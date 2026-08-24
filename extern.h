@@ -1039,6 +1039,11 @@ extern void SquareX P((int *, int *, flag));
 extern void InteractX P((void));
 extern void EndX P((void));
 #endif
+#ifdef QT
+extern void BeginQt P((void));
+extern void InteractQt P((void));
+extern void EndQt P((void));
+#endif
 extern flag FProcessYXU P((CONST char *, CONST char *, flag));
 extern int NProcessSwitchesX P((int, char **, int, flag, flag, flag));
 extern int NProcessSwitchesRareX P((int, char **, int, flag, flag, flag));

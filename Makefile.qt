@@ -1,0 +1,55 @@
+# Astrolog (Version 8.00) File: Makefile.qt (Linux/Qt GUI version)
+#
+# IMPORTANT NOTICE: Astrolog and all chart display routines and anything
+# not enumerated elsewhere in this program are Copyright (C) 1991-2026 by
+# Walter D. Pullen (Astara@msn.com, http://www.astrolog.org/astrolog.htm).
+# Permission is granted to freely use, modify, and distribute these
+# routines provided these credits and notices remain unmodified with any
+# altered or distributed versions of the program.
+#
+# This builds the Qt based Linux GUI backend, an alternative to the plain
+# X11 GUI the regular Makefile builds (real menus and dialogs instead of
+# single letter keystroke commands). It compiles the same shared core as
+# the X11 build, with "-DQT" overriding astrolog.h's default X11 backend
+# selection, plus qtdriver.cpp/qtdialog.cpp in place of wdialog.cpp/
+# wdriver.cpp (the Windows-only dialog/menu layer). Object files go in
+# obj-qt/ so this can be built alongside the regular "astrolog" binary
+# without either one clobbering the other's object files.
+#
+# Requires the Qt5 development headers/libraries (e.g. the "qtbase5-dev"
+# package on Debian/Ubuntu).
+#
+NAME = astrolog-qt
+OBJDIR = obj-qt
+OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
+ $(OBJDIR)/charts0.o $(OBJDIR)/charts1.o $(OBJDIR)/charts2.o \
+ $(OBJDIR)/charts3.o $(OBJDIR)/data.o $(OBJDIR)/express.o \
+ $(OBJDIR)/general.o $(OBJDIR)/intrpret.o $(OBJDIR)/io.o \
+ $(OBJDIR)/matrix.o $(OBJDIR)/placalc.o $(OBJDIR)/placalc2.o \
+ $(OBJDIR)/xdata.o $(OBJDIR)/xgeneral.o $(OBJDIR)/xdevice.o \
+ $(OBJDIR)/xcharts0.o $(OBJDIR)/xcharts1.o $(OBJDIR)/xcharts2.o \
+ $(OBJDIR)/xscreen.o $(OBJDIR)/qtdriver.o $(OBJDIR)/qtdialog.o \
+ $(OBJDIR)/swecl.o $(OBJDIR)/swedate.o $(OBJDIR)/swehouse.o \
+ $(OBJDIR)/swejpl.o $(OBJDIR)/swemmoon.o $(OBJDIR)/swemplan.o \
+ $(OBJDIR)/sweph.o $(OBJDIR)/swephlib.o
+
+QT_CFLAGS = $(shell pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core)
+QT_LIBS = $(shell pkg-config --libs Qt5Widgets Qt5Gui Qt5Core)
+LIBS = $(QT_LIBS) -lm -ldl
+CPPFLAGS = -DQT -O -fPIC -Wno-write-strings -Wno-narrowing -Wno-comment \
+ $(QT_CFLAGS)
+RM = rm -f
+
+$(NAME): $(OBJDIR) $(OBJS)
+	g++ -o $(NAME) $(OBJS) $(LIBS)
+
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
+
+$(OBJDIR)/%.o: %.cpp
+	g++ $(CPPFLAGS) -c -o $@ $<
+
+clean:
+	$(RM) -r $(OBJDIR)
+	$(RM) $(NAME)
+#

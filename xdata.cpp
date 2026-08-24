@@ -97,6 +97,9 @@ GI gi = {
 #ifdef X11
   NULL, 0, 0, 0, 0, 0, 0, 0, 0,
 #endif
+#ifdef QT
+  NULL, NULL, NULL, NULL, NULL,
+#endif
 #ifdef PS
   0, fFalse, 0, -1, 1,
 #endif

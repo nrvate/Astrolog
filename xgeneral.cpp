@@ -61,6 +61,15 @@
 ******************************************************************************
 */
 
+#ifdef QT
+// Convert one of Astrolog's packed KV color values to a Qt QColor.
+
+INLINE QColor QColorFromKv(KV kv)
+{
+  return QColor(RgbR(kv), RgbG(kv), RgbB(kv));
+}
+#endif
+
 // Set the current color to use in drawing on the screen or bitmap array.
 
 void DrawColor(KI ki)
@@ -252,6 +261,17 @@ void DrawPoint(int x, int y)
     }
   }
 #endif
+#ifdef QT
+  else {
+    gi.qpaint->setPen(QColorFromKv(gi.kvCur));
+    gi.qpaint->drawPoint(x, y);
+    if (gs.fThick) {
+      gi.qpaint->drawPoint(x+1, y);
+      gi.qpaint->drawPoint(x, y+1);
+      gi.qpaint->drawPoint(x+1, y+1);
+    }
+  }
+#endif
 #ifdef WINANY
   else {
     if (wi.nScaleWin > 1) {
@@ -391,6 +411,10 @@ void DrawBlock(int x1, int y1, int x2, int y2)
 #ifdef X11
   else
     XFillRectangle(gi.disp, gi.pmap, gi.gc, x1, y1, x2-x1+1, y2-y1+1);
+#endif
+#ifdef QT
+  else
+    gi.qpaint->fillRect(x1, y1, x2-x1+1, y2-y1+1, QColorFromKv(gi.kvCur));
 #endif
 #ifdef WINANY
   else {
@@ -625,6 +649,16 @@ void DrawDash(int x1, int y1, int x2, int y2, int skip)
         XDrawPoint(gi.disp, gi.pmap, gi.gc, x2+1, y2);
         XDrawPoint(gi.disp, gi.pmap, gi.gc, x2, y2+1);
         XDrawPoint(gi.disp, gi.pmap, gi.gc, x2+1, y2+1);
+      }
+#endif
+#ifdef QT
+      gi.qpaint->setPen(QColorFromKv(gi.kvCur));
+      gi.qpaint->drawLine(x1, y1, x2, y2);
+      if (gs.fThick) {
+        // Make the line thicker by drawing it four times, same as X11 does.
+        gi.qpaint->drawLine(x1+1, y1, x2+1, y2);
+        gi.qpaint->drawLine(x1, y1+1, x2, y2+1);
+        gi.qpaint->drawLine(x1+1, y1+1, x2+1, y2+1);
       }
 #endif
 #ifdef WINANY
@@ -1181,6 +1215,36 @@ void DrawFill(int x, int y, KV kv)
 #endif
     // Not implemented in PostScript, SVG, or wireframe formats.
   }
+#ifdef QT
+  else {
+    // Breadth first search flood fill directly against the QImage buffer,
+    // same algorithm as the bitmap file case above.
+    QRgb qrgbB = QColorFromKv(kvB).rgb(), qrgbF = QColorFromKv(kvF).rgb();
+    if (gi.qim->pixel(x, y) != qrgbB)
+      return;
+    gi.qim->setPixel(x, y, qrgbF);
+    iTop = 1; iCur = 0;
+    rgpt[0].x = x; rgpt[0].y = y;
+    while (iCur != iTop) {
+      x = rgpt[iCur].x; y = rgpt[iCur].y;
+      for (d = 0; d < 4; d++) {
+        xnew = x + dxOff[d]; ynew = y + dyOff[d];
+        if (!FOnWin(xnew, ynew) || gi.qim->pixel(xnew, ynew) != qrgbB)
+          continue;
+        if (iTop == iCur)
+          continue;
+        gi.qim->setPixel(xnew, ynew, qrgbF);
+        rgpt[iTop].x = xnew; rgpt[iTop].y = ynew;
+        iTop++;
+        if (iTop >= iFillMax)
+          iTop = 0;
+      }
+      iCur++;
+      if (iCur >= iFillMax)
+        iCur = 0;
+    }
+  }
+#endif
 #ifdef WINANY
   else {
     // Note that Windows FloodFill() doesn't work on printer DC's.

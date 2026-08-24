@@ -63,11 +63,28 @@
 ** can be disabled even if you are running a system that supports X windows.
 */
 
+#ifdef QT
+/* Qt's own headers must be included before any of Astrolog's single word */
+/* feature #define's below (e.g. META, PS, TIME) are declared, because   */
+/* Qt uses several of those same bare words as enum members internally,  */
+/* and the preprocessor would otherwise mangle Qt's own header text.     */
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QMainWindow>
+#include <QtWidgets/QWidget>
+#include <QtGui/QImage>
+#include <QtGui/QPainter>
+#endif
+
 //#define PC /* Comment out this #define if you have a Unix, Mac, or other */
            /* system that isn't a generic PC running DOS or MS Windows.  */
 
+#if !defined(QT)
 #define X11 /* Comment out this #define if you don't have X windows, or */
             /* else have them and don't wish to compile in X graphics.  */
+#endif
+            /* QT is a Linux GUI backend selected via "-DQT" on the compiler */
+            /* command line (see Makefile.qt) rather than by editing this   */
+            /* file, so the guard above lets it override the X11 default.   */
 
 //#define WIN /* Comment out this #define if you don't have MS Windows, or */
             /* else have them but want a command line version instead.   */
@@ -333,6 +350,9 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #endif
+#ifdef QT
+#define ISG
+#endif
 #ifdef WIN
 #define ISG
 #define WINANY
@@ -449,6 +469,21 @@
 #error "If 'WCLI' is defined 'PC' must be too"
 #endif
 #endif // WCLI
+
+#ifdef QT
+#ifndef GRAPH
+#error "If 'QT' is defined 'GRAPH' must be too"
+#endif
+#ifdef X11
+#error "If 'QT' is defined 'X11' must not be as well"
+#endif
+#ifdef WIN
+#error "If 'QT' is defined 'WIN' must not be as well"
+#endif
+#ifdef WCLI
+#error "If 'QT' is defined 'WCLI' must not be as well"
+#endif
+#endif // QT
 
 #ifdef PS
 #ifndef GRAPH
@@ -2174,6 +2209,13 @@ typedef struct _GraphicsInternal {
   Window wind, root;
   int screen;
   int depth;          // Number of active color bits.
+#endif
+#ifdef QT
+  QApplication *qapp; // The Qt application object.
+  QMainWindow *qwind; // The main chart window.
+  QWidget *qcanvas;   // The widget the chart is painted onto.
+  QImage *qim;        // Off screen chart buffer (like X11's Pixmap).
+  QPainter *qpaint;   // Painter open on qim while a chart is being drawn.
 #endif
 #ifdef PS             // Variables used by the PostScript generator.
   int cStroke;        // Number of items drawn without flushing.

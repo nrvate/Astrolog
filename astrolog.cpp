@@ -3423,6 +3423,17 @@ int main()
   is.szProgName = argv[0];
 #endif
   FProcessSwitchFile(DEFAULT_INFOFILE, NULL);
+#ifdef QT
+  // The Qt build is a GUI application first, like Windows: bring up the
+  // chart window by default instead of requiring the astrolog.as default
+  // settings file to have graphics mode active (it doesn't, by default),
+  // showing today's chart rather than prompting at a text mode stdin
+  // prompt if no chart file or switches were given on the command line.
+  // This runs after astrolog.as is processed, so an explicit command line
+  // switch (processed below) can still override it either way.
+  us.fGraphics = fTrue;
+  FInputData(szNowCore);
+#endif
   ciTran = ciHexa = ciFive = ciFour = ciThre = ciTwin = ciMain = ciCore;
 #ifdef BETA
   sprintf(szBeta, "This is a beta version of %s %s! "

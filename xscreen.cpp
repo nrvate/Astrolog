@@ -383,6 +383,11 @@ void BeginX()
   XFillRectangle(gi.disp, gi.pmap, gi.pmgc, 0, 0, gs.xWin, gs.yWin);
 #endif // X11
 
+#ifdef QT
+  BeginQt();       // Create the QApplication, main window, and chart buffer.
+  InitColorsX();
+#endif
+
 #ifdef WIN
   if (wi.fChartWindow && (wi.xClient != gs.xWin ||
     wi.yClient != gs.yWin) && wi.hdcPrint == hdcNil)
@@ -614,10 +619,12 @@ void ResizeWindowToChart()
 #endif
 
 
-#ifndef WIN
+#if !defined(WIN) && !defined(QT)
 // This routine gets called after graphics are brought up and displayed on
 // the screen. It loops, processing key presses, mouse clicks, etc, that the
 // window receives, until the user specifies they want to exit the program.
+// (Qt builds use InteractQt() in qtdriver.cpp instead, since Qt drives its
+// own event loop rather than polling XNextEvent() in a manual switch here.)
 
 void InteractX()
 {
@@ -1262,6 +1269,7 @@ void InteractX()
 #endif
   } // while
 }
+#endif // !WIN && !QT
 
 
 // This is called right before program termination to get rid of the window.
@@ -1275,11 +1283,13 @@ void EndX()
   XDestroyWindow(gi.disp, gi.wind);
   XCloseDisplay(gi.disp);
 #endif
+#ifdef QT
+  EndQt();
+#endif
 #ifdef WCLI
   UnregisterClass(szAppName, wi.hinst);
 #endif
 }
-#endif // ISG
 #endif // WIN
 
 
@@ -2443,7 +2453,10 @@ flag FActionX()
       }
     } else
 #endif
-#ifndef WIN
+#ifdef QT
+      InteractQt();   // Window's up; hand control to Qt's own event loop.
+    EndX();
+#elif !defined(WIN)
       InteractX();    // Window's up; process commands given to window now.
     EndX();
 #else
