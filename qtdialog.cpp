@@ -102,10 +102,18 @@ void ShowChartInfoDialogQt()
   QLineEdit *peDay  = new QLineEdit(QString::number(ciCore.day));
   QLineEdit *peYea  = new QLineEdit(QString::number(ciCore.yea));
   QLineEdit *peTim  = new QLineEdit(QString::number(ciCore.tim));
-  QLineEdit *peDst  = new QLineEdit(QString::number(ciCore.dst));
+  // Daylight offset has special sentinel values (see astrolog.h's dstAuto);
+  // show and accept them as the same "ST"/"DT"/"Autodetect" text the rest
+  // of Astrolog uses (e.g. when saving a chart file), not a raw number.
+  QLineEdit *peDst  = new QLineEdit(ciCore.dst == 0.0 ? "ST" :
+    (ciCore.dst == 1.0 ? "DT" :
+    (ciCore.dst == dstAuto ? "Autodetect" : SzZone(ciCore.dst))));
   QLineEdit *peZon  = new QLineEdit(QString::number(ciCore.zon));
   QLineEdit *peLon  = new QLineEdit(QString::number(ciCore.lon));
   QLineEdit *peLat  = new QLineEdit(QString::number(ciCore.lat));
+  // Long names/locations otherwise show their tail end, not their start.
+  peName->setCursorPosition(0);
+  peLoc->setCursorPosition(0);
 
   playout->addRow("Name:", peName);
   playout->addRow("Location:", peLoc);

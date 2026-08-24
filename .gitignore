@@ -1,0 +1,8 @@
+# Build outputs
+*.o
+/astrolog
+/astrolog-qt
+/obj-qt/
+
+# JetBrains IDE project files
+.idea/
