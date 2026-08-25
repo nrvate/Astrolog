@@ -2205,7 +2205,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"V",                 "Show &Graphics"},
   {"Ctrl+V",            "&Paste"},
   {"Ctrl+Alt+V",        "Save Chart i&Calendar..."},
-  {"Shift+V",           "Standard Radix"},
+  {"Shift+V",           "Standard &Radix"},
   {"Ctrl+Shift+V",      "&Vedic"},
   {"Alt+Shift+V",       "&House Wheel"},
   {"Down",              "Tilt &South"},
@@ -2884,6 +2884,94 @@ static QMenu *PmenuContextForChartQt()
 }
 
 
+#ifdef QTTEST
+extern int NRunQtTestsQt();   // qttest.cpp
+
+// Hooks for the test binary (see qttest.cpp and Makefile.qt.test). Only
+// compiled when QTTEST is defined, so the shipped astrolog-qt carries
+// none of this. They exist because the menu tables and the lookup helper
+// above are file static, and the tests need to walk them.
+
+typedef struct {
+  CONST char *szName;
+  CONST CTXITEM *rgitem;
+  int citem;
+} CTXTEST;
+
+static CONST CTXTEST rgctxtestQt[] = {
+  {"rgctxWheelQt", rgctxWheelQt, CctxQt(rgctxWheelQt)},
+  {"rgctxIndianQt", rgctxIndianQt, CctxQt(rgctxIndianQt)},
+  {"rgctxGridQt", rgctxGridQt, CctxQt(rgctxGridQt)},
+  {"rgctxMidpointQt", rgctxMidpointQt, CctxQt(rgctxMidpointQt)},
+  {"rgctxHorizonQt", rgctxHorizonQt, CctxQt(rgctxHorizonQt)},
+  {"rgctxOrbitQt", rgctxOrbitQt, CctxQt(rgctxOrbitQt)},
+  {"rgctxSectorQt", rgctxSectorQt, CctxQt(rgctxSectorQt)},
+  {"rgctxCalendarQt", rgctxCalendarQt, CctxQt(rgctxCalendarQt)},
+  {"rgctxInfluenceQt", rgctxInfluenceQt, CctxQt(rgctxInfluenceQt)},
+  {"rgctxEsotericQt", rgctxEsotericQt, CctxQt(rgctxEsotericQt)},
+  {"rgctxAstroGraphQt", rgctxAstroGraphQt, CctxQt(rgctxAstroGraphQt)},
+  {"rgctxEphemerisQt", rgctxEphemerisQt, CctxQt(rgctxEphemerisQt)},
+  {"rgctxRisingQt", rgctxRisingQt, CctxQt(rgctxRisingQt)},
+  {"rgctxLocalQt", rgctxLocalQt, CctxQt(rgctxLocalQt)},
+  {"rgctxMoonsQt", rgctxMoonsQt, CctxQt(rgctxMoonsQt)},
+  {"rgctxTransitQt", rgctxTransitQt, CctxQt(rgctxTransitQt)},
+  {"rgctxBiorhythmQt", rgctxBiorhythmQt, CctxQt(rgctxBiorhythmQt)},
+  {"rgctxSphereQt", rgctxSphereQt, CctxQt(rgctxSphereQt)},
+  {"rgctxGlobeQt", rgctxGlobeQt, CctxQt(rgctxGlobeQt)},
+  {"rgctxTelescopeQt", rgctxTelescopeQt, CctxQt(rgctxTelescopeQt)},
+  {"rgctxTxtListQt", rgctxTxtListQt, CctxQt(rgctxTxtListQt)},
+  {"rgctxTxtWheelQt", rgctxTxtWheelQt, CctxQt(rgctxTxtWheelQt)},
+  {"rgctxTxtGridQt", rgctxTxtGridQt, CctxQt(rgctxTxtGridQt)},
+  {"rgctxTxtAspectQt", rgctxTxtAspectQt, CctxQt(rgctxTxtAspectQt)},
+  {"rgctxTxtMidpointQt", rgctxTxtMidpointQt, CctxQt(rgctxTxtMidpointQt)},
+  {"rgctxTxtHorizonQt", rgctxTxtHorizonQt, CctxQt(rgctxTxtHorizonQt)},
+  {"rgctxTxtOrbitQt", rgctxTxtOrbitQt, CctxQt(rgctxTxtOrbitQt)},
+  {"rgctxTxtSectorQt", rgctxTxtSectorQt, CctxQt(rgctxTxtSectorQt)},
+  {"rgctxTxtCalendarQt", rgctxTxtCalendarQt, CctxQt(rgctxTxtCalendarQt)},
+  {"rgctxTxtInfluenceQt", rgctxTxtInfluenceQt, CctxQt(rgctxTxtInfluenceQt)},
+  {"rgctxTxtEsotericQt", rgctxTxtEsotericQt, CctxQt(rgctxTxtEsotericQt)},
+  {"rgctxTxtAstroGraphQt", rgctxTxtAstroGraphQt, CctxQt(rgctxTxtAstroGraphQt)},
+  {"rgctxTxtEphemerisQt", rgctxTxtEphemerisQt, CctxQt(rgctxTxtEphemerisQt)},
+  {"rgctxTxtArabicQt", rgctxTxtArabicQt, CctxQt(rgctxTxtArabicQt)},
+  {"rgctxTxtRisingQt", rgctxTxtRisingQt, CctxQt(rgctxTxtRisingQt)},
+  {"rgctxTxtLocalQt", rgctxTxtLocalQt, CctxQt(rgctxTxtLocalQt)},
+  {"rgctxTxtMoonsQt", rgctxTxtMoonsQt, CctxQt(rgctxTxtMoonsQt)},
+  {"rgctxTxtExoQt", rgctxTxtExoQt, CctxQt(rgctxTxtExoQt)},
+  {"rgctxTxtInDayQt", rgctxTxtInDayQt, CctxQt(rgctxTxtInDayQt)},
+  {"rgctxTxtTransInfQt", rgctxTxtTransInfQt, CctxQt(rgctxTxtTransInfQt)},
+  {"rgctxTxtTransGraQt", rgctxTxtTransGraQt, CctxQt(rgctxTxtTransGraQt)},
+  {"rgctxTxtBiorhythmQt", rgctxTxtBiorhythmQt, CctxQt(rgctxTxtBiorhythmQt)} };
+
+int CCtxTestQt()
+{
+  return (int)(sizeof(rgctxtestQt) / sizeof(CTXTEST));
+}
+
+// Build context menu "i" and report its name. The caller owns the menu.
+QMenu *PmenuCtxTestQt(int i, CONST char **pszName)
+{
+  *pszName = rgctxtestQt[i].szName;
+  return PmenuBuildContextQt(rgctxtestQt[i].rgitem, rgctxtestQt[i].citem);
+}
+
+int CHotkeyTestQt()
+{
+  return chotkeyQt;
+}
+
+void HotkeyTestQt(int i, CONST char **pszKey, CONST char **pszAction)
+{
+  *pszKey = rghotkeyQt[i].szKey;
+  *pszAction = rghotkeyQt[i].szAction;
+}
+
+QAction *PaFindActionTestQt(CONST char *sz)
+{
+  return PaFindMenuActionQt(gi.qwind->menuBar(), QString(sz));
+}
+#endif // QTTEST
+
+
 // This routine opens up and initializes the chart window, and is called
 // from BeginX() the same way the X11 backend's window setup is, once per
 // program invocation.
@@ -2916,6 +3004,12 @@ void InteractQt()
 {
   fQtReady = true;
   RedrawQt();
+#ifdef QTTEST
+  // The test binary comes in through the same startup path as the real
+  // one, so the suite runs against a fully built window: menus, hotkeys,
+  // and a drawn chart. Run it here instead of handing over to the user.
+  exit(NRunQtTestsQt());
+#endif
   gi.qapp->exec();
   fQtReady = false;
 }

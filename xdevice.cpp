@@ -928,6 +928,17 @@ flag FBmpDrawMap2(int x1, int y1, int x2, int y2,
 
   if (!gi.fBmp || (gi.fFile && gs.ft != ftBmp))
     return fFalse;
+#ifdef QT
+  // Same hole FBmpDrawMap() has, and the same fix. Only the file export
+  // path and the WINANY block below have a destination bitmap to draw
+  // into; drawing interactively on QT leaves "bmp" pointing at gi.bmp,
+  // which is the export buffer and is never allocated here, so the
+  // BmpSetAll() below wrote through a null pointer and took the process
+  // with it. Bail out and let the caller fall back to its vector drawn
+  // map, exactly as when the Earth bitmap fails to load.
+  if (!gi.fFile)
+    return fFalse;
+#endif
   if (gi.bmpWorld.rgb == NULL && !FLoadBmp(BITMAP_EARTH, &gi.bmpWorld, fFalse))
     return fFalse;
 #ifdef WINANY

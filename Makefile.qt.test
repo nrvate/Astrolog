@@ -1,0 +1,46 @@
+# Astrolog (Version 8.00) File: Makefile.qt.test
+#
+# Builds "astrolog-qt-test", the Qt GUI test binary. Same sources as
+# Makefile.qt plus qttest.cpp, compiled with -DQTTEST, which makes
+# InteractQt() run the suite instead of handing over to the user. Objects
+# go in their own directory so this never clobbers the release build.
+#
+# Needs the Qt5 test module (qtbase5-dev provides it) in addition to what
+# Makefile.qt needs. Run the result through ./run-qt-tests.sh, which sets
+# the environment for headless operation.
+#
+NAME = astrolog-qt-test
+OBJDIR = obj-qt-test
+OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
+ $(OBJDIR)/charts0.o $(OBJDIR)/charts1.o $(OBJDIR)/charts2.o \
+ $(OBJDIR)/charts3.o $(OBJDIR)/data.o $(OBJDIR)/express.o \
+ $(OBJDIR)/general.o $(OBJDIR)/intrpret.o $(OBJDIR)/io.o \
+ $(OBJDIR)/matrix.o $(OBJDIR)/placalc.o $(OBJDIR)/placalc2.o \
+ $(OBJDIR)/xdata.o $(OBJDIR)/xgeneral.o $(OBJDIR)/xdevice.o \
+ $(OBJDIR)/xcharts0.o $(OBJDIR)/xcharts1.o $(OBJDIR)/xcharts2.o \
+ $(OBJDIR)/xscreen.o $(OBJDIR)/qtdriver.o $(OBJDIR)/qtdialog.o \
+ $(OBJDIR)/qttest.o \
+ $(OBJDIR)/swecl.o $(OBJDIR)/swedate.o $(OBJDIR)/swehouse.o \
+ $(OBJDIR)/swejpl.o $(OBJDIR)/swemmoon.o $(OBJDIR)/swemplan.o \
+ $(OBJDIR)/sweph.o $(OBJDIR)/swephlib.o
+
+QT_CFLAGS = $(shell pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Test)
+QT_LIBS = $(shell pkg-config --libs Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Test)
+LIBS = $(QT_LIBS) -lm -ldl
+CPPFLAGS = -DQT -DQTTEST -O -fPIC -Wno-write-strings -Wno-narrowing \
+ -Wno-comment $(QT_CFLAGS)
+RM = rm -f
+
+$(NAME): $(OBJDIR) $(OBJS)
+	g++ -o $(NAME) $(OBJS) $(LIBS)
+
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
+
+$(OBJDIR)/%.o: %.cpp
+	g++ $(CPPFLAGS) -c -o $@ $<
+
+clean:
+	$(RM) -r $(OBJDIR)
+	$(RM) $(NAME)
+#

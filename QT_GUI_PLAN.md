@@ -85,13 +85,41 @@ Roughly in the order I'd take them.
    - Verified: `v` toggles graphics/text both ways and from either
      window, and Alt+Shift+N switches to the transit-and-natal chart.
 
-2. **A regression check of some kind.** There is none. Everything in this
-   project was verified by driving the GUI and eyeballing screenshots,
-   which caught a lot but is slow and doesn't run twice. Even a crude
-   script that launches the binary, opens each dialog, and confirms it
-   appears with the expected title would catch the class of breakage that
-   has actually happened here (a dialog failing to open, a menu item
-   wired to the wrong handler).
+3. ~~A regression check~~ — **done 2026-08-25.** `make -f
+   Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
+   display and no `xdotool`, and exits non-zero on failure. 1396
+   assertions at the time of writing.
+   - **How it works.** `Makefile.qt.test` builds the same sources plus
+     `qttest.cpp` with `-DQTTEST` into `astrolog-qt-test`, in its own
+     object directory, so the shipped binary carries no test code.
+     `InteractQt()` runs the suite instead of `exec()` when that's
+     defined, which means tests see the real app after menus, hotkeys and
+     the first chart are all up — not a fixture. Headless comes from
+     `QT_QPA_PLATFORM=offscreen`; `QT_QPA_PLATFORMTHEME` must also be
+     cleared, since the GTK theme plugin opens a display of its own and
+     aborts without one. `run-qt-tests.sh` sets both.
+   - **What it checks:** every dialog opens and reports the expected
+     window title; every context menu entry resolves to a real menu bar
+     item; every hotkey resolves, is a sequence Qt understands, is
+     actually attached, and is unique; every chart type renders a
+     non-blank image of the right size.
+   - **Deliberately says nothing about menu content** — not labels, not
+     order, not counts. Edit the context menus freely without touching
+     tests; they fail only when an entry points at something that isn't
+     there. Dialog window titles *are* asserted.
+   - **It found two real bugs on its first run**, both shipped earlier
+     the same day: `Shift+V` was bound to a label scraped out of a
+     *comment* rather than the menu item, and Nearest Cities crashed the
+     process because `FBmpDrawMap2()` had the same missing QT guard
+     `FBmpDrawMap()` was fixed for — on Qt `bmp` stayed pointing at the
+     never-allocated export buffer.
+   - Because rendering goes to `gi.qim`, a QImage in memory, pixel level
+     regression tests are possible here with no screenshotting at all.
+     The current check is only "did anything draw"; comparing against
+     stored baseline hashes is the obvious next step, and would cover the
+     kind of rendering question that has previously been argued over from
+     screenshots.
+
 3. **Decide about the deliberate divergences.** Five behaviours in
    "Known divergences from Windows" are places this port knowingly does
    something different, usually because Windows' behaviour looks like a
