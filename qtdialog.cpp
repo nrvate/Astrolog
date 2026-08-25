@@ -469,6 +469,280 @@ void ShowFileSettingsDialogQt()
 }
 
 
+// Label lists for the Graphics Settings dialog below. Windows has these in
+// wdialog.cpp, which isn't compiled into the QT build, so they're
+// duplicated here rather than shared -- keep in sync with the originals if
+// upstream ever adds a wheel decoration / fill / city coloring mode.
+
+static CONST char *rgszCityColorQt[6] = {"None", "Region", "Region+State",
+  "Generic Zone", "Current Zone", "Rainbow"};
+static CONST char *rgszWheelCornerQt[7] = {"None", "Spider Web",
+  "Moire Pattern", "Rays 1", "Rays 1,2", "Rays 12345", "Hearts"};
+// Windows lists wheel corner types in this order rather than array order,
+// so the combo shows the same sequence a Windows user would expect. The
+// value stored is still the index into rgszWheelCornerQt[].
+static CONST int rgiWheelCornerOrderQt[7] = {0, 1, 2, 6, 3, 4, 5};
+static CONST char *rgszDecaFillQt[8] = {"None", "Standard", "Rainbow RGB",
+  "Rainbow RYB", "Ruler Sign", "Ruler House", "7 Rays Sign", "7 Rays House"};
+
+
+// Graphics settings, equivalent to Windows' DlgGraphics. Note several of
+// these overlap menu items already built (Character Scale submenu, Map
+// Orientation submenu, Modify Chart) -- that's deliberate and matches
+// Windows: the menu items step values coarsely, while this dialog is where
+// an exact value gets typed in. As elsewhere, no attempt is made to resync
+// those menus' checkmarks afterward if a value set here doesn't line up
+// with one of their preset choices (Windows' own DlgGraphics leans on a
+// full RedoMenu() for that, which this port deliberately doesn't have).
+//
+// Skipped, as Win32-only (they live in the WI struct): the animation
+// update delay (wi.nTimerDelay, a Win32 SetTimer interval) and "Don't
+// Automatically Redraw Screen" (wi.fNoUpdate). Also skipped: the six font
+// selection combos (gs.nFontTxt/Sig/Hou/Obj/Asp/Nak), which pick from a
+// hardcoded list of Windows GDI font names -- porting them properly means
+// building a real Qt font picker, not translating a list.
+
+void ShowGraphicsSettingsDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Graphics Settings");
+  dlg.resize(460, 640);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QVBoxLayout *pin = new QVBoxLayout(pinner);
+  int i;
+
+  QFormLayout *pformSize = new QFormLayout();
+  QLineEdit *peWinX = new QLineEdit(QString::number(gs.xWin));
+  QLineEdit *peWinY = new QLineEdit(QString::number(gs.yWin));
+  pformSize->addRow("Horizontal Chart Size:", peWinX);
+  pformSize->addRow("Vertical Chart Size:", peWinY);
+  pin->addLayout(pformSize);
+  QCheckBox *pcbKeepSquare =
+    new QCheckBox("Ensure Square Charts Remain Square");
+  pcbKeepSquare->setChecked(gs.fKeepSquare != 0);
+  pin->addWidget(pcbKeepSquare);
+
+  QFormLayout *pformScale = new QFormLayout();
+  QLineEdit *peScale = new QLineEdit(QString::number(gs.nScale));
+  QLineEdit *peScaleText = new QLineEdit(QString::number(gs.nScaleText));
+  pformScale->addRow("Character Scale:", peScale);
+  pformScale->addRow("Text Scale:", peScaleText);
+  pin->addLayout(pformScale);
+  QCheckBox *pcbAutoScale =
+    new QCheckBox("Character Autoscale to Fit Window");
+  pcbAutoScale->setChecked(gs.fAutoScale != 0);
+  pin->addWidget(pcbAutoScale);
+
+  QFormLayout *pformMisc = new QFormLayout();
+  QLineEdit *peGridCell = new QLineEdit(QString::number(gs.nGridCell));
+  QLineEdit *peSpace = new QLineEdit(QString::number(gs.cspace));
+  QLineEdit *peTrack = new QLineEdit(gs.objTrack >= 0 ?
+    szObjName[gs.objTrack] : "None");
+  QLineEdit *peZoom = new QLineEdit(QString::number(gs.rspace));
+  pformMisc->addRow("Number of Cells in Graphics Aspect Grid:", peGridCell);
+  pformMisc->addRow("Solar System Orbit Trail Length:", peSpace);
+  pformMisc->addRow("Telescope Focuses on This Object:", peTrack);
+  pformMisc->addRow("Telescope and Orbit Zoom Scale:", peZoom);
+  pin->addLayout(pformMisc);
+
+  QGroupBox *pgbMap = new QGroupBox("Map and Globe");
+  QVBoxLayout *pvMap = new QVBoxLayout(pgbMap);
+  QFormLayout *pformMap = new QFormLayout();
+  QLineEdit *peRot = new QLineEdit(QString::number(gs.rRot));
+  QLineEdit *peTilt = new QLineEdit(QString::number(gs.rTilt));
+  pformMap->addRow("Horizontal Map Degree Rotation:", peRot);
+  pformMap->addRow("Vertical Globe Degree Tilt:", peTilt);
+  pvMap->addLayout(pformMap);
+  QCheckBox *pcbSouth =
+    new QCheckBox("Globe Halves Focus on South Hemisphere");
+  QCheckBox *pcbMollweide =
+    new QCheckBox("World Map in Mollweide Projection");
+  pcbSouth->setChecked(gs.fSouth != 0);
+  pcbMollweide->setChecked(gs.fMollweide != 0);
+  pvMap->addWidget(pcbSouth);
+  pvMap->addWidget(pcbMollweide);
+  pin->addWidget(pgbMap);
+
+  QCheckBox *pcbAnimMap = new QCheckBox("Animate Map Instead of Time");
+  pcbAnimMap->setChecked(gs.fAnimMap != 0);
+  pin->addWidget(pcbAnimMap);
+
+  QGroupBox *pgbStar = new QGroupBox("Full Star List");
+  QVBoxLayout *pvStar = new QVBoxLayout(pgbStar);
+  QCheckBox *pcbBigDots = new QCheckBox("Show Big Dots");
+  QCheckBox *pcbStarName = new QCheckBox("Label with Name");
+  pcbBigDots->setChecked(FOdd(gs.nAllStar));
+  pcbStarName->setChecked((gs.nAllStar & 2) > 0);
+  pvStar->addWidget(pcbBigDots);
+  pvStar->addWidget(pcbStarName);
+  pin->addWidget(pgbStar);
+
+  QGroupBox *pgbRot = new QGroupBox("Wheel Chart Rotation");
+  QVBoxLayout *pvRot = new QVBoxLayout(pgbRot);
+  QButtonGroup *pgroupRot = new QButtonGroup(&dlg);
+  CONST char *rgszRot[3] =
+    { "None", "Object at Left Edge", "Object at Top Edge" };
+  int nRotCur = gs.objLeft == 0 ? 0 : (gs.objLeft > 0 ? 1 : 2);
+  for (i = 0; i < 3; i++) {
+    QRadioButton *prb = new QRadioButton(rgszRot[i]);
+    prb->setChecked(i == nRotCur);
+    pgroupRot->addButton(prb, i);
+    pvRot->addWidget(prb);
+  }
+  QFormLayout *pformRot = new QFormLayout();
+  QLineEdit *peObjLeft = new QLineEdit(
+    szObjName[gs.objLeft == 0 ? oSun : NAbs(gs.objLeft)-1]);
+  pformRot->addRow("Use This Planet:", peObjLeft);
+  pvRot->addLayout(pformRot);
+  pin->addWidget(pgbRot);
+
+  QGroupBox *pgbCorner = new QGroupBox("Wheel Corners");
+  QFormLayout *pformCorner = new QFormLayout(pgbCorner);
+  QComboBox *pcbCorner = new QComboBox();
+  for (i = 0; i < 7; i++)
+    pcbCorner->addItem(rgszWheelCornerQt[rgiWheelCornerOrderQt[i]]);
+  for (i = 0; i < 7; i++)
+    if (rgiWheelCornerOrderQt[i] == gs.nDecaType) {
+      pcbCorner->setCurrentIndex(i);
+      break;
+    }
+  QLineEdit *peDecaSize = new QLineEdit(QString::number(gs.nDecaSize));
+  pformCorner->addRow("Type:", pcbCorner);
+  pformCorner->addRow("Coverage:", peDecaSize);
+  pin->addWidget(pgbCorner);
+
+  QFormLayout *pformFill = new QFormLayout();
+  QComboBox *pcbFill = new QComboBox();
+  for (i = 0; i < 8; i++)
+    pcbFill->addItem(rgszDecaFillQt[i]);
+  pcbFill->setCurrentIndex(gs.nDecaFill);
+  pformFill->addRow("Wheel Fill:", pcbFill);
+  QComboBox *pcbCity = new QComboBox();
+  for (i = 0; i < 6; i++)
+    pcbCity->addItem(rgszCityColorQt[i]);
+  pcbCity->setCurrentIndex(gs.fLabelCity ? gs.nLabelCity : 0);
+  pformFill->addRow("Atlas City Coloring:", pcbCity);
+  pin->addLayout(pformFill);
+
+  // Six glyph-variant radio groups, all the same shape.
+  CONST char *rgszGlyphTitle[6] = { "Capricorn Glyph", "Uranus Glyph",
+    "Pluto Glyph", "Lilith Glyph", "Vertex Glyph", "Eris Glyph" };
+  CONST int rgcGlyph[6] = { 2, 2, 3, 2, 2, 2 };
+  CONST char *rgszGlyphOpt[6][3] = {
+    { "American", "European", NULL },
+    { "Herschel's", "Astronomy", NULL },
+    { "Astrology", "Astronomy", "Esoteric" },
+    { "Classic", "Standard", NULL },
+    { "Classic", "Standard", NULL },
+    { "Form One", "Form Two", NULL } };
+  int *rgpnGlyph[6] = { &gs.nGlyphCap, &gs.nGlyphUra, &gs.nGlyphPlu,
+    &gs.nGlyphLil, &gs.nGlyphVer, &gs.nGlyphEri };
+  QButtonGroup *rgpgroupGlyph[6];
+  int j;
+  for (i = 0; i < 6; i++) {
+    QGroupBox *pgb = new QGroupBox(rgszGlyphTitle[i]);
+    QVBoxLayout *pv = new QVBoxLayout(pgb);
+    rgpgroupGlyph[i] = new QButtonGroup(&dlg);
+    for (j = 0; j < rgcGlyph[i]; j++) {
+      QRadioButton *prb = new QRadioButton(rgszGlyphOpt[i][j]);
+      prb->setChecked(j == *rgpnGlyph[i] - 1);
+      rgpgroupGlyph[i]->addButton(prb, j);
+      pv->addWidget(prb);
+    }
+    pin->addWidget(pgb);
+  }
+
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  int nWinX = peWinX->text().toInt();
+  int nWinY = peWinY->text().toInt();
+  int nScale = peScale->text().toInt();
+  int nScaleText = peScaleText->text().toInt();
+  int nGridCell = peGridCell->text().toInt();
+  int cspace = peSpace->text().toInt();
+  int nDecaSize = peDecaSize->text().toInt();
+  real rRot = peRot->text().toDouble();
+  real rTilt = peTilt->text().toDouble();
+  real rZoom = peZoom->text().toDouble();
+  QByteArray baTrack = peTrack->text().toLocal8Bit();
+  int objTrack = NParseSz(baTrack.constData(), pmObject);
+  QByteArray baObjLeft = peObjLeft->text().toLocal8Bit();
+  int objLeft = NParseSz(baObjLeft.constData(), pmObject);
+  if (!FValidGraphX(nWinX) || !FValidGraphY(nWinY) ||
+    !FValidScale(nScale) || !FValidScaleText(nScaleText) ||
+    !FValidGrid(nGridCell) || !FValidDecaSize(nDecaSize) ||
+    !FValidRotation(rRot) || !FValidTilt(rTilt) || !FValidZoom(rZoom) ||
+    !FValidTelescope(objTrack) || !FItem(objLeft)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more graphics settings fields are invalid.");
+    return;
+  }
+
+  flag fResize = (gs.xWin != nWinX || gs.yWin != nWinY);
+  gs.xWin = nWinX; gs.yWin = nWinY;
+  gs.fKeepSquare = pcbKeepSquare->isChecked();
+  gs.nScale = nScale; gs.nScaleText = nScaleText;
+  gs.fAutoScale = pcbAutoScale->isChecked();
+  gs.nGridCell = nGridCell;
+  // Changing the orbit trail length invalidates any trail already
+  // accumulated at the old length, same as Windows does here.
+  if (gs.cspace != cspace) {
+    gs.cspace = cspace;
+    if (gi.rgspace != NULL) {
+      DeallocateP(gi.rgspace);
+      gi.rgspace = NULL;
+    }
+  }
+  gs.objTrack = objTrack;
+  gs.rspace = rZoom;
+  gs.rRot = rRot; gs.rTilt = rTilt;
+  gs.fSouth = pcbSouth->isChecked();
+  gs.fMollweide = pcbMollweide->isChecked();
+  gs.fAnimMap = pcbAnimMap->isChecked();
+  gs.nAllStar = (pcbStarName->isChecked() << 1) | pcbBigDots->isChecked();
+  int nRotSel = pgroupRot->checkedId();
+  gs.objLeft = nRotSel == 0 ? 0 :
+    (nRotSel == 1 ? objLeft+1 : -objLeft-1);
+  gs.nDecaType = rgiWheelCornerOrderQt[pcbCorner->currentIndex()];
+  gs.nDecaSize = nDecaSize;
+  gs.nDecaFill = pcbFill->currentIndex();
+  // Windows' DlgGraphics writes gs.fLabelAsp here, but that field is -XA
+  // ("draw aspect glyphs on lines", the Graphics / Chart Effects / Show
+  // Glyphs on Aspect Lines toggle) and has nothing to do with city
+  // coloring -- the -XL switch that owns gs.nLabelCity toggles
+  // gs.fLabelCity (see xscreen.cpp). Treating that as an upstream typo
+  // and using gs.fLabelCity, so this combo doesn't silently turn aspect
+  // glyphs on and off.
+  i = pcbCity->currentIndex();
+  if (i <= 0)
+    gs.fLabelCity = fFalse;
+  else {
+    gs.fLabelCity = fTrue;
+    gs.nLabelCity = i;
+  }
+  for (i = 0; i < 6; i++)
+    *rgpnGlyph[i] = rgpgroupGlyph[i]->checkedId() + 1;
+
+  us.fGraphics = fTrue;
+  if (fResize && gs.xWin > 0 && gs.yWin > 0)
+    gi.qwind->resize(gs.xWin, gs.yWin);
+  RedrawQt();
+}
+
+
 // Chart info entry, equivalent to Windows' DlgInfo. This is the dialog that
 // lets someone actually create a chart interactively instead of only ever
 // loading one from disk.

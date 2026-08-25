@@ -73,6 +73,7 @@ void ShowSaveCalendarDialogQt();
 void ShowOpenBackgroundDialogQt();
 void ShowOpenWorldDialogQt();
 void ShowFileSettingsDialogQt();
+void ShowGraphicsSettingsDialogQt();
 void ShowDefaultInfoDialogQt();
 void ShowTransitDialogQt();
 void ShowProgressDialogQt();

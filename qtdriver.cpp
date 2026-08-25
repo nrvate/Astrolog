@@ -859,8 +859,7 @@ static void BuildChartMenu(QMainWindow *pwind)
 }
 
 
-// Windows' Graphics menu (wdriver.cpp cmdGraphics* handlers), in full
-// except the Graphics Settings dialog (DlgGraphics -- not yet ported).
+// Windows' Graphics menu (wdriver.cpp cmdGraphics* handlers), in full.
 // "Show Constellation Lines" tracks its own flag here (s_fStarLine) instead
 // of Windows' wi.fStarLine, which lives in the Win32-only WI struct.
 
@@ -1160,6 +1159,10 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   AddSelectAction(pmenuPen, pgroupPen, "Mai&ze", 3, &gi.kiPen, fFalse);
   AddSelectAction(pmenuPen, pgroupPen, "&Purple", 5, &gi.kiPen, fFalse);
   AddSelectAction(pmenuPen, pgroupPen, "&Dk. Cyan", 6, &gi.kiPen, fFalse);
+
+  QAction *paGraphicsSettings = pmenu->addAction("&Graphics Settings...");
+  QObject::connect(paGraphicsSettings, &QAction::triggered, pwind,
+    []() { ShowGraphicsSettingsDialogQt(); });
 }
 
 
