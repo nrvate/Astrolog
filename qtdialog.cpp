@@ -1512,27 +1512,36 @@ void ShowDefaultInfoDialogQt()
 
   QLineEdit *peName = new QLineEdit(FSzSet(ciDefa.nam) ? ciDefa.nam : "");
   QLineEdit *peLoc  = new QLineEdit(FSzSet(ciDefa.loc) ? ciDefa.loc : "");
-  QLineEdit *peDst  = new QLineEdit(ciDefa.dst == 0.0 ? "ST" :
-    (ciDefa.dst == 1.0 ? "DT" :
+  // Formatted the way Windows' DlgDefault does it (SetEditSZOA), not as
+  // raw numbers -- see ShowChartInfoForQt() for the same treatment and
+  // the reasoning about SzLocation()'s degree byte.
+  char sz[cchSzMax];
+  QLineEdit *peDst  = new QLineEdit(ciDefa.dst == 0.0 ? "No" :
+    (ciDefa.dst == 1.0 ? "Yes" :
     (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
-  QLineEdit *peZon  = new QLineEdit(QString::number(ciDefa.zon));
-  QLineEdit *peLon  = new QLineEdit(QString::number(ciDefa.lon));
-  QLineEdit *peLat  = new QLineEdit(QString::number(ciDefa.lat));
+  sprintf(sz, "%s", SzZone(ciDefa.zon));
+  QLineEdit *peZon  = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  int nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
+  sprintf(sz, "%s", SzLocation(ciDefa.lon, ciDefa.lat));
+  us.fAnsiChar = nSavChar;
+  sz[is.ichLocSplit] = chNull;
+  QLineEdit *peLon  = new QLineEdit(&sz[0]);
+  QLineEdit *peLat  = new QLineEdit(&sz[is.ichLocSplit+1]);
   QLineEdit *peElv  = new QLineEdit(SzElevation(us.elvDef));
   QLineEdit *peTmp  = new QLineEdit(SzTemperature(us.tmpDef));
   QLineEdit *peCor  = new QLineEdit(QString::number(us.lTimeAddition));
   peName->setCursorPosition(0);
   peLoc->setCursorPosition(0);
 
-  playout->addRow("Name:", peName);
-  playout->addRow("Location:", peLoc);
-  playout->addRow("Daylight offset:", peDst);
-  playout->addRow("Zone (hours west of UTC):", peZon);
-  playout->addRow("Longitude (degrees east):", peLon);
-  playout->addRow("Latitude (degrees north):", peLat);
+  playout->addRow("Daylight Saving:", peDst);
+  playout->addRow("Time Zone:", peZon);
+  playout->addRow("Longitude:", peLon);
+  playout->addRow("Latitude:", peLat);
   playout->addRow("Elevation:", peElv);
   playout->addRow("Temperature:", peTmp);
   playout->addRow("\"Now\" minute offset:", peCor);
+  playout->addRow("Name:", peName);
+  playout->addRow("Location:", peLoc);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
