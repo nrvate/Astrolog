@@ -52,6 +52,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QListWidget>
 #include <QtCore/QDir>
+#include <QtCore/QStringList>
 #include <QtCore/QEvent>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QVector>
@@ -64,6 +65,124 @@
 #include <unistd.h>
 
 #ifdef QT
+
+// An editable combo showing "strCur" with "rgstr" as dropdown suggestions:
+// the Qt counterpart of the SetEdit() + SetCombo() pairs Windows uses on
+// most of its text fields. Order matters -- every addItem() has to precede
+// setEditText(), because adding the first item resets the current index
+// and would overwrite the edit text.
+
+static QComboBox *NewComboQt(CONST QString &strCur, CONST QStringList &rgstr)
+{
+  QComboBox *pcb = new QComboBox();
+
+  pcb->setEditable(true);
+  pcb->addItems(rgstr);
+  pcb->setEditText(strCur);
+  return pcb;
+}
+
+
+// The suggestion lists Windows puts on the chart info fields, from
+// SetEditMDYT() and SetEditSZOA() in wdialog.cpp. Kept identical to
+// Windows including the year range, which upstream hardcodes.
+
+static QStringList RgstrMonthQt()
+{
+  QStringList rgstr;
+  int i;
+
+  for (i = 1; i <= cSign; i++)
+    rgstr.append(szMonth[i]);
+  return rgstr;
+}
+
+static QStringList RgstrDayQt()
+{
+  QStringList rgstr;
+  int i;
+
+  for (i = 0; i <= 25; i += 5)
+    rgstr.append(QString::number(Max(i, 1)));
+  return rgstr;
+}
+
+static QStringList RgstrYearQt()
+{
+  QStringList rgstr;
+  int i;
+
+  for (i = 2020; i <= 2030; i++)
+    rgstr.append(QString::number(i));
+  return rgstr;
+}
+
+static QStringList RgstrTimeQt()
+{
+  QStringList rgstr;
+
+  rgstr.append("Midnight");
+  rgstr.append(us.fEuroTime ? "6:00" : "6:00am");
+  rgstr.append("Noon");
+  rgstr.append(us.fEuroTime ? "18:00" : "6:00pm");
+  return rgstr;
+}
+
+// Windows' SetEditSZOA() offers only No/Yes here, and its individual
+// dialogs append "Autodetect" where they want it. This port shows
+// Autodetect in every chart info dialog rather than resolving it away
+// (see ShowChartInfoForQt), so it belongs in every list -- a value you
+// can see but not pick would be worse than the small divergence.
+static QStringList RgstrDstQt()
+{
+  QStringList rgstr;
+
+  rgstr.append("No");
+  rgstr.append("Yes");
+  rgstr.append("Autodetect");
+  return rgstr;
+}
+
+// Every three letter zone abbreviation that isn't a daylight or war time
+// variant, shown as "<offset> <abbreviation>" -- except LMT and LAT,
+// which have no fixed offset to print.
+static QStringList RgstrZoneQt()
+{
+  QStringList rgstr;
+  char sz[cchSzDef];
+  int i;
+
+  for (i = 0; i < cZone; i++) {
+    if (szZon[i][1] && szZon[i][1] != 'D' && szZon[i][1] != 'W' &&
+      szZon[i][2] && szZon[i][2] != 'D') {
+      if (rZon[i] != zonLMT && rZon[i] != zonLAT)
+        sprintf(sz, "%s %s", SzZone(rZon[i]), szZon[i]);
+      else
+        sprintf(sz, "%s", SzZone(rZon[i]));
+      rgstr.append(sz);
+    }
+  }
+  return rgstr;
+}
+
+static QStringList RgstrLonQt()
+{
+  QStringList rgstr;
+
+  rgstr.append("122W20");
+  rgstr.append("0E00");
+  return rgstr;
+}
+
+static QStringList RgstrLatQt()
+{
+  QStringList rgstr;
+
+  rgstr.append("47N36");
+  rgstr.append("0S00");
+  return rgstr;
+}
+
 
 // Qt delivers wheel events to whatever widget sits under the pointer, so
 // scrolling one of the tall settings dialogs silently changes any combo
@@ -855,20 +974,20 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   QLineEdit *peName = new QLineEdit(FSzSet(pci->nam) ? pci->nam : "");
   QLineEdit *peLoc  = new QLineEdit(FSzSet(pci->loc) ? pci->loc : "");
   sprintf(sz, "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
-  QLineEdit *peMon  = new QLineEdit(sz);
-  QLineEdit *peDay  = new QLineEdit(QString::number(pci->day));
-  QLineEdit *peYea  = new QLineEdit(QString::number(pci->yea));
-  QLineEdit *peTim  = new QLineEdit(SzTim(pci->tim));
+  QComboBox *peMon  = NewComboQt(sz, RgstrMonthQt());
+  QComboBox *peDay  = NewComboQt(QString::number(pci->day), RgstrDayQt());
+  QComboBox *peYea  = NewComboQt(QString::number(pci->yea), RgstrYearQt());
+  QComboBox *peTim  = NewComboQt(SzTim(pci->tim), RgstrTimeQt());
   // Daylight saving has sentinel values (see astrolog.h's dstAuto) rather
   // than being a plain offset. Windows resolves dstAuto to its concrete
   // Yes/No via DstReal() before display, which silently discards the
   // user's "work it out for me" choice on the next OK -- show it as
   // "Autodetect" instead so it survives a round trip.
-  QLineEdit *peDst  = new QLineEdit(pci->dst == 0.0 ? "No" :
+  QComboBox *peDst  = NewComboQt(pci->dst == 0.0 ? "No" :
     (pci->dst == 1.0 ? "Yes" :
-    (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))));
+    (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))), RgstrDstQt());
   sprintf(sz, "%s", SzZone(pci->zon));
-  QLineEdit *peZon  = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  QComboBox *peZon  = NewComboQt(sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
   // SzLocation() returns longitude and latitude in one string split at
   // is.ichLocSplit. Force plain ASCII while formatting: otherwise it uses
   // a Latin-1/IBM degree byte that isn't valid UTF-8 (see the Charts
@@ -878,8 +997,8 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   sprintf(sz, "%s", SzLocation(pci->lon, pci->lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
-  QLineEdit *peLon  = new QLineEdit(&sz[0]);
-  QLineEdit *peLat  = new QLineEdit(&sz[is.ichLocSplit+1]);
+  QComboBox *peLon  = NewComboQt(&sz[0], RgstrLonQt());
+  QComboBox *peLat  = NewComboQt(&sz[is.ichLocSplit+1], RgstrLatQt());
   // Long names/locations otherwise show their tail end, not their start.
   peName->setCursorPosition(0);
   peLoc->setCursorPosition(0);
@@ -907,14 +1026,14 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
 
   CI ci = *pci;
   QByteArray ba;
-  ba = peMon->text().toLocal8Bit(); ci.mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->text().toLocal8Bit(); ci.day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->text().toLocal8Bit(); ci.yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->text().toLocal8Bit(); ci.tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->text().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->text().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
-  ba = peLon->text().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
-  ba = peLat->text().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
+  ba = peMon->currentText().toLocal8Bit(); ci.mon = NParseSz(ba.constData(), pmMon);
+  ba = peDay->currentText().toLocal8Bit(); ci.day = NParseSz(ba.constData(), pmDay);
+  ba = peYea->currentText().toLocal8Bit(); ci.yea = NParseSz(ba.constData(), pmYea);
+  ba = peTim->currentText().toLocal8Bit(); ci.tim = RParseSz(ba.constData(), pmTim);
+  ba = peDst->currentText().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->currentText().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
+  ba = peLon->currentText().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
+  ba = peLat->currentText().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
 
   if (!FValidMon(ci.mon) || !FValidYea(ci.yea) ||
     !FValidDay(ci.day, ci.mon, ci.yea) || !FValidTim(ci.tim) ||
@@ -1830,20 +1949,25 @@ void ShowDefaultInfoDialogQt()
   // raw numbers -- see ShowChartInfoForQt() for the same treatment and
   // the reasoning about SzLocation()'s degree byte.
   char sz[cchSzMax];
-  QLineEdit *peDst  = new QLineEdit(ciDefa.dst == 0.0 ? "No" :
+  QComboBox *peDst  = NewComboQt(ciDefa.dst == 0.0 ? "No" :
     (ciDefa.dst == 1.0 ? "Yes" :
-    (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
+    (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))),
+    RgstrDstQt());
   sprintf(sz, "%s", SzZone(ciDefa.zon));
-  QLineEdit *peZon  = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  QComboBox *peZon  = NewComboQt(sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
   int nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
   sprintf(sz, "%s", SzLocation(ciDefa.lon, ciDefa.lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
-  QLineEdit *peLon  = new QLineEdit(&sz[0]);
-  QLineEdit *peLat  = new QLineEdit(&sz[is.ichLocSplit+1]);
-  QLineEdit *peElv  = new QLineEdit(SzElevation(us.elvDef));
-  QLineEdit *peTmp  = new QLineEdit(SzTemperature(us.tmpDef));
-  QLineEdit *peCor  = new QLineEdit(QString::number(us.lTimeAddition));
+  QComboBox *peLon  = NewComboQt(&sz[0], RgstrLonQt());
+  QComboBox *peLat  = NewComboQt(&sz[is.ichLocSplit+1], RgstrLatQt());
+  // Windows offers these three presets apiece (dcDeElv/dcDeTmp/dcDeCor).
+  QComboBox *peElv  = NewComboQt(SzElevation(us.elvDef),
+    QStringList() << "0m" << "1000ft");
+  QComboBox *peTmp  = NewComboQt(SzTemperature(us.tmpDef),
+    QStringList() << "0C" << "32F");
+  QComboBox *peCor  = NewComboQt(QString::number(us.lTimeAddition),
+    QStringList() << "60" << "0" << "-60");
   peName->setCursorPosition(0);
   peLoc->setCursorPosition(0);
 
@@ -1869,10 +1993,10 @@ void ShowDefaultInfoDialogQt()
 
   CI ci = ciDefa;
   QByteArray ba;
-  ba = peDst->text().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->text().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
-  ba = peLon->text().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
-  ba = peLat->text().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
+  ba = peDst->currentText().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->currentText().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
+  ba = peLon->currentText().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
+  ba = peLat->currentText().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
 
   if (!FValidDst(ci.dst) || !FValidZon(ci.zon) ||
     !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
@@ -1880,9 +2004,9 @@ void ShowDefaultInfoDialogQt()
       "One or more chart info fields are invalid.");
     return;
   }
-  ba = peElv->text().toLocal8Bit(); us.elvDef = RParseSz(ba.constData(), pmElv);
-  ba = peTmp->text().toLocal8Bit(); us.tmpDef = RParseSz(ba.constData(), pmTmp);
-  us.lTimeAddition = peCor->text().toLong();
+  ba = peElv->currentText().toLocal8Bit(); us.elvDef = RParseSz(ba.constData(), pmElv);
+  ba = peTmp->currentText().toLocal8Bit(); us.tmpDef = RParseSz(ba.constData(), pmTmp);
+  us.lTimeAddition = peCor->currentText().toLong();
   ciDefa = ci;
   ba = peName->text().toLocal8Bit(); ciDefa.nam = SzClone((char *)ba.constData());
   ba = peLoc->text().toLocal8Bit();  ciDefa.loc = SzClone((char *)ba.constData());
@@ -1930,15 +2054,19 @@ void ShowTransitDialogQt()
   QGroupBox *pgbInfo = new QGroupBox("Transit to Natal Info");
   QFormLayout *pformInfo = new QFormLayout(pgbInfo);
   sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
-  QLineEdit *peMon = new QLineEdit(sz);
-  QLineEdit *peDay = new QLineEdit(QString::number(ciTran.day));
-  QLineEdit *peYea = new QLineEdit(QString::number(ciTran.yea));
-  QLineEdit *peTim = new QLineEdit(SzTim(ciTran.tim));
-  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "No" :
+  QComboBox *peMon = NewComboQt(sz, RgstrMonthQt());
+  QComboBox *peDay = NewComboQt(QString::number(ciTran.day),
+    RgstrDayQt());
+  QComboBox *peYea = NewComboQt(QString::number(ciTran.yea),
+    RgstrYearQt());
+  QComboBox *peTim = NewComboQt(SzTim(ciTran.tim), RgstrTimeQt());
+  QComboBox *peDst = NewComboQt(ciTran.dst == 0.0 ? "No" :
     (ciTran.dst == 1.0 ? "Yes" :
-    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))));
+    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))),
+    RgstrDstQt());
   sprintf(sz, "%s", SzZone(ciTran.zon));
-  QLineEdit *peZon = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  QComboBox *peZon = NewComboQt(sz[0] == '+' ? &sz[1] : sz,
+    RgstrZoneQt());
   pformInfo->addRow("Month:", peMon);
   pformInfo->addRow("Day:", peDay);
   pformInfo->addRow("Year:", peYea);
@@ -2022,15 +2150,15 @@ void ShowTransitDialogQt()
       real tim;
       GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
       sprintf(szT, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
-      peMon->setText(szT);
-      peDay->setText(QString::number(day));
-      peYea->setText(QString::number(yea));
-      peTim->setText(SzTim(tim));
-      peDst->setText(ciDefa.dst == 0.0 ? "No" :
+      peMon->setEditText(szT);
+      peDay->setEditText(QString::number(day));
+      peYea->setEditText(QString::number(yea));
+      peTim->setEditText(SzTim(tim));
+      peDst->setEditText(ciDefa.dst == 0.0 ? "No" :
         (ciDefa.dst == 1.0 ? "Yes" :
         (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
       sprintf(szT, "%s", SzZone(ciDefa.zon));
-      peZon->setText(szT[0] == '+' ? &szT[1] : szT);
+      peZon->setEditText(szT[0] == '+' ? &szT[1] : szT);
     });
 
   BlockComboWheelQt(&dlg);
@@ -2040,12 +2168,12 @@ void ShowTransitDialogQt()
   int mon, day, yea;
   real tim, dst, zon;
   QByteArray ba;
-  ba = peMon->text().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->text().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->text().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->text().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->text().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->text().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
+  ba = peMon->currentText().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
+  ba = peDay->currentText().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
+  ba = peYea->currentText().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
+  ba = peTim->currentText().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
+  ba = peDst->currentText().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->currentText().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
   int nty = peYears->text().toInt();
   int nd = peDiv->text().toInt();
   if (!FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
@@ -2194,15 +2322,19 @@ void ShowProgressDialogQt()
   QGroupBox *pgbDate = new QGroupBox("Progress To");
   QFormLayout *pformDate = new QFormLayout(pgbDate);
   sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
-  QLineEdit *peMon = new QLineEdit(sz);
-  QLineEdit *peDay = new QLineEdit(QString::number(ciTran.day));
-  QLineEdit *peYea = new QLineEdit(QString::number(ciTran.yea));
-  QLineEdit *peTim = new QLineEdit(SzTim(ciTran.tim));
-  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "No" :
+  QComboBox *peMon = NewComboQt(sz, RgstrMonthQt());
+  QComboBox *peDay = NewComboQt(QString::number(ciTran.day),
+    RgstrDayQt());
+  QComboBox *peYea = NewComboQt(QString::number(ciTran.yea),
+    RgstrYearQt());
+  QComboBox *peTim = NewComboQt(SzTim(ciTran.tim), RgstrTimeQt());
+  QComboBox *peDst = NewComboQt(ciTran.dst == 0.0 ? "No" :
     (ciTran.dst == 1.0 ? "Yes" :
-    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))));
+    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))),
+    RgstrDstQt());
   sprintf(sz, "%s", SzZone(ciTran.zon));
-  QLineEdit *peZon = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  QComboBox *peZon = NewComboQt(sz[0] == '+' ? &sz[1] : sz,
+    RgstrZoneQt());
   pformDate->addRow("Month:", peMon);
   pformDate->addRow("Day:", peDay);
   pformDate->addRow("Year:", peYea);
@@ -2225,15 +2357,15 @@ void ShowProgressDialogQt()
       real tim;
       GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
       sprintf(szN, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
-      peMon->setText(szN);
-      peDay->setText(QString::number(day));
-      peYea->setText(QString::number(yea));
-      peTim->setText(SzTim(tim));
-      peDst->setText(ciDefa.dst == 0.0 ? "No" :
+      peMon->setEditText(szN);
+      peDay->setEditText(QString::number(day));
+      peYea->setEditText(QString::number(yea));
+      peTim->setEditText(SzTim(tim));
+      peDst->setEditText(ciDefa.dst == 0.0 ? "No" :
         (ciDefa.dst == 1.0 ? "Yes" :
         (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
       sprintf(szN, "%s", SzZone(ciDefa.zon));
-      peZon->setText(szN[0] == '+' ? &szN[1] : szN);
+      peZon->setEditText(szN[0] == '+' ? &szN[1] : szN);
     });
 
   BlockComboWheelQt(&dlg);
@@ -2255,12 +2387,12 @@ void ShowProgressDialogQt()
   int npO = NParseSz(ba.constData(), pmObject);
   int mon, day, yea;
   real tim, dst, zon;
-  ba = peMon->text().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->text().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->text().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->text().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->text().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->text().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
+  ba = peMon->currentText().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
+  ba = peDay->currentText().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
+  ba = peYea->currentText().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
+  ba = peTim->currentText().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
+  ba = peDst->currentText().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->currentText().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
   if (rd == 0.0 || rC == 0.0 || !FValidProgArc(npO) ||
     !FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
     !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon)) {

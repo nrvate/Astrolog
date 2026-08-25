@@ -626,18 +626,46 @@ skip.
     portable too and should be added back (it is presently skipped as
     Win32-only, which is true of `wi.nTimerDelay` but misses the real
     reason). Not attempted here: it is a feature, not a parity fix.
-   8.14 **Cross-cutting: combo boxes** (next up). Windows offers dropdown
-       suggestions on many fields this port renders as bare `QLineEdit`s
-       — month names, time presets (Noon/Midnight/6:00am), time zone
-       abbreviations, colour names, object names, chart size and scale
-       values. Typed values parse fine either way, but a Windows user
-       expects the dropdown. Worth doing as one pass with a shared helper
-       rather than per dialog. Two already done in passing: Calculation
-       Settings' Zodiac Offset and House System (8.12). Its Calculation
-       Method combo is still a plain non-editable dropdown where Windows'
-       is editable — left that way because its entries are long
-       version-stamped strings ("Swiss Ephemeris 2.10.03") nobody would
-       type, and Windows matches them with `FMatchSz` on the exact text.
+   8.14 ~~Cross-cutting: combo boxes~~ — **done 2026-08-25**. Windows
+       offers dropdown suggestions on fields this port rendered as bare
+       `QLineEdit`s. The authoritative list is every `SetCombo()` call in
+       wdialog.cpp; all of them are now accounted for.
+       - Added this pass: the eight chart info fields (month, day, year,
+         time, daylight, zone, longitude, latitude) across all four
+         dialogs that show them — Chart Info, Default Chart Info,
+         Transits, Progressions — plus Default Chart Info's elevation
+         ("0m"/"1000ft"), temperature ("0C"/"32F"), and "now" minute
+         offset ("60"/"0"/"-60"). Contents match Windows' `SetEditMDYT()`
+         and `SetEditSZOA()` exactly, including the zone list's
+         "<offset> <abbreviation>" format and its filter dropping
+         daylight and war time variants, and including the hardcoded
+         2020-2030 year range upstream uses.
+       - Shared helper `NewComboQt(strCur, rgstr)` plus one
+         `Rgstr*Qt()` function per list, so the four dialogs build these
+         fields from one place rather than each rolling its own.
+       - Verified the values round-trip: picking or typing "5W EST"
+         comes back as "5W", so `RParseSz` reads the suffixed form the
+         dropdown offers. Transits' and Progressions' "Now" buttons
+         needed `setEditText()` rather than `setText()`; both confirmed
+         still working.
+       - Already done earlier: colors (8.5), progression rate and cusp
+         ratio (8.4), aspect sort and decan type (8.6), zodiac offset and
+         house system (8.12), background transparency and the two scale
+         fields (8.13), wheel corner / wheel fill / city color.
+       - **Known remaining differences, deliberate.** Windows makes three
+         of its dropdowns editable where this port leaves them as plain
+         pick lists: Calculation Method (its entries are long
+         version-stamped strings like "Swiss Ephemeris 2.10.03" that
+         nobody would type, and Windows matches them with `FMatchSz` on
+         exact text), and Chart Settings' aspect sort and decan type
+         (fixed enums where free text only invites typos). All three
+         offer the same choices; only free-text entry differs.
+       - **One divergence worth knowing:** Windows' `SetEditSZOA()` puts
+         only No/Yes in the daylight dropdown, and its individual dialogs
+         append "Autodetect" where they want it. This port shows
+         Autodetect in every chart info dialog rather than resolving it
+         away (see 8.1), so it is offered in all of them — a value you
+         can see but not pick would be worse than the small difference.
 
 9. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
    to accept; lower priority, no immediate need identified.
