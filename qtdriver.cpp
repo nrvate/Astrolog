@@ -184,12 +184,18 @@ static QAction *s_rgpaChartMode[64];
 static int s_rgnChartMode[64];
 static int s_cChartMode = 0;
 
-static QAction *AddChartModeAction(QMenu *pmenu, QActionGroup *pgroup,
-  CONST char *szLabel, int mode)
+// Shared across the Chart menu's 16 chart type items and the Graphics
+// menu's 5 sphere/globe/map view items -- Windows treats chart type as one
+// unified radio state (wi.cmdCur/rgcmdMode) no matter which menu changed
+// it, so all 21 items here belong to the same exclusive group.
+static QActionGroup *s_pgroupChartMode = NULL;
+
+static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
+  int mode)
 {
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
-  pa->setActionGroup(pgroup);
+  pa->setActionGroup(s_pgroupChartMode);
   QObject::connect(pa, &QAction::triggered, pa, [mode]() {
     SetChartModeQt(mode);
   });
@@ -463,23 +469,23 @@ static void BuildSettingMenu(QMainWindow *pwind)
 static void BuildChartMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Chart");
-  QActionGroup *pgroup = new QActionGroup(pwind);
-  AddChartModeAction(pmenu, pgroup, "Standard &Radix", gWheel);
-  AddChartModeAction(pmenu, pgroup, "&House Wheel", gHouse);
-  AddChartModeAction(pmenu, pgroup, "Aspect &Midpoint Grid", gGrid);
-  AddChartModeAction(pmenu, pgroup, "Aspect &List", gAspect);
-  AddChartModeAction(pmenu, pgroup, "M&idpoint List", gMidpoint);
-  AddChartModeAction(pmenu, pgroup, "Local &Horizon", gHorizon);
-  AddChartModeAction(pmenu, pgroup, "Solar System &Orbit", gOrbit);
-  AddChartModeAction(pmenu, pgroup, "&Gauquelin Sectors", gSector);
-  AddChartModeAction(pmenu, pgroup, "&Calendar", gCalendar);
-  AddChartModeAction(pmenu, pgroup, "&Influence", gDisposit);
-  AddChartModeAction(pmenu, pgroup, "&Esoteric", gEsoteric);
-  AddChartModeAction(pmenu, pgroup, "&Astrocartography", gAstroGraph);
-  AddChartModeAction(pmenu, pgroup, "&Ephemeris", gEphemeris);
-  AddChartModeAction(pmenu, pgroup, "Ara&bic Parts", gArabic);
-  AddChartModeAction(pmenu, pgroup, "R&ising and Setting", gRising);
-  AddChartModeAction(pmenu, pgroup, "&Nearest Cities", gLocal);
+  s_pgroupChartMode = new QActionGroup(pwind);
+  AddChartModeAction(pmenu, "Standard &Radix", gWheel);
+  AddChartModeAction(pmenu, "&House Wheel", gHouse);
+  AddChartModeAction(pmenu, "Aspect &Midpoint Grid", gGrid);
+  AddChartModeAction(pmenu, "Aspect &List", gAspect);
+  AddChartModeAction(pmenu, "M&idpoint List", gMidpoint);
+  AddChartModeAction(pmenu, "Local &Horizon", gHorizon);
+  AddChartModeAction(pmenu, "Solar System &Orbit", gOrbit);
+  AddChartModeAction(pmenu, "&Gauquelin Sectors", gSector);
+  AddChartModeAction(pmenu, "&Calendar", gCalendar);
+  AddChartModeAction(pmenu, "&Influence", gDisposit);
+  AddChartModeAction(pmenu, "&Esoteric", gEsoteric);
+  AddChartModeAction(pmenu, "&Astrocartography", gAstroGraph);
+  AddChartModeAction(pmenu, "&Ephemeris", gEphemeris);
+  AddChartModeAction(pmenu, "Ara&bic Parts", gArabic);
+  AddChartModeAction(pmenu, "R&ising and Setting", gRising);
+  AddChartModeAction(pmenu, "&Nearest Cities", gLocal);
   // The chart starts on the standard radix; reflect that in the menu.
   s_rgpaChartMode[0]->setChecked(true);
   pmenu->addSeparator();
@@ -497,6 +503,126 @@ static void BuildChartMenu(QMainWindow *pwind)
 }
 
 
+// A curated subset of Windows' Graphics menu (wdriver.cpp cmdGraphics*
+// handlers): the 5 sphere/globe/map view types, the most broadly useful
+// toggles, and the Scribble Color submenu. Skipped for this pass: Square
+// Screen (ties to Windows' resizable-window model, no clean equivalent
+// given the Qt canvas always auto-fits), Map Orientation (rotate/tilt/zoom
+// -- mode-dependent math not worth replicating without the 3D globe modes
+// fully fleshed out first), Indian Style Charts, Constellations/
+// Constellation Lines/Detailed World Map (niche, and some depend on
+// Windows-only state), Modify Display/Chart, Graphics Settings dialog.
+
+static void BuildGraphicsMenu(QMainWindow *pwind)
+{
+  QMenu *pmenu = pwind->menuBar()->addMenu("&Graphics");
+  AddChartModeAction(pmenu, "Draw Chart Sp&here", gSphere);
+  AddChartModeAction(pmenu, "Draw &World Map", gWorldMap);
+  AddChartModeAction(pmenu, "Draw &Globe", gGlobe);
+  AddChartModeAction(pmenu, "Draw &Polar Globe", gPolar);
+  AddChartModeAction(pmenu, "Draw &Telescope", gTelescope);
+  pmenu->addSeparator();
+
+  QAction *paReverse = pmenu->addAction("&Reverse Background");
+  paReverse->setCheckable(true);
+  paReverse->setChecked(gs.fInverse != 0);
+  QObject::connect(paReverse, &QAction::triggered, pwind, [paReverse]() {
+    gs.fInverse = !gs.fInverse;
+    paReverse->setChecked(gs.fInverse != 0);
+    InitColorPalette(gs.fInverse);
+    RedrawQt();
+  });
+  QAction *paMono = pmenu->addAction("&Monochrome");
+  paMono->setCheckable(true);
+  paMono->setChecked(!gs.fColor);
+  QObject::connect(paMono, &QAction::triggered, pwind, [paMono]() {
+    gs.fColor = !gs.fColor;
+    paMono->setChecked(!gs.fColor);
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
+
+  QMenu *pmenuScale = pmenu->addMenu("Character &Scale");
+  QActionGroup *pgroupScale = new QActionGroup(pwind);
+  AddSelectAction(pmenuScale, pgroupScale, "&Small", 100, &gs.nScale, fFalse);
+  AddSelectAction(pmenuScale, pgroupScale, "&Medium", 200, &gs.nScale, fFalse);
+  AddSelectAction(pmenuScale, pgroupScale, "&Large", 300, &gs.nScale, fFalse);
+  AddSelectAction(pmenuScale, pgroupScale, "&Huge", 400, &gs.nScale, fFalse);
+  pmenuScale->addSeparator();
+  QAction *paScaleDn = pmenuScale->addAction("&Decrease");
+  QObject::connect(paScaleDn, &QAction::triggered, pwind, []() {
+    if (gs.nScale > 100) { gs.nScale -= 100; RedrawQt(); }
+  });
+  QAction *paScaleUp = pmenuScale->addAction("&Increase");
+  QObject::connect(paScaleUp, &QAction::triggered, pwind, []() {
+    if (gs.nScale < MAXSCALE) { gs.nScale += 100; RedrawQt(); }
+  });
+  pmenuScale->addSeparator();
+  QAction *paTextDn = pmenuScale->addAction("Decrease &Text");
+  QObject::connect(paTextDn, &QAction::triggered, pwind, []() {
+    if (gs.nScaleText > 100) {
+      gs.nScaleText -= 50; gs.fAutoScale = fFalse; RedrawQt();
+    }
+  });
+  QAction *paTextUp = pmenuScale->addAction("&Increase Text");
+  QObject::connect(paTextUp, &QAction::triggered, pwind, []() {
+    if (gs.nScaleText < MAXSCALE) {
+      gs.nScaleText += 50; gs.fAutoScale = fFalse; RedrawQt();
+    }
+  });
+
+  QMenu *pmenuEffects = pmenu->addMenu("&Chart Effects");
+  AddToggleAction(pmenuEffects, "Show &Border", &gs.fBorder, fFalse);
+  AddToggleAction(pmenuEffects, "Show Chart &Info", &gs.fText, fFalse);
+  QAction *paSidebar = pmenuEffects->addAction("Show Info &Sidebar");
+  paSidebar->setCheckable(true);
+  paSidebar->setChecked(gs.fDoSidebar != 0);
+  QObject::connect(paSidebar, &QAction::triggered, pwind, [paSidebar]() {
+    gs.fDoSidebar = !gs.fDoSidebar;
+    paSidebar->setChecked(gs.fDoSidebar != 0);
+    if (gs.fDoSidebar)
+      gs.fText = fTrue;
+    RedrawQt();
+  });
+  pmenuEffects->addSeparator();
+  AddToggleAction(pmenuEffects, "&Thicker Lines", &gs.fThick, fFalse);
+  AddToggleAction(pmenuEffects, "&Antialias Lines", &gs.fAntialias, fFalse);
+  AddToggleAction(pmenuEffects, "Show Glyph &Labels", &gs.fLabel, fFalse);
+  AddToggleAction(pmenuEffects, "Show &Glyphs on Aspect Lines",
+    &gs.fLabelAsp, fFalse);
+
+  QMenu *pmenuMap = pmenu->addMenu("Map &Effects");
+  AddToggleAction(pmenuMap, "Show Full &Star List", &gs.fAllStar, fFalse);
+  AddToggleAction(pmenuMap, "Show E&xoplanets", &gs.fAllExo, fFalse);
+  pmenuMap->addSeparator();
+  AddToggleAction(pmenuMap, "Show &House Details", &gs.fHouseExtra, fTrue);
+  AddToggleAction(pmenuMap, "Show &Equator", &gs.fEquator, fFalse);
+  AddToggleAction(pmenuMap, "Show C&ities", &gs.fLabelCity, fFalse);
+  pmenuMap->addSeparator();
+  AddToggleAction(pmenuMap, "Use Ecliptic &Axis", &gs.fEcliptic, fFalse);
+  pmenu->addSeparator();
+
+  QMenu *pmenuPen = pmenu->addMenu("Scribb&le Color");
+  QActionGroup *pgroupPen = new QActionGroup(pwind);
+  AddSelectAction(pmenuPen, pgroupPen, "Blac&k", 0, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&White", 15, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Red", 9, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Green", 10, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Blue", 12, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Yellow", 11, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Magenta", 13, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Cyan", 14, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "Gr&ay", 8, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Lt. Gray", 7, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "Maroo&n", 1, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "Dk. Gr&een", 2, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "Dk. Bl&ue", 4, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "Mai&ze", 3, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Purple", 5, &gi.kiPen, fFalse);
+  AddSelectAction(pmenuPen, pgroupPen, "&Dk. Cyan", 6, &gi.kiPen, fFalse);
+}
+
+
 // Build the main window's menu bar.
 
 static void BuildAstrologMenus(QMainWindow *pwind)
@@ -506,6 +632,7 @@ static void BuildAstrologMenus(QMainWindow *pwind)
   BuildInfoMenu(pwind);
   BuildSettingMenu(pwind);
   BuildChartMenu(pwind);
+  BuildGraphicsMenu(pwind);
 }
 
 
