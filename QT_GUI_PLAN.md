@@ -282,10 +282,19 @@ earlier claim here that nothing populated it was wrong. Open Charts in
 Folder is written on QDir rather than ported, because the shared
 `OpenDir()` in io.cpp has its entire body inside `#ifdef PC`.
 
-**Not yet verified** (everything else in this section was checked live):
-that Open Charts in Folder's charts actually land in the list, and that
-Save Chart List writes correct output. Both worth confirming before
-trusting them.
+**Not yet verified by running them** (everything else in this section was
+checked live): that Open Charts in Folder's charts actually land in the
+list, and that Save Chart List writes correct output. Both were code
+reviewed instead, which turned up and fixed a real NULL deref crash (see
+the commit "Fix NULL deref saving a chart list with an unnamed chart").
+Still worth exercising once in the GUI.
+
+**Note for testing anything in this port:** the Qt build has no headless
+mode — it always enters the Qt event loop, so command line style checks
+(`./astrolog-qt -i foo.as -o bar.as`) just hang rather than running and
+exiting. Verification has to be either through the GUI or by reasoning
+about shared code in io.cpp/general.cpp, which the console build does
+exercise.
 
 ### Setting — COMPLETE
 All items done: Sidereal Zodiac, Heliocentric, House System (22-item
