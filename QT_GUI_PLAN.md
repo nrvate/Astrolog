@@ -398,11 +398,40 @@ skip.
    Previous/Next/First/Last and File's Open Charts in Folder / Save Chart
    List. Read `DlgList` in full before starting — the navigation is
    trivial, the dialog is the work.
-8. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
+8. **UI parity audit across every dialog** — go through all of
+   qtdialog.cpp against the matching `Dlg*` in wdialog.cpp and the
+   matching resource block in astrolog.rc, and fix places where this port
+   is *functionally* right but *presentationally* diverged. Requested
+   after the chart info dialog was found showing `21.9` where Windows
+   shows `9:57pm`. That one is fixed; the same class of problem is known
+   to remain in at least:
+   - **Default Chart Info** (`ShowDefaultInfoDialogQt`): zone/longitude/
+     latitude as raw decimals instead of `8W` / `122:19W` / `47:36N`.
+   - **Transits** (`ShowTransitDialogQt`) and **Progressions**
+     (`ShowProgressDialogQt`): month as a number instead of a name, time
+     as decimal hours instead of `9:57pm`, zone as a raw decimal.
+   The fix pattern is already established in `ShowChartInfoForQt()` —
+   `szMonth[]` for months, `SzTim()` / `SzZone()` / `SzLocation()` (the
+   last with `us.fAnsiChar` forced off, split at `is.ichLocSplit`) for the
+   rest. It's display-only: Astrolog's `NParseSz`/`RParseSz` already
+   accept these forms, which is what these dialogs call on the way back in.
+   Beyond formatting, also worth auditing:
+   - **Combo boxes vs plain text fields.** Windows offers dropdown
+     suggestions on many fields this port renders as bare `QLineEdit`s
+     (month names, time presets like Noon/Midnight, time zone
+     abbreviations, colour lists, object names). The typed value parses
+     fine either way, but a Windows user expects the dropdown.
+   - **Numeric precision.** Windows' `SetEditR(..., n)` fixes decimal
+     places per field; `QString::number()` doesn't, so orb/influence
+     fields can show more digits than Windows does.
+   - **Field order and labels**, against the `.rc` `LTEXT` entries.
+   Do this as a sweep per dialog with a screenshot check, not one big
+   commit.
+9. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
    to accept; lower priority, no immediate need identified.
-9. **Edit menu's 96 macro slots** — lowest priority, deferred repeatedly.
-   Only do this if specifically asked.
-10. **File > Print...** — no existing portable rendering path to a
+10. **Edit menu's 96 macro slots** — lowest priority, deferred repeatedly.
+    Only do this if specifically asked.
+11. **File > Print...** — no existing portable rendering path to a
     printer; would need new code built on `QPrinter`. Not investigated.
 
 ## Explicitly out of scope (don't implement)
