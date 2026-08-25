@@ -984,6 +984,30 @@ original description said they were.
       "Exit" is the one worth a second opinion** — Quit is the Linux
       convention, and parity was chosen over it deliberately.
 
+17. **The mouse does things no menu item covers.** Windows' chart window
+    handles the mouse in `NWndProc()` (wdriver.cpp:820-960), and none of it
+    is reachable from a menu, so menu parity counting is blind to it. Now
+    ported in `ChartCanvas`:
+    - **Right button drag rotates and tilts** globes, spheres, polar and
+      world maps, astro-cartography, local horizon, telescope and midpoint
+      charts. Previously the only way to rotate was nudging via menu items.
+    - **Alt+click on a world map relocates the chart** to that spot.
+      Deliberately disabled on constellation and Mollweide maps, as on
+      Windows -- their projections aren't a plain lat/long grid.
+    - **Freehand scribbling**: click sets a pixel, Shift+click draws a line
+      from the last point, Ctrl+click a rectangle, Ctrl+Shift+click an
+      ellipse. A plain drag is treated as repeated Shift+clicks so it draws
+      a continuous line; a deliberate Shift+click leaves the anchor put so
+      several lines can fan out from one point.
+    - Note this made the already-ported **Scribble Color** menu item
+      reachable: it set a pen there was no way to draw with.
+    - The context menu had to move with it. Windows pops it on button *down*
+      for most charts but on button *up* for the rotatable ones, skipping it
+      if the drag rotated anything. Qt's automatic ContextMenu event can't
+      express that (X11 fires it on press, Windows on release), so the
+      canvas sets `Qt::PreventContextMenu` and drives the menu from the
+      mouse handlers. Change one of these and check the other.
+
 ## Known divergences from Windows
 
 Every place this port knowingly differs, so none of it reads as an

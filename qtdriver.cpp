@@ -44,6 +44,8 @@
 #include <QtWidgets/QTextBrowser>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QContextMenuEvent>
+#include <QtGui/QMouseEvent>
+#include <QtGui/QPainter>
 #include <QtGui/QPaintEvent>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
@@ -82,10 +84,31 @@ static void AddHotkeysToWindowQt(QWidget *pw);   // defined below
 static QMenu *PmenuContextForChartQt();   // defined below
 static QMenu *PmenuContextForTextQt();    // defined below
 
+// Does a right button drag rotate and tilt the current chart? Same set of
+// chart types as wdriver.cpp:842. These are exactly the types that have to
+// hold their context menu until the button is released, since otherwise
+// every rotate would end by popping up a menu.
+static flag FRotatableQt()
+{
+  return us.fGraphics && (fMap || gi.nMode == gMidpoint ||
+    gi.nMode == gLocal || gi.nMode == gSphere || gi.nMode == gGlobe ||
+    gi.nMode == gPolar || gi.nMode == gTelescope);
+}
+
+
 class ChartCanvas : public QWidget
 {
 public:
-  ChartCanvas(QWidget *parent = NULL) : QWidget(parent) { }
+  ChartCanvas(QWidget *parent = NULL) : QWidget(parent), fRotated(fFalse)
+  {
+    // Handle the right button in the mouse events below rather than letting
+    // Qt synthesize a ContextMenu event: Windows pops the menu on button
+    // down for most charts but on button up for the ones a drag rotates,
+    // and Qt's automatic event can't express that split (it fires on press
+    // under X11 but on release under Windows, so it isn't even consistent
+    // between the two platforms this program targets).
+    setContextMenuPolicy(Qt::PreventContextMenu);
+  }
 
 protected:
   // Qt's resize/show calls made before the event loop is running (in
@@ -119,19 +142,184 @@ protected:
     update();
   }
 
-  // Right-click brings up the context menu for the current chart type,
-  // as it does on Windows. Chart types that have no menu there get none
-  // here either, rather than a stub.
-  void contextMenuEvent(QContextMenuEvent *pevent) override
+  // Windows' chart window does three things with the mouse that aren't
+  // menu commands at all, in NWndProc()'s WM_LBUTTONDOWN / WM_MOUSEMOVE /
+  // WM_RBUTTONDOWN / WM_RBUTTONUP cases (wdriver.cpp:820-960): drag with
+  // the right button to rotate globes and maps, Alt+click a world map to
+  // move the chart to that spot, and scribble freehand over the chart with
+  // the left button. All three are ported below.
+
+  void mousePressEvent(QMouseEvent *pevent) override
+  {
+    if (pevent->button() == Qt::RightButton) {
+      ptRot = pevent->pos();
+      fRotated = fFalse;
+
+      // Charts a drag can rotate hold their menu until the button comes
+      // back up, so that dragging one doesn't end in a popup.
+      if (!FRotatableQt())
+        ShowContextMenu(pevent->globalPos());
+      return;
+    }
+    if (pevent->button() != Qt::LeftButton)
+      return;
+
+    // Alt+click on a world map relocates the chart to that spot. Windows
+    // consumes the click either way, so Alt+click never also scribbles.
+    if (pevent->modifiers() & Qt::AltModifier) {
+      if (fMap && !gs.fConstel && !gs.fMollweide) {
+        SetChartLocation(pevent->pos());
+        ptDraw = QPoint();
+      }
+      return;
+    }
+    Scribble(pevent->pos(), pevent->modifiers(), fFalse);
+  }
+
+  void mouseMoveEvent(QMouseEvent *pevent) override
+  {
+    if (pevent->buttons() & Qt::RightButton) {
+      if (FRotatableQt())
+        RotateByDrag(pevent->pos());
+      return;
+    }
+
+    // Windows treats a plain left drag as a series of Shift+clicks, which
+    // is what makes dragging draw a continuous line instead of a dotted
+    // trail of single pixels. Holding Shift or Ctrl during a drag draws
+    // nothing until the button goes down again, so that a Shift+click can
+    // fan several lines out from one anchor point, and a Ctrl+click can
+    // place a rectangle, without the drag itself scribbling over them.
+    if ((pevent->buttons() & Qt::LeftButton) &&
+      !(pevent->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier)))
+      Scribble(pevent->pos(), Qt::ShiftModifier, fTrue);
+  }
+
+  void mouseReleaseEvent(QMouseEvent *pevent) override
+  {
+    // The rotatable charts' menu appears now instead of on button down,
+    // and only if this drag didn't actually rotate anything.
+    if (pevent->button() == Qt::RightButton && FRotatableQt() && !fRotated)
+      ShowContextMenu(pevent->globalPos());
+  }
+
+private:
+  QPoint ptDraw;    // Where the last scribble left off, or null for none.
+  QPoint ptRot;     // Where the right button drag in progress last was.
+  flag fRotated;    // Has that drag rotated the chart? (Windows' wi.fMoved.)
+
+  // Right-click brings up the context menu for the current chart type, as
+  // it does on Windows. Chart types that have no menu there get none here
+  // either, rather than a stub.
+  void ShowContextMenu(CONST QPoint &ptGlobal)
   {
     QMenu *pmenu = PmenuContextForChartQt();
 
-    if (pmenu == NULL) {
-      pevent->ignore();
+    if (pmenu == NULL)
       return;
-    }
-    pmenu->exec(pevent->globalPos());
+    pmenu->exec(ptGlobal);
     delete pmenu;
+  }
+
+  // Port of the rotate and tilt math at wdriver.cpp:844-870.
+  void RotateByDrag(CONST QPoint &pt)
+  {
+    if (gs.xWin < 1 || gs.yWin < 1)
+      return;
+    gs.rRot += (real)(pt.x() - ptRot.x()) * rDegHalf / (real)gs.xWin *
+      (gi.nMode == gLocal || gi.nMode == gTelescope ? -gi.zViewRatio : 1.0);
+    gs.rTilt += (real)(pt.y() - ptRot.y()) * rDegHalf / (real)gs.yWin *
+      (gi.nMode == gLocal || gi.nMode == gTelescope ? gi.zViewRatio :
+      (gi.nMode == gGlobe ? -1.0 : 1.0));
+    while (gs.rRot >= rDegMax)
+      gs.rRot -= rDegMax;
+    while (gs.rRot < 0.0)
+      gs.rRot += rDegMax;
+    if (gs.rTilt > rDegQuad)
+      gs.rTilt = rDegQuad;
+    else if (gs.rTilt < -rDegQuad)
+      gs.rTilt = -rDegQuad;
+
+    // Dragging a telescope chart, or a midpoint chart that's tracking an
+    // object, means the view is no longer tied to what it was tracking.
+    if (gi.nMode == gMidpoint || gi.nMode == gTelescope) {
+      if (gi.nMode == gMidpoint && gs.objTrack >= 0)
+        gs.rRot = planet[gs.objTrack];
+      gs.objTrack = -1;
+    }
+    ptRot = pt;
+    fRotated = fTrue;
+    RedrawQt();
+  }
+
+  // Port of the Alt+click relocation at wdriver.cpp:876-897. Note this
+  // sets ciMain (what Lon and Lat resolve to) and then copies it over the
+  // working chart, rather than the other way around.
+  void SetChartLocation(CONST QPoint &pt)
+  {
+    if (gs.xWin < 1 || gs.yWin < 1)
+      return;
+    Lon = rDegHalf -
+      Mod((real)(pt.x() - gi.xOffset) / (real)gs.xWin * rDegMax - gs.rRot);
+    if (Lon < -rDegHalf)
+      Lon = -rDegHalf;
+    else if (Lon > rDegHalf)
+      Lon = rDegHalf;
+    Lat = rDegQuad - (real)(pt.y() - gi.yOffset) / (real)gs.yWin * rDegHalf;
+    if (Lat < -rDegQuad)
+      Lat = -rDegQuad;
+    else if (Lat > rDegQuad)
+      Lat = rDegQuad;
+    ciCore = ciMain;
+    RecastAndRedrawQt();
+  }
+
+  // Port of the freehand drawing at wdriver.cpp:899-930. Windows scribbles
+  // straight onto the window's device context, so its marks last until the
+  // next redraw paints over them; drawing into gi.qim here gives them the
+  // same lifetime, since a redraw replaces that buffer wholesale.
+  void Scribble(CONST QPoint &pt, Qt::KeyboardModifiers mods, flag fDrag)
+  {
+    if (gi.qim == NULL || !us.fGraphics)
+      return;
+    KV kv = KvFromKi(gi.kiPen);
+    QColor col(RgbR(kv), RgbG(kv), RgbB(kv));
+
+    // Ctrl+click draws a rectangle, Ctrl+Shift+click an ellipse, in both
+    // cases from the last remembered point to this one.
+    if (mods & Qt::ControlModifier) {
+      if (ptDraw.isNull())
+        return;
+      QPainter p(gi.qim);
+      p.setPen(QPen(col, Max((!gs.fThick ? 0 : 2) + gs.nThickAdjust, 0)));
+      p.setBrush(Qt::NoBrush);
+      if (mods & Qt::ShiftModifier)
+        p.drawEllipse(QRect(ptDraw, pt).normalized());
+      else
+        p.drawRect(QRect(ptDraw, pt).normalized());
+
+    // Shift+click draws a line from the last point to this one.
+    } else if (mods & Qt::ShiftModifier) {
+      if (ptDraw.isNull())
+        return;
+      QPainter p(gi.qim);
+      p.setPen(QPen(col, Max((!gs.fThick ? 0 : 2) + gs.nThickAdjust, 0)));
+      p.drawLine(ptDraw, pt);
+
+      // Only a drag advances the anchor. A deliberate Shift+click leaves it
+      // alone, so several lines can be fanned out from the same point.
+      if (fDrag)
+        ptDraw = pt;
+
+    // A plain click sets a single pixel and remembers where it was. This
+    // ignores pen thickness, exactly as Windows' SetPixel() does.
+    } else {
+      if (pt.x() >= 0 && pt.x() < gi.qim->width() &&
+        pt.y() >= 0 && pt.y() < gi.qim->height())
+        gi.qim->setPixel(pt, col.rgb());
+      ptDraw = pt;
+    }
+    update();
   }
 };
 
