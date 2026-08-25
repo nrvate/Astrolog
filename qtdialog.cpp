@@ -43,6 +43,7 @@
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QGroupBox>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QMessageBox>
@@ -823,6 +824,487 @@ void ShowAspectDialogQt()
     kAspA[i] = NParseSz(ba.constData(), pmColor);
   }
   AdjustAspectCount();
+  RecastAndRedrawQt();
+}
+
+
+// More Object Settings, equivalent to Windows' DlgObject2: extends
+// ShowObjectDialogQt() to the object range beyond the core planets (cusps
+// through dwarf planets), plus one extra row applying to all fixed stars
+// collectively, matching how Windows treats that whole range as a single
+// "stars" row instead of listing each star.
+
+void ShowObject2DialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("More Object Settings");
+  dlg.resize(500, 500);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QGridLayout *pgrid = new QGridLayout(pinner);
+  QVector<int> rgi;
+  QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf, rgpeColor;
+  int i0, i, row = 1;
+
+  pgrid->addWidget(new QLabel("Object"), 0, 0);
+  pgrid->addWidget(new QLabel("Max Orb"), 0, 1);
+  pgrid->addWidget(new QLabel("Orb Add"), 0, 2);
+  pgrid->addWidget(new QLabel("Influence"), 0, 3);
+  pgrid->addWidget(new QLabel("Color"), 0, 4);
+  for (i0 = oAsc; i0 <= dwarfHi+1; i0++) {
+    i = (i0 <= dwarfHi ? i0 : starLo);
+    rgi.append(i);
+    pgrid->addWidget(new QLabel(i0 <= dwarfHi ? szObjName[i] : "Stars"),
+      row, 0);
+    QLineEdit *peOrb = new QLineEdit(QString::number(rObjOrb[i]));
+    pgrid->addWidget(peOrb, row, 1);
+    rgpeOrb.append(peOrb);
+    QLineEdit *peAdd = new QLineEdit(QString::number(rObjAdd[i]));
+    pgrid->addWidget(peAdd, row, 2);
+    rgpeAdd.append(peAdd);
+    QLineEdit *peInf = new QLineEdit(QString::number(rObjInf[i]));
+    pgrid->addWidget(peInf, row, 3);
+    rgpeInf.append(peInf);
+    QLineEdit *peColor = new QLineEdit(SzColor(kObjU[i]));
+    pgrid->addWidget(peColor, row, 4);
+    rgpeColor.append(peColor);
+    row++;
+  }
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (row = 0; row < rgi.size(); row++) {
+    i = rgi[row];
+    rObjOrb[i] = rgpeOrb[row]->text().toDouble();
+    rObjAdd[i] = rgpeAdd[row]->text().toDouble();
+    rObjInf[i] = rgpeInf[row]->text().toDouble();
+    QByteArray ba = rgpeColor[row]->text().toLocal8Bit();
+    kObjU[i] = NParseSz(ba.constData(), pmColor);
+  }
+  RecastAndRedrawQt();
+}
+
+
+// Calculation settings, equivalent to Windows' DlgCalc: ephemeris source,
+// zodiac offset, house system, central planet, harmonic/dwad chart
+// factors, and a grab bag of position calculation toggles.
+
+void ShowCalcDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Calculation Settings");
+  dlg.resize(450, 600);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
+  int i;
+
+  QFormLayout *pform1 = new QFormLayout();
+  QComboBox *pcbEphem = new QComboBox();
+  QVector<int> rgcm;
+  pcbEphem->addItem(szEphem[cmSwiss]);   rgcm.append(cmSwiss);
+  pcbEphem->addItem(szEphem[cmMoshier]); rgcm.append(cmMoshier);
+  pcbEphem->addItem(szEphem[cmJPL]);     rgcm.append(cmJPL);
+  if (!us.fNoNetwork) {
+    pcbEphem->addItem(szEphem[cmJPLWeb]);
+    rgcm.append(cmJPLWeb);
+  }
+  pcbEphem->addItem(szEphem[cmPlacalc]); rgcm.append(cmPlacalc);
+  pcbEphem->addItem(szEphem[cmMatrix]);  rgcm.append(cmMatrix);
+  pcbEphem->addItem(szEphem[cmNone]);    rgcm.append(cmNone);
+  int cmCur = FCmSwissEph() ? cmSwiss : (FCmSwissMosh() ? cmMoshier :
+    (FCmSwissJPL() ? cmJPL : (FCmPlacalc() ? cmPlacalc :
+    (FCmMatrix() ? cmMatrix : (FCmJPLWeb() ? cmJPLWeb : cmNone)))));
+  pcbEphem->setCurrentIndex(rgcm.indexOf(cmCur));
+  pform1->addRow("Calculation Method:", pcbEphem);
+
+  QLineEdit *peOffset = new QLineEdit(QString::number(us.rZodiacOffset));
+  pform1->addRow("Zodiac Offset / Ayanamsa:", peOffset);
+
+  QComboBox *pcbSystem = new QComboBox();
+  for (i = 0; i < cSystem; i++)
+    pcbSystem->addItem(szSystem[i]);
+  pcbSystem->setCurrentIndex(us.nHouseSystem);
+  pform1->addRow("House System:", pcbSystem);
+
+  QLineEdit *peCenter = new QLineEdit(szObjName[us.objCenter]);
+  pform1->addRow("Central Planet:", peCenter);
+
+  QLineEdit *peHarmonic = new QLineEdit(QString::number(us.rHarmonic));
+  pform1->addRow("Harmonic Chart Factor:", peHarmonic);
+
+  QLineEdit *peDwad = new QLineEdit(QString::number(us.nDwad));
+  pform1->addRow("Dwad Nesting Level:", peDwad);
+  pinnerlayout->addLayout(pform1);
+
+  QCheckBox *pcbBary = new QCheckBox(
+    "Compute Solar System Barycenter Instead of Sun");
+  QCheckBox *pcbTrueNode = new QCheckBox(
+    "Compute True Instead of Mean Nodes and Lilith");
+  QCheckBox *pcbHouseAngle = new QCheckBox(
+    "Cusp Objects Are House Positions Instead of Angles");
+  QCheckBox *pcbRefract = new QCheckBox(
+    "Local Horizon Positions Apply Atmospheric Refraction");
+  QCheckBox *pcbSidereal2 = new QCheckBox(
+    "Sidereal Zodiac in Invariable Plane of Solar System");
+  QCheckBox *pcbNoNutation = new QCheckBox("Tropical Zodiac No Nutation");
+  QCheckBox *pcbEquator2 = new QCheckBox("Equatorial Latitudes");
+  QCheckBox *pcbEquator = new QCheckBox("Equatorial Longitudes");
+  QCheckBox *pcbTruePos = new QCheckBox("True Space Positions");
+  QCheckBox *pcbTopoPos = new QCheckBox("Topocentric Positions");
+  QCheckBox *pcbAspect3D = new QCheckBox("3D Aspects");
+  QCheckBox *pcbAspectLat = new QCheckBox("3D Orbs");
+  QCheckBox *pcbHouse3D = new QCheckBox("3D Houses");
+  QCheckBox *pcbSolarWhole = new QCheckBox("Use Start of Planet's Sign");
+  pcbBary->setChecked(us.fBarycenter != 0);
+  pcbTrueNode->setChecked(us.fTrueNode != 0);
+  pcbHouseAngle->setChecked(us.fHouseAngle != 0);
+  pcbRefract->setChecked(us.fRefract != 0);
+  pcbSidereal2->setChecked(us.fSidereal2 != 0);
+  pcbNoNutation->setChecked(us.fNoNutation != 0);
+  pcbEquator2->setChecked(us.fEquator2 != 0);
+  pcbEquator->setChecked(us.fEquator != 0);
+  pcbTruePos->setChecked(us.fTruePos != 0);
+  pcbTopoPos->setChecked(us.fTopoPos != 0);
+  pcbAspect3D->setChecked(us.fAspect3D != 0);
+  pcbAspectLat->setChecked(us.fAspectLat != 0);
+  pcbHouse3D->setChecked(us.fHouse3D != 0);
+  pcbSolarWhole->setChecked(us.fSolarWhole != 0);
+  for (QCheckBox *pcb : { pcbBary, pcbTrueNode, pcbHouseAngle, pcbRefract,
+    pcbSidereal2, pcbNoNutation, pcbEquator2, pcbEquator, pcbTruePos,
+    pcbTopoPos, pcbAspect3D, pcbAspectLat, pcbHouse3D, pcbSolarWhole })
+    pinnerlayout->addWidget(pcb);
+
+  QGroupBox *pgroupBox3D = new QGroupBox("3D House Projection");
+  QVBoxLayout *pgrouplayout3D = new QVBoxLayout(pgroupBox3D);
+  QButtonGroup *pgroup3D = new QButtonGroup(&dlg);
+  CONST char *rgsz3D[3] =
+    { "Prime Vertical", "Local Horizon", "Celestial Equator" };
+  for (i = 0; i < 3; i++) {
+    QRadioButton *prb = new QRadioButton(rgsz3D[i]);
+    prb->setChecked(i == us.nHouse3D - 1);
+    pgroup3D->addButton(prb, i);
+    pgrouplayout3D->addWidget(prb);
+  }
+  pinnerlayout->addWidget(pgroupBox3D);
+
+  QGroupBox *pgroupBoxAsc = new QGroupBox("Object on Angle");
+  QVBoxLayout *pgrouplayoutAsc = new QVBoxLayout(pgroupBoxAsc);
+  QButtonGroup *pgroupAsc = new QButtonGroup(&dlg);
+  CONST char *rgszAsc[3] =
+    { "None", "Object on Ascendant", "Object on Midheaven" };
+  int nAscCur = us.objOnAsc == 0 ? 0 : (us.objOnAsc > 0 ? 1 : 2);
+  for (i = 0; i < 3; i++) {
+    QRadioButton *prb = new QRadioButton(rgszAsc[i]);
+    prb->setChecked(i == nAscCur);
+    pgroupAsc->addButton(prb, i);
+    pgrouplayoutAsc->addWidget(prb);
+  }
+  QLineEdit *peOnAsc = new QLineEdit(
+    szObjName[us.objOnAsc == 0 ? oSun : NAbs(us.objOnAsc)-1]);
+  QFormLayout *pformAsc = new QFormLayout();
+  pformAsc->addRow("Object:", peOnAsc);
+  pgrouplayoutAsc->addLayout(pformAsc);
+  pinnerlayout->addWidget(pgroupBoxAsc);
+
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  real rOffset = peOffset->text().toDouble();
+  int nSystem = pcbSystem->currentIndex();
+  QByteArray baCenter = peCenter->text().toLocal8Bit();
+  int nCenter = NParseSz(baCenter.constData(), pmObject);
+  real rHarmonic = peHarmonic->text().toDouble();
+  int nDwad = peDwad->text().toInt();
+  QByteArray baOnAsc = peOnAsc->text().toLocal8Bit();
+  int nOnAsc = NParseSz(baOnAsc.constData(), pmObject);
+  if (!FValidOffset(rOffset) || !FValidSystem(nSystem) ||
+    !FValidCenter(nCenter) || !FValidHarmonic(rHarmonic) ||
+    !FValidDwad(nDwad) || !FItem(nOnAsc)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more calculation settings fields are invalid.");
+    return;
+  }
+
+  int cmSel = rgcm[pcbEphem->currentIndex()];
+  us.fEphemFiles = us.fPlacalcPla = us.fMatrixPla = fFalse;
+  us.nSwissEph = 0;
+  switch (cmSel) {
+  case cmSwiss:   us.fEphemFiles = fTrue; us.nSwissEph = 0; break;
+  case cmMoshier: us.fEphemFiles = fTrue; us.nSwissEph = 1; break;
+  case cmJPL:     us.fEphemFiles = fTrue; us.nSwissEph = 2; break;
+  case cmJPLWeb:  us.fEphemFiles = fTrue; us.nSwissEph = 3; break;
+  case cmPlacalc: us.fEphemFiles = us.fPlacalcPla = fTrue; break;
+  case cmMatrix:  us.fMatrixPla = fTrue; break;
+  default: break;  // cmNone
+  }
+  us.rZodiacOffset = rOffset;
+  us.nHouseSystem = nSystem;
+  SetCentric(nCenter);
+  SyncHelioMenuQt();
+  us.rHarmonic = rHarmonic;
+  us.nDwad = nDwad;
+  us.fBarycenter = pcbBary->isChecked();
+  us.fTrueNode = pcbTrueNode->isChecked();
+  us.fHouseAngle = pcbHouseAngle->isChecked();
+  us.fRefract = pcbRefract->isChecked();
+  us.fSidereal2 = pcbSidereal2->isChecked();
+  us.fNoNutation = pcbNoNutation->isChecked();
+  us.fAspect3D = pcbAspect3D->isChecked();
+  us.fAspectLat = pcbAspectLat->isChecked();
+  int nAscSel = pgroupAsc->checkedId();
+  us.objOnAsc = nAscSel == 0 ? 0 : (nAscSel == 1 ? nOnAsc+1 : -nOnAsc-1);
+  us.fSolarWhole = pcbSolarWhole->isChecked();
+  us.fEquator2 = pcbEquator2->isChecked();
+  us.fEquator = pcbEquator->isChecked();
+  us.fTruePos = pcbTruePos->isChecked();
+  us.fTopoPos = pcbTopoPos->isChecked();
+  us.fHouse3D = pcbHouse3D->isChecked();
+  us.nHouse3D = pgroup3D->checkedId() + 1;
+  RecastAndRedrawQt();
+}
+
+
+// Display settings, equivalent to Windows' DlgDisplay: date/time/number
+// formatting, aspect count and requirements, eclipse display, and the
+// angle/rulership restriction checkbox grids.
+
+void ShowDisplayDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Display Settings");
+  dlg.resize(450, 650);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
+  int i;
+
+  QCheckBox *pcbEuroDate = new QCheckBox(
+    "Format Dates as D-M-Y Instead of M/D/Y");
+  QCheckBox *pcbEuroTime = new QCheckBox(
+    "Format Times as 24 Hour Instead of am/pm");
+  QCheckBox *pcbOffsetOnly = new QCheckBox(
+    "Display Daylight and Time Zone as Single Offset");
+  QCheckBox *pcbEuroDist = new QCheckBox(
+    "Display Lengths in Metric Instead of Imperial Units");
+  QCheckBox *pcbRound = new QCheckBox(
+    "Round Positions to Nearest Unit Instead of Crop");
+  QCheckBox *pcbSeconds = new QCheckBox("Display Positions to Nearest Second");
+  QCheckBox *pcbSecond1K = new QCheckBox(
+    "Display Nearest Second to 1/1000th of a Second");
+  QCheckBox *pcbSecondHide = new QCheckBox(
+    "Don't Display Seconds If They're Exactly :00");
+  pcbEuroDate->setChecked(us.fEuroDate != 0);
+  pcbEuroTime->setChecked(us.fEuroTime != 0);
+  pcbOffsetOnly->setChecked(us.fOffsetOnly != 0);
+  pcbEuroDist->setChecked(us.fEuroDist != 0);
+  pcbRound->setChecked(us.fRound != 0);
+  pcbSeconds->setChecked(us.fSeconds != 0);
+  pcbSecond1K->setChecked(us.fSecond1K != 0);
+  pcbSecondHide->setChecked(us.fSecondHide != 0);
+  for (QCheckBox *pcb : { pcbEuroDate, pcbEuroTime, pcbOffsetOnly,
+    pcbEuroDist, pcbRound, pcbSeconds, pcbSecond1K, pcbSecondHide })
+    pinnerlayout->addWidget(pcb);
+
+  QFormLayout *pform1 = new QFormLayout();
+  QLineEdit *peAsp = new QLineEdit(QString::number(us.nAsp));
+  pform1->addRow("Number of Aspects to Include:", peAsp);
+  pinnerlayout->addLayout(pform1);
+
+  QCheckBox *pcbSmartCusp = new QCheckBox(
+    "Ignore Insignificant House Cusp Aspects");
+  pcbSmartCusp->setChecked(us.fSmartCusp != 0);
+  pinnerlayout->addWidget(pcbSmartCusp);
+
+  QFormLayout *pform2 = new QFormLayout();
+  QLineEdit *peReqObj = new QLineEdit(
+    us.objRequire >= 0 ? szObjName[us.objRequire] : "None");
+  pform2->addRow("Required Object for Aspects:", peReqObj);
+  pinnerlayout->addLayout(pform2);
+
+  QCheckBox *pcbParallel2 = new QCheckBox(
+    "Parallel Aspects Based on Ecliptic Not Equator");
+  QCheckBox *pcbDistance = new QCheckBox(
+    "Aspects Measure Along Distance Axis");
+  pcbParallel2->setChecked(us.fParallel2 != 0);
+  pcbDistance->setChecked(us.fDistance != 0);
+  pinnerlayout->addWidget(pcbParallel2);
+  pinnerlayout->addWidget(pcbDistance);
+
+  QFormLayout *pform3 = new QFormLayout();
+  QLineEdit *peScreenWidth = new QLineEdit(QString::number(us.nScreenWidth));
+  pform3->addRow("Text Columns:", peScreenWidth);
+  pinnerlayout->addLayout(pform3);
+
+  QCheckBox *pcbClip80 = new QCheckBox(
+    "Clip Text Charts at Rightmost (e.g. 80th) Column");
+  QCheckBox *pcbSabian = new QCheckBox("Interpretations Show Sabian Symbols");
+  pcbClip80->setChecked(us.fClip80 != 0);
+  pcbSabian->setChecked(us.fSabian != 0);
+  pinnerlayout->addWidget(pcbClip80);
+  pinnerlayout->addWidget(pcbSabian);
+
+  QFormLayout *pform4 = new QFormLayout();
+  QLineEdit *peStation = new QLineEdit(QString::number(us.rStation));
+  pform4->addRow("Stationary If Less Than This Velocity:", peStation);
+  pinnerlayout->addLayout(pform4);
+
+  QCheckBox *pcbEclipse = new QCheckBox("Show Eclipse Information");
+  QCheckBox *pcbEclipseAny = new QCheckBox(
+    "Eclipses Only at Location (Not Anywhere in World)");
+  pcbEclipse->setChecked(us.fEclipse != 0);
+  pcbEclipseAny->setChecked(!us.fEclipseAny);
+  pinnerlayout->addWidget(pcbEclipse);
+  pinnerlayout->addWidget(pcbEclipseAny);
+
+  QGroupBox *pgroupBoxAngle = new QGroupBox("Rising and Setting Restrictions");
+  QVBoxLayout *pgrouplayoutAngle = new QVBoxLayout(pgroupBoxAngle);
+  CONST char *rgszAngle[arMax] = { "Rising", "Zenith Crossing", "Setting",
+    "Nadir Crossing", "Vertex", "Antivertex" };
+  QVector<QCheckBox *> rgpcbAngle;
+  for (i = 0; i < arMax; i++) {
+    QCheckBox *pcb = new QCheckBox(rgszAngle[i]);
+    pcb->setChecked(ignorez[i] != 0);
+    pgrouplayoutAngle->addWidget(pcb);
+    rgpcbAngle.append(pcb);
+  }
+  pinnerlayout->addWidget(pgroupBoxAngle);
+
+  QGroupBox *pgroupBoxDegForm = new QGroupBox("Display Format");
+  QVBoxLayout *pgrouplayoutDegForm = new QVBoxLayout(pgroupBoxDegForm);
+  QButtonGroup *pgroupDegForm = new QButtonGroup(&dlg);
+  CONST char *rgszDegForm[4] =
+    { "Zodiac Position", "Hours & Minutes", "360 Degrees", "27 Nakshatras" };
+  for (i = 0; i < 4; i++) {
+    QRadioButton *prb = new QRadioButton(rgszDegForm[i]);
+    prb->setChecked(i == us.nDegForm);
+    pgroupDegForm->addButton(prb, i);
+    pgrouplayoutDegForm->addWidget(prb);
+  }
+  pinnerlayout->addWidget(pgroupBoxDegForm);
+
+  QGroupBox *pgroupBoxCharset = new QGroupBox("Character Encoding");
+  QVBoxLayout *pgrouplayoutCharset = new QVBoxLayout(pgroupBoxCharset);
+  QButtonGroup *pgroupCharset = new QButtonGroup(&dlg);
+  CONST char *rgszCharset[4] =
+    { "Default", "IBM / DOS", "Latin-1", "UTF8 Unicode" };
+  for (i = 0; i < 4; i++) {
+    QRadioButton *prb = new QRadioButton(rgszCharset[i]);
+    prb->setChecked(i == us.nCharset);
+    pgroupCharset->addButton(prb, i);
+    pgrouplayoutCharset->addWidget(prb);
+  }
+  pinnerlayout->addWidget(pgroupBoxCharset);
+
+  QGroupBox *pgroupBoxRuler = new QGroupBox("Rulership Restrictions");
+  QVBoxLayout *pgrouplayoutRuler = new QVBoxLayout(pgroupBoxRuler);
+  CONST char *rgszRuler[rrMax] =
+    { "Standard", "Esoteric", "Hierarchical", "Exaltations", "Ray Rulerships" };
+  QVector<QCheckBox *> rgpcbRuler;
+  for (i = 0; i < rrMax; i++) {
+    QCheckBox *pcb = new QCheckBox(rgszRuler[i]);
+    pcb->setChecked(ignore7[i] != 0);
+    pgrouplayoutRuler->addWidget(pcb);
+    rgpcbRuler.append(pcb);
+  }
+  pinnerlayout->addWidget(pgroupBoxRuler);
+
+  QGroupBox *pgroupBoxAspOrb = new QGroupBox("Aspect Orb Type");
+  QVBoxLayout *pgrouplayoutAspOrb = new QVBoxLayout(pgroupBoxAspOrb);
+  QButtonGroup *pgroupAspOrb = new QButtonGroup(&dlg);
+  CONST char *rgszAspOrb[3] =
+    { "Positive/Negative", "Applying/Separating", "Waxing/Waning" };
+  for (i = 0; i < 3; i++) {
+    QRadioButton *prb = new QRadioButton(rgszAspOrb[i]);
+    prb->setChecked(i == us.nAppSep);
+    pgroupAspOrb->addButton(prb, i);
+    pgrouplayoutAspOrb->addWidget(prb);
+  }
+  pinnerlayout->addWidget(pgroupBoxAspOrb);
+
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  QByteArray ba;
+  ba = peAsp->text().toLocal8Bit();
+  int na = NParseSz(ba.constData(), pmAspect);
+  ba = peReqObj->text().toLocal8Bit();
+  int nro = NParseSz(ba.constData(), pmObject);
+  int ni = peScreenWidth->text().toInt();
+  real ryw = peStation->text().toDouble();
+  if (!FValidAspect(na) || !(FItem(nro) || nro == -1) ||
+    !FValidScreen(ni) || ryw < 0.0) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more display settings fields are invalid.");
+    return;
+  }
+
+  us.fEuroDate = pcbEuroDate->isChecked();
+  us.fEuroTime = pcbEuroTime->isChecked();
+  us.fOffsetOnly = pcbOffsetOnly->isChecked();
+  us.fEuroDist = pcbEuroDist->isChecked();
+  us.fRound = pcbRound->isChecked();
+  us.fSeconds = pcbSeconds->isChecked();
+  us.fSecond1K = pcbSecond1K->isChecked();
+  us.fSecondHide = pcbSecondHide->isChecked();
+  int naOld = us.nAsp;
+  us.nAsp = na;
+  for (i = naOld + 1; i <= na; i++)
+    ignorea[i] = fFalse;
+  for (i = na + 1; i <= cAspect; i++)
+    ignorea[i] = fTrue;
+  us.fSmartCusp = pcbSmartCusp->isChecked();
+  us.objRequire = nro;
+  us.fParallel2 = pcbParallel2->isChecked();
+  us.fDistance = pcbDistance->isChecked();
+  us.nScreenWidth = ni;
+  us.fClip80 = pcbClip80->isChecked();
+  us.fSabian = pcbSabian->isChecked();
+  us.rStation = ryw;
+  us.fEclipse = pcbEclipse->isChecked();
+  us.fEclipseAny = !pcbEclipseAny->isChecked();
+  for (i = 0; i < arMax; i++)
+    ignorez[i] = rgpcbAngle[i]->isChecked();
+  us.nDegForm = pgroupDegForm->checkedId();
+  us.nCharset = pgroupCharset->checkedId();
+  for (i = 0; i < rrMax; i++)
+    ignore7[i] = rgpcbRuler[i]->isChecked();
+  if (!ignore7[rrRay])
+    EnsureRay();
+  us.nAppSep = pgroupAspOrb->checkedId();
   RecastAndRedrawQt();
 }
 

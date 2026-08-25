@@ -430,16 +430,26 @@ static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
 }
 
 
+// Tracked at file scope so SyncHelioMenuQt() can refresh this checkmark
+// after the Calculation Settings dialog changes the central planet too.
+static QAction *s_paHelio = NULL;
+
+void SyncHelioMenuQt()
+{
+  if (s_paHelio != NULL)
+    s_paHelio->setChecked(us.objCenter != oEar);
+}
+
 static void BuildSettingMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Setting");
   AddToggleAction(pmenu, "&Sidereal Zodiac", &us.fSidereal, fTrue);
-  QAction *paHelio = pmenu->addAction("&Heliocentric");
-  paHelio->setCheckable(true);
-  paHelio->setChecked(us.objCenter != oEar);
-  QObject::connect(paHelio, &QAction::triggered, pwind, [paHelio]() {
+  s_paHelio = pmenu->addAction("&Heliocentric");
+  s_paHelio->setCheckable(true);
+  s_paHelio->setChecked(us.objCenter != oEar);
+  QObject::connect(s_paHelio, &QAction::triggered, pwind, []() {
     SetCentric(us.objCenter == oEar ? oSun : oEar);
-    paHelio->setChecked(us.objCenter != oEar);
+    SyncHelioMenuQt();
     RecastAndRedrawQt();
   });
 
@@ -520,6 +530,9 @@ static void BuildSettingMenu(QMainWindow *pwind)
   QAction *paObject = pmenu->addAction("&Object Settings...");
   QObject::connect(paObject, &QAction::triggered, pwind,
     []() { ShowObjectDialogQt(); });
+  QAction *paObject2 = pmenu->addAction("&More Object Settings...");
+  QObject::connect(paObject2, &QAction::triggered, pwind,
+    []() { ShowObject2DialogQt(); });
   pmenu->addSeparator();
 
   QAction *paRestrict = pmenu->addAction("&Restrictions...");
@@ -547,6 +560,14 @@ static void BuildSettingMenu(QMainWindow *pwind)
     moonsHi, -1);
   AddCategoryRestrictAction(pmenu, "Include &Body Centers (COB)", &us.fCOB,
     cobLo, cobHi, -1);
+  pmenu->addSeparator();
+
+  QAction *paCalc = pmenu->addAction("&Calculation Settings...");
+  QObject::connect(paCalc, &QAction::triggered, pwind,
+    []() { ShowCalcDialogQt(); });
+  QAction *paDisplay = pmenu->addAction("&Display Settings...");
+  QObject::connect(paDisplay, &QAction::triggered, pwind,
+    []() { ShowDisplayDialogQt(); });
 }
 
 

@@ -52,6 +52,11 @@ void SetChartModeQt(int mode);
 // "rc" is one of the rcXxx constants in astrolog.h (rcNo, rcDual, etc).
 void SetRelQt(int rc);
 
+// Refresh the Setting menu's Heliocentric checkmark from current state.
+// Needed because the Calculation Settings dialog can also change the
+// central planet, not just the Heliocentric menu item itself.
+void SyncHelioMenuQt();
+
 // Dialog launchers, implemented in qtdialog.cpp, wired up to the menu bar
 // built in qtdriver.cpp.
 void ShowChartInfoDialogQt();
@@ -69,6 +74,9 @@ void ShowAboutDialogQt();
 void ShowAspectDialogQt();
 void ShowStarRestrictDialogQt();
 void ShowTransitRestrictDialogQt();
+void ShowObject2DialogQt();
+void ShowCalcDialogQt();
+void ShowDisplayDialogQt();
 
 #endif // __QTDRIVER_H
 
