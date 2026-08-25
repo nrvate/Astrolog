@@ -2065,33 +2065,60 @@ void ShowProgressDialogQt()
 }
 
 
-// Chart settings, equivalent to Windows' DlgChart: a grab bag of per chart
-// type display options. A curated subset of Windows' full field list --
-// the astrocartography step/distance, star/Arabic part sort order, aspect
-// sort order, and decan display fields are left for a later pass.
+// Chart settings, equivalent to Windows' DlgChart: per chart type display
+// options, sort orders, and a few counts.
+
+// Aspect list sort orders. Windows keeps this in wdialog.cpp, which isn't
+// compiled into the QT build.
+static CONST char *rgszSortQt[asMax] = {"Power", "Orb Magnitude",
+  "Orb Value", "1st Object Index", "2nd Object Index",
+  "Aspect", "1st Object Position", "2nd Object Position", "Midpoint"};
 
 void ShowChartSettingsDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Chart Settings");
-  dlg.resize(400, 500);
+  dlg.resize(760, 620);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QScrollArea *pscroll = new QScrollArea(&dlg);
   QWidget *pinner = new QWidget();
-  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
+  QHBoxLayout *phInner = new QHBoxLayout(pinner);
+  QVBoxLayout *pvLeft = new QVBoxLayout();
+  QVBoxLayout *pvRight = new QVBoxLayout();
+  char sz[cchSzMax];
+  int i;
 
-  QCheckBox *pcbVelocity = new QCheckBox("Show Object Velocities");
-  QCheckBox *pcbWheelReverse = new QCheckBox("Reverse Wheel Direction");
-  QCheckBox *pcbGridConfig = new QCheckBox("Show Grid Configurations");
-  QCheckBox *pcbGridMidpoint = new QCheckBox("Show Grid Midpoints");
-  QCheckBox *pcbAspSummary = new QCheckBox("Show Aspect Summary");
-  QCheckBox *pcbMidSummary = new QCheckBox("Show Midpoint Summary");
-  QCheckBox *pcbMidAspect = new QCheckBox("Show Midpoint Aspects");
-  QCheckBox *pcbPrimeVert = new QCheckBox("Prime Vertical Horizon Chart");
-  QCheckBox *pcbSectorApprox = new QCheckBox("Approximate Sectors");
-  QCheckBox *pcbCalendarYear = new QCheckBox("Calendar Covers Full Year");
-  QCheckBox *pcbInfluenceSign = new QCheckBox("Influence Chart By Sign");
-  QCheckBox *pcbArabicFlip = new QCheckBox("Flip Arabic Parts At Night");
+  QFormLayout *pformTop = new QFormLayout();
+  QComboBox *pcbDecan = new QComboBox();
+  for (i = 0; i < ddMax; i++)
+    pcbDecan->addItem(rgszDecan[i]);
+  pcbDecan->setCurrentIndex(us.fListDecan ? us.nDecanType : ddNone);
+  QLineEdit *peWheelRows = new QLineEdit(QString::number(us.nWheelRows));
+  pformTop->addRow("Wheel Sign Subdivision Type:", pcbDecan);
+  pformTop->addRow("Text House Wheel Rows:", peWheelRows);
+  pvLeft->addLayout(pformTop);
+
+  QCheckBox *pcbVelocity = new QCheckBox(
+    "Text Listing Velocities Relative to Average Speed");
+  QCheckBox *pcbWheelReverse = new QCheckBox(
+    "Text House Wheel Reverses Object Order");
+  QCheckBox *pcbGridConfig = new QCheckBox(
+    "Text Aspect Grid Shows Aspect Configurations");
+  QCheckBox *pcbGridMidpoint = new QCheckBox(
+    "Relationship Aspect Grid Shows Midpoints Instead");
+  QCheckBox *pcbAspSummary = new QCheckBox(
+    "Text Aspect List Shows Aspect Summary");
+  QCheckBox *pcbMidSummary = new QCheckBox(
+    "Text Midpoint List Shows Midpoint Summary");
+  QCheckBox *pcbMidAspect = new QCheckBox(
+    "Text Midpoint List Includes Aspects to Midpoints");
+  QCheckBox *pcbPrimeVert = new QCheckBox(
+    "Horizon Chart Displays with Polar Center");
+  QCheckBox *pcbSectorApprox = new QCheckBox(
+    "Sector Chart Approximated with Placidus Cusps");
+  QCheckBox *pcbCalendarYear = new QCheckBox("Calendar Is for Entire Year");
+  QCheckBox *pcbInfluenceSign = new QCheckBox(
+    "Text Influence Chart Shows Sign Influences Too");
   pcbVelocity->setChecked(us.fVelocity != 0);
   pcbWheelReverse->setChecked(us.fWheelReverse != 0);
   pcbGridConfig->setChecked(us.fGridConfig != 0);
@@ -2103,26 +2130,92 @@ void ShowChartSettingsDialogQt()
   pcbSectorApprox->setChecked(us.fSectorApprox != 0);
   pcbCalendarYear->setChecked(us.fCalendarYear != 0);
   pcbInfluenceSign->setChecked(us.fInfluenceSign != 0);
-  pcbArabicFlip->setChecked(us.fArabicFlip != 0);
   for (QCheckBox *pcb : { pcbVelocity, pcbWheelReverse, pcbGridConfig,
     pcbGridMidpoint, pcbAspSummary, pcbMidSummary, pcbMidAspect,
-    pcbPrimeVert, pcbSectorApprox, pcbCalendarYear, pcbInfluenceSign,
-    pcbArabicFlip })
-    pinnerlayout->addWidget(pcb);
+    pcbPrimeVert, pcbSectorApprox, pcbCalendarYear, pcbInfluenceSign })
+    pvLeft->addWidget(pcb);
 
-  QFormLayout *pform = new QFormLayout();
-  QLineEdit *peWheelRows = new QLineEdit(QString::number(us.nWheelRows));
-  QLineEdit *peArabicParts = new QLineEdit(QString::number(us.nArabicParts));
+  QFormLayout *pformStep = new QFormLayout();
+  QLineEdit *peAstroStep =
+    new QLineEdit(QString::number(us.nAstroGraphStep));
+  pformStep->addRow("Text Astrocartography Degree Step Rate:", peAstroStep);
+  pvLeft->addLayout(pformStep);
+  QCheckBox *pcbLatCross = new QCheckBox(
+    "Text Astrocartography Shows Latitude Crossings");
+  pcbLatCross->setChecked(us.fLatitudeCross != 0);
+  pvLeft->addWidget(pcbLatCross);
+
+  QFormLayout *pformCounts = new QFormLayout();
+  // Windows shows this one with its unit appended; the parse below only
+  // reads the leading number, so the suffix is cosmetic either way.
+  sprintf(sz, "%d%s", us.nAstroGraphDist, us.fEuroDist ? "km" : "mi");
+  QLineEdit *peAstroDist = new QLineEdit(sz);
+  QLineEdit *peArabicParts =
+    new QLineEdit(QString::number(us.nArabicParts));
   QLineEdit *peAtlasList = new QLineEdit(QString::number(us.nAtlasList));
   QLineEdit *peBioday = new QLineEdit(QString::number(us.nBioday));
-  QLineEdit *peRatio = new QLineEdit(QString::number(us.rRatio));
-  pform->addRow("Wheel rows per house:", peWheelRows);
-  pform->addRow("Arabic parts to include:", peArabicParts);
-  pform->addRow("Nearest cities row count:", peAtlasList);
-  pform->addRow("Biorhythm days:", peBioday);
-  pform->addRow("Chart proportion ratio:", peRatio);
-  pinnerlayout->addLayout(pform);
+  pformCounts->addRow("Latitude Crossings Show Cities Within:", peAstroDist);
+  pformCounts->addRow("Number of Arabic Parts to Display:", peArabicParts);
+  pformCounts->addRow("Nearest Cities Lists This Many Cities:", peAtlasList);
+  pformCounts->addRow("Number of Days Biorhythm Chart Covers:", peBioday);
+  pvLeft->addLayout(pformCounts);
+  QCheckBox *pcbEphemYears = new QCheckBox("Ephemeris Is for Entire Year");
+  QCheckBox *pcbArabicFlip = new QCheckBox(
+    "Display Arabic Part Formulas with Terms Reversed");
+  pcbEphemYears->setChecked(us.nEphemYears != 0);
+  pcbArabicFlip->setChecked(us.fArabicFlip != 0);
+  pvLeft->addWidget(pcbEphemYears);
+  pvLeft->addWidget(pcbArabicFlip);
+  pvLeft->addStretch(1);
 
+  // The two sort orders are stored as switch letters rather than indexes,
+  // so each radio carries its letter alongside.
+  QGroupBox *pgbStar = new QGroupBox("Fixed Stars Sort By");
+  QVBoxLayout *pvStar = new QVBoxLayout(pgbStar);
+  QButtonGroup *pgroupStar = new QButtonGroup(&dlg);
+  CONST char *rgszStarSort[7] = { "Object Index", "Longitude", "Latitude",
+    "Name", "Brightness", "Distance", "Velocity" };
+  CONST char rgchStarSort[7] = { 0, 'z', 'l', 'n', 'b', 'd', 'v' };
+  for (i = 0; i < 7; i++) {
+    QRadioButton *prb = new QRadioButton(rgszStarSort[i]);
+    prb->setChecked(us.nStarSort == rgchStarSort[i]);
+    pgroupStar->addButton(prb, i);
+    pvStar->addWidget(prb);
+  }
+  if (pgroupStar->checkedButton() == NULL)
+    pgroupStar->button(0)->setChecked(true);
+  pvRight->addWidget(pgbStar);
+
+  QGroupBox *pgbArabic = new QGroupBox("Arabic Parts Sort By");
+  QVBoxLayout *pvArabic = new QVBoxLayout(pgbArabic);
+  QButtonGroup *pgroupArabic = new QButtonGroup(&dlg);
+  CONST char *rgszArabicSort[4] =
+    { "Category Index", "Position", "Name", "Formula" };
+  CONST char rgchArabicSort[4] = { 0, 'z', 'n', 'f' };
+  for (i = 0; i < 4; i++) {
+    QRadioButton *prb = new QRadioButton(rgszArabicSort[i]);
+    prb->setChecked(us.nArabicSort == rgchArabicSort[i]);
+    pgroupArabic->addButton(prb, i);
+    pvArabic->addWidget(prb);
+  }
+  if (pgroupArabic->checkedButton() == NULL)
+    pgroupArabic->button(0)->setChecked(true);
+  pvRight->addWidget(pgbArabic);
+
+  QFormLayout *pformRight = new QFormLayout();
+  QComboBox *pcbAspSort = new QComboBox();
+  for (i = 0; i < asMax; i++)
+    pcbAspSort->addItem(rgszSortQt[i]);
+  pcbAspSort->setCurrentIndex(FBetween(us.nAspectSort, 0, asMax-1) ?
+    us.nAspectSort : 0);
+  QLineEdit *peRatio = new QLineEdit(QString::number(us.rRatio));
+  pformRight->addRow("Aspect List Sort By:", pcbAspSort);
+  pformRight->addRow("Midpoint Proportion:", peRatio);
+  pvRight->addLayout(pformRight);
+  pvRight->addStretch(1);
+
+  phInner->addLayout(pvLeft);
+  phInner->addLayout(pvRight);
   pscroll->setWidget(pinner);
   pscroll->setWidgetResizable(true);
   pouter->addWidget(pscroll);
@@ -2137,16 +2230,21 @@ void ShowChartSettingsDialogQt()
     return;
 
   int nWheelRows = peWheelRows->text().toInt();
+  int nAstroStep = peAstroStep->text().toInt();
+  int nAstroDist = peAstroDist->text().toInt();
   int nArabicParts = peArabicParts->text().toInt();
   int nAtlasList = peAtlasList->text().toInt();
   int nBioday = peBioday->text().toInt();
-  if (!FValidWheel(nWheelRows) || !FValidPart(nArabicParts) ||
-    nAtlasList < 0 || !FValidBioday(nBioday)) {
+  if (!FValidWheel(nWheelRows) || !FValidAstrograph(nAstroStep) ||
+    nAstroDist < 0 || !FValidPart(nArabicParts) || nAtlasList < 0 ||
+    !FValidBioday(nBioday)) {
     QMessageBox::warning(gi.qwind, szAppName,
       "One or more chart settings fields are invalid.");
     return;
   }
+
   us.fVelocity = pcbVelocity->isChecked();
+  us.nWheelRows = nWheelRows;
   us.fWheelReverse = pcbWheelReverse->isChecked();
   us.fGridConfig = pcbGridConfig->isChecked();
   us.fGridMidpoint = pcbGridMidpoint->isChecked();
@@ -2157,12 +2255,22 @@ void ShowChartSettingsDialogQt()
   us.fSectorApprox = pcbSectorApprox->isChecked();
   us.fCalendarYear = pcbCalendarYear->isChecked();
   us.fInfluenceSign = pcbInfluenceSign->isChecked();
-  us.fArabicFlip = pcbArabicFlip->isChecked();
-  us.nWheelRows = nWheelRows;
+  us.nAstroGraphStep = nAstroStep;
+  us.fLatitudeCross = pcbLatCross->isChecked();
+  us.nAstroGraphDist = nAstroDist;
+  us.nEphemYears = pcbEphemYears->isChecked();
   us.nArabicParts = nArabicParts;
+  us.fArabicFlip = pcbArabicFlip->isChecked();
   us.nAtlasList = nAtlasList;
   us.nBioday = nBioday;
+  us.nStarSort = rgchStarSort[pgroupStar->checkedId()];
+  us.nArabicSort = rgchArabicSort[pgroupArabic->checkedId()];
+  us.nAspectSort = pcbAspSort->currentIndex();
   us.rRatio = peRatio->text().toDouble();
+  i = pcbDecan->currentIndex();
+  us.fListDecan = (i > ddNone);
+  if (i > ddNone)
+    us.nDecanType = i;
   RecastAndRedrawQt();
 }
 
