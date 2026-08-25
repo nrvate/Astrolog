@@ -452,15 +452,25 @@ skip.
        wording now follows the `.rc`. Verified live. Note the sort orders
        are stored as switch letters not indexes, and the subdivision type
        splits across `us.fListDecan` + `us.nDecanType`.
-   8.7 **Object / More Object / Moon Object Settings** (next up) (`DlgObject`,
-       `DlgObject2`, `DlgObjectM`) — numeric precision. Windows formats
-       via `SetEditR(..., -2)` for max orb, `-1` for orb addition, `-2`
-       for influence; `QString::number()` prints full precision, so these
-       grids show more digits than Windows.
-   8.8 **Aspect Settings** (`ShowAspectDialogQt` / `DlgAspect`) — same
-       precision issue: Windows uses `-6` for orb and angle, `2` for
-       influence.
-   8.9 **Restrictions / Star / Transit Restrictions** (`DlgRestrict`,
+   8.7 ~~Object / More Object / Moon Object Settings~~ — **done 2026-08-25**
+       (`DlgObject`, `DlgObject2`, `DlgObjectM`): all three grids now
+       format through the new `SzFormatRQt()` helper (a thin wrapper on
+       `FormatR()`, which is what Windows' `SetEditR()` calls) using the
+       same precisions Windows does — `-2` max orb, `-1` orb addition,
+       `-2` influence. The main Objects dialog was also missing its
+       Influence column (`rObjInf`) entirely; added. Color columns went
+       from free-text `QLineEdit` to the `NewColorComboQt()` drop-down,
+       sized with `SetEditColor()`'s `nExtra` convention: 1 for objects,
+       `1 + (i == starLo)` in the More Object grid (Windows widens the
+       list by one on the collective stars row), 3 for the moons.
+   8.8 ~~Aspect Settings~~ — **done 2026-08-25** (`ShowAspectDialogQt` /
+       `DlgAspect`): `-6` orb, `-6` angle, `2` influence, color drop-down
+       with `nExtra` 0. Note `FormatR()`'s sign convention — negative n
+       strips trailing zeros ("7", "0"), positive n keeps at least one
+       fractional digit ("1.0"), which is why influence reads 2 and not
+       -2. Dialog widened 500 → 620; the extra "Show" checkbox column was
+       pushing Color off the right edge.
+   8.9 **Restrictions / Star / Transit Restrictions** (next up) (`DlgRestrict`,
        `DlgStar`) — missing the "Restrict All" and "Unrestrict All" quick
        buttons, and the transit variant's "Copy From Standard Restriction
        Set" button.
