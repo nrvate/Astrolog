@@ -77,6 +77,8 @@ static bool fQtReady = false;
 // Draw*() primitives in xgeneral.cpp; this widget's only job is to blit
 // that buffer to the screen, and to tell Astrolog when its size changes.
 
+static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str);
+static void AddHotkeysToWindowQt(QWidget *pw);   // defined below
 static QMenu *PmenuContextForChartQt();   // defined below
 static QMenu *PmenuContextForTextQt();    // defined below
 
@@ -350,6 +352,7 @@ static void RedrawTextQt()
     // Text charts live in this window rather than on the canvas, so
     // their context menus hang off here. Replaces QTextBrowser's own
     // copy/select-all menu, the same way Windows replaces the default.
+    AddHotkeysToWindowQt(s_pdlgText);
     s_ptextBrowser->setContextMenuPolicy(Qt::CustomContextMenu);
     QObject::connect(s_ptextBrowser, &QWidget::customContextMenuRequested,
       s_ptextBrowser, [](CONST QPoint &pt) {
@@ -1991,6 +1994,323 @@ static void LoadBundledFontsQt()
 }
 
 
+// Keyboard shortcuts, the Qt equivalent of Windows' "accelerator
+// ACCELERATORS" table in astrolog.rc (~line 3061). Astrolog's whole
+// single-keystroke interface lives there -- "v" to swap between graphics
+// and text, Alt+Shift+N for a transit chart, and so on -- and none of it
+// existed here until now.
+//
+// Same approach as the context menus: every accelerator names a cmd* the
+// menu bar already implements, so these bind to the existing QAction by
+// its label rather than duplicating anything. A side benefit is that Qt
+// then renders the shortcut alongside the item in the menu, which
+// Windows does and this port previously didn't.
+//
+// Generated from the resource; the 96 macro F-keys are handled by
+// BuildMacroMenus() instead and excluded here. Twenty-three accelerators
+// are deliberately not bound because their commands are ones this port
+// doesn't implement on purpose -- the Setup submenu, the Window Settings
+// submenu, Print Setup, the wallpaper modes -- plus the four text
+// scrolling ones, which the text window's own scrollbar handles.
+
+typedef struct {
+  CONST char *szKey;      // Qt key sequence text.
+  CONST char *szAction;   // Menu bar item to fire, by its label.
+} HOTKEY;
+
+static CONST HOTKEY rghotkeyQt[] = {
+  {"!",                 "&Seconds"},
+  {"#",                 "&Hours"},
+  {"$",                 "&Days"},
+  {"%",                 "M&onths"},
+  {"&",                 "&Decades"},
+  {"(",                 "Mi&llennia"},
+  {")",                 "Open &Documentation..."},
+  {"*",                 "&Centuries"},
+  {"+",                 "Step &Forward"},
+  {"-",                 "Step &Backward"},
+  {"0",                 "Modif&y Chart"},
+  {"Ctrl+0",            "List Cr&edits"},
+  {"Alt+0",             "&About Astrolog..."},
+  {" ",                 "&Redraw Screen"},
+  {"1",                 "&One Unit"},
+  {"Ctrl+1",            "&Small"},
+  {"Alt+1",             "&Solar Chart"},
+  {"Ctrl+Shift+1",      "Open &Changes"},
+  {"Alt+Shift+1",       "1/&10th Seconds"},
+  {"2",                 "&Two Units"},
+  {"Ctrl+2",            "&Medium"},
+  {"Alt+2",             "List &Signs"},
+  {"Ctrl+Shift+2",      "Open &License"},
+  {"Alt+Shift+2",       "1/1&00th Seconds"},
+  {"3",                 "T&hree Units"},
+  {"Ctrl+3",            "&Large"},
+  {"Alt+3",             "List &Objects"},
+  {"Ctrl+Shift+3",      "Open &Website"},
+  {"Alt+Shift+3",       "1&/1000th Seconds"},
+  {"4",                 "&Four Units"},
+  {"Ctrl+4",            "&Huge"},
+  {"Alt+4",             "List Aspec&ts"},
+  {"Ctrl+Shift+4",      "Open Website &Mirror"},
+  {"5",                 "Fi&ve Units"},
+  {"Ctrl+5",            "Export Chart &Text Output..."},
+  {"Alt+5",             "List &Constellations"},
+  {"Ctrl+Shift+5",      "&Copy Chart Text Output"},
+  {"6",                 "Si&x Units"},
+  {"Ctrl+6",            "Export Chart &Bitmap..."},
+  {"Alt+6",             "List &Planet Info"},
+  {"Ctrl+Shift+6",      "Copy Chart &Bitmap"},
+  {"7",                 "&Seven Units"},
+  {"Ctrl+7",            "Export Chart &Metafile..."},
+  {"Alt+7",             "&Esoteric"},
+  {"Ctrl+Shift+7",      "Copy Chart &Metafile"},
+  {"Alt+Shift+7",       "List &Rays"},
+  {"8",                 "&Eight Units"},
+  {"Ctrl+8",            "Export Chart &PostScript..."},
+  {"Alt+8",             "List S&witches"},
+  {"Ctrl+Shift+8",      "Copy Chart &PostScript"},
+  {"9",                 "&Nine Units"},
+  {"Ctrl+9",            "Save Program &Settings..."},
+  {"Alt+9",             "List O&bscure Switches"},
+  {"Ctrl+Shift+9",      "Open Default &Settings"},
+  {"Alt+Shift+9",       "Show &Navamsas"},
+  {"<",                 "&Decrease"},
+  {">",                 "&Increase"},
+  {"?",                 "List &Keystrokes"},
+  {"@",                 "&Minutes"},
+  {"^",                 "&Years"},
+  {"A",                 "&3D Houses"},
+  {"Ctrl+A",            "&White"},
+  {"Shift+A",           "Aspect &Midpoint Grid"},
+  {"Ctrl+Shift+A",      "A&lcabitius"},
+  {"Alt+Shift+A",       "&Aspect Settings..."},
+  {"B",                 "Show &Border"},
+  {"Ctrl+B",            "&Blue"},
+  {"Alt+B",             "Print Nearest &Second"},
+  {"Ctrl+Alt+B",        "Open &World Map..."},
+  {"Ctrl+Shift+B",      "Open Chart &Background..."},
+  {"Alt+Shift+B",       "&Display Settings..."},
+  {"C",                 "&Comparison Chart"},
+  {"Ctrl+C",            "Show C&ities"},
+  {"Shift+C",           "Include &Cusps"},
+  {"Ctrl+Shift+C",      "C&ampanus"},
+  {"Alt+Shift+C",       "Chart &Settings..."},
+  {"D",                 "Show &House Details"},
+  {"Ctrl+D",            "Gr&ay"},
+  {"Alt+D",             "&Default Chart Info..."},
+  {"Shift+D",           "&Date Difference Chart"},
+  {"Ctrl+Shift+D",      "Pullen (S.&Delta)"},
+  {"Alt+Shift+D",       "&Progressed and Natal"},
+  {"E",                 "Show &Equator"},
+  {"Ctrl+E",            "Maroo&n"},
+  {"Ctrl+Alt+E",        "Open Orbital &Elements"},
+  {"Shift+E",           "&Ephemeris"},
+  {"Ctrl+Shift+E",      "&Equal"},
+  {"Alt+Shift+E",       "File &Settings..."},
+  {"F",                 "&Flip Signs with Houses"},
+  {"Ctrl+F",            "Dk. Gr&een"},
+  {"Ctrl+Alt+F",        "&Star Customization..."},
+  {"Shift+F",           "Show &Constellations"},
+  {"Ctrl+Shift+F",      "&Savard-A"},
+  {"Alt+Shift+F",       "Star Restr&ictions..."},
+  {"G",                 "Show &Decans"},
+  {"Ctrl+G",            "&Green"},
+  {"Shift+G",           "Draw &Globe"},
+  {"Ctrl+Shift+G",      "&Carter P.Equat."},
+  {"Alt+Shift+G",       "&Graphics Settings..."},
+  {"H",                 "&Heliocentric"},
+  {"Ctrl+H",            "Open &Documentation..."},
+  {"Shift+H",           "&Gauquelin Sectors"},
+  {"Ctrl+Shift+H",      "Hori&zon"},
+  {"Alt+Shift+H",       "&Geodetic Houses"},
+  {"I",                 "Modify &Display"},
+  {"Ctrl+I",            "List &General Meanings"},
+  {"Shift+I",           "R&ising and Setting"},
+  {"Ctrl+Shift+I",      "S&ripati"},
+  {"Alt+Shift+I",       "Show &Interpretations"},
+  {"J",                 "&Timed Exposure"},
+  {"Ctrl+J",            "&Cyan"},
+  {"Alt+J",             "&Object Settings..."},
+  {"Ctrl+Alt+J",        "Open E&xoplanet List"},
+  {"Shift+J",           "&Influence"},
+  {"Ctrl+Shift+J",      "S&unshine"},
+  {"Alt+Shift+J",       "&More Object Settings..."},
+  {"K",                 "Show &Glyphs on Aspect Lines"},
+  {"Ctrl+K",            "&Dk. Cyan"},
+  {"Alt+K",             "&Colored Text"},
+  {"Ctrl+Alt+K",        "Save Chart &Quick*Chart..."},
+  {"Shift+K",           "&Calendar"},
+  {"Ctrl+Shift+K",      "&Koch"},
+  {"Alt+Shift+K",       "Set &Colors..."},
+  {"L",                 "Show Glyph &Labels"},
+  {"Ctrl+L",            "&Lt. Gray"},
+  {"Alt+L",             "Aspect &List"},
+  {"Shift+L",           "&Astrocartography"},
+  {"Ctrl+Shift+L",      "A.P.&C."},
+  {"Alt+Shift+L",       "&Nearest Cities"},
+  {"M",                 "&Monochrome"},
+  {"Ctrl+M",            "&Magenta"},
+  {"Alt+M",             "M&idpoint List"},
+  {"Ctrl+Alt+M",        "Open &Atlas"},
+  {"Shift+M",           "Moons Chart"},
+  {"Ctrl+Shift+M",      "&Meridian"},
+  {"Alt+Shift+M",       "&Time Space Midpoint Chart"},
+  {"N",                 "Chart for &Now"},
+  {"Ctrl+N",            "Dk. Bl&ue"},
+  {"Alt+N",             "Update to &Now"},
+  {"Ctrl+Alt+N",        "Set Tilt to &Zero"},
+  {"Shift+N",           "Do &Animation"},
+  {"Ctrl+Shift+N",      "N&ull"},
+  {"Alt+Shift+N",       "&Transit and Natal"},
+  {"O",                 "&Store Chart Info"},
+  {"Ctrl+O",            "Mai&ze"},
+  {"Alt+O",             "&Open Chart..."},
+  {"Ctrl+Alt+O",        "Open Charts in &Folder..."},
+  {"Shift+O",           "&Recall Chart Info"},
+  {"Ctrl+Shift+O",      "Pullen (S.&Ratio)"},
+  {"Alt+Shift+O",       "Open Chart #&2..."},
+  {"P",                 "&Pause Animation"},
+  {"Ctrl+P",            "&Print..."},
+  {"Alt+P",             "Ara&bic Parts"},
+  {"Ctrl+Alt+P",        "Save Chart E&xchange..."},
+  {"Shift+P",           "Draw &Polar Globe"},
+  {"Ctrl+Shift+P",      "&Placidus"},
+  {"Alt+Shift+P",       "&Progressions..."},
+  {"Q",                 "&Thicker Lines"},
+  {"Alt+Q",             "&Antialias Lines"},
+  {"Shift+Q",           "S&quare Screen"},
+  {"Ctrl+Shift+Q",      "Equal (&MC)"},
+  {"R",                 "&Reverse Direction"},
+  {"Ctrl+R",            "&Red"},
+  {"Alt+R",             "&Restrictions..."},
+  {"Ctrl+Alt+R",        "Open &Star List"},
+  {"Shift+R",           "Include &Minors"},
+  {"Ctrl+Shift+R",      "&Regiomontanus"},
+  {"Alt+Shift+R",       "&Transit Restrictions..."},
+  {"S",                 "&Sidereal Zodiac"},
+  {"Ctrl+S",            "Show Full &Star List"},
+  {"Ctrl+Alt+S",        "Show Constellation &Lines"},
+  {"Shift+S",           "Solar System &Orbit"},
+  {"Ctrl+Shift+S",      "K&rusinski"},
+  {"Alt+Shift+S",       "&Calculation Settings..."},
+  {"T",                 "Show Chart &Info"},
+  {"Alt+T",             "Show Info &Sidebar"},
+  {"Shift+T",           "Draw &Telescope"},
+  {"Ctrl+Shift+T",      "&Topocentric"},
+  {"Alt+Shift+T",       "&Transits..."},
+  {"U",                 "Include &Uranians"},
+  {"Ctrl+U",            "&Purple"},
+  {"Shift+U",           "Include &Fixed Stars"},
+  {"Ctrl+Shift+U",      "M&orinus"},
+  {"V",                 "Show &Graphics"},
+  {"Ctrl+V",            "&Paste"},
+  {"Ctrl+Alt+V",        "Save Chart i&Calendar..."},
+  {"Shift+V",           "Standard Radix"},
+  {"Ctrl+Shift+V",      "&Vedic"},
+  {"Alt+Shift+V",       "&House Wheel"},
+  {"Down",              "Tilt &South"},
+  {"Ctrl+Down",         "&Last Chart"},
+  {"Shift+Down",        "&Next Chart"},
+  {"Esc",               "&Quit"},
+  {"Left",              "Rotate &West"},
+  {"Shift+Left",        "Zoom &Out"},
+  {"`",                 "Include &Moons"},
+  {"Ctrl+`",            "Show E&xoplanets"},
+  {"Alt+`",             "Exoplanets Chart"},
+  {"Shift+`",           "Include &Body Centers (COB)"},
+  {"[",                 "Tilt &North"},
+  {"Ctrl+[",            "Zoom &Out"},
+  {"Shift+[",           "Rotate &West"},
+  {"Ctrl+\\\\",         "Export Chart &SVG..."},
+  {"Ctrl+Shift+\\\\",   "Copy Chart &SVG"},
+  {"]",                 "Tilt &South"},
+  {"Ctrl+]",            "Zoom &In"},
+  {"Shift+]",           "Rotate &East"},
+  {"Ctrl+,",            "Decrease &Text"},
+  {"Ctrl+-",            "Export Chart &Wireframe..."},
+  {"Ctrl+Shift+-",      "Copy Chart &Wireframe"},
+  {"Ctrl+.",            "&Increase Text"},
+  {"=",                 "Show &Indian Wheels"},
+  {"Ctrl+=",            "Draw &South Indian"},
+  {"Alt+=",             "Draw &North Indian"},
+  {"Ctrl+Alt+=",        "Draw &East Indian"},
+  {"Ctrl+Shift+=",      "Save Chart &List..."},
+  {"Pause",             "&Pause Animation"},
+  {"Return",            "Enter &Command Line..."},
+  {"Right",             "Rotate &East"},
+  {"Shift+Right",       "Zoom &In"},
+  {"Ctrl+Tab",          "Moon &Restrictions..."},
+  {"Ctrl+Shift+Tab",    "Moon &Object Settings..."},
+  {"Up",                "Tilt &North"},
+  {"Ctrl+Up",           "&First Chart"},
+  {"Shift+Up",          "&Previous Chart"},
+  {"W",                 "Use Detailed World &Map"},
+  {"Ctrl+W",            "Show D&wads"},
+  {"Alt+W",             "&Save Chart..."},
+  {"Ctrl+Alt+W",        "Object &Customization..."},
+  {"Shift+W",           "Draw &World Map"},
+  {"Ctrl+Shift+W",      "&Whole"},
+  {"Alt+Shift+W",       "Save Chart &Positions..."},
+  {"X",                 "&Reverse Background"},
+  {"Ctrl+X",            "Use Ecliptic &Axis"},
+  {"Alt+X",             "&Parallel Aspects"},
+  {"Shift+X",           "Draw Chart Sp&here"},
+  {"Ctrl+Shift+X",      "&Swap Chart #1 and #2"},
+  {"Alt+Shift+X",       "&Applying Aspects"},
+  {"Y",                 "Include D&warfs"},
+  {"Ctrl+Y",            "&Yellow"},
+  {"Alt+Y",             "&Synastry Chart"},
+  {"Ctrl+Alt+Y",        "Open &Time Zone Changes"},
+  {"Shift+Y",           "&Biorhythm Chart"},
+  {"Ctrl+Shift+Y",      "P&orphyry"},
+  {"Alt+Shift+Y",       "Co&mposite Chart"},
+  {"Z",                 "&Indian Wheel Order"},
+  {"Ctrl+Z",            "Blac&k"},
+  {"Alt+Z",             "&Set Chart Info..."},
+  {"Ctrl+Alt+Z",        "Chart &List..."},
+  {"Shift+Z",           "Local &Horizon"},
+  {"Ctrl+Shift+Z",      "Charts #&3 Through #6..."},
+  {"Alt+Shift+Z",       "Set Chart #&2 Info..."} };
+
+#define chotkeyQt (int)(sizeof(rghotkeyQt) / sizeof(HOTKEY))
+
+// Bind them onto the menu bar's own actions. Called once, after the menus
+// are built. An entry naming an item that no longer exists is skipped
+// rather than crashing; see the note above PmenuBuildContextQt() about
+// why label mismatches are worth surfacing.
+static void ApplyHotkeysQt(QMainWindow *pwind)
+{
+  int i;
+
+  for (i = 0; i < chotkeyQt; i++) {
+    QAction *pa = PaFindMenuActionQt(pwind->menuBar(),
+      QString(rghotkeyQt[i].szAction));
+    if (pa == NULL)
+      continue;
+    QList<QKeySequence> rgks = pa->shortcuts();
+    rgks.append(QKeySequence(QString(rghotkeyQt[i].szKey)));
+    pa->setShortcuts(rgks);
+  }
+}
+
+// A Qt shortcut only fires for the active window, and text charts are
+// shown in their own window rather than on the canvas -- so without this
+// every hotkey would go dead the moment text mode opened. Adding the
+// actions to that window makes their shortcuts live there too; they
+// aren't displayed, since it has no menu bar of its own.
+static void AddHotkeysToWindowQt(QWidget *pw)
+{
+  int i;
+
+  for (i = 0; i < chotkeyQt; i++) {
+    QAction *pa = PaFindMenuActionQt(gi.qwind->menuBar(),
+      QString(rghotkeyQt[i].szAction));
+    if (pa != NULL && !pw->actions().contains(pa))
+      pw->addAction(pa);
+  }
+}
+
+
 // Right-click context menus, the Qt equivalent of Windows' DoPopup()
 // dispatch from WM_RBUTTONDOWN (wdriver.cpp). Windows keeps one menu
 // resource per chart type in astrolog.rc (menuV, menuG, menuZ and the
@@ -2580,6 +2900,7 @@ void BeginQt()
   gi.qcanvas = new ChartCanvas();
   gi.qwind->setCentralWidget(gi.qcanvas);
   BuildAstrologMenus(gi.qwind);
+  ApplyHotkeysQt(gi.qwind);
   StartAnimTimerQt(gi.qwind);
   gi.qwind->resize(gs.xWin, gs.yWin);
   gi.qwind->show();

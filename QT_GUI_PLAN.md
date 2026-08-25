@@ -59,6 +59,32 @@ Roughly in the order I'd take them.
    - Text charts show in their own `QTextBrowser` window, so those menus
      replace its default copy/select-all menu via `CustomContextMenu`.
 
+2. ~~Keyboard shortcuts~~ — **done 2026-08-25.** Astrolog's whole
+   single-keystroke interface lives in the `accelerator ACCELERATORS`
+   table in astrolog.rc (~line 3061) and none of it existed here; the
+   only keys that did anything were the menu mnemonics and the 96 macro
+   F-keys. 252 of the 275 non-macro accelerators are now bound.
+   - Bound onto the menu bar's existing `QAction`s by label, the same
+     technique the context menus use, so nothing is reimplemented. Qt
+     then draws the shortcut beside each menu item, which Windows does
+     and this port previously didn't — a parity gap closed for free.
+   - Generated from the resource, with Windows' `VK_OEM_*` virtual keys
+     mapped to their US-layout characters (`OEM_PLUS` is `=`, `OEM_4` is
+     `[`, and so on). Three commands needed a hand-mapped label where
+     this port's wording differs: Exit/Quit, Save Chart Info, Open
+     Documentation.
+   - **23 accelerators are deliberately unbound**, and all of them belong
+     to command groups already listed as out of scope: the Setup submenu,
+     the Window Settings submenu, Print Setup, and the wallpaper modes —
+     plus the four text-scrolling ones, which the text window's own
+     scrollbar handles.
+   - **Shortcuts had to be added to the text chart window too.** A Qt
+     shortcut fires only for the active window, and text charts live in
+     their own window, so without `AddHotkeysToWindowQt()` every hotkey
+     went dead the moment text mode opened.
+   - Verified: `v` toggles graphics/text both ways and from either
+     window, and Alt+Shift+N switches to the transit-and-natal chart.
+
 2. **A regression check of some kind.** There is none. Everything in this
    project was verified by driving the GUI and eyeballing screenshots,
    which caught a lot but is slow and doesn't run twice. Even a crude
