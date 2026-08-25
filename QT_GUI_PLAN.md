@@ -282,12 +282,12 @@ earlier claim here that nothing populated it was wrong. Open Charts in
 Folder is written on QDir rather than ported, because the shared
 `OpenDir()` in io.cpp has its entire body inside `#ifdef PC`.
 
-**Not yet verified by running them** (everything else in this section was
-checked live): that Open Charts in Folder's charts actually land in the
-list, and that Save Chart List writes correct output. Both were code
-reviewed instead, which turned up and fixed a real NULL deref crash (see
-the commit "Fix NULL deref saving a chart list with an unnamed chart").
-Still worth exercising once in the GUI.
+All of this is verified live, including Open Charts in Folder (a folder
+of three .as files loads with correct weekdays and degree signs) and Save
+Chart List (writes a correct `@AL` header and one `-qcl` line per chart).
+Code review of those two beforehand also turned up and fixed a real NULL
+deref crash — see the commit "Fix NULL deref saving a chart list with an
+unnamed chart".
 
 **Note for testing anything in this port:** the Qt build has no headless
 mode — it always enters the Qt event loop, so command line style checks
@@ -417,9 +417,11 @@ skip.
 
    8.1 ~~Chart Info (`DlgInfo`)~~ — **done 2026-08-24**, and is the
        reference implementation for the rest.
-   8.2 **Default Chart Info** (`ShowDefaultInfoDialogQt` / `DlgDefault`) —
-       zone/longitude/latitude shown as raw decimals.
-   8.3 **Transits** (`ShowTransitDialogQt` / `DlgTransit`) — month as a
+   8.2 ~~Default Chart Info~~ — **done 2026-08-25**: zone/longitude/
+       latitude now show as `8W` / `122:19W` / `47:36N`, daylight saving
+       as No/Yes/Autodetect, labels and field order per the `.rc`.
+       Verified live including an OK round trip.
+   8.3 **Transits** (next up) (`ShowTransitDialogQt` / `DlgTransit`) — month as a
        number not a name, time as decimal hours, zone as a raw decimal.
        Also missing entirely: the ephemeris search range radio (day/month/
        year/N-years) and the six `us.fIgnore*` search filter checkboxes.
