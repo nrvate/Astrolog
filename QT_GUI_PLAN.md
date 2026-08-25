@@ -24,8 +24,9 @@ list (`DlgList`), multi-chart info (`DlgInfoAll`), command line
 (`DlgCommand`), and About (`DlgAbout`). They work; they just haven't been
 audited line by line, so that's the obvious place to look if something
 looks off in one of them. Item 12, the missing animation loop, is also
-done. What remains under "Prioritized remaining work" is Paste (9),
-the 96 macro slots (10), and File > Print (11). Everything
+done, as are Paste (9) and Print (11). The only item left is the 96
+macro slots (10), which have been deferred by choice throughout.
+Everything
 knowingly left undone or deliberately diverged from Windows is recorded
 either in the relevant 8.x sub-item or under "Known divergences from
 Windows" near the end — if you find something undocumented, that's a
@@ -727,8 +728,33 @@ skip.
      handling in xcharts0.cpp:641.
 10. **Edit menu's 96 macro slots** — lowest priority, deferred repeatedly.
     Only do this if specifically asked.
-11. **File > Print...** — no existing portable rendering path to a
-    printer; would need new code built on `QPrinter`. Not investigated.
+11. ~~File > Print...~~ — **done 2026-08-25.** `PrintChartQt()` in
+    qtdriver.cpp, wired to File / Print. `QPrintDialog` + `QPrinter`, then
+    the two things Windows' `DlgPrint()` does: scale the chart up before
+    rendering, and force a white background when "Export Text and Print
+    in Intuitive Manner" (`us.fSmartSave`) is on. Text charts go through
+    `QTextDocument::print()` on the same HTML listing the text window
+    shows, so Qt paginates them. Needed `Qt5PrintSupport` added to
+    Makefile.qt. Verified by printing to PDF.
+    - Windows draws straight onto the printer DC and scales by `METAMUL`
+      (12), which is free for a vector DC. That isn't available here:
+      `DrawFill()` (xgeneral.cpp) reads and writes `gi.qim` pixels
+      directly, so `gi.qim` and `gi.qpaint` have to describe the same
+      surface, meaning the chart must be rendered into a real QImage
+      first. At METAMUL that would be a ~250MB image, so `PRINTMUL` is 4.
+    - **Known artifact, upstream limitation.** With Wheel Fill set to
+      anything but None, printing shows blocky black/olive rectangles
+      where the fill should be. `DrawFill()` uses a fixed 255-point
+      circular queue (`iFillMax`, astrolog.h) for its breadth-first
+      flood fill; at 4x the area is 16x larger, the queue wraps, and the
+      fill comes out in fragments. Confirmed by setting Wheel Fill to
+      None and reprinting — completely clean. This is not caused by the
+      print code, and the same limit would bite anyone rendering the
+      chart at high resolution. Workarounds, in order of preference:
+      set Wheel Fill to None before printing; drop `PRINTMUL`; or raise
+      `iFillMax` in astrolog.h (a shared-core change — the array is on
+      the stack, so 4096 would cost 16KB, which is fine, but it affects
+      the X11 build too and this fork has otherwise left core alone).
 
 ## Known divergences from Windows
 

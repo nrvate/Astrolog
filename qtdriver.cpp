@@ -48,6 +48,9 @@
 #include <QtGui/QImage>
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
+#include <QtGui/QTextDocument>
+#include <QtPrintSupport/QPrinter>
+#include <QtPrintSupport/QPrintDialog>
 #include <QtCore/QMimeData>
 #include <QtCore/QFile>
 #include <QtCore/QSettings>
@@ -123,6 +126,96 @@ static QDialog *s_pdlgText = NULL;
 static QTextBrowser *s_ptextBrowser = NULL;
 
 // Shared by RedrawTextQt() and the Edit menu's Copy Chart Text Output --
+// Print, equivalent to Windows' DlgPrint(). Two things are copied from
+// there: the chart is scaled up before rendering so it doesn't print at
+// screen resolution, and "Export Text and Print in Intuitive Manner"
+// (us.fSmartSave) forces a white background, since printing a black one
+// wastes a cartridge.
+//
+// Windows scales by METAMUL (12) because it draws into a metafile-style
+// printer DC, where that costs nothing. Here the chart has to be rendered
+// into a real QImage first -- DrawFill() (xgeneral.cpp) reads and writes
+// gi.qim pixels directly, so gi.qim and gi.qpaint must describe the same
+// surface, exactly as they do on screen. At METAMUL a default window
+// would need a 9120x6900 image, around 250MB, so this uses a smaller
+// multiplier that still prints well above screen resolution.
+
+#define PRINTMUL 4
+
+static QString CaptureTextChartQt(flag fHTML);   // defined below
+
+void PrintChartQt()
+{
+  QPrinter printer(QPrinter::HighResolution);
+  QPrintDialog dlgPrint(&printer, gi.qwind);
+
+  dlgPrint.setWindowTitle("Print Chart");
+  if (dlgPrint.exec() != QDialog::Accepted)
+    return;
+
+  // Text charts aren't drawn at all, they're printed. Hand Qt the same
+  // HTML listing the text window already displays and let it paginate.
+  if (!us.fGraphics) {
+    QTextDocument doc;
+    doc.setHtml(CaptureTextChartQt(fTrue));
+    doc.print(&printer);
+    return;
+  }
+
+  int xSav = gs.xWin, ySav = gs.yWin;
+  int nScaleSav = gs.nScale, nScaleTextSav = gs.nScaleText;
+  flag fInverseSav = gs.fInverse;
+  QImage *pqimSav = gi.qim;
+  QPainter *pqpaintSav = gi.qpaint;
+
+  // Scale the text along with everything else. Windows only scales
+  // gs.nScale, because it draws text through GDI at the printer's own
+  // resolution; rendering into an image here means the sidebar has to
+  // grow with the canvas or it comes out as an unreadable sliver.
+  gs.xWin *= PRINTMUL; gs.yWin *= PRINTMUL;
+  gs.nScale *= PRINTMUL; gs.nScaleText *= PRINTMUL;
+  if (us.fSmartSave)
+    gs.fInverse = fTrue;
+
+  gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
+  if (gi.qim->isNull()) {
+    delete gi.qim;
+    gi.qim = pqimSav;
+    gs.xWin = xSav; gs.yWin = ySav;
+    gs.nScale = nScaleSav; gs.nScaleText = nScaleTextSav;
+    gs.fInverse = fInverseSav;
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Not enough memory to render the chart for printing.");
+    return;
+  }
+  gi.qim->fill(gs.fInverse ? Qt::white : Qt::black);
+  gi.qpaint = new QPainter(gi.qim);
+  InitColors();
+  gi.nScaleT = 1;
+  AdjustTextScale();
+  DrawChartX();
+  delete gi.qpaint;
+
+  // Fit the rendered chart to the page, keeping its aspect ratio.
+  QPainter painter(&printer);
+  QRect rect = painter.viewport();
+  QSize size = gi.qim->size();
+  size.scale(rect.size(), Qt::KeepAspectRatio);
+  painter.setViewport(rect.x(), rect.y(), size.width(), size.height());
+  painter.setWindow(gi.qim->rect());
+  painter.drawImage(0, 0, *gi.qim);
+  painter.end();
+
+  delete gi.qim;
+  gi.qim = pqimSav;
+  gi.qpaint = pqpaintSav;
+  gs.xWin = xSav; gs.yWin = ySav;
+  gs.nScale = nScaleSav; gs.nScaleText = nScaleTextSav;
+  gs.fInverse = fInverseSav;
+  RedrawQt();
+}
+
+
 // Paste, equivalent to Windows' FFilePaste(): take whatever is on the
 // clipboard and, if it's something Astrolog understands, load it. Windows
 // checks for a bitmap first and text second, and does the work by dumping
@@ -299,6 +392,14 @@ void RedrawQt()
   gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
   gi.qim->fill(Qt::black);
   gi.qpaint = new QPainter(gi.qim);
+  // DrawChartX() derives gi.nScale from gs.nScale itself, but not the
+  // text scale -- FActionX() is what normally calls AdjustTextScale(),
+  // and the screen path here goes straight to DrawChartX(). Without this
+  // gs.nScaleText (Graphics Settings' "Text Scale") never takes effect.
+  // gi.nScaleT is FActionX()'s per-output-format multiplier, 1 for
+  // anything drawn rather than written to a vector file.
+  gi.nScaleT = 1;
+  AdjustTextScale();
   DrawChartX();
   delete gi.qpaint;
   gi.qpaint = NULL;
@@ -645,6 +746,13 @@ static void BuildFileMenu(QMainWindow *pwind)
   QAction *paFileSettings = pmenu->addAction("File &Settings...");
   QObject::connect(paFileSettings, &QAction::triggered, pwind,
     []() { ShowFileSettingsDialogQt(); });
+  pmenu->addSeparator();
+
+  // Windows also has Print Setup here, which is its native printer
+  // configuration dialog; Qt's print dialog covers that itself.
+  QAction *paPrint = pmenu->addAction("&Print...");
+  QObject::connect(paPrint, &QAction::triggered, pwind,
+    []() { PrintChartQt(); });
   pmenu->addSeparator();
 
   QAction *paQuit = pmenu->addAction("&Quit");

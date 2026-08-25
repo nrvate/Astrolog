@@ -33,8 +33,8 @@ OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
  $(OBJDIR)/swejpl.o $(OBJDIR)/swemmoon.o $(OBJDIR)/swemplan.o \
  $(OBJDIR)/sweph.o $(OBJDIR)/swephlib.o
 
-QT_CFLAGS = $(shell pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core)
-QT_LIBS = $(shell pkg-config --libs Qt5Widgets Qt5Gui Qt5Core)
+QT_CFLAGS = $(shell pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport)
+QT_LIBS = $(shell pkg-config --libs Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport)
 LIBS = $(QT_LIBS) -lm -ldl
 CPPFLAGS = -DQT -O -fPIC -Wno-write-strings -Wno-narrowing -Wno-comment \
  $(QT_CFLAGS)
