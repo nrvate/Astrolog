@@ -92,6 +92,128 @@ void ShowSaveChartDialogQt()
 }
 
 
+// Save Chart Positions, equivalent to Windows' "Save Chart Positions"
+// (part of DlgSaveChart, cmdSavePositions): same mechanism as Save Chart
+// above, but us.nWriteFormat is set to the *character* '0' rather than
+// left at its default (integer) 0 -- FOutputData() branches on this to
+// write calculated positions instead of full chart info.
+
+void ShowSaveChartPositionsDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart Positions",
+    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  us.nWriteFormat = '0';
+  if (!FOutputData())
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
+}
+
+
+// Save Program Settings, equivalent to Windows' "Save Program Settings"
+// (cmdSaveSettings): writes the current configuration as an Astrolog
+// switch file, the same format loaded back via -i0 or by placing it at
+// DEFAULT_INFOFILE.
+
+void ShowSaveSettingsDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Program Settings",
+    DEFAULT_INFOFILE, "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputSettings())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that settings file.");
+}
+
+
+// Save Chart Exchange (AAF) / Quick*Chart / iCalendar formats, equivalent
+// to Windows' cmdSaveAAF/cmdSaveQuick/cmdSaveCalendar (part of
+// DlgSaveChart) -- each just a file picker into one already-portable
+// FOutputXxxFile() function.
+
+void ShowSaveAAFDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind,
+    "Save Chart Exchange Format", QString(),
+    "Astrological Exchange Files (*.aaf);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputAAFFile())
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that AAF file.");
+}
+
+void ShowSaveQuickDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind,
+    "Save Chart Quick*Chart Format", QString(),
+    "Quick*Chart Files (*.qck);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputQuickFile())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that Quick*Chart file.");
+}
+
+void ShowSaveCalendarDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind,
+    "Save Chart iCalendar Format", QString(),
+    "iCalendar Files (*.ics);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputCalendarFile())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that iCalendar file.");
+}
+
+
+// Open Chart Background / Open World Map, equivalent to Windows'
+// DlgOpenChart when wi.nDlgChart <= 0: load a bitmap into gi.bmpBack or
+// gi.bmpWorld instead of loading a chart. Open Chart Background also
+// turns on gi.fBmp (Use Detailed World Map's underlying flag) the same
+// way Windows' cmdOpenBackground handler does; Open World Map doesn't.
+
+void ShowOpenBackgroundDialogQt()
+{
+  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Background",
+    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FLoadBmp(ba.constData(), &gi.bmpBack, fFalse)) {
+    QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
+    return;
+  }
+  gi.fBmp = fTrue;
+  RedrawQt();
+}
+
+void ShowOpenWorldDialogQt()
+{
+  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open World Map",
+    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FLoadBmp(ba.constData(), &gi.bmpWorld, fFalse)) {
+    QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
+    return;
+  }
+  RedrawQt();
+}
+
+
 // Export the current chart as a graphics file, equivalent to what Windows'
 // DlgSaveChart does for its Export Chart Bitmap/Metafile/PostScript/SVG/
 // Wireframe commands. All five formats fall out of one shared mechanism:

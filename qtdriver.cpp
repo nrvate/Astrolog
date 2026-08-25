@@ -429,6 +429,31 @@ static void BuildFileMenu(QMainWindow *pwind)
   QAction *paSave = pmenu->addAction("&Save Chart...");
   QObject::connect(paSave, &QAction::triggered, pwind,
     []() { ShowSaveChartDialogQt(); });
+  QAction *paSavePos = pmenu->addAction("Save Chart &Positions...");
+  QObject::connect(paSavePos, &QAction::triggered, pwind,
+    []() { ShowSaveChartPositionsDialogQt(); });
+  pmenu->addSeparator();
+
+  QAction *paSaveSettings = pmenu->addAction("Save Program &Settings...");
+  QObject::connect(paSaveSettings, &QAction::triggered, pwind,
+    []() { ShowSaveSettingsDialogQt(); });
+  // Not included here: Open Charts in Folder.../Save Chart List..., since
+  // both are part of the not-yet-built multi-chart (Chart List) feature
+  // (see QT_GUI_PLAN.md) -- they read/write is.rgci, which nothing
+  // populates yet.
+  QMenu *pmenuOtherFormats = pmenu->addMenu("&Other Formats");
+  QAction *paSaveAAF = pmenuOtherFormats->addAction(
+    "Save Chart E&xchange...");
+  QObject::connect(paSaveAAF, &QAction::triggered, pwind,
+    []() { ShowSaveAAFDialogQt(); });
+  QAction *paSaveQuick = pmenuOtherFormats->addAction(
+    "Save Chart &Quick*Chart...");
+  QObject::connect(paSaveQuick, &QAction::triggered, pwind,
+    []() { ShowSaveQuickDialogQt(); });
+  QAction *paSaveCalendar = pmenuOtherFormats->addAction(
+    "Save Chart i&Calendar...");
+  QObject::connect(paSaveCalendar, &QAction::triggered, pwind,
+    []() { ShowSaveCalendarDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paExportText = pmenu->addAction("Export Chart &Text Output...");
@@ -450,6 +475,15 @@ static void BuildFileMenu(QMainWindow *pwind)
   QAction *paExportWire = pmenuVector->addAction("Export Chart &Wireframe...");
   QObject::connect(paExportWire, &QAction::triggered, pwind,
     []() { ShowExportWireDialogQt(); });
+  pmenu->addSeparator();
+
+  QMenu *pmenuOpenBmp = pmenu->addMenu("Open &Bitmap");
+  QAction *paOpenBack = pmenuOpenBmp->addAction("Open Chart &Background...");
+  QObject::connect(paOpenBack, &QAction::triggered, pwind,
+    []() { ShowOpenBackgroundDialogQt(); });
+  QAction *paOpenWorld = pmenuOpenBmp->addAction("Open &World Map...");
+  QObject::connect(paOpenWorld, &QAction::triggered, pwind,
+    []() { ShowOpenWorldDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paQuit = pmenu->addAction("&Quit");
