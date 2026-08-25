@@ -825,6 +825,33 @@ skip.
       off. Added, and its prompt now uses Windows' wording ("Enter
       command switches below:") rather than this port's own.
 
+15. ~~Graphics Settings' six font pickers~~ — **done 2026-08-25.**
+    Previously left out on the grounds that they pick from a list of
+    Windows GDI face names with no Linux equivalent. That was only half
+    true: the fonts ship *with Astrolog*, in `font/`, and their internal
+    family names match `rgszFontName[]` (xdata.cpp) exactly.
+    - `LoadBundledFontsQt()` (qtdriver.cpp) registers the seven bundled
+      `.ttf` files with `QFontDatabase::addApplicationFont()` at startup,
+      looking beside the binary and then in the working directory, so
+      they resolve without being installed system wide.
+    - The pickers alone would have been decorative. Astrolog dispatches
+      every sign, planet, aspect, house and Nakshatra glyph through
+      `DrawGlyph()` (xgeneral.cpp) and text through `DrawSzFont()`, and
+      both had PS, SVG and WINANY branches but no Qt one. Selecting a
+      font therefore did nothing — worse than nothing, since `DrawSign()`
+      and its siblings have already swapped the glyph for a character
+      code meant for the chosen font, so the vector fallback drew that
+      raw character. Both now have a `#ifdef QT` branch, and the five
+      `DrawGlyph()` call sites were widened from `#ifdef WINANY` to
+      `#if defined(WINANY) || defined(QT)`.
+    - The six combos in Graphics Settings are filtered per category by
+      `rgszFontAllow[]`, as Windows filters them — not every font carries
+      glyphs for every category. File Settings' "Use Real System Fonts"
+      master switch is in too, with the same `gs.nFontAll`/`gi.nFontPrev`
+      packing Windows uses.
+    - Verified: setting Signs to Enigma visibly changes the sign glyphs
+      on the wheel. Both builds compile.
+
 ## Known divergences from Windows
 
 Every place this port knowingly differs, so none of it reads as an
@@ -851,8 +878,8 @@ free-text entry. See 8.14.
 
 | Thing | Why |
 |---|---|
-| Graphics Settings' six font pickers | They pick from a hardcoded list of Windows GDI face names. Needs a real Qt font picker, not a translated list. |
 | `wi.*` fields in File/Graphics Settings — bitmap-from-window, antialias level, no-popup, no-auto-redraw | Win32-only `WI` struct. |
+| Wingdings, and the plain text families (Arial, Courier New, Consolas, Lucida Console, Cascadia Mono) | Offered in the font pickers, but not bundled — Wingdings is proprietary and the rest are system fonts. Qt substitutes when absent, as Windows does. |
 | Graphics Settings' "Update Delay in Milliseconds" | Nominally the same reason, but really blocked on item 12 — there's no animation loop for it to set the delay of. |
 | Open Charts in Folder skips Astrolog's own data files | Matches Windows, which does the same, since a folder of charts often sits alongside them. |
 | JPL Horizons lookup blocks the UI | Synchronous network fetch inside the modal dialog. Windows does the same. Obvious async candidate. |

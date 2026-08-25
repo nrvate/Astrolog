@@ -47,6 +47,8 @@
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
 #include <QtGui/QImage>
+#include <QtGui/QFontDatabase>
+#include <QtCore/QDir>
 #include <QtCore/QVector>
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
@@ -1923,6 +1925,41 @@ static void BuildAstrologMenus(QMainWindow *pwind)
 }
 
 
+// Astrolog ships the astrology symbol fonts it draws with in font/, and
+// on Windows they are expected to be installed system wide. Register them
+// with Qt at startup instead, so selecting one in Graphics Settings works
+// out of the box on a machine that has never installed them. The family
+// names inside the files match rgszFontName[] exactly, which is what
+// DrawSzFont() looks them up by.
+//
+// Not bundled: Wingdings (proprietary, Windows only) and the plain text
+// families near the end of rgszFontName[] -- Arial, Courier New and so on
+// -- which come from the system if present. Qt substitutes something
+// readable when they aren't, which is the same thing Windows does.
+
+static void LoadBundledFontsQt()
+{
+  CONST char *rgszFontFile[] = { "Astro.ttf", "EnigmaAstrology.ttf",
+    "HamburgSymbols.ttf", "Astronomicon.ttf", "StarFontSans.ttf",
+    "StarFontSerif.ttf", "HanksNakshatra.ttf" };
+  QStringList rgstrDir;
+  int i, j;
+
+  // Look next to the binary first, then in the working directory, so both
+  // a run from the source tree and an installed copy work.
+  rgstrDir << QCoreApplication::applicationDirPath() + "/font"
+           << QDir::currentPath() + "/font";
+  for (i = 0; i < (int)(sizeof(rgszFontFile)/sizeof(char *)); i++)
+    for (j = 0; j < rgstrDir.size(); j++) {
+      QString str = rgstrDir[j] + "/" + rgszFontFile[i];
+      if (QFile::exists(str)) {
+        QFontDatabase::addApplicationFont(str);
+        break;
+      }
+    }
+}
+
+
 // This routine opens up and initializes the chart window, and is called
 // from BeginX() the same way the X11 backend's window setup is, once per
 // program invocation.
@@ -1933,6 +1970,7 @@ void BeginQt()
   static char *s_argv[] = { (char *)"astrolog", NULL };
 
   gi.qapp = new QApplication(s_argc, s_argv);
+  LoadBundledFontsQt();
   gi.qwind = new QMainWindow();
   gi.qwind->setWindowTitle(szAppName);
   gi.qcanvas = new ChartCanvas();

@@ -494,6 +494,40 @@ void AdjustGlyph(int *ch, int *x, int *y, int *fi, int *nScale,
 #endif
 
 
+#ifdef QT
+// Draw an astrology character from a special font, the Qt counterpart of
+// the WINANY DrawGlyph() below. Astrolog dispatches every sign, planet,
+// aspect, house and Nakshatra glyph through here when a font is selected
+// for that category, so without it the font settings had no effect at all
+// -- the callers fall back to Astrolog's own vector glyphs.
+
+flag DrawGlyph(int ch, int x, int y, int fi, int nScale)
+{
+  QString str;
+
+  if (gi.qpaint == NULL)
+    return fFalse;
+  QFont font(rgszFontName[fi]);
+  font.setPixelSize(Max(12*gi.nScale*nScale/100, 1));
+  font.setWeight(!gs.fThick ? QFont::Normal : QFont::Bold);
+  // Negative ch means "spell this number out", which is how the text
+  // fonts render house numbers past nine.
+  if (ch < 0)
+    str = QString::number(-ch);
+  else
+    str = QString(QChar((uint)(fi >= fiArial ? ch : (uchar)ch)));
+  QFontMetrics fm(font);
+  gi.qpaint->setFont(font);
+  gi.qpaint->setPen(QColorFromKv(gi.kvCur));
+  // Windows centres the text extent on (x, y) and positions by its top
+  // left corner; Qt positions by the baseline.
+  gi.qpaint->drawText(x - (fm.horizontalAdvance(str) >> 1),
+    y - (fm.height() >> 1) + fm.ascent(), str);
+  return fTrue;
+}
+#endif // QT
+
+
 #ifdef WINANY
 // Draw an astrology character from a special font on the screen. Used to draw
 // sign, planet, aspect, and Nakshatra glyphs from these fonts within charts.
@@ -1355,6 +1389,31 @@ void DrawSz(CONST char *sz, int x, int y, int dt)
     nSav = SetBkMode(wi.hdc, TRANSPARENT);
   }
 #endif
+#ifdef QT
+  // Qt equivalent of the WINANY CreateFont/SelectObject block above. The
+  // families are the same rgszFontName[] strings; BeginQt() loads the ones
+  // bundled in font/ so they resolve without being installed system wide.
+  // Without this branch nFont > 0 fell through to the turtle vector
+  // fallback below, which is worse than ignoring the setting: DrawSign()
+  // and its siblings have already swapped the glyph for a character code
+  // meant for the chosen font, so the fallback drew that raw character.
+  QFont fontSavQt;
+  int nAscentQt = 0;
+  flag fFontQt = (!gi.fFile && nFont > 0 && gi.qpaint != NULL);
+  if (fFontQt) {
+    int nPixQt = xFont*nScale2;
+    if (nFont == fiLucida)
+      nPixQt = nPixQt*90/100;
+    QFont fontQt(rgszFontName[nFont]);
+    fontQt.setPixelSize(Max(nPixQt, 1));
+    fontQt.setWeight(!gs.fThick ? QFont::Normal : QFont::Bold);
+    fontSavQt = gi.qpaint->font();
+    gi.qpaint->setFont(fontQt);
+    gi.qpaint->setPen(QColorFromKv(gi.kvCur));
+    // Windows positions text by its top left corner, Qt by the baseline.
+    nAscentQt = QFontMetrics(fontQt).ascent();
+  }
+#endif
 #ifdef WIN
   if (nFont == 0)
     AdjustCoordinates(&x, &y);
@@ -1367,6 +1426,12 @@ void DrawSz(CONST char *sz, int x, int y, int dt)
       ch = ChLatinFromWch(wch);
     } else if (us.nCharset == ccIBM)
       ch = ChLatinFromWch(WchFromChIBM(ch));
+#ifdef QT
+    if (fFontQt) {
+      gi.qpaint->drawText(x-nScale2/2, y-nScale2*3/2 + nAscentQt,
+        QString(QChar(dch > 1 ? (uint)wch : (uint)(uchar)ch)));
+    } else
+#endif
 #ifdef WINANY
     if (!gi.fFile && nFont > 0) {
       if (dch > 1)
@@ -1397,6 +1462,10 @@ void DrawSz(CONST char *sz, int x, int y, int dt)
     x += xFont2*nScale2;
     sz += dch;
   }
+#ifdef QT
+  if (fFontQt)
+    gi.qpaint->setFont(fontSavQt);
+#endif
 #ifdef WINANY
   if (!gi.fFile && nFont > 0) {
     SetBkMode(wi.hdc, nSav);
@@ -1458,7 +1527,7 @@ void DrawSign(int i, int x, int y)
   fDoThin = gs.fThick && nFont == 0 && ch <= 0 && gi.nScale <= gi.nScaleT;
   if (fDoThin)
     DrawThick(fFalse);
-#ifdef WINANY
+#if defined(WINANY) || defined(QT)
   if (!gi.fFile && ch > 0) {
     if (DrawGlyph(ch, x, y, nFont, nScale))
       return;
@@ -1535,7 +1604,7 @@ void DrawHouse(int i, int x, int y)
   fDoThin = gs.fThick && nFont == 0 && ch <= 0 && gi.nScale <= gi.nScaleT;
   if (fDoThin)
     DrawThick(fFalse);
-#ifdef WINANY
+#if defined(WINANY) || defined(QT)
   if (!gi.fFile && ch > 0) {
     if (nFont == fiArial)
       ch = (i <= 9 ? '0' + i : -i);
@@ -1712,7 +1781,7 @@ void DrawObject(int obj, int x, int y)
   fDoThin = gs.fThick && nFont == 0 && ch <= 0 && gi.nScale <= gi.nScaleT;
   if (fDoThin)
     DrawThick(fFalse);
-#ifdef WINANY
+#if defined(WINANY) || defined(QT)
   if (!gi.fFile && ch > 0) {
     if (DrawGlyph(ch, x, y, nFont, nScale))
       return;
@@ -1917,7 +1986,7 @@ void DrawAspect(int asp, int x, int y)
   fDoThin = gs.fThick && nFont == 0 && ch <= 0 && gi.nScale <= gi.nScaleT;
   if (fDoThin)
     DrawThick(fFalse);
-#ifdef WINANY
+#if defined(WINANY) || defined(QT)
   if (!gi.fFile && ch > 0) {
     if (DrawGlyph(ch, x, y, nFont, nScale))
       return;
@@ -1985,7 +2054,7 @@ void DrawNakshatra(int i, int x, int y)
   fDoThin = gs.fThick && nFont == 0 && ch <= 0 && gi.nScale <= gi.nScaleT;
   if (fDoThin)
     DrawThick(fFalse);
-#ifdef WINANY
+#if defined(WINANY) || defined(QT)
   if (!gi.fFile && ch != -1) {
     if (DrawGlyph(ch, x, y, nFont, nScale))
       return;

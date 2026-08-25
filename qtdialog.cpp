@@ -550,11 +550,7 @@ void ShowExportTextDialogQt()
 // note the antialias toggle itself, gs.fAntialias, is already exposed via
 // Graphics > Chart Effects > Antialias Lines, just not this intensity
 // knob), and "Don't Show Popup Messages" (wi.fNoPopup) -- all three live
-// in the Win32-only WI struct. Also skipped: "Use Real System Fonts"
-// (gs.nFontAll/gi.nFontPrev), since that depends on the same Windows GDI
-// font enumeration system Graphics Settings' font pickers would need --
-// no direct Linux/Qt equivalent, not worth a partial port for one
-// checkbox with nothing underneath it.
+// in the Win32-only WI struct.
 
 void ShowFileSettingsDialogQt()
 {
@@ -571,6 +567,11 @@ void ShowFileSettingsDialogQt()
     "Export Encapsulated PostScript Files");
   QCheckBox *pcbWriteOld = new QCheckBox(
     "Save Chart Info Files in Old Style Format");
+  // Windows' dxFi_YXf: a master switch for the six Graphics Settings font
+  // pickers. Turning it off zeroes them and remembers the set in
+  // gi.nFontPrev; turning it back on restores that set.
+  QCheckBox *pcbFontAll = new QCheckBox("Use Real System Fonts in Graphic Charts");
+  pcbFontAll->setChecked(gs.nFontAll > 0);
   QCheckBox *pcbNoBackDraw = new QCheckBox("Don't Show Background Bitmap");
   pcbSmartSave->setChecked(us.fSmartSave != 0);
   pcbTextHTML->setChecked(us.fTextHTML != 0);
@@ -579,7 +580,7 @@ void ShowFileSettingsDialogQt()
   pcbWriteOld->setChecked(us.fWriteOld != 0);
   pcbNoBackDraw->setChecked(!gs.fBackDraw);
   for (QCheckBox *pcb : { pcbSmartSave, pcbTextHTML, pcbBmpPNG,
-    pcbPSComplete, pcbWriteOld })
+    pcbPSComplete, pcbWriteOld, pcbFontAll })
     pouter->addWidget(pcb);
 
   QFormLayout *pformThick = new QFormLayout();
@@ -648,6 +649,13 @@ void ShowFileSettingsDialogQt()
     gs.chBmpMode = 'B';
   gs.fPSComplete = !pcbPSComplete->isChecked();
   us.fWriteOld = pcbWriteOld->isChecked();
+  gs.nFontAll = pcbFontAll->isChecked() * gi.nFontPrev;
+  gs.nFontTxt = gs.nFontAll / 0x100000;
+  gs.nFontSig = (gs.nFontAll / 0x10000) % 0x10;
+  gs.nFontHou = (gs.nFontAll / 0x1000) % 0x10;
+  gs.nFontObj = (gs.nFontAll / 0x100) % 0x10;
+  gs.nFontAsp = (gs.nFontAll / 0x10) % 0x10;
+  gs.nFontNak = gs.nFontAll % 0x10;
   gs.nThickAdjust = nThickAdjust;
   gs.fBackDraw = !pcbNoBackDraw->isChecked();
   gs.rBackPct = rBackPct;
@@ -676,6 +684,14 @@ static CONST char *rgszWheelCornerQt[7] = {"None", "Spider Web",
 // so the combo shows the same sequence a Windows user would expect. The
 // value stored is still the index into rgszWheelCornerQt[].
 static CONST int rgiWheelCornerOrderQt[7] = {0, 1, 2, 6, 3, 4, 5};
+// Mirrors rgszFontDisp[] in wdialog.cpp, which is Windows-only. These are
+// the names shown to the user; rgszFontName[] (xdata.cpp, portable) holds
+// the family names actually looked up when drawing.
+static CONST char *rgszFontDispQt[cFont] = {szAppNameCore, "Wingdings",
+  "Astro", "Enigma", "Hamburg", "Astronomicon", "StarFont",
+  "StarFont Serif", "Hank's Nakshatra", "Arial", "Courier New", "Consolas",
+  "Lucida", "Cascadia"};
+
 static CONST char *rgszDecaFillQt[8] = {"None", "Standard", "Rainbow RGB",
   "Rainbow RYB", "Ruler Sign", "Ruler House", "7 Rays Sign", "7 Rays House"};
 
@@ -689,12 +705,8 @@ static CONST char *rgszDecaFillQt[8] = {"None", "Standard", "Rainbow RGB",
 // with one of their preset choices (Windows' own DlgGraphics leans on a
 // full RedoMenu() for that, which this port deliberately doesn't have).
 //
-// Skipped, as Win32-only (they live in the WI struct): the animation
-// update delay (wi.nTimerDelay, a Win32 SetTimer interval) and "Don't
-// Automatically Redraw Screen" (wi.fNoUpdate). Also skipped: the six font
-// selection combos (gs.nFontTxt/Sig/Hou/Obj/Asp/Nak), which pick from a
-// hardcoded list of Windows GDI font names -- porting them properly means
-// building a real Qt font picker, not translating a list.
+// Skipped, as Win32-only (it lives in the WI struct): "Don't
+// Automatically Redraw Screen" (wi.fNoUpdate).
 
 void ShowGraphicsSettingsDialogQt()
 {
@@ -770,6 +782,30 @@ void ShowGraphicsSettingsDialogQt()
   pvMap->addWidget(pcbSouth);
   pvMap->addWidget(pcbMollweide);
   pin->addWidget(pgbMap);
+
+  // Windows' Fonts group: one combo per glyph category, each offering only
+  // the fonts that category allows (rgszFontAllow[] in xdata.cpp -- not
+  // every font has glyphs for every category).
+  QGroupBox *pgbFont = new QGroupBox("Fonts");
+  QFormLayout *pformFont = new QFormLayout(pgbFont);
+  CONST char *rgszFontLabel[6] = { "Text:", "Signs:", "Houses:", "Objects:",
+    "Aspects:", "Nakshat.:" };
+  int *rgpnFont[6] = { &gs.nFontTxt, &gs.nFontSig, &gs.nFontHou,
+    &gs.nFontObj, &gs.nFontAsp, &gs.nFontNak };
+  QComboBox *rgpcbFont[6];
+  QVector<int> rgrgiFont[6];
+  for (i = 0; i < 6; i++) {
+    rgpcbFont[i] = new QComboBox();
+    for (int j = 0; j < cFont; j++) {
+      if (rgszFontAllow[i][j] < '0')
+        continue;
+      rgrgiFont[i].append(j);
+      rgpcbFont[i]->addItem(rgszFontDispQt[j]);
+    }
+    rgpcbFont[i]->setCurrentIndex(Max(rgrgiFont[i].indexOf(*rgpnFont[i]), 0));
+    pformFont->addRow(rgszFontLabel[i], rgpcbFont[i]);
+  }
+  pin->addWidget(pgbFont);
 
   QGroupBox *pgbAnim = new QGroupBox("Animation");
   QVBoxLayout *pvAnim = new QVBoxLayout(pgbAnim);
@@ -955,6 +991,14 @@ void ShowGraphicsSettingsDialogQt()
   }
   for (i = 0; i < 6; i++)
     *rgpnGlyph[i] = rgpgroupGlyph[i]->checkedId() + 1;
+  for (i = 0; i < 6; i++)
+    *rgpnFont[i] = rgrgiFont[i].value(rgpcbFont[i]->currentIndex(), 0);
+  // Windows keeps the six packed into gs.nFontAll as well, which is what
+  // File Settings' "Use Real System Fonts" toggles off and back on.
+  gs.nFontAll = gs.nFontTxt*0x100000 + gs.nFontSig*0x10000 +
+    gs.nFontHou*0x1000 + gs.nFontObj*0x100 + gs.nFontAsp*0x10 + gs.nFontNak;
+  if (gs.nFontAll > 0)
+    gi.nFontPrev = gs.nFontAll;
 
   us.fGraphics = fTrue;
   if (fResize && gs.xWin > 0 && gs.yWin > 0)
