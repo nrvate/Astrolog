@@ -452,7 +452,7 @@ skip.
        wording now follows the `.rc`. Verified live. Note the sort orders
        are stored as switch letters not indexes, and the subdivision type
        splits across `us.fListDecan` + `us.nDecanType`.
-   8.7 **Object / More Object** (next up) / Moon Object Settings** (`DlgObject`,
+   8.7 **Object / More Object / Moon Object Settings** (next up) (`DlgObject`,
        `DlgObject2`, `DlgObjectM`) — numeric precision. Windows formats
        via `SetEditR(..., -2)` for max orb, `-1` for orb addition, `-2`
        for influence; `QString::number()` prints full precision, so these
