@@ -317,36 +317,35 @@ fractional-second values), Jump Factor submenu (9 unit values), Reverse
 Direction, Pause Animation, Timed Exposure, Step Forward/Backward, Store/
 Recall Chart Info.
 
-### Help — mostly done, missing a few doc/data openers
+### Help — COMPLETE except Setup (not applicable)
 Done: Open Documentation..., Open Changes, Open License, Open Default
-Settings, Open Orbital Elements, Open Star List, About Astrolog..., and
-**all 11 List Signs/Objects/Aspects/Constellations/Planet Info/Rays/
-General Meanings/Switches/Obscure Switches/Keystrokes/Credits actions**
-(done 2026-08-24 — see `AddChartModeTextAction()` in qtdriver.cpp, which
-also now backs the Exoplanets Chart action; joins `s_pgroupChartMode`
-exactly like every other chart mode, confirmed correct via
-`astrolog.cpp`'s own `Assert(rgcmdMode[gSign] == cmdHelpSign)`-style
-self-checks). Fixed along the way: `AddChartModeTextAction()` keeps the
-View menu's "Show Graphics" checkbox in sync (`s_paGraphics`, file-scope)
-the same way Colored Text/Show Interpretations already did — a real gap
-since forcing text mode via the new helper wasn't updating it before.
-**Naming trap worth remembering**: `us.fConstel` (List Constellations) is
-a *different field* from `gs.fConstel` (Graphics > Map Effects > Show
-Constellations, a separate already-implemented toggle) — easy to
-transpose since they read almost identically.
+Settings, Open Orbital Elements, Open Star List, Open Atlas, Open Time
+Zone Changes, Open Exoplanet List, Open Website, Open Website Mirror,
+About Astrolog..., and **all 11 List Signs/Objects/Aspects/
+Constellations/Planet Info/Rays/General Meanings/Switches/Obscure
+Switches/Keystrokes/Credits actions** (done 2026-08-24 — see
+`AddChartModeTextAction()` in qtdriver.cpp, which also now backs the
+Exoplanets Chart action; joins `s_pgroupChartMode` exactly like every
+other chart mode, confirmed correct via `astrolog.cpp`'s own
+`Assert(rgcmdMode[gSign] == cmdHelpSign)`-style self-checks). Fixed along
+the way: `AddChartModeTextAction()` keeps the View menu's "Show Graphics"
+checkbox in sync (`s_paGraphics`, file-scope) the same way Colored Text/
+Show Interpretations already did — a real gap since forcing text mode via
+the new helper wasn't updating it before. **Naming trap worth
+remembering**: `us.fConstel` (List Constellations) is a *different field*
+from `gs.fConstel` (Graphics > Map Effects > Show Constellations, a
+separate already-implemented toggle) — easy to transpose since they read
+almost identically.
 
-Missing:
-- Open Website / Open Website Mirror — trivial:
-  `QDesktopServices::openUrl()` with the URLs already shipped in this
-  repo's `astrolog.url` (`http://www.astrolog.org/astrolog.htm`) and
-  `astrlog2.url` (`http://www.magitech.com/astrolog/astrolog.htm`) — read
-  those files' content rather than hardcoding, in case they ever change.
-- Open Atlas / Open Time Zone Changes / Open Exoplanet List — trivial,
-  same `FileOpen()`+`QDesktopServices::openUrl()` pattern the other 6
-  already use, just three more filenames: `DEFAULT_ATLASFILE`
-  ("atlas.as"), `DEFAULT_TIMECHANGE` ("timezone.as"), `szFileExoCore`
-  ("astexo.csv") — all `#define`d in astrolog.h.
-- Setup `[P]` submenu — Windows installer only, not applicable, skip.
+Open Website/Website Mirror (done 2026-08-24) needed a different
+mechanism from the plain doc/data openers: `astrolog.url`/`astrlog2.url`
+are Windows `.url` shortcut files (simple INI format) whose *content* is
+the URL to open. Read via `QSettings(path, QSettings::IniFormat)` and the
+key `"InternetShortcut/URL"` instead of opening the file itself, since
+`.url` files happen to already be valid INI — no manual parsing needed.
+
+Missing: Setup `[P]` submenu — Windows installer only, not applicable,
+skip.
 
 ## Prioritized remaining work
 
@@ -354,12 +353,11 @@ Missing:
    above.
 2. ~~File's remaining standalone export/save variants~~ — **done
    2026-08-24**, see File section above.
-3. **Help's remaining doc/data file openers** (Website/Website Mirror,
-   Atlas, Time Zone Changes, Exoplanet List) — trivial, same pattern
-   already used for the other 6. **Next item up.**
+3. ~~Help's remaining doc/data file openers~~ — **done 2026-08-24**, see
+   Help section above. Help menu is now fully complete.
 4. **Edit menu Copy Bitmap** — easy (`gi.qim` is already a `QImage`),
    reasonable value. Copy Text/Vector formats are the same file-then-read
-   pattern as export, moderate additional value.
+   pattern as export, moderate additional value. **Next item up.**
 5. **File Settings dialog** (portable subset only, skip Windows-only
    fields) — moderate complexity, moderate value.
 6. **Graphics Settings dialog** — lower priority than it looks; most
