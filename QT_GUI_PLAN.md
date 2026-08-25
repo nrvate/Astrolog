@@ -526,10 +526,53 @@ skip.
          escaped. The parse is now in one place, `ParseCustomDefQt()`,
          instead of the two inline copies it had (Windows open-codes it
          twice as well).
-   8.12 **Calculation Settings** (next up) (`DlgCalc`) and **Display Settings**
-       (`DlgDisplay`) — not yet audited field-by-field against the `.rc`;
-       check for missing fields, label wording, and field order.
-   8.13 **File Settings** (`DlgFile`) and **Graphics Settings**
+   8.12 ~~Calculation Settings and Display Settings~~ — **done 2026-08-25**
+       (`DlgCalc`, `DlgDisplay`). No fields were missing; the gaps were in
+       formatting, parsing, wording, and menu sync.
+       *Calculation Settings:*
+       - **"D<n>" divisional-chart syntax didn't work.** Windows reads
+         this field as `ChCap(sz[0])=='D' ? rDegMax/RFromSz(sz+1) : ...`,
+         so "D9" means the navamsa (360/9 = 40). Qt used `toDouble()`,
+         which returns 0 for "D9", so the dialog rejected it as an
+         invalid harmonic factor. Now supported.
+       - Zodiac Offset was a bare `QLineEdit`; Windows offers the ten
+         named ayanamsas as "<offset> <name>" dropdown entries and reads
+         the field with `atof()`, which stops at the space. Now an
+         editable combo doing the same. House System combo made editable
+         too (Windows' is `CBS_DROPDOWN`).
+       - Reals now read through `RFromSz()`, what Windows uses, instead
+         of `toDouble()` — same parse, and it also takes a leading `~`
+         AstroExpression where that's compiled in.
+       - Precision: `-6` harmonic, `6` zodiac offset (was full double).
+       - Wording: "3D House Projection" → "3D Houses Plane", "Object on
+         Angle" → "Solar Chart Setting", "Object:" → "Use This Planet:".
+         "Use Start of Planet's Sign" moved inside the Solar Chart group
+         where Windows has it, and the checkbox order now follows
+         Windows' reading order.
+       - **Menu sync missing**: `DlgCalc` re-checks House Settings' Solar
+         Chart, 3D Houses, and Show Dwads. Added `SyncHouseSetMenuQt()`.
+       *Display Settings:*
+       - **"Applying Aspects" checkmark condition was wrong.** It was
+         built with `AddToggleAction`, which checks `!= 0`, but `nAppSep`
+         has three values and Windows checks `== 1` everywhere — so
+         Waxing/Waning (2) showed as checked. Now has its own action.
+         (The toggle itself stays `inv()`, which is what Windows does.)
+       - **Menu sync missing**: `DlgDisplay` re-checks the View menu's
+         "Print Nearest Second" and "Applying Aspects". Added
+         `SyncDisplayMenuQt()`.
+       - Display Format radios were in value order; Windows shows them
+         27 Nakshatras (3) *above* 360 Degrees (2). Reordered for display
+         while keeping the button ids equal to the values.
+       - Precision `-6` on stationary velocity; "Antivertex" → "Antivert".
+       - Both dialogs widened 450 → 530; the longest labels were clipped.
+       - **Deliberate divergence, left as-is:** Windows' `nAsp` handler
+         assigns `us.nAsp = na` *before* the loop `for (i = us.nAsp + 1;
+         i <= na; i++) ignorea[i] = fFalse;`, so that loop can never run
+         and raising the aspect count doesn't actually un-restrict the
+         newly included aspects. Qt saves the old value first, so it
+         works. Keeping the working version rather than reproducing the
+         bug — flagged here so it reads as a choice, not an oversight.
+   8.13 **File Settings** (next up) (`DlgFile`) and **Graphics Settings**
        (`DlgGraphics`) — the Win32-only omissions are deliberate and
        documented, but the rest hasn't been checked for label wording and
        field order. Graphics Settings' six font pickers remain genuinely
@@ -540,7 +583,12 @@ skip.
        abbreviations, colour names, object names, chart size and scale
        values. Typed values parse fine either way, but a Windows user
        expects the dropdown. Worth doing as one pass with a shared helper
-       rather than per dialog.
+       rather than per dialog. Two already done in passing: Calculation
+       Settings' Zodiac Offset and House System (8.12). Its Calculation
+       Method combo is still a plain non-editable dropdown where Windows'
+       is editable — left that way because its entries are long
+       version-stamped strings ("Swiss Ephemeris 2.10.03") nobody would
+       type, and Windows matches them with `FMatchSz` on the exact text.
 
 9. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
    to accept; lower priority, no immediate need identified.

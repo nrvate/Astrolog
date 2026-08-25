@@ -59,6 +59,15 @@ void SetRelQt(int rc);
 // DlgStar, and DlgMoons call WiCheckMenu() before they return.
 void SyncRestrictMenuQt();
 
+// Refresh the View menu's "Print Nearest Second" and "Applying Aspects"
+// checkmarks, which the Display Settings dialog can also change.
+void SyncDisplayMenuQt();
+
+// Refresh the Setting / House Settings submenu's "Solar Chart", "3D
+// Houses", and "Show Dwads" checkmarks, which the Calculation Settings
+// dialog can also change.
+void SyncHouseSetMenuQt();
+
 // Refresh the Setting menu's Heliocentric checkmark from current state.
 // Needed because the Calculation Settings dialog can also change the
 // central planet, not just the Heliocentric menu item itself.

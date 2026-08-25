@@ -272,6 +272,30 @@ void RecastAndRedrawQt()
 // wdriver.cpp:1611) -- one reusable helper here instead of hand written
 // code per item.
 
+// Menu items that a dialog can also change, so they need re-syncing when
+// it closes -- the job Windows does with the WiCheckMenu() calls sprinkled
+// through DlgCalc and DlgDisplay.
+static QAction *s_paSeconds = NULL, *s_paApplying = NULL;
+static QAction *s_paSolar = NULL, *s_paHouse3D = NULL, *s_paDwad = NULL;
+
+void SyncDisplayMenuQt()
+{
+  if (s_paSeconds != NULL)
+    s_paSeconds->setChecked(us.fSeconds != 0);
+  if (s_paApplying != NULL)
+    s_paApplying->setChecked(us.nAppSep == 1);
+}
+
+void SyncHouseSetMenuQt()
+{
+  if (s_paSolar != NULL)
+    s_paSolar->setChecked(us.objOnAsc != 0);
+  if (s_paHouse3D != NULL)
+    s_paHouse3D->setChecked(us.fHouse3D != 0);
+  if (s_paDwad != NULL)
+    s_paDwad->setChecked(us.nDwad > 0);
+}
+
 static QAction *AddToggleAction(QMenu *pmenu, CONST char *szLabel,
   flag *pfield, flag fRecast)
 {
@@ -604,9 +628,22 @@ static void BuildViewMenu(QMainWindow *pwind)
       s_paGraphics->setChecked(fFalse);
       RedrawQt();
     });
-  AddToggleAction(pmenu, "Print Nearest &Second", &us.fSeconds, fFalse);
+  s_paSeconds = AddToggleAction(pmenu, "Print Nearest &Second", &us.fSeconds,
+    fFalse);
   AddToggleAction(pmenu, "&Parallel Aspects", &us.fParallel, fFalse);
-  AddToggleAction(pmenu, "&Applying Aspects", &us.nAppSep, fFalse);
+  // Not AddToggleAction: nAppSep has three values, and the checkmark means
+  // specifically "Applying/Separating", not "non-zero" -- Windows checks
+  // "us.nAppSep == 1" everywhere (cmdApplying in wdriver.cpp), so Waxing/
+  // Waning (2) shows unchecked. The toggle itself is still inv(), which is
+  // what Windows does too, oddly enough.
+  s_paApplying = pmenu->addAction("&Applying Aspects");
+  s_paApplying->setCheckable(true);
+  s_paApplying->setChecked(us.nAppSep == 1);
+  QObject::connect(s_paApplying, &QAction::triggered, pwind, []() {
+    us.nAppSep = !us.nAppSep;
+    s_paApplying->setChecked(us.nAppSep == 1);
+    RedrawQt();
+  });
 }
 
 
@@ -849,18 +886,19 @@ static void BuildSettingMenu(QMainWindow *pwind)
     &us.nHouseSystem, fTrue);
 
   QMenu *pmenuHouseSet = pmenu->addMenu("House S&ettings");
-  QAction *paSolar = pmenuHouseSet->addAction("&Solar Chart");
-  paSolar->setCheckable(true);
-  paSolar->setChecked(us.objOnAsc != 0);
-  QObject::connect(paSolar, &QAction::triggered, pwind, [paSolar]() {
+  s_paSolar = pmenuHouseSet->addAction("&Solar Chart");
+  s_paSolar->setCheckable(true);
+  s_paSolar->setChecked(us.objOnAsc != 0);
+  QObject::connect(s_paSolar, &QAction::triggered, pwind, []() {
     us.objOnAsc = us.objOnAsc ? 0 : oSun+1;
-    paSolar->setChecked(us.objOnAsc != 0);
+    s_paSolar->setChecked(us.objOnAsc != 0);
     RecastAndRedrawQt();
   });
-  AddToggleAction(pmenuHouseSet, "&3D Houses", &us.fHouse3D, fTrue);
+  s_paHouse3D = AddToggleAction(pmenuHouseSet, "&3D Houses", &us.fHouse3D,
+    fTrue);
   pmenuHouseSet->addSeparator();
   AddToggleAction(pmenuHouseSet, "Show &Decans", &us.fDecan, fTrue);
-  AddToggleAction(pmenuHouseSet, "Show D&wads", &us.nDwad, fTrue);
+  s_paDwad = AddToggleAction(pmenuHouseSet, "Show D&wads", &us.nDwad, fTrue);
   AddToggleAction(pmenuHouseSet, "&Flip Signs with Houses", &us.fFlip, fTrue);
   AddToggleAction(pmenuHouseSet, "&Geodetic Houses", &us.fGeodetic, fTrue);
   pmenuHouseSet->addSeparator();

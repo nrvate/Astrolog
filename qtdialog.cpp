@@ -2612,7 +2612,8 @@ void ShowCalcDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Calculation Settings");
-  dlg.resize(450, 600);
+  // Wide enough for "Local Horizon Positions Apply Atmospheric Refraction".
+  dlg.resize(530, 600);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QScrollArea *pscroll = new QScrollArea(&dlg);
   QWidget *pinner = new QWidget();
@@ -2638,19 +2639,36 @@ void ShowCalcDialogQt()
   pcbEphem->setCurrentIndex(rgcm.indexOf(cmCur));
   pform1->addRow("Calculation Method:", pcbEphem);
 
-  QLineEdit *peOffset = new QLineEdit(QString::number(us.rZodiacOffset));
-  pform1->addRow("Zodiac Offset / Ayanamsa:", peOffset);
+  // Windows offers the named ayanamsas as dropdown entries formatted
+  // "<offset> <name>", and reads the field back with atof(), which stops
+  // at the space -- so picking an entry and typing a bare number both
+  // work. addItem() before setEditText(): see the Progressions dialog.
+  QComboBox *pcbOffset = new QComboBox();
+  pcbOffset->setEditable(true);
+  QString strOffset = SzFormatRQt(us.rZodiacOffset, 6);
+  for (i = 0; *rgZodiacOffset[i].sz; i++) {
+    QString str = SzFormatRQt(rgZodiacOffset[i].r, 6) + " " +
+      rgZodiacOffset[i].sz;
+    pcbOffset->addItem(str);
+    if (us.rZodiacOffset == rgZodiacOffset[i].r)
+      strOffset = str;
+  }
+  pcbOffset->setEditText(strOffset);
+  pform1->addRow("Zodiac Offset / Ayanamsa:", pcbOffset);
 
+  // Editable, like Windows' dcSe_c, so a house system can be typed as
+  // well as picked; NParseSz() accepts either the name or its index.
   QComboBox *pcbSystem = new QComboBox();
+  pcbSystem->setEditable(true);
   for (i = 0; i < cSystem; i++)
     pcbSystem->addItem(szSystem[i]);
-  pcbSystem->setCurrentIndex(us.nHouseSystem);
+  pcbSystem->setEditText(szSystem[us.nHouseSystem]);
   pform1->addRow("House System:", pcbSystem);
 
   QLineEdit *peCenter = new QLineEdit(szObjName[us.objCenter]);
   pform1->addRow("Central Planet:", peCenter);
 
-  QLineEdit *peHarmonic = new QLineEdit(QString::number(us.rHarmonic));
+  QLineEdit *peHarmonic = new QLineEdit(SzFormatRQt(us.rHarmonic, -6));
   pform1->addRow("Harmonic Chart Factor:", peHarmonic);
 
   QLineEdit *peDwad = new QLineEdit(QString::number(us.nDwad));
@@ -2690,12 +2708,16 @@ void ShowCalcDialogQt()
   pcbAspectLat->setChecked(us.fAspectLat != 0);
   pcbHouse3D->setChecked(us.fHouse3D != 0);
   pcbSolarWhole->setChecked(us.fSolarWhole != 0);
-  for (QCheckBox *pcb : { pcbBary, pcbTrueNode, pcbHouseAngle, pcbRefract,
-    pcbSidereal2, pcbNoNutation, pcbEquator2, pcbEquator, pcbTruePos,
-    pcbTopoPos, pcbAspect3D, pcbAspectLat, pcbHouse3D, pcbSolarWhole })
+  // Windows' dlgCalc reads top to bottom as: the four coordinate-system
+  // boxes beside the form fields, then the wide ones, then the 3D pair,
+  // then "3D Houses" immediately above its plane group. "Use Start of
+  // Planet's Sign" belongs to the Solar Chart group and is added there.
+  for (QCheckBox *pcb : { pcbEquator2, pcbEquator, pcbTruePos, pcbTopoPos,
+    pcbBary, pcbTrueNode, pcbHouseAngle, pcbRefract, pcbSidereal2,
+    pcbNoNutation, pcbAspect3D, pcbAspectLat, pcbHouse3D })
     pinnerlayout->addWidget(pcb);
 
-  QGroupBox *pgroupBox3D = new QGroupBox("3D House Projection");
+  QGroupBox *pgroupBox3D = new QGroupBox("3D Houses Plane");
   QVBoxLayout *pgrouplayout3D = new QVBoxLayout(pgroupBox3D);
   QButtonGroup *pgroup3D = new QButtonGroup(&dlg);
   CONST char *rgsz3D[3] =
@@ -2708,7 +2730,7 @@ void ShowCalcDialogQt()
   }
   pinnerlayout->addWidget(pgroupBox3D);
 
-  QGroupBox *pgroupBoxAsc = new QGroupBox("Object on Angle");
+  QGroupBox *pgroupBoxAsc = new QGroupBox("Solar Chart Setting");
   QVBoxLayout *pgrouplayoutAsc = new QVBoxLayout(pgroupBoxAsc);
   QButtonGroup *pgroupAsc = new QButtonGroup(&dlg);
   CONST char *rgszAsc[3] =
@@ -2723,8 +2745,9 @@ void ShowCalcDialogQt()
   QLineEdit *peOnAsc = new QLineEdit(
     szObjName[us.objOnAsc == 0 ? oSun : NAbs(us.objOnAsc)-1]);
   QFormLayout *pformAsc = new QFormLayout();
-  pformAsc->addRow("Object:", peOnAsc);
+  pformAsc->addRow("Use This Planet:", peOnAsc);
   pgrouplayoutAsc->addLayout(pformAsc);
+  pgrouplayoutAsc->addWidget(pcbSolarWhole);
   pinnerlayout->addWidget(pgroupBoxAsc);
 
   pscroll->setWidget(pinner);
@@ -2740,11 +2763,24 @@ void ShowCalcDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  real rOffset = peOffset->text().toDouble();
-  int nSystem = pcbSystem->currentIndex();
+  // RFromSz() rather than toDouble(): it is what Windows reads these
+  // fields with, it stops at the space in "24.0 Lahiri", and it also
+  // accepts a leading "~" AstroExpression where that's compiled in.
+  QByteArray ba;
+  ba = pcbOffset->currentText().toLocal8Bit();
+  real rOffset = RFromSz(ba.constData());
+  ba = pcbSystem->currentText().toLocal8Bit();
+  int nSystem = NParseSz(ba.constData(), pmSystem);
   QByteArray baCenter = peCenter->text().toLocal8Bit();
   int nCenter = NParseSz(baCenter.constData(), pmObject);
-  real rHarmonic = peHarmonic->text().toDouble();
+  // A leading "D" asks for a divisional chart rather than a harmonic:
+  // "D9" is the navamsa, i.e. 360/9, not a harmonic factor of 9.
+  ba = peHarmonic->text().toLocal8Bit();
+  CONST char *szHarmonic = ba.constData();
+  int fDivisional = (ChCap(szHarmonic[0]) == 'D');
+  real rHarmonic = RFromSz(szHarmonic + fDivisional);
+  if (fDivisional && rHarmonic != 0.0)
+    rHarmonic = rDegMax / rHarmonic;
   int nDwad = peDwad->text().toInt();
   QByteArray baOnAsc = peOnAsc->text().toLocal8Bit();
   int nOnAsc = NParseSz(baOnAsc.constData(), pmObject);
@@ -2791,6 +2827,9 @@ void ShowCalcDialogQt()
   us.fTopoPos = pcbTopoPos->isChecked();
   us.fHouse3D = pcbHouse3D->isChecked();
   us.nHouse3D = pgroup3D->checkedId() + 1;
+  // Windows re-syncs the House Settings submenu here (the WiCheckMenu
+  // calls for cmdHouseSetSolar/cmdHouseSet3D/cmdHouseSetDwad in DlgCalc).
+  SyncHouseSetMenuQt();
   RecastAndRedrawQt();
 }
 
@@ -2803,7 +2842,8 @@ void ShowDisplayDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Display Settings");
-  dlg.resize(450, 650);
+  // Wide enough for "Eclipses Only at Location (Not Anywhere in World)".
+  dlg.resize(530, 650);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QScrollArea *pscroll = new QScrollArea(&dlg);
   QWidget *pinner = new QWidget();
@@ -2876,7 +2916,7 @@ void ShowDisplayDialogQt()
   pinnerlayout->addWidget(pcbSabian);
 
   QFormLayout *pform4 = new QFormLayout();
-  QLineEdit *peStation = new QLineEdit(QString::number(us.rStation));
+  QLineEdit *peStation = new QLineEdit(SzFormatRQt(us.rStation, -6));
   pform4->addRow("Stationary If Less Than This Velocity:", peStation);
   pinnerlayout->addLayout(pform4);
 
@@ -2891,7 +2931,7 @@ void ShowDisplayDialogQt()
   QGroupBox *pgroupBoxAngle = new QGroupBox("Rising and Setting Restrictions");
   QVBoxLayout *pgrouplayoutAngle = new QVBoxLayout(pgroupBoxAngle);
   CONST char *rgszAngle[arMax] = { "Rising", "Zenith Crossing", "Setting",
-    "Nadir Crossing", "Vertex", "Antivertex" };
+    "Nadir Crossing", "Vertex", "Antivert" };
   QVector<QCheckBox *> rgpcbAngle;
   for (i = 0; i < arMax; i++) {
     QCheckBox *pcb = new QCheckBox(rgszAngle[i]);
@@ -2904,12 +2944,16 @@ void ShowDisplayDialogQt()
   QGroupBox *pgroupBoxDegForm = new QGroupBox("Display Format");
   QVBoxLayout *pgrouplayoutDegForm = new QVBoxLayout(pgroupBoxDegForm);
   QButtonGroup *pgroupDegForm = new QButtonGroup(&dlg);
+  // Listed in Windows' on-screen order, which is not value order: it
+  // shows Nakshatras (3) above 360 Degrees (2). The button id is the
+  // us.nDegForm value, so the order here is presentation only.
   CONST char *rgszDegForm[4] =
-    { "Zodiac Position", "Hours & Minutes", "360 Degrees", "27 Nakshatras" };
+    { "Zodiac Position", "Hours & Minutes", "27 Nakshatras", "360 Degrees" };
+  CONST int rgnDegForm[4] = { 0, 1, 3, 2 };
   for (i = 0; i < 4; i++) {
     QRadioButton *prb = new QRadioButton(rgszDegForm[i]);
-    prb->setChecked(i == us.nDegForm);
-    pgroupDegForm->addButton(prb, i);
+    prb->setChecked(rgnDegForm[i] == us.nDegForm);
+    pgroupDegForm->addButton(prb, rgnDegForm[i]);
     pgrouplayoutDegForm->addWidget(prb);
   }
   pinnerlayout->addWidget(pgroupBoxDegForm);
@@ -2972,7 +3016,8 @@ void ShowDisplayDialogQt()
   ba = peReqObj->text().toLocal8Bit();
   int nro = NParseSz(ba.constData(), pmObject);
   int ni = peScreenWidth->text().toInt();
-  real ryw = peStation->text().toDouble();
+  ba = peStation->text().toLocal8Bit();
+  real ryw = RFromSz(ba.constData());
   if (!FValidAspect(na) || !(FItem(nro) || nro == -1) ||
     !FValidScreen(ni) || ryw < 0.0) {
     QMessageBox::warning(gi.qwind, szAppName,
@@ -3013,6 +3058,9 @@ void ShowDisplayDialogQt()
   if (!ignore7[rrRay])
     EnsureRay();
   us.nAppSep = pgroupAspOrb->checkedId();
+  // Windows re-syncs the View menu here (WiCheckMenu for cmdSecond and
+  // cmdApplying in DlgDisplay).
+  SyncDisplayMenuQt();
   RecastAndRedrawQt();
 }
 
