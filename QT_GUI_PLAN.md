@@ -23,9 +23,9 @@ were never in the sweep's scope and have not had that pass: the chart
 list (`DlgList`), multi-chart info (`DlgInfoAll`), command line
 (`DlgCommand`), and About (`DlgAbout`). They work; they just haven't been
 audited line by line, so that's the obvious place to look if something
-looks off in one of them. What remains is
-listed under "Prioritized remaining work": item 12 (no animation loop) is
-the largest functional gap, then Paste, macros, and Print. Everything
+looks off in one of them. Item 12, the missing animation loop, is also
+done. What remains under "Prioritized remaining work" is Paste (9),
+the 96 macro slots (10), and File > Print (11). Everything
 knowingly left undone or deliberately diverged from Windows is recorded
 either in the relevant 8.x sub-item or under "Known divergences from
 Windows" near the end — if you find something undocumented, that's a
@@ -466,8 +466,8 @@ skip.
    unverified — see that section. With this the **menu structure is
    complete**: every top-level menu and dialog Windows has is present
    except File > Print (item 11) and the deliberate Win32-only omissions.
-   **Item 8, the UI parity sweep, is now complete (2026-08-25). The next
-   item worth doing is 12, the missing animation loop.**
+   **Item 8, the UI parity sweep, is complete (2026-08-25), and so is item
+   12. Remaining: Paste (9), macros (10), Print (11).**
 8. ~~**UI parity sweep, one dialog at a time.**~~ — **all sub-items done
    2026-08-25.** Every dialog below was
    functionally correct but presentationally diverged from Windows.
@@ -678,60 +678,31 @@ skip.
          lesson stands — confirm a suspicious value against `astrolog.as`
          or the `GS` initializer in xdata.cpp before calling it a bug.
 
-12. **The Qt build has no animation loop.** Found while auditing 8.13.
-    The Animate menu sets `gs.nAnim`, `gi.nDir`, and the jump rate/factor
-    exactly as Windows does, and "Do Animation" toggles on — but nothing
-    consumes it. `Animate()` is called from only the two Step Forward/
-    Backward menu items (qtdriver.cpp), and there is no `QTimer`,
-    `startTimer`, or `timerEvent` anywhere in the Qt sources. Windows
-    drives it from `SetTimer`/`WM_TIMER` at `wi.nTimerDelay`
-    milliseconds. So the whole Animate menu below Step is currently
-    inert. Fixing it means a `QTimer` on the main window started/stopped
-    with `gs.nAnim`'s sign, firing `Animate(...)` — at which point
-    Graphics Settings' "Update Delay in Milliseconds" field becomes
-    portable too and should be added back (it is presently skipped as
-    Win32-only, which is true of `wi.nTimerDelay` but misses the real
-    reason). Not attempted here: it is a feature, not a parity fix.
-   8.14 ~~Cross-cutting: combo boxes~~ — **done 2026-08-25**. Windows
-       offers dropdown suggestions on fields this port rendered as bare
-       `QLineEdit`s. The authoritative list is every `SetCombo()` call in
-       wdialog.cpp; all of them are now accounted for.
-       - Added this pass: the eight chart info fields (month, day, year,
-         time, daylight, zone, longitude, latitude) across all four
-         dialogs that show them — Chart Info, Default Chart Info,
-         Transits, Progressions — plus Default Chart Info's elevation
-         ("0m"/"1000ft"), temperature ("0C"/"32F"), and "now" minute
-         offset ("60"/"0"/"-60"). Contents match Windows' `SetEditMDYT()`
-         and `SetEditSZOA()` exactly, including the zone list's
-         "<offset> <abbreviation>" format and its filter dropping
-         daylight and war time variants, and including the hardcoded
-         2020-2030 year range upstream uses.
-       - Shared helper `NewComboQt(strCur, rgstr)` plus one
-         `Rgstr*Qt()` function per list, so the four dialogs build these
-         fields from one place rather than each rolling its own.
-       - Verified the values round-trip: picking or typing "5W EST"
-         comes back as "5W", so `RParseSz` reads the suffixed form the
-         dropdown offers. Transits' and Progressions' "Now" buttons
-         needed `setEditText()` rather than `setText()`; both confirmed
-         still working.
-       - Already done earlier: colors (8.5), progression rate and cusp
-         ratio (8.4), aspect sort and decan type (8.6), zodiac offset and
-         house system (8.12), background transparency and the two scale
-         fields (8.13), wheel corner / wheel fill / city color.
-       - **Known remaining differences, deliberate.** Windows makes three
-         of its dropdowns editable where this port leaves them as plain
-         pick lists: Calculation Method (its entries are long
-         version-stamped strings like "Swiss Ephemeris 2.10.03" that
-         nobody would type, and Windows matches them with `FMatchSz` on
-         exact text), and Chart Settings' aspect sort and decan type
-         (fixed enums where free text only invites typos). All three
-         offer the same choices; only free-text entry differs.
-       - **One divergence worth knowing:** Windows' `SetEditSZOA()` puts
-         only No/Yes in the daylight dropdown, and its individual dialogs
-         append "Autodetect" where they want it. This port shows
-         Autodetect in every chart info dialog rather than resolving it
-         away (see 8.1), so it is offered in all of them — a value you
-         can see but not pick would be worse than the small difference.
+12. ~~The Qt build has no animation loop.~~ — **done 2026-08-25.** The
+    Animate menu used to set `gs.nAnim`, `gi.nDir`, and the jump rate and
+    factor exactly as Windows does, while nothing consumed any of it:
+    `Animate()` ran only from the two Step items, and there was no
+    `QTimer`, `startTimer`, or `timerEvent` anywhere in the Qt sources.
+    A `QTimer` created in `BeginQt()` now runs for the whole session and
+    checks the same guard Windows' `WM_TIMER` does
+    (`gs.nAnim < 1 || gi.fPause`), then calls `Animate()` +
+    `RecastAndRedrawQt()` — the same pair the Step items already used.
+    - The interval lives in `s_nTimerDelay` (qtdriver.cpp), the Qt build's
+      stand-in for Win32-only `wi.nTimerDelay`, default 100ms like
+      Windows. That makes Graphics Settings' **"Update Delay in
+      Milliseconds"** portable, so it is no longer skipped; `NAnimDelayQt()`
+      and `SetAnimDelayQt()` are the accessors, and the setter retimes the
+      running timer immediately.
+    - Verified: with Jump Rate = Days the chart date advanced Sep 9 →
+      Oct 12 2026 over three seconds (one day per tick), and Pause
+      Animation held it at zero pixels changed.
+    - **Worth knowing, and not a bug:** "Do Animation" does nothing from a
+      cold start. It is `neg(gs.nAnim)`, and `gs.nAnim` defaults to 0, so
+      negating it is a no-op — animation only arms once a Jump Rate has
+      been picked (which assigns a positive value directly). Windows'
+      `cmdAnimateNo` is the identical `neg(gs.nAnim)` with the identical
+      default, so this matches upstream exactly. Don't "fix" it without
+      deciding to diverge on purpose.
 
 9. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
    to accept; lower priority, no immediate need identified.

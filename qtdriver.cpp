@@ -46,6 +46,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
 #include <QtCore/QUrl>
+#include <QtCore/QTimer>
 #include <QtCore/QFile>
 #include <QtCore/QSettings>
 
@@ -1358,6 +1359,45 @@ static void BuildEditMenu(QMainWindow *pwind)
 }
 
 
+// Windows keeps one Win32 timer running for the entire session and works
+// out inside its WM_TIMER handler whether animation is actually on
+// (wdriver.cpp) -- gs.nAnim's sign is the on/off switch and gi.fPause
+// suspends it. A QTimer does the same job here. Without this the whole
+// Animate menu below Step Forward/Backward sets state that nothing ever
+// consumes, which is exactly how it behaved before this was added.
+static QTimer *s_ptimerAnim = NULL;
+static int s_nTimerDelay = 100;   // Windows' wi.nTimerDelay default
+
+// The animation interval, in milliseconds. Windows keeps this in
+// wi.nTimerDelay, which is Win32-only, so the Qt build owns its own copy;
+// Graphics Settings edits it through these.
+int NAnimDelayQt()
+{
+  return s_nTimerDelay;
+}
+
+void SetAnimDelayQt(int nDelay)
+{
+  s_nTimerDelay = nDelay;
+  if (s_ptimerAnim != NULL)
+    s_ptimerAnim->setInterval(nDelay);
+}
+
+static void StartAnimTimerQt(QMainWindow *pwind)
+{
+  s_ptimerAnim = new QTimer(pwind);
+  QObject::connect(s_ptimerAnim, &QTimer::timeout, pwind, []() {
+    // Same guard Windows' WM_TIMER uses. Note gs.nAnim < 1 covers both
+    // "off" (negative, remembering the rate) and "never set".
+    if (gs.nAnim < 1 || gi.fPause)
+      return;
+    Animate(gs.nAnim, gi.nDir);
+    RecastAndRedrawQt();
+  });
+  s_ptimerAnim->start(s_nTimerDelay);
+}
+
+
 // Animate menu, equivalent to Windows' cmdAnimate*/cmdStep*/cmdStore/
 // cmdRecall handlers (wdriver.cpp:2276-2354). gs.nAnim's sign doubles as
 // the on/off state (negative = off, remembering the last active rate) --
@@ -1593,6 +1633,7 @@ void BeginQt()
   gi.qcanvas = new ChartCanvas();
   gi.qwind->setCentralWidget(gi.qcanvas);
   BuildAstrologMenus(gi.qwind);
+  StartAnimTimerQt(gi.qwind);
   gi.qwind->resize(gs.xWin, gs.yWin);
   gi.qwind->show();
 }

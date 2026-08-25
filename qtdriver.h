@@ -59,6 +59,12 @@ void SetRelQt(int rc);
 // DlgStar, and DlgMoons call WiCheckMenu() before they return.
 void SyncRestrictMenuQt();
 
+// Animation interval in milliseconds, the Qt build's stand-in for
+// Windows' Win32-only wi.nTimerDelay. Graphics Settings edits it; the
+// setter retimes the running animation timer immediately.
+int NAnimDelayQt();
+void SetAnimDelayQt(int nDelay);
+
 // Refresh the View menu's "Print Nearest Second" and "Applying Aspects"
 // checkmarks, which the Display Settings dialog can also change.
 void SyncDisplayMenuQt();

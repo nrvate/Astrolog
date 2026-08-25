@@ -773,6 +773,12 @@ void ShowGraphicsSettingsDialogQt()
 
   QGroupBox *pgbAnim = new QGroupBox("Animation");
   QVBoxLayout *pvAnim = new QVBoxLayout(pgbAnim);
+  // Windows edits wi.nTimerDelay here; the Qt build keeps the equivalent
+  // in qtdriver.cpp, since wi is Win32-only.
+  QFormLayout *pformAnim = new QFormLayout();
+  QLineEdit *peAnimDelay = new QLineEdit(QString::number(NAnimDelayQt()));
+  pformAnim->addRow("Update Delay in Milliseconds:", peAnimDelay);
+  pvAnim->addLayout(pformAnim);
   QCheckBox *pcbAnimMap = new QCheckBox("Animate Map Instead of Time");
   pcbAnimMap->setChecked(gs.fAnimMap != 0);
   pvAnim->addWidget(pcbAnimMap);
@@ -884,6 +890,7 @@ void ShowGraphicsSettingsDialogQt()
   int nGridCell = peGridCell->text().toInt();
   int cspace = peSpace->text().toInt();
   int nDecaSize = peDecaSize->text().toInt();
+  int nAnimDelay = peAnimDelay->text().toInt();
   QByteArray ba;
   ba = peRot->text().toLocal8Bit();  real rRot = RFromSz(ba.constData());
   ba = peTilt->text().toLocal8Bit(); real rTilt = RFromSz(ba.constData());
@@ -895,6 +902,7 @@ void ShowGraphicsSettingsDialogQt()
   if (!FValidGraphX(nWinX) || !FValidGraphY(nWinY) ||
     !FValidScale(nScale) || !FValidScaleText(nScaleText) ||
     !FValidGrid(nGridCell) || !FValidDecaSize(nDecaSize) ||
+    !FValidTimer(nAnimDelay) ||
     !FValidRotation(rRot) || !FValidTilt(rTilt) || !FValidZoom(rZoom) ||
     !FValidTelescope(objTrack) || !FItem(objLeft)) {
     QMessageBox::warning(gi.qwind, szAppName,
@@ -923,6 +931,7 @@ void ShowGraphicsSettingsDialogQt()
   gs.fSouth = pcbSouth->isChecked();
   gs.fMollweide = pcbMollweide->isChecked();
   gs.fAnimMap = pcbAnimMap->isChecked();
+  SetAnimDelayQt(nAnimDelay);
   gs.nAllStar = (pcbStarName->isChecked() << 1) | pcbBigDots->isChecked();
   int nRotSel = pgroupRot->checkedId();
   gs.objLeft = nRotSel == 0 ? 0 :
