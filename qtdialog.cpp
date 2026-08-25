@@ -2670,11 +2670,16 @@ void ShowCommandLineDialogQt()
   char *rgsz[MAXSWITCHES];
   int argc = NParseCommandLine(szLine, rgsz);
   ciCore = ciMain;
+  // A chart-type switch has to be routed back through SetChartModeQt(),
+  // or gi.nMode and the Chart menu stay where the menus last put them.
+  QVector<flag> rgfMode(CChartModeQt());
+  SnapChartModeQt(rgfMode.data());
   if (argc <= 0 || !FProcessSwitches(argc, rgsz))
     QMessageBox::warning(gi.qwind, szAppName,
       "One or more switches were not understood.");
   ciMain = ciCore;
   InitColorsX();
+  SyncChartModeFromFlagsQt(rgfMode.constData());
   RecastAndRedrawQt();
 }
 

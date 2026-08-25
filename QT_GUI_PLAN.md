@@ -26,8 +26,8 @@ audited line by line, so that's the obvious place to look if something
 looks off in one of them. Item 12, the missing animation loop, is also
 done, as are Paste (9), the 96 macro slots (10), and Print (11) — so
 everything on the original list is now ported. Item 13, chart-type
-switches being ignored from the command line and macros, is the one
-known functional bug still open. Everything
+switches being ignored from the command line and macros, is fixed too.
+Everything
 knowingly left undone or deliberately diverged from Windows is recorded
 either in the relevant 8.x sub-item or under "Known divergences from
 Windows" near the end — if you find something undocumented, that's a
@@ -175,14 +175,13 @@ doc bug worth fixing, not a decision someone made silently.
    setting `gi.nMode` directly instead of zeroing and re-deriving. If you
    ever add a new chart mode, make sure it goes through `SetChartModeQt()`
    the same way rather than mimicking Windows' zero-and-redetect.
-5. **Any new chart mode added to `SetChartModeQt()` needs two edits, not
-   one**: an entry in the big flag-clearing list at the top (or its
-   `us.f*` flag will never turn back off when switching away), *and* a
-   `case` in the switch (or the mode-specific flag never turns on, and
-   downstream code that reads that flag directly — not just `gi.nMode` —
-   silently misbehaves; this bit `gMoons`/`gExo` until caught, since
-   `charts1.cpp`'s actual chart-casting logic reads `us.fMoonChart`/
-   `us.fExoTransit` directly).
+5. **Adding a chart mode is one edit.** *(Revised 2026-08-25 — this
+   used to warn that it took two, a clear-list entry and a switch case,
+   which could silently drift apart. They are now a single
+   `rgchartmodeQt[]` table of mode/flag pairs in qtdriver.cpp, read by
+   `SetChartModeQt()` and by the command-line/macro sync described in
+   item 13.)* Add the pair to that table; if the mode also wants a menu
+   entry, add it with `AddChartModeAction()` as usual.
 6. **`inv()` on a non-boolean field is often intentional, not a bug** —
    e.g. `inv(us.nDwad)` (dwad nesting *level*, an int) and `inv(us.nAppSep)`
    (3-way aspect-orb-type enum) both collapse to a 0/1 toggle in Windows
@@ -746,49 +745,37 @@ skip.
       defined."; a macro defined through the command line dialog runs and
       recasts when its key is pressed.
 
-13. **Chart-type switches do nothing from the command line or a macro.**
-    Found while testing item 10. `-Z` entered in the Command Line dialog,
-    or run from a macro, changes `us.fHorizon` but the drawn chart stays
-    a wheel — zero pixels change. Cause is gotcha #4: this port sets
-    `gi.nMode` directly in `SetChartModeQt()` rather than re-deriving it,
-    because `DetectGraphicsChartMode()` has real gaps, so nothing updates
-    `gi.nMode` when a switch changes the underlying `us.f*` flag. Macros
-    and the command line behave identically here, so this is one shared
-    bug rather than two.
-    This matters more than it first looks: the command line dialog is
-    advertised at the top of this doc as the escape hatch for anything
-    without a menu item, and for chart types it silently isn't. A fix
-    needs `gi.nMode` re-derived after `FProcessSwitches()` /
-    `FProcessCommandLine()` — probably a small Qt-side mapping from the
-    `us.f*` flags, since `DetectGraphicsChartMode()` can't be trusted
-    for it.
-11. ~~File > Print...~~ — **done 2026-08-25.** `PrintChartQt()` in
-    qtdriver.cpp, wired to File / Print. `QPrintDialog` + `QPrinter`, then
-    the two things Windows' `DlgPrint()` does: scale the chart up before
-    rendering, and force a white background when "Export Text and Print
-    in Intuitive Manner" (`us.fSmartSave`) is on. Text charts go through
-    `QTextDocument::print()` on the same HTML listing the text window
-    shows, so Qt paginates them. Needed `Qt5PrintSupport` added to
-    Makefile.qt. Verified by printing to PDF.
-    - Windows draws straight onto the printer DC and scales by `METAMUL`
-      (12), which is free for a vector DC. That isn't available here:
-      `DrawFill()` (xgeneral.cpp) reads and writes `gi.qim` pixels
-      directly, so `gi.qim` and `gi.qpaint` have to describe the same
-      surface, meaning the chart must be rendered into a real QImage
-      first. At METAMUL that would be a ~250MB image, so `PRINTMUL` is 4.
-    - **Known artifact, upstream limitation.** With Wheel Fill set to
-      anything but None, printing shows blocky black/olive rectangles
-      where the fill should be. `DrawFill()` uses a fixed 255-point
-      circular queue (`iFillMax`, astrolog.h) for its breadth-first
-      flood fill; at 4x the area is 16x larger, the queue wraps, and the
-      fill comes out in fragments. Confirmed by setting Wheel Fill to
-      None and reprinting — completely clean. This is not caused by the
-      print code, and the same limit would bite anyone rendering the
-      chart at high resolution. Workarounds, in order of preference:
-      set Wheel Fill to None before printing; drop `PRINTMUL`; or raise
-      `iFillMax` in astrolog.h (a shared-core change — the array is on
-      the stack, so 4096 would cost 16KB, which is fine, but it affects
-      the X11 build too and this fork has otherwise left core alone).
+13. ~~Chart-type switches do nothing from the command line or a macro.~~
+    — **done 2026-08-25.** `-Z` typed into the Command Line dialog, or run
+    from a macro, set `us.fHorizon` but the chart kept drawing as a wheel.
+    Command switches don't go through `SetChartModeQt()`, so nothing
+    updated `gi.nMode` or the Chart menu.
+    - **This is an improvement on Windows, not a parity fix.** Windows
+      zeroes `gi.nMode` only in its pending-menu-mode path
+      (wdriver.cpp:1148, inside `if (wi.nMode)`), and `FActionX()`
+      re-derives it only when it is zero — so after a command switch
+      Windows' chart doesn't change type either. Worse, its `RedoMenu()`
+      *does* re-derive the menu radio, so its menu and its chart end up
+      disagreeing. Deliberately not reproduced.
+    - Fixed by snapshotting the chart-type flags before running the
+      switches and routing whichever one they newly turned on through
+      `SetChartModeQt()`, so flags, `gi.nMode` and the menu all agree.
+      Snapshot-and-compare rather than deriving the mode from the flags
+      afterwards, because a switch sets its own flag without clearing the
+      previous mode's — after `-Z` from a wheel chart both `fListing` and
+      `fHorizon` are true, and choosing between them by priority is
+      guesswork. Which one is *newly* set isn't.
+      `SnapChartModeQt()` / `SyncChartModeFromFlagsQt()` / `CChartModeQt()`
+      in qtdriver.h; called from `ShowCommandLineDialogQt()` and
+      `RunMacroQt()`.
+    - **Gotcha #5 is now obsolete** — it warned that adding a chart mode
+      needed two edits to `SetChartModeQt()` that could drift apart. The
+      clear-list and the switch are now one `rgchartmodeQt[]` table of
+      mode/flag pairs, so a new mode is one line in one place.
+    - Verified all three paths: `-Z` from the command line switches to
+      Local Horizon *and* moves the menu radio; a macro running `-L`
+      switches to astrocartography; and picking Aspect Midpoint Grid from
+      the menu still works after the refactor.
 
 ## Known divergences from Windows
 

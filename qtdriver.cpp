@@ -47,6 +47,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
 #include <QtGui/QImage>
+#include <QtCore/QVector>
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
 #include <QtGui/QTextDocument>
@@ -564,18 +565,56 @@ static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
 // ProcessState() (wdriver.cpp:1143-1201): clear every chart-type flag, then
 // set the one matching the new mode. See qtdriver.h for the full comment.
 
+// Every chart mode and the us.f* flag that selects it. Kept as one table
+// rather than the clear-list-plus-switch this used to be, because that
+// needed two edits per new mode and they could silently drift apart.
+// SetChartModeQt() writes it; SyncChartModeFromFlagsQt() reads it.
+
+typedef struct {
+  int nMode;
+  flag *pf;
+} CHARTMODEQT;
+
+static CONST CHARTMODEQT rgchartmodeQt[] = {
+  {gWheel,      &us.fListing},       {gHouse,      &us.fWheel},
+  {gGrid,       &us.fGrid},          {gAspect,     &us.fAspList},
+  {gMidpoint,   &us.fMidpoint},      {gHorizon,    &us.fHorizon},
+  {gOrbit,      &us.fOrbit},         {gSector,     &us.fSector},
+  {gCalendar,   &us.fCalendar},      {gDisposit,   &us.fInfluence},
+  {gEsoteric,   &us.fEsoteric},      {gAstroGraph, &us.fAstroGraph},
+  {gEphemeris,  &us.fEphemeris},     {gArabic,     &us.fArabic},
+  {gRising,     &us.fHorizonSearch}, {gLocal,      &us.fAtlasNear},
+  {gTraTraTim,  &us.fInDay},         {gTraTraInf,  &us.fInDayInf},
+  {gTraTraGra,  &us.fInDayGra},      {gTraNatTim,  &us.fTransit},
+  {gTraNatInf,  &us.fTransitInf},    {gTraNatGra,  &us.fTransitGra},
+  {gMoons,      &us.fMoonChart},     {gExo,        &us.fExoTransit},
+  {gSign,       &us.fSign},          {gObject,     &us.fObject},
+  {gHelpAsp,    &us.fAspect},        {gConstel,    &us.fConstel},
+  {gPlanet,     &us.fOrbitData},     {gRay,        &us.fRay},
+  {gMeaning,    &us.fMeaning},       {gSwitch,     &us.fSwitch},
+  {gObscure,    &us.fSwitchRare},    {gKeystroke,  &us.fKeyGraph},
+  {gCredit,     &us.fCredit} };
+
+#define cchartmodeQt (int)(sizeof(rgchartmodeQt) / sizeof(CHARTMODEQT))
+
+// Move the Chart menu's radio to "mode", if it has an entry for it.
+static void CheckChartModeMenuQt(int mode)
+{
+  int i;
+
+  for (i = 0; i < s_cChartMode; i++)
+    if (s_rgnChartMode[i] == mode) {
+      s_rgpaChartMode[i]->setChecked(true);
+      break;
+    }
+}
+
 void SetChartModeQt(int mode)
 {
   int i;
 
-  us.fListing = us.fWheel = us.fGrid = us.fAspList = us.fMidpoint =
-    us.fHorizon = us.fOrbit = us.fSector = us.fCalendar = us.fInfluence =
-    us.fEsoteric = us.fAstroGraph = us.fEphemeris = us.fArabic =
-    us.fHorizonSearch = us.fAtlasNear = us.fInDay = us.fInDayInf =
-    us.fInDayGra = us.fTransit = us.fTransitInf = us.fTransitGra =
-    us.fMoonChart = us.fExoTransit = us.fSign = us.fObject = us.fAspect =
-    us.fConstel = us.fOrbitData = us.fRay = us.fMeaning = us.fSwitch =
-    us.fSwitchRare = us.fKeyGraph = us.fCredit = fFalse;
+  for (i = 0; i < cchartmodeQt; i++)
+    *rgchartmodeQt[i].pf = fFalse;
   // DrawChartX() switches directly on gi.nMode with no fallback if it's 0,
   // and DetectGraphicsChartMode() (xscreen.cpp:2165, normally what
   // (re)derives gi.nMode from the us.f* flags before a redraw) doesn't
@@ -584,49 +623,54 @@ void SetChartModeQt(int mode)
   // Windows' ProcessState() does, set it directly to what was actually
   // selected, since that's already known here.
   gi.nMode = mode;
-  switch (mode) {
-  case gWheel:      us.fListing       = fTrue; break;
-  case gHouse:      us.fWheel         = fTrue; break;
-  case gGrid:       us.fGrid          = fTrue; break;
-  case gAspect:     us.fAspList       = fTrue; break;
-  case gMidpoint:   us.fMidpoint      = fTrue; break;
-  case gHorizon:    us.fHorizon       = fTrue; break;
-  case gOrbit:      us.fOrbit         = fTrue; break;
-  case gSector:     us.fSector        = fTrue; break;
-  case gCalendar:   us.fCalendar      = fTrue; break;
-  case gDisposit:   us.fInfluence     = fTrue; break;
-  case gEsoteric:   us.fEsoteric      = fTrue; break;
-  case gAstroGraph: us.fAstroGraph    = fTrue; break;
-  case gEphemeris:  us.fEphemeris     = fTrue; break;
-  case gArabic:     us.fArabic        = fTrue; break;
-  case gRising:     us.fHorizonSearch = fTrue; break;
-  case gLocal:      us.fAtlasNear     = fTrue; break;
-  case gTraTraTim:  us.fInDay         = fTrue; break;
-  case gTraTraInf:  us.fInDayInf      = fTrue; break;
-  case gTraTraGra:  us.fInDayGra      = fTrue; break;
-  case gTraNatTim:  us.fTransit       = fTrue; break;
-  case gTraNatInf:  us.fTransitInf    = fTrue; break;
-  case gTraNatGra:  us.fTransitGra    = fTrue; break;
-  case gMoons:      us.fMoonChart     = fTrue; break;
-  case gExo:        us.fExoTransit    = fTrue; break;
-  case gSign:       us.fSign          = fTrue; break;
-  case gObject:     us.fObject        = fTrue; break;
-  case gHelpAsp:    us.fAspect        = fTrue; break;
-  case gConstel:    us.fConstel       = fTrue; break;
-  case gPlanet:     us.fOrbitData     = fTrue; break;
-  case gRay:        us.fRay           = fTrue; break;
-  case gMeaning:    us.fMeaning       = fTrue; break;
-  case gSwitch:     us.fSwitch        = fTrue; break;
-  case gObscure:    us.fSwitchRare    = fTrue; break;
-  case gKeystroke:  us.fKeyGraph      = fTrue; break;
-  case gCredit:     us.fCredit        = fTrue; break;
-  }
-  for (i = 0; i < s_cChartMode; i++)
-    if (s_rgnChartMode[i] == mode) {
-      s_rgpaChartMode[i]->setChecked(true);
+  for (i = 0; i < cchartmodeQt; i++)
+    if (rgchartmodeQt[i].nMode == mode) {
+      *rgchartmodeQt[i].pf = fTrue;
       break;
     }
+  CheckChartModeMenuQt(mode);
   RedrawQt();
+}
+
+
+// Command switches set the us.f* chart-type flags directly, without going
+// through SetChartModeQt(), so nothing updates gi.nMode or the Chart menu
+// and the chart keeps drawing as whatever was last picked from a menu.
+// Windows has the same split and doesn't resolve it: after "-Z" its
+// RedoMenu() re-derives the menu radio but gi.nMode still isn't touched,
+// so its menu and its chart actively disagree. Rather than reproduce
+// that, snapshot the flags around the switches and, if they turned one
+// on, route it through SetChartModeQt() so the flags, gi.nMode and the
+// menu all end up agreeing.
+//
+// Snapshot-and-compare rather than deriving the mode from the flags
+// afterward, because a switch only sets its own flag and leaves the
+// previous mode's flag standing -- after "-Z" from a wheel chart both
+// fListing and fHorizon are true, and picking between them by priority
+// is guesswork. Which one is newly set is not.
+
+void SnapChartModeQt(flag *rgf)
+{
+  int i;
+
+  for (i = 0; i < cchartmodeQt; i++)
+    rgf[i] = *rgchartmodeQt[i].pf;
+}
+
+void SyncChartModeFromFlagsQt(CONST flag *rgf)
+{
+  int i;
+
+  for (i = 0; i < cchartmodeQt; i++)
+    if (*rgchartmodeQt[i].pf && !rgf[i]) {
+      SetChartModeQt(rgchartmodeQt[i].nMode);
+      return;
+    }
+}
+
+int CChartModeQt()
+{
+  return cchartmodeQt;
 }
 
 
@@ -1528,7 +1572,12 @@ static void RunMacroQt(int iMacro)
   char szPath[cchSzMax];
 
   if (is.rgszMacro != NULL && FSzSet(is.rgszMacro[iMacro])) {
+    // Same chart-type handling the Command Line dialog needs; a macro is
+    // just a stored command line.
+    QVector<flag> rgfMode(cchartmodeQt);
+    SnapChartModeQt(rgfMode.data());
     FProcessCommandLine(is.rgszMacro[iMacro]);
+    SyncChartModeFromFlagsQt(rgfMode.constData());
     RecastAndRedrawQt();
     return;
   }

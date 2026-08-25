@@ -65,6 +65,15 @@ void SyncRestrictMenuQt();
 int NAnimDelayQt();
 void SetAnimDelayQt(int nDelay);
 
+// Chart-type flags around a run of command switches. Snapshot before,
+// sync after: a switch that turns a chart-type flag on doesn't go through
+// SetChartModeQt(), so without this gi.nMode and the Chart menu are left
+// pointing at whatever was last picked from a menu and the chart redraws
+// as the wrong type. Size the array with CChartModeQt().
+int CChartModeQt();
+void SnapChartModeQt(flag *rgf);
+void SyncChartModeFromFlagsQt(CONST flag *rgf);
+
 // Refresh the View menu's "Print Nearest Second" and "Applying Aspects"
 // checkmarks, which the Display Settings dialog can also change.
 void SyncDisplayMenuQt();
