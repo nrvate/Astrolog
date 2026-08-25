@@ -436,12 +436,17 @@ skip.
        `setEditText()`, since adding the first item sets current index 0
        and overwrites the line edit — otherwise any value that doesn't
        match a preset displays as the first preset.
-   8.5 **Colors** (next up) (`ShowColorDialogQt` / `DlgColor`) — currently a curated
-       subset (9 main + the 4 elements). Windows exposes the full
-       `cColor` palette, all `cElem` element colours, the `cRay` ray
-       colours, the scribble pen colour (`gi.kiPen`), and the decan
-       colour (`gs.kiDeca`, which takes 4 extra named values).
-   8.6 **Chart Settings** (`ShowChartSettingsDialogQt` / `DlgChart`) —
+   8.5 ~~Colors~~ — **done 2026-08-25**: full 16 slot palette (via
+       `ikPalette[]`, whose guard was widened to QT), elements, seven
+       rays, scribble pen and wheel corners, all as colour name combos.
+       Verified live. **Fixed a bug that predated it**: `InitColors()`
+       (astrolog.cpp) derives the `kObjA[]` table the drawing actually
+       reads from `kElemA`/`kRayA`, and `RedrawQt()` never called it, so
+       element and ray colours could be saved but never took effect. Now
+       called at the top of `RedrawQt()`, matching `Action()`. Note
+       `InitColorsX()` (xscreen.cpp) is a *different* function — backend
+       palette setup — and is still needed separately.
+   8.6 **Chart Settings** (next up) (`ShowChartSettingsDialogQt` / `DlgChart`) —
        missing the astrocartography step/distance fields, star and Arabic
        part sort order, aspect sort order, and the decan display fields.
    8.7 **Object / More Object / Moon Object Settings** (`DlgObject`,
