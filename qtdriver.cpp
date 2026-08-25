@@ -704,12 +704,54 @@ static void BuildInfoMenu(QMainWindow *pwind)
 // in Windows either -- it just flips each ignore[i] in range directly
 // (skipping "except", used to exclude oNod from the Minors range).
 
+// The Setting menu's "Include Cusps"/"Include Uranians"/etc entries each
+// mirror a us.f* flag that the restriction dialogs can also change, so
+// they're tracked here for SyncRestrictMenuQt() to refresh -- the same job
+// Windows does with the WiCheckMenu() calls at the end of DlgRestrict,
+// DlgStar, and DlgMoons. Only the entries backed by a real flag are
+// tracked; "Include Minors" has none and is derived from ignore[] alone.
+typedef struct {
+  QAction *pa;
+  flag *pfield;
+  int lo, hi;
+  flag fTransit;   // also count the transit set as making this included
+} CATRES;
+static CATRES s_rgcatres[8];
+static int s_ccatres = 0;
+
+void SyncRestrictMenuQt()
+{
+  int i, j;
+
+  for (i = 0; i < s_ccatres; i++) {
+    CATRES *pcat = &s_rgcatres[i];
+    flag f = fFalse;
+    // A category counts as included when anything in its range is
+    // unrestricted -- in either the standard or the transit set for most
+    // of them, but the standard set alone for fixed stars, which is the
+    // one place Windows differs (DlgStar tests ignore[] only, where
+    // DlgRestrict and DlgMoons test both).
+    for (j = pcat->lo; j <= pcat->hi; j++)
+      if (!ignore[j] || (pcat->fTransit && !ignore2[j])) {
+        f = fTrue;
+        break;
+      }
+    *pcat->pfield = f;
+    pcat->pa->setChecked(f != 0);
+  }
+}
+
 static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
-  flag *pfield, int lo, int hi, int except)
+  flag *pfield, int lo, int hi, int except, flag fTransit)
 {
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setChecked(pfield != NULL ? *pfield != 0 : !ignore[lo]);
+  if (pfield != NULL && s_ccatres < (int)(sizeof(s_rgcatres)/sizeof(CATRES))) {
+    CATRES *pcat = &s_rgcatres[s_ccatres++];
+    pcat->pa = pa; pcat->pfield = pfield; pcat->lo = lo; pcat->hi = hi;
+    pcat->fTransit = fTransit;
+  }
   QObject::connect(pa, &QAction::triggered, pa,
     [pfield, pa, lo, hi, except]() {
       int i;
@@ -868,19 +910,19 @@ static void BuildSettingMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   AddCategoryRestrictAction(pmenu, "Include &Minors", NULL, oChi, oEP,
-    oNod);
+    oNod, fTrue);
   AddCategoryRestrictAction(pmenu, "Include &Cusps", &us.fCusp, cuspLo,
-    cuspHi, -1);
+    cuspHi, -1, fTrue);
   AddCategoryRestrictAction(pmenu, "Include &Uranians", &us.fUranian,
-    uranLo, uranHi, -1);
+    uranLo, uranHi, -1, fTrue);
   AddCategoryRestrictAction(pmenu, "Include D&warfs", &us.fDwarf, dwarfLo,
-    dwarfHi, -1);
+    dwarfHi, -1, fTrue);
   AddCategoryRestrictAction(pmenu, "Include &Fixed Stars", &us.fStar,
-    starLo, starHi, -1);
+    starLo, starHi, -1, fFalse);
   AddCategoryRestrictAction(pmenu, "Include &Moons", &us.fMoons, moonsLo,
-    moonsHi, -1);
+    moonsHi, -1, fTrue);
   AddCategoryRestrictAction(pmenu, "Include &Body Centers (COB)", &us.fCOB,
-    cobLo, cobHi, -1);
+    cobLo, cobHi, -1, fTrue);
   pmenu->addSeparator();
 
   QAction *paCalc = pmenu->addAction("&Calculation Settings...");

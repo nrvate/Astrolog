@@ -52,6 +52,13 @@ void SetChartModeQt(int mode);
 // "rc" is one of the rcXxx constants in astrolog.h (rcNo, rcDual, etc).
 void SetRelQt(int rc);
 
+// Refresh the Setting menu's "Include Cusps"/"Include Uranians"/etc
+// checkmarks, and the us.f* flags behind them, from the current contents
+// of ignore[]/ignore2[]. Needed because the restriction dialogs can change
+// what those categories contain, the same way Windows' DlgRestrict,
+// DlgStar, and DlgMoons call WiCheckMenu() before they return.
+void SyncRestrictMenuQt();
+
 // Refresh the Setting menu's Heliocentric checkmark from current state.
 // Needed because the Calculation Settings dialog can also change the
 // central planet, not just the Heliocentric menu item itself.

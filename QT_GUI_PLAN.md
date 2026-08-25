@@ -470,14 +470,40 @@ skip.
        fractional digit ("1.0"), which is why influence reads 2 and not
        -2. Dialog widened 500 → 620; the extra "Show" checkbox column was
        pushing Color off the right edge.
-   8.9 **Restrictions / Star / Transit Restrictions** (next up) (`DlgRestrict`,
-       `DlgStar`) — missing the "Restrict All" and "Unrestrict All" quick
-       buttons, and the transit variant's "Copy From Standard Restriction
-       Set" button.
-   8.10 **Moon Restrictions** (`ShowMoonRestrictDialogQt` / `DlgMoons`) —
-       missing the per-planet group toggle buttons (Mars/Jupiter/Saturn/
-       Uranus/Neptune/Pluto/COB) plus Restrict-All / Unrestrict-All.
-   8.11 **Object & Star Customization** (`DlgCustom`, `DlgCustomS`) —
+   8.9 ~~Restrictions / Star / Transit Restrictions~~ — **done 2026-08-25**
+       (`DlgRestrict`, `DlgStar`). This turned out to be much more than
+       the missing buttons the item originally described:
+       - **Range was wrong.** Both dialogs showed objects `0..oCore`
+         (oCore is 21). Windows shows `0..dwarfHi` — the ~30 cusps,
+         Uranians, and dwarfs were entirely unreachable from the Qt GUI.
+       - **Checkbox polarity was inverted.** Qt labelled them
+         "Show <name>" with checked = visible; Windows uses the bare
+         object name with checked = *restricted*. Flipped to match
+         Windows. This one is worth remembering: it's the difference that
+         silently produces the opposite chart for someone acting on
+         muscle memory.
+       - **Titles** now match: "Object Restrictions", "Transit Object
+         Restrictions", "Fixed Star Restrictions".
+       - **Quick-button column** added, driven by a `RESBUT` table
+         (resSet/resClear/resToggle/resCopy) so all four restriction
+         dialogs share one implementation, the way Windows shares one
+         `DlgRestrict` between two of them.
+       - **Menu checkmarks now re-sync.** Windows re-derives
+         `us.fCusp`/`fUranian`/`fDwarf`/`fStar`/`fMoons`/`fCOB` and their
+         menu checkmarks when these dialogs OK; Qt didn't. Added
+         `SyncRestrictMenuQt()` in qtdriver.cpp, registered from
+         `AddCategoryRestrictAction()`. Faithfulness detail: every
+         category tests `ignore || ignore2` *except* fixed stars, which
+         Windows' `DlgStar` derives from `ignore` alone — hence the
+         `fTransit` field on `CATRES`.
+   8.10 ~~Moon Restrictions~~ — **done 2026-08-25**
+       (`ShowMoonRestrictDialogQt` / `DlgMoons`): all 9 buttons, using
+       Windows' own labels including its "Tog. &Neptune" abbreviation.
+       Windows writes the group toggles as offsets from the dialog's
+       first checkbox (0-1 Mars, 2-5 Jupiter, 6-13 Saturn, 14-18 Uranus,
+       19-21 Neptune, 22-26 Pluto, 27-31 COB); they're stored as absolute
+       object indexes here, offset from `moonsLo`.
+   8.11 **Object & Star Customization** (next up) (`DlgCustom`, `DlgCustomS`) —
        missing the "Lookup Names" button, which re-resolves a definition
        string into its canonical display name.
    8.12 **Calculation Settings** (`DlgCalc`) and **Display Settings**

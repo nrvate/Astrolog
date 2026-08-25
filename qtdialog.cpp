@@ -1567,13 +1567,44 @@ void ShowObjectDialogQt()
 // ignore array they edit, same as Windows' one DlgRestrict does based on
 // wi.wCmd.
 
+// One button in the quick-action column Windows runs down the right side
+// of each restriction dialog (dlgRestrict/dlgStar/dlgMoons in
+// astrolog.rc). They come in four shapes, and "lo"/"hi" are absolute
+// object indexes clamped to whatever range the dialog is showing.
+#define resSet    0   // check every box in the range (restrict them)
+#define resClear  1   // clear every box in the range (unrestrict them)
+#define resToggle 2   // flip every box in the range
+#define resCopy   3   // reload the range from another restriction array
+
+typedef struct {
+  CONST char *szLabel;
+  int nAction;
+  int lo, hi;
+  CONST byte *rgSource;   // resCopy only
+} RESBUT;
+
+#define CButRes(rg) (int)(sizeof(rg) / sizeof(RESBUT))
+
+// Object restriction (show/hide), equivalent to Windows' DlgRestrict,
+// DlgStar, and DlgMoons -- one implementation for all of them, since they
+// differ only in title, object range, which ignore array they edit, and
+// which quick buttons they offer. (Windows likewise drives the first two
+// with a single DlgRestrict keyed off wi.wCmd.)
+//
+// Checkbox polarity follows Windows: the label is the bare object name
+// and a *checked* box means restricted, i.e. hidden. That reads backwards
+// at first glance, but it's what a Windows user's muscle memory expects,
+// and inverting it is the one difference that would silently produce the
+// opposite chart.
+
 static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
-  byte *rgignore)
+  byte *rgignore, CONST RESBUT *rgbut, int cbut, int dxWidth)
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle(szTitle);
-  dlg.resize(300, 500);
+  dlg.resize(dxWidth, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QHBoxLayout *pmiddle = new QHBoxLayout();
   QScrollArea *pscroll = new QScrollArea(&dlg);
   QWidget *pinner = new QWidget();
   QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
@@ -1581,14 +1612,40 @@ static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
   int i;
 
   for (i = lo; i <= hi; i++) {
-    QCheckBox *pcb = new QCheckBox(QString("Show ") + szObjName[i]);
-    pcb->setChecked(!rgignore[i]);
+    QCheckBox *pcb = new QCheckBox(szObjName[i]);
+    pcb->setChecked(rgignore[i] != 0);
     pinnerlayout->addWidget(pcb);
     rgpcb.append(pcb);
   }
   pscroll->setWidget(pinner);
   pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  pmiddle->addWidget(pscroll);
+
+  if (cbut > 0) {
+    QVBoxLayout *pcol = new QVBoxLayout();
+    for (i = 0; i < cbut; i++) {
+      CONST RESBUT *pbut = &rgbut[i];
+      QPushButton *ppb = new QPushButton(pbut->szLabel);
+      pcol->addWidget(ppb);
+      // rgpcb outlives every click: the lambda only runs inside exec().
+      QObject::connect(ppb, &QPushButton::clicked, &dlg,
+        [&rgpcb, pbut, lo, hi]() {
+          int j, jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
+          for (j = jlo; j <= jhi; j++) {
+            QCheckBox *pcb = rgpcb[j - lo];
+            switch (pbut->nAction) {
+            case resSet:    pcb->setChecked(fTrue);              break;
+            case resClear:  pcb->setChecked(fFalse);             break;
+            case resToggle: pcb->setChecked(!pcb->isChecked());  break;
+            case resCopy:   pcb->setChecked(pbut->rgSource[j] != 0); break;
+            }
+          }
+        });
+    }
+    pcol->addStretch(1);
+    pmiddle->addLayout(pcol);
+  }
+  pouter->addLayout(pmiddle);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -1600,24 +1657,76 @@ static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
     return;
 
   for (i = lo; i <= hi; i++)
-    rgignore[i] = !rgpcb[i-lo]->isChecked();
+    rgignore[i] = rgpcb[i-lo]->isChecked();
   AdjustRestrictions();
+  // Windows re-derives the Setting menu's category checkmarks here (the
+  // us.fCusp/fUranian/fDwarf block at the end of DlgRestrict, and the
+  // equivalents in DlgStar and DlgMoons).
+  SyncRestrictMenuQt();
   RecastAndRedrawQt();
 }
 
+// Windows' dlgRestrict shows objects 0 through dwarfHi -- the core bodies
+// plus all the cusps, Uranians, and dwarfs -- not just 0 through oCore.
+static CONST RESBUT rgbutRestrict[] = {
+  {"&Restrict All",   resSet,    0,       dwarfHi},
+  {"&Unrestrict All", resClear,  0,       dwarfHi},
+  {"Toggle Minors",   resToggle, oMain+1, oCore},
+  {"Toggle Cusps",    resToggle, cuspLo,  cuspHi},
+  {"Toggle Uran.",    resToggle, uranLo,  uranHi},
+  {"Toggle Dwarfs",   resToggle, dwarfLo, dwarfHi},
+  {"Copy &from Transit Restriction Set", resCopy, 0, dwarfHi, ignore2},
+  {"Recall",          resCopy,   0,       dwarfHi, ignoreMem},
+};
+
+static CONST RESBUT rgbutTransit[] = {
+  {"&Restrict All",   resSet,    0,       dwarfHi},
+  {"&Unrestrict All", resClear,  0,       dwarfHi},
+  {"Toggle Minors",   resToggle, oMain+1, oCore},
+  {"Toggle Cusps",    resToggle, cuspLo,  cuspHi},
+  {"Toggle Uran.",    resToggle, uranLo,  uranHi},
+  {"Toggle Dwarfs",   resToggle, dwarfLo, dwarfHi},
+  {"Copy &From Standard Restriction Set", resCopy, 0, dwarfHi, ignore},
+  {"Recall",          resCopy,   0,       dwarfHi, ignore2Mem},
+};
+
+static CONST RESBUT rgbutStar[] = {
+  {"&Restrict All",   resSet,   starLo, starHi},
+  {"&Unrestrict All", resClear, starLo, starHi},
+};
+
+// Windows' moon toggles are written as offsets from the dialog's first
+// checkbox (dbMo_Mar covers 0..1, dbMo_Jup 2..5, and so on in DlgMoons);
+// they're absolute object indexes here.
+static CONST RESBUT rgbutMoons[] = {
+  {"&Restrict All",   resSet,    moonsLo,    cobHi},
+  {"&Unrestrict All", resClear,  moonsLo,    cobHi},
+  {"Toggle &Mars",    resToggle, moonsLo+0,  moonsLo+1},
+  {"Toggle &Jupiter", resToggle, moonsLo+2,  moonsLo+5},
+  {"Toggle &Saturn",  resToggle, moonsLo+6,  moonsLo+13},
+  {"Toggle Ur&anus",  resToggle, moonsLo+14, moonsLo+18},
+  {"Tog. &Neptune",   resToggle, moonsLo+19, moonsLo+21},
+  {"Toggle &Pluto",   resToggle, moonsLo+22, moonsLo+26},
+  {"Toggle CO&B",     resToggle, moonsLo+27, moonsLo+31},
+};
+
 void ShowRestrictDialogQt()
 {
-  ShowRestrictRangeDialogQt("Restrictions", 0, oCore, ignore);
+  // Wide enough for the "Copy from ... Restriction Set" button.
+  ShowRestrictRangeDialogQt("Object Restrictions", 0, dwarfHi, ignore,
+    rgbutRestrict, CButRes(rgbutRestrict), 480);
 }
 
 void ShowStarRestrictDialogQt()
 {
-  ShowRestrictRangeDialogQt("Star Restrictions", starLo, starHi, ignore);
+  ShowRestrictRangeDialogQt("Fixed Star Restrictions", starLo, starHi,
+    ignore, rgbutStar, CButRes(rgbutStar), 400);
 }
 
 void ShowTransitRestrictDialogQt()
 {
-  ShowRestrictRangeDialogQt("Transit Restrictions", 0, oCore, ignore2);
+  ShowRestrictRangeDialogQt("Transit Object Restrictions", 0, dwarfHi,
+    ignore2, rgbutTransit, CButRes(rgbutTransit), 480);
 }
 
 
@@ -2917,7 +3026,8 @@ void ShowDisplayDialogQt()
 
 void ShowMoonRestrictDialogQt()
 {
-  ShowRestrictRangeDialogQt("Moon Restrictions", moonsLo, cobHi, ignore);
+  ShowRestrictRangeDialogQt("Planetary Moon Restrictions", moonsLo, cobHi,
+    ignore, rgbutMoons, CButRes(rgbutMoons), 400);
 }
 
 
