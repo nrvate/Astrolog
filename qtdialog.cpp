@@ -50,6 +50,8 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QListWidget>
+#include <QtCore/QDir>
 #include <QtCore/QVector>
 #include <QtCore/QMimeData>
 #include <QtGui/QClipboard>
@@ -897,6 +899,45 @@ void ShowOpenChart2DialogQt()
 }
 
 
+// One chart's date/zone/location summary, as Windows formats it for the
+// Charts and Chart List dialogs. Those force us.fAnsiChar/us.fGraphics so
+// SzDate() and friends emit a real degree sign rather than the ASCII ':'
+// fallback; do the same, and additionally pin us.nCharset to Latin-1 so
+// the byte that comes back is predictable (ChDeg() would otherwise pick
+// the IBM codepage degree at 0xF8 depending on the user's -Ya setting).
+// That byte isn't valid UTF-8 either way, hence decoding as Latin-1.
+
+static QString SzChartDateLineQt(CONST CI *pci)
+{
+  char sz[cchSzMax];
+  int nSavChar = us.fAnsiChar, nSavSet = us.nCharset;
+  flag fSav = us.fGraphics;
+
+  us.fAnsiChar = 2; us.nCharset = ccLatin; us.fGraphics = fTrue;
+  int nDay = DayOfWeek(pci->mon, pci->day, pci->yea);
+  sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
+    SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
+    ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
+  us.fAnsiChar = nSavChar; us.nCharset = nSavSet; us.fGraphics = fSav;
+  return QString::fromLatin1(sz);
+}
+
+
+// The same chart's "name; location". Kept separate from the line above
+// because this is user entered text that really may be UTF-8, so it must
+// not be swept up in that function's Latin-1 decode.
+
+static QString SzChartNameLineQt(CONST CI *pci)
+{
+  char sz[cchSzMax];
+
+  sprintf(sz, "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
+    FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
+    FSzSet(pci->loc) ? pci->loc : "");
+  return QString::fromLocal8Bit(sz);
+}
+
+
 // The multi-chart manager, equivalent to Windows' DlgInfoAll ("Charts #3
 // Through #6" on the Info menu, though it covers all six): a summary line
 // per chart slot with buttons to load a file into it or edit its info,
@@ -913,31 +954,10 @@ void ShowChartsAllDialogQt()
   QLabel *rgplabel[cRing+1];
   int i;
 
-  // Rebuilds one slot's summary line. Windows formats the date/location
-  // line with us.fAnsiChar/us.fGraphics forced so SzDate() and friends
-  // emit a real degree sign rather than the ASCII ':' fallback; do the
-  // same, and additionally pin us.nCharset to Latin-1 so the byte that
-  // comes back is known (ChDeg() would otherwise pick the IBM codepage
-  // degree at 0xF8 depending on the user's -Ya setting). That byte isn't
-  // valid UTF-8 either way, so this line is decoded as Latin-1 -- but the
-  // name/location line is user-entered text that really may be UTF-8, so
-  // it's generated outside the override and decoded as such.
   auto RefreshRow = [&rgplabel](int iChart) {
-    char sz[cchSzMax];
     CI *pci = rgpci[iChart];
-    int nSavChar = us.fAnsiChar, nSavSet = us.nCharset;
-    flag fSav = us.fGraphics;
-    us.fAnsiChar = 2; us.nCharset = ccLatin; us.fGraphics = fTrue;
-    int nDay = DayOfWeek(pci->mon, pci->day, pci->yea);
-    sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
-      SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
-      ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
-    us.fAnsiChar = nSavChar; us.nCharset = nSavSet; us.fGraphics = fSav;
-    QString qs = QString::fromLatin1(sz);
-    sprintf(sz, "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
-      FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
-      FSzSet(pci->loc) ? pci->loc : "");
-    QString qsName = QString::fromLocal8Bit(sz);
+    QString qs = SzChartDateLineQt(pci);
+    QString qsName = SzChartNameLineQt(pci);
     if (!qsName.isEmpty())
       qs += "\n" + qsName;
     rgplabel[iChart]->setText(qs);
@@ -1019,6 +1039,299 @@ void ShowChartsAllDialogQt()
   // relationship item was checked there showing stale -- same
   // menu-vs-dialog staleness accepted elsewhere in this port.
   SetRelQt(-pgroupWheel->checkedId());
+}
+
+
+// Chart list, equivalent to Windows' DlgList: the list of charts held in
+// memory (is.rgci / is.cci), which FInputData() populates automatically
+// when it reads a multi chart file (AAF, Quick*Chart, Astrodatabank, or
+// Solar Fire text -- see the FAppendCIList() calls in io.cpp), and which
+// Open Charts in Folder also fills. Charts can be sorted, filtered,
+// edited, deleted, loaded into any of the six chart slots, or copied back
+// out of one.
+
+// Case insensitive substring test matching Windows' filter loop, guarding
+// the NULL name/location that Windows' version would dereference.
+static flag FChartFieldMatchQt(CONST char *szField, CONST char *szFind)
+{
+  int j;
+
+  if (!FSzSet(szFind))
+    return fTrue;
+  if (!FSzSet(szField))
+    return fFalse;
+  for (j = 0; szField[j]; j++)
+    if (FEqSzSubI(szFind, &szField[j]))
+      return fTrue;
+  return fFalse;
+}
+
+void ShowChartListDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Chart List");
+  dlg.resize(900, 560);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QHBoxLayout *phMain = new QHBoxLayout();
+  QListWidget *plist = new QListWidget();
+  QLabel *plabelSize = new QLabel();
+  int i;
+
+  phMain->addWidget(plist, 1);
+  QVBoxLayout *pvSide = new QVBoxLayout();
+  pvSide->addWidget(plabelSize);
+
+  QGroupBox *pgbSort = new QGroupBox("Sort By");
+  QVBoxLayout *pvSort = new QVBoxLayout(pgbSort);
+  QButtonGroup *pgroupSort = new QButtonGroup(&dlg);
+  CONST char *rgszSort[5] =
+    { "Date", "Longitude", "Latitude", "Name", "Location" };
+  for (i = 0; i < 5; i++) {
+    QRadioButton *prb = new QRadioButton(rgszSort[i]);
+    prb->setChecked(i == 0);
+    pgroupSort->addButton(prb, i);
+    pvSort->addWidget(prb);
+  }
+  pvSide->addWidget(pgbSort);
+  QPushButton *pbSort = new QPushButton("Sort List");
+  pvSide->addWidget(pbSort);
+
+  QGroupBox *pgbSlot = new QGroupBox("Chart Slot");
+  QVBoxLayout *pvSlot = new QVBoxLayout(pgbSlot);
+  QButtonGroup *pgroupSlot = new QButtonGroup(&dlg);
+  CONST char *rgszSlot[cRing] =
+    { "1st", "2nd", "3rd", "4th", "5th", "6th" };
+  for (i = 0; i < cRing; i++) {
+    QRadioButton *prb = new QRadioButton(rgszSlot[i]);
+    prb->setChecked(i == 0);
+    pgroupSlot->addButton(prb, i);
+    pvSlot->addWidget(prb);
+  }
+  pvSide->addWidget(pgbSlot);
+
+  QPushButton *pbSet = new QPushButton("Set To Slot");
+  QPushButton *pbCopy = new QPushButton("Copy From");
+  QPushButton *pbEdit = new QPushButton("Edit Chart...");
+  QPushButton *pbDel = new QPushButton("Delete Chart");
+  QPushButton *pbDelAll = new QPushButton("Delete All");
+  for (QPushButton *pb : { pbSet, pbCopy, pbEdit, pbDel, pbDelAll })
+    pvSide->addWidget(pb);
+  pvSide->addStretch(1);
+  phMain->addLayout(pvSide);
+  pouter->addLayout(phMain);
+
+  QHBoxLayout *phFilter = new QHBoxLayout();
+  QLineEdit *peName = new QLineEdit();
+  QLineEdit *peLoc = new QLineEdit();
+  QPushButton *pbFilter = new QPushButton("Filter");
+  QPushButton *pbUnfilter = new QPushButton("Remove Filter");
+  phFilter->addWidget(new QLabel("Name:"));
+  phFilter->addWidget(peName, 1);
+  phFilter->addWidget(new QLabel("Location:"));
+  phFilter->addWidget(peLoc, 1);
+  phFilter->addWidget(pbFilter);
+  phFilter->addWidget(pbUnfilter);
+  pouter->addLayout(phFilter);
+
+  // Whether the list is currently showing a filtered view. Windows only
+  // applies a filter permanently (FilterCIList, which actually discards
+  // the non matching charts) on OK with nothing selected; until then the
+  // filter is just a view over the full list.
+  flag fFilter = fFalse;
+
+  auto RefreshList = [&](flag fApplyFilter) {
+    QByteArray baName = peName->text().toLocal8Bit();
+    QByteArray baLoc = peLoc->text().toLocal8Bit();
+    int iSel = plist->currentRow(), cShown = 0, j;
+    plist->clear();
+    for (j = 0; j < is.cci; j++) {
+      CI *pci = &is.rgci[j];
+      if (fApplyFilter &&
+        (!FChartFieldMatchQt(pci->nam, baName.constData()) ||
+        !FChartFieldMatchQt(pci->loc, baLoc.constData())))
+        continue;
+      QString qs = SzChartDateLineQt(pci);
+      QString qsName = SzChartNameLineQt(pci);
+      if (!qsName.isEmpty())
+        qs += " " + qsName;
+      QListWidgetItem *pitem = new QListWidgetItem(qs, plist);
+      pitem->setData(Qt::UserRole, j);
+      cShown++;
+    }
+    if (cShown <= 0) {
+      QListWidgetItem *pitem =
+        new QListWidgetItem("(No charts in list)", plist);
+      pitem->setData(Qt::UserRole, -1);
+    }
+    plabelSize->setText(QString("List size: %1").arg(cShown));
+    if (iSel >= 0 && iSel < plist->count())
+      plist->setCurrentRow(iSel);
+  };
+
+  // Index into is.rgci of the selected row, or -1 for none/placeholder.
+  auto ISelected = [&plist]() -> int {
+    QListWidgetItem *pitem = plist->currentItem();
+    return pitem == NULL ? -1 : pitem->data(Qt::UserRole).toInt();
+  };
+
+  auto LoadIntoSlot = [&](int iList) {
+    CI ciT = is.rgci[iList];
+    int iSlot = pgroupSlot->checkedId() + 1;
+    is.iciCur = iList;
+    *rgpci[iSlot] = ciT;
+    if (iSlot == 1)
+      ciCore = ciT;
+  };
+
+  RefreshList(fFalse);
+
+  QObject::connect(pbSort, &QPushButton::clicked, &dlg, [&]() {
+    FSortCIList(pgroupSort->checkedId());
+    RefreshList(fFilter);
+  });
+  QObject::connect(pbDelAll, &QPushButton::clicked, &dlg, [&]() {
+    is.cci = 0;
+    RefreshList(fFilter);
+  });
+  QObject::connect(pbFilter, &QPushButton::clicked, &dlg, [&]() {
+    fFilter = fTrue;
+    RefreshList(fTrue);
+  });
+  QObject::connect(pbUnfilter, &QPushButton::clicked, &dlg, [&]() {
+    fFilter = fFalse;
+    peName->clear(); peLoc->clear();
+    RefreshList(fFalse);
+  });
+  QObject::connect(pbSet, &QPushButton::clicked, &dlg, [&]() {
+    int iList = ISelected();
+    if (iList < 0) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "Can't do operation because no chart in list is selected.");
+      return;
+    }
+    LoadIntoSlot(iList);
+    RecastAndRedrawQt();
+  });
+  QObject::connect(pbCopy, &QPushButton::clicked, &dlg, [&]() {
+    FAppendCIList(rgpci[pgroupSlot->checkedId() + 1]);
+    RefreshList(fFilter);
+    plist->setCurrentRow(plist->count() - 1);
+  });
+  QObject::connect(pbEdit, &QPushButton::clicked, &dlg, [&]() {
+    int iList = ISelected();
+    if (iList < 0) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "Can't do operation because no chart in list is selected.");
+      return;
+    }
+    QByteArray baTitle =
+      QString("Chart List #%1 Info").arg(iList + 1).toLocal8Bit();
+    ShowChartInfoForQt(&is.rgci[iList], baTitle.constData());
+    RefreshList(fFilter);
+  });
+  QObject::connect(pbDel, &QPushButton::clicked, &dlg, [&]() {
+    int iList = ISelected();
+    if (iList < 0) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "Can't do operation because no chart in list is selected.");
+      return;
+    }
+    CopyRgb((pbyte)&is.rgci[iList+1], (pbyte)&is.rgci[iList],
+      (is.cci-1-iList)*sizeof(CI));
+    is.cci--;
+    RefreshList(fFilter);
+  });
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  // Read the selection after exec() returns rather than from a second
+  // "accepted" handler: the dialog is still on the stack here, so its
+  // widgets are alive, and this doesn't depend on which order two slots
+  // connected to the same signal happen to run in.
+  int iOk = ISelected();
+  if (iOk >= 0) {
+    LoadIntoSlot(iOk);
+    RecastAndRedrawQt();
+  } else if (fFilter) {
+    // Windows only commits the filter (which actually drops the charts
+    // that don't match) when OK is pressed with nothing selected.
+    QByteArray baName = peName->text().toLocal8Bit();
+    QByteArray baLoc = peLoc->text().toLocal8Bit();
+    FilterCIList(baName.constData(), baLoc.constData());
+  }
+}
+
+
+// Load every chart file in a folder into the chart list, equivalent to
+// Windows' DlgOpenDir. Windows builds this on FindFirstFile inside a
+// WSETUP-only block; QDir does the same job portably. Astrolog's own
+// default data files are skipped, same as there, since a folder of charts
+// often sits alongside them.
+
+void ShowOpenChartDirDialogQt()
+{
+  QString qsDir = QFileDialog::getExistingDirectory(gi.qwind,
+    "Open Charts in Folder");
+  if (qsDir.isEmpty())
+    return;
+
+  QDir dir(qsDir);
+  QStringList qslFiles = dir.entryList(QStringList() << "*.as",
+    QDir::Files, QDir::Name);
+  CI ciT = ciCore;
+  int cAdded = 0;
+
+  for (CONST QString &qsFile : qslFiles) {
+    if (qsFile.compare(DEFAULT_INFOFILE, Qt::CaseInsensitive) == 0 ||
+      qsFile.compare(DEFAULT_ATLASFILE, Qt::CaseInsensitive) == 0 ||
+      qsFile.compare(DEFAULT_TIMECHANGE, Qt::CaseInsensitive) == 0)
+      continue;
+    QByteArray ba = dir.filePath(qsFile).toLocal8Bit();
+    if (!FInputData(ba.constData()))
+      break;
+    if (!FAppendCIList(&ciCore))
+      break;
+    cAdded++;
+  }
+  ciCore = ciT;
+
+  if (cAdded <= 0) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "No chart files were loaded from that folder.");
+    return;
+  }
+  RecastAndRedrawQt();
+}
+
+
+// Save the chart list, equivalent to Windows' cmdSaveList: the same
+// FOutputData() path as the other save formats, with the chart list
+// write format selected.
+
+void ShowSaveChartListDialogQt()
+{
+  if (is.cci <= 0) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "There is no chart list in memory.");
+    return;
+  }
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart List",
+    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  us.nWriteFormat = 'l';
+  if (!FOutputData())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that chart list file.");
 }
 
 

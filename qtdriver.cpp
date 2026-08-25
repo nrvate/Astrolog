@@ -244,6 +244,13 @@ void RedrawQt()
 
 void RecastAndRedrawQt()
 {
+  // ciCore is the chart being edited; ciMain is the one the drawing code
+  // reads (DrawInfo() in xcharts0.cpp builds the info sidebar from it).
+  // Astrolog's own Action() assigns one to the other immediately before
+  // casting, and every caller here that changes ciCore relies on that
+  // happening -- without it the chart recalculates but the sidebar keeps
+  // describing the previous chart.
+  ciMain = ciCore;
   CastChart(0);
   RedrawQt();
 }
@@ -491,11 +498,15 @@ static void BuildFileMenu(QMainWindow *pwind)
   QAction *paSaveSettings = pmenu->addAction("Save Program &Settings...");
   QObject::connect(paSaveSettings, &QAction::triggered, pwind,
     []() { ShowSaveSettingsDialogQt(); });
-  // Not included here: Open Charts in Folder.../Save Chart List..., since
-  // both are part of the not-yet-built multi-chart (Chart List) feature
-  // (see QT_GUI_PLAN.md) -- they read/write is.rgci, which nothing
-  // populates yet.
   QMenu *pmenuOtherFormats = pmenu->addMenu("&Other Formats");
+  QAction *paOpenDir = pmenuOtherFormats->addAction(
+    "Open Charts in &Folder...");
+  QObject::connect(paOpenDir, &QAction::triggered, pwind,
+    []() { ShowOpenChartDirDialogQt(); });
+  QAction *paSaveList = pmenuOtherFormats->addAction("Save Chart &List...");
+  QObject::connect(paSaveList, &QAction::triggered, pwind,
+    []() { ShowSaveChartListDialogQt(); });
+  pmenuOtherFormats->addSeparator();
   QAction *paSaveAAF = pmenuOtherFormats->addAction(
     "Save Chart E&xchange...");
   QObject::connect(paSaveAAF, &QAction::triggered, pwind,
@@ -590,6 +601,35 @@ static void BuildViewMenu(QMainWindow *pwind)
 }
 
 
+// Chart list navigation, mirroring wdriver.cpp's cmdListPrev/Next/First/
+// Last handlers. "nDir" is -1/+1 to step, or -2/+2 to jump to the first
+// or last chart in the list.
+
+static QAction *AddChartListNavAction(QMenu *pmenu, CONST char *szLabel,
+  int nDir)
+{
+  QAction *pa = pmenu->addAction(szLabel);
+  QObject::connect(pa, &QAction::triggered, pa, [nDir]() {
+    if (is.cci <= 0) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "There is no chart list in memory.");
+      return;
+    }
+    int i = nDir == -2 ? 0 : (nDir == 2 ? is.cci-1 : is.iciCur + nDir);
+    if (i < 0)
+      i = 0;
+    else if (i >= is.cci)
+      i = is.cci-1;
+    if (i != is.iciCur) {
+      is.iciCur = i;
+      ciCore = is.rgci[i];
+      RecastAndRedrawQt();
+    }
+  });
+  return pa;
+}
+
+
 static void BuildInfoMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Info");
@@ -612,12 +652,17 @@ static void BuildInfoMenu(QMainWindow *pwind)
   QAction *paInfoAll = pmenu->addAction("Charts #&3 Through #6...");
   QObject::connect(paInfoAll, &QAction::triggered, pwind,
     []() { ShowChartsAllDialogQt(); });
-  // Chart list navigation (Previous/Next/First/Last Chart and the Chart
-  // List dialog itself) isn't built yet -- it needs the is.rgci chart list
-  // array, which nothing in this port populates so far. Swap lives here
-  // because that's where Windows puts it, and it only touches the two
-  // chart slots, not the list.
   QMenu *pmenuList = pmenu->addMenu("Chart &List");
+  QAction *paList = pmenuList->addAction("Chart &List...");
+  QObject::connect(paList, &QAction::triggered, pwind,
+    []() { ShowChartListDialogQt(); });
+  pmenuList->addSeparator();
+  AddChartListNavAction(pmenuList, "&Previous Chart", -1);
+  AddChartListNavAction(pmenuList, "&Next Chart", 1);
+  pmenuList->addSeparator();
+  AddChartListNavAction(pmenuList, "&First Chart", -2);
+  AddChartListNavAction(pmenuList, "&Last Chart", 2);
+  pmenuList->addSeparator();
   QAction *paSwap = pmenuList->addAction("&Swap Chart #1 and #2");
   QObject::connect(paSwap, &QAction::triggered, pwind, []() {
     CI ciT;
