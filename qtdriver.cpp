@@ -221,7 +221,8 @@ void SetChartModeQt(int mode)
     us.fHorizon = us.fOrbit = us.fSector = us.fCalendar = us.fInfluence =
     us.fEsoteric = us.fAstroGraph = us.fEphemeris = us.fArabic =
     us.fHorizonSearch = us.fAtlasNear = us.fInDay = us.fInDayInf =
-    us.fInDayGra = us.fTransit = us.fTransitInf = us.fTransitGra = fFalse;
+    us.fInDayGra = us.fTransit = us.fTransitInf = us.fTransitGra =
+    us.fMoonChart = us.fExoTransit = fFalse;
   // DrawChartX() switches directly on gi.nMode with no fallback if it's 0,
   // and DetectGraphicsChartMode() (xscreen.cpp:2165, normally what
   // (re)derives gi.nMode from the us.f* flags before a redraw) doesn't
@@ -253,6 +254,8 @@ void SetChartModeQt(int mode)
   case gTraNatTim:  us.fTransit       = fTrue; break;
   case gTraNatInf:  us.fTransitInf    = fTrue; break;
   case gTraNatGra:  us.fTransitGra    = fTrue; break;
+  case gMoons:      us.fMoonChart     = fTrue; break;
+  case gExo:        us.fExoTransit    = fTrue; break;
   }
   for (i = 0; i < s_cChartMode; i++)
     if (s_rgnChartMode[i] == mode) {
@@ -544,6 +547,36 @@ static void BuildSettingMenu(QMainWindow *pwind)
   QAction *paTransitRestrict = pmenu->addAction("&Transit Restrictions...");
   QObject::connect(paTransitRestrict, &QAction::triggered, pwind,
     []() { ShowTransitRestrictDialogQt(); });
+
+  QMenu *pmenuMoons = pmenu->addMenu("Planetary &Moons");
+  AddChartModeAction(pmenuMoons, "Moons Chart", gMoons);
+  // Not AddChartModeAction: Windows also forces text mode when switching to
+  // this chart type (cmdChartExo, wdriver.cpp), and that has to happen
+  // before SetChartModeQt()'s redraw, not after.
+  QAction *paExo = pmenuMoons->addAction("Exoplanets Chart");
+  paExo->setCheckable(true);
+  paExo->setActionGroup(s_pgroupChartMode);
+  QObject::connect(paExo, &QAction::triggered, pwind, []() {
+    us.fGraphics = fFalse;
+    SetChartModeQt(gExo);
+  });
+  s_rgpaChartMode[s_cChartMode] = paExo;
+  s_rgnChartMode[s_cChartMode] = gExo;
+  s_cChartMode++;
+  pmenuMoons->addSeparator();
+  QAction *paMoonRestrict = pmenuMoons->addAction("Moon &Restrictions...");
+  QObject::connect(paMoonRestrict, &QAction::triggered, pwind,
+    []() { ShowMoonRestrictDialogQt(); });
+  QAction *paMoonObject = pmenuMoons->addAction("Moon &Object Settings...");
+  QObject::connect(paMoonObject, &QAction::triggered, pwind,
+    []() { ShowMoonObjectDialogQt(); });
+  pmenuMoons->addSeparator();
+  QAction *paCustom = pmenuMoons->addAction("Object &Customization...");
+  QObject::connect(paCustom, &QAction::triggered, pwind,
+    []() { ShowCustomDialogQt(); });
+  QAction *paCustomS = pmenuMoons->addAction("&Star Customization...");
+  QObject::connect(paCustomS, &QAction::triggered, pwind,
+    []() { ShowCustomStarDialogQt(); });
   pmenu->addSeparator();
 
   AddCategoryRestrictAction(pmenu, "Include &Minors", NULL, oChi, oEP,
@@ -574,7 +607,7 @@ static void BuildSettingMenu(QMainWindow *pwind)
 static void BuildChartMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Chart");
-  s_pgroupChartMode = new QActionGroup(pwind);
+  int i;
   AddChartModeAction(pmenu, "Standard &Radix", gWheel);
   AddChartModeAction(pmenu, "&House Wheel", gHouse);
   AddChartModeAction(pmenu, "Aspect &Midpoint Grid", gGrid);
@@ -591,8 +624,15 @@ static void BuildChartMenu(QMainWindow *pwind)
   AddChartModeAction(pmenu, "Ara&bic Parts", gArabic);
   AddChartModeAction(pmenu, "R&ising and Setting", gRising);
   AddChartModeAction(pmenu, "&Nearest Cities", gLocal);
-  // The chart starts on the standard radix; reflect that in the menu.
-  s_rgpaChartMode[0]->setChecked(true);
+  // The chart starts on the standard radix; reflect that in the menu. Not
+  // s_rgpaChartMode[0] -- since BuildSettingMenu()'s Planetary Moons items
+  // share this same group and are added before this menu is built, index 0
+  // is no longer reliably "Standard Radix".
+  for (i = 0; i < s_cChartMode; i++)
+    if (s_rgnChartMode[i] == gWheel) {
+      s_rgpaChartMode[i]->setChecked(true);
+      break;
+    }
   pmenu->addSeparator();
 
   QAction *paTransit = pmenu->addAction("&Transits...");
@@ -898,6 +938,11 @@ static void BuildHelpMenu(QMainWindow *pwind)
 
 static void BuildAstrologMenus(QMainWindow *pwind)
 {
+  // Allocated before any menu is built, since both BuildSettingMenu()
+  // (Planetary Moons chart types) and BuildChartMenu()/BuildGraphicsMenu()
+  // add actions to this same shared group.
+  s_pgroupChartMode = new QActionGroup(pwind);
+
   BuildFileMenu(pwind);
   BuildEditMenu(pwind);
   BuildViewMenu(pwind);

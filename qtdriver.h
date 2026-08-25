@@ -77,6 +77,10 @@ void ShowTransitRestrictDialogQt();
 void ShowObject2DialogQt();
 void ShowCalcDialogQt();
 void ShowDisplayDialogQt();
+void ShowMoonRestrictDialogQt();
+void ShowMoonObjectDialogQt();
+void ShowCustomDialogQt();
+void ShowCustomStarDialogQt();
 
 #endif // __QTDRIVER_H
 

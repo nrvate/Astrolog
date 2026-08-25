@@ -1308,6 +1308,300 @@ void ShowDisplayDialogQt()
   RecastAndRedrawQt();
 }
 
+
+// Moon restrictions, equivalent to Windows' DlgMoons: which individual
+// moons and center-of-body points are shown, using the same shared
+// checkbox-list dialog the main Restrictions menu items use. Simplified
+// from Windows' version by not including its per-planet "toggle this
+// group of moons" quick buttons -- the checkbox list alone covers the
+// same ground, just one click at a time instead of one per planet.
+
+void ShowMoonRestrictDialogQt()
+{
+  ShowRestrictRangeDialogQt("Moon Restrictions", moonsLo, cobHi, ignore);
+}
+
+
+// Moon object settings, equivalent to Windows' DlgObjectM: per moon/COB
+// object orb/color settings (the same grid shape as
+// ShowObject2DialogQt()), plus 3 moon chart display toggles.
+
+void ShowMoonObjectDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Moon Object Settings");
+  dlg.resize(500, 500);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
+  QGridLayout *pgrid = new QGridLayout();
+  QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf, rgpeColor;
+  int i, row = 1;
+
+  pgrid->addWidget(new QLabel("Object"), 0, 0);
+  pgrid->addWidget(new QLabel("Max Orb"), 0, 1);
+  pgrid->addWidget(new QLabel("Orb Add"), 0, 2);
+  pgrid->addWidget(new QLabel("Influence"), 0, 3);
+  pgrid->addWidget(new QLabel("Color"), 0, 4);
+  for (i = moonsLo; i <= cobHi; i++) {
+    pgrid->addWidget(new QLabel(szObjName[i]), row, 0);
+    QLineEdit *peOrb = new QLineEdit(QString::number(rObjOrb[i]));
+    pgrid->addWidget(peOrb, row, 1);
+    rgpeOrb.append(peOrb);
+    QLineEdit *peAdd = new QLineEdit(QString::number(rObjAdd[i]));
+    pgrid->addWidget(peAdd, row, 2);
+    rgpeAdd.append(peAdd);
+    QLineEdit *peInf = new QLineEdit(QString::number(rObjInf[i]));
+    pgrid->addWidget(peInf, row, 3);
+    rgpeInf.append(peInf);
+    QLineEdit *peColor = new QLineEdit(SzColor(kObjU[i]));
+    pgrid->addWidget(peColor, row, 4);
+    rgpeColor.append(peColor);
+    row++;
+  }
+  pinnerlayout->addLayout(pgrid);
+
+  QCheckBox *pcbMoonMove = new QCheckBox(
+    "Make Moons Orbit Current Central Object");
+  QCheckBox *pcbMoonChartSep = new QCheckBox(
+    "True Planetcentric Positions in Moons Charts");
+  QCheckBox *pcbMoonWheel = new QCheckBox(
+    "Wheel Charts Show Moons Orbiting Planet");
+  pcbMoonMove->setChecked(us.fMoonMove != 0);
+  pcbMoonChartSep->setChecked(us.fMoonChartSep != 0);
+  pcbMoonWheel->setChecked(gs.fMoonWheel != 0);
+  pinnerlayout->addWidget(pcbMoonMove);
+  pinnerlayout->addWidget(pcbMoonChartSep);
+  pinnerlayout->addWidget(pcbMoonWheel);
+
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (i = moonsLo; i <= cobHi; i++) {
+    row = i - moonsLo;
+    rObjOrb[i] = rgpeOrb[row]->text().toDouble();
+    rObjAdd[i] = rgpeAdd[row]->text().toDouble();
+    rObjInf[i] = rgpeInf[row]->text().toDouble();
+    QByteArray ba = rgpeColor[row]->text().toLocal8Bit();
+    kObjU[i] = NParseSz(ba.constData(), pmColor);
+  }
+  us.fMoonMove = pcbMoonMove->isChecked();
+  us.fMoonChartSep = pcbMoonChartSep->isChecked();
+  gs.fMoonWheel = pcbMoonWheel->isChecked();
+  RecastAndRedrawQt();
+}
+
+
+// Object customization, equivalent to Windows' DlgCustom: redefine each of
+// the "custom" (Uranian/dwarf) objects to instead track a hypothetical
+// point, a JPL/JPL Horizons body, a moon, an existing object's midpoint, or
+// an Arabic part, using the same compact definition-string syntax Windows
+// uses (e.g. "h120" for hypothetical Vulcan, "2 n" for the Moon's north
+// node point). Simplified from Windows' version by leaving out its
+// "Lookup Names" button, a convenience that re-resolves already-valid
+// definitions into their canonical display name -- typing the display name
+// directly works fine without it.
+
+void ShowCustomDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Object Customization");
+  dlg.resize(500, 500);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QGridLayout *pgrid = new QGridLayout(pinner);
+  QVector<QLineEdit *> rgpeName, rgpeDef;
+  int i, j, k, l, pnt, flg;
+  char sz[cchSzMax], *pch, *pchEnd;
+
+  pgrid->addWidget(new QLabel("Display Name"), 0, 0);
+  pgrid->addWidget(new QLabel("Definition"), 0, 1);
+  for (i = custLo; i <= custHi; i++) {
+    j = i - custLo;
+    QLineEdit *peName = new QLineEdit(szObjDisp[i]);
+    pgrid->addWidget(peName, j+1, 0);
+    rgpeName.append(peName);
+
+    k = rgTypSwiss[j];
+    l = rgObjSwiss[j];
+    if (k != 2)
+      sprintf(sz, "%s%d", k <= 0 ? "h" :
+        (k == 1 ? "" : (k == 3 ? "m" : (k == 4 ? "j" : "A"))), l);
+    else
+      sprintf(sz, l < cobLo ? "%.3s" : "%.4s", szObjName[l]);
+    for (pch = sz; *pch; pch++)
+      ;
+    pnt = rgPntSwiss[j];
+    flg = rgFlgSwiss[j];
+    if (pnt > 0 || flg > 0)
+      *pch++ = ' ';
+    if (pnt > 0)
+      *pch++ = (pnt == 1 ? 'n' : (pnt == 2 ? 's' : (pnt == 3 ? 'p' : 'a')));
+    if (flg &  1) *pch++ = 'H';
+    if (flg &  2) *pch++ = 'S';
+    if (flg &  4) *pch++ = 'B';
+    if (flg &  8) *pch++ = 'N';
+    if (flg & 16) *pch++ = 'T';
+    if (flg & 32) *pch++ = 'V';
+    *pch = chNull;
+    QLineEdit *peDef = new QLineEdit(sz);
+    pgrid->addWidget(peDef, j+1, 1);
+    rgpeDef.append(peDef);
+  }
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (i = custLo; i <= custHi; i++) {
+    j = i - custLo;
+    QByteArray ba = rgpeDef[j]->text().toLocal8Bit();
+    strncpy(sz, ba.constData(), cchSzMax-1);
+    sz[cchSzMax-1] = chNull;
+    for (pch = sz; *pch; pch++)
+      ;
+    for (pch--; pch > sz && *pch >= 'A'; pch--)
+      ;
+    if (pch >= sz && *pch < '0')
+      *pch = chNull;
+    pch = sz;
+    k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
+      (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
+    if (k == 0 || k >= 3)
+      pch++;
+    l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
+    if (!FValidCustom(l, k)) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "One or more object definitions are invalid.");
+      return;
+    }
+  }
+
+  for (i = custLo; i <= custHi; i++) {
+    j = i - custLo;
+    QByteArray ba = rgpeDef[j]->text().toLocal8Bit();
+    strncpy(sz, ba.constData(), cchSzMax-1);
+    sz[cchSzMax-1] = chNull;
+    for (pch = sz; *pch; pch++)
+      ;
+    pchEnd = pch;
+    for (pch--; pch > sz && *pch >= 'A'; pch--)
+      ;
+    if (pch >= sz && *pch < '0')
+      *pch = chNull;
+    pch = sz;
+    k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
+      (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
+    if (k == 0 || k >= 3)
+      pch++;
+    l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
+    rgTypSwiss[j] = k;
+    rgObjSwiss[j] = l;
+    pnt = 0; flg = 0;
+    for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--) {
+      if (*pch == 'n') pnt = 1;
+      if (*pch == 's') pnt = 2;
+      if (*pch == 'p') pnt = 3;
+      if (*pch == 'a') pnt = 4;
+      if (*pch == 'H') flg |= 1;
+      if (*pch == 'S') flg |= 2;
+      if (*pch == 'B') flg |= 4;
+      if (*pch == 'N') flg |= 8;
+      if (*pch == 'T') flg |= 16;
+      if (*pch == 'V') flg |= 32;
+    }
+    rgPntSwiss[j] = pnt;
+    rgFlgSwiss[j] = flg;
+
+    QByteArray baName = rgpeName[j]->text().toLocal8Bit();
+    if (!FEqSz(baName.constData(), szObjDisp[i]))
+      FCloneSzCore(baName.constData(), (char **)&szObjDisp[i],
+        szObjDisp[i] == szObjName[i]);
+  }
+  RecastAndRedrawQt();
+}
+
+
+// Star customization, equivalent to Windows' DlgCustomS: rename any fixed
+// star's display name, and optionally override which catalog star it
+// looks up in the Swiss Ephemeris star list. Simplified the same way
+// ShowCustomDialogQt() is, by leaving out the "Lookup Names" button.
+
+void ShowCustomStarDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Star Customization");
+  dlg.resize(500, 500);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QGridLayout *pgrid = new QGridLayout(pinner);
+  QVector<QLineEdit *> rgpeName, rgpeDef;
+  int i, k;
+
+  pgrid->addWidget(new QLabel("Display Name"), 0, 0);
+  pgrid->addWidget(new QLabel("Catalog Lookup Name"), 0, 1);
+  for (i = starLo; i <= starHi; i++) {
+    int row = i - starLo + 1;
+    QLineEdit *peName = new QLineEdit(szObjDisp[i]);
+    pgrid->addWidget(peName, row, 0);
+    rgpeName.append(peName);
+
+    k = i - starLo + 1;
+    CONST char *szDef = FSzSet(szStarCustom[k]) ? szStarCustom[k] :
+      (*szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]);
+    QLineEdit *peDef = new QLineEdit(szDef);
+    pgrid->addWidget(peDef, row, 1);
+    rgpeDef.append(peDef);
+  }
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (i = starLo; i <= starHi; i++) {
+    int row = i - starLo;
+    k = i - starLo + 1;
+    QByteArray baName = rgpeName[row]->text().toLocal8Bit();
+    if (!FEqSz(baName.constData(), szObjDisp[i]))
+      FCloneSzCore(baName.constData(), (char **)&szObjDisp[i],
+        szObjDisp[i] == szObjName[i]);
+    QByteArray baDef = rgpeDef[row]->text().toLocal8Bit();
+    FCloneSz(FEqSz(baDef.constData(),
+      *szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]) ?
+      NULL : baDef.constData(), &szStarCustom[k]);
+  }
+  RecastAndRedrawQt();
+}
+
 #endif // QT
 
 /* qtdialog.cpp */
