@@ -260,35 +260,32 @@ container, so most of these have no equivalent concept. If revisited,
 "Clear Screen" and "Size Window Full Screen" (`gi.qwind->showFullScreen()`)
 are the only two that might still mean something in Qt.
 
-### Info — done except the chart list
+### Info — COMPLETE
 Done: Set Chart Info..., Chart for Now, Default Chart Info..., all 8
-relationship chart type radios, and (2026-08-24) Set Chart #2 Info...,
-Charts #3 Through #6... (`ShowChartsAllDialogQt()`, equivalent to
-Windows' DlgInfoAll), and Swap Chart #1 and #2 inside the Chart List
-submenu.
+relationship chart type radios, Set Chart #2 Info..., Charts #3 Through
+#6... (`ShowChartsAllDialogQt()`), and the Chart List submenu (Chart
+List... dialog, Previous/Next/First/Last Chart, Swap Chart #1 and #2).
 
-The six **chart slots** are done: `rgpci`/`rgpcp` (extern.h, `cRing = 6`)
-are the per-ring chart info/positions, slot 1 being the main chart and
-2-6 the extra rings a bi/tri/.../hexa wheel draws.
-`ShowChartInfoForQt(CI *, title)` edits any slot;
-`FOpenChartIntoQt(iChart, file)` loads a file into one (FInputData()
-always lands in ciCore, so for slots >1 it saves ciCore, reads, copies
-out, and restores -- the same dance Windows' DlgOpenChart does).
+The six **chart slots**: `rgpci`/`rgpcp` (extern.h, `cRing = 6`) are the
+per-ring chart info/positions, slot 1 the main chart and 2-6 the extra
+rings a bi/tri/.../hexa wheel draws. `ShowChartInfoForQt(CI *, title)`
+edits any slot; `FOpenChartIntoQt(iChart, file)` loads a file into one.
 
-Missing — the **chart list**, a separate thing from the slots above and
-the one remaining chunk of this feature:
-- Chart List... `[D]` (`DlgList`, wdialog.cpp:866, ~150 lines: list view
-  with filtering and sorting), Previous/Next Chart, First/Last Chart.
-  These read `is.rgci` (the loaded chart list) / `is.cci` (its count) /
-  `is.iciCur` (current index). Navigation itself is trivial — see
-  wdriver.cpp:1545-1564, it's a clamp and a `ciCore = is.rgci[i]` — the
-  work is the dialog. A Qt version is probably a `QTableWidget` over
-  `is.rgci`.
-- File's Open Charts in Folder... and Save Chart List... belong to this
-  same chunk (they populate/write `is.rgci`); Save Chart List is just
-  `us.nWriteFormat = 'l'; FOutputData();` once a list exists.
-- **Nothing populates `is.rgci` in this port yet**, which is why the
-  above is deferred as a unit rather than half-built.
+The **chart list** (`is.rgci` / `is.cci` / `is.iciCur`):
+`ShowChartListDialogQt()` ports `DlgList`. Note `is.iciCur` starts at
+**-1**, not 0, which matters for the navigation clamping.
+`FSortCIList`/`FAppendCIList`/`FilterCIList`/`FEqSzSubI` all live in
+general.cpp and are fully portable. The list is populated by
+`FInputData()` itself, which calls `FAppendCIList()` when reading a multi
+chart file (AAF, Quick*Chart, Astrodatabank, Solar Fire text) — an
+earlier claim here that nothing populated it was wrong. Open Charts in
+Folder is written on QDir rather than ported, because the shared
+`OpenDir()` in io.cpp has its entire body inside `#ifdef PC`.
+
+**Not yet verified** (everything else in this section was checked live):
+that Open Charts in Folder's charts actually land in the list, and that
+Save Chart List writes correct output. Both worth confirming before
+trusting them.
 
 ### Setting — COMPLETE
 All items done: Sidereal Zodiac, Heliocentric, House System (22-item
@@ -391,13 +388,12 @@ skip.
 5. ~~File Settings dialog~~ — **done 2026-08-24**, see File section above.
 6. ~~Graphics Settings dialog~~ — **done 2026-08-24**, see Graphics
    section above (font pickers deliberately left out).
-7. Info's multi-chart feature — **half done 2026-08-24**: the six chart
-   slots (Set Chart #2 Info, the Charts manager, Open Chart #2, Swap) are
-   in; see Info section above. **Next item up** is the remaining half, the
-   chart list: the `DlgList` port (wdialog.cpp:866, ~150 lines) plus
-   Previous/Next/First/Last and File's Open Charts in Folder / Save Chart
-   List. Read `DlgList` in full before starting — the navigation is
-   trivial, the dialog is the work.
+7. ~~Info's multi-chart feature~~ — **done 2026-08-25** (chart slots and
+   chart list both); see Info section above. Two paths in it remain
+   unverified — see that section. With this the **menu structure is
+   complete**: every top-level menu and dialog Windows has is present
+   except File > Print (item 11) and the deliberate Win32-only omissions.
+   **Next item up is 8, the UI parity sweep.**
 8. **UI parity sweep, one dialog at a time.** Every dialog below is
    functionally correct but presentationally diverged from Windows.
    Requested after the chart info dialog was caught showing `21.9` where
