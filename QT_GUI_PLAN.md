@@ -503,10 +503,30 @@ skip.
        first checkbox (0-1 Mars, 2-5 Jupiter, 6-13 Saturn, 14-18 Uranus,
        19-21 Neptune, 22-26 Pluto, 27-31 COB); they're stored as absolute
        object indexes here, offset from `moonsLo`.
-   8.11 **Object & Star Customization** (next up) (`DlgCustom`, `DlgCustomS`) —
-       missing the "Lookup Names" button, which re-resolves a definition
-       string into its canonical display name.
-   8.12 **Calculation Settings** (`DlgCalc`) and **Display Settings**
+   8.11 ~~Object & Star Customization~~ — **done 2026-08-25** (`DlgCustom`,
+       `DlgCustomS`). "Lookup Names" added to both: it fills in every
+       display name still blank or `???` by resolving that row's
+       definition, and leaves already-named rows alone. Objects go
+       through `SwissGetObjName`/`szObjName`/`ObjMoons`/`ai[]` by
+       definition type; stars go through `SwissTestStar()`, which
+       rewrites its argument in place with the catalog's own spelling and
+       returns false for anything the catalog doesn't have (→ `???`).
+       Title also corrected to "Fixed Star Customization".
+       - **Note:** definition type 4 (`j<n>`, JPL Horizons) fetches over
+         the network synchronously while the modal dialog sits there,
+         with no progress feedback. That's what Windows does too, so it
+         was left as-is, but it's the obvious thing to make async if it
+         ever proves annoying.
+       - **Bug found and fixed while here.** The point/flag suffix parse
+         (the `n`/`s`/`p`/`a`/`HSBNTV` letters after a space) was missing
+         Windows' guard for an all-alphabetic definition, so a type-2
+         object name read its own letters as flags: `Mar` → apsis,
+         `Ven`/`Sun`/`Moon` → node, `Nep` → perihelion, `Vest` → south
+         node. Only names with no such letter after position 0 (`Plu`)
+         escaped. The parse is now in one place, `ParseCustomDefQt()`,
+         instead of the two inline copies it had (Windows open-codes it
+         twice as well).
+   8.12 **Calculation Settings** (next up) (`DlgCalc`) and **Display Settings**
        (`DlgDisplay`) — not yet audited field-by-field against the `.rc`;
        check for missing fields, label wording, and field order.
    8.13 **File Settings** (`DlgFile`) and **Graphics Settings**

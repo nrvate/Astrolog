@@ -3112,15 +3112,118 @@ void ShowMoonObjectDialogQt()
 }
 
 
+// Split one Object Customization definition string ("h120", "Mar",
+// "2 n", "j2 nHS") into the four values Astrolog keeps for it. Windows
+// open-codes this parse twice inside DlgCustom; it is wanted in three
+// places here -- validate, apply, and Lookup Names -- so it lives in one
+// function rather than being copied a third and fourth time.
+
+static void ParseCustomDefQt(CONST QString &str, char *sz, int *pk, int *pl,
+  int *ppnt, int *pflg)
+{
+  char *pch, *pchEnd;
+  int k, l, pnt = 0, flg = 0;
+
+  QByteArray ba = str.toLocal8Bit();
+  strncpy(sz, ba.constData(), cchSzMax-1);
+  sz[cchSzMax-1] = chNull;
+  for (pch = sz; *pch; pch++)
+    ;
+  pchEnd = pch;
+  // Any trailing point/flag letters are separated from the definition
+  // proper by a space; snip them off before reading the definition.
+  for (pch--; pch > sz && *pch >= 'A'; pch--)
+    ;
+  if (pch >= sz && *pch < '0')
+    *pch = chNull;
+  pch = sz;
+  k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
+    (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
+  if (k == 0 || k >= 3)
+    pch++;
+  l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
+
+  // Only read point/flag letters when the walk back stops short of the
+  // start of the string. An all-letter definition is an object name, not
+  // a run of flags -- without this guard (which Windows has, at the
+  // rgPntSwiss assignment in DlgCustom) "Mar" reads its own 'a' as the
+  // apsis marker, "Ven" and "Sun" read 'n' as the node marker, and so on.
+  for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--)
+    ;
+  if (pch > sz)
+    for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--) {
+      if (*pch == 'n') pnt = 1;
+      if (*pch == 's') pnt = 2;
+      if (*pch == 'p') pnt = 3;
+      if (*pch == 'a') pnt = 4;
+      if (*pch == 'H') flg |= 1;
+      if (*pch == 'S') flg |= 2;
+      if (*pch == 'B') flg |= 4;
+      if (*pch == 'N') flg |= 8;
+      if (*pch == 'T') flg |= 16;
+      if (*pch == 'V') flg |= 32;
+    }
+  *pk = k; *pl = l; *ppnt = pnt; *pflg = flg;
+}
+
+
+// "Lookup Names" (dbCu_l in Windows' DlgCustom): fill in every display
+// name still left blank or "???" by resolving its definition string to
+// the canonical name. Names already filled in are left alone.
+
+static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
+  QVector<QLineEdit *> &rgpeDef)
+{
+  char sz[cchSzMax];
+  int i, k, l, pnt, flg;
+
+  for (i = 0; i < rgpeName.size(); i++) {
+    QString strName = rgpeName[i]->text();
+    if (!strName.isEmpty() && strName != szObjUnknown)
+      continue;
+    ParseCustomDefQt(rgpeDef[i]->text(), sz, &k, &l, &pnt, &flg);
+    switch (k) {
+    case 0:
+      SwissGetObjName(sz, -l);
+      break;
+    case 1:
+      SwissGetObjName(sz, l);
+      break;
+    case 2:
+      sprintf(sz, "%s", FValidObj(l) ? szObjName[l] : szObjUnknown);
+      break;
+    case 3:
+      l = ObjMoons(l);
+      sprintf(sz, "%s", FItem(l) ? szObjName[l] : szObjUnknown);
+      break;
+    case 4:
+#ifdef JPLWEB
+      {
+        // Same as Windows: this one goes out to JPL Horizons over the
+        // network, synchronously, while the dialog sits there.
+        real rT;
+        if (!GetJPLHorizons(l, &rT, &rT, &rT, &rT, &rT, &rT, sz))
+          sprintf(sz, "%s", szObjUnknown);
+      }
+#else
+      sprintf(sz, "%s", szObjUnknown);
+#endif
+      break;
+    case 5:
+      sprintf(sz, "%s", FValidPart(l) ? ai[l-1].name : szObjUnknown);
+      break;
+    }
+    rgpeName[i]->setText(sz);
+  }
+}
+
+
 // Object customization, equivalent to Windows' DlgCustom: redefine each of
 // the "custom" (Uranian/dwarf) objects to instead track a hypothetical
 // point, a JPL/JPL Horizons body, a moon, an existing object's midpoint, or
 // an Arabic part, using the same compact definition-string syntax Windows
 // uses (e.g. "h120" for hypothetical Vulcan, "2 n" for the Moon's north
-// node point). Simplified from Windows' version by leaving out its
-// "Lookup Names" button, a convenience that re-resolves already-valid
-// definitions into their canonical display name -- typing the display name
-// directly works fine without it.
+// node point).
 
 void ShowCustomDialogQt()
 {
@@ -3133,7 +3236,7 @@ void ShowCustomDialogQt()
   QGridLayout *pgrid = new QGridLayout(pinner);
   QVector<QLineEdit *> rgpeName, rgpeDef;
   int i, j, k, l, pnt, flg;
-  char sz[cchSzMax], *pch, *pchEnd;
+  char sz[cchSzMax], *pch;
 
   pgrid->addWidget(new QLabel("Display Name"), 0, 0);
   pgrid->addWidget(new QLabel("Definition"), 0, 1);
@@ -3175,6 +3278,10 @@ void ShowCustomDialogQt()
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  QPushButton *ppbLookup =
+    pbuttons->addButton("&Lookup Names", QDialogButtonBox::ActionRole);
+  QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
+    [&rgpeName, &rgpeDef]() { LookupCustomNamesQt(rgpeName, rgpeDef); });
   pouter->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
@@ -3184,21 +3291,7 @@ void ShowCustomDialogQt()
 
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
-    QByteArray ba = rgpeDef[j]->text().toLocal8Bit();
-    strncpy(sz, ba.constData(), cchSzMax-1);
-    sz[cchSzMax-1] = chNull;
-    for (pch = sz; *pch; pch++)
-      ;
-    for (pch--; pch > sz && *pch >= 'A'; pch--)
-      ;
-    if (pch >= sz && *pch < '0')
-      *pch = chNull;
-    pch = sz;
-    k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
-      (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
-    if (k == 0 || k >= 3)
-      pch++;
-    l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
+    ParseCustomDefQt(rgpeDef[j]->text(), sz, &k, &l, &pnt, &flg);
     if (!FValidCustom(l, k)) {
       QMessageBox::warning(gi.qwind, szAppName,
         "One or more object definitions are invalid.");
@@ -3208,37 +3301,9 @@ void ShowCustomDialogQt()
 
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
-    QByteArray ba = rgpeDef[j]->text().toLocal8Bit();
-    strncpy(sz, ba.constData(), cchSzMax-1);
-    sz[cchSzMax-1] = chNull;
-    for (pch = sz; *pch; pch++)
-      ;
-    pchEnd = pch;
-    for (pch--; pch > sz && *pch >= 'A'; pch--)
-      ;
-    if (pch >= sz && *pch < '0')
-      *pch = chNull;
-    pch = sz;
-    k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
-      (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
-    if (k == 0 || k >= 3)
-      pch++;
-    l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
+    ParseCustomDefQt(rgpeDef[j]->text(), sz, &k, &l, &pnt, &flg);
     rgTypSwiss[j] = k;
     rgObjSwiss[j] = l;
-    pnt = 0; flg = 0;
-    for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--) {
-      if (*pch == 'n') pnt = 1;
-      if (*pch == 's') pnt = 2;
-      if (*pch == 'p') pnt = 3;
-      if (*pch == 'a') pnt = 4;
-      if (*pch == 'H') flg |= 1;
-      if (*pch == 'S') flg |= 2;
-      if (*pch == 'B') flg |= 4;
-      if (*pch == 'N') flg |= 8;
-      if (*pch == 'T') flg |= 16;
-      if (*pch == 'V') flg |= 32;
-    }
     rgPntSwiss[j] = pnt;
     rgFlgSwiss[j] = flg;
 
@@ -3253,13 +3318,12 @@ void ShowCustomDialogQt()
 
 // Star customization, equivalent to Windows' DlgCustomS: rename any fixed
 // star's display name, and optionally override which catalog star it
-// looks up in the Swiss Ephemeris star list. Simplified the same way
-// ShowCustomDialogQt() is, by leaving out the "Lookup Names" button.
+// looks up in the Swiss Ephemeris star list.
 
 void ShowCustomStarDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Star Customization");
+  dlg.setWindowTitle("Fixed Star Customization");
   dlg.resize(500, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QScrollArea *pscroll = new QScrollArea(&dlg);
@@ -3289,6 +3353,28 @@ void ShowCustomStarDialogQt()
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  // "Lookup Names" (dbCu_l in DlgCustomS): for every display name still
+  // blank or "???", ask the Swiss Ephemeris star catalog what the entry
+  // in the lookup column actually resolves to. SwissTestStar() rewrites
+  // its argument in place with the catalog's own spelling.
+  QPushButton *ppbLookup =
+    pbuttons->addButton("&Lookup Names", QDialogButtonBox::ActionRole);
+  QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
+    [&rgpeName, &rgpeDef]() {
+      char sz[cchSzMax];
+      int row;
+      for (row = 0; row < rgpeName.size(); row++) {
+        QString strName = rgpeName[row]->text();
+        if (!strName.isEmpty() && strName != szObjUnknown)
+          continue;
+        QByteArray ba = rgpeDef[row]->text().toLocal8Bit();
+        strncpy(sz, ba.constData(), cchSzMax-1);
+        sz[cchSzMax-1] = chNull;
+        if (!SwissTestStar(sz))
+          sprintf(sz, "%s", szObjUnknown);
+        rgpeName[row]->setText(sz);
+      }
+    });
   pouter->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
