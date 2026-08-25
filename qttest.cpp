@@ -57,9 +57,11 @@ extern QMenu *PmenuCtxTestQt(int, CONST char **);
 extern int CHotkeyTestQt();
 extern void HotkeyTestQt(int, CONST char **, CONST char **);
 extern QAction *PaFindActionTestQt(CONST char *);
+extern void AllActionsTestQt(QList<QAction *> *);
 
 static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
+static QString s_strModal;
 
 static void Group(CONST char *sz)
 {
@@ -82,6 +84,7 @@ static void Check(flag fOk, CONST char *szFmt, ...)
   else {
     s_cFail++;
     printf("  FAIL  %s\n", sz);
+    fflush(stdout);
   }
 }
 
@@ -257,15 +260,23 @@ static void TestChartRenderQt()
 {
   CONST int rgnMode[] = { gWheel, gHouse, gGrid, gAspect, gMidpoint,
     gHorizon, gOrbit, gSector, gCalendar, gDisposit, gEsoteric,
-    gAstroGraph, gEphemeris, gArabic, gRising, gLocal };
+    gAstroGraph, gEphemeris, gArabic, gRising, gLocal, gMoons, gExo,
+    gTraTraGra, gTraNatGra, gSphere, gWorldMap, gGlobe, gPolar,
+    gTelescope, gBiorhythm };
   CONST char *rgszMode[] = { "Wheel", "House", "Grid", "Aspect", "Midpoint",
     "Horizon", "Orbit", "Sector", "Calendar", "Influence", "Esoteric",
-    "AstroGraph", "Ephemeris", "Arabic", "Rising", "Local" };
+    "AstroGraph", "Ephemeris", "Arabic", "Rising", "Local", "Moons", "Exo",
+    "TraTraGra", "TraNatGra", "Sphere", "WorldMap", "Globe", "Polar",
+    "Telescope", "Biorhythm" };
   int i, x, y, cmode = (int)(sizeof(rgnMode) / sizeof(int)), nSav = gi.nMode;
+  // Named before drawing, flushed, so a crash says which one.
   long cpix;
 
   Group("Chart rendering");
   for (i = 0; i < cmode; i++) {
+    if (getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL) {
+      printf("    rendering: %s\n", rgszMode[i]); fflush(stdout);
+    }
     SetChartModeQt(rgnMode[i]);
     Check(gi.nMode == rgnMode[i], "%s: gi.nMode did not take", rgszMode[i]);
     Check(gi.qim != NULL, "%s: no image was rendered", rgszMode[i]);
@@ -290,6 +301,98 @@ static void TestChartRenderQt()
 
 /*
 ******************************************************************************
+** Firing every menu item.
+******************************************************************************
+*/
+
+// Trigger every menu item that doesn't open a dialog and check the app
+// survives and still draws. Deliberately does not reset state between
+// items, so this walks through a long chain of odd setting combinations
+// -- which is the point, since that's where the crashes have been.
+//
+// Skipped: anything whose label ends in "..." (those open a dialog and
+// would block; the dialog test covers them), and Quit.
+
+static void TestAllMenuActionsQt()
+{
+  QList<QAction *> rgpa;
+  int i, cfired = 0, cmodal = 0, ctext = 0, x, y;
+  long cpix;
+
+  Group("Firing every menu item");
+  AllActionsTestQt(&rgpa);
+  for (i = 0; i < rgpa.size(); i++) {
+    QString str = rgpa[i]->text();
+    // Quit would end the run. The doc and website items hand a file or a
+    // URL to the desktop, which isn't this suite's business to trigger.
+    if (str.contains("Quit") || str.contains("Exit") ||
+      str.startsWith("Open ") || str.contains("Website"))
+      continue;
+    // Anything that puts up a modal dialog blocks here forever, since
+    // nothing is driving the event loop to dismiss it. Rather than guess
+    // which items those are from their labels -- the first attempt did
+    // guess, guessed wrong, and hung the run -- queue a shot that closes
+    // whatever modal window appears and count it.
+    s_strModal = QString();
+    QTimer::singleShot(120, []() {
+      QWidget *pw = QApplication::activeModalWidget();
+      if (pw != NULL) {
+        s_strModal = pw->windowTitle();
+        pw->close();
+      }
+    });
+    // Name each item before firing it, flushed, so that when one takes
+    // the process down the log says which. Set ASTROLOG_QT_TEST_VERBOSE
+    // to see it; a clean run doesn't need the noise.
+    if (getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL) {
+      printf("    firing: %s\n", str.toLocal8Bit().constData());
+      fflush(stdout);
+    }
+    rgpa[i]->trigger();
+    if (!s_strModal.isEmpty())
+      cmodal++;
+    cfired++;
+    // Some items switch to text mode, where gi.qim isn't redrawn at all,
+    // so the image checks below would be reading a stale buffer. Put
+    // graphics back before carrying on -- and not only for correctness:
+    // left off, every later item takes the much slower text redraw path
+    // and the whole sweep stops finishing in reasonable time.
+    if (!us.fGraphics) {
+      ctext++;
+      // Back to graphics, and to a chart mode that has a graphical form:
+      // the items that switch to text mode also select a text-only mode
+      // (the Help menu listings, gCredit and friends), and asking
+      // DrawChartX() to draw one of those as graphics quite reasonably
+      // produces nothing. Restoring only the flag left the next item
+      // looking at a blank buffer and being blamed for it.
+      us.fGraphics = fTrue;
+      SetChartModeQt(gWheel);
+      continue;
+    }
+    // Getting here at all is most of the test: a crash takes the process
+    // with it and the run reports nothing further.
+    Check(gi.qim != NULL, "after \"%s\": no image",
+      str.toLocal8Bit().constData());
+    if (gi.qim == NULL)
+      continue;
+    Check(gi.qim->width() > 0 && gi.qim->height() > 0,
+      "after \"%s\": image is %dx%d", str.toLocal8Bit().constData(),
+      gi.qim->width(), gi.qim->height());
+    cpix = 0;
+    for (y = 0; y < gi.qim->height(); y += 8)
+      for (x = 0; x < gi.qim->width(); x += 8)
+        if (gi.qim->pixel(x, y) != gi.qim->pixel(0, 0))
+          cpix++;
+    Check(cpix > 20, "after \"%s\": chart went blank",
+      str.toLocal8Bit().constData());
+  }
+  printf("  %d menu items fired (%d opened a dialog, %d switched to text)\n",
+    cfired, cmodal, ctext);
+}
+
+
+/*
+******************************************************************************
 ** Entry point.
 ******************************************************************************
 */
@@ -301,6 +404,7 @@ int NRunQtTestsQt()
   TestContextMenusQt();
   TestHotkeysQt();
   TestChartRenderQt();
+  TestAllMenuActionsQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

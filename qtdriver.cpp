@@ -319,6 +319,16 @@ static QString CaptureTextChartQt(flag fHTML)
   // the caller already did.
   flag fGraphicsSave = us.fGraphics;
   flag fTextHTMLSave = us.fTextHTML;
+  // is.S has to be saved across this too, and that is less obvious than
+  // the flags. The whole GUI runs inside an Action() call already (main
+  // -> Action -> FActionX -> InteractQt), so the Action() below is a
+  // nested one. It opens is.S on the temp file and closes it on the way
+  // out -- but leaves is.S pointing at the closed FILE. Everything that
+  // prints through is.S afterwards is then writing to a dead handle, and
+  // the outer Action() will eventually fclose() it a second time; glibc
+  // catches that as "invalid stdio handle" and aborts. astrolog.cpp:462
+  // saves and restores it around its own nested call for this reason.
+  FILE *fileSave = is.S;
   us.fGraphics = fFalse;
   FCloneSz(szTemp, &is.szFileScreen);
   us.fTextHTML = fHTML;
@@ -326,6 +336,7 @@ static QString CaptureTextChartQt(flag fHTML)
   FCloneSz(NULL, &is.szFileScreen);
   us.fTextHTML = fTextHTMLSave;
   us.fGraphics = fGraphicsSave;
+  is.S = fileSave;
 
   QString qs;
   QFile file(szTemp);
@@ -2963,6 +2974,25 @@ void HotkeyTestQt(int i, CONST char **pszKey, CONST char **pszAction)
 {
   *pszKey = rghotkeyQt[i].szKey;
   *pszAction = rghotkeyQt[i].szAction;
+}
+
+// Collect every action in the menu bar, so a test can fire them all.
+static void CollectActionsTestQt(QWidget *pw, QList<QAction *> *prg)
+{
+  QList<QAction *> rgpa = pw->actions();
+  int i;
+
+  for (i = 0; i < rgpa.size(); i++) {
+    if (rgpa[i]->menu() != NULL)
+      CollectActionsTestQt(rgpa[i]->menu(), prg);
+    else if (!rgpa[i]->isSeparator())
+      prg->append(rgpa[i]);
+  }
+}
+
+void AllActionsTestQt(QList<QAction *> *prg)
+{
+  CollectActionsTestQt(gi.qwind->menuBar(), prg);
 }
 
 QAction *PaFindActionTestQt(CONST char *sz)
