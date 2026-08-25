@@ -78,6 +78,7 @@ static bool fQtReady = false;
 // that buffer to the screen, and to tell Astrolog when its size changes.
 
 static QMenu *PmenuContextForChartQt();   // defined below
+static QMenu *PmenuContextForTextQt();    // defined below
 
 class ChartCanvas : public QWidget
 {
@@ -346,6 +347,18 @@ static void RedrawTextQt()
     s_ptextBrowser = new QTextBrowser();
     s_ptextBrowser->setStyleSheet("background-color: black;");
     playout->addWidget(s_ptextBrowser);
+    // Text charts live in this window rather than on the canvas, so
+    // their context menus hang off here. Replaces QTextBrowser's own
+    // copy/select-all menu, the same way Windows replaces the default.
+    s_ptextBrowser->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(s_ptextBrowser, &QWidget::customContextMenuRequested,
+      s_ptextBrowser, [](CONST QPoint &pt) {
+        QMenu *pmenu = PmenuContextForTextQt();
+        if (pmenu == NULL)
+          return;
+        pmenu->exec(s_ptextBrowser->mapToGlobal(pt));
+        delete pmenu;
+      });
   }
   s_ptextBrowser->setHtml(qsHtml);
   s_pdlgText->show();
@@ -2279,6 +2292,147 @@ static CONST CTXITEM rgctxTelescopeQt[] = {
   {NULL, NULL},
   {"Use &Ecliptic Axis",                        "Use Ecliptic &Axis"} };
 
+// Windows' menu_V, the Standard listing text chart.
+static CONST CTXITEM rgctxTxtListQt[] = {
+  {"&View Graphics Mode Wheel",                 "Show &Graphics"},
+  {NULL, NULL},
+  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"House Placements Based on &3D Houses",      "&3D Houses"} };
+
+// Windows' menu_W, the House wheel text chart.
+static CONST CTXITEM rgctxTxtWheelQt[] = {
+  {"&View Graphic House Wheel",                 "Show &Graphics"},
+  {NULL, NULL},
+  {"&Indian Sign Arrangement",                  "&Indian Wheel Order"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"House Placements Based on &3D Houses",      "&3D Houses"} };
+
+// Windows' menu_G, the Grid text chart.
+static CONST CTXITEM rgctxTxtGridQt[] = {
+  {"&View Graphic Grid",                        "Show &Graphics"},
+  {NULL, NULL},
+  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"&Applying Aspects",                         "&Applying Aspects"} };
+
+// Windows' menu_A, the Aspect list text chart.
+static CONST CTXITEM rgctxTxtAspectQt[] = {
+  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"&Applying Aspects",                         "&Applying Aspects"} };
+
+// Windows' menu_M, the Midpoint list text chart.
+static CONST CTXITEM rgctxTxtMidpointQt[] = {
+  {"&View Graphic Dial Chart",                  "Show &Graphics"},
+  {NULL, NULL},
+  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Show &Latitude Midpoints Too",              "&Parallel Aspects"},
+  {"Midpoints are &3D",                         "&3D Houses"} };
+
+// Windows' menu_Z, the Horizon text chart.
+static CONST CTXITEM rgctxTxtHorizonQt[] = {
+  {"&View Graphic Horizon Chart",               "Show &Graphics"},
+  {NULL, NULL},
+  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Show &3D House Placements",                 "&3D Houses"} };
+
+// Windows' menu_S, the Orbit text chart.
+static CONST CTXITEM rgctxTxtOrbitQt[] = {
+  {"&View Graphic Orbit Chart",                 "Show &Graphics"},
+  {NULL, NULL},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_H, the Sector text chart.
+static CONST CTXITEM rgctxTxtSectorQt[] = {
+  {"&View Graphic Sector Wheel",                "Show &Graphics"},
+  {NULL, NULL},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_K, the Calendar text chart.
+static CONST CTXITEM rgctxTxtCalendarQt[] = {
+  {"&View Graphic Calendar",                    "Show &Graphics"},
+  {NULL, NULL},
+  {"Weeks Start on &Monday",                    "&Indian Wheel Order"} };
+
+// Windows' menu_J, the Influence text chart.
+static CONST CTXITEM rgctxTxtInfluenceQt[] = {
+  {"&View Graphic Dispositor Chart",            "Show &Graphics"},
+  {NULL, NULL},
+  {"&Combine Signs and Houses",                 "&Indian Wheel Order"},
+  {"Print &Detailed Percentages",               "Print Nearest &Second"} };
+
+// Windows' menu_7, the Esoteric text chart.
+static CONST CTXITEM rgctxTxtEsotericQt[] = {
+  {"&View Graphic Ray Ephemeris",               "Show &Graphics"} };
+
+// Windows' menu_L, the Astro-graph text chart.
+static CONST CTXITEM rgctxTxtAstroGraphQt[] = {
+  {"&View Graphic Astro-Graph Chart",           "Show &Graphics"},
+  {NULL, NULL},
+  {"Ignore Planet &Latitudes",                  "&3D Houses"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_E, the Ephemeris text chart.
+static CONST CTXITEM rgctxTxtEphemerisQt[] = {
+  {"&View Graphic Ephemeris",                   "Show &Graphics"},
+  {NULL, NULL},
+  {"Ephemeris Shows &Latitudes",                "&Parallel Aspects"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_P, the Arabic parts text chart.
+static CONST CTXITEM rgctxTxtArabicQt[] = {
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_I, the Rising text chart.
+static CONST CTXITEM rgctxTxtRisingQt[] = {
+  {"&View Graphic Rising Chart",                "Show &Graphics"},
+  {NULL, NULL},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_N, the Nearest cities text chart.
+static CONST CTXITEM rgctxTxtLocalQt[] = {
+  {"&View Graphic Local Space Chart",           "Show &Graphics"},
+  {NULL, NULL},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_8, the Moons text chart.
+static CONST CTXITEM rgctxTxtMoonsQt[] = {
+  {"&View Graphic Moons Chart",                 "Show &Graphics"},
+  {NULL, NULL},
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_Ux, the Exoplanets text chart.
+static CONST CTXITEM rgctxTxtExoQt[] = {
+  {"Transits at &Chart Time",                   "&Parallel Aspects"},
+  {"&Exact Transits Only",                      "&3D Houses"} };
+
+// Windows' menu_D, the Transit times text chart.
+static CONST CTXITEM rgctxTxtInDayQt[] = {
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_T, the Transit influence text chart.
+static CONST CTXITEM rgctxTxtTransInfQt[] = {
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"&Applying Aspects",                         "&Applying Aspects"},
+  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+
+// Windows' menu_B, the Transit graph text chart.
+static CONST CTXITEM rgctxTxtTransGraQt[] = {
+  {"&View Graphic Transit Graph",               "Show &Graphics"},
+  {NULL, NULL},
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"Show Only &Exact Aspects",                  "&Indian Wheel Order"} };
+
+// Windows' menu_Y, the Biorhythm text chart.
+static CONST CTXITEM rgctxTxtBiorhythmQt[] = {
+  {"&View Graphic Biorhythm",                   "Show &Graphics"} };
+
 #define CctxQt(rg) (int)(sizeof(rg) / sizeof(CTXITEM))
 
 // Find a menu bar item by its exact label, searching submenus too.
@@ -2328,6 +2482,43 @@ static QMenu *PmenuBuildContextQt(CONST CTXITEM *rgitem, int citem)
   }
   return pmenu;
 }
+
+// The text chart menus. Windows picks these from the us.f* chart-type
+// flags rather than gi.nMode, in an else-if chain whose order matters --
+// several of these flags can be set at once, and the first match wins.
+// Kept in Windows' order for that reason.
+
+static QMenu *PmenuContextForTextQt()
+{
+#define CtxIf(cond, rg) \
+  if (cond) return PmenuBuildContextQt(rg, CctxQt(rg));
+
+  CtxIf(us.nRel == rcBiorhythm, rgctxTxtBiorhythmQt)
+  CtxIf(us.fListing,       rgctxTxtListQt)
+  CtxIf(us.fWheel,         rgctxTxtWheelQt)
+  CtxIf(us.fGrid,          rgctxTxtGridQt)
+  CtxIf(us.fAspList,       rgctxTxtAspectQt)
+  CtxIf(us.fMidpoint,      rgctxTxtMidpointQt)
+  CtxIf(us.fHorizon,       rgctxTxtHorizonQt)
+  CtxIf(us.fOrbit,         rgctxTxtOrbitQt)
+  CtxIf(us.fSector,        rgctxTxtSectorQt)
+  CtxIf(us.fCalendar,      rgctxTxtCalendarQt)
+  CtxIf(us.fInfluence,     rgctxTxtInfluenceQt)
+  CtxIf(us.fEsoteric,      rgctxTxtEsotericQt)
+  CtxIf(us.fAstroGraph,    rgctxTxtAstroGraphQt)
+  CtxIf(us.fEphemeris,     rgctxTxtEphemerisQt)
+  CtxIf(us.fArabic,        rgctxTxtArabicQt)
+  CtxIf(us.fHorizonSearch, rgctxTxtRisingQt)
+  CtxIf(us.fAtlasNear,     rgctxTxtLocalQt)
+  CtxIf(us.fMoonChart,     rgctxTxtMoonsQt)
+  CtxIf(us.fExoTransit,    rgctxTxtExoQt)
+  CtxIf(us.fInDay    || us.fTransit,    rgctxTxtInDayQt)
+  CtxIf(us.fInDayInf || us.fTransitInf, rgctxTxtTransInfQt)
+  CtxIf(us.fInDayGra || us.fTransitGra, rgctxTxtTransGraQt)
+  return NULL;
+#undef CtxIf
+}
+
 
 // Pick the menu for the chart currently on screen, or NULL if this chart
 // type has none. Windows switches on gi.nMode the same way.

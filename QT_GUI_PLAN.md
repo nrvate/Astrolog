@@ -36,49 +36,28 @@ decision someone made silently.
 
 Roughly in the order I'd take them.
 
-1. **Right-click context menus — graphics side complete, text side to
-   go.** Right-clicking the chart brings up the menu for the current
-   chart type, dispatched on `gi.nMode` the way Windows' `DoPopup()` is
-   from `WM_RBUTTONDOWN` (wdriver.cpp ~line 938). All twenty graphics
-   menus are in: `menuV`/`menuV2` (Western and Indian wheels), `menuG`,
-   `menuM`, `menuZ`, `menuS`, `menuH`, `menuK`, `menuJ`, `menu7`,
-   `menuL`, `menuE`, `menuZd`, `menuN`, `menu8`, `menuB`, `menuY`,
-   `menuXX`, `menuXG`, `menuXZ`.
-   - **What's left: the 22 text-mode menus** (`menu_V`, `menu_W`,
-     `menu_G`, `menu_A`, `menu_M`, `menu_Z`, `menu_S`, `menu_H`,
-     `menu_K`, `menu_J`, `menu_7`, `menu_L`, `menu_E`, `menu_P`,
-     `menu_I`, `menu_N`, `menu_8`, `menu_Ux`, `menu_D`, `menu_T`,
-     `menu_B`, `menu_Y`). Windows picks these by the `us.f*` chart-type
-     flags rather than `gi.nMode`, in the same handler. **One decision
-     first:** this port draws text charts in a separate `QTextBrowser`
-     window (`RedrawTextQt`), so they hang off that widget, not the
-     canvas.
-   - **How a menu is described.** A `CTXITEM` table in qtdriver.cpp of
-     `{label shown here, label of the menu bar item to act through}`,
-     `{NULL, NULL}` for a separator, plus a `case` in
-     `PmenuContextForChartQt()`. The 20 graphics tables were generated
-     mechanically from astrolog.rc rather than transcribed, cross-
-     referencing each `cmd*` against the main menu block in the same
-     file; worth doing the same for the text ones.
-   - **Why entries proxy rather than reuse the menu bar's `QAction`.**
-     Windows gives one command different labels per context —
-     `cmdChartModify` is "Draw Houses Same Size" on a Western wheel and
-     "Toggle North Indian" on an Indian one — so the action's own text
-     can't serve. Each entry is a proxy that forwards to the real action
-     and mirrors its checkmark, rebuilt on every right-click so the state
-     is current. Nothing is reimplemented and there is still one piece of
-     state per command.
-   - **A bad label fails visibly:** an entry whose target matches nothing
-     is shown greyed rather than dropped. That caught two real label
-     differences between Windows and this port immediately — Windows'
-     "Com&parison Chart" vs this port's "&Comparison Chart", and
-     "Print &Nearest Second" vs "Print Nearest &Second".
-   - Known cosmetic gap, pre-existing: "Draw South/North/East Indian"
-     show no checkmark, here or in the Graphics menu, because the Qt
-     items are plain actions. Windows marks them from derived state in
-     `RedoMenu()` (`gi.nMode == gWheel && !gs.fHouseExtra` etc). Cheap to
-     add here since the menu is rebuilt on open; the main menu would need
-     a sync function.
+1. ~~Right-click context menus~~ — **done 2026-08-25, all 42.** Right
+   clicking brings up the menu for the current chart, dispatched the way
+   Windows' `DoPopup()` is from `WM_RBUTTONDOWN` (wdriver.cpp ~line 938):
+   the 20 graphics menus off the canvas, switched on `gi.nMode`, and the
+   22 text ones off the text chart window, chosen from the `us.f*` flags
+   by an else-if chain whose order matters and is kept as Windows has it.
+   - Each menu is a `CTXITEM` table of `{label shown here, label of the
+     menu bar item to act through}` with `{NULL, NULL}` for a separator.
+     All 42 were generated from astrolog.rc rather than transcribed,
+     cross-referencing each `cmd*` against the main menu block in the
+     same file. Worth reusing that approach for anything similar.
+   - Entries proxy to the menu bar's action rather than reusing it,
+     because Windows gives one command different labels per context
+     (`cmdChartModify` is "Draw Houses Same Size" on a Western wheel and
+     "Toggle North Indian" on an Indian one). The proxy mirrors the real
+     action's checkmark and is rebuilt on each right-click, so nothing is
+     reimplemented and there's still one piece of state per command.
+   - An entry whose target doesn't resolve shows greyed rather than being
+     dropped, which caught three real label differences between Windows
+     and this port during the work.
+   - Text charts show in their own `QTextBrowser` window, so those menus
+     replace its default copy/select-all menu via `CustomContextMenu`.
 
 2. **A regression check of some kind.** There is none. Everything in this
    project was verified by driving the GUI and eyeballing screenshots,
