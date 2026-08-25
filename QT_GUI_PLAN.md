@@ -427,11 +427,16 @@ skip.
        Verified live. Note the cover range is derived from
        `us.fInDayMonth`/`us.fInDayYear`/`us.nEphemYears` rather than
        stored as an index — that asymmetric logic is ported as-is.
-   8.4 **Progressions** (next up) (`ShowProgressDialogQt` / `DlgProgress`) — same
-       three formatting issues as 8.3. Also missing: preset dropdown
-       values for the progression rate (Primary/Secondary/etc) and the
-       `X` reciprocal-rate prefix for the solar arc field.
-   8.5 **Colors** (`ShowColorDialogQt` / `DlgColor`) — currently a curated
+   8.4 ~~Progressions~~ — **done 2026-08-25**: formatting fixed, the
+       progression type radios relabelled to Windows' wording, rate and
+       cusp ratio turned into editable combos carrying Windows' presets,
+       the `X` reciprocal-rate prefix supported, and a Now button added.
+       Verified live. **Gotcha found here, applies to any editable
+       QComboBox in this port**: all `addItem()` calls must precede
+       `setEditText()`, since adding the first item sets current index 0
+       and overwrites the line edit — otherwise any value that doesn't
+       match a preset displays as the first preset.
+   8.5 **Colors** (next up) (`ShowColorDialogQt` / `DlgColor`) — currently a curated
        subset (9 main + the 4 elements). Windows exposes the full
        `cColor` palette, all `cElem` element colours, the `cRay` ray
        colours, the scribble pen colour (`gi.kiPen`), and the decan
