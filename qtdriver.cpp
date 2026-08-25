@@ -393,6 +393,43 @@ static void BuildInfoMenu(QMainWindow *pwind)
 }
 
 
+// "Include <category>" toggles (Minors/Cusps/Uranians/Dwarfs/Fixed Stars/
+// Moons/Body Centers), mirroring wdriver.cpp:1737-1802. Most of these flip
+// a backing `us.f*` flag, then either hide every object in [lo, hi] (flag
+// turned off) or flip each one individually back (flag turned on) -- since
+// turning off always sets every ignore[i] to true, flipping them again on
+// re-enable is equivalent to "restore all to shown", not a real memory of
+// prior per-object state. Minors (pfield NULL) has no backing flag at all
+// in Windows either -- it just flips each ignore[i] in range directly
+// (skipping "except", used to exclude oNod from the Minors range).
+
+static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
+  flag *pfield, int lo, int hi, int except)
+{
+  QAction *pa = pmenu->addAction(szLabel);
+  pa->setCheckable(true);
+  pa->setChecked(pfield != NULL ? *pfield != 0 : !ignore[lo]);
+  QObject::connect(pa, &QAction::triggered, pa,
+    [pfield, pa, lo, hi, except]() {
+      int i;
+      if (pfield != NULL) {
+        *pfield = !*pfield;
+        pa->setChecked(*pfield != 0);
+        for (i = lo; i <= hi; i++)
+          ignore[i] = !*pfield || !ignore[i];
+      } else {
+        for (i = lo; i <= hi; i++)
+          if (i != except)
+            ignore[i] = !ignore[i];
+        pa->setChecked(!ignore[lo]);
+      }
+      AdjustRestrictions();
+      RecastAndRedrawQt();
+    });
+  return pa;
+}
+
+
 static void BuildSettingMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Setting");
@@ -457,15 +494,59 @@ static void BuildSettingMenu(QMainWindow *pwind)
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "N&ull", 22,
     &us.nHouseSystem, fTrue);
-  pmenu->addSeparator();
 
+  QMenu *pmenuHouseSet = pmenu->addMenu("House S&ettings");
+  QAction *paSolar = pmenuHouseSet->addAction("&Solar Chart");
+  paSolar->setCheckable(true);
+  paSolar->setChecked(us.objOnAsc != 0);
+  QObject::connect(paSolar, &QAction::triggered, pwind, [paSolar]() {
+    us.objOnAsc = us.objOnAsc ? 0 : oSun+1;
+    paSolar->setChecked(us.objOnAsc != 0);
+    RecastAndRedrawQt();
+  });
+  AddToggleAction(pmenuHouseSet, "&3D Houses", &us.fHouse3D, fTrue);
+  pmenuHouseSet->addSeparator();
+  AddToggleAction(pmenuHouseSet, "Show &Decans", &us.fDecan, fTrue);
+  AddToggleAction(pmenuHouseSet, "Show D&wads", &us.nDwad, fTrue);
+  AddToggleAction(pmenuHouseSet, "&Flip Signs with Houses", &us.fFlip, fTrue);
+  AddToggleAction(pmenuHouseSet, "&Geodetic Houses", &us.fGeodetic, fTrue);
+  pmenuHouseSet->addSeparator();
+  AddToggleAction(pmenuHouseSet, "&Indian Wheel Order", &us.fIndian, fFalse);
+  AddToggleAction(pmenuHouseSet, "Show &Navamsas", &us.fNavamsa, fTrue);
+
+  QAction *paAspect = pmenu->addAction("&Aspect Settings...");
+  QObject::connect(paAspect, &QAction::triggered, pwind,
+    []() { ShowAspectDialogQt(); });
   QAction *paObject = pmenu->addAction("&Object Settings...");
   QObject::connect(paObject, &QAction::triggered, pwind,
     []() { ShowObjectDialogQt(); });
   pmenu->addSeparator();
+
   QAction *paRestrict = pmenu->addAction("&Restrictions...");
   QObject::connect(paRestrict, &QAction::triggered, pwind,
     []() { ShowRestrictDialogQt(); });
+  QAction *paStarRestrict = pmenu->addAction("Star Restr&ictions...");
+  QObject::connect(paStarRestrict, &QAction::triggered, pwind,
+    []() { ShowStarRestrictDialogQt(); });
+  QAction *paTransitRestrict = pmenu->addAction("&Transit Restrictions...");
+  QObject::connect(paTransitRestrict, &QAction::triggered, pwind,
+    []() { ShowTransitRestrictDialogQt(); });
+  pmenu->addSeparator();
+
+  AddCategoryRestrictAction(pmenu, "Include &Minors", NULL, oChi, oEP,
+    oNod);
+  AddCategoryRestrictAction(pmenu, "Include &Cusps", &us.fCusp, cuspLo,
+    cuspHi, -1);
+  AddCategoryRestrictAction(pmenu, "Include &Uranians", &us.fUranian,
+    uranLo, uranHi, -1);
+  AddCategoryRestrictAction(pmenu, "Include D&warfs", &us.fDwarf, dwarfLo,
+    dwarfHi, -1);
+  AddCategoryRestrictAction(pmenu, "Include &Fixed Stars", &us.fStar,
+    starLo, starHi, -1);
+  AddCategoryRestrictAction(pmenu, "Include &Moons", &us.fMoons, moonsLo,
+    moonsHi, -1);
+  AddCategoryRestrictAction(pmenu, "Include &Body Centers (COB)", &us.fCOB,
+    cobLo, cobHi, -1);
 }
 
 

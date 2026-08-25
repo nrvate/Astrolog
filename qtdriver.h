@@ -66,6 +66,9 @@ void ShowProgressDialogQt();
 void ShowChartSettingsDialogQt();
 void ShowCommandLineDialogQt();
 void ShowAboutDialogQt();
+void ShowAspectDialogQt();
+void ShowStarRestrictDialogQt();
+void ShowTransitRestrictDialogQt();
 
 #endif // __QTDRIVER_H
 

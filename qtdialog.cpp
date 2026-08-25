@@ -48,6 +48,7 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QScrollArea>
+#include <QtCore/QVector>
 
 #include "astrolog.h"
 #include "qtdriver.h"
@@ -269,25 +270,30 @@ void ShowObjectDialogQt()
 }
 
 
-// Object restriction (show/hide), equivalent to Windows' DlgRestrict, for
-// the core planets and angles (object indices 0 through oCore).
+// Object restriction (show/hide), equivalent to Windows' DlgRestrict --
+// shared by the main Restrictions, Star Restrictions, and Transit
+// Restrictions menu items, which differ only in object range and which
+// ignore array they edit, same as Windows' one DlgRestrict does based on
+// wi.wCmd.
 
-void ShowRestrictDialogQt()
+static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
+  byte *rgignore)
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Restrictions");
+  dlg.setWindowTitle(szTitle);
   dlg.resize(300, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QScrollArea *pscroll = new QScrollArea(&dlg);
   QWidget *pinner = new QWidget();
   QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
-  QCheckBox *rgpcb[oCore+1];
+  QVector<QCheckBox *> rgpcb;
   int i;
 
-  for (i = 0; i <= oCore; i++) {
-    rgpcb[i] = new QCheckBox(QString("Show ") + szObjName[i]);
-    rgpcb[i]->setChecked(!ignore[i]);
-    pinnerlayout->addWidget(rgpcb[i]);
+  for (i = lo; i <= hi; i++) {
+    QCheckBox *pcb = new QCheckBox(QString("Show ") + szObjName[i]);
+    pcb->setChecked(!rgignore[i]);
+    pinnerlayout->addWidget(pcb);
+    rgpcb.append(pcb);
   }
   pscroll->setWidget(pinner);
   pscroll->setWidgetResizable(true);
@@ -302,10 +308,25 @@ void ShowRestrictDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  for (i = 0; i <= oCore; i++)
-    ignore[i] = !rgpcb[i]->isChecked();
+  for (i = lo; i <= hi; i++)
+    rgignore[i] = !rgpcb[i-lo]->isChecked();
   AdjustRestrictions();
   RecastAndRedrawQt();
+}
+
+void ShowRestrictDialogQt()
+{
+  ShowRestrictRangeDialogQt("Restrictions", 0, oCore, ignore);
+}
+
+void ShowStarRestrictDialogQt()
+{
+  ShowRestrictRangeDialogQt("Star Restrictions", starLo, starHi, ignore);
+}
+
+void ShowTransitRestrictDialogQt()
+{
+  ShowRestrictRangeDialogQt("Transit Restrictions", 0, oCore, ignore2);
 }
 
 
@@ -735,6 +756,74 @@ void ShowAboutDialogQt()
   playout->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   dlg.exec();
+}
+
+
+// Aspect settings, equivalent to Windows' DlgAspect: per aspect maximum
+// orb, exact angle, influence, color, and restriction, for all cAspect
+// aspects.
+
+void ShowAspectDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Aspect Settings");
+  dlg.resize(500, 500);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QGridLayout *pgrid = new QGridLayout(pinner);
+  QVector<QCheckBox *> rgpcbShow;
+  QVector<QLineEdit *> rgpeOrb, rgpeAngle, rgpeInf, rgpeColor;
+  int i;
+
+  pgrid->addWidget(new QLabel("Aspect"), 0, 0);
+  pgrid->addWidget(new QLabel("Show"), 0, 1);
+  pgrid->addWidget(new QLabel("Max Orb"), 0, 2);
+  pgrid->addWidget(new QLabel("Angle"), 0, 3);
+  pgrid->addWidget(new QLabel("Influence"), 0, 4);
+  pgrid->addWidget(new QLabel("Color"), 0, 5);
+  for (i = 1; i <= cAspect; i++) {
+    pgrid->addWidget(new QLabel(szAspectName[i]), i, 0);
+    QCheckBox *pcb = new QCheckBox();
+    pcb->setChecked(!ignorea[i]);
+    pgrid->addWidget(pcb, i, 1);
+    rgpcbShow.append(pcb);
+    QLineEdit *peOrb = new QLineEdit(QString::number(rAspOrb[i]));
+    pgrid->addWidget(peOrb, i, 2);
+    rgpeOrb.append(peOrb);
+    QLineEdit *peAngle = new QLineEdit(QString::number(rAspAngle[i]));
+    pgrid->addWidget(peAngle, i, 3);
+    rgpeAngle.append(peAngle);
+    QLineEdit *peInf = new QLineEdit(QString::number(rAspInf[i]));
+    pgrid->addWidget(peInf, i, 4);
+    rgpeInf.append(peInf);
+    QLineEdit *peColor = new QLineEdit(SzColor(kAspA[i]));
+    pgrid->addWidget(peColor, i, 5);
+    rgpeColor.append(peColor);
+  }
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (i = 1; i <= cAspect; i++) {
+    ignorea[i] = !rgpcbShow[i-1]->isChecked();
+    rAspOrb[i] = rgpeOrb[i-1]->text().toDouble();
+    rAspAngle[i] = rgpeAngle[i-1]->text().toDouble();
+    rAspInf[i] = rgpeInf[i-1]->text().toDouble();
+    QByteArray ba = rgpeColor[i-1]->text().toLocal8Bit();
+    kAspA[i] = NParseSz(ba.constData(), pmColor);
+  }
+  AdjustAspectCount();
+  RecastAndRedrawQt();
 }
 
 #endif // QT
