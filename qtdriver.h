@@ -60,6 +60,9 @@ void SyncHelioMenuQt();
 // Dialog launchers, implemented in qtdialog.cpp, wired up to the menu bar
 // built in qtdriver.cpp.
 void ShowChartInfoDialogQt();
+void ShowChartInfo2DialogQt();
+void ShowChartsAllDialogQt();
+void ShowOpenChart2DialogQt();
 void ShowColorDialogQt();
 void ShowObjectDialogQt();
 void ShowRestrictDialogQt();

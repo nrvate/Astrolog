@@ -477,6 +477,9 @@ static void BuildFileMenu(QMainWindow *pwind)
   QAction *paOpen = pmenu->addAction("&Open Chart...");
   QObject::connect(paOpen, &QAction::triggered, pwind,
     []() { ShowOpenChartDialogQt(); });
+  QAction *paOpen2 = pmenu->addAction("Open Chart #&2...");
+  QObject::connect(paOpen2, &QAction::triggered, pwind,
+    []() { ShowOpenChart2DialogQt(); });
   QAction *paSave = pmenu->addAction("&Save Chart...");
   QObject::connect(paSave, &QAction::triggered, pwind,
     []() { ShowSaveChartDialogQt(); });
@@ -601,6 +604,26 @@ static void BuildInfoMenu(QMainWindow *pwind)
   QAction *paDefault = pmenu->addAction("&Default Chart Info...");
   QObject::connect(paDefault, &QAction::triggered, pwind,
     []() { ShowDefaultInfoDialogQt(); });
+  pmenu->addSeparator();
+
+  QAction *paInfo2 = pmenu->addAction("Set Chart #&2 Info...");
+  QObject::connect(paInfo2, &QAction::triggered, pwind,
+    []() { ShowChartInfo2DialogQt(); });
+  QAction *paInfoAll = pmenu->addAction("Charts #&3 Through #6...");
+  QObject::connect(paInfoAll, &QAction::triggered, pwind,
+    []() { ShowChartsAllDialogQt(); });
+  // Chart list navigation (Previous/Next/First/Last Chart and the Chart
+  // List dialog itself) isn't built yet -- it needs the is.rgci chart list
+  // array, which nothing in this port populates so far. Swap lives here
+  // because that's where Windows puts it, and it only touches the two
+  // chart slots, not the list.
+  QMenu *pmenuList = pmenu->addMenu("Chart &List");
+  QAction *paSwap = pmenuList->addAction("&Swap Chart #1 and #2");
+  QObject::connect(paSwap, &QAction::triggered, pwind, []() {
+    CI ciT;
+    SwapTemp(ciCore, ciTwin, ciT);
+    RecastAndRedrawQt();
+  });
   pmenu->addSeparator();
 
   QActionGroup *pgroup = new QActionGroup(pwind);

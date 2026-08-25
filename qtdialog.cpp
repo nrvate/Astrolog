@@ -49,6 +49,7 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QScrollArea>
+#include <QtWidgets/QPushButton>
 #include <QtCore/QVector>
 #include <QtCore/QMimeData>
 #include <QtGui/QClipboard>
@@ -747,41 +748,61 @@ void ShowGraphicsSettingsDialogQt()
 // lets someone actually create a chart interactively instead of only ever
 // loading one from disk.
 
-void ShowChartInfoDialogQt()
+static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Chart Info");
+  dlg.setWindowTitle(szTitle);
   QFormLayout *playout = new QFormLayout(&dlg);
 
-  QLineEdit *peName = new QLineEdit(FSzSet(ciCore.nam) ? ciCore.nam : "");
-  QLineEdit *peLoc  = new QLineEdit(FSzSet(ciCore.loc) ? ciCore.loc : "");
-  QLineEdit *peMon  = new QLineEdit(QString::number(ciCore.mon));
-  QLineEdit *peDay  = new QLineEdit(QString::number(ciCore.day));
-  QLineEdit *peYea  = new QLineEdit(QString::number(ciCore.yea));
-  QLineEdit *peTim  = new QLineEdit(QString::number(ciCore.tim));
-  // Daylight offset has special sentinel values (see astrolog.h's dstAuto);
-  // show and accept them as the same "ST"/"DT"/"Autodetect" text the rest
-  // of Astrolog uses (e.g. when saving a chart file), not a raw number.
-  QLineEdit *peDst  = new QLineEdit(ciCore.dst == 0.0 ? "ST" :
-    (ciCore.dst == 1.0 ? "DT" :
-    (ciCore.dst == dstAuto ? "Autodetect" : SzZone(ciCore.dst))));
-  QLineEdit *peZon  = new QLineEdit(QString::number(ciCore.zon));
-  QLineEdit *peLon  = new QLineEdit(QString::number(ciCore.lon));
-  QLineEdit *peLat  = new QLineEdit(QString::number(ciCore.lat));
+  // Every field is shown in the same human readable form Windows' DlgInfo
+  // uses (SetEditMDYT/SetEditSZOA), not as a raw number: month as a name,
+  // time as "9:54pm"/"21:54", zone as "8W", and longitude/latitude as
+  // "122W19"/"47N36". Astrolog's own parsers accept exactly these forms
+  // back (that's what the NParseSz/RParseSz calls below do), so this is
+  // purely a display change -- no extra conversion needed either way.
+  char sz[cchSzMax];
+  QLineEdit *peName = new QLineEdit(FSzSet(pci->nam) ? pci->nam : "");
+  QLineEdit *peLoc  = new QLineEdit(FSzSet(pci->loc) ? pci->loc : "");
+  sprintf(sz, "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
+  QLineEdit *peMon  = new QLineEdit(sz);
+  QLineEdit *peDay  = new QLineEdit(QString::number(pci->day));
+  QLineEdit *peYea  = new QLineEdit(QString::number(pci->yea));
+  QLineEdit *peTim  = new QLineEdit(SzTim(pci->tim));
+  // Daylight saving has sentinel values (see astrolog.h's dstAuto) rather
+  // than being a plain offset. Windows resolves dstAuto to its concrete
+  // Yes/No via DstReal() before display, which silently discards the
+  // user's "work it out for me" choice on the next OK -- show it as
+  // "Autodetect" instead so it survives a round trip.
+  QLineEdit *peDst  = new QLineEdit(pci->dst == 0.0 ? "No" :
+    (pci->dst == 1.0 ? "Yes" :
+    (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))));
+  sprintf(sz, "%s", SzZone(pci->zon));
+  QLineEdit *peZon  = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  // SzLocation() returns longitude and latitude in one string split at
+  // is.ichLocSplit. Force plain ASCII while formatting: otherwise it uses
+  // a Latin-1/IBM degree byte that isn't valid UTF-8 (see the Charts
+  // dialog for where that matters), and these fields want the compact
+  // "122W19" form anyway.
+  int nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
+  sprintf(sz, "%s", SzLocation(pci->lon, pci->lat));
+  us.fAnsiChar = nSavChar;
+  sz[is.ichLocSplit] = chNull;
+  QLineEdit *peLon  = new QLineEdit(&sz[0]);
+  QLineEdit *peLat  = new QLineEdit(&sz[is.ichLocSplit+1]);
   // Long names/locations otherwise show their tail end, not their start.
   peName->setCursorPosition(0);
   peLoc->setCursorPosition(0);
 
-  playout->addRow("Name:", peName);
-  playout->addRow("Location:", peLoc);
-  playout->addRow("Month (1-12):", peMon);
+  playout->addRow("Month:", peMon);
   playout->addRow("Day:", peDay);
   playout->addRow("Year:", peYea);
-  playout->addRow("Time (decimal hours):", peTim);
-  playout->addRow("Daylight offset (hours):", peDst);
-  playout->addRow("Zone (hours west of UTC):", peZon);
-  playout->addRow("Longitude (degrees east):", peLon);
-  playout->addRow("Latitude (degrees north):", peLat);
+  playout->addRow("Time:", peTim);
+  playout->addRow("Daylight Saving:", peDst);
+  playout->addRow("Time Zone:", peZon);
+  playout->addRow("Longitude:", peLon);
+  playout->addRow("Latitude:", peLat);
+  playout->addRow("Name:", peName);
+  playout->addRow("Location:", peLoc);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -792,7 +813,7 @@ void ShowChartInfoDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  CI ci = ciCore;
+  CI ci = *pci;
   QByteArray ba;
   ba = peMon->text().toLocal8Bit(); ci.mon = NParseSz(ba.constData(), pmMon);
   ba = peDay->text().toLocal8Bit(); ci.day = NParseSz(ba.constData(), pmDay);
@@ -814,8 +835,190 @@ void ShowChartInfoDialogQt()
   ba = peName->text().toLocal8Bit(); ci.nam = SzClone((char *)ba.constData());
   ba = peLoc->text().toLocal8Bit();  ci.loc = SzClone((char *)ba.constData());
 
-  ciCore = ci;
+  *pci = ci;
   RecastAndRedrawQt();
+}
+
+void ShowChartInfoDialogQt()
+{
+  ShowChartInfoForQt(&ciCore, "Chart Info");
+}
+
+void ShowChartInfo2DialogQt()
+{
+  ShowChartInfoForQt(&ciTwin, "Chart #2 Info");
+}
+
+
+// Load a chart file into one of the six chart slots (rgpci/rgpcp, where
+// slot 1 is the main chart and 2-6 are the extra rings a bi/tri/.../hexa
+// wheel draws), equivalent to Windows' DlgOpenChart when wi.nDlgChart > 1.
+// FInputData() always loads into ciCore, so for the extra slots the
+// current chart is saved, the file is read, the result copied into the
+// target slot, and ciCore put back -- same dance Windows does.
+
+static flag FOpenChartIntoQt(int iChart, CONST char *szFile)
+{
+  CI ciT = ciCore;
+
+  if (!FInputData(szFile)) {
+    ciCore = ciT;
+    return fFalse;
+  }
+  if (iChart <= 1)
+    cp1 = cp0;
+  else {
+    *rgpci[iChart] = ciCore;
+    *rgpcp[iChart] = cp0;
+    ciCore = ciT;
+  }
+  return fTrue;
+}
+
+static void ShowOpenChartIntoDialogQt(int iChart)
+{
+  QString qsTitle = iChart <= 1 ? QString("Open Chart") :
+    QString("Open Chart #%1").arg(iChart);
+  QString qs = QFileDialog::getOpenFileName(gi.qwind, qsTitle, QString(),
+    "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FOpenChartIntoQt(iChart, ba.constData())) {
+    QMessageBox::warning(gi.qwind, szAppName, "Could not read that chart file.");
+    return;
+  }
+  RecastAndRedrawQt();
+}
+
+void ShowOpenChart2DialogQt()
+{
+  ShowOpenChartIntoDialogQt(2);
+}
+
+
+// The multi-chart manager, equivalent to Windows' DlgInfoAll ("Charts #3
+// Through #6" on the Info menu, though it covers all six): a summary line
+// per chart slot with buttons to load a file into it or edit its info,
+// plus how many of those slots the wheel actually draws and which of them
+// are progressed.
+
+void ShowChartsAllDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Charts");
+  dlg.resize(640, 400);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QGridLayout *pgrid = new QGridLayout();
+  QLabel *rgplabel[cRing+1];
+  int i;
+
+  // Rebuilds one slot's summary line. Windows formats the date/location
+  // line with us.fAnsiChar/us.fGraphics forced so SzDate() and friends
+  // emit a real degree sign rather than the ASCII ':' fallback; do the
+  // same, and additionally pin us.nCharset to Latin-1 so the byte that
+  // comes back is known (ChDeg() would otherwise pick the IBM codepage
+  // degree at 0xF8 depending on the user's -Ya setting). That byte isn't
+  // valid UTF-8 either way, so this line is decoded as Latin-1 -- but the
+  // name/location line is user-entered text that really may be UTF-8, so
+  // it's generated outside the override and decoded as such.
+  auto RefreshRow = [&rgplabel](int iChart) {
+    char sz[cchSzMax];
+    CI *pci = rgpci[iChart];
+    int nSavChar = us.fAnsiChar, nSavSet = us.nCharset;
+    flag fSav = us.fGraphics;
+    us.fAnsiChar = 2; us.nCharset = ccLatin; us.fGraphics = fTrue;
+    int nDay = DayOfWeek(pci->mon, pci->day, pci->yea);
+    sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
+      SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
+      ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
+    us.fAnsiChar = nSavChar; us.nCharset = nSavSet; us.fGraphics = fSav;
+    QString qs = QString::fromLatin1(sz);
+    sprintf(sz, "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
+      FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
+      FSzSet(pci->loc) ? pci->loc : "");
+    QString qsName = QString::fromLocal8Bit(sz);
+    if (!qsName.isEmpty())
+      qs += "\n" + qsName;
+    rgplabel[iChart]->setText(qs);
+  };
+
+  for (i = 1; i <= cRing; i++) {
+    QPushButton *pbOpen = new QPushButton(i <= 1 ?
+      QString("Open Chart...") : QString("Open Chart #%1...").arg(i));
+    QPushButton *pbInfo = new QPushButton(i <= 1 ?
+      QString("Set Chart Info...") : QString("Set Chart #%1 Info...").arg(i));
+    rgplabel[i] = new QLabel();
+    rgplabel[i]->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    pgrid->addWidget(pbOpen, i-1, 0);
+    pgrid->addWidget(pbInfo, i-1, 1);
+    pgrid->addWidget(rgplabel[i], i-1, 2);
+    pgrid->setColumnStretch(2, 1);
+    RefreshRow(i);
+    int iChart = i;
+    QObject::connect(pbOpen, &QPushButton::clicked, &dlg,
+      [iChart, RefreshRow]() {
+        ShowOpenChartIntoDialogQt(iChart);
+        RefreshRow(iChart);
+      });
+    QObject::connect(pbInfo, &QPushButton::clicked, &dlg,
+      [iChart, RefreshRow]() {
+        QByteArray baTitle = (iChart <= 1 ? QString("Chart Info") :
+          QString("Chart #%1 Info").arg(iChart)).toLocal8Bit();
+        ShowChartInfoForQt(rgpci[iChart], baTitle.constData());
+        RefreshRow(iChart);
+      });
+  }
+  pouter->addLayout(pgrid);
+
+  QHBoxLayout *phbox = new QHBoxLayout();
+  QGroupBox *pgbWheel = new QGroupBox("Wheel Chart Is");
+  QVBoxLayout *pvWheel = new QVBoxLayout(pgbWheel);
+  QButtonGroup *pgroupWheel = new QButtonGroup(&dlg);
+  CONST char *rgszWheel[6] = { "1: Single Wheel", "2: Dual Wheel",
+    "3: Tri-Wheel", "4: Quad-Wheel", "5: Quin-Wheel", "6: Hexa-Wheel" };
+  // us.nRel is 0 for a single wheel and counts down (rcDual is -1, through
+  // rcHexaWheel at -5) for multi-wheels; the other rcXxx values are
+  // unrelated relationship chart types, which show here as a single wheel.
+  int nWheelCur = (us.nRel <= rcNone && us.nRel >= rcHexaWheel) ?
+    -us.nRel : 0;
+  for (i = 0; i < 6; i++) {
+    QRadioButton *prb = new QRadioButton(rgszWheel[i]);
+    prb->setChecked(i == nWheelCur);
+    pgroupWheel->addButton(prb, i);
+    pvWheel->addWidget(prb);
+  }
+  phbox->addWidget(pgbWheel);
+
+  QGroupBox *pgbProg = new QGroupBox("Progress");
+  QVBoxLayout *pvProg = new QVBoxLayout(pgbProg);
+  QCheckBox *rgpcbProg[cRing+1];
+  for (i = 2; i <= 5; i++) {
+    rgpcbProg[i] = new QCheckBox(QString::number(i));
+    rgpcbProg[i]->setChecked(rgfProg[i] != 0);
+    pvProg->addWidget(rgpcbProg[i]);
+  }
+  phbox->addWidget(pgbProg);
+  phbox->addStretch(1);
+  pouter->addLayout(phbox);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (i = 2; i <= 5; i++)
+    rgfProg[i] = rgpcbProg[i]->isChecked();
+  // SetRelQt() recasts and redraws, and syncs the Info menu's relationship
+  // radios for the values that have one. The multi-wheel counts past
+  // rcDual don't appear in that menu, so picking one leaves whichever
+  // relationship item was checked there showing stale -- same
+  // menu-vs-dialog staleness accepted elsewhere in this port.
+  SetRelQt(-pgroupWheel->checkedId());
 }
 
 
