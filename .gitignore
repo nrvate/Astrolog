@@ -6,3 +6,7 @@
 
 # JetBrains IDE project files
 .idea/
+/astrolog-qt-test
+/astrolog-qt-asan
+/obj-qt-test/
+/obj-qt-asan/

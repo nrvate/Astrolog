@@ -754,10 +754,15 @@ void XChartGridRelation()
   // Loop through each cell in each row and column of grid.
 
   for (y = 0, j0 = -2; y <= gi.nGridCell; y++) {
+    // rgobjList[] must not be read until j0 is in range. j0 starts at -1
+    // here for the header row, and the "j0 >= 0" test below only runs
+    // after this line has already read rgobjList[-1]. The bounds test is
+    // also moved ahead of ignore[j] for the same reason: past the end of
+    // the list there is no j to look up.
     do {
       j0++;
-      j = rgobjList[j0];
-    } while (j0 >= 0 && ignore[j] && j0 <= is.nObj);
+      j = (j0 >= 0 && j0 <= is.nObj) ? rgobjList[j0] : -1;
+    } while (j0 >= 0 && j0 <= is.nObj && ignore[j]);
     DrawColor(gi.kiGray);
     DrawDash(0, (y+1)*unit, siz, (y+1)*unit, !gs.fColor);
     DrawDash((y+1)*unit, 0, (y+1)*unit, siz, !gs.fColor);
@@ -766,10 +771,11 @@ void XChartGridRelation()
     DrawEdge(y*unit, 0, (y+1)*unit, unit);
     DrawEdge(y*unit, y*unit, (y+1)*unit, (y+1)*unit);
     if (j0 <= is.nObj) for (x = 0, i0 = -2; x <= gi.nGridCell; x++) {
+      // Same as the row loop above.
       do {
         i0++;
-        i = rgobjList[i0];
-      } while (i0 >= 0 && ignore[i] && i0 <= is.nObj);
+        i = (i0 >= 0 && i0 <= is.nObj) ? rgobjList[i0] : -1;
+      } while (i0 >= 0 && i0 <= is.nObj && ignore[i]);
 
       // Again, are looping through each cell in each row and column.
 

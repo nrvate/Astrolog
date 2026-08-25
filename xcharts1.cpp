@@ -3071,6 +3071,14 @@ void XChartMidpoint()
     for (i = 1; i < count; i++) {
       j = i-1;
       loop {
+        // "j >= 0" has to be tested before the comparison rather than
+        // alongside it: every case below reads element j, so once j
+        // reaches -1 the switch reads one element off the front of
+        // obj1/obj2/rOrb/rDiff before the old combined test could stop
+        // it. Harmless looking, and it sorts the same either way, but it
+        // is a real out of bounds read on every midpoint chart drawn.
+        if (j < 0)
+          break;
         switch (us.nAspectSort) {
         case asO: f = obj1[j]*objMax+obj2[j]>obj1[j+1]*objMax+obj2[j+1]; break;
         case asP: f = obj2[j]*objMax+obj1[j]>obj2[j+1]*objMax+obj1[j+1]; break;
@@ -3078,7 +3086,7 @@ void XChartMidpoint()
         case asn: f = rOrb[j] > rOrb[j+1];             break;
         case asA: default: f = rDiff[j] > rDiff[j+1];  break;
         }
-        if (!(j >= 0 && f))
+        if (!f)
           break;
         SwapN(obj1[j], obj1[j+1]); SwapN(obj2[j], obj2[j+1]);
         SwapR(&rOrb[j], &rOrb[j+1]); SwapR(&rDiff[j], &rDiff[j+1]);

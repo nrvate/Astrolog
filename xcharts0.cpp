@@ -552,6 +552,12 @@ void DrawSidebar()
     }
     if (gi.nMode == gSector) {
       r = GFromO(cp1.obj[i]); s = (int)r + 1;
+      // GFromO() is (rDegMax - position)/10, so a position of exactly 0
+      // gives 36.0 and s = 37 -- one past the end of pluszone[], which
+      // holds cSector+1 entries indexed 0 through 36. That is sector 1
+      // arrived at the long way round, so wrap rather than clamp.
+      if (s > cSector)
+        s -= cSector;
       if (!us.fSeconds)
         sprintf(sz, " %2d", s);
       else
