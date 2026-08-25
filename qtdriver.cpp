@@ -47,6 +47,8 @@
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtWidgets/QScrollArea>
+#include <QtWidgets/QProxyStyle>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QScrollBar>
 #include <QtGui/QPaintEvent>
 #include <QtGui/QDesktopServices>
@@ -3596,12 +3598,34 @@ QAction *PaFindActionTestQt(CONST char *sz)
 // from BeginX() the same way the X11 backend's window setup is, once per
 // program invocation.
 
+// Windows' dialogs put Cancel to the left of OK -- see the button X
+// positions in astrolog.rc, where Cancel sits at 320 and OK at 375 in
+// dlgAspect, and the same the whole way through. Qt orders the buttons in
+// a QDialogButtonBox by platform convention instead, which under the
+// Fusion style is the other way round. Rather than hand-build the button
+// row in each of the twenty-odd dialogs, override the one style hint that
+// decides it: GnomeLayout is Qt's name for Cancel-then-OK.
+
+class AstroStyleQt : public QProxyStyle
+{
+public:
+  int styleHint(StyleHint hint, CONST QStyleOption *popt = NULL,
+    CONST QWidget *pw = NULL, QStyleHintReturn *pret = NULL) const override
+  {
+    if (hint == SH_DialogButtonLayout)
+      return QDialogButtonBox::GnomeLayout;
+    return QProxyStyle::styleHint(hint, popt, pw, pret);
+  }
+};
+
+
 void BeginQt()
 {
   static int s_argc = 1;
   static char *s_argv[] = { (char *)"astrolog", NULL };
 
   gi.qapp = new QApplication(s_argc, s_argv);
+  QApplication::setStyle(new AstroStyleQt);
   LoadBundledFontsQt();
   gi.qwind = new QMainWindow();
   gi.qwind->setWindowTitle(szAppName);

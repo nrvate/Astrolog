@@ -234,6 +234,21 @@ static void PrepareDialogQt(QDialog *pdlg)
   // field that needs widening. Windows' edit controls show the head.
   for (QLineEdit *pe : pdlg->findChildren<QLineEdit *>())
     pe->setCursorPosition(0);
+
+  // Size the dialog to what it holds. Every Windows dialog is a fixed size
+  // that fits its contents exactly; a Qt dialog left at whatever size it
+  // was given crops its content behind a scrollbar instead. Any dialog
+  // still using a scroll area is asked for the size of the widget inside
+  // it, capped so a very long list can't grow taller than a screen.
+  for (QScrollArea *psa : pdlg->findChildren<QScrollArea *>()) {
+    QWidget *pw = psa->widget();
+    if (pw == NULL)
+      continue;
+    QSize siz = pw->sizeHint();
+    psa->setMinimumSize(QSize(Min(siz.width() + 32, 1500),
+      Min(siz.height() + 8, 900)));
+  }
+  pdlg->adjustSize();
 }
 
 
@@ -247,6 +262,76 @@ static QString SzFormatRQt(real r, int n)
   FormatR(sz, r, n);
   return QString(sz);
 }
+
+// The object labels Windows' dialogs actually show, taken from the CONTROL
+// entries of dlgRestrict in astrolog.rc. They aren't szObjName[]: Windows
+// spells out "Pallas Athena" and "Part of Fortune" where the internal name
+// is the abbreviated "Pallas" and "Fortune". The "&" mnemonics are the ones
+// Windows assigns, and Qt reads them the same way, so this brings the
+// keyboard shortcuts across too.
+
+static CONST char *rgszObjDlgQt[] = {
+  "&Earth", "&Sun", "M&oon",
+  "Mercur&y", "&Venus", "&Mars",
+  "&Jupiter", "Sa&turn", "Ur&anus",
+  "&Neptune", "&Pluto", "&Chiron",
+  "Ceres", "Pallas Athena", "Juno",
+  "Vesta", "North Node", "South Node",
+  "Lilith", "Part of Fortune", "Vertex",
+  "East Point", "Ascendant", "&2nd Cusp",
+  "&3rd Cusp", "Nadir", "&5th Cusp",
+  "&6th Cusp", "&Descendant", "&8th Cusp",
+  "&9th Cusp", "Mid&heaven", "&11th Cusp",
+  "12th Cusp", "Vu&lcan", "Cupido",
+  "Hades", "Zeus", "Kronos",
+  "Apollon", "Admetos", "Vulkanus",
+  "Poseidon", "Hygiea", "Pholus",
+  "Eris", "Haumea", "Makemake",
+  "Gonggong", "Quaoar", "Sedna",
+  "Orcus" };
+#define cszObjDlgQt (int)(sizeof(rgszObjDlgQt) / sizeof(char *))
+
+// The label for object "i" in a dialog: the Windows one where there is
+// one, otherwise the internal name.
+static QString SzObjDlgQt(int i)
+{
+  if (i >= 0 && i < cszObjDlgQt && rgszObjDlgQt[i][0] != chNull)
+    return QString(rgszObjDlgQt[i]);
+  return QString(szObjName[i]);
+}
+
+// Windows lays its per-row setting grids out in several columns side by
+// side, sized to fit, rather than one tall scrolling list -- see the
+// repeated control X positions in each dlg* block of astrolog.rc. These
+// two put a Qt QGridLayout into the same shape.
+//
+// PlaceRowQt() says where row "i" lands given how many rows go in a
+// column and how many fields a row has. Grid row 0 is left for the column
+// headers, and one grid column between blocks acts as a gutter.
+
+static void PlaceRowQt(int i, int cRowPerCol, int cField, int *pnRow,
+  int *pnCol)
+{
+  *pnRow = i % cRowPerCol + 1;
+  *pnCol = (i / cRowPerCol) * (cField + 2);
+}
+
+// Add the header labels above every column block. "rgsz" lists the field
+// headings, left to right, not counting the row's name column.
+static void HeadersQt(QGridLayout *pgrid, int cCol, int cField,
+  CONST char **rgsz)
+{
+  int iCol, iField, nBase;
+
+  for (iCol = 0; iCol < cCol; iCol++) {
+    nBase = iCol * (cField + 2);
+    for (iField = 0; iField < cField; iField++)
+      pgrid->addWidget(new QLabel(rgsz[iField]), 0, nBase + 1 + iField);
+    if (iCol < cCol-1)
+      pgrid->setColumnMinimumWidth(nBase + cField + 1, 12);
+  }
+}
+
 
 // Load a chart file chosen via a standard file picker, exactly as Windows'
 // DlgOpenChart does via the stock Windows file dialog -- no custom dialog
@@ -1771,38 +1856,36 @@ void ShowColorDialogQt()
 
 void ShowObjectDialogQt()
 {
+  // Two columns, as Windows' dlgObject has (astrolog.rc column X 5 and 190).
+  CONST int cCol = 2, cField = 4;
+  CONST int cRowPerCol = (oCore + 1 + cCol - 1) / cCol;
+  CONST char *rgszHead[] = {"Max Orb", "Add", "Influence", "Color"};
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Objects");
-  dlg.resize(500, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QGridLayout *pgrid = new QGridLayout(pinner);
+  QGridLayout *pgrid = new QGridLayout();
   QLineEdit *rgpeOrb[oCore+1];
   QLineEdit *rgpeAdd[oCore+1];
   QLineEdit *rgpeInf[oCore+1];
   QComboBox *rgpcbColor[oCore+1];
-  int i;
+  int i, nRow, nCol;
 
-  pgrid->addWidget(new QLabel("Object"), 0, 0);
-  pgrid->addWidget(new QLabel("Max Orb"), 0, 1);
-  pgrid->addWidget(new QLabel("Orb Add"), 0, 2);
-  pgrid->addWidget(new QLabel("Influence"), 0, 3);
-  pgrid->addWidget(new QLabel("Color"), 0, 4);
+  pgrid->setHorizontalSpacing(4);
+  pgrid->setVerticalSpacing(2);
+  HeadersQt(pgrid, cCol, cField, rgszHead);
   for (i = 0; i <= oCore; i++) {
-    pgrid->addWidget(new QLabel(szObjName[i]), i+1, 0);
+    PlaceRowQt(i, cRowPerCol, cField, &nRow, &nCol);
+    pgrid->addWidget(new QLabel(SzObjDlgQt(i)), nRow, nCol);
     rgpeOrb[i] = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
-    pgrid->addWidget(rgpeOrb[i], i+1, 1);
+    pgrid->addWidget(rgpeOrb[i], nRow, nCol+1);
     rgpeAdd[i] = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
-    pgrid->addWidget(rgpeAdd[i], i+1, 2);
+    pgrid->addWidget(rgpeAdd[i], nRow, nCol+2);
     rgpeInf[i] = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
-    pgrid->addWidget(rgpeInf[i], i+1, 3);
+    pgrid->addWidget(rgpeInf[i], nRow, nCol+3);
     rgpcbColor[i] = NewColorComboQt(kObjU[i], 1);
-    pgrid->addWidget(rgpcbColor[i], i+1, 4);
+    pgrid->addWidget(rgpcbColor[i], nRow, nCol+4);
   }
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  pouter->addLayout(pgrid);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -1860,29 +1943,72 @@ typedef struct {
 // and inverting it is the one difference that would silently produce the
 // opposite chart.
 
+// Windows doesn't lay these boxes out as one long list, nor as columns of
+// equal length: dlgRestrict puts them in five labelled group boxes, by what
+// kind of object each is (astrolog.rc GROUPBOX "Planets", "Minor Objects",
+// "House Cusps", "Uranians", "Dwarfs"). Splitting the same objects into six
+// even columns would put Lilith, a cusp and an asteroid in one column, so
+// the grouping is what has to be matched, not the column count.
+
+typedef struct {
+  CONST char *szLabel;
+  int lo, hi;
+} OBJGROUPQT;
+
+static CONST OBJGROUPQT rgGroupRestrictQt[] = {
+  {"Planets",       0,       oChi-1},
+  {"Minor Objects", oChi,    oCore},
+  {"House Cusps",   cuspLo,  cuspHi},
+  {"Uranians",      uranLo,  uranHi},
+  {"Dwarfs",        dwarfLo, dwarfHi} };
+#define cGroupRestrictQt \
+  (int)(sizeof(rgGroupRestrictQt) / sizeof(OBJGROUPQT))
+
 static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
-  byte *rgignore, CONST RESBUT *rgbut, int cbut, int dxWidth)
+  byte *rgignore, CONST RESBUT *rgbut, int cbut, int cCol)
 {
+  // With cCol 0 the object range is split into the group boxes above;
+  // otherwise it's laid out in cCol plain columns, which is what the star
+  // and moon ranges want since neither has groups on Windows either.
+  CONST int cRowPerCol = (cCol > 0 ? (hi - lo + 1 + cCol - 1) / cCol : 0);
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle(szTitle);
-  dlg.resize(dxWidth, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QHBoxLayout *pmiddle = new QHBoxLayout();
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
   QVector<QCheckBox *> rgpcb;
-  int i;
+  int i, iGroup, jlo, jhi;
 
-  for (i = lo; i <= hi; i++) {
-    QCheckBox *pcb = new QCheckBox(szObjName[i]);
-    pcb->setChecked(rgignore[i] != 0);
-    pinnerlayout->addWidget(pcb);
-    rgpcb.append(pcb);
+  rgpcb.resize(hi - lo + 1);
+  if (cCol <= 0) {
+    for (iGroup = 0; iGroup < cGroupRestrictQt; iGroup++) {
+      CONST OBJGROUPQT *pgrp = &rgGroupRestrictQt[iGroup];
+      jlo = Max(pgrp->lo, lo); jhi = Min(pgrp->hi, hi);
+      if (jlo > jhi)
+        continue;
+      QGroupBox *pgb = new QGroupBox(pgrp->szLabel);
+      QVBoxLayout *pcol = new QVBoxLayout(pgb);
+      pcol->setSpacing(1);
+      for (i = jlo; i <= jhi; i++) {
+        QCheckBox *pcb = new QCheckBox(SzObjDlgQt(i));
+        pcb->setChecked(rgignore[i] != 0);
+        pcol->addWidget(pcb);
+        rgpcb[i - lo] = pcb;
+      }
+      pcol->addStretch(1);
+      pmiddle->addWidget(pgb, 0, Qt::AlignTop);
+    }
+  } else {
+    QGridLayout *pgrid = new QGridLayout();
+    pgrid->setHorizontalSpacing(10);
+    pgrid->setVerticalSpacing(1);
+    for (i = lo; i <= hi; i++) {
+      QCheckBox *pcb = new QCheckBox(SzObjDlgQt(i));
+      pcb->setChecked(rgignore[i] != 0);
+      pgrid->addWidget(pcb, (i - lo) % cRowPerCol, (i - lo) / cRowPerCol);
+      rgpcb[i - lo] = pcb;
+    }
+    pmiddle->addLayout(pgrid);
   }
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pmiddle->addWidget(pscroll);
 
   if (cbut > 0) {
     QVBoxLayout *pcol = new QVBoxLayout();
@@ -1978,19 +2104,19 @@ void ShowRestrictDialogQt()
 {
   // Wide enough for the "Copy from ... Restriction Set" button.
   ShowRestrictRangeDialogQt("Object Restrictions", 0, dwarfHi, ignore,
-    rgbutRestrict, CButRes(rgbutRestrict), 480);
+    rgbutRestrict, CButRes(rgbutRestrict), 0);
 }
 
 void ShowStarRestrictDialogQt()
 {
   ShowRestrictRangeDialogQt("Fixed Star Restrictions", starLo, starHi,
-    ignore, rgbutStar, CButRes(rgbutStar), 400);
+    ignore, rgbutStar, CButRes(rgbutStar), 5);
 }
 
 void ShowTransitRestrictDialogQt()
 {
   ShowRestrictRangeDialogQt("Transit Object Restrictions", 0, dwarfHi,
-    ignore2, rgbutTransit, CButRes(rgbutTransit), 480);
+    ignore2, rgbutTransit, CButRes(rgbutTransit), 0);
 }
 
 
@@ -2900,7 +3026,6 @@ void ShowAspectDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
   PrepareDialogQt(&dlg);
-  dlg.adjustSize();
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2924,46 +3049,46 @@ void ShowAspectDialogQt()
 
 void ShowObject2DialogQt()
 {
+  // Three columns, as Windows' dlgObject2 has (astrolog.rc column X 5,
+  // 175 and 335).
+  CONST int cCol = 3, cField = 4;
+  CONST int cRowTotal = dwarfHi + 1 - oAsc + 1;
+  CONST int cRowPerCol = (cRowTotal + cCol - 1) / cCol;
+  CONST char *rgszHead[] = {"Max Orb", "Add", "Influence", "Color"};
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("More Object Settings");
-  dlg.resize(500, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QGridLayout *pgrid = new QGridLayout(pinner);
+  QGridLayout *pgrid = new QGridLayout();
   QVector<int> rgi;
   QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
   QVector<QComboBox *> rgpcbColor;
-  int i0, i, row = 1;
+  int i0, i, iRow = 0, nRow, nCol;
 
-  pgrid->addWidget(new QLabel("Object"), 0, 0);
-  pgrid->addWidget(new QLabel("Max Orb"), 0, 1);
-  pgrid->addWidget(new QLabel("Orb Add"), 0, 2);
-  pgrid->addWidget(new QLabel("Influence"), 0, 3);
-  pgrid->addWidget(new QLabel("Color"), 0, 4);
+  pgrid->setHorizontalSpacing(4);
+  pgrid->setVerticalSpacing(2);
+  HeadersQt(pgrid, cCol, cField, rgszHead);
   for (i0 = oAsc; i0 <= dwarfHi+1; i0++) {
     i = (i0 <= dwarfHi ? i0 : starLo);
     rgi.append(i);
-    pgrid->addWidget(new QLabel(i0 <= dwarfHi ? szObjName[i] : "Stars"),
-      row, 0);
+    PlaceRowQt(iRow, cRowPerCol, cField, &nRow, &nCol);
+    pgrid->addWidget(new QLabel(i0 <= dwarfHi ? SzObjDlgQt(i) :
+      QString("Stars")), nRow, nCol);
     QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
-    pgrid->addWidget(peOrb, row, 1);
+    pgrid->addWidget(peOrb, nRow, nCol+1);
     rgpeOrb.append(peOrb);
     QLineEdit *peAdd = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
-    pgrid->addWidget(peAdd, row, 2);
+    pgrid->addWidget(peAdd, nRow, nCol+2);
     rgpeAdd.append(peAdd);
     QLineEdit *peInf = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
-    pgrid->addWidget(peInf, row, 3);
+    pgrid->addWidget(peInf, nRow, nCol+3);
     rgpeInf.append(peInf);
     // Windows widens the color list by one on the collective stars row.
     QComboBox *pcbColor = NewColorComboQt(kObjU[i], 1 + (i == starLo));
-    pgrid->addWidget(pcbColor, row, 4);
+    pgrid->addWidget(pcbColor, nRow, nCol+4);
     rgpcbColor.append(pcbColor);
-    row++;
+    iRow++;
   }
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  pouter->addLayout(pgrid);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -2975,12 +3100,12 @@ void ShowObject2DialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  for (row = 0; row < rgi.size(); row++) {
-    i = rgi[row];
-    rObjOrb[i] = rgpeOrb[row]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[row]->text().toDouble();
-    rObjInf[i] = rgpeInf[row]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[row]);
+  for (iRow = 0; iRow < rgi.size(); iRow++) {
+    i = rgi[iRow];
+    rObjOrb[i] = rgpeOrb[iRow]->text().toDouble();
+    rObjAdd[i] = rgpeAdd[iRow]->text().toDouble();
+    rObjInf[i] = rgpeInf[iRow]->text().toDouble();
+    kObjU[i] = NColorFromComboQt(rgpcbColor[iRow]);
   }
   RecastAndRedrawQt();
 }
@@ -3459,7 +3584,7 @@ void ShowDisplayDialogQt()
 void ShowMoonRestrictDialogQt()
 {
   ShowRestrictRangeDialogQt("Planetary Moon Restrictions", moonsLo, cobHi,
-    ignore, rgbutMoons, CButRes(rgbutMoons), 400);
+    ignore, rgbutMoons, CButRes(rgbutMoons), 4);
 }
 
 
@@ -3471,38 +3596,37 @@ void ShowMoonObjectDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Moon Object Settings");
-  dlg.resize(500, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
   QGridLayout *pgrid = new QGridLayout();
   QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
   QVector<QComboBox *> rgpcbColor;
-  int i, row = 1;
+  // Three columns, as Windows' dlgObjectM has (astrolog.rc X 5, 171, 330).
+  CONST int cCol = 3, cField = 4;
+  CONST int cRowPerCol = (cobHi - moonsLo + 1 + cCol - 1) / cCol;
+  CONST char *rgszHead[] = {"Max Orb", "Add", "Influence", "Color"};
+  int i, iRow = 0, nRow, nCol;
 
-  pgrid->addWidget(new QLabel("Object"), 0, 0);
-  pgrid->addWidget(new QLabel("Max Orb"), 0, 1);
-  pgrid->addWidget(new QLabel("Orb Add"), 0, 2);
-  pgrid->addWidget(new QLabel("Influence"), 0, 3);
-  pgrid->addWidget(new QLabel("Color"), 0, 4);
+  pgrid->setHorizontalSpacing(4);
+  pgrid->setVerticalSpacing(2);
+  HeadersQt(pgrid, cCol, cField, rgszHead);
   for (i = moonsLo; i <= cobHi; i++) {
-    pgrid->addWidget(new QLabel(szObjName[i]), row, 0);
+    PlaceRowQt(iRow, cRowPerCol, cField, &nRow, &nCol);
+    pgrid->addWidget(new QLabel(szObjName[i]), nRow, nCol+0);
     QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
-    pgrid->addWidget(peOrb, row, 1);
+    pgrid->addWidget(peOrb, nRow, nCol+1);
     rgpeOrb.append(peOrb);
     QLineEdit *peAdd = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
-    pgrid->addWidget(peAdd, row, 2);
+    pgrid->addWidget(peAdd, nRow, nCol+2);
     rgpeAdd.append(peAdd);
     QLineEdit *peInf = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
-    pgrid->addWidget(peInf, row, 3);
+    pgrid->addWidget(peInf, nRow, nCol+3);
     rgpeInf.append(peInf);
     QComboBox *pcbColor = NewColorComboQt(kObjU[i], 3);
-    pgrid->addWidget(pcbColor, row, 4);
+    pgrid->addWidget(pcbColor, nRow, nCol+4);
     rgpcbColor.append(pcbColor);
-    row++;
+    iRow++;
   }
-  pinnerlayout->addLayout(pgrid);
+  pouter->addLayout(pgrid);
 
   QCheckBox *pcbMoonMove = new QCheckBox(
     "Make Moons Orbit Current Central Object");
@@ -3513,13 +3637,11 @@ void ShowMoonObjectDialogQt()
   pcbMoonMove->setChecked(us.fMoonMove != 0);
   pcbMoonChartSep->setChecked(us.fMoonChartSep != 0);
   pcbMoonWheel->setChecked(gs.fMoonWheel != 0);
-  pinnerlayout->addWidget(pcbMoonMove);
-  pinnerlayout->addWidget(pcbMoonChartSep);
-  pinnerlayout->addWidget(pcbMoonWheel);
+  pouter->addWidget(pcbMoonMove);
+  pouter->addWidget(pcbMoonChartSep);
+  pouter->addWidget(pcbMoonWheel);
 
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  pouter->addLayout(pgrid);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -3532,11 +3654,11 @@ void ShowMoonObjectDialogQt()
     return;
 
   for (i = moonsLo; i <= cobHi; i++) {
-    row = i - moonsLo;
-    rObjOrb[i] = rgpeOrb[row]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[row]->text().toDouble();
-    rObjInf[i] = rgpeInf[row]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[row]);
+    iRow = i - moonsLo;
+    rObjOrb[i] = rgpeOrb[iRow]->text().toDouble();
+    rObjAdd[i] = rgpeAdd[iRow]->text().toDouble();
+    rObjInf[i] = rgpeInf[iRow]->text().toDouble();
+    kObjU[i] = NColorFromComboQt(rgpcbColor[iRow]);
   }
   us.fMoonMove = pcbMoonMove->isChecked();
   us.fMoonChartSep = pcbMoonChartSep->isChecked();
