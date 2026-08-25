@@ -44,6 +44,7 @@
 #include <QtGui/QResizeEvent>
 #include <QtGui/QPaintEvent>
 #include <QtGui/QDesktopServices>
+#include <QtGui/QClipboard>
 #include <QtCore/QUrl>
 #include <QtCore/QFile>
 #include <QtCore/QSettings>
@@ -118,28 +119,49 @@ protected:
 static QDialog *s_pdlgText = NULL;
 static QTextBrowser *s_ptextBrowser = NULL;
 
-static void RedrawTextQt()
+// Shared by RedrawTextQt() and the Edit menu's Copy Chart Text Output --
+// both need the plain-text or HTML chart listing PrintChart() would
+// print, captured via a scratch file rather than shown/redirected for
+// real. Doesn't touch us.fGraphics; callers decide how to reflect that.
+
+static QString CaptureTextChartQt(flag fHTML)
 {
   char szTemp[] = "/tmp/astrolog-qt-text-XXXXXX";
   int fd = mkstemp(szTemp);
   if (fd < 0)
-    return;
+    return QString();
   close(fd);
 
+  // Action() branches on us.fGraphics: "if (us.fGraphics) FActionX(); else
+  // PrintChart();" -- if it's still true here (e.g. a caller invoked this
+  // directly, without going through RedrawQt()'s own text-mode branch
+  // first), Action() takes the *graphics* path instead, which for QT ends
+  // up calling InteractQt() again -- a second, nested Qt event loop. Force
+  // it false for the duration so this helper is safe regardless of what
+  // the caller already did.
+  flag fGraphicsSave = us.fGraphics;
   flag fTextHTMLSave = us.fTextHTML;
+  us.fGraphics = fFalse;
   FCloneSz(szTemp, &is.szFileScreen);
-  us.fTextHTML = fTrue;
+  us.fTextHTML = fHTML;
   Action();
   FCloneSz(NULL, &is.szFileScreen);
   us.fTextHTML = fTextHTMLSave;
+  us.fGraphics = fGraphicsSave;
 
-  QString qsHtml;
+  QString qs;
   QFile file(szTemp);
   if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    qsHtml = QString::fromUtf8(file.readAll());
+    qs = QString::fromUtf8(file.readAll());
     file.close();
   }
   unlink(szTemp);
+  return qs;
+}
+
+static void RedrawTextQt()
+{
+  QString qsHtml = CaptureTextChartQt(fTrue);
 
   if (s_pdlgText == NULL) {
     s_pdlgText = new QDialog(gi.qwind, Qt::Window);
@@ -154,6 +176,34 @@ static void RedrawTextQt()
   s_pdlgText->show();
   s_pdlgText->raise();
   s_pdlgText->activateWindow();
+}
+
+
+// Copy Chart Text Output, equivalent to Windows' cmdCopyText: put the
+// same plain text listing Export Chart Text Output would write onto the
+// system clipboard instead of a file. Plain text only (not HTML) --
+// unlike the persistent Text Chart window, most paste targets for a
+// clipboard copy (chat, email, a plain text file) want plain text, and
+// it avoids a second capture pass just for an HTML fallback few of them
+// would use anyway.
+
+static void CopyChartTextQt()
+{
+  QString qs = CaptureTextChartQt(fFalse);
+  if (!qs.isEmpty())
+    QApplication::clipboard()->setText(qs);
+}
+
+
+// Copy Chart Bitmap, equivalent to Windows' cmdCopyBitmap: put the
+// currently rendered graphics chart on the clipboard as an image.
+// gi.qim already holds exactly that (it's what the canvas blits from),
+// so unlike the text/vector copies there's no capture step needed here.
+
+static void CopyChartBitmapQt()
+{
+  if (gi.qim != NULL)
+    QApplication::clipboard()->setImage(*gi.qim);
 }
 
 
@@ -1110,11 +1160,10 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
 }
 
 
-// Edit menu: just the command line entry dialog, equivalent to Windows'
-// DlgCommand / X11's CommandLineX() (xscreen.cpp) -- lets any switch
-// Astrolog understands be applied without a dedicated menu item for it.
-// Skipped: the 96 user-programmable macro slots (low value), copy/paste
-// (would need clipboard integration this pass doesn't add).
+// Edit menu, equivalent to Windows' cmdCommand/cmdCopy*/cmdPaste handlers.
+// Skipped: the 96 user-programmable macro slots (low value, deferred
+// repeatedly), and Paste (would need to figure out what clipboard
+// format(s) to accept -- lower priority, no immediate need identified).
 
 static void BuildEditMenu(QMainWindow *pwind)
 {
@@ -1122,6 +1171,27 @@ static void BuildEditMenu(QMainWindow *pwind)
   QAction *paCommand = pmenu->addAction("Enter &Command Line...");
   QObject::connect(paCommand, &QAction::triggered, pwind,
     []() { ShowCommandLineDialogQt(); });
+  pmenu->addSeparator();
+
+  QAction *paCopyText = pmenu->addAction("&Copy Chart Text Output");
+  QObject::connect(paCopyText, &QAction::triggered, pwind,
+    []() { CopyChartTextQt(); });
+  QAction *paCopyBmp = pmenu->addAction("Copy Chart &Bitmap");
+  QObject::connect(paCopyBmp, &QAction::triggered, pwind,
+    []() { CopyChartBitmapQt(); });
+  QMenu *pmenuCopyVector = pmenu->addMenu("Copy &Vector Format");
+  QAction *paCopyMeta = pmenuCopyVector->addAction("Copy Chart &Metafile");
+  QObject::connect(paCopyMeta, &QAction::triggered, pwind,
+    []() { CopyChartMetafileQt(); });
+  QAction *paCopyPS = pmenuCopyVector->addAction("Copy Chart &PostScript");
+  QObject::connect(paCopyPS, &QAction::triggered, pwind,
+    []() { CopyChartPSQt(); });
+  QAction *paCopySVG = pmenuCopyVector->addAction("Copy Chart &SVG");
+  QObject::connect(paCopySVG, &QAction::triggered, pwind,
+    []() { CopyChartSVGQt(); });
+  QAction *paCopyWire = pmenuCopyVector->addAction("Copy Chart &Wireframe");
+  QObject::connect(paCopyWire, &QAction::triggered, pwind,
+    []() { CopyChartWireQt(); });
 }
 
 

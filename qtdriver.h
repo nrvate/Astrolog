@@ -94,6 +94,10 @@ void ShowExportPSDialogQt();
 void ShowExportSVGDialogQt();
 void ShowExportWireDialogQt();
 void ShowExportTextDialogQt();
+void CopyChartMetafileQt();
+void CopyChartPSQt();
+void CopyChartSVGQt();
+void CopyChartWireQt();
 
 #endif // __QTDRIVER_H
 

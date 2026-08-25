@@ -50,9 +50,13 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QScrollArea>
 #include <QtCore/QVector>
+#include <QtCore/QMimeData>
+#include <QtGui/QClipboard>
 
 #include "astrolog.h"
 #include "qtdriver.h"
+
+#include <unistd.h>
 
 #ifdef QT
 
@@ -288,6 +292,48 @@ void ShowExportWireDialogQt()
   ShowExportGraphicsDialogQt("Export Chart Wireframe",
     "Daedalus Wireframes (*.dw)", ftWire);
 }
+
+
+// Copy Vector Format (Metafile/PostScript/SVG/Wireframe), equivalent to
+// Windows' cmdCopyPicture/cmdCopyPS/cmdCopySVG/cmdCopyWire: the same
+// FExportChartQt() mechanism as the Export Vector Format menu above, to a
+// scratch file that gets put on the clipboard and deleted instead of one
+// the user chose to keep. PostScript/SVG/Wireframe are text formats, so
+// plain text on the clipboard is directly useful (e.g. pasting the SVG
+// source into a text editor); SVG also gets image/svg+xml set alongside,
+// for apps that can paste it as an actual image. Metafile (a binary
+// Windows format) has no broadly supported Linux clipboard equivalent, so
+// it only gets the image/x-wmf MIME type, useful to the few apps that
+// recognize it and otherwise harmless.
+
+static void CopyChartVectorQt(int ft, CONST char *szMime)
+{
+  char szTemp[] = "/tmp/astrolog-qt-copy-XXXXXX";
+  int fd = mkstemp(szTemp);
+  if (fd < 0)
+    return;
+  close(fd);
+
+  if (FExportChartQt(szTemp, ft)) {
+    QFile file(szTemp);
+    if (file.open(QIODevice::ReadOnly)) {
+      QByteArray ba = file.readAll();
+      file.close();
+      QMimeData *pmime = new QMimeData();
+      if (ft != ftWmf)
+        pmime->setText(QString::fromUtf8(ba));
+      if (szMime != NULL)
+        pmime->setData(szMime, ba);
+      QApplication::clipboard()->setMimeData(pmime);
+    }
+  }
+  unlink(szTemp);
+}
+
+void CopyChartMetafileQt() { CopyChartVectorQt(ftWmf, "image/x-wmf"); }
+void CopyChartPSQt()       { CopyChartVectorQt(ftPS, NULL); }
+void CopyChartSVGQt()      { CopyChartVectorQt(ftSVG, "image/svg+xml"); }
+void CopyChartWireQt()     { CopyChartVectorQt(ftWire, NULL); }
 
 
 // Export the chart's text output (the same plain-text listing the -o0
