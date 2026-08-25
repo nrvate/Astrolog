@@ -2650,6 +2650,7 @@ void ShowCommandLineDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted || peLine->text().trimmed().isEmpty())
     return;
 
@@ -2682,6 +2683,7 @@ void ShowAboutDialogQt()
   QDialogButtonBox *pbuttons = new QDialogButtonBox(QDialogButtonBox::Ok);
   playout->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  BlockComboWheelQt(&dlg);
   dlg.exec();
 }
 

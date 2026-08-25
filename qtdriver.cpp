@@ -1474,12 +1474,13 @@ static void BuildAnimateMenu(QMainWindow *pwind)
 }
 
 
-// A curated subset of Windows' Help menu: About, and the doc/data file
-// openers (via QDesktopServices, same file resolution FileOpen() already
-// does). Skipped this pass: the 11 "List Signs/Objects/Aspects/..." text
-// listing actions -- those print to a text stream (is.S) that would need a
-// dedicated text output window to show usefully in a GUI, worth its own
-// pass rather than a quick addition here.
+// Windows' Help menu: About, the doc/data file openers (via
+// QDesktopServices, same file resolution FileOpen() already does), and
+// the 11 "List Signs/Objects/Aspects/..." text listing actions. Those
+// last ones print to a text stream rather than drawing a chart, which is
+// why they go through AddChartModeTextAction() -- it forces text mode, so
+// RedrawQt() takes the RedrawTextQt() path and they land in the shared
+// text window instead of needing one of their own.
 
 static void BuildHelpMenu(QMainWindow *pwind)
 {

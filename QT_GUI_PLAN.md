@@ -13,7 +13,23 @@ without re-deriving any of this.
 the actual current `qtdriver.cpp`/`qtdialog.cpp` (`grep -n "^static void
 Build" qtdriver.cpp` to find each menu-builder function, `grep -n "^void
 Show" qtdialog.cpp` for the dialog list) — this snapshot is accurate as of
-2026-08-24, but don't trust it blindly if it's been a while.
+2026-08-25, but don't trust it blindly if it's been a while.
+
+**Where things stand (2026-08-25).** All nine menus are built, all ~28
+dialogs exist, and the item-8 UI parity sweep (8.1 through 8.14) is
+finished — every *settings* dialog has been read field-by-field against
+its `Dlg*` in wdialog.cpp and its resource block in astrolog.rc. Four
+were never in the sweep's scope and have not had that pass: the chart
+list (`DlgList`), multi-chart info (`DlgInfoAll`), command line
+(`DlgCommand`), and About (`DlgAbout`). They work; they just haven't been
+audited line by line, so that's the obvious place to look if something
+looks off in one of them. What remains is
+listed under "Prioritized remaining work": item 12 (no animation loop) is
+the largest functional gap, then Paste, macros, and Print. Everything
+knowingly left undone or deliberately diverged from Windows is recorded
+either in the relevant 8.x sub-item or under "Known divergences from
+Windows" near the end — if you find something undocumented, that's a
+doc bug worth fixing, not a decision someone made silently.
 
 ## How this fork's Qt backend works
 
@@ -57,6 +73,33 @@ Show" qtdialog.cpp` for the dialog list) — this snapshot is accurate as of
   these first; only write a bespoke handler when the field isn't a plain
   bool/int (see "inv() on multi-value fields" below) or has a side effect
   beyond "set field, redraw."
+  Note `AddCategoryRestrictAction()` takes a trailing `flag fTransit`
+  telling `SyncRestrictMenuQt()` whether that category counts the transit
+  set (see gotcha #9).
+- **Dialog helpers** in qtdialog.cpp, all near the top of the file so they
+  precede every caller. Use these rather than reinventing a field:
+  - `SzFormatRQt(real, int n)` — format a real the way Windows'
+    `SetEditR()` does, via Astrolog's own `FormatR()`. **Never print a
+    real with `QString::number()`**; it shows full double precision where
+    Windows shows two or three digits. Sign convention is easy to get
+    backwards: negative `n` strips trailing zeros ("7", "0"), positive
+    `n` keeps at least one fractional digit ("1.0").
+  - `NewComboQt(strCur, rgstr)` — an editable combo with dropdown
+    suggestions, the counterpart of Windows' `SetEdit()` + `SetCombo()`
+    pairs. Its companions `RgstrMonthQt()`/`RgstrDayQt()`/`RgstrYearQt()`/
+    `RgstrTimeQt()`/`RgstrDstQt()`/`RgstrZoneQt()`/`RgstrLonQt()`/
+    `RgstrLatQt()` hold the chart info suggestion lists.
+  - `NewColorComboQt(ki, nExtra)` / `NColorFromComboQt(pcb)` — color
+    pickers, sized by `SetEditColor()`'s `nExtra` convention.
+  - `BlockComboWheelQt(&dlg)` — call before every `exec()`, see gotcha #10.
+  - `ParseCustomDefQt()` — the Object Customization definition-string
+    parse, in one place because it's wanted in three.
+  - `RESBUT` + `ShowRestrictRangeDialogQt()` — one implementation behind
+    all four restriction dialogs, with their quick-button columns
+    described as data.
+  **QComboBox ordering trap:** every `addItem()` must precede
+  `setEditText()`. Adding the first item resets the current index, which
+  silently overwrites the edit text — this has caused a real bug twice.
 - **Chart type/mode**: `SetChartModeQt(int mode)` (qtdriver.h) is a direct
   port of `ProcessState()`'s chart-type switch — clears every known
   chart-type `us.f*` flag, sets `gi.nMode = mode` **directly** (not via
@@ -162,15 +205,36 @@ Show" qtdialog.cpp` for the dialog list) — this snapshot is accurate as of
    nothing in `Makefile.qt` undefines any of them — so don't assume a
    Windows feature gated behind one of these is unavailable without
    actually checking; it's compiled into the Qt build too.
-9. **Menu-checkmark staleness across independent entry points is an
-   accepted, documented trade-off, not something to chase down.** E.g. the
-   House System submenu doesn't resync if Calculation Settings changes
-   `us.nHouseSystem` (Windows' own `DlgCalc` doesn't call `WiCheckMenu` for
-   that either — matches upstream). One exception was fixed because it was
-   cheap and one `QAction`: `SyncHelioMenuQt()` refreshes the Heliocentric
-   checkbox since Calculation Settings can change the central planet from
-   there too. Don't build a general `RedoMenu()`-style full resync unless
-   a specific new case actually needs it.
+9. **Menu-checkmark staleness: follow Windows, case by case.** *(Revised
+   2026-08-25 — this used to say staleness was an accepted trade-off not
+   worth chasing. That was wrong, and the 8.9/8.12 sweeps found four real
+   cases.)* The rule is simply what Windows does: wherever a `Dlg*`
+   function calls `WiCheckMenu()` before returning, the Qt dialog owes the
+   same resync, and where it doesn't, neither do we. Four sync functions
+   exist, all declared in qtdriver.h and called at the end of the matching
+   dialog:
+   - `SyncHelioMenuQt()` — Heliocentric, from Calculation Settings.
+   - `SyncRestrictMenuQt()` — the six "Include <category>" entries *and*
+     the `us.f*` flags behind them, from all four restriction dialogs.
+     Note it derives each category from `ignore || ignore2` except fixed
+     stars, which `DlgStar` derives from `ignore` alone.
+   - `SyncHouseSetMenuQt()` — House Settings' Solar Chart, 3D Houses,
+     Show Dwads, from Calculation Settings.
+   - `SyncDisplayMenuQt()` — View's Print Nearest Second and Applying
+     Aspects, from Display Settings.
+   Genuinely-matching-upstream staleness still exists and is fine: the
+   House System submenu doesn't resync when Calculation Settings changes
+   `us.nHouseSystem`, because `DlgCalc` doesn't `WiCheckMenu` it either.
+   Still don't build a general `RedoMenu()`-style blanket resync — check
+   the specific `Dlg*` and mirror it.
+10. **Wheel events edit combo boxes in the scrolling dialogs.** Qt
+   delivers a wheel event to whatever widget is under the pointer, so
+   scrolling a tall dialog silently changed any combo that slid past the
+   cursor. `BlockComboWheelQt()` (qtdialog.cpp) fixes this and is called
+   before every `exec()` — **keep calling it in any new dialog**. Beyond
+   the fix, the debugging lesson: a value read off a screenshot taken
+   after scrolling is not trustworthy. Confirm against `astrolog.as` or
+   the `GS`/`US` initializers before concluding a dialog is buggy.
 
 ## Status by menu
 
@@ -402,8 +466,10 @@ skip.
    unverified — see that section. With this the **menu structure is
    complete**: every top-level menu and dialog Windows has is present
    except File > Print (item 11) and the deliberate Win32-only omissions.
-   **Next item up is 8, the UI parity sweep.**
-8. **UI parity sweep, one dialog at a time.** Every dialog below is
+   **Item 8, the UI parity sweep, is now complete (2026-08-25). The next
+   item worth doing is 12, the missing animation loop.**
+8. ~~**UI parity sweep, one dialog at a time.**~~ — **all sub-items done
+   2026-08-25.** Every dialog below was
    functionally correct but presentationally diverged from Windows.
    Requested after the chart info dialog was caught showing `21.9` where
    Windows shows `9:57pm`. Each sub-item is independently doable and
@@ -673,6 +739,38 @@ skip.
     Only do this if specifically asked.
 11. **File > Print...** — no existing portable rendering path to a
     printer; would need new code built on `QPrinter`. Not investigated.
+
+## Known divergences from Windows
+
+Every place this port knowingly differs, so none of it reads as an
+oversight later. Anything *not* on this list and not in an 8.x sub-item
+is unintentional — treat it as a bug.
+
+**Deliberately different behaviour**
+
+| Where | Difference | Why |
+|---|---|---|
+| Display Settings | Raising "Number of Aspects to Include" actually un-restricts the newly included aspects | Windows assigns `us.nAsp = na` *before* the loop that would un-restrict them, so its loop can never run and raising the count silently does nothing. Kept the working version rather than reproduce the bug. |
+| Chart info dialogs | Daylight shows and offers "Autodetect" | Windows resolves `dstAuto` via `DstReal()` before display, discarding the user's "work it out for me" choice on the next OK. Showing it survives a round trip. |
+| Graphics Settings | Atlas City Coloring writes `gs.fLabelCity` | `DlgGraphics` writes `gs.fLabelAsp`, but that field is `-XA` (aspect glyphs on lines) and has nothing to do with city coloring. Treated as an upstream typo; using it would silently toggle aspect glyphs. |
+| Command line dialog | Doesn't save/restore `us.fLoop`/`is.fMult` around the call | `CommandLineX()` does. Only matters for a typed line that itself starts a multi-chart sequence. |
+| Restriction dialogs | (Since 8.9) checkbox = restricted, matching Windows | Previously "Show X" = visible, i.e. inverted. Flipped *toward* Windows, but it's a visible change to anyone used to the old Qt wording. |
+
+**Present but intentionally not editable**
+
+Calculation Method, and Chart Settings' aspect sort and decan type, are
+plain pick lists where Windows' are editable combos. Same choices, no
+free-text entry. See 8.14.
+
+**Not ported**
+
+| Thing | Why |
+|---|---|
+| Graphics Settings' six font pickers | They pick from a hardcoded list of Windows GDI face names. Needs a real Qt font picker, not a translated list. |
+| `wi.*` fields in File/Graphics Settings — bitmap-from-window, antialias level, no-popup, no-auto-redraw | Win32-only `WI` struct. |
+| Graphics Settings' "Update Delay in Milliseconds" | Nominally the same reason, but really blocked on item 12 — there's no animation loop for it to set the delay of. |
+| Open Charts in Folder skips Astrolog's own data files | Matches Windows, which does the same, since a folder of charts often sits alongside them. |
+| JPL Horizons lookup blocks the UI | Synchronous network fetch inside the modal dialog. Windows does the same. Obvious async candidate. |
 
 ## Explicitly out of scope (don't implement)
 
