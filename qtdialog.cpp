@@ -1342,24 +1342,45 @@ void ShowSaveChartListDialogQt()
 // wheel corner colors. Each is set by color name the same way SzColor()
 // and NParseSz() format and parse them elsewhere in Astrolog.
 
-// Adds one color field: an editable combo listing the color names, since
-// that is what Windows offers here. "fExtra" widens the list to include
-// the handful of symbolic entries past the plain colors (Element, Ray,
-// Star, Planet, Auto), which only the wheel corner color accepts.
-static QComboBox *AddColorComboQt(QFormLayout *pform, CONST char *szLabel,
-  KI ki, flag fExtra)
+// One color field: an editable combo listing the color names, since that
+// is what Windows offers. "nExtra" follows SetEditColor()'s convention --
+// 0 for plain colors only, higher values progressively admitting the
+// symbolic entries past them (Element, Ray, Star, Planet, Auto), which
+// only some fields accept.
+static QComboBox *NewColorComboQt(KI ki, int nExtra)
 {
   QComboBox *pcb = new QComboBox();
-  int i, iMax = fExtra ? cColor2 + 5 : cColor2;
+  int i, iMax = cColor2 + (nExtra > 0)*(nExtra + 1);
 
   pcb->setEditable(true);
   // addItem() before setEditText(): see the Progressions dialog.
   for (i = 0; i < iMax; i++)
     pcb->addItem(szColor[i]);
   pcb->setEditText(SzColor(ki));
+  return pcb;
+}
+
+static QComboBox *AddColorComboQt(QFormLayout *pform, CONST char *szLabel,
+  KI ki, int nExtra)
+{
+  QComboBox *pcb = NewColorComboQt(ki, nExtra);
+
   pform->addRow(QString(szLabel) + ":", pcb);
   return pcb;
 }
+
+// Format a real the way Windows' SetEditR() does, so the orb and
+// influence grids show the same number of decimals Windows does rather
+// than QString::number()'s full precision.
+static QString SzFormatRQt(real r, int n)
+{
+  char sz[cchSzDef];
+
+  FormatR(sz, r, n);
+  return QString(sz);
+}
+
+static int NColorFromComboQt(QComboBox *pcb);
 
 static int NColorFromComboQt(QComboBox *pcb)
 {
@@ -1399,30 +1420,27 @@ void ShowColorDialogQt()
   for (i = 0; i < cColor; i++) {
     j = ikPalette[i];
     rgpcbPalette[i] = AddColorComboQt(pformPalette, rgszPalette[i],
-      j <= 0 ? kMainA[-j] : kRainbowA[j], fFalse);
+      j <= 0 ? kMainA[-j] : kRainbowA[j], 0);
   }
   pvLeft->addWidget(pgbPalette);
 
   QGroupBox *pgbExtra = new QGroupBox("Other");
   QFormLayout *pformExtra = new QFormLayout(pgbExtra);
-  QComboBox *pcbPen = AddColorComboQt(pformExtra, "Scribble", gi.kiPen,
-    fFalse);
-  QComboBox *pcbDeca = AddColorComboQt(pformExtra, "Corners", gs.kiDeca,
-    fTrue);
+  QComboBox *pcbPen = AddColorComboQt(pformExtra, "Scribble", gi.kiPen, 0);
+  QComboBox *pcbDeca = AddColorComboQt(pformExtra, "Corners", gs.kiDeca, 4);
   pvLeft->addWidget(pgbExtra);
   pvLeft->addStretch(1);
 
   QGroupBox *pgbElem = new QGroupBox("Elements");
   QFormLayout *pformElem = new QFormLayout(pgbElem);
   for (i = 0; i < cElem; i++)
-    rgpcbElem[i] = AddColorComboQt(pformElem, rgszElem[i], kElemA[i],
-      fFalse);
+    rgpcbElem[i] = AddColorComboQt(pformElem, rgszElem[i], kElemA[i], 0);
   pvRight->addWidget(pgbElem);
 
   QGroupBox *pgbRay = new QGroupBox("Seven Rays");
   QFormLayout *pformRay = new QFormLayout(pgbRay);
   for (i = 1; i <= cRay; i++)
-    rgpcbRay[i] = AddColorComboQt(pformRay, rgszRay[i-1], kRayA[i], fFalse);
+    rgpcbRay[i] = AddColorComboQt(pformRay, rgszRay[i-1], kRayA[i], 0);
   pvRight->addWidget(pgbRay);
   pvRight->addStretch(1);
 
@@ -1500,21 +1518,25 @@ void ShowObjectDialogQt()
   QGridLayout *pgrid = new QGridLayout(pinner);
   QLineEdit *rgpeOrb[oCore+1];
   QLineEdit *rgpeAdd[oCore+1];
-  QLineEdit *rgpeColor[oCore+1];
+  QLineEdit *rgpeInf[oCore+1];
+  QComboBox *rgpcbColor[oCore+1];
   int i;
 
   pgrid->addWidget(new QLabel("Object"), 0, 0);
   pgrid->addWidget(new QLabel("Max Orb"), 0, 1);
   pgrid->addWidget(new QLabel("Orb Add"), 0, 2);
-  pgrid->addWidget(new QLabel("Color"), 0, 3);
+  pgrid->addWidget(new QLabel("Influence"), 0, 3);
+  pgrid->addWidget(new QLabel("Color"), 0, 4);
   for (i = 0; i <= oCore; i++) {
     pgrid->addWidget(new QLabel(szObjName[i]), i+1, 0);
-    rgpeOrb[i] = new QLineEdit(QString::number(rObjOrb[i]));
+    rgpeOrb[i] = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
     pgrid->addWidget(rgpeOrb[i], i+1, 1);
-    rgpeAdd[i] = new QLineEdit(QString::number(rObjAdd[i]));
+    rgpeAdd[i] = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
     pgrid->addWidget(rgpeAdd[i], i+1, 2);
-    rgpeColor[i] = new QLineEdit(SzColor(kObjU[i]));
-    pgrid->addWidget(rgpeColor[i], i+1, 3);
+    rgpeInf[i] = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
+    pgrid->addWidget(rgpeInf[i], i+1, 3);
+    rgpcbColor[i] = NewColorComboQt(kObjU[i], 1);
+    pgrid->addWidget(rgpcbColor[i], i+1, 4);
   }
   pscroll->setWidget(pinner);
   pscroll->setWidgetResizable(true);
@@ -1532,8 +1554,8 @@ void ShowObjectDialogQt()
   for (i = 0; i <= oCore; i++) {
     rObjOrb[i] = rgpeOrb[i]->text().toDouble();
     rObjAdd[i] = rgpeAdd[i]->text().toDouble();
-    QByteArray ba = rgpeColor[i]->text().toLocal8Bit();
-    kObjU[i] = NParseSz(ba.constData(), pmColor);
+    rObjInf[i] = rgpeInf[i]->text().toDouble();
+    kObjU[i] = NColorFromComboQt(rgpcbColor[i]);
   }
   RecastAndRedrawQt();
 }
@@ -2343,13 +2365,15 @@ void ShowAspectDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Aspect Settings");
-  dlg.resize(500, 500);
+  // Wider than the other grids: this one has an extra "Show" column.
+  dlg.resize(620, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QScrollArea *pscroll = new QScrollArea(&dlg);
   QWidget *pinner = new QWidget();
   QGridLayout *pgrid = new QGridLayout(pinner);
   QVector<QCheckBox *> rgpcbShow;
-  QVector<QLineEdit *> rgpeOrb, rgpeAngle, rgpeInf, rgpeColor;
+  QVector<QLineEdit *> rgpeOrb, rgpeAngle, rgpeInf;
+  QVector<QComboBox *> rgpcbColor;
   int i;
 
   pgrid->addWidget(new QLabel("Aspect"), 0, 0);
@@ -2364,18 +2388,18 @@ void ShowAspectDialogQt()
     pcb->setChecked(!ignorea[i]);
     pgrid->addWidget(pcb, i, 1);
     rgpcbShow.append(pcb);
-    QLineEdit *peOrb = new QLineEdit(QString::number(rAspOrb[i]));
+    QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rAspOrb[i], -6));
     pgrid->addWidget(peOrb, i, 2);
     rgpeOrb.append(peOrb);
-    QLineEdit *peAngle = new QLineEdit(QString::number(rAspAngle[i]));
+    QLineEdit *peAngle = new QLineEdit(SzFormatRQt(rAspAngle[i], -6));
     pgrid->addWidget(peAngle, i, 3);
     rgpeAngle.append(peAngle);
-    QLineEdit *peInf = new QLineEdit(QString::number(rAspInf[i]));
+    QLineEdit *peInf = new QLineEdit(SzFormatRQt(rAspInf[i], 2));
     pgrid->addWidget(peInf, i, 4);
     rgpeInf.append(peInf);
-    QLineEdit *peColor = new QLineEdit(SzColor(kAspA[i]));
-    pgrid->addWidget(peColor, i, 5);
-    rgpeColor.append(peColor);
+    QComboBox *pcbColor = NewColorComboQt(kAspA[i], 0);
+    pgrid->addWidget(pcbColor, i, 5);
+    rgpcbColor.append(pcbColor);
   }
   pscroll->setWidget(pinner);
   pscroll->setWidgetResizable(true);
@@ -2395,8 +2419,7 @@ void ShowAspectDialogQt()
     rAspOrb[i] = rgpeOrb[i-1]->text().toDouble();
     rAspAngle[i] = rgpeAngle[i-1]->text().toDouble();
     rAspInf[i] = rgpeInf[i-1]->text().toDouble();
-    QByteArray ba = rgpeColor[i-1]->text().toLocal8Bit();
-    kAspA[i] = NParseSz(ba.constData(), pmColor);
+    kAspA[i] = NColorFromComboQt(rgpcbColor[i-1]);
   }
   AdjustAspectCount();
   RecastAndRedrawQt();
@@ -2419,7 +2442,8 @@ void ShowObject2DialogQt()
   QWidget *pinner = new QWidget();
   QGridLayout *pgrid = new QGridLayout(pinner);
   QVector<int> rgi;
-  QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf, rgpeColor;
+  QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
+  QVector<QComboBox *> rgpcbColor;
   int i0, i, row = 1;
 
   pgrid->addWidget(new QLabel("Object"), 0, 0);
@@ -2432,18 +2456,19 @@ void ShowObject2DialogQt()
     rgi.append(i);
     pgrid->addWidget(new QLabel(i0 <= dwarfHi ? szObjName[i] : "Stars"),
       row, 0);
-    QLineEdit *peOrb = new QLineEdit(QString::number(rObjOrb[i]));
+    QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
     pgrid->addWidget(peOrb, row, 1);
     rgpeOrb.append(peOrb);
-    QLineEdit *peAdd = new QLineEdit(QString::number(rObjAdd[i]));
+    QLineEdit *peAdd = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
     pgrid->addWidget(peAdd, row, 2);
     rgpeAdd.append(peAdd);
-    QLineEdit *peInf = new QLineEdit(QString::number(rObjInf[i]));
+    QLineEdit *peInf = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
     pgrid->addWidget(peInf, row, 3);
     rgpeInf.append(peInf);
-    QLineEdit *peColor = new QLineEdit(SzColor(kObjU[i]));
-    pgrid->addWidget(peColor, row, 4);
-    rgpeColor.append(peColor);
+    // Windows widens the color list by one on the collective stars row.
+    QComboBox *pcbColor = NewColorComboQt(kObjU[i], 1 + (i == starLo));
+    pgrid->addWidget(pcbColor, row, 4);
+    rgpcbColor.append(pcbColor);
     row++;
   }
   pscroll->setWidget(pinner);
@@ -2464,8 +2489,7 @@ void ShowObject2DialogQt()
     rObjOrb[i] = rgpeOrb[row]->text().toDouble();
     rObjAdd[i] = rgpeAdd[row]->text().toDouble();
     rObjInf[i] = rgpeInf[row]->text().toDouble();
-    QByteArray ba = rgpeColor[row]->text().toLocal8Bit();
-    kObjU[i] = NParseSz(ba.constData(), pmColor);
+    kObjU[i] = NColorFromComboQt(rgpcbColor[row]);
   }
   RecastAndRedrawQt();
 }
@@ -2911,7 +2935,8 @@ void ShowMoonObjectDialogQt()
   QWidget *pinner = new QWidget();
   QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
   QGridLayout *pgrid = new QGridLayout();
-  QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf, rgpeColor;
+  QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
+  QVector<QComboBox *> rgpcbColor;
   int i, row = 1;
 
   pgrid->addWidget(new QLabel("Object"), 0, 0);
@@ -2921,18 +2946,18 @@ void ShowMoonObjectDialogQt()
   pgrid->addWidget(new QLabel("Color"), 0, 4);
   for (i = moonsLo; i <= cobHi; i++) {
     pgrid->addWidget(new QLabel(szObjName[i]), row, 0);
-    QLineEdit *peOrb = new QLineEdit(QString::number(rObjOrb[i]));
+    QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
     pgrid->addWidget(peOrb, row, 1);
     rgpeOrb.append(peOrb);
-    QLineEdit *peAdd = new QLineEdit(QString::number(rObjAdd[i]));
+    QLineEdit *peAdd = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
     pgrid->addWidget(peAdd, row, 2);
     rgpeAdd.append(peAdd);
-    QLineEdit *peInf = new QLineEdit(QString::number(rObjInf[i]));
+    QLineEdit *peInf = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
     pgrid->addWidget(peInf, row, 3);
     rgpeInf.append(peInf);
-    QLineEdit *peColor = new QLineEdit(SzColor(kObjU[i]));
-    pgrid->addWidget(peColor, row, 4);
-    rgpeColor.append(peColor);
+    QComboBox *pcbColor = NewColorComboQt(kObjU[i], 3);
+    pgrid->addWidget(pcbColor, row, 4);
+    rgpcbColor.append(pcbColor);
     row++;
   }
   pinnerlayout->addLayout(pgrid);
@@ -2968,8 +2993,7 @@ void ShowMoonObjectDialogQt()
     rObjOrb[i] = rgpeOrb[row]->text().toDouble();
     rObjAdd[i] = rgpeAdd[row]->text().toDouble();
     rObjInf[i] = rgpeInf[row]->text().toDouble();
-    QByteArray ba = rgpeColor[row]->text().toLocal8Bit();
-    kObjU[i] = NParseSz(ba.constData(), pmColor);
+    kObjU[i] = NColorFromComboQt(rgpcbColor[row]);
   }
   us.fMoonMove = pcbMoonMove->isChecked();
   us.fMoonChartSep = pcbMoonChartSep->isChecked();
