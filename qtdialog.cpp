@@ -1789,77 +1789,151 @@ void ShowTransitDialogQt()
 
 
 // Progressions, equivalent to Windows' DlgProgress: whether to show a
-// progressed chart, what kind, and the date to progress to (ciTran, shared
-// with the Transits dialog above). Simplified from Windows' version by
-// treating the progression rate/cusp ratio as plain numbers instead of also
-// offering preset dropdown values (Primary/Secondary/etc), and the solar
-// arc planet by name instead of a special "X" reciprocal-rate prefix.
+// progressed chart, what kind, how fast it progresses, and the date to
+// progress to (ciTran, shared with the Transits dialog).
+
+// Preset progression rates, as offered by Windows' two dropdowns. Those
+// live in wdialog.cpp, which isn't compiled into the QT build, so they're
+// duplicated here.
+static CONST char *rgszProgQt[4] =
+  {"Primary", "Secondary", "Tertiary2", "Tertiary1"};
+static CONST real rgrProgQt[4] =
+  {rDayInYear * rDegMax, rDayInYear, 29.530588, 27.321661};
+static CONST char *rgszProgCuspQt[2] = {"Quotidian", "Solar"};
+static CONST real rgrProgCuspQt[2] = {1.0, rDayInYear};
 
 void ShowProgressDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Progressions");
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  char sz[cchSzMax], szT[cchSzDef];
+  int i;
 
-  QCheckBox *pcbEnable = new QCheckBox("Show Progressed Chart");
+  QCheckBox *pcbEnable = new QCheckBox("Do Progression");
   pcbEnable->setChecked(us.fProgress != 0);
   pouter->addWidget(pcbEnable);
 
-  QGroupBox *pgroupBox = new QGroupBox("Progression Type");
-  QHBoxLayout *pgrouplayout = new QHBoxLayout(pgroupBox);
+  QGroupBox *pgbType = new QGroupBox("Progression Type");
+  QVBoxLayout *pvType = new QVBoxLayout(pgbType);
   QButtonGroup *pgroup = new QButtonGroup(&dlg);
-  CONST char *rgszType[3] = { "Cast", "Mixed", "Solar Arc" };
+  CONST char *rgszType[3] = { "Secondary (Calculated Cusps)",
+    "Secondary (Solar Arc Cusps)", "Solar Arc" };
   int nTypeCur = us.nProgress == ptCast ? 0 :
     (us.nProgress == ptMixed ? 1 : 2);
-  int i;
   for (i = 0; i < 3; i++) {
     QRadioButton *prb = new QRadioButton(rgszType[i]);
     prb->setChecked(i == nTypeCur);
     pgroup->addButton(prb, i);
-    pgrouplayout->addWidget(prb);
+    pvType->addWidget(prb);
   }
-  pouter->addWidget(pgroupBox);
+  pouter->addWidget(pgbType);
 
   QFormLayout *pform = new QFormLayout();
-  QLineEdit *peRate = new QLineEdit(QString::number(us.rProgDay));
-  QLineEdit *peCusp = new QLineEdit(QString::number(us.rProgCusp));
+  // Editable combos, matching Windows: the presets are suggestions, and
+  // an arbitrary rate can still be typed. Each entry is the raw number
+  // followed by its name, which is why the parse below only reads the
+  // leading number and ignores the rest.
+  // Every addItem() must happen before setEditText(): adding the first
+  // item to an editable combo sets its current index to 0, which
+  // overwrites whatever text is in the line edit. Setting the text first
+  // silently loses any value that doesn't happen to match a preset.
+  QComboBox *pcbDay = new QComboBox();
+  pcbDay->setEditable(true);
+  FormatR(szT, us.rProgDay, -6);
+  QString qsDay = szT;
+  for (i = 0; i < 4; i++) {
+    FormatR(szT, rgrProgQt[i], -6);
+    sprintf(sz, "%s %s", szT, rgszProgQt[i]);
+    pcbDay->addItem(sz);
+    if (us.rProgDay == rgrProgQt[i])
+      qsDay = sz;
+  }
+  pcbDay->setEditText(qsDay);
+  QComboBox *pcbCusp = new QComboBox();
+  pcbCusp->setEditable(true);
+  FormatR(szT, us.rProgCusp, -6);
+  QString qsCusp = szT;
+  for (i = 0; i < 2; i++) {
+    FormatR(szT, rgrProgCuspQt[i], -6);
+    sprintf(sz, "%s %s", szT, rgszProgCuspQt[i]);
+    pcbCusp->addItem(sz);
+    if (us.rProgCusp == rgrProgCuspQt[i])
+      qsCusp = sz;
+  }
+  pcbCusp->setEditText(qsCusp);
   QLineEdit *peArc = new QLineEdit(us.objProgArc >= 0 ?
     szObjName[us.objProgArc] : "None");
-  QCheckBox *pcbRAMC = new QCheckBox("Progress RAMC/Houses Too");
-  pcbRAMC->setChecked(us.fProgRAMC != 0);
-  pform->addRow("Degrees per day:", peRate);
-  pform->addRow("Cusp move ratio:", peCusp);
-  pform->addRow("Solar arc planet:", peArc);
-  pform->addRow(pcbRAMC);
-
-  QLineEdit *peMon = new QLineEdit(QString::number(ciTran.mon));
-  QLineEdit *peDay = new QLineEdit(QString::number(ciTran.day));
-  QLineEdit *peYea = new QLineEdit(QString::number(ciTran.yea));
-  QLineEdit *peTim = new QLineEdit(QString::number(ciTran.tim));
-  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "ST" :
-    (ciTran.dst == 1.0 ? "DT" :
-    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))));
-  QLineEdit *peZon = new QLineEdit(QString::number(ciTran.zon));
-  pform->addRow("Month (1-12):", peMon);
-  pform->addRow("Day:", peDay);
-  pform->addRow("Year:", peYea);
-  pform->addRow("Time (decimal hours):", peTim);
-  pform->addRow("Daylight offset:", peDst);
-  pform->addRow("Zone (hours west of UTC):", peZon);
+  pform->addRow("Degrees Per Day:", pcbDay);
+  pform->addRow("Cusp Move Ratio:", pcbCusp);
+  pform->addRow("Solar Arc Based on This Planet:", peArc);
   pouter->addLayout(pform);
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  QCheckBox *pcbRAMC =
+    new QCheckBox("Solar Arc Cusps Recalculated with New MC");
+  pcbRAMC->setChecked(us.fProgRAMC != 0);
+  pouter->addWidget(pcbRAMC);
+
+  // Same human readable formatting as the chart info dialog.
+  QGroupBox *pgbDate = new QGroupBox("Progress To");
+  QFormLayout *pformDate = new QFormLayout(pgbDate);
+  sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
+  QLineEdit *peMon = new QLineEdit(sz);
+  QLineEdit *peDay = new QLineEdit(QString::number(ciTran.day));
+  QLineEdit *peYea = new QLineEdit(QString::number(ciTran.yea));
+  QLineEdit *peTim = new QLineEdit(SzTim(ciTran.tim));
+  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "No" :
+    (ciTran.dst == 1.0 ? "Yes" :
+    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))));
+  sprintf(sz, "%s", SzZone(ciTran.zon));
+  QLineEdit *peZon = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  pformDate->addRow("Month:", peMon);
+  pformDate->addRow("Day:", peDay);
+  pformDate->addRow("Year:", peYea);
+  pformDate->addRow("Time:", peTim);
+  pformDate->addRow("Daylight:", peDst);
+  pformDate->addRow("Zone:", peZon);
+  pouter->addWidget(pgbDate);
+
+  QDialogButtonBox *pbuttons = new QDialogButtonBox(
+    QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  QPushButton *pbNow = pbuttons->addButton("Now",
+    QDialogButtonBox::ActionRole);
   pouter->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  QObject::connect(pbNow, &QPushButton::clicked, &dlg,
+    [peMon, peDay, peYea, peTim, peDst, peZon]() {
+      char szN[cchSzMax];
+      int mon, day, yea;
+      real tim;
+      GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
+      sprintf(szN, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
+      peMon->setText(szN);
+      peDay->setText(QString::number(day));
+      peYea->setText(QString::number(yea));
+      peTim->setText(SzTim(tim));
+      peDst->setText(ciDefa.dst == 0.0 ? "No" :
+        (ciDefa.dst == 1.0 ? "Yes" :
+        (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
+      sprintf(szN, "%s", SzZone(ciDefa.zon));
+      peZon->setText(szN[0] == '+' ? &szN[1] : szN);
+    });
 
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  real rDay = peRate->text().toDouble();
-  real rCusp = peCusp->text().toDouble();
   QByteArray ba;
+  // A leading "X" means the value is a divisor of a year rather than a
+  // rate, e.g. "X12" for a twelfth of a year per day. Windows' DlgProgress
+  // accepts the same prefix here.
+  ba = pcbDay->currentText().toLocal8Bit();
+  int iX = ChCap(ba.constData()[0]) == 'X';
+  real rd = RFromSz(ba.constData() + iX);
+  if (iX != 0 && rd != 0.0)
+    rd = rDayInYear / rd;
+  ba = pcbCusp->currentText().toLocal8Bit();
+  real rC = RFromSz(ba.constData());
   ba = peArc->text().toLocal8Bit();
   int npO = NParseSz(ba.constData(), pmObject);
   int mon, day, yea;
@@ -1870,7 +1944,7 @@ void ShowProgressDialogQt()
   ba = peTim->text().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
   ba = peDst->text().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
   ba = peZon->text().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
-  if (rDay == 0.0 || rCusp == 0.0 || !FValidProgArc(npO) ||
+  if (rd == 0.0 || rC == 0.0 || !FValidProgArc(npO) ||
     !FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
     !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon)) {
     QMessageBox::warning(gi.qwind, szAppName,
@@ -1881,8 +1955,8 @@ void ShowProgressDialogQt()
   us.fProgress = pcbEnable->isChecked();
   us.nProgress = pgroup->checkedId() == 0 ? ptCast :
     (pgroup->checkedId() == 1 ? ptMixed : ptSolarArc);
-  us.rProgDay = rDay;
-  us.rProgCusp = rCusp;
+  us.rProgDay = rd;
+  us.rProgCusp = rC;
   us.objProgArc = npO;
   us.fProgRAMC = pcbRAMC->isChecked();
   SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
