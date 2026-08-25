@@ -1283,7 +1283,9 @@ void ShowOpenChartDirDialogQt()
     return;
 
   QDir dir(qsDir);
-  QStringList qslFiles = dir.entryList(QStringList() << "*.as",
+  // Both cases: QDir's name filters are case sensitive on Linux, and
+  // chart files copied from a Windows install are often ".AS".
+  QStringList qslFiles = dir.entryList(QStringList() << "*.as" << "*.AS",
     QDir::Files, QDir::Name);
   CI ciT = ciCore;
   int cAdded = 0;

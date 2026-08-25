@@ -1290,11 +1290,16 @@ flag FOutputChartList()
     fprintf(file, "%s %s ", SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
     // Don't put double quotes within double quoted string parameters.
     putc('"', file);
-    for (pch = pci->nam; *pch; pch++)
-      putc(*pch != '"' ? *pch : '\'', file);
+    // Guard the unset name/location that chart slots 3-6 start life with,
+    // the same way the chart info writer above already does. Reachable by
+    // saving a chart list that a never-named chart was copied into.
+    if (FSzSet(pci->nam))
+      for (pch = pci->nam; *pch; pch++)
+        putc(*pch != '"' ? *pch : '\'', file);
     fprintf(file, "\" \"");
-    for (pch = pci->loc; *pch; pch++)
-      putc(*pch != '"' ? *pch : '\'', file);
+    if (FSzSet(pci->loc))
+      for (pch = pci->loc; *pch; pch++)
+        putc(*pch != '"' ? *pch : '\'', file);
     fprintf(file, "\"\n");
     us.fAnsiChar = nSav;
   }
