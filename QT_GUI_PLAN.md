@@ -446,10 +446,13 @@ skip.
        called at the top of `RedrawQt()`, matching `Action()`. Note
        `InitColorsX()` (xscreen.cpp) is a *different* function — backend
        palette setup — and is still needed separately.
-   8.6 **Chart Settings** (next up) (`ShowChartSettingsDialogQt` / `DlgChart`) —
-       missing the astrocartography step/distance fields, star and Arabic
-       part sort order, aspect sort order, and the decan display fields.
-   8.7 **Object / More Object / Moon Object Settings** (`DlgObject`,
+   8.6 ~~Chart Settings~~ — **done 2026-08-25**: astrocartography step/
+       crossings/distance, the two sort order radio groups, aspect sort
+       order and the wheel subdivision type all added, and the checkbox
+       wording now follows the `.rc`. Verified live. Note the sort orders
+       are stored as switch letters not indexes, and the subdivision type
+       splits across `us.fListDecan` + `us.nDecanType`.
+   8.7 **Object / More Object** (next up) / Moon Object Settings** (`DlgObject`,
        `DlgObject2`, `DlgObjectM`) — numeric precision. Windows formats
        via `SetEditR(..., -2)` for max orb, `-1` for orb addition, `-2`
        for influence; `QString::number()` prints full precision, so these
