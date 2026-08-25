@@ -296,40 +296,41 @@ gap), Calculation Settings..., Display Settings....
 ### Chart — COMPLETE
 All 16 chart-type radios, Transits..., Progressions..., Chart Settings....
 
-### Graphics — done except one dialog
+### Graphics — COMPLETE
 Done: 5 sphere/globe/map view types, Reverse Background, Monochrome,
 Square Screen, Character Scale submenu, Chart Effects submenu, Map
 Effects submenu (including Show Constellations/Constellation Lines/
 Detailed World Map), Map Orientation submenu (rotate/tilt/zoom), Indian
 Style Charts submenu, Modify Display, Modify Chart, Scribble Color
-submenu (16 colors).
+submenu (16 colors), Graphics Settings... (done 2026-08-24,
+`ShowGraphicsSettingsDialogQt()`).
 
-Missing: Graphics Settings... `[D]` (`DlgGraphics`, wdialog.cpp:2740) —
-large, mixed complexity, lower value than it looks:
-- Genuinely useful and portable: window size fields (`gs.xWin`/`yWin`,
-  though these are largely superseded by just resizing the Qt window
-  directly), `gs.fKeepSquare`, `gs.nScale`/`gs.nScaleText`/`gs.fAutoScale`
-  (already covered by the Character Scale submenu — skip duplicating),
-  `gs.nGridCell`, `gs.cspace`, `gs.objTrack` (telescope tracking target),
-  `gs.rspace`/`gs.rRot`/`gs.rTilt` (already covered by Map Orientation —
-  skip duplicating), `gs.fSouth`/`gs.fMollweide` (already reachable via
-  Modify Chart — skip duplicating), `gs.fAnimMap`, `gs.nAllStar` (star
-  magnitude filter bits), `gs.objLeft` (rotation reference planet),
-  `gs.nDecaType`/`gs.nDecaSize`/`gs.nDecaFill` (decan wheel display),
-  glyph capitalization radios (`gs.nGlyphCap`/`Ura`/`Plu`/`Lil`/`Ver`/
-  `Eri`), city label color (`gs.nLabelCity`).
-- Windows-only, skip: `wi.nTimerDelay`/`wi.fNoUpdate` (Win32 `SetTimer`),
-  `wi.fWindowChart` (resize-triggers-recast, Window Settings territory).
-- Genuinely hard to port meaningfully: the 6 font-selection combos
-  (`gs.nFontTxt`/`Sig`/`Hou`/`Obj`/`Asp`/`Nak`) enumerate Windows GDI font
-  names via `rgszFontDisp`/`rgszFontAllow` — no direct Linux/Qt
-  equivalent; would need a from-scratch Qt font picker with its own
-  mapping, not a straight port. Lowest-value part of this dialog; consider
-  skipping just this part even if the rest gets built.
-- Given most of the "useful" fields either duplicate menu items already
-  built or are genuinely niche (decan wheel styling, glyph capitalization),
-  this dialog is lower priority than it looks from the menu mapping alone
-  — the Graphics menu is already ~90% functionally covered without it.
+Notes on the Graphics Settings port:
+- Several fields intentionally overlap menu items already built
+  (Character Scale, Map Orientation, Modify Chart). That matches Windows:
+  the menus step values coarsely, the dialog is for typing an exact
+  value. No attempt is made to resync those menus' checkmarks afterward
+  if a typed value doesn't match a preset (see gotcha #9).
+- Skipped as Win32-only (`WI` struct): animation update delay
+  (`wi.nTimerDelay`) and "Don't Automatically Redraw Screen"
+  (`wi.fNoUpdate`).
+- Skipped as unportable: the six font selection combos
+  (`gs.nFontTxt`/`Sig`/`Hou`/`Obj`/`Asp`/`Nak`), which pick from a
+  hardcoded list of Windows GDI font names. Doing this properly means
+  building a real Qt font picker, not translating a list — still open if
+  anyone wants graphic-chart fonts on Linux.
+- **Deliberate deviation from Windows**: `DlgGraphics`' "Atlas City
+  Coloring" combo writes `gs.fLabelAsp`, but that field is `-XA` (draw
+  aspect glyphs on lines — the Chart Effects toggle) and is unrelated to
+  cities; the `-XL` switch that owns `gs.nLabelCity` toggles
+  `gs.fLabelCity` (xscreen.cpp). Reproducing it faithfully would make the
+  combo silently toggle aspect glyphs, so this port writes
+  `gs.fLabelCity`. Upstream typo, not a porting choice — worth reporting
+  upstream if anyone ever files bugs against CruiserOne/Astrolog.
+- The wheel-corner/fill/city label tables live in `wdialog.cpp` (not
+  compiled into the QT build), so qtdialog.cpp has its own copies,
+  including Windows' non-array display order for corner types. Keep in
+  sync if upstream adds a mode.
 
 ### Animate — COMPLETE
 Do Animation, Jump Rate submenu (Update to Now + 9 rate values + 3
@@ -378,15 +379,10 @@ skip.
 4. ~~Edit menu Copy Bitmap/Text/Vector Format~~ — **done 2026-08-24**, see
    Edit section above.
 5. ~~File Settings dialog~~ — **done 2026-08-24**, see File section above.
-6. **Graphics Settings dialog** — **next item up.** Lower priority than it
-   looks; most
-   useful fields duplicate menu items already built, the font pickers
-   need from-scratch Qt work with no direct port, and what's left over is
-   fairly niche (decan wheel styling, glyph capitalization, city label
-   color). Fine to leave for last, or skip the font-picker portion even
-   when the rest gets built.
-7. **Info's Chart List / multi-chart feature** — the single largest
-   remaining feature. Not just a dialog: a whole "manage N loaded charts,
+6. ~~Graphics Settings dialog~~ — **done 2026-08-24**, see Graphics
+   section above (font pickers deliberately left out).
+7. **Info's Chart List / multi-chart feature** — **next item up**, and the
+   single largest remaining feature. Not just a dialog: a whole "manage N loaded charts,
    navigate between them, swap #1/#2" subsystem. Budget accordingly; read
    `DlgList` in full before starting, don't estimate from the menu mapping
    alone.
