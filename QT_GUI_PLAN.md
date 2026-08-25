@@ -744,6 +744,34 @@ skip.
       defined."; a macro defined through the command line dialog runs and
       recasts when its key is pressed.
 
+11. ~~File > Print...~~ — **done 2026-08-25.** `PrintChartQt()` in
+    qtdriver.cpp, wired to File / Print. `QPrintDialog` + `QPrinter`, then
+    the two things Windows' `DlgPrint()` does: scale the chart up before
+    rendering, and force a white background when "Export Text and Print
+    in Intuitive Manner" (`us.fSmartSave`) is on. Text charts go through
+    `QTextDocument::print()` on the same HTML listing the text window
+    shows, so Qt paginates them. Needed `Qt5PrintSupport` added to
+    Makefile.qt. Verified by printing to PDF.
+    - Windows draws straight onto the printer DC and scales by `METAMUL`
+      (12), which is free for a vector DC. That isn't available here:
+      `DrawFill()` (xgeneral.cpp) reads and writes `gi.qim` pixels
+      directly, so `gi.qim` and `gi.qpaint` have to describe the same
+      surface, meaning the chart must be rendered into a real QImage
+      first. At METAMUL that would be a ~250MB image, so `PRINTMUL` is 4.
+    - **A note on the black wedges in the tick ring.** These were once
+      recorded here as a print-scaling artifact, caused by `DrawFill()`'s
+      255-point queue (`iFillMax`) overflowing at PRINTMUL. That was
+      wrong on both counts, and the correction is kept here so nobody
+      re-derives it. The wedges appear identically in the on-screen chart
+      at the default window size and predate any print work, and raising
+      `iFillMax` to 4096 or 16384 leaves the printed output unchanged —
+      measured, two prints differing only by the clock. The test that
+      seemed to confirm the fill theory, setting Wheel Fill to None and
+      watching them vanish, proved nothing: with no fill the whole
+      backdrop is black, so an unfilled wedge can't be seen against it.
+      Whatever they are, they are upstream rendering behaviour, not
+      print-specific. Don't change `iFillMax` over them.
+
 13. ~~Chart-type switches do nothing from the command line or a macro.~~
     — **done 2026-08-25.** `-Z` typed into the Command Line dialog, or run
     from a macro, set `us.fHorizon` but the chart kept drawing as a wheel.
