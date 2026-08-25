@@ -421,11 +421,13 @@ skip.
        latitude now show as `8W` / `122:19W` / `47:36N`, daylight saving
        as No/Yes/Autodetect, labels and field order per the `.rc`.
        Verified live including an OK round trip.
-   8.3 **Transits** (next up) (`ShowTransitDialogQt` / `DlgTransit`) — month as a
-       number not a name, time as decimal hours, zone as a raw decimal.
-       Also missing entirely: the ephemeris search range radio (day/month/
-       year/N-years) and the six `us.fIgnore*` search filter checkboxes.
-   8.4 **Progressions** (`ShowProgressDialogQt` / `DlgProgress`) — same
+   8.3 ~~Transits~~ — **done 2026-08-25**: formatting fixed, and the
+       Times and Graph Cover range, six Transit Time Restrictions, four
+       display toggles, Searching Divisions and the Now button all added.
+       Verified live. Note the cover range is derived from
+       `us.fInDayMonth`/`us.fInDayYear`/`us.nEphemYears` rather than
+       stored as an index — that asymmetric logic is ported as-is.
+   8.4 **Progressions** (next up) (`ShowProgressDialogQt` / `DlgProgress`) — same
        three formatting issues as 8.3. Also missing: preset dropdown
        values for the progression rate (Primary/Secondary/etc) and the
        `X` reciprocal-rate prefix for the solar arc field.
