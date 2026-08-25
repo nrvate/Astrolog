@@ -323,9 +323,23 @@ fractional-second values), Jump Factor submenu (9 unit values), Reverse
 Direction, Pause Animation, Timed Exposure, Step Forward/Backward, Store/
 Recall Chart Info.
 
-### Help — partial, missing the 11 list actions + a few doc/data openers
+### Help — mostly done, missing a few doc/data openers
 Done: Open Documentation..., Open Changes, Open License, Open Default
-Settings, Open Orbital Elements, Open Star List, About Astrolog....
+Settings, Open Orbital Elements, Open Star List, About Astrolog..., and
+**all 11 List Signs/Objects/Aspects/Constellations/Planet Info/Rays/
+General Meanings/Switches/Obscure Switches/Keystrokes/Credits actions**
+(done 2026-08-24 — see `AddChartModeTextAction()` in qtdriver.cpp, which
+also now backs the Exoplanets Chart action; joins `s_pgroupChartMode`
+exactly like every other chart mode, confirmed correct via
+`astrolog.cpp`'s own `Assert(rgcmdMode[gSign] == cmdHelpSign)`-style
+self-checks). Fixed along the way: `AddChartModeTextAction()` keeps the
+View menu's "Show Graphics" checkbox in sync (`s_paGraphics`, file-scope)
+the same way Colored Text/Show Interpretations already did — a real gap
+since forcing text mode via the new helper wasn't updating it before.
+**Naming trap worth remembering**: `us.fConstel` (List Constellations) is
+a *different field* from `gs.fConstel` (Graphics > Map Effects > Show
+Constellations, a separate already-implemented toggle) — easy to
+transpose since they read almost identically.
 
 Missing:
 - Open Website / Open Website Mirror — trivial:
@@ -338,71 +352,17 @@ Missing:
   already use, just three more filenames: `DEFAULT_ATLASFILE`
   ("atlas.as"), `DEFAULT_TIMECHANGE` ("timezone.as"), `szFileExoCore`
   ("astexo.csv") — all `#define`d in astrolog.h.
-- **The 11 List Signs/Objects/Aspects/Constellations/Planet Info/Rays/
-  General Meanings/Switches/Obscure Switches/Keystrokes/Credits actions**
-  — this was the reason `RedrawTextQt()` got built (see gotcha/finding
-  above), and is now well-scoped: each one in Windows
-  (`wdriver.cpp:2402+`, `cmdHelpSign` etc.) just does `wi.nMode = gXxx;
-  us.fGraphics = fFalse;` for one of `gSign`/`gObject`/`gHelpAsp`/
-  `gConstel`/`gPlanet`/`gRay`/`gMeaning`/`gSwitch`/`gObscure`/
-  `gKeystroke`/`gCredit` — already-existing constants (values 31-41) in
-  the `#if defined(WIN) || defined(QT)` section of the `_graphicschart`
-  enum in astrolog.h, confirmed already compiled into the QT build. Exact
-  `us.f*` field each sets (verified from `ProcessState()`'s chart-mode
-  switch, wdriver.cpp:1180-1190):
-
-  | Menu item | mode | flag |
-  |---|---|---|
-  | List Signs | `gSign` | `us.fSign` |
-  | List Objects | `gObject` | `us.fObject` |
-  | List Aspects | `gHelpAsp` | `us.fAspect` |
-  | List Constellations | `gConstel` | `us.fConstel` |
-  | List Planet Info | `gPlanet` | `us.fOrbitData` |
-  | List Rays | `gRay` | `us.fRay` |
-  | List General Meanings | `gMeaning` | `us.fMeaning` |
-  | List Switches | `gSwitch` | `us.fSwitch` |
-  | List Obscure Switches | `gObscure` | `us.fSwitchRare` |
-  | List Keystrokes | `gKeystroke` | `us.fKeyGraph` |
-  | List Credits | `gCredit` | `us.fCredit` |
-
-  **Naming trap**: `us.fConstel` (List Constellations, above) is a
-  *different field* from `gs.fConstel` (the Graphics > Map Effects > Show
-  Constellations toggle, already implemented) — easy to typo one for the
-  other since they read almost identically. To port: (1) add all 11 to
-  `SetChartModeQt()`'s clear-list *and* switch-cases (mechanical, same
-  pattern as the `gMoons`/`gExo` addition — see gotcha #5), (2) add 11
-  plain `QAction`s to `BuildHelpMenu()`, each setting
-  `us.fGraphics = fFalse` then calling `SetChartModeQt(gXxx)` (force
-  fGraphics false *before* calling `SetChartModeQt`, same ordering
-  `cmdChartExo`/the Exoplanets Chart action already uses, so the internal
-  redraw picks the text branch immediately rather than one frame late).
-  **Settled design question**: yes, add these to `s_pgroupChartMode` via
-  `AddChartModeAction()` like every other chart mode, matching Windows
-  exactly — confirmed (not just inferred) by `astrolog.cpp`'s own
-  self-check assertions (~line 3184-3194): `Assert(rgcmdMode[gSign] ==
-  cmdHelpSign)` etc. for all 11. `rgcmdMode[mode]` is the command ID
-  Windows radio-checks for that mode via the *exact same* `wi.cmdCur`/
-  `RadioMenu()` mechanism used for Wheel/Grid/Moons/everything else — so
-  Windows really does show, say, "List Signs" as the checked item (in
-  whichever menu has it) after you use it, the same way "Standard Radix"
-  stays checked after you pick it. No special-casing needed; treat these
-  11 exactly like the `gMoons`/`gExo` addition, including sharing the
-  group.
 - Setup `[P]` submenu — Windows installer only, not applicable, skip.
 
 ## Prioritized remaining work
 
-1. **Help's 11 list actions** — highest value-to-cost ratio left in the
-   whole GUI. Infrastructure (`RedrawTextQt()`) is already built and
-   proven (Colored Text/Show Interpretations use it live), and the
-   field-mapping table and shared-group question above are already
-   resolved — this is ~11 mechanical `SetChartModeQt()` cases + 11 menu
-   items away from done.
+1. ~~Help's 11 list actions~~ — **done 2026-08-24**, see Help section
+   above.
 2. **File's remaining standalone export/save variants** — Save Chart
    Positions, Save Program Settings, Save Chart Exchange/AAF, Save Chart
    Quick*Chart, Save Chart iCalendar, Open Chart Background, Open World
    Map. All trivial, all standalone (don't depend on Chart List), all
-   documented above with the exact function to call.
+   documented above with the exact function to call. **Next item up.**
 3. **Help's remaining doc/data file openers** (Website/Website Mirror,
    Atlas, Time Zone Changes, Exoplanet List) — trivial, same pattern
    already used for the other 6.
