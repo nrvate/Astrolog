@@ -648,15 +648,12 @@ static void BuildChartMenu(QMainWindow *pwind)
 }
 
 
-// A curated subset of Windows' Graphics menu (wdriver.cpp cmdGraphics*
-// handlers): the 5 sphere/globe/map view types, the most broadly useful
-// toggles, and the Scribble Color submenu. Skipped for this pass: Square
-// Screen (ties to Windows' resizable-window model, no clean equivalent
-// given the Qt canvas always auto-fits), Map Orientation (rotate/tilt/zoom
-// -- mode-dependent math not worth replicating without the 3D globe modes
-// fully fleshed out first), Indian Style Charts, Constellations/
-// Constellation Lines/Detailed World Map (niche, and some depend on
-// Windows-only state), Modify Display/Chart, Graphics Settings dialog.
+// Windows' Graphics menu (wdriver.cpp cmdGraphics* handlers), in full
+// except the Graphics Settings dialog (DlgGraphics -- not yet ported).
+// "Show Constellation Lines" tracks its own flag here (s_fStarLine) instead
+// of Windows' wi.fStarLine, which lives in the Win32-only WI struct.
+
+static flag s_fStarLine = fFalse;
 
 static void BuildGraphicsMenu(QMainWindow *pwind)
 {
@@ -683,6 +680,17 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QObject::connect(paMono, &QAction::triggered, pwind, [paMono]() {
     gs.fColor = !gs.fColor;
     paMono->setChecked(!gs.fColor);
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
+  // Not a persistent toggle in Windows either (cmdGraphicsSquare) -- just a
+  // one-shot resize. There, resizing the OS window is what changes the
+  // chart's drawable area; here the chart's drawable area is however big
+  // the canvas widget is, so resize the window that owns it instead.
+  QAction *paSquare = pmenu->addAction("S&quare Screen");
+  QObject::connect(paSquare, &QAction::triggered, pwind, []() {
+    SquareX(&gs.xWin, &gs.yWin, fTrue);
+    gi.qwind->resize(gs.xWin, gs.yWin);
     us.fGraphics = fTrue;
     RedrawQt();
   });
@@ -737,15 +745,191 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
     &gs.fLabelAsp, fFalse);
 
   QMenu *pmenuMap = pmenu->addMenu("Map &Effects");
+  // Custom instead of AddToggleAction: also forces the chart into a
+  // constellation-capable mode, same as Windows' cmdConstellation.
+  QAction *paConstel = pmenuMap->addAction("Show &Constellations");
+  paConstel->setCheckable(true);
+  paConstel->setChecked(gs.fConstel != 0);
+  QObject::connect(paConstel, &QAction::triggered, pwind, [paConstel]() {
+    gs.fConstel = !gs.fConstel;
+    paConstel->setChecked(gs.fConstel != 0);
+    us.fGraphics = fTrue;
+    if (gi.nMode != gHorizon && gi.nMode != gSphere && gi.nMode != gGlobe &&
+      gi.nMode != gPolar && gi.nMode != gTelescope)
+      SetChartModeQt(gWorldMap);
+    else
+      RedrawQt();
+  });
   AddToggleAction(pmenuMap, "Show Full &Star List", &gs.fAllStar, fFalse);
   AddToggleAction(pmenuMap, "Show E&xoplanets", &gs.fAllExo, fFalse);
+  // Custom instead of AddToggleAction: Windows stores this toggle in its
+  // Win32-only wi struct (not reachable from Qt), and applying it also
+  // calls into the portable star-line list builder -- so track the flag
+  // locally here instead and reuse just that logic.
+  QAction *paStarLine = pmenuMap->addAction("Show Constellation &Lines");
+  paStarLine->setCheckable(true);
+  paStarLine->setChecked(s_fStarLine != 0);
+  QObject::connect(paStarLine, &QAction::triggered, pwind, [paStarLine]() {
+    CONST char **ppch;
+    s_fStarLine = !s_fStarLine;
+    paStarLine->setChecked(s_fStarLine != 0);
+    if (s_fStarLine) {
+      for (ppch = szDrawConstelLine; *ppch != NULL; ppch += 2)
+        if (!FProcessYXU(ppch[0], ppch[1], ppch != szDrawConstelLine))
+          break;
+      gs.fAllStar = fTrue;
+    } else
+      FProcessYXU("", "", fFalse);
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
   pmenuMap->addSeparator();
   AddToggleAction(pmenuMap, "Show &House Details", &gs.fHouseExtra, fTrue);
   AddToggleAction(pmenuMap, "Show &Equator", &gs.fEquator, fFalse);
   AddToggleAction(pmenuMap, "Show C&ities", &gs.fLabelCity, fFalse);
   pmenuMap->addSeparator();
+  AddToggleAction(pmenuMap, "Use Detailed World &Map", &gi.fBmp, fFalse);
   AddToggleAction(pmenuMap, "Use Ecliptic &Axis", &gs.fEcliptic, fFalse);
+
+  QMenu *pmenuOrient = pmenu->addMenu("Map &Orientation");
+  QAction *paRotWest = pmenuOrient->addAction("Rotate &West");
+  QObject::connect(paRotWest, &QAction::triggered, pwind, []() {
+    real r = (real)NAbs(gi.nDir) *
+      (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
+    if (gi.nMode == gMidpoint || gi.nMode == gTelescope) {
+      if (gi.nMode == gMidpoint && gs.objTrack >= 0)
+        gs.rRot = planet[gs.objTrack];
+      gs.objTrack = -1;
+    }
+    gs.rRot += r;
+    if (gs.rRot >= rDegMax)
+      gs.rRot -= rDegMax;
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
+  QAction *paRotEast = pmenuOrient->addAction("Rotate &East");
+  QObject::connect(paRotEast, &QAction::triggered, pwind, []() {
+    real r = (real)NAbs(gi.nDir) *
+      (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
+    if (gi.nMode == gMidpoint || gi.nMode == gTelescope) {
+      if (gi.nMode == gMidpoint && gs.objTrack >= 0)
+        gs.rRot = planet[gs.objTrack];
+      gs.objTrack = -1;
+    }
+    gs.rRot -= r;
+    if (gs.rRot < 0)
+      gs.rRot += rDegMax;
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
+  pmenuOrient->addSeparator();
+  QAction *paTiltNorth = pmenuOrient->addAction("Tilt &North");
+  QObject::connect(paTiltNorth, &QAction::triggered, pwind, []() {
+    real r = (real)NAbs(gi.nDir) *
+      (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
+    if (gs.rTilt > -rDegQuad) {
+      gs.rTilt -= r;
+      if (gs.rTilt < -rDegQuad)
+        gs.rTilt = -rDegQuad;
+    }
+    if (gi.nMode == gTelescope)
+      gs.objTrack = -1;
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
+  QAction *paTiltSouth = pmenuOrient->addAction("Tilt &South");
+  QObject::connect(paTiltSouth, &QAction::triggered, pwind, []() {
+    real r = (real)NAbs(gi.nDir) *
+      (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
+    if (gs.rTilt < rDegQuad) {
+      gs.rTilt += r;
+      if (gs.rTilt > rDegQuad)
+        gs.rTilt = rDegQuad;
+    }
+    if (gi.nMode == gTelescope)
+      gs.objTrack = -1;
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
+  pmenuOrient->addSeparator();
+  QAction *paTiltZero = pmenuOrient->addAction("Set Tilt to &Zero");
+  QObject::connect(paTiltZero, &QAction::triggered, pwind, []() {
+    gs.rTilt = 0.0;
+    us.fGraphics = fTrue;
+    if (gi.nMode != gTelescope && gi.nMode != gSphere && gi.nMode != gGlobe)
+      SetChartModeQt(gGlobe);
+    else
+      RedrawQt();
+  });
+  pmenuOrient->addSeparator();
+  QAction *paZoomOut = pmenuOrient->addAction("Zoom &Out");
+  QObject::connect(paZoomOut, &QAction::triggered, pwind, []() {
+    real r = gs.rspace;
+    if (r < rSmall)
+      r = (real)(1 << (4 - gi.nScale/gi.nScaleT));
+    r *= 2.0;
+    if (FValidZoom(r)) {
+      gs.rspace = r;
+      us.fGraphics = fTrue;
+      RedrawQt();
+    }
+  });
+  QAction *paZoomIn = pmenuOrient->addAction("Zoom &In");
+  QObject::connect(paZoomIn, &QAction::triggered, pwind, []() {
+    real r = gs.rspace;
+    if (r < rSmall)
+      r = (real)(1 << (4 - gi.nScale/gi.nScaleT));
+    r /= 2.0;
+    if (FValidZoom(r)) {
+      gs.rspace = r;
+      us.fGraphics = fTrue;
+      RedrawQt();
+    }
+  });
   pmenu->addSeparator();
+
+  QMenu *pmenuIndian = pmenu->addMenu("&Indian Style Charts");
+  AddToggleAction(pmenuIndian, "Show &Indian Wheels", &gs.fIndianWheel,
+    fFalse);
+  pmenuIndian->addSeparator();
+  QAction *paIndianS = pmenuIndian->addAction("Draw &South Indian");
+  QObject::connect(paIndianS, &QAction::triggered, pwind, []() {
+    gs.fIndianWheel = fTrue;
+    gs.fHouseExtra = fFalse;
+    SetChartModeQt(gWheel);
+  });
+  QAction *paIndianN = pmenuIndian->addAction("Draw &North Indian");
+  QObject::connect(paIndianN, &QAction::triggered, pwind, []() {
+    gs.fIndianWheel = fTrue;
+    SetChartModeQt(gHouse);
+  });
+  QAction *paIndianE = pmenuIndian->addAction("Draw &East Indian");
+  QObject::connect(paIndianE, &QAction::triggered, pwind, []() {
+    gs.fIndianWheel = fTrue;
+    gs.fHouseExtra = fTrue;
+    SetChartModeQt(gWheel);
+  });
+
+  AddToggleAction(pmenu, "Modify &Display", &gs.fAlt, fFalse);
+  // Windows' cmdChartModify: a compound "alternate form" flip for whichever
+  // chart type is current, including a direct gWheel/gHouse mode swap that
+  // bypasses the usual us.f* chart-type flags entirely -- ported as is,
+  // not cleaned up, since that's exactly what Windows itself does here.
+  QAction *paChartModify = pmenu->addAction("Modif&y Chart");
+  QObject::connect(paChartModify, &QAction::triggered, pwind, []() {
+    inv(us.fGridMidpoint);
+    inv(us.fPrimeVert);
+    inv(us.fCalendarYear);
+    inv(us.fLatitudeCross);
+    inv(us.nEphemYears);
+    inv(us.fGraphAll);
+    inv(gs.fSouth);
+    inv(gs.fMollweide);
+    gi.nMode = (gi.nMode == gWheel ? gHouse :
+      (gi.nMode == gHouse ? gWheel : gi.nMode));
+    us.fGraphics = fTrue;
+    RedrawQt();
+  });
 
   QMenu *pmenuPen = pmenu->addMenu("Scribb&le Color");
   QActionGroup *pgroupPen = new QActionGroup(pwind);
