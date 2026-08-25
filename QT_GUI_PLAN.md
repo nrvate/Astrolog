@@ -24,9 +24,10 @@ list (`DlgList`), multi-chart info (`DlgInfoAll`), command line
 (`DlgCommand`), and About (`DlgAbout`). They work; they just haven't been
 audited line by line, so that's the obvious place to look if something
 looks off in one of them. Item 12, the missing animation loop, is also
-done, as are Paste (9) and Print (11). The only item left is the 96
-macro slots (10), which have been deferred by choice throughout.
-Everything
+done, as are Paste (9), the 96 macro slots (10), and Print (11) — so
+everything on the original list is now ported. Item 13, chart-type
+switches being ignored from the command line and macros, is the one
+known functional bug still open. Everything
 knowingly left undone or deliberately diverged from Windows is recorded
 either in the relevant 8.x sub-item or under "Known divergences from
 Windows" near the end — if you find something undocumented, that's a
@@ -726,8 +727,41 @@ skip.
      already-shipping path. Worth a look on its own — start at
      `FBmpDrawBack()` (xdevice.cpp) and the `nTrans`/`gs.rBackPct`
      handling in xcharts0.cpp:641.
-10. **Edit menu's 96 macro slots** — lowest priority, deferred repeatedly.
-    Only do this if specifically asked.
+10. ~~Edit menu's 96 macro slots~~ — **done 2026-08-25.** Eight submenus
+    of twelve under Edit, split into two groups of four as Windows has
+    them, each slot bound to F1-F12 under a different modifier
+    combination via `QAction::setShortcut()` (Windows uses an accelerator
+    table). `RunMacroQt()` calls `FProcessCommandLine(is.rgszMacro[i])`
+    then recasts, which is what Windows' `cmdMacro01..96` handler does,
+    including its two defaults for undefined slots: F1 opens
+    astrolog.htm and Alt+F4 quits. Anything else undefined warns with
+    Windows' exact wording.
+    - Macros are *defined* the way they are on Windows — `-M0 <n>
+      "<switches>"`, or in astrolog.as — not from the GUI. This menu only
+      runs them, same as Windows'.
+    - Windows can rename a macro's menu entry with `-WM`, which it does
+      via `ModifyMenu` on Win32-only `wi.hmenu`. Not ported; entries keep
+      their default "Macro N" labels.
+    - Verified: F5 with nothing defined gives "Macro number 5 is not
+      defined."; a macro defined through the command line dialog runs and
+      recasts when its key is pressed.
+
+13. **Chart-type switches do nothing from the command line or a macro.**
+    Found while testing item 10. `-Z` entered in the Command Line dialog,
+    or run from a macro, changes `us.fHorizon` but the drawn chart stays
+    a wheel — zero pixels change. Cause is gotcha #4: this port sets
+    `gi.nMode` directly in `SetChartModeQt()` rather than re-deriving it,
+    because `DetectGraphicsChartMode()` has real gaps, so nothing updates
+    `gi.nMode` when a switch changes the underlying `us.f*` flag. Macros
+    and the command line behave identically here, so this is one shared
+    bug rather than two.
+    This matters more than it first looks: the command line dialog is
+    advertised at the top of this doc as the escape hatch for anything
+    without a menu item, and for chart types it silently isn't. A fix
+    needs `gi.nMode` re-derived after `FProcessSwitches()` /
+    `FProcessCommandLine()` — probably a small Qt-side mapping from the
+    `us.f*` flags, since `DetectGraphicsChartMode()` can't be trusted
+    for it.
 11. ~~File > Print...~~ — **done 2026-08-25.** `PrintChartQt()` in
     qtdriver.cpp, wired to File / Print. `QPrintDialog` + `QPrinter`, then
     the two things Windows' `DlgPrint()` does: scale the chart up before

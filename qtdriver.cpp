@@ -37,6 +37,7 @@
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QAction>
 #include <QtWidgets/QActionGroup>
+#include <QtGui/QKeySequence>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QVBoxLayout>
@@ -1491,9 +1492,91 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
 }
 
 
-// Edit menu, equivalent to Windows' cmdCommand/cmdCopy*/cmdPaste handlers.
-// Skipped: the 96 user-programmable macro slots (low value, deferred
-// repeatedly).
+// The Edit menu's 96 macro slots, equivalent to Windows' cmdMacro01
+// through cmdMacro96 (wdriver.cpp). Eight sets of twelve, each set bound
+// to F1-F12 under a different modifier combination. The set names and
+// their order are Windows'; so is the modifier assignment, which is
+// spelled out in its -WM label handler rather than anywhere obvious:
+// Ctrl for sets 2, 4, 6, 7 and 8; Alt for 3, 5, 6, 7 and 8; Shift for
+// 1, 4, 5 and 7 (zero-based there, one-based in the menu names below).
+
+static CONST char *rgszMacroSetQt[8] = {
+  "Run Macro (&Normal Set)",     "Run Macro (&Shift Set)",
+  "Run Macro (&Control Set)",    "Run Macro (&Alt Set)",
+  "Run Macro (Ctrl+S&hift Set)", "Run Macro (Alt+Sh&ift Set)",
+  "Run Macro (Ct&rl+Alt Set)",   "Run Macro (Ctrl+Alt+Shi&ft)" };
+
+static QString SzMacroKeyQt(int iSet, int iKey)
+{
+  QString str;
+
+  if (iSet == 2 || iSet == 4 || iSet >= 6)
+    str += "Ctrl+";
+  if (iSet == 3 || iSet >= 5)
+    str += "Alt+";
+  if (iSet == 1 || iSet == 4 || iSet == 5 || iSet == 7)
+    str += "Shift+";
+  return str + QString("F%1").arg(iKey + 1);
+}
+
+// Run macro "iMacro" (1 based, as Windows numbers them). Undefined slots
+// mostly just say so, but Windows gives two of them a default meaning,
+// kept here: F1 opens the documentation, and Alt+F4 quits.
+
+static void RunMacroQt(int iMacro)
+{
+  char szPath[cchSzMax];
+
+  if (is.rgszMacro != NULL && FSzSet(is.rgszMacro[iMacro])) {
+    FProcessCommandLine(is.rgszMacro[iMacro]);
+    RecastAndRedrawQt();
+    return;
+  }
+  if (iMacro == 1) {
+    if (FileOpen("astrolog.htm", 2, szPath) != NULL)
+      QDesktopServices::openUrl(QUrl::fromLocalFile(szPath));
+    else
+      QMessageBox::warning(gi.qwind, szAppName,
+        "File 'astrolog.htm' not found.");
+    return;
+  }
+  if (iMacro == 40) {
+    gi.qwind->close();
+    return;
+  }
+  QMessageBox::warning(gi.qwind, szAppName,
+    QString("Macro number %1 is not defined.").arg(iMacro));
+}
+
+static void BuildMacroMenus(QMenu *pmenu, QMainWindow *pwind)
+{
+  int iSet, iKey;
+
+  for (iSet = 0; iSet < 8; iSet++) {
+    QMenu *pmenuSet = pmenu->addMenu(rgszMacroSetQt[iSet]);
+    for (iKey = 0; iKey < 12; iKey++) {
+      int iMacro = iSet*12 + iKey + 1;
+      QAction *pa = pmenuSet->addAction(QString("Macro %1").arg(iMacro));
+      // The shortcut makes the key work without opening the menu, which
+      // is how Windows' accelerator table has it.
+      pa->setShortcut(QKeySequence(SzMacroKeyQt(iSet, iKey)));
+      QObject::connect(pa, &QAction::triggered, pwind,
+        [iMacro]() { RunMacroQt(iMacro); });
+    }
+    // Windows breaks its eight submenus into two groups of four.
+    if (iSet == 3)
+      pmenu->addSeparator();
+  }
+}
+
+
+// Edit menu, equivalent to Windows' cmdCommand/cmdCopy*/cmdMacro*/cmdPaste
+// handlers. Macros are defined the same way they are on Windows -- with
+// the -M command switch, or in astrolog.as -- not from the GUI; this menu
+// only runs them, exactly as Windows' does. Windows can additionally
+// rename a macro's menu entry with -WM, which it does through ModifyMenu
+// on its Win32-only wi.hmenu, so that part isn't ported and the entries
+// keep their default "Macro N" labels.
 
 static void BuildEditMenu(QMainWindow *pwind)
 {
@@ -1501,6 +1584,8 @@ static void BuildEditMenu(QMainWindow *pwind)
   QAction *paCommand = pmenu->addAction("Enter &Command Line...");
   QObject::connect(paCommand, &QAction::triggered, pwind,
     []() { ShowCommandLineDialogQt(); });
+  pmenu->addSeparator();
+  BuildMacroMenus(pmenu, pwind);
   pmenu->addSeparator();
   QAction *paPaste = pmenu->addAction("&Paste");
   QObject::connect(paPaste, &QAction::triggered, pwind,
