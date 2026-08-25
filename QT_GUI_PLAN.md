@@ -1035,6 +1035,40 @@ original description said they were.
       Chart to Window (so, `Shift+B` in Qt). Getting this wrong produced a
       duplicate binding the hotkey test caught.
 
+19. **Check for missing backend branches before blaming rendering.**
+    `xgeneral.cpp`'s drawing primitives are written as a chain of
+    `#ifdef X11 / #ifdef WINANY` alternatives. Two of them, **`DrawArc()`
+    and `DrawEllipse2()`, had no Qt branch at all** and so silently drew
+    *nothing* on screen -- no compiler warning, no crash, just no curves.
+    - Every circle in every chart was missing. Worse, `DrawFill()` floods
+      up against those circles, so with the boundary gone a single sign
+      sector fill escaped and swallowed the whole chart in one flat color.
+      That one omission was most of "the wheel looks terrible".
+    - `DrawArc()` on Qt now draws the arc as the same series of line
+      segments the bitmap file path uses, rather than getting a
+      `QPainter::drawArc()` of its own. Two reasons: the curve then
+      rasterizes identically on screen and in an exported chart, and it
+      comes out *closed*, which a flood fill depends on.
+    - A grep worth repeating after any upstream merge:
+
+          for each Draw* in xgeneral.cpp, does it have #ifdef X11 or
+          #ifdef WINANY but no #ifdef QT?
+
+      Still outstanding by that test: **`DrawStar()`** (WINANY only).
+      `DrawColor()` and `DrawClearScreen()` also lack one but are fine --
+      their generic code already does the work for Qt.
+    - Watch `QPainter` state. The first cut of the `DrawEllipse2()` branch
+      left `Qt::NoPen` set, which made everything drawn afterwards vanish.
+      Save and restore pen and brush.
+
+20. **The wheel is an ellipse when the window isn't chart-square.** This is
+    correct, and matches Windows: `gs.xWin` is the *whole* client width and
+    the wheel code subtracts the sidebar from it (xcharts1.cpp:79), so a
+    circular wheel needs a window `SIDESIZE` wider than it is tall.
+    `SquareX()` adds that automatically, which is why the app opens at
+    760x600 -- a 600x600 wheel plus a 160 sidebar. Don't "fix" an oval seen
+    in a forced-square test window; check the natural startup size instead.
+
 ## Known divergences from Windows
 
 Every place this port knowingly differs, so none of it reads as an

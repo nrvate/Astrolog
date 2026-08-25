@@ -964,10 +964,23 @@ void DrawArc(int x1, int y1, int x2, int y2, real rRotate, real t1, real t2)
 {
   int x, y, rx, ry, m, n, u, v, i, di;
   real rS, rC, dx, dy, dx2, dy2, dt, t;
+#ifdef QT
+  // Unlike X11 and Windows below, Qt has no arc primitive here. Rather
+  // than add one, draw the arc on screen as the same series of line
+  // segments the bitmap file path uses. That makes an arc on screen come
+  // out identical to one in an exported chart, and more importantly it
+  // comes out closed: DrawFill() floods up against these curves, and a
+  // curve with a gap in it lets the fill escape and swallow the chart.
+  // Only for the screen -- a Qt build still writes PostScript and SVG
+  // files, which want their own native curves further down.
+  flag fSeg = !gi.fFile;
+#else
+  CONST flag fSeg = fFalse;
+#endif
 
-  if (gi.fFile || rRotate != 0.0) {
+  if (gi.fFile || rRotate != 0.0 || fSeg) {
     x = (x1+x2)/2; y = (y1+y2)/2; rx = (x2-x1)/2; ry = (y2-y1)/2;
-    if (gs.ft == ftBmp || gs.ft == ftWire || rRotate != 0.0) {
+    if (gs.ft == ftBmp || gs.ft == ftWire || rRotate != 0.0 || fSeg) {
       RotateR2Init(rS, rC, rRotate);
       dt = (t2 - t1) / rDegMax;
       i = NAbs(rx) + NAbs(ry);
@@ -1095,6 +1108,19 @@ void DrawEllipse2(int x1, int y1, int x2, int y2)
     }
 #endif
   }
+#ifdef QT
+  else {
+    // Put the pen back afterwards: the other Qt primitives here don't all
+    // set their own, so leaving Qt::NoPen behind makes everything drawn
+    // after this silently disappear.
+    QPen penSave = gi.qpaint->pen();
+    gi.qpaint->setPen(Qt::NoPen);
+    gi.qpaint->setBrush(QColorFromKv(gi.kvCur));
+    gi.qpaint->drawEllipse(x1, y1, x2-x1, y2-y1);
+    gi.qpaint->setBrush(Qt::NoBrush);
+    gi.qpaint->setPen(penSave);
+  }
+#endif
 #ifdef X11
   else
     XFillArc(gi.disp, gi.pmap, gi.gc, x1, y1, x2-x1, y2-y1, 0, nDegMax*64);
