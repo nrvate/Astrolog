@@ -1576,59 +1576,147 @@ void ShowDefaultInfoDialogQt()
 }
 
 
-// Transits, equivalent to Windows' DlgTransit: which day/transit chart mode
-// to show (if any) and the date/time to transit to (ciTran), using the
-// default location (Info / Default Chart Info) the same way Windows does.
-// The ephemeris search range and search filter options DlgTransit also has
-// are not included here -- they only matter for the search chart types,
-// which aren't in the Chart menu yet either.
+// Transits, equivalent to Windows' DlgTransit: which transit chart type
+// to show (if any), the date/time to transit to (ciTran), how much time
+// the search covers, which kinds of event the search reports, and a few
+// display options. Location comes from the default chart info the same
+// way Windows does it.
 
 void ShowTransitDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Transits");
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QHBoxLayout *phTop = new QHBoxLayout();
+  QVBoxLayout *pvLeft = new QVBoxLayout();
+  QVBoxLayout *pvRight = new QVBoxLayout();
+  char sz[cchSzMax];
+  int i;
 
-  QGroupBox *pgroupBox = new QGroupBox("Show");
-  QVBoxLayout *pgrouplayout = new QVBoxLayout(pgroupBox);
+  QGroupBox *pgbType = new QGroupBox("Transit Chart Type");
+  QVBoxLayout *pvType = new QVBoxLayout(pgbType);
   QButtonGroup *pgroup = new QButtonGroup(&dlg);
-  CONST char *rgszDayType[7] = { "Normal chart (no transits)",
-    "In-Day Transits: Timeline", "In-Day Transits: Influence",
-    "In-Day Transits: Graphic", "Transit to Natal: Timeline",
-    "Transit to Natal: Influence", "Transit to Natal: Graphic" };
+  CONST char *rgszDayType[7] = { "None",
+    "Transit to Transit Times", "Transit to Transit Influence",
+    "Transit to Transit Graph", "Transit to Natal Times",
+    "Transit to Natal Influence", "Transit to Natal Graph" };
   int n1 = us.fInDay ? 1 : (us.fInDayInf ? 2 : (us.fInDayGra ? 3 :
     (us.fTransit ? 4 : (us.fTransitInf ? 5 : (us.fTransitGra ? 6 : 0)))));
-  int i;
   for (i = 0; i < 7; i++) {
     QRadioButton *prb = new QRadioButton(rgszDayType[i]);
     prb->setChecked(i == n1);
     pgroup->addButton(prb, i);
-    pgrouplayout->addWidget(prb);
+    pvType->addWidget(prb);
   }
-  pouter->addWidget(pgroupBox);
+  pvLeft->addWidget(pgbType);
 
-  QFormLayout *pform = new QFormLayout();
-  QLineEdit *peMon = new QLineEdit(QString::number(ciTran.mon));
+  // Same human readable formatting as the chart info dialog -- month by
+  // name, time as "9:54pm", zone as "8W". See ShowChartInfoForQt().
+  QGroupBox *pgbInfo = new QGroupBox("Transit to Natal Info");
+  QFormLayout *pformInfo = new QFormLayout(pgbInfo);
+  sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
+  QLineEdit *peMon = new QLineEdit(sz);
   QLineEdit *peDay = new QLineEdit(QString::number(ciTran.day));
   QLineEdit *peYea = new QLineEdit(QString::number(ciTran.yea));
-  QLineEdit *peTim = new QLineEdit(QString::number(ciTran.tim));
-  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "ST" :
-    (ciTran.dst == 1.0 ? "DT" :
+  QLineEdit *peTim = new QLineEdit(SzTim(ciTran.tim));
+  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "No" :
+    (ciTran.dst == 1.0 ? "Yes" :
     (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))));
-  QLineEdit *peZon = new QLineEdit(QString::number(ciTran.zon));
-  pform->addRow("Month (1-12):", peMon);
-  pform->addRow("Day:", peDay);
-  pform->addRow("Year:", peYea);
-  pform->addRow("Time (decimal hours):", peTim);
-  pform->addRow("Daylight offset:", peDst);
-  pform->addRow("Zone (hours west of UTC):", peZon);
-  pouter->addLayout(pform);
+  sprintf(sz, "%s", SzZone(ciTran.zon));
+  QLineEdit *peZon = new QLineEdit(sz[0] == '+' ? &sz[1] : sz);
+  pformInfo->addRow("Month:", peMon);
+  pformInfo->addRow("Day:", peDay);
+  pformInfo->addRow("Year:", peYea);
+  pformInfo->addRow("Time:", peTim);
+  pformInfo->addRow("Daylight:", peDst);
+  pformInfo->addRow("Zone:", peZon);
+  pvLeft->addWidget(pgbInfo);
+  phTop->addLayout(pvLeft);
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  QGroupBox *pgbCover = new QGroupBox("Times and Graph Cover");
+  QVBoxLayout *pvCover = new QVBoxLayout(pgbCover);
+  QButtonGroup *pgroupCover = new QButtonGroup(&dlg);
+  CONST char *rgszCover[4] =
+    { "Given Day", "Given Month", "Given Year", "Range of Years" };
+  // Windows derives which of the four is current from two flags plus the
+  // magnitude of nEphemYears, rather than storing an index.
+  int n2 = us.fInDayMonth + us.fInDayYear +
+    us.fInDayYear*(NAbs(us.nEphemYears) > 1);
+  for (i = 0; i < 4; i++) {
+    QRadioButton *prb = new QRadioButton(rgszCover[i]);
+    prb->setChecked(i == n2);
+    pgroupCover->addButton(prb, i);
+    pvCover->addWidget(prb);
+  }
+  QFormLayout *pformYears = new QFormLayout();
+  QLineEdit *peYears = new QLineEdit(QString::number(us.nEphemYears));
+  pformYears->addRow("Years to Span:", peYears);
+  pvCover->addLayout(pformYears);
+  pvRight->addWidget(pgbCover);
+
+  QGroupBox *pgbRestrict = new QGroupBox("Transit Time Restrictions");
+  QVBoxLayout *pvRestrict = new QVBoxLayout(pgbRestrict);
+  QCheckBox *pcbSign = new QCheckBox("Sign Changes");
+  QCheckBox *pcbDir = new QCheckBox("Direction Changes");
+  QCheckBox *pcbDiralt = new QCheckBox("Latitude Dir. Changes");
+  QCheckBox *pcbDirlen = new QCheckBox("Distance Dir. Changes");
+  QCheckBox *pcbAlt0 = new QCheckBox("Latitude Zero Crossing");
+  QCheckBox *pcbDisequ = new QCheckBox("Distances Equal");
+  pcbSign->setChecked(us.fIgnoreSign != 0);
+  pcbDir->setChecked(us.fIgnoreDir != 0);
+  pcbDiralt->setChecked(us.fIgnoreDiralt != 0);
+  pcbDirlen->setChecked(us.fIgnoreDirlen != 0);
+  pcbAlt0->setChecked(us.fIgnoreAlt0 != 0);
+  pcbDisequ->setChecked(us.fIgnoreDisequ != 0);
+  for (QCheckBox *pcb : { pcbSign, pcbDir, pcbDiralt, pcbDirlen, pcbAlt0,
+    pcbDisequ })
+    pvRestrict->addWidget(pcb);
+  pvRight->addWidget(pgbRestrict);
+
+  QCheckBox *pcbProgress = new QCheckBox("Progress Instead of Transit");
+  QCheckBox *pcbReturn = new QCheckBox("Display Transit Returns Only");
+  QCheckBox *pcbListAuto = new QCheckBox("Times Populate Chart List");
+  QCheckBox *pcbGraphAll = new QCheckBox("Graphs Include All Objects");
+  pcbProgress->setChecked(is.fProgress != 0);
+  pcbReturn->setChecked(is.fReturn != 0);
+  pcbListAuto->setChecked(us.fListAuto != 0);
+  pcbGraphAll->setChecked(us.fGraphAll != 0);
+  for (QCheckBox *pcb : { pcbProgress, pcbReturn, pcbListAuto, pcbGraphAll })
+    pvRight->addWidget(pcb);
+  QFormLayout *pformDiv = new QFormLayout();
+  QLineEdit *peDiv = new QLineEdit(QString::number(us.nDivision));
+  pformDiv->addRow("Searching Divisions:", peDiv);
+  pvRight->addLayout(pformDiv);
+  pvRight->addStretch(1);
+  phTop->addLayout(pvRight);
+  pouter->addLayout(phTop);
+
+  QDialogButtonBox *pbuttons = new QDialogButtonBox(
+    QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  QPushButton *pbNow = pbuttons->addButton("Now",
+    QDialogButtonBox::ActionRole);
   pouter->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  // "Now" refills the date/time fields from the current clock, exactly as
+  // Windows' dbTr_tn button does -- it doesn't accept the dialog.
+  QObject::connect(pbNow, &QPushButton::clicked, &dlg,
+    [peMon, peDay, peYea, peTim, peDst, peZon]() {
+      char szT[cchSzMax];
+      int mon, day, yea;
+      real tim;
+      GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
+      sprintf(szT, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
+      peMon->setText(szT);
+      peDay->setText(QString::number(day));
+      peYea->setText(QString::number(yea));
+      peTim->setText(SzTim(tim));
+      peDst->setText(ciDefa.dst == 0.0 ? "No" :
+        (ciDefa.dst == 1.0 ? "Yes" :
+        (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
+      sprintf(szT, "%s", SzZone(ciDefa.zon));
+      peZon->setText(szT[0] == '+' ? &szT[1] : szT);
+    });
 
   if (dlg.exec() != QDialog::Accepted)
     return;
@@ -1642,29 +1730,57 @@ void ShowTransitDialogQt()
   ba = peTim->text().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
   ba = peDst->text().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
   ba = peZon->text().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
+  int nty = peYears->text().toInt();
+  int nd = peDiv->text().toInt();
   if (!FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
-    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon)) {
+    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon) ||
+    !FValidDivision(nd)) {
     QMessageBox::warning(gi.qwind, szAppName,
-      "One or more transit date fields are invalid.");
+      "One or more transit fields are invalid.");
     return;
   }
   SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
 
+  us.nEphemYears = nty;
+  us.fIgnoreSign   = pcbSign->isChecked();
+  us.fIgnoreDir    = pcbDir->isChecked();
+  us.fIgnoreDiralt = pcbDiralt->isChecked();
+  us.fIgnoreDirlen = pcbDirlen->isChecked();
+  us.fIgnoreAlt0   = pcbAlt0->isChecked();
+  us.fIgnoreDisequ = pcbDisequ->isChecked();
+  is.fProgress = pcbProgress->isChecked();
+  is.fReturn   = pcbReturn->isChecked();
+  us.fListAuto = pcbListAuto->isChecked();
+  us.fGraphAll = pcbGraphAll->isChecked();
+  us.nDivision = nd;
+
   int n1sel = pgroup->checkedId();
-  flag fRecast = fFalse;
+  int n2sel = pgroupCover->checkedId();
+  us.fInDayMonth = n2sel >= 1;
+  us.fInDayYear = us.fInDayMonth && n2sel >= 2;
+  if (n2sel == 2 && NAbs(us.nEphemYears) > 1)
+    us.nEphemYears = 0;
+  if (n1sel == 3 || n1sel == 6)
+    us.nEphemYears = (n2sel <= 2 ? 1 : (nty <= 1 ? 5 : nty));
+  else if (n1sel > 0) {
+    // The non graphical transit chart types are text listings.
+    us.fGraphics = fFalse;
+    if (n1sel == 2)
+      us.fProgress = is.fProgress;
+  }
+
+  flag fRecast = (n1sel == 2 || n1sel == 5);
   switch (n1sel) {
   case 1: SetChartModeQt(gTraTraTim); break;
-  case 2: SetChartModeQt(gTraTraInf); fRecast = fTrue; break;
+  case 2: SetChartModeQt(gTraTraInf); break;
   case 3: SetChartModeQt(gTraTraGra); break;
   case 4: SetChartModeQt(gTraNatTim); break;
-  case 5: SetChartModeQt(gTraNatInf); fRecast = fTrue; break;
+  case 5: SetChartModeQt(gTraNatInf); break;
   case 6: SetChartModeQt(gTraNatGra); break;
   default:
     if (n1 != 0)  // Was showing a transit chart; go back to a normal one.
       SetChartModeQt(gWheel);
   }
-  if (n1sel > 0)
-    us.fGraphics = fFalse;
   if (fRecast)
     RecastAndRedrawQt();
   else
