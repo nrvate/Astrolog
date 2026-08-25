@@ -81,6 +81,12 @@ void ShowMoonRestrictDialogQt();
 void ShowMoonObjectDialogQt();
 void ShowCustomDialogQt();
 void ShowCustomStarDialogQt();
+void ShowExportBitmapDialogQt();
+void ShowExportMetafileDialogQt();
+void ShowExportPSDialogQt();
+void ShowExportSVGDialogQt();
+void ShowExportWireDialogQt();
+void ShowExportTextDialogQt();
 
 #endif // __QTDRIVER_H
 

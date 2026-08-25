@@ -92,6 +92,110 @@ void ShowSaveChartDialogQt()
 }
 
 
+// Export the current chart as a graphics file, equivalent to what Windows'
+// DlgSaveChart does for its Export Chart Bitmap/Metafile/PostScript/SVG/
+// Wireframe commands. All five formats fall out of one shared mechanism:
+// FActionX() (xscreen.cpp) -- the same function invoked for -Xb/-Xp/etc
+// command line switches -- derives gi.fFile from whether gs.ft is set, and
+// take its "write to gi.szFileOut instead of drawing to screen" path when
+// it is, so setting gs.ft and calling it is really all that's needed.
+// FActionX() only restores gs.xWin/yWin/nScale for some formats (not
+// bitmap) since normally it's only ever called once per process, right
+// before that process exits -- here it can be called many times in one
+// running session, so save/restore all three unconditionally regardless,
+// and re-render the on-screen chart afterward.
+
+static flag FExportChartQt(CONST char *szFile, int ft)
+{
+  int xWinSave = gs.xWin, yWinSave = gs.yWin, nScaleSave = gs.nScale;
+  flag fGraphicsSave = us.fGraphics;
+  flag f;
+
+  FCloneSz(szFile, &is.szFileOut);
+  FCloneSz(szFile, &gi.szFileOut);
+  gs.ft = ft;
+  us.fGraphics = fTrue;
+  f = FActionX();
+  gs.ft = ftNone;
+  gi.fFile = fFalse;
+  gs.xWin = xWinSave; gs.yWin = yWinSave; gs.nScale = nScaleSave;
+  us.fGraphics = fGraphicsSave;
+  RedrawQt();
+  return f;
+}
+
+static void ShowExportGraphicsDialogQt(CONST char *szTitle,
+  CONST char *szFilter, int ft)
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, QString(),
+    QString(szFilter) + ";;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FExportChartQt(ba.constData(), ft))
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
+}
+
+void ShowExportBitmapDialogQt()
+{
+  gs.chBmpMode = 'B';
+  ShowExportGraphicsDialogQt("Export Chart Bitmap",
+    "Windows Bitmaps (*.bmp)", ftBmp);
+}
+
+void ShowExportMetafileDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart Metafile",
+    "Windows Metafiles (*.wmf)", ftWmf);
+}
+
+void ShowExportPSDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart PostScript",
+    "PostScript Files (*.eps *.ps)", ftPS);
+}
+
+void ShowExportSVGDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart SVG",
+    "Scalable Vector Graphics (*.svg)", ftSVG);
+}
+
+void ShowExportWireDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart Wireframe",
+    "Daedalus Wireframes (*.dw)", ftWire);
+}
+
+
+// Export the chart's text output (the same plain-text listing the -o0
+// command line switch writes) to a file, equivalent to Windows' Export
+// Chart Text Output. Text-mode chart output is a wholly separate rendering
+// path from the graphics one (Action(), astrolog.cpp: "if (us.fGraphics)
+// FActionX(); else PrintChart();"), driven by is.S/is.szFileScreen instead
+// of gi.qpaint -- so unlike the graphics exports above, this doesn't (and
+// can't) go through RedrawQt()/DrawChartX(). Calling Action() directly
+// reuses that path exactly as the -o0/-os command line switches do; since
+// the destination is a file, not the screen, this doesn't need the
+// still-undesigned on-screen text display QT is missing (see the Help
+// menu's list actions).
+
+void ShowExportTextDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Export Chart Text",
+    QString(), "Text Files (*.txt);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  flag fGraphicsSave = us.fGraphics;
+  FCloneSz(ba.constData(), &is.szFileScreen);
+  us.fGraphics = fFalse;
+  Action();
+  us.fGraphics = fGraphicsSave;
+  FCloneSz(NULL, &is.szFileScreen);
+}
+
+
 // Chart info entry, equivalent to Windows' DlgInfo. This is the dialog that
 // lets someone actually create a chart interactively instead of only ever
 // loading one from disk.

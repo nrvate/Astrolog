@@ -319,6 +319,28 @@ static void BuildFileMenu(QMainWindow *pwind)
   QObject::connect(paSave, &QAction::triggered, pwind,
     []() { ShowSaveChartDialogQt(); });
   pmenu->addSeparator();
+
+  QAction *paExportText = pmenu->addAction("Export Chart &Text Output...");
+  QObject::connect(paExportText, &QAction::triggered, pwind,
+    []() { ShowExportTextDialogQt(); });
+  QAction *paExportBmp = pmenu->addAction("Export Chart &Bitmap...");
+  QObject::connect(paExportBmp, &QAction::triggered, pwind,
+    []() { ShowExportBitmapDialogQt(); });
+  QMenu *pmenuVector = pmenu->addMenu("Export &Vector Format");
+  QAction *paExportMeta = pmenuVector->addAction("Export Chart &Metafile...");
+  QObject::connect(paExportMeta, &QAction::triggered, pwind,
+    []() { ShowExportMetafileDialogQt(); });
+  QAction *paExportPS = pmenuVector->addAction("Export Chart &PostScript...");
+  QObject::connect(paExportPS, &QAction::triggered, pwind,
+    []() { ShowExportPSDialogQt(); });
+  QAction *paExportSVG = pmenuVector->addAction("Export Chart &SVG...");
+  QObject::connect(paExportSVG, &QAction::triggered, pwind,
+    []() { ShowExportSVGDialogQt(); });
+  QAction *paExportWire = pmenuVector->addAction("Export Chart &Wireframe...");
+  QObject::connect(paExportWire, &QAction::triggered, pwind,
+    []() { ShowExportWireDialogQt(); });
+  pmenu->addSeparator();
+
   QAction *paQuit = pmenu->addAction("&Quit");
   QObject::connect(paQuit, &QAction::triggered, pwind,
     [pwind]() { pwind->close(); });
