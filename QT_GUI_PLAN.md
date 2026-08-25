@@ -961,6 +961,29 @@ original description said they were.
     - Verified: setting Signs to Enigma visibly changes the sign glyphs
       on the wheel. Both builds compile.
 
+16. **Menu parity is measured, not asserted.** The test suite parses
+    Windows' main menu resource (the `menu MENU` block in astrolog.rc)
+    and checks every item against the live Qt menu bar: **245 of 245
+    present**, plus 24 deliberately skipped (Setup submenu, Window
+    Settings, Print Setup, wallpaper modes, text scrolling) and the 96
+    macro slots, which the hotkey test covers instead.
+    - It matches ignoring `&` placement, since the two builds don't
+      always put the mnemonic on the same letter and that isn't worth
+      failing over. It *does* check each item sits under the same
+      top-level menu, because putting one in the wrong menu is a real
+      parity bug and has happened here before.
+    - Rerun it after any menu change. The table is generated from
+      astrolog.rc — regenerate rather than hand-editing if upstream's
+      menu changes.
+    - This replaced grepping qtdriver.cpp for label strings, which
+      counted text inside comments and missed anything built at runtime.
+      That method claimed "123 missing" where the truth was 4.
+    - The four it found were all wording: this port had "Save Chart...",
+      "Quit" and "Open Documentation..." where Windows has "Save Chart
+      Info...", "Exit" and "Open Documentation". Now matched. **"Quit" to
+      "Exit" is the one worth a second opinion** — Quit is the Linux
+      convention, and parity was chosen over it deliberately.
+
 ## Known divergences from Windows
 
 Every place this port knowingly differs, so none of it reads as an

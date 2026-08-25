@@ -773,7 +773,7 @@ static void BuildFileMenu(QMainWindow *pwind)
   QAction *paOpen2 = pmenu->addAction("Open Chart #&2...");
   QObject::connect(paOpen2, &QAction::triggered, pwind,
     []() { ShowOpenChart2DialogQt(); });
-  QAction *paSave = pmenu->addAction("&Save Chart...");
+  QAction *paSave = pmenu->addAction("&Save Chart Info...");
   QObject::connect(paSave, &QAction::triggered, pwind,
     []() { ShowSaveChartDialogQt(); });
   QAction *paSavePos = pmenu->addAction("Save Chart &Positions...");
@@ -847,7 +847,7 @@ static void BuildFileMenu(QMainWindow *pwind)
     []() { PrintChartQt(); });
   pmenu->addSeparator();
 
-  QAction *paQuit = pmenu->addAction("&Quit");
+  QAction *paQuit = pmenu->addAction("E&xit");
   QObject::connect(paQuit, &QAction::triggered, pwind,
     [pwind]() { pwind->close(); });
 }
@@ -1880,7 +1880,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
   CONST char *rgszDoc[9] = { "astrolog.htm", "changes.htm", "license.htm",
     DEFAULT_INFOFILE, "seorbel.txt", "sefstars.txt", DEFAULT_ATLASFILE,
     DEFAULT_TIMECHANGE, szFileExoCore };
-  CONST char *rgszLabel[9] = { "Open &Documentation...", "Open &Changes",
+  CONST char *rgszLabel[9] = { "Open &Documentation", "Open &Changes",
     "Open &License", "Open Default &Settings", "Open Orbital &Elements",
     "Open &Star List", "Open &Atlas", "Open &Time Zone Changes",
     "Open E&xoplanet List" };
@@ -2036,7 +2036,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"%",                 "M&onths"},
   {"&",                 "&Decades"},
   {"(",                 "Mi&llennia"},
-  {")",                 "Open &Documentation..."},
+  {")",                 "Open &Documentation"},
   {"*",                 "&Centuries"},
   {"+",                 "Step &Forward"},
   {"-",                 "Step &Backward"},
@@ -2130,7 +2130,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Ctrl+Shift+G",      "&Carter P.Equat."},
   {"Alt+Shift+G",       "&Graphics Settings..."},
   {"H",                 "&Heliocentric"},
-  {"Ctrl+H",            "Open &Documentation..."},
+  {"Ctrl+H",            "Open &Documentation"},
   {"Shift+H",           "&Gauquelin Sectors"},
   {"Ctrl+Shift+H",      "Hori&zon"},
   {"Alt+Shift+H",       "&Geodetic Houses"},
@@ -2222,7 +2222,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Down",              "Tilt &South"},
   {"Ctrl+Down",         "&Last Chart"},
   {"Shift+Down",        "&Next Chart"},
-  {"Esc",               "&Quit"},
+  {"Esc",               "E&xit"},
   {"Left",              "Rotate &West"},
   {"Shift+Left",        "Zoom &Out"},
   {"`",                 "Include &Moons"},
@@ -2257,7 +2257,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Shift+Up",          "&Previous Chart"},
   {"W",                 "Use Detailed World &Map"},
   {"Ctrl+W",            "Show D&wads"},
-  {"Alt+W",             "&Save Chart..."},
+  {"Alt+W",             "&Save Chart Info..."},
   {"Ctrl+Alt+W",        "Object &Customization..."},
   {"Shift+W",           "Draw &World Map"},
   {"Ctrl+Shift+W",      "&Whole"},
@@ -2993,6 +2993,34 @@ static void CollectActionsTestQt(QWidget *pw, QList<QAction *> *prg)
 void AllActionsTestQt(QList<QAction *> *prg)
 {
   CollectActionsTestQt(gi.qwind->menuBar(), prg);
+}
+
+// Find a menu bar item by label, ignoring "&" placement, and report
+// which top-level menu it turned up under. Used by the parity test:
+// Windows and this port do not always put the mnemonic on the same
+// letter, and that is not a parity gap worth failing over -- an item
+// living under the wrong menu is.
+QAction *PaFindLooseTestQt(CONST char *sz, CONST char **pszTop)
+{
+  QString str = QString(sz).remove('&');
+  int i;
+
+  QList<QAction *> rgtop = gi.qwind->menuBar()->actions();
+  for (i = 0; i < rgtop.size(); i++) {
+    if (rgtop[i]->menu() == NULL)
+      continue;
+    static QByteArray baTop;
+    baTop = rgtop[i]->text().remove('&').toLocal8Bit();
+    QList<QAction *> rgpa;
+    CollectActionsTestQt(rgtop[i]->menu(), &rgpa);
+    for (int j = 0; j < rgpa.size(); j++)
+      if (rgpa[j]->text().remove('&') == str) {
+        *pszTop = baTop.constData();
+        return rgpa[j];
+      }
+  }
+  *pszTop = NULL;
+  return NULL;
 }
 
 QAction *PaFindActionTestQt(CONST char *sz)

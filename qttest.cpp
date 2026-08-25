@@ -58,6 +58,7 @@ extern int CHotkeyTestQt();
 extern void HotkeyTestQt(int, CONST char **, CONST char **);
 extern QAction *PaFindActionTestQt(CONST char *);
 extern void AllActionsTestQt(QList<QAction *> *);
+extern QAction *PaFindLooseTestQt(CONST char *, CONST char **);
 
 static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
@@ -393,6 +394,335 @@ static void TestAllMenuActionsQt()
 
 /*
 ******************************************************************************
+** Parity with the Windows menu bar.
+******************************************************************************
+*/
+
+// Every item in Windows' main menu resource (astrolog.rc, the "menu MENU"
+// block), generated from that file rather than typed, checked against the
+// live Qt menu bar. This is the measurement behind any claim that the two
+// builds have the same menus -- previously that claim rested on grepping
+// the source for label strings, which counts text in comments and misses
+// anything built at runtime.
+//
+// Matching ignores "&" placement: the two builds do not always put the
+// mnemonic on the same letter and that is not worth failing over. What it
+// does check is that the item exists and sits under the same top-level
+// menu, since putting something in the wrong menu is a real parity bug
+// and has happened in this port before.
+//
+// The 96 macro slots are excluded: their labels are generated at runtime,
+// and TestHotkeysQt already covers that they exist and are bound.
+
+typedef struct {
+  CONST char *szTop;     // Top level menu it lives under on Windows.
+  CONST char *szLabel;   // The item's Windows label.
+  flag fSkip;            // Deliberately not ported; see the plan.
+} PARITYITEM;
+
+static CONST PARITYITEM rgparityQt[] = {
+  {"File",        "&Open Chart...",                              fFalse},
+  {"File",        "Open Chart #&2...",                           fFalse},
+  {"File",        "&Save Chart Info...",                         fFalse},
+  {"File",        "Save Chart &Positions...",                    fFalse},
+  {"File",        "Save Program Settin&gs...",                   fFalse},
+  {"File",        "Open Charts in &Folder...",                   fFalse},
+  {"File",        "Save Chart &List...",                         fFalse},
+  {"File",        "Save Chart &Exchange...",                     fFalse},
+  {"File",        "Save Chart &Quick*Chart...",                  fFalse},
+  {"File",        "Save Chart i&Calendar...",                    fFalse},
+  {"File",        "Export Chart &Text Output...",                fFalse},
+  {"File",        "Export Chart &Bitmap...",                     fFalse},
+  {"File",        "Export Chart &Metafile...",                   fFalse},
+  {"File",        "Export Chart &PostScript...",                 fFalse},
+  {"File",        "Export Chart &SVG...",                        fFalse},
+  {"File",        "Export Chart &Wireframe...",                  fFalse},
+  {"File",        "&Tile Bitmap",                                fTrue},
+  {"File",        "&Center Bitmap",                              fTrue},
+  {"File",        "&Stretch Bitmap",                             fTrue},
+  {"File",        "&Fit Bitmap",                                 fTrue},
+  {"File",        "Fi&ll Bitmap",                                fTrue},
+  {"File",        "Open Chart &Background...",                   fFalse},
+  {"File",        "Open &World Map...",                          fFalse},
+  {"File",        "&File Settings...",                           fFalse},
+  {"File",        "P&rint...",                                   fFalse},
+  {"File",        "Pr&int Setup...",                             fTrue},
+  {"File",        "E&xit",                                       fFalse},
+  {"Edit",        "Enter Command &Line...",                      fFalse},
+  {"Edit",        "Copy Chart &Text Output",                     fFalse},
+  {"Edit",        "Copy Chart &Bitmap",                          fFalse},
+  {"Edit",        "Copy Chart &Metafile",                        fFalse},
+  {"Edit",        "Copy Chart &PostScript",                      fFalse},
+  {"Edit",        "Copy Chart &SVG",                             fFalse},
+  {"Edit",        "Copy Chart &Wireframe",                       fFalse},
+  {"Edit",        "&Paste",                                      fFalse},
+  {"View",        "Show &Graphics",                              fFalse},
+  {"View",        "&Buffer Redraws",                             fTrue},
+  {"View",        "&Redraw Screen",                              fTrue},
+  {"View",        "&Clear Screen",                               fTrue},
+  {"View",        "&Hourglass on Redraw",                        fTrue},
+  {"View",        "Ch&art Resizes Window",                       fTrue},
+  {"View",        "&Window Resizes Chart",                       fTrue},
+  {"View",        "Si&ze Chart to Window",                       fTrue},
+  {"View",        "&Size Window to Chart",                       fTrue},
+  {"View",        "Size Window &Full Screen",                    fTrue},
+  {"View",        "Scroll Page &Up",                             fTrue},
+  {"View",        "Scroll Page &Down",                           fTrue},
+  {"View",        "Scroll &to Beginning",                        fTrue},
+  {"View",        "Scroll to &End",                              fTrue},
+  {"View",        "&Colored Text",                               fFalse},
+  {"View",        "&Set Colors...",                              fFalse},
+  {"View",        "Show &Interpretations",                       fFalse},
+  {"View",        "Print &Nearest Second",                       fFalse},
+  {"View",        "&Parallel Aspects",                           fFalse},
+  {"View",        "&Applying Aspects",                           fFalse},
+  {"Info",        "Set Chart &Info...",                          fFalse},
+  {"Info",        "Chart for &Now",                              fFalse},
+  {"Info",        "D&efault Chart Info...",                      fFalse},
+  {"Info",        "Set Chart #&2 Info...",                       fFalse},
+  {"Info",        "Charts #&3 Through #6...",                    fFalse},
+  {"Info",        "&Chart List...",                              fFalse},
+  {"Info",        "&Previous Chart",                             fFalse},
+  {"Info",        "&Next Chart",                                 fFalse},
+  {"Info",        "&First Chart",                                fFalse},
+  {"Info",        "&Last Chart",                                 fFalse},
+  {"Info",        "Swap Chart #&1 and #2",                       fFalse},
+  {"Info",        "No &Relationship Chart",                      fFalse},
+  {"Info",        "Com&parison Chart",                           fFalse},
+  {"Info",        "&Synastry Chart",                             fFalse},
+  {"Info",        "&Composite Chart",                            fFalse},
+  {"Info",        "Time Space &Midpoint Chart",                  fFalse},
+  {"Info",        "Date &Difference Chart",                      fFalse},
+  {"Info",        "&Biorhythm Chart",                            fFalse},
+  {"Info",        "&Transit and Natal",                          fFalse},
+  {"Info",        "&Progressed and Natal",                       fFalse},
+  {"Setting",     "&Sidereal Zodiac",                            fFalse},
+  {"Setting",     "He&liocentric",                               fFalse},
+  {"Setting",     "&Placidus",                                   fFalse},
+  {"Setting",     "&Koch",                                       fFalse},
+  {"Setting",     "&Campanus",                                   fFalse},
+  {"Setting",     "&Regiomontanus",                              fFalse},
+  {"Setting",     "&Topocentric",                                fFalse},
+  {"Setting",     "Alca&bitius",                                 fFalse},
+  {"Setting",     "Kr&usinski",                                  fFalse},
+  {"Setting",     "A&.P.C.",                                     fFalse},
+  {"Setting",     "Savard-&A",                                   fFalse},
+  {"Setting",     "Porph&yry",                                   fFalse},
+  {"Setting",     "Pullen (S.Rati&o)",                           fFalse},
+  {"Setting",     "Pullen (S.&Delta)",                           fFalse},
+  {"Setting",     "&Meridian",                                   fFalse},
+  {"Setting",     "Morinu&s",                                    fFalse},
+  {"Setting",     "Hori&zon",                                    fFalse},
+  {"Setting",     "Carter& P.Equat.",                            fFalse},
+  {"Setting",     "Suns&hine",                                   fFalse},
+  {"Setting",     "Sr&ipati",                                    fFalse},
+  {"Setting",     "&Equal",                                      fFalse},
+  {"Setting",     "E&qual (MC)",                                 fFalse},
+  {"Setting",     "&Whole",                                      fFalse},
+  {"Setting",     "&Vedic",                                      fFalse},
+  {"Setting",     "&Null",                                       fFalse},
+  {"Setting",     "&Solar Chart",                                fFalse},
+  {"Setting",     "&3D Houses",                                  fFalse},
+  {"Setting",     "Show &Decans",                                fFalse},
+  {"Setting",     "Show D&wads",                                 fFalse},
+  {"Setting",     "&Flip Signs with Houses",                     fFalse},
+  {"Setting",     "&Geodetic Houses",                            fFalse},
+  {"Setting",     "&Indian Wheel Order",                         fFalse},
+  {"Setting",     "Show &Navamsas",                              fFalse},
+  {"Setting",     "&Aspect Settings...",                         fFalse},
+  {"Setting",     "&Object Settings...",                         fFalse},
+  {"Setting",     "More Ob&ject Settings...",                    fFalse},
+  {"Setting",     "&Restrictions...",                            fFalse},
+  {"Setting",     "Star Restr&ictions...",                       fFalse},
+  {"Setting",     "&Transit Restrictions...",                    fFalse},
+  {"Setting",     "&Moons Chart",                                fFalse},
+  {"Setting",     "&Exoplanets Chart",                           fFalse},
+  {"Setting",     "Moon &Restrictions...",                       fFalse},
+  {"Setting",     "Moon &Object Settings...",                    fFalse},
+  {"Setting",     "&Include Moons",                              fFalse},
+  {"Setting",     "Include &Body Centers (COB)",                 fFalse},
+  {"Setting",     "Object &Customization...",                    fFalse},
+  {"Setting",     "&Star Customization...",                      fFalse},
+  {"Setting",     "Include &Minors",                             fFalse},
+  {"Setting",     "Include &Cusps",                              fFalse},
+  {"Setting",     "Include &Uranians",                           fFalse},
+  {"Setting",     "Include D&warfs",                             fFalse},
+  {"Setting",     "Include &Fixed Stars",                        fFalse},
+  {"Setting",     "Calculation Settin&gs...",                    fFalse},
+  {"Setting",     "&Display Settings...",                        fFalse},
+  {"Chart",       "Standard Radi&x",                             fFalse},
+  {"Chart",       "House &Wheel",                                fFalse},
+  {"Chart",       "Aspect Midpoint &Grid",                       fFalse},
+  {"Chart",       "&Aspect List",                                fFalse},
+  {"Chart",       "&Midpoint List",                              fFalse},
+  {"Chart",       "Local Hori&zon",                              fFalse},
+  {"Chart",       "Solar System &Orbit",                         fFalse},
+  {"Chart",       "Ga&uquelin Sectors",                          fFalse},
+  {"Chart",       "&Calendar",                                   fFalse},
+  {"Chart",       "Inf&luence",                                  fFalse},
+  {"Chart",       "Esoter&ic",                                   fFalse},
+  {"Chart",       "Astrocartograp&hy",                           fFalse},
+  {"Chart",       "&Ephemeris",                                  fFalse},
+  {"Chart",       "Ara&bic Parts",                               fFalse},
+  {"Chart",       "Risi&ng and Setting",                         fFalse},
+  {"Chart",       "Nea&rest Cities",                             fFalse},
+  {"Chart",       "&Transits...",                                fFalse},
+  {"Chart",       "&Progressions...",                            fFalse},
+  {"Chart",       "Chart &Settings...",                          fFalse},
+  {"Graphics",    "Draw Chart Sp&here",                          fFalse},
+  {"Graphics",    "Draw &World Map",                             fFalse},
+  {"Graphics",    "Draw &Globe",                                 fFalse},
+  {"Graphics",    "Draw &Polar Globe",                           fFalse},
+  {"Graphics",    "Draw &Telescope",                             fFalse},
+  {"Graphics",    "&Reverse Background",                         fFalse},
+  {"Graphics",    "&Monochrome",                                 fFalse},
+  {"Graphics",    "S&quare Screen",                              fFalse},
+  {"Graphics",    "&Small",                                      fFalse},
+  {"Graphics",    "&Medium",                                     fFalse},
+  {"Graphics",    "&Large",                                      fFalse},
+  {"Graphics",    "&Huge",                                       fFalse},
+  {"Graphics",    "&Decrease",                                   fFalse},
+  {"Graphics",    "&Increase",                                   fFalse},
+  {"Graphics",    "D&ecrease Text",                              fFalse},
+  {"Graphics",    "I&ncrease Text",                              fFalse},
+  {"Graphics",    "Show &Border",                                fFalse},
+  {"Graphics",    "Show Chart &Info",                            fFalse},
+  {"Graphics",    "Show Info &Sidebar",                          fFalse},
+  {"Graphics",    "&Thicker Lines",                              fFalse},
+  {"Graphics",    "&Antialias Lines",                            fFalse},
+  {"Graphics",    "Show Glyph &Labels",                          fFalse},
+  {"Graphics",    "Show &Glyphs on Aspect Lines",                fFalse},
+  {"Graphics",    "Show &Constellations",                        fFalse},
+  {"Graphics",    "Show Full &Star List",                        fFalse},
+  {"Graphics",    "Show E&xoplanets",                            fFalse},
+  {"Graphics",    "Show Constellation &Lines",                   fFalse},
+  {"Graphics",    "Show &House Details",                         fFalse},
+  {"Graphics",    "Show &Equator",                               fFalse},
+  {"Graphics",    "Show C&ities",                                fFalse},
+  {"Graphics",    "Use Detailed World &Map",                     fFalse},
+  {"Graphics",    "Use Ecliptic &Axis",                          fFalse},
+  {"Graphics",    "Rotate &West",                                fFalse},
+  {"Graphics",    "Rotate &East",                                fFalse},
+  {"Graphics",    "Tilt &North",                                 fFalse},
+  {"Graphics",    "Tilt &South",                                 fFalse},
+  {"Graphics",    "Set Tilt to &Zero",                           fFalse},
+  {"Graphics",    "Zoom &Out",                                   fFalse},
+  {"Graphics",    "Zoom &In",                                    fFalse},
+  {"Graphics",    "Show &Indian Wheels",                         fFalse},
+  {"Graphics",    "Draw &South Indian",                          fFalse},
+  {"Graphics",    "Draw &North Indian",                          fFalse},
+  {"Graphics",    "Draw &East Indian",                           fFalse},
+  {"Graphics",    "Modify &Display",                             fFalse},
+  {"Graphics",    "Modif&y Chart",                               fFalse},
+  {"Graphics",    "Blac&k",                                      fFalse},
+  {"Graphics",    "&White",                                      fFalse},
+  {"Graphics",    "&Red",                                        fFalse},
+  {"Graphics",    "&Green",                                      fFalse},
+  {"Graphics",    "&Blue",                                       fFalse},
+  {"Graphics",    "&Yellow",                                     fFalse},
+  {"Graphics",    "&Magenta",                                    fFalse},
+  {"Graphics",    "&Cyan",                                       fFalse},
+  {"Graphics",    "Gr&ay",                                       fFalse},
+  {"Graphics",    "&Lt. Gray",                                   fFalse},
+  {"Graphics",    "Maroo&n",                                     fFalse},
+  {"Graphics",    "Dk. Gr&een",                                  fFalse},
+  {"Graphics",    "Dk. Bl&ue",                                   fFalse},
+  {"Graphics",    "Mai&ze",                                      fFalse},
+  {"Graphics",    "&Purple",                                     fFalse},
+  {"Graphics",    "&Dk. Cyan",                                   fFalse},
+  {"Graphics",    "&Graphics Settings...",                       fFalse},
+  {"Animate",     "Do &Animation",                               fFalse},
+  {"Animate",     "Update to &Now",                              fFalse},
+  {"Animate",     "&Seconds",                                    fFalse},
+  {"Animate",     "&Minutes",                                    fFalse},
+  {"Animate",     "&Hours",                                      fFalse},
+  {"Animate",     "&Days",                                       fFalse},
+  {"Animate",     "M&onths",                                     fFalse},
+  {"Animate",     "&Years",                                      fFalse},
+  {"Animate",     "&Decades",                                    fFalse},
+  {"Animate",     "&Centuries",                                  fFalse},
+  {"Animate",     "Mi&llennia",                                  fFalse},
+  {"Animate",     "1/&10th Seconds",                             fFalse},
+  {"Animate",     "1/1&00th Seconds",                            fFalse},
+  {"Animate",     "1&/1000th Seconds",                           fFalse},
+  {"Animate",     "&One Unit",                                   fFalse},
+  {"Animate",     "&Two Units",                                  fFalse},
+  {"Animate",     "T&hree Units",                                fFalse},
+  {"Animate",     "&Four Units",                                 fFalse},
+  {"Animate",     "Fi&ve Units",                                 fFalse},
+  {"Animate",     "Si&x Units",                                  fFalse},
+  {"Animate",     "&Seven Units",                                fFalse},
+  {"Animate",     "&Eight Units",                                fFalse},
+  {"Animate",     "&Nine Units",                                 fFalse},
+  {"Animate",     "&Reverse Direction",                          fFalse},
+  {"Animate",     "&Pause Animation",                            fFalse},
+  {"Animate",     "&Timed Exposure",                             fFalse},
+  {"Animate",     "Step &Forward",                               fFalse},
+  {"Animate",     "Step &Backward",                              fFalse},
+  {"Animate",     "&Store Chart Info",                           fFalse},
+  {"Animate",     "Re&call Chart Info",                          fFalse},
+  {"Help",        "Open &Documentation",                         fFalse},
+  {"Help",        "&Open Documentation",                         fFalse},
+  {"Help",        "Open &Changes",                               fFalse},
+  {"Help",        "Open &License",                               fFalse},
+  {"Help",        "Open &Website",                               fFalse},
+  {"Help",        "Open Website &Mirror",                        fFalse},
+  {"Help",        "Open &Default Settings",                      fFalse},
+  {"Help",        "Open &Atlas",                                 fFalse},
+  {"Help",        "Open &Time Zone Changes",                     fFalse},
+  {"Help",        "Open &Star List",                             fFalse},
+  {"Help",        "Open &Orbital Elements",                      fFalse},
+  {"Help",        "Open &Exoplanet List",                        fFalse},
+  {"Help",        "List Si&gns",                                 fFalse},
+  {"Help",        "List &Objects",                               fFalse},
+  {"Help",        "List Aspec&ts",                               fFalse},
+  {"Help",        "List &Constellations",                        fFalse},
+  {"Help",        "List &Planet Info",                           fFalse},
+  {"Help",        "List &Rays",                                  fFalse},
+  {"Help",        "List &General Meanings",                      fFalse},
+  {"Help",        "List S&witches",                              fFalse},
+  {"Help",        "List O&bscure Switches",                      fFalse},
+  {"Help",        "List &Keystrokes",                            fFalse},
+  {"Help",        "List Cr&edits",                               fFalse},
+  {"Help",        "Create Program Group (&User)",                fTrue},
+  {"Help",        "Create Program Group (&All)",                 fTrue},
+  {"Help",        "Create &Desktop Icon",                        fTrue},
+  {"Help",        "Install File &Extensions",                    fTrue},
+  {"Help",        "Uninstall File E&xtensions",                  fTrue},
+  {"Help",        "&About Astrolog...",                          fFalse} };
+
+#define cparityQt (int)(sizeof(rgparityQt) / sizeof(PARITYITEM))
+
+static void TestMenuParityQt()
+{
+  CONST char *szTop;
+  int i, cfound = 0, cskip = 0, cwrong = 0;
+
+  Group("Menu parity with Windows");
+  for (i = 0; i < cparityQt; i++) {
+    QAction *pa = PaFindLooseTestQt(rgparityQt[i].szLabel, &szTop);
+    if (rgparityQt[i].fSkip) {
+      cskip++;
+      continue;
+    }
+    Check(pa != NULL, "%s > \"%s\" is missing from the Qt menu bar",
+      rgparityQt[i].szTop, rgparityQt[i].szLabel);
+    if (pa == NULL)
+      continue;
+    cfound++;
+    if (szTop != NULL && strcmp(szTop, rgparityQt[i].szTop) != 0) {
+      cwrong++;
+      Check(fFalse, "\"%s\" is under %s here but under %s on Windows",
+        rgparityQt[i].szLabel, szTop, rgparityQt[i].szTop);
+    }
+  }
+  printf("  %d of %d Windows menu items present (%d skipped on purpose)\n",
+    cfound, cparityQt - cskip, cskip);
+}
+
+
+/*
+******************************************************************************
 ** Entry point.
 ******************************************************************************
 */
@@ -405,6 +735,7 @@ int NRunQtTestsQt()
   TestHotkeysQt();
   TestChartRenderQt();
   TestAllMenuActionsQt();
+  TestMenuParityQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;
