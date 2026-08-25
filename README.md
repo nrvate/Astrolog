@@ -38,23 +38,31 @@ alongside the regular `astrolog` binary without interfering with it —
 
 ## Status
 
-All nine menus and their dialogs are implemented. Every settings dialog
-has been checked field-by-field against its Windows counterpart — labels,
-field order, number formatting, dropdown contents, and which menu
-checkmarks it refreshes on OK. The chart list, multi-chart, command line,
-and About dialogs exist and work but haven't had that same line-by-line
-pass.
+Feature complete against the Windows build, as far as the menu bar goes.
+All nine menus and every dialog are implemented, and each has been read
+field-by-field against its Windows counterpart — labels, field order,
+number formatting, dropdown contents, and which menu checkmarks it
+refreshes on OK. Charts animate, print, paste, run all 96 macro slots,
+and draw with Astrolog's bundled astrology fonts.
 
-Still missing: the animation loop (the Animate menu sets its state, but
-nothing drives it yet), Edit > Paste, the 96 macro slots, and
-File > Print.
+Not done: **right-click context menus.** Windows has one per chart type;
+this build has none, so right-clicking the chart does nothing. That's the
+main remaining gap and the obvious next piece of work.
+
+A handful of smaller things are either deliberately different from
+Windows or deliberately left out — mostly Win32-only settings with no
+Linux meaning, and a few places where Windows' own behaviour looks like a
+bug and this build does the sensible thing instead. They're all listed
+under "Known divergences from Windows" in `QT_GUI_PLAN.md` rather than
+left for you to discover.
 
 ## Docs
 
-- **`QT_GUI_PLAN.md`** — how the Qt backend fits into Astrolog's
-  architecture, the gotchas worth knowing before changing it, per-menu
-  status, remaining work, and every place this port knowingly differs
-  from Windows. Read this first if you're picking the work up.
+- **`QT_GUI_PLAN.md`** — read this first if you're picking the work up.
+  How the Qt backend fits into Astrolog's architecture, the gotchas worth
+  knowing before changing it, a "What to do next" section, per-menu
+  status, a log of every item done and what it actually turned out to be,
+  and every place this port knowingly differs from Windows.
 - **`QT_MENU_MAPPING.md`** — the Windows menu structure extracted from
   `astrolog.rc`, with command IDs. The reference the Qt menu bar is
   built against.

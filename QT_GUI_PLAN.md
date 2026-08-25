@@ -15,21 +15,65 @@ Build" qtdriver.cpp` to find each menu-builder function, `grep -n "^void
 Show" qtdialog.cpp` for the dialog list) — this snapshot is accurate as of
 2026-08-25, but don't trust it blindly if it's been a while.
 
-**Where things stand (2026-08-25).** All nine menus are built, all ~28
-dialogs exist, and the item-8 UI parity sweep (8.1 through 8.14) is
-finished — every *settings* dialog has been read field-by-field against
-its `Dlg*` in wdialog.cpp and its resource block in astrolog.rc. The four
-dialogs outside that sweep — chart list (`DlgList`), multi-chart info
-(`DlgInfoAll`), command line (`DlgCommand`) and About (`DlgAbout`) — were
-audited the same way on 2026-08-25; see item 14. Item 12, the missing animation loop, is also
-done, as are Paste (9), the 96 macro slots (10), and Print (11) — so
-everything on the original list is now ported. Item 13, chart-type
-switches being ignored from the command line and macros, is fixed too.
-Everything
-knowingly left undone or deliberately diverged from Windows is recorded
-either in the relevant 8.x sub-item or under "Known divergences from
-Windows" near the end — if you find something undocumented, that's a
-doc bug worth fixing, not a decision someone made silently.
+**Where things stand (2026-08-25). Every item on this plan is done.**
+All nine menus are built and all ~28 dialogs exist and have been read
+field-by-field against their `Dlg*` in wdialog.cpp and their resource
+block in astrolog.rc — the item-8 sweep covered the settings dialogs,
+item 14 covered the four outside it. The Qt build now also animates,
+prints, pastes, runs all 96 macros, and renders the bundled astrology
+fonts. Items 1-15 below are the complete record, each one saying what was
+found and what was deliberately left.
+
+**So there is no queue to pick up from.** If you are here to do work,
+read "What to do next" immediately below and pick something; don't invent
+a task by re-reading the item list, and don't assume something is missing
+because it isn't mentioned — everything knowingly skipped or deliberately
+diverged is in the relevant item or in "Known divergences from Windows"
+near the end. Something undocumented is a doc bug worth fixing, not a
+decision someone made silently.
+
+## What to do next
+
+Roughly in the order I'd take them.
+
+1. **Right-click context menus — the one real parity gap left.** Windows
+   has a context menu per chart type, and this port has none at all.
+   Right-clicking the chart currently does nothing. There are two
+   parallel families in astrolog.rc (from ~line 607): the graphics ones
+   picked by `gi.nMode` (`menuV`/`menuV2` for wheels, `menuG`, `menuM`,
+   `menuZ`, `menuS`, `menuH`, `menuK`, `menuJ`, `menu7`, `menuL`,
+   `menuE`, `menuZd`, `menuN`, `menu8`, `menuB`, `menuY`, `menuXX`,
+   `menuXG`, `menuXZ`) and the text-mode ones picked by the `us.f*` flags
+   (`menu_V`, `menu_W`, `menu_G`, `menu_A`, …). Windows dispatches both
+   from `WM_RBUTTONDOWN` in wdriver.cpp (~line 938) via `DoPopup()`.
+   **The good news: their items are all existing `cmd*` commands the
+   menu bar already implements**, so this is mostly wiring, not new
+   behaviour — build a `QMenu` per resource and show it from a
+   `contextMenuEvent` on the canvas, switching on `gi.nMode` the same way
+   `DoPopup` does. Start with `menuV`, the wheel one, since that's the
+   default chart. Nothing has been investigated beyond this paragraph.
+2. **A regression check of some kind.** There is none. Everything in this
+   project was verified by driving the GUI and eyeballing screenshots,
+   which caught a lot but is slow and doesn't run twice. Even a crude
+   script that launches the binary, opens each dialog, and confirms it
+   appears with the expected title would catch the class of breakage that
+   has actually happened here (a dialog failing to open, a menu item
+   wired to the wrong handler).
+3. **Decide about the deliberate divergences.** Five behaviours in
+   "Known divergences from Windows" are places this port knowingly does
+   something different, usually because Windows' behaviour looks like a
+   bug. They are defensible individually, but if the goal is strict
+   parity they are the list to revisit.
+4. **Unfinished business, low value:** Wingdings and the plain text
+   fonts aren't bundled (see item 15); the black wedges in the tick ring
+   are unexplained upstream rendering (see item 11) and nobody has
+   actually worked out what draws them.
+
+**If upstream releases a new Astrolog**, note this fork's changes to
+shared core are deliberately small and confined to `#ifdef QT` branches —
+`grep -ln "ifdef QT" *.cpp *.h` finds them. Diff against the upstream
+tarball rather than assuming; and keep line endings intact when editing
+those files, which is its own trap (see "Working pattern" at the end).
 
 ## How this fork's Qt backend works
 
@@ -447,7 +491,11 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Prioritized remaining work
+## Work log — items 1-15, all complete
+
+Kept because each entry records what was actually found, which is more
+useful than the fact that it's finished. Several were not what their
+original description said they were.
 
 1. ~~Help's 11 list actions~~ — **done 2026-08-24**, see Help section
    above.
@@ -677,32 +725,6 @@ skip.
          lesson stands — confirm a suspicious value against `astrolog.as`
          or the `GS` initializer in xdata.cpp before calling it a bug.
 
-12. ~~The Qt build has no animation loop.~~ — **done 2026-08-25.** The
-    Animate menu used to set `gs.nAnim`, `gi.nDir`, and the jump rate and
-    factor exactly as Windows does, while nothing consumed any of it:
-    `Animate()` ran only from the two Step items, and there was no
-    `QTimer`, `startTimer`, or `timerEvent` anywhere in the Qt sources.
-    A `QTimer` created in `BeginQt()` now runs for the whole session and
-    checks the same guard Windows' `WM_TIMER` does
-    (`gs.nAnim < 1 || gi.fPause`), then calls `Animate()` +
-    `RecastAndRedrawQt()` — the same pair the Step items already used.
-    - The interval lives in `s_nTimerDelay` (qtdriver.cpp), the Qt build's
-      stand-in for Win32-only `wi.nTimerDelay`, default 100ms like
-      Windows. That makes Graphics Settings' **"Update Delay in
-      Milliseconds"** portable, so it is no longer skipped; `NAnimDelayQt()`
-      and `SetAnimDelayQt()` are the accessors, and the setter retimes the
-      running timer immediately.
-    - Verified: with Jump Rate = Days the chart date advanced Sep 9 →
-      Oct 12 2026 over three seconds (one day per tick), and Pause
-      Animation held it at zero pixels changed.
-    - **Worth knowing, and not a bug:** "Do Animation" does nothing from a
-      cold start. It is `neg(gs.nAnim)`, and `gs.nAnim` defaults to 0, so
-      negating it is a no-op — animation only arms once a Jump Rate has
-      been picked (which assigns a positive value directly). Windows'
-      `cmdAnimateNo` is the identical `neg(gs.nAnim)` with the identical
-      default, so this matches upstream exactly. Don't "fix" it without
-      deciding to diverge on purpose.
-
 9. ~~Edit menu Paste~~ — **done 2026-08-25.** `PasteChartQt()` in
    qtdriver.cpp mirrors Windows' `FFilePaste()`: check the clipboard for
    an image first and text second, dump it to a temp file, and hand that
@@ -771,6 +793,32 @@ skip.
       backdrop is black, so an unfilled wedge can't be seen against it.
       Whatever they are, they are upstream rendering behaviour, not
       print-specific. Don't change `iFillMax` over them.
+
+12. ~~The Qt build has no animation loop.~~ — **done 2026-08-25.** The
+    Animate menu used to set `gs.nAnim`, `gi.nDir`, and the jump rate and
+    factor exactly as Windows does, while nothing consumed any of it:
+    `Animate()` ran only from the two Step items, and there was no
+    `QTimer`, `startTimer`, or `timerEvent` anywhere in the Qt sources.
+    A `QTimer` created in `BeginQt()` now runs for the whole session and
+    checks the same guard Windows' `WM_TIMER` does
+    (`gs.nAnim < 1 || gi.fPause`), then calls `Animate()` +
+    `RecastAndRedrawQt()` — the same pair the Step items already used.
+    - The interval lives in `s_nTimerDelay` (qtdriver.cpp), the Qt build's
+      stand-in for Win32-only `wi.nTimerDelay`, default 100ms like
+      Windows. That makes Graphics Settings' **"Update Delay in
+      Milliseconds"** portable, so it is no longer skipped; `NAnimDelayQt()`
+      and `SetAnimDelayQt()` are the accessors, and the setter retimes the
+      running timer immediately.
+    - Verified: with Jump Rate = Days the chart date advanced Sep 9 →
+      Oct 12 2026 over three seconds (one day per tick), and Pause
+      Animation held it at zero pixels changed.
+    - **Worth knowing, and not a bug:** "Do Animation" does nothing from a
+      cold start. It is `neg(gs.nAnim)`, and `gs.nAnim` defaults to 0, so
+      negating it is a no-op — animation only arms once a Jump Rate has
+      been picked (which assigns a positive value directly). Windows'
+      `cmdAnimateNo` is the identical `neg(gs.nAnim)` with the identical
+      default, so this matches upstream exactly. Don't "fix" it without
+      deciding to diverge on purpose.
 
 13. ~~Chart-type switches do nothing from the command line or a macro.~~
     — **done 2026-08-25.** `-Z` typed into the Command Line dialog, or run
@@ -890,10 +938,9 @@ free-text entry. See 8.14.
   model, mostly meaningless for a Qt canvas that always auto-fits)
 - Help > Setup submenu (Windows installer actions)
 - File > Print Setup (native Windows print dialog)
-- Right-click context menus (`menuV`/`menuG`/etc in astrolog.rc, starting
-  ~line 607 — a separate resource set from the main menu bar, never
-  investigated at all; worth a first look if right-click parity is ever
-  wanted, but nothing here assumes anything about them)
+(Right-click context menus used to be listed here. They aren't out of
+scope — they're the main thing left, and they've been promoted to "What
+to do next" item 1 with what's now known about them.)
 
 ## Working pattern / verification methodology
 
@@ -913,9 +960,16 @@ free-text entry. See 8.14.
 - GUI automation on a shared Linux Mint Cinnamon desktop is unreliable in
   specific, recurring ways: `xdotool getactivewindow`/`getwindowname` can
   reveal focus silently landed on an unrelated window — verify before
-  sending keys/clicks. Prefer direct mouse clicks at measured coordinates
-  over keyboard menu navigation (arrow keys inside an open popup menu were
-  unreliable — looked correct, silently no-opped). **Never screenshot
+  sending keys/clicks. **Both input paths fail here, in different
+  situations, so never assume an action landed** — re-check the mapped
+  window list before screenshotting. Arrow keys inside an open popup have
+  silently no-opped; and mouse clicks *on the menu bar* have silently
+  done nothing when the WM placed the window on a secondary monitor, with
+  the pointer provably over the right window. What worked reliably for
+  menus: `xdotool key alt+<mnemonic>` to open, then `Down` xN + `Return`,
+  remembering that Qt pre-highlights the first item (so N is index-1, and
+  separators don't count) and that a modal dialog left open swallows the
+  next `alt+` entirely, which looks exactly like the keyboard failing. **Never screenshot
   `-window root` or crop from it** — this has leaked unrelated desktop/
   window content into captures multiple times across sessions; always
   `import -window <specific-window-id>`, found via `xdotool search
@@ -938,6 +992,32 @@ free-text entry. See 8.14.
   rather than trusting a single screenshot — a screenshot of one window ID
   says nothing about whether a *different* window is still visible on top
   of or behind it.
+- **Preserve line endings when editing upstream files.** Most of the
+  original Astrolog sources are CRLF. Editing one through a script that
+  reads and writes in text mode silently rewrites the whole file as LF,
+  which makes it diff as entirely rewritten against upstream and would
+  conflict across every line on a merge. This has happened four times in
+  this project (`extern.h`, `io.cpp`, `xdata.cpp`, `xdevice.cpp`) before
+  being caught. If you script an edit, read with `newline=''`, normalise
+  to `\n` for matching, and convert back before writing. Check with
+  `tr -cd '\r' < file | wc -c` against `git show HEAD:file | tr -cd
+  '\r' | wc -c`. The fork's own files (`qtdriver.cpp`, `qtdialog.cpp`,
+  `qtdriver.h`, `Makefile.qt`, the `.md` docs) are LF.
+- **Scripted edits that compute a replacement range by index can eat the
+  next thing.** One in this project deleted an entire adjacent plan item
+  because its end index overshot, and it went unnoticed for several
+  commits. Prefer exact-string replacement; if you must use a range,
+  print what you're about to remove, and check the structure afterwards
+  (`grep -c` the headings, compare line counts).
+- **Verify a diagnosis before acting on it, especially before changing
+  shared core.** Two confident wrong diagnoses in this project: the
+  "print flood-fill artifact" that turned out to be normal on-screen
+  rendering (the confirming test was invalid — with fill off, everything
+  is black, so an unfilled region can't be seen), and a combo box read
+  from a screenshot taken after wheel-scrolling, which the scroll itself
+  had changed. In both cases the honest check was cheap: compare against
+  a known-good baseline, or against the value in `astrolog.as` or the
+  `GS`/`US` initialisers in xdata.cpp.
 - For crash debugging: the release `Makefile.qt` build has no debug
   symbols. Build a throwaway debug variant (`sed` a copy swapping `-O` for
   `-O0 -g`, changing `OBJDIR`/`NAME` to avoid clobbering the release
@@ -947,8 +1027,10 @@ free-text entry. See 8.14.
   not gitignored, not meant to persist.
 - Git hygiene for this repo specifically: never put a `Claude-Session:`
   line in commit messages here (existing history was scrubbed of it once
-  already at the user's request). `Co-Authored-By: Claude Sonnet 5` is
-  fine. Create new commits, don't amend. The `qt` branch has no remote
-  tracking branch and has never been pushed — `origin` points at the
-  upstream `CruiserOne/Astrolog` repo, not a fork under this user's
-  control.
+  already at the user's request). `Co-Authored-By:` is fine. Create new
+  commits, don't amend. *(Corrected 2026-08-25 — this used to say the
+  `qt` branch had never been pushed and that `origin` was upstream.
+  Neither is true now.)* `origin` is the user's own fork,
+  `git@github.com:nrvate/Astrolog.git` over SSH, and `qt` is pushed to it
+  after each commit. `upstream` is `CruiserOne/Astrolog` with its push
+  URL deliberately set to `DISABLED` — don't try to push there.

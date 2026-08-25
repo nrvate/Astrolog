@@ -229,11 +229,20 @@ Help [P]
   there for exact values if needed.
 - `[D]` items were confirmed by finding the command's `WM_COMMAND` case in
   `wdriver.cpp` and seeing it call `WiDoDialog(Dlg*, ...)`.
-- Sibling `.rc` menu resources (`menuV`, `menuV2`, `menuG`, `menuM`, `menuZ`,
-  `menuS`, `menuH`, `menuK`, `menuJ`, `menu7`, `menuL`, `menuE`, `menuZd`,
-  `menuN`, `menu8`, `menuB`, `menuY`, `menuXX`, `menuXG`, starting around
-  line 607 in astrolog.rc) are a **separate set of right-click context
-  menus**, not part of the main menu bar — out of scope here, worth a
-  follow-up read if right-click parity is wanted later.
+- Sibling `.rc` menu resources starting around line 607 are a **separate
+  set of right-click context menus**, not part of the main menu bar, and
+  this doc does not map them. As of 2026-08-25 they are the last real
+  parity gap — the Qt build has no context menus at all. What's known:
+  there are two parallel families. The graphics ones are chosen by
+  `gi.nMode` (`menuV`/`menuV2` for wheels, then `menuG`, `menuM`,
+  `menuZ`, `menuS`, `menuH`, `menuK`, `menuJ`, `menu7`, `menuL`,
+  `menuE`, `menuZd`, `menuN`, `menu8`, `menuB`, `menuY`, `menuXX`,
+  `menuXG`, `menuXZ`), and the text-mode ones by the `us.f*` chart-type
+  flags (`menu_V`, `menu_W`, `menu_G`, `menu_A`, `menu_M`, `menu_Z`, …).
+  Windows dispatches both from `WM_RBUTTONDOWN` in wdriver.cpp (~line
+  938) through `DoPopup()`. Their entries are ordinary `cmd*` commands
+  that the main menu bar already implements, so porting them is mostly
+  wiring rather than new behaviour. Mapping them out here, the way the
+  main menu is mapped above, is the natural first step.
 - Windows-only items (Setup submenu, Print Setup's native dialog) don't
   apply to the Qt/Linux build and should be skipped rather than stubbed.
