@@ -1165,7 +1165,7 @@ static QString SzChartNameLineQt(CONST CI *pci)
 void ShowChartsAllDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Charts");
+  dlg.setWindowTitle("Charts #3 through #6");
   dlg.resize(640, 400);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
   QGridLayout *pgrid = new QGridLayout();
@@ -2646,12 +2646,16 @@ void ShowCommandLineDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Enter Command Line");
-  dlg.resize(500, 100);
+  dlg.resize(500, 130);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  pouter->addWidget(new QLabel(
-    QString("Enter any %1 switch(es), e.g. \"-n -zw\":").arg(szAppName)));
+  pouter->addWidget(new QLabel("Enter command switches below:"));
   QLineEdit *peLine = new QLineEdit();
   pouter->addWidget(peLine);
+  // Windows has this checkbox too (dxCo_e), and applies it before running
+  // the switches so a line can be tried with expressions off.
+  QCheckBox *pcbExp = new QCheckBox("Enable AstroExpression hooks");
+  pcbExp->setChecked(!us.fExpOff);
+  pouter->addWidget(pcbExp);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -2663,6 +2667,7 @@ void ShowCommandLineDialogQt()
   if (dlg.exec() != QDialog::Accepted || peLine->text().trimmed().isEmpty())
     return;
 
+  us.fExpOff = !pcbExp->isChecked();
   char szLine[cchSzMax];
   QByteArray ba = peLine->text().toLocal8Bit();
   strncpy(szLine, ba.constData(), cchSzMax-1);
@@ -2686,14 +2691,71 @@ void ShowCommandLineDialogQt()
 
 // About, equivalent to Windows' DlgAbout.
 
+// The credits and license text Windows' dlgAbout carries, verbatim.
+// Astrolog's own license requires these notices stay with the program, so
+// they belong here rather than being trimmed to a version number -- which
+// is all this dialog used to show.
+
+static CONST char *rgszAboutQt[] = {
+  "By Walter D. Pullen (Astara@msn.com)",
+  "Astrolog Website: http://www.astrolog.org/astrolog.htm",
+  "Astrolog Website mirror: http://www.magitech.com/astrolog/astrolog.htm",
+  "",
+  "Main ephemeris databases and calculation routines are from the library",
+  "'Swiss Ephemeris' by Astrodienst AG, subject to license for Swiss",
+  "Ephemeris Free Edition at http://www.astro.com/swisseph. Old 'Placalc'",
+  "library and formulas are by Alois Treindl, also from Astrodienst AG.",
+  "",
+  "Original planetary calculation formulas were converted from",
+  "routines by James Neely, as listed in 'Manual of Computer Programming",
+  "for Astrologers' by Michael Erlewine, available from Matrix Software.",
+  "",
+  "Atlas list of city locations from GeoNames: https://www.geonames.org/",
+  "Timezone and Daylight Saving Time date changes converted from",
+  "TZ database: https://data.iana.org/time-zones/tz-link.html",
+  "PostScript graphics routines by Brian D. Willoughby.",
+  "",
+  "IMPORTANT: Astrolog is free software. You can distribute and/or modify",
+  "it under the terms of the GNU General Public License, as described at",
+  "http://www.gnu.org and in the license.htm file included with the",
+  "program. Astrolog is distributed without any warranty expressed or",
+  "implied of any kind. These license and copyright notices must not be",
+  "changed or removed by any user or editor of the program.",
+  "",
+  "Special thanks to all those unmentioned, seen and",
+  "unseen, who have pointed out problems, suggested",
+  "features, and sent many positive vibes! :-)" };
+
 void ShowAboutDialogQt()
 {
   QDialog dlg(gi.qwind);
+  int i;
+
   dlg.setWindowTitle("About Astrolog");
   QVBoxLayout *playout = new QVBoxLayout(&dlg);
-  playout->addWidget(new QLabel(
-    QString("%1 version %2 for Linux (Qt)").arg(szAppName, szVersionCore)));
+  // Windows' first two lines say "for <arch> Windows"; say what this
+  // build actually is instead.
+  QLabel *plabelVer = new QLabel(
+    QString("%1 version %2 for Linux (Qt)").arg(szAppName, szVersionCore));
+  QFont fontBold = plabelVer->font();
+  fontBold.setBold(true);
+  plabelVer->setFont(fontBold);
+  playout->addWidget(plabelVer);
   playout->addWidget(new QLabel(QString("Released %1").arg(szDateCore)));
+  playout->addSpacing(8);
+  for (i = 0; i < (int)(sizeof(rgszAboutQt)/sizeof(char *)); i++) {
+    if (!*rgszAboutQt[i]) {
+      playout->addSpacing(6);
+      continue;
+    }
+    QLabel *plabel = new QLabel(rgszAboutQt[i]);
+    // Makes the URLs clickable, and lets the text be selected and copied.
+    plabel->setTextFormat(Qt::PlainText);
+    plabel->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    plabel->setOpenExternalLinks(true);
+    playout->addWidget(plabel);
+  }
+  playout->addSpacing(8);
   QDialogButtonBox *pbuttons = new QDialogButtonBox(QDialogButtonBox::Ok);
   playout->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);

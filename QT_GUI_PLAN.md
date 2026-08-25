@@ -18,12 +18,10 @@ Show" qtdialog.cpp` for the dialog list) — this snapshot is accurate as of
 **Where things stand (2026-08-25).** All nine menus are built, all ~28
 dialogs exist, and the item-8 UI parity sweep (8.1 through 8.14) is
 finished — every *settings* dialog has been read field-by-field against
-its `Dlg*` in wdialog.cpp and its resource block in astrolog.rc. Four
-were never in the sweep's scope and have not had that pass: the chart
-list (`DlgList`), multi-chart info (`DlgInfoAll`), command line
-(`DlgCommand`), and About (`DlgAbout`). They work; they just haven't been
-audited line by line, so that's the obvious place to look if something
-looks off in one of them. Item 12, the missing animation loop, is also
+its `Dlg*` in wdialog.cpp and its resource block in astrolog.rc. The four
+dialogs outside that sweep — chart list (`DlgList`), multi-chart info
+(`DlgInfoAll`), command line (`DlgCommand`) and About (`DlgAbout`) — were
+audited the same way on 2026-08-25; see item 14. Item 12, the missing animation loop, is also
 done, as are Paste (9), the 96 macro slots (10), and Print (11) — so
 everything on the original list is now ported. Item 13, chart-type
 switches being ignored from the command line and macros, is fixed too.
@@ -777,6 +775,27 @@ skip.
       Local Horizon *and* moves the menu radio; a macro running `-L`
       switches to astrocartography; and picking Aspect Midpoint Grid from
       the menu still works after the refactor.
+
+14. ~~The four dialogs outside the item-8 sweep~~ — **audited
+    2026-08-25.** Chart List and Charts #3 through #6 turned out complete:
+    every button, radio and field in `dlgList` and `dlgInfoAll` was
+    already present, including Chart List's five sort options and its
+    name/location filter, and the multi-chart dialog's four Progress
+    checkboxes. Two real gaps in the other two:
+    - **About was missing its entire credits and license block.** It
+      showed a version line and a release date; Windows' `dlgAbout`
+      carries authorship, both websites, the Swiss Ephemeris and Placalc
+      attributions, the Neely/Erlewine formula credit, GeoNames, the TZ
+      database, the PostScript credit, and the GPL notice — which says in
+      terms that these notices "must not be changed or removed by any
+      user or editor of the program". Restored verbatim, with URLs
+      selectable and clickable. Also fixed the title of Charts #3
+      through #6, which was just "Charts".
+    - **The command line dialog was missing "Enable AstroExpression
+      hooks"** (`dxCo_e`), Windows' checkbox for `us.fExpOff`, applied
+      before the switches run so a line can be tried with expressions
+      off. Added, and its prompt now uses Windows' wording ("Enter
+      command switches below:") rather than this port's own.
 
 ## Known divergences from Windows
 
