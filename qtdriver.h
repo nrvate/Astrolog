@@ -138,6 +138,8 @@ void CopyChartPSQt();
 void CopyChartSVGQt();
 void CopyChartWireQt();
 
+int NProcessSwitchesQt(int argc, char **argv, int pos,
+  flag fOr, flag fAnd, flag fNot);
 void ApplySizeModeQt();
 void ResizeWindowToChartQt();
 void SizeChartToWindowQt();

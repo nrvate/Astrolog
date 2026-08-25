@@ -1156,3 +1156,10 @@ extern flag API DlgAbout    P((HWND, uint, WORD, LONG));
 #endif // WIN
 
 /* extern.h */
+
+#ifdef QT
+/* Defined in qtdriver.cpp: the Qt build's handler for the -W switch     */
+/* family, so a settings file written by the Windows build still loads.  */
+extern int NProcessSwitchesQt P((int, char **, int, flag, flag, flag));
+#endif
+

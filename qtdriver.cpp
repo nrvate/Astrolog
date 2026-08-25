@@ -2011,6 +2011,14 @@ static CONST char *rgszMacroSetQt[8] = {
   "Run Macro (Ctrl+S&hift Set)", "Run Macro (Alt+Sh&ift Set)",
   "Run Macro (Ct&rl+Alt Set)",   "Run Macro (Ctrl+Alt+Shi&ft)" };
 
+// Custom labels set by -WM (a macro slot) and -WM0 (a submenu), which is
+// how a Windows user names their macros in astrolog.as. Windows applies
+// these immediately with ModifyMenu on its Win32-only wi.hmenu; here the
+// switches are processed long before the menu bar exists, so the names are
+// held until BuildMacroMenus() runs. NULL means "keep the default label".
+static char *rgszMacroQt[cMacro];
+static char *rgszMSubQt[cMSub];
+
 static QString SzMacroKeyQt(int iSet, int iKey)
 {
   QString str;
@@ -2063,10 +2071,12 @@ static void BuildMacroMenus(QMenu *pmenu, QMainWindow *pwind)
   int iSet, iKey;
 
   for (iSet = 0; iSet < 8; iSet++) {
-    QMenu *pmenuSet = pmenu->addMenu(rgszMacroSetQt[iSet]);
+    QMenu *pmenuSet = pmenu->addMenu(iSet < cMSub && rgszMSubQt[iSet] != NULL ?
+      QString(rgszMSubQt[iSet]) : QString(rgszMacroSetQt[iSet]));
     for (iKey = 0; iKey < 12; iKey++) {
       int iMacro = iSet*12 + iKey + 1;
-      QAction *pa = pmenuSet->addAction(QString("Macro %1").arg(iMacro));
+      QAction *pa = pmenuSet->addAction(rgszMacroQt[iMacro-1] != NULL ?
+        QString(rgszMacroQt[iMacro-1]) : QString("Macro %1").arg(iMacro));
       // The shortcut makes the key work without opening the menu, which
       // is how Windows' accelerator table has it.
       pa->setShortcut(QKeySequence(SzMacroKeyQt(iSet, iKey)));
@@ -2083,10 +2093,9 @@ static void BuildMacroMenus(QMenu *pmenu, QMainWindow *pwind)
 // Edit menu, equivalent to Windows' cmdCommand/cmdCopy*/cmdMacro*/cmdPaste
 // handlers. Macros are defined the same way they are on Windows -- with
 // the -M command switch, or in astrolog.as -- not from the GUI; this menu
-// only runs them, exactly as Windows' does. Windows can additionally
-// rename a macro's menu entry with -WM, which it does through ModifyMenu
-// on its Win32-only wi.hmenu, so that part isn't ported and the entries
-// keep their default "Macro N" labels.
+// only runs them, exactly as Windows' does. A macro's menu entry can be
+// renamed with -WM, and a whole submenu with -WM0, the same as on Windows;
+// see NProcessSwitchesQt().
 
 static void BuildEditMenu(QMainWindow *pwind)
 {
@@ -2133,6 +2142,9 @@ static void BuildEditMenu(QMainWindow *pwind)
 // consumes, which is exactly how it behaved before this was added.
 static QTimer *s_ptimerAnim = NULL;
 static int s_nTimerDelay = 100;   // Windows' wi.nTimerDelay default
+static int s_nAntialiasQt = 6;    // Windows' wi.nAntialias default (-Wx)
+static int s_xWindQt = 0, s_yWindQt = 0;   // Window position from -Ww
+static flag s_fWindPosQt = fFalse;
 
 // The animation interval, in milliseconds. Windows keeps this in
 // wi.nTimerDelay, which is Win32-only, so the Qt build owns its own copy;
@@ -2148,6 +2160,131 @@ void SetAnimDelayQt(int nDelay)
   if (s_ptimerAnim != NULL)
     s_ptimerAnim->setInterval(nDelay);
 }
+
+/*
+******************************************************************************
+** The -W command switches.
+******************************************************************************
+*/
+
+// Windows parses the -W switch family in NProcessSwitchesW() (wdriver.cpp),
+// inside #ifdef WIN. That means a settings file written by the Windows
+// build -- which is what a Windows user coming to this port arrives with --
+// hits "Unknown switch '-WM'" here and Astrolog stops reading the file at
+// that line, taking every setting after it with it. Since astrolog.as is
+// meant to be portable between the two builds, this handles the same
+// switches: the ones with a Qt equivalent do their job, and the ones that
+// are meaningful only to Win32 are accepted and ignored rather than being
+// allowed to abort the file.
+
+int NProcessSwitchesQt(int argc, char **argv, int pos,
+  flag fOr, flag fAnd, flag fNot)
+{
+  int darg = 0, i, j;
+  char ch1;
+
+  ch1 = argv[0][pos+1];
+  switch (argv[0][pos]) {
+  case chNull:
+    // -W <n> invokes a menu command by its Windows command ID. Those IDs
+    // don't exist here, so consume the argument and move on.
+    if (FErrorArgc("W", argc, 1))
+      return tcError;
+    darg++;
+    break;
+
+  case 'N':
+    if (FErrorArgc("WN", argc, 1))
+      return tcError;
+    i = NFromSz(argv[1]);
+    if (FErrorValN("WN", !FValidTimer(i), i, 0))
+      return tcError;
+    SetAnimDelayQt(i);
+    darg++;
+    break;
+
+  case 'M':
+    if (FErrorArgc("WM", argc, 2))
+      return tcError;
+    i = NFromSz(argv[1]);
+    if (ch1 != '0') {
+      if (FErrorValN("WM", !FValidMacro2(i), i, 1))
+        return tcError;
+      i--;
+      FCloneSz(argv[2], &rgszMacroQt[i]);
+    } else {
+      if (FErrorValN("WM0", !FBetween(i, 0, cMSub-1), i, 1))
+        return tcError;
+      FCloneSz(argv[2], &rgszMSubQt[i]);
+    }
+    darg += 2;
+    break;
+
+  case 'h':
+    SwitchF(fHourglassQt);
+    break;
+
+  case 'T':
+    if (FErrorArgc("WT", argc, 1))
+      return tcError;
+    if (gi.qwind != NULL)
+      gi.qwind->setWindowTitle(argv[1]);
+    darg++;
+    break;
+
+  case 'w':
+    // Window position. Only meaningful once there's a window; when this
+    // comes from astrolog.as there isn't one yet, so remember it.
+    if (FErrorArgc("Ww", argc, 2))
+      return tcError;
+    i = NFromSz(argv[1]); j = NFromSz(argv[2]);
+    if (gi.qwind != NULL)
+      gi.qwind->move(i, j);
+    else {
+      s_xWindQt = i; s_yWindQt = j; s_fWindPosQt = fTrue;
+    }
+    darg += 2;
+    break;
+
+  case 'B':
+    if (FErrorArgc("WB", argc, 2))
+      return tcError;
+    darg += 2;
+    break;
+
+  case 'x':
+    // Antialiasing zoom scale. Windows renders the chart at this multiple
+    // and shrinks it down; nothing here does that yet, so just validate
+    // and remember the value so it survives a settings round trip.
+    if (FErrorArgc("Wx", argc, 1))
+      return tcError;
+    i = NFromSz(argv[1]);
+    s_nAntialiasQt = i;
+    darg++;
+    break;
+
+  // Win32-only behaviour with no Qt counterpart. Accepted so that a shared
+  // astrolog.as keeps loading; each is a no-op here.
+  case 'n': case 't': case 'b': case 'Z':
+    break;
+
+  case 'o':
+    if (ch1 == 'n' || ch1 == 'w')
+      break;
+    break;
+
+  case 'S':
+    // Windows installer actions: program group, desktop icon, file
+    // associations. None apply to a Linux build.
+    break;
+
+  default:
+    ErrorSwitch(argv[0]);
+    return tcError;
+  }
+  return darg;
+}
+
 
 static void StartAnimTimerQt(QMainWindow *pwind)
 {
@@ -3481,6 +3618,9 @@ void BeginQt()
   ApplyHotkeysQt(gi.qwind);
   StartAnimTimerQt(gi.qwind);
   gi.qwind->resize(gs.xWin, gs.yWin);
+  // A -Ww in astrolog.as was parsed before this window existed.
+  if (s_fWindPosQt)
+    gi.qwind->move(s_xWindQt, s_yWindQt);
   gi.qwind->show();
 }
 

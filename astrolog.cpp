@@ -2874,9 +2874,16 @@ flag FProcessSwitches(int argc, char **argv)
       argc -= i; argv += i;
       break;
 
-#ifdef WIN
+#if defined(WIN) || defined(QT)
+    // The Qt build handles these too, rather than rejecting them: a
+    // settings file written by the Windows build is full of -W switches,
+    // and an unknown switch stops Astrolog reading the rest of the file.
     case 'W':
+#ifdef WIN
       i = NProcessSwitchesW(argc, argv, ich, fOr, fAnd, fNot);
+#else
+      i = NProcessSwitchesQt(argc, argv, ich, fOr, fAnd, fNot);
+#endif
       if (i < 0)
         return fFalse;
       argc -= i; argv += i;
