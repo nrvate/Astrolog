@@ -45,8 +45,10 @@
 #include <QtGui/QPaintEvent>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
+#include <QtGui/QImage>
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
+#include <QtCore/QMimeData>
 #include <QtCore/QFile>
 #include <QtCore/QSettings>
 
@@ -121,6 +123,63 @@ static QDialog *s_pdlgText = NULL;
 static QTextBrowser *s_ptextBrowser = NULL;
 
 // Shared by RedrawTextQt() and the Edit menu's Copy Chart Text Output --
+// Paste, equivalent to Windows' FFilePaste(): take whatever is on the
+// clipboard and, if it's something Astrolog understands, load it. Windows
+// checks for a bitmap first and text second, and does the work by dumping
+// the clipboard to a temp file and handing that to the same loaders the
+// File menu uses -- do exactly that here.
+//
+// The one difference is the bitmap handoff. Windows writes a raw CF_DIB,
+// which has no BITMAPFILEHEADER, hence its FLoadBmp(..., fTrue). QImage
+// writes a complete .bmp, so this passes fFalse and takes the same path
+// File / Open Bitmap already uses.
+
+void PasteChartQt()
+{
+  CONST QMimeData *pmime = QApplication::clipboard()->mimeData();
+  char szTemp[] = "/tmp/astrolog-qt-paste-XXXXXX";
+  flag fRet;
+  int fd;
+
+  if (pmime == NULL ||
+    (!pmime->hasImage() && !pmime->hasText())) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "There is nothing on the clipboard to paste.");
+    return;
+  }
+  fd = mkstemp(szTemp);
+  if (fd < 0)
+    return;
+  close(fd);
+
+  if (pmime->hasImage()) {
+    QImage im = qvariant_cast<QImage>(pmime->imageData());
+    if (im.isNull() || !im.save(szTemp, "BMP"))
+      fRet = fFalse;
+    else {
+      fRet = FLoadBmp(szTemp, &gi.bmpBack, fFalse);
+      if (fRet)
+        gi.fBmp = fTrue;
+    }
+    if (!fRet)
+      QMessageBox::warning(gi.qwind, szAppName,
+        "Could not read the bitmap on the clipboard.");
+  } else {
+    QFile file(szTemp);
+    fRet = file.open(QIODevice::WriteOnly);
+    if (fRet) {
+      file.write(pmime->text().toLocal8Bit());
+      file.close();
+      // FInputData() prints its own diagnostics on a malformed file.
+      fRet = FInputData(szTemp);
+    }
+  }
+  unlink(szTemp);
+  if (fRet)
+    RecastAndRedrawQt();
+}
+
+
 // both need the plain-text or HTML chart listing PrintChart() would
 // print, captured via a scratch file rather than shown/redirected for
 // real. Doesn't touch us.fGraphics; callers decide how to reflect that.
@@ -1326,8 +1385,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
 
 // Edit menu, equivalent to Windows' cmdCommand/cmdCopy*/cmdPaste handlers.
 // Skipped: the 96 user-programmable macro slots (low value, deferred
-// repeatedly), and Paste (would need to figure out what clipboard
-// format(s) to accept -- lower priority, no immediate need identified).
+// repeatedly).
 
 static void BuildEditMenu(QMainWindow *pwind)
 {
@@ -1335,6 +1393,11 @@ static void BuildEditMenu(QMainWindow *pwind)
   QAction *paCommand = pmenu->addAction("Enter &Command Line...");
   QObject::connect(paCommand, &QAction::triggered, pwind,
     []() { ShowCommandLineDialogQt(); });
+  pmenu->addSeparator();
+  QAction *paPaste = pmenu->addAction("&Paste");
+  QObject::connect(paPaste, &QAction::triggered, pwind,
+    []() { PasteChartQt(); });
+  pmenu->addSeparator();
   pmenu->addSeparator();
 
   QAction *paCopyText = pmenu->addAction("&Copy Chart Text Output");

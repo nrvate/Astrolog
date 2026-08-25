@@ -704,8 +704,27 @@ skip.
       default, so this matches upstream exactly. Don't "fix" it without
       deciding to diverge on purpose.
 
-9. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
-   to accept; lower priority, no immediate need identified.
+9. ~~Edit menu Paste~~ — **done 2026-08-25.** `PasteChartQt()` in
+   qtdriver.cpp mirrors Windows' `FFilePaste()`: check the clipboard for
+   an image first and text second, dump it to a temp file, and hand that
+   to the same loaders the File menu already uses — `FLoadBmp()` into
+   `gi.bmpBack` for an image, `FInputData()` for text. Warns with
+   Windows' own wording when the clipboard holds neither.
+   - One difference: Windows writes a raw `CF_DIB`, which has no
+     `BITMAPFILEHEADER`, hence its `FLoadBmp(..., fTrue)`. `QImage::save()`
+     writes a complete `.bmp`, so this passes `fFalse` and takes the same
+     path File / Open Bitmap uses.
+   - Verified both formats: a chart info file on the clipboard loads the
+     chart (name, date, zone, location all correct), and an image loads
+     as the background.
+   - **Observed while testing, pre-existing, not caused by Paste:** after
+     loading a background bitmap the chart background goes from its usual
+     dark red to black, and the image itself isn't visible in a wheel
+     chart. File / Open Bitmap / Open Background does exactly the same
+     thing with the same file, so Paste is behaving identically to the
+     already-shipping path. Worth a look on its own — start at
+     `FBmpDrawBack()` (xdevice.cpp) and the `nTrans`/`gs.rBackPct`
+     handling in xcharts0.cpp:641.
 10. **Edit menu's 96 macro slots** — lowest priority, deferred repeatedly.
     Only do this if specifically asked.
 11. **File > Print...** — no existing portable rendering path to a
