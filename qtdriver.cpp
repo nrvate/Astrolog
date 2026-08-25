@@ -46,6 +46,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtCore/QUrl>
 #include <QtCore/QFile>
+#include <QtCore/QSettings>
 
 #include "astrolog.h"
 #include "qtdriver.h"
@@ -1250,13 +1251,15 @@ static void BuildAnimateMenu(QMainWindow *pwind)
 static void BuildHelpMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Help");
-  CONST char *rgszDoc[6] = { "astrolog.htm", "changes.htm", "license.htm",
-    "astrolog.as", "seorbel.txt", "sefstars.txt" };
-  CONST char *rgszLabel[6] = { "Open &Documentation...", "Open &Changes",
+  CONST char *rgszDoc[9] = { "astrolog.htm", "changes.htm", "license.htm",
+    DEFAULT_INFOFILE, "seorbel.txt", "sefstars.txt", DEFAULT_ATLASFILE,
+    DEFAULT_TIMECHANGE, szFileExoCore };
+  CONST char *rgszLabel[9] = { "Open &Documentation...", "Open &Changes",
     "Open &License", "Open Default &Settings", "Open Orbital &Elements",
-    "Open &Star List" };
+    "Open &Star List", "Open &Atlas", "Open &Time Zone Changes",
+    "Open E&xoplanet List" };
   int i;
-  for (i = 0; i < 6; i++) {
+  for (i = 0; i < 9; i++) {
     QAction *pa = pmenu->addAction(rgszLabel[i]);
     CONST char *szFile = rgszDoc[i];
     QObject::connect(pa, &QAction::triggered, pwind, [szFile]() {
@@ -1266,6 +1269,33 @@ static void BuildHelpMenu(QMainWindow *pwind)
       else
         QMessageBox::warning(gi.qwind, szAppName,
           QString("File '%1' not found.").arg(szFile));
+    });
+  }
+
+  // Unlike the doc/data files above, these are Windows .url shortcut
+  // files (simple INI format, readable via QSettings) whose *content* is
+  // the actual URL to open, not something to display directly.
+  CONST char *rgszWebsite[2] = { "astrolog.url", "astrlog2.url" };
+  CONST char *rgszWebsiteLabel[2] =
+    { "Open &Website", "Open Website &Mirror" };
+  for (i = 0; i < 2; i++) {
+    QAction *pa = pmenu->addAction(rgszWebsiteLabel[i]);
+    CONST char *szFile = rgszWebsite[i];
+    QObject::connect(pa, &QAction::triggered, pwind, [szFile]() {
+      char szPath[cchSzMax];
+      if (FileOpen(szFile, 2, szPath) == NULL) {
+        QMessageBox::warning(gi.qwind, szAppName,
+          QString("File '%1' not found.").arg(szFile));
+        return;
+      }
+      QSettings settings(szPath, QSettings::IniFormat);
+      QString qsUrl = settings.value("InternetShortcut/URL").toString();
+      if (qsUrl.isEmpty()) {
+        QMessageBox::warning(gi.qwind, szAppName,
+          QString("Could not read a URL from '%1'.").arg(szFile));
+        return;
+      }
+      QDesktopServices::openUrl(QUrl(qsUrl));
     });
   }
   pmenu->addSeparator();
