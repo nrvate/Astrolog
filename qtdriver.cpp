@@ -37,8 +37,11 @@
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QAction>
 #include <QtWidgets/QActionGroup>
+#include <QtWidgets/QMessageBox>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QPaintEvent>
+#include <QtGui/QDesktopServices>
+#include <QtCore/QUrl>
 
 #include "astrolog.h"
 #include "qtdriver.h"
@@ -623,16 +626,185 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
 }
 
 
+// Edit menu: just the command line entry dialog, equivalent to Windows'
+// DlgCommand / X11's CommandLineX() (xscreen.cpp) -- lets any switch
+// Astrolog understands be applied without a dedicated menu item for it.
+// Skipped: the 96 user-programmable macro slots (low value), copy/paste
+// (would need clipboard integration this pass doesn't add).
+
+static void BuildEditMenu(QMainWindow *pwind)
+{
+  QMenu *pmenu = pwind->menuBar()->addMenu("&Edit");
+  QAction *paCommand = pmenu->addAction("Enter &Command Line...");
+  QObject::connect(paCommand, &QAction::triggered, pwind,
+    []() { ShowCommandLineDialogQt(); });
+}
+
+
+// Animate menu, equivalent to Windows' cmdAnimate*/cmdStep*/cmdStore/
+// cmdRecall handlers (wdriver.cpp:2276-2354). gs.nAnim's sign doubles as
+// the on/off state (negative = off, remembering the last active rate) --
+// AddToggleAction/AddSelectAction don't fit that, so the rate/factor items
+// use small dedicated helpers that preserve the sign the same way
+// Windows' handlers do (e.g. "gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * rate").
+
+static QAction *AddAnimRateAction(QMenu *pmenu, QActionGroup *pgroup,
+  CONST char *szLabel, int rate)
+{
+  QAction *pa = pmenu->addAction(szLabel);
+  pa->setCheckable(true);
+  pa->setActionGroup(pgroup);
+  pa->setChecked(NAbs(gs.nAnim) == rate);
+  QObject::connect(pa, &QAction::triggered, pa, [rate]() {
+    gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * rate;
+  });
+  return pa;
+}
+
+static QAction *AddAnimFactorAction(QMenu *pmenu, QActionGroup *pgroup,
+  CONST char *szLabel, int factor)
+{
+  QAction *pa = pmenu->addAction(szLabel);
+  pa->setCheckable(true);
+  pa->setActionGroup(pgroup);
+  pa->setChecked(NAbs(gi.nDir) == factor);
+  QObject::connect(pa, &QAction::triggered, pa, [factor]() {
+    gi.nDir = (gi.nDir > 0 ? 1 : -1) * factor;
+  });
+  return pa;
+}
+
+static void BuildAnimateMenu(QMainWindow *pwind)
+{
+  QMenu *pmenu = pwind->menuBar()->addMenu("&Animate");
+  // gs.nAnim's sign is the on/off state and its magnitude is the rate, so
+  // toggling it on/off (unlike AddToggleAction's plain-bool flip) has to
+  // negate rather than overwrite, or the remembered rate would be lost.
+  QAction *paAnim = pmenu->addAction("Do &Animation");
+  paAnim->setCheckable(true);
+  paAnim->setChecked(gs.nAnim > 0);
+  QObject::connect(paAnim, &QAction::triggered, pwind, [paAnim]() {
+    neg(gs.nAnim);
+    paAnim->setChecked(gs.nAnim > 0);
+  });
+
+  QMenu *pmenuRate = pmenu->addMenu("&Jump Rate");
+  QAction *paNow = pmenuRate->addAction("Update to &Now");
+  QObject::connect(paNow, &QAction::triggered, pwind, []() {
+    gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * iAnimNow;
+  });
+  pmenuRate->addSeparator();
+  QActionGroup *pgroupRate = new QActionGroup(pwind);
+  AddAnimRateAction(pmenuRate, pgroupRate, "&Seconds", 1);
+  AddAnimRateAction(pmenuRate, pgroupRate, "&Minutes", 2);
+  AddAnimRateAction(pmenuRate, pgroupRate, "&Hours", 3);
+  AddAnimRateAction(pmenuRate, pgroupRate, "&Days", iAnimDay);
+  AddAnimRateAction(pmenuRate, pgroupRate, "M&onths", 5);
+  AddAnimRateAction(pmenuRate, pgroupRate, "&Years", 6);
+  AddAnimRateAction(pmenuRate, pgroupRate, "&Decades", 7);
+  AddAnimRateAction(pmenuRate, pgroupRate, "&Centuries", 8);
+  AddAnimRateAction(pmenuRate, pgroupRate, "Mi&llennia", 9);
+  pmenuRate->addSeparator();
+  AddAnimRateAction(pmenuRate, pgroupRate, "1/&10th Seconds", 11);
+  AddAnimRateAction(pmenuRate, pgroupRate, "1/1&00th Seconds", 12);
+  AddAnimRateAction(pmenuRate, pgroupRate, "1&/1000th Seconds", 13);
+
+  QMenu *pmenuFactor = pmenu->addMenu("Jump &Factor");
+  QActionGroup *pgroupFactor = new QActionGroup(pwind);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "&One Unit", 1);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "&Two Units", 2);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "T&hree Units", 3);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "&Four Units", 4);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "Fi&ve Units", 5);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "Si&x Units", 6);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "&Seven Units", 7);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "&Eight Units", 8);
+  AddAnimFactorAction(pmenuFactor, pgroupFactor, "&Nine Units", 9);
+
+  QAction *paReverse = pmenu->addAction("&Reverse Direction");
+  paReverse->setCheckable(true);
+  paReverse->setChecked(gi.nDir < 0);
+  QObject::connect(paReverse, &QAction::triggered, pwind, [paReverse]() {
+    neg(gi.nDir);
+    paReverse->setChecked(gi.nDir < 0);
+    if (gs.nAnim < 0)
+      neg(gs.nAnim);
+    RedrawQt();
+  });
+  AddToggleAction(pmenu, "&Pause Animation", &gi.fPause, fFalse);
+  AddToggleAction(pmenu, "&Timed Exposure", &gs.fJetTrail, fFalse);
+  pmenu->addSeparator();
+
+  QAction *paForward = pmenu->addAction("Step &Forward");
+  QObject::connect(paForward, &QAction::triggered, pwind, []() {
+    Animate(NAbs(gs.nAnim) == iAnimNow ? iAnimDay : gs.nAnim, NAbs(gi.nDir));
+    RecastAndRedrawQt();
+  });
+  QAction *paBackward = pmenu->addAction("Step &Backward");
+  QObject::connect(paBackward, &QAction::triggered, pwind, []() {
+    Animate(NAbs(gs.nAnim) == iAnimNow ? iAnimDay : gs.nAnim, -NAbs(gi.nDir));
+    RecastAndRedrawQt();
+  });
+  pmenu->addSeparator();
+  QAction *paStore = pmenu->addAction("&Store Chart Info");
+  QObject::connect(paStore, &QAction::triggered, pwind,
+    []() { ciSave = ciMain; });
+  QAction *paRecall = pmenu->addAction("&Recall Chart Info");
+  QObject::connect(paRecall, &QAction::triggered, pwind, []() {
+    ciMain = ciCore = ciSave;
+    RecastAndRedrawQt();
+  });
+}
+
+
+// A curated subset of Windows' Help menu: About, and the doc/data file
+// openers (via QDesktopServices, same file resolution FileOpen() already
+// does). Skipped this pass: the 11 "List Signs/Objects/Aspects/..." text
+// listing actions -- those print to a text stream (is.S) that would need a
+// dedicated text output window to show usefully in a GUI, worth its own
+// pass rather than a quick addition here.
+
+static void BuildHelpMenu(QMainWindow *pwind)
+{
+  QMenu *pmenu = pwind->menuBar()->addMenu("&Help");
+  CONST char *rgszDoc[6] = { "astrolog.htm", "changes.htm", "license.htm",
+    "astrolog.as", "seorbel.txt", "sefstars.txt" };
+  CONST char *rgszLabel[6] = { "Open &Documentation...", "Open &Changes",
+    "Open &License", "Open Default &Settings", "Open Orbital &Elements",
+    "Open &Star List" };
+  int i;
+  for (i = 0; i < 6; i++) {
+    QAction *pa = pmenu->addAction(rgszLabel[i]);
+    CONST char *szFile = rgszDoc[i];
+    QObject::connect(pa, &QAction::triggered, pwind, [szFile]() {
+      char szPath[cchSzMax];
+      if (FileOpen(szFile, 2, szPath) != NULL)
+        QDesktopServices::openUrl(QUrl::fromLocalFile(szPath));
+      else
+        QMessageBox::warning(gi.qwind, szAppName,
+          QString("File '%1' not found.").arg(szFile));
+    });
+  }
+  pmenu->addSeparator();
+  QAction *paAbout = pmenu->addAction("&About Astrolog...");
+  QObject::connect(paAbout, &QAction::triggered, pwind,
+    []() { ShowAboutDialogQt(); });
+}
+
+
 // Build the main window's menu bar.
 
 static void BuildAstrologMenus(QMainWindow *pwind)
 {
   BuildFileMenu(pwind);
+  BuildEditMenu(pwind);
   BuildViewMenu(pwind);
   BuildInfoMenu(pwind);
   BuildSettingMenu(pwind);
   BuildChartMenu(pwind);
   BuildGraphicsMenu(pwind);
+  BuildAnimateMenu(pwind);
+  BuildHelpMenu(pwind);
 }
 
 

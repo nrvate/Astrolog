@@ -677,6 +677,66 @@ void ShowChartSettingsDialogQt()
   RecastAndRedrawQt();
 }
 
+
+// Command line entry, equivalent to Windows' DlgCommand / X11's
+// CommandLineX() (xscreen.cpp): type any switch(es) Astrolog understands
+// and apply them immediately, the same parser command line invocation
+// uses. Simplified from CommandLineX() by not saving/restoring
+// us.fLoop/is.fMult around the call -- those matter for a line that
+// itself starts a new multi chart sequence, an edge case skipped here.
+
+void ShowCommandLineDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Enter Command Line");
+  dlg.resize(500, 100);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  pouter->addWidget(new QLabel(
+    QString("Enter any %1 switch(es), e.g. \"-n -zw\":").arg(szAppName)));
+  QLineEdit *peLine = new QLineEdit();
+  pouter->addWidget(peLine);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted || peLine->text().trimmed().isEmpty())
+    return;
+
+  char szLine[cchSzMax];
+  QByteArray ba = peLine->text().toLocal8Bit();
+  strncpy(szLine, ba.constData(), cchSzMax-1);
+  szLine[cchSzMax-1] = chNull;
+  char *rgsz[MAXSWITCHES];
+  int argc = NParseCommandLine(szLine, rgsz);
+  ciCore = ciMain;
+  if (argc <= 0 || !FProcessSwitches(argc, rgsz))
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more switches were not understood.");
+  ciMain = ciCore;
+  InitColorsX();
+  RecastAndRedrawQt();
+}
+
+
+// About, equivalent to Windows' DlgAbout.
+
+void ShowAboutDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("About Astrolog");
+  QVBoxLayout *playout = new QVBoxLayout(&dlg);
+  playout->addWidget(new QLabel(
+    QString("%1 version %2 for Linux (Qt)").arg(szAppName, szVersionCore)));
+  playout->addWidget(new QLabel(QString("Released %1").arg(szDateCore)));
+  QDialogButtonBox *pbuttons = new QDialogButtonBox(QDialogButtonBox::Ok);
+  playout->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  dlg.exec();
+}
+
 #endif // QT
 
 /* qtdialog.cpp */
