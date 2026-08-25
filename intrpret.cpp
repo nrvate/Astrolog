@@ -1021,7 +1021,11 @@ int InterpretEsoteric(flag fGetRays)
       FieldWord(sz);
     }
     // Planet
-    if (i <= oNorm && *rgEsoObj[i]) {
+    // rgEsoObj[] is declared with oNorm1 entries but its initializer
+    // supplies far fewer, so everything from the moons onward is a null
+    // pointer rather than an empty string. "i <= oNorm" keeps the index
+    // in bounds but says nothing about the entry, so check it too.
+    if (i <= oNorm && rgEsoObj[i] != NULL && *rgEsoObj[i]) {
       sprintf(sz, "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
       FieldWord(sz);
     }
@@ -1217,7 +1221,9 @@ void PrintEsoteric()
   }
   PrintL();
   for (i = 0; i <= is.nObj; i++) {
-    if (ignore[i] || !(i <= oNorm && *rgEsoObj[i]))
+    // Null entry check as above; without it, listing rays with the
+    // planetary moons unrestricted dereferences a null pointer.
+    if (ignore[i] || !(i <= oNorm && rgEsoObj[i] != NULL && *rgEsoObj[i]))
       continue;
     AnsiColor(kObjA[i]);
     sprintf(szName, "%s%s%s", i == oFor && szObjDisp[i] == szObjName[i] ?
@@ -1350,7 +1356,13 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
       k = grid->n[Min(i, j)][Max(i, j)];
       if (k) {
         l = (int)(grid->v[Min(i, j)][Max(i, j)]*3600.0);
-        power2[j] += rAspInf[k]*rObjInf[i]*
+        // RObjInf() rather than rObjInf[] directly: the macro clamps to
+        // oNorm1, which is why it exists -- rObjInf[] holds oNorm1+6
+        // entries while i here runs to is.nObj, which goes well past that
+        // once fixed stars or moons are unrestricted. Every other use in
+        // the program goes through the macro; this was the one that
+        // didn't, and it read off the end of the array.
+        power2[j] += rAspInf[k]*RObjInf(i)*
           (1.0-RAbs((real)l)/3600.0/GetOrb(i, j, k));
       }
     }

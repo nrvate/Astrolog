@@ -985,6 +985,16 @@ flag FBmpAntialias()
 
   if (!gi.fBmp || (gi.fFile && gs.ft != ftBmp))
     return fTrue;
+#ifdef QT
+  // The third function in this file with this shape, after FBmpDrawMap()
+  // and FBmpDrawMap2(): everything below works on gi.bmp, which only the
+  // file export path allocates, and the WINANY block just below is what
+  // would otherwise fill it in from the window. On Qt neither applies,
+  // and the chart lives in gi.qim instead, so there is nothing here to
+  // antialias -- reading gi.bmp would be a null dereference.
+  if (!gi.fFile)
+    return fTrue;
+#endif
 #ifdef WINANY
   // Copy the contents of the window about to be displayed to a bitmap.
   if (!gi.fFile) {
