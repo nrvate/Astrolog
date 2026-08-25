@@ -680,6 +680,15 @@ flag FBmpDrawMap()
   // Do nothing if not drawing bitmaps, or if the Earth bitmap fails to load.
   if (!gi.fBmp || (gi.fFile && gs.ft != ftBmp))
     return fFalse;
+#ifdef QT
+  // Below, only the file export and WINANY (GDI) cases allocate a
+  // destination bitmap to draw the map into; interactively on QT there
+  // isn't one, so bail out here and let the caller's existing vector drawn
+  // map fallback (DrawMap() in xcharts0.cpp, when this returns fFalse)
+  // handle it instead, same as when the Earth bitmap itself fails to load.
+  if (!gi.fFile)
+    return fFalse;
+#endif
   if (gi.bmpWorld.rgb == NULL && !FLoadBmp(BITMAP_EARTH, &gi.bmpWorld, fFalse))
     return fFalse;
   yWin2 = gs.yWin;
