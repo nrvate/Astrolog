@@ -184,7 +184,11 @@ Quick*Chart, Save Chart iCalendar — done 2026-08-24, see
 `ShowSaveAAFDialogQt()` etc. in qtdialog.cpp), Export Chart Text
 Output..., Export Chart Bitmap..., Export Vector Format submenu (Metafile/
 PostScript/SVG/Wireframe), Open Bitmap submenu (Open Chart Background,
-Open World Map — also done 2026-08-24), Quit.
+Open World Map — also done 2026-08-24), File Settings... (done
+2026-08-24, `ShowFileSettingsDialogQt()` — the portable subset of
+`DlgFile`; skipped `wi.fBmpWindow`/`wi.nAntialias`/`wi.fNoPopup` as
+Win32-only, and "Use Real System Fonts" since it needs the same Windows
+GDI font enumeration the Graphics Settings font pickers would), Quit.
 
 Missing (see "Prioritized remaining work" for how each maps to existing
 portable functions):
@@ -199,16 +203,6 @@ portable functions):
   (no single portable "set wallpaper" API the way Win32 has one). Lowest
   priority in File; consider just exporting the bitmap instead of trying
   to set wallpaper, or skip entirely.
-- File Settings... `[D]` (`DlgFile`, wdialog.cpp:786) — mixed complexity.
-  Portable fields: `us.fSmartSave`, `us.fTextHTML`, `gs.chBmpMode`
-  ('P'=PNG toggle), `gs.fPSComplete`, `us.fWriteOld`, `gs.nFontAll`/
-  per-element font sub-fields (font *selection* has the same "Windows GDI
-  font name enumeration" problem as Graphics Settings, see below — maybe
-  skip just the font picker sub-fields), `gs.nThickAdjust`,
-  `gs.fBackDraw`/`gs.rBackPct` (background bitmap draw/transparency),
-  `us.szADB` (astro-databank path), `gs.xInch`/`gs.yInch`/`gs.nOrient`
-  (print page size/orientation). Windows-only, skip: `wi.fBmpWindow`,
-  `wi.fNoPopup`, `wi.nAntialias`.
 - Print... `[D]` — no portable equivalent exists yet; could be built on
   `QPrinter`/`QPainter` rendering `gi.qim`, but nothing in the shared code
   does this today. Print Setup is a native Windows dialog — skip entirely,
@@ -383,9 +377,9 @@ skip.
    Help section above. Help menu is now fully complete.
 4. ~~Edit menu Copy Bitmap/Text/Vector Format~~ — **done 2026-08-24**, see
    Edit section above.
-5. **File Settings dialog** (portable subset only, skip Windows-only
-   fields) — moderate complexity, moderate value. **Next item up.**
-6. **Graphics Settings dialog** — lower priority than it looks; most
+5. ~~File Settings dialog~~ — **done 2026-08-24**, see File section above.
+6. **Graphics Settings dialog** — **next item up.** Lower priority than it
+   looks; most
    useful fields duplicate menu items already built, the font pickers
    need from-scratch Qt work with no direct port, and what's left over is
    fairly niche (decan wheel styling, glyph capitalization, city label
