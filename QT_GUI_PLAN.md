@@ -572,12 +572,61 @@ skip.
          newly included aspects. Qt saves the old value first, so it
          works. Keeping the working version rather than reproducing the
          bug — flagged here so it reads as a choice, not an oversight.
-   8.13 **File Settings** (next up) (`DlgFile`) and **Graphics Settings**
-       (`DlgGraphics`) — the Win32-only omissions are deliberate and
-       documented, but the rest hasn't been checked for label wording and
-       field order. Graphics Settings' six font pickers remain genuinely
-       unported (needs a real Qt font picker).
-   8.14 **Cross-cutting: combo boxes.** Windows offers dropdown
+   8.13 ~~File Settings and Graphics Settings~~ — **done 2026-08-25**
+       (`DlgFile`, `DlgGraphics`). Wording and field lists were already
+       right; the gaps were dropdowns, precision, and one grouping.
+       - **Character Scale / Text Scale** were plain edit boxes. Windows
+         offers both as editable dropdowns stepping 100..MAXSCALE by 50,
+         except character scale, which lists only whole multiples of 100
+         — matching `FValidScale` vs `FValidScaleText`. Both now do.
+       - **Background Transparency Percent** likewise: Windows offers
+         25/50/75/100 in an editable combo (`dcFi_XI1`).
+       - Precision: `-3` background transparency, `-6` telescope/orbit
+         zoom, `-3` map rotation and globe tilt. Reals read via
+         `RFromSz()` as Windows does.
+       - File Settings field order: Windows puts "Don't Show Background
+         Bitmap" at the head of its right-hand column, directly above the
+         transparency it governs, not in the left column's checkbox run.
+       - "Animate Map Instead of Time" now sits in an **Animation** group
+         box as Windows has it (its other two members are Win32-only).
+       - The deliberate omissions stand and are still correct: the
+         Win32-only `wi.*` fields, and the six font combos (they pick
+         from a hardcoded list of Windows GDI face names; porting them
+         means building a real Qt font picker, not translating a list).
+       - **Cross-cutting bug found and fixed here.** Qt delivers wheel
+         events to the widget under the pointer, so scrolling any of the
+         tall settings dialogs silently changed whatever combo slid past
+         the cursor — Wheel Fill, Character Scale, a color picker. This
+         cost real debugging time: a screenshot taken after scrolling
+         showed Wheel Fill as "7 Rays House" when `astrolog.as` plainly
+         says `:Xv 1`, and it read exactly like a dialog bug. Windows'
+         dialogs are fixed size with nothing to scroll, so the hazard is
+         specific to this port. `BlockComboWheelQt()` (qtdialog.cpp) now
+         swallows the wheel on any unfocused combo and forwards it to the
+         enclosing scroll area, so the dialog scrolls and values hold
+         still; it is called before every `exec()`. Click a combo first
+         and the wheel adjusts it as normal.
+       - **Note for whoever verifies these dialogs by automation:** don't
+         wheel-scroll to reach a control and then trust what you read.
+         Drag the scrollbar. The above is fixed now, but the general
+         lesson stands — confirm a suspicious value against `astrolog.as`
+         or the `GS` initializer in xdata.cpp before calling it a bug.
+
+12. **The Qt build has no animation loop.** Found while auditing 8.13.
+    The Animate menu sets `gs.nAnim`, `gi.nDir`, and the jump rate/factor
+    exactly as Windows does, and "Do Animation" toggles on — but nothing
+    consumes it. `Animate()` is called from only the two Step Forward/
+    Backward menu items (qtdriver.cpp), and there is no `QTimer`,
+    `startTimer`, or `timerEvent` anywhere in the Qt sources. Windows
+    drives it from `SetTimer`/`WM_TIMER` at `wi.nTimerDelay`
+    milliseconds. So the whole Animate menu below Step is currently
+    inert. Fixing it means a `QTimer` on the main window started/stopped
+    with `gs.nAnim`'s sign, firing `Animate(...)` — at which point
+    Graphics Settings' "Update Delay in Milliseconds" field becomes
+    portable too and should be added back (it is presently skipped as
+    Win32-only, which is true of `wi.nTimerDelay` but misses the real
+    reason). Not attempted here: it is a feature, not a parity fix.
+   8.14 **Cross-cutting: combo boxes** (next up). Windows offers dropdown
        suggestions on many fields this port renders as bare `QLineEdit`s
        — month names, time presets (Noon/Midnight/6:00am), time zone
        abbreviations, colour names, object names, chart size and scale

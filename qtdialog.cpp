@@ -52,6 +52,8 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QListWidget>
 #include <QtCore/QDir>
+#include <QtCore/QEvent>
+#include <QtCore/QCoreApplication>
 #include <QtCore/QVector>
 #include <QtCore/QMimeData>
 #include <QtGui/QClipboard>
@@ -62,6 +64,62 @@
 #include <unistd.h>
 
 #ifdef QT
+
+// Qt delivers wheel events to whatever widget sits under the pointer, so
+// scrolling one of the tall settings dialogs silently changes any combo
+// box that slides past the cursor -- Wheel Fill, Character Scale, a color
+// picker. Windows' dialogs are fixed size with nothing to scroll, so the
+// hazard is specific to this port. Swallow the wheel on any combo that
+// isn't focused and hand it to the enclosing scroll area instead, so the
+// dialog scrolls and the value stays put. Clicking a combo still focuses
+// it, after which the wheel adjusts it as usual.
+
+class NoComboWheelQt : public QObject
+{
+public:
+  bool eventFilter(QObject *pobj, QEvent *pev) override
+  {
+    QWidget *pw;
+
+    if (pev->type() != QEvent::Wheel)
+      return QObject::eventFilter(pobj, pev);
+    pw = qobject_cast<QWidget *>(pobj);
+    if (pw == NULL || pw->hasFocus())
+      return QObject::eventFilter(pobj, pev);
+    for (QWidget *ppar = pw->parentWidget(); ppar != NULL;
+      ppar = ppar->parentWidget()) {
+      QScrollArea *psa = qobject_cast<QScrollArea *>(ppar);
+      if (psa != NULL) {
+        QCoreApplication::sendEvent(psa->viewport(), pev);
+        break;
+      }
+    }
+    return fTrue;
+  }
+};
+
+// Apply the above to every combo in a dialog. Call just before exec().
+static void BlockComboWheelQt(QDialog *pdlg)
+{
+  static NoComboWheelQt filter;
+
+  for (QComboBox *pcb : pdlg->findChildren<QComboBox *>()) {
+    pcb->setFocusPolicy(Qt::StrongFocus);
+    pcb->installEventFilter(&filter);
+  }
+}
+
+
+// Format a real the way Windows' SetEditR() does, so the orb and
+// influence grids show the same number of decimals Windows does rather
+// than QString::number()'s full precision.
+static QString SzFormatRQt(real r, int n)
+{
+  char sz[cchSzDef];
+
+  FormatR(sz, r, n);
+  return QString(sz);
+}
 
 // Load a chart file chosen via a standard file picker, exactly as Windows'
 // DlgOpenChart does via the stock Windows file dialog -- no custom dialog
@@ -402,17 +460,29 @@ void ShowFileSettingsDialogQt()
   pcbWriteOld->setChecked(us.fWriteOld != 0);
   pcbNoBackDraw->setChecked(!gs.fBackDraw);
   for (QCheckBox *pcb : { pcbSmartSave, pcbTextHTML, pcbBmpPNG,
-    pcbPSComplete, pcbWriteOld, pcbNoBackDraw })
+    pcbPSComplete, pcbWriteOld })
     pouter->addWidget(pcb);
 
-  QFormLayout *pform = new QFormLayout();
+  QFormLayout *pformThick = new QFormLayout();
   QLineEdit *peThickAdjust = new QLineEdit(QString::number(gs.nThickAdjust));
-  QLineEdit *peBackPct = new QLineEdit(QString::number(gs.rBackPct));
+  pformThick->addRow("Line Thickness Adjustment:", peThickAdjust);
+  pouter->addLayout(pformThick);
+
+  // Windows puts this checkbox directly above the transparency it relates
+  // to, at the head of the dialog's right hand column.
+  pouter->addWidget(pcbNoBackDraw);
+
+  QFormLayout *pform = new QFormLayout();
+  // Editable with 25/50/75/100 offered, as Windows' dcFi_XI1 does.
+  QComboBox *pcbBackPct = new QComboBox();
+  pcbBackPct->setEditable(true);
+  for (i = 25; i <= 100; i += 25)
+    pcbBackPct->addItem(QString::number(i));
+  pcbBackPct->setEditText(SzFormatRQt(gs.rBackPct, -3));
   QLineEdit *peADB = new QLineEdit(FSzSet(us.szADB) ? us.szADB : "");
   QLineEdit *pePaperX = new QLineEdit(SzLength(gs.xInch));
   QLineEdit *pePaperY = new QLineEdit(SzLength(gs.yInch));
-  pform->addRow("Line Thickness Adjustment:", peThickAdjust);
-  pform->addRow("Background Transparency Percent:", peBackPct);
+  pform->addRow("Background Transparency Percent:", pcbBackPct);
   pform->addRow("Astrodatabank File Load Filter:", peADB);
   pform->addRow("Horizontal PostScript Paper Size:", pePaperX);
   pform->addRow("Vertical PostScript Paper Size:", pePaperY);
@@ -438,11 +508,13 @@ void ShowFileSettingsDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   int nThickAdjust = peThickAdjust->text().toInt();
-  real rBackPct = peBackPct->text().toDouble();
+  QByteArray baBackPct = pcbBackPct->currentText().toLocal8Bit();
+  real rBackPct = RFromSz(baBackPct.constData());
   if (!FValidBackPct(rBackPct)) {
     QMessageBox::warning(gi.qwind, szAppName,
       "The background transparency percent is invalid.");
@@ -527,11 +599,23 @@ void ShowGraphicsSettingsDialogQt()
   pcbKeepSquare->setChecked(gs.fKeepSquare != 0);
   pin->addWidget(pcbKeepSquare);
 
+  // Windows offers both as editable dropdowns stepping 100..MAXSCALE by
+  // 50, except character scale which only accepts whole multiples of 100
+  // (FValidScale vs FValidScaleText). addItem() before setEditText().
   QFormLayout *pformScale = new QFormLayout();
-  QLineEdit *peScale = new QLineEdit(QString::number(gs.nScale));
-  QLineEdit *peScaleText = new QLineEdit(QString::number(gs.nScaleText));
-  pformScale->addRow("Character Scale:", peScale);
-  pformScale->addRow("Text Scale:", peScaleText);
+  QComboBox *pcbScale = new QComboBox();
+  QComboBox *pcbScaleText = new QComboBox();
+  pcbScale->setEditable(true);
+  pcbScaleText->setEditable(true);
+  for (i = 100; i <= MAXSCALE; i += 50) {
+    if (i % 100 == 0)
+      pcbScale->addItem(QString::number(i));
+    pcbScaleText->addItem(QString::number(i));
+  }
+  pcbScale->setEditText(QString::number(gs.nScale));
+  pcbScaleText->setEditText(QString::number(gs.nScaleText));
+  pformScale->addRow("Character Scale:", pcbScale);
+  pformScale->addRow("Text Scale:", pcbScaleText);
   pin->addLayout(pformScale);
   QCheckBox *pcbAutoScale =
     new QCheckBox("Character Autoscale to Fit Window");
@@ -543,7 +627,7 @@ void ShowGraphicsSettingsDialogQt()
   QLineEdit *peSpace = new QLineEdit(QString::number(gs.cspace));
   QLineEdit *peTrack = new QLineEdit(gs.objTrack >= 0 ?
     szObjName[gs.objTrack] : "None");
-  QLineEdit *peZoom = new QLineEdit(QString::number(gs.rspace));
+  QLineEdit *peZoom = new QLineEdit(SzFormatRQt(gs.rspace, -6));
   pformMisc->addRow("Number of Cells in Graphics Aspect Grid:", peGridCell);
   pformMisc->addRow("Solar System Orbit Trail Length:", peSpace);
   pformMisc->addRow("Telescope Focuses on This Object:", peTrack);
@@ -553,8 +637,8 @@ void ShowGraphicsSettingsDialogQt()
   QGroupBox *pgbMap = new QGroupBox("Map and Globe");
   QVBoxLayout *pvMap = new QVBoxLayout(pgbMap);
   QFormLayout *pformMap = new QFormLayout();
-  QLineEdit *peRot = new QLineEdit(QString::number(gs.rRot));
-  QLineEdit *peTilt = new QLineEdit(QString::number(gs.rTilt));
+  QLineEdit *peRot = new QLineEdit(SzFormatRQt(gs.rRot, -3));
+  QLineEdit *peTilt = new QLineEdit(SzFormatRQt(gs.rTilt, -3));
   pformMap->addRow("Horizontal Map Degree Rotation:", peRot);
   pformMap->addRow("Vertical Globe Degree Tilt:", peTilt);
   pvMap->addLayout(pformMap);
@@ -568,9 +652,12 @@ void ShowGraphicsSettingsDialogQt()
   pvMap->addWidget(pcbMollweide);
   pin->addWidget(pgbMap);
 
+  QGroupBox *pgbAnim = new QGroupBox("Animation");
+  QVBoxLayout *pvAnim = new QVBoxLayout(pgbAnim);
   QCheckBox *pcbAnimMap = new QCheckBox("Animate Map Instead of Time");
   pcbAnimMap->setChecked(gs.fAnimMap != 0);
-  pin->addWidget(pcbAnimMap);
+  pvAnim->addWidget(pcbAnimMap);
+  pin->addWidget(pgbAnim);
 
   QGroupBox *pgbStar = new QGroupBox("Full Star List");
   QVBoxLayout *pvStar = new QVBoxLayout(pgbStar);
@@ -667,19 +754,21 @@ void ShowGraphicsSettingsDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   int nWinX = peWinX->text().toInt();
   int nWinY = peWinY->text().toInt();
-  int nScale = peScale->text().toInt();
-  int nScaleText = peScaleText->text().toInt();
+  int nScale = pcbScale->currentText().toInt();
+  int nScaleText = pcbScaleText->currentText().toInt();
   int nGridCell = peGridCell->text().toInt();
   int cspace = peSpace->text().toInt();
   int nDecaSize = peDecaSize->text().toInt();
-  real rRot = peRot->text().toDouble();
-  real rTilt = peTilt->text().toDouble();
-  real rZoom = peZoom->text().toDouble();
+  QByteArray ba;
+  ba = peRot->text().toLocal8Bit();  real rRot = RFromSz(ba.constData());
+  ba = peTilt->text().toLocal8Bit(); real rTilt = RFromSz(ba.constData());
+  ba = peZoom->text().toLocal8Bit(); real rZoom = RFromSz(ba.constData());
   QByteArray baTrack = peTrack->text().toLocal8Bit();
   int objTrack = NParseSz(baTrack.constData(), pmObject);
   QByteArray baObjLeft = peObjLeft->text().toLocal8Bit();
@@ -812,6 +901,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1028,6 +1118,7 @@ void ShowChartsAllDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1248,6 +1339,7 @@ void ShowChartListDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1369,17 +1461,6 @@ static QComboBox *AddColorComboQt(QFormLayout *pform, CONST char *szLabel,
   return pcb;
 }
 
-// Format a real the way Windows' SetEditR() does, so the orb and
-// influence grids show the same number of decimals Windows does rather
-// than QString::number()'s full precision.
-static QString SzFormatRQt(real r, int n)
-{
-  char sz[cchSzDef];
-
-  FormatR(sz, r, n);
-  return QString(sz);
-}
-
 static int NColorFromComboQt(QComboBox *pcb);
 
 static int NColorFromComboQt(QComboBox *pcb)
@@ -1456,6 +1537,7 @@ void ShowColorDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1548,6 +1630,7 @@ void ShowObjectDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1653,6 +1736,7 @@ static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1779,6 +1863,7 @@ void ShowDefaultInfoDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1948,6 +2033,7 @@ void ShowTransitDialogQt()
       peZon->setText(szT[0] == '+' ? &szT[1] : szT);
     });
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2150,6 +2236,7 @@ void ShowProgressDialogQt()
       peZon->setText(szN[0] == '+' ? &szN[1] : szN);
     });
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2357,6 +2444,7 @@ void ShowChartSettingsDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2520,6 +2608,7 @@ void ShowAspectDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2590,6 +2679,7 @@ void ShowObject2DialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2760,6 +2850,7 @@ void ShowCalcDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3007,6 +3098,7 @@ void ShowDisplayDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3143,6 +3235,7 @@ void ShowMoonObjectDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3334,6 +3427,7 @@ void ShowCustomDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3427,6 +3521,7 @@ void ShowCustomStarDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
+  BlockComboWheelQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
