@@ -2036,6 +2036,249 @@ static CONST CTXITEM rgctxIndianQt[] = {
   {"Show &Degrees on Wheel",                "Show C&ities"},
   {"Show &Info Sidebar",                    "Show Info &Sidebar"} };
 
+// Windows' menuG, the Grid chart.
+static CONST CTXITEM rgctxGridQt[] = {
+  {"&View Text Mode Grid",                      "Show &Graphics"},
+  {NULL, NULL},
+  {"&Increase Aspect Size",                     "&Increase"},
+  {"&Decrease Aspect Size",                     "&Decrease"},
+  {NULL, NULL},
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"&Applying Aspects",                         "&Applying Aspects"},
+  {NULL, NULL},
+  {"&Transpose Grid",                           "Modify &Display"},
+  {"&Highlight Main Axis",                      "Show &Glyphs on Aspect Lines"} };
+
+// Windows' menuM, the Midpoint chart.
+static CONST CTXITEM rgctxMidpointQt[] = {
+  {"&View Text List of Midpoints",              "Show &Graphics"},
+  {"Wheel is &Flipped Over",                    "&Indian Wheel Order"},
+  {NULL, NULL},
+  {"Show &Aspect Lines",                        "Show &Equator"},
+  {"&Label Aspect/Midpoint Lines",              "Show &Glyphs on Aspect Lines"},
+  {"Label &Midpoint Lines with Orbs",           "Show C&ities"},
+  {"Lines Dotted Based on Max &Orb",            "Modify &Display"},
+  {NULL, NULL},
+  {"Show Big Planet &Dots",                     "Show &House Details"},
+  {"Show Info &Sidebar",                        "Show Info &Sidebar"} };
+
+// Windows' menuZ, the Horizon chart.
+static CONST CTXITEM rgctxHorizonQt[] = {
+  {"&View Text Horizon List",                   "Show &Graphics"},
+  {"Use &Polar Projection",                     "Modif&y Chart"},
+  {"Use Ecliptic &Axis",                        "Use Ecliptic &Axis"},
+  {NULL, NULL},
+  {"Show &Constellations",                      "Show &Constellations"},
+  {"Show Sign &Boundaries",                     "&Indian Wheel Order"},
+  {"Show &House Boundaries",                    "Show &House Details"},
+  {"House Boundaries Are &3D",                  "&3D Houses"},
+  {"Show Earth's &Equator",                     "Show &Equator"},
+  {NULL, NULL},
+  {"Show Full &Star List",                      "Show Full &Star List"},
+  {"Show E&xoplanets",                          "Show E&xoplanets"},
+  {"Show Planet &Glyphs",                       "Show Glyph &Labels"},
+  {"Show Big Planet &Dots",                     "Modify &Display"},
+  {"Show Aspect &Lines",                        "Show C&ities"},
+  {"Aspect Lines Show Gl&yphs",                 "Show &Glyphs on Aspect Lines"} };
+
+// Windows' menuS, the Orbit chart.
+static CONST CTXITEM rgctxOrbitQt[] = {
+  {"&View Text Orbit Positions",                "Show &Graphics"},
+  {NULL, NULL},
+  {"Zoom &Out",                                 "Zoom &Out"},
+  {"Zoom &In",                                  "Zoom &In"},
+  {NULL, NULL},
+  {"&Logarithmic Distances",                    "&3D Houses"},
+  {"Show Full &Star List",                      "Show Full &Star List"},
+  {NULL, NULL},
+  {"Show Sign &Boundaries",                     "Show &House Details"},
+  {"Show &Aspect Lines",                        "Show &Equator"},
+  {"Aspect Lines Show Gl&yphs",                 "Show &Glyphs on Aspect Lines"},
+  {"Show Solid Orbit &Trails",                  "Show C&ities"},
+  {"Show Planet &Glyphs",                       "Show Glyph &Labels"},
+  {"Show Big Planet &Dots",                     "Modify &Display"} };
+
+// Windows' menuH, the Sector chart.
+static CONST CTXITEM rgctxSectorQt[] = {
+  {"&View Text Sector List",                    "Show &Graphics"},
+  {NULL, NULL},
+  {"Show &Aspect Lines",                        "Show &Equator"},
+  {"Aspect Lines Show &Glyphs",                 "Show &Glyphs on Aspect Lines"},
+  {"Aspect Lines Dotted Based on Max &Orb",     "Modify &Display"},
+  {NULL, NULL},
+  {"Wheel is &Flipped Over",                    "&Indian Wheel Order"},
+  {"Show Big Planet &Dots",                     "Show &House Details"},
+  {"Show Info &Sidebar",                        "Show Info &Sidebar"} };
+
+// Windows' menuK, the Calendar chart.
+static CONST CTXITEM rgctxCalendarQt[] = {
+  {"&View Text Mode Calendar",                  "Show &Graphics"},
+  {NULL, NULL},
+  {"Show Entire &Year",                         "Modif&y Chart"},
+  {"Show &Transits Within Days",                "Show &Glyphs on Aspect Lines"},
+  {"Transits are Transit to &Natal",            "&Comparison Chart"},
+  {NULL, NULL},
+  {"Weeks Start on &Monday",                    "&Indian Wheel Order"},
+  {"&Center Date Numbers",                      "Modify &Display"},
+  {"&Justify Date Numbers",                     "Show Chart &Info"},
+  {"Highlight Current &Date",                   "Show Glyph &Labels"} };
+
+// Windows' menuJ, the Influence chart.
+static CONST CTXITEM rgctxInfluenceQt[] = {
+  {"&View Text Influences",                     "Show &Graphics"},
+  {NULL, NULL},
+  {"&Include House Cusp Objects",               "Modify &Display"},
+  {"&Circle Final Dispositors",                 "Show &Glyphs on Aspect Lines"},
+  {"&Planets Arranged Clockwise",               "&Indian Wheel Order"},
+  {"Sun at &Top of Wheels",                     "Show &House Details"} };
+
+// Windows' menu7, the Esoteric chart.
+static CONST CTXITEM rgctxEsotericQt[] = {
+  {"&View Text Esoteric Chart",                 "Show &Graphics"},
+  {NULL, NULL},
+  {"Show Entire &Year",                         "Modif&y Chart"},
+  {"Year Plots Every &Day",                     "Print Nearest &Second"},
+  {NULL, NULL},
+  {"Ray Powers Are &Slice Not Count",           "Modify &Display"},
+  {"Highlight &Current Date",                   "Show Glyph &Labels"},
+  {"Show &Horizontal Lines",                    "Show &Equator"} };
+
+// Windows' menuL, the Astro-Graph chart.
+static CONST CTXITEM rgctxAstroGraphQt[] = {
+  {"&View Text Astro-Graph Table",              "Show &Graphics"},
+  {NULL, NULL},
+  {"&Increase Map Size",                        "&Increase"},
+  {"&Decrease Map Size",                        "&Decrease"},
+  {NULL, NULL},
+  {"Ignore Planet &Latitudes",                  "&3D Houses"},
+  {"Show Detailed &World Map",                  "Use Detailed World &Map"},
+  {"Show Latitude &Crossing",                   "Modif&y Chart"},
+  {"Only Show &Midheaven Lines",                "Modify &Display"},
+  {NULL, NULL},
+  {"Show Ci&ties from Atlas",                   "Show C&ities"},
+  {"Cities Colored By &Region",                 "Show &Glyphs on Aspect Lines"} };
+
+// Windows' menuE, the Ephemeris chart.
+static CONST CTXITEM rgctxEphemerisQt[] = {
+  {"&View Text Mode Ephemeris",                 "Show &Graphics"},
+  {NULL, NULL},
+  {"Show Entire &Year",                         "Modif&y Chart"},
+  {"Year Plots Every &Day",                     "Print Nearest &Second"},
+  {"Plot Vertical &Latitudes",                  "&Parallel Aspects"},
+  {NULL, NULL},
+  {"Don't Show &Moon",                          "Modify &Display"},
+  {"Highlight &Current Date",                   "Show Glyph &Labels"},
+  {"Show &Horizontal Lines",                    "Show &Equator"} };
+
+// Windows' menuZd, the Rising chart.
+static CONST CTXITEM rgctxRisingQt[] = {
+  {"&View Rising/Setting Times",                "Show &Graphics"},
+  {NULL, NULL},
+  {"Year Plots Every &Day",                     "Print Nearest &Second"},
+  {"Show Detailed &Color",                      "Use Detailed World &Map"},
+  {"Show &Object Key",                          "Show Glyph &Labels"},
+  {NULL, NULL},
+  {"Show &Grid",                                "Show C&ities"},
+  {"Show Current &Time",                        "Modify &Display"} };
+
+// Windows' menuN, the Local chart.
+static CONST CTXITEM rgctxLocalQt[] = {
+  {"&View Nearest City List",                   "Show &Graphics"},
+  {NULL, NULL},
+  {"Zoom &Out",                                 "Zoom &Out"},
+  {"Zoom &In",                                  "Zoom &In"},
+  {NULL, NULL},
+  {"Show Lines to &Planets",                    "&Indian Wheel Order"},
+  {"Lines are &Astrocartography",               "Use Ecliptic &Axis"},
+  {"Ignore Planet La&titudes",                  "&3D Houses"},
+  {"Show &Equator",                             "Show &Equator"},
+  {"Show &Degree Grid",                         "Show &House Details"},
+  {NULL, NULL},
+  {"&Label Cities",                             "Show C&ities"},
+  {"&Color Cities",                             "Show &Glyphs on Aspect Lines"},
+  {"Show &Big City Dots",                       "Modify &Display"} };
+
+// Windows' menu8, the Moons chart.
+static CONST CTXITEM rgctxMoonsQt[] = {
+  {"&View Text Mode Moons Chart",               "Show &Graphics"},
+  {NULL, NULL},
+  {"Show Prominence &Zones",                    "Show &House Details"},
+  {"Show Outer &Boundary",                      "Show &Equator"},
+  {NULL, NULL},
+  {"Show Planet &Glyphs",                       "Show Glyph &Labels"},
+  {"Show Big Planet &Dots",                     "Modify &Display"},
+  {NULL, NULL},
+  {"Show Aspect &Lines",                        "Show C&ities"},
+  {"Aspect Lines Show Gl&yphs",                 "Show &Glyphs on Aspect Lines"} };
+
+// Windows' menuB, the Transits chart.
+static CONST CTXITEM rgctxTransitQt[] = {
+  {"&View Text Mode Transit Graph",             "Show &Graphics"},
+  {NULL, NULL},
+  {"&Parallel Aspects",                         "&Parallel Aspects"},
+  {"Show &All Aspects",                         "Modif&y Chart"},
+  {"Show Only &Exact Aspects",                  "&Indian Wheel Order"},
+  {"Highlight Chart &Time",                     "Modify &Display"} };
+
+// Windows' menuY, the Biorhythm chart.
+static CONST CTXITEM rgctxBiorhythmQt[] = {
+  {"&View Text Mode Biorhythm",                 "Show &Graphics"},
+  {"Show &Average Line",                        "Modify &Display"} };
+
+// Windows' menuXX, the Sphere chart.
+static CONST CTXITEM rgctxSphereQt[] = {
+  {"Show &Other Half of Sphere",                "Modif&y Chart"},
+  {"Show Just Half of S&phere",                 "Modify &Display"},
+  {"Show Info &Sidebar",                        "Show Info &Sidebar"},
+  {NULL, NULL},
+  {"Show Sign &Boundaries",                     "&Indian Wheel Order"},
+  {"Show &House Boundaries",                    "Show &House Details"},
+  {"House Boundaries Are &3D",                  "&3D Houses"},
+  {NULL, NULL},
+  {"Aspect Lines Show &Glyphs",                 "Show &Glyphs on Aspect Lines"},
+  {"Show Earth's &Equator",                     "Show &Equator"},
+  {"Show &Constellations",                      "Show &Constellations"},
+  {"Show Full &Star List",                      "Show Full &Star List"},
+  {"Show E&xoplanets",                          "Show E&xoplanets"},
+  {"Use Ecliptic &Axis",                        "Use Ecliptic &Axis"} };
+
+// Windows' menuXG, the Globe chart.
+static CONST CTXITEM rgctxGlobeQt[] = {
+  {"Show Astro-Graph &Lines",                   "Modify &Display"},
+  {"Show &Constellations",                      "Show &Constellations"},
+  {NULL, NULL},
+  {"&Ignore Planet Latitudes",                  "&3D Houses"},
+  {"Show Detailed &World Map",                  "Use Detailed World &Map"},
+  {"Show Sign &Boundaries",                     "Show &House Details"},
+  {"Show &Equator",                             "Show &Equator"},
+  {"Show Full &Star List",                      "Show Full &Star List"},
+  {"Show E&xoplanets",                          "Show E&xoplanets"},
+  {"Use Ecliptic &Axis",                        "Use Ecliptic &Axis"},
+  {NULL, NULL},
+  {"Show C&ities from Atlas",                   "Show C&ities"},
+  {"Cities Colored By &Region",                 "Show &Glyphs on Aspect Lines"} };
+
+// Windows' menuXZ, the Telescope chart.
+static CONST CTXITEM rgctxTelescopeQt[] = {
+  {"Zoom &Out",                                 "Zoom &Out"},
+  {"Zoom &In",                                  "Zoom &In"},
+  {NULL, NULL},
+  {"Show &Constellations",                      "Show &Constellations"},
+  {"Show &Sign Boundaries",                     "&Indian Wheel Order"},
+  {"Show &House Boundaries",                    "Show &House Details"},
+  {"House Boundaries Are &3D",                  "&3D Houses"},
+  {"Show Hori&zon Line",                        "Show &Equator"},
+  {NULL, NULL},
+  {"Show Planet &Details",                      "Show &Glyphs on Aspect Lines"},
+  {"O&utline Occulted Planets",                 "Modif&y Chart"},
+  {"&Label Planets",                            "Show Glyph &Labels"},
+  {"Show &Big Planet Dots",                     "Modify &Display"},
+  {"Show &Full Star List",                      "Show Full &Star List"},
+  {"Show E&xoplanets",                          "Show E&xoplanets"},
+  {"Show Degree &Grid",                         "Show C&ities"},
+  {NULL, NULL},
+  {"Use &Ecliptic Axis",                        "Use Ecliptic &Axis"} };
+
 #define CctxQt(rg) (int)(sizeof(rg) / sizeof(CTXITEM))
 
 // Find a menu bar item by its exact label, searching submenus too.
@@ -2090,14 +2333,43 @@ static QMenu *PmenuBuildContextQt(CONST CTXITEM *rgitem, int citem)
 // type has none. Windows switches on gi.nMode the same way.
 static QMenu *PmenuContextForChartQt()
 {
+#define CtxCase(mode, rg) \
+  case mode: return PmenuBuildContextQt(rg, CctxQt(rg));
+
   switch (gi.nMode) {
   case gWheel:
   case gHouse:
     return !gs.fIndianWheel ?
       PmenuBuildContextQt(rgctxWheelQt, CctxQt(rgctxWheelQt)) :
       PmenuBuildContextQt(rgctxIndianQt, CctxQt(rgctxIndianQt));
+  CtxCase(gGrid,       rgctxGridQt)
+  CtxCase(gMidpoint,   rgctxMidpointQt)
+  CtxCase(gHorizon,    rgctxHorizonQt)
+  CtxCase(gOrbit,      rgctxOrbitQt)
+  CtxCase(gSector,     rgctxSectorQt)
+  CtxCase(gCalendar,   rgctxCalendarQt)
+  CtxCase(gDisposit,   rgctxInfluenceQt)
+  CtxCase(gEsoteric,   rgctxEsotericQt)
+  CtxCase(gAstroGraph, rgctxAstroGraphQt)
+  CtxCase(gEphemeris,  rgctxEphemerisQt)
+  CtxCase(gRising,     rgctxRisingQt)
+  CtxCase(gLocal,      rgctxLocalQt)
+  CtxCase(gMoons,      rgctxMoonsQt)
+  CtxCase(gBiorhythm,  rgctxBiorhythmQt)
+  CtxCase(gSphere,     rgctxSphereQt)
+  CtxCase(gTelescope,  rgctxTelescopeQt)
+  // Windows shares one menu between the three flat/round world maps, and
+  // one between the two transit graph types.
+  case gWorldMap:
+  case gGlobe:
+  case gPolar:
+    return PmenuBuildContextQt(rgctxGlobeQt, CctxQt(rgctxGlobeQt));
+  case gTraTraGra:
+  case gTraNatGra:
+    return PmenuBuildContextQt(rgctxTransitQt, CctxQt(rgctxTransitQt));
   }
   return NULL;
+#undef CtxCase
 }
 
 
