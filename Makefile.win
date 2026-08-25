@@ -12,9 +12,16 @@
 CXX    = x86_64-w64-mingw32-g++
 RC     = x86_64-w64-mingw32-windres
 ODIR   = obj-win
-CFLAGS = -DWIN -DPC -D_WINDOWS -DWIN32 -O2 -w -fpermissive -static
+# __CRT__NO_INLINE: mingw's <io.h> has inline functions with a local named
+# "ret", which extern.h defines as a macro (cp0.dir); disabling those inlines
+# avoids the collision without touching shared code.
+# min/max are restored by wincompat.h, included at the end of astrolog.h --
+# they can't be defined on the command line because libstdc++'s c++config.h
+# undefines them partway through the include chain.
+CFLAGS = -DWIN -DPC -D_WINDOWS -DWIN32 -D__CRT__NO_INLINE \
+         -O2 -w -fpermissive -static
 LIBS   = -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lole32 -luuid -lwinspool \
-         -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32
+         -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32 -lurlmon
 LDFLAGS = -mwindows -static -static-libgcc -static-libstdc++
 
 SRC = astrolog.cpp atlas.cpp calc.cpp charts0.cpp charts1.cpp charts2.cpp \

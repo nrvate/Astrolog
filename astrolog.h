@@ -2398,4 +2398,13 @@ typedef struct _WindowInternal {
 
 #include "extern.h"
 
+#ifdef __MINGW32__
+/* Cross compiling the Windows build with mingw rather than Visual Studio: */
+/* libstdc++'s c++config.h undefines min and max, which Visual Studio's    */
+/* windows.h leaves defined and wdriver.cpp relies on. Restore them here,  */
+/* after every system header has been seen. Guarded to mingw, so no other  */
+/* build is affected.                                                      */
+#include "wincompat.h"
+#endif
+
 /* astrolog.h */
