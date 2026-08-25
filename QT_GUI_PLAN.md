@@ -963,9 +963,9 @@ original description said they were.
 
 16. **Menu parity is measured, not asserted.** The test suite parses
     Windows' main menu resource (the `menu MENU` block in astrolog.rc)
-    and checks every item against the live Qt menu bar: **245 of 245
-    present**, plus 24 deliberately skipped (Setup submenu, Window
-    Settings, Print Setup, wallpaper modes, text scrolling) and the 96
+    and checks every item against the live Qt menu bar: **257 of 257
+    present**, plus 12 deliberately skipped (Setup submenu, Print Setup,
+    wallpaper modes, Buffer Redraws) and the 96
     macro slots, which the hotkey test covers instead.
     - It matches ignoring `&` placement, since the two builds don't
       always put the mnemonic on the same letter and that isn't worth
@@ -1007,6 +1007,33 @@ original description said they were.
       express that (X11 fires it on press, Windows on release), so the
       canvas sets `Qt::PreventContextMenu` and drives the menu from the
       mouse handlers. Change one of these and check the other.
+
+18. **The window sizing model is no longer hardwired.** The canvas used to
+    set `gs.xWin/yWin` from its own size on every paint, which is Windows'
+    *default* (`wi.fWindowChart` on, `wi.fChartWindow` off) but was the only
+    behavior available. The View / Window Settings submenu now exists, with
+    both toggles and all five sizing commands.
+    - The canvas lives in a `QScrollArea`. With "Window Resizes Chart" on it
+      tracks the viewport, exactly as before. With it off the canvas is
+      sized to the chart and real scrollbars appear when the chart is
+      larger than the window.
+    - That is why none of Windows' `wi.xScroll` / `gi.xOffset` panning
+      arithmetic (xscreen.cpp:396) is ported: Qt scrolls the viewport
+      itself, and gets mouse wheel and keyboard scrolling for free. The
+      four Scroll commands just drive the scrollbars.
+    - **"Buffer Redraws" is deliberately still absent.** It toggles whether
+      Win32 draws through an off screen bitmap; Qt composites every widget
+      off screen no matter what, so there is nothing for it to switch. An
+      item that silently does nothing would be worse than not offering it.
+      It is the only Window Settings item left unported.
+    - Full Screen is Qt's `showFullScreen()`. Windows saves and restores the
+      window rectangle by hand there and can fail outright, warning the user
+      about permissions; that whole failure mode doesn't exist here.
+    - Watch the accelerator case convention when adding hotkeys: in
+      astrolog.rc a **lowercase** letter is the plain key and an
+      **uppercase** letter means Shift. `b` is Show Border, `B` is Size
+      Chart to Window (so, `Shift+B` in Qt). Getting this wrong produced a
+      duplicate binding the hotkey test caught.
 
 ## Known divergences from Windows
 

@@ -370,6 +370,13 @@ static void TestAllMenuActionsQt()
       SetChartModeQt(gWheel);
       continue;
     }
+    // Clear Screen blanks the chart on purpose, so it can't be held to the
+    // "still drew something" check below, and leaving the buffer blank
+    // would get the next item blamed for it. Draw the chart back.
+    if (str == "&Clear Screen") {
+      RedrawQt();
+      continue;
+    }
     // Getting here at all is most of the test: a crash takes the process
     // with it and the run reports nothing further.
     Check(gi.qim != NULL, "after \"%s\": no image",
@@ -458,18 +465,18 @@ static CONST PARITYITEM rgparityQt[] = {
   {"Edit",        "&Paste",                                      fFalse},
   {"View",        "Show &Graphics",                              fFalse},
   {"View",        "&Buffer Redraws",                             fTrue},
-  {"View",        "&Redraw Screen",                              fTrue},
-  {"View",        "&Clear Screen",                               fTrue},
-  {"View",        "&Hourglass on Redraw",                        fTrue},
-  {"View",        "Ch&art Resizes Window",                       fTrue},
-  {"View",        "&Window Resizes Chart",                       fTrue},
-  {"View",        "Si&ze Chart to Window",                       fTrue},
-  {"View",        "&Size Window to Chart",                       fTrue},
-  {"View",        "Size Window &Full Screen",                    fTrue},
-  {"View",        "Scroll Page &Up",                             fTrue},
-  {"View",        "Scroll Page &Down",                           fTrue},
-  {"View",        "Scroll &to Beginning",                        fTrue},
-  {"View",        "Scroll to &End",                              fTrue},
+  {"View",        "&Redraw Screen",                              fFalse},
+  {"View",        "&Clear Screen",                               fFalse},
+  {"View",        "&Hourglass on Redraw",                        fFalse},
+  {"View",        "Ch&art Resizes Window",                       fFalse},
+  {"View",        "&Window Resizes Chart",                       fFalse},
+  {"View",        "Si&ze Chart to Window",                       fFalse},
+  {"View",        "&Size Window to Chart",                       fFalse},
+  {"View",        "Size Window &Full Screen",                    fFalse},
+  {"View",        "Scroll Page &Up",                             fFalse},
+  {"View",        "Scroll Page &Down",                           fFalse},
+  {"View",        "Scroll &to Beginning",                        fFalse},
+  {"View",        "Scroll to &End",                              fFalse},
   {"View",        "&Colored Text",                               fFalse},
   {"View",        "&Set Colors...",                              fFalse},
   {"View",        "Show &Interpretations",                       fFalse},

@@ -46,6 +46,8 @@
 #include <QtGui/QContextMenuEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
+#include <QtWidgets/QScrollArea>
+#include <QtWidgets/QScrollBar>
 #include <QtGui/QPaintEvent>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
@@ -72,6 +74,20 @@
 // Is the chart window fully set up? Guards against a resize event arriving
 // (e.g. during initial widget layout) before there is a chart to redraw.
 static bool fQtReady = false;
+
+// Windows' wi.fChartWindow and wi.fWindowChart (astrolog.h:2353), which
+// can't be used here because the whole WI struct is Win32 only. Same
+// defaults Windows starts with (xdata.cpp:130): a window resize changes
+// the chart to match, but a chart size change leaves the window alone.
+// When neither is on the chart keeps whatever size it was given and the
+// scroll area below provides scrollbars to pan around it.
+static flag fChartWindowQt = fFalse;   // Chart resize resizes the window?
+static flag fWindowChartQt = fTrue;    // Window resize resizes the chart?
+
+// Wraps the chart canvas, so a chart bigger than the window can be
+// scrolled. Qt scrolls the viewport itself, which is why none of Windows'
+// wi.xScroll/gi.xOffset panning arithmetic (xscreen.cpp:396) is ported.
+static QScrollArea *s_pscroll = NULL;
 
 
 // The widget the chart is actually painted onto. Astrolog keeps rendering
@@ -124,7 +140,12 @@ protected:
     // in text mode (us.fGraphics false) there's no buffer to paint here at
     // all (see RedrawTextQt()), and gi.qim never gets (re)created, so this
     // check would otherwise fire on every single repaint of this widget.
-    if (us.fGraphics && fQtReady && width() >= 1 && height() >= 1 &&
+    // Only chase the widget's size when a window resize is supposed to
+    // change the chart. With that off the chart keeps its own size and
+    // this widget is sized to match it instead (see ApplySizeModeQt), so
+    // redrawing to fit here would fight that and repaint forever.
+    if (us.fGraphics && fQtReady && fWindowChartQt &&
+      width() >= 1 && height() >= 1 &&
       (gi.qim == NULL || gi.qim->width() != width() ||
       gi.qim->height() != height())) {
       gs.xWin = width();
@@ -324,6 +345,123 @@ private:
 };
 
 
+/*
+******************************************************************************
+** Window sizing, the View / Window Settings commands.
+******************************************************************************
+*/
+
+// Should a redraw put up a wait cursor? Windows' wi.fHourglass, same
+// default (xdata.cpp:130). Applied by RedrawQt().
+static flag fHourglassQt = fTrue;
+
+static void ClearTextWindowQt();   // defined with the text window below
+
+// Put the canvas into whichever of the two sizing modes is currently set.
+// With "window resizes chart" on, the canvas tracks the scroll area's
+// viewport and paintEvent() picks the chart size up from it. With it off
+// the canvas is sized to the chart instead, and the scroll area grows
+// scrollbars whenever that doesn't fit in the window.
+void ApplySizeModeQt()
+{
+  if (s_pscroll == NULL || gi.qcanvas == NULL)
+    return;
+  s_pscroll->setWidgetResizable(fWindowChartQt != fFalse);
+  if (!fWindowChartQt && gs.xWin >= 1 && gs.yWin >= 1)
+    gi.qcanvas->resize(gs.xWin, gs.yWin);
+}
+
+
+// Grow or shrink the window so the chart fits it exactly, the Qt version
+// of Windows' ResizeWindowToChart() (xscreen.cpp:582). Rather than compute
+// frame and menu bar thickness, measure how much of the window currently
+// isn't chart viewport and keep that much.
+void ResizeWindowToChartQt()
+{
+  if (gi.qwind == NULL || s_pscroll == NULL || !us.fGraphics)
+    return;
+  if (gs.xWin < 1)
+    gs.xWin = DEFAULTX;
+  if (gs.yWin < 1)
+    gs.yWin = DEFAULTY;
+  QSize sizeExtra = gi.qwind->size() - s_pscroll->viewport()->size();
+  gi.qwind->resize(QSize(gs.xWin, gs.yWin) + sizeExtra);
+}
+
+
+// Size Chart to Window: adopt the viewport's size as the chart's.
+void SizeChartToWindowQt()
+{
+  if (s_pscroll == NULL)
+    return;
+  QSize size = s_pscroll->viewport()->size();
+
+  if (size.width() < 1 || size.height() < 1)
+    return;
+  gs.xWin = size.width();
+  gs.yWin = size.height();
+  us.fGraphics = fTrue;
+  ApplySizeModeQt();
+  RedrawQt();
+}
+
+
+// Size Window Full Screen. Windows saves and restores the window rectangle
+// by hand and can fail outright on it; Qt has this built in.
+void ToggleFullScreenQt()
+{
+  if (gi.qwind == NULL)
+    return;
+  if (gi.qwind->isFullScreen())
+    gi.qwind->showNormal();
+  else
+    gi.qwind->showFullScreen();
+}
+
+
+// Clear Screen. Windows calls DrawClearScreen(), which can't be used here
+// because it draws through gi.qpaint, and that only exists for the length
+// of a redraw. Filling the buffer with the background color is what that
+// would have done anyway (its DrawColor(gi.kiOff) + DrawBlock pair).
+void ClearScreenQt()
+{
+  if (us.fGraphics) {
+    if (gi.qim == NULL)
+      return;
+    KV kv = KvFromKi(gi.kiOff);
+    gi.qim->fill(QColor(RgbR(kv), RgbG(kv), RgbB(kv)));
+    if (gi.qcanvas != NULL)
+      gi.qcanvas->update();
+  } else
+    ClearTextWindowQt();
+}
+
+
+// The four scrolling commands. Windows posts scrollbar messages to itself
+// and repaints at a new offset; here the scroll area already owns real
+// scrollbars, so these just drive them.
+void ScrollChartQt(int nDir)
+{
+  if (s_pscroll == NULL)
+    return;
+  QScrollBar *psb = s_pscroll->verticalScrollBar();
+  QScrollBar *psbH = s_pscroll->horizontalScrollBar();
+
+  switch (nDir) {
+  case -1: psb->setValue(psb->value() - psb->pageStep()); break;
+  case  1: psb->setValue(psb->value() + psb->pageStep()); break;
+  case  0:
+    psb->setValue(psb->minimum());
+    psbH->setValue(psbH->minimum());
+    break;
+  case  2:
+    psb->setValue(psb->maximum());
+    psbH->setValue(psbH->maximum());
+    break;
+  }
+}
+
+
 // Text mode (us.fGraphics false, e.g. Colored Text / Show Interpretations)
 // renders through a wholly separate path from the graphics one -- Action()
 // (astrolog.cpp) calls PrintChart() instead of FActionX()/DrawChartX(),
@@ -337,6 +475,13 @@ private:
 
 static QDialog *s_pdlgText = NULL;
 static QTextBrowser *s_ptextBrowser = NULL;
+
+// Clear Screen in text mode, the counterpart of Windows' TextClearScreen().
+static void ClearTextWindowQt()
+{
+  if (s_ptextBrowser != NULL)
+    s_ptextBrowser->clear();
+}
 
 // Shared by RedrawTextQt() and the Edit menu's Copy Chart Text Output --
 // Print, equivalent to Windows' DlgPrint(). Two things are copied from
@@ -637,11 +782,25 @@ void RedrawQt()
   // anything drawn rather than written to a vector file.
   gi.nScaleT = 1;
   AdjustTextScale();
+  if (fHourglassQt)
+    QApplication::setOverrideCursor(Qt::WaitCursor);
   DrawChartX();
+  if (fHourglassQt)
+    QApplication::restoreOverrideCursor();
   delete gi.qpaint;
   gi.qpaint = NULL;
-  if (gi.qcanvas != NULL)
+  if (gi.qcanvas != NULL) {
+    // With the chart keeping its own size, the canvas has to be resized to
+    // match whenever the chart changes size, or the scroll area would keep
+    // scrolling over the old extent.
+    if (!fWindowChartQt &&
+      (gi.qcanvas->width() != gs.xWin || gi.qcanvas->height() != gs.yWin))
+      gi.qcanvas->resize(gs.xWin, gs.yWin);
     gi.qcanvas->update();
+  }
+  // Chart Resizes Window: fit the window around whatever was just drawn.
+  if (fChartWindowQt)
+    ResizeWindowToChartQt();
 }
 
 
@@ -1046,6 +1205,76 @@ static void BuildViewMenu(QMainWindow *pwind)
   QMenu *pmenu = pwind->menuBar()->addMenu("&View");
   s_paGraphics = AddToggleAction(pmenu, "Show &Graphics", &us.fGraphics,
     fFalse);
+
+  // Window Settings. Windows' "Buffer Redraws" is deliberately absent:
+  // it toggles whether Win32 draws through an off screen bitmap, and Qt
+  // composites every widget off screen regardless, so there is nothing
+  // for it to switch. A toggle that silently does nothing would be worse
+  // than not offering it.
+  QMenu *pmenuWin = pmenu->addMenu("&Window Settings");
+  QAction *paRedraw = pmenuWin->addAction("&Redraw Screen");
+  QObject::connect(paRedraw, &QAction::triggered, pwind,
+    []() { RedrawQt(); });
+  QAction *paClear = pmenuWin->addAction("&Clear Screen");
+  QObject::connect(paClear, &QAction::triggered, pwind,
+    []() { ClearScreenQt(); });
+  QAction *paHourglass = pmenuWin->addAction("&Hourglass on Redraw");
+  paHourglass->setCheckable(true);
+  paHourglass->setChecked(fHourglassQt != fFalse);
+  QObject::connect(paHourglass, &QAction::triggered, pwind,
+    [paHourglass]() {
+      fHourglassQt = !fHourglassQt;
+      paHourglass->setChecked(fHourglassQt != fFalse);
+    });
+  pmenuWin->addSeparator();
+
+  QAction *paChartWin = pmenuWin->addAction("Ch&art Resizes Window");
+  paChartWin->setCheckable(true);
+  paChartWin->setChecked(fChartWindowQt != fFalse);
+  QObject::connect(paChartWin, &QAction::triggered, pwind,
+    [paChartWin]() {
+      fChartWindowQt = !fChartWindowQt;
+      paChartWin->setChecked(fChartWindowQt != fFalse);
+      if (fChartWindowQt)
+        ResizeWindowToChartQt();
+    });
+  QAction *paWinChart = pmenuWin->addAction("&Window Resizes Chart");
+  paWinChart->setCheckable(true);
+  paWinChart->setChecked(fWindowChartQt != fFalse);
+  QObject::connect(paWinChart, &QAction::triggered, pwind,
+    [paWinChart]() {
+      fWindowChartQt = !fWindowChartQt;
+      paWinChart->setChecked(fWindowChartQt != fFalse);
+      ApplySizeModeQt();
+    });
+  QAction *paSizeChart = pmenuWin->addAction("Si&ze Chart to Window");
+  QObject::connect(paSizeChart, &QAction::triggered, pwind,
+    []() { SizeChartToWindowQt(); });
+  QAction *paSizeWin = pmenuWin->addAction("&Size Window to Chart");
+  QObject::connect(paSizeWin, &QAction::triggered, pwind,
+    []() { ResizeWindowToChartQt(); });
+  QAction *paFull = pmenuWin->addAction("Size Window &Full Screen");
+  paFull->setCheckable(true);
+  QObject::connect(paFull, &QAction::triggered, pwind,
+    [paFull]() {
+      ToggleFullScreenQt();
+      paFull->setChecked(gi.qwind != NULL && gi.qwind->isFullScreen());
+    });
+  pmenuWin->addSeparator();
+
+  QAction *paScrollUp = pmenuWin->addAction("Scroll Page &Up");
+  QObject::connect(paScrollUp, &QAction::triggered, pwind,
+    []() { ScrollChartQt(-1); });
+  QAction *paScrollDown = pmenuWin->addAction("Scroll Page &Down");
+  QObject::connect(paScrollDown, &QAction::triggered, pwind,
+    []() { ScrollChartQt(1); });
+  QAction *paScrollHome = pmenuWin->addAction("Scroll &to Beginning");
+  QObject::connect(paScrollHome, &QAction::triggered, pwind,
+    []() { ScrollChartQt(0); });
+  QAction *paScrollEnd = pmenuWin->addAction("Scroll to &End");
+  QObject::connect(paScrollEnd, &QAction::triggered, pwind,
+    []() { ScrollChartQt(2); });
+
   QAction *paColorText = pmenu->addAction("&Colored Text");
   paColorText->setCheckable(true);
   paColorText->setChecked(us.fAnsiColor != 0);
@@ -1058,9 +1287,6 @@ static void BuildViewMenu(QMainWindow *pwind)
       s_paGraphics->setChecked(fFalse);
       RedrawQt();
     });
-  QAction *paRedraw = pmenu->addAction("&Redraw Screen");
-  QObject::connect(paRedraw, &QAction::triggered, pwind,
-    []() { RedrawQt(); });
   QAction *paColors = pmenu->addAction("Set &Colors...");
   QObject::connect(paColors, &QAction::triggered, pwind,
     []() { ShowColorDialogQt(); });
@@ -2231,7 +2457,18 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"0",                 "Modif&y Chart"},
   {"Ctrl+0",            "List Cr&edits"},
   {"Alt+0",             "&About Astrolog..."},
-  {" ",                 "&Redraw Screen"},
+  {"Space",             "&Redraw Screen"},
+  {"Del",               "&Clear Screen"},
+  {"Alt+U",             "&Hourglass on Redraw"},
+  {"Alt+Shift+Q",       "Ch&art Resizes Window"},
+  {"Ctrl+Alt+Q",        "&Window Resizes Chart"},
+  {"Shift+B",           "Si&ze Chart to Window"},
+  {"Alt+Shift+U",       "&Size Window to Chart"},
+  {"Shift+Tab",         "Size Window &Full Screen"},
+  {"PgUp",              "Scroll Page &Up"},
+  {"PgDown",            "Scroll Page &Down"},
+  {"Home",              "Scroll &to Beginning"},
+  {"End",               "Scroll to &End"},
   {"1",                 "&One Unit"},
   {"Ctrl+1",            "&Small"},
   {"Alt+1",             "&Solar Chart"},
@@ -3232,7 +3469,14 @@ void BeginQt()
   gi.qwind = new QMainWindow();
   gi.qwind->setWindowTitle(szAppName);
   gi.qcanvas = new ChartCanvas();
-  gi.qwind->setCentralWidget(gi.qcanvas);
+  s_pscroll = new QScrollArea();
+  s_pscroll->setWidget(gi.qcanvas);
+  s_pscroll->setFrameShape(QFrame::NoFrame);
+  // Center a chart smaller than the window rather than pinning it to the
+  // top left corner, which is what Windows does with the leftover space.
+  s_pscroll->setAlignment(Qt::AlignCenter);
+  gi.qwind->setCentralWidget(s_pscroll);
+  ApplySizeModeQt();
   BuildAstrologMenus(gi.qwind);
   ApplyHotkeysQt(gi.qwind);
   StartAnimTimerQt(gi.qwind);

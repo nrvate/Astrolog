@@ -138,6 +138,13 @@ void CopyChartPSQt();
 void CopyChartSVGQt();
 void CopyChartWireQt();
 
+void ApplySizeModeQt();
+void ResizeWindowToChartQt();
+void SizeChartToWindowQt();
+void ToggleFullScreenQt();
+void ClearScreenQt();
+void ScrollChartQt(int nDir);
+
 #endif // __QTDRIVER_H
 
 /* qtdriver.h */
