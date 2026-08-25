@@ -364,6 +364,111 @@ void ShowExportTextDialogQt()
 }
 
 
+// File settings, equivalent to Windows' DlgFile. A curated subset of
+// Windows' full field list -- skipped: "Export Bitmaps from Window
+// Content" (wi.fBmpWindow), the antialias detail level (wi.nAntialias --
+// note the antialias toggle itself, gs.fAntialias, is already exposed via
+// Graphics > Chart Effects > Antialias Lines, just not this intensity
+// knob), and "Don't Show Popup Messages" (wi.fNoPopup) -- all three live
+// in the Win32-only WI struct. Also skipped: "Use Real System Fonts"
+// (gs.nFontAll/gi.nFontPrev), since that depends on the same Windows GDI
+// font enumeration system Graphics Settings' font pickers would need --
+// no direct Linux/Qt equivalent, not worth a partial port for one
+// checkbox with nothing underneath it.
+
+void ShowFileSettingsDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("File Settings");
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  int i;
+
+  QCheckBox *pcbSmartSave = new QCheckBox(
+    "Export Text and Print in Intuitive Manner");
+  QCheckBox *pcbTextHTML = new QCheckBox("Export Text Files in HTML Format");
+  QCheckBox *pcbBmpPNG = new QCheckBox("Export Bitmaps in PNG Format");
+  QCheckBox *pcbPSComplete = new QCheckBox(
+    "Export Encapsulated PostScript Files");
+  QCheckBox *pcbWriteOld = new QCheckBox(
+    "Save Chart Info Files in Old Style Format");
+  QCheckBox *pcbNoBackDraw = new QCheckBox("Don't Show Background Bitmap");
+  pcbSmartSave->setChecked(us.fSmartSave != 0);
+  pcbTextHTML->setChecked(us.fTextHTML != 0);
+  pcbBmpPNG->setChecked(gs.chBmpMode == 'P');
+  pcbPSComplete->setChecked(!gs.fPSComplete);
+  pcbWriteOld->setChecked(us.fWriteOld != 0);
+  pcbNoBackDraw->setChecked(!gs.fBackDraw);
+  for (QCheckBox *pcb : { pcbSmartSave, pcbTextHTML, pcbBmpPNG,
+    pcbPSComplete, pcbWriteOld, pcbNoBackDraw })
+    pouter->addWidget(pcb);
+
+  QFormLayout *pform = new QFormLayout();
+  QLineEdit *peThickAdjust = new QLineEdit(QString::number(gs.nThickAdjust));
+  QLineEdit *peBackPct = new QLineEdit(QString::number(gs.rBackPct));
+  QLineEdit *peADB = new QLineEdit(FSzSet(us.szADB) ? us.szADB : "");
+  QLineEdit *pePaperX = new QLineEdit(SzLength(gs.xInch));
+  QLineEdit *pePaperY = new QLineEdit(SzLength(gs.yInch));
+  pform->addRow("Line Thickness Adjustment:", peThickAdjust);
+  pform->addRow("Background Transparency Percent:", peBackPct);
+  pform->addRow("Astrodatabank File Load Filter:", peADB);
+  pform->addRow("Horizontal PostScript Paper Size:", pePaperX);
+  pform->addRow("Vertical PostScript Paper Size:", pePaperY);
+  pouter->addLayout(pform);
+
+  QGroupBox *pgroupOrient = new QGroupBox("PostScript Paper Orientation");
+  QVBoxLayout *pgrouplayout = new QVBoxLayout(pgroupOrient);
+  QButtonGroup *pgroup = new QButtonGroup(&dlg);
+  CONST char *rgszOrient[3] =
+    { "Portrait", "Landscape", "Based on Chart Dimensions" };
+  int nOrientCur = gs.nOrient == 0 ? 2 : (gs.nOrient > 0 ? 0 : 1);
+  for (i = 0; i < 3; i++) {
+    QRadioButton *prb = new QRadioButton(rgszOrient[i]);
+    prb->setChecked(i == nOrientCur);
+    pgroup->addButton(prb, i);
+    pgrouplayout->addWidget(prb);
+  }
+  pouter->addWidget(pgroupOrient);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  int nThickAdjust = peThickAdjust->text().toInt();
+  real rBackPct = peBackPct->text().toDouble();
+  if (!FValidBackPct(rBackPct)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "The background transparency percent is invalid.");
+    return;
+  }
+
+  us.fSmartSave = pcbSmartSave->isChecked();
+  us.fTextHTML = pcbTextHTML->isChecked();
+  if (pcbBmpPNG->isChecked())
+    gs.chBmpMode = 'P';
+  else if (gs.chBmpMode == 'P')
+    gs.chBmpMode = 'B';
+  gs.fPSComplete = !pcbPSComplete->isChecked();
+  us.fWriteOld = pcbWriteOld->isChecked();
+  gs.nThickAdjust = nThickAdjust;
+  gs.fBackDraw = !pcbNoBackDraw->isChecked();
+  gs.rBackPct = rBackPct;
+  QByteArray baADB = peADB->text().toLocal8Bit();
+  FCloneSz(baADB.constData(), &us.szADB);
+  QByteArray baPaperX = pePaperX->text().toLocal8Bit();
+  gs.xInch = RParseSz(baPaperX.constData(), pmLength);
+  QByteArray baPaperY = pePaperY->text().toLocal8Bit();
+  gs.yInch = RParseSz(baPaperY.constData(), pmLength);
+  int nOrientSel = pgroup->checkedId();
+  gs.nOrient = nOrientSel == 2 ? 0 : (nOrientSel == 0 ? 1 : -1);
+  RedrawQt();
+}
+
+
 // Chart info entry, equivalent to Windows' DlgInfo. This is the dialog that
 // lets someone actually create a chart interactively instead of only ever
 // loading one from disk.

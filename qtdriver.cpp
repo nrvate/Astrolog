@@ -535,6 +535,9 @@ static void BuildFileMenu(QMainWindow *pwind)
   QAction *paOpenWorld = pmenuOpenBmp->addAction("Open &World Map...");
   QObject::connect(paOpenWorld, &QAction::triggered, pwind,
     []() { ShowOpenWorldDialogQt(); });
+  QAction *paFileSettings = pmenu->addAction("File &Settings...");
+  QObject::connect(paFileSettings, &QAction::triggered, pwind,
+    []() { ShowFileSettingsDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paQuit = pmenu->addAction("&Quit");
