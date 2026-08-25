@@ -398,35 +398,72 @@ skip.
    Previous/Next/First/Last and File's Open Charts in Folder / Save Chart
    List. Read `DlgList` in full before starting — the navigation is
    trivial, the dialog is the work.
-8. **UI parity audit across every dialog** — go through all of
-   qtdialog.cpp against the matching `Dlg*` in wdialog.cpp and the
-   matching resource block in astrolog.rc, and fix places where this port
-   is *functionally* right but *presentationally* diverged. Requested
-   after the chart info dialog was found showing `21.9` where Windows
-   shows `9:57pm`. That one is fixed; the same class of problem is known
-   to remain in at least:
-   - **Default Chart Info** (`ShowDefaultInfoDialogQt`): zone/longitude/
-     latitude as raw decimals instead of `8W` / `122:19W` / `47:36N`.
-   - **Transits** (`ShowTransitDialogQt`) and **Progressions**
-     (`ShowProgressDialogQt`): month as a number instead of a name, time
-     as decimal hours instead of `9:57pm`, zone as a raw decimal.
-   The fix pattern is already established in `ShowChartInfoForQt()` —
-   `szMonth[]` for months, `SzTim()` / `SzZone()` / `SzLocation()` (the
-   last with `us.fAnsiChar` forced off, split at `is.ichLocSplit`) for the
-   rest. It's display-only: Astrolog's `NParseSz`/`RParseSz` already
-   accept these forms, which is what these dialogs call on the way back in.
-   Beyond formatting, also worth auditing:
-   - **Combo boxes vs plain text fields.** Windows offers dropdown
-     suggestions on many fields this port renders as bare `QLineEdit`s
-     (month names, time presets like Noon/Midnight, time zone
-     abbreviations, colour lists, object names). The typed value parses
-     fine either way, but a Windows user expects the dropdown.
-   - **Numeric precision.** Windows' `SetEditR(..., n)` fixes decimal
-     places per field; `QString::number()` doesn't, so orb/influence
-     fields can show more digits than Windows does.
-   - **Field order and labels**, against the `.rc` `LTEXT` entries.
-   Do this as a sweep per dialog with a screenshot check, not one big
-   commit.
+8. **UI parity sweep, one dialog at a time.** Every dialog below is
+   functionally correct but presentationally diverged from Windows.
+   Requested after the chart info dialog was caught showing `21.9` where
+   Windows shows `9:57pm`. Each sub-item is independently doable and
+   committable — take them one per iteration, with a screenshot check
+   against the matching `Dlg*` in wdialog.cpp and resource block in
+   astrolog.rc. **The fix pattern for all the formatting ones is already
+   written**: see `ShowChartInfoForQt()` — `szMonth[]` for months,
+   `SzTim()`/`SzZone()`/`SzLocation()` (the last with `us.fAnsiChar`
+   forced off, split at `is.ichLocSplit`). Display-only: Astrolog's
+   `NParseSz`/`RParseSz` already accept these forms on the way back in.
+
+   8.1 ~~Chart Info (`DlgInfo`)~~ — **done 2026-08-24**, and is the
+       reference implementation for the rest.
+   8.2 **Default Chart Info** (`ShowDefaultInfoDialogQt` / `DlgDefault`) —
+       zone/longitude/latitude shown as raw decimals.
+   8.3 **Transits** (`ShowTransitDialogQt` / `DlgTransit`) — month as a
+       number not a name, time as decimal hours, zone as a raw decimal.
+       Also missing entirely: the ephemeris search range radio (day/month/
+       year/N-years) and the six `us.fIgnore*` search filter checkboxes.
+   8.4 **Progressions** (`ShowProgressDialogQt` / `DlgProgress`) — same
+       three formatting issues as 8.3. Also missing: preset dropdown
+       values for the progression rate (Primary/Secondary/etc) and the
+       `X` reciprocal-rate prefix for the solar arc field.
+   8.5 **Colors** (`ShowColorDialogQt` / `DlgColor`) — currently a curated
+       subset (9 main + the 4 elements). Windows exposes the full
+       `cColor` palette, all `cElem` element colours, the `cRay` ray
+       colours, the scribble pen colour (`gi.kiPen`), and the decan
+       colour (`gs.kiDeca`, which takes 4 extra named values).
+   8.6 **Chart Settings** (`ShowChartSettingsDialogQt` / `DlgChart`) —
+       missing the astrocartography step/distance fields, star and Arabic
+       part sort order, aspect sort order, and the decan display fields.
+   8.7 **Object / More Object / Moon Object Settings** (`DlgObject`,
+       `DlgObject2`, `DlgObjectM`) — numeric precision. Windows formats
+       via `SetEditR(..., -2)` for max orb, `-1` for orb addition, `-2`
+       for influence; `QString::number()` prints full precision, so these
+       grids show more digits than Windows.
+   8.8 **Aspect Settings** (`ShowAspectDialogQt` / `DlgAspect`) — same
+       precision issue: Windows uses `-6` for orb and angle, `2` for
+       influence.
+   8.9 **Restrictions / Star / Transit Restrictions** (`DlgRestrict`,
+       `DlgStar`) — missing the "Restrict All" and "Unrestrict All" quick
+       buttons, and the transit variant's "Copy From Standard Restriction
+       Set" button.
+   8.10 **Moon Restrictions** (`ShowMoonRestrictDialogQt` / `DlgMoons`) —
+       missing the per-planet group toggle buttons (Mars/Jupiter/Saturn/
+       Uranus/Neptune/Pluto/COB) plus Restrict-All / Unrestrict-All.
+   8.11 **Object & Star Customization** (`DlgCustom`, `DlgCustomS`) —
+       missing the "Lookup Names" button, which re-resolves a definition
+       string into its canonical display name.
+   8.12 **Calculation Settings** (`DlgCalc`) and **Display Settings**
+       (`DlgDisplay`) — not yet audited field-by-field against the `.rc`;
+       check for missing fields, label wording, and field order.
+   8.13 **File Settings** (`DlgFile`) and **Graphics Settings**
+       (`DlgGraphics`) — the Win32-only omissions are deliberate and
+       documented, but the rest hasn't been checked for label wording and
+       field order. Graphics Settings' six font pickers remain genuinely
+       unported (needs a real Qt font picker).
+   8.14 **Cross-cutting: combo boxes.** Windows offers dropdown
+       suggestions on many fields this port renders as bare `QLineEdit`s
+       — month names, time presets (Noon/Midnight/6:00am), time zone
+       abbreviations, colour names, object names, chart size and scale
+       values. Typed values parse fine either way, but a Windows user
+       expects the dropdown. Worth doing as one pass with a shared helper
+       rather than per dialog.
+
 9. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
    to accept; lower priority, no immediate need identified.
 10. **Edit menu's 96 macro slots** — lowest priority, deferred repeatedly.
