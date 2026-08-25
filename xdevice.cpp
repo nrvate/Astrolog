@@ -636,6 +636,30 @@ flag FBmpDrawBack(Bitmap *bDest)
     return fTrue;
   }
 
+#ifdef QT
+  // Interactively on Qt, blit the blended cache straight onto the chart
+  // image. Without this the only non-file path here is the WINANY one
+  // below, so the background silently never got drawn -- and because this
+  // function still returned fTrue, callers believed one had been drawn and
+  // skipped their own erase (see the dtErase test in xcharts0.cpp), which
+  // is why loading a background used to blank the chart's backdrop
+  // instead of showing the image.
+  //
+  // A Bitmap row is 3 bytes per pixel in B,G,R order (see _SetRGB above)
+  // padded out to a long boundary, which is exactly Format_BGR888 with a
+  // stride of clRow*4 -- so this can wrap the existing buffer rather than
+  // copy it.
+  if (gi.qpaint == NULL)
+    return fFalse;
+  {
+    QImage qimBack((CONST uchar *)b2->rgb, b2->x, b2->y,
+      b2->clRow << 2, QImage::Format_BGR888);
+    gi.qpaint->drawImage(QRect(x1, y1, x2, y2), qimBack,
+      QRect(x3, y3, x4, y4));
+  }
+  return fTrue;
+#endif
+
 #ifdef WINANY
   // For Windows, draw background bitmap on window using Windows API.
   if (wi.hdcBack == NULL) {

@@ -718,14 +718,15 @@ skip.
    - Verified both formats: a chart info file on the clipboard loads the
      chart (name, date, zone, location all correct), and an image loads
      as the background.
-   - **Observed while testing, pre-existing, not caused by Paste:** after
-     loading a background bitmap the chart background goes from its usual
-     dark red to black, and the image itself isn't visible in a wheel
-     chart. File / Open Bitmap / Open Background does exactly the same
-     thing with the same file, so Paste is behaving identically to the
-     already-shipping path. Worth a look on its own — start at
-     `FBmpDrawBack()` (xdevice.cpp) and the `nTrans`/`gs.rBackPct`
-     handling in xcharts0.cpp:641.
+   - Observed while testing and since fixed: background bitmaps were
+     never drawn at all in the Qt GUI. `FBmpDrawBack()` (xdevice.cpp) had
+     a file-export path and a `#ifdef WINANY` path and nothing else, so
+     interactively it drew nothing while still returning `fTrue` — which
+     made callers believe a background was present and skip their own
+     erase (the `dtErase` test at xcharts0.cpp:2590), blanking the chart
+     backdrop instead. A `#ifdef QT` branch now blits the blended cache
+     onto `gi.qim`. Note `FBmpDrawMap()`, immediately below it, already
+     had a QT bail-out — the background case had just been missed.
 10. ~~Edit menu's 96 macro slots~~ — **done 2026-08-25.** Eight submenus
     of twelve under Edit, split into two groups of four as Windows has
     them, each slot bound to F1-F12 under a different modifier
