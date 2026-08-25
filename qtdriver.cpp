@@ -43,6 +43,7 @@
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QTextBrowser>
 #include <QtGui/QResizeEvent>
+#include <QtGui/QContextMenuEvent>
 #include <QtGui/QPaintEvent>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
@@ -75,6 +76,8 @@ static bool fQtReady = false;
 // into an off screen buffer (gi.qim, the Qt analog of X11's Pixmap) via the
 // Draw*() primitives in xgeneral.cpp; this widget's only job is to blit
 // that buffer to the screen, and to tell Astrolog when its size changes.
+
+static QMenu *PmenuContextForChartQt();   // defined below
 
 class ChartCanvas : public QWidget
 {
@@ -111,6 +114,21 @@ protected:
   {
     QWidget::resizeEvent(pevent);
     update();
+  }
+
+  // Right-click brings up the context menu for the current chart type,
+  // as it does on Windows. Chart types that have no menu there get none
+  // here either, rather than a stub.
+  void contextMenuEvent(QContextMenuEvent *pevent) override
+  {
+    QMenu *pmenu = PmenuContextForChartQt();
+
+    if (pmenu == NULL) {
+      pevent->ignore();
+      return;
+    }
+    pmenu->exec(pevent->globalPos());
+    delete pmenu;
   }
 };
 
@@ -1957,6 +1975,129 @@ static void LoadBundledFontsQt()
         break;
       }
     }
+}
+
+
+// Right-click context menus, the Qt equivalent of Windows' DoPopup()
+// dispatch from WM_RBUTTONDOWN (wdriver.cpp). Windows keeps one menu
+// resource per chart type in astrolog.rc (menuV, menuG, menuZ and the
+// rest, from ~line 607) and picks between them on gi.nMode.
+//
+// Every entry in those resources is an ordinary cmd* command that the
+// menu bar already implements, so rather than duplicate any behaviour
+// these tables name the *menu bar item* each entry should act through,
+// by its label. PmenuBuildContextQt() then looks that item up and builds
+// a proxy action that forwards to it and mirrors its checkmark. That
+// keeps one implementation and one piece of state per command, which
+// matters because most of these are toggles.
+//
+// The indirection is needed because Windows gives the same command a
+// different label depending on which context menu it appears in --
+// cmdChartModify is "Draw Houses Same Size" on a Western wheel and
+// "Toggle North Indian" on an Indian one -- so the context label can't
+// simply be the menu bar item's own text.
+
+typedef struct {
+  CONST char *szLabel;    // What this context menu calls the command.
+  CONST char *szAction;   // Menu bar item to act through, by its label.
+} CTXITEM;                // Both NULL means a separator.
+
+// Wheel charts (gWheel/gHouse), Windows' menuV.
+static CONST CTXITEM rgctxWheelQt[] = {
+  {"Toggle &Comparison Wheel",              "&Comparison Chart"},
+  {NULL, NULL},
+  {"Draw &Houses Same Size",                "Modif&y Chart"},
+  {"Position Planets Based on &3D Houses",  "&3D Houses"},
+  {"&Indian Sign Arrangement",              "&Indian Wheel Order"},
+  {"Show Indian Style &Wheel",              "Show &Indian Wheels"},
+  {NULL, NULL},
+  {"Show &Aspect Lines",                    "Show &Equator"},
+  {"Aspect Lines Show &Glyphs",             "Show &Glyphs on Aspect Lines"},
+  {"Aspect Lines Dotted Based on Max &Orb", "Modify &Display"},
+  {"Show Big &Planet Dots",                 "Show &House Details"},
+  {"Show &Degrees on Wheel",                "Show C&ities"},
+  {"Show Info &Sidebar",                    "Show Info &Sidebar"} };
+
+// Indian style wheel, Windows' menuV2. Same chart mode as above; which
+// of the two applies depends on gs.fIndianWheel.
+static CONST CTXITEM rgctxIndianQt[] = {
+  {"Draw &South Indian",                    "Draw &South Indian"},
+  {"Draw &North Indian",                    "Draw &North Indian"},
+  {"Draw &East Indian",                     "Draw &East Indian"},
+  {"Show &Western Style Wheel",             "Show &Indian Wheels"},
+  {NULL, NULL},
+  {"&Toggle North Indian",                  "Modif&y Chart"},
+  {"To&ggle South/East Indian",             "Show &House Details"},
+  {"&1st House on Left Edge",               "&Indian Wheel Order"},
+  {NULL, NULL},
+  {"&Aspect Grid in South/East Indian",     "Show &Equator"},
+  {"Aspect Grid &Highlights Main Axis",     "Show &Glyphs on Aspect Lines"},
+  {"Two &Letter Object Labels",             "Show Glyph &Labels"},
+  {"Show &Degrees on Wheel",                "Show C&ities"},
+  {"Show &Info Sidebar",                    "Show Info &Sidebar"} };
+
+#define CctxQt(rg) (int)(sizeof(rg) / sizeof(CTXITEM))
+
+// Find a menu bar item by its exact label, searching submenus too.
+static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str)
+{
+  QAction *pa, *paT;
+  int i;
+
+  QList<QAction *> rgpa = pw->actions();
+  for (i = 0; i < rgpa.size(); i++) {
+    pa = rgpa[i];
+    if (pa->menu() != NULL) {
+      paT = PaFindMenuActionQt(pa->menu(), str);
+      if (paT != NULL)
+        return paT;
+    } else if (pa->text() == str)
+      return pa;
+  }
+  return NULL;
+}
+
+static QMenu *PmenuBuildContextQt(CONST CTXITEM *rgitem, int citem)
+{
+  QMenu *pmenu = new QMenu(gi.qwind);
+  int i;
+
+  for (i = 0; i < citem; i++) {
+    if (rgitem[i].szLabel == NULL) {
+      pmenu->addSeparator();
+      continue;
+    }
+    QAction *paSrc = PaFindMenuActionQt(gi.qwind->menuBar(),
+      QString(rgitem[i].szAction));
+    if (paSrc == NULL) {
+      // The menu bar item was renamed or removed. Show the entry
+      // disabled rather than silently dropping it, so the mismatch is
+      // visible instead of looking like the menu is simply shorter.
+      pmenu->addAction(rgitem[i].szLabel)->setEnabled(false);
+      continue;
+    }
+    QAction *pa = pmenu->addAction(rgitem[i].szLabel);
+    pa->setCheckable(paSrc->isCheckable());
+    pa->setChecked(paSrc->isChecked());
+    pa->setEnabled(paSrc->isEnabled());
+    QObject::connect(pa, &QAction::triggered, pa,
+      [paSrc]() { paSrc->trigger(); });
+  }
+  return pmenu;
+}
+
+// Pick the menu for the chart currently on screen, or NULL if this chart
+// type has none. Windows switches on gi.nMode the same way.
+static QMenu *PmenuContextForChartQt()
+{
+  switch (gi.nMode) {
+  case gWheel:
+  case gHouse:
+    return !gs.fIndianWheel ?
+      PmenuBuildContextQt(rgctxWheelQt, CctxQt(rgctxWheelQt)) :
+      PmenuBuildContextQt(rgctxIndianQt, CctxQt(rgctxIndianQt));
+  }
+  return NULL;
 }
 
 

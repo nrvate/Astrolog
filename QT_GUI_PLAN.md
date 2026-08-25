@@ -36,22 +36,49 @@ decision someone made silently.
 
 Roughly in the order I'd take them.
 
-1. **Right-click context menus — the one real parity gap left.** Windows
-   has a context menu per chart type, and this port has none at all.
-   Right-clicking the chart currently does nothing. There are two
-   parallel families in astrolog.rc (from ~line 607): the graphics ones
-   picked by `gi.nMode` (`menuV`/`menuV2` for wheels, `menuG`, `menuM`,
-   `menuZ`, `menuS`, `menuH`, `menuK`, `menuJ`, `menu7`, `menuL`,
-   `menuE`, `menuZd`, `menuN`, `menu8`, `menuB`, `menuY`, `menuXX`,
-   `menuXG`, `menuXZ`) and the text-mode ones picked by the `us.f*` flags
-   (`menu_V`, `menu_W`, `menu_G`, `menu_A`, …). Windows dispatches both
-   from `WM_RBUTTONDOWN` in wdriver.cpp (~line 938) via `DoPopup()`.
-   **The good news: their items are all existing `cmd*` commands the
-   menu bar already implements**, so this is mostly wiring, not new
-   behaviour — build a `QMenu` per resource and show it from a
-   `contextMenuEvent` on the canvas, switching on `gi.nMode` the same way
-   `DoPopup` does. Start with `menuV`, the wheel one, since that's the
-   default chart. Nothing has been investigated beyond this paragraph.
+1. **Right-click context menus — started 2026-08-25, 2 of 42 done.**
+   The mechanism is built and working; the rest is filling in tables.
+   Right-clicking the chart canvas now brings up the menu for the current
+   chart type, dispatched on `gi.nMode` the way Windows' `DoPopup()` does
+   from `WM_RBUTTONDOWN` (wdriver.cpp ~line 938). Done: `menuV` (Western
+   wheel) and `menuV2` (Indian wheel), which cover the default chart.
+   - **How to add another.** Each is a `CTXITEM` table in qtdriver.cpp
+     near `PmenuContextForChartQt()`, listing `{label shown here, label
+     of the menu bar item to act through}`, with `{NULL, NULL}` for a
+     separator. Copy the entries out of the matching resource in
+     astrolog.rc (they start ~line 607), find each `cmd*`'s main-menu
+     label by grepping the *main* menu block at the top of the same file,
+     then add a `case` to `PmenuContextForChartQt()`.
+   - **Why the indirection.** Every entry is an ordinary `cmd*` the menu
+     bar already implements, so nothing is reimplemented: the built menu
+     holds proxy actions that forward to the real one and mirror its
+     checkmark, rebuilt on each right-click so the state is always
+     current. It can't just reuse the menu bar's `QAction` directly
+     because Windows gives the same command a different label per
+     context — `cmdChartModify` is "Draw Houses Same Size" on a Western
+     wheel and "Toggle North Indian" on an Indian one.
+   - **A wrong label fails visibly**, not silently: an entry whose
+     `szAction` matches nothing is shown greyed out rather than dropped,
+     so it looks obviously broken instead of looking like a shorter menu.
+     That caught a real mistake immediately while building the first
+     table (Windows writes "Com&parison Chart", Qt's item is
+     "&Comparison Chart").
+   - **Remaining: 40.** Eighteen more graphics ones (`menuG`, `menuM`,
+     `menuZ`, `menuS`, `menuH`, `menuK`, `menuJ`, `menu7`, `menuL`,
+     `menuE`, `menuZd`, `menuN`, `menu8`, `menuB`, `menuY`, `menuXX`,
+     `menuXG`, `menuXZ`) and twenty-two text-mode ones (`menu_V`,
+     `menu_W`, `menu_G`, `menu_A`, …) which Windows picks by the `us.f*`
+     flags rather than `gi.nMode`, in the same `WM_RBUTTONDOWN` handler.
+     The text-mode set needs one extra decision first: this port shows
+     text charts in a separate `QTextBrowser` window (see `RedrawTextQt`),
+     so that widget, not the canvas, is where those would hang off.
+   - Known cosmetic gap, pre-existing and not caused by this: the "Draw
+     South/North/East Indian" entries show no checkmark, here or in the
+     Graphics menu, because the Qt items are plain actions. Windows marks
+     them from derived state in `RedoMenu()` (`gi.nMode == gWheel &&
+     !gs.fHouseExtra` and so on). Cheap to add in the context menu, since
+     it is rebuilt on open; the main menu would need a sync function.
+
 2. **A regression check of some kind.** There is none. Everything in this
    project was verified by driving the GUI and eyeballing screenshots,
    which caught a lot but is slow and doesn't run twice. Even a crude
