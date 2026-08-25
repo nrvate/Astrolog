@@ -178,33 +178,27 @@ Legend matches `QT_MENU_MAPPING.md`: `[D]` dialog, `[T]` toggle, `[S]`
 select-one, `[A]` one-shot action, `[P]` submenu.
 
 ### File — partially done
-Done: Open Chart..., Save Chart..., Export Chart Text Output..., Export
-Chart Bitmap..., Export Vector Format submenu (Metafile/PostScript/SVG/
-Wireframe), Quit.
+Done: Open Chart..., Save Chart..., Save Chart Positions..., Save Program
+Settings..., Other Formats submenu (Save Chart Exchange/AAF, Save Chart
+Quick*Chart, Save Chart iCalendar — done 2026-08-24, see
+`ShowSaveAAFDialogQt()` etc. in qtdialog.cpp), Export Chart Text
+Output..., Export Chart Bitmap..., Export Vector Format submenu (Metafile/
+PostScript/SVG/Wireframe), Open Bitmap submenu (Open Chart Background,
+Open World Map — also done 2026-08-24), Quit.
 
 Missing (see "Prioritized remaining work" for how each maps to existing
 portable functions):
 - Open Chart #2... `[D]` — part of the multi-chart feature, see Info's
   Chart List gap below; don't build standalone.
-- Save Chart Positions... `[D]` — trivial: `us.nWriteFormat = '0';
-  FOutputData();` after a save-file picker (same shape as the existing
-  `ShowSaveChartDialogQt()`).
-- Save Program Settings... `[D]` — trivial: `FOutputSettings()`.
-- Other Formats `[P]`: Open Charts in Folder... (part of Chart List, see
-  Info), Save Chart List... (`us.nWriteFormat = 'l'; FOutputData();` —
-  also depends on Chart List existing since it writes `is.rgci`), Save
-  Chart Exchange/AAF... (`FOutputAAFFile()`), Save Chart Quick*Chart...
-  (`FOutputQuickFile()`), Save Chart iCalendar... (`FOutputCalendarFile()`)
-  — the last three are standalone and trivial, same file-picker shape.
+- Other Formats `[P]`'s remaining two items: Open Charts in Folder... and
+  Save Chart List... — both part of Chart List (see Info below), since
+  they read/write `is.rgci`, which nothing populates yet; don't build
+  standalone.
 - Export as Wallpaper `[P]` (5 variants) — sets desktop wallpaper, a
   concept that doesn't map cleanly to modern Linux desktop environments
   (no single portable "set wallpaper" API the way Win32 has one). Lowest
   priority in File; consider just exporting the bitmap instead of trying
   to set wallpaper, or skip entirely.
-- Open Bitmap `[P]`: Open Chart Background..., Open World Map... — both
-  trivial and standalone: a file picker (bitmap filter) then `FLoadBmp
-  (path, &gi.bmpBack or &gi.bmpWorld, fFalse)` (xdevice.cpp, portable,
-  confirmed no WIN guard) then `RedrawQt()`.
 - File Settings... `[D]` (`DlgFile`, wdialog.cpp:786) — mixed complexity.
   Portable fields: `us.fSmartSave`, `us.fTextHTML`, `gs.chBmpMode`
   ('P'=PNG toggle), `gs.fPSComplete`, `us.fWriteOld`, `gs.nFontAll`/
@@ -358,14 +352,11 @@ Missing:
 
 1. ~~Help's 11 list actions~~ — **done 2026-08-24**, see Help section
    above.
-2. **File's remaining standalone export/save variants** — Save Chart
-   Positions, Save Program Settings, Save Chart Exchange/AAF, Save Chart
-   Quick*Chart, Save Chart iCalendar, Open Chart Background, Open World
-   Map. All trivial, all standalone (don't depend on Chart List), all
-   documented above with the exact function to call. **Next item up.**
+2. ~~File's remaining standalone export/save variants~~ — **done
+   2026-08-24**, see File section above.
 3. **Help's remaining doc/data file openers** (Website/Website Mirror,
    Atlas, Time Zone Changes, Exoplanet List) — trivial, same pattern
-   already used for the other 6.
+   already used for the other 6. **Next item up.**
 4. **Edit menu Copy Bitmap** — easy (`gi.qim` is already a `QImage`),
    reasonable value. Copy Text/Vector formats are the same file-then-read
    pattern as export, moderate additional value.
