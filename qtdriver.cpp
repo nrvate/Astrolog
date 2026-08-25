@@ -38,13 +38,19 @@
 #include <QtWidgets/QAction>
 #include <QtWidgets/QActionGroup>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QTextBrowser>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QPaintEvent>
 #include <QtGui/QDesktopServices>
 #include <QtCore/QUrl>
+#include <QtCore/QFile>
 
 #include "astrolog.h"
 #include "qtdriver.h"
+
+#include <unistd.h>
 
 #ifdef QT
 
@@ -73,7 +79,11 @@ protected:
   // actual current size, and redraws first if not.
   void paintEvent(QPaintEvent *) override
   {
-    if (fQtReady && width() >= 1 && height() >= 1 &&
+    // Only auto-correct a buffer/widget size mismatch in graphics mode --
+    // in text mode (us.fGraphics false) there's no buffer to paint here at
+    // all (see RedrawTextQt()), and gi.qim never gets (re)created, so this
+    // check would otherwise fire on every single repaint of this widget.
+    if (us.fGraphics && fQtReady && width() >= 1 && height() >= 1 &&
       (gi.qim == NULL || gi.qim->width() != width() ||
       gi.qim->height() != height())) {
       gs.xWin = width();
@@ -93,12 +103,71 @@ protected:
 };
 
 
+// Text mode (us.fGraphics false, e.g. Colored Text / Show Interpretations)
+// renders through a wholly separate path from the graphics one -- Action()
+// (astrolog.cpp) calls PrintChart() instead of FActionX()/DrawChartX(),
+// driven by is.S/is.szFileScreen rather than gi.qpaint. There's no Win32
+// window to draw text characters into here, so instead: point
+// is.szFileScreen at a temp file, ask for HTML output (so color comes from
+// real <font color> tags instead of needing an ANSI escape parser), run
+// Action(), then load the result into a persistent read-only text window.
+// Same trick already proven by ShowExportTextDialogQt() in qtdialog.cpp,
+// just re-shown in a window instead of left on disk.
+
+static QDialog *s_pdlgText = NULL;
+static QTextBrowser *s_ptextBrowser = NULL;
+
+static void RedrawTextQt()
+{
+  char szTemp[] = "/tmp/astrolog-qt-text-XXXXXX";
+  int fd = mkstemp(szTemp);
+  if (fd < 0)
+    return;
+  close(fd);
+
+  flag fTextHTMLSave = us.fTextHTML;
+  FCloneSz(szTemp, &is.szFileScreen);
+  us.fTextHTML = fTrue;
+  Action();
+  FCloneSz(NULL, &is.szFileScreen);
+  us.fTextHTML = fTextHTMLSave;
+
+  QString qsHtml;
+  QFile file(szTemp);
+  if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    qsHtml = QString::fromUtf8(file.readAll());
+    file.close();
+  }
+  unlink(szTemp);
+
+  if (s_pdlgText == NULL) {
+    s_pdlgText = new QDialog(gi.qwind, Qt::Window);
+    s_pdlgText->setWindowTitle("Text Chart");
+    s_pdlgText->resize(700, 550);
+    QVBoxLayout *playout = new QVBoxLayout(s_pdlgText);
+    s_ptextBrowser = new QTextBrowser();
+    s_ptextBrowser->setStyleSheet("background-color: black;");
+    playout->addWidget(s_ptextBrowser);
+  }
+  s_ptextBrowser->setHtml(qsHtml);
+  s_pdlgText->show();
+  s_pdlgText->raise();
+  s_pdlgText->activateWindow();
+}
+
+
 // Redraw the chart into the off screen buffer at the chart's current size,
 // and repaint the canvas widget with the result. Called after any change
 // that affects only how the chart looks (e.g. colors), and after a resize.
 
 void RedrawQt()
 {
+  if (!us.fGraphics) {
+    RedrawTextQt();
+    return;
+  }
+  if (s_pdlgText != NULL)
+    s_pdlgText->hide();
   if (gi.qim != NULL) {
     delete gi.qim;
     gi.qim = NULL;
