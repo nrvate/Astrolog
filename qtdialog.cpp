@@ -218,7 +218,7 @@ public:
 };
 
 // Apply the above to every combo in a dialog. Call just before exec().
-static void BlockComboWheelQt(QDialog *pdlg)
+static void PrepareDialogQt(QDialog *pdlg)
 {
   static NoComboWheelQt filter;
 
@@ -226,6 +226,14 @@ static void BlockComboWheelQt(QDialog *pdlg)
     pcb->setFocusPolicy(Qt::StrongFocus);
     pcb->installEventFilter(&filter);
   }
+
+  // Show the *start* of every field's text. Qt leaves a QLineEdit's cursor
+  // at the end of text set programmatically, so a value too long for its
+  // box is scrolled to show its tail: the septile's 51.428571 degrees came
+  // up reading "8571", which looks like a corrupt number rather than a
+  // field that needs widening. Windows' edit controls show the head.
+  for (QLineEdit *pe : pdlg->findChildren<QLineEdit *>())
+    pe->setCursorPosition(0);
 }
 
 
@@ -628,7 +636,7 @@ void ShowFileSettingsDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -915,7 +923,7 @@ void ShowGraphicsSettingsDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1073,7 +1081,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1290,7 +1298,7 @@ void ShowChartsAllDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1511,7 +1519,7 @@ void ShowChartListDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1709,7 +1717,7 @@ void ShowColorDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1802,7 +1810,7 @@ void ShowObjectDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1908,7 +1916,7 @@ static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2040,7 +2048,7 @@ void ShowDefaultInfoDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2214,7 +2222,7 @@ void ShowTransitDialogQt()
       peZon->setEditText(szT[0] == '+' ? &szT[1] : szT);
     });
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2421,7 +2429,7 @@ void ShowProgressDialogQt()
       peZon->setEditText(szN[0] == '+' ? &szN[1] : szN);
     });
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2629,7 +2637,7 @@ void ShowChartSettingsDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2707,7 +2715,7 @@ void ShowCommandLineDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted || peLine->text().trimmed().isEmpty())
     return;
 
@@ -2803,7 +2811,7 @@ void ShowAboutDialogQt()
   QDialogButtonBox *pbuttons = new QDialogButtonBox(QDialogButtonBox::Ok);
   playout->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   dlg.exec();
 }
 
@@ -2814,60 +2822,90 @@ void ShowAboutDialogQt()
 
 void ShowAspectDialogQt()
 {
+  // Laid out to match Windows' dlgAspect (astrolog.rc): two columns of 12
+  // aspects side by side, sized to fit, with no scrolling. Astrolog's
+  // Windows dialogs are all dense like this -- a single tall scrolling
+  // column is the wrong shape for them however well it scales.
+  //
+  // The checkbox is the aspect's name and means *restricted*, as it does on
+  // Windows: checked hides the aspect. It used to be a separate "Show"
+  // column with the opposite sense, which both took an extra grid column
+  // and inverted the meaning of every box relative to the Windows build.
+  CONST int cCol = 2, cRow = cAspect / 2;
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Aspect Settings");
-  // Wider than the other grids: this one has an extra "Show" column.
-  dlg.resize(620, 500);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QGridLayout *pgrid = new QGridLayout(pinner);
-  QVector<QCheckBox *> rgpcbShow;
+  QGridLayout *pgrid = new QGridLayout();
+  QVector<QCheckBox *> rgpcbRes;
   QVector<QLineEdit *> rgpeOrb, rgpeAngle, rgpeInf;
   QVector<QComboBox *> rgpcbColor;
-  int i;
+  int i, j, iCol, iRow, nBase;
 
-  pgrid->addWidget(new QLabel("Aspect"), 0, 0);
-  pgrid->addWidget(new QLabel("Show"), 0, 1);
-  pgrid->addWidget(new QLabel("Max Orb"), 0, 2);
-  pgrid->addWidget(new QLabel("Angle"), 0, 3);
-  pgrid->addWidget(new QLabel("Influence"), 0, 4);
-  pgrid->addWidget(new QLabel("Color"), 0, 5);
-  for (i = 1; i <= cAspect; i++) {
-    pgrid->addWidget(new QLabel(szAspectName[i]), i, 0);
-    QCheckBox *pcb = new QCheckBox();
-    pcb->setChecked(!ignorea[i]);
-    pgrid->addWidget(pcb, i, 1);
-    rgpcbShow.append(pcb);
-    QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rAspOrb[i], -6));
-    pgrid->addWidget(peOrb, i, 2);
-    rgpeOrb.append(peOrb);
-    QLineEdit *peAngle = new QLineEdit(SzFormatRQt(rAspAngle[i], -6));
-    pgrid->addWidget(peAngle, i, 3);
-    rgpeAngle.append(peAngle);
-    QLineEdit *peInf = new QLineEdit(SzFormatRQt(rAspInf[i], 2));
-    pgrid->addWidget(peInf, i, 4);
-    rgpeInf.append(peInf);
-    QComboBox *pcbColor = NewColorComboQt(kAspA[i], 0);
-    pgrid->addWidget(pcbColor, i, 5);
-    rgpcbColor.append(pcbColor);
+  rgpcbRes.resize(cAspect); rgpeOrb.resize(cAspect);
+  rgpeAngle.resize(cAspect); rgpeInf.resize(cAspect);
+  rgpcbColor.resize(cAspect);
+  pgrid->setHorizontalSpacing(4);
+  pgrid->setVerticalSpacing(2);
+  for (iCol = 0; iCol < cCol; iCol++) {
+    nBase = iCol * 6;
+    pgrid->addWidget(new QLabel("Orb"), 0, nBase+1);
+    pgrid->addWidget(new QLabel("Angle"), 0, nBase+2);
+    pgrid->addWidget(new QLabel("Influence"), 0, nBase+3);
+    pgrid->addWidget(new QLabel("Color"), 0, nBase+4);
+    // A little air between the two blocks, as the Windows dialog has.
+    if (iCol < cCol-1)
+      pgrid->setColumnMinimumWidth(nBase+5, 10);
+    for (iRow = 0; iRow < cRow; iRow++) {
+      i = iCol*cRow + iRow + 1;
+      QCheckBox *pcb = new QCheckBox(szAspectName[i]);
+      pcb->setChecked(ignorea[i] != 0);
+      pgrid->addWidget(pcb, iRow+1, nBase+0);
+      rgpcbRes[i-1] = pcb;
+      QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rAspOrb[i], -6));
+      pgrid->addWidget(peOrb, iRow+1, nBase+1);
+      rgpeOrb[i-1] = peOrb;
+      QLineEdit *peAngle = new QLineEdit(SzFormatRQt(rAspAngle[i], -6));
+      pgrid->addWidget(peAngle, iRow+1, nBase+2);
+      rgpeAngle[i-1] = peAngle;
+      QLineEdit *peInf = new QLineEdit(SzFormatRQt(rAspInf[i], 2));
+      pgrid->addWidget(peInf, iRow+1, nBase+3);
+      rgpeInf[i-1] = peInf;
+      QComboBox *pcbColor = NewColorComboQt(kAspA[i], 0);
+      pgrid->addWidget(pcbColor, iRow+1, nBase+4);
+      rgpcbColor[i-1] = pcbColor;
+    }
   }
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  pouter->addLayout(pgrid);
 
+  // Windows puts Restrict All / Unrestrict All / Toggle Majors along the
+  // bottom left, opposite Cancel and OK.
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  QPushButton *pbRes = new QPushButton("&Restrict All");
+  QPushButton *pbUnres = new QPushButton("&Unrestrict All");
+  QPushButton *pbMajor = new QPushButton("Toggle &Majors");
+  pbuttons->addButton(pbRes, QDialogButtonBox::ResetRole);
+  pbuttons->addButton(pbUnres, QDialogButtonBox::ResetRole);
+  pbuttons->addButton(pbMajor, QDialogButtonBox::ResetRole);
   pouter->addWidget(pbuttons);
+  QObject::connect(pbRes, &QPushButton::clicked, &dlg, [&rgpcbRes]() {
+    for (int k = 0; k < cAspect; k++) rgpcbRes[k]->setChecked(true); });
+  QObject::connect(pbUnres, &QPushButton::clicked, &dlg, [&rgpcbRes]() {
+    for (int k = 0; k < cAspect; k++) rgpcbRes[k]->setChecked(false); });
+  // Windows toggles just the five majors here (wdialog.cpp:1380).
+  QObject::connect(pbMajor, &QPushButton::clicked, &dlg, [&rgpcbRes]() {
+    for (int k = 0; k < 5; k++)
+      rgpcbRes[k]->setChecked(!rgpcbRes[k]->isChecked()); });
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
+  dlg.adjustSize();
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   for (i = 1; i <= cAspect; i++) {
-    ignorea[i] = !rgpcbShow[i-1]->isChecked();
+    ignorea[i] = rgpcbRes[i-1]->isChecked();
     rAspOrb[i] = rgpeOrb[i-1]->text().toDouble();
     rAspAngle[i] = rgpeAngle[i-1]->text().toDouble();
     rAspInf[i] = rgpeInf[i-1]->text().toDouble();
@@ -2933,7 +2971,7 @@ void ShowObject2DialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3104,7 +3142,7 @@ void ShowCalcDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3352,7 +3390,7 @@ void ShowDisplayDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3489,7 +3527,7 @@ void ShowMoonObjectDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3681,7 +3719,7 @@ void ShowCustomDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3775,7 +3813,7 @@ void ShowCustomStarDialogQt()
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-  BlockComboWheelQt(&dlg);
+  PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 

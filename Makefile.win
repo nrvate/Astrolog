@@ -1,0 +1,42 @@
+# Cross compile the Windows build of Astrolog with mingw-w64, so it can be
+# run under Wine on Linux and compared side by side against the Qt build.
+# This produces the same program a Windows user runs -- same wdriver.cpp,
+# same wdialog.cpp, same astrolog.rc -- rather than an approximation of it.
+#
+#   make -f Makefile.win
+#   wine ./astrolog.exe
+#
+# IDC_STATIC is an MFC symbol that windres doesn't define but the resource
+# script uses throughout; -1 is the value Visual Studio gives it.
+
+CXX    = x86_64-w64-mingw32-g++
+RC     = x86_64-w64-mingw32-windres
+ODIR   = obj-win
+CFLAGS = -DWIN -DPC -D_WINDOWS -DWIN32 -O2 -w -fpermissive -static
+LIBS   = -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lole32 -luuid -lwinspool \
+         -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32
+LDFLAGS = -mwindows -static -static-libgcc -static-libstdc++
+
+SRC = astrolog.cpp atlas.cpp calc.cpp charts0.cpp charts1.cpp charts2.cpp \
+      charts3.cpp data.cpp express.cpp general.cpp intrpret.cpp io.cpp \
+      matrix.cpp placalc.cpp placalc2.cpp swecl.cpp swedate.cpp \
+      swehouse.cpp swejpl.cpp swemmoon.cpp swemplan.cpp sweph.cpp \
+      swephlib.cpp wdialog.cpp wdriver.cpp xcharts0.cpp xcharts1.cpp \
+      xcharts2.cpp xdata.cpp xdevice.cpp xgeneral.cpp xscreen.cpp
+
+OBJ = $(patsubst %.cpp,$(ODIR)/%.o,$(SRC))
+
+astrolog.exe: $(OBJ) $(ODIR)/astrolog.res
+	$(CXX) $(LDFLAGS) -o $@ $(OBJ) $(ODIR)/astrolog.res $(LIBS)
+
+$(ODIR)/%.o: %.cpp | $(ODIR)
+	$(CXX) $(CFLAGS) -c $< -o $@
+
+$(ODIR)/astrolog.res: astrolog.rc | $(ODIR)
+	$(RC) -I. -DIDC_STATIC=-1 -O coff $< $@
+
+$(ODIR):
+	mkdir -p $(ODIR)
+
+clean:
+	rm -rf $(ODIR) astrolog.exe

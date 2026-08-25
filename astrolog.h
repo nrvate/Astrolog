@@ -78,13 +78,16 @@
 //#define PC /* Comment out this #define if you have a Unix, Mac, or other */
            /* system that isn't a generic PC running DOS or MS Windows.  */
 
-#if !defined(QT)
+#if !defined(QT) && !defined(WIN)
 #define X11 /* Comment out this #define if you don't have X windows, or */
             /* else have them and don't wish to compile in X graphics.  */
 #endif
             /* QT is a Linux GUI backend selected via "-DQT" on the compiler */
             /* command line (see Makefile.qt) rather than by editing this   */
             /* file, so the guard above lets it override the X11 default.   */
+            /* WIN is likewise accepted from the command line, so the      */
+            /* Windows build can be cross compiled with mingw (Makefile.win) */
+            /* and run under Wine, to compare it against the Qt one.        */
 
 //#define WIN /* Comment out this #define if you don't have MS Windows, or */
             /* else have them but want a command line version instead.   */

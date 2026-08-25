@@ -10,3 +10,5 @@
 /astrolog-qt-asan
 /obj-qt-test/
 /obj-qt-asan/
+obj-win/
+astrolog.exe
