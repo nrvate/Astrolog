@@ -278,6 +278,35 @@ static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
 }
 
 
+// Same as AddChartModeAction(), but for the handful of chart modes that
+// are actually text listings (Exoplanets Chart, and the Help menu's 11
+// List Signs/Objects/etc actions) -- these need us.fGraphics forced false
+// *before* SetChartModeQt() redraws, not after, or the first redraw would
+// still take the graphics path. Also keeps the View menu's "Show Graphics"
+// checkbox in sync, the same way Colored Text/Show Interpretations already
+// do when they force text mode -- set once BuildViewMenu() runs.
+
+static QAction *s_paGraphics = NULL;
+
+static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
+  int mode)
+{
+  QAction *pa = pmenu->addAction(szLabel);
+  pa->setCheckable(true);
+  pa->setActionGroup(s_pgroupChartMode);
+  QObject::connect(pa, &QAction::triggered, pa, [mode]() {
+    us.fGraphics = fFalse;
+    if (s_paGraphics != NULL)
+      s_paGraphics->setChecked(fFalse);
+    SetChartModeQt(mode);
+  });
+  s_rgpaChartMode[s_cChartMode] = pa;
+  s_rgnChartMode[s_cChartMode] = mode;
+  s_cChartMode++;
+  return pa;
+}
+
+
 // Switch chart type/mode, mirroring the chart-type switch in Windows'
 // ProcessState() (wdriver.cpp:1143-1201): clear every chart-type flag, then
 // set the one matching the new mode. See qtdriver.h for the full comment.
@@ -291,7 +320,9 @@ void SetChartModeQt(int mode)
     us.fEsoteric = us.fAstroGraph = us.fEphemeris = us.fArabic =
     us.fHorizonSearch = us.fAtlasNear = us.fInDay = us.fInDayInf =
     us.fInDayGra = us.fTransit = us.fTransitInf = us.fTransitGra =
-    us.fMoonChart = us.fExoTransit = fFalse;
+    us.fMoonChart = us.fExoTransit = us.fSign = us.fObject = us.fAspect =
+    us.fConstel = us.fOrbitData = us.fRay = us.fMeaning = us.fSwitch =
+    us.fSwitchRare = us.fKeyGraph = us.fCredit = fFalse;
   // DrawChartX() switches directly on gi.nMode with no fallback if it's 0,
   // and DetectGraphicsChartMode() (xscreen.cpp:2165, normally what
   // (re)derives gi.nMode from the us.f* flags before a redraw) doesn't
@@ -325,6 +356,17 @@ void SetChartModeQt(int mode)
   case gTraNatGra:  us.fTransitGra    = fTrue; break;
   case gMoons:      us.fMoonChart     = fTrue; break;
   case gExo:        us.fExoTransit    = fTrue; break;
+  case gSign:       us.fSign          = fTrue; break;
+  case gObject:     us.fObject        = fTrue; break;
+  case gHelpAsp:    us.fAspect        = fTrue; break;
+  case gConstel:    us.fConstel       = fTrue; break;
+  case gPlanet:     us.fOrbitData     = fTrue; break;
+  case gRay:        us.fRay           = fTrue; break;
+  case gMeaning:    us.fMeaning       = fTrue; break;
+  case gSwitch:     us.fSwitch        = fTrue; break;
+  case gObscure:    us.fSwitchRare    = fTrue; break;
+  case gKeystroke:  us.fKeyGraph      = fTrue; break;
+  case gCredit:     us.fCredit        = fTrue; break;
   }
   for (i = 0; i < s_cChartMode; i++)
     if (s_rgnChartMode[i] == mode) {
@@ -419,18 +461,18 @@ static void BuildFileMenu(QMainWindow *pwind)
 static void BuildViewMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&View");
-  QAction *paGraphics = AddToggleAction(pmenu, "Show &Graphics",
-    &us.fGraphics, fFalse);
+  s_paGraphics = AddToggleAction(pmenu, "Show &Graphics", &us.fGraphics,
+    fFalse);
   QAction *paColorText = pmenu->addAction("&Colored Text");
   paColorText->setCheckable(true);
   paColorText->setChecked(us.fAnsiColor != 0);
   QObject::connect(paColorText, &QAction::triggered, pwind,
-    [paColorText, paGraphics]() {
+    [paColorText]() {
       us.fAnsiColor = !us.fAnsiColor;
       us.fAnsiChar = !us.fAnsiChar;
       paColorText->setChecked(us.fAnsiColor != 0);
       us.fGraphics = fFalse;
-      paGraphics->setChecked(fFalse);
+      s_paGraphics->setChecked(fFalse);
       RedrawQt();
     });
   QAction *paRedraw = pmenu->addAction("&Redraw Screen");
@@ -444,11 +486,11 @@ static void BuildViewMenu(QMainWindow *pwind)
   paInterpret->setCheckable(true);
   paInterpret->setChecked(us.fInterpret != 0);
   QObject::connect(paInterpret, &QAction::triggered, pwind,
-    [paInterpret, paGraphics]() {
+    [paInterpret]() {
       us.fInterpret = !us.fInterpret;
       paInterpret->setChecked(us.fInterpret != 0);
       us.fGraphics = fFalse;
-      paGraphics->setChecked(fFalse);
+      s_paGraphics->setChecked(fFalse);
       RedrawQt();
     });
   AddToggleAction(pmenu, "Print Nearest &Second", &us.fSeconds, fFalse);
@@ -641,19 +683,9 @@ static void BuildSettingMenu(QMainWindow *pwind)
 
   QMenu *pmenuMoons = pmenu->addMenu("Planetary &Moons");
   AddChartModeAction(pmenuMoons, "Moons Chart", gMoons);
-  // Not AddChartModeAction: Windows also forces text mode when switching to
-  // this chart type (cmdChartExo, wdriver.cpp), and that has to happen
-  // before SetChartModeQt()'s redraw, not after.
-  QAction *paExo = pmenuMoons->addAction("Exoplanets Chart");
-  paExo->setCheckable(true);
-  paExo->setActionGroup(s_pgroupChartMode);
-  QObject::connect(paExo, &QAction::triggered, pwind, []() {
-    us.fGraphics = fFalse;
-    SetChartModeQt(gExo);
-  });
-  s_rgpaChartMode[s_cChartMode] = paExo;
-  s_rgnChartMode[s_cChartMode] = gExo;
-  s_cChartMode++;
+  // Windows also forces text mode when switching to this chart type
+  // (cmdChartExo, wdriver.cpp).
+  AddChartModeTextAction(pmenuMoons, "Exoplanets Chart", gExo);
   pmenuMoons->addSeparator();
   QAction *paMoonRestrict = pmenuMoons->addAction("Moon &Restrictions...");
   QObject::connect(paMoonRestrict, &QAction::triggered, pwind,
@@ -1203,6 +1235,24 @@ static void BuildHelpMenu(QMainWindow *pwind)
     });
   }
   pmenu->addSeparator();
+
+  // Each of these is a chart "mode" that's actually a plain text listing
+  // (us.fGraphics forced false) rather than a picture -- see
+  // AddChartModeTextAction() and RedrawTextQt(). Field mapping verified
+  // against ProcessState()'s chart-mode switch, wdriver.cpp:1180-1190.
+  AddChartModeTextAction(pmenu, "List &Signs", gSign);
+  AddChartModeTextAction(pmenu, "List &Objects", gObject);
+  AddChartModeTextAction(pmenu, "List Aspec&ts", gHelpAsp);
+  AddChartModeTextAction(pmenu, "List &Constellations", gConstel);
+  AddChartModeTextAction(pmenu, "List &Planet Info", gPlanet);
+  AddChartModeTextAction(pmenu, "List &Rays", gRay);
+  AddChartModeTextAction(pmenu, "List &General Meanings", gMeaning);
+  AddChartModeTextAction(pmenu, "List S&witches", gSwitch);
+  AddChartModeTextAction(pmenu, "List O&bscure Switches", gObscure);
+  AddChartModeTextAction(pmenu, "List &Keystrokes", gKeystroke);
+  AddChartModeTextAction(pmenu, "List Cr&edits", gCredit);
+  pmenu->addSeparator();
+
   QAction *paAbout = pmenu->addAction("&About Astrolog...");
   QObject::connect(paAbout, &QAction::triggered, pwind,
     []() { ShowAboutDialogQt(); });
