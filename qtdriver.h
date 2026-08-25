@@ -36,6 +36,22 @@ void RecastAndRedrawQt();
 // the chart is drawn, such as colors.
 void RedrawQt();
 
+// Switch the chart type/mode, mirroring the chart-type switch in Windows'
+// ProcessState() (wdriver.cpp) -- clears all the chart-type flags, then
+// sets the one flag matching the new mode, syncs the Chart menu's radio
+// checkmark if "mode" has one (this is also how the Transits dialog keeps
+// that menu in sync, since it can set chart mode too), then redraws (chart
+// type alone doesn't need a recast; the underlying positions haven't
+// changed -- callers that also changed what's being cast, like the
+// Transits dialog, recast separately afterward). "mode" is one of the gXxx
+// chart-mode constants in astrolog.h (gWheel, gHouse, gGrid, etc), the same
+// set Windows' wi.nMode holds.
+void SetChartModeQt(int mode);
+
+// Switch the relationship chart type, mirroring Windows' SetRel().
+// "rc" is one of the rcXxx constants in astrolog.h (rcNo, rcDual, etc).
+void SetRelQt(int rc);
+
 // Dialog launchers, implemented in qtdialog.cpp, wired up to the menu bar
 // built in qtdriver.cpp.
 void ShowChartInfoDialogQt();
@@ -44,6 +60,10 @@ void ShowObjectDialogQt();
 void ShowRestrictDialogQt();
 void ShowOpenChartDialogQt();
 void ShowSaveChartDialogQt();
+void ShowDefaultInfoDialogQt();
+void ShowTransitDialogQt();
+void ShowProgressDialogQt();
+void ShowChartSettingsDialogQt();
 
 #endif // __QTDRIVER_H
 

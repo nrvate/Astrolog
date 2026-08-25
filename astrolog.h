@@ -1023,7 +1023,7 @@ enum _graphicschart {
   gPolar      = 22,
   gTelescope  = 23,
   gBiorhythm  = 24,
-#ifdef WIN
+#if defined(WIN) || defined(QT)
   gAspect     = 25,
   gArabic     = 26,
   gTraTraTim  = 27,

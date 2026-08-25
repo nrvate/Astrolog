@@ -37,8 +37,12 @@
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QRadioButton>
+#include <QtWidgets/QButtonGroup>
+#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QMessageBox>
@@ -301,6 +305,375 @@ void ShowRestrictDialogQt()
   for (i = 0; i <= oCore; i++)
     ignore[i] = !rgpcb[i]->isChecked();
   AdjustRestrictions();
+  RecastAndRedrawQt();
+}
+
+
+// Default chart info, equivalent to Windows' DlgDefault: the location/
+// elevation/temperature/etc that a new chart starts out with, and what
+// "now" charts use for a location.
+
+void ShowDefaultInfoDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Default Chart Info");
+  QFormLayout *playout = new QFormLayout(&dlg);
+
+  QLineEdit *peName = new QLineEdit(FSzSet(ciDefa.nam) ? ciDefa.nam : "");
+  QLineEdit *peLoc  = new QLineEdit(FSzSet(ciDefa.loc) ? ciDefa.loc : "");
+  QLineEdit *peDst  = new QLineEdit(ciDefa.dst == 0.0 ? "ST" :
+    (ciDefa.dst == 1.0 ? "DT" :
+    (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
+  QLineEdit *peZon  = new QLineEdit(QString::number(ciDefa.zon));
+  QLineEdit *peLon  = new QLineEdit(QString::number(ciDefa.lon));
+  QLineEdit *peLat  = new QLineEdit(QString::number(ciDefa.lat));
+  QLineEdit *peElv  = new QLineEdit(SzElevation(us.elvDef));
+  QLineEdit *peTmp  = new QLineEdit(SzTemperature(us.tmpDef));
+  QLineEdit *peCor  = new QLineEdit(QString::number(us.lTimeAddition));
+  peName->setCursorPosition(0);
+  peLoc->setCursorPosition(0);
+
+  playout->addRow("Name:", peName);
+  playout->addRow("Location:", peLoc);
+  playout->addRow("Daylight offset:", peDst);
+  playout->addRow("Zone (hours west of UTC):", peZon);
+  playout->addRow("Longitude (degrees east):", peLon);
+  playout->addRow("Latitude (degrees north):", peLat);
+  playout->addRow("Elevation:", peElv);
+  playout->addRow("Temperature:", peTmp);
+  playout->addRow("\"Now\" minute offset:", peCor);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  playout->addRow(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  CI ci = ciDefa;
+  QByteArray ba;
+  ba = peDst->text().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->text().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
+  ba = peLon->text().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
+  ba = peLat->text().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
+
+  if (!FValidDst(ci.dst) || !FValidZon(ci.zon) ||
+    !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more chart info fields are invalid.");
+    return;
+  }
+  ba = peElv->text().toLocal8Bit(); us.elvDef = RParseSz(ba.constData(), pmElv);
+  ba = peTmp->text().toLocal8Bit(); us.tmpDef = RParseSz(ba.constData(), pmTmp);
+  us.lTimeAddition = peCor->text().toLong();
+  ciDefa = ci;
+  ba = peName->text().toLocal8Bit(); ciDefa.nam = SzClone((char *)ba.constData());
+  ba = peLoc->text().toLocal8Bit();  ciDefa.loc = SzClone((char *)ba.constData());
+
+  RecastAndRedrawQt();
+}
+
+
+// Transits, equivalent to Windows' DlgTransit: which day/transit chart mode
+// to show (if any) and the date/time to transit to (ciTran), using the
+// default location (Info / Default Chart Info) the same way Windows does.
+// The ephemeris search range and search filter options DlgTransit also has
+// are not included here -- they only matter for the search chart types,
+// which aren't in the Chart menu yet either.
+
+void ShowTransitDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Transits");
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+
+  QGroupBox *pgroupBox = new QGroupBox("Show");
+  QVBoxLayout *pgrouplayout = new QVBoxLayout(pgroupBox);
+  QButtonGroup *pgroup = new QButtonGroup(&dlg);
+  CONST char *rgszDayType[7] = { "Normal chart (no transits)",
+    "In-Day Transits: Timeline", "In-Day Transits: Influence",
+    "In-Day Transits: Graphic", "Transit to Natal: Timeline",
+    "Transit to Natal: Influence", "Transit to Natal: Graphic" };
+  int n1 = us.fInDay ? 1 : (us.fInDayInf ? 2 : (us.fInDayGra ? 3 :
+    (us.fTransit ? 4 : (us.fTransitInf ? 5 : (us.fTransitGra ? 6 : 0)))));
+  int i;
+  for (i = 0; i < 7; i++) {
+    QRadioButton *prb = new QRadioButton(rgszDayType[i]);
+    prb->setChecked(i == n1);
+    pgroup->addButton(prb, i);
+    pgrouplayout->addWidget(prb);
+  }
+  pouter->addWidget(pgroupBox);
+
+  QFormLayout *pform = new QFormLayout();
+  QLineEdit *peMon = new QLineEdit(QString::number(ciTran.mon));
+  QLineEdit *peDay = new QLineEdit(QString::number(ciTran.day));
+  QLineEdit *peYea = new QLineEdit(QString::number(ciTran.yea));
+  QLineEdit *peTim = new QLineEdit(QString::number(ciTran.tim));
+  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "ST" :
+    (ciTran.dst == 1.0 ? "DT" :
+    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))));
+  QLineEdit *peZon = new QLineEdit(QString::number(ciTran.zon));
+  pform->addRow("Month (1-12):", peMon);
+  pform->addRow("Day:", peDay);
+  pform->addRow("Year:", peYea);
+  pform->addRow("Time (decimal hours):", peTim);
+  pform->addRow("Daylight offset:", peDst);
+  pform->addRow("Zone (hours west of UTC):", peZon);
+  pouter->addLayout(pform);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  int mon, day, yea;
+  real tim, dst, zon;
+  QByteArray ba;
+  ba = peMon->text().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
+  ba = peDay->text().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
+  ba = peYea->text().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
+  ba = peTim->text().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
+  ba = peDst->text().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->text().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
+  if (!FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
+    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more transit date fields are invalid.");
+    return;
+  }
+  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
+
+  int n1sel = pgroup->checkedId();
+  flag fRecast = fFalse;
+  switch (n1sel) {
+  case 1: SetChartModeQt(gTraTraTim); break;
+  case 2: SetChartModeQt(gTraTraInf); fRecast = fTrue; break;
+  case 3: SetChartModeQt(gTraTraGra); break;
+  case 4: SetChartModeQt(gTraNatTim); break;
+  case 5: SetChartModeQt(gTraNatInf); fRecast = fTrue; break;
+  case 6: SetChartModeQt(gTraNatGra); break;
+  default:
+    if (n1 != 0)  // Was showing a transit chart; go back to a normal one.
+      SetChartModeQt(gWheel);
+  }
+  if (n1sel > 0)
+    us.fGraphics = fFalse;
+  if (fRecast)
+    RecastAndRedrawQt();
+  else
+    RedrawQt();
+}
+
+
+// Progressions, equivalent to Windows' DlgProgress: whether to show a
+// progressed chart, what kind, and the date to progress to (ciTran, shared
+// with the Transits dialog above). Simplified from Windows' version by
+// treating the progression rate/cusp ratio as plain numbers instead of also
+// offering preset dropdown values (Primary/Secondary/etc), and the solar
+// arc planet by name instead of a special "X" reciprocal-rate prefix.
+
+void ShowProgressDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Progressions");
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+
+  QCheckBox *pcbEnable = new QCheckBox("Show Progressed Chart");
+  pcbEnable->setChecked(us.fProgress != 0);
+  pouter->addWidget(pcbEnable);
+
+  QGroupBox *pgroupBox = new QGroupBox("Progression Type");
+  QHBoxLayout *pgrouplayout = new QHBoxLayout(pgroupBox);
+  QButtonGroup *pgroup = new QButtonGroup(&dlg);
+  CONST char *rgszType[3] = { "Cast", "Mixed", "Solar Arc" };
+  int nTypeCur = us.nProgress == ptCast ? 0 :
+    (us.nProgress == ptMixed ? 1 : 2);
+  int i;
+  for (i = 0; i < 3; i++) {
+    QRadioButton *prb = new QRadioButton(rgszType[i]);
+    prb->setChecked(i == nTypeCur);
+    pgroup->addButton(prb, i);
+    pgrouplayout->addWidget(prb);
+  }
+  pouter->addWidget(pgroupBox);
+
+  QFormLayout *pform = new QFormLayout();
+  QLineEdit *peRate = new QLineEdit(QString::number(us.rProgDay));
+  QLineEdit *peCusp = new QLineEdit(QString::number(us.rProgCusp));
+  QLineEdit *peArc = new QLineEdit(us.objProgArc >= 0 ?
+    szObjName[us.objProgArc] : "None");
+  QCheckBox *pcbRAMC = new QCheckBox("Progress RAMC/Houses Too");
+  pcbRAMC->setChecked(us.fProgRAMC != 0);
+  pform->addRow("Degrees per day:", peRate);
+  pform->addRow("Cusp move ratio:", peCusp);
+  pform->addRow("Solar arc planet:", peArc);
+  pform->addRow(pcbRAMC);
+
+  QLineEdit *peMon = new QLineEdit(QString::number(ciTran.mon));
+  QLineEdit *peDay = new QLineEdit(QString::number(ciTran.day));
+  QLineEdit *peYea = new QLineEdit(QString::number(ciTran.yea));
+  QLineEdit *peTim = new QLineEdit(QString::number(ciTran.tim));
+  QLineEdit *peDst = new QLineEdit(ciTran.dst == 0.0 ? "ST" :
+    (ciTran.dst == 1.0 ? "DT" :
+    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))));
+  QLineEdit *peZon = new QLineEdit(QString::number(ciTran.zon));
+  pform->addRow("Month (1-12):", peMon);
+  pform->addRow("Day:", peDay);
+  pform->addRow("Year:", peYea);
+  pform->addRow("Time (decimal hours):", peTim);
+  pform->addRow("Daylight offset:", peDst);
+  pform->addRow("Zone (hours west of UTC):", peZon);
+  pouter->addLayout(pform);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  real rDay = peRate->text().toDouble();
+  real rCusp = peCusp->text().toDouble();
+  QByteArray ba;
+  ba = peArc->text().toLocal8Bit();
+  int npO = NParseSz(ba.constData(), pmObject);
+  int mon, day, yea;
+  real tim, dst, zon;
+  ba = peMon->text().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
+  ba = peDay->text().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
+  ba = peYea->text().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
+  ba = peTim->text().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
+  ba = peDst->text().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->text().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
+  if (rDay == 0.0 || rCusp == 0.0 || !FValidProgArc(npO) ||
+    !FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
+    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more progression fields are invalid.");
+    return;
+  }
+
+  us.fProgress = pcbEnable->isChecked();
+  us.nProgress = pgroup->checkedId() == 0 ? ptCast :
+    (pgroup->checkedId() == 1 ? ptMixed : ptSolarArc);
+  us.rProgDay = rDay;
+  us.rProgCusp = rCusp;
+  us.objProgArc = npO;
+  us.fProgRAMC = pcbRAMC->isChecked();
+  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
+  is.JDp = MdytszToJulian(ciTran.mon, ciTran.day, ciTran.yea, ciTran.tim,
+    ciDefa.dst, ciDefa.zon);
+  RecastAndRedrawQt();
+}
+
+
+// Chart settings, equivalent to Windows' DlgChart: a grab bag of per chart
+// type display options. A curated subset of Windows' full field list --
+// the astrocartography step/distance, star/Arabic part sort order, aspect
+// sort order, and decan display fields are left for a later pass.
+
+void ShowChartSettingsDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Chart Settings");
+  dlg.resize(400, 500);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
+
+  QCheckBox *pcbVelocity = new QCheckBox("Show Object Velocities");
+  QCheckBox *pcbWheelReverse = new QCheckBox("Reverse Wheel Direction");
+  QCheckBox *pcbGridConfig = new QCheckBox("Show Grid Configurations");
+  QCheckBox *pcbGridMidpoint = new QCheckBox("Show Grid Midpoints");
+  QCheckBox *pcbAspSummary = new QCheckBox("Show Aspect Summary");
+  QCheckBox *pcbMidSummary = new QCheckBox("Show Midpoint Summary");
+  QCheckBox *pcbMidAspect = new QCheckBox("Show Midpoint Aspects");
+  QCheckBox *pcbPrimeVert = new QCheckBox("Prime Vertical Horizon Chart");
+  QCheckBox *pcbSectorApprox = new QCheckBox("Approximate Sectors");
+  QCheckBox *pcbCalendarYear = new QCheckBox("Calendar Covers Full Year");
+  QCheckBox *pcbInfluenceSign = new QCheckBox("Influence Chart By Sign");
+  QCheckBox *pcbArabicFlip = new QCheckBox("Flip Arabic Parts At Night");
+  pcbVelocity->setChecked(us.fVelocity != 0);
+  pcbWheelReverse->setChecked(us.fWheelReverse != 0);
+  pcbGridConfig->setChecked(us.fGridConfig != 0);
+  pcbGridMidpoint->setChecked(us.fGridMidpoint != 0);
+  pcbAspSummary->setChecked(us.fAspSummary != 0);
+  pcbMidSummary->setChecked(us.fMidSummary != 0);
+  pcbMidAspect->setChecked(us.fMidAspect != 0);
+  pcbPrimeVert->setChecked(us.fPrimeVert != 0);
+  pcbSectorApprox->setChecked(us.fSectorApprox != 0);
+  pcbCalendarYear->setChecked(us.fCalendarYear != 0);
+  pcbInfluenceSign->setChecked(us.fInfluenceSign != 0);
+  pcbArabicFlip->setChecked(us.fArabicFlip != 0);
+  for (QCheckBox *pcb : { pcbVelocity, pcbWheelReverse, pcbGridConfig,
+    pcbGridMidpoint, pcbAspSummary, pcbMidSummary, pcbMidAspect,
+    pcbPrimeVert, pcbSectorApprox, pcbCalendarYear, pcbInfluenceSign,
+    pcbArabicFlip })
+    pinnerlayout->addWidget(pcb);
+
+  QFormLayout *pform = new QFormLayout();
+  QLineEdit *peWheelRows = new QLineEdit(QString::number(us.nWheelRows));
+  QLineEdit *peArabicParts = new QLineEdit(QString::number(us.nArabicParts));
+  QLineEdit *peAtlasList = new QLineEdit(QString::number(us.nAtlasList));
+  QLineEdit *peBioday = new QLineEdit(QString::number(us.nBioday));
+  QLineEdit *peRatio = new QLineEdit(QString::number(us.rRatio));
+  pform->addRow("Wheel rows per house:", peWheelRows);
+  pform->addRow("Arabic parts to include:", peArabicParts);
+  pform->addRow("Nearest cities row count:", peAtlasList);
+  pform->addRow("Biorhythm days:", peBioday);
+  pform->addRow("Chart proportion ratio:", peRatio);
+  pinnerlayout->addLayout(pform);
+
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  int nWheelRows = peWheelRows->text().toInt();
+  int nArabicParts = peArabicParts->text().toInt();
+  int nAtlasList = peAtlasList->text().toInt();
+  int nBioday = peBioday->text().toInt();
+  if (!FValidWheel(nWheelRows) || !FValidPart(nArabicParts) ||
+    nAtlasList < 0 || !FValidBioday(nBioday)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more chart settings fields are invalid.");
+    return;
+  }
+  us.fVelocity = pcbVelocity->isChecked();
+  us.fWheelReverse = pcbWheelReverse->isChecked();
+  us.fGridConfig = pcbGridConfig->isChecked();
+  us.fGridMidpoint = pcbGridMidpoint->isChecked();
+  us.fAspSummary = pcbAspSummary->isChecked();
+  us.fMidSummary = pcbMidSummary->isChecked();
+  us.fMidAspect = pcbMidAspect->isChecked();
+  us.fPrimeVert = pcbPrimeVert->isChecked();
+  us.fSectorApprox = pcbSectorApprox->isChecked();
+  us.fCalendarYear = pcbCalendarYear->isChecked();
+  us.fInfluenceSign = pcbInfluenceSign->isChecked();
+  us.fArabicFlip = pcbArabicFlip->isChecked();
+  us.nWheelRows = nWheelRows;
+  us.nArabicParts = nArabicParts;
+  us.nAtlasList = nAtlasList;
+  us.nBioday = nBioday;
+  us.rRatio = peRatio->text().toDouble();
   RecastAndRedrawQt();
 }
 
