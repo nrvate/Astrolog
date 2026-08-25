@@ -192,8 +192,7 @@ GDI font enumeration the Graphics Settings font pickers would), Quit.
 
 Missing (see "Prioritized remaining work" for how each maps to existing
 portable functions):
-- Open Chart #2... `[D]` — part of the multi-chart feature, see Info's
-  Chart List gap below; don't build standalone.
+- (Open Chart #2 is done — see Info below.)
 - Other Formats `[P]`'s remaining two items: Open Charts in Folder... and
   Save Chart List... — both part of Chart List (see Info below), since
   they read/write `is.rgci`, which nothing populates yet; don't build
@@ -261,24 +260,35 @@ container, so most of these have no equivalent concept. If revisited,
 "Clear Screen" and "Size Window Full Screen" (`gi.qwind->showFullScreen()`)
 are the only two that might still mean something in Qt.
 
-### Info — partial, missing the multi-chart feature
+### Info — done except the chart list
 Done: Set Chart Info..., Chart for Now, Default Chart Info..., all 8
-relationship chart type radios.
+relationship chart type radios, and (2026-08-24) Set Chart #2 Info...,
+Charts #3 Through #6... (`ShowChartsAllDialogQt()`, equivalent to
+Windows' DlgInfoAll), and Swap Chart #1 and #2 inside the Chart List
+submenu.
 
-Missing — all part of one feature (multi-chart support), don't implement
-piecemeal:
-- Set Chart #2 Info..., Charts #3 Through #6..., Chart List `[P]`
-  (Chart List... dialog, Previous/Next/First/Last Chart, Swap Chart #1
-  and #2). Backing data structures already exist and are portable:
-  `CI * CONST rgpci[cRing+1]` / `CP * CONST rgpcp[cRing+1]` (extern.h,
-  `cRing = 6` — arrays of chart-info/chart-position pointers for charts
-  1-6), and `is.rgci`/`is.cci` (the loaded chart list Save Chart List/
-  Open Charts in Folder read and write). `DlgList` (wdialog.cpp, function
-  starting ~line 866) is Windows' chart-list dialog — it's large (list
-  view, filtering, sorting); read it fully before starting, budget this
-  as the biggest remaining single feature in the whole GUI. A Qt version
-  would likely be a `QListWidget` or `QTableWidget` wrapping the same
-  `is.rgci` array.
+The six **chart slots** are done: `rgpci`/`rgpcp` (extern.h, `cRing = 6`)
+are the per-ring chart info/positions, slot 1 being the main chart and
+2-6 the extra rings a bi/tri/.../hexa wheel draws.
+`ShowChartInfoForQt(CI *, title)` edits any slot;
+`FOpenChartIntoQt(iChart, file)` loads a file into one (FInputData()
+always lands in ciCore, so for slots >1 it saves ciCore, reads, copies
+out, and restores -- the same dance Windows' DlgOpenChart does).
+
+Missing — the **chart list**, a separate thing from the slots above and
+the one remaining chunk of this feature:
+- Chart List... `[D]` (`DlgList`, wdialog.cpp:866, ~150 lines: list view
+  with filtering and sorting), Previous/Next Chart, First/Last Chart.
+  These read `is.rgci` (the loaded chart list) / `is.cci` (its count) /
+  `is.iciCur` (current index). Navigation itself is trivial — see
+  wdriver.cpp:1545-1564, it's a clamp and a `ciCore = is.rgci[i]` — the
+  work is the dialog. A Qt version is probably a `QTableWidget` over
+  `is.rgci`.
+- File's Open Charts in Folder... and Save Chart List... belong to this
+  same chunk (they populate/write `is.rgci`); Save Chart List is just
+  `us.nWriteFormat = 'l'; FOutputData();` once a list exists.
+- **Nothing populates `is.rgci` in this port yet**, which is why the
+  above is deferred as a unit rather than half-built.
 
 ### Setting — COMPLETE
 All items done: Sidereal Zodiac, Heliocentric, House System (22-item
@@ -381,11 +391,13 @@ skip.
 5. ~~File Settings dialog~~ — **done 2026-08-24**, see File section above.
 6. ~~Graphics Settings dialog~~ — **done 2026-08-24**, see Graphics
    section above (font pickers deliberately left out).
-7. **Info's Chart List / multi-chart feature** — **next item up**, and the
-   single largest remaining feature. Not just a dialog: a whole "manage N loaded charts,
-   navigate between them, swap #1/#2" subsystem. Budget accordingly; read
-   `DlgList` in full before starting, don't estimate from the menu mapping
-   alone.
+7. Info's multi-chart feature — **half done 2026-08-24**: the six chart
+   slots (Set Chart #2 Info, the Charts manager, Open Chart #2, Swap) are
+   in; see Info section above. **Next item up** is the remaining half, the
+   chart list: the `DlgList` port (wdialog.cpp:866, ~150 lines) plus
+   Previous/Next/First/Last and File's Open Charts in Folder / Save Chart
+   List. Read `DlgList` in full before starting — the navigation is
+   trivial, the dialog is the work.
 8. **Edit menu Paste** — needs clipboard read + figuring out what format(s)
    to accept; lower priority, no immediate need identified.
 9. **Edit menu's 96 macro slots** — lowest priority, deferred repeatedly.
