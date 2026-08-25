@@ -214,17 +214,43 @@ portable functions):
   does this today. Print Setup is a native Windows dialog — skip entirely,
   not applicable.
 
-### Edit — minimal
-Done: Enter Command Line... (the escape hatch — see above).
+### Edit — done except Paste and macros
+Done: Enter Command Line... (the escape hatch — see above), Copy Chart
+Text Output, Copy Chart Bitmap, Copy Vector Format submenu (Metafile/
+PostScript/SVG/Wireframe) — done 2026-08-24, see `CopyChartTextQt()`/
+`CopyChartBitmapQt()`/`CopyChartVectorQt()`. Copy Bitmap is trivial
+(`gi.qim` is already a `QImage`). Copy Vector Format reuses
+`FExportChartQt()` to a scratch temp file instead of one the user keeps;
+text formats (PS/SVG/Wireframe) go on the clipboard as plain text (SVG
+also gets `image/svg+xml` set alongside), Metafile (binary) gets
+`image/x-wmf` only.
+
+**Real crash found and fixed here, worth knowing about**: `Action()`
+branches on `us.fGraphics` ("if (us.fGraphics) FActionX(); else
+PrintChart();"). `CaptureTextChartQt()` (the shared text-capture helper
+`RedrawTextQt()` already used) didn't force `us.fGraphics` false itself —
+it relied on every *caller* doing that first, which was true for
+`RedrawTextQt()`'s existing callers (they all go through `RedrawQt()`'s
+own text-mode branch, which already guarantees it) but not for
+`CopyChartTextQt()`, a new caller that invoked it directly. With
+`us.fGraphics` still true, `Action()` took the graphics path, which for
+QT calls `InteractQt()` again — a second, nested Qt event loop
+("QCoreApplication::exec: The event loop is already running"), silently
+producing empty output. **Lesson: push invariants like this into the
+shared helper itself, not onto every caller to remember** — fixed by
+having `CaptureTextChartQt()` save/force/restore `us.fGraphics` around
+its own `Action()` call, so no future caller can hit this. Root-caused
+with the gdb debug-build workflow (see below) after black-box testing
+didn't converge — `pgrep astrolog-qt-debug` (no `-f`) gave false
+"not running" reads because Linux's `/proc/pid/comm` truncates at 15
+characters; use `pgrep -f` (matches full cmdline) when a binary's name is
+long, or `pgrep` will lie to you.
 
 Missing:
-- Copy Chart Text Output / Copy Chart Bitmap / Copy Vector Format (4) /
-  Paste — plausible medium-value addition via `QClipboard`
-  (`QApplication::clipboard()`); Copy Bitmap especially is easy (`gi.qim`
-  is already a `QImage`, `clipboard->setImage(*gi.qim)` when in graphics
-  mode). Text/vector copies would need the same temp-file-then-read
-  pattern `FExportChartQt()`/`RedrawTextQt()` already use, just placed on
-  the clipboard instead of shown/saved. Not yet attempted.
+- Paste — needs clipboard read + figuring out what format(s) to accept;
+  lower priority, no immediate need identified.
+- 96 macro slots — lowest priority, deferred repeatedly across sessions.
+  Only worth doing if specifically requested.
 - 96 macro slots (8 submenus × 12 "Macro N" items, `cmdMacro01`..`96`) —
   explicitly low priority, deferred repeatedly across sessions. Only worth
   doing if specifically requested.
@@ -355,11 +381,10 @@ skip.
    2026-08-24**, see File section above.
 3. ~~Help's remaining doc/data file openers~~ — **done 2026-08-24**, see
    Help section above. Help menu is now fully complete.
-4. **Edit menu Copy Bitmap** — easy (`gi.qim` is already a `QImage`),
-   reasonable value. Copy Text/Vector formats are the same file-then-read
-   pattern as export, moderate additional value. **Next item up.**
+4. ~~Edit menu Copy Bitmap/Text/Vector Format~~ — **done 2026-08-24**, see
+   Edit section above.
 5. **File Settings dialog** (portable subset only, skip Windows-only
-   fields) — moderate complexity, moderate value.
+   fields) — moderate complexity, moderate value. **Next item up.**
 6. **Graphics Settings dialog** — lower priority than it looks; most
    useful fields duplicate menu items already built, the font pickers
    need from-scratch Qt work with no direct port, and what's left over is
