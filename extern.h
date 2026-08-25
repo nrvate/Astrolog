@@ -727,8 +727,10 @@ extern char xkey[];
 extern KV rgbind[cColor2];
 extern KV fg, bg;
 #endif
-#ifdef WIN
+#if defined(WIN) || defined(QT)
 extern CONST int ikPalette[cColor];
+#endif
+#ifdef WIN
 extern CONST int rgcmdMode[gMax];
 #endif
 #ifdef WCLI

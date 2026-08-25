@@ -213,6 +213,15 @@ static void CopyChartBitmapQt()
 
 void RedrawQt()
 {
+  // Astrolog's own Action() calls this before every chart it renders, and
+  // the drawing code depends on it: InitColors() is what turns the
+  // element and ray colors (kElemA/kRayA, which the Colors dialog edits)
+  // and the rulership restrictions into the per object kObjA[] table that
+  // kSignA() and the glyph drawing actually read. Without it those
+  // settings can be changed and saved but never visibly take effect.
+  // Note this is a different function from InitColorsX() in xscreen.cpp,
+  // which sets up the backend palette instead.
+  InitColors();
   if (!us.fGraphics) {
     RedrawTextQt();
     return;

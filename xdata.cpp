@@ -180,9 +180,14 @@ KV rgbbmp[cColor2], rgbbmpRay[cRay+2];
 #ifdef X11
 KV rgbind[cColor2], fg, bg;
 #endif
-#ifdef WIN
+// Maps each standard palette slot to its entry in kMainA[] (when <= 0)
+// or kRainbowA[] (when > 0). Plain data with no Windows dependency, so
+// the Qt Colors dialog uses it too.
+#if defined(WIN) || defined(QT)
 CONST int ikPalette[cColor] =
   {-0, -1, 1, 4, 6, 3, -8, 5, -3, -2, -4, -5, -7, 2, 7, -6};
+#endif
+#ifdef WIN
 // Map _graphicschart enum to Windows commands
 CONST int rgcmdMode[gMax] = {0,
   cmdChartList, cmdChartWheel, cmdChartGrid, cmdChartMidpoint, cmdChartHorizon,

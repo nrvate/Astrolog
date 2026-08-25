@@ -1337,50 +1337,149 @@ void ShowSaveChartListDialogQt()
 }
 
 
-// Colors, a curated subset of Windows' DlgColor covering the main palette
-// and element colors (the ones most visibly used in every chart), letting
-// each be set by color name (e.g. "Red") the same way SzColor()/NParseSz()
-// format and parse them elsewhere in Astrolog.
+// Colors, equivalent to Windows' DlgColor: the 16 slot standard palette,
+// the four element colors, the seven ray colors, and the scribble pen and
+// wheel corner colors. Each is set by color name the same way SzColor()
+// and NParseSz() format and parse them elsewhere in Astrolog.
+
+// Adds one color field: an editable combo listing the color names, since
+// that is what Windows offers here. "fExtra" widens the list to include
+// the handful of symbolic entries past the plain colors (Element, Ray,
+// Star, Planet, Auto), which only the wheel corner color accepts.
+static QComboBox *AddColorComboQt(QFormLayout *pform, CONST char *szLabel,
+  KI ki, flag fExtra)
+{
+  QComboBox *pcb = new QComboBox();
+  int i, iMax = fExtra ? cColor2 + 5 : cColor2;
+
+  pcb->setEditable(true);
+  // addItem() before setEditText(): see the Progressions dialog.
+  for (i = 0; i < iMax; i++)
+    pcb->addItem(szColor[i]);
+  pcb->setEditText(SzColor(ki));
+  pform->addRow(QString(szLabel) + ":", pcb);
+  return pcb;
+}
+
+static int NColorFromComboQt(QComboBox *pcb)
+{
+  QByteArray ba = pcb->currentText().toLocal8Bit();
+  return NParseSz(ba.constData(), pmColor);
+}
 
 void ShowColorDialogQt()
 {
-  static CONST char *rgszMain[9] = { "Black", "White", "Light Gray",
-    "Dark Gray", "Maroon", "Dark Green", "Dark Cyan", "Dark Blue",
-    "Magenta" };
-  static CONST char *rgszElem[4] = { "Fire", "Earth", "Air", "Water" };
+  // The palette slots are named for the color they nominally represent,
+  // but each one maps through ikPalette[] to an entry in either kMainA[]
+  // or kRainbowA[] -- the dialog remaps which actual color each slot
+  // renders as, so the label and the current value need not agree.
+  static CONST char *rgszPalette[cColor] = {
+    "Black", "White", "Red", "Green", "Blue", "Yellow", "Magenta", "Cyan",
+    "Gray", "Lt. Gray", "Maroon", "Dk. Green", "Dk. Blue", "Maize",
+    "Purple", "Dk. Cyan" };
+  static CONST char *rgszElem[cElem] = { "Fire", "Earth", "Air", "Water" };
+  static CONST char *rgszRay[cRay] =
+    { "1st", "2nd", "3rd", "4th", "5th", "6th", "7th" };
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Colors");
-  QFormLayout *playout = new QFormLayout(&dlg);
-  QLineEdit *rgpeMain[9];
-  QLineEdit *rgpeElem[4];
-  int i;
+  dlg.resize(720, 640);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QScrollArea *pscroll = new QScrollArea(&dlg);
+  QWidget *pinner = new QWidget();
+  QHBoxLayout *phInner = new QHBoxLayout(pinner);
+  QVBoxLayout *pvLeft = new QVBoxLayout();
+  QVBoxLayout *pvRight = new QVBoxLayout();
+  QComboBox *rgpcbPalette[cColor];
+  QComboBox *rgpcbElem[cElem];
+  QComboBox *rgpcbRay[cRay+1];
+  int i, j;
 
-  for (i = 0; i < 9; i++) {
-    rgpeMain[i] = new QLineEdit(SzColor(kMainA[i]));
-    playout->addRow(QString(rgszMain[i]) + ":", rgpeMain[i]);
+  QGroupBox *pgbPalette = new QGroupBox("Standard Color Palette");
+  QFormLayout *pformPalette = new QFormLayout(pgbPalette);
+  for (i = 0; i < cColor; i++) {
+    j = ikPalette[i];
+    rgpcbPalette[i] = AddColorComboQt(pformPalette, rgszPalette[i],
+      j <= 0 ? kMainA[-j] : kRainbowA[j], fFalse);
   }
-  for (i = 0; i < cElem; i++) {
-    rgpeElem[i] = new QLineEdit(SzColor(kElemA[i]));
-    playout->addRow(QString(rgszElem[i]) + ":", rgpeElem[i]);
-  }
+  pvLeft->addWidget(pgbPalette);
+
+  QGroupBox *pgbExtra = new QGroupBox("Other");
+  QFormLayout *pformExtra = new QFormLayout(pgbExtra);
+  QComboBox *pcbPen = AddColorComboQt(pformExtra, "Scribble", gi.kiPen,
+    fFalse);
+  QComboBox *pcbDeca = AddColorComboQt(pformExtra, "Corners", gs.kiDeca,
+    fTrue);
+  pvLeft->addWidget(pgbExtra);
+  pvLeft->addStretch(1);
+
+  QGroupBox *pgbElem = new QGroupBox("Elements");
+  QFormLayout *pformElem = new QFormLayout(pgbElem);
+  for (i = 0; i < cElem; i++)
+    rgpcbElem[i] = AddColorComboQt(pformElem, rgszElem[i], kElemA[i],
+      fFalse);
+  pvRight->addWidget(pgbElem);
+
+  QGroupBox *pgbRay = new QGroupBox("Seven Rays");
+  QFormLayout *pformRay = new QFormLayout(pgbRay);
+  for (i = 1; i <= cRay; i++)
+    rgpcbRay[i] = AddColorComboQt(pformRay, rgszRay[i-1], kRayA[i], fFalse);
+  pvRight->addWidget(pgbRay);
+  pvRight->addStretch(1);
+
+  phInner->addLayout(pvLeft);
+  phInner->addLayout(pvRight);
+  pscroll->setWidget(pinner);
+  pscroll->setWidgetResizable(true);
+  pouter->addWidget(pscroll);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  playout->addRow(pbuttons);
+  pouter->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  for (i = 0; i < 9; i++) {
-    QByteArray ba = rgpeMain[i]->text().toLocal8Bit();
-    kMainA[i] = NParseSz(ba.constData(), pmColor);
+  // Validate everything before writing anything, so a single bad entry
+  // can't leave the palette half updated.
+  int rgkPalette[cColor], rgkElem[cElem], rgkRay[cRay+1], kPen, kDeca;
+  flag fOK = fTrue;
+  for (i = 0; i < cColor; i++) {
+    rgkPalette[i] = NColorFromComboQt(rgpcbPalette[i]);
+    fOK &= FValidColorA(rgkPalette[i]);
   }
   for (i = 0; i < cElem; i++) {
-    QByteArray ba = rgpeElem[i]->text().toLocal8Bit();
-    kElemA[i] = NParseSz(ba.constData(), pmColor);
+    rgkElem[i] = NColorFromComboQt(rgpcbElem[i]);
+    fOK &= FValidColorA(rgkElem[i]);
   }
+  for (i = 1; i <= cRay; i++) {
+    rgkRay[i] = NColorFromComboQt(rgpcbRay[i]);
+    fOK &= FValidColorA(rgkRay[i]);
+  }
+  kPen = NColorFromComboQt(pcbPen);
+  fOK &= FValidColorA(kPen);
+  kDeca = NColorFromComboQt(pcbDeca);
+  fOK &= (FValidColorA(kDeca) || kDeca == kMax);
+  if (!fOK) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more colors were not understood.");
+    return;
+  }
+
+  for (i = 0; i < cColor; i++) {
+    j = ikPalette[i];
+    if (j <= 0)
+      kMainA[-j] = rgkPalette[i];
+    else
+      kRainbowA[j] = rgkPalette[i];
+  }
+  for (i = 0; i < cElem; i++)
+    kElemA[i] = rgkElem[i];
+  for (i = 1; i <= cRay; i++)
+    kRayA[i] = rgkRay[i];
+  gi.kiPen = kPen;
+  gs.kiDeca = kDeca;
   InitColorsX();
   RedrawQt();
 }
