@@ -806,9 +806,27 @@ void RedrawQt()
     gs.xWin = 1;
   if (gs.yWin < 1)
     gs.yWin = 1;
+  // Keep the buffer the size of the widget, then draw into a square part
+  // of it if the chart wants that. Windows does the squaring in FActionX
+  // (xscreen.cpp:2275) when "Ensure Square Charts Remain Square" is on and
+  // the chart type is one that looks right square, which is why a
+  // maximized window there keeps a round wheel with space beside it rather
+  // than stretching it into an oval. The screen path here goes straight to
+  // DrawChartX() and never passes through FActionX, so it does the same
+  // thing itself.
+  int dxWin = gs.xWin, dyWin = gs.yWin;
   gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
   gi.qim->fill(Qt::black);
   gi.qpaint = new QPainter(gi.qim);
+  if (gs.fKeepSquare && fSquare) {
+    // The sidebar isn't part of the square, so take it off before
+    // squaring and put it back after, as Windows does.
+    int dxSide = fSidebar ? (SIDESIZE * gi.nScaleText) >> 1 : 0, n;
+    gs.xWin -= dxSide;
+    n = Min(gs.xWin, gs.yWin);
+    gs.xWin = gs.yWin = n;
+    gs.xWin += dxSide;
+  }
   // DrawChartX() derives gi.nScale from gs.nScale itself, but not the
   // text scale -- FActionX() is what normally calls AdjustTextScale(),
   // and the screen path here goes straight to DrawChartX(). Without this
@@ -824,6 +842,9 @@ void RedrawQt()
     QApplication::restoreOverrideCursor();
   delete gi.qpaint;
   gi.qpaint = NULL;
+  // Put back what the squaring above changed, so the size the user set is
+  // still the size Graphics Settings reports.
+  gs.xWin = dxWin; gs.yWin = dyWin;
   if (gi.qcanvas != NULL) {
     // With the chart keeping its own size, the canvas has to be resized to
     // match whenever the chart changes size, or the scroll area would keep
