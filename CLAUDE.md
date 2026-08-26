@@ -97,9 +97,13 @@ On a private Xvfb display, `import -window root` is fine.
 - **Never put a `Claude-Session:` line in a commit message here.** History
   was scrubbed of it once already at the user's request.
   `Co-Authored-By:` is fine. Create new commits, don't amend.
-- **Never push to `upstream`** (CruiserOne). Its push URL is deliberately
-  set to `DISABLED`. `origin` is the user's fork,
-  `git@github.com:nrvate/Astrolog.git`; push `qt` there after each commit.
+- **Never push to `upstream`** (CruiserOne). Its push URL should read
+  `DISABLED` — but that lives in `.git/config`, which does **not** survive
+  a clone, so on a fresh checkout the guard is simply absent. Check
+  `git remote -v` and set it yourself before doing anything else:
+  `git remote set-url --push upstream DISABLED`. `origin` is the user's
+  fork, `git@github.com:nrvate/Astrolog.git`; push `qt` there after each
+  commit.
 - **Never screenshot `import -window root` on the user's real desktop, or
   crop from it** — it leaks unrelated windows. Target a specific window ID
   found via `xdotool search --pid`, never by name substring. (A private

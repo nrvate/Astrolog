@@ -231,9 +231,9 @@ Help [P]
   `wdriver.cpp` and seeing it call `WiDoDialog(Dlg*, ...)`.
 - Sibling `.rc` menu resources starting around line 607 are a **separate
   set of right-click context menus**, not part of the main menu bar, and
-  this doc does not map them. As of 2026-08-25 they are the last real
-  parity gap — the Qt build has no context menus at all. What's known:
-  there are two parallel families. The graphics ones are chosen by
+  this doc does not map them. **All 42 are ported** (plan item 1) and the
+  test suite resolves every entry; this note is kept for the structure it
+  records. There are two parallel families. The graphics ones are chosen by
   `gi.nMode` (`menuV`/`menuV2` for wheels, then `menuG`, `menuM`,
   `menuZ`, `menuS`, `menuH`, `menuK`, `menuJ`, `menu7`, `menuL`,
   `menuE`, `menuZd`, `menuN`, `menu8`, `menuB`, `menuY`, `menuXX`,
@@ -241,8 +241,8 @@ Help [P]
   flags (`menu_V`, `menu_W`, `menu_G`, `menu_A`, `menu_M`, `menu_Z`, …).
   Windows dispatches both from `WM_RBUTTONDOWN` in wdriver.cpp (~line
   938) through `DoPopup()`. Their entries are ordinary `cmd*` commands
-  that the main menu bar already implements, so porting them is mostly
-  wiring rather than new behaviour. Mapping them out here, the way the
-  main menu is mapped above, is the natural first step.
+  that the main menu bar already implements, so porting them was mostly
+  wiring rather than new behaviour — each Qt entry proxies to the menu bar
+  action rather than reimplementing the command.
 - Windows-only items (Setup submenu, Print Setup's native dialog) don't
   apply to the Qt/Linux build and should be skipped rather than stubbed.

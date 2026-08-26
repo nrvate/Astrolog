@@ -355,8 +355,8 @@ those files, which is its own trap (see "Working pattern" at the end).
 Legend matches `QT_MENU_MAPPING.md`: `[D]` dialog, `[T]` toggle, `[S]`
 select-one, `[A]` one-shot action, `[P]` submenu.
 
-### File — partially done
-Done: Open Chart..., Save Chart..., Save Chart Positions..., Save Program
+### File — COMPLETE except the wallpaper modes
+Done: Open Chart..., Save Chart Info..., Save Chart Positions..., Save Program
 Settings..., Other Formats submenu (Save Chart Exchange/AAF, Save Chart
 Quick*Chart, Save Chart iCalendar — done 2026-08-24, see
 `ShowSaveAAFDialogQt()` etc. in qtdialog.cpp), Export Chart Text
@@ -365,28 +365,24 @@ PostScript/SVG/Wireframe), Open Bitmap submenu (Open Chart Background,
 Open World Map — also done 2026-08-24), File Settings... (done
 2026-08-24, `ShowFileSettingsDialogQt()` — the portable subset of
 `DlgFile`; skipped `wi.fBmpWindow`/`wi.nAntialias`/`wi.fNoPopup` as
-Win32-only, and "Use Real System Fonts" since it needs the same Windows
-GDI font enumeration the Graphics Settings font pickers would), Quit.
+Win32-only — "Use Real System Fonts" was skipped alongside them and is
+now in, see item 15), Exit.
+Open Chart #2 and Other Formats' Open Charts in Folder.../Save Chart
+List... are done too — see Info below, since they belong to the chart
+list. Print... is done; see item 11.
 
-Missing (see "Prioritized remaining work" for how each maps to existing
-portable functions):
-- (Open Chart #2 is done — see Info below.)
-- Other Formats `[P]`'s remaining two items: Open Charts in Folder... and
-  Save Chart List... — both part of Chart List (see Info below), since
-  they read/write `is.rgci`, which nothing populates yet; don't build
-  standalone.
+Not done, and both deliberate:
 - Export as Wallpaper `[P]` (5 variants) — sets desktop wallpaper, a
   concept that doesn't map cleanly to modern Linux desktop environments
-  (no single portable "set wallpaper" API the way Win32 has one). Lowest
-  priority in File; consider just exporting the bitmap instead of trying
-  to set wallpaper, or skip entirely.
-- Print... `[D]` — no portable equivalent exists yet; could be built on
-  `QPrinter`/`QPainter` rendering `gi.qim`, but nothing in the shared code
-  does this today. Print Setup is a native Windows dialog — skip entirely,
-  not applicable.
+  (no single portable "set wallpaper" API the way Win32 has one). Skipped;
+  five of the twelve items the parity test skips on purpose. If it's ever
+  wanted, export the bitmap and leave setting the wallpaper to the desktop.
+- Print Setup... `[D]` — a native Windows print dialog. Not applicable;
+  `QPrintDialog` already carries the setup UI Windows splits out.
 
-### Edit — done except Paste and macros
-Done: Enter Command Line... (the escape hatch — see above), Copy Chart
+### Edit — COMPLETE
+Done: Enter Command Line... (the escape hatch — see above), Paste (item
+9), all 96 macro slots (item 10), Copy Chart
 Text Output, Copy Chart Bitmap, Copy Vector Format submenu (Metafile/
 PostScript/SVG/Wireframe) — done 2026-08-24, see `CopyChartTextQt()`/
 `CopyChartBitmapQt()`/`CopyChartVectorQt()`. Copy Bitmap is trivial
@@ -417,26 +413,17 @@ didn't converge — `pgrep astrolog-qt-debug` (no `-f`) gave false
 characters; use `pgrep -f` (matches full cmdline) when a binary's name is
 long, or `pgrep` will lie to you.
 
-Missing:
-- Paste — needs clipboard read + figuring out what format(s) to accept;
-  lower priority, no immediate need identified.
-- 96 macro slots — lowest priority, deferred repeatedly across sessions.
-  Only worth doing if specifically requested.
-- 96 macro slots (8 submenus × 12 "Macro N" items, `cmdMacro01`..`96`) —
-  explicitly low priority, deferred repeatedly across sessions. Only worth
-  doing if specifically requested.
-
-### View — done except one explicitly-skipped submenu
+### View — COMPLETE except Buffer Redraws
 Done: Show Graphics, Colored Text, Redraw Screen, Set Colors..., Show
-Interpretations, Print Nearest Second, Parallel Aspects, Applying Aspects.
+Interpretations, Print Nearest Second, Parallel Aspects, Applying
+Aspects, and the Window Settings `[P]` submenu (item 18 — this section
+used to say the whole submenu was skipped as Win32-only, which is no
+longer true).
 
-Intentionally skipped: Window Settings `[P]` (Buffer Redraws, Clear
-Screen, Hourglass on Redraw, Chart/Window resize-each-other toggles, Size
-to Window/Full Screen, Scroll actions) — all about Win32's resizable/
-bufferable window model; the Qt canvas already always auto-fits its
-container, so most of these have no equivalent concept. If revisited,
-"Clear Screen" and "Size Window Full Screen" (`gi.qwind->showFullScreen()`)
-are the only two that might still mean something in Qt.
+**Buffer Redraws** is the one item still absent, deliberately: it toggles
+whether Win32 draws through an off-screen bitmap, and Qt composites every
+widget off-screen regardless, so there is nothing for it to switch. An
+item that silently does nothing would be worse than not offering it.
 
 ### Info — COMPLETE
 Done: Set Chart Info..., Chart for Now, Default Chart Info..., all 8
@@ -505,14 +492,14 @@ Notes on the Graphics Settings port:
   the menus step values coarsely, the dialog is for typing an exact
   value. No attempt is made to resync those menus' checkmarks afterward
   if a typed value doesn't match a preset (see gotcha #9).
-- Skipped as Win32-only (`WI` struct): animation update delay
-  (`wi.nTimerDelay`) and "Don't Automatically Redraw Screen"
-  (`wi.fNoUpdate`).
-- Skipped as unportable: the six font selection combos
-  (`gs.nFontTxt`/`Sig`/`Hou`/`Obj`/`Asp`/`Nak`), which pick from a
-  hardcoded list of Windows GDI font names. Doing this properly means
-  building a real Qt font picker, not translating a list — still open if
-  anyone wants graphic-chart fonts on Linux.
+- Skipped as Win32-only (`WI` struct): "Don't Automatically Redraw
+  Screen" (`wi.fNoUpdate`). The animation update delay was skipped for
+  the same reason and is now **in** — item 12 gave the Qt build a real
+  animation loop, so `s_nTimerDelay` stands in for `wi.nTimerDelay`.
+- The six font selection combos (`gs.nFontTxt`/`Sig`/`Hou`/`Obj`/`Asp`/
+  `Nak`) were once skipped as unportable Windows GDI face names. That was
+  only half true — the fonts ship *with Astrolog*, in `font/`. Item 15
+  bundles them and gives `DrawGlyph()`/`DrawSzFont()` their Qt branches.
 - **Deliberate deviation from Windows**: `DlgGraphics`' "Atlas City
   Coloring" combo writes `gs.fLabelAsp`, but that field is `-XA` (draw
   aspect glyphs on lines — the Chart Effects toggle) and is unrelated to
@@ -582,14 +569,12 @@ are the more useful half to read before starting something new.
    Edit section above.
 5. ~~File Settings dialog~~ — **done 2026-08-24**, see File section above.
 6. ~~Graphics Settings dialog~~ — **done 2026-08-24**, see Graphics
-   section above (font pickers deliberately left out).
+   section above. The font pickers were left out here and added by item 15.
 7. ~~Info's multi-chart feature~~ — **done 2026-08-25** (chart slots and
-   chart list both); see Info section above. Two paths in it remain
-   unverified — see that section. With this the **menu structure is
+   chart list both); see Info section above, including the two paths that
+   were verified live afterwards. With this the **menu structure is
    complete**: every top-level menu and dialog Windows has is present
-   except File > Print (item 11) and the deliberate Win32-only omissions.
-   **Item 8, the UI parity sweep, is complete (2026-08-25), and so is item
-   12. Remaining: Paste (9), macros (10), Print (11).**
+   apart from the deliberate Win32-only omissions.
 8. ~~**UI parity sweep, one dialog at a time.**~~ — **all sub-items done
    2026-08-25.** Every dialog below was
    functionally correct but presentationally diverged from Windows.
@@ -1224,14 +1209,7 @@ is unintentional — treat it as a bug.
 | Graphics Settings | Atlas City Coloring writes `gs.fLabelCity` | `DlgGraphics` writes `gs.fLabelAsp`, but that field is `-XA` (aspect glyphs on lines) and has nothing to do with city coloring. Treated as an upstream typo; using it would silently toggle aspect glyphs. |
 | Command line dialog | Doesn't save/restore `us.fLoop`/`is.fMult` around the call | `CommandLineX()` does. Only matters for a typed line that itself starts a multi-chart sequence. |
 | Restriction dialogs | (Since 8.9) checkbox = restricted, matching Windows | Previously "Show X" = visible, i.e. inverted. Flipped *toward* Windows, but it's a visible change to anyone used to the old Qt wording. |
-
 | Menu accelerator column | Reads `Shift+V`, `Alt+L` where Windows reads `V`, `Alt+l` | Astrolog's resource writes an uppercase letter alone to mean Shift. Qt derives the column from `QKeySequence` and spells the modifier out. Same keys, different notation; changing it means overriding how Qt renders shortcuts. |
-
-**Present but intentionally not editable**
-
-Calculation Method, and Chart Settings' aspect sort and decan type, are
-plain pick lists where Windows' are editable combos. Same choices, no
-free-text entry. See 8.14.
 
 **Not ported**
 
@@ -1239,19 +1217,22 @@ free-text entry. See 8.14.
 |---|---|
 | `wi.*` fields in File/Graphics Settings — bitmap-from-window, antialias level, no-popup, no-auto-redraw | Win32-only `WI` struct. |
 | Wingdings, and the plain text families (Arial, Courier New, Consolas, Lucida Console, Cascadia Mono) | Offered in the font pickers, but not bundled — Wingdings is proprietary and the rest are system fonts. Qt substitutes when absent, as Windows does. |
-| Graphics Settings' "Update Delay in Milliseconds" | Nominally the same reason, but really blocked on item 12 — there's no animation loop for it to set the delay of. |
 | Open Charts in Folder skips Astrolog's own data files | Matches Windows, which does the same, since a folder of charts often sits alongside them. |
 | JPL Horizons lookup blocks the UI | Synchronous network fetch inside the modal dialog. Windows does the same. Obvious async candidate. |
 
 ## Explicitly out of scope (don't implement)
 
-- View > Window Settings submenu (Win32 resizable/bufferable window
-  model, mostly meaningless for a Qt canvas that always auto-fits)
+- View > Buffer Redraws (Qt composites off-screen regardless, so the
+  toggle would switch nothing — the rest of Window Settings *is* ported,
+  see item 18)
+- File > Export as Wallpaper, all 5 modes (no portable Linux equivalent)
 - Help > Setup submenu (Windows installer actions)
 - File > Print Setup (native Windows print dialog)
+This list is exactly the 12 items the parity test skips on purpose, so it
+and `rgparityQt[]` in qttest.cpp have to agree — change one, change both.
+
 (Right-click context menus used to be listed here. They aren't out of
-scope — they're the main thing left, and they've been promoted to "What
-to do next" item 1 with what's now known about them.)
+scope and aren't outstanding either: all 42 are ported, see item 1.)
 
 ## Working pattern / verification methodology
 
