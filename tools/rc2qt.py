@@ -56,10 +56,31 @@ def geometry(rest):
     return None
 
 
-def controls(body):
-    """Yield (kind, text, symbol, x, y, w, h) for each control in a block."""
+def joined(body):
+    """The block's lines, with continuations folded in.
+
+    A control statement can run across two lines, with the geometry on the
+    second: CONTROL "...",dxMo_Ym,\n "Button",BS_AUTOCHECKBOX,5,175,160,10.
+    Reading line by line silently drops every one of those.
+    """
+    out, pend = [], ""
     for line in body.split("\n"):
         line = line.strip()
+        if pend:
+            line = pend + " " + line
+            pend = ""
+        if LINE.match(line) and geometry(line) is None:
+            pend = line
+            continue
+        out.append(line)
+    if pend:
+        out.append(pend)
+    return out
+
+
+def controls(body):
+    """Yield (kind, text, symbol, x, y, w, h) for each control in a block."""
+    for line in joined(body):
         m = LINE.match(line)
         if not m:
             continue

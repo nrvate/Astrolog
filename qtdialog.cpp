@@ -3283,95 +3283,80 @@ void ShowAboutDialogQt()
 // orb, exact angle, influence, color, and restriction, for all cAspect
 // aspects.
 
+// Aspect Settings, transcribed from dlgAspect. The checkbox is the
+// aspect's name and means *restricted*, as on Windows: checked hides it.
+
 void ShowAspectDialogQt()
 {
-  // Laid out to match Windows' dlgAspect (astrolog.rc): two columns of 12
-  // aspects side by side, sized to fit, with no scrolling. Astrolog's
-  // Windows dialogs are all dense like this -- a single tall scrolling
-  // column is the wrong shape for them however well it scales.
-  //
-  // The checkbox is the aspect's name and means *restricted*, as it does on
-  // Windows: checked hides the aspect. It used to be a separate "Show"
-  // column with the opposite sense, which both took an extra grid column
-  // and inverted the meaning of every box relative to the Windows build.
-  CONST int cCol = 2, cRow = cAspect / 2;
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Aspect Settings");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
+  QVector<RCBUILT> rgbuilt;
   QVector<QCheckBox *> rgpcbRes;
   QVector<QLineEdit *> rgpeOrb, rgpeAngle, rgpeInf;
   QVector<QComboBox *> rgpcbColor;
-  int i, j, iCol, iRow, nBase;
+  int i;
 
-  rgpcbRes.resize(cAspect); rgpeOrb.resize(cAspect);
-  rgpeAngle.resize(cAspect); rgpeInf.resize(cAspect);
-  rgpcbColor.resize(cAspect);
-  pgrid->setHorizontalSpacing(4);
-  pgrid->setVerticalSpacing(2);
-  for (iCol = 0; iCol < cCol; iCol++) {
-    nBase = iCol * 6;
-    pgrid->addWidget(new QLabel("Orb"), 0, nBase+1);
-    pgrid->addWidget(new QLabel("Angle"), 0, nBase+2);
-    pgrid->addWidget(new QLabel("Influence"), 0, nBase+3);
-    pgrid->addWidget(new QLabel("Color"), 0, nBase+4);
-    // A little air between the two blocks, as the Windows dialog has.
-    if (iCol < cCol-1)
-      pgrid->setColumnMinimumWidth(nBase+5, 10);
-    for (iRow = 0; iRow < cRow; iRow++) {
-      i = iCol*cRow + iRow + 1;
-      QCheckBox *pcb = new QCheckBox(SzAspDlgQt(i));
-      pcb->setChecked(ignorea[i] != 0);
-      pgrid->addWidget(pcb, iRow+1, nBase+0);
-      rgpcbRes[i-1] = pcb;
-      QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rAspOrb[i], -6));
-      pgrid->addWidget(peOrb, iRow+1, nBase+1);
-      rgpeOrb[i-1] = peOrb;
-      QLineEdit *peAngle = new QLineEdit(SzFormatRQt(rAspAngle[i], -6));
-      pgrid->addWidget(peAngle, iRow+1, nBase+2);
-      rgpeAngle[i-1] = peAngle;
-      QLineEdit *peInf = new QLineEdit(SzFormatRQt(rAspInf[i], 2));
-      pgrid->addWidget(peInf, iRow+1, nBase+3);
-      rgpeInf[i-1] = peInf;
-      QComboBox *pcbColor = NewColorComboQt(kAspA[i], 0);
-      pgrid->addWidget(pcbColor, iRow+1, nBase+4);
-      rgpcbColor[i-1] = pcbColor;
-    }
+  dlg.setWindowTitle("Aspect Settings");
+  RcBuildDialogQt(&dlg, rgctlAspect, cctlAspect, dxAspect, dyAspect,
+    &rgbuilt);
+  rgpcbRes.resize(cAspect+1); rgpeOrb.resize(cAspect+1);
+  rgpeAngle.resize(cAspect+1); rgpeInf.resize(cAspect+1);
+  rgpcbColor.resize(cAspect+1);
+  for (i = 1; i <= cAspect; i++) {
+    rgpcbRes[i] = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxa", i);
+    rgpeOrb[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deo", i);
+    rgpeAngle[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dea", i);
+    rgpeInf[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dei", i);
+    rgpcbColor[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", i);
+    if (rgpcbRes[i] != NULL)
+      rgpcbRes[i]->setChecked(ignorea[i] != 0);
+    if (rgpeOrb[i] != NULL)
+      rgpeOrb[i]->setText(SzFormatRQt(rAspOrb[i], -6));
+    if (rgpeAngle[i] != NULL)
+      rgpeAngle[i]->setText(SzFormatRQt(rAspAngle[i], -6));
+    if (rgpeInf[i] != NULL)
+      rgpeInf[i]->setText(SzFormatRQt(rAspInf[i], 2));
+    FillColorComboQt(rgpcbColor[i], kAspA[i], 0);
   }
-  pouter->addLayout(pgrid);
 
-  // Windows puts Restrict All / Unrestrict All / Toggle Majors along the
-  // bottom left, opposite Cancel and OK.
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  QPushButton *pbRes = new QPushButton("&Restrict All");
-  QPushButton *pbUnres = new QPushButton("&Unrestrict All");
-  QPushButton *pbMajor = new QPushButton("Toggle &Majors");
-  pbuttons->addButton(pbRes, QDialogButtonBox::ResetRole);
-  pbuttons->addButton(pbUnres, QDialogButtonBox::ResetRole);
-  pbuttons->addButton(pbMajor, QDialogButtonBox::ResetRole);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbRes, &QPushButton::clicked, &dlg, [&rgpcbRes]() {
-    for (int k = 0; k < cAspect; k++) rgpcbRes[k]->setChecked(true); });
-  QObject::connect(pbUnres, &QPushButton::clicked, &dlg, [&rgpcbRes]() {
-    for (int k = 0; k < cAspect; k++) rgpcbRes[k]->setChecked(false); });
-  // Windows toggles just the five majors here (wdialog.cpp:1380).
-  QObject::connect(pbMajor, &QPushButton::clicked, &dlg, [&rgpcbRes]() {
-    for (int k = 0; k < 5; k++)
-      rgpcbRes[k]->setChecked(!rgpcbRes[k]->isChecked()); });
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  // Restrict All, Unrestrict All, and Toggle Majors, which covers the
+  // first five (wdialog.cpp:1380).
+  struct { int nIdx, nAction, hi; } rgact[] =
+    {{0, resSet, cAspect}, {1, resClear, cAspect}, {-1, resToggle, 5}};
+  for (i = 0; i < 3; i++) {
+    QPushButton *ppb = (QPushButton *)(rgact[i].nIdx >= 0 ?
+      PwRcFindIdxQt(rgbuilt, "dbAs_RA", rgact[i].nIdx) :
+      PwRcFindQt(rgbuilt, "dbAs_RA"));
+    if (ppb == NULL)
+      continue;
+    int nAction = rgact[i].nAction, hi = rgact[i].hi;
+    QObject::connect(ppb, &QPushButton::clicked, &dlg,
+      [&rgpcbRes, nAction, hi]() {
+        for (int j = 1; j <= hi; j++) {
+          if (rgpcbRes[j] == NULL)
+            continue;
+          switch (nAction) {
+          case resSet:    rgpcbRes[j]->setChecked(fTrue);  break;
+          case resClear:  rgpcbRes[j]->setChecked(fFalse); break;
+          case resToggle: rgpcbRes[j]->setChecked(!rgpcbRes[j]->isChecked());
+            break;
+          }
+        }
+      });
+  }
 
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   for (i = 1; i <= cAspect; i++) {
-    ignorea[i] = rgpcbRes[i-1]->isChecked();
-    rAspOrb[i] = rgpeOrb[i-1]->text().toDouble();
-    rAspAngle[i] = rgpeAngle[i-1]->text().toDouble();
-    rAspInf[i] = rgpeInf[i-1]->text().toDouble();
-    kAspA[i] = NColorFromComboQt(rgpcbColor[i-1]);
+    if (rgpcbRes[i] == NULL)
+      continue;
+    ignorea[i] = rgpcbRes[i]->isChecked();
+    rAspOrb[i] = rgpeOrb[i]->text().toDouble();
+    rAspAngle[i] = rgpeAngle[i]->text().toDouble();
+    rAspInf[i] = rgpeInf[i]->text().toDouble();
+    kAspA[i] = NColorFromComboQt(rgpcbColor[i]);
   }
   AdjustAspectCount();
   RecastAndRedrawQt();
@@ -3433,63 +3418,48 @@ void ShowObjectDialogQt()
 
 void ShowObject2DialogQt()
 {
-  // Three columns, as Windows' dlgObject2 has (astrolog.rc column X 5,
-  // 175 and 335).
-  CONST int cCol = 3, cField = 4;
-  CONST int cRowTotal = dwarfHi + 1 - oAsc + 1;
-  CONST int cRowPerCol = (cRowTotal + cCol - 1) / cCol;
-  CONST char *rgszHead[] = {"Max Orb", "Add", "Influence", "Color"};
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("More Object Settings");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
+  QVector<RCBUILT> rgbuilt;
   QVector<int> rgi;
   QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
   QVector<QComboBox *> rgpcbColor;
-  int i0, i, iRow = 0, nRow, nCol;
+  int i0, i, j = 0;
 
-  pgrid->setHorizontalSpacing(4);
-  pgrid->setVerticalSpacing(2);
-  HeadersQt(pgrid, cCol, cField, rgszHead);
+  dlg.setWindowTitle("More Object Settings");
+  RcBuildDialogQt(&dlg, rgctlObject2, cctlObject2, dxObject2, dyObject2,
+    &rgbuilt);
   for (i0 = oAsc; i0 <= dwarfHi+1; i0++) {
     i = (i0 <= dwarfHi ? i0 : starLo);
     rgi.append(i);
-    PlaceRowQt(iRow, cRowPerCol, cField, &nRow, &nCol);
-    pgrid->addWidget(new QLabel(i0 <= dwarfHi ? SzObjDlgPlainQt(i) :
-      QString("Stars")), nRow, nCol);
-    QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
-    pgrid->addWidget(peOrb, nRow, nCol+1);
-    rgpeOrb.append(peOrb);
-    QLineEdit *peAdd = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
-    pgrid->addWidget(peAdd, nRow, nCol+2);
-    rgpeAdd.append(peAdd);
-    QLineEdit *peInf = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
-    pgrid->addWidget(peInf, nRow, nCol+3);
-    rgpeInf.append(peInf);
+    QLineEdit *peOrb = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deo", j+1);
+    QLineEdit *peAdd = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dea", j+1);
+    QLineEdit *peInf = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dei", j+1);
+    QComboBox *pcbColor = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", j);
+    if (peOrb != NULL)
+      peOrb->setText(SzFormatRQt(rObjOrb[i], -2));
+    if (peAdd != NULL)
+      peAdd->setText(SzFormatRQt(rObjAdd[i], -1));
+    if (peInf != NULL)
+      peInf->setText(SzFormatRQt(rObjInf[i], -2));
     // Windows widens the color list by one on the collective stars row.
-    QComboBox *pcbColor = NewColorComboQt(kObjU[i], 1 + (i == starLo));
-    pgrid->addWidget(pcbColor, nRow, nCol+4);
-    rgpcbColor.append(pcbColor);
-    iRow++;
+    FillColorComboQt(pcbColor, kObjU[i], 1 + (i == starLo));
+    rgpeOrb.append(peOrb); rgpeAdd.append(peAdd);
+    rgpeInf.append(peInf); rgpcbColor.append(pcbColor);
+    j++;
   }
-  pouter->addLayout(pgrid);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  for (iRow = 0; iRow < rgi.size(); iRow++) {
-    i = rgi[iRow];
-    rObjOrb[i] = rgpeOrb[iRow]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[iRow]->text().toDouble();
-    rObjInf[i] = rgpeInf[iRow]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[iRow]);
+  for (j = 0; j < rgi.size(); j++) {
+    if (rgpeOrb[j] == NULL)
+      continue;
+    i = rgi[j];
+    rObjOrb[i] = rgpeOrb[j]->text().toDouble();
+    rObjAdd[i] = rgpeAdd[j]->text().toDouble();
+    rObjInf[i] = rgpeInf[j]->text().toDouble();
+    kObjU[i] = NColorFromComboQt(rgpcbColor[j]);
   }
   RecastAndRedrawQt();
 }
@@ -3992,74 +3962,61 @@ void ShowMoonRestrictDialogQt()
 void ShowMoonObjectDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Moon Object Settings");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
+  QVector<RCBUILT> rgbuilt;
   QVector<QLineEdit *> rgpeOrb, rgpeAdd, rgpeInf;
   QVector<QComboBox *> rgpcbColor;
-  // Three columns, as Windows' dlgObjectM has (astrolog.rc X 5, 171, 330).
-  CONST int cCol = 3, cField = 4;
-  CONST int cRowPerCol = (cobHi - moonsLo + 1 + cCol - 1) / cCol;
-  CONST char *rgszHead[] = {"Max Orb", "Add", "Influence", "Color"};
-  int i, iRow = 0, nRow, nCol;
+  int i, j;
 
-  pgrid->setHorizontalSpacing(4);
-  pgrid->setVerticalSpacing(2);
-  HeadersQt(pgrid, cCol, cField, rgszHead);
+  dlg.setWindowTitle("Moon Object Settings");
+  RcBuildDialogQt(&dlg, rgctlObjectM, cctlObjectM, dxObjectM, dyObjectM,
+    &rgbuilt);
   for (i = moonsLo; i <= cobHi; i++) {
-    PlaceRowQt(iRow, cRowPerCol, cField, &nRow, &nCol);
-    pgrid->addWidget(new QLabel(szObjName[i]), nRow, nCol+0);
-    QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
-    pgrid->addWidget(peOrb, nRow, nCol+1);
-    rgpeOrb.append(peOrb);
-    QLineEdit *peAdd = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
-    pgrid->addWidget(peAdd, nRow, nCol+2);
-    rgpeAdd.append(peAdd);
-    QLineEdit *peInf = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
-    pgrid->addWidget(peInf, nRow, nCol+3);
-    rgpeInf.append(peInf);
-    QComboBox *pcbColor = NewColorComboQt(kObjU[i], 3);
-    pgrid->addWidget(pcbColor, nRow, nCol+4);
-    rgpcbColor.append(pcbColor);
-    iRow++;
+    j = i - moonsLo;
+    QLineEdit *peOrb = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deo", j+1);
+    QLineEdit *peAdd = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dea", j+1);
+    QLineEdit *peInf = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dei", j+1);
+    QComboBox *pcbColor = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", j);
+    if (peOrb != NULL)
+      peOrb->setText(SzFormatRQt(rObjOrb[i], -2));
+    if (peAdd != NULL)
+      peAdd->setText(SzFormatRQt(rObjAdd[i], -1));
+    if (peInf != NULL)
+      peInf->setText(SzFormatRQt(rObjInf[i], -2));
+    FillColorComboQt(pcbColor, kObjU[i], 3);
+    rgpeOrb.append(peOrb); rgpeAdd.append(peAdd);
+    rgpeInf.append(peInf); rgpcbColor.append(pcbColor);
   }
-  pouter->addLayout(pgrid);
+  // The three settings dlgObjectM carries below its grid.
+  QCheckBox *pcbMove = (QCheckBox *)PwRcFindQt(rgbuilt, "dxMo_Ym");
+  QCheckBox *pcbSep = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxMo_", 80);
+  QCheckBox *pcbWheel = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxMo_X", 8);
+  if (pcbMove != NULL)
+    pcbMove->setChecked(us.fMoonMove != 0);
+  if (pcbSep != NULL)
+    pcbSep->setChecked(us.fMoonChartSep != 0);
+  if (pcbWheel != NULL)
+    pcbWheel->setChecked(gs.fMoonWheel != 0);
 
-  QCheckBox *pcbMoonMove = new QCheckBox(
-    "Make Moons Orbit Current Central Object");
-  QCheckBox *pcbMoonChartSep = new QCheckBox(
-    "True Planetcentric Positions in Moons Charts");
-  QCheckBox *pcbMoonWheel = new QCheckBox(
-    "Wheel Charts Show Moons Orbiting Planet");
-  pcbMoonMove->setChecked(us.fMoonMove != 0);
-  pcbMoonChartSep->setChecked(us.fMoonChartSep != 0);
-  pcbMoonWheel->setChecked(gs.fMoonWheel != 0);
-  pouter->addWidget(pcbMoonMove);
-  pouter->addWidget(pcbMoonChartSep);
-  pouter->addWidget(pcbMoonWheel);
-
-  pouter->addLayout(pgrid);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
+  if (pcbMove != NULL)
+    us.fMoonMove = pcbMove->isChecked();
+  if (pcbSep != NULL)
+    us.fMoonChartSep = pcbSep->isChecked();
+  if (pcbWheel != NULL)
+    gs.fMoonWheel = pcbWheel->isChecked();
   for (i = moonsLo; i <= cobHi; i++) {
-    iRow = i - moonsLo;
-    rObjOrb[i] = rgpeOrb[iRow]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[iRow]->text().toDouble();
-    rObjInf[i] = rgpeInf[iRow]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[iRow]);
+    j = i - moonsLo;
+    if (rgpeOrb[j] == NULL)
+      continue;
+    rObjOrb[i] = rgpeOrb[j]->text().toDouble();
+    rObjAdd[i] = rgpeAdd[j]->text().toDouble();
+    rObjInf[i] = rgpeInf[j]->text().toDouble();
+    kObjU[i] = NColorFromComboQt(rgpcbColor[j]);
   }
-  us.fMoonMove = pcbMoonMove->isChecked();
-  us.fMoonChartSep = pcbMoonChartSep->isChecked();
-  gs.fMoonWheel = pcbMoonWheel->isChecked();
   RecastAndRedrawQt();
 }
 
