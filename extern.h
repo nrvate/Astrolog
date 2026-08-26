@@ -1164,6 +1164,7 @@ extern int NProcessSwitchesQt P((int, char **, int, flag, flag, flag));
 /* Text charts draw into the chart window, as they do on Windows.        */
 extern void TextCharQt P((int, int, int));
 extern void TextColorQt P((KI));
+extern void PrintWarningQt P((CONST char *, flag));
 #endif
 
 #ifdef QT

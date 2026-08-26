@@ -35,6 +35,7 @@ void RecastAndRedrawQt();
 // without recasting first. Call this after a change that only affects how
 // the chart is drawn, such as colors.
 void RedrawQt();
+void PrintWarningQt(CONST char *sz, flag fError);
 void RedrawForceQt();
 flag FNoUpdateQt();
 flag FNoPopupQt();

@@ -1437,6 +1437,10 @@ void PrintNotice(CONST char *sz)
 
 void PrintWarning(CONST char *sz)
 {
+#ifdef QT
+  PrintWarningQt(sz, fFalse);
+  return;
+#endif
 #ifndef WIN
   AnsiColor(kRedA);
   fprintf(stderr, "%s\n", sz);
@@ -1463,6 +1467,12 @@ void PrintWarning(CONST char *sz)
 
 void PrintError(CONST char *sz)
 {
+#ifdef QT
+  // Note this returns rather than calling Terminate(), which is what the
+  // plain non-Windows path does: a missing file shouldn't end the session.
+  PrintWarningQt(sz, fTrue);
+  return;
+#endif
 #ifndef WIN
   AnsiColor(kRedA);
   fprintf(stderr, "%s: %s\n", szAppName, sz);

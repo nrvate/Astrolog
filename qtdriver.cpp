@@ -487,6 +487,26 @@ void ScrollChartQt(int nDir)
 }
 
 
+// Warnings and errors reach the user in a message box, as they do on
+// Windows, rather than going to stderr. That matters more than it looks:
+// PrintError()'s non-Windows path ends in Terminate(), so a chart that
+// referenced a missing file -- a macro pointing at a path that doesn't
+// exist here, say -- took the whole program down rather than complaining
+// about it. Windows shows a box and carries on, and so does this.
+void PrintWarningQt(CONST char *sz, flag fError)
+{
+  if (FNoPopupQt())
+    return;
+  // Stop an animation first, or the same box comes back every frame.
+  // Negating gs.nAnim is what Windows does, and is what the animation
+  // timer's own guard checks, so the timer stops on its next tick.
+  if (gs.nAnim > 0)
+    neg(gs.nAnim);
+  QMessageBox::warning(gi.qwind, QString("%1 %2").arg(szAppName)
+    .arg(fError ? "Error" : "Warning"), QString::fromLatin1(sz));
+}
+
+
 /*
 ******************************************************************************
 ** Text charts drawn into the chart window.
@@ -882,6 +902,13 @@ void RedrawQt()
   gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
   gi.qim->fill(Qt::black);
   gi.qpaint = new QPainter(gi.qim);
+  // With no mode set, work one out from the chart flags the way FActionX
+  // does (xscreen.cpp:2208). DetectGraphicsChartMode() falls through to
+  // gWheel, which is how switching back to graphics from a text only chart
+  // type lands on the main chart instead of on nothing.
+  if (us.fGraphics && gi.nMode == 0)
+    gi.nMode = DetectGraphicsChartMode();
+
   // Text mode draws characters into this same buffer rather than the
   // chart, which is what Windows does and is why the window shows the
   // text chart instead of going black while a second window holds it.
@@ -1371,8 +1398,22 @@ static void BuildFileMenu(QMainWindow *pwind)
 static void BuildViewMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&View");
-  s_paGraphics = AddToggleAction(pmenu, "Show &Graphics", &us.fGraphics,
-    fFalse);
+  // Not AddToggleAction: turning graphics back on has to re-derive the
+  // chart mode. Several chart types are text only -- the aspect list, the
+  // transit lists, the help listings -- and DrawChartX() has nothing to
+  // draw for them, so toggling straight back left the window blank.
+  // Zeroing gi.nMode makes RedrawQt() work one out from the chart flags,
+  // which is what Windows does by way of ProcessState() and FActionX().
+  s_paGraphics = pmenu->addAction("Show &Graphics");
+  s_paGraphics->setCheckable(fTrue);
+  s_paGraphics->setChecked(us.fGraphics != 0);
+  QObject::connect(s_paGraphics, &QAction::triggered, pwind, []() {
+    us.fGraphics = !us.fGraphics;
+    s_paGraphics->setChecked(us.fGraphics != 0);
+    if (us.fGraphics)
+      gi.nMode = 0;
+    RedrawQt();
+  });
 
   // Window Settings. Windows' "Buffer Redraws" is deliberately absent:
   // it toggles whether Win32 draws through an off screen bitmap, and Qt
