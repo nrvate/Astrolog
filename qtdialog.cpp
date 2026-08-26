@@ -622,6 +622,35 @@ static CONST RCCTL *PctlBuiltQt(CONST QVector<RCBUILT> *prg, int i)
 }
 
 
+
+#ifdef QTTEST
+// Every text control in every transcribed dialog, with the width the
+// resource gives it, for the font fitting diagnostic in qttest.cpp.
+void RcAllTablesTestQt(QVector<QPair<QString,int> > *prg)
+{
+  struct { CONST RCCTL *rgctl; int cctl; } rgtab[] = {
+    {rgctlRestrict, cctlRestrict}, {rgctlStar, cctlStar},
+    {rgctlMoons, cctlMoons}, {rgctlObject, cctlObject},
+    {rgctlObject2, cctlObject2}, {rgctlObjectM, cctlObjectM},
+    {rgctlAspect, cctlAspect}, {rgctlColor, cctlColor},
+    {rgctlCustom, cctlCustom}, {rgctlCustomS, cctlCustomS},
+    {rgctlCalc, cctlCalc}, {rgctlDisplay, cctlDisplay},
+    {rgctlChart, cctlChart}, {rgctlGraphics, cctlGraphics} };
+  prg->clear();
+  for (int i = 0; i < (int)(sizeof(rgtab)/sizeof(rgtab[0])); i++)
+    for (int j = 0; j < rgtab[i].cctl; j++) {
+      CONST RCCTL *pctl = &rgtab[i].rgctl[j];
+      if (pctl->szText[0] == 0 || pctl->dx <= 0)
+        continue;
+      if (pctl->nType != ctlLabel && pctl->nType != ctlCheck &&
+        pctl->nType != ctlRadio && pctl->nType != ctlButton)
+        continue;
+      prg->append(qMakePair(QString(pctl->szText).remove(QChar('&')),
+        pctl->dx));
+    }
+}
+#endif
+
 // Shrink one control's own font until its text fits the box the resource
 // gave it. Only the text changes size; the box stays where it is, so the
 // dialog keeps Windows' proportions.

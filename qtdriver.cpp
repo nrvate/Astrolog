@@ -2555,11 +2555,36 @@ static void BuildAstrologMenus(QMainWindow *pwind)
 // -- which come from the system if present. Qt substitutes something
 // readable when they aren't, which is the same thing Windows does.
 
+// Astrolog's Windows dialogs are laid out in units of the dialog font's
+// average character width, against MS Shell Dlg. A font whose strings run
+// wider than that per unit of average width doesn't fit the boxes the
+// resource gives them: measured across all 630 pieces of text in the
+// dialogs, this desktop's default overflows 168 of them where Liberation
+// Sans overflows 8. Liberation is metrically compatible with Arial and
+// close enough to MS Shell Dlg to lay out the same way, so the interface
+// uses it and the bundled copy means that holds on any machine.
+//
+// The point size stays whatever the desktop asked for, so its scaling
+// still applies -- only the family changes.
+static void SetUiFontQt()
+{
+  QFont font("Liberation Sans");
+
+  if (QFontInfo(font).family() != QString("Liberation Sans"))
+    return;                       // Not there: keep the desktop's font.
+  font.setPointSizeF(QApplication::font().pointSizeF());
+  QApplication::setFont(font);
+}
+
+
 static void LoadBundledFontsQt()
 {
   CONST char *rgszFontFile[] = { "Astro.ttf", "EnigmaAstrology.ttf",
     "HamburgSymbols.ttf", "Astronomicon.ttf", "StarFontSans.ttf",
-    "StarFontSerif.ttf", "HanksNakshatra.ttf" };
+    "StarFontSerif.ttf", "HanksNakshatra.ttf",
+    // The interface font, bundled so the dialogs transcribed from the
+    // Windows resource fit their boxes wherever this runs.
+    "LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf" };
   QStringList rgstrDir;
   int i, j;
 
@@ -3647,6 +3672,7 @@ void BeginQt()
   gi.qapp = new QApplication(s_argc, s_argv);
   QApplication::setStyle(new AstroStyleQt);
   LoadBundledFontsQt();
+  SetUiFontQt();
   gi.qwind = new QMainWindow();
   gi.qwind->setWindowTitle(szAppName);
   gi.qcanvas = new ChartCanvas();
