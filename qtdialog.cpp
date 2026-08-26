@@ -1961,149 +1961,6 @@ static int NColorFromComboQt(QComboBox *pcb)
   return NParseSz(ba.constData(), pmColor);
 }
 
-void ShowColorDialogQt()
-{
-  // Laid out as Windows' dlgColor is: the sixteen palette slots in two
-  // columns of eight inside a "Standard Color Palette" box, Elements in
-  // two columns of two, the Seven Rays in columns of three and four, and
-  // Scribble and Corners loose along the bottom rather than in a box of
-  // their own.
-  //
-  // The palette slots are named for the color they nominally represent,
-  // but each one maps through ikPalette[] to an entry in either kMainA[]
-  // or kRainbowA[] -- the dialog remaps which actual color each slot
-  // renders as, so the label and the current value need not agree.
-  static CONST char *rgszPalette[cColor] = {
-    "Black", "White", "Red", "Green", "Blue", "Yellow", "Magenta", "Cyan",
-    "Gray", "Lt. Gray", "Maroon", "Dk. Green", "Dk. Blue", "Maize",
-    "Purple", "Dk. Cyan" };
-  static CONST char *rgszElem[cElem] = { "Fire", "Earth", "Air", "Water" };
-  static CONST char *rgszRay[cRay] =
-    { "1st", "2nd", "3rd", "4th", "5th", "6th", "7th" };
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Colors");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QHBoxLayout *ptop = new QHBoxLayout();
-  QVBoxLayout *pvRight = new QVBoxLayout();
-  QComboBox *rgpcbPalette[cColor];
-  QComboBox *rgpcbElem[cElem];
-  QComboBox *rgpcbRay[cRay+1];
-  int i, j, nRow, nCol;
-
-  QGroupBox *pgbPalette = new QGroupBox("Standard Color Palette");
-  QGridLayout *pgrid = new QGridLayout(pgbPalette);
-  pgrid->setVerticalSpacing(2);
-  for (i = 0; i < cColor; i++) {
-    j = ikPalette[i];
-    nRow = i % (cColor/2); nCol = (i / (cColor/2)) * 3;
-    pgrid->addWidget(new QLabel(rgszPalette[i]), nRow, nCol);
-    rgpcbPalette[i] = NewColorComboQt(j <= 0 ? kMainA[-j] : kRainbowA[j], 0);
-    pgrid->addWidget(rgpcbPalette[i], nRow, nCol+1);
-    if (nCol == 0)
-      pgrid->setColumnMinimumWidth(2, 12);
-  }
-  ptop->addWidget(pgbPalette, 0, Qt::AlignTop);
-
-  QGroupBox *pgbElem = new QGroupBox("Elements");
-  QGridLayout *pgridElem = new QGridLayout(pgbElem);
-  pgridElem->setVerticalSpacing(2);
-  for (i = 0; i < cElem; i++) {
-    nRow = i % 2; nCol = (i / 2) * 3;
-    pgridElem->addWidget(new QLabel(rgszElem[i]), nRow, nCol);
-    rgpcbElem[i] = NewColorComboQt(kElemA[i], 0);
-    pgridElem->addWidget(rgpcbElem[i], nRow, nCol+1);
-    if (nCol == 0)
-      pgridElem->setColumnMinimumWidth(2, 12);
-  }
-  pvRight->addWidget(pgbElem);
-
-  // Windows splits the rays three and four, not four and three.
-  QGroupBox *pgbRay = new QGroupBox("Seven Rays");
-  QGridLayout *pgridRay = new QGridLayout(pgbRay);
-  pgridRay->setVerticalSpacing(2);
-  for (i = 1; i <= cRay; i++) {
-    if (i <= 3) { nRow = i-1;  nCol = 0; }
-    else        { nRow = i-4;  nCol = 3; }
-    pgridRay->addWidget(new QLabel(rgszRay[i-1]), nRow, nCol);
-    rgpcbRay[i] = NewColorComboQt(kRayA[i], 0);
-    pgridRay->addWidget(rgpcbRay[i], nRow, nCol+1);
-  }
-  pgridRay->setColumnMinimumWidth(2, 12);
-  pvRight->addWidget(pgbRay);
-  pvRight->addStretch(1);
-  ptop->addLayout(pvRight);
-  pouter->addLayout(ptop);
-
-  // Scribble and Corners sit on their own row along the bottom.
-  QHBoxLayout *pbottom = new QHBoxLayout();
-  pbottom->addWidget(new QLabel("Scribble"));
-  QComboBox *pcbPen = NewColorComboQt(gi.kiPen, 0);
-  pbottom->addWidget(pcbPen);
-  pbottom->addSpacing(16);
-  pbottom->addWidget(new QLabel("Corners"));
-  QComboBox *pcbDeca = NewColorComboQt(gs.kiDeca, 4);
-  pbottom->addWidget(pcbDeca);
-  pbottom->addStretch(1);
-  pouter->addLayout(pbottom);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  // Validate everything before writing anything, so a single bad entry
-  // can't leave the palette half updated.
-  int rgkPalette[cColor], rgkElem[cElem], rgkRay[cRay+1], kPen, kDeca;
-  flag fOK = fTrue;
-  for (i = 0; i < cColor; i++) {
-    rgkPalette[i] = NColorFromComboQt(rgpcbPalette[i]);
-    fOK &= FValidColorA(rgkPalette[i]);
-  }
-  for (i = 0; i < cElem; i++) {
-    rgkElem[i] = NColorFromComboQt(rgpcbElem[i]);
-    fOK &= FValidColorA(rgkElem[i]);
-  }
-  for (i = 1; i <= cRay; i++) {
-    rgkRay[i] = NColorFromComboQt(rgpcbRay[i]);
-    fOK &= FValidColorA(rgkRay[i]);
-  }
-  kPen = NColorFromComboQt(pcbPen);
-  fOK &= FValidColorA(kPen);
-  kDeca = NColorFromComboQt(pcbDeca);
-  fOK &= (FValidColorA(kDeca) || kDeca == kMax);
-  if (!fOK) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more colors were not understood.");
-    return;
-  }
-
-  for (i = 0; i < cColor; i++) {
-    j = ikPalette[i];
-    if (j <= 0)
-      kMainA[-j] = rgkPalette[i];
-    else
-      kRainbowA[j] = rgkPalette[i];
-  }
-  for (i = 0; i < cElem; i++)
-    kElemA[i] = rgkElem[i];
-  for (i = 1; i <= cRay; i++)
-    kRayA[i] = rgkRay[i];
-  gi.kiPen = kPen;
-  gs.kiDeca = kDeca;
-  InitColorsX();
-  RedrawQt();
-}
-
-
-// Object display, equivalent to Windows' DlgObject: per object maximum orb,
-// orb addition, and color, for the core planets and angles (object indices
-// 0 through oCore).
-
 /*
 ******************************************************************************
 ** Dialogs transcribed from astrolog.rc.
@@ -3363,6 +3220,99 @@ void ShowAspectDialogQt()
 }
 
 
+// Colors, transcribed from dlgColor. The palette slots are dck00 through
+// dck15, the elements dce0 through dce3, the seven rays dcr1 through dcr7,
+// and the two loose lists along the bottom dca1 (scribble) and dca2
+// (corners).
+//
+// The palette slots are named for the color they nominally represent, but
+// each one maps through ikPalette[] to an entry in either kMainA[] or
+// kRainbowA[] -- the dialog remaps which actual color each slot renders
+// as, so the label and the current value need not agree.
+
+void ShowColorDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  QComboBox *rgpcbPalette[cColor];
+  QComboBox *rgpcbElem[cElem];
+  QComboBox *rgpcbRay[cRay+1];
+  int i, j;
+
+  dlg.setWindowTitle("Colors");
+  RcBuildDialogQt(&dlg, rgctlColor, cctlColor, dxColor, dyColor, &rgbuilt);
+  for (i = 0; i < cColor; i++) {
+    j = ikPalette[i];
+    rgpcbPalette[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", i);
+    FillColorComboQt(rgpcbPalette[i],
+      j <= 0 ? kMainA[-j] : kRainbowA[j], 0);
+  }
+  for (i = 0; i < cElem; i++) {
+    rgpcbElem[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dce", i);
+    FillColorComboQt(rgpcbElem[i], kElemA[i], 0);
+  }
+  for (i = 1; i <= cRay; i++) {
+    rgpcbRay[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcr", i);
+    FillColorComboQt(rgpcbRay[i], kRayA[i], 0);
+  }
+  QComboBox *pcbPen = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dca", 1);
+  QComboBox *pcbDeca = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dca", 2);
+  FillColorComboQt(pcbPen, gi.kiPen, 0);
+  FillColorComboQt(pcbDeca, gs.kiDeca, 4);
+
+  RcWireOkCancelQt(&dlg, rgbuilt);
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  // Validate everything before writing anything, so a single bad entry
+  // can't leave the palette half updated.
+  int rgkPalette[cColor], rgkElem[cElem], rgkRay[cRay+1], kPen, kDeca;
+  flag fOK = fTrue;
+  for (i = 0; i < cColor; i++) {
+    rgkPalette[i] = NColorFromComboQt(rgpcbPalette[i]);
+    fOK &= FValidColorA(rgkPalette[i]);
+  }
+  for (i = 0; i < cElem; i++) {
+    rgkElem[i] = NColorFromComboQt(rgpcbElem[i]);
+    fOK &= FValidColorA(rgkElem[i]);
+  }
+  for (i = 1; i <= cRay; i++) {
+    rgkRay[i] = NColorFromComboQt(rgpcbRay[i]);
+    fOK &= FValidColorA(rgkRay[i]);
+  }
+  kPen = NColorFromComboQt(pcbPen);
+  fOK &= FValidColorA(kPen);
+  kDeca = NColorFromComboQt(pcbDeca);
+  fOK &= (FValidColorA(kDeca) || kDeca == kMax);
+  if (!fOK) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more colors were not understood.");
+    return;
+  }
+
+  for (i = 0; i < cColor; i++) {
+    j = ikPalette[i];
+    if (j <= 0)
+      kMainA[-j] = rgkPalette[i];
+    else
+      kRainbowA[j] = rgkPalette[i];
+  }
+  for (i = 0; i < cElem; i++)
+    kElemA[i] = rgkElem[i];
+  for (i = 1; i <= cRay; i++)
+    kRayA[i] = rgkRay[i];
+  gi.kiPen = kPen;
+  gs.kiDeca = kDeca;
+  InitColorsX();
+  RedrawQt();
+}
+
+
+// Object display, equivalent to Windows' DlgObject: per object maximum orb,
+// orb addition, and color, for the core planets and angles (object indices
+// 0 through oCore).
+
 // Objects, transcribed from dlgObject. The orb, add and influence fields
 // are deoNN/deaNN/deiNN and the color list dckNN, all numbered from one
 // over the object range, so they load and store by index.
@@ -4134,32 +4084,30 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
 // uses (e.g. "h120" for hypothetical Vulcan, "2 n" for the Moon's north
 // node point).
 
+// Object Customization, transcribed from dlgCustom: denNN is the display
+// name and dedNN the definition, both numbered from one over the range.
+
 void ShowCustomDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Object Customization");
-  // Four columns, as Windows' dlgCustom has (astrolog.rc column X 5, 130,
-  // 260 and 385), each row being the object's name in static text and then
-  // its Name and Definition fields.
-  CONST int cCol = 4, cField = 2;
-  CONST int cRowPerCol = (custHi - custLo + 1 + cCol - 1) / cCol;
-  CONST char *rgszHead[] = {"Name", "Definition"};
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
+  QVector<RCBUILT> rgbuilt;
   QVector<QLineEdit *> rgpeName, rgpeDef;
-  int i, j, k, l, pnt, flg, nRow, nCol;
+  int i, j, k, l, pnt, flg;
   char sz[cchSzMax], *pch;
 
-  pgrid->setHorizontalSpacing(4);
-  pgrid->setVerticalSpacing(2);
-  HeadersQt(pgrid, cCol, cField, rgszHead);
+  dlg.setWindowTitle("Object Customization");
+  RcBuildDialogQt(&dlg, rgctlCustom, cctlCustom, dxCustom, dyCustom,
+    &rgbuilt);
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
-    PlaceRowQt(j, cRowPerCol, cField, &nRow, &nCol);
-    pgrid->addWidget(new QLabel(SzObjDlgPlainQt(i)), nRow, nCol);
-    QLineEdit *peName = new QLineEdit(szObjDisp[i]);
-    pgrid->addWidget(peName, nRow, nCol+1);
+    QLineEdit *peName = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "den", j+1);
+    QLineEdit *peDef = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "ded", j+1);
     rgpeName.append(peName);
+    rgpeDef.append(peDef);
+    if (peName != NULL)
+      peName->setText(szObjDisp[i]);
+    if (peDef == NULL)
+      continue;
 
     k = rgTypSwiss[j];
     l = rgObjSwiss[j];
@@ -4183,29 +4131,14 @@ void ShowCustomDialogQt()
     if (flg & 16) *pch++ = 'T';
     if (flg & 32) *pch++ = 'V';
     *pch = chNull;
-    QLineEdit *peDef = new QLineEdit(sz);
-    pgrid->addWidget(peDef, nRow, nCol+2);
-    rgpeDef.append(peDef);
+    peDef->setText(sz);
   }
-  // Windows gives Name and Definition the same width (both 40 units in
-  // the resource); left to itself the grid gives Definition more and
-  // clips the name.
-  for (nCol = 0; nCol < cCol; nCol++) {
-    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 1, 96);
-    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 2, 96);
-  }
-  pouter->addLayout(pgrid);
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  QPushButton *ppbLookup =
-    pbuttons->addButton("&Lookup Names", QDialogButtonBox::ActionRole);
-  QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
-    [&rgpeName, &rgpeDef]() { LookupCustomNamesQt(rgpeName, rgpeDef); });
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbCu_l");
+  if (ppbLookup != NULL)
+    QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
+      [&rgpeName, &rgpeDef]() { LookupCustomNamesQt(rgpeName, rgpeDef); });
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
@@ -4241,73 +4174,65 @@ void ShowCustomDialogQt()
 // star's display name, and optionally override which catalog star it
 // looks up in the Swiss Ephemeris star list.
 
+// "Lookup Names" in the star dialog (dbCu_l in Windows' DlgCustomS): for
+// every row whose display name is blank or still the unknown placeholder,
+// check the definition against the ephemeris and name the row after what
+// came back, or mark it unknown. The object dialog's equivalent is
+// LookupCustomNamesQt() above; this one tests a star catalog name rather
+// than an object definition.
+static void LookupStarNamesQt(QVector<QLineEdit *> &rgpeName,
+  QVector<QLineEdit *> &rgpeDef)
+{
+#ifdef SWISS
+  char sz[cchSzMax];
+  int i;
+
+  for (i = 0; i < rgpeName.size() && i < rgpeDef.size(); i++) {
+    if (rgpeName[i] == NULL || rgpeDef[i] == NULL)
+      continue;
+    QByteArray baName = rgpeName[i]->text().toLocal8Bit();
+    if (baName.size() > 0 && !FEqSz(baName.constData(), szObjUnknown))
+      continue;
+    QByteArray baDef = rgpeDef[i]->text().toLocal8Bit();
+    sprintf(sz, "%.*s", cchSzMax-1, baDef.constData());
+    if (!SwissTestStar(sz))
+      sprintf(sz, "%s", szObjUnknown);
+    rgpeName[i]->setText(sz);
+  }
+#endif
+}
+
+
+// Fixed Star Customization, transcribed from dlgCustomS.
+
 void ShowCustomStarDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Fixed Star Customization");
-  // Four columns, as Windows' dlgCustomS has, each row being the star's
-  // name in static text and then its Name and Definition fields. Windows
-  // heads the columns "Name" and "Definition", not the longer wording
-  // this had.
-  CONST int cCol = 4, cField = 2;
-  CONST int cRowPerCol = (starHi - starLo + 1 + cCol - 1) / cCol;
-  CONST char *rgszHead[] = {"Name", "Definition"};
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
+  QVector<RCBUILT> rgbuilt;
   QVector<QLineEdit *> rgpeName, rgpeDef;
-  int i, k, nRow, nCol;
+  int i, k;
 
-  pgrid->setHorizontalSpacing(4);
-  pgrid->setVerticalSpacing(2);
-  HeadersQt(pgrid, cCol, cField, rgszHead);
+  dlg.setWindowTitle("Fixed Star Customization");
+  RcBuildDialogQt(&dlg, rgctlCustomS, cctlCustomS, dxCustomS, dyCustomS,
+    &rgbuilt);
   for (i = starLo; i <= starHi; i++) {
-    PlaceRowQt(i - starLo, cRowPerCol, cField, &nRow, &nCol);
-    pgrid->addWidget(new QLabel(SzObjDlgPlainQt(i)), nRow, nCol);
-    QLineEdit *peName = new QLineEdit(szObjDisp[i]);
-    pgrid->addWidget(peName, nRow, nCol+1);
-    rgpeName.append(peName);
-
     k = i - starLo + 1;
-    CONST char *szDef = FSzSet(szStarCustom[k]) ? szStarCustom[k] :
-      (*szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]);
-    QLineEdit *peDef = new QLineEdit(szDef);
-    pgrid->addWidget(peDef, nRow, nCol+2);
+    QLineEdit *peName = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "den", k);
+    QLineEdit *peDef = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "ded", k);
+    rgpeName.append(peName);
     rgpeDef.append(peDef);
+    if (peName != NULL)
+      peName->setText(szObjDisp[i]);
+    if (peDef != NULL)
+      peDef->setText(FSzSet(szStarCustom[k]) ? szStarCustom[k] :
+        (*szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]));
   }
-  for (nCol = 0; nCol < cCol; nCol++) {
-    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 1, 96);
-    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 2, 96);
-  }
-  pouter->addLayout(pgrid);
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  // "Lookup Names" (dbCu_l in DlgCustomS): for every display name still
-  // blank or "???", ask the Swiss Ephemeris star catalog what the entry
-  // in the lookup column actually resolves to. SwissTestStar() rewrites
-  // its argument in place with the catalog's own spelling.
-  QPushButton *ppbLookup =
-    pbuttons->addButton("&Lookup Names", QDialogButtonBox::ActionRole);
-  QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
-    [&rgpeName, &rgpeDef]() {
-      char sz[cchSzMax];
-      int row;
-      for (row = 0; row < rgpeName.size(); row++) {
-        QString strName = rgpeName[row]->text();
-        if (!strName.isEmpty() && strName != szObjUnknown)
-          continue;
-        QByteArray ba = rgpeDef[row]->text().toLocal8Bit();
-        strncpy(sz, ba.constData(), cchSzMax-1);
-        sz[cchSzMax-1] = chNull;
-        if (!SwissTestStar(sz))
-          sprintf(sz, "%s", szObjUnknown);
-        rgpeName[row]->setText(sz);
-      }
-    });
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbCu_l");
+  if (ppbLookup != NULL)
+    QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
+      [&rgpeName, &rgpeDef]() { LookupStarNamesQt(rgpeName, rgpeDef); });
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
