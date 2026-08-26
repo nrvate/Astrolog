@@ -1882,6 +1882,12 @@ static int NColorFromComboQt(QComboBox *pcb)
 
 void ShowColorDialogQt()
 {
+  // Laid out as Windows' dlgColor is: the sixteen palette slots in two
+  // columns of eight inside a "Standard Color Palette" box, Elements in
+  // two columns of two, the Seven Rays in columns of three and four, and
+  // Scribble and Corners loose along the bottom rather than in a box of
+  // their own.
+  //
   // The palette slots are named for the color they nominally represent,
   // but each one maps through ikPalette[] to an entry in either kMainA[]
   // or kRainbowA[] -- the dialog remaps which actual color each slot
@@ -1895,52 +1901,69 @@ void ShowColorDialogQt()
     { "1st", "2nd", "3rd", "4th", "5th", "6th", "7th" };
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Colors");
-  dlg.resize(720, 640);
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QHBoxLayout *phInner = new QHBoxLayout(pinner);
-  QVBoxLayout *pvLeft = new QVBoxLayout();
+  QHBoxLayout *ptop = new QHBoxLayout();
   QVBoxLayout *pvRight = new QVBoxLayout();
   QComboBox *rgpcbPalette[cColor];
   QComboBox *rgpcbElem[cElem];
   QComboBox *rgpcbRay[cRay+1];
-  int i, j;
+  int i, j, nRow, nCol;
 
   QGroupBox *pgbPalette = new QGroupBox("Standard Color Palette");
-  QFormLayout *pformPalette = new QFormLayout(pgbPalette);
+  QGridLayout *pgrid = new QGridLayout(pgbPalette);
+  pgrid->setVerticalSpacing(2);
   for (i = 0; i < cColor; i++) {
     j = ikPalette[i];
-    rgpcbPalette[i] = AddColorComboQt(pformPalette, rgszPalette[i],
-      j <= 0 ? kMainA[-j] : kRainbowA[j], 0);
+    nRow = i % (cColor/2); nCol = (i / (cColor/2)) * 3;
+    pgrid->addWidget(new QLabel(rgszPalette[i]), nRow, nCol);
+    rgpcbPalette[i] = NewColorComboQt(j <= 0 ? kMainA[-j] : kRainbowA[j], 0);
+    pgrid->addWidget(rgpcbPalette[i], nRow, nCol+1);
+    if (nCol == 0)
+      pgrid->setColumnMinimumWidth(2, 12);
   }
-  pvLeft->addWidget(pgbPalette);
-
-  QGroupBox *pgbExtra = new QGroupBox("Other");
-  QFormLayout *pformExtra = new QFormLayout(pgbExtra);
-  QComboBox *pcbPen = AddColorComboQt(pformExtra, "Scribble", gi.kiPen, 0);
-  QComboBox *pcbDeca = AddColorComboQt(pformExtra, "Corners", gs.kiDeca, 4);
-  pvLeft->addWidget(pgbExtra);
-  pvLeft->addStretch(1);
+  ptop->addWidget(pgbPalette, 0, Qt::AlignTop);
 
   QGroupBox *pgbElem = new QGroupBox("Elements");
-  QFormLayout *pformElem = new QFormLayout(pgbElem);
-  for (i = 0; i < cElem; i++)
-    rgpcbElem[i] = AddColorComboQt(pformElem, rgszElem[i], kElemA[i], 0);
+  QGridLayout *pgridElem = new QGridLayout(pgbElem);
+  pgridElem->setVerticalSpacing(2);
+  for (i = 0; i < cElem; i++) {
+    nRow = i % 2; nCol = (i / 2) * 3;
+    pgridElem->addWidget(new QLabel(rgszElem[i]), nRow, nCol);
+    rgpcbElem[i] = NewColorComboQt(kElemA[i], 0);
+    pgridElem->addWidget(rgpcbElem[i], nRow, nCol+1);
+    if (nCol == 0)
+      pgridElem->setColumnMinimumWidth(2, 12);
+  }
   pvRight->addWidget(pgbElem);
 
+  // Windows splits the rays three and four, not four and three.
   QGroupBox *pgbRay = new QGroupBox("Seven Rays");
-  QFormLayout *pformRay = new QFormLayout(pgbRay);
-  for (i = 1; i <= cRay; i++)
-    rgpcbRay[i] = AddColorComboQt(pformRay, rgszRay[i-1], kRayA[i], 0);
+  QGridLayout *pgridRay = new QGridLayout(pgbRay);
+  pgridRay->setVerticalSpacing(2);
+  for (i = 1; i <= cRay; i++) {
+    if (i <= 3) { nRow = i-1;  nCol = 0; }
+    else        { nRow = i-4;  nCol = 3; }
+    pgridRay->addWidget(new QLabel(rgszRay[i-1]), nRow, nCol);
+    rgpcbRay[i] = NewColorComboQt(kRayA[i], 0);
+    pgridRay->addWidget(rgpcbRay[i], nRow, nCol+1);
+  }
+  pgridRay->setColumnMinimumWidth(2, 12);
   pvRight->addWidget(pgbRay);
   pvRight->addStretch(1);
+  ptop->addLayout(pvRight);
+  pouter->addLayout(ptop);
 
-  phInner->addLayout(pvLeft);
-  phInner->addLayout(pvRight);
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  // Scribble and Corners sit on their own row along the bottom.
+  QHBoxLayout *pbottom = new QHBoxLayout();
+  pbottom->addWidget(new QLabel("Scribble"));
+  QComboBox *pcbPen = NewColorComboQt(gi.kiPen, 0);
+  pbottom->addWidget(pcbPen);
+  pbottom->addSpacing(16);
+  pbottom->addWidget(new QLabel("Corners"));
+  QComboBox *pcbDeca = NewColorComboQt(gs.kiDeca, 4);
+  pbottom->addWidget(pcbDeca);
+  pbottom->addStretch(1);
+  pouter->addLayout(pbottom);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -3980,21 +4003,27 @@ void ShowCustomDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Object Customization");
-  dlg.resize(500, 500);
+  // Four columns, as Windows' dlgCustom has (astrolog.rc column X 5, 130,
+  // 260 and 385), each row being the object's name in static text and then
+  // its Name and Definition fields.
+  CONST int cCol = 4, cField = 2;
+  CONST int cRowPerCol = (custHi - custLo + 1 + cCol - 1) / cCol;
+  CONST char *rgszHead[] = {"Name", "Definition"};
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QGridLayout *pgrid = new QGridLayout(pinner);
+  QGridLayout *pgrid = new QGridLayout();
   QVector<QLineEdit *> rgpeName, rgpeDef;
-  int i, j, k, l, pnt, flg;
+  int i, j, k, l, pnt, flg, nRow, nCol;
   char sz[cchSzMax], *pch;
 
-  pgrid->addWidget(new QLabel("Display Name"), 0, 0);
-  pgrid->addWidget(new QLabel("Definition"), 0, 1);
+  pgrid->setHorizontalSpacing(4);
+  pgrid->setVerticalSpacing(2);
+  HeadersQt(pgrid, cCol, cField, rgszHead);
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
+    PlaceRowQt(j, cRowPerCol, cField, &nRow, &nCol);
+    pgrid->addWidget(new QLabel(SzObjDlgPlainQt(i)), nRow, nCol);
     QLineEdit *peName = new QLineEdit(szObjDisp[i]);
-    pgrid->addWidget(peName, j+1, 0);
+    pgrid->addWidget(peName, nRow, nCol+1);
     rgpeName.append(peName);
 
     k = rgTypSwiss[j];
@@ -4020,12 +4049,17 @@ void ShowCustomDialogQt()
     if (flg & 32) *pch++ = 'V';
     *pch = chNull;
     QLineEdit *peDef = new QLineEdit(sz);
-    pgrid->addWidget(peDef, j+1, 1);
+    pgrid->addWidget(peDef, nRow, nCol+2);
     rgpeDef.append(peDef);
   }
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  // Windows gives Name and Definition the same width (both 40 units in
+  // the resource); left to itself the grid gives Definition more and
+  // clips the name.
+  for (nCol = 0; nCol < cCol; nCol++) {
+    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 1, 96);
+    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 2, 96);
+  }
+  pouter->addLayout(pgrid);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -4076,32 +4110,40 @@ void ShowCustomStarDialogQt()
 {
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle("Fixed Star Customization");
-  dlg.resize(500, 500);
+  // Four columns, as Windows' dlgCustomS has, each row being the star's
+  // name in static text and then its Name and Definition fields. Windows
+  // heads the columns "Name" and "Definition", not the longer wording
+  // this had.
+  CONST int cCol = 4, cField = 2;
+  CONST int cRowPerCol = (starHi - starLo + 1 + cCol - 1) / cCol;
+  CONST char *rgszHead[] = {"Name", "Definition"};
   QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QGridLayout *pgrid = new QGridLayout(pinner);
+  QGridLayout *pgrid = new QGridLayout();
   QVector<QLineEdit *> rgpeName, rgpeDef;
-  int i, k;
+  int i, k, nRow, nCol;
 
-  pgrid->addWidget(new QLabel("Display Name"), 0, 0);
-  pgrid->addWidget(new QLabel("Catalog Lookup Name"), 0, 1);
+  pgrid->setHorizontalSpacing(4);
+  pgrid->setVerticalSpacing(2);
+  HeadersQt(pgrid, cCol, cField, rgszHead);
   for (i = starLo; i <= starHi; i++) {
-    int row = i - starLo + 1;
+    PlaceRowQt(i - starLo, cRowPerCol, cField, &nRow, &nCol);
+    pgrid->addWidget(new QLabel(SzObjDlgPlainQt(i)), nRow, nCol);
     QLineEdit *peName = new QLineEdit(szObjDisp[i]);
-    pgrid->addWidget(peName, row, 0);
+    pgrid->addWidget(peName, nRow, nCol+1);
     rgpeName.append(peName);
 
     k = i - starLo + 1;
     CONST char *szDef = FSzSet(szStarCustom[k]) ? szStarCustom[k] :
       (*szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]);
     QLineEdit *peDef = new QLineEdit(szDef);
-    pgrid->addWidget(peDef, row, 1);
+    pgrid->addWidget(peDef, nRow, nCol+2);
     rgpeDef.append(peDef);
   }
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  for (nCol = 0; nCol < cCol; nCol++) {
+    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 1, 96);
+    pgrid->setColumnMinimumWidth(nCol * (cField + 2) + 2, 96);
+  }
+  pouter->addLayout(pgrid);
 
   QDialogButtonBox *pbuttons =
     new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
