@@ -80,6 +80,7 @@ void SyncChartModeFromFlagsQt(CONST flag *rgf);
 // Refresh the View menu's "Print Nearest Second" and "Applying Aspects"
 // checkmarks, which the Display Settings dialog can also change.
 void SyncDisplayMenuQt();
+void SyncProgressMenuQt();
 
 // Refresh the Setting / House Settings submenu's "Solar Chart", "3D
 // Houses", and "Show Dwads" checkmarks, which the Calculation Settings

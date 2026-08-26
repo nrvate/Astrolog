@@ -613,20 +613,27 @@ typedef struct {
   QWidget *pw;
 } RCBUILT;
 
-static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &, CONST char *);
-
-static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt)
+// Find a built control by the symbol the resource gave it.
+static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, CONST char *szId)
 {
-  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
-  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
+  for (int i = 0; i < rgbuilt.size(); i++)
+    if (rgbuilt[i].pw != NULL && strcmp(rgbuilt[i].pctl->szId, szId) == 0)
+      return rgbuilt[i].pw;
+  return NULL;
+}
 
-  if (ppbOK != NULL) {
-    ppbOK->setDefault(fTrue);
-    QObject::connect(ppbOK, &QPushButton::clicked, pdlg, &QDialog::accept);
-  }
-  if (ppbCancel != NULL)
-    QObject::connect(ppbCancel, &QPushButton::clicked, pdlg,
-      &QDialog::reject);
+// Wire the OK and Cancel a transcribed dialog got from its resource.
+static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt);
+
+// Same, for the numbered runs of controls: PwRcFindIdxQt(rg, "deo", 7).
+static QWidget *PwRcFindIdxQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST char *szId, int nIdx)
+{
+  for (int i = 0; i < rgbuilt.size(); i++)
+    if (rgbuilt[i].pw != NULL && rgbuilt[i].pctl->nIdx == nIdx &&
+      strcmp(rgbuilt[i].pctl->szId, szId) == 0)
+      return rgbuilt[i].pw;
+  return NULL;
 }
 
 
@@ -635,35 +642,6 @@ static CONST RCCTL *PctlBuiltQt(CONST QVector<RCBUILT> *prg, int i)
   return (*prg)[i].pctl;
 }
 
-
-
-#ifdef QTTEST
-// Every text control in every transcribed dialog, with the width the
-// resource gives it, for the font fitting diagnostic in qttest.cpp.
-void RcAllTablesTestQt(QVector<QPair<QString,int> > *prg)
-{
-  struct { CONST RCCTL *rgctl; int cctl; } rgtab[] = {
-    {rgctlRestrict, cctlRestrict}, {rgctlStar, cctlStar},
-    {rgctlMoons, cctlMoons}, {rgctlObject, cctlObject},
-    {rgctlObject2, cctlObject2}, {rgctlObjectM, cctlObjectM},
-    {rgctlAspect, cctlAspect}, {rgctlColor, cctlColor},
-    {rgctlCustom, cctlCustom}, {rgctlCustomS, cctlCustomS},
-    {rgctlCalc, cctlCalc}, {rgctlDisplay, cctlDisplay},
-    {rgctlChart, cctlChart}, {rgctlGraphics, cctlGraphics} };
-  prg->clear();
-  for (int i = 0; i < (int)(sizeof(rgtab)/sizeof(rgtab[0])); i++)
-    for (int j = 0; j < rgtab[i].cctl; j++) {
-      CONST RCCTL *pctl = &rgtab[i].rgctl[j];
-      if (pctl->szText[0] == 0 || pctl->dx <= 0)
-        continue;
-      if (pctl->nType != ctlLabel && pctl->nType != ctlCheck &&
-        pctl->nType != ctlRadio && pctl->nType != ctlButton)
-        continue;
-      prg->append(qMakePair(QString(pctl->szText).remove(QChar('&')),
-        pctl->dx));
-    }
-}
-#endif
 
 // Shrink one control's own font until its text fits the box the resource
 // gave it. Only the text changes size; the box stays where it is, so the
@@ -833,793 +811,51 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
   }
 }
 
-// Find a built control by the symbol the resource gave it.
-static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, CONST char *szId)
+static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt)
 {
-  for (int i = 0; i < rgbuilt.size(); i++)
-    if (rgbuilt[i].pw != NULL && strcmp(rgbuilt[i].pctl->szId, szId) == 0)
-      return rgbuilt[i].pw;
-  return NULL;
-}
-
-// Wire the OK and Cancel a transcribed dialog got from its resource.
-static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt);
-
-// Same, for the numbered runs of controls: PwRcFindIdxQt(rg, "deo", 7).
-static QWidget *PwRcFindIdxQt(CONST QVector<RCBUILT> &rgbuilt,
-  CONST char *szId, int nIdx)
-{
-  for (int i = 0; i < rgbuilt.size(); i++)
-    if (rgbuilt[i].pw != NULL && rgbuilt[i].pctl->nIdx == nIdx &&
-      strcmp(rgbuilt[i].pctl->szId, szId) == 0)
-      return rgbuilt[i].pw;
-  return NULL;
-}
-
-
-// Object restriction (show/hide), equivalent to Windows' DlgRestrict,
-// DlgStar, and DlgMoons -- one implementation for all of them, since they
-// differ only in title, object range, which ignore array they edit, and
-// which quick buttons they offer. (Windows likewise drives the first two
-// with a single DlgRestrict keyed off wi.wCmd.)
-//
-// Checkbox polarity follows Windows: the label is the bare object name
-// and a *checked* box means restricted, i.e. hidden. That reads backwards
-// at first glance, but it's what a Windows user's muscle memory expects,
-// and inverting it is the one difference that would silently produce the
-// opposite chart.
-
-
-// The restriction dialogs, transcribed from dlgRestrict, dlgStar and
-// dlgMoons: every checkbox, group box, button and the icon sit at the
-// coordinates the resource gives them.
-//
-// Checkbox polarity follows Windows: the label is the object's name and a
-// *checked* box means restricted, i.e. hidden. That reads backwards at
-// first glance, but it is what a Windows user expects, and inverting it is
-// the one difference that would silently produce the opposite chart.
-
-// What one of a restriction dialog's quick buttons does to its range.
-enum { resSet, resClear, resToggle, resCopy };
-
-typedef struct {
-  CONST char *szId;   // Resource symbol of the button.
-  int nIdx;           // Its index, or -1 when the symbol carries none.
-  int nAction, lo, hi;
-  CONST byte *rgSource;
-} RCRESBUT;
-
-static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
-  int cctl, int dxDlg, int dyDlg, int lo, int hi, byte *rgignore,
-  CONST RCRESBUT *rgbut, int cbut)
-{
-  QDialog dlg(gi.qwind);
-  QVector<RCBUILT> rgbuilt;
-  QVector<QCheckBox *> rgpcb;
-  int i;
-
-  dlg.setWindowTitle(szTitle);
-  RcBuildDialogQt(&dlg, rgctl, cctl, dxDlg, dyDlg, &rgbuilt);
-
-  // The checkbox numbering is one based over the dialog's object range.
-  rgpcb.resize(hi - lo + 1);
-  for (i = 0; i < rgbuilt.size(); i++) {
-    CONST RCCTL *pctl = rgbuilt[i].pctl;
-    if (rgbuilt[i].pw == NULL || pctl == NULL || pctl->nType != ctlCheck)
-      continue;
-    int iObj = lo + pctl->nIdx - 1;
-    if (pctl->nIdx < 1 || !FBetween(iObj, lo, hi))
-      continue;
-    QCheckBox *pcb = (QCheckBox *)rgbuilt[i].pw;
-    pcb->setChecked(rgignore[iObj] != 0);
-    rgpcb[iObj - lo] = pcb;
-  }
-
-  for (i = 0; i < cbut; i++) {
-    CONST RCRESBUT *pbut = &rgbut[i];
-    QPushButton *ppb = (QPushButton *)(pbut->nIdx >= 0 ?
-      PwRcFindIdxQt(rgbuilt, pbut->szId, pbut->nIdx) :
-      PwRcFindQt(rgbuilt, pbut->szId));
-    if (ppb == NULL)
-      continue;
-    QObject::connect(ppb, &QPushButton::clicked, &dlg,
-      [&rgpcb, pbut, lo, hi]() {
-        int jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
-        for (int j = jlo; j <= jhi; j++) {
-          QCheckBox *pcb = rgpcb[j - lo];
-          if (pcb == NULL)
-            continue;
-          switch (pbut->nAction) {
-          case resSet:    pcb->setChecked(fTrue);              break;
-          case resClear:  pcb->setChecked(fFalse);             break;
-          case resToggle: pcb->setChecked(!pcb->isChecked());  break;
-          case resCopy:   pcb->setChecked(pbut->rgSource[j] != 0); break;
-          }
-        }
-      });
-  }
-
   QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
   QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
+
   if (ppbOK != NULL) {
     ppbOK->setDefault(fTrue);
-    QObject::connect(ppbOK, &QPushButton::clicked, &dlg, &QDialog::accept);
+    QObject::connect(ppbOK, &QPushButton::clicked, pdlg, &QDialog::accept);
   }
   if (ppbCancel != NULL)
-    QObject::connect(ppbCancel, &QPushButton::clicked, &dlg,
+    QObject::connect(ppbCancel, &QPushButton::clicked, pdlg,
       &QDialog::reject);
-
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-  for (i = lo; i <= hi; i++)
-    if (rgpcb[i - lo] != NULL)
-      rgignore[i] = rgpcb[i - lo]->isChecked();
-  AdjustRestrictions();
-  // Windows re-derives the Setting menu's category checkmarks here.
-  SyncRestrictMenuQt();
-  RecastAndRedrawQt();
 }
 
 
-void ShowRestrictDialogQt()
+
+
+
+#ifdef QTTEST
+// Every text control in every transcribed dialog, with the width the
+// resource gives it, for the font fitting diagnostic in qttest.cpp.
+void RcAllTablesTestQt(QVector<QPair<QString,int> > *prg)
 {
-  CONST RCRESBUT rgbut[] = {
-    {"dbRe_R",    0, resSet,    0,       dwarfHi, NULL},
-    {"dbRe_R",    1, resClear,  0,       dwarfHi, NULL},
-    {"dbRe_R",   -1, resToggle, oMain+1, oCore,   NULL},
-    {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
-    {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
-    {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
-    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore2},
-    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
-
-  ShowRcRestrictQt(szTitleRestrict, rgctlRestrict, cctlRestrict,
-    dxRestrict, dyRestrict, 0, dwarfHi, ignore,
-    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
-}
-
-
-void ShowStarRestrictDialogQt()
-{
-  CONST RCRESBUT rgbut[] = {
-    {"dbSt_RU", 0, resSet,   starLo, starHi, NULL},
-    {"dbSt_RU", 1, resClear, starLo, starHi, NULL} };
-
-  ShowRcRestrictQt(szTitleStar, rgctlStar, cctlStar,
-    dxStar, dyStar, starLo, starHi, ignore,
-    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
-}
-
-// Windows drives this from the same dlgRestrict, only editing ignore2 and
-// offering a copy from the standard set rather than the transit one.
-void ShowTransitRestrictDialogQt()
-{
-  CONST RCRESBUT rgbut[] = {
-    {"dbRe_R",    0, resSet,    0,       dwarfHi, NULL},
-    {"dbRe_R",    1, resClear,  0,       dwarfHi, NULL},
-    {"dbRe_R",   -1, resToggle, oMain+1, oCore,   NULL},
-    {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
-    {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
-    {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
-    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore},
-    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
-
-  ShowRcRestrictQt("Transit Object Restrictions", rgctlRestrict,
-    cctlRestrict, dxRestrict, dyRestrict, 0, dwarfHi, ignore2,
-    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
-}
-
-
-// Default chart info, equivalent to Windows' DlgDefault: the location/
-// elevation/temperature/etc that a new chart starts out with, and what
-// "now" charts use for a location.
-
-// The four atlas buttons Windows' chart info dialogs carry, wired to the
-// lookups in atlas.cpp. Those fill a Win32 listbox directly; the Qt build
-// receives their rows through pfnAtlasRowQt instead (see atlas.cpp), which
-// is set only while one of these runs.
-
-#ifdef ATLAS
-static QListWidget *s_plistAtlasQt = NULL;
-static QVector<int> s_rgiaeQt;
-
-static void AtlasRowQt(CONST char *sz, int iae)
-{
-  if (s_plistAtlasQt == NULL)
-    return;
-  // fromLatin1, not the implicit UTF-8: these rows carry Astrolog's degree
-  // sign as a single high byte, which decoded as UTF-8 is invalid and comes
-  // out as a replacement character.
-  s_plistAtlasQt->addItem(QString::fromLatin1(sz));
-  s_rgiaeQt.append(iae);
-}
-
-// Run one lookup with the rows going to "plist".
-static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
-  QComboBox *pcbLon, QComboBox *pcbLat, CI *pci)
-{
-  char sz[cchSzMax];
-  int ilist = 12, i;
-  real lon, lat;
-
-  if (plist == NULL)
-    return;
-  plist->clear();
-  s_plistAtlasQt = plist;
-  s_rgiaeQt.clear();
-  pfnAtlasRowQt = AtlasRowQt;
-
-  if (nWhich == 0) {                     // Lookup City
-    sprintf(sz, "%.*s", cchSzMax-1,
-      peLoc->text().toLocal8Bit().constData());
-    if (!DisplayAtlasLookup(sz, 1, &ilist))
-      plist->addItem("Couldn't get atlas data!");
-  } else if (nWhich == 1) {              // Nearby Cities
-    lon = RParseSz(pcbLon->currentText().toLocal8Bit().constData(), pmLon);
-    lat = RParseSz(pcbLat->currentText().toLocal8Bit().constData(), pmLat);
-    if (!DisplayAtlasNearby(lon, lat, 1, &ilist, fFalse))
-      plist->addItem("Couldn't get atlas data!");
-  } else {                               // Time Changes
-    sprintf(sz, "%.*s", cchSzMax-1,
-      peLoc->text().toLocal8Bit().constData());
-    pfnAtlasRowQt = NULL;
-    if (!DisplayAtlasLookup(sz, 0, &i)) {
-      pfnAtlasRowQt = NULL;
-      s_plistAtlasQt = NULL;
-      plist->addItem("Put a valid city in the Location field first.");
-      return;
+  struct { CONST RCCTL *rgctl; int cctl; } rgtab[] = {
+    {rgctlRestrict, cctlRestrict}, {rgctlStar, cctlStar},
+    {rgctlMoons, cctlMoons}, {rgctlObject, cctlObject},
+    {rgctlObject2, cctlObject2}, {rgctlObjectM, cctlObjectM},
+    {rgctlAspect, cctlAspect}, {rgctlColor, cctlColor},
+    {rgctlCustom, cctlCustom}, {rgctlCustomS, cctlCustomS},
+    {rgctlCalc, cctlCalc}, {rgctlDisplay, cctlDisplay},
+    {rgctlChart, cctlChart}, {rgctlGraphics, cctlGraphics} };
+  prg->clear();
+  for (int i = 0; i < (int)(sizeof(rgtab)/sizeof(rgtab[0])); i++)
+    for (int j = 0; j < rgtab[i].cctl; j++) {
+      CONST RCCTL *pctl = &rgtab[i].rgctl[j];
+      if (pctl->szText[0] == 0 || pctl->dx <= 0)
+        continue;
+      if (pctl->nType != ctlLabel && pctl->nType != ctlCheck &&
+        pctl->nType != ctlRadio && pctl->nType != ctlButton)
+        continue;
+      prg->append(qMakePair(QString(pctl->szText).remove(QChar('&')),
+        pctl->dx));
     }
-    pfnAtlasRowQt = AtlasRowQt;
-    if (!DisplayTimezoneChanges(is.rgae[i].izn, 1, pci))
-      plist->addItem("Couldn't get time zone data!");
-  }
-  pfnAtlasRowQt = NULL;
-  s_plistAtlasQt = NULL;
 }
-
-// "Apply Info": copy the highlighted atlas row into the location fields.
-static void RcAtlasApplyQt(QListWidget *plist, QComboBox *pcbLon,
-  QComboBox *pcbLat, QComboBox *pcbZon, QLineEdit *peLoc)
-{
-  char sz[cchSzMax];
-  int iRow, iae, nSav;
-
-  if (plist == NULL)
-    return;
-  iRow = plist->currentRow();
-  if (iRow < 0 || iRow >= s_rgiaeQt.size() || s_rgiaeQt[iRow] < 0)
-    return;
-  iae = s_rgiaeQt[iRow];
-  nSav = us.fAnsiChar; us.fAnsiChar = fFalse;
-  sprintf(sz, "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
-  us.fAnsiChar = nSav;
-  sz[is.ichLocSplit] = chNull;
-  if (pcbLon != NULL) pcbLon->setEditText(&sz[0]);
-  if (pcbLat != NULL) pcbLat->setEditText(&sz[is.ichLocSplit+1]);
-  if (pcbZon != NULL)
-    pcbZon->setEditText(SzZone(ZondefFromIzn(is.rgae[iae].izn)));
-  if (peLoc != NULL) peLoc->setText(SzCity(iae));
-}
-#endif // ATLAS
-
-
-void ShowDefaultInfoDialogQt()
-{
-  QDialog dlg(gi.qwind);
-  QVector<RCBUILT> rgbuilt;
-  char sz[cchSzMax];
-  int nSavChar;
-
-  dlg.setWindowTitle(szTitleDefault);
-  RcBuildDialogQt(&dlg, rgctlDefault, cctlDefault, dxDefault, dyDefault,
-    &rgbuilt);
-
-  QComboBox *pcbDst = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeDst");
-  QComboBox *pcbZon = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeZon");
-  QComboBox *pcbCor = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeCor");
-  QComboBox *pcbLon = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeLon");
-  QComboBox *pcbLat = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeLat");
-  QComboBox *pcbElv = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeElv");
-  QComboBox *pcbTmp = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeTmp");
-  QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deDeNam");
-  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deDeLoc");
-  QListWidget *plist = (QListWidget *)PwRcFindQt(rgbuilt, "dlIn");
-
-  // Formatted the way Windows' DlgDefault does it (SetEditSZOA), not as
-  // raw numbers -- see ShowChartInfoForQt() for the same treatment and
-  // the reasoning about SzLocation()'s degree byte.
-  FillComboQt(pcbDst, ciDefa.dst == 0.0 ? "No" :
-    (ciDefa.dst == 1.0 ? "Yes" :
-    (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))),
-    RgstrDstQt());
-  sprintf(sz, "%s", SzZone(ciDefa.zon));
-  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
-  nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
-  sprintf(sz, "%s", SzLocation(ciDefa.lon, ciDefa.lat));
-  us.fAnsiChar = nSavChar;
-  sz[is.ichLocSplit] = chNull;
-  FillComboQt(pcbLon, &sz[0], RgstrLonQt());
-  FillComboQt(pcbLat, &sz[is.ichLocSplit+1], RgstrLatQt());
-  FillComboQt(pcbElv, SzElevation(us.elvDef),
-    QStringList() << "0m" << "1000ft");
-  FillComboQt(pcbTmp, SzTemperature(us.tmpDef),
-    QStringList() << "0C" << "32F");
-  FillComboQt(pcbCor, QString::number(us.lTimeAddition),
-    QStringList() << "60" << "0" << "-60");
-  if (peName != NULL)
-    peName->setText(FSzSet(ciDefa.nam) ? ciDefa.nam : "");
-  if (peLoc != NULL)
-    peLoc->setText(FSzSet(ciDefa.loc) ? ciDefa.loc : "");
-
-#ifdef ATLAS
-  // The atlas buttons, which this port didn't have at all.
-  CI ciT = ciDefa;
-  QPushButton *ppbCity = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCity");
-  QPushButton *ppbCoor = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCoor");
-  QPushButton *ppbChan = (QPushButton *)PwRcFindQt(rgbuilt, "dbInChan");
-  QPushButton *ppbAppl = (QPushButton *)PwRcFindQt(rgbuilt, "dbInAppl");
-  if (ppbCity != NULL)
-    QObject::connect(ppbCity, &QPushButton::clicked, &dlg,
-      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
-        RcAtlasRunQt(plist, 0, peLoc, pcbLon, pcbLat, &ciT); });
-  if (ppbCoor != NULL)
-    QObject::connect(ppbCoor, &QPushButton::clicked, &dlg,
-      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
-        RcAtlasRunQt(plist, 1, peLoc, pcbLon, pcbLat, &ciT); });
-  if (ppbChan != NULL)
-    QObject::connect(ppbChan, &QPushButton::clicked, &dlg,
-      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
-        RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ciT); });
-  if (ppbAppl != NULL)
-    QObject::connect(ppbAppl, &QPushButton::clicked, &dlg,
-      [plist, pcbLon, pcbLat, pcbZon, peLoc]() {
-        RcAtlasApplyQt(plist, pcbLon, pcbLat, pcbZon, peLoc); });
 #endif
-
-  RcWireOkCancelQt(&dlg, rgbuilt);
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  CI ci = ciDefa;
-  QByteArray ba;
-  if (pcbDst != NULL) { ba = pcbDst->currentText().toLocal8Bit();
-    ci.dst = RParseSz(ba.constData(), pmDst); }
-  if (pcbZon != NULL) { ba = pcbZon->currentText().toLocal8Bit();
-    ci.zon = RParseSz(ba.constData(), pmZon); }
-  if (pcbLon != NULL) { ba = pcbLon->currentText().toLocal8Bit();
-    ci.lon = RParseSz(ba.constData(), pmLon); }
-  if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
-    ci.lat = RParseSz(ba.constData(), pmLat); }
-  if (!FValidDst(ci.dst) || !FValidZon(ci.zon) ||
-    !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more chart info fields are invalid.");
-    return;
-  }
-  if (pcbElv != NULL) { ba = pcbElv->currentText().toLocal8Bit();
-    us.elvDef = RParseSz(ba.constData(), pmElv); }
-  if (pcbTmp != NULL) { ba = pcbTmp->currentText().toLocal8Bit();
-    us.tmpDef = RParseSz(ba.constData(), pmTmp); }
-  if (pcbCor != NULL)
-    us.lTimeAddition = pcbCor->currentText().toLong();
-  if (peName != NULL)
-    FCloneSz(peName->text().toLocal8Bit().constData(), &ci.nam);
-  if (peLoc != NULL)
-    FCloneSz(peLoc->text().toLocal8Bit().constData(), &ci.loc);
-  ciDefa = ci;
-  RecastAndRedrawQt();
-}
-
-
-// Transits, equivalent to Windows' DlgTransit: which transit chart type
-// to show (if any), the date/time to transit to (ciTran), how much time
-// the search covers, which kinds of event the search reports, and a few
-// display options. Location comes from the default chart info the same
-// way Windows does it.
-
-void ShowTransitDialogQt()
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Transits");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QHBoxLayout *phTop = new QHBoxLayout();
-  QVBoxLayout *pvLeft = new QVBoxLayout();
-  QVBoxLayout *pvRight = new QVBoxLayout();
-  char sz[cchSzMax];
-  int i;
-
-  QGroupBox *pgbType = new QGroupBox("Transit Chart Type");
-  QVBoxLayout *pvType = new QVBoxLayout(pgbType);
-  QButtonGroup *pgroup = new QButtonGroup(&dlg);
-  CONST char *rgszDayType[7] = { "None",
-    "Transit to Transit Times", "Transit to Transit Influence",
-    "Transit to Transit Graph", "Transit to Natal Times",
-    "Transit to Natal Influence", "Transit to Natal Graph" };
-  int n1 = us.fInDay ? 1 : (us.fInDayInf ? 2 : (us.fInDayGra ? 3 :
-    (us.fTransit ? 4 : (us.fTransitInf ? 5 : (us.fTransitGra ? 6 : 0)))));
-  for (i = 0; i < 7; i++) {
-    QRadioButton *prb = new QRadioButton(rgszDayType[i]);
-    prb->setChecked(i == n1);
-    pgroup->addButton(prb, i);
-    pvType->addWidget(prb);
-  }
-  pvLeft->addWidget(pgbType);
-
-  // Same human readable formatting as the chart info dialog -- month by
-  // name, time as "9:54pm", zone as "8W". See ShowChartInfoForQt().
-  QGroupBox *pgbInfo = new QGroupBox("Transit to Natal Info");
-  QFormLayout *pformInfo = new QFormLayout(pgbInfo);
-  sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
-  QComboBox *peMon = NewComboQt(sz, RgstrMonthQt());
-  QComboBox *peDay = NewComboQt(QString::number(ciTran.day),
-    RgstrDayQt());
-  QComboBox *peYea = NewComboQt(QString::number(ciTran.yea),
-    RgstrYearQt());
-  QComboBox *peTim = NewComboQt(SzTim(ciTran.tim), RgstrTimeQt());
-  QComboBox *peDst = NewComboQt(ciTran.dst == 0.0 ? "No" :
-    (ciTran.dst == 1.0 ? "Yes" :
-    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))),
-    RgstrDstQt());
-  sprintf(sz, "%s", SzZone(ciTran.zon));
-  QComboBox *peZon = NewComboQt(sz[0] == '+' ? &sz[1] : sz,
-    RgstrZoneQt());
-  pformInfo->addRow("Month:", peMon);
-  pformInfo->addRow("Day:", peDay);
-  pformInfo->addRow("Year:", peYea);
-  pformInfo->addRow("Time:", peTim);
-  pformInfo->addRow("Daylight:", peDst);
-  pformInfo->addRow("Zone:", peZon);
-  pvLeft->addWidget(pgbInfo);
-  phTop->addLayout(pvLeft);
-
-  QGroupBox *pgbCover = new QGroupBox("Times and Graph Cover");
-  QVBoxLayout *pvCover = new QVBoxLayout(pgbCover);
-  QButtonGroup *pgroupCover = new QButtonGroup(&dlg);
-  CONST char *rgszCover[4] =
-    { "Given Day", "Given Month", "Given Year", "Range of Years" };
-  // Windows derives which of the four is current from two flags plus the
-  // magnitude of nEphemYears, rather than storing an index.
-  int n2 = us.fInDayMonth + us.fInDayYear +
-    us.fInDayYear*(NAbs(us.nEphemYears) > 1);
-  for (i = 0; i < 4; i++) {
-    QRadioButton *prb = new QRadioButton(rgszCover[i]);
-    prb->setChecked(i == n2);
-    pgroupCover->addButton(prb, i);
-    pvCover->addWidget(prb);
-  }
-  QFormLayout *pformYears = new QFormLayout();
-  QLineEdit *peYears = new QLineEdit(QString::number(us.nEphemYears));
-  pformYears->addRow("Years to Span:", peYears);
-  pvCover->addLayout(pformYears);
-  pvRight->addWidget(pgbCover);
-
-  QGroupBox *pgbRestrict = new QGroupBox("Transit Time Restrictions");
-  QVBoxLayout *pvRestrict = new QVBoxLayout(pgbRestrict);
-  QCheckBox *pcbSign = new QCheckBox("Sign Changes");
-  QCheckBox *pcbDir = new QCheckBox("Direction Changes");
-  QCheckBox *pcbDiralt = new QCheckBox("Latitude Dir. Changes");
-  QCheckBox *pcbDirlen = new QCheckBox("Distance Dir. Changes");
-  QCheckBox *pcbAlt0 = new QCheckBox("Latitude Zero Crossing");
-  QCheckBox *pcbDisequ = new QCheckBox("Distances Equal");
-  pcbSign->setChecked(us.fIgnoreSign != 0);
-  pcbDir->setChecked(us.fIgnoreDir != 0);
-  pcbDiralt->setChecked(us.fIgnoreDiralt != 0);
-  pcbDirlen->setChecked(us.fIgnoreDirlen != 0);
-  pcbAlt0->setChecked(us.fIgnoreAlt0 != 0);
-  pcbDisequ->setChecked(us.fIgnoreDisequ != 0);
-  for (QCheckBox *pcb : { pcbSign, pcbDir, pcbDiralt, pcbDirlen, pcbAlt0,
-    pcbDisequ })
-    pvRestrict->addWidget(pcb);
-  pvRight->addWidget(pgbRestrict);
-
-  QCheckBox *pcbProgress = new QCheckBox("Progress Instead of Transit");
-  QCheckBox *pcbReturn = new QCheckBox("Display Transit Returns Only");
-  QCheckBox *pcbListAuto = new QCheckBox("Times Populate Chart List");
-  QCheckBox *pcbGraphAll = new QCheckBox("Graphs Include All Objects");
-  pcbProgress->setChecked(is.fProgress != 0);
-  pcbReturn->setChecked(is.fReturn != 0);
-  pcbListAuto->setChecked(us.fListAuto != 0);
-  pcbGraphAll->setChecked(us.fGraphAll != 0);
-  for (QCheckBox *pcb : { pcbProgress, pcbReturn, pcbListAuto, pcbGraphAll })
-    pvRight->addWidget(pcb);
-  QFormLayout *pformDiv = new QFormLayout();
-  QLineEdit *peDiv = new QLineEdit(QString::number(us.nDivision));
-  pformDiv->addRow("Searching Divisions:", peDiv);
-  pvRight->addLayout(pformDiv);
-  pvRight->addStretch(1);
-  phTop->addLayout(pvRight);
-  pouter->addLayout(phTop);
-
-  QDialogButtonBox *pbuttons = new QDialogButtonBox(
-    QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  QPushButton *pbNow = pbuttons->addButton("Now",
-    QDialogButtonBox::ActionRole);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-  // "Now" refills the date/time fields from the current clock, exactly as
-  // Windows' dbTr_tn button does -- it doesn't accept the dialog.
-  QObject::connect(pbNow, &QPushButton::clicked, &dlg,
-    [peMon, peDay, peYea, peTim, peDst, peZon]() {
-      char szT[cchSzMax];
-      int mon, day, yea;
-      real tim;
-      GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
-      sprintf(szT, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
-      peMon->setEditText(szT);
-      peDay->setEditText(QString::number(day));
-      peYea->setEditText(QString::number(yea));
-      peTim->setEditText(SzTim(tim));
-      peDst->setEditText(ciDefa.dst == 0.0 ? "No" :
-        (ciDefa.dst == 1.0 ? "Yes" :
-        (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
-      sprintf(szT, "%s", SzZone(ciDefa.zon));
-      peZon->setEditText(szT[0] == '+' ? &szT[1] : szT);
-    });
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  int mon, day, yea;
-  real tim, dst, zon;
-  QByteArray ba;
-  ba = peMon->currentText().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->currentText().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->currentText().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->currentText().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->currentText().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->currentText().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
-  int nty = peYears->text().toInt();
-  int nd = peDiv->text().toInt();
-  if (!FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
-    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon) ||
-    !FValidDivision(nd)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more transit fields are invalid.");
-    return;
-  }
-  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
-
-  us.nEphemYears = nty;
-  us.fIgnoreSign   = pcbSign->isChecked();
-  us.fIgnoreDir    = pcbDir->isChecked();
-  us.fIgnoreDiralt = pcbDiralt->isChecked();
-  us.fIgnoreDirlen = pcbDirlen->isChecked();
-  us.fIgnoreAlt0   = pcbAlt0->isChecked();
-  us.fIgnoreDisequ = pcbDisequ->isChecked();
-  is.fProgress = pcbProgress->isChecked();
-  is.fReturn   = pcbReturn->isChecked();
-  us.fListAuto = pcbListAuto->isChecked();
-  us.fGraphAll = pcbGraphAll->isChecked();
-  us.nDivision = nd;
-
-  int n1sel = pgroup->checkedId();
-  int n2sel = pgroupCover->checkedId();
-  us.fInDayMonth = n2sel >= 1;
-  us.fInDayYear = us.fInDayMonth && n2sel >= 2;
-  if (n2sel == 2 && NAbs(us.nEphemYears) > 1)
-    us.nEphemYears = 0;
-  if (n1sel == 3 || n1sel == 6)
-    us.nEphemYears = (n2sel <= 2 ? 1 : (nty <= 1 ? 5 : nty));
-  else if (n1sel > 0) {
-    // The non graphical transit chart types are text listings.
-    us.fGraphics = fFalse;
-    if (n1sel == 2)
-      us.fProgress = is.fProgress;
-  }
-
-  flag fRecast = (n1sel == 2 || n1sel == 5);
-  switch (n1sel) {
-  case 1: SetChartModeQt(gTraTraTim); break;
-  case 2: SetChartModeQt(gTraTraInf); break;
-  case 3: SetChartModeQt(gTraTraGra); break;
-  case 4: SetChartModeQt(gTraNatTim); break;
-  case 5: SetChartModeQt(gTraNatInf); break;
-  case 6: SetChartModeQt(gTraNatGra); break;
-  default:
-    if (n1 != 0)  // Was showing a transit chart; go back to a normal one.
-      SetChartModeQt(gWheel);
-  }
-  if (fRecast)
-    RecastAndRedrawQt();
-  else
-    RedrawQt();
-}
-
-
-// Progressions, equivalent to Windows' DlgProgress: whether to show a
-// progressed chart, what kind, how fast it progresses, and the date to
-// progress to (ciTran, shared with the Transits dialog).
-
-// Preset progression rates, as offered by Windows' two dropdowns. Those
-// live in wdialog.cpp, which isn't compiled into the QT build, so they're
-// duplicated here.
-static CONST char *rgszProgQt[4] =
-  {"Primary", "Secondary", "Tertiary2", "Tertiary1"};
-static CONST real rgrProgQt[4] =
-  {rDayInYear * rDegMax, rDayInYear, 29.530588, 27.321661};
-static CONST char *rgszProgCuspQt[2] = {"Quotidian", "Solar"};
-static CONST real rgrProgCuspQt[2] = {1.0, rDayInYear};
-
-void ShowProgressDialogQt()
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Progressions");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  char sz[cchSzMax], szT[cchSzDef];
-  int i;
-
-  QCheckBox *pcbEnable = new QCheckBox("Do Progression");
-  pcbEnable->setChecked(us.fProgress != 0);
-  pouter->addWidget(pcbEnable);
-
-  QGroupBox *pgbType = new QGroupBox("Progression Type");
-  QVBoxLayout *pvType = new QVBoxLayout(pgbType);
-  QButtonGroup *pgroup = new QButtonGroup(&dlg);
-  CONST char *rgszType[3] = { "Secondary (Calculated Cusps)",
-    "Secondary (Solar Arc Cusps)", "Solar Arc" };
-  int nTypeCur = us.nProgress == ptCast ? 0 :
-    (us.nProgress == ptMixed ? 1 : 2);
-  for (i = 0; i < 3; i++) {
-    QRadioButton *prb = new QRadioButton(rgszType[i]);
-    prb->setChecked(i == nTypeCur);
-    pgroup->addButton(prb, i);
-    pvType->addWidget(prb);
-  }
-  pouter->addWidget(pgbType);
-
-  QFormLayout *pform = new QFormLayout();
-  // Editable combos, matching Windows: the presets are suggestions, and
-  // an arbitrary rate can still be typed. Each entry is the raw number
-  // followed by its name, which is why the parse below only reads the
-  // leading number and ignores the rest.
-  // Every addItem() must happen before setEditText(): adding the first
-  // item to an editable combo sets its current index to 0, which
-  // overwrites whatever text is in the line edit. Setting the text first
-  // silently loses any value that doesn't happen to match a preset.
-  QComboBox *pcbDay = new QComboBox();
-  pcbDay->setEditable(true);
-  FormatR(szT, us.rProgDay, -6);
-  QString qsDay = szT;
-  for (i = 0; i < 4; i++) {
-    FormatR(szT, rgrProgQt[i], -6);
-    sprintf(sz, "%s %s", szT, rgszProgQt[i]);
-    pcbDay->addItem(sz);
-    if (us.rProgDay == rgrProgQt[i])
-      qsDay = sz;
-  }
-  pcbDay->setEditText(qsDay);
-  QComboBox *pcbCusp = new QComboBox();
-  pcbCusp->setEditable(true);
-  FormatR(szT, us.rProgCusp, -6);
-  QString qsCusp = szT;
-  for (i = 0; i < 2; i++) {
-    FormatR(szT, rgrProgCuspQt[i], -6);
-    sprintf(sz, "%s %s", szT, rgszProgCuspQt[i]);
-    pcbCusp->addItem(sz);
-    if (us.rProgCusp == rgrProgCuspQt[i])
-      qsCusp = sz;
-  }
-  pcbCusp->setEditText(qsCusp);
-  QLineEdit *peArc = new QLineEdit(us.objProgArc >= 0 ?
-    szObjName[us.objProgArc] : "None");
-  pform->addRow("Degrees Per Day:", pcbDay);
-  pform->addRow("Cusp Move Ratio:", pcbCusp);
-  pform->addRow("Solar Arc Based on This Planet:", peArc);
-  pouter->addLayout(pform);
-
-  QCheckBox *pcbRAMC =
-    new QCheckBox("Solar Arc Cusps Recalculated with New MC");
-  pcbRAMC->setChecked(us.fProgRAMC != 0);
-  pouter->addWidget(pcbRAMC);
-
-  // Same human readable formatting as the chart info dialog.
-  QGroupBox *pgbDate = new QGroupBox("Progress To");
-  QFormLayout *pformDate = new QFormLayout(pgbDate);
-  sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
-  QComboBox *peMon = NewComboQt(sz, RgstrMonthQt());
-  QComboBox *peDay = NewComboQt(QString::number(ciTran.day),
-    RgstrDayQt());
-  QComboBox *peYea = NewComboQt(QString::number(ciTran.yea),
-    RgstrYearQt());
-  QComboBox *peTim = NewComboQt(SzTim(ciTran.tim), RgstrTimeQt());
-  QComboBox *peDst = NewComboQt(ciTran.dst == 0.0 ? "No" :
-    (ciTran.dst == 1.0 ? "Yes" :
-    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))),
-    RgstrDstQt());
-  sprintf(sz, "%s", SzZone(ciTran.zon));
-  QComboBox *peZon = NewComboQt(sz[0] == '+' ? &sz[1] : sz,
-    RgstrZoneQt());
-  pformDate->addRow("Month:", peMon);
-  pformDate->addRow("Day:", peDay);
-  pformDate->addRow("Year:", peYea);
-  pformDate->addRow("Time:", peTim);
-  pformDate->addRow("Daylight:", peDst);
-  pformDate->addRow("Zone:", peZon);
-  pouter->addWidget(pgbDate);
-
-  QDialogButtonBox *pbuttons = new QDialogButtonBox(
-    QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  QPushButton *pbNow = pbuttons->addButton("Now",
-    QDialogButtonBox::ActionRole);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-  QObject::connect(pbNow, &QPushButton::clicked, &dlg,
-    [peMon, peDay, peYea, peTim, peDst, peZon]() {
-      char szN[cchSzMax];
-      int mon, day, yea;
-      real tim;
-      GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
-      sprintf(szN, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
-      peMon->setEditText(szN);
-      peDay->setEditText(QString::number(day));
-      peYea->setEditText(QString::number(yea));
-      peTim->setEditText(SzTim(tim));
-      peDst->setEditText(ciDefa.dst == 0.0 ? "No" :
-        (ciDefa.dst == 1.0 ? "Yes" :
-        (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
-      sprintf(szN, "%s", SzZone(ciDefa.zon));
-      peZon->setEditText(szN[0] == '+' ? &szN[1] : szN);
-    });
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  QByteArray ba;
-  // A leading "X" means the value is a divisor of a year rather than a
-  // rate, e.g. "X12" for a twelfth of a year per day. Windows' DlgProgress
-  // accepts the same prefix here.
-  ba = pcbDay->currentText().toLocal8Bit();
-  int iX = ChCap(ba.constData()[0]) == 'X';
-  real rd = RFromSz(ba.constData() + iX);
-  if (iX != 0 && rd != 0.0)
-    rd = rDayInYear / rd;
-  ba = pcbCusp->currentText().toLocal8Bit();
-  real rC = RFromSz(ba.constData());
-  ba = peArc->text().toLocal8Bit();
-  int npO = NParseSz(ba.constData(), pmObject);
-  int mon, day, yea;
-  real tim, dst, zon;
-  ba = peMon->currentText().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->currentText().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->currentText().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->currentText().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->currentText().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->currentText().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
-  if (rd == 0.0 || rC == 0.0 || !FValidProgArc(npO) ||
-    !FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
-    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more progression fields are invalid.");
-    return;
-  }
-
-  us.fProgress = pcbEnable->isChecked();
-  us.nProgress = pgroup->checkedId() == 0 ? ptCast :
-    (pgroup->checkedId() == 1 ? ptMixed : ptSolarArc);
-  us.rProgDay = rd;
-  us.rProgCusp = rC;
-  us.objProgArc = npO;
-  us.fProgRAMC = pcbRAMC->isChecked();
-  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
-  is.JDp = MdytszToJulian(ciTran.mon, ciTran.day, ciTran.yea, ciTran.tim,
-    ciDefa.dst, ciDefa.zon);
-  RecastAndRedrawQt();
-}
-
-
-// Chart settings, equivalent to Windows' DlgChart: per chart type display
-// options, sort orders, and a few counts.
-
-// Aspect list sort orders. Windows keeps this in wdialog.cpp, which isn't
-// compiled into the QT build.
-static CONST char *rgszSortQt[asMax] = {"Power", "Orb Magnitude",
-  "Orb Value", "1st Object Index", "2nd Object Index",
-  "Aspect", "1st Object Position", "2nd Object Position", "Midpoint"};
 
 // A checkbox in a transcribed dialog and the flag it edits. Extracted from
 // the SetCheck/GetCheck pairs in Windows' own dialog handlers rather than
@@ -2391,6 +1627,95 @@ void ShowGraphicsSettingsDialogQt()
 // lets someone actually create a chart interactively instead of only ever
 // loading one from disk.
 
+// The four atlas buttons Windows' chart info dialogs carry, wired to the
+// lookups in atlas.cpp. Those fill a Win32 listbox directly; the Qt build
+// receives their rows through pfnAtlasRowQt instead (see atlas.cpp), which
+// is set only while one of these runs.
+
+#ifdef ATLAS
+static QListWidget *s_plistAtlasQt = NULL;
+static QVector<int> s_rgiaeQt;
+
+static void AtlasRowQt(CONST char *sz, int iae)
+{
+  if (s_plistAtlasQt == NULL)
+    return;
+  // fromLatin1, not the implicit UTF-8: these rows carry Astrolog's degree
+  // sign as a single high byte, which decoded as UTF-8 is invalid and comes
+  // out as a replacement character.
+  s_plistAtlasQt->addItem(QString::fromLatin1(sz));
+  s_rgiaeQt.append(iae);
+}
+
+// Run one lookup with the rows going to "plist".
+static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
+  QComboBox *pcbLon, QComboBox *pcbLat, CI *pci)
+{
+  char sz[cchSzMax];
+  int ilist = 12, i;
+  real lon, lat;
+
+  if (plist == NULL)
+    return;
+  plist->clear();
+  s_plistAtlasQt = plist;
+  s_rgiaeQt.clear();
+  pfnAtlasRowQt = AtlasRowQt;
+
+  if (nWhich == 0) {                     // Lookup City
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peLoc->text().toLocal8Bit().constData());
+    if (!DisplayAtlasLookup(sz, 1, &ilist))
+      plist->addItem("Couldn't get atlas data!");
+  } else if (nWhich == 1) {              // Nearby Cities
+    lon = RParseSz(pcbLon->currentText().toLocal8Bit().constData(), pmLon);
+    lat = RParseSz(pcbLat->currentText().toLocal8Bit().constData(), pmLat);
+    if (!DisplayAtlasNearby(lon, lat, 1, &ilist, fFalse))
+      plist->addItem("Couldn't get atlas data!");
+  } else {                               // Time Changes
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peLoc->text().toLocal8Bit().constData());
+    pfnAtlasRowQt = NULL;
+    if (!DisplayAtlasLookup(sz, 0, &i)) {
+      pfnAtlasRowQt = NULL;
+      s_plistAtlasQt = NULL;
+      plist->addItem("Put a valid city in the Location field first.");
+      return;
+    }
+    pfnAtlasRowQt = AtlasRowQt;
+    if (!DisplayTimezoneChanges(is.rgae[i].izn, 1, pci))
+      plist->addItem("Couldn't get time zone data!");
+  }
+  pfnAtlasRowQt = NULL;
+  s_plistAtlasQt = NULL;
+}
+
+// "Apply Info": copy the highlighted atlas row into the location fields.
+static void RcAtlasApplyQt(QListWidget *plist, QComboBox *pcbLon,
+  QComboBox *pcbLat, QComboBox *pcbZon, QLineEdit *peLoc)
+{
+  char sz[cchSzMax];
+  int iRow, iae, nSav;
+
+  if (plist == NULL)
+    return;
+  iRow = plist->currentRow();
+  if (iRow < 0 || iRow >= s_rgiaeQt.size() || s_rgiaeQt[iRow] < 0)
+    return;
+  iae = s_rgiaeQt[iRow];
+  nSav = us.fAnsiChar; us.fAnsiChar = fFalse;
+  sprintf(sz, "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
+  us.fAnsiChar = nSav;
+  sz[is.ichLocSplit] = chNull;
+  if (pcbLon != NULL) pcbLon->setEditText(&sz[0]);
+  if (pcbLat != NULL) pcbLat->setEditText(&sz[is.ichLocSplit+1]);
+  if (pcbZon != NULL)
+    pcbZon->setEditText(SzZone(ZondefFromIzn(is.rgae[iae].izn)));
+  if (peLoc != NULL) peLoc->setText(SzCity(iae));
+}
+#endif // ATLAS
+
+
 // Chart info, transcribed from dlgInfo: the date, time and place fields,
 // Windows' Now and Recall buttons, and the four atlas lookups with their
 // results list. The same dialog serves chart #2 with a different title,
@@ -3095,6 +2420,664 @@ static int NColorFromComboQt(QComboBox *pcb)
   QByteArray ba = pcb->currentText().toLocal8Bit();
   return NParseSz(ba.constData(), pmColor);
 }
+
+// Object restriction (show/hide), equivalent to Windows' DlgRestrict,
+// DlgStar, and DlgMoons -- one implementation for all of them, since they
+// differ only in title, object range, which ignore array they edit, and
+// which quick buttons they offer. (Windows likewise drives the first two
+// with a single DlgRestrict keyed off wi.wCmd.)
+//
+// Checkbox polarity follows Windows: the label is the bare object name
+// and a *checked* box means restricted, i.e. hidden. That reads backwards
+// at first glance, but it's what a Windows user's muscle memory expects,
+// and inverting it is the one difference that would silently produce the
+// opposite chart.
+
+
+// The restriction dialogs, transcribed from dlgRestrict, dlgStar and
+// dlgMoons: every checkbox, group box, button and the icon sit at the
+// coordinates the resource gives them.
+//
+// Checkbox polarity follows Windows: the label is the object's name and a
+// *checked* box means restricted, i.e. hidden. That reads backwards at
+// first glance, but it is what a Windows user expects, and inverting it is
+// the one difference that would silently produce the opposite chart.
+
+// What one of a restriction dialog's quick buttons does to its range.
+enum { resSet, resClear, resToggle, resCopy };
+
+typedef struct {
+  CONST char *szId;   // Resource symbol of the button.
+  int nIdx;           // Its index, or -1 when the symbol carries none.
+  int nAction, lo, hi;
+  CONST byte *rgSource;
+} RCRESBUT;
+
+static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
+  int cctl, int dxDlg, int dyDlg, int lo, int hi, byte *rgignore,
+  CONST RCRESBUT *rgbut, int cbut)
+{
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  QVector<QCheckBox *> rgpcb;
+  int i;
+
+  dlg.setWindowTitle(szTitle);
+  RcBuildDialogQt(&dlg, rgctl, cctl, dxDlg, dyDlg, &rgbuilt);
+
+  // The checkbox numbering is one based over the dialog's object range.
+  rgpcb.resize(hi - lo + 1);
+  for (i = 0; i < rgbuilt.size(); i++) {
+    CONST RCCTL *pctl = rgbuilt[i].pctl;
+    if (rgbuilt[i].pw == NULL || pctl == NULL || pctl->nType != ctlCheck)
+      continue;
+    int iObj = lo + pctl->nIdx - 1;
+    if (pctl->nIdx < 1 || !FBetween(iObj, lo, hi))
+      continue;
+    QCheckBox *pcb = (QCheckBox *)rgbuilt[i].pw;
+    pcb->setChecked(rgignore[iObj] != 0);
+    rgpcb[iObj - lo] = pcb;
+  }
+
+  for (i = 0; i < cbut; i++) {
+    CONST RCRESBUT *pbut = &rgbut[i];
+    QPushButton *ppb = (QPushButton *)(pbut->nIdx >= 0 ?
+      PwRcFindIdxQt(rgbuilt, pbut->szId, pbut->nIdx) :
+      PwRcFindQt(rgbuilt, pbut->szId));
+    if (ppb == NULL)
+      continue;
+    QObject::connect(ppb, &QPushButton::clicked, &dlg,
+      [&rgpcb, pbut, lo, hi]() {
+        int jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
+        for (int j = jlo; j <= jhi; j++) {
+          QCheckBox *pcb = rgpcb[j - lo];
+          if (pcb == NULL)
+            continue;
+          switch (pbut->nAction) {
+          case resSet:    pcb->setChecked(fTrue);              break;
+          case resClear:  pcb->setChecked(fFalse);             break;
+          case resToggle: pcb->setChecked(!pcb->isChecked());  break;
+          case resCopy:   pcb->setChecked(pbut->rgSource[j] != 0); break;
+          }
+        }
+      });
+  }
+
+  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
+  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
+  if (ppbOK != NULL) {
+    ppbOK->setDefault(fTrue);
+    QObject::connect(ppbOK, &QPushButton::clicked, &dlg, &QDialog::accept);
+  }
+  if (ppbCancel != NULL)
+    QObject::connect(ppbCancel, &QPushButton::clicked, &dlg,
+      &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+  for (i = lo; i <= hi; i++)
+    if (rgpcb[i - lo] != NULL)
+      rgignore[i] = rgpcb[i - lo]->isChecked();
+  AdjustRestrictions();
+  // Windows re-derives the Setting menu's category checkmarks here.
+  SyncRestrictMenuQt();
+  RecastAndRedrawQt();
+}
+
+
+void ShowRestrictDialogQt()
+{
+  CONST RCRESBUT rgbut[] = {
+    {"dbRe_R",    0, resSet,    0,       dwarfHi, NULL},
+    {"dbRe_R",    1, resClear,  0,       dwarfHi, NULL},
+    {"dbRe_R",   -1, resToggle, oMain+1, oCore,   NULL},
+    {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
+    {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
+    {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
+    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore2},
+    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
+
+  ShowRcRestrictQt(szTitleRestrict, rgctlRestrict, cctlRestrict,
+    dxRestrict, dyRestrict, 0, dwarfHi, ignore,
+    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
+}
+
+
+void ShowStarRestrictDialogQt()
+{
+  CONST RCRESBUT rgbut[] = {
+    {"dbSt_RU", 0, resSet,   starLo, starHi, NULL},
+    {"dbSt_RU", 1, resClear, starLo, starHi, NULL} };
+
+  ShowRcRestrictQt(szTitleStar, rgctlStar, cctlStar,
+    dxStar, dyStar, starLo, starHi, ignore,
+    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
+}
+
+// Windows drives this from the same dlgRestrict, only editing ignore2 and
+// offering a copy from the standard set rather than the transit one.
+void ShowTransitRestrictDialogQt()
+{
+  CONST RCRESBUT rgbut[] = {
+    {"dbRe_R",    0, resSet,    0,       dwarfHi, NULL},
+    {"dbRe_R",    1, resClear,  0,       dwarfHi, NULL},
+    {"dbRe_R",   -1, resToggle, oMain+1, oCore,   NULL},
+    {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
+    {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
+    {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
+    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore},
+    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
+
+  ShowRcRestrictQt("Transit Object Restrictions", rgctlRestrict,
+    cctlRestrict, dxRestrict, dyRestrict, 0, dwarfHi, ignore2,
+    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
+}
+
+
+// Default chart info, equivalent to Windows' DlgDefault: the location/
+// elevation/temperature/etc that a new chart starts out with, and what
+// "now" charts use for a location.
+
+void ShowDefaultInfoDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  char sz[cchSzMax];
+  int nSavChar;
+
+  dlg.setWindowTitle(szTitleDefault);
+  RcBuildDialogQt(&dlg, rgctlDefault, cctlDefault, dxDefault, dyDefault,
+    &rgbuilt);
+
+  QComboBox *pcbDst = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeDst");
+  QComboBox *pcbZon = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeZon");
+  QComboBox *pcbCor = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeCor");
+  QComboBox *pcbLon = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeLon");
+  QComboBox *pcbLat = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeLat");
+  QComboBox *pcbElv = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeElv");
+  QComboBox *pcbTmp = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeTmp");
+  QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deDeNam");
+  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deDeLoc");
+  QListWidget *plist = (QListWidget *)PwRcFindQt(rgbuilt, "dlIn");
+
+  // Formatted the way Windows' DlgDefault does it (SetEditSZOA), not as
+  // raw numbers -- see ShowChartInfoForQt() for the same treatment and
+  // the reasoning about SzLocation()'s degree byte.
+  FillComboQt(pcbDst, ciDefa.dst == 0.0 ? "No" :
+    (ciDefa.dst == 1.0 ? "Yes" :
+    (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))),
+    RgstrDstQt());
+  sprintf(sz, "%s", SzZone(ciDefa.zon));
+  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
+  sprintf(sz, "%s", SzLocation(ciDefa.lon, ciDefa.lat));
+  us.fAnsiChar = nSavChar;
+  sz[is.ichLocSplit] = chNull;
+  FillComboQt(pcbLon, &sz[0], RgstrLonQt());
+  FillComboQt(pcbLat, &sz[is.ichLocSplit+1], RgstrLatQt());
+  FillComboQt(pcbElv, SzElevation(us.elvDef),
+    QStringList() << "0m" << "1000ft");
+  FillComboQt(pcbTmp, SzTemperature(us.tmpDef),
+    QStringList() << "0C" << "32F");
+  FillComboQt(pcbCor, QString::number(us.lTimeAddition),
+    QStringList() << "60" << "0" << "-60");
+  if (peName != NULL)
+    peName->setText(FSzSet(ciDefa.nam) ? ciDefa.nam : "");
+  if (peLoc != NULL)
+    peLoc->setText(FSzSet(ciDefa.loc) ? ciDefa.loc : "");
+
+#ifdef ATLAS
+  // The atlas buttons, which this port didn't have at all.
+  CI ciT = ciDefa;
+  QPushButton *ppbCity = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCity");
+  QPushButton *ppbCoor = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCoor");
+  QPushButton *ppbChan = (QPushButton *)PwRcFindQt(rgbuilt, "dbInChan");
+  QPushButton *ppbAppl = (QPushButton *)PwRcFindQt(rgbuilt, "dbInAppl");
+  if (ppbCity != NULL)
+    QObject::connect(ppbCity, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
+        RcAtlasRunQt(plist, 0, peLoc, pcbLon, pcbLat, &ciT); });
+  if (ppbCoor != NULL)
+    QObject::connect(ppbCoor, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
+        RcAtlasRunQt(plist, 1, peLoc, pcbLon, pcbLat, &ciT); });
+  if (ppbChan != NULL)
+    QObject::connect(ppbChan, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
+        RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ciT); });
+  if (ppbAppl != NULL)
+    QObject::connect(ppbAppl, &QPushButton::clicked, &dlg,
+      [plist, pcbLon, pcbLat, pcbZon, peLoc]() {
+        RcAtlasApplyQt(plist, pcbLon, pcbLat, pcbZon, peLoc); });
+#endif
+
+  RcWireOkCancelQt(&dlg, rgbuilt);
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  CI ci = ciDefa;
+  QByteArray ba;
+  if (pcbDst != NULL) { ba = pcbDst->currentText().toLocal8Bit();
+    ci.dst = RParseSz(ba.constData(), pmDst); }
+  if (pcbZon != NULL) { ba = pcbZon->currentText().toLocal8Bit();
+    ci.zon = RParseSz(ba.constData(), pmZon); }
+  if (pcbLon != NULL) { ba = pcbLon->currentText().toLocal8Bit();
+    ci.lon = RParseSz(ba.constData(), pmLon); }
+  if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
+    ci.lat = RParseSz(ba.constData(), pmLat); }
+  if (!FValidDst(ci.dst) || !FValidZon(ci.zon) ||
+    !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more chart info fields are invalid.");
+    return;
+  }
+  if (pcbElv != NULL) { ba = pcbElv->currentText().toLocal8Bit();
+    us.elvDef = RParseSz(ba.constData(), pmElv); }
+  if (pcbTmp != NULL) { ba = pcbTmp->currentText().toLocal8Bit();
+    us.tmpDef = RParseSz(ba.constData(), pmTmp); }
+  if (pcbCor != NULL)
+    us.lTimeAddition = pcbCor->currentText().toLong();
+  if (peName != NULL)
+    FCloneSz(peName->text().toLocal8Bit().constData(), &ci.nam);
+  if (peLoc != NULL)
+    FCloneSz(peLoc->text().toLocal8Bit().constData(), &ci.loc);
+  ciDefa = ci;
+  RecastAndRedrawQt();
+}
+
+
+// Transits, equivalent to Windows' DlgTransit: which transit chart type
+// to show (if any), the date/time to transit to (ciTran), how much time
+// the search covers, which kinds of event the search reports, and a few
+// display options. Location comes from the default chart info the same
+// way Windows does it.
+
+void ShowTransitDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Transits");
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QHBoxLayout *phTop = new QHBoxLayout();
+  QVBoxLayout *pvLeft = new QVBoxLayout();
+  QVBoxLayout *pvRight = new QVBoxLayout();
+  char sz[cchSzMax];
+  int i;
+
+  QGroupBox *pgbType = new QGroupBox("Transit Chart Type");
+  QVBoxLayout *pvType = new QVBoxLayout(pgbType);
+  QButtonGroup *pgroup = new QButtonGroup(&dlg);
+  CONST char *rgszDayType[7] = { "None",
+    "Transit to Transit Times", "Transit to Transit Influence",
+    "Transit to Transit Graph", "Transit to Natal Times",
+    "Transit to Natal Influence", "Transit to Natal Graph" };
+  int n1 = us.fInDay ? 1 : (us.fInDayInf ? 2 : (us.fInDayGra ? 3 :
+    (us.fTransit ? 4 : (us.fTransitInf ? 5 : (us.fTransitGra ? 6 : 0)))));
+  for (i = 0; i < 7; i++) {
+    QRadioButton *prb = new QRadioButton(rgszDayType[i]);
+    prb->setChecked(i == n1);
+    pgroup->addButton(prb, i);
+    pvType->addWidget(prb);
+  }
+  pvLeft->addWidget(pgbType);
+
+  // Same human readable formatting as the chart info dialog -- month by
+  // name, time as "9:54pm", zone as "8W". See ShowChartInfoForQt().
+  QGroupBox *pgbInfo = new QGroupBox("Transit to Natal Info");
+  QFormLayout *pformInfo = new QFormLayout(pgbInfo);
+  sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
+  QComboBox *peMon = NewComboQt(sz, RgstrMonthQt());
+  QComboBox *peDay = NewComboQt(QString::number(ciTran.day),
+    RgstrDayQt());
+  QComboBox *peYea = NewComboQt(QString::number(ciTran.yea),
+    RgstrYearQt());
+  QComboBox *peTim = NewComboQt(SzTim(ciTran.tim), RgstrTimeQt());
+  QComboBox *peDst = NewComboQt(ciTran.dst == 0.0 ? "No" :
+    (ciTran.dst == 1.0 ? "Yes" :
+    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))),
+    RgstrDstQt());
+  sprintf(sz, "%s", SzZone(ciTran.zon));
+  QComboBox *peZon = NewComboQt(sz[0] == '+' ? &sz[1] : sz,
+    RgstrZoneQt());
+  pformInfo->addRow("Month:", peMon);
+  pformInfo->addRow("Day:", peDay);
+  pformInfo->addRow("Year:", peYea);
+  pformInfo->addRow("Time:", peTim);
+  pformInfo->addRow("Daylight:", peDst);
+  pformInfo->addRow("Zone:", peZon);
+  pvLeft->addWidget(pgbInfo);
+  phTop->addLayout(pvLeft);
+
+  QGroupBox *pgbCover = new QGroupBox("Times and Graph Cover");
+  QVBoxLayout *pvCover = new QVBoxLayout(pgbCover);
+  QButtonGroup *pgroupCover = new QButtonGroup(&dlg);
+  CONST char *rgszCover[4] =
+    { "Given Day", "Given Month", "Given Year", "Range of Years" };
+  // Windows derives which of the four is current from two flags plus the
+  // magnitude of nEphemYears, rather than storing an index.
+  int n2 = us.fInDayMonth + us.fInDayYear +
+    us.fInDayYear*(NAbs(us.nEphemYears) > 1);
+  for (i = 0; i < 4; i++) {
+    QRadioButton *prb = new QRadioButton(rgszCover[i]);
+    prb->setChecked(i == n2);
+    pgroupCover->addButton(prb, i);
+    pvCover->addWidget(prb);
+  }
+  QFormLayout *pformYears = new QFormLayout();
+  QLineEdit *peYears = new QLineEdit(QString::number(us.nEphemYears));
+  pformYears->addRow("Years to Span:", peYears);
+  pvCover->addLayout(pformYears);
+  pvRight->addWidget(pgbCover);
+
+  QGroupBox *pgbRestrict = new QGroupBox("Transit Time Restrictions");
+  QVBoxLayout *pvRestrict = new QVBoxLayout(pgbRestrict);
+  QCheckBox *pcbSign = new QCheckBox("Sign Changes");
+  QCheckBox *pcbDir = new QCheckBox("Direction Changes");
+  QCheckBox *pcbDiralt = new QCheckBox("Latitude Dir. Changes");
+  QCheckBox *pcbDirlen = new QCheckBox("Distance Dir. Changes");
+  QCheckBox *pcbAlt0 = new QCheckBox("Latitude Zero Crossing");
+  QCheckBox *pcbDisequ = new QCheckBox("Distances Equal");
+  pcbSign->setChecked(us.fIgnoreSign != 0);
+  pcbDir->setChecked(us.fIgnoreDir != 0);
+  pcbDiralt->setChecked(us.fIgnoreDiralt != 0);
+  pcbDirlen->setChecked(us.fIgnoreDirlen != 0);
+  pcbAlt0->setChecked(us.fIgnoreAlt0 != 0);
+  pcbDisequ->setChecked(us.fIgnoreDisequ != 0);
+  for (QCheckBox *pcb : { pcbSign, pcbDir, pcbDiralt, pcbDirlen, pcbAlt0,
+    pcbDisequ })
+    pvRestrict->addWidget(pcb);
+  pvRight->addWidget(pgbRestrict);
+
+  QCheckBox *pcbProgress = new QCheckBox("Progress Instead of Transit");
+  QCheckBox *pcbReturn = new QCheckBox("Display Transit Returns Only");
+  QCheckBox *pcbListAuto = new QCheckBox("Times Populate Chart List");
+  QCheckBox *pcbGraphAll = new QCheckBox("Graphs Include All Objects");
+  pcbProgress->setChecked(is.fProgress != 0);
+  pcbReturn->setChecked(is.fReturn != 0);
+  pcbListAuto->setChecked(us.fListAuto != 0);
+  pcbGraphAll->setChecked(us.fGraphAll != 0);
+  for (QCheckBox *pcb : { pcbProgress, pcbReturn, pcbListAuto, pcbGraphAll })
+    pvRight->addWidget(pcb);
+  QFormLayout *pformDiv = new QFormLayout();
+  QLineEdit *peDiv = new QLineEdit(QString::number(us.nDivision));
+  pformDiv->addRow("Searching Divisions:", peDiv);
+  pvRight->addLayout(pformDiv);
+  pvRight->addStretch(1);
+  phTop->addLayout(pvRight);
+  pouter->addLayout(phTop);
+
+  QDialogButtonBox *pbuttons = new QDialogButtonBox(
+    QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  QPushButton *pbNow = pbuttons->addButton("Now",
+    QDialogButtonBox::ActionRole);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  // "Now" refills the date/time fields from the current clock, exactly as
+  // Windows' dbTr_tn button does -- it doesn't accept the dialog.
+  QObject::connect(pbNow, &QPushButton::clicked, &dlg,
+    [peMon, peDay, peYea, peTim, peDst, peZon]() {
+      char szT[cchSzMax];
+      int mon, day, yea;
+      real tim;
+      GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
+      sprintf(szT, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
+      peMon->setEditText(szT);
+      peDay->setEditText(QString::number(day));
+      peYea->setEditText(QString::number(yea));
+      peTim->setEditText(SzTim(tim));
+      peDst->setEditText(ciDefa.dst == 0.0 ? "No" :
+        (ciDefa.dst == 1.0 ? "Yes" :
+        (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
+      sprintf(szT, "%s", SzZone(ciDefa.zon));
+      peZon->setEditText(szT[0] == '+' ? &szT[1] : szT);
+    });
+
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  int mon, day, yea;
+  real tim, dst, zon;
+  QByteArray ba;
+  ba = peMon->currentText().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
+  ba = peDay->currentText().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
+  ba = peYea->currentText().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
+  ba = peTim->currentText().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
+  ba = peDst->currentText().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->currentText().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
+  int nty = peYears->text().toInt();
+  int nd = peDiv->text().toInt();
+  if (!FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
+    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon) ||
+    !FValidDivision(nd)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more transit fields are invalid.");
+    return;
+  }
+  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
+
+  us.nEphemYears = nty;
+  us.fIgnoreSign   = pcbSign->isChecked();
+  us.fIgnoreDir    = pcbDir->isChecked();
+  us.fIgnoreDiralt = pcbDiralt->isChecked();
+  us.fIgnoreDirlen = pcbDirlen->isChecked();
+  us.fIgnoreAlt0   = pcbAlt0->isChecked();
+  us.fIgnoreDisequ = pcbDisequ->isChecked();
+  is.fProgress = pcbProgress->isChecked();
+  is.fReturn   = pcbReturn->isChecked();
+  us.fListAuto = pcbListAuto->isChecked();
+  us.fGraphAll = pcbGraphAll->isChecked();
+  us.nDivision = nd;
+
+  int n1sel = pgroup->checkedId();
+  int n2sel = pgroupCover->checkedId();
+  us.fInDayMonth = n2sel >= 1;
+  us.fInDayYear = us.fInDayMonth && n2sel >= 2;
+  if (n2sel == 2 && NAbs(us.nEphemYears) > 1)
+    us.nEphemYears = 0;
+  if (n1sel == 3 || n1sel == 6)
+    us.nEphemYears = (n2sel <= 2 ? 1 : (nty <= 1 ? 5 : nty));
+  else if (n1sel > 0) {
+    // The non graphical transit chart types are text listings.
+    us.fGraphics = fFalse;
+    if (n1sel == 2)
+      us.fProgress = is.fProgress;
+  }
+
+  flag fRecast = (n1sel == 2 || n1sel == 5);
+  switch (n1sel) {
+  case 1: SetChartModeQt(gTraTraTim); break;
+  case 2: SetChartModeQt(gTraTraInf); break;
+  case 3: SetChartModeQt(gTraTraGra); break;
+  case 4: SetChartModeQt(gTraNatTim); break;
+  case 5: SetChartModeQt(gTraNatInf); break;
+  case 6: SetChartModeQt(gTraNatGra); break;
+  default:
+    if (n1 != 0)  // Was showing a transit chart; go back to a normal one.
+      SetChartModeQt(gWheel);
+  }
+  if (fRecast)
+    RecastAndRedrawQt();
+  else
+    RedrawQt();
+}
+
+
+// Progressions, equivalent to Windows' DlgProgress: whether to show a
+// progressed chart, what kind, how fast it progresses, and the date to
+// progress to (ciTran, shared with the Transits dialog).
+
+// Preset progression rates, as offered by Windows' two dropdowns. Those
+// live in wdialog.cpp, which isn't compiled into the QT build, so they're
+// duplicated here.
+static CONST char *rgszProgQt[4] =
+  {"Primary", "Secondary", "Tertiary2", "Tertiary1"};
+static CONST real rgrProgQt[4] =
+  {rDayInYear * rDegMax, rDayInYear, 29.530588, 27.321661};
+static CONST char *rgszProgCuspQt[2] = {"Quotidian", "Solar"};
+static CONST real rgrProgCuspQt[2] = {1.0, rDayInYear};
+
+// Progressions, transcribed from dlgProgress.
+
+void ShowProgressDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  char sz[cchSzMax], szT[cchSzDef];
+  int npO, mon, day, yea, i;
+  real tim, dst, zon, rd, rC;
+
+  dlg.setWindowTitle(szTitleProgress);
+  RcBuildDialogQt(&dlg, rgctlProgress, cctlProgress, dxProgress, dyProgress,
+    &rgbuilt);
+
+  QCheckBox *pcbOn = (QCheckBox *)PwRcFindQt(rgbuilt, "dxPr_p");
+  QCheckBox *pcbRAMC = (QCheckBox *)PwRcFindQt(rgbuilt, "dxPr_pc");
+  QComboBox *pcbRate = (QComboBox *)PwRcFindQt(rgbuilt, "dcPr_pd");
+  QComboBox *pcbCusp = (QComboBox *)PwRcFindQt(rgbuilt, "dcPr_pC");
+  QLineEdit *peArc = (QLineEdit *)PwRcFindQt(rgbuilt, "dePr_pO");
+  QComboBox *pcbMon = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrMon");
+  QComboBox *pcbDay = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrDay");
+  QComboBox *pcbYea = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrYea");
+  QComboBox *pcbTim = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrTim");
+  QComboBox *pcbDst = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrDst");
+  QComboBox *pcbZon = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrZon");
+
+  if (pcbOn != NULL)
+    pcbOn->setChecked(us.fProgress != 0);
+  if (pcbRAMC != NULL)
+    pcbRAMC->setChecked(us.fProgRAMC != 0);
+  RcLoadRadioQt(rgbuilt, 1, 3, us.nProgress == ptCast ? 0 :
+    (us.nProgress == ptMixed ? 1 : 2));
+
+  // The rate and cusp lists offer named presets with their values, while
+  // the field itself takes a number, as Windows fills them.
+  if (pcbRate != NULL) {
+    QStringList rgstr;
+    QString strCur = SzFormatRQt(us.rProgDay, -6);
+    for (i = 0; i < 4; i++) {
+      FormatR(szT, rgrProgQt[i], -6);
+      sprintf(sz, "%s %s", szT, rgszProgQt[i]);
+      rgstr << sz;
+      if (us.rProgDay == rgrProgQt[i])
+        strCur = sz;
+    }
+    FillComboQt(pcbRate, strCur, rgstr);
+  }
+  if (pcbCusp != NULL) {
+    QStringList rgstr;
+    QString strCur = SzFormatRQt(us.rProgCusp, -6);
+    for (i = 0; i < 2; i++) {
+      FormatR(szT, rgrProgCuspQt[i], -6);
+      sprintf(sz, "%s %s", szT, rgszProgCuspQt[i]);
+      rgstr << sz;
+      if (us.rProgCusp == rgrProgCuspQt[i])
+        strCur = sz;
+    }
+    FillComboQt(pcbCusp, strCur, rgstr);
+  }
+  if (peArc != NULL)
+    peArc->setText(us.objProgArc >= 0 ? szObjName[us.objProgArc] : "None");
+
+  sprintf(sz, "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
+  FillComboQt(pcbMon, sz, RgstrMonthQt());
+  FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
+  FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
+  FillComboQt(pcbTim, SzTim(TimT), RgstrTimeQt());
+  FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
+    (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
+  sprintf(sz, "%s", SzZone(ZonT));
+  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+
+  // "Now" fills the date and time with the current moment.
+  QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbPr_pn");
+  if (ppbNow != NULL)
+    QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
+      [pcbMon, pcbDay, pcbYea, pcbTim]() {
+#ifdef TIME
+        char szN[cchSzMax];
+        int monN, dayN, yeaN;
+        real timN;
+        GetTimeNow(&monN, &dayN, &yeaN, &timN, ciDefa.dst, ciDefa.zon);
+        sprintf(szN, "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
+        if (pcbMon != NULL) pcbMon->setEditText(szN);
+        if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
+        if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
+        if (pcbTim != NULL) pcbTim->setEditText(SzTim(timN));
+#endif
+      });
+
+  RcWireOkCancelQt(&dlg, rgbuilt);
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  // A leading "X" on the rate means "this many years per day", inverted.
+  rd = us.rProgDay;
+  if (pcbRate != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbRate->currentText().toLocal8Bit().constData());
+    i = (ChCap(sz[0]) == 'X');
+    rd = RFromSz(sz + i);
+    if (i != 0 && rd != 0.0)
+      rd = rDayInYear / rd;
+  }
+  rC = pcbCusp != NULL ?
+    RFromSz(pcbCusp->currentText().toLocal8Bit().constData()) : us.rProgCusp;
+  npO = us.objProgArc;
+  if (peArc != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peArc->text().toLocal8Bit().constData());
+    npO = NParseSz(sz, pmObject);
+  }
+  mon = pcbMon != NULL ?
+    NParseSz(pcbMon->currentText().toLocal8Bit().constData(), pmMon) : MonT;
+  day = pcbDay != NULL ?
+    NParseSz(pcbDay->currentText().toLocal8Bit().constData(), pmDay) : DayT;
+  yea = pcbYea != NULL ?
+    NParseSz(pcbYea->currentText().toLocal8Bit().constData(), pmYea) : YeaT;
+  tim = pcbTim != NULL ?
+    RParseSz(pcbTim->currentText().toLocal8Bit().constData(), pmTim) : TimT;
+  dst = pcbDst != NULL ?
+    RParseSz(pcbDst->currentText().toLocal8Bit().constData(), pmDst) : DstT;
+  zon = pcbZon != NULL ?
+    RParseSz(pcbZon->currentText().toLocal8Bit().constData(), pmZon) : ZonT;
+
+  if (rd == 0.0)                { ErrorEnsureQt(&dlg, 0, "degree per day"); return; }
+  if (rC == 0.0)                { ErrorEnsureQt(&dlg, 0, "cusp move ratio"); return; }
+  if (!FValidProgArc(npO))      { ErrorEnsureQt(&dlg, npO, "solar arc planet"); return; }
+  if (!FValidMon(mon))          { ErrorEnsureQt(&dlg, mon, "month"); return; }
+  if (!FValidYea(yea))          { ErrorEnsureQt(&dlg, yea, "year"); return; }
+  if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); return; }
+  if (!FValidTim(tim))          { ErrorEnsureQt(&dlg, (int)tim, "time"); return; }
+  if (!FValidDst(dst))          { ErrorEnsureQt(&dlg, (int)dst, "daylight saving"); return; }
+  if (!FValidZon(zon))          { ErrorEnsureQt(&dlg, (int)zon, "time zone"); return; }
+
+  if (pcbOn != NULL)
+    us.fProgress = pcbOn->isChecked();
+  us.nProgress = NRcStoreRadioQt(rgbuilt, 1, 3, 0) == 0 ? ptCast :
+    (NRcStoreRadioQt(rgbuilt, 1, 3, 0) == 1 ? ptMixed : ptSolarArc);
+  us.rProgDay = rd;
+  us.rProgCusp = rC;
+  us.objProgArc = npO;
+  if (pcbRAMC != NULL)
+    us.fProgRAMC = pcbRAMC->isChecked();
+  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
+  is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
+  SyncProgressMenuQt();
+  RecastAndRedrawQt();
+}
+
+
+// Chart settings, equivalent to Windows' DlgChart: per chart type display
+// options, sort orders, and a few counts.
+
+// Aspect list sort orders. Windows keeps this in wdialog.cpp, which isn't
+// compiled into the QT build.
+static CONST char *rgszSortQt[asMax] = {"Power", "Orb Magnitude",
+  "Orb Value", "1st Object Index", "2nd Object Index",
+  "Aspect", "1st Object Position", "2nd Object Position", "Midpoint"};
 
 // Chart Settings, transcribed from dlgChart. Two things here don't follow
 // the usual shape: the star and Arabic part sort orders store a character

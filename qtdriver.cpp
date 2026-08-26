@@ -856,6 +856,13 @@ void RecastAndRedrawQt()
 // through DlgCalc and DlgDisplay.
 static QAction *s_paSeconds = NULL, *s_paApplying = NULL;
 static QAction *s_paSolar = NULL, *s_paHouse3D = NULL, *s_paDwad = NULL;
+static QAction *s_paProgress = NULL;
+
+void SyncProgressMenuQt()
+{
+  if (s_paProgress != NULL)
+    s_paProgress->setChecked(us.fProgress != 0);
+}
 
 void SyncDisplayMenuQt()
 {
@@ -1702,8 +1709,12 @@ static void BuildChartMenu(QMainWindow *pwind)
   QAction *paTransit = pmenu->addAction("&Transits...");
   QObject::connect(paTransit, &QAction::triggered, pwind,
     []() { ShowTransitDialogQt(); });
-  QAction *paProgress = pmenu->addAction("&Progressions...");
-  QObject::connect(paProgress, &QAction::triggered, pwind,
+  // Windows ticks this while progressions are on (WiCheckMenu with
+  // cmdProgress in DlgProgress), so it does here too.
+  s_paProgress = pmenu->addAction("&Progressions...");
+  s_paProgress->setCheckable(fTrue);
+  s_paProgress->setChecked(us.fProgress != 0);
+  QObject::connect(s_paProgress, &QAction::triggered, pwind,
     []() { ShowProgressDialogQt(); });
   pmenu->addSeparator();
   QAction *paSettings = pmenu->addAction("Chart &Settings...");
