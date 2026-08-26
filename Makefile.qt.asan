@@ -9,8 +9,8 @@
 # Makefile.qt needs. Run the result through ./run-qt-tests.sh, which sets
 # the environment for headless operation.
 #
-NAME = astrolog-qt-test
-OBJDIR = obj-qt-test
+NAME = astrolog-qt-asan
+OBJDIR = obj-qt-asan
 OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
  $(OBJDIR)/charts0.o $(OBJDIR)/charts1.o $(OBJDIR)/charts2.o \
  $(OBJDIR)/charts3.o $(OBJDIR)/data.o $(OBJDIR)/express.o \
@@ -26,8 +26,8 @@ OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
 
 QT_CFLAGS = $(shell pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Test)
 QT_LIBS = $(shell pkg-config --libs Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Test)
-LIBS = $(QT_LIBS) -lm -ldl
-CPPFLAGS = -DQT -DQTTEST -O -fPIC -Wno-write-strings -Wno-narrowing \
+LIBS = $(QT_LIBS) -lm -ldl -fsanitize=address
+CPPFLAGS = -DQT -DQTTEST -fsanitize=address -g -O0 -fPIC -Wno-write-strings -Wno-narrowing \
  -Wno-comment $(QT_CFLAGS)
 RM = rm -f
 

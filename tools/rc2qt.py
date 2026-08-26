@@ -28,8 +28,11 @@ import sys
 # symbol in the resource means.
 SPLIT = re.compile(r"^([A-Za-z_][A-Za-z_0-9]*?)(\d*)$")
 
+# A CONTROL is refined to ctlRadio by its style, in controls() below.
 KIND = {
-    "CONTROL": "ctlCheck",   # refined to ctlRadio by the style, below "LTEXT": "ctlLabel", "RTEXT": "ctlLabel",
+    "CONTROL": "ctlCheck",
+    "LTEXT": "ctlLabel",
+    "RTEXT": "ctlLabel",
     "GROUPBOX": "ctlGroup", "PUSHBUTTON": "ctlButton",
     "DEFPUSHBUTTON": "ctlButton", "ICON": "ctlIcon",
     "EDITTEXT": "ctlEdit", "COMBOBOX": "ctlCombo",

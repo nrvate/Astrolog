@@ -3509,229 +3509,162 @@ void ShowObject2DialogQt()
 // zodiac offset, house system, central planet, harmonic/dwad chart
 // factors, and a grab bag of position calculation toggles.
 
+// Calculation Settings, transcribed from dlgCalc. The checkbox mapping
+// again comes from Windows' own DlgCalc handler.
+
 void ShowCalcDialogQt()
 {
+  CONST RCFLAG rgflag[] = {
+    {"dxSe_Yh", -1, &us.fBarycenter,  fFalse},
+    {"dxSe_Yn", -1, &us.fTrueNode,    fFalse},
+    {"dxSe_Yc",  0, &us.fHouseAngle,  fFalse},
+    {"dxSe_Yf", -1, &us.fRefract,     fFalse},
+    {"dxSe_ys", -1, &us.fSidereal2,   fFalse},
+    {"dxSe_Yn",  0, &us.fNoNutation,  fFalse},
+    {"dxSe_",   10, &us.fSolarWhole,  fFalse},
+    {"dxSe_sr",  0, &us.fEquator2,    fFalse},
+    {"dxSe_sr", -1, &us.fEquator,     fFalse},
+    {"dxSe_yt", -1, &us.fTruePos,     fFalse},
+    {"dxSe_yv", -1, &us.fTopoPos,     fFalse},
+    {"dxSe_A",   3, &us.fAspect3D,    fFalse},
+    {"dxSe_Ap", -1, &us.fAspectLat,   fFalse} };
   QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  char sz[cchSzMax];
+  int i, nc, nh, n4, n1;
+  real rs, rx;
+
   dlg.setWindowTitle("Calculation Settings");
-  // Wide enough for "Local Horizon Positions Apply Atmospheric Refraction".
-  dlg.resize(530, 600);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
-  int i;
+  RcBuildDialogQt(&dlg, rgctlCalc, cctlCalc, dxCalc, dyCalc, &rgbuilt);
+  RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
 
-  QFormLayout *pform1 = new QFormLayout();
-  QComboBox *pcbEphem = new QComboBox();
-  QVector<int> rgcm;
-  pcbEphem->addItem(szEphem[cmSwiss]);   rgcm.append(cmSwiss);
-  pcbEphem->addItem(szEphem[cmMoshier]); rgcm.append(cmMoshier);
-  pcbEphem->addItem(szEphem[cmJPL]);     rgcm.append(cmJPL);
-  if (!us.fNoNetwork) {
-    pcbEphem->addItem(szEphem[cmJPLWeb]);
-    rgcm.append(cmJPLWeb);
+  // Ephemeris, ayanamsa and house system are editable combos, as on
+  // Windows, so a value can be typed as well as picked.
+  QComboBox *pcbEphem = (QComboBox *)PwRcFindQt(rgbuilt, "dcSe_b");
+  QComboBox *pcbAyan = (QComboBox *)PwRcFindQt(rgbuilt, "dcSe_s");
+  QComboBox *pcbHouse = (QComboBox *)PwRcFindQt(rgbuilt, "dcSe_c");
+  if (pcbEphem != NULL) {
+    pcbEphem->setEditable(fTrue);
+    for (i = 0; i <= cmNone; i++)
+      pcbEphem->addItem(szEphem[i]);
+    pcbEphem->setEditText(szEphem[!us.fEphemFiles ?
+      (us.fMatrixPla ? cmMatrix : cmNone) :
+      (us.fPlacalcPla ? cmPlacalc : us.nSwissEph)]);
   }
-  pcbEphem->addItem(szEphem[cmPlacalc]); rgcm.append(cmPlacalc);
-  pcbEphem->addItem(szEphem[cmMatrix]);  rgcm.append(cmMatrix);
-  pcbEphem->addItem(szEphem[cmNone]);    rgcm.append(cmNone);
-  int cmCur = FCmSwissEph() ? cmSwiss : (FCmSwissMosh() ? cmMoshier :
-    (FCmSwissJPL() ? cmJPL : (FCmPlacalc() ? cmPlacalc :
-    (FCmMatrix() ? cmMatrix : (FCmJPLWeb() ? cmJPLWeb : cmNone)))));
-  pcbEphem->setCurrentIndex(rgcm.indexOf(cmCur));
-  pform1->addRow("Calculation Method:", pcbEphem);
-
-  // Windows offers the named ayanamsas as dropdown entries formatted
-  // "<offset> <name>", and reads the field back with atof(), which stops
-  // at the space -- so picking an entry and typing a bare number both
-  // work. addItem() before setEditText(): see the Progressions dialog.
-  QComboBox *pcbOffset = new QComboBox();
-  pcbOffset->setEditable(true);
-  QString strOffset = SzFormatRQt(us.rZodiacOffset, 6);
-  for (i = 0; *rgZodiacOffset[i].sz; i++) {
-    QString str = SzFormatRQt(rgZodiacOffset[i].r, 6) + " " +
-      rgZodiacOffset[i].sz;
-    pcbOffset->addItem(str);
-    if (us.rZodiacOffset == rgZodiacOffset[i].r)
-      strOffset = str;
+  if (pcbAyan != NULL) {
+    // The list offers the named ayanamsas with their offsets, and the
+    // field itself takes a raw number, exactly as Windows fills it.
+    pcbAyan->setEditable(fTrue);
+    QString strCur = SzFormatRQt(us.rZodiacOffset, 6);
+    for (i = 0; *rgZodiacOffset[i].sz; i++) {
+      QString str = SzFormatRQt(rgZodiacOffset[i].r, 6) + " " +
+        rgZodiacOffset[i].sz;
+      pcbAyan->addItem(str);
+      if (us.rZodiacOffset == rgZodiacOffset[i].r)
+        strCur = str;
+    }
+    pcbAyan->setEditText(strCur);
   }
-  pcbOffset->setEditText(strOffset);
-  pform1->addRow("Zodiac Offset / Ayanamsa:", pcbOffset);
-
-  // Editable, like Windows' dcSe_c, so a house system can be typed as
-  // well as picked; NParseSz() accepts either the name or its index.
-  QComboBox *pcbSystem = new QComboBox();
-  pcbSystem->setEditable(true);
-  for (i = 0; i < cSystem; i++)
-    pcbSystem->addItem(szSystem[i]);
-  pcbSystem->setEditText(szSystem[us.nHouseSystem]);
-  pform1->addRow("House System:", pcbSystem);
-
-  QLineEdit *peCenter = new QLineEdit(szObjName[us.objCenter]);
-  pform1->addRow("Central Planet:", peCenter);
-
-  QLineEdit *peHarmonic = new QLineEdit(SzFormatRQt(us.rHarmonic, -6));
-  pform1->addRow("Harmonic Chart Factor:", peHarmonic);
-
-  QLineEdit *peDwad = new QLineEdit(QString::number(us.nDwad));
-  pform1->addRow("Dwad Nesting Level:", peDwad);
-  pinnerlayout->addLayout(pform1);
-
-  QCheckBox *pcbBary = new QCheckBox(
-    "Compute Solar System Barycenter Instead of Sun");
-  QCheckBox *pcbTrueNode = new QCheckBox(
-    "Compute True Instead of Mean Nodes and Lilith");
-  QCheckBox *pcbHouseAngle = new QCheckBox(
-    "Cusp Objects Are House Positions Instead of Angles");
-  QCheckBox *pcbRefract = new QCheckBox(
-    "Local Horizon Positions Apply Atmospheric Refraction");
-  QCheckBox *pcbSidereal2 = new QCheckBox(
-    "Sidereal Zodiac in Invariable Plane of Solar System");
-  QCheckBox *pcbNoNutation = new QCheckBox("Tropical Zodiac No Nutation");
-  QCheckBox *pcbEquator2 = new QCheckBox("Equatorial Latitudes");
-  QCheckBox *pcbEquator = new QCheckBox("Equatorial Longitudes");
-  QCheckBox *pcbTruePos = new QCheckBox("True Space Positions");
-  QCheckBox *pcbTopoPos = new QCheckBox("Topocentric Positions");
-  QCheckBox *pcbAspect3D = new QCheckBox("3D Aspects");
-  QCheckBox *pcbAspectLat = new QCheckBox("3D Orbs");
-  QCheckBox *pcbHouse3D = new QCheckBox("3D Houses");
-  QCheckBox *pcbSolarWhole = new QCheckBox("Use Start of Planet's Sign");
-  pcbBary->setChecked(us.fBarycenter != 0);
-  pcbTrueNode->setChecked(us.fTrueNode != 0);
-  pcbHouseAngle->setChecked(us.fHouseAngle != 0);
-  pcbRefract->setChecked(us.fRefract != 0);
-  pcbSidereal2->setChecked(us.fSidereal2 != 0);
-  pcbNoNutation->setChecked(us.fNoNutation != 0);
-  pcbEquator2->setChecked(us.fEquator2 != 0);
-  pcbEquator->setChecked(us.fEquator != 0);
-  pcbTruePos->setChecked(us.fTruePos != 0);
-  pcbTopoPos->setChecked(us.fTopoPos != 0);
-  pcbAspect3D->setChecked(us.fAspect3D != 0);
-  pcbAspectLat->setChecked(us.fAspectLat != 0);
-  pcbHouse3D->setChecked(us.fHouse3D != 0);
-  pcbSolarWhole->setChecked(us.fSolarWhole != 0);
-  // Windows' dlgCalc reads top to bottom as: the four coordinate-system
-  // boxes beside the form fields, then the wide ones, then the 3D pair,
-  // then "3D Houses" immediately above its plane group. "Use Start of
-  // Planet's Sign" belongs to the Solar Chart group and is added there.
-  for (QCheckBox *pcb : { pcbEquator2, pcbEquator, pcbTruePos, pcbTopoPos,
-    pcbBary, pcbTrueNode, pcbHouseAngle, pcbRefract, pcbSidereal2,
-    pcbNoNutation, pcbAspect3D, pcbAspectLat, pcbHouse3D })
-    pinnerlayout->addWidget(pcb);
-
-  QGroupBox *pgroupBox3D = new QGroupBox("3D Houses Plane");
-  QVBoxLayout *pgrouplayout3D = new QVBoxLayout(pgroupBox3D);
-  QButtonGroup *pgroup3D = new QButtonGroup(&dlg);
-  CONST char *rgsz3D[3] =
-    { "Prime Vertical", "Local Horizon", "Celestial Equator" };
-  for (i = 0; i < 3; i++) {
-    QRadioButton *prb = new QRadioButton(rgsz3D[i]);
-    prb->setChecked(i == us.nHouse3D - 1);
-    pgroup3D->addButton(prb, i);
-    pgrouplayout3D->addWidget(prb);
+  if (pcbHouse != NULL) {
+    pcbHouse->setEditable(fTrue);
+    for (i = 0; i < cSystem; i++)
+      pcbHouse->addItem(szSystem[i]);
+    pcbHouse->setEditText(szSystem[us.nHouseSystem]);
   }
-  pinnerlayout->addWidget(pgroupBox3D);
 
-  QGroupBox *pgroupBoxAsc = new QGroupBox("Solar Chart Setting");
-  QVBoxLayout *pgrouplayoutAsc = new QVBoxLayout(pgroupBoxAsc);
-  QButtonGroup *pgroupAsc = new QButtonGroup(&dlg);
-  CONST char *rgszAsc[3] =
-    { "None", "Object on Ascendant", "Object on Midheaven" };
-  int nAscCur = us.objOnAsc == 0 ? 0 : (us.objOnAsc > 0 ? 1 : 2);
-  for (i = 0; i < 3; i++) {
-    QRadioButton *prb = new QRadioButton(rgszAsc[i]);
-    prb->setChecked(i == nAscCur);
-    pgroupAsc->addButton(prb, i);
-    pgrouplayoutAsc->addWidget(prb);
-  }
-  QLineEdit *peOnAsc = new QLineEdit(
-    szObjName[us.objOnAsc == 0 ? oSun : NAbs(us.objOnAsc)-1]);
-  QFormLayout *pformAsc = new QFormLayout();
-  pformAsc->addRow("Use This Planet:", peOnAsc);
-  pgrouplayoutAsc->addLayout(pformAsc);
-  pgrouplayoutAsc->addWidget(pcbSolarWhole);
-  pinnerlayout->addWidget(pgroupBoxAsc);
+  QLineEdit *peCentral = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_h");
+  QLineEdit *peHarmonic = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_x");
+  QLineEdit *peDwad = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deSe_", 4);
+  QLineEdit *peSolar = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deSe_", 1);
+  if (peCentral != NULL)
+    peCentral->setText(szObjName[us.objCenter]);
+  if (peHarmonic != NULL)
+    peHarmonic->setText(SzFormatRQt(us.rHarmonic, -6));
+  if (peDwad != NULL)
+    peDwad->setText(QString::number(us.nDwad));
+  if (peSolar != NULL)
+    peSolar->setText(szObjName[us.objOnAsc == 0 ? oSun :
+      NAbs(us.objOnAsc)-1]);
 
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
+  // dr01..dr03 pick what sits on the Ascendant; dr04..dr06 the 3D house
+  // frame of reference.
+  RcLoadRadioQt(rgbuilt, 1, 3,
+    us.objOnAsc == 0 ? 0 : (us.objOnAsc > 0 ? 1 : 2));
+  RcLoadRadioQt(rgbuilt, 4, 3, us.nHouse3D - 1);
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  // RFromSz() rather than toDouble(): it is what Windows reads these
-  // fields with, it stops at the space in "24.0 Lahiri", and it also
-  // accepts a leading "~" AstroExpression where that's compiled in.
-  QByteArray ba;
-  ba = pcbOffset->currentText().toLocal8Bit();
-  real rOffset = RFromSz(ba.constData());
-  ba = pcbSystem->currentText().toLocal8Bit();
-  int nSystem = NParseSz(ba.constData(), pmSystem);
-  QByteArray baCenter = peCenter->text().toLocal8Bit();
-  int nCenter = NParseSz(baCenter.constData(), pmObject);
-  // A leading "D" asks for a divisional chart rather than a harmonic:
-  // "D9" is the navamsa, i.e. 360/9, not a harmonic factor of 9.
-  ba = peHarmonic->text().toLocal8Bit();
-  CONST char *szHarmonic = ba.constData();
-  int fDivisional = (ChCap(szHarmonic[0]) == 'D');
-  real rHarmonic = RFromSz(szHarmonic + fDivisional);
-  if (fDivisional && rHarmonic != 0.0)
-    rHarmonic = rDegMax / rHarmonic;
-  int nDwad = peDwad->text().toInt();
-  QByteArray baOnAsc = peOnAsc->text().toLocal8Bit();
-  int nOnAsc = NParseSz(baOnAsc.constData(), pmObject);
-  if (!FValidOffset(rOffset) || !FValidSystem(nSystem) ||
-    !FValidCenter(nCenter) || !FValidHarmonic(rHarmonic) ||
-    !FValidDwad(nDwad) || !FItem(nOnAsc)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more calculation settings fields are invalid.");
-    return;
+  rs = us.rZodiacOffset; nc = us.nHouseSystem; nh = us.objCenter;
+  rx = us.rHarmonic; n4 = us.nDwad; n1 = oSun;
+  if (pcbAyan != NULL)
+    rs = RFromSz(pcbAyan->currentText().toLocal8Bit().constData());
+  if (pcbHouse != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbHouse->currentText().toLocal8Bit().constData());
+    nc = NParseSz(sz, pmSystem);
   }
+  if (peCentral != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peCentral->text().toLocal8Bit().constData());
+    nh = NParseSz(sz, pmObject);
+  }
+  if (peHarmonic != NULL) {
+    // A leading "D" means the field gives a divisor, not a multiplier.
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peHarmonic->text().toLocal8Bit().constData());
+    i = (ChCap(sz[0]) == 'D');
+    rx = RFromSz(sz + i);
+    if (i != 0 && rx != 0.0)
+      rx = rDegMax / rx;
+  }
+  if (peDwad != NULL)
+    n4 = peDwad->text().toInt();
+  if (peSolar != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peSolar->text().toLocal8Bit().constData());
+    n1 = NParseSz(sz, pmObject);
+  }
+  if (!FValidOffset(rs))      { ErrorEnsureQt(&dlg, (int)rs, "zodiac offset"); return; }
+  if (!FValidSystem(nc))      { ErrorEnsureQt(&dlg, nc, "house system"); return; }
+  if (!FValidCenter(nh))      { ErrorEnsureQt(&dlg, nh, "central planet"); return; }
+  if (!FValidHarmonic(rx))    { ErrorEnsureQt(&dlg, (int)rx, "harmonic factor"); return; }
+  if (!FValidDwad(n4))        { ErrorEnsureQt(&dlg, n4, "dwad nesting"); return; }
+  if (!FItem(n1))             { ErrorEnsureQt(&dlg, n1, "Solar chart planet"); return; }
 
-  int cmSel = rgcm[pcbEphem->currentIndex()];
-  us.fEphemFiles = us.fPlacalcPla = us.fMatrixPla = fFalse;
-  us.nSwissEph = 0;
-  switch (cmSel) {
-  case cmSwiss:   us.fEphemFiles = fTrue; us.nSwissEph = 0; break;
-  case cmMoshier: us.fEphemFiles = fTrue; us.nSwissEph = 1; break;
-  case cmJPL:     us.fEphemFiles = fTrue; us.nSwissEph = 2; break;
-  case cmJPLWeb:  us.fEphemFiles = fTrue; us.nSwissEph = 3; break;
-  case cmPlacalc: us.fEphemFiles = us.fPlacalcPla = fTrue; break;
-  case cmMatrix:  us.fMatrixPla = fTrue; break;
-  default: break;  // cmNone
+  if (pcbEphem != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbEphem->currentText().toLocal8Bit().constData());
+    us.fEphemFiles = us.fPlacalcPla = us.fMatrixPla = fFalse;
+    us.nSwissEph = 0;
+#ifdef SWISS
+    if (FMatchSz(sz, szEphem[cmSwiss]))        { us.fEphemFiles = fTrue; us.nSwissEph = 0; }
+    else if (FMatchSz(sz, szEphem[cmMoshier])) { us.fEphemFiles = fTrue; us.nSwissEph = 1; }
+    else if (FMatchSz(sz, szEphem[cmJPL]))     { us.fEphemFiles = fTrue; us.nSwissEph = 2; }
+    else if (FMatchSz(sz, szEphem[cmJPLWeb]))  { us.fEphemFiles = fTrue; us.nSwissEph = 3; }
+#endif
+#ifdef PLACALC
+    if (FMatchSz(sz, szEphem[cmPlacalc]))
+      us.fEphemFiles = us.fPlacalcPla = fTrue;
+#endif
+#ifdef MATRIX
+    if (FMatchSz(sz, szEphem[cmMatrix]))
+      us.fMatrixPla = fTrue;
+#endif
   }
-  us.rZodiacOffset = rOffset;
-  us.nHouseSystem = nSystem;
-  SetCentric(nCenter);
-  SyncHelioMenuQt();
-  us.rHarmonic = rHarmonic;
-  us.nDwad = nDwad;
-  us.fBarycenter = pcbBary->isChecked();
-  us.fTrueNode = pcbTrueNode->isChecked();
-  us.fHouseAngle = pcbHouseAngle->isChecked();
-  us.fRefract = pcbRefract->isChecked();
-  us.fSidereal2 = pcbSidereal2->isChecked();
-  us.fNoNutation = pcbNoNutation->isChecked();
-  us.fAspect3D = pcbAspect3D->isChecked();
-  us.fAspectLat = pcbAspectLat->isChecked();
-  int nAscSel = pgroupAsc->checkedId();
-  us.objOnAsc = nAscSel == 0 ? 0 : (nAscSel == 1 ? nOnAsc+1 : -nOnAsc-1);
-  us.fSolarWhole = pcbSolarWhole->isChecked();
-  us.fEquator2 = pcbEquator2->isChecked();
-  us.fEquator = pcbEquator->isChecked();
-  us.fTruePos = pcbTruePos->isChecked();
-  us.fTopoPos = pcbTopoPos->isChecked();
-  us.fHouse3D = pcbHouse3D->isChecked();
-  us.nHouse3D = pgroup3D->checkedId() + 1;
-  // Windows re-syncs the House Settings submenu here (the WiCheckMenu
-  // calls for cmdHouseSetSolar/cmdHouseSet3D/cmdHouseSetDwad in DlgCalc).
+  us.rZodiacOffset = rs;
+  us.nHouseSystem = nc;
+  SetCentric(nh);
+  us.rHarmonic = rx;
+  us.nDwad = n4;
+  RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+  i = NRcStoreRadioQt(rgbuilt, 1, 3, 0);
+  us.objOnAsc = (i == 0 ? 0 : (i == 1 ? n1+1 : -n1-1));
+  us.nHouse3D = NRcStoreRadioQt(rgbuilt, 4, 3, us.nHouse3D - 1) + 1;
   SyncHouseSetMenuQt();
+  SyncHelioMenuQt();
   RecastAndRedrawQt();
 }
 
