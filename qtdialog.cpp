@@ -2391,95 +2391,159 @@ void ShowGraphicsSettingsDialogQt()
 // lets someone actually create a chart interactively instead of only ever
 // loading one from disk.
 
-static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle(szTitle);
-  QFormLayout *playout = new QFormLayout(&dlg);
+// Chart info, transcribed from dlgInfo: the date, time and place fields,
+// Windows' Now and Recall buttons, and the four atlas lookups with their
+// results list. The same dialog serves chart #2 with a different title,
+// as it does on Windows.
 
-  // Every field is shown in the same human readable form Windows' DlgInfo
-  // uses (SetEditMDYT/SetEditSZOA), not as a raw number: month as a name,
-  // time as "9:54pm"/"21:54", zone as "8W", and longitude/latitude as
-  // "122W19"/"47N36". Astrolog's own parsers accept exactly these forms
-  // back (that's what the NParseSz/RParseSz calls below do), so this is
-  // purely a display change -- no extra conversion needed either way.
+static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
+{
   char sz[cchSzMax];
-  QLineEdit *peName = new QLineEdit(FSzSet(pci->nam) ? pci->nam : "");
-  QLineEdit *peLoc  = new QLineEdit(FSzSet(pci->loc) ? pci->loc : "");
+  int nSavChar;
+
   sprintf(sz, "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
-  QComboBox *peMon  = NewComboQt(sz, RgstrMonthQt());
-  QComboBox *peDay  = NewComboQt(QString::number(pci->day), RgstrDayQt());
-  QComboBox *peYea  = NewComboQt(QString::number(pci->yea), RgstrYearQt());
-  QComboBox *peTim  = NewComboQt(SzTim(pci->tim), RgstrTimeQt());
-  // Daylight saving has sentinel values (see astrolog.h's dstAuto) rather
-  // than being a plain offset. Windows resolves dstAuto to its concrete
-  // Yes/No via DstReal() before display, which silently discards the
-  // user's "work it out for me" choice on the next OK -- show it as
-  // "Autodetect" instead so it survives a round trip.
-  QComboBox *peDst  = NewComboQt(pci->dst == 0.0 ? "No" :
-    (pci->dst == 1.0 ? "Yes" :
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInMon"), sz,
+    RgstrMonthQt());
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInDay"),
+    QString::number(pci->day), RgstrDayQt());
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInYea"),
+    QString::number(pci->yea), RgstrYearQt());
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInTim"), SzTim(pci->tim),
+    RgstrTimeQt());
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInDst"),
+    pci->dst == 0.0 ? "No" : (pci->dst == 1.0 ? "Yes" :
     (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))), RgstrDstQt());
   sprintf(sz, "%s", SzZone(pci->zon));
-  QComboBox *peZon  = NewComboQt(sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
-  // SzLocation() returns longitude and latitude in one string split at
-  // is.ichLocSplit. Force plain ASCII while formatting: otherwise it uses
-  // a Latin-1/IBM degree byte that isn't valid UTF-8 (see the Charts
-  // dialog for where that matters), and these fields want the compact
-  // "122W19" form anyway.
-  int nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInZon"),
+    sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  // SzLocation()'s degree byte confuses the parse back, so ask for it
+  // without, the way Windows' SetEditSZOA does.
+  nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
   sprintf(sz, "%s", SzLocation(pci->lon, pci->lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
-  QComboBox *peLon  = NewComboQt(&sz[0], RgstrLonQt());
-  QComboBox *peLat  = NewComboQt(&sz[is.ichLocSplit+1], RgstrLatQt());
-  // Long names/locations otherwise show their tail end, not their start.
-  peName->setCursorPosition(0);
-  peLoc->setCursorPosition(0);
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInLon"), &sz[0],
+    RgstrLonQt());
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInLat"),
+    &sz[is.ichLocSplit+1], RgstrLatQt());
+  QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
+  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deInLoc");
+  if (peName != NULL)
+    peName->setText(FSzSet(pci->nam) ? pci->nam : "");
+  if (peLoc != NULL)
+    peLoc->setText(FSzSet(pci->loc) ? pci->loc : "");
+}
 
-  playout->addRow("Month:", peMon);
-  playout->addRow("Day:", peDay);
-  playout->addRow("Year:", peYea);
-  playout->addRow("Time:", peTim);
-  playout->addRow("Daylight Saving:", peDst);
-  playout->addRow("Time Zone:", peZon);
-  playout->addRow("Longitude:", peLon);
-  playout->addRow("Latitude:", peLat);
-  playout->addRow("Name:", peName);
-  playout->addRow("Location:", peLoc);
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  playout->addRow(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
+{
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  CI ci = *pci;
 
+  dlg.setWindowTitle(szTitle);
+  RcBuildDialogQt(&dlg, rgctlInfo, cctlInfo, dxInfo, dyInfo, &rgbuilt);
+  RcLoadChartInfoQt(rgbuilt, pci);
+
+  QComboBox *pcbLon = (QComboBox *)PwRcFindQt(rgbuilt, "dcInLon");
+  QComboBox *pcbLat = (QComboBox *)PwRcFindQt(rgbuilt, "dcInLat");
+  QComboBox *pcbZon = (QComboBox *)PwRcFindQt(rgbuilt, "dcInZon");
+  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deInLoc");
+  QListWidget *plist = (QListWidget *)PwRcFindQt(rgbuilt, "dlIn");
+
+  // Now: today's date and time at the default location. Recall: whatever
+  // was last saved. Both refill the fields rather than closing.
+  QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbInNow");
+  QPushButton *ppbSet = (QPushButton *)PwRcFindQt(rgbuilt, "dbInSet");
+  if (ppbNow != NULL)
+    QObject::connect(ppbNow, &QPushButton::clicked, &dlg, [&rgbuilt]() {
+      CI ciT;
+#ifdef TIME
+      GetTimeNow(&ciT.mon, &ciT.day, &ciT.yea, &ciT.tim, ciDefa.dst,
+        ciDefa.zon);
+      ciT.dst = ciDefa.dst; ciT.zon = ciDefa.zon;
+      ciT.lon = ciDefa.lon; ciT.lat = ciDefa.lat;
+      ciT.nam = ciDefa.nam; ciT.loc = ciDefa.loc;
+      RcLoadChartInfoQt(rgbuilt, &ciT);
+#endif
+    });
+  if (ppbSet != NULL)
+    QObject::connect(ppbSet, &QPushButton::clicked, &dlg, [&rgbuilt]() {
+      RcLoadChartInfoQt(rgbuilt, &ciSave);
+    });
+
+#ifdef ATLAS
+  QPushButton *ppbCity = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCity");
+  QPushButton *ppbCoor = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCoor");
+  QPushButton *ppbChan = (QPushButton *)PwRcFindQt(rgbuilt, "dbInChan");
+  QPushButton *ppbAppl = (QPushButton *)PwRcFindQt(rgbuilt, "dbInAppl");
+  if (ppbCity != NULL)
+    QObject::connect(ppbCity, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ci]() {
+        RcAtlasRunQt(plist, 0, peLoc, pcbLon, pcbLat, &ci); });
+  if (ppbCoor != NULL)
+    QObject::connect(ppbCoor, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ci]() {
+        RcAtlasRunQt(plist, 1, peLoc, pcbLon, pcbLat, &ci); });
+  if (ppbChan != NULL)
+    QObject::connect(ppbChan, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ci, &rgbuilt]() {
+        // Windows takes the year from the dialog for this one.
+        QComboBox *pcbYea = (QComboBox *)PwRcFindQt(rgbuilt, "dcInYea");
+        if (pcbYea != NULL)
+          ci.yea = NParseSz(pcbYea->currentText().toLocal8Bit().constData(),
+            pmYea);
+        RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ci); });
+  if (ppbAppl != NULL)
+    QObject::connect(ppbAppl, &QPushButton::clicked, &dlg,
+      [plist, pcbLon, pcbLat, pcbZon, peLoc]() {
+        RcAtlasApplyQt(plist, pcbLon, pcbLat, pcbZon, peLoc); });
+#endif
+
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  CI ci = *pci;
   QByteArray ba;
-  ba = peMon->currentText().toLocal8Bit(); ci.mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->currentText().toLocal8Bit(); ci.day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->currentText().toLocal8Bit(); ci.yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->currentText().toLocal8Bit(); ci.tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->currentText().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->currentText().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
-  ba = peLon->currentText().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
-  ba = peLat->currentText().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
+  QComboBox *pcb;
+  ci = *pci;
+  if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInMon")) != NULL) {
+    ba = pcb->currentText().toLocal8Bit();
+    ci.mon = NParseSz(ba.constData(), pmMon); }
+  if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInDay")) != NULL) {
+    ba = pcb->currentText().toLocal8Bit();
+    ci.day = NParseSz(ba.constData(), pmDay); }
+  if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInYea")) != NULL) {
+    ba = pcb->currentText().toLocal8Bit();
+    ci.yea = NParseSz(ba.constData(), pmYea); }
+  if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInTim")) != NULL) {
+    ba = pcb->currentText().toLocal8Bit();
+    ci.tim = RParseSz(ba.constData(), pmTim); }
+  if ((pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcInDst")) != NULL) {
+    ba = pcb->currentText().toLocal8Bit();
+    ci.dst = RParseSz(ba.constData(), pmDst); }
+  if (pcbZon != NULL) { ba = pcbZon->currentText().toLocal8Bit();
+    ci.zon = RParseSz(ba.constData(), pmZon); }
+  if (pcbLon != NULL) { ba = pcbLon->currentText().toLocal8Bit();
+    ci.lon = RParseSz(ba.constData(), pmLon); }
+  if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
+    ci.lat = RParseSz(ba.constData(), pmLat); }
 
-  if (!FValidMon(ci.mon) || !FValidYea(ci.yea) ||
-    !FValidDay(ci.day, ci.mon, ci.yea) || !FValidTim(ci.tim) ||
-    !FValidDst(ci.dst) || !FValidZon(ci.zon) ||
-    !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
+  if (!FValidMon(ci.mon) || !FValidDay(ci.day, ci.mon, ci.yea) ||
+    !FValidYea(ci.yea) || !FValidTim(ci.tim) || !FValidDst(ci.dst) ||
+    !FValidZon(ci.zon) || !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
     QMessageBox::warning(gi.qwind, szAppName,
       "One or more chart info fields are invalid.");
     return;
   }
-  ba = peName->text().toLocal8Bit(); ci.nam = SzClone((char *)ba.constData());
-  ba = peLoc->text().toLocal8Bit();  ci.loc = SzClone((char *)ba.constData());
-
+  QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
+  if (peName != NULL)
+    FCloneSz(peName->text().toLocal8Bit().constData(), &ci.nam);
+  if (peLoc != NULL)
+    FCloneSz(peLoc->text().toLocal8Bit().constData(), &ci.loc);
   *pci = ci;
+  ciSave = ci;
   RecastAndRedrawQt();
 }
 
