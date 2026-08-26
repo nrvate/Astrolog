@@ -848,11 +848,18 @@ static void TextChartCaptureQt(CONST char *szDir)
   int i, cchart = (int)(sizeof(rgszAct) / sizeof(char *));
 
   // The chart tools/text-chart-capture.sh leaves the Windows build on:
-  // Nov 19 1971 11:01am, ST Zone 8W, 122:19W 47:36N, no name or location
-  // string (a name makes the header wrap to a second line, charts1.cpp:91).
+  // Nov 19 1971 11:01am, ST Zone 8W, no name or location string (a name
+  // makes the header wrap to a second line, charts1.cpp:91).
+  //
+  // The location has to be the *exact* one astrolog.as carries, seconds
+  // and all -- "-zl 122W19'59 47N36'35". Rounding it to whole minutes,
+  // which is all the header displays, leaves the planets looking right
+  // while every house cusp sits one to two arcminutes off, which then
+  // reads as a calculation divergence between the two builds.
   ciCore.mon = 11; ciCore.day = 19; ciCore.yea = 1971;
   ciCore.tim = 11.0 + 1.0/60.0; ciCore.dst = 0.0; ciCore.zon = 8.0;
-  ciCore.lon = 122.0 + 19.0/60.0; ciCore.lat = 47.0 + 36.0/60.0;
+  ciCore.lon = 122.0 + 19.0/60.0 + 59.0/3600.0;
+  ciCore.lat = 47.0 + 36.0/60.0 + 35.0/3600.0;
   ciCore.nam[0] = chNull; ciCore.loc[0] = chNull;
   ciMain = ciCore;
   CastChart(1);

@@ -75,9 +75,17 @@ manager and no keystrokes. The Wine side gets the same determinism by
 launching as `wine ./astrolog.exe _X`, which clears `us.fGraphics` at
 startup and leaves the GUI up in text mode.
 
-Both sides pin the same chart — Nov 19 1971 11:01am, ST Zone 8W, 122:19W
-47:36N, with no name or location string. Change it in both or the
-comparison is only about layout, not values.
+Both sides pin the same chart — Nov 19 1971 11:01am, ST Zone 8W, at the
+exact location `astrolog.as` carries (`-zl 122W19'59 47N36'35`), with no
+name or location string. Change it in both or the comparison is only
+about layout, not values.
+
+**Use the location to the second.** The header only ever displays whole
+minutes, so rounding to `122:19W 47:36N` looks right and matches the
+header — while shifting every house cusp by one to two arcminutes. The
+planets stay correct, which makes it read as a calculation divergence
+between the two builds rather than as bad test data. With the exact
+values the two sides are character-for-character identical.
 
 ## Reading the result
 
