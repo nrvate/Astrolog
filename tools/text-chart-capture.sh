@@ -96,7 +96,13 @@ echo "window $WID on $DISP"
 # XSendEvent, which Wine ignores outright. Keys look delivered, nothing
 # happens, and each capture then shows the *previous* chart -- which reads
 # as a redraw lag rather than as input never arriving.
-send() { DISPLAY=$DISP xdotool windowactivate --sync "$WID" 2>/dev/null || true
+# With no window manager there is no EWMH, so "windowactivate" fails and
+# X input focus stays PointerRoot -- meaning XTEST keys go to whatever the
+# pointer happens to be over, which is wherever it was left. Set focus
+# explicitly and park the pointer inside the window; without both, keys
+# land somewhere else and every capture comes out identical.
+send() { DISPLAY=$DISP xdotool windowfocus --sync "$WID" 2>/dev/null || true
+         DISPLAY=$DISP xdotool mousemove --window "$WID" 40 40 2>/dev/null || true
          sleep 0.4; DISPLAY=$DISP xdotool key --clearmodifiers "$1"; sleep 1.2; }
 
 # Wine under Xvfb does not reliably repaint between commands; a plain

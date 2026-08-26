@@ -122,20 +122,29 @@ Roughly in the order I'd take them.
      kind of rendering question that has previously been argued over from
      screenshots.
 
-4. **Pixel-level baselines.** Rendering goes to `gi.qim`, a QImage in
+4. **Fix the Wine capture from a clean clone.** `tools/text-chart-capture.sh`
+   works in a working tree and produces correct captures of all eight text
+   chart types, but run against a fresh clone it gives a menu bar and a
+   blank client area every time. Same `astrolog.as`, same `ephem/` files,
+   same source, and not a startup-timing problem — a 30 second settle and
+   explicit focus didn't change it. The two `astrolog.exe` builds differ by
+   md5, which may only be build nondeterminism. Not root-caused. Noted in
+   `QT_COMPARING_WITH_WINDOWS.md` so nobody trusts a blank comparison; the
+   tell is that all eight captures come out byte-identical.
+5. **Pixel-level baselines.** Rendering goes to `gi.qim`, a QImage in
    memory, so image regression tests need no screenshotting at all.
    Storing baseline hashes per chart type is the obvious next step and
    would settle the kind of rendering question this project has
    repeatedly argued over from screenshots. The Wine build gives a
    reference to generate them against.
-5. **Decide about the deliberate divergences.** The behaviours in
+6. **Decide about the deliberate divergences.** The behaviours in
    "Known divergences from Windows" are places this port knowingly does
    something different, usually because Windows' behaviour looks like a
    bug. They are defensible individually, but if the goal is strict
    parity they are the list to revisit. The menu accelerator column
    (`Shift+V` where Windows writes `V`) is the most visible one and the
    only one a user sees on every menu.
-6. **Unfinished business, low value:** Wingdings and the plain text
+7. **Unfinished business, low value:** Wingdings and the plain text
    fonts aren't bundled (see item 15); the black wedges in the tick ring
    are unexplained upstream rendering (see item 11) and nobody has
    actually worked out what draws them.

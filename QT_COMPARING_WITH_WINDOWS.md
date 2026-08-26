@@ -36,6 +36,22 @@ python3 tools/text-chart-diff.py out/win out/qt out/cmp
 **Layout is what to compare** — column positions, row spacing, where each
 field starts.
 
+> **Known limitation, 2026-08-25.** The Qt side of this
+> (`QTTEXTDIR=... ./run-qt-tests.sh`) is deterministic and verified from a
+> clean clone. The Wine side is verified working *in a working tree* — it
+> produces correct, distinct captures of all eight chart types — but the
+> same script run against a fresh clone of this repo produced a window
+> with a menu bar and a blank client area for every chart. Same config,
+> same `ephem/` files, same source; not root-caused, and not a longer
+> startup wait. **If you get blank Windows captures, that's this, not your
+> setup.** Check a capture by eye before trusting a comparison; the useful
+> tell is that all eight files are byte-identical:
+> `md5sum out/win/*.png | awk '{print $1}' | sort -u | wc -l` should be 8.
+
+The Qt side alone is still worth running — it renders all eight text
+charts headlessly in a second, which is enough to catch a regression in
+this port even without the Windows side beside it.
+
 The two sides are captured by deliberately different means, and it matters
 why. `v` is a *toggle*, so driving it leaves each build in whatever state
 it happened to start in; get that wrong and a graphics chart is compared
