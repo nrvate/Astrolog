@@ -122,29 +122,20 @@ Roughly in the order I'd take them.
      kind of rendering question that has previously been argued over from
      screenshots.
 
-4. **Fix the Wine capture from a clean clone.** `tools/text-chart-capture.sh`
-   works in a working tree and produces correct captures of all eight text
-   chart types, but run against a fresh clone it gives a menu bar and a
-   blank client area every time. Same `astrolog.as`, same `ephem/` files,
-   same source, and not a startup-timing problem — a 30 second settle and
-   explicit focus didn't change it. The two `astrolog.exe` builds differ by
-   md5, which may only be build nondeterminism. Not root-caused. Noted in
-   `QT_COMPARING_WITH_WINDOWS.md` so nobody trusts a blank comparison; the
-   tell is that all eight captures come out byte-identical.
-5. **Pixel-level baselines.** Rendering goes to `gi.qim`, a QImage in
+4. **Pixel-level baselines.** Rendering goes to `gi.qim`, a QImage in
    memory, so image regression tests need no screenshotting at all.
    Storing baseline hashes per chart type is the obvious next step and
    would settle the kind of rendering question this project has
    repeatedly argued over from screenshots. The Wine build gives a
    reference to generate them against.
-6. **Decide about the deliberate divergences.** The behaviours in
+5. **Decide about the deliberate divergences.** The behaviours in
    "Known divergences from Windows" are places this port knowingly does
    something different, usually because Windows' behaviour looks like a
    bug. They are defensible individually, but if the goal is strict
    parity they are the list to revisit. The menu accelerator column
    (`Shift+V` where Windows writes `V`) is the most visible one and the
    only one a user sees on every menu.
-7. **Unfinished business, low value:** Wingdings and the plain text
+6. **Unfinished business, low value:** Wingdings and the plain text
    fonts aren't bundled (see item 15); the black wedges in the tick ring
    are unexplained upstream rendering (see item 11) and nobody has
    actually worked out what draws them.
@@ -571,13 +562,13 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-25
+## Work log — items 1-26
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
 original description said they were.
 
-Items 1-15 are completed pieces of work. Items 16-25 are findings — how
+Items 1-15 are completed pieces of work. Items 16-26 are findings — how
 a thing turned out to work, or a class of bug worth not repeating — and
 are the more useful half to read before starting something new.
 
@@ -1189,6 +1180,34 @@ are the more useful half to read before starting something new.
       (`charts1.cpp:91` emits the newline), and cusp values differed
       because that Wine instance had 3D houses on. Worth checking before
       concluding the renderer diverges.
+
+26. **A modal warning can block the Windows build before it draws
+    anything.** `SwissEnsurePath()` (calc.cpp) concatenates the
+    executable's directory, the working directory, several environment
+    variables and a compile-time directory into one `char[AS_MAXCH]` —
+    256 bytes. From a long enough working directory that overflows, and
+    Astrolog calls `PrintWarning()`, which on Windows is a **modal**
+    `MessageBox` raised before the first chart is drawn. The app sits on
+    it: menu bar painted, client area blank, keystrokes going to the
+    dialog. Launch the Windows build with `-Wt` (`wi.fNoPopup`) for any
+    automated run. Threshold observed: a 50-character working directory
+    was fine, 70 was not.
+    - Worth knowing generally — **any** `PrintWarning`/`PrintError` in the
+      Windows build is modal and will hang an unattended run. The Qt port
+      routes both through `PrintWarningQt()`, which honours
+      `FNoPopupQt()`, so it has the same hazard and the same escape.
+    - **The debugging lesson is the expensive part: look at the whole
+      frame.** The dialog was in every capture from the first run. It went
+      unseen through several wrong theories — a bad clone, path length in
+      a file-open buffer, filesystem speed, focus, startup timing — purely
+      because every crop was of the top-left corner where the chart text
+      belongs, and a `MessageBox` is centred. Open the full image before
+      theorising about why something rendered blank.
+    - Two other wrong turns worth not repeating: three different md5s from
+      the same source were read as evidence the binary differed, when the
+      mingw build is simply nondeterministic; and "all eight captures are
+      distinct" was accepted as "all eight captures are good", when
+      distinctness says nothing about content.
 
 ## Known divergences from Windows
 

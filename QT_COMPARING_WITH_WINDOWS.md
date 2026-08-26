@@ -36,21 +36,34 @@ python3 tools/text-chart-diff.py out/win out/qt out/cmp
 **Layout is what to compare** — column positions, row spacing, where each
 field starts.
 
-> **Known limitation, 2026-08-25.** The Qt side of this
-> (`QTTEXTDIR=... ./run-qt-tests.sh`) is deterministic and verified from a
-> clean clone. The Wine side is verified working *in a working tree* — it
-> produces correct, distinct captures of all eight chart types — but the
-> same script run against a fresh clone of this repo produced a window
-> with a menu bar and a blank client area for every chart. Same config,
-> same `ephem/` files, same source; not root-caused, and not a longer
-> startup wait. **If you get blank Windows captures, that's this, not your
-> setup.** Check a capture by eye before trusting a comparison; the useful
-> tell is that all eight files are byte-identical:
-> `md5sum out/win/*.png | awk '{print $1}' | sort -u | wc -l` should be 8.
+### Why the Windows build is launched with `-Wt`
 
-The Qt side alone is still worth running — it renders all eight text
-charts headlessly in a second, which is enough to catch a regression in
-this port even without the Windows side beside it.
+`SwissEnsurePath()` (calc.cpp) builds the Swiss Ephemeris search path by
+concatenating the executable's directory, the working directory, several
+environment variables and a compile-time directory into a single
+`char[AS_MAXCH]` — 256 bytes. Run from a deep enough working directory
+and that overflows, at which point Astrolog calls `PrintWarning()`, which
+on Windows is a **modal** `MessageBox`, put up before the first chart is
+ever drawn.
+
+The app then sits on that dialog. The menu bar is painted, the client area
+stays blank, and every keystroke goes to the dialog instead of the chart —
+so all eight captures come out identical and empty. It looks exactly like
+a broken checkout or a rendering divergence, and it is neither. The
+threshold here was between a 50-character working directory (fine) and a
+70-character one (blank); a checkout under a temp directory clears it
+easily.
+
+`-Wt` sets `wi.fNoPopup`, which makes `PrintWarning()` return instead of
+putting up the box. The script passes it, and also refuses to hand back a
+capture directory whose images are all byte-identical rather than let a
+silent failure through.
+
+**The lesson that cost the most time here: look at the whole frame.** The
+dialog was in every single capture from the start. It went unseen for an
+hour because every crop was of the top-left corner, where the chart text
+belongs — and a `MessageBox` is centred. When something renders blank,
+open the full image before theorising about why.
 
 The two sides are captured by deliberately different means, and it matters
 why. `v` is a *toggle*, so driving it leaves each build in whatever state

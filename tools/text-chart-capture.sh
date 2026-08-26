@@ -84,7 +84,20 @@ DISPLAY=$DISP xset -b 2>/dev/null || true
 
 # "_X" clears us.fGraphics at startup: the GUI comes up in text mode and
 # stays up. Deterministic, where pressing "v" is not.
-DISPLAY=$DISP wine ./astrolog.exe _X >/dev/null 2>&1 &
+#
+# "-Wt" sets wi.fNoPopup, which makes PrintWarning() return instead of
+# putting up a message box. That matters more than it sounds:
+# SwissEnsurePath() (calc.cpp) concatenates the executable's directory,
+# the working directory, several environment variables and a compile-time
+# directory into one char[AS_MAXCH] search path. Run from a deep enough
+# working directory that overflows 255 characters, and Astrolog warns --
+# on Windows, with a *modal* MessageBox, before the first chart is drawn.
+# The app then sits on that dialog: the menu bar is painted, the client
+# area stays blank, and every keystroke goes to the dialog rather than the
+# chart, so all eight captures come out identical. Without -Wt this script
+# silently produces a directory of blank images whenever it is run from a
+# long path, which is exactly what a checkout under a temp directory is.
+DISPLAY=$DISP wine ./astrolog.exe -Wt _X >/dev/null 2>&1 &
 APPPID=$!
 sleep 16
 
@@ -127,4 +140,18 @@ for pair in $CHARTS; do
   DISPLAY=$DISP import -window root "$OUT/$name.png"
   echo "  $name"
 done
-echo "captured to $OUT"
+
+# If the app never processed the keystrokes -- blocked on a modal dialog,
+# or never focused -- every capture is byte-identical and blank, and a
+# comparison against them looks like a rendering divergence rather than a
+# harness failure. Refuse to hand back a directory like that.
+CDISTINCT=$(md5sum "$OUT"/*.png | awk '{print $1}' | sort -u | wc -l)
+if [ "$CDISTINCT" -lt 2 ]; then
+  echo "" >&2
+  echo "FAILED: all captures are identical, so the keystrokes never" >&2
+  echo "reached the chart. Astrolog is most likely sitting on a modal" >&2
+  echo "dialog: look at the CENTRE of $OUT/radix.png, not the top left." >&2
+  echo "See QT_COMPARING_WITH_WINDOWS.md." >&2
+  exit 1
+fi
+echo "captured to $OUT ($CDISTINCT distinct)"
