@@ -15,6 +15,20 @@ Build" qtdriver.cpp` to find each menu-builder function, `grep -n "^void
 Show" qtdialog.cpp` for the dialog list) — this snapshot is accurate as of
 2026-08-25, but don't trust it blindly if it's been a while.
 
+**Update 2026-08-26 — the first real user session found three bugs no
+test had.** Someone ran the port against their own long-standing
+`astrolog.as` for the first time, rather than against the repo's default,
+and inside an hour turned up a startup core dump (item 27), initial focus
+landing on the wrong control in seven dialogs (item 28), and a leak
+warning on every exit (item 29). All three are fixed. None was reachable
+by the resource audits or the in-process suite, and none needed a
+comparison against Windows to find — only somebody using it normally.
+**If you are looking for what to do next, that is the highest-yield thing
+on this page:** drive real charts with real settings, rather than adding
+coverage to what is already measured. Item 30 is the fourth thing that
+session raised, which turned out to be a setting working correctly — and
+is kept because the wrong theory about it is worth not repeating.
+
 **Where things stand (2026-08-25). Every item on this plan is done.**
 All nine menus are built and all ~28 dialogs exist and have been read
 field-by-field against their `Dlg*` in wdialog.cpp and their resource
@@ -139,6 +153,21 @@ Roughly in the order I'd take them.
    fonts aren't bundled (see item 15); the black wedges in the tick ring
    are unexplained upstream rendering (see item 11) and nobody has
    actually worked out what draws them.
+7. **Use it on real data.** Added 2026-08-26, and on the evidence it
+   outranks everything above it. Every verification before that date was
+   mechanical — does the item fire, does the dialog open, does the layout
+   match. One session driving the port from a user's own settings file
+   found three bugs (items 27-29) that 2728 assertions and three
+   resource audits had all missed, because each of them was in behaviour
+   nothing measures: process startup, keyboard focus, and exit cleanup.
+   Run charts you actually want to read, from a settings file that isn't
+   the repo's.
+8. **A way to render a chart without the event loop.** The Qt build has
+   no headless output path at all: `-Xb` and friends enter `InteractQt()`
+   like everything else, so a chart can only be got out of it through the
+   GUI. That blocks the image A/B in item 30, and it is also what makes
+   item 4's pixel baselines awkward. Probably the single most useful
+   piece of plumbing left.
 
 **If upstream releases a new Astrolog**, note this fork's changes to
 shared core are deliberately small and confined to `#ifdef QT` branches —
@@ -549,13 +578,13 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-26
+## Work log — items 1-30
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
 original description said they were.
 
-Items 1-15 are completed pieces of work. Items 16-26 are findings — how
+Items 1-15 are completed pieces of work. Items 16-30 are findings — how
 a thing turned out to work, or a class of bug worth not repeating — and
 are the more useful half to read before starting something new.
 
@@ -820,8 +849,11 @@ are the more useful half to read before starting something new.
       "<switches>"`, or in astrolog.as — not from the GUI. This menu only
       runs them, same as Windows'.
     - Windows can rename a macro's menu entry with `-WM`, which it does
-      via `ModifyMenu` on Win32-only `wi.hmenu`. Not ported; entries keep
-      their default "Macro N" labels.
+      via `ModifyMenu` on Win32-only `wi.hmenu`. *(Corrected 2026-08-26 —
+      this used to say "not ported". It is: `NProcessSwitchesQt()`'s `M`
+      case clones the name into `rgszMacroQt[]`/`rgszMSubQt[]`, and
+      `BuildMacroMenusQt()` reads them, so a settings file's `-WM` lines
+      do rename the entries. See item 29 for the leak that came with it.)*
     - Verified: F5 with nothing defined gives "Macro number 5 is not
       defined."; a macro defined through the command line dialog runs and
       recasts when its key is pressed.
@@ -1179,8 +1211,13 @@ are the more useful half to read before starting something new.
     was fine, 70 was not.
     - Worth knowing generally — **any** `PrintWarning`/`PrintError` in the
       Windows build is modal and will hang an unattended run. The Qt port
-      routes both through `PrintWarningQt()`, which honours
-      `FNoPopupQt()`, so it has the same hazard and the same escape.
+      routes both through `PrintWarningQt()`, which honours `FNoPopupQt()`,
+      so it has the same hazard. *(Corrected 2026-08-26 — this used to say
+      "and the same escape". It doesn't: `-Wt` sets Win32-only
+      `wi.fNoPopup`, and nothing on the Qt command line reaches
+      `SetNoPopupQt()`, which only the test suite and File Settings' own
+      checkbox call. An unattended Qt run has no way to turn the boxes off
+      from outside. Worth adding if anyone needs it.)*
     - **The debugging lesson is the expensive part: look at the whole
       frame.** The dialog was in every capture from the first run. It went
       unseen through several wrong theories — a bad clone, path length in
@@ -1193,6 +1230,100 @@ are the more useful half to read before starting something new.
       mingw build is simply nondeterministic; and "all eight captures are
       distinct" was accepted as "all eight captures are good", when
       distinctness says nothing about content.
+
+27. **A warning raised before the window exists took the process down.**
+    `astrolog-qt -i <file that can't be opened>` core dumped with
+    `QWidget: Must construct a QApplication before a QWidget`, as did any
+    switch given too few parameters. Backtrace: `main` →
+    `FProcessSwitches` → `FInputData` → `FileOpen` → `PrintError` →
+    `PrintWarningQt` → `QMessageBox` → `qFatal`.
+    - **The ordering is the whole bug.** `main()` (astrolog.cpp) parses
+      astrolog.as and then the command line well before `Action()` reaches
+      `InteractQt()`, and `BeginQt()` — which constructs the QApplication —
+      runs inside that. So the entire startup parse happens with no
+      application object, and Qt refuses to build a widget there. Windows
+      has no equivalent problem: `MessageBox(NULL, ...)` needs neither a
+      window nor an app object, which is why this is Qt-only and why
+      reading `wdialog.cpp` would never have suggested it.
+    - Fixed in `PrintWarningQt()`: with `QApplication::instance() == NULL`
+      it writes to stderr in the two formats the console builds use
+      (general.cpp's `PrintWarning`/`PrintError`) and returns.
+    - **`TestBadInputQt()` could not have caught this**, and its "survived
+      missing files" line reads as though it should. It runs *inside* the
+      program from `InteractQt()`, i.e. after the QApplication exists, so
+      it exercises the opposite path. The check has to be a separate
+      process, and now is: `run-qt-tests.sh` grew a **Startup
+      diagnostics** section that runs the binary with a missing `-i` file
+      and with a `-t` missing its parameters, and fails on a signal death
+      or on that qFatal message. Confirmed to fail with the guard removed.
+    - General lesson worth keeping: an in-process test suite cannot test
+      its own process's startup. Anything before the event loop needs a
+      subprocess check.
+
+28. **Seven dialogs opened with focus on the wrong control.** Windows sets
+    initial focus explicitly from `WM_INITDIALOG` — `SetFocus(GetDlgItem(
+    hdlg, ...))` in `DlgCommand` (`deCo`), `DlgInfo` (`dcInMon`),
+    `DlgDefault` (`dcDeDst`), `DlgTransit` (`dcTrMon`), `DlgProgress`
+    (`dcPrMon`), `DlgList` (`dbLi_sl`) and `DlgGraphics` (`deGr_Xw_x`) —
+    because the dialog manager would otherwise leave it on the first tab
+    stop, which in every one of them is the OK button. Qt's default is the
+    same, so it needed the same override; without it Enter opened the
+    command line box and you had to Tab into the field before typing.
+    - `FocusDialogQt()` (qtdialog.cpp) does it, called after
+      `PrepareDialogQt()` in each of the seven.
+    - Windows does *not* select the field's existing text when it does
+      this — its handlers return `fFalse`, so no `EM_SETSEL` follows — and
+      neither does this. The caret lands at the head, where
+      `PrepareDialogQt()` already puts it.
+    - Reported by the user, not by any test: nothing asserts focus. Worth
+      knowing that the resource-driven audits can't see this either, since
+      focus isn't in the `.rc` — it's in the dialog handlers.
+
+29. **`-WM` leaked one allocation per renamed macro.** A settings file with
+    thirteen `-WM` lines ended every session with upstream's own leak
+    check firing: *"Number of memory allocations not freed before exiting:
+    13"*. `NProcessSwitchesQt()`'s `M` case clones each name into
+    `rgszMacroQt[]`/`rgszMSubQt[]` and nothing freed them.
+    - Fixed with `FinalizeQt()` (qtdriver.cpp), called from a new `#ifdef
+      QT` branch in `FinalizeProgram()` (astrolog.cpp) beside the existing
+      `#ifdef X11` and `#ifdef WINANY` cleanup. That function is where a
+      backend frees what it allocated through `PAllocate()`; the Qt build
+      simply never had its branch. **Check it if you ever add a
+      `PAllocate()` to the Qt sources** — there are none besides this one,
+      which is why it went unnoticed.
+    - The count matching the number of `-WM` lines exactly is what
+      identified it. Upstream's check is a release-build feature, not a
+      DEBUG one (only the companion "bytes not freed" line is `#ifdef
+      DEBUG`), so users see it.
+    - **Diagnosis note:** the first comparison run was wrong because it
+      launched with no `-i` at all, and came back clean. The user's own
+      repro — `-i <settings file>`, quit immediately — was the thing that
+      reproduced. Take the reporter's exact invocation rather than an
+      approximation of it.
+
+30. **The arcs outside the wheel are a wheel-corner decoration, and are
+    working correctly.** Large arcs sweeping through all four corners of
+    the chart window, outside the wheel, turned out to be `-YXv 1 55` in
+    the user's settings: decoration type 1, "Spider Web", at 55% size,
+    drawn by `xcharts0.cpp:280-286` as a fan of straight lines from each
+    corner. It reads as curves and as a moiré because of the fan, but
+    type **2** is the actual "Moire Pattern" (`rgszWheelCorner[]`,
+    wdialog.cpp:2732, mirrored in qtdialog.cpp). Shared upstream drawing
+    code, identical on both backends. Nothing to fix.
+    - Recorded because the wrong theory is instructive. The guess was that
+      wheel fill being off (`-Xv 0`, also in that file) had stopped
+      painting over them — the inverse of item 11's trap. That was
+      plausible, tidy, connected to a real documented hazard, and wrong.
+      The answer came from the user recognising their own setting, and
+      then from grepping the settings file for what it actually enables.
+      **Read the config before theorising about what a config produces.**
+    - Real limitation found while trying to A/B it: **the Qt build cannot
+      render a chart from the command line.** `-Xb` and the rest enter
+      `InteractQt()` like everything else, so a chart only comes out
+      through the GUI. The plan used to say such invocations "just hang";
+      since item 27 they no longer crash, but there is still no headless
+      export, which is what an image A/B or a pixel baseline would want.
+      Carried up to "What to do next" as item 8.
 
 ## Known divergences from Windows
 
