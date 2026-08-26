@@ -296,7 +296,44 @@ static void TestChartRenderQt()
       "background)", rgszMode[i], cpix);
   }
   SetChartModeQt(nSav);
-  printf("  %d chart types rendered\n", cmode);
+
+  // The loop above drives SetChartModeQt() directly, which leaves
+  // us.fGraphics alone -- so it only ever exercised whichever mode the
+  // suite happened to be in. A user picks these off the Chart menu, and
+  // the two chart types with no case in DrawChartX() (Aspect List and
+  // Arabic Parts) render an empty window unless the menu action turns
+  // graphics off first, the way Windows does. Fire the actions themselves,
+  // with graphics deliberately on, so that path is covered.
+  CONST char *rgszChart[] = { "Standard Radi&x", "House &Wheel",
+    "Aspect Midpoint &Grid", "&Aspect List", "&Midpoint List",
+    "Local Hori&zon", "Solar System &Orbit", "Ga&uquelin Sectors",
+    "&Calendar", "Inf&luence", "Esoter&ic", "Astrocartograp&hy",
+    "&Ephemeris", "Ara&bic Parts", "Risi&ng and Setting",
+    "Nea&rest Cities" };
+  int cchart = (int)(sizeof(rgszChart) / sizeof(char *));
+  flag fSav = us.fGraphics;
+
+  for (i = 0; i < cchart; i++) {
+    QAction *pa = PaFindActionTestQt(rgszChart[i]);
+    Check(pa != NULL, "%s: not on the Chart menu", rgszChart[i]);
+    if (pa == NULL)
+      continue;
+    us.fGraphics = fTrue;
+    pa->trigger();
+    // Windows drops to text for exactly these two and leaves every other
+    // chart type in whatever mode it was already in (wdriver.cpp
+    // cmdChartAspect and cmdChartArabic are the only chart-type cases that
+    // assign us.fGraphics). Anything else here is a divergence.
+    flag fWantText = (NCompareSz(rgszChart[i], "&Aspect List") == 0 ||
+      NCompareSz(rgszChart[i], "Ara&bic Parts") == 0);
+    Check(fWantText ? !us.fGraphics : us.fGraphics != 0,
+      "%s: left us.fGraphics %s; Windows leaves it %s", rgszChart[i],
+      us.fGraphics ? "on" : "off", fWantText ? "off" : "on");
+  }
+  us.fGraphics = fSav;
+  SetChartModeQt(nSav);
+  printf("  %d chart types rendered, %d fired from the Chart menu\n",
+    cmode, cchart);
 }
 
 
@@ -735,6 +772,52 @@ static void TestMenuParityQt()
 
 /*
 ******************************************************************************
+** Bad input.
+******************************************************************************
+*/
+
+// A macro is just a stored command line, and one written on a different
+// machine will name files that aren't here. On every non-Windows build
+// PrintError() ended in Terminate(), so a macro pointing at a missing file
+// took the whole program down instead of complaining -- which is what
+// hitting F1 with someone else's macro set did. Windows shows a message
+// box and carries on; the Qt build now does too.
+//
+// If that regresses, these calls never return and the suite dies partway
+// through with no summary line, which is loud enough to spot.
+
+static void TestBadInputQt()
+{
+  flag fSav = FNoPopupQt();
+  char sz[cchSzMax];
+
+  Group("Bad input");
+  SetNoPopupQt(fTrue);          // no message boxes during an automated run
+
+  Check(FileOpen("no-such-file-here.as", 0, NULL) == NULL,
+    "FileOpen() found a file that isn't there");
+  Check(fTrue, "FileOpen() on a missing file returned");
+
+  // The macro path proper: a command line naming a file that isn't here.
+  sprintf(sz, "-i no-such-file-here.as");
+  FProcessCommandLine(sz);
+  Check(fTrue, "FProcessCommandLine() returned after a missing -i file");
+
+  // And an outright bad switch, the other way a stale macro goes wrong.
+  sprintf(sz, "-ZZzzz");
+  FProcessCommandLine(sz);
+  Check(fTrue, "FProcessCommandLine() returned after an unknown switch");
+
+  PrintError("Test error; the suite expects to keep running past this.");
+  Check(fTrue, "PrintError() returned instead of terminating");
+
+  SetNoPopupQt(fSav);
+  printf("  survived missing files, a bad switch and PrintError()\n");
+}
+
+
+/*
+******************************************************************************
 ** Entry point.
 ******************************************************************************
 */
@@ -748,6 +831,7 @@ int NRunQtTestsQt()
   TestChartRenderQt();
   TestAllMenuActionsQt();
   TestMenuParityQt();
+  TestBadInputQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

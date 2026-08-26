@@ -1323,10 +1323,10 @@ static void BuildFileMenu(QMainWindow *pwind)
     []() { ShowSaveChartPositionsDialogQt(); });
   pmenu->addSeparator();
 
-  QAction *paSaveSettings = pmenu->addAction("Save Program &Settings...");
+  QAction *paSaveSettings = pmenu->addAction("Save Program Settin&gs...");
   QObject::connect(paSaveSettings, &QAction::triggered, pwind,
     []() { ShowSaveSettingsDialogQt(); });
-  QMenu *pmenuOtherFormats = pmenu->addMenu("&Other Formats");
+  QMenu *pmenuOtherFormats = pmenu->addMenu("Ot&her Formats");
   QAction *paOpenDir = pmenuOtherFormats->addAction(
     "Open Charts in &Folder...");
   QObject::connect(paOpenDir, &QAction::triggered, pwind,
@@ -1336,7 +1336,7 @@ static void BuildFileMenu(QMainWindow *pwind)
     []() { ShowSaveChartListDialogQt(); });
   pmenuOtherFormats->addSeparator();
   QAction *paSaveAAF = pmenuOtherFormats->addAction(
-    "Save Chart E&xchange...");
+    "Save Chart &Exchange...");
   QObject::connect(paSaveAAF, &QAction::triggered, pwind,
     []() { ShowSaveAAFDialogQt(); });
   QAction *paSaveQuick = pmenuOtherFormats->addAction(
@@ -1370,21 +1370,21 @@ static void BuildFileMenu(QMainWindow *pwind)
     []() { ShowExportWireDialogQt(); });
   pmenu->addSeparator();
 
-  QMenu *pmenuOpenBmp = pmenu->addMenu("Open &Bitmap");
+  QMenu *pmenuOpenBmp = pmenu->addMenu("Open Bit&map");
   QAction *paOpenBack = pmenuOpenBmp->addAction("Open Chart &Background...");
   QObject::connect(paOpenBack, &QAction::triggered, pwind,
     []() { ShowOpenBackgroundDialogQt(); });
   QAction *paOpenWorld = pmenuOpenBmp->addAction("Open &World Map...");
   QObject::connect(paOpenWorld, &QAction::triggered, pwind,
     []() { ShowOpenWorldDialogQt(); });
-  QAction *paFileSettings = pmenu->addAction("File &Settings...");
+  QAction *paFileSettings = pmenu->addAction("&File Settings...");
   QObject::connect(paFileSettings, &QAction::triggered, pwind,
     []() { ShowFileSettingsDialogQt(); });
   pmenu->addSeparator();
 
   // Windows also has Print Setup here, which is its native printer
   // configuration dialog; Qt's print dialog covers that itself.
-  QAction *paPrint = pmenu->addAction("&Print...");
+  QAction *paPrint = pmenu->addAction("P&rint...");
   QObject::connect(paPrint, &QAction::triggered, pwind,
     []() { PrintChartQt(); });
   pmenu->addSeparator();
@@ -1496,7 +1496,7 @@ static void BuildViewMenu(QMainWindow *pwind)
       s_paGraphics->setChecked(fFalse);
       RedrawQt();
     });
-  QAction *paColors = pmenu->addAction("Set &Colors...");
+  QAction *paColors = pmenu->addAction("&Set Colors...");
   QObject::connect(paColors, &QAction::triggered, pwind,
     []() { ShowColorDialogQt(); });
   pmenu->addSeparator();
@@ -1511,7 +1511,7 @@ static void BuildViewMenu(QMainWindow *pwind)
       s_paGraphics->setChecked(fFalse);
       RedrawQt();
     });
-  s_paSeconds = AddToggleAction(pmenu, "Print Nearest &Second", &us.fSeconds,
+  s_paSeconds = AddToggleAction(pmenu, "Print &Nearest Second", &us.fSeconds,
     fFalse);
   AddToggleAction(pmenu, "&Parallel Aspects", &us.fParallel, fFalse);
   // Not AddToggleAction: nAppSep has three values, and the checkmark means
@@ -1562,7 +1562,7 @@ static QAction *AddChartListNavAction(QMenu *pmenu, CONST char *szLabel,
 static void BuildInfoMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Info");
-  QAction *paInfo = pmenu->addAction("&Set Chart Info...");
+  QAction *paInfo = pmenu->addAction("Set Chart &Info...");
   QObject::connect(paInfo, &QAction::triggered, pwind,
     []() { ShowChartInfoDialogQt(); });
   QAction *paNow = pmenu->addAction("Chart for &Now");
@@ -1570,7 +1570,7 @@ static void BuildInfoMenu(QMainWindow *pwind)
     FInputData(szNowCore);
     RecastAndRedrawQt();
   });
-  QAction *paDefault = pmenu->addAction("&Default Chart Info...");
+  QAction *paDefault = pmenu->addAction("D&efault Chart Info...");
   QObject::connect(paDefault, &QAction::triggered, pwind,
     []() { ShowDefaultInfoDialogQt(); });
   pmenu->addSeparator();
@@ -1582,7 +1582,7 @@ static void BuildInfoMenu(QMainWindow *pwind)
   QObject::connect(paInfoAll, &QAction::triggered, pwind,
     []() { ShowChartsAllDialogQt(); });
   QMenu *pmenuList = pmenu->addMenu("Chart &List");
-  QAction *paList = pmenuList->addAction("Chart &List...");
+  QAction *paList = pmenuList->addAction("&Chart List...");
   QObject::connect(paList, &QAction::triggered, pwind,
     []() { ShowChartListDialogQt(); });
   pmenuList->addSeparator();
@@ -1592,7 +1592,7 @@ static void BuildInfoMenu(QMainWindow *pwind)
   AddChartListNavAction(pmenuList, "&First Chart", -2);
   AddChartListNavAction(pmenuList, "&Last Chart", 2);
   pmenuList->addSeparator();
-  QAction *paSwap = pmenuList->addAction("&Swap Chart #1 and #2");
+  QAction *paSwap = pmenuList->addAction("Swap Chart #&1 and #2");
   QObject::connect(paSwap, &QAction::triggered, pwind, []() {
     CI ciT;
     SwapTemp(ciCore, ciTwin, ciT);
@@ -1601,13 +1601,13 @@ static void BuildInfoMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   QActionGroup *pgroup = new QActionGroup(pwind);
-  AddRelAction(pmenu, pgroup, "&No Relationship Chart", rcNone);
-  AddRelAction(pmenu, pgroup, "&Comparison Chart", rcDual);
+  AddRelAction(pmenu, pgroup, "No &Relationship Chart", rcNone);
+  AddRelAction(pmenu, pgroup, "Com&parison Chart", rcDual);
   AddRelAction(pmenu, pgroup, "&Synastry Chart", rcSynastry);
-  AddRelAction(pmenu, pgroup, "Co&mposite Chart", rcComposite);
-  AddRelAction(pmenu, pgroup, "&Time Space Midpoint Chart", rcMidpoint);
+  AddRelAction(pmenu, pgroup, "&Composite Chart", rcComposite);
+  AddRelAction(pmenu, pgroup, "Time Space &Midpoint Chart", rcMidpoint);
   pmenu->addSeparator();
-  AddRelAction(pmenu, pgroup, "&Date Difference Chart", rcDifference);
+  AddRelAction(pmenu, pgroup, "Date &Difference Chart", rcDifference);
   AddRelAction(pmenu, pgroup, "&Biorhythm Chart", rcBiorhythm);
   AddRelAction(pmenu, pgroup, "&Transit and Natal", rcTransit);
   AddRelAction(pmenu, pgroup, "&Progressed and Natal", rcProgress);
@@ -1707,7 +1707,7 @@ static void BuildSettingMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Setting");
   AddToggleAction(pmenu, "&Sidereal Zodiac", &us.fSidereal, fTrue);
-  s_paHelio = pmenu->addAction("&Heliocentric");
+  s_paHelio = pmenu->addAction("He&liocentric");
   s_paHelio->setCheckable(true);
   s_paHelio->setChecked(us.objCenter != oEar);
   QObject::connect(s_paHelio, &QAction::triggered, pwind, []() {
@@ -1722,50 +1722,50 @@ static void BuildSettingMenu(QMainWindow *pwind)
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "&Koch", 1,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "C&ampanus", 3,
+  AddSelectAction(pmenuHouse, pgroupHouse, "&Campanus", 3,
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "&Regiomontanus", 5,
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "&Topocentric", 8,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "A&lcabitius", 9,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Alca&bitius", 9,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "K&rusinski", 10,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Kr&usinski", 10,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "A.P.&C.", 18,
+  AddSelectAction(pmenuHouse, pgroupHouse, "A&.P.C.", 18,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "&Savard-A", 21,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Savard-&A", 21,
     &us.nHouseSystem, fTrue);
   pmenuHouse->addSeparator();
-  AddSelectAction(pmenuHouse, pgroupHouse, "P&orphyry", 6,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Porph&yry", 6,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "Pullen (S.&Ratio)", 12,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Pullen (S.Rati&o)", 12,
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "Pullen (S.&Delta)", 13,
     &us.nHouseSystem, fTrue);
   pmenuHouse->addSeparator();
   AddSelectAction(pmenuHouse, pgroupHouse, "&Meridian", 4,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "M&orinus", 7,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Morinu&s", 7,
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "Hori&zon", 17,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "&Carter P.Equat.", 19,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Carter& P.Equat.", 19,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "S&unshine", 20,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Suns&hine", 20,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "S&ripati", 16,
+  AddSelectAction(pmenuHouse, pgroupHouse, "Sr&ipati", 16,
     &us.nHouseSystem, fTrue);
   pmenuHouse->addSeparator();
   AddSelectAction(pmenuHouse, pgroupHouse, "&Equal", 2,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "Equal (&MC)", 11,
+  AddSelectAction(pmenuHouse, pgroupHouse, "E&qual (MC)", 11,
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "&Whole", 14,
     &us.nHouseSystem, fTrue);
   AddSelectAction(pmenuHouse, pgroupHouse, "&Vedic", 15,
     &us.nHouseSystem, fTrue);
-  AddSelectAction(pmenuHouse, pgroupHouse, "N&ull", 22,
+  AddSelectAction(pmenuHouse, pgroupHouse, "&Null", 22,
     &us.nHouseSystem, fTrue);
 
   QMenu *pmenuHouseSet = pmenu->addMenu("House S&ettings");
@@ -1794,7 +1794,7 @@ static void BuildSettingMenu(QMainWindow *pwind)
   QAction *paObject = pmenu->addAction("&Object Settings...");
   QObject::connect(paObject, &QAction::triggered, pwind,
     []() { ShowObjectDialogQt(); });
-  QAction *paObject2 = pmenu->addAction("&More Object Settings...");
+  QAction *paObject2 = pmenu->addAction("More Ob&ject Settings...");
   QObject::connect(paObject2, &QAction::triggered, pwind,
     []() { ShowObject2DialogQt(); });
   pmenu->addSeparator();
@@ -1809,11 +1809,11 @@ static void BuildSettingMenu(QMainWindow *pwind)
   QObject::connect(paTransitRestrict, &QAction::triggered, pwind,
     []() { ShowTransitRestrictDialogQt(); });
 
-  QMenu *pmenuMoons = pmenu->addMenu("Planetary &Moons");
-  AddChartModeAction(pmenuMoons, "Moons Chart", gMoons);
+  QMenu *pmenuMoons = pmenu->addMenu("&Planetary Moons");
+  AddChartModeAction(pmenuMoons, "&Moons Chart", gMoons);
   // Windows also forces text mode when switching to this chart type
   // (cmdChartExo, wdriver.cpp).
-  AddChartModeTextAction(pmenuMoons, "Exoplanets Chart", gExo);
+  AddChartModeTextAction(pmenuMoons, "&Exoplanets Chart", gExo);
   pmenuMoons->addSeparator();
   QAction *paMoonRestrict = pmenuMoons->addAction("Moon &Restrictions...");
   QObject::connect(paMoonRestrict, &QAction::triggered, pwind,
@@ -1840,13 +1840,13 @@ static void BuildSettingMenu(QMainWindow *pwind)
     dwarfHi, -1, fTrue);
   AddCategoryRestrictAction(pmenu, "Include &Fixed Stars", &us.fStar,
     starLo, starHi, -1, fFalse);
-  AddCategoryRestrictAction(pmenu, "Include &Moons", &us.fMoons, moonsLo,
+  AddCategoryRestrictAction(pmenu, "&Include Moons", &us.fMoons, moonsLo,
     moonsHi, -1, fTrue);
   AddCategoryRestrictAction(pmenu, "Include &Body Centers (COB)", &us.fCOB,
     cobLo, cobHi, -1, fTrue);
   pmenu->addSeparator();
 
-  QAction *paCalc = pmenu->addAction("&Calculation Settings...");
+  QAction *paCalc = pmenu->addAction("Calculation Settin&gs...");
   QObject::connect(paCalc, &QAction::triggered, pwind,
     []() { ShowCalcDialogQt(); });
   QAction *paDisplay = pmenu->addAction("&Display Settings...");
@@ -1859,22 +1859,26 @@ static void BuildChartMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Chart");
   int i;
-  AddChartModeAction(pmenu, "Standard &Radix", gWheel);
-  AddChartModeAction(pmenu, "&House Wheel", gHouse);
-  AddChartModeAction(pmenu, "Aspect &Midpoint Grid", gGrid);
-  AddChartModeAction(pmenu, "Aspect &List", gAspect);
-  AddChartModeAction(pmenu, "M&idpoint List", gMidpoint);
-  AddChartModeAction(pmenu, "Local &Horizon", gHorizon);
+  AddChartModeAction(pmenu, "Standard Radi&x", gWheel);
+  AddChartModeAction(pmenu, "House &Wheel", gHouse);
+  AddChartModeAction(pmenu, "Aspect Midpoint &Grid", gGrid);
+  // Aspect List and Arabic Parts have no case in DrawChartX(), so drawing
+  // either with graphics on yields an empty window. Windows sets
+  // us.fGraphics = fFalse for exactly these two chart types (wdriver.cpp
+  // cmdChartAspect and cmdChartArabic) and no others; match that.
+  AddChartModeTextAction(pmenu, "&Aspect List", gAspect);
+  AddChartModeAction(pmenu, "&Midpoint List", gMidpoint);
+  AddChartModeAction(pmenu, "Local Hori&zon", gHorizon);
   AddChartModeAction(pmenu, "Solar System &Orbit", gOrbit);
-  AddChartModeAction(pmenu, "&Gauquelin Sectors", gSector);
+  AddChartModeAction(pmenu, "Ga&uquelin Sectors", gSector);
   AddChartModeAction(pmenu, "&Calendar", gCalendar);
-  AddChartModeAction(pmenu, "&Influence", gDisposit);
-  AddChartModeAction(pmenu, "&Esoteric", gEsoteric);
-  AddChartModeAction(pmenu, "&Astrocartography", gAstroGraph);
+  AddChartModeAction(pmenu, "Inf&luence", gDisposit);
+  AddChartModeAction(pmenu, "Esoter&ic", gEsoteric);
+  AddChartModeAction(pmenu, "Astrocartograp&hy", gAstroGraph);
   AddChartModeAction(pmenu, "&Ephemeris", gEphemeris);
-  AddChartModeAction(pmenu, "Ara&bic Parts", gArabic);
-  AddChartModeAction(pmenu, "R&ising and Setting", gRising);
-  AddChartModeAction(pmenu, "&Nearest Cities", gLocal);
+  AddChartModeTextAction(pmenu, "Ara&bic Parts", gArabic);
+  AddChartModeAction(pmenu, "Risi&ng and Setting", gRising);
+  AddChartModeAction(pmenu, "Nea&rest Cities", gLocal);
   // The chart starts on the standard radix; reflect that in the menu. Not
   // s_rgpaChartMode[0] -- since BuildSettingMenu()'s Planetary Moons items
   // share this same group and are added before this menu is built, index 0
@@ -1965,13 +1969,13 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
     if (gs.nScale < MAXSCALE) { gs.nScale += 100; RedrawQt(); }
   });
   pmenuScale->addSeparator();
-  QAction *paTextDn = pmenuScale->addAction("Decrease &Text");
+  QAction *paTextDn = pmenuScale->addAction("D&ecrease Text");
   QObject::connect(paTextDn, &QAction::triggered, pwind, []() {
     if (gs.nScaleText > 100) {
       gs.nScaleText -= 50; gs.fAutoScale = fFalse; RedrawQt();
     }
   });
-  QAction *paTextUp = pmenuScale->addAction("&Increase Text");
+  QAction *paTextUp = pmenuScale->addAction("I&ncrease Text");
   QObject::connect(paTextUp, &QAction::triggered, pwind, []() {
     if (gs.nScaleText < MAXSCALE) {
       gs.nScaleText += 50; gs.fAutoScale = fFalse; RedrawQt();
@@ -2313,7 +2317,7 @@ static void BuildMacroMenus(QMenu *pmenu, QMainWindow *pwind)
 static void BuildEditMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Edit");
-  QAction *paCommand = pmenu->addAction("Enter &Command Line...");
+  QAction *paCommand = pmenu->addAction("Enter Command &Line...");
   QObject::connect(paCommand, &QAction::triggered, pwind,
     []() { ShowCommandLineDialogQt(); });
   pmenu->addSeparator();
@@ -2325,7 +2329,7 @@ static void BuildEditMenu(QMainWindow *pwind)
   pmenu->addSeparator();
   pmenu->addSeparator();
 
-  QAction *paCopyText = pmenu->addAction("&Copy Chart Text Output");
+  QAction *paCopyText = pmenu->addAction("Copy Chart &Text Output");
   QObject::connect(paCopyText, &QAction::triggered, pwind,
     []() { CopyChartTextQt(); });
   QAction *paCopyBmp = pmenu->addAction("Copy Chart &Bitmap");
@@ -2625,7 +2629,7 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   QAction *paStore = pmenu->addAction("&Store Chart Info");
   QObject::connect(paStore, &QAction::triggered, pwind,
     []() { ciSave = ciMain; });
-  QAction *paRecall = pmenu->addAction("&Recall Chart Info");
+  QAction *paRecall = pmenu->addAction("Re&call Chart Info");
   QObject::connect(paRecall, &QAction::triggered, pwind, []() {
     ciMain = ciCore = ciSave;
     RecastAndRedrawQt();
@@ -2648,9 +2652,9 @@ static void BuildHelpMenu(QMainWindow *pwind)
     DEFAULT_INFOFILE, "seorbel.txt", "sefstars.txt", DEFAULT_ATLASFILE,
     DEFAULT_TIMECHANGE, szFileExoCore };
   CONST char *rgszLabel[9] = { "Open &Documentation", "Open &Changes",
-    "Open &License", "Open Default &Settings", "Open Orbital &Elements",
+    "Open &License", "Open &Default Settings", "Open &Orbital Elements",
     "Open &Star List", "Open &Atlas", "Open &Time Zone Changes",
-    "Open E&xoplanet List" };
+    "Open &Exoplanet List" };
   int i;
   for (i = 0; i < 9; i++) {
     QAction *pa = pmenu->addAction(rgszLabel[i]);
@@ -2697,7 +2701,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
   // (us.fGraphics forced false) rather than a picture -- see
   // AddChartModeTextAction() and RedrawTextQt(). Field mapping verified
   // against ProcessState()'s chart-mode switch, wdriver.cpp:1180-1190.
-  AddChartModeTextAction(pmenu, "List &Signs", gSign);
+  AddChartModeTextAction(pmenu, "List Si&gns", gSign);
   AddChartModeTextAction(pmenu, "List &Objects", gObject);
   AddChartModeTextAction(pmenu, "List Aspec&ts", gHelpAsp);
   AddChartModeTextAction(pmenu, "List &Constellations", gConstel);
@@ -2856,7 +2860,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Alt+Shift+1",       "1/&10th Seconds"},
   {"2",                 "&Two Units"},
   {"Ctrl+2",            "&Medium"},
-  {"Alt+2",             "List &Signs"},
+  {"Alt+2",             "List Si&gns"},
   {"Ctrl+Shift+2",      "Open &License"},
   {"Alt+Shift+2",       "1/1&00th Seconds"},
   {"3",                 "T&hree Units"},
@@ -2871,14 +2875,14 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"5",                 "Fi&ve Units"},
   {"Ctrl+5",            "Export Chart &Text Output..."},
   {"Alt+5",             "List &Constellations"},
-  {"Ctrl+Shift+5",      "&Copy Chart Text Output"},
+  {"Ctrl+Shift+5",      "Copy Chart &Text Output"},
   {"6",                 "Si&x Units"},
   {"Ctrl+6",            "Export Chart &Bitmap..."},
   {"Alt+6",             "List &Planet Info"},
   {"Ctrl+Shift+6",      "Copy Chart &Bitmap"},
   {"7",                 "&Seven Units"},
   {"Ctrl+7",            "Export Chart &Metafile..."},
-  {"Alt+7",             "&Esoteric"},
+  {"Alt+7",             "Esoter&ic"},
   {"Ctrl+Shift+7",      "Copy Chart &Metafile"},
   {"Alt+Shift+7",       "List &Rays"},
   {"8",                 "&Eight Units"},
@@ -2886,9 +2890,9 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Alt+8",             "List S&witches"},
   {"Ctrl+Shift+8",      "Copy Chart &PostScript"},
   {"9",                 "&Nine Units"},
-  {"Ctrl+9",            "Save Program &Settings..."},
+  {"Ctrl+9",            "Save Program Settin&gs..."},
   {"Alt+9",             "List O&bscure Switches"},
-  {"Ctrl+Shift+9",      "Open Default &Settings"},
+  {"Ctrl+Shift+9",      "Open &Default Settings"},
   {"Alt+Shift+9",       "Show &Navamsas"},
   {"<",                 "&Decrease"},
   {">",                 "&Increase"},
@@ -2897,105 +2901,105 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"^",                 "&Years"},
   {"A",                 "&3D Houses"},
   {"Ctrl+A",            "&White"},
-  {"Shift+A",           "Aspect &Midpoint Grid"},
-  {"Ctrl+Shift+A",      "A&lcabitius"},
+  {"Shift+A",           "Aspect Midpoint &Grid"},
+  {"Ctrl+Shift+A",      "Alca&bitius"},
   {"Alt+Shift+A",       "&Aspect Settings..."},
   {"B",                 "Show &Border"},
   {"Ctrl+B",            "&Blue"},
-  {"Alt+B",             "Print Nearest &Second"},
+  {"Alt+B",             "Print &Nearest Second"},
   {"Ctrl+Alt+B",        "Open &World Map..."},
   {"Ctrl+Shift+B",      "Open Chart &Background..."},
   {"Alt+Shift+B",       "&Display Settings..."},
-  {"C",                 "&Comparison Chart"},
+  {"C",                 "Com&parison Chart"},
   {"Ctrl+C",            "Show C&ities"},
   {"Shift+C",           "Include &Cusps"},
-  {"Ctrl+Shift+C",      "C&ampanus"},
+  {"Ctrl+Shift+C",      "&Campanus"},
   {"Alt+Shift+C",       "Chart &Settings..."},
   {"D",                 "Show &House Details"},
   {"Ctrl+D",            "Gr&ay"},
-  {"Alt+D",             "&Default Chart Info..."},
-  {"Shift+D",           "&Date Difference Chart"},
+  {"Alt+D",             "D&efault Chart Info..."},
+  {"Shift+D",           "Date &Difference Chart"},
   {"Ctrl+Shift+D",      "Pullen (S.&Delta)"},
   {"Alt+Shift+D",       "&Progressed and Natal"},
   {"E",                 "Show &Equator"},
   {"Ctrl+E",            "Maroo&n"},
-  {"Ctrl+Alt+E",        "Open Orbital &Elements"},
+  {"Ctrl+Alt+E",        "Open &Orbital Elements"},
   {"Shift+E",           "&Ephemeris"},
   {"Ctrl+Shift+E",      "&Equal"},
-  {"Alt+Shift+E",       "File &Settings..."},
+  {"Alt+Shift+E",       "&File Settings..."},
   {"F",                 "&Flip Signs with Houses"},
   {"Ctrl+F",            "Dk. Gr&een"},
   {"Ctrl+Alt+F",        "&Star Customization..."},
   {"Shift+F",           "Show &Constellations"},
-  {"Ctrl+Shift+F",      "&Savard-A"},
+  {"Ctrl+Shift+F",      "Savard-&A"},
   {"Alt+Shift+F",       "Star Restr&ictions..."},
   {"G",                 "Show &Decans"},
   {"Ctrl+G",            "&Green"},
   {"Shift+G",           "Draw &Globe"},
-  {"Ctrl+Shift+G",      "&Carter P.Equat."},
+  {"Ctrl+Shift+G",      "Carter& P.Equat."},
   {"Alt+Shift+G",       "&Graphics Settings..."},
-  {"H",                 "&Heliocentric"},
+  {"H",                 "He&liocentric"},
   {"Ctrl+H",            "Open &Documentation"},
-  {"Shift+H",           "&Gauquelin Sectors"},
+  {"Shift+H",           "Ga&uquelin Sectors"},
   {"Ctrl+Shift+H",      "Hori&zon"},
   {"Alt+Shift+H",       "&Geodetic Houses"},
   {"I",                 "Modify &Display"},
   {"Ctrl+I",            "List &General Meanings"},
-  {"Shift+I",           "R&ising and Setting"},
-  {"Ctrl+Shift+I",      "S&ripati"},
+  {"Shift+I",           "Risi&ng and Setting"},
+  {"Ctrl+Shift+I",      "Sr&ipati"},
   {"Alt+Shift+I",       "Show &Interpretations"},
   {"J",                 "&Timed Exposure"},
   {"Ctrl+J",            "&Cyan"},
   {"Alt+J",             "&Object Settings..."},
-  {"Ctrl+Alt+J",        "Open E&xoplanet List"},
-  {"Shift+J",           "&Influence"},
-  {"Ctrl+Shift+J",      "S&unshine"},
-  {"Alt+Shift+J",       "&More Object Settings..."},
+  {"Ctrl+Alt+J",        "Open &Exoplanet List"},
+  {"Shift+J",           "Inf&luence"},
+  {"Ctrl+Shift+J",      "Suns&hine"},
+  {"Alt+Shift+J",       "More Ob&ject Settings..."},
   {"K",                 "Show &Glyphs on Aspect Lines"},
   {"Ctrl+K",            "&Dk. Cyan"},
   {"Alt+K",             "&Colored Text"},
   {"Ctrl+Alt+K",        "Save Chart &Quick*Chart..."},
   {"Shift+K",           "&Calendar"},
   {"Ctrl+Shift+K",      "&Koch"},
-  {"Alt+Shift+K",       "Set &Colors..."},
+  {"Alt+Shift+K",       "&Set Colors..."},
   {"L",                 "Show Glyph &Labels"},
   {"Ctrl+L",            "&Lt. Gray"},
-  {"Alt+L",             "Aspect &List"},
-  {"Shift+L",           "&Astrocartography"},
-  {"Ctrl+Shift+L",      "A.P.&C."},
-  {"Alt+Shift+L",       "&Nearest Cities"},
+  {"Alt+L",             "&Aspect List"},
+  {"Shift+L",           "Astrocartograp&hy"},
+  {"Ctrl+Shift+L",      "A&.P.C."},
+  {"Alt+Shift+L",       "Nea&rest Cities"},
   {"M",                 "&Monochrome"},
   {"Ctrl+M",            "&Magenta"},
-  {"Alt+M",             "M&idpoint List"},
+  {"Alt+M",             "&Midpoint List"},
   {"Ctrl+Alt+M",        "Open &Atlas"},
-  {"Shift+M",           "Moons Chart"},
+  {"Shift+M",           "&Moons Chart"},
   {"Ctrl+Shift+M",      "&Meridian"},
-  {"Alt+Shift+M",       "&Time Space Midpoint Chart"},
+  {"Alt+Shift+M",       "Time Space &Midpoint Chart"},
   {"N",                 "Chart for &Now"},
   {"Ctrl+N",            "Dk. Bl&ue"},
   {"Alt+N",             "Update to &Now"},
   {"Ctrl+Alt+N",        "Set Tilt to &Zero"},
   {"Shift+N",           "Do &Animation"},
-  {"Ctrl+Shift+N",      "N&ull"},
+  {"Ctrl+Shift+N",      "&Null"},
   {"Alt+Shift+N",       "&Transit and Natal"},
   {"O",                 "&Store Chart Info"},
   {"Ctrl+O",            "Mai&ze"},
   {"Alt+O",             "&Open Chart..."},
   {"Ctrl+Alt+O",        "Open Charts in &Folder..."},
-  {"Shift+O",           "&Recall Chart Info"},
-  {"Ctrl+Shift+O",      "Pullen (S.&Ratio)"},
+  {"Shift+O",           "Re&call Chart Info"},
+  {"Ctrl+Shift+O",      "Pullen (S.Rati&o)"},
   {"Alt+Shift+O",       "Open Chart #&2..."},
   {"P",                 "&Pause Animation"},
-  {"Ctrl+P",            "&Print..."},
+  {"Ctrl+P",            "P&rint..."},
   {"Alt+P",             "Ara&bic Parts"},
-  {"Ctrl+Alt+P",        "Save Chart E&xchange..."},
+  {"Ctrl+Alt+P",        "Save Chart &Exchange..."},
   {"Shift+P",           "Draw &Polar Globe"},
   {"Ctrl+Shift+P",      "&Placidus"},
   {"Alt+Shift+P",       "&Progressions..."},
   {"Q",                 "&Thicker Lines"},
   {"Alt+Q",             "&Antialias Lines"},
   {"Shift+Q",           "S&quare Screen"},
-  {"Ctrl+Shift+Q",      "Equal (&MC)"},
+  {"Ctrl+Shift+Q",      "E&qual (MC)"},
   {"R",                 "&Reverse Direction"},
   {"Ctrl+R",            "&Red"},
   {"Alt+R",             "&Restrictions..."},
@@ -3007,8 +3011,8 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Ctrl+S",            "Show Full &Star List"},
   {"Ctrl+Alt+S",        "Show Constellation &Lines"},
   {"Shift+S",           "Solar System &Orbit"},
-  {"Ctrl+Shift+S",      "K&rusinski"},
-  {"Alt+Shift+S",       "&Calculation Settings..."},
+  {"Ctrl+Shift+S",      "Kr&usinski"},
+  {"Alt+Shift+S",       "Calculation Settin&gs..."},
   {"T",                 "Show Chart &Info"},
   {"Alt+T",             "Show Info &Sidebar"},
   {"Shift+T",           "Draw &Telescope"},
@@ -3017,22 +3021,22 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"U",                 "Include &Uranians"},
   {"Ctrl+U",            "&Purple"},
   {"Shift+U",           "Include &Fixed Stars"},
-  {"Ctrl+Shift+U",      "M&orinus"},
+  {"Ctrl+Shift+U",      "Morinu&s"},
   {"V",                 "Show &Graphics"},
   {"Ctrl+V",            "&Paste"},
   {"Ctrl+Alt+V",        "Save Chart i&Calendar..."},
-  {"Shift+V",           "Standard &Radix"},
+  {"Shift+V",           "Standard Radi&x"},
   {"Ctrl+Shift+V",      "&Vedic"},
-  {"Alt+Shift+V",       "&House Wheel"},
+  {"Alt+Shift+V",       "House &Wheel"},
   {"Down",              "Tilt &South"},
   {"Ctrl+Down",         "&Last Chart"},
   {"Shift+Down",        "&Next Chart"},
   {"Esc",               "E&xit"},
   {"Left",              "Rotate &West"},
   {"Shift+Left",        "Zoom &Out"},
-  {"`",                 "Include &Moons"},
+  {"`",                 "&Include Moons"},
   {"Ctrl+`",            "Show E&xoplanets"},
-  {"Alt+`",             "Exoplanets Chart"},
+  {"Alt+`",             "&Exoplanets Chart"},
   {"Shift+`",           "Include &Body Centers (COB)"},
   {"[",                 "Tilt &North"},
   {"Ctrl+[",            "Zoom &Out"},
@@ -3042,17 +3046,17 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"]",                 "Tilt &South"},
   {"Ctrl+]",            "Zoom &In"},
   {"Shift+]",           "Rotate &East"},
-  {"Ctrl+,",            "Decrease &Text"},
+  {"Ctrl+,",            "D&ecrease Text"},
   {"Ctrl+-",            "Export Chart &Wireframe..."},
   {"Ctrl+Shift+-",      "Copy Chart &Wireframe"},
-  {"Ctrl+.",            "&Increase Text"},
+  {"Ctrl+.",            "I&ncrease Text"},
   {"=",                 "Show &Indian Wheels"},
   {"Ctrl+=",            "Draw &South Indian"},
   {"Alt+=",             "Draw &North Indian"},
   {"Ctrl+Alt+=",        "Draw &East Indian"},
   {"Ctrl+Shift+=",      "Save Chart &List..."},
   {"Pause",             "&Pause Animation"},
-  {"Return",            "Enter &Command Line..."},
+  {"Return",            "Enter Command &Line..."},
   {"Right",             "Rotate &East"},
   {"Shift+Right",       "Zoom &In"},
   {"Ctrl+Tab",          "Moon &Restrictions..."},
@@ -3071,20 +3075,20 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Ctrl+X",            "Use Ecliptic &Axis"},
   {"Alt+X",             "&Parallel Aspects"},
   {"Shift+X",           "Draw Chart Sp&here"},
-  {"Ctrl+Shift+X",      "&Swap Chart #1 and #2"},
+  {"Ctrl+Shift+X",      "Swap Chart #&1 and #2"},
   {"Alt+Shift+X",       "&Applying Aspects"},
   {"Y",                 "Include D&warfs"},
   {"Ctrl+Y",            "&Yellow"},
   {"Alt+Y",             "&Synastry Chart"},
   {"Ctrl+Alt+Y",        "Open &Time Zone Changes"},
   {"Shift+Y",           "&Biorhythm Chart"},
-  {"Ctrl+Shift+Y",      "P&orphyry"},
-  {"Alt+Shift+Y",       "Co&mposite Chart"},
+  {"Ctrl+Shift+Y",      "Porph&yry"},
+  {"Alt+Shift+Y",       "&Composite Chart"},
   {"Z",                 "&Indian Wheel Order"},
   {"Ctrl+Z",            "Blac&k"},
-  {"Alt+Z",             "&Set Chart Info..."},
-  {"Ctrl+Alt+Z",        "Chart &List..."},
-  {"Shift+Z",           "Local &Horizon"},
+  {"Alt+Z",             "Set Chart &Info..."},
+  {"Ctrl+Alt+Z",        "&Chart List..."},
+  {"Shift+Z",           "Local Hori&zon"},
   {"Ctrl+Shift+Z",      "Charts #&3 Through #6..."},
   {"Alt+Shift+Z",       "Set Chart #&2 Info..."} };
 
@@ -3153,7 +3157,7 @@ typedef struct {
 
 // Wheel charts (gWheel/gHouse), Windows' menuV.
 static CONST CTXITEM rgctxWheelQt[] = {
-  {"Toggle &Comparison Wheel",              "&Comparison Chart"},
+  {"Toggle &Comparison Wheel",              "Com&parison Chart"},
   {NULL, NULL},
   {"Draw &Houses Same Size",                "Modif&y Chart"},
   {"Position Planets Based on &3D Houses",  "&3D Houses"},
@@ -3183,7 +3187,7 @@ static CONST CTXITEM rgctxIndianQt[] = {
   {"Aspect Grid &Highlights Main Axis",     "Show &Glyphs on Aspect Lines"},
   {"Two &Letter Object Labels",             "Show Glyph &Labels"},
   {"Show &Degrees on Wheel",                "Show C&ities"},
-  {"Show &Info Sidebar",                    "Show Info &Sidebar"} };
+  {"Show Info &Sidebar",                    "Show Info &Sidebar"} };
 
 // Windows' menuG, the Grid chart.
 static CONST CTXITEM rgctxGridQt[] = {
@@ -3265,7 +3269,7 @@ static CONST CTXITEM rgctxCalendarQt[] = {
   {NULL, NULL},
   {"Show Entire &Year",                         "Modif&y Chart"},
   {"Show &Transits Within Days",                "Show &Glyphs on Aspect Lines"},
-  {"Transits are Transit to &Natal",            "&Comparison Chart"},
+  {"Transits are Transit to &Natal",            "Com&parison Chart"},
   {NULL, NULL},
   {"Weeks Start on &Monday",                    "&Indian Wheel Order"},
   {"&Center Date Numbers",                      "Modify &Display"},
@@ -3286,7 +3290,7 @@ static CONST CTXITEM rgctxEsotericQt[] = {
   {"&View Text Esoteric Chart",                 "Show &Graphics"},
   {NULL, NULL},
   {"Show Entire &Year",                         "Modif&y Chart"},
-  {"Year Plots Every &Day",                     "Print Nearest &Second"},
+  {"Year Plots Every &Day",                     "Print &Nearest Second"},
   {NULL, NULL},
   {"Ray Powers Are &Slice Not Count",           "Modify &Display"},
   {"Highlight &Current Date",                   "Show Glyph &Labels"},
@@ -3312,7 +3316,7 @@ static CONST CTXITEM rgctxEphemerisQt[] = {
   {"&View Text Mode Ephemeris",                 "Show &Graphics"},
   {NULL, NULL},
   {"Show Entire &Year",                         "Modif&y Chart"},
-  {"Year Plots Every &Day",                     "Print Nearest &Second"},
+  {"Year Plots Every &Day",                     "Print &Nearest Second"},
   {"Plot Vertical &Latitudes",                  "&Parallel Aspects"},
   {NULL, NULL},
   {"Don't Show &Moon",                          "Modify &Display"},
@@ -3323,7 +3327,7 @@ static CONST CTXITEM rgctxEphemerisQt[] = {
 static CONST CTXITEM rgctxRisingQt[] = {
   {"&View Rising/Setting Times",                "Show &Graphics"},
   {NULL, NULL},
-  {"Year Plots Every &Day",                     "Print Nearest &Second"},
+  {"Year Plots Every &Day",                     "Print &Nearest Second"},
   {"Show Detailed &Color",                      "Use Detailed World &Map"},
   {"Show &Object Key",                          "Show Glyph &Labels"},
   {NULL, NULL},
@@ -3422,18 +3426,18 @@ static CONST CTXITEM rgctxTelescopeQt[] = {
   {"O&utline Occulted Planets",                 "Modif&y Chart"},
   {"&Label Planets",                            "Show Glyph &Labels"},
   {"Show &Big Planet Dots",                     "Modify &Display"},
-  {"Show &Full Star List",                      "Show Full &Star List"},
+  {"Show Full &Star List",                      "Show Full &Star List"},
   {"Show E&xoplanets",                          "Show E&xoplanets"},
   {"Show Degree &Grid",                         "Show C&ities"},
   {NULL, NULL},
-  {"Use &Ecliptic Axis",                        "Use Ecliptic &Axis"} };
+  {"Use Ecliptic &Axis",                        "Use Ecliptic &Axis"} };
 
 // Windows' menu_V, the Standard listing text chart.
 static CONST CTXITEM rgctxTxtListQt[] = {
   {"&View Graphics Mode Wheel",                 "Show &Graphics"},
   {NULL, NULL},
-  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Toggle &Comparison Chart",                  "Com&parison Chart"},
+  {"Print &Nearest Second",                     "Print &Nearest Second"},
   {"House Placements Based on &3D Houses",      "&3D Houses"} };
 
 // Windows' menu_W, the House wheel text chart.
@@ -3441,22 +3445,22 @@ static CONST CTXITEM rgctxTxtWheelQt[] = {
   {"&View Graphic House Wheel",                 "Show &Graphics"},
   {NULL, NULL},
   {"&Indian Sign Arrangement",                  "&Indian Wheel Order"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Print &Nearest Second",                     "Print &Nearest Second"},
   {"House Placements Based on &3D Houses",      "&3D Houses"} };
 
 // Windows' menu_G, the Grid text chart.
 static CONST CTXITEM rgctxTxtGridQt[] = {
   {"&View Graphic Grid",                        "Show &Graphics"},
   {NULL, NULL},
-  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Toggle &Comparison Chart",                  "Com&parison Chart"},
+  {"Print &Nearest Second",                     "Print &Nearest Second"},
   {"&Parallel Aspects",                         "&Parallel Aspects"},
   {"&Applying Aspects",                         "&Applying Aspects"} };
 
 // Windows' menu_A, the Aspect list text chart.
 static CONST CTXITEM rgctxTxtAspectQt[] = {
-  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Toggle &Comparison Chart",                  "Com&parison Chart"},
+  {"Print &Nearest Second",                     "Print &Nearest Second"},
   {"&Parallel Aspects",                         "&Parallel Aspects"},
   {"&Applying Aspects",                         "&Applying Aspects"} };
 
@@ -3464,8 +3468,8 @@ static CONST CTXITEM rgctxTxtAspectQt[] = {
 static CONST CTXITEM rgctxTxtMidpointQt[] = {
   {"&View Graphic Dial Chart",                  "Show &Graphics"},
   {NULL, NULL},
-  {"Toggle &Comparison Chart",                  "&Comparison Chart"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Toggle &Comparison Chart",                  "Com&parison Chart"},
+  {"Print &Nearest Second",                     "Print &Nearest Second"},
   {"Show &Latitude Midpoints Too",              "&Parallel Aspects"},
   {"Midpoints are &3D",                         "&3D Houses"} };
 
@@ -3473,20 +3477,20 @@ static CONST CTXITEM rgctxTxtMidpointQt[] = {
 static CONST CTXITEM rgctxTxtHorizonQt[] = {
   {"&View Graphic Horizon Chart",               "Show &Graphics"},
   {NULL, NULL},
-  {"Print Nearest &Second",                     "Print Nearest &Second"},
+  {"Print &Nearest Second",                     "Print &Nearest Second"},
   {"Show &3D House Placements",                 "&3D Houses"} };
 
 // Windows' menu_S, the Orbit text chart.
 static CONST CTXITEM rgctxTxtOrbitQt[] = {
   {"&View Graphic Orbit Chart",                 "Show &Graphics"},
   {NULL, NULL},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_H, the Sector text chart.
 static CONST CTXITEM rgctxTxtSectorQt[] = {
   {"&View Graphic Sector Wheel",                "Show &Graphics"},
   {NULL, NULL},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_K, the Calendar text chart.
 static CONST CTXITEM rgctxTxtCalendarQt[] = {
@@ -3499,7 +3503,7 @@ static CONST CTXITEM rgctxTxtInfluenceQt[] = {
   {"&View Graphic Dispositor Chart",            "Show &Graphics"},
   {NULL, NULL},
   {"&Combine Signs and Houses",                 "&Indian Wheel Order"},
-  {"Print &Detailed Percentages",               "Print Nearest &Second"} };
+  {"Print &Detailed Percentages",               "Print &Nearest Second"} };
 
 // Windows' menu_7, the Esoteric text chart.
 static CONST CTXITEM rgctxTxtEsotericQt[] = {
@@ -3510,37 +3514,37 @@ static CONST CTXITEM rgctxTxtAstroGraphQt[] = {
   {"&View Graphic Astro-Graph Chart",           "Show &Graphics"},
   {NULL, NULL},
   {"Ignore Planet &Latitudes",                  "&3D Houses"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_E, the Ephemeris text chart.
 static CONST CTXITEM rgctxTxtEphemerisQt[] = {
   {"&View Graphic Ephemeris",                   "Show &Graphics"},
   {NULL, NULL},
   {"Ephemeris Shows &Latitudes",                "&Parallel Aspects"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_P, the Arabic parts text chart.
 static CONST CTXITEM rgctxTxtArabicQt[] = {
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_I, the Rising text chart.
 static CONST CTXITEM rgctxTxtRisingQt[] = {
   {"&View Graphic Rising Chart",                "Show &Graphics"},
   {NULL, NULL},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_N, the Nearest cities text chart.
 static CONST CTXITEM rgctxTxtLocalQt[] = {
   {"&View Graphic Local Space Chart",           "Show &Graphics"},
   {NULL, NULL},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_8, the Moons text chart.
 static CONST CTXITEM rgctxTxtMoonsQt[] = {
   {"&View Graphic Moons Chart",                 "Show &Graphics"},
   {NULL, NULL},
   {"&Parallel Aspects",                         "&Parallel Aspects"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_Ux, the Exoplanets text chart.
 static CONST CTXITEM rgctxTxtExoQt[] = {
@@ -3550,13 +3554,13 @@ static CONST CTXITEM rgctxTxtExoQt[] = {
 // Windows' menu_D, the Transit times text chart.
 static CONST CTXITEM rgctxTxtInDayQt[] = {
   {"&Parallel Aspects",                         "&Parallel Aspects"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_T, the Transit influence text chart.
 static CONST CTXITEM rgctxTxtTransInfQt[] = {
   {"&Parallel Aspects",                         "&Parallel Aspects"},
   {"&Applying Aspects",                         "&Applying Aspects"},
-  {"Print Nearest &Second",                     "Print Nearest &Second"} };
+  {"Print &Nearest Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_B, the Transit graph text chart.
 static CONST CTXITEM rgctxTxtTransGraQt[] = {
