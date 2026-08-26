@@ -501,19 +501,31 @@ void ScrollChartQt(int nDir)
 
 static int s_xCharQt = 8, s_yCharQt = 12;
 static KV s_kvTextQt = 0;
+static QFont s_fontTextQt;
 
-// Cell size from the current text font, following Windows' scale steps.
+// Windows draws text charts in "Terminal", a bitmap font whose glyphs are
+// exactly the 8x12 cell it lays them out on, which is why they come out
+// crisp. Forcing a TrueType face into that same cell doesn't: at 12 pixels
+// its advance is nearer 7, so the glyphs end up thin and cramped with a
+// ragged gap at the end of every cell.
+//
+// So the cell comes from the font here rather than the font from the cell.
+// The chart is laid out in character cells either way, so the columns still
+// line up; the text is simply rendered at a size the face was drawn for.
+// The size still follows gs.nScale, so Character Scale keeps working.
 static void SetTextMetricsQt()
 {
-  int i = gs.nScale / 100;
+  int nPix = Max(gs.nScale * 13 / 200, 9);
 
-  if (gs.nFontTxt > 0) {
-    s_xCharQt = 3 + 3*i;
-    s_yCharQt = (s_xCharQt * 3 + 1) / 2;
-  } else {
-    s_xCharQt = i < 2 ? 6 : (i < 3 ? 8 : (i < 4 ? 10 : 12));
-    s_yCharQt = i < 2 ? 8 : (i < 3 ? 12 : (i < 4 ? 18 : 16));
-  }
+  s_fontTextQt = QFont("Liberation Mono");
+  s_fontTextQt.setPixelSize(nPix);
+  s_fontTextQt.setFixedPitch(fTrue);
+  s_fontTextQt.setStyleHint(QFont::Monospace, QFont::PreferQuality);
+  QFontMetrics fm(s_fontTextQt);
+  s_xCharQt = fm.horizontalAdvance(QChar('M'));
+  s_yCharQt = fm.height();
+  if (s_xCharQt < 1) s_xCharQt = 8;
+  if (s_yCharQt < 1) s_yCharQt = 12;
 }
 
 // Called from AnsiColor() (general.cpp) for each colour change.
@@ -875,10 +887,7 @@ void RedrawQt()
   // text chart instead of going black while a second window holds it.
   if (!us.fGraphics) {
     SetTextMetricsQt();
-    QFont font("Liberation Mono");
-    font.setPixelSize(s_yCharQt);
-    font.setFixedPitch(fTrue);
-    gi.qpaint->setFont(font);
+    gi.qpaint->setFont(s_fontTextQt);
     s_kvTextQt = KvFromKi(kLtGrayA);
     is.cchRow = is.cchCol = is.cchColMax = 0;
     FILE *fileSav = is.S;
@@ -2728,7 +2737,9 @@ static void LoadBundledFontsQt()
     "StarFontSerif.ttf", "HanksNakshatra.ttf",
     // The interface font, bundled so the dialogs transcribed from the
     // Windows resource fit their boxes wherever this runs.
-    "LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf" };
+    "LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf",
+    // And the monospaced face text charts are drawn in.
+    "LiberationMono-Regular.ttf", "LiberationMono-Bold.ttf" };
   QStringList rgstrDir;
   int i, j;
 
