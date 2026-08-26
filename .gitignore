@@ -12,3 +12,6 @@
 /obj-qt-asan/
 obj-win/
 astrolog.exe
+
+# Comparison captures (tools/text-chart-capture.sh, text-chart-diff.py)
+/out/

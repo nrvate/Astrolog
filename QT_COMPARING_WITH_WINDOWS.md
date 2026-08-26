@@ -100,15 +100,26 @@ Two things look like divergences and are not:
 
 As of 2026-08-25 all eight text chart types are character-for-character
 identical in layout, including the IBM box-drawing path that `=k` enables.
+Reproduced 2026-08-26 from a fresh clone on a second machine (Wine 9.0),
+so the result is the builds' and not one checkout's.
 
 Colour counts in the diff output are a coarse mode check, not a quality
-measure: Astrolog draws from a small fixed palette with no antialiasing,
-so a Windows text capture lands around 6 colours and the antialiased Qt
-one around 190. Wildly different counts *for the same chart* usually mean
-the two sides ended up in different modes. Don't read a low count as
-"blank" on its own — crop out the window chrome and open the image. A
-full-window capture includes an antialiased menu bar, which puts hundreds
-of colours into even a pure graphics chart and destroys the signal.
+measure, and **the two sides are not comparable to each other** — the
+counts only mean anything against the same side's previous runs.
+
+The reason is that the two are captured at different extents. The Qt side
+writes `gi.qim` straight to a PNG, so it is the bare chart: measured
+2026-08-26, 181-192 colours across the eight types. The Windows side is
+`import -window root`, the whole 1200x900 display, so it also carries
+Wine's antialiased menu bar, scrollbars and window frame: 1468-2245 for
+the identical charts. A `192` beside a `2121` is the normal reading, not
+a divergence.
+
+Wildly different counts *for the same chart on the same side* usually mean
+that side ended up in a different mode. Don't read a low count as "blank"
+on its own — open the image. And don't add chrome to the Qt side to make
+the numbers line up; the asymmetry is what keeps the Qt figure sensitive
+to the chart itself.
 
 ## Driving either build headlessly
 
