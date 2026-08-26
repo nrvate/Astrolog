@@ -2194,18 +2194,15 @@ enum {
   ctlCheck, ctlLabel, ctlGroup, ctlButton, ctlIcon, ctlEdit, ctlCombo
 };
 
-// Button identities the dialogs below wire up. Checkbox ids are the object
-// index instead, straight out of the resource's dxNN numbering.
-enum {
-  butOK = 1000, butCancel, butResAll, butUnresAll, butMinors, butCusps,
-  butUran, butDwarf, butCopy, butRecall, butMars, butJupiter, butSaturn,
-  butUranus, butNeptune, butPluto, butCOB
-};
-
+// Each control carries the symbol the resource gave it, split into a
+// prefix and any trailing number: "deo07" arrives as szId "deo", nIdx 7.
+// A dialog then asks for what it needs by name -- PwRcFindQt("IDOK") -- or
+// by prefix and index -- PwRcFindIdxQt("deo", 7).
 typedef struct {
   int nType;
   CONST char *szText;
-  int id;
+  CONST char *szId;
+  int nIdx;
   int x, y, dx, dy;   // In dialog units, as the resource gives them.
 } RCCTL;
 
@@ -2326,11 +2323,22 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
   }
 }
 
-// Find a built control by the id the resource gave it.
-static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, int id)
+// Find a built control by the symbol the resource gave it.
+static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, CONST char *szId)
 {
   for (int i = 0; i < rgbuilt.size(); i++)
-    if (rgbuilt[i].pw != NULL && rgbuilt[i].pctl->id == id)
+    if (rgbuilt[i].pw != NULL && strcmp(rgbuilt[i].pctl->szId, szId) == 0)
+      return rgbuilt[i].pw;
+  return NULL;
+}
+
+// Same, for the numbered runs of controls: PwRcFindIdxQt(rg, "deo", 7).
+static QWidget *PwRcFindIdxQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST char *szId, int nIdx)
+{
+  for (int i = 0; i < rgbuilt.size(); i++)
+    if (rgbuilt[i].pw != NULL && rgbuilt[i].pctl->nIdx == nIdx &&
+      strcmp(rgbuilt[i].pctl->szId, szId) == 0)
       return rgbuilt[i].pw;
   return NULL;
 }
@@ -2565,68 +2573,74 @@ static CONST RESBUT rgbutMoons[] = {
   {"Toggle CO&B",     resToggle, moonsLo+27, moonsLo+31},
 };
 
-// Object restrictions, transcribed from dlgRestrict rather than rebuilt:
-// every checkbox, group box, button and the icon sit at the coordinates
-// the resource gives them.
+// The restriction dialogs, transcribed from dlgRestrict, dlgStar and
+// dlgMoons: every checkbox, group box, button and the icon sit at the
+// coordinates the resource gives them.
+//
+// Checkbox polarity follows Windows: the label is the object's name and a
+// *checked* box means restricted, i.e. hidden. That reads backwards at
+// first glance, but it is what a Windows user expects, and inverting it is
+// the one difference that would silently produce the opposite chart.
 
-void ShowRestrictDialogQt()
+typedef struct {
+  CONST char *szId;   // Resource symbol of the button.
+  int nIdx;           // Its index, or -1 when the symbol carries none.
+  int nAction, lo, hi;
+  CONST byte *rgSource;
+} RCRESBUT;
+
+static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
+  int cctl, int dxDlg, int dyDlg, int lo, int hi, byte *rgignore,
+  CONST RCRESBUT *rgbut, int cbut)
 {
   QDialog dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QVector<QCheckBox *> rgpcb;
   int i;
 
-  dlg.setWindowTitle("Object Restrictions");
-  RcBuildDialogQt(&dlg, rgctlRestrict, cctlRestrict, dxRestrict, dyRestrict,
-    &rgbuilt);
+  dlg.setWindowTitle(szTitle);
+  RcBuildDialogQt(&dlg, rgctl, cctl, dxDlg, dyDlg, &rgbuilt);
 
-  // The checkbox ids are object indices, so they load and store directly.
-  rgpcb.resize(dwarfHi + 1);
+  // The checkbox numbering is one based over the dialog's object range.
+  rgpcb.resize(hi - lo + 1);
   for (i = 0; i < rgbuilt.size(); i++) {
     CONST RCCTL *pctl = rgbuilt[i].pctl;
-    if (rgbuilt[i].pw == NULL || pctl->nType != ctlCheck)
+    if (rgbuilt[i].pw == NULL || pctl == NULL || pctl->nType != ctlCheck)
       continue;
-    if (!FBetween(pctl->id, 0, dwarfHi))
+    int iObj = lo + pctl->nIdx - 1;
+    if (pctl->nIdx < 1 || !FBetween(iObj, lo, hi))
       continue;
     QCheckBox *pcb = (QCheckBox *)rgbuilt[i].pw;
-    pcb->setChecked(ignore[pctl->id] != 0);
-    rgpcb[pctl->id] = pcb;
+    pcb->setChecked(rgignore[iObj] != 0);
+    rgpcb[iObj - lo] = pcb;
   }
 
-  // Windows' quick buttons, each acting on one range of the checkboxes.
-  struct { int id, nAction, lo, hi; CONST byte *rgSource; } rgact[] = {
-    {butResAll,    resSet,    0,       dwarfHi, NULL},
-    {butUnresAll,  resClear,  0,       dwarfHi, NULL},
-    {butMinors,    resToggle, oMain+1, oCore,   NULL},
-    {butCusps,     resToggle, cuspLo,  cuspHi,  NULL},
-    {butUran,      resToggle, uranLo,  uranHi,  NULL},
-    {butDwarf,     resToggle, dwarfLo, dwarfHi, NULL},
-    {butCopy,      resCopy,   0,       dwarfHi, ignore2},
-    {butRecall,    resCopy,   0,       dwarfHi, ignoreMem} };
-  for (i = 0; i < (int)(sizeof(rgact)/sizeof(rgact[0])); i++) {
-    QPushButton *ppb = (QPushButton *)PwRcFindQt(rgbuilt, rgact[i].id);
+  for (i = 0; i < cbut; i++) {
+    CONST RCRESBUT *pbut = &rgbut[i];
+    QPushButton *ppb = (QPushButton *)(pbut->nIdx >= 0 ?
+      PwRcFindIdxQt(rgbuilt, pbut->szId, pbut->nIdx) :
+      PwRcFindQt(rgbuilt, pbut->szId));
     if (ppb == NULL)
       continue;
-    int nAction = rgact[i].nAction, lo = rgact[i].lo, hi = rgact[i].hi;
-    CONST byte *rgSource = rgact[i].rgSource;
     QObject::connect(ppb, &QPushButton::clicked, &dlg,
-      [&rgpcb, nAction, lo, hi, rgSource]() {
-        for (int j = lo; j <= hi; j++) {
-          QCheckBox *pcb = rgpcb[j];
+      [&rgpcb, pbut, lo, hi]() {
+        int jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
+        for (int j = jlo; j <= jhi; j++) {
+          QCheckBox *pcb = rgpcb[j - lo];
           if (pcb == NULL)
             continue;
-          switch (nAction) {
+          switch (pbut->nAction) {
           case resSet:    pcb->setChecked(fTrue);              break;
           case resClear:  pcb->setChecked(fFalse);             break;
           case resToggle: pcb->setChecked(!pcb->isChecked());  break;
-          case resCopy:   pcb->setChecked(rgSource[j] != 0);   break;
+          case resCopy:   pcb->setChecked(pbut->rgSource[j] != 0); break;
           }
         }
       });
   }
 
-  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, butOK);
-  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, butCancel);
+  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
+  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
   if (ppbOK != NULL) {
     ppbOK->setDefault(fTrue);
     QObject::connect(ppbOK, &QPushButton::clicked, &dlg, &QDialog::accept);
@@ -2637,25 +2651,62 @@ void ShowRestrictDialogQt()
 
   if (dlg.exec() != QDialog::Accepted)
     return;
-  for (i = 0; i <= dwarfHi; i++)
-    if (rgpcb[i] != NULL)
-      ignore[i] = rgpcb[i]->isChecked();
+  for (i = lo; i <= hi; i++)
+    if (rgpcb[i - lo] != NULL)
+      rgignore[i] = rgpcb[i - lo]->isChecked();
   AdjustRestrictions();
+  // Windows re-derives the Setting menu's category checkmarks here.
   SyncRestrictMenuQt();
   RecastAndRedrawQt();
 }
 
-void ShowStarRestrictDialogQt()
+
+void ShowRestrictDialogQt()
 {
-  ShowRestrictRangeDialogQt("Fixed Star Restrictions", starLo, starHi,
-    ignore, rgbutStar, CButRes(rgbutStar), 4, NULL, 0);
+  CONST RCRESBUT rgbut[] = {
+    {"dbRe_R",    0, resSet,    0,       dwarfHi, NULL},
+    {"dbRe_R",    1, resClear,  0,       dwarfHi, NULL},
+    {"dbRe_R",   -1, resToggle, oMain+1, oCore,   NULL},
+    {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
+    {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
+    {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
+    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore2},
+    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
+
+  ShowRcRestrictQt("Object Restrictions", rgctlRestrict, cctlRestrict,
+    dxRestrict, dyRestrict, 0, dwarfHi, ignore,
+    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
 
+
+void ShowStarRestrictDialogQt()
+{
+  CONST RCRESBUT rgbut[] = {
+    {"dbSt_RU", 0, resSet,   starLo, starHi, NULL},
+    {"dbSt_RU", 1, resClear, starLo, starHi, NULL} };
+
+  ShowRcRestrictQt("Fixed Star Restrictions", rgctlStar, cctlStar,
+    dxStar, dyStar, starLo, starHi, ignore,
+    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
+}
+
+// Windows drives this from the same dlgRestrict, only editing ignore2 and
+// offering a copy from the standard set rather than the transit one.
 void ShowTransitRestrictDialogQt()
 {
-  ShowRestrictRangeDialogQt("Transit Object Restrictions", 0, dwarfHi,
-    ignore2, rgbutTransit, CButRes(rgbutTransit), 0,
-    rgGroupRestrictQt, cGroupRestrictQt);
+  CONST RCRESBUT rgbut[] = {
+    {"dbRe_R",    0, resSet,    0,       dwarfHi, NULL},
+    {"dbRe_R",    1, resClear,  0,       dwarfHi, NULL},
+    {"dbRe_R",   -1, resToggle, oMain+1, oCore,   NULL},
+    {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
+    {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
+    {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
+    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore},
+    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
+
+  ShowRcRestrictQt("Transit Object Restrictions", rgctlRestrict,
+    cctlRestrict, dxRestrict, dyRestrict, 0, dwarfHi, ignore2,
+    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
 
 
@@ -4122,9 +4173,21 @@ void ShowDisplayDialogQt()
 
 void ShowMoonRestrictDialogQt()
 {
-  ShowRestrictRangeDialogQt("Planetary Moon Restrictions", moonsLo, cobHi,
-    ignore, rgbutMoons, CButRes(rgbutMoons), 0,
-    rgGroupMoonQt, cGroupMoonQt);
+  // The per planet toggles cover the moon ranges dlgMoons groups them by.
+  CONST RCRESBUT rgbut[] = {
+    {"dbMo_Rm",  0, resSet,    moonsLo,    cobHi,      NULL},
+    {"dbMo_Rm",  1, resClear,  moonsLo,    cobHi,      NULL},
+    {"dbMo_Mar",-1, resToggle, moonsLo+0,  moonsLo+1,  NULL},
+    {"dbMo_Jup",-1, resToggle, moonsLo+2,  moonsLo+5,  NULL},
+    {"dbMo_Sat",-1, resToggle, moonsLo+6,  moonsLo+13, NULL},
+    {"dbMo_Ura",-1, resToggle, moonsLo+14, moonsLo+18, NULL},
+    {"dbMo_Nep",-1, resToggle, moonsLo+19, moonsLo+21, NULL},
+    {"dbMo_Plu",-1, resToggle, moonsLo+22, moonsLo+26, NULL},
+    {"dbMo_COB",-1, resToggle, cobLo,      cobHi,      NULL} };
+
+  ShowRcRestrictQt("Planetary Moon Restrictions", rgctlMoons, cctlMoons,
+    dxMoons, dyMoons, moonsLo, cobHi, ignore,
+    rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
 
 

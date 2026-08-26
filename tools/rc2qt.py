@@ -21,23 +21,12 @@ Usage:  python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h
 import re
 import sys
 
-# Resource control symbol -> the id the Qt side switches on. Checkboxes in
-# the object dialogs are dxNN, which maps to object NN-1 and is handled
-# separately.
-SYMBOL_ID = {
-    "IDOK": "butOK",
-    "IDCANCEL": "butCancel",
-    "dbRe_R0": "butResAll",   "dbRe_R1": "butUnresAll",
-    "dbRe_R": "butMinors",    "dbRe_RC": "butCusps",
-    "dbRe_Ru": "butUran",     "dbRe_Ry": "butDwarf",
-    "dbRT": "butCopy",        "dbRe_YRi": "butRecall",
-    "dbSt_RU0": "butResAll",  "dbSt_RU1": "butUnresAll",
-    "dbMo_Rm0": "butResAll",  "dbMo_Rm1": "butUnresAll",
-    "dbMo_Mar": "butMars",    "dbMo_Jup": "butJupiter",
-    "dbMo_Sat": "butSaturn",  "dbMo_Ura": "butUranus",
-    "dbMo_Nep": "butNeptune", "dbMo_Plu": "butPluto",
-    "dbMo_COB": "butCOB",
-}
+# Controls are emitted with the resource symbol they carry, split into a
+# prefix and any trailing number -- "deo07" becomes prefix "deo", index 7.
+# The Qt side then asks for what it wants by name ("IDOK") or by prefix and
+# index ("deo", 7), rather than this script having to know what every
+# symbol in the resource means.
+SPLIT = re.compile(r"^([A-Za-z_][A-Za-z_0-9]*?)(\d*)$")
 
 KIND = {
     "CONTROL": "ctlCheck", "LTEXT": "ctlLabel", "RTEXT": "ctlLabel",
@@ -78,14 +67,12 @@ def emit(name, w, h, body, out):
                (name, w, h))
     out.append("static CONST RCCTL rgctl%s[] = {" % name[3:])
     for kind, text, symbol, (x, y, cx, cy) in controls(body):
-        idx = re.match(r"^dx[a-z]*(\d+)$", symbol)
-        if kind == "ctlCheck" and idx:
-            ident = str(int(idx.group(1)) - 1)
-        else:
-            ident = SYMBOL_ID.get(symbol, "-1")
-        text = text.replace('""', '\\"')
-        out.append('  {%-10s "%s", %s, %d,%d,%d,%d},' %
-                   (kind + ",", text, ident, x, y, cx, cy))
+        m = SPLIT.match(symbol) if symbol else None
+        prefix = m.group(1) if m else ""
+        index = int(m.group(2)) if (m and m.group(2)) else -1
+        text = text.replace('""', '\\"').replace("\\", "\\\\")
+        out.append('  {%-10s "%s", "%s", %d, %d,%d,%d,%d},' %
+                   (kind + ",", text, prefix, index, x, y, cx, cy))
     out.append("};")
     out.append("#define cctl%s (int)(sizeof(rgctl%s) / sizeof(RCCTL))" %
                (name[3:], name[3:]))
