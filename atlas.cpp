@@ -1479,6 +1479,14 @@ flag FLoadZoneLinks(FILE *file, int czl)
 // Lookup a city in the atlas. Display a list of matches in text or in a
 // Windows dialog. Implements the -N switch and "Lookup City" button.
 
+#ifdef QT
+// The Qt dialogs receive atlas result rows through this instead of a Win32
+// listbox: the lookup itself is portable, only its way of showing results
+// was not. Set while a dialog is open, NULL otherwise, in which case these
+// functions print to the text output as they always have.
+void (*pfnAtlasRowQt)(CONST char *, int) = NULL;
+#endif
+
 flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
 {
   AtlasEntry *pae;
@@ -1631,6 +1639,12 @@ flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
       sprintf(sz, "%s (%s, %s)", SzCity(rgiae[i]), pch, SzZone(zon));
     } else
       sprintf(sz, "%s (%s)", SzCity(rgiae[i]), pch);
+    #ifdef QT
+    if (pfnAtlasRowQt != NULL) {
+      pfnAtlasRowQt(sz, rgiae[i]);
+      continue;
+    }
+    #endif
 #ifdef WIN
     if (hdlg != NULL) {
       SetListN(dlIn, sz, rgiae[i], j);
@@ -1643,6 +1657,11 @@ flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
 
   // It's possible no matches were found.
   if (clist <= 0) {
+    #ifdef QT
+    if (pfnAtlasRowQt != NULL)
+      pfnAtlasRowQt("(No matches found)", -1);
+    else
+    #endif
 #ifdef WIN
     if (hdlg != NULL) {
       SetListN(dlIn, "(No matches found)", -1, j);
@@ -1740,6 +1759,12 @@ flag DisplayAtlasNearby(real lon, real lat, size_t lDialog, int *piae,
     } else
       sprintf(sz, "%d %s: %s (%s)", rgn[i], us.fEuroDist ? "km" : "mi",
         SzCity(rgiae[i]), pch);
+    #ifdef QT
+    if (pfnAtlasRowQt != NULL) {
+      pfnAtlasRowQt(sz, rgiae[i]);
+      continue;
+    }
+    #endif
 #ifdef WIN
     if (hdlg != NULL) {
       SetListN(dlIn, sz, rgiae[i], j);
@@ -1895,6 +1920,12 @@ flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
 #ifdef WIN
   else {
     sprintf(sz, "Time changes within zone: %s", rgszzn[izn]);
+    #ifdef QT
+    if (pfnAtlasRowQt != NULL) {
+      pfnAtlasRowQt(sz, -1);
+      continue;
+    }
+    #endif
     SetListN(dlIn, sz, -1, k);
   }
 #endif
@@ -1956,6 +1987,12 @@ flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
 #ifdef WIN
     if (lDialog != 0) {
       sprintf(sz1, "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz);
+      #ifdef QT
+      if (pfnAtlasRowQt != NULL) {
+        pfnAtlasRowQt(sz1, -1);
+        continue;
+      }
+      #endif
       SetListN(dlIn, sz1, -1, k);
       goto LSkip;
     }
@@ -2087,6 +2124,12 @@ LSkip:
 #ifdef WIN
         if (lDialog != 0) {
           sprintf(sz, "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz1);
+          #ifdef QT
+          if (pfnAtlasRowQt != NULL) {
+            pfnAtlasRowQt(sz, -1);
+            continue;
+          }
+          #endif
           SetListN(dlIn, sz, -1, k);
           continue;
         }

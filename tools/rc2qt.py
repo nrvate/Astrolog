@@ -36,6 +36,7 @@ KIND = {
     "GROUPBOX": "ctlGroup", "PUSHBUTTON": "ctlButton",
     "DEFPUSHBUTTON": "ctlButton", "ICON": "ctlIcon",
     "EDITTEXT": "ctlEdit", "COMBOBOX": "ctlCombo",
+    "LISTBOX": "ctlList",
 }
 
 # The geometry is four consecutive integers, but not reliably at the end of

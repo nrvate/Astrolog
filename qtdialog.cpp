@@ -75,6 +75,20 @@
 // setEditText(), because adding the first item resets the current index
 // and would overwrite the edit text.
 
+// Fill a combo the resource already placed, the counterpart of
+// NewComboQt() for the transcribed dialogs.
+static void FillComboQt(QComboBox *pcb, CONST QString &strCur,
+  CONST QStringList &rgstr)
+{
+  if (pcb == NULL)
+    return;
+  pcb->setEditable(fTrue);
+  // addItem() before setEditText(): see the Progressions dialog.
+  for (int i = 0; i < rgstr.size(); i++)
+    pcb->addItem(rgstr[i]);
+  pcb->setEditText(strCur);
+}
+
 static QComboBox *NewComboQt(CONST QString &strCur, CONST QStringList &rgstr)
 {
   QComboBox *pcb = new QComboBox();
@@ -572,7 +586,7 @@ static void HeadersQt(QGridLayout *pgrid, int cCol, int cField,
 
 enum {
   ctlCheck, ctlLabel, ctlGroup, ctlButton, ctlIcon, ctlEdit, ctlCombo,
-  ctlRadio
+  ctlRadio, ctlList
 };
 
 // Each control carries the symbol the resource gave it, split into a
@@ -749,6 +763,9 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
         break;
       case ctlCombo:
         pw = new QComboBox(pdlg);
+        break;
+      case ctlList:
+        pw = new QListWidget(pdlg);
         break;
       case ctlIcon: {
         QLabel *plIcon = new QLabel(pdlg);
@@ -997,80 +1014,200 @@ void ShowTransitRestrictDialogQt()
 // elevation/temperature/etc that a new chart starts out with, and what
 // "now" charts use for a location.
 
+// The four atlas buttons Windows' chart info dialogs carry, wired to the
+// lookups in atlas.cpp. Those fill a Win32 listbox directly; the Qt build
+// receives their rows through pfnAtlasRowQt instead (see atlas.cpp), which
+// is set only while one of these runs.
+
+#ifdef ATLAS
+static QListWidget *s_plistAtlasQt = NULL;
+static QVector<int> s_rgiaeQt;
+
+static void AtlasRowQt(CONST char *sz, int iae)
+{
+  if (s_plistAtlasQt == NULL)
+    return;
+  // fromLatin1, not the implicit UTF-8: these rows carry Astrolog's degree
+  // sign as a single high byte, which decoded as UTF-8 is invalid and comes
+  // out as a replacement character.
+  s_plistAtlasQt->addItem(QString::fromLatin1(sz));
+  s_rgiaeQt.append(iae);
+}
+
+// Run one lookup with the rows going to "plist".
+static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
+  QComboBox *pcbLon, QComboBox *pcbLat, CI *pci)
+{
+  char sz[cchSzMax];
+  int ilist = 12, i;
+  real lon, lat;
+
+  if (plist == NULL)
+    return;
+  plist->clear();
+  s_plistAtlasQt = plist;
+  s_rgiaeQt.clear();
+  pfnAtlasRowQt = AtlasRowQt;
+
+  if (nWhich == 0) {                     // Lookup City
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peLoc->text().toLocal8Bit().constData());
+    if (!DisplayAtlasLookup(sz, 1, &ilist))
+      plist->addItem("Couldn't get atlas data!");
+  } else if (nWhich == 1) {              // Nearby Cities
+    lon = RParseSz(pcbLon->currentText().toLocal8Bit().constData(), pmLon);
+    lat = RParseSz(pcbLat->currentText().toLocal8Bit().constData(), pmLat);
+    if (!DisplayAtlasNearby(lon, lat, 1, &ilist, fFalse))
+      plist->addItem("Couldn't get atlas data!");
+  } else {                               // Time Changes
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peLoc->text().toLocal8Bit().constData());
+    pfnAtlasRowQt = NULL;
+    if (!DisplayAtlasLookup(sz, 0, &i)) {
+      pfnAtlasRowQt = NULL;
+      s_plistAtlasQt = NULL;
+      plist->addItem("Put a valid city in the Location field first.");
+      return;
+    }
+    pfnAtlasRowQt = AtlasRowQt;
+    if (!DisplayTimezoneChanges(is.rgae[i].izn, 1, pci))
+      plist->addItem("Couldn't get time zone data!");
+  }
+  pfnAtlasRowQt = NULL;
+  s_plistAtlasQt = NULL;
+}
+
+// "Apply Info": copy the highlighted atlas row into the location fields.
+static void RcAtlasApplyQt(QListWidget *plist, QComboBox *pcbLon,
+  QComboBox *pcbLat, QComboBox *pcbZon, QLineEdit *peLoc)
+{
+  char sz[cchSzMax];
+  int iRow, iae, nSav;
+
+  if (plist == NULL)
+    return;
+  iRow = plist->currentRow();
+  if (iRow < 0 || iRow >= s_rgiaeQt.size() || s_rgiaeQt[iRow] < 0)
+    return;
+  iae = s_rgiaeQt[iRow];
+  nSav = us.fAnsiChar; us.fAnsiChar = fFalse;
+  sprintf(sz, "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
+  us.fAnsiChar = nSav;
+  sz[is.ichLocSplit] = chNull;
+  if (pcbLon != NULL) pcbLon->setEditText(&sz[0]);
+  if (pcbLat != NULL) pcbLat->setEditText(&sz[is.ichLocSplit+1]);
+  if (pcbZon != NULL)
+    pcbZon->setEditText(SzZone(ZondefFromIzn(is.rgae[iae].izn)));
+  if (peLoc != NULL) peLoc->setText(SzCity(iae));
+}
+#endif // ATLAS
+
+
 void ShowDefaultInfoDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Default Chart Info");
-  QFormLayout *playout = new QFormLayout(&dlg);
+  QVector<RCBUILT> rgbuilt;
+  char sz[cchSzMax];
+  int nSavChar;
 
-  QLineEdit *peName = new QLineEdit(FSzSet(ciDefa.nam) ? ciDefa.nam : "");
-  QLineEdit *peLoc  = new QLineEdit(FSzSet(ciDefa.loc) ? ciDefa.loc : "");
+  dlg.setWindowTitle("Default Chart Info");
+  RcBuildDialogQt(&dlg, rgctlDefault, cctlDefault, dxDefault, dyDefault,
+    &rgbuilt);
+
+  QComboBox *pcbDst = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeDst");
+  QComboBox *pcbZon = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeZon");
+  QComboBox *pcbCor = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeCor");
+  QComboBox *pcbLon = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeLon");
+  QComboBox *pcbLat = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeLat");
+  QComboBox *pcbElv = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeElv");
+  QComboBox *pcbTmp = (QComboBox *)PwRcFindQt(rgbuilt, "dcDeTmp");
+  QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deDeNam");
+  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deDeLoc");
+  QListWidget *plist = (QListWidget *)PwRcFindQt(rgbuilt, "dlIn");
+
   // Formatted the way Windows' DlgDefault does it (SetEditSZOA), not as
   // raw numbers -- see ShowChartInfoForQt() for the same treatment and
   // the reasoning about SzLocation()'s degree byte.
-  char sz[cchSzMax];
-  QComboBox *peDst  = NewComboQt(ciDefa.dst == 0.0 ? "No" :
+  FillComboQt(pcbDst, ciDefa.dst == 0.0 ? "No" :
     (ciDefa.dst == 1.0 ? "Yes" :
     (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))),
     RgstrDstQt());
   sprintf(sz, "%s", SzZone(ciDefa.zon));
-  QComboBox *peZon  = NewComboQt(sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
-  int nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
+  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
   sprintf(sz, "%s", SzLocation(ciDefa.lon, ciDefa.lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
-  QComboBox *peLon  = NewComboQt(&sz[0], RgstrLonQt());
-  QComboBox *peLat  = NewComboQt(&sz[is.ichLocSplit+1], RgstrLatQt());
-  // Windows offers these three presets apiece (dcDeElv/dcDeTmp/dcDeCor).
-  QComboBox *peElv  = NewComboQt(SzElevation(us.elvDef),
+  FillComboQt(pcbLon, &sz[0], RgstrLonQt());
+  FillComboQt(pcbLat, &sz[is.ichLocSplit+1], RgstrLatQt());
+  FillComboQt(pcbElv, SzElevation(us.elvDef),
     QStringList() << "0m" << "1000ft");
-  QComboBox *peTmp  = NewComboQt(SzTemperature(us.tmpDef),
+  FillComboQt(pcbTmp, SzTemperature(us.tmpDef),
     QStringList() << "0C" << "32F");
-  QComboBox *peCor  = NewComboQt(QString::number(us.lTimeAddition),
+  FillComboQt(pcbCor, QString::number(us.lTimeAddition),
     QStringList() << "60" << "0" << "-60");
-  peName->setCursorPosition(0);
-  peLoc->setCursorPosition(0);
+  if (peName != NULL)
+    peName->setText(FSzSet(ciDefa.nam) ? ciDefa.nam : "");
+  if (peLoc != NULL)
+    peLoc->setText(FSzSet(ciDefa.loc) ? ciDefa.loc : "");
 
-  playout->addRow("Daylight Saving:", peDst);
-  playout->addRow("Time Zone:", peZon);
-  playout->addRow("Longitude:", peLon);
-  playout->addRow("Latitude:", peLat);
-  playout->addRow("Elevation:", peElv);
-  playout->addRow("Temperature:", peTmp);
-  playout->addRow("\"Now\" minute offset:", peCor);
-  playout->addRow("Name:", peName);
-  playout->addRow("Location:", peLoc);
+#ifdef ATLAS
+  // The atlas buttons, which this port didn't have at all.
+  CI ciT = ciDefa;
+  QPushButton *ppbCity = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCity");
+  QPushButton *ppbCoor = (QPushButton *)PwRcFindQt(rgbuilt, "dbInCoor");
+  QPushButton *ppbChan = (QPushButton *)PwRcFindQt(rgbuilt, "dbInChan");
+  QPushButton *ppbAppl = (QPushButton *)PwRcFindQt(rgbuilt, "dbInAppl");
+  if (ppbCity != NULL)
+    QObject::connect(ppbCity, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
+        RcAtlasRunQt(plist, 0, peLoc, pcbLon, pcbLat, &ciT); });
+  if (ppbCoor != NULL)
+    QObject::connect(ppbCoor, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
+        RcAtlasRunQt(plist, 1, peLoc, pcbLon, pcbLat, &ciT); });
+  if (ppbChan != NULL)
+    QObject::connect(ppbChan, &QPushButton::clicked, &dlg,
+      [plist, peLoc, pcbLon, pcbLat, &ciT]() {
+        RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ciT); });
+  if (ppbAppl != NULL)
+    QObject::connect(ppbAppl, &QPushButton::clicked, &dlg,
+      [plist, pcbLon, pcbLat, pcbZon, peLoc]() {
+        RcAtlasApplyQt(plist, pcbLon, pcbLat, pcbZon, peLoc); });
+#endif
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  playout->addRow(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
   CI ci = ciDefa;
   QByteArray ba;
-  ba = peDst->currentText().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->currentText().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
-  ba = peLon->currentText().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
-  ba = peLat->currentText().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
-
+  if (pcbDst != NULL) { ba = pcbDst->currentText().toLocal8Bit();
+    ci.dst = RParseSz(ba.constData(), pmDst); }
+  if (pcbZon != NULL) { ba = pcbZon->currentText().toLocal8Bit();
+    ci.zon = RParseSz(ba.constData(), pmZon); }
+  if (pcbLon != NULL) { ba = pcbLon->currentText().toLocal8Bit();
+    ci.lon = RParseSz(ba.constData(), pmLon); }
+  if (pcbLat != NULL) { ba = pcbLat->currentText().toLocal8Bit();
+    ci.lat = RParseSz(ba.constData(), pmLat); }
   if (!FValidDst(ci.dst) || !FValidZon(ci.zon) ||
     !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
     QMessageBox::warning(gi.qwind, szAppName,
       "One or more chart info fields are invalid.");
     return;
   }
-  ba = peElv->currentText().toLocal8Bit(); us.elvDef = RParseSz(ba.constData(), pmElv);
-  ba = peTmp->currentText().toLocal8Bit(); us.tmpDef = RParseSz(ba.constData(), pmTmp);
-  us.lTimeAddition = peCor->currentText().toLong();
+  if (pcbElv != NULL) { ba = pcbElv->currentText().toLocal8Bit();
+    us.elvDef = RParseSz(ba.constData(), pmElv); }
+  if (pcbTmp != NULL) { ba = pcbTmp->currentText().toLocal8Bit();
+    us.tmpDef = RParseSz(ba.constData(), pmTmp); }
+  if (pcbCor != NULL)
+    us.lTimeAddition = pcbCor->currentText().toLong();
+  if (peName != NULL)
+    FCloneSz(peName->text().toLocal8Bit().constData(), &ci.nam);
+  if (peLoc != NULL)
+    FCloneSz(peLoc->text().toLocal8Bit().constData(), &ci.loc);
   ciDefa = ci;
-  ba = peName->text().toLocal8Bit(); ciDefa.nam = SzClone((char *)ba.constData());
-  ba = peLoc->text().toLocal8Bit();  ciDefa.loc = SzClone((char *)ba.constData());
-
   RecastAndRedrawQt();
 }
 

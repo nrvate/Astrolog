@@ -1163,3 +1163,8 @@ extern flag API DlgAbout    P((HWND, uint, WORD, LONG));
 extern int NProcessSwitchesQt P((int, char **, int, flag, flag, flag));
 #endif
 
+#ifdef QT
+/* Set by the Qt dialogs to receive rows from the atlas lookups in       */
+/* atlas.cpp, which otherwise fill a Win32 listbox or print to text.     */
+extern void (*pfnAtlasRowQt) P((CONST char *, int));
+#endif
