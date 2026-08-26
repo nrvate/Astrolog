@@ -1981,7 +1981,8 @@ static int NColorFromComboQt(QComboBox *pcb)
 // numbers avoids the guesswork entirely.
 
 enum {
-  ctlCheck, ctlLabel, ctlGroup, ctlButton, ctlIcon, ctlEdit, ctlCombo
+  ctlCheck, ctlLabel, ctlGroup, ctlButton, ctlIcon, ctlEdit, ctlCombo,
+  ctlRadio
 };
 
 // Each control carries the symbol the resource gave it, split into a
@@ -2058,6 +2059,13 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
       case ctlCheck:
         pw = new QCheckBox(str, pdlg);
         break;
+      case ctlRadio:
+        // Left ungrouped on purpose: Qt would otherwise make every radio
+        // in the dialog mutually exclusive, where the resource has
+        // several independent groups. Each dialog groups its own.
+        pw = new QRadioButton(str, pdlg);
+        ((QRadioButton *)pw)->setAutoExclusive(fFalse);
+        break;
       case ctlLabel:
         // A static label renders "&" literally, so drop it -- the
         // resource only uses it on controls that take focus.
@@ -2105,7 +2113,7 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
     if (pw == NULL || pctl == NULL || pctl->dx <= 0)
       continue;
     if (pctl->nType != ctlCheck && pctl->nType != ctlLabel &&
-      pctl->nType != ctlButton)
+      pctl->nType != ctlButton && pctl->nType != ctlRadio)
       continue;
     int dxWant = pw->sizeHint().width();
     if (dxWant > 0)
@@ -3220,6 +3228,88 @@ void ShowAspectDialogQt()
 }
 
 
+// A checkbox in a transcribed dialog and the flag it edits. Extracted from
+// the SetCheck/GetCheck pairs in Windows' own dialog handlers rather than
+// worked out by hand, so the two builds cannot drift apart over which box
+// controls what.
+typedef struct {
+  CONST char *szId;
+  int nIdx;
+  flag *pf;
+  flag fInvert;   // The box shows the opposite of the flag.
+} RCFLAG;
+
+static void RcLoadFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST RCFLAG *rgflag, int cflag)
+{
+  for (int i = 0; i < cflag; i++) {
+    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
+      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
+      PwRcFindQt(rgbuilt, rgflag[i].szId));
+    if (pcb != NULL)
+      pcb->setChecked((*rgflag[i].pf != 0) != (rgflag[i].fInvert != 0));
+  }
+}
+
+static void RcStoreFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST RCFLAG *rgflag, int cflag)
+{
+  for (int i = 0; i < cflag; i++) {
+    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
+      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
+      PwRcFindQt(rgbuilt, rgflag[i].szId));
+    if (pcb != NULL)
+      *rgflag[i].pf = (pcb->isChecked() != (rgflag[i].fInvert != 0));
+  }
+}
+
+#define CRcFlag(rg) (int)(sizeof(rg) / sizeof(RCFLAG))
+
+
+// Windows' EnsureN(): complain about one out of range field and leave the
+// dialog's values alone.
+static void ErrorEnsureQt(QWidget *pw, int n, CONST char *szField)
+{
+  QMessageBox::warning(pw, szAppName,
+    QString("The value %1 is not valid for the %2 field.")
+    .arg(n).arg(szField));
+}
+
+
+// One of the resource's radio groups: a run of drNN controls that are
+// mutually exclusive and together pick a value. They are built ungrouped
+// (see RcBuildDialogQt), so exclusivity is enforced here.
+static void RcLoadRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
+  int cRadio, int nValue)
+{
+  QButtonGroup *pgroup = NULL;
+
+  for (int i = 0; i < cRadio; i++) {
+    QRadioButton *prb =
+      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
+    if (prb == NULL)
+      continue;
+    if (pgroup == NULL)
+      pgroup = new QButtonGroup(prb->parentWidget());
+    prb->setAutoExclusive(fTrue);
+    pgroup->addButton(prb, i);
+    prb->setChecked(i == nValue);
+  }
+}
+
+static int NRcStoreRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
+  int cRadio, int nDefault)
+{
+  for (int i = 0; i < cRadio; i++) {
+    QRadioButton *prb =
+      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
+    if (prb != NULL && prb->isChecked())
+      return i;
+  }
+  return nDefault;
+}
+
+
 // Colors, transcribed from dlgColor. The palette slots are dck00 through
 // dck15, the elements dce0 through dce3, the seven rays dcr1 through dcr7,
 // and the two loose lists along the bottom dca1 (scribble) and dca2
@@ -3650,229 +3740,125 @@ void ShowCalcDialogQt()
 // formatting, aspect count and requirements, eclipse display, and the
 // angle/rulership restriction checkbox grids.
 
+// Display Settings, transcribed from dlgDisplay. The checkbox to flag
+// mapping is taken from Windows' own DlgDisplay handler.
+
 void ShowDisplayDialogQt()
 {
+  CONST RCFLAG rgflag[] = {
+    {"dxDi_Yd", -1, &us.fEuroDate,   fFalse},
+    {"dxDi_Yt", -1, &us.fEuroTime,   fFalse},
+    {"dxDi_Yz",  1, &us.fOffsetOnly, fFalse},
+    {"dxDi_Yv", -1, &us.fEuroDist,   fFalse},
+    {"dxDi_Yr", -1, &us.fRound,      fFalse},
+    {"dxDi_b",   0, &us.fSeconds,    fFalse},
+    {"dxDi_b",   1, &us.fSecond1K,   fFalse},
+    {"dxDi_b",   2, &us.fSecondHide, fFalse},
+    {"dxDi_YC", -1, &us.fSmartCusp,  fFalse},
+    {"dxDi_AP", -1, &us.fParallel2,  fFalse},
+    {"dxDi_gd", -1, &us.fDistance,   fFalse},
+    {"dxDi_Y",   8, &us.fClip80,     fFalse},
+    {"dxDi_I",   0, &us.fSabian,     fFalse},
+    {"dxDi_Yu", -1, &us.fEclipse,    fFalse},
+    // Windows' box reads "only at location", the flag "anywhere".
+    {"dxDi_Yu",  0, &us.fEclipseAny, fTrue} };
   QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  char sz[cchSzMax];
+  int na, nro, ni;
+  real ryw;
+
   dlg.setWindowTitle("Display Settings");
-  // Wide enough for "Eclipses Only at Location (Not Anywhere in World)".
-  dlg.resize(530, 650);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QVBoxLayout *pinnerlayout = new QVBoxLayout(pinner);
-  int i;
-
-  QCheckBox *pcbEuroDate = new QCheckBox(
-    "Format Dates as D-M-Y Instead of M/D/Y");
-  QCheckBox *pcbEuroTime = new QCheckBox(
-    "Format Times as 24 Hour Instead of am/pm");
-  QCheckBox *pcbOffsetOnly = new QCheckBox(
-    "Display Daylight and Time Zone as Single Offset");
-  QCheckBox *pcbEuroDist = new QCheckBox(
-    "Display Lengths in Metric Instead of Imperial Units");
-  QCheckBox *pcbRound = new QCheckBox(
-    "Round Positions to Nearest Unit Instead of Crop");
-  QCheckBox *pcbSeconds = new QCheckBox("Display Positions to Nearest Second");
-  QCheckBox *pcbSecond1K = new QCheckBox(
-    "Display Nearest Second to 1/1000th of a Second");
-  QCheckBox *pcbSecondHide = new QCheckBox(
-    "Don't Display Seconds If They're Exactly :00");
-  pcbEuroDate->setChecked(us.fEuroDate != 0);
-  pcbEuroTime->setChecked(us.fEuroTime != 0);
-  pcbOffsetOnly->setChecked(us.fOffsetOnly != 0);
-  pcbEuroDist->setChecked(us.fEuroDist != 0);
-  pcbRound->setChecked(us.fRound != 0);
-  pcbSeconds->setChecked(us.fSeconds != 0);
-  pcbSecond1K->setChecked(us.fSecond1K != 0);
-  pcbSecondHide->setChecked(us.fSecondHide != 0);
-  for (QCheckBox *pcb : { pcbEuroDate, pcbEuroTime, pcbOffsetOnly,
-    pcbEuroDist, pcbRound, pcbSeconds, pcbSecond1K, pcbSecondHide })
-    pinnerlayout->addWidget(pcb);
-
-  QFormLayout *pform1 = new QFormLayout();
-  QLineEdit *peAsp = new QLineEdit(QString::number(us.nAsp));
-  pform1->addRow("Number of Aspects to Include:", peAsp);
-  pinnerlayout->addLayout(pform1);
-
-  QCheckBox *pcbSmartCusp = new QCheckBox(
-    "Ignore Insignificant House Cusp Aspects");
-  pcbSmartCusp->setChecked(us.fSmartCusp != 0);
-  pinnerlayout->addWidget(pcbSmartCusp);
-
-  QFormLayout *pform2 = new QFormLayout();
-  QLineEdit *peReqObj = new QLineEdit(
-    us.objRequire >= 0 ? szObjName[us.objRequire] : "None");
-  pform2->addRow("Required Object for Aspects:", peReqObj);
-  pinnerlayout->addLayout(pform2);
-
-  QCheckBox *pcbParallel2 = new QCheckBox(
-    "Parallel Aspects Based on Ecliptic Not Equator");
-  QCheckBox *pcbDistance = new QCheckBox(
-    "Aspects Measure Along Distance Axis");
-  pcbParallel2->setChecked(us.fParallel2 != 0);
-  pcbDistance->setChecked(us.fDistance != 0);
-  pinnerlayout->addWidget(pcbParallel2);
-  pinnerlayout->addWidget(pcbDistance);
-
-  QFormLayout *pform3 = new QFormLayout();
-  QLineEdit *peScreenWidth = new QLineEdit(QString::number(us.nScreenWidth));
-  pform3->addRow("Text Columns:", peScreenWidth);
-  pinnerlayout->addLayout(pform3);
-
-  QCheckBox *pcbClip80 = new QCheckBox(
-    "Clip Text Charts at Rightmost (e.g. 80th) Column");
-  QCheckBox *pcbSabian = new QCheckBox("Interpretations Show Sabian Symbols");
-  pcbClip80->setChecked(us.fClip80 != 0);
-  pcbSabian->setChecked(us.fSabian != 0);
-  pinnerlayout->addWidget(pcbClip80);
-  pinnerlayout->addWidget(pcbSabian);
-
-  QFormLayout *pform4 = new QFormLayout();
-  QLineEdit *peStation = new QLineEdit(SzFormatRQt(us.rStation, -6));
-  pform4->addRow("Stationary If Less Than This Velocity:", peStation);
-  pinnerlayout->addLayout(pform4);
-
-  QCheckBox *pcbEclipse = new QCheckBox("Show Eclipse Information");
-  QCheckBox *pcbEclipseAny = new QCheckBox(
-    "Eclipses Only at Location (Not Anywhere in World)");
-  pcbEclipse->setChecked(us.fEclipse != 0);
-  pcbEclipseAny->setChecked(!us.fEclipseAny);
-  pinnerlayout->addWidget(pcbEclipse);
-  pinnerlayout->addWidget(pcbEclipseAny);
-
-  QGroupBox *pgroupBoxAngle = new QGroupBox("Rising and Setting Restrictions");
-  QVBoxLayout *pgrouplayoutAngle = new QVBoxLayout(pgroupBoxAngle);
-  CONST char *rgszAngle[arMax] = { "Rising", "Zenith Crossing", "Setting",
-    "Nadir Crossing", "Vertex", "Antivert" };
-  QVector<QCheckBox *> rgpcbAngle;
-  for (i = 0; i < arMax; i++) {
-    QCheckBox *pcb = new QCheckBox(rgszAngle[i]);
-    pcb->setChecked(ignorez[i] != 0);
-    pgrouplayoutAngle->addWidget(pcb);
-    rgpcbAngle.append(pcb);
+  RcBuildDialogQt(&dlg, rgctlDisplay, cctlDisplay, dxDisplay, dyDisplay,
+    &rgbuilt);
+  RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+  // The two arrays of restriction boxes, dxDi_z0.. and dxDi_r0..
+  for (int i = 0; i < 6; i++) {
+    QCheckBox *pcb = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxDi_z", i);
+    if (pcb != NULL)
+      pcb->setChecked(ignorez[i] != 0);
   }
-  pinnerlayout->addWidget(pgroupBoxAngle);
-
-  QGroupBox *pgroupBoxDegForm = new QGroupBox("Display Format");
-  QVBoxLayout *pgrouplayoutDegForm = new QVBoxLayout(pgroupBoxDegForm);
-  QButtonGroup *pgroupDegForm = new QButtonGroup(&dlg);
-  // Listed in Windows' on-screen order, which is not value order: it
-  // shows Nakshatras (3) above 360 Degrees (2). The button id is the
-  // us.nDegForm value, so the order here is presentation only.
-  CONST char *rgszDegForm[4] =
-    { "Zodiac Position", "Hours & Minutes", "27 Nakshatras", "360 Degrees" };
-  CONST int rgnDegForm[4] = { 0, 1, 3, 2 };
-  for (i = 0; i < 4; i++) {
-    QRadioButton *prb = new QRadioButton(rgszDegForm[i]);
-    prb->setChecked(rgnDegForm[i] == us.nDegForm);
-    pgroupDegForm->addButton(prb, rgnDegForm[i]);
-    pgrouplayoutDegForm->addWidget(prb);
+  for (int i = 0; i < 5; i++) {
+    QCheckBox *pcb = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxDi_r", i);
+    if (pcb != NULL)
+      pcb->setChecked(ignore7[i] != 0);
   }
-  pinnerlayout->addWidget(pgroupBoxDegForm);
+  RcLoadRadioQt(rgbuilt, 4, 4, us.nDegForm);
+  RcLoadRadioQt(rgbuilt, 8, 4, us.nCharset);
+  RcLoadRadioQt(rgbuilt, 12, 3, us.nAppSep);
 
-  QGroupBox *pgroupBoxCharset = new QGroupBox("Character Encoding");
-  QVBoxLayout *pgrouplayoutCharset = new QVBoxLayout(pgroupBoxCharset);
-  QButtonGroup *pgroupCharset = new QButtonGroup(&dlg);
-  CONST char *rgszCharset[4] =
-    { "Default", "IBM / DOS", "Latin-1", "UTF8 Unicode" };
-  for (i = 0; i < 4; i++) {
-    QRadioButton *prb = new QRadioButton(rgszCharset[i]);
-    prb->setChecked(i == us.nCharset);
-    pgroupCharset->addButton(prb, i);
-    pgrouplayoutCharset->addWidget(prb);
-  }
-  pinnerlayout->addWidget(pgroupBoxCharset);
+  QLineEdit *peAsp = (QLineEdit *)PwRcFindQt(rgbuilt, "deDi_A");
+  QLineEdit *peReq = (QLineEdit *)PwRcFindQt(rgbuilt, "deDi_RO");
+  QLineEdit *peWid = (QLineEdit *)PwRcFindQt(rgbuilt, "deDi_I");
+  QLineEdit *peSta = (QLineEdit *)PwRcFindQt(rgbuilt, "deDi_Yw");
+  if (peAsp != NULL)
+    peAsp->setText(QString::number(us.nAsp));
+  if (peReq != NULL)
+    peReq->setText(us.objRequire >= 0 ? szObjName[us.objRequire] : "None");
+  if (peWid != NULL)
+    peWid->setText(QString::number(us.nScreenWidth));
+  if (peSta != NULL)
+    peSta->setText(SzFormatRQt(us.rStation, -6));
 
-  QGroupBox *pgroupBoxRuler = new QGroupBox("Rulership Restrictions");
-  QVBoxLayout *pgrouplayoutRuler = new QVBoxLayout(pgroupBoxRuler);
-  CONST char *rgszRuler[rrMax] =
-    { "Standard", "Esoteric", "Hierarchical", "Exaltations", "Ray Rulerships" };
-  QVector<QCheckBox *> rgpcbRuler;
-  for (i = 0; i < rrMax; i++) {
-    QCheckBox *pcb = new QCheckBox(rgszRuler[i]);
-    pcb->setChecked(ignore7[i] != 0);
-    pgrouplayoutRuler->addWidget(pcb);
-    rgpcbRuler.append(pcb);
-  }
-  pinnerlayout->addWidget(pgroupBoxRuler);
-
-  QGroupBox *pgroupBoxAspOrb = new QGroupBox("Aspect Orb Type");
-  QVBoxLayout *pgrouplayoutAspOrb = new QVBoxLayout(pgroupBoxAspOrb);
-  QButtonGroup *pgroupAspOrb = new QButtonGroup(&dlg);
-  CONST char *rgszAspOrb[3] =
-    { "Positive/Negative", "Applying/Separating", "Waxing/Waning" };
-  for (i = 0; i < 3; i++) {
-    QRadioButton *prb = new QRadioButton(rgszAspOrb[i]);
-    prb->setChecked(i == us.nAppSep);
-    pgroupAspOrb->addButton(prb, i);
-    pgrouplayoutAspOrb->addWidget(prb);
-  }
-  pinnerlayout->addWidget(pgroupBoxAspOrb);
-
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  QByteArray ba;
-  ba = peAsp->text().toLocal8Bit();
-  int na = NParseSz(ba.constData(), pmAspect);
-  ba = peReqObj->text().toLocal8Bit();
-  int nro = NParseSz(ba.constData(), pmObject);
-  int ni = peScreenWidth->text().toInt();
-  ba = peStation->text().toLocal8Bit();
-  real ryw = RFromSz(ba.constData());
-  if (!FValidAspect(na) || !(FItem(nro) || nro == -1) ||
-    !FValidScreen(ni) || ryw < 0.0) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more display settings fields are invalid.");
+  // Validate before writing anything, as Windows does, so one bad field
+  // can't leave the settings half applied.
+  na = us.nAsp; nro = us.objRequire;
+  ni = us.nScreenWidth; ryw = us.rStation;
+  if (peAsp != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1, peAsp->text().toLocal8Bit().constData());
+    na = NParseSz(sz, pmAspect);
+  }
+  if (peReq != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1, peReq->text().toLocal8Bit().constData());
+    nro = NParseSz(sz, pmObject);
+  }
+  if (peWid != NULL)
+    ni = peWid->text().toInt();
+  if (peSta != NULL)
+    ryw = peSta->text().toDouble();
+  if (!FValidAspect(na)) {
+    ErrorEnsureQt(&dlg, na, "aspect count");
+    return;
+  }
+  if (!(FItem(nro) || nro == -1)) {
+    ErrorEnsureQt(&dlg, nro, "required object");
+    return;
+  }
+  if (!FValidScreen(ni)) {
+    ErrorEnsureQt(&dlg, ni, "text columns");
+    return;
+  }
+  if (ryw < 0.0) {
+    ErrorEnsureQt(&dlg, (int)ryw, "stationary velocity");
     return;
   }
 
-  us.fEuroDate = pcbEuroDate->isChecked();
-  us.fEuroTime = pcbEuroTime->isChecked();
-  us.fOffsetOnly = pcbOffsetOnly->isChecked();
-  us.fEuroDist = pcbEuroDist->isChecked();
-  us.fRound = pcbRound->isChecked();
-  us.fSeconds = pcbSeconds->isChecked();
-  us.fSecond1K = pcbSecond1K->isChecked();
-  us.fSecondHide = pcbSecondHide->isChecked();
-  int naOld = us.nAsp;
-  us.nAsp = na;
-  for (i = naOld + 1; i <= na; i++)
-    ignorea[i] = fFalse;
-  for (i = na + 1; i <= cAspect; i++)
+  RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+  for (int i = 0; i < 6; i++) {
+    QCheckBox *pcb = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxDi_z", i);
+    if (pcb != NULL)
+      ignorez[i] = pcb->isChecked();
+  }
+  for (int i = 0; i < 5; i++) {
+    QCheckBox *pcb = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxDi_r", i);
+    if (pcb != NULL)
+      ignore7[i] = pcb->isChecked();
+  }
+  us.nDegForm = NRcStoreRadioQt(rgbuilt, 4, 4, us.nDegForm);
+  us.nCharset = NRcStoreRadioQt(rgbuilt, 8, 4, us.nCharset);
+  us.nAppSep = NRcStoreRadioQt(rgbuilt, 12, 3, us.nAppSep);
+  for (int i = na + 1; i <= cAspect; i++)
     ignorea[i] = fTrue;
-  us.fSmartCusp = pcbSmartCusp->isChecked();
+  us.nAsp = na;
   us.objRequire = nro;
-  us.fParallel2 = pcbParallel2->isChecked();
-  us.fDistance = pcbDistance->isChecked();
   us.nScreenWidth = ni;
-  us.fClip80 = pcbClip80->isChecked();
-  us.fSabian = pcbSabian->isChecked();
   us.rStation = ryw;
-  us.fEclipse = pcbEclipse->isChecked();
-  us.fEclipseAny = !pcbEclipseAny->isChecked();
-  for (i = 0; i < arMax; i++)
-    ignorez[i] = rgpcbAngle[i]->isChecked();
-  us.nDegForm = pgroupDegForm->checkedId();
-  us.nCharset = pgroupCharset->checkedId();
-  for (i = 0; i < rrMax; i++)
-    ignore7[i] = rgpcbRuler[i]->isChecked();
-  if (!ignore7[rrRay])
-    EnsureRay();
-  us.nAppSep = pgroupAspOrb->checkedId();
-  // Windows re-syncs the View menu here (WiCheckMenu for cmdSecond and
-  // cmdApplying in DlgDisplay).
+  AdjustAspectCount();
   SyncDisplayMenuQt();
   RecastAndRedrawQt();
 }

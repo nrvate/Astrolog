@@ -29,7 +29,7 @@ import sys
 SPLIT = re.compile(r"^([A-Za-z_][A-Za-z_0-9]*?)(\d*)$")
 
 KIND = {
-    "CONTROL": "ctlCheck", "LTEXT": "ctlLabel", "RTEXT": "ctlLabel",
+    "CONTROL": "ctlCheck",   # refined to ctlRadio by the style, below "LTEXT": "ctlLabel", "RTEXT": "ctlLabel",
     "GROUPBOX": "ctlGroup", "PUSHBUTTON": "ctlButton",
     "DEFPUSHBUTTON": "ctlButton", "ICON": "ctlIcon",
     "EDITTEXT": "ctlEdit", "COMBOBOX": "ctlCombo",
@@ -94,7 +94,13 @@ def controls(body):
         else:
             b = BARE.match(rest)
             text, symbol = "", (b.group(1) if b else "")
-        yield KIND[kind], text, symbol, g
+        knd = KIND[kind]
+        # A CONTROL is a checkbox or a radio button depending on its
+        # style; they are not interchangeable, since a radio group is
+        # mutually exclusive and a row of checkboxes is not.
+        if knd == "ctlCheck" and "BS_AUTORADIOBUTTON" in rest:
+            knd = "ctlRadio"
+        yield knd, text, symbol, g
 
 
 def emit(name, w, h, body, out):
