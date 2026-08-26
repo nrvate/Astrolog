@@ -817,6 +817,87 @@ static void TestBadInputQt()
 }
 
 
+// Forced object positions have to survive being written to a settings file
+// and read back. FOutputSettings() had no "-F"/"-Fm" section at all, so
+// File / Save Program Settings silently dropped every forced position --
+// including ones set by hand in a user's own astrolog.as, which is how it
+// was found. The write loop covers every object rather than any narrower
+// range on purpose: a forced position can sit on anything from 0 to cObj,
+// and this asserts an out-of-range one is not lost, since that is the
+// failure that would destroy someone's configuration rather than annoy
+// them. Remove the io.cpp block and the first two checks here fail.
+static void TestForcedPositionsQt()
+{
+  real rgforceSav[objMax];
+  char *szFileOutSav = is.szFileOut;
+  int nWriteFormatSav = us.nWriteFormat, i;
+  flag fNoWriteSav = us.fNoWrite;
+  char szPath[cchSzMax], szLine[cchSzMax], szMid[cchSzMax], szPos[cchSzMax];
+  FILE *file;
+
+  Group("Forced object positions");
+  for (i = 0; i < objMax; i++)
+    rgforceSav[i] = force[i];
+
+  // oFor (19) stands in for a forced position outside any one dialog's
+  // range; uranLo (34) for one inside it. Both must come back.
+  ClearB((pbyte)force, sizeof(force));
+  force[oFor] = (real)-(1*objMax + 2 + 1);        // -Fm 19 1 2
+  force[uranLo] = ZD(1, 15.25) + rDegMax;         // -F 34 Ari 15.25
+
+  sprintf(szPath, "%s/astrolog-qt-force-test.as", getenv("TMPDIR") != NULL ?
+    getenv("TMPDIR") : "/tmp");
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+  is.szFileOut = szPath;
+  Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
+
+  szMid[0] = szPos[0] = chNull;
+  file = FileOpen(szPath, 3, NULL);
+  if (file != NULL) {
+    while (fgets(szLine, cchSzMax, file) != NULL) {
+      for (i = 0; szLine[i]; i++)          // Keep the line, minus its \n.
+        ;
+      while (i > 0 && szLine[i-1] < ' ')
+        szLine[--i] = chNull;
+      if (FEqSz(szLine, "-Fm 19 1 2"))
+        CopyRgb((pbyte)szLine, (pbyte)szMid, i+1);
+      else if (FEqSz(szLine, "-F 34 Ari 15.25"))
+        CopyRgb((pbyte)szLine, (pbyte)szPos, i+1);
+    }
+    fclose(file);
+  }
+  Check(szMid[0] != chNull, "an out-of-range forced midpoint survived the save");
+  Check(szPos[0] != chNull,
+    "a forced zodiac position survived the save, to the digit");
+
+  // Now feed those exact lines back through the switch parser. This is the
+  // half that proves the written *form* reads: the sign is abbreviated and
+  // the degrees go through FormatR(), so either could be written in a shape
+  // that looks right and parses wrong. Only the two lines are replayed, not
+  // the whole settings file -- the suite shares live us/gs state, and
+  // reading a full settings file back would apply several hundred settings
+  // to the running program.
+  ClearB((pbyte)force, sizeof(force));
+  if (szMid[0] != chNull)
+    FProcessCommandLine(szMid);
+  if (szPos[0] != chNull)
+    FProcessCommandLine(szPos);
+  Check(force[oFor] == (real)-(1*objMax + 2 + 1),
+    "the saved midpoint parsed back to the same encoding");
+  Check(force[uranLo] == ZD(1, 15.25) + rDegMax,
+    "the saved zodiac position parsed back to the same value");
+
+  remove(szPath);
+  for (i = 0; i < objMax; i++)
+    force[i] = rgforceSav[i];
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+  us.fNoWrite = fNoWriteSav;
+  printf("  forced positions round trip through a settings file\n");
+}
+
+
 /*
 ******************************************************************************
 ** Text chart capture, for comparing against the Windows build.
@@ -917,6 +998,7 @@ int NRunQtTestsQt()
   TestAllMenuActionsQt();
   TestMenuParityQt();
   TestBadInputQt();
+  TestForcedPositionsQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;
