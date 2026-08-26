@@ -291,13 +291,159 @@ static CONST char *rgszObjDlgQt[] = {
   "Orcus" };
 #define cszObjDlgQt (int)(sizeof(rgszObjDlgQt) / sizeof(char *))
 
+// And the moon and COB labels, from dlgMoons the same way. Windows writes
+// "Jupiter COB" where the internal name is the abbreviated "JupCOB".
+static CONST char *rgszMoonDlgQt[] = {
+  "P&hobos",
+  "&Deimos",
+  "&Ganymede",
+  "&Callisto",
+  "&Io",
+  "&Europa",
+  "&Titan",
+  "Rhea",
+  "Iapetus",
+  "Dione",
+  "Tethys",
+  "Enceladus",
+  "Mimas",
+  "Hyperion",
+  "Titania",
+  "Oberon",
+  "Umbriel",
+  "Ariel",
+  "Miranda",
+  "Triton",
+  "Proteus",
+  "Nereid",
+  "Char&on",
+  "Hydra",
+  "Nix",
+  "Kerberos",
+  "Styx",
+  "Jupiter COB",
+  "Saturn COB",
+  "Uranus COB",
+  "Neptune COB",
+  "Pluto COB" };
+#define cszMoonDlgQt (int)(sizeof(rgszMoonDlgQt) / sizeof(char *))
+
+// The aspect labels from dlgAspect, likewise. Windows writes out
+// "Conjunction" and "Opposition" where szAspectName[] has the short
+// "Conjunct" and "Opposite", and spells TriDecile with an i.
+static CONST char *rgszAspDlgQt[] = {
+  "&Conjunction",
+  "&Opposition",
+  "&Square",
+  "&Trine",
+  "Se&xtile",
+  "&Inconjunct",
+  "S&emiSextile",
+  "SemiSquare",
+  "SesquiQuadrate",
+  "&Quintile",
+  "&BiQuintile",
+  "SemiQuintile",
+  "Se&ptile",
+  "&Novile",
+  "BiNovile",
+  "BiSeptile",
+  "TriSeptile",
+  "QuatroNovile",
+  "TriDecile",
+  "Undecile",
+  "BiUndecile",
+  "TriUndecile",
+  "QuadUndecile",
+  "QuinUndecile" };
+#define cszAspDlgQt (int)(sizeof(rgszAspDlgQt) / sizeof(char *))
+
+// The label for aspect "i" (1 based, as the aspect arrays are).
+static QString SzAspDlgQt(int i)
+{
+  if (i >= 1 && i - 1 < cszAspDlgQt && rgszAspDlgQt[i-1][0] != chNull)
+    return QString(rgszAspDlgQt[i-1]);
+  return QString(szAspectName[i]);
+}
+
+// And the fixed star labels from dlgStar. Windows writes "Rigil
+// Kentaurus", "Kaus Australis" and "Great Attractor" in full where the
+// internal names are truncated to fit a text column.
+static CONST char *rgszStarDlgQt[] = {
+  "&Sirius",
+  "Canopus",
+  "Rigil &Kentaurus",
+  "Arcturus",
+  "&Vega",
+  "Capella",
+  "Rigel",
+  "Procyon",
+  "&Betelgeuse",
+  "Achernar",
+  "Agena",
+  "Altair",
+  "Acrux",
+  "Aldebaran",
+  "Antares",
+  "Spica",
+  "Pollux",
+  "Fomalhaut",
+  "Deneb",
+  "Becrux",
+  "Regulus",
+  "Adara",
+  "Castor",
+  "Shaula",
+  "Bellatrix",
+  "Gacrux",
+  "Alnath",
+  "Alnilam",
+  "Miaplacidus",
+  "Alnair",
+  "Alioth",
+  "Dubhe",
+  "Wezen",
+  "Kaus Australis",
+  "Alkaid",
+  "Sargas",
+  "Menkalinan",
+  "Peacock",
+  "Alhena",
+  "Avior",
+  "Murzim",
+  "Alphard",
+  "Polaris",
+  "Algol",
+  "Suhail",
+  "Alcyone",
+  "&Andromeda",
+  "&Zeta Reticuli",
+  "Galactic &Center",
+  "&Great Attractor" };
+#define cszStarDlgQt (int)(sizeof(rgszStarDlgQt) / sizeof(char *))
+
 // The label for object "i" in a dialog: the Windows one where there is
-// one, otherwise the internal name.
+// one, otherwise the internal name. The Windows strings carry "&"
+// mnemonics, which is right for a checkbox -- Qt reads them the same way
+// -- but a QLabel renders the "&" literally, giving "&2nd Cusp". The
+// grids that label a row with static text want SzObjDlgPlainQt().
 static QString SzObjDlgQt(int i)
 {
+  if (i >= starLo && i - starLo < cszStarDlgQt &&
+    rgszStarDlgQt[i - starLo][0] != chNull)
+    return QString(rgszStarDlgQt[i - starLo]);
+  if (i >= moonsLo && i - moonsLo < cszMoonDlgQt &&
+    rgszMoonDlgQt[i - moonsLo][0] != chNull)
+    return QString(rgszMoonDlgQt[i - moonsLo]);
   if (i >= 0 && i < cszObjDlgQt && rgszObjDlgQt[i][0] != chNull)
     return QString(rgszObjDlgQt[i]);
   return QString(szObjName[i]);
+}
+
+// Same label with the mnemonic marker removed, for static text.
+static QString SzObjDlgPlainQt(int i)
+{
+  return SzObjDlgQt(i).remove(QChar('&'));
 }
 
 // Windows lays its per-row setting grids out in several columns side by
@@ -1875,7 +2021,7 @@ void ShowObjectDialogQt()
   HeadersQt(pgrid, cCol, cField, rgszHead);
   for (i = 0; i <= oCore; i++) {
     PlaceRowQt(i, cRowPerCol, cField, &nRow, &nCol);
-    pgrid->addWidget(new QLabel(SzObjDlgQt(i)), nRow, nCol);
+    pgrid->addWidget(new QLabel(SzObjDlgPlainQt(i)), nRow, nCol);
     rgpeOrb[i] = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
     pgrid->addWidget(rgpeOrb[i], nRow, nCol+1);
     rgpeAdd[i] = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
@@ -1964,12 +2110,27 @@ static CONST OBJGROUPQT rgGroupRestrictQt[] = {
 #define cGroupRestrictQt \
   (int)(sizeof(rgGroupRestrictQt) / sizeof(OBJGROUPQT))
 
+// dlgMoons groups its moons by the planet they orbit, seven boxes of it
+// (astrolog.rc GROUPBOX "Mars" through "Center of Body (COB)"). The counts
+// come from that dialog's checkbox blocks: Mars 2, Jupiter 4, Saturn 8,
+// Uranus 5, Neptune 3, Pluto 5, then the five COB points.
+static CONST OBJGROUPQT rgGroupMoonQt[] = {
+  {"Mars",     moonsLo+0,  moonsLo+1},
+  {"Jupiter",  moonsLo+2,  moonsLo+5},
+  {"Saturn",   moonsLo+6,  moonsLo+13},
+  {"Uranus",   moonsLo+14, moonsLo+18},
+  {"Neptune",  moonsLo+19, moonsLo+21},
+  {"Pluto",    moonsLo+22, moonsLo+26},
+  {"Center of Body (COB)", cobLo, cobHi} };
+#define cGroupMoonQt (int)(sizeof(rgGroupMoonQt) / sizeof(OBJGROUPQT))
+
 static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
-  byte *rgignore, CONST RESBUT *rgbut, int cbut, int cCol)
+  byte *rgignore, CONST RESBUT *rgbut, int cbut, int cCol,
+  CONST OBJGROUPQT *rggroup, int cgroup)
 {
-  // With cCol 0 the object range is split into the group boxes above;
-  // otherwise it's laid out in cCol plain columns, which is what the star
-  // and moon ranges want since neither has groups on Windows either.
+  // With a group table the range goes into labelled boxes; otherwise it's
+  // laid out in cCol plain columns, which is what the fixed stars want
+  // since dlgStar has no groups either.
   CONST int cRowPerCol = (cCol > 0 ? (hi - lo + 1 + cCol - 1) / cCol : 0);
   QDialog dlg(gi.qwind);
   dlg.setWindowTitle(szTitle);
@@ -1979,9 +2140,9 @@ static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
   int i, iGroup, jlo, jhi;
 
   rgpcb.resize(hi - lo + 1);
-  if (cCol <= 0) {
-    for (iGroup = 0; iGroup < cGroupRestrictQt; iGroup++) {
-      CONST OBJGROUPQT *pgrp = &rgGroupRestrictQt[iGroup];
+  if (cgroup > 0) {
+    for (iGroup = 0; iGroup < cgroup; iGroup++) {
+      CONST OBJGROUPQT *pgrp = &rggroup[iGroup];
       jlo = Max(pgrp->lo, lo); jhi = Min(pgrp->hi, hi);
       if (jlo > jhi)
         continue;
@@ -2010,37 +2171,69 @@ static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
     pmiddle->addLayout(pgrid);
   }
 
-  if (cbut > 0) {
-    QVBoxLayout *pcol = new QVBoxLayout();
-    for (i = 0; i < cbut; i++) {
-      CONST RESBUT *pbut = &rgbut[i];
-      QPushButton *ppb = new QPushButton(pbut->szLabel);
-      pcol->addWidget(ppb);
-      // rgpcb outlives every click: the lambda only runs inside exec().
-      QObject::connect(ppb, &QPushButton::clicked, &dlg,
-        [&rgpcb, pbut, lo, hi]() {
-          int j, jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
-          for (j = jlo; j <= jhi; j++) {
-            QCheckBox *pcb = rgpcb[j - lo];
-            switch (pbut->nAction) {
-            case resSet:    pcb->setChecked(fTrue);              break;
-            case resClear:  pcb->setChecked(fFalse);             break;
-            case resToggle: pcb->setChecked(!pcb->isChecked());  break;
-            case resCopy:   pcb->setChecked(pbut->rgSource[j] != 0); break;
-            }
-          }
-        });
-    }
-    pcol->addStretch(1);
-    pmiddle->addLayout(pcol);
-  }
-  pouter->addLayout(pmiddle);
+  // Windows' button placement (astrolog.rc dlgRestrict): the set/toggle
+  // buttons are a column of uniform 50 unit wide buttons down the right
+  // hand side, with Cancel and OK stacked at the bottom of that same
+  // column. The two "copy a whole set in" buttons are not in that column
+  // at all -- they sit along the bottom edge, the wide one at far left
+  // (125 units) and Recall in the middle. Leaving them in the column is
+  // what stretched every button to the width of the longest label.
+  QVBoxLayout *pcol = new QVBoxLayout();
+  QHBoxLayout *pbottom = new QHBoxLayout();
+  QVector<QPushButton *> rgpbCol;
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  for (i = 0; i < cbut; i++) {
+    CONST RESBUT *pbut = &rgbut[i];
+    QPushButton *ppb = new QPushButton(pbut->szLabel);
+    // rgpcb outlives every click: the lambda only runs inside exec().
+    QObject::connect(ppb, &QPushButton::clicked, &dlg,
+      [&rgpcb, pbut, lo, hi]() {
+        int j, jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
+        for (j = jlo; j <= jhi; j++) {
+          QCheckBox *pcb = rgpcb[j - lo];
+          switch (pbut->nAction) {
+          case resSet:    pcb->setChecked(fTrue);              break;
+          case resClear:  pcb->setChecked(fFalse);             break;
+          case resToggle: pcb->setChecked(!pcb->isChecked());  break;
+          case resCopy:   pcb->setChecked(pbut->rgSource[j] != 0); break;
+          }
+        }
+      });
+    if (pbut->nAction == resCopy) {
+      // Along the bottom, in table order: the wide one then Recall.
+      if (pbottom->count() > 0)
+        pbottom->addSpacing(20);
+      pbottom->addWidget(ppb);
+    } else {
+      pcol->addWidget(ppb);
+      rgpbCol.append(ppb);
+    }
+  }
+
+  QPushButton *pbCancel = new QPushButton("Cancel");
+  QPushButton *pbOk = new QPushButton("OK");
+  pbOk->setDefault(fTrue);
+  rgpbCol.append(pbCancel);
+  rgpbCol.append(pbOk);
+  QObject::connect(pbOk, &QPushButton::clicked, &dlg, &QDialog::accept);
+  QObject::connect(pbCancel, &QPushButton::clicked, &dlg, &QDialog::reject);
+  pcol->addStretch(1);
+  pcol->addWidget(pbCancel);
+  pcol->addWidget(pbOk);
+
+  // One width for the whole column, as Windows gives them, rather than
+  // letting the longest label set it.
+  int dxBut = 0;
+  for (QPushButton *ppb : rgpbCol)
+    dxBut = Max(dxBut, ppb->sizeHint().width());
+  for (QPushButton *ppb : rgpbCol)
+    ppb->setFixedWidth(dxBut);
+
+  pmiddle->addStretch(1);
+  pmiddle->addLayout(pcol);
+  pouter->addLayout(pmiddle);
+  pbottom->addStretch(1);
+  pouter->addLayout(pbottom);
 
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
@@ -2104,19 +2297,21 @@ void ShowRestrictDialogQt()
 {
   // Wide enough for the "Copy from ... Restriction Set" button.
   ShowRestrictRangeDialogQt("Object Restrictions", 0, dwarfHi, ignore,
-    rgbutRestrict, CButRes(rgbutRestrict), 0);
+    rgbutRestrict, CButRes(rgbutRestrict), 0,
+    rgGroupRestrictQt, cGroupRestrictQt);
 }
 
 void ShowStarRestrictDialogQt()
 {
   ShowRestrictRangeDialogQt("Fixed Star Restrictions", starLo, starHi,
-    ignore, rgbutStar, CButRes(rgbutStar), 5);
+    ignore, rgbutStar, CButRes(rgbutStar), 4, NULL, 0);
 }
 
 void ShowTransitRestrictDialogQt()
 {
   ShowRestrictRangeDialogQt("Transit Object Restrictions", 0, dwarfHi,
-    ignore2, rgbutTransit, CButRes(rgbutTransit), 0);
+    ignore2, rgbutTransit, CButRes(rgbutTransit), 0,
+    rgGroupRestrictQt, cGroupRestrictQt);
 }
 
 
@@ -2983,7 +3178,7 @@ void ShowAspectDialogQt()
       pgrid->setColumnMinimumWidth(nBase+5, 10);
     for (iRow = 0; iRow < cRow; iRow++) {
       i = iCol*cRow + iRow + 1;
-      QCheckBox *pcb = new QCheckBox(szAspectName[i]);
+      QCheckBox *pcb = new QCheckBox(SzAspDlgQt(i));
       pcb->setChecked(ignorea[i] != 0);
       pgrid->addWidget(pcb, iRow+1, nBase+0);
       rgpcbRes[i-1] = pcb;
@@ -3071,7 +3266,7 @@ void ShowObject2DialogQt()
     i = (i0 <= dwarfHi ? i0 : starLo);
     rgi.append(i);
     PlaceRowQt(iRow, cRowPerCol, cField, &nRow, &nCol);
-    pgrid->addWidget(new QLabel(i0 <= dwarfHi ? SzObjDlgQt(i) :
+    pgrid->addWidget(new QLabel(i0 <= dwarfHi ? SzObjDlgPlainQt(i) :
       QString("Stars")), nRow, nCol);
     QLineEdit *peOrb = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
     pgrid->addWidget(peOrb, nRow, nCol+1);
@@ -3584,7 +3779,8 @@ void ShowDisplayDialogQt()
 void ShowMoonRestrictDialogQt()
 {
   ShowRestrictRangeDialogQt("Planetary Moon Restrictions", moonsLo, cobHi,
-    ignore, rgbutMoons, CButRes(rgbutMoons), 4);
+    ignore, rgbutMoons, CButRes(rgbutMoons), 0,
+    rgGroupMoonQt, cGroupMoonQt);
 }
 
 
