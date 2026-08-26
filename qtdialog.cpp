@@ -1657,10 +1657,10 @@ void ShowChartListDialogQt()
   QGroupBox *pgbSort = new QGroupBox("Sort By");
   QVBoxLayout *pvSort = new QVBoxLayout(pgbSort);
   QButtonGroup *pgroupSort = new QButtonGroup(&dlg);
-  CONST char *rgszSort[5] =
+  CONST char *rgszSortQt[5] =
     { "Date", "Longitude", "Latitude", "Name", "Location" };
   for (i = 0; i < 5; i++) {
-    QRadioButton *prb = new QRadioButton(rgszSort[i]);
+    QRadioButton *prb = new QRadioButton(rgszSortQt[i]);
     prb->setChecked(i == 0);
     pgroupSort->addButton(prb, i);
     pvSort->addWidget(prb);
@@ -2813,204 +2813,217 @@ static CONST char *rgszSortQt[asMax] = {"Power", "Orb Magnitude",
   "Orb Value", "1st Object Index", "2nd Object Index",
   "Aspect", "1st Object Position", "2nd Object Position", "Midpoint"};
 
+// A checkbox in a transcribed dialog and the flag it edits. Extracted from
+// the SetCheck/GetCheck pairs in Windows' own dialog handlers rather than
+// worked out by hand, so the two builds cannot drift apart over which box
+// controls what.
+typedef struct {
+  CONST char *szId;
+  int nIdx;
+  flag *pf;
+  flag fInvert;   // The box shows the opposite of the flag.
+} RCFLAG;
+
+static void RcLoadFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST RCFLAG *rgflag, int cflag)
+{
+  for (int i = 0; i < cflag; i++) {
+    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
+      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
+      PwRcFindQt(rgbuilt, rgflag[i].szId));
+    if (pcb != NULL)
+      pcb->setChecked((*rgflag[i].pf != 0) != (rgflag[i].fInvert != 0));
+  }
+}
+
+static void RcStoreFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST RCFLAG *rgflag, int cflag)
+{
+  for (int i = 0; i < cflag; i++) {
+    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
+      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
+      PwRcFindQt(rgbuilt, rgflag[i].szId));
+    if (pcb != NULL)
+      *rgflag[i].pf = (pcb->isChecked() != (rgflag[i].fInvert != 0));
+  }
+}
+
+#define CRcFlag(rg) (int)(sizeof(rg) / sizeof(RCFLAG))
+
+
+// Windows' EnsureN(): complain about one out of range field and leave the
+// dialog's values alone.
+static void ErrorEnsureQt(QWidget *pw, int n, CONST char *szField)
+{
+  QMessageBox::warning(pw, szAppName,
+    QString("The value %1 is not valid for the %2 field.")
+    .arg(n).arg(szField));
+}
+
+
+// One of the resource's radio groups: a run of drNN controls that are
+// mutually exclusive and together pick a value. They are built ungrouped
+// (see RcBuildDialogQt), so exclusivity is enforced here.
+static void RcLoadRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
+  int cRadio, int nValue)
+{
+  QButtonGroup *pgroup = NULL;
+
+  for (int i = 0; i < cRadio; i++) {
+    QRadioButton *prb =
+      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
+    if (prb == NULL)
+      continue;
+    if (pgroup == NULL)
+      pgroup = new QButtonGroup(prb->parentWidget());
+    prb->setAutoExclusive(fTrue);
+    pgroup->addButton(prb, i);
+    prb->setChecked(i == nValue);
+  }
+}
+
+static int NRcStoreRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
+  int cRadio, int nDefault)
+{
+  for (int i = 0; i < cRadio; i++) {
+    QRadioButton *prb =
+      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
+    if (prb != NULL && prb->isChecked())
+      return i;
+  }
+  return nDefault;
+}
+
+
+// Chart Settings, transcribed from dlgChart. Two things here don't follow
+// the usual shape: the star and Arabic part sort orders store a character
+// code rather than an index, and the decan list folds two settings into
+// one -- whether decans are listed at all, and which kind.
+
 void ShowChartSettingsDialogQt()
 {
+  // The character each star sort radio stands for, dr01 through dr07.
+  static CONST char rgchStarSort[] = {0, 'z', 'l', 'n', 'b', 'd', 'v'};
+  // And dr08 through dr11 for Arabic parts.
+  static CONST char rgchArabicSort[] = {0, 'z', 'n', 'f'};
+  CONST RCFLAG rgflag[] = {
+    {"dxCh_v",  0, &us.fVelocity,      fFalse},
+    {"dxCh_w",  0, &us.fWheelReverse,  fFalse},
+    {"dxCh_g",  0, &us.fGridConfig,    fFalse},
+    {"dxCh_gm",-1, &us.fGridMidpoint,  fFalse},
+    {"dxCh_a",  0, &us.fAspSummary,    fFalse},
+    {"dxCh_m",  0, &us.fMidSummary,    fFalse},
+    {"dxCh_ma",-1, &us.fMidAspect,     fFalse},
+    {"dxCh_Z",  0, &us.fPrimeVert,     fFalse},
+    {"dxCh_l", -1, &us.fSectorApprox,  fFalse},
+    {"dxCh_Ky",-1, &us.fCalendarYear,  fFalse},
+    {"dxCh_j",  0, &us.fInfluenceSign, fFalse},
+    {"dxCh_L",  0, &us.fLatitudeCross, fFalse},
+    {"dxCh_P",  0, &us.fArabicFlip,    fFalse} };
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Chart Settings");
-  dlg.resize(760, 620);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QHBoxLayout *phInner = new QHBoxLayout(pinner);
-  QVBoxLayout *pvLeft = new QVBoxLayout();
-  QVBoxLayout *pvRight = new QVBoxLayout();
+  QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
-  int i;
+  int i, nw, nl, nl2, np, nn, yb;
 
-  QFormLayout *pformTop = new QFormLayout();
-  QComboBox *pcbDecan = new QComboBox();
-  for (i = 0; i < ddMax; i++)
-    pcbDecan->addItem(rgszDecan[i]);
-  pcbDecan->setCurrentIndex(us.fListDecan ? us.nDecanType : ddNone);
-  QLineEdit *peWheelRows = new QLineEdit(QString::number(us.nWheelRows));
-  pformTop->addRow("Wheel Sign Subdivision Type:", pcbDecan);
-  pformTop->addRow("Text House Wheel Rows:", peWheelRows);
-  pvLeft->addLayout(pformTop);
+  dlg.setWindowTitle("Chart Settings");
+  RcBuildDialogQt(&dlg, rgctlChart, cctlChart, dxChart, dyChart, &rgbuilt);
+  RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
 
-  QCheckBox *pcbVelocity = new QCheckBox(
-    "Text Listing Velocities Relative to Average Speed");
-  QCheckBox *pcbWheelReverse = new QCheckBox(
-    "Text House Wheel Reverses Object Order");
-  QCheckBox *pcbGridConfig = new QCheckBox(
-    "Text Aspect Grid Shows Aspect Configurations");
-  QCheckBox *pcbGridMidpoint = new QCheckBox(
-    "Relationship Aspect Grid Shows Midpoints Instead");
-  QCheckBox *pcbAspSummary = new QCheckBox(
-    "Text Aspect List Shows Aspect Summary");
-  QCheckBox *pcbMidSummary = new QCheckBox(
-    "Text Midpoint List Shows Midpoint Summary");
-  QCheckBox *pcbMidAspect = new QCheckBox(
-    "Text Midpoint List Includes Aspects to Midpoints");
-  QCheckBox *pcbPrimeVert = new QCheckBox(
-    "Horizon Chart Displays with Polar Center");
-  QCheckBox *pcbSectorApprox = new QCheckBox(
-    "Sector Chart Approximated with Placidus Cusps");
-  QCheckBox *pcbCalendarYear = new QCheckBox("Calendar Is for Entire Year");
-  QCheckBox *pcbInfluenceSign = new QCheckBox(
-    "Text Influence Chart Shows Sign Influences Too");
-  pcbVelocity->setChecked(us.fVelocity != 0);
-  pcbWheelReverse->setChecked(us.fWheelReverse != 0);
-  pcbGridConfig->setChecked(us.fGridConfig != 0);
-  pcbGridMidpoint->setChecked(us.fGridMidpoint != 0);
-  pcbAspSummary->setChecked(us.fAspSummary != 0);
-  pcbMidSummary->setChecked(us.fMidSummary != 0);
-  pcbMidAspect->setChecked(us.fMidAspect != 0);
-  pcbPrimeVert->setChecked(us.fPrimeVert != 0);
-  pcbSectorApprox->setChecked(us.fSectorApprox != 0);
-  pcbCalendarYear->setChecked(us.fCalendarYear != 0);
-  pcbInfluenceSign->setChecked(us.fInfluenceSign != 0);
-  for (QCheckBox *pcb : { pcbVelocity, pcbWheelReverse, pcbGridConfig,
-    pcbGridMidpoint, pcbAspSummary, pcbMidSummary, pcbMidAspect,
-    pcbPrimeVert, pcbSectorApprox, pcbCalendarYear, pcbInfluenceSign })
-    pvLeft->addWidget(pcb);
+  // us.nEphemYears is a count, but the box only asks whether it's on.
+  QCheckBox *pcbEphYears = (QCheckBox *)PwRcFindQt(rgbuilt, "dxCh_Ey");
+  if (pcbEphYears != NULL)
+    pcbEphYears->setChecked(us.nEphemYears != 0);
 
-  QFormLayout *pformStep = new QFormLayout();
-  QLineEdit *peAstroStep =
-    new QLineEdit(QString::number(us.nAstroGraphStep));
-  pformStep->addRow("Text Astrocartography Degree Step Rate:", peAstroStep);
-  pvLeft->addLayout(pformStep);
-  QCheckBox *pcbLatCross = new QCheckBox(
-    "Text Astrocartography Shows Latitude Crossings");
-  pcbLatCross->setChecked(us.fLatitudeCross != 0);
-  pvLeft->addWidget(pcbLatCross);
+  QLineEdit *peWheel = (QLineEdit *)PwRcFindQt(rgbuilt, "deCh_w");
+  QLineEdit *peStep = (QLineEdit *)PwRcFindQt(rgbuilt, "deCh_L");
+  QLineEdit *peDist = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deCh_L", 2);
+  QLineEdit *pePart = (QLineEdit *)PwRcFindQt(rgbuilt, "deCh_P");
+  QLineEdit *peCity = (QLineEdit *)PwRcFindQt(rgbuilt, "deCh_Nl");
+  QLineEdit *peBio = (QLineEdit *)PwRcFindQt(rgbuilt, "deCh_Yb");
+  QLineEdit *peRatio = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deCh_rc", 0);
+  if (peWheel != NULL) peWheel->setText(QString::number(us.nWheelRows));
+  if (peStep != NULL)  peStep->setText(QString::number(us.nAstroGraphStep));
+  if (peDist != NULL)  peDist->setText(QString::number(us.nAstroGraphDist));
+  if (pePart != NULL)  pePart->setText(QString::number(us.nArabicParts));
+  if (peCity != NULL)  peCity->setText(QString::number(us.nAtlasList));
+  if (peBio != NULL)   peBio->setText(QString::number(us.nBioday));
+  if (peRatio != NULL) peRatio->setText(SzFormatRQt(us.rRatio, 6));
 
-  QFormLayout *pformCounts = new QFormLayout();
-  // Windows shows this one with its unit appended; the parse below only
-  // reads the leading number, so the suffix is cosmetic either way.
-  sprintf(sz, "%d%s", us.nAstroGraphDist, us.fEuroDist ? "km" : "mi");
-  QLineEdit *peAstroDist = new QLineEdit(sz);
-  QLineEdit *peArabicParts =
-    new QLineEdit(QString::number(us.nArabicParts));
-  QLineEdit *peAtlasList = new QLineEdit(QString::number(us.nAtlasList));
-  QLineEdit *peBioday = new QLineEdit(QString::number(us.nBioday));
-  pformCounts->addRow("Latitude Crossings Show Cities Within:", peAstroDist);
-  pformCounts->addRow("Number of Arabic Parts to Display:", peArabicParts);
-  pformCounts->addRow("Nearest Cities Lists This Many Cities:", peAtlasList);
-  pformCounts->addRow("Number of Days Biorhythm Chart Covers:", peBioday);
-  pvLeft->addLayout(pformCounts);
-  QCheckBox *pcbEphemYears = new QCheckBox("Ephemeris Is for Entire Year");
-  QCheckBox *pcbArabicFlip = new QCheckBox(
-    "Display Arabic Part Formulas with Terms Reversed");
-  pcbEphemYears->setChecked(us.nEphemYears != 0);
-  pcbArabicFlip->setChecked(us.fArabicFlip != 0);
-  pvLeft->addWidget(pcbEphemYears);
-  pvLeft->addWidget(pcbArabicFlip);
-  pvLeft->addStretch(1);
-
-  // The two sort orders are stored as switch letters rather than indexes,
-  // so each radio carries its letter alongside.
-  QGroupBox *pgbStar = new QGroupBox("Fixed Stars Sort By");
-  QVBoxLayout *pvStar = new QVBoxLayout(pgbStar);
-  QButtonGroup *pgroupStar = new QButtonGroup(&dlg);
-  CONST char *rgszStarSort[7] = { "Object Index", "Longitude", "Latitude",
-    "Name", "Brightness", "Distance", "Velocity" };
-  CONST char rgchStarSort[7] = { 0, 'z', 'l', 'n', 'b', 'd', 'v' };
-  for (i = 0; i < 7; i++) {
-    QRadioButton *prb = new QRadioButton(rgszStarSort[i]);
-    prb->setChecked(us.nStarSort == rgchStarSort[i]);
-    pgroupStar->addButton(prb, i);
-    pvStar->addWidget(prb);
+  QComboBox *pcbSort = (QComboBox *)PwRcFindQt(rgbuilt, "dcCh_a");
+  QComboBox *pcbDecan = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcCh_v", 3);
+  if (pcbSort != NULL) {
+    pcbSort->setEditable(fTrue);
+    for (i = 0; i < asMax; i++)
+      pcbSort->addItem(rgszSortQt[i]);
+    pcbSort->setEditText(rgszSortQt[us.nAspectSort]);
   }
-  if (pgroupStar->checkedButton() == NULL)
-    pgroupStar->button(0)->setChecked(true);
-  pvRight->addWidget(pgbStar);
-
-  QGroupBox *pgbArabic = new QGroupBox("Arabic Parts Sort By");
-  QVBoxLayout *pvArabic = new QVBoxLayout(pgbArabic);
-  QButtonGroup *pgroupArabic = new QButtonGroup(&dlg);
-  CONST char *rgszArabicSort[4] =
-    { "Category Index", "Position", "Name", "Formula" };
-  CONST char rgchArabicSort[4] = { 0, 'z', 'n', 'f' };
-  for (i = 0; i < 4; i++) {
-    QRadioButton *prb = new QRadioButton(rgszArabicSort[i]);
-    prb->setChecked(us.nArabicSort == rgchArabicSort[i]);
-    pgroupArabic->addButton(prb, i);
-    pvArabic->addWidget(prb);
+  if (pcbDecan != NULL) {
+    pcbDecan->setEditable(fTrue);
+    for (i = 0; i < ddMax; i++)
+      pcbDecan->addItem(rgszDecan[i]);
+    pcbDecan->setEditText(rgszDecan[us.fListDecan ? us.nDecanType : 0]);
   }
-  if (pgroupArabic->checkedButton() == NULL)
-    pgroupArabic->button(0)->setChecked(true);
-  pvRight->addWidget(pgbArabic);
 
-  QFormLayout *pformRight = new QFormLayout();
-  QComboBox *pcbAspSort = new QComboBox();
-  for (i = 0; i < asMax; i++)
-    pcbAspSort->addItem(rgszSortQt[i]);
-  pcbAspSort->setCurrentIndex(FBetween(us.nAspectSort, 0, asMax-1) ?
-    us.nAspectSort : 0);
-  QLineEdit *peRatio = new QLineEdit(QString::number(us.rRatio));
-  pformRight->addRow("Aspect List Sort By:", pcbAspSort);
-  pformRight->addRow("Midpoint Proportion:", peRatio);
-  pvRight->addLayout(pformRight);
-  pvRight->addStretch(1);
+  for (i = 0; i < (int)sizeof(rgchStarSort); i++)
+    if (rgchStarSort[i] == us.nStarSort)
+      RcLoadRadioQt(rgbuilt, 1, (int)sizeof(rgchStarSort), i);
+  for (i = 0; i < (int)sizeof(rgchArabicSort); i++)
+    if (rgchArabicSort[i] == us.nArabicSort)
+      RcLoadRadioQt(rgbuilt, 8, (int)sizeof(rgchArabicSort), i);
 
-  phInner->addLayout(pvLeft);
-  phInner->addLayout(pvRight);
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  int nWheelRows = peWheelRows->text().toInt();
-  int nAstroStep = peAstroStep->text().toInt();
-  int nAstroDist = peAstroDist->text().toInt();
-  int nArabicParts = peArabicParts->text().toInt();
-  int nAtlasList = peAtlasList->text().toInt();
-  int nBioday = peBioday->text().toInt();
-  if (!FValidWheel(nWheelRows) || !FValidAstrograph(nAstroStep) ||
-    nAstroDist < 0 || !FValidPart(nArabicParts) || nAtlasList < 0 ||
-    !FValidBioday(nBioday)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more chart settings fields are invalid.");
-    return;
-  }
+  nw = peWheel != NULL ? peWheel->text().toInt() : us.nWheelRows;
+  nl = peStep != NULL ? peStep->text().toInt() : us.nAstroGraphStep;
+  nl2 = peDist != NULL ? peDist->text().toInt() : us.nAstroGraphDist;
+  np = pePart != NULL ? pePart->text().toInt() : us.nArabicParts;
+  nn = peCity != NULL ? peCity->text().toInt() : us.nAtlasList;
+  yb = peBio != NULL ? peBio->text().toInt() : us.nBioday;
+  if (!FValidWheel(nw))       { ErrorEnsureQt(&dlg, nw, "wheel row"); return; }
+  if (!FValidAstrograph(nl))  { ErrorEnsureQt(&dlg, nl, "astrocartography step"); return; }
+  if (nl2 < 0)                { ErrorEnsureQt(&dlg, nl2, "latitude crossing count"); return; }
+  if (!FValidPart(np))        { ErrorEnsureQt(&dlg, np, "Arabic part"); return; }
+  if (nn < 0)                 { ErrorEnsureQt(&dlg, nn, "nearest city count"); return; }
+  if (!FValidBioday(yb))      { ErrorEnsureQt(&dlg, yb, "Biorhythm days"); return; }
 
-  us.fVelocity = pcbVelocity->isChecked();
-  us.nWheelRows = nWheelRows;
-  us.fWheelReverse = pcbWheelReverse->isChecked();
-  us.fGridConfig = pcbGridConfig->isChecked();
-  us.fGridMidpoint = pcbGridMidpoint->isChecked();
-  us.fAspSummary = pcbAspSummary->isChecked();
-  us.fMidSummary = pcbMidSummary->isChecked();
-  us.fMidAspect = pcbMidAspect->isChecked();
-  us.fPrimeVert = pcbPrimeVert->isChecked();
-  us.fSectorApprox = pcbSectorApprox->isChecked();
-  us.fCalendarYear = pcbCalendarYear->isChecked();
-  us.fInfluenceSign = pcbInfluenceSign->isChecked();
-  us.nAstroGraphStep = nAstroStep;
-  us.fLatitudeCross = pcbLatCross->isChecked();
-  us.nAstroGraphDist = nAstroDist;
-  us.nEphemYears = pcbEphemYears->isChecked();
-  us.nArabicParts = nArabicParts;
-  us.fArabicFlip = pcbArabicFlip->isChecked();
-  us.nAtlasList = nAtlasList;
-  us.nBioday = nBioday;
-  us.nStarSort = rgchStarSort[pgroupStar->checkedId()];
-  us.nArabicSort = rgchArabicSort[pgroupArabic->checkedId()];
-  us.nAspectSort = pcbAspSort->currentIndex();
-  us.rRatio = peRatio->text().toDouble();
-  i = pcbDecan->currentIndex();
-  us.fListDecan = (i > ddNone);
-  if (i > ddNone)
-    us.nDecanType = i;
+  RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+  us.nWheelRows = nw;
+  us.nAstroGraphStep = nl;
+  us.nAstroGraphDist = nl2;
+  us.nArabicParts = np;
+  us.nAtlasList = nn;
+  us.nBioday = yb;
+  if (pcbEphYears != NULL)
+    us.nEphemYears = pcbEphYears->isChecked();
+  us.nStarSort =
+    rgchStarSort[NRcStoreRadioQt(rgbuilt, 1, (int)sizeof(rgchStarSort), 0)];
+  us.nArabicSort =
+    rgchArabicSort[NRcStoreRadioQt(rgbuilt, 8,
+    (int)sizeof(rgchArabicSort), 0)];
+  if (pcbSort != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbSort->currentText().toLocal8Bit().constData());
+    for (i = 1; i < asMax; i++)
+      if (FMatchSz(sz, rgszSortQt[i]))
+        us.nAspectSort = i;
+  }
+  if (peRatio != NULL)
+    us.rRatio = peRatio->text().toDouble();
+  if (pcbDecan != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbDecan->currentText().toLocal8Bit().constData());
+    for (i = 0; i < ddMax; i++)
+      if (FMatchSz(sz, rgszDecan[i]))
+        break;
+    if (i >= ddMax)
+      i = 0;
+    us.fListDecan = (i > ddNone);
+    if (i > ddNone)
+      us.nDecanType = i;
+  }
   RecastAndRedrawQt();
 }
 
@@ -3225,88 +3238,6 @@ void ShowAspectDialogQt()
   }
   AdjustAspectCount();
   RecastAndRedrawQt();
-}
-
-
-// A checkbox in a transcribed dialog and the flag it edits. Extracted from
-// the SetCheck/GetCheck pairs in Windows' own dialog handlers rather than
-// worked out by hand, so the two builds cannot drift apart over which box
-// controls what.
-typedef struct {
-  CONST char *szId;
-  int nIdx;
-  flag *pf;
-  flag fInvert;   // The box shows the opposite of the flag.
-} RCFLAG;
-
-static void RcLoadFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
-  CONST RCFLAG *rgflag, int cflag)
-{
-  for (int i = 0; i < cflag; i++) {
-    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
-      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
-      PwRcFindQt(rgbuilt, rgflag[i].szId));
-    if (pcb != NULL)
-      pcb->setChecked((*rgflag[i].pf != 0) != (rgflag[i].fInvert != 0));
-  }
-}
-
-static void RcStoreFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
-  CONST RCFLAG *rgflag, int cflag)
-{
-  for (int i = 0; i < cflag; i++) {
-    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
-      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
-      PwRcFindQt(rgbuilt, rgflag[i].szId));
-    if (pcb != NULL)
-      *rgflag[i].pf = (pcb->isChecked() != (rgflag[i].fInvert != 0));
-  }
-}
-
-#define CRcFlag(rg) (int)(sizeof(rg) / sizeof(RCFLAG))
-
-
-// Windows' EnsureN(): complain about one out of range field and leave the
-// dialog's values alone.
-static void ErrorEnsureQt(QWidget *pw, int n, CONST char *szField)
-{
-  QMessageBox::warning(pw, szAppName,
-    QString("The value %1 is not valid for the %2 field.")
-    .arg(n).arg(szField));
-}
-
-
-// One of the resource's radio groups: a run of drNN controls that are
-// mutually exclusive and together pick a value. They are built ungrouped
-// (see RcBuildDialogQt), so exclusivity is enforced here.
-static void RcLoadRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
-  int cRadio, int nValue)
-{
-  QButtonGroup *pgroup = NULL;
-
-  for (int i = 0; i < cRadio; i++) {
-    QRadioButton *prb =
-      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
-    if (prb == NULL)
-      continue;
-    if (pgroup == NULL)
-      pgroup = new QButtonGroup(prb->parentWidget());
-    prb->setAutoExclusive(fTrue);
-    pgroup->addButton(prb, i);
-    prb->setChecked(i == nValue);
-  }
-}
-
-static int NRcStoreRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
-  int cRadio, int nDefault)
-{
-  for (int i = 0; i < cRadio; i++) {
-    QRadioButton *prb =
-      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
-    if (prb != NULL && prb->isChecked())
-      return i;
-  }
-  return nDefault;
 }
 
 
