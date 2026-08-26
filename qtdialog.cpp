@@ -42,6 +42,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QButtonGroup>
+#include <QtWidgets/QStyle>
 #include <QtWidgets/QGroupBox>
 #include <QtCore/QFile>
 #include <QtGui/QPixmap>
@@ -621,12 +622,56 @@ static CONST RCCTL *PctlBuiltQt(CONST QVector<RCBUILT> *prg, int i)
 }
 
 
+// Shrink one control's own font until its text fits the box the resource
+// gave it. Only the text changes size; the box stays where it is, so the
+// dialog keeps Windows' proportions.
+static void RcFitTextQt(QWidget *pw, CONST QString &str, int dxBox)
+{
+  if (str.isEmpty() || dxBox <= 0)
+    return;
+  QFont font = pw->font();
+  real rPt = font.pointSizeF();
+
+  for (int i = 0; i < 8; i++) {
+    QFontMetrics fm(font);
+    if (fm.horizontalAdvance(str) + 4 <= dxBox || font.pointSizeF() < rPt*0.7)
+      break;
+    font.setPointSizeF(font.pointSizeF() - 0.5);
+  }
+  if (font.pointSizeF() < rPt)
+    pw->setFont(font);
+
+  // Still too wide even shrunk: let it wrap, which is what Windows' static
+  // text does. "Atlas City Coloring:" in its 35 unit box is the one case.
+  QFontMetrics fmFinal(font);
+  QLabel *pl = qobject_cast<QLabel *>(pw);
+  if (pl != NULL && fmFinal.horizontalAdvance(str) + 4 > dxBox)
+    pl->setWordWrap(fTrue);
+}
+
+
 // Lay a transcribed dialog out. Widgets are positioned absolutely rather
 // than through a layout, which is the whole point -- the resource has
 // already decided where everything goes.
 static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
   int dxDlg, int dyDlg, QVector<RCBUILT> *prgbuilt)
 {
+  // Windows' own units: one horizontal unit is a quarter of the dialog
+  // font's average character width, one vertical an eighth of its line
+  // height. Keeping them exactly that keeps the resource's proportions.
+  //
+  // Two things were tried here and are wrong. Widening the units so the
+  // longest label fits nearly doubles the dialog: "Atlas City Coloring:"
+  // sits in a 35 unit box and demands a base of 19 against a natural 9.
+  // Shrinking the whole dialog font does nothing at all, because the base
+  // unit is derived from that same font, so the space available shrinks
+  // exactly as fast as the text in it.
+  //
+  // What does work is leaving the boxes where the resource put them and
+  // shrinking the text of just the control that overflows -- see
+  // RcFitTextQt() below. The layout stays Windows', and the strings that
+  // this font renders wider than MS Shell Dlg did simply come out a point
+  // or so smaller.
   QFontMetrics fm(pdlg->font());
   int dxBase = fm.averageCharWidth(), dyBase = fm.height();
   int i, iPass;
@@ -659,11 +704,14 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
         pw = new QRadioButton(str, pdlg);
         ((QRadioButton *)pw)->setAutoExclusive(fFalse);
         break;
-      case ctlLabel:
+      case ctlLabel: {
         // A static label renders "&" literally, so drop it -- the
-        // resource only uses it on controls that take focus.
-        pw = new QLabel(str.remove(QChar('&')), pdlg);
-        break;
+        // resource only uses it on controls that take focus. Wrapping
+        // matches Windows, whose static text wraps inside its rectangle.
+        QLabel *pl = new QLabel(str.remove(QChar('&')), pdlg);
+        pl->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        pw = pl;
+        break; }
       case ctlButton:
         pw = new QPushButton(str, pdlg);
         break;
@@ -691,28 +739,17 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
       (*prgbuilt)[i].pw = pw;
     }
 
-  // Widen the base unit until every label fits the space the resource
-  // allotted it, then lay the whole dialog out at that scale. Windows'
-  // formula uses the font's average character width, but a given string
-  // takes more of that average in one typeface than another -- this font
-  // needs noticeably more than the MS Shell Dlg the resource was drawn
-  // against, so at the nominal scale the longer labels clip. Growing the
-  // individual controls instead would break the alignment the resource
-  // spent its coordinates establishing; scaling the unit keeps every
-  // proportion intact and simply renders the same dialog larger.
-  for (i = 0; i < cctl; i++) {
-    CONST RCCTL *pctl = PctlBuiltQt(prgbuilt, i);
-    QWidget *pw = (*prgbuilt)[i].pw;
-    if (pw == NULL || pctl == NULL || pctl->dx <= 0)
-      continue;
-    if (pctl->nType != ctlCheck && pctl->nType != ctlLabel &&
-      pctl->nType != ctlButton && pctl->nType != ctlRadio)
-      continue;
-    int dxWant = pw->sizeHint().width();
-    if (dxWant > 0)
-      dxBase = Max(dxBase, (dxWant * 4 + pctl->dx - 1) / pctl->dx);
-  }
-
+  // Keep the base units Windows' own: one horizontal unit is a quarter of
+  // the font's average character width, one vertical an eighth of its line
+  // height. Widening them so the longest label fits was tried and is
+  // wrong -- "Atlas City Coloring:" sits in a 35 unit box and would have
+  // demanded a base of 19 against the natural 9, very nearly doubling the
+  // width of the whole dialog for one label. Windows just wraps that label
+  // onto two lines, which is what static text does there.
+  //
+  // So labels wrap, and any other text control that doesn't fit its box in
+  // this font grows on its own rather than dragging the dialog with it.
+  // The proportions then stay exactly the resource's.
   pdlg->setFixedSize(dxDlg * dxBase / 4, dyDlg * dyBase / 8);
   for (i = 0; i < cctl; i++) {
     CONST RCCTL *pctl = PctlBuiltQt(prgbuilt, i);
@@ -726,8 +763,20 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
     // shoves everything below it off the dialog. Qt sizes its own.
     if (pctl->nType == ctlCombo)
       dyCtl = pw->sizeHint().height();
+    int dxCtl = pctl->dx * dxBase / 4;
+    if (pctl->nType == ctlLabel || pctl->nType == ctlCheck ||
+      pctl->nType == ctlRadio || pctl->nType == ctlButton) {
+      // A checkbox or radio spends part of its width on the indicator.
+      int dxInd = (pctl->nType == ctlCheck || pctl->nType == ctlRadio) ?
+        pw->style()->pixelMetric(QStyle::PM_IndicatorWidth) + 6 : 0;
+      RcFitTextQt(pw, QString(pctl->szText).remove(QChar('&')),
+        dxCtl - dxInd);
+    }
+    QLabel *plWrap = qobject_cast<QLabel *>(pw);
+    if (plWrap != NULL && plWrap->wordWrap())
+      dyCtl = Max(dyCtl, plWrap->heightForWidth(dxCtl));
     pw->setGeometry(pctl->x * dxBase / 4, pctl->y * dyBase / 8,
-      pctl->dx * dxBase / 4, dyCtl);
+      dxCtl, dyCtl);
     if (pctl->nType == ctlIcon) {
       QPixmap pix = PixAstrologIconQt();
       if (!pix.isNull())
@@ -2959,29 +3008,25 @@ void ShowChartSettingsDialogQt()
 void ShowCommandLineDialogQt()
 {
   QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+
   dlg.setWindowTitle("Enter Command Line");
-  dlg.resize(500, 130);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  pouter->addWidget(new QLabel("Enter command switches below:"));
-  QLineEdit *peLine = new QLineEdit();
-  pouter->addWidget(peLine);
-  // Windows has this checkbox too (dxCo_e), and applies it before running
-  // the switches so a line can be tried with expressions off.
-  QCheckBox *pcbExp = new QCheckBox("Enable AstroExpression hooks");
-  pcbExp->setChecked(!us.fExpOff);
-  pouter->addWidget(pcbExp);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcBuildDialogQt(&dlg, rgctlCommand, cctlCommand, dxCommand, dyCommand,
+    &rgbuilt);
+  QLineEdit *peLine = (QLineEdit *)PwRcFindQt(rgbuilt, "deCo");
+  // Windows' dxCo_e, applied before running the switches so a line can be
+  // tried with expressions off. The box reads the inverse of the flag.
+  QCheckBox *pcbExp = (QCheckBox *)PwRcFindQt(rgbuilt, "dxCo_e");
+  if (pcbExp != NULL)
+    pcbExp->setChecked(!us.fExpOff);
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted || peLine->text().trimmed().isEmpty())
+  if (dlg.exec() != QDialog::Accepted || peLine == NULL ||
+    peLine->text().trimmed().isEmpty())
     return;
 
-  us.fExpOff = !pcbExp->isChecked();
+  if (pcbExp != NULL)
+    us.fExpOff = !pcbExp->isChecked();
   char szLine[cchSzMax];
   QByteArray ba = peLine->text().toLocal8Bit();
   strncpy(szLine, ba.constData(), cchSzMax-1);
