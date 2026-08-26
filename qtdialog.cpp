@@ -3527,7 +3527,8 @@ void ShowCalcDialogQt()
     {"dxSe_yt", -1, &us.fTruePos,     fFalse},
     {"dxSe_yv", -1, &us.fTopoPos,     fFalse},
     {"dxSe_A",   3, &us.fAspect3D,    fFalse},
-    {"dxSe_Ap", -1, &us.fAspectLat,   fFalse} };
+    {"dxSe_Ap", -1, &us.fAspectLat,   fFalse},
+    {"dxSe_c",   3, &us.fHouse3D,     fFalse} };
   QDialog dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
