@@ -3380,6 +3380,9 @@ void FinalizeProgram(flag fSkip)
 #ifdef X11
   DeallocatePIf(gs.szDisplay);
 #endif
+#ifdef QT
+  FinalizeQt();
+#endif
 #ifdef WINANY
   DeallocatePIf(wi.bmpWin.rgb);
 #endif

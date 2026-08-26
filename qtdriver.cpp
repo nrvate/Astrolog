@@ -497,6 +497,23 @@ void PrintWarningQt(CONST char *sz, flag fError)
 {
   if (FNoPopupQt())
     return;
+  // Before the window exists, say it on stderr instead. main() parses
+  // astrolog.as and then the command line (astrolog.cpp, the
+  // FProcessSwitchFile and FProcessSwitches calls) well before Action()
+  // reaches InteractQt() and BeginQt() constructs the QApplication, so a
+  // warning raised from either -- a chart file that isn't there, a switch
+  // given too few parameters -- would build a QWidget with no application
+  // alive, and Qt answers that with qFatal() and a core dump. Windows has
+  // no equivalent problem: MessageBox(NULL, ...) needs neither a window
+  // nor an application object. The two formats are the ones the console
+  // builds use in PrintWarning()/PrintError() (general.cpp).
+  if (QApplication::instance() == NULL) {
+    if (fError)
+      fprintf(stderr, "%s: %s\n", szAppName, sz);
+    else
+      fprintf(stderr, "%s\n", sz);
+    return;
+  }
   // Stop an animation first, or the same box comes back every frame.
   // Negating gs.nAnim is what Windows does, and is what the animation
   // timer's own guard checks, so the timer stops on its next tick.
@@ -3862,6 +3879,31 @@ public:
     return QProxyStyle::styleHint(hint, popt, pw, pret);
   }
 };
+
+
+// Free what this backend allocated through Astrolog's own allocator. The
+// counterpart of the #ifdef X11 and #ifdef WINANY blocks beside the call
+// site in FinalizeProgram() (astrolog.cpp), and called from the same
+// place. Only the -WM menu names come through PAllocate() here; the rest
+// of what the Qt driver owns is QObjects, which go with the QApplication.
+//
+// Without this a settings file carrying -WM lines ends every session with
+// upstream's own leak check firing -- "Number of memory allocations not
+// freed before exiting: 13" for thirteen renamed macros -- which reads
+// like a fault in the chart engine rather than an unfreed menu label.
+void FinalizeQt(void)
+{
+  int i;
+
+  for (i = 0; i < cMacro; i++) {
+    DeallocatePIf(rgszMacroQt[i]);
+    rgszMacroQt[i] = NULL;
+  }
+  for (i = 0; i < cMSub; i++) {
+    DeallocatePIf(rgszMSubQt[i]);
+    rgszMSubQt[i] = NULL;
+  }
+}
 
 
 void BeginQt()

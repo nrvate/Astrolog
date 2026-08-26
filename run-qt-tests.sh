@@ -9,5 +9,40 @@
 # Exits non-zero if any check fails, so it can gate a commit or CI.
 cd "$(dirname "$0")" || exit 1
 [ -x ./astrolog-qt-test ] || { echo "build it first: make -f Makefile.qt.test"; exit 1; }
-exec env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
-  ./astrolog-qt-test "$@"
+
+QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
+
+$QTENV ./astrolog-qt-test "$@"
+rc=$?
+[ $rc -eq 0 ] || exit $rc
+
+# Startup diagnostics, which the in-process suite cannot reach.
+#
+# main() parses astrolog.as and then the command line long before Action()
+# gets to InteractQt() and BeginQt() constructs the QApplication, so a
+# warning raised from either used to build a QWidget with no application
+# alive -- which Qt answers with qFatal() and a core dump. A mistyped file
+# name on the command line took the process down instead of printing
+# "File not found". TestBadInputQt() cannot catch this: it runs inside the
+# program, after the QApplication exists, so it exercises the wrong path.
+# These have to be separate processes.
+echo
+echo "== Startup diagnostics =="
+fail=0
+for arg in "-i /nonexistent-astrolog-test-file.as" "-t"; do
+  out=`$QTENV ./astrolog-qt-test $arg 2>&1`
+  rc=$?
+  case $out in
+    *"Must construct a QApplication"*)
+      echo "  FAIL: '$arg' built a QWidget before the QApplication"; fail=1 ;;
+    *)
+      if [ $rc -ge 128 ]; then
+        echo "  FAIL: '$arg' died on signal `expr $rc - 128`"; fail=1
+      else
+        echo "  ok: '$arg' reported and exited $rc"
+      fi ;;
+  esac
+done
+[ $fail -eq 0 ] || { echo "FAIL: startup diagnostics"; exit 1; }
+echo "  a startup warning reaches stderr instead of aborting"
+exit 0

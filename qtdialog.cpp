@@ -338,6 +338,26 @@ static void PrepareDialogQt(QDialog *pdlg)
 }
 
 
+// Put initial focus where Windows puts it. Seven of its dialogs call
+// SetFocus() from WM_INITDIALOG (the list is in wdialog.cpp: DlgCommand,
+// DlgInfo, DlgDefault, DlgTransit, DlgProgress, DlgList, DlgGraphics)
+// rather than let the dialog manager leave it on the first tab stop,
+// which in every one of them is the OK button. Qt's default is the same
+// as Win32's, so it needs the same override -- without it the Enter
+// Command Line box opens with OK focused and you have to Tab into the
+// field before typing, where on Windows you just type.
+//
+// Note Windows does not select the existing text when it does this (its
+// handlers return fFalse, so no EM_SETSEL follows), and neither does
+// this: the caret lands at the head of the field, which is where
+// PrepareDialogQt() has already put it.
+static void FocusDialogQt(QWidget *pw)
+{
+  if (pw != NULL)
+    pw->setFocus();
+}
+
+
 // Format a real the way Windows' SetEditR() does, so the orb and
 // influence grids show the same number of decimals Windows does rather
 // than QString::number()'s full precision.
@@ -1532,6 +1552,7 @@ void ShowGraphicsSettingsDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindQt(rgbuilt, "deGr_Xw_x"));
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -1814,6 +1835,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindQt(rgbuilt, "dcInMon"));
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2239,6 +2261,7 @@ void ShowChartListDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindQt(rgbuilt, "dbLi_sl"));
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2604,6 +2627,7 @@ void ShowDefaultInfoDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindQt(rgbuilt, "dcDeDst"));
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2721,6 +2745,7 @@ void ShowTransitDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindQt(rgbuilt, "dcTrMon"));
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -2899,6 +2924,7 @@ void ShowProgressDialogQt()
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindQt(rgbuilt, "dcPrMon"));
   if (dlg.exec() != QDialog::Accepted)
     return;
 
@@ -3124,6 +3150,7 @@ void ShowCommandLineDialogQt()
     pcbExp->setChecked(!us.fExpOff);
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindQt(rgbuilt, "deCo"));
   if (dlg.exec() != QDialog::Accepted || peLine == NULL ||
     peLine->text().trimmed().isEmpty())
     return;
