@@ -550,1417 +550,6 @@ static void HeadersQt(QGridLayout *pgrid, int cCol, int cField,
 }
 
 
-// Load a chart file chosen via a standard file picker, exactly as Windows'
-// DlgOpenChart does via the stock Windows file dialog -- no custom dialog
-// is needed here either, just FInputData() doing the actual work.
-
-void ShowOpenChartDialogQt()
-{
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Chart", QString(),
-    "Astrolog Chart Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  if (!FInputData(ba.constData())) {
-    QMessageBox::warning(gi.qwind, szAppName, "Could not read that chart file.");
-    return;
-  }
-  RecastAndRedrawQt();
-}
-
-
-// Save the current chart to a file chosen via a standard file picker, the
-// same way Windows' DlgSaveChart does for its "Save Chart" command.
-
-void ShowSaveChartDialogQt()
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart", QString(),
-    "Astrolog Chart Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  is.szFileOut = SzClone((char *)ba.constData());
-  us.nWriteFormat = 0;
-  if (!FOutputData())
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
-}
-
-
-// Save Chart Positions, equivalent to Windows' "Save Chart Positions"
-// (part of DlgSaveChart, cmdSavePositions): same mechanism as Save Chart
-// above, but us.nWriteFormat is set to the *character* '0' rather than
-// left at its default (integer) 0 -- FOutputData() branches on this to
-// write calculated positions instead of full chart info.
-
-void ShowSaveChartPositionsDialogQt()
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart Positions",
-    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  us.nWriteFormat = '0';
-  if (!FOutputData())
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
-}
-
-
-// Save Program Settings, equivalent to Windows' "Save Program Settings"
-// (cmdSaveSettings): writes the current configuration as an Astrolog
-// switch file, the same format loaded back via -i0 or by placing it at
-// DEFAULT_INFOFILE.
-
-void ShowSaveSettingsDialogQt()
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Program Settings",
-    DEFAULT_INFOFILE, "Astrolog Chart Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputSettings())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that settings file.");
-}
-
-
-// Save Chart Exchange (AAF) / Quick*Chart / iCalendar formats, equivalent
-// to Windows' cmdSaveAAF/cmdSaveQuick/cmdSaveCalendar (part of
-// DlgSaveChart) -- each just a file picker into one already-portable
-// FOutputXxxFile() function.
-
-void ShowSaveAAFDialogQt()
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind,
-    "Save Chart Exchange Format", QString(),
-    "Astrological Exchange Files (*.aaf);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputAAFFile())
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that AAF file.");
-}
-
-void ShowSaveQuickDialogQt()
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind,
-    "Save Chart Quick*Chart Format", QString(),
-    "Quick*Chart Files (*.qck);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputQuickFile())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that Quick*Chart file.");
-}
-
-void ShowSaveCalendarDialogQt()
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind,
-    "Save Chart iCalendar Format", QString(),
-    "iCalendar Files (*.ics);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputCalendarFile())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that iCalendar file.");
-}
-
-
-// Open Chart Background / Open World Map, equivalent to Windows'
-// DlgOpenChart when wi.nDlgChart <= 0: load a bitmap into gi.bmpBack or
-// gi.bmpWorld instead of loading a chart. Open Chart Background also
-// turns on gi.fBmp (Use Detailed World Map's underlying flag) the same
-// way Windows' cmdOpenBackground handler does; Open World Map doesn't.
-
-void ShowOpenBackgroundDialogQt()
-{
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Background",
-    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  if (!FLoadBmp(ba.constData(), &gi.bmpBack, fFalse)) {
-    QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
-    return;
-  }
-  gi.fBmp = fTrue;
-  RedrawQt();
-}
-
-void ShowOpenWorldDialogQt()
-{
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open World Map",
-    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  if (!FLoadBmp(ba.constData(), &gi.bmpWorld, fFalse)) {
-    QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
-    return;
-  }
-  RedrawQt();
-}
-
-
-// Export the current chart as a graphics file, equivalent to what Windows'
-// DlgSaveChart does for its Export Chart Bitmap/Metafile/PostScript/SVG/
-// Wireframe commands. All five formats fall out of one shared mechanism:
-// FActionX() (xscreen.cpp) -- the same function invoked for -Xb/-Xp/etc
-// command line switches -- derives gi.fFile from whether gs.ft is set, and
-// take its "write to gi.szFileOut instead of drawing to screen" path when
-// it is, so setting gs.ft and calling it is really all that's needed.
-// FActionX() only restores gs.xWin/yWin/nScale for some formats (not
-// bitmap) since normally it's only ever called once per process, right
-// before that process exits -- here it can be called many times in one
-// running session, so save/restore all three unconditionally regardless,
-// and re-render the on-screen chart afterward.
-
-static flag FExportChartQt(CONST char *szFile, int ft)
-{
-  int xWinSave = gs.xWin, yWinSave = gs.yWin, nScaleSave = gs.nScale;
-  flag fGraphicsSave = us.fGraphics;
-  flag f;
-
-  FCloneSz(szFile, &is.szFileOut);
-  FCloneSz(szFile, &gi.szFileOut);
-  gs.ft = ft;
-  us.fGraphics = fTrue;
-  f = FActionX();
-  gs.ft = ftNone;
-  gi.fFile = fFalse;
-  gs.xWin = xWinSave; gs.yWin = yWinSave; gs.nScale = nScaleSave;
-  us.fGraphics = fGraphicsSave;
-  RedrawQt();
-  return f;
-}
-
-static void ShowExportGraphicsDialogQt(CONST char *szTitle,
-  CONST char *szFilter, int ft)
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, QString(),
-    QString(szFilter) + ";;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  if (!FExportChartQt(ba.constData(), ft))
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
-}
-
-void ShowExportBitmapDialogQt()
-{
-  gs.chBmpMode = 'B';
-  ShowExportGraphicsDialogQt("Export Chart Bitmap",
-    "Windows Bitmaps (*.bmp)", ftBmp);
-}
-
-void ShowExportMetafileDialogQt()
-{
-  ShowExportGraphicsDialogQt("Export Chart Metafile",
-    "Windows Metafiles (*.wmf)", ftWmf);
-}
-
-void ShowExportPSDialogQt()
-{
-  ShowExportGraphicsDialogQt("Export Chart PostScript",
-    "PostScript Files (*.eps *.ps)", ftPS);
-}
-
-void ShowExportSVGDialogQt()
-{
-  ShowExportGraphicsDialogQt("Export Chart SVG",
-    "Scalable Vector Graphics (*.svg)", ftSVG);
-}
-
-void ShowExportWireDialogQt()
-{
-  ShowExportGraphicsDialogQt("Export Chart Wireframe",
-    "Daedalus Wireframes (*.dw)", ftWire);
-}
-
-
-// Copy Vector Format (Metafile/PostScript/SVG/Wireframe), equivalent to
-// Windows' cmdCopyPicture/cmdCopyPS/cmdCopySVG/cmdCopyWire: the same
-// FExportChartQt() mechanism as the Export Vector Format menu above, to a
-// scratch file that gets put on the clipboard and deleted instead of one
-// the user chose to keep. PostScript/SVG/Wireframe are text formats, so
-// plain text on the clipboard is directly useful (e.g. pasting the SVG
-// source into a text editor); SVG also gets image/svg+xml set alongside,
-// for apps that can paste it as an actual image. Metafile (a binary
-// Windows format) has no broadly supported Linux clipboard equivalent, so
-// it only gets the image/x-wmf MIME type, useful to the few apps that
-// recognize it and otherwise harmless.
-
-static void CopyChartVectorQt(int ft, CONST char *szMime)
-{
-  char szTemp[] = "/tmp/astrolog-qt-copy-XXXXXX";
-  int fd = mkstemp(szTemp);
-  if (fd < 0)
-    return;
-  close(fd);
-
-  if (FExportChartQt(szTemp, ft)) {
-    QFile file(szTemp);
-    if (file.open(QIODevice::ReadOnly)) {
-      QByteArray ba = file.readAll();
-      file.close();
-      QMimeData *pmime = new QMimeData();
-      if (ft != ftWmf)
-        pmime->setText(QString::fromUtf8(ba));
-      if (szMime != NULL)
-        pmime->setData(szMime, ba);
-      QApplication::clipboard()->setMimeData(pmime);
-    }
-  }
-  unlink(szTemp);
-}
-
-void CopyChartMetafileQt() { CopyChartVectorQt(ftWmf, "image/x-wmf"); }
-void CopyChartPSQt()       { CopyChartVectorQt(ftPS, NULL); }
-void CopyChartSVGQt()      { CopyChartVectorQt(ftSVG, "image/svg+xml"); }
-void CopyChartWireQt()     { CopyChartVectorQt(ftWire, NULL); }
-
-
-// Export the chart's text output (the same plain-text listing the -o0
-// command line switch writes) to a file, equivalent to Windows' Export
-// Chart Text Output. Text-mode chart output is a wholly separate rendering
-// path from the graphics one (Action(), astrolog.cpp: "if (us.fGraphics)
-// FActionX(); else PrintChart();"), driven by is.S/is.szFileScreen instead
-// of gi.qpaint -- so unlike the graphics exports above, this doesn't (and
-// can't) go through RedrawQt()/DrawChartX(). Calling Action() directly
-// reuses that path exactly as the -o0/-os command line switches do; since
-// the destination is a file, not the screen, this doesn't need the
-// still-undesigned on-screen text display QT is missing (see the Help
-// menu's list actions).
-
-void ShowExportTextDialogQt()
-{
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Export Chart Text",
-    QString(), "Text Files (*.txt);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  flag fGraphicsSave = us.fGraphics;
-  FCloneSz(ba.constData(), &is.szFileScreen);
-  us.fGraphics = fFalse;
-  Action();
-  us.fGraphics = fGraphicsSave;
-  FCloneSz(NULL, &is.szFileScreen);
-}
-
-
-// File settings, equivalent to Windows' DlgFile. A curated subset of
-// Windows' full field list -- skipped: "Export Bitmaps from Window
-// Content" (wi.fBmpWindow), the antialias detail level (wi.nAntialias --
-// note the antialias toggle itself, gs.fAntialias, is already exposed via
-// Graphics > Chart Effects > Antialias Lines, just not this intensity
-// knob), and "Don't Show Popup Messages" (wi.fNoPopup) -- all three live
-// in the Win32-only WI struct.
-
-void ShowFileSettingsDialogQt()
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("File Settings");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  int i;
-
-  QCheckBox *pcbSmartSave = new QCheckBox(
-    "Export Text and Print in Intuitive Manner");
-  QCheckBox *pcbTextHTML = new QCheckBox("Export Text Files in HTML Format");
-  QCheckBox *pcbBmpPNG = new QCheckBox("Export Bitmaps in PNG Format");
-  QCheckBox *pcbPSComplete = new QCheckBox(
-    "Export Encapsulated PostScript Files");
-  QCheckBox *pcbWriteOld = new QCheckBox(
-    "Save Chart Info Files in Old Style Format");
-  // Windows' dxFi_YXf: a master switch for the six Graphics Settings font
-  // pickers. Turning it off zeroes them and remembers the set in
-  // gi.nFontPrev; turning it back on restores that set.
-  QCheckBox *pcbFontAll = new QCheckBox("Use Real System Fonts in Graphic Charts");
-  pcbFontAll->setChecked(gs.nFontAll > 0);
-  QCheckBox *pcbNoBackDraw = new QCheckBox("Don't Show Background Bitmap");
-  pcbSmartSave->setChecked(us.fSmartSave != 0);
-  pcbTextHTML->setChecked(us.fTextHTML != 0);
-  pcbBmpPNG->setChecked(gs.chBmpMode == 'P');
-  pcbPSComplete->setChecked(!gs.fPSComplete);
-  pcbWriteOld->setChecked(us.fWriteOld != 0);
-  pcbNoBackDraw->setChecked(!gs.fBackDraw);
-  for (QCheckBox *pcb : { pcbSmartSave, pcbTextHTML, pcbBmpPNG,
-    pcbPSComplete, pcbWriteOld, pcbFontAll })
-    pouter->addWidget(pcb);
-
-  QFormLayout *pformThick = new QFormLayout();
-  QLineEdit *peThickAdjust = new QLineEdit(QString::number(gs.nThickAdjust));
-  pformThick->addRow("Line Thickness Adjustment:", peThickAdjust);
-  pouter->addLayout(pformThick);
-
-  // Windows puts this checkbox directly above the transparency it relates
-  // to, at the head of the dialog's right hand column.
-  pouter->addWidget(pcbNoBackDraw);
-
-  QFormLayout *pform = new QFormLayout();
-  // Editable with 25/50/75/100 offered, as Windows' dcFi_XI1 does.
-  QComboBox *pcbBackPct = new QComboBox();
-  pcbBackPct->setEditable(true);
-  for (i = 25; i <= 100; i += 25)
-    pcbBackPct->addItem(QString::number(i));
-  pcbBackPct->setEditText(SzFormatRQt(gs.rBackPct, -3));
-  QLineEdit *peADB = new QLineEdit(FSzSet(us.szADB) ? us.szADB : "");
-  QLineEdit *pePaperX = new QLineEdit(SzLength(gs.xInch));
-  QLineEdit *pePaperY = new QLineEdit(SzLength(gs.yInch));
-  pform->addRow("Background Transparency Percent:", pcbBackPct);
-  pform->addRow("Astrodatabank File Load Filter:", peADB);
-  pform->addRow("Horizontal PostScript Paper Size:", pePaperX);
-  pform->addRow("Vertical PostScript Paper Size:", pePaperY);
-  pouter->addLayout(pform);
-
-  QGroupBox *pgroupOrient = new QGroupBox("PostScript Paper Orientation");
-  QVBoxLayout *pgrouplayout = new QVBoxLayout(pgroupOrient);
-  QButtonGroup *pgroup = new QButtonGroup(&dlg);
-  CONST char *rgszOrient[3] =
-    { "Portrait", "Landscape", "Based on Chart Dimensions" };
-  int nOrientCur = gs.nOrient == 0 ? 2 : (gs.nOrient > 0 ? 0 : 1);
-  for (i = 0; i < 3; i++) {
-    QRadioButton *prb = new QRadioButton(rgszOrient[i]);
-    prb->setChecked(i == nOrientCur);
-    pgroup->addButton(prb, i);
-    pgrouplayout->addWidget(prb);
-  }
-  pouter->addWidget(pgroupOrient);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  int nThickAdjust = peThickAdjust->text().toInt();
-  QByteArray baBackPct = pcbBackPct->currentText().toLocal8Bit();
-  real rBackPct = RFromSz(baBackPct.constData());
-  if (!FValidBackPct(rBackPct)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "The background transparency percent is invalid.");
-    return;
-  }
-
-  us.fSmartSave = pcbSmartSave->isChecked();
-  us.fTextHTML = pcbTextHTML->isChecked();
-  if (pcbBmpPNG->isChecked())
-    gs.chBmpMode = 'P';
-  else if (gs.chBmpMode == 'P')
-    gs.chBmpMode = 'B';
-  gs.fPSComplete = !pcbPSComplete->isChecked();
-  us.fWriteOld = pcbWriteOld->isChecked();
-  gs.nFontAll = pcbFontAll->isChecked() * gi.nFontPrev;
-  gs.nFontTxt = gs.nFontAll / 0x100000;
-  gs.nFontSig = (gs.nFontAll / 0x10000) % 0x10;
-  gs.nFontHou = (gs.nFontAll / 0x1000) % 0x10;
-  gs.nFontObj = (gs.nFontAll / 0x100) % 0x10;
-  gs.nFontAsp = (gs.nFontAll / 0x10) % 0x10;
-  gs.nFontNak = gs.nFontAll % 0x10;
-  gs.nThickAdjust = nThickAdjust;
-  gs.fBackDraw = !pcbNoBackDraw->isChecked();
-  gs.rBackPct = rBackPct;
-  QByteArray baADB = peADB->text().toLocal8Bit();
-  FCloneSz(baADB.constData(), &us.szADB);
-  QByteArray baPaperX = pePaperX->text().toLocal8Bit();
-  gs.xInch = RParseSz(baPaperX.constData(), pmLength);
-  QByteArray baPaperY = pePaperY->text().toLocal8Bit();
-  gs.yInch = RParseSz(baPaperY.constData(), pmLength);
-  int nOrientSel = pgroup->checkedId();
-  gs.nOrient = nOrientSel == 2 ? 0 : (nOrientSel == 0 ? 1 : -1);
-  RedrawQt();
-}
-
-
-// Label lists for the Graphics Settings dialog below. Windows has these in
-// wdialog.cpp, which isn't compiled into the QT build, so they're
-// duplicated here rather than shared -- keep in sync with the originals if
-// upstream ever adds a wheel decoration / fill / city coloring mode.
-
-static CONST char *rgszCityColorQt[6] = {"None", "Region", "Region+State",
-  "Generic Zone", "Current Zone", "Rainbow"};
-static CONST char *rgszWheelCornerQt[7] = {"None", "Spider Web",
-  "Moire Pattern", "Rays 1", "Rays 1,2", "Rays 12345", "Hearts"};
-// Windows lists wheel corner types in this order rather than array order,
-// so the combo shows the same sequence a Windows user would expect. The
-// value stored is still the index into rgszWheelCornerQt[].
-static CONST int rgiWheelCornerOrderQt[7] = {0, 1, 2, 6, 3, 4, 5};
-// Mirrors rgszFontDisp[] in wdialog.cpp, which is Windows-only. These are
-// the names shown to the user; rgszFontName[] (xdata.cpp, portable) holds
-// the family names actually looked up when drawing.
-static CONST char *rgszFontDispQt[cFont] = {szAppNameCore, "Wingdings",
-  "Astro", "Enigma", "Hamburg", "Astronomicon", "StarFont",
-  "StarFont Serif", "Hank's Nakshatra", "Arial", "Courier New", "Consolas",
-  "Lucida", "Cascadia"};
-
-static CONST char *rgszDecaFillQt[8] = {"None", "Standard", "Rainbow RGB",
-  "Rainbow RYB", "Ruler Sign", "Ruler House", "7 Rays Sign", "7 Rays House"};
-
-
-// Graphics settings, equivalent to Windows' DlgGraphics. Note several of
-// these overlap menu items already built (Character Scale submenu, Map
-// Orientation submenu, Modify Chart) -- that's deliberate and matches
-// Windows: the menu items step values coarsely, while this dialog is where
-// an exact value gets typed in. As elsewhere, no attempt is made to resync
-// those menus' checkmarks afterward if a value set here doesn't line up
-// with one of their preset choices (Windows' own DlgGraphics leans on a
-// full RedoMenu() for that, which this port deliberately doesn't have).
-//
-// Skipped, as Win32-only (it lives in the WI struct): "Don't
-// Automatically Redraw Screen" (wi.fNoUpdate).
-
-void ShowGraphicsSettingsDialogQt()
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Graphics Settings");
-  dlg.resize(460, 640);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QScrollArea *pscroll = new QScrollArea(&dlg);
-  QWidget *pinner = new QWidget();
-  QVBoxLayout *pin = new QVBoxLayout(pinner);
-  int i;
-
-  QFormLayout *pformSize = new QFormLayout();
-  QLineEdit *peWinX = new QLineEdit(QString::number(gs.xWin));
-  QLineEdit *peWinY = new QLineEdit(QString::number(gs.yWin));
-  pformSize->addRow("Horizontal Chart Size:", peWinX);
-  pformSize->addRow("Vertical Chart Size:", peWinY);
-  pin->addLayout(pformSize);
-  QCheckBox *pcbKeepSquare =
-    new QCheckBox("Ensure Square Charts Remain Square");
-  pcbKeepSquare->setChecked(gs.fKeepSquare != 0);
-  pin->addWidget(pcbKeepSquare);
-
-  // Windows offers both as editable dropdowns stepping 100..MAXSCALE by
-  // 50, except character scale which only accepts whole multiples of 100
-  // (FValidScale vs FValidScaleText). addItem() before setEditText().
-  QFormLayout *pformScale = new QFormLayout();
-  QComboBox *pcbScale = new QComboBox();
-  QComboBox *pcbScaleText = new QComboBox();
-  pcbScale->setEditable(true);
-  pcbScaleText->setEditable(true);
-  for (i = 100; i <= MAXSCALE; i += 50) {
-    if (i % 100 == 0)
-      pcbScale->addItem(QString::number(i));
-    pcbScaleText->addItem(QString::number(i));
-  }
-  pcbScale->setEditText(QString::number(gs.nScale));
-  pcbScaleText->setEditText(QString::number(gs.nScaleText));
-  pformScale->addRow("Character Scale:", pcbScale);
-  pformScale->addRow("Text Scale:", pcbScaleText);
-  pin->addLayout(pformScale);
-  QCheckBox *pcbAutoScale =
-    new QCheckBox("Character Autoscale to Fit Window");
-  pcbAutoScale->setChecked(gs.fAutoScale != 0);
-  pin->addWidget(pcbAutoScale);
-
-  QFormLayout *pformMisc = new QFormLayout();
-  QLineEdit *peGridCell = new QLineEdit(QString::number(gs.nGridCell));
-  QLineEdit *peSpace = new QLineEdit(QString::number(gs.cspace));
-  QLineEdit *peTrack = new QLineEdit(gs.objTrack >= 0 ?
-    szObjName[gs.objTrack] : "None");
-  QLineEdit *peZoom = new QLineEdit(SzFormatRQt(gs.rspace, -6));
-  pformMisc->addRow("Number of Cells in Graphics Aspect Grid:", peGridCell);
-  pformMisc->addRow("Solar System Orbit Trail Length:", peSpace);
-  pformMisc->addRow("Telescope Focuses on This Object:", peTrack);
-  pformMisc->addRow("Telescope and Orbit Zoom Scale:", peZoom);
-  pin->addLayout(pformMisc);
-
-  QGroupBox *pgbMap = new QGroupBox("Map and Globe");
-  QVBoxLayout *pvMap = new QVBoxLayout(pgbMap);
-  QFormLayout *pformMap = new QFormLayout();
-  QLineEdit *peRot = new QLineEdit(SzFormatRQt(gs.rRot, -3));
-  QLineEdit *peTilt = new QLineEdit(SzFormatRQt(gs.rTilt, -3));
-  pformMap->addRow("Horizontal Map Degree Rotation:", peRot);
-  pformMap->addRow("Vertical Globe Degree Tilt:", peTilt);
-  pvMap->addLayout(pformMap);
-  QCheckBox *pcbSouth =
-    new QCheckBox("Globe Halves Focus on South Hemisphere");
-  QCheckBox *pcbMollweide =
-    new QCheckBox("World Map in Mollweide Projection");
-  pcbSouth->setChecked(gs.fSouth != 0);
-  pcbMollweide->setChecked(gs.fMollweide != 0);
-  pvMap->addWidget(pcbSouth);
-  pvMap->addWidget(pcbMollweide);
-  pin->addWidget(pgbMap);
-
-  // Windows' Fonts group: one combo per glyph category, each offering only
-  // the fonts that category allows (rgszFontAllow[] in xdata.cpp -- not
-  // every font has glyphs for every category).
-  QGroupBox *pgbFont = new QGroupBox("Fonts");
-  QFormLayout *pformFont = new QFormLayout(pgbFont);
-  CONST char *rgszFontLabel[6] = { "Text:", "Signs:", "Houses:", "Objects:",
-    "Aspects:", "Nakshat.:" };
-  int *rgpnFont[6] = { &gs.nFontTxt, &gs.nFontSig, &gs.nFontHou,
-    &gs.nFontObj, &gs.nFontAsp, &gs.nFontNak };
-  QComboBox *rgpcbFont[6];
-  QVector<int> rgrgiFont[6];
-  for (i = 0; i < 6; i++) {
-    rgpcbFont[i] = new QComboBox();
-    for (int j = 0; j < cFont; j++) {
-      if (rgszFontAllow[i][j] < '0')
-        continue;
-      rgrgiFont[i].append(j);
-      rgpcbFont[i]->addItem(rgszFontDispQt[j]);
-    }
-    rgpcbFont[i]->setCurrentIndex(Max(rgrgiFont[i].indexOf(*rgpnFont[i]), 0));
-    pformFont->addRow(rgszFontLabel[i], rgpcbFont[i]);
-  }
-  pin->addWidget(pgbFont);
-
-  QGroupBox *pgbAnim = new QGroupBox("Animation");
-  QVBoxLayout *pvAnim = new QVBoxLayout(pgbAnim);
-  // Windows edits wi.nTimerDelay here; the Qt build keeps the equivalent
-  // in qtdriver.cpp, since wi is Win32-only.
-  QFormLayout *pformAnim = new QFormLayout();
-  QLineEdit *peAnimDelay = new QLineEdit(QString::number(NAnimDelayQt()));
-  pformAnim->addRow("Update Delay in Milliseconds:", peAnimDelay);
-  pvAnim->addLayout(pformAnim);
-  QCheckBox *pcbAnimMap = new QCheckBox("Animate Map Instead of Time");
-  pcbAnimMap->setChecked(gs.fAnimMap != 0);
-  pvAnim->addWidget(pcbAnimMap);
-  pin->addWidget(pgbAnim);
-
-  QGroupBox *pgbStar = new QGroupBox("Full Star List");
-  QVBoxLayout *pvStar = new QVBoxLayout(pgbStar);
-  QCheckBox *pcbBigDots = new QCheckBox("Show Big Dots");
-  QCheckBox *pcbStarName = new QCheckBox("Label with Name");
-  pcbBigDots->setChecked(FOdd(gs.nAllStar));
-  pcbStarName->setChecked((gs.nAllStar & 2) > 0);
-  pvStar->addWidget(pcbBigDots);
-  pvStar->addWidget(pcbStarName);
-  pin->addWidget(pgbStar);
-
-  QGroupBox *pgbRot = new QGroupBox("Wheel Chart Rotation");
-  QVBoxLayout *pvRot = new QVBoxLayout(pgbRot);
-  QButtonGroup *pgroupRot = new QButtonGroup(&dlg);
-  CONST char *rgszRot[3] =
-    { "None", "Object at Left Edge", "Object at Top Edge" };
-  int nRotCur = gs.objLeft == 0 ? 0 : (gs.objLeft > 0 ? 1 : 2);
-  for (i = 0; i < 3; i++) {
-    QRadioButton *prb = new QRadioButton(rgszRot[i]);
-    prb->setChecked(i == nRotCur);
-    pgroupRot->addButton(prb, i);
-    pvRot->addWidget(prb);
-  }
-  QFormLayout *pformRot = new QFormLayout();
-  QLineEdit *peObjLeft = new QLineEdit(
-    szObjName[gs.objLeft == 0 ? oSun : NAbs(gs.objLeft)-1]);
-  pformRot->addRow("Use This Planet:", peObjLeft);
-  pvRot->addLayout(pformRot);
-  pin->addWidget(pgbRot);
-
-  QGroupBox *pgbCorner = new QGroupBox("Wheel Corners");
-  QFormLayout *pformCorner = new QFormLayout(pgbCorner);
-  QComboBox *pcbCorner = new QComboBox();
-  for (i = 0; i < 7; i++)
-    pcbCorner->addItem(rgszWheelCornerQt[rgiWheelCornerOrderQt[i]]);
-  for (i = 0; i < 7; i++)
-    if (rgiWheelCornerOrderQt[i] == gs.nDecaType) {
-      pcbCorner->setCurrentIndex(i);
-      break;
-    }
-  QLineEdit *peDecaSize = new QLineEdit(QString::number(gs.nDecaSize));
-  pformCorner->addRow("Type:", pcbCorner);
-  pformCorner->addRow("Coverage:", peDecaSize);
-  pin->addWidget(pgbCorner);
-
-  QFormLayout *pformFill = new QFormLayout();
-  QComboBox *pcbFill = new QComboBox();
-  for (i = 0; i < 8; i++)
-    pcbFill->addItem(rgszDecaFillQt[i]);
-  pcbFill->setCurrentIndex(gs.nDecaFill);
-  pformFill->addRow("Wheel Fill:", pcbFill);
-  QComboBox *pcbCity = new QComboBox();
-  for (i = 0; i < 6; i++)
-    pcbCity->addItem(rgszCityColorQt[i]);
-  pcbCity->setCurrentIndex(gs.fLabelCity ? gs.nLabelCity : 0);
-  pformFill->addRow("Atlas City Coloring:", pcbCity);
-  pin->addLayout(pformFill);
-
-  // Six glyph-variant radio groups, all the same shape.
-  CONST char *rgszGlyphTitle[6] = { "Capricorn Glyph", "Uranus Glyph",
-    "Pluto Glyph", "Lilith Glyph", "Vertex Glyph", "Eris Glyph" };
-  CONST int rgcGlyph[6] = { 2, 2, 3, 2, 2, 2 };
-  CONST char *rgszGlyphOpt[6][3] = {
-    { "American", "European", NULL },
-    { "Herschel's", "Astronomy", NULL },
-    { "Astrology", "Astronomy", "Esoteric" },
-    { "Classic", "Standard", NULL },
-    { "Classic", "Standard", NULL },
-    { "Form One", "Form Two", NULL } };
-  int *rgpnGlyph[6] = { &gs.nGlyphCap, &gs.nGlyphUra, &gs.nGlyphPlu,
-    &gs.nGlyphLil, &gs.nGlyphVer, &gs.nGlyphEri };
-  QButtonGroup *rgpgroupGlyph[6];
-  int j;
-  for (i = 0; i < 6; i++) {
-    QGroupBox *pgb = new QGroupBox(rgszGlyphTitle[i]);
-    QVBoxLayout *pv = new QVBoxLayout(pgb);
-    rgpgroupGlyph[i] = new QButtonGroup(&dlg);
-    for (j = 0; j < rgcGlyph[i]; j++) {
-      QRadioButton *prb = new QRadioButton(rgszGlyphOpt[i][j]);
-      prb->setChecked(j == *rgpnGlyph[i] - 1);
-      rgpgroupGlyph[i]->addButton(prb, j);
-      pv->addWidget(prb);
-    }
-    pin->addWidget(pgb);
-  }
-
-  pscroll->setWidget(pinner);
-  pscroll->setWidgetResizable(true);
-  pouter->addWidget(pscroll);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  int nWinX = peWinX->text().toInt();
-  int nWinY = peWinY->text().toInt();
-  int nScale = pcbScale->currentText().toInt();
-  int nScaleText = pcbScaleText->currentText().toInt();
-  int nGridCell = peGridCell->text().toInt();
-  int cspace = peSpace->text().toInt();
-  int nDecaSize = peDecaSize->text().toInt();
-  int nAnimDelay = peAnimDelay->text().toInt();
-  QByteArray ba;
-  ba = peRot->text().toLocal8Bit();  real rRot = RFromSz(ba.constData());
-  ba = peTilt->text().toLocal8Bit(); real rTilt = RFromSz(ba.constData());
-  ba = peZoom->text().toLocal8Bit(); real rZoom = RFromSz(ba.constData());
-  QByteArray baTrack = peTrack->text().toLocal8Bit();
-  int objTrack = NParseSz(baTrack.constData(), pmObject);
-  QByteArray baObjLeft = peObjLeft->text().toLocal8Bit();
-  int objLeft = NParseSz(baObjLeft.constData(), pmObject);
-  if (!FValidGraphX(nWinX) || !FValidGraphY(nWinY) ||
-    !FValidScale(nScale) || !FValidScaleText(nScaleText) ||
-    !FValidGrid(nGridCell) || !FValidDecaSize(nDecaSize) ||
-    !FValidTimer(nAnimDelay) ||
-    !FValidRotation(rRot) || !FValidTilt(rTilt) || !FValidZoom(rZoom) ||
-    !FValidTelescope(objTrack) || !FItem(objLeft)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more graphics settings fields are invalid.");
-    return;
-  }
-
-  flag fResize = (gs.xWin != nWinX || gs.yWin != nWinY);
-  gs.xWin = nWinX; gs.yWin = nWinY;
-  gs.fKeepSquare = pcbKeepSquare->isChecked();
-  gs.nScale = nScale; gs.nScaleText = nScaleText;
-  gs.fAutoScale = pcbAutoScale->isChecked();
-  gs.nGridCell = nGridCell;
-  // Changing the orbit trail length invalidates any trail already
-  // accumulated at the old length, same as Windows does here.
-  if (gs.cspace != cspace) {
-    gs.cspace = cspace;
-    if (gi.rgspace != NULL) {
-      DeallocateP(gi.rgspace);
-      gi.rgspace = NULL;
-    }
-  }
-  gs.objTrack = objTrack;
-  gs.rspace = rZoom;
-  gs.rRot = rRot; gs.rTilt = rTilt;
-  gs.fSouth = pcbSouth->isChecked();
-  gs.fMollweide = pcbMollweide->isChecked();
-  gs.fAnimMap = pcbAnimMap->isChecked();
-  SetAnimDelayQt(nAnimDelay);
-  gs.nAllStar = (pcbStarName->isChecked() << 1) | pcbBigDots->isChecked();
-  int nRotSel = pgroupRot->checkedId();
-  gs.objLeft = nRotSel == 0 ? 0 :
-    (nRotSel == 1 ? objLeft+1 : -objLeft-1);
-  gs.nDecaType = rgiWheelCornerOrderQt[pcbCorner->currentIndex()];
-  gs.nDecaSize = nDecaSize;
-  gs.nDecaFill = pcbFill->currentIndex();
-  // Windows' DlgGraphics writes gs.fLabelAsp here, but that field is -XA
-  // ("draw aspect glyphs on lines", the Graphics / Chart Effects / Show
-  // Glyphs on Aspect Lines toggle) and has nothing to do with city
-  // coloring -- the -XL switch that owns gs.nLabelCity toggles
-  // gs.fLabelCity (see xscreen.cpp). Treating that as an upstream typo
-  // and using gs.fLabelCity, so this combo doesn't silently turn aspect
-  // glyphs on and off.
-  i = pcbCity->currentIndex();
-  if (i <= 0)
-    gs.fLabelCity = fFalse;
-  else {
-    gs.fLabelCity = fTrue;
-    gs.nLabelCity = i;
-  }
-  for (i = 0; i < 6; i++)
-    *rgpnGlyph[i] = rgpgroupGlyph[i]->checkedId() + 1;
-  for (i = 0; i < 6; i++)
-    *rgpnFont[i] = rgrgiFont[i].value(rgpcbFont[i]->currentIndex(), 0);
-  // Windows keeps the six packed into gs.nFontAll as well, which is what
-  // File Settings' "Use Real System Fonts" toggles off and back on.
-  gs.nFontAll = gs.nFontTxt*0x100000 + gs.nFontSig*0x10000 +
-    gs.nFontHou*0x1000 + gs.nFontObj*0x100 + gs.nFontAsp*0x10 + gs.nFontNak;
-  if (gs.nFontAll > 0)
-    gi.nFontPrev = gs.nFontAll;
-
-  us.fGraphics = fTrue;
-  if (fResize && gs.xWin > 0 && gs.yWin > 0)
-    gi.qwind->resize(gs.xWin, gs.yWin);
-  RedrawQt();
-}
-
-
-// Chart info entry, equivalent to Windows' DlgInfo. This is the dialog that
-// lets someone actually create a chart interactively instead of only ever
-// loading one from disk.
-
-static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle(szTitle);
-  QFormLayout *playout = new QFormLayout(&dlg);
-
-  // Every field is shown in the same human readable form Windows' DlgInfo
-  // uses (SetEditMDYT/SetEditSZOA), not as a raw number: month as a name,
-  // time as "9:54pm"/"21:54", zone as "8W", and longitude/latitude as
-  // "122W19"/"47N36". Astrolog's own parsers accept exactly these forms
-  // back (that's what the NParseSz/RParseSz calls below do), so this is
-  // purely a display change -- no extra conversion needed either way.
-  char sz[cchSzMax];
-  QLineEdit *peName = new QLineEdit(FSzSet(pci->nam) ? pci->nam : "");
-  QLineEdit *peLoc  = new QLineEdit(FSzSet(pci->loc) ? pci->loc : "");
-  sprintf(sz, "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
-  QComboBox *peMon  = NewComboQt(sz, RgstrMonthQt());
-  QComboBox *peDay  = NewComboQt(QString::number(pci->day), RgstrDayQt());
-  QComboBox *peYea  = NewComboQt(QString::number(pci->yea), RgstrYearQt());
-  QComboBox *peTim  = NewComboQt(SzTim(pci->tim), RgstrTimeQt());
-  // Daylight saving has sentinel values (see astrolog.h's dstAuto) rather
-  // than being a plain offset. Windows resolves dstAuto to its concrete
-  // Yes/No via DstReal() before display, which silently discards the
-  // user's "work it out for me" choice on the next OK -- show it as
-  // "Autodetect" instead so it survives a round trip.
-  QComboBox *peDst  = NewComboQt(pci->dst == 0.0 ? "No" :
-    (pci->dst == 1.0 ? "Yes" :
-    (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))), RgstrDstQt());
-  sprintf(sz, "%s", SzZone(pci->zon));
-  QComboBox *peZon  = NewComboQt(sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
-  // SzLocation() returns longitude and latitude in one string split at
-  // is.ichLocSplit. Force plain ASCII while formatting: otherwise it uses
-  // a Latin-1/IBM degree byte that isn't valid UTF-8 (see the Charts
-  // dialog for where that matters), and these fields want the compact
-  // "122W19" form anyway.
-  int nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
-  sprintf(sz, "%s", SzLocation(pci->lon, pci->lat));
-  us.fAnsiChar = nSavChar;
-  sz[is.ichLocSplit] = chNull;
-  QComboBox *peLon  = NewComboQt(&sz[0], RgstrLonQt());
-  QComboBox *peLat  = NewComboQt(&sz[is.ichLocSplit+1], RgstrLatQt());
-  // Long names/locations otherwise show their tail end, not their start.
-  peName->setCursorPosition(0);
-  peLoc->setCursorPosition(0);
-
-  playout->addRow("Month:", peMon);
-  playout->addRow("Day:", peDay);
-  playout->addRow("Year:", peYea);
-  playout->addRow("Time:", peTim);
-  playout->addRow("Daylight Saving:", peDst);
-  playout->addRow("Time Zone:", peZon);
-  playout->addRow("Longitude:", peLon);
-  playout->addRow("Latitude:", peLat);
-  playout->addRow("Name:", peName);
-  playout->addRow("Location:", peLoc);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  playout->addRow(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  CI ci = *pci;
-  QByteArray ba;
-  ba = peMon->currentText().toLocal8Bit(); ci.mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->currentText().toLocal8Bit(); ci.day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->currentText().toLocal8Bit(); ci.yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->currentText().toLocal8Bit(); ci.tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->currentText().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->currentText().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
-  ba = peLon->currentText().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
-  ba = peLat->currentText().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
-
-  if (!FValidMon(ci.mon) || !FValidYea(ci.yea) ||
-    !FValidDay(ci.day, ci.mon, ci.yea) || !FValidTim(ci.tim) ||
-    !FValidDst(ci.dst) || !FValidZon(ci.zon) ||
-    !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more chart info fields are invalid.");
-    return;
-  }
-  ba = peName->text().toLocal8Bit(); ci.nam = SzClone((char *)ba.constData());
-  ba = peLoc->text().toLocal8Bit();  ci.loc = SzClone((char *)ba.constData());
-
-  *pci = ci;
-  RecastAndRedrawQt();
-}
-
-void ShowChartInfoDialogQt()
-{
-  ShowChartInfoForQt(&ciCore, "Chart Info");
-}
-
-void ShowChartInfo2DialogQt()
-{
-  ShowChartInfoForQt(&ciTwin, "Chart #2 Info");
-}
-
-
-// Load a chart file into one of the six chart slots (rgpci/rgpcp, where
-// slot 1 is the main chart and 2-6 are the extra rings a bi/tri/.../hexa
-// wheel draws), equivalent to Windows' DlgOpenChart when wi.nDlgChart > 1.
-// FInputData() always loads into ciCore, so for the extra slots the
-// current chart is saved, the file is read, the result copied into the
-// target slot, and ciCore put back -- same dance Windows does.
-
-static flag FOpenChartIntoQt(int iChart, CONST char *szFile)
-{
-  CI ciT = ciCore;
-
-  if (!FInputData(szFile)) {
-    ciCore = ciT;
-    return fFalse;
-  }
-  if (iChart <= 1)
-    cp1 = cp0;
-  else {
-    *rgpci[iChart] = ciCore;
-    *rgpcp[iChart] = cp0;
-    ciCore = ciT;
-  }
-  return fTrue;
-}
-
-static void ShowOpenChartIntoDialogQt(int iChart)
-{
-  QString qsTitle = iChart <= 1 ? QString("Open Chart") :
-    QString("Open Chart #%1").arg(iChart);
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, qsTitle, QString(),
-    "Astrolog Chart Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  if (!FOpenChartIntoQt(iChart, ba.constData())) {
-    QMessageBox::warning(gi.qwind, szAppName, "Could not read that chart file.");
-    return;
-  }
-  RecastAndRedrawQt();
-}
-
-void ShowOpenChart2DialogQt()
-{
-  ShowOpenChartIntoDialogQt(2);
-}
-
-
-// One chart's date/zone/location summary, as Windows formats it for the
-// Charts and Chart List dialogs. Those force us.fAnsiChar/us.fGraphics so
-// SzDate() and friends emit a real degree sign rather than the ASCII ':'
-// fallback; do the same, and additionally pin us.nCharset to Latin-1 so
-// the byte that comes back is predictable (ChDeg() would otherwise pick
-// the IBM codepage degree at 0xF8 depending on the user's -Ya setting).
-// That byte isn't valid UTF-8 either way, hence decoding as Latin-1.
-
-static QString SzChartDateLineQt(CONST CI *pci)
-{
-  char sz[cchSzMax];
-  int nSavChar = us.fAnsiChar, nSavSet = us.nCharset;
-  flag fSav = us.fGraphics;
-
-  us.fAnsiChar = 2; us.nCharset = ccLatin; us.fGraphics = fTrue;
-  int nDay = DayOfWeek(pci->mon, pci->day, pci->yea);
-  sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
-    SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
-    ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
-  us.fAnsiChar = nSavChar; us.nCharset = nSavSet; us.fGraphics = fSav;
-  return QString::fromLatin1(sz);
-}
-
-
-// The same chart's "name; location". Kept separate from the line above
-// because this is user entered text that really may be UTF-8, so it must
-// not be swept up in that function's Latin-1 decode.
-
-static QString SzChartNameLineQt(CONST CI *pci)
-{
-  char sz[cchSzMax];
-
-  sprintf(sz, "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
-    FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
-    FSzSet(pci->loc) ? pci->loc : "");
-  return QString::fromLocal8Bit(sz);
-}
-
-
-// The multi-chart manager, equivalent to Windows' DlgInfoAll ("Charts #3
-// Through #6" on the Info menu, though it covers all six): a summary line
-// per chart slot with buttons to load a file into it or edit its info,
-// plus how many of those slots the wheel actually draws and which of them
-// are progressed.
-
-void ShowChartsAllDialogQt()
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Charts #3 through #6");
-  dlg.resize(640, 400);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
-  QLabel *rgplabel[cRing+1];
-  int i;
-
-  auto RefreshRow = [&rgplabel](int iChart) {
-    CI *pci = rgpci[iChart];
-    QString qs = SzChartDateLineQt(pci);
-    QString qsName = SzChartNameLineQt(pci);
-    if (!qsName.isEmpty())
-      qs += "\n" + qsName;
-    rgplabel[iChart]->setText(qs);
-  };
-
-  for (i = 1; i <= cRing; i++) {
-    QPushButton *pbOpen = new QPushButton(i <= 1 ?
-      QString("Open Chart...") : QString("Open Chart #%1...").arg(i));
-    QPushButton *pbInfo = new QPushButton(i <= 1 ?
-      QString("Set Chart Info...") : QString("Set Chart #%1 Info...").arg(i));
-    rgplabel[i] = new QLabel();
-    rgplabel[i]->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    pgrid->addWidget(pbOpen, i-1, 0);
-    pgrid->addWidget(pbInfo, i-1, 1);
-    pgrid->addWidget(rgplabel[i], i-1, 2);
-    pgrid->setColumnStretch(2, 1);
-    RefreshRow(i);
-    int iChart = i;
-    QObject::connect(pbOpen, &QPushButton::clicked, &dlg,
-      [iChart, RefreshRow]() {
-        ShowOpenChartIntoDialogQt(iChart);
-        RefreshRow(iChart);
-      });
-    QObject::connect(pbInfo, &QPushButton::clicked, &dlg,
-      [iChart, RefreshRow]() {
-        QByteArray baTitle = (iChart <= 1 ? QString("Chart Info") :
-          QString("Chart #%1 Info").arg(iChart)).toLocal8Bit();
-        ShowChartInfoForQt(rgpci[iChart], baTitle.constData());
-        RefreshRow(iChart);
-      });
-  }
-  pouter->addLayout(pgrid);
-
-  QHBoxLayout *phbox = new QHBoxLayout();
-  QGroupBox *pgbWheel = new QGroupBox("Wheel Chart Is");
-  QVBoxLayout *pvWheel = new QVBoxLayout(pgbWheel);
-  QButtonGroup *pgroupWheel = new QButtonGroup(&dlg);
-  CONST char *rgszWheel[6] = { "1: Single Wheel", "2: Dual Wheel",
-    "3: Tri-Wheel", "4: Quad-Wheel", "5: Quin-Wheel", "6: Hexa-Wheel" };
-  // us.nRel is 0 for a single wheel and counts down (rcDual is -1, through
-  // rcHexaWheel at -5) for multi-wheels; the other rcXxx values are
-  // unrelated relationship chart types, which show here as a single wheel.
-  int nWheelCur = (us.nRel <= rcNone && us.nRel >= rcHexaWheel) ?
-    -us.nRel : 0;
-  for (i = 0; i < 6; i++) {
-    QRadioButton *prb = new QRadioButton(rgszWheel[i]);
-    prb->setChecked(i == nWheelCur);
-    pgroupWheel->addButton(prb, i);
-    pvWheel->addWidget(prb);
-  }
-  phbox->addWidget(pgbWheel);
-
-  QGroupBox *pgbProg = new QGroupBox("Progress");
-  QVBoxLayout *pvProg = new QVBoxLayout(pgbProg);
-  QCheckBox *rgpcbProg[cRing+1];
-  for (i = 2; i <= 5; i++) {
-    rgpcbProg[i] = new QCheckBox(QString::number(i));
-    rgpcbProg[i]->setChecked(rgfProg[i] != 0);
-    pvProg->addWidget(rgpcbProg[i]);
-  }
-  phbox->addWidget(pgbProg);
-  phbox->addStretch(1);
-  pouter->addLayout(phbox);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  for (i = 2; i <= 5; i++)
-    rgfProg[i] = rgpcbProg[i]->isChecked();
-  // SetRelQt() recasts and redraws, and syncs the Info menu's relationship
-  // radios for the values that have one. The multi-wheel counts past
-  // rcDual don't appear in that menu, so picking one leaves whichever
-  // relationship item was checked there showing stale -- same
-  // menu-vs-dialog staleness accepted elsewhere in this port.
-  SetRelQt(-pgroupWheel->checkedId());
-}
-
-
-// Chart list, equivalent to Windows' DlgList: the list of charts held in
-// memory (is.rgci / is.cci), which FInputData() populates automatically
-// when it reads a multi chart file (AAF, Quick*Chart, Astrodatabank, or
-// Solar Fire text -- see the FAppendCIList() calls in io.cpp), and which
-// Open Charts in Folder also fills. Charts can be sorted, filtered,
-// edited, deleted, loaded into any of the six chart slots, or copied back
-// out of one.
-
-// Case insensitive substring test matching Windows' filter loop, guarding
-// the NULL name/location that Windows' version would dereference.
-static flag FChartFieldMatchQt(CONST char *szField, CONST char *szFind)
-{
-  int j;
-
-  if (!FSzSet(szFind))
-    return fTrue;
-  if (!FSzSet(szField))
-    return fFalse;
-  for (j = 0; szField[j]; j++)
-    if (FEqSzSubI(szFind, &szField[j]))
-      return fTrue;
-  return fFalse;
-}
-
-void ShowChartListDialogQt()
-{
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Chart List");
-  dlg.resize(900, 560);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QHBoxLayout *phMain = new QHBoxLayout();
-  QListWidget *plist = new QListWidget();
-  QLabel *plabelSize = new QLabel();
-  int i;
-
-  phMain->addWidget(plist, 1);
-  QVBoxLayout *pvSide = new QVBoxLayout();
-  pvSide->addWidget(plabelSize);
-
-  QGroupBox *pgbSort = new QGroupBox("Sort By");
-  QVBoxLayout *pvSort = new QVBoxLayout(pgbSort);
-  QButtonGroup *pgroupSort = new QButtonGroup(&dlg);
-  CONST char *rgszSortQt[5] =
-    { "Date", "Longitude", "Latitude", "Name", "Location" };
-  for (i = 0; i < 5; i++) {
-    QRadioButton *prb = new QRadioButton(rgszSortQt[i]);
-    prb->setChecked(i == 0);
-    pgroupSort->addButton(prb, i);
-    pvSort->addWidget(prb);
-  }
-  pvSide->addWidget(pgbSort);
-  QPushButton *pbSort = new QPushButton("Sort List");
-  pvSide->addWidget(pbSort);
-
-  QGroupBox *pgbSlot = new QGroupBox("Chart Slot");
-  QVBoxLayout *pvSlot = new QVBoxLayout(pgbSlot);
-  QButtonGroup *pgroupSlot = new QButtonGroup(&dlg);
-  CONST char *rgszSlot[cRing] =
-    { "1st", "2nd", "3rd", "4th", "5th", "6th" };
-  for (i = 0; i < cRing; i++) {
-    QRadioButton *prb = new QRadioButton(rgszSlot[i]);
-    prb->setChecked(i == 0);
-    pgroupSlot->addButton(prb, i);
-    pvSlot->addWidget(prb);
-  }
-  pvSide->addWidget(pgbSlot);
-
-  QPushButton *pbSet = new QPushButton("Set To Slot");
-  QPushButton *pbCopy = new QPushButton("Copy From");
-  QPushButton *pbEdit = new QPushButton("Edit Chart...");
-  QPushButton *pbDel = new QPushButton("Delete Chart");
-  QPushButton *pbDelAll = new QPushButton("Delete All");
-  for (QPushButton *pb : { pbSet, pbCopy, pbEdit, pbDel, pbDelAll })
-    pvSide->addWidget(pb);
-  pvSide->addStretch(1);
-  phMain->addLayout(pvSide);
-  pouter->addLayout(phMain);
-
-  QHBoxLayout *phFilter = new QHBoxLayout();
-  QLineEdit *peName = new QLineEdit();
-  QLineEdit *peLoc = new QLineEdit();
-  QPushButton *pbFilter = new QPushButton("Filter");
-  QPushButton *pbUnfilter = new QPushButton("Remove Filter");
-  phFilter->addWidget(new QLabel("Name:"));
-  phFilter->addWidget(peName, 1);
-  phFilter->addWidget(new QLabel("Location:"));
-  phFilter->addWidget(peLoc, 1);
-  phFilter->addWidget(pbFilter);
-  phFilter->addWidget(pbUnfilter);
-  pouter->addLayout(phFilter);
-
-  // Whether the list is currently showing a filtered view. Windows only
-  // applies a filter permanently (FilterCIList, which actually discards
-  // the non matching charts) on OK with nothing selected; until then the
-  // filter is just a view over the full list.
-  flag fFilter = fFalse;
-
-  auto RefreshList = [&](flag fApplyFilter) {
-    QByteArray baName = peName->text().toLocal8Bit();
-    QByteArray baLoc = peLoc->text().toLocal8Bit();
-    int iSel = plist->currentRow(), cShown = 0, j;
-    plist->clear();
-    for (j = 0; j < is.cci; j++) {
-      CI *pci = &is.rgci[j];
-      if (fApplyFilter &&
-        (!FChartFieldMatchQt(pci->nam, baName.constData()) ||
-        !FChartFieldMatchQt(pci->loc, baLoc.constData())))
-        continue;
-      QString qs = SzChartDateLineQt(pci);
-      QString qsName = SzChartNameLineQt(pci);
-      if (!qsName.isEmpty())
-        qs += " " + qsName;
-      QListWidgetItem *pitem = new QListWidgetItem(qs, plist);
-      pitem->setData(Qt::UserRole, j);
-      cShown++;
-    }
-    if (cShown <= 0) {
-      QListWidgetItem *pitem =
-        new QListWidgetItem("(No charts in list)", plist);
-      pitem->setData(Qt::UserRole, -1);
-    }
-    plabelSize->setText(QString("List size: %1").arg(cShown));
-    if (iSel >= 0 && iSel < plist->count())
-      plist->setCurrentRow(iSel);
-  };
-
-  // Index into is.rgci of the selected row, or -1 for none/placeholder.
-  auto ISelected = [&plist]() -> int {
-    QListWidgetItem *pitem = plist->currentItem();
-    return pitem == NULL ? -1 : pitem->data(Qt::UserRole).toInt();
-  };
-
-  auto LoadIntoSlot = [&](int iList) {
-    CI ciT = is.rgci[iList];
-    int iSlot = pgroupSlot->checkedId() + 1;
-    is.iciCur = iList;
-    *rgpci[iSlot] = ciT;
-    if (iSlot == 1)
-      ciCore = ciT;
-  };
-
-  RefreshList(fFalse);
-
-  QObject::connect(pbSort, &QPushButton::clicked, &dlg, [&]() {
-    FSortCIList(pgroupSort->checkedId());
-    RefreshList(fFilter);
-  });
-  QObject::connect(pbDelAll, &QPushButton::clicked, &dlg, [&]() {
-    is.cci = 0;
-    RefreshList(fFilter);
-  });
-  QObject::connect(pbFilter, &QPushButton::clicked, &dlg, [&]() {
-    fFilter = fTrue;
-    RefreshList(fTrue);
-  });
-  QObject::connect(pbUnfilter, &QPushButton::clicked, &dlg, [&]() {
-    fFilter = fFalse;
-    peName->clear(); peLoc->clear();
-    RefreshList(fFalse);
-  });
-  QObject::connect(pbSet, &QPushButton::clicked, &dlg, [&]() {
-    int iList = ISelected();
-    if (iList < 0) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "Can't do operation because no chart in list is selected.");
-      return;
-    }
-    LoadIntoSlot(iList);
-    RecastAndRedrawQt();
-  });
-  QObject::connect(pbCopy, &QPushButton::clicked, &dlg, [&]() {
-    FAppendCIList(rgpci[pgroupSlot->checkedId() + 1]);
-    RefreshList(fFilter);
-    plist->setCurrentRow(plist->count() - 1);
-  });
-  QObject::connect(pbEdit, &QPushButton::clicked, &dlg, [&]() {
-    int iList = ISelected();
-    if (iList < 0) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "Can't do operation because no chart in list is selected.");
-      return;
-    }
-    QByteArray baTitle =
-      QString("Chart List #%1 Info").arg(iList + 1).toLocal8Bit();
-    ShowChartInfoForQt(&is.rgci[iList], baTitle.constData());
-    RefreshList(fFilter);
-  });
-  QObject::connect(pbDel, &QPushButton::clicked, &dlg, [&]() {
-    int iList = ISelected();
-    if (iList < 0) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "Can't do operation because no chart in list is selected.");
-      return;
-    }
-    CopyRgb((pbyte)&is.rgci[iList+1], (pbyte)&is.rgci[iList],
-      (is.cci-1-iList)*sizeof(CI));
-    is.cci--;
-    RefreshList(fFilter);
-  });
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  // Read the selection after exec() returns rather than from a second
-  // "accepted" handler: the dialog is still on the stack here, so its
-  // widgets are alive, and this doesn't depend on which order two slots
-  // connected to the same signal happen to run in.
-  int iOk = ISelected();
-  if (iOk >= 0) {
-    LoadIntoSlot(iOk);
-    RecastAndRedrawQt();
-  } else if (fFilter) {
-    // Windows only commits the filter (which actually drops the charts
-    // that don't match) when OK is pressed with nothing selected.
-    QByteArray baName = peName->text().toLocal8Bit();
-    QByteArray baLoc = peLoc->text().toLocal8Bit();
-    FilterCIList(baName.constData(), baLoc.constData());
-  }
-}
-
-
-// Load every chart file in a folder into the chart list, equivalent to
-// Windows' DlgOpenDir. Windows builds this on FindFirstFile inside a
-// WSETUP-only block; QDir does the same job portably. Astrolog's own
-// default data files are skipped, same as there, since a folder of charts
-// often sits alongside them.
-
-void ShowOpenChartDirDialogQt()
-{
-  QString qsDir = QFileDialog::getExistingDirectory(gi.qwind,
-    "Open Charts in Folder");
-  if (qsDir.isEmpty())
-    return;
-
-  QDir dir(qsDir);
-  // Both cases: QDir's name filters are case sensitive on Linux, and
-  // chart files copied from a Windows install are often ".AS".
-  QStringList qslFiles = dir.entryList(QStringList() << "*.as" << "*.AS",
-    QDir::Files, QDir::Name);
-  CI ciT = ciCore;
-  int cAdded = 0;
-
-  for (CONST QString &qsFile : qslFiles) {
-    if (qsFile.compare(DEFAULT_INFOFILE, Qt::CaseInsensitive) == 0 ||
-      qsFile.compare(DEFAULT_ATLASFILE, Qt::CaseInsensitive) == 0 ||
-      qsFile.compare(DEFAULT_TIMECHANGE, Qt::CaseInsensitive) == 0)
-      continue;
-    QByteArray ba = dir.filePath(qsFile).toLocal8Bit();
-    if (!FInputData(ba.constData()))
-      break;
-    if (!FAppendCIList(&ciCore))
-      break;
-    cAdded++;
-  }
-  ciCore = ciT;
-
-  if (cAdded <= 0) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "No chart files were loaded from that folder.");
-    return;
-  }
-  RecastAndRedrawQt();
-}
-
-
-// Save the chart list, equivalent to Windows' cmdSaveList: the same
-// FOutputData() path as the other save formats, with the chart list
-// write format selected.
-
-void ShowSaveChartListDialogQt()
-{
-  if (is.cci <= 0) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "There is no chart list in memory.");
-    return;
-  }
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart List",
-    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  us.nWriteFormat = 'l';
-  if (!FOutputData())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that chart list file.");
-}
-
-
-// Colors, equivalent to Windows' DlgColor: the 16 slot standard palette,
-// the four element colors, the seven ray colors, and the scribble pen and
-// wheel corner colors. Each is set by color name the same way SzColor()
-// and NParseSz() format and parse them elsewhere in Astrolog.
-
-// One color field: an editable combo listing the color names, since that
-// is what Windows offers. "nExtra" follows SetEditColor()'s convention --
-// 0 for plain colors only, higher values progressively admitting the
-// symbolic entries past them (Element, Ray, Star, Planet, Auto), which
-// only some fields accept.
-// Populate a color list that already exists, which is what the transcribed
-// dialogs need -- the resource placed the combo box, this just fills it.
-static void FillColorComboQt(QComboBox *pcb, KI ki, int nExtra)
-{
-  int i, iMax = cColor2 + (nExtra > 0)*(nExtra + 1);
-
-  if (pcb == NULL)
-    return;
-  pcb->setEditable(true);
-  // addItem() before setEditText(): see the Progressions dialog.
-  for (i = 0; i < iMax; i++)
-    pcb->addItem(szColor[i]);
-  pcb->setEditText(SzColor(ki));
-}
-
-static QComboBox *NewColorComboQt(KI ki, int nExtra)
-{
-  QComboBox *pcb = new QComboBox();
-
-  FillColorComboQt(pcb, ki, nExtra);
-  return pcb;
-}
-
-static QComboBox *AddColorComboQt(QFormLayout *pform, CONST char *szLabel,
-  KI ki, int nExtra)
-{
-  QComboBox *pcb = NewColorComboQt(ki, nExtra);
-
-  pform->addRow(QString(szLabel) + ":", pcb);
-  return pcb;
-}
-
-static int NColorFromComboQt(QComboBox *pcb);
-
-static int NColorFromComboQt(QComboBox *pcb)
-{
-  QByteArray ba = pcb->currentText().toLocal8Bit();
-  return NParseSz(ba.constData(), pmColor);
-}
-
 /*
 ******************************************************************************
 ** Dialogs transcribed from astrolog.rc.
@@ -1989,6 +578,10 @@ enum {
 // prefix and any trailing number: "deo07" arrives as szId "deo", nIdx 7.
 // A dialog then asks for what it needs by name -- PwRcFindQt("IDOK") -- or
 // by prefix and index -- PwRcFindIdxQt("deo", 7).
+// How many font choices dlgGraphics offers (text, signs, houses, objects,
+// aspects, nakshatras).
+#define cFontEntry 6
+
 typedef struct {
   int nType;
   CONST char *szText;
@@ -2864,14 +1457,14 @@ static void ErrorEnsureQt(QWidget *pw, int n, CONST char *szField)
 // One of the resource's radio groups: a run of drNN controls that are
 // mutually exclusive and together pick a value. They are built ungrouped
 // (see RcBuildDialogQt), so exclusivity is enforced here.
-static void RcLoadRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
-  int cRadio, int nValue)
+static void RcLoadRadioSzQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST char *szId, int nFirst, int cRadio, int nValue)
 {
   QButtonGroup *pgroup = NULL;
 
   for (int i = 0; i < cRadio; i++) {
     QRadioButton *prb =
-      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
+      (QRadioButton *)PwRcFindIdxQt(rgbuilt, szId, nFirst + i);
     if (prb == NULL)
       continue;
     if (pgroup == NULL)
@@ -2882,18 +1475,1346 @@ static void RcLoadRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
   }
 }
 
-static int NRcStoreRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
-  int cRadio, int nDefault)
+static int NRcStoreRadioSzQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST char *szId, int nFirst, int cRadio, int nDefault)
 {
   for (int i = 0; i < cRadio; i++) {
     QRadioButton *prb =
-      (QRadioButton *)PwRcFindIdxQt(rgbuilt, "dr", nFirst + i);
+      (QRadioButton *)PwRcFindIdxQt(rgbuilt, szId, nFirst + i);
     if (prb != NULL && prb->isChecked())
       return i;
   }
   return nDefault;
 }
 
+// Most groups are the plain "dr" run; Graphics Settings also has "drg".
+static void RcLoadRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
+  int cRadio, int nValue)
+{
+  RcLoadRadioSzQt(rgbuilt, "dr", nFirst, cRadio, nValue);
+}
+
+static int NRcStoreRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
+  int cRadio, int nDefault)
+{
+  return NRcStoreRadioSzQt(rgbuilt, "dr", nFirst, cRadio, nDefault);
+}
+
+
+// Load a chart file chosen via a standard file picker, exactly as Windows'
+// DlgOpenChart does via the stock Windows file dialog -- no custom dialog
+// is needed here either, just FInputData() doing the actual work.
+
+void ShowOpenChartDialogQt()
+{
+  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Chart", QString(),
+    "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FInputData(ba.constData())) {
+    QMessageBox::warning(gi.qwind, szAppName, "Could not read that chart file.");
+    return;
+  }
+  RecastAndRedrawQt();
+}
+
+
+// Save the current chart to a file chosen via a standard file picker, the
+// same way Windows' DlgSaveChart does for its "Save Chart" command.
+
+void ShowSaveChartDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart", QString(),
+    "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  is.szFileOut = SzClone((char *)ba.constData());
+  us.nWriteFormat = 0;
+  if (!FOutputData())
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
+}
+
+
+// Save Chart Positions, equivalent to Windows' "Save Chart Positions"
+// (part of DlgSaveChart, cmdSavePositions): same mechanism as Save Chart
+// above, but us.nWriteFormat is set to the *character* '0' rather than
+// left at its default (integer) 0 -- FOutputData() branches on this to
+// write calculated positions instead of full chart info.
+
+void ShowSaveChartPositionsDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart Positions",
+    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  us.nWriteFormat = '0';
+  if (!FOutputData())
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
+}
+
+
+// Save Program Settings, equivalent to Windows' "Save Program Settings"
+// (cmdSaveSettings): writes the current configuration as an Astrolog
+// switch file, the same format loaded back via -i0 or by placing it at
+// DEFAULT_INFOFILE.
+
+void ShowSaveSettingsDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Program Settings",
+    DEFAULT_INFOFILE, "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputSettings())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that settings file.");
+}
+
+
+// Save Chart Exchange (AAF) / Quick*Chart / iCalendar formats, equivalent
+// to Windows' cmdSaveAAF/cmdSaveQuick/cmdSaveCalendar (part of
+// DlgSaveChart) -- each just a file picker into one already-portable
+// FOutputXxxFile() function.
+
+void ShowSaveAAFDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind,
+    "Save Chart Exchange Format", QString(),
+    "Astrological Exchange Files (*.aaf);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputAAFFile())
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that AAF file.");
+}
+
+void ShowSaveQuickDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind,
+    "Save Chart Quick*Chart Format", QString(),
+    "Quick*Chart Files (*.qck);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputQuickFile())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that Quick*Chart file.");
+}
+
+void ShowSaveCalendarDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind,
+    "Save Chart iCalendar Format", QString(),
+    "iCalendar Files (*.ics);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  if (!FOutputCalendarFile())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that iCalendar file.");
+}
+
+
+// Open Chart Background / Open World Map, equivalent to Windows'
+// DlgOpenChart when wi.nDlgChart <= 0: load a bitmap into gi.bmpBack or
+// gi.bmpWorld instead of loading a chart. Open Chart Background also
+// turns on gi.fBmp (Use Detailed World Map's underlying flag) the same
+// way Windows' cmdOpenBackground handler does; Open World Map doesn't.
+
+void ShowOpenBackgroundDialogQt()
+{
+  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Background",
+    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FLoadBmp(ba.constData(), &gi.bmpBack, fFalse)) {
+    QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
+    return;
+  }
+  gi.fBmp = fTrue;
+  RedrawQt();
+}
+
+void ShowOpenWorldDialogQt()
+{
+  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open World Map",
+    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FLoadBmp(ba.constData(), &gi.bmpWorld, fFalse)) {
+    QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
+    return;
+  }
+  RedrawQt();
+}
+
+
+// Export the current chart as a graphics file, equivalent to what Windows'
+// DlgSaveChart does for its Export Chart Bitmap/Metafile/PostScript/SVG/
+// Wireframe commands. All five formats fall out of one shared mechanism:
+// FActionX() (xscreen.cpp) -- the same function invoked for -Xb/-Xp/etc
+// command line switches -- derives gi.fFile from whether gs.ft is set, and
+// take its "write to gi.szFileOut instead of drawing to screen" path when
+// it is, so setting gs.ft and calling it is really all that's needed.
+// FActionX() only restores gs.xWin/yWin/nScale for some formats (not
+// bitmap) since normally it's only ever called once per process, right
+// before that process exits -- here it can be called many times in one
+// running session, so save/restore all three unconditionally regardless,
+// and re-render the on-screen chart afterward.
+
+static flag FExportChartQt(CONST char *szFile, int ft)
+{
+  int xWinSave = gs.xWin, yWinSave = gs.yWin, nScaleSave = gs.nScale;
+  flag fGraphicsSave = us.fGraphics;
+  flag f;
+
+  FCloneSz(szFile, &is.szFileOut);
+  FCloneSz(szFile, &gi.szFileOut);
+  gs.ft = ft;
+  us.fGraphics = fTrue;
+  f = FActionX();
+  gs.ft = ftNone;
+  gi.fFile = fFalse;
+  gs.xWin = xWinSave; gs.yWin = yWinSave; gs.nScale = nScaleSave;
+  us.fGraphics = fGraphicsSave;
+  RedrawQt();
+  return f;
+}
+
+static void ShowExportGraphicsDialogQt(CONST char *szTitle,
+  CONST char *szFilter, int ft)
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, QString(),
+    QString(szFilter) + ";;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FExportChartQt(ba.constData(), ft))
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
+}
+
+void ShowExportBitmapDialogQt()
+{
+  gs.chBmpMode = 'B';
+  ShowExportGraphicsDialogQt("Export Chart Bitmap",
+    "Windows Bitmaps (*.bmp)", ftBmp);
+}
+
+void ShowExportMetafileDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart Metafile",
+    "Windows Metafiles (*.wmf)", ftWmf);
+}
+
+void ShowExportPSDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart PostScript",
+    "PostScript Files (*.eps *.ps)", ftPS);
+}
+
+void ShowExportSVGDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart SVG",
+    "Scalable Vector Graphics (*.svg)", ftSVG);
+}
+
+void ShowExportWireDialogQt()
+{
+  ShowExportGraphicsDialogQt("Export Chart Wireframe",
+    "Daedalus Wireframes (*.dw)", ftWire);
+}
+
+
+// Copy Vector Format (Metafile/PostScript/SVG/Wireframe), equivalent to
+// Windows' cmdCopyPicture/cmdCopyPS/cmdCopySVG/cmdCopyWire: the same
+// FExportChartQt() mechanism as the Export Vector Format menu above, to a
+// scratch file that gets put on the clipboard and deleted instead of one
+// the user chose to keep. PostScript/SVG/Wireframe are text formats, so
+// plain text on the clipboard is directly useful (e.g. pasting the SVG
+// source into a text editor); SVG also gets image/svg+xml set alongside,
+// for apps that can paste it as an actual image. Metafile (a binary
+// Windows format) has no broadly supported Linux clipboard equivalent, so
+// it only gets the image/x-wmf MIME type, useful to the few apps that
+// recognize it and otherwise harmless.
+
+static void CopyChartVectorQt(int ft, CONST char *szMime)
+{
+  char szTemp[] = "/tmp/astrolog-qt-copy-XXXXXX";
+  int fd = mkstemp(szTemp);
+  if (fd < 0)
+    return;
+  close(fd);
+
+  if (FExportChartQt(szTemp, ft)) {
+    QFile file(szTemp);
+    if (file.open(QIODevice::ReadOnly)) {
+      QByteArray ba = file.readAll();
+      file.close();
+      QMimeData *pmime = new QMimeData();
+      if (ft != ftWmf)
+        pmime->setText(QString::fromUtf8(ba));
+      if (szMime != NULL)
+        pmime->setData(szMime, ba);
+      QApplication::clipboard()->setMimeData(pmime);
+    }
+  }
+  unlink(szTemp);
+}
+
+void CopyChartMetafileQt() { CopyChartVectorQt(ftWmf, "image/x-wmf"); }
+void CopyChartPSQt()       { CopyChartVectorQt(ftPS, NULL); }
+void CopyChartSVGQt()      { CopyChartVectorQt(ftSVG, "image/svg+xml"); }
+void CopyChartWireQt()     { CopyChartVectorQt(ftWire, NULL); }
+
+
+// Export the chart's text output (the same plain-text listing the -o0
+// command line switch writes) to a file, equivalent to Windows' Export
+// Chart Text Output. Text-mode chart output is a wholly separate rendering
+// path from the graphics one (Action(), astrolog.cpp: "if (us.fGraphics)
+// FActionX(); else PrintChart();"), driven by is.S/is.szFileScreen instead
+// of gi.qpaint -- so unlike the graphics exports above, this doesn't (and
+// can't) go through RedrawQt()/DrawChartX(). Calling Action() directly
+// reuses that path exactly as the -o0/-os command line switches do; since
+// the destination is a file, not the screen, this doesn't need the
+// still-undesigned on-screen text display QT is missing (see the Help
+// menu's list actions).
+
+void ShowExportTextDialogQt()
+{
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Export Chart Text",
+    QString(), "Text Files (*.txt);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  flag fGraphicsSave = us.fGraphics;
+  FCloneSz(ba.constData(), &is.szFileScreen);
+  us.fGraphics = fFalse;
+  Action();
+  us.fGraphics = fGraphicsSave;
+  FCloneSz(NULL, &is.szFileScreen);
+}
+
+
+// File settings, equivalent to Windows' DlgFile. A curated subset of
+// Windows' full field list -- skipped: "Export Bitmaps from Window
+// Content" (wi.fBmpWindow), the antialias detail level (wi.nAntialias --
+// note the antialias toggle itself, gs.fAntialias, is already exposed via
+// Graphics > Chart Effects > Antialias Lines, just not this intensity
+// knob), and "Don't Show Popup Messages" (wi.fNoPopup) -- all three live
+// in the Win32-only WI struct.
+
+void ShowFileSettingsDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("File Settings");
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  int i;
+
+  QCheckBox *pcbSmartSave = new QCheckBox(
+    "Export Text and Print in Intuitive Manner");
+  QCheckBox *pcbTextHTML = new QCheckBox("Export Text Files in HTML Format");
+  QCheckBox *pcbBmpPNG = new QCheckBox("Export Bitmaps in PNG Format");
+  QCheckBox *pcbPSComplete = new QCheckBox(
+    "Export Encapsulated PostScript Files");
+  QCheckBox *pcbWriteOld = new QCheckBox(
+    "Save Chart Info Files in Old Style Format");
+  // Windows' dxFi_YXf: a master switch for the six Graphics Settings font
+  // pickers. Turning it off zeroes them and remembers the set in
+  // gi.nFontPrev; turning it back on restores that set.
+  QCheckBox *pcbFontAll = new QCheckBox("Use Real System Fonts in Graphic Charts");
+  pcbFontAll->setChecked(gs.nFontAll > 0);
+  QCheckBox *pcbNoBackDraw = new QCheckBox("Don't Show Background Bitmap");
+  pcbSmartSave->setChecked(us.fSmartSave != 0);
+  pcbTextHTML->setChecked(us.fTextHTML != 0);
+  pcbBmpPNG->setChecked(gs.chBmpMode == 'P');
+  pcbPSComplete->setChecked(!gs.fPSComplete);
+  pcbWriteOld->setChecked(us.fWriteOld != 0);
+  pcbNoBackDraw->setChecked(!gs.fBackDraw);
+  for (QCheckBox *pcb : { pcbSmartSave, pcbTextHTML, pcbBmpPNG,
+    pcbPSComplete, pcbWriteOld, pcbFontAll })
+    pouter->addWidget(pcb);
+
+  QFormLayout *pformThick = new QFormLayout();
+  QLineEdit *peThickAdjust = new QLineEdit(QString::number(gs.nThickAdjust));
+  pformThick->addRow("Line Thickness Adjustment:", peThickAdjust);
+  pouter->addLayout(pformThick);
+
+  // Windows puts this checkbox directly above the transparency it relates
+  // to, at the head of the dialog's right hand column.
+  pouter->addWidget(pcbNoBackDraw);
+
+  QFormLayout *pform = new QFormLayout();
+  // Editable with 25/50/75/100 offered, as Windows' dcFi_XI1 does.
+  QComboBox *pcbBackPct = new QComboBox();
+  pcbBackPct->setEditable(true);
+  for (i = 25; i <= 100; i += 25)
+    pcbBackPct->addItem(QString::number(i));
+  pcbBackPct->setEditText(SzFormatRQt(gs.rBackPct, -3));
+  QLineEdit *peADB = new QLineEdit(FSzSet(us.szADB) ? us.szADB : "");
+  QLineEdit *pePaperX = new QLineEdit(SzLength(gs.xInch));
+  QLineEdit *pePaperY = new QLineEdit(SzLength(gs.yInch));
+  pform->addRow("Background Transparency Percent:", pcbBackPct);
+  pform->addRow("Astrodatabank File Load Filter:", peADB);
+  pform->addRow("Horizontal PostScript Paper Size:", pePaperX);
+  pform->addRow("Vertical PostScript Paper Size:", pePaperY);
+  pouter->addLayout(pform);
+
+  QGroupBox *pgroupOrient = new QGroupBox("PostScript Paper Orientation");
+  QVBoxLayout *pgrouplayout = new QVBoxLayout(pgroupOrient);
+  QButtonGroup *pgroup = new QButtonGroup(&dlg);
+  CONST char *rgszOrient[3] =
+    { "Portrait", "Landscape", "Based on Chart Dimensions" };
+  int nOrientCur = gs.nOrient == 0 ? 2 : (gs.nOrient > 0 ? 0 : 1);
+  for (i = 0; i < 3; i++) {
+    QRadioButton *prb = new QRadioButton(rgszOrient[i]);
+    prb->setChecked(i == nOrientCur);
+    pgroup->addButton(prb, i);
+    pgrouplayout->addWidget(prb);
+  }
+  pouter->addWidget(pgroupOrient);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  int nThickAdjust = peThickAdjust->text().toInt();
+  QByteArray baBackPct = pcbBackPct->currentText().toLocal8Bit();
+  real rBackPct = RFromSz(baBackPct.constData());
+  if (!FValidBackPct(rBackPct)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "The background transparency percent is invalid.");
+    return;
+  }
+
+  us.fSmartSave = pcbSmartSave->isChecked();
+  us.fTextHTML = pcbTextHTML->isChecked();
+  if (pcbBmpPNG->isChecked())
+    gs.chBmpMode = 'P';
+  else if (gs.chBmpMode == 'P')
+    gs.chBmpMode = 'B';
+  gs.fPSComplete = !pcbPSComplete->isChecked();
+  us.fWriteOld = pcbWriteOld->isChecked();
+  gs.nFontAll = pcbFontAll->isChecked() * gi.nFontPrev;
+  gs.nFontTxt = gs.nFontAll / 0x100000;
+  gs.nFontSig = (gs.nFontAll / 0x10000) % 0x10;
+  gs.nFontHou = (gs.nFontAll / 0x1000) % 0x10;
+  gs.nFontObj = (gs.nFontAll / 0x100) % 0x10;
+  gs.nFontAsp = (gs.nFontAll / 0x10) % 0x10;
+  gs.nFontNak = gs.nFontAll % 0x10;
+  gs.nThickAdjust = nThickAdjust;
+  gs.fBackDraw = !pcbNoBackDraw->isChecked();
+  gs.rBackPct = rBackPct;
+  QByteArray baADB = peADB->text().toLocal8Bit();
+  FCloneSz(baADB.constData(), &us.szADB);
+  QByteArray baPaperX = pePaperX->text().toLocal8Bit();
+  gs.xInch = RParseSz(baPaperX.constData(), pmLength);
+  QByteArray baPaperY = pePaperY->text().toLocal8Bit();
+  gs.yInch = RParseSz(baPaperY.constData(), pmLength);
+  int nOrientSel = pgroup->checkedId();
+  gs.nOrient = nOrientSel == 2 ? 0 : (nOrientSel == 0 ? 1 : -1);
+  RedrawQt();
+}
+
+
+// Label lists for the Graphics Settings dialog below. Windows has these in
+// wdialog.cpp, which isn't compiled into the QT build, so they're
+// duplicated here rather than shared -- keep in sync with the originals if
+// upstream ever adds a wheel decoration / fill / city coloring mode.
+
+static CONST char *rgszCityColorQt[6] = {"None", "Region", "Region+State",
+  "Generic Zone", "Current Zone", "Rainbow"};
+static CONST char *rgszWheelCornerQt[7] = {"None", "Spider Web",
+  "Moire Pattern", "Rays 1", "Rays 1,2", "Rays 12345", "Hearts"};
+// Windows lists wheel corner types in this order rather than array order,
+// so the combo shows the same sequence a Windows user would expect. The
+// value stored is still the index into rgszWheelCornerQt[].
+static CONST int rgiWheelCornerOrderQt[7] = {0, 1, 2, 6, 3, 4, 5};
+// Mirrors rgszFontDisp[] in wdialog.cpp, which is Windows-only. These are
+// the names shown to the user; rgszFontName[] (xdata.cpp, portable) holds
+// the family names actually looked up when drawing.
+static CONST char *rgszFontDispQt[cFont] = {szAppNameCore, "Wingdings",
+  "Astro", "Enigma", "Hamburg", "Astronomicon", "StarFont",
+  "StarFont Serif", "Hank's Nakshatra", "Arial", "Courier New", "Consolas",
+  "Lucida", "Cascadia"};
+
+static CONST char *rgszDecaFillQt[8] = {"None", "Standard", "Rainbow RGB",
+  "Rainbow RYB", "Ruler Sign", "Ruler House", "7 Rays Sign", "7 Rays House"};
+
+
+// Graphics settings, equivalent to Windows' DlgGraphics. Note several of
+// these overlap menu items already built (Character Scale submenu, Map
+// Orientation submenu, Modify Chart) -- that's deliberate and matches
+// Windows: the menu items step values coarsely, while this dialog is where
+// an exact value gets typed in. As elsewhere, no attempt is made to resync
+// those menus' checkmarks afterward if a value set here doesn't line up
+// with one of their preset choices (Windows' own DlgGraphics leans on a
+// full RedoMenu() for that, which this port deliberately doesn't have).
+//
+// Skipped, as Win32-only (it lives in the WI struct): "Don't
+// Automatically Redraw Screen" (wi.fNoUpdate).
+
+// Graphics Settings, transcribed from dlgGraphics. The largest of them:
+// six font lists, six glyph variant radio groups on their own "drg" run,
+// and two checkboxes that are bits of one value rather than flags.
+
+void ShowGraphicsSettingsDialogQt()
+{
+  CONST RCFLAG rgflag[] = {
+    {"dxGr_XQ", -1, &gs.fKeepSquare, fFalse},
+    {"dxGr_XQ",  0, &gs.fAutoScale,  fFalse},
+    {"dxGr_XP",  0, &gs.fSouth,      fFalse},
+    {"dxGr_XW",  0, &gs.fMollweide,  fFalse},
+    {"dxGr_XN", -1, &gs.fAnimMap,    fFalse} };
+  // Each glyph choice is a run on the "drg" numbering: Capricorn and
+  // Uranus have two variants, Pluto three, then Lilith, Vertex and Eris
+  // two each. The stored value is one based.
+  struct { int nFirst, cRadio; int *pn; } rgglyph[] = {
+    { 1, 2, &gs.nGlyphCap}, { 3, 2, &gs.nGlyphUra},
+    { 5, 3, &gs.nGlyphPlu}, { 8, 2, &gs.nGlyphLil},
+    {10, 2, &gs.nGlyphVer}, {12, 2, &gs.nGlyphEri} };
+  CONST int cglyph = (int)(sizeof(rgglyph)/sizeof(rgglyph[0]));
+  int *rgpnFont[cFontEntry] = {&gs.nFontTxt, &gs.nFontSig, &gs.nFontHou,
+    &gs.nFontObj, &gs.nFontAsp, &gs.nFontNak};
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  QComboBox *rgpcbFont[cFontEntry];
+  char sz[cchSzMax];
+  int i, j;
+
+  dlg.setWindowTitle("Graphics Settings");
+  RcBuildDialogQt(&dlg, rgctlGraphics, cctlGraphics, dxGraphics, dyGraphics,
+    &rgbuilt);
+  RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+
+  // Windows' "do not automatically update screen".
+  QCheckBox *pcbNoUpd = (QCheckBox *)PwRcFindQt(rgbuilt, "dxGr_Wn");
+  if (pcbNoUpd != NULL)
+    pcbNoUpd->setChecked(FNoUpdateQt());
+
+  // gs.nAllStar is a pair of bits, not two flags.
+  QCheckBox *pcbStar1 = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxGr_XU", 1);
+  QCheckBox *pcbStar2 = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxGr_XU", 2);
+  if (pcbStar1 != NULL)
+    pcbStar1->setChecked(FOdd(gs.nAllStar));
+  if (pcbStar2 != NULL)
+    pcbStar2->setChecked((gs.nAllStar & 2) != 0);
+
+  QLineEdit *peX = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_Xw_x");
+  QLineEdit *peY = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_Xw_y");
+  QLineEdit *peGrid = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_YXg");
+  QLineEdit *peSpace = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_YXj");
+  QLineEdit *peTrack = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_XZ");
+  QLineEdit *peAU = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_YXS");
+  QLineEdit *peRot = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_XW");
+  QLineEdit *peTilt = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_XG");
+  QLineEdit *peDelay = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_WN");
+  QLineEdit *peLeft = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deGr_X", 1);
+  QLineEdit *peDeca = (QLineEdit *)PwRcFindQt(rgbuilt, "deGr_YXv");
+  if (peX != NULL)     peX->setText(QString::number(gs.xWin));
+  if (peY != NULL)     peY->setText(QString::number(gs.yWin));
+  if (peGrid != NULL)  peGrid->setText(QString::number(gs.nGridCell));
+  if (peSpace != NULL) peSpace->setText(QString::number(gs.cspace));
+  if (peTrack != NULL) peTrack->setText(gs.objTrack >= 0 ?
+    szObjName[gs.objTrack] : "None");
+  if (peAU != NULL)    peAU->setText(SzFormatRQt(gs.rspace, -6));
+  if (peRot != NULL)   peRot->setText(SzFormatRQt(gs.rRot, -3));
+  if (peTilt != NULL)  peTilt->setText(SzFormatRQt(gs.rTilt, -3));
+  if (peDelay != NULL) peDelay->setText(QString::number(NAnimDelayQt()));
+  if (peLeft != NULL)  peLeft->setText(szObjName[gs.objLeft == 0 ? oSun :
+    NAbs(gs.objLeft)-1]);
+  if (peDeca != NULL)  peDeca->setText(QString::number(gs.nDecaSize));
+
+  QComboBox *pcbScale = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_Xs");
+  QComboBox *pcbScaleT = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_XSS");
+  QComboBox *pcbCorner = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_YXv");
+  QComboBox *pcbFill = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_Xv");
+  QComboBox *pcbCity = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_XL");
+  if (pcbScale != NULL) {
+    pcbScale->setEditable(fTrue);
+    for (i = 100; i <= MAXSCALE; i += 100)
+      pcbScale->addItem(QString::number(i));
+    pcbScale->setEditText(QString::number(gs.nScale));
+  }
+  if (pcbScaleT != NULL) {
+    pcbScaleT->setEditable(fTrue);
+    for (i = 100; i <= MAXSCALE; i += 50)
+      pcbScaleT->addItem(QString::number(i));
+    pcbScaleT->setEditText(QString::number(gs.nScaleText));
+  }
+  if (pcbCorner != NULL) {
+    pcbCorner->setEditable(fTrue);
+    // Windows lists these in its own order, not array order.
+    for (i = 0; i < 7; i++)
+      pcbCorner->addItem(rgszWheelCornerQt[rgiWheelCornerOrderQt[i]]);
+    pcbCorner->setEditText(rgszWheelCornerQt[gs.nDecaType]);
+  }
+  if (pcbFill != NULL) {
+    pcbFill->setEditable(fTrue);
+    for (i = 0; i < 8; i++)
+      pcbFill->addItem(rgszDecaFillQt[i]);
+    pcbFill->setEditText(rgszDecaFillQt[gs.nDecaFill]);
+  }
+  if (pcbCity != NULL) {
+    pcbCity->setEditable(fTrue);
+    for (i = 0; i < 6; i++)
+      pcbCity->addItem(rgszCityColorQt[i]);
+    pcbCity->setEditText(rgszCityColorQt[gs.fLabelAsp ? gs.nLabelCity : 0]);
+  }
+  for (i = 0; i < cFontEntry; i++) {
+    rgpcbFont[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcGr_Xf", i);
+    if (rgpcbFont[i] == NULL)
+      continue;
+    rgpcbFont[i]->setEditable(fTrue);
+    for (j = 0; j < cFont; j++)
+      rgpcbFont[i]->addItem(rgszFontDispQt[j]);
+    rgpcbFont[i]->setEditText(rgszFontDispQt[*rgpnFont[i]]);
+  }
+
+  RcLoadRadioQt(rgbuilt, 1, 3,
+    gs.objLeft > 0 ? 1 : (gs.objLeft < 0 ? 2 : 0));
+  for (i = 0; i < cglyph; i++)
+    RcLoadRadioSzQt(rgbuilt, "drg", rgglyph[i].nFirst, rgglyph[i].cRadio,
+      *rgglyph[i].pn - 1);
+
+  RcWireOkCancelQt(&dlg, rgbuilt);
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  int nx = peX != NULL ? peX->text().toInt() : gs.xWin;
+  int ny = peY != NULL ? peY->text().toInt() : gs.yWin;
+  if (!FValidGraphX(nx)) { ErrorEnsureQt(&dlg, nx, "horizontal size"); return; }
+  if (!FValidGraphY(ny)) { ErrorEnsureQt(&dlg, ny, "vertical size"); return; }
+
+  RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+  if (pcbNoUpd != NULL)
+    SetNoUpdateQt(pcbNoUpd->isChecked());
+  gs.nAllStar = (pcbStar1 != NULL && pcbStar1->isChecked()) |
+    ((pcbStar2 != NULL && pcbStar2->isChecked()) << 1);
+  flag fResize = (gs.xWin != nx || gs.yWin != ny);
+  gs.xWin = nx; gs.yWin = ny;
+  if (peGrid != NULL)  gs.nGridCell = peGrid->text().toInt();
+  if (peSpace != NULL) gs.cspace = peSpace->text().toInt();
+  if (peAU != NULL)    gs.rspace = peAU->text().toDouble();
+  if (peRot != NULL)   gs.rRot = peRot->text().toDouble();
+  if (peTilt != NULL)  gs.rTilt = peTilt->text().toDouble();
+  if (peDeca != NULL)  gs.nDecaSize = peDeca->text().toInt();
+  if (peDelay != NULL) SetAnimDelayQt(peDelay->text().toInt());
+  if (peTrack != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peTrack->text().toLocal8Bit().constData());
+    gs.objTrack = FMatchSz(sz, "None") ? -1 : NParseSz(sz, pmObject);
+  }
+  if (pcbScale != NULL)  gs.nScale = pcbScale->currentText().toInt();
+  if (pcbScaleT != NULL) gs.nScaleText = pcbScaleT->currentText().toInt();
+  if (pcbCorner != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbCorner->currentText().toLocal8Bit().constData());
+    for (i = 0; i < 7; i++)
+      if (FMatchSz(sz, rgszWheelCornerQt[i]))
+        gs.nDecaType = i;
+  }
+  if (pcbFill != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbFill->currentText().toLocal8Bit().constData());
+    for (i = 0; i < 8; i++)
+      if (FMatchSz(sz, rgszDecaFillQt[i]))
+        gs.nDecaFill = i;
+  }
+  if (pcbCity != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      pcbCity->currentText().toLocal8Bit().constData());
+    for (i = 0; i < 6; i++)
+      if (FMatchSz(sz, rgszCityColorQt[i])) {
+        gs.fLabelAsp = (i > 0);
+        if (i > 0)
+          gs.nLabelCity = i;
+      }
+  }
+  for (i = 0; i < cFontEntry; i++) {
+    if (rgpcbFont[i] == NULL)
+      continue;
+    sprintf(sz, "%.*s", cchSzMax-1,
+      rgpcbFont[i]->currentText().toLocal8Bit().constData());
+    for (j = 0; j < cFont; j++)
+      if (FMatchSz(sz, rgszFontDispQt[j]))
+        *rgpnFont[i] = j;
+  }
+  i = NRcStoreRadioQt(rgbuilt, 1, 3, 0);
+  if (peLeft != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peLeft->text().toLocal8Bit().constData());
+    j = NParseSz(sz, pmObject);
+    gs.objLeft = (i == 0 ? 0 : (i == 1 ? j+1 : -j-1));
+  }
+  for (i = 0; i < cglyph; i++)
+    *rgglyph[i].pn = NRcStoreRadioSzQt(rgbuilt, "drg", rgglyph[i].nFirst,
+      rgglyph[i].cRadio, *rgglyph[i].pn - 1) + 1;
+  if (fResize && gs.xWin > 0 && gs.yWin > 0)
+    gi.qwind->resize(gs.xWin, gs.yWin);
+  RecastAndRedrawQt();
+}
+
+
+// Chart info entry, equivalent to Windows' DlgInfo. This is the dialog that
+// lets someone actually create a chart interactively instead of only ever
+// loading one from disk.
+
+static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle(szTitle);
+  QFormLayout *playout = new QFormLayout(&dlg);
+
+  // Every field is shown in the same human readable form Windows' DlgInfo
+  // uses (SetEditMDYT/SetEditSZOA), not as a raw number: month as a name,
+  // time as "9:54pm"/"21:54", zone as "8W", and longitude/latitude as
+  // "122W19"/"47N36". Astrolog's own parsers accept exactly these forms
+  // back (that's what the NParseSz/RParseSz calls below do), so this is
+  // purely a display change -- no extra conversion needed either way.
+  char sz[cchSzMax];
+  QLineEdit *peName = new QLineEdit(FSzSet(pci->nam) ? pci->nam : "");
+  QLineEdit *peLoc  = new QLineEdit(FSzSet(pci->loc) ? pci->loc : "");
+  sprintf(sz, "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
+  QComboBox *peMon  = NewComboQt(sz, RgstrMonthQt());
+  QComboBox *peDay  = NewComboQt(QString::number(pci->day), RgstrDayQt());
+  QComboBox *peYea  = NewComboQt(QString::number(pci->yea), RgstrYearQt());
+  QComboBox *peTim  = NewComboQt(SzTim(pci->tim), RgstrTimeQt());
+  // Daylight saving has sentinel values (see astrolog.h's dstAuto) rather
+  // than being a plain offset. Windows resolves dstAuto to its concrete
+  // Yes/No via DstReal() before display, which silently discards the
+  // user's "work it out for me" choice on the next OK -- show it as
+  // "Autodetect" instead so it survives a round trip.
+  QComboBox *peDst  = NewComboQt(pci->dst == 0.0 ? "No" :
+    (pci->dst == 1.0 ? "Yes" :
+    (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))), RgstrDstQt());
+  sprintf(sz, "%s", SzZone(pci->zon));
+  QComboBox *peZon  = NewComboQt(sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  // SzLocation() returns longitude and latitude in one string split at
+  // is.ichLocSplit. Force plain ASCII while formatting: otherwise it uses
+  // a Latin-1/IBM degree byte that isn't valid UTF-8 (see the Charts
+  // dialog for where that matters), and these fields want the compact
+  // "122W19" form anyway.
+  int nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
+  sprintf(sz, "%s", SzLocation(pci->lon, pci->lat));
+  us.fAnsiChar = nSavChar;
+  sz[is.ichLocSplit] = chNull;
+  QComboBox *peLon  = NewComboQt(&sz[0], RgstrLonQt());
+  QComboBox *peLat  = NewComboQt(&sz[is.ichLocSplit+1], RgstrLatQt());
+  // Long names/locations otherwise show their tail end, not their start.
+  peName->setCursorPosition(0);
+  peLoc->setCursorPosition(0);
+
+  playout->addRow("Month:", peMon);
+  playout->addRow("Day:", peDay);
+  playout->addRow("Year:", peYea);
+  playout->addRow("Time:", peTim);
+  playout->addRow("Daylight Saving:", peDst);
+  playout->addRow("Time Zone:", peZon);
+  playout->addRow("Longitude:", peLon);
+  playout->addRow("Latitude:", peLat);
+  playout->addRow("Name:", peName);
+  playout->addRow("Location:", peLoc);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  playout->addRow(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  CI ci = *pci;
+  QByteArray ba;
+  ba = peMon->currentText().toLocal8Bit(); ci.mon = NParseSz(ba.constData(), pmMon);
+  ba = peDay->currentText().toLocal8Bit(); ci.day = NParseSz(ba.constData(), pmDay);
+  ba = peYea->currentText().toLocal8Bit(); ci.yea = NParseSz(ba.constData(), pmYea);
+  ba = peTim->currentText().toLocal8Bit(); ci.tim = RParseSz(ba.constData(), pmTim);
+  ba = peDst->currentText().toLocal8Bit(); ci.dst = RParseSz(ba.constData(), pmDst);
+  ba = peZon->currentText().toLocal8Bit(); ci.zon = RParseSz(ba.constData(), pmZon);
+  ba = peLon->currentText().toLocal8Bit(); ci.lon = RParseSz(ba.constData(), pmLon);
+  ba = peLat->currentText().toLocal8Bit(); ci.lat = RParseSz(ba.constData(), pmLat);
+
+  if (!FValidMon(ci.mon) || !FValidYea(ci.yea) ||
+    !FValidDay(ci.day, ci.mon, ci.yea) || !FValidTim(ci.tim) ||
+    !FValidDst(ci.dst) || !FValidZon(ci.zon) ||
+    !FValidLon(ci.lon) || !FValidLat(ci.lat)) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "One or more chart info fields are invalid.");
+    return;
+  }
+  ba = peName->text().toLocal8Bit(); ci.nam = SzClone((char *)ba.constData());
+  ba = peLoc->text().toLocal8Bit();  ci.loc = SzClone((char *)ba.constData());
+
+  *pci = ci;
+  RecastAndRedrawQt();
+}
+
+void ShowChartInfoDialogQt()
+{
+  ShowChartInfoForQt(&ciCore, "Chart Info");
+}
+
+void ShowChartInfo2DialogQt()
+{
+  ShowChartInfoForQt(&ciTwin, "Chart #2 Info");
+}
+
+
+// Load a chart file into one of the six chart slots (rgpci/rgpcp, where
+// slot 1 is the main chart and 2-6 are the extra rings a bi/tri/.../hexa
+// wheel draws), equivalent to Windows' DlgOpenChart when wi.nDlgChart > 1.
+// FInputData() always loads into ciCore, so for the extra slots the
+// current chart is saved, the file is read, the result copied into the
+// target slot, and ciCore put back -- same dance Windows does.
+
+static flag FOpenChartIntoQt(int iChart, CONST char *szFile)
+{
+  CI ciT = ciCore;
+
+  if (!FInputData(szFile)) {
+    ciCore = ciT;
+    return fFalse;
+  }
+  if (iChart <= 1)
+    cp1 = cp0;
+  else {
+    *rgpci[iChart] = ciCore;
+    *rgpcp[iChart] = cp0;
+    ciCore = ciT;
+  }
+  return fTrue;
+}
+
+static void ShowOpenChartIntoDialogQt(int iChart)
+{
+  QString qsTitle = iChart <= 1 ? QString("Open Chart") :
+    QString("Open Chart #%1").arg(iChart);
+  QString qs = QFileDialog::getOpenFileName(gi.qwind, qsTitle, QString(),
+    "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  if (!FOpenChartIntoQt(iChart, ba.constData())) {
+    QMessageBox::warning(gi.qwind, szAppName, "Could not read that chart file.");
+    return;
+  }
+  RecastAndRedrawQt();
+}
+
+void ShowOpenChart2DialogQt()
+{
+  ShowOpenChartIntoDialogQt(2);
+}
+
+
+// One chart's date/zone/location summary, as Windows formats it for the
+// Charts and Chart List dialogs. Those force us.fAnsiChar/us.fGraphics so
+// SzDate() and friends emit a real degree sign rather than the ASCII ':'
+// fallback; do the same, and additionally pin us.nCharset to Latin-1 so
+// the byte that comes back is predictable (ChDeg() would otherwise pick
+// the IBM codepage degree at 0xF8 depending on the user's -Ya setting).
+// That byte isn't valid UTF-8 either way, hence decoding as Latin-1.
+
+static QString SzChartDateLineQt(CONST CI *pci)
+{
+  char sz[cchSzMax];
+  int nSavChar = us.fAnsiChar, nSavSet = us.nCharset;
+  flag fSav = us.fGraphics;
+
+  us.fAnsiChar = 2; us.nCharset = ccLatin; us.fGraphics = fTrue;
+  int nDay = DayOfWeek(pci->mon, pci->day, pci->yea);
+  sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
+    SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
+    ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
+  us.fAnsiChar = nSavChar; us.nCharset = nSavSet; us.fGraphics = fSav;
+  return QString::fromLatin1(sz);
+}
+
+
+// The same chart's "name; location". Kept separate from the line above
+// because this is user entered text that really may be UTF-8, so it must
+// not be swept up in that function's Latin-1 decode.
+
+static QString SzChartNameLineQt(CONST CI *pci)
+{
+  char sz[cchSzMax];
+
+  sprintf(sz, "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
+    FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
+    FSzSet(pci->loc) ? pci->loc : "");
+  return QString::fromLocal8Bit(sz);
+}
+
+
+// The multi-chart manager, equivalent to Windows' DlgInfoAll ("Charts #3
+// Through #6" on the Info menu, though it covers all six): a summary line
+// per chart slot with buttons to load a file into it or edit its info,
+// plus how many of those slots the wheel actually draws and which of them
+// are progressed.
+
+void ShowChartsAllDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Charts #3 through #6");
+  dlg.resize(640, 400);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QGridLayout *pgrid = new QGridLayout();
+  QLabel *rgplabel[cRing+1];
+  int i;
+
+  auto RefreshRow = [&rgplabel](int iChart) {
+    CI *pci = rgpci[iChart];
+    QString qs = SzChartDateLineQt(pci);
+    QString qsName = SzChartNameLineQt(pci);
+    if (!qsName.isEmpty())
+      qs += "\n" + qsName;
+    rgplabel[iChart]->setText(qs);
+  };
+
+  for (i = 1; i <= cRing; i++) {
+    QPushButton *pbOpen = new QPushButton(i <= 1 ?
+      QString("Open Chart...") : QString("Open Chart #%1...").arg(i));
+    QPushButton *pbInfo = new QPushButton(i <= 1 ?
+      QString("Set Chart Info...") : QString("Set Chart #%1 Info...").arg(i));
+    rgplabel[i] = new QLabel();
+    rgplabel[i]->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    pgrid->addWidget(pbOpen, i-1, 0);
+    pgrid->addWidget(pbInfo, i-1, 1);
+    pgrid->addWidget(rgplabel[i], i-1, 2);
+    pgrid->setColumnStretch(2, 1);
+    RefreshRow(i);
+    int iChart = i;
+    QObject::connect(pbOpen, &QPushButton::clicked, &dlg,
+      [iChart, RefreshRow]() {
+        ShowOpenChartIntoDialogQt(iChart);
+        RefreshRow(iChart);
+      });
+    QObject::connect(pbInfo, &QPushButton::clicked, &dlg,
+      [iChart, RefreshRow]() {
+        QByteArray baTitle = (iChart <= 1 ? QString("Chart Info") :
+          QString("Chart #%1 Info").arg(iChart)).toLocal8Bit();
+        ShowChartInfoForQt(rgpci[iChart], baTitle.constData());
+        RefreshRow(iChart);
+      });
+  }
+  pouter->addLayout(pgrid);
+
+  QHBoxLayout *phbox = new QHBoxLayout();
+  QGroupBox *pgbWheel = new QGroupBox("Wheel Chart Is");
+  QVBoxLayout *pvWheel = new QVBoxLayout(pgbWheel);
+  QButtonGroup *pgroupWheel = new QButtonGroup(&dlg);
+  CONST char *rgszWheel[6] = { "1: Single Wheel", "2: Dual Wheel",
+    "3: Tri-Wheel", "4: Quad-Wheel", "5: Quin-Wheel", "6: Hexa-Wheel" };
+  // us.nRel is 0 for a single wheel and counts down (rcDual is -1, through
+  // rcHexaWheel at -5) for multi-wheels; the other rcXxx values are
+  // unrelated relationship chart types, which show here as a single wheel.
+  int nWheelCur = (us.nRel <= rcNone && us.nRel >= rcHexaWheel) ?
+    -us.nRel : 0;
+  for (i = 0; i < 6; i++) {
+    QRadioButton *prb = new QRadioButton(rgszWheel[i]);
+    prb->setChecked(i == nWheelCur);
+    pgroupWheel->addButton(prb, i);
+    pvWheel->addWidget(prb);
+  }
+  phbox->addWidget(pgbWheel);
+
+  QGroupBox *pgbProg = new QGroupBox("Progress");
+  QVBoxLayout *pvProg = new QVBoxLayout(pgbProg);
+  QCheckBox *rgpcbProg[cRing+1];
+  for (i = 2; i <= 5; i++) {
+    rgpcbProg[i] = new QCheckBox(QString::number(i));
+    rgpcbProg[i]->setChecked(rgfProg[i] != 0);
+    pvProg->addWidget(rgpcbProg[i]);
+  }
+  phbox->addWidget(pgbProg);
+  phbox->addStretch(1);
+  pouter->addLayout(phbox);
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (i = 2; i <= 5; i++)
+    rgfProg[i] = rgpcbProg[i]->isChecked();
+  // SetRelQt() recasts and redraws, and syncs the Info menu's relationship
+  // radios for the values that have one. The multi-wheel counts past
+  // rcDual don't appear in that menu, so picking one leaves whichever
+  // relationship item was checked there showing stale -- same
+  // menu-vs-dialog staleness accepted elsewhere in this port.
+  SetRelQt(-pgroupWheel->checkedId());
+}
+
+
+// Chart list, equivalent to Windows' DlgList: the list of charts held in
+// memory (is.rgci / is.cci), which FInputData() populates automatically
+// when it reads a multi chart file (AAF, Quick*Chart, Astrodatabank, or
+// Solar Fire text -- see the FAppendCIList() calls in io.cpp), and which
+// Open Charts in Folder also fills. Charts can be sorted, filtered,
+// edited, deleted, loaded into any of the six chart slots, or copied back
+// out of one.
+
+// Case insensitive substring test matching Windows' filter loop, guarding
+// the NULL name/location that Windows' version would dereference.
+static flag FChartFieldMatchQt(CONST char *szField, CONST char *szFind)
+{
+  int j;
+
+  if (!FSzSet(szFind))
+    return fTrue;
+  if (!FSzSet(szField))
+    return fFalse;
+  for (j = 0; szField[j]; j++)
+    if (FEqSzSubI(szFind, &szField[j]))
+      return fTrue;
+  return fFalse;
+}
+
+void ShowChartListDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  dlg.setWindowTitle("Chart List");
+  dlg.resize(900, 560);
+  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
+  QHBoxLayout *phMain = new QHBoxLayout();
+  QListWidget *plist = new QListWidget();
+  QLabel *plabelSize = new QLabel();
+  int i;
+
+  phMain->addWidget(plist, 1);
+  QVBoxLayout *pvSide = new QVBoxLayout();
+  pvSide->addWidget(plabelSize);
+
+  QGroupBox *pgbSort = new QGroupBox("Sort By");
+  QVBoxLayout *pvSort = new QVBoxLayout(pgbSort);
+  QButtonGroup *pgroupSort = new QButtonGroup(&dlg);
+  CONST char *rgszSortQt[5] =
+    { "Date", "Longitude", "Latitude", "Name", "Location" };
+  for (i = 0; i < 5; i++) {
+    QRadioButton *prb = new QRadioButton(rgszSortQt[i]);
+    prb->setChecked(i == 0);
+    pgroupSort->addButton(prb, i);
+    pvSort->addWidget(prb);
+  }
+  pvSide->addWidget(pgbSort);
+  QPushButton *pbSort = new QPushButton("Sort List");
+  pvSide->addWidget(pbSort);
+
+  QGroupBox *pgbSlot = new QGroupBox("Chart Slot");
+  QVBoxLayout *pvSlot = new QVBoxLayout(pgbSlot);
+  QButtonGroup *pgroupSlot = new QButtonGroup(&dlg);
+  CONST char *rgszSlot[cRing] =
+    { "1st", "2nd", "3rd", "4th", "5th", "6th" };
+  for (i = 0; i < cRing; i++) {
+    QRadioButton *prb = new QRadioButton(rgszSlot[i]);
+    prb->setChecked(i == 0);
+    pgroupSlot->addButton(prb, i);
+    pvSlot->addWidget(prb);
+  }
+  pvSide->addWidget(pgbSlot);
+
+  QPushButton *pbSet = new QPushButton("Set To Slot");
+  QPushButton *pbCopy = new QPushButton("Copy From");
+  QPushButton *pbEdit = new QPushButton("Edit Chart...");
+  QPushButton *pbDel = new QPushButton("Delete Chart");
+  QPushButton *pbDelAll = new QPushButton("Delete All");
+  for (QPushButton *pb : { pbSet, pbCopy, pbEdit, pbDel, pbDelAll })
+    pvSide->addWidget(pb);
+  pvSide->addStretch(1);
+  phMain->addLayout(pvSide);
+  pouter->addLayout(phMain);
+
+  QHBoxLayout *phFilter = new QHBoxLayout();
+  QLineEdit *peName = new QLineEdit();
+  QLineEdit *peLoc = new QLineEdit();
+  QPushButton *pbFilter = new QPushButton("Filter");
+  QPushButton *pbUnfilter = new QPushButton("Remove Filter");
+  phFilter->addWidget(new QLabel("Name:"));
+  phFilter->addWidget(peName, 1);
+  phFilter->addWidget(new QLabel("Location:"));
+  phFilter->addWidget(peLoc, 1);
+  phFilter->addWidget(pbFilter);
+  phFilter->addWidget(pbUnfilter);
+  pouter->addLayout(phFilter);
+
+  // Whether the list is currently showing a filtered view. Windows only
+  // applies a filter permanently (FilterCIList, which actually discards
+  // the non matching charts) on OK with nothing selected; until then the
+  // filter is just a view over the full list.
+  flag fFilter = fFalse;
+
+  auto RefreshList = [&](flag fApplyFilter) {
+    QByteArray baName = peName->text().toLocal8Bit();
+    QByteArray baLoc = peLoc->text().toLocal8Bit();
+    int iSel = plist->currentRow(), cShown = 0, j;
+    plist->clear();
+    for (j = 0; j < is.cci; j++) {
+      CI *pci = &is.rgci[j];
+      if (fApplyFilter &&
+        (!FChartFieldMatchQt(pci->nam, baName.constData()) ||
+        !FChartFieldMatchQt(pci->loc, baLoc.constData())))
+        continue;
+      QString qs = SzChartDateLineQt(pci);
+      QString qsName = SzChartNameLineQt(pci);
+      if (!qsName.isEmpty())
+        qs += " " + qsName;
+      QListWidgetItem *pitem = new QListWidgetItem(qs, plist);
+      pitem->setData(Qt::UserRole, j);
+      cShown++;
+    }
+    if (cShown <= 0) {
+      QListWidgetItem *pitem =
+        new QListWidgetItem("(No charts in list)", plist);
+      pitem->setData(Qt::UserRole, -1);
+    }
+    plabelSize->setText(QString("List size: %1").arg(cShown));
+    if (iSel >= 0 && iSel < plist->count())
+      plist->setCurrentRow(iSel);
+  };
+
+  // Index into is.rgci of the selected row, or -1 for none/placeholder.
+  auto ISelected = [&plist]() -> int {
+    QListWidgetItem *pitem = plist->currentItem();
+    return pitem == NULL ? -1 : pitem->data(Qt::UserRole).toInt();
+  };
+
+  auto LoadIntoSlot = [&](int iList) {
+    CI ciT = is.rgci[iList];
+    int iSlot = pgroupSlot->checkedId() + 1;
+    is.iciCur = iList;
+    *rgpci[iSlot] = ciT;
+    if (iSlot == 1)
+      ciCore = ciT;
+  };
+
+  RefreshList(fFalse);
+
+  QObject::connect(pbSort, &QPushButton::clicked, &dlg, [&]() {
+    FSortCIList(pgroupSort->checkedId());
+    RefreshList(fFilter);
+  });
+  QObject::connect(pbDelAll, &QPushButton::clicked, &dlg, [&]() {
+    is.cci = 0;
+    RefreshList(fFilter);
+  });
+  QObject::connect(pbFilter, &QPushButton::clicked, &dlg, [&]() {
+    fFilter = fTrue;
+    RefreshList(fTrue);
+  });
+  QObject::connect(pbUnfilter, &QPushButton::clicked, &dlg, [&]() {
+    fFilter = fFalse;
+    peName->clear(); peLoc->clear();
+    RefreshList(fFalse);
+  });
+  QObject::connect(pbSet, &QPushButton::clicked, &dlg, [&]() {
+    int iList = ISelected();
+    if (iList < 0) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "Can't do operation because no chart in list is selected.");
+      return;
+    }
+    LoadIntoSlot(iList);
+    RecastAndRedrawQt();
+  });
+  QObject::connect(pbCopy, &QPushButton::clicked, &dlg, [&]() {
+    FAppendCIList(rgpci[pgroupSlot->checkedId() + 1]);
+    RefreshList(fFilter);
+    plist->setCurrentRow(plist->count() - 1);
+  });
+  QObject::connect(pbEdit, &QPushButton::clicked, &dlg, [&]() {
+    int iList = ISelected();
+    if (iList < 0) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "Can't do operation because no chart in list is selected.");
+      return;
+    }
+    QByteArray baTitle =
+      QString("Chart List #%1 Info").arg(iList + 1).toLocal8Bit();
+    ShowChartInfoForQt(&is.rgci[iList], baTitle.constData());
+    RefreshList(fFilter);
+  });
+  QObject::connect(pbDel, &QPushButton::clicked, &dlg, [&]() {
+    int iList = ISelected();
+    if (iList < 0) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "Can't do operation because no chart in list is selected.");
+      return;
+    }
+    CopyRgb((pbyte)&is.rgci[iList+1], (pbyte)&is.rgci[iList],
+      (is.cci-1-iList)*sizeof(CI));
+    is.cci--;
+    RefreshList(fFilter);
+  });
+
+  QDialogButtonBox *pbuttons =
+    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  pouter->addWidget(pbuttons);
+  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  // Read the selection after exec() returns rather than from a second
+  // "accepted" handler: the dialog is still on the stack here, so its
+  // widgets are alive, and this doesn't depend on which order two slots
+  // connected to the same signal happen to run in.
+  int iOk = ISelected();
+  if (iOk >= 0) {
+    LoadIntoSlot(iOk);
+    RecastAndRedrawQt();
+  } else if (fFilter) {
+    // Windows only commits the filter (which actually drops the charts
+    // that don't match) when OK is pressed with nothing selected.
+    QByteArray baName = peName->text().toLocal8Bit();
+    QByteArray baLoc = peLoc->text().toLocal8Bit();
+    FilterCIList(baName.constData(), baLoc.constData());
+  }
+}
+
+
+// Load every chart file in a folder into the chart list, equivalent to
+// Windows' DlgOpenDir. Windows builds this on FindFirstFile inside a
+// WSETUP-only block; QDir does the same job portably. Astrolog's own
+// default data files are skipped, same as there, since a folder of charts
+// often sits alongside them.
+
+void ShowOpenChartDirDialogQt()
+{
+  QString qsDir = QFileDialog::getExistingDirectory(gi.qwind,
+    "Open Charts in Folder");
+  if (qsDir.isEmpty())
+    return;
+
+  QDir dir(qsDir);
+  // Both cases: QDir's name filters are case sensitive on Linux, and
+  // chart files copied from a Windows install are often ".AS".
+  QStringList qslFiles = dir.entryList(QStringList() << "*.as" << "*.AS",
+    QDir::Files, QDir::Name);
+  CI ciT = ciCore;
+  int cAdded = 0;
+
+  for (CONST QString &qsFile : qslFiles) {
+    if (qsFile.compare(DEFAULT_INFOFILE, Qt::CaseInsensitive) == 0 ||
+      qsFile.compare(DEFAULT_ATLASFILE, Qt::CaseInsensitive) == 0 ||
+      qsFile.compare(DEFAULT_TIMECHANGE, Qt::CaseInsensitive) == 0)
+      continue;
+    QByteArray ba = dir.filePath(qsFile).toLocal8Bit();
+    if (!FInputData(ba.constData()))
+      break;
+    if (!FAppendCIList(&ciCore))
+      break;
+    cAdded++;
+  }
+  ciCore = ciT;
+
+  if (cAdded <= 0) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "No chart files were loaded from that folder.");
+    return;
+  }
+  RecastAndRedrawQt();
+}
+
+
+// Save the chart list, equivalent to Windows' cmdSaveList: the same
+// FOutputData() path as the other save formats, with the chart list
+// write format selected.
+
+void ShowSaveChartListDialogQt()
+{
+  if (is.cci <= 0) {
+    QMessageBox::warning(gi.qwind, szAppName,
+      "There is no chart list in memory.");
+    return;
+  }
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart List",
+    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  QByteArray ba = qs.toLocal8Bit();
+  FCloneSz(ba.constData(), &is.szFileOut);
+  us.nWriteFormat = 'l';
+  if (!FOutputData())
+    QMessageBox::warning(gi.qwind, szAppName,
+      "Could not write that chart list file.");
+}
+
+
+// Colors, equivalent to Windows' DlgColor: the 16 slot standard palette,
+// the four element colors, the seven ray colors, and the scribble pen and
+// wheel corner colors. Each is set by color name the same way SzColor()
+// and NParseSz() format and parse them elsewhere in Astrolog.
+
+// One color field: an editable combo listing the color names, since that
+// is what Windows offers. "nExtra" follows SetEditColor()'s convention --
+// 0 for plain colors only, higher values progressively admitting the
+// symbolic entries past them (Element, Ray, Star, Planet, Auto), which
+// only some fields accept.
+// Populate a color list that already exists, which is what the transcribed
+// dialogs need -- the resource placed the combo box, this just fills it.
+static void FillColorComboQt(QComboBox *pcb, KI ki, int nExtra)
+{
+  int i, iMax = cColor2 + (nExtra > 0)*(nExtra + 1);
+
+  if (pcb == NULL)
+    return;
+  pcb->setEditable(true);
+  // addItem() before setEditText(): see the Progressions dialog.
+  for (i = 0; i < iMax; i++)
+    pcb->addItem(szColor[i]);
+  pcb->setEditText(SzColor(ki));
+}
+
+static QComboBox *NewColorComboQt(KI ki, int nExtra)
+{
+  QComboBox *pcb = new QComboBox();
+
+  FillColorComboQt(pcb, ki, nExtra);
+  return pcb;
+}
+
+static QComboBox *AddColorComboQt(QFormLayout *pform, CONST char *szLabel,
+  KI ki, int nExtra)
+{
+  QComboBox *pcb = NewColorComboQt(ki, nExtra);
+
+  pform->addRow(QString(szLabel) + ":", pcb);
+  return pcb;
+}
+
+static int NColorFromComboQt(QComboBox *pcb);
+
+static int NColorFromComboQt(QComboBox *pcb)
+{
+  QByteArray ba = pcb->currentText().toLocal8Bit();
+  return NParseSz(ba.constData(), pmColor);
+}
 
 // Chart Settings, transcribed from dlgChart. Two things here don't follow
 // the usual shape: the star and Arabic part sort orders store a character

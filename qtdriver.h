@@ -35,6 +35,9 @@ void RecastAndRedrawQt();
 // without recasting first. Call this after a change that only affects how
 // the chart is drawn, such as colors.
 void RedrawQt();
+void RedrawForceQt();
+flag FNoUpdateQt();
+void SetNoUpdateQt(flag f);
 
 // Switch the chart type/mode, mirroring the chart-type switch in Windows'
 // ProcessState() (wdriver.cpp) -- clears all the chart-type flags, then

@@ -357,6 +357,14 @@ private:
 // default (xdata.cpp:130). Applied by RedrawQt().
 static flag fHourglassQt = fTrue;
 
+// Windows' wi.fNoUpdate: suppress automatic redraws, so a run of setting
+// changes doesn't repaint after every one. Redraw Screen still works, and
+// goes through RedrawForceQt() to say so explicitly.
+static flag fNoUpdateQt = fFalse;
+
+flag FNoUpdateQt() { return fNoUpdateQt; }
+void SetNoUpdateQt(flag f) { fNoUpdateQt = f; }
+
 static void ClearTextWindowQt();   // defined with the text window below
 
 // Put the canvas into whichever of the two sizing modes is currently set.
@@ -748,8 +756,20 @@ static void CopyChartBitmapQt()
 // and repaint the canvas widget with the result. Called after any change
 // that affects only how the chart looks (e.g. colors), and after a resize.
 
+void RedrawForceQt()
+{
+  flag fSav = fNoUpdateQt;
+
+  fNoUpdateQt = fFalse;
+  RedrawQt();
+  fNoUpdateQt = fSav;
+}
+
+
 void RedrawQt()
 {
+  if (fNoUpdateQt)
+    return;
   // Astrolog's own Action() calls this before every chart it renders, and
   // the drawing code depends on it: InitColors() is what turns the
   // element and ray colors (kElemA/kRayA, which the Colors dialog edits)
@@ -1216,7 +1236,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QMenu *pmenuWin = pmenu->addMenu("&Window Settings");
   QAction *paRedraw = pmenuWin->addAction("&Redraw Screen");
   QObject::connect(paRedraw, &QAction::triggered, pwind,
-    []() { RedrawQt(); });
+    []() { RedrawForceQt(); });
   QAction *paClear = pmenuWin->addAction("&Clear Screen");
   QObject::connect(paClear, &QAction::triggered, pwind,
     []() { ClearScreenQt(); });
