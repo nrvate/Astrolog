@@ -948,7 +948,19 @@ void RecastAndRedrawQt()
   // happening -- without it the chart recalculates but the sidebar keeps
   // describing the previous chart.
   ciMain = ciCore;
-  CastChart(0);
+  // Which cast to run depends on whether a relationship chart is selected,
+  // exactly as Action() chooses (astrolog.cpp:242). A relationship chart
+  // needs both charts computed, and CastChart() only does the one, so
+  // calling it unconditionally left every second ring full of zeroes --
+  // every object in the outer wheel sitting at 0 Aries. That affected all
+  // eight relationship types, not just transits.
+  //
+  // The context argument matches Action()'s too: 1 rather than 0, which is
+  // what tells the AstroExpression hooks this is the main chart.
+  if (!us.nRel)
+    CastChart(1);
+  else
+    CastRelation();
   RedrawQt();
 }
 
