@@ -38,16 +38,16 @@ alongside the regular `astrolog` binary without interfering with it —
 
 ## Status
 
-Feature complete against the Windows build, as far as the menu bar goes.
-All nine menus and every dialog are implemented, and each has been read
-field-by-field against its Windows counterpart — labels, field order,
-number formatting, dropdown contents, and which menu checkmarks it
-refreshes on OK. Charts animate, print, paste, run all 96 macro slots,
-and draw with Astrolog's bundled astrology fonts.
-
-Not done: **right-click context menus.** Windows has one per chart type;
-this build has none, so right-clicking the chart does nothing. That's the
-main remaining gap and the obvious next piece of work.
+Feature complete against the Windows build. All nine menus, all 257 menu
+items, every dialog, all 42 right-click context menus and 263 keyboard
+shortcuts are implemented, and each dialog has been read field-by-field
+against its Windows counterpart — labels, field order, number formatting,
+dropdown contents, and which menu checkmarks it refreshes on OK. Menu
+mnemonics sit on the same letters Windows uses, so Alt-key muscle memory
+carries over. Charts animate, print, paste, run all 96 macro slots, and
+draw with Astrolog's bundled astrology fonts. Text charts render in the
+main window on a character grid, as they do on Windows, rather than in a
+separate text box.
 
 A handful of smaller things are either deliberately different from
 Windows or deliberately left out — mostly Win32-only settings with no
@@ -56,8 +56,45 @@ bug and this build does the sensible thing instead. They're all listed
 under "Known divergences from Windows" in `QT_GUI_PLAN.md` rather than
 left for you to discover.
 
+## Tests
+
+```
+make -f Makefile.qt.test
+./run-qt-tests.sh
+```
+
+A headless suite of 2728 assertions covering dialogs, context menus,
+shortcuts, chart rendering, every menu item, menu parity against
+`astrolog.rc`, and bad input. No X display needed; exits nonzero on
+failure.
+
+There are also three audits that check this port against Windows'
+resource script directly:
+
+```
+python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
+python3 tools/rc_audit.py                        # controls nothing wires up
+python3 tools/rc_mnemonic_audit.py               # "&" placement vs the .rc
+```
+
+## Comparing against the real Windows build
+
+`Makefile.win` cross-compiles the actual Windows binary with mingw-w64 —
+same `wdriver.cpp`, same `wdialog.cpp`, same `astrolog.rc` — so it can be
+run under Wine and compared side by side rather than reasoned about:
+
+```
+make -f Makefile.win
+wine ./astrolog.exe
+```
+
+Needs `mingw-w64` and `wine`.
+
 ## Docs
 
+- **`CLAUDE.md`** — orientation for picking the work up from a fresh
+  clone: build and test commands, the audits, the Wine reference build,
+  and the rules this repo is worked under.
 - **`QT_GUI_PLAN.md`** — read this first if you're picking the work up.
   How the Qt backend fits into Astrolog's architecture, the gotchas worth
   knowing before changing it, a "What to do next" section, per-menu

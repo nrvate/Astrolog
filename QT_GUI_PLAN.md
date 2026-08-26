@@ -87,8 +87,10 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. 1396
-   assertions at the time of writing.
+   display and no `xdotool`, and exits non-zero on failure. **2728
+   assertions** as of 2026-08-25; it was 1396 when first written, and has
+   since grown to cover menu parity against `astrolog.rc` (257/257), the
+   Chart menu's graphics/text handling, and bad input.
    - **How it works.** `Makefile.qt.test` builds the same sources plus
      `qttest.cpp` with `-DQTTEST` into `astrolog-qt-test`, in its own
      object directory, so the shipped binary carries no test code.
@@ -120,12 +122,20 @@ Roughly in the order I'd take them.
      kind of rendering question that has previously been argued over from
      screenshots.
 
-3. **Decide about the deliberate divergences.** Five behaviours in
+4. **Pixel-level baselines.** Rendering goes to `gi.qim`, a QImage in
+   memory, so image regression tests need no screenshotting at all.
+   Storing baseline hashes per chart type is the obvious next step and
+   would settle the kind of rendering question this project has
+   repeatedly argued over from screenshots. The Wine build gives a
+   reference to generate them against.
+5. **Decide about the deliberate divergences.** The behaviours in
    "Known divergences from Windows" are places this port knowingly does
    something different, usually because Windows' behaviour looks like a
    bug. They are defensible individually, but if the goal is strict
-   parity they are the list to revisit.
-4. **Unfinished business, low value:** Wingdings and the plain text
+   parity they are the list to revisit. The menu accelerator column
+   (`Shift+V` where Windows writes `V`) is the most visible one and the
+   only one a user sees on every menu.
+6. **Unfinished business, low value:** Wingdings and the plain text
    fonts aren't bundled (see item 15); the black wedges in the tick ring
    are unexplained upstream rendering (see item 11) and nobody has
    actually worked out what draws them.
@@ -552,11 +562,15 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-15, all complete
+## Work log — items 1-25
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
 original description said they were.
+
+Items 1-15 are completed pieces of work. Items 16-25 are findings — how
+a thing turned out to work, or a class of bug worth not repeating — and
+are the more useful half to read before starting something new.
 
 1. ~~Help's 11 list actions~~ — **done 2026-08-24**, see Help section
    above.
@@ -1114,6 +1128,59 @@ original description said they were.
       The control that overflows shrinks its own text, and a label that
       still doesn't fit wraps, which is what Windows' static text does.
 
+23. **Menu mnemonics come from the `.rc`, not from the obvious letter.**
+    Where the `&` sits in `astrolog.rc` decides which Alt-key reaches an
+    item, and upstream frequently does not put it first: `Standard
+    Radi&x`, `Ga&uquelin Sectors`, `Inf&luence`, `Ara&bic Parts`,
+    `Nea&rest Cities`. This port had picked the obvious letter, so Alt+C
+    then `x` — which a Windows user has in muscle memory — did nothing.
+    155 label sites were rewritten to the `.rc` spelling.
+    - It is not enough to fix the menu bar. The context menu tables and
+      the hotkey table both *name menu items by label*, so all three have
+      to agree; changing only the menu bar broke 37 previously passing
+      assertions until the other two were rewritten to match.
+    - `tools/rc_mnemonic_audit.py` checks all 848 label sites and is
+      clean. It compares labels with the `&` and the `\t` accelerator
+      stripped, so it only ever flags a mnemonic that *moved*, never a
+      wording difference — which keeps it useful as labels evolve.
+    - `Carter& P.Equat.` really does put its `&` before a space in the
+      resource, so Windows shows no underline on that item. Transcribed
+      as-is; it looks like a typo and is faithful.
+
+24. **Two chart types render nothing with graphics on.** `gAspect`
+    (Aspect List) and `gArabic` (Arabic Parts) have no `case` in
+    `DrawChartX()`, so selecting either while `us.fGraphics` was set drew
+    an empty window — the blank screen reported after Alt+L. Windows sets
+    `us.fGraphics = fFalse` for exactly those two chart types and no
+    others (`wdriver.cpp`, `cmdChartAspect` and `cmdChartArabic`); both
+    now go through `AddChartModeTextAction()` to do the same.
+    - The existing render test missed it because it drove
+      `SetChartModeQt()` directly, which leaves `us.fGraphics` alone — so
+      it only ever exercised whichever mode the suite happened to be in.
+      It now also fires all 16 Chart menu actions with graphics
+      deliberately on. **A pixel-blankness assertion did not catch this**
+      (something still paints offscreen); asserting the actual invariant —
+      that each item leaves `us.fGraphics` where Windows leaves it — does,
+      and reads better besides.
+    - The other half of the same report was the F1 macro crash:
+      `PrintError()` ended in `Terminate()` on every non-Windows build, so
+      a macro naming a file that lives on another machine took the session
+      down instead of complaining. `TestBadInputQt()` covers it;
+      reinstating the `Terminate()` makes the suite die mid-run and exit 1.
+
+25. **Text chart layout was verified against Wine, not assumed.** All
+    eight text chart types (radix, house wheel, aspect grid, calendar,
+    influence, ephemeris, aspect list, midpoint list) were captured from
+    the mingw build under Wine and rendered again in Qt with the same
+    chart data. Layout is character-for-character identical: same column
+    positions, same header, same values. The IBM box-drawing path that
+    `=k` enables maps correctly too.
+    - Both apparent differences turned out to be data, not rendering. The
+      header wraps to a second line whenever a chart *name* is set
+      (`charts1.cpp:91` emits the newline), and cusp values differed
+      because that Wine instance had 3D houses on. Worth checking before
+      concluding the renderer diverges.
+
 ## Known divergences from Windows
 
 Every place this port knowingly differs, so none of it reads as an
@@ -1129,6 +1196,8 @@ is unintentional — treat it as a bug.
 | Graphics Settings | Atlas City Coloring writes `gs.fLabelCity` | `DlgGraphics` writes `gs.fLabelAsp`, but that field is `-XA` (aspect glyphs on lines) and has nothing to do with city coloring. Treated as an upstream typo; using it would silently toggle aspect glyphs. |
 | Command line dialog | Doesn't save/restore `us.fLoop`/`is.fMult` around the call | `CommandLineX()` does. Only matters for a typed line that itself starts a multi-chart sequence. |
 | Restriction dialogs | (Since 8.9) checkbox = restricted, matching Windows | Previously "Show X" = visible, i.e. inverted. Flipped *toward* Windows, but it's a visible change to anyone used to the old Qt wording. |
+
+| Menu accelerator column | Reads `Shift+V`, `Alt+L` where Windows reads `V`, `Alt+l` | Astrolog's resource writes an uppercase letter alone to mean Shift. Qt derives the column from `QKeySequence` and spells the modifier out. Same keys, different notation; changing it means overriding how Qt renders shortcuts. |
 
 **Present but intentionally not editable**
 
@@ -1161,6 +1230,62 @@ to do next" item 1 with what's now known about them.)
 - Build with `make -f Makefile.qt -j4`; binary is `./astrolog-qt`.
 - Compile-check after every change before testing live — this codebase
   has caught real preprocessor/linkage mistakes this way every session.
+- **Run the test suite before every commit.** `make -f Makefile.qt.test`
+  then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
+  failure. 2728 assertions covering dialog titles, the 42 context menus,
+  263 shortcuts, 26 chart types rendering non-blank, all 337 menu items
+  firing, 257/257 menu parity against `astrolog.rc`, and bad input. The
+  suite runs inside the real program from `InteractQt()` after the window
+  and menus are up, so it shares live `us`/`gs`/`gi` state — a test that
+  changes a setting must put it back.
+  - Grep build errors for `: error`, not `^qtdialog.cpp:` — a narrower
+    pattern once hid a real failure in a generated header.
+- **A test that passes both with and without the fix is worthless.** After
+  writing a regression test, put the bug back and confirm the test fails,
+  then restore. This project has produced two tests that were confirming
+  an invention rather than catching a defect, and one assertion (pixel
+  blankness) that looked reasonable and detected nothing. Asserting the
+  actual invariant — "this item leaves `us.fGraphics` where Windows leaves
+  it" — beat asserting a downstream symptom.
+- **Generate from `astrolog.rc` rather than transcribing by hand.** The
+  dialogs (`tools/rc2qt.py`), the 42 context menus and the 848 menu
+  mnemonics were all derived from the resource script. Every time part of
+  it was transcribed by hand instead, it introduced errors — wrong
+  mnemonics on 155 labels, and four invented dialog titles that the tests
+  then asserted. Where generation isn't practical, audit against the
+  resource with a script (`tools/rc_audit.py`,
+  `tools/rc_mnemonic_audit.py`) so drift is detectable rather than
+  discovered by a user.
+- **Build the Windows binary and look, rather than reasoning about what
+  Windows does.** `make -f Makefile.win` cross-compiles the real thing
+  with mingw-w64 — same `wdriver.cpp`, same `wdialog.cpp`, same
+  `astrolog.rc` — and it runs under Wine. This has settled questions that
+  code reading got wrong, and it is how the text chart layouts and the
+  menu mnemonics were verified rather than guessed.
+  - Drive it on a **private** Xvfb display, never the user's desktop:
+    `Xvfb :77 -screen 0 1200x900x24 &`, then `DISPLAY=:77 wine
+    ./astrolog.exe &`. On a private display `import -window root` is fine
+    and much easier than chasing window IDs.
+  - **Qt needs a window manager for menus to open.** Under bare Xvfb the
+    Qt app runs and renders, but Alt+mnemonic and menu-bar clicks silently
+    do nothing and no popup window ever appears. `DISPLAY=:77 metacity
+    --sm-disable &` fixes it. Wine doesn't need this — it manages its own
+    windows — which makes the failure look app-specific rather than
+    environmental.
+  - **`xdotool key --window <id>` uses XSendEvent, which Wine ignores.**
+    Keys appear to be delivered and nothing happens; captures then show
+    the *previous* chart and read as a redraw lag. Activate the window and
+    send via XTEST instead (plain `xdotool key`, no `--window`).
+  - **Astrolog's accelerators are case-sensitive.** `v` is the Show
+    Graphics toggle; `V` (i.e. `shift+v`) is Standard Radix. `Alt+l` and
+    `Alt+L` are different commands. Send `shift+a`, not `a`.
+  - Wine under Xvfb doesn't always repaint between commands. Forcing a
+    resize away and back, then Redraw Screen (`space`), produced reliable
+    captures where a plain sleep did not.
+- **Don't `pkill -f` a pattern that matches your own command line.**
+  `pkill -f astrolog-qt` kills the shell running it, which surfaces as a
+  bare exit code 144 and no output — easy to misread as the app crashing.
+  Use `pkill -x <exact-name>`, or match on a PID.
 - **Always verify new interactive behavior live**, not just by code
   review — this project has found multiple genuine pre-existing
   architectural bugs this way (`DrawDash()`'s invisible-solid-lines bug,
