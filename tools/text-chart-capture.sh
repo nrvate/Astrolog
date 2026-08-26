@@ -102,7 +102,14 @@ for pair in $CHARTS; do
   send "$key"
   repaint
   sleep 0.6
-  DISPLAY=$DISP import -window "$WID" "$OUT/$name.png"
+  # Capture the root window, not "$WID". With a window manager running
+  # there are several windows named "Astrolog" -- the client and the frame
+  # the WM reparents it into -- and which one xdotool returns last varies
+  # between runs. Grabbing the frame yields a stale image that never
+  # tracks the client's redraws, so every chart comes out identical and it
+  # reads as the keystrokes never landing. This display is private and has
+  # nothing else on it, so the root window is both safe and unambiguous.
+  DISPLAY=$DISP import -window root "$OUT/$name.png"
   echo "  $name"
 done
 echo "captured to $OUT"
