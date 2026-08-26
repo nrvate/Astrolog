@@ -2262,6 +2262,16 @@ typedef struct _ArabicInfo {
   char *name;                 // The name of the Arabic part.
 } AI;
 
+// One body the Object Selections dialog can put in a slot. The pair of
+// numbers is exactly what -Ye<x> would set, i.e. an rgTypSwiss[] value
+// and the matching rgObjSwiss[] value, so picking from the list and
+// typing the switch by hand end up in the same place.
+typedef struct _ObjectSelect {
+  int nTyp;                   // Definition type, an rgTypSwiss[] value.
+  int nObj;                   // Definition index, an rgObjSwiss[] value.
+  CONST char *szName;         // What the list shows for it.
+} OBJSEL;
+
 typedef struct _ElementTable {
   int coSum;             // Total objects considered.
   int coHemi;            // Number that can be in hemispheres.

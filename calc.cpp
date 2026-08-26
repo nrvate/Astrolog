@@ -2554,6 +2554,69 @@ int rgTypSwiss[cCust];
 int rgPntSwiss[cCust];
 int rgFlgSwiss[cCust];
 
+// Bodies the Object Selections dialog offers for a slot. This is a
+// convenience list and not a limit: that dialog's field is editable and
+// takes the same definition text Object Customization does, so anything
+// -Ye<x> accepts can still be typed. Type 0 is a set of orbital elements
+// in seorbel.txt, type 1 an MPC minor planet number, type 2 an Astrolog
+// object index -- the same encoding rgTypSwissDef[] above uses.
+//
+// A body listed here still needs its ephemeris file present to compute or
+// to name itself; the dialog's Lookup Names button is what reports that,
+// by leaving the name as "???" when Swiss Ephemeris can't find it.
+CONST OBJSEL rgObjSel[] = {
+  // The nine Uranians, as their default orbital element sets.
+  {0, SE_VULCAN   - SE_FICT_OFFSET_1, "Vulcan"},
+  {0, SE_CUPIDO   - SE_FICT_OFFSET_1, "Cupido"},
+  {0, SE_HADES    - SE_FICT_OFFSET_1, "Hades"},
+  {0, SE_ZEUS     - SE_FICT_OFFSET_1, "Zeus"},
+  {0, SE_KRONOS   - SE_FICT_OFFSET_1, "Kronos"},
+  {0, SE_APOLLON  - SE_FICT_OFFSET_1, "Apollon"},
+  {0, SE_ADMETOS  - SE_FICT_OFFSET_1, "Admetos"},
+  {0, SE_VULKANUS - SE_FICT_OFFSET_1, "Vulkanus"},
+  {0, SE_POSEIDON - SE_FICT_OFFSET_1, "Poseidon"},
+
+  // The dwarf planets and larger trans Neptunians, as the defaults have
+  // them. Pholus is type 2 here because rgTypSwissDef[] makes it so, and
+  // that definition needs no ephemeris file; 5145 can still be typed.
+  {1,     10, "Hygiea"},
+  {2,   oPho, "Pholus"},
+  {1, 136199, "Eris"},
+  {1, 136108, "Haumea"},
+  {1, 136472, "Makemake"},
+  {1, 225088, "Gonggong"},
+  {1,  50000, "Quaoar"},
+  {1,  90377, "Sedna"},
+  {1,  90482, "Orcus"},
+  {1, 120347, "Salacia"},
+
+  // Centaurs.
+  {1,   2060, "Chiron"},
+  {1,   7066, "Nessus"},
+  {1,   8405, "Asbolus"},
+  {1,  10199, "Chariklo"},
+  {1,  10370, "Hylonome"},
+
+  // Other trans Neptunians.
+  {1,  20000, "Varuna"},
+  {1,  28978, "Ixion"},
+  {1,  38628, "Huya"},
+  {1,  42355, "Typhon"},
+
+  // Main belt asteroids often wanted in a chart.
+  {1,      5, "Astraea"},
+  {1,      6, "Hebe"},
+  {1,      7, "Iris"},
+  {1,      8, "Flora"},
+  {1,    433, "Eros"},
+  {1,    944, "Hidalgo"},
+  {1,   1181, "Lilith"},
+  {1,   1566, "Icarus"},
+  {1,   1862, "Apollo"},
+  {1,   2062, "Aten"},
+  {1,   3200, "Phaethon"}};
+CONST int cObjSel = (int)(sizeof(rgObjSel) / sizeof(OBJSEL));
+
 // Given an object index and a Julian Day time, get ecliptic longitude and
 // latitude of the object and its velocity and distance from the Earth or
 // Sun. This basically just calls the Swiss Ephemeris calculation function to

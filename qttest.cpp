@@ -817,6 +817,64 @@ static void TestBadInputQt()
 }
 
 
+// The body list the Object Selections dialog offers is a table of
+// {definition type, definition index, name} triples, and its whole value is
+// that the numbers are right -- that {1, 7066} really is Nessus. A digit
+// wrong there silently puts a different body in the chart, which no other
+// check would notice. So resolve each entry the way the -Ye handler does
+// (astrolog.cpp, the SwissGetObjName call) and compare against the name the
+// table claims.
+//
+// Only entries whose ephemeris data is actually present can be checked;
+// this checkout ships the orbital elements and eight asteroid files, so the
+// rest come back as szObjUnknown. Those are skipped rather than failed --
+// a missing file is not a wrong number -- and the count of what was really
+// verified is printed, so the check can't quietly degrade to nothing.
+//
+// Know what this does and does not catch. A number changed to another real
+// body IS caught, and that is the dangerous case: the dialog would offer
+// "Sedna" and quietly put Eris in the chart. A number changed to one that
+// resolves to nothing is NOT caught, because it is indistinguishable here
+// from a body whose ephemeris file simply isn't installed -- it only drops
+// the printed count. That case is self announcing anyway: the user picks it
+// and the name comes up "???" straight away.
+static void TestObjSelTableQt()
+{
+  char szName[cchSzDef];
+  int i, j, k, cCheck = 0;
+
+  Group("Object selection table");
+  Check(cObjSel > 0, "the body list is empty");
+  for (i = 0; i < cObjSel; i++) {
+    if (rgObjSel[i].nTyp <= 1)
+      SwissGetObjName(szName,
+        rgObjSel[i].nTyp <= 0 ? -rgObjSel[i].nObj : rgObjSel[i].nObj);
+    else
+      sprintf(szName, "%s", FItem(rgObjSel[i].nObj) ?
+        szObjName[rgObjSel[i].nObj] : szObjUnknown);
+    if (FEqSz(szName, szObjUnknown))
+      continue;                   // No ephemeris for it here; can't judge.
+    cCheck++;
+    // Accept a spelling difference only where Astrolog itself treats the
+    // two as the same object. seorbel.txt writes the seventh Uranian
+    // "Vulcanus" while szObjName[] writes it "Vulkanus", and data.cpp's
+    // own name table carries both -- so ask that table rather than
+    // hardcoding the pair, and a genuinely wrong number still fails
+    // because the two names then resolve to different objects, or to none.
+    j = NParseSz(rgObjSel[i].szName, pmObject);
+    k = NParseSz(szName, pmObject);
+    Check(FMatchSz(rgObjSel[i].szName, szName) ||
+      FMatchSz(szName, rgObjSel[i].szName) ||
+      (FItem(j) && FItem(k) && j == k),
+      "list says \"%s\" for type %d index %d, ephemeris says \"%s\"",
+      rgObjSel[i].szName, rgObjSel[i].nTyp, rgObjSel[i].nObj, szName);
+  }
+  Check(cCheck > 0, "no entry could be resolved at all, so nothing was checked");
+  printf("  %d of %d bodies resolved and matched their listed name\n",
+    cCheck, cObjSel);
+}
+
+
 // Forced object positions have to survive being written to a settings file
 // and read back. FOutputSettings() had no "-F"/"-Fm" section at all, so
 // File / Save Program Settings silently dropped every forced position --
@@ -999,6 +1057,7 @@ int NRunQtTestsQt()
   TestMenuParityQt();
   TestBadInputQt();
   TestForcedPositionsQt();
+  TestObjSelTableQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

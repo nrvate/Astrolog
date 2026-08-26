@@ -491,6 +491,8 @@ extern void CreateElemTable P((ET *));
 extern CONST int rgObjSwissDef[cCust], rgTypSwissDef[cCust];
 extern int rgObjSwiss[cCust], rgTypSwiss[cCust], rgPntSwiss[cCust],
   rgFlgSwiss[cCust];
+extern CONST OBJSEL rgObjSel[];
+extern CONST int cObjSel;
 
 extern flag FSwissPlanet
   P((int, real, int, real *, real *, real *, real *, real *, real *));
