@@ -365,6 +365,19 @@ static flag fNoUpdateQt = fFalse;
 flag FNoUpdateQt() { return fNoUpdateQt; }
 void SetNoUpdateQt(flag f) { fNoUpdateQt = f; }
 
+// Windows' wi.fNoPopup and wi.fBmpWindow, which File Settings edits. The
+// first suppresses warning message boxes; the second says a chart bitmap
+// should be grabbed from the window rather than redrawn, which is what
+// CopyChartBitmapQt() already does, so it is kept for the setting's sake.
+static flag fNoPopupQt = fFalse, fBmpWindowQt = fTrue;
+
+flag FNoPopupQt() { return fNoPopupQt; }
+void SetNoPopupQt(flag f) { fNoPopupQt = f; }
+flag FBmpWindowQt() { return fBmpWindowQt; }
+void SetBmpWindowQt(flag f) { fBmpWindowQt = f; }
+
+
+
 static void ClearTextWindowQt();   // defined with the text window below
 
 // Put the canvas into whichever of the two sizing modes is currently set.
@@ -2176,6 +2189,9 @@ static void BuildEditMenu(QMainWindow *pwind)
 static QTimer *s_ptimerAnim = NULL;
 static int s_nTimerDelay = 100;   // Windows' wi.nTimerDelay default
 static int s_nAntialiasQt = 6;    // Windows' wi.nAntialias default (-Wx)
+
+int NAntialiasQt() { return s_nAntialiasQt; }
+void SetAntialiasQt(int n) { s_nAntialiasQt = n; }
 static int s_xWindQt = 0, s_yWindQt = 0;   // Window position from -Ww
 static flag s_fWindPosQt = fFalse;
 

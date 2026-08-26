@@ -1264,121 +1264,108 @@ void ShowExportTextDialogQt()
 // knob), and "Don't Show Popup Messages" (wi.fNoPopup) -- all three live
 // in the Win32-only WI struct.
 
+// File Settings, transcribed from dlgFile.
+
 void ShowFileSettingsDialogQt()
 {
+  CONST RCFLAG rgflag[] = {
+    {"dxFi_YOO", -1, &us.fSmartSave, fFalse},
+    {"dxFi_kh",  -1, &us.fTextHTML,  fFalse},
+    {"dxFi_Yo",  -1, &us.fWriteOld,  fFalse} };
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("File Settings");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  int i;
+  QVector<RCBUILT> rgbuilt;
+  char sz[cchSzMax];
+  int nwx, i;
+  real rI;
 
-  QCheckBox *pcbSmartSave = new QCheckBox(
-    "Export Text and Print in Intuitive Manner");
-  QCheckBox *pcbTextHTML = new QCheckBox("Export Text Files in HTML Format");
-  QCheckBox *pcbBmpPNG = new QCheckBox("Export Bitmaps in PNG Format");
-  QCheckBox *pcbPSComplete = new QCheckBox(
-    "Export Encapsulated PostScript Files");
-  QCheckBox *pcbWriteOld = new QCheckBox(
-    "Save Chart Info Files in Old Style Format");
-  // Windows' dxFi_YXf: a master switch for the six Graphics Settings font
-  // pickers. Turning it off zeroes them and remembers the set in
-  // gi.nFontPrev; turning it back on restores that set.
-  QCheckBox *pcbFontAll = new QCheckBox("Use Real System Fonts in Graphic Charts");
-  pcbFontAll->setChecked(gs.nFontAll > 0);
-  QCheckBox *pcbNoBackDraw = new QCheckBox("Don't Show Background Bitmap");
-  pcbSmartSave->setChecked(us.fSmartSave != 0);
-  pcbTextHTML->setChecked(us.fTextHTML != 0);
-  pcbBmpPNG->setChecked(gs.chBmpMode == 'P');
-  pcbPSComplete->setChecked(!gs.fPSComplete);
-  pcbWriteOld->setChecked(us.fWriteOld != 0);
-  pcbNoBackDraw->setChecked(!gs.fBackDraw);
-  for (QCheckBox *pcb : { pcbSmartSave, pcbTextHTML, pcbBmpPNG,
-    pcbPSComplete, pcbWriteOld, pcbFontAll })
-    pouter->addWidget(pcb);
+  dlg.setWindowTitle(szTitleFile);
+  RcBuildDialogQt(&dlg, rgctlFile, cctlFile, dxFile, dyFile, &rgbuilt);
+  RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
 
-  QFormLayout *pformThick = new QFormLayout();
-  QLineEdit *peThickAdjust = new QLineEdit(QString::number(gs.nThickAdjust));
-  pformThick->addRow("Line Thickness Adjustment:", peThickAdjust);
-  pouter->addLayout(pformThick);
+  // These three read something other than a plain flag.
+  QCheckBox *pcbBmpP = (QCheckBox *)PwRcFindQt(rgbuilt, "dxFi_Xbp");
+  QCheckBox *pcbPS = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxFi_Xp", 0);
+  QCheckBox *pcbFont = (QCheckBox *)PwRcFindQt(rgbuilt, "dxFi_YXf");
+  QCheckBox *pcbBack = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxFi_XI", 0);
+  QCheckBox *pcbBmpWin = (QCheckBox *)PwRcFindQt(rgbuilt, "dxFi_Wb");
+  QCheckBox *pcbNoPop = (QCheckBox *)PwRcFindQt(rgbuilt, "dxFi_Wt");
+  if (pcbBmpP != NULL)  pcbBmpP->setChecked(gs.chBmpMode == 'P');
+  if (pcbPS != NULL)    pcbPS->setChecked(!gs.fPSComplete);
+  if (pcbFont != NULL)  pcbFont->setChecked(gs.nFontAll > 0);
+  if (pcbBack != NULL)  pcbBack->setChecked(!gs.fBackDraw);
+  if (pcbBmpWin != NULL) pcbBmpWin->setChecked(FBmpWindowQt());
+  if (pcbNoPop != NULL) pcbNoPop->setChecked(FNoPopupQt());
 
-  // Windows puts this checkbox directly above the transparency it relates
-  // to, at the head of the dialog's right hand column.
-  pouter->addWidget(pcbNoBackDraw);
-
-  QFormLayout *pform = new QFormLayout();
-  // Editable with 25/50/75/100 offered, as Windows' dcFi_XI1 does.
-  QComboBox *pcbBackPct = new QComboBox();
-  pcbBackPct->setEditable(true);
-  for (i = 25; i <= 100; i += 25)
-    pcbBackPct->addItem(QString::number(i));
-  pcbBackPct->setEditText(SzFormatRQt(gs.rBackPct, -3));
-  QLineEdit *peADB = new QLineEdit(FSzSet(us.szADB) ? us.szADB : "");
-  QLineEdit *pePaperX = new QLineEdit(SzLength(gs.xInch));
-  QLineEdit *pePaperY = new QLineEdit(SzLength(gs.yInch));
-  pform->addRow("Background Transparency Percent:", pcbBackPct);
-  pform->addRow("Astrodatabank File Load Filter:", peADB);
-  pform->addRow("Horizontal PostScript Paper Size:", pePaperX);
-  pform->addRow("Vertical PostScript Paper Size:", pePaperY);
-  pouter->addLayout(pform);
-
-  QGroupBox *pgroupOrient = new QGroupBox("PostScript Paper Orientation");
-  QVBoxLayout *pgrouplayout = new QVBoxLayout(pgroupOrient);
-  QButtonGroup *pgroup = new QButtonGroup(&dlg);
-  CONST char *rgszOrient[3] =
-    { "Portrait", "Landscape", "Based on Chart Dimensions" };
-  int nOrientCur = gs.nOrient == 0 ? 2 : (gs.nOrient > 0 ? 0 : 1);
-  for (i = 0; i < 3; i++) {
-    QRadioButton *prb = new QRadioButton(rgszOrient[i]);
-    prb->setChecked(i == nOrientCur);
-    pgroup->addButton(prb, i);
-    pgrouplayout->addWidget(prb);
+  QLineEdit *peAnti = (QLineEdit *)PwRcFindQt(rgbuilt, "deFi_Wx");
+  QLineEdit *peThick = (QLineEdit *)PwRcFindQt(rgbuilt, "deFi_YXx");
+  QLineEdit *peADB = (QLineEdit *)PwRcFindQt(rgbuilt, "deFi_Y5i");
+  QLineEdit *peInchX = (QLineEdit *)PwRcFindQt(rgbuilt, "deFi_YXp0_x");
+  QLineEdit *peInchY = (QLineEdit *)PwRcFindQt(rgbuilt, "deFi_YXp0_y");
+  QComboBox *pcbPct = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcFi_XI", 1);
+  if (peAnti != NULL)  peAnti->setText(QString::number(NAntialiasQt()));
+  if (peThick != NULL) peThick->setText(QString::number(gs.nThickAdjust));
+  if (peADB != NULL)   peADB->setText(FSzSet(us.szADB) ? us.szADB : "");
+  if (peInchX != NULL) peInchX->setText(SzLength(gs.xInch));
+  if (peInchY != NULL) peInchY->setText(SzLength(gs.yInch));
+  if (pcbPct != NULL) {
+    QStringList rgstr;
+    for (i = 25; i <= 100; i += 25)
+      rgstr << QString::number(i);
+    FillComboQt(pcbPct, SzFormatRQt(gs.rBackPct, -3), rgstr);
   }
-  pouter->addWidget(pgroupOrient);
+  RcLoadRadioQt(rgbuilt, 1, 3,
+    gs.nOrient == 0 ? 2 : (gs.nOrient > 0 ? 0 : 1));
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  int nThickAdjust = peThickAdjust->text().toInt();
-  QByteArray baBackPct = pcbBackPct->currentText().toLocal8Bit();
-  real rBackPct = RFromSz(baBackPct.constData());
-  if (!FValidBackPct(rBackPct)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "The background transparency percent is invalid.");
-    return;
-  }
+  nwx = peAnti != NULL ? peAnti->text().toInt() : NAntialiasQt();
+  rI = pcbPct != NULL ?
+    RFromSz(pcbPct->currentText().toLocal8Bit().constData()) : gs.rBackPct;
+  if (!FValidAntialias(nwx)) { ErrorEnsureQt(&dlg, nwx, "antialias"); return; }
+  if (!FValidBackPct(rI))    { ErrorEnsureQt(&dlg, (int)rI, "background transparency"); return; }
 
-  us.fSmartSave = pcbSmartSave->isChecked();
-  us.fTextHTML = pcbTextHTML->isChecked();
-  if (pcbBmpPNG->isChecked())
-    gs.chBmpMode = 'P';
-  else if (gs.chBmpMode == 'P')
-    gs.chBmpMode = 'B';
-  gs.fPSComplete = !pcbPSComplete->isChecked();
-  us.fWriteOld = pcbWriteOld->isChecked();
-  gs.nFontAll = pcbFontAll->isChecked() * gi.nFontPrev;
-  gs.nFontTxt = gs.nFontAll / 0x100000;
-  gs.nFontSig = (gs.nFontAll / 0x10000) % 0x10;
-  gs.nFontHou = (gs.nFontAll / 0x1000) % 0x10;
-  gs.nFontObj = (gs.nFontAll / 0x100) % 0x10;
-  gs.nFontAsp = (gs.nFontAll / 0x10) % 0x10;
-  gs.nFontNak = gs.nFontAll % 0x10;
-  gs.nThickAdjust = nThickAdjust;
-  gs.fBackDraw = !pcbNoBackDraw->isChecked();
-  gs.rBackPct = rBackPct;
-  QByteArray baADB = peADB->text().toLocal8Bit();
-  FCloneSz(baADB.constData(), &us.szADB);
-  QByteArray baPaperX = pePaperX->text().toLocal8Bit();
-  gs.xInch = RParseSz(baPaperX.constData(), pmLength);
-  QByteArray baPaperY = pePaperY->text().toLocal8Bit();
-  gs.yInch = RParseSz(baPaperY.constData(), pmLength);
-  int nOrientSel = pgroup->checkedId();
-  gs.nOrient = nOrientSel == 2 ? 0 : (nOrientSel == 0 ? 1 : -1);
+  RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+  if (pcbBmpP != NULL) {
+    if (pcbBmpP->isChecked())
+      gs.chBmpMode = 'P';
+    else if (gs.chBmpMode == 'P')
+      gs.chBmpMode = 'B';
+  }
+  if (pcbPS != NULL)     gs.fPSComplete = !pcbPS->isChecked();
+  if (pcbBack != NULL)   gs.fBackDraw = !pcbBack->isChecked();
+  if (pcbBmpWin != NULL) SetBmpWindowQt(pcbBmpWin->isChecked());
+  if (pcbNoPop != NULL)  SetNoPopupQt(pcbNoPop->isChecked());
+  // One box turns every font choice on or off together, remembering what
+  // they were so it can put them back.
+  if (pcbFont != NULL) {
+    gs.nFontAll = pcbFont->isChecked() * gi.nFontPrev;
+    gs.nFontTxt = gs.nFontAll / 0x100000;
+    gs.nFontSig = (gs.nFontAll / 0x10000) % 0x10;
+    gs.nFontHou = (gs.nFontAll / 0x1000) % 0x10;
+    gs.nFontObj = (gs.nFontAll / 0x100) % 0x10;
+    gs.nFontAsp = (gs.nFontAll / 0x10) % 0x10;
+    gs.nFontNak = gs.nFontAll % 0x10;
+  }
+  if (nwx <= 0)
+    gs.fAntialias = fFalse;
+  else
+    SetAntialiasQt(nwx);
+  if (peThick != NULL) gs.nThickAdjust = peThick->text().toInt();
+  gs.rBackPct = rI;
+  if (peADB != NULL) {
+    sprintf(sz, "%.*s", cchSzMax-1,
+      peADB->text().toLocal8Bit().constData());
+    FCloneSz(sz, &us.szADB);
+  }
+  if (peInchX != NULL)
+    gs.xInch = RParseSz(peInchX->text().toLocal8Bit().constData(), pmLength);
+  if (peInchY != NULL)
+    gs.yInch = RParseSz(peInchY->text().toLocal8Bit().constData(), pmLength);
+  i = NRcStoreRadioQt(rgbuilt, 1, 3, 2);
+  gs.nOrient = (i == 2 ? 0 : (i == 0 ? 1 : -1));
   RedrawQt();
 }
 
@@ -2693,200 +2680,127 @@ void ShowDefaultInfoDialogQt()
 // display options. Location comes from the default chart info the same
 // way Windows does it.
 
+// Transits, transcribed from dlgTransit. The first radio group picks
+// which kind of transit chart to cast, the second how far the search runs,
+// and the six "ignore" boxes filter what a search reports.
+
 void ShowTransitDialogQt()
 {
+  CONST RCFLAG rgflag[] = {
+    {"dxTr_YR0_s", -1, &us.fIgnoreSign,   fFalse},
+    {"dxTr_YR0_d", -1, &us.fIgnoreDir,    fFalse},
+    {"dxTr_YR1_l", -1, &us.fIgnoreDiralt, fFalse},
+    {"dxTr_YR1_d", -1, &us.fIgnoreDirlen, fFalse},
+    {"dxTr_YR2_",   0, &us.fIgnoreAlt0,   fFalse},
+    {"dxTr_YR2_d", -1, &us.fIgnoreDisequ, fFalse},
+    {"dxTr_p",     -1, &is.fProgress,     fFalse},
+    {"dxTr_r",     -1, &is.fReturn,       fFalse},
+    {"dxTr_",       5, &us.fListAuto,     fFalse},
+    {"dxTr_g",     -1, &us.fGraphAll,     fFalse} };
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Transits");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QHBoxLayout *phTop = new QHBoxLayout();
-  QVBoxLayout *pvLeft = new QVBoxLayout();
-  QVBoxLayout *pvRight = new QVBoxLayout();
+  QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax];
-  int i;
+  int mon, day, yea, nty, nd, n1, n2;
+  real tim, dst, zon;
 
-  QGroupBox *pgbType = new QGroupBox("Transit Chart Type");
-  QVBoxLayout *pvType = new QVBoxLayout(pgbType);
-  QButtonGroup *pgroup = new QButtonGroup(&dlg);
-  CONST char *rgszDayType[7] = { "None",
-    "Transit to Transit Times", "Transit to Transit Influence",
-    "Transit to Transit Graph", "Transit to Natal Times",
-    "Transit to Natal Influence", "Transit to Natal Graph" };
-  int n1 = us.fInDay ? 1 : (us.fInDayInf ? 2 : (us.fInDayGra ? 3 :
+  dlg.setWindowTitle(szTitleTransit);
+  RcBuildDialogQt(&dlg, rgctlTransit, cctlTransit, dxTransit, dyTransit,
+    &rgbuilt);
+  RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
+
+  n1 = us.fInDay ? 1 : (us.fInDayInf ? 2 : (us.fInDayGra ? 3 :
     (us.fTransit ? 4 : (us.fTransitInf ? 5 : (us.fTransitGra ? 6 : 0)))));
-  for (i = 0; i < 7; i++) {
-    QRadioButton *prb = new QRadioButton(rgszDayType[i]);
-    prb->setChecked(i == n1);
-    pgroup->addButton(prb, i);
-    pvType->addWidget(prb);
-  }
-  pvLeft->addWidget(pgbType);
-
-  // Same human readable formatting as the chart info dialog -- month by
-  // name, time as "9:54pm", zone as "8W". See ShowChartInfoForQt().
-  QGroupBox *pgbInfo = new QGroupBox("Transit to Natal Info");
-  QFormLayout *pformInfo = new QFormLayout(pgbInfo);
-  sprintf(sz, "%.3s", szMonth[FValidMon(ciTran.mon) ? ciTran.mon : 1]);
-  QComboBox *peMon = NewComboQt(sz, RgstrMonthQt());
-  QComboBox *peDay = NewComboQt(QString::number(ciTran.day),
-    RgstrDayQt());
-  QComboBox *peYea = NewComboQt(QString::number(ciTran.yea),
-    RgstrYearQt());
-  QComboBox *peTim = NewComboQt(SzTim(ciTran.tim), RgstrTimeQt());
-  QComboBox *peDst = NewComboQt(ciTran.dst == 0.0 ? "No" :
-    (ciTran.dst == 1.0 ? "Yes" :
-    (ciTran.dst == dstAuto ? "Autodetect" : SzZone(ciTran.dst))),
-    RgstrDstQt());
-  sprintf(sz, "%s", SzZone(ciTran.zon));
-  QComboBox *peZon = NewComboQt(sz[0] == '+' ? &sz[1] : sz,
-    RgstrZoneQt());
-  pformInfo->addRow("Month:", peMon);
-  pformInfo->addRow("Day:", peDay);
-  pformInfo->addRow("Year:", peYea);
-  pformInfo->addRow("Time:", peTim);
-  pformInfo->addRow("Daylight:", peDst);
-  pformInfo->addRow("Zone:", peZon);
-  pvLeft->addWidget(pgbInfo);
-  phTop->addLayout(pvLeft);
-
-  QGroupBox *pgbCover = new QGroupBox("Times and Graph Cover");
-  QVBoxLayout *pvCover = new QVBoxLayout(pgbCover);
-  QButtonGroup *pgroupCover = new QButtonGroup(&dlg);
-  CONST char *rgszCover[4] =
-    { "Given Day", "Given Month", "Given Year", "Range of Years" };
-  // Windows derives which of the four is current from two flags plus the
-  // magnitude of nEphemYears, rather than storing an index.
-  int n2 = us.fInDayMonth + us.fInDayYear +
+  RcLoadRadioQt(rgbuilt, 1, 7, n1);
+  n2 = us.fInDayMonth + us.fInDayYear +
     us.fInDayYear*(NAbs(us.nEphemYears) > 1);
-  for (i = 0; i < 4; i++) {
-    QRadioButton *prb = new QRadioButton(rgszCover[i]);
-    prb->setChecked(i == n2);
-    pgroupCover->addButton(prb, i);
-    pvCover->addWidget(prb);
-  }
-  QFormLayout *pformYears = new QFormLayout();
-  QLineEdit *peYears = new QLineEdit(QString::number(us.nEphemYears));
-  pformYears->addRow("Years to Span:", peYears);
-  pvCover->addLayout(pformYears);
-  pvRight->addWidget(pgbCover);
+  RcLoadRadioQt(rgbuilt, 8, 4, n2);
 
-  QGroupBox *pgbRestrict = new QGroupBox("Transit Time Restrictions");
-  QVBoxLayout *pvRestrict = new QVBoxLayout(pgbRestrict);
-  QCheckBox *pcbSign = new QCheckBox("Sign Changes");
-  QCheckBox *pcbDir = new QCheckBox("Direction Changes");
-  QCheckBox *pcbDiralt = new QCheckBox("Latitude Dir. Changes");
-  QCheckBox *pcbDirlen = new QCheckBox("Distance Dir. Changes");
-  QCheckBox *pcbAlt0 = new QCheckBox("Latitude Zero Crossing");
-  QCheckBox *pcbDisequ = new QCheckBox("Distances Equal");
-  pcbSign->setChecked(us.fIgnoreSign != 0);
-  pcbDir->setChecked(us.fIgnoreDir != 0);
-  pcbDiralt->setChecked(us.fIgnoreDiralt != 0);
-  pcbDirlen->setChecked(us.fIgnoreDirlen != 0);
-  pcbAlt0->setChecked(us.fIgnoreAlt0 != 0);
-  pcbDisequ->setChecked(us.fIgnoreDisequ != 0);
-  for (QCheckBox *pcb : { pcbSign, pcbDir, pcbDiralt, pcbDirlen, pcbAlt0,
-    pcbDisequ })
-    pvRestrict->addWidget(pcb);
-  pvRight->addWidget(pgbRestrict);
+  QComboBox *pcbMon = (QComboBox *)PwRcFindQt(rgbuilt, "dcTrMon");
+  QComboBox *pcbDay = (QComboBox *)PwRcFindQt(rgbuilt, "dcTrDay");
+  QComboBox *pcbYea = (QComboBox *)PwRcFindQt(rgbuilt, "dcTrYea");
+  QComboBox *pcbTim = (QComboBox *)PwRcFindQt(rgbuilt, "dcTrTim");
+  QComboBox *pcbDst = (QComboBox *)PwRcFindQt(rgbuilt, "dcTrDst");
+  QComboBox *pcbZon = (QComboBox *)PwRcFindQt(rgbuilt, "dcTrZon");
+  QLineEdit *peYears = (QLineEdit *)PwRcFindQt(rgbuilt, "deTr_tY");
+  QLineEdit *peDiv = (QLineEdit *)PwRcFindQt(rgbuilt, "deTr_d");
 
-  QCheckBox *pcbProgress = new QCheckBox("Progress Instead of Transit");
-  QCheckBox *pcbReturn = new QCheckBox("Display Transit Returns Only");
-  QCheckBox *pcbListAuto = new QCheckBox("Times Populate Chart List");
-  QCheckBox *pcbGraphAll = new QCheckBox("Graphs Include All Objects");
-  pcbProgress->setChecked(is.fProgress != 0);
-  pcbReturn->setChecked(is.fReturn != 0);
-  pcbListAuto->setChecked(us.fListAuto != 0);
-  pcbGraphAll->setChecked(us.fGraphAll != 0);
-  for (QCheckBox *pcb : { pcbProgress, pcbReturn, pcbListAuto, pcbGraphAll })
-    pvRight->addWidget(pcb);
-  QFormLayout *pformDiv = new QFormLayout();
-  QLineEdit *peDiv = new QLineEdit(QString::number(us.nDivision));
-  pformDiv->addRow("Searching Divisions:", peDiv);
-  pvRight->addLayout(pformDiv);
-  pvRight->addStretch(1);
-  phTop->addLayout(pvRight);
-  pouter->addLayout(phTop);
+  sprintf(sz, "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
+  FillComboQt(pcbMon, sz, RgstrMonthQt());
+  FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
+  FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
+  FillComboQt(pcbTim, SzTim(TimT), RgstrTimeQt());
+  FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
+    (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
+  sprintf(sz, "%s", SzZone(ZonT));
+  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  if (peYears != NULL)
+    peYears->setText(QString::number(us.nEphemYears));
+  if (peDiv != NULL)
+    peDiv->setText(QString::number(us.nDivision));
 
-  QDialogButtonBox *pbuttons = new QDialogButtonBox(
-    QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  QPushButton *pbNow = pbuttons->addButton("Now",
-    QDialogButtonBox::ActionRole);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-  // "Now" refills the date/time fields from the current clock, exactly as
-  // Windows' dbTr_tn button does -- it doesn't accept the dialog.
-  QObject::connect(pbNow, &QPushButton::clicked, &dlg,
-    [peMon, peDay, peYea, peTim, peDst, peZon]() {
-      char szT[cchSzMax];
-      int mon, day, yea;
-      real tim;
-      GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
-      sprintf(szT, "%.3s", szMonth[FValidMon(mon) ? mon : 1]);
-      peMon->setEditText(szT);
-      peDay->setEditText(QString::number(day));
-      peYea->setEditText(QString::number(yea));
-      peTim->setEditText(SzTim(tim));
-      peDst->setEditText(ciDefa.dst == 0.0 ? "No" :
-        (ciDefa.dst == 1.0 ? "Yes" :
-        (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
-      sprintf(szT, "%s", SzZone(ciDefa.zon));
-      peZon->setEditText(szT[0] == '+' ? &szT[1] : szT);
-    });
+  QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbTr_tn");
+  if (ppbNow != NULL)
+    QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
+      [pcbMon, pcbDay, pcbYea, pcbTim]() {
+#ifdef TIME
+        char szN[cchSzMax];
+        int monN, dayN, yeaN;
+        real timN;
+        GetTimeNow(&monN, &dayN, &yeaN, &timN, ciDefa.dst, ciDefa.zon);
+        sprintf(szN, "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
+        if (pcbMon != NULL) pcbMon->setEditText(szN);
+        if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
+        if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
+        if (pcbTim != NULL) pcbTim->setEditText(SzTim(timN));
+#endif
+      });
 
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  int mon, day, yea;
-  real tim, dst, zon;
-  QByteArray ba;
-  ba = peMon->currentText().toLocal8Bit(); mon = NParseSz(ba.constData(), pmMon);
-  ba = peDay->currentText().toLocal8Bit(); day = NParseSz(ba.constData(), pmDay);
-  ba = peYea->currentText().toLocal8Bit(); yea = NParseSz(ba.constData(), pmYea);
-  ba = peTim->currentText().toLocal8Bit(); tim = RParseSz(ba.constData(), pmTim);
-  ba = peDst->currentText().toLocal8Bit(); dst = RParseSz(ba.constData(), pmDst);
-  ba = peZon->currentText().toLocal8Bit(); zon = RParseSz(ba.constData(), pmZon);
-  int nty = peYears->text().toInt();
-  int nd = peDiv->text().toInt();
-  if (!FValidMon(mon) || !FValidYea(yea) || !FValidDay(day, mon, yea) ||
-    !FValidTim(tim) || !FValidDst(dst) || !FValidZon(zon) ||
-    !FValidDivision(nd)) {
-    QMessageBox::warning(gi.qwind, szAppName,
-      "One or more transit fields are invalid.");
-    return;
-  }
-  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
+  mon = pcbMon != NULL ?
+    NParseSz(pcbMon->currentText().toLocal8Bit().constData(), pmMon) : MonT;
+  day = pcbDay != NULL ?
+    NParseSz(pcbDay->currentText().toLocal8Bit().constData(), pmDay) : DayT;
+  yea = pcbYea != NULL ?
+    NParseSz(pcbYea->currentText().toLocal8Bit().constData(), pmYea) : YeaT;
+  tim = pcbTim != NULL ?
+    RParseSz(pcbTim->currentText().toLocal8Bit().constData(), pmTim) : TimT;
+  dst = pcbDst != NULL ?
+    RParseSz(pcbDst->currentText().toLocal8Bit().constData(), pmDst) : DstT;
+  zon = pcbZon != NULL ?
+    RParseSz(pcbZon->currentText().toLocal8Bit().constData(), pmZon) : ZonT;
+  nty = peYears != NULL ? peYears->text().toInt() : us.nEphemYears;
+  nd = peDiv != NULL ? peDiv->text().toInt() : us.nDivision;
 
+  if (!FValidMon(mon))           { ErrorEnsureQt(&dlg, mon, "month"); return; }
+  if (!FValidYea(yea))           { ErrorEnsureQt(&dlg, yea, "year"); return; }
+  if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); return; }
+  if (!FValidTim(tim))           { ErrorEnsureQt(&dlg, (int)tim, "time"); return; }
+  if (!FValidDst(dst))           { ErrorEnsureQt(&dlg, (int)dst, "daylight saving"); return; }
+  if (!FValidZon(zon))           { ErrorEnsureQt(&dlg, (int)zon, "time zone"); return; }
+  if (!FValidDivision(nd))       { ErrorEnsureQt(&dlg, nd, "searching divisions"); return; }
+
+  SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
   us.nEphemYears = nty;
-  us.fIgnoreSign   = pcbSign->isChecked();
-  us.fIgnoreDir    = pcbDir->isChecked();
-  us.fIgnoreDiralt = pcbDiralt->isChecked();
-  us.fIgnoreDirlen = pcbDirlen->isChecked();
-  us.fIgnoreAlt0   = pcbAlt0->isChecked();
-  us.fIgnoreDisequ = pcbDisequ->isChecked();
-  is.fProgress = pcbProgress->isChecked();
-  is.fReturn   = pcbReturn->isChecked();
-  us.fListAuto = pcbListAuto->isChecked();
-  us.fGraphAll = pcbGraphAll->isChecked();
+  RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   us.nDivision = nd;
 
-  int n1sel = pgroup->checkedId();
-  int n2sel = pgroupCover->checkedId();
-  us.fInDayMonth = n2sel >= 1;
-  us.fInDayYear = us.fInDayMonth && n2sel >= 2;
-  if (n2sel == 2 && NAbs(us.nEphemYears) > 1)
+  n1 = NRcStoreRadioQt(rgbuilt, 1, 7, 0);
+  n2 = NRcStoreRadioQt(rgbuilt, 8, 4, 0);
+  us.fInDayMonth = (n2 >= 1);
+  us.fInDayYear = us.fInDayMonth && n2 >= 2;
+  if (n2 == 2 && NAbs(us.nEphemYears) > 1)
     us.nEphemYears = 0;
-  if (n1sel == 3 || n1sel == 6)
-    us.nEphemYears = (n2sel <= 2 ? 1 : (nty <= 1 ? 5 : nty));
-  else if (n1sel > 0) {
-    // The non graphical transit chart types are text listings.
-    us.fGraphics = fFalse;
-    if (n1sel == 2)
-      us.fProgress = is.fProgress;
-  }
+  if (n2 == 3 && NAbs(us.nEphemYears) <= 1)
+    us.nEphemYears = 5;
 
-  flag fRecast = (n1sel == 2 || n1sel == 5);
-  switch (n1sel) {
+  // The chart type flags are set by switching to the mode the first radio
+  // group chose, which is what routes through SetChartModeQt() here where
+  // Windows sets wi.nMode and lets ProcessState() sort the flags out.
+  switch (n1) {
   case 1: SetChartModeQt(gTraTraTim); break;
   case 2: SetChartModeQt(gTraTraInf); break;
   case 3: SetChartModeQt(gTraTraGra); break;
@@ -2894,13 +2808,11 @@ void ShowTransitDialogQt()
   case 5: SetChartModeQt(gTraNatInf); break;
   case 6: SetChartModeQt(gTraNatGra); break;
   default:
-    if (n1 != 0)  // Was showing a transit chart; go back to a normal one.
+    if (us.fInDay || us.fInDayInf || us.fInDayGra ||
+      us.fTransit || us.fTransitInf || us.fTransitGra)
       SetChartModeQt(gWheel);
   }
-  if (fRecast)
-    RecastAndRedrawQt();
-  else
-    RedrawQt();
+  RecastAndRedrawQt();
 }
 
 

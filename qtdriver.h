@@ -37,6 +37,12 @@ void RecastAndRedrawQt();
 void RedrawQt();
 void RedrawForceQt();
 flag FNoUpdateQt();
+flag FNoPopupQt();
+void SetNoPopupQt(flag f);
+flag FBmpWindowQt();
+void SetBmpWindowQt(flag f);
+int NAntialiasQt();
+void SetAntialiasQt(int n);
 void SetNoUpdateQt(flag f);
 
 // Switch the chart type/mode, mirroring the chart-type switch in Windows'
