@@ -1069,6 +1069,51 @@ original description said they were.
     760x600 -- a 600x600 wheel plus a 160 sidebar. Don't "fix" an oval seen
     in a forced-square test window; check the natural startup size instead.
 
+21. **The dialogs are transcribed from astrolog.rc, not rebuilt.**
+    `tools/rc2qt.py` turns each `dlg*` block into a control table
+    (`qtrcdlg.h`), and `RcBuildDialogQt()` lays it out through Windows' own
+    unit conversion. **22 of the 23 dialogs** go through it.
+    - Regenerate with `python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h`
+      after any upstream resource change, then rebuild -- the makefiles
+      list the header as a dependency now, which they didn't at first, and
+      a stale object file makes a regeneration look like it did nothing.
+    - `tools/rc_audit.py` reports any control a dialog builds that nothing
+      wires up. It has caught real ones: Calculation Settings' "3D Houses"
+      box, and Graphics Settings' "Don't Automatically Redraw Screen".
+      Run it after adding a dialog.
+    - **dlgAbort is the one not transcribed.** It is a modeless "printing,
+      Cancel" window that exists to service GDI's abort procedure while
+      spooling. Qt prints synchronously through QPrinter with no abort
+      hook, so the dialog would appear and vanish with nothing to cancel.
+    - Things the resource hides, all of which cost a debugging cycle:
+      `CONTROL` puts its style flags before the geometry while `EDITTEXT`
+      and `COMBOBOX` put them after; a control can span two lines with the
+      geometry on the second; a `COMBOBOX`'s height is its dropped-down
+      extent, not the closed control; and `CONTROL` is a checkbox or a
+      radio button depending on its style.
+    - Numbering is not uniform. Colour lists start at `dck00` while the
+      edit fields beside them start at `deo01`; pairing them by the same
+      index puts every colour one row below its object.
+    - Which checkbox drives which setting is extracted from the
+      `SetCheck`/`GetCheck` pairs in Windows' own dialog handlers rather
+      than worked out here, so the two builds can't drift apart on it --
+      including the boxes that show the *inverse* of their flag.
+
+22. **The interface font is bundled.** Astrolog's dialogs are laid out in
+    units of the dialog font's average character width, against MS Shell
+    Dlg, so a font whose strings run wider per unit of average width won't
+    fit the resource's boxes. Measured across all 630 pieces of text:
+    DejaVu Sans overflows 168, DejaVu Sans **Condensed** 177 (narrower is
+    not better proportioned), Liberation Sans 8. Liberation is bundled
+    under the SIL OFL in `font/`, and only the *family* is set -- the point
+    size stays the desktop's, so its scaling still applies.
+    - Do not widen the base unit to make text fit. "Atlas City Coloring:"
+      sits in a 35 unit box and would demand a base of 19 against a natural
+      9, very nearly doubling every dialog. Shrinking the whole dialog font
+      does nothing either, since the base unit derives from that same font.
+      The control that overflows shrinks its own text, and a label that
+      still doesn't fit wraps, which is what Windows' static text does.
+
 ## Known divergences from Windows
 
 Every place this port knowingly differs, so none of it reads as an

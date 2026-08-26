@@ -2086,206 +2086,170 @@ static flag FChartFieldMatchQt(CONST char *szField, CONST char *szFind)
   return fFalse;
 }
 
+// Chart List, transcribed from dlgList. The list holds every chart read in
+// this session; the buttons down the right sort it, move a chart into one
+// of the six slots or out of one, edit or delete entries, and the two at
+// the bottom filter what's shown by name and location.
+
+// Refill the list, optionally keeping only rows matching the filter
+// fields, and return how many were shown. rgiciQt maps row to chart.
+static QVector<int> s_rgiciQt;
+
+static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
+  QLineEdit *peName, QLineEdit *peLoc, flag fFilter)
+{
+  char sz[cchSzLine], sz1[cchSzDef], sz2[cchSzDef];
+  int i, i2 = 0, j, nSav;
+  flag fSav;
+  CI *pci;
+
+  if (plist == NULL)
+    return;
+  plist->clear();
+  s_rgiciQt.clear();
+  sz1[0] = sz2[0] = chNull;
+  if (fFilter) {
+    if (peName != NULL)
+      sprintf(sz1, "%.*s", cchSzDef-1,
+        peName->text().toLocal8Bit().constData());
+    if (peLoc != NULL)
+      sprintf(sz2, "%.*s", cchSzDef-1,
+        peLoc->text().toLocal8Bit().constData());
+  }
+  for (i = 0; i < is.cci; i++) {
+    pci = &is.rgci[i];
+    if (fFilter) {
+      if (*sz1) {
+        for (j = 0; pci->nam[j]; j++)
+          if (FEqSzSubI(sz1, &pci->nam[j]))
+            break;
+        if (!pci->nam[j])
+          continue;
+      }
+      if (*sz2) {
+        for (j = 0; pci->loc[j]; j++)
+          if (FEqSzSubI(sz2, &pci->loc[j]))
+            break;
+        if (!pci->loc[j])
+          continue;
+      }
+    }
+    j = DayOfWeek(pci->mon, pci->day, pci->yea);
+    nSav = us.fAnsiChar; us.fAnsiChar = 2;
+    fSav = us.fGraphics; us.fGraphics = fTrue;
+    sprintf(sz, "%.3s %s %s (%cT Zone %s) %s %s%s%s", szDay[j],
+      SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
+      ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat),
+      pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
+      pci->loc);
+    us.fAnsiChar = nSav; us.fGraphics = fSav;
+    plist->addItem(QString::fromLatin1(sz));
+    s_rgiciQt.append(i);
+    i2++;
+  }
+  if (i2 <= 0) {
+    plist->addItem("(No charts in list)");
+    s_rgiciQt.append(-1);
+  }
+  if (plSize != NULL)
+    plSize->setText(QString("List size: %1").arg(i2));
+}
+
+
 void ShowChartListDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Chart List");
-  dlg.resize(900, 560);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QHBoxLayout *phMain = new QHBoxLayout();
-  QListWidget *plist = new QListWidget();
-  QLabel *plabelSize = new QLabel();
-  int i;
+  QVector<RCBUILT> rgbuilt;
 
-  phMain->addWidget(plist, 1);
-  QVBoxLayout *pvSide = new QVBoxLayout();
-  pvSide->addWidget(plabelSize);
+  dlg.setWindowTitle(szTitleList);
+  RcBuildDialogQt(&dlg, rgctlList, cctlList, dxList, dyList, &rgbuilt);
 
-  QGroupBox *pgbSort = new QGroupBox("Sort By");
-  QVBoxLayout *pvSort = new QVBoxLayout(pgbSort);
-  QButtonGroup *pgroupSort = new QButtonGroup(&dlg);
-  CONST char *rgszSortQt[5] =
-    { "Date", "Longitude", "Latitude", "Name", "Location" };
-  for (i = 0; i < 5; i++) {
-    QRadioButton *prb = new QRadioButton(rgszSortQt[i]);
-    prb->setChecked(i == 0);
-    pgroupSort->addButton(prb, i);
-    pvSort->addWidget(prb);
+  QListWidget *plist = (QListWidget *)PwRcFindQt(rgbuilt, "dlLi");
+  QLabel *plSize = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", 1);
+  QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deLi_n");
+  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deLi_l");
+  RcFillChartListQt(plist, plSize, peName, peLoc, fFalse);
+  RcLoadRadioQt(rgbuilt, 1, 5, 0);    // Sort by: date
+  RcLoadRadioQt(rgbuilt, 6, 6, 0);    // Slot: 1st
+
+  // The selected chart, or -1 when the row is the "no charts" placeholder.
+  auto iciSel = [plist]() -> int {
+    int iRow = plist != NULL ? plist->currentRow() : -1;
+    return (iRow >= 0 && iRow < s_rgiciQt.size()) ? s_rgiciQt[iRow] : -1;
+  };
+  auto iSlot = [&rgbuilt]() -> int {
+    return NRcStoreRadioQt(rgbuilt, 6, 6, 0) + 1;
+  };
+  auto refill = [plist, plSize, peName, peLoc](flag fFilter) {
+    RcFillChartListQt(plist, plSize, peName, peLoc, fFilter);
+  };
+
+  struct { CONST char *szId; int nAct; } rgbut[] = {
+    {"dbLi_sl", 0}, {"dbLi_da", 1}, {"dbLi_f", 2}, {"dbLi_fr", 3},
+    {"dbLi_st", 4}, {"dbLi_cf", 5}, {"dbLi_ec", 6}, {"dbLi_dc", 7} };
+  for (int i = 0; i < (int)(sizeof(rgbut)/sizeof(rgbut[0])); i++) {
+    QPushButton *ppb = (QPushButton *)PwRcFindQt(rgbuilt, rgbut[i].szId);
+    if (ppb == NULL)
+      continue;
+    int nAct = rgbut[i].nAct;
+    QObject::connect(ppb, &QPushButton::clicked, &dlg,
+      [nAct, &rgbuilt, plist, iciSel, iSlot, refill]() {
+        int ici = iciSel(), i2;
+        switch (nAct) {
+        case 0:                                   // Sort List
+          FSortCIList(NRcStoreRadioQt(rgbuilt, 1, 5, 0));
+          refill(fFalse);
+          return;
+        case 1:                                   // Delete All
+          is.cci = 0; refill(fFalse); return;
+        case 2: refill(fTrue); return;            // Filter
+        case 3:                                   // Remove Filter
+          refill(fFalse); return;
+        }
+        if (ici < 0 && nAct != 5) {
+          QMessageBox::warning(gi.qwind, szAppName,
+            "Can't do operation because no chart in list is selected.");
+          return;
+        }
+        switch (nAct) {
+        case 4:                                   // Set To Slot
+          *rgpci[iSlot()] = is.rgci[ici];
+          is.iciCur = ici;
+          if (iSlot() == 1)
+            ciCore = is.rgci[ici];
+          RecastAndRedrawQt();
+          break;
+        case 5:                                   // Copy From slot
+          FAppendCIList(rgpci[iSlot()]);
+          break;
+        case 6:                                   // Edit Chart
+          ShowChartInfoForQt(&is.rgci[ici], "Set Chart List Info");
+          break;
+        case 7:                                   // Delete Chart
+          i2 = is.cci - 1 - ici;
+          if (i2 > 0)
+            CopyRgb((pbyte)&is.rgci[ici+1], (pbyte)&is.rgci[ici],
+              i2*sizeof(CI));
+          is.cci--;
+          break;
+        }
+        refill(fFalse);
+      });
   }
-  pvSide->addWidget(pgbSort);
-  QPushButton *pbSort = new QPushButton("Sort List");
-  pvSide->addWidget(pbSort);
 
-  QGroupBox *pgbSlot = new QGroupBox("Chart Slot");
-  QVBoxLayout *pvSlot = new QVBoxLayout(pgbSlot);
-  QButtonGroup *pgroupSlot = new QButtonGroup(&dlg);
-  CONST char *rgszSlot[cRing] =
-    { "1st", "2nd", "3rd", "4th", "5th", "6th" };
-  for (i = 0; i < cRing; i++) {
-    QRadioButton *prb = new QRadioButton(rgszSlot[i]);
-    prb->setChecked(i == 0);
-    pgroupSlot->addButton(prb, i);
-    pvSlot->addWidget(prb);
-  }
-  pvSide->addWidget(pgbSlot);
-
-  QPushButton *pbSet = new QPushButton("Set To Slot");
-  QPushButton *pbCopy = new QPushButton("Copy From");
-  QPushButton *pbEdit = new QPushButton("Edit Chart...");
-  QPushButton *pbDel = new QPushButton("Delete Chart");
-  QPushButton *pbDelAll = new QPushButton("Delete All");
-  for (QPushButton *pb : { pbSet, pbCopy, pbEdit, pbDel, pbDelAll })
-    pvSide->addWidget(pb);
-  pvSide->addStretch(1);
-  phMain->addLayout(pvSide);
-  pouter->addLayout(phMain);
-
-  QHBoxLayout *phFilter = new QHBoxLayout();
-  QLineEdit *peName = new QLineEdit();
-  QLineEdit *peLoc = new QLineEdit();
-  QPushButton *pbFilter = new QPushButton("Filter");
-  QPushButton *pbUnfilter = new QPushButton("Remove Filter");
-  phFilter->addWidget(new QLabel("Name:"));
-  phFilter->addWidget(peName, 1);
-  phFilter->addWidget(new QLabel("Location:"));
-  phFilter->addWidget(peLoc, 1);
-  phFilter->addWidget(pbFilter);
-  phFilter->addWidget(pbUnfilter);
-  pouter->addLayout(phFilter);
-
-  // Whether the list is currently showing a filtered view. Windows only
-  // applies a filter permanently (FilterCIList, which actually discards
-  // the non matching charts) on OK with nothing selected; until then the
-  // filter is just a view over the full list.
-  flag fFilter = fFalse;
-
-  auto RefreshList = [&](flag fApplyFilter) {
-    QByteArray baName = peName->text().toLocal8Bit();
-    QByteArray baLoc = peLoc->text().toLocal8Bit();
-    int iSel = plist->currentRow(), cShown = 0, j;
-    plist->clear();
-    for (j = 0; j < is.cci; j++) {
-      CI *pci = &is.rgci[j];
-      if (fApplyFilter &&
-        (!FChartFieldMatchQt(pci->nam, baName.constData()) ||
-        !FChartFieldMatchQt(pci->loc, baLoc.constData())))
-        continue;
-      QString qs = SzChartDateLineQt(pci);
-      QString qsName = SzChartNameLineQt(pci);
-      if (!qsName.isEmpty())
-        qs += " " + qsName;
-      QListWidgetItem *pitem = new QListWidgetItem(qs, plist);
-      pitem->setData(Qt::UserRole, j);
-      cShown++;
-    }
-    if (cShown <= 0) {
-      QListWidgetItem *pitem =
-        new QListWidgetItem("(No charts in list)", plist);
-      pitem->setData(Qt::UserRole, -1);
-    }
-    plabelSize->setText(QString("List size: %1").arg(cShown));
-    if (iSel >= 0 && iSel < plist->count())
-      plist->setCurrentRow(iSel);
-  };
-
-  // Index into is.rgci of the selected row, or -1 for none/placeholder.
-  auto ISelected = [&plist]() -> int {
-    QListWidgetItem *pitem = plist->currentItem();
-    return pitem == NULL ? -1 : pitem->data(Qt::UserRole).toInt();
-  };
-
-  auto LoadIntoSlot = [&](int iList) {
-    CI ciT = is.rgci[iList];
-    int iSlot = pgroupSlot->checkedId() + 1;
-    is.iciCur = iList;
-    *rgpci[iSlot] = ciT;
-    if (iSlot == 1)
-      ciCore = ciT;
-  };
-
-  RefreshList(fFalse);
-
-  QObject::connect(pbSort, &QPushButton::clicked, &dlg, [&]() {
-    FSortCIList(pgroupSort->checkedId());
-    RefreshList(fFilter);
-  });
-  QObject::connect(pbDelAll, &QPushButton::clicked, &dlg, [&]() {
-    is.cci = 0;
-    RefreshList(fFilter);
-  });
-  QObject::connect(pbFilter, &QPushButton::clicked, &dlg, [&]() {
-    fFilter = fTrue;
-    RefreshList(fTrue);
-  });
-  QObject::connect(pbUnfilter, &QPushButton::clicked, &dlg, [&]() {
-    fFilter = fFalse;
-    peName->clear(); peLoc->clear();
-    RefreshList(fFalse);
-  });
-  QObject::connect(pbSet, &QPushButton::clicked, &dlg, [&]() {
-    int iList = ISelected();
-    if (iList < 0) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "Can't do operation because no chart in list is selected.");
-      return;
-    }
-    LoadIntoSlot(iList);
-    RecastAndRedrawQt();
-  });
-  QObject::connect(pbCopy, &QPushButton::clicked, &dlg, [&]() {
-    FAppendCIList(rgpci[pgroupSlot->checkedId() + 1]);
-    RefreshList(fFilter);
-    plist->setCurrentRow(plist->count() - 1);
-  });
-  QObject::connect(pbEdit, &QPushButton::clicked, &dlg, [&]() {
-    int iList = ISelected();
-    if (iList < 0) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "Can't do operation because no chart in list is selected.");
-      return;
-    }
-    QByteArray baTitle =
-      QString("Chart List #%1 Info").arg(iList + 1).toLocal8Bit();
-    ShowChartInfoForQt(&is.rgci[iList], baTitle.constData());
-    RefreshList(fFilter);
-  });
-  QObject::connect(pbDel, &QPushButton::clicked, &dlg, [&]() {
-    int iList = ISelected();
-    if (iList < 0) {
-      QMessageBox::warning(gi.qwind, szAppName,
-        "Can't do operation because no chart in list is selected.");
-      return;
-    }
-    CopyRgb((pbyte)&is.rgci[iList+1], (pbyte)&is.rgci[iList],
-      (is.cci-1-iList)*sizeof(CI));
-    is.cci--;
-    RefreshList(fFilter);
-  });
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  // Read the selection after exec() returns rather than from a second
-  // "accepted" handler: the dialog is still on the stack here, so its
-  // widgets are alive, and this doesn't depend on which order two slots
-  // connected to the same signal happen to run in.
-  int iOk = ISelected();
-  if (iOk >= 0) {
-    LoadIntoSlot(iOk);
+  // OK loads the highlighted chart into the chosen slot, as Windows does.
+  int ici = iciSel();
+  if (ici >= 0) {
+    *rgpci[iSlot()] = is.rgci[ici];
+    is.iciCur = ici;
+    if (iSlot() == 1)
+      ciCore = is.rgci[ici];
     RecastAndRedrawQt();
-  } else if (fFilter) {
-    // Windows only commits the filter (which actually drops the charts
-    // that don't match) when OK is pressed with nothing selected.
-    QByteArray baName = peName->text().toLocal8Bit();
-    QByteArray baLoc = peLoc->text().toLocal8Bit();
-    FilterCIList(baName.constData(), baLoc.constData());
   }
 }
 
