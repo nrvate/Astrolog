@@ -88,7 +88,17 @@ make -f Makefile.win
 wine ./astrolog.exe
 ```
 
-Needs `mingw-w64` and `wine`.
+There's a scripted comparison too, which captures the same text charts
+from both builds and stacks them for a look:
+
+```
+tools/text-chart-capture.sh out/win
+QTTEXTDIR=out/qt ./run-qt-tests.sh
+python3 tools/text-chart-diff.py out/win out/qt out/cmp
+```
+
+Needs `g++-mingw-w64-x86-64`, `wine`, `xvfb`, `metacity`, `xdotool`,
+`imagemagick` and `python3-pil`. See `QT_COMPARING_WITH_WINDOWS.md`.
 
 ## Docs
 
@@ -100,6 +110,8 @@ Needs `mingw-w64` and `wine`.
   knowing before changing it, a "What to do next" section, per-menu
   status, a log of every item done and what it actually turned out to be,
   and every place this port knowingly differs from Windows.
+- **`QT_COMPARING_WITH_WINDOWS.md`** — how to build the real Windows
+  binary, run it under Wine, and diff it against this port.
 - **`QT_MENU_MAPPING.md`** — the Windows menu structure extracted from
   `astrolog.rc`, with command IDs. The reference the Qt menu bar is
   built against.

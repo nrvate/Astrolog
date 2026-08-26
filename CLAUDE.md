@@ -15,6 +15,9 @@ Work happens on branch **`qt`**.
   per-menu status, "What to do next", a work log of every item and what it
   actually turned out to be, and every knowing divergence from Windows.
   **Read this before changing anything.**
+- **`QT_COMPARING_WITH_WINDOWS.md`** — how to build and drive the real
+  Windows binary under Wine and diff it against this port, and the
+  headless-automation traps specific to doing that.
 - **`QT_MENU_MAPPING.md`** — the Windows menu structure extracted from
   `astrolog.rc`, with command IDs.
 
@@ -24,10 +27,22 @@ Windows-only `wdriver.cpp`/`wdialog.cpp`. The shared calculation and
 drawing core is upstream's and is changed only when a backend branch is
 genuinely missing (see "Editing shared code" below).
 
+## Prerequisites
+
+```sh
+sudo apt install qtbase5-dev pkg-config              # build the Qt port
+sudo apt install g++-mingw-w64-x86-64 wine           # build and run the Windows one
+sudo apt install xvfb metacity xdotool imagemagick   # drive either headlessly
+sudo apt install python3-pil                         # compare captures
+```
+
+Only the first line is needed to build the port and run its whole test
+suite. The rest is for comparing against Windows.
+
 ## Build and test
 
 ```sh
-make -f Makefile.qt -j4          # ./astrolog-qt        (needs qtbase5-dev, pkg-config)
+make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
 ./run-qt-tests.sh                # 2728 assertions, exits nonzero on failure
 ```
@@ -53,21 +68,22 @@ python3 tools/rc_mnemonic_audit.py               # "&" placement vs astrolog.rc
 
 Don't guess at Windows behaviour — build it and look. `Makefile.win`
 cross-compiles the real Windows binary with mingw-w64, same
-`wdriver.cpp`, same `astrolog.rc`:
+`wdriver.cpp`, same `astrolog.rc`, and it runs under Wine. This has
+repeatedly settled questions that code reading got wrong.
 
 ```sh
-make -f Makefile.win             # needs mingw-w64
-wine ./astrolog.exe              # needs wine
+make -f Makefile.win
+tools/text-chart-capture.sh out/win         # Windows text charts
+QTTEXTDIR=out/qt ./run-qt-tests.sh          # the same charts from this port
+python3 tools/text-chart-diff.py out/win out/qt out/cmp
 ```
 
-This has repeatedly settled questions that code reading got wrong. Drive
-it on a private display rather than the user's desktop:
-
-```sh
-Xvfb :77 -screen 0 1200x900x24 &
-DISPLAY=:77 metacity --sm-disable &     # Qt needs a WM for menus to open
-DISPLAY=:77 wine ./astrolog.exe &
-```
+**`QT_COMPARING_WITH_WINDOWS.md` has the full workflow**, including how to
+drive either build headlessly and the environment traps that cost real
+time to rediscover (Qt needs a window manager for menus to open; xdotool's
+`--window` path uses XSendEvent, which Wine ignores; Astrolog's
+accelerators are case-sensitive; Xvfb doesn't isolate audio, so an
+undriven beep plays on the real speakers).
 
 On a private Xvfb display, `import -window root` is fine.
 

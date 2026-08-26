@@ -818,12 +818,81 @@ static void TestBadInputQt()
 
 /*
 ******************************************************************************
+** Text chart capture, for comparing against the Windows build.
+******************************************************************************
+*/
+
+// Render the text charts to PNGs so they can be put beside the same
+// charts captured from the real Windows build under Wine -- see
+// QT_COMPARING_WITH_WINDOWS.md. This side is done in code rather than by
+// driving the UI because "v" is a *toggle*: pressing it leaves the two
+// builds in whatever state they started in, which is not necessarily the
+// same one, and a graphics chart then gets compared against a text chart.
+// Setting us.fGraphics directly is deterministic, needs no display, no
+// window manager and no keystrokes, and cannot beep.
+//
+//   make -f Makefile.qt.test
+//   QTTEXTDIR=out/qt ./run-qt-tests.sh
+//
+// Chart data is pinned here so both sides show the same chart; change it
+// in both places or the comparison is only about layout, not values.
+
+static void TextChartCaptureQt(CONST char *szDir)
+{
+  CONST char *rgszAct[] = { "Standard Radi&x", "House &Wheel",
+    "Aspect Midpoint &Grid", "&Calendar", "Inf&luence", "&Ephemeris",
+    "&Aspect List", "&Midpoint List" };
+  CONST char *rgszFile[] = { "radix", "wheel", "grid", "calendar",
+    "influence", "ephemeris", "aspectlist", "midpointlist" };
+  int i, cchart = (int)(sizeof(rgszAct) / sizeof(char *));
+
+  // The chart tools/text-chart-capture.sh leaves the Windows build on:
+  // Nov 19 1971 11:01am, ST Zone 8W, 122:19W 47:36N, no name or location
+  // string (a name makes the header wrap to a second line, charts1.cpp:91).
+  ciCore.mon = 11; ciCore.day = 19; ciCore.yea = 1971;
+  ciCore.tim = 11.0 + 1.0/60.0; ciCore.dst = 0.0; ciCore.zon = 8.0;
+  ciCore.lon = 122.0 + 19.0/60.0; ciCore.lat = 47.0 + 36.0/60.0;
+  ciCore.nam[0] = chNull; ciCore.loc[0] = chNull;
+  ciMain = ciCore;
+  CastChart(1);
+
+  gs.xWin = 1000; gs.yWin = 620;
+  if (gi.qcanvas != NULL)
+    gi.qcanvas->resize(gs.xWin, gs.yWin);
+
+  printf("capturing %d text charts to %s\n", cchart, szDir);
+  for (i = 0; i < cchart; i++) {
+    QAction *pa = PaFindActionTestQt(rgszAct[i]);
+    if (pa == NULL) {
+      printf("  %-24s NOT FOUND\n", rgszAct[i]);
+      continue;
+    }
+    pa->trigger();
+    us.fGraphics = fFalse;      // deterministic, unlike toggling "v"
+    RedrawQt();
+    if (gi.qim == NULL) {
+      printf("  %-24s nothing rendered\n", rgszAct[i]);
+      continue;
+    }
+    gi.qim->save(QString("%1/%2.png").arg(szDir).arg(rgszFile[i]));
+    printf("  %s\n", rgszFile[i]);
+    fflush(stdout);
+  }
+}
+
+
+/*
+******************************************************************************
 ** Entry point.
 ******************************************************************************
 */
 
 int NRunQtTestsQt()
 {
+  if (getenv("QTTEXTDIR") != NULL) {
+    TextChartCaptureQt(getenv("QTTEXTDIR"));
+    return 0;
+  }
   printf("Astrolog Qt test suite\n");
   TestDialogsQt();
   TestContextMenusQt();

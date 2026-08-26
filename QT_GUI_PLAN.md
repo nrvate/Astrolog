@@ -1261,31 +1261,19 @@ to do next" item 1 with what's now known about them.)
   with mingw-w64 — same `wdriver.cpp`, same `wdialog.cpp`, same
   `astrolog.rc` — and it runs under Wine. This has settled questions that
   code reading got wrong, and it is how the text chart layouts and the
-  menu mnemonics were verified rather than guessed.
-  - Drive it on a **private** Xvfb display, never the user's desktop:
-    `Xvfb :77 -screen 0 1200x900x24 &`, then `DISPLAY=:77 wine
-    ./astrolog.exe &`. On a private display `import -window root` is fine
-    and much easier than chasing window IDs.
-  - **Qt needs a window manager for menus to open.** Under bare Xvfb the
-    Qt app runs and renders, but Alt+mnemonic and menu-bar clicks silently
-    do nothing and no popup window ever appears. `DISPLAY=:77 metacity
-    --sm-disable &` fixes it. Wine doesn't need this — it manages its own
-    windows — which makes the failure look app-specific rather than
-    environmental.
-  - **`xdotool key --window <id>` uses XSendEvent, which Wine ignores.**
-    Keys appear to be delivered and nothing happens; captures then show
-    the *previous* chart and read as a redraw lag. Activate the window and
-    send via XTEST instead (plain `xdotool key`, no `--window`).
-  - **Astrolog's accelerators are case-sensitive.** `v` is the Show
-    Graphics toggle; `V` (i.e. `shift+v`) is Standard Radix. `Alt+l` and
-    `Alt+L` are different commands. Send `shift+a`, not `a`.
-  - Wine under Xvfb doesn't always repaint between commands. Forcing a
-    resize away and back, then Redraw Screen (`space`), produced reliable
-    captures where a plain sleep did not.
-- **Don't `pkill -f` a pattern that matches your own command line.**
-  `pkill -f astrolog-qt` kills the shell running it, which surfaces as a
-  bare exit code 144 and no output — easy to misread as the app crashing.
-  Use `pkill -x <exact-name>`, or match on a PID.
+  menu mnemonics were verified rather than guessed. **The workflow, and
+  the headless-automation traps that go with it, are in
+  `QT_COMPARING_WITH_WINDOWS.md`** — read it before driving either build
+  with `xdotool`, because several of the failure modes there are silent
+  and look like application bugs rather than harness bugs.
+- **Prefer a toggle-free way to reach a known state.** Comparing the two
+  builds went wrong first time because `v` is a *toggle*: pressing it
+  leaves each build in whatever state it started in, and a graphics chart
+  got compared against a text chart, which looks exactly like a rendering
+  divergence. `wine ./astrolog.exe _X` starts in text mode
+  deterministically, and the Qt side sets `us.fGraphics` in code. The
+  general lesson: when a harness needs a known starting state, find the
+  way to *assert* it rather than the way to flip it.
 - **Always verify new interactive behavior live**, not just by code
   review — this project has found multiple genuine pre-existing
   architectural bugs this way (`DrawDash()`'s invisible-solid-lines bug,
