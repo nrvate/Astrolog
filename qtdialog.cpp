@@ -2171,6 +2171,171 @@ typedef struct {
 
 #define CButRes(rg) (int)(sizeof(rg) / sizeof(RESBUT))
 
+/*
+******************************************************************************
+** Dialogs transcribed from astrolog.rc.
+******************************************************************************
+*/
+
+// Windows measures dialogs in "dialog units": one horizontal unit is a
+// quarter of the dialog font's average character width, one vertical unit
+// an eighth of its line height. Placing controls at the resource's own
+// coordinates through that conversion reproduces the original layout
+// exactly, and scales with whatever font the desktop is set to.
+//
+// This exists because rebuilding these dialogs out of nested Qt layouts
+// does not. Inferring "two columns here, a group box there" from the
+// resource gets the structure right but not the density: every layout
+// level contributes its own margins and spacing, and the result came out
+// close to twice as tall and wide as the original. Transcribing the
+// numbers avoids the guesswork entirely.
+
+enum {
+  ctlCheck, ctlLabel, ctlGroup, ctlButton, ctlIcon, ctlEdit, ctlCombo
+};
+
+// Button identities the dialogs below wire up. Checkbox ids are the object
+// index instead, straight out of the resource's dxNN numbering.
+enum {
+  butOK = 1000, butCancel, butResAll, butUnresAll, butMinors, butCusps,
+  butUran, butDwarf, butCopy, butRecall, butMars, butJupiter, butSaturn,
+  butUranus, butNeptune, butPluto, butCOB
+};
+
+typedef struct {
+  int nType;
+  CONST char *szText;
+  int id;
+  int x, y, dx, dy;   // In dialog units, as the resource gives them.
+} RCCTL;
+
+#include "qtrcdlg.h"
+
+// One built control, so a caller can find what it needs to wire up.
+typedef struct {
+  CONST RCCTL *pctl;
+  QWidget *pw;
+} RCBUILT;
+
+static CONST RCCTL *PctlBuiltQt(CONST QVector<RCBUILT> *prg, int i)
+{
+  return (*prg)[i].pctl;
+}
+
+
+// Lay a transcribed dialog out. Widgets are positioned absolutely rather
+// than through a layout, which is the whole point -- the resource has
+// already decided where everything goes.
+static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
+  int dxDlg, int dyDlg, QVector<RCBUILT> *prgbuilt)
+{
+  QFontMetrics fm(pdlg->font());
+  int dxBase = fm.averageCharWidth(), dyBase = fm.height();
+  int i, iPass;
+
+  prgbuilt->clear();
+  prgbuilt->resize(cctl);
+
+  // Group boxes first: they are frames the other controls sit inside, and
+  // sibling widgets paint in creation order, so building them later would
+  // draw the frames over their own contents.
+  for (iPass = 0; iPass < 2; iPass++)
+    for (i = 0; i < cctl; i++) {
+      CONST RCCTL *pctl = &rgctl[i];
+      if ((pctl->nType == ctlGroup) != (iPass == 0))
+        continue;
+      QString str = QString(pctl->szText);
+      QWidget *pw = NULL;
+
+      switch (pctl->nType) {
+      case ctlGroup:
+        pw = new QGroupBox(str, pdlg);
+        break;
+      case ctlCheck:
+        pw = new QCheckBox(str, pdlg);
+        break;
+      case ctlLabel:
+        // A static label renders "&" literally, so drop it -- the
+        // resource only uses it on controls that take focus.
+        pw = new QLabel(str.remove(QChar('&')), pdlg);
+        break;
+      case ctlButton:
+        pw = new QPushButton(str, pdlg);
+        break;
+      case ctlEdit:
+        pw = new QLineEdit(pdlg);
+        break;
+      case ctlCombo:
+        pw = new QComboBox(pdlg);
+        break;
+      case ctlIcon: {
+        QLabel *plIcon = new QLabel(pdlg);
+        QPixmap pix = PixAstrologIconQt();
+        // The resource sizes the icon too, so it scales with the rest.
+        if (!pix.isNull())
+          plIcon->setPixmap(pix.scaled(pctl->dx * dxBase / 4,
+            pctl->dy * dyBase / 8, Qt::KeepAspectRatio,
+            Qt::SmoothTransformation));
+        plIcon->setAlignment(Qt::AlignCenter);
+        pw = plIcon;
+        break; }
+      }
+      if (pw == NULL)
+        continue;
+      (*prgbuilt)[i].pctl = pctl;
+      (*prgbuilt)[i].pw = pw;
+    }
+
+  // Widen the base unit until every label fits the space the resource
+  // allotted it, then lay the whole dialog out at that scale. Windows'
+  // formula uses the font's average character width, but a given string
+  // takes more of that average in one typeface than another -- this font
+  // needs noticeably more than the MS Shell Dlg the resource was drawn
+  // against, so at the nominal scale the longer labels clip. Growing the
+  // individual controls instead would break the alignment the resource
+  // spent its coordinates establishing; scaling the unit keeps every
+  // proportion intact and simply renders the same dialog larger.
+  for (i = 0; i < cctl; i++) {
+    CONST RCCTL *pctl = PctlBuiltQt(prgbuilt, i);
+    QWidget *pw = (*prgbuilt)[i].pw;
+    if (pw == NULL || pctl == NULL || pctl->dx <= 0)
+      continue;
+    if (pctl->nType != ctlCheck && pctl->nType != ctlLabel &&
+      pctl->nType != ctlButton)
+      continue;
+    int dxWant = pw->sizeHint().width();
+    if (dxWant > 0)
+      dxBase = Max(dxBase, (dxWant * 4 + pctl->dx - 1) / pctl->dx);
+  }
+
+  pdlg->setFixedSize(dxDlg * dxBase / 4, dyDlg * dyBase / 8);
+  for (i = 0; i < cctl; i++) {
+    CONST RCCTL *pctl = PctlBuiltQt(prgbuilt, i);
+    QWidget *pw = (*prgbuilt)[i].pw;
+    if (pw == NULL || pctl == NULL)
+      continue;
+    pw->setGeometry(pctl->x * dxBase / 4, pctl->y * dyBase / 8,
+      pctl->dx * dxBase / 4, pctl->dy * dyBase / 8);
+    if (pctl->nType == ctlIcon) {
+      QPixmap pix = PixAstrologIconQt();
+      if (!pix.isNull())
+        ((QLabel *)pw)->setPixmap(pix.scaled(pctl->dx * dxBase / 4,
+          pctl->dy * dyBase / 8, Qt::KeepAspectRatio,
+          Qt::SmoothTransformation));
+    }
+  }
+}
+
+// Find a built control by the id the resource gave it.
+static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, int id)
+{
+  for (int i = 0; i < rgbuilt.size(); i++)
+    if (rgbuilt[i].pw != NULL && rgbuilt[i].pctl->id == id)
+      return rgbuilt[i].pw;
+  return NULL;
+}
+
+
 // Object restriction (show/hide), equivalent to Windows' DlgRestrict,
 // DlgStar, and DlgMoons -- one implementation for all of them, since they
 // differ only in title, object range, which ignore array they edit, and
@@ -2400,12 +2565,84 @@ static CONST RESBUT rgbutMoons[] = {
   {"Toggle CO&B",     resToggle, moonsLo+27, moonsLo+31},
 };
 
+// Object restrictions, transcribed from dlgRestrict rather than rebuilt:
+// every checkbox, group box, button and the icon sit at the coordinates
+// the resource gives them.
+
 void ShowRestrictDialogQt()
 {
-  // Wide enough for the "Copy from ... Restriction Set" button.
-  ShowRestrictRangeDialogQt("Object Restrictions", 0, dwarfHi, ignore,
-    rgbutRestrict, CButRes(rgbutRestrict), 0,
-    rgGroupRestrictQt, cGroupRestrictQt);
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  QVector<QCheckBox *> rgpcb;
+  int i;
+
+  dlg.setWindowTitle("Object Restrictions");
+  RcBuildDialogQt(&dlg, rgctlRestrict, cctlRestrict, dxRestrict, dyRestrict,
+    &rgbuilt);
+
+  // The checkbox ids are object indices, so they load and store directly.
+  rgpcb.resize(dwarfHi + 1);
+  for (i = 0; i < rgbuilt.size(); i++) {
+    CONST RCCTL *pctl = rgbuilt[i].pctl;
+    if (rgbuilt[i].pw == NULL || pctl->nType != ctlCheck)
+      continue;
+    if (!FBetween(pctl->id, 0, dwarfHi))
+      continue;
+    QCheckBox *pcb = (QCheckBox *)rgbuilt[i].pw;
+    pcb->setChecked(ignore[pctl->id] != 0);
+    rgpcb[pctl->id] = pcb;
+  }
+
+  // Windows' quick buttons, each acting on one range of the checkboxes.
+  struct { int id, nAction, lo, hi; CONST byte *rgSource; } rgact[] = {
+    {butResAll,    resSet,    0,       dwarfHi, NULL},
+    {butUnresAll,  resClear,  0,       dwarfHi, NULL},
+    {butMinors,    resToggle, oMain+1, oCore,   NULL},
+    {butCusps,     resToggle, cuspLo,  cuspHi,  NULL},
+    {butUran,      resToggle, uranLo,  uranHi,  NULL},
+    {butDwarf,     resToggle, dwarfLo, dwarfHi, NULL},
+    {butCopy,      resCopy,   0,       dwarfHi, ignore2},
+    {butRecall,    resCopy,   0,       dwarfHi, ignoreMem} };
+  for (i = 0; i < (int)(sizeof(rgact)/sizeof(rgact[0])); i++) {
+    QPushButton *ppb = (QPushButton *)PwRcFindQt(rgbuilt, rgact[i].id);
+    if (ppb == NULL)
+      continue;
+    int nAction = rgact[i].nAction, lo = rgact[i].lo, hi = rgact[i].hi;
+    CONST byte *rgSource = rgact[i].rgSource;
+    QObject::connect(ppb, &QPushButton::clicked, &dlg,
+      [&rgpcb, nAction, lo, hi, rgSource]() {
+        for (int j = lo; j <= hi; j++) {
+          QCheckBox *pcb = rgpcb[j];
+          if (pcb == NULL)
+            continue;
+          switch (nAction) {
+          case resSet:    pcb->setChecked(fTrue);              break;
+          case resClear:  pcb->setChecked(fFalse);             break;
+          case resToggle: pcb->setChecked(!pcb->isChecked());  break;
+          case resCopy:   pcb->setChecked(rgSource[j] != 0);   break;
+          }
+        }
+      });
+  }
+
+  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, butOK);
+  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, butCancel);
+  if (ppbOK != NULL) {
+    ppbOK->setDefault(fTrue);
+    QObject::connect(ppbOK, &QPushButton::clicked, &dlg, &QDialog::accept);
+  }
+  if (ppbCancel != NULL)
+    QObject::connect(ppbCancel, &QPushButton::clicked, &dlg,
+      &QDialog::reject);
+
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+  for (i = 0; i <= dwarfHi; i++)
+    if (rgpcb[i] != NULL)
+      ignore[i] = rgpcb[i]->isChecked();
+  AdjustRestrictions();
+  SyncRestrictMenuQt();
+  RecastAndRedrawQt();
 }
 
 void ShowStarRestrictDialogQt()
