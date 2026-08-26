@@ -103,12 +103,30 @@ Traps, each of which cost real time here:
 - **Wine under Xvfb doesn't reliably repaint between commands.** A plain
   sleep isn't enough; resizing the window away and back forces a real
   expose.
-- **Xvfb isolates the display, not audio.** Astrolog `MessageBeep`s on
-  every keystroke it doesn't handle, so a capture run plays sound on the
-  real speakers from a program nobody can see. `MessageBeep` is in
-  `user32` and reaches the audio backend even with `winmm` disabled —
-  disable the wine audio *drivers* (`winepulse.drv=d;winealsa.drv=d;...`),
-  which is what `tools/text-chart-capture.sh` does.
+- **Xvfb isolates the display, not the session's sound server.** A
+  headless run can make audible noise on the real speakers, from a window
+  nobody can see. There are two separate sources and they need separate
+  fixes:
+  - **metacity plays the X bell**, as the desktop sound theme's
+    `bell-window-system` sample, through the user's PulseAudio. Astrolog
+    rings the bell on every keystroke it doesn't handle, so a capture run
+    is a burst of them. This is the loud one and it is easy to misattribute
+    to Wine. `tools/text-chart-capture.sh` starts **no** window manager,
+    because Wine doesn't need one. Qt does — its menus silently never open
+    without one — so when running Qt, start it as
+    `PULSE_SERVER=/nonexistent metacity --sm-disable &`, which leaves
+    libcanberra unable to reach the sound server and touches no user
+    setting. Note `xset -b` alone is *not* enough: metacity handles the
+    bell itself.
+  - **Wine's `MessageBeep`** is in `user32` and reaches the audio backend
+    even with `winmm` disabled, so disable the wine audio *drivers*
+    (`winepulse.drv=d;winealsa.drv=d;...`), which the script does.
+
+  To identify a mystery sound rather than guess at it, watch PulseAudio
+  event-driven — `pactl subscribe`, dumping `pactl list sink-inputs` on
+  each `sink-input` event. Polling on a timer misses these entirely; they
+  last a fraction of a second. The stream names its own source
+  (`application.name = "Metacity"`).
 - **Don't `pkill -f` a pattern that matches your own command line.**
   `pkill -f astrolog-qt` kills the shell running it, which surfaces as a
   bare exit code 144 and no output — easy to misread as the app crashing.

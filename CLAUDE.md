@@ -82,8 +82,13 @@ python3 tools/text-chart-diff.py out/win out/qt out/cmp
 drive either build headlessly and the environment traps that cost real
 time to rediscover (Qt needs a window manager for menus to open; xdotool's
 `--window` path uses XSendEvent, which Wine ignores; Astrolog's
-accelerators are case-sensitive; Xvfb doesn't isolate audio, so an
-undriven beep plays on the real speakers).
+accelerators are case-sensitive).
+
+**Xvfb isolates the display, not the session's sound server.** Don't run
+metacity on a capture display unless Qt needs it: it plays the X bell
+through the user's speakers, and Astrolog rings the bell on every
+keystroke it doesn't handle. When Qt does need it, start it as
+`PULSE_SERVER=/nonexistent metacity --sm-disable &`.
 
 On a private Xvfb display, `import -window root` is fine.
 

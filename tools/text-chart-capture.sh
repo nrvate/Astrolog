@@ -21,7 +21,8 @@
 # desktop and "import -window root" is safe here -- see CLAUDE.md for why
 # that matters on a real display.
 #
-# Needs: xvfb metacity xdotool imagemagick wine.
+# Needs: xvfb xdotool imagemagick wine. Deliberately NO window manager
+# -- see the note below.
 
 set -e
 
@@ -56,7 +57,6 @@ export WINEDLLOVERRIDES
 cleanup() {
   [ -n "$APPPID" ] && kill "$APPPID" 2>/dev/null || true
   WINEDEBUG=-all wineserver -k 2>/dev/null || true   # outlives the app
-  [ -n "$WMPID" ] && kill "$WMPID" 2>/dev/null || true
   [ -n "$XPID" ] && kill "$XPID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
@@ -66,12 +66,21 @@ XPID=$!
 sleep 2
 DISPLAY=$DISP xset -b 2>/dev/null || true
 
-# Wine manages its own windows and doesn't strictly need a WM, but Qt does
-# -- under a bare X server Qt's menus silently never open -- so the same
-# harness serves both if anything here is ever pointed at astrolog-qt.
-DISPLAY=$DISP metacity --sm-disable >/dev/null 2>&1 &
-WMPID=$!
-sleep 2
+# NO window manager here. Wine manages its own windows and doesn't need
+# one, and metacity is actively harmful in this harness: it implements the
+# X bell by playing the desktop sound theme's "bell-window-system" sample
+# through the *user's* PulseAudio, so every keystroke Astrolog doesn't
+# handle makes an audible noise on the real speakers -- from a window
+# nobody can see, on a display that is supposed to be isolated. Xvfb
+# isolates the display, not the session's sound server.
+#
+# Qt does need a window manager, or its menus silently never open. If you
+# ever point this at astrolog-qt, start metacity with PULSE_SERVER set to
+# a path that doesn't exist, which leaves libcanberra unable to reach the
+# sound server and makes the bell silent without touching any user
+# setting:
+#
+#   PULSE_SERVER=/nonexistent metacity --sm-disable &
 
 # "_X" clears us.fGraphics at startup: the GUI comes up in text mode and
 # stays up. Deterministic, where pressing "v" is not.
