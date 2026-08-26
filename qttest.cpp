@@ -43,6 +43,7 @@
 #include <QtWidgets/QDialog>
 #include <QtCore/QTimer>
 #include <QtCore/QStringList>
+#include <QtCore/QDir>
 #include <QtGui/QImage>
 #include <stdarg.h>
 #include "astrolog.h"
@@ -860,6 +861,13 @@ static void TextChartCaptureQt(CONST char *szDir)
   if (gi.qcanvas != NULL)
     gi.qcanvas->resize(gs.xWin, gs.yWin);
 
+  // QImage::save() just returns false into a directory that isn't there,
+  // so without this the run reports every chart as captured and writes
+  // nothing at all.
+  if (!QDir().mkpath(QString(szDir))) {
+    printf("cannot create %s\n", szDir);
+    return;
+  }
   printf("capturing %d text charts to %s\n", cchart, szDir);
   for (i = 0; i < cchart; i++) {
     QAction *pa = PaFindActionTestQt(rgszAct[i]);
@@ -874,8 +882,9 @@ static void TextChartCaptureQt(CONST char *szDir)
       printf("  %-24s nothing rendered\n", rgszAct[i]);
       continue;
     }
-    gi.qim->save(QString("%1/%2.png").arg(szDir).arg(rgszFile[i]));
-    printf("  %s\n", rgszFile[i]);
+    QString str = QString("%1/%2.png").arg(szDir).arg(rgszFile[i]);
+    printf("  %s%s\n", rgszFile[i],
+      gi.qim->save(str) ? "" : "   FAILED TO WRITE");
     fflush(stdout);
   }
 }
