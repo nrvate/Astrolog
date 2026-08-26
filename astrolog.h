@@ -539,6 +539,8 @@
 #define szSetCore     "set"
 #define szNulCore     "nul"
 #define szObjUnknown  "???"
+#define szObjSelNone  "(none)"
+#define cObjSelRow    (dwarfHi - uranLo + 1)
 
 #define cchSzDef  80
 #define cchSzMax  255

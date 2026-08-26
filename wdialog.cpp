@@ -1764,6 +1764,172 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
 }
 
 
+// Processing function for the object selections dialog, as brought up with
+// the Setting / Object Selections menu command.
+//
+// This is a task shaped view over two mechanisms that already exist and
+// have never been reachable together. A slot's body is the -Ye<x> pair in
+// rgTypSwiss[]/rgObjSwiss[], which Object Customization also edits but only
+// as raw definition text you have to already know ("7066" is Nessus); here
+// it is a list of names. A slot's midpoint is force[], the -Fm switch,
+// which no dialog on either platform has ever exposed. Restriction state is
+// shown alongside because selecting a body into a restricted slot changes
+// nothing visible, which would otherwise read as the dialog not working.
+//
+// Note the ranges. -Yeb reaches custLo through custHi, i.e. the moons and
+// body centers too, and -Fm reaches every object there is. This dialog
+// deliberately shows only the Uranians and Dwarfs. That means every write
+// below is bounded to uranLo..dwarfHi and nothing is ever cleared wholesale
+// -- a forced midpoint on some other object, say the Part of Fortune, must
+// survive this dialog untouched.
+
+flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
+{
+  char sz[cchSzMax], szT[cchSzMax];
+  int i, j, k, nPnt, nFlg, iobj, rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
+  int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
+  real rgforce[cObjSelRow];
+  flag rgfShow[cObjSelRow];
+
+  switch (message) {
+  case WM_INITDIALOG:
+    for (i = 0; i < cObjSelRow; i++) {
+      iobj = uranLo + i;
+      SetCheck(dxOs01 + i, !ignore[iobj]);
+      SetEdit(deOs01 + i, szObjDisp[iobj]);
+
+      // Body: offer the shared list by name, and show the current setting
+      // as a name when it is one of them, otherwise as the definition text
+      // Object Customization would show. The field stays editable either
+      // way, so anything -Ye<x> accepts can still be typed.
+      for (j = 0; j < cObjSel; j++)
+        SetCombo(dcOs01 + i, rgObjSel[j].szName);
+      SzObjSelDef(sz, iobj);
+      SetEdit(dcOs01 + i, sz);
+
+      // Midpoint: "(none)", then the core objects. Also editable, so a
+      // cusp or a Uranian can be typed even though the list stops at
+      // oCore -- -Fm itself accepts any object.
+      SetCombo(dcOsa01 + i, szObjSelNone);
+      SetCombo(dcOsb01 + i, szObjSelNone);
+      for (j = 0; j <= oCore; j++) {
+        SetCombo(dcOsa01 + i, szObjName[j]);
+        SetCombo(dcOsb01 + i, szObjName[j]);
+      }
+      if (force[iobj] < 0.0) {
+        k = (-(int)force[iobj]) - 1;
+        SetEdit(dcOsa01 + i, szObjName[k / objMax]);
+        SetEdit(dcOsb01 + i, szObjName[k % objMax]);
+      } else {
+        SetEdit(dcOsa01 + i, szObjSelNone);
+        SetEdit(dcOsb01 + i, szObjSelNone);
+      }
+    }
+    return fTrue;
+
+  case WM_COMMAND:
+    if (wParam == dbOs_l) {
+      // Fill in any name still blank or unknown, from whatever the row's
+      // body says, exactly as Object Customization's own button does. A
+      // row set to a midpoint with no name yet gets "A/B" instead, since
+      // -Fm moves a position but never touches the name.
+      for (i = 0; i < cObjSelRow; i++) {
+        GetEdit(deOs01 + i, sz);
+        if (*sz && !FEqSz(sz, szObjUnknown))
+          continue;
+        GetEdit(dcOsa01 + i, sz);
+        GetEdit(dcOsb01 + i, szT);
+        j = NParseSz(sz, pmObject);
+        k = NParseSz(szT, pmObject);
+        if (!FEqSz(sz, szObjSelNone) && !FEqSz(szT, szObjSelNone) &&
+          FItem(j) && FItem(k)) {
+          sprintf(sz, "%.3s/%.3s", szObjName[j], szObjName[k]);
+          SetEdit(deOs01 + i, sz);
+          continue;
+        }
+        GetEdit(dcOs01 + i, sz);
+        if (FObjSelParse(sz, &j, &k, &nPnt, &nFlg))
+          SzObjSelName(sz, j, k);
+        else
+          sprintf(sz, "%s", szObjUnknown);
+        SetEdit(deOs01 + i, sz);
+      }
+    }
+
+    if (wParam == IDOK) {
+      // Validate every row before writing any of it, the way DlgCustom
+      // does, so a bad entry leaves the previous settings alone rather
+      // than applying half of them.
+      for (i = 0; i < cObjSelRow; i++) {
+        GetEdit(dcOs01 + i, sz);
+        if (!FObjSelParse(sz, &j, &k, &nPnt, &nFlg)) {
+          ErrorEnsure(0, "definition");
+          return fTrue;
+        }
+        EnsureN(k, FValidCustom(k, j), "definition");
+        rgnTyp[i] = j; rgnObj[i] = k;
+        rgnPnt[i] = nPnt; rgnFlg[i] = nFlg;
+
+        GetEdit(dcOsa01 + i, sz);
+        GetEdit(dcOsb01 + i, szT);
+        if (FEqSz(sz, szObjSelNone) || FEqSz(szT, szObjSelNone) ||
+          !*sz || !*szT)
+          rgforce[i] = 0.0;
+        else {
+          j = NParseSz(sz, pmObject);
+          EnsureN(j, FItem(j), "midpoint object");
+          k = NParseSz(szT, pmObject);
+          EnsureN(k, FItem(k), "midpoint object");
+          rgforce[i] = (real)-(j*objMax + k + 1);
+        }
+        rgfShow[i] = GetCheck(dxOs01 + i);
+      }
+
+      for (i = 0; i < cObjSelRow; i++) {
+        iobj = uranLo + i;
+#ifdef SWISS
+        rgTypSwiss[iobj - custLo] = rgnTyp[i];
+        rgObjSwiss[iobj - custLo] = rgnObj[i];
+        rgPntSwiss[iobj - custLo] = rgnPnt[i];
+        rgFlgSwiss[iobj - custLo] = rgnFlg[i];
+#endif
+        force[iobj] = rgforce[i];
+        ignore[iobj] = !rgfShow[i];
+        GetEdit(deOs01 + i, sz);
+        if (!FEqSz(sz, szObjDisp[iobj]))
+          FCloneSzCore(sz, (char **)&szObjDisp[iobj],
+            szObjDisp[iobj] == szObjName[iobj]);
+      }
+
+      // Re-derive the two Include categories and their menu checks, the
+      // way DlgRestrict does, since the boxes above just changed them.
+      us.fUranian = fFalse;
+      for (i = uranLo; i <= uranHi; i++)
+        if (!ignore[i] || !ignore2[i]) {
+          us.fUranian = fTrue;
+          break;
+        }
+      WiCheckMenu(cmdResUranian, us.fUranian);
+      us.fDwarf = fFalse;
+      for (i = dwarfLo; i <= dwarfHi; i++)
+        if (!ignore[i] || !ignore2[i]) {
+          us.fDwarf = fTrue;
+          break;
+        }
+      WiCheckMenu(cmdResDwarf, us.fDwarf);
+      AdjustRestrictions();
+      wi.fCast = fTrue;
+    }
+    if (wParam == IDOK || wParam == IDCANCEL) {
+      EndDialog(hdlg, fTrue);
+      return fTrue;
+    }
+    break;
+  }
+  return fFalse;
+}
+
+
 // Processing function for the custom stars dialog, as brought up with the
 // Setting / Planetary Moons / Star Customization menu command.
 

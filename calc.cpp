@@ -2617,6 +2617,133 @@ CONST OBJSEL rgObjSel[] = {
   {1,   3200, "Phaethon"}};
 CONST int cObjSel = (int)(sizeof(rgObjSel) / sizeof(OBJSEL));
 
+// Resolve a body definition to the name it should display, the same way the
+// -Ye switch handler does after setting one (astrolog.cpp). Returns
+// szObjUnknown when the ephemeris can't identify it, which for an asteroid
+// usually means its file isn't installed rather than that the number is
+// wrong.
+
+void SzObjSelName(char *sz, int nTyp, int nObj)
+{
+  if (nTyp <= 1)
+    SwissGetObjName(sz, nTyp <= 0 ? -nObj : nObj);
+  else if (nTyp >= 5)
+    sprintf(sz, "%s", FValidPart(nObj) ? ai[nObj-1].name : szObjUnknown);
+  else {
+    if (nTyp == 3)
+      nObj = ObjMoons(nObj);
+    sprintf(sz, "%s", FItem(nObj) ? szObjName[nObj] : szObjUnknown);
+  }
+}
+
+
+// Format what a slot's body field should show: one of rgObjSel[]'s names
+// when the slot holds exactly that body, otherwise the definition text
+// Object Customization uses, including any point and flag suffix. The
+// suffix case never takes the name shortcut, so that a slot carrying one
+// round trips through the field unchanged rather than being silently
+// stripped back to a plain body.
+
+void SzObjSelDef(char *sz, int iobj)
+{
+  char *pch;
+  int i, j, k, nPnt, nFlg;
+
+  j = rgTypSwiss[iobj - custLo];
+  k = rgObjSwiss[iobj - custLo];
+  nPnt = rgPntSwiss[iobj - custLo];
+  nFlg = rgFlgSwiss[iobj - custLo];
+  if (nPnt <= 0 && nFlg <= 0)
+    for (i = 0; i < cObjSel; i++)
+      if (rgObjSel[i].nTyp == j && rgObjSel[i].nObj == k) {
+        sprintf(sz, "%s", rgObjSel[i].szName);
+        return;
+      }
+  if (j != 2)
+    sprintf(sz, "%s%d", j <= 0 ? "h" :
+      (j == 1 ? "" : (j == 3 ? "m" : (j == 4 ? "j" : "A"))), k);
+  else
+    sprintf(sz, k < cobLo ? "%.3s" : "%.4s", szObjName[k]);
+  for (pch = sz; *pch; pch++)
+    ;
+  if (nPnt > 0 || nFlg > 0)
+    *pch++ = ' ';
+  if (nPnt > 0)
+    *pch++ = (nPnt == 1 ? 'n' : (nPnt == 2 ? 's' : (nPnt == 3 ? 'p' : 'a')));
+  if (nFlg &  1) *pch++ = 'H';
+  if (nFlg &  2) *pch++ = 'S';
+  if (nFlg &  4) *pch++ = 'B';
+  if (nFlg &  8) *pch++ = 'N';
+  if (nFlg & 16) *pch++ = 'T';
+  if (nFlg & 32) *pch++ = 'V';
+  *pch = chNull;
+}
+
+
+// Parse a body field back. Accepts either a name from rgObjSel[] or the
+// definition text Object Customization uses. Returns false only for an
+// empty field; the caller still has to check FValidCustom() on the result,
+// as the dialogs do.
+//
+// The definition half is Windows' own parse from DlgCustom, moved here so
+// there is one copy rather than the three this program used to carry. Its
+// "if (pch > sz)" guard matters: without it an all alphabetic definition
+// reads its own letters as flags, so "Ven" would set the node flag off its
+// own 'n'.
+
+flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
+  int *pnFlg)
+{
+  char sz[cchSzMax], *pch, *pchEnd;
+  int i, j, k, nPnt = 0, nFlg = 0;
+
+  while (*szIn && *szIn <= ' ')
+    szIn++;
+  if (!*szIn)
+    return fFalse;
+
+  // A name from the list wins, and never carries a suffix.
+  for (i = 0; i < cObjSel; i++)
+    if (FEqSzI(szIn, rgObjSel[i].szName)) {
+      *pnTyp = rgObjSel[i].nTyp; *pnObj = rgObjSel[i].nObj;
+      *pnPnt = *pnFlg = 0;
+      return fTrue;
+    }
+
+  sprintf(sz, "%s", szIn);
+  for (pch = sz; *pch; pch++)
+    ;
+  pchEnd = pch;
+  for (pch--; pch > sz && *pch >= 'A'; pch--)
+    ;
+  if (pch >= sz && *pch < '0')
+    *pch = chNull;
+  pch = sz;
+  k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
+    (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
+  if (k == 0 || k >= 3)
+    pch++;
+  j = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
+  for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--)
+    ;
+  if (pch > sz)
+    for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--) {
+      if (*pch == 'n') nPnt = 1;
+      if (*pch == 's') nPnt = 2;
+      if (*pch == 'p') nPnt = 3;
+      if (*pch == 'a') nPnt = 4;
+      if (*pch == 'H') nFlg |= 1;
+      if (*pch == 'S') nFlg |= 2;
+      if (*pch == 'B') nFlg |= 4;
+      if (*pch == 'N') nFlg |= 8;
+      if (*pch == 'T') nFlg |= 16;
+      if (*pch == 'V') nFlg |= 32;
+    }
+  *pnTyp = k; *pnObj = j; *pnPnt = nPnt; *pnFlg = nFlg;
+  return fTrue;
+}
+
+
 // Given an object index and a Julian Day time, get ecliptic longitude and
 // latitude of the object and its velocity and distance from the Earth or
 // Sun. This basically just calls the Swiss Ephemeris calculation function to

@@ -493,6 +493,9 @@ extern int rgObjSwiss[cCust], rgTypSwiss[cCust], rgPntSwiss[cCust],
   rgFlgSwiss[cCust];
 extern CONST OBJSEL rgObjSel[];
 extern CONST int cObjSel;
+extern void SzObjSelDef P((char *, int));
+extern void SzObjSelName P((char *, int, int));
+extern flag FObjSelParse P((CONST char *, int *, int *, int *, int *));
 
 extern flag FSwissPlanet
   P((int, real, int, real *, real *, real *, real *, real *, real *));
@@ -1145,6 +1148,7 @@ extern flag API DlgObject2  P((HWND, uint, WORD, LONG));
 extern flag API DlgObjectM  P((HWND, uint, WORD, LONG));
 extern flag API DlgCustom   P((HWND, uint, WORD, LONG));
 extern flag API DlgCustomS  P((HWND, uint, WORD, LONG));
+extern flag API DlgObjectSel P((HWND, uint, WORD, LONG));
 extern flag API DlgRestrict P((HWND, uint, WORD, LONG));
 extern flag API DlgStar     P((HWND, uint, WORD, LONG));
 extern flag API DlgMoons    P((HWND, uint, WORD, LONG));

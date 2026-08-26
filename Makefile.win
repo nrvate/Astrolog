@@ -39,7 +39,7 @@ astrolog.exe: $(OBJ) $(ODIR)/astrolog.res
 $(ODIR)/%.o: %.cpp | $(ODIR)
 	$(CXX) $(CFLAGS) -c $< -o $@
 
-$(ODIR)/astrolog.res: astrolog.rc | $(ODIR)
+$(ODIR)/astrolog.res: astrolog.rc resource.h | $(ODIR)
 	$(RC) -I. -DIDC_STATIC=-1 -O coff $< $@
 
 $(ODIR):

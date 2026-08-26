@@ -1756,6 +1756,10 @@ int NWmCommand(WORD wCmd)
     WiDoDialog(DlgCustom, dlgCustom);
     break;
 
+  case cmdObjectSel:
+    WiDoDialog(DlgObjectSel, dlgObjectSel);
+    break;
+
   case cmdCustomS:
     WiDoDialog(DlgCustomS, dlgCustomS);
     break;
