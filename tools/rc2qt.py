@@ -45,6 +45,7 @@ KIND = {
 # end silently dropped every edit field and combo box in the resource.
 INT = re.compile(r"^-?\d+$")
 HEAD = re.compile(r"^(dlg\w+)\s+DIALOGEX?\s+\d+,\s*\d+,\s*(\d+),\s*(\d+)")
+CAPTION = re.compile(r'^CAPTION\s+"([^"]*)"', re.M)
 LINE = re.compile(r"^(%s)\s+(.*)$" % "|".join(KIND))
 TEXT = re.compile(r'^"((?:[^"]|"")*)"\s*,\s*([A-Za-z_0-9]+)')
 BARE = re.compile(r"^([A-Za-z_0-9]+)\s*,")
@@ -110,6 +111,9 @@ def controls(body):
 def emit(name, w, h, body, out):
     out.append("// %s -- %d x %d dialog units, from astrolog.rc" %
                (name, w, h))
+    cap = CAPTION.search(body)
+    if cap:
+        out.append('#define szTitle%s "%s"' % (name[3:], cap.group(1)))
     out.append("static CONST RCCTL rgctl%s[] = {" % name[3:])
     for kind, text, symbol, (x, y, cx, cy) in controls(body):
         m = SPLIT.match(symbol) if symbol else None

@@ -973,7 +973,7 @@ void ShowRestrictDialogQt()
     {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore2},
     {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
 
-  ShowRcRestrictQt("Object Restrictions", rgctlRestrict, cctlRestrict,
+  ShowRcRestrictQt(szTitleRestrict, rgctlRestrict, cctlRestrict,
     dxRestrict, dyRestrict, 0, dwarfHi, ignore,
     rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
@@ -985,7 +985,7 @@ void ShowStarRestrictDialogQt()
     {"dbSt_RU", 0, resSet,   starLo, starHi, NULL},
     {"dbSt_RU", 1, resClear, starLo, starHi, NULL} };
 
-  ShowRcRestrictQt("Fixed Star Restrictions", rgctlStar, cctlStar,
+  ShowRcRestrictQt(szTitleStar, rgctlStar, cctlStar,
     dxStar, dyStar, starLo, starHi, ignore,
     rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
@@ -1110,7 +1110,7 @@ void ShowDefaultInfoDialogQt()
   char sz[cchSzMax];
   int nSavChar;
 
-  dlg.setWindowTitle("Default Chart Info");
+  dlg.setWindowTitle(szTitleDefault);
   RcBuildDialogQt(&dlg, rgctlDefault, cctlDefault, dxDefault, dyDefault,
     &rgbuilt);
 
@@ -2212,7 +2212,7 @@ void ShowGraphicsSettingsDialogQt()
   char sz[cchSzMax];
   int i, j;
 
-  dlg.setWindowTitle("Graphics Settings");
+  dlg.setWindowTitle(szTitleGraphics);
   RcBuildDialogQt(&dlg, rgctlGraphics, cctlGraphics, dxGraphics, dyGraphics,
     &rgbuilt);
   RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
@@ -2549,12 +2549,12 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
 
 void ShowChartInfoDialogQt()
 {
-  ShowChartInfoForQt(&ciCore, "Chart Info");
+  ShowChartInfoForQt(&ciCore, szTitleInfo);
 }
 
 void ShowChartInfo2DialogQt()
 {
-  ShowChartInfoForQt(&ciTwin, "Chart #2 Info");
+  ShowChartInfoForQt(&ciTwin, "Set Chart #2 Info");
 }
 
 
@@ -2650,102 +2650,103 @@ static QString SzChartNameLineQt(CONST CI *pci)
 // plus how many of those slots the wheel actually draws and which of them
 // are progressed.
 
+// Charts #1 through #6, transcribed from dlgInfoAll. Two lines of summary
+// per chart in static text, an Open and a Set Info button for each, the
+// relationship type as a radio group, and which charts progress.
+
+static void RcLoadInfoAllQt(CONST QVector<RCBUILT> &rgbuilt)
+{
+  char sz[cchSzMax];
+  int i, n, nSav;
+  flag fSav;
+  CI *pci;
+
+  // Windows asks for the degree sign here (fAnsiChar 2) since these are
+  // display only, and the fields are never parsed back.
+  nSav = us.fAnsiChar; us.fAnsiChar = 2;
+  fSav = us.fGraphics; us.fGraphics = fTrue;
+  for (i = 1; i <= cRing; i++) {
+    pci = rgpci[i];
+    n = DayOfWeek(pci->mon, pci->day, pci->yea);
+    sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[n],
+      SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
+      ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
+    QLabel *pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 1);
+    if (pl != NULL)
+      pl->setText(QString::fromLatin1(sz));
+    sprintf(sz, "%s%s%s", pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ?
+      "; " : "", pci->loc);
+    pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 2);
+    if (pl != NULL)
+      pl->setText(QString::fromLatin1(sz));
+  }
+  us.fAnsiChar = nSav; us.fGraphics = fSav;
+}
+
+
 void ShowChartsAllDialogQt()
 {
   QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Charts #3 through #6");
-  dlg.resize(640, 400);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
-  QLabel *rgplabel[cRing+1];
+  QVector<RCBUILT> rgbuilt;
   int i;
 
-  auto RefreshRow = [&rgplabel](int iChart) {
-    CI *pci = rgpci[iChart];
-    QString qs = SzChartDateLineQt(pci);
-    QString qsName = SzChartNameLineQt(pci);
-    if (!qsName.isEmpty())
-      qs += "\n" + qsName;
-    rgplabel[iChart]->setText(qs);
-  };
+  dlg.setWindowTitle(szTitleInfoAll);
+  RcBuildDialogQt(&dlg, rgctlInfoAll, cctlInfoAll, dxInfoAll, dyInfoAll,
+    &rgbuilt);
+  RcLoadInfoAllQt(rgbuilt);
 
   for (i = 1; i <= cRing; i++) {
-    QPushButton *pbOpen = new QPushButton(i <= 1 ?
-      QString("Open Chart...") : QString("Open Chart #%1...").arg(i));
-    QPushButton *pbInfo = new QPushButton(i <= 1 ?
-      QString("Set Chart Info...") : QString("Set Chart #%1 Info...").arg(i));
-    rgplabel[i] = new QLabel();
-    rgplabel[i]->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    pgrid->addWidget(pbOpen, i-1, 0);
-    pgrid->addWidget(pbInfo, i-1, 1);
-    pgrid->addWidget(rgplabel[i], i-1, 2);
-    pgrid->setColumnStretch(2, 1);
-    RefreshRow(i);
-    int iChart = i;
-    QObject::connect(pbOpen, &QPushButton::clicked, &dlg,
-      [iChart, RefreshRow]() {
-        ShowOpenChartIntoDialogQt(iChart);
-        RefreshRow(iChart);
-      });
-    QObject::connect(pbInfo, &QPushButton::clicked, &dlg,
-      [iChart, RefreshRow]() {
-        QByteArray baTitle = (iChart <= 1 ? QString("Chart Info") :
-          QString("Chart #%1 Info").arg(iChart)).toLocal8Bit();
-        ShowChartInfoForQt(rgpci[iChart], baTitle.constData());
-        RefreshRow(iChart);
-      });
+    QPushButton *ppbOpen =
+      (QPushButton *)PwRcFindIdxQt(rgbuilt, "dbIa_o", i);
+    QPushButton *ppbInfo =
+      (QPushButton *)PwRcFindIdxQt(rgbuilt, "dbIa_i", i);
+    if (ppbOpen != NULL)
+      QObject::connect(ppbOpen, &QPushButton::clicked, &dlg,
+        [i, &rgbuilt]() {
+          ShowOpenChartIntoDialogQt(i);
+          RcLoadInfoAllQt(rgbuilt);   // Its summary line just changed.
+        });
+    if (ppbInfo != NULL)
+      QObject::connect(ppbInfo, &QPushButton::clicked, &dlg,
+        [i, &rgbuilt]() {
+          // Windows titles these "Set Chart #N Info", the plain caption
+          // only for chart one (wdialog.cpp:1142).
+          char szT[cchSzDef];
+          if (i <= 1)
+            sprintf(szT, "%s", szTitleInfo);
+          else
+            sprintf(szT, "Set Chart #%d Info", i);
+          ShowChartInfoForQt(rgpci[i], szT);
+          RcLoadInfoAllQt(rgbuilt);
+        });
   }
-  pouter->addLayout(pgrid);
 
-  QHBoxLayout *phbox = new QHBoxLayout();
-  QGroupBox *pgbWheel = new QGroupBox("Wheel Chart Is");
-  QVBoxLayout *pvWheel = new QVBoxLayout(pgbWheel);
-  QButtonGroup *pgroupWheel = new QButtonGroup(&dlg);
-  CONST char *rgszWheel[6] = { "1: Single Wheel", "2: Dual Wheel",
-    "3: Tri-Wheel", "4: Quad-Wheel", "5: Quin-Wheel", "6: Hexa-Wheel" };
-  // us.nRel is 0 for a single wheel and counts down (rcDual is -1, through
-  // rcHexaWheel at -5) for multi-wheels; the other rcXxx values are
-  // unrelated relationship chart types, which show here as a single wheel.
-  int nWheelCur = (us.nRel <= rcNone && us.nRel >= rcHexaWheel) ?
-    -us.nRel : 0;
-  for (i = 0; i < 6; i++) {
-    QRadioButton *prb = new QRadioButton(rgszWheel[i]);
-    prb->setChecked(i == nWheelCur);
-    pgroupWheel->addButton(prb, i);
-    pvWheel->addWidget(prb);
-  }
-  phbox->addWidget(pgbWheel);
-
-  QGroupBox *pgbProg = new QGroupBox("Progress");
-  QVBoxLayout *pvProg = new QVBoxLayout(pgbProg);
-  QCheckBox *rgpcbProg[cRing+1];
+  // Windows numbers these backwards: radio 0 is the relationship value 0,
+  // and each one after it is the next negative value (rcDual downwards).
+  i = us.nRel;
+  if (i > rcDual)
+    i = 0;
+  else if (i < rcHexaWheel)
+    i = rcDual;
+  RcLoadRadioQt(rgbuilt, 1, 6, -i);
   for (i = 2; i <= 5; i++) {
-    rgpcbProg[i] = new QCheckBox(QString::number(i));
-    rgpcbProg[i]->setChecked(rgfProg[i] != 0);
-    pvProg->addWidget(rgpcbProg[i]);
+    QCheckBox *pcb = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dx", i);
+    if (pcb != NULL)
+      pcb->setChecked(rgfProg[i] != 0);
   }
-  phbox->addWidget(pgbProg);
-  phbox->addStretch(1);
-  pouter->addLayout(phbox);
 
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  for (i = 2; i <= 5; i++)
-    rgfProg[i] = rgpcbProg[i]->isChecked();
-  // SetRelQt() recasts and redraws, and syncs the Info menu's relationship
-  // radios for the values that have one. The multi-wheel counts past
-  // rcDual don't appear in that menu, so picking one leaves whichever
-  // relationship item was checked there showing stale -- same
-  // menu-vs-dialog staleness accepted elsewhere in this port.
-  SetRelQt(-pgroupWheel->checkedId());
+  SetRelQt(-NRcStoreRadioQt(rgbuilt, 1, 6, 0));
+  for (i = 2; i <= 5; i++) {
+    QCheckBox *pcb = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dx", i);
+    if (pcb != NULL)
+      rgfProg[i] = pcb->isChecked();
+  }
+  RecastAndRedrawQt();
 }
 
 
@@ -3125,7 +3126,7 @@ void ShowChartSettingsDialogQt()
   char sz[cchSzMax];
   int i, nw, nl, nl2, np, nn, yb;
 
-  dlg.setWindowTitle("Chart Settings");
+  dlg.setWindowTitle(szTitleChart);
   RcBuildDialogQt(&dlg, rgctlChart, cctlChart, dxChart, dyChart, &rgbuilt);
   RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
 
@@ -3240,7 +3241,7 @@ void ShowCommandLineDialogQt()
   QDialog dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
 
-  dlg.setWindowTitle("Enter Command Line");
+  dlg.setWindowTitle(szTitleCommand);
   RcBuildDialogQt(&dlg, rgctlCommand, cctlCommand, dxCommand, dyCommand,
     &rgbuilt);
   QLineEdit *peLine = (QLineEdit *)PwRcFindQt(rgbuilt, "deCo");
@@ -3369,7 +3370,7 @@ void ShowAspectDialogQt()
   QVector<QComboBox *> rgpcbColor;
   int i;
 
-  dlg.setWindowTitle("Aspect Settings");
+  dlg.setWindowTitle(szTitleAspect);
   RcBuildDialogQt(&dlg, rgctlAspect, cctlAspect, dxAspect, dyAspect,
     &rgbuilt);
   rgpcbRes.resize(cAspect+1); rgpeOrb.resize(cAspect+1);
@@ -3456,7 +3457,7 @@ void ShowColorDialogQt()
   QComboBox *rgpcbRay[cRay+1];
   int i, j;
 
-  dlg.setWindowTitle("Colors");
+  dlg.setWindowTitle(szTitleColor);
   RcBuildDialogQt(&dlg, rgctlColor, cctlColor, dxColor, dyColor, &rgbuilt);
   for (i = 0; i < cColor; i++) {
     j = ikPalette[i];
@@ -3542,7 +3543,7 @@ void ShowObjectDialogQt()
   QComboBox *rgpcbColor[oCore+1];
   int i;
 
-  dlg.setWindowTitle("Objects");
+  dlg.setWindowTitle(szTitleObject);
   RcBuildDialogQt(&dlg, rgctlObject, cctlObject, dxObject, dyObject,
     &rgbuilt);
   for (i = 0; i <= oCore; i++) {
@@ -3592,7 +3593,7 @@ void ShowObject2DialogQt()
   QVector<QComboBox *> rgpcbColor;
   int i0, i, j = 0;
 
-  dlg.setWindowTitle("More Object Settings");
+  dlg.setWindowTitle(szTitleObject2);
   RcBuildDialogQt(&dlg, rgctlObject2, cctlObject2, dxObject2, dyObject2,
     &rgbuilt);
   for (i0 = oAsc; i0 <= dwarfHi+1; i0++) {
@@ -3662,7 +3663,7 @@ void ShowCalcDialogQt()
   int i, nc, nh, n4, n1;
   real rs, rx;
 
-  dlg.setWindowTitle("Calculation Settings");
+  dlg.setWindowTitle(szTitleCalc);
   RcBuildDialogQt(&dlg, rgctlCalc, cctlCalc, dxCalc, dyCalc, &rgbuilt);
   RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
 
@@ -3829,7 +3830,7 @@ void ShowDisplayDialogQt()
   int na, nro, ni;
   real ryw;
 
-  dlg.setWindowTitle("Display Settings");
+  dlg.setWindowTitle(szTitleDisplay);
   RcBuildDialogQt(&dlg, rgctlDisplay, cctlDisplay, dxDisplay, dyDisplay,
     &rgbuilt);
   RcLoadFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
@@ -3946,7 +3947,7 @@ void ShowMoonRestrictDialogQt()
     {"dbMo_Plu",-1, resToggle, moonsLo+22, moonsLo+26, NULL},
     {"dbMo_COB",-1, resToggle, cobLo,      cobHi,      NULL} };
 
-  ShowRcRestrictQt("Planetary Moon Restrictions", rgctlMoons, cctlMoons,
+  ShowRcRestrictQt(szTitleMoons, rgctlMoons, cctlMoons,
     dxMoons, dyMoons, moonsLo, cobHi, ignore,
     rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
@@ -3964,7 +3965,7 @@ void ShowMoonObjectDialogQt()
   QVector<QComboBox *> rgpcbColor;
   int i, j;
 
-  dlg.setWindowTitle("Moon Object Settings");
+  dlg.setWindowTitle(szTitleObjectM);
   RcBuildDialogQt(&dlg, rgctlObjectM, cctlObjectM, dxObjectM, dyObjectM,
     &rgbuilt);
   for (i = moonsLo; i <= cobHi; i++) {
@@ -4142,7 +4143,7 @@ void ShowCustomDialogQt()
   int i, j, k, l, pnt, flg;
   char sz[cchSzMax], *pch;
 
-  dlg.setWindowTitle("Object Customization");
+  dlg.setWindowTitle(szTitleCustom);
   RcBuildDialogQt(&dlg, rgctlCustom, cctlCustom, dxCustom, dyCustom,
     &rgbuilt);
   for (i = custLo; i <= custHi; i++) {
@@ -4259,7 +4260,7 @@ void ShowCustomStarDialogQt()
   QVector<QLineEdit *> rgpeName, rgpeDef;
   int i, k;
 
-  dlg.setWindowTitle("Fixed Star Customization");
+  dlg.setWindowTitle(szTitleCustomS);
   RcBuildDialogQt(&dlg, rgctlCustomS, cctlCustomS, dxCustomS, dyCustomS,
     &rgbuilt);
   for (i = starLo; i <= starHi; i++) {

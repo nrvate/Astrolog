@@ -4,6 +4,7 @@
 */
 
 // dlgInfo -- 415 x 158 dialog units, from astrolog.rc
+#define szTitleInfo "Set Chart Info"
 static CONST RCCTL rgctlInfo[] = {
   {ctlButton, "OK", "IDOK", -1, 125,105,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 125,85,50,14},
@@ -42,6 +43,7 @@ static CONST RCCTL rgctlInfo[] = {
 #define dyInfo 158
 
 // dlgCommand -- 143 x 62 dialog units, from astrolog.rc
+#define szTitleCommand "Enter Command Line"
 static CONST RCCTL rgctlCommand[] = {
   {ctlButton, "OK", "IDOK", -1, 90,42,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 36,42,50,14},
@@ -55,6 +57,7 @@ static CONST RCCTL rgctlCommand[] = {
 #define dyCommand 62
 
 // dlgAspect -- 431 x 213 dialog units, from astrolog.rc
+#define szTitleAspect "Aspect Settings"
 static CONST RCCTL rgctlAspect[] = {
   {ctlButton, "OK", "IDOK", -1, 375,195,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 320,195,50,14},
@@ -196,6 +199,7 @@ static CONST RCCTL rgctlAspect[] = {
 #define dyAspect 213
 
 // dlgColor -- 351 x 162 dialog units, from astrolog.rc
+#define szTitleColor "Set Colors"
 static CONST RCCTL rgctlColor[] = {
   {ctlButton, "OK", "IDOK", -1, 295,142,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 240,142,50,14},
@@ -267,6 +271,7 @@ static CONST RCCTL rgctlColor[] = {
 #define dyColor 162
 
 // dlgRestrict -- 371 x 148 dialog units, from astrolog.rc
+#define szTitleRestrict "Object Restrictions"
 static CONST RCCTL rgctlRestrict[] = {
   {ctlButton, "OK", "IDOK", -1, 315,130,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 315,114,50,14},
@@ -342,6 +347,7 @@ static CONST RCCTL rgctlRestrict[] = {
 #define dyRestrict 148
 
 // dlgDefault -- 415 x 142 dialog units, from astrolog.rc
+#define szTitleDefault "Default Chart Info"
 static CONST RCCTL rgctlDefault[] = {
   {ctlButton, "OK", "IDOK", -1, 125,90,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 125,70,50,14},
@@ -376,6 +382,7 @@ static CONST RCCTL rgctlDefault[] = {
 #define dyDefault 142
 
 // dlgProgress -- 281 x 132 dialog units, from astrolog.rc
+#define szTitleProgress "Progressions"
 static CONST RCCTL rgctlProgress[] = {
   {ctlButton, "OK", "IDOK", -1, 225,115,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 170,115,50,14},
@@ -412,6 +419,7 @@ static CONST RCCTL rgctlProgress[] = {
 #define dyProgress 132
 
 // dlgTransit -- 225 x 232 dialog units, from astrolog.rc
+#define szTitleTransit "Transits"
 static CONST RCCTL rgctlTransit[] = {
   {ctlButton, "OK", "IDOK", -1, 170,215,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 115,215,50,14},
@@ -464,6 +472,7 @@ static CONST RCCTL rgctlTransit[] = {
 #define dyTransit 232
 
 // dlgCalc -- 203 x 242 dialog units, from astrolog.rc
+#define szTitleCalc "Calculation Settings"
 static CONST RCCTL rgctlCalc[] = {
   {ctlButton, "OK", "IDOK", -1, 145,224,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 145,206,50,14},
@@ -510,6 +519,7 @@ static CONST RCCTL rgctlCalc[] = {
 #define dyCalc 242
 
 // dlgChart -- 261 x 247 dialog units, from astrolog.rc
+#define szTitleChart "Chart Settings"
 static CONST RCCTL rgctlChart[] = {
   {ctlButton, "OK", "IDOK", -1, 205,230,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 205,210,50,14},
@@ -565,6 +575,7 @@ static CONST RCCTL rgctlChart[] = {
 #define dyChart 247
 
 // dlgDisplay -- 275 x 257 dialog units, from astrolog.rc
+#define szTitleDisplay "Display Settings"
 static CONST RCCTL rgctlDisplay[] = {
   {ctlButton, "OK", "IDOK", -1, 220,235,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 165,235,50,14},
@@ -625,6 +636,7 @@ static CONST RCCTL rgctlDisplay[] = {
 #define dyDisplay 257
 
 // dlgGraphics -- 355 x 262 dialog units, from astrolog.rc
+#define szTitleGraphics "Graphics Settings"
 static CONST RCCTL rgctlGraphics[] = {
   {ctlButton, "OK", "IDOK", -1, 300,241,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 300,224,50,14},
@@ -714,6 +726,7 @@ static CONST RCCTL rgctlGraphics[] = {
 #define dyGraphics 262
 
 // dlgStar -- 311 x 137 dialog units, from astrolog.rc
+#define szTitleStar "Fixed Star Restrictions"
 static CONST RCCTL rgctlStar[] = {
   {ctlButton, "OK", "IDOK", -1, 255,120,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 255,100,50,14},
@@ -776,6 +789,7 @@ static CONST RCCTL rgctlStar[] = {
 #define dyStar 137
 
 // dlgMoons -- 231 x 191 dialog units, from astrolog.rc
+#define szTitleMoons "Planetary Moon Restrictions"
 static CONST RCCTL rgctlMoons[] = {
   {ctlButton, "OK", "IDOK", -1, 175,170,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 120,170,50,14},
@@ -834,6 +848,7 @@ static CONST RCCTL rgctlMoons[] = {
 #define dyMoons 191
 
 // dlgObject -- 388 x 202 dialog units, from astrolog.rc
+#define szTitleObject "Object Settings"
 static CONST RCCTL rgctlObject[] = {
   {ctlButton, "OK", "IDOK", -1, 335,183,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 280,183,50,14},
@@ -962,6 +977,7 @@ static CONST RCCTL rgctlObject[] = {
 #define dyObject 202
 
 // dlgObject2 -- 501 x 197 dialog units, from astrolog.rc
+#define szTitleObject2 "More Object Settings"
 static CONST RCCTL rgctlObject2[] = {
   {ctlButton, "OK", "IDOK", -1, 451,175,45,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 401,175,45,14},
@@ -1139,6 +1155,7 @@ static CONST RCCTL rgctlObject2[] = {
 #define dyObject2 197
 
 // dlgObjectM -- 505 x 197 dialog units, from astrolog.rc
+#define szTitleObjectM "Planetary Moon Object Settings"
 static CONST RCCTL rgctlObjectM[] = {
   {ctlButton, "OK", "IDOK", -1, 451,175,45,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 401,175,45,14},
@@ -1324,6 +1341,7 @@ static CONST RCCTL rgctlObjectM[] = {
 #define dyObjectM 197
 
 // dlgCustom -- 505 x 217 dialog units, from astrolog.rc
+#define szTitleCustom "Object Customization"
 static CONST RCCTL rgctlCustom[] = {
   {ctlButton, "OK", "IDOK", -1, 460,197,40,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 415,197,40,14},
@@ -1493,6 +1511,7 @@ static CONST RCCTL rgctlCustom[] = {
 #define dyCustom 217
 
 // dlgCustomS -- 521 x 217 dialog units, from astrolog.rc
+#define szTitleCustomS "Fixed Star Customization"
 static CONST RCCTL rgctlCustomS[] = {
   {ctlButton, "OK", "IDOK", -1, 475,197,40,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 430,197,40,14},
@@ -1662,6 +1681,7 @@ static CONST RCCTL rgctlCustomS[] = {
 #define dyCustomS 217
 
 // dlgAbort -- 125 x 38 dialog units, from astrolog.rc
+#define szTitleAbort "Print Progress"
 static CONST RCCTL rgctlAbort[] = {
   {ctlButton, "Cancel", "IDCANCEL", -1, 40,20,50,14},
   {ctlLabel,  "The Astrolog chart is being printed.", "IDC_STATIC", -1, 5,5,115,8},
@@ -1672,6 +1692,7 @@ static CONST RCCTL rgctlAbort[] = {
 #define dyAbort 38
 
 // dlgInfoAll -- 345 x 167 dialog units, from astrolog.rc
+#define szTitleInfoAll "Charts #3 through #6"
 static CONST RCCTL rgctlInfoAll[] = {
   {ctlButton, "OK", "IDOK", -1, 290,145,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 290,128,50,14},
@@ -1718,6 +1739,7 @@ static CONST RCCTL rgctlInfoAll[] = {
 #define dyInfoAll 167
 
 // dlgList -- 445 x 267 dialog units, from astrolog.rc
+#define szTitleList "Chart List"
 static CONST RCCTL rgctlList[] = {
   {ctlButton, "OK", "IDOK", -1, 385,246,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 385,230,50,14},
@@ -1756,6 +1778,7 @@ static CONST RCCTL rgctlList[] = {
 #define dyList 267
 
 // dlgFile -- 341 x 127 dialog units, from astrolog.rc
+#define szTitleFile "File Settings"
 static CONST RCCTL rgctlFile[] = {
   {ctlButton, "OK", "IDOK", -1, 285,106,50,14},
   {ctlButton, "Cancel", "IDCANCEL", -1, 285,86,50,14},
