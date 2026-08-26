@@ -1921,16 +1921,26 @@ void ShowSaveChartListDialogQt()
 // 0 for plain colors only, higher values progressively admitting the
 // symbolic entries past them (Element, Ray, Star, Planet, Auto), which
 // only some fields accept.
-static QComboBox *NewColorComboQt(KI ki, int nExtra)
+// Populate a color list that already exists, which is what the transcribed
+// dialogs need -- the resource placed the combo box, this just fills it.
+static void FillColorComboQt(QComboBox *pcb, KI ki, int nExtra)
 {
-  QComboBox *pcb = new QComboBox();
   int i, iMax = cColor2 + (nExtra > 0)*(nExtra + 1);
 
+  if (pcb == NULL)
+    return;
   pcb->setEditable(true);
   // addItem() before setEditText(): see the Progressions dialog.
   for (i = 0; i < iMax; i++)
     pcb->addItem(szColor[i]);
   pcb->setEditText(SzColor(ki));
+}
+
+static QComboBox *NewColorComboQt(KI ki, int nExtra)
+{
+  QComboBox *pcb = new QComboBox();
+
+  FillColorComboQt(pcb, ki, nExtra);
   return pcb;
 }
 
@@ -2094,83 +2104,6 @@ void ShowColorDialogQt()
 // orb addition, and color, for the core planets and angles (object indices
 // 0 through oCore).
 
-void ShowObjectDialogQt()
-{
-  // Two columns, as Windows' dlgObject has (astrolog.rc column X 5 and 190).
-  CONST int cCol = 2, cField = 4;
-  CONST int cRowPerCol = (oCore + 1 + cCol - 1) / cCol;
-  CONST char *rgszHead[] = {"Max Orb", "Add", "Influence", "Color"};
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle("Objects");
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QGridLayout *pgrid = new QGridLayout();
-  QLineEdit *rgpeOrb[oCore+1];
-  QLineEdit *rgpeAdd[oCore+1];
-  QLineEdit *rgpeInf[oCore+1];
-  QComboBox *rgpcbColor[oCore+1];
-  int i, nRow, nCol;
-
-  pgrid->setHorizontalSpacing(4);
-  pgrid->setVerticalSpacing(2);
-  HeadersQt(pgrid, cCol, cField, rgszHead);
-  for (i = 0; i <= oCore; i++) {
-    PlaceRowQt(i, cRowPerCol, cField, &nRow, &nCol);
-    pgrid->addWidget(new QLabel(SzObjDlgPlainQt(i)), nRow, nCol);
-    rgpeOrb[i] = new QLineEdit(SzFormatRQt(rObjOrb[i], -2));
-    pgrid->addWidget(rgpeOrb[i], nRow, nCol+1);
-    rgpeAdd[i] = new QLineEdit(SzFormatRQt(rObjAdd[i], -1));
-    pgrid->addWidget(rgpeAdd[i], nRow, nCol+2);
-    rgpeInf[i] = new QLineEdit(SzFormatRQt(rObjInf[i], -2));
-    pgrid->addWidget(rgpeInf[i], nRow, nCol+3);
-    rgpcbColor[i] = NewColorComboQt(kObjU[i], 1);
-    pgrid->addWidget(rgpcbColor[i], nRow, nCol+4);
-  }
-  pouter->addLayout(pgrid);
-
-  QDialogButtonBox *pbuttons =
-    new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  pouter->addWidget(pbuttons);
-  QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-  QObject::connect(pbuttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  for (i = 0; i <= oCore; i++) {
-    rObjOrb[i] = rgpeOrb[i]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[i]->text().toDouble();
-    rObjInf[i] = rgpeInf[i]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[i]);
-  }
-  RecastAndRedrawQt();
-}
-
-
-// Object restriction (show/hide), equivalent to Windows' DlgRestrict --
-// shared by the main Restrictions, Star Restrictions, and Transit
-// Restrictions menu items, which differ only in object range and which
-// ignore array they edit, same as Windows' one DlgRestrict does based on
-// wi.wCmd.
-
-// One button in the quick-action column Windows runs down the right side
-// of each restriction dialog (dlgRestrict/dlgStar/dlgMoons in
-// astrolog.rc). They come in four shapes, and "lo"/"hi" are absolute
-// object indexes clamped to whatever range the dialog is showing.
-#define resSet    0   // check every box in the range (restrict them)
-#define resClear  1   // clear every box in the range (unrestrict them)
-#define resToggle 2   // flip every box in the range
-#define resCopy   3   // reload the range from another restriction array
-
-typedef struct {
-  CONST char *szLabel;
-  int nAction;
-  int lo, hi;
-  CONST byte *rgSource;   // resCopy only
-} RESBUT;
-
-#define CButRes(rg) (int)(sizeof(rg) / sizeof(RESBUT))
-
 /*
 ******************************************************************************
 ** Dialogs transcribed from astrolog.rc.
@@ -2213,6 +2146,23 @@ typedef struct {
   CONST RCCTL *pctl;
   QWidget *pw;
 } RCBUILT;
+
+static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &, CONST char *);
+
+static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt)
+{
+  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
+  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
+
+  if (ppbOK != NULL) {
+    ppbOK->setDefault(fTrue);
+    QObject::connect(ppbOK, &QPushButton::clicked, pdlg, &QDialog::accept);
+  }
+  if (ppbCancel != NULL)
+    QObject::connect(ppbCancel, &QPushButton::clicked, pdlg,
+      &QDialog::reject);
+}
+
 
 static CONST RCCTL *PctlBuiltQt(CONST QVector<RCBUILT> *prg, int i)
 {
@@ -2311,8 +2261,15 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
     QWidget *pw = (*prgbuilt)[i].pw;
     if (pw == NULL || pctl == NULL)
       continue;
+    int dyCtl = pctl->dy * dyBase / 8;
+    // A COMBOBOX's height in a resource is how far its list drops down
+    // when opened, not how tall the closed control is -- taking it
+    // literally gives a combo box a couple of hundred pixels high and
+    // shoves everything below it off the dialog. Qt sizes its own.
+    if (pctl->nType == ctlCombo)
+      dyCtl = pw->sizeHint().height();
     pw->setGeometry(pctl->x * dxBase / 4, pctl->y * dyBase / 8,
-      pctl->dx * dxBase / 4, pctl->dy * dyBase / 8);
+      pctl->dx * dxBase / 4, dyCtl);
     if (pctl->nType == ctlIcon) {
       QPixmap pix = PixAstrologIconQt();
       if (!pix.isNull())
@@ -2331,6 +2288,9 @@ static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, CONST char *szId)
       return rgbuilt[i].pw;
   return NULL;
 }
+
+// Wire the OK and Cancel a transcribed dialog got from its resource.
+static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt);
 
 // Same, for the numbered runs of controls: PwRcFindIdxQt(rg, "deo", 7).
 static QWidget *PwRcFindIdxQt(CONST QVector<RCBUILT> &rgbuilt,
@@ -2356,222 +2316,6 @@ static QWidget *PwRcFindIdxQt(CONST QVector<RCBUILT> &rgbuilt,
 // and inverting it is the one difference that would silently produce the
 // opposite chart.
 
-// Windows doesn't lay these boxes out as one long list, nor as columns of
-// equal length: dlgRestrict puts them in five labelled group boxes, by what
-// kind of object each is (astrolog.rc GROUPBOX "Planets", "Minor Objects",
-// "House Cusps", "Uranians", "Dwarfs"). Splitting the same objects into six
-// even columns would put Lilith, a cusp and an asteroid in one column, so
-// the grouping is what has to be matched, not the column count.
-
-typedef struct {
-  CONST char *szLabel;
-  int lo, hi;
-} OBJGROUPQT;
-
-static CONST OBJGROUPQT rgGroupRestrictQt[] = {
-  {"Planets",       0,       oChi-1},
-  {"Minor Objects", oChi,    oCore},
-  {"House Cusps",   cuspLo,  cuspHi},
-  {"Uranians",      uranLo,  uranHi},
-  {"Dwarfs",        dwarfLo, dwarfHi} };
-#define cGroupRestrictQt \
-  (int)(sizeof(rgGroupRestrictQt) / sizeof(OBJGROUPQT))
-
-// dlgMoons groups its moons by the planet they orbit, seven boxes of it
-// (astrolog.rc GROUPBOX "Mars" through "Center of Body (COB)"). The counts
-// come from that dialog's checkbox blocks: Mars 2, Jupiter 4, Saturn 8,
-// Uranus 5, Neptune 3, Pluto 5, then the five COB points.
-static CONST OBJGROUPQT rgGroupMoonQt[] = {
-  {"Mars",     moonsLo+0,  moonsLo+1},
-  {"Jupiter",  moonsLo+2,  moonsLo+5},
-  {"Saturn",   moonsLo+6,  moonsLo+13},
-  {"Uranus",   moonsLo+14, moonsLo+18},
-  {"Neptune",  moonsLo+19, moonsLo+21},
-  {"Pluto",    moonsLo+22, moonsLo+26},
-  {"Center of Body (COB)", cobLo, cobHi} };
-#define cGroupMoonQt (int)(sizeof(rgGroupMoonQt) / sizeof(OBJGROUPQT))
-
-static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
-  byte *rgignore, CONST RESBUT *rgbut, int cbut, int cCol,
-  CONST OBJGROUPQT *rggroup, int cgroup)
-{
-  // With a group table the range goes into labelled boxes; otherwise it's
-  // laid out in cCol plain columns, which is what the fixed stars want
-  // since dlgStar has no groups either.
-  CONST int cRowPerCol = (cCol > 0 ? (hi - lo + 1 + cCol - 1) / cCol : 0);
-  QDialog dlg(gi.qwind);
-  dlg.setWindowTitle(szTitle);
-  QVBoxLayout *pouter = new QVBoxLayout(&dlg);
-  QHBoxLayout *pmiddle = new QHBoxLayout();
-  QVector<QCheckBox *> rgpcb;
-  int i, iGroup, jlo, jhi;
-
-  rgpcb.resize(hi - lo + 1);
-  if (cgroup > 0) {
-    for (iGroup = 0; iGroup < cgroup; iGroup++) {
-      CONST OBJGROUPQT *pgrp = &rggroup[iGroup];
-      jlo = Max(pgrp->lo, lo); jhi = Min(pgrp->hi, hi);
-      if (jlo > jhi)
-        continue;
-      QGroupBox *pgb = new QGroupBox(pgrp->szLabel);
-      QVBoxLayout *pcol = new QVBoxLayout(pgb);
-      pcol->setSpacing(1);
-      for (i = jlo; i <= jhi; i++) {
-        QCheckBox *pcb = new QCheckBox(SzObjDlgQt(i));
-        pcb->setChecked(rgignore[i] != 0);
-        pcol->addWidget(pcb);
-        rgpcb[i - lo] = pcb;
-      }
-      pcol->addStretch(1);
-      pmiddle->addWidget(pgb, 0, Qt::AlignTop);
-    }
-  } else {
-    QGridLayout *pgrid = new QGridLayout();
-    pgrid->setHorizontalSpacing(10);
-    pgrid->setVerticalSpacing(1);
-    for (i = lo; i <= hi; i++) {
-      QCheckBox *pcb = new QCheckBox(SzObjDlgQt(i));
-      pcb->setChecked(rgignore[i] != 0);
-      pgrid->addWidget(pcb, (i - lo) % cRowPerCol, (i - lo) / cRowPerCol);
-      rgpcb[i - lo] = pcb;
-    }
-    pmiddle->addLayout(pgrid);
-  }
-
-  // Windows' button placement (astrolog.rc dlgRestrict): the set/toggle
-  // buttons are a column of uniform 50 unit wide buttons down the right
-  // hand side, with Cancel and OK stacked at the bottom of that same
-  // column. The two "copy a whole set in" buttons are not in that column
-  // at all -- they sit along the bottom edge, the wide one at far left
-  // (125 units) and Recall in the middle. Leaving them in the column is
-  // what stretched every button to the width of the longest label.
-  QVBoxLayout *pcol = new QVBoxLayout();
-  QHBoxLayout *pbottom = new QHBoxLayout();
-  QVector<QPushButton *> rgpbCol;
-
-  for (i = 0; i < cbut; i++) {
-    CONST RESBUT *pbut = &rgbut[i];
-    QPushButton *ppb = new QPushButton(pbut->szLabel);
-    // rgpcb outlives every click: the lambda only runs inside exec().
-    QObject::connect(ppb, &QPushButton::clicked, &dlg,
-      [&rgpcb, pbut, lo, hi]() {
-        int j, jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
-        for (j = jlo; j <= jhi; j++) {
-          QCheckBox *pcb = rgpcb[j - lo];
-          switch (pbut->nAction) {
-          case resSet:    pcb->setChecked(fTrue);              break;
-          case resClear:  pcb->setChecked(fFalse);             break;
-          case resToggle: pcb->setChecked(!pcb->isChecked());  break;
-          case resCopy:   pcb->setChecked(pbut->rgSource[j] != 0); break;
-          }
-        }
-      });
-    if (pbut->nAction == resCopy) {
-      // Along the bottom, in table order: the wide one then Recall.
-      if (pbottom->count() > 0)
-        pbottom->addSpacing(20);
-      pbottom->addWidget(ppb);
-    } else {
-      pcol->addWidget(ppb);
-      rgpbCol.append(ppb);
-    }
-  }
-
-  QPushButton *pbCancel = new QPushButton("Cancel");
-  QPushButton *pbOk = new QPushButton("OK");
-  pbOk->setDefault(fTrue);
-  rgpbCol.append(pbCancel);
-  rgpbCol.append(pbOk);
-  QObject::connect(pbOk, &QPushButton::clicked, &dlg, &QDialog::accept);
-  QObject::connect(pbCancel, &QPushButton::clicked, &dlg, &QDialog::reject);
-  pcol->addStretch(1);
-  pcol->addWidget(pbCancel);
-  pcol->addWidget(pbOk);
-
-  // One width for the whole column, as Windows gives them, rather than
-  // letting the longest label set it.
-  int dxBut = 0;
-  for (QPushButton *ppb : rgpbCol)
-    dxBut = Max(dxBut, ppb->sizeHint().width());
-  for (QPushButton *ppb : rgpbCol)
-    ppb->setFixedWidth(dxBut);
-
-  pmiddle->addStretch(1);
-  pmiddle->addLayout(pcol);
-  pouter->addLayout(pmiddle);
-
-  // These dialogs build their own button column rather than using a
-  // QDialogButtonBox, so PrepareDialogQt()'s pass doesn't reach them --
-  // add Windows' planet icon here instead. dlgRestrict has it at x 270
-  // with Cancel at 315, so it belongs at the right of the bottom row,
-  // just inboard of the button column.
-  pbottom->addStretch(1);
-  QPixmap pixIcon = PixAstrologIconQt();
-  if (!pixIcon.isNull()) {
-    QLabel *plIcon = new QLabel();
-    plIcon->setPixmap(pixIcon);
-    pbottom->addWidget(plIcon);
-    pbottom->addSpacing(8);
-  }
-  pouter->addLayout(pbottom);
-
-  PrepareDialogQt(&dlg);
-  if (dlg.exec() != QDialog::Accepted)
-    return;
-
-  for (i = lo; i <= hi; i++)
-    rgignore[i] = rgpcb[i-lo]->isChecked();
-  AdjustRestrictions();
-  // Windows re-derives the Setting menu's category checkmarks here (the
-  // us.fCusp/fUranian/fDwarf block at the end of DlgRestrict, and the
-  // equivalents in DlgStar and DlgMoons).
-  SyncRestrictMenuQt();
-  RecastAndRedrawQt();
-}
-
-// Windows' dlgRestrict shows objects 0 through dwarfHi -- the core bodies
-// plus all the cusps, Uranians, and dwarfs -- not just 0 through oCore.
-static CONST RESBUT rgbutRestrict[] = {
-  {"&Restrict All",   resSet,    0,       dwarfHi},
-  {"&Unrestrict All", resClear,  0,       dwarfHi},
-  {"Toggle Minors",   resToggle, oMain+1, oCore},
-  {"Toggle Cusps",    resToggle, cuspLo,  cuspHi},
-  {"Toggle Uran.",    resToggle, uranLo,  uranHi},
-  {"Toggle Dwarfs",   resToggle, dwarfLo, dwarfHi},
-  {"Copy &from Transit Restriction Set", resCopy, 0, dwarfHi, ignore2},
-  {"Recall",          resCopy,   0,       dwarfHi, ignoreMem},
-};
-
-static CONST RESBUT rgbutTransit[] = {
-  {"&Restrict All",   resSet,    0,       dwarfHi},
-  {"&Unrestrict All", resClear,  0,       dwarfHi},
-  {"Toggle Minors",   resToggle, oMain+1, oCore},
-  {"Toggle Cusps",    resToggle, cuspLo,  cuspHi},
-  {"Toggle Uran.",    resToggle, uranLo,  uranHi},
-  {"Toggle Dwarfs",   resToggle, dwarfLo, dwarfHi},
-  {"Copy &From Standard Restriction Set", resCopy, 0, dwarfHi, ignore},
-  {"Recall",          resCopy,   0,       dwarfHi, ignore2Mem},
-};
-
-static CONST RESBUT rgbutStar[] = {
-  {"&Restrict All",   resSet,   starLo, starHi},
-  {"&Unrestrict All", resClear, starLo, starHi},
-};
-
-// Windows' moon toggles are written as offsets from the dialog's first
-// checkbox (dbMo_Mar covers 0..1, dbMo_Jup 2..5, and so on in DlgMoons);
-// they're absolute object indexes here.
-static CONST RESBUT rgbutMoons[] = {
-  {"&Restrict All",   resSet,    moonsLo,    cobHi},
-  {"&Unrestrict All", resClear,  moonsLo,    cobHi},
-  {"Toggle &Mars",    resToggle, moonsLo+0,  moonsLo+1},
-  {"Toggle &Jupiter", resToggle, moonsLo+2,  moonsLo+5},
-  {"Toggle &Saturn",  resToggle, moonsLo+6,  moonsLo+13},
-  {"Toggle Ur&anus",  resToggle, moonsLo+14, moonsLo+18},
-  {"Tog. &Neptune",   resToggle, moonsLo+19, moonsLo+21},
-  {"Toggle &Pluto",   resToggle, moonsLo+22, moonsLo+26},
-  {"Toggle CO&B",     resToggle, moonsLo+27, moonsLo+31},
-};
 
 // The restriction dialogs, transcribed from dlgRestrict, dlgStar and
 // dlgMoons: every checkbox, group box, button and the icon sit at the
@@ -2581,6 +2325,9 @@ static CONST RESBUT rgbutMoons[] = {
 // *checked* box means restricted, i.e. hidden. That reads backwards at
 // first glance, but it is what a Windows user expects, and inverting it is
 // the one difference that would silently produce the opposite chart.
+
+// What one of a restriction dialog's quick buttons does to its range.
+enum { resSet, resClear, resToggle, resCopy };
 
 typedef struct {
   CONST char *szId;   // Resource symbol of the button.
@@ -3627,6 +3374,53 @@ void ShowAspectDialogQt()
     kAspA[i] = NColorFromComboQt(rgpcbColor[i-1]);
   }
   AdjustAspectCount();
+  RecastAndRedrawQt();
+}
+
+
+// Objects, transcribed from dlgObject. The orb, add and influence fields
+// are deoNN/deaNN/deiNN and the color list dckNN, all numbered from one
+// over the object range, so they load and store by index.
+
+void ShowObjectDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  QLineEdit *rgpeOrb[oCore+1], *rgpeAdd[oCore+1], *rgpeInf[oCore+1];
+  QComboBox *rgpcbColor[oCore+1];
+  int i;
+
+  dlg.setWindowTitle("Objects");
+  RcBuildDialogQt(&dlg, rgctlObject, cctlObject, dxObject, dyObject,
+    &rgbuilt);
+  for (i = 0; i <= oCore; i++) {
+    rgpeOrb[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deo", i+1);
+    rgpeAdd[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dea", i+1);
+    rgpeInf[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dei", i+1);
+    // The color lists are numbered from dck00, unlike the edit fields
+    // which start at 01, so this index is the object number itself.
+    rgpcbColor[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", i);
+    if (rgpeOrb[i] != NULL)
+      rgpeOrb[i]->setText(SzFormatRQt(rObjOrb[i], -2));
+    if (rgpeAdd[i] != NULL)
+      rgpeAdd[i]->setText(SzFormatRQt(rObjAdd[i], -1));
+    if (rgpeInf[i] != NULL)
+      rgpeInf[i]->setText(SzFormatRQt(rObjInf[i], -2));
+    FillColorComboQt(rgpcbColor[i], kObjU[i], 1);
+  }
+  RcWireOkCancelQt(&dlg, rgbuilt);
+  PrepareDialogQt(&dlg);
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  for (i = 0; i <= oCore; i++) {
+    if (rgpeOrb[i] == NULL)
+      continue;
+    rObjOrb[i] = rgpeOrb[i]->text().toDouble();
+    rObjAdd[i] = rgpeAdd[i]->text().toDouble();
+    rObjInf[i] = rgpeInf[i]->text().toDouble();
+    kObjU[i] = NColorFromComboQt(rgpcbColor[i]);
+  }
   RecastAndRedrawQt();
 }
 

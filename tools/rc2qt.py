@@ -35,11 +35,25 @@ KIND = {
     "EDITTEXT": "ctlEdit", "COMBOBOX": "ctlCombo",
 }
 
-GEOM = re.compile(r"(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)\s*$")
+# The geometry is four consecutive integers, but not reliably at the end of
+# the line: CONTROL puts its style flags before them, EDITTEXT and COMBOBOX
+# after ("EDITTEXT den01,40,15,40,13,ES_AUTOHSCROLL"). Requiring them at the
+# end silently dropped every edit field and combo box in the resource.
+INT = re.compile(r"^-?\d+$")
 HEAD = re.compile(r"^(dlg\w+)\s+DIALOGEX?\s+\d+,\s*\d+,\s*(\d+),\s*(\d+)")
 LINE = re.compile(r"^(%s)\s+(.*)$" % "|".join(KIND))
 TEXT = re.compile(r'^"((?:[^"]|"")*)"\s*,\s*([A-Za-z_0-9]+)')
 BARE = re.compile(r"^([A-Za-z_0-9]+)\s*,")
+
+
+def geometry(rest):
+    """The first run of four consecutive integer fields, or None."""
+    parts = [p.strip() for p in rest.split(",")]
+    for i in range(len(parts) - 3):
+        run = parts[i:i + 4]
+        if all(INT.match(p) for p in run):
+            return [int(p) for p in run]
+    return None
 
 
 def controls(body):
@@ -50,7 +64,7 @@ def controls(body):
         if not m:
             continue
         kind, rest = m.group(1), m.group(2)
-        g = GEOM.search(rest)
+        g = geometry(rest)
         if not g:
             continue
         t = TEXT.match(rest)
@@ -59,7 +73,7 @@ def controls(body):
         else:
             b = BARE.match(rest)
             text, symbol = "", (b.group(1) if b else "")
-        yield KIND[kind], text, symbol, [int(v) for v in g.groups()]
+        yield KIND[kind], text, symbol, g
 
 
 def emit(name, w, h, body, out):
