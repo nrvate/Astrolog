@@ -138,15 +138,14 @@ protected:
   // actual current size, and redraws first if not.
   void paintEvent(QPaintEvent *) override
   {
-    // Only auto-correct a buffer/widget size mismatch in graphics mode --
-    // in text mode (us.fGraphics false) there's no buffer to paint here at
-    // all (see RedrawTextQt()), and gi.qim never gets (re)created, so this
-    // check would otherwise fire on every single repaint of this widget.
+    // Text charts now draw into gi.qim too, so this size check applies in
+    // both modes -- it used to skip text mode, back when text lived in a
+    // window of its own and this buffer went stale.
     // Only chase the widget's size when a window resize is supposed to
     // change the chart. With that off the chart keeps its own size and
     // this widget is sized to match it instead (see ApplySizeModeQt), so
     // redrawing to fit here would fight that and repaint forever.
-    if (us.fGraphics && fQtReady && fWindowChartQt &&
+    if (fQtReady && fWindowChartQt &&
       width() >= 1 && height() >= 1 &&
       (gi.qim == NULL || gi.qim->width() != width() ||
       gi.qim->height() != height())) {
@@ -236,7 +235,10 @@ private:
   // either, rather than a stub.
   void ShowContextMenu(CONST QPoint &ptGlobal)
   {
-    QMenu *pmenu = PmenuContextForChartQt();
+    // The canvas shows text charts too now, and those have their own set
+    // of context menus, keyed off the text chart type rather than gi.nMode.
+    QMenu *pmenu = us.fGraphics ? PmenuContextForChartQt() :
+      PmenuContextForTextQt();
 
     if (pmenu == NULL)
       return;
@@ -482,6 +484,60 @@ void ScrollChartQt(int nDir)
     psbH->setValue(psbH->maximum());
     break;
   }
+}
+
+
+/*
+******************************************************************************
+** Text charts drawn into the chart window.
+******************************************************************************
+*/
+
+// Windows draws text charts into the same window the graphics ones use,
+// one character at a time on a fixed grid (the TextOut() in PrintSz(),
+// general.cpp:1175, with the cell size set in wdriver.cpp:2841). This does
+// the same into gi.qim, so pressing V switches what the window shows
+// rather than opening a second window beside it.
+
+static int s_xCharQt = 8, s_yCharQt = 12;
+static KV s_kvTextQt = 0;
+
+// Cell size from the current text font, following Windows' scale steps.
+static void SetTextMetricsQt()
+{
+  int i = gs.nScale / 100;
+
+  if (gs.nFontTxt > 0) {
+    s_xCharQt = 3 + 3*i;
+    s_yCharQt = (s_xCharQt * 3 + 1) / 2;
+  } else {
+    s_xCharQt = i < 2 ? 6 : (i < 3 ? 8 : (i < 4 ? 10 : 12));
+    s_yCharQt = i < 2 ? 8 : (i < 3 ? 12 : (i < 4 ? 18 : 16));
+  }
+}
+
+// Called from AnsiColor() (general.cpp) for each colour change.
+void TextColorQt(KI ki)
+{
+  s_kvTextQt = KvFromKi(ki);
+}
+
+// Called from PrintSz() (general.cpp) for each character, with the cell
+// the text engine has reached.
+void TextCharQt(int xCell, int yCell, int ch)
+{
+  if (gi.qpaint == NULL)
+    return;
+  wchar wch = (uchar)ch;
+
+  // Astrolog's text charts draw their boxes with IBM code page glyphs, so
+  // map the high bytes to what they mean rather than showing Latin-1.
+  if ((uchar)ch >= 128 && us.nCharset != ccLatin)
+    wch = WchFromChIBM((uchar)ch);
+  gi.qpaint->setPen(QColor(RgbR(s_kvTextQt), RgbG(s_kvTextQt),
+    RgbB(s_kvTextQt)));
+  gi.qpaint->drawText(xCell * s_xCharQt + 4, (yCell + 1) * s_yCharQt,
+    QString(QChar(wch)));
 }
 
 
@@ -792,10 +848,6 @@ void RedrawQt()
   // Note this is a different function from InitColorsX() in xscreen.cpp,
   // which sets up the backend palette instead.
   InitColors();
-  if (!us.fGraphics) {
-    RedrawTextQt();
-    return;
-  }
   if (s_pdlgText != NULL)
     s_pdlgText->hide();
   if (gi.qim != NULL) {
@@ -818,6 +870,29 @@ void RedrawQt()
   gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
   gi.qim->fill(Qt::black);
   gi.qpaint = new QPainter(gi.qim);
+  // Text mode draws characters into this same buffer rather than the
+  // chart, which is what Windows does and is why the window shows the
+  // text chart instead of going black while a second window holds it.
+  if (!us.fGraphics) {
+    SetTextMetricsQt();
+    QFont font("Liberation Mono");
+    font.setPixelSize(s_yCharQt);
+    font.setFixedPitch(fTrue);
+    gi.qpaint->setFont(font);
+    s_kvTextQt = KvFromKi(kLtGrayA);
+    is.cchRow = is.cchCol = is.cchColMax = 0;
+    FILE *fileSav = is.S;
+    is.S = stdout;
+    Action();
+    is.S = fileSav;
+    delete gi.qpaint;
+    gi.qpaint = NULL;
+    gs.xWin = dxWin; gs.yWin = dyWin;
+    if (gi.qcanvas != NULL)
+      gi.qcanvas->update();
+    return;
+  }
+
   if (gs.fKeepSquare && fSquare) {
     // The sidebar isn't part of the square, so take it off before
     // squaring and put it back after, as Windows does.
@@ -998,6 +1073,15 @@ static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
 // do when they force text mode -- set once BuildViewMenu() runs.
 
 static QAction *s_paGraphics = NULL;
+
+// Keep the View menu's Show Graphics tick honest when something other than
+// that menu item changes the mode -- the Transits dialog does, since its
+// list chart types are text only.
+void SyncGraphicsMenuQt()
+{
+  if (s_paGraphics != NULL)
+    s_paGraphics->setChecked(us.fGraphics != 0);
+}
 
 static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
   int mode)

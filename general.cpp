@@ -1155,6 +1155,14 @@ void PrintSz(CONST char *sz)
       is.cchRow++;
       is.cchCol = 0;
     }
+#ifdef QT
+    // Text charts draw into the chart window, as they do on Windows just
+    // below, rather than being written out and shown somewhere else.
+    if (is.S == stdout) {
+      if ((byte)ch >= ' ')
+        TextCharQt(is.cchCol - 1, is.cchRow, ch);
+    } else
+#endif
 #ifdef WIN
     if (is.S == stdout) {
       // Windows text mode screen text should be output in IBM character set.
@@ -1598,6 +1606,14 @@ void AnsiColor(KI k)
   char sz[cchSzDef];
   int cchSav;
 
+#ifdef QT
+  if (is.S == stdout) {
+    if (k == kDefault || !us.fAnsiColor)
+      k = kLtGrayA;
+    TextColorQt(k);
+    return;
+  }
+#endif
 #ifdef WIN
   if (is.S == stdout) {
     if (k == kDefault || !us.fAnsiColor)

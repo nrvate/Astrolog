@@ -2758,8 +2758,6 @@ void ShowTransitDialogQt()
   us.fInDayYear = us.fInDayMonth && n2 >= 2;
   if (n2 == 2 && NAbs(us.nEphemYears) > 1)
     us.nEphemYears = 0;
-  if (n2 == 3 && NAbs(us.nEphemYears) <= 1)
-    us.nEphemYears = 5;
 
   // The chart type flags are set by switching to the mode the first radio
   // group chose, which is what routes through SetChartModeQt() here where
@@ -2776,6 +2774,21 @@ void ShowTransitDialogQt()
       us.fTransit || us.fTransitInf || us.fTransitGra)
       SetChartModeQt(gWheel);
   }
+
+  // Windows' tail (wdialog.cpp, DlgTransit's IDOK). Only the two "graph"
+  // types are drawn; the rest are lists, and a list rendered as graphics
+  // comes out as a wheel with nothing cast into it -- every object sitting
+  // at 0 Aries. SetChartModeQt() turns graphics on, so this has to follow
+  // it rather than precede it.
+  if (n1 == 3 || n1 == 6)
+    us.nEphemYears = (n2 <= 2 ? 1 : (nty <= 1 ? 5 : nty));
+  else {
+    if (n1 > 0)
+      us.fGraphics = fFalse;
+    if (n1 == 2)
+      us.fProgress = is.fProgress;
+  }
+  SyncGraphicsMenuQt();
   RecastAndRedrawQt();
 }
 

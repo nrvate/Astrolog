@@ -1161,6 +1161,9 @@ extern flag API DlgAbout    P((HWND, uint, WORD, LONG));
 /* Defined in qtdriver.cpp: the Qt build's handler for the -W switch     */
 /* family, so a settings file written by the Windows build still loads.  */
 extern int NProcessSwitchesQt P((int, char **, int, flag, flag, flag));
+/* Text charts draw into the chart window, as they do on Windows.        */
+extern void TextCharQt P((int, int, int));
+extern void TextColorQt P((KI));
 #endif
 
 #ifdef QT
