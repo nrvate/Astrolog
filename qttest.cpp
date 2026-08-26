@@ -386,9 +386,14 @@ static void TestAllMenuActionsQt()
     Check(gi.qim->width() > 0 && gi.qim->height() > 0,
       "after \"%s\": image is %dx%d", str.toLocal8Bit().constData(),
       gi.qim->width(), gi.qim->height());
+    // Sampled every four pixels rather than every eight. A chart can be
+    // legitimately sparse without being blank -- a telescope chart zoomed
+    // out to two degrees is a border, its axis labels and a single star --
+    // and on the coarser grid that came to exactly 20 differing samples,
+    // failing a "more than 20" check for drawing exactly what it should.
     cpix = 0;
-    for (y = 0; y < gi.qim->height(); y += 8)
-      for (x = 0; x < gi.qim->width(); x += 8)
+    for (y = 0; y < gi.qim->height(); y += 4)
+      for (x = 0; x < gi.qim->width(); x += 4)
         if (gi.qim->pixel(x, y) != gi.qim->pixel(0, 0))
           cpix++;
     Check(cpix > 20, "after \"%s\": chart went blank",

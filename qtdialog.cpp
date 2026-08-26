@@ -43,6 +43,8 @@
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QGroupBox>
+#include <QtCore/QFile>
+#include <QtGui/QPixmap>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QDialogButtonBox>
@@ -218,6 +220,30 @@ public:
 };
 
 // Apply the above to every combo in a dialog. Call just before exec().
+// Astrolog's planet icon, the astrlog3.ico that every Windows dialog
+// shows. Looked for next to the binary and in the working directory, the
+// same two places the bundled fonts are.
+static QPixmap PixAstrologIconQt()
+{
+  static QPixmap pix;
+  static flag fTried = fFalse;
+
+  if (!fTried) {
+    fTried = fTrue;
+    QStringList rgstr;
+    rgstr << QCoreApplication::applicationDirPath() + "/astrlog3.ico"
+          << QDir::currentPath() + "/astrlog3.ico";
+    for (int i = 0; i < rgstr.size(); i++)
+      if (QFile::exists(rgstr[i])) {
+        pix = QPixmap(rgstr[i]);
+        if (!pix.isNull() && pix.height() > 24)
+          pix = pix.scaledToHeight(24, Qt::SmoothTransformation);
+        break;
+      }
+  }
+  return pix;
+}
+
 static void PrepareDialogQt(QDialog *pdlg)
 {
   static NoComboWheelQt filter;
@@ -248,6 +274,51 @@ static void PrepareDialogQt(QDialog *pdlg)
     psa->setMinimumSize(QSize(Min(siz.width() + 32, 1500),
       Min(siz.height() + 8, 900)));
   }
+  // Windows shows its planet icon (astrlog3.ico, the "icon3" resource) in
+  // every one of these dialogs, and in nearly all of them it sits just to
+  // the left of the Cancel button -- dlgAspect has it at x 235 with Cancel
+  // at 320, dlgObject at 200 with Cancel at 280, and so on. Rather than
+  // place it by hand in twenty-odd dialogs, find each button box and slot
+  // the icon in ahead of it.
+  QPixmap pixIcon = PixAstrologIconQt();
+  if (!pixIcon.isNull())
+    for (QDialogButtonBox *pbb : pdlg->findChildren<QDialogButtonBox *>()) {
+      QBoxLayout *pblOwner = NULL;
+      int iItem = -1;
+
+      // Find the box layout holding this button box, and where in it.
+      QList<QBoxLayout *> rgpbl = pdlg->findChildren<QBoxLayout *>();
+      QBoxLayout *pblTop = qobject_cast<QBoxLayout *>(pdlg->layout());
+      if (pblTop != NULL)
+        rgpbl.prepend(pblTop);
+      for (QBoxLayout *pbl : rgpbl) {
+        for (int i = 0; i < pbl->count(); i++)
+          if (pbl->itemAt(i)->widget() == pbb) {
+            pblOwner = pbl; iItem = i; break;
+          }
+        if (pblOwner != NULL)
+          break;
+      }
+      if (pblOwner == NULL)
+        continue;
+      QLabel *plIcon = new QLabel();
+      plIcon->setPixmap(pixIcon);
+      if (pblOwner->direction() == QBoxLayout::LeftToRight ||
+        pblOwner->direction() == QBoxLayout::RightToLeft)
+        pblOwner->insertWidget(iItem, plIcon);
+      else {
+        // A vertical layout: put the icon and the buttons on one row, so
+        // the icon ends up beside Cancel rather than above it.
+        pblOwner->removeWidget(pbb);
+        QHBoxLayout *prow = new QHBoxLayout();
+        prow->addStretch(1);
+        prow->addWidget(plIcon);
+        prow->addSpacing(8);
+        prow->addWidget(pbb);
+        pblOwner->insertLayout(iItem, prow);
+      }
+    }
+
   pdlg->adjustSize();
 }
 
@@ -2255,7 +2326,20 @@ static void ShowRestrictRangeDialogQt(CONST char *szTitle, int lo, int hi,
   pmiddle->addStretch(1);
   pmiddle->addLayout(pcol);
   pouter->addLayout(pmiddle);
+
+  // These dialogs build their own button column rather than using a
+  // QDialogButtonBox, so PrepareDialogQt()'s pass doesn't reach them --
+  // add Windows' planet icon here instead. dlgRestrict has it at x 270
+  // with Cancel at 315, so it belongs at the right of the bottom row,
+  // just inboard of the button column.
   pbottom->addStretch(1);
+  QPixmap pixIcon = PixAstrologIconQt();
+  if (!pixIcon.isNull()) {
+    QLabel *plIcon = new QLabel();
+    plIcon->setPixmap(pixIcon);
+    pbottom->addWidget(plIcon);
+    pbottom->addSpacing(8);
+  }
   pouter->addLayout(pbottom);
 
   PrepareDialogQt(&dlg);
