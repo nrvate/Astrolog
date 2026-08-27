@@ -1411,10 +1411,16 @@ are the more useful half to read before starting something new.
       instead: which is the X11 build, so `=X` in a settings file opens a
       window (item 32), and which rejects `-WM` outright, so the config
       under test could not be loaded at all. Two dead ends, both avoidable.
-    - **It is text charts only.** Extending it to graphics modes is the
-      real remaining work, and it is what item 4's pixel baselines want.
-      That is a small job on top of a mechanism that exists, not the
-      missing plumbing item 9 described.
+    - Since fixed: `GraphicsChartCaptureQt()` does the other 24 modes, and
+      `ProbeQt()` generalises the whole idea -- an empty function you
+      rewrite to ask the program anything, ~0.2s a round trip. That, not a
+      window driver, is how this program should be interrogated.
+    - **The deeper miss was the axis, not the fact.** A window driver was
+      built for questions that have nothing to do with windows. Every
+      problem it then hit -- focus, coordinates, timing, modal dialogs,
+      clicks that missed -- does not exist in a probe, because there is no
+      window and no input. Check what the repo already does, and prefer
+      asking the program directly over pretending to be a user.
     - The general lesson, and it is the same one as item 30: check what
       the repo already does before concluding it cannot do it. `grep -rn
       QTTEXTDIR` would have settled this in seconds.
@@ -1649,6 +1655,18 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   deterministically, and the Qt side sets `us.fGraphics` in code. The
   general lesson: when a harness needs a known starting state, find the
   way to *assert* it rather than the way to flip it.
+- **Answer questions with a probe, not by driving the UI.** `ProbeQt()` in
+  qttest.cpp is an empty function whose body you rewrite freely: build,
+  run with `ASTROLOG_QT_PROBE=1`, read the answer, rewrite it. About 0.2
+  seconds a question, with every global live and no window, display,
+  focus or coordinate anywhere in it. Driving a real window costs 60-240
+  seconds a run and can miss. This was rediscovered the hard way after a
+  session spent building a window driver for questions the probe answers
+  instantly -- see item 34 and QT_TESTING.md.
+- **Always run with `-i nrvate.as`.** It carries `-Yi1 "/swe"`, and
+  `SwissEnsurePath()` caches the ephemeris path on first use, so a `-Yi`
+  set after startup does nothing and every esoteric body reads `???`.
+  A test against the stock astrolog.as answers a question nobody has.
 - **Always verify new interactive behavior live**, not just by code
   review — this project has found multiple genuine pre-existing
   architectural bugs this way (`DrawDash()`'s invisible-solid-lines bug,

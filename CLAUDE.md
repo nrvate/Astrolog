@@ -15,9 +15,10 @@ Work happens on branch **`qt`**.
   per-menu status, "What to do next", a work log of every item and what it
   actually turned out to be, and every knowing divergence from Windows.
   **Read this before changing anything.**
-- **`QT_TESTING.md`** — how to see what the app draws without a
-  display, and the failure modes that waste hours. Read it before
-  driving the app any other way; most of what looks like a rendering
+- **`QT_TESTING.md`** — **read this before testing anything.** The fast
+  loop is a scratch probe inside `qttest.cpp` (`ASTROLOG_QT_PROBE=1`,
+  ~0.2s a question, no display at all), not driving a window. Also the
+  failure modes that waste hours; most of what looks like a rendering
   problem or a hang is in there.
 - **`QT_COMPARING_WITH_WINDOWS.md`** — how to build and drive the real
   Windows binary under Wine and diff it against this port, and the
@@ -68,8 +69,15 @@ Three audits, all currently clean:
 python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
 python3 tools/rc_audit.py                        # controls nothing wires up
 python3 tools/rc_mnemonic_audit.py               # "&" placement vs astrolog.rc
-tools/qtdrive.sh tree                            # dump the live widget tree
-tools/qtdrive.sh run tools/scenarios/objectsel.txt   # drive a dialog by name
+
+# Ask the program a question directly -- the fast loop, ~0.2s. Rewrite
+# ProbeQt() in qttest.cpp, rebuild, run. See QT_TESTING.md.
+env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
+  ASTROLOG_QT_PROBE=1 ./astrolog-qt-test -i nrvate.as
+
+# Driving a real window is 60-240s a run and only worth it for menus,
+# focus, or the Windows build. Prefer the probe.
+tools/qtdrive.sh run tools/scenarios/objectsel.txt
 ```
 
 ## The Windows build is the reference, and it runs here
@@ -128,6 +136,10 @@ On a private Xvfb display, `import -window root` is fine.
   silently rewrites the whole file as LF and makes it diff as entirely
   rewritten. Read with `newline=''` and write back the same way. Check:
   `tr -cd '\r' < file | wc -c` against `git show HEAD:file | tr -cd '\r' | wc -c`.
+- **Always test with `-i nrvate.as`**, the maintainer's own settings.
+  It sets `-Yi1 "/swe"`, and `SwissEnsurePath()` caches the ephemeris
+  path on first use — so without it at startup every esoteric body
+  reads `???` and the run tells you nothing.
 - The user's config at `/data/med/astrolog.as` is theirs. Don't edit it
   unless asked.
 
