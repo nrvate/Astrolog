@@ -162,6 +162,23 @@ Things that cost a cycle each, if you do end up here:
   it, surfacing as a bare exit code 144. Use `pkill -x`, and remember
   `/proc/pid/comm` truncates at 15 characters: `astrolog-qt-tes`.
 
+## One slow thing that is not a bug
+
+A JPL Horizons lookup — the `j<n>` object definition, and Lookup Names on
+such a row — takes about a second the first time. That is the service, not
+this program: measured with `ASTROLOG_QT_NETLOG=1`, headers, first byte
+and completion all land on the same timestamp roughly 900ms after the
+request goes out, so the ~7KB reply transfers instantly and the entire
+wait is Horizons computing the ephemeris before it answers.
+
+The parts that *were* ours are done: the TLS handshake (130ms) is paid
+once per session rather than once per body, and a body-and-time already
+asked about is answered from cache in 0ms. Nothing else on this end
+moves the number. Don't go looking for a bug in it.
+
+Both shipped configs carry `=0n`, which disables web queries entirely, so
+none of this happens unless someone asks for it.
+
 ## When something stops rather than slows
 
 **Any `PrintWarning()`/`PrintError()` becomes a modal dialog and waits

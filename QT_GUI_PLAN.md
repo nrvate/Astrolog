@@ -1622,13 +1622,25 @@ Qt's `encrypted()` signal fires only when a handshake really happens:
     body 4  reused                    919ms
     body 5  reused                    920ms
 
-**Read that carefully, because it is also a lesson in measurement.** The
-handshake is 130ms and is now paid once per session instead of once per
-body. But the dominant cost is ~900ms of server-side computation, and an
-earlier attempt to demonstrate the fix by comparing wall-clock times
-across two runs showed nothing at all — the effect was smaller than the
-variance between runs, and the run ordering confounded it further. The
-signal, not the stopwatch, is what settles it.
+**Horizons is simply slow, and that is not something this end can fix.**
+Look at where the time goes in those numbers: headers, first byte and
+done are all the *same* timestamp. The reply is about 7KB, so the
+transfer is instantaneous; the whole ~900ms is the server thinking before
+it says anything at all. That is Horizons computing an ephemeris, and no
+amount of client work touches it. The 130ms handshake — the only part
+that was ever ours — is now paid once per session rather than once per
+body, and the reply cache means a question already asked costs 0ms. Those
+were the two available levers and both have been pulled. A first lookup
+taking about a second is the service, not the program, and it is worth
+knowing that before someone goes looking for a bug in this code.
+
+**It is also a lesson in measurement.** An earlier attempt to demonstrate
+the connection reuse by comparing wall-clock times across two runs showed
+nothing at all — it even showed the reuse run's first call as *more*
+expensive, which reuse cannot explain. With a 130ms effect sitting inside
+a ~900ms server wait that varies run to run, and the run ordering
+confounding what was left, the timings were noise. The signal, not the
+stopwatch, is what settles it.
 
 **One target per call is a hard limit**, confirmed in JPL's own API
 documentation: `COMMAND` takes a single target, and when it matches
