@@ -1602,6 +1602,44 @@ that toggling it still changes the answer (152.910217 against 152.925690)
 rather than the cache flattening the two. A fixed 64-entry ring, so it
 cannot grow without bound or reach the unfreed-allocation count at exit.
 
+**The endpoint is the documented modern one**,
+`https://ssd.jpl.nasa.gov/api/horizons.api?format=text&...`, rather than
+the older `horizons_batch.cgi` upstream uses. The parameter names are
+identical and `format=text` returns the same plain text, so the parse is
+unchanged — verified by fetching both with identical parameters and
+comparing: same target line, same CSV rows, same `$$SOE` marker.
+
+**One connection, not one per body.** `QNetworkAccessManager` pools and
+keeps connections alive *per manager*, so the manager is a session-long
+singleton (`s_pnamQt`, torn down in `FinalizeQt()`). It was a local at
+first, which threw that away and paid a fresh TCP connect and TLS
+handshake for every object. `ASTROLOG_QT_NETLOG=1` prints where the time
+goes, and answers it categorically rather than by stopwatch, because
+Qt's `encrypted()` signal fires only when a handshake really happens:
+
+    body 1  connect+TLS 130ms   done 1086ms
+    body 2  connect+TLS reused  done  892ms
+    body 4  reused                    919ms
+    body 5  reused                    920ms
+
+**Read that carefully, because it is also a lesson in measurement.** The
+handshake is 130ms and is now paid once per session instead of once per
+body. But the dominant cost is ~900ms of server-side computation, and an
+earlier attempt to demonstrate the fix by comparing wall-clock times
+across two runs showed nothing at all — the effect was smaller than the
+variance between runs, and the run ordering confounded it further. The
+signal, not the stopwatch, is what settles it.
+
+**One target per call is a hard limit**, confirmed in JPL's own API
+documentation: `COMMAND` takes a single target, and when it matches
+several things it returns a disambiguation list rather than several
+ephemerides. There is no batching to be had. The server offers no HTTP/2
+either — its ALPN advertises `http/1.1` only — and pipelining would not
+help regardless, since each fetch completes before the next begins so
+there is never more than one request in flight. Astrolog does already get
+its three instants from one request rather than three, by asking for a
+range with `STEP_SIZE`; that part was always right.
+
 The console/X11 build still shells out, and the comment there now says
 plainly what that costs. Windows keeps `URLDownloadToFile`, which at
 least is not a shell, though it has no timeout either.

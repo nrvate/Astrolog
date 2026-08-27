@@ -3074,7 +3074,12 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   } else
     *szLine = chNull;
   fSemicolon = FBetween(id, nMillion, nMillion*2-1);
-  sprintf(szUrl, "https://ssd.jpl.nasa.gov/horizons_batch.cgi?batch=1&"
+  // The documented current endpoint. Its parameter names are the same
+  // as the old horizons_batch.cgi and "format=text" returns the same
+  // plain text, so the parse below is unchanged -- verified by fetching
+  // both with identical parameters and diffing: same target line, same
+  // CSV rows, same $$SOE marker.
+  sprintf(szUrl, "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&"
     "COMMAND='%d%s'&"
     "OBJ_DATA='YES'&"
     "MAKE_EPHEM='YES'&"

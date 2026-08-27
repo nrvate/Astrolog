@@ -60,6 +60,7 @@
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
 #include <QtCore/QEventLoop>
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
@@ -378,6 +379,9 @@ void SetNoUpdateQt(flag f) { fNoUpdateQt = f; }
 // should be grabbed from the window rather than redrawn, which is what
 // CopyChartBitmapQt() already does, so it is kept for the setting's sake.
 static flag fNoPopupQt = fFalse, fBmpWindowQt = fTrue;
+// The session's one network manager; see FGetUrlQt() for why it is not
+// created per fetch. Torn down in FinalizeQt().
+static QNetworkAccessManager *s_pnamQt = NULL;
 
 flag FNoPopupQt() { return fNoPopupQt; }
 void SetNoPopupQt(flag f) { fNoPopupQt = f; }
@@ -3921,6 +3925,11 @@ void FinalizeQt(void)
 {
   int i;
 
+  if (s_pnamQt != NULL) {
+    delete s_pnamQt;
+    s_pnamQt = NULL;
+  }
+
   for (i = 0; i < cMacro; i++) {
     DeallocatePIf(rgszMacroQt[i]);
     rgszMacroQt[i] = NULL;
@@ -3959,13 +3968,29 @@ void FinalizeQt(void)
 
 #define cmsGetUrlQt 30000       // Give up on a fetch after this long.
 
+// One manager for the whole session, not one per fetch.
+//
+// Qt pools connections and keeps them alive per manager, so a persistent
+// one costs a TCP connection and a TLS handshake once and reuses them for
+// every later request to the same host. A local manager -- which is what
+// this was at first -- throws that away and pays a fresh handshake for
+// every object looked up, which is exactly the waste the cache below it
+// exists to avoid.
+//
+// The server does not offer HTTP/2 (its ALPN advertises http/1.1 only),
+// so there is no multiplexing to be had; the attribute is set anyway so
+// this picks it up for free if that ever changes. Pipelining would not
+// help either way: each fetch runs to completion before the next starts,
+// so there is never more than one request in flight to pipeline.
 flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
 {
-  QNetworkAccessManager nam;
   QEventLoop evloop;
   QTimer timer;
   QString strErr;
   flag fCancel = fFalse;
+
+  if (s_pnamQt == NULL)
+    s_pnamQt = new QNetworkAccessManager();
 
   QNetworkRequest req((QUrl(QString::fromUtf8(szUrl))));
   if (!req.url().isValid()) {
@@ -3978,9 +4003,34 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
     QNetworkRequest::NoLessSafeRedirectPolicy);
   req.setHeader(QNetworkRequest::UserAgentHeader,
     QString("%1/%2").arg(szAppName).arg(szVersionCore));
+  req.setAttribute(QNetworkRequest::Http2AllowedAttribute, true);
 
-  QNetworkReply *prep = nam.get(req);
+  QNetworkReply *prep = s_pnamQt->get(req);
   QObject::connect(prep, &QNetworkReply::finished, &evloop, &QEventLoop::quit);
+
+  // Where the time actually goes. Set ASTROLOG_QT_NETLOG to print it.
+  //
+  // The encrypted() signal fires only when a TLS handshake really happens,
+  // so whether it fires at all is the categorical answer to "was the
+  // connection reused" -- far better evidence than comparing wall times,
+  // which on this service are dominated by however long Horizons takes to
+  // compute an ephemeris and vary more between runs than the handshake
+  // costs in the first place.
+  flag fNetLog = (getenv("ASTROLOG_QT_NETLOG") != NULL);
+  QElapsedTimer timNet;
+  qint64 msTls = -1, msHead = -1, msFirst = -1;
+  timNet.start();
+  if (fNetLog) {
+    QObject::connect(prep, &QNetworkReply::encrypted, prep,
+      [&msTls, &timNet]() { msTls = timNet.elapsed(); });
+    QObject::connect(prep, &QNetworkReply::metaDataChanged, prep,
+      [&msHead, &timNet]() { msHead = timNet.elapsed(); });
+    QObject::connect(prep, &QNetworkReply::readyRead, prep,
+      [&msFirst, &timNet]() {
+        if (msFirst < 0)
+          msFirst = timNet.elapsed();
+      });
+  }
 
   // A fetch with no timeout is a hang waiting to happen.
   timer.setSingleShot(fTrue);
@@ -4006,6 +4056,14 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
 
   evloop.exec();
   timer.stop();
+  if (fNetLog)
+    printf("  net: %s  connect+TLS %s  headers %lldms  first byte %lldms  "
+      "done %lldms\n",
+      req.url().host().toLocal8Bit().constData(),
+      msTls < 0 ? "reused" : QString("%1ms").arg(msTls).toLocal8Bit()
+        .constData(),
+      (long long)msHead, (long long)msFirst,
+      (long long)timNet.elapsed());
   if (pdlg != NULL) {
     pdlg->close();
     delete pdlg;
