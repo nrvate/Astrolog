@@ -39,8 +39,10 @@ WMPID=$!
 sleep 1
 
 # The driver needs the a11y bus of whatever session it is in, so the whole
-# thing runs under one private bus.
-exec dbus-run-session -- /bin/sh -c '
+# thing runs under one private bus. Deliberately not exec'd: exec replaces
+# this shell and takes the cleanup trap with it, which leaks an Xvfb and a
+# metacity every run.
+dbus-run-session -- /bin/sh -c '
   DISPLAY='"$DISP"' /usr/libexec/at-spi-bus-launcher --launch-immediately &
   sleep 2
   gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
@@ -48,3 +50,6 @@ exec dbus-run-session -- /bin/sh -c '
     org.a11y.Status ScreenReaderEnabled "<true>" >/dev/null 2>&1
   DISPLAY='"$DISP"' exec python3 tools/qtdrive.py "$@"
 ' _ "$@"
+rc=$?
+cleanup
+exit $rc

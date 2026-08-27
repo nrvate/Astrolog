@@ -279,6 +279,20 @@ on purpose.
   regeneration look like it did nothing.
 - **Grep build output for `: error`**, not a narrower pattern.
 
+## If you extend the drivers
+
+Two things bit while writing them, and will bite again:
+
+- **Don't `exec` past a cleanup trap.** `qtdrive.sh` originally `exec`'d
+  into `dbus-run-session`, which replaces the shell and takes its `trap`
+  with it — so every run leaked an Xvfb and a metacity, silently, until a
+  process check caught it. Run it as a child and clean up after.
+- **A scenario with no `expect-*` line proves nothing.** Keys and clicks
+  that land nowhere are completely silent on both platforms. Every
+  assertion in both drivers was checked by making it fail on purpose,
+  which is the only way to know an assertion works; this repo has shipped
+  tests before that confirmed an invention rather than caught a defect.
+
 ## Checks worth running before a commit
 
 ```sh

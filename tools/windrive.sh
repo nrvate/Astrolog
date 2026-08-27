@@ -56,6 +56,7 @@ cleanup() {
   WINEDEBUG=-all wineserver -k 2>/dev/null
   [ -n "$WMPID" ] && kill "$WMPID" 2>/dev/null
   [ -n "$XPID" ] && kill "$XPID" 2>/dev/null
+  wait 2>/dev/null
   return 0
 }
 trap cleanup EXIT INT TERM
