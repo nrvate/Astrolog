@@ -164,6 +164,7 @@ extern byte ignore[objMax], ignore2[objMax], ignorea[cAspect+1],
   ignorez[arMax], ignore7[rrMax], pluszone[cSector+1];
 extern byte ignoreMem[objMax], ignore2Mem[objMax], ignoreaMem[cAspect+1],
   ignorezMem[arMax], ignore7Mem[rrMax], ignorefMem[6];
+extern CONST real rAspAngleDef[cAspect+1];
 extern real rAspAngle[cAspect+1], rAspOrb[cAspect+1], rObjOrb[oNorm+2],
   rObjAdd[oNorm+2];
 extern int ruler1[oNorm+1], ruler2[oNorm+1], exalt[oNorm+1],

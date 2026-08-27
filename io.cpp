@@ -1504,6 +1504,14 @@ flag FOutputSettings()
   sprintf(sz, "=v3 %d   ", us.fListDecan ? us.nDecanType : 0); PrintFSz();
   PrintF(
     "; Wheel subdivision type    [Change \"0\" to desired subdivision ]\n");
+  // nAspectSort is an index, not the switch letter that set it, so map
+  // it back through the same order the -a handler reads.
+  sprintf(sz, "-a%c     ", "jonOPACDM"[us.nAspectSort]); PrintFSz();
+  PrintF(
+    "; Aspect list sort order    [j power, o orb, n orb value, O name]\n");
+  sprintf(sz, "%cma     ", ChDashF(us.fMidAspect)); PrintFSz();
+  PrintF(
+    "; Aspects to midpoints too  [\"=ma\" shows them, \"_ma\" doesn't  ]\n");
   sprintf(sz, ":w %d    ", us.nWheelRows); PrintFSz();
   PrintF(
     "; Wheel chart text rows     [Change \"0\" to desired wheel rows  ]\n");
@@ -1668,6 +1676,23 @@ flag FOutputSettings()
   PrintF("  ; Obscure aspects\n-YAo 19 24  ");
   for (i = 19; i <= 24; i++) { PrintF(" "); PrintRSz(rAspOrb[i], -6); }
   PrintF("  ; Very obscure aspects\n\n");
+
+  // An aspect whose angle has been changed from the standard one.
+  // Only the changed ones are written, the way the object
+  // customization section only writes what differs from its default.
+  PrintF("; CHANGED ASPECT ANGLES:\n\n");
+  fAny = fFalse;
+  for (i = 1; i <= cAspect; i++) {
+    if (rAspAngle[i] == rAspAngleDef[i])
+      continue;
+    fAny = fTrue;
+    sprintf(sz, "-Aa %d ", i); PrintFSz();
+    PrintRSz(rAspAngle[i], -6);
+    sprintf(sz, "  ; %s\n", szAspectName[i]); PrintFSz();
+  }
+  if (!fAny)
+    PrintF("; [No aspect angles are different from defaults]\n");
+  PrintF("\n\n");
 
   PrintF("; DEFAULT MAX PLANET ASPECT ORBS:\n\n-YAm 0 10   ");
   for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
@@ -1980,6 +2005,11 @@ flag FOutputSettings()
   PrintF("; Line thickness adjustment for vector formats\n");
   sprintf(sz, ":YXf #%06x     ", gs.nFontAll); PrintFSz();
   PrintF("; Fonts to use [text, signs, houses, planets, aspects, naks.]\n");
+  sprintf(sz, ":YXv %d %d %d      ", gs.nDecaType, gs.nDecaSize,
+    gs.nDecaLine); PrintFSz();
+  PrintF("; Wheel corner decoration [type, size %, line count]\n");
+  sprintf(sz, ":YXa %d          ", gs.nDashMax); PrintFSz();
+  PrintF("; Dashedness limit in aspect lines drawn\n");
 #ifdef PS
   sprintf(sz, ":YXp %d           ", gs.nOrient); PrintFSz();
   PrintF(

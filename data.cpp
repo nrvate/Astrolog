@@ -439,6 +439,15 @@ real rAspAngle[cAspect+1] = {0,
   108.0, rDegMax/11.0, rDegMax*2.0/11.0, rDegMax*3.0/11.0, rDegMax*4.0/11.0,
   rDegMax*5.0/11.0};
 
+// The standard angles again, so FOutputSettings() can tell which ones -Aa
+// has changed and write only those, the way the object customization
+// section compares against rgObjSwissDef[].
+CONST real rAspAngleDef[cAspect+1] = {0,
+  0.0, 180.0, 90.0, 120.0, 60.0, 150.0, 30.0, 45.0, 135.0, 72.0, 144.0,
+  36.0, rDegMax/7.0, 40.0, 80.0, rDegMax*2.0/7.0, rDegMax*3.0/7.0, 160.0,
+  108.0, rDegMax/11.0, rDegMax*2.0/11.0, rDegMax*3.0/11.0, rDegMax*4.0/11.0,
+  rDegMax*5.0/11.0};
+
 real rAspOrb[cAspect+1] = {0,
   7.0, 7.0, 7.0, 7.0, 6.0, 3.0, 3.0, 3.0, 3.0, 2.0, 2.0,
   1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,

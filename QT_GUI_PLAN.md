@@ -163,19 +163,24 @@ day and three
    nothing measures: process startup, keyboard focus, and exit cleanup.
    Run charts you actually want to read, from a settings file that isn't
    the repo's.
-8. **The other eight switch families Save Program Settings drops.** Found
+8. **~~The other switch families Save Program Settings drops.~~** — all
+   fixed 2026-08-26, see "Features this fork adds to both builds". What
+   remains open there is only widening `case 'W':` so the console build
+   can read a settings file that has `-WM` lines in it. Originally: Found
    the same way item 7 recommends, by running a real config through the
    GUI and diffing what came back. Listed in "Features this fork adds to
    both builds"; the `-F`/`-Fm` and `-WM` ones there are worked examples
    of what fixing one looks like. Read the note about the `-W` guard: fix
    the save path without it and settings files stop being readable by the
    console build.
-9. **A way to render a chart without the event loop.** The Qt build has
-   no headless output path at all: `-Xb` and friends enter `InteractQt()`
-   like everything else, so a chart can only be got out of it through the
-   GUI. That blocks the image A/B in item 30, and it is also what makes
-   item 4's pixel baselines awkward. Probably the single most useful
-   piece of plumbing left.
+9. **~~A way to render a chart without the event loop.~~** *(Struck
+   2026-08-26 — this was wrong, and wrong in a way that cost real time.
+   `TextChartCaptureQt()` in qttest.cpp already renders `gi.qim` straight
+   to PNG with no display, driven by `QTTEXTDIR=out/qt ./run-qt-tests.sh`.
+   It is how the Windows text-chart comparison in item 25 was done. It is
+   text charts only today, so extending it to graphics modes is the actual
+   remaining work — but the mechanism exists and there is no need to fight
+   the console build for it. See item 34.)*
 
 **If upstream releases a new Astrolog**, note this fork's changes to
 shared core are deliberately small and confined to `#ifdef QT` branches —
@@ -592,13 +597,13 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-33
+## Work log — items 1-34
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
 original description said they were.
 
-Items 1-15 are completed pieces of work. Items 16-33 are findings — how
+Items 1-15 are completed pieces of work. Items 16-34 are findings — how
 a thing turned out to work, or a class of bug worth not repeating — and
 are the more useful half to read before starting something new.
 
@@ -1389,6 +1394,27 @@ are the more useful half to read before starting something new.
     coordinates. This is the same family as the traps already listed under
     "Working pattern" and cost the same kind of time.
 
+34. **The headless renderer already existed, and not knowing that cost
+    an hour.** Item 9 of "What to do next" claimed the Qt build had no way
+    to render a chart without the event loop. It does:
+    `TextChartCaptureQt()` in qttest.cpp writes `gi.qim` to PNG with no
+    display, and `QTTEXTDIR=out/qt ./run-qt-tests.sh` is how the Windows
+    text chart comparison of item 25 was produced — in this same session,
+    before the claim was written.
+    - The cost was not the wrong sentence, it was what followed from it.
+      Needing to compare two settings files semantically, and believing
+      there was no headless render, the work went to the console build
+      instead: which is the X11 build, so `=X` in a settings file opens a
+      window (item 32), and which rejects `-WM` outright, so the config
+      under test could not be loaded at all. Two dead ends, both avoidable.
+    - **It is text charts only.** Extending it to graphics modes is the
+      real remaining work, and it is what item 4's pixel baselines want.
+      That is a small job on top of a mechanism that exists, not the
+      missing plumbing item 9 described.
+    - The general lesson, and it is the same one as item 30: check what
+      the repo already does before concluding it cannot do it. `grep -rn
+      QTTEXTDIR` would have settled this in seconds.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
@@ -1481,11 +1507,12 @@ splits cleanly in two:
 |---|---|---|---|
 | `-WM` | macro menu names, 13 in that config | **no** | yes |
 | `-WN` | animation update delay | **no** | yes |
-| `-Am` | per-object maximum orb | no | no |
-| `-Aa`, `-Ao` | custom aspect definitions and their orbs | no | no |
-| `-YXv` | wheel corner decoration (the Spider Web of item 30) | no | no |
-| `-YXa` | dash weak aspects | no | no |
-| `-ao`, `-ma`, `_m` | aspect sort order, aspects to midpoints | no | no |
+| `-Aa` | changed aspect angles | **no** | **no** |
+| `-ao` | aspect list sort order | **no** | **no** |
+| `-ma` | aspects to midpoints as well | **no** | **no** |
+| `-YXv` | wheel corner decoration (the Spider Web of item 30) | **no** | **no** |
+| `-YXa` | dashedness limit in aspect lines | **no** | **no** |
+| `-Am`, `-Ao` | per-object and per-aspect maximum orbs | yes | yes |
 
 **The first two were fixed.** `io.cpp` has the code that writes them, at
 what is now the WINDOWS MENUS / WINDOWS DEFAULTS block, and it was
@@ -1503,10 +1530,22 @@ would claim a round trip that doesn't happen. Note `-Wx`'s own comment
 there already said it kept the value "so it survives a settings round
 trip", which it could not, because nothing wrote it.
 
-The remaining eight are genuinely shared: `grep -c nDecaType io.cpp` and
-friends return 0, so `FOutputSettings()` has no section for them on
-either platform. Still open, still a good upstream contribution alongside
-the `-F` one, and still their own piece of work.
+**The other five were fixed too**, and are genuinely shared rather than
+Qt only — neither build wrote them. `-Am` and `-Ao` turned out never to
+have been lost at all: they set `rObjOrb[]`/`rAspOrb[]`, which the
+`-YAm`/`-YAo` tables already write, so only the spelling differed. Check
+the variable before believing a switch is dropped.
+
+Two of the five are editable from a dialog, which made them the worst of
+the set: aspect sort order in Chart Settings and the wheel decoration in
+Graphics Settings could both be changed in the GUI and lost on save.
+
+Two things worth knowing about the fix. `rAspAngle[]` had no defaults
+array to compare against, so `rAspAngleDef[]` was added beside it in
+data.cpp, the same shape `rgObjSwissDef[]` uses, and only changed angles
+are written. And `us.nAspectSort` is an *index*, not the switch letter
+that set it, so it maps back through `"jonOPACDM"` — writing `%c` of the
+index puts a control character in the settings file.
 
 **One trap if anyone takes those on.** Saved files load in the X11/console
 build only because those lines are absent. `case 'W':` in astrolog.cpp is
