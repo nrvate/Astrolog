@@ -1287,6 +1287,43 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
 // Process a command switch line passed to the program. Read each entry in
 // the argument list and set all the program modes and charts to display.
 
+#if !defined(WIN) && !defined(QT)
+// Consume a -W switch and its arguments without doing anything.
+//
+// These control a graphical interface this build does not have, so there
+// is nothing to apply -- but they must still be *parsed*, because the
+// alternative is ErrorSwitch() and abandoning the rest of the settings
+// file. The argument counts mirror NProcessSwitchesW()/Qt() exactly; if a
+// switch there grows an argument, it has to grow one here too or this
+// build will read the next line as though it were a switch.
+
+static int NProcessSwitchesNullW(int argc, char **argv, int pos)
+{
+  int carg;
+
+  switch (argv[0][pos]) {
+  case 'M':                       // -WM <n> "<name>", -WM0 <n> "<name>"
+  case 'w':                       // -Ww <x> <y>
+  case 'B':                       // -WB <x> <y>
+    carg = 2;
+    break;
+  case chNull:                    // -W <command id>
+  case 'N':                       // -WN <ms>
+  case 'T':                       // -WT "<title>"
+  case 'x':                       // -Wx <level>
+    carg = 1;
+    break;
+  default:                        // -Wh, -Wn, -Wt, -Wb, -WZ, -Wo*, -WS*
+    carg = 0;
+    break;
+  }
+  if (carg > 0 && FErrorArgc("W", argc, carg))
+    return tcError;
+  return carg;
+}
+#endif
+
+
 flag FProcessSwitches(int argc, char **argv)
 {
   int ich, i, j, k;
@@ -2874,21 +2911,23 @@ flag FProcessSwitches(int argc, char **argv)
       argc -= i; argv += i;
       break;
 
-#if defined(WIN) || defined(QT)
-    // The Qt build handles these too, rather than rejecting them: a
-    // settings file written by the Windows build is full of -W switches,
-    // and an unknown switch stops Astrolog reading the rest of the file.
+    // Every build accepts these, even the ones with no interface to apply
+    // them to. A settings file written by the Windows or Qt build is full
+    // of -W switches, and an unknown switch does not merely get skipped --
+    // it stops Astrolog reading the rest of the file, so a console build
+    // meeting a "-WM" line silently loses everything after it.
     case 'W':
 #ifdef WIN
       i = NProcessSwitchesW(argc, argv, ich, fOr, fAnd, fNot);
-#else
+#elif defined(QT)
       i = NProcessSwitchesQt(argc, argv, ich, fOr, fAnd, fNot);
+#else
+      i = NProcessSwitchesNullW(argc, argv, ich);
 #endif
       if (i < 0)
         return fFalse;
       argc -= i; argv += i;
       break;
-#endif
 #endif // GRAPH
 
     case '0':
