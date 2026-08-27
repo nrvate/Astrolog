@@ -2173,6 +2173,11 @@ static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
   int i, i2 = 0, j, nSav;
   flag fSav;
   CI *pci;
+#ifdef EXPRESS
+  CI ciT;
+  CP cpT;
+  flag fRet;
+#endif
 
   if (plist == NULL)
     return;
@@ -2204,6 +2209,24 @@ static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
         if (!pci->loc[j])
           continue;
       }
+#ifdef EXPRESS
+      // May want to skip current chart if AstroExpression says to do so.
+      // Windows' DlgList has always done this and this list never did, so
+      // an expression that narrowed the chart list there did nothing here.
+      // Cast the candidate chart so the expression can see its positions,
+      // then put the real one back: this runs once per chart in the list.
+      if (!us.fExpOff && FSzSet(us.szExpListF)) {
+        cpT = cp0; ciT = ciCore;
+        ciCore = *pci;
+        CastChart(-1);
+        ExpSetN(iLetterZ, i);
+        fRet = !NParseExpression(us.szExpListF);
+        ciCore = ciT;
+        cp0 = cpT;
+        if (fRet)
+          continue;
+      }
+#endif
     }
     j = DayOfWeek(pci->mon, pci->day, pci->yea);
     nSav = us.fAnsiChar; us.fAnsiChar = 2;

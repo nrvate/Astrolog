@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2811
+   display and no `xdotool`, and exits non-zero on failure. **2814
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1705,7 +1705,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2811 -- turned up something worse than the
+    totals -- 2785 against 2814 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -1781,6 +1781,33 @@ are the more useful half to read before starting something new.
       was found *before* asserting anything about its contents. The "found
       at all" check is what turned an empty capture into a visible failure
       rather than a green run.
+
+42. **Third pass: the chart list ignored its AstroExpression filter.**
+    The first two passes asked which shared code branches on `WIN`, and
+    which settings the Windows dialogs touch that the Qt ones do not. This
+    one asked which *shared functions* wdialog.cpp calls that qtdialog.cpp
+    never does. Most of the 126 differences are Win32 helpers, and one
+    cluster was not: `NParseExpression`, `ExpSetN`, and `us.szExpListF`,
+    which had also turned up unexplained in the pass 2 list.
+    - `DlgList` narrows the chart list three ways: by name substring, by
+      location substring, and by AstroExpression. `RcFillChartListQt()`
+      had the first two, faithfully, and silently lacked the third -- so
+      an expression that narrowed the list on Windows did nothing here.
+      Ported as written, including casting each candidate chart so the
+      expression can see its positions and putting the real one back
+      afterwards.
+    - Verified both directions before writing a test, which mattered: an
+      expression of `"0"` leaves "(No charts in list)" and one of `"1"`
+      keeps all three, so the filter is being evaluated rather than always
+      failing shut. `TestChartListFilterQt()` asserts both, and removing
+      the ported block again fails the second.
+    - **An angle that finds nothing is worth recording too.** The same
+      pass compared settings *assigned* by wdriver.cpp against qtdriver.cpp
+      and produced 42 apparent gaps, every one a false positive: the Qt
+      build assigns those chart type flags through a table of pointers
+      (`{gCalendar, &us.fCalendar}` and so on), which a search for
+      `us.fCalendar =` cannot see. Check how a thing is written before
+      concluding it is not.
 
 ## Features this fork adds to both builds
 
@@ -2117,7 +2144,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2811 assertions covering dialog titles, the 42 context menus,
+  failure. 2814 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

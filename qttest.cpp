@@ -42,6 +42,8 @@
 #include <QtWidgets/QAction>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QListWidget>
+#include <QtWidgets/QPushButton>
 #include <QtCore/QTimer>
 #include <QtCore/QStringList>
 #include <QtCore/QDir>
@@ -1088,6 +1090,77 @@ static QString StrEphemListQt()
 // Windows leaves an ephemeris out of this list when the user has switched
 // it off; see plan item 41. The maintainer's own settings file sets both
 // restrictions, so this is the list they actually get.
+static int s_cRowList;
+static QString s_strRow0;
+
+// Open the chart list, press Filter, and report what the list holds.
+static void FilterChartListQt()
+{
+  s_cRowList = -1;
+  s_strRow0 = QString();
+  for (int t = 1; t <= 8; t++)
+    QTimer::singleShot(120 * t * nScaleTest, []() {
+      if (s_cRowList >= 0)
+        return;
+      QWidget *pw = QApplication::activeModalWidget();
+      if (pw == NULL)
+        return;
+      QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
+      for (int b = 0; b < rgb.size(); b++)
+        if (rgb[b]->text().contains("Filter") &&
+          !rgb[b]->text().contains("Remove")) {
+          rgb[b]->click();
+          break;
+        }
+      QList<QListWidget *> rgl = pw->findChildren<QListWidget *>();
+      if (rgl.size() > 0) {
+        s_cRowList = rgl[0]->count();
+        if (s_cRowList > 0)
+          s_strRow0 = rgl[0]->item(0)->text();
+      }
+      pw->close();
+    });
+  QTimer::singleShot(2500 * nScaleTest, []() {
+    QWidget *pw = QApplication::activeModalWidget();
+    if (pw != NULL)
+      pw->close();
+  });
+  ShowChartListDialogQt();
+}
+
+
+// Windows' DlgList narrows the chart list by AstroExpression as well as by
+// name and location; this one did not. See plan item 42.
+static void TestChartListFilterQt()
+{
+  int cciSav = is.cci, i;
+  char *szSav = us.szExpListF;
+
+  Group("Chart list filter");
+  for (i = 0; i < 3; i++) {
+    ciCore = ciMain; ciCore.yea = 1990 + i;
+    sprintf(ciCore.nam, "AstrologSuiteChart%d", i);
+    FAppendCIList(&ciCore);
+  }
+  Check(is.cci >= cciSav + 3, "three charts went into the list");
+
+  us.szExpListF = SzClone("1");     // keep everything
+  FilterChartListQt();
+  Check(s_cRowList == 3, "an expression that keeps everything keeps 3 (got %d)",
+    s_cRowList);
+
+  us.szExpListF = SzClone("0");     // keep nothing
+  FilterChartListQt();
+  Check(s_cRowList == 1 && s_strRow0.contains("No charts"),
+    "an expression that keeps nothing empties the list (got %d rows, \"%s\")",
+    s_cRowList, s_strRow0.toLocal8Bit().constData());
+
+  us.szExpListF = szSav;
+  is.cci = cciSav;
+  printf("  the chart list honours its AstroExpression filter\n");
+}
+
+
 static void TestEphemerisListQt()
 {
   flag fNetSav = us.fNoNetwork, fPlaSav = us.fNoPlacalc;
@@ -1527,6 +1600,7 @@ int NRunQtTestsQt()
   TestSharedCoreFixesQt();
   TestRelationshipModeQt();
   TestEphemerisListQt();
+  TestChartListFilterQt();
   TestObjSelTableQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",
