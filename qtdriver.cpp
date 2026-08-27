@@ -59,6 +59,12 @@
 #include <QtCore/QVector>
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
+#include <QtCore/QEventLoop>
+#include <QtCore/QFile>
+#include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkReply>
+#include <QtNetwork/QNetworkRequest>
+#include <QtWidgets/QProgressDialog>
 #include <QtGui/QTextDocument>
 #include <QtPrintSupport/QPrinter>
 #include <QtPrintSupport/QPrintDialog>
@@ -3923,6 +3929,119 @@ void FinalizeQt(void)
     DeallocatePIf(rgszMSubQt[i]);
     rgszMSubQt[i] = NULL;
   }
+}
+
+
+/*
+******************************************************************************
+** Fetching a URL.
+******************************************************************************
+*/
+
+// Astrolog needs to fetch exactly one thing: a body's positions from JPL
+// Horizons, for the "j<n>" custom object definition. Upstream does that by
+// handing a sprintf'd command line to system() and shelling out to wget --
+// which means an undeclared dependency on wget being installed, a shell
+// string built from a URL, no timeout, and a completely frozen window for
+// however long the network takes.
+//
+// None of that is necessary here. Qt Network is part of the same Qt this
+// build already requires, under the same licence as the modules already
+// linked, and it speaks TLS -- which matters, because the Horizons URL is
+// https and so a plain-HTTP client would not do.
+//
+// The call has to *look* synchronous, because its shared callers are: one
+// of them is inside ComputeEphem() and a chart genuinely cannot be drawn
+// without the position. So this runs a nested event loop rather than
+// blocking, which is the difference between a window that keeps painting
+// and offers a Cancel button, and one the desktop greys out and offers to
+// kill.
+
+#define cmsGetUrlQt 30000       // Give up on a fetch after this long.
+
+flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
+{
+  QNetworkAccessManager nam;
+  QEventLoop evloop;
+  QTimer timer;
+  QString strErr;
+  flag fCancel = fFalse;
+
+  QNetworkRequest req((QUrl(QString::fromUtf8(szUrl))));
+  if (!req.url().isValid()) {
+    PrintWarningQt("The address to download from is not a valid URL.",
+      fTrue);
+    return fFalse;
+  }
+  // Follow redirects, but never a downgrade from https to http.
+  req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+    QNetworkRequest::NoLessSafeRedirectPolicy);
+  req.setHeader(QNetworkRequest::UserAgentHeader,
+    QString("%1/%2").arg(szAppName).arg(szVersionCore));
+
+  QNetworkReply *prep = nam.get(req);
+  QObject::connect(prep, &QNetworkReply::finished, &evloop, &QEventLoop::quit);
+
+  // A fetch with no timeout is a hang waiting to happen.
+  timer.setSingleShot(fTrue);
+  QObject::connect(&timer, &QTimer::timeout, prep, [prep]() {
+    prep->abort();
+  });
+  timer.start(cmsGetUrlQt);
+
+  // Keep the window alive and give the user a way out. Suppressed when
+  // popups are off, which is how an unattended run avoids putting up a
+  // dialog nobody is there to dismiss.
+  QProgressDialog *pdlg = NULL;
+  if (!FNoPopupQt()) {
+    pdlg = new QProgressDialog(
+      QString("Downloading from %1...").arg(req.url().host()),
+      "Cancel", 0, 0, gi.qwind);
+    pdlg->setWindowTitle(szAppName);
+    pdlg->setWindowModality(Qt::WindowModal);
+    pdlg->setMinimumDuration(400);      // no flash for a fast reply
+    QObject::connect(pdlg, &QProgressDialog::canceled, prep,
+      [prep, &fCancel]() { fCancel = fTrue; prep->abort(); });
+  }
+
+  evloop.exec();
+  timer.stop();
+  if (pdlg != NULL) {
+    pdlg->close();
+    delete pdlg;
+  }
+
+  // Say which of the three different things went wrong, rather than the
+  // one "Failed to download" upstream prints for all of them.
+  if (fCancel)
+    strErr = "Download cancelled.";
+  else if (prep->error() == QNetworkReply::OperationCanceledError)
+    strErr = QString("Timed out after %1 seconds contacting %2.")
+      .arg(cmsGetUrlQt / 1000).arg(req.url().host());
+  else if (prep->error() != QNetworkReply::NoError)
+    strErr = QString("Couldn't reach %1: %2")
+      .arg(req.url().host()).arg(prep->errorString());
+
+  if (strErr.isEmpty()) {
+    QByteArray ba = prep->readAll();
+    QFile file(QString::fromUtf8(szFile));
+    if (!file.open(QIODevice::WriteOnly))
+      strErr = QString("Couldn't write %1").arg(QString::fromUtf8(szFile));
+    else {
+      if (file.write(ba) != ba.size())
+        strErr = QString("Couldn't finish writing %1")
+          .arg(QString::fromUtf8(szFile));
+      file.close();
+    }
+  }
+  prep->deleteLater();
+
+  if (!strErr.isEmpty()) {
+    QByteArray baErr = strErr.toLocal8Bit();
+    PrintWarningQt(baErr.constData(), fTrue);
+    return fFalse;
+  }
+  return fTrue;
 }
 
 

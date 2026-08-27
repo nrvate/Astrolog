@@ -2948,7 +2948,14 @@ flag GetURL(const char *szUrl, const char *szFile)
   if (!FAILED(hr))
     return fTrue;
   sprintf(sz, "Failed to download '%s' (error %08x)\n", szUrl, hr);
+#elif defined(QT)
+  // Qt Network: real TLS, a timeout, a Cancel button, an error message
+  // that says which thing went wrong, and no shell anywhere near it.
+  // FGetUrlQt() reports its own failures, so nothing to add here.
+  return FGetUrlQt(szUrl, szFile);
 #else
+  // No HTTP client in this build, so shell out. Note this needs wget
+  // installed, blocks with no timeout, and hands a URL to system().
   sprintf(sz, "wget -q -O %s \"%s\"", szFile, szUrl);
   if (system(sz) == 0)
     return fTrue;
@@ -2956,6 +2963,66 @@ flag GetURL(const char *szUrl, const char *szFile)
 #endif
   PrintWarning(sz);
   return fFalse;
+}
+
+
+// A small cache of Horizons replies, keyed on the exact URL.
+//
+// Without this every chart cast refetches, because GetJPLHorizons() is
+// called from ComputeEphem() once per object per cast -- so a chart with
+// three JPL bodies hits a public NASA service three times on every redraw,
+// and animating one hammers it continuously. Measured before the cache:
+// three identical lookups in a row cost 469ms, 367ms and 451ms.
+//
+// The URL already encodes everything the answer depends on -- the body,
+// the three instants, the center, and whether the position is topocentric
+// -- so it is the honest key: change the chart and the key changes with
+// it, and no staleness is possible.
+//
+// What is cached is the *raw* reply, not the finished numbers, because
+// us.fTruePos adjusts those afterwards and is not part of the URL; two
+// callers can legitimately want different answers from one download.
+//
+// A fixed ring rather than an allocated one, so it cannot grow without
+// bound and never reaches the unfreed-allocation count at exit.
+
+#define cJPLCache 64
+
+static struct {
+  char szUrl[cchSzLine];
+  PT3R pt[3];
+  char szName[cchSzMax];
+} rgjc[cJPLCache];
+static int cjcUsed = 0, ijcNext = 0;
+
+static flag FJPLCacheGet(CONST char *szUrl, PT3R *pt, char *szName)
+{
+  int i, j;
+
+  for (i = 0; i < cjcUsed; i++)
+    if (FEqSz(szUrl, rgjc[i].szUrl)) {
+      for (j = 0; j < 3; j++)
+        pt[j] = rgjc[i].pt[j];
+      sprintf(szName, "%s", rgjc[i].szName);
+      return fTrue;
+    }
+  return fFalse;
+}
+
+static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
+  CONST char *szName)
+{
+  int j;
+
+  if (CchSz(szUrl) >= cchSzLine)
+    return;
+  sprintf(rgjc[ijcNext].szUrl, "%s", szUrl);
+  for (j = 0; j < 3; j++)
+    rgjc[ijcNext].pt[j] = pt[j];
+  sprintf(rgjc[ijcNext].szName, "%s", szName);
+  ijcNext = (ijcNext + 1) % cJPLCache;
+  if (cjcUsed < cJPLCache)
+    cjcUsed++;
 }
 
 
@@ -3040,6 +3107,10 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
       pch[1] = '3'; pch[2] = 'B';
     }
   }
+  // A reply we already have is the fastest and politest kind.
+  if (FJPLCacheGet(szUrl, pt, szName))
+    goto LProcess;
+
   GetURL(szUrl, szFileJPLCore);
 
   // Process downloaded file.
@@ -3092,7 +3163,11 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     return fFalse;
   }
 
-  // Process planet data.
+  FJPLCachePut(szUrl, pt, szName);
+
+LProcess:
+  // Process planet data. Reached either way: what is cached is the
+  // raw reply, and us.fTruePos below is not part of the cache key.
   for (i = 0; i < 3; i++) {
     // Convert speed of light in min to AU.
     len[i] = pt[i].z / (1440.0*rDayInYear) * rLYToAU;

@@ -44,6 +44,7 @@
 #include <QtCore/QTimer>
 #include <QtCore/QStringList>
 #include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
 #include <stdarg.h>

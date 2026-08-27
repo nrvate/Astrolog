@@ -1557,6 +1557,55 @@ and `SwissEnsurePath()` caches the ephemeris search path on first use, so
 a `-Yi` set afterwards does nothing. Without it every esoteric body reads
 `???` and the dialog looks broken when it is not.
 
+### HTTP without shelling out to wget
+
+Astrolog needs to fetch exactly one thing: a body's positions from JPL
+Horizons, for the `j<n>` custom object definition. Upstream does it by
+`sprintf`ing a command line and handing it to `system()`:
+
+    wget -q -O <file> "<url>"
+
+which means an undeclared dependency on wget being installed, a shell
+string assembled around a URL, no timeout, and a window frozen solid for
+however long the network takes. `GetURL()` (io.cpp) has a proper
+`URLDownloadToFile()` on Windows and that shell-out everywhere else.
+
+The Qt build now uses **Qt Network**. That is not a new dependency: it is
+the same Qt this build already requires, the same licence as the modules
+already linked, and Qt is LGPLv3 against Astrolog's GPLv2-*or-later*, so
+compatible. It matters that it speaks TLS — the Horizons URL is `https`,
+so a plain-HTTP client would not have done, and vendoring a TLS stack for
+one feature would be thousands of lines to maintain forever.
+
+`FGetUrlQt()` (qtdriver.cpp) fixes each of the four problems: no shell, a
+30 second timeout, a Cancel button, and an error that says *which* thing
+went wrong rather than one "Failed to download" for all of them. It looks
+synchronous to its caller because it has to — one caller is inside
+`ComputeEphem()` and a chart genuinely cannot be drawn without the
+position — but it runs a nested event loop, which is the difference
+between a window that keeps painting and one the desktop offers to kill.
+The progress dialog is suppressed when popups are off, so an unattended
+run does not put up a box nobody is there to dismiss.
+
+**The bigger win is the cache.** `GetJPLHorizons()` is called once per
+object per chart cast, and nothing was cached, so a chart with three JPL
+bodies hit a public NASA service three times on *every redraw* and
+animating one hammered it continuously. Measured before: three identical
+lookups cost 469ms, 367ms, 451ms. After: 473ms then 0ms, 0ms, 0ms, 0ms.
+
+The key is the exact URL, which already encodes everything the answer
+depends on — body, the three instants, center, topocentric or not — so
+changing the chart changes the key and staleness is impossible. What is
+cached is the **raw** reply rather than the finished numbers, because
+`us.fTruePos` adjusts those afterwards and is not in the URL; verified
+that toggling it still changes the answer (152.910217 against 152.925690)
+rather than the cache flattening the two. A fixed 64-entry ring, so it
+cannot grow without bound or reach the unfreed-allocation count at exit.
+
+The console/X11 build still shells out, and the comment there now says
+plainly what that costs. Windows keeps `URLDownloadToFile`, which at
+least is not a shell, though it has no timeout either.
+
 ### The -W settings this build stores are written back
 
 *(Corrected 2026-08-26. This section first said ten switch families were
@@ -1645,7 +1694,6 @@ as a bug.
 | `wi.*` fields in File/Graphics Settings — bitmap-from-window, antialias level, no-popup, no-auto-redraw | Win32-only `WI` struct. |
 | Wingdings, and the plain text families (Arial, Courier New, Consolas, Lucida Console, Cascadia Mono) | Offered in the font pickers, but not bundled — Wingdings is proprietary and the rest are system fonts. Qt substitutes when absent, as Windows does. |
 | Open Charts in Folder skips Astrolog's own data files | Matches Windows, which does the same, since a folder of charts often sits alongside them. |
-| JPL Horizons lookup blocks the UI | Synchronous network fetch inside the modal dialog. Windows does the same. Obvious async candidate. |
 
 ## Explicitly out of scope (don't implement)
 

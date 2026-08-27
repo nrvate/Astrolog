@@ -1174,6 +1174,7 @@ extern flag API DlgAbout    P((HWND, uint, WORD, LONG));
 extern int NProcessSwitchesQt P((int, char **, int, flag, flag, flag));
 /* Free what the Qt backend allocated through PAllocate(), at exit.      */
 extern void FinalizeQt P((void));
+extern flag FGetUrlQt P((CONST char *, CONST char *));
 /* Settings this build stores for the -W switch family, so that      */
 /* FOutputSettings() can write back what NProcessSwitchesQt() read.  */
 extern CONST char *SzMacroNameQt P((int));
