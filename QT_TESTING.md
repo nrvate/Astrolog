@@ -104,6 +104,25 @@ it was stuck.** Check what it was doing before calling it a hang.
 That last point means the console build is **not** a good way to test a
 real user's config. Use the Qt capture instead.
 
+What it *is* good for is a fast smoke test of the shared calculation and
+text-rendering core, with no display and no GUI in the way. This exits 0
+and prints a chart:
+
+```sh
+env -u DISPLAY ./astrolog -n _X \
+  -qb 11 19 1971 11:01am 0 8W 122:19:59W 47:36:35N </dev/null
+```
+
+`_X` forces text, `-qb` pins the chart so successive runs are comparable,
+`</dev/null` means a prompt fails fast instead of waiting, and unsetting
+`DISPLAY` means a stray graphics switch errors out visibly rather than
+opening a window. Strip the ANSI colour with
+`sed 's/\x1b\[[0-9;]*m//g'` if you want to diff two runs.
+
+Astrolog's own switch reference is `./astrolog -H`, and the rare ones are
+`-Y` — quicker than reading `charts0.cpp` when you need the exact
+argument order for something like `-qb`.
+
 ## Driving dialogs by widget name, not by pixel
 
 `tools/qtdrive.sh` removes the worst kludge in this repo. Qt draws all its
