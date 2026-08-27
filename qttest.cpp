@@ -67,6 +67,19 @@ static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
 static QString s_strModal;
 
+// Every timer here is racing a dialog that has to appear before it can be
+// closed, and under AddressSanitizer the whole program runs roughly an
+// order of magnitude slower -- so a delay that comfortably wins the race
+// in a normal build loses it there, the dialog goes unclosed, and the run
+// blocks in exec() with nothing driving the event loop. That looks exactly
+// like a hang and wasted twenty minutes once. GCC and Clang both define
+// this when -fsanitize=address is on, so it needs no flag of its own.
+#ifdef __SANITIZE_ADDRESS__
+#define nScaleTest 10
+#else
+#define nScaleTest 1
+#endif
+
 static void Group(CONST char *sz)
 {
   s_szGroup = sz;
@@ -108,7 +121,7 @@ static QString StrOpenDialogQt(void (*pfn)())
   static QString strTitle;
 
   strTitle = QString();
-  QTimer::singleShot(50, []() {
+  QTimer::singleShot(50 * nScaleTest, []() {
     QWidget *pw = QApplication::activeModalWidget();
     if (pw == NULL)
       pw = QApplication::activePopupWidget();
@@ -119,7 +132,7 @@ static QString StrOpenDialogQt(void (*pfn)())
   });
   // Safety net: if nothing showed up, or close() didn't take, don't hang
   // the whole suite on one dialog.
-  QTimer::singleShot(1500, []() {
+  QTimer::singleShot(1500 * nScaleTest, []() {
     QWidget *pw = QApplication::activeModalWidget();
     if (pw != NULL)
       pw->close();
@@ -376,10 +389,22 @@ static void TestAllMenuActionsQt()
     // guess, guessed wrong, and hung the run -- queue a shot that closes
     // whatever modal window appears and count it.
     s_strModal = QString();
-    QTimer::singleShot(120, []() {
+    QTimer::singleShot(120 * nScaleTest, []() {
       QWidget *pw = QApplication::activeModalWidget();
       if (pw != NULL) {
         s_strModal = pw->windowTitle();
+        pw->close();
+      }
+    });
+    // Safety net, the one StrOpenDialogQt has always had and this site
+    // did not: a dialog slower to appear than the shot above misses it
+    // entirely, and trigger() then waits forever for a click nobody is
+    // there to give. One item hanging must not cost the whole run.
+    QTimer::singleShot(1500 * nScaleTest, []() {
+      QWidget *pw = QApplication::activeModalWidget();
+      if (pw != NULL) {
+        if (s_strModal.isEmpty())
+          s_strModal = pw->windowTitle();
         pw->close();
       }
     });

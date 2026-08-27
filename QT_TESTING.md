@@ -275,6 +275,46 @@ And time each step before theorising. Every graphics mode draws in 1–60ms
 except Rising (~490ms) and the two transit grids (~275ms); each PNG saves
 in 30–55ms. If something takes seconds, it is not drawing.
 
+## Finding memory bugs: build the suite under AddressSanitizer
+
+A fault that happens once and will not happen again is almost never a
+logic error you can read your way to. Build the suite with ASan and it
+becomes deterministic — it reports the exact line, the array, and how far
+outside it the access went, on the run where the damage is *done* rather
+than the later run where the program falls over.
+
+Nothing in the repo needs changing; override the flags and the output
+paths so the normal build is untouched:
+
+```sh
+QC=$(pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Network Qt5Test)
+QL=$(pkg-config --libs   Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Network Qt5Test)
+make -f Makefile.qt.test -j4 OBJDIR=obj-qt-asan NAME=astrolog-qt-asan \
+  CPPFLAGS="-DQT -DQTTEST -O1 -g -fsanitize=address -fno-omit-frame-pointer \
+            -fPIC -Wno-write-strings -Wno-narrowing -Wno-comment $QC" \
+  LIBS="$QL -lm -ldl -fsanitize=address"
+
+env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
+  ASAN_OPTIONS=detect_leaks=0 ./astrolog-qt-asan -i nrvate.as
+```
+
+`detect_leaks=0` matters: Qt does not free everything it allocates at
+exit, and the leak report buries any real finding. Turn it on only when
+leaks are what you are hunting. Expect the run to take minutes rather
+than seconds, which is why this is not a pre-commit check.
+
+The suite is a good host for it because it already renders all 26 chart
+types and fires all 338 menu items — so one run exercises far more of the
+program than a person clicking would. It found the esoteric-influence
+stack underflow (plan item 37) on its first run, in shared upstream code
+that had nothing to do with the crash actually being chased. `ProbeQt()`
+works under ASan too, which is how a second instance of the same bug in
+`-j0` was confirmed rather than merely suspected from reading.
+
+A caveat worth knowing: ASan stops at the *first* error, so a fix can
+reveal the next one immediately behind it. That happened here — line 1342
+hid line 1456. Re-run after every fix until it is silent.
+
 ## Build traps
 
 - **`Makefile.win`'s resource depends on `resource.h`.** Change control IDs

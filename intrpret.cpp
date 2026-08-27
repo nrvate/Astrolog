@@ -1338,12 +1338,12 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
     j = SFromZ(chouse[i]);               // if house cusps fall in signs
     power1[rules[j]] += rHouseInf[i];    // they rule.
     if (!ignore7[rrEso]) {
-      k = rgSignEso1[j]; if (k) power1[k] += rHouseInf[i];
-      k = rgSignEso2[j]; if (k) power1[k] += rHouseInf[i];
+      k = rgSignEso1[j]; if (k > 0) power1[k] += rHouseInf[i];
+      k = rgSignEso2[j]; if (k > 0) power1[k] += rHouseInf[i];
     }
     if (!ignore7[rrHie]) {
-      k = rgSignHie1[j]; if (k) power1[k] += rHouseInf[i];
-      k = rgSignHie2[j]; if (k) power1[k] += rHouseInf[i];
+      k = rgSignHie1[j]; if (k > 0) power1[k] += rHouseInf[i];
+      k = rgSignHie2[j]; if (k > 0) power1[k] += rHouseInf[i];
     }
   }
 
@@ -1450,14 +1450,24 @@ void ChartInfluence(void)
       if (ruler2[i])
         power1[ruler2[i]]       += power[i] / 3.0;
     }
-    if (!ignore7[rrEso]) {
-      power1[rgSignEso1[i]]     += power[i] / 3.0;
-      if (rgSignEso2[i])
+    // Unlike ruler1[]/ruler2[] above, which are indexed by object and hold
+    // a sign, rgSignEso*[]/rgSignHie*[] are indexed by *sign* and hold an
+    // object -- and this loop's "i" is an object. Reading them here runs
+    // off the end of a 13 entry table for any object above Pisces, and
+    // most entries are -1, which as a power1[] index writes below the
+    // array. Both were confirmed with AddressSanitizer. Guarding the index
+    // and the value stops the corruption; what this loop was meant to
+    // compute is a separate question, recorded in QT_GUI_PLAN.md.
+    if (!ignore7[rrEso] && FValidSign(i)) {
+      if (rgSignEso1[i] > 0)
+        power1[rgSignEso1[i]]   += power[i] / 3.0;
+      if (rgSignEso2[i] > 0)
         power1[rgSignEso2[i]]   += power[i] / 3.0;
     }
-    if (!ignore7[rrEso]) {
-      power1[rgSignHie1[i]]     += power[i] / 3.0;
-      if (rgSignHie2[i])
+    if (!ignore7[rrEso] && FValidSign(i)) {
+      if (rgSignHie1[i] > 0)
+        power1[rgSignHie1[i]]   += power[i] / 3.0;
+      if (rgSignHie2[i] > 0)
         power1[rgSignHie2[i]]   += power[i] / 3.0;
     }
   }

@@ -1515,6 +1515,61 @@ are the more useful half to read before starting something new.
       without the fix is worthless, and it is easy to write one by
       accident.
 
+37. **A once-only crash, chased with AddressSanitizer instead of
+    guesswork.** The user hit a fault in the Object Selections dialog once
+    and could not reproduce it. Reading the dialog code found nothing: the
+    OK path validates both midpoint operands with `FItem()` before
+    encoding them, `-Fm` validates the same way in astrolog.cpp, and
+    `NObjSelMid()` returns -1 or a valid index and nothing else. So the
+    crash was probably never in that code.
+    - Building the suite under ASan settled it in one run. It is a good
+      host: it already renders 26 chart types and fires all 338 menu
+      items, so it exercises far more of the program in a minute than a
+      person clicking could in an hour. The recipe is in `QT_TESTING.md`;
+      it needs no change to any Makefile, only variable overrides and its
+      own object directory.
+    - **What it found was in intrpret.cpp, in upstream shared code, and
+      had nothing to do with the dialog.** `ComputeInfluence()` guards its
+      esoteric and hierarchical ruler lookups with `if (k)` in four
+      places, where the block twenty lines above it correctly writes
+      `if (k > 0 && i != k)`. `rgSignEso2[]` and `rgSignHie2[]` are almost
+      entirely -1 -- only Leo has an esoteric co-ruler -- so `if (k)`
+      passes -1 straight through and `power1[-1] +=` writes below a
+      `real[objMax]` on the stack. It fires on any Esoteric chart with
+      those rulerships on, which is to say routinely, and in a normal
+      build it silently corrupts whatever local sits below the array.
+    - **A second instance sits in `ChartInfluence()`, the `-j0` sign
+      listing, and it is worse.** That loop iterates *objects*, but
+      `rgSignEso1[]`/`rgSignHie1[]` are indexed by *sign* and hold 13
+      entries, so any object above Pisces reads off the end of the table
+      and then uses the result as an index. Confirmed with ASan through
+      `ProbeQt()` rather than assumed from reading. The index and the
+      value are both guarded now, which ends the undefined behaviour --
+      **but the loop's arithmetic is still wrong and deliberately left
+      alone**: `ruler1[]` is object-indexed and holds a sign, these tables
+      are the inverse, and computing what upstream meant here would change
+      every `-j0` figure for anyone using esoteric rulerships. That is a
+      decision for the maintainer, not a drive-by fix. Noted also, and
+      likewise untouched: the second block tests `ignore7[rrEso]` where it
+      almost certainly means `rrHie`, so hierarchical rulers are applied
+      when esoteric ones are enabled and never on their own.
+    - **ASan stops at the first error, so a fix reveals the next one
+      behind it.** Line 1342 hid line 1456 completely. Re-run after every
+      fix until it is silent; one clean report is not evidence when the
+      first error aborted the run.
+    - **It also exposed a hang in the suite's own scaffolding.** The
+      menu-firing loop closed modal dialogs with a single
+      `QTimer::singleShot(120, ...)` and, unlike `StrOpenDialogQt()`, had
+      no safety net behind it. Under ASan everything runs about ten times
+      slower, the dialog appears after its own timer has already fired,
+      and `trigger()` then waits forever for a click nobody is there to
+      give -- twenty minutes of "it must be a slow build" before the
+      symptom was recognised as the modal-dialog trap this file already
+      documents. The timers now scale off `__SANITIZE_ADDRESS__`, which
+      the compiler defines on its own, and the missing safety net is in.
+      Diagnosed from outside exactly as the doc says to: `do_poll`, no
+      sockets, 39 seconds of CPU against 19 minutes of wall clock.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
