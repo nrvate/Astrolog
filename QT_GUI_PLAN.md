@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2814
+   display and no `xdotool`, and exits non-zero on failure. **2816
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1705,7 +1705,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2814 -- turned up something worse than the
+    totals -- 2785 against 2816 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -1808,6 +1808,34 @@ are the more useful half to read before starting something new.
       (`{gCalendar, &us.fCalendar}` and so on), which a search for
       `us.fCalendar =` cannot see. Check how a thing is written before
       concluding it is not.
+
+43. **AstroExpression coverage, audited hook by hook.** Asked whether
+    AstroExpressions are fully implemented here, the answer needed the
+    list rather than an impression. There are **54 `szExp*` hooks**.
+    Fifty-one fire from shared code and so behave identically in both
+    builds. The other three each needed checking:
+    - **`szExpListF`** (chart list filter) -- was Windows-only, ported in
+      item 42.
+    - **`szExpDisp3`** (notify after a redraw) -- Windows fires it at the
+      end of its redraw; xscreen.cpp fires it too but from inside
+      `#if !defined(WIN) && !defined(QT)`, so this build reached neither.
+      Now fired at the end of `RedrawQt()`. `TestExpressionHooksQt()`
+      asserts it fires and that `-~0` still suppresses it.
+    - **`szExpKey`** (adjust a key press) -- fires only from that same
+      X11-only block, so **Windows does not fire it either**. Not a parity
+      gap, and not something to "fix" without deciding it is wanted.
+    - **`szExpMenu`** (adjust a menu command before it runs) -- Windows
+      only, and **deliberately still missing**. It hands the expression a
+      numeric `cmd*` id and dispatches whatever id comes back. This port
+      binds every action by *label*, with no id at dispatch, so honouring
+      it means building a label-to-command map and rerouting dispatch
+      through it. That is a design change, not a port.
+    - Separately, **twelve expression *functions*** are `#ifdef WIN`
+      (`cfunW`): `Dlg`, `Mouse`, and ten readbacks of `-W` settings. Ten
+      of those settings exist here but are reached through accessors like
+      `NAnimDelayQt()` rather than a `wi` struct, which this build does not
+      have at all. There is also `funWin` and `funX11` but no `funQt`, so
+      an expression can identify every backend except this one.
 
 ## Features this fork adds to both builds
 
@@ -2144,7 +2172,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2814 assertions covering dialog titles, the 42 context menus,
+  failure. 2816 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

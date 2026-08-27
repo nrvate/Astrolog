@@ -1131,6 +1131,32 @@ static void FilterChartListQt()
 
 // Windows' DlgList narrows the chart list by AstroExpression as well as by
 // name and location; this one did not. See plan item 42.
+// Windows fires the redraw notification hook at the end of its redraw;
+// the X11 path fires it from a block that excludes both GUI builds, so
+// this one never did. See plan item 43.
+static void TestExpressionHooksQt()
+{
+  char *szSav = us.szExpDisp3;
+
+  Group("AstroExpression hooks");
+  us.szExpDisp3 = SzClone("=z 4242");
+  ExpSetN(iLetterZ, 0);
+  RedrawQt();
+  Check(NExpGet(iLetterZ) == 4242,
+    "the redraw notification hook fires (@z is %d)", NExpGet(iLetterZ));
+
+  // And is not fired when expressions are switched off wholesale.
+  us.fExpOff = fTrue;
+  ExpSetN(iLetterZ, 0);
+  RedrawQt();
+  Check(NExpGet(iLetterZ) == 0, "and not when -~0 has turned them off");
+  us.fExpOff = fFalse;
+
+  us.szExpDisp3 = szSav;
+  printf("  the redraw notification hook fires\n");
+}
+
+
 static void TestChartListFilterQt()
 {
   int cciSav = is.cci, i;
@@ -1601,6 +1627,7 @@ int NRunQtTestsQt()
   TestRelationshipModeQt();
   TestEphemerisListQt();
   TestChartListFilterQt();
+  TestExpressionHooksQt();
   TestObjSelTableQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",

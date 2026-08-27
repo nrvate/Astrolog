@@ -995,6 +995,14 @@ void RedrawQt()
   // Chart Resizes Window: fit the window around whatever was just drawn.
   if (fChartWindowQt)
     ResizeWindowToChartQt();
+#ifdef EXPRESS
+  // Notify AstroExpression the screen has just been redrawn, as Windows
+  // does at the end of its own redraw. The X11 path fires this too, but
+  // from a block xscreen.cpp excludes both GUI builds from, so this one
+  // never reached it.
+  if (!us.fExpOff && FSzSet(us.szExpDisp3))
+    ParseExpression(us.szExpDisp3);
+#endif
 }
 
 
