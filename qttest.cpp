@@ -993,6 +993,54 @@ static void TestObjSelParseQt()
 // Two bugs in shared upstream code, neither of them Qt specific -- both
 // files have no "ifdef QT" in them at all -- and both of the kind that
 // produce a plausible number rather than an obvious failure.
+// A GUI casts the same relationship chart repeatedly; the console builds
+// cast once and exit. charts2.cpp was written for the latter and only
+// excepted WIN, so this build took the console path while behaving like a
+// GUI -- see plan item 39.
+static void TestRelationshipModeQt()
+{
+  CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciSaveSav = ciSave, ciOrig;
+  int nRelSav = us.nRel, k;
+
+  Group("Relationship chart modes");
+
+  ciTwin = ciMain;
+  ciTwin.yea = ciMain.yea - 10;
+  ciOrig = ciMain;
+
+  SetRelQt(rcMidpoint);
+  Check(us.nRel == rcMidpoint,
+    "midpoint mode survives its own cast (us.nRel is %d)", us.nRel);
+  Check(ciMain.yea != ciOrig.yea, "and the chart actually moved to the midpoint");
+
+  // Every recast must take the midpoint of the chart as *loaded*. Taking
+  // it of the previous midpoint instead walks the chart toward the twin a
+  // little further on each redraw -- 2021, 2019, 2017, 2016 -- which a
+  // user sees as the chart changing every time the window is resized.
+  CI ciMid = ciMain;
+  for (k = 0; k < 3; k++)
+    RecastAndRedrawQt();
+  Check(ciMain.yea == ciMid.yea && ciMain.mon == ciMid.mon &&
+    ciMain.day == ciMid.day,
+    "a midpoint chart does not drift when redrawn (%d/%d/%d vs %d/%d/%d)",
+    ciMain.mon, ciMain.day, ciMain.yea, ciMid.mon, ciMid.day, ciMid.yea);
+
+  // Leaving midpoint mode puts the loaded chart back, which SetRelQt()
+  // can only do while us.nRel still says it is in midpoint mode.
+  SetRelQt(rcNone);
+  Check(ciMain.yea == ciOrig.yea && ciMain.mon == ciOrig.mon &&
+    ciMain.day == ciOrig.day,
+    "leaving midpoint mode restores the loaded chart (%d/%d/%d)",
+    ciMain.mon, ciMain.day, ciMain.yea);
+
+  us.nRel = nRelSav;
+  ciMain = ciMainSav; ciTwin = ciTwinSav; ciSave = ciSaveSav;
+  ciCore = ciMain;
+  CastChart(1);
+  printf("  relationship modes persist, restore, and do not drift\n");
+}
+
+
 static void TestSharedCoreFixesQt()
 {
   real rgforceSav[objMax], rMid;
@@ -1356,6 +1404,7 @@ int NRunQtTestsQt()
   TestBadInputQt();
   TestForcedPositionsQt();
   TestSharedCoreFixesQt();
+  TestRelationshipModeQt();
   TestObjSelTableQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",

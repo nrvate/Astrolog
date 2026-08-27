@@ -448,7 +448,12 @@ void CastRelation(void)
 
   for (i = 1; i <= cChart; i++) {
     ciCore = *rgpci[i];
-#ifdef WIN
+    // A GUI recasts the same relationship chart over and over, so the
+    // midpoint has to be taken from the chart as loaded every time. Left
+    // out, each recast takes the midpoint of the *previous* midpoint and
+    // the chart walks toward the twin a little more on every redraw.
+    // SetRel()/SetRelQt() put the original in ciSave for exactly this.
+#if defined(WIN) || defined(QT)
     if (i == 1 && us.nRel == rcMidpoint)
       ciCore = ciMain = ciSave;
 #endif
@@ -569,7 +574,13 @@ void CastRelation(void)
     }
     ciMain = ciCore;
     CastChart(0);
-#ifndef WIN
+    // The console builds cast once and exit, so they clear the mode here
+    // rather than carry it. A GUI must keep it: the menu shows it as the
+    // current mode, and SetRel()/SetRelQt() test it to know to put the
+    // original chart back when the user leaves midpoint mode. Cleared
+    // here, that restore never fires and the loaded chart is silently
+    // replaced by the midpoint for the rest of the session.
+#if !defined(WIN) && !defined(QT)
     us.nRel = rcNone;  // Turn off so don't move to midpoint again.
 #endif
 

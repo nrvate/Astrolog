@@ -1650,6 +1650,59 @@ are the more useful half to read before starting something new.
       repo carries a standing warning about. The data was never the
       problem; only the code reading it was.
 
+39. **The Windows-versus-Qt audit: one real astrological gap, and it was
+    a silent data loss.** The question asked was whether this port fails
+    to implement anything Windows does that is not window specific. The
+    way to answer it is not to read menus -- the suite already asserts
+    258/258 of those -- but to look at shared code that branches on `WIN`
+    with no `QT` branch, because that is where a feature can simply not
+    exist here. `grep -nE "^#(if|ifdef).*\bWIN\b" *.cpp *.h` on
+    everything except the two backends finds about 105 sites; discarding
+    those with a `QT` branch within a dozen lines leaves roughly 40 to
+    read.
+    - **charts2.cpp had a matched pair, and this build had neither half.**
+      `CastRelation()` cleared `us.nRel` after casting under `#ifndef WIN`,
+      and restored `ciCore` from `ciSave` under `#ifdef WIN`. Both make
+      sense: a console build casts once and exits, a GUI recasts the same
+      chart over and over. This port is a GUI taking the console path.
+    - **What that did to a user.** Time Space Midpoint is a composite
+      chart, and `SetRelQt()` -- a faithful port of Windows' `SetRel()` --
+      stashes the loaded chart in `ciSave` on entering that mode and puts
+      it back on leaving. The restore is gated on `us.nRel` still reading
+      `rcMidpoint`, which `CastRelation()` had just zeroed. So viewing a
+      composite chart **replaced the loaded chart permanently**: enter the
+      mode on a 2026 chart against a 2016 twin and it becomes 2021, leave
+      the mode and it stays 2021. The chart the user opened is gone, and
+      nothing says so.
+    - **Fixing only the obvious half would have made it worse.** With
+      `us.nRel` kept but the `ciSave` restore still Windows-only, every
+      recast takes the midpoint *of the previous midpoint*: measured at
+      2021, 2019, 2017, 2016, converging on the twin. A window resize
+      would move the chart. Both guards are load-bearing and each was
+      verified by disabling it alone.
+    - `TestRelationshipModeQt()` covers all three properties -- the mode
+      survives its cast, the chart does not drift across redraws, and
+      leaving the mode restores what was loaded. Each assertion was made
+      to fail on purpose, and the drift one needed the *persistence* fix
+      left in to bite at all, since with the mode cleared there is no
+      recast to drift.
+    - **Everything else found was cosmetic or console flow**, and is
+      listed under "Known divergences" rather than fixed silently. The
+      only one with any user-visible edge is the text font family:
+      charts1.cpp and general.cpp turn off IBM line drawing characters and
+      change the degree glyph when `gs.nFontTxt > 0`, under `#ifdef WIN`.
+      This port does implement font selection, so a text grid shown in a
+      non-default font keeps line characters Windows would have dropped.
+      Not changed, because whether it actually looks wrong is a question
+      for a human at a screen, not for a code reading.
+    - **AstroExpressions are the other asymmetry, and it is real but
+      narrow.** express.cpp defines twelve functions under `#ifdef WIN`
+      (`cfunW 12`): `Dlg`, `Mouse`, and ten readbacks of `-W` switch
+      settings. Ten of those settings *do* exist in this build, so a
+      script that reads `_WN` works on Windows and fails here as an
+      unknown function. There is also `funWin` and `funX11` but no `funQt`,
+      so an expression can identify every backend except this one.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
