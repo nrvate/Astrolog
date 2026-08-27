@@ -110,6 +110,8 @@ Needs `g++-mingw-w64-x86-64`, `wine`, `xvfb`, `metacity`, `xdotool`,
   knowing before changing it, a "What to do next" section, per-menu
   status, a log of every item done and what it actually turned out to be,
   and every place this port knowingly differs from Windows.
+- **`QT_TESTING.md`** — how to render any chart to a PNG with no
+  display, and the traps in driving the app headlessly.
 - **`QT_COMPARING_WITH_WINDOWS.md`** — how to build the real Windows
   binary, run it under Wine, and diff it against this port.
 - **`QT_MENU_MAPPING.md`** — the Windows menu structure extracted from

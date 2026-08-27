@@ -15,6 +15,10 @@ Work happens on branch **`qt`**.
   per-menu status, "What to do next", a work log of every item and what it
   actually turned out to be, and every knowing divergence from Windows.
   **Read this before changing anything.**
+- **`QT_TESTING.md`** — how to see what the app draws without a
+  display, and the failure modes that waste hours. Read it before
+  driving the app any other way; most of what looks like a rendering
+  problem or a hang is in there.
 - **`QT_COMPARING_WITH_WINDOWS.md`** — how to build and drive the real
   Windows binary under Wine and diff it against this port, and the
   headless-automation traps specific to doing that.

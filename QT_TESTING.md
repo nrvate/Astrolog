@@ -1,0 +1,193 @@
+# Seeing what this app actually does
+
+How to run, drive and observe the Qt build without a display, and the
+failure modes that waste hours if you don't know them. Written after a
+session that hit most of them.
+
+`QT_COMPARING_WITH_WINDOWS.md` covers diffing this build against the real
+Windows one. This file is about observing *this* build.
+
+## The short version
+
+```sh
+make -f Makefile.qt.test -j4
+
+./run-qt-tests.sh                       # 2773 assertions, ~22 seconds
+QTTEXTDIR=out/qt  ./run-qt-tests.sh     # 8 text charts   -> PNG, ~2 seconds
+QTGRAPHDIR=out/qtg ./run-qt-tests.sh    # 24 graphics charts -> PNG, ~3 seconds
+```
+
+The two capture forms **render and exit without running the assertion
+suite** (the wrapper still runs its short Startup diagnostics section
+afterwards, which is a second or two). No X display, no window manager, no `xdotool`. This is the fastest
+way to look at what the program draws, and it is almost always the right
+tool — reach for a real window only when the thing under test is genuinely
+interactive (a dialog, focus, a menu).
+
+They live in `qttest.cpp` as `TextChartCaptureQt()` and
+`GraphicsChartCaptureQt()`; both pin the same chart (Nov 19 1971 11:01am,
+ST Zone 8W, Seattle to the arcsecond) so the two sets describe the same
+data. Charts are written at whatever `gs.xWin`/`gs.yWin` currently are.
+
+Adding a mode is one line in each of the two arrays at the top of
+`GraphicsChartCaptureQt()`. `gAspect` and `gArabic` are deliberately
+absent: `DrawChartX()` has no case for either, which is why Windows forces
+text mode for exactly those two.
+
+## The one that will get you: a modal warning stops everything
+
+**Any `PrintWarning()`/`PrintError()` becomes a modal dialog and waits
+forever for a click nobody is there to give.** This is the single most
+expensive failure mode in this codebase and it has three different
+disguises:
+
+- an automated capture that stops partway through and never returns;
+- the Windows build under Wine painting its menu bar and nothing else
+  (`QT_COMPARING_WITH_WINDOWS.md` has that story);
+- a chart mode that "renders slowly" when it is in fact not rendering.
+
+**The escape is `SetNoPopupQt(fTrue)`** around anything unattended, which
+`TestBadInputQt()` and both capture functions do. On the Windows binary
+the equivalent is launching with `-Wt`. Note there is *no* command-line
+escape in the Qt build: `-Wt` sets Win32-only `wi.fNoPopup`, and nothing
+on the Qt command line reaches `SetNoPopupQt()`.
+
+**How to recognise it from outside**, without a debugger:
+
+```sh
+P=$(pgrep -x astrolog-qt-tes)          # note: 15-char truncation, see below
+cat /proc/$P/status | grep State       # S (sleeping)
+cat /proc/$P/wchan                     # do_poll...
+ls -l /proc/$P/fd | grep -c socket     # 0
+```
+
+Sleeping in `do_poll`, no sockets, no CPU: that is a Qt event loop waiting
+on a window. It is a dialog. It is not slow, it is not the network, and it
+is not the ephemeris.
+
+A worked example: `gMoons` wants moon ephemeris files that aren't in
+`ephem/`, warns, and hung the graphics capture at chart 15 of 24 —
+which read as "the capture is slow" for far longer than it should have.
+
+## Distinguish "slow" from "stopped" before theorising
+
+Time each step. It is two lines and it ends the argument:
+
+```c
+QElapsedTimer tim;
+tim.start();
+SetChartModeQt(rgnMode[i]);
+printf("  %-12s draw %lldms\n", rgszFile[i], (long long)tim.elapsed());
+fflush(stdout);
+```
+
+For reference, on this machine every graphics mode draws in **1–60ms**
+except Rising (~490ms) and the two transit grids (~275ms), and each PNG
+saves in 30–55ms. If something takes seconds, it is not drawing.
+
+**`timeout`'s exit code 124 means the process was still running, not that
+it was stuck.** Check what it was doing before calling it a hang.
+
+## The console build is the X11 build
+
+`make` (the plain Makefile) links `-lX11`. So:
+
+- a settings file containing `=X` (graphics mode) makes it **open a chart
+  window and wait** — that is the program working, not a hang. With
+  `DISPLAY` unset it says "Can't open display" and exits 1;
+- force text with `_X` and it prints a chart and exits 0;
+- it **rejects the `-W` switch family** as unknown, because `case 'W':` in
+  astrolog.cpp is guarded `#if defined(WIN) || defined(QT)`. An unknown
+  switch stops it reading the rest of the file, so a settings file written
+  by the Qt or Windows build stops being readable at its first `-WM` line.
+
+That last point means the console build is **not** a good way to test a
+real user's config. Use the Qt capture instead.
+
+## Driving a real window, when you actually need one
+
+For dialogs, focus and menus there is no substitute. Use a private Xvfb
+display, never the user's own (see `CLAUDE.md` on screenshots).
+
+```sh
+Xvfb :83 -screen 0 1280x1024x24 &
+PULSE_SERVER=/nonexistent DISPLAY=:83 metacity --sm-disable &   # Qt needs a WM for menus
+DISPLAY=:83 ./astrolog-qt -i somefile.as &
+```
+
+`PULSE_SERVER=/nonexistent` matters: metacity plays the X bell through the
+real speakers, and Astrolog rings it on every keystroke it doesn't handle.
+
+Then, in order of how much time each has cost:
+
+- **Use `xwininfo` for coordinates, not `xdotool getwindowgeometry`.** The
+  latter does not report the client origin, and clicks land in the wrong
+  place:
+  ```sh
+  eval $(DISPLAY=:83 xwininfo -id $W | awk '/Absolute upper-left X/{print "DX="$4} /Absolute upper-left Y/{print "DY="$4}')
+  ```
+- **Verify the click landed.** A missed OK leaves the dialog open, and a
+  before/after comparison then shows "identical" because *nothing
+  happened*. Always check the window is gone:
+  ```sh
+  DISPLAY=:83 xdotool search --onlyvisible --name 'Object Selections' >/dev/null && echo STILL OPEN
+  ```
+- **Give menus time.** `alt+s` then the mnemonic works, but sending the
+  second key too early silently does nothing. Screenshot the menu to
+  confirm it opened before picking from it.
+- **Accelerators are case-sensitive** — `v` and `V` are different commands.
+- **`pkill -f <pattern>` matches your own command line** and kills the
+  shell running it, which surfaces as a bare exit code **144**. Use
+  `pkill -x`, and remember `/proc/pid/comm` truncates at 15 characters, so
+  the exact name for the test binary is `astrolog-qt-tes`.
+
+## Build traps
+
+- **`Makefile.win`'s resource depends on `resource.h`** (it didn't, until
+  this was hit). Change control IDs without rebuilding the `.res` and the
+  compiled dialog template and the C++ addressing it disagree — every
+  field lands in the wrong column, which reads exactly like broken layout
+  code. No audit here can see it: they read the `.rc` and the header as
+  text, not what got linked.
+- **Regenerate `qtrcdlg.h` after any `.rc` change** and rebuild; the
+  makefiles list it as a dependency, but a stale object file still makes a
+  regeneration look like it did nothing.
+- **Grep build output for `: error`**, not a narrower pattern.
+
+## Checks worth running before a commit
+
+```sh
+make -f Makefile.qt -j4 && make -f Makefile.qt.test -j4 && ./run-qt-tests.sh
+make -f Makefile.win -j4          # the Windows build must keep compiling
+python3 tools/rc_audit.py         # controls nothing wires up
+python3 tools/rc_mnemonic_audit.py
+python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h
+```
+
+And for any upstream (CRLF) file you touched:
+
+```sh
+tr -cd '\r' < file | wc -c        # must equal the line count
+```
+
+Note `sweph.cpp` ships from upstream with mixed endings (9 CRs in 8621
+lines). That is not something this fork did; don't "fix" it.
+
+## What the suite can and cannot tell you
+
+It runs *inside* the program from `InteractQt()`, after the window, menus
+and first chart are up. That makes it a real test of the real app, and it
+means two things it cannot do:
+
+- **it cannot test startup**, because startup already happened. `main()`
+  parses `astrolog.as` and the command line long before the QApplication
+  exists, and a warning raised there once dumped core. That check has to
+  be a separate process, and is: the **Startup diagnostics** section of
+  `run-qt-tests.sh`.
+- **it shares live `us`/`gs`/`gi` state**, so a test that changes a setting
+  must put it back.
+
+It also says nothing about **keyboard focus**, which lives in the dialog
+handlers rather than the resource, so no audit sees it either. Seven
+dialogs set focus explicitly on Windows; that gap was found by a user
+typing into a box, not by a test.
