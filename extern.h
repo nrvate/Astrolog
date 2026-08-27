@@ -497,6 +497,10 @@ extern CONST int cObjSel;
 extern void SzObjSelDef P((char *, int));
 extern void SzObjSelName P((char *, int, int));
 extern flag FObjSelParse P((CONST char *, int *, int *, int *, int *));
+extern int NObjSelMid P((CONST char *));
+extern flag FObjSelMidPair P((CONST char *, int *, int *));
+extern void ObjSelRemember P((int, int, CONST char *));
+extern flag FObjSelRecall P((CONST char *, int *, int *));
 
 extern flag FSwissPlanet
   P((int, real, int, real *, real *, real *, real *, real *, real *));

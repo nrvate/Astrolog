@@ -1786,7 +1786,7 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
 flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
 {
   char sz[cchSzMax], szT[cchSzMax];
-  int i, j, k, nPnt, nFlg, iobj, rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
+  int i, j, k, l, nPnt, nFlg, iobj, rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
   int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
   real rgforce[cObjSelRow];
   flag rgfShow[cObjSelRow];
@@ -1798,32 +1798,17 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       SetCheck(dxOs01 + i, !ignore[iobj]);
       SetEdit(deOs01 + i, szObjDisp[iobj]);
 
-      // Body: offer the shared list by name, and show the current setting
-      // as a name when it is one of them, otherwise as the definition text
-      // Object Customization would show. The field stays editable either
-      // way, so anything -Ye<x> accepts can still be typed.
+      // Contains: the offered bodies in the drop list, and whatever the
+      // slot holds in the field -- a midpoint shown as A/B, which is both
+      // what was typed and what an astrologer writes.
       for (j = 0; j < cObjSel; j++)
         SetCombo(dcOs01 + i, rgObjSel[j].szName);
-      SzObjSelDef(sz, iobj);
-      SetEdit(dcOs01 + i, sz);
-
-      // Midpoint: "(none)", then the core objects. Also editable, so a
-      // cusp or a Uranian can be typed even though the list stops at
-      // oCore -- -Fm itself accepts any object.
-      SetCombo(dcOsa01 + i, szObjSelNone);
-      SetCombo(dcOsb01 + i, szObjSelNone);
-      for (j = 0; j <= oCore; j++) {
-        SetCombo(dcOsa01 + i, szObjName[j]);
-        SetCombo(dcOsb01 + i, szObjName[j]);
-      }
       if (force[iobj] < 0.0) {
         k = (-(int)force[iobj]) - 1;
-        SetEdit(dcOsa01 + i, szObjName[k / objMax]);
-        SetEdit(dcOsb01 + i, szObjName[k % objMax]);
-      } else {
-        SetEdit(dcOsa01 + i, szObjSelNone);
-        SetEdit(dcOsb01 + i, szObjSelNone);
-      }
+        sprintf(sz, "%s/%s", szObjDisp[k / objMax], szObjDisp[k % objMax]);
+      } else
+        SzObjSelDef(sz, iobj);
+      SetEdit(dcOs01 + i, sz);
     }
     // Focus the first body field rather than letting the dialog
     // manager leave it on OK, which is what the seven dialogs with an
@@ -1842,20 +1827,29 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         GetEdit(deOs01 + i, sz);
         if (*sz && !FEqSz(sz, szObjUnknown))
           continue;
-        GetEdit(dcOsa01 + i, sz);
-        GetEdit(dcOsb01 + i, szT);
-        j = NParseSz(sz, pmObject);
-        k = NParseSz(szT, pmObject);
-        if (!FEqSz(sz, szObjSelNone) && !FEqSz(szT, szObjSelNone) &&
-          FItem(j) && FItem(k)) {
-          sprintf(sz, "%.3s/%.3s", szObjName[j], szObjName[k]);
+        GetEdit(dcOs01 + i, sz);
+        // A midpoint names itself after its two halves.
+        if (FObjSelMidPair(sz, &j, &k)) {
+          if (FItem(j) && FItem(k))
+            sprintf(sz, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
+          else
+            sprintf(sz, "%s", szObjUnknown);
           SetEdit(deOs01 + i, sz);
           continue;
         }
-        GetEdit(dcOs01 + i, sz);
-        if (FObjSelParse(sz, &j, &k, &nPnt, &nFlg))
+        // Otherwise ask the ephemeris, falling back to the name the
+        // offered-body list already knows -- without that a body whose
+        // .se1 file is not installed reads "???" even while the Contains
+        // field beside it is displaying its name.
+        if (FObjSelParse(sz, &j, &k, &nPnt, &nFlg)) {
           SzObjSelName(sz, j, k);
-        else
+          if (FEqSz(sz, szObjUnknown))
+            for (l = 0; l < cObjSel; l++)
+              if (rgObjSel[l].nTyp == j && rgObjSel[l].nObj == k) {
+                sprintf(sz, "%s", rgObjSel[l].szName);
+                break;
+              }
+        } else
           sprintf(sz, "%s", szObjUnknown);
         SetEdit(deOs01 + i, sz);
       }
@@ -1867,6 +1861,22 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       // than applying half of them.
       for (i = 0; i < cObjSelRow; i++) {
         GetEdit(dcOs01 + i, sz);
+        rgfShow[i] = GetCheck(dxOs01 + i);
+        iobj = uranLo + i;
+
+        // A slash means a midpoint, and the slot keeps its body: -Fm moves
+        // a position, it does not change what the object is.
+        rgforce[i] = 0.0;
+        if (FObjSelMidPair(sz, &j, &k)) {
+          EnsureN(j, FItem(j), "midpoint object");
+          EnsureN(k, FItem(k), "midpoint object");
+          rgforce[i] = (real)-(j*objMax + k + 1);
+          rgnTyp[i] = rgTypSwiss[iobj - custLo];
+          rgnObj[i] = rgObjSwiss[iobj - custLo];
+          rgnPnt[i] = rgPntSwiss[iobj - custLo];
+          rgnFlg[i] = rgFlgSwiss[iobj - custLo];
+          continue;
+        }
         if (!FObjSelParse(sz, &j, &k, &nPnt, &nFlg)) {
           ErrorEnsure(0, "definition");
           return fTrue;
@@ -1874,20 +1884,6 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         EnsureN(k, FValidCustom(k, j), "definition");
         rgnTyp[i] = j; rgnObj[i] = k;
         rgnPnt[i] = nPnt; rgnFlg[i] = nFlg;
-
-        GetEdit(dcOsa01 + i, sz);
-        GetEdit(dcOsb01 + i, szT);
-        if (FEqSz(sz, szObjSelNone) || FEqSz(szT, szObjSelNone) ||
-          !*sz || !*szT)
-          rgforce[i] = 0.0;
-        else {
-          j = NParseSz(sz, pmObject);
-          EnsureN(j, FItem(j), "midpoint object");
-          k = NParseSz(szT, pmObject);
-          EnsureN(k, FItem(k), "midpoint object");
-          rgforce[i] = (real)-(j*objMax + k + 1);
-        }
-        rgfShow[i] = GetCheck(dxOs01 + i);
       }
 
       for (i = 0; i < cObjSelRow; i++) {

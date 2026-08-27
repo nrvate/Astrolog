@@ -2617,6 +2617,63 @@ CONST OBJSEL rgObjSel[] = {
   {1,   3200, "Phaethon"}};
 CONST int cObjSel = (int)(sizeof(rgObjSel) / sizeof(OBJSEL));
 
+// Names this session has seen the ephemeris give for a body number.
+//
+// There is no name-to-number catalog anywhere: a .se1 file maps its own
+// number to a name and nothing maps back, and there are on the order of
+// 800,000 of those files, so enumerating them is not an option. What is
+// cheap is remembering what has already been resolved. Once the program
+// has shown someone that 52872 is Okyrhoe, typing "Okyrhoe" has to work --
+// displaying a name and then refusing it is indefensible.
+//
+// A fixed table rather than an allocated one, deliberately: this is a
+// cache, it should never grow without bound, and it must not show up in
+// the unfreed-allocation count at exit.
+
+#define cObjSelSeen 256
+
+static struct {
+  int nTyp;
+  int nObj;
+  char szName[cchSzDef];
+} rgObjSelSeen[cObjSelSeen];
+static int cObjSelSeenUsed = 0;
+
+void ObjSelRemember(int nTyp, int nObj, CONST char *szName)
+{
+  int i;
+
+  if (szName == NULL || !*szName || FEqSz(szName, szObjUnknown))
+    return;
+  for (i = 0; i < cObjSelSeenUsed; i++)
+    if (rgObjSelSeen[i].nTyp == nTyp && rgObjSelSeen[i].nObj == nObj)
+      return;
+  if (cObjSelSeenUsed >= cObjSelSeen)
+    return;
+  rgObjSelSeen[cObjSelSeenUsed].nTyp = nTyp;
+  rgObjSelSeen[cObjSelSeenUsed].nObj = nObj;
+  sprintf(rgObjSelSeen[cObjSelSeenUsed].szName, "%s", szName);
+  cObjSelSeenUsed++;
+}
+
+
+// The other direction: a name this session has been shown, back to the
+// body it named. Returns false if it has never been seen.
+
+flag FObjSelRecall(CONST char *szName, int *pnTyp, int *pnObj)
+{
+  int i;
+
+  for (i = 0; i < cObjSelSeenUsed; i++)
+    if (FEqSzI(szName, rgObjSelSeen[i].szName)) {
+      *pnTyp = rgObjSelSeen[i].nTyp;
+      *pnObj = rgObjSelSeen[i].nObj;
+      return fTrue;
+    }
+  return fFalse;
+}
+
+
 // Resolve a body definition to the name it should display, the same way the
 // -Ye switch handler does after setting one (astrolog.cpp). Returns
 // szObjUnknown when the ephemeris can't identify it, which for an asteroid
@@ -2634,6 +2691,9 @@ void SzObjSelName(char *sz, int nTyp, int nObj)
       nObj = ObjMoons(nObj);
     sprintf(sz, "%s", FItem(nObj) ? szObjName[nObj] : szObjUnknown);
   }
+  // Whatever came back, remember it, so the name just shown is a name the
+  // program will accept back.
+  ObjSelRemember(nTyp, nObj, sz);
 }
 
 
@@ -2691,6 +2751,76 @@ void SzObjSelDef(char *sz, int iobj)
 // reads its own letters as flags, so "Ven" would set the node flag off its
 // own 'n'.
 
+// Resolve one midpoint operand to an object index, or -1 for none.
+//
+// -Fm stores object indexes, so that is what this has to produce -- but an
+// index is not what a user has in front of them. Four things all name the
+// same body and all now work:
+//
+//   Sun       a stock object name, which NParseSz() already knew
+//   34        an object index, likewise
+//   Nessus    the *display* name of a slot. NParseSz() matches szObjName[]
+//             only, so a slot renamed by -YD was rejected even though the
+//             dialog shows that very name in its own Name column.
+//   7066      the ephemeris number of a body, resolved to whichever slot
+//             holds it. There is no index for a body that occupies no slot,
+//             which is a real limit of -Fm and not something a dialog can
+//             paper over -- assign it to a slot first.
+//
+// A plain number is read as an object index before it is read as an
+// ephemeris number, since that is what -Fm itself means by one. The two
+// only overlap below 134, where the index reading is the useful one.
+
+// Split a "Contains" field. A midpoint is written the way an astrologer
+// writes one -- two bodies with a slash, "Sun/Moo", "Nessus/Orcus",
+// "7066/90482" -- and each half goes through NObjSelMid(), so either side
+// can be a name, an index, a slot's display name or an ephemeris number.
+//
+// Returns true and fills both indexes if the field is a midpoint; false if
+// it holds no slash, in which case the caller reads it as a body.
+
+flag FObjSelMidPair(CONST char *szIn, int *pn1, int *pn2)
+{
+  char sz[cchSzMax], *pch;
+
+  sprintf(sz, "%s", szIn);
+  for (pch = sz; *pch && *pch != '/'; pch++)
+    ;
+  if (*pch != '/')
+    return fFalse;
+  *pch++ = chNull;
+  *pn1 = NObjSelMid(sz);
+  *pn2 = NObjSelMid(pch);
+  return fTrue;
+}
+
+
+int NObjSelMid(CONST char *szIn)
+{
+  int i, n;
+
+  while (*szIn && *szIn <= ' ')
+    szIn++;
+  if (!*szIn || FEqSz(szIn, szObjSelNone))
+    return -1;
+
+  n = NParseSz(szIn, pmObject);
+  if (FItem(n))
+    return n;
+
+  for (i = 0; i <= cObj; i++)
+    if (szObjDisp[i] != NULL && FEqSz(szIn, szObjDisp[i]))
+      return i;
+
+  n = NFromSz(szIn);
+  if (n > 0)
+    for (i = custLo; i <= custHi; i++)
+      if (rgTypSwiss[i - custLo] == 1 && rgObjSwiss[i - custLo] == n)
+        return i;
+  return -1;
+}
+
+
 flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
   int *pnFlg)
 {
@@ -2709,6 +2839,12 @@ flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
       *pnPnt = *pnFlg = 0;
       return fTrue;
     }
+
+  // Then anything the ephemeris has already been asked about this session.
+  if (FObjSelRecall(szIn, pnTyp, pnObj)) {
+    *pnPnt = *pnFlg = 0;
+    return fTrue;
+  }
 
   sprintf(sz, "%s", szIn);
   for (pch = sz; *pch; pch++)

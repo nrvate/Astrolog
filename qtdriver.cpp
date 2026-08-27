@@ -2991,6 +2991,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Shift+J",           "Inf&luence"},
   {"Ctrl+Shift+J",      "Suns&hine"},
   {"Alt+Shift+J",       "More Ob&ject Settings..."},
+  {"Ctrl+T",            "Object Selectio&ns..."},
   {"K",                 "Show &Glyphs on Aspect Lines"},
   {"Ctrl+K",            "&Dk. Cyan"},
   {"Alt+K",             "&Colored Text"},

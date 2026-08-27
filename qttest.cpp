@@ -1193,8 +1193,38 @@ static void TextChartCaptureQt(CONST char *szDir)
 ******************************************************************************
 */
 
+// Scratch probe. This is the fast way to answer a question about what the
+// program does, and it is deliberately disposable: rewrite the body, build,
+// run, read the answer, rewrite it again. Seconds per iteration, because
+// there is no window, no display, no input simulation and no waiting.
+//
+//   ASTROLOG_QT_PROBE=1 QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
+//     ./astrolog-qt-test
+//
+// Everything the program has is in scope: poke us/gs/gi directly, call
+// SetChartModeQt() or any dialog function, then save gi.qim and measure it
+// with PIL rather than looking at it. See QT_TESTING.md.
+//
+// Nothing here is a test. Do not add assertions; put those in the suite.
+static void ProbeQt()
+{
+  // Nothing in particular. Rewrite this body to ask the program a
+  // question, build, run. Everything is in scope: poke us/gs/gi, call
+  // SetChartModeQt() or a dialog function, save gi.qim and measure it.
+  SetChartModeQt(gWheel);
+  RedrawQt();
+  printf("probe: mode=%d image=%dx%d\n", gi.nMode,
+    gi.qim != NULL ? gi.qim->width() : 0,
+    gi.qim != NULL ? gi.qim->height() : 0);
+}
+
+
 int NRunQtTestsQt()
 {
+  if (getenv("ASTROLOG_QT_PROBE") != NULL) {
+    ProbeQt();
+    return fFalse;
+  }
   if (getenv("QTGRAPHDIR") != NULL) {
     GraphicsChartCaptureQt(getenv("QTGRAPHDIR"));
     return fFalse;

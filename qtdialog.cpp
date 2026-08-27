@@ -4132,7 +4132,7 @@ void ShowObjectSelDialogQt()
   QDialog dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QVector<QCheckBox *> rgpcbShow;
-  QVector<QComboBox *> rgpcbDef, rgpcbMidA, rgpcbMidB;
+  QVector<QComboBox *> rgpcbDef;
   QVector<QLineEdit *> rgpeName;
   int rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
   int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
@@ -4148,11 +4148,9 @@ void ShowObjectSelDialogQt()
     iobj = uranLo + i;
     QCheckBox *pcbShow = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxOs", i+1);
     QComboBox *pcbDef = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcOs", i+1);
-    QComboBox *pcbA = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcOsa", i+1);
-    QComboBox *pcbB = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcOsb", i+1);
     QLineEdit *peName = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deOs", i+1);
     rgpcbShow.append(pcbShow); rgpcbDef.append(pcbDef);
-    rgpcbMidA.append(pcbA); rgpcbMidB.append(pcbB); rgpeName.append(peName);
+    rgpeName.append(peName);
 
     if (pcbShow != NULL)
       pcbShow->setChecked(!ignore[iobj]);
@@ -4165,62 +4163,57 @@ void ShowObjectSelDialogQt()
       pcbDef->setEditable(fTrue);
       for (j = 0; j < cObjSel; j++)
         pcbDef->addItem(rgObjSel[j].szName);
-      SzObjSelDef(sz, iobj);
-      pcbDef->setEditText(sz);
-    }
-    if (pcbA != NULL && pcbB != NULL) {
-      pcbA->setEditable(fTrue);
-      pcbB->setEditable(fTrue);
-      pcbA->addItem(szObjSelNone);
-      pcbB->addItem(szObjSelNone);
-      for (j = 0; j <= oCore; j++) {
-        pcbA->addItem(szObjName[j]);
-        pcbB->addItem(szObjName[j]);
-      }
+      // A slot forced to a midpoint shows it as A/B, which is both what
+      // the user typed and what an astrologer would write. Otherwise the
+      // field shows the body, as before.
       if (force[iobj] < 0.0) {
         k = (-(int)force[iobj]) - 1;
-        pcbA->setEditText(szObjName[k / objMax]);
-        pcbB->setEditText(szObjName[k % objMax]);
-      } else {
-        pcbA->setEditText(szObjSelNone);
-        pcbB->setEditText(szObjSelNone);
-      }
+        sprintf(sz, "%s/%s", szObjDisp[k / objMax], szObjDisp[k % objMax]);
+      } else
+        SzObjSelDef(sz, iobj);
+      pcbDef->setEditText(sz);
     }
   }
 
   QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbOs_l");
   if (ppbLookup != NULL)
     QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
-      [&rgpeName, &rgpcbDef, &rgpcbMidA, &rgpcbMidB]() {
+      [&rgpeName, &rgpcbDef]() {
       char szT[cchSzMax];
       int i2, j2, k2, pnt2, flg2;
 
       for (i2 = 0; i2 < cObjSelRow; i2++) {
-        if (rgpeName[i2] == NULL)
+        if (rgpeName[i2] == NULL || rgpcbDef[i2] == NULL)
           continue;
         QByteArray ba = rgpeName[i2]->text().toLocal8Bit();
         if (!ba.isEmpty() && !FEqSz(ba.constData(), szObjUnknown))
           continue;
-        // A row set to a midpoint gets "A/B", since -Fm moves a position
-        // but never touches the name.
-        if (rgpcbMidA[i2] != NULL && rgpcbMidB[i2] != NULL) {
-          QByteArray baA = rgpcbMidA[i2]->currentText().toLocal8Bit();
-          QByteArray baB = rgpcbMidB[i2]->currentText().toLocal8Bit();
-          j2 = NParseSz(baA.constData(), pmObject);
-          k2 = NParseSz(baB.constData(), pmObject);
-          if (!FEqSz(baA.constData(), szObjSelNone) &&
-            !FEqSz(baB.constData(), szObjSelNone) && FItem(j2) && FItem(k2)) {
-            sprintf(szT, "%.3s/%.3s", szObjName[j2], szObjName[k2]);
-            rgpeName[i2]->setText(szT);
-            continue;
-          }
-        }
-        if (rgpcbDef[i2] == NULL)
-          continue;
         QByteArray baDef = rgpcbDef[i2]->currentText().toLocal8Bit();
-        if (FObjSelParse(baDef.constData(), &j2, &k2, &pnt2, &flg2))
+
+        // A midpoint names itself after its two halves; -Fm moves a
+        // position but never touches a name.
+        if (FObjSelMidPair(baDef.constData(), &j2, &k2)) {
+          if (FItem(j2) && FItem(k2))
+            sprintf(szT, "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
+          else
+            sprintf(szT, "%s", szObjUnknown);
+          rgpeName[i2]->setText(szT);
+          continue;
+        }
+
+        // Otherwise ask the ephemeris, and fall back to the name the
+        // offered-body list already knows. Without that fallback a body
+        // whose .se1 file isn't installed comes back "???" even though
+        // the Contains field beside it is displaying its name.
+        if (FObjSelParse(baDef.constData(), &j2, &k2, &pnt2, &flg2)) {
           SzObjSelName(szT, j2, k2);
-        else
+          if (FEqSz(szT, szObjUnknown))
+            for (int iSel = 0; iSel < cObjSel; iSel++)
+              if (rgObjSel[iSel].nTyp == j2 && rgObjSel[iSel].nObj == k2) {
+                sprintf(szT, "%s", rgObjSel[iSel].szName);
+                break;
+              }
+        } else
           sprintf(szT, "%s", szObjUnknown);
         rgpeName[i2]->setText(szT);
       }
@@ -4238,6 +4231,25 @@ void ShowObjectSelDialogQt()
     if (rgpcbDef[i] == NULL)
       continue;
     QByteArray ba = rgpcbDef[i]->currentText().toLocal8Bit();
+
+    // A slash means a midpoint, and the slot keeps whatever body it had:
+    // -Fm moves a position, it does not change what the object is.
+    rgforce[i] = 0.0;
+    if (FObjSelMidPair(ba.constData(), &j, &k)) {
+      if (!FItem(j) || !FItem(k)) {
+        QMessageBox::warning(gi.qwind, szAppName,
+          "A midpoint needs two objects this chart has, written as "
+          "\"Sun/Moo\" or \"7066/90482\".");
+        return;
+      }
+      rgforce[i] = (real)-(j*objMax + k + 1);
+      rgnTyp[i] = rgTypSwiss[uranLo + i - custLo];
+      rgnObj[i] = rgObjSwiss[uranLo + i - custLo];
+      rgnPnt[i] = rgPntSwiss[uranLo + i - custLo];
+      rgnFlg[i] = rgFlgSwiss[uranLo + i - custLo];
+      continue;
+    }
+
     if (!FObjSelParse(ba.constData(), &j, &k, &pnt, &flg) ||
       !FValidCustom(k, j)) {
       QMessageBox::warning(gi.qwind, szAppName,
@@ -4245,24 +4257,6 @@ void ShowObjectSelDialogQt()
       return;
     }
     rgnTyp[i] = j; rgnObj[i] = k; rgnPnt[i] = pnt; rgnFlg[i] = flg;
-
-    rgforce[i] = 0.0;
-    if (rgpcbMidA[i] != NULL && rgpcbMidB[i] != NULL) {
-      QByteArray baA = rgpcbMidA[i]->currentText().toLocal8Bit();
-      QByteArray baB = rgpcbMidB[i]->currentText().toLocal8Bit();
-      if (!FEqSz(baA.constData(), szObjSelNone) &&
-        !FEqSz(baB.constData(), szObjSelNone) &&
-        !baA.isEmpty() && !baB.isEmpty()) {
-        j = NParseSz(baA.constData(), pmObject);
-        k = NParseSz(baB.constData(), pmObject);
-        if (!FItem(j) || !FItem(k)) {
-          QMessageBox::warning(gi.qwind, szAppName,
-            "One or more midpoint objects are invalid.");
-          return;
-        }
-        rgforce[i] = (real)-(j*objMax + k + 1);
-      }
-    }
   }
 
   for (i = 0; i < cObjSelRow; i++) {
