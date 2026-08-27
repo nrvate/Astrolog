@@ -61,7 +61,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-Xvfb "$DISP" -screen 0 1280x1024x24 >/dev/null 2>&1 &
+# Bigger than the real config asks for. nrvate.as sets ":Xw 1260 1260"
+# and the sidebar adds 240, so the window is 1500x1260; on a smaller
+# screen it overflows and the menu bar is off the visible area, which
+# looks exactly like the app failing to draw.
+Xvfb "$DISP" -screen 0 1920x1200x24 >/dev/null 2>&1 &
 XPID=$!
 sleep 2
 # Wine renders fine with no window manager, which is why the older capture
@@ -86,6 +90,18 @@ done
 W=$(DISPLAY=$DISP xdotool search --onlyvisible --name "Astrolog" | head -1)
 DISPLAY=$DISP xdotool windowactivate "$W" 2>/dev/null || true
 sleep 1
+# Wine under Xvfb does not reliably repaint on its own: the window comes up
+# with a half drawn menu bar and a black client area, which reads exactly
+# like the app failing to start. Sleeping does not help. Resizing away and
+# back forces a real expose.
+eval "$(DISPLAY=$DISP xdotool getwindowgeometry --shell "$W")"
+DISPLAY=$DISP xdotool windowsize "$W" $((WIDTH-40)) $((HEIGHT-40))
+sleep 1
+DISPLAY=$DISP xdotool windowsize "$W" "$WIDTH" "$HEIGHT"
+sleep 2
+# Resizing loses the focus set above, so take it back before any keys go out.
+DISPLAY=$DISP xdotool windowactivate "$W" 2>/dev/null || true
+sleep 1
 
 if [ "$MODE" = "shell" ]; then
   echo "running on $DISP, window $W -- press Enter to stop"
@@ -95,6 +111,10 @@ fi
 
 [ -n "$SCRIPT" ] || { echo "usage: $0 run SCRIPT [--args \"...\"]"; exit 2; }
 
+# How many windows are mapped with no menu open, so an opened menu can be
+# told apart from one that never appeared.
+nWinBase=$(DISPLAY=$DISP xdotool search --onlyvisible --name . 2>/dev/null | wc -l)
+
 fails=0
 while IFS= read -r line; do
   case "$line" in ''|'#'*) continue;; esac
@@ -103,8 +123,19 @@ while IFS= read -r line; do
   status=""
   case "$cmd" in
     menu)
+      # Sending the item mnemonic into a menu that never opened is
+      # completely silent -- it just does nothing, and the scenario reads
+      # as if the menu entry is broken. An open menu is one more mapped
+      # window than the baseline, so check that before the second key and
+      # retry rather than reporting a failure the app did not cause.
       top=${rest%% *}; item=${rest#* }
-      DISPLAY=$DISP xdotool key --clearmodifiers "alt+$top"; sleep 2
+      n=0
+      while [ $n -lt 4 ]; do
+        DISPLAY=$DISP xdotool key --clearmodifiers "alt+$top"; sleep 1
+        cnt=$(DISPLAY=$DISP xdotool search --onlyvisible --name . 2>/dev/null | wc -l)
+        [ "$cnt" -gt "$nWinBase" ] && break
+        n=$((n+1))
+      done
       DISPLAY=$DISP xdotool key --clearmodifiers "$item"; sleep 2 ;;
     focus)
       # With no window manager a dialog Wine has just created does not take

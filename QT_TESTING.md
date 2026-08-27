@@ -122,6 +122,11 @@ when the thing under test genuinely *is* the windowing behaviour:
 - what a dialog looks like, for a human to review
 - the Windows build, which has no other automation at all
 
+For the Windows build that last one is packaged as `tools/win-tests.sh`,
+which runs every `tools/scenarios/win-*.txt` against the real config and
+reports once. It is minutes, not the suite's seconds, so it is not a
+pre-commit check — run it when something ships in both builds.
+
 For anything else — what a field parses, what a global holds, what a chart
 draws — use the probe. It answers the same question hundreds of times
 faster and cannot mis-click.
@@ -203,6 +208,41 @@ Sleeping in `do_poll`, no sockets, no CPU: that is a Qt event loop waiting
 on a window. It is a dialog. **`timeout`'s exit code 124 means the process
 was still running, not that it was stuck.**
 
+**Crop the whole frame, not the corner.** A message box is centred; chart
+text is top-left. A crop of the top-left corner shows a blank client area
+and hides the dialog explaining it, which is how the above went unseen
+through several wrong theories. Better still, measure — `non-black rows:
+0..55` out of 1200 says "menu bar only" without anyone having to look.
+
+### The same symptom, a second cause: /swe under Wine
+
+The Windows build given `nrvate.as` paints its menu bar, leaves the client
+area black and ignores every keystroke — identical to the modal dialog
+above, and this time there is no dialog. The cause is `-Yi "/swe"`:
+**887,000 ephemeris files**, which native Linux handles and Wine's path
+translation does not. It is neither a hang nor an app bug, and `-Wt` does
+nothing for it.
+
+The tell that separates the two: screenshot the centre. A dialog is there
+or it is not. Then swap the path and see it draw:
+
+```sh
+sed 's|"/swe"|"ephem"|' nrvate.as > /tmp/w.as
+tools/windrive.sh run tools/scenarios/win-objectsel.txt --args "-i /tmp/w.as"
+```
+
+`tools/win-tests.sh` does that swap itself. Everything worth testing in
+the config — restrictions, orbs, aspect set, macros, window size, graphics
+mode — survives it; only the file count goes.
+
+This one masqueraded as two other things first. Both were wrong and both
+are worth not repeating: *"XTEST accelerators don't reach Wine"* (they do —
+`ctrl+t`, `shift+alt+a` and `alt+j` all drive dialogs in
+`win-dialogs.txt`), and *"graphics mode doesn't render under Wine"* (it
+does; every earlier capture used `_X` for unrelated reasons, so it had
+simply never been tried). Both theories came from changing two things at
+once. Change one.
+
 And time each step before theorising. Every graphics mode draws in 1–60ms
 except Rising (~490ms) and the two transit grids (~275ms); each PNG saves
 in 30–55ms. If something takes seconds, it is not drawing.
@@ -230,6 +270,11 @@ python3 tools/rc_audit.py
 python3 tools/rc_mnemonic_audit.py
 python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h
 ```
+
+And when the change touches both builds, `tools/win-tests.sh` as well.
+The shared logic underneath is already covered by the Qt suite, since
+both builds call the same `calc.cpp` and `io.cpp`; what this adds is the
+Windows dialog and menu wiring, which nothing else sees.
 
 ## What the suite cannot tell you
 

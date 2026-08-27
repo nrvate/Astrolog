@@ -31,7 +31,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-Xvfb "$DISP" -screen 0 1280x1024x24 >/dev/null 2>&1 &
+# Bigger than the real config asks for. nrvate.as sets ":Xw 1260 1260"
+# and the sidebar adds 240, so the window is 1500x1260; on a smaller
+# screen it overflows and the menu bar is off the visible area, which
+# looks exactly like the app failing to draw.
+Xvfb "$DISP" -screen 0 1920x1200x24 >/dev/null 2>&1 &
 XPID=$!
 sleep 2
 PULSE_SERVER=/nonexistent DISPLAY=$DISP metacity --sm-disable >/dev/null 2>&1 &

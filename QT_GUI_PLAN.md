@@ -176,10 +176,13 @@ Roughly in the order I'd take them.
    2026-08-26; see "Features this fork adds to both builds", which has the
    list and two worked examples. Found the way item 7 recommends, by
    running a real config through the GUI and diffing what came back.
-   **What is still open is one line:** `case 'W':` in astrolog.cpp is
-   `#if defined(WIN) || defined(QT)`, so the console build rejects `-WM`
-   as an unknown switch and stops reading the rest of the file. Saved
-   settings files are therefore not portable to it.
+   **The last of it is fixed too**, 2026-08-27: `case 'W':` in
+   astrolog.cpp used to be `#if defined(WIN) || defined(QT)`, so the
+   console build rejected `-WM` as an unknown switch and stopped reading
+   the rest of the file — a settings file saved from Qt or Windows was
+   not loadable by it. The case is now unconditional, with a third branch
+   for the GUI-less builds that consumes each `-W` switch's arguments and
+   ignores it. Saved settings files are portable to every build.
 9. **~~A way to render a chart without the event loop.~~** — **done
    2026-08-26.** It already half existed and the claim that it didn't cost
    real time; see item 34. `TextChartCaptureQt()` in qttest.cpp had always
@@ -1398,11 +1401,13 @@ are the more useful half to read before starting something new.
       working. With `DISPLAY` unset it says "Can't open display" and exits
       1; the window had been opening on a real desktop and sitting there.
       Force `_X` and the same file prints a chart and exits 0.
-    - The user's own `astrolog.as` did not hang either. It exits 1 with
-      **`Unknown switch '-WM'`**: `case 'W':` (astrolog.cpp) is guarded by
-      `#if defined(WIN) || defined(QT)`, so the console build rejects the
-      whole family, and per the comment there an unknown switch stops it
-      reading the rest of the file. It never reaches the graphics switch.
+    - The user's own `astrolog.as` did not hang either. It exited 1 with
+      **`Unknown switch '-WM'`**: `case 'W':` (astrolog.cpp) was guarded
+      by `#if defined(WIN) || defined(QT)`, so the console build rejected
+      the whole family, and per the comment there an unknown switch stops
+      it reading the rest of the file. It never reached the graphics
+      switch. Since fixed — see item 8 — so this particular reproduction
+      no longer reproduces.
     - **The lesson is narrow and worth keeping: an exit code of 124 from
       `timeout` says a process was still running, not that it was stuck.**
       Check what it is doing before calling it a hang. Two runs — one with
@@ -1445,6 +1450,70 @@ are the more useful half to read before starting something new.
     - The general lesson, and it is the same one as item 30: check what
       the repo already does before concluding it cannot do it. `grep -rn
       QTTEXTDIR` would have settled this in seconds.
+
+35. **A directory of 887,000 files is indistinguishable from a hang.**
+    The Windows build given `nrvate.as` painted its menu bar, left the
+    client area black and ignored every keystroke -- which is exactly the
+    signature of the modal `PrintWarning()` dialog of item 25, except
+    `-Wt` was already set and there was no dialog. The cause is
+    `-Yi "/swe"`: the ephemeris collection is ~887,000 `.se1` files, which
+    native Linux walks without complaint and Wine's path translation does
+    not.
+    - The tell that separates it from the dialog is a screenshot of the
+      **centre** of the frame, because a message box is centred and chart
+      content is not. Item 25 was missed for exactly the opposite reason,
+      and this was nearly missed the same way -- every crop taken here was
+      the top-left corner too, until the plan's own lesson was re-read.
+      Better than looking: measure. "non-black rows 0..55 of 1200" states
+      the symptom without anyone squinting at an image.
+    - `tools/win-tests.sh` runs the real config with `/swe` swapped for
+      the bundled `ephem/`. Everything that makes the config worth testing
+      against survives -- restrictions, orbs, aspect set, macros, window
+      size, graphics mode -- and only the file count goes. The Qt suite
+      still runs the true path, where it costs nothing.
+    - **Two confident wrong theories came first, both from changing two
+      things at once.** That XTEST accelerators cannot reach Wine: they
+      can, and `win-dialogs.txt` now drives three dialogs with `ctrl+t`,
+      `shift+alt+a` and `alt+j`. And that graphics mode does not render
+      under Wine: it does -- every prior capture used `_X` for reasons
+      unrelated to rendering, so it had simply never been tried. Each was
+      "confirmed" by a run that also differed in the config. One variable.
+    - A retry loop was added to `windrive.sh` on the strength of the first
+      theory. It stayed, because a mnemonic sent into a menu that never
+      opened is silent either way, but its comment was rewritten: a
+      comment that explains a symptom by a cause that turned out to be
+      false is worse than no comment.
+
+36. **Two long-standing shared-code bugs, both in upstream, both fixed
+    2026-08-27.** Neither is a porting artifact; both are in files that
+    have no `#ifdef QT` in them at all, so both builds had them.
+    - **`:Xw` shrank the window by a sidebar on every save and reload.**
+      `gs.xWin` includes the sidebar everywhere in this program: the code
+      that wants the chart alone subtracts it and adds it back, and
+      `FOutputSettings()` writes `:Xw` *without* it and says so in the
+      comment beside the value. `NProcessSwitchesX()` (xscreen.cpp) read
+      it back without adding it on again, so save, reload, save, reload
+      walked a 1500 wide window down 1500, 1260, 1020, 780 -- 240 pixels
+      a cycle, slow enough to read as imagination rather than a bug.
+    - **`-Fm` between two restricted objects produced confident garbage.**
+      A forced midpoint is computed in `CastChart()` from `planet[]` of
+      its two sources, but `ComputeEphem()` skips any restricted object
+      above the Moon, so the midpoint was built from whatever those slots
+      last held -- a previous chart's values, or zero. `-Fm Kro Sun Moo`
+      with Kronos' sources restricted read 0.0000 and looked like a real
+      position. `FObjMidSource()` (calc.cpp) now reports whether any
+      forced midpoint reads a given object, and both `ComputeEphem()` and
+      the `AdjustRestrictions()` macro consult it: sources are computed,
+      and stay hidden, because `ignore[]` still governs what is drawn.
+      Restricting an object should hide it, not corrupt what depends on
+      it.
+    - Both were verified the way this file keeps recommending and the
+      negative case caught a mistake: the first attempt at proving the
+      midpoint fix replaced `!FObjMidSource(i)` with `fFalse`, which
+      disables the skip rather than restoring the bug, so the test passed
+      either way. `fTrue` is the restore. A test that passes with and
+      without the fix is worthless, and it is easy to write one by
+      accident.
 
 ## Features this fork adds to both builds
 
@@ -1709,14 +1778,15 @@ are written. And `us.nAspectSort` is an *index*, not the switch letter
 that set it, so it maps back through `"jonOPACDM"` — writing `%c` of the
 index puts a control character in the settings file.
 
-**One trap if anyone takes those on.** Saved files load in the X11/console
-build only because those lines are absent. `case 'W':` in astrolog.cpp is
-guarded by `#if defined(WIN) || defined(QT)`, so the console build rejects
-that whole family as an unknown switch — which, as the comment there says,
-stops it reading the rest of the file. That is already true of the `-WM`
-lines this change restores: a settings file saved from Qt or Windows is
-not readable by the console build. Widening the guard is the other half of
-the job, and item 32 is the story of mistaking that for a hang.
+**A trap that used to come with those, now closed.** `case 'W':` in
+astrolog.cpp was guarded by `#if defined(WIN) || defined(QT)`, so the
+console build rejected that whole family as an unknown switch — which, as
+the comment there says, stops it reading the rest of the file. The `-WM`
+lines this change restores made that bite: a settings file saved from Qt
+or Windows was not readable by the console build. The case is now
+unconditional, the GUI-less branch consuming each switch's arguments and
+discarding it, so a saved file loads everywhere. Item 32 is the story of
+mistaking the old behaviour for a hang.
 
 ## Known divergences from Windows
 

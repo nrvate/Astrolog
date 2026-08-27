@@ -1,0 +1,24 @@
+# The Windows half of what TestDialogsQt() covers on the Qt side: each
+# dialog opens under its expected title and closes again. Reached by
+# accelerator rather than by menu navigation, because a mnemonic sent
+# before the menu has opened silently does nothing.
+expect-window Astrolog
+focus Astrolog
+
+key ctrl+t
+expect-window Object Selections
+focus Object Selections
+key Escape
+expect-no-window Object Selections
+
+key shift+alt+a
+expect-window Aspect Settings
+focus Aspect Settings
+key Escape
+expect-no-window Aspect Settings
+
+key alt+j
+expect-window Object Settings
+focus Object Settings
+key Escape
+expect-no-window Object Settings
