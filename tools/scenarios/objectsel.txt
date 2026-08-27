@@ -1,0 +1,9 @@
+# The regression that matters for Object Selections: opening it and
+# pressing OK must not disturb anything. Tonight this was verified by
+# measuring a screenshot, and the first two clicks missed -- which showed
+# up as "chart identical before and after" because nothing had happened.
+menu Setting Object Selectio&ns...
+expect-window Object Selections
+shot out/drive/objectsel-open.png
+click OK
+expect-no-window Object Selections

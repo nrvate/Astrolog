@@ -104,6 +104,72 @@ it was stuck.** Check what it was doing before calling it a hang.
 That last point means the console build is **not** a good way to test a
 real user's config. Use the Qt capture instead.
 
+## Driving dialogs by widget name, not by pixel
+
+`tools/qtdrive.sh` removes the worst kludge in this repo. Qt draws all its
+widgets inside one X window, so `xwininfo` and `xdotool` can see the window
+but not the buttons in it — which is why driving a dialog by hand means
+measuring a screenshot, and why a mis-measured click leaves the dialog open
+while a before/after comparison cheerfully reports "identical". Nothing
+happened, and nothing said so. That exact false pass cost real time.
+
+Qt publishes every widget over AT-SPI, so a button can be found by its
+label and clicked where it says it is:
+
+```sh
+tools/qtdrive.sh tree                          # dump the whole widget tree
+tools/qtdrive.sh tree --args "-i nrvate.as"    # ... with the app given args
+tools/qtdrive.sh run tools/scenarios/objectsel.txt
+```
+
+A scenario is one command per line:
+
+```
+menu Setting Object Selectio&ns...    open a menu bar item, then an entry
+click OK                              click a widget by label
+type combo-box#3 Nessus               set a field
+expect-window Object Selections       fail unless that window exists
+expect-no-window Object Selections    fail unless it does not
+expect-value combo-box#1 Vulcan       fail unless the field reads that
+shot out/drive/x.png                  screenshot
+tree                                  dump the tree at this point
+```
+
+Exit status is 0 only if every `expect-*` passed. **Those assertions have
+teeth** — verified by making each one fail on purpose: leaving the dialog
+open fails `expect-no-window`, and a wrong value fails `expect-value` with
+what it actually found.
+
+The wrapper gives the run a private Xvfb display, a private D-Bus session
+and its own metacity, so it touches neither your screen nor your desktop's
+accessibility settings.
+
+Four things that are not obvious, all of which cost a cycle here:
+
+- **Qt only publishes the tree when `ScreenReaderEnabled` is true.** The
+  app appears on the bus regardless, reporting zero children, which looks
+  like the tree not existing. `qtdrive.sh` sets it on its private bus.
+- **A widget's accessible name is its *value*, not its resource symbol.**
+  The dialogs are generated from `astrolog.rc`, but `deOs01` means nothing
+  to AT-SPI; that field reports whatever it currently displays. Buttons,
+  menus and labels are reachable by name; a grid of identical rows needs
+  `role#n`, 1-based, as in `combo-box#5`.
+- **Roles contain spaces**, and scenario lines are split on whitespace, so
+  selectors are written with hyphens: `combo-box`, `push-button`,
+  `check-box`.
+- **Menu bar entries have role `menu item`**, the same as the entries
+  inside them — the role is not what distinguishes a menu from its items.
+
+The menu commands go through the accessible action rather than
+`alt+mnemonic`, so the "second key sent too early does nothing" flake
+cannot happen.
+
+**It is Qt-only.** The Windows build under Wine has no AT-SPI, so that
+still needs the coordinate method below.
+
+A harmless `A connection to the bus can't be made` on exit is the private
+bus being torn down after the app has already gone.
+
 ## Driving a real window, when you actually need one
 
 For dialogs, focus and menus there is no substitute. Use a private Xvfb

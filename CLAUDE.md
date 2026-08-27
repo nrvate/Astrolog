@@ -68,6 +68,8 @@ Three audits, all currently clean:
 python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
 python3 tools/rc_audit.py                        # controls nothing wires up
 python3 tools/rc_mnemonic_audit.py               # "&" placement vs astrolog.rc
+tools/qtdrive.sh tree                            # dump the live widget tree
+tools/qtdrive.sh run tools/scenarios/objectsel.txt   # drive a dialog by name
 ```
 
 ## The Windows build is the reference, and it runs here
