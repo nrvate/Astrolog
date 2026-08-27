@@ -972,12 +972,39 @@ static int NRcStoreRadioQt(CONST QVector<RCBUILT> &rgbuilt, int nFirst,
 }
 
 
+// Windows refuses before it ever puts up a file picker: DlgOpenChart and
+// DlgSaveChart test these first and say so. The shared write path in
+// io.cpp honours us.fNoWrite too, so nothing was actually written here
+// either -- but only after the user had picked a name and been told
+// nothing, which reads as the save silently failing. Refuse up front,
+// with the wording Windows uses.
+
+static flag FNoReadQt()
+{
+  if (!us.fNoRead)
+    return fFalse;
+  PrintWarning("File input is disabled.");
+  return fTrue;
+}
+
+
+static flag FNoWriteQt()
+{
+  if (!us.fNoWrite)
+    return fFalse;
+  PrintWarning("File output is disabled.");
+  return fTrue;
+}
+
+
 // Load a chart file chosen via a standard file picker, exactly as Windows'
 // DlgOpenChart does via the stock Windows file dialog -- no custom dialog
 // is needed here either, just FInputData() doing the actual work.
 
 void ShowOpenChartDialogQt()
 {
+  if (FNoReadQt())
+    return;
   QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Chart", QString(),
     "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
@@ -996,6 +1023,8 @@ void ShowOpenChartDialogQt()
 
 void ShowSaveChartDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart", QString(),
     "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
@@ -1016,6 +1045,8 @@ void ShowSaveChartDialogQt()
 
 void ShowSaveChartPositionsDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart Positions",
     QString(), "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
@@ -1035,6 +1066,8 @@ void ShowSaveChartPositionsDialogQt()
 
 void ShowSaveSettingsDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Program Settings",
     DEFAULT_INFOFILE, "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
@@ -1054,6 +1087,8 @@ void ShowSaveSettingsDialogQt()
 
 void ShowSaveAAFDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind,
     "Save Chart Exchange Format", QString(),
     "Astrological Exchange Files (*.aaf);;All Files (*)");
@@ -1067,6 +1102,8 @@ void ShowSaveAAFDialogQt()
 
 void ShowSaveQuickDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind,
     "Save Chart Quick*Chart Format", QString(),
     "Quick*Chart Files (*.qck);;All Files (*)");
@@ -1081,6 +1118,8 @@ void ShowSaveQuickDialogQt()
 
 void ShowSaveCalendarDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind,
     "Save Chart iCalendar Format", QString(),
     "iCalendar Files (*.ics);;All Files (*)");
@@ -1102,6 +1141,8 @@ void ShowSaveCalendarDialogQt()
 
 void ShowOpenBackgroundDialogQt()
 {
+  if (FNoReadQt())
+    return;
   QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Background",
     QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
   if (qs.isEmpty())
@@ -1117,6 +1158,8 @@ void ShowOpenBackgroundDialogQt()
 
 void ShowOpenWorldDialogQt()
 {
+  if (FNoReadQt())
+    return;
   QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open World Map",
     QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
   if (qs.isEmpty())
@@ -1165,6 +1208,8 @@ static flag FExportChartQt(CONST char *szFile, int ft)
 static void ShowExportGraphicsDialogQt(CONST char *szTitle,
   CONST char *szFilter, int ft)
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, QString(),
     QString(szFilter) + ";;All Files (*)");
   if (qs.isEmpty())
@@ -1262,6 +1307,8 @@ void CopyChartWireQt()     { CopyChartVectorQt(ftWire, NULL); }
 
 void ShowExportTextDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Export Chart Text",
     QString(), "Text Files (*.txt);;All Files (*)");
   if (qs.isEmpty())
@@ -1919,6 +1966,8 @@ static flag FOpenChartIntoQt(int iChart, CONST char *szFile)
 
 static void ShowOpenChartIntoDialogQt(int iChart)
 {
+  if (FNoReadQt())
+    return;
   QString qsTitle = iChart <= 1 ? QString("Open Chart") :
     QString("Open Chart #%1").arg(iChart);
   QString qs = QFileDialog::getOpenFileName(gi.qwind, qsTitle, QString(),
@@ -2327,6 +2376,8 @@ void ShowOpenChartDirDialogQt()
 
 void ShowSaveChartListDialogQt()
 {
+  if (FNoWriteQt())
+    return;
   if (is.cci <= 0) {
     QMessageBox::warning(gi.qwind, szAppName,
       "There is no chart list in memory.");
@@ -3573,8 +3624,31 @@ void ShowCalcDialogQt()
   QComboBox *pcbHouse = (QComboBox *)PwRcFindQt(rgbuilt, "dcSe_c");
   if (pcbEphem != NULL) {
     pcbEphem->setEditable(fTrue);
-    for (i = 0; i <= cmNone; i++)
-      pcbEphem->addItem(szEphem[i]);
+    // Built in Windows' order and with Windows' omissions, rather than by
+    // running the cm* constants in numeric order: JPL Web sits after the
+    // three Swiss entries there, not last, and an ephemeris the user has
+    // switched off is left out entirely -- no JPL Web under "-0n", no
+    // Placalc or Matrix under "-0p". Offering one that is disabled invites
+    // a lookup that cannot happen. The selection is read back by name
+    // below rather than by index, so a shorter list needs nothing else.
+#ifdef SWISS
+    pcbEphem->addItem(szEphem[cmSwiss]);
+    pcbEphem->addItem(szEphem[cmMoshier]);
+    pcbEphem->addItem(szEphem[cmJPL]);
+#endif
+#ifdef JPLWEB
+    if (!us.fNoNetwork)
+      pcbEphem->addItem(szEphem[cmJPLWeb]);
+#endif
+#ifdef PLACALC
+    if (!us.fNoPlacalc)
+      pcbEphem->addItem(szEphem[cmPlacalc]);
+#endif
+#ifdef MATRIX
+    if (!us.fNoPlacalc)
+      pcbEphem->addItem(szEphem[cmMatrix]);
+#endif
+    pcbEphem->addItem(szEphem[cmNone]);
     pcbEphem->setEditText(szEphem[!us.fEphemFiles ?
       (us.fMatrixPla ? cmMatrix : cmNone) :
       (us.fPlacalcPla ? cmPlacalc : us.nSwissEph)]);

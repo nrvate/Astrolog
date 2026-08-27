@@ -41,6 +41,7 @@
 #include <QtWidgets/QMenuBar>
 #include <QtWidgets/QAction>
 #include <QtWidgets/QDialog>
+#include <QtWidgets/QComboBox>
 #include <QtCore/QTimer>
 #include <QtCore/QStringList>
 #include <QtCore/QDir>
@@ -66,16 +67,6 @@ extern QAction *PaFindLooseTestQt(CONST char *, CONST char **);
 static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
 static QString s_strModal;
-
-// Which menu item currently owns s_strModal. A queued close fires a fixed
-// delay after it is armed, not when the item that armed it finishes, so
-// once trigger() returns quickly the shot lands somewhere in a *later*
-// item and used to record a dialog against it. That is how text mode
-// items with no dialog at all -- Arabic Parts, the List tables, macros --
-// came to be counted as opening one, and why the count differed between
-// a normal build and a sanitizer build, which shifts every delay.
-static int s_iModalGen = 0;
-static int s_cModalLate = 0;
 
 // Every timer here is racing a dialog that has to appear before it can be
 // closed, and under AddressSanitizer the whole program runs roughly an
@@ -144,7 +135,16 @@ static QString StrOpenDialogQt(void (*pfn)())
   static QString strTitle;
 
   strTitle = QString();
-  QTimer::singleShot(50 * nScaleTest, []() {
+  // Stoppable timers rather than singleShot, so nothing outlives this
+  // call. A queued close that is still pending when the dialog has
+  // already been dealt with goes on to close whatever modal window the
+  // *next* test opens -- which is exactly what happened: 25 dialogs here
+  // left 25 nets armed, and the first dialog any later test opened was
+  // shut before it could be looked at, reporting itself as absent.
+  QTimer tOpen, tNet;
+  tOpen.setSingleShot(fTrue);
+  tNet.setSingleShot(fTrue);
+  QObject::connect(&tOpen, &QTimer::timeout, []() {
     QWidget *pw = QApplication::activeModalWidget();
     if (pw == NULL)
       pw = QApplication::activePopupWidget();
@@ -155,12 +155,16 @@ static QString StrOpenDialogQt(void (*pfn)())
   });
   // Safety net: if nothing showed up, or close() didn't take, don't hang
   // the whole suite on one dialog.
-  QTimer::singleShot(1500 * nScaleTest, []() {
+  QObject::connect(&tNet, &QTimer::timeout, []() {
     QWidget *pw = QApplication::activeModalWidget();
     if (pw != NULL)
       pw->close();
   });
+  tOpen.start(50 * nScaleTest);
+  tNet.start(1500 * nScaleTest);
   pfn();
+  tOpen.stop();
+  tNet.stop();
   return strTitle;
 }
 
@@ -398,6 +402,22 @@ static void TestAllMenuActionsQt()
   long cpix;
 
   Group("Firing every menu item");
+  // One repeating closer for the whole group, rather than a pair of
+  // queued shots per item. Per-item shots cannot be cancelled, so at the
+  // end of the group hundreds were still pending, and they went on to
+  // close the first modal window the *next* test opened -- which reported
+  // that dialog as never having appeared. A timer that lives exactly as
+  // long as this loop cannot do that.
+  QTimer tClose;
+  QObject::connect(&tClose, &QTimer::timeout, []() {
+    QWidget *pw = QApplication::activeModalWidget();
+    if (pw != NULL) {
+      if (s_strModal.isEmpty())
+        s_strModal = pw->windowTitle();
+      pw->close();
+    }
+  });
+  tClose.start(60 * nScaleTest);
   AllActionsTestQt(&rgpa);
   for (i = 0; i < rgpa.size(); i++) {
     QString str = rgpa[i]->text();
@@ -412,32 +432,6 @@ static void TestAllMenuActionsQt()
     // guess, guessed wrong, and hung the run -- queue a shot that closes
     // whatever modal window appears and count it.
     s_strModal = QString();
-    int iGen = ++s_iModalGen;
-    QTimer::singleShot(120 * nScaleTest, [iGen]() {
-      QWidget *pw = QApplication::activeModalWidget();
-      if (pw == NULL)
-        return;
-      if (iGen == s_iModalGen)      // Still this item's dialog to claim.
-        s_strModal = pw->windowTitle();
-      else
-        s_cModalLate++;
-      pw->close();
-    });
-    // Safety net, the one StrOpenDialogQt has always had and this site
-    // did not: a dialog slower to appear than the shot above misses it
-    // entirely, and trigger() then waits forever for a click nobody is
-    // there to give. One item hanging must not cost the whole run. It is
-    // also the shot that does most of the catching -- dialogs here take
-    // longer than 120ms to appear -- so it records as well, under the
-    // same ownership test.
-    QTimer::singleShot(1500 * nScaleTest, [iGen]() {
-      QWidget *pw = QApplication::activeModalWidget();
-      if (pw == NULL)
-        return;
-      if (iGen == s_iModalGen && s_strModal.isEmpty())
-        s_strModal = pw->windowTitle();
-      pw->close();
-    });
     // Name each item before firing it, flushed, so that when one takes
     // the process down the log says which. Set ASTROLOG_QT_TEST_VERBOSE
     // to see it; a clean run doesn't need the noise.
@@ -446,19 +440,6 @@ static void TestAllMenuActionsQt()
       fflush(stdout);
     }
     rgpa[i]->trigger();
-    // Not every dialog blocks inside trigger(). Some are queued and open
-    // only once control returns here, by which point a shot armed before
-    // the trigger belongs to an item the loop has already left. So look
-    // again afterwards, briefly, and close whatever this item put up.
-    for (k = 0; k < 40 && s_strModal.isEmpty(); k++) {
-      QWidget *pw = QApplication::activeModalWidget();
-      if (pw != NULL) {
-        s_strModal = pw->windowTitle();
-        pw->close();
-        break;
-      }
-      QApplication::processEvents(QEventLoop::AllEvents, 5);
-    }
     if (!s_strModal.isEmpty()) {
       cmodal++;
       if (getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL)
@@ -521,6 +502,12 @@ static void TestAllMenuActionsQt()
   // dialog at all, because a close armed by one item fired during a
   // later one. What matters is asserted rather than counted -- every item
   // fires, nothing hangs, and the chart still draws afterwards.
+  // Let any dialog still opening settle and be closed while the closer is
+  // still running, then stop it so nothing outlives this group.
+  for (k = 0; k < 40; k++)
+    QApplication::processEvents(QEventLoop::AllEvents, 5 * nScaleTest);
+  tClose.stop();
+
   printf("  %d menu items fired, %d switched to text\n", cfired, ctext);
 }
 
@@ -1052,6 +1039,85 @@ static void TestObjSelParseQt()
 // cast once and exit. charts2.cpp was written for the latter and only
 // excepted WIN, so this build took the console path while behaving like a
 // GUI -- see plan item 39.
+static QString s_strCombo;
+static QString s_strComboWin;
+
+// Capture the ephemeris dropdown's contents from the Calculation Settings
+// dialog, then close it. The dialog blocks in exec(), so as everywhere
+// else here the inspection has to be queued before it opens.
+static QString StrEphemListQt()
+{
+  s_strCombo = QString();
+  s_strComboWin = QString();
+  // Retried rather than fired once. A single shot has to guess when the
+  // dialog exists *and* its combo is populated, and guessing 50ms came
+  // back empty -- which quietly satisfied every "does not contain" check.
+  // Hence also the "found at all" assertion: an empty string passes all
+  // of them.
+  for (int t = 1; t <= 8; t++)
+    QTimer::singleShot(120 * t * nScaleTest, []() {
+      if (!s_strCombo.isEmpty())
+        return;
+      QWidget *pw = QApplication::activeModalWidget();
+      if (pw == NULL)
+        return;
+      s_strComboWin = pw->windowTitle();
+      QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
+      for (int i = 0; i < rg.size(); i++) {
+        QStringList items;
+        for (int j = 0; j < rg[i]->count(); j++)
+          items << rg[i]->itemText(j);
+        if (items.join(",").contains("Swiss")) {
+          s_strCombo = items.join(" | ");
+          break;
+        }
+      }
+      if (!s_strCombo.isEmpty())
+        pw->close();
+    });
+  QTimer::singleShot(2500 * nScaleTest, []() {
+    QWidget *pw = QApplication::activeModalWidget();
+    if (pw != NULL)
+      pw->close();
+  });
+  ShowCalcDialogQt();
+  return s_strCombo;
+}
+
+
+// Windows leaves an ephemeris out of this list when the user has switched
+// it off; see plan item 41. The maintainer's own settings file sets both
+// restrictions, so this is the list they actually get.
+static void TestEphemerisListQt()
+{
+  flag fNetSav = us.fNoNetwork, fPlaSav = us.fNoPlacalc;
+  QString str;
+
+  Group("Ephemeris list");
+
+  us.fNoNetwork = us.fNoPlacalc = fTrue;
+  str = StrEphemListQt();
+  Check(!str.isEmpty(), "the ephemeris list was found at all (modal seen: \"%s\")",
+    s_strComboWin.toLocal8Bit().constData());
+  Check(!str.contains("Web"),
+    "no web query offered when web queries are off: %s",
+    str.toLocal8Bit().constData());
+  Check(!str.contains("Placalc") && !str.contains("Matrix"),
+    "no Placalc or Matrix offered when those are off: %s",
+    str.toLocal8Bit().constData());
+  Check(str.contains("Swiss"), "Swiss Ephemeris is still offered");
+
+  us.fNoNetwork = us.fNoPlacalc = fFalse;
+  str = StrEphemListQt();
+  Check(str.contains("Web"), "the web query is offered when allowed");
+  Check(str.contains("Placalc") && str.contains("Matrix"),
+    "Placalc and Matrix are offered when allowed");
+
+  us.fNoNetwork = fNetSav; us.fNoPlacalc = fPlaSav;
+  printf("  the ephemeris list omits what the user switched off\n");
+}
+
+
 static void TestRelationshipModeQt()
 {
   CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciSaveSav = ciSave, ciOrig;
@@ -1460,6 +1526,7 @@ int NRunQtTestsQt()
   TestForcedPositionsQt();
   TestSharedCoreFixesQt();
   TestRelationshipModeQt();
+  TestEphemerisListQt();
   TestObjSelTableQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",

@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2805
+   display and no `xdotool`, and exits non-zero on failure. **2811
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1705,7 +1705,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2805 -- turned up something worse than the
+    totals -- 2785 against 2811 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -1738,6 +1738,49 @@ are the more useful half to read before starting something new.
     - Fixing the counter did surface one real thing: the Arabic Parts menu
       item raises an **"Astrolog Warning"** dialog, which is now visible in
       verbose output rather than lost among 143 phantoms.
+
+41. **Second Windows-versus-Qt pass, by a different question.** The first
+    pass asked which shared code branches on `WIN` with no `QT` branch.
+    Repeating that finds the same things, so this one asked instead: which
+    *settings* do the Windows dialogs touch that the Qt dialogs never do?
+    `grep -o "us\.[a-zA-Z_]*" wdialog.cpp | sort -u` against the same of
+    qtdialog.cpp, minus anything the driver handles, leaves five.
+    - **The ephemeris list offered what the user had switched off.**
+      Windows builds that dropdown in a fixed order and omits entries the
+      restrictions forbid: no JPL Web under `-0n`, no Placalc or Matrix
+      under `-0p`. The Qt build ran the `cm*` constants in numeric order
+      and added all seven unconditionally -- so with `nrvate.as`, which
+      sets **both** restrictions, the list offered "JPL Horizons Web
+      Query" to a user who had disabled web queries. It also listed JPL
+      Web last where Windows lists it fourth. Both fixed; the selection is
+      read back by name rather than index, so a shorter list needed
+      nothing else.
+    - **File restrictions were not honoured before the file picker.**
+      `us.fNoRead`/`us.fNoWrite` appear nowhere in the Qt backend, while
+      Windows tests them first and says "File input is disabled." The
+      shared write path in io.cpp does honour `fNoWrite`, so nothing was
+      actually written -- but only after the user picked a filename and
+      was told nothing at all, which reads as a silent failure. Thirteen
+      file dialogs now refuse up front, with Windows' wording.
+    - **Writing the test for it exposed two leaks in the suite itself,
+      and they were the reason it appeared not to work.** Every dialog
+      check armed `QTimer::singleShot` closers that cannot be cancelled,
+      so `TestDialogsQt()` left 25 pending and the menu loop left hundreds
+      more -- and those went on to close the first modal window a *later*
+      test opened. The new test saw no dialog at all and reported an empty
+      list, which is worse than a failure: an empty string satisfies every
+      "does not contain" assertion, so two of its four checks passed
+      vacuously. Both sites now use timers scoped to the work that needs
+      them -- stoppable ones in `StrOpenDialogQt()`, a single repeating
+      closer for the menu loop -- and stop them before returning.
+    - Diagnosing that took bisecting the test's position in the run: it
+      passed first, failed after the dialog group, and the failure count
+      changed depending on where it sat. **A test whose result depends on
+      what ran before it is reporting on the suite, not the program.**
+    - The lesson for writing these: assert that the thing being examined
+      was found *before* asserting anything about its contents. The "found
+      at all" check is what turned an empty capture into a visible failure
+      rather than a green run.
 
 ## Features this fork adds to both builds
 
@@ -2061,7 +2104,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2805 assertions covering dialog titles, the 42 context menus,
+  failure. 2811 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

@@ -75,7 +75,7 @@ make -f Makefile.qt.test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 2805 assertions plus startup checks, covering dialogs, context menus,
+A headless suite of 2811 assertions plus startup checks, covering dialogs, context menus,
 shortcuts, chart rendering, every menu item, menu parity against
 `astrolog.rc`, and bad input. No X display needed; exits nonzero on
 failure.
