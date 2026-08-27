@@ -38,7 +38,7 @@ alongside the regular `astrolog` binary without interfering with it —
 
 ## Status
 
-Feature complete against the Windows build. All nine menus, all 257 menu
+Feature complete against the Windows build. All nine menus, all 258 menu
 items, every dialog, all 42 right-click context menus and 263 keyboard
 shortcuts are implemented, and each dialog has been read field-by-field
 against its Windows counterpart — labels, field order, number formatting,
@@ -63,7 +63,7 @@ make -f Makefile.qt.test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 2728 assertions plus startup checks, covering dialogs, context menus,
+A headless suite of 2772 assertions plus startup checks, covering dialogs, context menus,
 shortcuts, chart rendering, every menu item, menu parity against
 `astrolog.rc`, and bad input. No X display needed; exits nonzero on
 failure.
