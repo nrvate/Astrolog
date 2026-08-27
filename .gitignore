@@ -15,3 +15,8 @@ astrolog.exe
 
 # Comparison captures (tools/text-chart-capture.sh, text-chart-diff.py)
 /out/
+
+# Editor swap files
+*.swp
+*.swo
+*~
