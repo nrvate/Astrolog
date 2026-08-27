@@ -988,7 +988,8 @@ void ComputeEphem(real t)
 
   imax = Min(oNorm, is.nObj); imax = Max(imax, oSun);
   for (i = oEar; i <= imax; i++) {
-    if ((ignore[i] && i > oMoo && (i != oNod || ignore[oSou])) ||
+    if ((ignore[i] && i > oMoo && (i != oNod || ignore[oSou]) &&
+      !FObjMidSource(i)) ||
       !FThing(i) ||
       (i == objCentCalc && !fJPLPla &&
         !(fSwiss && objCentCalc == oEar && us.fBarycenter)) ||
@@ -2750,6 +2751,33 @@ void SzObjSelDef(char *sz, int iobj)
 // "if (pch > sz)" guard matters: without it an all alphabetic definition
 // reads its own letters as flags, so "Ven" would set the node flag off its
 // own 'n'.
+
+// Whether some object's forced midpoint reads this object's position.
+//
+// A midpoint set with -Fm is computed in CastChart() from planet[] of its
+// two sources, and ComputeEphem() skips computing any restricted object
+// above the Moon. So a midpoint of two restricted objects was quietly
+// built from whatever those slots happened to hold -- stale values from a
+// previous chart, or zero -- and produced a plausible looking position
+// that was simply wrong. Nothing said so.
+//
+// Restricting an object hides it; it should not silently corrupt a
+// midpoint that depends on it. Sources are therefore computed regardless,
+// and stay hidden, because ignore[] still governs what is drawn.
+
+flag FObjMidSource(int iObj)
+{
+  int i, k;
+
+  for (i = 0; i <= cObj; i++)
+    if (force[i] < 0.0) {
+      k = (-(int)force[i]) - 1;
+      if (k / objMax == iObj || k % objMax == iObj)
+        return fTrue;
+    }
+  return fFalse;
+}
+
 
 // Resolve one midpoint operand to an object index, or -1 for none.
 //

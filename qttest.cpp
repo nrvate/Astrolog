@@ -965,6 +965,93 @@ static void TestObjSelParseQt()
 // and this asserts an out-of-range one is not lost, since that is the
 // failure that would destroy someone's configuration rather than annoy
 // them. Remove the io.cpp block and the first two checks here fail.
+// Two bugs in shared upstream code, neither of them Qt specific -- both
+// files have no "ifdef QT" in them at all -- and both of the kind that
+// produce a plausible number rather than an obvious failure.
+static void TestSharedCoreFixesQt()
+{
+  real rgforceSav[objMax], rMid;
+  flag rgignoreSav[objMax];
+  int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode, i;
+  int nDwadSav, objOnAscSav;
+  real rHarmonicSav;
+  flag fTextSav = gs.fText, fDoSidebarSav = gs.fDoSidebar;
+  flag fFlipSav, fDecanSav, fNavamsaSav, fExpOffSav;
+  char szLine[cchSzMax];
+
+  Group("Shared core fixes");
+  for (i = 0; i < objMax; i++) {
+    rgforceSav[i] = force[i];
+    rgignoreSav[i] = ignore[i];
+  }
+
+  // gs.xWin includes the sidebar; FOutputSettings() writes ":Xw" without
+  // it and says so in the comment beside the value. Reading it back has
+  // to add it on again, and did not -- so save, reload, save, reload
+  // walked the window down 240 pixels a cycle. Mirror exactly what
+  // io.cpp writes, rather than writing a file, and require the value to
+  // come back where it started.
+  gi.nMode = gWheel; gs.fText = fTrue; gs.fDoSidebar = fTrue;
+  gs.yWin = 1260;
+  gs.xWin = 1260 + ((SIDESIZE * gi.nScaleText) >> 1);
+  i = gs.xWin; if (fSidebar) i -= (SIDESIZE * gi.nScaleText) >> 1;
+  sprintf(szLine, ":Xw %d %d", i, gs.yWin);
+  FProcessCommandLine(szLine);
+  Check(gs.xWin == 1260 + ((SIDESIZE * gi.nScaleText) >> 1),
+    "a saved window width reloads to the width it was saved at");
+
+  // A forced midpoint is computed in CastChart() from planet[] of its two
+  // sources, and ComputeEphem() skips any restricted object above the
+  // Moon -- so a midpoint of two restricted objects was built from
+  // whatever those slots last held. Zero them first: without the fix they
+  // stay zero and the midpoint is confidently wrong, with it they are
+  // computed and hidden. Sun and Moon would prove nothing here, being
+  // below the point ComputeEphem() starts skipping at.
+  //
+  // Half a dozen switches rewrite planet[] *after* the forces are applied
+  // -- domal, decan, dwad, navamsa, solar rotation, object expressions --
+  // and any of them leaves the midpoint relation untrue of the final
+  // positions. They are off in a default chart, but this suite shares
+  // live us/gs state with everything that ran before it, so say so rather
+  // than inherit it: with -4 left on by an earlier test, the forced slot
+  // came back exactly 30 degrees from the midpoint and the failure looked
+  // like the fix not working.
+  fFlipSav = us.fFlip; fDecanSav = us.fDecan; nDwadSav = us.nDwad;
+  fNavamsaSav = us.fNavamsa; objOnAscSav = us.objOnAsc;
+  rHarmonicSav = us.rHarmonic; fExpOffSav = us.fExpOff;
+  us.fFlip = us.fDecan = us.fNavamsa = fFalse;
+  us.nDwad = 0; us.objOnAsc = 0; us.rHarmonic = 1.0; us.fExpOff = fTrue;
+
+  ClearB((pbyte)force, sizeof(force));
+  ignore[oJup] = ignore[oSat] = fTrue;
+  force[oFor] = (real)-(oJup*objMax + oSat + 1);      // -Fm 19 6 7
+  planet[oJup] = planet[oSat] = 0.0;
+  AdjustRestrictions();
+  CastChart(1);
+  rMid = Midpoint(planet[oJup], planet[oSat]);
+  Check(planet[oJup] != 0.0 && planet[oSat] != 0.0,
+    "a restricted object a forced midpoint reads is still computed");
+  Check(planet[oFor] == rMid && rMid != 0.0,
+    "a midpoint of two restricted objects is their real midpoint");
+  Check(ignore[oJup] && ignore[oSat],
+    "and computing them did not un-restrict them");
+
+  us.fFlip = fFlipSav; us.fDecan = fDecanSav; us.nDwad = nDwadSav;
+  us.fNavamsa = fNavamsaSav; us.objOnAsc = objOnAscSav;
+  us.rHarmonic = rHarmonicSav; us.fExpOff = fExpOffSav;
+
+  for (i = 0; i < objMax; i++) {
+    force[i] = rgforceSav[i];
+    ignore[i] = rgignoreSav[i];
+  }
+  gs.xWin = xWinSav; gs.yWin = yWinSav; gi.nMode = nModeSav;
+  gs.fText = fTextSav; gs.fDoSidebar = fDoSidebarSav;
+  AdjustRestrictions();
+  CastChart(1);
+  printf("  window size round trips, forced midpoints read real positions\n");
+}
+
+
 static void TestForcedPositionsQt()
 {
   real rgforceSav[objMax];
@@ -1243,6 +1330,7 @@ int NRunQtTestsQt()
   TestMenuParityQt();
   TestBadInputQt();
   TestForcedPositionsQt();
+  TestSharedCoreFixesQt();
   TestObjSelTableQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",

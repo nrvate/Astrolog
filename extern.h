@@ -440,7 +440,8 @@ extern flag GetJPLHorizons P((int,
 #define Untropical(deg) ((deg) + is.rSid)
 #define ObjCOB(i) (FBetween(i, oJup, oPlu) ? cobLo + ((i)-oJup) : (i))
 #define AdjustRestrictions() for (is.nObj = cObj; is.nObj >= 0 && \
-  ignore[is.nObj] && ignore2[is.nObj] && force[is.nObj] == 0.0; is.nObj--);
+  ignore[is.nObj] && ignore2[is.nObj] && force[is.nObj] == 0.0 && \
+  !FObjMidSource(is.nObj); is.nObj--);
 #define AdjustAspectCount() for (us.nAsp = cAspect; us.nAsp > 0 && \
   ignorea[us.nAsp]; us.nAsp--);
 #define RgRules() (ignore7[rrStd] && ignore7[rrEso] && !ignore7[rrHie] ? \
@@ -497,6 +498,7 @@ extern CONST int cObjSel;
 extern void SzObjSelDef P((char *, int));
 extern void SzObjSelName P((char *, int, int));
 extern flag FObjSelParse P((CONST char *, int *, int *, int *, int *));
+extern flag FObjMidSource P((int));
 extern int NObjSelMid P((CONST char *));
 extern flag FObjSelMidPair P((CONST char *, int *, int *));
 extern void ObjSelRemember P((int, int, CONST char *));

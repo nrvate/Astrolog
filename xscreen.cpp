@@ -1507,7 +1507,15 @@ int NProcessSwitchesX(int argc, char **argv, int pos,
       return tcError;
     if (FErrorValN("Xw", !FValidGraphY(j), j, 2))
       return tcError;
+    // gs.xWin includes the sidebar everywhere else in this program --
+    // the places that want the chart alone subtract it and add it back
+    // (see above, and DrawChartX) -- and FOutputSettings() writes this
+    // switch without it, saying so in the comment beside the value.
+    // This did not add it back, so every save-and-reload of a settings
+    // file shrank the window by one sidebar: 1500, 1260, 1020, 780.
     gs.xWin = i; gs.yWin = j;
+    if (fSidebar)
+      gs.xWin += (SIDESIZE * gi.nScaleText) >> 1;
     darg++;
     break;
 
