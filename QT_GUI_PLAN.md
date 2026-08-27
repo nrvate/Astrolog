@@ -101,7 +101,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2772
+   display and no `xdotool`, and exits non-zero on failure. **2773
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -163,11 +163,11 @@ day and three
    nothing measures: process startup, keyboard focus, and exit cleanup.
    Run charts you actually want to read, from a settings file that isn't
    the repo's.
-8. **The other ten switch families Save Program Settings drops.** Found
+8. **The other eight switch families Save Program Settings drops.** Found
    the same way item 7 recommends, by running a real config through the
    GUI and diffing what came back. Listed in "Features this fork adds to
-   both builds"; the `-F`/`-Fm` one there is the worked example of what
-   fixing one looks like. Read the note about the `-W` guard first: fix
+   both builds"; the `-F`/`-Fm` and `-WM` ones there are worked examples
+   of what fixing one looks like. Read the note about the `-W` guard: fix
    the save path without it and settings files stop being readable by the
    console build.
 9. **A way to render a chart without the event loop.** The Qt build has
@@ -1468,35 +1468,54 @@ Three things about it that are easy to get wrong later:
    `Ven` sets the north node off its own `n`. `TestObjSelParseQt()` fails
    if it is removed.
 
-### Still open: ten more switch families that Save Program Settings drops
+### The -W settings this build stores are written back
 
-Found by running the real user config through the GUI and diffing what
-came back (see the note on doing this in "What to do next"). Every one of
-these is in that config and none of them survives a save:
+*(Corrected 2026-08-26. This section first said ten switch families were
+dropped and all were "equally pre existing". Two of them were not: they
+were this fork's own gap, and they were the two that lost the most.)*
 
-| switch | what it is |
-|---|---|
-| `-WM` | macro menu names — 13 lines in that config |
-| `-Am` | per-object maximum orb |
-| `-Aa`, `-Ao` | custom aspect definitions and their orbs |
-| `-YXv` | wheel corner decoration (the Spider Web of item 30) |
-| `-YXa` | dash weak aspects |
-| `-WN` | animation update delay |
-| `-ao`, `-ma`, `_m` | aspect sort order, aspects to midpoints |
+Running the real user config through both GUIs and diffing what came back
+splits cleanly in two:
 
-Same class as the `-F`/`-Fm` gap above and equally pre existing:
-`grep -c nDecaType io.cpp` and friends all return 0, so
-`FOutputSettings()` simply has no section for them. Not fixed here — ten
-independent gaps is its own piece of work, and a good upstream
-contribution alongside the `-F` one.
+| switch | what it is | Qt saved | Windows saved |
+|---|---|---|---|
+| `-WM` | macro menu names, 13 in that config | **no** | yes |
+| `-WN` | animation update delay | **no** | yes |
+| `-Am` | per-object maximum orb | no | no |
+| `-Aa`, `-Ao` | custom aspect definitions and their orbs | no | no |
+| `-YXv` | wheel corner decoration (the Spider Web of item 30) | no | no |
+| `-YXa` | dash weak aspects | no | no |
+| `-ao`, `-ma`, `_m` | aspect sort order, aspects to midpoints | no | no |
 
-**One trap if anyone takes it on.** Saved files currently load in the
-X11/console build *because* the `-WM` lines are dropped. Write them and
-that stops being true, since `case 'W':` in astrolog.cpp is guarded by
-`#if defined(WIN) || defined(QT)` and the console build rejects the whole
-family as an unknown switch — which, as the comment there says, stops it
-reading the rest of the file. Fix the save path and the guard together,
-or settings files stop being portable between the three builds.
+**The first two were fixed.** `io.cpp` has the code that writes them, at
+what is now the WINDOWS MENUS / WINDOWS DEFAULTS block, and it was
+`#ifdef WIN`. So this build read `-WM`/`-WN` through
+`NProcessSwitchesQt()` — which is why a user's macro names showed up in
+the Edit menu — and then dropped them on every save, while Windows kept
+them. The exact structural mirror of the `FinalizeQt()` bug in item 29:
+half a Windows mechanism implemented.
+
+There is now a `#ifdef QT` block beside the Windows one. **The rule it
+follows is: write what this build can load.** `NProcessSwitchesQt()`
+genuinely stores `-WM`, `-WM0`, `-WN`, `-Wx` and `-Wh`, so those are
+written; it accepts `-Wn`, `-Wt` and `-Wb` as no-ops, so writing them
+would claim a round trip that doesn't happen. Note `-Wx`'s own comment
+there already said it kept the value "so it survives a settings round
+trip", which it could not, because nothing wrote it.
+
+The remaining eight are genuinely shared: `grep -c nDecaType io.cpp` and
+friends return 0, so `FOutputSettings()` has no section for them on
+either platform. Still open, still a good upstream contribution alongside
+the `-F` one, and still their own piece of work.
+
+**One trap if anyone takes those on.** Saved files load in the X11/console
+build only because those lines are absent. `case 'W':` in astrolog.cpp is
+guarded by `#if defined(WIN) || defined(QT)`, so the console build rejects
+that whole family as an unknown switch — which, as the comment there says,
+stops it reading the rest of the file. That is already true of the `-WM`
+lines this change restores: a settings file saved from Qt or Windows is
+not readable by the console build. Widening the guard is the other half of
+the job, and item 32 is the story of mistaking that for a hang.
 
 ## Known divergences from Windows
 
@@ -1545,7 +1564,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2772 assertions covering dialog titles, the 42 context menus,
+  failure. 2773 assertions covering dialog titles, the 42 context menus,
   263 shortcuts, 26 chart types rendering non-blank, all 337 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

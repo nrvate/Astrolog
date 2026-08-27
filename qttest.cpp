@@ -968,7 +968,7 @@ static void TestForcedPositionsQt()
   real rgforceSav[objMax];
   char *szFileOutSav = is.szFileOut;
   int nWriteFormatSav = us.nWriteFormat, i;
-  flag fNoWriteSav = us.fNoWrite;
+  flag fNoWriteSav = us.fNoWrite, fFoundMacro = fFalse;
   char szPath[cchSzMax], szLine[cchSzMax], szMid[cchSzMax], szPos[cchSzMax];
   FILE *file;
 
@@ -982,6 +982,14 @@ static void TestForcedPositionsQt()
   force[oFor] = (real)-(1*objMax + 2 + 1);        // -Fm 19 1 2
   force[uranLo] = ZD(1, 15.25) + rDegMax;         // -F 34 Ari 15.25
 
+  // A renamed macro menu entry goes in the same file. The Qt build stores
+  // -WM through NProcessSwitchesQt() but the block that writes it back was
+  // #ifdef WIN, so a settings file saved here silently lost every macro
+  // name -- 13 of them in the config this was found with -- while the
+  // Windows build kept them. Save what this build can load.
+  sprintf(szLine, "-WM 1 \"AstrologQtSuiteMacro\"");
+  FProcessCommandLine(szLine);
+
   sprintf(szPath, "%s/astrolog-qt-force-test.as", getenv("TMPDIR") != NULL ?
     getenv("TMPDIR") : "/tmp");
   us.fNoWrite = fFalse;
@@ -993,6 +1001,8 @@ static void TestForcedPositionsQt()
   file = FileOpen(szPath, 3, NULL);
   if (file != NULL) {
     while (fgets(szLine, cchSzMax, file) != NULL) {
+      if (FEqSz(szLine, "-WM 1 \"AstrologQtSuiteMacro\"\n"))
+        fFoundMacro = fTrue;
       for (i = 0; szLine[i]; i++)          // Keep the line, minus its \n.
         ;
       while (i > 0 && szLine[i-1] < ' ')
@@ -1005,6 +1015,7 @@ static void TestForcedPositionsQt()
     fclose(file);
   }
   Check(szMid[0] != chNull, "an out-of-range forced midpoint survived the save");
+  Check(fFoundMacro, "a renamed macro menu entry survived the save");
   Check(szPos[0] != chNull,
     "a forced zodiac position survived the save, to the digit");
 

@@ -2056,6 +2056,43 @@ flag FOutputSettings()
     "[\"=Wb\" from window, \"_Wb\" created  ]\n");
 #endif
 
+#ifdef QT
+  // The same settings, for this build. Windows reads its macro names back
+  // out of the live Win32 menu; here they are held directly, so this is
+  // the same information from a different place. Only what
+  // NProcessSwitchesQt() actually stores is written: -Wn, -Wt and -Wb are
+  // accepted as no-ops there, so writing them would claim a round trip
+  // that doesn't happen.
+  PrintF("\n\n");
+  PrintF("; MENU NAMES:\n\n");
+  fAny = fFalse;
+  for (i = 0; i < cMacro; i++) {
+    if (SzMacroNameQt(i) == NULL)
+      continue;
+    fAny = fTrue;
+    sprintf(sz, "-WM %d \"%s\"\n", i+1, SzMacroNameQt(i)); PrintFSz();
+  }
+  for (i = 0; i < cMSub; i++) {
+    if (SzMacroSubNameQt(i) == NULL)
+      continue;
+    fAny = fTrue;
+    sprintf(sz, "-WM0 %d \"%s\"\n", i, SzMacroSubNameQt(i)); PrintFSz();
+  }
+  if (!fAny)
+    PrintF("; [No menus renamed]\n");
+  PrintF("\n\n");
+
+  PrintF("; INTERFACE DEFAULTS:\n\n");
+  sprintf(sz, "-WN %4d ", NAnimDelayQt()); PrintFSz();
+  PrintF("; Animation update delay in milliseconds\n");
+  sprintf(sz, "-Wx %d    ", NAntialiasQt()); PrintFSz();
+  PrintF("; Antialiasing line detail level "
+    "[\"1\" is simplest, \"12\" is nicest   ]\n");
+  sprintf(sz, "%cWh      ", ChDashF(FHourglassQt())); PrintFSz();
+  PrintF("; Hourglass cursor on redraw     "
+    "[\"=Wh\" has hourglass, \"_Wh\" doesn't]\n");
+#endif
+
   sprintf(sz, "\n; %s\n", DEFAULT_INFOFILE); PrintFSz();
   fclose(file);
   return fTrue;

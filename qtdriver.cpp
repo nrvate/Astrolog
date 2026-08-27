@@ -2417,6 +2417,22 @@ void SetAnimDelayQt(int nDelay)
 // are meaningful only to Win32 are accepted and ignored rather than being
 // allowed to abort the file.
 
+// Read back what -WM/-WM0/-Wh set, so FOutputSettings() can write them
+// out again. The arrays are file static here, and io.cpp is shared code
+// that must not see them directly.
+CONST char *SzMacroNameQt(int i)
+{
+  return FBetween(i, 0, cMacro-1) ? rgszMacroQt[i] : NULL;
+}
+
+CONST char *SzMacroSubNameQt(int i)
+{
+  return FBetween(i, 0, cMSub-1) ? rgszMSubQt[i] : NULL;
+}
+
+flag FHourglassQt() { return fHourglassQt; }
+
+
 int NProcessSwitchesQt(int argc, char **argv, int pos,
   flag fOr, flag fAnd, flag fNot)
 {

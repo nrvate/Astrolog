@@ -154,6 +154,9 @@ void CopyChartWireQt();
 int NProcessSwitchesQt(int argc, char **argv, int pos,
   flag fOr, flag fAnd, flag fNot);
 void FinalizeQt(void);
+CONST char *SzMacroNameQt(int i);
+CONST char *SzMacroSubNameQt(int i);
+flag FHourglassQt();
 void ApplySizeModeQt();
 void ResizeWindowToChartQt();
 void SizeChartToWindowQt();

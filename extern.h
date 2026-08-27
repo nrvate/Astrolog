@@ -1169,6 +1169,13 @@ extern flag API DlgAbout    P((HWND, uint, WORD, LONG));
 extern int NProcessSwitchesQt P((int, char **, int, flag, flag, flag));
 /* Free what the Qt backend allocated through PAllocate(), at exit.      */
 extern void FinalizeQt P((void));
+/* Settings this build stores for the -W switch family, so that      */
+/* FOutputSettings() can write back what NProcessSwitchesQt() read.  */
+extern CONST char *SzMacroNameQt P((int));
+extern CONST char *SzMacroSubNameQt P((int));
+extern flag FHourglassQt P((void));
+extern int NAnimDelayQt P((void));
+extern int NAntialiasQt P((void));
 /* Text charts draw into the chart window, as they do on Windows.        */
 extern void TextCharQt P((int, int, int));
 extern void TextColorQt P((KI));
