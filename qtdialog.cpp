@@ -4232,6 +4232,7 @@ void ShowObjectSelDialogQt()
   QVector<QComboBox *> rgpcbDef;
   QVector<QLineEdit *> rgpeName;
   QVector<QString> rgstrName0;
+  real rgforceSav[cObjSelRow];
   int rgTypSwissSav[cObjSelRow], rgObjSwissSav[cObjSelRow];
   int rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
   int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
@@ -4369,6 +4370,7 @@ void ShowObjectSelDialogQt()
     iobj = uranLo + i;
     rgTypSwissSav[i] = rgTypSwiss[iobj - custLo];
     rgObjSwissSav[i] = rgObjSwiss[iobj - custLo];
+    rgforceSav[i] = force[iobj];
     rgTypSwiss[iobj - custLo] = rgnTyp[i];
     rgObjSwiss[iobj - custLo] = rgnObj[i];
     rgPntSwiss[iobj - custLo] = rgnPnt[i];
@@ -4385,12 +4387,27 @@ void ShowObjectSelDialogQt()
       // read the body it used to be. So when the definition changed and
       // the name was not edited by hand, the name follows the definition.
       // A name the user did type is theirs and is kept.
-      if (i < rgstrName0.size() && str == rgstrName0[i] &&
-        (rgnTyp[i] != rgTypSwissSav[i] || rgnObj[i] != rgObjSwissSav[i])) {
+      if (i < rgstrName0.size() && str == rgstrName0[i]) {
         char szT[cchSzDef];
-        SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
-        if (!FEqSz(szT, szObjUnknown))
-          str = QString(szT);
+        int j2, k2;
+        if (rgforce[i] != rgforceSav[i] && rgforce[i] < 0.0) {
+          // Forced to a midpoint: name it after its two halves, the same
+          // way Lookup Names does. Left alone, the slot sits at the
+          // midpoint under the name of the body it used to be, which is
+          // the same confusion as picking a new body and keeping the old
+          // name.
+          k2 = (-(int)rgforce[i]) - 1;
+          j2 = k2 / objMax; k2 = k2 % objMax;
+          if (FItem(j2) && FItem(k2)) {
+            sprintf(szT, "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
+            str = QString(szT);
+          }
+        } else if (rgnTyp[i] != rgTypSwissSav[i] ||
+          rgnObj[i] != rgObjSwissSav[i]) {
+          SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
+          if (!FEqSz(szT, szObjUnknown))
+            str = QString(szT);
+        }
       }
       QByteArray ba = str.toLocal8Bit();
       if (!FEqSz(ba.constData(), szObjDisp[iobj]))

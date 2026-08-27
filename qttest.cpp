@@ -43,6 +43,7 @@
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtCore/QTimer>
@@ -922,6 +923,7 @@ static void TestBadInputQt()
 // the printed count. That case is self announcing anyway: the user picks it
 // and the name comes up "???" straight away.
 static QString s_strLookupQt;
+static flag s_fWarnedQt = fFalse;
 
 // Open Object Selections, do one thing to the first row, press OK.
 static void DriveObjSelQt(int nWhat)
@@ -955,9 +957,43 @@ static void DriveObjSelQt(int nWhat)
           break;
         }
       s_strLookupQt = rgle[0]->text();
-    } else {
+    } else if (nWhat == 2) {
       rgcb[0]->setEditText("Chiron");
       rgle[0]->setText("AstrologSuiteName");
+    } else if (nWhat == 3) {           // a different row, and un-shown
+      QList<QCheckBox *> rgx = pw->findChildren<QCheckBox *>();
+      if (rgcb.size() > 5) rgcb[5]->setEditText("2060");
+      if (rgx.size() > 5) rgx[5]->setChecked(false);
+    } else if (nWhat == 4) {           // a midpoint
+      rgcb[0]->setEditText("Sun/Moo");
+    } else if (nWhat == 5) {           // changed, then cancelled
+      rgcb[0]->setEditText("2060");
+      for (int b = 0; b < rgb.size(); b++)
+        if (rgb[b]->text().contains("Cancel")) {
+          rgb[b]->click();
+          return;
+        }
+    } else if (nWhat == 6) {           // nonsense
+      rgcb[0]->setEditText("zznotabody");
+      // The refusal is a modal warning raised inside the OK handler, so
+      // the closer has to be queued before the click, not written after
+      // it: the click does not return until the warning is gone.
+      QWidget *pwT = pw;
+      for (int t = 1; t <= 6; t++)
+        QTimer::singleShot(100 * t * nScaleTest, [pwT]() {
+          QWidget *pwarn = QApplication::activeModalWidget();
+          if (pwarn != NULL && pwarn != pwT) {
+            s_fWarnedQt = fTrue;
+            pwarn->close();
+          }
+        });
+      for (int b = 0; b < rgb.size(); b++)
+        if (rgb[b]->text() == "OK") {
+          rgb[b]->click();
+          break;
+        }
+      QTimer::singleShot(0, [pwT]() { pwT->close(); });
+      return;
     }
     for (int b = 0; b < rgb.size(); b++)
       if (rgb[b]->text() == "OK") {
@@ -1003,6 +1039,48 @@ static void TestObjSelDialogQt()
   DriveObjSelQt(2);
   Check(FEqSz(szObjDisp[iobj], "AstrologSuiteName"),
     "a name the user typed is kept, not overwritten (%s)", szObjDisp[iobj]);
+
+  // Row 5, not row 0: an off-by-one in the row mapping would set the
+  // wrong slot and nothing above would notice.
+  int nRow5Sav = rgObjSwiss[uranLo + 5 - custLo], nRow4, nRow6;
+  nRow4 = rgObjSwiss[uranLo + 4 - custLo];
+  nRow6 = rgObjSwiss[uranLo + 6 - custLo];
+  DriveObjSelQt(3);
+  Check(rgObjSwiss[uranLo + 5 - custLo] == 2060,
+    "a row other than the first sets that row (obj %d)",
+    rgObjSwiss[uranLo + 5 - custLo]);
+  Check(rgObjSwiss[uranLo + 4 - custLo] == nRow4 &&
+    rgObjSwiss[uranLo + 6 - custLo] == nRow6,
+    "and leaves its neighbours alone");
+  Check(ignore[uranLo + 5] != 0, "the Show box drives the restriction");
+  rgObjSwiss[uranLo + 5 - custLo] = nRow5Sav;
+
+  // A midpoint has to rename the slot too, or it sits at the midpoint
+  // under the name of the body it used to be.
+  ClearB((pbyte)force, sizeof(force));
+  DriveObjSelQt(4);
+  Check(force[iobj] == (real)-(oSun*objMax + oMoo + 1),
+    "a midpoint typed into the box is stored (%.1f)", force[iobj]);
+  Check(FEqSz(szObjDisp[iobj], "Sun/Moo"),
+    "and names the slot after its two halves (%s)", szObjDisp[iobj]);
+
+  // Cancel discards everything.
+  int nBeforeCancel = rgObjSwiss[iobj - custLo];
+  DriveObjSelQt(5);
+  Check(rgObjSwiss[iobj - custLo] == nBeforeCancel,
+    "Cancel discards what was typed (%d)", rgObjSwiss[iobj - custLo]);
+
+  // Nonsense is refused, and nothing is applied.
+  // Only the behaviour is asserted, not that a warning widget appeared.
+  // The refusal is a modal raised inside the OK handler, and a queued
+  // check for it does not reliably run from inside the suite even though
+  // it does from ProbeQt() -- so asserting on it would be asserting on
+  // the harness. That the settings survive an unparseable entry is the
+  // part that matters, and it fails if the guard is removed.
+  DriveObjSelQt(6);
+  Check(rgObjSwiss[iobj - custLo] == nBeforeCancel,
+    "an unparseable definition applies nothing (%d)",
+    rgObjSwiss[iobj - custLo]);
 
   rgTypSwiss[iobj - custLo] = nTypSav;
   rgObjSwiss[iobj - custLo] = nObjSav;

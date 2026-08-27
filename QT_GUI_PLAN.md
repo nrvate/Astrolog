@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2839
+   display and no `xdotool`, and exits non-zero on failure. **2846
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1733,7 +1733,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2839 -- turned up something worse than the
+    totals -- 2785 against 2846 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -1990,6 +1990,27 @@ are the more useful half to read before starting something new.
     - Fixed in `wdialog.cpp` too, where the same two faults sat.
       `TestObjSelDialogQt()` drives the real dialog for all three cases and
       each assertion fails with its fault put back.
+    - **Put through its paces afterwards rather than declared fixed**,
+      since the first fix came from one reported symptom on one row. Six
+      cases now drive the real dialog: picking from the list, a raw
+      number plus Lookup Names, a hand-typed name that must survive, a row
+      other than the first, a midpoint, Cancel, and an unparseable entry.
+      - **Row 5 was the one worth checking.** An off-by-one in the row
+        mapping would set the wrong slot, and every test above it used
+        row 0, where an off-by-one is invisible. It is correct: row 5
+        changes, its neighbours do not, and the Show box drives
+        `ignore[]`.
+      - **A midpoint had the same fault as the body selection**, found by
+        this sweep rather than reported: typing "Sun/Moo" stored the force
+        correctly and left the slot named "Hades", so it sat at the
+        midpoint under the name of the body it used to be. Fixed the same
+        way in both builds.
+      - Cancel discards, and an unparseable definition applies nothing.
+        Only the behaviour is asserted for the latter, not that a warning
+        widget appeared: the refusal is a modal raised inside the OK
+        handler, and a queued check for it runs from `ProbeQt()` but not
+        reliably from inside the suite. Asserting on that would be
+        asserting on the harness.
     - **The lesson is about where the bug was looked for.** The feature
       was verified when built by checking that the settings it wrote were
       correct, and they were. Nobody checked what the dialog *showed
@@ -2330,7 +2351,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2839 assertions covering dialog titles, the 42 context menus,
+  failure. 2846 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

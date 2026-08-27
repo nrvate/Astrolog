@@ -1796,6 +1796,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
   // message, with nowhere else to keep it.
   static char rgszName0[cObjSelRow][cchSzDef];
   static int rgnTyp0[cObjSelRow], rgnObj0[cObjSelRow];
+  static real rgforce0[cObjSelRow];
 
   switch (message) {
   case WM_INITDIALOG:
@@ -1806,6 +1807,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       sprintf(rgszName0[i], "%.*s", cchSzDef-1, szObjDisp[iobj]);
       rgnTyp0[i] = rgTypSwiss[iobj - custLo];
       rgnObj0[i] = rgObjSwiss[iobj - custLo];
+      rgforce0[i] = force[iobj];
 
       // Contains: the offered bodies in the drop list, and whatever the
       // slot holds in the field -- a midpoint shown as A/B, which is both
@@ -1915,11 +1917,20 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         // different ephemeris number, while every label still read what
         // it used to be. So an untouched name follows the definition; one
         // the user typed is theirs and is kept.
-        if (FEqSz(sz, rgszName0[i]) &&
-          (rgnTyp[i] != rgnTyp0[i] || rgnObj[i] != rgnObj0[i])) {
-          SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
-          if (!FEqSz(szT, szObjUnknown))
-            sprintf(sz, "%.*s", cchSzMax-1, szT);
+        if (FEqSz(sz, rgszName0[i])) {
+          if (rgforce[i] != rgforce0[i] && rgforce[i] < 0.0) {
+            // Forced to a midpoint: name it after its two halves, as
+            // Lookup Names does. Otherwise the slot sits at the midpoint
+            // under the name of the body it used to be.
+            l = (-(int)rgforce[i]) - 1;
+            j = l / objMax; k = l % objMax;
+            if (FItem(j) && FItem(k))
+              sprintf(sz, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
+          } else if (rgnTyp[i] != rgnTyp0[i] || rgnObj[i] != rgnObj0[i]) {
+            SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
+            if (!FEqSz(szT, szObjUnknown))
+              sprintf(sz, "%.*s", cchSzMax-1, szT);
+          }
         }
         if (!FEqSz(sz, szObjDisp[iobj]))
           FCloneSzCore(sz, (char **)&szObjDisp[iobj],
