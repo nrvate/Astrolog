@@ -1,0 +1,10 @@
+# The Windows half of the Object Selections check. No AT-SPI over here, so
+# the dialog is reached by mnemonic and confirmed by window title -- which
+# is the part that matters: a keystroke that goes nowhere is silent.
+expect-window Astrolog
+menu s n
+expect-window Object Selections
+shot out/win/objectsel-open.png
+focus Object Selections
+key Escape
+expect-no-window Object Selections

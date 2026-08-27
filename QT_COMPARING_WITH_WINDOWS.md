@@ -135,11 +135,15 @@ than chasing window IDs. On a real display it is forbidden — see
 
 Traps, each of which cost real time here:
 
-- **Qt needs a window manager for menus to open.** Under bare Xvfb the Qt
-  app runs and renders fine, but Alt+mnemonic and menu-bar clicks silently
-  do nothing and no popup window is ever mapped. Wine manages its own
-  windows and doesn't need one, which makes the failure look
-  app-specific rather than environmental.
+- **Both builds need a window manager, for different reasons.** Under bare
+  Xvfb the Qt app runs and renders fine, but Alt+mnemonic and menu-bar
+  clicks silently do nothing and no popup is ever mapped. *(Corrected
+  2026-08-26: this used to say Wine "manages its own windows and doesn't
+  need one". That is true of rendering and false of input. A dialog Wine
+  creates does not become the X focus window on its own, so keystrokes keep
+  going to the main window and the dialog appears to ignore everything --
+  including Escape. Start metacity for Wine too, as
+  `tools/windrive.sh` does.)*
 - **`xdotool key --window <id>` uses XSendEvent, which Wine ignores.**
   Keys appear delivered and nothing happens; captures then show the
   *previous* chart, which reads as redraw lag rather than as input never

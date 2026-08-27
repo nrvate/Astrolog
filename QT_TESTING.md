@@ -207,6 +207,46 @@ Then, in order of how much time each has cost:
   `pkill -x`, and remember `/proc/pid/comm` truncates at 15 characters, so
   the exact name for the test binary is `astrolog-qt-tes`.
 
+## Driving the Windows build
+
+`tools/windrive.sh` is the same idea for the real Windows binary under
+Wine, with the same scenario vocabulary:
+
+```sh
+make -f Makefile.win
+tools/windrive.sh run tools/scenarios/win-objectsel.txt
+tools/windrive.sh shell                      # leave it up on a private display
+```
+
+Wine has no AT-SPI, so there is no addressing a widget by name over there —
+it is keys and titles. What the wrapper removes is the setup, every part of
+which went wrong by hand at least once: `-Wt` so a modal `PrintWarning`
+cannot hang the run, the `WINEDLLOVERRIDES` that actually silence
+`MessageBeep`, `wineserver -k` on the way out because it outlives the app,
+and waiting for the window to map rather than guessing a sleep.
+
+**Wine needs a window manager too.** Not for rendering — it draws fine
+without one, which is why `tools/text-chart-capture.sh` runs without one —
+but for *input*. A dialog Wine has just created does not become the X focus
+window on its own, so keystrokes keep going to the main window and the
+dialog appears to ignore everything, Escape included. This cost a cycle
+here and the older note in `QT_COMPARING_WITH_WINDOWS.md` said the
+opposite; it is corrected now. Even with a window manager, focus a dialog
+explicitly by title before sending it keys:
+
+```
+menu s n
+expect-window Object Selections
+focus Object Selections
+key Escape
+expect-no-window Object Selections
+```
+
+**The `expect-*` lines are the whole point.** A keystroke that lands
+nowhere is completely silent, so a Wine scenario without them proves
+nothing at all. Both drivers' assertions were checked by making them fail
+on purpose.
+
 ## Build traps
 
 - **`Makefile.win`'s resource depends on `resource.h`** (it didn't, until
