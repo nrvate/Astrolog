@@ -61,11 +61,11 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 2816 assertions + startup checks
+./run-qt-tests.sh                # 2820 assertions + startup checks
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **2816 passed, 0 failed**, startup diagnostics ok.
+commit. Current state: **2820 passed, 0 failed**, startup diagnostics ok.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render
@@ -81,6 +81,7 @@ Three audits, all currently clean:
 python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
 python3 tools/rc_audit.py                        # controls nothing wires up
 python3 tools/rc_mnemonic_audit.py               # "&" placement vs astrolog.rc
+python3 tools/rc_accel.py astrolog.rc > qtrcaccel.h   # accelerator column
 
 # Ask the program a question directly -- the fast loop, ~0.2s. Rewrite
 # ProbeQt() in qttest.cpp, rebuild, run. See QT_TESTING.md.

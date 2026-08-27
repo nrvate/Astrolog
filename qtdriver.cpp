@@ -105,6 +105,7 @@ static QScrollArea *s_pscroll = NULL;
 // that buffer to the screen, and to tell Astrolog when its size changes.
 
 static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str);
+static QAction *PaFindMenuActionLooseQt(QWidget *pw, CONST QString &str);
 static void AddHotkeysToWindowQt(QWidget *pw);   // defined below
 static QMenu *PmenuContextForChartQt();   // defined below
 static QMenu *PmenuContextForTextQt();    // defined below
@@ -3149,6 +3150,46 @@ static CONST HOTKEY rghotkeyQt[] = {
 
 #define chotkeyQt (int)(sizeof(rghotkeyQt) / sizeof(HOTKEY))
 
+#include "qtrcaccel.h"
+
+#ifdef QTTEST
+// The suite checks every label here still names a menu item.
+CONST RCACCEL *PaccelTestQt() { return rgaccelQt; }
+int CaccelTestQt() { return caccelQt; }
+#endif
+
+// Show the accelerator column the way Windows shows it. Qt renders that
+// column from the QKeySequence, spelling every modifier out -- "Shift+V",
+// "Alt+Shift+O" -- while astrolog.rc writes the string Windows draws
+// verbatim after a "\t", capitalising a letter to mean Shift: "V",
+// "Alt+O". Same keys either way, but the notation is on every menu, every
+// time, and a Windows user reads it on every item.
+//
+// A tab in a QAction's text is what Qt checks *first* when painting a
+// menu row, ahead of the shortcut, so appending the resource's own string
+// replaces the rendering without touching what the shortcut does. The
+// label stays the item's identity: everything here finds an action by its
+// label, so the lookups compare only up to the tab.
+static void ApplyAccelTextQt(QMainWindow *pwind)
+{
+  int i;
+
+  for (i = 0; i < caccelQt; i++) {
+    QAction *pa = PaFindMenuActionQt(pwind->menuBar(),
+      QString(rgaccelQt[i].szLabel));
+    if (pa == NULL) {
+      // Fall back to matching without the mnemonic. This port puts "&" on
+      // a different letter than the resource in a few dozen places, on
+      // purpose, and those items still want Windows' accelerator text.
+      pa = PaFindMenuActionLooseQt(pwind->menuBar(),
+        QString(rgaccelQt[i].szLabel).remove('&'));
+    }
+    if (pa == NULL || pa->text().contains(QChar('\t')))
+      continue;
+    pa->setText(pa->text() + QChar('\t') + QString(rgaccelQt[i].szAccel));
+  }
+}
+
 // Bind them onto the menu bar's own actions. Called once, after the menus
 // are built. An entry naming an item that no longer exists is skipped
 // rather than crashing; see the note above PmenuBuildContextQt() about
@@ -3631,6 +3672,25 @@ static CONST CTXITEM rgctxTxtBiorhythmQt[] = {
 #define CctxQt(rg) (int)(sizeof(rg) / sizeof(CTXITEM))
 
 // Find a menu bar item by its exact label, searching submenus too.
+// As PaFindMenuActionQt, but comparing with the mnemonic removed.
+static QAction *PaFindMenuActionLooseQt(QWidget *pw, CONST QString &str)
+{
+  QList<QAction *> rgpa = pw->actions();
+  QAction *pa, *paT;
+  int i;
+
+  for (i = 0; i < rgpa.size(); i++) {
+    pa = rgpa[i];
+    if (pa->menu() != NULL) {
+      paT = PaFindMenuActionLooseQt(pa->menu(), str);
+      if (paT != NULL)
+        return paT;
+    } else if (pa->text().section(QChar('\t'), 0, 0).remove('&') == str)
+      return pa;
+  }
+  return NULL;
+}
+
 static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str)
 {
   QAction *pa, *paT;
@@ -3643,7 +3703,7 @@ static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str)
       paT = PaFindMenuActionQt(pa->menu(), str);
       if (paT != NULL)
         return paT;
-    } else if (pa->text() == str)
+    } else if (pa->text().section(QChar('\t'), 0, 0) == str)
       return pa;
   }
   return NULL;
@@ -3878,7 +3938,7 @@ QAction *PaFindLooseTestQt(CONST char *sz, CONST char **pszTop)
     QList<QAction *> rgpa;
     CollectActionsTestQt(rgtop[i]->menu(), &rgpa);
     for (int j = 0; j < rgpa.size(); j++)
-      if (rgpa[j]->text().remove('&') == str) {
+      if (rgpa[j]->text().section(QChar('\t'), 0, 0).remove('&') == str) {
         *pszTop = baTop.constData();
         return rgpa[j];
       }
@@ -4133,6 +4193,7 @@ void BeginQt()
   ApplySizeModeQt();
   BuildAstrologMenus(gi.qwind);
   ApplyHotkeysQt(gi.qwind);
+  ApplyAccelTextQt(gi.qwind);
   StartAnimTimerQt(gi.qwind);
   gi.qwind->resize(gs.xWin, gs.yWin);
   // A -Ww in astrolog.as was parsed before this window existed.

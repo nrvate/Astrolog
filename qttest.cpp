@@ -46,6 +46,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtCore/QTimer>
 #include <QtCore/QStringList>
+#include <QtCore/QSet>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
 #include <QtCore/QElapsedTimer>
@@ -65,6 +66,11 @@ extern void HotkeyTestQt(int, CONST char **, CONST char **);
 extern QAction *PaFindActionTestQt(CONST char *);
 extern void AllActionsTestQt(QList<QAction *> *);
 extern QAction *PaFindLooseTestQt(CONST char *, CONST char **);
+typedef struct _RcAccel { CONST char *szLabel, *szAccel; } RCACCEL;
+extern CONST RCACCEL *PaccelTestQt();
+extern int CaccelTestQt();
+#define rgaccelQt PaccelTestQt()
+#define caccelQt CaccelTestQt()
 
 static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
@@ -422,7 +428,10 @@ static void TestAllMenuActionsQt()
   tClose.start(60 * nScaleTest);
   AllActionsTestQt(&rgpa);
   for (i = 0; i < rgpa.size(); i++) {
-    QString str = rgpa[i]->text();
+    // The label is the item's identity; the accelerator column after the
+    // tab is display only, and carrying it here would break every
+    // comparison below against a label from astrolog.rc.
+    QString str = rgpa[i]->text().section(QChar('\t'), 0, 0);
     // Quit would end the run. The doc and website items hand a file or a
     // URL to the desktop, which isn't this suite's business to trigger.
     if (str.contains("Quit") || str.contains("Exit") ||
@@ -1134,6 +1143,67 @@ static void FilterChartListQt()
 // Windows fires the redraw notification hook at the end of its redraw;
 // the X11 path fires it from a block that excludes both GUI builds, so
 // this one never did. See plan item 43.
+// The accelerator column is drawn from astrolog.rc's own text, not from
+// Qt's rendering of the key sequence; see plan item 44. Every label in the
+// generated table has to still name a real menu item, or the column
+// silently goes missing for it.
+static void TestAccelTextQt()
+{
+  int i, j, cFound = 0, cShown = 0, cWant = 0;
+  QSet<QAction *> rgpaClaimed;
+  QAction *pa;
+
+  Group("Accelerator column");
+  for (i = 0; i < caccelQt; i++) {
+    // Loose, the way the parity test looks items up: this port puts the
+    // mnemonic on a different letter than the resource in a few places,
+    // which is not a gap. Items the port deliberately doesn't implement
+    // are flagged in rgparityQt[] and expected to be absent here too.
+    CONST char *szTop;
+    flag fSkip = fFalse;
+    for (j = 0; j < cparityQt; j++)
+      if (rgparityQt[j].fSkip &&
+        FEqSz(rgparityQt[j].szLabel, rgaccelQt[i].szLabel)) {
+        fSkip = fTrue;
+        break;
+      }
+    if (fSkip)
+      continue;
+    cWant++;
+    pa = PaFindLooseTestQt(rgaccelQt[i].szLabel, &szTop);
+    if (pa == NULL)
+      continue;
+    cFound++;
+    // The resource names one command from two menus with different labels
+    // and different accelerators -- "Open &Documentation\tCtrl+h" in Help
+    // and "&Open Documentation\t)" in its More Documentation submenu --
+    // and this port has the first. The apply pass leaves an item alone
+    // once it carries a column, so mirror that here rather than counting
+    // the second entry as a miss.
+    if (rgpaClaimed.contains(pa))
+      continue;
+    rgpaClaimed.insert(pa);
+    if (pa->text().section(QChar('\t'), 1, 1) == QString(rgaccelQt[i].szAccel))
+      cShown++;
+  }
+  Check(cFound == cWant,
+    "every label in the accelerator table names a real menu item (%d of %d)",
+    cFound, cWant);
+  Check(cShown == (int)rgpaClaimed.size(),
+    "and each shows the resource's own text (%d of %d)",
+    cShown, (int)rgpaClaimed.size());
+  // The notation is the whole point: Windows writes "V" for Shift+V and
+  // "Alt+O" for Alt+Shift+O, capitalising a letter to mean Shift, where
+  // Qt would spell both modifiers out.
+  pa = PaFindActionTestQt("Standard Radi&x");
+  Check(pa != NULL && pa->text().endsWith(QChar('\t') + QString("V")),
+    "Standard Radix shows \"V\", not \"Shift+V\"");
+  Check(pa != NULL && !pa->shortcuts().isEmpty(),
+    "and still has its shortcut bound");
+  printf("  %d menu items show Windows' accelerator text\n", cShown);
+}
+
+
 static void TestExpressionHooksQt()
 {
   char *szSav = us.szExpDisp3;
@@ -1628,6 +1698,7 @@ int NRunQtTestsQt()
   TestEphemerisListQt();
   TestChartListFilterQt();
   TestExpressionHooksQt();
+  TestAccelTextQt();
   TestObjSelTableQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",

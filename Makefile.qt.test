@@ -41,6 +41,10 @@ $(OBJDIR):
 # object file survives a regeneration and the change appears to do nothing.
 $(OBJDIR)/qtdialog.o: qtdialog.cpp qtrcdlg.h astrolog.h qtdriver.h
 
+# Same reason for the generated accelerator table: without this the
+# object file survives a regeneration and the change looks inert.
+$(OBJDIR)/qtdriver.o: qtdriver.cpp qtrcaccel.h astrolog.h qtdriver.h
+
 $(OBJDIR)/%.o: %.cpp
 	g++ $(CPPFLAGS) -c -o $@ $<
 

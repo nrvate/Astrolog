@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2816
+   display and no `xdotool`, and exits non-zero on failure. **2820
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1705,7 +1705,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2816 -- turned up something worse than the
+    totals -- 2785 against 2820 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -1836,6 +1836,39 @@ are the more useful half to read before starting something new.
       `NAnimDelayQt()` rather than a `wi` struct, which this build does not
       have at all. There is also `funWin` and `funX11` but no `funQt`, so
       an expression can identify every backend except this one.
+
+44. **~~The menu accelerator column~~** -- **fixed 2026-08-27**, and it
+    was the only divergence a user met on every menu. Qt draws that column
+    from the `QKeySequence`, spelling every modifier out, while
+    astrolog.rc writes the string Windows draws verbatim after a `\t` and
+    capitalises a letter to mean Shift. So this port read `Shift+V`,
+    `Alt+Shift+V`, `Alt+L` where Windows reads `V`, `Alt+V`, `Alt+l`.
+    - **A tab in a QAction's text is what Qt's menu painter checks first**,
+      ahead of the shortcut, so carrying the resource's own string across
+      replaces the rendering without touching what the key does. No
+      override of Qt's shortcut handling was needed after all, which is
+      what the old entry assumed would be required.
+    - `tools/rc_accel.py` generates `qtrcaccel.h` from the menu bar block
+      of astrolog.rc -- 269 items, the 96 macros excluded because they are
+      renamed at runtime by `-WM` and their column is a plain function key
+      Qt already spells Windows' way. Regenerating and diffing is a
+      pre-commit check now, beside the other three.
+    - The label stays the item's identity. Everything here finds an action
+      by label, so both lookups compare only up to the tab, and so does
+      the suite -- missing that turned `&Clear Screen` into
+      `&Clear Screen\tDel` and four chart-rendering assertions failed
+      before the cause was obvious.
+    - **The apply pass had to match loosely.** A few dozen items carry the
+      mnemonic on a different letter here than in the resource, on
+      purpose, and they still want Windows' text.
+    - Verified by opening the Chart menu on a private display and reading
+      the column off the screenshot: `V`, `Alt+V`, `A`, `Alt+l`, `J`,
+      `Alt+L`. Menus are one of the few things worth driving a real window
+      for, and this is one of them.
+    - **`qtdriver.o` had no dependency on the generated header**, so the
+      first regeneration looked inert and the suite reported a count from
+      a stale object file. Exactly item 31's trap in a new place; all
+      three makefiles now declare it.
 
 ## Features this fork adds to both builds
 
@@ -2140,7 +2173,6 @@ as a bug.
 | Graphics Settings | Atlas City Coloring writes `gs.fLabelCity` | `DlgGraphics` writes `gs.fLabelAsp`, but that field is `-XA` (aspect glyphs on lines) and has nothing to do with city coloring. Treated as an upstream typo; using it would silently toggle aspect glyphs. |
 | Command line dialog | Doesn't save/restore `us.fLoop`/`is.fMult` around the call | `CommandLineX()` does. Only matters for a typed line that itself starts a multi-chart sequence. |
 | Restriction dialogs | (Since 8.9) checkbox = restricted, matching Windows | Previously "Show X" = visible, i.e. inverted. Flipped *toward* Windows, but it's a visible change to anyone used to the old Qt wording. |
-| Menu accelerator column | Reads `Shift+V`, `Alt+L` where Windows reads `V`, `Alt+l` | Astrolog's resource writes an uppercase letter alone to mean Shift. Qt derives the column from `QKeySequence` and spells the modifier out. Same keys, different notation; changing it means overriding how Qt renders shortcuts. |
 
 **Not ported**
 
@@ -2172,7 +2204,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2816 assertions covering dialog titles, the 42 context menus,
+  failure. 2820 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window
