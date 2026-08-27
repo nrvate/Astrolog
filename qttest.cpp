@@ -44,6 +44,7 @@
 #include <QtCore/QTimer>
 #include <QtCore/QStringList>
 #include <QtCore/QDir>
+#include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
 #include <stdarg.h>
 #include "astrolog.h"
@@ -1067,6 +1068,66 @@ static void TestForcedPositionsQt()
 // Chart data is pinned here so both sides show the same chart; change it
 // in both places or the comparison is only about layout, not values.
 
+// Graphics charts to PNG with no display, the counterpart of
+// TextChartCaptureQt() below. SetChartModeQt() already renders each mode
+// into gi.qim -- that is what TestChartRenderQt() checks -- so this is
+// that loop plus a save.
+//
+//   QTGRAPHDIR=out/qtg ./run-qt-tests.sh
+static void GraphicsChartCaptureQt(CONST char *szDir)
+{
+  CONST int rgnMode[] = { gWheel, gHouse, gGrid, gMidpoint,
+    gHorizon, gOrbit, gSector, gCalendar, gDisposit, gEsoteric,
+    gAstroGraph, gEphemeris, gRising, gLocal, gMoons, gExo,
+    gTraTraGra, gTraNatGra, gSphere, gWorldMap, gGlobe, gPolar,
+    gTelescope, gBiorhythm };
+  CONST char *rgszFile[] = { "wheel", "house", "grid", "midpoint",
+    "horizon", "orbit", "sector", "calendar", "influence", "esoteric",
+    "astrograph", "ephemeris", "rising", "local", "moons", "exo",
+    "tratragra", "tranatgra", "sphere", "worldmap", "globe", "polar",
+    "telescope", "biorhythm" };
+  int i, cmode = (int)(sizeof(rgnMode) / sizeof(int)), nSav = gi.nMode;
+  flag fSav = us.fGraphics, fPopupSav;
+  QElapsedTimer tim;
+  qint64 msDraw, msSave;
+
+  // gAspect and gArabic are absent on purpose: DrawChartX() has no case
+  // for either, which is why Windows forces text mode for exactly those
+  // two (item 24).
+  if (!QDir().mkpath(QString(szDir))) {
+    printf("cannot create %s\n", szDir);
+    return;
+  }
+  printf("capturing %d graphics charts to %s\n", cmode, szDir);
+  // Any PrintWarning() here becomes a modal QMessageBox and blocks for a
+  // click that is never coming -- gMoons wants moon ephemeris files that
+  // aren't installed, and hangs the whole capture on the warning. Same
+  // hazard TestBadInputQt() guards against, same escape.
+  fPopupSav = FNoPopupQt();
+  SetNoPopupQt(fTrue);
+  us.fGraphics = fTrue;
+  for (i = 0; i < cmode; i++) {
+    tim.start();
+    SetChartModeQt(rgnMode[i]);
+    msDraw = tim.elapsed();
+    if (gi.qim == NULL) {
+      printf("  %-12s nothing rendered\n", rgszFile[i]);
+      continue;
+    }
+    tim.start();
+    QString str = QString("%1/%2.png").arg(szDir).arg(rgszFile[i]);
+    flag fOk = gi.qim->save(str);
+    msSave = tim.elapsed();
+    printf("  %-12s draw %5lldms  save %4lldms  %s\n", rgszFile[i],
+      (long long)msDraw, (long long)msSave, fOk ? "" : "WRITE FAILED");
+    fflush(stdout);
+  }
+  us.fGraphics = fSav;
+  SetNoPopupQt(fPopupSav);
+  SetChartModeQt(nSav);
+}
+
+
 static void TextChartCaptureQt(CONST char *szDir)
 {
   CONST char *rgszAct[] = { "Standard Radi&x", "House &Wheel",
@@ -1134,6 +1195,10 @@ static void TextChartCaptureQt(CONST char *szDir)
 
 int NRunQtTestsQt()
 {
+  if (getenv("QTGRAPHDIR") != NULL) {
+    GraphicsChartCaptureQt(getenv("QTGRAPHDIR"));
+    return fFalse;
+  }
   if (getenv("QTTEXTDIR") != NULL) {
     TextChartCaptureQt(getenv("QTTEXTDIR"));
     return 0;

@@ -80,6 +80,13 @@ QTTEXTDIR=out/qt ./run-qt-tests.sh          # the same charts from this port
 python3 tools/text-chart-diff.py out/win out/qt out/cmp
 ```
 
+Graphics charts render headlessly too, to PNG, with no display and no
+window manager:
+
+```sh
+QTGRAPHDIR=out/qtg ./run-qt-tests.sh   # 24 chart types, about 3 seconds
+```
+
 **`QT_COMPARING_WITH_WINDOWS.md` has the full workflow**, including how to
 drive either build headlessly and the environment traps that cost real
 time to rediscover (Qt needs a window manager for menus to open; xdotool's

@@ -173,14 +173,18 @@ day and three
    of what fixing one looks like. Read the note about the `-W` guard: fix
    the save path without it and settings files stop being readable by the
    console build.
-9. **~~A way to render a chart without the event loop.~~** *(Struck
-   2026-08-26 — this was wrong, and wrong in a way that cost real time.
-   `TextChartCaptureQt()` in qttest.cpp already renders `gi.qim` straight
-   to PNG with no display, driven by `QTTEXTDIR=out/qt ./run-qt-tests.sh`.
-   It is how the Windows text-chart comparison in item 25 was done. It is
-   text charts only today, so extending it to graphics modes is the actual
-   remaining work — but the mechanism exists and there is no need to fight
-   the console build for it. See item 34.)*
+9. **~~A way to render a chart without the event loop.~~** — **done
+   2026-08-26.** It already half existed and the claim that it didn't cost
+   real time; see item 34. `TextChartCaptureQt()` in qttest.cpp had always
+   rendered text charts to PNG with no display, and now
+   `GraphicsChartCaptureQt()` beside it does the other 24 modes:
+
+       QTGRAPHDIR=out/qtg ./run-qt-tests.sh
+
+   Both capture and exit without running the assertion suite. The whole
+   graphics set takes about three seconds — every mode draws in 1-60ms
+   except Rising at ~490ms and the two transit grids at ~275ms.
+   This is what item 4's pixel baselines want.
 
 **If upstream releases a new Astrolog**, note this fork's changes to
 shared core are deliberately small and confined to `#ifdef QT` branches —
