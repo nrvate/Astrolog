@@ -61,11 +61,11 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 2777 assertions + startup checks
+./run-qt-tests.sh                # 2781 assertions + startup checks
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **2777 passed, 0 failed**, startup diagnostics ok.
+commit. Current state: **2781 passed, 0 failed**, startup diagnostics ok.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render
@@ -112,6 +112,18 @@ window manager:
 ```sh
 QTGRAPHDIR=out/qtg ./run-qt-tests.sh   # 24 chart types, about 3 seconds
 ```
+
+The Windows build has assertions of its own now — not many, and slow, but
+it is no longer the only half with none:
+
+```sh
+tools/win-tests.sh                     # every tools/scenarios/win-*.txt
+```
+
+Minutes rather than seconds, so not a pre-commit check; run it when a
+change ships in both builds. It swaps `/swe` for the bundled `ephem/`
+first, because ~887,000 files through Wine's path translation looks
+exactly like the app hanging. `QT_COMPARING_WITH_WINDOWS.md` says why.
 
 **`QT_COMPARING_WITH_WINDOWS.md` has the full workflow**, including how to
 drive either build headlessly and the environment traps that cost real

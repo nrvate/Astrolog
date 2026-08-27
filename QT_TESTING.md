@@ -90,6 +90,22 @@ Both render and exit without running the assertion suite. `gAspect` and
 no case for either, which is why Windows forces text mode for exactly
 those two.
 
+## When the suite itself takes the process down
+
+An assertion failure prints and carries on. A *crash* does not, and the
+log then ends wherever the buffer happened to stop, which is rarely the
+thing that killed it. Two of the suite's sections name each item before
+they touch it and flush, so the last line printed is the culprit:
+
+```sh
+ASTROLOG_QT_TEST_VERBOSE=1 ./run-qt-tests.sh
+```
+
+That covers the 26 chart renders (`rendering: TraNatGra`) and all 338
+menu items fired (`firing: Chart Settings...`). A clean run does not need
+the noise, which is why it is off by default — reach for it the moment a
+run dies without saying where.
+
 ## The console build, for the calculation core
 
 `make` builds the X11 binary, the quickest way to exercise the shared
@@ -105,10 +121,22 @@ and sit there; `-qb` pins the chart so runs are comparable; `</dev/null`
 makes a prompt fail fast rather than look like a hang; unsetting `DISPLAY`
 makes a stray graphics switch error out visibly.
 
-It **rejects the `-W` switch family** (`case 'W':` in astrolog.cpp is
-`#if defined(WIN) || defined(QT)`), and an unknown switch stops it reading
-the rest of the file — so it cannot load `nrvate.as` at all. Use it for
-core questions, not configuration ones.
+**It loads `nrvate.as` now**, which it could not until 2026-08-27:
+`case 'W':` in astrolog.cpp was `#if defined(WIN) || defined(QT)`, so this
+build rejected `-WM` as an unknown switch, and an unknown switch stops
+Astrolog reading the rest of the file — it gave up 240 lines in and used
+defaults for everything below. So the real config, restrictions, orbs and
+the `/swe` path are all available here:
+
+```sh
+env -u DISPLAY ./astrolog -i nrvate.as _X -n </dev/null | head
+```
+
+Still no GUI in it, so it answers nothing about windows, dialogs or menus
+— that is what the probe and the drivers are for. What it is good for is
+the calculation core and text output with the least machinery in the way,
+and being an ordinary process, it takes a debugger without an event loop
+in the picture.
 
 ## Driving a real window — slow, clunky, occasionally necessary
 
@@ -260,6 +288,40 @@ in 30–55ms. If something takes seconds, it is not drawing.
   them. Exact-string replacement only, then check
   `tr -cd '\r' < f | wc -c` equals the line count. Note `sweph.cpp` ships
   from upstream with mixed endings (9 CRs in 8621 lines); not ours to fix.
+
+## Proving a regression test actually works
+
+A test that passes with and without the fix is worthless, and this
+project has produced two of them — each confirming an invention rather
+than catching a defect. After writing one, put the bug back and watch it
+fail. It costs one rebuild.
+
+Back the files up, patch, build, run, restore:
+
+```sh
+mkdir -p /tmp/bk && cp calc.cpp extern.h /tmp/bk/
+#   ... reintroduce the bug, rebuild, run, expect FAIL ...
+cp /tmp/bk/calc.cpp /tmp/bk/extern.h .
+```
+
+Two ways this goes wrong, both seen here:
+
+- **Restoring the bug is not the same as disabling the fix.** Proving the
+  forced-midpoint fix meant putting back a `&&` term that had been
+  negated. Writing `fFalse` there disables the skip altogether — a third
+  behaviour that is neither the bug nor the fix — and the test passed
+  either way. `fTrue` was the restore. Work out what the original
+  expression evaluated to, not what makes the line look inert.
+- **Most of these files are CRLF.** An exact-string patch written with
+  bare `\n` matches nothing, and a script that asserts on the match count
+  says so immediately; one that does not will happily report a pass
+  against an unmodified file. Assert `count == 1` before every write.
+
+Then state the test's preconditions rather than inheriting them. The
+suite shares live `us`/`gs` state with everything that ran before it, so
+a setting an earlier test left on can make a correct fix look broken —
+`-4` left set put a forced midpoint exactly 30 degrees off, which reads
+precisely like the fix not working.
 
 ## Checks worth running before a commit
 

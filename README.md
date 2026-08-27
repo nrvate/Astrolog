@@ -75,10 +75,20 @@ make -f Makefile.qt.test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 2777 assertions plus startup checks, covering dialogs, context menus,
+A headless suite of 2781 assertions plus startup checks, covering dialogs, context menus,
 shortcuts, chart rendering, every menu item, menu parity against
 `astrolog.rc`, and bad input. No X display needed; exits nonzero on
 failure.
+
+The Windows build has a small suite of its own, driving the real binary
+under Wine:
+
+```
+tools/win-tests.sh
+```
+
+It takes minutes rather than seconds, so it is run when a change ships in
+both builds rather than before every commit.
 
 There are also three audits that check this port against Windows'
 resource script directly:

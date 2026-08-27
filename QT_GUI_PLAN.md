@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2777
+   display and no `xdotool`, and exits non-zero on failure. **2781
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1837,7 +1837,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2777 assertions covering dialog titles, the 42 context menus,
+  failure. 2781 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

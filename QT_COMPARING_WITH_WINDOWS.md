@@ -59,6 +59,34 @@ putting up the box. The script passes it, and also refuses to hand back a
 capture directory whose images are all byte-identical rather than let a
 silent failure through.
 
+### The same symptom with no dialog behind it: `/swe`
+
+Menu bar painted, client area black, every keystroke ignored — and `-Wt`
+already set. That is not the dialog above; it is `-Yi "/swe"`. The
+ephemeris collection is ~887,000 `.se1` files, which native Linux walks
+without complaint and **Wine's path translation does not**. Nothing is
+hung and nothing is broken. It is also not fixed by waiting: it was still
+black after a minute.
+
+Telling the two apart takes one screenshot of the **centre** of the frame,
+because a `MessageBox` is centred and chart content is not. Better than
+looking, measure — if the only non-black rows in a 1200-row capture are
+`0..55`, that is a menu bar and nothing else, whatever the cause.
+
+`tools/win-tests.sh` runs the real settings file with `/swe` swapped for
+the small bundled `ephem/`. Everything that makes the config worth testing
+against survives — restrictions, orbs, aspect set, macros, window size,
+graphics mode — and only the file count goes. The Qt suite still uses the
+true path, where it costs nothing.
+
+Two things this was blamed on first, both wrong, both from changing two
+variables at once:
+
+- **XTEST accelerators do reach Wine.** `ctrl+t`, `shift+alt+a` and
+  `alt+j` each drive a dialog in `tools/scenarios/win-dialogs.txt`.
+- **Graphics mode does render under Wine.** Every capture here uses `_X`
+  for reasons unrelated to rendering, so it had simply never been tried.
+
 **The lesson that cost the most time here: look at the whole frame.** The
 dialog was in every single capture from the start. It went unseen for an
 hour because every crop was of the top-left corner, where the chart text
@@ -202,3 +230,18 @@ after regenerating means upstream's resource changed.
 
 The test suite also asserts menu parity directly: 258 of 258 Windows menu
 items present, checked against `astrolog.rc` at runtime.
+
+For the Windows build's own behaviour — the wiring the resource cannot
+prove, and nothing else covers — `tools/win-tests.sh` runs every
+`tools/scenarios/win-*.txt` and reports once:
+
+```sh
+tools/win-tests.sh                 # all of them
+tools/win-tests.sh win-objectsel   # just one
+```
+
+It is minutes rather than the Qt suite's seconds, so it is not a
+pre-commit check. Run it when something ships in both builds: the shared
+logic underneath is already covered by the Qt suite, since both call the
+same `calc.cpp` and `io.cpp`, and what this adds is the Windows dialog and
+menu wiring.
