@@ -61,7 +61,7 @@
 ******************************************************************************
 */
 
-#define cfunA 484
+#define cfunA 485
 #ifdef GRAPH
 #define cfunX 73
 #else
@@ -72,7 +72,7 @@
 #else
 #define cfunI 0
 #endif
-#ifdef WIN
+#if defined(WIN) || defined(QT)
 #define cfunW 12
 #else
 #define cfunW 0
@@ -549,7 +549,7 @@ enum _functionindex {
   fun_Xnf,
 #endif
 
-#ifdef WIN
+#if defined(WIN) || defined(QT)
   // Functions related to Windows operations
   funDlg,
   funMouse,
@@ -571,6 +571,7 @@ enum _functionindex {
   funPc,
   funWin,
   funX11,
+  funQt,
   funWcli,
   funWsetup,
   funJplweb,
@@ -1130,7 +1131,7 @@ CONST FUN rgfun[cfun] = {
 {fun_Xnf, "_Xnf", 0, I_},
 #endif
 
-#ifdef WIN
+#if defined(WIN) || defined(QT)
 // Functions related to Windows operations
 {funDlg,   "Dlg",   0, I_},
 {funMouse, "Mouse", 1, I_I},
@@ -1152,6 +1153,7 @@ CONST FUN rgfun[cfun] = {
 {funPc,     "PC",     0, I_},
 {funWin,    "WIN",    0, I_},
 {funX11,    "X11",    0, I_},
+{funQt,     "QT",     0, I_},
 {funWcli,   "WCLI",   0, I_},
 {funWsetup, "WSETUP", 0, I_},
 {funJplweb, "JPLWEB", 0, I_},
@@ -1238,6 +1240,9 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
   flag fRetOpt = fFalse, fRetReal = fFalse, fOpt = fFalse, fOptReal = fFalse;
 #ifdef WIN
   POINT pt;
+#endif
+#ifdef QT
+  int xMouse, yMouse;
 #endif
 
   // Analyze the input and output parameter types.
@@ -1870,12 +1875,26 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
   case fun_Xnf: n = gi.nDir;   break;
 #endif
 
-#ifdef WIN
+#if defined(WIN) || defined(QT)
   // Functions related to Windows operations
   case funDlg:
+#ifdef QT
+    n = KvDialogQt();
+    break;
+#else
     n = KvDialog();
     break;
+#endif
   case funMouse:
+#ifdef QT
+    MousePosQt(&xMouse, &yMouse);
+    if (n1 >= 0 && FEnsureParVar(n1+1)) {
+      xi.rgparVar[n1].n   = xMouse; xi.rgparVar[n1].fReal   = fFalse;
+      xi.rgparVar[n1+1].n = yMouse; xi.rgparVar[n1+1].fReal = fFalse;
+    }
+    n = LFromWW(xMouse, yMouse);
+    break;
+#else
     GetCursorPos(&pt);
     ScreenToClient(wi.hwnd, &pt);
     if (n1 >= 0 && FEnsureParVar(n1+1)) {
@@ -1884,8 +1903,24 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
     }
     n = LFromWW(pt.x, pt.y);
     break;
+#endif
 
   // Astrolog command switch settings (Windows)
+#ifdef QT
+  // Same settings, read through this build's accessors: it has no "wi"
+  // struct. Autosave after each draw and the screen saver have no
+  // counterpart here, so they report off rather than pretending.
+  case fun_WN:  n = NAnimDelayQt();   break;
+  case fun_Wn:  n = FNoUpdateQt();    break;
+  case fun_Wh:  n = FHourglassQt();   break;
+  case fun_Wt:  n = FNoPopupQt();     break;
+  case fun_Wo:  n = 0;                break;
+  case fun_Wo0: n = 0;                break;
+  case fun_Wo3: n = 0;                break;
+  case fun_Wx:  n = NAntialiasQt();   break;
+  case fun_Wb:  n = FBmpWindowQt();   break;
+  case fun_WZ:  n = 0;                break;
+#else
   case fun_WN:  n = wi.nTimerDelay;   break;
   case fun_Wn:  n = wi.fNoUpdate;     break;
   case fun_Wh:  n = wi.fHourglass;    break;
@@ -1896,6 +1931,7 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
   case fun_Wx:  n = wi.nAntialias;    break;
   case fun_Wb:  n = wi.fBmpWindow;    break;
   case fun_WZ:  n = wi.fSaverRun;     break;
+#endif
 #endif
 
   // Functions related to compile time options
@@ -1908,6 +1944,13 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
     break;
   case funWin:
 #ifdef WIN
+    n = 1;
+#else
+    n = 0;
+#endif
+    break;
+  case funQt:
+#ifdef QT
     n = 1;
 #else
     n = 0;

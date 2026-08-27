@@ -35,6 +35,7 @@
 // collide with identifiers used inside Qt's own headers.
 #include <QtWidgets/QMenuBar>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QColorDialog>
 #include <QtWidgets/QAction>
 #include <QtWidgets/QActionGroup>
 #include <QtGui/QKeySequence>
@@ -59,6 +60,7 @@
 #include <QtCore/QVector>
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
+#include <functional>
 #include <QtCore/QEventLoop>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
@@ -106,6 +108,8 @@ static QScrollArea *s_pscroll = NULL;
 
 static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str);
 static QAction *PaFindMenuActionLooseQt(QWidget *pw, CONST QString &str);
+static void ConnectMenuQt(QAction *pa, QObject *pctx,
+  std::function<void()> fn);
 static void AddHotkeysToWindowQt(QWidget *pw);   // defined below
 static QMenu *PmenuContextForChartQt();   // defined below
 static QMenu *PmenuContextForTextQt();    // defined below
@@ -1081,7 +1085,7 @@ static QAction *AddToggleAction(QMenu *pmenu, CONST char *szLabel,
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setChecked(*pfield != 0);
-  QObject::connect(pa, &QAction::triggered, pa, [pfield, pa, fRecast]() {
+  ConnectMenuQt(pa, pa, [pfield, pa, fRecast]() {
     *pfield = !*pfield;
     pa->setChecked(*pfield != 0);
     if (fRecast)
@@ -1105,7 +1109,7 @@ static QAction *AddSelectAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setChecked(*ptarget == value);
   pa->setActionGroup(pgroup);
-  QObject::connect(pa, &QAction::triggered, pa, [value, ptarget, fRecast]() {
+  ConnectMenuQt(pa, pa, [value, ptarget, fRecast]() {
     *ptarget = value;
     if (fRecast)
       RecastAndRedrawQt();
@@ -1138,7 +1142,7 @@ static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setActionGroup(s_pgroupChartMode);
-  QObject::connect(pa, &QAction::triggered, pa, [mode]() {
+  ConnectMenuQt(pa, pa, [mode]() {
     SetChartModeQt(mode);
   });
   s_rgpaChartMode[s_cChartMode] = pa;
@@ -1173,7 +1177,7 @@ static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setActionGroup(s_pgroupChartMode);
-  QObject::connect(pa, &QAction::triggered, pa, [mode]() {
+  ConnectMenuQt(pa, pa, [mode]() {
     us.fGraphics = fFalse;
     if (s_paGraphics != NULL)
       s_paGraphics->setChecked(fFalse);
@@ -1334,7 +1338,7 @@ static QAction *AddRelAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(us.nRel == rc);
-  QObject::connect(pa, &QAction::triggered, pa, [rc]() { SetRelQt(rc); });
+  ConnectMenuQt(pa, pa, [rc]() { SetRelQt(rc); });
   s_rgpaRel[s_cRel] = pa;
   s_rgnRel[s_cRel] = rc;
   s_cRel++;
@@ -1346,87 +1350,87 @@ static void BuildFileMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&File");
   QAction *paOpen = pmenu->addAction("&Open Chart...");
-  QObject::connect(paOpen, &QAction::triggered, pwind,
+  ConnectMenuQt(paOpen, pwind,
     []() { ShowOpenChartDialogQt(); });
   QAction *paOpen2 = pmenu->addAction("Open Chart #&2...");
-  QObject::connect(paOpen2, &QAction::triggered, pwind,
+  ConnectMenuQt(paOpen2, pwind,
     []() { ShowOpenChart2DialogQt(); });
   QAction *paSave = pmenu->addAction("&Save Chart Info...");
-  QObject::connect(paSave, &QAction::triggered, pwind,
+  ConnectMenuQt(paSave, pwind,
     []() { ShowSaveChartDialogQt(); });
   QAction *paSavePos = pmenu->addAction("Save Chart &Positions...");
-  QObject::connect(paSavePos, &QAction::triggered, pwind,
+  ConnectMenuQt(paSavePos, pwind,
     []() { ShowSaveChartPositionsDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paSaveSettings = pmenu->addAction("Save Program Settin&gs...");
-  QObject::connect(paSaveSettings, &QAction::triggered, pwind,
+  ConnectMenuQt(paSaveSettings, pwind,
     []() { ShowSaveSettingsDialogQt(); });
   QMenu *pmenuOtherFormats = pmenu->addMenu("Ot&her Formats");
   QAction *paOpenDir = pmenuOtherFormats->addAction(
     "Open Charts in &Folder...");
-  QObject::connect(paOpenDir, &QAction::triggered, pwind,
+  ConnectMenuQt(paOpenDir, pwind,
     []() { ShowOpenChartDirDialogQt(); });
   QAction *paSaveList = pmenuOtherFormats->addAction("Save Chart &List...");
-  QObject::connect(paSaveList, &QAction::triggered, pwind,
+  ConnectMenuQt(paSaveList, pwind,
     []() { ShowSaveChartListDialogQt(); });
   pmenuOtherFormats->addSeparator();
   QAction *paSaveAAF = pmenuOtherFormats->addAction(
     "Save Chart &Exchange...");
-  QObject::connect(paSaveAAF, &QAction::triggered, pwind,
+  ConnectMenuQt(paSaveAAF, pwind,
     []() { ShowSaveAAFDialogQt(); });
   QAction *paSaveQuick = pmenuOtherFormats->addAction(
     "Save Chart &Quick*Chart...");
-  QObject::connect(paSaveQuick, &QAction::triggered, pwind,
+  ConnectMenuQt(paSaveQuick, pwind,
     []() { ShowSaveQuickDialogQt(); });
   QAction *paSaveCalendar = pmenuOtherFormats->addAction(
     "Save Chart i&Calendar...");
-  QObject::connect(paSaveCalendar, &QAction::triggered, pwind,
+  ConnectMenuQt(paSaveCalendar, pwind,
     []() { ShowSaveCalendarDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paExportText = pmenu->addAction("Export Chart &Text Output...");
-  QObject::connect(paExportText, &QAction::triggered, pwind,
+  ConnectMenuQt(paExportText, pwind,
     []() { ShowExportTextDialogQt(); });
   QAction *paExportBmp = pmenu->addAction("Export Chart &Bitmap...");
-  QObject::connect(paExportBmp, &QAction::triggered, pwind,
+  ConnectMenuQt(paExportBmp, pwind,
     []() { ShowExportBitmapDialogQt(); });
   QMenu *pmenuVector = pmenu->addMenu("Export &Vector Format");
   QAction *paExportMeta = pmenuVector->addAction("Export Chart &Metafile...");
-  QObject::connect(paExportMeta, &QAction::triggered, pwind,
+  ConnectMenuQt(paExportMeta, pwind,
     []() { ShowExportMetafileDialogQt(); });
   QAction *paExportPS = pmenuVector->addAction("Export Chart &PostScript...");
-  QObject::connect(paExportPS, &QAction::triggered, pwind,
+  ConnectMenuQt(paExportPS, pwind,
     []() { ShowExportPSDialogQt(); });
   QAction *paExportSVG = pmenuVector->addAction("Export Chart &SVG...");
-  QObject::connect(paExportSVG, &QAction::triggered, pwind,
+  ConnectMenuQt(paExportSVG, pwind,
     []() { ShowExportSVGDialogQt(); });
   QAction *paExportWire = pmenuVector->addAction("Export Chart &Wireframe...");
-  QObject::connect(paExportWire, &QAction::triggered, pwind,
+  ConnectMenuQt(paExportWire, pwind,
     []() { ShowExportWireDialogQt(); });
   pmenu->addSeparator();
 
   QMenu *pmenuOpenBmp = pmenu->addMenu("Open Bit&map");
   QAction *paOpenBack = pmenuOpenBmp->addAction("Open Chart &Background...");
-  QObject::connect(paOpenBack, &QAction::triggered, pwind,
+  ConnectMenuQt(paOpenBack, pwind,
     []() { ShowOpenBackgroundDialogQt(); });
   QAction *paOpenWorld = pmenuOpenBmp->addAction("Open &World Map...");
-  QObject::connect(paOpenWorld, &QAction::triggered, pwind,
+  ConnectMenuQt(paOpenWorld, pwind,
     []() { ShowOpenWorldDialogQt(); });
   QAction *paFileSettings = pmenu->addAction("&File Settings...");
-  QObject::connect(paFileSettings, &QAction::triggered, pwind,
+  ConnectMenuQt(paFileSettings, pwind,
     []() { ShowFileSettingsDialogQt(); });
   pmenu->addSeparator();
 
   // Windows also has Print Setup here, which is its native printer
   // configuration dialog; Qt's print dialog covers that itself.
   QAction *paPrint = pmenu->addAction("P&rint...");
-  QObject::connect(paPrint, &QAction::triggered, pwind,
+  ConnectMenuQt(paPrint, pwind,
     []() { PrintChartQt(); });
   pmenu->addSeparator();
 
   QAction *paQuit = pmenu->addAction("E&xit");
-  QObject::connect(paQuit, &QAction::triggered, pwind,
+  ConnectMenuQt(paQuit, pwind,
     [pwind]() { pwind->close(); });
 }
 
@@ -1443,7 +1447,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   s_paGraphics = pmenu->addAction("Show &Graphics");
   s_paGraphics->setCheckable(fTrue);
   s_paGraphics->setChecked(us.fGraphics != 0);
-  QObject::connect(s_paGraphics, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(s_paGraphics, pwind, []() {
     us.fGraphics = !us.fGraphics;
     s_paGraphics->setChecked(us.fGraphics != 0);
     if (us.fGraphics)
@@ -1458,15 +1462,15 @@ static void BuildViewMenu(QMainWindow *pwind)
   // than not offering it.
   QMenu *pmenuWin = pmenu->addMenu("&Window Settings");
   QAction *paRedraw = pmenuWin->addAction("&Redraw Screen");
-  QObject::connect(paRedraw, &QAction::triggered, pwind,
+  ConnectMenuQt(paRedraw, pwind,
     []() { RedrawForceQt(); });
   QAction *paClear = pmenuWin->addAction("&Clear Screen");
-  QObject::connect(paClear, &QAction::triggered, pwind,
+  ConnectMenuQt(paClear, pwind,
     []() { ClearScreenQt(); });
   QAction *paHourglass = pmenuWin->addAction("&Hourglass on Redraw");
   paHourglass->setCheckable(true);
   paHourglass->setChecked(fHourglassQt != fFalse);
-  QObject::connect(paHourglass, &QAction::triggered, pwind,
+  ConnectMenuQt(paHourglass, pwind,
     [paHourglass]() {
       fHourglassQt = !fHourglassQt;
       paHourglass->setChecked(fHourglassQt != fFalse);
@@ -1476,7 +1480,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paChartWin = pmenuWin->addAction("Ch&art Resizes Window");
   paChartWin->setCheckable(true);
   paChartWin->setChecked(fChartWindowQt != fFalse);
-  QObject::connect(paChartWin, &QAction::triggered, pwind,
+  ConnectMenuQt(paChartWin, pwind,
     [paChartWin]() {
       fChartWindowQt = !fChartWindowQt;
       paChartWin->setChecked(fChartWindowQt != fFalse);
@@ -1486,21 +1490,21 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paWinChart = pmenuWin->addAction("&Window Resizes Chart");
   paWinChart->setCheckable(true);
   paWinChart->setChecked(fWindowChartQt != fFalse);
-  QObject::connect(paWinChart, &QAction::triggered, pwind,
+  ConnectMenuQt(paWinChart, pwind,
     [paWinChart]() {
       fWindowChartQt = !fWindowChartQt;
       paWinChart->setChecked(fWindowChartQt != fFalse);
       ApplySizeModeQt();
     });
   QAction *paSizeChart = pmenuWin->addAction("Si&ze Chart to Window");
-  QObject::connect(paSizeChart, &QAction::triggered, pwind,
+  ConnectMenuQt(paSizeChart, pwind,
     []() { SizeChartToWindowQt(); });
   QAction *paSizeWin = pmenuWin->addAction("&Size Window to Chart");
-  QObject::connect(paSizeWin, &QAction::triggered, pwind,
+  ConnectMenuQt(paSizeWin, pwind,
     []() { ResizeWindowToChartQt(); });
   QAction *paFull = pmenuWin->addAction("Size Window &Full Screen");
   paFull->setCheckable(true);
-  QObject::connect(paFull, &QAction::triggered, pwind,
+  ConnectMenuQt(paFull, pwind,
     [paFull]() {
       ToggleFullScreenQt();
       paFull->setChecked(gi.qwind != NULL && gi.qwind->isFullScreen());
@@ -1508,22 +1512,22 @@ static void BuildViewMenu(QMainWindow *pwind)
   pmenuWin->addSeparator();
 
   QAction *paScrollUp = pmenuWin->addAction("Scroll Page &Up");
-  QObject::connect(paScrollUp, &QAction::triggered, pwind,
+  ConnectMenuQt(paScrollUp, pwind,
     []() { ScrollChartQt(-1); });
   QAction *paScrollDown = pmenuWin->addAction("Scroll Page &Down");
-  QObject::connect(paScrollDown, &QAction::triggered, pwind,
+  ConnectMenuQt(paScrollDown, pwind,
     []() { ScrollChartQt(1); });
   QAction *paScrollHome = pmenuWin->addAction("Scroll &to Beginning");
-  QObject::connect(paScrollHome, &QAction::triggered, pwind,
+  ConnectMenuQt(paScrollHome, pwind,
     []() { ScrollChartQt(0); });
   QAction *paScrollEnd = pmenuWin->addAction("Scroll to &End");
-  QObject::connect(paScrollEnd, &QAction::triggered, pwind,
+  ConnectMenuQt(paScrollEnd, pwind,
     []() { ScrollChartQt(2); });
 
   QAction *paColorText = pmenu->addAction("&Colored Text");
   paColorText->setCheckable(true);
   paColorText->setChecked(us.fAnsiColor != 0);
-  QObject::connect(paColorText, &QAction::triggered, pwind,
+  ConnectMenuQt(paColorText, pwind,
     [paColorText]() {
       us.fAnsiColor = !us.fAnsiColor;
       us.fAnsiChar = !us.fAnsiChar;
@@ -1533,13 +1537,13 @@ static void BuildViewMenu(QMainWindow *pwind)
       RedrawQt();
     });
   QAction *paColors = pmenu->addAction("&Set Colors...");
-  QObject::connect(paColors, &QAction::triggered, pwind,
+  ConnectMenuQt(paColors, pwind,
     []() { ShowColorDialogQt(); });
   pmenu->addSeparator();
   QAction *paInterpret = pmenu->addAction("Show &Interpretations");
   paInterpret->setCheckable(true);
   paInterpret->setChecked(us.fInterpret != 0);
-  QObject::connect(paInterpret, &QAction::triggered, pwind,
+  ConnectMenuQt(paInterpret, pwind,
     [paInterpret]() {
       us.fInterpret = !us.fInterpret;
       paInterpret->setChecked(us.fInterpret != 0);
@@ -1558,7 +1562,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   s_paApplying = pmenu->addAction("&Applying Aspects");
   s_paApplying->setCheckable(true);
   s_paApplying->setChecked(us.nAppSep == 1);
-  QObject::connect(s_paApplying, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(s_paApplying, pwind, []() {
     us.nAppSep = !us.nAppSep;
     s_paApplying->setChecked(us.nAppSep == 1);
     RedrawQt();
@@ -1574,7 +1578,7 @@ static QAction *AddChartListNavAction(QMenu *pmenu, CONST char *szLabel,
   int nDir)
 {
   QAction *pa = pmenu->addAction(szLabel);
-  QObject::connect(pa, &QAction::triggered, pa, [nDir]() {
+  ConnectMenuQt(pa, pa, [nDir]() {
     if (is.cci <= 0) {
       QMessageBox::warning(gi.qwind, szAppName,
         "There is no chart list in memory.");
@@ -1599,27 +1603,27 @@ static void BuildInfoMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Info");
   QAction *paInfo = pmenu->addAction("Set Chart &Info...");
-  QObject::connect(paInfo, &QAction::triggered, pwind,
+  ConnectMenuQt(paInfo, pwind,
     []() { ShowChartInfoDialogQt(); });
   QAction *paNow = pmenu->addAction("Chart for &Now");
-  QObject::connect(paNow, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paNow, pwind, []() {
     FInputData(szNowCore);
     RecastAndRedrawQt();
   });
   QAction *paDefault = pmenu->addAction("D&efault Chart Info...");
-  QObject::connect(paDefault, &QAction::triggered, pwind,
+  ConnectMenuQt(paDefault, pwind,
     []() { ShowDefaultInfoDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paInfo2 = pmenu->addAction("Set Chart #&2 Info...");
-  QObject::connect(paInfo2, &QAction::triggered, pwind,
+  ConnectMenuQt(paInfo2, pwind,
     []() { ShowChartInfo2DialogQt(); });
   QAction *paInfoAll = pmenu->addAction("Charts #&3 Through #6...");
-  QObject::connect(paInfoAll, &QAction::triggered, pwind,
+  ConnectMenuQt(paInfoAll, pwind,
     []() { ShowChartsAllDialogQt(); });
   QMenu *pmenuList = pmenu->addMenu("Chart &List");
   QAction *paList = pmenuList->addAction("&Chart List...");
-  QObject::connect(paList, &QAction::triggered, pwind,
+  ConnectMenuQt(paList, pwind,
     []() { ShowChartListDialogQt(); });
   pmenuList->addSeparator();
   AddChartListNavAction(pmenuList, "&Previous Chart", -1);
@@ -1629,7 +1633,7 @@ static void BuildInfoMenu(QMainWindow *pwind)
   AddChartListNavAction(pmenuList, "&Last Chart", 2);
   pmenuList->addSeparator();
   QAction *paSwap = pmenuList->addAction("Swap Chart #&1 and #2");
-  QObject::connect(paSwap, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paSwap, pwind, []() {
     CI ciT;
     SwapTemp(ciCore, ciTwin, ciT);
     RecastAndRedrawQt();
@@ -1708,7 +1712,7 @@ static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
     pcat->pa = pa; pcat->pfield = pfield; pcat->lo = lo; pcat->hi = hi;
     pcat->fTransit = fTransit;
   }
-  QObject::connect(pa, &QAction::triggered, pa,
+  ConnectMenuQt(pa, pa,
     [pfield, pa, lo, hi, except]() {
       int i;
       if (pfield != NULL) {
@@ -1746,7 +1750,7 @@ static void BuildSettingMenu(QMainWindow *pwind)
   s_paHelio = pmenu->addAction("He&liocentric");
   s_paHelio->setCheckable(true);
   s_paHelio->setChecked(us.objCenter != oEar);
-  QObject::connect(s_paHelio, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(s_paHelio, pwind, []() {
     SetCentric(us.objCenter == oEar ? oSun : oEar);
     SyncHelioMenuQt();
     RecastAndRedrawQt();
@@ -1808,7 +1812,7 @@ static void BuildSettingMenu(QMainWindow *pwind)
   s_paSolar = pmenuHouseSet->addAction("&Solar Chart");
   s_paSolar->setCheckable(true);
   s_paSolar->setChecked(us.objOnAsc != 0);
-  QObject::connect(s_paSolar, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(s_paSolar, pwind, []() {
     us.objOnAsc = us.objOnAsc ? 0 : oSun+1;
     s_paSolar->setChecked(us.objOnAsc != 0);
     RecastAndRedrawQt();
@@ -1825,27 +1829,27 @@ static void BuildSettingMenu(QMainWindow *pwind)
   AddToggleAction(pmenuHouseSet, "Show &Navamsas", &us.fNavamsa, fTrue);
 
   QAction *paAspect = pmenu->addAction("&Aspect Settings...");
-  QObject::connect(paAspect, &QAction::triggered, pwind,
+  ConnectMenuQt(paAspect, pwind,
     []() { ShowAspectDialogQt(); });
   QAction *paObject = pmenu->addAction("&Object Settings...");
-  QObject::connect(paObject, &QAction::triggered, pwind,
+  ConnectMenuQt(paObject, pwind,
     []() { ShowObjectDialogQt(); });
   QAction *paObject2 = pmenu->addAction("More Ob&ject Settings...");
-  QObject::connect(paObject2, &QAction::triggered, pwind,
+  ConnectMenuQt(paObject2, pwind,
     []() { ShowObject2DialogQt(); });
   QAction *paObjectSel = pmenu->addAction("Object Selectio&ns...");
-  QObject::connect(paObjectSel, &QAction::triggered, pwind,
+  ConnectMenuQt(paObjectSel, pwind,
     []() { ShowObjectSelDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paRestrict = pmenu->addAction("&Restrictions...");
-  QObject::connect(paRestrict, &QAction::triggered, pwind,
+  ConnectMenuQt(paRestrict, pwind,
     []() { ShowRestrictDialogQt(); });
   QAction *paStarRestrict = pmenu->addAction("Star Restr&ictions...");
-  QObject::connect(paStarRestrict, &QAction::triggered, pwind,
+  ConnectMenuQt(paStarRestrict, pwind,
     []() { ShowStarRestrictDialogQt(); });
   QAction *paTransitRestrict = pmenu->addAction("&Transit Restrictions...");
-  QObject::connect(paTransitRestrict, &QAction::triggered, pwind,
+  ConnectMenuQt(paTransitRestrict, pwind,
     []() { ShowTransitRestrictDialogQt(); });
 
   QMenu *pmenuMoons = pmenu->addMenu("&Planetary Moons");
@@ -1855,17 +1859,17 @@ static void BuildSettingMenu(QMainWindow *pwind)
   AddChartModeTextAction(pmenuMoons, "&Exoplanets Chart", gExo);
   pmenuMoons->addSeparator();
   QAction *paMoonRestrict = pmenuMoons->addAction("Moon &Restrictions...");
-  QObject::connect(paMoonRestrict, &QAction::triggered, pwind,
+  ConnectMenuQt(paMoonRestrict, pwind,
     []() { ShowMoonRestrictDialogQt(); });
   QAction *paMoonObject = pmenuMoons->addAction("Moon &Object Settings...");
-  QObject::connect(paMoonObject, &QAction::triggered, pwind,
+  ConnectMenuQt(paMoonObject, pwind,
     []() { ShowMoonObjectDialogQt(); });
   pmenuMoons->addSeparator();
   QAction *paCustom = pmenuMoons->addAction("Object &Customization...");
-  QObject::connect(paCustom, &QAction::triggered, pwind,
+  ConnectMenuQt(paCustom, pwind,
     []() { ShowCustomDialogQt(); });
   QAction *paCustomS = pmenuMoons->addAction("&Star Customization...");
-  QObject::connect(paCustomS, &QAction::triggered, pwind,
+  ConnectMenuQt(paCustomS, pwind,
     []() { ShowCustomStarDialogQt(); });
   pmenu->addSeparator();
 
@@ -1886,10 +1890,10 @@ static void BuildSettingMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   QAction *paCalc = pmenu->addAction("Calculation Settin&gs...");
-  QObject::connect(paCalc, &QAction::triggered, pwind,
+  ConnectMenuQt(paCalc, pwind,
     []() { ShowCalcDialogQt(); });
   QAction *paDisplay = pmenu->addAction("&Display Settings...");
-  QObject::connect(paDisplay, &QAction::triggered, pwind,
+  ConnectMenuQt(paDisplay, pwind,
     []() { ShowDisplayDialogQt(); });
 }
 
@@ -1930,18 +1934,18 @@ static void BuildChartMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   QAction *paTransit = pmenu->addAction("&Transits...");
-  QObject::connect(paTransit, &QAction::triggered, pwind,
+  ConnectMenuQt(paTransit, pwind,
     []() { ShowTransitDialogQt(); });
   // Windows ticks this while progressions are on (WiCheckMenu with
   // cmdProgress in DlgProgress), so it does here too.
   s_paProgress = pmenu->addAction("&Progressions...");
   s_paProgress->setCheckable(fTrue);
   s_paProgress->setChecked(us.fProgress != 0);
-  QObject::connect(s_paProgress, &QAction::triggered, pwind,
+  ConnectMenuQt(s_paProgress, pwind,
     []() { ShowProgressDialogQt(); });
   pmenu->addSeparator();
   QAction *paSettings = pmenu->addAction("Chart &Settings...");
-  QObject::connect(paSettings, &QAction::triggered, pwind,
+  ConnectMenuQt(paSettings, pwind,
     []() { ShowChartSettingsDialogQt(); });
 }
 
@@ -1965,7 +1969,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paReverse = pmenu->addAction("&Reverse Background");
   paReverse->setCheckable(true);
   paReverse->setChecked(gs.fInverse != 0);
-  QObject::connect(paReverse, &QAction::triggered, pwind, [paReverse]() {
+  ConnectMenuQt(paReverse, pwind, [paReverse]() {
     gs.fInverse = !gs.fInverse;
     paReverse->setChecked(gs.fInverse != 0);
     InitColorPalette(gs.fInverse);
@@ -1974,7 +1978,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paMono = pmenu->addAction("&Monochrome");
   paMono->setCheckable(true);
   paMono->setChecked(!gs.fColor);
-  QObject::connect(paMono, &QAction::triggered, pwind, [paMono]() {
+  ConnectMenuQt(paMono, pwind, [paMono]() {
     gs.fColor = !gs.fColor;
     paMono->setChecked(!gs.fColor);
     us.fGraphics = fTrue;
@@ -1985,7 +1989,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   // chart's drawable area; here the chart's drawable area is however big
   // the canvas widget is, so resize the window that owns it instead.
   QAction *paSquare = pmenu->addAction("S&quare Screen");
-  QObject::connect(paSquare, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paSquare, pwind, []() {
     SquareX(&gs.xWin, &gs.yWin, fTrue);
     gi.qwind->resize(gs.xWin, gs.yWin);
     us.fGraphics = fTrue;
@@ -2000,22 +2004,22 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   AddSelectAction(pmenuScale, pgroupScale, "&Huge", 400, &gs.nScale, fFalse);
   pmenuScale->addSeparator();
   QAction *paScaleDn = pmenuScale->addAction("&Decrease");
-  QObject::connect(paScaleDn, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paScaleDn, pwind, []() {
     if (gs.nScale > 100) { gs.nScale -= 100; RedrawQt(); }
   });
   QAction *paScaleUp = pmenuScale->addAction("&Increase");
-  QObject::connect(paScaleUp, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paScaleUp, pwind, []() {
     if (gs.nScale < MAXSCALE) { gs.nScale += 100; RedrawQt(); }
   });
   pmenuScale->addSeparator();
   QAction *paTextDn = pmenuScale->addAction("D&ecrease Text");
-  QObject::connect(paTextDn, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paTextDn, pwind, []() {
     if (gs.nScaleText > 100) {
       gs.nScaleText -= 50; gs.fAutoScale = fFalse; RedrawQt();
     }
   });
   QAction *paTextUp = pmenuScale->addAction("I&ncrease Text");
-  QObject::connect(paTextUp, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paTextUp, pwind, []() {
     if (gs.nScaleText < MAXSCALE) {
       gs.nScaleText += 50; gs.fAutoScale = fFalse; RedrawQt();
     }
@@ -2027,7 +2031,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paSidebar = pmenuEffects->addAction("Show Info &Sidebar");
   paSidebar->setCheckable(true);
   paSidebar->setChecked(gs.fDoSidebar != 0);
-  QObject::connect(paSidebar, &QAction::triggered, pwind, [paSidebar]() {
+  ConnectMenuQt(paSidebar, pwind, [paSidebar]() {
     gs.fDoSidebar = !gs.fDoSidebar;
     paSidebar->setChecked(gs.fDoSidebar != 0);
     if (gs.fDoSidebar)
@@ -2047,7 +2051,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paConstel = pmenuMap->addAction("Show &Constellations");
   paConstel->setCheckable(true);
   paConstel->setChecked(gs.fConstel != 0);
-  QObject::connect(paConstel, &QAction::triggered, pwind, [paConstel]() {
+  ConnectMenuQt(paConstel, pwind, [paConstel]() {
     gs.fConstel = !gs.fConstel;
     paConstel->setChecked(gs.fConstel != 0);
     us.fGraphics = fTrue;
@@ -2066,7 +2070,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paStarLine = pmenuMap->addAction("Show Constellation &Lines");
   paStarLine->setCheckable(true);
   paStarLine->setChecked(s_fStarLine != 0);
-  QObject::connect(paStarLine, &QAction::triggered, pwind, [paStarLine]() {
+  ConnectMenuQt(paStarLine, pwind, [paStarLine]() {
     CONST char **ppch;
     s_fStarLine = !s_fStarLine;
     paStarLine->setChecked(s_fStarLine != 0);
@@ -2090,7 +2094,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
 
   QMenu *pmenuOrient = pmenu->addMenu("Map &Orientation");
   QAction *paRotWest = pmenuOrient->addAction("Rotate &West");
-  QObject::connect(paRotWest, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paRotWest, pwind, []() {
     real r = (real)NAbs(gi.nDir) *
       (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
     if (gi.nMode == gMidpoint || gi.nMode == gTelescope) {
@@ -2105,7 +2109,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
     RedrawQt();
   });
   QAction *paRotEast = pmenuOrient->addAction("Rotate &East");
-  QObject::connect(paRotEast, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paRotEast, pwind, []() {
     real r = (real)NAbs(gi.nDir) *
       (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
     if (gi.nMode == gMidpoint || gi.nMode == gTelescope) {
@@ -2121,7 +2125,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   });
   pmenuOrient->addSeparator();
   QAction *paTiltNorth = pmenuOrient->addAction("Tilt &North");
-  QObject::connect(paTiltNorth, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paTiltNorth, pwind, []() {
     real r = (real)NAbs(gi.nDir) *
       (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
     if (gs.rTilt > -rDegQuad) {
@@ -2135,7 +2139,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
     RedrawQt();
   });
   QAction *paTiltSouth = pmenuOrient->addAction("Tilt &South");
-  QObject::connect(paTiltSouth, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paTiltSouth, pwind, []() {
     real r = (real)NAbs(gi.nDir) *
       (gi.nMode == gTelescope || gi.nMode == gLocal ? gi.zViewRatio : 1.0);
     if (gs.rTilt < rDegQuad) {
@@ -2150,7 +2154,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   });
   pmenuOrient->addSeparator();
   QAction *paTiltZero = pmenuOrient->addAction("Set Tilt to &Zero");
-  QObject::connect(paTiltZero, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paTiltZero, pwind, []() {
     gs.rTilt = 0.0;
     us.fGraphics = fTrue;
     if (gi.nMode != gTelescope && gi.nMode != gSphere && gi.nMode != gGlobe)
@@ -2160,7 +2164,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   });
   pmenuOrient->addSeparator();
   QAction *paZoomOut = pmenuOrient->addAction("Zoom &Out");
-  QObject::connect(paZoomOut, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paZoomOut, pwind, []() {
     real r = gs.rspace;
     if (r < rSmall)
       r = (real)(1 << (4 - gi.nScale/gi.nScaleT));
@@ -2172,7 +2176,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
     }
   });
   QAction *paZoomIn = pmenuOrient->addAction("Zoom &In");
-  QObject::connect(paZoomIn, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paZoomIn, pwind, []() {
     real r = gs.rspace;
     if (r < rSmall)
       r = (real)(1 << (4 - gi.nScale/gi.nScaleT));
@@ -2190,18 +2194,18 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
     fFalse);
   pmenuIndian->addSeparator();
   QAction *paIndianS = pmenuIndian->addAction("Draw &South Indian");
-  QObject::connect(paIndianS, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paIndianS, pwind, []() {
     gs.fIndianWheel = fTrue;
     gs.fHouseExtra = fFalse;
     SetChartModeQt(gWheel);
   });
   QAction *paIndianN = pmenuIndian->addAction("Draw &North Indian");
-  QObject::connect(paIndianN, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paIndianN, pwind, []() {
     gs.fIndianWheel = fTrue;
     SetChartModeQt(gHouse);
   });
   QAction *paIndianE = pmenuIndian->addAction("Draw &East Indian");
-  QObject::connect(paIndianE, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paIndianE, pwind, []() {
     gs.fIndianWheel = fTrue;
     gs.fHouseExtra = fTrue;
     SetChartModeQt(gWheel);
@@ -2213,7 +2217,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   // bypasses the usual us.f* chart-type flags entirely -- ported as is,
   // not cleaned up, since that's exactly what Windows itself does here.
   QAction *paChartModify = pmenu->addAction("Modif&y Chart");
-  QObject::connect(paChartModify, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paChartModify, pwind, []() {
     inv(us.fGridMidpoint);
     inv(us.fPrimeVert);
     inv(us.fCalendarYear);
@@ -2248,7 +2252,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   AddSelectAction(pmenuPen, pgroupPen, "&Dk. Cyan", 6, &gi.kiPen, fFalse);
 
   QAction *paGraphicsSettings = pmenu->addAction("&Graphics Settings...");
-  QObject::connect(paGraphicsSettings, &QAction::triggered, pwind,
+  ConnectMenuQt(paGraphicsSettings, pwind,
     []() { ShowGraphicsSettingsDialogQt(); });
 }
 
@@ -2336,7 +2340,7 @@ static void BuildMacroMenus(QMenu *pmenu, QMainWindow *pwind)
       // The shortcut makes the key work without opening the menu, which
       // is how Windows' accelerator table has it.
       pa->setShortcut(QKeySequence(SzMacroKeyQt(iSet, iKey)));
-      QObject::connect(pa, &QAction::triggered, pwind,
+      ConnectMenuQt(pa, pwind,
         [iMacro]() { RunMacroQt(iMacro); });
     }
     // Windows breaks its eight submenus into two groups of four.
@@ -2357,35 +2361,35 @@ static void BuildEditMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Edit");
   QAction *paCommand = pmenu->addAction("Enter Command &Line...");
-  QObject::connect(paCommand, &QAction::triggered, pwind,
+  ConnectMenuQt(paCommand, pwind,
     []() { ShowCommandLineDialogQt(); });
   pmenu->addSeparator();
   BuildMacroMenus(pmenu, pwind);
   pmenu->addSeparator();
   QAction *paPaste = pmenu->addAction("&Paste");
-  QObject::connect(paPaste, &QAction::triggered, pwind,
+  ConnectMenuQt(paPaste, pwind,
     []() { PasteChartQt(); });
   pmenu->addSeparator();
   pmenu->addSeparator();
 
   QAction *paCopyText = pmenu->addAction("Copy Chart &Text Output");
-  QObject::connect(paCopyText, &QAction::triggered, pwind,
+  ConnectMenuQt(paCopyText, pwind,
     []() { CopyChartTextQt(); });
   QAction *paCopyBmp = pmenu->addAction("Copy Chart &Bitmap");
-  QObject::connect(paCopyBmp, &QAction::triggered, pwind,
+  ConnectMenuQt(paCopyBmp, pwind,
     []() { CopyChartBitmapQt(); });
   QMenu *pmenuCopyVector = pmenu->addMenu("Copy &Vector Format");
   QAction *paCopyMeta = pmenuCopyVector->addAction("Copy Chart &Metafile");
-  QObject::connect(paCopyMeta, &QAction::triggered, pwind,
+  ConnectMenuQt(paCopyMeta, pwind,
     []() { CopyChartMetafileQt(); });
   QAction *paCopyPS = pmenuCopyVector->addAction("Copy Chart &PostScript");
-  QObject::connect(paCopyPS, &QAction::triggered, pwind,
+  ConnectMenuQt(paCopyPS, pwind,
     []() { CopyChartPSQt(); });
   QAction *paCopySVG = pmenuCopyVector->addAction("Copy Chart &SVG");
-  QObject::connect(paCopySVG, &QAction::triggered, pwind,
+  ConnectMenuQt(paCopySVG, pwind,
     []() { CopyChartSVGQt(); });
   QAction *paCopyWire = pmenuCopyVector->addAction("Copy Chart &Wireframe");
-  QObject::connect(paCopyWire, &QAction::triggered, pwind,
+  ConnectMenuQt(paCopyWire, pwind,
     []() { CopyChartWireQt(); });
 }
 
@@ -2408,6 +2412,39 @@ static flag s_fWindPosQt = fFalse;
 // The animation interval, in milliseconds. Windows keeps this in
 // wi.nTimerDelay, which is Win32-only, so the Qt build owns its own copy;
 // Graphics Settings edits it through these.
+// Two readbacks the AstroExpression functions need, so express.cpp can
+// answer "Dlg" and "Mouse" here as it does on Windows. The "-W" settings
+// they sit beside already have accessors; autosave and the screen saver
+// have no counterpart in this build and report off. See item 46.
+
+// Windows' KvDialog(): put up the colour picker and return what was
+// chosen, or the current foreground colour if the user cancelled.
+
+KV KvDialogQt()
+{
+  KV kv = KvFromKi(gi.kiOn);
+  QColor col = QColorDialog::getColor(
+    QColor(RgbR(kv), RgbG(kv), RgbB(kv)), gi.qwind, "Choose Color");
+
+  if (!col.isValid())
+    return kv;
+  return Rgb(col.red(), col.green(), col.blue());
+}
+
+
+// Windows maps the cursor to client coordinates; the equivalent here is
+// the canvas the chart is painted on.
+
+void MousePosQt(int *px, int *py)
+{
+  QPoint pt = QCursor::pos();
+
+  if (gi.qcanvas != NULL)
+    pt = gi.qcanvas->mapFromGlobal(pt);
+  *px = pt.x(); *py = pt.y();
+}
+
+
 int NAnimDelayQt()
 {
   return s_nTimerDelay;
@@ -2590,7 +2627,7 @@ static QAction *AddAnimRateAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(NAbs(gs.nAnim) == rate);
-  QObject::connect(pa, &QAction::triggered, pa, [rate]() {
+  ConnectMenuQt(pa, pa, [rate]() {
     gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * rate;
   });
   return pa;
@@ -2603,7 +2640,7 @@ static QAction *AddAnimFactorAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(NAbs(gi.nDir) == factor);
-  QObject::connect(pa, &QAction::triggered, pa, [factor]() {
+  ConnectMenuQt(pa, pa, [factor]() {
     gi.nDir = (gi.nDir > 0 ? 1 : -1) * factor;
   });
   return pa;
@@ -2618,14 +2655,14 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   QAction *paAnim = pmenu->addAction("Do &Animation");
   paAnim->setCheckable(true);
   paAnim->setChecked(gs.nAnim > 0);
-  QObject::connect(paAnim, &QAction::triggered, pwind, [paAnim]() {
+  ConnectMenuQt(paAnim, pwind, [paAnim]() {
     neg(gs.nAnim);
     paAnim->setChecked(gs.nAnim > 0);
   });
 
   QMenu *pmenuRate = pmenu->addMenu("&Jump Rate");
   QAction *paNow = pmenuRate->addAction("Update to &Now");
-  QObject::connect(paNow, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paNow, pwind, []() {
     gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * iAnimNow;
   });
   pmenuRate->addSeparator();
@@ -2659,7 +2696,7 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   QAction *paReverse = pmenu->addAction("&Reverse Direction");
   paReverse->setCheckable(true);
   paReverse->setChecked(gi.nDir < 0);
-  QObject::connect(paReverse, &QAction::triggered, pwind, [paReverse]() {
+  ConnectMenuQt(paReverse, pwind, [paReverse]() {
     neg(gi.nDir);
     paReverse->setChecked(gi.nDir < 0);
     if (gs.nAnim < 0)
@@ -2671,21 +2708,21 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   QAction *paForward = pmenu->addAction("Step &Forward");
-  QObject::connect(paForward, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paForward, pwind, []() {
     Animate(NAbs(gs.nAnim) == iAnimNow ? iAnimDay : gs.nAnim, NAbs(gi.nDir));
     RecastAndRedrawQt();
   });
   QAction *paBackward = pmenu->addAction("Step &Backward");
-  QObject::connect(paBackward, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paBackward, pwind, []() {
     Animate(NAbs(gs.nAnim) == iAnimNow ? iAnimDay : gs.nAnim, -NAbs(gi.nDir));
     RecastAndRedrawQt();
   });
   pmenu->addSeparator();
   QAction *paStore = pmenu->addAction("&Store Chart Info");
-  QObject::connect(paStore, &QAction::triggered, pwind,
+  ConnectMenuQt(paStore, pwind,
     []() { ciSave = ciMain; });
   QAction *paRecall = pmenu->addAction("Re&call Chart Info");
-  QObject::connect(paRecall, &QAction::triggered, pwind, []() {
+  ConnectMenuQt(paRecall, pwind, []() {
     ciMain = ciCore = ciSave;
     RecastAndRedrawQt();
   });
@@ -2714,7 +2751,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
   for (i = 0; i < 9; i++) {
     QAction *pa = pmenu->addAction(rgszLabel[i]);
     CONST char *szFile = rgszDoc[i];
-    QObject::connect(pa, &QAction::triggered, pwind, [szFile]() {
+    ConnectMenuQt(pa, pwind, [szFile]() {
       char szPath[cchSzMax];
       if (FileOpen(szFile, 2, szPath) != NULL)
         QDesktopServices::openUrl(QUrl::fromLocalFile(szPath));
@@ -2733,7 +2770,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
   for (i = 0; i < 2; i++) {
     QAction *pa = pmenu->addAction(rgszWebsiteLabel[i]);
     CONST char *szFile = rgszWebsite[i];
-    QObject::connect(pa, &QAction::triggered, pwind, [szFile]() {
+    ConnectMenuQt(pa, pwind, [szFile]() {
       char szPath[cchSzMax];
       if (FileOpen(szFile, 2, szPath) == NULL) {
         QMessageBox::warning(gi.qwind, szAppName,
@@ -2770,7 +2807,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   QAction *paAbout = pmenu->addAction("&About Astrolog...");
-  QObject::connect(paAbout, &QAction::triggered, pwind,
+  ConnectMenuQt(paAbout, pwind,
     []() { ShowAboutDialogQt(); });
 }
 
@@ -3151,6 +3188,62 @@ static CONST HOTKEY rghotkeyQt[] = {
 #define chotkeyQt (int)(sizeof(rghotkeyQt) / sizeof(HOTKEY))
 
 #include "qtrcaccel.h"
+#include "qtrccmd.h"
+
+// Windows hands every menu choice to one WM_COMMAND switch, and applies
+// the "-~WQ" AstroExpression (us.szExpMenu) to the command id before the
+// switch runs -- so an expression can veto a command or swap it for
+// another. This port binds each action to its own handler and had no id
+// to hand over, which is why the hook was unimplemented.
+//
+// ConnectMenuQt() supplies the missing half without giving every call
+// site a command constant: it looks the id up from the action's own
+// label, and records the handler against that id so a substituted
+// command can be dispatched to the right place. Actions whose label is
+// not in the resource (the runtime-renamed macros, the website links)
+// get a plain connection and simply do not take part.
+static QVector<QPair<int, std::function<void()> > > s_rgcmdfnQt;
+
+static int NCmdFromLabelQt(CONST QString &str)
+{
+  QString strT = str.section(QChar('\t'), 0, 0);
+  int i;
+
+  for (i = 0; i < ccmdQt; i++)
+    if (strT == QString(rgcmdQt[i].szLabel))
+      return rgcmdQt[i].cmd;
+  return 0;
+}
+
+static void ConnectMenuQt(QAction *pa, QObject *pctx,
+  std::function<void()> fn)
+{
+  int cmd = NCmdFromLabelQt(pa->text());
+
+  if (cmd > 0)
+    s_rgcmdfnQt.append(qMakePair(cmd, fn));
+  QObject::connect(pa, &QAction::triggered, pctx, [cmd, fn]() {
+    int n = cmd;
+#ifdef EXPRESS
+    if (!us.fExpOff && FSzSet(us.szExpMenu) && cmd > 0) {
+      ExpSetN(iLetterZ, cmd);
+      ParseExpression(us.szExpMenu);
+      n = NExpGet(iLetterZ);
+    }
+#endif
+    if (n == cmd) {
+      fn();
+      return;
+    }
+    if (n <= 0)                      // Expression vetoed the command.
+      return;
+    for (int i = 0; i < s_rgcmdfnQt.size(); i++)
+      if (s_rgcmdfnQt[i].first == n) {
+        s_rgcmdfnQt[i].second();
+        return;
+      }
+  });
+}
 
 #ifdef QTTEST
 // The suite checks every label here still names a menu item.
@@ -3732,7 +3825,7 @@ static QMenu *PmenuBuildContextQt(CONST CTXITEM *rgitem, int citem)
     pa->setCheckable(paSrc->isCheckable());
     pa->setChecked(paSrc->isChecked());
     pa->setEnabled(paSrc->isEnabled());
-    QObject::connect(pa, &QAction::triggered, pa,
+    ConnectMenuQt(pa, pa,
       [paSrc]() { paSrc->trigger(); });
   }
   return pmenu;

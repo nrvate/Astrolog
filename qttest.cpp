@@ -1147,6 +1147,54 @@ static void FilterChartListQt()
 // Qt's rendering of the key sequence; see plan item 44. Every label in the
 // generated table has to still name a real menu item, or the column
 // silently goes missing for it.
+// Evaluate an AstroExpression and return what it left in @z.
+static int NExpEvalQt(CONST char *sz)
+{
+  char szT[cchSzMax];
+
+  ExpSetN(iLetterZ, -999);
+  sprintf(szT, "=z %s", sz);
+  ParseExpression(szT);
+  return NExpGet(iLetterZ);
+}
+
+
+// The twelve expression functions that were "#ifdef WIN" only, plus a
+// "QT" to sit beside "WIN" and "X11"; see plan item 46.
+static void TestExpressionFunctionsQt()
+{
+  int nDelaySav = NAnimDelayQt();
+  flag fPopupSav = FNoPopupQt();
+
+  Group("AstroExpression functions");
+  Check(NExpEvalQt("QT") == 1, "an expression can tell it is the Qt build");
+  Check(NExpEvalQt("WIN") == 0, "and that it is not Windows");
+  Check(NExpEvalQt("X11") == 0, "and not X11 either");
+
+  // Read live settings back, not constants: set one and see it change.
+  SetAnimDelayQt(137);
+  Check(NExpEvalQt("_WN") == 137, "_WN reads the animation delay (%d)",
+    NExpEvalQt("_WN"));
+  SetAnimDelayQt(42);
+  Check(NExpEvalQt("_WN") == 42, "and follows it when it changes (%d)",
+    NExpEvalQt("_WN"));
+  SetAnimDelayQt(nDelaySav);
+
+  SetNoPopupQt(fTrue);
+  Check(NExpEvalQt("_Wt") == 1, "_Wt reads the no-popup setting");
+  SetNoPopupQt(fFalse);
+  Check(NExpEvalQt("_Wt") == 0, "and follows it when it changes");
+  SetNoPopupQt(fPopupSav);
+
+  // Autosave and the screen saver have no counterpart in this build, so
+  // they report off rather than pretending to a setting that isn't there.
+  Check(NExpEvalQt("_Wo") == 0 && NExpEvalQt("_Wo0") == 0 &&
+    NExpEvalQt("_Wo3") == 0, "autosave reports off, having no counterpart");
+  Check(NExpEvalQt("_WZ") == 0, "and so does the screen saver");
+  printf("  the Windows-only expression functions answer here too\n");
+}
+
+
 static void TestAccelTextQt()
 {
   int i, j, cFound = 0, cShown = 0, cWant = 0;
@@ -1223,7 +1271,37 @@ static void TestExpressionHooksQt()
   us.fExpOff = fFalse;
 
   us.szExpDisp3 = szSav;
-  printf("  the redraw notification hook fires\n");
+
+  // "-~WQ": Windows applies this to the command id before dispatching, so
+  // an expression can veto a menu command or swap it for another. This
+  // port had no command id at dispatch until ConnectMenuQt(); see item 45.
+  char *szMenuSav = us.szExpMenu;
+  QAction *paGrid = PaFindActionTestQt("Aspect Midpoint &Grid");
+  int nModeSav = gi.nMode;
+
+  Check(paGrid != NULL, "the Aspect Midpoint Grid item is there to fire");
+  if (paGrid != NULL) {
+    SetChartModeQt(gWheel);
+    us.szExpMenu = SzClone("=z 0");        // veto whatever was chosen
+    paGrid->trigger();
+    Check(gi.nMode == gWheel,
+      "a menu command an expression returns 0 for does not run (mode %d)",
+      gi.nMode);
+
+    us.szExpMenu = SzClone("=z 40057");    // cmdChartWheel
+    paGrid->trigger();
+    Check(gi.nMode == gHouse,
+      "and one swapped for another command runs that one (mode %d)",
+      gi.nMode);
+
+    us.szExpMenu = NULL;
+    paGrid->trigger();
+    Check(gi.nMode == gGrid,
+      "with no expression the command runs as itself (mode %d)", gi.nMode);
+  }
+  us.szExpMenu = szMenuSav;
+  SetChartModeQt(nModeSav);
+  printf("  the redraw and menu command hooks both fire\n");
 }
 
 
@@ -1664,12 +1742,6 @@ static void ProbeQt()
   // SetChartModeQt() or a dialog function, save gi.qim and measure it.
   SetChartModeQt(gWheel);
   RedrawQt();
-  if (gi.qim != NULL) {
-    gi.qim->save("/tmp/wedge-qt.png");
-    printf("saved %dx%d\n", gi.qim->width(), gi.qim->height());
-  }
-  SetChartModeQt(gWheel);
-  RedrawQt();
   printf("probe: mode=%d image=%dx%d\n", gi.nMode,
     gi.qim != NULL ? gi.qim->width() : 0,
     gi.qim != NULL ? gi.qim->height() : 0);
@@ -1705,6 +1777,7 @@ int NRunQtTestsQt()
   TestChartListFilterQt();
   TestExpressionHooksQt();
   TestAccelTextQt();
+  TestExpressionFunctionsQt();
   TestObjSelTableQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",

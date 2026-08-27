@@ -73,6 +73,13 @@ void SyncRestrictMenuQt();
 // Windows' Win32-only wi.nTimerDelay. Graphics Settings edits it; the
 // setter retimes the running animation timer immediately.
 int NAnimDelayQt();
+
+// Readbacks for the AstroExpression functions in express.cpp: the
+// hourglass setting, Windows' KvDialog() colour picker, and the cursor
+// position in canvas coordinates.
+flag FHourglassQt();
+KV KvDialogQt();
+void MousePosQt(int *px, int *py);
 void SetAnimDelayQt(int nDelay);
 
 // Chart-type flags around a run of command switches. Snapshot before,

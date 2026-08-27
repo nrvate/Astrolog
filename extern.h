@@ -1066,6 +1066,21 @@ extern flag FActionX P((void));
 #endif // GRAPH
 
 
+#ifdef QT
+// From qtdriver.cpp, for the AstroExpression functions in express.cpp.
+// Declared here rather than in qtdriver.h because that header pulls in Qt
+// itself, and express.cpp has no business including it.
+
+extern flag FNoUpdateQt P((void));
+extern flag FNoPopupQt P((void));
+extern flag FBmpWindowQt P((void));
+extern flag FHourglassQt P((void));
+extern int NAntialiasQt P((void));
+extern int NAnimDelayQt P((void));
+extern KV KvDialogQt P((void));
+extern void MousePosQt P((int *, int *));
+#endif
+
 #ifdef WIN
 // From wdriver.cpp
 

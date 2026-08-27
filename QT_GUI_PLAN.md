@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2820
+   display and no `xdotool`, and exits non-zero on failure. **2833
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1733,7 +1733,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2820 -- turned up something worse than the
+    totals -- 2785 against 2833 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -1852,18 +1852,13 @@ are the more useful half to read before starting something new.
     - **`szExpKey`** (adjust a key press) -- fires only from that same
       X11-only block, so **Windows does not fire it either**. Not a parity
       gap, and not something to "fix" without deciding it is wanted.
-    - **`szExpMenu`** (adjust a menu command before it runs) -- Windows
-      only, and **deliberately still missing**. It hands the expression a
-      numeric `cmd*` id and dispatches whatever id comes back. This port
-      binds every action by *label*, with no id at dispatch, so honouring
-      it means building a label-to-command map and rerouting dispatch
-      through it. That is a design change, not a port.
-    - Separately, **twelve expression *functions*** are `#ifdef WIN`
-      (`cfunW`): `Dlg`, `Mouse`, and ten readbacks of `-W` settings. Ten
-      of those settings exist here but are reached through accessors like
-      `NAnimDelayQt()` rather than a `wi` struct, which this build does not
-      have at all. There is also `funWin` and `funX11` but no `funQt`, so
-      an expression can identify every backend except this one.
+    - **`szExpMenu`** (adjust a menu command before it runs) -- **done
+      2026-08-27**, see item 45. It did need the label-to-command map and
+      the dispatch reroute this entry called a design change; that turned
+      out to be about forty lines and one scripted substitution.
+    - Separately, **twelve expression *functions*** were `#ifdef WIN`
+      (`cfunW`), and a `funQt` was missing beside `funWin`/`funX11`.
+      **Both done 2026-08-27**, see item 46.
 
 44. **~~The menu accelerator column~~** -- **fixed 2026-08-27**, and it
     was the only divergence a user met on every menu. Qt draws that column
@@ -1897,6 +1892,54 @@ are the more useful half to read before starting something new.
       first regeneration looked inert and the suite reported a count from
       a stale object file. Exactly item 31's trap in a new place; all
       three makefiles now declare it.
+
+45. **`szExpMenu`: giving the port a command id to hand over.** Windows
+    routes every menu choice through one `WM_COMMAND` switch and applies
+    the `-~WQ` expression to the id *before* the switch, so a script can
+    veto a command or swap it for another. This port binds each action to
+    its own handler by label and had no id at dispatch, which is why the
+    hook was unimplemented and why item 43 called fixing it a design
+    change rather than a port.
+    - It is a design change, but a small one. `tools/rc_cmd.py` generates
+      the label-to-id map from the menu bar block of astrolog.rc and
+      resource.h (366 items, every one resolving to a number), and
+      `ConnectMenuQt()` replaces the bare `QObject::connect(pa,
+      &QAction::triggered, ...)` at all 114 call sites -- a scripted
+      substitution, since every site had the same shape. It looks the id
+      up from the action's *own label*, so no call site needed a command
+      constant, and it records each handler against its id so a
+      substituted command can be dispatched to the right place.
+    - Verified all three ways Windows behaves: an expression returning 0
+      vetoes (mode stayed `gWheel`), returning another id runs that
+      command instead (`40057` on the Grid item gave `gHouse`), and with
+      no expression the item runs as itself (`gGrid`).
+    - Actions whose label is not in the resource -- the runtime-renamed
+      macros, the website links -- get a plain connection and simply do
+      not take part, which is the same set the accelerator table skips.
+
+46. **The twelve Windows-only expression functions, and a `funQt`.**
+    `express.cpp` guarded `Dlg`, `Mouse` and ten readbacks of `-W`
+    settings with `#ifdef WIN`, so a script reading `_WN` worked on
+    Windows and failed here as an unknown function -- and `funWin` and
+    `funX11` existed with nothing to identify this build.
+    - Six of the ten settings map straight onto accessors this port
+      already had (`NAnimDelayQt`, `FNoUpdateQt`, `FNoPopupQt`,
+      `FBmpWindowQt`, `NAntialiasQt`, `FHourglassQt`). **Autosave and the
+      screen saver report off**, because neither exists in this build; a
+      readback that invented a value would be worse than one that says no.
+    - `Dlg` and `Mouse` needed real work rather than a readback:
+      `KvDialogQt()` puts up a `QColorDialog` and returns the chosen
+      colour the way Windows' `KvDialog()` does, and `MousePosQt()` maps
+      the cursor into canvas coordinates as Windows maps it into client
+      ones.
+    - Declared in extern.h rather than qtdriver.h, because that header
+      pulls in Qt itself and express.cpp has no business including it.
+    - The test reads settings back *after changing them* rather than
+      asserting a constant: `_WN` follows `SetAnimDelayQt()` from 137 to
+      42, `_Wt` follows `SetNoPopupQt()` both ways. An accessor wired to
+      the wrong variable would pass a fixed-value check.
+    - `cfunA` goes 484 to 485 for the new `QT` function, which is a shared
+      count every build sees.
 
 ## Features this fork adds to both builds
 
@@ -2232,7 +2275,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2820 assertions covering dialog titles, the 42 context menus,
+  failure. 2833 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window
