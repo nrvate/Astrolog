@@ -278,42 +278,49 @@ in 30–55ms. If something takes seconds, it is not drawing.
 ## Finding memory bugs: build the suite under AddressSanitizer
 
 A fault that happens once and will not happen again is almost never a
-logic error you can read your way to. Build the suite with ASan and it
-becomes deterministic — it reports the exact line, the array, and how far
-outside it the access went, on the run where the damage is *done* rather
-than the later run where the program falls over.
+logic error you can read your way to. ASan makes it deterministic — it
+names the line, the array, and how far outside it the access went, on the
+run where the damage is *done* rather than the later run where the
+program falls over.
 
-Nothing in the repo needs changing; override the flags and the output
-paths so the normal build is untouched:
+**`Makefile.qt.asan` already exists for this.** It is `Makefile.qt.test`
+with `-fsanitize=address -g -O0` and its own name and object directory,
+so it never clobbers the normal build:
 
 ```sh
-QC=$(pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Network Qt5Test)
-QL=$(pkg-config --libs   Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Network Qt5Test)
-make -f Makefile.qt.test -j4 OBJDIR=obj-qt-asan NAME=astrolog-qt-asan \
-  CPPFLAGS="-DQT -DQTTEST -O1 -g -fsanitize=address -fno-omit-frame-pointer \
-            -fPIC -Wno-write-strings -Wno-narrowing -Wno-comment $QC" \
-  LIBS="$QL -lm -ldl -fsanitize=address"
-
+make -f Makefile.qt.asan -j4
 env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
-  ASAN_OPTIONS=detect_leaks=0 ./astrolog-qt-asan -i nrvate.as
+  ASAN_OPTIONS=detect_leaks=0 timeout 600 ./astrolog-qt-asan -i nrvate.as
 ```
 
-`detect_leaks=0` matters: Qt does not free everything it allocates at
-exit, and the leak report buries any real finding. Turn it on only when
-leaks are what you are hunting. Expect the run to take minutes rather
-than seconds, which is why this is not a pre-commit check.
+`detect_leaks=0` matters: Qt does not free everything at exit and the
+leak report buries any real finding. Turn it on only when leaks are what
+you are hunting. Expect minutes rather than seconds — hence the
+`timeout`, which is not optional courtesy: a run that goes wrong here
+goes wrong by *hanging*, not by failing.
 
-The suite is a good host for it because it already renders all 26 chart
-types and fires all 338 menu items — so one run exercises far more of the
-program than a person clicking would. It found the esoteric-influence
-stack underflow (plan item 37) on its first run, in shared upstream code
-that had nothing to do with the crash actually being chased. `ProbeQt()`
-works under ASan too, which is how a second instance of the same bug in
-`-j0` was confirmed rather than merely suspected from reading.
+The suite is a good host because it already renders 26 chart types and
+fires all 338 menu items, so one run exercises far more than a person
+clicking could. `ProbeQt()` works under ASan too, which is how the
+second instance of the esoteric-influence bug was confirmed rather than
+merely suspected from reading. Between them, ASan has found four real
+out-of-bounds bugs in this program's own chart code (plan items 24 and
+37), every one of them silent in a normal build.
 
-A caveat worth knowing: ASan stops at the *first* error, so a fix can
-reveal the next one immediately behind it. That happened here — line 1342
-hid line 1456. Re-run after every fix until it is silent.
+Two things that cost time here:
+
+- **ASan stops at the first error**, so a fix can reveal the next one
+  immediately behind it — line 1342 hid line 1456 entirely. Re-run after
+  every fix until it is silent. One clean report proves nothing if the
+  first error aborted the run.
+- **Everything runs about ten times slower**, which loses races the
+  normal build wins. The suite's modal-closing timers scale off
+  `__SANITIZE_ADDRESS__` for exactly that reason; before they did, a
+  dialog appeared after its own auto-close timer had fired and the run
+  waited forever for a click nobody was there to give. If an ASan run
+  seems endless, check it the way "When something stops rather than
+  slows" says to before assuming it is just slow: 39 seconds of CPU
+  against 19 minutes of wall clock is a dialog, not a sanitizer.
 
 ## Build traps
 

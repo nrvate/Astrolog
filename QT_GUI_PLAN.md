@@ -1525,9 +1525,17 @@ are the more useful half to read before starting something new.
     - Building the suite under ASan settled it in one run. It is a good
       host: it already renders 26 chart types and fires all 338 menu
       items, so it exercises far more of the program in a minute than a
-      person clicking could in an hour. The recipe is in `QT_TESTING.md`;
-      it needs no change to any Makefile, only variable overrides and its
-      own object directory.
+      person clicking could in an hour.
+    - **`Makefile.qt.asan` already existed**, from item 24's three
+      out-of-bounds fixes two days earlier, and this session rebuilt the
+      whole setup by hand with variable overrides before noticing — then
+      wrote it up that way, telling the next person no Makefile was
+      needed. Item 34's lesson exactly, missed again. The sweep that
+      should have caught it enumerated every `getenv()` knob and every
+      `tools/` script against the docs and **never looked at Makefiles**;
+      ASan appeared in no `.md` file at all, which is why grepping the
+      docs could not find it. `QT_TESTING.md` documents it now, pointing
+      at the Makefile.
     - **What it found was in intrpret.cpp, in upstream shared code, and
       had nothing to do with the dialog.** `ComputeInfluence()` guards its
       esoteric and hierarchical ruler lookups with `if (k)` in four

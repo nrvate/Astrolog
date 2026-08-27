@@ -1,13 +1,19 @@
-# Astrolog (Version 8.00) File: Makefile.qt.test
+# Astrolog (Version 8.00) File: Makefile.qt.asan
 #
-# Builds "astrolog-qt-test", the Qt GUI test binary. Same sources as
-# Makefile.qt plus qttest.cpp, compiled with -DQTTEST, which makes
-# InteractQt() run the suite instead of handing over to the user. Objects
-# go in their own directory so this never clobbers the release build.
+# Builds "astrolog-qt-asan": the test suite of Makefile.qt.test compiled
+# with AddressSanitizer, at -O0 -g so the reports name real lines. Its own
+# name and object directory, so it never clobbers either other build.
 #
-# Needs the Qt5 test module (qtbase5-dev provides it) in addition to what
-# Makefile.qt needs. Run the result through ./run-qt-tests.sh, which sets
-# the environment for headless operation.
+# Run it directly rather than through run-qt-tests.sh, and cap it:
+#
+#   make -f Makefile.qt.asan -j4
+#   env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
+#     ASAN_OPTIONS=detect_leaks=0 timeout 600 ./astrolog-qt-asan -i nrvate.as
+#
+# detect_leaks=0 because Qt does not free everything at exit and the leak
+# report buries real findings. Minutes, not seconds. It has found four
+# out-of-bounds bugs in Astrolog's own chart code so far, all silent
+# without it. See "Finding memory bugs" in QT_TESTING.md.
 #
 NAME = astrolog-qt-asan
 OBJDIR = obj-qt-asan
