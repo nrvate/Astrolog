@@ -2065,6 +2065,19 @@ as a bug.
 
 **Deliberately different behaviour**
 
+- **The IBM line drawing adjustment is not copied, on purpose.**
+  charts1.cpp and general.cpp turn off `us.fAnsiChar` and switch the
+  degree glyph while a text chart is drawn, whenever `gs.nFontTxt > 0`,
+  under `#ifdef WIN`. That exists because Windows lets the text window use
+  a font that has no box drawing characters in it. This port draws text
+  charts in a fixed Liberation Mono and `gs.nFontTxt` does not change it,
+  and that face carries every character involved -- U+2500, U+2502,
+  U+250C, U+2510, U+2514, U+2518, U+253C and U+00B0 all report `inFont`
+  true. Adding the guard here would strip line drawing from grids that
+  render correctly, so it is a divergence that must stay. (The *graphics*
+  side of `gs.nFontTxt` is not affected and does work, through `DrawSz()`
+  and the Qt `DrawGlyph()`.)
+
 | Where | Difference | Why |
 |---|---|---|
 | Display Settings | Raising "Number of Aspects to Include" actually un-restricts the newly included aspects | Windows assigns `us.nAsp = na` *before* the loop that would un-restrict them, so its loop can never run and raising the count silently does nothing. Kept the working version rather than reproduce the bug. |
