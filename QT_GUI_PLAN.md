@@ -953,6 +953,34 @@ are the more useful half to read before starting something new.
       backdrop is black, so an unfilled wedge can't be seen against it.
       Whatever they are, they are upstream rendering behaviour, not
       print-specific. Don't change `iFillMax` over them.
+    - **Looked at again 2026-08-27. Two more theories ruled out, and the
+      wedges could not be reproduced at all.**
+      - `iFillMax` is now ruled out for the *screen* as well, not just
+        print: rebuilt at 65536 against the stock 255 and measured the
+        black pixels in the sign ring annulus of the same pinned chart --
+        16844 against 16900, which is noise. The earlier note only tested
+        printed output.
+      - **The two builds do not share a fill implementation**, so no
+        fill-algorithm artifact can explain a shape both produce. Qt runs
+        its own breadth-first flood fill over the QImage
+        (xgeneral.cpp ~1278); Windows calls Win32 `ExtFloodFill` with
+        `FLOODFILLSURFACE` (~1308). Whatever this is, it is above the
+        fill.
+      - **And at 900x900 with `-Xv 1` there were no wedges to find.**
+        Sampling the sign ring annulus by angle at several radii came back
+        **0% background** on both an unpinned chart and one pinned with
+        `-qb 11 19 1971 ...`. So the artifact is not universal; it needs
+        conditions not captured here, and the ones tried are not them.
+      - **A caution about how it gets identified.** During this pass a
+        crop of the ring was read as showing wedges at the sector
+        boundaries, and the same reading was applied to a Wine capture of
+        the Windows build -- before measurement showed the Qt ring was
+        completely filled. The black band inside the coloured ring is the
+        tick ring, which is *meant* to be black, and background outside
+        the outer circle reads as a wedge at the right crop. **Measure the
+        annulus by angle before believing an eye.** Next attempt: vary
+        `gs.nDecaFill` (`-Xv 2`/`3`), window size, and `us.fListDecan`,
+        measuring rather than cropping, and only then compare builds.
 
 12. ~~The Qt build has no animation loop.~~ — **done 2026-08-25.** The
     Animate menu used to set `gs.nAnim`, `gi.nDir`, and the jump rate and

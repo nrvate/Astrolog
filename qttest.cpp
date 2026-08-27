@@ -1664,6 +1664,12 @@ static void ProbeQt()
   // SetChartModeQt() or a dialog function, save gi.qim and measure it.
   SetChartModeQt(gWheel);
   RedrawQt();
+  if (gi.qim != NULL) {
+    gi.qim->save("/tmp/wedge-qt.png");
+    printf("saved %dx%d\n", gi.qim->width(), gi.qim->height());
+  }
+  SetChartModeQt(gWheel);
+  RedrawQt();
   printf("probe: mode=%d image=%dx%d\n", gi.nMode,
     gi.qim != NULL ? gi.qim->width() : 0,
     gi.qim != NULL ? gi.qim->height() : 0);
