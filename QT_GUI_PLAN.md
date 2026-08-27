@@ -1578,14 +1578,8 @@ are the more useful half to read before starting something new.
       and then uses the result as an index. Confirmed with ASan through
       `ProbeQt()` rather than assumed from reading. The index and the
       value are both guarded now, which ends the undefined behaviour --
-      **but the loop's arithmetic is still wrong and deliberately left
-      alone**: `ruler1[]` is object-indexed and holds a sign, these tables
-      are the inverse, and computing what upstream meant here would change
-      every `-j0` figure for anyone using esoteric rulerships. That is a
-      decision for the maintainer, not a drive-by fix. Noted also, and
-      likewise untouched: the second block tests `ignore7[rrEso]` where it
-      almost certainly means `rrHie`, so hierarchical rulers are applied
-      when esoteric ones are enabled and never on their own.
+      **and the arithmetic is fixed too** -- see item 38, which turned
+      out to need no new data at all.
     - **ASan stops at the first error, so a fix reveals the next one
       behind it.** Line 1342 hid line 1456 completely. Re-run after every
       fix until it is silent; one clean report is not evidence when the
@@ -1602,6 +1596,59 @@ are the more useful half to read before starting something new.
       the compiler defines on its own, and the missing safety net is in.
       Diagnosed from outside exactly as the doc says to: `do_poll`, no
       sockets, 39 seconds of CPU against 19 minutes of wall clock.
+
+38. **The table the `-j0` loop needed already existed.** Item 37 stopped
+    `ChartInfluence()` corrupting the stack but left its arithmetic wrong,
+    on the reasoning that computing what upstream meant would need an
+    inverse of the sign keyed esoteric tables that nobody had written.
+    Somebody had. `rgObjEso1[]`, `rgObjEso2[]`, `rgObjHie1[]` and
+    `rgObjHie2[]` are in data.cpp and declared in extern.h, indexed by
+    object and holding a sign, exactly as `ruler1[]`/`ruler2[]` are the
+    object keyed counterpart of `rules[]`/`rules2[]`. The fix is to use
+    them: the block becomes a copy of the traditional one directly above
+    it, and reads correctly for every object rather than only for the
+    twelve whose index happens to fall inside a sign table.
+    - **That also explains where the bug came from.** The two directions
+      spell "none" differently -- `0` in the object keyed tables, `-1` in
+      the sign keyed ones -- so `if (ruler2[i])` is a correct test and
+      `if (rgSignEso2[j])` is not. The esoteric block was written by
+      copying the traditional one and swapping the table names for the
+      only esoteric tables whose names were remembered.
+    - The second block's `ignore7[rrEso]` is now `rrHie`. Hierarchical
+      rulers had been applied whenever esoteric ones were enabled, and
+      never on their own; the two flags are independent again.
+    - **Third time in one session that something was rebuilt which the
+      repo already had** -- after `Makefile.qt.asan` (item 37) and the
+      headless renderer (item 34). Here the inverse tables were derived
+      from scratch, generated into a fresh `data.cpp` block, and only
+      then found to be duplicates, because the search was for a *concept*
+      rather than a name. `grep -n "oNorm+1" data.cpp` lists every object
+      keyed table in the program on one screen. When about to add data,
+      look at what is already indexed the same way.
+    - **The generated version was not wasted.** It agreed with the
+      committed tables on all twelve rulers of both schemes and on three
+      of the four "veiling" entries, which is a real cross-check of data
+      nothing else here verifies -- and it disagreed on the fourth, which
+      is now a question for the maintainer rather than an assumption:
+      `rgObjEso2[oVul] = sVir` says Vulcan is veiled in Virgo, and
+      `rgSignEso2[sVir]` is -1 and says nothing is. **Astrolog's own two
+      tables contradict each other**, so the influence calculation credits
+      Vulcan with Virgo while the interpretation text does not mention it.
+      The object keyed entry is the one consistent with the source: Virgo's
+      esoteric ruler is the Moon, and Bailey's recurring teaching, as
+      transcribed in the astromcp repo's `esoteric.py`, is that "the moon
+      is spoken of in the ancient teaching as veiling either Vulcan or
+      Uranus". Not changed here, because it moves both a number and an
+      interpretation, and because that repo carries the general teaching
+      rather than a per sign table that would settle it outright.
+    - **Cross-checked against an authoritative transcription.**
+      `/shares/astromcp`'s `esoteric.py` carries the same three schemes
+      read from Bailey's Tabulation VI and corroborated against
+      Tabulations IV/V/VII and Oken's Tabulation 4. Astrolog's esoteric
+      and hierarchical rulers match it **12/12 each**, and Astrolog keeps
+      Vulcan and Vulkanus as separate objects, which is the confusion that
+      repo carries a standing warning about. The data was never the
+      problem; only the code reading it was.
 
 ## Features this fork adds to both builds
 

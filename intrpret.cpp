@@ -1450,25 +1450,26 @@ void ChartInfluence(void)
       if (ruler2[i])
         power1[ruler2[i]]       += power[i] / 3.0;
     }
-    // Unlike ruler1[]/ruler2[] above, which are indexed by object and hold
-    // a sign, rgSignEso*[]/rgSignHie*[] are indexed by *sign* and hold an
-    // object -- and this loop's "i" is an object. Reading them here runs
-    // off the end of a 13 entry table for any object above Pisces, and
-    // most entries are -1, which as a power1[] index writes below the
-    // array. Both were confirmed with AddressSanitizer. Guarding the index
-    // and the value stops the corruption; what this loop was meant to
-    // compute is a separate question, recorded in QT_GUI_PLAN.md.
-    if (!ignore7[rrEso] && FValidSign(i)) {
-      if (rgSignEso1[i] > 0)
-        power1[rgSignEso1[i]]   += power[i] / 3.0;
-      if (rgSignEso2[i] > 0)
-        power1[rgSignEso2[i]]   += power[i] / 3.0;
+    // rgObjEso*[]/rgObjHie*[], not rgSignEso*[]/rgSignHie*[]: this loop's
+    // "i" is an object, and the object keyed tables are the ones that hold
+    // a sign, exactly as ruler1[]/ruler2[] do above. The sign keyed pair
+    // was used here, which read off the end of a 13 entry table for every
+    // object above Pisces and then used the result as an index. The two
+    // directions also differ in how they spell "none" -- 0 in the object
+    // keyed tables, -1 in the sign keyed ones -- which is why "if (x)" is
+    // the right test here and was not there.
+    if (!ignore7[rrEso]) {
+      power1[rgObjEso1[i]]      += power[i] / 3.0;
+      if (rgObjEso2[i])
+        power1[rgObjEso2[i]]    += power[i] / 3.0;
     }
-    if (!ignore7[rrEso] && FValidSign(i)) {
-      if (rgSignHie1[i] > 0)
-        power1[rgSignHie1[i]]   += power[i] / 3.0;
-      if (rgSignHie2[i] > 0)
-        power1[rgSignHie2[i]]   += power[i] / 3.0;
+    // rrHie, not rrEso. Both blocks tested the esoteric flag, so
+    // hierarchical rulers were applied whenever esoteric ones were on and
+    // never on their own.
+    if (!ignore7[rrHie]) {
+      power1[rgObjHie1[i]]      += power[i] / 3.0;
+      if (rgObjHie2[i])
+        power1[rgObjHie2[i]]    += power[i] / 3.0;
     }
   }
 
