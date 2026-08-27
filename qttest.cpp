@@ -67,6 +67,16 @@ static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
 static QString s_strModal;
 
+// Which menu item currently owns s_strModal. A queued close fires a fixed
+// delay after it is armed, not when the item that armed it finishes, so
+// once trigger() returns quickly the shot lands somewhere in a *later*
+// item and used to record a dialog against it. That is how text mode
+// items with no dialog at all -- Arabic Parts, the List tables, macros --
+// came to be counted as opening one, and why the count differed between
+// a normal build and a sanitizer build, which shifts every delay.
+static int s_iModalGen = 0;
+static int s_cModalLate = 0;
+
 // Every timer here is racing a dialog that has to appear before it can be
 // closed, and under AddressSanitizer the whole program runs roughly an
 // order of magnitude slower -- so a delay that comfortably wins the race
@@ -80,8 +90,21 @@ static QString s_strModal;
 #define nScaleTest 1
 #endif
 
+// Report the count from the group just finished before naming the next.
+// Two builds of this suite disagreed by 20 assertions and there was no way
+// to see where from the output, because only the total was ever printed.
+static int s_cPassGroup = 0;
+
+static void GroupEnd(void)
+{
+  if (s_szGroup[0] != chNull && getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL)
+    printf("  [%s: %d assertions]\n", s_szGroup, s_cPass - s_cPassGroup);
+  s_cPassGroup = s_cPass;
+}
+
 static void Group(CONST char *sz)
 {
+  GroupEnd();
   s_szGroup = sz;
   printf("\n== %s ==\n", sz);
 }
@@ -371,7 +394,7 @@ static void TestChartRenderQt()
 static void TestAllMenuActionsQt()
 {
   QList<QAction *> rgpa;
-  int i, cfired = 0, cmodal = 0, ctext = 0, x, y;
+  int i, k, cfired = 0, cmodal = 0, ctext = 0, x, y;
   long cpix;
 
   Group("Firing every menu item");
@@ -389,24 +412,31 @@ static void TestAllMenuActionsQt()
     // guess, guessed wrong, and hung the run -- queue a shot that closes
     // whatever modal window appears and count it.
     s_strModal = QString();
-    QTimer::singleShot(120 * nScaleTest, []() {
+    int iGen = ++s_iModalGen;
+    QTimer::singleShot(120 * nScaleTest, [iGen]() {
       QWidget *pw = QApplication::activeModalWidget();
-      if (pw != NULL) {
+      if (pw == NULL)
+        return;
+      if (iGen == s_iModalGen)      // Still this item's dialog to claim.
         s_strModal = pw->windowTitle();
-        pw->close();
-      }
+      else
+        s_cModalLate++;
+      pw->close();
     });
     // Safety net, the one StrOpenDialogQt has always had and this site
     // did not: a dialog slower to appear than the shot above misses it
     // entirely, and trigger() then waits forever for a click nobody is
-    // there to give. One item hanging must not cost the whole run.
-    QTimer::singleShot(1500 * nScaleTest, []() {
+    // there to give. One item hanging must not cost the whole run. It is
+    // also the shot that does most of the catching -- dialogs here take
+    // longer than 120ms to appear -- so it records as well, under the
+    // same ownership test.
+    QTimer::singleShot(1500 * nScaleTest, [iGen]() {
       QWidget *pw = QApplication::activeModalWidget();
-      if (pw != NULL) {
-        if (s_strModal.isEmpty())
-          s_strModal = pw->windowTitle();
-        pw->close();
-      }
+      if (pw == NULL)
+        return;
+      if (iGen == s_iModalGen && s_strModal.isEmpty())
+        s_strModal = pw->windowTitle();
+      pw->close();
     });
     // Name each item before firing it, flushed, so that when one takes
     // the process down the log says which. Set ASTROLOG_QT_TEST_VERBOSE
@@ -416,8 +446,25 @@ static void TestAllMenuActionsQt()
       fflush(stdout);
     }
     rgpa[i]->trigger();
-    if (!s_strModal.isEmpty())
+    // Not every dialog blocks inside trigger(). Some are queued and open
+    // only once control returns here, by which point a shot armed before
+    // the trigger belongs to an item the loop has already left. So look
+    // again afterwards, briefly, and close whatever this item put up.
+    for (k = 0; k < 40 && s_strModal.isEmpty(); k++) {
+      QWidget *pw = QApplication::activeModalWidget();
+      if (pw != NULL) {
+        s_strModal = pw->windowTitle();
+        pw->close();
+        break;
+      }
+      QApplication::processEvents(QEventLoop::AllEvents, 5);
+    }
+    if (!s_strModal.isEmpty()) {
       cmodal++;
+      if (getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL)
+        printf("      modal: %s -> %s\n", str.toLocal8Bit().constData(),
+          s_strModal.toLocal8Bit().constData());
+    }
     cfired++;
     // Some items switch to text mode, where gi.qim isn't redrawn at all,
     // so the image checks below would be reading a stale buffer. Put
@@ -465,8 +512,16 @@ static void TestAllMenuActionsQt()
     Check(cpix > 20, "after \"%s\": chart went blank",
       str.toLocal8Bit().constData());
   }
-  printf("  %d menu items fired (%d opened a dialog, %d switched to text)\n",
-    cfired, cmodal, ctext);
+  // No dialog count is reported, deliberately. Most open asynchronously,
+  // appearing well after the trigger that caused them returns, so they
+  // cannot be attributed to an item here and the total is not even stable
+  // run to run -- 112 to 115 in one build, 126 under a sanitizer, which
+  // shifts every delay. The earlier per item figure was worse than
+  // unstable, it was wrong: it counted text mode items that open no
+  // dialog at all, because a close armed by one item fired during a
+  // later one. What matters is asserted rather than counted -- every item
+  // fires, nothing hangs, and the chart still draws afterwards.
+  printf("  %d menu items fired, %d switched to text\n", cfired, ctext);
 }
 
 

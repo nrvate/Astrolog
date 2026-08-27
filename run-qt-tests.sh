@@ -12,6 +12,17 @@ cd "$(dirname "$0")" || exit 1
 
 QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
 
+# Default to the maintainer's settings file, because running without it is
+# not a milder test, it is a quieter one. nrvate.as carries -Yi1 "/swe",
+# and SwissEnsurePath() caches the ephemeris search path the first time it
+# is asked -- so without it every esoteric body resolves to "???" and the
+# checks that compare those names against the ephemeris skip themselves
+# rather than fail. That was 20 assertions and 20 of 39 bodies quietly not
+# tested, in the exact command CLAUDE.md gives as the pre-commit check,
+# while CLAUDE.md's own hard rule says always to pass this file. Any
+# argument given here still overrides it.
+[ $# -gt 0 ] || set -- -i nrvate.as
+
 $QTENV ./astrolog-qt-test "$@"
 rc=$?
 [ $rc -eq 0 ] || exit $rc

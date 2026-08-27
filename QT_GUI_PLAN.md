@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2781
+   display and no `xdotool`, and exits non-zero on failure. **2805
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1703,6 +1703,42 @@ are the more useful half to read before starting something new.
       unknown function. There is also `funWin` and `funX11` but no `funQt`,
       so an expression can identify every backend except this one.
 
+40. **The pre-commit command was running the suite without the config.**
+    Chasing why two builds of the same suite reported different assertion
+    totals -- 2785 against 2805 -- turned up something worse than the
+    discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
+    `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
+    every commit ran **without `-i nrvate.as`**, in the same file whose
+    hard rules say always to pass it.
+    - The cost was invisible by design. `TestObjSelTableQt()` skips any
+      body whose name comes back `???`, on the reasoning that a missing
+      ephemeris is not a wrong name -- and without the config
+      `SwissEnsurePath()` never sees `/swe`, so **20 of 39 bodies resolved
+      to nothing and 20 assertions skipped rather than failed**. A green
+      run said 2781 and meant "half the esoteric bodies were not checked".
+    - The runner now defaults to `-i nrvate.as` when given no arguments,
+      and any argument still overrides it. 39 of 39 bodies resolve.
+    - **A suite that only prints a grand total cannot answer "where?".**
+      Two totals differing by 20 gave nothing to go on until per group
+      counts were added, which named the group on the first run. Under
+      `ASTROLOG_QT_TEST_VERBOSE` each group now reports its own count.
+    - **The dialog counter in the menu test was measuring nothing.** It
+      reported 143 dialogs in one build and 125 in another, and both were
+      wrong: a queued close armed by one item fires a fixed delay later,
+      lands inside a *different* item, and was recorded against that one.
+      Text mode items that open no dialog at all -- Arabic Parts, the List
+      tables, macros -- were being counted as opening one. Most dialogs
+      here open asynchronously and appear after the trigger returns, so
+      per item attribution is not available without restructuring, and the
+      total is not stable run to run either (112-115, 126 under a
+      sanitizer). The count is gone rather than dressed up; what the group
+      actually proves -- every item fires, nothing hangs, the chart still
+      draws -- is asserted, not counted. A number nobody can defend is
+      worse than no number, because it gets quoted.
+    - Fixing the counter did surface one real thing: the Arabic Parts menu
+      item raises an **"Astrolog Warning"** dialog, which is now visible in
+      verbose output rather than lost among 143 phantoms.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
@@ -2025,7 +2061,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2781 assertions covering dialog titles, the 42 context menus,
+  failure. 2805 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window
