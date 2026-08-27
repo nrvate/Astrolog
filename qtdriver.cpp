@@ -1814,6 +1814,9 @@ static void BuildSettingMenu(QMainWindow *pwind)
   QAction *paObject2 = pmenu->addAction("More Ob&ject Settings...");
   QObject::connect(paObject2, &QAction::triggered, pwind,
     []() { ShowObject2DialogQt(); });
+  QAction *paObjectSel = pmenu->addAction("Object Selectio&ns...");
+  QObject::connect(paObjectSel, &QAction::triggered, pwind,
+    []() { ShowObjectSelDialogQt(); });
   pmenu->addSeparator();
 
   QAction *paRestrict = pmenu->addAction("&Restrictions...");

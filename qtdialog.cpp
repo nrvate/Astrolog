@@ -4117,6 +4117,180 @@ void ShowCustomDialogQt()
 }
 
 
+// Object selections, this port's half of Windows' DlgObjectSel. Both are
+// built from the same dlgObjectSel block in astrolog.rc, and both go
+// through the shared SzObjSelDef()/SzObjSelName()/FObjSelParse() in
+// calc.cpp, so the two builds cannot drift on what a field means.
+//
+// Every write below is bounded to uranLo..dwarfHi, and nothing is cleared
+// wholesale. force[] and ignore[] are full range globals and this dialog
+// shows a slice of them, so a forced midpoint on some object it does not
+// display -- the Part of Fortune, say -- has to come through untouched.
+
+void ShowObjectSelDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  QVector<RCBUILT> rgbuilt;
+  QVector<QCheckBox *> rgpcbShow;
+  QVector<QComboBox *> rgpcbDef, rgpcbMidA, rgpcbMidB;
+  QVector<QLineEdit *> rgpeName;
+  int rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
+  int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
+  real rgforce[cObjSelRow];
+  char sz[cchSzMax];
+  int i, j, k, iobj, pnt, flg;
+
+  dlg.setWindowTitle(szTitleObjectSel);
+  RcBuildDialogQt(&dlg, rgctlObjectSel, cctlObjectSel, dxObjectSel,
+    dyObjectSel, &rgbuilt);
+
+  for (i = 0; i < cObjSelRow; i++) {
+    iobj = uranLo + i;
+    QCheckBox *pcbShow = (QCheckBox *)PwRcFindIdxQt(rgbuilt, "dxOs", i+1);
+    QComboBox *pcbDef = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcOs", i+1);
+    QComboBox *pcbA = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcOsa", i+1);
+    QComboBox *pcbB = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcOsb", i+1);
+    QLineEdit *peName = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deOs", i+1);
+    rgpcbShow.append(pcbShow); rgpcbDef.append(pcbDef);
+    rgpcbMidA.append(pcbA); rgpcbMidB.append(pcbB); rgpeName.append(peName);
+
+    if (pcbShow != NULL)
+      pcbShow->setChecked(!ignore[iobj]);
+    if (peName != NULL)
+      peName->setText(szObjDisp[iobj]);
+
+    // Every addItem() has to precede setEditText(): adding the first item
+    // resets the current index and silently overwrites the line edit.
+    if (pcbDef != NULL) {
+      pcbDef->setEditable(fTrue);
+      for (j = 0; j < cObjSel; j++)
+        pcbDef->addItem(rgObjSel[j].szName);
+      SzObjSelDef(sz, iobj);
+      pcbDef->setEditText(sz);
+    }
+    if (pcbA != NULL && pcbB != NULL) {
+      pcbA->setEditable(fTrue);
+      pcbB->setEditable(fTrue);
+      pcbA->addItem(szObjSelNone);
+      pcbB->addItem(szObjSelNone);
+      for (j = 0; j <= oCore; j++) {
+        pcbA->addItem(szObjName[j]);
+        pcbB->addItem(szObjName[j]);
+      }
+      if (force[iobj] < 0.0) {
+        k = (-(int)force[iobj]) - 1;
+        pcbA->setEditText(szObjName[k / objMax]);
+        pcbB->setEditText(szObjName[k % objMax]);
+      } else {
+        pcbA->setEditText(szObjSelNone);
+        pcbB->setEditText(szObjSelNone);
+      }
+    }
+  }
+
+  QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbOs_l");
+  if (ppbLookup != NULL)
+    QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
+      [&rgpeName, &rgpcbDef, &rgpcbMidA, &rgpcbMidB]() {
+      char szT[cchSzMax];
+      int i2, j2, k2, pnt2, flg2;
+
+      for (i2 = 0; i2 < cObjSelRow; i2++) {
+        if (rgpeName[i2] == NULL)
+          continue;
+        QByteArray ba = rgpeName[i2]->text().toLocal8Bit();
+        if (!ba.isEmpty() && !FEqSz(ba.constData(), szObjUnknown))
+          continue;
+        // A row set to a midpoint gets "A/B", since -Fm moves a position
+        // but never touches the name.
+        if (rgpcbMidA[i2] != NULL && rgpcbMidB[i2] != NULL) {
+          QByteArray baA = rgpcbMidA[i2]->currentText().toLocal8Bit();
+          QByteArray baB = rgpcbMidB[i2]->currentText().toLocal8Bit();
+          j2 = NParseSz(baA.constData(), pmObject);
+          k2 = NParseSz(baB.constData(), pmObject);
+          if (!FEqSz(baA.constData(), szObjSelNone) &&
+            !FEqSz(baB.constData(), szObjSelNone) && FItem(j2) && FItem(k2)) {
+            sprintf(szT, "%.3s/%.3s", szObjName[j2], szObjName[k2]);
+            rgpeName[i2]->setText(szT);
+            continue;
+          }
+        }
+        if (rgpcbDef[i2] == NULL)
+          continue;
+        QByteArray baDef = rgpcbDef[i2]->currentText().toLocal8Bit();
+        if (FObjSelParse(baDef.constData(), &j2, &k2, &pnt2, &flg2))
+          SzObjSelName(szT, j2, k2);
+        else
+          sprintf(szT, "%s", szObjUnknown);
+        rgpeName[i2]->setText(szT);
+      }
+    });
+
+  RcWireOkCancelQt(&dlg, rgbuilt);
+  PrepareDialogQt(&dlg);
+  FocusDialogQt(PwRcFindIdxQt(rgbuilt, "dcOs", 1));
+  if (dlg.exec() != QDialog::Accepted)
+    return;
+
+  // Validate every row before writing any of it, so a bad entry leaves the
+  // previous settings alone rather than applying half of them.
+  for (i = 0; i < cObjSelRow; i++) {
+    if (rgpcbDef[i] == NULL)
+      continue;
+    QByteArray ba = rgpcbDef[i]->currentText().toLocal8Bit();
+    if (!FObjSelParse(ba.constData(), &j, &k, &pnt, &flg) ||
+      !FValidCustom(k, j)) {
+      QMessageBox::warning(gi.qwind, szAppName,
+        "One or more object definitions are invalid.");
+      return;
+    }
+    rgnTyp[i] = j; rgnObj[i] = k; rgnPnt[i] = pnt; rgnFlg[i] = flg;
+
+    rgforce[i] = 0.0;
+    if (rgpcbMidA[i] != NULL && rgpcbMidB[i] != NULL) {
+      QByteArray baA = rgpcbMidA[i]->currentText().toLocal8Bit();
+      QByteArray baB = rgpcbMidB[i]->currentText().toLocal8Bit();
+      if (!FEqSz(baA.constData(), szObjSelNone) &&
+        !FEqSz(baB.constData(), szObjSelNone) &&
+        !baA.isEmpty() && !baB.isEmpty()) {
+        j = NParseSz(baA.constData(), pmObject);
+        k = NParseSz(baB.constData(), pmObject);
+        if (!FItem(j) || !FItem(k)) {
+          QMessageBox::warning(gi.qwind, szAppName,
+            "One or more midpoint objects are invalid.");
+          return;
+        }
+        rgforce[i] = (real)-(j*objMax + k + 1);
+      }
+    }
+  }
+
+  for (i = 0; i < cObjSelRow; i++) {
+    iobj = uranLo + i;
+    rgTypSwiss[iobj - custLo] = rgnTyp[i];
+    rgObjSwiss[iobj - custLo] = rgnObj[i];
+    rgPntSwiss[iobj - custLo] = rgnPnt[i];
+    rgFlgSwiss[iobj - custLo] = rgnFlg[i];
+    force[iobj] = rgforce[i];
+    if (rgpcbShow[i] != NULL)
+      ignore[iobj] = !rgpcbShow[i]->isChecked();
+    if (rgpeName[i] != NULL) {
+      QByteArray ba = rgpeName[i]->text().toLocal8Bit();
+      if (!FEqSz(ba.constData(), szObjDisp[iobj]))
+        FCloneSzCore(ba.constData(), (char **)&szObjDisp[iobj],
+          szObjDisp[iobj] == szObjName[iobj]);
+    }
+  }
+
+  // The Show boxes just changed which categories have anything in them,
+  // so re-derive us.fUranian/us.fDwarf and their menu checks the way the
+  // restriction dialogs do.
+  AdjustRestrictions();
+  SyncRestrictMenuQt();
+  RecastAndRedrawQt();
+}
+
+
 // Star customization, equivalent to Windows' DlgCustomS: rename any fixed
 // star's display name, and optionally override which catalog star it
 // looks up in the Swiss Ephemeris star list.

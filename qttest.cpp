@@ -150,6 +150,7 @@ static void TestDialogsQt()
     {ShowMoonRestrictDialogQt,     "Planetary Moon Restrictions"},
     {ShowCustomDialogQt,           "Object Customization"},
     {ShowCustomStarDialogQt,       "Fixed Star Customization"},
+    {ShowObjectSelDialogQt,        "Object Selections"},
     {ShowDefaultInfoDialogQt,      "Default Chart Info"},
     {ShowTransitDialogQt,          "Transits"},
     {ShowProgressDialogQt,         "Progressions"},
@@ -582,6 +583,7 @@ static CONST PARITYITEM rgparityQt[] = {
   {"Setting",     "&Aspect Settings...",                         fFalse},
   {"Setting",     "&Object Settings...",                         fFalse},
   {"Setting",     "More Ob&ject Settings...",                    fFalse},
+  {"Setting",     "Object Selectio&ns...",                       fFalse},
   {"Setting",     "&Restrictions...",                            fFalse},
   {"Setting",     "Star Restr&ictions...",                       fFalse},
   {"Setting",     "&Transit Restrictions...",                    fFalse},
@@ -875,6 +877,83 @@ static void TestObjSelTableQt()
 }
 
 
+// The Object Selections dialog's fields go through three shared helpers in
+// calc.cpp, which both this build and the Windows one call. The dialog
+// itself is modal and can only be driven by clicking, so what is worth
+// pinning down in a suite is those helpers: a field accepts either a name
+// from the offered list or the definition text Object Customization uses,
+// and comes back as the same body either way.
+static void TestObjSelParseQt()
+{
+  char sz[cchSzMax];
+  int nTyp, nObj, nPnt, nFlg, nTypSav, nObjSav, nPntSav, nFlgSav;
+
+  Group("Object selection fields");
+
+  // A name from the list, and the bare number, are the same body.
+  Check(FObjSelParse("Nessus", &nTyp, &nObj, &nPnt, &nFlg) &&
+    nTyp == 1 && nObj == 7066 && nPnt == 0 && nFlg == 0,
+    "\"Nessus\" did not read as asteroid 7066");
+  Check(FObjSelParse("7066", &nTyp, &nObj, &nPnt, &nFlg) &&
+    nTyp == 1 && nObj == 7066,
+    "\"7066\" did not read as asteroid 7066");
+  Check(FObjSelParse("nessus", &nTyp, &nObj, &nPnt, &nFlg) && nObj == 7066,
+    "the list match is case sensitive when it shouldn't be");
+
+  // Definition forms other than a plain asteroid number.
+  Check(FObjSelParse("h5", &nTyp, &nObj, &nPnt, &nFlg) &&
+    nTyp == 0 && nObj == 5, "\"h5\" did not read as element set 5");
+  Check(FObjSelParse("Ven", &nTyp, &nObj, &nPnt, &nFlg) &&
+    nTyp == 2 && nObj == oVen, "\"Ven\" did not read as Venus");
+
+  // The guard this parse exists to keep. Without it the trailing letters
+  // of an all alphabetic definition are read as point and flag suffixes,
+  // so "Ven" sets the north node off its own 'n' and the chart quietly
+  // shows Venus's node instead of Venus.
+  Check(nPnt == 0 && nFlg == 0,
+    "\"Ven\" read its own letters as a point/flag suffix (pnt %d flg %d)",
+    nPnt, nFlg);
+  Check(FObjSelParse("Mar", &nTyp, &nObj, &nPnt, &nFlg) && nPnt == 0,
+    "\"Mar\" read its own letters as a suffix");
+
+  // A real suffix still parses.
+  Check(FObjSelParse("7066 nH", &nTyp, &nObj, &nPnt, &nFlg) &&
+    nTyp == 1 && nObj == 7066 && nPnt == 1 && (nFlg & 1),
+    "\"7066 nH\" lost its point or flag suffix");
+
+  Check(!FObjSelParse("", &nTyp, &nObj, &nPnt, &nFlg),
+    "an empty field was accepted");
+
+  // And the formatting side round trips: set a slot, read it back.
+  nTypSav = rgTypSwiss[uranLo - custLo];
+  nObjSav = rgObjSwiss[uranLo - custLo];
+  nPntSav = rgPntSwiss[uranLo - custLo];
+  nFlgSav = rgFlgSwiss[uranLo - custLo];
+
+  rgTypSwiss[uranLo - custLo] = 1; rgObjSwiss[uranLo - custLo] = 7066;
+  rgPntSwiss[uranLo - custLo] = rgFlgSwiss[uranLo - custLo] = 0;
+  SzObjSelDef(sz, uranLo);
+  Check(FEqSz(sz, "Nessus"),
+    "a slot holding 7066 showed as \"%s\", not the list name", sz);
+
+  // With a suffix it must show the raw definition instead, or OK would
+  // silently strip the suffix off the slot.
+  rgPntSwiss[uranLo - custLo] = 1;
+  SzObjSelDef(sz, uranLo);
+  Check(FEqSz(sz, "7066 n"),
+    "a slot with a point suffix showed as \"%s\"", sz);
+  Check(FObjSelParse(sz, &nTyp, &nObj, &nPnt, &nFlg) &&
+    nTyp == 1 && nObj == 7066 && nPnt == 1,
+    "the suffixed form did not read back to the same slot");
+
+  rgTypSwiss[uranLo - custLo] = nTypSav;
+  rgObjSwiss[uranLo - custLo] = nObjSav;
+  rgPntSwiss[uranLo - custLo] = nPntSav;
+  rgFlgSwiss[uranLo - custLo] = nFlgSav;
+  printf("  body fields read as names, as definitions, and with suffixes\n");
+}
+
+
 // Forced object positions have to survive being written to a settings file
 // and read back. FOutputSettings() had no "-F"/"-Fm" section at all, so
 // File / Save Program Settings silently dropped every forced position --
@@ -1058,6 +1137,7 @@ int NRunQtTestsQt()
   TestBadInputQt();
   TestForcedPositionsQt();
   TestObjSelTableQt();
+  TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

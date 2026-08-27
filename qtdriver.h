@@ -139,6 +139,7 @@ void ShowMoonRestrictDialogQt();
 void ShowMoonObjectDialogQt();
 void ShowCustomDialogQt();
 void ShowCustomStarDialogQt();
+void ShowObjectSelDialogQt();
 void ShowExportBitmapDialogQt();
 void ShowExportMetafileDialogQt();
 void ShowExportPSDialogQt();
