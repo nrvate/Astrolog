@@ -26,7 +26,8 @@ A scenario is one command per line; "#" comments and blank lines ignored:
 
   menu Setting Object Selectio&ns...   open a menu bar item, then an entry
   click OK                             click a widget by name
-  type combo-box#3 Nessus              set a field, by name or "role#n"
+  type combo-box#3 Nessus              set a field via accessibility
+  typeinto combo-box#3 7066            click it and type, for combos
   expect-window Object Selections      fail unless that window exists
   expect-no-window Object Selections   fail unless it does not
   expect-value combo-box#3 Nessus      fail unless the field reads that
@@ -144,6 +145,14 @@ def find(root, name, role=None):
         for _, n in walk(root):
             try:
                 if n.getRoleName() != want_role:
+                    continue
+                # A combo box contains its own "text" child, so counting
+                # every text would make text#1 the first combo's editor
+                # rather than the first standalone field. Count only
+                # widgets that are not part of another control.
+                par = n.parent
+                if par is not None and par.getRoleName() in (
+                        "combo box", "spin button", "scroll bar"):
                     continue
             except Exception:
                 continue
@@ -299,6 +308,25 @@ def run_script(path, args=""):
                 n = find(root, wid)
                 if n is None or not set_text(n, value):
                     fails.append("type: no editable widget %r" % wid)
+            elif cmd == "typeinto":
+                # A QComboBox does not expose EditableText itself -- its
+                # internal line edit does -- so "type" cannot reach one.
+                # Click it and use the keyboard, which is also closer to
+                # what a user actually does.
+                wid, value = rest.split(None, 1)
+                n = find(root, wid)
+                ext = extents(n) if n is not None else None
+                if not ext:
+                    fails.append("typeinto: no widget %r" % wid)
+                else:
+                    x, y, w, h = ext
+                    xdo("mousemove", str(x + w // 3), str(y + h // 2),
+                        "click", "1")
+                    time.sleep(0.3)
+                    xdo("key", "--clearmodifiers", "ctrl+a")
+                    time.sleep(0.2)
+                    xdo("type", "--delay", "40", "--", value)
+                    time.sleep(0.4)
             elif cmd == "expect-window":
                 if find_window(root, rest) is None:
                     fails.append("expect-window: %r is not open" % rest)
@@ -324,6 +352,13 @@ def run_script(path, args=""):
                 fails.append("unknown command %r" % cmd)
             print("  %-60s %s" % (line, "" if not fails or
                                   fails[-1].split(":")[0] != cmd else "FAIL"))
+            # A crash must never be silent: without this every later
+            # command just fails to find a widget and the real event --
+            # the process dying -- is buried.
+            rc = s.proc.poll()
+            if rc is not None:
+                fails.append("the app exited (status %d) after %r" % (rc, line))
+                break
     for f in fails:
         print("FAIL  " + f)
     print("%s: %d command(s) failed" % ("FAIL" if fails else "PASS", len(fails)))
