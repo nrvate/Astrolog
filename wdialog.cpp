@@ -1825,7 +1825,12 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         SetEdit(dcOsb01 + i, szObjSelNone);
       }
     }
-    return fTrue;
+    // Focus the first body field rather than letting the dialog
+    // manager leave it on OK, which is what the seven dialogs with an
+    // explicit SetFocus() do and what the Qt side does. Returning
+    // fFalse is what tells Windows the focus was set here.
+    SetFocus(GetDlgItem(hdlg, dcOs01));
+    return fFalse;
 
   case WM_COMMAND:
     if (wParam == dbOs_l) {
