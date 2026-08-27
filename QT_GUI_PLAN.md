@@ -146,12 +146,33 @@ Roughly in the order I'd take them.
      kind of rendering question that has previously been argued over from
      screenshots.
 
-4. **Pixel-level baselines.** Rendering goes to `gi.qim`, a QImage in
-   memory, so image regression tests need no screenshotting at all.
-   Storing baseline hashes per chart type is the obvious next step and
-   would settle the kind of rendering question this project has
-   repeatedly argued over from screenshots. The Wine build gives a
-   reference to generate them against.
+4. **~~Pixel-level baselines.~~** — **dropped 2026-08-27, measured
+   rather than argued.** The idea was to hash each chart type's `gi.qim`
+   and assert against stored baselines. It does not work here, and the
+   claim that it would settle this project's rendering arguments does not
+   survive checking either.
+   - **The renders are not reproducible.** Two consecutive
+     `QTGRAPHDIR` runs on one machine differ in **14 of 24** images, and
+     not in a header timestamp: the changed region spans 692x473 of
+     `wheel`, and most of `globe` and `worldmap`. Those charts are cast
+     from the current moment, so planets move, the globe turns and the
+     terminator shifts between runs seconds apart. Baselines would need
+     the chart time pinned first, and would then still freeze font
+     rendering and antialiasing that differ between the two machines this
+     fork is worked on.
+   - **It would not have caught any of the four rendering incidents that
+     prompted it.** The moire arcs and the tick-ring wedges were "what is
+     this?", which a baseline cannot answer; the blank Windows captures
+     and the black client area were both Windows-side and both settled by
+     *measurement* — all-images-identical, and "non-black rows 0..55 of
+     1200" — which a Qt baseline never sees.
+   - What already covers the catastrophic case is in the suite: 26 chart
+     types asserted non-blank and correctly sized, which is what caught
+     Aspect List and Arabic Parts drawing nothing. Above that line sits
+     subtle rendering drift, which is the expensive, low-yield thing to
+     chase. Measure a specific property when a specific question comes
+     up, the way the sidebar width and the non-black row count were
+     measured. Do not store pictures.
 5. **Decide about the deliberate divergences.** The behaviours in
    "Known divergences from Windows" are places this port knowingly does
    something different, usually because Windows' behaviour looks like a
@@ -1517,7 +1538,11 @@ are the more useful half to read before starting something new.
 
 37. **A once-only crash, chased with AddressSanitizer instead of
     guesswork.** The user hit a fault in the Object Selections dialog once
-    and could not reproduce it. Reading the dialog code found nothing: the
+    and could not reproduce it. **Closed 2026-08-27 without a confirmed
+    reproduction**, the maintainer's call, on the grounds that the
+    stack-corruption fixed below is the likeliest cause and the dialog
+    itself validates everything it is given. To be reopened if it recurs;
+    what follows is what the hunt actually found, which was elsewhere. Reading the dialog code found nothing: the
     OK path validates both midpoint operands with `FItem()` before
     encoding them, `-Fm` validates the same way in astrolog.cpp, and
     `NObjSelMid()` returns -1 or a valid index and nothing else. So the
