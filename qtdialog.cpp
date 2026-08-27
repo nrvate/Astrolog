@@ -4231,6 +4231,8 @@ void ShowObjectSelDialogQt()
   QVector<QCheckBox *> rgpcbShow;
   QVector<QComboBox *> rgpcbDef;
   QVector<QLineEdit *> rgpeName;
+  QVector<QString> rgstrName0;
+  int rgTypSwissSav[cObjSelRow], rgObjSwissSav[cObjSelRow];
   int rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
   int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
   real rgforce[cObjSelRow];
@@ -4253,6 +4255,9 @@ void ShowObjectSelDialogQt()
       pcbShow->setChecked(!ignore[iobj]);
     if (peName != NULL)
       peName->setText(szObjDisp[iobj]);
+    // Remember it, so OK can tell a name the user typed from one that is
+    // simply the old body's name sitting there untouched.
+    rgstrName0.append(peName != NULL ? peName->text() : QString());
 
     // Every addItem() has to precede setEditText(): adding the first item
     // resets the current index and silently overwrites the line edit.
@@ -4282,9 +4287,13 @@ void ShowObjectSelDialogQt()
       for (i2 = 0; i2 < cObjSelRow; i2++) {
         if (rgpeName[i2] == NULL || rgpcbDef[i2] == NULL)
           continue;
-        QByteArray ba = rgpeName[i2]->text().toLocal8Bit();
-        if (!ba.isEmpty() && !FEqSz(ba.constData(), szObjUnknown))
-          continue;
+        // Every row, not just the blank ones. Windows' Custom Objects
+        // dialog only fills a name that is empty or "???", because there
+        // the name column is the user's own label. Here the button's
+        // whole point is turning what is in the definition box into a
+        // name -- type 52872, press it, get Okyrhoe -- so it resolves
+        // every row and overwrites. Skipping the ones that already had a
+        // name made it look like the button did nothing at all.
         QByteArray baDef = rgpcbDef[i2]->currentText().toLocal8Bit();
 
         // A midpoint names itself after its two halves; -Fm moves a
@@ -4358,6 +4367,8 @@ void ShowObjectSelDialogQt()
 
   for (i = 0; i < cObjSelRow; i++) {
     iobj = uranLo + i;
+    rgTypSwissSav[i] = rgTypSwiss[iobj - custLo];
+    rgObjSwissSav[i] = rgObjSwiss[iobj - custLo];
     rgTypSwiss[iobj - custLo] = rgnTyp[i];
     rgObjSwiss[iobj - custLo] = rgnObj[i];
     rgPntSwiss[iobj - custLo] = rgnPnt[i];
@@ -4366,7 +4377,22 @@ void ShowObjectSelDialogQt()
     if (rgpcbShow[i] != NULL)
       ignore[iobj] = !rgpcbShow[i]->isChecked();
     if (rgpeName[i] != NULL) {
-      QByteArray ba = rgpeName[i]->text().toLocal8Bit();
+      QString str = rgpeName[i]->text();
+      // A name the user did not touch is the *old* body's name, and
+      // leaving it there is what made picking a new body look like it did
+      // nothing: the slot really did change -- a different position, a
+      // different ephemeris number -- while every label in the chart still
+      // read the body it used to be. So when the definition changed and
+      // the name was not edited by hand, the name follows the definition.
+      // A name the user did type is theirs and is kept.
+      if (i < rgstrName0.size() && str == rgstrName0[i] &&
+        (rgnTyp[i] != rgTypSwissSav[i] || rgnObj[i] != rgObjSwissSav[i])) {
+        char szT[cchSzDef];
+        SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
+        if (!FEqSz(szT, szObjUnknown))
+          str = QString(szT);
+      }
+      QByteArray ba = str.toLocal8Bit();
       if (!FEqSz(ba.constData(), szObjDisp[iobj]))
         FCloneSzCore(ba.constData(), (char **)&szObjDisp[iobj],
           szObjDisp[iobj] == szObjName[iobj]);

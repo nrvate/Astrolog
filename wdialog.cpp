@@ -1790,6 +1790,12 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
   int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
   real rgforce[cObjSelRow];
   flag rgfShow[cObjSelRow];
+  // What each name field and definition held when the dialog opened, so
+  // OK can tell a name the user typed from the old body's name left
+  // sitting there. Static because this is a dialog proc called once per
+  // message, with nowhere else to keep it.
+  static char rgszName0[cObjSelRow][cchSzDef];
+  static int rgnTyp0[cObjSelRow], rgnObj0[cObjSelRow];
 
   switch (message) {
   case WM_INITDIALOG:
@@ -1797,6 +1803,9 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       iobj = uranLo + i;
       SetCheck(dxOs01 + i, !ignore[iobj]);
       SetEdit(deOs01 + i, szObjDisp[iobj]);
+      sprintf(rgszName0[i], "%.*s", cchSzDef-1, szObjDisp[iobj]);
+      rgnTyp0[i] = rgTypSwiss[iobj - custLo];
+      rgnObj0[i] = rgObjSwiss[iobj - custLo];
 
       // Contains: the offered bodies in the drop list, and whatever the
       // slot holds in the field -- a midpoint shown as A/B, which is both
@@ -1824,9 +1833,12 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       // row set to a midpoint with no name yet gets "A/B" instead, since
       // -Fm moves a position but never touches the name.
       for (i = 0; i < cObjSelRow; i++) {
-        GetEdit(deOs01 + i, sz);
-        if (*sz && !FEqSz(sz, szObjUnknown))
-          continue;
+        // Every row, not just the ones with no name yet. DlgCustom only
+        // fills a blank or "???" because there the name column is the
+        // user's own label; here the button exists to turn what is in the
+        // definition box into a name -- type 52872, press it, get Okyrhoe
+        // -- so it resolves every row. Skipping named rows made the button
+        // look like it did nothing.
         GetEdit(dcOs01 + i, sz);
         // A midpoint names itself after its two halves.
         if (FObjSelMidPair(sz, &j, &k)) {
@@ -1897,6 +1909,18 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         force[iobj] = rgforce[i];
         ignore[iobj] = !rgfShow[i];
         GetEdit(deOs01 + i, sz);
+        // A name the user did not touch is the *old* body's name, and
+        // leaving it there is what made choosing a new body look inert:
+        // the slot really did change, to a different position and a
+        // different ephemeris number, while every label still read what
+        // it used to be. So an untouched name follows the definition; one
+        // the user typed is theirs and is kept.
+        if (FEqSz(sz, rgszName0[i]) &&
+          (rgnTyp[i] != rgnTyp0[i] || rgnObj[i] != rgnObj0[i])) {
+          SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
+          if (!FEqSz(szT, szObjUnknown))
+            sprintf(sz, "%.*s", cchSzMax-1, szT);
+        }
         if (!FEqSz(sz, szObjDisp[iobj]))
           FCloneSzCore(sz, (char **)&szObjDisp[iobj],
             szObjDisp[iobj] == szObjName[iobj]);

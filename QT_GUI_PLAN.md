@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2833
+   display and no `xdotool`, and exits non-zero on failure. **2839
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1733,7 +1733,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2833 -- turned up something worse than the
+    totals -- 2785 against 2839 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -1965,6 +1965,36 @@ are the more useful half to read before starting something new.
       rather than four.
     - The five controls left unmatched are radio groups (`dr01`-`dr09`),
       which both builds handle by a different mechanism.
+
+48. **Object Selections looked completely broken, and one line explained
+    all of it.** Reported as: choosing an object does not set it, and
+    Lookup Names does nothing with a number. Both builds, and both true
+    from where the user sat.
+    - **The slot was being set.** Driving the dialog from `ProbeQt()` and
+      measuring rather than clicking: pick Chiron and `rgObjSwiss` goes
+      7066 to 2060; type `52872` and it goes to 52872, with `planet[]`
+      moving 352.0017 to 39.3855. The calculation had been right the whole
+      time.
+    - **The name never followed.** `szObjDisp[]` still read "Nessus", so
+      every label in the chart named the old body at the new body's
+      position. Nothing on screen changed except the numbers, which is
+      indistinguishable from "it does not work" -- and worse than not
+      working, because the chart was quietly mislabelled.
+    - Now an untouched name follows the definition, and a name the user
+      typed is kept. Telling them apart needs what the field held when the
+      dialog opened, which both builds now remember.
+    - **Lookup Names skipped any row that already had a name**, copied
+      from `DlgCustom` where the name column is the user's own label. Here
+      the button exists to turn a definition into a name, so it now
+      resolves every row: type `52872`, press it, get "Okyrhoe".
+    - Fixed in `wdialog.cpp` too, where the same two faults sat.
+      `TestObjSelDialogQt()` drives the real dialog for all three cases and
+      each assertion fails with its fault put back.
+    - **The lesson is about where the bug was looked for.** The feature
+      was verified when built by checking that the settings it wrote were
+      correct, and they were. Nobody checked what the dialog *showed
+      afterwards*. A test that reads back the same variable the code just
+      wrote proves the write, not the feature.
 
 ## Features this fork adds to both builds
 
@@ -2300,7 +2330,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2833 assertions covering dialog titles, the 42 context menus,
+  failure. 2839 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

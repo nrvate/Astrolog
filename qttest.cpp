@@ -42,6 +42,7 @@
 #include <QtWidgets/QAction>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtCore/QTimer>
@@ -920,6 +921,97 @@ static void TestBadInputQt()
 // from a body whose ephemeris file simply isn't installed -- it only drops
 // the printed count. That case is self announcing anyway: the user picks it
 // and the name comes up "???" straight away.
+static QString s_strLookupQt;
+
+// Open Object Selections, do one thing to the first row, press OK.
+static void DriveObjSelQt(int nWhat)
+{
+  s_strLookupQt = QString();
+  QTimer tOpen;
+  tOpen.setSingleShot(fTrue);
+  QObject::connect(&tOpen, &QTimer::timeout, [nWhat]() {
+    QWidget *pw = QApplication::activeModalWidget();
+    if (pw == NULL)
+      return;
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    QList<QLineEdit *> rgle, rgall = pw->findChildren<QLineEdit *>();
+    for (int i = 0; i < rgall.size(); i++)
+      if (qobject_cast<QComboBox *>(rgall[i]->parentWidget()) == NULL)
+        rgle.append(rgall[i]);
+    QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
+    if (rgcb.isEmpty() || rgle.isEmpty()) {
+      pw->close();
+      return;
+    }
+    if (nWhat == 0) {
+      int n = rgcb[0]->findText("Chiron");
+      if (n >= 0)
+        rgcb[0]->setCurrentIndex(n);
+    } else if (nWhat == 1) {
+      rgcb[0]->setEditText("52872");
+      for (int b = 0; b < rgb.size(); b++)
+        if (rgb[b]->text().contains("Lookup")) {
+          rgb[b]->click();
+          break;
+        }
+      s_strLookupQt = rgle[0]->text();
+    } else {
+      rgcb[0]->setEditText("Chiron");
+      rgle[0]->setText("AstrologSuiteName");
+    }
+    for (int b = 0; b < rgb.size(); b++)
+      if (rgb[b]->text() == "OK") {
+        rgb[b]->click();
+        return;
+      }
+    pw->close();
+  });
+  tOpen.start(300 * nScaleTest);
+  ShowObjectSelDialogQt();
+  tOpen.stop();
+}
+
+
+// Choosing a body really has to change what the slot *says*, not only
+// what it computes. See plan item 48.
+static void TestObjSelDialogQt()
+{
+  int iobj = uranLo, nTypSav = rgTypSwiss[iobj - custLo];
+  int nObjSav = rgObjSwiss[iobj - custLo];
+  CONST char *szSav = szObjDisp[iobj];
+
+  Group("Object Selections dialog");
+
+  DriveObjSelQt(0);
+  Check(rgObjSwiss[iobj - custLo] == 2060,
+    "picking a body from the list sets it (obj %d)",
+    rgObjSwiss[iobj - custLo]);
+  Check(FEqSz(szObjDisp[iobj], "Chiron"),
+    "and the slot is named after it, not the body it used to be (%s)",
+    szObjDisp[iobj]);
+
+  DriveObjSelQt(1);
+  Check(rgObjSwiss[iobj - custLo] == 52872,
+    "a raw ephemeris number sets the body (obj %d)",
+    rgObjSwiss[iobj - custLo]);
+  Check(s_strLookupQt == QString("Okyrhoe"),
+    "Lookup Names turns that number into a name (\"%s\")",
+    s_strLookupQt.toLocal8Bit().constData());
+  Check(FEqSz(szObjDisp[iobj], "Okyrhoe"), "which is what gets saved (%s)",
+    szObjDisp[iobj]);
+
+  DriveObjSelQt(2);
+  Check(FEqSz(szObjDisp[iobj], "AstrologSuiteName"),
+    "a name the user typed is kept, not overwritten (%s)", szObjDisp[iobj]);
+
+  rgTypSwiss[iobj - custLo] = nTypSav;
+  rgObjSwiss[iobj - custLo] = nObjSav;
+  szObjDisp[iobj] = szSav;
+  AdjustRestrictions();
+  printf("  the dialog sets the body and names it\n");
+}
+
+
 static void TestObjSelTableQt()
 {
   char szName[cchSzDef];
@@ -1779,6 +1871,7 @@ int NRunQtTestsQt()
   TestAccelTextQt();
   TestExpressionFunctionsQt();
   TestObjSelTableQt();
+  TestObjSelDialogQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
