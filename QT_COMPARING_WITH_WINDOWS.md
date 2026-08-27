@@ -164,11 +164,12 @@ Traps, each of which cost real time here:
     rings the bell on every keystroke it doesn't handle, so a capture run
     is a burst of them. This is the loud one and it is easy to misattribute
     to Wine. `tools/text-chart-capture.sh` starts **no** window manager,
-    because Wine doesn't need one. Qt does — its menus silently never open
-    without one — so when running Qt, start it as
-    `PULSE_SERVER=/nonexistent metacity --sm-disable &`, which leaves
-    libcanberra unable to reach the sound server and touches no user
-    setting. Note `xset -b` alone is *not* enough: metacity handles the
+    which it can get away with because it only captures — it sends a few
+    keystrokes to the main window and never opens a dialog. Anything that
+    *drives* either build needs one (see the correction above), so start
+    it as `PULSE_SERVER=/nonexistent metacity --sm-disable &`, which
+    leaves libcanberra unable to reach the sound server and touches no
+    user setting. `tools/qtdrive.sh` and `tools/windrive.sh` both do. Note `xset -b` alone is *not* enough: metacity handles the
     bell itself.
   - **Wine's `MessageBeep`** is in `user32` and reaches the audio backend
     even with `winmm` disabled, so disable the wine audio *drivers*
@@ -191,7 +192,7 @@ For menu structure, don't compare screenshots — compare against the
 resource script, which is the thing both builds are built from:
 
 ```sh
-python3 tools/rc_mnemonic_audit.py    # "&" placement, all 848 label sites
+python3 tools/rc_mnemonic_audit.py    # "&" placement, all 850 label sites
 python3 tools/rc_audit.py             # dialog controls nothing wires up
 python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
 ```
@@ -199,5 +200,5 @@ python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
 `rc2qt.py` reproduces the committed `qtrcdlg.h` byte-for-byte, so a diff
 after regenerating means upstream's resource changed.
 
-The test suite also asserts menu parity directly: 257 of 257 Windows menu
+The test suite also asserts menu parity directly: 258 of 258 Windows menu
 items present, checked against `astrolog.rc` at runtime.

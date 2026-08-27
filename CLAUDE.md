@@ -28,9 +28,20 @@ Work happens on branch **`qt`**.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the
-Windows-only `wdriver.cpp`/`wdialog.cpp`. The shared calculation and
-drawing core is upstream's and is changed only when a backend branch is
-genuinely missing (see "Editing shared code" below).
+Windows-only `wdriver.cpp`/`wdialog.cpp`.
+
+Two different kinds of change reach the shared core, and the difference
+matters when merging a new upstream release:
+
+- **Porting work** touches it only where a backend branch is genuinely
+  missing, always inside `#ifdef QT`. `grep -ln "ifdef QT" *.cpp *.h`
+  finds all of it.
+- **Features this fork adds to *both* builds** — the Object Selections
+  dialog and the settings-save fixes — deliberately carry no `QT` guard
+  at all, because they go into `wdialog.cpp`, `astrolog.rc`, `io.cpp` and
+  `calc.cpp` as upstream would take them. `calc.cpp` has zero `ifdef QT`
+  in it. See "Features this fork adds to both builds" in
+  `QT_GUI_PLAN.md`.
 
 ## Prerequisites
 
@@ -49,15 +60,15 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 2773 assertions + startup checks
+./run-qt-tests.sh                # 2777 assertions + startup checks
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **2773 passed, 0 failed**, startup diagnostics ok.
+commit. Current state: **2777 passed, 0 failed**, startup diagnostics ok.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
-menus resolve, 263 shortcuts bound and unique, 26 chart types render
-non-blank, all 337 menu items fire without crashing, 258/258 Windows menu
+menus resolve, 264 shortcuts bound and unique, 26 chart types render
+non-blank, all 338 menu items fire without crashing, 258/258 Windows menu
 items present, and bad input (missing files, unknown switches) doesn't
 terminate the process. A separate **Startup diagnostics** section runs
 the binary as its own process, because an in-process suite cannot test
@@ -103,7 +114,8 @@ QTGRAPHDIR=out/qtg ./run-qt-tests.sh   # 24 chart types, about 3 seconds
 
 **`QT_COMPARING_WITH_WINDOWS.md` has the full workflow**, including how to
 drive either build headlessly and the environment traps that cost real
-time to rediscover (Qt needs a window manager for menus to open; xdotool's
+time to rediscover (**both** builds need a window manager — Qt for its
+menus to open at all, Wine for a new dialog to accept keys; xdotool's
 `--window` path uses XSendEvent, which Wine ignores; Astrolog's
 accelerators are case-sensitive).
 
@@ -134,8 +146,18 @@ On a private Xvfb display, `import -window root` is fine.
 - **Preserve CRLF in upstream files.** Most original Astrolog sources are
   CRLF; this fork's own files are LF. A scripted edit in text mode
   silently rewrites the whole file as LF and makes it diff as entirely
-  rewritten. Read with `newline=''` and write back the same way. Check:
-  `tr -cd '\r' < file | wc -c` against `git show HEAD:file | tr -cd '\r' | wc -c`.
+  rewritten. Read with `newline=''` and write back the same way.
+
+  Check with `tr -cd '\r' < file | wc -c` **against that file's own line
+  count**, not against `git show HEAD:file` — legitimately adding lines
+  changes the CR total, so comparing to HEAD flags every honest edit and
+  teaches you to ignore it. CR count == line count is the real invariant.
+  (`sweph.cpp` is the one exception: it ships from upstream with 9 CRs in
+  8621 lines. Not ours to fix.)
+- **Never edit a CRLF file with a range-based regex.** One in this project
+  matched across the gap between two functions and spliced them together,
+  producing code that looked plausible and would not compile. Exact-string
+  replacement only; if a match count is not exactly 1, stop.
 - **Always test with `-i nrvate.as`**, the maintainer's own settings.
   It sets `-Yi1 "/swe"`, and `SwissEnsurePath()` caches the ephemeris
   path on first use — so without it at startup every esoteric body

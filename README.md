@@ -16,13 +16,20 @@ single-keystroke commands; this one gives you the same nine menus and
 ~28 dialogs a Windows user would recognise, so the two builds can be
 used more or less interchangeably.
 
-Nothing in the shared calculation or rendering core was changed to do
-this. The new code lives in two files, `qtdriver.cpp` (main window,
-canvas, menu bar) and `qtdialog.cpp` (dialogs), which stand in for the
-Windows-only `wdriver.cpp`/`wdialog.cpp`. The backend is selected with
-`-DQT` on the compile line, following the same pattern astrolog.h
-already used for its `X11`/`WIN`/`WCLI` choice, so the existing builds
-are unaffected.
+The port itself changes almost nothing in the shared calculation or
+rendering core, and where it must, it does so inside `#ifdef QT`. The new
+code lives in two files, `qtdriver.cpp` (main window, canvas, menu bar)
+and `qtdialog.cpp` (dialogs), which stand in for the Windows-only
+`wdriver.cpp`/`wdialog.cpp`. The backend is selected with `-DQT` on the
+compile line, following the same pattern astrolog.h already used for its
+`X11`/`WIN`/`WCLI` choice, so the existing builds are unaffected.
+
+Separately, the fork adds a few things to **both** builds — a new Object
+Selections dialog, and fixes for settings the program was silently
+failing to save. Those deliberately carry no `QT` guard, because they go
+into `astrolog.rc`, `wdialog.cpp` and the shared code the way upstream
+would take them. See "Features this fork adds to both builds" in
+`QT_GUI_PLAN.md`.
 
 ## Building
 
@@ -39,7 +46,7 @@ alongside the regular `astrolog` binary without interfering with it —
 ## Status
 
 Feature complete against the Windows build. All nine menus, all 258 menu
-items, every dialog, all 42 right-click context menus and 263 keyboard
+items, every dialog, all 42 right-click context menus and 264 keyboard
 shortcuts are implemented, and each dialog has been read field-by-field
 against its Windows counterpart — labels, field order, number formatting,
 dropdown contents, and which menu checkmarks it refreshes on OK. Menu
@@ -48,6 +55,11 @@ carries over. Charts animate, print, paste, run all 96 macro slots, and
 draw with Astrolog's bundled astrology fonts. Text charts render in the
 main window on a character grid, as they do on Windows, rather than in a
 separate text box.
+
+It also goes slightly *past* the Windows build in one place: an Object
+Selections dialog (Ctrl+T) that puts a chosen body or a midpoint into any
+Uranian or Dwarf slot, which neither build previously offered — added to
+both, not just this one.
 
 A handful of smaller things are either deliberately different from
 Windows or deliberately left out — mostly Win32-only settings with no
@@ -63,7 +75,7 @@ make -f Makefile.qt.test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 2773 assertions plus startup checks, covering dialogs, context menus,
+A headless suite of 2777 assertions plus startup checks, covering dialogs, context menus,
 shortcuts, chart rendering, every menu item, menu parity against
 `astrolog.rc`, and bad input. No X display needed; exits nonzero on
 failure.

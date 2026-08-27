@@ -1,10 +1,13 @@
 # Windows menu structure reference (for Qt GUI parity)
 
-Extracted from `astrolog.rc`'s `menu MENU` block (the main menu bar; lines
-~70-606), cross-referenced against `resource.h` command IDs and their
-`WM_COMMAND` handlers in `wdriver.cpp`. This is the source of truth for
-building out the Qt backend's (`qtdriver.cpp`/`qtdialog.cpp`) menu bar to
-match Windows.
+Extracted from `astrolog.rc`'s `menu MENU` block (the main menu bar),
+cross-referenced against `resource.h` command IDs and their `WM_COMMAND`
+handlers in `wdriver.cpp`. The resource is the source of truth for both
+builds' menu bars.
+
+One entry here is **not** upstream's: Setting / Object Selections, which
+this fork adds to the resource and therefore to the Windows build as well
+as this one. It is marked below. Everything else is Walter Pullen's.
 
 Legend: `[D]` opens a dialog (`Dlg*` function via `WiDoDialog`) · `[T]` direct
 flag toggle · `[S]` selects one of a set (chart type/mode/house system/color
@@ -133,6 +136,7 @@ Setting [P]
   Aspect Settings... [D] cmdAspect
   Object Settings... [D] cmdObject
   More Object Settings... [D] cmdObject2
+  Object Selections... [D] cmdObjectSel  (added by this fork, to both builds)
   ---
   Restrictions... [D] cmdRes
   Star Restrictions... [D] cmdStar

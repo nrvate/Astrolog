@@ -15,21 +15,30 @@ Build" qtdriver.cpp` to find each menu-builder function, `grep -n "^void
 Show" qtdialog.cpp` for the dialog list) — this snapshot is accurate as of
 2026-08-25, but don't trust it blindly if it's been a while.
 
-**Update 2026-08-26 — the first real user session found three bugs no
-test had.** Someone ran the port against their own long-standing
-`astrolog.as` for the first time, rather than against the repo's default,
-and inside an hour turned up a startup core dump (item 27), initial focus
-landing on the wrong control in seven dialogs (item 28), and a leak
-warning on every exit (item 29). All three are fixed. None was reachable
-by the resource audits or the in-process suite, and none needed a
-comparison against Windows to find — only somebody using it normally.
-**If you are looking for what to do next, that is the highest-yield thing
-on this page:** drive real charts with real settings, rather than adding
-coverage to what is already measured. Item 30 is the fourth thing that
-session raised, which turned out to be a setting working correctly — and
-is kept because the wrong theory about it is worth not repeating.
+**Update 2026-08-26 — using it found what testing it had not.** The
+port was run against its maintainer's own long-standing `astrolog.as`
+rather than the repo's default, and inside an hour that turned up a
+startup core dump (item 27), initial focus on the wrong control in seven
+dialogs (item 28), and a leak warning on every exit (item 29). Then
+saving settings turned out to drop seven switch families silently, and
+then the new Object Selections dialog turned out to reject three of the
+four ways a user would name a body. All fixed. **Not one was reachable
+by the resource audits or the in-process suite**, and none needed a
+comparison against Windows — only somebody using it normally.
 
-**Where things stand (2026-08-25). Every item on this plan is done.**
+**Two things follow, and they are the most useful sentences on this
+page.** First: drive real charts with real settings, always with
+`-i nrvate.as`, rather than adding coverage to what is already measured.
+Second: ask the program directly rather than driving its window —
+`ProbeQt()` in qttest.cpp answers a question in about 0.2 seconds with no
+display at all, and a session was lost to not knowing that (items 34 and
+QT_TESTING.md). Item 30 is the one thing that session raised which turned
+out to be a setting working correctly, kept because the wrong theory
+about it is worth not repeating.
+
+**Where things stand (2026-08-26). Every item on this plan is done**, and
+the fork has since gone slightly past parity: see "Features this fork
+adds to both builds".
 All nine menus are built and all ~28 dialogs exist and have been read
 field-by-field against their `Dlg*` in wdialog.cpp and their resource
 block in astrolog.rc — the item-8 sweep covered the settings dialogs,
@@ -77,7 +86,8 @@ Roughly in the order I'd take them.
    single-keystroke interface lives in the `accelerator ACCELERATORS`
    table in astrolog.rc (~line 3061) and none of it existed here; the
    only keys that did anything were the menu mnemonics and the 96 macro
-   F-keys. 252 of the 275 non-macro accelerators are now bound.
+   F-keys. All but 23 of the non-macro accelerators are now bound (the
+   exact totals drift as entries are added; the 23 are enumerated below).
    - Bound onto the menu bar's existing `QAction`s by label, the same
      technique the context menus use, so nothing is reimplemented. Qt
      then draws the shortcut beside each menu item, which Windows does
@@ -101,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2773
+   display and no `xdotool`, and exits non-zero on failure. **2777
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -157,22 +167,19 @@ Roughly in the order I'd take them.
    outranks everything above it. Every verification before that date was
    mechanical — does the item fire, does the dialog open, does the layout
    match. One session driving the port from a user's own settings file
-   found three bugs (items 27-29) that the 2728 assertions of the
-day and three
-   resource audits had all missed, because each of them was in behaviour
+   found three bugs (items 27-29) that the 2728 assertions of the day
+   and three resource audits had all missed, because each was in behaviour
    nothing measures: process startup, keyboard focus, and exit cleanup.
    Run charts you actually want to read, from a settings file that isn't
    the repo's.
-8. **~~The other switch families Save Program Settings drops.~~** — all
-   fixed 2026-08-26, see "Features this fork adds to both builds". What
-   remains open there is only widening `case 'W':` so the console build
-   can read a settings file that has `-WM` lines in it. Originally: Found
-   the same way item 7 recommends, by running a real config through the
-   GUI and diffing what came back. Listed in "Features this fork adds to
-   both builds"; the `-F`/`-Fm` and `-WM` ones there are worked examples
-   of what fixing one looks like. Read the note about the `-W` guard: fix
-   the save path without it and settings files stop being readable by the
-   console build.
+8. **~~The switch families Save Program Settings drops.~~** — all fixed
+   2026-08-26; see "Features this fork adds to both builds", which has the
+   list and two worked examples. Found the way item 7 recommends, by
+   running a real config through the GUI and diffing what came back.
+   **What is still open is one line:** `case 'W':` in astrolog.cpp is
+   `#if defined(WIN) || defined(QT)`, so the console build rejects `-WM`
+   as an unknown switch and stops reading the rest of the file. Saved
+   settings files are therefore not portable to it.
 9. **~~A way to render a chart without the event loop.~~** — **done
    2026-08-26.** It already half existed and the claim that it didn't cost
    real time; see item 34. `TextChartCaptureQt()` in qttest.cpp had always
@@ -186,11 +193,22 @@ day and three
    except Rising at ~490ms and the two transit grids at ~275ms.
    This is what item 4's pixel baselines want.
 
-**If upstream releases a new Astrolog**, note this fork's changes to
-shared core are deliberately small and confined to `#ifdef QT` branches —
-`grep -ln "ifdef QT" *.cpp *.h` finds them. Diff against the upstream
-tarball rather than assuming; and keep line endings intact when editing
-those files, which is its own trap (see "Working pattern" at the end).
+**If upstream releases a new Astrolog**, this fork's changes to shared
+code come in two kinds and they merge differently.
+
+*Porting* changes are small and confined to `#ifdef QT` branches;
+`grep -ln "ifdef QT" *.cpp *.h` finds all of them.
+
+*Features added to both builds* are not guarded at all, on purpose —
+`calc.cpp` has zero `ifdef QT` in it, and the Object Selections dialog
+lives in `astrolog.rc` and `wdialog.cpp` alongside upstream's own. They
+are shaped to be offerable upstream rather than to be easy to strip, so
+expect real merge work there. See "Features this fork adds to both
+builds".
+
+Diff against the upstream tarball rather than assuming, and keep line
+endings intact when editing those files, which is its own trap (see
+"Working pattern" at the end).
 
 ## How this fork's Qt backend works
 
@@ -520,11 +538,14 @@ note Include Moons/COB are flattened to top-level here rather than nested
 under Planetary Moons like Windows; a deliberate simplification, not a
 gap), Calculation Settings..., Display Settings....
 
-Also **Object Selections...**, which this fork adds to *both* builds
-rather than only this one — see "Features this fork adds to both
+Also **Object Selections...** (Ctrl+T), which this fork adds to *both*
+builds rather than only this one — see "Features this fork adds to both
 builds" near the end. It sits after More Object Settings, matching the
 resource, so menu parity counts it on both sides rather than needing an
-exemption.
+exemption. Its accelerator is in the resource's own table for the same
+reason. No plain Alt+letter was available: the menu mnemonics take
+F E V I S C G A H and the accelerator table takes the rest, and the
+whole Alt+Shift range is in use.
 
 ### Chart — COMPLETE
 All 16 chart-type radios, Transits..., Progressions..., Chart Settings....
@@ -1181,7 +1202,7 @@ are the more useful half to read before starting something new.
       the hotkey table both *name menu items by label*, so all three have
       to agree; changing only the menu bar broke 37 previously passing
       assertions until the other two were rewritten to match.
-    - `tools/rc_mnemonic_audit.py` checks all 848 label sites and is
+    - `tools/rc_mnemonic_audit.py` checks all 850 label sites and is
       clean. It compares labels with the `&` and the `\t` accelerator
       stripped, so it only ever flags a mnemonic that *moved*, never a
       wording difference — which keeps it useful as labels evolve.
@@ -1462,25 +1483,36 @@ anything; a dialog showing a subset must never be able to drop the rest.
 
 ### The Object Selections dialog
 
-Setting / Object Selections, `dlgObjectSel` in astrolog.rc, `DlgObjectSel`
-in wdialog.cpp, `ShowObjectSelDialogQt()` in qtdialog.cpp. 18 rows, one
-per Uranian and Dwarf slot: Show, Body, "Midpoint of" and "and", Name,
-plus a Lookup Names button.
+Setting / Object Selections (**Ctrl+T**), `dlgObjectSel` in astrolog.rc,
+`DlgObjectSel` in wdialog.cpp, `ShowObjectSelDialogQt()` in qtdialog.cpp.
+18 rows, one per Uranian and Dwarf slot, three columns and a button:
 
-It is a task shaped view over two mechanisms that already existed and had
-never been reachable together:
+| column | is | backed by |
+|---|---|---|
+| Show | whether the slot appears in the chart | `ignore[]` |
+| Contains | what the slot holds | `-Ye<x>` or `-Fm` |
+| Name | what it is called | `szObjDisp[]`, i.e. `-YD` |
 
-- **Body** is the `-Ye<x>` pair in `rgTypSwiss[]`/`rgObjSwiss[]`. Object
-  Customization edits the same thing, but only as raw definition text you
-  must already know — that `7066` is Nessus. Here it is a list of names,
-  from `rgObjSel[]` in calc.cpp.
-- **Midpoint** is `force[]`, the `-Fm` switch, which no dialog on either
-  platform had ever exposed.
-- **Show** is `ignore[]`, in the same row because selecting a body into a
-  restricted slot changes nothing visible, which otherwise reads as the
-  dialog being broken.
+**Contains answers one question per row, and that is the point.** It first
+had a Body column *and* a "Midpoint of"/"and" pair, which could both be
+set, with the midpoint silently winning on position — a state no user
+could be expected to infer. Now a row holds either a body or a midpoint,
+and a midpoint is written the way astrologers write one:
 
-Three things about it that are easy to get wrong later:
+    Nessus          a name from the offered list, or one already seen
+    7066            an ephemeris number
+    Sun/Moo         a midpoint, either half in any of these spellings
+    7066/90482      the Nessus/Orcus midpoint
+    h5              the raw -Ye definition text, as Object Customization
+
+It is a task shaped view over two mechanisms that existed and had never
+been reachable together: the `-Ye<x>` pair in `rgTypSwiss[]`/`rgObjSwiss[]`
+that Object Customization edits as raw definition text, and `force[]`, the
+`-Fm` switch, which no dialog on either platform had ever exposed. Show
+sits beside them because selecting a body into a restricted slot changes
+nothing visible, which otherwise reads as the dialog being broken.
+
+Five things that are easy to get wrong later:
 
 1. **The dialog's range is narrower than either switch's.** `-Yeb` reaches
    `custLo`..`custHi`, i.e. 34-83, the moons and body centers included,
@@ -1491,18 +1523,39 @@ Three things about it that are easy to get wrong later:
    range globals being edited from a partial range dialog. A
    clear-then-refill loop would delete a forced midpoint on the Part of
    Fortune the first time someone opened this.
-2. **A midpoint overrides the position but not the name.** The force loop
-   in `CastChart()` (calc.cpp) runs after positions are computed, so `-Fm`
-   always wins over `-Yeb` for the same slot — but only for the position.
-   Force Kronos to the Sun/Moon midpoint and the wheel still says Kronos.
-   Hence the Name column, and hence Lookup Names offering `Sun/Moo` for a
-   midpoint row.
-3. **The definition parse now exists once.** Windows open coded it twice
-   and this port had a third copy; `FObjSelParse()` in calc.cpp is the
-   single one, and it keeps Windows' `if (pch > sz)` guard. Without that
-   guard an all alphabetic definition reads its own letters as flags, so
-   `Ven` sets the north node off its own `n`. `TestObjSelParseQt()` fails
-   if it is removed.
+2. **A midpoint overrides the position but not the identity.** The force
+   loop in `CastChart()` (calc.cpp) runs after positions are computed, so
+   `-Fm` always wins for the same slot — but only for where it sits. The
+   slot keeps its body, and so its glyph and its name. Hence the Name
+   column, and hence Lookup Names offering `Sun/Moo` for a midpoint row.
+3. **There is no name-to-number catalog, and there cannot be one.** A
+   `.se1` file maps its own number to a name; nothing maps back, and the
+   full collection is on the order of 887,000 files, so enumerating them
+   at startup is not an option — it would stall for minutes. What is cheap
+   is remembering: `ObjSelRemember()`/`FObjSelRecall()` (calc.cpp) record
+   every name the ephemeris returns, so once the program has shown someone
+   that 52872 is Okyrhoe, "Okyrhoe" is accepted back. Showing a name and
+   then refusing it is indefensible, and that is the whole reason this
+   exists. A fixed table rather than an allocated one, so it cannot grow
+   without bound or reach the unfreed-allocation count at exit.
+4. **`NParseSz()` matches `szObjName[]`, never `szObjDisp[]`.** So a slot
+   renamed by `-YD` was refused under the name the dialog was itself
+   displaying. `NObjSelMid()` covers all four spellings a midpoint operand
+   can take: stock name, object index, a slot's display name, and an
+   ephemeris number resolved to whichever slot holds that body. An index
+   is read as an index before it is read as an ephemeris number, since
+   that is what `-Fm` means by one.
+5. **The definition parse exists once.** Windows open coded it twice and
+   this port had a third copy; `FObjSelParse()` in calc.cpp is the single
+   one, and it keeps Windows' `if (pch > sz)` guard. Without that guard an
+   all alphabetic definition reads its own letters as flags, so `Ven` sets
+   the north node off its own `n`. `TestObjSelParseQt()` fails if it is
+   removed.
+
+**Testing it needs the real config.** `-i nrvate.as` sets `-Yi1 "/swe"`,
+and `SwissEnsurePath()` caches the ephemeris search path on first use, so
+a `-Yi` set afterwards does nothing. Without it every esoteric body reads
+`???` and the dialog looks broken when it is not.
 
 ### The -W settings this build stores are written back
 
@@ -1568,9 +1621,11 @@ the job, and item 32 is the story of mistaking that for a hang.
 
 ## Known divergences from Windows
 
-Every place this port knowingly differs, so none of it reads as an
-oversight later. Anything *not* on this list and not in an 8.x sub-item
-is unintentional — treat it as a bug.
+Every place this port knowingly *differs* from Windows, so none of it
+reads as an oversight later. Things the fork deliberately *adds* to both
+builds are not divergences and live in their own section above. Anything
+not on either list and not in an 8.x sub-item is unintentional — treat it
+as a bug.
 
 **Deliberately different behaviour**
 
@@ -1600,6 +1655,7 @@ is unintentional — treat it as a bug.
 - File > Export as Wallpaper, all 5 modes (no portable Linux equivalent)
 - Help > Setup submenu (Windows installer actions)
 - File > Print Setup (native Windows print dialog)
+
 This list is exactly the 12 items the parity test skips on purpose, so it
 and `rgparityQt[]` in qttest.cpp have to agree — change one, change both.
 
@@ -1613,8 +1669,8 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2773 assertions covering dialog titles, the 42 context menus,
-  263 shortcuts, 26 chart types rendering non-blank, all 337 menu items
+  failure. 2777 assertions covering dialog titles, the 42 context menus,
+  264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window
   and menus are up, so it shares live `us`/`gs`/`gi` state — a test that
@@ -1629,7 +1685,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   actual invariant — "this item leaves `us.fGraphics` where Windows leaves
   it" — beat asserting a downstream symptom.
 - **Generate from `astrolog.rc` rather than transcribing by hand.** The
-  dialogs (`tools/rc2qt.py`), the 42 context menus and the 848 menu
+  dialogs (`tools/rc2qt.py`), the 42 context menus and the 850 menu
   mnemonics were all derived from the resource script. Every time part of
   it was transcribed by hand instead, it introduced errors — wrong
   mnemonics on 155 labels, and four invented dialog titles that the tests
