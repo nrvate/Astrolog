@@ -75,12 +75,13 @@ terminate the process. A separate **Startup diagnostics** section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Three audits, all currently clean:
+Four audits, all currently clean:
 
 ```sh
 python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
 python3 tools/rc_audit.py                        # controls nothing wires up
 python3 tools/rc_mnemonic_audit.py               # "&" placement vs astrolog.rc
+python3 tools/rc_field_audit.py                  # controls wired to the wrong setting
 python3 tools/rc_accel.py astrolog.rc > qtrcaccel.h   # accelerator column
 python3 tools/rc_cmd.py astrolog.rc resource.h > qtrccmd.h  # label -> cmd id
 

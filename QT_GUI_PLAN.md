@@ -1941,6 +1941,31 @@ are the more useful half to read before starting something new.
     - `cfunA` goes 484 to 485 for the new `QT` function, which is a shared
       count every build sees.
 
+47. **Fourth parity pass: are controls wired to the *same* setting?**
+    `tools/rc_audit.py` finds controls nothing wires up. It cannot see the
+    quieter fault -- a control wired to the *wrong* variable -- which is
+    what Windows' Graphics Settings does with Atlas City Coloring
+    (`gs.fLabelAsp`, the aspect glyph setting), found by reading rather
+    than by any tool. So: extract control-to-field from both backends and
+    diff.
+    - **65 controls checked, 0 mismatched.** The dialog wiring is right
+      everywhere the two builds both bind one. `tools/rc_field_audit.py`
+      keeps it that way and is a pre-commit check now; reversing one
+      binding by hand makes it fail, which is how it was verified.
+    - **The first version of it reported four mismatches, and all four
+      were the script.** Both backends name controls the same way but
+      reach them differently, and the index forms are the trap: a table
+      row `{"dxSe_sr", 0, &us.fEquator2}` is control `dxSe_sr0` and the
+      `-sr0` switch, `{"dxSe_sr", -1, ...}` is the bare name, and
+      `PwRcFindIdxQt(rgbuilt, "dxMo_", 80)` is `dxMo_80`. Read as separate
+      things they produce four confident false positives -- three of them
+      pointing at the *adjacent* table row, which reads exactly like an
+      off-by-one bug in the port. Every one was checked against the source
+      before being believed, which is the only reason this entry says zero
+      rather than four.
+    - The five controls left unmatched are radio groups (`dr01`-`dr09`),
+      which both builds handle by a different mechanism.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
