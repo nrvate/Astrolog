@@ -1460,6 +1460,60 @@ static void TestDialogMnemonicsQt()
 }
 
 
+// Arrow keys move to the control that is actually in that direction.
+//
+// Qt moves focus on an arrow key by walking the tab chain. Object
+// Restrictions lists OK and Cancel before all 52 checkboxes, and focus
+// starts on OK, so Up wrapped to the end of the chain and landed on
+// "Recall" at the opposite corner -- with Cancel sitting directly above.
+// Windows walks its tab order too, so following the layout instead is a
+// divergence, and a deliberate one: the dialog is a grid of columns.
+static void TestDialogArrowKeysQt()
+{
+  Group("Dialog arrow keys");
+
+  DriveModalQt(ShowRestrictDialogQt, [](QWidget *pw) {
+    auto go = [pw](CONST char *szFrom, int key) -> QString {
+      for (QAbstractButton *p : pw->findChildren<QAbstractButton *>())
+        if (p->text() == QString(szFrom)) {
+          p->setFocus();
+          break;
+        }
+      QKeyEvent ev(QEvent::KeyPress, key, Qt::NoModifier);
+      QApplication::sendEvent(pw, &ev);
+      QWidget *pwNow = QApplication::focusWidget();
+      QAbstractButton *pb = qobject_cast<QAbstractButton *>(pwNow);
+      return pb != NULL ? pb->text() : QString("(not a button)");
+    };
+    struct { CONST char *szFrom; int key; CONST char *szKey, *szWant; } rg[] = {
+      // The reported case: Cancel is directly above OK.
+      {"OK",              Qt::Key_Up,    "Up",    "Cancel"},
+      {"Cancel",          Qt::Key_Down,  "Down",  "OK"},
+      // Down and up the Planets column.
+      {"&Earth",          Qt::Key_Down,  "Down",  "&Sun"},
+      {"&Sun",            Qt::Key_Down,  "Down",  "M&oon"},
+      {"&Sun",            Qt::Key_Up,    "Up",    "&Earth"},
+      // Across to the next column and back.
+      {"&Earth",          Qt::Key_Right, "Right", "&Chiron"},
+      {"&Chiron",         Qt::Key_Left,  "Left",  "&Earth"},
+      {"&Chiron",         Qt::Key_Right, "Right", "Ascendant"},
+      // The quick buttons stacked down the right edge.
+      {"&Restrict All",   Qt::Key_Down,  "Down",  "&Unrestrict All"},
+      {"&Unrestrict All", Qt::Key_Down,  "Down",  "Toggle Minors"},
+      {"Toggle Minors",   Qt::Key_Up,    "Up",    "&Unrestrict All"} };
+    for (int k = 0; k < 11; k++) {
+      QString str = go(rg[k].szFrom, rg[k].key);
+      Check(str == QString(rg[k].szWant), "%s from %s reaches %s (got %s)",
+        rg[k].szKey, rg[k].szFrom, rg[k].szWant,
+        str.toLocal8Bit().constData());
+    }
+    pw->close();
+  });
+
+  printf("  arrow keys follow the layout, not the order controls were built\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -2550,6 +2604,7 @@ int NRunQtTestsQt()
   TestSharedSymbolBoxesQt();
   TestAnimationStateQt();
   TestDialogMnemonicsQt();
+  TestDialogArrowKeysQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

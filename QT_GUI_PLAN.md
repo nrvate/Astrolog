@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2948
+   display and no `xdotool`, and exits non-zero on failure. **2959
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -2339,13 +2339,24 @@ are the more useful half to read before starting something new.
       to `RcBuildDialogQt()`, which every dialog built from the resource
       goes through. The probe said "NO EFFECT" eight times before the
       move, which is the only reason it was caught rather than shipped.
-    - **The other half of the report, the tab order, is not reproduced.**
-      Walking the focus chain of Object Restrictions gives exactly the
-      resource order -- OK, Cancel, then dx01 upward -- and the arrow keys
-      follow the same chain (Down from Venus reaches Mars, Right reaches
-      Jupiter, which is Win32's own "next control in the group"). Left
-      open rather than guessed at.
-    - 22 new assertions, nine of which fail without the filter.
+    - **The other half of the report took asking to pin down**, and was
+      real. Tab order is exactly the resource order and is fine; the fault
+      was the *arrow* keys. Qt moves focus on an arrow by walking the tab
+      chain, Object Restrictions lists OK and Cancel before all 52
+      checkboxes, and focus starts on OK -- so Up wrapped to the end of
+      the chain and landed on "Recall" in the opposite corner, with Cancel
+      sitting directly above. The first measurement missed it by starting
+      from a checkbox in the middle of a column, where walking the chain
+      and following the layout happen to agree. **Starting a measurement
+      from the case the user actually described would have found it
+      immediately.**
+    - Arrows now pick the nearest focusable control in the direction
+      pressed, scored as distance ahead plus four times the sideways
+      drift. Down and Up walk a column, Left and Right cross between
+      them, and Up from OK reaches Cancel. Controls that need the arrows
+      themselves -- combos, lists, text fields -- keep them.
+    - 33 new assertions: nine fail without the mnemonic filter, eleven
+      without the arrow navigation.
 
 ## Features this fork adds to both builds
 
@@ -2629,6 +2640,19 @@ not on either list and not in an 8.x sub-item is unintentional — treat it
 as a bug.
 
 **Deliberately different behaviour**
+
+- **Arrow keys in dialogs follow the layout, not the tab order.** Windows
+  moves between controls with an arrow by walking the dialog's tab order
+  within a group, and Qt does the same by walking its focus chain. Both
+  give nonsense on a dialog whose controls are a 2D grid: in Object
+  Restrictions the resource lists OK and Cancel before all 52 checkboxes
+  and focus starts on OK, so Up wrapped around the whole chain to
+  "Recall", at the opposite corner from the Cancel button directly above.
+  This port picks the nearest focusable control in the direction pressed
+  instead -- `PwArrowTargetQt()` in qtdialog.cpp, scored as distance ahead
+  plus four times the sideways drift. Tab order is untouched and still
+  matches the resource exactly. Controls that need the arrow keys for
+  themselves (combo boxes, lists, text fields) keep them.
 
 - **Animation is one switch, not two, and only the switch moves it.**
   Upstream stores the jump rate and the running state together in

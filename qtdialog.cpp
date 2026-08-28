@@ -58,6 +58,7 @@
 #include <QtWidgets/QTextEdit>
 #include <QtWidgets/QPlainTextEdit>
 #include <QtGui/QKeyEvent>
+#include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QListWidget>
 #include <QtCore/QDir>
 #include <QtCore/QStringList>
@@ -297,6 +298,74 @@ static QChar ChMnemonicQt(CONST QString &str)
 // Duplicated mnemonics cycle, the way Windows cycles rather than always
 // firing the first: dlgRestrict alone has several letters used twice.
 
+// Does this control want the raw keystroke for itself? A text field takes
+// letters, and a combo or list takes the arrow keys, so neither can have
+// them stolen for navigation.
+
+static flag FWidgetTakesKeysQt(QWidget *pw, flag fArrow)
+{
+  if (qobject_cast<QLineEdit *>(pw) != NULL ||
+    qobject_cast<QAbstractSpinBox *>(pw) != NULL ||
+    qobject_cast<QTextEdit *>(pw) != NULL ||
+    qobject_cast<QPlainTextEdit *>(pw) != NULL)
+    return fTrue;
+  QComboBox *pcb = qobject_cast<QComboBox *>(pw);
+  if (pcb != NULL)
+    return fArrow || pcb->isEditable();
+  return fArrow && qobject_cast<QAbstractItemView *>(pw) != NULL;
+}
+
+
+// The focusable control nearest to pwFrom in the given direction, by where
+// the controls actually sit rather than by the order they were built in.
+//
+// Qt moves focus on an arrow key by walking the tab chain, so in Object
+// Restrictions -- where the resource lists OK and Cancel before all 52
+// checkboxes -- pressing Up on the OK button, which is where focus starts,
+// wrapped to the end of the chain and landed on "Recall" at the far side
+// of the dialog. Cancel is sitting directly above OK. Windows' dialogs
+// walk their tab order too, so this is a divergence, and a deliberate one:
+// the layout is a 2D grid of columns and the arrows should follow it.
+//
+// Scored so the control most nearly straight ahead wins: distance along
+// the direction pressed, plus a heavy penalty for drifting sideways.
+
+static QWidget *PwArrowTargetQt(QDialog *pdlg, QWidget *pwFrom, int key)
+{
+  QWidget *pwBest = NULL;
+  long lBest = 0;
+
+  if (pwFrom == NULL)
+    return NULL;
+  QPoint ptFrom = pwFrom->mapTo(pdlg, pwFrom->rect().center());
+  for (QWidget *pw : pdlg->findChildren<QWidget *>()) {
+    if (pw == pwFrom || pw->focusPolicy() == Qt::NoFocus ||
+      !pw->isEnabled() || !pw->isVisibleTo(pdlg))
+      continue;
+    QPoint pt = pw->mapTo(pdlg, pw->rect().center());
+    int dx = pt.x() - ptFrom.x(), dy = pt.y() - ptFrom.y();
+    int nAhead, nSide;
+    switch (key) {
+    case Qt::Key_Up:    nAhead = -dy; nSide = dx; break;
+    case Qt::Key_Down:  nAhead =  dy; nSide = dx; break;
+    case Qt::Key_Left:  nAhead = -dx; nSide = dy; break;
+    default:            nAhead =  dx; nSide = dy; break;
+    }
+    if (nAhead <= 0)
+      continue;
+    long l = (long)nAhead + 4L*(long)NAbs(nSide);
+    if (pwBest == NULL || l < lBest) {
+      pwBest = pw;
+      lBest = l;
+    }
+  }
+  return pwBest;
+}
+
+
+// Keyboard behaviour every dialog built from the resource shares: bare
+// mnemonic letters, and arrow keys that follow the layout.
+
 class MnemonicKeysQt : public QObject
 {
 public:
@@ -311,22 +380,28 @@ public:
     QKeyEvent *pke = (QKeyEvent *)pev;
     if ((pke->modifiers() & ~Qt::KeypadModifier) != Qt::NoModifier)
       return QObject::eventFilter(pobj, pev);
-    QString str = pke->text().toLower();
-    if (str.size() != 1 || !str[0].isLetterOrNumber())
-      return QObject::eventFilter(pobj, pev);
     pdlg = qobject_cast<QDialog *>(pobj);
     if (pdlg == NULL)
       return QObject::eventFilter(pobj, pev);
-
-    // Anything that accepts typed text keeps the keystroke.
     pwFocus = pdlg->focusWidget();
-    if (qobject_cast<QLineEdit *>(pwFocus) != NULL ||
-      qobject_cast<QAbstractSpinBox *>(pwFocus) != NULL ||
-      qobject_cast<QTextEdit *>(pwFocus) != NULL ||
-      qobject_cast<QPlainTextEdit *>(pwFocus) != NULL)
+
+    int key = pke->key();
+    if (key == Qt::Key_Up || key == Qt::Key_Down || key == Qt::Key_Left ||
+      key == Qt::Key_Right) {
+      if (FWidgetTakesKeysQt(pwFocus, fTrue))
+        return QObject::eventFilter(pobj, pev);
+      QWidget *pwTo = PwArrowTargetQt(pdlg, pwFocus, key);
+      if (pwTo == NULL)
+        return QObject::eventFilter(pobj, pev);
+      pwTo->setFocus(Qt::TabFocusReason);
+      return true;
+    }
+
+    QString str = pke->text().toLower();
+    if (str.size() != 1 || !str[0].isLetterOrNumber())
       return QObject::eventFilter(pobj, pev);
-    QComboBox *pcbFocus = qobject_cast<QComboBox *>(pwFocus);
-    if (pcbFocus != NULL && pcbFocus->isEditable())
+    // Anything that accepts typed text keeps the keystroke.
+    if (FWidgetTakesKeysQt(pwFocus, fFalse))
       return QObject::eventFilter(pobj, pev);
 
     // findChildren() walks in creation order, which is the order the
