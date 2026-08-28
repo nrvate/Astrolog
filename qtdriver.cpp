@@ -74,6 +74,11 @@
 #include <QtCore/QMimeData>
 #include <QtCore/QFile>
 #include <QtCore/QSettings>
+#include <QtCore/QProcess>
+#include <QtCore/QStandardPaths>
+#include <QtWidgets/QStyleFactory>
+#include <QtGui/QPalette>
+#include <QtGui/QColor>
 
 #include "astrolog.h"
 #include "qtdriver.h"
@@ -4062,6 +4067,11 @@ QAction *PaFindActionTestQt(CONST char *sz)
 class AstroStyleQt : public QProxyStyle
 {
 public:
+  // A NULL base means "whatever style the application already has", which
+  // is how this is constructed at startup. ApplyColorSchemeQt() passes a
+  // real one when it needs to pin the style to Fusion.
+  explicit AstroStyleQt(QStyle *pbase = NULL) : QProxyStyle(pbase) { }
+
   int styleHint(StyleHint hint, CONST QStyleOption *popt = NULL,
     CONST QWidget *pw = NULL, QStyleHintReturn *pret = NULL) const override
   {
@@ -4070,6 +4080,303 @@ public:
     return QProxyStyle::styleHint(hint, popt, pw, pret);
   }
 };
+
+
+// Linux has no single place to ask "is the desktop in dark mode?", and Qt5
+// has no API for it at all: QStyleHints::colorScheme() only arrived in Qt
+// 6.5, and what it does there is read the XDG desktop portal -- the
+// cross-desktop standard every current desktop publishes. So read the
+// portal directly, and fall back to each desktop's own setting for the
+// ones that don't run one. Everything here stays inside the Qt 5.12 API,
+// which is the oldest of the Ubuntu LTS releases this fork targets.
+//
+// This is needed because Qt5's gtk3 platform theme plugin loads and then
+// supplies no palette. Verified on Mint/Cinnamon with QT_DEBUG_PLUGINS:
+// libqgtk3.so loads, and the palette stays Qt's default light #efefef
+// while the desktop sits on Mint-L-Dark. The gtk2 plugin does supply one
+// (#383838 there), so whether a machine looks right comes down to whether
+// qt5-style-plugins happens to be installed. Detecting it ourselves ends
+// that lottery.
+
+#define nSchemeNone  (-1)
+#define nSchemeLight 0
+#define nSchemeDark  1
+
+// Run a helper and return its trimmed output, or a null string if it isn't
+// installed, fails, or takes longer than nMsec. None of these answers is
+// worth delaying startup for, and a desktop that hangs its own settings
+// daemon shouldn't be able to hang Astrolog.
+
+static QString SzRunToolQt(CONST char *szProg, CONST QStringList &lsArg,
+  int nMsec = 400)
+{
+  QString strProg = QStandardPaths::findExecutable(QString(szProg));
+  if (strProg.isEmpty())
+    return QString();
+  QProcess proc;
+  proc.setStandardErrorFile(QProcess::nullDevice());
+  proc.start(strProg, lsArg, QIODevice::ReadOnly);
+  if (!proc.waitForFinished(nMsec)) {
+    proc.kill();
+    proc.waitForFinished(100);
+    return QString();
+  }
+  if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0)
+    return QString();
+  return QString::fromLocal8Bit(proc.readAllStandardOutput()).trimmed();
+}
+
+
+// True if a theme name like "Mint-L-Dark" or "Adwaita-dark" names a dark
+// variant. Deliberately narrow -- the variant is always a separate word or
+// suffix, so matching a bare "dark" anywhere would catch theme names that
+// merely contain it.
+
+static bool FThemeNameDarkQt(CONST QString &str)
+{
+  QString strLow = str.toLower();
+  strLow.remove(QChar('\''));          // gsettings quotes what it prints
+  return strLow.endsWith("dark") || strLow.contains("-dark") ||
+    strLow.contains("_dark") || strLow.contains(" dark");
+}
+
+
+// org.freedesktop.appearance/color-scheme: 0 no preference, 1 dark, 2
+// light. This is the one route that is not desktop specific, and it is
+// what Qt 6.5+ reads too.
+
+static int NSchemeFromPortalQt(void)
+{
+  QStringList lsArg;
+  lsArg << "call" << "--session"
+    << "--dest" << "org.freedesktop.portal.Desktop"
+    << "--object-path" << "/org/freedesktop/portal/desktop"
+    << "--method" << "org.freedesktop.portal.Settings.Read"
+    << "org.freedesktop.appearance" << "color-scheme";
+  QString str = SzRunToolQt("gdbus", lsArg);
+  // Prints as: (<<uint32 1>>,)
+  int i = str.indexOf("uint32");
+  if (i < 0)
+    return nSchemeNone;
+  int n = str.mid(i + 6).trimmed().leftRef(1).toInt();
+  return n == 1 ? nSchemeDark : (n == 2 ? nSchemeLight : nSchemeNone);
+}
+
+
+// GNOME 42+ publishes the preference outright. Cinnamon and MATE don't,
+// and only name a theme, so fall back to reading the variant off that.
+
+static int NSchemeFromGSettingsQt(void)
+{
+  CONST char *rgszSchema[] = {"org.cinnamon.desktop.interface",
+    "org.gnome.desktop.interface", "org.mate.interface", NULL};
+  QString str;
+  int i;
+
+  str = SzRunToolQt("gsettings", QStringList()
+    << "get" << "org.gnome.desktop.interface" << "color-scheme");
+  if (str.contains("prefer-dark"))
+    return nSchemeDark;
+  if (str.contains("prefer-light"))
+    return nSchemeLight;
+  // "default" means the theme name is the only evidence there is.
+  for (i = 0; rgszSchema[i] != NULL; i++) {
+    str = SzRunToolQt("gsettings", QStringList()
+      << "get" << rgszSchema[i] << "gtk-theme");
+    if (!str.isEmpty())
+      return FThemeNameDarkQt(str) ? nSchemeDark : nSchemeLight;
+  }
+  return nSchemeNone;
+}
+
+
+static int NSchemeFromXfceQt(void)
+{
+  QString str = SzRunToolQt("xfconf-query", QStringList()
+    << "-c" << "xsettings" << "-p" << "/Net/ThemeName");
+  if (str.isEmpty())
+    return nSchemeNone;
+  return FThemeNameDarkQt(str) ? nSchemeDark : nSchemeLight;
+}
+
+
+// Read one key out of an INI-style file.
+//
+// Written by hand rather than with QSettings, for two reasons, both found
+// the hard way on Qt 5.15.13. QSettings cannot read a key whose section
+// name contains a colon -- which is exactly kdeglobals' [Colors:Window]:
+// allKeys() lists "Colors:Window/BackgroundNormal" and passing that very
+// string back to value() returns an empty variant, as do beginGroup() and
+// a percent-encoded key. And QSettings caches parsed files by timestamp
+// and size, so a file rewritten inside the same second to a value of the
+// same length reads back stale. The first bug silently reports every KDE
+// desktop as light; the second only shows up under test, but both are
+// invisible at the call site.
+
+static QString SzIniValueQt(CONST QString &strPath, CONST char *szSect,
+  CONST char *szKey)
+{
+  QFile file(strPath);
+  QString strSect, str;
+  int i;
+
+  if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    return QString();
+  while (!file.atEnd()) {
+    str = QString::fromLocal8Bit(file.readLine()).trimmed();
+    if (str.startsWith(QChar('['))) {
+      i = str.indexOf(QChar(']'));
+      strSect = i > 1 ? str.mid(1, i - 1) : QString();
+      continue;
+    }
+    if (strSect != QString(szSect))
+      continue;
+    i = str.indexOf(QChar('='));
+    if (i < 0 || str.left(i).trimmed() != QString(szKey))
+      continue;
+    return str.mid(i + 1).trimmed();
+  }
+  return QString();
+}
+
+
+// KDE writes the active scheme's window background into kdeglobals as
+// "r,g,b". Judging the colour is better than matching scheme names, of
+// which there are many. Needs no helper program, so this still works on a
+// machine with no glib tools installed.
+
+static int NSchemeFromKdeQt(void)
+{
+  QStringList ls = SzIniValueQt(QDir::homePath() + "/.config/kdeglobals",
+    "Colors:Window", "BackgroundNormal").split(QChar(','));
+
+  if (ls.size() < 3)
+    return nSchemeNone;
+  return QColor(ls[0].trimmed().toInt(), ls[1].trimmed().toInt(),
+    ls[2].trimmed().toInt()).lightness() < 128 ? nSchemeDark : nSchemeLight;
+}
+
+
+// The GTK config file, which a plain GTK setup writes even with no
+// settings daemon running. Also needs no helper program.
+
+static int NSchemeFromGtkFileQt(void)
+{
+  QString strPath = QDir::homePath() + "/.config/gtk-3.0/settings.ini";
+  QString str;
+
+  str = SzIniValueQt(strPath, "Settings",
+    "gtk-application-prefer-dark-theme");
+  if (!str.isEmpty()) {
+    str = str.toLower();
+    return (str == "1" || str == "true") ? nSchemeDark : nSchemeLight;
+  }
+  str = SzIniValueQt(strPath, "Settings", "gtk-theme-name");
+  if (!str.isEmpty())
+    return FThemeNameDarkQt(str) ? nSchemeDark : nSchemeLight;
+  return nSchemeNone;
+}
+
+
+// Cheapest and most explicit first, then the standard, then per desktop,
+// then the files that need no helper program at all.
+
+static int NDarkPreferenceQt(void)
+{
+  CONST char *szEnv;
+  int n;
+
+  szEnv = getenv("ASTROLOG_QT_THEME");
+  if (szEnv != NULL) {
+    QString str = QString(szEnv).trimmed().toLower();
+    if (str == "dark")
+      return nSchemeDark;
+    if (str == "light")
+      return nSchemeLight;
+    // "auto", "system", or anything else: detect as normal.
+  }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+  // Qt answers this itself from 6.5 on, and none of the rest need run.
+  // Nothing below Qt6 compiles this, so it costs the Qt5 build nothing.
+  Qt::ColorScheme cs = QGuiApplication::styleHints()->colorScheme();
+  if (cs == Qt::ColorScheme::Dark)
+    return nSchemeDark;
+  if (cs == Qt::ColorScheme::Light)
+    return nSchemeLight;
+#endif
+  if ((n = NSchemeFromPortalQt())    != nSchemeNone) return n;
+  if ((n = NSchemeFromGSettingsQt()) != nSchemeNone) return n;
+  if ((n = NSchemeFromXfceQt())      != nSchemeNone) return n;
+  if ((n = NSchemeFromKdeQt())       != nSchemeNone) return n;
+  if ((n = NSchemeFromGtkFileQt())   != nSchemeNone) return n;
+  szEnv = getenv("GTK_THEME");
+  if (szEnv != NULL)
+    return FThemeNameDarkQt(QString(szEnv)) ? nSchemeDark : nSchemeLight;
+  return nSchemeNone;
+}
+
+
+#ifdef QTTEST
+// The suite exercises the detection above, which outside the tests only
+// ever runs once, at startup, against whatever desktop the developer
+// happens to be sitting at.
+
+flag FThemeNameDarkTestQt(CONST char *sz)
+  { return FThemeNameDarkQt(QString(sz)) ? fTrue : fFalse; }
+int NSchemeFromKdeTestQt(void) { return NSchemeFromKdeQt(); }
+int NSchemeFromGtkFileTestQt(void) { return NSchemeFromGtkFileQt(); }
+#endif
+
+
+// Follow the desktop into dark mode, if it's in it and Qt hasn't already
+// worked that out for itself.
+
+void ApplyColorSchemeQt(void)
+{
+  QColor coWind(0x35, 0x35, 0x35), coBase(0x2A, 0x2A, 0x2A),
+    coText(0xFF, 0xFF, 0xFF), coHigh(0x2A, 0x82, 0xDA),
+    coDim(0x7F, 0x7F, 0x7F);
+  QStyle *pstyle;
+  QPalette pal;
+
+  if (NDarkPreferenceQt() != nSchemeDark)
+    return;
+
+  // A platform theme that already produced a dark palette knows the real
+  // desktop colours, which are better than anything invented here. This is
+  // the KDE case, and the gtk2 plugin's case.
+  if (QApplication::palette().color(QPalette::Window).lightness() < 128)
+    return;
+
+  // Fusion is the one bundled style that draws entirely from the palette.
+  // The GTK styles paint their own colours and would ignore all of this.
+  pstyle = QStyleFactory::create("Fusion");
+  if (pstyle != NULL)
+    QApplication::setStyle(new AstroStyleQt(pstyle));
+
+  pal.setColor(QPalette::Window, coWind);
+  pal.setColor(QPalette::WindowText, coText);
+  pal.setColor(QPalette::Base, coBase);
+  pal.setColor(QPalette::AlternateBase, coWind);
+  pal.setColor(QPalette::ToolTipBase, coWind);
+  pal.setColor(QPalette::ToolTipText, coText);
+  pal.setColor(QPalette::Text, coText);
+  pal.setColor(QPalette::Button, coWind);
+  pal.setColor(QPalette::ButtonText, coText);
+  pal.setColor(QPalette::BrightText, QColor(0xFF, 0x40, 0x40));
+  pal.setColor(QPalette::Link, coHigh);
+  pal.setColor(QPalette::Highlight, coHigh);
+  pal.setColor(QPalette::HighlightedText, QColor(0x00, 0x00, 0x00));
+  pal.setColor(QPalette::Disabled, QPalette::Text, coDim);
+  pal.setColor(QPalette::Disabled, QPalette::ButtonText, coDim);
+  pal.setColor(QPalette::Disabled, QPalette::WindowText, coDim);
+  pal.setColor(QPalette::Disabled, QPalette::HighlightedText, coDim);
+  pal.setColor(QPalette::Disabled, QPalette::Highlight, QColor(0x50,0x50,0x50));
+#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
+  pal.setColor(QPalette::PlaceholderText, coDim);
+#endif
+  QApplication::setPalette(pal);
+}
 
 
 // Free what this backend allocated through Astrolog's own allocator. The
@@ -4271,6 +4578,7 @@ void BeginQt()
 
   gi.qapp = new QApplication(s_argc, s_argv);
   QApplication::setStyle(new AstroStyleQt);
+  ApplyColorSchemeQt();
   LoadBundledFontsQt();
   SetUiFontQt();
   gi.qwind = new QMainWindow();

@@ -61,11 +61,11 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 2847 assertions + startup checks
+./run-qt-tests.sh                # 2873 assertions + startup checks
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **2847 passed, 0 failed**, startup diagnostics ok.
+commit. Current state: **2873 passed, 0 failed**, startup diagnostics ok.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render
@@ -78,8 +78,9 @@ Several groups drive real dialogs rather than calling into them: Object
 Selections through seven cases, the Calculation Settings ephemeris list,
 and the chart list's filter. Others cover behaviour no audit can see --
 relationship chart modes surviving a recast, the AstroExpression hooks
-and functions, and a check that queued timers fire inside nested modals,
-which every dialog test depends on. A separate **Startup diagnostics**
+and functions, the desktop light/dark detection read from each of its
+sources, and a check that queued timers fire inside nested modals, which
+every dialog test depends on. A separate **Startup diagnostics**
 section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
@@ -199,6 +200,11 @@ On a private Xvfb display, `import -window root` is fine.
   reads `???` and the run tells you nothing.
 - The user's config at `/data/med/astrolog.as` is theirs. Don't edit it
   unless asked.
+- **The port follows the desktop's dark mode**, because Qt5 has no API
+  for it and its gtk3 platform theme supplies no palette. Detection is
+  `NDarkPreferenceQt()` in `qtdriver.cpp`; `ASTROLOG_QT_THEME=dark|light`
+  forces it either way, which is also how to check a change under both.
+  Work log item 50 has the reasoning, including two `QSettings` traps.
 
 ## Working method
 

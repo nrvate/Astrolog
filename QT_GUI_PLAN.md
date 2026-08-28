@@ -111,8 +111,8 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2847
-   assertions** as of 2026-08-25; it was 1396 when first written, and has
+   display and no `xdotool`, and exits non-zero on failure. **2873
+   assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
    - **How it works.** `Makefile.qt.test` builds the same sources plus
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-34
+## Work log — items 1-50
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2059,6 +2059,63 @@ are the more useful half to read before starting something new.
       assertion was weakened is a claim about the system, and this one was
       wrong. The user reading it as "the harness is broken" was a fairer
       reading than what it actually said.
+
+50. **The dialogs ignored the desktop's dark mode, and Qt5 gives you
+    nothing to fix it with.** Reported as "the dialogs are light on this
+    machine, almost blinding", on Mint 22 / Cinnamon sitting on
+    `Mint-L-Dark`. Two things had to be ruled out before anything was
+    written, and both mattered.
+    - **It is not `AstroStyleQt`.** `QApplication::setStyle()` is called
+      at the top of `BeginQt()`, and Qt's docs are widely read as saying
+      that resets the palette. Measured, in ten lines standing outside
+      this program: the palette is byte-identical before and after the
+      call. The custom style was innocent.
+    - **It is not a missing package.** `qt5-gtk-platformtheme` was
+      installed, and `QT_DEBUG_PLUGINS=1` shows `libqgtk3.so` being found
+      and loaded. It loads and then supplies no palette at all — the app
+      stays on Qt's default light `#efefef` while the desktop is dark.
+      The **gtk2** plugin on the same machine reads the real theme
+      (`#383838`). So whether a Qt5 app looks right on a GTK desktop comes
+      down to whether `qt5-style-plugins` happens to be installed, which
+      is not something to ask a user to know.
+    - **Qt has the API, in Qt 6.5.** `QStyleHints::colorScheme()` is
+      exactly the universal answer, and what it does internally is read
+      the XDG desktop portal. That is out of reach here twice over: this
+      builds against Qt 5.15, and the Qt6 packaged on the target LTS
+      releases is 6.4, which is *below* 6.5. Requiring Qt6 would not have
+      fixed the machine that reported it.
+    - **So read the portal ourselves**, which is the same source of truth,
+      then fall back per desktop: `org.freedesktop.appearance`
+      `color-scheme` via the portal, then GNOME's `color-scheme` and the
+      Cinnamon/GNOME/MATE theme name via `gsettings`, then XFCE's
+      `xfconf-query`, then `kdeglobals`, then `gtk-3.0/settings.ini`, then
+      `GTK_THEME`. The last three need no helper program, so detection
+      still works on a machine with no glib tools at all. A
+      `#if QT_VERSION >= 6.5` branch defers to Qt itself and compiles to
+      nothing on Qt5. `ASTROLOG_QT_THEME=dark|light` overrides everything.
+    - **Only synthesise a palette when nothing else has.** If a platform
+      theme already produced a dark one it knows the real desktop colours,
+      which beat anything invented here, so KDE and the gtk2 plugin are
+      left alone. When we do paint, the style is pinned to Fusion, because
+      it is the one bundled style that draws entirely from the palette —
+      the GTK styles paint their own colours and would ignore all of it.
+    - **`QSettings` cannot read `kdeglobals`, and that is not a typo.**
+      The section is `[Colors:Window]`, and QSettings will not return a
+      key out of a section whose name contains a colon: `allKeys()` lists
+      `"Colors:Window/BackgroundNormal"` and handing that exact string
+      back to `value()` yields an empty variant. `beginGroup()` and a
+      percent-encoded key fail identically. Written with QSettings this
+      compiles, runs, and silently reports every KDE desktop as light.
+      Both file routes are hand-parsed now.
+    - **The suite then caught a second QSettings trap**, which is the
+      better argument for having written the test: it caches parsed files
+      by timestamp and size, so rewriting `...prefer-dark-theme=1` to `=0`
+      inside the same second reads back stale. Only reachable under test
+      today, but it would be a live bug the moment anything re-reads.
+    - Verified twelve ways, each route with the routes above it removed
+      (`PATH=/nonexistent`, a scratch `HOME`): portal, gsettings, both
+      file routes, both overrides, and the "nothing said" case. 26 new
+      assertions; reintroducing the QSettings read fails two of them.
 
 ## Features this fork adds to both builds
 

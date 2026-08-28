@@ -54,6 +54,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
+#include <QtCore/QTemporaryDir>
 #include <stdarg.h>
 #include "astrolog.h"
 #include "extern.h"
@@ -961,6 +962,97 @@ static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
   pfnOpen();
   tPoll.stop();
   tNet.stop();
+}
+
+
+extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
+extern int NSchemeFromKdeTestQt(void);
+extern int NSchemeFromGtkFileTestQt(void);
+
+// Write sz to the named file, creating its directory.
+static flag FWriteScratchQt(CONST QString &strPath, CONST char *sz)
+{
+  QDir().mkpath(QFileInfo(strPath).path());
+  QFile file(strPath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    return fFalse;
+  file.write(sz);
+  return fTrue;
+}
+
+// Does the port follow the desktop into dark mode? Qt5 has no API for
+// this -- QStyleHints::colorScheme() is Qt 6.5 -- and Qt5's own gtk3
+// platform theme loads without supplying any palette, so the port detects
+// it. The routes that need no helper program are the ones testable in
+// process; the portal and gsettings routes depend on the desktop the
+// developer is sitting at and are deliberately not asserted here.
+static void TestColorSchemeQt()
+{
+  Group("Desktop colour scheme");
+
+  // Theme names, as the desktops actually spell them. gsettings quotes
+  // what it prints, so a quoted answer has to classify the same way.
+  Check(FThemeNameDarkTestQt("Mint-L-Dark"), "Mint-L-Dark is dark");
+  Check(FThemeNameDarkTestQt("'Mint-L-Dark'"), "a quoted answer is dark");
+  Check(FThemeNameDarkTestQt("Adwaita-dark"), "Adwaita-dark is dark");
+  Check(FThemeNameDarkTestQt("Breeze Dark"), "Breeze Dark is dark");
+  Check(FThemeNameDarkTestQt("Yaru-blue-dark"), "Yaru-blue-dark is dark");
+  Check(!FThemeNameDarkTestQt("Mint-L"), "Mint-L is light");
+  Check(!FThemeNameDarkTestQt("Adwaita"), "Adwaita is light");
+  Check(!FThemeNameDarkTestQt("Yaru"), "Yaru is light");
+  Check(!FThemeNameDarkTestQt("Breeze"), "Breeze is light");
+
+  QTemporaryDir dir;
+  Check(dir.isValid(), "a scratch directory to write config files into");
+  if (!dir.isValid())
+    return;
+  QByteArray baHome = qgetenv("HOME");
+  qputenv("HOME", dir.path().toLocal8Bit());
+
+  // kdeglobals. This is a regression test with a specific target: the
+  // section is [Colors:Window], and QSettings cannot read a key out of a
+  // section whose name contains a colon -- allKeys() lists it and value()
+  // then returns an empty variant for that very string. Reading it with
+  // QSettings compiles, runs, and silently reports every KDE desktop as
+  // light.
+  QString strKde = dir.path() + "/.config/kdeglobals";
+  Check(FWriteScratchQt(strKde,
+    "[General]\nwidgetStyle=Breeze\n"
+    "[Colors:Window]\nForegroundNormal=252,252,252\n"
+    "BackgroundNormal=27,30,32\n"), "wrote a dark kdeglobals");
+  Check(NSchemeFromKdeTestQt() == 1, "a dark kdeglobals reads as dark");
+  Check(FWriteScratchQt(strKde,
+    "[Colors:Window]\nBackgroundNormal=239,240,241\n"),
+    "wrote a light kdeglobals");
+  Check(NSchemeFromKdeTestQt() == 0, "a light kdeglobals reads as light");
+  Check(FWriteScratchQt(strKde, "[Colors:Window]\nBackgroundNormal=x\n"),
+    "wrote a malformed kdeglobals");
+  Check(NSchemeFromKdeTestQt() == -1, "a malformed kdeglobals says nothing");
+  QFile::remove(strKde);
+  Check(NSchemeFromKdeTestQt() == -1, "no kdeglobals at all says nothing");
+
+  // The GTK config file, which a plain GTK setup writes with no settings
+  // daemon running at all.
+  QString strGtk = dir.path() + "/.config/gtk-3.0/settings.ini";
+  Check(FWriteScratchQt(strGtk,
+    "[Settings]\ngtk-application-prefer-dark-theme=1\n"),
+    "wrote gtk settings.ini asking for dark");
+  Check(NSchemeFromGtkFileTestQt() == 1, "prefer-dark-theme=1 reads as dark");
+  Check(FWriteScratchQt(strGtk,
+    "[Settings]\ngtk-application-prefer-dark-theme=0\n"),
+    "wrote gtk settings.ini asking for light");
+  Check(NSchemeFromGtkFileTestQt() == 0, "prefer-dark-theme=0 reads as light");
+  Check(FWriteScratchQt(strGtk, "[Settings]\ngtk-theme-name=Adwaita-dark\n"),
+    "wrote gtk settings.ini naming a dark theme");
+  Check(NSchemeFromGtkFileTestQt() == 1, "a dark gtk-theme-name reads as dark");
+  Check(FWriteScratchQt(strGtk, "[Settings]\ngtk-theme-name=Adwaita\n"),
+    "wrote gtk settings.ini naming a light theme");
+  Check(NSchemeFromGtkFileTestQt() == 0, "a light gtk-theme-name reads as light");
+  QFile::remove(strGtk);
+  Check(NSchemeFromGtkFileTestQt() == -1, "no settings.ini at all says nothing");
+
+  qputenv("HOME", baHome);
+  printf("  the desktop's light/dark preference is read from each source\n");
 }
 
 
@@ -1990,6 +2082,7 @@ int NRunQtTestsQt()
   TestTimerSanityQt();
   TestObjSelDialogQt();
   TestObjSelParseQt();
+  TestColorSchemeQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

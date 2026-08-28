@@ -68,6 +68,22 @@ bug and this build does the sensible thing instead. They're all listed
 under "Known divergences from Windows" in `QT_GUI_PLAN.md` rather than
 left for you to discover.
 
+## Appearance
+
+The Qt build follows the desktop's light/dark setting. Qt 5 has no API for
+this — `QStyleHints::colorScheme()` arrived in Qt 6.5 — and Qt 5's own gtk3
+platform theme loads without supplying a palette, so Astrolog reads the
+preference itself: the `org.freedesktop.appearance` portal first, which is
+what Qt 6.5 reads too, then GNOME/Cinnamon/MATE via `gsettings`, XFCE via
+`xfconf-query`, then `kdeglobals`, `gtk-3.0/settings.ini` and `GTK_THEME`.
+The last three need no helper programs installed.
+
+Set `ASTROLOG_QT_THEME=dark` or `=light` to override the detection:
+
+```sh
+ASTROLOG_QT_THEME=light ./astrolog-qt
+```
+
 ## Tests
 
 ```
@@ -75,7 +91,7 @@ make -f Makefile.qt.test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 2847 assertions plus startup checks, covering dialogs, context menus,
+A headless suite of 2873 assertions plus startup checks, covering dialogs, context menus,
 shortcuts, chart rendering, every menu item, menu parity against
 `astrolog.rc`, and bad input. Several groups drive the real dialogs and
 assert what they leave behind, rather than calling the code underneath
