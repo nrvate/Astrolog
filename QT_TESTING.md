@@ -165,7 +165,11 @@ tools/qtdrive.sh run tools/scenarios/objectsel.txt
 tools/windrive.sh run tools/scenarios/win-objectsel.txt
 ```
 
-`qtdrive.sh` addresses widgets by name over AT-SPI, which is at least
+`qtdrive.sh` sets up the display, window manager and private D-Bus, then
+runs `tools/qtdrive.py`, which is where the scenario commands and the
+AT-SPI walking actually live — edit the `.py`, not the wrapper.
+
+It addresses widgets by name over AT-SPI, which is at least
 better than measuring screenshots: Qt draws every widget inside one X
 window, so `xwininfo` and `xdotool` see the window but not the buttons in
 it, and a mis-measured click leaves the dialog open while a before/after
@@ -377,8 +381,16 @@ make -f Makefile.qt -j4 && make -f Makefile.qt.test -j4 && ./run-qt-tests.sh
 make -f Makefile.win -j4
 python3 tools/rc_audit.py
 python3 tools/rc_mnemonic_audit.py
+python3 tools/rc_field_audit.py
 python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h
+python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h
+python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h
 ```
+
+The three `diff` lines check that the generated tables still match the
+resource. Run the generators with `>` instead only when you mean to
+regenerate them, and rebuild afterwards: the object files depend on those
+headers, and a regeneration without a rebuild looks like it did nothing.
 
 And when the change touches both builds, `tools/win-tests.sh` as well.
 The shared logic underneath is already covered by the Qt suite, since

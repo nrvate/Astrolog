@@ -175,15 +175,31 @@ Roughly in the order I'd take them.
      measured. Do not store pictures.
 5. **Decide about the deliberate divergences.** The behaviours in
    "Known divergences from Windows" are places this port knowingly does
-   something different, usually because Windows' behaviour looks like a
-   bug. They are defensible individually, but if the goal is strict
-   parity they are the list to revisit. The menu accelerator column
-   (`Shift+V` where Windows writes `V`) is the most visible one and the
-   only one a user sees on every menu.
+   something different. Five remain, and **four of them are cases where
+   Windows looks like it has a bug** — Display Settings' aspect count that
+   cannot un-restrict anything, Daylight discarding an "Autodetect"
+   choice, Atlas City Coloring writing the aspect-glyph field, and the
+   command line dialog's save/restore. Reproducing those for parity's
+   sake would make the program worse; the recommendation is to keep them.
+   The fifth is the restriction dialogs' checkbox sense, already flipped
+   *toward* Windows.
+   The one a user met on every menu — the accelerator column reading
+   `Shift+V` where Windows writes `V` — **is fixed**, see item 44, so this
+   item no longer has anything urgent in it.
 6. **Unfinished business, low value:** Wingdings and the plain text
-   fonts aren't bundled (see item 15); the black wedges in the tick ring
-   are unexplained upstream rendering (see item 11) and nobody has
-   actually worked out what draws them.
+   fonts aren't bundled (see item 15) — a licensing fact rather than a
+   task: Wingdings is proprietary and the rest are system fonts, and Qt
+   substitutes when absent exactly as Windows does. The seven that can
+   ship do.
+   **The tick ring wedges are closed**, 2026-08-27, at the maintainer's
+   direction rather than by being explained. Item 11 records what was
+   ruled out — `iFillMax` for screen as well as print, and any
+   fill-algorithm cause at all, since the two builds share no fill
+   implementation — and that they could not be reproduced here under any
+   fill mode, window size or decan setting, while the Windows build
+   measured 34.9% and 26.2% background in the same bands. If they ever
+   matter again, that is where to start, and measure the annulus by angle
+   rather than cropping.
 7. **Use it on real data.** Added 2026-08-26, and on the evidence it
    outranks everything above it. Every verification before that date was
    mechanical — does the item fire, does the dialog open, does the layout

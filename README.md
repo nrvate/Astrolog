@@ -77,8 +77,13 @@ make -f Makefile.qt.test
 
 A headless suite of 2847 assertions plus startup checks, covering dialogs, context menus,
 shortcuts, chart rendering, every menu item, menu parity against
-`astrolog.rc`, and bad input. No X display needed; exits nonzero on
-failure.
+`astrolog.rc`, and bad input. Several groups drive the real dialogs and
+assert what they leave behind, rather than calling the code underneath
+them. No X display needed; exits nonzero on failure.
+
+It defaults to `-i nrvate.as`, the maintainer's settings file, because
+that is the only input under which the esoteric bodies resolve at all —
+without it a fifth of the checks skip themselves silently.
 
 The Windows build has a small suite of its own, driving the real binary
 under Wine:

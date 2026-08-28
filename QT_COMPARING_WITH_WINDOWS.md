@@ -222,7 +222,9 @@ resource script, which is the thing both builds are built from:
 ```sh
 python3 tools/rc_mnemonic_audit.py    # "&" placement, all 850 label sites
 python3 tools/rc_audit.py             # dialog controls nothing wires up
-python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
+python3 tools/rc_field_audit.py       # a control wired to the *wrong* setting
+python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h        # dialog layouts
+python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h   # accelerator column
 ```
 
 `rc2qt.py` reproduces the committed `qtrcdlg.h` byte-for-byte, so a diff

@@ -70,20 +70,39 @@ commit. Current state: **2847 passed, 0 failed**, startup diagnostics ok.
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render
 non-blank, all 338 menu items fire without crashing, 258/258 Windows menu
-items present, and bad input (missing files, unknown switches) doesn't
-terminate the process. A separate **Startup diagnostics** section runs
+items present, 256 show Windows' own accelerator text, 39/39 esoteric
+bodies resolve against the ephemeris, and bad input (missing files,
+unknown switches) doesn't terminate the process.
+
+Several groups drive real dialogs rather than calling into them: Object
+Selections through seven cases, the Calculation Settings ephemeris list,
+and the chart list's filter. Others cover behaviour no audit can see --
+relationship chart modes surviving a recast, the AstroExpression hooks
+and functions, and a check that queued timers fire inside nested modals,
+which every dialog test depends on. A separate **Startup diagnostics**
+section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Four audits, all currently clean:
+Three audits of the port against `astrolog.rc`, all currently clean:
 
 ```sh
-python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
-python3 tools/rc_audit.py                        # controls nothing wires up
-python3 tools/rc_mnemonic_audit.py               # "&" placement vs astrolog.rc
-python3 tools/rc_field_audit.py                  # controls wired to the wrong setting
-python3 tools/rc_accel.py astrolog.rc > qtrcaccel.h   # accelerator column
-python3 tools/rc_cmd.py astrolog.rc resource.h > qtrccmd.h  # label -> cmd id
+python3 tools/rc_audit.py            # dialog controls nothing wires up
+python3 tools/rc_mnemonic_audit.py   # "&" placement, all 850 label sites
+python3 tools/rc_field_audit.py      # a control wired to the *wrong* setting
+```
+
+And three tables generated from the resource. Regenerate after any `.rc`
+change; piping into `diff` is how you check they are still in sync, which
+is the pre-commit form — the plain `>` form overwrites the committed file:
+
+```sh
+python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h                # dialogs
+python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h           # accelerators
+python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h    # cmd ids
+```
+
+```sh
 
 # Ask the program a question directly -- the fast loop, ~0.2s. Rewrite
 # ProbeQt() in qttest.cpp, rebuild, run. See QT_TESTING.md.
