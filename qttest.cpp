@@ -55,6 +55,7 @@
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QKeyEvent>
 #include <stdarg.h>
 #include "astrolog.h"
 #include "extern.h"
@@ -1374,6 +1375,91 @@ static void TestAnimationStateQt()
   printf("  one switch starts and stops it; nothing else moves the chart\n");
 }
 
+// Windows dialogs act on a mnemonic letter pressed on its own -- "s"
+// ticks "&Sun" -- while Qt wants Alt held. Both builds read the same "&"
+// out of astrolog.rc, so only the routing differs, and on the restriction
+// grid of 52 checkboxes it decides whether the dialog can be used from
+// the keyboard at all.
+static void TestDialogMnemonicsQt()
+{
+  Group("Dialog mnemonic keys");
+
+  DriveModalQt(ShowRestrictDialogQt, [](QWidget *pw) {
+    auto tap = [pw](CONST char *szCh) {
+      QKeyEvent ev(QEvent::KeyPress, (int)Qt::Key_A, Qt::NoModifier,
+        QString(szCh));
+      QApplication::sendEvent(pw, &ev);
+    };
+    auto find = [pw](CONST char *sz) -> QCheckBox * {
+      for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+        if (p->text() == QString(sz))
+          return p;
+      return NULL;
+    };
+    struct { CONST char *szLabel, *szCh; } rg[] = {
+      {"&Sun", "s"}, {"Mercur&y", "y"}, {"&Venus", "v"}, {"&Earth", "e"},
+      {"M&oon", "o"}, {"&Jupiter", "j"}, {"&Pluto", "p"},
+      {"&Neptune", "n"}, {"&Chiron", "c"} };
+    for (int k = 0; k < 9; k++) {
+      QCheckBox *pcb = find(rg[k].szLabel);
+      Check(pcb != NULL, "%s is on the dialog", rg[k].szLabel);
+      if (pcb == NULL)
+        continue;
+      flag fWas = pcb->isChecked();
+      tap(rg[k].szCh);
+      Check(pcb->isChecked() != fWas,
+        "bare '%s' toggles %s", rg[k].szCh, rg[k].szLabel);
+      tap(rg[k].szCh);
+    }
+
+    // A letter no control claims changes nothing.
+    int cBefore = 0;
+    for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+      cBefore += p->isChecked() ? 1 : 0;
+    tap("q");
+    int cAfter = 0;
+    for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+      cAfter += p->isChecked() ? 1 : 0;
+    Check(cBefore == cAfter, "a letter with no mnemonic changes nothing");
+    pw->close();
+  });
+
+  // The keystroke has to reach a text field when one has focus, or typing
+  // a chart name would tick boxes across the dialog.
+  DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
+    QLineEdit *pe = NULL;
+    for (QLineEdit *p : pw->findChildren<QLineEdit *>())
+      if (p->isEnabled() && p->isVisibleTo(pw)) {
+        pe = p;
+        break;
+      }
+    Check(pe != NULL, "the chart info dialog has a text field");
+    if (pe != NULL) {
+      int cBefore = 0;
+      for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+        cBefore += p->isChecked() ? 1 : 0;
+      pe->setFocus();
+      pe->setText("");
+      for (CONST char *pch = "sunny"; *pch != chNull; pch++) {
+        QKeyEvent ev(QEvent::KeyPress, (int)Qt::Key_A, Qt::NoModifier,
+          QString(QChar(*pch)));
+        QApplication::sendEvent(pe, &ev);
+      }
+      int cAfter = 0;
+      for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+        cAfter += p->isChecked() ? 1 : 0;
+      Check(pe->text() == "sunny",
+        "a text field still takes typed letters (\"%s\")",
+        pe->text().toLocal8Bit().constData());
+      Check(cBefore == cAfter, "and typing ticks nothing");
+    }
+    pw->close();
+  });
+
+  printf("  bare mnemonic letters work, and text fields still take typing\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -2463,6 +2549,7 @@ int NRunQtTestsQt()
   TestDialogButtonWiringQt();
   TestSharedSymbolBoxesQt();
   TestAnimationStateQt();
+  TestDialogMnemonicsQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

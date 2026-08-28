@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2926
+   display and no `xdotool`, and exits non-zero on failure. **2948
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-55
+## Work log — items 1-56
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2316,6 +2316,36 @@ are the more useful half to read before starting something new.
     - 10 of the group's assertions fail if the old two-flag design comes
       back, which is a stronger regression net than the count suggests:
       they cover the states, not the keystrokes.
+
+56. **Dialog mnemonics needed Alt here and not on Windows.** Reported
+    against the restriction dialogs: "S=Sun, y=Mercury" used to work by
+    themselves, and this port wanted Alt held.
+    - A Win32 dialog acts on a mnemonic letter pressed alone; Qt only
+      binds `Alt`+letter. Both builds take the mnemonics from the same `&`
+      in astrolog.rc -- `rc_mnemonic_audit.py` already checks all 850 of
+      them -- so nothing was missing, only the routing. On a grid of 52
+      checkboxes that is the difference between the dialog being usable
+      from the keyboard and not.
+    - `MnemonicKeysQt` is an event filter on the dialog itself, so it sees
+      the key only after the focused widget has declined it. A control
+      that takes typing therefore keeps its letters: a `QLineEdit`,
+      spin box, text edit or editable combo is checked for first, or
+      typing a chart name into Set Chart Info would tick boxes across the
+      dialog. Duplicated mnemonics cycle rather than always firing the
+      first, which is what Windows does.
+    - **It went in the wrong place first.** `PrepareDialogQt()` looked
+      like the shared hook -- 21 dialogs call it -- but the restriction
+      dialogs are not among them, and they were the ones reported. Moved
+      to `RcBuildDialogQt()`, which every dialog built from the resource
+      goes through. The probe said "NO EFFECT" eight times before the
+      move, which is the only reason it was caught rather than shipped.
+    - **The other half of the report, the tab order, is not reproduced.**
+      Walking the focus chain of Object Restrictions gives exactly the
+      resource order -- OK, Cancel, then dx01 upward -- and the arrow keys
+      follow the same chain (Down from Venus reaches Mars, Right reaches
+      Jupiter, which is Win32's own "next control in the group"). Left
+      open rather than guessed at.
+    - 22 new assertions, nine of which fail without the filter.
 
 ## Features this fork adds to both builds
 

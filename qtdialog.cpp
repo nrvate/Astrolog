@@ -53,6 +53,11 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QAbstractButton>
+#include <QtWidgets/QAbstractSpinBox>
+#include <QtWidgets/QTextEdit>
+#include <QtWidgets/QPlainTextEdit>
+#include <QtGui/QKeyEvent>
 #include <QtWidgets/QListWidget>
 #include <QtCore/QDir>
 #include <QtCore/QStringList>
@@ -258,6 +263,92 @@ static QPixmap PixAstrologIconQt()
   }
   return pix;
 }
+
+// The mnemonic letter of a label, or a null character if it has none.
+// "&&" is a literal ampersand, not a marker, so it is skipped.
+
+static QChar ChMnemonicQt(CONST QString &str)
+{
+  for (int i = 0; i < str.size() - 1; i++) {
+    if (str[i] != QChar('&'))
+      continue;
+    if (str[i+1] == QChar('&')) {
+      i++;
+      continue;
+    }
+    return str[i+1].toLower();
+  }
+  return QChar();
+}
+
+
+// Windows dialogs activate a control from its mnemonic letter alone --
+// "s" ticks "&Sun" -- while Qt wants Alt held down. Both builds take the
+// mnemonics from the same "&" in astrolog.rc, so the only difference is
+// how the keystroke is routed; on a grid of 52 restriction checkboxes it
+// is the difference between the dialog being usable from the keyboard and
+// not being usable at all.
+//
+// Installed on the dialog rather than on each control, so it sees the key
+// after the focused widget has declined it. A field that takes typing
+// therefore keeps its letters -- otherwise typing a chart name into Set
+// Chart Info would tick boxes across the dialog.
+//
+// Duplicated mnemonics cycle, the way Windows cycles rather than always
+// firing the first: dlgRestrict alone has several letters used twice.
+
+class MnemonicKeysQt : public QObject
+{
+public:
+  bool eventFilter(QObject *pobj, QEvent *pev) override
+  {
+    QDialog *pdlg;
+    QWidget *pwFocus;
+    QChar ch;
+
+    if (pev->type() != QEvent::KeyPress)
+      return QObject::eventFilter(pobj, pev);
+    QKeyEvent *pke = (QKeyEvent *)pev;
+    if ((pke->modifiers() & ~Qt::KeypadModifier) != Qt::NoModifier)
+      return QObject::eventFilter(pobj, pev);
+    QString str = pke->text().toLower();
+    if (str.size() != 1 || !str[0].isLetterOrNumber())
+      return QObject::eventFilter(pobj, pev);
+    pdlg = qobject_cast<QDialog *>(pobj);
+    if (pdlg == NULL)
+      return QObject::eventFilter(pobj, pev);
+
+    // Anything that accepts typed text keeps the keystroke.
+    pwFocus = pdlg->focusWidget();
+    if (qobject_cast<QLineEdit *>(pwFocus) != NULL ||
+      qobject_cast<QAbstractSpinBox *>(pwFocus) != NULL ||
+      qobject_cast<QTextEdit *>(pwFocus) != NULL ||
+      qobject_cast<QPlainTextEdit *>(pwFocus) != NULL)
+      return QObject::eventFilter(pobj, pev);
+    QComboBox *pcbFocus = qobject_cast<QComboBox *>(pwFocus);
+    if (pcbFocus != NULL && pcbFocus->isEditable())
+      return QObject::eventFilter(pobj, pev);
+
+    // findChildren() walks in creation order, which is the order the
+    // resource lists the controls in, which is the tab order.
+    QList<QAbstractButton *> rgpb;
+    for (QAbstractButton *pb : pdlg->findChildren<QAbstractButton *>()) {
+      if (!pb->isEnabled() || !pb->isVisibleTo(pdlg))
+        continue;
+      ch = ChMnemonicQt(pb->text());
+      if (!ch.isNull() && ch == str[0])
+        rgpb.append(pb);
+    }
+    if (rgpb.isEmpty())
+      return QObject::eventFilter(pobj, pev);
+    int i = rgpb.indexOf(qobject_cast<QAbstractButton *>(pwFocus));
+    QAbstractButton *pb = rgpb[(i + 1) % rgpb.size()];
+    pb->setFocus(Qt::ShortcutFocusReason);
+    pb->click();
+    return true;
+  }
+};
+
 
 static void PrepareDialogQt(QDialog *pdlg)
 {
@@ -732,6 +823,13 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
   QFontMetrics fm(pdlg->font());
   int dxBase = fm.averageCharWidth(), dyBase = fm.height();
   int i, iPass;
+
+  // Every dialog built from the resource answers bare mnemonic letters,
+  // which is where Windows' dialogs act on them. Installed here rather
+  // than in PrepareDialogQt() because the restriction dialogs never call
+  // that, and they are the ones with 52 checkboxes to reach.
+  static MnemonicKeysQt filterMnemonic;
+  pdlg->installEventFilter(&filterMnemonic);
 
   prgbuilt->clear();
   prgbuilt->resize(cctl);
