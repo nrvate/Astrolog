@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2873
+   display and no `xdotool`, and exits non-zero on failure. **2886
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-50
+## Work log — items 1-51
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2116,6 +2116,48 @@ are the more useful half to read before starting something new.
       (`PATH=/nonexistent`, a scratch `HOME`): portal, gsettings, both
       file routes, both overrides, and the "nothing said" case. 26 new
       assertions; reintroducing the QSettings read fails two of them.
+
+51. **Transit mode was a one-way door, and one shared `case` was why.**
+    Reported from memory of the Windows build: Alt+Shift+N for a transit
+    chart, then `c` to come back to a single chart -- and here `c` never
+    came back.
+    - **Windows runs two menu commands through one toggle.**
+      `wdriver.cpp:1571` is `case cmdRelNo: case cmdRelComparison:
+      SetRel(us.nRel ? rcNone : rcDual);`. Either item turns off a
+      relationship chart of *any* kind, and turns comparison on when there
+      isn't one. That is why astrolog.rc gives both items the same
+      accelerator text `c` (lines 309-310) while the ACCELERATORS table
+      binds `c` to `cmdRelComparison` alone.
+    - **The port wired each item to its own fixed mode**, which reads
+      correctly and is not. From `rcTransit`, `c` set `rcDual`; pressing it
+      again set `rcDual` again. There is no other key for `rcNone`, so a
+      user who pressed Alt+Shift+N could not get back to a single chart at
+      all without the menu.
+    - **Confirmed against the real Windows build under Wine**, since the
+      claim was about remembered behaviour. Four screenshots through
+      `tools/windrive.sh`: initial, Alt+Shift+N, `c`, `c`. The third is
+      **pixel-identical to the first** (same MD5) and the fourth differs
+      from both -- single chart, transit, single chart, comparison. The
+      settings file records no `nRel`, so the chart itself is the only
+      observable, and a single wheel against a bi-wheel is unambiguous.
+    - **Asked whether this was a whole class of mis-wired toggles**, and
+      it is not, but the checking is the point. Two sweeps: every
+      `case cmd*` body in wdriver.cpp that branches on current state (22
+      of 188 groups) read against its Qt counterpart -- Heliocentric,
+      Solar Chart, Monochrome, Modify Chart, the six Include-category
+      restrictions and the animation rate/factor sign handling are all
+      faithful; and every `MENUITEM` accelerator in astrolog.rc grouped by
+      key, looking for one key shown on two distinct commands, which is
+      the signature of a shared toggle. **`c` is the only one in the whole
+      resource.** A single bug, but now known to be single.
+    - **A second, quieter gap in the same function.** `SetRelQt()` matched
+      `rc` exactly to find the menu item to bullet, while Windows'
+      `CmdFromRc()` (wdriver.cpp:251) bullets Comparison for *every*
+      multi-wheel mode. `qtdialog.cpp:2126` reaches `rcTriWheel` through
+      `rcHexaWheel` from the Charts #3 Through #6 dialog, and for those
+      the loop found nothing and left the bullet wherever it was.
+    - 13 new assertions. Each fix was reverted alone and fails exactly
+      four of them, so neither is riding on the other.
 
 ## Features this fork adds to both builds
 

@@ -1318,7 +1318,7 @@ static int s_cRel = 0;
 void SetRelQt(int rc)
 {
   CI ciT;
-  int i;
+  int i, rcMenu;
 
   if (us.nRel == rcMidpoint) {  // Restore chart when leaving midpoint mode.
     ciT = ciMain;
@@ -1328,22 +1328,47 @@ void SetRelQt(int rc)
   if (rc == rcMidpoint)         // Remember chart so it can be restored.
     ciSave = ciMain;
   us.nRel = rc;
+  // Windows' CmdFromRc() (wdriver.cpp:251) bullets Comparison for every
+  // multi-wheel mode, not only rcDual, and the "Charts #3 Through #6"
+  // dialog reaches all of them -- qtdialog.cpp calls here with rcTriWheel
+  // through rcHexaWheel. Matching rc exactly would find no menu item for
+  // those and leave the bullet wherever it happened to be.
+  rcMenu = FBetween(rc, rcHexaWheel, rcDual) ? rcDual : rc;
   for (i = 0; i < s_cRel; i++)
-    if (s_rgnRel[i] == rc) {
+    if (s_rgnRel[i] == rcMenu) {
       s_rgpaRel[i]->setChecked(true);
       break;
     }
   RecastAndRedrawQt();
 }
 
+// Windows runs cmdRelNo and cmdRelComparison through one shared toggle --
+// SetRel(us.nRel ? rcNone : rcDual), wdriver.cpp:1571 -- so either item
+// turns off a relationship chart of any kind, and turns comparison on when
+// there isn't one. That is why astrolog.rc gives both menu items the same
+// "c" accelerator (lines 309-310), and it is the only way back to a single
+// chart from the keyboard.
+//
+// Wiring each item to its own fixed mode looks right and is not: 'c' then
+// set rcDual unconditionally, so from Alt+Shift+N a user reached the
+// transit chart and could never leave it -- pressing 'c' again just set
+// comparison again. Confirmed against the real Windows build under Wine:
+// from transit mode, 'c' renders pixel-identical to the single chart it
+// started from, and a second 'c' gives comparison.
+//
+// fToggle marks the two items that share that toggle. Every other mode is
+// a plain set, as Windows has it.
+
 static QAction *AddRelAction(QMenu *pmenu, QActionGroup *pgroup,
-  CONST char *szLabel, int rc)
+  CONST char *szLabel, int rc, flag fToggle = fFalse)
 {
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(us.nRel == rc);
-  ConnectMenuQt(pa, pa, [rc]() { SetRelQt(rc); });
+  ConnectMenuQt(pa, pa, [rc, fToggle]() {
+    SetRelQt(fToggle ? (us.nRel ? rcNone : rcDual) : rc);
+  });
   s_rgpaRel[s_cRel] = pa;
   s_rgnRel[s_cRel] = rc;
   s_cRel++;
@@ -1646,8 +1671,8 @@ static void BuildInfoMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   QActionGroup *pgroup = new QActionGroup(pwind);
-  AddRelAction(pmenu, pgroup, "No &Relationship Chart", rcNone);
-  AddRelAction(pmenu, pgroup, "Com&parison Chart", rcDual);
+  AddRelAction(pmenu, pgroup, "No &Relationship Chart", rcNone, fTrue);
+  AddRelAction(pmenu, pgroup, "Com&parison Chart", rcDual, fTrue);
   AddRelAction(pmenu, pgroup, "&Synastry Chart", rcSynastry);
   AddRelAction(pmenu, pgroup, "&Composite Chart", rcComposite);
   AddRelAction(pmenu, pgroup, "Time Space &Midpoint Chart", rcMidpoint);

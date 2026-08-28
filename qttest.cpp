@@ -1701,11 +1701,69 @@ static void TestRelationshipModeQt()
     "leaving midpoint mode restores the loaded chart (%d/%d/%d)",
     ciMain.mon, ciMain.day, ciMain.yea);
 
+  // "No Relationship Chart" and "Comparison Chart" are one shared toggle
+  // on Windows -- SetRel(us.nRel ? rcNone : rcDual), wdriver.cpp:1571 --
+  // which is why astrolog.rc gives both the same "c" accelerator, and why
+  // 'c' is the only way out of transit mode from the keyboard. Wired as
+  // two fixed modes instead, 'c' set comparison forever and a user who
+  // pressed Alt+Shift+N could never get back to a single chart.
+  // Confirmed against the Windows build under Wine: from transit mode 'c'
+  // renders pixel-identical to the single chart it started from.
+  QAction *paComp = PaFindActionTestQt("Com&parison Chart");
+  QAction *paNo = PaFindActionTestQt("No &Relationship Chart");
+  Check(paComp != NULL && paNo != NULL,
+    "both halves of the comparison toggle are on the menu");
+  if (paComp != NULL && paNo != NULL) {
+    SetRelQt(rcTransit);
+    Check(us.nRel == rcTransit, "Alt+Shift+N reaches transit mode (%d)",
+      us.nRel);
+    paComp->trigger();
+    Check(us.nRel == rcNone,
+      "'c' leaves transit mode for a single chart (%d)", us.nRel);
+    paComp->trigger();
+    Check(us.nRel == rcDual, "'c' again turns comparison on (%d)", us.nRel);
+    paComp->trigger();
+    Check(us.nRel == rcNone, "and 'c' again turns it off (%d)", us.nRel);
+
+    // Either item drives the same toggle, so this one leaves every mode
+    // too -- including the ones with no key of their own.
+    SetRelQt(rcProgress);
+    paNo->trigger();
+    Check(us.nRel == rcNone,
+      "\"No Relationship Chart\" leaves progressed mode (%d)", us.nRel);
+    SetRelQt(rcSynastry);
+    paComp->trigger();
+    Check(us.nRel == rcNone, "'c' leaves synastry mode (%d)", us.nRel);
+
+    // A mode that is not part of the toggle still sets outright.
+    paNo->trigger();
+    Check(us.nRel == rcDual, "from a single chart the toggle turns on (%d)",
+      us.nRel);
+    SetRelQt(rcSynastry);
+    Check(us.nRel == rcSynastry, "synastry still sets outright (%d)",
+      us.nRel);
+  }
+
+  // Windows' CmdFromRc() bullets Comparison for every multi-wheel mode,
+  // not just rcDual (wdriver.cpp:251), and the Charts #3 Through #6
+  // dialog reaches all four. Matching rc exactly finds no item for those
+  // and leaves the bullet wherever it was.
+  if (paComp != NULL) {
+    int rgrc[] = {rcTriWheel, rcQuadWheel, rcQuinWheel, rcHexaWheel};
+    for (k = 0; k < 4; k++) {
+      SetRelQt(rcSynastry);
+      SetRelQt(rgrc[k]);
+      Check(paComp->isChecked(),
+        "multi-wheel mode %d bullets Comparison", rgrc[k]);
+    }
+  }
+
   us.nRel = nRelSav;
   ciMain = ciMainSav; ciTwin = ciTwinSav; ciSave = ciSaveSav;
   ciCore = ciMain;
   CastChart(1);
   printf("  relationship modes persist, restore, and do not drift\n");
+  printf("  the comparison toggle leaves any mode, as Windows does\n");
 }
 
 
