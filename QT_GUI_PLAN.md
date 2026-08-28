@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2886
+   display and no `xdotool`, and exits non-zero on failure. **2895
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-51
+## Work log — items 1-52
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2158,6 +2158,49 @@ are the more useful half to read before starting something new.
       the loop found nothing and left the bullet wherever it was.
     - 13 new assertions. Each fix was reverted alone and fails exactly
       four of them, so neither is riding on the other.
+
+52. **"Minors doesn't work properly with the toggles" was one line in a
+    lookup helper, and it had mis-wired three dialogs.** Reported against
+    the Object Restrictions dialog.
+    - **What rc2qt.py does, and why it matters here.** It splits a trailing
+      run of digits off a resource symbol into a separate index, so
+      astrolog.rc's `dbRe_R0`, `dbRe_R1` and `dbRe_R` -- Restrict All,
+      Unrestrict All, Toggle Minors -- all reach `qtrcdlg.h` as szId
+      `"dbRe_R"` with nIdx 0, 1 and -1. A lookup by bare name means the
+      one whose symbol carried no digits.
+    - **`PwRcFindQt()` matched szId alone**, ignoring nIdx, so a bare
+      lookup returned whichever the generated table listed first. For
+      `dbRe_R` that is the nIdx=0 entry: **Toggle Minors was wired to
+      nothing, and Restrict All got the minors toggle connected to it as a
+      second slot.** Measured through the real dialog: Toggle Minors moved
+      0 objects, and after Restrict All the minors read 0 restricted / 11
+      not, because the button restricted everything and then toggled the
+      minors straight back off. Cusps, Uranians and Dwarfs were fine --
+      their symbols end in letters, so nothing collides.
+    - **Asked whether it was a class, and this time it was.** Cross-
+      referencing every bare lookup in qtdialog.cpp against qtrcdlg.h
+      found seven symbols where a bare name sits beside indexed controls.
+      Four happened to list the -1 entry first and were right by accident.
+      **Three were wrong**: `dbRe_R` (Toggle Minors), `dbAs_RA` ("Toggle
+      &Majors" in Aspect Settings, same shape, also dead), and `dxSe_sr`
+      -- two checkboxes, where `us.fEquator` bound to the **"&Equatorial
+      Latitudes"** box and "E&quatorial Longitudes" drove nothing at all.
+    - **Fixed at the root**: a bare lookup now matches nIdx -1 too. Checked
+      first that this breaks nothing -- all 146 bare lookups have a -1
+      entry, so a strict match still resolves every one, corrects the
+      three and leaves the four accidental passes alone.
+    - **`rc_field_audit.py` could not have caught this, and uses `dxSe_sr`
+      as its own worked example.** It compares the *tables* against
+      wdialog.cpp, and the table was right: `{"dxSe_sr", -1, &us.fEquator}`
+      is exactly what Windows does. The fault was one layer below, in what
+      the lookup resolved that row to. Same shape as item 31: a check that
+      reads source as text cannot see what got bound. `rc_lookup_audit.py`
+      covers that layer now -- it fails if a bare lookup can find no
+      control at all, and lists the 13 symbols where a bare name sits
+      beside indexed ones. Confirmed non-vacuous by pointing a bare lookup
+      at an indexed-only symbol and watching it exit 1.
+    - 9 new assertions driving the three real dialogs. Reverting the one
+      line fails four of them.
 
 ## Features this fork adds to both builds
 

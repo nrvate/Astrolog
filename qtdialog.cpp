@@ -633,11 +633,27 @@ typedef struct {
   QWidget *pw;
 } RCBUILT;
 
-// Find a built control by the symbol the resource gave it.
+// Find a built control by the symbol the resource gave it -- the whole
+// symbol, carrying no index.
+//
+// rc2qt.py splits a trailing run of digits off a resource symbol into
+// nIdx, so "dbRe_R0" arrives here as szId "dbRe_R" with nIdx 0, and only a
+// symbol that ended in no digits at all gets nIdx -1. Matching on szId
+// alone therefore returned whichever of "dbRe_R0", "dbRe_R1" and "dbRe_R"
+// the generated table listed first -- a different control the moment the
+// resource is reordered, and the wrong one in three dialogs already:
+// "Toggle Minors" and "Toggle &Majors" were dead while their Restrict All
+// buttons silently ran the toggle as well, and "E&quatorial Longitudes"
+// loaded and stored through the "&Equatorial Latitudes" box beside it.
+//
+// Matching nIdx too makes a bare lookup mean what it says. Callers that
+// want one of the indexed controls ask for it by index instead, with
+// PwRcFindIdxQt(). See work log item 52.
 static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, CONST char *szId)
 {
   for (int i = 0; i < rgbuilt.size(); i++)
-    if (rgbuilt[i].pw != NULL && strcmp(rgbuilt[i].pctl->szId, szId) == 0)
+    if (rgbuilt[i].pw != NULL && rgbuilt[i].pctl->nIdx < 0 &&
+      strcmp(rgbuilt[i].pctl->szId, szId) == 0)
       return rgbuilt[i].pw;
   return NULL;
 }

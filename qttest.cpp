@@ -1056,6 +1056,125 @@ static void TestColorSchemeQt()
 }
 
 
+// Click a button by its label in a modal, then OK.
+static void ClickInModalQt(void (*pfnOpen)(), CONST char *szButton)
+{
+  DriveModalQt(pfnOpen, [szButton](QWidget *pw) {
+    QPushButton *ppbHit = NULL, *ppbOK = NULL;
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>()) {
+      if (ppb->text() == QString(szButton))
+        ppbHit = ppb;
+      if (ppb->text() == "OK")
+        ppbOK = ppb;
+    }
+    if (ppbHit != NULL)
+      ppbHit->click();
+    if (ppbOK != NULL)
+      ppbOK->click();
+  });
+}
+
+// The quick buttons on the restriction dialogs, and the one control lookup
+// they all go through.
+//
+// rc2qt.py splits a trailing digit run off a resource symbol into nIdx, so
+// dbRe_R0/dbRe_R1/dbRe_R all arrive as szId "dbRe_R" with nIdx 0/1/-1.
+// PwRcFindQt() matched szId alone and returned whichever the generated
+// table listed first, which is the nIdx=0 one -- so "Toggle Minors" was
+// wired to nothing at all while "Restrict All" silently ran the minors
+// toggle as well, leaving every minor object unrestricted immediately
+// after a user asked for everything to be restricted.
+static void TestDialogButtonWiringQt()
+{
+  int i, cIn, cOut;
+
+  Group("Restriction dialog buttons");
+
+  // Toggle Minors covers oMain+1..oCore, and nothing else (wdialog.cpp
+  // dbRe_R). Run it twice: a toggle must come back to where it started.
+  byte rgbSav[oNorm+1];
+  for (i = 0; i <= dwarfHi && i <= oNorm; i++)
+    rgbSav[i] = ignore[i];
+
+  ClickInModalQt(ShowRestrictDialogQt, "Toggle Minors");
+  cIn = cOut = 0;
+  for (i = 0; i <= dwarfHi && i <= oNorm; i++)
+    if (ignore[i] != rgbSav[i]) {
+      if (FBetween(i, oMain+1, oCore)) cIn++; else cOut++;
+    }
+  Check(cIn == oCore - oMain,
+    "Toggle Minors toggles every minor object (%d of %d)", cIn,
+    oCore - oMain);
+  Check(cOut == 0, "and touches nothing outside them (%d)", cOut);
+  ClickInModalQt(ShowRestrictDialogQt, "Toggle Minors");
+  cIn = 0;
+  for (i = 0; i <= dwarfHi && i <= oNorm; i++)
+    if (ignore[i] != rgbSav[i]) cIn++;
+  Check(cIn == 0, "and toggling twice returns to the start (%d changed)",
+    cIn);
+
+  // Restrict All must restrict the minors too. With the lookup bug the
+  // toggle rode along on this button and turned them all back off.
+  ClickInModalQt(ShowRestrictDialogQt, "&Restrict All");
+  cIn = cOut = 0;
+  for (i = oMain+1; i <= oCore; i++)
+    (ignore[i] ? cIn : cOut)++;
+  Check(cOut == 0,
+    "Restrict All leaves every minor restricted (%d still not)", cOut);
+  ClickInModalQt(ShowRestrictDialogQt, "&Unrestrict All");
+  cIn = 0;
+  for (i = oMain+1; i <= oCore; i++)
+    if (ignore[i]) cIn++;
+  Check(cIn == 0, "Unrestrict All clears them all (%d left)", cIn);
+
+  for (i = 0; i <= dwarfHi && i <= oNorm; i++)
+    ignore[i] = rgbSav[i];
+  AdjustRestrictions();
+
+  // Same shape in Aspect Settings: dbAs_RA0/dbAs_RA1/dbAs_RA, where the
+  // toggle covers the first five aspects (wdialog.cpp:1380).
+  byte rgbASav[cAspect+1];
+  for (i = 1; i <= cAspect; i++)
+    rgbASav[i] = ignorea[i];
+  ClickInModalQt(ShowAspectDialogQt, "Toggle &Majors");
+  cIn = cOut = 0;
+  for (i = 1; i <= cAspect; i++)
+    if (ignorea[i] != rgbASav[i]) {
+      if (i <= 5) cIn++; else cOut++;
+    }
+  Check(cIn == 5, "Toggle Majors toggles the first five aspects (%d)", cIn);
+  Check(cOut == 0, "and leaves the rest alone (%d)", cOut);
+  for (i = 1; i <= cAspect; i++)
+    ignorea[i] = rgbASav[i];
+
+  // And the same collision on a pair of checkboxes rather than buttons:
+  // dxSe_sr is "&Equatorial Latitudes" (nIdx 0) and "E&quatorial
+  // Longitudes" (nIdx -1), and the bare lookup bound us.fEquator to the
+  // latitudes box, so the longitudes box drove nothing.
+  flag fEqSav = us.fEquator, fEq2Sav = us.fEquator2;
+  us.fEquator = fFalse; us.fEquator2 = fFalse;
+  DriveModalQt(ShowCalcDialogQt, [](QWidget *pw) {
+    QCheckBox *pcb = NULL;
+    QPushButton *ppbOK = NULL;
+    for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+      if (p->text() == "E&quatorial Longitudes")
+        pcb = p;
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK")
+        ppbOK = p;
+    if (pcb != NULL)
+      pcb->setChecked(fTrue);
+    if (ppbOK != NULL)
+      ppbOK->click();
+  });
+  Check(us.fEquator, "the Equatorial Longitudes box drives us.fEquator");
+  Check(!us.fEquator2, "and not us.fEquator2, its neighbour");
+  us.fEquator = fEqSav; us.fEquator2 = fEq2Sav;
+
+  printf("  the restriction quick buttons drive their own ranges\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -2141,6 +2260,7 @@ int NRunQtTestsQt()
   TestObjSelDialogQt();
   TestObjSelParseQt();
   TestColorSchemeQt();
+  TestDialogButtonWiringQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

@@ -61,11 +61,11 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 2886 assertions + startup checks
+./run-qt-tests.sh                # 2895 assertions + startup checks
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **2886 passed, 0 failed**, startup diagnostics ok.
+commit. Current state: **2895 passed, 0 failed**, startup diagnostics ok.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render
@@ -85,12 +85,16 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Three audits of the port against `astrolog.rc`, all currently clean:
+Four audits of the port against `astrolog.rc`, all currently clean:
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
 python3 tools/rc_mnemonic_audit.py   # "&" placement, all 850 label sites
 python3 tools/rc_field_audit.py      # a control wired to the *wrong* setting
+python3 tools/rc_lookup_audit.py     # a by-name lookup that finds the wrong
+                                     # control, or none -- the layer below
+                                     # rc_field_audit, which reads the table
+                                     # as text and cannot see what got bound
 ```
 
 And three tables generated from the resource. Regenerate after any `.rc`
