@@ -72,7 +72,11 @@ GS gs = {
   fFalse, fFalse, fFalse, fFalse, fFalse, fFalse, fTrue, fTrue, fFalse,
   fFalse, fFalse, fFalse, fFalse, fTrue,
   DEFAULTX, DEFAULTY,
-#ifdef WIN
+// Animation starts off, remembering a rate: the sign of gs.nAnim is the
+// on/off switch, so a zero here would make the first jump rate picked
+// turn animation on as a side effect. GUI builds only -- a console run
+// casts once and exits.
+#if defined(WIN) || defined(QT)
   -10,
 #else
   0,

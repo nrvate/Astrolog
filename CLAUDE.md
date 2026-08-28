@@ -34,8 +34,12 @@ Two different kinds of change reach the shared core, and the difference
 matters when merging a new upstream release:
 
 - **Porting work** touches it only where a backend branch is genuinely
-  missing, always inside `#ifdef QT`. `grep -ln "ifdef QT" *.cpp *.h`
-  finds all of it.
+  missing, always inside `#ifdef QT` — or, where Windows already has the
+  branch and this port wants the same, by widening it to
+  `#if defined(WIN) || defined(QT)`. Both forms count, so the sweep is
+  `grep -lnE "ifdef QT|defined\(QT\)" *.cpp *.h`. A `WIN`-only branch
+  with no `QT` in it is the shape bugs hide in: see work log items 39
+  and 54, one of which was a plain value in a struct initialiser.
 - **Features this fork adds to *both* builds** — the Object Selections
   dialog and the settings-save fixes — deliberately carry no `QT` guard
   at all, because they go into `wdialog.cpp`, `astrolog.rc`, `io.cpp` and
@@ -61,11 +65,11 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 2906 assertions + startup checks
+./run-qt-tests.sh                # 2922 assertions + startup checks
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **2906 passed, 0 failed**, startup diagnostics ok.
+commit. Current state: **2922 passed, 0 failed**, startup diagnostics ok.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render

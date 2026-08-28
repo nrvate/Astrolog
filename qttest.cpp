@@ -1269,6 +1269,92 @@ static void TestSharedSymbolBoxesQt()
 }
 
 
+int s_nAnimStartQt = 0;   // gs.nAnim as the program started, before any test
+
+// Animation is off at startup, and picking a jump rate leaves it off.
+//
+// gs.nAnim's sign is the on/off switch and its magnitude the rate, so the
+// rate items multiply by the sign to keep it: "(gs.nAnim < 0 ? -1 : 1) *
+// rate" (wdriver.cpp:2302). That only works if the value starts negative.
+// xdata.cpp initialised it to -10 under WIN and 0 everywhere else, and
+// this port is neither -- so it started at 0, every "(0 < 0 ? -1 : 1)"
+// came out positive, and choosing Hours from a standing start began
+// animating on its own. Windows does not: verified against the real
+// binary under Wine, where selecting Hours through the menu moves the
+// Jump Rate bullet and the chart then sits still for eight seconds.
+static void TestAnimationStateQt()
+{
+  int nAnimSav = gs.nAnim, nDirSav = gi.nDir;
+  flag fPauseSav = gi.fPause;
+  CI ciSav = ciCore;
+
+  Group("Animation state");
+
+  Check(s_nAnimStartQt < 0,
+    "animation starts off, with a rate remembered (gs.nAnim was %d)",
+    s_nAnimStartQt);
+
+  QAction *paHours = PaFindActionTestQt("&Hours");
+  QAction *paDo = PaFindActionTestQt("Do &Animation");
+  QAction *paPause = PaFindActionTestQt("&Pause Animation");
+  QAction *paRev = PaFindActionTestQt("&Reverse Direction");
+  Check(paHours != NULL && paDo != NULL && paPause != NULL && paRev != NULL,
+    "the four animation items are on the menu");
+  if (paHours == NULL || paDo == NULL || paPause == NULL || paRev == NULL)
+    return;
+
+  // The guard the timer uses, in both builds.
+#define FAnimatingQt() (gs.nAnim >= 1 && !gi.fPause)
+  gs.nAnim = -10; gi.fPause = fFalse;
+  Check(!FAnimatingQt(), "nothing is moving at rest");
+
+  paHours->trigger();
+  Check(gs.nAnim == -3, "picking Hours keeps it off (%d, want -3)", gs.nAnim);
+  Check(!FAnimatingQt(), "and the chart stays still");
+
+  paDo->trigger();
+  Check(gs.nAnim == 3, "Do Animation turns it on at that rate (%d)", gs.nAnim);
+  Check(FAnimatingQt(), "and the chart moves");
+
+  // Picking a rate while it runs keeps it running, which is the other
+  // half of preserving the sign.
+  paHours->trigger();
+  Check(gs.nAnim == 3, "picking a rate again leaves it running (%d)", gs.nAnim);
+  Check(FAnimatingQt(), "still moving");
+
+  paPause->trigger();
+  Check(gi.fPause && !FAnimatingQt(), "Pause stops it while it runs");
+  paPause->trigger();
+  Check(!gi.fPause && FAnimatingQt(), "and Pause again resumes it");
+
+  paDo->trigger();
+  Check(!FAnimatingQt(), "Do Animation turns it back off");
+
+  // Pause at rest toggles its flag and nothing else -- confirmed on
+  // Windows, where the chart does not move either way.
+  paPause->trigger();
+  Check(gi.fPause, "Pause at rest still toggles the flag");
+  Check(!FAnimatingQt(), "but nothing starts moving");
+  paPause->trigger();
+
+  // Reverse Direction turns animation on when it was off. That reads odd
+  // and is upstream's own behaviour (wdriver.cpp:2323), confirmed on
+  // Windows from a standing start.
+  gs.nAnim = -10; gi.fPause = fFalse;
+  int nDirWas = gi.nDir;
+  paRev->trigger();
+  Check(gi.nDir == -nDirWas, "Reverse flips the direction (%d)", gi.nDir);
+  Check(gs.nAnim == 10 && FAnimatingQt(),
+    "and turns animation on, as Windows does (%d)", gs.nAnim);
+#undef FAnimatingQt
+
+  gs.nAnim = nAnimSav; gi.nDir = nDirSav; gi.fPause = fPauseSav;
+  ciCore = ciSav;
+  CastChart(1);
+  printf("  animation stays off until asked, and the rate keeps its sign\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -2333,6 +2419,7 @@ int NRunQtTestsQt()
     TextChartCaptureQt(getenv("QTTEXTDIR"));
     return 0;
   }
+  s_nAnimStartQt = gs.nAnim;
   printf("Astrolog Qt test suite\n");
   TestDialogsQt();
   TestContextMenusQt();
@@ -2356,6 +2443,7 @@ int NRunQtTestsQt()
   TestColorSchemeQt();
   TestDialogButtonWiringQt();
   TestSharedSymbolBoxesQt();
+  TestAnimationStateQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

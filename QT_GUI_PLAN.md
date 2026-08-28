@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2906
+   display and no `xdotool`, and exits non-zero on failure. **2922
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-53
+## Work log — items 1-54
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2236,6 +2236,50 @@ are the more useful half to read before starting something new.
       pinning which box drives which setting in four dialogs nothing else
       opened, and not a second regression test for item 52's bug. Calling
       them one would misrepresent what they check.
+
+54. **Animation started itself, and the cause was a number in a struct
+    initialiser.** Reported as: pressing a jump-rate key like `#` (Hours)
+    starts the animation on its own, which Windows does not do.
+    - **`gs.nAnim`'s sign is the on/off switch and its magnitude the
+      rate.** So the rate items multiply by the sign to preserve it:
+      `gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * rate` (wdriver.cpp:2302), and
+      the port copies that exactly. It only works if the value starts
+      negative -- and `xdata.cpp` initialised it `-10` under `WIN` and `0`
+      everywhere else. This port is neither, so it started at 0, every
+      `(0 < 0 ? -1 : 1)` came out `+1`, and the first rate picked turned
+      animation on. `neg(0)` is also 0, so `N` (Do Animation) did nothing
+      from a standing start either. One `#ifdef WIN` with no `QT` branch,
+      exactly the class item 39 swept for, in the one shape that sweep did
+      not look at: a plain value in an initialiser rather than a code
+      branch.
+    - **Two Wine runs were worthless before one was worth anything.** The
+      first pressed `#` and watched the chart: no movement, which looked
+      like proof. It was not -- ASCII accelerators (`#`, `!`, and the rest
+      of that row) never reach the Windows build through xdotool at all,
+      as `numbersign` and `shift+3` both showed, while `shift+n` landed
+      fine. Checking the Jump Rate bullet before and after found it
+      **byte-identical**: the key had simply not arrived, and the test had
+      measured nothing. Driving `cmdAnimateNo3` through the menu instead
+      moved the bullet *and* left the chart still for eight seconds, which
+      is the actual evidence. **Confirm the input landed before believing
+      a before/after comparison** -- the same lesson as item 33, in a new
+      place.
+    - **The arithmetic is what caught the lie.** With `nAnim` at 0, `N`
+      does `neg(0)` and cannot start anything, yet the first Wine run had
+      shown it starting. Two observations that cannot both be true meant a
+      premise was wrong, and the premise was the assumed default. That is
+      what sent the search to the initialiser.
+    - **Then two follow-up reports, and neither was a bug.** With the fix
+      in, `p` appeared to do nothing and `r` started the animation. Both
+      are Windows' own behaviour, measured from a standing start on Wine:
+      Pause toggles `gi.fPause`, which is invisible while nothing is
+      running, and Reverse Direction turns animation on when it was off
+      (`if (gs.nAnim < 0) neg(gs.nAnim)`, wdriver.cpp:2323). The master
+      on/off is **Shift+N**, not `p`. Left alone; parity is the spec, and
+      a divergence here is the user's call rather than a fix.
+    - 16 new assertions walking the whole sequence, including one on the
+      startup value captured before any group can move it. Reverting the
+      initialiser fails it.
 
 ## Features this fork adds to both builds
 
