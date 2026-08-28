@@ -1074,6 +1074,26 @@ static void ClickInModalQt(void (*pfnOpen)(), CONST char *szButton)
   });
 }
 
+// Tick one checkbox by its label in a modal, then OK.
+static void TickInModalQt(void (*pfnOpen)(), CONST char *szLabel)
+{
+  DriveModalQt(pfnOpen, [szLabel](QWidget *pw) {
+    QCheckBox *pcb = NULL;
+    QPushButton *ppbOK = NULL;
+    for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+      if (p->text() == QString(szLabel))
+        pcb = p;
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK")
+        ppbOK = p;
+    if (pcb != NULL)
+      pcb->setChecked(fTrue);
+    if (ppbOK != NULL)
+      ppbOK->click();
+  });
+}
+
+
 // The quick buttons on the restriction dialogs, and the one control lookup
 // they all go through.
 //
@@ -1172,6 +1192,80 @@ static void TestDialogButtonWiringQt()
   us.fEquator = fEqSav; us.fEquator2 = fEq2Sav;
 
   printf("  the restriction quick buttons drive their own ranges\n");
+}
+
+
+// The other symbols where a bare name sits beside an indexed control in
+// the same dialog. rc_lookup_audit.py lists all seven; three were wired to
+// the wrong control and are covered above, and these four were right only
+// because the generated table happened to list the bare entry first.
+// Matching nIdx makes them right by construction instead -- these pin that
+// down, since nothing else here opens these four dialogs and checks which
+// box drove which setting.
+static void TestSharedSymbolBoxesQt()
+{
+  Group("Shared control symbols");
+
+  // dxSe_Yn in Calculation Settings: bare is fTrueNode, index 0 is
+  // fNoNutation.
+  flag fSav1 = us.fTrueNode, fSav2 = us.fNoNutation;
+  us.fTrueNode = fFalse; us.fNoNutation = fFalse;
+  TickInModalQt(ShowCalcDialogQt, "Compute True Instead of Mean N&odes and Lilith");
+  Check(us.fTrueNode, "the true-nodes box drives us.fTrueNode");
+  Check(!us.fNoNutation, "and not us.fNoNutation beside it");
+  us.fTrueNode = fFalse; us.fNoNutation = fFalse;
+  TickInModalQt(ShowCalcDialogQt, "Tropical &Zodiac No Nutation");
+  Check(us.fNoNutation, "the no-nutation box drives us.fNoNutation");
+  Check(!us.fTrueNode, "and not us.fTrueNode beside it");
+  us.fTrueNode = fSav1; us.fNoNutation = fSav2;
+
+  // dxGr_XQ in Graphics Settings: bare is fKeepSquare, index 0 is
+  // fAutoScale.
+  fSav1 = gs.fKeepSquare; fSav2 = gs.fAutoScale;
+  gs.fKeepSquare = fFalse; gs.fAutoScale = fFalse;
+  TickInModalQt(ShowGraphicsSettingsDialogQt, "Ensure S&quare Charts Remain Square");
+  Check(gs.fKeepSquare, "the keep-square box drives gs.fKeepSquare");
+  Check(!gs.fAutoScale, "and not gs.fAutoScale beside it");
+  gs.fKeepSquare = fFalse; gs.fAutoScale = fFalse;
+  TickInModalQt(ShowGraphicsSettingsDialogQt, "Character Autoscale to &Fit Window");
+  Check(gs.fAutoScale, "the autoscale box drives gs.fAutoScale");
+  Check(!gs.fKeepSquare, "and not gs.fKeepSquare beside it");
+  gs.fKeepSquare = fSav1; gs.fAutoScale = fSav2;
+
+  // dxDi_Yu in Display Settings: bare is fEclipse. Its neighbour is
+  // stored inverted, so it is only checked for not moving.
+  fSav1 = us.fEclipse;
+  us.fEclipse = fFalse;
+  TickInModalQt(ShowDisplayDialogQt, "Sho&w Eclipse Information");
+  Check(us.fEclipse, "the eclipse-information box drives us.fEclipse");
+  us.fEclipse = fSav1;
+
+  // deCh_L in Chart Settings is a pair of edits rather than checkboxes:
+  // bare is the astro-graph step, index 2 the distance.
+  int nSav1 = us.nAstroGraphStep, nSav2 = us.nAstroGraphDist;
+  us.nAstroGraphStep = 7; us.nAstroGraphDist = 15;
+  DriveModalQt(ShowChartSettingsDialogQt, [](QWidget *pw) {
+    QLineEdit *peStep = NULL, *peDist = NULL;
+    QPushButton *ppbOK = NULL;
+    for (QLineEdit *p : pw->findChildren<QLineEdit *>()) {
+      if (p->text() == "7") peStep = p;
+      if (p->text() == "15") peDist = p;
+    }
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK")
+        ppbOK = p;
+    if (peStep != NULL) peStep->setText("9");
+    if (peDist != NULL) peDist->setText("21");
+    if (ppbOK != NULL) ppbOK->click();
+  });
+  Check(us.nAstroGraphStep == 9,
+    "the two deCh_L edits are distinct: step is %d (want 9)",
+    us.nAstroGraphStep);
+  Check(us.nAstroGraphDist == 21,
+    "and distance is %d (want 21)", us.nAstroGraphDist);
+  us.nAstroGraphStep = nSav1; us.nAstroGraphDist = nSav2;
+
+  printf("  a bare symbol and its indexed neighbour drive separate settings\n");
 }
 
 
@@ -2261,6 +2355,7 @@ int NRunQtTestsQt()
   TestObjSelParseQt();
   TestColorSchemeQt();
   TestDialogButtonWiringQt();
+  TestSharedSymbolBoxesQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

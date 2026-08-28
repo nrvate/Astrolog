@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2895
+   display and no `xdotool`, and exits non-zero on failure. **2906
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-52
+## Work log — items 1-53
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2201,6 +2201,41 @@ are the more useful half to read before starting something new.
       at an indexed-only symbol and watching it exit 1.
     - 9 new assertions driving the three real dialogs. Reverting the one
       line fails four of them.
+
+53. **Following item 52 up, and finding the audit was the thing that
+    needed fixing.** Asked to fix the four symbols that item 52 had left
+    "right by accident", and to take whatever else fell out.
+    - **The four needed no fix, and saying so was the first job.** Once a
+      bare lookup matches nIdx, `deCh_L`, `dxDi_Yu`, `dxGr_XQ` and
+      `dxSe_Yn` resolve by construction, not by table order, and a
+      reordered resource can no longer change the answer. The remark that
+      closed item 52 -- that they were "one resource reordering away from
+      mattering" -- was already false when written.
+    - **What did need fixing was the new audit's scope.** It asked whether
+      a bare-looked-up symbol had an nIdx -1 entry *anywhere in
+      qtrcdlg.h*. That file holds all 24 dialogs concatenated and the
+      symbols recur across them -- `dx01` and `deo01` belong to several --
+      so the check passed on nearly anything. Rewritten to resolve each
+      lookup against the controls of the dialog whose array the calling
+      function actually builds: 208 lookups rather than 144, and it fails
+      on a lookup matching zero controls *or more than one*. Confirmed non
+      vacuous by injecting both a bad index and a bare lookup for an
+      indexed-only symbol, and watching it name the function and exit 1.
+    - **The scare was cross-dialog too.** A first pass counted 296
+      duplicate (szId, nIdx) pairs and 283 of them looked up, which reads
+      like a disaster. It is an artefact of the same mistake: within a
+      single dialog there are **zero** duplicate pairs, so both lookups
+      are unambiguous. The per-dialog list of symbols where a bare name
+      sits beside an indexed one is seven, not the thirteen the table-wide
+      pass reported.
+    - **The four are now covered, and what that coverage is worth is
+      worth being exact about.** Reverting the lookup fix does *not* fail
+      them -- their tables happen to list the bare entry first, which is
+      what made them accidental passes to begin with. Swapping two wiring
+      rows does fail four of them. So they are field-wiring assertions,
+      pinning which box drives which setting in four dialogs nothing else
+      opened, and not a second regression test for item 52's bug. Calling
+      them one would misrepresent what they check.
 
 ## Features this fork adds to both builds
 
