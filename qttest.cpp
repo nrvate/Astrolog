@@ -1514,6 +1514,81 @@ static void TestDialogArrowKeysQt()
 }
 
 
+// A slot forced to a midpoint draws its name, not its old glyph.
+//
+// -Fm overrides where a slot sits but not what it is, so the slot keeps
+// the body it started as -- and so its glyph. The position list, the
+// sidebar and the Object Selections dialog all show the name the midpoint
+// was given, which left the wheel the one place still claiming the point
+// was Chiron.
+//
+// Checked by rendering rather than by reading the code: change only the
+// name and see whether the picture moves. The sidebar has to be off for
+// that to mean anything, because it prints object names into the same
+// image and would make any rename change it.
+static void TestMidpointGlyphQt()
+{
+  unsigned long lPlain1, lPlain2, lMid1, lMid2;
+  int obj = oChi;
+  flag fIgnoreSav = ignore[obj], fTextSav = gs.fText, fLabelSav = gs.fLabel;
+  real forceSav = force[obj];
+  CONST char *szDispSav = szObjDisp[obj];
+
+  Group("Midpoint glyph");
+
+  ignore[obj] = fFalse;
+  AdjustRestrictions();
+  // Set what the render depends on rather than inheriting it.
+  // TestAllMenuActionsQt() fires all 338 menu items, "Show Glyph Labels"
+  // among them, so gs.fLabel arrives here as whatever that left. With it
+  // off DrawObject() returns before drawing anything and every hash below
+  // matches every other one -- the test then passes or fails on nothing.
+  gs.fText = fFalse;
+  gs.fLabel = fTrue;
+
+  // Render the wheel and hash it.
+  auto hash = []() -> unsigned long {
+    unsigned long l = 5381;
+    int x, y;
+    SetChartModeQt(gWheel);
+    RedrawQt();
+    if (gi.qim == NULL)
+      return 0;
+    for (y = 0; y < gi.qim->height(); y++) {
+      CONST uchar *pb = gi.qim->constScanLine(y);
+      for (x = 0; x < gi.qim->bytesPerLine(); x++)
+        l = l*33 + pb[x];
+    }
+    return l;
+  };
+
+  // Control: a plain slot draws its glyph, so its name cannot show.
+  force[obj] = 0.0;
+  szObjDisp[obj] = "AAA"; CastChart(1); lPlain1 = hash();
+  szObjDisp[obj] = "ZZZ"; CastChart(1); lPlain2 = hash();
+  Check(lPlain1 == lPlain2,
+    "renaming a plain slot leaves the wheel alone -- it draws a glyph");
+
+  // The reported case: forced to the Sun/Moon midpoint.
+  force[obj] = -(real)(oSun*objMax + oMoo + 1);
+  szObjDisp[obj] = "AAA"; CastChart(1); lMid1 = hash();
+  szObjDisp[obj] = "ZZZ"; CastChart(1); lMid2 = hash();
+  Check(lMid1 != lMid2,
+    "a forced midpoint draws the name it was given, not the old glyph");
+  Check(lMid1 != lPlain1,
+    "and a midpoint slot no longer renders like the body it replaced");
+
+  ignore[obj] = fIgnoreSav;
+  force[obj] = forceSav;
+  szObjDisp[obj] = szDispSav;
+  gs.fText = fTextSav;
+  gs.fLabel = fLabelSav;
+  AdjustRestrictions();
+  CastChart(1);
+  printf("  a slot forced to a midpoint is labelled, not glyphed\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -2605,6 +2680,7 @@ int NRunQtTestsQt()
   TestAnimationStateQt();
   TestDialogMnemonicsQt();
   TestDialogArrowKeysQt();
+  TestMidpointGlyphQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

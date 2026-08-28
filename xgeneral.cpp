@@ -1804,6 +1804,27 @@ void DrawObject(int obj, int x, int y)
   if (!FBetween(nFont, 0, cFont-1))
     ch = -1;
 #endif
+
+  // A slot forced to a midpoint is no longer the body it started as.
+  // -Fm overrides where a slot sits but not what it is, so the slot
+  // keeps the glyph of its original body while the position list, the
+  // sidebar and the Object Selections dialog all show the name the
+  // midpoint was given. Drawing Chiron's glyph on a point labelled
+  // "Sun/Moo" everywhere else is the one place the two disagree, and
+  // the glyph is the half that is wrong: that body is not what sits
+  // there any more.
+  //
+  // Draw the name instead -- the same three letter abbreviation that
+  // objects with no glyph of their own already fall back to below.
+  // Above the font paths rather than beside that fallback, so it
+  // reaches every output format, and before any DrawThick() change so
+  // there is nothing to undo on the way out.
+  if (force[obj] < 0.0 && !fNoText) {
+    sprintf(szGlyph, "%.3s", szObjDisp[obj]);
+    DrawSz(szGlyph, x, y, dtCent | dtScale2);
+    return;
+  }
+
   fDoThin = gs.fThick && nFont == 0 && ch <= 0 && gi.nScale <= gi.nScaleT;
   if (fDoThin)
     DrawThick(fFalse);

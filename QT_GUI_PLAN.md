@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2959
+   display and no `xdotool`, and exits non-zero on failure. **2962
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -2438,8 +2438,22 @@ Five things that are easy to get wrong later:
 2. **A midpoint overrides the position but not the identity.** The force
    loop in `CastChart()` (calc.cpp) runs after positions are computed, so
    `-Fm` always wins for the same slot — but only for where it sits. The
-   slot keeps its body, and so its glyph and its name. Hence the Name
-   column, and hence Lookup Names offering `Sun/Moo` for a midpoint row.
+   slot keeps its body, and so its name. Hence the Name column, and hence
+   Lookup Names offering `Sun/Moo` for a midpoint row.
+   - **The glyph is the one part that does not keep**, since 2026-08-28.
+     A slot forced to a midpoint kept drawing the glyph of the body it
+     used to be, so a point the position list, the sidebar and this
+     dialog all called `Sun/Moo` still had Chiron's glyph on the wheel.
+     `DrawObject()` (xgeneral.cpp) now draws the three letter
+     abbreviation for a slot with `force[obj] < 0.0`, the same fallback
+     objects with no glyph of their own already use. Above the font
+     paths, so it applies to every output format and not only the turtle
+     vector one. Both builds, like the rest of this dialog.
+   - Checked by rendering rather than by reading: change only the name
+     and see whether the picture moves. **The sidebar has to be off for
+     that to mean anything** -- it prints object names into the same
+     image, so with it on a plain rename changes the picture too and the
+     control proves nothing.
 3. **There is no name-to-number catalog, and there cannot be one.** A
    `.se1` file maps its own number to a name; nothing maps back, and the
    full collection is on the order of 887,000 files, so enumerating them
