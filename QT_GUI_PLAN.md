@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2846
+   display and no `xdotool`, and exits non-zero on failure. **2847
    assertions** as of 2026-08-25; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -1733,7 +1733,7 @@ are the more useful half to read before starting something new.
 
 40. **The pre-commit command was running the suite without the config.**
     Chasing why two builds of the same suite reported different assertion
-    totals -- 2785 against 2846 -- turned up something worse than the
+    totals -- 2785 against 2847 -- turned up something worse than the
     discrepancy. `run-qt-tests.sh` passes `"$@"` through, so the bare
     `./run-qt-tests.sh` that CLAUDE.md gives as the check to run before
     every commit ran **without `-i nrvate.as`**, in the same file whose
@@ -2007,15 +2007,42 @@ are the more useful half to read before starting something new.
         way in both builds.
       - Cancel discards, and an unparseable definition applies nothing.
         Only the behaviour is asserted for the latter, not that a warning
-        widget appeared: the refusal is a modal raised inside the OK
-        handler, and a queued check for it runs from `ProbeQt()` but not
-        reliably from inside the suite. Asserting on that would be
-        asserting on the harness.
+        widget appeared -- see item 49, which is where the reason for that
+        turned out not to be the reason first written down here.
     - **The lesson is about where the bug was looked for.** The feature
       was verified when built by checking that the settings it wrote were
       correct, and they were. Nobody checked what the dialog *showed
       afterwards*. A test that reads back the same variable the code just
       wrote proves the write, not the feature.
+
+49. **"It sounds like the harness is broken" -- half right, and the half
+    that was right mattered.** A test had been left asserting only
+    behaviour, with a note saying a queued check "does not reliably run
+    from inside the suite". That is the kind of claim worth testing rather
+    than writing down.
+    - **Queued timers were fine.** `TestTimerSanityQt()` arms a shot
+      before a modal, and another inside that one during a second modal
+      opened from it, and both fire. It stays in the suite, because every
+      dialog test depends on that and nothing else checks it.
+    - **What was actually broken was ordering**, and the proof was
+      accidental: adding that two-assertion diagnostic *before* the Object
+      Selections group made three of its assertions fail. The diagnostic's
+      own `QTimer::singleShot` closers were still pending when the next
+      dialog opened, and shut it.
+    - Item 41 fixed exactly this in `StrOpenDialogQt()` and the menu loop,
+      and then three test helpers written afterwards reintroduced it. The
+      fix is now one place: `DriveModalQt()` waits for a dialog, runs a
+      lambda against it, and stops both its timers before returning, so
+      nothing it arms can reach a later test. **The suite has no
+      uncancellable timer left in it.**
+    - **Order-independence is now checked rather than assumed**: moving
+      the four dialog groups to the front of the run gives the same 2847
+      assertions and no failures. A suite that passes only in one order is
+      reporting on itself.
+    - The lesson is narrow and worth keeping: a note explaining why an
+      assertion was weakened is a claim about the system, and this one was
+      wrong. The user reading it as "the harness is broken" was a fairer
+      reading than what it actually said.
 
 ## Features this fork adds to both builds
 
@@ -2351,7 +2378,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   has caught real preprocessor/linkage mistakes this way every session.
 - **Run the test suite before every commit.** `make -f Makefile.qt.test`
   then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2846 assertions covering dialog titles, the 42 context menus,
+  failure. 2847 assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

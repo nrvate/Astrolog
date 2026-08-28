@@ -44,6 +44,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtCore/QTimer>
@@ -922,6 +923,81 @@ static void TestBadInputQt()
 // from a body whose ephemeris file simply isn't installed -- it only drops
 // the printed count. That case is self announcing anyway: the user picks it
 // and the name comes up "???" straight away.
+// Drive a modal dialog: wait for it to appear, run "fnOn" against it, and
+// make sure it is gone before returning.
+//
+// Everything here is a stoppable QTimer rather than QTimer::singleShot,
+// for the reason the menu group and StrOpenDialogQt already are: a queued
+// close cannot be cancelled, so one armed by a test that has finished goes
+// on to close the first modal window a *later* test opens. That is not
+// theoretical -- adding a two-assertion diagnostic before the Object
+// Selections group made three of its assertions fail, because the
+// diagnostic's own closers were still pending. A test whose result depends
+// on what ran before it is reporting on the suite, not the program.
+static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
+{
+  QTimer tPoll, tNet;
+  flag fDone = fFalse;
+
+  QObject::connect(&tPoll, &QTimer::timeout, [&]() {
+    QWidget *pw;
+    if (fDone)
+      return;
+    pw = QApplication::activeModalWidget();
+    if (pw == NULL)
+      return;
+    fDone = fTrue;
+    fnOn(pw);
+  });
+  // If the dialog never appeared, or fnOn left it open, do not hang the
+  // run on it.
+  QObject::connect(&tNet, &QTimer::timeout, []() {
+    QWidget *pw = QApplication::activeModalWidget();
+    if (pw != NULL)
+      pw->close();
+  });
+  tPoll.start(80 * nScaleTest);
+  tNet.start(3000 * nScaleTest);
+  pfnOpen();
+  tPoll.stop();
+  tNet.stop();
+}
+
+
+static int s_cTickQt = 0;
+
+// Does a queued timer fire while a modal dialog is up, and while a second
+// modal is up inside the first? Three of the tests here depend on it.
+static void TestTimerSanityQt()
+{
+  Group("Harness: queued timers");
+
+  // A shot armed before a modal has to fire during its exec(), and one
+  // armed inside that has to fire during a second modal opened from it.
+  // Every dialog test here depends on both, and neither is obvious.
+  s_cTickQt = 0;
+  DriveModalQt(ShowCalcDialogQt, [](QWidget *pw) {
+    QTimer t;
+    t.setSingleShot(fTrue);
+    QObject::connect(&t, &QTimer::timeout, []() { s_cTickQt++; });
+    t.start(50 * nScaleTest);
+    QMessageBox box(QMessageBox::Warning, "T", "nested", QMessageBox::Ok);
+    QTimer tClose;
+    tClose.setSingleShot(fTrue);
+    QObject::connect(&tClose, &QTimer::timeout, [&box]() { box.close(); });
+    tClose.start(300 * nScaleTest);
+    box.exec();
+    t.stop();
+    tClose.stop();
+    pw->close();
+  });
+  Check(s_cTickQt == 1,
+    "a queued shot fires during a modal nested inside a modal (%d)",
+    s_cTickQt);
+  printf("  queued timers fire at both nesting levels\n");
+}
+
+
 static QString s_strLookupQt;
 static flag s_fWarnedQt = fFalse;
 
@@ -929,82 +1005,72 @@ static flag s_fWarnedQt = fFalse;
 static void DriveObjSelQt(int nWhat)
 {
   s_strLookupQt = QString();
-  QTimer tOpen;
-  tOpen.setSingleShot(fTrue);
-  QObject::connect(&tOpen, &QTimer::timeout, [nWhat]() {
-    QWidget *pw = QApplication::activeModalWidget();
-    if (pw == NULL)
-      return;
+  DriveModalQt(ShowObjectSelDialogQt, [nWhat](QWidget *pw) {
     QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
     QList<QLineEdit *> rgle, rgall = pw->findChildren<QLineEdit *>();
-    for (int i = 0; i < rgall.size(); i++)
+    QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
+    int i, b;
+
+    for (i = 0; i < rgall.size(); i++)
       if (qobject_cast<QComboBox *>(rgall[i]->parentWidget()) == NULL)
         rgle.append(rgall[i]);
-    QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
     if (rgcb.isEmpty() || rgle.isEmpty()) {
       pw->close();
       return;
     }
-    if (nWhat == 0) {
-      int n = rgcb[0]->findText("Chiron");
-      if (n >= 0)
-        rgcb[0]->setCurrentIndex(n);
-    } else if (nWhat == 1) {
+    switch (nWhat) {
+    case 0:                                   // pick a body from the list
+      i = rgcb[0]->findText("Chiron");
+      if (i >= 0)
+        rgcb[0]->setCurrentIndex(i);
+      break;
+    case 1:                                   // a number, then Lookup Names
       rgcb[0]->setEditText("52872");
-      for (int b = 0; b < rgb.size(); b++)
+      for (b = 0; b < rgb.size(); b++)
         if (rgb[b]->text().contains("Lookup")) {
           rgb[b]->click();
           break;
         }
       s_strLookupQt = rgle[0]->text();
-    } else if (nWhat == 2) {
+      break;
+    case 2:                                   // a name the user typed
       rgcb[0]->setEditText("Chiron");
       rgle[0]->setText("AstrologSuiteName");
-    } else if (nWhat == 3) {           // a different row, and un-shown
+      break;
+    case 3: {                                 // a later row, and un-shown
       QList<QCheckBox *> rgx = pw->findChildren<QCheckBox *>();
-      if (rgcb.size() > 5) rgcb[5]->setEditText("2060");
-      if (rgx.size() > 5) rgx[5]->setChecked(false);
-    } else if (nWhat == 4) {           // a midpoint
+      if (rgcb.size() > 5)
+        rgcb[5]->setEditText("2060");
+      if (rgx.size() > 5)
+        rgx[5]->setChecked(false);
+      break;
+    }
+    case 4:                                   // a midpoint
       rgcb[0]->setEditText("Sun/Moo");
-    } else if (nWhat == 5) {           // changed, then cancelled
+      break;
+    case 5:                                   // changed, then cancelled
       rgcb[0]->setEditText("2060");
-      for (int b = 0; b < rgb.size(); b++)
+      for (b = 0; b < rgb.size(); b++)
         if (rgb[b]->text().contains("Cancel")) {
           rgb[b]->click();
           return;
         }
-    } else if (nWhat == 6) {           // nonsense
+      break;
+    case 6:                                   // nonsense
       rgcb[0]->setEditText("zznotabody");
-      // The refusal is a modal warning raised inside the OK handler, so
-      // the closer has to be queued before the click, not written after
-      // it: the click does not return until the warning is gone.
-      QWidget *pwT = pw;
-      for (int t = 1; t <= 6; t++)
-        QTimer::singleShot(100 * t * nScaleTest, [pwT]() {
-          QWidget *pwarn = QApplication::activeModalWidget();
-          if (pwarn != NULL && pwarn != pwT) {
-            s_fWarnedQt = fTrue;
-            pwarn->close();
-          }
-        });
-      for (int b = 0; b < rgb.size(); b++)
-        if (rgb[b]->text() == "OK") {
-          rgb[b]->click();
-          break;
-        }
-      QTimer::singleShot(0, [pwT]() { pwT->close(); });
-      return;
+      break;
     }
-    for (int b = 0; b < rgb.size(); b++)
+    for (b = 0; b < rgb.size(); b++)
       if (rgb[b]->text() == "OK") {
         rgb[b]->click();
+        // OK refuses an unparseable row and leaves the dialog open, with
+        // its warning already dismissed by the net in DriveModalQt.
+        if (pw->isVisible())
+          pw->close();
         return;
       }
     pw->close();
   });
-  tOpen.start(300 * nScaleTest);
-  ShowObjectSelDialogQt();
-  tOpen.stop();
 }
 
 
@@ -1072,11 +1138,13 @@ static void TestObjSelDialogQt()
 
   // Nonsense is refused, and nothing is applied.
   // Only the behaviour is asserted, not that a warning widget appeared.
-  // The refusal is a modal raised inside the OK handler, and a queued
-  // check for it does not reliably run from inside the suite even though
-  // it does from ProbeQt() -- so asserting on it would be asserting on
-  // the harness. That the settings survive an unparseable entry is the
-  // part that matters, and it fails if the guard is removed.
+  // Not because queued checks are unreliable -- TestTimerSanityQt proves
+  // they are not, at both nesting levels -- but because the warning is a
+  // second modal opened from inside the first, and DriveModalQt's own net
+  // closes it. Catching it would mean teaching the driver to distinguish
+  // the two, for an assertion that adds nothing: that the settings
+  // survive an unparseable entry is the part that matters, and it fails
+  // if the guard is removed.
   DriveObjSelQt(6);
   Check(rgObjSwiss[iobj - custLo] == nBeforeCancel,
     "an unparseable definition applies nothing (%d)",
@@ -1230,38 +1298,20 @@ static QString StrEphemListQt()
 {
   s_strCombo = QString();
   s_strComboWin = QString();
-  // Retried rather than fired once. A single shot has to guess when the
-  // dialog exists *and* its combo is populated, and guessing 50ms came
-  // back empty -- which quietly satisfied every "does not contain" check.
-  // Hence also the "found at all" assertion: an empty string passes all
-  // of them.
-  for (int t = 1; t <= 8; t++)
-    QTimer::singleShot(120 * t * nScaleTest, []() {
-      if (!s_strCombo.isEmpty())
-        return;
-      QWidget *pw = QApplication::activeModalWidget();
-      if (pw == NULL)
-        return;
-      s_strComboWin = pw->windowTitle();
-      QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
-      for (int i = 0; i < rg.size(); i++) {
-        QStringList items;
-        for (int j = 0; j < rg[i]->count(); j++)
-          items << rg[i]->itemText(j);
-        if (items.join(",").contains("Swiss")) {
-          s_strCombo = items.join(" | ");
-          break;
-        }
+  DriveModalQt(ShowCalcDialogQt, [](QWidget *pw) {
+    s_strComboWin = pw->windowTitle();
+    QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
+    for (int i = 0; i < rg.size(); i++) {
+      QStringList items;
+      for (int j = 0; j < rg[i]->count(); j++)
+        items << rg[i]->itemText(j);
+      if (items.join(",").contains("Swiss")) {
+        s_strCombo = items.join(" | ");
+        break;
       }
-      if (!s_strCombo.isEmpty())
-        pw->close();
-    });
-  QTimer::singleShot(2500 * nScaleTest, []() {
-    QWidget *pw = QApplication::activeModalWidget();
-    if (pw != NULL)
-      pw->close();
+    }
+    pw->close();
   });
-  ShowCalcDialogQt();
   return s_strCombo;
 }
 
@@ -1277,34 +1327,22 @@ static void FilterChartListQt()
 {
   s_cRowList = -1;
   s_strRow0 = QString();
-  for (int t = 1; t <= 8; t++)
-    QTimer::singleShot(120 * t * nScaleTest, []() {
-      if (s_cRowList >= 0)
-        return;
-      QWidget *pw = QApplication::activeModalWidget();
-      if (pw == NULL)
-        return;
-      QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
-      for (int b = 0; b < rgb.size(); b++)
-        if (rgb[b]->text().contains("Filter") &&
-          !rgb[b]->text().contains("Remove")) {
-          rgb[b]->click();
-          break;
-        }
-      QList<QListWidget *> rgl = pw->findChildren<QListWidget *>();
-      if (rgl.size() > 0) {
-        s_cRowList = rgl[0]->count();
-        if (s_cRowList > 0)
-          s_strRow0 = rgl[0]->item(0)->text();
+  DriveModalQt(ShowChartListDialogQt, [](QWidget *pw) {
+    QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
+    for (int b = 0; b < rgb.size(); b++)
+      if (rgb[b]->text().contains("Filter") &&
+        !rgb[b]->text().contains("Remove")) {
+        rgb[b]->click();
+        break;
       }
-      pw->close();
-    });
-  QTimer::singleShot(2500 * nScaleTest, []() {
-    QWidget *pw = QApplication::activeModalWidget();
-    if (pw != NULL)
-      pw->close();
+    QList<QListWidget *> rgl = pw->findChildren<QListWidget *>();
+    if (rgl.size() > 0) {
+      s_cRowList = rgl[0]->count();
+      if (s_cRowList > 0)
+        s_strRow0 = rgl[0]->item(0)->text();
+    }
+    pw->close();
   });
-  ShowChartListDialogQt();
 }
 
 
@@ -1949,6 +1987,7 @@ int NRunQtTestsQt()
   TestAccelTextQt();
   TestExpressionFunctionsQt();
   TestObjSelTableQt();
+  TestTimerSanityQt();
   TestObjSelDialogQt();
   TestObjSelParseQt();
   printf("\n%s: %d passed, %d failed\n",
