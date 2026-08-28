@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2922
+   display and no `xdotool`, and exits non-zero on failure. **2926
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-54
+## Work log — items 1-55
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2281,6 +2281,42 @@ are the more useful half to read before starting something new.
       startup value captured before any group can move it. Reverting the
       initialiser fails it.
 
+55. **Four animation complaints, one bad encoding, and the first refactor
+    that stopped being a port.** Item 54 fixed the startup default and the
+    user came back with: `p` still does nothing, `r` starts the animation,
+    and "how am I supposed to start/stop animation?" -- then, fairly,
+    "there was no change in behavior from your last change", which was
+    true: that commit was tests and documentation only.
+    - **The answer to the question was Shift+N**, and having to answer it
+      at all was the bug. `gs.nAnim` holds the rate in its magnitude and
+      the running state in its sign; `gi.fPause` is a *second*,
+      independent stop. So there were two ways to be stopped, two menu
+      items that each moved only one of them, a rate control that started
+      the chart as a side effect of arithmetic, and a direction control
+      that started it on purpose.
+    - **Six call sites open-coded the encoding** -- `(gs.nAnim < 0 ? -1 :
+      1) * x` and `neg(gs.nAnim)` -- and getting the sign wrong in any one
+      of them is invisible until something moves that shouldn't. Three of
+      this port's animation bugs were exactly that. The encoding cannot be
+      replaced (the `-Xn` switch and saved settings both read it), but it
+      does not have to be repeated: it is now stated once behind
+      `FAnimRunningQt()`, `SetAnimRunningQt()`, `SetAnimRateQt()` and
+      `NAnimRateQt()`, and no other line in qtdriver.cpp reasons about a
+      sign.
+    - **The user's own framing settled the design**: "why do we need a
+      toggle? its not a rocket we dont have to fucking arm it." One state,
+      one control. `p` starts and stops. Rate selection picks a rate.
+      Reverse reverses. Do Animation is the same switch under the Windows
+      name the menu audit requires.
+    - **This is the first deliberate behavioural divergence in the port
+      that is not a limitation** -- everything under "Known divergences"
+      before it was something Windows does that this build cannot or
+      should not. Recorded there in full, on the user's explicit call that
+      parity is not worth this.
+    - 10 of the group's assertions fail if the old two-flag design comes
+      back, which is a stronger regression net than the count suggests:
+      they cover the states, not the keystrokes.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
@@ -2563,6 +2599,31 @@ not on either list and not in an 8.x sub-item is unintentional — treat it
 as a bug.
 
 **Deliberately different behaviour**
+
+- **Animation is one switch, not two, and only the switch moves it.**
+  Upstream stores the jump rate and the running state together in
+  `gs.nAnim` -- magnitude is the rate, sign is on/off -- with `gi.fPause`
+  a second independent stop on top. On Windows that means "Pause
+  Animation" does nothing at all from a standing start, the master on/off
+  is Shift+N, picking a jump rate can start the chart moving on its own,
+  and "Reverse Direction" also starts it
+  (`if (gs.nAnim < 0) neg(gs.nAnim)`, wdriver.cpp:2323). All four were
+  reported here as bugs, by a user who had to be told which key actually
+  starts it.
+  - This port has **one** running/not-running state, behind
+    `FAnimRunningQt()` and `SetAnimRunningQt()` in qtdriver.cpp. `p`
+    starts it and stops it. "Do Animation" is the same switch under its
+    Windows name, kept because the menu is checked against `astrolog.rc`.
+    Picking a jump rate only picks a rate. Reversing only reverses.
+  - The `gs.nAnim` encoding itself is unchanged, because the `-Xn` switch
+    and saved settings depend on it (xscreen.cpp:1814). It is written
+    down in one place now instead of open-coded at six call sites, which
+    is what let three separate bugs through.
+  - Stopped is one canonical state -- rate negated, pause clear -- so the
+    two upstream stops can't disagree and leave the menu contradicting
+    the chart.
+  - `TestAnimationStateQt()` covers it; reverting the change fails ten of
+    its assertions.
 
 - **The IBM line drawing adjustment is not copied, on purpose.**
   charts1.cpp and general.cpp turn off `us.fAnsiChar` and switch the

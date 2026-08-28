@@ -1271,17 +1271,18 @@ static void TestSharedSymbolBoxesQt()
 
 int s_nAnimStartQt = 0;   // gs.nAnim as the program started, before any test
 
-// Animation is off at startup, and picking a jump rate leaves it off.
+// Animation: one switch, and only the switch moves it.
 //
-// gs.nAnim's sign is the on/off switch and its magnitude the rate, so the
-// rate items multiply by the sign to keep it: "(gs.nAnim < 0 ? -1 : 1) *
-// rate" (wdriver.cpp:2302). That only works if the value starts negative.
-// xdata.cpp initialised it to -10 under WIN and 0 everywhere else, and
-// this port is neither -- so it started at 0, every "(0 < 0 ? -1 : 1)"
-// came out positive, and choosing Hours from a standing start began
-// animating on its own. Windows does not: verified against the real
-// binary under Wine, where selecting Hours through the menu moves the
-// Jump Rate bullet and the chart then sits still for eight seconds.
+// Upstream stores the jump rate and the running state in the sign and
+// magnitude of one int, with gi.fPause a second independent stop on top.
+// That is why every control here used to be able to start the chart
+// moving by accident -- picking a rate did, reversing direction did, and
+// the control actually named Pause did nothing at all from a standing
+// start. This port now has one running/not-running state behind
+// FAnimRunningQt()/SetAnimRunningQt(), and these pin down that only the
+// two controls meant to touch it do.
+//
+// Deliberately not Windows' behaviour; see "Known divergences".
 static void TestAnimationStateQt()
 {
   int nAnimSav = gs.nAnim, nDirSav = gi.nDir;
@@ -1291,69 +1292,87 @@ static void TestAnimationStateQt()
   Group("Animation state");
 
   Check(s_nAnimStartQt < 0,
-    "animation starts off, with a rate remembered (gs.nAnim was %d)",
+    "animation is stopped at startup, with a rate remembered (was %d)",
     s_nAnimStartQt);
 
-  QAction *paHours = PaFindActionTestQt("&Hours");
-  QAction *paDo = PaFindActionTestQt("Do &Animation");
+  QAction *paRun = PaFindActionTestQt("Do &Animation");
   QAction *paPause = PaFindActionTestQt("&Pause Animation");
+  QAction *paHours = PaFindActionTestQt("&Hours");
+  QAction *paSecs = PaFindActionTestQt("&Seconds");
   QAction *paRev = PaFindActionTestQt("&Reverse Direction");
-  Check(paHours != NULL && paDo != NULL && paPause != NULL && paRev != NULL,
-    "the four animation items are on the menu");
-  if (paHours == NULL || paDo == NULL || paPause == NULL || paRev == NULL)
+  Check(paRun != NULL && paPause != NULL && paHours != NULL &&
+    paSecs != NULL && paRev != NULL, "the animation items are on the menu");
+  if (paRun == NULL || paPause == NULL || paHours == NULL ||
+    paSecs == NULL || paRev == NULL)
     return;
 
-  // The guard the timer uses, in both builds.
-#define FAnimatingQt() (gs.nAnim >= 1 && !gi.fPause)
+  // The guard the timer itself uses.
+#define FRunningQt() (gs.nAnim >= 1 && !gi.fPause)
   gs.nAnim = -10; gi.fPause = fFalse;
-  Check(!FAnimatingQt(), "nothing is moving at rest");
+  Check(!FRunningQt(), "nothing is moving at rest");
 
+  // 'p' is the whole interface: it starts, and it stops.
+  paPause->trigger();
+  Check(FRunningQt(), "'p' starts it from a standing start (nAnim %d)",
+    gs.nAnim);
+  paPause->trigger();
+  Check(!FRunningQt(), "'p' again stops it (nAnim %d)", gs.nAnim);
+  paPause->trigger();
+  Check(FRunningQt(), "and 'p' starts it once more");
+
+  // Stopped is one canonical state, so the two upstream stops can never
+  // disagree and leave the menu contradicting the chart.
+  paPause->trigger();
+  Check(gs.nAnim < 0 && !gi.fPause,
+    "stopped is always negative rate with pause clear (%d, %d)",
+    gs.nAnim, gi.fPause);
+
+  // Picking a rate never starts or stops anything, in either state.
   paHours->trigger();
-  Check(gs.nAnim == -3, "picking Hours keeps it off (%d, want -3)", gs.nAnim);
-  Check(!FAnimatingQt(), "and the chart stays still");
-
-  paDo->trigger();
-  Check(gs.nAnim == 3, "Do Animation turns it on at that rate (%d)", gs.nAnim);
-  Check(FAnimatingQt(), "and the chart moves");
-
-  // Picking a rate while it runs keeps it running, which is the other
-  // half of preserving the sign.
+  Check(!FRunningQt() && gs.nAnim == -3,
+    "picking a rate while stopped stays stopped (%d)", gs.nAnim);
+  paSecs->trigger();
+  Check(!FRunningQt() && gs.nAnim == -1,
+    "and so does picking another (%d)", gs.nAnim);
+  paPause->trigger();
+  Check(FRunningQt() && gs.nAnim == 1,
+    "starting uses the rate that was chosen (%d)", gs.nAnim);
   paHours->trigger();
-  Check(gs.nAnim == 3, "picking a rate again leaves it running (%d)", gs.nAnim);
-  Check(FAnimatingQt(), "still moving");
+  Check(FRunningQt() && gs.nAnim == 3,
+    "picking a rate while running keeps it running (%d)", gs.nAnim);
 
-  paPause->trigger();
-  Check(gi.fPause && !FAnimatingQt(), "Pause stops it while it runs");
-  paPause->trigger();
-  Check(!gi.fPause && FAnimatingQt(), "and Pause again resumes it");
-
-  paDo->trigger();
-  Check(!FAnimatingQt(), "Do Animation turns it back off");
-
-  // Pause at rest toggles its flag and nothing else -- confirmed on
-  // Windows, where the chart does not move either way.
-  paPause->trigger();
-  Check(gi.fPause, "Pause at rest still toggles the flag");
-  Check(!FAnimatingQt(), "but nothing starts moving");
-  paPause->trigger();
-
-  // Reverse Direction turns animation on when it was off. That reads odd
-  // and is upstream's own behaviour (wdriver.cpp:2323), confirmed on
-  // Windows from a standing start.
-  gs.nAnim = -10; gi.fPause = fFalse;
+  // Reversing reverses, and does nothing else.
   int nDirWas = gi.nDir;
   paRev->trigger();
-  Check(gi.nDir == -nDirWas, "Reverse flips the direction (%d)", gi.nDir);
-  Check(gs.nAnim == 10 && FAnimatingQt(),
-    "and turns animation on, as Windows does (%d)", gs.nAnim);
-#undef FAnimatingQt
+  Check(gi.nDir == -nDirWas, "reverse flips the direction (%d)", gi.nDir);
+  Check(FRunningQt(), "and leaves it running");
+  paPause->trigger();
+  nDirWas = gi.nDir;
+  paRev->trigger();
+  Check(gi.nDir == -nDirWas, "reverse flips it while stopped too (%d)",
+    gi.nDir);
+  Check(!FRunningQt(), "and does not start it, unlike Windows");
+
+  // The rate survives a stop, which is the whole reason for the sign.
+  Check(NAbs(gs.nAnim) == 3, "the rate is remembered while stopped (%d)",
+    NAbs(gs.nAnim));
+
+  // Do Animation is the same one switch under its Windows name.
+  paRun->trigger();
+  Check(FRunningQt(), "Do Animation starts it too");
+  Check(paPause->isChecked() == fFalse && paRun->isChecked(),
+    "and both menu items agree it is running");
+  paRun->trigger();
+  Check(!FRunningQt(), "and stops it");
+  Check(paPause->isChecked() && !paRun->isChecked(),
+    "and both agree it is stopped");
+#undef FRunningQt
 
   gs.nAnim = nAnimSav; gi.nDir = nDirSav; gi.fPause = fPauseSav;
   ciCore = ciSav;
   CastChart(1);
-  printf("  animation stays off until asked, and the rate keeps its sign\n");
+  printf("  one switch starts and stops it; nothing else moves the chart\n");
 }
-
 
 static int s_cTickQt = 0;
 

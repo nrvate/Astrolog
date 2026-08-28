@@ -535,8 +535,7 @@ void PrintWarningQt(CONST char *sz, flag fError)
     return;
   }
   // Stop an animation first, or the same box comes back every frame.
-  // Negating gs.nAnim is what Windows does, and is what the animation
-  // timer's own guard checks, so the timer stops on its next tick.
+  // Declared below; stopping is the one thing this needs from it.
   if (gs.nAnim > 0)
     neg(gs.nAnim);
   QMessageBox::warning(gi.qwind, QString("%1 %2").arg(szAppName)
@@ -2643,12 +2642,59 @@ static void StartAnimTimerQt(QMainWindow *pwind)
 }
 
 
-// Animate menu, equivalent to Windows' cmdAnimate*/cmdStep*/cmdStore/
-// cmdRecall handlers (wdriver.cpp:2276-2354). gs.nAnim's sign doubles as
-// the on/off state (negative = off, remembering the last active rate) --
-// AddToggleAction/AddSelectAction don't fit that, so the rate/factor items
-// use small dedicated helpers that preserve the sign the same way
-// Windows' handlers do (e.g. "gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * rate").
+// Animation state.
+//
+// Upstream stores two things in one int: the magnitude of gs.nAnim is the
+// jump rate, and its sign is whether animation is running. gi.fPause is a
+// second, independent stop on top of that. The encoding has to stay -- the
+// -Xn switch and saved settings both depend on it (xscreen.cpp:1814) --
+// but it is written down here once, and nothing else in this file reasons
+// about it. Six call sites used to open-code "(gs.nAnim < 0 ? -1 : 1) * x"
+// and "neg(gs.nAnim)", and a sign wrong in any of them is invisible until
+// something moves that shouldn't. Three of this port's animation bugs were
+// exactly that.
+//
+// Above this line there is one idea, not two: animation is running or it
+// isn't, and one control starts and stops it. There is no separate "arm
+// it first" step, which is a divergence from Windows and a deliberate one
+// -- see "Known divergences" in QT_GUI_PLAN.md.
+
+static QAction *s_paAnimRun = NULL, *s_paAnimPause = NULL;
+
+static flag FAnimRunningQt(void) { return gs.nAnim >= 1 && !gi.fPause; }
+
+// The jump rate, never zero: a stopped state still remembers one, and a
+// settings file that never set -Xn leaves nothing useful behind.
+static int NAnimRateQt(void)
+{
+  int n = NAbs(gs.nAnim);
+  return n >= 1 ? n : iAnimNow;
+}
+
+static void SyncAnimMenuQt(void)
+{
+  if (s_paAnimRun != NULL)
+    s_paAnimRun->setChecked(FAnimRunningQt());
+  if (s_paAnimPause != NULL)
+    s_paAnimPause->setChecked(!FAnimRunningQt());
+}
+
+// Start or stop, keeping the rate. Stopped is always the one canonical
+// state -- rate negated, pause clear -- so the two ways upstream can stop
+// can't disagree and leave the menu contradicting the chart.
+static void SetAnimRunningQt(flag fRun)
+{
+  gs.nAnim = fRun ? NAnimRateQt() : -NAnimRateQt();
+  gi.fPause = fFalse;
+  SyncAnimMenuQt();
+}
+
+// Choose the jump rate. Never starts or stops anything.
+static void SetAnimRateQt(int rate)
+{
+  gs.nAnim = FAnimRunningQt() ? rate : -rate;
+  SyncAnimMenuQt();
+}
 
 static QAction *AddAnimRateAction(QMenu *pmenu, QActionGroup *pgroup,
   CONST char *szLabel, int rate)
@@ -2657,9 +2703,7 @@ static QAction *AddAnimRateAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(NAbs(gs.nAnim) == rate);
-  ConnectMenuQt(pa, pa, [rate]() {
-    gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * rate;
-  });
+  ConnectMenuQt(pa, pa, [rate]() { SetAnimRateQt(rate); });
   return pa;
 }
 
@@ -2679,22 +2723,17 @@ static QAction *AddAnimFactorAction(QMenu *pmenu, QActionGroup *pgroup,
 static void BuildAnimateMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Animate");
-  // gs.nAnim's sign is the on/off state and its magnitude is the rate, so
-  // toggling it on/off (unlike AddToggleAction's plain-bool flip) has to
-  // negate rather than overwrite, or the remembered rate would be lost.
-  QAction *paAnim = pmenu->addAction("Do &Animation");
-  paAnim->setCheckable(true);
-  paAnim->setChecked(gs.nAnim > 0);
-  ConnectMenuQt(paAnim, pwind, [paAnim]() {
-    neg(gs.nAnim);
-    paAnim->setChecked(gs.nAnim > 0);
-  });
+  // Both this and Pause Animation below drive the one running/not-running
+  // state, so either starts and either stops. Two names for one switch is
+  // upstream's menu, kept for parity; the behaviour behind them is not.
+  s_paAnimRun = pmenu->addAction("Do &Animation");
+  s_paAnimRun->setCheckable(true);
+  ConnectMenuQt(s_paAnimRun, pwind,
+    []() { SetAnimRunningQt(!FAnimRunningQt()); });
 
   QMenu *pmenuRate = pmenu->addMenu("&Jump Rate");
   QAction *paNow = pmenuRate->addAction("Update to &Now");
-  ConnectMenuQt(paNow, pwind, []() {
-    gs.nAnim = (gs.nAnim < 0 ? -1 : 1) * iAnimNow;
-  });
+  ConnectMenuQt(paNow, pwind, []() { SetAnimRateQt(iAnimNow); });
   pmenuRate->addSeparator();
   QActionGroup *pgroupRate = new QActionGroup(pwind);
   AddAnimRateAction(pmenuRate, pgroupRate, "&Seconds", 1);
@@ -2726,14 +2765,21 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   QAction *paReverse = pmenu->addAction("&Reverse Direction");
   paReverse->setCheckable(true);
   paReverse->setChecked(gi.nDir < 0);
+  // Reverse only reverses. Windows also starts animation here when it was
+  // stopped, which means a direction control silently doubles as a start
+  // button -- another divergence, and deliberate.
   ConnectMenuQt(paReverse, pwind, [paReverse]() {
     neg(gi.nDir);
     paReverse->setChecked(gi.nDir < 0);
-    if (gs.nAnim < 0)
-      neg(gs.nAnim);
     RedrawQt();
   });
-  AddToggleAction(pmenu, "&Pause Animation", &gi.fPause, fFalse);
+
+  // Play/pause. The same one switch as Do Animation above: pressing it
+  // when nothing is moving starts it, pressing it again stops it.
+  s_paAnimPause = pmenu->addAction("&Pause Animation");
+  s_paAnimPause->setCheckable(true);
+  ConnectMenuQt(s_paAnimPause, pwind,
+    []() { SetAnimRunningQt(!FAnimRunningQt()); });
   AddToggleAction(pmenu, "&Timed Exposure", &gs.fJetTrail, fFalse);
   pmenu->addSeparator();
 
@@ -2756,6 +2802,10 @@ static void BuildAnimateMenu(QMainWindow *pwind)
     ciMain = ciCore = ciSave;
     RecastAndRedrawQt();
   });
+
+  // The two items above both show the one state; set them from it now
+  // that they exist, rather than from gs.nAnim by hand at each site.
+  SyncAnimMenuQt();
 }
 
 

@@ -236,16 +236,16 @@ _Xx              ; Thicker lines ["=Xx" is thicker, "_Xx" is thinner         ]
 -Ao Un4 1
 
 
--M0 1 "-i c:\ast80\defplan.dat"
+-M0 1 "-i /data/med/defplan.dat"
 -WM 1 "Default Planets"
 
--M0 2 "-i c:\ast80\noplan.dat"
+-M0 2 "-i /data/med/noplan.dat"
 -WM 2 "All Planets Off"
 
--M0 3 "-i c:\ast80\deftran.dat"
+-M0 3 "-i /data/med/deftran.dat"
 -WM 3 "Default Transiters"
 
--M0 4 "-i c:\ast80\notran.dat"
+-M0 4 "-i /data/med/notran.dat"
 -WM 4 "All Transiters Off"
 
 ; Harmonic hotkeys
@@ -258,19 +258,19 @@ _Xx              ; Thicker lines ["=Xx" is thicker, "_Xx" is thinner         ]
 -M0 8 "-x 19200"
 -WM 8 "H19200"
 
--M0 9 "-i c:\ast80\normasp.dat"
+-M0 9 "-i /data/med/normasp.dat"
 -WM 9 "Normal aspects"
 
--M0 10 "-i c:\ast80\mpasp.dat"
+-M0 10 "-i /data/med/mpasp.dat"
 -WM 10 "Midpoint aspects"
 
--M0 11 "-i c:\ast80\yeb1.dat"
+-M0 11 "-i /data/med/yeb1.dat"
 -WM 11 "YEBSet1"
 
--M0 12 "-i c:\ast80\yeb2.dat"
+-M0 12 "-i /data/med/yeb2.dat"
 -WM 12 "YEBSet2"
 
--M0 13 "-i c:\ast80\anglemps.dat"
+-M0 13 "-i /data/med/anglemps.dat"
 -WM 13 "AngleMps"
 
 
