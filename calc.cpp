@@ -3408,7 +3408,7 @@ void SwissComputeStars(real jd, flag fInitBright)
           us.fStarMagAbs ? 10.0 * rPCToAU : xx[2]);
       else
         rStarBright[i] = rStarBrightDef[i];
-      if (kObjU[starLo] >= cColor2)
+      if (rgobjset[starLo].kolor >= cColor2)
         kObjA[oNorm+i] = KStarA(rStarBright[i]);
     } else {
       rStarBrightDistDef[i] = xx[2];

@@ -1435,10 +1435,10 @@ flag API DlgObject(HWND hdlg, uint message, WORD wParam, LONG lParam)
   switch (message) {
   case WM_INITDIALOG:
     for (i = 0; i <= oCore; i++) {
-      SetEditR(hdlg, deo01 + i, rObjOrb[i], -2);
-      SetEditR(hdlg, dea01 + i, rObjAdd[i], -1);
-      SetEditR(hdlg, dei01 + i, rObjInf[i], -2);
-      SetEditColor(hdlg, dck00 + i, kObjU[i], 1);
+      SetEditR(hdlg, deo01 + i, rgobjset[i].orb, -2);
+      SetEditR(hdlg, dea01 + i, rgobjset[i].add, -1);
+      SetEditR(hdlg, dei01 + i, rgobjset[i].inf, -2);
+      SetEditColor(hdlg, dck00 + i, rgobjset[i].kolor, 1);
     }
     return fTrue;
 
@@ -1448,21 +1448,21 @@ flag API DlgObject(HWND hdlg, uint message, WORD wParam, LONG lParam)
         for (i = 0; i <= oCore; i++) {
           r = GetEditR(hdlg, deo01 + i);
           if (j)
-            rObjOrb[i] = r;
+            rgobjset[i].orb = r;
           else
             EnsureR(r, r >= -rDegMax && r <= rDegMax, "max orb");
           r = GetEditR(hdlg, dea01 + i);
           if (j)
-            rObjAdd[i] = r;
+            rgobjset[i].add = r;
           else
             EnsureR(r, r >= -rDegMax && r <= rDegMax, "orb addition");
           r = GetEditR(hdlg, dei01 + i);
           if (j)
-            rObjInf[i] = r;
+            rgobjset[i].inf = r;
           GetEdit(dck00 + i, sz);
           k = NParseSz(sz, pmColor);
           if (j)
-            kObjU[i] = k;
+            rgobjset[i].kolor = k;
           else
             EnsureN(k, FValidColor2A(k), "color");
         }
@@ -1492,10 +1492,10 @@ flag API DlgObject2(HWND hdlg, uint message, WORD wParam, LONG lParam)
   case WM_INITDIALOG:
     for (i0 = oAsc; i0 <= dwarfHi+1; i0++) {
       i = (i0 <= dwarfHi ? i0 : starLo);
-      SetEditR(hdlg, deo01 - oAsc + i0, rObjOrb[i], -2);
-      SetEditR(hdlg, dea01 - oAsc + i0, rObjAdd[i], -1);
-      SetEditR(hdlg, dei01 - oAsc + i0, rObjInf[i], -2);
-      SetEditColor(hdlg, dck00 - oAsc + i0, kObjU[i], 1 + (i == starLo));
+      SetEditR(hdlg, deo01 - oAsc + i0, rgobjset[i].orb, -2);
+      SetEditR(hdlg, dea01 - oAsc + i0, rgobjset[i].add, -1);
+      SetEditR(hdlg, dei01 - oAsc + i0, rgobjset[i].inf, -2);
+      SetEditColor(hdlg, dck00 - oAsc + i0, rgobjset[i].kolor, 1 + (i == starLo));
     }
     return fTrue;
 
@@ -1506,21 +1506,21 @@ flag API DlgObject2(HWND hdlg, uint message, WORD wParam, LONG lParam)
           i = (i0 <= dwarfHi ? i0 : starLo);
           r = GetEditR(hdlg, deo01 - oAsc + i0);
           if (j)
-            rObjOrb[i] = r;
+            rgobjset[i].orb = r;
           else
             EnsureR(r, FBetween(r, -rDegMax, rDegMax), "max orb");
           r = GetEditR(hdlg, dea01 - oAsc + i0);
           if (j)
-            rObjAdd[i] = r;
+            rgobjset[i].add = r;
           else
             EnsureR(r, FBetween(r, -rDegMax, rDegMax), "orb addition");
           r = GetEditR(hdlg, dei01 - oAsc + i0);
           if (j)
-            rObjInf[i] = r;
+            rgobjset[i].inf = r;
           GetEdit(dck00 - oAsc + i0, sz);
           k = NParseSz(sz, pmColor);
           if (j)
-            kObjU[i] = k;
+            rgobjset[i].kolor = k;
           else
             EnsureN(k, i < starLo ? FValidColor2A(k) : FValidColorSA(k),
               "color");
@@ -1551,10 +1551,10 @@ flag API DlgObjectM(HWND hdlg, uint message, WORD wParam, LONG lParam)
   switch (message) {
   case WM_INITDIALOG:
     for (i = moonsLo; i <= cobHi; i++) {
-      SetEditR(hdlg, deo01 - moonsLo + i, rObjOrb[i], -2);
-      SetEditR(hdlg, dea01 - moonsLo + i, rObjAdd[i], -1);
-      SetEditR(hdlg, dei01 - moonsLo + i, rObjInf[i], -2);
-      SetEditColor(hdlg, dck00 - moonsLo + i, kObjU[i], 3);
+      SetEditR(hdlg, deo01 - moonsLo + i, rgobjset[i].orb, -2);
+      SetEditR(hdlg, dea01 - moonsLo + i, rgobjset[i].add, -1);
+      SetEditR(hdlg, dei01 - moonsLo + i, rgobjset[i].inf, -2);
+      SetEditColor(hdlg, dck00 - moonsLo + i, rgobjset[i].kolor, 3);
     }
     SetCheck(dxMo_Ym, us.fMoonMove);
     SetCheck(dxMo_80, us.fMoonChartSep);
@@ -1567,21 +1567,21 @@ flag API DlgObjectM(HWND hdlg, uint message, WORD wParam, LONG lParam)
         for (i = moonsLo; i <= cobHi; i++) {
           r = GetEditR(hdlg, deo01 - moonsLo + i);
           if (j)
-            rObjOrb[i] = r;
+            rgobjset[i].orb = r;
           else
             EnsureR(r, r >= -rDegMax && r <= rDegMax, "max orb");
           r = GetEditR(hdlg, dea01 - moonsLo + i);
           if (j)
-            rObjAdd[i] = r;
+            rgobjset[i].add = r;
           else
             EnsureR(r, r >= -rDegMax && r <= rDegMax, "orb addition");
           r = GetEditR(hdlg, dei01 - moonsLo + i);
           if (j)
-            rObjInf[i] = r;
+            rgobjset[i].inf = r;
           GetEdit(dck00 - moonsLo + i, sz);
           k = NParseSz(sz, pmColor);
           if (j)
-            kObjU[i] = k;
+            rgobjset[i].kolor = k;
           else
             EnsureN(k, FValidColorMA(k), "color");
         }

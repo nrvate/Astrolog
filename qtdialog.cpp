@@ -3716,12 +3716,12 @@ void ShowObjectDialogQt()
     // which start at 01, so this index is the object number itself.
     rgpcbColor[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", i);
     if (rgpeOrb[i] != NULL)
-      rgpeOrb[i]->setText(SzFormatRQt(rObjOrb[i], -2));
+      rgpeOrb[i]->setText(SzFormatRQt(rgobjset[i].orb, -2));
     if (rgpeAdd[i] != NULL)
-      rgpeAdd[i]->setText(SzFormatRQt(rObjAdd[i], -1));
+      rgpeAdd[i]->setText(SzFormatRQt(rgobjset[i].add, -1));
     if (rgpeInf[i] != NULL)
-      rgpeInf[i]->setText(SzFormatRQt(rObjInf[i], -2));
-    FillColorComboQt(rgpcbColor[i], kObjU[i], 1);
+      rgpeInf[i]->setText(SzFormatRQt(rgobjset[i].inf, -2));
+    FillColorComboQt(rgpcbColor[i], rgobjset[i].kolor, 1);
   }
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
@@ -3731,10 +3731,10 @@ void ShowObjectDialogQt()
   for (i = 0; i <= oCore; i++) {
     if (rgpeOrb[i] == NULL)
       continue;
-    rObjOrb[i] = rgpeOrb[i]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[i]->text().toDouble();
-    rObjInf[i] = rgpeInf[i]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[i]);
+    rgobjset[i].orb = rgpeOrb[i]->text().toDouble();
+    rgobjset[i].add = rgpeAdd[i]->text().toDouble();
+    rgobjset[i].inf = rgpeInf[i]->text().toDouble();
+    rgobjset[i].kolor = NColorFromComboQt(rgpcbColor[i]);
   }
   RecastAndRedrawQt();
 }
@@ -3766,13 +3766,13 @@ void ShowObject2DialogQt()
     QLineEdit *peInf = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dei", j+1);
     QComboBox *pcbColor = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", j);
     if (peOrb != NULL)
-      peOrb->setText(SzFormatRQt(rObjOrb[i], -2));
+      peOrb->setText(SzFormatRQt(rgobjset[i].orb, -2));
     if (peAdd != NULL)
-      peAdd->setText(SzFormatRQt(rObjAdd[i], -1));
+      peAdd->setText(SzFormatRQt(rgobjset[i].add, -1));
     if (peInf != NULL)
-      peInf->setText(SzFormatRQt(rObjInf[i], -2));
+      peInf->setText(SzFormatRQt(rgobjset[i].inf, -2));
     // Windows widens the color list by one on the collective stars row.
-    FillColorComboQt(pcbColor, kObjU[i], 1 + (i == starLo));
+    FillColorComboQt(pcbColor, rgobjset[i].kolor, 1 + (i == starLo));
     rgpeOrb.append(peOrb); rgpeAdd.append(peAdd);
     rgpeInf.append(peInf); rgpcbColor.append(pcbColor);
     j++;
@@ -3786,10 +3786,10 @@ void ShowObject2DialogQt()
     if (rgpeOrb[j] == NULL)
       continue;
     i = rgi[j];
-    rObjOrb[i] = rgpeOrb[j]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[j]->text().toDouble();
-    rObjInf[i] = rgpeInf[j]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[j]);
+    rgobjset[i].orb = rgpeOrb[j]->text().toDouble();
+    rgobjset[i].add = rgpeAdd[j]->text().toDouble();
+    rgobjset[i].inf = rgpeInf[j]->text().toDouble();
+    rgobjset[i].kolor = NColorFromComboQt(rgpcbColor[j]);
   }
   RecastAndRedrawQt();
 }
@@ -4160,12 +4160,12 @@ void ShowMoonObjectDialogQt()
     QLineEdit *peInf = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dei", j+1);
     QComboBox *pcbColor = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", j);
     if (peOrb != NULL)
-      peOrb->setText(SzFormatRQt(rObjOrb[i], -2));
+      peOrb->setText(SzFormatRQt(rgobjset[i].orb, -2));
     if (peAdd != NULL)
-      peAdd->setText(SzFormatRQt(rObjAdd[i], -1));
+      peAdd->setText(SzFormatRQt(rgobjset[i].add, -1));
     if (peInf != NULL)
-      peInf->setText(SzFormatRQt(rObjInf[i], -2));
-    FillColorComboQt(pcbColor, kObjU[i], 3);
+      peInf->setText(SzFormatRQt(rgobjset[i].inf, -2));
+    FillColorComboQt(pcbColor, rgobjset[i].kolor, 3);
     rgpeOrb.append(peOrb); rgpeAdd.append(peAdd);
     rgpeInf.append(peInf); rgpcbColor.append(pcbColor);
   }
@@ -4195,10 +4195,10 @@ void ShowMoonObjectDialogQt()
     j = i - moonsLo;
     if (rgpeOrb[j] == NULL)
       continue;
-    rObjOrb[i] = rgpeOrb[j]->text().toDouble();
-    rObjAdd[i] = rgpeAdd[j]->text().toDouble();
-    rObjInf[i] = rgpeInf[j]->text().toDouble();
-    kObjU[i] = NColorFromComboQt(rgpcbColor[j]);
+    rgobjset[i].orb = rgpeOrb[j]->text().toDouble();
+    rgobjset[i].add = rgpeAdd[j]->text().toDouble();
+    rgobjset[i].inf = rgpeInf[j]->text().toDouble();
+    rgobjset[i].kolor = NColorFromComboQt(rgpcbColor[j]);
   }
   RecastAndRedrawQt();
 }

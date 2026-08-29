@@ -77,7 +77,7 @@ void InitColors(void)
 
   // Determine and assign the color of each planet.
   for (i = 0; i <= oNorm; i++) {
-    k = kObjU[i];
+    k = rgobjset[i].kolor;
     if (k == kRay || rgObjRuler == NULL)
       k = kRayA[rgObjRay[i]];
     else if (k == kElement)
@@ -98,7 +98,7 @@ void InitColors(void)
 
   // Determine and assign the color of each star.
   EnsureStarBright();
-  k = kObjU[starLo];
+  k = rgobjset[starLo].kolor;
   for (i = starLo; i <= starHi; i++)
     kObjA[i] = (k >= cColor2 ? KStarA(rStarBright[i-starLo+1]) : k);
 }
@@ -933,10 +933,20 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
       return tcError;
     if (FErrorArgc("YA", argc, 3+j-i))
       return tcError;
-    lpr = ch1 == 'o' ? rAspOrb : (ch1 == 'm' ? rObjOrb :
-      (ch1 == 'd' ? rObjAdd : rAspAngle));
-    for (k = i; k <= j; k++)
-      lpr[k] = RFromSz(argv[3+k-i]);
+    // The object columns live in rgobjset[] now, so the old trick of
+    // picking a target array by pointer only works for the aspect pair.
+    if (ch1 == 'm' || ch1 == 'd')
+      for (k = i; k <= j; k++) {
+        if (ch1 == 'm')
+          rgobjset[k].orb = RFromSz(argv[3+k-i]);
+        else
+          rgobjset[k].add = RFromSz(argv[3+k-i]);
+      }
+    else {
+      lpr = ch1 == 'o' ? rAspOrb : rAspAngle;
+      for (k = i; k <= j; k++)
+        lpr[k] = RFromSz(argv[3+k-i]);
+    }
     darg += 3+j-i;
     break;
 
@@ -944,16 +954,16 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     if (FErrorArgc("Yj", argc, 2 + 2*(ch1 == '0') + 4*(ch1 == '7')))
       return tcError;
     if (ch1 == '0') {
-      rObjInf[oNorm1+1]  = RFromSz(argv[1]);
-      rObjInf[oNorm1+2]  = RFromSz(argv[2]);
+      rgrBonusInf[1]  = RFromSz(argv[1]);
+      rgrBonusInf[2]  = RFromSz(argv[2]);
       rHouseInf[cSign+1] = RFromSz(argv[3]);
       rHouseInf[cSign+2] = RFromSz(argv[4]);
       darg += 4;
       break;
     } else if (ch1 == '7') {
-      rObjInf[oNorm1+3]  = RFromSz(argv[1]);
-      rObjInf[oNorm1+4]  = RFromSz(argv[2]);
-      rObjInf[oNorm1+5]  = RFromSz(argv[3]);
+      rgrBonusInf[3]  = RFromSz(argv[1]);
+      rgrBonusInf[4]  = RFromSz(argv[2]);
+      rgrBonusInf[5]  = RFromSz(argv[3]);
       rHouseInf[cSign+3] = RFromSz(argv[4]);
       rHouseInf[cSign+4] = RFromSz(argv[5]);
       rHouseInf[cSign+5] = RFromSz(argv[6]);
@@ -969,10 +979,17 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
       return tcError;
     if (FErrorArgc("Yj", argc, 3+j-i))
       return tcError;
-    lpr = ch1 == 'C' ? rHouseInf : (ch1 == 'A' ? rAspInf :
-      (ch1 == 'T' ? rTransitInf : rObjInf));
-    for (k = i; k <= j; k++)
-      lpr[k] = RFromSz(argv[3+k-i]);
+    if (ch1 == 'C' || ch1 == 'A') {
+      lpr = ch1 == 'C' ? rHouseInf : rAspInf;
+      for (k = i; k <= j; k++)
+        lpr[k] = RFromSz(argv[3+k-i]);
+    } else
+      for (k = i; k <= j; k++) {
+        if (ch1 == 'T')
+          rgobjset[k].tinf = RFromSz(argv[3+k-i]);
+        else
+          rgobjset[k].inf = RFromSz(argv[3+k-i]);
+      }
     darg += 3+j-i;
     break;
 
@@ -1120,14 +1137,17 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
       return tcError;
     if (FErrorArgc("Yk", argc, 3+j-i))
       return tcError;
-    lpn = ch1 == 'O' ? kObjU : (ch1 == 'A' ? kAspA : (ch1 == '7' ? kRayA :
-      (ch1 == '0' ? kRainbowA : kMainA)));
+    lpn = ch1 == 'A' ? kAspA : (ch1 == '7' ? kRayA :
+      (ch1 == '0' ? kRainbowA : kMainA));
     for (k = i; k <= j; k++) {
       l = NParseSz(argv[3+k-i], pmColor);
       if (FErrorValN("Yk",
         !FBetween(l, -0xffffff, ch1 != 'O' ? cColor2-1 : kMax-1), l, 0))
         return tcError;
-      lpn[k] = l;
+      if (ch1 == 'O')
+        rgobjset[k].kolor = l;
+      else
+        lpn[k] = l;
     }
     darg += 3+j-i;
     break;
@@ -2439,9 +2459,9 @@ flag FProcessSwitches(int argc, char **argv)
         if (ch1 == 'o')
           rAspOrb[i] = rT;
         else if (ch1 == 'm')
-          rObjOrb[i] = rT;
+          rgobjset[i].orb = rT;
         else if (ch1 == 'd')
-          rObjAdd[i] = rT;
+          rgobjset[i].add = rT;
         else
           rAspAngle[i] = rT;
         argc -= 2; argv += 2;

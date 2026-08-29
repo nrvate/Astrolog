@@ -40,6 +40,12 @@ matters when merging a new upstream release:
   `grep -lnE "ifdef QT|defined\(QT\)" *.cpp *.h`. A `WIN`-only branch
   with no `QT` in it is the shape bugs hide in: see work log items 39
   and 54, one of which was a plain value in a struct initialiser.
+- **Upstream merges ended at work log item 63** (2026-08-29), by the
+  maintainer's explicit decision: the per-object settings storage is
+  `rgobjset[]`/`OBJSET` now, and upstream's ~130 references to the five
+  flat arrays it replaced no longer apply. The Windows *build* is
+  unaffected — `Makefile.win` compiles this same core and remains the
+  behavioural oracle.
 - **Features this fork adds to *both* builds** — the Object Selections
   dialog and the settings-save fixes — deliberately carry no `QT` guard
   at all, because they go into `wdialog.cpp`, `astrolog.rc`, `io.cpp` and
@@ -65,13 +71,13 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 3014 assertions + startup checks
+./run-qt-tests.sh                # 3018 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3014 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`).
+commit. Current state: **3018 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`).
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render

@@ -1695,57 +1695,57 @@ flag FOutputSettings()
   PrintF("\n\n");
 
   PrintF("; DEFAULT MAX PLANET ASPECT ORBS:\n\n-YAm 0 10   ");
-  for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
+  for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("      ; Planets\n-YAm 11 21  ");
-  for (i = 11; i <= 21; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
+  for (i = 11; i <= 21; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("      ; Minor planets\n-YAm 22 33  ");
-  for (i = 22; i <= 33; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
+  for (i = 22; i <= 33; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("  ; Cusp objects\n-YAm 34 42  ");
-  for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
+  for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("              ; Uranians\n-YAm 43 51  ");
-  for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
+  for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("              ; Dwarfs\n-YAm 52 83  ");
-  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
+  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("  ; Moons and body centers\n-YAm 84 84  ");
-  sprintf(sz, "%4.0f", rObjOrb[84]); PrintFSz();
+  sprintf(sz, "%4.0f", rgobjset[84].orb); PrintFSz();
   PrintF("                                              ; Fixed stars\n");
 
   PrintF("\n; DEFAULT PLANET ASPECT ORB ADDITIONS:\n\n-YAd 0 10   ");
-  for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
+  for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
   PrintF("    ; Planets\n-YAd 11 21  ");
-  for (i = 11; i <= 21; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
+  for (i = 11; i <= 21; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
   PrintF("    ; Minor planets\n-YAd 22 33  ");
-  for (i = 22; i <= 33; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
+  for (i = 22; i <= 33; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
   PrintF("  ; Cusp objects\n-YAd 34 42  ");
-  for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
+  for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
   PrintF("        ; Uranians\n-YAd 43 51  ");
-  for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
+  for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
   PrintF("        ; Dwarfs\n-YAd 52 83  ");
-  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
+  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
   PrintF("  ; Moons and body centers\n-YAd 84 84  ");
-  sprintf(sz, " %.0f", rObjAdd[84]); PrintFSz();
+  sprintf(sz, " %.0f", rgobjset[84].add); PrintFSz();
   PrintF("                        ; Fixed stars\n\n\n");
 
   PrintF("; DEFAULT INFLUENCES:\n\n-Yj 0 10   ");
   for (i = 0; i <= 10; i++)
-    { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].inf); PrintFSz(); }
   PrintF("     ; Planets\n-Yj 11 21  ");
   for (i = 11; i <= 21; i++)
-    { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].inf); PrintFSz(); }
   PrintF("     ; Minor planets\n-Yj 22 33  ");
   for (i = 22; i <= 33; i++)
-    { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].inf); PrintFSz(); }
   PrintF("  ; Cusp objects\n-Yj 34 42  ");
   for (i = 34; i <= 42; i++)
-    { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].inf); PrintFSz(); }
   PrintF("           ; Uranians\n-Yj 43 51  ");
   for (i = 43; i <= 51; i++)
-    { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].inf); PrintFSz(); }
   PrintF("           ; Dwarfs\n-Yj 52 83  ");
   for (i = 52; i <= 83; i++)
-    { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].inf); PrintFSz(); }
   PrintF("  ; Moons and body centers\n-Yj 84 84   ");
-  sprintf(sz, "%2.0f", rObjInf[84]); PrintFSz();
+  sprintf(sz, "%2.0f", rgobjset[84].inf); PrintFSz();
   PrintF("                                   ; Fixed stars\n\n");
 
   PrintF("-YjC 1 12  ");
@@ -1762,32 +1762,32 @@ flag FOutputSettings()
 
   PrintF("; DEFAULT TRANSIT INFLUENCES:\n\n-YjT 0 10  ");
   for (i = 0; i <= 10; i++)
-    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].tinf); PrintFSz(); }
   PrintF("  ; Planets\n-YjT 11 21 ");
   for (i = 11; i <= 21; i++)
-    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].tinf); PrintFSz(); }
   PrintF("  ; Minor planets\n-YjT 22 33 ");
   for (i = 22; i <= 33; i++)
-    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].tinf); PrintFSz(); }
   PrintF("  ; Cusp objects\n-YjT 34 42 ");
   for (i = 34; i <= 42; i++)
-    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].tinf); PrintFSz(); }
   PrintF("        ; Uranians\n-YjT 43 51 ");
   for (i = 43; i <= 51; i++)
-    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].tinf); PrintFSz(); }
   PrintF("        ; Dwarfs\n-YjT 52 83 ");
   for (i = 52; i <= 83; i++)
-    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+    { sprintf(sz, " %2.0f", rgobjset[i].tinf); PrintFSz(); }
   PrintF("  ; Moons and body centers\n-YjT 84 84  ");
-  sprintf(sz, "%2.0f", rTransitInf[84]); PrintFSz();
+  sprintf(sz, "%2.0f", rgobjset[84].tinf); PrintFSz();
   PrintF("                                ; Fixed stars\n\n");
 
   sprintf(sz, "-Yj0 %.0f %.0f %.0f %.0f ",
-    rObjInf[oNorm1 + 1], rObjInf[oNorm1 + 2], rHouseInf[cSign + 1],
+    rgrBonusInf[1], rgrBonusInf[2], rHouseInf[cSign + 1],
     rHouseInf[cSign + 2]); PrintFSz();
   PrintF(" ; In ruling sign, exalted sign, ruling house, exalted house\n");
-  sprintf(sz, "-Yj7 %.0f %.0f %.0f %.0f %.0f %.0f ", rObjInf[oNorm1 + 3],
-    rObjInf[oNorm1 + 4], rObjInf[oNorm1 + 5], rHouseInf[cSign + 3],
+  sprintf(sz, "-Yj7 %.0f %.0f %.0f %.0f %.0f %.0f ", rgrBonusInf[3],
+    rgrBonusInf[4], rgrBonusInf[5], rHouseInf[cSign + 3],
     rHouseInf[cSign + 4], rHouseInf[cSign + 5]); PrintFSz();
   PrintF(" ; In Esoteric, Hierarchical, Ray ruling (signs, houses)\n\n\n");
 
@@ -1822,30 +1822,30 @@ flag FOutputSettings()
     "; DkGray, Orange, Pink, Brown, Indigo, Forest, Amber, Rose, Sky, Violet"
     "\n\n-YkO 0 10  ");
   for (i = 0; i <= 10; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("      ; Planet colors\n-YkO 11 21 ");
   for (i = 11; i <= 21; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("      ; Minor colors\n-YkO 22 33 ");
   for (i = 22; i <= 33; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("  ; Cusp colors\n-YkO 34 42 ");
   for (i = 34; i <= 42; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("              ; Uranian colors\n-YkO 43 51 ");
   for (i = 43; i <= 51; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("              ; Dwarf colors\n-YkO 52 63 ");
   for (i = 52; i <= 63; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("  ; Moons\n-YkO 64 75 ");
   for (i = 64; i <= 75; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("  ; Moons\n-YkO 76 83 ");
   for (i = 76; i <= 83; i++)
-    { sprintf(sz, " %s", SzColor2(kObjU[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
   PrintF("                  ; Moons\n-YkO 84 84 ");
-  sprintf(sz, " %s", SzColor2(kObjU[84])); PrintFSz();
+  sprintf(sz, " %s", SzColor2(rgobjset[84].kolor)); PrintFSz();
   for (i = 0; i < 46; i++) PrintF(" ");
   PrintF("; Fixed stars\n\n-YkA 1 5   ");
 

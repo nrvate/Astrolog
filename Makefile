@@ -23,6 +23,7 @@ OBJS = astrolog.o atlas.o calc.o charts0.o charts1.o charts2.o charts3.o\
  swecl.o swedate.o swehouse.o swejpl.o swemmoon.o swemplan.o sweph.o\
  swephlib.o
 
+
 # If you don't have X windows, delete the "-lX11" part from the line below:
 # If not compiling with GNUC, delete the "-ldl" part from the line below:
 LIBS = -lm -lX11 -ldl -s
@@ -31,6 +32,10 @@ RM = rm -f
 
 $(NAME): $(OBJS)
 	cc -o $(NAME) $(OBJS) $(LIBS)
+
+# Every object depends on the headers this fork edits constantly; see
+# the same rule in Makefile.qt for why.
+$(OBJS): astrolog.h extern.h
 
 clean:
 	$(RM) $(OBJS) $(NAME)

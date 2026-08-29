@@ -1534,10 +1534,11 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
   case funObjZN:   r = FRingObj(n1, n2) ? rgpcp[n1]->pt[n2].z : 0.0; break;
   case funObjOn:   n = FValidObj(n1)    ? !ignore[n1]   : 0;   break;
   case funObjOnT:  n = FValidObj(n1)    ? !ignore2[n1]  : 0;   break;
-  case funObjOrb:  r = FValidObj(n1)    ? rObjOrb[n1]   : 0.0; break;
-  case funObjAdd:  r = FValidObj(n1)    ? rObjAdd[n1]   : 0.0; break;
-  case funObjInf:  r = FBetween(n1, 0, oNorm1+5) ? rObjInf[n1]   : 0.0; break;
-  case funObjInfT: r = FBetween(n1, 0, oNorm1) ? rTransitInf[n1] : 0.0; break;
+  case funObjOrb:  r = FValidObj(n1)    ? rgobjset[n1].orb   : 0.0; break;
+  case funObjAdd:  r = FValidObj(n1)    ? rgobjset[n1].add   : 0.0; break;
+  case funObjInf:  r = FBetween(n1, 0, oNorm1) ? rgobjset[n1].inf :
+    (FBetween(n1, oNorm1+1, oNorm1+5) ? rgrBonusInf[n1-oNorm1] : 0.0); break;
+  case funObjInfT: r = FBetween(n1, 0, oNorm1) ? rgobjset[n1].tinf : 0.0; break;
   case funObjCol:  n = FValidObj(n1)    ? kObjA[n1]     : 0; break;
   case funObjRul:  n = FNorm(n1)        ? ruler1[n1]    : 0; break;
   case funObjRul2: n = FNorm(n1)        ? ruler2[n1]    : 0; break;

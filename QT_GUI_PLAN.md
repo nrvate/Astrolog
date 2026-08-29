@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3014
+   display and no `xdotool`, and exits non-zero on failure. **3018
    assertions** as of 2026-08-29; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-62
+## Work log — items 1-63
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2540,6 +2540,48 @@ are the more useful half to read before starting something new.
       purpose: pulling a whole OBJDEF to test one field is noise, not
       clarity. The multi-field gathers (FSwissPlanet, both dialogs'
       pre-fills, SzObjSelDef) all go through ObjDefGet now.
+
+63. **Stage 4: the per-object settings are one struct, and the flat
+    arrays' own initializer proved the point on the way out.** The first
+    storage change of the plan, taken on the maintainer's explicit and
+    repeated decision that upstream merges are worth spending. `OBJSET
+    rgobjset[oNorm1+1]` holds max orb, orb addition, influence, transit
+    influence and color -- one named row a slot, each row commented with
+    its object -- replacing rObjOrb/rObjAdd/rObjInf/rTransitInf/kObjU.
+    The five rulership bonus weights that rode past the end of rObjInf[]
+    are `rgrBonusInf[]` now, with `funObjInf` still answering the old
+    indexes so scripts keep working.
+    - **The flat initializer was broken in exactly the way the structure
+      exists to prevent.** rObjOrb[]'s 85-slot initializer had 84
+      anonymous values: one entry missing at Lilith, so she wore
+      Fortune's 360-degree orb, every later slot shifted onto its
+      neighbor's value, and the fixed-star row read zero. Found because
+      the generator counted; located by machine-diffing against
+      upstream's own astrolog.as, where a single insertion realigns
+      every mismatch. A row-per-slot initializer with the object's name
+      on each row cannot fail this way, which is the whole argument the
+      maintainer had been making.
+    - The struct rows were generated from the flat lists and verified
+      statically against them (and astrolog.as) before the flats were
+      deleted, orb column corrected. Three switch parsers that selected
+      a target array by pointer across two index domains (-YA, -Yj,
+      -Yk) were split by hand; everything else was mechanical, with the
+      compiler flushing what the regexes missed.
+    - **What the net caught during the change:** io.cpp's bonus writers
+      spelled the index "oNorm1 + 1" with spaces and dodged the bonus
+      regex, becoming an out-of-bounds struct read that one ASan run
+      named; and the console build's Makefile had neither header
+      dependencies nor a post-conversion rebuild, so its stale objects
+      "found" phantom leftovers -- the plain Makefile now carries the
+      same header-deps rule as the other four, placed *after* the link
+      target, since a dependency line placed first becomes the default
+      goal and quietly stops the build at the objects.
+    - `tools/settings-round-trip.sh` is the end-to-end proof and now a
+      standing check: one save/load/save through the console build
+      reaches a byte-identical fixed point.
+    - **The upstream-merge bridge is burned here**, deliberately:
+      upstream addresses these five arrays ~130 times. The Windows build
+      is unaffected and remains the oracle.
 
 ## Features this fork adds to both builds
 

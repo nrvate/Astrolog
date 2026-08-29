@@ -1832,8 +1832,7 @@ static flag FEqSzPrefixQt(CONST char *szLine, CONST char *szSwitch)
 static void TestSettingsRoundTripQt()
 {
   byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
-  real rgrOrbSav[oNorm+2], rgrAddSav[oNorm+2];
-  real rgrInfSav[oNorm1+6], rgrTraSav[oNorm1+1];
+  OBJSET rgosSav[oNorm1+1];
   char *szFileOutSav = is.szFileOut;
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite;
@@ -1842,25 +1841,40 @@ static void TestSettingsRoundTripQt()
 
   Group("Settings file round trip");
 
+  // The defaults themselves, before anything else: the flat rObjOrb[]
+  // initializer was one entry short from Lilith on, so Lilith wore
+  // Fortune's 360-degree orb, every later slot shifted onto its
+  // neighbor's, and the star row read zero. rgobjset[]'s named rows
+  // carry the corrected values; these are the sentinel points of that
+  // repair. (Live data, but nothing before this group rewrites row 18's
+  // orb, and nrvate.as sets it to the same 2.0 the default now is.)
+  Check(rgobjset[18].orb == 2.0,
+    "Lilith has her own orb back (%g)", rgobjset[18].orb);
+  Check(rgobjset[84].orb == 2.0,
+    "and the fixed-star row is no longer zero (%g)", rgobjset[84].orb);
+  Check(rgrBonusInf[1] == 20.0 && rgrBonusInf[5] == 10.0,
+    "the rulership bonuses moved out whole (%g, %g)",
+    rgrBonusInf[1], rgrBonusInf[5]);
+
   CopyRgb(ignore, rgbIgnoreSav, sizeof(ignore));
   CopyRgb(ignore2, rgbIgnore2Sav, sizeof(ignore2));
-  CopyRgb((pbyte)rObjOrb, (pbyte)rgrOrbSav, sizeof(rObjOrb));
-  CopyRgb((pbyte)rObjAdd, (pbyte)rgrAddSav, sizeof(rObjAdd));
-  CopyRgb((pbyte)rObjInf, (pbyte)rgrInfSav, sizeof(rObjInf));
-  CopyRgb((pbyte)rTransitInf, (pbyte)rgrTraSav, sizeof(rTransitInf));
+  // One snapshot where four parallel-array copies used to be -- the
+  // struct being the point of the exercise.
+  CopyRgb((pbyte)rgobjset, (pbyte)rgosSav, sizeof(rgobjset));
 
   // Index 60 is a planetary moon, inside the range the Moon Object
   // Settings dialog edits and outside every range the writer covered.
   // Index 25 is a house cusp. Both are ordinary things to customise.
   int iMoon = 60, iCusp = 25;
   ignore[iMoon] = fFalse; ignore2[iMoon] = fTrue;
-  rObjOrb[iMoon] = 7.5;
-  rObjAdd[iMoon] = 1.25;
+  rgobjset[iMoon].orb = 7.5;
+  rgobjset[iMoon].add = 1.25;
+  rgobjset[iMoon].kolor = 13;
   // Influence is written "%2.0f", so it is a whole number by format --
   // not a gap, a precision limit, and worth pinning as one.
-  rObjInf[iMoon] = 3.0;
-  rTransitInf[iMoon] = 4.0;
-  rTransitInf[iCusp] = 6.0;
+  rgobjset[iMoon].inf = 3.0;
+  rgobjset[iMoon].tinf = 4.0;
+  rgobjset[iCusp].tinf = 6.0;
 
   sprintf(szPath, "%s/astrolog-qt-roundtrip.as", getenv("TMPDIR") != NULL ?
     getenv("TMPDIR") : "/tmp");
@@ -1871,8 +1885,9 @@ static void TestSettingsRoundTripQt()
 
   // Overwrite in memory, so anything the file failed to carry stays wrong.
   ignore[iMoon] = fTrue; ignore2[iMoon] = fFalse;
-  rObjOrb[iMoon] = rObjAdd[iMoon] = rObjInf[iMoon] = 99.0;
-  rTransitInf[iMoon] = rTransitInf[iCusp] = 99.0;
+  rgobjset[iMoon].orb = rgobjset[iMoon].add = rgobjset[iMoon].inf = 99.0;
+  rgobjset[iMoon].kolor = 1;
+  rgobjset[iMoon].tinf = rgobjset[iCusp].tinf = 99.0;
 
   file = FileOpen(szPath, 3, NULL);
   Check(file != NULL, "and it can be read back");
@@ -1882,7 +1897,8 @@ static void TestSettingsRoundTripQt()
       // several hundred other settings the file carries.
       if (!FEqSzPrefixQt(szLine, "-YR") && !FEqSzPrefixQt(szLine, "-YRT") &&
         !FEqSzPrefixQt(szLine, "-YAm") && !FEqSzPrefixQt(szLine, "-YAd") &&
-        !FEqSzPrefixQt(szLine, "-Yj") && !FEqSzPrefixQt(szLine, "-YjT"))
+        !FEqSzPrefixQt(szLine, "-Yj") && !FEqSzPrefixQt(szLine, "-YjT") &&
+        !FEqSzPrefixQt(szLine, "-YkO"))
         continue;
       for (i = 0; szLine[i]; i++)
         ;
@@ -1899,25 +1915,24 @@ static void TestSettingsRoundTripQt()
   Check(ignore2[iMoon] == fTrue,
     "and so does the transit one (ignore2[%d] is %d, want 1)",
     iMoon, ignore2[iMoon]);
-  Check(rObjOrb[iMoon] == 7.5,
-    "a moon's max orb survives (%.2f, want 7.50)", rObjOrb[iMoon]);
-  Check(rObjAdd[iMoon] == 1.25,
-    "a moon's orb addition survives (%.2f, want 1.25)", rObjAdd[iMoon]);
-  Check(rObjInf[iMoon] == 3.0,
-    "a moon's influence survives (%.2f, want 3.00)", rObjInf[iMoon]);
-  Check(rTransitInf[iMoon] == 4.0,
+  Check(rgobjset[iMoon].kolor == 13,
+    "a moon's color survives (%d, want 13)", rgobjset[iMoon].kolor);
+  Check(rgobjset[iMoon].orb == 7.5,
+    "a moon's max orb survives (%.2f, want 7.50)", rgobjset[iMoon].orb);
+  Check(rgobjset[iMoon].add == 1.25,
+    "a moon's orb addition survives (%.2f, want 1.25)", rgobjset[iMoon].add);
+  Check(rgobjset[iMoon].inf == 3.0,
+    "a moon's influence survives (%.2f, want 3.00)", rgobjset[iMoon].inf);
+  Check(rgobjset[iMoon].tinf == 4.0,
     "a moon's transit influence survives (%.2f, want 4.00)",
-    rTransitInf[iMoon]);
-  Check(rTransitInf[iCusp] == 6.0,
+    rgobjset[iMoon].tinf);
+  Check(rgobjset[iCusp].tinf == 6.0,
     "a cusp's transit influence survives (%.2f, want 6.00)",
-    rTransitInf[iCusp]);
+    rgobjset[iCusp].tinf);
 
   CopyRgb(rgbIgnoreSav, ignore, sizeof(ignore));
   CopyRgb(rgbIgnore2Sav, ignore2, sizeof(ignore2));
-  CopyRgb((pbyte)rgrOrbSav, (pbyte)rObjOrb, sizeof(rObjOrb));
-  CopyRgb((pbyte)rgrAddSav, (pbyte)rObjAdd, sizeof(rObjAdd));
-  CopyRgb((pbyte)rgrInfSav, (pbyte)rObjInf, sizeof(rObjInf));
-  CopyRgb((pbyte)rgrTraSav, (pbyte)rTransitInf, sizeof(rTransitInf));
+  CopyRgb((pbyte)rgosSav, (pbyte)rgobjset, sizeof(rgobjset));
   is.szFileOut = szFileOutSav;
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
@@ -3210,11 +3225,25 @@ static void ProbeQt()
   // Nothing in particular. Rewrite this body to ask the program a
   // question, build, run. Everything is in scope: poke us/gs/gi, call
   // SetChartModeQt() or a dialog function, save gi.qim and measure it.
-  SetChartModeQt(gWheel);
-  RedrawQt();
-  printf("probe: mode=%d image=%dx%d\n", gi.nMode,
-    gi.qim != NULL ? gi.qim->width() : 0,
-    gi.qim != NULL ? gi.qim->height() : 0);
+  int i, cBad = 0;
+  for (i = 0; i <= oNorm1; i++) {
+    if (rgobjset[i].add != rgobjset[i].add || rgobjset[i].inf != rgobjset[i].inf ||
+      rgobjset[i].tinf != rgobjset[i].tinf || rgobjset[i].kolor != rgobjset[i].kolor)
+      { printf("row %d: add %g/%g inf %g/%g tinf %g/%g k %d/%d\n", i,
+          rgobjset[i].add, rgobjset[i].add, rgobjset[i].inf, rgobjset[i].inf,
+          rgobjset[i].tinf, rgobjset[i].tinf, rgobjset[i].kolor, rgobjset[i].kolor);
+        cBad++; }
+    if (i < 18 && rgobjset[i].orb != rgobjset[i].orb)
+      { printf("row %d orb differs below the slip\n", i); cBad++; }
+    if (i > 18 && i < 84 && rgobjset[i].orb != rgobjset[i-1].orb)
+      { printf("row %d orb not the one-shifted flat value\n", i); cBad++; }
+  }
+  for (i = 1; i <= 5; i++)
+    if (rgrBonusInf[i] != rgobjset[oNorm1+i].inf)
+      { printf("bonus %d differs\n", i); cBad++; }
+  printf("probe: %s; orb[18]=%g orb[84]=%g (want 2 2)\n",
+    cBad ? "MISMATCH" : "struct == flat arrays everywhere expected",
+    rgobjset[18].orb, rgobjset[84].orb);
 }
 
 

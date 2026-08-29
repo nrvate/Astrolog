@@ -156,6 +156,9 @@ extern CI * CONST rgpci[cRing+1];
 extern flag rgfProg[cRing+1];
 
 extern real force[objMax];
+extern OBJSET rgobjset[oNorm1+1];
+extern real rgrBonusInf[6];
+extern real rHouseInf[cSign+6], rAspInf[cAspect+1];
 
 // force[obj] packs three states into one real, and these helpers are the
 // only place that knows how (fun_F in express.cpp excepted: it hands the
@@ -183,14 +186,10 @@ extern byte ignore[objMax], ignore2[objMax], ignorea[cAspect+1],
 extern byte ignoreMem[objMax], ignore2Mem[objMax], ignoreaMem[cAspect+1],
   ignorezMem[arMax], ignore7Mem[rrMax], ignorefMem[6];
 extern CONST real rAspAngleDef[cAspect+1];
-extern real rAspAngle[cAspect+1], rAspOrb[cAspect+1], rObjOrb[oNorm+2],
-  rObjAdd[oNorm+2];
+extern real rAspAngle[cAspect+1], rAspOrb[cAspect+1];
 extern int ruler1[oNorm+1], ruler2[oNorm+1], exalt[oNorm+1],
   rules[cSign+1], rules2[cSign+1],
-  kMainA[9], kRainbowA[cRainbow+1], kElemA[cElem], kAspA[cAspect+1],
-  kObjU[oNorm+2];
-extern real rObjInf[oNorm1+6], rHouseInf[cSign+6], rAspInf[cAspect+1],
-  rTransitInf[oNorm1+1];
+  kMainA[9], kRainbowA[cRainbow+1], kElemA[cElem], kAspA[cAspect+1];
 
 #define kBlackA   kMainA[0]
 #define kWhiteA   kMainA[1]
@@ -691,8 +690,8 @@ extern flag ChartExoplanet P((flag));
 
 // From intrpret.cpp
 
-#define RObjInf(i) rObjInf[Min(i, oNorm1)]
-#define RTransitInf(i) rTransitInf[Min(i, oNorm1)]
+#define RObjInf(i) (rgobjset[Min(i, oNorm1)].inf)
+#define RTransitInf(i) (rgobjset[Min(i, oNorm1)].tinf)
 extern CONST char *rgEsoRayArea[5];
 
 #ifdef INTERPRET

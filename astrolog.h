@@ -2290,6 +2290,18 @@ typedef struct _ObjectDefine {
               // node, 16 true position, 32 topocentric. rgFlgSwiss[].
 } OBJDEF;
 
+// One custom slot's user settings, the columns of the Object Settings
+// dialogs. Stored as one array of these (rgobjset[] in data.cpp) rather
+// than as five parallel arrays whose initializers have to stay in step
+// by counting -- which upstream's rObjOrb[] demonstrably did not.
+typedef struct _ObjectSettings {
+  real orb;     // Max orb allowed to aspects (-YAm)
+  real add;     // Orb addition while transiting (-YAd)
+  real inf;     // Influence, i.e. power (-Yj)
+  real tinf;    // Influence while transiting (-YjT)
+  int kolor;    // Color (-YkO)
+} OBJSET;
+
 // A slot's glyph, when it has none of its own and should be drawn as its
 // name instead. DrawObject() tests the first character for 'T' rather
 // than comparing the string, so this is a sentinel and not a drawing:

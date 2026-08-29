@@ -1301,11 +1301,11 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
     power1[i] += rHouseInf[inhouse[i]];    // Influence of house it's in.
     x = 0.0;
     c = Dignify(i, j);
-    if (c[rrStd+1] == 'R') x += rObjInf[oNorm1+1];  // Planets in signs they
-    if (c[rrExa+1] == 'X') x += rObjInf[oNorm1+2];  // rule or are exalted
-    if (c[rrEso+1] == 'S') x += rObjInf[oNorm1+3];  // in have influence.
-    if (c[rrHie+1] == 'H') x += rObjInf[oNorm1+4];
-    if (c[rrRay+1] == 'Y') x += rObjInf[oNorm1+5];
+    if (c[rrStd+1] == 'R') x += rgrBonusInf[1];  // Planets in signs they
+    if (c[rrExa+1] == 'X') x += rgrBonusInf[2];  // rule or are exalted
+    if (c[rrEso+1] == 'S') x += rgrBonusInf[3];  // in have influence.
+    if (c[rrHie+1] == 'H') x += rgrBonusInf[4];
+    if (c[rrRay+1] == 'Y') x += rgrBonusInf[5];
     c = Dignify(i, inhouse[i]);
     if (c[rrStd+1] == 'R') x += rHouseInf[cSign+1];  // Planets in houses
     if (c[rrExa+1] == 'X') x += rHouseInf[cSign+2];  // aligned with sign
@@ -1356,8 +1356,8 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
       k = grid->n[Min(i, j)][Max(i, j)];
       if (k) {
         l = (int)(grid->v[Min(i, j)][Max(i, j)]*3600.0);
-        // RObjInf() rather than rObjInf[] directly: the macro clamps to
-        // oNorm1, which is why it exists -- rObjInf[] holds oNorm1+6
+        // RObjInf() rather than rgobjset[].inf directly: the macro clamps to
+        // oNorm1, which is why it exists -- rgobjset[].inf holds oNorm1+6
         // entries while i here runs to is.nObj, which goes well past that
         // once fixed stars or moons are unrestricted. Every other use in
         // the program goes through the macro; this was the one that
@@ -1537,7 +1537,7 @@ void ChartInfluence(void)
   if (fSignOnly)
     return;
   for (i = 1; i <= cSign; i++)
-    power2[i] += rObjInf[oAsc + i - 1];
+    power2[i] += rgobjset[oAsc + i - 1].inf;
   for (i = 0; i <= is.nObj; i++) if (!FIgnore(i))
     power2[inhouse[i]] += power[i];
 

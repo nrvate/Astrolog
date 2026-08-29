@@ -934,12 +934,12 @@ real GetOrb(int obj1, int obj2, int asp)
   real orb, r;
 
   orb = rAspOrb[asp];
-  r = rObjOrb[Min(obj1, oNorm1)];
+  r = rgobjset[Min(obj1, oNorm1)].orb;
   orb = Min(orb, r);
-  r = rObjOrb[Min(obj2, oNorm1)];
+  r = rgobjset[Min(obj2, oNorm1)].orb;
   orb = Min(orb, r);
-  orb += rObjAdd[Min(obj1, oNorm1)];
-  orb += rObjAdd[Min(obj2, oNorm1)];
+  orb += rgobjset[Min(obj1, oNorm1)].add;
+  orb += rgobjset[Min(obj2, oNorm1)].add;
   return orb;
 }
 

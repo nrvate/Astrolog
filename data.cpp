@@ -453,28 +453,7 @@ real rAspOrb[cAspect+1] = {0,
   1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
   0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
 
-real rObjOrb[oNorm+2] = {360.0,
-  360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0,
-  360.0, 360.0, 360.0, 360.0, 360.0, 2.0, 2.0, 360.0, 360.0, 2.0,
-  360.0, 360.0, 360.0, 360.0, 360.0, 360.0,
-  360.0, 360.0, 360.0, 360.0, 360.0, 360.0,
-  360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0,
-  360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0, 360.0,
-  2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,
-  2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,
-  2.0, 2.0, 2.0, 2.0, 2.0,
-  2.0};
 
-real rObjAdd[oNorm+2] = {0.0,
-  1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0, 0.0, 0.0, 0.0, 0.0,
-  0.0};
 
 int ruler1[oNorm+1] = {sSag,
   sLeo, sCan, sGem, sLib, sAri, sSag, sCap, sAqu, sPis, sSco,
@@ -569,6 +548,7 @@ CONST char *szRayName[cRay+1] = {"",
 CONST char *szRayWill[cRay+1] = {"",
   "Initiate", "Unify", "Evolve", "Harmonize", "Act", "Cause", "Express"};
 
+
 // Colors
 CONST char *szColor[cColor2+5] = {"Black",
   "Maroon", "DkGreen", "Maize", "DkBlue", "Purple", "DkCyan", "LtGray",
@@ -586,22 +566,112 @@ int kAspA[cAspect+1] = {kWhite,
   kMagenta, kMagenta, kOrange, kOrange, kDkCyan, kDkCyan,
   kDkCyan, kMaroon, kPurple, kPurple, kMaroon, kMaroon, kPurple,
   kDkCyan, kDkGreen, kDkGreen, kDkGreen, kDkGreen, kDkGreen};
-int kObjU[oNorm+2] = {kYellow,
-  kElement, kElement, kElement, kElement, kElement,
-    kElement, kElement, kElement, kElement, kElement,
-  kMagenta, kMagenta, kMagenta, kMagenta, kMagenta,
-  kDkCyan, kDkCyan, kDkCyan, kDkCyan, kDkCyan, kDkCyan,
-  kElement, kElement, kElement, kElement, kElement, kElement,
-    kElement, kElement, kElement, kElement, kElement, kElement,
-  kPurple,
-    kPurple, kPurple, kPurple, kPurple, kPurple, kPurple, kPurple, kPurple,
-  kMagenta, kMagenta, kPurple, kPurple, kPurple, kPurple, kPurple, kPurple,
-    kPurple,
-  kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet,
-    kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet,
-    kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet,
-    kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet, kPlanet,
-  kStar};
+
+// Per-object user settings, one row a slot: max orb (-YAm), orb addition
+// (-YAd), influence (-Yj), transit influence (-YjT) and color (-YkO).
+// Index oNorm1 (84) is the collective fixed-star row. These were five
+// parallel arrays of anonymous values; a row here is one slot, named, so
+// a miscount cannot silently shift every later object onto its
+// neighbor's settings -- which is not hypothetical: upstream's flat
+// rObjOrb[] initializer was one entry short from Lilith on, every later
+// slot wore the next slot's orb, and the star row read zero. The orb
+// column below carries the corrected values, matching upstream's own
+// astrolog.as. The five rulership bonus weights that rode past the end
+// of rObjInf[] live in rgrBonusInf[], where their different meaning is
+// visible instead of smuggled past the array's domain.
+OBJSET rgobjset[oNorm1+1] = {
+  {360.0, 0.0, 30, 10, kYellow},              //  0 Earth
+  {360.0, 1.0, 30, 10, kElement},             //  1 Sun
+  {360.0, 1.0, 25, 4, kElement},              //  2 Moon
+  {360.0, 0.0, 10, 8, kElement},              //  3 Mercury
+  {360.0, 0.0, 10, 9, kElement},              //  4 Venus
+  {360.0, 0.0, 10, 20, kElement},             //  5 Mars
+  {360.0, 0.0, 10, 30, kElement},             //  6 Jupiter
+  {360.0, 0.0, 10, 35, kElement},             //  7 Saturn
+  {360.0, 0.0, 10, 40, kElement},             //  8 Uranus
+  {360.0, 0.0, 10, 45, kElement},             //  9 Neptune
+  {360.0, 0.0, 10, 50, kElement},             // 10 Pluto
+  {360.0, 0.0, 5, 30, kMagenta},              // 11 Chiron
+  {360.0, 0.0, 5, 15, kMagenta},              // 12 Ceres
+  {360.0, 0.0, 5, 15, kMagenta},              // 13 Pallas
+  {360.0, 0.0, 5, 15, kMagenta},              // 14 Juno
+  {360.0, 0.0, 5, 15, kMagenta},              // 15 Vesta
+  {2.0, 0.0, 5, 30, kDkCyan},                 // 16 North Node
+  {2.0, 0.0, 5, 30, kDkCyan},                 // 17 South Node
+  {2.0, 0.0, 5, 1, kDkCyan},                  // 18 Lilith
+  {360.0, 0.0, 5, 1, kDkCyan},                // 19 Fortune
+  {360.0, 0.0, 5, 1, kDkCyan},                // 20 Vertex
+  {2.0, 0.0, 5, 1, kDkCyan},                  // 21 East Point
+  {360.0, 0.0, 20, 1, kElement},              // 22 Ascendant
+  {360.0, 0.0, 10, 1, kElement},              // 23 2nd Cusp
+  {360.0, 0.0, 10, 1, kElement},              // 24 3rd Cusp
+  {360.0, 0.0, 10, 1, kElement},              // 25 Nadir
+  {360.0, 0.0, 10, 1, kElement},              // 26 5th Cusp
+  {360.0, 0.0, 10, 1, kElement},              // 27 6th Cusp
+  {360.0, 0.0, 10, 1, kElement},              // 28 Descendant
+  {360.0, 0.0, 10, 1, kElement},              // 29 8th Cusp
+  {360.0, 0.0, 10, 1, kElement},              // 30 9th Cusp
+  {360.0, 0.0, 15, 1, kElement},              // 31 Midheaven
+  {360.0, 0.0, 10, 1, kElement},              // 32 11th Cusp
+  {360.0, 0.0, 10, 1, kElement},              // 33 12th Cusp
+  {360.0, 0.0, 4, 6, kPurple},                // 34 Vulcan
+  {360.0, 0.0, 3, 50, kPurple},               // 35 Cupido
+  {360.0, 0.0, 3, 50, kPurple},               // 36 Hades
+  {360.0, 0.0, 3, 50, kPurple},               // 37 Zeus
+  {360.0, 0.0, 3, 50, kPurple},               // 38 Kronos
+  {360.0, 0.0, 3, 50, kPurple},               // 39 Apollon
+  {360.0, 0.0, 3, 50, kPurple},               // 40 Admetos
+  {360.0, 0.0, 3, 50, kPurple},               // 41 Vulkanus
+  {360.0, 0.0, 3, 50, kPurple},               // 42 Poseidon
+  {360.0, 0.0, 3, 15, kMagenta},              // 43 Hygiea
+  {360.0, 0.0, 3, 30, kMagenta},              // 44 Pholus
+  {360.0, 0.0, 3, 50, kPurple},               // 45 Eris
+  {360.0, 0.0, 3, 50, kPurple},               // 46 Haumea
+  {360.0, 0.0, 3, 50, kPurple},               // 47 Makemake
+  {360.0, 0.0, 3, 50, kPurple},               // 48 Gonggong
+  {360.0, 0.0, 3, 50, kPurple},               // 49 Quaoar
+  {360.0, 0.0, 3, 50, kPurple},               // 50 Sedna
+  {360.0, 0.0, 3, 50, kPurple},               // 51 Orcus
+  {2.0, 0.0, 1, 2, kPlanet},                  // 52 Phobos
+  {2.0, 0.0, 1, 2, kPlanet},                  // 53 Deimos
+  {2.0, 0.0, 1, 2, kPlanet},                  // 54 Ganymede
+  {2.0, 0.0, 1, 2, kPlanet},                  // 55 Callisto
+  {2.0, 0.0, 1, 2, kPlanet},                  // 56 Io
+  {2.0, 0.0, 1, 2, kPlanet},                  // 57 Europa
+  {2.0, 0.0, 1, 2, kPlanet},                  // 58 Titan
+  {2.0, 0.0, 1, 2, kPlanet},                  // 59 Rhea
+  {2.0, 0.0, 1, 2, kPlanet},                  // 60 Iapetus
+  {2.0, 0.0, 1, 2, kPlanet},                  // 61 Dione
+  {2.0, 0.0, 1, 2, kPlanet},                  // 62 Tethys
+  {2.0, 0.0, 1, 2, kPlanet},                  // 63 Enceladus
+  {2.0, 0.0, 1, 2, kPlanet},                  // 64 Mimas
+  {2.0, 0.0, 1, 2, kPlanet},                  // 65 Hyperion
+  {2.0, 0.0, 1, 2, kPlanet},                  // 66 Titania
+  {2.0, 0.0, 1, 2, kPlanet},                  // 67 Oberon
+  {2.0, 0.0, 1, 2, kPlanet},                  // 68 Umbriel
+  {2.0, 0.0, 1, 2, kPlanet},                  // 69 Ariel
+  {2.0, 0.0, 1, 2, kPlanet},                  // 70 Miranda
+  {2.0, 0.0, 1, 2, kPlanet},                  // 71 Triton
+  {2.0, 0.0, 1, 2, kPlanet},                  // 72 Proteus
+  {2.0, 0.0, 1, 2, kPlanet},                  // 73 Nereid
+  {2.0, 0.0, 1, 2, kPlanet},                  // 74 Charon
+  {2.0, 0.0, 1, 2, kPlanet},                  // 75 Hydra
+  {2.0, 0.0, 1, 2, kPlanet},                  // 76 Nix
+  {2.0, 0.0, 1, 2, kPlanet},                  // 77 Kerberos
+  {2.0, 0.0, 1, 2, kPlanet},                  // 78 Styx
+  {2.0, 0.0, 1, 2, kPlanet},                  // 79 JupCOB
+  {2.0, 0.0, 1, 2, kPlanet},                  // 80 SatCOB
+  {2.0, 0.0, 1, 2, kPlanet},                  // 81 UraCOB
+  {2.0, 0.0, 1, 2, kPlanet},                  // 82 NepCOB
+  {2.0, 0.0, 1, 2, kPlanet},                  // 83 PluCOB
+  {2.0, 0.0, 2, 60, kStar},                   // 84 Stars (collective)
+};
+
+// Rulership bonus weights (-Yj0's four and -Yj7's fifth), 1-based.
+real rgrBonusInf[6] = {0.0, 20, 10, 10, 10, 10};
+
+
+
 #ifndef GRAPH
 // Copy of rgbbmpDef in xdata.c for non-graphics compiles.
 CONST KV rgbbmp[cColor2] = {
@@ -617,17 +687,6 @@ CONST KV rgbbmp[cColor2] = {
 // planet in its ruling or exalting sign or house is tacked onto the last two
 // positions of the object and house influence array, respectively.
 
-// The inherent strength of each planet
-real rObjInf[oNorm1+6] = {30,
-  30, 25, 10, 10, 10, 10, 10, 10, 10, 10,
-  5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-  20, 10, 10, 10, 10, 10, 10, 10, 10, 15, 10, 10,
-  4, 3, 3, 3, 3, 3, 3, 3, 3,
-  3, 3, 3, 3, 3, 3, 3, 3, 3,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  2,
-  20, 10, 10, 10, 10};
 
 // The inherent strength of each house
 real rHouseInf[cSign+6]  = {0,
@@ -640,16 +699,6 @@ real rAspInf[cAspect+1] = {0.0,
   0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
   0.05, 0.05, 0.05, 0.05, 0.05, 0.05};
 
-// The inherent strength of each planet when transiting
-real rTransitInf[oNorm1+1] = {10,
-  10, 4, 8, 9, 20, 30, 35, 40, 45, 50,
-  30, 15, 15, 15, 15, 30, 30, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  6, 50, 50, 50, 50, 50, 50, 50, 50,
-  15, 30, 50, 50, 50, 50, 50, 50, 50,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-  60};
 
 // Informational astronomical data for planets
 CONST real rObjDist[oNorm+1] = {rEarthDist, 0.0, 0.3844,
