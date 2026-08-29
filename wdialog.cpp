@@ -1610,8 +1610,7 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
   int i, j;
 #ifdef SWISS
   OBJDEF od;
-  char *pch;
-  int k, l;
+  int l;
 #ifdef JPLWEB
   real rT;
 #endif
@@ -1622,28 +1621,10 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
     for (i = custLo; i <= custHi; i++) {
       SetEdit(den01 - custLo + i, szObjDisp[i]);
 #ifdef SWISS
-      j = rgTypSwiss[i - custLo];
-      k = rgObjSwiss[i - custLo];
-      if (j != 2)
-        sprintf(sz, "%s%d", j <= 0 ? "h" :
-          (j == 1 ? "" : (j == 3 ? "m" : (j == 4 ? "j" : "A"))), k);
-      else
-        sprintf(sz, k < cobLo ? "%.3s" : "%.4s", szObjName[k]);
-      for (pch = sz; *pch; pch++)
-        ;
-      j = rgPntSwiss[i - custLo];
-      k = rgFlgSwiss[i - custLo];
-      if (j > 0 || k > 0)
-        *pch++ = ' ';
-      if (j > 0)
-        *pch++ = (j == 1 ? 'n' : (j == 2 ? 's' : (j == 3 ? 'p' : 'a')));
-      if (k &  1) *pch++ = 'H';
-      if (k &  2) *pch++ = 'S';
-      if (k &  4) *pch++ = 'B';
-      if (k &  8) *pch++ = 'N';
-      if (k & 16) *pch++ = 'T';
-      if (k & 32) *pch++ = 'V';
-      *pch = chNull;
+      // The definition formatter lives in SzObjDefFormat() now; this
+      // used to be its third open-coded copy.
+      ObjDefGet(i, &od);
+      SzObjDefFormat(sz, &od);
       SetEdit(ded01 - custLo + i, sz);
 #endif
     }

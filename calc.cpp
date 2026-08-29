@@ -2705,39 +2705,65 @@ void SzObjSelName(char *sz, int nTyp, int nObj)
 // round trips through the field unchanged rather than being silently
 // stripped back to a plain body.
 
-void SzObjSelDef(char *sz, int iobj)
+// Read a custom slot's definition out of the four parallel arrays that
+// store it. The one place that knows a definition is spread over
+// rgTypSwiss/rgObjSwiss/rgPntSwiss/rgFlgSwiss[obj - custLo]; everything
+// else handles an OBJDEF.
+
+void ObjDefGet(int obj, OBJDEF *pod)
+{
+  pod->nTyp = rgTypSwiss[obj - custLo];
+  pod->nObj = rgObjSwiss[obj - custLo];
+  pod->nPnt = rgPntSwiss[obj - custLo];
+  pod->nFlg = rgFlgSwiss[obj - custLo];
+}
+
+
+// Format a definition as the text Object Customization shows and every
+// definition field accepts: "h120", "Mar", "2 n", "j2 nHS". The inverse
+// of FObjDefParse(), and like the parse it used to exist in several
+// places -- here, and open coded in both Custom Objects dialogs.
+
+void SzObjDefFormat(char *sz, CONST OBJDEF *pod)
 {
   char *pch;
-  int i, j, k, nPnt, nFlg;
 
-  j = rgTypSwiss[iobj - custLo];
-  k = rgObjSwiss[iobj - custLo];
-  nPnt = rgPntSwiss[iobj - custLo];
-  nFlg = rgFlgSwiss[iobj - custLo];
-  if (nPnt <= 0 && nFlg <= 0)
+  if (pod->nTyp != 2)
+    sprintf(sz, "%s%d", pod->nTyp <= 0 ? "h" :
+      (pod->nTyp == 1 ? "" : (pod->nTyp == 3 ? "m" :
+      (pod->nTyp == 4 ? "j" : "A"))), pod->nObj);
+  else
+    sprintf(sz, pod->nObj < cobLo ? "%.3s" : "%.4s", szObjName[pod->nObj]);
+  for (pch = sz; *pch; pch++)
+    ;
+  if (pod->nPnt > 0 || pod->nFlg > 0)
+    *pch++ = ' ';
+  if (pod->nPnt > 0)
+    *pch++ = (pod->nPnt == 1 ? 'n' : (pod->nPnt == 2 ? 's' :
+      (pod->nPnt == 3 ? 'p' : 'a')));
+  if (pod->nFlg &  1) *pch++ = 'H';
+  if (pod->nFlg &  2) *pch++ = 'S';
+  if (pod->nFlg &  4) *pch++ = 'B';
+  if (pod->nFlg &  8) *pch++ = 'N';
+  if (pod->nFlg & 16) *pch++ = 'T';
+  if (pod->nFlg & 32) *pch++ = 'V';
+  *pch = chNull;
+}
+
+
+void SzObjSelDef(char *sz, int iobj)
+{
+  OBJDEF od;
+  int i;
+
+  ObjDefGet(iobj, &od);
+  if (od.nPnt <= 0 && od.nFlg <= 0)
     for (i = 0; i < cObjSel; i++)
-      if (rgObjSel[i].nTyp == j && rgObjSel[i].nObj == k) {
+      if (rgObjSel[i].nTyp == od.nTyp && rgObjSel[i].nObj == od.nObj) {
         sprintf(sz, "%s", rgObjSel[i].szName);
         return;
       }
-  if (j != 2)
-    sprintf(sz, "%s%d", j <= 0 ? "h" :
-      (j == 1 ? "" : (j == 3 ? "m" : (j == 4 ? "j" : "A"))), k);
-  else
-    sprintf(sz, k < cobLo ? "%.3s" : "%.4s", szObjName[k]);
-  for (pch = sz; *pch; pch++)
-    ;
-  if (nPnt > 0 || nFlg > 0)
-    *pch++ = ' ';
-  if (nPnt > 0)
-    *pch++ = (nPnt == 1 ? 'n' : (nPnt == 2 ? 's' : (nPnt == 3 ? 'p' : 'a')));
-  if (nFlg &  1) *pch++ = 'H';
-  if (nFlg &  2) *pch++ = 'S';
-  if (nFlg &  4) *pch++ = 'B';
-  if (nFlg &  8) *pch++ = 'N';
-  if (nFlg & 16) *pch++ = 'T';
-  if (nFlg & 32) *pch++ = 'V';
-  *pch = chNull;
+  SzObjDefFormat(sz, &od);
 }
 
 

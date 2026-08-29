@@ -499,6 +499,8 @@ extern CONST int cObjSel;
 extern void SzObjSelDef P((char *, int));
 extern void SzObjSelName P((char *, int, int));
 extern flag FObjSelFlagRun P((CONST char *));
+extern void ObjDefGet P((int, OBJDEF *));
+extern void SzObjDefFormat P((char *, CONST OBJDEF *));
 extern flag FObjDefParse P((CONST char *, OBJDEF *));
 extern flag FObjSelParse P((CONST char *, OBJDEF *));
 extern flag FObjMidSource P((int));

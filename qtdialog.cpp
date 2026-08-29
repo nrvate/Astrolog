@@ -4302,8 +4302,8 @@ void ShowCustomDialogQt()
   QVector<RCBUILT> rgbuilt;
   QVector<QLineEdit *> rgpeName, rgpeDef;
   OBJDEF od;
-  int i, j, k, l, pnt, flg;
-  char sz[cchSzMax], *pch;
+  int i, j;
+  char sz[cchSzMax];
 
   dlg.setWindowTitle(szTitleCustom);
   RcBuildDialogQt(&dlg, rgctlCustom, cctlCustom, dxCustom, dyCustom,
@@ -4319,28 +4319,10 @@ void ShowCustomDialogQt()
     if (peDef == NULL)
       continue;
 
-    k = rgTypSwiss[j];
-    l = rgObjSwiss[j];
-    if (k != 2)
-      sprintf(sz, "%s%d", k <= 0 ? "h" :
-        (k == 1 ? "" : (k == 3 ? "m" : (k == 4 ? "j" : "A"))), l);
-    else
-      sprintf(sz, l < cobLo ? "%.3s" : "%.4s", szObjName[l]);
-    for (pch = sz; *pch; pch++)
-      ;
-    pnt = rgPntSwiss[j];
-    flg = rgFlgSwiss[j];
-    if (pnt > 0 || flg > 0)
-      *pch++ = ' ';
-    if (pnt > 0)
-      *pch++ = (pnt == 1 ? 'n' : (pnt == 2 ? 's' : (pnt == 3 ? 'p' : 'a')));
-    if (flg &  1) *pch++ = 'H';
-    if (flg &  2) *pch++ = 'S';
-    if (flg &  4) *pch++ = 'B';
-    if (flg &  8) *pch++ = 'N';
-    if (flg & 16) *pch++ = 'T';
-    if (flg & 32) *pch++ = 'V';
-    *pch = chNull;
+    // The definition formatter lives in SzObjDefFormat() now; this used
+    // to be its second open-coded copy.
+    ObjDefGet(custLo + j, &od);
+    SzObjDefFormat(sz, &od);
     peDef->setText(sz);
   }
 
