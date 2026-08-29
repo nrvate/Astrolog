@@ -1632,8 +1632,17 @@ static void TestObjSelGlyphQt()
   int iobj = uranLo + 1;
   int nTypSav = rgTypSwiss[iobj - custLo];
   int nObjSav = rgObjSwiss[iobj - custLo];
-  CONST char *szDispSav = szObjDisp[iobj];
   flag fIgnoreSav = ignore[iobj];
+  // Save the display name's *text*, not its pointer. The dialog writes it
+  // through FCloneSzCore(), which frees the old string, so a saved pointer
+  // is dangling by the time this returns -- restoring it plants a freed
+  // address that FinalizeProgram() frees a second time. That is a heap
+  // corruption, and it showed up as an intermittent SIGSEGV inside Qt's
+  // accessibility cache while a later dialog was being torn down, which
+  // points nowhere near the cause.
+  char szDispSav[cchSzMax];
+  flag fDispWasOwn = (szObjDisp[iobj] == szObjName[iobj]);
+  sprintf(szDispSav, "%s", szObjDisp[iobj]);
 
   Group("Object selection glyph");
 
@@ -1677,11 +1686,14 @@ static void TestObjSelGlyphQt()
     DeallocateP((char *)szDrawObject2[iobj]);
     szDrawObject2[iobj] = szDrawObjectDef2[iobj];
   }
-  if (szObjDisp[iobj] != szDispSav) {
+  if (fDispWasOwn) {
+    // It was the stock name, a constant: free any clone and point back.
     if (szObjDisp[iobj] != szObjName[iobj])
       DeallocateP((char *)szObjDisp[iobj]);
-    szObjDisp[iobj] = szDispSav;
-  }
+    szObjDisp[iobj] = szObjName[iobj];
+  } else
+    FCloneSzCore(szDispSav, (char **)&szObjDisp[iobj],
+      szObjDisp[iobj] == szObjName[iobj]);
   rgTypSwiss[iobj - custLo] = nTypSav;
   rgObjSwiss[iobj - custLo] = nObjSav;
   ignore[iobj] = fIgnoreSav;
