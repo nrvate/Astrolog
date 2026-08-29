@@ -92,10 +92,10 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 -YRT 22 33   1 1 1 1 1 1 1 1 1 1 1 1  ; House cusps
 -YRT 34 42   1 1 1 1 1 1 1 1 1        ; Uranians
 -YRT 43 51   1 1 1 1 1 1 1 1 1        ; Dwarfs
--YR 52 78    1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Moons
--YR 79 83    1 1 1 1 1                ; Centers of Body
--YR 84 108   1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Fixed stars
--YR 109 133  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Fixed stars
+-YRT 52 78   1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Moons
+-YRT 79 83   1 1 1 1 1                ; Centers of Body
+-YRT 84 108  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Fixed stars
+-YRT 109 133 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Fixed stars
 
 -YR0 0 0  ; Restrict sign changes, direction changes
 -YR1 1 1  ; Restrict latitude direction changes, distance direction changes

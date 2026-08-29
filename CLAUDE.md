@@ -100,7 +100,8 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Four audits of the port against `astrolog.rc`, all currently clean:
+Five standing audits, all currently clean — four of the port against
+`astrolog.rc`, and one of the compiled defaults against `astrolog.as`:
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
@@ -115,6 +116,12 @@ python3 tools/rc_lookup_audit.py     # a by-name lookup that resolves to no
                                      # all 24 concatenated and the symbols
                                      # recur, so a table-wide check passes on
                                      # nearly anything
+python3 tools/defaults_audit.py      # data.cpp initializer counts and
+                                     # values vs astrolog.as, incl. the
+                                     # known-preference allowlist; found
+                                     # ruler2[] one short on its first run.
+                                     # With a file argument: count leg only,
+                                     # for any .as
 ```
 
 And three tables generated from the resource. Regenerate after any `.rc`

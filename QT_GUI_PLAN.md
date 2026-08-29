@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-64
+## Work log — items 1-65
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2604,6 +2604,27 @@ are the more useful half to read before starting something new.
       there is no co-ruler to promote. astrolog.as's own `-YJ` block
       restates the defaults exactly, so loading it changes nothing and
       the group may run at any point in the suite.
+
+65. **The defaults audit, and what its first run caught.**
+    `tools/defaults_audit.py` (REFACTORING.md increment 1) machine-diffs
+    data.cpp's compiled defaults against astrolog.as two ways: every
+    initializer must hold exactly its declared count, and every value the
+    .as restates must match, behind an allowlist of 27 verified upstream
+    preferences (each checked against CruiserOne master before being
+    excused). Six falsification classes confirmed caught before shipping.
+    - **First run found `ruler2[]` one value short** -- 83 values in 84
+      slots, the minors row missing an entry, upstream's bug too. Benign
+      today only because everything past the gap is zero, so the fix
+      (one added `0`) is behavior-identical; the next co-ruler added
+      near the end would have landed one slot off.
+    - **astrolog.as still carried the stale output of the -YR/-YRT
+      writer bug.** The io.cpp writer was fixed earlier to emit `-YRT`
+      for transit rows 52-133, but the shipped file was never
+      regenerated, so its transit section restated the natal
+      restrictions a second time. Corrected in place; behavior-neutral
+      because ignore2[52..133] defaults are all restricted anyway.
+    - With a file argument the audit runs its count leg against any .as
+      (nrvate.as is clean).
 
 ## Features this fork adds to both builds
 

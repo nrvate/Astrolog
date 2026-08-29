@@ -730,8 +730,13 @@ bug is this class; these are its remaining members. *Direction:* a
 static `tools/defaults_audit.py` machine-diffing data.cpp's initializer
 runs against upstream astrolog.as's own restatement of the defaults —
 the exact method that caught rObjOrb, made standing alongside the four
-rc audits. Named-row conversion only for tables that earn it. *Cost:*
-one session for the audit; it protects every anonymous table at once.
+rc audits. Named-row conversion only for tables that earn it.
+**Done 2026-08-29** — and the audit found `ruler2[]` one value short
+(83 in 84 slots, upstream's bug too, benign only because everything
+after the gap is zero) on its very first run. Also surfaced that
+astrolog.as's transit-restriction rows 52-133 still carried the stale
+`-YR`-for-`-YRT` output of the settings writer fixed earlier; the file
+is corrected. Six falsification classes verified caught.
 
 **H2 — The feature macros are bare colliding words that are always
 on.** `TIME`, `PS`, `META`, `SWISS`, `GRAPH`... (astrolog.h:82-173)
@@ -761,8 +766,8 @@ The survey pass is complete (all eight areas, 2026-08-29). The findings
 above sort into a natural order — smallest risk and best nets first,
 each independently shippable:
 
-1. **H1** — `tools/defaults_audit.py`: the standing initializer audit.
-   Pure tooling, protects every anonymous table.
+1. ~~**H1** — `tools/defaults_audit.py`~~ — **done 2026-08-29**; found
+   `ruler2[]` one short on its first run. See H1.
 2. **B5** — the full-coverage settings fixture for the round-trip
    script. Pure test; makes T4 regressions impossible to hide.
 3. **B3** — save/restore `is.fileIn` around nested includes, with its
