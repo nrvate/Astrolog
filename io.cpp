@@ -1636,13 +1636,13 @@ flag FOutputSettings()
   for (i = 34; i <= 42; i++) PrintF(SzNumF(ignore2[i]));
   PrintF("       ; Uranians\n-YRT 43 51   ");
   for (i = 43; i <= 51; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF("       ; Dwarfs\n-YR 52 78    ");
+  PrintF("       ; Dwarfs\n-YRT 52 78   ");
   for (i = 52; i <= 78; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF(" ; Moons\n-YR 79 83    ");
+  PrintF(" ; Moons\n-YRT 79 83   ");
   for (i = 79; i <= 83; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF("               ; Centers of Body\n-YR 84 108   ");
+  PrintF("               ; Centers of Body\n-YRT 84 108  ");
   for (i = 84; i <= 108; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF(" ; Fixed stars\n-YR 109 133  ");
+  PrintF(" ; Fixed stars\n-YRT 109 133 ");
   for (i = 109; i <= 133; i++) PrintF(SzNumF(ignore2[i]));
   PrintF(" ; Fixed stars\n\n");
 
@@ -1704,7 +1704,9 @@ flag FOutputSettings()
   for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
   PrintF("              ; Uranians\n-YAm 43 51  ");
   for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
-  PrintF("              ; Dwarfs\n-YAm 84 84  ");
+  PrintF("              ; Dwarfs\n-YAm 52 83  ");
+  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rObjOrb[i], -306); }
+  PrintF("  ; Moons and body centers\n-YAm 84 84  ");
   sprintf(sz, "%4.0f", rObjOrb[84]); PrintFSz();
   PrintF("                                              ; Fixed stars\n");
 
@@ -1718,7 +1720,9 @@ flag FOutputSettings()
   for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
   PrintF("        ; Uranians\n-YAd 43 51  ");
   for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
-  PrintF("        ; Dwarfs\n-YAd 84 84  ");
+  PrintF("        ; Dwarfs\n-YAd 52 83  ");
+  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rObjAdd[i], -6); }
+  PrintF("  ; Moons and body centers\n-YAd 84 84  ");
   sprintf(sz, " %.0f", rObjAdd[84]); PrintFSz();
   PrintF("                        ; Fixed stars\n\n\n");
 
@@ -1737,7 +1741,10 @@ flag FOutputSettings()
   PrintF("           ; Uranians\n-Yj 43 51  ");
   for (i = 43; i <= 51; i++)
     { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
-  PrintF("           ; Dwarfs\n-Yj 84 84   ");
+  PrintF("           ; Dwarfs\n-Yj 52 83  ");
+  for (i = 52; i <= 83; i++)
+    { sprintf(sz, " %2.0f", rObjInf[i]); PrintFSz(); }
+  PrintF("  ; Moons and body centers\n-Yj 84 84   ");
   sprintf(sz, "%2.0f", rObjInf[84]); PrintFSz();
   PrintF("                                   ; Fixed stars\n\n");
 
@@ -1759,13 +1766,19 @@ flag FOutputSettings()
   PrintF("  ; Planets\n-YjT 11 21 ");
   for (i = 11; i <= 21; i++)
     { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
-  PrintF("  ; Minor planets\n-YjT 34 42 ");
+  PrintF("  ; Minor planets\n-YjT 22 33 ");
+  for (i = 22; i <= 33; i++)
+    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+  PrintF("  ; Cusp objects\n-YjT 34 42 ");
   for (i = 34; i <= 42; i++)
     { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
   PrintF("        ; Uranians\n-YjT 43 51 ");
   for (i = 43; i <= 51; i++)
     { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
-  PrintF("        ; Dwarfs\n-YjT 84 84  ");
+  PrintF("        ; Dwarfs\n-YjT 52 83 ");
+  for (i = 52; i <= 83; i++)
+    { sprintf(sz, " %2.0f", rTransitInf[i]); PrintFSz(); }
+  PrintF("  ; Moons and body centers\n-YjT 84 84  ");
   sprintf(sz, "%2.0f", rTransitInf[84]); PrintFSz();
   PrintF("                                ; Fixed stars\n\n");
 

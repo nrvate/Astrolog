@@ -1789,6 +1789,131 @@ static void TestObjSelLookupQt()
 }
 
 
+// Does a line start with this switch, and end there or at a space? A bare
+// prefix test would let "-YRT" answer to "-YR", which is the very pair
+// this is here to tell apart.
+static flag FEqSzPrefixQt(CONST char *szLine, CONST char *szSwitch)
+{
+  int i;
+
+  for (i = 0; szSwitch[i]; i++)
+    if (szLine[i] != szSwitch[i])
+      return fFalse;
+  return szLine[i] <= ' ';
+}
+
+
+// Does a settings file bring back what it was written from?
+//
+// Save Program Settings is the only way a user keeps anything, and until
+// now nothing asserted that what it writes reloads. Four ranges did not,
+// in both builds, and all four are invisible unless you look for them --
+// the file is written, it parses, and it quietly holds different values
+// than the program did.
+//
+// Each field is set to a distinctive value, written out, overwritten in
+// memory with a sentinel, and only the lines for the switch under test are
+// replayed. Replaying the whole file would apply several hundred settings
+// to the running suite, which is why TestForcedPositionsQt() reads rather
+// than replays; filtering by switch keeps the round trip real and the
+// blast radius nil.
+static void TestSettingsRoundTripQt()
+{
+  byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
+  real rgrOrbSav[oNorm+2], rgrAddSav[oNorm+2];
+  real rgrInfSav[oNorm1+6], rgrTraSav[oNorm1+1];
+  char *szFileOutSav = is.szFileOut;
+  int nWriteFormatSav = us.nWriteFormat, i;
+  flag fNoWriteSav = us.fNoWrite;
+  char szPath[cchSzMax], szLine[cchSzMax];
+  FILE *file;
+
+  Group("Settings file round trip");
+
+  CopyRgb(ignore, rgbIgnoreSav, sizeof(ignore));
+  CopyRgb(ignore2, rgbIgnore2Sav, sizeof(ignore2));
+  CopyRgb((pbyte)rObjOrb, (pbyte)rgrOrbSav, sizeof(rObjOrb));
+  CopyRgb((pbyte)rObjAdd, (pbyte)rgrAddSav, sizeof(rObjAdd));
+  CopyRgb((pbyte)rObjInf, (pbyte)rgrInfSav, sizeof(rObjInf));
+  CopyRgb((pbyte)rTransitInf, (pbyte)rgrTraSav, sizeof(rTransitInf));
+
+  // Index 60 is a planetary moon, inside the range the Moon Object
+  // Settings dialog edits and outside every range the writer covered.
+  // Index 25 is a house cusp. Both are ordinary things to customise.
+  int iMoon = 60, iCusp = 25;
+  ignore[iMoon] = fFalse; ignore2[iMoon] = fTrue;
+  rObjOrb[iMoon] = 7.5;
+  rObjAdd[iMoon] = 1.25;
+  // Influence is written "%2.0f", so it is a whole number by format --
+  // not a gap, a precision limit, and worth pinning as one.
+  rObjInf[iMoon] = 3.0;
+  rTransitInf[iMoon] = 4.0;
+  rTransitInf[iCusp] = 6.0;
+
+  sprintf(szPath, "%s/astrolog-qt-roundtrip.as", getenv("TMPDIR") != NULL ?
+    getenv("TMPDIR") : "/tmp");
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+  is.szFileOut = szPath;
+  Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
+
+  // Overwrite in memory, so anything the file failed to carry stays wrong.
+  ignore[iMoon] = fTrue; ignore2[iMoon] = fFalse;
+  rObjOrb[iMoon] = rObjAdd[iMoon] = rObjInf[iMoon] = 99.0;
+  rTransitInf[iMoon] = rTransitInf[iCusp] = 99.0;
+
+  file = FileOpen(szPath, 3, NULL);
+  Check(file != NULL, "and it can be read back");
+  if (file != NULL) {
+    while (fgets(szLine, cchSzMax, file) != NULL) {
+      // Only the switches under test, so replaying cannot disturb the
+      // several hundred other settings the file carries.
+      if (!FEqSzPrefixQt(szLine, "-YR") && !FEqSzPrefixQt(szLine, "-YRT") &&
+        !FEqSzPrefixQt(szLine, "-YAm") && !FEqSzPrefixQt(szLine, "-YAd") &&
+        !FEqSzPrefixQt(szLine, "-Yj") && !FEqSzPrefixQt(szLine, "-YjT"))
+        continue;
+      for (i = 0; szLine[i]; i++)
+        ;
+      while (i > 0 && szLine[i-1] < ' ')
+        szLine[--i] = chNull;
+      FProcessCommandLine(szLine);
+    }
+    fclose(file);
+  }
+
+  Check(ignore[iMoon] == fFalse,
+    "a natal restriction on a moon survives (ignore[%d] is %d, want 0)",
+    iMoon, ignore[iMoon]);
+  Check(ignore2[iMoon] == fTrue,
+    "and so does the transit one (ignore2[%d] is %d, want 1)",
+    iMoon, ignore2[iMoon]);
+  Check(rObjOrb[iMoon] == 7.5,
+    "a moon's max orb survives (%.2f, want 7.50)", rObjOrb[iMoon]);
+  Check(rObjAdd[iMoon] == 1.25,
+    "a moon's orb addition survives (%.2f, want 1.25)", rObjAdd[iMoon]);
+  Check(rObjInf[iMoon] == 3.0,
+    "a moon's influence survives (%.2f, want 3.00)", rObjInf[iMoon]);
+  Check(rTransitInf[iMoon] == 4.0,
+    "a moon's transit influence survives (%.2f, want 4.00)",
+    rTransitInf[iMoon]);
+  Check(rTransitInf[iCusp] == 6.0,
+    "a cusp's transit influence survives (%.2f, want 6.00)",
+    rTransitInf[iCusp]);
+
+  CopyRgb(rgbIgnoreSav, ignore, sizeof(ignore));
+  CopyRgb(rgbIgnore2Sav, ignore2, sizeof(ignore2));
+  CopyRgb((pbyte)rgrOrbSav, (pbyte)rObjOrb, sizeof(rObjOrb));
+  CopyRgb((pbyte)rgrAddSav, (pbyte)rObjAdd, sizeof(rObjAdd));
+  CopyRgb((pbyte)rgrInfSav, (pbyte)rObjInf, sizeof(rObjInf));
+  CopyRgb((pbyte)rgrTraSav, (pbyte)rTransitInf, sizeof(rTransitInf));
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+  us.fNoWrite = fNoWriteSav;
+  AdjustRestrictions();
+  printf("  what Save Program Settings writes is what it reads back\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -2898,6 +3023,7 @@ int NRunQtTestsQt()
   TestMidpointGlyphQt();
   TestObjSelLookupQt();
   TestObjSelGlyphQt();
+  TestSettingsRoundTripQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;
