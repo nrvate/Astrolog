@@ -2874,30 +2874,26 @@ flag FObjSelFlagRun(CONST char *szRun)
 }
 
 
-flag FObjSelParse(CONST char *szIn, OBJDEF *pod)
+// Parse the definition half of a body field -- "h120", "Mar", "2 n",
+// "j2 nHS" -- into an OBJDEF. No name lookup: FObjSelParse() does that
+// first and calls here for the rest.
+//
+// This is Windows' own parse from DlgCustom, and this is the only copy.
+// There were three: here, ParseCustomDefQt() in qtdialog.cpp, and open
+// coded inside DlgCustom itself. Three copies of a parse that reads
+// trailing letters as flags is three places for the same subtle fault,
+// and they had already drifted -- only this one had the FObjSelFlagRun()
+// guard that stops a body's name being read as a run of flags.
+
+flag FObjDefParse(CONST char *szIn, OBJDEF *pod)
 {
   char sz[cchSzMax], *pch, *pchEnd;
-  int i, j, k, nPnt = 0, nFlg = 0;
+  int j, k, nPnt = 0, nFlg = 0;
 
   while (*szIn && *szIn <= ' ')
     szIn++;
   if (!*szIn)
     return fFalse;
-
-  // A name from the list wins, and never carries a suffix.
-  for (i = 0; i < cObjSel; i++)
-    if (FEqSzI(szIn, rgObjSel[i].szName)) {
-      pod->nTyp = rgObjSel[i].nTyp; pod->nObj = rgObjSel[i].nObj;
-      pod->nPnt = pod->nFlg = 0;
-      return fTrue;
-    }
-
-  // Then anything the ephemeris has already been asked about this session.
-  if (FObjSelRecall(szIn, &pod->nTyp, &pod->nObj)) {
-    pod->nPnt = pod->nFlg = 0;
-    return fTrue;
-  }
-
   sprintf(sz, "%s", szIn);
   for (pch = sz; *pch; pch++)
     ;
@@ -2929,6 +2925,38 @@ flag FObjSelParse(CONST char *szIn, OBJDEF *pod)
     }
   pod->nTyp = k; pod->nObj = j; pod->nPnt = nPnt; pod->nFlg = nFlg;
   return fTrue;
+}
+
+
+// Parse a body field back. Accepts a name from rgObjSel[], any name the
+// ephemeris has already been asked about this session, or the definition
+// text Object Customization uses. Returns false only for an empty field;
+// the caller still has to check FValidCustom() on the result, as the
+// dialogs do.
+
+flag FObjSelParse(CONST char *szIn, OBJDEF *pod)
+{
+  int i;
+
+  while (*szIn && *szIn <= ' ')
+    szIn++;
+  if (!*szIn)
+    return fFalse;
+
+  // A name from the list wins, and never carries a suffix.
+  for (i = 0; i < cObjSel; i++)
+    if (FEqSzI(szIn, rgObjSel[i].szName)) {
+      pod->nTyp = rgObjSel[i].nTyp; pod->nObj = rgObjSel[i].nObj;
+      pod->nPnt = pod->nFlg = 0;
+      return fTrue;
+    }
+
+  // Then anything the ephemeris has already been asked about this session.
+  if (FObjSelRecall(szIn, &pod->nTyp, &pod->nObj)) {
+    pod->nPnt = pod->nFlg = 0;
+    return fTrue;
+  }
+  return FObjDefParse(szIn, pod);
 }
 
 
