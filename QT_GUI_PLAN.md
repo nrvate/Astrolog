@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-68
+## Work log — items 1-69
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2713,6 +2713,26 @@ are the more useful half to read before starting something new.
       unconditional, and FileOpen's two remaining unbounded probes use
       them. A deep install directory now degrades gracefully (a
       truncation warning) instead of aborting before main output.
+
+69. **M2: the restriction, Ray and color families join the registry --
+    39 switches migrated, six parser cases gone.** The ranged
+    descriptor grew what the new families actually need: a value kind
+    (real, boolean-into-byte, checked int, checked color -- each
+    reproducing its retired case's own validation and error-parameter
+    convention) and a post-store hook (`RedoRestrictions()` after
+    -YR/-YRT). -YR/-YRT/-Y7O/-Y7C/-YkO/-YkA/-Yk0/-Yk7/-Yk became table
+    rows; fifteen sub-switches (-YR0/1/2/p/Z/7/d/h/o/i/U/U0,
+    -YkU/E/C) became handlers, quirks preserved (the -YR pairs parse
+    their booleans through pmObject exactly as before). Cases 'R', '7'
+    and 'k' are deleted from NProcessSwitchesRare().
+    - Proven by the M1 differential method, extended: 61 invocations,
+      1,193 lines of captured stderr and saved-settings output,
+      byte-identical between the pre-M2 binary and this one. The
+      harness now normalizes its temp paths and captures every
+      migrated family's save lines -- and its first run caught its own
+      append-after-rmdir bug, both binaries failing identically.
+    - Same strictness note as item 68: accidental garbage-suffix
+      aliases of these families (-YRx as -YR, -Ykx as -Yk) now error.
 
 ## Features this fork adds to both builds
 
