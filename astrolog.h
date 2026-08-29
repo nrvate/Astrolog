@@ -402,7 +402,11 @@
 #ifdef SWISS
 #endif // SWISS
 
-#ifdef PC
+#if 1  // was #ifdef PC
+// snprintf is C99 and present on every compiler this builds with. The
+// plain-sprintf fallback below made every sprintf2() in the program
+// unbounded on non-Windows builds -- a deep install directory crashed
+// startup in FileOpen()'s path probing under glibc fortify.
 #define sprintf2 snprintf
 #define S(sz) (sz), (int)sizeof(sz)
 #define SO(pch, sz) (pch), (sizeof(sz) - ((pch) - (sz)))

@@ -910,149 +910,6 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     RedoRestrictions();
     break;
 
-  case 'A':
-    if (ch1 == 'D') {
-      if (FErrorArgc("YAD", argc, 4))
-        return tcError;
-      i = NParseSz(argv[1], pmAspect);
-      if (FErrorValN("YAD", !FAspect2(i), i, 1))
-        return tcError;
-      FCloneSzCore(CchSz(argv[2]) >= 3 ? argv[2] : szAspectName[i],
-        (char **)&szAspectDisp[i], szAspectDisp[i] == szAspectName[i]);
-      FCloneSzCore(CchSz(argv[3]) >= 3 ? argv[3] : szAspectAbbrev[i],
-        (char **)&szAspectAbbrevDisp[i],
-        szAspectAbbrevDisp[i] == szAspectAbbrev[i]);
-      FCloneSzCore(CchSz(argv[4]) >= 3 ? argv[4] : szAspectGlyph[i],
-        (char **)&szAspectGlyphDisp[i],
-        szAspectGlyphDisp[i] == szAspectGlyph[i]);
-      darg += 4;
-      break;
-    }
-    if (FErrorArgc("YA", argc, 2))
-      return tcError;
-    k = ch1 == 'm' || ch1 == 'd' ? pmObject : pmAspect;
-    i = NParseSz(argv[1], k); j = NParseSz(argv[2], k);
-    k = ch1 == 'm' || ch1 == 'd' ? oNorm+1 : cAspect;
-    if (FErrorValN("YA", !FBetween(i, (int)(ch1 == 'o' || ch1 == 'a'), k),
-      i, 1))
-      return tcError;
-    if (FErrorValN("YA", !FBetween(j, 0, k) || j < i, j, 2))
-      return tcError;
-    if (FErrorArgc("YA", argc, 3+j-i))
-      return tcError;
-    // The object columns live in rgobjset[] now, so the old trick of
-    // picking a target array by pointer only works for the aspect pair.
-    if (ch1 == 'm' || ch1 == 'd')
-      for (k = i; k <= j; k++) {
-        if (ch1 == 'm')
-          rgobjset[k].orb = RFromSz(argv[3+k-i]);
-        else
-          rgobjset[k].add = RFromSz(argv[3+k-i]);
-      }
-    else {
-      lpr = ch1 == 'o' ? rAspOrb : rAspAngle;
-      for (k = i; k <= j; k++)
-        lpr[k] = RFromSz(argv[3+k-i]);
-    }
-    darg += 3+j-i;
-    break;
-
-  case 'j':
-    if (FErrorArgc("Yj", argc, 2 + 2*(ch1 == '0') + 4*(ch1 == '7')))
-      return tcError;
-    if (ch1 == '0') {
-      rgrBonusInf[1]  = RFromSz(argv[1]);
-      rgrBonusInf[2]  = RFromSz(argv[2]);
-      rHouseInf[cSign+1] = RFromSz(argv[3]);
-      rHouseInf[cSign+2] = RFromSz(argv[4]);
-      darg += 4;
-      break;
-    } else if (ch1 == '7') {
-      rgrBonusInf[3]  = RFromSz(argv[1]);
-      rgrBonusInf[4]  = RFromSz(argv[2]);
-      rgrBonusInf[5]  = RFromSz(argv[3]);
-      rHouseInf[cSign+3] = RFromSz(argv[4]);
-      rHouseInf[cSign+4] = RFromSz(argv[5]);
-      rHouseInf[cSign+5] = RFromSz(argv[6]);
-      darg += 6;
-      break;
-    }
-    k = ch1 == 'C' ? pmSign : (ch1 == 'A' ? pmAspect : pmObject);
-    i = NParseSz(argv[1], k); j = NParseSz(argv[2], k);
-    k = ch1 == 'C' ? cSign : (ch1 == 'A' ? cAspect : oNorm1);
-    if (FErrorValN("Yj", !FBetween(i, 0, k), i, 1))
-      return tcError;
-    if (FErrorValN("Yj", !FBetween(j, 0, k) || j < i, j, 2))
-      return tcError;
-    if (FErrorArgc("Yj", argc, 3+j-i))
-      return tcError;
-    if (ch1 == 'C' || ch1 == 'A') {
-      lpr = ch1 == 'C' ? rHouseInf : rAspInf;
-      for (k = i; k <= j; k++)
-        lpr[k] = RFromSz(argv[3+k-i]);
-    } else
-      for (k = i; k <= j; k++) {
-        if (ch1 == 'T')
-          rgobjset[k].tinf = RFromSz(argv[3+k-i]);
-        else
-          rgobjset[k].inf = RFromSz(argv[3+k-i]);
-      }
-    darg += 3+j-i;
-    break;
-
-  case 'J':
-    if (FErrorArgc("YJ", argc, 3 - (ch1 == '0')))
-      return tcError;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("YJ", !FNorm(i), i, 1))
-      return tcError;
-    j = NParseSz(argv[2], pmSign);
-    if (FErrorValN("YJ", !FBetween(j, 0, cSign), j, 2))
-      return tcError;
-    if (ch1 != '0') {
-      k = NParseSz(argv[3], pmSign);
-      if (FErrorValN("YJ", !FBetween(k, 0, cSign), k, 3))
-        return tcError;
-    }
-    if (ch1 == chNull) {
-      if (j <= 0)
-        j = k;
-      if (j == k)
-        k = 0;
-      ruler1[i] = j;
-      ruler2[i] = k;
-      if (FBetween(i, 1, oPlu)) {
-        AdjustRulership(rules, rules2, k, i, fFalse);
-        AdjustRulership(rules, rules2, j, i, fTrue);
-      }
-    } else if (ch1 == '0') {
-      exalt[i] = j;
-    } else if (ch2 != '0') {
-      if (j <= 0)
-        j = k;
-      if (j == k)
-        k = 0;
-      rgObjEso1[i] = j;
-      rgObjEso2[i] = k;
-      if (FBetween(i, 0, oPlu) || i == oVul) {
-        AdjustRulership(rgSignEso1, rgSignEso2, k, i, fFalse);
-        AdjustRulership(rgSignEso1, rgSignEso2, j, i, fTrue);
-      }
-    } else {
-      if (j <= 0)
-        j = k;
-      if (j == k)
-        k = 0;
-      rgObjHie1[i] = j;
-      rgObjHie2[i] = k;
-      if (FBetween(i, 0, oPlu) || i == oVul) {
-        AdjustRulership(rgSignHie1, rgSignHie2, k, i, fFalse);
-        AdjustRulership(rgSignHie1, rgSignHie2, j, i, fTrue);
-      }
-    }
-    darg += 3 - (ch1 == '0');
-    break;
-
   case '7':
     if (FErrorArgc("Y7", argc, 2))
       return tcError;
@@ -1309,6 +1166,221 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
 }
 
 
+/*
+******************************************************************************
+** The Switch Registry.
+******************************************************************************
+*/
+
+// One row per switch, replacing hand-written parser cases a family at a
+// time (REFACTORING.md, T3). FProcessSwitches() consults the registry by
+// the switch's exact full spelling before its own big switch, so a
+// migrated switch behaves identically from the command line, from
+// settings files, and from macros, in every build. A name not present
+// falls through to the remaining cases unchanged.
+//
+// Deliberate strictness: only spellings listed in -HY exist here. The
+// retired cases happened to accept garbage suffixes as aliases (-YJq
+// acted as -YJ7, -YAz as -YAa); those now fail as any unknown switch.
+
+#define nSwitchAbsent (-2)      // Name not in the registry.
+
+// A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1 reals
+// into consecutive slots of a table -- the shape shared by the orb,
+// angle, and influence families (and eventually restrictions & colors).
+typedef struct _switchranged {
+  CONST char *szName;   // Full spelling after the dash: "YAm".
+  CONST char *szErr;    // Label today's error messages use: "YA".
+  int pm;               // Parse mode for the two range indexes.
+  int iMin;             // Lowest legal index: aspects 1, all else 0.
+  int iMax;             // Highest legal index.
+  real *prBase;         // First slot...
+  int cbStride;         // ...and the byte distance to the next.
+} SWITCHRANGED;
+
+static CONST SWITCHRANGED rgswranged[] = {
+  {"YAo", "YA", pmAspect, 1, cAspect, &rAspOrb[0],       sizeof(real)},
+  {"YAa", "YA", pmAspect, 1, cAspect, &rAspAngle[0],     sizeof(real)},
+  {"YAm", "YA", pmObject, 0, oNorm+1, &rgobjset[0].orb,  sizeof(OBJSET)},
+  {"YAd", "YA", pmObject, 0, oNorm+1, &rgobjset[0].add,  sizeof(OBJSET)},
+  {"Yj",  "Yj", pmObject, 0, oNorm1,  &rgobjset[0].inf,  sizeof(OBJSET)},
+  {"YjT", "Yj", pmObject, 0, oNorm1,  &rgobjset[0].tinf, sizeof(OBJSET)},
+  {"YjC", "Yj", pmSign,   0, cSign,   &rHouseInf[0],     sizeof(real)},
+  {"YjA", "Yj", pmAspect, 0, cAspect, &rAspInf[0],       sizeof(real)}};
+
+static int NProcessSwitchRanged(CONST SWITCHRANGED *psr, int argc,
+  char **argv)
+{
+  int i, j, k;
+
+  if (FErrorArgc(psr->szErr, argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], psr->pm); j = NParseSz(argv[2], psr->pm);
+  if (FErrorValN(psr->szErr, !FBetween(i, psr->iMin, psr->iMax), i, 1))
+    return tcError;
+  if (FErrorValN(psr->szErr, !FBetween(j, 0, psr->iMax) || j < i, j, 2))
+    return tcError;
+  if (FErrorArgc(psr->szErr, argc, 3+j-i))
+    return tcError;
+  for (k = i; k <= j; k++)
+    *(real *)((pbyte)psr->prBase + (size_t)k * psr->cbStride) =
+      RFromSz(argv[3+k-i]);
+  return 3+j-i;
+}
+
+// -Yj0 and -Yj7: the rulership bonus influences, split between
+// rgrBonusInf[] and the slots past the houses in rHouseInf[] the same
+// way FOutputSettings() writes them.
+
+static int NSwYj0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("Yj", argc, 4))
+    return tcError;
+  rgrBonusInf[1]     = RFromSz(argv[1]);
+  rgrBonusInf[2]     = RFromSz(argv[2]);
+  rHouseInf[cSign+1] = RFromSz(argv[3]);
+  rHouseInf[cSign+2] = RFromSz(argv[4]);
+  return 4;
+}
+
+static int NSwYj7(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("Yj", argc, 6))
+    return tcError;
+  rgrBonusInf[3]     = RFromSz(argv[1]);
+  rgrBonusInf[4]     = RFromSz(argv[2]);
+  rgrBonusInf[5]     = RFromSz(argv[3]);
+  rHouseInf[cSign+3] = RFromSz(argv[4]);
+  rHouseInf[cSign+4] = RFromSz(argv[5]);
+  rHouseInf[cSign+5] = RFromSz(argv[6]);
+  return 6;
+}
+
+// -YJ, -YJ7 and -YJ70 share one shape: object, sign, cosign, stored to
+// the object-keyed pair and mirrored into the sign-keyed pair for the
+// planets those tables cover. The suite's "rulership" group pins the
+// mirror's invariants.
+
+static int NSwRulershipCore(int argc, char **argv, int *rgObj1,
+  int *rgObj2, int *rgSign1, int *rgSign2, flag fWithEarthVulcan)
+{
+  int i, j, k;
+
+  if (FErrorArgc("YJ", argc, 3))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YJ", !FNorm(i), i, 1))
+    return tcError;
+  j = NParseSz(argv[2], pmSign);
+  if (FErrorValN("YJ", !FBetween(j, 0, cSign), j, 2))
+    return tcError;
+  k = NParseSz(argv[3], pmSign);
+  if (FErrorValN("YJ", !FBetween(k, 0, cSign), k, 3))
+    return tcError;
+  if (j <= 0)
+    j = k;
+  if (j == k)
+    k = 0;
+  rgObj1[i] = j;
+  rgObj2[i] = k;
+  if (fWithEarthVulcan ? (FBetween(i, 0, oPlu) || i == oVul) :
+    FBetween(i, 1, oPlu)) {
+    AdjustRulership(rgSign1, rgSign2, k, i, fFalse);
+    AdjustRulership(rgSign1, rgSign2, j, i, fTrue);
+  }
+  return 3;
+}
+
+static int NSwYJ(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  return NSwRulershipCore(argc, argv, ruler1, ruler2, rules, rules2,
+    fFalse);
+}
+
+static int NSwYJ7(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  return NSwRulershipCore(argc, argv, rgObjEso1, rgObjEso2, rgSignEso1,
+    rgSignEso2, fTrue);
+}
+
+static int NSwYJ70(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  return NSwRulershipCore(argc, argv, rgObjHie1, rgObjHie2, rgSignHie1,
+    rgSignHie2, fTrue);
+}
+
+static int NSwYJ0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  int i, j;
+
+  if (FErrorArgc("YJ", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YJ", !FNorm(i), i, 1))
+    return tcError;
+  j = NParseSz(argv[2], pmSign);
+  if (FErrorValN("YJ", !FBetween(j, 0, cSign), j, 2))
+    return tcError;
+  exalt[i] = j;
+  return 2;
+}
+
+static int NSwYAD(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  int i;
+
+  if (FErrorArgc("YAD", argc, 4))
+    return tcError;
+  i = NParseSz(argv[1], pmAspect);
+  if (FErrorValN("YAD", !FAspect2(i), i, 1))
+    return tcError;
+  FCloneSzCore(CchSz(argv[2]) >= 3 ? argv[2] : szAspectName[i],
+    (char **)&szAspectDisp[i], szAspectDisp[i] == szAspectName[i]);
+  FCloneSzCore(CchSz(argv[3]) >= 3 ? argv[3] : szAspectAbbrev[i],
+    (char **)&szAspectAbbrevDisp[i],
+    szAspectAbbrevDisp[i] == szAspectAbbrev[i]);
+  FCloneSzCore(CchSz(argv[4]) >= 3 ? argv[4] : szAspectGlyph[i],
+    (char **)&szAspectGlyphDisp[i],
+    szAspectGlyphDisp[i] == szAspectGlyph[i]);
+  return 4;
+}
+
+// The registry proper: switches whose shape doesn't fit a family table
+// carry a handler. The handler owns arity, parsing, and stores, and
+// returns the count of arguments it consumed, or tcError.
+
+typedef struct _switchdef {
+  CONST char *szName;
+  int (*pfn)(int argc, char **argv, flag fOr, flag fAnd, flag fNot);
+} SWITCHDEF;
+
+static CONST SWITCHDEF rgswitchdef[] = {
+  {"Yj0",  NSwYj0},  {"Yj7", NSwYj7}, {"YAD", NSwYAD},
+  {"YJ",   NSwYJ},   {"YJ0", NSwYJ0}, {"YJ7", NSwYJ7},
+  {"YJ70", NSwYJ70}};
+
+// Look up a switch by its full spelling and run it. Returns the count of
+// extra arguments consumed, tcError on a bad invocation, or
+// nSwitchAbsent when the name isn't in the registry yet.
+
+static int NProcessSwitchTable(CONST char *szName, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot)
+{
+  CONST SWITCHRANGED *psr;
+  CONST SWITCHDEF *psd;
+
+  for (psr = rgswranged;
+    psr < rgswranged + sizeof(rgswranged)/sizeof(*rgswranged); psr++)
+    if (FEqSz(szName, psr->szName))
+      return NProcessSwitchRanged(psr, argc, argv);
+  for (psd = rgswitchdef;
+    psd < rgswitchdef + sizeof(rgswitchdef)/sizeof(*rgswitchdef); psd++)
+    if (FEqSz(szName, psd->szName))
+      return psd->pfn(argc, argv, fOr, fAnd, fNot);
+  return nSwitchAbsent;
+}
+
+
 // Process a command switch line passed to the program. Read each entry in
 // the argument list and set all the program modes and charts to display.
 
@@ -1373,6 +1445,17 @@ flag FProcessSwitches(int argc, char **argv)
     ich = 1 + FChSwitch(ch1);    // Leading dash?
     ch1 = argv[0][ich];
     ch2 = (ch1 == chNull ? chNull : argv[0][ich+1]);
+    // Registry-migrated switches resolve here by exact name; anything
+    // else falls through to the cases below unchanged.
+    i = NProcessSwitchTable(&argv[0][ich-1], argc, argv, fOr, fAnd, fNot);
+    if (i != nSwitchAbsent) {
+      if (i < 0)
+        return fFalse;
+      argc -= i; argv += i;
+      argc--; argv++;
+      continue;
+    }
+
     switch (argv[0][ich-1]) {
 
     case 'H':

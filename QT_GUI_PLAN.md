@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-67
+## Work log — items 1-68
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2682,6 +2682,37 @@ are the more useful half to read before starting something new.
       failure mode is a hang on a message box, not a FAIL.
     - This is the interim fix; T3's parse context (REFACTORING.md)
       retires the global channel entirely.
+
+68. **The switch registry exists, and fifteen switches live in it.**
+    T3's M1 (REFACTORING.md): a compiled-in registry consulted by
+    `FProcessSwitches()` by exact full spelling before its big switch,
+    covering command line, settings files, and macros in every build.
+    A ranged-setter descriptor table (`rgswranged[]` -- index domain,
+    bounds, target slot and stride) absorbs -YAo/-YAa/-YAm/-YAd/-Yj/
+    -YjT/-YjC/-YjA as *data*; handlers carry -Yj0/-Yj7/-YAD and the
+    four rulership spellings. Cases 'A', 'j' and 'J' are deleted from
+    `NProcessSwitchesRare()` (~140 lines of hand-rolled parsing).
+    - **Proof of preservation**: a 26-invocation behavior matrix
+      (valid, edge, names-as-indexes, and every error shape) run
+      through the pre-M1 binary built from HEAD in a scratch worktree
+      and the new one -- byte-identical output, plus the standing nets
+      (suite, three round-trip legs whose fixture covers every migrated
+      family, defaults audit which loads astrolog.as through the new
+      driver, ASan, Wine scenarios).
+    - **One deliberate strictness divergence from upstream**: the
+      retired cases accepted garbage suffixes as accidental aliases
+      (-YJq acted as -YJ7, -YAz as -YAa, bare -YA as -YAa). Only the
+      spellings -HY documents exist in the registry; the rest now fail
+      as any unknown switch would.
+    - **The differential method found a crash of its own**: the pre-M1
+      binary, living in a deep scratch directory, aborted at startup --
+      `sprintf2`/`S()`/`SO()` were only bounded `#ifdef PC`, so every
+      "bounded" formatted write in the program was plain sprintf on
+      non-Windows builds, and FileOpen()'s path probing overflowed on
+      a long executable path. The snprintf definitions are now
+      unconditional, and FileOpen's two remaining unbounded probes use
+      them. A deep install directory now degrades gracefully (a
+      truncation warning) instead of aborting before main output.
 
 ## Features this fork adds to both builds
 

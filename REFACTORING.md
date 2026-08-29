@@ -252,6 +252,12 @@ of the file (A2's failure mode, gone for good).
   `-YJ` (multi-domain name parsing plus the `AdjustRulership` side
   effect) and one ranged-row family (`-Yj`/`-YAm`). Includes the -H
   diff harness. This is the design-heavy step.
+  **Done 2026-08-29** (work log item 68), scoped to registry + driver +
+  fifteen switches (the -YA*, -Yj*, -YJ* families); the parse context
+  is deferred to the family that needs it (-YY) rather than shipped as
+  dead structure. Proven by a 26-invocation old-vs-new binary
+  differential, byte-identical. The differential itself exposed that
+  `sprintf2` was unbounded on non-Windows builds — fixed, see T5.
 - **M2..Mn**: one switch letter-family per session, deleting each old
   case as it migrates. After each: the suite, all three round-trip
   legs, a `-H` diff, the defaults audit, and a Windows text-chart
@@ -313,7 +319,12 @@ flag-flip leg crashed the fortified console build in `SzLocation()`
 expression branch overflowed `szZod[16]` on every call. Both fixed
 (item 66). The suite's ASan runs never see these because no test sets
 `=b1`; T5's focused audit of small static buffers under maximal
-formats is now *evidenced*, not speculative.
+formats is now *evidenced*, not speculative. And it got worse before
+it got better: M1's differential exposed that `sprintf2`/`S()`/`SO()`
+— the codebase's own bounded-write convention — were only bounded
+`#ifdef PC`, so *every* such call was plain `sprintf` on non-Windows
+builds, and a deep install directory crashed startup in `FileOpen()`'s
+path probing. The snprintf branch is unconditional now (item 68).
 
 *Direction:* don't sweep 1,500 call sites. **(1)** keep ASan in the
 pre-commit net (it is), **(2)** when an area survey touches a function,
@@ -873,7 +884,11 @@ each independently shippable:
 4. **T3's switch registry** — promoted to next at the maintainer's
    direction (2026-08-29): the fragility itself, not its symptoms. The
    full design and migration plan are in T3 above; A2 is subsumed by
-   its M1 step. Nets are in place; begin with M1.
+   its M1 step. **M1 done 2026-08-29** — registry, driver, fifteen
+   switches, old-vs-new differential byte-identical. Next: M2, one
+   letter-family per session (-YR/-YRT restrictions and -Yk* colors
+   extend the ranged table with a value-kind field; -YY brings the
+   parse context).
 5. **D2, C3, E1, D1/F1/F2** — the remaining quality increments, now
    opportunistic: pick one up when a T3 migration session leaves room,
    or between migration phases.

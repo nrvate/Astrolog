@@ -132,7 +132,8 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath)
             ;
         } else
           pch = sz;
-        sprintf(pch, "%s%c%s", us.rgszPath[j], chDirSep, szFileT);
+        sprintf2(SO(pch, sz), "%s%c%s", us.rgszPath[j], chDirSep,
+          szFileT);
         file = fopen(sz, szMode);
         if (file != NULL)
           goto LDone;
@@ -174,7 +175,7 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath)
     pch2 = (nFileMode == 0 ? DEFAULT_DIR :
       (nFileMode == 1 ? CHART_DIR : EPHE_DIR));
     if (FSzSet(pch2)) {
-      sprintf(sz, "%s%c%s", pch2, chDirSep, szFileT);
+      sprintf2(S(sz), "%s%c%s", pch2, chDirSep, szFileT);
       file = fopen(sz, szMode);
       if (file != NULL)
         goto LDone;
