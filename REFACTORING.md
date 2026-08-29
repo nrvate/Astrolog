@@ -262,6 +262,13 @@ of the file (A2's failure mode, gone for good).
   case as it migrates. After each: the suite, all three round-trip
   legs, a `-H` diff, the defaults audit, and a Windows text-chart
   diff.
+  **M2 done 2026-08-29** (work log item 69): the ranged descriptor
+  gained value kinds and a post-store hook; -YR/-YRT, -Y7O/-Y7C and
+  the six -Yk* families are rows, fifteen sub-switches are handlers,
+  and cases 'R', '7', 'k' are deleted. 39 switches now live in the
+  registry; the 61-invocation differential is byte-identical (redone
+  against the real code after the stash/worktree incident the commit
+  history records).
 - **M-final**: the four parser shells reduce to dispatch loops; the
   help printers are deleted; `FOutputSettings()` is a loop plus the
   handful of genuinely bespoke sections.
@@ -884,11 +891,12 @@ each independently shippable:
 4. **T3's switch registry** — promoted to next at the maintainer's
    direction (2026-08-29): the fragility itself, not its symptoms. The
    full design and migration plan are in T3 above; A2 is subsumed by
-   its M1 step. **M1 done 2026-08-29** — registry, driver, fifteen
-   switches, old-vs-new differential byte-identical. Next: M2, one
-   letter-family per session (-YR/-YRT restrictions and -Yk* colors
-   extend the ranged table with a value-kind field; -YY brings the
-   parse context).
+   its M1 step. **M1 and M2 done 2026-08-29** — registry, driver, 39
+   switches across the -YA*, -Yj*, -YJ*, -YR*, -Y7* and -Yk* families;
+   six parser cases deleted; both differentials byte-identical. Next:
+   M3 — candidates: the -YD/-YS/-Ye object-definition group, the -YI
+   interpretation strings, and -YY, which brings the parse context
+   that retires is.fileIn.
 5. **D2, C3, E1, D1/F1/F2** — the remaining quality increments, now
    opportunistic: pick one up when a T3 migration session leaves room,
    or between migration phases.
