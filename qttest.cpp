@@ -2991,6 +2991,129 @@ static void ProbeQt()
 }
 
 
+// One entry per test group, so one group can be run by itself:
+//
+//   ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh        one group, ~2s
+//   ASTROLOG_QT_TESTS=objsel,glyph ./run-qt-tests.sh     several
+//   ASTROLOG_QT_TESTS=list ./run-qt-tests.sh             print the names
+//
+// Matching is a case-insensitive substring over the names below, with
+// commas separating alternatives. The full suite is ~40 seconds, and
+// chasing one intermittent failure through full runs is how a debugging
+// session turns into minutes of dead air per attempt -- an exit-time
+// heap corruption took eight full runs to localise the night before this
+// existed, when three two-second runs of its own group would have done.
+//
+// A group that passes alone and fails in the full run is inheriting
+// state: TestAllMenuActionsQt() fires all 338 menu items and leaves
+// every setting wherever that lands, and anything after it must set what
+// it depends on. Dump the globals in a solo run and a full run and diff
+// them (work log item 57) rather than guessing one variable per rebuild.
+//
+// When a filter is active (or ASTROLOG_QT_TIME is set), each group also
+// reports its wall time, which is how to find where the 40 seconds go.
+
+typedef struct _qttestentry {
+  CONST char *szName;
+  void (*pfn)();
+} QTTESTENTRY;
+
+static CONST QTTESTENTRY rgqttestQt[] = {
+  {"dialogs",              TestDialogsQt},
+  {"context-menus",        TestContextMenusQt},
+  {"hotkeys",              TestHotkeysQt},
+  {"chart-render",         TestChartRenderQt},
+  {"menu-actions",         TestAllMenuActionsQt},
+  {"menu-parity",          TestMenuParityQt},
+  {"bad-input",            TestBadInputQt},
+  {"forced-positions",     TestForcedPositionsQt},
+  {"shared-core",          TestSharedCoreFixesQt},
+  {"relationship",         TestRelationshipModeQt},
+  {"ephemeris-list",       TestEphemerisListQt},
+  {"chart-list",           TestChartListFilterQt},
+  {"expression-hooks",     TestExpressionHooksQt},
+  {"accel-text",           TestAccelTextQt},
+  {"expression-functions", TestExpressionFunctionsQt},
+  {"objsel-table",         TestObjSelTableQt},
+  {"timers",               TestTimerSanityQt},
+  {"objsel-dialog",        TestObjSelDialogQt},
+  {"objsel-parse",         TestObjSelParseQt},
+  {"color-scheme",         TestColorSchemeQt},
+  {"dialog-buttons",       TestDialogButtonWiringQt},
+  {"shared-symbols",       TestSharedSymbolBoxesQt},
+  {"animation",            TestAnimationStateQt},
+  {"mnemonics",            TestDialogMnemonicsQt},
+  {"arrow-keys",           TestDialogArrowKeysQt},
+  {"midpoint-glyph",       TestMidpointGlyphQt},
+  {"objsel-lookup",        TestObjSelLookupQt},
+  {"objsel-glyph",         TestObjSelGlyphQt},
+  {"settings-roundtrip",   TestSettingsRoundTripQt}};
+#define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
+
+// Does any comma-separated token of the filter appear in the name?
+static flag FTestWantedQt(CONST char *szFilter, CONST char *szName)
+{
+  char szLow[cchSzMax], szTok[cchSzMax];
+  int i, j;
+
+  if (szFilter == NULL)
+    return fTrue;
+  for (i = 0; szName[i] != chNull && i < cchSzMax-1; i++)
+    szLow[i] = ChUncap(szName[i]);
+  szLow[i] = chNull;
+  i = 0;
+  while (szFilter[i] != chNull) {
+    for (j = 0; szFilter[i] != chNull && szFilter[i] != ','; i++)
+      if (j < cchSzMax-1)
+        szTok[j++] = ChUncap(szFilter[i]);
+    szTok[j] = chNull;
+    if (j > 0 && strstr(szLow, szTok) != NULL)
+      return fTrue;
+    if (szFilter[i] == ',')
+      i++;
+  }
+  return fFalse;
+}
+
+static int NRunQtTestTableQt()
+{
+  CONST char *szFilter = getenv("ASTROLOG_QT_TESTS");
+  flag fTime = szFilter != NULL || getenv("ASTROLOG_QT_TIME") != NULL;
+  QElapsedTimer timerTest;
+  int i, cRun = 0;
+
+  if (szFilter != NULL && FEqSzI(szFilter, "list")) {
+    for (i = 0; i < cqttestQt; i++)
+      printf("%s\n", rgqttestQt[i].szName);
+    return fFalse;
+  }
+  printf("Astrolog Qt test suite\n");
+  for (i = 0; i < cqttestQt; i++) {
+    if (!FTestWantedQt(szFilter, rgqttestQt[i].szName))
+      continue;
+    cRun++;
+    timerTest.start();
+    rgqttestQt[i].pfn();
+    if (fTime)
+      printf("  [%s: %d ms]\n", rgqttestQt[i].szName,
+        (int)timerTest.elapsed());
+  }
+  // A filter that matches nothing must fail loudly, or a typo in the
+  // group name reads as a suite that passed.
+  if (cRun < 1) {
+    printf("\nFAIL: no test group matches \"%s\" -- "
+      "ASTROLOG_QT_TESTS=list names them\n", szFilter);
+    return fTrue;
+  }
+  if (szFilter != NULL)
+    printf("\n%d of %d groups matched \"%s\"\n", cRun, cqttestQt,
+      szFilter);
+  printf("\n%s: %d passed, %d failed\n",
+    s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
+  return s_cFail > 0;
+}
+
+
 int NRunQtTestsQt()
 {
   if (getenv("ASTROLOG_QT_PROBE") != NULL) {
@@ -3006,39 +3129,7 @@ int NRunQtTestsQt()
     return 0;
   }
   s_nAnimStartQt = gs.nAnim;
-  printf("Astrolog Qt test suite\n");
-  TestDialogsQt();
-  TestContextMenusQt();
-  TestHotkeysQt();
-  TestChartRenderQt();
-  TestAllMenuActionsQt();
-  TestMenuParityQt();
-  TestBadInputQt();
-  TestForcedPositionsQt();
-  TestSharedCoreFixesQt();
-  TestRelationshipModeQt();
-  TestEphemerisListQt();
-  TestChartListFilterQt();
-  TestExpressionHooksQt();
-  TestAccelTextQt();
-  TestExpressionFunctionsQt();
-  TestObjSelTableQt();
-  TestTimerSanityQt();
-  TestObjSelDialogQt();
-  TestObjSelParseQt();
-  TestColorSchemeQt();
-  TestDialogButtonWiringQt();
-  TestSharedSymbolBoxesQt();
-  TestAnimationStateQt();
-  TestDialogMnemonicsQt();
-  TestDialogArrowKeysQt();
-  TestMidpointGlyphQt();
-  TestObjSelLookupQt();
-  TestObjSelGlyphQt();
-  TestSettingsRoundTripQt();
-  printf("\n%s: %d passed, %d failed\n",
-    s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
-  return s_cFail > 0;
+  return NRunQtTestTableQt();
 }
 
 #endif // QTTEST

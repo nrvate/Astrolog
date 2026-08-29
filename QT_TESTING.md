@@ -76,6 +76,42 @@ A worked example of the whole loop: "if the GUI shows me Okyrhoe, will it
 accept Okyrhoe back?" — probe written, built, run, answered in 0.21s,
 across six esoteric bodies at once.
 
+## Running one test group instead of all of them
+
+The suite runs 29 groups in sequence and takes tens of seconds end to
+end. When one group is under investigation, run just it:
+
+```sh
+ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh       # one group, well under a second
+ASTROLOG_QT_TESTS=objsel,glyph ./run-qt-tests.sh    # comma = alternatives
+ASTROLOG_QT_TESTS=list ./run-qt-tests.sh            # print the group names
+```
+
+Matching is a case-insensitive substring over the names in `rgqttestQt[]`
+(qttest.cpp). A filter that matches nothing fails the run rather than
+reporting an empty PASS, so a typo cannot read as success.
+
+When a filter is active — or `ASTROLOG_QT_TIME=1` on a full run — each
+group prints its wall time. Measured once: `menu-actions` is ~60% of the
+whole suite by itself (it fires all 338 menu items), with `objsel-dialog`
+and `chart-render` most of the rest; nearly every other group is
+single-digit milliseconds. So "the suite is slow" is really "four groups
+are slow", and a debugging loop that avoids them is interactive.
+
+Two caveats, both already paid for:
+
+- **A group that passes alone and fails in the full run is inheriting
+  state.** `menu-actions` leaves every setting wherever firing 338 items
+  lands, and anything after it must set what it depends on. Dump the
+  globals in a solo run and a full run and diff them (work log item 57)
+  rather than guessing one variable per rebuild.
+- **An intermittent crash localises in seconds this way.** The exit-time
+  heap corruption of 2026-08-28 took eight ~40-second full runs to pin to
+  one test; three sub-second runs of that group alone would have answered
+  it. Prefer this to any loop over the full suite — and prefer capturing
+  one run's output to a file over re-running because a grep pattern
+  missed.
+
 ## Rendering charts headlessly
 
 The same idea, already packaged, for when you want the images themselves:
