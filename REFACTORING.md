@@ -78,7 +78,7 @@ sits in: themes and area findings are ordered most-worth-doing first.
 | D. Text charts & interpretation | charts0-3.cpp (8876), intrpret.cpp (1605) | **surveyed 2026-08-29** — findings D1-D4 |
 | E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | **surveyed 2026-08-29** — findings E1-E3 |
 | F. Graphics charts | xcharts0-2.cpp (9129) | **surveyed 2026-08-29** — findings F1-F4 |
-| G. Frontends & satellites | qtdriver/qtdialog (9345), express.cpp (2936), atlas.cpp (2171) | pending |
+| G. Frontends & satellites | qtdriver/qtdialog (9345), express.cpp (2936), atlas.cpp (2171) | **surveyed 2026-08-29** — findings G1-G4 |
 | H. Data model & headers | astrolog.h (2457), extern.h (1243), data.cpp (1702) | pending |
 
 The area order is deliberate: B and C sit under everything else, and
@@ -659,7 +659,56 @@ xcharts0.cpp:2435 switches on `gi.nMode` parallel to `Action()`,
 `PrintChart()`, `DetectGraphicsChartMode()`, and the ports' tables.
 Counted under A3; the shared table now has five consumers on record.
 
-### Areas G-H — pending
+### Area G — frontends & satellites, surveyed 2026-08-29
+
+express.cpp (the AstroExpression language), atlas.cpp (atlas and
+timezone data), and the fork's own qtdriver.cpp/qtdialog.cpp — reviewed
+with the same standard as upstream's code. express.cpp earns a largely
+clean verdict: `FEvalFunction()`'s 878 lines are an opcode switch over
+a data-driven function table with packed type signatures and a
+hand-built trie for name lookup — the conventional interpreter shape,
+already table-driven where it counts. Its seven backend `#ifdef`s are
+platform functions in the VM's standard library (mouse position and
+the like), which genuinely are per-platform.
+
+**G1 — Shared core takes a UI handle as a `size_t` that means two
+different things.** `DisplayAtlasLookup(..., size_t lDialog, ...)`
+(atlas.cpp:1490) casts `lDialog` to `HWND` internally; Windows passes
+`(size_t)hdlg` (wdialog.cpp:275), the Qt port passes literal `1`
+(qtdialog.cpp:1912) — the same parameter is a window handle on one
+backend and a boolean on the other, and the core branches on both
+interpretations. *Incident:* none yet; it worked because the casts are
+guarded, which is luck of the `#ifdef` layout. *Direction:* split the
+parameter into what it actually is — a "results go to the open dialog"
+flag plus a per-backend sink the ports own; small, self-contained.
+*Cost:* low. Tagged T6 (backend knowledge above the device layer).
+
+**G2 — The atlas loaders are the payload half of B3.** `FLoadAtlas`/
+`FLoadZoneRules`/etc. (atlas.cpp:906-1392) read their data through the
+`is.fileIn` channel and hand-roll their own line loops — the same
+family as B1's readers. Any B1/B3 fix must count these four as
+call sites. *Cost:* counted under B1/B3.
+
+**G3 — The Qt port joins everything by English label strings.** Menu
+actions, context menus, and hotkeys bind by menu-item label text —
+a deliberate design (labels come generated from `astrolog.rc`, and 42
+context menus + 264 shortcuts + 258 parity checks assert every label
+resolves). The invariant that makes this safe — *a menu label is an
+identifier; changing one is an interface change* — lives only in the
+suite's failure mode today. *Direction:* state the invariant in T8's
+conventions doc; the design itself stands. *Cost:* documentation.
+
+**G4 — The port grew its own file-scope global layer.** 29 `s_*`
+statics in qtdriver.cpp (shared chart-mode group, tracking arrays, the
+text window...). *Incident:* gotcha 7 — code assuming
+`s_rgpaChartMode[0]` was "Standard Radix" broke when menu build order
+changed; fixed by lookup-by-value, but the arrays still invite index
+assumptions. *Direction:* gather them into one `QTUI` struct (the
+port's `wi` equivalent) so ownership is visible and the "look up by
+value, never by index" rule (gotcha 7) sits beside the data it
+protects. *Cost:* low, mechanical, port-only — no oracle needed.
+
+### Area H — pending
 
 ---
 
