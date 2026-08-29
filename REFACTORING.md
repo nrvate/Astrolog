@@ -79,7 +79,7 @@ sits in: themes and area findings are ordered most-worth-doing first.
 | E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | **surveyed 2026-08-29** — findings E1-E3 |
 | F. Graphics charts | xcharts0-2.cpp (9129) | **surveyed 2026-08-29** — findings F1-F4 |
 | G. Frontends & satellites | qtdriver/qtdialog (9345), express.cpp (2936), atlas.cpp (2171) | **surveyed 2026-08-29** — findings G1-G4 |
-| H. Data model & headers | astrolog.h (2457), extern.h (1243), data.cpp (1702) | pending |
+| H. Data model & headers | astrolog.h (2457), extern.h (1243), data.cpp (1702) | **surveyed 2026-08-29** — findings H1-H3 |
 
 The area order is deliberate: B and C sit under everything else, and
 what the themes prescribe (a settings table, index types) lands there
@@ -708,7 +708,81 @@ port's `wi` equivalent) so ownership is visible and the "look up by
 value, never by index" rule (gotcha 7) sits beside the data it
 protects. *Cost:* low, mechanical, port-only — no oracle needed.
 
-### Area H — pending
+### Area H — data model & headers, surveyed 2026-08-29
+
+astrolog.h (constants, types, the four structs, feature macros),
+extern.h (the 636-declaration manifest plus alias macros), data.cpp
+(the tables). Credit first: **the object taxonomy is good design** —
+chained range constants (`custLo = uranLo`, `oNorm = cobHi`,
+astrolog.h:658-683) with predicate macros (`FItem`/`FNorm`/`FMoons`/
+`FCob`/`FCust`/`FStar`/`FThing`) that compose, so inserting a category
+shifts every range consistently. Its only documentation is the
+predicates themselves — that goes in T8's conventions doc. The
+`OBJSET`/`rgobjset` named-row pattern (item 63) is the established
+template for tables that deserve it.
+
+**H1 — The restriction defaults are the surviving instances of the
+rObjOrb failure class.** `ignore[]` and `ignore2[]` (data.cpp:198, 210)
+are `objMax`-sized anonymous value runs: a miscount misaligns every
+later object silently, exactly the defect that sat in `rObjOrb[]` for
+years, and zero-fill hides a short list. *Incident:* item 63's found
+bug is this class; these are its remaining members. *Direction:* a
+static `tools/defaults_audit.py` machine-diffing data.cpp's initializer
+runs against upstream astrolog.as's own restatement of the defaults —
+the exact method that caught rObjOrb, made standing alongside the four
+rc audits. Named-row conversion only for tables that earn it. *Cost:*
+one session for the audit; it protects every anonymous table at once.
+
+**H2 — The feature macros are bare colliding words that are always
+on.** `TIME`, `PS`, `META`, `SWISS`, `GRAPH`... (astrolog.h:82-173)
+are effectively permanent (gotcha 8) yet force include-order
+contortions (Qt headers must precede astrolog.h because its bare words
+collide with Qt internals) and keep dead `#ifdef`-else paths alive
+(`MdyToJulian`'s unreachable `return 0`). *Direction:* minimum is the
+T8 rule ("new macros take a prefix; these three collide"); the fuller
+move — prefixing `META`/`PS`/`TIME` — is one mechanical sweep each,
+high upstream-divergence, worth it only for the three that collide.
+*Cost:* low each; decide per macro.
+
+**H3 — One header pair is the whole module system.** Every compilation
+unit includes astrolog.h + extern.h; the "From x.cpp" comment sections
+in extern.h are the only module boundaries that exist, and any edit to
+the `US` struct rebuilds the world (which commit 01f52b1 made honest —
+previously it rebuilt *nothing*, which was worse). *Verdict:* accept
+for this codebase's size; per-module headers are a real modularization
+project with real merge cost, and nothing above depends on it. Recorded
+so nobody mistakes the omission for an oversight.
+
+---
+
+## Sequencing — the first increments
+
+The survey pass is complete (all eight areas, 2026-08-29). The findings
+above sort into a natural order — smallest risk and best nets first,
+each independently shippable:
+
+1. **H1** — `tools/defaults_audit.py`: the standing initializer audit.
+   Pure tooling, protects every anonymous table.
+2. **B5** — the full-coverage settings fixture for the round-trip
+   script. Pure test; makes T4 regressions impossible to hide.
+3. **B3** — save/restore `is.fileIn` around nested includes, with its
+   regression test. Three-line bug fix, both builds.
+4. **D2** — collapse `ComputeInfluence()`'s rulership stanzas onto the
+   three-system family table. Small, sits on item 64's assertions.
+5. **C3** — name the clauses of `ComputeEphem()`'s skip predicate.
+   Readability with a diagnostic payoff.
+6. **A2** — the arity/advance helper pair in the switch parsers: the
+   first concrete step of T3, shrinks every case it touches.
+7. **E1** — normalize the drawing primitives to one block per target.
+   Mechanical; sets up the optional vtable.
+8. **D1/F1/F2** — the clone-pair merges, one pair a session, each
+   under the text-diff or pinned-capture net.
+9. **T3's table** — designed against the ugliest ten switches once
+   A2 has cleaned the ground; absorbs T4 when it lands.
+
+Everything else in this file is documentation work (T1's field
+classification, T8's conventions doc, A4's lifecycle contract) that can
+interleave with the above at any pace.
 
 ---
 
