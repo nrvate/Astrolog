@@ -77,7 +77,7 @@ sits in: themes and area findings are ordered most-worth-doing first.
 | C. Computation core | calc.cpp (4000), matrix.cpp (703), ephemeris glue | **surveyed 2026-08-29** — findings C1-C6 |
 | D. Text charts & interpretation | charts0-3.cpp (8876), intrpret.cpp (1605) | **surveyed 2026-08-29** — findings D1-D4 |
 | E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | **surveyed 2026-08-29** — findings E1-E3 |
-| F. Graphics charts | xcharts0-2.cpp (9129) | pending |
+| F. Graphics charts | xcharts0-2.cpp (9129) | **surveyed 2026-08-29** — findings F1-F4 |
 | G. Frontends & satellites | qtdriver/qtdialog (9345), express.cpp (2936), atlas.cpp (2171) | pending |
 | H. Data model & headers | astrolog.h (2457), extern.h (1243), data.cpp (1702) | pending |
 
@@ -615,7 +615,51 @@ work (item 2); the loops themselves are inherently per-backend and stay.
 new command must be added) in T8's conventions doc; no restructuring.
 *Cost:* documentation.
 
-### Areas F-H — pending
+### Area F — graphics charts (xcharts0-2.cpp), surveyed 2026-08-29
+
+The chart renderers proper. One verdict up front: the wheel machinery
+passing parallel `real` arrays (`xsign`, `xhouse`, `xplanet`, `symbol`)
+through `DrawWheel`/`DrawSymbolRing`/`FillSymbolRing` is *correct by
+this project's own storage rule* (item 63: flat arrays for what the
+math sweeps) — not a finding. The net for anything in this area:
+graphics captures are only comparable at **pinned chart time** on one
+machine (item 4 established renders of "now" differ run to run), so a
+refactor here captures fixed-data charts before and after and
+byte-diffs those.
+
+**F1 — The projection helpers exist in triplicate, plus one.**
+`LocTo/EquTo/EclTo/PriTo/EarTo` × `{Horizon, HorizonSky, Telescope}`
+(xcharts1.cpp:608-674, 1023-1096, 1440-1507) are eighteen functions in
+three parallel sets, each set differing only in the terminal plot
+transform (`PlotHorizon` vs `PlotHorizonSky` vs `PlotTelescope`), with
+`FSphere*` (xcharts1.cpp:4178-4222) a fourth family for the sphere
+chart. A new projection mode today means transcribing five or six
+functions. *Incident:* none recorded — but this is the same
+clone-and-vary shape as D1/item 38, one table-name swap from a quiet
+bug. *Direction:* one helper set parameterized by the plot transform
+(a function pointer or the `CIRC`/`TELE` argument generalized).
+*Cost:* low-medium; pinned-capture diff as net.
+
+**F2 — The horizon charts are a clone lineage.** `XChartHorizon` (323
+lines) and `XChartHorizonSky` (318) measure ~67% identical;
+`XChartTelescope` (662) grew from the same stock. Same treatment as
+D1: merge per pair when touched, not as a campaign. *Cost:* medium.
+
+**F3 — `DrawPrint()` has three calling conventions in one signature.**
+xcharts0.cpp:70: `sz == NULL && n >= 0` means "set cursor to (m, n)";
+`sz == NULL && n < 0` means "advance x by m"; otherwise `m` is a
+*color* and `n` selects same-line vs next-line — all against a static
+cursor. Every sidebar and info listing threads through it.
+*Direction:* split the cursor control into named functions and keep
+`DrawPrint(sz, color, fSameLine)` for text; entirely mechanical.
+*Cost:* low; touches many call sites but each is a rename.
+
+**F4 — `DrawChartX()` is the fifth knower of the mode mapping.**
+xcharts0.cpp:2435 switches on `gi.nMode` parallel to `Action()`,
+`PrintChart()`, `DetectGraphicsChartMode()`, and the ports' tables.
+Counted under A3; the shared table now has five consumers on record.
+
+### Areas G-H — pending
 
 ---
 
