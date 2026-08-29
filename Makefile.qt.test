@@ -45,6 +45,14 @@ $(OBJDIR)/qtdialog.o: qtdialog.cpp qtrcdlg.h astrolog.h qtdriver.h
 # object file survives a regeneration and the change looks inert.
 $(OBJDIR)/qtdriver.o: qtdriver.cpp qtrcaccel.h astrolog.h qtdriver.h
 
+# Every object depends on the two headers this fork edits constantly.
+# Without this, a change to only a header rebuilds nothing at all, and a
+# "load-bearing" check against the freshly broken header passes against
+# the stale binary -- which is how this line got here. Same failure shape
+# as the generated-table rules above (work log item 31).
+$(OBJS): astrolog.h extern.h
+$(OBJDIR)/qttest.o: qttest.cpp qtdriver.h
+
 $(OBJDIR)/%.o: %.cpp
 	g++ $(CPPFLAGS) -c -o $@ $<
 
