@@ -497,12 +497,22 @@ int NPromptSwitches(char *line, char *argv[MAXSWITCHES])
 
 #define nSwitchAbsent (-2)      // Name not in the registry.
 
+#define grfSwPrefix   0x1  // Match szName as a prefix; the handler
+                           // parses the rest of the spelling itself
+                           // (-Ye's suffix soup).
+#define grfSwGraphics 0x2  // The -X family: refused when -0X has locked
+                           // graphics away, and turns graphics mode on
+                           // whenever the switch succeeds -- behavior
+                           // the retired case 'X' applied around its
+                           // whole sub-parser.
+
 // A flag switch: the =/_/-/: prefix semantics applied to one boolean.
 // The simplest and most numerous row shape.
 
 typedef struct _switchflag {
   CONST char *szName;
   flag *pf;
+  word grf;       // grfSw* bits; trailing so plain rows omit it.
 } SWITCHFLAG;
 
 static CONST SWITCHFLAG rgswflag[] = {
@@ -518,6 +528,25 @@ static CONST SWITCHFLAG rgswflag[] = {
   {"Y0",  &us.fNoDisplay},   {"Yz1", &us.fOffsetOnly},
 #ifdef GRAPH
   {"YXe", &gs.fEcliptic},
+  {"Xm",  &gs.fColor,       grfSwGraphics},
+  {"Xi",  &gs.fAlt,         grfSwGraphics},
+  {"Xt",  &gs.fText,        grfSwGraphics},
+  {"Xu",  &gs.fBorder,      grfSwGraphics},
+  {"Xl",  &gs.fLabel,       grfSwGraphics},
+  {"XA",  &gs.fLabelAsp,    grfSwGraphics},
+  {"Xj",  &gs.fJetTrail,    grfSwGraphics},
+  {"Xe",  &gs.fEquator,     grfSwGraphics},
+  {"XC",  &gs.fHouseExtra,  grfSwGraphics},
+  {"XJ",  &gs.fIndianWheel, grfSwGraphics},
+  {"X8",  &gs.fMoonWheel,   grfSwGraphics},
+  {"XQ",  &gs.fKeepSquare,  grfSwGraphics},
+  {"XQ0", &gs.fAutoScale,   grfSwGraphics},
+  {"Xx",  &gs.fThick,       grfSwGraphics},
+  {"Xx0", &gs.fAntialias,   grfSwGraphics},
+  {"Xv0", &gs.fDoSidebar,   grfSwGraphics},
+#ifdef ISG
+  {"XN",  &gs.fAnimMap,     grfSwGraphics},
+#endif
 #endif
   };
 
@@ -1974,87 +2003,660 @@ static int NSwYXp0(CONST char *szSwitch, int argc, char **argv,
 #endif // PS
 #endif // GRAPH
 
+#ifdef GRAPH
+// The -X graphics family, migrated whole from the retired
+// NProcessSwitchesX() in xscreen.cpp. Every row carries grfSwGraphics:
+// the dispatch refuses it under -0X and turns graphics mode on when it
+// succeeds, as the retired case 'X' did around its whole sub-parser.
+
+static int NSwX(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return 0;    // Bare -X: the grfSwGraphics epilogue is the whole point.
+}
+
+static int NSwXb(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1;
+
+  if (us.fNoWrite || is.fSzInteract) {
+    ErrorArgv("Xb");
+    return tcError;
+  }
+  ch1 = ChCap(szSwitch[2]);
+  if (ch1 == 'B')
+    gi.fBmp = fFalse;
+  else if (ch1 == 'W') {
+    ch1 = 'B';
+    gi.fBmp = fTrue;
+  } else if (ch1 == 'P')
+    gi.fBmp = fTrue;
+  if (FValidBmpmode(ch1))
+    gs.chBmpMode = ch1;
+  gs.ft = FSwitchF2(gs.ft == ftBmp) * ftBmp;
+  return 0;
+}
+
+#ifdef PS
+static int NSwXp(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (us.fNoWrite || is.fSzInteract) {
+    ErrorArgv("Xp");
+    return tcError;
+  }
+  gs.ft = FSwitchF2(gs.ft == ftPS) * ftPS;
+  gs.fPSComplete = (szSwitch[2] == '0');
+  return 0;
+}
+#endif
+
+static int NSwXM(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[2], ch2 = ch1 == chNull ? chNull : szSwitch[3];
+  int i, j;
+
+  if (FBetween(ch1, '1', '0' + cRing)) {
+    i = (ch1 - '0') + (ch2 == '0');
+    if (FErrorArgc("XM", argc, i))
+      return tcError;
+    for (j = 1; j <= i; j++)
+      FCloneSz(argv[j], &szWheelX[(ch2 == '0' && j >= i) ? 0 : j]);
+    return i;
+  }
+#ifdef META
+  if (us.fNoWrite || is.fSzInteract) {
+    ErrorArgv("XM");
+    return tcError;
+  }
+  gs.ft = FSwitchF2(gs.ft == ftWmf) * ftWmf;
+#endif
+  return 0;
+}
+
+#ifdef SVG
+static int NSwXV(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (us.fNoWrite || is.fSzInteract) {
+    ErrorArgv("XV");
+    return tcError;
+  }
+  gs.ft = FSwitchF2(gs.ft == ftSVG) * ftSVG;
+  return 0;
+}
+#endif
+
+#ifdef WIRE
+static int NSwX3(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (us.fNoWrite || is.fSzInteract) {
+    ErrorArgv("X3");
+    return tcError;
+  }
+  gs.ft = FSwitchF2(gs.ft == ftWire) * ftWire;
+  return 0;
+}
+#endif
+
+static int NSwXo(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (us.fNoWrite || is.fSzInteract) {
+    ErrorArgv("Xo");
+    return tcError;
+  }
+  if (FErrorArgc("Xo", argc, 1))
+    return tcError;
+  if (gs.ft == ftNone)
+    gs.ft = ftBmp;
+  FCloneSz(argv[1], &gi.szFileOut);
+  return 1;
+}
+
+#ifdef X11
+static int NSwXB(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (is.fSzInteract) {
+    ErrorArgv("XB");
+    return tcError;
+  }
+  SwitchF(gs.fRoot);
+  return 0;
+}
+
+static int NSwXd(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (is.fSzInteract) {
+    ErrorArgv("Xd");
+    return tcError;
+  }
+  if (FErrorArgc("Xd", argc, 1))
+    return tcError;
+  FCloneSz(argv[1], &gs.szDisplay);
+  return 1;
+}
+#endif
+
+static int NSwXI(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("XI", argc, 1))
+    return tcError;
+  FLoadBmp(argv[1], &gi.bmpBack, fFalse);
+  return 1;
+}
+
+static int NSwXI0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real rT;
+  int i;
+
+  SwitchF2(gs.fBackDraw);
+  if (fAnd)
+    return 0;
+  if (FErrorArgc("XI0", argc, 2))
+    return tcError;
+  rT = RFromSz(argv[1]);
+  i = NFromSz(argv[2]);
+  if (FErrorValR("XI0", !FValidBackPct(rT), rT, 1))
+    return tcError;
+  if (FErrorValN("XI0", !FValidBackOrient(i), i, 2))
+    return tcError;
+  gs.rBackPct = rT;
+  gs.nBackOrient = i;
+  return 2;
+}
+
+static int NSwXIW(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("XIW", argc, 1))
+    return tcError;
+  FLoadBmp(argv[1], &gi.bmpWorld, fFalse);
+  return 1;
+}
+
+static int NSwXr(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(gs.fInverse);
+  InitColorPalette(gs.fInverse);
+  return 0;
+}
+
+static int NSwXw(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, j, darg = 0;
+
+  if (FErrorArgc("Xw", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (argc > 2 && ((j = NFromSz(argv[2])) || argv[2][0] == '0'))
+    darg++;
+  else
+    j = i;
+  if (FErrorValN("Xw", !FValidGraphX(i), i, 1))
+    return tcError;
+  if (FErrorValN("Xw", !FValidGraphY(j), j, 2))
+    return tcError;
+  // gs.xWin includes the sidebar everywhere else in this program -- the
+  // places that want the chart alone subtract it and add it back -- and
+  // FOutputSettings() writes this switch without it, saying so in the
+  // comment beside the value. This did not add it back once, so every
+  // save-and-reload shrank the window by one sidebar (work log).
+  gs.xWin = i; gs.yWin = j;
+  if (fSidebar)
+    gs.xWin += (SIDESIZE * gi.nScaleText) >> 1;
+  return darg + 1;
+}
+
+static int NSwXs(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Xs", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (i < 100)
+    i *= 100;
+  if (FErrorValN("Xs", !FValidScale(i), i, 0))
+    return tcError;
+  gs.nScale = i;
+  gi.nScale = gs.nScale/100;   // Refresh so -Xs within -XM2 works
+  return 1;
+}
+
+static int NSwXS(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("XS", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (i < 100)
+    i *= 100;
+  if (FErrorValN("XS", !FValidScaleText(i), i, 0))
+    return tcError;
+  gs.nScaleText = i;
+  AdjustTextScale();    // Refresh so changing -XS works
+  return 1;
+}
+
+static int NSwXU(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[2];
+
+  if (ch1 == 'x') {
+    SwitchF(gs.fAllExo);
+    return 0;
+  }
+  SwitchF(gs.fAllStar);
+  if (FBetween(ch1, '0', '3'))
+    gs.nAllStar = (ch1 - '0');
+  return 0;
+}
+
+static int NSwXE(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[2];
+
+  if (FErrorArgc("XE", argc, 2))
+    return tcError;
+  if (FBetween(ch1, '0', '3'))
+    gs.nAstLabel = (ch1 - '0');
+  gs.nAstLo = NFromSz(argv[1]);
+  gs.nAstHi = NFromSz(argv[2]);
+  return 2;
+}
+
+#ifdef ATLAS
+static int NSwXL(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[2];
+
+  SwitchF(gs.fLabelCity);
+  if (FBetween(ch1, '1', '5'))
+    gs.nLabelCity = (ch1 - '0');
+  return 0;
+}
+#endif
+
+static int NSwX1Or2(int argc, char **argv, flag fAnd, flag fSecond)
+{
+  int i;
+
+  if (fAnd) {
+    gs.objLeft = 0;
+    return 0;
+  }
+  if (FErrorArgc(fSecond ? "X2" : "X1", argc, 1))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN(fSecond ? "X2" : "X1", !FItem(i), i, 0))
+    return tcError;
+  gs.objLeft = fSecond ? -i-1 : i+1;
+  return 1;
+}
+
+static int NSwXOne(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwX1Or2(argc, argv, fAnd, fFalse);
+}
+
+static int NSwXTwo(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwX1Or2(argc, argv, fAnd, fTrue);
+}
+
+static int NSwXv(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Xv", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("Xv", !FValidDecaFill(i), i, 0))
+    return tcError;
+  gs.nDecaFill = i;
+  return 1;
+}
+
+// The -XX/-XW/-XG/-XP/-XZ chart modes share a shape: optional numeric
+// rotation (and tilt) arguments, then toggle the mode, with a "0" (or
+// "v") suffix flipping a related flag.
+
+static int NSwXX(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real rT;
+  int darg = 0;
+
+  if (argc > 1 && ((rT = RFromSz(argv[1])) || argv[1][0] == '0')) {
+    darg++;
+    if (FErrorValR("XX", !FValidRotation(rT), rT, 1))
+      return tcError;
+    gs.rRot = rT;
+    if (argc > 2 && ((rT = RFromSz(argv[2])) || argv[2][0] == '0')) {
+      darg++;
+      if (FErrorValR("XX", !FValidTilt(rT), rT, 2))
+        return tcError;
+      gs.rTilt = rT;
+    }
+  }
+  gi.nMode = FSwitchF2(gi.nMode == gSphere) * gSphere;
+  if (szSwitch[2] == '0')
+    SwitchF(gs.fSouth);
+  return darg;
+}
+
+static int NSwXW(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real rT;
+  int darg = 0;
+
+  if (argc > 1 && ((rT = RFromSz(argv[1])) || argv[1][0] == '0')) {
+    darg++;
+    if (FErrorValR("XW", !FValidRotation(rT), rT, 0))
+      return tcError;
+    gs.rRot = rT;
+  }
+  gi.nMode = FSwitchF2(gi.nMode == gWorldMap) * gWorldMap;
+  if (szSwitch[2] == '0')
+    SwitchF(gs.fMollweide);
+  is.fHaveInfo |= gs.fAlt;
+  return darg;
+}
+
+static int NSwXG(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real rT;
+  int darg = 0;
+
+  if (argc > 1 && ((rT = RFromSz(argv[1])) || argv[1][0] == '0')) {
+    darg++;
+    if (FErrorValR("XG", !FValidRotation(rT), rT, 1))
+      return tcError;
+    gs.rRot = rT;
+    if (argc > 2 && ((rT = RFromSz(argv[2])) || argv[2][0] == '0')) {
+      darg++;
+      if (FErrorValR("XG", !FValidTilt(rT), rT, 2))
+        return tcError;
+      gs.rTilt = rT;
+    }
+  }
+  gi.nMode = FSwitchF2(gi.nMode == gGlobe) * gGlobe;
+  if (szSwitch[2] == '0')
+    SwitchF(gs.fSouth);
+  is.fHaveInfo |= gs.fAlt;
+  return darg;
+}
+
+static int NSwXP(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real rT;
+  int darg = 0;
+
+  if (argc > 1 && ((rT = RFromSz(argv[1])) || argv[1][0] == '0')) {
+    darg++;
+    if (FErrorValR("XP", !FValidRotation(rT), rT, 0))
+      return tcError;
+  } else
+    rT = 0.0;
+  gs.rRot = rT;
+  gi.nMode = FSwitchF2(gi.nMode == gPolar) * gPolar;
+  if (szSwitch[2] == '0')
+    SwitchF(gs.fSouth);
+  else if (szSwitch[2] == 'v')
+    SwitchF(gs.fPrintMap);
+  is.fHaveInfo |= gs.fAlt;
+  return darg;
+}
+
+static int NSwXZ(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NParseSz(argv[1], pmObject)) != -1) {
+    darg++;
+    if (!FValidObj(i))
+      i = -1;
+    gs.objTrack = i;
+    if (fAnd)
+      return darg;
+  }
+  gi.nMode = FSwitchF2(gi.nMode == gTelescope) * gTelescope;
+  return darg;
+}
+
+#ifdef CONSTEL
+static int NSwXF(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (gi.nMode != gHorizon && gi.nMode != gSphere && gi.nMode != gGlobe &&
+    gi.nMode != gPolar && gi.nMode != gTelescope)
+    gi.nMode = FSwitchF2(gi.nMode == gWorldMap) * gWorldMap;
+  SwitchF(gs.fConstel);
+  is.fHaveInfo |= gs.fAlt;
+  return 0;
+}
+#endif
+
+static int NSwXk(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Xk", argc, 1))
+    return tcError;
+  i = NParseSz(argv[1], pmColor);
+#ifdef ISG
+  if (szSwitch[2] != 'v') {
+    if (FErrorValN("Xk", !FValidColorA(i), i, 0))
+      return tcError;
+    gi.kiPen = i;
+  } else
+#endif
+  {
+    if (FErrorValN("Xkv", !FValidColorA(i) && i != kMax, i, 0))
+      return tcError;
+    gs.kiDeca = i;
+  }
+  return 1;
+}
+
+#ifdef ISG
+static int NSwXn(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NFromSz(argv[1])))
+    darg++;
+  else
+    i = 10;
+  if (FErrorValN("Xn", !FBetween(i, 1, 13), i, 0))
+    return tcError;
+  gs.nAnim = (fOr || fNot ? i : -i);
+  return darg;
+}
+
+static int NSwXnp(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(gi.fPause);
+  return 0;
+}
+
+static int NSwXnf(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Xnf", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("Xnf", !FBetween(i, 1, 9), i, 0))
+    return tcError;
+  gi.nDir = i;
+  return 1;
+}
+#endif // ISG
+#endif // GRAPH
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
 
 typedef struct _switchdef {
   CONST char *szName;
-  flag fPrefix;   // Match szName as a prefix; the handler parses the
-                  // rest of the spelling itself (-Ye's suffix soup).
+  word grf;
   int (*pfn)(CONST char *szSwitch, int argc, char **argv, flag fOr,
     flag fAnd, flag fNot, PARSECTX *pctx);
 } SWITCHDEF;
 
 static CONST SWITCHDEF rgswitchdef[] = {
-  {"Yj0",  fFalse, NSwYj0},  {"Yj7",  fFalse, NSwYj7},
-  {"YAD",  fFalse, NSwYAD},  {"YJ",   fFalse, NSwYJ},
-  {"YJ0",  fFalse, NSwYJ0},  {"YJ7",  fFalse, NSwYJ7},
-  {"YJ70", fFalse, NSwYJ70},
-  {"YR0",  fFalse, NSwYR0},  {"YR1",  fFalse, NSwYR1},
-  {"YR2",  fFalse, NSwYR2},  {"YRp",  fFalse, NSwYRp},
-  {"YRZ",  fFalse, NSwYRZ},  {"YR7",  fFalse, NSwYR7},
-  {"YRd",  fFalse, NSwYRd},  {"YRh",  fFalse, NSwYRh},
-  {"YRo",  fFalse, NSwYRo},  {"YRi",  fFalse, NSwYRi},
-  {"YRU",  fFalse, NSwYRU},  {"YRU0", fFalse, NSwYRU0},
-  {"YkU",  fFalse, NSwYkU},  {"YkE",  fFalse, NSwYkE},
-  {"YkC",  fFalse, NSwYkC},
-  {"YD",   fFalse, NSwYD},   {"YS",   fFalse, NSwYS},
-  {"YU",   fFalse, NSwYU},   {"YUb",  fFalse, NSwYUb},
-  {"YUb0", fFalse, NSwYUb0}, {"YUx",  fFalse, NSwYUx},
-  {"YF",   fFalse, NSwYF},
+  {"Yj0",  0,      NSwYj0},  {"Yj7",  0,      NSwYj7},
+  {"YAD",  0,      NSwYAD},  {"YJ",   0,      NSwYJ},
+  {"YJ0",  0,      NSwYJ0},  {"YJ7",  0,      NSwYJ7},
+  {"YJ70", 0, NSwYJ70},
+  {"YR0",  0,      NSwYR0},  {"YR1",  0,      NSwYR1},
+  {"YR2",  0,      NSwYR2},  {"YRp",  0,      NSwYRp},
+  {"YRZ",  0,      NSwYRZ},  {"YR7",  0,      NSwYR7},
+  {"YRd",  0,      NSwYRd},  {"YRh",  0,      NSwYRh},
+  {"YRo",  0,      NSwYRo},  {"YRi",  0,      NSwYRi},
+  {"YRU",  0,      NSwYRU},  {"YRU0", 0, NSwYRU0},
+  {"YkU",  0,      NSwYkU},  {"YkE",  0,      NSwYkE},
+  {"YkC",  0,      NSwYkC},
+  {"YD",   0,      NSwYD},   {"YS",   0,      NSwYS},
+  {"YU",   0,      NSwYU},   {"YUb",  0,      NSwYUb},
+  {"YUb0", 0, NSwYUb0}, {"YUx",  0,      NSwYUx},
+  {"YF",   0,      NSwYF},
 #ifdef SWISS
-  {"Ye",   fTrue,  NSwYe},
+  {"Ye",   grfSwPrefix, NSwYe},
 #endif
 #ifdef MATRIX
-  {"YE",   fFalse, NSwYE},
+  {"YE",   0,      NSwYE},
 #endif
 #ifdef INTERPRET
-  {"YI",   fFalse, NSwYI},   {"YIa",  fFalse, NSwYIa},
-  {"YIv",  fFalse, NSwYIv},  {"YIC",  fFalse, NSwYIC},
-  {"YIA",  fFalse, NSwYIA},  {"YIA0", fFalse, NSwYIA0},
+  {"YI",   0,      NSwYI},   {"YIa",  0,      NSwYIa},
+  {"YIv",  0,      NSwYIv},  {"YIC",  0,      NSwYIC},
+  {"YIA",  0,      NSwYIA},  {"YIA0", 0, NSwYIA0},
 #endif
-  {"YYt",  fFalse, NSwYYt},  {"YYT",  fFalse, NSwYYT},
+  {"YYt",  0,      NSwYYt},  {"YYT",  0,      NSwYYT},
 #ifdef ATLAS
-  {"YY",   fFalse, NSwYY},   {"YY1",  fFalse, NSwYY1},
-  {"YY2",  fFalse, NSwYY2},  {"YY3",  fFalse, NSwYY3},
+  {"YY",   0,      NSwYY},   {"YY1",  0,      NSwYY1},
+  {"YY2",  0,      NSwYY2},  {"YY3",  0,      NSwYY3},
 #endif
-  {"Yu",   fFalse, NSwYu},   {"Yu0",  fFalse, NSwYu0},
-  {"Ys",   fFalse, NSwYs},   {"Yc",   fFalse, NSwYc},
-  {"Yl",   fFalse, NSwYl},   {"Y1",   fFalse, NSwY1},
-  {"Y10",  fFalse, NSwY10},  {"Yz",   fFalse, NSwYz},
-  {"Yz0",  fFalse, NSwYz0},  {"YzO",  fFalse, NSwYzO},
-  {"YzC",  fFalse, NSwYzC},  {"YQ",   fFalse, NSwYQ},
-  {"Yw",   fFalse, NSwYw},   {"YZ",   fFalse, NSwYZ},
-  {"Yb",   fFalse, NSwYb},
+  {"Yu",   0,      NSwYu},   {"Yu0",  0,      NSwYu0},
+  {"Ys",   0,      NSwYs},   {"Yc",   0,      NSwYc},
+  {"Yl",   0,      NSwYl},   {"Y1",   0,      NSwY1},
+  {"Y10",  0,      NSwY10},  {"Yz",   0,      NSwYz},
+  {"Yz0",  0,      NSwYz0},  {"YzO",  0,      NSwYzO},
+  {"YzC",  0,      NSwYzC},  {"YQ",   0,      NSwYQ},
+  {"Yw",   0,      NSwYw},   {"YZ",   0,      NSwYZ},
+  {"Yb",   0,      NSwYb},
 #ifdef ARABIC
-  {"YP",   fFalse, NSwYP},
+  {"YP",   0,      NSwYP},
 #endif
-  {"YB",   fFalse, NSwYB},
-  {"Y5i",  fFalse, NSwY5i},  {"Y5I",  fFalse, NSwY5I},
+  {"YB",   0,      NSwYB},
+  {"Y5i",  0,      NSwY5i},  {"Y5I",  0,      NSwY5I},
   // Prefix rows last, so exact spellings above always win.
-  {"Y5",   fTrue,  NSwY5},   {"Ya",   fTrue,  NSwYa},
-  {"Yq",   fTrue,  NSwYq},   {"Yi",   fTrue,  NSwYi},
+  {"Y5",   grfSwPrefix, NSwY5},   {"Ya",   grfSwPrefix, NSwYa},
+  {"Yq",   grfSwPrefix, NSwYq},   {"Yi",   grfSwPrefix, NSwYi},
 #ifdef GRAPH
-  {"YX",   fFalse, NSwYXNull},
-  {"YXD",  fFalse, NSwYXD},   {"YXD1", fFalse, NSwYXD1},
-  {"YXDD", fFalse, NSwYXDD},  {"YXA",  fFalse, NSwYXA},
-  {"YXA1", fFalse, NSwYXA1},  {"YXv",  fFalse, NSwYXv},
-  {"YXt",  fFalse, NSwYXt},   {"YXg",  fFalse, NSwYXg},
-  {"YXS",  fFalse, NSwYXS},   {"YXj",  fFalse, NSwYXj},
-  {"YXj0", fFalse, NSwYXj0},  {"YX7",  fFalse, NSwYX7},
-  {"YXk",  fFalse, NSwYXk},   {"YXk0", fFalse, NSwYXk0},
-  {"YXK",  fFalse, NSwYXK},   {"YXK0", fFalse, NSwYXK0},
-  {"YXa",  fFalse, NSwYXa},   {"YXx",  fFalse, NSwYXx},
-  {"YXW",  fFalse, NSwYXW},
+  {"YX",   0,      NSwYXNull},
+  {"YXD",  0,      NSwYXD},   {"YXD1", 0, NSwYXD1},
+  {"YXDD", 0, NSwYXDD},  {"YXA",  0,      NSwYXA},
+  {"YXA1", 0, NSwYXA1},  {"YXv",  0,      NSwYXv},
+  {"YXt",  0,      NSwYXt},   {"YXg",  0,      NSwYXg},
+  {"YXS",  0,      NSwYXS},   {"YXj",  0,      NSwYXj},
+  {"YXj0", 0, NSwYXj0},  {"YX7",  0,      NSwYX7},
+  {"YXk",  0,      NSwYXk},   {"YXk0", 0, NSwYXk0},
+  {"YXK",  0,      NSwYXK},   {"YXK0", 0, NSwYXK0},
+  {"YXa",  0,      NSwYXa},   {"YXx",  0,      NSwYXx},
+  {"YXW",  0,      NSwYXW},
 #ifdef SWISS
-  {"YXU",  fFalse, NSwYXU},   {"YXU0", fFalse, NSwYXU0},
-  {"YXU1", fFalse, NSwYXU1},
+  {"YXU",  0,      NSwYXU},   {"YXU0", 0, NSwYXU0},
+  {"YXU1", 0, NSwYXU1},
 #endif
 #ifdef PS
-  {"YXp",  fFalse, NSwYXp},   {"YXp0", fFalse, NSwYXp0},
+  {"YXp",  0,      NSwYXp},   {"YXp0", 0, NSwYXp0},
 #endif
-  {"YXG",  fTrue,  NSwYXG},   {"YXf",  fTrue,  NSwYXf},
+  {"YXG",  grfSwPrefix, NSwYXG},   {"YXf",  grfSwPrefix, NSwYXf},
+  {"X",    grfSwGraphics, NSwX},
+  {"Xo",   grfSwGraphics, NSwXo},
+  {"XI",   grfSwGraphics, NSwXI},
+  {"XI0",  grfSwGraphics, NSwXI0},
+  {"XIW",  grfSwGraphics, NSwXIW},
+  {"Xr",   grfSwGraphics, NSwXr},
+  {"Xw",   grfSwGraphics, NSwXw},
+  {"Xs",   grfSwGraphics, NSwXs},
+  {"XS",   grfSwGraphics, NSwXS},
+  {"X1",   grfSwGraphics, NSwXOne},
+  {"X2",   grfSwGraphics, NSwXTwo},
+  {"Xv",   grfSwGraphics, NSwXv},
+  {"XX",   grfSwGraphics, NSwXX},
+  {"XX0",  grfSwGraphics, NSwXX},
+  {"XW",   grfSwGraphics, NSwXW},
+  {"XW0",  grfSwGraphics, NSwXW},
+  {"XG",   grfSwGraphics, NSwXG},
+  {"XG0",  grfSwGraphics, NSwXG},
+  {"XP",   grfSwGraphics, NSwXP},
+  {"XP0",  grfSwGraphics, NSwXP},
+  {"XPv",  grfSwGraphics, NSwXP},
+  {"XZ",   grfSwGraphics, NSwXZ},
+  {"Xk",   grfSwGraphics, NSwXk},
+  {"Xkv",  grfSwGraphics, NSwXk},
+#ifdef PS
+  {"Xp",   grfSwGraphics, NSwXp},
+  {"Xp0",  grfSwGraphics, NSwXp},
+#endif
+#ifdef SVG
+  {"XV",   grfSwGraphics, NSwXV},
+#endif
+#ifdef WIRE
+  {"X3",   grfSwGraphics, NSwX3},
+#endif
+#ifdef X11
+  {"XB",   grfSwGraphics, NSwXB},
+  {"Xd",   grfSwGraphics, NSwXd},
+#endif
+#ifdef CONSTEL
+  {"XF",   grfSwGraphics, NSwXF},
+#endif
+#ifdef ISG
+  {"Xn",   grfSwGraphics, NSwXn},
+  {"Xnp",  grfSwGraphics, NSwXnp},
+  {"Xnf",  grfSwGraphics, NSwXnf},
+#endif
+  // Prefix rows for the sub-lettered X spellings.
+  {"XE",   grfSwPrefix | grfSwGraphics, NSwXE},
+  {"Xb",   grfSwPrefix | grfSwGraphics, NSwXb},
+  {"XM",   grfSwPrefix | grfSwGraphics, NSwXM},
+  {"XU",   grfSwPrefix | grfSwGraphics, NSwXU},
+#ifdef ATLAS
+  {"XL",   grfSwPrefix | grfSwGraphics, NSwXL},
+#endif
 #endif
   };
 
@@ -2075,11 +2677,20 @@ static int NProcessSwitchTable(CONST char *szName, int argc, char **argv,
   CONST SWITCHFLAG *psf;
   CONST SWITCHRANGED *psr;
   CONST SWITCHDEF *psd;
+  int i;
 
   for (psf = rgswflag;
     psf < rgswflag + sizeof(rgswflag)/sizeof(*rgswflag); psf++)
     if (FEqSz(szName, psf->szName)) {
-      SwitchF(*psf->pf);
+      if (psf->grf & grfSwGraphics) {
+        if (us.fNoGraphics) {
+          ErrorArgv("X");
+          return tcError;
+        }
+        SwitchF(*psf->pf);
+        SwitchF2(us.fGraphics);
+      } else
+        SwitchF(*psf->pf);
       return 0;
     }
   for (psr = rgswranged;
@@ -2088,9 +2699,17 @@ static int NProcessSwitchTable(CONST char *szName, int argc, char **argv,
       return NProcessSwitchRanged(psr, argc, argv);
   for (psd = rgswitchdef;
     psd < rgswitchdef + sizeof(rgswitchdef)/sizeof(*rgswitchdef); psd++)
-    if (psd->fPrefix ? FSwitchPrefix(szName, psd->szName) :
-      FEqSz(szName, psd->szName))
-      return psd->pfn(szName, argc, argv, fOr, fAnd, fNot, pctx);
+    if ((psd->grf & grfSwPrefix) ? FSwitchPrefix(szName, psd->szName) :
+      FEqSz(szName, psd->szName)) {
+      if ((psd->grf & grfSwGraphics) && us.fNoGraphics) {
+        ErrorArgv("X");
+        return tcError;
+      }
+      i = psd->pfn(szName, argc, argv, fOr, fAnd, fNot, pctx);
+      if (i >= 0 && (psd->grf & grfSwGraphics))
+        SwitchF2(us.fGraphics);
+      return i;
+    }
   return nSwitchAbsent;
 }
 
@@ -3715,18 +4334,6 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       break;
 
 #ifdef GRAPH
-    case 'X':
-      if (us.fNoGraphics) {
-        ErrorArgv("X");
-        return fFalse;
-      }
-      i = NProcessSwitchesX(argc, argv, ich, fOr, fAnd, fNot);
-      if (i < 0)
-        return fFalse;
-      SwitchF2(us.fGraphics);
-      argc -= i; argv += i;
-      break;
-
     // Every build accepts these, even the ones with no interface to apply
     // them to. A settings file written by the Windows or Qt build is full
     // of -W switches, and an unknown switch does not merely get skipped --

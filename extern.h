@@ -1089,7 +1089,6 @@ extern void InteractQt P((void));
 extern void EndQt P((void));
 #endif
 extern flag FProcessYXU P((CONST char *, CONST char *, flag));
-extern int NProcessSwitchesX P((int, char **, int, flag, flag, flag));
 extern int DetectGraphicsChartMode P((void));
 extern flag FActionX P((void));
 #endif // GRAPH
