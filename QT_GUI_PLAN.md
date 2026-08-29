@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3018
+   display and no `xdotool`, and exits non-zero on failure. **3027
    assertions** as of 2026-08-29; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-63
+## Work log — items 1-64
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2582,6 +2582,28 @@ are the more useful half to read before starting something new.
     - **The upstream-merge bridge is burned here**, deliberately:
       upstream addresses these five arrays ~130 times. The Windows build
       is unaffected and remains the oracle.
+
+64. **The rulership cross-table invariant is asserted** -- the one piece
+    of the declined "Stage 5" reference-data struct worth having, added
+    2026-08-29. The `rulership` suite group pins, for each of the
+    traditional, esoteric and hierarchical systems: the two "none"
+    encodings (-1 sign-keyed, where 0 is the Earth; 0 object-keyed --
+    the exact difference item 38's bug was made of), that every table
+    entry indexes in range, and that every ruler or co-ruler a sign
+    names lists that sign back in the object-keyed direction. Verified
+    to fail on all three corruption classes before shipping.
+    - **Only that direction is asserted, on purpose.** The reverse is
+      legitimately looser: `ruler1[]` gives minor objects sign
+      affinities `rules[]` never records (Ceres "rules" Virgo without
+      being Virgo's ruler), and `rgObjEso2[oVul]` claims Virgo while
+      `rgSignEso2[sVir]` stays empty -- upstream data, kept.
+    - **The invariant is about the shipped defaults, not a runtime
+      guarantee.** `-YJ` maintains the mirror through
+      `AdjustRulership()`, but that function is deliberately lossy:
+      a sign whose planet moves away keeps its stale primary ruler when
+      there is no co-ruler to promote. astrolog.as's own `-YJ` block
+      restates the defaults exactly, so loading it changes nothing and
+      the group may run at any point in the suite.
 
 ## Features this fork adds to both builds
 

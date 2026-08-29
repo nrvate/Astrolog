@@ -2961,6 +2961,57 @@ static void TestSharedCoreFixesQt()
 }
 
 
+// The rulership tables come in mirrored pairs for each of the three
+// systems: sign-keyed (a sign's ruler and co-ruler) and object-keyed (an
+// object's ruled and co-ruled sign). The two directions spell "none"
+// differently -- -1 sign-keyed, where 0 is a real object, the Earth; 0
+// object-keyed -- and work log item 38 is what one forgotten difference
+// cost: an esoteric block tested a sign-keyed table the object-keyed way
+// and used -1 as an array index. Pin the encodings, and pin the shipped
+// defaults agreeing with themselves: every ruler a sign names must name
+// that sign back. Only that direction -- ruler1[] gives minor objects
+// sign affinities the sign tables never record, and AdjustRulership()
+// is deliberately lossy when -YJ moves a planet off a sign that has no
+// co-ruler to promote -- so this is a claim about the defaults, made
+// where nothing has customized them.
+static void TestRulershipTablesQt()
+{
+  static CONST struct {
+    CONST char *szSystem;
+    CONST int *rgsign1, *rgsign2, *rgobj1, *rgobj2;
+  } rgfam[] = {
+    {"traditional",  rules,      rules2,     ruler1,    ruler2},
+    {"esoteric",     rgSignEso1, rgSignEso2, rgObjEso1, rgObjEso2},
+    {"hierarchical", rgSignHie1, rgSignHie2, rgObjHie1, rgObjHie2}};
+  flag fEnc, fRul, fCorul;
+  int ifam, i, k;
+
+  Group("Rulership tables");
+  for (ifam = 0; ifam < (int)(sizeof(rgfam)/sizeof(*rgfam)); ifam++) {
+    fEnc = fRul = fCorul = fTrue;
+    for (i = 1; i <= cSign; i++) {
+      k = rgfam[ifam].rgsign1[i];
+      fEnc &= FBetween(k, 0, oNorm);        // Every sign has a ruler.
+      if (FBetween(k, 0, oNorm))
+        fRul &= (rgfam[ifam].rgobj1[k] == i || rgfam[ifam].rgobj2[k] == i);
+      k = rgfam[ifam].rgsign2[i];
+      fEnc &= (k == -1 || FBetween(k, 0, oNorm));
+      if (FBetween(k, 0, oNorm))
+        fCorul &= (rgfam[ifam].rgobj1[k] == i || rgfam[ifam].rgobj2[k] == i);
+    }
+    for (i = 0; i <= oNorm; i++)
+      fEnc &= FBetween(rgfam[ifam].rgobj1[i], 0, cSign) &&
+        FBetween(rgfam[ifam].rgobj2[i], 0, cSign);
+    Check(fEnc, "%s tables: none is -1 sign-keyed and 0 object-keyed",
+      rgfam[ifam].szSystem);
+    Check(fRul, "every sign's %s ruler rules it back", rgfam[ifam].szSystem);
+    Check(fCorul, "every sign's %s co-ruler co-rules it back",
+      rgfam[ifam].szSystem);
+  }
+  printf("  three systems' sign-keyed and object-keyed tables agree\n");
+}
+
+
 static void TestForcedPositionsQt()
 {
   real rgforceSav[objMax];
@@ -3284,6 +3335,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"bad-input",            TestBadInputQt},
   {"forced-positions",     TestForcedPositionsQt},
   {"shared-core",          TestSharedCoreFixesQt},
+  {"rulership",            TestRulershipTablesQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},
   {"chart-list",           TestChartListFilterQt},
