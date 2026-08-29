@@ -3012,6 +3012,59 @@ static void TestRulershipTablesQt()
 }
 
 
+// A switch file can include another with -i, and switches like -YY read
+// an in-band payload from the file being parsed through is.fileIn. The
+// parsers used to clear that channel on exit instead of restoring it, so
+// an include nested inside a file left the OUTER file's channel NULL:
+// its next payload switch failed "Switch only allowed in file context"
+// and everything after it was skipped -- including, from the command
+// line, any switches after the -i itself. Regression: an outer file
+// with an include, then an atlas payload, then one more switch, must
+// load to the end with all three applied.
+static void TestNestedIncludeQt()
+{
+  char szInner[cchSzMax], szOuter[cchSzMax];
+  CONST char *szTmp;
+  FILE *file;
+  int nScrollSav = us.nScrollRow;
+  flag fRet, fPopupSav = FNoPopupQt();
+
+  Group("Nested include");
+  SetNoPopupQt(fTrue);    // a failing load must fail, not open a box
+  szTmp = getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp";
+  sprintf(szInner, "%s/astrolog-qt-nest-inner.as", szTmp);
+  sprintf(szOuter, "%s/astrolog-qt-nest-outer.as", szTmp);
+  file = fopen(szInner, "w");
+  fprintf(file, "@AD800  ; inner\n-YQ 41\n");
+  fclose(file);
+  file = fopen(szOuter, "w");
+  fprintf(file, "@AD800  ; outer\n-i \"%s\"\n-YY 1\n"
+    "0.0\t0.0\tUS\tNowhere\tAfrica/Abidjan\n-YQ 47\n", szInner);
+  fclose(file);
+
+  us.nScrollRow = 24;
+  fRet = FProcessSwitchFile(szOuter, NULL);
+  Check(fRet, "a switch file with a nested include loads to its end");
+  Check(is.cae == 1 && is.rgae != NULL,
+    "the payload switch after the include read its payload");
+  Check(us.nScrollRow == 47,
+    "a switch after the payload still applied (got %d)", us.nScrollRow);
+  Check(is.fileIn == NULL, "the payload channel is clear at top level");
+
+  // The payload replaced the atlas with one synthetic city; hand the
+  // real one back to FEnsureAtlas()'s lazy load.
+  if (is.rgae != NULL) {
+    DeallocateP(is.rgae);
+    is.rgae = NULL;
+  }
+  is.cae = 0;
+  us.nScrollRow = nScrollSav;
+  SetNoPopupQt(fPopupSav);
+  remove(szInner); remove(szOuter);
+  printf("  an include inside a settings file hands the channel back\n");
+}
+
+
 static void TestForcedPositionsQt()
 {
   real rgforceSav[objMax];
@@ -3336,6 +3389,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"forced-positions",     TestForcedPositionsQt},
   {"shared-core",          TestSharedCoreFixesQt},
   {"rulership",            TestRulershipTablesQt},
+  {"nested-include",       TestNestedIncludeQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},
   {"chart-list",           TestChartListFilterQt},

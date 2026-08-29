@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3027
+   display and no `xdotool`, and exits non-zero on failure. **3031
    assertions** as of 2026-08-29; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-66
+## Work log — items 1-67
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2657,6 +2657,31 @@ are the more useful half to read before starting something new.
       writer emitted `-YD` only inside the custom-slot and star loops,
       so a renamed planet or cusp lost its name on the next save. The
       object-customization section now writes them.
+
+67. **A nested include no longer severs the switch-file payload
+    channel.** Switches like -YY read in-band data from the file being
+    parsed through `is.fileIn`, and all six file parsers cleared that
+    global on exit instead of restoring it -- so a file included with
+    -i from inside another file left the outer file's channel NULL.
+    The live repro showed the blast radius was bigger than the survey
+    predicted: the outer file's next payload switch errored "Switch
+    only allowed in file context", which aborted not just the rest of
+    that file but the rest of the *command line* after the -i. All six
+    parsers now save and restore the previous channel.
+    - Suite group `nested-include` pins it: an outer file with an
+      include, then a one-city -YY payload, then one more switch, must
+      load to the end with all three applied (and the test resets the
+      atlas to lazy-load afterward, since its payload replaces the real
+      city list). Falsified: reintroducing the clear fails 3 of its 4
+      checks, the third reporting the inner file's value -- the outer
+      aborted exactly where predicted.
+    - Two suite-craft lessons paid for themselves: `FileOpen()` is
+      read-only and *prompts interactively* for a missing file (the
+      test's fixtures are written with plain fopen), and a test whose
+      failure path raises PrintError must SetNoPopupQt(fTrue) or its
+      failure mode is a hang on a message box, not a FAIL.
+    - This is the interim fix; T3's parse context (REFACTORING.md)
+      retires the global channel entirely.
 
 ## Features this fork adds to both builds
 

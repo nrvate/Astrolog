@@ -236,6 +236,7 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
   char rgchLine[cchSzLine], *argv[MAXSWITCHES], *szLine = rgchLine, *szNew, ch;
   int argc, cchLine = cchSzLine, i;
   flag fHaveFile, fRet = fFalse;
+  FILE *fileInSav;
 
   // Open a file if don't already have one.
   fHaveFile = (file != NULL);
@@ -244,6 +245,12 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
     if (file == NULL)
       goto LDone;
   }
+  // is.fileIn is the channel switches like -YY read their payload
+  // from. Save and restore it rather than clearing on exit: a file
+  // included with -i from inside another file used to leave the outer
+  // file's channel NULL, so its next payload switch failed and aborted
+  // everything after it.
+  fileInSav = is.fileIn;
   is.fileIn = file;
 
   // All files have to begin with the -@ switch file type identifier.
@@ -294,7 +301,7 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
 LDone:
   if (szLine != rgchLine)
     DeallocateP(szLine);
-  is.fileIn = NULL;
+  is.fileIn = fileInSav;
   if (!fHaveFile && file != NULL)
     fclose(file);
   return fRet;
@@ -451,6 +458,7 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
   char szLine[cchSzLine], sz[cchSzMax], *pch, *sz1, *sz2, ch;
   int i, grf;
   flag fHaveFile, fRet = fFalse;
+  FILE *fileInSav;
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
@@ -458,6 +466,7 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
     if (file == NULL)
       goto LDone;
   }
+  fileInSav = is.fileIn;
   is.fileIn = file;
   do {
 
@@ -561,7 +570,7 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
   } while (!feof(file));
   fRet = fTrue;
 LDone:
-  is.fileIn = NULL;
+  is.fileIn = fileInSav;
   if (!fHaveFile)
     fclose(file);
   return fRet;
@@ -644,6 +653,7 @@ flag FProcessQuickFile(CONST char *szFile, FILE *file)
   char szLine[cchSzMax], sz[cchSzDef];
   int i;
   flag fHaveFile, fRet = fFalse;
+  FILE *fileInSav;
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
@@ -651,6 +661,7 @@ flag FProcessQuickFile(CONST char *szFile, FILE *file)
     if (file == NULL)
       goto LDone;
   }
+  fileInSav = is.fileIn;
   is.fileIn = file;
   do {
     fgets(szLine, cchSzMax, file);
@@ -702,7 +713,7 @@ flag FProcessQuickFile(CONST char *szFile, FILE *file)
 
   fRet = fTrue;
 LDone:
-  is.fileIn = NULL;
+  is.fileIn = fileInSav;
   if (!fHaveFile)
     fclose(file);
   return fRet;
@@ -793,6 +804,7 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
     ch, *pch, *pch2;
   int i, grf, cchSz = (us.szADB == NULL ? 0 : CchSz(us.szADB));
   flag fHaveFile, fDidOne = fFalse, fDidStart, fDidEnd, fDidLon, fRet = fFalse;
+  FILE *fileInSav;
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
@@ -800,6 +812,7 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
     if (file == NULL)
       goto LDone;
   }
+  fileInSav = is.fileIn;
   is.fileIn = file;
   do {
 #ifdef EXPRESS
@@ -959,7 +972,7 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
   fRet = fTrue;
 
 LDone:
-  is.fileIn = NULL;
+  is.fileIn = fileInSav;
   if (!fHaveFile)
     fclose(file);
   return fRet;
@@ -974,6 +987,7 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
   char szLine[cchSzLine], *pch, *pch2;
   int nState = -1, cch;
   flag fHaveFile, fRet = fFalse;
+  FILE *fileInSav;
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
@@ -981,6 +995,7 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
     if (file == NULL)
       goto LDone;
   }
+  fileInSav = is.fileIn;
   is.fileIn = file;
   loop {
 
@@ -1095,7 +1110,7 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
 
   fRet = fTrue;
 LDone:
-  is.fileIn = NULL;
+  is.fileIn = fileInSav;
   if (!fHaveFile)
     fclose(file);
   return fRet;
@@ -1110,6 +1125,7 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
   char szLine[cchSzLine], *pch;
   int nState = -1, hr, min, sec;
   flag fHaveFile, fRet = fFalse;
+  FILE *fileInSav;
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
@@ -1117,6 +1133,7 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
     if (file == NULL)
       goto LDone;
   }
+  fileInSav = is.fileIn;
   is.fileIn = file;
 
   loop {
@@ -1183,7 +1200,7 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
 
   fRet = fTrue;
 LDone:
-  is.fileIn = NULL;
+  is.fileIn = fileInSav;
   if (!fHaveFile)
     fclose(file);
   return fRet;

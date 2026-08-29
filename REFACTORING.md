@@ -4,7 +4,7 @@ This is the catalog of what makes Astrolog hard to evolve and what to do
 about it. The goal is a codebase someone could read without cringing:
 maintainable, flexible, modular — while every increment keeps the program
 byte-for-byte behaving as it does today, under the nets this project
-already trusts (the 3027-assertion suite, ASan, the settings round trip,
+already trusts (the 3031-assertion suite, ASan, the settings round trip,
 the four rc audits, and the Windows build as oracle).
 
 It is a **living document worked across many sessions**. The survey
@@ -190,6 +190,87 @@ surveys own the concrete plan.
 be designed once, against the ugliest ten switches, not the easiest.
 *(Amended by E2: the family is four parsers, four help printers, and
 the settings writer — nine parallel descriptions of one surface.)*
+
+#### The way off the switch hacks — T3's design, promoted 2026-08-29
+
+Promoted at the maintainer's direction: the fragility itself is the
+target, not its symptoms. The diagnosis in one line: **the switch
+surface is this program's only API** — menus, dialogs, settings files,
+macros, and AstroExpressions all compile down to switch strings — and
+that one surface is maintained as nine hand-written parallel
+descriptions, with side channels (`is.fileIn`) and packed encodings
+(`-Yu`'s suffix bit, `-v3`'s value-boolean) living only in folklore.
+Every bug increments 1-3 caught is this one disease presenting nine
+ways.
+
+**The destination: one switch registry.** A compiled-in table, one row
+per switch, that every consumer derives from:
+
+    typedef struct _switchdef {
+      CONST char *szName;   // "YQ" -- the name after the dash
+      word grf;             // persistent? file-context payload? which builds?
+      byte carg, cargMax;   // arity, min and max
+      byte rgpm[4];         // parse mode per argument (pmObject, pmLength...)
+      void *pv; int pt;     // target field and its type, or --
+      int (*pfn)();         // -- a handler, for the genuinely weird
+      CONST char *szHelp;   // the -H line
+    } SWITCHDEF;
+
+Everything the nine descriptions do becomes a derivation:
+
+1. **One parse driver** owns prefix handling (`=`/`_`/`:`/`-`), arity
+   checking, `NParseSz` by declared mode, range checks, the store, and
+   the argv advance. Roughly 80% of switches become pure rows; the
+   weird 20% keep a handler but lose all their boilerplate. A2's
+   arity/advance drift becomes impossible.
+2. **`FOutputSettings()` becomes a loop** over rows marked persistent,
+   formatting the current value through the same descriptor that parses
+   it. Save and load are inverses *by construction*; the round-trip
+   legs stop being able to fail for migrated rows. T4 dissolves.
+3. **`-H` help is printed from the rows** — `DisplaySwitches*()`
+   retired after a one-time diff against their old output.
+4. **The audits read the table** instead of regexing C source —
+   `defaults_audit` gains exact coverage, and a new audit becomes
+   possible: every dialog control maps to a row (rc_field_audit's
+   missing other half).
+5. **Packed encodings get declared.** A row whose state doesn't fit
+   "one field" carries an encode/decode pair — the `-Yu` suffix bit
+   and `-v3`'s value-boolean become named code instead of trivia that
+   bites once a year.
+
+**The channel dies with it.** The driver threads a parse context —
+`{FILE *fileIn; CONST char *szSource; int iLine;}` — through parsing,
+so `is.fileIn` disappears, payload switches declare themselves in
+their row, error messages finally say *file and line*, and a bad
+switch can skip-and-continue instead of silently truncating the rest
+of the file (A2's failure mode, gone for good).
+
+**Migration, each step shipping green under the nets built this week:**
+
+- **M1**: registry, driver, and parse context; migrate *one ugly
+  family* end to end to prove the row shape against the worst cases —
+  `-YJ` (multi-domain name parsing plus the `AdjustRulership` side
+  effect) and one ranged-row family (`-Yj`/`-YAm`). Includes the -H
+  diff harness. This is the design-heavy step.
+- **M2..Mn**: one switch letter-family per session, deleting each old
+  case as it migrates. After each: the suite, all three round-trip
+  legs, a `-H` diff, the defaults audit, and a Windows text-chart
+  diff.
+- **M-final**: the four parser shells reduce to dispatch loops; the
+  help printers are deleted; `FOutputSettings()` is a loop plus the
+  handful of genuinely bespoke sections.
+
+**Honest scale**: ~200 switches; M1 is the hard thinking; the family
+migrations are a session each, ~10-15 sessions total at that pace, and
+the surface stays fully functional at every intermediate commit. What
+does *not* change: the `.as` file format (existing files stay valid
+forever), the command line, and Windows parity — the same table
+compiles into both builds.
+
+What it ends, structurally rather than one bug at a time: missing
+save-twins, arity/advance drift, packed-bit asymmetries, channel
+clobbering, and silent file truncation — the five classes this week's
+increments each caught one instance of.
 
 ### T4 — Serialization is a hand-written mirror of the parser
 
@@ -417,11 +498,13 @@ with an in-band binary payload, multiplexed by global state. Every
 parser NULLs `is.fileIn` at its `LDone` unconditionally, so an `-i`
 include nested inside a file leaves the *outer* file's channel NULL;
 an atlas-load switch after the include point would fail. Latent — no
-incident, the bundled files never nest that way. *Direction:* save and
-restore the previous value around each parser (three-line fix), plus a
-regression test with a nested include followed by a payload switch.
-*Cost:* low, and it's the kind of quiet misdesign this document exists
-to catch before it draws blood.
+incident, the bundled files never nest that way.
+**Done 2026-08-29** (work log item 67): all six parsers save and
+restore the channel; the live repro showed the failure was worse than
+predicted — the abort propagated so far that command-line switches
+after the `-i` were skipped too. Regression group `nested-include`,
+falsified 3-of-4 failing with the bug reintroduced. The channel itself
+still dies properly under T3's parse context.
 
 **B4 — Chart info hides behind two-letter field macros.** `MM`, `DD`,
 `YY`, `TT`, `SS`, `ZZ`, `OO`, `AA` (extern.h:83-90) alias `ciCore`
@@ -784,20 +867,16 @@ each independently shippable:
 2. ~~**B5** — the full-coverage settings fixture~~ — **done
    2026-08-29**; caught five shared-core bugs including two buffer
    overflows. See B5 and work log item 66.
-3. **B3** — save/restore `is.fileIn` around nested includes, with its
-   regression test. Three-line bug fix, both builds.
-4. **D2** — collapse `ComputeInfluence()`'s rulership stanzas onto the
-   three-system family table. Small, sits on item 64's assertions.
-5. **C3** — name the clauses of `ComputeEphem()`'s skip predicate.
-   Readability with a diagnostic payoff.
-6. **A2** — the arity/advance helper pair in the switch parsers: the
-   first concrete step of T3, shrinks every case it touches.
-7. **E1** — normalize the drawing primitives to one block per target.
-   Mechanical; sets up the optional vtable.
-8. **D1/F1/F2** — the clone-pair merges, one pair a session, each
-   under the text-diff or pinned-capture net.
-9. **T3's table** — designed against the ugliest ten switches once
-   A2 has cleaned the ground; absorbs T4 when it lands.
+3. ~~**B3** — save/restore `is.fileIn` around nested includes~~ —
+   **done 2026-08-29** (work log item 67); the interim fix until T3's
+   parse context retires the channel entirely.
+4. **T3's switch registry** — promoted to next at the maintainer's
+   direction (2026-08-29): the fragility itself, not its symptoms. The
+   full design and migration plan are in T3 above; A2 is subsumed by
+   its M1 step. Nets are in place; begin with M1.
+5. **D2, C3, E1, D1/F1/F2** — the remaining quality increments, now
+   opportunistic: pick one up when a T3 migration session leaves room,
+   or between migration phases.
 
 Everything else in this file is documentation work (T1's field
 classification, T8's conventions doc, A4's lifecycle contract) that can
