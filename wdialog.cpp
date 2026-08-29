@@ -1918,6 +1918,11 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       for (i = 0; i < cObjSelRow; i++) {
         iobj = uranLo + i;
 #ifdef SWISS
+        // A slot pointed at a different body drops the old body's
+        // glyph, the way -Ye does, or the wheel goes on drawing Vulcan
+        // for a point everything else calls Chiron.
+        if (rgod[i].nTyp != rgnTyp0[i] || rgod[i].nObj != rgnObj0[i])
+          SetObjGlyphNoneCore(iobj);
         rgTypSwiss[iobj - custLo] = rgod[i].nTyp;
         rgObjSwiss[iobj - custLo] = rgod[i].nObj;
         rgPntSwiss[iobj - custLo] = rgod[i].nPnt;

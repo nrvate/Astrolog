@@ -767,12 +767,7 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     }
     FCloneSzCore(szName, (char **)&szObjDisp[i + custLo],
       szObjDisp[i + custLo] == szObjName[i + custLo]);
-#ifdef GRAPH
-    FCloneSzCore("t", (char **)&szDrawObject[i + custLo],
-      szDrawObject[i + custLo] == szDrawObjectDef[i + custLo]);
-    FCloneSzCore("", (char **)&szDrawObject2[i + custLo],
-      szDrawObject2[i + custLo] == szDrawObjectDef2[i + custLo]);
-#endif
+    SetObjGlyphNoneCore(i + custLo);
     k = pos + 1;
     do {
       ch2 = argv[0][k++];

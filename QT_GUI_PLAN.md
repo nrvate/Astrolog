@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2975
+   display and no `xdotool`, and exits non-zero on failure. **2979
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.

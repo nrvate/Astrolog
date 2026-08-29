@@ -2290,6 +2290,13 @@ typedef struct _ObjectDefine {
               // node, 16 true position, 32 topocentric. rgFlgSwiss[].
 } OBJDEF;
 
+// A slot's glyph, when it has none of its own and should be drawn as its
+// name instead. DrawObject() tests the first character for 'T' rather
+// than comparing the string, so this is a sentinel and not a drawing:
+// "turtle graphics that draw nothing". Written by -Ye and by
+// SetObjGlyphNoneCore() below, and read in xgeneral.cpp.
+#define szObjGlyphNone "t"
+
 typedef struct _ElementTable {
   int coSum;             // Total objects considered.
   int coHemi;            // Number that can be in hemispheres.

@@ -1614,6 +1614,83 @@ static void TestMidpointGlyphQt()
 }
 
 
+// Pointing a slot at a different body drops the old body's glyph.
+//
+// -Ye does this (astrolog.cpp, now via SetObjGlyphNoneCore) and the two
+// Object Selections dialogs did not -- szDrawObject was referenced zero
+// times in either of them. So Chiron assigned to a slot from the command
+// line drew its name, while the same assignment made through the dialog
+// kept the old body's glyph, on a point the position list, the sidebar
+// and the dialog itself all called Chiron. The same fault as the midpoint
+// glyph above, in the path nobody had looked at.
+//
+// Row 1 (Cupido) on purpose: nrvate.as redefines row 0 already, so that
+// slot's glyph is the sentinel before the test starts and there would be
+// nothing to observe. This one still holds its own glyph.
+static void TestObjSelGlyphQt()
+{
+  int iobj = uranLo + 1;
+  int nTypSav = rgTypSwiss[iobj - custLo];
+  int nObjSav = rgObjSwiss[iobj - custLo];
+  CONST char *szDispSav = szObjDisp[iobj];
+  flag fIgnoreSav = ignore[iobj];
+
+  Group("Object selection glyph");
+
+  Check(szDrawObject[iobj] == szDrawObjectDef[iobj],
+    "the slot starts out holding its own body's glyph");
+
+  DriveModalQt(ShowObjectSelDialogQt, [](QWidget *pw) {
+    QComboBox *pcb = NULL;
+    QPushButton *ppbOK = NULL;
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    if (rgcb.size() > 1)
+      pcb = rgcb[1];
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK")
+        ppbOK = p;
+    if (pcb != NULL)
+      pcb->setEditText("10199");
+    if (ppbOK != NULL)
+      ppbOK->click();
+    else
+      pw->close();
+  });
+
+  Check(rgObjSwiss[iobj - custLo] == 10199,
+    "the dialog put the new body in the slot (%d)",
+    rgObjSwiss[iobj - custLo]);
+  Check(szDrawObject[iobj] != szDrawObjectDef[iobj],
+    "and the slot stopped carrying its old body's glyph");
+  Check(szDrawObject[iobj][0] == 't' || szDrawObject[iobj][0] == 'T',
+    "leaving the draw-the-name sentinel instead (\"%s\")",
+    szDrawObject[iobj]);
+
+  // Put the slot back, freeing whatever the dialog cloned rather than
+  // cloning over it -- the exit-time "allocations not freed" count is a
+  // release-build feature and a leak here would show up in it.
+  if (szDrawObject[iobj] != szDrawObjectDef[iobj]) {
+    DeallocateP((char *)szDrawObject[iobj]);
+    szDrawObject[iobj] = szDrawObjectDef[iobj];
+  }
+  if (szDrawObject2[iobj] != szDrawObjectDef2[iobj]) {
+    DeallocateP((char *)szDrawObject2[iobj]);
+    szDrawObject2[iobj] = szDrawObjectDef2[iobj];
+  }
+  if (szObjDisp[iobj] != szDispSav) {
+    if (szObjDisp[iobj] != szObjName[iobj])
+      DeallocateP((char *)szObjDisp[iobj]);
+    szObjDisp[iobj] = szDispSav;
+  }
+  rgTypSwiss[iobj - custLo] = nTypSav;
+  rgObjSwiss[iobj - custLo] = nObjSav;
+  ignore[iobj] = fIgnoreSav;
+  AdjustRestrictions();
+  CastChart(1);
+  printf("  a slot given a new body stops drawing the old one\n");
+}
+
+
 // Lookup Names writes the number and the name into the body field, and
 // the parse reads that pair back.
 //
@@ -2820,6 +2897,7 @@ int NRunQtTestsQt()
   TestDialogArrowKeysQt();
   TestMidpointGlyphQt();
   TestObjSelLookupQt();
+  TestObjSelGlyphQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

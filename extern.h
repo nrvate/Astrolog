@@ -380,6 +380,7 @@ extern void UTF8ToLatinSz P((char *));
 extern void UTF8ToIBMSz P((char *));
 extern void ConvertSzFromUTF8 P((char *));
 extern CONST char *ConvertSzToLatin P((CONST char *, char *, int));
+extern void SetObjGlyphNoneCore P((int));
 extern flag FCloneSzCore P((CONST char *, char **, flag));
 extern char *SzClone P((char *));
 extern pbyte PAllocate P((long, CONST char *));

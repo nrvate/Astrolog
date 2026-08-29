@@ -3123,6 +3123,31 @@ CONST char *ConvertSzToLatin(CONST char *sz, char *szBuf, int cchBuf)
 // Copy a source string to a destination location, taking care of destination
 // buffer reallocation and frees when needed.
 
+// Drop a slot's glyph, so it draws its name instead.
+//
+// A custom slot pointed at a different body has no business keeping the
+// old body's glyph: the position list, the sidebar and the Object
+// Selections dialog all show the new name while the wheel still drew the
+// old picture. -Ye did this and the two Object Selections dialogs did
+// not, which is the whole of that bug -- szDrawObject is referenced zero
+// times in wdialog.cpp and qtdialog.cpp. One function both paths call now,
+// rather than three copies of two FCloneSzCore() calls with a magic "t".
+//
+// The third argument to FCloneSzCore() is "the pointer is still the shared
+// constant, do not free it", which is why each is compared against its own
+// Def[] entry rather than assumed.
+
+void SetObjGlyphNoneCore(int obj)
+{
+#ifdef GRAPH
+  FCloneSzCore(szObjGlyphNone, (char **)&szDrawObject[obj],
+    szDrawObject[obj] == szDrawObjectDef[obj]);
+  FCloneSzCore("", (char **)&szDrawObject2[obj],
+    szDrawObject2[obj] == szDrawObjectDef2[obj]);
+#endif
+}
+
+
 flag FCloneSzCore(CONST char *szSrc, char **pszDst, flag fDestConst)
 {
   char *szNew;
