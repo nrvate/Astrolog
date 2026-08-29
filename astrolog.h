@@ -1540,6 +1540,15 @@ typedef byte * pbyte;
 typedef int KI;
 typedef unsigned long KV;
 
+// Where a switch line came from. Passed down by the file parsers so
+// payload switches (-YY and family) read from the file being parsed
+// instead of through a global channel; NULL when parsing the command
+// line, a macro, or a GUI dialog's switch string.
+typedef struct _ParseContext {
+  FILE *fileIn;         // The switch file being read.
+  CONST char *szSource; // Its name, for diagnostics.
+} PARSECTX;
+
 typedef struct _StrLook {
   char *sz;  // The string in the table
   int isz;   // Number the string maps to
@@ -2050,7 +2059,6 @@ typedef struct _InternalSettings {
   ExoData *rgexod;     // List of exoplanet transit stars loaded from file.
   char **rgszMacro;    // List of command switch macro strings.
   ES *rgesSort;        // List of sorted extra stars or extra asteroids.
-  FILE *fileIn;        // The switch file currently being read from.
   FILE *S;             // File to write text to.
   real T;              // Julian time for chart.
   real MC;             // Midheaven at chart time.

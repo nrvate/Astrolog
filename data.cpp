@@ -157,7 +157,7 @@ IS is = {
   NULL, {0,0,0,0,0,0,0,0,0}, NULL, NULL, NULL,
   0, cObj, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, 0, 0, 0,
   0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0,
-  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, rAxis, 0.0, rInvalid, 0.0};
 
 CI ciCore = {11, 19, 1971, HM(11, 1),     0.0, 8.0, DEFAULT_LOC, NULL, NULL};

@@ -3013,14 +3013,12 @@ static void TestRulershipTablesQt()
 
 
 // A switch file can include another with -i, and switches like -YY read
-// an in-band payload from the file being parsed through is.fileIn. The
-// parsers used to clear that channel on exit instead of restoring it, so
-// an include nested inside a file left the OUTER file's channel NULL:
-// its next payload switch failed "Switch only allowed in file context"
-// and everything after it was skipped -- including, from the command
-// line, any switches after the -i itself. Regression: an outer file
-// with an include, then an atlas payload, then one more switch, must
-// load to the end with all three applied.
+// an in-band payload from the file being parsed -- through the global
+// is.fileIn once (whose clear-on-exit bug this test caught), and now
+// through the PARSECTX each file parser passes down its own stack.
+// Regression either way: an outer file with an include, then an atlas
+// payload, then one more switch, must load to the end with all three
+// applied, and load again the same way.
 static void TestNestedIncludeQt()
 {
   char szInner[cchSzMax], szOuter[cchSzMax];
@@ -3049,7 +3047,8 @@ static void TestNestedIncludeQt()
     "the payload switch after the include read its payload");
   Check(us.nScrollRow == 47,
     "a switch after the payload still applied (got %d)", us.nScrollRow);
-  Check(is.fileIn == NULL, "the payload channel is clear at top level");
+  Check(FProcessSwitchFile(szOuter, NULL),
+    "and the same file loads a second time cleanly");
 
   // The payload replaced the atlas with one synthetic city; hand the
   // real one back to FEnsureAtlas()'s lazy load.

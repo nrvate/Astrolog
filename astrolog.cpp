@@ -389,7 +389,7 @@ flag FProcessCommandLine(CONST char *szLine)
   if (!fT)
     CopyRgb((byte *)szLine, (byte *)szCommandLine, cb);
   argc = NParseCommandLine(szCommandLine, rgsz);
-  fT = FProcessSwitches(argc, rgsz);
+  fT = FProcessSwitches(argc, rgsz, NULL);
   if (!fT) {
     sprintf(szCommandLine, "Failed to parse command line: %s", szLine);
     PrintWarning(szCommandLine);
@@ -736,178 +736,6 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     darg++;
     break;
 
-#ifdef SWISS
-  case 'e':
-    if (FErrorArgc("Ye", argc, 2))
-      return tcError;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("Ye", !FCust(i), i, 1))
-      return tcError;
-    i -= custLo;
-    j = (ch1 == 'b') + (ch1 == 'O')*2 + (ch1 == 'm')*3 + (ch1 == 'j')*4 +
-      (ch1 == 'A')*5;
-    if (j > 0)
-      ch1 = ch2;
-    k = (j == 2 ? NParseSz(argv[2], pmObject) : NFromSz(argv[2]));
-    if (FErrorValN("Ye", !FValidCustom(k, j), k, 2))
-      return tcError;
-    od.nTyp = j; od.nObj = k;
-    od.nPnt = (ch1 == 'n') + (ch1 == 's')*2 + (ch1 == 'p')*3 +
-      (ch1 == 'a')*4;
-    od.nFlg = 0;
-    l = pos + 1;
-    do {
-      ch2 = argv[0][l++];
-      od.nFlg |= (ch2 == 'H') + (ch2 == 'S')*2 + (ch2 == 'B')*4 +
-        (ch2 == 'N')*8 + (ch2 == 'T')*16 + (ch2 == 'V')*32;
-    } while (ch2);
-    // The store, and the glyph rule with it, are ObjDefSet()'s. One
-    // deliberate change from the old open-coded store: re-asserting a
-    // slot's existing definition no longer drops its glyph, since the
-    // slot still is that body.
-    ObjDefSet(i + custLo, &od);
-    if (j <= 1)
-      SwissGetObjName(szName, j <= 0 ? -k : k);
-    else if (j == 5)
-      sprintf(szName, "%s", FValidPart(k) ? ai[k-1].name : szObjUnknown);
-    else {
-      if (j == 3)
-        k = ObjMoons(k);
-      sprintf(szName, "%s", FItem(k) ? szObjName[k] : szObjUnknown);
-    }
-    k = od.nPnt;
-    if (k > 0) {
-      for (pch = szName; *pch; pch++)
-        ;
-      sprintf(szName + Min(3, pch-szName), "%s",
-        k == 1 ? "Nor" : (k == 2 ? "Sou" : (k == 3 ? "Per" : "Api")));
-    }
-    SetObjDisp(i + custLo, szName);
-    darg += 2;
-    break;
-#endif
-
-#ifdef MATRIX
-  case 'E':
-    if (FErrorArgc("YE", argc, 17))
-      return tcError;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("YE", !FHelio(i), i, 1))
-      return tcError;
-    oe.sma = RFromSz(argv[2]);
-    oe.ec0 = atof(argv[3]);  oe.ec1 = atof(argv[4]);  oe.ec2 = atof(argv[5]);
-    oe.in0 = atof(argv[6]);  oe.in1 = atof(argv[7]);  oe.in2 = atof(argv[8]);
-    oe.ap0 = atof(argv[9]);  oe.ap1 = atof(argv[10]); oe.ap2 = atof(argv[11]);
-    oe.an0 = atof(argv[12]); oe.an1 = atof(argv[13]); oe.an2 = atof(argv[14]);
-    oe.ma0 = atof(argv[15]); oe.ma1 = atof(argv[16]); oe.ma2 = atof(argv[17]);
-    rgoe[IoeFromObj(i)] = oe;
-    darg += 17;
-    break;
-#endif
-
-  case 'U':
-    if (ch1 == 'b') {
-      SwitchF(us.fStarMagDist);
-      if (ch2 == '0')
-        SwitchF(us.fStarMagAbs);
-      break;
-    } else if (ch1 == 'x') {
-      if (FErrorArgc("YUx", argc, 1))
-        return tcError;
-      FCloneSz(argv[1], &us.szExoList);
-      darg++;
-      break;
-    }
-    if (FErrorArgc("YU", argc, 2))
-      return tcError;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("YU", !FStar(i), i, 1))
-      return tcError;
-    FCloneSz(argv[2], &szStarCustom[i-oNorm]);
-    rStarBrightDef[0] = -1.0;                    // Recompute brightness
-    darg += 2;
-    break;
-
-#ifdef INTERPRET
-  case 'I':
-    if (FErrorArgc("YI", argc, 2))
-      return tcError;
-    i = NParseSz(argv[1],
-      ch1 == 'A' ? pmAspect : (ch1 == chNull ? pmObject : pmSign));
-    j = ch1 == 'A' ? cAspect : (ch1 == chNull ? (int)cObj : (int)cSign);
-    if (FErrorValN("YI", !FBetween(i, (int)(ch1 != chNull), j), i, 1))
-      return tcError;
-    if (ch1 == 'A' && ch2 == '0')
-      ch1 = '0';
-    switch (ch1) {
-    case 'A':    FCloneSzCore(argv[2], (char **)&szInteract[i],
-      szInteract[i]  == szInteractDef[i]);  break;
-    case '0':    FCloneSzCore(argv[2], (char **)&szTherefore[i],
-      szTherefore[i] == szThereforeDef[i]); break;
-    case chNull: FCloneSzCore(argv[2], (char **)&szMindPart[i],
-      szMindPart[i]  == szMindPartDef[i]);  break;
-    case 'C':    FCloneSzCore(argv[2], (char **)&szLifeArea[i],
-      szLifeArea[i]  == szLifeAreaDef[i]);  break;
-    case 'v':    FCloneSzCore(argv[2], (char **)&szDesire[i],
-      szDesire[i]    == szDesireDef[i]);    break;
-    default:     FCloneSzCore(argv[2], (char **)&szDesc[i],
-      szDesc[i]      == szDescDef[i]);      break;
-    }
-    darg += 2;
-    break;
-#endif
-
-  case 'D':
-    if (FErrorArgc("YD", argc, 2))
-      return tcError;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("YD", !FItem(i), i, 1))
-      return tcError;
-    SetObjDisp(i, CchSz(argv[2]) >= 2 ? argv[2] : szObjName[i]);
-    darg += 2;
-    break;
-
-  case 'S':
-    if (FErrorArgc("YS", argc, 2))
-      return tcError;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("YS", !FNorm(i), i, 1))
-      return tcError;
-    r = RParseSz(argv[2], pmDist);
-    if (FErrorValR("YS", r < 0.0, r, 2))
-      return tcError;
-    rObjDiam[i] = r;
-    darg += 2;
-    break;
-
-  case 'F':
-    if (FErrorArgc("YF", argc, 8))
-      return tcError;
-    is.fHaveInfo = fTrue;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("YF", !FItem(i), i, 1))
-      return tcError;
-    r = Mod((real)(NFromSz(argv[2]) +
-      (NParseSz(argv[3], pmSign)-1)*30) + RFromSz(argv[4])/60.0);
-    planet[i] = r;
-    if (FCusp(i) && i != oAsc && i != oMC) {
-      chouse[i-(cuspLo-1)] = r;
-      if (i == oDes)
-        chouse[sAri] = Mod(chouse[sLib] + rDegHalf);
-      else if (i == oNad)
-        chouse[sCap] = Mod(chouse[sCan] + rDegHalf);
-    }
-    j = NFromSz(argv[5]);
-    r = (j < 0 ? -1.0 : 1.0)*((real)NAbs(j) + RFromSz(argv[6])/60.0);
-    planetalt[i] = Mod((r + rDegQuad) * 2.0) / 2.0 - rDegQuad;
-    ret[i] = RFromSz(argv[7]);
-    if (i <= oNorm)
-      SphToRec(RFromSz(argv[8]), planet[i], planetalt[i],
-        &space[i].x, &space[i].y, &space[i].z);
-    MM = -1;    // Assume a chart position file is being loaded.
-    darg += 8;
-    break;
-
 #ifdef GRAPH
   case 'X':
     return NProcessSwitchesRareX(argc, argv, pos+1, fOr, fAnd, fNot);
@@ -946,58 +774,6 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     i = 1 + (ch1 == '2') + (ch1 == '3')*2 + (ch1 == '4')*3;
     FEnumerateCIList(i);
     break;
-
-  case 'Y':
-    if (ch1 == 't') {
-      if (FErrorArgc("YYt", argc, 1))
-        return tcError;
-      if (!us.fGraphics)
-        PrintSzFormat(argv[1], fFalse);
-      darg++;
-      break;
-    } else if (ch1 == 'T') {
-      if (FErrorArgc("YYT", argc, 1))
-        return tcError;
-      PrintSzFormat(argv[1], fTrue);
-      darg++;
-      break;
-    }
-#ifdef INTRPRET
-    else if (ch1 == 'I') {
-      if (FErrorArgc("YYI", argc, 1))
-        return tcError;
-      FieldWord(argv[1]);
-      darg++;
-      break;
-    }
-#endif
-#ifdef ATLAS
-    i = ch1 - '0';
-    if (FErrorArgc("YY", argc, 1 + (i == 1 || i == 2)))
-      return tcError;
-    if (is.fileIn == NULL) {
-      PrintError("Switch only allowed in file context.");
-      return tcError;
-    }
-    ch2 = getc(is.fileIn);
-    if (ch2 >= ' ')
-      ungetc(ch2, is.fileIn);
-    if (i <= 0) {
-      if (!FLoadAtlas(is.fileIn, NFromSz(argv[1])))
-        return tcError;
-    } else if (i == 1) {
-      if (!FLoadZoneRules(is.fileIn, NFromSz(argv[1]), NFromSz(argv[2])))
-        return tcError;
-    } else if (i == 2) {
-      if (!FLoadZoneChanges(is.fileIn, NFromSz(argv[1]), NFromSz(argv[2])))
-        return tcError;
-    } else if (i >= 3) {
-      if (!FLoadZoneLinks(is.fileIn, NFromSz(argv[1])))
-        return tcError;
-    }
-    darg += 1 + (i == 1 || i == 2);
-    break;
-#endif
 
   default:
     ErrorSwitch(argv[0]);
@@ -1140,7 +916,8 @@ static int NProcessSwitchRanged(CONST SWITCHRANGED *psr, int argc,
 // rgrBonusInf[] and the slots past the houses in rHouseInf[] the same
 // way FOutputSettings() writes them.
 
-static int NSwYj0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYj0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("Yj", argc, 4))
     return tcError;
@@ -1151,7 +928,8 @@ static int NSwYj0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 4;
 }
 
-static int NSwYj7(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYj7(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("Yj", argc, 6))
     return tcError;
@@ -1199,25 +977,29 @@ static int NSwRulershipCore(int argc, char **argv, int *rgObj1,
   return 3;
 }
 
-static int NSwYJ(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYJ(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   return NSwRulershipCore(argc, argv, ruler1, ruler2, rules, rules2,
     fFalse);
 }
 
-static int NSwYJ7(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYJ7(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   return NSwRulershipCore(argc, argv, rgObjEso1, rgObjEso2, rgSignEso1,
     rgSignEso2, fTrue);
 }
 
-static int NSwYJ70(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYJ70(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   return NSwRulershipCore(argc, argv, rgObjHie1, rgObjHie2, rgSignHie1,
     rgSignHie2, fTrue);
 }
 
-static int NSwYJ0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYJ0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   int i, j;
 
@@ -1233,7 +1015,8 @@ static int NSwYJ0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 2;
 }
 
-static int NSwYAD(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYAD(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   int i;
 
@@ -1265,22 +1048,26 @@ static int NSwYRPair(int argc, char **argv, flag *pf1, flag *pf2)
   return 2;
 }
 
-static int NSwYR0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYR0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   return NSwYRPair(argc, argv, &us.fIgnoreSign, &us.fIgnoreDir);
 }
 
-static int NSwYR1(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYR1(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   return NSwYRPair(argc, argv, &us.fIgnoreDiralt, &us.fIgnoreDirlen);
 }
 
-static int NSwYR2(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYR2(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   return NSwYRPair(argc, argv, &us.fIgnoreAlt0, &us.fIgnoreDisequ);
 }
 
-static int NSwYRp(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRp(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YR", argc, 2))
     return tcError;
@@ -1289,7 +1076,8 @@ static int NSwYRp(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 2;
 }
 
-static int NSwYRZ(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRZ(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YR", argc, 4))
     return tcError;
@@ -1300,7 +1088,8 @@ static int NSwYRZ(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 4;
 }
 
-static int NSwYR7(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYR7(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YR", argc, 5))
     return tcError;
@@ -1314,7 +1103,8 @@ static int NSwYR7(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 5;
 }
 
-static int NSwYRd(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRd(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YRd", argc, 1))
     return tcError;
@@ -1322,19 +1112,22 @@ static int NSwYRd(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 1;
 }
 
-static int NSwYRh(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRh(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   SwitchF(us.fIgnoreAuto);
   return 0;
 }
 
-static int NSwYRo(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRo(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   InitRestrictions(fTrue);
   return 0;
 }
 
-static int NSwYRi(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRi(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   InitRestrictions(fFalse);
   AdjustRestrictions();
@@ -1342,7 +1135,8 @@ static int NSwYRi(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 0;
 }
 
-static int NSwYRU(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRU(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YRU", argc, 1))
     return tcError;
@@ -1351,7 +1145,8 @@ static int NSwYRU(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 1;
 }
 
-static int NSwYRU0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYRU0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YRU", argc, 1))
     return tcError;
@@ -1360,7 +1155,8 @@ static int NSwYRU0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 1;
 }
 
-static int NSwYkU(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYkU(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YkU", argc, 1))
     return tcError;
@@ -1368,7 +1164,8 @@ static int NSwYkU(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 1;
 }
 
-static int NSwYkE(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYkE(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   if (FErrorArgc("YkE", argc, 1))
     return tcError;
@@ -1376,7 +1173,8 @@ static int NSwYkE(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 1;
 }
 
-static int NSwYkC(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+static int NSwYkC(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   int k, l;
 
@@ -1391,31 +1189,394 @@ static int NSwYkC(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 4;
 }
 
+static int NSwYD(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YD", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YD", !FItem(i), i, 1))
+    return tcError;
+  SetObjDisp(i, CchSz(argv[2]) >= 2 ? argv[2] : szObjName[i]);
+  return 2;
+}
+
+static int NSwYS(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+  real r;
+
+  if (FErrorArgc("YS", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YS", !FNorm(i), i, 1))
+    return tcError;
+  r = RParseSz(argv[2], pmDist);
+  if (FErrorValR("YS", r < 0.0, r, 2))
+    return tcError;
+  rObjDiam[i] = r;
+  return 2;
+}
+
+static int NSwYU(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YU", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YU", !FStar(i), i, 1))
+    return tcError;
+  FCloneSz(argv[2], &szStarCustom[i-oNorm]);
+  rStarBrightDef[0] = -1.0;                    // Recompute brightness
+  return 2;
+}
+
+static int NSwYUb(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(us.fStarMagDist);
+  return 0;
+}
+
+static int NSwYUb0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(us.fStarMagDist);
+  SwitchF(us.fStarMagAbs);
+  return 0;
+}
+
+static int NSwYUx(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YUx", argc, 1))
+    return tcError;
+  FCloneSz(argv[1], &us.szExoList);
+  return 1;
+}
+
+static int NSwYF(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, j;
+  real r;
+
+  if (FErrorArgc("YF", argc, 8))
+    return tcError;
+  is.fHaveInfo = fTrue;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YF", !FItem(i), i, 1))
+    return tcError;
+  r = Mod((real)(NFromSz(argv[2]) +
+    (NParseSz(argv[3], pmSign)-1)*30) + RFromSz(argv[4])/60.0);
+  planet[i] = r;
+  if (FCusp(i) && i != oAsc && i != oMC) {
+    chouse[i-(cuspLo-1)] = r;
+    if (i == oDes)
+      chouse[sAri] = Mod(chouse[sLib] + rDegHalf);
+    else if (i == oNad)
+      chouse[sCap] = Mod(chouse[sCan] + rDegHalf);
+  }
+  j = NFromSz(argv[5]);
+  r = (j < 0 ? -1.0 : 1.0)*((real)NAbs(j) + RFromSz(argv[6])/60.0);
+  planetalt[i] = Mod((r + rDegQuad) * 2.0) / 2.0 - rDegQuad;
+  ret[i] = RFromSz(argv[7]);
+  if (i <= oNorm)
+    SphToRec(RFromSz(argv[8]), planet[i], planetalt[i],
+      &space[i].x, &space[i].y, &space[i].z);
+  MM = -1;    // Assume a chart position file is being loaded.
+  return 8;
+}
+
+#ifdef SWISS
+// -Ye is a prefix row: the type, point, and flag letters ride in the
+// switch spelling itself (-YemnHS...), scanned out of szSwitch just as
+// the retired case scanned argv[0].
+
+static int NSwYe(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  OBJDEF od;
+  char szName[cchSzDef], ch1, ch2, *pch;
+  int i, j, k, l;
+
+  if (FErrorArgc("Ye", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("Ye", !FCust(i), i, 1))
+    return tcError;
+  i -= custLo;
+  ch1 = szSwitch[2];
+  ch2 = ch1 == chNull ? chNull : szSwitch[3];
+  j = (ch1 == 'b') + (ch1 == 'O')*2 + (ch1 == 'm')*3 + (ch1 == 'j')*4 +
+    (ch1 == 'A')*5;
+  if (j > 0)
+    ch1 = ch2;
+  k = (j == 2 ? NParseSz(argv[2], pmObject) : NFromSz(argv[2]));
+  if (FErrorValN("Ye", !FValidCustom(k, j), k, 2))
+    return tcError;
+  od.nTyp = j; od.nObj = k;
+  od.nPnt = (ch1 == 'n') + (ch1 == 's')*2 + (ch1 == 'p')*3 +
+    (ch1 == 'a')*4;
+  od.nFlg = 0;
+  l = 2;
+  do {
+    ch2 = szSwitch[l++];
+    od.nFlg |= (ch2 == 'H') + (ch2 == 'S')*2 + (ch2 == 'B')*4 +
+      (ch2 == 'N')*8 + (ch2 == 'T')*16 + (ch2 == 'V')*32;
+  } while (ch2);
+  // The store, and the glyph rule with it, are ObjDefSet()'s. One
+  // deliberate change from the old open-coded store: re-asserting a
+  // slot's existing definition no longer drops its glyph, since the
+  // slot still is that body.
+  ObjDefSet(i + custLo, &od);
+  if (j <= 1)
+    SwissGetObjName(szName, j <= 0 ? -k : k);
+  else if (j == 5)
+    sprintf(szName, "%s", FValidPart(k) ? ai[k-1].name : szObjUnknown);
+  else {
+    if (j == 3)
+      k = ObjMoons(k);
+    sprintf(szName, "%s", FItem(k) ? szObjName[k] : szObjUnknown);
+  }
+  k = od.nPnt;
+  if (k > 0) {
+    for (pch = szName; *pch; pch++)
+      ;
+    sprintf(szName + Min(3, pch-szName), "%s",
+      k == 1 ? "Nor" : (k == 2 ? "Sou" : (k == 3 ? "Per" : "Api")));
+  }
+  SetObjDisp(i + custLo, szName);
+  return 2;
+}
+#endif
+
+#ifdef MATRIX
+static int NSwYE(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  OE oe;
+  int i;
+
+  if (FErrorArgc("YE", argc, 17))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YE", !FHelio(i), i, 1))
+    return tcError;
+  oe.sma = RFromSz(argv[2]);
+  oe.ec0 = atof(argv[3]);  oe.ec1 = atof(argv[4]);  oe.ec2 = atof(argv[5]);
+  oe.in0 = atof(argv[6]);  oe.in1 = atof(argv[7]);  oe.in2 = atof(argv[8]);
+  oe.ap0 = atof(argv[9]);  oe.ap1 = atof(argv[10]); oe.ap2 = atof(argv[11]);
+  oe.an0 = atof(argv[12]); oe.an1 = atof(argv[13]); oe.an2 = atof(argv[14]);
+  oe.ma0 = atof(argv[15]); oe.ma1 = atof(argv[16]); oe.ma2 = atof(argv[17]);
+  rgoe[IoeFromObj(i)] = oe;
+  return 17;
+}
+#endif
+
+#ifdef INTERPRET
+// The six -YI spellings differ only in which phrase table and index
+// domain they address.
+
+static int NSwYIStore(int argc, char **argv, int pm, int iMin, int iMax,
+  CONST char **rgsz, CONST char **rgszDef)
+{
+  int i;
+
+  if (FErrorArgc("YI", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pm);
+  if (FErrorValN("YI", !FBetween(i, iMin, iMax), i, 1))
+    return tcError;
+  FCloneSzCore(argv[2], (char **)&rgsz[i], rgsz[i] == rgszDef[i]);
+  return 2;
+}
+
+static int NSwYI(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYIStore(argc, argv, pmObject, 0, cObj,
+    szMindPart, szMindPartDef);
+}
+
+static int NSwYIa(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYIStore(argc, argv, pmSign, 1, cSign, szDesc, szDescDef);
+}
+
+static int NSwYIv(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYIStore(argc, argv, pmSign, 1, cSign, szDesire, szDesireDef);
+}
+
+static int NSwYIC(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYIStore(argc, argv, pmSign, 1, cSign,
+    szLifeArea, szLifeAreaDef);
+}
+
+static int NSwYIA(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYIStore(argc, argv, pmAspect, 1, cAspect,
+    szInteract, szInteractDef);
+}
+
+static int NSwYIA0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYIStore(argc, argv, pmAspect, 1, cAspect,
+    szTherefore, szThereforeDef);
+}
+#endif
+
+static int NSwYYt(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YYt", argc, 1))
+    return tcError;
+  if (!us.fGraphics)
+    PrintSzFormat(argv[1], fFalse);
+  return 1;
+}
+
+static int NSwYYT(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YYT", argc, 1))
+    return tcError;
+  PrintSzFormat(argv[1], fTrue);
+  return 1;
+}
+
+#ifdef ATLAS
+// The -YY payload family reads the rest of the switch file being
+// parsed, through the parse context the file parser passes down --
+// which is why these only work in file context.
+
+static int NSwYYLoad(int argc, char **argv, PARSECTX *pctx, int nTyp)
+{
+  char ch;
+
+  if (FErrorArgc("YY", argc, 1 + (nTyp == 1 || nTyp == 2)))
+    return tcError;
+  if (pctx == NULL || pctx->fileIn == NULL) {
+    PrintError("Switch only allowed in file context.");
+    return tcError;
+  }
+  ch = getc(pctx->fileIn);
+  if (ch >= ' ')
+    ungetc(ch, pctx->fileIn);
+  if (nTyp <= 0) {
+    if (!FLoadAtlas(pctx->fileIn, NFromSz(argv[1])))
+      return tcError;
+  } else if (nTyp == 1) {
+    if (!FLoadZoneRules(pctx->fileIn, NFromSz(argv[1]), NFromSz(argv[2])))
+      return tcError;
+  } else if (nTyp == 2) {
+    if (!FLoadZoneChanges(pctx->fileIn, NFromSz(argv[1]),
+      NFromSz(argv[2])))
+      return tcError;
+  } else {
+    if (!FLoadZoneLinks(pctx->fileIn, NFromSz(argv[1])))
+      return tcError;
+  }
+  return 1 + (nTyp == 1 || nTyp == 2);
+}
+
+static int NSwYY(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYYLoad(argc, argv, pctx, 0);
+}
+
+static int NSwYY1(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYYLoad(argc, argv, pctx, 1);
+}
+
+static int NSwYY2(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYYLoad(argc, argv, pctx, 2);
+}
+
+static int NSwYY3(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYYLoad(argc, argv, pctx, 3);
+}
+#endif
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
 
 typedef struct _switchdef {
   CONST char *szName;
-  int (*pfn)(int argc, char **argv, flag fOr, flag fAnd, flag fNot);
+  flag fPrefix;   // Match szName as a prefix; the handler parses the
+                  // rest of the spelling itself (-Ye's suffix soup).
+  int (*pfn)(CONST char *szSwitch, int argc, char **argv, flag fOr,
+    flag fAnd, flag fNot, PARSECTX *pctx);
 } SWITCHDEF;
 
 static CONST SWITCHDEF rgswitchdef[] = {
-  {"Yj0",  NSwYj0},  {"Yj7",  NSwYj7},  {"YAD", NSwYAD},
-  {"YJ",   NSwYJ},   {"YJ0",  NSwYJ0},  {"YJ7", NSwYJ7},
-  {"YJ70", NSwYJ70},
-  {"YR0",  NSwYR0},  {"YR1",  NSwYR1},  {"YR2", NSwYR2},
-  {"YRp",  NSwYRp},  {"YRZ",  NSwYRZ},  {"YR7", NSwYR7},
-  {"YRd",  NSwYRd},  {"YRh",  NSwYRh},  {"YRo", NSwYRo},
-  {"YRi",  NSwYRi},  {"YRU",  NSwYRU},  {"YRU0", NSwYRU0},
-  {"YkU",  NSwYkU},  {"YkE",  NSwYkE},  {"YkC", NSwYkC}};
+  {"Yj0",  fFalse, NSwYj0},  {"Yj7",  fFalse, NSwYj7},
+  {"YAD",  fFalse, NSwYAD},  {"YJ",   fFalse, NSwYJ},
+  {"YJ0",  fFalse, NSwYJ0},  {"YJ7",  fFalse, NSwYJ7},
+  {"YJ70", fFalse, NSwYJ70},
+  {"YR0",  fFalse, NSwYR0},  {"YR1",  fFalse, NSwYR1},
+  {"YR2",  fFalse, NSwYR2},  {"YRp",  fFalse, NSwYRp},
+  {"YRZ",  fFalse, NSwYRZ},  {"YR7",  fFalse, NSwYR7},
+  {"YRd",  fFalse, NSwYRd},  {"YRh",  fFalse, NSwYRh},
+  {"YRo",  fFalse, NSwYRo},  {"YRi",  fFalse, NSwYRi},
+  {"YRU",  fFalse, NSwYRU},  {"YRU0", fFalse, NSwYRU0},
+  {"YkU",  fFalse, NSwYkU},  {"YkE",  fFalse, NSwYkE},
+  {"YkC",  fFalse, NSwYkC},
+  {"YD",   fFalse, NSwYD},   {"YS",   fFalse, NSwYS},
+  {"YU",   fFalse, NSwYU},   {"YUb",  fFalse, NSwYUb},
+  {"YUb0", fFalse, NSwYUb0}, {"YUx",  fFalse, NSwYUx},
+  {"YF",   fFalse, NSwYF},
+#ifdef SWISS
+  {"Ye",   fTrue,  NSwYe},
+#endif
+#ifdef MATRIX
+  {"YE",   fFalse, NSwYE},
+#endif
+#ifdef INTERPRET
+  {"YI",   fFalse, NSwYI},   {"YIa",  fFalse, NSwYIa},
+  {"YIv",  fFalse, NSwYIv},  {"YIC",  fFalse, NSwYIC},
+  {"YIA",  fFalse, NSwYIA},  {"YIA0", fFalse, NSwYIA0},
+#endif
+  {"YYt",  fFalse, NSwYYt},  {"YYT",  fFalse, NSwYYT},
+#ifdef ATLAS
+  {"YY",   fFalse, NSwYY},   {"YY1",  fFalse, NSwYY1},
+  {"YY2",  fFalse, NSwYY2},  {"YY3",  fFalse, NSwYY3},
+#endif
+  };
 
 // Look up a switch by its full spelling and run it. Returns the count of
 // extra arguments consumed, tcError on a bad invocation, or
 // nSwitchAbsent when the name isn't in the registry yet.
 
+static flag FSwitchPrefix(CONST char *szName, CONST char *szPrefix)
+{
+  while (*szPrefix && *szName == *szPrefix)
+    szName++, szPrefix++;
+  return *szPrefix == chNull;
+}
+
 static int NProcessSwitchTable(CONST char *szName, int argc, char **argv,
-  flag fOr, flag fAnd, flag fNot)
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
   CONST SWITCHRANGED *psr;
   CONST SWITCHDEF *psd;
@@ -1426,8 +1587,9 @@ static int NProcessSwitchTable(CONST char *szName, int argc, char **argv,
       return NProcessSwitchRanged(psr, argc, argv);
   for (psd = rgswitchdef;
     psd < rgswitchdef + sizeof(rgswitchdef)/sizeof(*rgswitchdef); psd++)
-    if (FEqSz(szName, psd->szName))
-      return psd->pfn(argc, argv, fOr, fAnd, fNot);
+    if (psd->fPrefix ? FSwitchPrefix(szName, psd->szName) :
+      FEqSz(szName, psd->szName))
+      return psd->pfn(szName, argc, argv, fOr, fAnd, fNot, pctx);
   return nSwitchAbsent;
 }
 
@@ -1472,7 +1634,7 @@ static int NProcessSwitchesNullW(int argc, char **argv, int pos)
 #endif
 
 
-flag FProcessSwitches(int argc, char **argv)
+flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
 {
   int ich, i, j, k;
   flag fNot, fOr, fAnd;
@@ -1498,7 +1660,8 @@ flag FProcessSwitches(int argc, char **argv)
     ch2 = (ch1 == chNull ? chNull : argv[0][ich+1]);
     // Registry-migrated switches resolve here by exact name; anything
     // else falls through to the cases below unchanged.
-    i = NProcessSwitchTable(&argv[0][ich-1], argc, argv, fOr, fAnd, fNot);
+    i = NProcessSwitchTable(&argv[0][ich-1], argc, argv, fOr, fAnd, fNot,
+      pctx);
     if (i != nSwitchAbsent) {
       if (i < 0)
         return fFalse;
@@ -3658,7 +3821,7 @@ LBegin:
     argv = rgsz;
   }
   is.szProgName = argv[0];
-  if (FProcessSwitches(argc, argv)) {
+  if (FProcessSwitches(argc, argv, NULL)) {
     if (!is.fNoSwitches && us.fLoopInit) {
       is.fNoSwitches = fTrue;
       goto LBegin;

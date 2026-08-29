@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-69
+## Work log — items 1-70
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2733,6 +2733,33 @@ are the more useful half to read before starting something new.
       append-after-rmdir bug, both binaries failing identically.
     - Same strictness note as item 68: accidental garbage-suffix
       aliases of these families (-YRx as -YR, -Ykx as -Yk) now error.
+
+70. **M3: the parse context arrives, and is.fileIn is gone.**
+    `FProcessSwitches()` takes a `PARSECTX *` (NULL from the command
+    line, macros, and dialogs; the file parser passes one holding its
+    own FILE* and name), so the -YY payload family reads the file being
+    parsed through an argument on the stack instead of a global -- the
+    channel whose clobbering item 67 patched is now structurally
+    impossible, and the `is.fileIn` field, its six set/restore dances,
+    and the B3 interim fix are all deleted. Registered this increment:
+    -YD, -YS, -YU/-YUb/-YUb0/-YUx, -YF, -YE, the six -YI spellings over
+    one phrase-table core, -YYt/-YYT, and -YY/-YY1/-YY2/-YY3 over one
+    payload core. -Ye is the registry's first *prefix row*: its type,
+    point, and flag letters ride in the switch spelling itself
+    (-YemnHS...), so the handler receives the spelling and scans it
+    exactly as the retired case scanned argv[0]. Eight more parser
+    cases deleted; the registry holds ~60 switches.
+    - Differential: 96 invocations, 1,891 captured lines,
+      byte-identical -- including -zL/-zN, which pull the atlas and
+      timezone payloads through the new context end to end.
+    - Two strictness divergences of the established class, recorded:
+      -YY with a garbage suffix acted as zone-links (-YYx, and -YYI,
+      whose intended branch has sat dead behind a misspelled `#ifdef
+      INTRPRET` upstream); -YI with an unknown suffix acted as -YIa.
+      Both now error as unknown switches. Theoretical third: a -YY
+      *payload* switch inside a macro string ran off the enclosing
+      file's channel through the old global; macros now have no file
+      context (text -YYt/-YYT are unaffected).
 
 ## Features this fork adds to both builds
 

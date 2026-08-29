@@ -3431,7 +3431,7 @@ void ShowCommandLineDialogQt()
   // or gi.nMode and the Chart menu stay where the menus last put them.
   QVector<flag> rgfMode(CChartModeQt());
   SnapChartModeQt(rgfMode.data());
-  if (argc <= 0 || !FProcessSwitches(argc, rgsz))
+  if (argc <= 0 || !FProcessSwitches(argc, rgsz, NULL))
     QMessageBox::warning(gi.qwind, szAppName,
       "One or more switches were not understood.");
   ciMain = ciCore;

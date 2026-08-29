@@ -536,7 +536,7 @@ void CommandLineX()
   argc = NPromptSwitches(szCommandLine, rgsz);
   is.cchRow = 0;
   is.fSzInteract = fTrue;
-  if (!FProcessSwitches(argc, rgsz))
+  if (!FProcessSwitches(argc, rgsz, NULL))
     fPause = fTrue;
   else {
     is.fMult = fFalse;
