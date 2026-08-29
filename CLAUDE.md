@@ -25,6 +25,9 @@ Work happens on branch **`qt`**.
   headless-automation traps specific to doing that.
 - **`QT_MENU_MAPPING.md`** — the Windows menu structure extracted from
   `astrolog.rc`, with command IDs.
+- **`REFACTORING.md`** — the standing architectural review: what makes
+  the codebase hard to evolve, with evidence, and the survey ledger that
+  says which area to review next. Read it before any refactoring work.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the
