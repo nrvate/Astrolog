@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-70
+## Work log — items 1-71
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2760,6 +2760,29 @@ are the more useful half to read before starting something new.
       *payload* switch inside a macro string ran off the enclosing
       file's channel through the old global; macros now have no file
       context (text -YYt/-YYT are unaffected).
+
+71. **M4: NProcessSwitchesRare() is deleted.** The rare parser's last
+    ~30 cases moved to the registry and the function, its case in
+    FProcessSwitches(), and its extern are gone. A fourth row shape
+    arrived for the ~20 pure toggles -- `{"Yd", &us.fEuroDate}` flag
+    rows, with the =/_/-/: prefix semantics applied by the dispatch --
+    plus a dozen small handlers carrying their quirks intact (`_Yz0`
+    restoring automatic Delta-T with no argument, -Y1/-Y10's `!fAnd`,
+    -Ys's optional peeked offset, the -Yu fixed-point semantics), four
+    more prefix rows for the digit-suffix families (-Ya, -Yq, -Yi,
+    -Y5), and a -YX prefix bridge that forwards to the graphics rare
+    parser until that family migrates. Differential: 156 invocations,
+    3,236 captured lines, byte-identical against the pre-M4 binary.
+    - **The suite failure that verification hit was a pre-existing
+      flake, not M4** -- proven by the same minimal group combination
+      (menu-actions, chart-list, midpoint-glyph) failing on the pre-M4
+      build too. TestChartListFilterQt() leaves ciCore on a synthetic
+      chart whose date is fixed but whose *time* is "now", so the
+      midpoint-glyph render drifted with the clock, and at the double
+      scale menu-actions leaves behind, the forced slot's label sat on
+      or off the canvas depending on the minute. The test now pins
+      ciCore (to ciTwin's fixed data) beside its existing us/gs pin --
+      item 4's pin-the-time lesson, applied where it was missed.
 
 ## Features this fork adds to both builds
 

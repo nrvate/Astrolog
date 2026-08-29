@@ -477,312 +477,6 @@ int NPromptSwitches(char *line, char *argv[MAXSWITCHES])
 #endif
 
 
-// This subprocedure is like FProcessSwitches() below, except that it only
-// processes one switch, namely one of the obscure -Y types.
-
-int NProcessSwitchesRare(int argc, char **argv, int pos,
-  flag fOr, flag fAnd, flag fNot)
-{
-  int darg = 0, i, j, k, l;
-  real r;
-  char ch1, ch2 = chNull;
-#ifdef SWISS
-  OBJDEF od;
-#endif
-  real *lpr;
-#ifdef MATRIX
-  OE oe;
-#endif
-#ifdef SWISS
-  char szName[cchSzDef], *pch;
-#endif
-
-  ch1 = argv[0][pos+1];
-  if (ch1 != chNull)
-    ch2 = argv[0][pos+2];
-
-  switch (argv[0][pos]) {
-  case chNull:
-    SwitchF(us.fSwitchRare);
-    break;
-
-  case 'T':
-    SwitchF(us.fTruePos);
-    break;
-
-  case 'V':
-    SwitchF(us.fTopoPos);
-    break;
-
-  case 'f':
-    SwitchF(us.fRefract);
-    break;
-
-  case 'h':
-    SwitchF(us.fBarycenter);
-    break;
-
-  case 'm':
-    SwitchF(us.fMoonMove);
-    break;
-
-  case 's':
-    if (argc > 1 && (r = RParseSz(argv[1], pmOffset)) != rLarge) {
-      if (FErrorValR("Ys", !FValidOffset(r), r, 0))
-        return fFalse;
-      us.rZodiacOffsetAll = r;
-      darg++;
-    }
-    SwitchF(us.fSidereal2);
-    break;
-
-  case 'n':
-    if (ch1 == '0')
-      SwitchF(us.fNoNutation);
-    else if (ch1 == 'n')
-      SwitchF(us.fNaturalNode);
-    else
-      SwitchF(us.fTrueNode);
-    break;
-
-  case 'u':
-    if (ch1 == '0')
-      SwitchF(us.fEclipseAny);
-    else if (fOr || fAnd)
-      // Settings files pack fEclipseAny into the "0" suffix, so an
-      // explicit "=Yu" or "_Yu" means it is off; only a bare toggling
-      // -Yu leaves it alone. Without this, "_Yu" saved when both flags
-      // are off reloads with fEclipseAny stale and the next save writes
-      // "_Yu0" -- the file never reaches a fixed point.
-      us.fEclipseAny = fFalse;
-    SwitchF(us.fEclipse);
-    break;
-
-  case 'd':
-    SwitchF(us.fEuroDate);
-    break;
-
-  case 't':
-    SwitchF(us.fEuroTime);
-    break;
-
-  case 'v':
-    SwitchF(us.fEuroDist);
-    break;
-
-  case 'r':
-    SwitchF(us.fRound);
-    break;
-
-  case 'w':
-    if (FErrorArgc("Yw", argc, 1))
-      return tcError;
-    r = RFromSz(argv[1]);
-    if (FErrorValR("Yw", r < 0.0, r, 0))
-      return tcError;
-    us.rStation = r;
-    darg++;
-    break;
-
-  case 'C':
-    SwitchF(us.fSmartCusp);
-    break;
-
-  case 'O':
-    SwitchF(us.fSmartSave);
-    break;
-
-  case '8':
-    SwitchF(us.fClip80);
-    break;
-
-  case 'a':
-    if (ch1 == 'o') {
-      i = (ch2 - '0');
-      if (!FBetween(i, 0, 3))
-        i = 0;
-      us.nCharsetOut = i;
-    } else {
-      i = (ch1 - '0');
-      if (!FBetween(i, 0, 3))
-        i = 0;
-      us.nCharset = i;
-    }
-    break;
-
-  case 'Q':
-    if (FErrorArgc("YQ", argc, 1))
-      return tcError;
-    i = NFromSz(argv[1]);
-    if (FErrorValN("YQ", i < 0, i, 0))
-      return tcError;
-    us.nScrollRow = i;
-    darg++;
-    break;
-
-  case 'q':
-    i = (ch1 - '0');
-    if (!FBetween(i, 0, 9))
-      i = 0;
-    if (FErrorArgc("Yq", argc, i))
-      return tcError;
-    us.cSequenceLine = i;
-    for (i = 0; i < us.cSequenceLine; i++)
-      FCloneSz(argv[i+1], &is.rgszLine[i]);
-    darg += i;
-    break;
-
-  case 'i':
-    if (FErrorArgc("Yi", argc, 1))
-      return tcError;
-    i = (ch1 - '0');
-    if (!FBetween(i, 0, 9))
-      i = 0;
-    FCloneSz(argv[1], &us.rgszPath[i]);
-    is.fSwissPathSet = fFalse;
-    darg++;
-    break;
-
-  case 'o':
-    SwitchF(us.fWriteOld);
-    break;
-
-  case 'c':
-    SwitchF(us.fHouseAngle);
-    for (i = 0; i < 4; i++)
-      SetObjDisp(oAsc + i*3, us.fHouseAngle ? szObjName[objMax + i] :
-        szObjName[oAsc + i*3]);
-    break;
-
-  case 'p':
-    SwitchF(us.fPolarAsc);
-    break;
-
-  case 'z':
-    if (ch1 == '0' && fAnd) {
-      us.rDeltaT = rInvalid;
-      break;
-    } else if (ch1 == '1') {
-      SwitchF(us.fOffsetOnly);
-      break;
-    }
-    if (FErrorArgc("Yz", argc, 1))
-      return tcError;
-    if (ch1 == '0')
-      us.rDeltaT = RFromSz(argv[1]);
-    else if (ch1 == 'O')
-      us.rObjAddition = RFromSz(argv[1]);
-    else if (ch1 == 'C')
-      us.rCuspAddition = RFromSz(argv[1]);
-    else
-      us.lTimeAddition = NFromSz(argv[1]);
-    darg++;
-    break;
-
-  case '1':
-    if (FErrorArgc("Y1", argc, 2))
-      return tcError;
-    i = NParseSz(argv[1], pmObject);
-    if (FErrorValN("Y1", !FItem(i), i, 1))
-      return tcError;
-    j = NParseSz(argv[2], pmObject);
-    if (FErrorValN("Y1", !FItem(j), j, 2))
-      return tcError;
-    us.fObjRotWhole = (ch1 == '0' && !fAnd);
-    us.objRot1 = i;
-    us.objRot2 = j;
-    darg += 2;
-    break;
-
-  case 'Z':
-    if (FErrorArgc("YZ", argc, 1))
-      return tcError;
-    i = NFromSz(argv[1]);
-    if (FErrorValN("YZ", !FBetween(i, 0, 7), i, 0))
-      return tcError;
-    us.nHorizon = i;
-    darg++;
-    break;
-
-  case 'l':
-    if (FErrorArgc("Yl", argc, 1))
-      return tcError;
-    i = NFromSz(argv[1]);
-    if (FErrorValN("Yl", !FSector(i), i, 0))
-      return tcError;
-    SwitchF(pluszone[i]);
-    darg++;
-    break;
-
-#ifdef ARABIC
-  case 'P':
-    if (FErrorArgc("YP", argc, 1))
-      return tcError;
-    i = NFromSz(argv[1]);
-    if (FErrorValN("YP", !FBetween(i, -1, 1), i, 0))
-      return tcError;
-    us.nArabicNight = i;
-    darg++;
-    break;
-#endif
-
-  case 'b':
-    if (FErrorArgc("Yb", argc, 1))
-      return tcError;
-    i = NFromSz(argv[1]);
-    if (FErrorValN("Yb", !FValidBioday(i), i, 0))
-      return tcError;
-    us.nBioday = i;
-    darg++;
-    break;
-
-#ifdef GRAPH
-  case 'X':
-    return NProcessSwitchesRareX(argc, argv, pos+1, fOr, fAnd, fNot);
-#endif
-
-  case 'B':
-#ifndef WIN
-    putchar(chBell);
-#else
-    MessageBeep((UINT)-1);
-#endif
-    break;
-
-  case '0':
-    SwitchF(us.fNoDisplay);
-    break;
-
-  case '5':
-    if (ch1 == 'i') {
-      if (FErrorArgc("Y5i", argc, 1))
-        return tcError;
-      FCloneSz(argv[1], &us.szADB);
-      darg++;
-      break;
-    } else if (ch1 == 'I') {
-      if (FErrorArgc("Y5I", argc, 2))
-        return tcError;
-      i = NFromSz(argv[1]);
-      if (FErrorValN("Y5I", i < 0, i, 1))
-        return tcError;
-      us.iExpADB = i;
-      us.cExpADB = NFromSz(argv[2]);
-      darg += 2;
-      break;
-    }
-    i = 1 + (ch1 == '2') + (ch1 == '3')*2 + (ch1 == '4')*3;
-    FEnumerateCIList(i);
-    break;
-
-  default:
-    ErrorSwitch(argv[0]);
-    return tcError;
-  }
-  return darg;    // Return the value to be added to argc.
-}
-
-
 /*
 ******************************************************************************
 ** The Switch Registry.
@@ -802,6 +496,26 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
 // fail as any unknown switch.
 
 #define nSwitchAbsent (-2)      // Name not in the registry.
+
+// A flag switch: the =/_/-/: prefix semantics applied to one boolean.
+// The simplest and most numerous row shape.
+
+typedef struct _switchflag {
+  CONST char *szName;
+  flag *pf;
+} SWITCHFLAG;
+
+static CONST SWITCHFLAG rgswflag[] = {
+  {"Y",   &us.fSwitchRare},  {"YT",  &us.fTruePos},
+  {"YV",  &us.fTopoPos},     {"Yf",  &us.fRefract},
+  {"Yh",  &us.fBarycenter},  {"Ym",  &us.fMoonMove},
+  {"Yn",  &us.fTrueNode},    {"Yn0", &us.fNoNutation},
+  {"Ynn", &us.fNaturalNode}, {"Yd",  &us.fEuroDate},
+  {"Yt",  &us.fEuroTime},    {"Yv",  &us.fEuroDist},
+  {"Yr",  &us.fRound},       {"YC",  &us.fSmartCusp},
+  {"YO",  &us.fSmartSave},   {"Y8",  &us.fClip80},
+  {"Yo",  &us.fWriteOld},    {"Yp",  &us.fPolarAsc},
+  {"Y0",  &us.fNoDisplay},   {"Yz1", &us.fOffsetOnly}};
 
 // A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1
 // values into consecutive slots of a table -- the shape shared by the
@@ -1517,6 +1231,321 @@ static int NSwYY3(CONST char *szSwitch, int argc, char **argv,
 }
 #endif
 
+static int NSwYu(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  // Settings files pack fEclipseAny into the "0" suffix, so an explicit
+  // "=Yu" or "_Yu" means it is off; only a bare toggling -Yu leaves it
+  // alone (see the -Yu fixed-point fix, work log item 66).
+  if (fOr || fAnd)
+    us.fEclipseAny = fFalse;
+  SwitchF(us.fEclipse);
+  return 0;
+}
+
+static int NSwYu0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(us.fEclipseAny);
+  SwitchF(us.fEclipse);
+  return 0;
+}
+
+static int NSwYs(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real r;
+
+  if (argc > 1 && (r = RParseSz(argv[1], pmOffset)) != rLarge) {
+    if (FErrorValR("Ys", !FValidOffset(r), r, 0))
+      return 0;    // The retired case "continued" here, consuming nothing.
+    us.rZodiacOffsetAll = r;
+    SwitchF(us.fSidereal2);
+    return 1;
+  }
+  SwitchF(us.fSidereal2);
+  return 0;
+}
+
+static int NSwYc(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  SwitchF(us.fHouseAngle);
+  for (i = 0; i < 4; i++)
+    SetObjDisp(oAsc + i*3, us.fHouseAngle ? szObjName[objMax + i] :
+      szObjName[oAsc + i*3]);
+  return 0;
+}
+
+static int NSwYl(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Yl", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("Yl", !FSector(i), i, 0))
+    return tcError;
+  SwitchF(pluszone[i]);
+  return 1;
+}
+
+static int NSwY1Core(int argc, char **argv, flag fAnd, flag fZero)
+{
+  int i, j;
+
+  if (FErrorArgc("Y1", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("Y1", !FItem(i), i, 1))
+    return tcError;
+  j = NParseSz(argv[2], pmObject);
+  if (FErrorValN("Y1", !FItem(j), j, 2))
+    return tcError;
+  us.fObjRotWhole = fZero && !fAnd;
+  us.objRot1 = i;
+  us.objRot2 = j;
+  return 2;
+}
+
+static int NSwY1(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwY1Core(argc, argv, fAnd, fFalse);
+}
+
+static int NSwY10(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwY1Core(argc, argv, fAnd, fTrue);
+}
+
+static int NSwYz(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("Yz", argc, 1))
+    return tcError;
+  us.lTimeAddition = NFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYz0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (fAnd) {
+    us.rDeltaT = rInvalid;   // "_Yz0" alone restores automatic Delta-T.
+    return 0;
+  }
+  if (FErrorArgc("Yz", argc, 1))
+    return tcError;
+  us.rDeltaT = RFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYzO(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("Yz", argc, 1))
+    return tcError;
+  us.rObjAddition = RFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYzC(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("Yz", argc, 1))
+    return tcError;
+  us.rCuspAddition = RFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYQ(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YQ", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("YQ", i < 0, i, 0))
+    return tcError;
+  us.nScrollRow = i;
+  return 1;
+}
+
+static int NSwYw(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real r;
+
+  if (FErrorArgc("Yw", argc, 1))
+    return tcError;
+  r = RFromSz(argv[1]);
+  if (FErrorValR("Yw", r < 0.0, r, 0))
+    return tcError;
+  us.rStation = r;
+  return 1;
+}
+
+static int NSwYZ(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YZ", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("YZ", !FBetween(i, 0, 7), i, 0))
+    return tcError;
+  us.nHorizon = i;
+  return 1;
+}
+
+static int NSwYb(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Yb", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("Yb", !FValidBioday(i), i, 0))
+    return tcError;
+  us.nBioday = i;
+  return 1;
+}
+
+#ifdef ARABIC
+static int NSwYP(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YP", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("YP", !FBetween(i, -1, 1), i, 0))
+    return tcError;
+  us.nArabicNight = i;
+  return 1;
+}
+#endif
+
+static int NSwYB(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+#ifndef WIN
+  putchar(chBell);
+#else
+  MessageBeep((UINT)-1);
+#endif
+  return 0;
+}
+
+static int NSwY5i(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("Y5i", argc, 1))
+    return tcError;
+  FCloneSz(argv[1], &us.szADB);
+  return 1;
+}
+
+static int NSwY5I(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Y5I", argc, 2))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("Y5I", i < 0, i, 1))
+    return tcError;
+  us.iExpADB = i;
+  us.cExpADB = NFromSz(argv[2]);
+  return 2;
+}
+
+// The prefix rows below scan their parameters out of the spelling, at
+// the same offsets the retired cases read them from argv[0]: the
+// letter after the family name is szSwitch[2].
+
+static int NSwY5(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[2];
+
+  FEnumerateCIList(1 + (ch1 == '2') + (ch1 == '3')*2 + (ch1 == '4')*3);
+  return 0;
+}
+
+static int NSwYa(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[2];
+  int i;
+
+  if (ch1 == 'o') {
+    i = szSwitch[3] - '0';
+    if (!FBetween(i, 0, 3))
+      i = 0;
+    us.nCharsetOut = i;
+  } else {
+    i = ch1 - '0';
+    if (!FBetween(i, 0, 3))
+      i = 0;
+    us.nCharset = i;
+  }
+  return 0;
+}
+
+static int NSwYq(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  i = szSwitch[2] - '0';
+  if (!FBetween(i, 0, 9))
+    i = 0;
+  if (FErrorArgc("Yq", argc, i))
+    return tcError;
+  us.cSequenceLine = i;
+  for (i = 0; i < us.cSequenceLine; i++)
+    FCloneSz(argv[i+1], &is.rgszLine[i]);
+  return i;
+}
+
+static int NSwYi(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("Yi", argc, 1))
+    return tcError;
+  i = szSwitch[2] - '0';
+  if (!FBetween(i, 0, 9))
+    i = 0;
+  FCloneSz(argv[1], &us.rgszPath[i]);
+  is.fSwissPathSet = fFalse;
+  return 1;
+}
+
+#ifdef GRAPH
+// The -YX graphics switches still live in NProcessSwitchesRareX(); this
+// bridge forwards to it until that family migrates.
+
+static int NSwYX(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NProcessSwitchesRareX(argc, argv,
+    (int)(szSwitch - argv[0]) + 2, fOr, fAnd, fNot);
+}
+#endif
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
@@ -1562,6 +1591,25 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"YY",   fFalse, NSwYY},   {"YY1",  fFalse, NSwYY1},
   {"YY2",  fFalse, NSwYY2},  {"YY3",  fFalse, NSwYY3},
 #endif
+  {"Yu",   fFalse, NSwYu},   {"Yu0",  fFalse, NSwYu0},
+  {"Ys",   fFalse, NSwYs},   {"Yc",   fFalse, NSwYc},
+  {"Yl",   fFalse, NSwYl},   {"Y1",   fFalse, NSwY1},
+  {"Y10",  fFalse, NSwY10},  {"Yz",   fFalse, NSwYz},
+  {"Yz0",  fFalse, NSwYz0},  {"YzO",  fFalse, NSwYzO},
+  {"YzC",  fFalse, NSwYzC},  {"YQ",   fFalse, NSwYQ},
+  {"Yw",   fFalse, NSwYw},   {"YZ",   fFalse, NSwYZ},
+  {"Yb",   fFalse, NSwYb},
+#ifdef ARABIC
+  {"YP",   fFalse, NSwYP},
+#endif
+  {"YB",   fFalse, NSwYB},
+  {"Y5i",  fFalse, NSwY5i},  {"Y5I",  fFalse, NSwY5I},
+  // Prefix rows last, so exact spellings above always win.
+  {"Y5",   fTrue,  NSwY5},   {"Ya",   fTrue,  NSwYa},
+  {"Yq",   fTrue,  NSwYq},   {"Yi",   fTrue,  NSwYi},
+#ifdef GRAPH
+  {"YX",   fTrue,  NSwYX},
+#endif
   };
 
 // Look up a switch by its full spelling and run it. Returns the count of
@@ -1578,9 +1626,16 @@ static flag FSwitchPrefix(CONST char *szName, CONST char *szPrefix)
 static int NProcessSwitchTable(CONST char *szName, int argc, char **argv,
   flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
+  CONST SWITCHFLAG *psf;
   CONST SWITCHRANGED *psr;
   CONST SWITCHDEF *psd;
 
+  for (psf = rgswflag;
+    psf < rgswflag + sizeof(rgswflag)/sizeof(*rgswflag); psf++)
+    if (FEqSz(szName, psf->szName)) {
+      SwitchF(*psf->pf);
+      return 0;
+    }
   for (psr = rgswranged;
     psr < rgswranged + sizeof(rgswranged)/sizeof(*rgswranged); psr++)
     if (FEqSz(szName, psr->szName))
@@ -1732,13 +1787,6 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       } else if (j < is.cszMacro)
         FProcessCommandLine(is.rgszMacro[j]);
       argc -= 1+i; argv += 1+i;
-      break;
-
-    case 'Y':
-      i = NProcessSwitchesRare(argc, argv, ich, fOr, fAnd, fNot);
-      if (i < 0)
-        return fFalse;
-      argc -= i; argv += i;
       break;
 
     // Switches which determine the type of chart to display:

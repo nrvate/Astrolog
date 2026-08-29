@@ -1546,6 +1546,15 @@ static void TestMidpointGlyphQt()
   // pinned rather than guessed at one field per attempt.
   US usSav = us;
   GS gsSav = gs;
+  CI ciSav = ciCore;
+
+  // Pin the chart's moment too. TestChartListFilterQt() leaves ciCore on
+  // a synthetic entry whose date is fixed but whose time is "now", so
+  // the wheel drifted with the clock -- and at the double scale
+  // TestAllMenuActionsQt() leaves behind, the forced slot's label sat on
+  // or off the canvas depending on the minute. A time-flaky render test
+  // is item 4's lesson all over again: pin the time, then hash.
+  ciCore = ciTwin;
 
   ignore[obj] = fFalse;
   AdjustRestrictions();
@@ -1608,6 +1617,7 @@ static void TestMidpointGlyphQt()
   szObjDisp[obj] = szDispSav;
   us = usSav;
   gs = gsSav;
+  ciCore = ciSav;
   AdjustRestrictions();
   CastChart(1);
   printf("  a slot forced to a midpoint is labelled, not glyphed\n");
