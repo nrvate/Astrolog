@@ -2523,6 +2523,224 @@ static int NSwXnf(CONST char *szSwitch, int argc, char **argv,
 #endif // ISG
 #endif // GRAPH
 
+// The -R restriction family: category presets by suffix, then a
+// variadic object list. Quirks preserved exactly, including the stale
+// second letter: "-RTu0" reads its ch2 from the position "-Ru0" keeps
+// it at, so it acts as "-RTu" -- as it always has.
+
+static int NSwR(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1, ch2, *pch;
+  int argcIn = argc, i;
+  flag fT;
+
+  ch1 = szSwitch[1];
+  ch2 = szSwitch[2];
+  if (ch1 == 'A') {
+    if (ch2 == '0')
+      for (i = 1; i <= cAspect; i++)
+        ignorea[i] = fTrue;
+    else if (ch2 == '1')
+      for (i = 1; i <= cAspect; i++)
+        ignorea[i] = fFalse;
+    while (argc > 1 && (i = NParseSz(argv[1], pmAspect)))
+      if (FErrorValN("RA", !FAspect(i), i, 0))
+        return tcError;
+      else {
+        SwitchF(ignorea[i]);
+        argc--; argv++;
+      }
+    AdjustAspectCount();
+    return argcIn - argc;
+  }
+  if (ch1 == 'O') {
+    if (FErrorArgc("RO", argc, 1))
+      return tcError;
+    i = NParseSz(argv[1], pmObject);
+    if (FErrorValN("RO", !FBetween(i, -1, cObj), i, 0))
+      return tcError;
+    us.objRequire = i;
+    return 1;
+  }
+  fT = (ch1 == 'T');
+  if (fT) {
+    pch = (char *)ignore2;
+    ch1 = szSwitch[2];
+  } else
+    pch = (char *)ignore;
+  if (ch1 == '0')
+    for (i = 0; i <= cObj; i++)
+      pch[i] = fTrue;
+  else if (ch1 == '1')
+    for (i = 0; i <= cObj; i++)
+      pch[i] = fFalse;
+  else if (ch1 == '2')
+    for (i = 0; i <= cObj; i++)
+      pch[i] = ((char *)(pch == (char *)ignore2 ? ignore : ignore2))[i];
+  else if (ch1 == 'C')
+    for (i = cuspLo; i <= cuspHi; i++)
+      SwitchF(pch[i]);
+  else if (ch1 == 'u' && ch2 == '0')      // Must be before Uranian check
+    for (i = dwarfLo; i <= dwarfHi; i++)
+      SwitchF(pch[i]);
+  else if (ch1 == 'u')
+    for (i = uranLo; i <= uranHi; i++)
+      SwitchF(pch[i]);
+  else if (ch1 == '8')
+    for (i = moonsLo; i <= moonsHi; i++)
+      SwitchF(pch[i]);
+  else if (ch1 == 'b')
+    for (i = cobLo; i <= cobHi; i++)
+      SwitchF(pch[i]);
+  else if (ch1 == 'U')
+    for (i = starLo; i <= starHi; i++)
+      SwitchF(pch[i]);
+  else if (argc <= 1 || NParseSz(argv[1], pmObject) < 0)
+    for (i = oChi; i <= oEP; i++)
+      if (i != oNod)
+        SwitchF(pch[i]);
+  while (argc > 1 && (i = NParseSz(argv[1], pmObject)) >= 0)
+    if (FErrorValN("R", !FItem(i), i, 0))
+      return tcError;
+    else {
+      if (ch1 != 'C' && ch1 != 'u' && ch1 != 'U')
+        SwitchF(pch[i]);
+      else
+        inv(pch[i]);
+      argc--; argv++;
+    }
+  RedoRestrictions();
+  return argcIn - argc;
+}
+
+// -C, -u, -u0, -u8, -ub: toggle an object category's master flag and
+// sync its restriction range when the flag actually changed.
+
+static int NSwCategory(flag *pf, int ilo, int ihi,
+  flag fOr, flag fAnd, flag fNot)
+{
+  flag j;
+  int i;
+
+  j = *pf;
+  SwitchF(*pf);
+  if (j != *pf)
+    for (i = ilo; i <= ihi; i++)
+      ignore[i] = j;
+  AdjustRestrictions();
+  return 0;
+}
+
+static int NSwC(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwCategory(&us.fCusp, cuspLo, cuspHi, fOr, fAnd, fNot);
+}
+
+static int NSwu(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwCategory(&us.fUranian, uranLo, uranHi, fOr, fAnd, fNot);
+}
+
+static int NSwu0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwCategory(&us.fDwarf, dwarfLo, dwarfHi, fOr, fAnd, fNot);
+}
+
+static int NSwu8(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwCategory(&us.fMoons, moonsLo, moonsHi, fOr, fAnd, fNot);
+}
+
+static int NSwub(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwCategory(&us.fCOB, cobLo, cobHi, fOr, fAnd, fNot);
+}
+
+static int NSwU(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2;
+  flag j;
+  int i;
+
+  if (ch1 == 'x') {
+    ch2 = szSwitch[2];
+    SwitchF(us.fExoTransit);
+    if (ch2 == 'd' || ch2 == 'm' || ch2 == 'y' || ch2 == 'Y') {
+      us.fParallel = fTrue;
+      us.fInDayMonth = (ch2 != 'd');
+      us.fInDayYear = us.fInDayMonth && (ch2 == 'y' || ch2 == 'Y');
+      us.nEphemYears = (ch2 == 'Y' ? 5 : 1);
+    }
+    return 0;
+  }
+  j = us.fStar;
+  if (ch1 == 'i' || ch1 == 'z' || ch1 == 'l' || ch1 == 'n' ||
+    ch1 == 'b' || ch1 == 'd' || ch1 == 'v')
+    us.nStarSort = (ch1 != 'i' ? ch1 : 0);
+  SwitchF(us.fStar);
+  if (j != us.fStar)
+    for (i = starLo; i <= starHi; i++)
+      ignore[i] = j;
+  AdjustRestrictions();
+  return 0;
+}
+
+static int NSwA(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+  real rT;
+  int i, j;
+
+  if (ch1 == '3') {
+    SwitchF(us.fAspect3D);
+    return 0;
+  } else if (ch1 == 'p') {
+    SwitchF(us.fAspectLat);
+    return 0;
+  } else if (ch1 == 'P') {
+    SwitchF(us.fParallel2);
+    return 0;
+  } else if (ch1 != 'o' && ch1 != 'm' && ch1 != 'd' && ch1 != 'a') {
+    if (FErrorArgc("A", argc, 1))
+      return tcError;
+    i = NParseSz(argv[1], pmAspect);
+    if (FErrorValN("A", !FValidAspect(i), i, 0))
+      return tcError;
+    for (j = us.nAsp + 1; j <= i; j++)
+      ignorea[j] = fFalse;
+    for (j = i + 1; j <= cAspect; j++)
+      ignorea[j] = fTrue;
+    us.nAsp = i;
+    return 1;
+  }
+  if (FErrorArgc("A", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], ch1 == 'o' || ch1 == 'a' ? pmAspect : pmObject);
+  if (FErrorValN("A", i < (int)(ch1 == 'o' || ch1 == 'a') ||
+    i > (ch1 == 'o' || ch1 == 'a' ? cAspect : oNorm+1), i, 1))
+    return tcError;
+  rT = RParseSz(argv[2], 0);
+  if (FErrorValR("A", rT < -rDegMax || rT > rDegMax, rT, 2))
+    return tcError;
+  if (ch1 == 'o')
+    rAspOrb[i] = rT;
+  else if (ch1 == 'm')
+    rgobjset[i].orb = rT;
+  else if (ch1 == 'd')
+    rgobjset[i].add = rT;
+  else
+    rAspAngle[i] = rT;
+  return 2;
+}
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
@@ -2658,6 +2876,12 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"XL",   grfSwPrefix | grfSwGraphics, NSwXL},
 #endif
 #endif
+  {"C",    0,           NSwC},
+  {"u",    0,           NSwu},   {"u0",   0,           NSwu0},
+  {"u8",   0,           NSwu8},  {"ub",   0,           NSwub},
+  {"R",    grfSwPrefix, NSwR},
+  {"U",    grfSwPrefix, NSwU},
+  {"A",    grfSwPrefix, NSwA},
   };
 
 // Look up a switch by its full spelling and run it. Returns the count of
@@ -3706,184 +3930,6 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       break;
 
     // Switches which affect what information is used in a chart:
-
-    case 'R':
-      if (ch1 == 'A') {
-        if (ch2 == '0')
-          for (i = 1; i <= cAspect; i++)
-            ignorea[i] = fTrue;
-        else if (ch2 == '1')
-          for (i = 1; i <= cAspect; i++)
-            ignorea[i] = fFalse;
-        while (argc > 1 && (i = NParseSz(argv[1], pmAspect)))
-          if (FErrorValN("RA", !FAspect(i), i, 0))
-            return fFalse;
-          else {
-            SwitchF(ignorea[i]);
-            argc--; argv++;
-          }
-        AdjustAspectCount();
-        break;
-      }
-      if (ch1 == 'O') {
-        if (FErrorArgc("RO", argc, 1))
-          return fFalse;
-        i = NParseSz(argv[1], pmObject);
-        if (FErrorValN("RO", !FBetween(i, -1, cObj), i, 0))
-          return fFalse;
-        us.objRequire = i;
-        argc--; argv++;
-        break;
-      }
-      if (ch1 == 'T') {
-        pch = (char *)ignore2;
-        ch1 = argv[0][++ich];
-      } else
-        pch = (char *)ignore;
-      if (ch1 == '0')
-        for (i = 0; i <= cObj; i++)
-          pch[i] = fTrue;
-      else if (ch1 == '1')
-        for (i = 0; i <= cObj; i++)
-          pch[i] = fFalse;
-      else if (ch1 == '2')
-        for (i = 0; i <= cObj; i++)
-          pch[i] = ((char *)(pch == (char *)ignore2 ? ignore : ignore2))[i];
-      else if (ch1 == 'C')
-        for (i = cuspLo; i <= cuspHi; i++)
-          SwitchF(pch[i]);
-      else if (ch1 == 'u' && ch2 == '0')      // Must be before Uranian check
-        for (i = dwarfLo; i <= dwarfHi; i++)
-          SwitchF(pch[i]);
-      else if (ch1 == 'u')
-        for (i = uranLo; i <= uranHi; i++)
-          SwitchF(pch[i]);
-      else if (ch1 == '8')
-        for (i = moonsLo; i <= moonsHi; i++)
-          SwitchF(pch[i]);
-      else if (ch1 == 'b')
-        for (i = cobLo; i <= cobHi; i++)
-          SwitchF(pch[i]);
-      else if (ch1 == 'U')
-        for (i = starLo; i <= starHi; i++)
-          SwitchF(pch[i]);
-      else if (argc <= 1 || NParseSz(argv[1], pmObject) < 0)
-        for (i = oChi; i <= oEP; i++)
-          if (i != oNod)
-            SwitchF(pch[i]);
-      while (argc > 1 && (i = NParseSz(argv[1], pmObject)) >= 0)
-        if (FErrorValN("R", !FItem(i), i, 0))
-          return fFalse;
-        else {
-          if (ch1 != 'C' && ch1 != 'u' && ch1 != 'U')
-            SwitchF(pch[i]);
-          else
-            inv(pch[i]);
-          argc--; argv++;
-        }
-      RedoRestrictions();
-      break;
-
-    case 'C':
-      j = us.fCusp;
-      SwitchF(us.fCusp);
-      if (j != us.fCusp)
-        for (i = cuspLo; i <= cuspHi; i++)
-          ignore[i] = j;
-      AdjustRestrictions();
-      break;
-
-    case 'u':
-      if (ch1 == '0') {
-        j = us.fDwarf;
-        SwitchF(us.fDwarf);
-        if (j != us.fDwarf)
-          for (i = dwarfLo; i <= dwarfHi; i++)
-            ignore[i] = j;
-      } else if (ch1 == '8') {
-        j = us.fMoons;
-        SwitchF(us.fMoons);
-        if (j != us.fMoons)
-          for (i = moonsLo; i <= moonsHi; i++)
-            ignore[i] = j;
-      } else if (ch1 == 'b') {
-        j = us.fCOB;
-        SwitchF(us.fCOB);
-        if (j != us.fCOB)
-          for (i = cobLo; i <= cobHi; i++)
-            ignore[i] = j;
-      } else {
-        j = us.fUranian;
-        SwitchF(us.fUranian);
-        if (j != us.fUranian)
-          for (i = uranLo; i <= uranHi; i++)
-            ignore[i] = j;
-      }
-      AdjustRestrictions();
-      break;
-
-    case 'U':
-      if (ch1 == 'x') {
-        SwitchF(us.fExoTransit);
-        if (ch2 == 'd' || ch2 == 'm' || ch2 == 'y' || ch2 == 'Y') {
-          us.fParallel = fTrue;
-          us.fInDayMonth = (ch2 != 'd');
-          us.fInDayYear = us.fInDayMonth && (ch2 == 'y' || ch2 == 'Y');
-          us.nEphemYears = (ch2 == 'Y' ? 5 : 1);
-        }
-        break;
-      }
-      j = us.fStar;
-      if (ch1 == 'i' || ch1 == 'z' || ch1 == 'l' || ch1 == 'n' ||
-        ch1 == 'b' || ch1 == 'd' || ch1 == 'v')
-        us.nStarSort = (ch1 != 'i' ? ch1 : 0);
-      SwitchF(us.fStar);
-      if (j != us.fStar)
-        for (i = starLo; i <= starHi; i++)
-          ignore[i] = j;
-      AdjustRestrictions();
-      break;
-
-    case 'A':
-      if (ch1 == '3')
-        SwitchF(us.fAspect3D);
-      else if (ch1 == 'p')
-        SwitchF(us.fAspectLat);
-      else if (ch1 == 'P')
-        SwitchF(us.fParallel2);
-      else if (ch1 != 'o' && ch1 != 'm' && ch1 != 'd' && ch1 != 'a') {
-        if (FErrorArgc("A", argc, 1))
-          return fFalse;
-        i = NParseSz(argv[1], pmAspect);
-        if (FErrorValN("A", !FValidAspect(i), i, 0))
-          return fFalse;
-        for (j = us.nAsp + 1; j <= i; j++)
-          ignorea[j] = fFalse;
-        for (j = i + 1; j <= cAspect; j++)
-          ignorea[j] = fTrue;
-        us.nAsp = i;
-        argc--; argv++;
-      } else {
-        if (FErrorArgc("A", argc, 2))
-          return fFalse;
-        i = NParseSz(argv[1], ch1 == 'o' || ch1 == 'a' ? pmAspect : pmObject);
-        if (FErrorValN("A", i < (int)(ch1 == 'o' || ch1 == 'a') ||
-          i > (ch1 == 'o' || ch1 == 'a' ? cAspect : oNorm+1), i, 1))
-          return fFalse;
-        rT = RParseSz(argv[2], 0);
-        if (FErrorValR("A", rT < -rDegMax || rT > rDegMax, rT, 2))
-          return fFalse;
-        if (ch1 == 'o')
-          rAspOrb[i] = rT;
-        else if (ch1 == 'm')
-          rgobjset[i].orb = rT;
-        else if (ch1 == 'd')
-          rgobjset[i].add = rT;
-        else
-          rAspAngle[i] = rT;
-        argc -= 2; argv += 2;
-      }
-      break;
 
     // Switches which affect how a chart is computed:
 

@@ -287,6 +287,9 @@ of the file (A2's failure mode, gone for good).
   field whose first use declares the -X family's lockdown-and-enable
   behavior once instead of coding it around a call site. ~160 switches
   migrated; 259-invocation differential byte-identical.
+  **M7 done 2026-08-29** (work log item 74): the -R/-C/-u/-U/-A
+  restriction and aspect cluster left the main parser; ~175 switches
+  migrated; 314-invocation differential byte-identical.
 - **M-final**: the four parser shells reduce to dispatch loops; the
   help printers are deleted; `FOutputSettings()` is a loop plus the
   handful of genuinely bespoke sections.

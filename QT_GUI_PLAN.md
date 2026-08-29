@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-73
+## Work log — items 1-74
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2819,6 +2819,23 @@ are the more useful half to read before starting something new.
       -0X used to say graphics were not allowed and now says unknown
       switch, since the registry checks the lockdown only for
       spellings that exist. Same strictness class as items 68-72.
+
+74. **M7: the restriction and aspect cluster leaves the main parser.**
+    Cases 'R', 'C', 'u', 'U' and 'A' are deleted from
+    FProcessSwitches(). -R is a prefix row whose handler carries the
+    whole family -- category presets by suffix, the -RT second-level
+    prefix, and the variadic object list, counting its consumption by
+    argc delta. Quirks preserved exactly, including the stale second
+    letter ("-RTu0" reads ch2 from where "-Ru0" keeps it, so it acts
+    as "-RTu", as it always has). -C and the -u categories share one
+    toggle-and-sync core; -U covers the star sorts and exo-transit
+    spellings; -A covers its five shapes (count, three flags, and the
+    four single-slot orb/angle setters). Differential: 314
+    invocations, 8,361 captured lines, byte-identical.
+    - Strictness divergences of the established class: suffix garbage
+      that used to alias a defined spelling ("-C5" as -C, "-uz" as -u,
+      "-Az"... actually -A<unknown> remains the aspect-count branch,
+      transliterated) now errors where the registry has no row.
 
 ## Features this fork adds to both builds
 
