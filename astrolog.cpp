@@ -550,6 +550,13 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
   case 'u':
     if (ch1 == '0')
       SwitchF(us.fEclipseAny);
+    else if (fOr || fAnd)
+      // Settings files pack fEclipseAny into the "0" suffix, so an
+      // explicit "=Yu" or "_Yu" means it is off; only a bare toggling
+      // -Yu leaves it alone. Without this, "_Yu" saved when both flags
+      // are off reloads with fEclipseAny stale and the next save writes
+      // "_Yu0" -- the file never reaches a fixed point.
+      us.fEclipseAny = fFalse;
     SwitchF(us.fEclipse);
     break;
 

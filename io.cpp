@@ -1875,6 +1875,15 @@ flag FOutputSettings()
 #ifdef SWISS
   PrintF("; OBJECT CUSTOMIZATION:\n\n");
   fAny = fFalse;
+  // Standard objects can be renamed with -YD too. Before this loop the
+  // save covered custom slots and stars only, so a renamed planet or
+  // cusp kept its name for the session and lost it on the next save.
+  for (i = 0; i < custLo; i++) {
+    if (FObjDispCustom(i)) {
+      fAny = fTrue;
+      sprintf(sz, "-YD %d \"%s\"\n", i, szObjDisp[i]); PrintFSz();
+    }
+  }
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
     f1 = (rgObjSwiss[j] != rgObjSwissDef[j] || rgTypSwiss[j] !=

@@ -225,9 +225,14 @@ stack buffers. Last night's sessions retired the worst *duplication*
 fits — is everywhere.
 
 *Incidents:* item 24's three out-of-bounds fixes; the ASan catches of
-items 37/63 were reads, but the same runs would have caught writes.
-No confirmed overflow is currently known — ASan over the whole suite is
-clean — which honestly caps this theme's urgency.
+items 37/63 were reads. The caveat this section used to carry — "no
+confirmed overflow is currently known" — died 2026-08-29: increment 2's
+flag-flip leg crashed the fortified console build in `SzLocation()`
+(`szLoc[25]`, 29 bytes needed under `=b1`), and `SzZodiac()`'s
+expression branch overflowed `szZod[16]` on every call. Both fixed
+(item 66). The suite's ASan runs never see these because no test sets
+`=b1`; T5's focused audit of small static buffers under maximal
+formats is now *evidenced*, not speculative.
 
 *Direction:* don't sweep 1,500 call sites. **(1)** keep ASan in the
 pre-commit net (it is), **(2)** when an area survey touches a function,
@@ -430,6 +435,14 @@ write `ciCore.mon` explicitly. Tagged T8. *Cost:* documentation.
 file exercising **every** switch family `FOutputSettings()` writes, so
 a switch whose save-twin is missing cannot hide by being unset in the
 maintainer's config. *Cost:* one session, pure test.
+**Done 2026-08-29**, as two legs (a mechanized all-flags flip and a
+31-sentinel value fixture), and it caught five shared-core bugs on its
+first runs: two buffer overflows (`szLoc[25]`, `szZod[16]` -- one a
+crash under fortify), the `-Yu` save oscillation, `:YXp0` multiplying
+by 2.54 per metric cycle, and `-YD` never saving standard-object
+renames. Work log item 66 has the details. Known limitation: a switch
+family the writer has *never* covered is still invisible until T3's
+table enumerates the switch surface.
 
 ### Area C — computation core (calc.cpp, matrix.cpp), surveyed 2026-08-29
 
@@ -768,8 +781,9 @@ each independently shippable:
 
 1. ~~**H1** — `tools/defaults_audit.py`~~ — **done 2026-08-29**; found
    `ruler2[]` one short on its first run. See H1.
-2. **B5** — the full-coverage settings fixture for the round-trip
-   script. Pure test; makes T4 regressions impossible to hide.
+2. ~~**B5** — the full-coverage settings fixture~~ — **done
+   2026-08-29**; caught five shared-core bugs including two buffer
+   overflows. See B5 and work log item 66.
 3. **B3** — save/restore `is.fileIn` around nested includes, with its
    regression test. Three-line bug fix, both builds.
 4. **D2** — collapse `ComputeInfluence()`'s rulership stanzas onto the

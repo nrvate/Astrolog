@@ -2145,8 +2145,11 @@ int NProcessSwitchesRareX(int argc, char **argv, int pos,
     if (ch1 == '0') {
       if (FErrorArgc("YXp0", argc, 2))
         return tcError;
-      gs.xInch = RFromSz(argv[1]);
-      gs.yInch = RFromSz(argv[2]);
+      // pmLength honors the "cm" suffix SzLength() writes and the
+      // dialogs already parse; a bare RFromSz() read "21.59cm" as 21.59
+      // inches, so each metric save/load cycle multiplied by 2.54.
+      gs.xInch = RParseSz(argv[1], pmLength);
+      gs.yInch = RParseSz(argv[2], pmLength);
       darg += 2;
       break;
     }

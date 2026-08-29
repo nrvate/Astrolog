@@ -1728,7 +1728,7 @@ char ChRet(real dir)
 
 char *SzZodiac(real deg)
 {
-  static char szZod[16];
+  static char szZod[24];
   int sign, d, m;
   real s;
 
@@ -1772,7 +1772,7 @@ char *SzZodiac(real deg)
 #ifdef EXPRESS
     if (!us.fExpOff && FSzSet(us.szExpDegree)) {
       ExpSetR(iLetterZ, deg);
-      deg = RParseExpression(us.szExpDegree);
+      deg = Mod(RParseExpression(us.szExpDegree));
       sprintf(szZod, "%15.15f", deg);
       szZod[VSeconds(7, 11, 15)] = chNull;
       break;
@@ -2093,7 +2093,7 @@ char *SzOffset(real zon, real dst, real lon)
 
 char *SzLocation(real lon, real lat)
 {
-  static char szLoc[25];
+  static char szLoc[32];
   int i, j, i2, j2, i3, j3;
   real rT;
   char chDeg, chLon, chLat;

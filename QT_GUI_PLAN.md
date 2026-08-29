@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-65
+## Work log — items 1-66
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2625,6 +2625,38 @@ are the more useful half to read before starting something new.
       because ignore2[52..133] defaults are all restricted anyway.
     - With a file argument the audit runs its count leg against any .as
       (nrvate.as is clean).
+
+66. **The settings round trip grew teeth, and five bugs came out.**
+    `tools/settings-round-trip.sh` (REFACTORING.md increment 2) now has
+    three legs: the maintainer's settings fixed point (as before); every
+    boolean flag flipped at once, required to persist and to reach its
+    own fixed point; and `tools/settings-fixture.as`, 31 value switches
+    set to sentinels with per-line `; EXPECT <regex>` checks against the
+    resulting save. Flag families that cannot flip are exempted with
+    reasons in the script (the one-way `-0` lockdown family, `-v3`
+    carrying its boolean in the value, bare `X` forced by the script).
+    What the two new legs caught, all fixed and all shared-core:
+    - **A buffer-overflow crash**: `SzLocation()`'s `static char
+      szLoc[25]` needs 29 bytes when `=b1` (zodiac milliseconds) is on
+      -- glibc fortify aborts the console build on any location print.
+      Buffer sized to the worst format. Upstream's bug.
+    - **A second overflow in `SzZodiac()`**: the AstroExpression degree
+      hook's `"%15.15f"` writes 17-19 bytes into `szZod[16]` for every
+      value, before its fixed-offset truncation runs. Buffer enlarged
+      and the expression result bounded with `Mod()`.
+    - **`-Yu` never reached a fixed point**: the writer packs
+      `fEclipseAny` into the "0" suffix, but loading suffix-less
+      `_Yu`/`=Yu` left the flag stale, so alternate saves wrote `_Yu`,
+      `_Yu0`, `_Yu`... The parser now decodes both bits when the prefix
+      is explicit; a bare toggling `-Yu` is unchanged.
+    - **`:YXp0` multiplied by 2.54 per metric save/load cycle**: the
+      switch parser read "21.59cm" with bare `RFromSz()` as 21.59
+      inches, while both GUIs' dialogs already parse the same field
+      with `RParseSz(pmLength)`. The switch now does too.
+    - **`-YD` renames of standard objects were never saved**: the
+      writer emitted `-YD` only inside the custom-slot and star loops,
+      so a renamed planet or cusp lost its name on the next save. The
+      object-customization section now writes them.
 
 ## Features this fork adds to both builds
 
