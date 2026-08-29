@@ -1863,6 +1863,20 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
                 sprintf(sz, "%s", rgObjSel[l].szName);
                 break;
               }
+          // Put the number and the name in the body field together,
+          // so a row that has been looked up stops reading as a bare
+          // catalogue number: "10199" becomes "10199 Chariklo".
+          // Only for a plain MPC number with nothing else on it --
+          // the other definition forms have no number to pair a name
+          // with, and a point or flag suffix already occupies the
+          // space after it. FObjSelParse() reads the pair back, since
+          // a trailing run is only taken for flags when every letter
+          // in it is one.
+          if (j == 1 && nPnt <= 0 && nFlg <= 0 &&
+            !FEqSz(sz, szObjUnknown)) {
+            sprintf(szT, "%d %s", k, sz);
+            SetEdit(dcOs01 + i, szT);
+          }
         } else
           sprintf(sz, "%s", szObjUnknown);
         SetEdit(deOs01 + i, sz);

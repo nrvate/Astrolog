@@ -4509,6 +4509,20 @@ void ShowObjectSelDialogQt()
                 sprintf(szT, "%s", rgObjSel[iSel].szName);
                 break;
               }
+          // Put the number and the name in the body field together, so a
+          // row that has been looked up stops reading as a bare catalogue
+          // number: "10199" becomes "10199 Chariklo". Only for a plain
+          // MPC number with nothing else on it -- the other definition
+          // forms have no number to pair a name with, and a point or flag
+          // suffix already occupies the space after it. FObjSelParse()
+          // reads the pair back, since a trailing run is only taken for
+          // flags when every letter in it is one.
+          if (j2 == 1 && pnt2 <= 0 && flg2 <= 0 &&
+            !FEqSz(szT, szObjUnknown)) {
+            char szD[cchSzMax];
+            sprintf(szD, "%d %s", k2, szT);
+            rgpcbDef[i2]->setEditText(szD);
+          }
         } else
           sprintf(szT, "%s", szObjUnknown);
         rgpeName[i2]->setText(szT);

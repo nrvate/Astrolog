@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2962
+   display and no `xdotool`, and exits non-zero on failure. **2975
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-56
+## Work log — items 1-57
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2358,6 +2358,43 @@ are the more useful half to read before starting something new.
     - 33 new assertions: nine fail without the mnemonic filter, eleven
       without the arrow navigation.
 
+57. **Lookup Names left half the row behind, and the test kept measuring
+    the leftovers.** Reported: the button fills the Name box but the body
+    field still reads a bare catalogue number.
+    - The fix itself is small -- write `10199 Chariklo` into the body
+      field too -- but the parse had to accept it first. A trailing run of
+      letters after a space was always taken for point/flag letters, so
+      `Chariklo` set the apsis marker off its own `a`. Measured as
+      `pnt=4` by reverting the guard afterwards, not assumed.
+      `FObjSelFlagRun()` requires every letter in the run to be a suffix
+      letter, so `10199 nH` still reads its flags and `10199 Chariklo nH`
+      reads both.
+    - **The interesting part was the test, which failed three times for
+      three different reasons, none of them the change.** It renders the
+      wheel twice with different names and asks whether the picture moved.
+      First `gs.fLabel` was off, so `DrawObject()` returned before drawing
+      and every hash matched. Then `us.nRel` was `rcProgress`, where the
+      wheel draws two charts and the forced slot is not the one labelled.
+      Fixing those one at a time was the mistake: **the third attempt
+      dumped 27 globals in a solo run and in a full run and diffed them**,
+      which showed the real scale of it -- heliocentric, sidereal,
+      equatorial, 3D houses, an Indian wheel, house system 22, monochrome
+      and double scale, all inherited.
+    - **`TestAllMenuActionsQt()` is why.** It fires all 338 menu items to
+      prove none of them crashes, which is worth doing and leaves the
+      program wherever that lands. Nothing after it can assume a setting.
+      The test now copies `us` and `gs`, sets the baseline it needs on
+      top, and puts both back at the end.
+    - **The lesson is about method, not about the flags.** Guessing one
+      variable per rebuild took three rounds and would have taken more;
+      diffing the whole state against a known-good run took one and
+      answered it completely. When a test passes alone and fails in the
+      suite, dump state and diff rather than reasoning about which single
+      thing it might be.
+    - 13 new assertions. Each of the three changes was reverted alone:
+      the glyph fix fails one, the parse guard two, the body-field write
+      one.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
@@ -2471,7 +2508,21 @@ Five things that are easy to get wrong later:
    ephemeris number resolved to whichever slot holds that body. An index
    is read as an index before it is read as an ephemeris number, since
    that is what `-Fm` means by one.
-5. **The definition parse exists once.** Windows open coded it twice and
+5. **Lookup Names fills the body field too, as number and name.** A
+   looked-up row used to keep a bare catalogue number in Contains while
+   the Name box beside it filled in, so the two columns disagreed about
+   what the row was. The button now writes `10199 Chariklo` into the body
+   field as well, for a plain MPC number with no point or flag suffix --
+   the other definition forms have no number to pair a name with, and a
+   suffix already occupies the space after it. Both builds.
+   - **The parse had to learn that first.** A trailing run of letters
+     after a space was always read as point/flag letters, so `Chariklo`
+     would set the apsis marker off its own `a` -- measured, before the
+     fix, as `pnt=4`. `FObjSelFlagRun()` makes a run count as flags only
+     when *every* letter in it is one, so `10199 nH` still reads its
+     suffix and `10199 Chariklo nH` reads both.
+
+6. **The definition parse exists once.** Windows open coded it twice and
    this port had a third copy; `FObjSelParse()` in calc.cpp is the single
    one, and it keeps Windows' `if (pch > sz)` guard. Without that guard an
    all alphabetic definition reads its own letters as flags, so `Ven` sets

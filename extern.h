@@ -497,6 +497,7 @@ extern CONST OBJSEL rgObjSel[];
 extern CONST int cObjSel;
 extern void SzObjSelDef P((char *, int));
 extern void SzObjSelName P((char *, int, int));
+extern flag FObjSelFlagRun P((CONST char *));
 extern flag FObjSelParse P((CONST char *, int *, int *, int *, int *));
 extern flag FObjMidSource P((int));
 extern int NObjSelMid P((CONST char *));

@@ -2849,6 +2849,31 @@ int NObjSelMid(CONST char *szIn)
 }
 
 
+// Is this trailing run of letters a point/flag suffix, rather than a
+// body's name? Only if every letter in it is one of the suffix letters.
+//
+// The body field may carry the name beside the number -- "10199
+// Chariklo" -- which Lookup Names writes there so a looked up row stops
+// reading as a bare catalogue number. Without this check that name is
+// read as a run of flags: "Chariklo" alone would set the apsis marker
+// off its own 'a'.
+
+flag FObjSelFlagRun(CONST char *szRun)
+{
+  CONST char *szFlag = "nspaHSBNTV", *pch, *pchT;
+
+  if (*szRun == chNull)
+    return fFalse;
+  for (pch = szRun; *pch; pch++) {
+    for (pchT = szFlag; *pchT && *pchT != *pch; pchT++)
+      ;
+    if (*pchT == chNull)
+      return fFalse;
+  }
+  return fTrue;
+}
+
+
 flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
   int *pnFlg)
 {
@@ -2890,7 +2915,7 @@ flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
   j = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
   for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--)
     ;
-  if (pch > sz)
+  if (pch > sz && FObjSelFlagRun(pch+1))
     for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--) {
       if (*pch == 'n') nPnt = 1;
       if (*pch == 's') nPnt = 2;

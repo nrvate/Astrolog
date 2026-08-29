@@ -1530,14 +1530,33 @@ static void TestMidpointGlyphQt()
 {
   unsigned long lPlain1, lPlain2, lMid1, lMid2;
   int obj = oChi;
-  flag fIgnoreSav = ignore[obj], fTextSav = gs.fText, fLabelSav = gs.fLabel;
+  flag fIgnoreSav = ignore[obj];
   real forceSav = force[obj];
   CONST char *szDispSav = szObjDisp[obj];
 
   Group("Midpoint glyph");
 
+  // Take a copy and put the whole of it back at the end, then set a known
+  // baseline on top. TestAllMenuActionsQt() fires all 338 menu items and
+  // leaves the program wherever that lands: measured here as heliocentric,
+  // sidereal, equatorial, 3D houses, an Indian wheel, house system 22,
+  // monochrome and double scale. A rendering test that inherits any of
+  // that is testing the leftovers, not the change -- this one failed twice
+  // that way, on gs.fLabel and then on us.nRel, before the state was
+  // pinned rather than guessed at one field per attempt.
+  US usSav = us;
+  GS gsSav = gs;
+
   ignore[obj] = fFalse;
   AdjustRestrictions();
+  us.nRel = rcNone;
+  us.fIndian = fFalse;
+  us.fHouse3D = fFalse;
+  us.objCenter = oEar;
+  us.fSidereal = fFalse;
+  gs.fEquator = fFalse;
+  gs.fThick = fFalse;
+  gs.fColor = fTrue;
   // Set what the render depends on rather than inheriting it.
   // TestAllMenuActionsQt() fires all 338 menu items, "Show Glyph Labels"
   // among them, so gs.fLabel arrives here as whatever that left. With it
@@ -1545,6 +1564,12 @@ static void TestMidpointGlyphQt()
   // matches every other one -- the test then passes or fails on nothing.
   gs.fText = fFalse;
   gs.fLabel = fTrue;
+  // And a single chart. TestAllMenuActionsQt() fires every relationship
+  // mode on its way through all 338 menu items, and this arrived in
+  // rcProgress, where the wheel draws two charts and the forced slot is
+  // not the one being labelled -- so the name never reached the picture
+  // and the assertion failed on the chart type rather than on the fix.
+  us.nRel = rcNone;
 
   // Render the wheel and hash it.
   auto hash = []() -> unsigned long {
@@ -1581,11 +1606,107 @@ static void TestMidpointGlyphQt()
   ignore[obj] = fIgnoreSav;
   force[obj] = forceSav;
   szObjDisp[obj] = szDispSav;
-  gs.fText = fTextSav;
-  gs.fLabel = fLabelSav;
+  us = usSav;
+  gs = gsSav;
   AdjustRestrictions();
   CastChart(1);
   printf("  a slot forced to a midpoint is labelled, not glyphed\n");
+}
+
+
+// Lookup Names writes the number and the name into the body field, and
+// the parse reads that pair back.
+//
+// A looked-up row used to keep a bare catalogue number in Contains while
+// the Name box beside it filled in, so the two columns disagreed about
+// what the row was. The field now reads "10199 Chariklo".
+//
+// The parse had to learn that first: a trailing run of letters after a
+// space was always read as point/flag letters, so "Chariklo" would set
+// the apsis marker off its own 'a'. A run counts as flags only when every
+// letter in it is one.
+static void TestObjSelLookupQt()
+{
+  int j, k, nPnt, nFlg;
+
+  Group("Object selection lookup");
+
+  struct { CONST char *sz; int nTyp, nObj, nPnt, nFlg; } rg[] = {
+    {"10199",             1,  10199, 0, 0},
+    {"10199 Chariklo",    1,  10199, 0, 0},   // the pair Lookup Names writes
+    {"52872 Okyrhoe",     1,  52872, 0, 0},
+    {"10199 nH",          1,  10199, 1, 1},   // a real suffix still reads
+    {"10199 Chariklo nH", 1,  10199, 1, 1},   // and still reads beside a name
+    {"Chariklo",          1,  10199, 0, 0},
+    {"h0",                0,      0, 0, 0} };
+  for (int i = 0; i < 7; i++) {
+    flag f = FObjSelParse(rg[i].sz, &j, &k, &nPnt, &nFlg);
+    Check(f && j == rg[i].nTyp && k == rg[i].nObj && nPnt == rg[i].nPnt &&
+      nFlg == rg[i].nFlg,
+      "\"%s\" parses as typ %d obj %d pnt %d flg %d (got %d %d %d %d)",
+      rg[i].sz, rg[i].nTyp, rg[i].nObj, rg[i].nPnt, rg[i].nFlg,
+      j, k, nPnt, nFlg);
+  }
+  Check(FObjSelFlagRun("nH") && FObjSelFlagRun("a"),
+    "a run of suffix letters is recognised as one");
+  Check(!FObjSelFlagRun("Chariklo") && !FObjSelFlagRun("Okyrhoe"),
+    "and a body's name is not");
+
+  // Through the real dialog: put a bare number in the first row's body
+  // field, press Lookup Names, and read both boxes back.
+  DriveModalQt(ShowObjectSelDialogQt, [](QWidget *pw) {
+    QComboBox *pcb = NULL;
+    QLineEdit *pe = NULL;
+    QPushButton *ppb = NULL, *ppbCancel = NULL;
+    QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
+    QList<QLineEdit *> rgpe;
+
+    // A combo box owns a QLineEdit of its own; the Name column's are the
+    // ones that do not belong to one.
+    for (QLineEdit *p : pw->findChildren<QLineEdit *>())
+      if (qobject_cast<QComboBox *>(p->parentWidget()) == NULL)
+        rgpe.append(p);
+    if (!rgcb.isEmpty())
+      pcb = rgcb[0];
+    if (!rgpe.isEmpty())
+      pe = rgpe[0];
+    for (QPushButton *p : pw->findChildren<QPushButton *>()) {
+      if (p->text() == "&Lookup Names")
+        ppb = p;
+      if (p->text() == "Cancel")
+        ppbCancel = p;
+    }
+    Check(pcb != NULL && pe != NULL && ppb != NULL,
+      "the first row's two boxes and the Lookup Names button are there");
+    if (pcb == NULL || pe == NULL || ppb == NULL) {
+      pw->close();
+      return;
+    }
+    pcb->setEditText("10199");
+    pe->setText("");
+    ppb->click();
+    Check(pe->text() == "Chariklo",
+      "Lookup Names fills the Name box (\"%s\")",
+      pe->text().toLocal8Bit().constData());
+    Check(pcb->currentText() == "10199 Chariklo",
+      "and writes the number and name into Contains (\"%s\")",
+      pcb->currentText().toLocal8Bit().constData());
+
+    // What it wrote has to parse back to what was typed.
+    QByteArray ba = pcb->currentText().toLocal8Bit();
+    int j2, k2, p2, f2;
+    Check(FObjSelParse(ba.constData(), &j2, &k2, &p2, &f2) &&
+      j2 == 1 && k2 == 10199 && p2 == 0 && f2 == 0,
+      "and that pair parses back to the number it started from");
+
+    // Cancel, so none of this reaches the settings.
+    if (ppbCancel != NULL)
+      ppbCancel->click();
+    else
+      pw->close();
+  });
+
+  printf("  Lookup Names fills both boxes, and the pair parses back\n");
 }
 
 
@@ -2681,6 +2802,7 @@ int NRunQtTestsQt()
   TestDialogMnemonicsQt();
   TestDialogArrowKeysQt();
   TestMidpointGlyphQt();
+  TestObjSelLookupQt();
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;
