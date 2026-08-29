@@ -1609,7 +1609,8 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
   char sz[cchSzMax];
   int i, j;
 #ifdef SWISS
-  char *pch, *pchEnd;
+  OBJDEF od;
+  char *pch;
   int k, l;
 #ifdef JPLWEB
   real rT;
@@ -1660,42 +1661,37 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
         GetEdit(den01 - custLo + i, sz);
         if (*sz && !FEqSz(sz, szObjUnknown))
           continue;
+        // The parse was open coded here and had drifted from the shared
+        // one: no FObjSelFlagRun() guard, so a definition ending in a
+        // body's name read the name's letters as point and flag markers.
+        // FObjDefParse() in calc.cpp is the only copy now.
         GetEdit(ded01 - custLo + i, sz);
-        for (pch = sz; *pch; pch++)
-          ;
-        pchEnd = pch;
-        for (pch--; pch > sz && *pch >= 'A'; pch--)
-          ;
-        if (pch >= sz && *pch < '0')
-          *pch = chNull;
-        pch = sz;
-        k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
-          (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
-        if (k == 0 || k >= 3)
-          pch++;
-        l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
-        switch (k) {
+        if (!FObjDefParse(sz, &od))
+          continue;
+        switch (od.nTyp) {
         case 0:
-          SwissGetObjName(sz, -l);
+          SwissGetObjName(sz, -od.nObj);
           break;
         case 1:
-          SwissGetObjName(sz, l);
+          SwissGetObjName(sz, od.nObj);
           break;
         case 2:
-          sprintf(sz, "%s", FValidObj(l) ? szObjName[l] : szObjUnknown);
+          sprintf(sz, "%s",
+            FValidObj(od.nObj) ? szObjName[od.nObj] : szObjUnknown);
           break;
         case 3:
-          l = ObjMoons(l);
+          l = ObjMoons(od.nObj);
           sprintf(sz, "%s", FItem(l) ? szObjName[l] : szObjUnknown);
           break;
         case 4:
 #ifdef JPLWEB
-          if (!GetJPLHorizons(l, &rT, &rT, &rT, &rT, &rT, &rT, sz))
+          if (!GetJPLHorizons(od.nObj, &rT, &rT, &rT, &rT, &rT, &rT, sz))
 #endif
             sprintf(sz, "%s", szObjUnknown);
           break;
         case 5:
-          sprintf(sz, "%s", FValidPart(l) ? ai[l-1].name : szObjUnknown);
+          sprintf(sz, "%s",
+            FValidPart(od.nObj) ? ai[od.nObj-1].name : szObjUnknown);
           break;
         }
         SetEdit(den01 - custLo + i, sz);
@@ -1706,44 +1702,23 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
       for (j = 0; j <= 1; j++) {
         for (i = custLo; i <= custHi; i++) {
 #ifdef SWISS
+          // One call parses the definition and its point/flag suffix
+          // together; pass zero validates and discards, pass one stores.
+          // An empty field reads as an invalid object so EnsureN() names
+          // it, rather than parsing as object zero.
           GetEdit(ded01 - custLo + i, sz);
-          for (pch = sz; *pch; pch++)
-            ;
-          pchEnd = pch;
-          for (pch--; pch > sz && *pch >= 'A'; pch--)
-            ;
-          if (pch >= sz && *pch < '0')
-            *pch = chNull;
-          pch = sz;
-          k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
-            (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
-          if (k == 0 || k >= 3)
-            pch++;
-          l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
-          EnsureN(l, FValidCustom(l, k), "definition");
+          if (!FObjDefParse(sz, &od)) {
+            od.nTyp = 2; od.nObj = -1;
+            od.nPnt = od.nFlg = 0;
+          }
+          EnsureN(od.nObj, FValidCustom(od.nObj, od.nTyp), "definition");
 #endif
           if (j) {
 #ifdef SWISS
-            rgTypSwiss[i - custLo] = k;
-            rgObjSwiss[i - custLo] = l;
-            k = l = 0;
-            for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--)
-              ;
-            if (pch > sz)
-              for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--) {
-                if (*pch == 'n') k = 1;
-                if (*pch == 's') k = 2;
-                if (*pch == 'p') k = 3;
-                if (*pch == 'a') k = 4;
-                if (*pch == 'H') l |= 1;
-                if (*pch == 'S') l |= 2;
-                if (*pch == 'B') l |= 4;
-                if (*pch == 'N') l |= 8;
-                if (*pch == 'T') l |= 16;
-                if (*pch == 'V') l |= 32;
-              }
-            rgPntSwiss[i - custLo] = k;
-            rgFlgSwiss[i - custLo] = l;
+            rgTypSwiss[i - custLo] = od.nTyp;
+            rgObjSwiss[i - custLo] = od.nObj;
+            rgPntSwiss[i - custLo] = od.nPnt;
+            rgFlgSwiss[i - custLo] = od.nFlg;
 #endif
             GetEdit(den01 - custLo + i, sz);
             if (!FEqSz(sz, szObjDisp[i]))

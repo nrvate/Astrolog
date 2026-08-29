@@ -1926,6 +1926,66 @@ static void TestSettingsRoundTripQt()
 }
 
 
+// The Custom Objects dialog's parse is the shared FObjDefParse() now.
+//
+// The copy it replaced (ParseCustomDefQt, and the same open coded twice
+// in Windows' DlgCustom) lacked the FObjSelFlagRun() guard, so a
+// definition carrying a name beside its number -- "10199 Chariklo", the
+// very pair Lookup Names writes into the Object Selections field -- read
+// the name's 'a' as the apsis marker and stored nPnt=4. This drives the
+// real dialog and asserts what reached the arrays.
+static void TestCustomDialogParseQt()
+{
+  int nTypSav = rgTypSwiss[0], nObjSav = rgObjSwiss[0];
+  int nPntSav = rgPntSwiss[0], nFlgSav = rgFlgSwiss[0];
+
+  Group("Custom objects parse");
+
+  DriveModalQt(ShowCustomDialogQt, [](QWidget *pw) {
+    QLineEdit *peDef = NULL;
+    QList<int> rgx;
+
+    // The dialog lays its 50 rows out in two banks, so the edits sit in
+    // four columns: name and definition of the left bank, then of the
+    // right (x = 40, 85, 170, 215 in dialog units). ded01 -- row zero's
+    // definition -- is the top of the second column. Found by geometry
+    // because the first attempt took "rightmost column" and edited row
+    // 25 of the other bank instead, which the assertion caught.
+    for (QLineEdit *pe : pw->findChildren<QLineEdit *>())
+      if (!rgx.contains(pe->x()))
+        rgx.append(pe->x());
+    std::sort(rgx.begin(), rgx.end());
+    if (rgx.size() < 2)
+      return;
+    for (QLineEdit *pe : pw->findChildren<QLineEdit *>())
+      if (pe->x() == rgx[1] && (peDef == NULL || pe->y() < peDef->y()))
+        peDef = pe;
+    if (peDef != NULL)
+      peDef->setText("10199 Chariklo");
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") {
+        ppb->click();
+        return;
+      }
+    pw->close();
+  });
+
+  Check(rgTypSwiss[0] == 1 && rgObjSwiss[0] == 10199,
+    "the dialog stored the body (typ %d obj %d)",
+    rgTypSwiss[0], rgObjSwiss[0]);
+  Check(rgPntSwiss[0] == 0,
+    "and a name beside the number is not a run of point flags (nPnt %d)",
+    rgPntSwiss[0]);
+  Check(rgFlgSwiss[0] == 0,
+    "nor of calculation flags (nFlg %d)", rgFlgSwiss[0]);
+
+  rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
+  rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
+  CastChart(1);
+  printf("  the one shared parse is what the Custom Objects dialog uses\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -3046,6 +3106,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"arrow-keys",           TestDialogArrowKeysQt},
   {"midpoint-glyph",       TestMidpointGlyphQt},
   {"objsel-lookup",        TestObjSelLookupQt},
+  {"custom-parse",         TestCustomDialogParseQt},
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))

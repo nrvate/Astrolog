@@ -4210,52 +4210,21 @@ void ShowMoonObjectDialogQt()
 // places here -- validate, apply, and Lookup Names -- so it lives in one
 // function rather than being copied a third and fourth time.
 
-static void ParseCustomDefQt(CONST QString &str, char *sz, int *pk, int *pl,
-  int *ppnt, int *pflg)
+// Parse one Object Customization definition string into an OBJDEF. The
+// parse itself is FObjDefParse() in calc.cpp -- this used to be a third
+// copy of it, and the copies had drifted: this one lacked the
+// FObjSelFlagRun() guard, so a definition ending in a body's name would
+// read the name's letters as point and flag markers. An empty field now
+// comes back as an invalid object rather than quietly parsing as object
+// zero, so the dialog's own validation message fires instead.
+static void ParseCustomDefQt(CONST QString &str, OBJDEF *pod)
 {
-  char *pch, *pchEnd;
-  int k, l, pnt = 0, flg = 0;
-
   QByteArray ba = str.toLocal8Bit();
-  strncpy(sz, ba.constData(), cchSzMax-1);
-  sz[cchSzMax-1] = chNull;
-  for (pch = sz; *pch; pch++)
-    ;
-  pchEnd = pch;
-  // Any trailing point/flag letters are separated from the definition
-  // proper by a space; snip them off before reading the definition.
-  for (pch--; pch > sz && *pch >= 'A'; pch--)
-    ;
-  if (pch >= sz && *pch < '0')
-    *pch = chNull;
-  pch = sz;
-  k = (*pch == 'h' ? 0 : (*pch == 'm' ? 3 : (*pch == 'j' ? 4 :
-    (*pch == 'A' ? 5 : (FNumCh(*pch) ? 1 : 2)))));
-  if (k == 0 || k >= 3)
-    pch++;
-  l = (k == 2 ? NParseSz(pch, pmObject) : NFromSz(pch));
 
-  // Only read point/flag letters when the walk back stops short of the
-  // start of the string. An all-letter definition is an object name, not
-  // a run of flags -- without this guard (which Windows has, at the
-  // rgPntSwiss assignment in DlgCustom) "Mar" reads its own 'a' as the
-  // apsis marker, "Ven" and "Sun" read 'n' as the node marker, and so on.
-  for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--)
-    ;
-  if (pch > sz)
-    for (pch = pchEnd-1; pch > sz && *pch >= 'A'; pch--) {
-      if (*pch == 'n') pnt = 1;
-      if (*pch == 's') pnt = 2;
-      if (*pch == 'p') pnt = 3;
-      if (*pch == 'a') pnt = 4;
-      if (*pch == 'H') flg |= 1;
-      if (*pch == 'S') flg |= 2;
-      if (*pch == 'B') flg |= 4;
-      if (*pch == 'N') flg |= 8;
-      if (*pch == 'T') flg |= 16;
-      if (*pch == 'V') flg |= 32;
-    }
-  *pk = k; *pl = l; *ppnt = pnt; *pflg = flg;
+  if (!FObjDefParse(ba.constData(), pod)) {
+    pod->nTyp = 2; pod->nObj = -1;
+    pod->nPnt = pod->nFlg = 0;
+  }
 }
 
 
@@ -4267,25 +4236,31 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
   QVector<QLineEdit *> &rgpeDef)
 {
   char sz[cchSzMax];
-  int i, k, l, pnt, flg;
+  OBJDEF od;
+  int i, l;
 
   for (i = 0; i < rgpeName.size(); i++) {
     QString strName = rgpeName[i]->text();
     if (!strName.isEmpty() && strName != szObjUnknown)
       continue;
-    ParseCustomDefQt(rgpeDef[i]->text(), sz, &k, &l, &pnt, &flg);
-    switch (k) {
+    ParseCustomDefQt(rgpeDef[i]->text(), &od);
+    // All but the JPL Horizons case is SzObjSelName()'s job description,
+    // but that function treats type 4 as a plain object index; the web
+    // query below is why this switch survives. Worth folding once
+    // SzObjSelName() learns type 4.
+    switch (od.nTyp) {
     case 0:
-      SwissGetObjName(sz, -l);
+      SwissGetObjName(sz, -od.nObj);
       break;
     case 1:
-      SwissGetObjName(sz, l);
+      SwissGetObjName(sz, od.nObj);
       break;
     case 2:
-      sprintf(sz, "%s", FValidObj(l) ? szObjName[l] : szObjUnknown);
+      sprintf(sz, "%s",
+        FValidObj(od.nObj) ? szObjName[od.nObj] : szObjUnknown);
       break;
     case 3:
-      l = ObjMoons(l);
+      l = ObjMoons(od.nObj);
       sprintf(sz, "%s", FItem(l) ? szObjName[l] : szObjUnknown);
       break;
     case 4:
@@ -4294,7 +4269,7 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
         // Same as Windows: this one goes out to JPL Horizons over the
         // network, synchronously, while the dialog sits there.
         real rT;
-        if (!GetJPLHorizons(l, &rT, &rT, &rT, &rT, &rT, &rT, sz))
+        if (!GetJPLHorizons(od.nObj, &rT, &rT, &rT, &rT, &rT, &rT, sz))
           sprintf(sz, "%s", szObjUnknown);
       }
 #else
@@ -4302,7 +4277,8 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
 #endif
       break;
     case 5:
-      sprintf(sz, "%s", FValidPart(l) ? ai[l-1].name : szObjUnknown);
+      sprintf(sz, "%s",
+        FValidPart(od.nObj) ? ai[od.nObj-1].name : szObjUnknown);
       break;
     }
     rgpeName[i]->setText(sz);
@@ -4325,6 +4301,7 @@ void ShowCustomDialogQt()
   QDialog dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   QVector<QLineEdit *> rgpeName, rgpeDef;
+  OBJDEF od;
   int i, j, k, l, pnt, flg;
   char sz[cchSzMax], *pch;
 
@@ -4378,8 +4355,8 @@ void ShowCustomDialogQt()
 
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
-    ParseCustomDefQt(rgpeDef[j]->text(), sz, &k, &l, &pnt, &flg);
-    if (!FValidCustom(l, k)) {
+    ParseCustomDefQt(rgpeDef[j]->text(), &od);
+    if (!FValidCustom(od.nObj, od.nTyp)) {
       QMessageBox::warning(gi.qwind, szAppName,
         "One or more object definitions are invalid.");
       return;
@@ -4388,11 +4365,11 @@ void ShowCustomDialogQt()
 
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
-    ParseCustomDefQt(rgpeDef[j]->text(), sz, &k, &l, &pnt, &flg);
-    rgTypSwiss[j] = k;
-    rgObjSwiss[j] = l;
-    rgPntSwiss[j] = pnt;
-    rgFlgSwiss[j] = flg;
+    ParseCustomDefQt(rgpeDef[j]->text(), &od);
+    rgTypSwiss[j] = od.nTyp;
+    rgObjSwiss[j] = od.nObj;
+    rgPntSwiss[j] = od.nPnt;
+    rgFlgSwiss[j] = od.nFlg;
 
     QByteArray baName = rgpeName[j]->text().toLocal8Bit();
     if (!FEqSz(baName.constData(), szObjDisp[i]))

@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2988
+   display and no `xdotool`, and exits non-zero on failure. **2991
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-57
+## Work log — items 1-58
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2394,6 +2394,35 @@ are the more useful half to read before starting something new.
     - 13 new assertions. Each of the three changes was reverted alone:
       the glyph fix fails one, the parse guard two, the body-field write
       one.
+
+58. **The definition parse existed four times, and only one copy had the
+    guard.** The string cleanup's first real cut, after `FObjDefParse()`
+    was split out of `FObjSelParse()`: `ParseCustomDefQt()` in
+    qtdialog.cpp was a full copy, and Windows' `DlgCustom` open-coded it
+    **twice more** -- once in its Lookup Names handler, once in its OK
+    apply. All three retired against the one shared function.
+    - **The drift was live in both builds.** Only the shared copy had the
+      `FObjSelFlagRun()` guard from item 57, so a definition carrying a
+      name beside its number -- `10199 Chariklo`, the very pair Lookup
+      Names writes into Object Selections -- read the name's `a` as the
+      apsis marker in the Custom Objects dialog and stored `nPnt=4`.
+      Confirmed by reverting the Qt wiring alone: the new test then fails
+      with exactly `nPnt 4`.
+    - An empty definition field used to fall through the parse as "object
+      zero"; it now reads as an invalid object, so the dialogs' own
+      validation message fires instead of quietly storing Earth.
+    - **The test-finding trap:** dlgCustom lays its 50 rows in two banks,
+      so the edits sit in four x-columns (40/85/170/215). "Rightmost
+      column, top row" picked row 25 of the wrong bank, and the store
+      assertion caught the edit landing nowhere. Row zero's definition is
+      the *second* column's top. The whole diagnose-fix-verify loop was
+      four sub-second `ASTROLOG_QT_TESTS=custom-parse` runs.
+    - Still open in this family: `DlgCustom`'s `WM_INITDIALOG` open-codes
+      the definition *formatter* the same way (a near-copy of
+      `SzObjSelDef()` minus the name shortcut), the Qt lookup's
+      type-to-name switch duplicates `SzObjSelName()` except for the JPL
+      Horizons web case, and the Custom Objects dialogs do not reset a
+      redefined slot's glyph the way Object Selections now does.
 
 ## Features this fork adds to both builds
 
