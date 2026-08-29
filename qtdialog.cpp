@@ -4390,9 +4390,9 @@ void ShowObjectSelDialogQt()
       // A slot forced to a midpoint shows it as A/B, which is both what
       // the user typed and what an astrologer would write. Otherwise the
       // field shows the body, as before.
-      if (force[iobj] < 0.0) {
-        k = (-(int)force[iobj]) - 1;
-        sprintf(sz, "%s/%s", szObjDisp[k / objMax], szObjDisp[k % objMax]);
+      if (FForceMid(force[iobj])) {
+        sprintf(sz, "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
+          szObjDisp[ObjForceMid2(force[iobj])]);
       } else
         SzObjSelDef(sz, iobj);
       pcbDef->setEditText(sz);
@@ -4486,7 +4486,7 @@ void ShowObjectSelDialogQt()
           "\"Sun/Moo\" or \"7066/90482\".");
         return;
       }
-      rgforce[i] = (real)-(j*objMax + k + 1);
+      rgforce[i] = ForceMid(j, k);
       rgod[i].nTyp = rgTypSwiss[uranLo + i - custLo];
       rgod[i].nObj = rgObjSwiss[uranLo + i - custLo];
       rgod[i].nPnt = rgPntSwiss[uranLo + i - custLo];
@@ -4531,14 +4531,13 @@ void ShowObjectSelDialogQt()
       if (i < rgstrName0.size() && str == rgstrName0[i]) {
         char szT[cchSzDef];
         int j2, k2;
-        if (rgforce[i] != rgforceSav[i] && rgforce[i] < 0.0) {
+        if (rgforce[i] != rgforceSav[i] && FForceMid(rgforce[i])) {
           // Forced to a midpoint: name it after its two halves, the same
           // way Lookup Names does. Left alone, the slot sits at the
           // midpoint under the name of the body it used to be, which is
           // the same confusion as picking a new body and keeping the old
           // name.
-          k2 = (-(int)rgforce[i]) - 1;
-          j2 = k2 / objMax; k2 = k2 % objMax;
+          j2 = ObjForceMid1(rgforce[i]); k2 = ObjForceMid2(rgforce[i]);
           if (FItem(j2) && FItem(k2)) {
             sprintf(szT, "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
             str = QString(szT);

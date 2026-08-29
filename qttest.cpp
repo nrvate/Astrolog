@@ -1595,7 +1595,7 @@ static void TestMidpointGlyphQt()
     "renaming a plain slot leaves the wheel alone -- it draws a glyph");
 
   // The reported case: forced to the Sun/Moon midpoint.
-  force[obj] = -(real)(oSun*objMax + oMoo + 1);
+  force[obj] = ForceMid(oSun, oMoo);
   szObjDisp[obj] = "AAA"; CastChart(1); lMid1 = hash();
   szObjDisp[obj] = "ZZZ"; CastChart(1); lMid2 = hash();
   Check(lMid1 != lMid2,
@@ -2216,7 +2216,7 @@ static void TestObjSelDialogQt()
   // under the name of the body it used to be.
   ClearB((pbyte)force, sizeof(force));
   DriveObjSelQt(4);
-  Check(force[iobj] == (real)-(oSun*objMax + oMoo + 1),
+  Check(force[iobj] == ForceMid(oSun, oMoo),
     "a midpoint typed into the box is stored (%.1f)", force[iobj]);
   Check(FEqSz(szObjDisp[iobj], "Sun/Moo"),
     "and names the slot after its two halves (%s)", szObjDisp[iobj]);
@@ -2853,7 +2853,7 @@ static void TestSharedCoreFixesQt()
 
   ClearB((pbyte)force, sizeof(force));
   ignore[oJup] = ignore[oSat] = fTrue;
-  force[oFor] = (real)-(oJup*objMax + oSat + 1);      // -Fm 19 6 7
+  force[oFor] = ForceMid(oJup, oSat);             // -Fm 19 6 7
   planet[oJup] = planet[oSat] = 0.0;
   AdjustRestrictions();
   CastChart(1);
@@ -2897,8 +2897,8 @@ static void TestForcedPositionsQt()
   // oFor (19) stands in for a forced position outside any one dialog's
   // range; uranLo (34) for one inside it. Both must come back.
   ClearB((pbyte)force, sizeof(force));
-  force[oFor] = (real)-(1*objMax + 2 + 1);        // -Fm 19 1 2
-  force[uranLo] = ZD(1, 15.25) + rDegMax;         // -F 34 Ari 15.25
+  force[oFor] = ForceMid(1, 2);                   // -Fm 19 1 2
+  force[uranLo] = ForcePos(ZD(1, 15.25));         // -F 34 Ari 15.25
 
   // A renamed macro menu entry goes in the same file. The Qt build stores
   // -WM through NProcessSwitchesQt() but the block that writes it back was
@@ -2949,10 +2949,23 @@ static void TestForcedPositionsQt()
     FProcessCommandLine(szMid);
   if (szPos[0] != chNull)
     FProcessCommandLine(szPos);
-  Check(force[oFor] == (real)-(1*objMax + 2 + 1),
+  Check(force[oFor] == ForceMid(1, 2),
     "the saved midpoint parsed back to the same encoding");
-  Check(force[uranLo] == ZD(1, 15.25) + rDegMax,
+  Check(force[uranLo] == ForcePos(ZD(1, 15.25)),
     "the saved zodiac position parsed back to the same value");
+
+  // The encoding's edges, through the helpers that now own it: the
+  // largest legal pair is where an objMax off-by-one would show, and
+  // 0 Aries is the value that collides with "no force" if the rDegMax
+  // bias is ever lost.
+  force[oFor] = ForceMid(cObj, cObj);
+  Check(FForceMid(force[oFor]) && ObjForceMid1(force[oFor]) == cObj &&
+    ObjForceMid2(force[oFor]) == cObj,
+    "the largest legal midpoint pair unpacks to itself (%d/%d)",
+    ObjForceMid1(force[oFor]), ObjForceMid2(force[oFor]));
+  force[oFor] = ForcePos(0.0);
+  Check(FForcePos(force[oFor]) && RForcePos(force[oFor]) == 0.0,
+    "0 Aries is a forced position, not \"no force\"");
 
   remove(szPath);
   for (i = 0; i < objMax; i++)

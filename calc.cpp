@@ -1470,15 +1470,14 @@ real CastChart(int nContext)
   // Check to see if are -F forcing any objects to be particular values.
 
   for (i = 0; i <= is.nObj; i++)
-    if (force[i] != 0.0) {
-      if (force[i] > 0.0) {
+    if (!FForceNone(force[i])) {
+      if (FForcePos(force[i])) {
         // Force to a specific zodiac position.
-        planet[i] = force[i]-rDegMax;
+        planet[i] = RForcePos(force[i]);
         planetalt[i] = ret[i] = retalt[i] = retlen[i] = 0.0;
       } else {
         // Force to a midpoint of two other positions.
-        k = (-(int)force[i])-1;
-        k2 = k % objMax; k /= objMax;
+        k = ObjForceMid1(force[i]); k2 = ObjForceMid2(force[i]);
         planet[i] = Midpoint(planet[k], planet[k2]);
         planetalt[i] = (planetalt[k] + planetalt[k2]) / 2.0;
         ret[i] = (ret[k] + ret[k2]) / 2.0;
@@ -2806,11 +2805,9 @@ flag FObjMidSource(int iObj)
   int i, k;
 
   for (i = 0; i <= cObj; i++)
-    if (force[i] < 0.0) {
-      k = (-(int)force[i]) - 1;
-      if (k / objMax == iObj || k % objMax == iObj)
-        return fTrue;
-    }
+    if (FForceMid(force[i]) &&
+      (ObjForceMid1(force[i]) == iObj || ObjForceMid2(force[i]) == iObj))
+      return fTrue;
   return fFalse;
 }
 

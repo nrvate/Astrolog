@@ -156,6 +156,24 @@ extern CI * CONST rgpci[cRing+1];
 extern flag rgfProg[cRing+1];
 
 extern real force[objMax];
+
+// force[obj] packs three states into one real, and these helpers are the
+// only place that knows how (fun_F in express.cpp excepted: it hands the
+// raw encoded value to AstroExpressions on purpose):
+//   zero      no force
+//   positive  a zodiac position, stored with a rDegMax bias so 0 Aries
+//             is distinguishable from "no force"
+//   negative  a midpoint, packed as (int)(obj1*objMax + obj2 + 1) and
+//             negated; the (int) truncation toward zero is part of the
+//             format
+#define FForceNone(vf) ((vf) == 0.0)
+#define FForcePos(vf) ((vf) > 0.0)
+#define FForceMid(vf) ((vf) < 0.0)
+#define ForcePos(deg) ((deg) + rDegMax)
+#define RForcePos(vf) ((vf) - rDegMax)
+#define ForceMid(obj1, obj2) ((real)-((obj1)*objMax + (obj2) + 1))
+#define ObjForceMid1(vf) (((-(int)(vf)) - 1) / objMax)
+#define ObjForceMid2(vf) (((-(int)(vf)) - 1) % objMax)
 extern GridInfo *grid;
 extern int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1],
   kObjA[objMax];
@@ -441,7 +459,7 @@ extern flag GetJPLHorizons P((int,
 #define Untropical(deg) ((deg) + is.rSid)
 #define ObjCOB(i) (FBetween(i, oJup, oPlu) ? cobLo + ((i)-oJup) : (i))
 #define AdjustRestrictions() for (is.nObj = cObj; is.nObj >= 0 && \
-  ignore[is.nObj] && ignore2[is.nObj] && force[is.nObj] == 0.0 && \
+  ignore[is.nObj] && ignore2[is.nObj] && FForceNone(force[is.nObj]) && \
   !FObjMidSource(is.nObj); is.nObj--);
 #define AdjustAspectCount() for (us.nAsp = cAspect; us.nAsp > 0 && \
   ignorea[us.nAsp]; us.nAsp--);

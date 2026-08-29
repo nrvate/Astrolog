@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3004
+   display and no `xdotool`, and exits non-zero on failure. **3006
    assertions** as of 2026-08-29; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-60
+## Work log — items 1-61
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2482,6 +2482,32 @@ are the more useful half to read before starting something new.
       turtle string.
     - `DlgCustom` is down to two locals under SWISS from six; the
       duplicated parse, formatter, and name switch were their only users.
+
+61. **force[]'s three-states-in-one-real encoding is stated once, and the
+    proof of it exposed a makefile hole.** Stage 1 of the object plan:
+    FForceNone/FForcePos/FForceMid, ForcePos/RForcePos, ForceMid and
+    ObjForceMid1/2 in extern.h beside the array, value-based so they
+    serve both `force[]` and the dialogs' local `rgforce[]` copies.
+    Fourteen open-coded pack/unpack sites, five rDegMax bias sites and
+    the tag tests across seven files now read in words; `fun_F` alone
+    still hands the raw encoded value to AstroExpressions, on purpose.
+    Edge assertions pin the format: the largest legal midpoint pair
+    unpacks to itself, and 0 Aries is a forced position rather than "no
+    force".
+    - **The load-bearing check then passed against a deliberately broken
+      helper, and that was the real find.** No Qt makefile listed
+      extern.h (or astrolog.h, outside two generated-table rules) as a
+      dependency of anything -- so editing only a header rebuilt nothing,
+      and the check ran the stale binary. Same failure shape as item
+      31's astrolog.res, in the header dimension. All four makefiles now
+      make every object depend on astrolog.h and extern.h (resource.h
+      too for Windows), and the rerun failed the three assertions it
+      should: break the bias, lose the round trip and the 0-Aries edge.
+    - Every earlier header edit in this branch happened alongside .cpp
+      edits, which is the only reason none of them shipped stale.
+    - Also relearned: grep full build logs for `: error`, not ` error` --
+      atlas.cpp legitimately prints "Zone rule error:" inside warning
+      context, six times.
 
 ## Features this fork adds to both builds
 

@@ -1749,9 +1749,9 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       // what was typed and what an astrologer writes.
       for (j = 0; j < cObjSel; j++)
         SetCombo(dcOs01 + i, rgObjSel[j].szName);
-      if (force[iobj] < 0.0) {
-        k = (-(int)force[iobj]) - 1;
-        sprintf(sz, "%s/%s", szObjDisp[k / objMax], szObjDisp[k % objMax]);
+      if (FForceMid(force[iobj])) {
+        sprintf(sz, "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
+          szObjDisp[ObjForceMid2(force[iobj])]);
       } else
         SzObjSelDef(sz, iobj);
       SetEdit(dcOs01 + i, sz);
@@ -1834,7 +1834,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         if (FObjSelMidPair(sz, &j, &k)) {
           EnsureN(j, FItem(j), "midpoint object");
           EnsureN(k, FItem(k), "midpoint object");
-          rgforce[i] = (real)-(j*objMax + k + 1);
+          rgforce[i] = ForceMid(j, k);
           rgod[i].nTyp = rgTypSwiss[iobj - custLo];
           rgod[i].nObj = rgObjSwiss[iobj - custLo];
           rgod[i].nPnt = rgPntSwiss[iobj - custLo];
@@ -1872,12 +1872,11 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         // it used to be. So an untouched name follows the definition; one
         // the user typed is theirs and is kept.
         if (FEqSz(sz, rgszName0[i])) {
-          if (rgforce[i] != rgforce0[i] && rgforce[i] < 0.0) {
+          if (rgforce[i] != rgforce0[i] && FForceMid(rgforce[i])) {
             // Forced to a midpoint: name it after its two halves, as
             // Lookup Names does. Otherwise the slot sits at the midpoint
             // under the name of the body it used to be.
-            l = (-(int)rgforce[i]) - 1;
-            j = l / objMax; k = l % objMax;
+            j = ObjForceMid1(rgforce[i]); k = ObjForceMid2(rgforce[i]);
             if (FItem(j) && FItem(k))
               sprintf(sz, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
           } else if (rgod[i].nTyp != rgnTyp0[i] ||

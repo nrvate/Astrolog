@@ -1926,16 +1926,16 @@ flag FOutputSettings()
   PrintF("; FORCED OBJECT POSITIONS:\n\n");
   fAny = fFalse;
   for (i = 0; i <= cObj; i++) {
-    if (force[i] == 0.0)
+    if (FForceNone(force[i]))
       continue;
     fAny = fTrue;
-    if (force[i] > 0.0) {
+    if (FForcePos(force[i])) {
       // Forced to a zodiac position. The parse is ZD(sign, deg) plus a
       // rDegMax bias, so take the bias off and split it back up. The sign
       // is written abbreviated, which FMatchSz() reads back on a three
       // character prefix, and the degrees through FormatR() so an exact
       // value survives instead of being rounded to whole degrees.
-      rForce = force[i] - rDegMax;
+      rForce = RForcePos(force[i]);
       nForce = SFromZ(rForce);
       FormatR(szForce, rForce - ZFromS(nForce), -6);
       sprintf(sz, "-F %d %.3s %s\n", i, szSignName[nForce], szForce);
@@ -1943,8 +1943,8 @@ flag FOutputSettings()
     } else {
       // Forced to a midpoint of two objects, packed as a single negative
       // number by the -Fm parse; unpack it the way CastChart() does.
-      nForce = (-(int)force[i]) - 1;
-      sprintf(sz, "-Fm %d %d %d\n", i, nForce / objMax, nForce % objMax);
+      sprintf(sz, "-Fm %d %d %d\n", i,
+        ObjForceMid1(force[i]), ObjForceMid2(force[i]));
       PrintFSz();
     }
   }

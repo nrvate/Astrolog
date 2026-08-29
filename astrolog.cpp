@@ -2702,7 +2702,7 @@ flag FProcessSwitches(int argc, char **argv)
         if (FErrorValR("F", force[i] < 0.0 || force[i] >= rDegMax,
           force[i], 0))
           return fFalse;
-        force[i] += rDegMax;
+        force[i] = ForcePos(force[i]);
       } else {
         j = NParseSz(argv[2], pmObject);
         if (FErrorValN("Fm", !FItem(j), j, 2))
@@ -2710,7 +2710,7 @@ flag FProcessSwitches(int argc, char **argv)
         k = NParseSz(argv[3], pmObject);
         if (FErrorValN("Fm", !FItem(k), k, 3))
           return fFalse;
-        force[i] = (real)-(j*objMax + k + 1);
+        force[i] = ForceMid(j, k);
       }
       AdjustRestrictions();
       argc -= 3; argv += 3;

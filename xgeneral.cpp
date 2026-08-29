@@ -1819,7 +1819,7 @@ void DrawObject(int obj, int x, int y)
   // Above the font paths rather than beside that fallback, so it
   // reaches every output format, and before any DrawThick() change so
   // there is nothing to undo on the way out.
-  if (force[obj] < 0.0 && !fNoText) {
+  if (FForceMid(force[obj]) && !fNoText) {
     sprintf(szGlyph, "%.3s", szObjDisp[obj]);
     DrawSz(szGlyph, x, y, dtCent | dtScale2);
     return;
