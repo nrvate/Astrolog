@@ -489,8 +489,6 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
 #ifdef SWISS
   OBJDEF od;
 #endif
-  pbyte pb;
-  int *lpn;
   real *lpr;
 #ifdef MATRIX
   OE oe;
@@ -830,109 +828,6 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     darg += 2;
     break;
 
-  case 'R':
-    if (ch1 == 'd') {
-      if (FErrorArgc("YRd", argc, 1))
-        return tcError;
-      us.nSignDiv = NFromSz(argv[1]);
-      darg++;
-      break;
-    } else if (ch1 == 'h') {
-      SwitchF(us.fIgnoreAuto);
-      break;
-    } else if (ch1 == 'U') {
-      if (FErrorArgc("YRU", argc, 1))
-        return tcError;
-      us.fStarsList = (ch2 == '0');
-      FCloneSz(argv[1], &us.szStarsList);
-      darg++;
-      break;
-    } else if (ch1 == 'o') {
-      InitRestrictions(fTrue);
-      break;
-    } else if (ch1 == 'i') {
-      InitRestrictions(fFalse);
-      AdjustRestrictions();
-      AdjustAspectCount();
-      break;
-    }
-    if (FErrorArgc("YR", argc, 2 + (ch1 == 'Z')*2 + (ch1 == '7')*3))
-      return tcError;
-    i = NParseSz(argv[1], pmObject); j = NParseSz(argv[2], pmObject);
-    if (ch1 == '0') {
-      us.fIgnoreSign = i != 0;
-      us.fIgnoreDir  = j != 0;
-      darg += 2;
-      break;
-    } else if (ch1 == '1') {
-      us.fIgnoreDiralt = i != 0;
-      us.fIgnoreDirlen = j != 0;
-      darg += 2;
-      break;
-    } else if (ch1 == '2') {
-      us.fIgnoreAlt0   = i != 0;
-      us.fIgnoreDisequ = j != 0;
-      darg += 2;
-      break;
-    } else if (ch1 == 'Z') {
-      ignorez[arAsc] = i != 0;
-      ignorez[arMC]  = j != 0;
-      ignorez[arDes] = NFromSz(argv[3]) != 0;
-      ignorez[arIC]  = NFromSz(argv[4]) != 0;
-      darg += 4;
-      break;
-    } else if (ch1 == 'p') {
-      ignorez[arVer] = i != 0;
-      ignorez[arAnt] = j != 0;
-      darg += 2;
-      break;
-    } else if (ch1 == '7') {
-      ignore7[rrStd] = i != 0;
-      ignore7[rrEso] = j != 0;
-      ignore7[rrHie] = NFromSz(argv[3]) != 0;
-      ignore7[rrExa] = NFromSz(argv[4]) != 0;
-      ignore7[rrRay] = NFromSz(argv[5]) != 0;
-      if (!ignore7[rrRay])
-        EnsureRay();
-      darg += 5;
-      break;
-    }
-    if (FErrorValN("YR", !FItem(i), i, 1))
-      return tcError;
-    if (FErrorValN("YR", !FItem(j) || j < i, j, 2))
-      return tcError;
-    if (FErrorArgc("YR", argc, 3+j-i))
-      return tcError;
-    pb = ch1 == 'T' ? ignore2 : ignore;
-    for (k = i; k <= j; k++)
-      pb[k] = NFromSz(argv[3+k-i]) != 0;
-    darg += 3+j-i;
-    RedoRestrictions();
-    break;
-
-  case '7':
-    if (FErrorArgc("Y7", argc, 2))
-      return tcError;
-    k = ch1 == 'O' ? pmObject : (ch1 == 'C' ? pmSign : 0);
-    i = NParseSz(argv[1], k); j = NParseSz(argv[2], k);
-    k = ch1 == 'O' ? oNorm : (ch1 == 'C' ? cSign : 0);
-    if (FErrorValN("Y7", !FBetween(i, (int)(ch1 == 'C'), k), i, 1))
-      return tcError;
-    if (FErrorValN("Y7", !FBetween(j, (int)(ch1 == 'C'), k) || j < i, j, 2))
-      return tcError;
-    if (FErrorArgc("Y7", argc, 3+j-i))
-      return tcError;
-    lpn = ch1 == 'O' ? rgObjRay : (ch1 == 'C' ? rgSignRay : NULL);
-    for (k = i; k <= j; k++) {
-      l = NFromSz(argv[3+k-i]);
-      if (FErrorValN("Y7",
-        !FBetween(l, (int)(ch1 == 'C'), ch1 != 'C' ? 7 : 1234567), l, 3+k-i))
-        return tcError;
-      lpn[k] = l;
-    }
-    darg += 3+j-i;
-    break;
-
 #ifdef INTERPRET
   case 'I':
     if (FErrorArgc("YI", argc, 2))
@@ -961,60 +856,6 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     darg += 2;
     break;
 #endif
-
-  case 'k':
-    if (ch1 == 'U') {
-      if (FErrorArgc("YkU", argc, 1))
-        return tcError;
-      FCloneSz(argv[1], &us.szStarsColor);
-      darg++;
-      break;
-    }
-    if (ch1 == 'E') {
-      if (FErrorArgc("YkE", argc, 1))
-        return tcError;
-      FCloneSz(argv[1], &us.szAstColor);
-      darg++;
-      break;
-    }
-    if (FErrorArgc("Yk", argc, 2 + 2*(ch1 == 'C')))
-      return tcError;
-    if (ch1 == 'C') {
-      for (k = 0; k < cElem; k++) {
-        l = NParseSz(argv[1+k], pmColor);
-        if (FErrorValN("Yk", !FValidColorA(l), l, 1+k))
-          return tcError;
-        kElemA[k] = l;
-      }
-      darg += 4;
-      break;
-    }
-    k = ch1 == 'O' ? pmObject : (ch1 == 'A' ? pmAspect : 0);
-    i = NParseSz(argv[1], k); j = NParseSz(argv[2], k);
-    k = ch1 == 'O' ? starLo : (ch1 == 'A' ? cAspect :
-      (ch1 == '0' || ch1 == '7' ? cRainbow : 8));
-    if (FErrorValN("Yk",
-      !FBetween(i, (int)(ch1 != chNull && ch1 != 'O'), k), i, 1))
-      return tcError;
-    if (FErrorValN("Yk",
-      !FBetween(j, (int)(ch1 != chNull && ch1 != 'O'), k) || j < i, j, 2))
-      return tcError;
-    if (FErrorArgc("Yk", argc, 3+j-i))
-      return tcError;
-    lpn = ch1 == 'A' ? kAspA : (ch1 == '7' ? kRayA :
-      (ch1 == '0' ? kRainbowA : kMainA));
-    for (k = i; k <= j; k++) {
-      l = NParseSz(argv[3+k-i], pmColor);
-      if (FErrorValN("Yk",
-        !FBetween(l, -0xffffff, ch1 != 'O' ? cColor2-1 : kMax-1), l, 0))
-        return tcError;
-      if (ch1 == 'O')
-        rgobjset[k].kolor = l;
-      else
-        lpn[k] = l;
-    }
-    darg += 3+j-i;
-    break;
 
   case 'D':
     if (FErrorArgc("YD", argc, 2))
@@ -1181,37 +1022,80 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
 //
 // Deliberate strictness: only spellings listed in -HY exist here. The
 // retired cases happened to accept garbage suffixes as aliases (-YJq
-// acted as -YJ7, -YAz as -YAa); those now fail as any unknown switch.
+// acted as -YJ7, -YAz as -YAa, -YRx as -YR, -Ykx as -Yk); those now
+// fail as any unknown switch.
 
 #define nSwitchAbsent (-2)      // Name not in the registry.
 
-// A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1 reals
-// into consecutive slots of a table -- the shape shared by the orb,
-// angle, and influence families (and eventually restrictions & colors).
+// A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1
+// values into consecutive slots of a table -- the shape shared by the
+// orb, angle, influence, restriction, Ray and color families. The value
+// kinds are the conventions the retired cases actually used, error
+// reporting included:
+
+enum _rangedvaluekind {
+  vtReal = 0,   // RFromSz() into a real slot, unchecked.
+  vtBool,       // NFromSz() != 0 into a byte slot, unchecked.
+  vtRay,        // NFromSz() into an int slot, checked against
+                // [nValMin, nValMax], errors naming parameter 3+k-i.
+  vtColor,      // NParseSz(pmColor) into an int slot, checked against
+                // [-0xffffff, nValMax], errors naming parameter 0.
+};
+
 typedef struct _switchranged {
   CONST char *szName;   // Full spelling after the dash: "YAm".
   CONST char *szErr;    // Label today's error messages use: "YA".
   int pm;               // Parse mode for the two range indexes.
   int iMin;             // Lowest legal index: aspects 1, all else 0.
   int iMax;             // Highest legal index.
-  real *prBase;         // First slot...
+  void *pvBase;         // First slot...
   int cbStride;         // ...and the byte distance to the next.
+  int vt;               // Value kind above.
+  int nValMin, nValMax; // Value bounds for the checked kinds.
+  void (*pfnAfter)(void);  // Post-store hook, or NULL.
 } SWITCHRANGED;
 
 static CONST SWITCHRANGED rgswranged[] = {
-  {"YAo", "YA", pmAspect, 1, cAspect, &rAspOrb[0],       sizeof(real)},
-  {"YAa", "YA", pmAspect, 1, cAspect, &rAspAngle[0],     sizeof(real)},
-  {"YAm", "YA", pmObject, 0, oNorm+1, &rgobjset[0].orb,  sizeof(OBJSET)},
-  {"YAd", "YA", pmObject, 0, oNorm+1, &rgobjset[0].add,  sizeof(OBJSET)},
-  {"Yj",  "Yj", pmObject, 0, oNorm1,  &rgobjset[0].inf,  sizeof(OBJSET)},
-  {"YjT", "Yj", pmObject, 0, oNorm1,  &rgobjset[0].tinf, sizeof(OBJSET)},
-  {"YjC", "Yj", pmSign,   0, cSign,   &rHouseInf[0],     sizeof(real)},
-  {"YjA", "Yj", pmAspect, 0, cAspect, &rAspInf[0],       sizeof(real)}};
+  {"YAo", "YA", pmAspect, 1, cAspect, &rAspOrb[0],       sizeof(real),
+    vtReal, 0, 0, NULL},
+  {"YAa", "YA", pmAspect, 1, cAspect, &rAspAngle[0],     sizeof(real),
+    vtReal, 0, 0, NULL},
+  {"YAm", "YA", pmObject, 0, oNorm+1, &rgobjset[0].orb,  sizeof(OBJSET),
+    vtReal, 0, 0, NULL},
+  {"YAd", "YA", pmObject, 0, oNorm+1, &rgobjset[0].add,  sizeof(OBJSET),
+    vtReal, 0, 0, NULL},
+  {"Yj",  "Yj", pmObject, 0, oNorm1,  &rgobjset[0].inf,  sizeof(OBJSET),
+    vtReal, 0, 0, NULL},
+  {"YjT", "Yj", pmObject, 0, oNorm1,  &rgobjset[0].tinf, sizeof(OBJSET),
+    vtReal, 0, 0, NULL},
+  {"YjC", "Yj", pmSign,   0, cSign,   &rHouseInf[0],     sizeof(real),
+    vtReal, 0, 0, NULL},
+  {"YjA", "Yj", pmAspect, 0, cAspect, &rAspInf[0],       sizeof(real),
+    vtReal, 0, 0, NULL},
+  {"YR",  "YR", pmObject, 0, cObj,    ignore,            sizeof(byte),
+    vtBool, 0, 0, RedoRestrictions},
+  {"YRT", "YR", pmObject, 0, cObj,    ignore2,           sizeof(byte),
+    vtBool, 0, 0, RedoRestrictions},
+  {"Y7O", "Y7", pmObject, 0, oNorm,   rgObjRay,          sizeof(int),
+    vtRay, 0, 7, NULL},
+  {"Y7C", "Y7", pmSign,   1, cSign,   rgSignRay,         sizeof(int),
+    vtRay, 1, 1234567, NULL},
+  {"YkO", "Yk", pmObject, 0, starLo,  &rgobjset[0].kolor, sizeof(OBJSET),
+    vtColor, 0, kMax-1, NULL},
+  {"YkA", "Yk", pmAspect, 1, cAspect, kAspA,             sizeof(int),
+    vtColor, 0, cColor2-1, NULL},
+  {"Yk0", "Yk", 0,        1, cRainbow, kRainbowA,        sizeof(int),
+    vtColor, 0, cColor2-1, NULL},
+  {"Yk7", "Yk", 0,        1, cRainbow, kRayA,            sizeof(int),
+    vtColor, 0, cColor2-1, NULL},
+  {"Yk",  "Yk", 0,        0, 8,       kMainA,            sizeof(int),
+    vtColor, 0, cColor2-1, NULL}};
 
 static int NProcessSwitchRanged(CONST SWITCHRANGED *psr, int argc,
   char **argv)
 {
-  int i, j, k;
+  pbyte pb;
+  int i, j, k, l;
 
   if (FErrorArgc(psr->szErr, argc, 2))
     return tcError;
@@ -1222,9 +1106,33 @@ static int NProcessSwitchRanged(CONST SWITCHRANGED *psr, int argc,
     return tcError;
   if (FErrorArgc(psr->szErr, argc, 3+j-i))
     return tcError;
-  for (k = i; k <= j; k++)
-    *(real *)((pbyte)psr->prBase + (size_t)k * psr->cbStride) =
-      RFromSz(argv[3+k-i]);
+  for (k = i; k <= j; k++) {
+    pb = (pbyte)psr->pvBase + (size_t)k * psr->cbStride;
+    switch (psr->vt) {
+    case vtReal:
+      *(real *)pb = RFromSz(argv[3+k-i]);
+      break;
+    case vtBool:
+      *pb = NFromSz(argv[3+k-i]) != 0;
+      break;
+    case vtRay:
+      l = NFromSz(argv[3+k-i]);
+      if (FErrorValN(psr->szErr,
+        !FBetween(l, psr->nValMin, psr->nValMax), l, 3+k-i))
+        return tcError;
+      *(int *)pb = l;
+      break;
+    case vtColor:
+      l = NParseSz(argv[3+k-i], pmColor);
+      if (FErrorValN(psr->szErr,
+        !FBetween(l, -0xffffff, psr->nValMax), l, 0))
+        return tcError;
+      *(int *)pb = l;
+      break;
+    }
+  }
+  if (psr->pfnAfter != NULL)
+    psr->pfnAfter();
   return 3+j-i;
 }
 
@@ -1345,6 +1253,144 @@ static int NSwYAD(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
   return 4;
 }
 
+// The -YR sub-switch pairs parse their booleans through pmObject the
+// way the retired case did, quirks included.
+
+static int NSwYRPair(int argc, char **argv, flag *pf1, flag *pf2)
+{
+  if (FErrorArgc("YR", argc, 2))
+    return tcError;
+  *pf1 = NParseSz(argv[1], pmObject) != 0;
+  *pf2 = NParseSz(argv[2], pmObject) != 0;
+  return 2;
+}
+
+static int NSwYR0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  return NSwYRPair(argc, argv, &us.fIgnoreSign, &us.fIgnoreDir);
+}
+
+static int NSwYR1(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  return NSwYRPair(argc, argv, &us.fIgnoreDiralt, &us.fIgnoreDirlen);
+}
+
+static int NSwYR2(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  return NSwYRPair(argc, argv, &us.fIgnoreAlt0, &us.fIgnoreDisequ);
+}
+
+static int NSwYRp(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YR", argc, 2))
+    return tcError;
+  ignorez[arVer] = NParseSz(argv[1], pmObject) != 0;
+  ignorez[arAnt] = NParseSz(argv[2], pmObject) != 0;
+  return 2;
+}
+
+static int NSwYRZ(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YR", argc, 4))
+    return tcError;
+  ignorez[arAsc] = NParseSz(argv[1], pmObject) != 0;
+  ignorez[arMC]  = NParseSz(argv[2], pmObject) != 0;
+  ignorez[arDes] = NFromSz(argv[3]) != 0;
+  ignorez[arIC]  = NFromSz(argv[4]) != 0;
+  return 4;
+}
+
+static int NSwYR7(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YR", argc, 5))
+    return tcError;
+  ignore7[rrStd] = NParseSz(argv[1], pmObject) != 0;
+  ignore7[rrEso] = NParseSz(argv[2], pmObject) != 0;
+  ignore7[rrHie] = NFromSz(argv[3]) != 0;
+  ignore7[rrExa] = NFromSz(argv[4]) != 0;
+  ignore7[rrRay] = NFromSz(argv[5]) != 0;
+  if (!ignore7[rrRay])
+    EnsureRay();
+  return 5;
+}
+
+static int NSwYRd(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YRd", argc, 1))
+    return tcError;
+  us.nSignDiv = NFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYRh(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  SwitchF(us.fIgnoreAuto);
+  return 0;
+}
+
+static int NSwYRo(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  InitRestrictions(fTrue);
+  return 0;
+}
+
+static int NSwYRi(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  InitRestrictions(fFalse);
+  AdjustRestrictions();
+  AdjustAspectCount();
+  return 0;
+}
+
+static int NSwYRU(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YRU", argc, 1))
+    return tcError;
+  us.fStarsList = fFalse;
+  FCloneSz(argv[1], &us.szStarsList);
+  return 1;
+}
+
+static int NSwYRU0(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YRU", argc, 1))
+    return tcError;
+  us.fStarsList = fTrue;
+  FCloneSz(argv[1], &us.szStarsList);
+  return 1;
+}
+
+static int NSwYkU(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YkU", argc, 1))
+    return tcError;
+  FCloneSz(argv[1], &us.szStarsColor);
+  return 1;
+}
+
+static int NSwYkE(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  if (FErrorArgc("YkE", argc, 1))
+    return tcError;
+  FCloneSz(argv[1], &us.szAstColor);
+  return 1;
+}
+
+static int NSwYkC(int argc, char **argv, flag fOr, flag fAnd, flag fNot)
+{
+  int k, l;
+
+  if (FErrorArgc("Yk", argc, 4))
+    return tcError;
+  for (k = 0; k < cElem; k++) {
+    l = NParseSz(argv[1+k], pmColor);
+    if (FErrorValN("Yk", !FValidColorA(l), l, 1+k))
+      return tcError;
+    kElemA[k] = l;
+  }
+  return 4;
+}
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
@@ -1355,9 +1401,14 @@ typedef struct _switchdef {
 } SWITCHDEF;
 
 static CONST SWITCHDEF rgswitchdef[] = {
-  {"Yj0",  NSwYj0},  {"Yj7", NSwYj7}, {"YAD", NSwYAD},
-  {"YJ",   NSwYJ},   {"YJ0", NSwYJ0}, {"YJ7", NSwYJ7},
-  {"YJ70", NSwYJ70}};
+  {"Yj0",  NSwYj0},  {"Yj7",  NSwYj7},  {"YAD", NSwYAD},
+  {"YJ",   NSwYJ},   {"YJ0",  NSwYJ0},  {"YJ7", NSwYJ7},
+  {"YJ70", NSwYJ70},
+  {"YR0",  NSwYR0},  {"YR1",  NSwYR1},  {"YR2", NSwYR2},
+  {"YRp",  NSwYRp},  {"YRZ",  NSwYRZ},  {"YR7", NSwYR7},
+  {"YRd",  NSwYRd},  {"YRh",  NSwYRh},  {"YRo", NSwYRo},
+  {"YRi",  NSwYRi},  {"YRU",  NSwYRU},  {"YRU0", NSwYRU0},
+  {"YkU",  NSwYkU},  {"YkE",  NSwYkE},  {"YkC", NSwYkC}};
 
 // Look up a switch by its full spelling and run it. Returns the count of
 // extra arguments consumed, tcError on a bad invocation, or
