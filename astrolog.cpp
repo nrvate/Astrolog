@@ -515,7 +515,11 @@ static CONST SWITCHFLAG rgswflag[] = {
   {"Yr",  &us.fRound},       {"YC",  &us.fSmartCusp},
   {"YO",  &us.fSmartSave},   {"Y8",  &us.fClip80},
   {"Yo",  &us.fWriteOld},    {"Yp",  &us.fPolarAsc},
-  {"Y0",  &us.fNoDisplay},   {"Yz1", &us.fOffsetOnly}};
+  {"Y0",  &us.fNoDisplay},   {"Yz1", &us.fOffsetOnly},
+#ifdef GRAPH
+  {"YXe", &gs.fEcliptic},
+#endif
+  };
 
 // A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1
 // values into consecutive slots of a table -- the shape shared by the
@@ -1535,16 +1539,440 @@ static int NSwYi(CONST char *szSwitch, int argc, char **argv,
 }
 
 #ifdef GRAPH
-// The -YX graphics switches still live in NProcessSwitchesRareX(); this
-// bridge forwards to it until that family migrates.
+// The -YX graphics family, migrated whole from the retired
+// NProcessSwitchesRareX() in xscreen.cpp.
 
-static int NSwYX(CONST char *szSwitch, int argc, char **argv,
+// -YX itself is no longer implemented, but still skips 2 parameters and
+// does nothing, for compatibility with old astrolog.as files.
+
+static int NSwYXNull(CONST char *szSwitch, int argc, char **argv,
   flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
 {
-  return NProcessSwitchesRareX(argc, argv,
-    (int)(szSwitch - argv[0]) + 2, fOr, fAnd, fNot);
+  if (FErrorArgc("YX", argc, 2))
+    return tcError;
+  return 2;
 }
+
+static int NSwYXG(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YXG", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  switch (szSwitch[3]) {
+  case 'c':
+    if (FErrorValN("YXGc", !FBetween(i, 1, 2), i, 0))
+      return tcError;
+    gs.nGlyphCap = i;
+    break;
+  case 'u':
+    if (FErrorValN("YXGu", !FBetween(i, 1, 2), i, 0))
+      return tcError;
+    gs.nGlyphUra = i;
+    break;
+  case 'p':
+    if (FErrorValN("YXGp", !FBetween(i, 1, 3), i, 0))
+      return tcError;
+    gs.nGlyphPlu = i;
+    break;
+  case 'l':
+    if (FErrorValN("YXGl", !FBetween(i, 1, 2), i, 0))
+      return tcError;
+    gs.nGlyphLil = i;
+    break;
+  case 'v':
+    if (FErrorValN("YXGv", !FBetween(i, 1, 2), i, 0))
+      return tcError;
+    gs.nGlyphVer = i;
+    break;
+  case 'e':
+    if (FErrorValN("YXGe", !FBetween(i, 1, 2), i, 0))
+      return tcError;
+    gs.nGlyphEri = i;
+    break;
+  default:
+    if (FErrorValN("YXG", !FValidGlyphs(i), i, 0))
+      return tcError;
+    if (FBetween(i/100000,   1, 2)) gs.nGlyphCap = i/100000;
+    if (FBetween(i/10000%10, 1, 2)) gs.nGlyphUra = i/10000%10;
+    if (FBetween(i/1000%10,  1, 3)) gs.nGlyphPlu = i/1000%10;
+    if (FBetween(i/100%10,   1, 2)) gs.nGlyphLil = i/100%10;
+    if (FBetween(i/10%10,    1, 2)) gs.nGlyphVer = i/10%10;
+    if (FBetween(i%10,       1, 2)) gs.nGlyphEri = i%10;
+    break;
+  }
+  return 1;
+}
+
+static int NSwYXDCore(int argc, char **argv, char chVar)
+{
+  int i, j;
+
+  if (FErrorArgc("YXD", argc, 3 - (chVar == '1' || chVar == 'D')))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("YXD", !FItem(i), i, 1))
+    return tcError;
+  if (chVar == 'D') {
+    j = NParseSz(argv[2], pmObject);
+    if (FErrorValN("YXDD", !FItem(j), j, 2))
+      return tcError;
+    FCloneSz(szDrawObject[j], (char **)&szDrawObject[i]);
+    FCloneSz(szDrawObject2[j], (char **)&szDrawObject2[i]);
+  } else {
+    FCloneSzCore(argv[2][0] ? argv[2] : szDrawObjectDef[i],
+      (char **)&szDrawObject[i], szDrawObject[i] == szDrawObjectDef[i]);
+    FCloneSzCore(
+      chVar == '1' ? "" : (argv[3][0] ? argv[3] : szDrawObjectDef2[i]),
+      (char **)&szDrawObject2[i], szDrawObject2[i] == szDrawObjectDef2[i]);
+  }
+  return 3 - (chVar == '1' || chVar == 'D');
+}
+
+static int NSwYXD(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYXDCore(argc, argv, chNull);
+}
+
+static int NSwYXD1(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYXDCore(argc, argv, '1');
+}
+
+static int NSwYXDD(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYXDCore(argc, argv, 'D');
+}
+
+static int NSwYXACore(int argc, char **argv, flag fSingle)
+{
+  int i;
+
+  if (FErrorArgc("YXA", argc, 3 - fSingle))
+    return tcError;
+  i = NParseSz(argv[1], pmAspect);
+  if (FErrorValN("YXA", !FAspect3(i), i, 0))
+    return tcError;
+  FCloneSzCore(argv[2][0] ? argv[2] : szDrawAspectDef[i],
+    (char **)&szDrawAspect[i], szDrawAspect[i] == szDrawAspectDef[i]);
+  FCloneSzCore(
+    fSingle ? "" : (argv[3][0] ? argv[3] : szDrawAspectDef2[i]),
+    (char **)&szDrawAspect2[i], szDrawAspect2[i] == szDrawAspectDef2[i]);
+  return 3 - fSingle;
+}
+
+static int NSwYXA(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYXACore(argc, argv, fFalse);
+}
+
+static int NSwYXA1(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwYXACore(argc, argv, fTrue);
+}
+
+static int NSwYXv(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (FErrorArgc("YXv", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("YXv", !FValidDecaType(i), i, 1))
+    return tcError;
+  gs.nDecaType = i;
+  darg++;
+  if (argc > 2 && FNumCh(argv[2][0])) {
+    i = NFromSz(argv[2]);
+    if (FErrorValN("YXv", !FValidDecaSize(i), i, 2))
+      return tcError;
+    gs.nDecaSize = i;
+    darg++;
+    if (argc > 3 && FNumCh(argv[3][0])) {
+      i = NFromSz(argv[3]);
+      if (FErrorValN("YXv", !FValidDecaLine(i), i, 3))
+        return tcError;
+      gs.nDecaLine = i;
+      darg++;
+    }
+  }
+  return darg;
+}
+
+static int NSwYXt(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXt", argc, 1))
+    return tcError;
+  FCloneSz(argv[1], &gs.szSidebar);
+  return 1;
+}
+
+static int NSwYXg(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YXg", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("YXg", !FValidGrid(i), i, 0))
+    return tcError;
+  gs.nGridCell = i;
+  return 1;
+}
+
+static int NSwYXS(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real rT;
+
+  if (FErrorArgc("YXS", argc, 1))
+    return tcError;
+  rT = RFromSz(argv[1]);
+  if (FErrorValR("YXS", !FValidZoom(rT), rT, 0))
+    return tcError;
+  gs.rspace = rT;
+  return 1;
+}
+
+static int NSwYXj(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXj", argc, 1))
+    return tcError;
+  gs.cspace = NFromSz(argv[1]);
+  if (gi.rgspace != NULL) {
+    DeallocateP(gi.rgspace);
+    gi.rgspace = NULL;
+  }
+  return 1;
+}
+
+static int NSwYXj0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXj", argc, 1))
+    return tcError;
+  gs.zspace = NFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYX7(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YX7", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  if (FErrorValN("YX7", !FValidEsoteric(i), i, 0))
+    return tcError;
+  gs.nRayWidth = i;
+  return 1;
+}
+
+static int NSwYXk(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(gs.fColorSign);
+  return 0;
+}
+
+static int NSwYXk0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(gs.fColorSign);
+  SwitchF(gs.fColorHouse);
+  return 0;
+}
+
+static int NSwYXK(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YXK", argc, 2))
+    return tcError;
+  i = NParseSz(argv[1], pmColor);
+  if (FErrorValN("YXK", !FValidColor(i), i, 0))
+    return tcError;
+  rgbbmp[i] = NParseSz(argv[2], pmRGB);
+  return 2;
+}
+
+static int NSwYXK0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(gs.fAltPalette);
+  InitColorPalette(gs.fInverse);
+  return 0;
+}
+
+static int NSwYXa(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXa", argc, 1))
+    return tcError;
+  gs.nDashMax = NFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYXx(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXx", argc, 1))
+    return tcError;
+  gs.nThickAdjust = NFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYXW(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  // The retired case read argv[1] with no arity check at all -- the one
+  // divergence in this family that is a fix, not a transliteration.
+  if (FErrorArgc("YXW", argc, 1))
+    return tcError;
+  gs.nTriangles = NFromSz(argv[1]);
+  return 1;
+}
+
+#ifdef SWISS
+static int NSwYXU(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXU", argc, 2))
+    return tcError;
+  if (!FProcessYXU(argv[1], argv[2], fFalse))
+    return tcError;
+  return 2;
+}
+
+static int NSwYXU0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  flag fAdd;
+
+  if (FErrorArgc("YXU", argc, 2))
+    return tcError;
+  fAdd = FSzSet(gs.szStarsLin) && FSzSet(gs.szStarsLnk);
+  if (!FProcessYXU(argv[1], argv[2], fAdd))
+    return tcError;
+  return 2;
+}
+
+static int NSwYXU1(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+#ifdef CONSTEL
+  CONST char **ppch;
+
+  for (ppch = szDrawConstelLine; *ppch != NULL; ppch += 2) {
+    if (!FProcessYXU(ppch[0], ppch[1], ppch != szDrawConstelLine))
+      return tcError;
+  }
 #endif
+  return 0;
+}
+#endif // SWISS
+
+static int NSwYXf(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (FErrorArgc("YXf", argc, 1))
+    return tcError;
+  i = NFromSz(argv[1]);
+  switch (szSwitch[3]) {
+  case 't':
+    if (FErrorValN("YXft", !FValidFont(0, i), i, 0))
+      return tcError;
+    gs.nFontTxt = i;
+    break;
+  case 's':
+    if (FErrorValN("YXfs", !FValidFont(1, i), i, 0))
+      return tcError;
+    gs.nFontSig = i;
+    break;
+  case 'h':
+    if (FErrorValN("YXfh", !FValidFont(2, i), i, 0))
+      return tcError;
+    gs.nFontHou = i;
+    break;
+  case 'o':
+    if (FErrorValN("YXfo", !FValidFont(3, i), i, 0))
+      return tcError;
+    gs.nFontObj = i;
+    break;
+  case 'a':
+    if (FErrorValN("YXfa", !FValidFont(4, i), i, 0))
+      return tcError;
+    gs.nFontAsp = i;
+    break;
+  case 'n':
+    if (FErrorValN("YXfn", !FValidFont(5, i), i, 0))
+      return tcError;
+    gs.nFontNak = i;
+    break;
+  default:
+    if (FErrorValN("YXf", !FBetween(i, 0, 0xffffff), i, 0))
+      return tcError;
+    gs.nFontTxt = i/0x100000;
+    gs.nFontSig = i/0x10000 % 0x10;
+    gs.nFontHou = i/0x1000 % 0x10;
+    gs.nFontObj = i/0x100 % 0x10;
+    gs.nFontAsp = i/0x10 % 0x10;
+    gs.nFontNak = i%0x10;
+    if (!FValidFont(0, gs.nFontTxt)) gs.nFontTxt = 0;
+    if (!FValidFont(1, gs.nFontSig)) gs.nFontSig = 0;
+    if (!FValidFont(2, gs.nFontHou)) gs.nFontHou = 0;
+    if (!FValidFont(3, gs.nFontObj)) gs.nFontObj = 0;
+    if (!FValidFont(4, gs.nFontAsp)) gs.nFontAsp = 0;
+    if (!FValidFont(5, gs.nFontNak)) gs.nFontNak = 0;
+    break;
+  }
+  gs.nFontAll = gs.nFontTxt*0x100000 + gs.nFontSig*0x10000 +
+    gs.nFontHou*0x1000 + gs.nFontObj*0x100 + gs.nFontAsp*0x10 +
+    gs.nFontNak;
+  if (gs.nFontAll != 0)
+    gi.nFontPrev = gs.nFontAll;
+  return 1;
+}
+
+#ifdef PS
+static int NSwYXp(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXp", argc, 1))
+    return tcError;
+  gs.nOrient = NFromSz(argv[1]);
+  return 1;
+}
+
+static int NSwYXp0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YXp0", argc, 2))
+    return tcError;
+  // pmLength honors the "cm" suffix SzLength() writes and the dialogs
+  // already parse; a bare RFromSz() read "21.59cm" as 21.59 inches, so
+  // each metric save/load cycle multiplied by 2.54.
+  gs.xInch = RParseSz(argv[1], pmLength);
+  gs.yInch = RParseSz(argv[2], pmLength);
+  return 2;
+}
+#endif // PS
+#endif // GRAPH
 
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
@@ -1608,7 +2036,25 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"Y5",   fTrue,  NSwY5},   {"Ya",   fTrue,  NSwYa},
   {"Yq",   fTrue,  NSwYq},   {"Yi",   fTrue,  NSwYi},
 #ifdef GRAPH
-  {"YX",   fTrue,  NSwYX},
+  {"YX",   fFalse, NSwYXNull},
+  {"YXD",  fFalse, NSwYXD},   {"YXD1", fFalse, NSwYXD1},
+  {"YXDD", fFalse, NSwYXDD},  {"YXA",  fFalse, NSwYXA},
+  {"YXA1", fFalse, NSwYXA1},  {"YXv",  fFalse, NSwYXv},
+  {"YXt",  fFalse, NSwYXt},   {"YXg",  fFalse, NSwYXg},
+  {"YXS",  fFalse, NSwYXS},   {"YXj",  fFalse, NSwYXj},
+  {"YXj0", fFalse, NSwYXj0},  {"YX7",  fFalse, NSwYX7},
+  {"YXk",  fFalse, NSwYXk},   {"YXk0", fFalse, NSwYXk0},
+  {"YXK",  fFalse, NSwYXK},   {"YXK0", fFalse, NSwYXK0},
+  {"YXa",  fFalse, NSwYXa},   {"YXx",  fFalse, NSwYXx},
+  {"YXW",  fFalse, NSwYXW},
+#ifdef SWISS
+  {"YXU",  fFalse, NSwYXU},   {"YXU0", fFalse, NSwYXU0},
+  {"YXU1", fFalse, NSwYXU1},
+#endif
+#ifdef PS
+  {"YXp",  fFalse, NSwYXp},   {"YXp0", fFalse, NSwYXp0},
+#endif
+  {"YXG",  fTrue,  NSwYXG},   {"YXf",  fTrue,  NSwYXf},
 #endif
   };
 

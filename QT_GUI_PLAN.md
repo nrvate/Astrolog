@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-71
+## Work log — items 1-72
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2783,6 +2783,21 @@ are the more useful half to read before starting something new.
       or off the canvas depending on the minute. The test now pins
       ciCore (to ciTwin's fixed data) beside its existing us/gs pin --
       item 4's pin-the-time lesson, applied where it was missed.
+
+72. **M5: NProcessSwitchesRareX() is deleted -- the second of the four
+    parsers gone.** The whole -YX graphics family moved into the
+    registry (all inside `#ifdef GRAPH`, with SWISS/PS/CONSTEL guards
+    riding on their rows and handlers exactly as the retired cases
+    carried them): exact rows for the two-dozen plain spellings, prefix
+    rows for -YXG and -YXf whose sub-letter rides in the spelling, a
+    flag row for -YXe, and shared cores for the -YXD and -YXA variant
+    pairs. The M4 bridge, the function, its banner, and its extern are
+    gone. Differential: 192 invocations, 4,883 captured lines,
+    byte-identical against the pre-M5 binary.
+    - One deliberate divergence that is a fix, not a transliteration:
+      the retired -YXW case read argv[1] with no arity check at all --
+      undefined behavior on a bare "-YXW", not preservable behavior --
+      so the registry handler checks like every other switch.
 
 ## Features this fork adds to both builds
 
