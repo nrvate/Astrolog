@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-72
+## Work log — items 1-73
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2798,6 +2798,27 @@ are the more useful half to read before starting something new.
       the retired -YXW case read argv[1] with no arity check at all --
       undefined behavior on a bare "-YXW", not preservable behavior --
       so the registry handler checks like every other switch.
+
+73. **M6: NProcessSwitchesX() is deleted -- three of the four parsers
+    gone.** The whole -X graphics family is registry-resident. The row
+    tables gained a `grf` bits field, and its first bit does what the
+    retired main-parser case 'X' did around its entire sub-parser:
+    every row marked `grfSwGraphics` is refused when -0X has locked
+    graphics away, and turns graphics mode on when it succeeds --
+    family-wide behavior declared once on the rows instead of coded
+    around a call site. Seventeen -X toggles became flag rows, the
+    chart modes (-XX/-XW/-XG/-XP/-XZ) share their optional
+    rotation/tilt shape across suffix spellings mapped to one handler
+    each, and -Xb/-XM/-XE/-XU/-XL are prefix rows. The main parser's
+    case 'X' and the 480-line function are deleted.
+    - Differential: 259 invocations, 6,791 captured lines,
+      byte-identical -- after it caught a real mistake in review: -XE
+      was first registered as an exact row and "-XE1" fell through to
+      "Unknown switch". The harness exists precisely for that.
+    - The -0X lockdown corner narrowed: a garbage -X spelling under
+      -0X used to say graphics were not allowed and now says unknown
+      switch, since the registry checks the lockdown only for
+      spellings that exist. Same strictness class as items 68-72.
 
 ## Features this fork adds to both builds
 

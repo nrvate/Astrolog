@@ -282,6 +282,11 @@ of the file (A2's failure mode, gone for good).
   deleted -- the second of the four parsers gone. The -YX graphics
   family is registry-resident; 192-invocation differential
   byte-identical; ~120 switches migrated.
+  **M6 done 2026-08-29** (work log item 73): NProcessSwitchesX()
+  deleted -- three of four parsers gone. The rows gained a `grf` bits
+  field whose first use declares the -X family's lockdown-and-enable
+  behavior once instead of coding it around a call site. ~160 switches
+  migrated; 259-invocation differential byte-identical.
 - **M-final**: the four parser shells reduce to dispatch loops; the
   help printers are deleted; `FOutputSettings()` is a loop plus the
   handful of genuinely bespoke sections.
@@ -907,10 +912,11 @@ each independently shippable:
    its M1 step. **M1 and M2 done 2026-08-29** — registry, driver, 39
    switches across the -YA*, -Yj*, -YJ*, -YR*, -Y7* and -Yk* families;
    all differentials byte-identical. M3 added the parse context and
-   retired is.fileIn; M4 deleted NProcessSwitchesRare(); M5 deleted
-   NProcessSwitchesRareX(). Two of the four parsers remain: the main
-   FProcessSwitches() cases and NProcessSwitchesX() (-X graphics).
-   Next: M6 onward, one main-parser letter family per session.
+   retired is.fileIn; M4-M6 deleted NProcessSwitchesRare(),
+   NProcessSwitchesRareX(), and NProcessSwitchesX(). Only the main
+   FProcessSwitches() cases remain -- chart types, chart info, the -R
+   restrictions, -W passthroughs, and the imperative switches. M7
+   onward takes them a letter family at a time.
 5. **D2, C3, E1, D1/F1/F2** — the remaining quality increments, now
    opportunistic: pick one up when a T3 migration session leaves room,
    or between migration phases.
