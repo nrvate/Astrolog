@@ -75,7 +75,7 @@ sits in: themes and area findings are ordered most-worth-doing first.
 | A. Spine: startup, switch parsing, dispatch | astrolog.cpp (3538) | **surveyed 2026-08-29** — findings A1-A5 |
 | B. Settings & serialization | io.cpp (3211) | **surveyed 2026-08-29** — findings B1-B5 |
 | C. Computation core | calc.cpp (4000), matrix.cpp (703), ephemeris glue | **surveyed 2026-08-29** — findings C1-C6 |
-| D. Text charts & interpretation | charts0-3.cpp (8876), intrpret.cpp (1605) | pending |
+| D. Text charts & interpretation | charts0-3.cpp (8876), intrpret.cpp (1605) | **surveyed 2026-08-29** — findings D1-D4 |
 | E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | pending |
 | F. Graphics charts | xcharts0-2.cpp (9129) | pending |
 | G. Frontends & satellites | qtdriver/qtdialog (9345), express.cpp (2936), atlas.cpp (2171) | pending |
@@ -503,7 +503,70 @@ losing their mode on recast needed a fork fix and a standing test
 slot ownership — who writes each ring and when — as the surveys reach
 the chart code that juggles them (Area D). *Cost:* documentation.
 
-### Areas D-H — pending
+### Area D — text charts & interpretation, surveyed 2026-08-29
+
+charts0.cpp is the help/table displays and the print primitives;
+charts1.cpp the single-chart listings and wheels; charts2.cpp the
+relation (two-chart) variants; charts3.cpp the time searches;
+intrpret.cpp the interpretation engine. Two clean verdicts first: the
+interpretation engine is genuinely data-driven — phrase tables
+(`szMindPart`, `szInteract`, `szModify`, `szTherefore`) composed by a
+word-wrap accumulator — a design to preserve, not fix; and the two big
+search loops (`ChartInDaySearch`/`ChartTransitSearch`) turn out to
+share machinery, not lines (~23% textual overlap; the shared parts —
+`InDayInfo`/`TransInfo`, `PrintInDays` — are already factored out).
+Leave both alone.
+
+**D1 — Eight single/relation chart clone pairs.** `ChartListing`,
+`ChartGrid`, `ChartAspect`, `ChartMidpoint`, `ChartAstroGraph` each
+have a `...Relation` twin in charts2.cpp, and `InterpretAspect`/
+`InterpretGrid`/`InterpretMidpoint` repeat the pattern. Measured on the
+aspect pair: 118 vs 113 lines, ~70% identical — same loop, same
+sorting, same summary, differing in grid source and iteration domain.
+*Incident:* the clone-and-swap culture is what produced item 38
+(traditional block copied, table names swapped, wrong domain), and
+relationship-mode state needed a fork fix (`TestRelationshipModeQt`).
+*Direction:* merge pair by pair into one core taking the position
+sources and iteration domain as parameters — and this area has the best
+net in the project: `tools/text-chart-capture.sh` +
+`text-chart-diff.py` byte-diff every text chart against the Windows
+build. A pair a session, diff after each. *Cost:* medium, mechanical,
+high confidence.
+
+**D2 — The influence stanzas are twelve-line clones over table names.**
+`ComputeInfluence()` (intrpret.cpp:1319-1346) repeats
+`k = table[j]; if (k > 0 && i != k) power1[k] += x;` twelve times per
+concern across traditional/esoteric/hierarchical, differing only in
+which table — with real guard subtleties between blocks (`i != k`
+present in the sign loop, absent in the house-cusp loop; `rules[]`
+unguarded because its entries are never empty). *Incident:* items 37
+and 38 — the two worst memory bugs found in this project — were both in
+these stanzas. *Direction:* iterate the same three-system family table
+the `rulership` suite group already models, preserving each block's
+guard semantics exactly; the data side is pinned by item 64's
+assertions, the behavior side by the suite and Windows text-diff.
+*Cost:* small; good early increment.
+
+**D3 — The print pipeline is modal global state.** Output goes through
+`is.S` redirection; `AnsiColor()` emits ANSI escapes or HTML `<font>`
+tags depending on `us.fAnsiColor`/`us.fTextHTML` (which
+`RedrawTextQt()` deliberately exploits); column layout is hand-counted
+spaces, so a one-character label change silently breaks alignment; and
+`PrintS()` (charts0.cpp:177) colorizes the help screen by *parsing the
+help text's own characters* with static cross-call state. `FieldWord()`
+likewise accumulates in a static buffer flushed by a `NULL` call.
+*Verdict:* document the modes and the flush conventions (T8) and rely
+on the text-diff tooling as the net for any layout-touching change;
+none of it is worth restructuring on its own. Tagged T1/T8.
+
+**D4 — `PrintChart()` is the text twin of A3's mode zoo.**
+charts1.cpp:2715 dispatches on the same `us.f*` flag combinations
+`Action()`, `DetectGraphicsChartMode()` and the ports each re-derive,
+in an else-if order that matters (the context menus mirror it, work
+log item 1). Tagged onto A3: one shared flag↔mode table serves all
+four consumers. *Cost:* counted under A3.
+
+### Areas E-H — pending
 
 ---
 
