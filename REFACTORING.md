@@ -73,7 +73,7 @@ sits in: themes and area findings are ordered most-worth-doing first.
 |---|---|---|
 | Metrics pass, whole codebase | all own `.cpp/.h` | **done 2026-08-29** — numbers cited throughout |
 | A. Spine: startup, switch parsing, dispatch | astrolog.cpp (3538) | **surveyed 2026-08-29** — findings A1-A5 |
-| B. Settings & serialization | io.cpp (3211) | pending |
+| B. Settings & serialization | io.cpp (3211) | **surveyed 2026-08-29** — findings B1-B5 |
 | C. Computation core | calc.cpp (4000), matrix.cpp (703), ephemeris glue | pending |
 | D. Text charts & interpretation | charts0-3.cpp (8876), intrpret.cpp (1605) | pending |
 | E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | pending |
@@ -372,10 +372,62 @@ while the contract is written down. *Cost:* documentation now.
 so Area G reconciles how the Qt build enters. *Cost:* trivial;
 fold when touched.
 
-### Area B — settings & serialization (io.cpp) — pending
+### Area B — settings & serialization (io.cpp), surveyed 2026-08-29
 
-Seeded from T4: the full-coverage round-trip leg; the 51 `goto`s in
-io.cpp (highest in the codebase) want a look at the error-path idiom.
+The file is six file-format parsers (switch/.as, AAF, quick, ADB,
+Solar Fire text, calendar), their output twins, the shared value parsers
+`NParseSz`/`RParseSz`, chart-info input, and the fork's HTTP client.
+One seeded suspicion dissolved on reading: the 51 `goto`s are almost all
+a disciplined single-exit `goto LDone` cleanup idiom — the right shape
+for C-style resource handling, to be documented (T8), not refactored.
+
+**B1 — Six parsers, three hand-rolled line readers, visibly drifting.**
+`FProcessSwitchFile` (io.cpp:234) reads via `getbyte()` with
+realloc-doubling growth; `FProcessAAFFile` (io.cpp:449) hand-loops
+`getc` into a fixed `cchSzLine` buffer, silently truncating; the Solar
+Fire and calendar parsers call `fgets(szLine, cchSzMax, ...)` into
+buffers declared `cchSzLine` — **four times larger than the read limit**
+(io.cpp:972/987, 1108/1123), so a long line silently splits at 254
+characters while the buffer says 1020 was intended. No incident yet;
+the drift is the evidence. *Direction:* one line-reader helper with an
+explicit growth/truncation policy per caller — but first pin current
+behavior with long-line fixture tests, because the existing truncation
+points may be load-bearing for real files. *Cost:* low; net first.
+
+**B2 — Virtual filenames are in-band magic strings.** `FInputData`
+(io.cpp:2656) special-cases the names `nul`, `set`, `now`, `tty`,
+`__t`, `__g`, `__d`, `__1`..`__6` before touching the filesystem — so
+a real file named `now` is unreachable, and the full list exists only
+as an if-chain. *Direction:* keep the behavior (scripts depend on it);
+lift the names into one commented table the if-chain walks, and list
+them in the helpfile section that documents `-i`. *Cost:* trivial.
+
+**B3 — The switch-file channel is a global, and nested includes clobber
+it.** Parsers publish their `FILE*` in `is.fileIn`, and the atlas/zone
+loading switches (astrolog.cpp:1273-1290) read *the rest of the current
+file* through that global — a command file is really a switch stream
+with an in-band binary payload, multiplexed by global state. Every
+parser NULLs `is.fileIn` at its `LDone` unconditionally, so an `-i`
+include nested inside a file leaves the *outer* file's channel NULL;
+an atlas-load switch after the include point would fail. Latent — no
+incident, the bundled files never nest that way. *Direction:* save and
+restore the previous value around each parser (three-line fix), plus a
+regression test with a nested include followed by a payload switch.
+*Cost:* low, and it's the kind of quiet misdesign this document exists
+to catch before it draws blood.
+
+**B4 — Chart info hides behind two-letter field macros.** `MM`, `DD`,
+`YY`, `TT`, `SS`, `ZZ`, `OO`, `AA` (extern.h:83-90) alias `ciCore`
+fields, so `GetTimeNow(&MM, ...)` mutates a global through what reads
+as a local. Pervasive and upstream-idiomatic — renaming is churn (see
+non-goals) — but it belongs in the conventions doc, and new code should
+write `ciCore.mon` explicitly. Tagged T8. *Cost:* documentation.
+
+**B5 — T4's concrete increment lives here.** Extend
+`tools/settings-round-trip.sh` with a second leg: a fixture settings
+file exercising **every** switch family `FOutputSettings()` writes, so
+a switch whose save-twin is missing cannot hide by being unset in the
+maintainer's config. *Cost:* one session, pure test.
 
 ### Areas C-H — pending
 
