@@ -4237,50 +4237,17 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
 {
   char sz[cchSzMax];
   OBJDEF od;
-  int i, l;
+  int i;
 
   for (i = 0; i < rgpeName.size(); i++) {
     QString strName = rgpeName[i]->text();
     if (!strName.isEmpty() && strName != szObjUnknown)
       continue;
     ParseCustomDefQt(rgpeDef[i]->text(), &od);
-    // All but the JPL Horizons case is SzObjSelName()'s job description,
-    // but that function treats type 4 as a plain object index; the web
-    // query below is why this switch survives. Worth folding once
-    // SzObjSelName() learns type 4.
-    switch (od.nTyp) {
-    case 0:
-      SwissGetObjName(sz, -od.nObj);
-      break;
-    case 1:
-      SwissGetObjName(sz, od.nObj);
-      break;
-    case 2:
-      sprintf(sz, "%s",
-        FValidObj(od.nObj) ? szObjName[od.nObj] : szObjUnknown);
-      break;
-    case 3:
-      l = ObjMoons(od.nObj);
-      sprintf(sz, "%s", FItem(l) ? szObjName[l] : szObjUnknown);
-      break;
-    case 4:
-#ifdef JPLWEB
-      {
-        // Same as Windows: this one goes out to JPL Horizons over the
-        // network, synchronously, while the dialog sits there.
-        real rT;
-        if (!GetJPLHorizons(od.nObj, &rT, &rT, &rT, &rT, &rT, &rT, sz))
-          sprintf(sz, "%s", szObjUnknown);
-      }
-#else
-      sprintf(sz, "%s", szObjUnknown);
-#endif
-      break;
-    case 5:
-      sprintf(sz, "%s",
-        FValidPart(od.nObj) ? ai[od.nObj-1].name : szObjUnknown);
-      break;
-    }
+    // SzObjSelName() covers every definition type now, the JPL Horizons
+    // web query included, and remembers the name it answers -- so a name
+    // this button shows is a name the program accepts back.
+    SzObjSelName(sz, od.nTyp, od.nObj);
     rgpeName[i]->setText(sz);
   }
 }
@@ -4348,6 +4315,12 @@ void ShowCustomDialogQt()
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
     ParseCustomDefQt(rgpeDef[j]->text(), &od);
+    // A slot pointed at a different body drops the old body's glyph, the
+    // way -Ye and Object Selections already do -- this dialog was the
+    // last path that could leave Vulcan's glyph on a point everything
+    // else calls by its new name.
+    if (od.nTyp != rgTypSwiss[j] || od.nObj != rgObjSwiss[j])
+      SetObjGlyphNoneCore(i);
     rgTypSwiss[j] = od.nTyp;
     rgObjSwiss[j] = od.nObj;
     rgPntSwiss[j] = od.nPnt;

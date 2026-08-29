@@ -1610,10 +1610,6 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
   int i, j;
 #ifdef SWISS
   OBJDEF od;
-  int l;
-#ifdef JPLWEB
-  real rT;
-#endif
 #endif // SWISS
 
   switch (message) {
@@ -1649,32 +1645,9 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
         GetEdit(ded01 - custLo + i, sz);
         if (!FObjDefParse(sz, &od))
           continue;
-        switch (od.nTyp) {
-        case 0:
-          SwissGetObjName(sz, -od.nObj);
-          break;
-        case 1:
-          SwissGetObjName(sz, od.nObj);
-          break;
-        case 2:
-          sprintf(sz, "%s",
-            FValidObj(od.nObj) ? szObjName[od.nObj] : szObjUnknown);
-          break;
-        case 3:
-          l = ObjMoons(od.nObj);
-          sprintf(sz, "%s", FItem(l) ? szObjName[l] : szObjUnknown);
-          break;
-        case 4:
-#ifdef JPLWEB
-          if (!GetJPLHorizons(od.nObj, &rT, &rT, &rT, &rT, &rT, &rT, sz))
-#endif
-            sprintf(sz, "%s", szObjUnknown);
-          break;
-        case 5:
-          sprintf(sz, "%s",
-            FValidPart(od.nObj) ? ai[od.nObj-1].name : szObjUnknown);
-          break;
-        }
+        // SzObjSelName() covers every definition type now, the JPL
+        // Horizons web query included, and remembers the name it answers.
+        SzObjSelName(sz, od.nTyp, od.nObj);
         SetEdit(den01 - custLo + i, sz);
       }
 #endif
@@ -1696,6 +1669,11 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
 #endif
           if (j) {
 #ifdef SWISS
+            // A slot pointed at a different body drops the old body's
+            // glyph, the way -Ye and Object Selections already do.
+            if (od.nTyp != rgTypSwiss[i - custLo] ||
+              od.nObj != rgObjSwiss[i - custLo])
+              SetObjGlyphNoneCore(i);
             rgTypSwiss[i - custLo] = od.nTyp;
             rgObjSwiss[i - custLo] = od.nObj;
             rgPntSwiss[i - custLo] = od.nPnt;

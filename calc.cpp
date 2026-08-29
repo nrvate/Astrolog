@@ -2687,7 +2687,17 @@ void SzObjSelName(char *sz, int nTyp, int nObj)
     SwissGetObjName(sz, nTyp <= 0 ? -nObj : nObj);
   else if (nTyp >= 5)
     sprintf(sz, "%s", FValidPart(nObj) ? ai[nObj-1].name : szObjUnknown);
-  else {
+  else if (nTyp == 4) {
+    // A JPL Horizons body, named by asking JPL -- over the network,
+    // synchronously, the same way Windows' DlgCustom always has. Before
+    // this case existed, a "j" definition fell into the object-index
+    // branch below and a Lookup Names on "j2" answered "Moon".
+#ifdef JPLWEB
+    real rT;
+    if (!GetJPLHorizons(nObj, &rT, &rT, &rT, &rT, &rT, &rT, sz))
+#endif
+      sprintf(sz, "%s", szObjUnknown);
+  } else {
     if (nTyp == 3)
       nObj = ObjMoons(nObj);
     sprintf(sz, "%s", FItem(nObj) ? szObjName[nObj] : szObjUnknown);

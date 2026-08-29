@@ -1938,8 +1938,16 @@ static void TestCustomDialogParseQt()
 {
   int nTypSav = rgTypSwiss[0], nObjSav = rgObjSwiss[0];
   int nPntSav = rgPntSwiss[0], nFlgSav = rgFlgSwiss[0];
+  // Row 1 too, for the glyph: row 0's slot is already redefined by
+  // nrvate.as, so its glyph is the sentinel before the test starts and
+  // proves nothing. Row 1 still holds its own body and its own glyph.
+  int iobj1 = custLo + 1;
+  int nTyp1Sav = rgTypSwiss[1], nObj1Sav = rgObjSwiss[1];
+  int nPnt1Sav = rgPntSwiss[1], nFlg1Sav = rgFlgSwiss[1];
 
   Group("Custom objects parse");
+  Check(szDrawObject[iobj1] == szDrawObjectDef[iobj1],
+    "row 1's slot starts out holding its own body's glyph");
 
   DriveModalQt(ShowCustomDialogQt, [](QWidget *pw) {
     QLineEdit *peDef = NULL;
@@ -1957,11 +1965,18 @@ static void TestCustomDialogParseQt()
     std::sort(rgx.begin(), rgx.end());
     if (rgx.size() < 2)
       return;
+    QLineEdit *peDef1 = NULL;
     for (QLineEdit *pe : pw->findChildren<QLineEdit *>())
       if (pe->x() == rgx[1] && (peDef == NULL || pe->y() < peDef->y()))
         peDef = pe;
+    for (QLineEdit *pe : pw->findChildren<QLineEdit *>())
+      if (pe->x() == rgx[1] && pe != peDef &&
+        (peDef1 == NULL || pe->y() < peDef1->y()))
+        peDef1 = pe;
     if (peDef != NULL)
       peDef->setText("10199 Chariklo");
+    if (peDef1 != NULL)
+      peDef1->setText("52872");
     for (QPushButton *ppb : pw->findChildren<QPushButton *>())
       if (ppb->text() == "OK") {
         ppb->click();
@@ -1979,6 +1994,27 @@ static void TestCustomDialogParseQt()
   Check(rgFlgSwiss[0] == 0,
     "nor of calculation flags (nFlg %d)", rgFlgSwiss[0]);
 
+  // The glyph half: pointing row 1 at a new body dropped the old body's
+  // glyph, the way -Ye and Object Selections do. This dialog was the
+  // last path that kept it.
+  Check(rgObjSwiss[1] == 52872,
+    "row 1 took its new body (obj %d)", rgObjSwiss[1]);
+  Check(szDrawObject[iobj1] != szDrawObjectDef[iobj1] &&
+    ChCap(szDrawObject[iobj1][0]) == 'T',
+    "and dropped the old body's glyph for the sentinel (\"%s\")",
+    szDrawObject[iobj1]);
+
+  // Put row 1 back, freeing what the dialog cloned.
+  if (szDrawObject[iobj1] != szDrawObjectDef[iobj1]) {
+    DeallocateP((char *)szDrawObject[iobj1]);
+    szDrawObject[iobj1] = szDrawObjectDef[iobj1];
+  }
+  if (szDrawObject2[iobj1] != szDrawObjectDef2[iobj1]) {
+    DeallocateP((char *)szDrawObject2[iobj1]);
+    szDrawObject2[iobj1] = szDrawObjectDef2[iobj1];
+  }
+  rgTypSwiss[1] = nTyp1Sav; rgObjSwiss[1] = nObj1Sav;
+  rgPntSwiss[1] = nPnt1Sav; rgFlgSwiss[1] = nFlg1Sav;
   rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
   rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
   CastChart(1);

@@ -111,8 +111,8 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3001
-   assertions** as of 2026-08-28; it was 1396 when first written, and has
+   display and no `xdotool`, and exits non-zero on failure. **3004
+   assertions** as of 2026-08-29; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
    - **How it works.** `Makefile.qt.test` builds the same sources plus
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-59
+## Work log — items 1-60
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2458,6 +2458,30 @@ are the more useful half to read before starting something new.
       it; point it at your own buffer.
     - The suite is now clean under ASan end to end, which it has never
       been before.
+
+60. **The name lookup joined the parse and the formatter, and Custom
+    Objects stopped hoarding stale glyphs.** Two loose ends from items
+    58-59, closed together.
+    - `SzObjSelName()` now knows definition type 4 -- a JPL Horizons
+      body, named by asking JPL over the network, the way Windows'
+      DlgCustom always had privately. Before, type 4 fell into the
+      object-index branch, so a Lookup Names on `j2` in Object Selections
+      answered **"Moon"**. Both Custom Objects lookup switches collapsed
+      into the one function, which also means every name a lookup shows
+      is now remembered and accepted back (`ObjSelRemember()`), which the
+      open-coded switches never did. The type 4 path stays deliberately
+      untested: JPLWEB is compiled in, and a suite must not do
+      synchronous network I/O.
+    - Both Custom Objects dialogs now drop a redefined slot's glyph via
+      `SetObjGlyphNoneCore()`, the rule `-Ye` and Object Selections
+      already follow; they were the last path that could leave Vulcan's
+      glyph on a point everything else calls by its new name. Proven on
+      row 1 (row 0 is already redefined by nrvate.as, so its glyph is the
+      sentinel before the test starts and proves nothing): without the
+      fix the assertion catches the slot still holding Cupido's raw
+      turtle string.
+    - `DlgCustom` is down to two locals under SWISS from six; the
+      duplicated parse, formatter, and name switch were their only users.
 
 ## Features this fork adds to both builds
 
