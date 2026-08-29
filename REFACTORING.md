@@ -74,7 +74,7 @@ sits in: themes and area findings are ordered most-worth-doing first.
 | Metrics pass, whole codebase | all own `.cpp/.h` | **done 2026-08-29** — numbers cited throughout |
 | A. Spine: startup, switch parsing, dispatch | astrolog.cpp (3538) | **surveyed 2026-08-29** — findings A1-A5 |
 | B. Settings & serialization | io.cpp (3211) | **surveyed 2026-08-29** — findings B1-B5 |
-| C. Computation core | calc.cpp (4000), matrix.cpp (703), ephemeris glue | pending |
+| C. Computation core | calc.cpp (4000), matrix.cpp (703), ephemeris glue | **surveyed 2026-08-29** — findings C1-C6 |
 | D. Text charts & interpretation | charts0-3.cpp (8876), intrpret.cpp (1605) | pending |
 | E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | pending |
 | F. Graphics charts | xcharts0-2.cpp (9129) | pending |
@@ -429,7 +429,81 @@ file exercising **every** switch family `FOutputSettings()` writes, so
 a switch whose save-twin is missing cannot hide by being unset in the
 maintainer's config. *Cost:* one session, pure test.
 
-### Areas C-H — pending
+### Area C — computation core (calc.cpp, matrix.cpp), surveyed 2026-08-29
+
+matrix.cpp gets a clean verdict: it is the oldest code and a coherent
+single-purpose backend (the built-in "Matrix" math), reached only
+through dispatch fronts like `MdyToJulian()` (calc.cpp:66) that pick
+Matrix/Placalc/Swiss per call. Leave it alone. Credit also to the
+`FCm*` backend predicates (extern.h:140-147) — the capability tests are
+already single-homed — and to `CP` being a real struct rather than
+parallel arrays. The findings:
+
+**C1 — calc.cpp is three modules sharing a file.** (a) Chart math —
+houses, aspects, eclipses, `CastChart`/`ComputeEphem`; (b) a ~950-line
+Swiss Ephemeris wrapper layer (`SwissEnsurePath` through `SwissRevJul`,
+calc.cpp:2453-4000); (c) the fork's object-selection/OBJDEF store and
+parsers (calc.cpp:2642-3038), which are naming/settings code, not
+computation, and landed here mainly to stay `#ifdef`-free for both
+builds. *Direction:* low urgency; if the OBJDEF code grows again, give
+it its own file in both Makefiles. Until then the boundary is
+documented here. *Cost:* deferral is free.
+
+**C2 — `CastChart` cooks the user's input in place.** It normalizes
+`ZZ`/`SS`/`TT` (LMT/LAT zones, auto-DST, zone-into-time folding)
+directly inside `ciCore` — the same storage holding what the user typed
+— and restores from a stack copy 350 lines later (calc.cpp:1228→1584).
+Verified: no early return currently sits inside the window, but any
+future one silently corrupts the chart info, and every reader of
+`ciCore` must know whether it is currently "typed" or "cooked".
+*Incident:* none recorded — the discipline has held; that is luck, not
+design. *Direction:* derive into locals or a working copy handed to the
+house/ephemeris calls; needs care because downstream code (Matrix
+`ProcessInput()`) reads the cooked values through the same macros. Pin
+with a zone/DST/LMT round-trip test first. *Cost:* medium; net first.
+
+**C3 — `ComputeEphem`'s skip predicate is write-only logic.** The
+decision "compute this object or not" is six OR'd clauses mixing four
+concerns — restriction policy, object taxonomy, computation center,
+backend capability (calc.cpp:991-999). *Incident:* the forced-midpoint
+bug lived exactly here — restricted objects a forced midpoint depends
+on weren't computed — and its fix (`FObjMidSource`) made the predicate
+longer still (work log; pinned by `TestSharedCoreFixesQt`).
+*Direction:* name the clauses: small predicates or a per-object
+skip-reason value, which also makes "why is this object blank?"
+diagnosable at runtime. Behavior-preserving by construction; the suite
+plus a Windows text-diff is the net. *Cost:* low, good early increment.
+
+**C4 — The backend selector is three flags and an int with unreachable
+corners.** `fEphemFiles`, `fPlacalcPla`, `fMatrixPla`, `fMatrixStar`,
+`nSwissEph` 0-3 jointly encode one choice (astrolog.h:1806-1820);
+illegal combinations are representable, meaning lives in negations
+("ephem files but not Placalc" = Swiss), and each math entry point
+dispatches longhand. *Direction:* document the reachable state space
+(which switch sequences produce what); collapsing to one derived enum
+is worthwhile but belongs to the T3 table work, since the flags are set
+by switch parsing. *Cost:* documentation now, enum later.
+
+**C5 — The Swiss boundary translates object numbers by offset
+arithmetic and caches by stealth.** `FSwissPlanet()` (calc.cpp:3055+)
+maps three numbering domains (Astrolog objects, SE constants, custom
+slots via `SE_*_OFFSET` bases) in one if-chain — T2 in its purest form,
+though at least single-homed — and `SwissEnsurePath()` plus a static
+`nSwissEph` change-detector cache path state invisibly. *Incident:* the
+cached ephemeris path is why every test must run `-i nrvate.as` or read
+`???` for esoteric bodies — a hard rule in CLAUDE.md exists because of
+this cache. *Direction:* fold the cache contract into A4's lifecycle
+doc; consider a mapping table when next touched. *Cost:* low.
+
+**C6 — Chart positions are seven global slots with macro aliases.**
+`planet` *is* `cp0.obj` (extern.h:110); rings `cp1`..`cp6` are copied
+around wholesale by relationship modes. *Incident:* relationship charts
+losing their mode on recast needed a fork fix and a standing test
+(`TestRelationshipModeQt`). Mostly T1; the increment is to document
+slot ownership — who writes each ring and when — as the surveys reach
+the chart code that juggles them (Area D). *Cost:* documentation.
+
+### Areas D-H — pending
 
 ---
 
