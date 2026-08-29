@@ -1982,6 +1982,30 @@ static void TestCustomDialogParseQt()
   rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
   rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
   CastChart(1);
+
+  // The formatter and the parse are inverses, now that each exists once:
+  // whatever SzObjDefFormat() writes, FObjDefParse() reads back as the
+  // same four values. The definition types by turn, with and without a
+  // point and flag suffix.
+  {
+    CONST OBJDEF rgodT[] = {
+      {0, 120, 0, 0}, {1, 10199, 0, 0}, {2, oMar, 0, 0}, {3, 401, 0, 0},
+      {4, 599, 0, 0}, {5, 1, 0, 0}, {1, 10199, 4, 0}, {1, 7066, 1, 33},
+      {2, oVen, 2, 2}, {0, 120, 0, 63}};
+    OBJDEF odT;
+    char szT[cchSzMax];
+    int iT;
+
+    for (iT = 0; iT < (int)(sizeof(rgodT)/sizeof(OBJDEF)); iT++) {
+      SzObjDefFormat(szT, &rgodT[iT]);
+      Check(FObjDefParse(szT, &odT) && odT.nTyp == rgodT[iT].nTyp &&
+        odT.nObj == rgodT[iT].nObj && odT.nPnt == rgodT[iT].nPnt &&
+        odT.nFlg == rgodT[iT].nFlg,
+        "\"%s\" round trips (%d %d %d %d -> %d %d %d %d)", szT,
+        rgodT[iT].nTyp, rgodT[iT].nObj, rgodT[iT].nPnt, rgodT[iT].nFlg,
+        odT.nTyp, odT.nObj, odT.nPnt, odT.nFlg);
+    }
+  }
   printf("  the one shared parse is what the Custom Objects dialog uses\n");
 }
 
@@ -2102,7 +2126,16 @@ static void TestObjSelDialogQt()
 {
   int iobj = uranLo, nTypSav = rgTypSwiss[iobj - custLo];
   int nObjSav = rgObjSwiss[iobj - custLo];
-  CONST char *szSav = szObjDisp[iobj];
+  // Save the display name's text, not its pointer: the dialog's apply
+  // frees the old clone through FCloneSzCore(), so a saved pointer is
+  // dangling by case 1 -- and restoring it left the global aimed at freed
+  // memory for the rest of the suite, read by every later redraw that
+  // names this slot and freed a second time at exit. ASan pinned it; it
+  // had been the suite's intermittent exit crash for some time, and the
+  // glyph test below once had an independent copy of the same bug.
+  char szDispSav[cchSzMax];
+  flag fDispWasOwn = (szObjDisp[iobj] == szObjName[iobj]);
+  sprintf(szDispSav, "%s", szObjDisp[iobj]);
 
   Group("Object Selections dialog");
 
@@ -2174,7 +2207,13 @@ static void TestObjSelDialogQt()
 
   rgTypSwiss[iobj - custLo] = nTypSav;
   rgObjSwiss[iobj - custLo] = nObjSav;
-  szObjDisp[iobj] = szSav;
+  if (fDispWasOwn) {
+    if (szObjDisp[iobj] != szObjName[iobj])
+      DeallocateP((char *)szObjDisp[iobj]);
+    szObjDisp[iobj] = szObjName[iobj];
+  } else
+    FCloneSzCore(szDispSav, (char **)&szObjDisp[iobj],
+      szObjDisp[iobj] == szObjName[iobj]);
   AdjustRestrictions();
   printf("  the dialog sets the body and names it\n");
 }
@@ -2556,9 +2595,19 @@ static void TestChartListFilterQt()
   char *szSav = us.szExpListF;
 
   Group("Chart list filter");
+  // CI.nam is a pointer, not a buffer: after "ciCore = ciMain" it aims at
+  // the name string cloned from the settings file, which for nrvate.as is
+  // a one-byte "". The sprintf that used to be here wrote twenty bytes
+  // through it -- a heap smash ASan pinned after it had spent the evening
+  // crashing the suite intermittently at whatever unlucky spot the
+  // corrupted neighbour was freed. Static buffers, because
+  // FAppendCIList() copies the struct shallowly and the list keeps the
+  // pointers.
+  static char rgszNamT[3][cchSzDef];
   for (i = 0; i < 3; i++) {
     ciCore = ciMain; ciCore.yea = 1990 + i;
-    sprintf(ciCore.nam, "AstrologSuiteChart%d", i);
+    sprintf(rgszNamT[i], "AstrologSuiteChart%d", i);
+    ciCore.nam = rgszNamT[i];
     FAppendCIList(&ciCore);
   }
   Check(is.cci >= cciSav + 3, "three charts went into the list");
@@ -2982,7 +3031,11 @@ static void TextChartCaptureQt(CONST char *szDir)
   ciCore.tim = 11.0 + 1.0/60.0; ciCore.dst = 0.0; ciCore.zon = 8.0;
   ciCore.lon = 122.0 + 19.0/60.0 + 59.0/3600.0;
   ciCore.lat = 47.0 + 36.0/60.0 + 35.0/3600.0;
-  ciCore.nam[0] = chNull; ciCore.loc[0] = chNull;
+  // Point at empty strings rather than writing NULs through the shared
+  // clones ciMain also holds -- same pointer-not-buffer trap as the chart
+  // list filter test, in its harmless-looking form.
+  static char szNamT[1], szLocT[1];
+  ciCore.nam = szNamT; ciCore.loc = szLocT;
   ciMain = ciCore;
   CastChart(1);
 

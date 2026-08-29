@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **2991
+   display and no `xdotool`, and exits non-zero on failure. **3001
    assertions** as of 2026-08-28; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-58
+## Work log — items 1-59
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2423,6 +2423,41 @@ are the more useful half to read before starting something new.
       type-to-name switch duplicates `SzObjSelName()` except for the JPL
       Horizons web case, and the Custom Objects dialogs do not reset a
       redefined slot's glyph the way Object Selections now does.
+
+59. **The formatter followed the parser into one function, and ASan then
+    caught the suite's real intermittent crasher.** `SzObjDefFormat()` is
+    the inverse of `FObjDefParse()` and existed three times -- inside
+    `SzObjSelDef()`, and open coded in both Custom Objects dialogs'
+    field pre-fills. One copy now, plus `ObjDefGet()` -- the read half of
+    the planned Stage 2 accessor, arriving because all three sites began
+    by gathering the four arrays. Ten round-trip assertions pin
+    format-then-parse as the identity across every definition type, with
+    and without suffixes.
+    - **The full run then segfaulted, and the crash point was a lie
+      twice over.** The output named a wireframe save; stdout was block
+      buffered into the log, so the crash ate every group header and the
+      last visible line was noise. Under gdb it passed outright. One
+      ASan run replaced all of that guessing with line numbers.
+    - **Three heap bugs in the suite itself, none from this session's
+      code.** `TestChartListFilterQt()` sprintf'd twenty bytes through
+      `ciCore.nam` -- a *pointer* into the one-byte "" cloned from
+      nrvate.as, not a buffer -- smashing the neighbouring allocation on
+      every full run since it was written. The text-capture path wrote
+      NULs through the same shared clones. And `TestObjSelDialogQt()`
+      saved `szObjDisp[iobj]` as a pointer and planted it back after the
+      dialog's apply had freed it, leaving the global aimed at freed
+      memory for the rest of the run and freed a second time at exit --
+      **the suite's long-standing intermittent exit crash**. The glyph
+      test's identical bug, fixed earlier the same day, had been a second
+      independent copy; fixing it "resolved" the symptom only until the
+      heap re-shuffled.
+    - The lesson consolidates item 37's: an intermittent crash whose
+      backtrace moves between runs is heap corruption, and the move is
+      one ASan run, not another timing experiment. And `CI.nam` is a
+      pointer that usually aims at a shared clone -- never write through
+      it; point it at your own buffer.
+    - The suite is now clean under ASan end to end, which it has never
+      been before.
 
 ## Features this fork adds to both builds
 
