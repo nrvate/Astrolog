@@ -1786,8 +1786,9 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
 flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
 {
   char sz[cchSzMax], szT[cchSzMax];
-  int i, j, k, l, nPnt, nFlg, iobj, rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
-  int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
+  int i, j, k, l, iobj;
+  // One OBJDEF a row rather than four arrays that have to stay aligned.
+  OBJDEF rgod[cObjSelRow], od;
   real rgforce[cObjSelRow];
   flag rgfShow[cObjSelRow];
   // What each name field and definition held when the dialog opened, so
@@ -1855,11 +1856,12 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         // offered-body list already knows -- without that a body whose
         // .se1 file is not installed reads "???" even while the Contains
         // field beside it is displaying its name.
-        if (FObjSelParse(sz, &j, &k, &nPnt, &nFlg)) {
-          SzObjSelName(sz, j, k);
+        if (FObjSelParse(sz, &od)) {
+          SzObjSelName(sz, od.nTyp, od.nObj);
           if (FEqSz(sz, szObjUnknown))
             for (l = 0; l < cObjSel; l++)
-              if (rgObjSel[l].nTyp == j && rgObjSel[l].nObj == k) {
+              if (rgObjSel[l].nTyp == od.nTyp &&
+                rgObjSel[l].nObj == od.nObj) {
                 sprintf(sz, "%s", rgObjSel[l].szName);
                 break;
               }
@@ -1872,9 +1874,9 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
           // space after it. FObjSelParse() reads the pair back, since
           // a trailing run is only taken for flags when every letter
           // in it is one.
-          if (j == 1 && nPnt <= 0 && nFlg <= 0 &&
+          if (od.nTyp == 1 && od.nPnt <= 0 && od.nFlg <= 0 &&
             !FEqSz(sz, szObjUnknown)) {
-            sprintf(szT, "%d %s", k, sz);
+            sprintf(szT, "%d %s", od.nObj, sz);
             SetEdit(dcOs01 + i, szT);
           }
         } else
@@ -1899,28 +1901,27 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
           EnsureN(j, FItem(j), "midpoint object");
           EnsureN(k, FItem(k), "midpoint object");
           rgforce[i] = (real)-(j*objMax + k + 1);
-          rgnTyp[i] = rgTypSwiss[iobj - custLo];
-          rgnObj[i] = rgObjSwiss[iobj - custLo];
-          rgnPnt[i] = rgPntSwiss[iobj - custLo];
-          rgnFlg[i] = rgFlgSwiss[iobj - custLo];
+          rgod[i].nTyp = rgTypSwiss[iobj - custLo];
+          rgod[i].nObj = rgObjSwiss[iobj - custLo];
+          rgod[i].nPnt = rgPntSwiss[iobj - custLo];
+          rgod[i].nFlg = rgFlgSwiss[iobj - custLo];
           continue;
         }
-        if (!FObjSelParse(sz, &j, &k, &nPnt, &nFlg)) {
+        if (!FObjSelParse(sz, &rgod[i])) {
           ErrorEnsure(0, "definition");
           return fTrue;
         }
-        EnsureN(k, FValidCustom(k, j), "definition");
-        rgnTyp[i] = j; rgnObj[i] = k;
-        rgnPnt[i] = nPnt; rgnFlg[i] = nFlg;
+        EnsureN(rgod[i].nObj,
+          FValidCustom(rgod[i].nObj, rgod[i].nTyp), "definition");
       }
 
       for (i = 0; i < cObjSelRow; i++) {
         iobj = uranLo + i;
 #ifdef SWISS
-        rgTypSwiss[iobj - custLo] = rgnTyp[i];
-        rgObjSwiss[iobj - custLo] = rgnObj[i];
-        rgPntSwiss[iobj - custLo] = rgnPnt[i];
-        rgFlgSwiss[iobj - custLo] = rgnFlg[i];
+        rgTypSwiss[iobj - custLo] = rgod[i].nTyp;
+        rgObjSwiss[iobj - custLo] = rgod[i].nObj;
+        rgPntSwiss[iobj - custLo] = rgod[i].nPnt;
+        rgFlgSwiss[iobj - custLo] = rgod[i].nFlg;
 #endif
         force[iobj] = rgforce[i];
         ignore[iobj] = !rgfShow[i];
@@ -1940,8 +1941,9 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
             j = l / objMax; k = l % objMax;
             if (FItem(j) && FItem(k))
               sprintf(sz, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
-          } else if (rgnTyp[i] != rgnTyp0[i] || rgnObj[i] != rgnObj0[i]) {
-            SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
+          } else if (rgod[i].nTyp != rgnTyp0[i] ||
+            rgod[i].nObj != rgnObj0[i]) {
+            SzObjSelName(szT, rgod[i].nTyp, rgod[i].nObj);
             if (!FEqSz(szT, szObjUnknown))
               sprintf(sz, "%.*s", cchSzMax-1, szT);
           }

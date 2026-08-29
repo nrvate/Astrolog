@@ -4423,11 +4423,11 @@ void ShowObjectSelDialogQt()
   QVector<QString> rgstrName0;
   real rgforceSav[cObjSelRow];
   int rgTypSwissSav[cObjSelRow], rgObjSwissSav[cObjSelRow];
-  int rgnTyp[cObjSelRow], rgnObj[cObjSelRow];
-  int rgnPnt[cObjSelRow], rgnFlg[cObjSelRow];
+  // One OBJDEF a row rather than four arrays that have to stay aligned.
+  OBJDEF rgod[cObjSelRow];
   real rgforce[cObjSelRow];
   char sz[cchSzMax];
-  int i, j, k, iobj, pnt, flg;
+  int i, j, k, iobj;
 
   dlg.setWindowTitle(szTitleObjectSel);
   RcBuildDialogQt(&dlg, rgctlObjectSel, cctlObjectSel, dxObjectSel,
@@ -4472,7 +4472,8 @@ void ShowObjectSelDialogQt()
     QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,
       [&rgpeName, &rgpcbDef]() {
       char szT[cchSzMax];
-      int i2, j2, k2, pnt2, flg2;
+      OBJDEF od2;
+      int i2, j2, k2;
 
       for (i2 = 0; i2 < cObjSelRow; i2++) {
         if (rgpeName[i2] == NULL || rgpcbDef[i2] == NULL)
@@ -4501,11 +4502,12 @@ void ShowObjectSelDialogQt()
         // offered-body list already knows. Without that fallback a body
         // whose .se1 file isn't installed comes back "???" even though
         // the Contains field beside it is displaying its name.
-        if (FObjSelParse(baDef.constData(), &j2, &k2, &pnt2, &flg2)) {
-          SzObjSelName(szT, j2, k2);
+        if (FObjSelParse(baDef.constData(), &od2)) {
+          SzObjSelName(szT, od2.nTyp, od2.nObj);
           if (FEqSz(szT, szObjUnknown))
             for (int iSel = 0; iSel < cObjSel; iSel++)
-              if (rgObjSel[iSel].nTyp == j2 && rgObjSel[iSel].nObj == k2) {
+              if (rgObjSel[iSel].nTyp == od2.nTyp &&
+                rgObjSel[iSel].nObj == od2.nObj) {
                 sprintf(szT, "%s", rgObjSel[iSel].szName);
                 break;
               }
@@ -4517,10 +4519,10 @@ void ShowObjectSelDialogQt()
           // suffix already occupies the space after it. FObjSelParse()
           // reads the pair back, since a trailing run is only taken for
           // flags when every letter in it is one.
-          if (j2 == 1 && pnt2 <= 0 && flg2 <= 0 &&
+          if (od2.nTyp == 1 && od2.nPnt <= 0 && od2.nFlg <= 0 &&
             !FEqSz(szT, szObjUnknown)) {
             char szD[cchSzMax];
-            sprintf(szD, "%d %s", k2, szT);
+            sprintf(szD, "%d %s", od2.nObj, szT);
             rgpcbDef[i2]->setEditText(szD);
           }
         } else
@@ -4553,20 +4555,19 @@ void ShowObjectSelDialogQt()
         return;
       }
       rgforce[i] = (real)-(j*objMax + k + 1);
-      rgnTyp[i] = rgTypSwiss[uranLo + i - custLo];
-      rgnObj[i] = rgObjSwiss[uranLo + i - custLo];
-      rgnPnt[i] = rgPntSwiss[uranLo + i - custLo];
-      rgnFlg[i] = rgFlgSwiss[uranLo + i - custLo];
+      rgod[i].nTyp = rgTypSwiss[uranLo + i - custLo];
+      rgod[i].nObj = rgObjSwiss[uranLo + i - custLo];
+      rgod[i].nPnt = rgPntSwiss[uranLo + i - custLo];
+      rgod[i].nFlg = rgFlgSwiss[uranLo + i - custLo];
       continue;
     }
 
-    if (!FObjSelParse(ba.constData(), &j, &k, &pnt, &flg) ||
-      !FValidCustom(k, j)) {
+    if (!FObjSelParse(ba.constData(), &rgod[i]) ||
+      !FValidCustom(rgod[i].nObj, rgod[i].nTyp)) {
       QMessageBox::warning(gi.qwind, szAppName,
         "One or more object definitions are invalid.");
       return;
     }
-    rgnTyp[i] = j; rgnObj[i] = k; rgnPnt[i] = pnt; rgnFlg[i] = flg;
   }
 
   for (i = 0; i < cObjSelRow; i++) {
@@ -4574,10 +4575,10 @@ void ShowObjectSelDialogQt()
     rgTypSwissSav[i] = rgTypSwiss[iobj - custLo];
     rgObjSwissSav[i] = rgObjSwiss[iobj - custLo];
     rgforceSav[i] = force[iobj];
-    rgTypSwiss[iobj - custLo] = rgnTyp[i];
-    rgObjSwiss[iobj - custLo] = rgnObj[i];
-    rgPntSwiss[iobj - custLo] = rgnPnt[i];
-    rgFlgSwiss[iobj - custLo] = rgnFlg[i];
+    rgTypSwiss[iobj - custLo] = rgod[i].nTyp;
+    rgObjSwiss[iobj - custLo] = rgod[i].nObj;
+    rgPntSwiss[iobj - custLo] = rgod[i].nPnt;
+    rgFlgSwiss[iobj - custLo] = rgod[i].nFlg;
     force[iobj] = rgforce[i];
     if (rgpcbShow[i] != NULL)
       ignore[iobj] = !rgpcbShow[i]->isChecked();
@@ -4605,9 +4606,9 @@ void ShowObjectSelDialogQt()
             sprintf(szT, "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
             str = QString(szT);
           }
-        } else if (rgnTyp[i] != rgTypSwissSav[i] ||
-          rgnObj[i] != rgObjSwissSav[i]) {
-          SzObjSelName(szT, rgnTyp[i], rgnObj[i]);
+        } else if (rgod[i].nTyp != rgTypSwissSav[i] ||
+          rgod[i].nObj != rgObjSwissSav[i]) {
+          SzObjSelName(szT, rgod[i].nTyp, rgod[i].nObj);
           if (!FEqSz(szT, szObjUnknown))
             str = QString(szT);
         }

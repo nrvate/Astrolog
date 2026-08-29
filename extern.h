@@ -498,7 +498,7 @@ extern CONST int cObjSel;
 extern void SzObjSelDef P((char *, int));
 extern void SzObjSelName P((char *, int, int));
 extern flag FObjSelFlagRun P((CONST char *));
-extern flag FObjSelParse P((CONST char *, int *, int *, int *, int *));
+extern flag FObjSelParse P((CONST char *, OBJDEF *));
 extern flag FObjMidSource P((int));
 extern int NObjSelMid P((CONST char *));
 extern flag FObjSelMidPair P((CONST char *, int *, int *));

@@ -2274,6 +2274,22 @@ typedef struct _ObjectSelect {
   CONST char *szName;         // What the list shows for it.
 } OBJSEL;
 
+// A custom object's definition: which body, how to find it, and the
+// point and flag modifiers on top of it. These four values are stored
+// per slot in four parallel arrays -- rgTypSwiss[], rgObjSwiss[],
+// rgPntSwiss[] and rgFlgSwiss[] -- and are passed around together
+// everywhere they are used, which is what this is for. Four positional
+// int* out parameters in a row are easy to hand over in the wrong order
+// and the compiler cannot tell; one of these cannot be.
+typedef struct _ObjectDefine {
+  int nTyp;   // How to find the body: an rgTypSwiss[] value.
+  int nObj;   // Which body, in whatever terms nTyp means.
+  int nPnt;   // 0 the body, 1 north node, 2 south node, 3 perihelion,
+              // 4 aphelion. An rgPntSwiss[] value.
+  int nFlg;   // Bits: 1 heliocentric, 2 sidereal, 4 barycentric, 8 true
+              // node, 16 true position, 32 topocentric. rgFlgSwiss[].
+} OBJDEF;
+
 typedef struct _ElementTable {
   int coSum;             // Total objects considered.
   int coHemi;            // Number that can be in hemispheres.

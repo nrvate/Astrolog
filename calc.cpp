@@ -2874,8 +2874,7 @@ flag FObjSelFlagRun(CONST char *szRun)
 }
 
 
-flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
-  int *pnFlg)
+flag FObjSelParse(CONST char *szIn, OBJDEF *pod)
 {
   char sz[cchSzMax], *pch, *pchEnd;
   int i, j, k, nPnt = 0, nFlg = 0;
@@ -2888,14 +2887,14 @@ flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
   // A name from the list wins, and never carries a suffix.
   for (i = 0; i < cObjSel; i++)
     if (FEqSzI(szIn, rgObjSel[i].szName)) {
-      *pnTyp = rgObjSel[i].nTyp; *pnObj = rgObjSel[i].nObj;
-      *pnPnt = *pnFlg = 0;
+      pod->nTyp = rgObjSel[i].nTyp; pod->nObj = rgObjSel[i].nObj;
+      pod->nPnt = pod->nFlg = 0;
       return fTrue;
     }
 
   // Then anything the ephemeris has already been asked about this session.
-  if (FObjSelRecall(szIn, pnTyp, pnObj)) {
-    *pnPnt = *pnFlg = 0;
+  if (FObjSelRecall(szIn, &pod->nTyp, &pod->nObj)) {
+    pod->nPnt = pod->nFlg = 0;
     return fTrue;
   }
 
@@ -2928,7 +2927,7 @@ flag FObjSelParse(CONST char *szIn, int *pnTyp, int *pnObj, int *pnPnt,
       if (*pch == 'T') nFlg |= 16;
       if (*pch == 'V') nFlg |= 32;
     }
-  *pnTyp = k; *pnObj = j; *pnPnt = nPnt; *pnFlg = nFlg;
+  pod->nTyp = k; pod->nObj = j; pod->nPnt = nPnt; pod->nFlg = nFlg;
   return fTrue;
 }
 

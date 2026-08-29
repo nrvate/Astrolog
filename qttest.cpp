@@ -1627,6 +1627,7 @@ static void TestMidpointGlyphQt()
 // letter in it is one.
 static void TestObjSelLookupQt()
 {
+  OBJDEF od;
   int j, k, nPnt, nFlg;
 
   Group("Object selection lookup");
@@ -1640,7 +1641,8 @@ static void TestObjSelLookupQt()
     {"Chariklo",          1,  10199, 0, 0},
     {"h0",                0,      0, 0, 0} };
   for (int i = 0; i < 7; i++) {
-    flag f = FObjSelParse(rg[i].sz, &j, &k, &nPnt, &nFlg);
+    flag f = FObjSelParse(rg[i].sz, &od);
+    j = od.nTyp; k = od.nObj; nPnt = od.nPnt; nFlg = od.nFlg;
     Check(f && j == rg[i].nTyp && k == rg[i].nObj && nPnt == rg[i].nPnt &&
       nFlg == rg[i].nFlg,
       "\"%s\" parses as typ %d obj %d pnt %d flg %d (got %d %d %d %d)",
@@ -1694,9 +1696,9 @@ static void TestObjSelLookupQt()
 
     // What it wrote has to parse back to what was typed.
     QByteArray ba = pcb->currentText().toLocal8Bit();
-    int j2, k2, p2, f2;
-    Check(FObjSelParse(ba.constData(), &j2, &k2, &p2, &f2) &&
-      j2 == 1 && k2 == 10199 && p2 == 0 && f2 == 0,
+    OBJDEF od2;
+    Check(FObjSelParse(ba.constData(), &od2) &&
+      od2.nTyp == 1 && od2.nObj == 10199 && od2.nPnt == 0 && od2.nFlg == 0,
       "and that pair parses back to the number it started from");
 
     // Cancel, so none of this reaches the settings.
@@ -1947,6 +1949,21 @@ static void TestObjSelTableQt()
 // pinning down in a suite is those helpers: a field accepts either a name
 // from the offered list or the definition text Object Customization uses,
 // and comes back as the same body either way.
+// The four values back as separate ints, which is what these assertions
+// read most clearly. FObjSelParse() itself takes one OBJDEF now, so that
+// four ints in a row cannot be handed over in the wrong order.
+static flag FObjSelParseTestQt(CONST char *sz, int *pnTyp, int *pnObj,
+  int *pnPnt, int *pnFlg)
+{
+  OBJDEF od;
+  flag f = FObjSelParse(sz, &od);
+
+  *pnTyp = od.nTyp; *pnObj = od.nObj;
+  *pnPnt = od.nPnt; *pnFlg = od.nFlg;
+  return f;
+}
+
+
 static void TestObjSelParseQt()
 {
   char sz[cchSzMax];
@@ -1955,19 +1972,19 @@ static void TestObjSelParseQt()
   Group("Object selection fields");
 
   // A name from the list, and the bare number, are the same body.
-  Check(FObjSelParse("Nessus", &nTyp, &nObj, &nPnt, &nFlg) &&
+  Check(FObjSelParseTestQt("Nessus", &nTyp, &nObj, &nPnt, &nFlg) &&
     nTyp == 1 && nObj == 7066 && nPnt == 0 && nFlg == 0,
     "\"Nessus\" did not read as asteroid 7066");
-  Check(FObjSelParse("7066", &nTyp, &nObj, &nPnt, &nFlg) &&
+  Check(FObjSelParseTestQt("7066", &nTyp, &nObj, &nPnt, &nFlg) &&
     nTyp == 1 && nObj == 7066,
     "\"7066\" did not read as asteroid 7066");
-  Check(FObjSelParse("nessus", &nTyp, &nObj, &nPnt, &nFlg) && nObj == 7066,
+  Check(FObjSelParseTestQt("nessus", &nTyp, &nObj, &nPnt, &nFlg) && nObj == 7066,
     "the list match is case sensitive when it shouldn't be");
 
   // Definition forms other than a plain asteroid number.
-  Check(FObjSelParse("h5", &nTyp, &nObj, &nPnt, &nFlg) &&
+  Check(FObjSelParseTestQt("h5", &nTyp, &nObj, &nPnt, &nFlg) &&
     nTyp == 0 && nObj == 5, "\"h5\" did not read as element set 5");
-  Check(FObjSelParse("Ven", &nTyp, &nObj, &nPnt, &nFlg) &&
+  Check(FObjSelParseTestQt("Ven", &nTyp, &nObj, &nPnt, &nFlg) &&
     nTyp == 2 && nObj == oVen, "\"Ven\" did not read as Venus");
 
   // The guard this parse exists to keep. Without it the trailing letters
@@ -1977,15 +1994,15 @@ static void TestObjSelParseQt()
   Check(nPnt == 0 && nFlg == 0,
     "\"Ven\" read its own letters as a point/flag suffix (pnt %d flg %d)",
     nPnt, nFlg);
-  Check(FObjSelParse("Mar", &nTyp, &nObj, &nPnt, &nFlg) && nPnt == 0,
+  Check(FObjSelParseTestQt("Mar", &nTyp, &nObj, &nPnt, &nFlg) && nPnt == 0,
     "\"Mar\" read its own letters as a suffix");
 
   // A real suffix still parses.
-  Check(FObjSelParse("7066 nH", &nTyp, &nObj, &nPnt, &nFlg) &&
+  Check(FObjSelParseTestQt("7066 nH", &nTyp, &nObj, &nPnt, &nFlg) &&
     nTyp == 1 && nObj == 7066 && nPnt == 1 && (nFlg & 1),
     "\"7066 nH\" lost its point or flag suffix");
 
-  Check(!FObjSelParse("", &nTyp, &nObj, &nPnt, &nFlg),
+  Check(!FObjSelParseTestQt("", &nTyp, &nObj, &nPnt, &nFlg),
     "an empty field was accepted");
 
   // And the formatting side round trips: set a slot, read it back.
@@ -2006,7 +2023,7 @@ static void TestObjSelParseQt()
   SzObjSelDef(sz, uranLo);
   Check(FEqSz(sz, "7066 n"),
     "a slot with a point suffix showed as \"%s\"", sz);
-  Check(FObjSelParse(sz, &nTyp, &nObj, &nPnt, &nFlg) &&
+  Check(FObjSelParseTestQt(sz, &nTyp, &nObj, &nPnt, &nFlg) &&
     nTyp == 1 && nObj == 7066 && nPnt == 1,
     "the suffixed form did not read back to the same slot");
 
