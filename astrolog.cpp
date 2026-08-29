@@ -486,6 +486,9 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
   int darg = 0, i, j, k, l;
   real r;
   char ch1, ch2 = chNull;
+#ifdef SWISS
+  OBJDEF od;
+#endif
   pbyte pb;
   int *lpn;
   real *lpr;
@@ -642,9 +645,8 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
   case 'c':
     SwitchF(us.fHouseAngle);
     for (i = 0; i < 4; i++)
-      FCloneSzCore(us.fHouseAngle ? szObjName[objMax + i] :
-        szObjName[oAsc + i*3], (char **)&szObjDisp[oAsc + i*3],
-        szObjDisp[oAsc + i*3] == szObjName[oAsc + i*3]);
+      SetObjDisp(oAsc + i*3, us.fHouseAngle ? szObjName[objMax + i] :
+        szObjName[oAsc + i*3]);
     break;
 
   case 'p':
@@ -744,11 +746,21 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     k = (j == 2 ? NParseSz(argv[2], pmObject) : NFromSz(argv[2]));
     if (FErrorValN("Ye", !FValidCustom(k, j), k, 2))
       return tcError;
-    rgObjSwiss[i] = k;
-    rgTypSwiss[i] = j;
-    rgPntSwiss[i] =
-      (ch1 == 'n') + (ch1 == 's')*2 + (ch1 == 'p')*3 + (ch1 == 'a')*4;
-    rgFlgSwiss[i] = 0;
+    od.nTyp = j; od.nObj = k;
+    od.nPnt = (ch1 == 'n') + (ch1 == 's')*2 + (ch1 == 'p')*3 +
+      (ch1 == 'a')*4;
+    od.nFlg = 0;
+    l = pos + 1;
+    do {
+      ch2 = argv[0][l++];
+      od.nFlg |= (ch2 == 'H') + (ch2 == 'S')*2 + (ch2 == 'B')*4 +
+        (ch2 == 'N')*8 + (ch2 == 'T')*16 + (ch2 == 'V')*32;
+    } while (ch2);
+    // The store, and the glyph rule with it, are ObjDefSet()'s. One
+    // deliberate change from the old open-coded store: re-asserting a
+    // slot's existing definition no longer drops its glyph, since the
+    // slot still is that body.
+    ObjDefSet(i + custLo, &od);
     if (j <= 1)
       SwissGetObjName(szName, j <= 0 ? -k : k);
     else if (j == 5)
@@ -758,22 +770,14 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
         k = ObjMoons(k);
       sprintf(szName, "%s", FItem(k) ? szObjName[k] : szObjUnknown);
     }
-    k = rgPntSwiss[i];
+    k = od.nPnt;
     if (k > 0) {
       for (pch = szName; *pch; pch++)
         ;
       sprintf(szName + Min(3, pch-szName), "%s",
         k == 1 ? "Nor" : (k == 2 ? "Sou" : (k == 3 ? "Per" : "Api")));
     }
-    FCloneSzCore(szName, (char **)&szObjDisp[i + custLo],
-      szObjDisp[i + custLo] == szObjName[i + custLo]);
-    SetObjGlyphNoneCore(i + custLo);
-    k = pos + 1;
-    do {
-      ch2 = argv[0][k++];
-      rgFlgSwiss[i] |= (ch2 == 'H') + (ch2 == 'S')*2 + (ch2 == 'B')*4 +
-        (ch2 == 'N')*8 + (ch2 == 'T')*16 + (ch2 == 'V')*32;
-    } while (ch2);
+    SetObjDisp(i + custLo, szName);
     darg += 2;
     break;
 #endif
@@ -1134,8 +1138,7 @@ int NProcessSwitchesRare(int argc, char **argv, int pos,
     i = NParseSz(argv[1], pmObject);
     if (FErrorValN("YD", !FItem(i), i, 1))
       return tcError;
-    FCloneSzCore(CchSz(argv[2]) >= 2 ? argv[2] : szObjName[i],
-      (char **)&szObjDisp[i], szObjDisp[i] == szObjName[i]);
+    SetObjDisp(i, CchSz(argv[2]) >= 2 ? argv[2] : szObjName[i]);
     darg += 2;
     break;
 
@@ -3282,7 +3285,7 @@ void FinalizeProgram(flag fSkip)
     DeallocateP(is.rgszComment);
   }
   for (i = 0; i < objMax; i++)
-    if (szObjDisp[i] != szObjName[i])
+    if (FObjDispCustom(i))
       DeallocateP((char *)szObjDisp[i]);
   for (i = 1; i <= cAspect2; i++) {
     if (szAspectDisp[i] != szAspectName[i])

@@ -2046,6 +2046,71 @@ static void TestCustomDialogParseQt()
 }
 
 
+// ObjDefSet() is now the one way a definition reaches a slot, and the
+// glyph rule rides inside it: identity is type, body and point -- a
+// north node is not the planet -- while the calculation flags are not.
+// Two edges the dialog tests cannot reach: re-asserting the definition a
+// slot already has keeps its glyph (a deliberate change from -Ye's old
+// unconditional drop), and changing only the point drops it.
+static void TestObjDefSetQt()
+{
+  int iobj = custLo + 2;   // Hades: pristine under nrvate.as
+  OBJDEF od, odSav;
+
+  Group("Object definition store");
+
+  ObjDefGet(iobj, &odSav);
+  Check(szDrawObject[iobj] == szDrawObjectDef[iobj],
+    "the slot starts out holding its own body's glyph");
+
+  od = odSav;
+  ObjDefSet(iobj, &od);
+  Check(szDrawObject[iobj] == szDrawObjectDef[iobj],
+    "re-asserting the same definition keeps the glyph");
+
+  od.nFlg ^= 1;
+  ObjDefSet(iobj, &od);
+  Check(szDrawObject[iobj] == szDrawObjectDef[iobj],
+    "and a calculation flag alone is not an identity change");
+
+  od.nPnt = 1;
+  ObjDefSet(iobj, &od);
+  Check(rgPntSwiss[iobj - custLo] == 1, "the point was stored (%d)",
+    rgPntSwiss[iobj - custLo]);
+  Check(szDrawObject[iobj] != szDrawObjectDef[iobj] &&
+    ChCap(szDrawObject[iobj][0]) == 'T',
+    "but a point is not the body, so the glyph dropped (\"%s\")",
+    szDrawObject[iobj]);
+
+  // Put the slot back, freeing what the drop cloned.
+  if (szDrawObject[iobj] != szDrawObjectDef[iobj]) {
+    DeallocateP((char *)szDrawObject[iobj]);
+    szDrawObject[iobj] = szDrawObjectDef[iobj];
+  }
+  if (szDrawObject2[iobj] != szDrawObjectDef2[iobj]) {
+    DeallocateP((char *)szDrawObject2[iobj]);
+    szDrawObject2[iobj] = szDrawObjectDef2[iobj];
+  }
+  ObjDefSet(iobj, &odSav);
+
+  // And the display-name convention, through its own setter: renaming a
+  // slot customises it, renaming it back to the stock text repoints at
+  // the szObjName[] constant -- before SetObjDisp() that left a clone of
+  // the stock name behind, which read as a rename forever after and
+  // earned the slot a -YD line in every saved settings file.
+  Check(!FObjDispCustom(iobj), "the slot starts un-renamed");
+  SetObjDisp(iobj, "AstrologSuiteHades");
+  Check(FObjDispCustom(iobj) && FEqSz(szObjDisp[iobj], "AstrologSuiteHades"),
+    "renaming a slot customises it (\"%s\")", szObjDisp[iobj]);
+  SetObjDisp(iobj, szObjName[iobj]);
+  Check(!FObjDispCustom(iobj),
+    "and renaming it back to the stock text un-customises it");
+
+  CastChart(1);
+  printf("  one function stores a definition, and owns the glyph rule\n");
+}
+
+
 static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
@@ -3209,6 +3274,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"midpoint-glyph",       TestMidpointGlyphQt},
   {"objsel-lookup",        TestObjSelLookupQt},
   {"custom-parse",         TestCustomDialogParseQt},
+  {"objdef-set",           TestObjDefSetQt},
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))

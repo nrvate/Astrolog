@@ -1879,7 +1879,7 @@ flag FOutputSettings()
     j = i - custLo;
     f1 = (rgObjSwiss[j] != rgObjSwissDef[j] || rgTypSwiss[j] !=
       rgTypSwissDef[j] || rgPntSwiss[j] != 0 || rgFlgSwiss[j] != 0);
-    f2 = (szObjDisp[i] != szObjName[i]);
+    f2 = FObjDispCustom(i);
     if (!f1 && !f2)
       continue;
     fAny = fTrue;
@@ -1902,7 +1902,7 @@ flag FOutputSettings()
   for (i = starLo; i <= starHi; i++) {
     j = i - starLo + 1;
     f1 = FSzSet(szStarCustom[j]);
-    f2 = (szObjDisp[i] != szObjName[i]);
+    f2 = FObjDispCustom(i);
     if (!f1 && !f2)
       continue;
     fAny = fTrue;

@@ -1552,29 +1552,25 @@ void XChartTelescope()
   // Initialize variables.
   iSat = !ignore[oSaC] ? oSaC :
 #ifdef SWISS
-    (!ignore[oVul] && rgTypSwiss[oVul - custLo] == 3 &&
-    rgObjSwiss[oVul - custLo] == 699 ? oVul : oSat);
+    (FObjIsCOBOf(oVul, oSat) ? oVul : oSat);
 #else
     oSat;
 #endif
   iUra = !ignore[oUrC] ? oUrC :
 #ifdef SWISS
-    (!ignore[oVul] && rgTypSwiss[oVul - custLo] == 3 &&
-    rgObjSwiss[oVul - custLo] == 799 ? oVul : oUra);
+    (FObjIsCOBOf(oVul, oUra) ? oVul : oUra);
 #else
     oUra;
 #endif
   iNep = !ignore[oNeC] ? oNeC :
 #ifdef SWISS
-    (!ignore[oVul] && rgTypSwiss[oVul - custLo] == 3 &&
-    rgObjSwiss[oVul - custLo] == 899 ? oVul : oNep);
+    (FObjIsCOBOf(oVul, oNep) ? oVul : oNep);
 #else
     oNep;
 #endif
   iJup = !ignore[oJuC] ? oJuC :
 #ifdef SWISS
-    (!ignore[oVul] && rgTypSwiss[oVul - custLo] == 3 &&
-    rgObjSwiss[oVul - custLo] == 599 ? oVul : oJup);
+    (FObjIsCOBOf(oVul, oJup) ? oVul : oJup);
 #else
     oJup;
 #endif

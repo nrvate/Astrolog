@@ -203,9 +203,9 @@ void InterpretLocation(void)
       AnsiColor(kObjA[i]);
       j = SFromZ(planet[i]);
       sprintf(sz, "%s%s%s in %s",
-        i == oFor && szObjDisp[i] == szObjName[i] ? "Part of " : "",
+        i == oFor && !FObjDispCustom(i) ? "Part of " : "",
         szObjDisp[i],
-        i == oPal && szObjDisp[i] == szObjName[i] ? " Athena" : "",
+        i == oPal && !FObjDispCustom(i) ? " Athena" : "",
         szSignName[j]);
       FieldWord(sz);
       j = (int)planet[i] - (j-1)*30;
@@ -221,9 +221,9 @@ void InterpretLocation(void)
     AnsiColor(kObjA[i]);
     j = SFromZ(planet[i]); ch = *Dignify(i, j);
     sprintf(sz, "%s%s%s%s in %s", ret[i] < 0.0 ? "Retrograde " : "",
-      i == oFor && szObjDisp[i] == szObjName[i] ? "Part of " : "",
+      i == oFor && !FObjDispCustom(i) ? "Part of " : "",
       szObjDisp[i],
-      i == oPal && szObjDisp[i] == szObjName[i] ? " Athena" : "",
+      i == oPal && !FObjDispCustom(i) ? " Athena" : "",
       szSignName[j]);
     FieldWord(sz);
     sprintf(sz, "and %d%s House:", inhouse[i], szSuffix[inhouse[i]]);
@@ -547,9 +547,9 @@ void InterpretSynastry(void)
     AnsiColor(kObjA[i]);
     j = SFromZ(planet[i]); c = *Dignify(i, j);
     sprintf(sz, "%s%s%s%s in %s,", ret[i] < 0.0 ? "Retrograde " : "",
-      i == oFor && szObjDisp[i] == szObjName[i] ? "Part of " : "",
+      i == oFor && !FObjDispCustom(i) ? "Part of " : "",
       szObjDisp[i],
-      i == oPal && szObjDisp[i] == szObjName[i] ? " Athena" : "",
+      i == oPal && !FObjDispCustom(i) ? " Athena" : "",
       szSignName[j]);
     FieldWord(sz);
     sprintf(sz, "in their %d%s House:", inhouse[i], szSuffix[inhouse[i]]);
@@ -1008,9 +1008,9 @@ int InterpretEsoteric(flag fGetRays)
     if (ignore[i])
       continue;
     AnsiColor(kObjA[i]);
-    sprintf(szName, "%s%s%s", i == oFor && szObjDisp[i] == szObjName[i] ?
+    sprintf(szName, "%s%s%s", i == oFor && !FObjDispCustom(i) ?
       "Part of " : "", szObjDisp[i],
-      i == oPal && szObjDisp[i] == szObjName[i] ? " Athena" : "");
+      i == oPal && !FObjDispCustom(i) ? " Athena" : "");
     sig = SFromZ(planet[i]);
     hou = inhouse[i];
     sprintf(sz, "%s in %s%s", szName, szSignName[sig],
@@ -1226,9 +1226,9 @@ void PrintEsoteric()
     if (ignore[i] || !(i <= oNorm && rgEsoObj[i] != NULL && *rgEsoObj[i]))
       continue;
     AnsiColor(kObjA[i]);
-    sprintf(szName, "%s%s%s", i == oFor && szObjDisp[i] == szObjName[i] ?
+    sprintf(szName, "%s%s%s", i == oFor && !FObjDispCustom(i) ?
       "Part of " : "", szObjDisp[i],
-      i == oPal && szObjDisp[i] == szObjName[i] ? " Athena" : "");
+      i == oPal && !FObjDispCustom(i) ? " Athena" : "");
     sprintf(sz, "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
     FieldWord(sz);
   }

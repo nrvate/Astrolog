@@ -244,6 +244,12 @@ extern char *szStarCustom[cStar+1];
 extern CONST char *szObjDisp[objMax], *szAspectDisp[cAspect2+1],
   *szAspectAbbrevDisp[cAspect2+1], *szAspectGlyphDisp[cAspect2+1];
 
+// A slot's display name is "customised" exactly when its pointer differs
+// from the shared szObjName[] constant -- FinalizeProgram()'s free loop
+// and the -YD settings writer both rest on that convention. Write the
+// name only through SetObjDisp(), which keeps the convention true.
+#define FObjDispCustom(obj) (szObjDisp[obj] != szObjName[obj])
+
 extern CONST real rObjDist[oNorm+1], rObjYear[oNorm+1], rObjDay[oNorm+1],
   rObjMass[oPlu+1], rObjAxis[oPlu+1];
 extern real rObjDiam[oNorm+1];
@@ -399,6 +405,7 @@ extern void UTF8ToIBMSz P((char *));
 extern void ConvertSzFromUTF8 P((char *));
 extern CONST char *ConvertSzToLatin P((CONST char *, char *, int));
 extern void SetObjGlyphNoneCore P((int));
+extern flag SetObjDisp P((int, CONST char *));
 extern flag FCloneSzCore P((CONST char *, char **, flag));
 extern char *SzClone P((char *));
 extern pbyte PAllocate P((long, CONST char *));
@@ -518,6 +525,8 @@ extern void SzObjSelDef P((char *, int));
 extern void SzObjSelName P((char *, int, int));
 extern flag FObjSelFlagRun P((CONST char *));
 extern void ObjDefGet P((int, OBJDEF *));
+extern void ObjDefSet P((int, CONST OBJDEF *));
+extern flag FObjIsCOBOf P((int, int));
 extern void SzObjDefFormat P((char *, CONST OBJDEF *));
 extern flag FObjDefParse P((CONST char *, OBJDEF *));
 extern flag FObjSelParse P((CONST char *, OBJDEF *));

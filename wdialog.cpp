@@ -1669,20 +1669,11 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
 #endif
           if (j) {
 #ifdef SWISS
-            // A slot pointed at a different body drops the old body's
-            // glyph, the way -Ye and Object Selections already do.
-            if (od.nTyp != rgTypSwiss[i - custLo] ||
-              od.nObj != rgObjSwiss[i - custLo])
-              SetObjGlyphNoneCore(i);
-            rgTypSwiss[i - custLo] = od.nTyp;
-            rgObjSwiss[i - custLo] = od.nObj;
-            rgPntSwiss[i - custLo] = od.nPnt;
-            rgFlgSwiss[i - custLo] = od.nFlg;
+            // The store and the glyph rule are ObjDefSet()'s.
+            ObjDefSet(i, &od);
 #endif
             GetEdit(den01 - custLo + i, sz);
-            if (!FEqSz(sz, szObjDisp[i]))
-              FCloneSzCore(sz, (char **)&szObjDisp[i],
-                szObjDisp[i] == szObjName[i]);
+            SetObjDisp(i, sz);
           }
         }
       }
@@ -1852,15 +1843,8 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       for (i = 0; i < cObjSelRow; i++) {
         iobj = uranLo + i;
 #ifdef SWISS
-        // A slot pointed at a different body drops the old body's
-        // glyph, the way -Ye does, or the wheel goes on drawing Vulcan
-        // for a point everything else calls Chiron.
-        if (rgod[i].nTyp != rgnTyp0[i] || rgod[i].nObj != rgnObj0[i])
-          SetObjGlyphNoneCore(iobj);
-        rgTypSwiss[iobj - custLo] = rgod[i].nTyp;
-        rgObjSwiss[iobj - custLo] = rgod[i].nObj;
-        rgPntSwiss[iobj - custLo] = rgod[i].nPnt;
-        rgFlgSwiss[iobj - custLo] = rgod[i].nFlg;
+        // The store and the glyph rule are ObjDefSet()'s.
+        ObjDefSet(iobj, &rgod[i]);
 #endif
         force[iobj] = rgforce[i];
         ignore[iobj] = !rgfShow[i];
@@ -1886,9 +1870,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
               sprintf(sz, "%.*s", cchSzMax-1, szT);
           }
         }
-        if (!FEqSz(sz, szObjDisp[iobj]))
-          FCloneSzCore(sz, (char **)&szObjDisp[iobj],
-            szObjDisp[iobj] == szObjName[iobj]);
+        SetObjDisp(iobj, sz);
       }
 
       // Re-derive the two Include categories and their menu checks, the
@@ -1971,9 +1953,7 @@ flag API DlgCustomS(HWND hdlg, uint message, WORD wParam, LONG lParam)
         for (i = starLo; i <= starHi; i++) {
           if (j) {
             GetEdit(den01 - starLo + i, sz);
-            if (!FEqSz(sz, szObjDisp[i]))
-              FCloneSzCore(sz, (char **)&szObjDisp[i],
-                szObjDisp[i] == szObjName[i]);
+            SetObjDisp(i, sz);
 #ifdef SWISS
             GetEdit(ded01 - starLo + i, sz);
             k = i - starLo + 1;

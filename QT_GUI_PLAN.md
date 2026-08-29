@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3006
+   display and no `xdotool`, and exits non-zero on failure. **3014
    assertions** as of 2026-08-29; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-61
+## Work log — items 1-62
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2508,6 +2508,38 @@ are the more useful half to read before starting something new.
     - Also relearned: grep full build logs for `: error`, not ` error` --
       atlas.cpp legitimately prints "Zone rule error:" inside warning
       context, six times.
+
+62. **Stages 2 and 3: one way to set a definition, one way to set a
+    name.** The write half of the slot accessor and the display-name
+    convention, together because their call sites interleave.
+    - `ObjDefSet()` replaces the five separate array-store sites (`-Ye`
+      and both dialogs in both builds), carrying the glyph rule inside:
+      identity is type, body and **point** -- a north node is not the
+      planet -- while calculation flags are not. Two deliberate changes:
+      `-Ye` re-asserting a slot's existing definition keeps its glyph
+      (the old code dropped it unconditionally), and a point-only change
+      through a dialog now drops it (the dialogs compared only
+      type/body). `-Ye` also gathers its whole definition, trailing
+      flags included, into one OBJDEF before a single store, instead of
+      storing four arrays at three separate moments.
+    - `FObjIsCOBOf()` replaces the five open-coded "is the Vulcan slot
+      redefined as planet N's center of body" predicates -- four wheels
+      in xcharts1.cpp with the moon number as a literal, and RObjDiam()
+      with it computed -- which the plan (Stage 2) flagged as the
+      most-duplicated predicate in the core.
+    - `SetObjDisp()` and `FObjDispCustom()` own the display-name
+      convention: customised means the pointer differs from the
+      `szObjName[]` constant. Nine guarded-clone sites and thirteen
+      identity tests (ten of them in intrpret.cpp, which the plan
+      missed) now go through them. One real fix rides along: restoring
+      a slot's stock name used to *clone* it, so the slot read as
+      renamed forever after and earned a spurious `-YD` line in every
+      saved settings file; the setter repoints at the constant instead,
+      and an assertion pins the round trip.
+    - Single-field reads like `rgTypSwiss[..] == 4` stay direct on
+      purpose: pulling a whole OBJDEF to test one field is noise, not
+      clarity. The multi-field gathers (FSwissPlanet, both dialogs'
+      pre-fills, SzObjSelDef) all go through ObjDefGet now.
 
 ## Features this fork adds to both builds
 

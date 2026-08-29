@@ -2728,6 +2728,41 @@ void ObjDefGet(int obj, OBJDEF *pod)
 }
 
 
+// Put a definition into a custom slot: the four arrays, plus the one side
+// effect every write path used to carry for itself -- a slot pointed at a
+// different body, or at a different point of one, drops the old body's
+// glyph and draws its name instead (a north node is not the planet, so
+// nPnt is part of the identity; the calculation flags are not). The
+// display name is deliberately NOT set here: -Ye always renames, the
+// dialogs rename only a name the user left alone, so name policy stays
+// with the caller. This replaces five separate store sites, three of
+// which had already grown their own copies of the glyph rule.
+
+void ObjDefSet(int obj, CONST OBJDEF *pod)
+{
+  if (pod->nTyp != rgTypSwiss[obj - custLo] ||
+    pod->nObj != rgObjSwiss[obj - custLo] ||
+    pod->nPnt != rgPntSwiss[obj - custLo])
+    SetObjGlyphNoneCore(obj);
+  rgTypSwiss[obj - custLo] = pod->nTyp;
+  rgObjSwiss[obj - custLo] = pod->nObj;
+  rgPntSwiss[obj - custLo] = pod->nPnt;
+  rgFlgSwiss[obj - custLo] = pod->nFlg;
+}
+
+
+// Is this custom slot redefined to be the center of body of the given
+// planet -- the "99" planetary-moon ephemeris entry -- and not
+// restricted? Open coded five times before: four wheels in xcharts1.cpp
+// with the moon number as a literal, and RObjDiam() with it computed.
+
+flag FObjIsCOBOf(int obj, int objPla)
+{
+  return FCust(obj) && !ignore[obj] && rgTypSwiss[obj - custLo] == 3 &&
+    rgObjSwiss[obj - custLo] == (objPla - oJup + 5)*100 + 99;
+}
+
+
 // Format a definition as the text Object Customization shows and every
 // definition field accepts: "h120", "Mar", "2 n", "j2 nHS". The inverse
 // of FObjDefParse(), and like the parse it used to exist in several
@@ -3005,6 +3040,7 @@ flag FSwissPlanet(int ind, real jd, int indCent,
   real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
 {
   int iobj, iobjCent, iflag, nRet, nTyp, nPnt = 0, nFlg = 0, ix;
+  OBJDEF od;
   double jde, xx[6], xnasc[6], xndsc[6], xperi[6], xaphe[6], *px;
   char serr[AS_MAXCH], szErr[AS_MAXCH + cchSzDef];
   static int nSwissEph = 0;
@@ -3033,10 +3069,11 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     iobj = us.fNaturalNode ? SE_INTP_APOG :
       (us.fTrueNode ? SE_OSCU_APOG : SE_MEAN_APOG);
   } else if (FCust(ind)) {
-    iobj = rgObjSwiss[ind - custLo];
-    nTyp = rgTypSwiss[ind - custLo];
-    nPnt = rgPntSwiss[ind - custLo];
-    nFlg = rgFlgSwiss[ind - custLo];
+    ObjDefGet(ind, &od);
+    iobj = od.nObj;
+    nTyp = od.nTyp;
+    nPnt = od.nPnt;
+    nFlg = od.nFlg;
     if (nTyp != 2)
       iobj += (nTyp <= 0 ? SE_FICT_OFFSET_1 : (nTyp == 1 ? SE_AST_OFFSET :
         SE_PLMOON_OFFSET));

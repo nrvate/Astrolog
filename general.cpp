@@ -1105,8 +1105,7 @@ real RObjDiam(int obj)
   // If planet Center of Body (COB) is present, barycenter size should be 0.
   if (FBetween(obj, oJup, oPlu) && (!ignore[obj - oJup + cobLo]
 #ifdef SWISS
-    || (!ignore[oVul] && rgTypSwiss[oVul - custLo] == 3 &&
-    rgObjSwiss[oVul - custLo] == (obj - oJup + 5)*100 + 99)
+    || FObjIsCOBOf(oVul, obj)
 #endif
     ))
     return 0.0;
@@ -3145,6 +3144,28 @@ void SetObjGlyphNoneCore(int obj)
   FCloneSzCore("", (char **)&szDrawObject2[obj],
     szDrawObject2[obj] == szDrawObjectDef2[obj]);
 #endif
+}
+
+
+// Set a slot's display name. Restoring the stock text repoints at the
+// szObjName[] constant rather than keeping a clone -- a clone of the
+// stock name reads as a rename forever after: FinalizeProgram() would
+// free it, and the settings writer would emit a -YD line for a slot that
+// is not renamed at all. A set to what the slot already shows is skipped
+// outright, which also folds in the FEqSz() guard every call site used
+// to carry by hand.
+
+flag SetObjDisp(int obj, CONST char *sz)
+{
+  if (FEqSz(sz, szObjDisp[obj]))
+    return fTrue;
+  if (FEqSz(sz, szObjName[obj])) {
+    if (FObjDispCustom(obj))
+      DeallocateP((char *)szObjDisp[obj]);
+    szObjDisp[obj] = szObjName[obj];
+    return fTrue;
+  }
+  return FCloneSzCore(sz, (char **)&szObjDisp[obj], !FObjDispCustom(obj));
 }
 
 

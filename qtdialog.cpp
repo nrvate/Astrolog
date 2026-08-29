@@ -4315,21 +4315,11 @@ void ShowCustomDialogQt()
   for (i = custLo; i <= custHi; i++) {
     j = i - custLo;
     ParseCustomDefQt(rgpeDef[j]->text(), &od);
-    // A slot pointed at a different body drops the old body's glyph, the
-    // way -Ye and Object Selections already do -- this dialog was the
-    // last path that could leave Vulcan's glyph on a point everything
-    // else calls by its new name.
-    if (od.nTyp != rgTypSwiss[j] || od.nObj != rgObjSwiss[j])
-      SetObjGlyphNoneCore(i);
-    rgTypSwiss[j] = od.nTyp;
-    rgObjSwiss[j] = od.nObj;
-    rgPntSwiss[j] = od.nPnt;
-    rgFlgSwiss[j] = od.nFlg;
+    // The store and the glyph rule are ObjDefSet()'s.
+    ObjDefSet(i, &od);
 
     QByteArray baName = rgpeName[j]->text().toLocal8Bit();
-    if (!FEqSz(baName.constData(), szObjDisp[i]))
-      FCloneSzCore(baName.constData(), (char **)&szObjDisp[i],
-        szObjDisp[i] == szObjName[i]);
+    SetObjDisp(i, baName.constData());
   }
   RecastAndRedrawQt();
 }
@@ -4507,15 +4497,8 @@ void ShowObjectSelDialogQt()
     rgTypSwissSav[i] = rgTypSwiss[iobj - custLo];
     rgObjSwissSav[i] = rgObjSwiss[iobj - custLo];
     rgforceSav[i] = force[iobj];
-    // A slot pointed at a different body drops the old body's glyph, the
-    // way -Ye does, or the wheel goes on drawing Vulcan for a point that
-    // everything else calls Chiron.
-    if (rgod[i].nTyp != rgTypSwissSav[i] || rgod[i].nObj != rgObjSwissSav[i])
-      SetObjGlyphNoneCore(iobj);
-    rgTypSwiss[iobj - custLo] = rgod[i].nTyp;
-    rgObjSwiss[iobj - custLo] = rgod[i].nObj;
-    rgPntSwiss[iobj - custLo] = rgod[i].nPnt;
-    rgFlgSwiss[iobj - custLo] = rgod[i].nFlg;
+    // The store and the glyph rule are ObjDefSet()'s.
+    ObjDefSet(iobj, &rgod[i]);
     force[iobj] = rgforce[i];
     if (rgpcbShow[i] != NULL)
       ignore[iobj] = !rgpcbShow[i]->isChecked();
@@ -4550,9 +4533,7 @@ void ShowObjectSelDialogQt()
         }
       }
       QByteArray ba = str.toLocal8Bit();
-      if (!FEqSz(ba.constData(), szObjDisp[iobj]))
-        FCloneSzCore(ba.constData(), (char **)&szObjDisp[iobj],
-          szObjDisp[iobj] == szObjName[iobj]);
+      SetObjDisp(iobj, ba.constData());
     }
   }
 
@@ -4636,9 +4617,7 @@ void ShowCustomStarDialogQt()
     int row = i - starLo;
     k = i - starLo + 1;
     QByteArray baName = rgpeName[row]->text().toLocal8Bit();
-    if (!FEqSz(baName.constData(), szObjDisp[i]))
-      FCloneSzCore(baName.constData(), (char **)&szObjDisp[i],
-        szObjDisp[i] == szObjName[i]);
+    SetObjDisp(i, baName.constData());
     QByteArray baDef = rgpeDef[row]->text().toLocal8Bit();
     FCloneSz(FEqSz(baDef.constData(),
       *szStarNameSwiss[k] ? szStarNameSwiss[k] : szObjName[i]) ?
