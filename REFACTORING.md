@@ -76,7 +76,7 @@ sits in: themes and area findings are ordered most-worth-doing first.
 | B. Settings & serialization | io.cpp (3211) | **surveyed 2026-08-29** — findings B1-B5 |
 | C. Computation core | calc.cpp (4000), matrix.cpp (703), ephemeris glue | **surveyed 2026-08-29** — findings C1-C6 |
 | D. Text charts & interpretation | charts0-3.cpp (8876), intrpret.cpp (1605) | **surveyed 2026-08-29** — findings D1-D4 |
-| E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | pending |
+| E. Graphics core & device layer | xscreen.cpp, xgeneral.cpp, xdevice.cpp, xdata.cpp (8971) | **surveyed 2026-08-29** — findings E1-E3 |
 | F. Graphics charts | xcharts0-2.cpp (9129) | pending |
 | G. Frontends & satellites | qtdriver/qtdialog (9345), express.cpp (2936), atlas.cpp (2171) | pending |
 | H. Data model & headers | astrolog.h (2457), extern.h (1243), data.cpp (1702) | pending |
@@ -188,6 +188,8 @@ surveys own the concrete plan.
 
 *Cost/risk:* medium per step, high total value. The table's shape should
 be designed once, against the ugliest ten switches, not the easiest.
+*(Amended by E2: the family is four parsers, four help printers, and
+the settings writer — nine parallel descriptions of one surface.)*
 
 ### T4 — Serialization is a hand-written mirror of the parser
 
@@ -566,7 +568,54 @@ in an else-if order that matters (the context menus mirror it, work
 log item 1). Tagged onto A3: one shared flag↔mode table serves all
 four consumers. *Cost:* counted under A3.
 
-### Areas E-H — pending
+### Area E — graphics core & device layer, surveyed 2026-08-29
+
+xgeneral.cpp is the drawing primitives; xscreen.cpp the window/event
+lifecycle, graphics switch parsing, and `FActionX()`; xdevice.cpp the
+file-format writers (BMP/PNG/XBM, PostScript, metafile, SVG, wireframe)
+plus bitmap operations; xdata.cpp is graphics globals and data tables
+(verdict: it's data, leave it). The good news first: **T6 is in better
+shape than assumed** — the backend branches concentrate *inside* ~11
+primitives (`DrawColor`, `DrawPoint`, `DrawBlock`, `DrawDash`,
+`DrawArc`, `DrawEllipse2`, `DrawFill`, `DrawSz`, `DrawGlyph`,
+`DrawClearScreen`, `DrawThick`); everything above them, all of
+xcharts*, is target-free. The device layer exists; it's just written
+longhand.
+
+**E1 — Each primitive multiplexes two axes at once.** Screen backend
+(X11/WINANY/QT, compile-time) and file format (`gs.ft` = PS/WMF/SVG/
+wire at runtime, under `gi.fFile`) interleave in each primitive body:
+`DrawColor()` (xgeneral.cpp:75) handles seven targets in one function,
+and `DrawSz()` scatters seven conditional blocks. Some primitives are
+already clean one-block-per-target (`DrawBlock`); others grew organic.
+*Incident:* the missing-QT-branch crash class (items 39/54,
+`FBmpDrawMap2()` leaving `bmp` on a never-allocated buffer — the
+suite's first-run catch). *Direction:* normalize every primitive to
+one block per target in a fixed order — mechanical, verifiable by the
+`QTGRAPHDIR` captures and Windows comparison; a true target vtable
+(one struct of pointers per screen backend *and* per file format)
+becomes a small step afterward instead of a leap, and would let a new
+export format be one file instead of edits to eleven functions.
+*Cost:* normalization low; vtable medium, only if warranted.
+
+**E2 — T3's parser family is four, not two.** `NProcessSwitchesX()`
+(xscreen.cpp:1354, ~480 lines) and `NProcessSwitchesRareX()`
+(xscreen.cpp:1835, ~340 lines) parse the graphics switches, with their
+own help twins (`DisplaySwitchesX`/`DisplaySwitchesW`, charts0.cpp).
+The eventual switch table must cover all four parsers, the four help
+printers, and `FOutputSettings()` — the full count of hand-kept
+parallel descriptions of the switch surface is **nine**. T3 amended.
+
+**E3 — Four event loops own the same keystroke surface.** X11 and WCLI
+share `InteractX()` (xscreen.cpp:629, itself internally `#ifdef`-split);
+Windows has `WndProc()`; Qt runs its own loop. The keystroke→command
+mapping already unified once through the resource-generated accelerator
+work (item 2); the loops themselves are inherently per-backend and stay.
+*Direction:* document ownership (which loop serves which build, where a
+new command must be added) in T8's conventions doc; no restructuring.
+*Cost:* documentation.
+
+### Areas F-H — pending
 
 ---
 
