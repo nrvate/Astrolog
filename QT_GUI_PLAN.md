@@ -3282,6 +3282,26 @@ are the more useful half to read before starting something new.
     distinct, deterministic, byte-identical after conversion. Suite
     3039/0, audits clean.
 
+103. **P6 family 2: the tight scopes borrow (4 sites).**
+    XChartTelescope's fEclipseAny wrap around one NCheckEclipse call
+    and its fSeconds+nDegForm pair around the axis-label formatting;
+    XChartSphere's two cp0 dances (install *pcp for FCreateGrid, and
+    for the EnumMoonsRing init call). The FCreateGrid site's old code
+    returned with cp0 still holding *pcp on the allocation-failure
+    path -- the guard restores on that exit too, the exact leak class
+    Borrow exists for (unreachable in the differential; noted, not
+    proven). Three unused Sav locals deleted. The gate grew teeth
+    this family: sabotage runs proved the eclipse case (a real
+    solar-eclipse date, 1999-08-11 London), and exposed that both
+    sphere cp0 sites are self-assignments in a single chart (pcp ==
+    &cp0) -- only a relation sphere exercises them, and moons need
+    =X8 _R8 -- so the battery gained sphere-moons-rel, and every one
+    of the four sites now has a case a sabotaged conversion visibly
+    breaks (value sabotage for the borrow values; a forced
+    wrong-restore for the degform pair, caught by the =YXe case's
+    next loop iteration). 14 cases, pairwise distinct, deterministic,
+    byte-identical old vs. new. Suite 3039/0, audits clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

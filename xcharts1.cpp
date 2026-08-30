@@ -1606,7 +1606,7 @@ void XChartTelescope()
   char sz[cchSzDef], szT[cchSzDef], *pch;
   int rgobj[objMax+1], xunit, yunit, x1, y1, x2, y2, xs, ys, xc, yc, xp, yp,
     xT, yT, xd, yd, i, j, k, i0, i1, i2, iEar, iMoo, dx, dy = 0, nEclipse,
-    zLimit, nShowMinute, nSav;
+    zLimit, nShowMinute;
   real rglen[objMax+1], lonH, latH, xBase, yBase, xScale, yScale,
     xBase2, yBase2, xScale2, yScale2, xi, yi, diam, radi, rRatio, len, ang,
     xo, yo, xr, yr, zr, xrSun, yrSun, xrT, yrT,
@@ -2099,9 +2099,10 @@ void XChartTelescope()
             if (i2 >= 0) {
               if (!FProper(i2) || i == us.objCenter || i2 == us.objCenter)
                 continue;
-              fSav = us.fEclipseAny; us.fEclipseAny = fFalse;
-              nEclipse = NCheckEclipse(i2, i, &rPct);
-              us.fEclipseAny = fSav;
+              {
+                Borrow bEclipse(us.fEclipseAny, fFalse);
+                nEclipse = NCheckEclipse(i2, i, &rPct);
+              }
             } else {
               if (!(i == iMoo && us.objCenter == iEar && !FIgnore(iEar)))
                 continue;
@@ -2226,7 +2227,9 @@ void XChartTelescope()
     DrawLineY(xp, y2 - (3+fShowLabel*2)*gi.nScaleT, y2);
     if (!fShowLabel)
       continue;
-    fSav = us.fSeconds; nSav = us.nDegForm;
+    {
+    Borrow bSeconds(us.fSeconds);
+    Borrow bDegForm(us.nDegForm);
     us.fSeconds =
       ((us.nDegForm == dfHM  || us.nDegForm == dfNak) && nShowMinute > 0) ||
       ((us.nDegForm == dfZod || us.nDegForm == df360) && nShowMinute > 1);
@@ -2251,7 +2254,7 @@ void XChartTelescope()
       sz[N012(nShowMinute, 4, 6, 9)] = chNull;
     else if (us.nDegForm == dfNak)
       sz[nShowMinute <= 0 ? 7 : 9] = chNull;
-    us.nDegForm = nSav; us.fSeconds = fSav;
+    }
     pch = sz + (sz[0] == ' ');
     DrawSz(pch, xp, 3*gi.nScaleTextT, dtCent | dtTop | dtScale2);
     if (!gs.fText)
@@ -4317,7 +4320,6 @@ void XChartSphere()
   real rLat, rT;
   CIRC cr, cr2;
   CONST CP *pcp;
-  CP cpSav;
   ObjDraw rgod[objMax];
   byte ignoreSav[objMax];
   ES es;
@@ -4665,11 +4667,11 @@ void XChartSphere()
     }
 
     // Draw lines connecting planets which have aspects between them.
-    cpSav = cp0;
-    cp0 = *pcp;
-    if (!FCreateGrid(fFalse))
-      return;
-    cp0 = cpSav;
+    {
+      Borrow bcp(cp0, *pcp);
+      if (!FCreateGrid(fFalse))
+        return;
+    }
     {
     Borrow bScale(gi.nScale, gi.nScaleTextT);
     for (j = is.nObj; j >= 1; j--)
@@ -4692,10 +4694,10 @@ void XChartSphere()
 
     // Draw planetary moons in orbit around their planet glyphs.
     if (gs.fMoonWheel) {
-      cpSav = cp0;
-      cp0 = *pcp;
-      EnumMoonsRing(NULL, NULL, NULL, NULL, NULL, fTrue);
-      cp0 = cpSav;
+      {
+        Borrow bcp(cp0, *pcp);
+        EnumMoonsRing(NULL, NULL, NULL, NULL, NULL, fTrue);
+      }
       while (EnumMoonsRing(&i, &j, &rT, &k, &chT, fTrue)) {
         rLat = Min(pcp->alt[j], rDegQuad-5.0);
         FSphereZodiac(pcp->obj[j], rLat, &cr, &xp, &yp);
