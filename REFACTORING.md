@@ -542,13 +542,18 @@ reword; valid input behavior is byte-sacred.
 **Harvest state and constraints:**
 - Done: registry self-check + cross-audits (item 78, which also
   revived -YYI from upstream's misspelled `#ifdef INTRPRET`).
-- `FOutputSettings()` as a row-driven loop: constrained hard by the
-  settings file being a user-facing artifact — its layout, comments,
-  and ordering must stay byte-stable (the round trip and users'
-  files). Realistic shape: keep the prose skeleton, derive the
-  values/rows from the registry where families align, and let
-  `registry_audit.py` keep the rest honest. Not urgent; the audit
-  already closes the drift class.
+- `FOutputSettings()` as a row-driven loop: **closed as measured
+  infeasible-at-value, 2026-08-29** (work log item 87). The
+  constraint stands (byte-stable user-facing layout), and the
+  single-sourcing idea was measured: of the 42 simple flag emissions
+  (`ChDashF` lines), only 9 spellings are exact registry flag rows —
+  the other 33 are suffix-parsed inside prefix handlers ("b0" inside
+  NSwb, the -X family, the -W passthroughs), where no row lookup can
+  reach without exploding the registry into per-suffix exact rows,
+  which the migration deliberately avoided. `registry_audit.py`
+  already closes the spelling-drift class; the value-drift class
+  stays covered by the round-trip fixture's 31 sentinels. Nothing
+  further to harvest here.
 - Generated `-H` help: needs help text moved onto rows *plus* an
   explicit ordering list, because help order is pedagogical, not table
   order. Byte-diff the generated output against the four hand-written
@@ -992,6 +997,11 @@ cursor. Every sidebar and info listing threads through it.
 *Direction:* split the cursor control into named functions and keep
 `DrawPrint(sz, color, fSameLine)` for text; entirely mechanical.
 *Cost:* low; touches many call sites but each is a rename.
+
+**Done 2026-08-29** (work log item 87): `DrawPrintTo(x, y)` and
+`DrawPrintShift(dx)` own the cursor (now file-scope statics);
+`DrawPrint()` only draws. The "many call sites" turned out to be
+two — every other caller already used the text convention.
 
 **F4 — `DrawChartX()` is the fifth knower of the mode mapping.**
 xcharts0.cpp:2435 switches on `gi.nMode` parallel to `Action()`,

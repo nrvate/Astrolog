@@ -990,6 +990,8 @@ extern void WireChartSphere P((void));
 // From xcharts0.cpp
 
 extern int DrawPrint P((CONST char *, int, int));
+extern void DrawPrintTo P((int, int));
+extern void DrawPrintShift P((int));
 extern void DrawSidebar P((void));
 extern flag DrawFillWheel P((int, int, int, int));
 extern void DrawWheel P((real *, real *, int, int, real, real,

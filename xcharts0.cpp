@@ -67,35 +67,42 @@
 // or in the same row just to the right. This is used by the sidebar drawing
 // routine to print a list of text on the chart.
 
+static int xStartPrint, xPrint, yPrint;  // The DrawPrint() cursor.
+
+// Set the DrawPrint() cursor to the given coordinates, starting a new
+// column of text there.
+
+void DrawPrintTo(int x, int y)
+{
+  xStartPrint = xPrint = x; yPrint = y;
+}
+
+// Shift the DrawPrint() cursor horizontally without printing anything.
+
+void DrawPrintShift(int dx)
+{
+  xPrint += dx;
+}
+
 int DrawPrint(CONST char *sz, int m, int n)
 {
-  static int xStart, x, y;
-
-  if (sz == NULL) {           // Null string means just initialize position.
-    if (n >= 0) {
-      xStart = x = m; y = n;
-    } else
-      x += m;
-    return y;
-  }
-  if (y >= gs.yWin-1)     // Don't draw if have scrolled off the chart bottom.
-    return y;
+  if (yPrint >= gs.yWin-1)  // Don't draw if scrolled off the chart bottom.
+    return yPrint;
   DrawColor(m);
   if (CwchSz(sz) > 25)     // Adjust slightly to fit in 26 character strings.
-    x -= xFontT/2;
-  DrawSz(sz, x, y, dtLeft | dtBottom | dtScale2);
+    xPrint -= xFontT/2;
+  DrawSz(sz, xPrint, yPrint, dtLeft | dtBottom | dtScale2);
 
   // If the second parameter is TRUE, then stay on the same line, otherwise
   // when FALSE go to the next line at the original column setting.
 
   if (n)
-    x += CchSz(sz) * xFontT;
+    xPrint += CchSz(sz) * xFontT;
   else {
-    x = xStart;
-    n = y;
-    y += yFontT;
+    xPrint = xStartPrint;
+    yPrint += yFontT;
   }
-  return y;
+  return yPrint;
 }
 
 
@@ -388,7 +395,7 @@ void DrawSidebar()
   gs.xWin += xSideT;
   if (gs.fBorder)
     DrawLineY(i, 1, gs.yWin-1-gi.nScaleT);
-  DrawPrint(NULL, gs.xWin-xSideT+xFontT-gi.nScaleT, yFontT*7/5);
+  DrawPrintTo(gs.xWin-xSideT+xFontT-gi.nScaleT, yFontT*7/5);
 #ifdef EXPRESS
   // Notify AstroExpression the sidebar is about to be drawn.
   if (!us.fExpOff && FSzSet(us.szExpSidebar))
@@ -585,7 +592,7 @@ void DrawSidebar()
   sprintf(sz, "Yang: %d, Yin: %d", et.coYang, et.coYin);
   DrawPrint(sz, gi.kiLite, fFalse);
   if (et.coMC > 9 && et.coIC > 9 && et.coAsc > 9 && et.coDes > 9)
-    DrawPrint(NULL, -xFont2*gi.nScaleText/2, -1);
+    DrawPrintShift(-xFont2*gi.nScaleText/2);
   sprintf(sz, "M: %d,",  et.coMC);  DrawPrint(sz, kElemB[eEar], fTrue);
   sprintf(sz, " N: %d,", et.coIC);  DrawPrint(sz, kElemB[eWat], fTrue);
   sprintf(sz, " A: %d,", et.coAsc); DrawPrint(sz, kElemB[eFir], fTrue);

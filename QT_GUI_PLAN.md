@@ -3034,6 +3034,20 @@ are the more useful half to read before starting something new.
     restructuring it risks rendering for no behavioral gain. Verdict
     recorded in REFACTORING.md; no code change, on purpose.
 
+87. **Two closes and a small split.** (a) The T3 harvest idea of
+    deriving FOutputSettings() flag values from registry rows was
+    measured and closed: of 42 simple flag emissions only 9 spellings
+    are exact registry flag rows; the rest are suffix-parsed inside
+    prefix handlers, out of reach of any row lookup. The audits and
+    round-trip sentinels already cover the drift classes. (b) F3:
+    DrawPrint()'s three calling conventions became three functions --
+    DrawPrintTo(x, y) and DrawPrintShift(dx) own the cursor,
+    DrawPrint() only draws. The "many call sites" was two; every
+    other caller already used the text convention. Proven with a
+    4-bitmap sidebar differential (wheel, relationship wheel,
+    exoplanet chart, sidebar off), byte-identical; suite 3036/0;
+    Windows cross-build clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
