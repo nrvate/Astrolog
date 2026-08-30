@@ -1730,6 +1730,12 @@ typedef struct _ExtraStar {
   KI ki;              // Color to use for star.
 } ES;
 
+// The state classification (REFACTORING.md T1): US holds user intent --
+// set by switches and dialogs, serialized by FOutputSettings() where
+// persistent. Computation never owns a US field; it may *borrow* one
+// around a call via the save/restore idiom (CONVENTIONS.md, *Sav), and
+// every borrow restores. Derived and scratch state belongs in IS.
+
 typedef struct _UserSettings {
 
   // Chart types
@@ -2023,6 +2029,12 @@ typedef struct _UserSettings {
   char *szExpADB;      // -~5i
 } US;
 
+// IS holds derived and scratch state: recomputed by casting, reset per
+// run, or latched on first use (the lifecycle contract, REFACTORING.md
+// A4). Nothing here is serialized; nothing here is user intent. Where a
+// name shadows one in US (fProgress), the US field is the user's
+// request and the IS field is what the current cast actually did.
+
 typedef struct _InternalSettings {
   flag fNoSwitches;    // Do we need to prompt user to enter a command line?
   flag fHaveInfo;      // Do we need to prompt user for chart info?
@@ -2099,6 +2111,9 @@ typedef struct _Bitmap {
   int clRow;  // Longs per row in bitmap
   byte *rgb;  // Bytes of bitmap bits
 } Bitmap;
+
+// GS is US for graphics: user intent from the -X family, serialized
+// where persistent. Same borrowing contract as US.
 
 typedef struct _GraphicsSettings {
   int ft;            // File type being created (-Xb, -Xp, -XM, or -X3).
@@ -2185,6 +2200,9 @@ typedef struct _GraphicsSettings {
   char *szStarsLin;  // Names of extra stars for linking (-YXU).
   char *szStarsLnk;  // Indexes of star pairs to link up (-YXU).
 } GS;
+
+// GI is IS for graphics: the canvas, buffers, cursors, and per-render
+// scratch. Never serialized, never user intent.
 
 typedef struct _GraphicsInternal {
   int nMode;          // Current type of chart to create.

@@ -122,6 +122,15 @@ restore becomes grep-able; **(3)** make the worst offenders explicit
 parameters where a function's whole contract is "reads two fields,
 writes one" — findable case by case during area surveys, each one small.
 
+**Move (1) done 2026-08-29** (work log item 92), with a finding that
+sharpened it: the struct split already *is* the classification — US/GS
+are user intent, IS/GI are derived and scratch, and shadowed names
+(us.fProgress = the request, is.fProgress = what the cast did) mark the
+boundary. The interleaving problem is not misfiled fields but
+computation *borrowing* settings fields via the *Sav dance. The
+contract now sits on all four struct heads in astrolog.h. Moves (2)
+and (3) remain open, (2) being the next code-shaped increment here.
+
 *Cost/risk:* (1) is documentation, zero risk, high leverage — it is also
 the prerequisite for T6. (2) is mechanical. (3) is open-ended; do it
 opportunistically, never as a sweep.

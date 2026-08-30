@@ -3102,6 +3102,18 @@ are the more useful half to read before starting something new.
     and pointers to the registry and lifecycle documents. CLAUDE.md's
     orientation list now includes it.
 
+92. **T1 move (1): the state classification is on the structs.** The
+    four global structs in astrolog.h now carry their contracts: US/GS
+    are user intent (serialized where persistent, mutations owned by
+    switches and dialogs), IS/GI are derived and scratch (never
+    serialized), shadowed names like fProgress mark the boundary --
+    us.fProgress is the request, is.fProgress is what the current
+    cast actually did -- and computation may only *borrow* a settings
+    field via the save/restore idiom, every borrow restoring. Writing
+    it sharpened the T1 finding: the interleaving problem was never
+    misfiled fields, it is the ~60-site *Sav dance, which is exactly
+    what T1's move (2) (a push/pop home for borrows) addresses next.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
