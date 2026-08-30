@@ -3144,6 +3144,20 @@ are the more useful half to read before starting something new.
     core needing the C++ EH runtime. Conversion of the other ~60 *Sav
     sites is opportunistic by policy.
 
+95. **Phase 2 planned: polish the registry's rough edges.** The
+    registry retrospective (asked for by the maintainer) conceded
+    four things honestly -- not less code, suffix soup bottled rather
+    than drained, a 5,294-line astrolog.cpp god-file, and a
+    7-parameter handler signature -- and the maintainer asked for a
+    plan to do the hard cleanup. REFACTORING.md gained "Phase 2 --
+    the polish plan": tranche 1 finishes what the registry started
+    (P1 extract switch.cpp, P2 pack the handler arguments, P3
+    declared arity closes A2, P4 de-soup by measure), tranche 2 is
+    the deferred heavy items (P5 AstroGraph merge, P6 the Borrow
+    campaign, P7 prefix the colliding feature macros), tranche 3 is
+    survey-gated (P8-P10). Same rules as phase 1: nets on every
+    increment, measured closes allowed, docs in the same commit.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

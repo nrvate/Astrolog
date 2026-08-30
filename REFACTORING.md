@@ -1221,14 +1221,99 @@ each independently shippable:
    QT_TESTING.md), C4 (the backend state table), T1 moves (1) and (2)
    (the classification on the structs; the Borrow guard).
 
-**The specified queue is empty as of 2026-08-29.** What remains is
-opportunistic by this document's own policy:
-- The AstroGraph clone merge (D1's last true pair) — a dedicated
-  block of work with a -L text differential as the net, or never.
-- F2 horizon-chart merges and A5's main() fold — when touched.
-- T1 move (3) and *Sav→Borrow conversions — per site, when touched.
-- New findings join this file the way the old ones did: with
-  evidence, an incident if there is one, and a net.
+**The specified queue is empty as of 2026-08-29** — and the phase-1
+retrospective (the registry review, same evening) named the rough
+edges phase 1 accepted. Phase 2 below turns those into increments.
+
+---
+
+## Phase 2 — the polish plan (drafted 2026-08-29, late)
+
+Phase 1's verdict on the registry: better on fragility, auditability
+and bug yield; a wash on volume; the soup contained in labeled jars
+rather than gone. Phase 2 is the hard cleanup those jars deserve. Same
+rules as phase 1: every increment independently shippable, every one
+proven by a net, docs travel in the increment's commit, and anything
+that measures as no-gain gets closed with the measurement instead of
+done anyway.
+
+**Tranche 1 — finish what the registry started** (the retrospective's
+own concessions, in dependency order):
+
+- **P1. Give the command surface its own file.** astrolog.cpp is
+  5,294 lines because the registry, ~99 handlers, and the dispatch
+  all live in it. Move them to a new `switch.cpp` (tables, handlers,
+  driver, `FProcessSwitches`, `FSwitchRegistryRow`), leaving
+  astrolog.cpp the program shell (main, InitProgram, Action). Pure
+  relocation, no edits in flight with it. Net: switch-matrix
+  byte-diff + suite + all four builds (three makefiles + win gain
+  one object). *Cost: low.*
+- **P2. One argument pack for handlers.** The uniform 7-parameter
+  handler signature threads fOr/fAnd/fNot/argc/argv/pctx into ~99
+  functions that mostly ignore them. Pack them into one PARSEIN
+  struct built once by the dispatch; handlers sign
+  `(CONST char *szSwitch, PARSEIN *pin)`. Mechanical rewrite of
+  signatures and the dispatch call. Net: switch-matrix byte-diff.
+  *Cost: low, wide.*
+- **P3. Declared arity closes A2.** Handlers whose first act is
+  exactly `FErrorArgc(...)` hand-roll what a row could declare: add
+  `cargMin` to SWITCHDEF rows and let the dispatch make the exact
+  same call centrally. Convert only handlers where the check is
+  literally first (grep-able); leave conditional-arity handlers
+  alone. Net: matrix — error messages byte-identical because the
+  same function fires with the same arguments. *Cost: low.*
+- **P4. De-soup by measure.** Per prefix row, count the spellings its
+  handler personally parses. Where the suffix set is closed and each
+  suffix is an independent flag/value (the -b0/-b1/-b2 kind), promote
+  them to exact rows and shrink the handler; where suffixes share
+  fall-through semantics (the -b backend/fEphemFiles toggle), keep
+  the handler and say why in a comment. Deliverable includes the
+  before/after prefix-row count. Strictness policy from phase 1
+  applies unchanged. Net: matrix per family. *Cost: medium, many
+  small commits.*
+
+**Tranche 2 — the deferred heavy items:**
+
+- **P5. The AstroGraph merge**, exactly as specified in the D1
+  verdict: a dedicated block at session start, nothing else in
+  flight, -L text differential across single/relation/transit modes
+  as the gate, abort-and-record if it fights back. Measured 76%
+  line-identical with the differences interleaved through an [i2]
+  chart dimension — the equivalence argument between planet[] and
+  rgpcp[] data paths is the real work, not the editing.
+- **P6. Borrow conversion becomes a paced campaign.** Phase 1 made
+  *Sav conversion opportunistic; phase 2 promotes it: family-by-family
+  through xcharts1.cpp's ~60 sites (the worst file), a handful of
+  sites per commit, each commit gated by the -Xb pinned-date bitmap
+  differential over the charts those sites draw. Stop the campaign
+  the first time a conversion is not obviously mechanical (a
+  conditional restore, an ordering dependency) and record why.
+- **P7. Prefix the three colliding feature macros.** H2's fuller
+  move: `PS`, `META`, `TIME` are why Qt headers must precede
+  astrolog.h. One mechanical sweep per macro (build-breaks-find-all),
+  then delete the include-order rule from CONVENTIONS.md rather than
+  documenting around it. Net: all four builds + suite; no output can
+  change. *Cost: low each, high churn-width; do one and reassess.*
+
+**Tranche 3 — survey first, then decide** (open findings that need
+reading before they deserve increments; each gets a measured verdict
+the way D1's tail and the harvest did):
+
+- **P8. D3/D4** — the print pipeline's modal global state and
+  PrintChart's mode zoo. Survey what a table or context struct would
+  actually displace; the text-diff tooling is the ready-made net.
+- **P9. G4** — the Qt port's 29 `s_*` file-scope globals: classify
+  like T1 (wiring vs cache vs scratch), fold the trivial ones.
+- **P10. C1/C5/C6, G1/G2** — calc.cpp's three-modules-in-a-file, the
+  Swiss index mapping, the chart-position slot aliases, the size_t
+  UI handle, the atlas loader channels. Order by incident risk when
+  surveyed; C5's mapping table is first candidate (it has phase-1
+  incident history).
+
+Sequencing: P1 → P2 → P3 (each enables the next's mechanical
+confidence), then P4 interleaved with tranche 2 at will. P5 wants a
+fresh session. Nothing in phase 2 is urgent; everything in it is the
+difference between "contained" and "clean".
 
 ---
 
