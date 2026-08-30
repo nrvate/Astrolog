@@ -28,6 +28,9 @@ Work happens on branch **`qt`**.
 - **`REFACTORING.md`** — the standing architectural review: what makes
   the codebase hard to evolve, with evidence, and the survey ledger that
   says which area to review next. Read it before any refactoring work.
+- **`CONVENTIONS.md`** — the codebase's actual conventions, verified
+  and written down: naming, none-values, macro families, buffer and
+  error idioms, how to add a command. Read it before writing new code.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the

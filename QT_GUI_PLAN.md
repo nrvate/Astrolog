@@ -3088,6 +3088,20 @@ are the more useful half to read before starting something new.
     reason is now the true one, and the probe (0.2s) settled in one
     run what code reading got wrong.
 
+91. **T8: CONVENTIONS.md exists.** The conventions that lived in
+    folklore and incident reports are one verified document at the
+    repo root: the Hungarian dialect, the two spellings of "none"
+    (object-keyed 0 vs sign-keyed -1, item 38's root cause), the
+    SwitchF/ChDashF prefix machinery, the chart-info alias macros,
+    the bare feature-word collision rule (Qt headers before
+    astrolog.h; new macros take prefixes), buffer bounds and
+    sprintf2, the PrintS/FieldWord static-state output machinery,
+    handler return codes, the goto LDone idiom, the four event loops
+    and the full checklist for adding a command, the
+    label-is-an-identifier invariant, the object taxonomy predicates,
+    and pointers to the registry and lifecycle documents. CLAUDE.md's
+    orientation list now includes it.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

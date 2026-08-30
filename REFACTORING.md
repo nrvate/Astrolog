@@ -456,6 +456,13 @@ every future session. The bare-word macros deserve their own small
 finding in Area H: prefixing them (`fmtMETA`...) is upstream-divergent
 but removes a whole class of include-order traps.
 
+**Done 2026-08-29** (work log item 91): `CONVENTIONS.md` exists at the
+repo root, every entry verified against the code with references. It
+absorbs the documentation halves of B4 (chart-info aliases), E3 (loop
+ownership and adding a command), G3 (label-is-an-identifier), H1's
+taxonomy note, H2's macro-prefix rule, and the B-area goto/flush
+verdicts.
+
 ---
 
 ## The registry as built — read this before touching switch code
