@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-check the switch registry against the program's own descriptions.
 
-The registry (astrolog.cpp's rgswflag/rgswranged/rgswitchdef) is the one
+The registry (switch.cpp's rgswflag/rgswranged/rgswtilde/rgswitchdef) is the one
 place a switch spelling exists. Two other places still describe
 spellings by hand and can drift: the -H help text (DisplaySwitches* in
 charts0.cpp and xscreen.cpp) and the settings writer (FOutputSettings()
@@ -26,12 +26,15 @@ def read(name):
 
 
 def registry_rows():
-    """(name, is_prefix) in scan order, parsed from the three tables."""
-    s = read('astrolog.cpp')
+    """(name, is_prefix) in scan order, parsed from the four tables
+    in switch.cpp (the registry moved there from astrolog.cpp in
+    phase 2's P1; the tilde table joined in P4)."""
+    s = read('switch.cpp')
     rows = []
     for table, pat in [
         (0, r'static CONST SWITCHFLAG rgswflag\[\] = \{(.*?)\};'),
         (1, r'static CONST SWITCHRANGED rgswranged\[\] = \{(.*?)\};'),
+        (3, r'static CONST SWITCHTILDE rgswtilde\[\] = \{(.*?)\};'),
         (2, r'static CONST SWITCHDEF rgswitchdef\[\] = \{(.*?)\};')]:
         body = re.search(pat, s, re.S).group(1)
         for m in re.finditer(r'\{"([^"]*)",\s*([^,]+),', body):

@@ -1267,15 +1267,16 @@ own concessions, in dependency order):
   Yj0 that error under the family label Yj, prefix rows, per-suffix
   arity — keep their checks on purpose. Net: a 41-spelling
   missing-argument stderr byte-diff plus the matrix, both identical.
-- **P4. De-soup by measure.** Per prefix row, count the spellings its
-  handler personally parses. Where the suffix set is closed and each
-  suffix is an independent flag/value (the -b0/-b1/-b2 kind), promote
-  them to exact rows and shrink the handler; where suffixes share
-  fall-through semantics (the -b backend/fEphemFiles toggle), keep
-  the handler and say why in a comment. Deliverable includes the
-  before/after prefix-row count. Strictness policy from phase 1
-  applies unchanged. Net: matrix per family. *Cost: medium, many
-  small commits.*
+- **P4. De-soup by measure** — in progress; the maintainer chose the
+  high-value cut (2026-08-30). **First increment done** (work log
+  item 99): NSwTilde's 87-comparison chain became `rgswtilde[]`, a
+  fourth registry table of exact string-hook rows; the handler keeps
+  the imperative forms. Transcription proven by simulating the old
+  chain from git per spelling. Registry stands at 313 rows.
+  Remaining P4 work: the trivially promotable small families, then
+  per-family verdicts on the rest. The rule stands: closed suffix
+  sets promote, fall-through semantics stay handlers with the reason
+  written down.
 
 **Tranche 2 — the deferred heavy items:**
 

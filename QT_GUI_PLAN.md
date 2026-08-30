@@ -3204,6 +3204,26 @@ are the more useful half to read before starting something new.
     529-invocation matrix, both identical; suite 3039/0; win build
     clean.
 
+99. **P4 first cut: the AstroExpression hooks are a table.** The
+    biggest soup pot -- NSwTilde's 87-comparison if-chain mapping ~54
+    spellings to us.szExp* slots -- is now rgswtilde[], a fourth
+    registry table of exact (spelling, slot) rows scanned between the
+    ranged and handler tables; the residual handler keeps only the
+    imperative forms (~0 ~M ~1 ~2 ~3, bare ~) and the unknown-suffix
+    error. Former garbage-suffix aliases (-~gz acted as -~g) now
+    error, per the standing strictness policy. Transcription was
+    proven mechanically: a script simulated the OLD if-chain from git
+    for each spelling and compared the landing slot against the new
+    table -- all 54 match, including the three-level ~v/~v3/~v30
+    ternary. Nets: 108-case store/arity differential byte-identical;
+    matrix identical; both audits clean. Two process catches: the
+    settings writer never persists expression hooks, so the first
+    store-leg proved nothing until replaced by the chain simulation;
+    and registry_audit.py had been reading astrolog.cpp since P1
+    moved the tables -- the phase-2 batteries had dropped the audits,
+    which is how it stayed unnoticed. The audits are back in the
+    battery, and the audit reads switch.cpp's four tables now.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

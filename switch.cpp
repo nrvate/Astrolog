@@ -3682,7 +3682,6 @@ static int NSwDot(CONST char *szSwitch, PARSEIN *pin)
 static int NSwTilde(CONST char *szSwitch, PARSEIN *pin)
 {
   char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
-  char **ppch;
   int i, j;
 
   if (ch1 == '0') {
@@ -3692,101 +3691,7 @@ static int NSwTilde(CONST char *szSwitch, PARSEIN *pin)
   i = 1 + (ch1 == 'M' || ch1 == '2' || ch1 == '3');
   if (FErrorArgc("~", pin->argc, i))
     return tcError;
-  ppch = NULL;
-  if (ch1 == 'g')
-    ppch = &us.szExpConfig;
-  else if (ch1 == 'a')
-    ppch = (ch2 != '0' ? &us.szExpAspList : &us.szExpAspSumm);
-  else if (ch1 == 'm')
-    ppch = (ch2 != 'a' ? &us.szExpMid : &us.szExpMidAsp);
-  else if (ch1 == 'j')
-    ppch = (ch2 != '0' ? &us.szExpInf : &us.szExpInf0);
-  else if (ch1 == '7')
-    ppch = &us.szExpEso;
-  else if (ch1 == 'L')
-    ppch = &us.szExpCross;
-  else if (ch1 == 'E')
-    ppch = &us.szExpEph;
-  else if (ch1 == 'Z' && ch2 == 'd')
-    ppch = &us.szExpRis;
-  else if (ch1 == 'd')
-    ppch = (ch2 != 'v' ? &us.szExpDay : &us.szExpVoid);
-  else if (ch1 == 't')
-    ppch = &us.szExpTra;
-  else if (ch1 == 'P')
-    ppch = &us.szExpPart;
-  else if (ch1 == 'O')
-    ppch = &us.szExpObj;
-  else if (ch1 == 'C')
-    ppch = &us.szExpHou;
-  else if (ch1 == 'A')
-    ppch = &us.szExpAsp;
-  else if (ch1 == 'p')
-    ppch = (ch2 != '0' ? &us.szExpProg : &us.szExpProg0);
-  else if (ch1 == 'k' && ch2 == 'O')
-    ppch = &us.szExpColObj;
-  else if (ch1 == 'k' && ch2 == 'A')
-    ppch = &us.szExpColAsp;
-  else if (ch1 == 'k' && ch2 == 'v')
-    ppch = &us.szExpColFill;
-  else if (ch1 == 'F' && ch2 == chNull)
-    ppch = &us.szExpFontSig;
-  else if (ch1 == 'F' && ch2 == 'C')
-    ppch = &us.szExpFontHou;
-  else if (ch1 == 'F' && ch2 == 'O')
-    ppch = &us.szExpFontObj;
-  else if (ch1 == 'F' && ch2 == 'A')
-    ppch = &us.szExpFontAsp;
-  else if (ch1 == 'F' && ch2 == 'N')
-    ppch = &us.szExpFontNak;
-  else if (ch1 == 'F' && ch2 == 'T')
-    ppch = &us.szExpFontTxt;
-  else if (ch1 == 'v')
-    ppch = (ch2 != '3' ? &us.szExpSort : (ch2 == chNull ||
-    szSwitch[3] != '0' ? &us.szExpDecan : &us.szExpDecan2));
-  else if (ch1 == 's' && ch2 == 'd')
-    ppch = &us.szExpDegree;
-  else if (ch1 == 'U' && ch2 == 'x')
-    ppch = &us.szExpExo;
-  else if (ch1 == 'U')
-    ppch = (ch2 != '0' ? &us.szExpStar : &us.szExpAst);
-  else if (ch1 == 'I' && ch2 == 'v')
-    ppch = &us.szExpIntV;
-  else if (ch1 == 'I' && ch2 == 'V')
-    ppch = &us.szExpIntV2;
-  else if (ch1 == 'I' && ch2 == 'a')
-    ppch = &us.szExpIntA;
-  else if (ch1 == 'I' && ch2 == 'A')
-    ppch = &us.szExpIntA2;
-  else if (ch1 == 'X' && ch2 == 'v')
-    ppch = &us.szExpCorner;
-  else if (ch1 == 'X' && ch2 == 'L')
-    ppch = &us.szExpCity;
-  else if (ch1 == 'X' && ch2 == 't')
-    ppch = &us.szExpSidebar;
-  else if (ch1 == 'X' && ch2 == 'Q')
-    ppch = &us.szExpKey;
-  else if (ch1 == 'W' && ch2 == 'Q')
-    ppch = &us.szExpMenu;
-  else if (ch1 == 'q' && ch2 == '1')
-    ppch = &us.szExpCast1;
-  else if (ch1 == 'q' && ch2 == '2')
-    ppch = &us.szExpCast2;
-  else if (ch1 == 'Q' && ch2 == '1')
-    ppch = &us.szExpDisp1;
-  else if (ch1 == 'Q' && ch2 == '2')
-    ppch = &us.szExpDisp2;
-  else if (ch1 == 'Q' && ch2 == '3')
-    ppch = &us.szExpDisp3;
-  else if (ch1 == '5' && ch2 == 's')
-    ppch = &us.szExpListS;
-  else if (ch1 == '5' && ch2 == 'f')
-    ppch = &us.szExpListF;
-  else if (ch1 == '5' && ch2 == 'Y')
-    ppch = &us.szExpListY;
-  else if (ch1 == '5' && ch2 == 'i')
-    ppch = &us.szExpADB;
-  else if (ch1 == 'M') {
+  if (ch1 == 'M') {
     j = NFromSz(pin->argv[1]);
     if (FErrorValN("~M", j < 0, j, 1))
       return tcError;
@@ -3807,10 +3712,54 @@ static int NSwTilde(CONST char *szSwitch, PARSEIN *pin)
     return tcError;
   else
     ShowParseExpression(pin->argv[1]);
-  if (ppch != NULL)
-    FCloneSz(pin->argv[1], ppch);
   return i;
 }
+#endif
+
+
+// An AstroExpression hook switch: -~x "<expr>" stores one string into
+// one us.szExp* slot, all with the same shape -- one argument, error
+// label "~", prefix flags ignored. The whole family is data; the
+// residual NSwTilde() handler keeps only the imperative forms (~0 ~M
+// ~1 ~2 ~3 and bare ~) and the unknown-suffix error. Promoting these
+// to exact rows tightened former garbage-suffix aliases (-~gz acted
+// as -~g) into unknown-subswitch errors, per the strictness policy.
+
+typedef struct _switchtilde {
+  CONST char *szName;   // The full spelling, tilde included.
+  char **ppch;          // The expression slot the argument lands in.
+} SWITCHTILDE;
+
+#ifdef EXPRESS
+static CONST SWITCHTILDE rgswtilde[] = {
+  {"~g", &us.szExpConfig}, {"~a", &us.szExpAspList},
+  {"~a0", &us.szExpAspSumm}, {"~m", &us.szExpMid},
+  {"~ma", &us.szExpMidAsp}, {"~j", &us.szExpInf},
+  {"~j0", &us.szExpInf0}, {"~7", &us.szExpEso},
+  {"~L", &us.szExpCross}, {"~E", &us.szExpEph},
+  {"~Zd", &us.szExpRis}, {"~d", &us.szExpDay},
+  {"~dv", &us.szExpVoid}, {"~t", &us.szExpTra},
+  {"~P", &us.szExpPart}, {"~O", &us.szExpObj},
+  {"~C", &us.szExpHou}, {"~A", &us.szExpAsp},
+  {"~p", &us.szExpProg}, {"~p0", &us.szExpProg0},
+  {"~kO", &us.szExpColObj}, {"~kA", &us.szExpColAsp},
+  {"~kv", &us.szExpColFill}, {"~F", &us.szExpFontSig},
+  {"~FC", &us.szExpFontHou}, {"~FO", &us.szExpFontObj},
+  {"~FA", &us.szExpFontAsp}, {"~FN", &us.szExpFontNak},
+  {"~FT", &us.szExpFontTxt}, {"~v", &us.szExpSort},
+  {"~v3", &us.szExpDecan}, {"~v30", &us.szExpDecan2},
+  {"~sd", &us.szExpDegree}, {"~Ux", &us.szExpExo},
+  {"~U", &us.szExpStar}, {"~U0", &us.szExpAst},
+  {"~Iv", &us.szExpIntV}, {"~IV", &us.szExpIntV2},
+  {"~Ia", &us.szExpIntA}, {"~IA", &us.szExpIntA2},
+  {"~Xv", &us.szExpCorner}, {"~XL", &us.szExpCity},
+  {"~Xt", &us.szExpSidebar}, {"~XQ", &us.szExpKey},
+  {"~WQ", &us.szExpMenu}, {"~q1", &us.szExpCast1},
+  {"~q2", &us.szExpCast2}, {"~Q1", &us.szExpDisp1},
+  {"~Q2", &us.szExpDisp2}, {"~Q3", &us.szExpDisp3},
+  {"~5s", &us.szExpListS}, {"~5f", &us.szExpListF},
+  {"~5Y", &us.szExpListY}, {"~5i", &us.szExpADB}
+};
 #endif
 
 // The registry proper: switches whose shape doesn't fit a family table
@@ -4044,6 +3993,19 @@ static int NProcessSwitchTable(CONST char *szName, PARSEIN *pin)
     psr < rgswranged + sizeof(rgswranged)/sizeof(*rgswranged); psr++)
     if (FEqSz(szName, psr->szName))
       return NProcessSwitchRanged(psr, pin->argc, pin->argv);
+#ifdef EXPRESS
+  if (szName[0] == '~') {
+    CONST SWITCHTILDE *pst;
+    for (pst = rgswtilde;
+      pst < rgswtilde + sizeof(rgswtilde)/sizeof(*rgswtilde); pst++)
+      if (FEqSz(szName, pst->szName)) {
+        if (FErrorArgc("~", pin->argc, 1))
+          return tcError;
+        FCloneSz(pin->argv[1], pst->ppch);
+        return 1;
+      }
+  }
+#endif
   for (psd = rgswitchdef;
     psd < rgswitchdef + sizeof(rgswitchdef)/sizeof(*rgswitchdef); psd++)
     if ((psd->grf & grfSwPrefix) ? FSwitchPrefix(szName, psd->szName) :
@@ -4090,6 +4052,18 @@ flag FSwitchRegistryRow(int i, CONST char **pszName, int *pgrf,
     return fTrue;
   }
   i -= cranged;
+#ifdef EXPRESS
+  {
+    int ctilde = sizeof(rgswtilde)/sizeof(*rgswtilde);
+    if (i < ctilde) {
+      *pszName = rgswtilde[i].szName;
+      *pgrf = 0;
+      *pnTable = 3;
+      return fTrue;
+    }
+    i -= ctilde;
+  }
+#endif
   if (i < cdef) {
     *pszName = rgswitchdef[i].szName;
     *pgrf = rgswitchdef[i].grf;
