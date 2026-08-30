@@ -152,7 +152,9 @@ QTGRAPHDIR=out/a ./run-qt-tests.sh -i nrvate.as   -qb 3 15 2020 10:30 0 6:00 87W
 
 With the time pinned the images are reproducible to the byte, so
 `diff -rq` between a worktree build of the old commit and the tree's
-build is a real proof (work log item 111 did exactly this).
+build is a real proof (work log items 109 and 111 both did exactly
+this -- 111 re-derived the trap from scratch because 109 had recorded
+it only in the work log, which is why it is written here now).
 
 ## When the suite itself takes the process down
 

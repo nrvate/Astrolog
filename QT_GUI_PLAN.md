@@ -392,13 +392,15 @@ endings intact when editing those files, which is its own trap (see
    setting `gi.nMode` directly instead of zeroing and re-deriving. If you
    ever add a new chart mode, make sure it goes through `SetChartModeQt()`
    the same way rather than mimicking Windows' zero-and-redetect.
-5. **Adding a chart mode is one edit.** *(Revised 2026-08-25 — this
-   used to warn that it took two, a clear-list entry and a switch case,
-   which could silently drift apart. They are now a single
-   `rgchartmodeQt[]` table of mode/flag pairs in qtdriver.cpp, read by
-   `SetChartModeQt()` and by the command-line/macro sync described in
-   item 13.)* Add the pair to that table; if the mode also wants a menu
-   entry, add it with `AddChartModeAction()` as usual.
+5. **Adding a chart mode is one edit.** *(Revised 2026-08-25, and again
+   2026-08-30 when the table moved to the shared core as `rgchartmode[]`
+   in xscreen.cpp, item 111 — it now also feeds Windows' ProcessState()
+   and DetectGraphicsChartMode().)* Add the pair to that table — above
+   the `cchartmodeDetect` boundary, in priority position, if detection
+   should find it; below otherwise — and `TestChartModeTableQt()`'s
+   expected copy of the mapping, which will name the row until it
+   matches. If the mode also wants a menu entry, add it with
+   `AddChartModeAction()` as usual.
 6. **`inv()` on a non-boolean field is often intentional, not a bug** —
    e.g. `inv(us.nDwad)` (dwad nesting *level*, an int) and `inv(us.nAppSep)`
    (3-way aspect-orb-type enum) both collapse to a 0/1 toggle in Windows
@@ -3461,12 +3463,14 @@ are the more useful half to read before starting something new.
     back to `gi.nMode = mode` for the five projection modes that never
     had a flag; and the port's private `rgchartmodeQt[]` is deleted.
     `PrintChart()` untouched, per item 110's verdict.
-    - **Verified with pinned-time captures.** The first byte-diff of
-      the 24 graphics modes "failed" 23/24 -- and two captures from the
-      *same* binary also differed 23/24, which is what identified time
-      as the variable: charts cast the current moment. With `-qb`
-      pinning the chart, a HEAD-worktree build and the tree's build
-      produce 24/24 byte-identical PNGs.
+    - **Verified with pinned-time captures**: a HEAD-worktree build
+      and the tree's build produce 24/24 byte-identical PNGs under
+      `-qb`. The unpinned-capture trap (item 109 recorded it the day
+      before: charts cast *now*, same binary differs 23/24) was re-hit
+      and re-derived here because the lesson lived only in that work
+      log entry -- it is in QT_TESTING.md's headless-rendering section
+      now, which is where a session about to diff captures actually
+      looks.
     - `TestChartModeTableQt()` (81 assertions, group `chartmode-table`)
       pins the row order, the mapping, detection priority, the
       specials, and the boundary. **Its expected table is a deliberate

@@ -79,7 +79,7 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 3046 assertions + startup checks
+./run-qt-tests.sh                # 3127 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
