@@ -4,8 +4,8 @@ This is the catalog of what makes Astrolog hard to evolve and what to do
 about it. The goal is a codebase someone could read without cringing:
 maintainable, flexible, modular — while every increment keeps the program
 byte-for-byte behaving as it does today, under the nets this project
-already trusts (the 3031-assertion suite, ASan, the settings round trip,
-the four rc audits, and the Windows build as oracle).
+already trusts (the 3036-assertion suite, ASan, the settings round trip,
+the six standing audits, and the Windows build as oracle).
 
 It is a **living document worked across many sessions**. The survey
 ledger below says which parts of the codebase have been reviewed and
@@ -311,9 +311,10 @@ of the file (A2's failure mode, gone for good).
   to it -- 449 spellings resolve; its first run found and fixed -YYI,
   documented but dead behind a misspelled ifdef since upstream wrote
   it.
-- **M-final**: the four parser shells reduce to dispatch loops; the
-  help printers are deleted; `FOutputSettings()` is a loop plus the
-  handful of genuinely bespoke sections.
+- **M-final**: ~~the four parser shells reduce to dispatch loops~~ —
+  **happened 2026-08-29** (M10, work log item 77): the shells aren't
+  reduced, they're *gone*. The help printers and `FOutputSettings()`
+  restructure remain as harvest work, below.
 
 **Honest scale**: ~200 switches; M1 is the hard thinking; the family
 migrations are a session each, ~10-15 sessions total at that pace, and
@@ -456,6 +457,111 @@ finding in Area H: prefixing them (`fmtMETA`...) is upstream-divergent
 but removes a whole class of include-order traps.
 
 ---
+
+## The registry as built — read this before touching switch code
+
+*(Written 2026-08-29 at the end of the migration day, for the next
+session's fresh context. Everything here is verified fact, not plan.)*
+
+**Where everything lives.** All in astrolog.cpp: `rgswflag[]` (flag
+rows: name + `flag *`, prefix semantics applied by the dispatch),
+`rgswranged[]` (ranged setters: index domain/bounds, value kind
+`vtReal/vtBool/vtRay/vtColor` with per-kind validation and error
+conventions, target slot + stride, post-store hook), and
+`rgswitchdef[]` (handlers: `{name, grf, pfn}`). Dispatch is
+`NProcessSwitchTable()`, scanning flags, then ranged, then handlers in
+row order; handler rows match exactly, or as a *prefix* when
+`grfSwPrefix` is set (the handler receives the full spelling and scans
+its suffix — `-Ye`, `-t`, the whole chart-type family work this way).
+`grfSwGraphics` declares the -X family's lockdown-and-enable wrap.
+Handlers return args consumed, `tcError`, or `nSwitchStop`
+(success-and-stop: `-;`, and the lockdown paths whose old
+`return tcError` from FProcessSwitches read as success).
+`nSwitchAbsent` means unknown switch — nothing falls through anymore;
+`FProcessSwitches()` is 44 lines. `PARSECTX` (astrolog.h) carries the
+switch file's `FILE*` down for payload switches (-YY family);
+`is.fileIn` no longer exists. `FSwitchRegistryRow()` enumerates all
+260 rows for the suite's `registry` group and tools.
+
+**Invariants that are enforced, so rely on them:** spellings unique;
+no prefix row shadows any row scanned after it; exactly one empty
+spelling (day arithmetic). The suite group and
+`tools/registry_audit.py` (help text and settings writer vs registry,
+449 spellings) fail on drift.
+
+**Adding a switch now:** one row (+ handler if not a flag/ranged
+shape), its `-H` line, and its `FOutputSettings()` line if persistent —
+and the registry audit reminds you of the last two.
+
+**The verification method for any behavior-touching change:**
+1. Baseline binary: `git worktree add DIR <commit>`, build there, copy
+   the binary out, remove the worktree. Never stash around this
+   (worktree add checks out its commit regardless of the dirty main
+   tree; a stash pop obeys cwd and once destroyed uncommitted work —
+   work log item 69's commit message).
+2. `tools/switch-matrix.sh` (529 invocations, parser surface) and/or
+   `tools/influence-matrix.sh` (computation), old vs new, byte-diffed.
+   Extend the matrix with the touched family's valid/edge/error shapes
+   *before* trusting it; a green diff over output that's implausibly
+   short is a broken harness, which has happened twice (a stray token
+   parsed as a switch; -q's four-argument arity).
+3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3036/0),
+   `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
+   `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
+   those last two in parallel subshells, they're the slow tail.
+4. Doc edits and `git commit` must be chained on exit status (`if
+   [ $? -eq 0 ]`), never sequential statements — a failed edit script
+   shipped a half-commit twice before this rule.
+
+**Strictness policy, settled:** exact/flag-row migrations may turn
+garbage-suffix aliases into unknown-switch errors (documented per item
+in work log 68-77); prefix rows are provably equivalent to the old
+cases for every token, so prefer them wherever the old case read its
+suffix. Error *messages* for things that were always errors may
+reword; valid input behavior is byte-sacred.
+
+**Harvest state and constraints:**
+- Done: registry self-check + cross-audits (item 78, which also
+  revived -YYI from upstream's misspelled `#ifdef INTRPRET`).
+- `FOutputSettings()` as a row-driven loop: constrained hard by the
+  settings file being a user-facing artifact — its layout, comments,
+  and ordering must stay byte-stable (the round trip and users'
+  files). Realistic shape: keep the prose skeleton, derive the
+  values/rows from the registry where families align, and let
+  `registry_audit.py` keep the rest honest. Not urgent; the audit
+  already closes the drift class.
+- Generated `-H` help: needs help text moved onto rows *plus* an
+  explicit ordering list, because help order is pedagogical, not table
+  order. Byte-diff the generated output against the four hand-written
+  printers before deleting them. A transcription session; do it when
+  fresh.
+
+**Next up, specified:**
+- **C3** (in flight when this was written; nothing committed): extract
+  `ComputeEphem()`'s five-clause skip predicate (calc.cpp, the
+  `for (i = oEar; i <= imax...)` loop) into a named
+  `FSkipEphem(i, objCentCalc, fSwiss, fJPLPla)` whose clauses carry
+  their reasons (restricted-and-unneeded — the forced-midpoint bug's
+  home, non-thing, computation center, Placalc can't, JPL's Earth).
+  Same clause order, sequential ifs ≡ the short-circuit chain. Net:
+  suite (TestSharedCoreFixesQt directly covers the midpoint clause)
+  plus a position differential — text listings (-v) old vs new under
+  restriction combinations.
+- **D1 first pair**: merge `ChartAspect`/`ChartAspectRelation`
+  (charts1.cpp:999 / charts2.cpp:229, ~70% identical) into one core
+  over position sources and iteration domain. Net: old-vs-new binary
+  diff of -a output across sort modes and relationship modes at a
+  fixed date (the matrix method, not the Xvfb tooling).
+- **F1** (projection helper families) and **E1** (one block per
+  target in the drawing primitives) after that, with pinned-time
+  captures.
+
+**House habits that keep paying:** falsify every new test before
+trusting it; pin renders to literal constants, never to mutable
+globals (the midpoint-glyph flake needed two rounds — item 79);
+check `git show --stat` file counts after committing; kill orphaned
+`astrolog-qt` processes left by interrupted suite runs (startup
+diagnostics children); CRLF check is CR count == line count per file.
 
 ## Area findings
 
@@ -963,3 +1069,16 @@ interleave with the above at any pace.
   rows; settings round-trip script. Commit `caf3205` (work log item 63).
 - **T5 partial** — definition parse/format unified, name lookups folded
   (items 59-62), commits `9218317`..`9c83003`.
+- **The whole of 2026-08-29** — the audits (`defaults_audit`,
+  `registry_audit`), the three-leg round trip, the nested-include and
+  parse-context work, the T3 migration M1-M10, the registry hardening,
+  and D2: work log items 65-79 carry each with its commit. T3's
+  migration phase is closed; T4's drift class is closed by audit; T6's
+  worst evidence (missing-branch parsers) is gone with the parsers.
+- **Bugs fixed along the way, all shared-core**: ruler2[] one short;
+  astrolog.as's stale -YR/-YRT rows; two buffer overflows (szLoc,
+  szZod) plus `sprintf2` unbounded on non-Windows; -Yu never reaching
+  a fixed point; :YXp0 metric double-conversion; -YD losing
+  standard-object renames; is.fileIn clobbering; -YXW's missing arity
+  check; -YYI dead since upstream wrote it. Every one found by a net
+  built the same day.

@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-79
+## Work log — items 1-80
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2934,6 +2934,17 @@ are the more useful half to read before starting something new.
       only held while the clock cooperated, and failed deterministically
       by evening. The test now pins ciCore to literal constants. Two
       clean full-suite runs at the failing clock time.
+
+80. **The migration day's harnesses are committed, and the
+    continuation state is written down.** `tools/switch-matrix.sh`
+    (the 529-invocation behavior matrix that proved M1-M10) and
+    `tools/influence-matrix.sh` (D2's computation matrix) moved from
+    session scratch into the repo, each headed with the worktree
+    baseline method. REFACTORING.md gained "The registry as built" --
+    the architecture map, enforced invariants, verification method,
+    strictness policy, harvest constraints, and the specified next
+    increments (C3, the D1 pair merge, F1, E1) -- written so a session
+    with no memory of the migration can continue it correctly.
 
 ## Features this fork adds to both builds
 

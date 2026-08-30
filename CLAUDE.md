@@ -123,6 +123,14 @@ python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # ruler2[] one short on its first run.
                                      # With a file argument: count leg only,
                                      # for any .as
+tools/switch-matrix.sh <binary>      # 529-invocation switch-surface
+                                     # behavior matrix; byte-diff it
+                                     # between an old-commit worktree
+                                     # build and the tree's binary to
+                                     # prove a parser change (see
+                                     # REFACTORING.md, "The registry as
+                                     # built"). influence-matrix.sh is
+                                     # the same for -j/-j0/-7 output
 python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # or FOutputSettings() writes resolves
                                      # to a registry row; found -YYI dead
