@@ -22,7 +22,15 @@ re-applied — but because the Swiss Ephemeris library caches its
 orbital-elements state internally on the first (failed) load. Verified
 live with a probe, 2026-08-29 (work log item 90): after a late
 `-Yi1 "/swe"`, `rgszPath[1]` and the latch both update and Cupido still
-reads 0. The path must be right before the *first* computation. It also carries the
+reads 0. The path must be right before the *first* computation.
+
+For old-vs-new *differential* work (proving a refactor changed
+nothing), the method and its accumulated traps live in REFACTORING.md
+under "The verification method" — including the `=` force-on prefix
+requirement, grep's binary detection on chart output, the
+parallel-make grep race, and the fact that `-od` never persists
+AstroExpression hooks, so a settings-file leg cannot verify `-~*`
+stores. It also carries the
 restrictions, orbs, aspect set and 13 macro names that make the program
 behave the way it does in use. Testing against the stock `astrolog.as`
 answers a question nobody has.

@@ -491,26 +491,44 @@ verdicts.
 *(Written 2026-08-29 at the end of the migration day, for the next
 session's fresh context. Everything here is verified fact, not plan.)*
 
-**Where everything lives.** All in switch.cpp (extracted from
-astrolog.cpp by P1, 2026-08-29): `rgswflag[]` (flag
-rows: name + `flag *`, prefix semantics applied by the dispatch),
-`rgswranged[]` (ranged setters: index domain/bounds, value kind
-`vtReal/vtBool/vtRay/vtColor` with per-kind validation and error
-conventions, target slot + stride, post-store hook), and
-`rgswitchdef[]` (handlers: `{name, grf, pfn}`). Dispatch is
-`NProcessSwitchTable()`, scanning flags, then ranged, then handlers in
-row order; handler rows match exactly, or as a *prefix* when
-`grfSwPrefix` is set (the handler receives the full spelling and scans
-its suffix — `-Ye`, `-t`, the whole chart-type family work this way).
+**Where everything lives** *(updated 2026-08-30 after phase 2's
+tranche 1)*. All in switch.cpp — the command surface's own file since
+P1; astrolog.cpp is the 896-line program shell. **Four** tables now:
+
+- `rgswflag[]` — flag rows `{name, flag*, grf, flag *pf2}` with the
+  trailing fields optional. `pf2` is the "-l0 also enables -l" shape
+  (P4): the dispatch applies the prefix semantics to `pf`, then to
+  `pf2` when set.
+- `rgswranged[]` — ranged setters: index domain/bounds, value kind
+  `vtReal/vtBool/vtRay/vtColor` with per-kind validation and error
+  conventions, target slot + stride, post-store hook.
+- `rgswtilde[]` — the AstroExpression hook rows `{name, char **}`
+  (P4): exact spellings, one argument, error label "~", scanned only
+  when the spelling starts with '~'.
+- `rgswitchdef[]` — handlers `{name, grf, pfn, carg}`. `carg > 0`
+  makes the dispatch run the identical `FErrorArgc(szName, ...)` the
+  handler used to (P3); rows whose error label differs from their
+  spelling (Yj0 errors as "Yj") or whose arity varies by suffix keep
+  the check in the handler, reason at the field.
+
+Dispatch is `NProcessSwitchTable()`, scanning flags, ranged, tilde,
+then handlers in row order; handler rows match exactly, or as a
+*prefix* when `grfSwPrefix` is set (the handler receives the full
+spelling and scans its suffix). Every remaining prefix handler
+carries a de-soup verdict in the comment at the handler table (P4).
 `grfSwGraphics` declares the -X family's lockdown-and-enable wrap.
-Handlers return args consumed, `tcError`, or `nSwitchStop`
-(success-and-stop: `-;`, and the lockdown paths whose old
-`return tcError` from FProcessSwitches read as success).
-`nSwitchAbsent` means unknown switch — nothing falls through anymore;
-`FProcessSwitches()` is 44 lines. `PARSECTX` (astrolog.h) carries the
-switch file's `FILE*` down for payload switches (-YY family);
-`is.fileIn` no longer exists. `FSwitchRegistryRow()` enumerates all
-260 rows for the suite's `registry` group and tools.
+
+Handlers sign `(CONST char *szSwitch, PARSEIN *pin)` since P2:
+`PARSEIN` (astrolog.h) packs argc/argv, the decoded =/_/- prefix as
+fOr/fAnd/fNot, and the `PARSECTX`. The `FSwitchF()`/`FSwitchF2()`
+macros read the prefix flags **through `pin`** — that scope capture is
+why any function touching a flag takes a `PARSEIN *pin`, stated at
+the typedef. Handlers return args consumed, `tcError`, or
+`nSwitchStop`; `nSwitchAbsent` means unknown switch — nothing falls
+through; `FProcessSwitches()` builds the pin and consults the table,
+~50 lines. `FSwitchRegistryRow()` enumerates all **318** rows (table
+ids 0 flag, 1 ranged, 3 tilde, 2 handler — dispatch order) for the
+suite's `registry` group and tools.
 
 **Invariants that are enforced, so rely on them:** spellings unique;
 no prefix row shadows any row scanned after it; exactly one empty
@@ -553,6 +571,29 @@ and the registry audit reminds you of the last two.
    bitmap headlessly (no display, no window manager, no Qt harness):
    a pinned-date `-Xb` differential is the graphics analogue of the
    text matrices, and F1's 12-case run is the worked example.
+   Phase-2 additions, each paid for once:
+   - **Never grep a parallel make.** `make -j4 2>&1 | grep -cE error`
+     miscounts on interleaved output (phantom "6 errors" twice). The
+     reliable check is a second `make` reporting 'up to date', or a
+     serial build when the count matters.
+   - **Chart output may not end in a newline**, so `echo "== case"`
+     markers appended to a capture file can glue to the previous
+     case's tail and break marker-based parsing. The byte-diff is
+     unaffected; parse with that in mind or emit a leading newline.
+   - **`-od` cannot verify everything**: the settings writer never
+     persists AstroExpression hooks, so a store-then-write leg for
+     `-~*` switches is green over nothing (item 99). Verify stores
+     some other way.
+   - **The old-chain simulation net** (item 99's worked example): when
+     replacing a mapping if-chain with a table, mechanically simulate
+     the old chain from `git show` for every spelling and compare
+     landing slots. Stronger than any output differential for
+     transcription bugs, and immune to the -od gap above.
+   - **Run the audits in every battery, no exceptions**:
+     `registry_audit.py` sat broken for four commits after P1 moved
+     the tables, precisely because the phase-2 batteries had trimmed
+     step 3 down to builds+suite+matrix. The step-3 list is the
+     battery; trimming it is how nets go stale unnoticed.
 3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3039/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
