@@ -613,73 +613,180 @@ void PlotHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
   *yp = y1 + (int)((real)ys*lat/rDegHalf + rRound);
 }
 
-void LocToHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
-  int *xp, int *yp)
+void PlotHorizonSky(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp);
+void PlotTelescope(real lon, real lat, TELE *pte,
+  int *xp, int *yp, real *xr, real *yr);
+
+// The coordinate chains for the three projected charts -- the rectangular
+// -Z horizon chart, the circular -Z0 sky chart, and the -XZ telescope --
+// used to exist in triplicate, one set per terminal plot transform. The
+// chain logic lives once here, over a PROJ context naming the projection;
+// the public (Loc|Equ|Ecl|Pri|Ear)To{Horizon,HorizonSky,Telescope}()
+// adapters below keep every call site reading unchanged.
+
+enum _projkind { pjRect, pjCirc, pjTele };
+
+typedef struct _proj {
+  int pj;              // Which projection: pjRect, pjCirc, or pjTele.
+  int x1, y1, xs, ys;  // pjRect: bounding rectangle.
+  CONST CIRC *pcr;     // pjCirc: circle context.
+  TELE *pte;           // pjTele: telescope context.
+  real *xr, *yr;       // pjTele: real valued result coordinates.
+} PROJ;
+
+static void ProjRect(PROJ *pp, int x1, int y1, int xs, int ys)
+{
+  pp->pj = pjRect; pp->x1 = x1; pp->y1 = y1; pp->xs = xs; pp->ys = ys;
+}
+
+static void ProjCirc(PROJ *pp, CONST CIRC *pcr)
+{
+  pp->pj = pjCirc; pp->pcr = pcr;
+}
+
+static void ProjTele(PROJ *pp, TELE *pte, real *xr, real *yr)
+{
+  pp->pj = pjTele; pp->pte = pte; pp->xr = xr; pp->yr = yr;
+}
+
+static void PlotProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp)
+{
+  if (pp->pj == pjRect)
+    PlotHorizon(lon, lat, pp->x1, pp->y1, pp->xs, pp->ys, xp, yp);
+  else if (pp->pj == pjCirc)
+    PlotHorizonSky(lon, lat, pp->pcr, xp, yp);
+  else
+    PlotTelescope(lon, lat, pp->pte, xp, yp, pp->xr, pp->yr);
+}
+
+static void EquToProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp);
+static void EclToProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp);
+
+static void LocToProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp)
 {
   if (!gs.fEcliptic) {
-    lon = Mod(rDegQuad - lon);
+    // The circular sky chart's plot transform orients azimuth itself; the
+    // other two projections flip it here.
+    if (pp->pj != pjCirc)
+      lon = Mod(rDegQuad - lon);
     if (us.fRefract)
       lat = SwissRefract(lat);
-    PlotHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
+    PlotProj(lon, lat, pp, xp, yp);
   } else {
     lon = rDegMax - lon;
     CoorXform(&lon, &lat, Lat - rDegQuad);
     lon = Mod(cp0.lonMC - lon + rDegQuad);
-    EquToHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
+    EquToProj(lon, lat, pp, xp, yp);
   }
 }
 
-void EquToHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
-  int *xp, int *yp)
+static void EquToProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp)
 {
   if (!gs.fEcliptic) {
     lon = Mod(cp0.lonMC - lon + rDegQuad);
     EquToLocal(&lon, &lat, rDegQuad - Lat);
     lon = rDegMax - lon;
-    LocToHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
+    LocToProj(lon, lat, pp, xp, yp);
   } else {
     EquToEcl(&lon, &lat);
     lon = Mod(Untropical(lon));
-    EclToHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
+    EclToProj(lon, lat, pp, xp, yp);
   }
+}
+
+static void EclToProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp)
+{
+  if (!gs.fEcliptic) {
+    lon = Tropical(lon);
+    EclToEqu(&lon, &lat);
+    EquToProj(lon, lat, pp, xp, yp);
+  } else
+    PlotProj(lon, lat, pp, xp, yp);
+}
+
+static void PriToProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp)
+{
+  lon = rDegMax - lon;
+  CoorXform(&lon, &lat, rDegQuad);
+  LocToProj(lon, lat, pp, xp, yp);
+}
+
+static void EarToProj(real lon, real lat, CONST PROJ *pp, int *xp, int *yp)
+{
+  if (pp->pj != pjTele) {
+    lon = Mod(lon + rDegHalf);
+    CoorXform(&lon, &lat, rDegQuad - Lat);
+    LocToProj(Mod(lon - rDegHalf), lat, pp, xp, yp);
+  } else {
+    // The telescope view leaves longitude alone and mirrors latitude.
+    CoorXform(&lon, &lat, rDegQuad - Lat);
+    LocToProj(lon, -lat, pp, xp, yp);
+  }
+}
+
+static void EquToProj2(real lon, real lat, CONST PROJ *pp, int *xp, int *yp,
+  flag fFlip)
+{
+  if (!fFlip)
+    EquToProj(lon, lat, pp, xp, yp);
+  else {
+    EquToEcl(&lon, &lat);
+    EclToProj(rDegMax - lon, lat, pp, xp, yp);
+  }
+}
+
+void LocToHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
+  int *xp, int *yp)
+{
+  PROJ pr;
+
+  ProjRect(&pr, x1, y1, xs, ys);
+  LocToProj(lon, lat, &pr, xp, yp);
+}
+
+void EquToHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
+  int *xp, int *yp)
+{
+  PROJ pr;
+
+  ProjRect(&pr, x1, y1, xs, ys);
+  EquToProj(lon, lat, &pr, xp, yp);
 }
 
 void EclToHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
   int *xp, int *yp)
 {
-  if (!gs.fEcliptic) {
-    lon = Tropical(lon);
-    EclToEqu(&lon, &lat);
-    EquToHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
-  } else
-    PlotHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
+  PROJ pr;
+
+  ProjRect(&pr, x1, y1, xs, ys);
+  EclToProj(lon, lat, &pr, xp, yp);
 }
 
 void PriToHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
   int *xp, int *yp)
 {
-  lon = rDegMax - lon;
-  CoorXform(&lon, &lat, rDegQuad);
-  LocToHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
+  PROJ pr;
+
+  ProjRect(&pr, x1, y1, xs, ys);
+  PriToProj(lon, lat, &pr, xp, yp);
 }
 
 void EarToHorizon(real lon, real lat, int x1, int y1, int xs, int ys,
   int *xp, int *yp)
 {
-  lon = Mod(lon + rDegHalf);
-  CoorXform(&lon, &lat, rDegQuad - Lat);
-  LocToHorizon(Mod(lon - rDegHalf), lat, x1, y1, xs, ys, xp, yp);
+  PROJ pr;
+
+  ProjRect(&pr, x1, y1, xs, ys);
+  EarToProj(lon, lat, &pr, xp, yp);
 }
 
 void EquToHorizon2(real lon, real lat, int x1, int y1, int xs, int ys,
   int *xp, int *yp, flag fFlip)
 {
-  if (!fFlip)
-    EquToHorizon(lon, lat, x1, y1, xs, ys, xp, yp);
-  else {
-    EquToEcl(&lon, &lat);
-    EclToHorizon(rDegMax - lon, lat, x1, y1, xs, ys, xp, yp);
-  }
+  PROJ pr;
+
+  ProjRect(&pr, x1, y1, xs, ys);
+  EquToProj2(lon, lat, &pr, xp, yp, fFlip);
 }
 
 
@@ -1043,65 +1150,51 @@ void PlotHorizonSky(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp)
 
 void LocToHorizonSky(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp)
 {
-  if (!gs.fEcliptic) {
-    if (us.fRefract)
-      lat = SwissRefract(lat);
-    PlotHorizonSky(lon, lat, pcr, xp, yp);
-  } else {
-    lon = rDegMax - lon;
-    CoorXform(&lon, &lat, Lat - rDegQuad);
-    lon = Mod(cp0.lonMC - lon + rDegQuad);
-    EquToHorizonSky(lon, lat, pcr, xp, yp);
-  }
+  PROJ pr;
+
+  ProjCirc(&pr, pcr);
+  LocToProj(lon, lat, &pr, xp, yp);
 }
 
 void EquToHorizonSky(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp)
 {
-  if (!gs.fEcliptic) {
-    lon = Mod(cp0.lonMC - lon + rDegQuad);
-    EquToLocal(&lon, &lat, rDegQuad - Lat);
-    lon = rDegMax - lon;
-    LocToHorizonSky(lon, lat, pcr, xp, yp);
-  } else {
-    EquToEcl(&lon, &lat);
-    lon = Mod(Untropical(lon));
-    EclToHorizonSky(lon, lat, pcr, xp, yp);
-  }
+  PROJ pr;
+
+  ProjCirc(&pr, pcr);
+  EquToProj(lon, lat, &pr, xp, yp);
 }
 
 void EclToHorizonSky(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp)
 {
-  if (!gs.fEcliptic) {
-    lon = Tropical(lon);
-    EclToEqu(&lon, &lat);
-    EquToHorizonSky(lon, lat, pcr, xp, yp);
-  } else
-    PlotHorizonSky(lon, lat, pcr, xp, yp);
+  PROJ pr;
+
+  ProjCirc(&pr, pcr);
+  EclToProj(lon, lat, &pr, xp, yp);
 }
 
 void PriToHorizonSky(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp)
 {
-  lon = rDegMax - lon;
-  CoorXform(&lon, &lat, rDegQuad);
-  LocToHorizonSky(lon, lat, pcr, xp, yp);
+  PROJ pr;
+
+  ProjCirc(&pr, pcr);
+  PriToProj(lon, lat, &pr, xp, yp);
 }
 
 void EarToHorizonSky(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp)
 {
-  lon = Mod(lon + rDegHalf);
-  CoorXform(&lon, &lat, rDegQuad - Lat);
-  LocToHorizonSky(Mod(lon - rDegHalf), lat, pcr, xp, yp);
+  PROJ pr;
+
+  ProjCirc(&pr, pcr);
+  EarToProj(lon, lat, &pr, xp, yp);
 }
 
 void EquToHorizonSky2(real lon, real lat, CONST CIRC *pcr, int *xp, int *yp,
   flag fFlip)
 {
-  if (!fFlip)
-    EquToHorizonSky(lon, lat, pcr, xp, yp);
-  else {
-    EquToEcl(&lon, &lat);
-    EclToHorizonSky(rDegMax - lon, lat, pcr, xp, yp);
-  }
+  PROJ pr;
+
+  ProjCirc(&pr, pcr);
+  EquToProj2(lon, lat, &pr, xp, yp, fFlip);
 }
 
 
@@ -1450,69 +1543,55 @@ void PlotTelescope(real lon, real lat, TELE *pte,
 void LocToTelescope(real lon, real lat, TELE *pte,
   int *xp, int *yp, real *xr, real *yr)
 {
-  if (!gs.fEcliptic) {
-    lon = Mod(rDegQuad - lon);
-    if (us.fRefract)
-      lat = SwissRefract(lat);
-    PlotTelescope(lon, lat, pte, xp, yp, xr, yr);
-  } else {
-    lon = rDegMax - lon;
-    CoorXform(&lon, &lat, Lat - rDegQuad);
-    lon = Mod(cp0.lonMC - lon + rDegQuad);
-    EquToTelescope(lon, lat, pte, xp, yp, xr, yr);
-  }
+  PROJ pr;
+
+  ProjTele(&pr, pte, xr, yr);
+  LocToProj(lon, lat, &pr, xp, yp);
 }
 
 void EquToTelescope(real lon, real lat, TELE *pte,
   int *xp, int *yp, real *xr, real *yr)
 {
-  if (!gs.fEcliptic) {
-    lon = Mod(cp0.lonMC - lon + rDegQuad);
-    EquToLocal(&lon, &lat, rDegQuad - Lat);
-    lon = rDegMax - lon;
-    LocToTelescope(lon, lat, pte, xp, yp, xr, yr);
-  } else {
-    EquToEcl(&lon, &lat);
-    lon = Mod(Untropical(lon));
-    EclToTelescope(lon, lat, pte, xp, yp, xr, yr);
-  }
+  PROJ pr;
+
+  ProjTele(&pr, pte, xr, yr);
+  EquToProj(lon, lat, &pr, xp, yp);
 }
 
 void EclToTelescope(real lon, real lat, TELE *pte,
   int *xp, int *yp, real *xr, real *yr)
 {
-  if (!gs.fEcliptic) {
-    lon = Tropical(lon);
-    EclToEqu(&lon, &lat);
-    EquToTelescope(lon, lat, pte, xp, yp, xr, yr);
-  } else
-    PlotTelescope(lon, lat, pte, xp, yp, xr, yr);
+  PROJ pr;
+
+  ProjTele(&pr, pte, xr, yr);
+  EclToProj(lon, lat, &pr, xp, yp);
 }
 
 void PriToTelescope(real lon, real lat, TELE *pte,
   int *xp, int *yp, real *xr, real *yr)
 {
-  lon = rDegMax - lon;
-  CoorXform(&lon, &lat, rDegQuad);
-  LocToTelescope(lon, lat, pte, xp, yp, xr, yr);
+  PROJ pr;
+
+  ProjTele(&pr, pte, xr, yr);
+  PriToProj(lon, lat, &pr, xp, yp);
 }
 
 void EarToTelescope(real lon, real lat, TELE *pte,
   int *xp, int *yp, real *xr, real *yr)
 {
-  CoorXform(&lon, &lat, rDegQuad - Lat);
-  LocToTelescope(lon, -lat, pte, xp, yp, xr, yr);
+  PROJ pr;
+
+  ProjTele(&pr, pte, xr, yr);
+  EarToProj(lon, lat, &pr, xp, yp);
 }
 
 void EquToTelescope2(real lon, real lat, TELE *pte,
   int *xp, int *yp, real *xr, real *yr, flag fFlip)
 {
-  if (!fFlip)
-    EquToTelescope(lon, lat, pte, xp, yp, xr, yr);
-  else {
-    EquToEcl(&lon, &lat);
-    EclToTelescope(rDegMax - lon, lat, pte, xp, yp, xr, yr);
-  }
+  PROJ pr;
+
+  ProjTele(&pr, pte, xr, yr);
+  EquToProj2(lon, lat, &pr, xp, yp, fFlip);
 }
 
 

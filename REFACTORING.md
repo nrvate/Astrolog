@@ -520,6 +520,10 @@ and the registry audit reminds you of the last two.
    detection). After building any case list, prove the cases differ
    from each other (`cmp` each against the base case) before trusting
    a green diff.
+   For graphics code, `-Xb -Xo file.bmp` renders any chart to a
+   bitmap headlessly (no display, no window manager, no Qt harness):
+   a pinned-date `-Xb` differential is the graphics analogue of the
+   text matrices, and F1's 12-case run is the worked example.
 3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3036/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
@@ -583,9 +587,15 @@ reword; valid input behavior is byte-sacred.
   lines each; relation = the same algorithm with every array doubled
   to [2][objMax] plus transit handling) but is a dedicated-session
   merge with a -L text differential, not a quick pair.
-- **F1** (projection helper families) and **E1** (one block per
-  target in the drawing primitives) after that, with pinned-time
-  captures.
+- **F1 — done 2026-08-29** (work log item 85): the three projection
+  chain families collapsed onto one static `*ToProj()` set over a
+  `PROJ` context in xcharts1.cpp; the eighteen public names stay as
+  three-line adapters so no call site changed. Net: 12-bitmap `-Xb`
+  differential (-Z/-Z0/-XZ x default/=YXe/=Yf/both), byte-identical,
+  every variant proven distinct. The `FSphere*` family is still
+  separate (different geometry, the finding's "plus one").
+- **E1** (one block per target in the drawing primitives) next,
+  with pinned-time captures.
 
 **House habits that keep paying:** falsify every new test before
 trusting it; pin renders to literal constants, never to mutable
@@ -945,6 +955,12 @@ clone-and-vary shape as D1/item 38, one table-name swap from a quiet
 bug. *Direction:* one helper set parameterized by the plot transform
 (a function pointer or the `CIRC`/`TELE` argument generalized).
 *Cost:* low-medium; pinned-capture diff as net.
+
+**Done 2026-08-29** (work log item 85): the chains exist once as
+`static *ToProj(..., CONST PROJ *pp, ...)`; the two real per-family
+deltas (the sky chart's Loc skips the azimuth flip its plot transform
+applies itself; the telescope's Ear mirrors latitude) are named
+branches in the core. The 18 public adapters keep every signature.
 
 **F2 — The horizon charts are a clone lineage.** `XChartHorizon` (323
 lines) and `XChartHorizonSky` (318) measure ~67% identical;

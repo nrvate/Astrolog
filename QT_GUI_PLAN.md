@@ -3004,6 +3004,23 @@ are the more useful half to read before starting something new.
     a dedicated-session merge with a -L differential if ever.
     Verdicts recorded in REFACTORING.md's D1 finding.
 
+85. **F1: the projection chains exist once.** The eighteen
+    (Loc|Equ|Ecl|Pri|Ear)To{Horizon,HorizonSky,Telescope} helpers in
+    xcharts1.cpp were three near-identical chain sets differing in
+    their terminal plot transform plus two real deltas (the sky
+    chart's Loc skips the azimuth flip because PlotHorizonSky orients
+    azimuth itself; the telescope's Ear mirrors latitude). The chain
+    logic now lives once in static *ToProj() functions over a PROJ
+    context; all eighteen names remain as three-line adapters, so no
+    call site or extern.h signature changed. Proven byte-identical
+    over a 12-bitmap -Xb differential: -Z, -Z0, -XZ each rendered at
+    default, =YXe (ecliptic), =Yf (refraction), and both -- with a
+    distinctness pass showing every variant changed the bitmap, so
+    both branches of every chain ran. Suite 3036/0, Windows
+    cross-build clean. The -Xb headless bitmap render is a new net:
+    pinned-date graphics differentials without a display, window
+    manager, or the Qt harness.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
