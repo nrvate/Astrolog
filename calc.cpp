@@ -2180,8 +2180,10 @@ int NCheckEclipseSolar(int iEar, int iMoo, int iSun, real *prPct)
   PT3R pSun, pMoo, pEar, pNear, pUmb, vS2M, vS2E, vE2U, vS2Mu, vS2N;
   real radiS, radiE, radiM, radiU, radiP, lNear, lSM, lSU, lSE, lSN, lEU, dot;
 
-  // Objects must be different.
-  if (iEar == iSun || iEar == iMoo || iMoo == iSun)
+  // Objects must be different, and within rObjDiam[]'s oNorm bound --
+  // stars have no size on record (same guard as NCheckEclipseLunar).
+  if (iEar == iSun || iEar == iMoo || iMoo == iSun ||
+    !FNorm(iEar) || !FNorm(iMoo) || !FNorm(iSun))
     return etUndefined;
 
   // Calculate radius and coordinates of the objects in km.
@@ -2311,6 +2313,11 @@ int NCheckEclipseLunar(int iEar, int iMoo, int iSun, real *prPct)
 
   // Objects that aren't actual things in space can't eclipse or be eclipsed.
   if (!FThing(iEar) || !FThing(iMoo) || !FThing(iSun))
+    return etUndefined;
+
+  // Stars pass FThing() but sit above rObjDiam[]'s oNorm bound -- the
+  // eclipse model only knows solar system bodies with sizes on record.
+  if (!FNorm(iEar) || !FNorm(iMoo) || !FNorm(iSun))
     return etUndefined;
 
   // Calculate angular distance between the Moon and point opposite the Sun.

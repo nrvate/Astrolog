@@ -411,6 +411,8 @@ void DisplaySwitches(void)
   PrintS(
     " _ql [..]: Like _q but also append chart info to chart list in memory.");
   PrintS(" _i <file>: Compute chart based on info in file.");
+  PrintS("   (Virtual names: 'nul' keep info, 'set' saved info, 'now' present");
+  PrintS("   moment, 'tty' prompt, '__1'-'__6' chart slots, '__t' '__g' '__d'.)");
   PrintS(" _i[2-6] <file>: Load chart info into chart slots 2 through 6.");
   PrintS(" _il <file>: Like _i but also append chart info to chart list.");
   PrintS(" _id <dir>: Open all chart files in directory into chart list.");

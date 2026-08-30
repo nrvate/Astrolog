@@ -1050,7 +1050,7 @@ int InterpretEsoteric(flag fGetRays)
       sprintf(sz, "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
       FieldWord(sz);
     }
-    ray = rgObjRay[i];
+    ray = (i <= oNorm ? rgObjRay[i] : 0);  // Stars sit above the table.
     if (ray > 0) {
       sprintf(sz, "%s is Ray %d (%s), the \"Will to %s\".\n",
         szName, ray, szRayName[ray], szRayWill[ray]);
@@ -1466,13 +1466,20 @@ void ChartInfluence(void)
     // directions also spell "none" differently, which is why the
     // secondary's test is "if nonzero" where the sign-keyed sites test
     // "> 0".
-    for (prs = rgrulersys; prs < rgrulersys + crulersys; prs++) {
-      if (ignore7[prs->rr])
-        continue;
-      power1[prs->rgObj1[i]] += power[i] / 3.0;
-      if (prs->rgObj2[i])
-        power1[prs->rgObj2[i]] += power[i] / 3.0;
-    }
+    // Only through oNorm: the object-keyed tables end there, and stars
+    // rule no signs -- for a star this read walked off rgObj1[] into
+    // whatever global follows it and credited a garbage "sign". Present
+    // in upstream's nine copied stanzas too; caught by the suite's
+    // long-strings battery the first time -j0 ran with stars
+    // unrestricted under ASan (work log item 115).
+    if (i <= oNorm)
+      for (prs = rgrulersys; prs < rgrulersys + crulersys; prs++) {
+        if (ignore7[prs->rr])
+          continue;
+        power1[prs->rgObj1[i]] += power[i] / 3.0;
+        if (prs->rgObj2[i])
+          power1[prs->rgObj2[i]] += power[i] / 3.0;
+      }
   }
 
 #ifdef EXPRESS

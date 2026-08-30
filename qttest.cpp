@@ -3795,6 +3795,75 @@ static void TestCastCookingQt()
 }
 
 
+// Work log item 115: item 114's crasher class -- a user-supplied string
+// formatted through a fixed-size line buffer -- pinned across the whole
+// text chart surface rather than just the two functions caught crashing.
+// Every mode in rgchartmode[] is rendered to a file with a 120-character
+// chart name and location in place; each one surviving with output is
+// the assertion, the way TestBadInputQt() treats a crash. This is the
+// battery that would have caught PrintHeader() before a user's saved
+// eclipse chart did.
+static void TestLongStringsQt()
+{
+  static char szLongNam[121], szLongLoc[121];
+  char szOut[cchSzMax];
+  CI ciMainSav = ciMain, ciCoreSav = ciCore;
+  flag rgfSav[48], fPopupSav = FNoPopupQt();
+  long cb;
+  int i, j;
+  FILE *file;
+
+  Group("Long strings through every text chart");
+  Check(cchartmode <= 48, "the flag snapshot holds the table (%d)", cchartmode);
+  // A text search mode can warn (missing ephemeris range, say), and a
+  // warning is a modal box nothing will click.
+  SetNoPopupQt(fTrue);
+  {
+    Borrow bSec(us.fSeconds, fTrue), bGraph(us.fGraphics, fFalse);
+    Borrow bProg(us.fProgress, fFalse);
+    Borrow bRel(us.nRel, (int)rcNone);
+
+    for (i = 0; i < 120; i++) {
+      szLongNam[i] = 'N';
+      szLongLoc[i] = 'L';
+    }
+    szLongNam[120] = szLongLoc[120] = chNull;
+    ciMain.nam = szLongNam; ciMain.loc = szLongLoc;
+    ciCore = ciMain;
+    for (i = 0; i < cchartmode; i++)
+      rgfSav[i] = *rgchartmode[i].pf;
+    sprintf(szOut, "%s/astrolog-qt-longstrings.txt",
+      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+    FCloneSz(szOut, &is.szFileScreen);
+
+    for (i = 0; i < cchartmode; i++) {
+      for (j = 0; j < cchartmode; j++)
+        *rgchartmode[j].pf = (j == i);
+      remove(szOut);
+      Action();
+      cb = 0;
+      file = fopen(szOut, "rb");
+      if (file != NULL) {
+        fseek(file, 0, SEEK_END);
+        cb = ftell(file);
+        fclose(file);
+      }
+      Check(file != NULL && cb > 0,
+        "mode %d survives 120-char name and location (%ld bytes)",
+        rgchartmode[i].nMode, cb);
+    }
+
+    remove(szOut);
+    FCloneSz(NULL, &is.szFileScreen);
+    for (i = 0; i < cchartmode; i++)
+      *rgchartmode[i].pf = rgfSav[i];
+  }
+  ciMain = ciMainSav; ciCore = ciCoreSav;
+  CastChart(1);              // Put the shared chart state back for the rest.
+  SetNoPopupQt(fPopupSav);
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"context-menus",        TestContextMenusQt},
@@ -3832,7 +3901,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"atlas-sink",           TestAtlasSinkQt},
   {"chartmode-table",      TestChartModeTableQt},
-  {"cast-cooking",         TestCastCookingQt}};
+  {"cast-cooking",         TestCastCookingQt},
+  {"long-strings",         TestLongStringsQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
 
 // Does any comma-separated token of the filter appear in the name?

@@ -3629,6 +3629,55 @@ are the more useful half to read before starting something new.
     - The Wine cross-check also confirmed the two builds render the
       same wheel for the same chart and config, sidebar included.
 
+115. **The long-strings battery, and the three star bugs it flushed
+    out.** Item 114's crasher class -- a user string through a fixed
+    line buffer -- is now pinned across the whole text chart surface:
+    the `long-strings` group renders every mode in rgchartmode[] to a
+    file with 120-character chart names and locations in place, 1.6s
+    for all 35. Falsified by reverting both layers of the PrintHeader
+    fix: the battery dies on the first vulnerable mode.
+    - **Its first full-suite run found a different bug family.** Alone
+      the group passed; after the full suite -- which leaves stars
+      unrestricted -- ASan reported a global-buffer-overflow, and then
+      two more on successive runs, all upstream-inherited reads of
+      object-keyed tables (sized oNorm+1) by star indexes:
+      ChartInfluence()'s -j0 stanza crediting `power1[rgObj1[star]]`
+      (in upstream's nine copied stanzas too, D2's rework preserved it
+      faithfully); InterpretEsoteric() reading rgObjRay[] where its
+      neighbor five lines up already carried the i<=oNorm guard; and
+      NCheckEclipseSolar()/Lunar() reading rObjDiam[] raw where their
+      sibling RObjDiam() has always used FNorm(). Fixes follow the
+      guards upstream itself used at Dignify() and charts1.cpp:1785.
+    - **The influence one crashed outright**: `=U -j` (stars
+      unrestricted, influence chart) bus-errors the pre-fix binary on
+      every run and completes with sane 100.0%-total output after.
+      Two debugging traps cost real time and are worth knowing: the
+      crash is address-layout-sensitive, so it vanished under gdb and
+      under -O0 and -g rebuilds -- ASan on the suite was the reliable
+      witness -- and one "new binary still crashes" scare was a stale
+      root-directory .o; the console build objects live in the repo
+      root and do not rebuild just because the Qt objects did.
+    - Uncovered on purpose, recorded here: the battery does not vary
+      the -I interpretation axis, us.fSeconds beyond on, or
+      relationship modes; InterpretLocation()'s rgObjRay[i] read at
+      intrpret.cpp:293 is reachable only for objects with szMindPart
+      text and stars have none, so it is guarded in practice but not
+      in code.
+    - Nets: suite 3176/0 (was 3140), clean under ASan; pinned text and
+      graphics captures byte-identical for default (star-restricted)
+      charts, so nothing changed for anyone not running `=U`; all four
+      builds compile; win scenarios pass.
+
+116. **B2 taken: the virtual filenames exist in one table.** The
+    plain-copy names FInputData() accepts in place of a real file
+    ("set", "__t", "__g", "__d") are one commented rgvirtfile[] table,
+    with the three behavioral specials (nul, now, tty) and the
+    "__1".."__6" slot pattern documented beside it, and -H's -i entry
+    now lists every virtual name -- indented four spaces, past where
+    registry_audit reads switch tokens, and verified clean against all
+    six audits. Behavior identical by construction; the -i spot checks
+    (nul, set, now, __d) and the full suite are the net.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -2668,37 +2668,34 @@ flag FInputData(CONST char *szFile)
   real k, l, m;
   flag fRet = fFalse;
 
-  // If we are to read from the virtual file "nul" that means to leave the
-  // chart information alone with whatever settings it may have already.
+  // The virtual filenames -i accepts in place of a real file, each one
+  // copying a chart info kept by the program. A real file with one of
+  // these names is unreachable, so the complete list lives in this one
+  // table plus the three specials after it (and in -H's text for -i):
+  // "nul" leaves the current info alone, "now" computes the present
+  // moment, "tty" prompts interactively, and "__1" through "__6" copy
+  // from the numbered chart slots, matched as a pattern below.
+
+  static CONST struct {
+    CONST char *szName;  // The virtual filename
+    CONST CI *pci;       // The chart info it copies
+  } rgvirtfile[] = {
+    {szSetCore, &ciSave},  // "set": chart info saved earlier in session
+    {"__t",     &ciTran},  // Transit event chart info
+    {"__g",     &ciGreg},  // Gregorian calendar changeover date
+    {"__d",     &ciDefa},  // The default chart info
+  };
 
   if (FEqSz(szFile, szNulCore)) {
     is.fHaveInfo = fTrue;
     return fTrue;
   }
-
-  // If we are to read from the virtual file "set" then that means use a
-  // particular set of chart information generated earlier in the program.
-
-  if (FEqSz(szFile, szSetCore)) {
-    is.fHaveInfo = fTrue;
-    ciCore = ciSave;
-    return fTrue;
-  }
-  if (FEqSz(szFile, "__t")) {
-    is.fHaveInfo = fTrue;
-    ciCore = ciTran;
-    return fTrue;
-  }
-  if (FEqSz(szFile, "__g")) {
-    is.fHaveInfo = fTrue;
-    ciCore = ciGreg;
-    return fTrue;
-  }
-  if (FEqSz(szFile, "__d")) {
-    is.fHaveInfo = fTrue;
-    ciCore = ciDefa;
-    return fTrue;
-  }
+  for (i = 0; i < (int)(sizeof(rgvirtfile)/sizeof(*rgvirtfile)); i++)
+    if (FEqSz(szFile, rgvirtfile[i].szName)) {
+      is.fHaveInfo = fTrue;
+      ciCore = *rgvirtfile[i].pci;
+      return fTrue;
+    }
 
   // If we are to read from the virtual file "__1" through "__6" then that
   // means copy the chart information from the specified chart slot.

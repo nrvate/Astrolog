@@ -594,7 +594,7 @@ and the registry audit reminds you of the last two.
      the tables, precisely because the phase-2 batteries had trimmed
      step 3 down to builds+suite+matrix. The step-3 list is the
      battery; trimming it is how nets go stale unnoticed.
-3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3140/0),
+3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3176/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
    those last two in parallel subshells, they're the slow tail.
@@ -845,6 +845,13 @@ a real file named `now` is unreachable, and the full list exists only
 as an if-chain. *Direction:* keep the behavior (scripts depend on it);
 lift the names into one commented table the if-chain walks, and list
 them in the helpfile section that documents `-i`. *Cost:* trivial.
+
+**Done 2026-08-30** (work log item 116): the plain-copy names are one
+commented `rgvirtfile[]` table at the top of `FInputData()`, with the
+three behavioral specials (`nul`, `now`, `tty`) and the `__1`..`__6`
+slot pattern documented beside it; `-H`'s `-i` entry now lists every
+virtual name (indented past where `registry_audit` reads switch
+tokens, verified clean).
 
 **B3 — The switch-file channel is a global, and nested includes clobber
 it.** Parsers publish their `FILE*` in `is.fileIn`, and the atlas/zone
@@ -1486,3 +1493,13 @@ measured at the finding).
   standard-object renames; is.fileIn clobbering; -YXW's missing arity
   check; -YYI dead since upstream wrote it. Every one found by a net
   built the same day.
+- **And after phase 2, by the real-data session and its long-strings
+  battery** (work log items 114-115, 2026-08-30): PrintHeader() and
+  PrintWheelCenter() overflowing 80-byte buffers on real chart
+  name/location strings (crashed a user's saved eclipse chart);
+  ChartInfluence()'s -j0 stanza indexing object-keyed rulership
+  tables by star numbers — `=U -j` bus-errored outright before the
+  fix; InterpretEsoteric() reading rgObjRay[] past oNorm; and both
+  raw-rObjDiam eclipse checkers missing the FNorm guard their sibling
+  RObjDiam() always had. All four upstream-inherited, all in shared
+  core, all now behind the 35-mode battery plus ASan.
