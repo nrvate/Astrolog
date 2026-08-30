@@ -3954,7 +3954,7 @@ void XChartMoons()
       } else {
         // Bottom charts: Show all aspects between bodies like in -S -X chart.
         if (!FCreateGrid(fFalse))
-          return;
+          goto LDone;
         for (j = count-1; j >= 1; j--) {
           y = rgod[j].obj;
           for (i = j-1; i >= 0; i--) {
@@ -3982,7 +3982,10 @@ void XChartMoons()
     DrawLineX(0, gs.xWin-1, cy0);
   }
 
-  // Restore settings and recast original chart.
+  // Restore settings and recast original chart. Failure exits above
+  // land here too: leaving without this block used to leak the moons
+  // chart's restrictions and fMoonMove into the session.
+LDone:
   CopyRgb(ignoreSav, ignore, sizeof(ignore));
   AdjustRestrictions();
   us.fMoonMove = fMoonSav;
