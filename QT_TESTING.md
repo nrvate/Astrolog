@@ -15,9 +15,14 @@ Windows one. This file is about observing *this* build.
 
 `nrvate.as` is the maintainer's own settings file and is the only
 realistic test input. It carries `-Yi1 "/swe"`, the path to the ephemeris
-collection — **without it every esoteric body reads `???`**, because
-`SwissEnsurePath()` (calc.cpp) caches the search path the first time it is
-asked, so a `-Yi` set afterwards does nothing at all. It also carries the
+collection — **without it every esoteric body reads `???`**, and a `-Yi`
+set after the first computation does not recover them. Not because of
+Astrolog's own latch — `-Yi` clears `is.fSwissPathSet` and the path is
+re-applied — but because the Swiss Ephemeris library caches its
+orbital-elements state internally on the first (failed) load. Verified
+live with a probe, 2026-08-29 (work log item 90): after a late
+`-Yi1 "/swe"`, `rgszPath[1]` and the latch both update and Cupido still
+reads 0. The path must be right before the *first* computation. It also carries the
 restrictions, orbs, aspect set and 13 macro names that make the program
 behave the way it does in use. Testing against the stock `astrolog.as`
 answers a question nobody has.

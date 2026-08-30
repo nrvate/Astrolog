@@ -3074,6 +3074,20 @@ are the more useful half to read before starting something new.
     "collapse to an enum" step is deferred indefinitely as
     relocation, not creation.
 
+90. **A4: the lifecycle contract is written, and the probe corrected
+    a doc.** REFACTORING.md now records what runs once
+    (InitProgram/FinalizeProgram), what is re-entrant (CastChart,
+    with the relationship-mode fix as the known exception), the
+    first-use caches, and the ordering constraints. Writing it
+    surfaced a mechanism error in QT_TESTING.md: the claim was that
+    SwissEnsurePath() latches the path so a late -Yi does nothing --
+    in fact -Yi has cleared the latch since upstream 7.00 and the
+    path re-applies; the probe showed Cupido still reads 0 after a
+    late -Yi1 because the Swiss library caches its orbital-elements
+    state internally on the first failed load. The rule stands, the
+    reason is now the true one, and the probe (0.2s) settled in one
+    run what code reading got wrong.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

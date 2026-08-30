@@ -3412,25 +3412,6 @@ static void ProbeQt()
   // Nothing in particular. Rewrite this body to ask the program a
   // question, build, run. Everything is in scope: poke us/gs/gi, call
   // SetChartModeQt() or a dialog function, save gi.qim and measure it.
-  int i, cBad = 0;
-  for (i = 0; i <= oNorm1; i++) {
-    if (rgobjset[i].add != rgobjset[i].add || rgobjset[i].inf != rgobjset[i].inf ||
-      rgobjset[i].tinf != rgobjset[i].tinf || rgobjset[i].kolor != rgobjset[i].kolor)
-      { printf("row %d: add %g/%g inf %g/%g tinf %g/%g k %d/%d\n", i,
-          rgobjset[i].add, rgobjset[i].add, rgobjset[i].inf, rgobjset[i].inf,
-          rgobjset[i].tinf, rgobjset[i].tinf, rgobjset[i].kolor, rgobjset[i].kolor);
-        cBad++; }
-    if (i < 18 && rgobjset[i].orb != rgobjset[i].orb)
-      { printf("row %d orb differs below the slip\n", i); cBad++; }
-    if (i > 18 && i < 84 && rgobjset[i].orb != rgobjset[i-1].orb)
-      { printf("row %d orb not the one-shifted flat value\n", i); cBad++; }
-  }
-  for (i = 1; i <= 5; i++)
-    if (rgrBonusInf[i] != rgobjset[oNorm1+i].inf)
-      { printf("bonus %d differs\n", i); cBad++; }
-  printf("probe: %s; orb[18]=%g orb[84]=%g (want 2 2)\n",
-    cBad ? "MISMATCH" : "struct == flat arrays everywhere expected",
-    rgobjset[18].orb, rgobjset[84].orb);
 }
 
 

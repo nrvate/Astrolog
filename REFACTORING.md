@@ -685,6 +685,40 @@ contract (what is idempotent, what caches, what must precede what) in
 this file as Area A completes; actual restructuring is low priority
 while the contract is written down. *Cost:* documentation now.
 
+**Done 2026-08-29** (work log item 90) — the contract, each entry
+verified by reading or by probe:
+
+- `InitProgram()` (astrolog.cpp) runs once, before any parsing: seeds
+  `ciDefa` from compiled defaults, restrictions, the display-name
+  pointer tables the parsers read, the custom-object tables, the
+  palette. Nothing re-runs it; every later customization layers on
+  top and persists for the session — that is the settings model, not
+  a leak.
+- `FinalizeProgram()` is exit-time deallocation of owned strings and
+  arrays; each GUI calls it exactly once at quit.
+- `CastChart()` is re-entrant and the GUI recast loop rests on that;
+  the one known exception class was relationship-mode state, fixed in
+  this fork and pinned by `TestRelationshipModeQt`.
+- First-use caches, the class that bites only interactive runs:
+  - **Swiss path**: `is.fSwissPathSet` latches on first computation.
+    `-Yi` clears it (upstream since 7.00) and `FSwissPlanet()`'s
+    static detector clears it when `nSwissEph` changes — but
+    re-latching does NOT recover esoteric bodies, because the Swiss
+    library caches its orbital-elements state internally on the
+    first failed load. Probed live: after a late `-Yi1 "/swe"`,
+    `rgszPath[1]` and the latch both update and Cupido still reads
+    0. Hence the hard rule: the path must be right before the first
+    computation (`-i nrvate.as` at startup).
+  - **AstroExpression tries**: built by `FCreateTries()` on first
+    parse; contents are the static function names, so the latch is
+    harmless.
+  - **Star/asteroid enumeration statics** (calc.cpp `lonPrev`,
+    `istar`, `ces`, `iast`): per-sweep cursors reset by their own
+    callers, not lifecycle state.
+- Ordering constraints: `-Yz` before `-n` (recorded in the settings
+  writer); `-Yi1` before the first computation (above);
+  `InitProgram()` before any parse.
+
 **A5 — `main()` is duplicated per platform by `#ifdef`** (astrolog.cpp
 :3474 vs :3477) with WIN taking `WinMain` in wdriver. Minor; note only
 so Area G reconciles how the Qt build enters. *Cost:* trivial;
