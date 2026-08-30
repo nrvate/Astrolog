@@ -3710,6 +3710,33 @@ static void TestCastCookingQt()
   Check(planet[oSun] == rSun1 && chouse[1] == rCusp1,
     "latitude 90 casts as the clamped rDegQuad - rSmall");
 
+  // The Matrix house backend's topocentric system, which no other group
+  // reaches (the suite runs with Swiss ephemeris on): pin two cusps to
+  // literal constants, matrix.cpp's only standing net. The constants
+  // assume this exact environment, so every cast-relevant knob a
+  // previous group may have left set is borrowed to its default --
+  // TestAllMenuActionsQt fires all 338 menu items and leaves five of
+  // these dirty (found the hard way: the pin held alone and failed in
+  // the full suite).
+  {
+    Borrow bEphem(us.fEphemFiles, fFalse), bSid(us.fSidereal, fFalse);
+    Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fFalse);
+    Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
+    Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
+    Borrow bRotW(us.fObjRotWhole, fFalse), bExp(us.fExpOff, fTrue);
+    Borrow bHouse(us.nHouseSystem, (int)hsTopocentric);
+    Borrow bCtr(us.objCenter, (int)oEar), bRel(us.nRel, (int)rcNone);
+    Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+    Borrow bCusp(us.rCuspAddition, 0.0);
+    Borrow bAsc(us.objOnAsc, 0), bRot1(us.objRot1, 0), bRot2(us.objRot2, 0);
+    ciCore = ciT;
+    CastChart(1);
+    Check(RAbs(chouse[1] - 86.684187020121769) < 1e-9 &&
+      RAbs(chouse[5] - 184.489550958797622) < 1e-9,
+      "matrix topocentric cusps sit at their pinned positions (%f %f)",
+      chouse[1], chouse[5]);
+  }
+
   is.fDst = fDstSav;
   ciCore = ciCoreSav; ciMain = ciMainSav;
   CastChart(1);            // Put the shared chart state back for the rest.

@@ -1233,7 +1233,6 @@ void ComputeEphem(real t)
 
 real CastChart(int nContext)
 {
-  CI ciSav;
   real housetemp[cSign+1], r, r2;
   int i, k, k2;
 
@@ -1257,7 +1256,17 @@ real CastChart(int nContext)
   // This is done by making the time zone value reflect the logical offset
   // from UTC as indicated by the chart's longitude value.
 
-  ciSav = ciCore;
+  // From here to the end of the function, ciCore holds COOKED values, not
+  // what the user typed: an LMT/LAT zone is resolved from the longitude,
+  // an automatic Daylight setting from is.fDst, the zone is folded into
+  // the time (making it UT), and the latitude is clamped off the exact
+  // poles. Readers that depend on the cooked state: the is.T derivation
+  // below, ComputeVariables()'s TT, the house math's AA, and any
+  // AstroExpression hook that fires during the cast (funTim/funDst/
+  // funZon/funLat read these fields). The Borrow restores the typed
+  // values at every exit from the function; TestCastCookingQt() pins
+  // both the cooked interpretation and the restore.
+  Borrow bciCore(ciCore);
   is.JD = (real)MdyToJulian(MM, DD, YY);
   if (ZZ == zonLMT)
     ZZ = OO / 15.0;
@@ -1613,7 +1622,6 @@ real CastChart(int nContext)
   if (!us.fExpOff && FSzSet(us.szExpCast2))
     ParseExpression(us.szExpCast2);
 #endif
-  ciCore = ciSav;
   return is.T;
 }
 

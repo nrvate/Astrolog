@@ -3515,6 +3515,48 @@ are the more useful half to read before starting something new.
       remains open and is now unblocked; when it lands, this group is
       the net that has to stay green.
 
+113. **C2 taken, in the shape the code could take.** The full
+    derive-into-locals the finding imagined is a measured no-go, with
+    the evidence at the finding: cooked TT is read by
+    ComputeVariables() and by AstroExpression hooks firing inside the
+    cast (funTim/funDst/funZon/funLat read the CI macros), and clamped
+    AA is a global input to a dozen matrix house functions. Taken
+    instead: the ciSav pair is `Borrow bciCore(ciCore)` (any future
+    early return restores -- the finding's recorded hazard), the
+    typed/cooked contract is a comment at the cooking site naming
+    every cooked-state reader, and one undocumented in-window
+    corruption the audit turned up is gone.
+    - **HouseTopocentric() smuggled radians through ciCore.** It
+      passed its Polich-Page pole latitudes to CuspTopocentric() by
+      assigning them to AA -- the user's typed latitude -- five times
+      per cast, in radians, in a field whose unit is degrees,
+      restoring after. Internally consistent, so no output bug, but
+      the maintainer flagged it and it fell squarely under C2:
+      CuspTopocentric() takes the pole as a parameter now and AA is
+      written by nothing but the documented clamp.
+    - **Nets**: byte-identical -v output across all 40 house systems
+      (Swiss) plus 7 Matrix-backend runs, old worktree binary vs.
+      new, pinned -qb chart. Switch trap recorded: `-bm`'s handler
+      tail toggles fEphemFiles back on, so `_b -bm` quietly re-enables
+      the ephemeris and diffs Swiss against Swiss; plain `_b` is how
+      to reach the Matrix house path.
+    - **A standing pin for matrix.cpp**, its first: the topocentric
+      cusps at literal constants under the Matrix backend
+      (cast-cooking group). It held alone and failed in the full
+      suite -- TestAllMenuActionsQt fires all 338 menu items and
+      leaves fFlip, fGeodetic, objOnAsc, objRot1/2 and szExpHou
+      dirty behind it. Found by bisecting groups, then byte-diffing
+      `us` before/after each fired action and mapping offsets to
+      fields with `gdb -batch -ex 'ptype /o US'` on the ASan binary
+      (it has -g; the test binary doesn't). The pin now borrows
+      every cast-relevant knob it depends on, and fExpOff besides,
+      which silences the hook class wholesale.
+    - Falsified twice: swapping the P1/P2 poles fails the pin (in
+      the full suite, where it has to hold); the item-112 sabotages
+      still fail their assertions. Suite 3139/0 twice over, clean
+      under ASan; win build and scenarios clean. CONVENTIONS'
+      one-Borrow-per-deduced-type rule bit once, exactly as written.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

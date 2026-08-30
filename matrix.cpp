@@ -461,12 +461,15 @@ void HouseMorinus(void)
   }
 }
 
-real CuspTopocentric(real deg)
+// "latR" is the pole's geographic latitude, in radians (unlike most
+// latitudes in the program, which are in degrees).
+
+real CuspTopocentric(real deg, real latR)
 {
   real OA, X, LO;
 
   OA = ModRad(RFromD(is.RA + deg));
-  X = RAtn(RTan(AA)/RCos(OA));
+  X = RAtn(RTan(latR)/RCos(OA));
   LO = RAtn(RCos(X)*RTan(OA)/RCos(X+RFromD(is.OB)));
   if (LO < 0.0)
     LO += rPi;
@@ -481,13 +484,17 @@ void HouseTopocentric(void)
   int i;
 
   chouse[4] = ModRad(RFromD(is.MC+rDegHalf-is.rSid));
-  TL = RTanD(AA); P1 = RAtn(TL/3.0); P2 = RAtn(TL/1.5); LT = AA;
-  AA = P1;         chouse[5] = CuspTopocentric(30.0) + rPi;
-  AA = P2;         chouse[6] = CuspTopocentric(60.0) + rPi;
-  AA = RFromD(LT); chouse[1] = CuspTopocentric(90.0);
-  AA = P2;         chouse[2] = CuspTopocentric(120.0);
-  AA = P1;         chouse[3] = CuspTopocentric(150.0);
-  AA = LT;
+  // The intermediate cusps are cast at the "topocentric pole" latitudes
+  // P1/P2, whose tangents are 1/3 and 2/3 the chart latitude's. These
+  // used to be smuggled to CuspTopocentric() through AA itself -- the
+  // user's typed latitude in ciCore, briefly holding radians in a field
+  // whose unit is degrees -- which is why it takes them as a parameter.
+  TL = RTanD(AA); P1 = RAtn(TL/3.0); P2 = RAtn(TL/1.5); LT = RFromD(AA);
+  chouse[5] = CuspTopocentric(30.0, P1) + rPi;
+  chouse[6] = CuspTopocentric(60.0, P2) + rPi;
+  chouse[1] = CuspTopocentric(90.0, LT);
+  chouse[2] = CuspTopocentric(120.0, P2);
+  chouse[3] = CuspTopocentric(150.0, P1);
   for (i = 1; i <= 6; i++) {
     chouse[i] = Mod(DFromR(chouse[i])+is.rSid);
     chouse[i+6] = Mod(chouse[i]+rDegHalf);
