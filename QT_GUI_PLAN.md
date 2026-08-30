@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-74
+## Work log — items 1-75
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2836,6 +2836,26 @@ are the more useful half to read before starting something new.
       that used to alias a defined spelling ("-C5" as -C, "-uz" as -u,
       "-Az"... actually -A<unknown> remains the aspect-count branch,
       transliterated) now errors where the registry has no row.
+
+75. **M8: the chart-computation letters leave the main parser.**
+    Fifteen cases deleted -- the -b ephemeris-selection soup (digit
+    suffixes stand alone, every other spelling also enables ephemeris
+    files, exactly as the case fell through), -c house systems with a
+    new `nSwitchStop` dispatch sentinel reproducing the WIN
+    screensaver's stop-parsing-and-succeed quirk, the -s zodiac and
+    degree-form family with its optional peeked offset, -h centering,
+    the whole -p progression family (six sub-shapes), -x harmonics,
+    -1/-10/-2/-20 solar charts with their fAnd quirks over one core,
+    -4 dwad, -F/-Fm forced positions, and flag rows for
+    -3/-9/-f/-G/-J. Differential: 377 invocations, 10,175 captured
+    lines, byte-identical.
+    - The one candidate diff the matrix surfaced was its own stale
+      line: a -Yj run passing one value too many, whose leftover "43"
+      token used to error as "Unknown subswitch '-43'" via case '4'
+      and now errors as an unknown switch -- the established
+      strictness class, this time only rewording an error that was
+      always an error. The FErrorSubswitch message wording for retired
+      digit cases goes with them.
 
 ## Features this fork adds to both builds
 

@@ -290,6 +290,12 @@ of the file (A2's failure mode, gone for good).
   **M7 done 2026-08-29** (work log item 74): the -R/-C/-u/-U/-A
   restriction and aspect cluster left the main parser; ~175 switches
   migrated; 314-invocation differential byte-identical.
+  **M8 done 2026-08-29** (work log item 75): the chart-computation
+  letters (-b/-c/-s/-h/-p/-x/-1/-2/-3/-4/-9/-f/-G/-J/-F) left the main
+  parser; a `nSwitchStop` sentinel lets a row end parsing successfully
+  (the WIN screensaver quirk). ~190 switches migrated; 377-invocation
+  differential byte-identical. What remains: chart types, chart info,
+  I/O and macros, day arithmetic, and -W.
 - **M-final**: the four parser shells reduce to dispatch loops; the
   help printers are deleted; `FOutputSettings()` is a loop plus the
   handful of genuinely bespoke sections.

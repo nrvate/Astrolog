@@ -496,6 +496,8 @@ int NPromptSwitches(char *line, char *argv[MAXSWITCHES])
 // fail as any unknown switch.
 
 #define nSwitchAbsent (-2)      // Name not in the registry.
+#define nSwitchStop   (-3)      // Success, and stop parsing the rest of
+                                // the line (the WIN -c screensaver case).
 
 #define grfSwPrefix   0x1  // Match szName as a prefix; the handler
                            // parses the rest of the spelling itself
@@ -548,6 +550,9 @@ static CONST SWITCHFLAG rgswflag[] = {
   {"XN",  &gs.fAnimMap,     grfSwGraphics},
 #endif
 #endif
+  {"3",   &us.fDecan},       {"9",   &us.fNavamsa},
+  {"f",   &us.fFlip},        {"G",   &us.fGeodetic},
+  {"J",   &us.fIndian},
   };
 
 // A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1
@@ -2741,6 +2746,308 @@ static int NSwA(CONST char *szSwitch, int argc, char **argv,
   return 2;
 }
 
+// The -b ephemeris-selection family: the digit suffixes are display
+// toggles that stand alone; every other spelling also turns ephemeris
+// files on, exactly as the retired case fell through to.
+
+static int NSwb(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+
+  if (ch1 == '0') {
+    SwitchF(us.fSeconds);
+    return 0;
+  } else if (ch1 == '1') {
+    SwitchF(us.fSecond1K);
+    return 0;
+  } else if (ch1 == '2') {
+    SwitchF(us.fSecondHide);
+    return 0;
+  } else if (ch1 == 'j')
+    us.nSwissEph = FSwitchF(us.nSwissEph == 2) * 2;
+  else if (ch1 == 's')
+    us.nSwissEph = FSwitchF(us.nSwissEph == 1);
+  else if (ch1 == 'p' && !us.fNoPlacalc)
+    SwitchF(us.fPlacalcPla);
+  else if (ch1 == 'm' && !us.fNoPlacalc)
+    SwitchF(us.fMatrixPla);
+  else if (ch1 == 'a')
+    SwitchF(us.fPlacalcAst);
+  else if (ch1 == 'U')
+    SwitchF(us.fMatrixStar);
+  else if (ch1 == 'J' && !us.fNoNetwork)
+    us.nSwissEph = FSwitchF(us.nSwissEph == 3) * 3;
+  SwitchF(us.fEphemFiles);
+  return 0;
+}
+
+static int NSwc(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i;
+
+  if (szSwitch[1] == '3') {
+    if (argc > 1 && ((i = NFromSz(argv[1])) != 0 || FNumCh(argv[1][0]) ||
+      argv[1][0] == '~')) {
+      if (FErrorValN("c3", !FValidMethod(i), i, 0))
+        return tcError;
+      if (i > 0)
+        us.nHouse3D = i;
+      else {
+        us.fHouse3D = fFalse;
+        return 1;
+      }
+      SwitchF(us.fHouse3D);
+      return 1;
+    }
+    SwitchF(us.fHouse3D);
+    return 0;
+  }
+#ifdef WIN
+  if (argc <= 1 && wi.fSaverCfg)
+    return nSwitchStop;
+#endif
+  if (FErrorArgc("c", argc, 1))
+    return tcError;
+  i = NParseSz(argv[1], pmSystem);
+  if (FErrorValN("c", !FValidSystem(i), i, 0))
+    return tcError;
+  us.nHouseSystem = i;
+  return 1;
+}
+
+static int NSws(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  real rT;
+  int darg = 0;
+#ifdef WSETUP
+  int i;
+#endif
+
+  if (argc > 1 && (rT = RParseSz(argv[1], pmOffset)) != rLarge) {
+    if (FErrorValR("s", !FValidOffset(rT), rT, 0))
+      return tcError;
+    darg++;
+    us.rZodiacOffset = rT;
+  }
+  if (ch1 == 'r') {
+    if (ch2 != '0')
+      SwitchF(us.fEquator);
+    SwitchF(us.fEquator2);
+  } else if (ch1 == 'z')
+    us.nDegForm = dfZod;
+  else if (ch1 == 'h')
+    us.nDegForm = dfHM;
+  else if (ch1 == 'd')
+    us.nDegForm = df360;
+  else if (ch1 == 'n')
+    us.nDegForm = dfNak;
+#ifdef WSETUP
+  else if (ch1 == 'e')    // -setup switch for Windows
+    i = FCreateProgramGroup(fFalse) && FCreateDesktopIcon() &&
+      FRegisterExtensions();
+#endif
+  else
+    SwitchF(us.fSidereal);
+  return darg;
+}
+
+static int NSwh(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NParseSz(argv[1], pmObject)) >= 0)
+    darg++;
+  else
+    i = FSwitchF(us.objCenter != 0);
+  if (FErrorValN("h", !FValidCenter(i), i, 0))
+    return tcError;
+  SetCentric(i);
+  return darg;
+}
+
+static int NSwp(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  real rT;
+  int i;
+
+  us.nProgress = (ch1 == '0') + 2*(ch1 == '1');
+  if (us.nProgress)
+    ch1 = ch2;
+  if (fAnd && ch1 != 'c') {
+    us.fProgress = fFalse;
+    return 0;
+  } else if (ch1 == 'd') {
+    if (FErrorArgc("pd", argc, 1))
+      return tcError;
+    i = (ChCap(argv[1][0]) == 'X');
+    rT = RFromSz(argv[1] + i);
+    if (i != 0 && rT != 0.0)
+      rT = rDayInYear / rT;
+    if (FErrorValR("pd", rT == 0.0, rT, 0))
+      return tcError;
+    us.rProgDay = rT;
+    return 1;
+  } else if (ch1 == 'C') {
+    if (FErrorArgc("pC", argc, 1))
+      return tcError;
+    rT = RFromSz(argv[1]);
+    if (FErrorValR("pC", rT == 0.0, rT, 0))
+      return tcError;
+    us.rProgCusp = rT;
+    return 1;
+  } else if (ch1 == 'O') {
+    if (FErrorArgc("pO", argc, 1))
+      return tcError;
+    i = NParseSz(argv[1], pmObject);
+    if (FErrorValN("pO", !FValidProgArc(i), i, 0))
+      return tcError;
+    us.objProgArc = i;
+    return 1;
+  } else if (ch1 == 'c') {
+    SwitchF(us.fProgRAMC);
+    return 0;
+  }
+  SwitchF(us.fProgress);
+#ifdef TIME
+  if (ch1 == 'n') {
+    GetTimeNow(&MonT, &DayT, &YeaT, &TimT, ciDefa.dst, ciDefa.zon);
+    is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT,
+      ciDefa.dst, ciDefa.zon);
+    return 0;
+  }
+#endif
+  i = 3 + (ch1 == 't');
+  if (FErrorArgc("p", argc, i))
+    return tcError;
+  MonT = NParseSz(argv[1], pmMon);
+  DayT = NParseSz(argv[2], pmDay);
+  YeaT = NParseSz(argv[3], pmYea);
+  TimT = ch1 == 't' ? RParseSz(argv[4], pmTim) : 0.0;
+  if (FErrorValN("p", !FValidMon(MonT), MonT, 1))
+    return tcError;
+  else if (FErrorValN("p", !FValidDay(DayT, MonT, YeaT), DayT, 2))
+    return tcError;
+  else if (FErrorValN("p", !FValidYea(YeaT), YeaT, 3))
+    return tcError;
+  else if (ch1 == 't' && FErrorValR("p", !FValidTim(TimT), TimT, 4))
+    return tcError;
+  is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
+  return i;
+}
+
+static int NSwx(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  real rT;
+  int i;
+
+  if (FErrorArgc("x", argc, 1))
+    return tcError;
+  i = ChCap(argv[1][0]) == 'D';
+  rT = RFromSz(argv[1] + i);
+  if (i != 0 && rT != 0.0)
+    rT = rDegMax / rT;
+  if (FErrorValR("x", !FValidHarmonic(rT), rT, 0))
+    return tcError;
+  us.rHarmonic = rT;
+  return 1;
+}
+
+static int NSwOnAsc(int argc, char **argv, flag fAnd, flag fZero,
+  flag fSecond)
+{
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NParseSz(argv[1], pmObject)) >= 0)
+    darg++;
+  else
+    i = oSun;
+  if (FErrorValN(fSecond ? "2" : "1", !FItem(i), i, 0))
+    return tcError;
+  us.fSolarWhole = (fZero && !fAnd);
+  us.objOnAsc = fAnd ? 0 : (fSecond ? -(i+1) : i+1);
+  return darg;
+}
+
+static int NSwOne(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwOnAsc(argc, argv, fAnd, fFalse, fFalse);
+}
+
+static int NSwOne0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwOnAsc(argc, argv, fAnd, fTrue, fFalse);
+}
+
+static int NSwTwo(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwOnAsc(argc, argv, fAnd, fFalse, fTrue);
+}
+
+static int NSwTwo0(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwOnAsc(argc, argv, fAnd, fTrue, fTrue);
+}
+
+static int NSwFour(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NFromSz(argv[1])) >= 0)
+    darg++;
+  else
+    i = 1;
+  if (FErrorValN("4", !FValidDwad(i), i, 0))
+    return tcError;
+  us.nDwad = fAnd ? 0 : i;
+  return darg;
+}
+
+static int NSwF(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, j, k;
+
+  if (FErrorArgc("F", argc, !fAnd ? 3 : 1))
+    return tcError;
+  i = NParseSz(argv[1], pmObject);
+  if (FErrorValN("F", !FItem(i), i, 1))
+    return tcError;
+  if (fAnd) {
+    force[i] = 0.0;
+    return 1;
+  }
+  if (szSwitch[1] != 'm') {
+    force[i] = ZD(NParseSz(argv[2], pmSign), RFromSz(argv[3]));
+    if (FErrorValR("F", force[i] < 0.0 || force[i] >= rDegMax,
+      force[i], 0))
+      return tcError;
+    force[i] = ForcePos(force[i]);
+  } else {
+    j = NParseSz(argv[2], pmObject);
+    if (FErrorValN("Fm", !FItem(j), j, 2))
+      return tcError;
+    k = NParseSz(argv[3], pmObject);
+    if (FErrorValN("Fm", !FItem(k), k, 3))
+      return tcError;
+    force[i] = ForceMid(j, k);
+  }
+  AdjustRestrictions();
+  return 3;
+}
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
@@ -2882,6 +3189,15 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"R",    grfSwPrefix, NSwR},
   {"U",    grfSwPrefix, NSwU},
   {"A",    grfSwPrefix, NSwA},
+  {"h",    0,           NSwh},   {"x",    0,           NSwx},
+  {"1",    0,           NSwOne}, {"10",   0,           NSwOne0},
+  {"2",    0,           NSwTwo}, {"20",   0,           NSwTwo0},
+  {"4",    0,           NSwFour},
+  {"b",    grfSwPrefix, NSwb},
+  {"c",    grfSwPrefix, NSwc},
+  {"s",    grfSwPrefix, NSws},
+  {"p",    grfSwPrefix, NSwp},
+  {"F",    grfSwPrefix, NSwF},
   };
 
 // Look up a switch by its full spelling and run it. Returns the count of
@@ -3007,6 +3323,8 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
     i = NProcessSwitchTable(&argv[0][ich-1], argc, argv, fOr, fAnd, fNot,
       pctx);
     if (i != nSwitchAbsent) {
+      if (i == nSwitchStop)
+        return fTrue;
       if (i < 0)
         return fFalse;
       argc -= i; argv += i;
@@ -3930,277 +4248,6 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       break;
 
     // Switches which affect what information is used in a chart:
-
-    // Switches which affect how a chart is computed:
-
-    case 'b':
-      if (ch1 == '0') {
-        SwitchF(us.fSeconds);
-        break;
-      } else if (ch1 == '1') {
-        SwitchF(us.fSecond1K);
-        break;
-      } else if (ch1 == '2') {
-        SwitchF(us.fSecondHide);
-        break;
-      } else if (ch1 == 'j')
-        us.nSwissEph = FSwitchF(us.nSwissEph == 2) * 2;
-      else if (ch1 == 's')
-        us.nSwissEph = FSwitchF(us.nSwissEph == 1);
-      else if (ch1 == 'p' && !us.fNoPlacalc)
-        SwitchF(us.fPlacalcPla);
-      else if (ch1 == 'm' && !us.fNoPlacalc)
-        SwitchF(us.fMatrixPla);
-      else if (ch1 == 'a')
-        SwitchF(us.fPlacalcAst);
-      else if (ch1 == 'U')
-        SwitchF(us.fMatrixStar);
-      else if (ch1 == 'J' && !us.fNoNetwork)
-        us.nSwissEph = FSwitchF(us.nSwissEph == 3) * 3;
-      SwitchF(us.fEphemFiles);
-      break;
-
-    case 'c':
-      if (ch1 == '3') {
-        if (argc > 1 && ((i = NFromSz(argv[1])) != 0 || FNumCh(argv[1][0]) ||
-          argv[1][0] == '~')) {
-          if (FErrorValN("c3", !FValidMethod(i), i, 0))
-            return fFalse;
-          argc--; argv++;
-          if (i > 0)
-            us.nHouse3D = i;
-          else {
-            us.fHouse3D = fFalse;
-            break;
-          }
-        }
-        SwitchF(us.fHouse3D);
-        break;
-      }
-#ifdef WIN
-      if (argc <= 1 && wi.fSaverCfg)
-        return fTrue;
-#endif
-      if (FErrorArgc("c", argc, 1))
-        return fFalse;
-      i = NParseSz(argv[1], pmSystem);
-      if (FErrorValN("c", !FValidSystem(i), i, 0))
-        return fFalse;
-      us.nHouseSystem = i;
-      argc--; argv++;
-      break;
-
-    case 's':
-      if (argc > 1 && (rT = RParseSz(argv[1], pmOffset)) != rLarge) {
-        if (FErrorValR("s", !FValidOffset(rT), rT, 0))
-          return fFalse;
-        argc--; argv++;
-        us.rZodiacOffset = rT;
-      }
-      if (ch1 == 'r') {
-        if (ch2 != '0')
-          SwitchF(us.fEquator);
-        SwitchF(us.fEquator2);
-      } else if (ch1 == 'z')
-        us.nDegForm = dfZod;
-      else if (ch1 == 'h')
-        us.nDegForm = dfHM;
-      else if (ch1 == 'd')
-        us.nDegForm = df360;
-      else if (ch1 == 'n')
-        us.nDegForm = dfNak;
-#ifdef WSETUP
-      else if (ch1 == 'e')    // -setup switch for Windows
-        i = FCreateProgramGroup(fFalse) && FCreateDesktopIcon() &&
-          FRegisterExtensions();
-#endif
-      else
-        SwitchF(us.fSidereal);
-      break;
-
-    case 'h':
-      if (argc > 1 && (i = NParseSz(argv[1], pmObject)) >= 0) {
-        argc--; argv++;
-      } else
-        i = FSwitchF(us.objCenter != 0);
-      if (FErrorValN("h", !FValidCenter(i), i, 0))
-        return fFalse;
-      SetCentric(i);
-      break;
-
-    case 'p':
-      us.nProgress = (ch1 == '0') + 2*(ch1 == '1');
-      if (us.nProgress)
-        ch1 = ch2;
-      if (fAnd && ch1 != 'c') {
-        us.fProgress = fFalse;
-        break;
-      } else if (ch1 == 'd') {
-        if (FErrorArgc("pd", argc, 1))
-          return fFalse;
-        i = (ChCap(argv[1][0]) == 'X');
-        rT = RFromSz(argv[1] + i);
-        if (i != 0 && rT != 0.0)
-          rT = rDayInYear / rT;
-        if (FErrorValR("pd", rT == 0.0, rT, 0))
-          return fFalse;
-        us.rProgDay = rT;
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'C') {
-        if (FErrorArgc("pC", argc, 1))
-          return fFalse;
-        rT = RFromSz(argv[1]);
-        if (FErrorValR("pC", rT == 0.0, rT, 0))
-          return fFalse;
-        us.rProgCusp = rT;
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'O') {
-        if (FErrorArgc("pO", argc, 1))
-          return fFalse;
-        i = NParseSz(argv[1], pmObject);
-        if (FErrorValN("pO", !FValidProgArc(i), i, 0))
-          return fFalse;
-        us.objProgArc = i;
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'c') {
-        SwitchF(us.fProgRAMC);
-        break;
-      }
-      SwitchF(us.fProgress);
-#ifdef TIME
-      if (ch1 == 'n') {
-        GetTimeNow(&MonT, &DayT, &YeaT, &TimT, ciDefa.dst, ciDefa.zon);
-        is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT,
-          ciDefa.dst, ciDefa.zon);
-        break;
-      }
-#endif
-      i = 3 + (ch1 == 't');
-      if (FErrorArgc("p", argc, i))
-        return fFalse;
-      MonT = NParseSz(argv[1], pmMon);
-      DayT = NParseSz(argv[2], pmDay);
-      YeaT = NParseSz(argv[3], pmYea);
-      TimT = ch1 == 't' ? RParseSz(argv[4], pmTim) : 0.0;
-      if (FErrorValN("p", !FValidMon(MonT), MonT, 1))
-        return fFalse;
-      else if (FErrorValN("p", !FValidDay(DayT, MonT, YeaT), DayT, 2))
-        return fFalse;
-      else if (FErrorValN("p", !FValidYea(YeaT), YeaT, 3))
-        return fFalse;
-      else if (ch1 == 't' && FErrorValR("p", !FValidTim(TimT), TimT, 4))
-        return fFalse;
-      is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
-      argc -= i; argv += i;
-      break;
-
-    case 'x':
-      if (FErrorArgc("x", argc, 1))
-        return fFalse;
-      i = ChCap(argv[1][0]) == 'D';
-      rT = RFromSz(argv[1] + i);
-      if (i != 0 && rT != 0.0)
-        rT = rDegMax / rT;
-      if (FErrorValR("x", !FValidHarmonic(rT), rT, 0))
-        return fFalse;
-      us.rHarmonic = rT;
-      argc--; argv++;
-      break;
-
-    case '1':
-      if (FErrorSubswitch("1", ch1, ch1 != chNull && ch1 != '0'))
-        return fFalse;
-      if (argc > 1 && (i = NParseSz(argv[1], pmObject)) >= 0) {
-        argc--; argv++;
-      } else
-        i = oSun;
-      if (FErrorValN("1", !FItem(i), i, 0))
-        return fFalse;
-      us.fSolarWhole = (ch1 == '0' && !fAnd);
-      us.objOnAsc = fAnd ? 0 : i+1;
-      break;
-
-    case '2':
-      if (FErrorSubswitch("2", ch1, ch1 != chNull && ch1 != '0'))
-        return fFalse;
-      if (argc > 1 && (i = NParseSz(argv[1], pmObject)) >= 0) {
-        argc--; argv++;
-      } else
-        i = oSun;
-      if (FErrorValN("2", !FItem(i), i, 0))
-        return fFalse;
-      us.fSolarWhole = (ch1 == '0' && !fAnd);
-      us.objOnAsc = fAnd ? 0 : -(i+1);
-      break;
-
-    case '3':
-      if (FErrorSubswitch("3", ch1, ch1 != chNull))
-        return fFalse;
-      SwitchF(us.fDecan);
-      break;
-
-    case '4':
-      if (FErrorSubswitch("4", ch1, ch1 != chNull))
-        return fFalse;
-      if (argc > 1 && (i = NFromSz(argv[1])) >= 0) {
-        argc--; argv++;
-      } else
-        i = 1;
-      if (FErrorValN("4", !FValidDwad(i), i, 0))
-        return fFalse;
-      us.nDwad = fAnd ? 0 : i;
-      break;
-
-    case 'f':
-      SwitchF(us.fFlip);
-      break;
-
-    case 'G':
-      SwitchF(us.fGeodetic);
-      break;
-
-    case 'J':
-      SwitchF(us.fIndian);
-      break;
-
-    case '9':
-      if (FErrorSubswitch("9", ch1, ch1 != chNull))
-        return fFalse;
-      SwitchF(us.fNavamsa);
-      break;
-
-    case 'F':
-      if (FErrorArgc("F", argc, !fAnd ? 3 : 1))
-        return fFalse;
-      i = NParseSz(argv[1], pmObject);
-      if (FErrorValN("F", !FItem(i), i, 1))
-        return fFalse;
-      if (fAnd) {
-        force[i] = 0.0;
-        argc--; argv++;
-        break;
-      }
-      if (ch1 != 'm') {
-        force[i] = ZD(NParseSz(argv[2], pmSign), RFromSz(argv[3]));
-        if (FErrorValR("F", force[i] < 0.0 || force[i] >= rDegMax,
-          force[i], 0))
-          return fFalse;
-        force[i] = ForcePos(force[i]);
-      } else {
-        j = NParseSz(argv[2], pmObject);
-        if (FErrorValN("Fm", !FItem(j), j, 2))
-          return fFalse;
-        k = NParseSz(argv[3], pmObject);
-        if (FErrorValN("Fm", !FItem(k), k, 3))
-          return fFalse;
-        force[i] = ForceMid(j, k);
-      }
-      AdjustRestrictions();
-      argc -= 3; argv += 3;
-      break;
 
     case chNull:
       if (ich <= 1)
