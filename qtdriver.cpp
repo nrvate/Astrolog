@@ -87,23 +87,139 @@
 
 #ifdef QT
 
-// Is the chart window fully set up? Guards against a resize event arriving
-// (e.g. during initial widget layout) before there is a chart to redraw.
-static bool fQtReady = false;
+// A Setting-menu restriction entry: "Include Cusps"/"Include Uranians"/
+// etc each mirror a us.f* flag the restriction dialogs can also change, so
+// they're tracked for SyncRestrictMenuQt() to refresh -- the same job
+// Windows does with the WiCheckMenu() calls at the end of DlgRestrict,
+// DlgStar, and DlgMoons. Only entries backed by a real flag are tracked;
+// "Include Minors" has none and is derived from ignore[] alone.
+typedef struct {
+  QAction *pa;
+  flag *pfield;
+  int lo, hi;
+  flag fTransit;   // also count the transit set as making this included
+} CATRES;
 
-// Windows' wi.fChartWindow and wi.fWindowChart (astrolog.h:2353), which
-// can't be used here because the whole WI struct is Win32 only. Same
-// defaults Windows starts with (xdata.cpp:130): a window resize changes
-// the chart to match, but a chart size change leaves the window alone.
-// When neither is on the chart keeps whatever size it was given and the
-// scroll area below provides scrollbars to pan around it.
-static flag fChartWindowQt = fFalse;   // Chart resize resizes the window?
-static flag fWindowChartQt = fTrue;    // Window resize resizes the chart?
+// The port's mutable window state in one place -- the analogue of Windows'
+// WI struct (astrolog.h), which is Win32-only. What used to be ~40
+// file-scope statics lives here so ownership is visible; the CONST tables
+// (menus, hotkeys, context menus) stay beside the code that uses them.
+//
+// Rule, paid for once as gotcha 7: the chart-mode and relationship
+// tracking arrays are looked up BY VALUE, never by index. Menu build
+// order is not a stable interface.
+typedef struct _qtuserinterface {
+  // Is the chart window fully set up? Guards against a resize event
+  // arriving (during initial widget layout) before there is a chart.
+  bool fReady = false;
 
-// Wraps the chart canvas, so a chart bigger than the window can be
-// scrolled. Qt scrolls the viewport itself, which is why none of Windows'
-// wi.xScroll/gi.xOffset panning arithmetic (xscreen.cpp:396) is ported.
-static QScrollArea *s_pscroll = NULL;
+  // Windows' wi.fChartWindow and wi.fWindowChart (astrolog.h:2353), which
+  // can't be used here because the whole WI struct is Win32 only. Same
+  // defaults Windows starts with (xdata.cpp:130): a window resize changes
+  // the chart to match, but a chart size change leaves the window alone.
+  // When neither is on the chart keeps whatever size it was given and the
+  // scroll area provides scrollbars to pan around it.
+  flag fChartWindow = fFalse;   // Chart resize resizes the window?
+  flag fWindowChart = fTrue;    // Window resize resizes the chart?
+
+  // Wraps the chart canvas, so a chart bigger than the window can be
+  // scrolled. Qt scrolls the viewport itself, which is why none of
+  // Windows' wi.xScroll/gi.xOffset panning arithmetic is ported.
+  QScrollArea *pscroll = NULL;
+
+  // Should a redraw put up a wait cursor? Windows' wi.fHourglass, same
+  // default (xdata.cpp:130). Applied by RedrawQt().
+  flag fHourglass = fTrue;
+
+  // Windows' wi.fNoUpdate: suppress automatic redraws, so a run of
+  // setting changes doesn't repaint after every one. Redraw Screen still
+  // works, and goes through RedrawForceQt() to say so explicitly.
+  flag fNoUpdate = fFalse;
+
+  // Windows' wi.fNoPopup and wi.fBmpWindow, which File Settings edits.
+  // The first suppresses warning message boxes; the second says a chart
+  // bitmap should be grabbed from the window rather than redrawn, which
+  // is what CopyChartBitmapQt() already does, so it is kept for the
+  // setting's sake.
+  flag fNoPopup = fFalse;
+  flag fBmpWindow = fTrue;
+
+  // The session's one network manager; see FGetUrlQt() for why it is not
+  // created per fetch. Torn down in FinalizeQt().
+  QNetworkAccessManager *pnam = NULL;
+
+  // The text-chart character cell, color, and font (see the text-mode
+  // rendering above SetTextMetricsQt()).
+  int xChar = 8, yChar = 12;
+  KV kvText = 0;
+  QFont fontText;
+
+  // The persistent read-only text window (see RedrawTextQt()).
+  QDialog *pdlgText = NULL;
+  QTextBrowser *ptextBrowser = NULL;
+
+  // Menu items that a dialog can also change, so they need re-syncing
+  // when it closes -- the job Windows does with the WiCheckMenu() calls
+  // sprinkled through DlgCalc and DlgDisplay.
+  QAction *paSeconds = NULL, *paApplying = NULL;
+  QAction *paSolar = NULL, *paHouse3D = NULL, *paDwad = NULL;
+  QAction *paProgress = NULL;
+  QAction *paGraphics = NULL;
+  QAction *paHelio = NULL;
+
+  // The Chart menu's chart-type radio items, tracked separately from
+  // ordinary AddSelectAction groups because chart mode can also change
+  // from outside the menu (the Transits dialog) -- SetChartModeQt() looks
+  // up the action matching whatever mode was just applied and checks it,
+  // regardless of who called it. Sized generously; only 16 slots are
+  // used as of this writing. Looked up by value (rule above).
+  QAction *rgpaChartMode[64];
+  int rgnChartMode[64];
+  int cChartMode = 0;
+
+  // Shared across the Chart menu's 16 chart type items and the Graphics
+  // menu's 5 sphere/globe/map view items -- Windows treats chart type as
+  // one unified radio state (wi.cmdCur/rgcmdMode) no matter which menu
+  // changed it, so all 21 items belong to the same exclusive group.
+  QActionGroup *pgroupChartMode = NULL;
+
+  // The relationship chart type radio items (SetRelQt). By value, ditto.
+  QAction *rgpaRel[16];
+  int rgnRel[16];
+  int cRel = 0;
+
+  // The Setting menu's restriction-category entries (CATRES above).
+  CATRES rgcatres[8];
+  int ccatres = 0;
+
+  // "Show Constellation Lines" tracks its own flag here instead of
+  // Windows' wi.fStarLine, which lives in the Win32-only WI struct.
+  flag fStarLine = fFalse;
+
+  // Custom labels set by -WM (a macro slot) and -WM0 (a submenu), which
+  // is how a Windows user names their macros in astrolog.as. Windows
+  // applies these immediately with ModifyMenu on its Win32-only wi.hmenu;
+  // here the switches are processed long before the menu bar exists, so
+  // the names are held until BuildMacroMenus() runs. NULL means "keep
+  // the default label".
+  char *rgszMacro[cMacro];
+  char *rgszMSub[cMSub];
+
+  // Windows keeps one Win32 timer running for the entire session and
+  // works out inside its WM_TIMER handler whether animation is actually
+  // on -- gs.nAnim's sign is the on/off switch and gi.fPause suspends
+  // it. A QTimer does the same job here.
+  QTimer *ptimerAnim = NULL;
+  int nTimerDelay = 100;        // Windows' wi.nTimerDelay default
+  int nAntialias = 6;           // Windows' wi.nAntialias default (-Wx)
+  int xWind = 0, yWind = 0;     // Window position from -Ww
+  flag fWindPos = fFalse;
+
+  // The Animate menu's run/pause pair (see the note at BuildAnimateMenu).
+  QAction *paAnimRun = NULL, *paAnimPause = NULL;
+} QTUI;
+
+static QTUI qi;
 
 
 // The widget the chart is actually painted onto. Astrolog keeps rendering
@@ -162,7 +278,7 @@ protected:
     // change the chart. With that off the chart keeps its own size and
     // this widget is sized to match it instead (see ApplySizeModeQt), so
     // redrawing to fit here would fight that and repaint forever.
-    if (fQtReady && fWindowChartQt &&
+    if (qi.fReady && qi.fWindowChart &&
       width() >= 1 && height() >= 1 &&
       (gi.qim == NULL || gi.qim->width() != width() ||
       gi.qim->height() != height())) {
@@ -372,31 +488,13 @@ private:
 ******************************************************************************
 */
 
-// Should a redraw put up a wait cursor? Windows' wi.fHourglass, same
-// default (xdata.cpp:130). Applied by RedrawQt().
-static flag fHourglassQt = fTrue;
+flag FNoUpdateQt() { return qi.fNoUpdate; }
+void SetNoUpdateQt(flag f) { qi.fNoUpdate = f; }
 
-// Windows' wi.fNoUpdate: suppress automatic redraws, so a run of setting
-// changes doesn't repaint after every one. Redraw Screen still works, and
-// goes through RedrawForceQt() to say so explicitly.
-static flag fNoUpdateQt = fFalse;
-
-flag FNoUpdateQt() { return fNoUpdateQt; }
-void SetNoUpdateQt(flag f) { fNoUpdateQt = f; }
-
-// Windows' wi.fNoPopup and wi.fBmpWindow, which File Settings edits. The
-// first suppresses warning message boxes; the second says a chart bitmap
-// should be grabbed from the window rather than redrawn, which is what
-// CopyChartBitmapQt() already does, so it is kept for the setting's sake.
-static flag fNoPopupQt = fFalse, fBmpWindowQt = fTrue;
-// The session's one network manager; see FGetUrlQt() for why it is not
-// created per fetch. Torn down in FinalizeQt().
-static QNetworkAccessManager *s_pnamQt = NULL;
-
-flag FNoPopupQt() { return fNoPopupQt; }
-void SetNoPopupQt(flag f) { fNoPopupQt = f; }
-flag FBmpWindowQt() { return fBmpWindowQt; }
-void SetBmpWindowQt(flag f) { fBmpWindowQt = f; }
+flag FNoPopupQt() { return qi.fNoPopup; }
+void SetNoPopupQt(flag f) { qi.fNoPopup = f; }
+flag FBmpWindowQt() { return qi.fBmpWindow; }
+void SetBmpWindowQt(flag f) { qi.fBmpWindow = f; }
 
 
 
@@ -409,10 +507,10 @@ static void ClearTextWindowQt();   // defined with the text window below
 // scrollbars whenever that doesn't fit in the window.
 void ApplySizeModeQt()
 {
-  if (s_pscroll == NULL || gi.qcanvas == NULL)
+  if (qi.pscroll == NULL || gi.qcanvas == NULL)
     return;
-  s_pscroll->setWidgetResizable(fWindowChartQt != fFalse);
-  if (!fWindowChartQt && gs.xWin >= 1 && gs.yWin >= 1)
+  qi.pscroll->setWidgetResizable(qi.fWindowChart != fFalse);
+  if (!qi.fWindowChart && gs.xWin >= 1 && gs.yWin >= 1)
     gi.qcanvas->resize(gs.xWin, gs.yWin);
 }
 
@@ -423,13 +521,13 @@ void ApplySizeModeQt()
 // isn't chart viewport and keep that much.
 void ResizeWindowToChartQt()
 {
-  if (gi.qwind == NULL || s_pscroll == NULL || !us.fGraphics)
+  if (gi.qwind == NULL || qi.pscroll == NULL || !us.fGraphics)
     return;
   if (gs.xWin < 1)
     gs.xWin = DEFAULTX;
   if (gs.yWin < 1)
     gs.yWin = DEFAULTY;
-  QSize sizeExtra = gi.qwind->size() - s_pscroll->viewport()->size();
+  QSize sizeExtra = gi.qwind->size() - qi.pscroll->viewport()->size();
   gi.qwind->resize(QSize(gs.xWin, gs.yWin) + sizeExtra);
 }
 
@@ -437,9 +535,9 @@ void ResizeWindowToChartQt()
 // Size Chart to Window: adopt the viewport's size as the chart's.
 void SizeChartToWindowQt()
 {
-  if (s_pscroll == NULL)
+  if (qi.pscroll == NULL)
     return;
-  QSize size = s_pscroll->viewport()->size();
+  QSize size = qi.pscroll->viewport()->size();
 
   if (size.width() < 1 || size.height() < 1)
     return;
@@ -487,10 +585,10 @@ void ClearScreenQt()
 // scrollbars, so these just drive them.
 void ScrollChartQt(int nDir)
 {
-  if (s_pscroll == NULL)
+  if (qi.pscroll == NULL)
     return;
-  QScrollBar *psb = s_pscroll->verticalScrollBar();
-  QScrollBar *psbH = s_pscroll->horizontalScrollBar();
+  QScrollBar *psb = qi.pscroll->verticalScrollBar();
+  QScrollBar *psbH = qi.pscroll->horizontalScrollBar();
 
   switch (nDir) {
   case -1: psb->setValue(psb->value() - psb->pageStep()); break;
@@ -555,10 +653,6 @@ void PrintWarningQt(CONST char *sz, flag fError)
 // the same into gi.qim, so pressing V switches what the window shows
 // rather than opening a second window beside it.
 
-static int s_xCharQt = 8, s_yCharQt = 12;
-static KV s_kvTextQt = 0;
-static QFont s_fontTextQt;
-
 // Windows draws text charts in "Terminal", a bitmap font whose glyphs are
 // exactly the 8x12 cell it lays them out on, which is why they come out
 // crisp. Forcing a TrueType face into that same cell doesn't: at 12 pixels
@@ -573,21 +667,21 @@ static void SetTextMetricsQt()
 {
   int nPix = Max(gs.nScale * 13 / 200, 9);
 
-  s_fontTextQt = QFont("Liberation Mono");
-  s_fontTextQt.setPixelSize(nPix);
-  s_fontTextQt.setFixedPitch(fTrue);
-  s_fontTextQt.setStyleHint(QFont::Monospace, QFont::PreferQuality);
-  QFontMetrics fm(s_fontTextQt);
-  s_xCharQt = fm.horizontalAdvance(QChar('M'));
-  s_yCharQt = fm.height();
-  if (s_xCharQt < 1) s_xCharQt = 8;
-  if (s_yCharQt < 1) s_yCharQt = 12;
+  qi.fontText = QFont("Liberation Mono");
+  qi.fontText.setPixelSize(nPix);
+  qi.fontText.setFixedPitch(fTrue);
+  qi.fontText.setStyleHint(QFont::Monospace, QFont::PreferQuality);
+  QFontMetrics fm(qi.fontText);
+  qi.xChar = fm.horizontalAdvance(QChar('M'));
+  qi.yChar = fm.height();
+  if (qi.xChar < 1) qi.xChar = 8;
+  if (qi.yChar < 1) qi.yChar = 12;
 }
 
 // Called from AnsiColor() (general.cpp) for each colour change.
 void TextColorQt(KI ki)
 {
-  s_kvTextQt = KvFromKi(ki);
+  qi.kvText = KvFromKi(ki);
 }
 
 // Called from PrintSz() (general.cpp) for each character, with the cell
@@ -602,9 +696,9 @@ void TextCharQt(int xCell, int yCell, int ch)
   // map the high bytes to what they mean rather than showing Latin-1.
   if ((uchar)ch >= 128 && us.nCharset != ccLatin)
     wch = WchFromChIBM((uchar)ch);
-  gi.qpaint->setPen(QColor(RgbR(s_kvTextQt), RgbG(s_kvTextQt),
-    RgbB(s_kvTextQt)));
-  gi.qpaint->drawText(xCell * s_xCharQt + 4, (yCell + 1) * s_yCharQt,
+  gi.qpaint->setPen(QColor(RgbR(qi.kvText), RgbG(qi.kvText),
+    RgbB(qi.kvText)));
+  gi.qpaint->drawText(xCell * qi.xChar + 4, (yCell + 1) * qi.yChar,
     QString(QChar(wch)));
 }
 
@@ -620,14 +714,11 @@ void TextCharQt(int xCell, int yCell, int ch)
 // Same trick already proven by ShowExportTextDialogQt() in qtdialog.cpp,
 // just re-shown in a window instead of left on disk.
 
-static QDialog *s_pdlgText = NULL;
-static QTextBrowser *s_ptextBrowser = NULL;
-
 // Clear Screen in text mode, the counterpart of Windows' TextClearScreen().
 static void ClearTextWindowQt()
 {
-  if (s_ptextBrowser != NULL)
-    s_ptextBrowser->clear();
+  if (qi.ptextBrowser != NULL)
+    qi.ptextBrowser->clear();
 }
 
 // Shared by RedrawTextQt() and the Edit menu's Copy Chart Text Output --
@@ -834,32 +925,32 @@ static void RedrawTextQt()
 {
   QString qsHtml = CaptureTextChartQt(fTrue);
 
-  if (s_pdlgText == NULL) {
-    s_pdlgText = new QDialog(gi.qwind, Qt::Window);
-    s_pdlgText->setWindowTitle("Text Chart");
-    s_pdlgText->resize(700, 550);
-    QVBoxLayout *playout = new QVBoxLayout(s_pdlgText);
-    s_ptextBrowser = new QTextBrowser();
-    s_ptextBrowser->setStyleSheet("background-color: black;");
-    playout->addWidget(s_ptextBrowser);
+  if (qi.pdlgText == NULL) {
+    qi.pdlgText = new QDialog(gi.qwind, Qt::Window);
+    qi.pdlgText->setWindowTitle("Text Chart");
+    qi.pdlgText->resize(700, 550);
+    QVBoxLayout *playout = new QVBoxLayout(qi.pdlgText);
+    qi.ptextBrowser = new QTextBrowser();
+    qi.ptextBrowser->setStyleSheet("background-color: black;");
+    playout->addWidget(qi.ptextBrowser);
     // Text charts live in this window rather than on the canvas, so
     // their context menus hang off here. Replaces QTextBrowser's own
     // copy/select-all menu, the same way Windows replaces the default.
-    AddHotkeysToWindowQt(s_pdlgText);
-    s_ptextBrowser->setContextMenuPolicy(Qt::CustomContextMenu);
-    QObject::connect(s_ptextBrowser, &QWidget::customContextMenuRequested,
-      s_ptextBrowser, [](CONST QPoint &pt) {
+    AddHotkeysToWindowQt(qi.pdlgText);
+    qi.ptextBrowser->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(qi.ptextBrowser, &QWidget::customContextMenuRequested,
+      qi.ptextBrowser, [](CONST QPoint &pt) {
         QMenu *pmenu = PmenuContextForTextQt();
         if (pmenu == NULL)
           return;
-        pmenu->exec(s_ptextBrowser->mapToGlobal(pt));
+        pmenu->exec(qi.ptextBrowser->mapToGlobal(pt));
         delete pmenu;
       });
   }
-  s_ptextBrowser->setHtml(qsHtml);
-  s_pdlgText->show();
-  s_pdlgText->raise();
-  s_pdlgText->activateWindow();
+  qi.ptextBrowser->setHtml(qsHtml);
+  qi.pdlgText->show();
+  qi.pdlgText->raise();
+  qi.pdlgText->activateWindow();
 }
 
 
@@ -897,17 +988,17 @@ static void CopyChartBitmapQt()
 
 void RedrawForceQt()
 {
-  flag fSav = fNoUpdateQt;
+  flag fSav = qi.fNoUpdate;
 
-  fNoUpdateQt = fFalse;
+  qi.fNoUpdate = fFalse;
   RedrawQt();
-  fNoUpdateQt = fSav;
+  qi.fNoUpdate = fSav;
 }
 
 
 void RedrawQt()
 {
-  if (fNoUpdateQt)
+  if (qi.fNoUpdate)
     return;
   // Astrolog's own Action() calls this before every chart it renders, and
   // the drawing code depends on it: InitColors() is what turns the
@@ -918,8 +1009,8 @@ void RedrawQt()
   // Note this is a different function from InitColorsX() in xscreen.cpp,
   // which sets up the backend palette instead.
   InitColors();
-  if (s_pdlgText != NULL)
-    s_pdlgText->hide();
+  if (qi.pdlgText != NULL)
+    qi.pdlgText->hide();
   if (gi.qim != NULL) {
     delete gi.qim;
     gi.qim = NULL;
@@ -952,8 +1043,8 @@ void RedrawQt()
   // text chart instead of going black while a second window holds it.
   if (!us.fGraphics) {
     SetTextMetricsQt();
-    gi.qpaint->setFont(s_fontTextQt);
-    s_kvTextQt = KvFromKi(kLtGrayA);
+    gi.qpaint->setFont(qi.fontText);
+    qi.kvText = KvFromKi(kLtGrayA);
     is.cchRow = is.cchCol = is.cchColMax = 0;
     FILE *fileSav = is.S;
     is.S = stdout;
@@ -984,10 +1075,10 @@ void RedrawQt()
   // anything drawn rather than written to a vector file.
   gi.nScaleT = 1;
   AdjustTextScale();
-  if (fHourglassQt)
+  if (qi.fHourglass)
     QApplication::setOverrideCursor(Qt::WaitCursor);
   DrawChartX();
-  if (fHourglassQt)
+  if (qi.fHourglass)
     QApplication::restoreOverrideCursor();
   delete gi.qpaint;
   gi.qpaint = NULL;
@@ -998,13 +1089,13 @@ void RedrawQt()
     // With the chart keeping its own size, the canvas has to be resized to
     // match whenever the chart changes size, or the scroll area would keep
     // scrolling over the old extent.
-    if (!fWindowChartQt &&
+    if (!qi.fWindowChart &&
       (gi.qcanvas->width() != gs.xWin || gi.qcanvas->height() != gs.yWin))
       gi.qcanvas->resize(gs.xWin, gs.yWin);
     gi.qcanvas->update();
   }
   // Chart Resizes Window: fit the window around whatever was just drawn.
-  if (fChartWindowQt)
+  if (qi.fChartWindow)
     ResizeWindowToChartQt();
 #ifdef EXPRESS
   // Notify AstroExpression the screen has just been redrawn, as Windows
@@ -1054,35 +1145,28 @@ void RecastAndRedrawQt()
 // wdriver.cpp:1611) -- one reusable helper here instead of hand written
 // code per item.
 
-// Menu items that a dialog can also change, so they need re-syncing when
-// it closes -- the job Windows does with the WiCheckMenu() calls sprinkled
-// through DlgCalc and DlgDisplay.
-static QAction *s_paSeconds = NULL, *s_paApplying = NULL;
-static QAction *s_paSolar = NULL, *s_paHouse3D = NULL, *s_paDwad = NULL;
-static QAction *s_paProgress = NULL;
-
 void SyncProgressMenuQt()
 {
-  if (s_paProgress != NULL)
-    s_paProgress->setChecked(us.fProgress != 0);
+  if (qi.paProgress != NULL)
+    qi.paProgress->setChecked(us.fProgress != 0);
 }
 
 void SyncDisplayMenuQt()
 {
-  if (s_paSeconds != NULL)
-    s_paSeconds->setChecked(us.fSeconds != 0);
-  if (s_paApplying != NULL)
-    s_paApplying->setChecked(us.nAppSep == 1);
+  if (qi.paSeconds != NULL)
+    qi.paSeconds->setChecked(us.fSeconds != 0);
+  if (qi.paApplying != NULL)
+    qi.paApplying->setChecked(us.nAppSep == 1);
 }
 
 void SyncHouseSetMenuQt()
 {
-  if (s_paSolar != NULL)
-    s_paSolar->setChecked(us.objOnAsc != 0);
-  if (s_paHouse3D != NULL)
-    s_paHouse3D->setChecked(us.fHouse3D != 0);
-  if (s_paDwad != NULL)
-    s_paDwad->setChecked(us.nDwad > 0);
+  if (qi.paSolar != NULL)
+    qi.paSolar->setChecked(us.objOnAsc != 0);
+  if (qi.paHouse3D != NULL)
+    qi.paHouse3D->setChecked(us.fHouse3D != 0);
+  if (qi.paDwad != NULL)
+    qi.paDwad->setChecked(us.nDwad > 0);
 }
 
 static QAction *AddToggleAction(QMenu *pmenu, CONST char *szLabel,
@@ -1126,34 +1210,18 @@ static QAction *AddSelectAction(QMenu *pmenu, QActionGroup *pgroup,
 }
 
 
-// The Chart menu's chart-type radio items, tracked separately from ordinary
-// AddSelectAction groups because chart mode can also change from outside
-// the menu (the Transits dialog) -- SetChartModeQt() looks up the action
-// matching whatever mode was just applied and checks it, regardless of who
-// called it. Sized generously; only 16 slots are used as of this writing.
-
-static QAction *s_rgpaChartMode[64];
-static int s_rgnChartMode[64];
-static int s_cChartMode = 0;
-
-// Shared across the Chart menu's 16 chart type items and the Graphics
-// menu's 5 sphere/globe/map view items -- Windows treats chart type as one
-// unified radio state (wi.cmdCur/rgcmdMode) no matter which menu changed
-// it, so all 21 items here belong to the same exclusive group.
-static QActionGroup *s_pgroupChartMode = NULL;
-
 static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
   int mode)
 {
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
-  pa->setActionGroup(s_pgroupChartMode);
+  pa->setActionGroup(qi.pgroupChartMode);
   ConnectMenuQt(pa, pa, [mode]() {
     SetChartModeQt(mode);
   });
-  s_rgpaChartMode[s_cChartMode] = pa;
-  s_rgnChartMode[s_cChartMode] = mode;
-  s_cChartMode++;
+  qi.rgpaChartMode[qi.cChartMode] = pa;
+  qi.rgnChartMode[qi.cChartMode] = mode;
+  qi.cChartMode++;
   return pa;
 }
 
@@ -1166,15 +1234,13 @@ static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
 // checkbox in sync, the same way Colored Text/Show Interpretations already
 // do when they force text mode -- set once BuildViewMenu() runs.
 
-static QAction *s_paGraphics = NULL;
-
 // Keep the View menu's Show Graphics tick honest when something other than
 // that menu item changes the mode -- the Transits dialog does, since its
 // list chart types are text only.
 void SyncGraphicsMenuQt()
 {
-  if (s_paGraphics != NULL)
-    s_paGraphics->setChecked(us.fGraphics != 0);
+  if (qi.paGraphics != NULL)
+    qi.paGraphics->setChecked(us.fGraphics != 0);
 }
 
 static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
@@ -1182,16 +1248,16 @@ static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
 {
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
-  pa->setActionGroup(s_pgroupChartMode);
+  pa->setActionGroup(qi.pgroupChartMode);
   ConnectMenuQt(pa, pa, [mode]() {
     us.fGraphics = fFalse;
-    if (s_paGraphics != NULL)
-      s_paGraphics->setChecked(fFalse);
+    if (qi.paGraphics != NULL)
+      qi.paGraphics->setChecked(fFalse);
     SetChartModeQt(mode);
   });
-  s_rgpaChartMode[s_cChartMode] = pa;
-  s_rgnChartMode[s_cChartMode] = mode;
-  s_cChartMode++;
+  qi.rgpaChartMode[qi.cChartMode] = pa;
+  qi.rgnChartMode[qi.cChartMode] = mode;
+  qi.cChartMode++;
   return pa;
 }
 
@@ -1237,9 +1303,9 @@ static void CheckChartModeMenuQt(int mode)
 {
   int i;
 
-  for (i = 0; i < s_cChartMode; i++)
-    if (s_rgnChartMode[i] == mode) {
-      s_rgpaChartMode[i]->setChecked(true);
+  for (i = 0; i < qi.cChartMode; i++)
+    if (qi.rgnChartMode[i] == mode) {
+      qi.rgpaChartMode[i]->setChecked(true);
       break;
     }
 }
@@ -1312,10 +1378,6 @@ int CChartModeQt()
 // Switch relationship chart type, mirroring Windows' SetRel()
 // (wdriver.cpp:267-281).
 
-static QAction *s_rgpaRel[16];
-static int s_rgnRel[16];
-static int s_cRel = 0;
-
 void SetRelQt(int rc)
 {
   CI ciT;
@@ -1335,9 +1397,9 @@ void SetRelQt(int rc)
   // through rcHexaWheel. Matching rc exactly would find no menu item for
   // those and leave the bullet wherever it happened to be.
   rcMenu = FBetween(rc, rcHexaWheel, rcDual) ? rcDual : rc;
-  for (i = 0; i < s_cRel; i++)
-    if (s_rgnRel[i] == rcMenu) {
-      s_rgpaRel[i]->setChecked(true);
+  for (i = 0; i < qi.cRel; i++)
+    if (qi.rgnRel[i] == rcMenu) {
+      qi.rgpaRel[i]->setChecked(true);
       break;
     }
   RecastAndRedrawQt();
@@ -1370,9 +1432,9 @@ static QAction *AddRelAction(QMenu *pmenu, QActionGroup *pgroup,
   ConnectMenuQt(pa, pa, [rc, fToggle]() {
     SetRelQt(fToggle ? (us.nRel ? rcNone : rcDual) : rc);
   });
-  s_rgpaRel[s_cRel] = pa;
-  s_rgnRel[s_cRel] = rc;
-  s_cRel++;
+  qi.rgpaRel[qi.cRel] = pa;
+  qi.rgnRel[qi.cRel] = rc;
+  qi.cRel++;
   return pa;
 }
 
@@ -1475,12 +1537,12 @@ static void BuildViewMenu(QMainWindow *pwind)
   // draw for them, so toggling straight back left the window blank.
   // Zeroing gi.nMode makes RedrawQt() work one out from the chart flags,
   // which is what Windows does by way of ProcessState() and FActionX().
-  s_paGraphics = pmenu->addAction("Show &Graphics");
-  s_paGraphics->setCheckable(fTrue);
-  s_paGraphics->setChecked(us.fGraphics != 0);
-  ConnectMenuQt(s_paGraphics, pwind, []() {
+  qi.paGraphics = pmenu->addAction("Show &Graphics");
+  qi.paGraphics->setCheckable(fTrue);
+  qi.paGraphics->setChecked(us.fGraphics != 0);
+  ConnectMenuQt(qi.paGraphics, pwind, []() {
     us.fGraphics = !us.fGraphics;
-    s_paGraphics->setChecked(us.fGraphics != 0);
+    qi.paGraphics->setChecked(us.fGraphics != 0);
     if (us.fGraphics)
       gi.nMode = 0;
     RedrawQt();
@@ -1500,31 +1562,31 @@ static void BuildViewMenu(QMainWindow *pwind)
     []() { ClearScreenQt(); });
   QAction *paHourglass = pmenuWin->addAction("&Hourglass on Redraw");
   paHourglass->setCheckable(true);
-  paHourglass->setChecked(fHourglassQt != fFalse);
+  paHourglass->setChecked(qi.fHourglass != fFalse);
   ConnectMenuQt(paHourglass, pwind,
     [paHourglass]() {
-      fHourglassQt = !fHourglassQt;
-      paHourglass->setChecked(fHourglassQt != fFalse);
+      qi.fHourglass = !qi.fHourglass;
+      paHourglass->setChecked(qi.fHourglass != fFalse);
     });
   pmenuWin->addSeparator();
 
   QAction *paChartWin = pmenuWin->addAction("Ch&art Resizes Window");
   paChartWin->setCheckable(true);
-  paChartWin->setChecked(fChartWindowQt != fFalse);
+  paChartWin->setChecked(qi.fChartWindow != fFalse);
   ConnectMenuQt(paChartWin, pwind,
     [paChartWin]() {
-      fChartWindowQt = !fChartWindowQt;
-      paChartWin->setChecked(fChartWindowQt != fFalse);
-      if (fChartWindowQt)
+      qi.fChartWindow = !qi.fChartWindow;
+      paChartWin->setChecked(qi.fChartWindow != fFalse);
+      if (qi.fChartWindow)
         ResizeWindowToChartQt();
     });
   QAction *paWinChart = pmenuWin->addAction("&Window Resizes Chart");
   paWinChart->setCheckable(true);
-  paWinChart->setChecked(fWindowChartQt != fFalse);
+  paWinChart->setChecked(qi.fWindowChart != fFalse);
   ConnectMenuQt(paWinChart, pwind,
     [paWinChart]() {
-      fWindowChartQt = !fWindowChartQt;
-      paWinChart->setChecked(fWindowChartQt != fFalse);
+      qi.fWindowChart = !qi.fWindowChart;
+      paWinChart->setChecked(qi.fWindowChart != fFalse);
       ApplySizeModeQt();
     });
   QAction *paSizeChart = pmenuWin->addAction("Si&ze Chart to Window");
@@ -1564,7 +1626,7 @@ static void BuildViewMenu(QMainWindow *pwind)
       us.fAnsiChar = !us.fAnsiChar;
       paColorText->setChecked(us.fAnsiColor != 0);
       us.fGraphics = fFalse;
-      s_paGraphics->setChecked(fFalse);
+      qi.paGraphics->setChecked(fFalse);
       RedrawQt();
     });
   QAction *paColors = pmenu->addAction("&Set Colors...");
@@ -1579,10 +1641,10 @@ static void BuildViewMenu(QMainWindow *pwind)
       us.fInterpret = !us.fInterpret;
       paInterpret->setChecked(us.fInterpret != 0);
       us.fGraphics = fFalse;
-      s_paGraphics->setChecked(fFalse);
+      qi.paGraphics->setChecked(fFalse);
       RedrawQt();
     });
-  s_paSeconds = AddToggleAction(pmenu, "Print &Nearest Second", &us.fSeconds,
+  qi.paSeconds = AddToggleAction(pmenu, "Print &Nearest Second", &us.fSeconds,
     fFalse);
   AddToggleAction(pmenu, "&Parallel Aspects", &us.fParallel, fFalse);
   // Not AddToggleAction: nAppSep has three values, and the checkmark means
@@ -1590,12 +1652,12 @@ static void BuildViewMenu(QMainWindow *pwind)
   // "us.nAppSep == 1" everywhere (cmdApplying in wdriver.cpp), so Waxing/
   // Waning (2) shows unchecked. The toggle itself is still inv(), which is
   // what Windows does too, oddly enough.
-  s_paApplying = pmenu->addAction("&Applying Aspects");
-  s_paApplying->setCheckable(true);
-  s_paApplying->setChecked(us.nAppSep == 1);
-  ConnectMenuQt(s_paApplying, pwind, []() {
+  qi.paApplying = pmenu->addAction("&Applying Aspects");
+  qi.paApplying->setCheckable(true);
+  qi.paApplying->setChecked(us.nAppSep == 1);
+  ConnectMenuQt(qi.paApplying, pwind, []() {
     us.nAppSep = !us.nAppSep;
-    s_paApplying->setChecked(us.nAppSep == 1);
+    qi.paApplying->setChecked(us.nAppSep == 1);
     RedrawQt();
   });
 }
@@ -1701,21 +1763,12 @@ static void BuildInfoMenu(QMainWindow *pwind)
 // Windows does with the WiCheckMenu() calls at the end of DlgRestrict,
 // DlgStar, and DlgMoons. Only the entries backed by a real flag are
 // tracked; "Include Minors" has none and is derived from ignore[] alone.
-typedef struct {
-  QAction *pa;
-  flag *pfield;
-  int lo, hi;
-  flag fTransit;   // also count the transit set as making this included
-} CATRES;
-static CATRES s_rgcatres[8];
-static int s_ccatres = 0;
-
 void SyncRestrictMenuQt()
 {
   int i, j;
 
-  for (i = 0; i < s_ccatres; i++) {
-    CATRES *pcat = &s_rgcatres[i];
+  for (i = 0; i < qi.ccatres; i++) {
+    CATRES *pcat = &qi.rgcatres[i];
     flag f = fFalse;
     // A category counts as included when anything in its range is
     // unrestricted -- in either the standard or the transit set for most
@@ -1738,8 +1791,8 @@ static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setChecked(pfield != NULL ? *pfield != 0 : !ignore[lo]);
-  if (pfield != NULL && s_ccatres < (int)(sizeof(s_rgcatres)/sizeof(CATRES))) {
-    CATRES *pcat = &s_rgcatres[s_ccatres++];
+  if (pfield != NULL && qi.ccatres < (int)(sizeof(qi.rgcatres)/sizeof(CATRES))) {
+    CATRES *pcat = &qi.rgcatres[qi.ccatres++];
     pcat->pa = pa; pcat->pfield = pfield; pcat->lo = lo; pcat->hi = hi;
     pcat->fTransit = fTransit;
   }
@@ -1764,24 +1817,20 @@ static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
 }
 
 
-// Tracked at file scope so SyncHelioMenuQt() can refresh this checkmark
-// after the Calculation Settings dialog changes the central planet too.
-static QAction *s_paHelio = NULL;
-
 void SyncHelioMenuQt()
 {
-  if (s_paHelio != NULL)
-    s_paHelio->setChecked(us.objCenter != oEar);
+  if (qi.paHelio != NULL)
+    qi.paHelio->setChecked(us.objCenter != oEar);
 }
 
 static void BuildSettingMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&Setting");
   AddToggleAction(pmenu, "&Sidereal Zodiac", &us.fSidereal, fTrue);
-  s_paHelio = pmenu->addAction("He&liocentric");
-  s_paHelio->setCheckable(true);
-  s_paHelio->setChecked(us.objCenter != oEar);
-  ConnectMenuQt(s_paHelio, pwind, []() {
+  qi.paHelio = pmenu->addAction("He&liocentric");
+  qi.paHelio->setCheckable(true);
+  qi.paHelio->setChecked(us.objCenter != oEar);
+  ConnectMenuQt(qi.paHelio, pwind, []() {
     SetCentric(us.objCenter == oEar ? oSun : oEar);
     SyncHelioMenuQt();
     RecastAndRedrawQt();
@@ -1840,19 +1889,19 @@ static void BuildSettingMenu(QMainWindow *pwind)
     &us.nHouseSystem, fTrue);
 
   QMenu *pmenuHouseSet = pmenu->addMenu("House S&ettings");
-  s_paSolar = pmenuHouseSet->addAction("&Solar Chart");
-  s_paSolar->setCheckable(true);
-  s_paSolar->setChecked(us.objOnAsc != 0);
-  ConnectMenuQt(s_paSolar, pwind, []() {
+  qi.paSolar = pmenuHouseSet->addAction("&Solar Chart");
+  qi.paSolar->setCheckable(true);
+  qi.paSolar->setChecked(us.objOnAsc != 0);
+  ConnectMenuQt(qi.paSolar, pwind, []() {
     us.objOnAsc = us.objOnAsc ? 0 : oSun+1;
-    s_paSolar->setChecked(us.objOnAsc != 0);
+    qi.paSolar->setChecked(us.objOnAsc != 0);
     RecastAndRedrawQt();
   });
-  s_paHouse3D = AddToggleAction(pmenuHouseSet, "&3D Houses", &us.fHouse3D,
+  qi.paHouse3D = AddToggleAction(pmenuHouseSet, "&3D Houses", &us.fHouse3D,
     fTrue);
   pmenuHouseSet->addSeparator();
   AddToggleAction(pmenuHouseSet, "Show &Decans", &us.fDecan, fTrue);
-  s_paDwad = AddToggleAction(pmenuHouseSet, "Show D&wads", &us.nDwad, fTrue);
+  qi.paDwad = AddToggleAction(pmenuHouseSet, "Show D&wads", &us.nDwad, fTrue);
   AddToggleAction(pmenuHouseSet, "&Flip Signs with Houses", &us.fFlip, fTrue);
   AddToggleAction(pmenuHouseSet, "&Geodetic Houses", &us.fGeodetic, fTrue);
   pmenuHouseSet->addSeparator();
@@ -1954,12 +2003,12 @@ static void BuildChartMenu(QMainWindow *pwind)
   AddChartModeAction(pmenu, "Risi&ng and Setting", gRising);
   AddChartModeAction(pmenu, "Nea&rest Cities", gLocal);
   // The chart starts on the standard radix; reflect that in the menu. Not
-  // s_rgpaChartMode[0] -- since BuildSettingMenu()'s Planetary Moons items
+  // qi.rgpaChartMode[0] -- since BuildSettingMenu()'s Planetary Moons items
   // share this same group and are added before this menu is built, index 0
   // is no longer reliably "Standard Radix".
-  for (i = 0; i < s_cChartMode; i++)
-    if (s_rgnChartMode[i] == gWheel) {
-      s_rgpaChartMode[i]->setChecked(true);
+  for (i = 0; i < qi.cChartMode; i++)
+    if (qi.rgnChartMode[i] == gWheel) {
+      qi.rgpaChartMode[i]->setChecked(true);
       break;
     }
   pmenu->addSeparator();
@@ -1969,10 +2018,10 @@ static void BuildChartMenu(QMainWindow *pwind)
     []() { ShowTransitDialogQt(); });
   // Windows ticks this while progressions are on (WiCheckMenu with
   // cmdProgress in DlgProgress), so it does here too.
-  s_paProgress = pmenu->addAction("&Progressions...");
-  s_paProgress->setCheckable(fTrue);
-  s_paProgress->setChecked(us.fProgress != 0);
-  ConnectMenuQt(s_paProgress, pwind,
+  qi.paProgress = pmenu->addAction("&Progressions...");
+  qi.paProgress->setCheckable(fTrue);
+  qi.paProgress->setChecked(us.fProgress != 0);
+  ConnectMenuQt(qi.paProgress, pwind,
     []() { ShowProgressDialogQt(); });
   pmenu->addSeparator();
   QAction *paSettings = pmenu->addAction("Chart &Settings...");
@@ -1982,10 +2031,6 @@ static void BuildChartMenu(QMainWindow *pwind)
 
 
 // Windows' Graphics menu (wdriver.cpp cmdGraphics* handlers), in full.
-// "Show Constellation Lines" tracks its own flag here (s_fStarLine) instead
-// of Windows' wi.fStarLine, which lives in the Win32-only WI struct.
-
-static flag s_fStarLine = fFalse;
 
 static void BuildGraphicsMenu(QMainWindow *pwind)
 {
@@ -2100,12 +2145,12 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   // locally here instead and reuse just that logic.
   QAction *paStarLine = pmenuMap->addAction("Show Constellation &Lines");
   paStarLine->setCheckable(true);
-  paStarLine->setChecked(s_fStarLine != 0);
+  paStarLine->setChecked(qi.fStarLine != 0);
   ConnectMenuQt(paStarLine, pwind, [paStarLine]() {
     CONST char **ppch;
-    s_fStarLine = !s_fStarLine;
-    paStarLine->setChecked(s_fStarLine != 0);
-    if (s_fStarLine) {
+    qi.fStarLine = !qi.fStarLine;
+    paStarLine->setChecked(qi.fStarLine != 0);
+    if (qi.fStarLine) {
       for (ppch = szDrawConstelLine; *ppch != NULL; ppch += 2)
         if (!FProcessYXU(ppch[0], ppch[1], ppch != szDrawConstelLine))
           break;
@@ -2302,14 +2347,6 @@ static CONST char *rgszMacroSetQt[8] = {
   "Run Macro (Ctrl+S&hift Set)", "Run Macro (Alt+Sh&ift Set)",
   "Run Macro (Ct&rl+Alt Set)",   "Run Macro (Ctrl+Alt+Shi&ft)" };
 
-// Custom labels set by -WM (a macro slot) and -WM0 (a submenu), which is
-// how a Windows user names their macros in astrolog.as. Windows applies
-// these immediately with ModifyMenu on its Win32-only wi.hmenu; here the
-// switches are processed long before the menu bar exists, so the names are
-// held until BuildMacroMenus() runs. NULL means "keep the default label".
-static char *rgszMacroQt[cMacro];
-static char *rgszMSubQt[cMSub];
-
 static QString SzMacroKeyQt(int iSet, int iKey)
 {
   QString str;
@@ -2362,12 +2399,12 @@ static void BuildMacroMenus(QMenu *pmenu, QMainWindow *pwind)
   int iSet, iKey;
 
   for (iSet = 0; iSet < 8; iSet++) {
-    QMenu *pmenuSet = pmenu->addMenu(iSet < cMSub && rgszMSubQt[iSet] != NULL ?
-      QString(rgszMSubQt[iSet]) : QString(rgszMacroSetQt[iSet]));
+    QMenu *pmenuSet = pmenu->addMenu(iSet < cMSub && qi.rgszMSub[iSet] != NULL ?
+      QString(qi.rgszMSub[iSet]) : QString(rgszMacroSetQt[iSet]));
     for (iKey = 0; iKey < 12; iKey++) {
       int iMacro = iSet*12 + iKey + 1;
-      QAction *pa = pmenuSet->addAction(rgszMacroQt[iMacro-1] != NULL ?
-        QString(rgszMacroQt[iMacro-1]) : QString("Macro %1").arg(iMacro));
+      QAction *pa = pmenuSet->addAction(qi.rgszMacro[iMacro-1] != NULL ?
+        QString(qi.rgszMacro[iMacro-1]) : QString("Macro %1").arg(iMacro));
       // The shortcut makes the key work without opening the menu, which
       // is how Windows' accelerator table has it.
       pa->setShortcut(QKeySequence(SzMacroKeyQt(iSet, iKey)));
@@ -2425,21 +2462,8 @@ static void BuildEditMenu(QMainWindow *pwind)
 }
 
 
-// Windows keeps one Win32 timer running for the entire session and works
-// out inside its WM_TIMER handler whether animation is actually on
-// (wdriver.cpp) -- gs.nAnim's sign is the on/off switch and gi.fPause
-// suspends it. A QTimer does the same job here. Without this the whole
-// Animate menu below Step Forward/Backward sets state that nothing ever
-// consumes, which is exactly how it behaved before this was added.
-static QTimer *s_ptimerAnim = NULL;
-static int s_nTimerDelay = 100;   // Windows' wi.nTimerDelay default
-static int s_nAntialiasQt = 6;    // Windows' wi.nAntialias default (-Wx)
-
-int NAntialiasQt() { return s_nAntialiasQt; }
-void SetAntialiasQt(int n) { s_nAntialiasQt = n; }
-static int s_xWindQt = 0, s_yWindQt = 0;   // Window position from -Ww
-static flag s_fWindPosQt = fFalse;
-
+int NAntialiasQt() { return qi.nAntialias; }
+void SetAntialiasQt(int n) { qi.nAntialias = n; }
 // The animation interval, in milliseconds. Windows keeps this in
 // wi.nTimerDelay, which is Win32-only, so the Qt build owns its own copy;
 // Graphics Settings edits it through these.
@@ -2478,14 +2502,14 @@ void MousePosQt(int *px, int *py)
 
 int NAnimDelayQt()
 {
-  return s_nTimerDelay;
+  return qi.nTimerDelay;
 }
 
 void SetAnimDelayQt(int nDelay)
 {
-  s_nTimerDelay = nDelay;
-  if (s_ptimerAnim != NULL)
-    s_ptimerAnim->setInterval(nDelay);
+  qi.nTimerDelay = nDelay;
+  if (qi.ptimerAnim != NULL)
+    qi.ptimerAnim->setInterval(nDelay);
 }
 
 /*
@@ -2509,15 +2533,15 @@ void SetAnimDelayQt(int nDelay)
 // that must not see them directly.
 CONST char *SzMacroNameQt(int i)
 {
-  return FBetween(i, 0, cMacro-1) ? rgszMacroQt[i] : NULL;
+  return FBetween(i, 0, cMacro-1) ? qi.rgszMacro[i] : NULL;
 }
 
 CONST char *SzMacroSubNameQt(int i)
 {
-  return FBetween(i, 0, cMSub-1) ? rgszMSubQt[i] : NULL;
+  return FBetween(i, 0, cMSub-1) ? qi.rgszMSub[i] : NULL;
 }
 
-flag FHourglassQt() { return fHourglassQt; }
+flag FHourglassQt() { return qi.fHourglass; }
 
 
 int NProcessSwitchesQt(int pos, PARSEIN *pin)
@@ -2553,17 +2577,17 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
       if (FErrorValN("WM", !FValidMacro2(i), i, 1))
         return tcError;
       i--;
-      FCloneSz(pin->argv[2], &rgszMacroQt[i]);
+      FCloneSz(pin->argv[2], &qi.rgszMacro[i]);
     } else {
       if (FErrorValN("WM0", !FBetween(i, 0, cMSub-1), i, 1))
         return tcError;
-      FCloneSz(pin->argv[2], &rgszMSubQt[i]);
+      FCloneSz(pin->argv[2], &qi.rgszMSub[i]);
     }
     darg += 2;
     break;
 
   case 'h':
-    SwitchF(fHourglassQt);
+    SwitchF(qi.fHourglass);
     break;
 
   case 'T':
@@ -2583,7 +2607,7 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
     if (gi.qwind != NULL)
       gi.qwind->move(i, j);
     else {
-      s_xWindQt = i; s_yWindQt = j; s_fWindPosQt = fTrue;
+      qi.xWind = i; qi.yWind = j; qi.fWindPos = fTrue;
     }
     darg += 2;
     break;
@@ -2601,7 +2625,7 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
     if (FErrorArgc("Wx", pin->argc, 1))
       return tcError;
     i = NFromSz(pin->argv[1]);
-    s_nAntialiasQt = i;
+    qi.nAntialias = i;
     darg++;
     break;
 
@@ -2630,8 +2654,8 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
 
 static void StartAnimTimerQt(QMainWindow *pwind)
 {
-  s_ptimerAnim = new QTimer(pwind);
-  QObject::connect(s_ptimerAnim, &QTimer::timeout, pwind, []() {
+  qi.ptimerAnim = new QTimer(pwind);
+  QObject::connect(qi.ptimerAnim, &QTimer::timeout, pwind, []() {
     // Same guard Windows' WM_TIMER uses. Note gs.nAnim < 1 covers both
     // "off" (negative, remembering the rate) and "never set".
     if (gs.nAnim < 1 || gi.fPause)
@@ -2639,7 +2663,7 @@ static void StartAnimTimerQt(QMainWindow *pwind)
     Animate(gs.nAnim, gi.nDir);
     RecastAndRedrawQt();
   });
-  s_ptimerAnim->start(s_nTimerDelay);
+  qi.ptimerAnim->start(qi.nTimerDelay);
 }
 
 
@@ -2660,8 +2684,6 @@ static void StartAnimTimerQt(QMainWindow *pwind)
 // it first" step, which is a divergence from Windows and a deliberate one
 // -- see "Known divergences" in QT_GUI_PLAN.md.
 
-static QAction *s_paAnimRun = NULL, *s_paAnimPause = NULL;
-
 static flag FAnimRunningQt(void) { return gs.nAnim >= 1 && !gi.fPause; }
 
 // The jump rate, never zero: a stopped state still remembers one, and a
@@ -2674,10 +2696,10 @@ static int NAnimRateQt(void)
 
 static void SyncAnimMenuQt(void)
 {
-  if (s_paAnimRun != NULL)
-    s_paAnimRun->setChecked(FAnimRunningQt());
-  if (s_paAnimPause != NULL)
-    s_paAnimPause->setChecked(!FAnimRunningQt());
+  if (qi.paAnimRun != NULL)
+    qi.paAnimRun->setChecked(FAnimRunningQt());
+  if (qi.paAnimPause != NULL)
+    qi.paAnimPause->setChecked(!FAnimRunningQt());
 }
 
 // Start or stop, keeping the rate. Stopped is always the one canonical
@@ -2727,9 +2749,9 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   // Both this and Pause Animation below drive the one running/not-running
   // state, so either starts and either stops. Two names for one switch is
   // upstream's menu, kept for parity; the behaviour behind them is not.
-  s_paAnimRun = pmenu->addAction("Do &Animation");
-  s_paAnimRun->setCheckable(true);
-  ConnectMenuQt(s_paAnimRun, pwind,
+  qi.paAnimRun = pmenu->addAction("Do &Animation");
+  qi.paAnimRun->setCheckable(true);
+  ConnectMenuQt(qi.paAnimRun, pwind,
     []() { SetAnimRunningQt(!FAnimRunningQt()); });
 
   QMenu *pmenuRate = pmenu->addMenu("&Jump Rate");
@@ -2777,9 +2799,9 @@ static void BuildAnimateMenu(QMainWindow *pwind)
 
   // Play/pause. The same one switch as Do Animation above: pressing it
   // when nothing is moving starts it, pressing it again stops it.
-  s_paAnimPause = pmenu->addAction("&Pause Animation");
-  s_paAnimPause->setCheckable(true);
-  ConnectMenuQt(s_paAnimPause, pwind,
+  qi.paAnimPause = pmenu->addAction("&Pause Animation");
+  qi.paAnimPause->setCheckable(true);
+  ConnectMenuQt(qi.paAnimPause, pwind,
     []() { SetAnimRunningQt(!FAnimRunningQt()); });
   AddToggleAction(pmenu, "&Timed Exposure", &gs.fJetTrail, fFalse);
   pmenu->addSeparator();
@@ -2900,7 +2922,7 @@ static void BuildAstrologMenus(QMainWindow *pwind)
   // Allocated before any menu is built, since both BuildSettingMenu()
   // (Planetary Moons chart types) and BuildChartMenu()/BuildGraphicsMenu()
   // add actions to this same shared group.
-  s_pgroupChartMode = new QActionGroup(pwind);
+  qi.pgroupChartMode = new QActionGroup(pwind);
 
   BuildFileMenu(pwind);
   BuildEditMenu(pwind);
@@ -4469,18 +4491,18 @@ void FinalizeQt(void)
 {
   int i;
 
-  if (s_pnamQt != NULL) {
-    delete s_pnamQt;
-    s_pnamQt = NULL;
+  if (qi.pnam != NULL) {
+    delete qi.pnam;
+    qi.pnam = NULL;
   }
 
   for (i = 0; i < cMacro; i++) {
-    DeallocatePIf(rgszMacroQt[i]);
-    rgszMacroQt[i] = NULL;
+    DeallocatePIf(qi.rgszMacro[i]);
+    qi.rgszMacro[i] = NULL;
   }
   for (i = 0; i < cMSub; i++) {
-    DeallocatePIf(rgszMSubQt[i]);
-    rgszMSubQt[i] = NULL;
+    DeallocatePIf(qi.rgszMSub[i]);
+    qi.rgszMSub[i] = NULL;
   }
 }
 
@@ -4533,8 +4555,8 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
   QString strErr;
   flag fCancel = fFalse;
 
-  if (s_pnamQt == NULL)
-    s_pnamQt = new QNetworkAccessManager();
+  if (qi.pnam == NULL)
+    qi.pnam = new QNetworkAccessManager();
 
   QNetworkRequest req((QUrl(QString::fromUtf8(szUrl))));
   if (!req.url().isValid()) {
@@ -4549,7 +4571,7 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
     QString("%1/%2").arg(szAppName).arg(szVersionCore));
   req.setAttribute(QNetworkRequest::Http2AllowedAttribute, true);
 
-  QNetworkReply *prep = s_pnamQt->get(req);
+  QNetworkReply *prep = qi.pnam->get(req);
   QObject::connect(prep, &QNetworkReply::finished, &evloop, &QEventLoop::quit);
 
   // Where the time actually goes. Set ASTROLOG_QT_NETLOG to print it.
@@ -4660,13 +4682,13 @@ void BeginQt()
   gi.qwind = new QMainWindow();
   gi.qwind->setWindowTitle(szAppName);
   gi.qcanvas = new ChartCanvas();
-  s_pscroll = new QScrollArea();
-  s_pscroll->setWidget(gi.qcanvas);
-  s_pscroll->setFrameShape(QFrame::NoFrame);
+  qi.pscroll = new QScrollArea();
+  qi.pscroll->setWidget(gi.qcanvas);
+  qi.pscroll->setFrameShape(QFrame::NoFrame);
   // Center a chart smaller than the window rather than pinning it to the
   // top left corner, which is what Windows does with the leftover space.
-  s_pscroll->setAlignment(Qt::AlignCenter);
-  gi.qwind->setCentralWidget(s_pscroll);
+  qi.pscroll->setAlignment(Qt::AlignCenter);
+  gi.qwind->setCentralWidget(qi.pscroll);
   ApplySizeModeQt();
   BuildAstrologMenus(gi.qwind);
   ApplyHotkeysQt(gi.qwind);
@@ -4674,8 +4696,8 @@ void BeginQt()
   StartAnimTimerQt(gi.qwind);
   gi.qwind->resize(gs.xWin, gs.yWin);
   // A -Ww in astrolog.as was parsed before this window existed.
-  if (s_fWindPosQt)
-    gi.qwind->move(s_xWindQt, s_yWindQt);
+  if (qi.fWindPos)
+    gi.qwind->move(qi.xWind, qi.yWind);
   gi.qwind->show();
 }
 
@@ -4687,7 +4709,7 @@ void BeginQt()
 
 void InteractQt()
 {
-  fQtReady = true;
+  qi.fReady = true;
   RedrawQt();
 #ifdef QTTEST
   // The test binary comes in through the same startup path as the real
@@ -4696,7 +4718,7 @@ void InteractQt()
   exit(NRunQtTestsQt());
 #endif
   gi.qapp->exec();
-  fQtReady = false;
+  qi.fReady = false;
 }
 
 

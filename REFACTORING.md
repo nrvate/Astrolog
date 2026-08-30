@@ -1178,10 +1178,11 @@ statics in qtdriver.cpp (shared chart-mode group, tracking arrays, the
 text window...). *Incident:* gotcha 7 — code assuming
 `s_rgpaChartMode[0]` was "Standard Radix" broke when menu build order
 changed; fixed by lookup-by-value, but the arrays still invite index
-assumptions. *Direction:* gather them into one `QTUI` struct (the
-port's `wi` equivalent) so ownership is visible and the "look up by
-value, never by index" rule (gotcha 7) sits beside the data it
-protects. *Cost:* low, mechanical, port-only — no oracle needed.
+assumptions. **Done 2026-08-30** (work log item
+109): the `QTUI` struct (instance `qi`) holds all ~40 mutable
+statics with their comments; the by-value rule is written on the
+struct; CONST tables stay beside their code. Suite, text captures,
+and pinned-date graphics captures all byte-identical.
 
 ### Area H — data model & headers, surveyed 2026-08-29
 
@@ -1376,8 +1377,9 @@ the way D1's tail and the harvest did):
 - **P8. D3/D4** — the print pipeline's modal global state and
   PrintChart's mode zoo. Survey what a table or context struct would
   actually displace; the text-diff tooling is the ready-made net.
-- **P9. G4** — the Qt port's 29 `s_*` file-scope globals: classify
-  like T1 (wiring vs cache vs scratch), fold the trivial ones.
+- **P9. G4 — done 2026-08-30** (work log item 109): all mutable
+  statics gathered into `QTUI qi`, not just the trivial ones — the
+  classification collapsed to mutable-vs-CONST once read.
 - **P10. C1/C5/C6, G1/G2** — surveyed 2026-08-30, ordered by
   incident risk: **C5 done** (work log item 107, verdict at the
   finding); G1 done (item 108 —

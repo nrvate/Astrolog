@@ -3416,6 +3416,22 @@ are the more useful half to read before starting something new.
     read the row counter before the call under test ran -- sequence
     the call, then print. Suite 3046/0, audits clean.
 
+109. **P9/G4: the port's window state lives in one struct.** The ~40
+    mutable file-scope statics qtdriver.cpp had grown -- tracking
+    arrays, text window, sync'd menu actions, animation timer,
+    resize flags, the network manager -- are a single QTUI struct
+    (instance `qi`) at the top of the file, the port's analogue of
+    Windows' Win32-only WI. Fields keep their site comments; CONST
+    tables stay beside their code; gotcha 7's by-value lookup rule
+    is written on the struct holding the arrays it protects. 219
+    renamed sites, file-local by construction (statics). Nets: suite
+    3046/0, text captures byte-identical, pinned-date 24-chart
+    graphics captures byte-identical old vs. new, live windowed
+    scenario. Capture lesson recorded: unpinned QTGRAPHDIR renders
+    charts of *now* -- two runs of the same binary differ in 23 of
+    24 charts, so a graphics differential must pin -qb on the test
+    binary's command line.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
