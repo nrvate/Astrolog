@@ -594,8 +594,20 @@ reword; valid input behavior is byte-sacred.
   differential (-Z/-Z0/-XZ x default/=YXe/=Yf/both), byte-identical,
   every variant proven distinct. The `FSphere*` family is still
   separate (different geometry, the finding's "plus one").
-- **E1** (one block per target in the drawing primitives) next,
-  with pinned-time captures.
+- **E1 — closed as already-satisfied, 2026-08-29** (work log item
+  86): a shape audit of all 28 xgeneral.cpp primitives found the
+  one-block-per-target order the finding asked for is already the
+  codebase's shape — the QT porting pass touched every primitive and
+  left them normalized. The apparent stragglers are deliberate:
+  DrawFill has no X11 screen branch (X11 offers no flood fill;
+  PS/SVG/wire are commented as not implemented), DrawEllipse2 merely
+  orders QT before X11, and DrawSz's density is dictated by its
+  per-character loop over seven text targets — restructuring it
+  risks text rendering for zero behavioral gain. No code change.
+- **Next: the T3 harvest** — FOutputSettings() as a loop over
+  registry rows under the byte-stable-layout constraint (the
+  round-trip script plus a byte-diff of the saved file is the net),
+  then generated -H help with its explicit ordering list.
 
 **House habits that keep paying:** falsify every new test before
 trusting it; pin renders to literal constants, never to mutable
@@ -913,6 +925,11 @@ one block per target in a fixed order — mechanical, verifiable by the
 becomes a small step afterward instead of a leap, and would let a new
 export format be one file instead of edits to eleven functions.
 *Cost:* normalization low; vtable medium, only if warranted.
+
+**Closed 2026-08-29** (work log item 86): the normalization already
+holds — see the sequencing note. The vtable step remains available if
+an export format is ever added, but there is nothing to normalize
+first anymore.
 
 **E2 — T3's parser family is four, not two.** `NProcessSwitchesX()`
 (xscreen.cpp:1354, ~480 lines) and `NProcessSwitchesRareX()`

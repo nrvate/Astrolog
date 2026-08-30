@@ -3021,6 +3021,19 @@ are the more useful half to read before starting something new.
     pinned-date graphics differentials without a display, window
     manager, or the Qt harness.
 
+86. **E1 closed: the primitives are already normalized.** A shape
+    audit of all 28 xgeneral.cpp drawing primitives (tag-mapping each
+    function's #ifdef/format-branch order) found the
+    one-block-per-target shape E1 asked for already holds everywhere
+    it can: the QT porting pass touched every primitive and left them
+    normalized. The apparent exceptions are deliberate -- DrawFill
+    has no X11 screen branch because X11 offers no flood fill (and
+    PS/SVG/wireframe are commented not-implemented); DrawEllipse2
+    just orders its QT block before X11; DrawSz is dense because a
+    per-character loop must dispatch across seven text targets, and
+    restructuring it risks rendering for no behavioral gain. Verdict
+    recorded in REFACTORING.md; no code change, on purpose.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
