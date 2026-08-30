@@ -994,9 +994,13 @@ void PrintAspectSummary(int *ca, int *co, int count, real rPowSum)
 // Display all aspects between objects in the chart, one per line, in sorted
 // order based on the total "power" of the aspect, as specified with the -a
 // switch. The same influences used for -j charts are used here. This is
-// almost the same as the -D list, except influences are different.
+// almost the same as the -D list, except influences are different. One
+// routine covers both the single chart list and the relationship comparison
+// list (-r0 -a): fRel picks the grid orientation (triangular [j][i] vs. full
+// matrix [i][j]), the position source (planet[] vs. cp1/cp2), the sort keys,
+// the AstroExpression hook, and the line tail that differ between them.
 
-void ChartAspect(void)
+static void ChartAspectCore(flag fRel)
 {
   int ca[cAspect + 1], co[objMax];
   char sz[cchSzDef], *pch;
@@ -1018,17 +1022,28 @@ void ChartAspect(void)
         continue;
       for (j0 = 0; j0 <= is.nObj; j0++) {
         j = rgobjList[j0];
-        if (j >= i || FIgnore(j))
+        if ((!fRel && j >= i) || FIgnore(j))
           continue;
-        k = grid->n[j][i];
+        k = fRel ? grid->n[i][j] : grid->n[j][i];
         if (k > 0) {
           ip = RObjInf(i);
           jp = RObjInf(j);
           p = rAspInf[k] * (ip+jp)/2.0 *
-            (1.0-RAbs(grid->v[j][i])/GetOrb(i, j, k));
+            (1.0-RAbs(fRel ? grid->v[i][j] : grid->v[j][i])/GetOrb(i, j, k));
 #ifdef EXPRESS
-          // Adjust power with AstroExpression if one set.
-          if (!us.fExpOff && FSzSet(us.szExpAspList)) {
+          // Adjust power with AstroExpression if one set. The two lists
+          // pass different letters and only the single chart list passes
+          // eclipse data; each keeps its historical fExpOff guard.
+          if (fRel) {
+            if (FSzSet(us.szExpAspList)) {
+              ExpSetN(iLetterW, i);
+              ExpSetN(iLetterX, k);
+              ExpSetN(iLetterY, j);
+              ExpSetR(iLetterZ, p);
+              ParseExpression(us.szExpAspList);
+              p = RExpGet(iLetterZ);
+            }
+          } else if (!us.fExpOff && FSzSet(us.szExpAspList)) {
             nSav = NCheckEclipseAny(j, k, i, &rT);
             ExpSetN(iLetterU, i);
             ExpSetN(iLetterV, k);
@@ -1042,14 +1057,17 @@ void ChartAspect(void)
 #endif
           switch (us.nAspectSort) {
           default:  v = p;                    break;
-          case aso: v = -RAbs(grid->v[j][i]); break;
-          case asn: v = -grid->v[j][i];       break;
-          case asO: v = -(real)(Min(j0,i0)*cObj + Max(i0,j0)); break;
-          case asP: v = -(real)(Max(i0,j0)*cObj + Min(j0,i0)); break;
-          case asA: v = -(real)(k*cObj*cObj + j*cObj + i);     break;
-          case asC: v = -planet[j];           break;
-          case asD: v = -planet[i];           break;
-          case asM: v = -Midpoint(planet[j], planet[i]);       break;
+          case aso: v = -RAbs(fRel ? grid->v[i][j] : grid->v[j][i]); break;
+          case asn: v = -(fRel ? grid->v[i][j] : grid->v[j][i]);     break;
+          case asO: v = fRel ? -(real)(j0*cObj + i0) :
+            -(real)(Min(j0,i0)*cObj + Max(i0,j0));                   break;
+          case asP: v = fRel ? -(real)(i0*cObj + j0) :
+            -(real)(Max(i0,j0)*cObj + Min(j0,i0));                   break;
+          case asA: v = -(real)(k*cObj*cObj + j*cObj + i);           break;
+          case asC: v = -(fRel ? cp1.obj[j] : planet[j]);            break;
+          case asD: v = -(fRel ? cp2.obj[i] : planet[i]);            break;
+          case asM: v = fRel ? -Midpoint(cp1.obj[j], cp2.obj[i]) :
+            -Midpoint(planet[j], planet[i]);                         break;
           }
           if ((v < vcut || (v == vcut && (i0 > icut ||
             (i0 == icut && j0 > jcut)))) && v > vhi) {
@@ -1068,21 +1086,28 @@ void ChartAspect(void)
     co[j]++; co[i]++;
 #ifdef INTERPRET
     if (us.fInterpret) {                     // Interpret it if -I in effect.
-      InterpretAspect(j, i);
+      if (fRel)
+        InterpretAspectRelation(j, i);
+      else
+        InterpretAspect(j, i);
       AnsiColor(kDefault);
       continue;
     }
 #endif
     sprintf(sz, "%3d: ", count); PrintSz(sz);
-    PrintAspect(i, planetval(i), planetdir(i), ahi,
-      j, planetval(j), planetdir(j), 'a');
-    rT = grid->v[j][i];
+    if (fRel)
+      PrintAspect(j, planetval1(j), planetdir1(j), ahi,
+        i, planetval2(i), planetdir2(i), 'A');
+    else
+      PrintAspect(i, planetval(i), planetdir(i), ahi,
+        j, planetval(j), planetdir(j), 'a');
+    rT = fRel ? grid->v[i][j] : grid->v[j][i];
     AnsiColor(rT < 0.0 ? kWhiteA : kLtGrayA);
     if (fDistance) {
       nSav = us.nDegForm; us.nDegForm = df360;
     }
-    sprintf(sz, " - orb: %c%s", rgchAppSep[us.nAppSep*2 + (rT >= 0.0)],
-      SzDegree2(RAbs(rT)));
+    sprintf(sz, "%s- orb: %c%s", fRel ? "" : " ",
+      rgchAppSep[us.nAppSep*2 + (rT >= 0.0)], SzDegree2(RAbs(rT)));
     if (fDistance) {
       us.nDegForm = nSav;
       for (pch = sz; *pch; pch++)
@@ -1094,7 +1119,11 @@ void ChartAspect(void)
     PrintSz(" - power: ");
     sprintf(sz, us.fSeconds ? "%7.4f" : "%5.2f", phi);
     PrintSz(sz);
-    PrintInDayEvent(j, ahi, i, -1);
+    if (fRel) {
+      PrintL();
+      AnsiColor(kDefault);
+    } else
+      PrintInDayEvent(j, ahi, i, -1);
   }
 
 #ifdef EXPRESS
@@ -1106,6 +1135,23 @@ void ChartAspect(void)
   }
 #endif
   PrintAspectSummary(ca, co, count, rPowSum);
+}
+
+
+// Display all aspects between objects in the chart (-a).
+
+void ChartAspect(void)
+{
+  ChartAspectCore(fFalse);
+}
+
+
+// Display all aspects between objects in the relationship comparison chart
+// (-r0 -a).
+
+void ChartAspectRelation(void)
+{
+  ChartAspectCore(fTrue);
 }
 
 

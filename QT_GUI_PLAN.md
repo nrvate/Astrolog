@@ -2960,6 +2960,23 @@ are the more useful half to read before starting something new.
     turns graphics on. The ad-hoc-differential discipline is now in
     REFACTORING.md's verification recipe.
 
+82. **D1 first pair: the aspect lists share one core.** ChartAspect()
+    and ChartAspectRelation() (~70% identical clones, the pattern that
+    produced item 38) are now wrappers over a static
+    ChartAspectCore(flag fRel) in charts1.cpp; the charts2.cpp copy is
+    deleted. fRel picks the grid orientation, position source, sort
+    keys, AstroExpression letters, interpret routine, and line tail;
+    the search scaffold, ordering logic, and summary exist once.
+    Proven byte-identical over a 32-case differential -- both lists x
+    nine sort keys x parallel/distance/applying/exact, summary,
+    interpret. The differential's first version was green over nothing
+    twice: -a on the command line silently toggled the aspect list OFF
+    (nrvate.as line 281 already sets -ao; the = force-on prefix is
+    required), and grep without -a printed nothing on chart output
+    (binary detection). Both are in REFACTORING.md's recipe now, with
+    the rule: prove the cases differ from each other before trusting
+    a green diff.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

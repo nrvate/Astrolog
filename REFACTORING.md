@@ -511,6 +511,15 @@ and the registry audit reminds you of the last two.
    token — `nrvate.as` switches graphics *on*, so a console run
    without `_X` pops an X window on the real desktop. Forgetting this
    once interrupted a session (C3's first differential attempt).
+   Two more, both found by D1's distinctness check: `nrvate.as`
+   already toggles chart flags (`-ao` line 281), so an ad-hoc case
+   must use the `=` force-on prefix or the switch silently toggles
+   the chart *off* and every case diffs green over the default -v
+   listing; and `grep`/`grep -c` on chart output silently prints
+   nothing without `-a` (ANSI escapes plus degree bytes trip binary
+   detection). After building any case list, prove the cases differ
+   from each other (`cmp` each against the base case) before trusting
+   a green diff.
 3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3036/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
@@ -550,11 +559,13 @@ reword; valid input behavior is byte-sacred.
   guess). Net: 11-case `-v` position differential old-vs-new under
   restriction/backend combinations, byte-identical; suite 3036/0;
   win cross-build.
-- **D1 first pair**: merge `ChartAspect`/`ChartAspectRelation`
-  (charts1.cpp:999 / charts2.cpp:229, ~70% identical) into one core
-  over position sources and iteration domain. Net: old-vs-new binary
-  diff of -a output across sort modes and relationship modes at a
-  fixed date (the matrix method, not the Xvfb tooling).
+- **D1 first pair — done 2026-08-29** (work log item 82): static
+  `ChartAspectCore(flag fRel)` in charts1.cpp; both public names are
+  wrappers, the charts2.cpp copy is deleted. Net: 32-case old-vs-new
+  differential (both lists x all nine sort keys x p/d/a/x variants,
+  summary, interpret), byte-identical. Two harness footguns joined
+  the recipe below. Remaining D1 pairs: Listing, Grid, Midpoint,
+  AstroGraph, and the Interpret trio — same method, one a session.
 - **F1** (projection helper families) and **E1** (one block per
   target in the drawing primitives) after that, with pinned-time
   captures.
@@ -802,6 +813,9 @@ net in the project: `tools/text-chart-capture.sh` +
 `text-chart-diff.py` byte-diff every text chart against the Windows
 build. A pair a session, diff after each. *Cost:* medium, mechanical,
 high confidence.
+
+**First pair done 2026-08-29** (work log item 82): the aspect pair is
+`ChartAspectCore(flag fRel)` in charts1.cpp.
 
 **D2 — DONE 2026-08-29 (work log item 79). The influence stanzas are
 twelve-line clones over table names.**
