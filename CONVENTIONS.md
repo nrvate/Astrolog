@@ -87,6 +87,25 @@ compound word like those; never add another bare word.
 
 ## Output machinery
 
+The text pipeline is modal global state (REFACTORING.md D3); the modes,
+each verified in code:
+
+- `is.S` is where all text goes. `Action()` owns it: opened from
+  `-os`'s filename (else stdout) at the top, closed at the bottom.
+  `PrintSz()` additionally routes `is.S == stdout` into the chart
+  window on the GUI ports (TextCharQt / Win32 TextOut).
+- `is.nHTML` is the `-kh` HTML context: 0 = off, 1 = content
+  (characters entity-escaped, columns counted), 2 = raw markup
+  (tags pass through, no column counting), 3 = "no font tag open
+  yet" (the state `Action()` leaves after the header, so the first
+  `AnsiColor()` skips the closing `</font>`).
+- `AnsiColor()` is a tri-state: `us.fAnsiColor` off emits nothing; on
+  with `is.nHTML <= 0` emits ANSI escapes; on with HTML emits `<font>`
+  tags through the 2->1 dance above. `fAnsiColor >= 2` additionally
+  enables reverse video (`kReverse`).
+- Column layout is hand-counted spaces. Any change that could touch
+  layout is verified with the text-diff tooling
+  (`tools/text-chart-capture.sh` / `text-chart-diff.py`), not by eye.
 - `PrintS()` (charts0.cpp:177) colorizes the help screens by parsing
   the help text's own characters, with static cross-call state.
 - `FieldWord()` accumulates into a static buffer; `FieldWord(NULL)`

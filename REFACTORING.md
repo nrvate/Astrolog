@@ -741,7 +741,16 @@ the core (the Qt port's table is the model; item 13 built it for
 sync already), consumed by `Action()`, `DetectGraphicsChartMode()`, and
 the ports. *Cost:* medium; behavioral risk concentrated in else-if
 order, which the 26 chart-render assertions and Windows text-diff
-cover.
+cover. **Measured 2026-08-30** (P8's survey, work log item 110):
+`rgchartmodeQt[]` is 35 {mode, flag*} rows and Windows'
+`ProcessState()` switch is the same rows longhand, so promotion would
+displace those plus `DetectGraphicsChartMode()`'s 18 else-ifs — row
+order must carry the priority, and `rcBiorhythm` (a value test, not a
+flag) stays a special case. `PrintChart()` is NOT table-shaped:
+sequential byte-sacred print order with heterogeneous per-mode bodies
+(relation-variant splits, per-mode arguments) — the same measured
+no-go as `FOutputSettings()` (item 87). Take the increment with those
+boundaries or not at all.
 
 **A4 — Program lifecycle assumes one shot, GUI runs it forever.**
 `InitProgram()`/`FinalizeProgram()` and friends were written for
@@ -1017,6 +1026,9 @@ likewise accumulates in a static buffer flushed by a `NULL` call.
 *Verdict:* document the modes and the flush conventions (T8) and rely
 on the text-diff tooling as the net for any layout-touching change;
 none of it is worth restructuring on its own. Tagged T1/T8.
+**Documented 2026-08-30** (work log item 110): CONVENTIONS.md
+"Output machinery" carries the is.S/is.nHTML/AnsiColor contract,
+each state verified in code before being written down. D3 closed.
 
 **D4 — `PrintChart()` is the text twin of A3's mode zoo.**
 charts1.cpp:2715 dispatches on the same `us.f*` flag combinations
@@ -1374,9 +1386,12 @@ own concessions, in dependency order):
 reading before they deserve increments; each gets a measured verdict
 the way D1's tail and the harvest did):
 
-- **P8. D3/D4** — the print pipeline's modal global state and
-  PrintChart's mode zoo. Survey what a table or context struct would
-  actually displace; the text-diff tooling is the ready-made net.
+- **P8. D3/D4 — closed 2026-08-30** (work log item 110): D3's
+  modes are documented in CONVENTIONS.md "Output machinery" (its
+  verdict was already document-don't-restructure); D4's survey is
+  recorded at A3 with measured boundaries — the mode table would
+  displace three longhand copies but PrintChart stays, for the same
+  reason FOutputSettings did (item 87).
 - **P9. G4 — done 2026-08-30** (work log item 109): all mutable
   statics gathered into `QTUI qi`, not just the trivial ones — the
   classification collapsed to mutable-vs-CONST once read.

@@ -3432,6 +3432,21 @@ are the more useful half to read before starting something new.
     24 charts, so a graphics differential must pin -qb on the test
     binary's command line.
 
+110. **P8 closes tranche 3: D3 documented, D4 measured.** The print
+    pipeline's modal contract is in CONVENTIONS.md "Output machinery"
+    now -- is.S ownership, the is.nHTML 0/1/2/3 states, AnsiColor's
+    off/ANSI/HTML tri-state -- each state read from the code before
+    being written down (the 3 state exists solely so the first
+    AnsiColor after the HTML header skips its closing </font>). D4's
+    shared flag<->mode table idea is measured onto A3 with its
+    boundaries: the Qt port's 35-row table plus Windows'
+    ProcessState() longhand copy plus DetectGraphicsChartMode()'s 18
+    else-ifs would collapse (row order carrying priority, rcBiorhythm
+    a special case); PrintChart() stays -- byte-sacred sequential
+    order, heterogeneous bodies, the FOutputSettings no-go shape.
+    With P8, phase 2's tranche 3 is complete: P5-P10 all carry
+    done-notes or measured verdicts.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
