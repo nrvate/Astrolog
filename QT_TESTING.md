@@ -139,6 +139,21 @@ Both render and exit without running the assertion suite. `gAspect` and
 no case for either, which is why Windows forces text mode for exactly
 those two.
 
+**Byte-diffing captures requires pinning the chart time.** The captures
+cast whatever chart the startup arguments produce, and with just
+`-i nrvate.as` that is *now* -- two captures from the very same binary
+differ in 23 of 24 images (only `calendar.png` survives). A diff that is
+supposed to prove a change harmless must pin the moment, and extra
+arguments pass straight through `run-qt-tests.sh`:
+
+```sh
+QTGRAPHDIR=out/a ./run-qt-tests.sh -i nrvate.as   -qb 3 15 2020 10:30 0 6:00 87W39 41N51
+```
+
+With the time pinned the images are reproducible to the byte, so
+`diff -rq` between a worktree build of the old commit and the tree's
+build is a real proof (work log item 111 did exactly this).
+
 ## When the suite itself takes the process down
 
 An assertion failure prints and carries on. A *crash* does not, and the
