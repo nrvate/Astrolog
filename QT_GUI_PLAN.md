@@ -3131,6 +3131,19 @@ are the more useful half to read before starting something new.
     lone differing pixels are Fortune's glyph); the described
     behavior is the House Wheel (-w) working as designed.
 
+94. **T1 move (2): borrows have one home.** The Borrow scope guard
+    (astrolog.h, C++ only, all builds are C++) saves at construction
+    and restores at the closing brace on every exit; CONVENTIONS.md
+    carries the rule. Exemplars: the settings writer's two scoped
+    borrows (byte-identical written file, round trip green) and the
+    print path (gotcha 3's site), where two hand-written five-field
+    restore blocks became one closing brace and the out-of-memory
+    warning now fires after the restore, so the repaint behind the
+    modal cannot happen at print scale. The console Makefile links
+    with g++ now -- the guard's destructor is the first thing in the
+    core needing the C++ EH runtime. Conversion of the other ~60 *Sav
+    sites is opportunistic by policy.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

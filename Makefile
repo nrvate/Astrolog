@@ -31,7 +31,7 @@ CPPFLAGS = -O -Wno-write-strings -Wno-narrowing -Wno-comment
 RM = rm -f
 
 $(NAME): $(OBJS)
-	cc -o $(NAME) $(OBJS) $(LIBS)
+	g++ -o $(NAME) $(OBJS) $(LIBS)
 
 # Every object depends on the headers this fork edits constantly; see
 # the same rule in Makefile.qt for why.

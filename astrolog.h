@@ -1430,6 +1430,26 @@ enum _terminationcode {
 #define FSwitchF2(f) (((f) || (fOr || fNot)) && !fAnd)
 #define SwitchF(f) f = FSwitchF(f)
 #define SwitchF2(f) f = FSwitchF2(f)
+
+#ifdef __cplusplus
+// Borrow a settings field for the current scope: saves the value at
+// construction, restores it at the closing brace, whatever exit is
+// taken. The one home for the save/restore idiom (REFACTORING.md T1
+// move 2; CONVENTIONS.md "Borrowing a settings field"). Brace the
+// borrow to match any site that restored mid-function -- the restore
+// happens at the brace, nowhere else.
+template <class T> class Borrow {
+private:
+  T *pt;
+  T tSav;
+public:
+  Borrow(T &t) : pt(&t), tSav(t) {}
+  Borrow(T &t, T tNew) : pt(&t), tSav(t) { t = tNew; }
+  ~Borrow() { *pt = tSav; }
+  Borrow(const Borrow &) = delete;
+  Borrow &operator=(const Borrow &) = delete;
+};
+#endif
 #define SetCI(ci, M, D, Y, T, S, Z, O, A) \
   ci.mon = M; ci.day = D; ci.yea = Y; \
   ci.tim = T; ci.dst = S; ci.zon = Z; ci.lon = O; ci.lat = A

@@ -667,56 +667,58 @@ void PrintChartQt()
     return;
   }
 
-  int xSav = gs.xWin, ySav = gs.yWin;
-  int nScaleSav = gs.nScale, nScaleTextSav = gs.nScaleText;
-  flag fInverseSav = gs.fInverse;
-  QImage *pqimSav = gi.qim;
-  QPainter *pqpaintSav = gi.qpaint;
+  flag fNoMemory = fFalse;
+  {
+    // Borrow the render geometry and both canvas pointers; the closing
+    // brace restores all seven on every exit, which is what the two
+    // hand-written restore blocks here used to do (gotcha 3's site).
+    Borrow bx(gs.xWin), by(gs.yWin);
+    Borrow bs(gs.nScale), bst(gs.nScaleText);
+    Borrow bi(gs.fInverse);
+    Borrow bqim(gi.qim);
+    Borrow bqpaint(gi.qpaint);
 
-  // Scale the text along with everything else. Windows only scales
-  // gs.nScale, because it draws text through GDI at the printer's own
-  // resolution; rendering into an image here means the sidebar has to
-  // grow with the canvas or it comes out as an unreadable sliver.
-  gs.xWin *= PRINTMUL; gs.yWin *= PRINTMUL;
-  gs.nScale *= PRINTMUL; gs.nScaleText *= PRINTMUL;
-  if (us.fSmartSave)
-    gs.fInverse = fTrue;
+    // Scale the text along with everything else. Windows only scales
+    // gs.nScale, because it draws text through GDI at the printer's own
+    // resolution; rendering into an image here means the sidebar has to
+    // grow with the canvas or it comes out as an unreadable sliver.
+    gs.xWin *= PRINTMUL; gs.yWin *= PRINTMUL;
+    gs.nScale *= PRINTMUL; gs.nScaleText *= PRINTMUL;
+    if (us.fSmartSave)
+      gs.fInverse = fTrue;
 
-  gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
-  if (gi.qim->isNull()) {
-    delete gi.qim;
-    gi.qim = pqimSav;
-    gs.xWin = xSav; gs.yWin = ySav;
-    gs.nScale = nScaleSav; gs.nScaleText = nScaleTextSav;
-    gs.fInverse = fInverseSav;
+    gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
+    if (gi.qim->isNull()) {
+      delete gi.qim;
+      fNoMemory = fTrue;
+    } else {
+      gi.qim->fill(gs.fInverse ? Qt::white : Qt::black);
+      gi.qpaint = new QPainter(gi.qim);
+      InitColors();
+      gi.nScaleT = 1;
+      AdjustTextScale();
+      DrawChartX();
+      delete gi.qpaint;
+
+      // Fit the rendered chart to the page, keeping its aspect ratio.
+      QPainter painter(&printer);
+      QRect rect = painter.viewport();
+      QSize size = gi.qim->size();
+      size.scale(rect.size(), Qt::KeepAspectRatio);
+      painter.setViewport(rect.x(), rect.y(), size.width(), size.height());
+      painter.setWindow(gi.qim->rect());
+      painter.drawImage(0, 0, *gi.qim);
+      painter.end();
+      delete gi.qim;
+    }
+  }
+  if (fNoMemory) {
+    // After the restore on purpose: the warning is modal, and a repaint
+    // behind it must not happen at the print scale.
     QMessageBox::warning(gi.qwind, szAppName,
       "Not enough memory to render the chart for printing.");
     return;
   }
-  gi.qim->fill(gs.fInverse ? Qt::white : Qt::black);
-  gi.qpaint = new QPainter(gi.qim);
-  InitColors();
-  gi.nScaleT = 1;
-  AdjustTextScale();
-  DrawChartX();
-  delete gi.qpaint;
-
-  // Fit the rendered chart to the page, keeping its aspect ratio.
-  QPainter painter(&printer);
-  QRect rect = painter.viewport();
-  QSize size = gi.qim->size();
-  size.scale(rect.size(), Qt::KeepAspectRatio);
-  painter.setViewport(rect.x(), rect.y(), size.width(), size.height());
-  painter.setWindow(gi.qim->rect());
-  painter.drawImage(0, 0, *gi.qim);
-  painter.end();
-
-  delete gi.qim;
-  gi.qim = pqimSav;
-  gi.qpaint = pqpaintSav;
-  gs.xWin = xSav; gs.yWin = ySav;
-  gs.nScale = nScaleSav; gs.nScaleText = nScaleTextSav;
-  gs.fInverse = fInverseSav;
   RedrawQt();
 }
 

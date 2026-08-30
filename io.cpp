@@ -1416,9 +1416,10 @@ flag FOutputSettings()
     "; \"File / Save Program Settings\" menu command, or with the -od "
     "command switch.\n\n");
 
-  f1 = us.fSeconds; us.fSeconds = fTrue;
-  sprintf(sz, "-z %s                ", SzZone(ciDefa.zon)); PrintFSz();
-  us.fSeconds = f1;
+  {
+    Borrow bSec(us.fSeconds, fTrue);
+    sprintf(sz, "-z %s                ", SzZone(ciDefa.zon)); PrintFSz();
+  }
   PrintF("; Default time zone     [hours W or E of UTC   ]\n");
   if (ciDefa.dst != dstAuto)
     sprintf(sz, "-z0 %d                   ", (int)ciDefa.dst);
@@ -1426,10 +1427,11 @@ flag FOutputSettings()
     sprintf(sz, "-z0 Autodetect          ");
   PrintFSz();
   PrintF("; Default Daylight time [0 standard, 1 daylight]\n");
-  f1 = us.fAnsiChar; us.fAnsiChar = 3;
-  f2 = us.fSeconds; us.fSeconds = fTrue;
-  sprintf(sz, "-zl %s  ", SzLocation(ciDefa.lon, ciDefa.lat)); PrintFSz();
-  us.fAnsiChar = f1; us.fSeconds = f2;
+  {
+    Borrow bAnsi(us.fAnsiChar, 3);
+    Borrow bSec(us.fSeconds, fTrue);
+    sprintf(sz, "-zl %s  ", SzLocation(ciDefa.lon, ciDefa.lat)); PrintFSz();
+  }
   PrintF("; Default location      [longitude and latitude]\n");
   sprintf(sz, "-zv %s               ", SzElevation(us.elvDef)); PrintFSz();
   PrintF("; Default elevation     [in feet or meters     ]\n");

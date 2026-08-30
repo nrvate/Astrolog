@@ -18,7 +18,14 @@ Upstream Hungarian, used consistently enough to trust:
   `grf` bit set, `pfn` function pointer.
 - `*Sav` locals hold a global's saved value around a temporary override;
   the override pattern `fSav = us.fX; us.fX = ...; ...; us.fX = fSav;`
-  is everywhere and is the idiom, not a smell.
+  is everywhere. **New code borrows through the `Borrow` guard instead**
+  (astrolog.h): `{ Borrow b(us.fX, newValue); ... }` restores at the
+  closing brace on every exit, so a forgotten restore cannot exist and
+  the remaining hand-written `*Sav` sites are grep-able. Brace the
+  borrow to match sites that restored mid-function; convert old sites
+  opportunistically when touched, never as a sweep. One CTAD limit:
+  one `Borrow` declaration per deduced type (split
+  `Borrow a(x), b(p);` when x and p differ in type).
 - Functions: `F...` returns flag, `N...` returns int, `R...` real,
   `Sz...` string, `Ch...` char. `...2` is a variant, not a version.
 

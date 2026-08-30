@@ -128,8 +128,20 @@ are user intent, IS/GI are derived and scratch, and shadowed names
 (us.fProgress = the request, is.fProgress = what the cast did) mark the
 boundary. The interleaving problem is not misfiled fields but
 computation *borrowing* settings fields via the *Sav dance. The
-contract now sits on all four struct heads in astrolog.h. Moves (2)
-and (3) remain open, (2) being the next code-shaped increment here.
+contract now sits on all four struct heads in astrolog.h.
+
+**Move (2) done 2026-08-29** (work log item 94): the `Borrow` scope
+guard in astrolog.h is the one home for the dance; CONVENTIONS.md
+carries the usage rule (new code borrows, old `*Sav` sites convert
+opportunistically). Two exemplars converted: the settings writer's
+two brace-scoped borrows (io.cpp; written file byte-identical) and
+gotcha 3's print path (qtdriver.cpp), whose two hand-written restore
+blocks collapsed into one closing brace — with the out-of-memory
+warning moved after the restore so the modal repaint cannot happen at
+print scale, T7's exact incident shape. The console `Makefile` now
+links with g++: the guard's destructor is the first thing in the
+shared core that needs the C++ EH runtime. Move (3) stays
+opportunistic, per the non-campaign policy.
 
 *Cost/risk:* (1) is documentation, zero risk, high leverage — it is also
 the prerequisite for T6. (2) is mechanical. (3) is open-ended; do it
