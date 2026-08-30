@@ -540,7 +540,7 @@ and the registry audit reminds you of the last two.
    bitmap headlessly (no display, no window manager, no Qt harness):
    a pinned-date `-Xb` differential is the graphics analogue of the
    text matrices, and F1's 12-case run is the worked example.
-3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3036/0),
+3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3039/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
    those last two in parallel subshells, they're the slow tail.
