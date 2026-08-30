@@ -3171,6 +3171,24 @@ are the more useful half to read before starting something new.
     scratchpad baseline emitted the Swiss path-truncation warning on
     every invocation, exactly as the header warns).
 
+97. **P2: handlers take one argument pack.** PARSEIN (astrolog.h)
+    carries argc/argv, the decoded =/_/- prefix flags, and the parse
+    context; FProcessSwitches() builds it once per switch, and all
+    187 handler signatures plus the wdriver/qtdriver -W passthroughs
+    collapsed to (szSwitch, PARSEIN *pin) / (pos, PARSEIN *pin). The
+    interesting discovery: the 7-parameter threading was never
+    laziness -- the FSwitchF()/FSwitchF2() macros scope-capture
+    fOr/fAnd/fNot, so every function touching a flag needed the
+    names in scope. The macros now read through pin, making the
+    contract explicit ("any function using them takes a PARSEIN
+    *pin", stated at the typedef). NSwR keeps local walking copies of
+    argc/argv on purpose (it consumes arguments in a loop and returns
+    argcIn - argc; writing through pin would corrupt the caller).
+    Two helper functions (NSwCategory, NSwoCore) joined the
+    convention when the compiler flagged their macro use. Matrix
+    byte-identical over 14,378 lines; full battery green including
+    win-tests, since wdriver.cpp changed.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

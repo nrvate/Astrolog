@@ -46,8 +46,10 @@ suite's `rulership` group.
 ## Switch-flag macros
 
 - `SwitchF(f)` applies the calling prefix's semantics to a flag:
-  plain `-x` toggles, `=x` sets, `_x` clears (`fOr`/`fAnd`/`fNot`
-  threaded by the dispatch; astrolog.h:1431).
+  plain `-x` toggles, `=x` sets, `_x` clears. The macros read the
+  decoded prefix through a local named `pin` (a `PARSEIN *`,
+  astrolog.h) — any function using them must take one, which is the
+  handler signature's whole contract.
 - `ChDashF(f)` picks `'='`/`'_'` when *writing* a flag to a settings
   file, so saved files use forced prefixes and reload identically.
 - `inv(v)` is a bare toggle.

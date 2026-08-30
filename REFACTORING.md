@@ -1249,13 +1249,16 @@ own concessions, in dependency order):
   Matrix byte-identical over 14,378 lines — after a first run
   tripped the harness's own short-path rule (deep-path baseline
   emits the Swiss truncation warning; the header says so).
-- **P2. One argument pack for handlers.** The uniform 7-parameter
-  handler signature threads fOr/fAnd/fNot/argc/argv/pctx into ~99
-  functions that mostly ignore them. Pack them into one PARSEIN
-  struct built once by the dispatch; handlers sign
-  `(CONST char *szSwitch, PARSEIN *pin)`. Mechanical rewrite of
-  signatures and the dispatch call. Net: switch-matrix byte-diff.
-  *Cost: low, wide.*
+- **P2 — done 2026-08-30** (work log item 97): PARSEIN carries
+  argc/argv/fOr/fAnd/fNot/pctx, built once per switch by
+  FProcessSwitches(); 187 handler signatures became
+  `(szSwitch, PARSEIN *pin)`, and the passthrough parsers in
+  wdriver.cpp/qtdriver.cpp take `(pos, PARSEIN *)` too. The
+  FSwitchF()/FSwitchF2() macros now read the prefix flags through
+  `pin` — the scope-capture that used to force the threading is the
+  documented contract instead. One handler (NSwR) keeps local
+  walking copies of argc/argv on purpose: it consumes arguments in a
+  loop and returns argcIn - argc. Matrix byte-identical.
 - **P3. Declared arity closes A2.** Handlers whose first act is
   exactly `FErrorArgc(...)` hand-roll what a row could declare: add
   `cargMin` to SWITCHDEF rows and let the dispatch make the exact

@@ -65,28 +65,27 @@
 // Windows features. This is just like the processing of each switch in the
 // main program, however here each switch has been prefixed with an 'W'.
 
-int NProcessSwitchesW(int argc, char **argv, int pos,
-  flag fOr, flag fAnd, flag fNot)
+int NProcessSwitchesW(int pos, PARSEIN *pin)
 {
   int darg = 0, xo, yo, i, j;
   char sz[cchSzMax], ch1, ch2;
   RECT rc;
 
-  ch1 = argv[0][pos+1];
-  ch2 = ch1 != chNull ? argv[0][pos+2] : chNull;
-  switch (argv[0][pos]) {
+  ch1 = pin->argv[0][pos+1];
+  ch2 = ch1 != chNull ? pin->argv[0][pos+2] : chNull;
+  switch (pin->argv[0][pos]) {
   case chNull:
-    if (FErrorArgc("W", argc, 1))
+    if (FErrorArgc("W", pin->argc, 1))
       return tcError;
-    i = NFromSz(argv[1]);
+    i = NFromSz(pin->argv[1]);
     PostMessage(wi.hwnd, WM_COMMAND, i, 0L);
     darg++;
     break;
 
   case 'N':
-    if (FErrorArgc("WN", argc, 1))
+    if (FErrorArgc("WN", pin->argc, 1))
       return tcError;
-    i = NFromSz(argv[1]);
+    i = NFromSz(pin->argv[1]);
     if (FErrorValN("WN", !FValidTimer(i), i, 0))
       return tcError;
     wi.nTimerDelay = i;
@@ -94,15 +93,15 @@ int NProcessSwitchesW(int argc, char **argv, int pos,
     break;
 
   case 'M':
-    if (FErrorArgc("WM", argc, 2))
+    if (FErrorArgc("WM", pin->argc, 2))
       return tcError;
-    i = NFromSz(argv[1]);
+    i = NFromSz(pin->argv[1]);
     if (ch1 != '0') {
       if (FErrorValN("WM", !FValidMacro2(i), i, 1))
         return tcError;
       i--;
       j = i/12;
-      sprintf(sz, "%s\t%s%s%sF%d", argv[2],
+      sprintf(sz, "%s\t%s%s%sF%d", pin->argv[2],
         j == 2 || j == 4 || j >= 6           ? "Ctrl+"  : "",
         j == 3 || j >= 5                     ? "Alt+"   : "",
         j == 1 || j == 4 || j == 5 || j == 7 ? "Shift+" : "", i % 12 + 1);
@@ -112,7 +111,7 @@ int NProcessSwitchesW(int argc, char **argv, int pos,
     } else {
       if (FErrorValN("WM0", !FBetween(i, 0, cMSub-1), i, 1))
         return tcError;
-      ModifyMenu(wi.hmenuEdit, i+2, MF_BYPOSITION | MF_STRING, i+2, argv[2]);
+      ModifyMenu(wi.hmenuEdit, i+2, MF_BYPOSITION | MF_STRING, i+2, pin->argv[2]);
       wi.rgfME[i] = fTrue;
     }
     darg += 2;
@@ -131,31 +130,31 @@ int NProcessSwitchesW(int argc, char **argv, int pos,
     break;
 
   case 'w':
-    if (FErrorArgc("Ww", argc, 2))
+    if (FErrorArgc("Ww", pin->argc, 2))
       return tcError;
     GetWindowRect(wi.hwnd, &rc);
-    xo = NFromSz(argv[1]);
-    yo = NFromSz(argv[2]);
+    xo = NFromSz(pin->argv[1]);
+    yo = NFromSz(pin->argv[2]);
     SetWindowPos(wi.hwnd, HWND_NOTOPMOST, xo, yo,
       rc.right - rc.left, rc.bottom - rc.top, 0);
     darg += 2;
     break;
 
   case 'B':
-    if (FErrorArgc("WB", argc, 2))
+    if (FErrorArgc("WB", pin->argc, 2))
       return tcError;
-    wi.xScroll = max(0, min(NFromSz(argv[1]), nScrollDiv));
-    wi.yScroll = max(0, min(NFromSz(argv[2]), nScrollDiv));
+    wi.xScroll = max(0, min(NFromSz(pin->argv[1]), nScrollDiv));
+    wi.yScroll = max(0, min(NFromSz(pin->argv[2]), nScrollDiv));
     SetScrollPos(wi.hwnd, SB_HORZ, wi.xScroll, fTrue);
     SetScrollPos(wi.hwnd, SB_VERT, wi.yScroll, fTrue);
     darg += 2;
     break;
 
   case 'T':
-    if (FErrorArgc("WT", argc, 1))
+    if (FErrorArgc("WT", pin->argc, 1))
       return tcError;
-    if (*argv[1])
-      sprintf(sz, "%s %s: %s", szAppName, szVersionCore, argv[1]);
+    if (*pin->argv[1])
+      sprintf(sz, "%s %s: %s", szAppName, szVersionCore, pin->argv[1]);
     else
       sprintf(sz, "%s %s", szAppName, szVersionCore);
     SetWindowText(wi.hwnd, sz);
@@ -163,15 +162,15 @@ int NProcessSwitchesW(int argc, char **argv, int pos,
     break;
 
   case 'x':
-    if (FErrorArgc("Wx", argc, 1))
+    if (FErrorArgc("Wx", pin->argc, 1))
       return tcError;
-    i = NFromSz(argv[1]);
+    i = NFromSz(pin->argv[1]);
     if (FErrorValN("Wx", !FValidAntialias(i), i, 0))
       return tcError;
     wi.nAntialias = i;
-    if (fOr)
+    if (pin->fOr)
       gs.fAntialias = fTrue;
-    else if (fAnd)
+    else if (pin->fAnd)
       gs.fAntialias = fFalse;
     darg++;
     break;
@@ -210,10 +209,10 @@ int NProcessSwitchesW(int argc, char **argv, int pos,
     break;
 
   default:
-    ErrorSwitch(argv[0]);
+    ErrorSwitch(pin->argv[0]);
     return tcError;
   }
-  // 'darg' contains the value to be added to argc when we return.
+  // 'darg' contains the value to be added to pin->argc when we return.
   return darg;
 }
 

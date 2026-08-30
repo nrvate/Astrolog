@@ -1426,8 +1426,8 @@ enum _terminationcode {
 #define PrintF(sz) fprintf(file, "%s", sz)
 #define SwapTemp(v1, v2, vT) vT = v1; v1 = v2; v2 = vT
 #define SwapN(n1, n2) (n1)^=(n2)^=(n1)^=(n2)
-#define FSwitchF(f) ((((f) || fOr) && !fAnd) != fNot)
-#define FSwitchF2(f) (((f) || (fOr || fNot)) && !fAnd)
+#define FSwitchF(f) ((((f) || pin->fOr) && !pin->fAnd) != pin->fNot)
+#define FSwitchF2(f) (((f) || (pin->fOr || pin->fNot)) && !pin->fAnd)
 #define SwitchF(f) f = FSwitchF(f)
 #define SwitchF2(f) f = FSwitchF2(f)
 
@@ -1568,6 +1568,22 @@ typedef struct _ParseContext {
   FILE *fileIn;         // The switch file being read.
   CONST char *szSource; // Its name, for diagnostics.
 } PARSECTX;
+
+// Everything a switch handler receives besides its own spelling, built
+// once per switch by FProcessSwitches(): the remaining arguments, the
+// =/_/-/: prefix already decoded into fOr/fAnd/fNot, and the parse
+// context. One pack instead of six threaded parameters (REFACTORING.md
+// phase 2, P2). The FSwitchF()/FSwitchF2() macros read the prefix
+// flags through the local named pin, so any function using them must
+// take a PARSEIN *pin.
+typedef struct _parsein {
+  int argc;          // Arguments remaining, the switch itself included.
+  char **argv;
+  flag fOr;          // "=x": force on.
+  flag fAnd;         // "_x": force off.
+  flag fNot;         // "-x": toggle.
+  PARSECTX *pctx;    // Where the switch text came from.
+} PARSEIN;
 
 typedef struct _StrLook {
   char *sz;  // The string in the table

@@ -2520,26 +2520,25 @@ CONST char *SzMacroSubNameQt(int i)
 flag FHourglassQt() { return fHourglassQt; }
 
 
-int NProcessSwitchesQt(int argc, char **argv, int pos,
-  flag fOr, flag fAnd, flag fNot)
+int NProcessSwitchesQt(int pos, PARSEIN *pin)
 {
   int darg = 0, i, j;
   char ch1;
 
-  ch1 = argv[0][pos+1];
-  switch (argv[0][pos]) {
+  ch1 = pin->argv[0][pos+1];
+  switch (pin->argv[0][pos]) {
   case chNull:
     // -W <n> invokes a menu command by its Windows command ID. Those IDs
     // don't exist here, so consume the argument and move on.
-    if (FErrorArgc("W", argc, 1))
+    if (FErrorArgc("W", pin->argc, 1))
       return tcError;
     darg++;
     break;
 
   case 'N':
-    if (FErrorArgc("WN", argc, 1))
+    if (FErrorArgc("WN", pin->argc, 1))
       return tcError;
-    i = NFromSz(argv[1]);
+    i = NFromSz(pin->argv[1]);
     if (FErrorValN("WN", !FValidTimer(i), i, 0))
       return tcError;
     SetAnimDelayQt(i);
@@ -2547,18 +2546,18 @@ int NProcessSwitchesQt(int argc, char **argv, int pos,
     break;
 
   case 'M':
-    if (FErrorArgc("WM", argc, 2))
+    if (FErrorArgc("WM", pin->argc, 2))
       return tcError;
-    i = NFromSz(argv[1]);
+    i = NFromSz(pin->argv[1]);
     if (ch1 != '0') {
       if (FErrorValN("WM", !FValidMacro2(i), i, 1))
         return tcError;
       i--;
-      FCloneSz(argv[2], &rgszMacroQt[i]);
+      FCloneSz(pin->argv[2], &rgszMacroQt[i]);
     } else {
       if (FErrorValN("WM0", !FBetween(i, 0, cMSub-1), i, 1))
         return tcError;
-      FCloneSz(argv[2], &rgszMSubQt[i]);
+      FCloneSz(pin->argv[2], &rgszMSubQt[i]);
     }
     darg += 2;
     break;
@@ -2568,19 +2567,19 @@ int NProcessSwitchesQt(int argc, char **argv, int pos,
     break;
 
   case 'T':
-    if (FErrorArgc("WT", argc, 1))
+    if (FErrorArgc("WT", pin->argc, 1))
       return tcError;
     if (gi.qwind != NULL)
-      gi.qwind->setWindowTitle(argv[1]);
+      gi.qwind->setWindowTitle(pin->argv[1]);
     darg++;
     break;
 
   case 'w':
     // Window position. Only meaningful once there's a window; when this
     // comes from astrolog.as there isn't one yet, so remember it.
-    if (FErrorArgc("Ww", argc, 2))
+    if (FErrorArgc("Ww", pin->argc, 2))
       return tcError;
-    i = NFromSz(argv[1]); j = NFromSz(argv[2]);
+    i = NFromSz(pin->argv[1]); j = NFromSz(pin->argv[2]);
     if (gi.qwind != NULL)
       gi.qwind->move(i, j);
     else {
@@ -2590,7 +2589,7 @@ int NProcessSwitchesQt(int argc, char **argv, int pos,
     break;
 
   case 'B':
-    if (FErrorArgc("WB", argc, 2))
+    if (FErrorArgc("WB", pin->argc, 2))
       return tcError;
     darg += 2;
     break;
@@ -2599,9 +2598,9 @@ int NProcessSwitchesQt(int argc, char **argv, int pos,
     // Antialiasing zoom scale. Windows renders the chart at this multiple
     // and shrinks it down; nothing here does that yet, so just validate
     // and remember the value so it survives a settings round trip.
-    if (FErrorArgc("Wx", argc, 1))
+    if (FErrorArgc("Wx", pin->argc, 1))
       return tcError;
-    i = NFromSz(argv[1]);
+    i = NFromSz(pin->argv[1]);
     s_nAntialiasQt = i;
     darg++;
     break;
@@ -2622,7 +2621,7 @@ int NProcessSwitchesQt(int argc, char **argv, int pos,
     break;
 
   default:
-    ErrorSwitch(argv[0]);
+    ErrorSwitch(pin->argv[0]);
     return tcError;
   }
   return darg;

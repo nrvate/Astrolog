@@ -1156,7 +1156,7 @@ extern char szFileName[cchSzMaxFile], szFileTitle[cchSzMaxFile], *szFileTemp;
 #define EnsureR(r, f, sz) EnsureN((int)r, f, sz)
 
 extern LRESULT API WndProc P((HWND, UINT, WPARAM, LPARAM));
-extern int NProcessSwitchesW P((int, char **, int, flag, flag, flag));
+extern int NProcessSwitchesW P((int, PARSEIN *));
 extern void BootExternal P((CONST char *, CONST char *));
 extern WORD WCmdFromRc P((int));
 extern void SetRel P((int));
@@ -1221,7 +1221,7 @@ extern flag API DlgAbout    P((HWND, uint, WORD, LONG));
 #ifdef QT
 /* Defined in qtdriver.cpp: the Qt build's handler for the -W switch     */
 /* family, so a settings file written by the Windows build still loads.  */
-extern int NProcessSwitchesQt P((int, char **, int, flag, flag, flag));
+extern int NProcessSwitchesQt P((int, PARSEIN *));
 /* Free what the Qt backend allocated through PAllocate(), at exit.      */
 extern void FinalizeQt P((void));
 extern flag FGetUrlQt P((CONST char *, CONST char *));
