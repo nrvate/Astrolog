@@ -3068,6 +3068,33 @@ flag FObjSelParse(CONST char *szIn, OBJDEF *pod)
 // Ephemeris definitions, and does things such as translation to indices and
 // formats of Swiss Ephemeris.
 
+// Map a standard body index to its Swiss Ephemeris body index, for a
+// custom slot defined to point at another object (type 2). This list
+// exists once on purpose: FSwissPlanet()'s direct and central-object
+// translations used to carry line-identical copies of it.
+
+static flag FSwissFromObj(int obj, int *piobj)
+{
+  if (obj <= oEar)
+    *piobj = SE_EARTH;
+  else if (obj <= oPlu)
+    *piobj = obj-1;
+  else if (obj == oChi)
+    *piobj = SE_CHIRON;
+  else if (FBetween(obj, oCer, oVes))
+    *piobj = obj - oCer + SE_CERES;
+  else if (obj == oVul)
+    *piobj = SE_VULCAN;
+  else if (FUranian(obj))
+    *piobj = obj - uranLo + SE_FICT_OFFSET_1;
+  else if (obj == oPho)
+    *piobj = SE_PHOLUS;
+  else
+    return fFalse;
+  return fTrue;
+}
+
+
 flag FSwissPlanet(int ind, real jd, int indCent,
   real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
 {
@@ -3109,24 +3136,8 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     if (nTyp != 2)
       iobj += (nTyp <= 0 ? SE_FICT_OFFSET_1 : (nTyp == 1 ? SE_AST_OFFSET :
         SE_PLMOON_OFFSET));
-    else {
-      if (iobj <= oEar)
-        iobj = SE_EARTH;
-      else if (iobj <= oPlu)
-        iobj--;
-      else if (iobj == oChi)
-        iobj = SE_CHIRON;
-      else if (FBetween(iobj, oCer, oVes))
-        iobj = iobj - oCer + SE_CERES;
-      else if (iobj == oVul)
-        iobj = SE_VULCAN;
-      else if (FUranian(iobj))
-        iobj = iobj - uranLo + SE_FICT_OFFSET_1;
-      else if (iobj == oPho)
-        iobj = SE_PHOLUS;
-      else
-        return fFalse;
-    }
+    else if (!FSwissFromObj(iobj, &iobj))
+      return fFalse;
     if (nFlg > 0) {
       if (nFlg & 1)  inv(fHelio);
       if (nFlg & 2)  inv(us.fSidereal);
@@ -3181,31 +3192,16 @@ flag FSwissPlanet(int ind, real jd, int indCent,
       else if (FBetween(indCent, oCer, oVes))
         iobjCent = indCent - oCer + SE_CERES;
       else if (FCust(indCent)) {
-        iobjCent = rgObjSwiss[indCent - custLo];
-        ix = rgTypSwiss[indCent - custLo];
+        ObjDefGet(indCent, &od);
+        iobjCent = od.nObj;
+        ix = od.nTyp;
         if (ix == 4)
           iobjCent = (fHelio ? SE_SUN : SE_EARTH);
         else if (ix != 2)
           iobjCent += (ix <= 0 ? SE_FICT_OFFSET_1 : (ix == 1 ? SE_AST_OFFSET :
             SE_PLMOON_OFFSET));
-        else {
-          if (iobjCent <= oEar)
-            iobjCent = SE_EARTH;
-          else if (iobjCent <= oPlu)
-            iobjCent--;
-          else if (iobjCent == oChi)
-            iobjCent = SE_CHIRON;
-          else if (FBetween(iobjCent, oCer, oVes))
-            iobjCent = iobjCent - oCer + SE_CERES;
-          else if (iobjCent == oVul)
-            iobjCent = SE_VULCAN;
-          else if (FUranian(iobjCent))
-            iobjCent = iobjCent - uranLo + SE_FICT_OFFSET_1;
-          else if (iobjCent == oPho)
-            iobjCent = SE_PHOLUS;
-          else
-            return fFalse;
-        }
+        else if (!FSwissFromObj(iobjCent, &iobjCent))
+          return fFalse;
       } else
         return fFalse;
       // Can happen if object customized to be a COB.

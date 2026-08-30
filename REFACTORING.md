@@ -935,8 +935,14 @@ though at least single-homed — and `SwissEnsurePath()` plus a static
 `nSwissEph` change-detector cache path state invisibly. *Incident:* the
 cached ephemeris path is why every test must run `-i nrvate.as` or read
 `???` for esoteric bodies — a hard rule in CLAUDE.md exists because of
-this cache. *Direction:* fold the cache contract into A4's lifecycle
-doc; consider a mapping table when next touched. *Cost:* low.
+this cache. **Closed 2026-08-30** (work log item 107): the cache half
+was already covered by A4's lifecycle contract (item 90); the mapping
+half surveyed to *five* copies of the motif, not one — the two
+line-identical nested type-2 maps are now one `FSwissFromObj()` and
+the central path reads through `ObjDefGet()`; the three prefix copies
+(direct, central, `FSwissPlanetData`) differ in body coverage on
+purpose — a shared superset would change which objects map at which
+sites — and stay as they are, on that measured ground.
 
 **C6 — Chart positions are seven global slots with macro aliases.**
 `planet` *is* `cp0.obj` (extern.h:110); rings `cp1`..`cp6` are copied
@@ -1370,11 +1376,12 @@ the way D1's tail and the harvest did):
   actually displace; the text-diff tooling is the ready-made net.
 - **P9. G4** — the Qt port's 29 `s_*` file-scope globals: classify
   like T1 (wiring vs cache vs scratch), fold the trivial ones.
-- **P10. C1/C5/C6, G1/G2** — calc.cpp's three-modules-in-a-file, the
-  Swiss index mapping, the chart-position slot aliases, the size_t
-  UI handle, the atlas loader channels. Order by incident risk when
-  surveyed; C5's mapping table is first candidate (it has phase-1
-  incident history).
+- **P10. C1/C5/C6, G1/G2** — surveyed 2026-08-30, ordered by
+  incident risk: **C5 done** (work log item 107, verdict at the
+  finding); G1's size_t split is next (small, self-contained, no
+  incident yet); C6 stays a documentation task tied to Area D's
+  chart-code work; C1 already verdicted (deferral free); G2 is
+  counted under B1/B3, not here.
 
 Sequencing: P1 → P2 → P3 (each enables the next's mechanical
 confidence), then P4 interleaved with tranche 2 at will. P5 wants a

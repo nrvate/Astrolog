@@ -3368,6 +3368,28 @@ are the more useful half to read before starting something new.
     half-commit shape, repeated because the statements were sequential
     instead of chained.)
 
+107. **P10 opens tranche 3: the custom-object Swiss mapping exists
+    once.** The C5 survey found its cache half already closed (A4's
+    lifecycle contract, item 90) and measured its mapping half: five
+    copies of the standard-object-to-SE-index motif in calc.cpp. Two
+    were line-identical eight-way chains -- the nested type-2 custom
+    maps in FSwissPlanet()'s direct and central-object translations,
+    the same clone shape that bred item 38 -- and are now one static
+    FSwissFromObj(); the central path also reads its custom
+    definition through ObjDefGet() instead of the raw rgObjSwiss/
+    rgTypSwiss arrays (same store, one accessor). The three remaining
+    prefix copies (FSwissPlanet direct, central, FSwissPlanetData)
+    share only a four-branch prefix and differ in coverage on purpose
+    -- collapsing them would change which objects map at which sites
+    -- so they stay, with the measured reason recorded in the C5
+    finding. Nets: a 14-case -v positions differential (one case per
+    cloned-map branch, geocentric and central via -h with slots
+    referenced by number because nrvate.as renames the display names,
+    plus asteroid/fictitious/moon/COB/part central types), pairwise
+    distinct, deterministic, byte-identical; and the item-99
+    old-chain simulation over the whole object domain, zero
+    mismatches. Suite 3039/0, audits clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
