@@ -2946,6 +2946,20 @@ are the more useful half to read before starting something new.
     increments (C3, the D1 pair merge, F1, E1) -- written so a session
     with no memory of the migration can continue it correctly.
 
+81. **C3: ComputeEphem()'s skip predicate is now FSkipEphem().** The
+    six OR'd clauses deciding "compute this object or not" (calc.cpp)
+    became five named sequential ifs, each comment stating its
+    verified reason -- the JPL-Earth clause's first-draft comment
+    guessed wrong and was corrected against rgObjJPL[] (Earth has no
+    entry; it is the query center). Proven with an 11-case -v position
+    differential old-vs-new (restriction, node, heliocentric, Placalc,
+    -ba, Moshier, restricted-midpoint cases), byte-identical; suite
+    3036/0; Windows cross-build clean. Process note: the first
+    differential attempt ran the console binary without env -u DISPLAY
+    and _X, popping chart windows on the real desktop -- nrvate.as
+    turns graphics on. The ad-hoc-differential discipline is now in
+    REFACTORING.md's verification recipe.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

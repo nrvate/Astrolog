@@ -958,6 +958,45 @@ CONST int rgObjJPL[cThing+1] = {0/*399*/, 10, 301,
 #define FJPL(f) fFalse
 #endif
 
+// Return whether ComputeEphem() should skip computing object i entirely.
+// Each if is one reason to skip, checked in the order the old inline
+// condition chain OR'd them together.
+
+flag FSkipEphem(int i, int objCentCalc, flag fSwiss, flag fJPLPla)
+{
+  // Restricted, and nothing else needs it: the Sun, Moon, and Earth are
+  // always computed, as is a Node whose opposite Node is unrestricted,
+  // and any object some forced midpoint is defined upon.
+  if (ignore[i] && i > oMoo && (i != oNod || ignore[oSou]) &&
+    !FObjMidSource(i))
+    return fTrue;
+
+  // Not a physical thing with an ephemeris position.
+  if (!FThing(i))
+    return fTrue;
+
+  // The center of the computation has no position of its own, except
+  // when JPL Horizons does its own centering, or the Swiss Ephemeris is
+  // computing a barycentric Earth.
+  if (i == objCentCalc && !fJPLPla &&
+    !(fSwiss && objCentCalc == oEar && us.fBarycenter))
+    return fTrue;
+
+  // The Placalc backend computes nothing from Fortune onward, and the
+  // -ba setting suppresses its four main asteroids.
+  if (!fSwiss && (i >= oFor ||
+    (us.fPlacalcAst && FBetween(i, oCer, oVes))))
+    return fTrue;
+
+  // JPL Horizons mode has no Earth entry in rgObjJPL[]: the Earth is
+  // the center its queries are made from, not an object of its own.
+  if (fJPLPla && i == oEar)
+    return fTrue;
+
+  return fFalse;
+}
+
+
 // Compute the positions of the planets at a certain time using the Swiss
 // Ephemeris accurate formulas. This will supersede the Matrix routine values
 // and is only called when the -b switch is in effect. Not all objects or
@@ -988,14 +1027,7 @@ void ComputeEphem(real t)
 
   imax = Min(oNorm, is.nObj); imax = Max(imax, oSun);
   for (i = oEar; i <= imax; i++) {
-    if ((ignore[i] && i > oMoo && (i != oNod || ignore[oSou]) &&
-      !FObjMidSource(i)) ||
-      !FThing(i) ||
-      (i == objCentCalc && !fJPLPla &&
-        !(fSwiss && objCentCalc == oEar && us.fBarycenter)) ||
-      (!fSwiss && (i >= oFor ||
-        (us.fPlacalcAst && FBetween(i, oCer, oVes)))) ||
-      (fJPLPla && i == oEar))
+    if (FSkipEphem(i, objCentCalc, fSwiss, fJPLPla))
       continue;
 
     // Calculate planet using Swiss Ephemeris, Placalc, or JPL Horizons

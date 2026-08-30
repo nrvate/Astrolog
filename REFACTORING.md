@@ -505,6 +505,12 @@ and the registry audit reminds you of the last two.
    *before* trusting it; a green diff over output that's implausibly
    short is a broken harness, which has happened twice (a stray token
    parsed as a switch; -q's four-argument arity).
+   An ad-hoc differential (positions, a chart mode the matrices don't
+   cover) must copy `run()`'s discipline from `switch-matrix.sh`
+   verbatim: `env -u DISPLAY`, `</dev/null`, `timeout`, and the `_X`
+   token — `nrvate.as` switches graphics *on*, so a console run
+   without `_X` pops an X window on the real desktop. Forgetting this
+   once interrupted a session (C3's first differential attempt).
 3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3036/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
@@ -537,16 +543,13 @@ reword; valid input behavior is byte-sacred.
   fresh.
 
 **Next up, specified:**
-- **C3** (in flight when this was written; nothing committed): extract
-  `ComputeEphem()`'s five-clause skip predicate (calc.cpp, the
-  `for (i = oEar; i <= imax...)` loop) into a named
-  `FSkipEphem(i, objCentCalc, fSwiss, fJPLPla)` whose clauses carry
-  their reasons (restricted-and-unneeded — the forced-midpoint bug's
-  home, non-thing, computation center, Placalc can't, JPL's Earth).
-  Same clause order, sequential ifs ≡ the short-circuit chain. Net:
-  suite (TestSharedCoreFixesQt directly covers the midpoint clause)
-  plus a position differential — text listings (-v) old vs new under
-  restriction combinations.
+- **C3 — done 2026-08-29** (work log item 81): `FSkipEphem()` in
+  calc.cpp, five sequential ifs each carrying its verified reason
+  (the JPL-Earth clause's reason was checked against `rgObjJPL[]`
+  before writing it down, and came out different from the first
+  guess). Net: 11-case `-v` position differential old-vs-new under
+  restriction/backend combinations, byte-identical; suite 3036/0;
+  win cross-build.
 - **D1 first pair**: merge `ChartAspect`/`ChartAspectRelation`
   (charts1.cpp:999 / charts2.cpp:229, ~70% identical) into one core
   over position sources and iteration domain. Net: old-vs-new binary
@@ -737,6 +740,9 @@ longer still (work log; pinned by `TestSharedCoreFixesQt`).
 skip-reason value, which also makes "why is this object blank?"
 diagnosable at runtime. Behavior-preserving by construction; the suite
 plus a Windows text-diff is the net. *Cost:* low, good early increment.
+
+**Done 2026-08-29** (work log item 81): extracted as `FSkipEphem()`,
+five named sequential ifs, same clause order.
 
 **C4 — The backend selector is three flags and an int with unreachable
 corners.** `fEphemFiles`, `fPlacalcPla`, `fMatrixPla`, `fMatrixStar`,
@@ -1072,7 +1078,7 @@ interleave with the above at any pace.
 - **The whole of 2026-08-29** — the audits (`defaults_audit`,
   `registry_audit`), the three-leg round trip, the nested-include and
   parse-context work, the T3 migration M1-M10, the registry hardening,
-  and D2: work log items 65-79 carry each with its commit. T3's
+  and D2: work log items 65-81 carry each with its commit. T3's
   migration phase is closed; T4's drift class is closed by audit; T6's
   worst evidence (missing-branch parsers) is gone with the parsers.
 - **Bugs fixed along the way, all shared-core**: ruler2[] one short;
