@@ -64,6 +64,27 @@
 // This function is used by the interpretation routines to print out lines of
 // text with newlines inserted just before the end of screen is reached.
 
+// The three rulership systems the influence computations walk, with
+// both directions of each system's tables -- the same pairs the
+// suite's "rulership" group holds to their cross-agreement invariants.
+// One table and three loops replace nine copied stanzas, the
+// clone-and-swap shape that bred the bugs work log items 37 and 38
+// record (a sign-keyed table indexed by object, and a wrong ignore7
+// flag, each hiding in a hand-copied block).
+
+typedef struct _rulershipsystem {
+  int rr;                        // ignore7[] slot gating the system.
+  CONST int *rgSign1, *rgSign2;  // A sign's ruler and co-ruler.
+  CONST int *rgObj1, *rgObj2;    // An object's ruled and co-ruled sign.
+} RULERSYS;
+
+static CONST RULERSYS rgrulersys[] = {
+  {rrStd, rules,      rules2,     ruler1,    ruler2},
+  {rrEso, rgSignEso1, rgSignEso2, rgObjEso1, rgObjEso2},
+  {rrHie, rgSignHie1, rgSignHie2, rgObjHie1, rgObjHie2}};
+#define crulersys (int)(sizeof(rgrulersys)/sizeof(*rgrulersys))
+
+
 void FieldWord(CONST char *sz)
 {
   static char line[cchSzMax];
@@ -1286,6 +1307,7 @@ void SortRank(real *value, int *rank, int size, flag fObj)
 
 void ComputeInfluence(real power1[objMax], real power2[objMax])
 {
+  CONST RULERSYS *prs;
   int i, j, k, l;
   real x;
   char *c;
@@ -1314,36 +1336,27 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
     if (c[rrRay+1] == 'Y') x += rHouseInf[cSign+5];
     power1[i] += x;
     x = RObjInf(i)/2.0;
-    if (!ignore7[rrStd]) {
-      // Planet ruling sign and house current planet is in, gets influence.
-      k = rules[j];           if (k > 0 && i != k) power1[k] += x;
-      k = rules2[j];          if (k > 0 && i != k) power1[k] += x;
-      k = rules[inhouse[i]];  if (k > 0 && i != k) power1[k] += x;
-      k = rules2[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
-    }
-    if (!ignore7[rrEso]) {
-      k = rgSignEso1[j];          if (k > 0 && i != k) power1[k] += x;
-      k = rgSignEso2[j];          if (k > 0 && i != k) power1[k] += x;
-      k = rgSignEso1[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
-      k = rgSignEso2[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
-    }
-    if (!ignore7[rrHie]) {
-      k = rgSignHie1[j];          if (k > 0 && i != k) power1[k] += x;
-      k = rgSignHie2[j];          if (k > 0 && i != k) power1[k] += x;
-      k = rgSignHie1[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
-      k = rgSignHie2[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
+    // Planets ruling the sign and house the current planet is in get
+    // influence, in each unrestricted rulership system.
+    for (prs = rgrulersys; prs < rgrulersys + crulersys; prs++) {
+      if (ignore7[prs->rr])
+        continue;
+      k = prs->rgSign1[j];          if (k > 0 && i != k) power1[k] += x;
+      k = prs->rgSign2[j];          if (k > 0 && i != k) power1[k] += x;
+      k = prs->rgSign1[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
+      k = prs->rgSign2[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
     }
   }
   for (i = 1; i <= cSign; i++) {         // Various planets get influence
     j = SFromZ(chouse[i]);               // if house cusps fall in signs
-    power1[rules[j]] += rHouseInf[i];    // they rule.
-    if (!ignore7[rrEso]) {
-      k = rgSignEso1[j]; if (k > 0) power1[k] += rHouseInf[i];
-      k = rgSignEso2[j]; if (k > 0) power1[k] += rHouseInf[i];
-    }
-    if (!ignore7[rrHie]) {
-      k = rgSignHie1[j]; if (k > 0) power1[k] += rHouseInf[i];
-      k = rgSignHie2[j]; if (k > 0) power1[k] += rHouseInf[i];
+    power1[rules[j]] += rHouseInf[i];    // they rule. (The traditional
+    // system counts only the primary ruler here, unguarded, as it
+    // always has; the loop below walks the other two systems.)
+    for (prs = rgrulersys + 1; prs < rgrulersys + crulersys; prs++) {
+      if (ignore7[prs->rr])
+        continue;
+      k = prs->rgSign1[j]; if (k > 0) power1[k] += rHouseInf[i];
+      k = prs->rgSign2[j]; if (k > 0) power1[k] += rHouseInf[i];
     }
   }
 
@@ -1389,6 +1402,7 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
 
 void ChartInfluence(void)
 {
+  CONST RULERSYS *prs;
   real power[objMax], power1[objMax], power2[objMax],
     total, total1, total2;
   int rank[objMax], rank1[objMax], rank2[objMax], i, j;
@@ -1445,31 +1459,19 @@ void ChartInfluence(void)
       power1[SFromZ(Decan(planet[i]))] += power[i] / 6.0;
     if (fSignOnly)
       power1[inhouse[i]]        += power[i] / 4.0;
-    if (!ignore7[rrStd]) {
-      power1[ruler1[i]]         += power[i] / 3.0;
-      if (ruler2[i])
-        power1[ruler2[i]]       += power[i] / 3.0;
-    }
-    // rgObjEso*[]/rgObjHie*[], not rgSignEso*[]/rgSignHie*[]: this loop's
-    // "i" is an object, and the object keyed tables are the ones that hold
-    // a sign, exactly as ruler1[]/ruler2[] do above. The sign keyed pair
-    // was used here, which read off the end of a 13 entry table for every
-    // object above Pisces and then used the result as an index. The two
-    // directions also differ in how they spell "none" -- 0 in the object
-    // keyed tables, -1 in the sign keyed ones -- which is why "if (x)" is
-    // the right test here and was not there.
-    if (!ignore7[rrEso]) {
-      power1[rgObjEso1[i]]      += power[i] / 3.0;
-      if (rgObjEso2[i])
-        power1[rgObjEso2[i]]    += power[i] / 3.0;
-    }
-    // rrHie, not rrEso. Both blocks tested the esoteric flag, so
-    // hierarchical rulers were applied whenever esoteric ones were on and
-    // never on their own.
-    if (!ignore7[rrHie]) {
-      power1[rgObjHie1[i]]      += power[i] / 3.0;
-      if (rgObjHie2[i])
-        power1[rgObjHie2[i]]    += power[i] / 3.0;
+    // The object-keyed direction on purpose: this loop's "i" is an
+    // object, and rgObj1/rgObj2 hold the sign it rules -- using the
+    // sign-keyed pair here once read off the end of a 13-entry table
+    // for every object above Pisces (work log item 38). The two
+    // directions also spell "none" differently, which is why the
+    // secondary's test is "if nonzero" where the sign-keyed sites test
+    // "> 0".
+    for (prs = rgrulersys; prs < rgrulersys + crulersys; prs++) {
+      if (ignore7[prs->rr])
+        continue;
+      power1[prs->rgObj1[i]] += power[i] / 3.0;
+      if (prs->rgObj2[i])
+        power1[prs->rgObj2[i]] += power[i] / 3.0;
     }
   }
 

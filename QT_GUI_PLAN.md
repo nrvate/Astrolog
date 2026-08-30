@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-78
+## Work log — items 1-79
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2914,6 +2914,26 @@ are the more useful half to read before starting something new.
       now does what the help always said, under the correctly spelled
       guard, and the audit holds the manual and the program to each
       other from here on.
+
+79. **D2: the influence stanzas ride the rulership family table.**
+    ComputeInfluence() and ChartInfluence()'s sign section walk a
+    three-row RULERSYS table (system gate, sign-keyed pair, object-
+    keyed pair -- the same pairs item 64's suite group cross-checks)
+    instead of nine hand-copied stanzas: the clone-and-swap shape that
+    bred items 37 and 38. The two deliberate non-uniformities survive
+    with their reasons attached: the house-cusp loop's traditional
+    line counts only the primary ruler, unguarded, as it always has;
+    and the object-keyed direction's "if nonzero" secondary test
+    stays distinct from the sign-keyed "> 0". Proof: influence and
+    esoteric charts for a fixed date under six rulership-restriction
+    states, 3,426 output lines, byte-identical against the pre-D2
+    binary.
+    - The battery caught the midpoint-glyph flake AGAIN, and this time
+      the root: item 71's pin was "ciCore = ciTwin", but ciTwin is
+      mutated by the relationship groups to charts of "now" -- the pin
+      only held while the clock cooperated, and failed deterministically
+      by evening. The test now pins ciCore to literal constants. Two
+      clean full-suite runs at the failing clock time.
 
 ## Features this fork adds to both builds
 

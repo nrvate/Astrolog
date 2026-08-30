@@ -691,7 +691,8 @@ net in the project: `tools/text-chart-capture.sh` +
 build. A pair a session, diff after each. *Cost:* medium, mechanical,
 high confidence.
 
-**D2 — The influence stanzas are twelve-line clones over table names.**
+**D2 — DONE 2026-08-29 (work log item 79). The influence stanzas are
+twelve-line clones over table names.**
 `ComputeInfluence()` (intrpret.cpp:1319-1346) repeats
 `k = table[j]; if (k > 0 && i != k) power1[k] += x;` twelve times per
 concern across traditional/esoteric/hierarchical, differing only in
@@ -943,9 +944,10 @@ each independently shippable:
    FProcessSwitches() cases remain -- chart types, chart info, the -R
    restrictions, -W passthroughs, and the imperative switches. M7
    onward takes them a letter family at a time.
-5. **D2, C3, E1, D1/F1/F2** — the remaining quality increments, now
-   opportunistic: pick one up when a T3 migration session leaves room,
-   or between migration phases.
+5. **C3, E1, D1/F1/F2** — the remaining quality increments, now
+   opportunistic. D2 done 2026-08-29: the influence stanzas ride a
+   RULERSYS family table; 3,426 output lines byte-identical across six
+   rulership-restriction states.
 
 Everything else in this file is documentation work (T1's field
 classification, T8's conventions doc, A4's lifecycle contract) that can

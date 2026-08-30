@@ -1548,13 +1548,16 @@ static void TestMidpointGlyphQt()
   GS gsSav = gs;
   CI ciSav = ciCore;
 
-  // Pin the chart's moment too. TestChartListFilterQt() leaves ciCore on
-  // a synthetic entry whose date is fixed but whose time is "now", so
-  // the wheel drifted with the clock -- and at the double scale
-  // TestAllMenuActionsQt() leaves behind, the forced slot's label sat on
-  // or off the canvas depending on the minute. A time-flaky render test
-  // is item 4's lesson all over again: pin the time, then hash.
-  ciCore = ciTwin;
+  // Pin the chart's moment too, to CONSTANTS. The first pin here was
+  // "ciCore = ciTwin", which only worked while ciTwin still held its
+  // compile-time 1991 data -- the relationship groups load charts of
+  // "now" into it, so the flake this pin exists to kill (item 4's
+  // pin-the-time lesson: the render drifted with the clock at the
+  // double scale TestAllMenuActionsQt() leaves behind) came back the
+  // same evening, wearing a different global.
+  ciCore.mon = 9; ciCore.day = 11; ciCore.yea = 1991;
+  ciCore.tim = 0.0; ciCore.dst = 0.0; ciCore.zon = 8.0;
+  ciCore.lon = DEFAULT_LONG; ciCore.lat = DEFAULT_LAT;
 
   ignore[obj] = fFalse;
   AdjustRestrictions();
