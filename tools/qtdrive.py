@@ -34,6 +34,10 @@ A scenario is one command per line; "#" comments and blank lines ignored:
   shot out/x.png                       screenshot the whole display
   tree                                 dump the tree at this point
   sleep 1
+  key ctrl+l                           raw keystroke to the focus window --
+                                       the escape hatch for native (GTK)
+                                       dialogs AT-SPI cannot see into
+  typeraw /tmp/x.as                    raw typing, same escape hatch
 
 Exit status is 0 only if every expect-* passed.
 """
@@ -140,31 +144,39 @@ def find(root, name, role=None):
         try:
             idx = int(idx)
         except ValueError:
+            # Not positional after all -- a real label containing '#'
+            # ('Open Chart #2...'). Fall through to name matching.
+            idx = None
+        if idx is not None:
+            seen = 0
+            for _, n in walk(root):
+                try:
+                    if n.getRoleName() != want_role:
+                        continue
+                    # A combo box contains its own "text" child, so
+                    # counting every text would make text#1 the first
+                    # combo's editor rather than the first standalone
+                    # field. Count only widgets that are not part of
+                    # another control.
+                    par = n.parent
+                    if par is not None and par.getRoleName() in (
+                            "combo box", "spin button", "scroll bar"):
+                        continue
+                except Exception:
+                    continue
+                seen += 1
+                if seen == idx:
+                    return n
             return None
-        seen = 0
-        for _, n in walk(root):
-            try:
-                if n.getRoleName() != want_role:
-                    continue
-                # A combo box contains its own "text" child, so counting
-                # every text would make text#1 the first combo's editor
-                # rather than the first standalone field. Count only
-                # widgets that are not part of another control.
-                par = n.parent
-                if par is not None and par.getRoleName() in (
-                        "combo box", "spin button", "scroll bar"):
-                    continue
-            except Exception:
-                continue
-            seen += 1
-            if seen == idx:
-                return n
-        return None
 
-    want = (name or "").replace("&", "")
+    # A menu item's accessible name carries its shortcut column after a
+    # tab ('Open Chart...\tAlt+o') once a QAction has a shortcut -- which
+    # nearly every item does since the accelerator work. Match on the
+    # label half only, or every shortcut-bearing item is unreachable.
+    want = (name or "").split("\t")[0].replace("&", "")
     for _, n in walk(root):
         try:
-            if (n.name or "").replace("&", "") != want:
+            if (n.name or "").split("\t")[0].replace("&", "") != want:
                 continue
             if role is not None and n.getRoleName() != role:
                 continue
@@ -346,6 +358,14 @@ def run_script(path, args=""):
                                env=dict(os.environ, DISPLAY=DISPLAY))
             elif cmd == "tree":
                 dump_tree(root)
+            elif cmd == "key":
+                # Raw keystrokes to whatever has focus -- the escape hatch
+                # for native (GTK) dialogs that AT-SPI cannot see into.
+                xdo("key", "--clearmodifiers", rest)
+                time.sleep(0.3)
+            elif cmd == "typeraw":
+                xdo("type", "--delay", "40", "--", rest)
+                time.sleep(0.3)
             elif cmd == "sleep":
                 time.sleep(float(rest))
             else:

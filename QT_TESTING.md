@@ -264,6 +264,15 @@ Things that cost a cycle each, if you do end up here:
 - **`pkill -f` matches your own command line** and kills the shell running
   it, surfacing as a bare exit code 144. Use `pkill -x`, and remember
   `/proc/pid/comm` truncates at 15 characters: `astrolog-qt-tes`.
+- **The file dialogs are native GTK and AT-SPI cannot see into them** —
+  their tree is unnamed buttons at bogus coordinates. The `key` and
+  `typeraw` scenario commands are the escape hatch: `key ctrl+l`, then
+  `typeraw /path/to/file.as`, then `key Return` drives the path bar
+  every GTK chooser has.
+- **A QAction with a shortcut reports the shortcut inside its accessible
+  name** (`Open Chart...\tAlt+o`), which is why the driver matches on
+  the label half before the tab. If a by-name lookup misses a menu item
+  that clearly exists, check the name for a `\t` first.
 
 ## One slow thing that is not a bug
 

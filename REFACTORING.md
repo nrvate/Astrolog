@@ -594,7 +594,7 @@ and the registry audit reminds you of the last two.
      the tables, precisely because the phase-2 batteries had trimmed
      step 3 down to builds+suite+matrix. The step-3 list is the
      battery; trimming it is how nets go stale unnoticed.
-3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3139/0),
+3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3140/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
    those last two in parallel subshells, they're the slow tail.

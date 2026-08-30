@@ -65,7 +65,12 @@
 
 void PrintHeader(int nSpace)
 {
-  char sz[cchSzDef];
+  // cchSzLine, not cchSzDef: the location line joins ciMain.loc and the
+  // formatted coordinates, and an atlas-produced location name alone can
+  // pass 58 characters ("Washington, Washington West, District of
+  // Columbia Co., DC") -- with seconds on, the joined line overflowed an
+  // 80-byte buffer and crashed every text chart of such a saved file.
+  char sz[cchSzLine];
   int day, fNam, fLoc, fProg;
 
   if (nSpace < 0) {
@@ -88,12 +93,12 @@ void PrintHeader(int nSpace)
   else {
     if (!us.fSeconds || fNam)
       PrintSz("for ");
-    sprintf(sz, "%s%s", fNam ? ciMain.nam : "", fNam ? "\n" : "");
+    sprintf2(S(sz), "%s%s", fNam ? ciMain.nam : "", fNam ? "\n" : "");
     PrintSz(sz);
     day = DayOfWeek(Mon, Day, Yea);
     sprintf(sz, "%.3s %s %s (%s)", szDay[day], SzDate(Mon, Day, Yea, 3),
       SzTim(Tim), SzOffset(Zon, Dst, Lon)); PrintSz(sz);
-    sprintf(sz, "%c%s%s%s\n", fLoc && !fNam ? '\n' : ' ',
+    sprintf2(S(sz), "%c%s%s%s\n", fLoc && !fNam ? '\n' : ' ',
       fLoc ? ciMain.loc : "", fLoc ? " " : "", SzLocation(Lon, Lat));
     PrintSz(sz);
     if (us.fProgress) {
@@ -108,7 +113,7 @@ void PrintHeader(int nSpace)
     AnsiColor(kDkGray);
     fNam = FSzSet(ciTwin.nam); fLoc = FSzSet(ciTwin.loc);
     fProg = us.nRel == rcProgress;
-    sprintf(sz, "Chart %s %s%s", !us.fSeconds || fNam ?
+    sprintf2(S(sz), "Chart %s %s%s", !us.fSeconds || fNam ?
       (!fProg ? "#2 comparison for" : "#2 progressed for") :
       (!fProg ? "Number2:" : "Progr.2:"), fNam ? ciTwin.nam : "",
       fNam ? "\n" : ""); PrintSz(sz);
@@ -119,7 +124,7 @@ void PrintHeader(int nSpace)
       sprintf(sz, "%.3s %s %s (%s)", szDay[day],
         SzDate(ciTwin.mon, ciTwin.day, ciTwin.yea, 3), SzTim(ciTwin.tim),
         SzOffset(ciTwin.zon, ciTwin.dst, ciTwin.lon)); PrintSz(sz);
-      sprintf(sz, "%c%s%s%s\n", fLoc && !fNam ? '\n' : ' ',
+      sprintf2(S(sz), "%c%s%s%s\n", fLoc && !fNam ? '\n' : ' ',
         fLoc ? ciTwin.loc : "", fLoc ? " " : "",
         SzLocation(ciTwin.lon, ciTwin.lat)); PrintSz(sz);
     }
@@ -714,7 +719,10 @@ void PrintHouse(int i, flag fLeft)
 
 void PrintWheelCenter(int irow)
 {
-  char sz[cchSzDef], szT[cchSzDef];
+  // cchSzLine for the same reason as PrintHeader() above: rows 1 and 3
+  // are the chart's name and location verbatim, which are user strings
+  // with no 80-character guarantee.
+  char sz[cchSzLine], szT[cchSzDef];
   int cch, nT;
   flag fNam = FSzSet(ciMain.nam), fLoc = FSzSet(ciMain.loc);
 
@@ -732,7 +740,7 @@ void PrintWheelCenter(int irow)
     sprintf(sz, "%s %s chart", szAppName, szVersionCore);
     break;
   case 1:
-    sprintf(sz, "%s", ciMain.nam);
+    sprintf2(S(sz), "%s", ciMain.nam);
     break;
   case 2:
     if (FNoTimeOrSpace(ciMain))
@@ -744,7 +752,7 @@ void PrintWheelCenter(int irow)
     }
     break;
   case 3:
-    sprintf(sz, "%s", ciMain.loc);
+    sprintf2(S(sz), "%s", ciMain.loc);
     break;
   case 4:
     sprintf(sz, "%s, %s", SzOffset(Zon, Dst, Lon), SzLocation(Lon, Lat));

@@ -2907,6 +2907,57 @@ static void TestSharedCoreFixesQt()
     rgignoreSav[i] = ignore[i];
   }
 
+  // Work log item 114: PrintHeader() and PrintWheelCenter() format the
+  // chart's name and location -- arbitrary user strings, and the atlas
+  // itself produces location names near 60 characters -- through what
+  // were 80-byte buffers. A saved chart of a long-named city crashed
+  // every text chart under fortify (found by exporting a real eclipse
+  // chart of "Washington, Washington West, District of Columbia Co.,
+  // DC" with seconds on). Drive both functions with strings past every
+  // old bound; surviving IS the assertion, the way TestBadInputQt()
+  // treats a crash.
+  {
+    static char szLongNam[121], szLongLoc[121];
+    char szOut[cchSzMax];
+    CI ciMainSav = ciMain, ciCoreSav = ciCore;
+    flag fSecSav = us.fSeconds, fWheelSav = us.fWheel;
+    flag fListSav = us.fListing, fGraphSav = us.fGraphics;
+    FILE *file;
+    long cb = 0;
+
+    for (i = 0; i < 120; i++) {
+      szLongNam[i] = 'N';
+      szLongLoc[i] = 'L';
+    }
+    ciMain.nam = szLongNam; ciMain.loc = szLongLoc;
+    ciCore = ciMain;
+    us.fSeconds = fTrue;
+    sprintf(szOut, "%s/astrolog-qt-longloc.txt",
+      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+    FCloneSz(szOut, &is.szFileScreen);
+    us.fGraphics = fFalse;
+    us.fListing = fTrue; us.fWheel = fFalse;
+    Action();                       // PrintHeader() path (-v listing).
+    us.fListing = fFalse; us.fWheel = fTrue;
+    Action();                       // PrintWheelCenter() path (-w wheel).
+    us.fWheel = fWheelSav; us.fListing = fListSav;
+    us.fGraphics = fGraphSav;
+    FCloneSz(NULL, &is.szFileScreen);
+    us.fSeconds = fSecSav;
+    ciMain = ciMainSav; ciCore = ciCoreSav;
+    file = fopen(szOut, "rb");
+    if (file != NULL) {
+      fseek(file, 0, SEEK_END);
+      cb = ftell(file);
+      fclose(file);
+      remove(szOut);
+    }
+    Check(file != NULL && cb > 500,
+      "a 120-character name and location survive the text charts "
+      "(%ld bytes)", cb);
+    CastChart(1);                   // Leave real positions for the rest.
+  }
+
   // Work log item 93: a slot forced to a midpoint draws its NAME in
   // place of a glyph only when it was also renamed. A forced slot that
   // keeps its name is that body computed by another formula -- the

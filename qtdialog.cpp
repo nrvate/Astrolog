@@ -1194,8 +1194,16 @@ void ShowOpenChartDialogQt()
 {
   if (FNoReadQt())
     return;
+  // The filter list is Windows' DlgOpenChart lpstrFilter, verbatim: every
+  // format FInputData() can read gets its own row there, not just .as.
   QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Chart", QString(),
-    "Astrolog Chart Files (*.as);;All Files (*)");
+    "Astrolog Files (*.as);;"
+    "Astrological Exchange Files (*.aaf);;"
+    "Quick*Chart Files (*.qck);;"
+    "Astrodatabank Files (*.xml);;"
+    "iCalendar Files (*.ics);;"
+    "Text Files [Solar Fire] (*.txt);;"
+    "All Files (*)");
   if (qs.isEmpty())
     return;
   QByteArray ba = qs.toLocal8Bit();
@@ -2159,8 +2167,15 @@ static void ShowOpenChartIntoDialogQt(int iChart)
     return;
   QString qsTitle = iChart <= 1 ? QString("Open Chart") :
     QString("Open Chart #%1").arg(iChart);
+  // Same seven-filter list as ShowOpenChartDialogQt(), from Windows.
   QString qs = QFileDialog::getOpenFileName(gi.qwind, qsTitle, QString(),
-    "Astrolog Chart Files (*.as);;All Files (*)");
+    "Astrolog Files (*.as);;"
+    "Astrological Exchange Files (*.aaf);;"
+    "Quick*Chart Files (*.qck);;"
+    "Astrodatabank Files (*.xml);;"
+    "iCalendar Files (*.ics);;"
+    "Text Files [Solar Fire] (*.txt);;"
+    "All Files (*)");
   if (qs.isEmpty())
     return;
   QByteArray ba = qs.toLocal8Bit();

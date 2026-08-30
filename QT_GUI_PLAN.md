@@ -201,7 +201,13 @@ Roughly in the order I'd take them.
    matter again, that is where to start, and measure the annulus by angle
    rather than cropping.
 7. **Use it on real data.** Added 2026-08-26, and on the evidence it
-   outranks everything above it. Every verification before that date was
+   outranks everything above it. **Second session run 2026-08-30**
+   (work log item 114): the maintainer's own 7.40-era config and real
+   chart files, driven through the live GUI. It found a shared-core
+   crasher (a text-chart buffer overflow on atlas-length location
+   names), silent rot in the GUI-automation driver, and a file-dialog
+   parity gap — none visible to the 3000+ mechanical assertions. The
+   item stays open on purpose: it is a practice, not a task. Every verification before that date was
    mechanical — does the item fire, does the dialog open, does the layout
    match. One session driving the port from a user's own settings file
    found three bugs (items 27-29) that the 2728 assertions of the day
@@ -3556,6 +3562,72 @@ are the more useful half to read before starting something new.
       still fail their assertions. Suite 3139/0 twice over, clean
       under ASan; win build and scenarios clean. CONVENTIONS'
       one-Borrow-per-deduced-type rule bit once, exactly as written.
+
+114. **The second real-data session: the maintainer's config, the
+    maintainer's charts, the live GUI.** Item 7's practice, executed
+    with /data/med/astrolog.as (a 7.40-era settings file) and the real
+    chart files beside it, driven through qtdrive plus console runs and
+    a Wine cross-check. Verified working end to end: startup render
+    with that config, chart-mode switching, a live Placidus recast off
+    the House System menu, Set Chart Info carrying the loaded chart's
+    data, an atlas lookup of "Austin, TX" returning real rows, Open
+    Chart #2 through the native file dialog, the comparison wheel with
+    both charts' sidebar blocks, Set Chart #2 Info, the Transits
+    dialog, a .dat event chart, text and bitmap export to real files,
+    and File/Exit returning status 0 four times out of four.
+    - **A shared-core crasher, the session's reason to exist.**
+      Exporting the text of a saved lunar-eclipse chart aborted the
+      process: fortify caught `PrintHeader()` (charts1.cpp) formatting
+      the chart's location plus seconds-precision coordinates through
+      an 80-byte buffer — the file's atlas-produced location name is
+      58 characters by itself ("Washington, Washington West, District
+      of Columbia Co., DC"). The same pattern sat in the ciTwin block
+      below it and in `PrintWheelCenter()`. All fixed with cchSzLine
+      buffers plus `sprintf2` per CONVENTIONS' bounded-formatting
+      rule; charts2's relation header was checked and is safe (its
+      format string carries a precision). Nets: the console repro now
+      completes byte-identical to the intended output, pinned-time
+      text and graphics captures are byte-identical old binary vs.
+      new, and a shared-core-fixes assertion drives both functions
+      with 120-character names and locations. **Falsification took
+      two attempts**: reverting only the buffer passed, because
+      sprintf2 still bounds it — the fix is two layers and only
+      reverting both (buffer and sprintf) reproduces the abort. The
+      crash reaches Windows too (same sprintf, no fortify — silent
+      stack corruption there), so the fix ships in both builds,
+      unguarded.
+    - **The GUI-automation driver had rotted silently.** Since the
+      accelerator work, a QAction with a shortcut reports its
+      accessible name with the shortcut appended ("Open Chart...\t
+      Alt+o"), so qtdrive's by-name lookup missed every
+      shortcut-bearing menu item — scenarios/objectsel.txt still
+      passed only because that one item carries no shortcut. Also any
+      label containing '#' ("Open Chart #2...") was misrouted into the
+      positional role#n branch. Both fixed in tools/qtdrive.py, which
+      also gained `key` and `typeraw` commands — the escape hatch for
+      the native GTK file dialogs AT-SPI cannot see into (Ctrl+L, type
+      the path, Return).
+    - **A parity gap fixed**: both Open Chart dialogs now carry
+      Windows' seven-filter list (.as, .aaf, .qck, .xml, .ics, Solar
+      Fire .txt, all files) instead of .as-or-everything. The save
+      dialogs already matched Windows' two-filter save side.
+    - **Recorded, not changed**: the default astrolog.as is searched
+      for in the executable's directory before the current directory
+      (io.cpp FileOpen, upstream order), so running the repo binary
+      from a directory with its own astrolog.as silently loads the
+      repo's — reach a personal config with -i. The Chart menu shows
+      "Alt+T" for Transits but the .rc accelerator table binds
+      Shift+Alt+T there and gives Alt+T to the sidebar toggle — an
+      upstream label/accel mismatch this port reproduces exactly
+      (proven live in both builds; a windrive alt+t blanked the Wine
+      sidebar before the shot, which is also why that screenshot
+      confused a whole debugging pass). And the Transits dialog's
+      initial fields are ciTran, frozen before command-line switches
+      in both builds — with a config loaded via -i its zone shows the
+      compiled default, and the dialog's Now button, which reads the
+      live ciDefa, is the correct path.
+    - The Wine cross-check also confirmed the two builds render the
+      same wheel for the same chart and config, sidebar included.
 
 ## Features this fork adds to both builds
 
