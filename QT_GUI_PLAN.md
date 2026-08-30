@@ -3241,6 +3241,32 @@ are the more useful half to read before starting something new.
     prefix uses; grfSwPrefix mentions total 43 in the def table).
     Suite 3039/0. Tranche 1 of phase 2 is complete.
 
+101. **P5: the astrocartography twins share one core.** ChartAstroGraph()
+    and ChartAstroGraphRelation() -- the one true structural clone left
+    from D1's survey (~385 vs. ~430 lines, every array doubled to
+    [2][objMax]) -- are now wrappers over static
+    ChartAstroGraphCore(flag fRel) in charts1.cpp; the charts2.cpp copy
+    is deleted. The core was *derived, never retyped*: the relation
+    function's exact text, extracted with CRLF intact, transformed by
+    seventeen counted exact-string replacements (chart count, position
+    sources cp0/planet[] vs. rgpcp[1..2], line prefixes via an empty
+    sz2[0], ring indexes i3/i4 through the crossing search, and the two
+    pairing conditions single mode adds: k != l against MC/IC, ordered
+    pairs minus the Node axis against Asc/Des), then the diff reviewed
+    hunk by hunk against the plan before splicing. One asymmetry kept
+    on purpose, commented at the site: -c3 3D houses zero the altitude
+    in single charts only, as the twins always did. The gate the D1
+    verdict specified: a 27-case -L differential
+    (single/synastry/dual/transit/progress x seconds off/on/1K x step
+    x 3D x -R/-RT restrictions x -YRZ angle restrictions x interpret x
+    -~L crossing filter x crossings off), every case proven pairwise
+    distinct and the battery proven deterministic *before* being
+    trusted -- the first run was green over nothing twice (the qt
+    binary never prints console charts, use ./astrolog; =b0 force-on
+    was a no-op because nrvate.as already has seconds on, _b0 is the
+    off case). Byte-identical old vs. new on the first post-merge run.
+    Suite 3039/0, six audits, round trip, ASan suite, win-tests.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

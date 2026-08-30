@@ -1968,19 +1968,24 @@ void ChartSector(void)
 }
 
 
-// Print the locations of the astrocartography lines on the Earth as
-// specified with the -L switch. This includes Midheaven and Nadir lines,
-// zenith positions, and locations of Ascendant and Descendant lines.
+// This is a subprocedure of ChartAstroGraph() and ChartAstroGraphRelation().
+// Print the locations of the astrocartography lines on the Earth for one
+// chart (-L) or a two chart comparison (-r0 -L): Midheaven and Nadir lines,
+// zenith positions, and locations of Ascendant and Descendant lines. fRel
+// selects the chart count, the position sources (the main chart vs. the
+// two comparison rings), the per-chart line prefixes, and which chart
+// pairings the -L0 latitude crossing search walks.
 
-flag ChartAstroGraph(void)
+static flag ChartAstroGraphCore(flag fRel)
 {
   CrossInfo *rgcr, *pcr, crT;
-  char sz[cchSzDef];
-  real planet1[objMax], planet2[objMax], mc[objMax], ic[objMax],
-    asc[objMax], des[objMax], asc1[objMax], des1[objMax], rgad[objMax],
-    lo = Lon, longm, w, x, y, z, ww, xx, yy, zz, ad, oa, am, od;
-  int cCross = 0, i, j, k, l, m, n, o;
-  flag fEdge;
+  char sz[cchSzDef], sz2[2][4];
+  real planet1[2][objMax], planet2[2][objMax], mc[2][objMax], ic[2][objMax],
+    asc[2][objMax], des[2][objMax], asc1[2][objMax], des1[2][objMax],
+    rgad[2][objMax], lo[2], longm, w, x, y, z, ww, xx, yy, zz, ad, oa, am, od;
+  int cChart = 1 + (fRel != 0), cCross = 0, i, i2, i3, i4, j, k, l, m, n, o;
+  byte ignore3[objMax];
+  flag fTransit, fEdge;
 
   if (us.fLatitudeCross) {
     rgcr = RgAllocate(MAXCROSS, CrossInfo, "crossing table");
@@ -1989,51 +1994,69 @@ flag ChartAstroGraph(void)
     pcr = rgcr;
   }
 
-  // Calculate zenith location on Earth of each object.
+  fTransit = fRel && (us.nRel == rcTransit || us.nRel == rcProgress);
+  if (fTransit) {
+    sprintf(sz2[0], "%c.", us.nRel == rcTransit ? 'T' : 'P');
+    sprintf(sz2[1], "N.");
+    for (i = 0; i <= is.nObj; i++)
+      ignore3[i] = ignore[i] && ignore2[i];
+  } else {
+    if (fRel) {
+      sprintf(sz2[0], "#1 "); sprintf(sz2[1], "#2 ");
+    } else
+      sz2[0][0] = chNull;
+    CopyRgb(ignore, ignore3, sizeof(ignore));
+  }
 
-  for (i = 0; i <= is.nObj; i++) if (!ignore[i]) {
-    planet1[i] = Tropical(planet[i]);
-    planet2[i] = !us.fHouse3D ? planetalt[i] : 0.0;
-    EclToEqu(&planet1[i], &planet2[i]);
+  for (i2 = 0; i2 < cChart; i2++) {
+
+  for (i = 0; i <= is.nObj; i++) if (!ignore3[i]) {
+    planet1[i2][i] = Tropical(fRel ? rgpcp[i2+1]->obj[i] : planet[i]);
+    planet2[i2][i] = fRel ? rgpcp[i2+1]->alt[i] :  // The 3D house zeroing
+      (!us.fHouse3D ? planetalt[i] : 0.0);         // is single chart only.
+    EclToEqu(&planet1[i2][i], &planet2[i2][i]);    // Calc zenith location.
   }
 
   // Print header.
 
-  PrintSz("Object :");
+  if (fRel)
+    AnsiColor(kDefault);
+  sprintf(sz, "%sObject :", sz2[i2]); PrintSz(sz);
   for (j = 0; j <= is.nObj; j++) {
     i = rgobjList[j];
-    if (!ignore[i] && FThing2(i)) {
+    if (!ignore3[i] && FThing2(i)) {
       AnsiColor(kObjA[i]);
       sprintf(sz, VSeconds(" %.3s", " %-10.10s", " %-14.14s"), szObjDisp[i]);
       PrintSz(sz);
     }
   }
   AnsiColor(kDefault);
-  PrintSz("\n------ :");
+  sprintf(sz, "\n%s------ :", sz2[i2]); PrintSz(sz);
   for (i = 0; i <= is.nObj; i++)
-    if (!ignore[i] && FThing2(i)) {
+    if (!ignore3[i] && FThing2(i)) {
       PrintCh(' ');
       PrintTab('#', VSeconds(3, 10, 14));
     }
 
   // Print the longitude locations of the Midheaven lines.
 
-  PrintSz("\nMidheav: ");
-  if (lo < 0.0)
-    lo += rDegMax;
+  sprintf(sz, "\n%sMidheav: ", sz2[i2]); PrintSz(sz);
+  lo[i2] = fRel ? rgpci[i2+1]->lon : Lon;
+  if (lo[i2] < 0.0)
+    lo[i2] += rDegMax;
   for (j = 0; j <= is.nObj; j++) {
     i = rgobjList[j];
-    if (!ignore[i] && FThing2(i)) {
+    if (!ignore3[i] && FThing2(i)) {
       AnsiColor(kObjA[i]);
-      x = cp0.lonMC - planet1[i];
+      x = (fRel ? rgpcp[i2+1]->lonMC : cp0.lonMC) - planet1[i2][i];
       if (x < 0.0)
         x += rDegMax;
       if (x > rDegHalf)
         x -= rDegMax;
-      z = lo + x;
+      z = lo[i2] + x;
       if (z > rDegHalf)
         z -= rDegMax;
-      mc[i] = z;
+      mc[i2][i] = z;
       if (us.fSeconds) {
         sprintf(sz, "%s ", SzLocation(z, 0.0));
         sz[11 + us.fSecond1K*4] = chNull;
@@ -2047,15 +2070,15 @@ flag ChartAstroGraph(void)
 
   // The Nadir lines are just always 180 degrees away from the Midheaven.
 
-  PrintSz("\nNadir  : ");
+  sprintf(sz, "\n%sNadir  : ", sz2[i2]); PrintSz(sz);
   for (j = 0; j <= is.nObj; j++) {
     i = rgobjList[j];
-    if (!ignore[i] && FThing2(i)) {
+    if (!ignore3[i] && FThing2(i)) {
       AnsiColor(kObjA[i]);
-      z = mc[i] + rDegHalf;
+      z = mc[i2][i] + rDegHalf;
       if (z > rDegHalf)
         z -= rDegMax;
-      ic[i] = z;
+      ic[i2][i] = z;
       if (us.fSeconds) {
         sprintf(sz, "%s ", SzLocation(z, 0.0));
         sz[11 + us.fSecond1K*4] = chNull;
@@ -2069,12 +2092,12 @@ flag ChartAstroGraph(void)
 
   // Print the Zenith latitude locations.
 
-  PrintSz("\nZenith : ");
+  sprintf(sz, "\n%sZenith : ", sz2[i2]); PrintSz(sz);
   for (k = 0; k <= is.nObj; k++) {
     i = rgobjList[k];
-    if (!ignore[i] && FThing2(i)) {
+    if (!ignore3[i] && FThing2(i)) {
       AnsiColor(kObjA[i]);
-      y = planet2[i];
+      y = planet2[i2][i];
       if (us.fSeconds) {
         sprintf(sz, " %s ", SzLocation(0.0, y));
         for (j = 1; sz[j] = sz[j+11 + us.fSecond1K*4]; j++)
@@ -2087,31 +2110,35 @@ flag ChartAstroGraph(void)
   }
   PrintL2();
 
+  } // i2
+
   // Now print the locations of Ascendant and Descendant lines. Since these
   // are curvy, loop through the latitudes, and for each object at each
   // latitude, print the longitude location of the line in question.
 
-  longm = Mod(cp0.lonMC + lo);
-  for (k = 0; k <= is.nObj; k++)
-    asc[k] = des[k] = rgad[k] = rLarge;
+  for (i2 = 0; i2 < cChart; i2++)
+    for (k = 0; k <= is.nObj; k++)
+      asc[i2][k] = des[i2][k] = rgad[i2][k] = rLarge;
   for (j = 90-(90 % us.nAstroGraphStep); j >= -90; j -= us.nAstroGraphStep) {
+    for (i2 = 0; i2 < cChart; i2++) {
+    longm = Mod((fRel ? rgpcp[i2+1]->lonMC : cp0.lonMC) + lo[i2]);
     fEdge = (j >= 90 || j <= -90);
     if (!fEdge) {
       AnsiColor(kDefault);
-      sprintf(sz, "Asc@%2d%c: ", NAbs(j), j < 0 ? 's' : 'n');
+      sprintf(sz, "%sAsc@%2d%c: ", sz2[i2], NAbs(j), j < 0 ? 's' : 'n');
       PrintSz(sz);
     }
     for (k = 0; k <= is.nObj; k++) {
       i = rgobjList[k];
-      if (!ignore[i] && FThing2(i)) {
+      if (!ignore3[i] && FThing2(i)) {
         AnsiColor(kObjA[i]);
-        asc1[i] = asc[i];
+        asc1[i2][i] = asc[i2][i];
         if (fEdge)
           ad = rLarge;
         else
-          ad = RTanD(planet2[i])*RTanD((real)j);
+          ad = RTanD(planet2[i2][i])*RTanD((real)j);
         if (ad*ad > 1.0) {
-          asc[i] = rgad[i] = rLarge;
+          asc[i2][i] = rgad[i2][i] = rLarge;
           if (fEdge)
             continue;
           PrintCh(' ');
@@ -2119,7 +2146,7 @@ flag ChartAstroGraph(void)
           PrintTab(' ', 1 + us.fSeconds);
         } else {
           ad = RAsin(ad);
-          oa = planet1[i] - DFromR(ad);
+          oa = planet1[i2][i] - DFromR(ad);
           if (oa < 0.0)
             oa += rDegMax;
           am = oa - rDegQuad;
@@ -2130,8 +2157,8 @@ flag ChartAstroGraph(void)
             z += rDegMax;
           if (z > rDegHalf)
             z -= rDegMax;
-          asc[i] = z;
-          rgad[i] = ad;
+          asc[i2][i] = z;
+          rgad[i2][i] = ad;
           if (fEdge)
             continue;
           if (us.fSeconds) {
@@ -2149,30 +2176,30 @@ flag ChartAstroGraph(void)
 
     if (!fEdge) {
       AnsiColor(kDefault);
-      sprintf(sz, "\nDsc@%2d%c: ", NAbs(j), j < 0 ? 's' : 'n');
+      sprintf(sz, "\n%sDsc@%2d%c: ", sz2[i2], NAbs(j), j < 0 ? 's' : 'n');
       PrintSz(sz);
     }
     for (k = 0; k <= is.nObj; k++) {
       i = rgobjList[k];
-      if (!ignore[i] && FThing2(i)) {
+      if (!ignore3[i] && FThing2(i)) {
         AnsiColor(kObjA[i]);
-        des1[i] = des[i];
-        ad = rgad[i];
+        des1[i2][i] = des[i2][i];
+        ad = rgad[i2][i];
         if (ad == rLarge) {
-          des[i] = rLarge;
+          des[i2][i] = rLarge;
           if (fEdge)
             continue;
           PrintCh(' ');
           PrintTab('-', VSeconds(2, 8, 12));
           PrintTab(' ', 1 + us.fSeconds);
         } else {
-          od = planet1[i] + DFromR(ad);
+          od = planet1[i2][i] + DFromR(ad);
           z = longm - (od + rDegQuad);
           if (z < 0.0)
             z += rDegMax;
           if (z > rDegHalf)
             z -= rDegMax;
-          des[i] = z;
+          des[i2][i] = z;
           if (fEdge)
             continue;
           if (us.fSeconds) {
@@ -2191,24 +2218,28 @@ flag ChartAstroGraph(void)
     // which were saved in an array above as they were printed, and calculate
     // and print the latitude crossings.
 
-    if (!us.fLatitudeCross)
+    if (!us.fLatitudeCross || i2 < cChart-1)
       continue;
     for (l = 0; l <= is.nObj; l++) {
-      if (ignore[l] || !FThing2(l))
+      if (ignore3[l] || !FThing2(l))
         continue;
       for (k = 0; k <= is.nObj; k++) {
-        if (ignore[k] || !FThing2(k))
+        if (ignore3[k] || !FThing2(k))
           continue;
-        for (n = 0; n <= 1; n++) {
-          if (ignorez[n ? arDes : arAsc])
+        for (n = 0; n <= (fRel ? 3 : 1); n++) {
+          // i3: ring owning this Asc/Des line; i4: the ring crossed
+          // against (the other chart when comparing, ring 0 if not).
+          i3 = fRel && n >= 2; i4 = fRel && n < 2;
+          if (ignorez[FOdd(n) ? arDes : arAsc])
             continue;
-          x = n ? des1[l] : asc1[l];
-          y = n ? des[l] : asc[l];
+          x = FOdd(n) ? des1[i3][l] : asc1[i3][l];
+          y = FOdd(n) ? des[i3][l] : asc[i3][l];
           // Make sure Asc/Des crossings in top/bottom lat bands are seen.
           if ((x == rLarge) != (y == rLarge)) {
             zz = (x == rLarge ? y : x);
-            z = MinDistance(Mod(zz), Mod(mc[l])) <
-              MinDistance(Mod(zz), Mod(ic[l])) ? mc[l] : ic[l];
+            z = MinDistance(Mod(zz), Mod(mc[i3][l])) <
+                MinDistance(Mod(zz), Mod(ic[i3][l])) ?
+              mc[i3][l] : ic[i3][l];
             if (x == rLarge)
               x = z;
             else
@@ -2221,26 +2252,33 @@ flag ChartAstroGraph(void)
 
             // Check if Ascendant/Descendant cross Midheaven/Nadir.
 
-            z = m ? ic[k] : mc[k];
+            z = m ? ic[i4][k] : mc[i4][k];
             zz = (z >= 0 ? z : z + rDegMax);
-            if (cCross < MAXCROSS && k != l && !ignorez[m ? arIC : arMC] &&
+            if (cCross < MAXCROSS && (fRel || k != l) &&
+              !ignorez[m ? arIC : arMC] &&
               (FCrossAscMC(x, y, z) || FCrossAscMC(xx, yy, zz))) {
-              pcr->obj1 = l;
-              pcr->ang1 = n ? oDes : oAsc;
-              pcr->obj2 = k;
+              pcr->obj1 = l + objMax*i3;
+              pcr->ang1 = FOdd(n) ? oDes : oAsc;
+              pcr->obj2 = k + objMax*i4;
               pcr->ang2 = m ? oNad : oMC;
               pcr->lon  = z;
               pcr->lat  = (real)j+5.0*(FCrossAscMC(x, y, z) ?
                 RAbs(z-y)/RAbs(x-y) : RAbs(zz-yy)/RAbs(xx-yy));
+              if (n >= 2) {
+                SwapN(pcr->obj1, pcr->obj2); SwapN(pcr->ang1, pcr->ang2);
+              }
+              if (fTransit &&
+                (ignore2[pcr->obj1 % objMax] || ignore[pcr->obj2 % objMax]))
+                continue;
               cCross++, pcr++;
 #ifdef EXPRESS
               // Skip current crossing if AstroExpression says to do so.
               if (!us.fExpOff && FSzSet(us.szExpCross)) {
                 ExpSetR(iLetterU, (pcr-1)->lon);
                 ExpSetR(iLetterV, (pcr-1)->lat);
-                ExpSetN(iLetterW, l);
+                ExpSetN(iLetterW, l + objMax*i3);
                 ExpSetN(iLetterX, (pcr-1)->ang1);
-                ExpSetN(iLetterY, k);
+                ExpSetN(iLetterY, k + objMax*i4);
                 ExpSetN(iLetterZ, (pcr-1)->ang2);
                 if (!NParseExpression(us.szExpCross))
                   cCross--, pcr--;
@@ -2250,13 +2288,16 @@ flag ChartAstroGraph(void)
 
             // Check if Ascendant/Descendant cross another Asc/Des.
 
-            w = m ? des1[k] : asc1[k];
-            z = m ? des[k] : asc[k];
+            if (n >= 2)
+              continue;
+            w = m ? des1[i4][k] : asc1[i4][k];
+            z = m ? des[i4][k] : asc[i4][k];
             // Make sure Asc/Des crossings in top/bottom lat bands are seen.
             if ((w == rLarge) != (z == rLarge)) {
               zz = (w == rLarge ? z : w);
-              ww = MinDistance(Mod(zz), Mod(mc[k])) <
-                MinDistance(Mod(zz), Mod(ic[k])) ? mc[k] : ic[k];
+              ww = MinDistance(Mod(zz), Mod(mc[i4][k])) <
+                   MinDistance(Mod(zz), Mod(ic[i4][k])) ?
+                mc[i4][k] : ic[i4][k];
               if (w == rLarge)
                 w = ww;
               else
@@ -2265,12 +2306,13 @@ flag ChartAstroGraph(void)
             // Second set of variables used to detect crossings near lon 180.
             ww = (w >= 0.0 ? w : w + rDegMax);
             zz = (z >= 0.0 ? z : z + rDegMax);
-            if (cCross < MAXCROSS && k > l && !(k == oSou && l == oNod) &&
+            if (cCross < MAXCROSS &&
+              (fRel || (k > l && !(k == oSou && l == oNod))) &&
               !ignorez[m ? arDes : arAsc] &&
               (FCrossAscAsc(w, x, y, z) || FCrossAscAsc(ww, xx, yy, zz))) {
-              pcr->obj1 = l;
-              pcr->ang1 = n ? oDes : oAsc;
-              pcr->obj2 = k;
+              pcr->obj1 = l + objMax*i3;
+              pcr->ang1 = FOdd(n) ? oDes : oAsc;
+              pcr->obj2 = k + objMax*i4;
               pcr->ang2 = m ? oDes : oAsc;
               pcr->lon = y + (x-y)*RAbs(y-z)/(RAbs(x-w)+RAbs(y-z));
               pcr->lat = (real)j + 5.0*RAbs(y-z)/(RAbs(x-w)+RAbs(y-z));
@@ -2286,15 +2328,18 @@ flag ChartAstroGraph(void)
                 }
               if (o < cCross)
                 continue;
+              if (fTransit &&
+                (ignore2[pcr->obj1 % objMax] || ignore[pcr->obj2 % objMax]))
+                continue;
               cCross++, pcr++;
 #ifdef EXPRESS
               // Skip current crossing if AstroExpression says to do so.
               if (!us.fExpOff && FSzSet(us.szExpCross)) {
                 ExpSetR(iLetterU, (pcr-1)->lon);
                 ExpSetR(iLetterV, (pcr-1)->lat);
-                ExpSetN(iLetterW, l);
+                ExpSetN(iLetterW, l + objMax*i3);
                 ExpSetN(iLetterX, (pcr-1)->ang1);
-                ExpSetN(iLetterY, k);
+                ExpSetN(iLetterY, k + objMax*i4);
                 ExpSetN(iLetterZ, (pcr-1)->ang2);
                 if (!NParseExpression(us.szExpCross))
                   cCross--, pcr--;
@@ -2305,7 +2350,9 @@ flag ChartAstroGraph(void)
         } // n
       } // k
     } // l
+    } // i2
   } // j
+
   if (!us.fLatitudeCross)
     return fTrue;
   PrintL();
@@ -2323,6 +2370,12 @@ flag ChartAstroGraph(void)
   for (i = 0; i < cCross; i++) {
     pcr = rgcr + i;
     j = pcr->obj1;
+    i2 = (j >= objMax);
+    if (i2 > 0)
+      j -= objMax;
+    if (fRel)
+      AnsiColor(kDefault);
+    PrintSz(sz2[i2]);
     AnsiColor(kObjA[j]);
     sprintf(sz, "%.3s ", szObjDisp[j]); PrintSz(sz);
     k = pcr->ang1;
@@ -2332,6 +2385,10 @@ flag ChartAstroGraph(void)
     AnsiColor(kDefault);
     PrintSz(" crosses ");
     l = pcr->obj2;
+    i2 = (l >= objMax);
+    if (i2 > 0)
+      l -= objMax;
+    PrintSz(sz2[i2]);
     AnsiColor(kObjA[l]);
     sprintf(sz, "%.3s ", szObjDisp[l]); PrintSz(sz);
     m = pcr->ang2;
@@ -2353,9 +2410,31 @@ flag ChartAstroGraph(void)
   DeallocateP(rgcr);
   if (cCross <= 0) {
     AnsiColor(kDefault);
-    PrintSz("No latitude crossings.\n");
+    PrintSz(fRel ? "No relationship latitude crossings.\n" :
+      "No latitude crossings.\n");
   }
   return fTrue;
+}
+
+
+
+// Print the locations of the astrocartography lines on the Earth as
+// specified with the -L switch. This includes Midheaven and Nadir lines,
+// zenith positions, and locations of Ascendant and Descendant lines.
+
+flag ChartAstroGraph(void)
+{
+  return ChartAstroGraphCore(fFalse);
+}
+
+
+// Print the locations of astrocartography lines on the Earth for two charts,
+// as specified with the -L -r0 switches. This includes Midheaven and Nadir
+// lines, zenith positions, and locations of Ascendant and Descendant lines.
+
+flag ChartAstroGraphRelation(void)
+{
+  return ChartAstroGraphCore(fTrue);
 }
 
 

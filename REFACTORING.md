@@ -981,9 +981,9 @@ high confidence.
 same day** (item 83): `ChartMidpointCore(flag fRel)`. **Survey of the
 rest, same day** (item 84): Listing and Grid twins are different
 layouts, not clones; the Interpret trio differ in actual prose — all
-three stay as they are, on purpose. AstroGraph is the one true clone
-left (arrays doubled to [2][objMax]); merge it in a dedicated session
-with a -L text differential, or not at all.
+three stay as they are, on purpose. AstroGraph was the one true clone
+left (arrays doubled to [2][objMax]); **merged 2026-08-30** (work log
+item 101, P5's done-note above has the method) — D1 is fully closed.
 
 **D2 — DONE 2026-08-29 (work log item 79). The influence stanzas are
 twelve-line clones over table names.**
@@ -1322,13 +1322,18 @@ own concessions, in dependency order):
 
 **Tranche 2 — the deferred heavy items:**
 
-- **P5. The AstroGraph merge**, exactly as specified in the D1
-  verdict: a dedicated block at session start, nothing else in
-  flight, -L text differential across single/relation/transit modes
-  as the gate, abort-and-record if it fights back. Measured 76%
-  line-identical with the differences interleaved through an [i2]
-  chart dimension — the equivalence argument between planet[] and
-  rgpcp[] data paths is the real work, not the editing.
+- **P5 — done 2026-08-30** (work log item 101): static
+  ChartAstroGraphCore(flag fRel) in charts1.cpp, both public names
+  wrappers, the charts2.cpp copy deleted. The equivalence argument
+  never had to be made: the data paths are genuinely different
+  (cp0/planet[] vs. rgpcp[1..2]) and stay behind fRel ternaries; the
+  core is the relation text with fRel threaded through seventeen
+  counted replacements, never retyped. Gate as specified: 27-case -L
+  differential (all five mode families x seconds/step/3D/
+  restrictions/angle-restrictions/interpret/expression-filter/
+  crossings-off), cases proven pairwise distinct and deterministic
+  before trusting it, byte-identical after. One kept asymmetry,
+  commented: 3D houses zero the altitude in single charts only.
 - **P6. Borrow conversion becomes a paced campaign.** Phase 1 made
   *Sav conversion opportunistic; phase 2 promotes it: family-by-family
   through xcharts1.cpp's ~60 sites (the worst file), a handful of
