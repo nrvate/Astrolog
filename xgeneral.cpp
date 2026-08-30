@@ -1718,6 +1718,16 @@ CONST wchar wzObjectFontUnicode[oCore+1] = {
 
 // Draw the glyph of an object at particular coordinates on the screen.
 
+// Should DrawObject() draw this slot's three letter name instead of a
+// glyph? Only when the slot is forced to a midpoint AND renamed away
+// from its original body -- see the comment at the caller. Split out so
+// the suite can pin both halves of the trigger.
+
+flag FDrawObjectAsName(int obj)
+{
+  return FForceMid(force[obj]) && szObjDisp[obj] != szObjName[obj];
+}
+
 void DrawObject(int obj, int x, int y)
 {
   char szGlyph[4];
@@ -1805,21 +1815,23 @@ void DrawObject(int obj, int x, int y)
     ch = -1;
 #endif
 
-  // A slot forced to a midpoint is no longer the body it started as.
-  // -Fm overrides where a slot sits but not what it is, so the slot
-  // keeps the glyph of its original body while the position list, the
-  // sidebar and the Object Selections dialog all show the name the
-  // midpoint was given. Drawing Chiron's glyph on a point labelled
-  // "Sun/Moo" everywhere else is the one place the two disagree, and
-  // the glyph is the half that is wrong: that body is not what sits
-  // there any more.
+  // A slot forced to a midpoint AND renamed is no longer the body it
+  // started as: the position list, the sidebar and the Object
+  // Selections dialog all show the name the midpoint was given, so
+  // drawing Chiron's glyph on a point labelled "Sun/Moo" everywhere
+  // else would make the glyph the one place that disagrees, and the
+  // glyph is the half that is wrong. Draw the name instead -- the same
+  // three letter abbreviation objects with no glyph of their own fall
+  // back to below. Above the font paths rather than beside that
+  // fallback, so it reaches every output format, and before any
+  // DrawThick() change so there is nothing to undo on the way out.
   //
-  // Draw the name instead -- the same three letter abbreviation that
-  // objects with no glyph of their own already fall back to below.
-  // Above the font paths rather than beside that fallback, so it
-  // reaches every output format, and before any DrawThick() change so
-  // there is nothing to undo on the way out.
-  if (FForceMid(force[obj]) && !fNoText) {
+  // The rename is part of the trigger on purpose: a forced slot that
+  // KEEPS its name is that body computed by another formula (the
+  // classic case: -Fm on Fortune, redefining the Part of Fortune as
+  // the Sun/Moon midpoint), and it keeps its own glyph. Reported live
+  // the first evening this shipped, on exactly that config line.
+  if (FDrawObjectAsName(obj) && !fNoText) {
     sprintf(szGlyph, "%.3s", szObjDisp[obj]);
     DrawSz(szGlyph, x, y, dtCent | dtScale2);
     return;

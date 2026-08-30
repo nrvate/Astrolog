@@ -876,6 +876,7 @@ extern void DrawFill P((int, int, KV));
 extern void DrawSz P((CONST char *, int, int, int));
 extern void DrawSign P((int, int, int));
 extern void DrawHouse P((int, int, int));
+extern flag FDrawObjectAsName P((int));
 extern void DrawObject P((int, int, int));
 extern void DrawStar P((int, int, CONST ES *));
 extern void DrawAspect P((int, int, int));

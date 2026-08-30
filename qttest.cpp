@@ -2907,6 +2907,29 @@ static void TestSharedCoreFixesQt()
     rgignoreSav[i] = ignore[i];
   }
 
+  // Work log item 93: a slot forced to a midpoint draws its NAME in
+  // place of a glyph only when it was also renamed. A forced slot that
+  // keeps its name is that body computed by another formula -- the
+  // maintainer's own config does -Fm on Fortune to redefine the Part
+  // of Fortune as the Sun/Moon midpoint, and the glyph must stay.
+  {
+    real forceFor = force[oFor];
+    CONST char *dispSav = szObjDisp[oFor];
+    static char szRenamedT[] = "Sun/Moo";
+    force[oFor] = ForceMid(oSun, oMoo);
+    szObjDisp[oFor] = szObjName[oFor];
+    Check(!FDrawObjectAsName(oFor),
+      "forced but un-renamed slot keeps its glyph");
+    szObjDisp[oFor] = szRenamedT;
+    Check(FDrawObjectAsName(oFor),
+      "forced and renamed slot draws its name");
+    force[oFor] = 0.0;
+    Check(!FDrawObjectAsName(oFor),
+      "renamed but unforced slot keeps its glyph");
+    force[oFor] = forceFor;
+    szObjDisp[oFor] = dispSav;
+  }
+
   // gs.xWin includes the sidebar; FOutputSettings() writes ":Xw" without
   // it and says so in the comment beside the value. Reading it back has
   // to add it on again, and did not -- so save, reload, save, reload
@@ -3409,9 +3432,12 @@ static void TextChartCaptureQt(CONST char *szDir)
 // Nothing here is a test. Do not add assertions; put those in the suite.
 static void ProbeQt()
 {
-  // Nothing in particular. Rewrite this body to ask the program a
-  // question, build, run. Everything is in scope: poke us/gs/gi, call
-  // SetChartModeQt() or a dialog function, save gi.qim and measure it.
+  printf("gi.nMode=%d (gWheel=%d gHouse=%d)\n", gi.nMode, gWheel, gHouse);
+  printf("force[19]=%f  disp=%s  name=%s  renamed=%d\n",
+    force[19], szObjDisp[19], szObjName[19],
+    szObjDisp[19] != szObjName[19]);
+  printf("us.fListDecan=%d us.nDecanType=%d\n",
+    us.fListDecan, us.nDecanType);
 }
 
 

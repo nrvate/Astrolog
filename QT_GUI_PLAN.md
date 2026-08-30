@@ -3114,6 +3114,23 @@ are the more useful half to read before starting something new.
     misfiled fields, it is the ~60-site *Sav dance, which is exactly
     what T1's move (2) (a push/pop home for borrows) addresses next.
 
+93. **The forced-slot name rule needed the rename in its trigger.**
+    Reported by the maintainer the first evening the rule shipped:
+    the Part of Fortune drew as "For" instead of its glyph. Their own
+    config does "-Fm 19 1 2  ; POF = Sun/Moon midpoint" -- a forced
+    slot that KEEPS its name is that body computed by another
+    formula, not a different body wearing a stale glyph, so the
+    draw-the-name rule now requires forced AND renamed. The condition
+    is a predicate (FDrawObjectAsName) so the suite pins all three
+    corners; the test was falsified against the reverted condition
+    (and the first falsification run was void -- a const error left a
+    stale binary passing, caught by the build-gating habit). The same
+    evening's second report, house systems resizing signs, measured
+    as NOT a regression: pre-last-night and current binaries produce
+    pixel-identical change profiles across Plac/Koch/Equal/Whole (the
+    lone differing pixels are Fortune's glyph); the described
+    behavior is the House Wheel (-w) working as designed.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
