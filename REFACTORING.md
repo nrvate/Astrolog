@@ -296,6 +296,10 @@ of the file (A2's failure mode, gone for good).
   (the WIN screensaver quirk). ~190 switches migrated; 377-invocation
   differential byte-identical. What remains: chart types, chart info,
   I/O and macros, day arithmetic, and -W.
+  **M9 done 2026-08-29** (work log item 76): the twenty-four
+  chart-type letters left the main parser; 460-invocation differential
+  byte-identical. What remains: chart info (-n/-z/-q/-i), I/O and
+  macros, relationship charts (-r*), day arithmetic, -H* help, and -W.
 - **M-final**: the four parser shells reduce to dispatch loops; the
   help printers are deleted; `FOutputSettings()` is a loop plus the
   handful of genuinely bespoke sections.

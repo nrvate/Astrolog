@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-75
+## Work log — items 1-76
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2856,6 +2856,22 @@ are the more useful half to read before starting something new.
       strictness class, this time only rewording an error that was
       always an error. The FErrorSubswitch message wording for retired
       digit cases goes with them.
+
+76. **M9: the chart-type letters leave the main parser.** Twenty-four
+    cases deleted -- every text chart selector (-v/-w/-g/-a/-m/-Z/-S/
+    -l/-j/-7/-L/-K/-d/-D/-E/-8/-e/-t/-T/-B/-V/-P/-N/-I). Nearly all
+    are prefix rows, which for these are *exactly* equivalent to the
+    retired cases for every token (a prefix row and a case letter see
+    the same spellings); the handlers that used to walk argv[0] with
+    ich -- the transit and progression suffix machinery of -t/-T/-B/
+    -V/-dp -- walk szSwitch with a local cursor. -S/-D/-7 became flag
+    rows and -e (the everything-toggle) an exact row. The X11
+    -geometry and -display long spellings ride the -g and -d prefix
+    rows just as they rode the cases.
+    - One transliteration bug caught by re-derivation before the
+      differential ran: -dp's cursor got a spurious initial increment.
+      The 460-invocation matrix (12,582 captured lines, byte-identical)
+      then covered every cursor-walking spelling.
 
 ## Features this fork adds to both builds
 

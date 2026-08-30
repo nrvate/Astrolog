@@ -552,7 +552,8 @@ static CONST SWITCHFLAG rgswflag[] = {
 #endif
   {"3",   &us.fDecan},       {"9",   &us.fNavamsa},
   {"f",   &us.fFlip},        {"G",   &us.fGeodetic},
-  {"J",   &us.fIndian},
+  {"J",   &us.fIndian},      {"S",   &us.fOrbit},
+  {"D",   &us.fInDayInf},    {"7",   &us.fEsoteric},
   };
 
 // A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1
@@ -3048,6 +3049,629 @@ static int NSwF(CONST char *szSwitch, int argc, char **argv,
   return 3;
 }
 
+// The chart-type letters. Prefix rows, since nearly every one packs
+// options into its spelling; the handlers that used to walk argv[0]
+// with ich walk szSwitch with a local cursor instead.
+
+static int NSwv(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+  int i;
+
+  if (ch1 == '0') {
+    SwitchF(us.fVelocity);
+    return 0;
+  } else if (ch1 == '3') {
+    SwitchF(us.fListDecan);
+    if (argc > 1 && ((i = NFromSz(argv[1])) > 0 || FNumCh(argv[1][0]) ||
+      argv[1][0] == '~')) {
+      if (FErrorValN("v3", !FValidDecan(i), i, 0))
+        return tcError;
+      if (i <= 0)
+        us.fListDecan = fFalse;
+      else
+        us.nDecanType = i;
+      return 1;
+    }
+    return 0;
+  }
+  SwitchF(us.fListing);
+  return 0;
+}
+
+static int NSww(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (szSwitch[1] == '0')
+    SwitchF(us.fWheelReverse);
+  if (argc > 1 && ((i = NFromSz(argv[1])) > 0 || FNumCh(argv[1][0]))) {
+    darg++;
+    if (FErrorValN("w", !FValidWheel(i), i, 0))
+      return tcError;
+    us.nWheelRows = i;
+  }
+  SwitchF(us.fWheel);
+  return darg;
+}
+
+static int NSwg(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i, darg = 0;
+
+  if (ch1 == '0' || ch2 == '0')
+    SwitchF(us.fGridConfig);
+  else if (ch1 == 'm' || ch2 == 'm')
+    SwitchF(us.fGridMidpoint);
+  if (ch1 == 'p')
+    SwitchF(us.fParallel);
+  else if (ch1 == 'd')
+    SwitchF(us.fDistance);
+  else if (ch1 == 'a')
+    us.nAppSep = FSwitchF(us.nAppSep);
+  else if (ch1 == 'x')
+    us.nAppSep = FSwitchF(us.nAppSep) * 2;
+  else if (ch1 == 's') {
+    if (FErrorArgc("gs", argc, 1))
+      return tcError;
+    i = NFromSz(argv[1]);
+    if (FErrorValN("gs", !FValidAppSep(i), i, 0))
+      return tcError;
+    us.nAppSep = i;
+    darg++;
+  }
+#ifdef X11
+  else if (ch1 == 'e') {
+    if (FErrorArgc("geometry", argc, 1))
+      return tcError;
+    gs.xWin = NFromSz(argv[1]);
+    if (argc > 2 && (gs.yWin = NFromSz(argv[2])))
+      darg++;
+    else
+      gs.yWin = gs.xWin;
+    if (FErrorValN("geometry", !FValidGraphX(gs.xWin), gs.xWin, 1))
+      return tcError;
+    if (FErrorValN("geometry", !FValidGraphY(gs.yWin), gs.yWin, 2))
+      return tcError;
+    return darg + 1;
+  }
+#endif
+  SwitchF(us.fGrid);
+  return darg;
+}
+
+static int NSwa(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i, darg = 0;
+
+  SwitchF(us.fAspList);
+  if (ch1 == '0') {
+    SwitchF(us.fAspSummary);
+    ch1 = ch2;
+  }
+  if (ch1 == 'p') {
+    SwitchF(us.fParallel);
+    ch1 = ch2;
+  } else if (ch1 == 'd') {
+    SwitchF(us.fDistance);
+    ch1 = ch2;
+  } else if (ch1 == 'a') {
+    us.nAppSep = FSwitchF(us.nAppSep);
+    ch1 = ch2;
+  } else if (ch1 == 'x') {
+    us.nAppSep = FSwitchF(us.nAppSep) * 2;
+    ch1 = ch2;
+  } else if (ch1 == 's') {
+    if (FErrorArgc("as", argc, 1))
+      return tcError;
+    i = NFromSz(argv[1]);
+    if (FErrorValN("as", !FValidAppSep(i), i, 0))
+      return tcError;
+    us.nAppSep = i;
+    darg++;
+  }
+  switch (ch1) {
+  case 'j': us.nAspectSort = asj; break;
+  case 'o': us.nAspectSort = aso; break;
+  case 'n': us.nAspectSort = asn; break;
+  case 'O': us.nAspectSort = asO; break;
+  case 'P': us.nAspectSort = asP; break;
+  case 'A': us.nAspectSort = asA; break;
+  case 'C': us.nAspectSort = asC; break;
+  case 'D': us.nAspectSort = asD; break;
+  case 'm': us.nAspectSort = asM; break;
+  }
+  return darg;
+}
+
+static int NSwm(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+
+  if (ch1 == '0' || ch2 == '0')
+    SwitchF(us.fMidSummary);
+  if (ch1 == 'a')
+    SwitchF(us.fMidAspect);
+  SwitchF(us.fMidpoint);
+  return 0;
+}
+
+static int NSwZ(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i, darg = 0;
+
+  if (ch1 == 'd') {
+    if (ch2 == 'm' || ch2 == 'y' || ch2 == 'Y') {
+      if (ch2 == 'y')
+        us.nEphemYears = 1;
+      else if (ch2 == 'Y') {
+        if (FErrorArgc("ZdY", argc, 1))
+          return tcError;
+        i = NFromSz(argv[1]);
+        if (FErrorValN("ZdY", i < 1, i, 0))
+          return tcError;
+        us.nEphemYears = i;
+        darg++;
+      }
+      SwitchF(us.fInDayMonth);
+      us.fInDayYear = us.fInDayMonth && (ch2 != 'm');
+    }
+    SwitchF(us.fHorizonSearch);
+    return darg;
+  }
+  if (ch1 == '0')
+    SwitchF(us.fPrimeVert);
+  SwitchF(us.fHorizon);
+  return 0;
+}
+
+static int NSwl(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (szSwitch[1] == '0')
+    SwitchF(us.fSectorApprox);
+  SwitchF(us.fSector);
+  return 0;
+}
+
+static int NSwj(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (szSwitch[1] == '0')
+    SwitchF(us.fInfluenceSign);
+  SwitchF(us.fInfluence);
+  return 0;
+}
+
+static int NSwL(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (szSwitch[1] == '0')
+    SwitchF(us.fLatitudeCross);
+  if (argc > 1 && (i = NFromSz(argv[1]))) {
+    darg++;
+    if (FErrorValN("L", !FValidAstrograph(i), i, 1))
+      return tcError;
+    us.nAstroGraphStep = i;
+    if (argc > 2 && ((i = NFromSz(argv[2])) != 0 || FNumCh(argv[2][0]))) {
+      darg++;
+      if (FErrorValN("L0", !FValidAstrograph2(i), i, 2))
+        return tcError;
+      us.nAstroGraphDist = i;
+    }
+  }
+  SwitchF(us.fAstroGraph);
+  return darg;
+}
+
+static int NSwK(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (szSwitch[1] == 'y')
+    SwitchF(us.fCalendarYear);
+  SwitchF(us.fCalendar);
+  return 0;
+}
+
+static int NSwd(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i, j, l = 1, darg = 0;
+
+  if (ch1 == 'p') {
+    us.nProgress = (ch2 == '0') + 2*(ch2 == '1');
+    if (us.nProgress)
+      ch2 = szSwitch[++l + 1];
+    i = (ch2 == 'y') + 2*(ch2 == 'Y');
+#ifdef TIME
+    j = i < 2 && (szSwitch[l+i+1] == 'n');
+#else
+    j = fFalse;
+#endif
+    if (!j && FErrorArgc("dp", argc, 2-(i&1)))
+      return tcError;
+    is.fProgress = us.fInDayMonth = fTrue;
+    DstT = ciDefa.dst; ZonT = ciDefa.zon;
+    LonT = ciDefa.lon; LatT = ciDefa.lat;
+#ifdef TIME
+    if (j)
+      GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
+#endif
+    if (i) {
+      us.fInDayYear = fTrue;
+      if (!j)
+        YeaT = NParseSz(argv[1], pmYea);
+      us.nEphemYears = i == 2 ? NFromSz(argv[2]) : 1;
+    } else {
+      if (!j) {
+        MonT = NParseSz(argv[1], pmMon);
+        YeaT = NParseSz(argv[2], pmYea);
+        if (FErrorValN("dp", !FValidMon(MonT), MonT, 1))
+          return tcError;
+      }
+    }
+    if (FErrorValN("dp", !FValidYea(YeaT), YeaT, i ? 1 : 2))
+      return tcError;
+    if (!j)
+      darg = 2-(i&1);
+    SwitchF(us.fInDay);
+    return darg;
+  } else if (ch1 == 'm' || ch1 == 'y' || ch1 == 'Y') {
+    is.fProgress = fFalse;
+    if (ch1 == 'y')
+      us.nEphemYears = 1;
+    else if (ch1 == 'Y') {
+      if (FErrorArgc("dY", argc, 1))
+        return tcError;
+      i = NFromSz(argv[1]);
+      if (FErrorValN("dY", i < 1, i, 1))
+        return tcError;
+      us.nEphemYears = i;
+      darg++;
+    }
+    SwitchF(us.fInDayMonth);
+    us.fInDayYear = us.fInDayMonth && (ch1 != 'm');
+  }
+#ifdef X11
+  else if (ch1 == 'i') {    // -display switch for X
+    if (FErrorArgc("display", argc, 1))
+      return tcError;
+    FCloneSz(argv[1], &gs.szDisplay);
+    return 1;
+  }
+#endif
+  else if (argc > 1 && (i = NFromSz(argv[1]))) {
+    if (FErrorValN("d", !FValidDivision(i), i, 0))
+      return tcError;
+    us.nDivision = i;
+    darg++;
+  }
+  SwitchF(us.fInDay);
+  return darg;
+}
+
+static int NSwE(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i, j, darg = 0;
+
+  j = ch1 == '0' || ch2 == '0';
+  if (FErrorArgc("E", argc, (ch1 == 'Y') + j))
+    return tcError;
+  SwitchF(us.fEphemeris);
+  if (ch1 == 'y')
+    us.nEphemYears = us.fEphemeris ? 1 : 0;
+  else if (ch1 == 'Y') {
+    i = NFromSz(argv[1]);
+    if (FErrorValN("EY", i < 1, i, 1))
+      return tcError;
+    us.nEphemYears = i;
+    darg++;
+  }
+  if (j) {
+    ch1 = argv[darg+1][0];
+    if (ch1) {
+      us.nEphemRate = (ch1 == 'n' ? -2 : (ch1 == 'h' ? -1 :
+        (ch1 == 'm' ? 1 : (ch1 == 'y' ? 2 : 0))));
+      i = NFromSz(&argv[darg+1][1]);
+      us.nEphemFactor = Max(i, 1);
+    }
+    darg++;
+  }
+  return darg;
+}
+
+static int NSwEight(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (szSwitch[1] == '0')
+    SwitchF(us.fMoonChartSep);
+  SwitchF(us.fMoonChart);
+  return 0;
+}
+
+static int NSwe(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  SwitchF(us.fListing); SwitchF(us.fWheel);
+  SwitchF(us.fGrid); SwitchF(us.fAspList); SwitchF(us.fMidpoint);
+  SwitchF(us.fHorizon); SwitchF(us.fOrbit); SwitchF(us.fSector);
+  SwitchF(us.fInfluence); SwitchF(us.fEsoteric); SwitchF(us.fAstroGraph);
+  SwitchF(us.fCalendar); SwitchF(us.fHorizonSearch);
+  SwitchF(us.fInDay); SwitchF(us.fInDayInf); SwitchF(us.fInDayGra);
+  SwitchF(us.fEphemeris); SwitchF(us.fArabic);
+  SwitchF(us.fMoonChart); SwitchF(us.fExoTransit);
+  return 0;
+}
+
+static int NSwt(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+  int i, l = 1;
+
+  SwitchF(us.fTransit);
+  ZonT = ciDefa.zon; DstT = ciDefa.dst;
+  LonT = ciDefa.lon; LatT = ciDefa.lat;
+  if (ch1 == 'p') {
+    us.nProgress = (szSwitch[2] == '0') + 2*(szSwitch[2] == '1');
+    if (us.nProgress)
+      l++;
+    is.fProgress = fTrue;
+    ch1 = szSwitch[++l];
+  } else
+    is.fProgress = fFalse;
+  if (ch1 == 'r') {
+    SwitchF(is.fReturn);
+    ch1 = szSwitch[++l];
+  }
+  i = (ch1 == 'y') + 2*(ch1 == 'Y') - (ch1 == 'd');
+  if (i != 0)
+    ch1 = szSwitch[++l];
+  us.fInDayMonth = (i >= 0);
+  us.fInDayYear = (i >= 1);
+#ifdef TIME
+  if (ch1 == 'n') {
+    GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
+    if (i >= 2) {
+      if (FErrorArgc("tYn", argc, 1))
+        return tcError;
+      us.nEphemYears = NFromSz(argv[1]);
+      return 1;
+    }
+    return 0;
+  }
+#endif
+  if (FErrorArgc("t", argc, 2 - (i == 1) + (i < 0)))
+    return tcError;
+  YeaT = NParseSz(argv[2 - (i > 0) + (i < 0)], pmYea);
+  if (FErrorValN("t", !FValidYea(YeaT), YeaT, 2 - (i > 0) + (i < 0)))
+    return tcError;
+  if (i <= 0) {
+    MonT = NParseSz(argv[1], pmMon);
+    if (FErrorValN("t", !FValidMon(MonT), MonT, 1))
+      return tcError;
+  }
+  if (i < 0) {
+    DayT = NParseSz(argv[2], pmDay);
+    if (FErrorValN("td", !FValidDay(DayT, MonT, YeaT), DayT, 2))
+      return tcError;
+  }
+  if (i > 1)
+    us.nEphemYears = NFromSz(argv[2]);
+  return 2 - (i == 1) + (i < 0);
+}
+
+static int NSwT(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+  int i, l = 1;
+
+  SwitchF(us.fTransitInf);
+  ZonT = ciDefa.zon; DstT = ciDefa.dst;
+  LonT = ciDefa.lon; LatT = ciDefa.lat;
+  i = (ch1 == 't');
+  if (i > 0)
+    ch1 = szSwitch[++l];
+  if (ch1 == 'p') {
+    is.fProgress = fTrue;
+    ch1 = szSwitch[++l];
+  } else
+    is.fProgress = fFalse;
+  if (ch1 == 'r') {
+    SwitchF(is.fReturn);
+    ch1 = szSwitch[++l];
+  }
+#ifdef TIME
+  if (ch1 == 'n') {
+    GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
+    return 0;
+  }
+#endif
+  if (FErrorArgc("T", argc, 3 + i))
+    return tcError;
+  MonT = NParseSz(argv[1], pmMon);
+  DayT = NParseSz(argv[2], pmDay);
+  YeaT = NParseSz(argv[3], pmYea);
+  TimT = i > 0 ? RParseSz(argv[4], pmTim) : 0.0;
+  if (FErrorValN("T", !FValidMon(MonT), MonT, 1))
+    return tcError;
+  if (FErrorValN("T", !FValidDay(DayT, MonT, YeaT), DayT, 2))
+    return tcError;
+  if (FErrorValN("T", !FValidYea(YeaT), YeaT, 3))
+    return tcError;
+  if (i > 0 && FErrorValR("T", !FValidTim(TimT), TimT, 4))
+    return tcError;
+  return 3 + i;
+}
+
+static int NSwB(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int l = 1;
+
+  SwitchF(us.fInDayGra);
+  if (ch1 == 'p') {
+    is.fProgress = fTrue;
+    ch1 = szSwitch[++l];
+  } else
+    is.fProgress = fFalse;
+  if (ch1 == 'm' || ch1 == 'y' || ch1 == 'Y') {
+    if (ch1 == 'y')
+      us.nEphemYears = 1;
+    else if (ch1 == 'Y')
+      us.nEphemYears = 5;
+    SwitchF(us.fInDayMonth);
+    us.fInDayYear = us.fInDayMonth && (ch1 != 'm');
+  }
+  if (ch1 == '0' || ch2 == '0')
+    SwitchF(us.fGraphAll);
+  return 0;
+}
+
+static int NSwV(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+  int i, j, l = 1;
+
+  SwitchF(us.fTransitGra);
+  ZonT = ciDefa.zon; DstT = ciDefa.dst;
+  LonT = ciDefa.lon; LatT = ciDefa.lat;
+  if (ch1 == 'p') {
+    is.fProgress = fTrue;
+    ch1 = szSwitch[++l];
+  } else
+    is.fProgress = fFalse;
+  if (ch1 == 'r') {
+    SwitchF(is.fReturn);
+    ch1 = szSwitch[++l];
+  }
+  if (i = (ch1 == 'd') + 2*(ch1 == 'm') + 3*(ch1 == 'y') + 4*(ch1 == 'Y'))
+    ch1 = szSwitch[++l];
+  if (i < 1)
+    i = 2;
+  if (ch1 == '0') {
+    SwitchF(us.fGraphAll);
+    ch1 = szSwitch[++l];
+  }
+  if (i >= 2) {
+    if (i == 3)
+      us.nEphemYears = 1;
+    else if (i == 4)
+      us.nEphemYears = 5;
+    SwitchF(us.fInDayMonth);
+    if (i >= 3)
+      us.fInDayYear = us.fInDayMonth;
+  }
+#ifdef TIME
+  if (ch1 == 'n') {
+    GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
+    if (i >= 3)
+      us.fInDayYear = us.fInDayMonth;
+    return 0;
+  }
+#endif
+  j = i < 2 ? 3 : (i == 2 ? 2 : 1);
+  if (FErrorArgc("V", argc, j))
+    return tcError;
+  if (i == 1) {
+    MonT = NParseSz(argv[1], pmMon);
+    DayT = NParseSz(argv[2], pmDay);
+    YeaT = NParseSz(argv[3], pmYea);
+  } else if (i == 2) {
+    MonT = NParseSz(argv[1], pmMon);
+    YeaT = NParseSz(argv[2], pmYea);
+    DayT = 1;
+  } else {
+    YeaT = NParseSz(argv[1], pmYea);
+    MonT = DayT = 1;
+  }
+  if (FErrorValN("V", !FValidMon(MonT), MonT, 1))
+    return tcError;
+  if (FErrorValN("V", !FValidYea(YeaT), YeaT, j))
+    return tcError;
+  if (FErrorValN("V", !FValidDay(DayT, MonT, YeaT), DayT, 2))
+    return tcError;
+  return j;
+}
+
+#ifdef ARABIC
+static int NSwP(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NFromSz(argv[1]))) {
+    darg++;
+    if (FErrorValN("P", !FValidPart(i), i, 0))
+      return tcError;
+    us.nArabicParts = i;
+  }
+  if (ch1 == 'i' || ch1 == 'z' || ch1 == 'n' || ch1 == 'f') {
+    us.nArabicSort = (ch1 != 'i' ? ch1 : 0);
+    ch1 = ch2;
+  }
+  SwitchF(us.fArabic);
+  if (ch1 == '0')
+    SwitchF(us.fArabicFlip);
+  return darg;
+}
+#endif
+
+static int NSwN(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NFromSz(argv[1]))) {
+    darg++;
+    us.nAtlasList = i;
+  }
+  if (ch1 == 'z')
+    SwitchF(us.fZoneChange);
+  else if (ch1 == 'l')
+    SwitchF(us.fAtlasNear);
+  else
+    SwitchF(us.fAtlasLook);
+  return darg;
+}
+
+static int NSwI(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int i, darg = 0;
+
+  if (argc > 1 && (i = NFromSz(argv[1]))) {
+    darg++;
+    if (FErrorValN("I", !FValidScreen(i), i, 0))
+      return tcError;
+    us.nScreenWidth = i;
+  }
+  if (szSwitch[1] != '0')
+    SwitchF(us.fInterpret);
+  else
+    SwitchF(us.fSabian);
+  return darg;
+}
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
@@ -3198,6 +3822,20 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"s",    grfSwPrefix, NSws},
   {"p",    grfSwPrefix, NSwp},
   {"F",    grfSwPrefix, NSwF},
+  {"e",    0,           NSwe},
+  {"v",    grfSwPrefix, NSwv},  {"w",    grfSwPrefix, NSww},
+  {"g",    grfSwPrefix, NSwg},  {"a",    grfSwPrefix, NSwa},
+  {"m",    grfSwPrefix, NSwm},  {"Z",    grfSwPrefix, NSwZ},
+  {"l",    grfSwPrefix, NSwl},  {"j",    grfSwPrefix, NSwj},
+  {"L",    grfSwPrefix, NSwL},  {"K",    grfSwPrefix, NSwK},
+  {"d",    grfSwPrefix, NSwd},  {"E",    grfSwPrefix, NSwE},
+  {"8",    grfSwPrefix, NSwEight},
+  {"t",    grfSwPrefix, NSwt},  {"T",    grfSwPrefix, NSwT},
+  {"B",    grfSwPrefix, NSwB},  {"V",    grfSwPrefix, NSwV},
+#ifdef ARABIC
+  {"P",    grfSwPrefix, NSwP},
+#endif
+  {"N",    grfSwPrefix, NSwN},  {"I",    grfSwPrefix, NSwI},
   };
 
 // Look up a switch by its full spelling and run it. Returns the count of
@@ -3397,540 +4035,6 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       break;
 
     // Switches which determine the type of chart to display:
-
-    case 'v':
-      if (ch1 == '0') {
-        SwitchF(us.fVelocity);
-        break;
-      } else if (ch1 == '3') {
-        SwitchF(us.fListDecan);
-        if (argc > 1 && ((i = NFromSz(argv[1])) > 0 || FNumCh(argv[1][0]) ||
-          argv[1][0] == '~')) {
-          argc--; argv++;
-          if (FErrorValN("v3", !FValidDecan(i), i, 0))
-            return fFalse;
-          if (i <= 0)
-            us.fListDecan = fFalse;
-          else
-            us.nDecanType = i;
-        }
-        break;
-      }
-      SwitchF(us.fListing);
-      break;
-
-    case 'w':
-      if (ch1 == '0')
-        SwitchF(us.fWheelReverse);
-      if (argc > 1 && ((i = NFromSz(argv[1])) > 0 || FNumCh(argv[1][0]))) {
-        argc--; argv++;
-        if (FErrorValN("w", !FValidWheel(i), i, 0))
-          return fFalse;
-        us.nWheelRows = i;
-      }
-      SwitchF(us.fWheel);
-      break;
-
-    case 'g':
-      if (ch1 == '0' || ch2 == '0')
-        SwitchF(us.fGridConfig);
-      else if (ch1 == 'm' || ch2 == 'm')
-        SwitchF(us.fGridMidpoint);
-      if (ch1 == 'p')
-        SwitchF(us.fParallel);
-      else if (ch1 == 'd')
-        SwitchF(us.fDistance);
-      else if (ch1 == 'a')
-        us.nAppSep = FSwitchF(us.nAppSep);
-      else if (ch1 == 'x')
-        us.nAppSep = FSwitchF(us.nAppSep) * 2;
-      else if (ch1 == 's') {
-        if (FErrorArgc("gs", argc, 1))
-          return fFalse;
-        i = NFromSz(argv[1]);
-        if (FErrorValN("gs", !FValidAppSep(i), i, 0))
-          return fFalse;
-        us.nAppSep = i;
-        argc--; argv++;
-      }
-#ifdef X11
-      else if (ch1 == 'e') {
-        if (FErrorArgc("geometry", argc, 1))
-          return fFalse;
-        gs.xWin = NFromSz(argv[1]);
-        if (argc > 2 && (gs.yWin = NFromSz(argv[2]))) {
-          argc--; argv++;
-        } else
-          gs.yWin = gs.xWin;
-        if (FErrorValN("geometry", !FValidGraphX(gs.xWin), gs.xWin, 1))
-          return fFalse;
-        if (FErrorValN("geometry", !FValidGraphY(gs.yWin), gs.yWin, 2))
-          return fFalse;
-        argc--; argv++;
-        break;
-      }
-#endif
-      SwitchF(us.fGrid);
-      break;
-
-    case 'a':
-      SwitchF(us.fAspList);
-      if (ch1 == '0') {
-        SwitchF(us.fAspSummary);
-        ch1 = ch2;
-      }
-      if (ch1 == 'p') {
-        SwitchF(us.fParallel);
-        ch1 = ch2;
-      } else if (ch1 == 'd') {
-        SwitchF(us.fDistance);
-        ch1 = ch2;
-      } else if (ch1 == 'a') {
-        us.nAppSep = FSwitchF(us.nAppSep);
-        ch1 = ch2;
-      } else if (ch1 == 'x') {
-        us.nAppSep = FSwitchF(us.nAppSep) * 2;
-        ch1 = ch2;
-      } else if (ch1 == 's') {
-        if (FErrorArgc("as", argc, 1))
-          return fFalse;
-        i = NFromSz(argv[1]);
-        if (FErrorValN("as", !FValidAppSep(i), i, 0))
-          return fFalse;
-        us.nAppSep = i;
-        argc--; argv++;
-      }
-      switch (ch1) {
-      case 'j': us.nAspectSort = asj; break;
-      case 'o': us.nAspectSort = aso; break;
-      case 'n': us.nAspectSort = asn; break;
-      case 'O': us.nAspectSort = asO; break;
-      case 'P': us.nAspectSort = asP; break;
-      case 'A': us.nAspectSort = asA; break;
-      case 'C': us.nAspectSort = asC; break;
-      case 'D': us.nAspectSort = asD; break;
-      case 'm': us.nAspectSort = asM; break;
-      }
-      break;
-
-    case 'm':
-      if (ch1 == '0' || ch2 == '0')
-        SwitchF(us.fMidSummary);
-      if (ch1 == 'a')
-        SwitchF(us.fMidAspect);
-      SwitchF(us.fMidpoint);
-      break;
-
-    case 'Z':
-      if (ch1 == 'd') {
-        if (ch2 == 'm' || ch2 == 'y' || ch2 == 'Y') {
-          if (ch2 == 'y')
-            us.nEphemYears = 1;
-          else if (ch2 == 'Y') {
-            if (FErrorArgc("ZdY", argc, 1))
-              return fFalse;
-            i = NFromSz(argv[1]);
-            if (FErrorValN("ZdY", i < 1, i, 0))
-              return fFalse;
-            us.nEphemYears = i;
-            argc--; argv++;
-          }
-          SwitchF(us.fInDayMonth);
-          us.fInDayYear = us.fInDayMonth && (ch2 != 'm');
-        }
-        SwitchF(us.fHorizonSearch);
-        break;
-      }
-      if (ch1 == '0')
-        SwitchF(us.fPrimeVert);
-      SwitchF(us.fHorizon);
-      break;
-
-    case 'S':
-      SwitchF(us.fOrbit);
-      break;
-
-    case 'l':
-      if (ch1 == '0')
-        SwitchF(us.fSectorApprox);
-      SwitchF(us.fSector);
-      break;
-
-    case 'j':
-      if (ch1 == '0')
-        SwitchF(us.fInfluenceSign);
-      SwitchF(us.fInfluence);
-      break;
-
-    case '7':
-      if (FErrorSubswitch("7", ch1, ch1 != chNull))
-        return fFalse;
-      SwitchF(us.fEsoteric);
-      break;
-
-    case 'L':
-      if (ch1 == '0')
-        SwitchF(us.fLatitudeCross);
-      if (argc > 1 && (i = NFromSz(argv[1]))) {
-        argc--; argv++;
-        if (FErrorValN("L", !FValidAstrograph(i), i, 1))
-          return fFalse;
-        us.nAstroGraphStep = i;
-        if (argc > 1 && ((i = NFromSz(argv[1])) != 0 || FNumCh(argv[1][0]))) {
-          argc--; argv++;
-          if (FErrorValN("L0", !FValidAstrograph2(i), i, 2))
-            return fFalse;
-          us.nAstroGraphDist = i;
-        }
-      }
-      SwitchF(us.fAstroGraph);
-      break;
-
-    case 'K':
-      if (ch1 == 'y')
-        SwitchF(us.fCalendarYear);
-      SwitchF(us.fCalendar);
-      break;
-
-    case 'd':
-      if (ch1 == 'p') {
-        us.nProgress = (ch2 == '0') + 2*(ch2 == '1');
-        if (us.nProgress)
-          ch2 = argv[0][++ich + 1];
-        i = (ch2 == 'y') + 2*(ch2 == 'Y');
-#ifdef TIME
-        j = i < 2 && (argv[0][ich+i+1] == 'n');
-#else
-        j = fFalse;
-#endif
-        if (!j && FErrorArgc("dp", argc, 2-(i&1)))
-          return fFalse;
-        is.fProgress = us.fInDayMonth = fTrue;
-        DstT = ciDefa.dst; ZonT = ciDefa.zon;
-        LonT = ciDefa.lon; LatT = ciDefa.lat;
-#ifdef TIME
-        if (j)
-          GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
-#endif
-        if (i) {
-          us.fInDayYear = fTrue;
-          if (!j)
-            YeaT = NParseSz(argv[1], pmYea);
-          us.nEphemYears = i == 2 ? NFromSz(argv[2]) : 1;
-        } else {
-          if (!j) {
-            MonT = NParseSz(argv[1], pmMon);
-            YeaT = NParseSz(argv[2], pmYea);
-            if (FErrorValN("dp", !FValidMon(MonT), MonT, 1))
-              return fFalse;
-          }
-        }
-        if (FErrorValN("dp", !FValidYea(YeaT), YeaT, i ? 1 : 2))
-          return fFalse;
-        if (!j) {
-          i = 2-(i&1);
-          argc -= i; argv += i;
-        }
-      } else if (ch1 == 'm' || ch1 == 'y' || ch1 == 'Y') {
-        is.fProgress = fFalse;
-        if (ch1 == 'y')
-          us.nEphemYears = 1;
-        else if (ch1 == 'Y') {
-          if (FErrorArgc("dY", argc, 1))
-            return fFalse;
-          i = NFromSz(argv[1]);
-          if (FErrorValN("dY", i < 1, i, 1))
-            return fFalse;
-          us.nEphemYears = i;
-          argc--; argv++;
-        }
-        SwitchF(us.fInDayMonth);
-        us.fInDayYear = us.fInDayMonth && (ch1 != 'm');
-      }
-#ifdef X11
-      else if (ch1 == 'i') {    // -display switch for X
-        if (FErrorArgc("display", argc, 1))
-          return fFalse;
-        FCloneSz(argv[1], &gs.szDisplay);
-        argc--; argv++;
-        break;
-      }
-#endif
-      else if (argc > 1 && (i = NFromSz(argv[1]))) {
-        if (FErrorValN("d", !FValidDivision(i), i, 0))
-          return fFalse;
-        us.nDivision = i;
-        argc--; argv++;
-      }
-      SwitchF(us.fInDay);
-      break;
-
-    case 'D':
-      SwitchF(us.fInDayInf);
-      break;
-
-    case 'E':
-      j = ch1 == '0' || ch2 == '0';
-      if (FErrorArgc("E", argc, (ch1 == 'Y') + j))
-        return fFalse;
-      SwitchF(us.fEphemeris);
-      if (ch1 == 'y')
-        us.nEphemYears = us.fEphemeris ? 1 : 0;
-      else if (ch1 == 'Y') {
-        i = NFromSz(argv[1]);
-        if (FErrorValN("EY", i < 1, i, 1))
-          return fFalse;
-        us.nEphemYears = i;
-        argc--; argv++;
-      }
-      if (j) {
-        ch1 = argv[1][0];
-        if (ch1) {
-          us.nEphemRate = (ch1 == 'n' ? -2 : (ch1 == 'h' ? -1 :
-            (ch1 == 'm' ? 1 : (ch1 == 'y' ? 2 : 0))));
-          i = NFromSz(&argv[1][1]);
-          us.nEphemFactor = Max(i, 1);
-        }
-        argc--; argv++;
-      }
-      break;
-
-    case '8':
-      if (ch1 == '0')
-        SwitchF(us.fMoonChartSep);
-      else if (FErrorSubswitch("8", ch1, ch1 != chNull))
-        return fFalse;
-      SwitchF(us.fMoonChart);
-      break;
-
-    case 'e':
-      SwitchF(us.fListing); SwitchF(us.fWheel);
-      SwitchF(us.fGrid); SwitchF(us.fAspList); SwitchF(us.fMidpoint);
-      SwitchF(us.fHorizon); SwitchF(us.fOrbit); SwitchF(us.fSector);
-      SwitchF(us.fInfluence); SwitchF(us.fEsoteric); SwitchF(us.fAstroGraph);
-      SwitchF(us.fCalendar); SwitchF(us.fHorizonSearch);
-      SwitchF(us.fInDay); SwitchF(us.fInDayInf); SwitchF(us.fInDayGra);
-      SwitchF(us.fEphemeris); SwitchF(us.fArabic);
-      SwitchF(us.fMoonChart); SwitchF(us.fExoTransit);
-      break;
-
-    case 't':
-      SwitchF(us.fTransit);
-      ZonT = ciDefa.zon; DstT = ciDefa.dst;
-      LonT = ciDefa.lon; LatT = ciDefa.lat;
-      if (ch1 == 'p') {
-        us.nProgress = (ch2 == '0') + 2*(ch2 == '1');
-        if (us.nProgress)
-          ich++;
-        is.fProgress = fTrue;
-        ch1 = argv[0][++ich];
-      } else
-        is.fProgress = fFalse;
-      if (ch1 == 'r') {
-        SwitchF(is.fReturn);
-        ch1 = argv[0][++ich];
-      }
-      i = (ch1 == 'y') + 2*(ch1 == 'Y') - (ch1 == 'd');
-      if (i != 0)
-        ch1 = argv[0][++ich];
-      us.fInDayMonth = (i >= 0);
-      us.fInDayYear = (i >= 1);
-#ifdef TIME
-      if (ch1 == 'n') {
-        GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
-        if (i >= 2) {
-          if (FErrorArgc("tYn", argc, 1))
-            return fFalse;
-          us.nEphemYears = NFromSz(argv[1]);
-          argc--; argv++;
-        }
-        break;
-      }
-#endif
-      if (FErrorArgc("t", argc, 2 - (i == 1) + (i < 0)))
-        return fFalse;
-      YeaT = NParseSz(argv[2 - (i > 0) + (i < 0)], pmYea);
-      if (FErrorValN("t", !FValidYea(YeaT), YeaT, 2 - (i > 0) + (i < 0)))
-        return fFalse;
-      if (i <= 0) {
-        MonT = NParseSz(argv[1], pmMon);
-        if (FErrorValN("t", !FValidMon(MonT), MonT, 1))
-          return fFalse;
-      }
-      if (i < 0) {
-        DayT = NParseSz(argv[2], pmDay);
-        if (FErrorValN("td", !FValidDay(DayT, MonT, YeaT), DayT, 2))
-          return fFalse;
-      }
-      if (i > 1)
-        us.nEphemYears = NFromSz(argv[2]);
-      i = 2 - (i == 1) + (i < 0);
-      argc -= i; argv += i;
-      break;
-
-    case 'T':
-      SwitchF(us.fTransitInf);
-      ZonT = ciDefa.zon; DstT = ciDefa.dst;
-      LonT = ciDefa.lon; LatT = ciDefa.lat;
-      i = (ch1 == 't');
-      if (i > 0)
-        ch1 = argv[0][++ich];
-      if (ch1 == 'p') {
-        is.fProgress = fTrue;
-        ch1 = argv[0][++ich];
-      } else
-        is.fProgress = fFalse;
-      if (ch1 == 'r') {
-        SwitchF(is.fReturn);
-        ch1 = argv[0][++ich];
-      }
-#ifdef TIME
-      if (ch1 == 'n') {
-        GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
-        break;
-      }
-#endif
-      if (FErrorArgc("T", argc, 3 + i))
-        return fFalse;
-      MonT = NParseSz(argv[1], pmMon);
-      DayT = NParseSz(argv[2], pmDay);
-      YeaT = NParseSz(argv[3], pmYea);
-      TimT = i > 0 ? RParseSz(argv[4], pmTim) : 0.0;
-      if (FErrorValN("T", !FValidMon(MonT), MonT, 1))
-        return fFalse;
-      else if (FErrorValN("T", !FValidYea(YeaT), YeaT, 3))
-        return fFalse;
-      else if (FErrorValN("T", !FValidDay(DayT, MonT, YeaT), DayT, 2))
-        return fFalse;
-      else if (i > 0 && FErrorValR("Tt", !FValidTim(TimT), TimT, 4))
-        return fFalse;
-      argc -= 3+i; argv += 3+i;
-      break;
-
-    case 'B':
-      SwitchF(us.fInDayGra);
-      if (ch1 == 'p') {
-        is.fProgress = fTrue;
-        ch1 = argv[0][++ich];
-      } else
-        is.fProgress = fFalse;
-      if (ch1 == 'm' || ch1 == 'y' || ch1 == 'Y') {
-        if (ch1 == 'y')
-          us.nEphemYears = 1;
-        else if (ch1 == 'Y')
-          us.nEphemYears = 5;
-        SwitchF(us.fInDayMonth);
-        us.fInDayYear = us.fInDayMonth && (ch1 != 'm');
-      }
-      if (ch1 == '0' || ch2 == '0')
-        SwitchF(us.fGraphAll);
-      break;
-
-    case 'V':
-      SwitchF(us.fTransitGra);
-      ZonT = ciDefa.zon; DstT = ciDefa.dst;
-      LonT = ciDefa.lon; LatT = ciDefa.lat;
-      if (ch1 == 'p') {
-        is.fProgress = fTrue;
-        ch1 = argv[0][++ich];
-      } else
-        is.fProgress = fFalse;
-      if (ch1 == 'r') {
-        SwitchF(is.fReturn);
-        ch1 = argv[0][++ich];
-      }
-      if (i = (ch1 == 'd') + 2*(ch1 == 'm') + 3*(ch1 == 'y') + 4*(ch1 == 'Y'))
-        ch1 = argv[0][++ich];
-      if (i < 1)
-        i = 2;
-      if (ch1 == '0') {
-        SwitchF(us.fGraphAll);
-        ch1 = argv[0][++ich];
-      }
-      if (i >= 2) {
-        if (i == 3)
-          us.nEphemYears = 1;
-        else if (i == 4)
-          us.nEphemYears = 5;
-        SwitchF(us.fInDayMonth);
-        if (i >= 3)
-          us.fInDayYear = us.fInDayMonth;
-      }
-#ifdef TIME
-      if (ch1 == 'n') {
-        GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
-        if (i >= 3)
-          us.fInDayYear = us.fInDayMonth;
-        break;
-      }
-#endif
-      j = i < 2 ? 3 : (i == 2 ? 2 : 1);
-      if (FErrorArgc("V", argc, j))
-        return fFalse;
-      if (i == 1) {
-        MonT = NParseSz(argv[1], pmMon);
-        DayT = NParseSz(argv[2], pmDay);
-        YeaT = NParseSz(argv[3], pmYea);
-      } else if (i == 2) {
-        MonT = NParseSz(argv[1], pmMon);
-        YeaT = NParseSz(argv[2], pmYea);
-        DayT = 1;
-      } else {
-        YeaT = NParseSz(argv[1], pmYea);
-        MonT = DayT = 1;
-      }
-      if (FErrorValN("V", !FValidMon(MonT), MonT, 1))
-        return fFalse;
-      if (FErrorValN("V", !FValidYea(YeaT), YeaT, j))
-        return fFalse;
-      if (FErrorValN("V", !FValidDay(DayT, MonT, YeaT), DayT, 2))
-        return fFalse;
-      argc -= j; argv += j;
-      break;
-
-#ifdef ARABIC
-    case 'P':
-      if (argc > 1 && (i = NFromSz(argv[1]))) {
-        argc--; argv++;
-        if (FErrorValN("P", !FValidPart(i), i, 0))
-          return fFalse;
-        us.nArabicParts = i;
-      }
-      if (ch1 == 'i' || ch1 == 'z' || ch1 == 'n' || ch1 == 'f') {
-        us.nArabicSort = (ch1 != 'i' ? ch1 : 0);
-        ch1 = ch2;
-      }
-      SwitchF(us.fArabic);
-      if (ch1 == '0')
-        SwitchF(us.fArabicFlip);
-      break;
-#endif
-
-    case 'N':
-      if (argc > 1 && (i = NFromSz(argv[1]))) {
-        argc--; argv++;
-        us.nAtlasList = i;
-      }
-      if (ch1 == 'z')
-        SwitchF(us.fZoneChange);
-      else if (ch1 == 'l')
-        SwitchF(us.fAtlasNear);
-      else
-        SwitchF(us.fAtlasLook);
-      break;
-
-    case 'I':
-      if (argc > 1 && (i = NFromSz(argv[1]))) {
-        argc--; argv++;
-        if (FErrorValN("I", !FValidScreen(i), i, 0))
-          return fFalse;
-        us.nScreenWidth = i;
-      }
-      if (ch1 != '0')
-        SwitchF(us.fInterpret);
-      else
-        SwitchF(us.fSabian);
-      break;
 
     // Switches which affect how the chart parameters are obtained:
 
