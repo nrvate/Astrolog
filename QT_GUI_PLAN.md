@@ -3224,6 +3224,23 @@ are the more useful half to read before starting something new.
     which is how it stayed unnoticed. The audits are back in the
     battery, and the audit reads switch.cpp's four tables now.
 
+100. **P4 closed: de-souped by measure, verdicts written down.** The
+    second cut promoted the two-flag chart families -- -l/-l0, -j/-j0,
+    -K/-Ky, -Q/-Q0, -8/-80 -- onto flag rows via a new optional pf2
+    field (the "suffix also enables the base chart" shape), and -v0
+    onto a plain flag row; five handlers deleted. Proven by a 39-case
+    output differential (13 spellings x 3 prefixes, byte-identical,
+    cross-family distinctness verified), the matrix, both audits, and
+    the suite. Everything still a prefix handler now has its reason
+    in a verdict comment at the handler table: -m's suffixes combine
+    (-ma0 means summary+aspects+midpoints -- a meaningful spelling no
+    row can carry), -b shares the fEphemFiles fall-through, the chart
+    info parsers choose argument shapes by suffix, and the list
+    walkers take variable arguments. Registry: 318 rows; prefix
+    handler rows 61 -> 56 across P4 (the count includes non-def
+    prefix uses; grfSwPrefix mentions total 43 in the def table).
+    Suite 3039/0. Tranche 1 of phase 2 is complete.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

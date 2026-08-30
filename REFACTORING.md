@@ -1267,16 +1267,17 @@ own concessions, in dependency order):
   Yj0 that error under the family label Yj, prefix rows, per-suffix
   arity — keep their checks on purpose. Net: a 41-spelling
   missing-argument stderr byte-diff plus the matrix, both identical.
-- **P4. De-soup by measure** — in progress; the maintainer chose the
-  high-value cut (2026-08-30). **First increment done** (work log
-  item 99): NSwTilde's 87-comparison chain became `rgswtilde[]`, a
-  fourth registry table of exact string-hook rows; the handler keeps
-  the imperative forms. Transcription proven by simulating the old
-  chain from git per spelling. Registry stands at 313 rows.
-  Remaining P4 work: the trivially promotable small families, then
-  per-family verdicts on the rest. The rule stands: closed suffix
-  sets promote, fall-through semantics stay handlers with the reason
-  written down.
+- **P4 — closed 2026-08-30** (work log items 99-100), as the
+  high-value cut the maintainer chose. First increment: NSwTilde's
+  87-comparison chain became `rgswtilde[]`, a fourth registry table
+  of exact string-hook rows, transcription proven by simulating the
+  old chain from git per spelling. Second increment: the two-flag
+  chart families (-l -j -K -Q -8) promoted onto flag rows via an
+  optional `pf2` field, -v0 onto a plain row, five handlers deleted.
+  Registry: 318 rows. Every remaining prefix handler carries its
+  verdict in a comment at the handler table — combining suffixes,
+  fall-through semantics, suffix-chosen argument shapes, or
+  variable-length walks. **Tranche 1 is complete.**
 
 **Tranche 2 — the deferred heavy items:**
 

@@ -92,6 +92,8 @@ typedef struct _switchflag {
   CONST char *szName;
   flag *pf;
   word grf;       // grfSw* bits; trailing so plain rows omit it.
+  flag *pf2;      // A second flag the same prefix semantics apply to
+                  // after pf -- the "-l0 also enables -l" family shape.
 } SWITCHFLAG;
 
 static CONST SWITCHFLAG rgswflag[] = {
@@ -132,7 +134,12 @@ static CONST SWITCHFLAG rgswflag[] = {
   {"J",   &us.fIndian},      {"S",   &us.fOrbit},
   {"D",   &us.fInDayInf},    {"7",   &us.fEsoteric},
   {"?",   &us.fSwitch},
-  };
+  {"l",   &us.fSector},       {"l0",  &us.fSectorApprox, 0, &us.fSector},
+  {"j",   &us.fInfluence},    {"j0",  &us.fInfluenceSign, 0, &us.fInfluence},
+  {"K",   &us.fCalendar},     {"Ky",  &us.fCalendarYear, 0, &us.fCalendar},
+  {"Q",   &us.fLoop},         {"Q0",  &us.fLoopInit, 0, &us.fLoop},
+  {"8",   &us.fMoonChart},    {"80",  &us.fMoonChartSep, 0, &us.fMoonChart},
+  {"v0",  &us.fVelocity}};
 
 // A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1
 // values into consecutive slots of a table -- the shape shared by the
@@ -2424,10 +2431,7 @@ static int NSwv(CONST char *szSwitch, PARSEIN *pin)
   char ch1 = szSwitch[1];
   int i;
 
-  if (ch1 == '0') {
-    SwitchF(us.fVelocity);
-    return 0;
-  } else if (ch1 == '3') {
+  if (ch1 == '3') {
     SwitchF(us.fListDecan);
     if (pin->argc > 1 && ((i = NFromSz(pin->argv[1])) > 0 || FNumCh(pin->argv[1][0]) ||
       pin->argv[1][0] == '~')) {
@@ -2594,22 +2598,6 @@ static int NSwZ(CONST char *szSwitch, PARSEIN *pin)
   return 0;
 }
 
-static int NSwl(CONST char *szSwitch, PARSEIN *pin)
-{
-  if (szSwitch[1] == '0')
-    SwitchF(us.fSectorApprox);
-  SwitchF(us.fSector);
-  return 0;
-}
-
-static int NSwj(CONST char *szSwitch, PARSEIN *pin)
-{
-  if (szSwitch[1] == '0')
-    SwitchF(us.fInfluenceSign);
-  SwitchF(us.fInfluence);
-  return 0;
-}
-
 static int NSwL(CONST char *szSwitch, PARSEIN *pin)
 {
   int i, darg = 0;
@@ -2630,14 +2618,6 @@ static int NSwL(CONST char *szSwitch, PARSEIN *pin)
   }
   SwitchF(us.fAstroGraph);
   return darg;
-}
-
-static int NSwK(CONST char *szSwitch, PARSEIN *pin)
-{
-  if (szSwitch[1] == 'y')
-    SwitchF(us.fCalendarYear);
-  SwitchF(us.fCalendar);
-  return 0;
 }
 
 static int NSwd(CONST char *szSwitch, PARSEIN *pin)
@@ -2746,14 +2726,6 @@ static int NSwE(CONST char *szSwitch, PARSEIN *pin)
     darg++;
   }
   return darg;
-}
-
-static int NSwEight(CONST char *szSwitch, PARSEIN *pin)
-{
-  if (szSwitch[1] == '0')
-    SwitchF(us.fMoonChartSep);
-  SwitchF(us.fMoonChart);
-  return 0;
 }
 
 static int NSwe(CONST char *szSwitch, PARSEIN *pin)
@@ -3054,14 +3026,6 @@ static int NSwH(CONST char *szSwitch, PARSEIN *pin)
     SwitchF(us.fRay); SwitchF(us.fMeaning);
   } else
     SwitchF(us.fSwitch);
-  return 0;
-}
-
-static int NSwQBig(CONST char *szSwitch, PARSEIN *pin)
-{
-  if (szSwitch[1] == '0')
-    SwitchF(us.fLoopInit);
-  SwitchF(us.fLoop);
   return 0;
 }
 
@@ -3762,6 +3726,17 @@ static CONST SWITCHTILDE rgswtilde[] = {
 };
 #endif
 
+// De-soup verdicts (phase 2, P4, 2026-08-30): every prefix row below
+// was read and sorted. Promoted out of here: the -~ hooks (rgswtilde),
+// the two-flag chart families (-l -j -K -Q -8, now pf2 flag rows), and
+// -v0. What stays, stays for cause: -m's suffixes combine (-ma0 is
+// summary+aspects+midpoints, a meaningful spelling no row can carry);
+// -b's backend suffixes share the fEphemFiles fall-through toggle;
+// -z/-q/-d/-p/-r parse chart info and progression arguments where
+// suffixes choose argument shapes; -R/-A/-E walk variable-length
+// object lists; -w/-L/-N take optional leading numbers; -Y* and -X*
+// prefix rows carry per-suffix arity and error labels. Promoting any
+// of these would scatter coupled semantics across rows.
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
@@ -3923,17 +3898,16 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"v",    grfSwPrefix, NSwv},  {"w",    grfSwPrefix, NSww},
   {"g",    grfSwPrefix, NSwg},  {"a",    grfSwPrefix, NSwa},
   {"m",    grfSwPrefix, NSwm},  {"Z",    grfSwPrefix, NSwZ},
-  {"l",    grfSwPrefix, NSwl},  {"j",    grfSwPrefix, NSwj},
-  {"L",    grfSwPrefix, NSwL},  {"K",    grfSwPrefix, NSwK},
+    
+  {"L",    grfSwPrefix, NSwL},  
   {"d",    grfSwPrefix, NSwd},  {"E",    grfSwPrefix, NSwE},
-  {"8",    grfSwPrefix, NSwEight},
   {"t",    grfSwPrefix, NSwt},  {"T",    grfSwPrefix, NSwT},
   {"B",    grfSwPrefix, NSwB},  {"V",    grfSwPrefix, NSwV},
 #ifdef ARABIC
   {"P",    grfSwPrefix, NSwP},
 #endif
   {"N",    grfSwPrefix, NSwN},  {"I",    grfSwPrefix, NSwI},
-  {"H",    grfSwPrefix, NSwH},  {"Q",    grfSwPrefix, NSwQBig},
+  {"H",    grfSwPrefix, NSwH},  
   {"M",    grfSwPrefix, NSwM},
 #ifdef TIME
   {"n",    grfSwPrefix, NSwn},  {"y",    grfSwPrefix, NSwy},
@@ -3987,6 +3961,8 @@ static int NProcessSwitchTable(CONST char *szName, PARSEIN *pin)
         SwitchF2(us.fGraphics);
       } else
         SwitchF(*psf->pf);
+      if (psf->pf2 != NULL)
+        SwitchF(*psf->pf2);
       return 0;
     }
   for (psr = rgswranged;
