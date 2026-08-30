@@ -594,7 +594,7 @@ and the registry audit reminds you of the last two.
      the tables, precisely because the phase-2 batteries had trimmed
      step 3 down to builds+suite+matrix. The step-3 list is the
      battery; trimming it is how nets go stale unnoticed.
-3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3039/0),
+3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3046/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
    those last two in parallel subshells, they're the slow tail.
@@ -1150,11 +1150,13 @@ different things.** `DisplayAtlasLookup(..., size_t lDialog, ...)`
 `(size_t)hdlg` (wdialog.cpp:275), the Qt port passes literal `1`
 (qtdialog.cpp:1912) — the same parameter is a window handle on one
 backend and a boolean on the other, and the core branches on both
-interpretations. *Incident:* none yet; it worked because the casts are
-guarded, which is luck of the `#ifdef` layout. *Direction:* split the
-parameter into what it actually is — a "results go to the open dialog"
-flag plus a per-backend sink the ports own; small, self-contained.
-*Cost:* low. Tagged T6 (backend knowledge above the device layer).
+interpretations. *Incident:* found during the split
+(work log item 108): the Qt-side row delivery for time changes sat
+nested inside `#ifdef WIN` — dead code, an always-empty dialog list.
+**Done 2026-08-30** (item 108): the parameter is a `flag fDialog`, and
+every port receives rows through the `pfnAtlasRow` sink the Qt port
+already had; wdialog.cpp owns the Windows end. The shared core no
+longer mentions listboxes at all. Tagged T6, now discharged here.
 
 **G2 — The atlas loaders are the payload half of B3.** `FLoadAtlas`/
 `FLoadZoneRules`/etc. (atlas.cpp:906-1392) read their data through the
@@ -1378,8 +1380,9 @@ the way D1's tail and the harvest did):
   like T1 (wiring vs cache vs scratch), fold the trivial ones.
 - **P10. C1/C5/C6, G1/G2** — surveyed 2026-08-30, ordered by
   incident risk: **C5 done** (work log item 107, verdict at the
-  finding); G1's size_t split is next (small, self-contained, no
-  incident yet); C6 stays a documentation task tied to Area D's
+  finding); G1 done (item 108 —
+  and the split surfaced a real incident after all: Qt's Time Changes
+  list was dead code, empty since the port's first day); C6 stays a documentation task tied to Area D's
   chart-code work; C1 already verdicted (deferral free); G2 is
   counted under B1/B3, not here.
 

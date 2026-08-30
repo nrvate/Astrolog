@@ -250,6 +250,24 @@ void ErrorEnsure(int n, CONST char *sz)
 
 
 #ifdef ATLAS
+// Receive one atlas result row while a chart info dialog runs a lookup,
+// and put it in that dialog's listbox. The lookups in atlas.cpp deliver
+// rows through the pfnAtlasRow sink on every port; this is the Windows
+// end of it, and hdlgAtlasRow is which dialog is currently listening.
+
+static HWND hdlgAtlasRow = NULL;
+
+static void AtlasRowW(CONST char *sz, int n)
+{
+  HWND hdlg = hdlgAtlasRow;
+  int j;
+
+  if (hdlg != NULL) {
+    SetListN(dlIn, sz, n, j);
+  }
+}
+
+
 // Shared WM_COMMAND processor for atlas and time change related button
 // commands. Called from DlgInfo() and DlgDefault().
 
@@ -272,16 +290,20 @@ flag FDlgInfoAtlas(HWND hdlg, WORD wParam, flag fDefault)
   if (wParam == dbInCity) {
     GetEdit(deLoc, sz);
     ClearList(dlIn);
-    if (!DisplayAtlasLookup(sz, (size_t)hdlg, &ilist))
+    hdlgAtlasRow = hdlg; pfnAtlasRow = AtlasRowW;
+    if (!DisplayAtlasLookup(sz, fTrue, &ilist))
       PrintWarning("Couldn't get atlas data!");
+    pfnAtlasRow = NULL;
 
   // "Nearby Cities" button:
   } else if (wParam == dbInCoor) {
     GetEdit(dcLon, sz); lon = RParseSz(sz, pmLon);
     GetEdit(dcLat, sz); lat = RParseSz(sz, pmLat);
     ClearList(dlIn);
-    if (!DisplayAtlasNearby(lon, lat, (size_t)hdlg, &ilist, fFalse))
+    hdlgAtlasRow = hdlg; pfnAtlasRow = AtlasRowW;
+    if (!DisplayAtlasNearby(lon, lat, fTrue, &ilist, fFalse))
       PrintWarning("Couldn't get atlas data!");
+    pfnAtlasRow = NULL;
 
   // "Time Changes" button:
   } else if (wParam == dbInChan) {
@@ -295,8 +317,10 @@ flag FDlgInfoAtlas(HWND hdlg, WORD wParam, flag fDefault)
     if (!fDefault) {
       GetEdit(dcInYea, sz); ci.yea = NParseSz(sz, pmYea);
     }
-    if (!DisplayTimezoneChanges(is.rgae[i].izn, (size_t)hdlg, &ci))
+    hdlgAtlasRow = hdlg; pfnAtlasRow = AtlasRowW;
+    if (!DisplayTimezoneChanges(is.rgae[i].izn, fTrue, &ci))
       PrintWarning("Couldn't get time zone data!");
+    pfnAtlasRow = NULL;
 
   // "Apply Info" button:
   } else if (wParam == dbInAppl) {

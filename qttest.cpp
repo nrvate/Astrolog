@@ -3463,6 +3463,55 @@ static void ProbeQt()
 // When a filter is active (or ASTROLOG_QT_TIME is set), each group also
 // reports its wall time, which is how to find where the 40 seconds go.
 
+// The atlas lookups deliver dialog rows through the pfnAtlasRow sink on
+// every port. The Qt Time Changes list was empty from the port's first
+// day to work log item 108: the delivery calls sat nested inside
+// #ifdef WIN, the exact dead-branch shape of items 39 and 54, so only
+// the city lists ever reached the dialog. Assert all three lookups
+// deliver rows when the dialog flag is up, and none when it is down.
+
+static int s_cAtlasRow = 0;
+
+static void CountAtlasRowQt(CONST char *sz, int n)
+{
+  s_cAtlasRow++;
+}
+
+static void TestAtlasSinkQt()
+{
+  void (*pfnSav)(CONST char *, int) = pfnAtlasRow;
+  CI ci = ciMain;
+  int i = 12, cLook, cTz, cNear;
+
+  Group("Atlas row sink");
+  pfnAtlasRow = CountAtlasRowQt;
+  s_cAtlasRow = 0;
+  Check(DisplayAtlasLookup("Seattle, WA, USA", fTrue, &i),
+    "dialog city lookup succeeds");
+  cLook = s_cAtlasRow;
+  Check(cLook == 1, "Seattle delivers exactly one row, got %d", cLook);
+
+  pfnAtlasRow = NULL;
+  i = 12;
+  Check(DisplayAtlasLookup("Seattle, WA, USA", fFalse, &i),
+    "console city lookup succeeds");
+  pfnAtlasRow = CountAtlasRowQt;
+  s_cAtlasRow = 0;
+  Check(DisplayTimezoneChanges(is.rgae[i].izn, fTrue, &ci),
+    "dialog time changes succeed");
+  cTz = s_cAtlasRow;
+  Check(cTz > 1, "time changes deliver header and rows, got %d", cTz);
+
+  s_cAtlasRow = 0;
+  i = 12;
+  Check(DisplayAtlasNearby(is.rgae[0].lon, is.rgae[0].lat, fTrue, &i,
+    fFalse), "dialog nearby lookup succeeds");
+  cNear = s_cAtlasRow;
+  Check(cNear >= 1, "nearby delivers rows, got %d", cNear);
+  pfnAtlasRow = pfnSav;
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -3502,7 +3551,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"custom-parse",         TestCustomDialogParseQt},
   {"objdef-set",           TestObjDefSetQt},
   {"objsel-glyph",         TestObjSelGlyphQt},
-  {"settings-roundtrip",   TestSettingsRoundTripQt}};
+  {"settings-roundtrip",   TestSettingsRoundTripQt},
+  {"atlas-sink",           TestAtlasSinkQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
 
 // Does any comma-separated token of the filter appear in the name?

@@ -1479,15 +1479,13 @@ flag FLoadZoneLinks(FILE *file, int czl)
 // Lookup a city in the atlas. Display a list of matches in text or in a
 // Windows dialog. Implements the -N switch and "Lookup City" button.
 
-#ifdef QT
-// The Qt dialogs receive atlas result rows through this instead of a Win32
-// listbox: the lookup itself is portable, only its way of showing results
-// was not. Set while a dialog is open, NULL otherwise, in which case these
-// functions print to the text output as they always have.
-void (*pfnAtlasRowQt)(CONST char *, int) = NULL;
-#endif
+// The dialogs receive atlas result rows through this sink: the lookup
+// itself is portable, only its way of showing results was not. Each port
+// sets it while its chart info dialog runs a lookup, NULL otherwise, in
+// which case these functions print to the text output as they always have.
+void (*pfnAtlasRow)(CONST char *, int) = NULL;
 
-flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
+flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
 {
   AtlasEntry *pae;
   char szCity[cchSzMax], sz[cchSzMax], *pch1, *pch2, *pch;
@@ -1495,15 +1493,11 @@ flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
     clist = 0, icn, istateUS, istateCA, iae, nPower, i, j, nSav, fSav;
   flag fTimezoneChanges;
   real zon;
-#ifdef WIN
-  HWND hdlg = (HWND)lDialog;
-#endif
-
   if (!FEnsureAtlas())
     return fFalse;
   if (szIn == NULL)
     szIn = "";
-  ilistHi = (lDialog != 0 ? *piae : (piae != NULL ? 1 :
+  ilistHi = (fDialog ? *piae : (piae != NULL ? 1 :
     (us.nAtlasList > 0 ? Min(us.nAtlasList, ilistMax) : ilistMax)));
 
   // Parse city, along with comma separated state/province and country/region.
@@ -1598,7 +1592,7 @@ flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
 
   // Display header.
   fTimezoneChanges = FEnsureTimezoneChanges();
-  if (lDialog != 0) {
+  if (fDialog) {
     nSav = us.fAnsiChar; us.fAnsiChar = 2;
     fSav = us.fGraphics; us.fGraphics = fTrue;
   } else {
@@ -1626,7 +1620,7 @@ flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
 
   // Display list of matches.
   for (i = 0; i < clist; i++) {
-    if (lDialog == 0) {
+    if (!fDialog) {
       sprintf(sz, "%3d: ", i+1);
       PrintSz(sz);
     }
@@ -1639,37 +1633,22 @@ flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
       sprintf(sz, "%s (%s, %s)", SzCity(rgiae[i]), pch, SzZone(zon));
     } else
       sprintf(sz, "%s (%s)", SzCity(rgiae[i]), pch);
-    #ifdef QT
-    if (pfnAtlasRowQt != NULL) {
-      pfnAtlasRowQt(sz, rgiae[i]);
+    if (pfnAtlasRow != NULL) {
+      pfnAtlasRow(sz, rgiae[i]);
       continue;
     }
-    #endif
-#ifdef WIN
-    if (hdlg != NULL) {
-      SetListN(dlIn, sz, rgiae[i], j);
-      continue;
-    }
-#endif
     PrintSz(sz);
     PrintL();
   }
 
   // It's possible no matches were found.
   if (clist <= 0) {
-    #ifdef QT
-    if (pfnAtlasRowQt != NULL)
-      pfnAtlasRowQt("(No matches found)", -1);
+    if (pfnAtlasRow != NULL)
+      pfnAtlasRow("(No matches found)", -1);
     else
-    #endif
-#ifdef WIN
-    if (hdlg != NULL) {
-      SetListN(dlIn, "(No matches found)", -1, j);
-    } else
-#endif
       PrintSz("No matches found.");
   }
-  if (lDialog != 0) {
+  if (fDialog) {
     us.fAnsiChar = nSav; us.fGraphics = fSav;
   }
   return fTrue;
@@ -1679,7 +1658,7 @@ flag DisplayAtlasLookup(CONST char *szIn, size_t lDialog, int *piae)
 // Given a location, display a list of cities from the atlas nearest to it.
 // Display it in text or in a Windows dialog. Implements the -Nl switch.
 
-flag DisplayAtlasNearby(real lon, real lat, size_t lDialog, int *piae,
+flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
   flag fAstroGraph)
 {
   AtlasEntry *pae;
@@ -1688,13 +1667,9 @@ flag DisplayAtlasNearby(real lon, real lat, size_t lDialog, int *piae,
     i, j, nSav, fSav;
   flag fTimezoneChanges;
   real rDist, zon;
-#ifdef WIN
-  HWND hdlg = (HWND)lDialog;
-#endif
-
   if (!FEnsureAtlas())
     return fFalse;
-  ilistHi = (lDialog != 0 ? *piae : (piae != NULL ? 1 :
+  ilistHi = (fDialog ? *piae : (piae != NULL ? 1 :
     (us.nAtlasList > 0 ? Min(us.nAtlasList, ilistMax) : ilistMax)));
 
   // Loop over all cities in atlas, computing their distance to location.
@@ -1721,7 +1696,7 @@ flag DisplayAtlasNearby(real lon, real lat, size_t lDialog, int *piae,
   }
 
   // Display header.
-  if (lDialog != 0) {
+  if (fDialog) {
     nSav = us.fAnsiChar; us.fAnsiChar = 2;
     fSav = us.fGraphics; us.fGraphics = fTrue;
   } else {
@@ -1744,7 +1719,7 @@ flag DisplayAtlasNearby(real lon, real lat, size_t lDialog, int *piae,
   for (i = 0; i < clist; i++) {
     if (fAstroGraph && rgn[i] >= us.nAstroGraphDist)
       break;
-    if (lDialog == 0) {
+    if (!fDialog) {
       sprintf(sz, "%3d: ", i+1);
       PrintSz(sz);
     }
@@ -1759,23 +1734,15 @@ flag DisplayAtlasNearby(real lon, real lat, size_t lDialog, int *piae,
     } else
       sprintf(sz, "%d %s: %s (%s)", rgn[i], us.fEuroDist ? "km" : "mi",
         SzCity(rgiae[i]), pch);
-    #ifdef QT
-    if (pfnAtlasRowQt != NULL) {
-      pfnAtlasRowQt(sz, rgiae[i]);
+    if (pfnAtlasRow != NULL) {
+      pfnAtlasRow(sz, rgiae[i]);
       continue;
     }
-    #endif
-#ifdef WIN
-    if (hdlg != NULL) {
-      SetListN(dlIn, sz, rgiae[i], j);
-      continue;
-    }
-#endif
     PrintSz(sz);
     PrintL();
   }
 
-  if (lDialog != 0) {
+  if (fDialog) {
     us.fAnsiChar = nSav; us.fGraphics = fSav;
   }
   return fTrue;
@@ -1876,7 +1843,7 @@ flag FSetDstZon(CI *ci, int izn,
 // Implements the -Nz switch. Can also do the important task of determining
 // the time zone and Daylight Time setting for a particular time.
 
-flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
+flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
 {
   char sz[cchSzMax*2], sz1[cchSzMax], sz2[cchSzDef], sz3[cchSzDef];
   int rgmon[ichngMax], rgday[ichngMax], rgtim[ichngMax], rgiru[ichngMax],
@@ -1886,15 +1853,11 @@ flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
     iyea, yea2, irue, crue, cn, ici, idMon, dd, i, j, k;
   ZoneChange *pzc, *pzc2;
   RuleEntry *pru;
-#ifdef WIN
-  HWND hdlg = (HWND)lDialog;
-#endif
-
   if (!FEnsureTimezoneChanges())
     return fFalse;
 
   // Loop over all possible time zone areas, or just the one specified.
-  if (lDialog == 0 && iznIn < 0) {
+  if (!fDialog && iznIn < 0) {
     AnsiColor(kWhiteA);
     sprintf(sz, "%s %s time changes\n\n", szAppName, szVersionCore);
     PrintSz(sz);
@@ -1907,7 +1870,7 @@ flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
   if (iznIn < 0 && izn > 0)
     PrintL();
   izcn = mpznzc[izn];
-  if (lDialog == 0 && ci == NULL) {
+  if (!fDialog && ci == NULL) {
     AnsiColor(kWhiteA);
     sprintf(sz, "Time changes within zone: %s", rgszzn[izn]); PrintSz(sz);
     i = rgznChange[izcn];
@@ -1917,18 +1880,10 @@ flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
     PrintL();
     AnsiColor(kDefault);
   }
-#ifdef WIN
-  else {
+  else if (pfnAtlasRow != NULL) {
     sprintf(sz, "Time changes within zone: %s", rgszzn[izn]);
-    #ifdef QT
-    if (pfnAtlasRowQt != NULL) {
-      pfnAtlasRowQt(sz, -1);
-      continue;
-    }
-    #endif
-    SetListN(dlIn, sz, -1, k);
+    pfnAtlasRow(sz, -1);
   }
-#endif
   izce = rgizcChange[izcn];
   czce = rgizcChange[izcn+1] - izce;
   cn = off = doff = 0;
@@ -1956,7 +1911,7 @@ flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
     if (doff == 0 && dst == dstPrev && zon == zonPrev)
       goto LSkip;
     cn++;
-    if (ci != NULL && lDialog == 0) {
+    if (ci != NULL && !fDialog) {
       // If ci set, then just set correct time zone and Daylight offset.
       // If ci date before any time zones were defined, then default to LMT.
       if (cn <= 1 && (yea > ci->yea || (yea == ci->yea && (mon > ci->mon ||
@@ -1984,19 +1939,12 @@ flag DisplayTimezoneChanges(int iznIn, size_t lDialog, CI *ci)
     sprintf(sz, "%s %s: %s: %s%s%s", SzDate(mon, day, yea, fFalse),
       SzTime(tim / 3600, tim / 60 % 60, us.fSeconds ? tim % 60 : -1),
       sz1, dst == 0 ? "ST" : "DT", sz2, sz3);
-#ifdef WIN
-    if (lDialog != 0) {
+    if (fDialog) {
       sprintf(sz1, "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz);
-      #ifdef QT
-      if (pfnAtlasRowQt != NULL) {
-        pfnAtlasRowQt(sz1, -1);
-        continue;
-      }
-      #endif
-      SetListN(dlIn, sz1, -1, k);
+      if (pfnAtlasRow != NULL)
+        pfnAtlasRow(sz1, -1);
       goto LSkip;
     }
-#endif
     sprintf(sz1, "%3d: ", cn); PrintSz(sz1);
     k = DayOfWeek(mon, day, yea);
     AnsiColor(kRainbowA[k + 1]);
@@ -2101,7 +2049,7 @@ LSkip:
           tim -= (zon - dstPrev);
         AdjustTime(&mon, &day, &yea, &tim);
         doff = offPrev - off;
-        if (ci != NULL && lDialog == 0) {
+        if (ci != NULL && !fDialog) {
           // If ci set, then just set correct time zone and Daylight offset.
           if (FSetDstZon(ci, izn, mon, day, yea, tim, zon, doff,
             monPrev, dayPrev, yeaPrev, timPrev, dstPrev, zonPrev, doffPrev))
@@ -2121,19 +2069,12 @@ LSkip:
           SzTime(tim / 3600, tim / 60 % 60, us.fSeconds ? tim % 60 : -1),
           SzHMS(doff),
           dst == 0 ? "ST" : "DT", sz2);
-#ifdef WIN
-        if (lDialog != 0) {
+        if (fDialog) {
           sprintf(sz, "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz1);
-          #ifdef QT
-          if (pfnAtlasRowQt != NULL) {
-            pfnAtlasRowQt(sz, -1);
-            continue;
-          }
-          #endif
-          SetListN(dlIn, sz, -1, k);
+          if (pfnAtlasRow != NULL)
+            pfnAtlasRow(sz, -1);
           continue;
         }
-#endif
         AnsiColor(kDefault);
         sprintf(sz, "%3d: ", cn); PrintSz(sz);
         k = DayOfWeek(mon, day, yea);
@@ -2148,7 +2089,7 @@ LSkip:
   } // izn
 
   // If ci date after all time zones are defined, then go with final values.
-  if (ci != NULL && lDialog == 0) {
+  if (ci != NULL && !fDialog) {
     ci->dst = RTim(dst); ci->zon = RTim(zon);
   }
   return fTrue;

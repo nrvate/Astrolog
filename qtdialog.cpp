@@ -1873,7 +1873,7 @@ void ShowGraphicsSettingsDialogQt()
 
 // The four atlas buttons Windows' chart info dialogs carry, wired to the
 // lookups in atlas.cpp. Those fill a Win32 listbox directly; the Qt build
-// receives their rows through pfnAtlasRowQt instead (see atlas.cpp), which
+// receives their rows through pfnAtlasRow instead (see atlas.cpp), which
 // is set only while one of these runs.
 
 #ifdef ATLAS
@@ -1904,7 +1904,7 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
   plist->clear();
   s_plistAtlasQt = plist;
   s_rgiaeQt.clear();
-  pfnAtlasRowQt = AtlasRowQt;
+  pfnAtlasRow = AtlasRowQt;
 
   if (nWhich == 0) {                     // Lookup City
     sprintf(sz, "%.*s", cchSzMax-1,
@@ -1919,18 +1919,18 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
   } else {                               // Time Changes
     sprintf(sz, "%.*s", cchSzMax-1,
       peLoc->text().toLocal8Bit().constData());
-    pfnAtlasRowQt = NULL;
+    pfnAtlasRow = NULL;
     if (!DisplayAtlasLookup(sz, 0, &i)) {
-      pfnAtlasRowQt = NULL;
+      pfnAtlasRow = NULL;
       s_plistAtlasQt = NULL;
       plist->addItem("Put a valid city in the Location field first.");
       return;
     }
-    pfnAtlasRowQt = AtlasRowQt;
+    pfnAtlasRow = AtlasRowQt;
     if (!DisplayTimezoneChanges(is.rgae[i].izn, 1, pci))
       plist->addItem("Couldn't get time zone data!");
   }
-  pfnAtlasRowQt = NULL;
+  pfnAtlasRow = NULL;
   s_plistAtlasQt = NULL;
 }
 

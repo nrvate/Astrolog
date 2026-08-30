@@ -3390,6 +3390,32 @@ are the more useful half to read before starting something new.
     old-chain simulation over the whole object domain, zero
     mismatches. Suite 3039/0, audits clean.
 
+108. **P10/G1: the atlas lookups deliver rows through one sink.** The
+    size_t that was an HWND on Windows and a boolean on Qt is a flag
+    now, and all three atlas display functions hand result rows to
+    the pfnAtlasRow sink (the Qt port's own mechanism, renamed from
+    pfnAtlasRowQt) -- wdialog.cpp implements the Windows end over a
+    port-owned handle, and atlas.cpp's #ifdef WIN clusters are gone.
+    The survey first found a real port bug: the TimezoneChanges sink
+    calls were nested inside #ifdef WIN -- dead on the Qt build since
+    the port's first day (items 39/54's exact shape) -- so the Set
+    Chart Info dialog's Time Changes list was always empty, its rows
+    leaking to stdout; the dead branches also carried two latent flow
+    bugs (a continue past each zone's rows after its header, and a
+    continue where Windows does goto LSkip, skipping the Prev-state
+    update), both superseded by the unified code. Probe first
+    measured lookup rows=1, tzchanges rows=0; after, rows=174. New
+    suite group atlas-sink (7 assertions), proven to fail with the
+    bug reintroduced. Nets: 9-case console -N differential
+    (byte-identical; two first-draft cases were degenerate -- a
+    single-match city makes the count moot, and Nearby reads
+    coordinates, not the location string); Wine-driven Set Chart
+    Info screenshots for all three buttons, pixel-identical old vs.
+    new, pinned date because the shot embeds the whole chart. One
+    probe lesson for QT_TESTING.md-style work: printf argument order
+    read the row counter before the call under test ran -- sequence
+    the call, then print. Suite 3046/0, audits clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

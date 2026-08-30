@@ -729,10 +729,10 @@ extern flag FLoadAtlas P((FILE *, int));
 extern flag FLoadZoneRules P((FILE *, int, int));
 extern flag FLoadZoneChanges P((FILE *, int, int));
 extern flag FLoadZoneLinks P((FILE *, int));
-extern flag DisplayAtlasLookup P((CONST char *, size_t, int *));
-extern flag DisplayAtlasNearby P((real, real, size_t, int *, flag));
+extern flag DisplayAtlasLookup P((CONST char *, flag, int *));
+extern flag DisplayAtlasNearby P((real, real, flag, int *, flag));
 extern void AdjustTime P((int *, int *, int *, int *));
-extern flag DisplayTimezoneChanges P((int, size_t, CI *));
+extern flag DisplayTimezoneChanges P((int, flag, CI *));
 extern real ZondefFromIzn P((int));
 #endif
 
@@ -1238,8 +1238,6 @@ extern void TextColorQt P((KI));
 extern void PrintWarningQt P((CONST char *, flag));
 #endif
 
-#ifdef QT
-/* Set by the Qt dialogs to receive rows from the atlas lookups in       */
-/* atlas.cpp, which otherwise fill a Win32 listbox or print to text.     */
-extern void (*pfnAtlasRowQt) P((CONST char *, int));
-#endif
+/* Set by a port's chart info dialog to receive rows from the atlas      */
+/* lookups in atlas.cpp, which otherwise print to the text output.       */
+extern void (*pfnAtlasRow) P((CONST char *, int));
