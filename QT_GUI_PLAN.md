@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3031
+   display and no `xdotool`, and exits non-zero on failure. **3036
    assertions** as of 2026-08-29; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, and bad input.
@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-77
+## Work log — items 1-78
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2894,6 +2894,26 @@ are the more useful half to read before starting something new.
       spellings, four parsers dissolved (NProcessSwitchesRare, RareX,
       X, and the main switch), every step proven against the previous
       binary.
+
+78. **The registry is self-checking, and -YYI works for the first time
+    in its existence.** Two nets for the new architecture: suite group
+    `registry` enumerates all 260 rows through a new
+    FSwitchRegistryRow() accessor and pins the structural invariants
+    (unique spellings; no prefix row shadowing a row scanned after it
+    -- the -XE mistake class, now structural; exactly one empty
+    spelling), falsified with a planted duplicate and a hoisted prefix
+    row. And `tools/registry_audit.py` extracts every spelling the -H
+    help text documents and FOutputSettings() writes -- 449 of them --
+    and resolves each against the registry with the dispatch's own
+    exact-then-prefix rule.
+    - The audit's first run found -HY documenting `-YYI <text>`, a
+      switch that had never worked: its implementation sat behind
+      upstream's misspelled `#ifdef INTRPRET`, so the spelling fell
+      through to the atlas payload branch (any file using it would
+      have eaten the rest of the file as zone links). The registry row
+      now does what the help always said, under the correctly spelled
+      guard, and the audit holds the manual and the program to each
+      other from here on.
 
 ## Features this fork adds to both builds
 

@@ -72,6 +72,7 @@ extern flag FProcessCommandLine P((CONST char *));
 extern int NParseCommandLine P((char *, char **));
 extern int NPromptSwitches P((char *, char *[MAXSWITCHES]));
 extern flag FProcessSwitches P((int, char **, PARSECTX *));
+extern flag FSwitchRegistryRow P((int, CONST char **, int *, int *));
 extern void InitRestrictions P((flag));
 extern void InitProgram P((void));
 extern void FinalizeProgram P((flag));

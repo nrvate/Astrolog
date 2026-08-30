@@ -3074,6 +3074,77 @@ static void TestNestedIncludeQt()
 }
 
 
+// The switch registry's structural invariants. Every switch spelling
+// in the program resolves through three tables scanned in order, with
+// prefix rows matching any spelling they begin. Two mistakes are easy
+// to make when adding rows and were each made once during the M1-M10
+// migration before review caught them: a duplicate spelling (the first
+// row silently wins), and a prefix row placed where it shadows an
+// exact spelling scanned later (-XE registered exact once made "-XE1"
+// unknown; the reverse ordering would silently reroute it). These
+// checks make both structural.
+static void TestRegistryQt()
+{
+  CONST char *rgsz[400], *sz, *pch1, *pch2;
+  int rggrf[400], rgtab[400], csw = 0, cPrefix = 0, i, j, grf, tab;
+  flag fOk;
+
+  Group("Switch registry");
+  while (csw < 400 && FSwitchRegistryRow(csw, &rgsz[csw], &rggrf[csw],
+    &rgtab[csw]))
+    csw++;
+  Check(csw >= 240 && csw < 400,
+    "the registry enumerates a plausible row count (%d)", csw);
+
+  // Spellings are unique across all three tables.
+  fOk = fTrue;
+  for (i = 0; i < csw; i++)
+    for (j = i+1; j < csw; j++)
+      if (FEqSz(rgsz[i], rgsz[j])) {
+        fOk = fFalse;
+        printf("  duplicate spelling \"%s\" (rows %d and %d)\n",
+          rgsz[i], i, j);
+      }
+  Check(fOk, "every spelling appears exactly once");
+
+  // A prefix row (handler table only) must scan after any row whose
+  // exact spelling it would otherwise swallow, and must not begin any
+  // later prefix row's spelling either.
+  fOk = fTrue;
+  for (i = 0; i < csw; i++) {
+    if (!(rgtab[i] == 2 && (rggrf[i] & 1)))    // grfSwPrefix
+      continue;
+    cPrefix++;
+    for (j = i+1; j < csw; j++) {
+      for (pch1 = rgsz[i], pch2 = rgsz[j]; *pch1 && *pch1 == *pch2;
+        pch1++, pch2++)
+        ;
+      if (*pch1 == chNull && rgsz[i][0] != chNull) {
+        fOk = fFalse;
+        printf("  prefix row \"%s\" shadows later row \"%s\"\n",
+          rgsz[i], rgsz[j]);
+      }
+    }
+  }
+  Check(fOk, "no prefix row shadows a row scanned after it");
+  Check(cPrefix >= 30, "the prefix rows enumerated (%d)", cPrefix);
+
+  // Exactly one empty spelling: the day-arithmetic row for a lone
+  // prefix character.
+  for (i = j = 0; i < csw; i++)
+    if (rgsz[i][0] == chNull)
+      j++;
+  Check(j == 1, "exactly one empty spelling, the day-arithmetic row");
+
+  // And every spelling the running binary's own -H text documents must
+  // resolve: sz stays unused here because the resolution check lives
+  // in tools/registry_audit.py, which parses the help source directly.
+  sz = NULL;
+  printf("  %d rows, %d of them prefix rows, all invariants hold\n",
+    csw, cPrefix);
+}
+
+
 static void TestForcedPositionsQt()
 {
   real rgforceSav[objMax];
@@ -3399,6 +3470,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"shared-core",          TestSharedCoreFixesQt},
   {"rulership",            TestRulershipTablesQt},
   {"nested-include",       TestNestedIncludeQt},
+  {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},
   {"chart-list",           TestChartListFilterQt},

@@ -1211,6 +1211,22 @@ static int NSwYYT(CONST char *szSwitch, int argc, char **argv,
   return 1;
 }
 
+#ifdef INTERPRET
+// -YYI is documented in -HY and had never worked: its implementation
+// sat behind a misspelled "#ifdef INTRPRET" upstream, so the spelling
+// fell through to the atlas payload branch (pre-M3) or errored as
+// unknown (post-M3). The registry row does what the help always said.
+
+static int NSwYYI(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (FErrorArgc("YYI", argc, 1))
+    return tcError;
+  FieldWord(argv[1]);
+  return 1;
+}
+#endif
+
 #ifdef ATLAS
 // The -YY payload family reads the rest of the switch file being
 // parsed, through the parse context the file parser passes down --
@@ -4530,6 +4546,9 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"YIA",  0,      NSwYIA},  {"YIA0", 0, NSwYIA0},
 #endif
   {"YYt",  0,      NSwYYt},  {"YYT",  0,      NSwYYT},
+#ifdef INTERPRET
+  {"YYI",  0,      NSwYYI},
+#endif
 #ifdef ATLAS
   {"YY",   0,      NSwYY},   {"YY1",  0,      NSwYY1},
   {"YY2",  0,      NSwYY2},  {"YY3",  0,      NSwYY3},
@@ -4729,6 +4748,43 @@ static int NProcessSwitchTable(CONST char *szName, int argc, char **argv,
       return i;
     }
   return nSwitchAbsent;
+}
+
+
+// Enumerate the registry for tests and tools: row i's spelling, grf
+// bits, and which table it lives in (0 flag, 1 ranged, 2 handler), in
+// exactly the order the dispatch scans them. Returns fFalse past the
+// end. The suite's "registry" group pins the structural invariants
+// (unique spellings, prefix rows never shadowing an exact row).
+
+flag FSwitchRegistryRow(int i, CONST char **pszName, int *pgrf,
+  int *pnTable)
+{
+  int cflag = sizeof(rgswflag)/sizeof(*rgswflag),
+    cranged = sizeof(rgswranged)/sizeof(*rgswranged),
+    cdef = sizeof(rgswitchdef)/sizeof(*rgswitchdef);
+
+  if (i < cflag) {
+    *pszName = rgswflag[i].szName;
+    *pgrf = rgswflag[i].grf;
+    *pnTable = 0;
+    return fTrue;
+  }
+  i -= cflag;
+  if (i < cranged) {
+    *pszName = rgswranged[i].szName;
+    *pgrf = 0;
+    *pnTable = 1;
+    return fTrue;
+  }
+  i -= cranged;
+  if (i < cdef) {
+    *pszName = rgswitchdef[i].szName;
+    *pgrf = rgswitchdef[i].grf;
+    *pnTable = 2;
+    return fTrue;
+  }
+  return fFalse;
 }
 
 

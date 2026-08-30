@@ -305,6 +305,12 @@ of the file (A2's failure mode, gone for good).
   is registry-resident. The migration phase of T3 is complete -- what
   remains of T3 is the harvest: the table-driven settings writer (T4),
   generated -H help, and audits reading the registry.
+  **Harvest step 1 done 2026-08-29** (work log item 78): the registry
+  is self-checking (suite group `registry`, structural invariants) and
+  `tools/registry_audit.py` holds the -H text and the settings writer
+  to it -- 449 spellings resolve; its first run found and fixed -YYI,
+  documented but dead behind a misspelled ifdef since upstream wrote
+  it.
 - **M-final**: the four parser shells reduce to dispatch loops; the
   help printers are deleted; `FOutputSettings()` is a loop plus the
   handful of genuinely bespoke sections.
