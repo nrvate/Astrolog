@@ -1611,8 +1611,7 @@ void XChartTelescope()
     xBase2, yBase2, xScale2, yScale2, xi, yi, diam, radi, rRatio, len, ang,
     xo, yo, xr, yr, zr, xrSun, yrSun, xrT, yrT,
     radiS, radiE, radiM, radiU, radiP, lenS, lenM, theta, rPct;
-  flag fFlip = gs.fEcliptic && us.rHarmonic < 0.0, fShowLabel, fShowUmbra,
-    fSav;
+  flag fFlip = gs.fEcliptic && us.rHarmonic < 0.0, fShowLabel, fShowUmbra;
   TELE te;
   ES es;
   PT3R v1, v2;
@@ -1659,7 +1658,8 @@ void XChartTelescope()
   } else if (ObjOrbit(gs.objTrack) == us.objCenter) {
     iEar = us.objCenter; iMoo = gs.objTrack; fShowUmbra = fTrue;
   }
-  fSav = us.fRefract; us.fRefract = fFalse;
+  {
+  Borrow bRefract(us.fRefract, fFalse);
 
   for (nShowMinute = 0; nShowMinute <= 2; nShowMinute++) {
     xunit = xFontT * N012(nShowMinute, 4, 7, 10);
@@ -1864,7 +1864,7 @@ void XChartTelescope()
       xT = xp; yT = yp;
     }
   }
-  us.fRefract = fSav;
+  }
 
   // Draw planet disks.
   for (k = 0; k <= 1; k++) {
@@ -3921,8 +3921,7 @@ void XChartMoons()
 
     // Draw lines connecting planets which have aspects between them.
     if (gs.fLabelCity) {
-      k = gi.nScale;
-      gi.nScale = gi.nScaleTextT;
+      Borrow bScale(gi.nScale, gi.nScaleTextT);
       if (ySub <= 0) {
         // Top charts: Show Conjunctions between planet disks in longitude.
         cp = &rgcp[xSub];
@@ -3971,7 +3970,6 @@ void XChartMoons()
           }
         }
       }
-      gi.nScale = k;
     }
     DrawObjects(rgod, count, 0);
   } // ySub

@@ -3302,6 +3302,34 @@ are the more useful half to read before starting something new.
     next loop iteration). 14 cases, pairwise distinct, deterministic,
     byte-identical old vs. new. Suite 3039/0, audits clean.
 
+104. **P6 closed: the campaign converts what is scope-shaped and
+    writes verdicts for what is not.** Family 3: XChartTelescope's
+    whole-span fRefract override is a braced function-level Borrow
+    (no early exits in the 205-line span; `git diff -w` shows the
+    edit is five lines, matching the campaign's no-reindent brace
+    style), and XChartMoons' aspect-label nScale dance -- hidden from
+    the Sav grep behind the name `k`, its span containing a
+    FCreateGrid early return that leaked the scale -- borrows too,
+    with a new moons-labels case (=8 =XL =XA _R8) sabotage-proven to
+    see it. The fRefract case (=Yf, distinct output) cannot see a
+    value sabotage inside its span on any case tried -- the span's
+    projection path never visibly consults it here -- recorded as
+    proven-by-construction (one-line value, brace-only diff) rather
+    than by net. Campaign ledger for xcharts1.cpp, 11 sites
+    converted, the rest stay with reasons: XChartSphere's fRefract
+    restores *inside* the per-ring loop while saving outside it (an
+    ordering no scope guard can express); the three ignoreSav arrays
+    don't assign (and XChartSector restores at two points, XChartMoons
+    pairs its restore with AdjustRestrictions and a recast -- compound
+    cleanup, not field borrowing); DrawCalendar's Mon/MonT/cp shuffle
+    is chart-swapping, not borrowing; XChartMoons' objCenterSav is a
+    data source read long after its restore. One observed defect
+    recorded for a future deliberate fix: XChartMoons' FCreateGrid
+    early return skips the entire cleanup block (ignore restore,
+    fMoonMove restore, the recast) -- upstream shape, needs a real
+    fix, not a conversion. 16-case -Xb battery, pairwise distinct,
+    byte-identical throughout. Suite 3039/0, audits clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

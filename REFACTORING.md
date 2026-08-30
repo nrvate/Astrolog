@@ -1334,13 +1334,22 @@ own concessions, in dependency order):
   crossings-off), cases proven pairwise distinct and deterministic
   before trusting it, byte-identical after. One kept asymmetry,
   commented: 3D houses zero the altitude in single charts only.
-- **P6. Borrow conversion becomes a paced campaign.** Phase 1 made
-  *Sav conversion opportunistic; phase 2 promotes it: family-by-family
-  through xcharts1.cpp's ~60 sites (the worst file), a handful of
-  sites per commit, each commit gated by the -Xb pinned-date bitmap
-  differential over the charts those sites draw. Stop the campaign
-  the first time a conversion is not obviously mechanical (a
-  conditional restore, an ordering dependency) and record why.
+- **P6 — closed 2026-08-30** (work log items 102-104): three
+  families, three commits, 11 sites converted in xcharts1.cpp (all
+  five gi.nScale dances plus one hiding behind the name `k`; the
+  tight fEclipseAny, fSeconds+nDegForm, and both sphere cp0 scopes;
+  the telescope's whole-span fRefract). Each commit gated by the
+  -Xb pinned-date bitmap differential, grown to 16 cases and
+  sabotage-proven per site to actually see each converted scope --
+  which exposed that both sphere cp0 dances are self-assignments in
+  a single chart and forced a relation-sphere case. The campaign
+  stopped exactly where the plan said to: item 104 records why the
+  sphere fRefract (restore inside the ring loop), the ignoreSav
+  arrays (compound cleanup), DrawCalendar's chart shuffle, and
+  objCenterSav (a data source, not a save) stay hand-written, plus
+  one observed upstream leak (XChartMoons' early return skips its
+  whole cleanup block) left for a deliberate fix. Other files keep
+  the opportunistic rule.
 - **P7. Prefix the three colliding feature macros.** H2's fuller
   move: `PS`, `META`, `TIME` are why Qt headers must precede
   astrolog.h. One mechanical sweep per macro (build-breaks-find-all),
