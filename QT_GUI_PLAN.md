@@ -3061,6 +3061,19 @@ are the more useful half to read before starting something new.
     Remaining plan items are the documentation themes (T1, T8, A4,
     C4) and the optional AstroGraph clone merge.
 
+89. **C4: the backend selector's state space is written down.** The
+    five fields that jointly choose the ephemeris backend now carry a
+    state table at their declarations (astrolog.h): the six reachable
+    backends, the inert corners (fPlacalcPla wins over nSwissEph),
+    and the trap that every -b backend suffix falls through to also
+    toggle fEphemFiles -- benign in practice because the settings
+    writer emits forced prefixes and the dialogs assign fields
+    directly. Found while writing it: the derived reading layer C4
+    wanted already exists as the FCm*() macros in extern.h, and the
+    dialogs already collapse the choice to a six-value list, so the
+    "collapse to an enum" step is deferred indefinitely as
+    relocation, not creation.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

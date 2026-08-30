@@ -1827,6 +1827,26 @@ typedef struct _UserSettings {
   flag fSeconds;     // -b0
   flag fSecond1K;    // -b1
   flag fSecondHide;  // -b2
+  // The ephemeris backend is chosen by five fields together (these four,
+  // fEphemFiles above, and nSwissEph below), read through the FCm*()
+  // macros in extern.h -- use those, not the raw fields:
+  //   fEphemFiles fPlacalcPla nSwissEph = backend
+  //        0           -          -       Matrix formulas (fMatrixPla
+  //                                       names this state for the GUI)
+  //        1           1          -       Placalc (fPlacalcAst suppresses
+  //                                       its four main asteroids)
+  //        1           0          0       Swiss Ephemeris files
+  //        1           0          1       Moshier analytic (-bs)
+  //        1           0          2       JPL ephemeris file (-bj)
+  //        1           0          3       JPL Horizons web query (-bJ)
+  // fMatrixStar computes fixed stars with Matrix even when Swiss is on.
+  // Corners like fPlacalcPla with nSwissEph == 3 are representable but
+  // inert: fPlacalcPla wins and nSwissEph is ignored. Trap: every backend
+  // suffix of -b (-bp -bm -bs -bj -bJ -ba -bU) falls through to also
+  // TOGGLE fEphemFiles (NSwb, astrolog.cpp), so a plain "-bp" with files
+  // already on turns files off. The settings writer emits forced =/_
+  // prefixes and the dialogs assign the fields directly, so only a
+  // hand-typed plain -b* hits that fall-through.
   flag fPlacalcAst;  // -ba
   flag fPlacalcPla;  // -bp
   flag fMatrixPla;   // -bm

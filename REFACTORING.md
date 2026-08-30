@@ -815,6 +815,14 @@ dispatches longhand. *Direction:* document the reachable state space
 is worthwhile but belongs to the T3 table work, since the flags are set
 by switch parsing. *Cost:* documentation now, enum later.
 
+**Done 2026-08-29** (work log item 89): the state table, the inert
+corners, and the -b fall-through toggle trap are documented at the
+field declarations (astrolog.h). Better news found while writing it:
+the derived reading layer already exists — the `FCm*()` macros in
+extern.h are eight named predicates over the five fields, and the
+dialogs already collapse the choice to a six-value list. The enum
+step would relocate, not create, the meaning; deferred indefinitely.
+
 **C5 — The Swiss boundary translates object numbers by offset
 arithmetic and caches by stealth.** `FSwissPlanet()` (calc.cpp:3055+)
 maps three numbering domains (Astrolog objects, SE constants, custom
