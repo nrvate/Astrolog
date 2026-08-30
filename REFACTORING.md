@@ -1408,6 +1408,14 @@ confidence), then P4 interleaved with tranche 2 at will. P5 wants a
 fresh session. Nothing in phase 2 is urgent; everything in it is the
 difference between "contained" and "clean".
 
+**Phase 2 completed 2026-08-30** (work log items 96-110): tranche 1
+on the 29th-30th, tranches 2 and 3 on the 30th, every item with a
+done-note or a measured verdict above. Still open, by choice, with
+their reasons recorded at the findings: A3's shared mode table (take
+it with the measured boundaries or not at all), C2's cooked-input
+window (net first), C6's ring-ownership documentation (with Area D),
+and T1 move 3 (opportunistic, never a sweep).
+
 ---
 
 ## Done
