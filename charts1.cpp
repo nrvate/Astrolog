@@ -1245,14 +1245,18 @@ void PrintMidpointSummary(int *cs, int count, real rSpanSum)
 
 // Display locations of all midpoints between objects in the chart, one per
 // line, in sorted zodiac order from zero Aries onward, as specified with the
-// -m switch.
+// -m switch. One routine covers both the single chart list and the
+// relationship comparison list (-r0 -m): fRel picks the iteration domain
+// (unordered pairs vs. the full chart1 x chart2 matrix), the grid
+// orientation, the position source, and the line details that differ.
 
-void ChartMidpoint(void)
+static void ChartMidpointCore(flag fRel)
 {
   int cs[cSign + 1];
   char sz[cchSzDef];
   int icut, jcut, ilo, jlo, i, j, count = 0;
-  real rSpanSum = 0.0, mcut = -1.0, mlo, m, mid, dist, midalt;
+  real rSpanSum = 0.0, mcut = -1.0, mlo, m, mid, dist, midalt,
+    deg1, alt1, dir1, deg2, alt2, dir2;
 
   ClearB((pbyte)cs, sizeof(cs));
   loop {
@@ -1260,9 +1264,10 @@ void ChartMidpoint(void)
 
     // Search for the next closest midpoint farther down in the zodiac.
 
-    for (i = 0; i < is.nObj; i++) if (!FIgnore(i))
-      for (j = i+1; j <= is.nObj; j++) if (!FIgnore(j)) {
-        m = ZFromS(grid->n[j][i]) + grid->v[j][i];
+    for (i = 0; i <= is.nObj; i++) if (!FIgnore(i))
+      for (j = fRel ? 0 : i+1; j <= is.nObj; j++) if (!FIgnore(j)) {
+        m = fRel ? ZFromS(grid->n[i][j]) + grid->v[i][j] :
+          ZFromS(grid->n[j][i]) + grid->v[j][i];
         if ((m > mcut || (m == mcut && (i > icut ||
           (i == icut && j > jcut)))) && m < mlo) {
           ilo = i; jlo = j; mlo = m;
@@ -1273,15 +1278,20 @@ void ChartMidpoint(void)
     mcut = mlo; icut = ilo; jcut = jlo;
     if (us.objRequire >= 0 && ilo != us.objRequire && jlo != us.objRequire)
       continue;
-    if (!us.fHouse3D) {
-      mid = Midpoint2(planet[ilo], planet[jlo], us.rRatio);
-      midalt = Ratio(planetalt[ilo], planetalt[jlo], us.rRatio);
-      dist = MinDistance(planet[ilo], planet[jlo]);
+    if (fRel) {
+      deg1 = cp1.obj[ilo]; alt1 = cp1.alt[ilo]; dir1 = cp1.dir[ilo];
+      deg2 = cp2.obj[jlo]; alt2 = cp2.alt[jlo]; dir2 = cp2.dir[jlo];
     } else {
-      SphRatio(planet[ilo], planetalt[ilo], planet[jlo], planetalt[jlo],
-        us.rRatio, &mid, &midalt);
-      dist = SphDistance(planet[ilo], planetalt[ilo],
-        planet[jlo], planetalt[jlo]);
+      deg1 = planet[ilo]; alt1 = planetalt[ilo]; dir1 = ret[ilo];
+      deg2 = planet[jlo]; alt2 = planetalt[jlo]; dir2 = ret[jlo];
+    }
+    if (!us.fHouse3D) {
+      mid = Midpoint2(deg1, deg2, us.rRatio);
+      midalt = Ratio(alt1, alt2, us.rRatio);
+      dist = MinDistance(deg1, deg2);
+    } else {
+      SphRatio(deg1, alt1, deg2, alt2, us.rRatio, &mid, &midalt);
+      dist = SphDistance(deg1, alt1, deg2, alt2);
     }
 #ifdef EXPRESS
     // Skip current midpoint if AstroExpression says to do so.
@@ -1299,7 +1309,10 @@ void ChartMidpoint(void)
     rSpanSum += dist;
 #ifdef INTERPRET
     if (us.fInterpret) {                   // Interpret it if -I in effect.
-      InterpretMidpoint(ilo, jlo);
+      if (fRel)
+        InterpretMidpointRelation(ilo, jlo);
+      else
+        InterpretMidpoint(ilo, jlo);
       AnsiColor(kDefault);
       continue;
     }
@@ -1312,14 +1325,13 @@ void ChartMidpoint(void)
       PrintAltitude(midalt);
       PrintCh(' ');
     }
-    PrintAspect(ilo, planet[ilo], ret[ilo], 0, jlo, planet[jlo], ret[jlo],
-      'm');
+    PrintAspect(ilo, deg1, dir1, 0, jlo, deg2, dir2, fRel ? 'M' : 'm');
     AnsiColor(kDefault);
-    PrintSz(" - ");
+    PrintSz(fRel ? "- " : " - ");
     PrintSz(SzDegree(dist));
     if (us.fParallel && !us.fHouse3D) {
       PrintCh(' ');
-      PrintSz(SzDegree(RAbs(planetalt[ilo] - planetalt[jlo])));
+      PrintSz(SzDegree(RAbs(alt1 - alt2)));
     }
     PrintSz(" degree span.\n");
 
@@ -1327,10 +1339,27 @@ void ChartMidpoint(void)
     // the planets to the current midpoint, and the aspect's orb.
 
     if (us.fMidAspect)
-      PrintAspectsToPoint(mid, ilo, (ret[ilo]+ret[jlo])/2.0, "Midpoint");
+      PrintAspectsToPoint(mid, fRel ? jlo : ilo, (dir1+dir2)/2.0, "Midpoint");
   }
 
   PrintMidpointSummary(cs, count, rSpanSum);
+}
+
+
+// Display locations of all midpoints between objects in the chart (-m).
+
+void ChartMidpoint(void)
+{
+  ChartMidpointCore(fFalse);
+}
+
+
+// Display locations of all midpoints between objects in the relationship
+// comparison chart (-r0 -m).
+
+void ChartMidpointRelation(void)
+{
+  ChartMidpointCore(fTrue);
 }
 
 

@@ -2977,6 +2977,19 @@ are the more useful half to read before starting something new.
     the rule: prove the cases differ from each other before trusting
     a green diff.
 
+83. **D1 second pair: the midpoint lists share one core.**
+    ChartMidpoint() and ChartMidpointRelation() are wrappers over
+    static ChartMidpointCore(flag fRel) in charts1.cpp; the charts2
+    copy is deleted. The pair differed only in iteration domain, grid
+    cell, position source, 'm'/'M', one space, and the
+    PrintAspectsToPoint arguments; fRel carries all six. Proven over a
+    16-case differential (list, summary, midpoint aspects, interpret,
+    3D house, -RO required-object, parallel), byte-identical, suite
+    3036/0, Windows cross-build clean. Coverage notes: nrvate.as
+    already sets -ma and the summary, so those cases equal =m by
+    construction; fParallel needed "=ap _a" to force (it belongs to
+    the -g/-a families; -Yp is something else entirely).
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -564,8 +564,13 @@ reword; valid input behavior is byte-sacred.
   wrappers, the charts2.cpp copy is deleted. Net: 32-case old-vs-new
   differential (both lists x all nine sort keys x p/d/a/x variants,
   summary, interpret), byte-identical. Two harness footguns joined
-  the recipe below. Remaining D1 pairs: Listing, Grid, Midpoint,
-  AstroGraph, and the Interpret trio — same method, one a session.
+  the recipe below.
+- **D1 second pair — done 2026-08-29** (work log item 83): the
+  midpoint lists likewise, as `ChartMidpointCore(flag fRel)` in
+  charts1.cpp. 16-case differential (=m/=m0/=ma, interpret, 3D
+  house, -RO, parallel — parallel needed `=ap _a` to force, -Yp was
+  the wrong switch), byte-identical. Remaining D1 pairs: Listing,
+  Grid, AstroGraph, and the Interpret trio — same method.
 - **F1** (projection helper families) and **E1** (one block per
   target in the drawing primitives) after that, with pinned-time
   captures.
@@ -815,7 +820,8 @@ build. A pair a session, diff after each. *Cost:* medium, mechanical,
 high confidence.
 
 **First pair done 2026-08-29** (work log item 82): the aspect pair is
-`ChartAspectCore(flag fRel)` in charts1.cpp.
+`ChartAspectCore(flag fRel)` in charts1.cpp. **Second pair done the
+same day** (item 83): `ChartMidpointCore(flag fRel)`.
 
 **D2 — DONE 2026-08-29 (work log item 79). The influence stanzas are
 twelve-line clones over table names.**
