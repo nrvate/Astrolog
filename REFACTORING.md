@@ -1259,13 +1259,14 @@ own concessions, in dependency order):
   documented contract instead. One handler (NSwR) keeps local
   walking copies of argc/argv on purpose: it consumes arguments in a
   loop and returns argcIn - argc. Matrix byte-identical.
-- **P3. Declared arity closes A2.** Handlers whose first act is
-  exactly `FErrorArgc(...)` hand-roll what a row could declare: add
-  `cargMin` to SWITCHDEF rows and let the dispatch make the exact
-  same call centrally. Convert only handlers where the check is
-  literally first (grep-able); leave conditional-arity handlers
-  alone. Net: matrix — error messages byte-identical because the
-  same function fires with the same arguments. *Cost: low.*
+- **P3 — done 2026-08-30** (work log item 98): SWITCHDEF rows carry
+  `carg`; the dispatch makes the identical FErrorArgc call with the
+  row's own spelling as the label. 41 handlers converted under the
+  strict rule (check literally first, label equals row spelling,
+  handler serves exactly one exact row); the near-misses — rows like
+  Yj0 that error under the family label Yj, prefix rows, per-suffix
+  arity — keep their checks on purpose. Net: a 41-spelling
+  missing-argument stderr byte-diff plus the matrix, both identical.
 - **P4. De-soup by measure.** Per prefix row, count the spellings its
   handler personally parses. Where the suffix set is closed and each
   suffix is an independent flag/value (the -b0/-b1/-b2 kind), promote

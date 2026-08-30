@@ -3189,6 +3189,21 @@ are the more useful half to read before starting something new.
     byte-identical over 14,378 lines; full battery green including
     win-tests, since wdriver.cpp changed.
 
+98. **P3: rows declare their arity.** SWITCHDEF gained carg (trailing
+    field; unconverted rows stay valid unchanged) and the dispatch
+    makes the same FErrorArgc call the handler used to, with the
+    row's spelling as the label. 41 handlers qualified under the
+    strict rule -- the check is literally the first statement, the
+    error label equals the row spelling, and the handler serves
+    exactly one exact row. The skip list is as informative as the
+    conversions: sixteen rows error under a different label than
+    their spelling (Yj0 errors as "Yj" -- upstream's message
+    choices), and prefix rows have per-suffix arity, so all of those
+    keep hand-rolled checks with the reason stated at the carg field.
+    Nets: a 41-spelling missing-argument stderr byte-diff and the
+    529-invocation matrix, both identical; suite 3039/0; win build
+    clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -344,8 +344,6 @@ static int NSwYAD(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YAD", pin->argc, 4))
-    return tcError;
   i = NParseSz(pin->argv[1], pmAspect);
   if (FErrorValN("YAD", !FAspect2(i), i, 1))
     return tcError;
@@ -423,8 +421,6 @@ static int NSwYR7(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYRd(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YRd", pin->argc, 1))
-    return tcError;
   us.nSignDiv = NFromSz(pin->argv[1]);
   return 1;
 }
@@ -451,8 +447,6 @@ static int NSwYRi(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYRU(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YRU", pin->argc, 1))
-    return tcError;
   us.fStarsList = fFalse;
   FCloneSz(pin->argv[1], &us.szStarsList);
   return 1;
@@ -469,16 +463,12 @@ static int NSwYRU0(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYkU(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YkU", pin->argc, 1))
-    return tcError;
   FCloneSz(pin->argv[1], &us.szStarsColor);
   return 1;
 }
 
 static int NSwYkE(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YkE", pin->argc, 1))
-    return tcError;
   FCloneSz(pin->argv[1], &us.szAstColor);
   return 1;
 }
@@ -502,8 +492,6 @@ static int NSwYD(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YD", pin->argc, 2))
-    return tcError;
   i = NParseSz(pin->argv[1], pmObject);
   if (FErrorValN("YD", !FItem(i), i, 1))
     return tcError;
@@ -516,8 +504,6 @@ static int NSwYS(CONST char *szSwitch, PARSEIN *pin)
   int i;
   real r;
 
-  if (FErrorArgc("YS", pin->argc, 2))
-    return tcError;
   i = NParseSz(pin->argv[1], pmObject);
   if (FErrorValN("YS", !FNorm(i), i, 1))
     return tcError;
@@ -532,8 +518,6 @@ static int NSwYU(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YU", pin->argc, 2))
-    return tcError;
   i = NParseSz(pin->argv[1], pmObject);
   if (FErrorValN("YU", !FStar(i), i, 1))
     return tcError;
@@ -557,8 +541,6 @@ static int NSwYUb0(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYUx(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YUx", pin->argc, 1))
-    return tcError;
   FCloneSz(pin->argv[1], &us.szExoList);
   return 1;
 }
@@ -568,8 +550,6 @@ static int NSwYF(CONST char *szSwitch, PARSEIN *pin)
   int i, j;
   real r;
 
-  if (FErrorArgc("YF", pin->argc, 8))
-    return tcError;
   is.fHaveInfo = fTrue;
   i = NParseSz(pin->argv[1], pmObject);
   if (FErrorValN("YF", !FItem(i), i, 1))
@@ -734,8 +714,6 @@ static int NSwYIA0(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYYt(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YYt", pin->argc, 1))
-    return tcError;
   if (!us.fGraphics)
     PrintSzFormat(pin->argv[1], fFalse);
   return 1;
@@ -743,8 +721,6 @@ static int NSwYYt(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYYT(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YYT", pin->argc, 1))
-    return tcError;
   PrintSzFormat(pin->argv[1], fTrue);
   return 1;
 }
@@ -757,8 +733,6 @@ static int NSwYYT(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYYI(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YYI", pin->argc, 1))
-    return tcError;
   FieldWord(pin->argv[1]);
   return 1;
 }
@@ -868,8 +842,6 @@ static int NSwYl(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("Yl", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("Yl", !FSector(i), i, 0))
     return tcError;
@@ -907,8 +879,6 @@ static int NSwY10(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYz(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("Yz", pin->argc, 1))
-    return tcError;
   us.lTimeAddition = NFromSz(pin->argv[1]);
   return 1;
 }
@@ -945,8 +915,6 @@ static int NSwYQ(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YQ", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("YQ", i < 0, i, 0))
     return tcError;
@@ -958,8 +926,6 @@ static int NSwYw(CONST char *szSwitch, PARSEIN *pin)
 {
   real r;
 
-  if (FErrorArgc("Yw", pin->argc, 1))
-    return tcError;
   r = RFromSz(pin->argv[1]);
   if (FErrorValR("Yw", r < 0.0, r, 0))
     return tcError;
@@ -971,8 +937,6 @@ static int NSwYZ(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YZ", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("YZ", !FBetween(i, 0, 7), i, 0))
     return tcError;
@@ -984,8 +948,6 @@ static int NSwYb(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("Yb", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("Yb", !FValidBioday(i), i, 0))
     return tcError;
@@ -998,8 +960,6 @@ static int NSwYP(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YP", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("YP", !FBetween(i, -1, 1), i, 0))
     return tcError;
@@ -1020,8 +980,6 @@ static int NSwYB(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwY5i(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("Y5i", pin->argc, 1))
-    return tcError;
   FCloneSz(pin->argv[1], &us.szADB);
   return 1;
 }
@@ -1030,8 +988,6 @@ static int NSwY5I(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("Y5I", pin->argc, 2))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("Y5I", i < 0, i, 1))
     return tcError;
@@ -1109,8 +1065,6 @@ static int NSwYi(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYXNull(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YX", pin->argc, 2))
-    return tcError;
   return 2;
 }
 
@@ -1263,8 +1217,6 @@ static int NSwYXv(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYXt(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YXt", pin->argc, 1))
-    return tcError;
   FCloneSz(pin->argv[1], &gs.szSidebar);
   return 1;
 }
@@ -1273,8 +1225,6 @@ static int NSwYXg(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YXg", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("YXg", !FValidGrid(i), i, 0))
     return tcError;
@@ -1286,8 +1236,6 @@ static int NSwYXS(CONST char *szSwitch, PARSEIN *pin)
 {
   real rT;
 
-  if (FErrorArgc("YXS", pin->argc, 1))
-    return tcError;
   rT = RFromSz(pin->argv[1]);
   if (FErrorValR("YXS", !FValidZoom(rT), rT, 0))
     return tcError;
@@ -1297,8 +1245,6 @@ static int NSwYXS(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYXj(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YXj", pin->argc, 1))
-    return tcError;
   gs.cspace = NFromSz(pin->argv[1]);
   if (gi.rgspace != NULL) {
     DeallocateP(gi.rgspace);
@@ -1319,8 +1265,6 @@ static int NSwYX7(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YX7", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("YX7", !FValidEsoteric(i), i, 0))
     return tcError;
@@ -1345,8 +1289,6 @@ static int NSwYXK(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("YXK", pin->argc, 2))
-    return tcError;
   i = NParseSz(pin->argv[1], pmColor);
   if (FErrorValN("YXK", !FValidColor(i), i, 0))
     return tcError;
@@ -1363,16 +1305,12 @@ static int NSwYXK0(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYXa(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YXa", pin->argc, 1))
-    return tcError;
   gs.nDashMax = NFromSz(pin->argv[1]);
   return 1;
 }
 
 static int NSwYXx(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YXx", pin->argc, 1))
-    return tcError;
   gs.nThickAdjust = NFromSz(pin->argv[1]);
   return 1;
 }
@@ -1390,8 +1328,6 @@ static int NSwYXW(CONST char *szSwitch, PARSEIN *pin)
 #ifdef SWISS
 static int NSwYXU(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YXU", pin->argc, 2))
-    return tcError;
   if (!FProcessYXU(pin->argv[1], pin->argv[2], fFalse))
     return tcError;
   return 2;
@@ -1489,16 +1425,12 @@ static int NSwYXf(CONST char *szSwitch, PARSEIN *pin)
 #ifdef PS
 static int NSwYXp(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YXp", pin->argc, 1))
-    return tcError;
   gs.nOrient = NFromSz(pin->argv[1]);
   return 1;
 }
 
 static int NSwYXp0(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("YXp0", pin->argc, 2))
-    return tcError;
   // pmLength honors the "cm" suffix SzLength() writes and the dialogs
   // already parse; a bare RFromSz() read "21.59cm" as 21.59 inches, so
   // each metric save/load cycle multiplied by 2.54.
@@ -1642,8 +1574,6 @@ static int NSwXd(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwXI(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("XI", pin->argc, 1))
-    return tcError;
   FLoadBmp(pin->argv[1], &gi.bmpBack, fFalse);
   return 1;
 }
@@ -1671,8 +1601,6 @@ static int NSwXI0(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwXIW(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (FErrorArgc("XIW", pin->argc, 1))
-    return tcError;
   FLoadBmp(pin->argv[1], &gi.bmpWorld, fFalse);
   return 1;
 }
@@ -1714,8 +1642,6 @@ static int NSwXs(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("Xs", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (i < 100)
     i *= 100;
@@ -1730,8 +1656,6 @@ static int NSwXS(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("XS", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (i < 100)
     i *= 100;
@@ -1812,8 +1736,6 @@ static int NSwXv(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("Xv", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("Xv", !FValidDecaFill(i), i, 0))
     return tcError;
@@ -1986,8 +1908,6 @@ static int NSwXnf(CONST char *szSwitch, PARSEIN *pin)
 {
   int i;
 
-  if (FErrorArgc("Xnf", pin->argc, 1))
-    return tcError;
   i = NFromSz(pin->argv[1]);
   if (FErrorValN("Xnf", !FBetween(i, 1, 9), i, 0))
     return tcError;
@@ -2403,8 +2323,6 @@ static int NSwx(CONST char *szSwitch, PARSEIN *pin)
   real rT;
   int i;
 
-  if (FErrorArgc("x", pin->argc, 1))
-    return tcError;
   i = ChCap(pin->argv[1][0]) == 'D';
   rT = RFromSz(pin->argv[1] + i);
   if (i != 0 && rT != 0.0)
@@ -3903,25 +3821,30 @@ typedef struct _switchdef {
   CONST char *szName;
   word grf;
   int (*pfn)(CONST char *szSwitch, PARSEIN *pin);
+  int carg;             // Minimum argument count; checked centrally
+                        // by the dispatch when > 0, with szName as the
+                        // error label. Rows whose handler needs a
+                        // different label or per-suffix arity keep the
+                        // check in the handler and leave this 0.
 } SWITCHDEF;
 
 static CONST SWITCHDEF rgswitchdef[] = {
   {"Yj0",  0,      NSwYj0},  {"Yj7",  0,      NSwYj7},
-  {"YAD",  0,      NSwYAD},  {"YJ",   0,      NSwYJ},
+  {"YAD",  0,      NSwYAD, 4},  {"YJ",   0,      NSwYJ},
   {"YJ0",  0,      NSwYJ0},  {"YJ7",  0,      NSwYJ7},
   {"YJ70", 0, NSwYJ70},
   {"YR0",  0,      NSwYR0},  {"YR1",  0,      NSwYR1},
   {"YR2",  0,      NSwYR2},  {"YRp",  0,      NSwYRp},
   {"YRZ",  0,      NSwYRZ},  {"YR7",  0,      NSwYR7},
-  {"YRd",  0,      NSwYRd},  {"YRh",  0,      NSwYRh},
+  {"YRd",  0,      NSwYRd, 1},  {"YRh",  0,      NSwYRh},
   {"YRo",  0,      NSwYRo},  {"YRi",  0,      NSwYRi},
-  {"YRU",  0,      NSwYRU},  {"YRU0", 0, NSwYRU0},
-  {"YkU",  0,      NSwYkU},  {"YkE",  0,      NSwYkE},
+  {"YRU",  0,      NSwYRU, 1},  {"YRU0", 0, NSwYRU0},
+  {"YkU",  0,      NSwYkU, 1},  {"YkE",  0,      NSwYkE, 1},
   {"YkC",  0,      NSwYkC},
-  {"YD",   0,      NSwYD},   {"YS",   0,      NSwYS},
-  {"YU",   0,      NSwYU},   {"YUb",  0,      NSwYUb},
-  {"YUb0", 0, NSwYUb0}, {"YUx",  0,      NSwYUx},
-  {"YF",   0,      NSwYF},
+  {"YD",   0,      NSwYD, 2},   {"YS",   0,      NSwYS, 2},
+  {"YU",   0,      NSwYU, 2},   {"YUb",  0,      NSwYUb},
+  {"YUb0", 0, NSwYUb0}, {"YUx",  0,      NSwYUx, 1},
+  {"YF",   0,      NSwYF, 8},
 #ifdef SWISS
   {"Ye",   grfSwPrefix, NSwYe},
 #endif
@@ -3933,9 +3856,9 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"YIv",  0,      NSwYIv},  {"YIC",  0,      NSwYIC},
   {"YIA",  0,      NSwYIA},  {"YIA0", 0, NSwYIA0},
 #endif
-  {"YYt",  0,      NSwYYt},  {"YYT",  0,      NSwYYT},
+  {"YYt",  0,      NSwYYt, 1},  {"YYT",  0,      NSwYYT, 1},
 #ifdef INTERPRET
-  {"YYI",  0,      NSwYYI},
+  {"YYI",  0,      NSwYYI, 1},
 #endif
 #ifdef ATLAS
   {"YY",   0,      NSwYY},   {"YY1",  0,      NSwYY1},
@@ -3943,52 +3866,52 @@ static CONST SWITCHDEF rgswitchdef[] = {
 #endif
   {"Yu",   0,      NSwYu},   {"Yu0",  0,      NSwYu0},
   {"Ys",   0,      NSwYs},   {"Yc",   0,      NSwYc},
-  {"Yl",   0,      NSwYl},   {"Y1",   0,      NSwY1},
-  {"Y10",  0,      NSwY10},  {"Yz",   0,      NSwYz},
+  {"Yl",   0,      NSwYl, 1},   {"Y1",   0,      NSwY1},
+  {"Y10",  0,      NSwY10},  {"Yz",   0,      NSwYz, 1},
   {"Yz0",  0,      NSwYz0},  {"YzO",  0,      NSwYzO},
-  {"YzC",  0,      NSwYzC},  {"YQ",   0,      NSwYQ},
-  {"Yw",   0,      NSwYw},   {"YZ",   0,      NSwYZ},
-  {"Yb",   0,      NSwYb},
+  {"YzC",  0,      NSwYzC},  {"YQ",   0,      NSwYQ, 1},
+  {"Yw",   0,      NSwYw, 1},   {"YZ",   0,      NSwYZ, 1},
+  {"Yb",   0,      NSwYb, 1},
 #ifdef ARABIC
-  {"YP",   0,      NSwYP},
+  {"YP",   0,      NSwYP, 1},
 #endif
   {"YB",   0,      NSwYB},
-  {"Y5i",  0,      NSwY5i},  {"Y5I",  0,      NSwY5I},
+  {"Y5i",  0,      NSwY5i, 1},  {"Y5I",  0,      NSwY5I, 2},
   // Prefix rows last, so exact spellings above always win.
   {"Y5",   grfSwPrefix, NSwY5},   {"Ya",   grfSwPrefix, NSwYa},
   {"Yq",   grfSwPrefix, NSwYq},   {"Yi",   grfSwPrefix, NSwYi},
 #ifdef GRAPH
-  {"YX",   0,      NSwYXNull},
+  {"YX",   0,      NSwYXNull, 2},
   {"YXD",  0,      NSwYXD},   {"YXD1", 0, NSwYXD1},
   {"YXDD", 0, NSwYXDD},  {"YXA",  0,      NSwYXA},
   {"YXA1", 0, NSwYXA1},  {"YXv",  0,      NSwYXv},
-  {"YXt",  0,      NSwYXt},   {"YXg",  0,      NSwYXg},
-  {"YXS",  0,      NSwYXS},   {"YXj",  0,      NSwYXj},
-  {"YXj0", 0, NSwYXj0},  {"YX7",  0,      NSwYX7},
+  {"YXt",  0,      NSwYXt, 1},   {"YXg",  0,      NSwYXg, 1},
+  {"YXS",  0,      NSwYXS, 1},   {"YXj",  0,      NSwYXj, 1},
+  {"YXj0", 0, NSwYXj0},  {"YX7",  0,      NSwYX7, 1},
   {"YXk",  0,      NSwYXk},   {"YXk0", 0, NSwYXk0},
-  {"YXK",  0,      NSwYXK},   {"YXK0", 0, NSwYXK0},
-  {"YXa",  0,      NSwYXa},   {"YXx",  0,      NSwYXx},
+  {"YXK",  0,      NSwYXK, 2},   {"YXK0", 0, NSwYXK0},
+  {"YXa",  0,      NSwYXa, 1},   {"YXx",  0,      NSwYXx, 1},
   {"YXW",  0,      NSwYXW},
 #ifdef SWISS
-  {"YXU",  0,      NSwYXU},   {"YXU0", 0, NSwYXU0},
+  {"YXU",  0,      NSwYXU, 2},   {"YXU0", 0, NSwYXU0},
   {"YXU1", 0, NSwYXU1},
 #endif
 #ifdef PS
-  {"YXp",  0,      NSwYXp},   {"YXp0", 0, NSwYXp0},
+  {"YXp",  0,      NSwYXp, 1},   {"YXp0", 0, NSwYXp0, 2},
 #endif
   {"YXG",  grfSwPrefix, NSwYXG},   {"YXf",  grfSwPrefix, NSwYXf},
   {"X",    grfSwGraphics, NSwX},
   {"Xo",   grfSwGraphics, NSwXo},
-  {"XI",   grfSwGraphics, NSwXI},
+  {"XI",   grfSwGraphics, NSwXI, 1},
   {"XI0",  grfSwGraphics, NSwXI0},
-  {"XIW",  grfSwGraphics, NSwXIW},
+  {"XIW",  grfSwGraphics, NSwXIW, 1},
   {"Xr",   grfSwGraphics, NSwXr},
   {"Xw",   grfSwGraphics, NSwXw},
-  {"Xs",   grfSwGraphics, NSwXs},
-  {"XS",   grfSwGraphics, NSwXS},
+  {"Xs",   grfSwGraphics, NSwXs, 1},
+  {"XS",   grfSwGraphics, NSwXS, 1},
   {"X1",   grfSwGraphics, NSwXOne},
   {"X2",   grfSwGraphics, NSwXTwo},
-  {"Xv",   grfSwGraphics, NSwXv},
+  {"Xv",   grfSwGraphics, NSwXv, 1},
   {"XX",   grfSwGraphics, NSwXX},
   {"XX0",  grfSwGraphics, NSwXX},
   {"XW",   grfSwGraphics, NSwXW},
@@ -4021,7 +3944,7 @@ static CONST SWITCHDEF rgswitchdef[] = {
 #ifdef ISG
   {"Xn",   grfSwGraphics, NSwXn},
   {"Xnp",  grfSwGraphics, NSwXnp},
-  {"Xnf",  grfSwGraphics, NSwXnf},
+  {"Xnf",  grfSwGraphics, NSwXnf, 1},
 #endif
   // Prefix rows for the sub-lettered X spellings.
   {"XE",   grfSwPrefix | grfSwGraphics, NSwXE},
@@ -4038,7 +3961,7 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"R",    grfSwPrefix, NSwR},
   {"U",    grfSwPrefix, NSwU},
   {"A",    grfSwPrefix, NSwA},
-  {"h",    0,           NSwh},   {"x",    0,           NSwx},
+  {"h",    0,           NSwh},   {"x",    0,           NSwx, 1},
   {"1",    0,           NSwOne}, {"10",   0,           NSwOne0},
   {"2",    0,           NSwTwo}, {"20",   0,           NSwTwo0},
   {"4",    0,           NSwFour},
@@ -4129,6 +4052,8 @@ static int NProcessSwitchTable(CONST char *szName, PARSEIN *pin)
         ErrorArgv("X");
         return tcError;
       }
+      if (psd->carg > 0 && FErrorArgc(psd->szName, pin->argc, psd->carg))
+        return tcError;
       i = psd->pfn(szName, pin);
       if (i >= 0 && (psd->grf & grfSwGraphics))
         SwitchF2(us.fGraphics);
