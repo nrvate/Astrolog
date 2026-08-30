@@ -662,7 +662,7 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-76
+## Work log — items 1-77
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
@@ -2872,6 +2872,28 @@ are the more useful half to read before starting something new.
       differential ran: -dp's cursor got a spurious initial increment.
       The 460-invocation matrix (12,582 captured lines, byte-identical)
       then covered every cursor-walking spelling.
+
+77. **M10: the main parser's switch statement is deleted.**
+    FProcessSwitches() is 44 lines -- the prefix prologue, the registry
+    consult, and an unknown-switch error. It measured 1,774 lines when
+    REFACTORING.md's survey ran. The last twenty-two cases moved: help,
+    macros (-M runs and defines through the registry now, so macro
+    strings recurse through the same dispatch), chart-info entry (-n/
+    -q/-z with a shared slot-store helper), -i with its success-and-
+    stop lockdown semantics preserved via nSwitchStop, -o's trailing
+    comment-list scan, day arithmetic (bare "-", "=", "+", and the
+    "--t" spellings, with the empty-name row distinguishing a bare
+    prefix char from an empty token by pointer position), relationship
+    charts, the chart list, -k colors, the per-build -W dispatch, the
+    -0 lockdown walk, -;/-@/-. (the -@ row is a prefix row because .as
+    file headers like "@AD800" parse as switches), and the entire ~
+    AstroExpression hook table, its sixty-odd spellings transliterated
+    verbatim.
+    - Final differential: 529 invocations, 14,378 captured lines,
+      byte-identical. The migration ran M1-M10 in one day: about 250
+      spellings, four parsers dissolved (NProcessSwitchesRare, RareX,
+      X, and the main switch), every step proven against the previous
+      binary.
 
 ## Features this fork adds to both builds
 

@@ -554,6 +554,7 @@ static CONST SWITCHFLAG rgswflag[] = {
   {"f",   &us.fFlip},        {"G",   &us.fGeodetic},
   {"J",   &us.fIndian},      {"S",   &us.fOrbit},
   {"D",   &us.fInDayInf},    {"7",   &us.fEsoteric},
+  {"?",   &us.fSwitch},
   };
 
 // A ranged setter: "<name> <lo> <hi> <v1>..<vn>", writing hi-lo+1
@@ -3672,6 +3673,823 @@ static int NSwI(CONST char *szSwitch, int argc, char **argv,
   return darg;
 }
 
+// The last of the main parser's cases: help, macros, chart info, I/O,
+// day arithmetic, relationship charts, the chart list, and the
+// AstroExpression hooks.
+
+static int NSwH(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+
+  if (ch1 == 'c')
+    SwitchF(us.fCredit);
+  else if (ch1 == 'Y')
+    SwitchF(us.fSwitchRare);
+#ifdef ISG
+  else if (ch1 == 'X')
+    SwitchF(us.fKeyGraph);
+#endif
+  else if (ch1 == 'C')
+    SwitchF(us.fSign);
+  else if (ch1 == 'O')
+    SwitchF(us.fObject);
+  else if (ch1 == 'A')
+    SwitchF(us.fAspect);
+  else if (ch1 == 'F')
+    SwitchF(us.fConstel);
+  else if (ch1 == 'S')
+    SwitchF(us.fOrbitData);
+  else if (ch1 == '7')
+    SwitchF(us.fRay);
+  else if (ch1 == 'I')
+    SwitchF(us.fMeaning);
+  else if (ch1 == 'e') {
+    SwitchF(us.fCredit); SwitchF(us.fSwitch); SwitchF(us.fSwitchRare);
+    SwitchF(us.fKeyGraph); SwitchF(us.fSign); SwitchF(us.fObject);
+    SwitchF(us.fAspect); SwitchF(us.fConstel); SwitchF(us.fOrbitData);
+    SwitchF(us.fRay); SwitchF(us.fMeaning);
+  } else
+    SwitchF(us.fSwitch);
+  return 0;
+}
+
+static int NSwQBig(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  if (szSwitch[1] == '0')
+    SwitchF(us.fLoopInit);
+  SwitchF(us.fLoop);
+  return 0;
+}
+
+static int NSwM(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i, j;
+
+  if (FBetween(ch1, '1', '0' + cRing)) {
+    i = (ch1 - '0') + (ch2 == '0');
+    if (FErrorArgc("M", argc, i))
+      return tcError;
+    for (j = 1; j <= i; j++)
+      FCloneSz(argv[j], &szWheel[(ch2 == '0' && j >= i) ? 0 : j]);
+    return i;
+  }
+  i = (ch1 == '0');
+  if (FErrorArgc("M", argc, 1+i))
+    return tcError;
+  j = NFromSz(argv[1]);
+  if (FErrorValN("M", !FValidMacro(j), j, 1))
+    return tcError;
+  if (i) {
+    if (FEnsureMacro(j+1))
+      FCloneSz(argv[2], &is.rgszMacro[j]);
+  } else if (j < is.cszMacro)
+    FProcessCommandLine(is.rgszMacro[j]);
+  return 1+i;
+}
+
+// The chart-info slot stores shared by -n, -q and -i: a trailing letter
+// or digit files the chart away and puts the previous one back.
+
+static void SwSlotStore(char ch, CI *pci)
+{
+  if (FBetween(ch, '1', '0' + cRing)) {
+    *rgpci[ch - '0'] = ciCore;
+    ciCore = *pci;
+  } else if (ch == 'D') {
+    ciDefa = ciCore;
+    ciCore = *pci;
+  } else if (ch == 't') {
+    ciTran = ciCore;
+    ciCore = *pci;
+  } else if (ch == 's') {
+    ciSave = ciCore;
+    ciCore = *pci;
+  } else if (ch == 'g') {
+    ciGreg = ciCore;
+    ciCore = *pci;
+  } else if (ch == 'l')
+    FAppendCIList(&ciCore);
+}
+
+#ifdef TIME
+static int NSwn(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  CI ci;
+
+  ci = ciCore;
+  FInputData(szNowCore);
+  if (ch1 == 'd')
+    TT = 0.0;
+  else if (ch1 == 'm') {
+    DD = 1; TT = 0.0;
+  } else if (ch1 == 'y') {
+    MM = DD = 1; TT = 0.0;
+  } else
+    ch2 = ch1;
+  if (FBetween(ch2, '1', '0' + cRing)) {
+    *rgpci[ch2 - '0'] = ciCore;
+    ciCore = ci;
+  }
+  return 0;
+}
+#endif
+
+static int NSwz(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+  real rT;
+  int i;
+
+  if (ch1 == '0') {
+    if (argc <= 1 || RParseSz(argv[1], pmDst) == rLarge) {
+      i = (ciDefa.dst != 0.0);
+      SwitchF(i);
+      SS = ciDefa.dst = (i ? 1.0 : 0.0);
+      return 0;
+    }
+    rT = RParseSz(argv[1], pmDst);
+    if (FErrorValR("z0", !FValidDst(rT), rT, 0))
+      return tcError;
+    SS = ciDefa.dst = rT;
+    return 1;
+  } else if (ch1 == 'l') {
+    if (FErrorArgc("zl", argc, 2))
+      return tcError;
+    rT = RParseSz(argv[1], pmLon);
+    if (FErrorValR("zl", !FValidLon(rT), rT, 1))
+      return tcError;
+    OO = ciDefa.lon = rT;
+    rT = RParseSz(argv[2], pmLat);
+    if (FErrorValR("zl", !FValidLat(rT), rT, 2))
+      return tcError;
+    AA = ciDefa.lat = rT;
+    return 2;
+  } else if (ch1 == 'v') {
+    if (FErrorArgc("zv", argc, 1))
+      return tcError;
+    us.elvDef = RParseSz(argv[1], pmElv);
+    return 1;
+  } else if (ch1 == 'f') {
+    if (FErrorArgc("zf", argc, 1))
+      return tcError;
+    us.tmpDef = RParseSz(argv[1], pmTmp);
+    return 1;
+  } else if (ch1 == 'j') {
+    if (FErrorArgc("zj", argc, 2))
+      return tcError;
+    ciDefa.nam = SzClone(argv[1]);
+    ciDefa.loc = SzClone(argv[2]);
+    return 2;
+  } else if (ch1 == 't') {
+    if (FErrorArgc("zt", argc, 1))
+      return tcError;
+    rT = RParseSz(argv[1], pmTim);
+    if (FErrorValR("zt", !FValidTim(rT), rT, 0))
+      return tcError;
+    TT = rT;
+    return 1;
+  } else if (ch1 == 'd') {
+    if (FErrorArgc("zd", argc, 1))
+      return tcError;
+    i = NParseSz(argv[1], pmDay);
+    if (FErrorValN("zd", !FValidDay(i, MM, YY), i, 0))
+      return tcError;
+    DD = i;
+    return 1;
+  } else if (ch1 == 'm') {
+    if (FErrorArgc("zm", argc, 1))
+      return tcError;
+    i = NParseSz(argv[1], pmMon);
+    if (FErrorValN("zm", !FValidMon(i), i, 0))
+      return tcError;
+    MM = i;
+    return 1;
+  } else if (ch1 == 'y') {
+    if (FErrorArgc("zy", argc, 1))
+      return tcError;
+    i = NParseSz(argv[1], pmYea);
+    if (FErrorValN("zy", !FValidYea(i), i, 0))
+      return tcError;
+    YY = i;
+    return 1;
+  } else if (ch1 == 'i') {
+    if (FErrorArgc("zi", argc, 2))
+      return tcError;
+    ciCore.nam = SzClone(argv[1]);
+    ciCore.loc = SzClone(argv[2]);
+    return 2;
+  }
+#ifdef ATLAS
+  else if (ch1 == 'L') {
+    if (FErrorArgc("zL", argc, 1))
+      return tcError;
+    if (!DisplayAtlasLookup(argv[1], 0, &i))
+      PrintWarning("City doesn't match anything in atlas.");
+    else {
+      ciDefa.lon = OO; ciDefa.lat = AA;
+    }
+    return 1;
+  } else if (ch1 == 'N') {
+    if (FErrorArgc("zN", argc, 1))
+      return tcError;
+    if (!DisplayAtlasLookup(argv[1], 0, &i))
+      PrintWarning("City doesn't match anything in atlas.");
+    else if (!DisplayTimezoneChanges(is.rgae[i].izn, 0, &ciCore))
+      PrintWarning("Couldn't get time zone data!");
+    else {
+      ciDefa.dst = SS; ciDefa.zon = ZZ;
+      ciDefa.lon = OO; ciDefa.lat = AA;
+      is.fDst = (SS > 0.0);
+    }
+    return 1;
+  }
+#endif
+  else if (ch1 == 'Z') {
+    if (FErrorArgc("zZ", argc, 2))
+      return tcError;
+    rT = RParseSz(argv[1], pmZon);
+    if (FErrorValR("z", !FValidZon(rT), rT, 1))
+      return tcError;
+    AdjustTimeZone(&ciCore, rT, RParseSz(argv[2], pmDst));
+    return 2;
+  }
+  if (argc <= 1 || RParseSz(argv[1], pmZon) == rLarge) {
+    ZZ -= 1.0;
+    return 0;
+  }
+  rT = RParseSz(argv[1], pmZon);
+  if (FErrorValR("z", !FValidZon(rT), rT, 0))
+    return tcError;
+  ZZ = ciDefa.zon = rT;
+  return 1;
+}
+
+static int NSwq(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  CI ci;
+  int i, j;
+
+  i = (ch1 == 'y' || ch1 == 'j' || ch1 == 'L') + 2*(ch1 == 'm') +
+    3*(ch1 == 'd') + 7*(ch1 == 'a') + 8*(ch1 == 'b') + 10*(ch1 == 'c');
+  if (i <= 0) {
+    i = 4;
+    ch2 = ch1;
+  }
+  if (FErrorArgc("q", argc, i))
+    return tcError;
+  is.fHaveInfo = fTrue;
+  ci = ciCore;
+  if (ch1 == 'j') {
+    is.JD = RFromSz(argv[1]) + rRound;
+    TT = RFract(is.JD);
+    JulianToMdy(is.JD - TT, &MM, &DD, &YY);
+    TT *= 24.0;
+    SS = ZZ = 0.0; OO = ciDefa.lon; AA = ciDefa.lat;
+  } else if (ch1 == 'L') {
+    j = NFromSz(argv[1]);
+    if (FErrorValN("qL", !FValidList(j), j, 0))
+      return tcError;
+    ciCore = is.rgci[j];
+    is.iciCur = j;
+  } else {
+    MM = i > 1 ? NParseSz(argv[1], pmMon) : 1;
+    DD = i > 2 ? NParseSz(argv[2], pmDay) : 1;
+    YY = NParseSz(argv[3 - (i < 3) - (i < 2)], pmYea);
+    TT = i > 3 ? RParseSz(argv[4], pmTim) : (i < 3 ? 0.0 : 12.0);
+    SS = i > 7 ? RParseSz(argv[5], pmDst) : (i > 6 ? 0.0 : ciDefa.dst);
+    ZZ = i > 6 ? RParseSz(argv[5 + (i > 7)], pmZon) : ciDefa.zon;
+    OO = i > 6 ? RParseSz(argv[6 + (i > 7)], pmLon) : ciDefa.lon;
+    AA = i > 6 ? RParseSz(argv[7 + (i > 7)], pmLat) : ciDefa.lat;
+    if (FErrorValN("q", !FValidMon(MM), MM, 1))
+      return tcError;
+    else if (FErrorValN("q", !FValidDay(DD, MM, YY), DD, 2))
+      return tcError;
+    else if (FErrorValN("q", !FValidYea(YY), YY, 3 - (i < 3) - (i < 2)))
+      return tcError;
+    else if (FErrorValR("q", !FValidTim(TT), TT, 4))
+      return tcError;
+    else if (FErrorValR("q", !FValidDst(SS), SS, 5))
+      return tcError;
+    else if (FErrorValR("q", !FValidZon(ZZ), ZZ, 5 + (i > 7)))
+      return tcError;
+    else if (FErrorValR("q", !FValidLon(OO), OO, 6 + (i > 7)))
+      return tcError;
+    else if (FErrorValR("q", !FValidLat(AA), AA, 7 + (i > 7)))
+      return tcError;
+    if (i > 9) {
+      ciCore.nam = SzClone(argv[9]);
+      ciCore.loc = SzClone(argv[10]);
+    }
+  }
+  SwSlotStore(ch2, &ci);
+  return i;
+}
+
+static int NSwi(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  CI ci;
+
+  if (ch1 == 'x') {
+    SwapTemp(ciCore, ciTwin, ci);
+    return 0;
+  }
+  if (us.fNoRead) {
+    ErrorArgv("i");
+    // The retired case's "return tcError" left FProcessSwitches()
+    // returning nonzero, which callers read as success-and-stop.
+    return nSwitchStop;
+  }
+  if (FErrorArgc("i", argc, 1))
+    return tcError;
+  if (ch1 == 'd') {
+    OpenDir(argv[1]);
+    return 1;
+  }
+  ci = ciCore;
+  if (!FInputData(argv[1]))
+    return tcError;
+  if (ch1 == 'l' || ch2 == 'l')
+    FAppendCIList(&ciCore);
+  if (FBetween(ch1, '1', '0' + cRing)) {
+    *rgpci[ch1 - '0'] = ciCore;
+    ciCore = ci;
+    *rgpcp[ch1 - '0'] = cp0;
+  } else if (ch1 == 'D') {
+    ciDefa = ciCore;
+    ciCore = ci;
+  } else if (ch1 == 't') {
+    ciTran = ciCore;
+    ciCore = ci;
+    is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT,
+      ciDefa.dst, ciDefa.zon);
+  } else if (ch1 == 's') {
+    ciSave = ciCore;
+    ciCore = ci;
+  } else if (ch1 == 'g') {
+    ciGreg = ciCore;
+    ciCore = ci;
+  }
+  return 1;
+}
+
+static int NSwoCore(char ch1, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot)
+{
+  int i, c;
+
+  if (us.fNoWrite) {
+    ErrorArgv("o");
+    return nSwitchStop;   // See NSwi(): success-and-stop, as before.
+  }
+  if (FErrorArgc("o", argc, 1))
+    return tcError;
+  if (ch1 == 's') {
+    FCloneSz(argv[1], &is.szFileScreen);
+    return 1;
+  } else if (ch1 == '0' || ch1 == 'd' || ch1 == 'l' ||
+    ch1 == 'a' || ch1 == 'q' || ch1 == 'c' || ch1 == 'x')
+    us.nWriteFormat = FSwitchF2(us.nWriteFormat == ch1) * ch1;
+  SwitchF(us.fWriteFile);
+  FCloneSz(argv[1], &is.szFileOut);
+  if (is.rgszComment != NULL) {
+    for (i = 0; i < is.cszComment; i++)
+      DeallocatePIf(is.rgszComment[i]);
+    DeallocateP(is.rgszComment);
+    is.rgszComment = NULL;
+  }
+  for (c = 0; argc - 1 - c > 1 && !FChSwitch(argv[2 + c][0]); c++)
+    ;
+  is.cszComment = c;
+  if (c > 0) {
+    is.rgszComment = RgAllocate(c, char *, "comment list");
+    ClearB((pbyte)is.rgszComment, c * sizeof(char *));
+    for (i = 0; i < c; i++)
+      FCloneSz(argv[2 + i], &is.rgszComment[i]);
+  }
+  return 1 + c;
+}
+
+static int NSwo(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwoCore(szSwitch[1], argc, argv, fOr, fAnd, fNot);
+}
+
+static int NSwGreater(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return NSwoCore('s', argc, argv, fOr, fAnd, fNot);
+}
+
+// Day arithmetic: bare "-" and "+" (and any lone switch character) move
+// the chart date, with t/m/y suffixes selecting the unit.
+
+static int NSwDay(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1;
+  real rT;
+  int i, j, darg = 0;
+
+  if (szSwitch == argv[0] && szSwitch[0] == chNull)
+    return 0;    // A genuinely empty token is a no-op, as it was.
+  ch1 = szSwitch[1];
+  if (argc > 1 && ((rT = RFromSz(argv[1])) != 0.0 || FNumCh(argv[1][0]) ||
+    argv[1][0] == '~'))
+    darg++;
+  else
+    rT = 1.0;
+  if (szSwitch[0] != '+')
+    neg(rT);
+  i = (int)rT;
+  if (ch1 == 't') {
+    i /= 24;
+    rT -= (real)(i*24);
+    TT += rT;
+    AddTime(&ciCore, 3, 0);
+  } else if (ch1 == 'm') {
+    AddTime(&ciCore, 5, i%12);
+    AddTime(&ciCore, 6, i/12);
+    return darg;
+  } else if (ch1 == 'y') {
+    AddTime(&ciCore, 6, i);
+    return darg;
+  }
+  j = MdyToJulian(MM, DD + i, YY);
+  JulianToMdy((real)j - 0.5, &MM, &DD, &YY);
+  return darg;
+}
+
+static int NSwr(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  CI ci;
+  int i, j, k;
+
+  if (ch1 == 'P') {
+    if (FErrorArgc("r", argc, 1))
+      return tcError;
+    j = NFromSz(argv[1]);
+    if (FErrorValN("rP", !FBetween(j, 2, cRing), j, 0))
+      return tcError;
+    SwitchF(rgfProg[j]);
+    return 1;
+  }
+  if (fAnd) {
+    us.nRel = rcNone;
+    return 0;
+  } else if (FBetween(ch1, '1', '0' + cRing)) {
+    us.nRel = -(int)(ch1-'1');
+    return 0;
+  }
+  i = 2 + 2*((ch1 == 'c' || ch1 == 'm') && ch2 == '0');
+  if (FErrorArgc("r", argc, i))
+    return tcError;
+  if (ch1 == 'c')
+    us.nRel = rcComposite;
+  else if (ch1 == 'm')
+    us.nRel = rcMidpoint;
+  else if (ch1 == 'd')
+    us.nRel = rcDifference;
+#ifdef BIORHYTHM
+  else if (ch1 == 'b')
+    us.nRel = rcBiorhythm;
+#endif
+  else if (ch1 == '0')
+    us.nRel = rcDual;
+  else if (ch1 == 't')
+    us.nRel = rcTransit;
+  else if (ch1 == 'p') {
+    us.nRel = rcProgress;
+    us.nProgress = (ch2 == '0') + 2*(ch2 == '1');
+  } else
+    us.nRel = rcSynastry;
+  ci = ciCore;
+  ciCore = ciTwin;
+  if (!FInputData(argv[2]))
+    return tcError;
+  cp2 = cp0;
+  ciTwin = ciCore;
+  ciCore = ci;
+  if (!FInputData(argv[1]))
+    return tcError;
+  cp1 = cp0;
+  if (i > 2) {
+    j = NFromSz(argv[3]);
+    if (j < 0)
+      us.rRatio = RFromSz(argv[4]);
+    else {
+      k = NFromSz(argv[4]);
+      if (j + k == 0)
+        j = k = 1;
+      us.rRatio = (real)j / (real)(j + k);
+    }
+  }
+  return i;
+}
+
+#ifdef TIME
+static int NSwy(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+
+  if (FErrorArgc("y", argc, 1))
+    return tcError;
+  if (ch1 == 'd')
+    us.nRel = rcDifference;
+#ifdef BIORHYTHM
+  else if (ch1 == 'b')
+    us.nRel = rcBiorhythm;
+#endif
+  else if (ch1 == 't')
+    us.nRel = rcTransit;
+  else if (ch1 == 'p') {
+    us.nRel = rcProgress;
+    us.nProgress = (ch2 == '0') + 2*(ch2 == '1');
+  } else
+    us.nRel = rcDual;
+  if (!FInputData(szNowCore))
+    return tcError;
+  ciTwin = ciCore;
+  if (!FInputData(argv[1]))
+    return tcError;
+  return 1;
+}
+#endif
+
+static int NSwFive(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  int i;
+
+  if (ch1 == 'e' || ch1 == 'Y') {
+    i = 1 + (ch2 == '2') + (ch2 == '3')*2 + (ch2 == '4')*3;
+    if (ch1 == 'e')
+      us.nListAll = FSwitchF(us.nListAll == i) * i;
+    else
+      FEnumerateCIList(i);   // -5Y does the same as -Y5
+  } else if (ch1 == 'd')
+    FSortCIList(0);
+  else if (ch1 == 'x')
+    FSortCIList(1);
+  else if (ch1 == 'y')
+    FSortCIList(2);
+  else if (ch1 == 'n')
+    FSortCIList(3);
+  else if (ch1 == 'l')
+    FSortCIList(4);
+  else if (ch1 == 's')
+    FSortCIList(5);
+  else if (ch1 == '0')
+    is.cci = 0;
+  else if (ch1 == 'f') {
+    if (FErrorArgc("5f", argc, 2))
+      return tcError;
+    FilterCIList(argv[1], argv[2]);
+    return 2;
+  } else if (ch1 == chNull)
+    SwitchF(us.fListAuto);
+  else {
+    FErrorSubswitch("5", ch1, fTrue);
+    return tcError;
+  }
+  return 0;
+}
+
+static int NSwk(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1];
+
+  if (ch1 == 'h') {
+    SwitchF(us.fTextHTML);
+    return 0;
+  }
+  if (ch1 == '1') {     // Undocumented subswitch.
+    us.fAnsiColor = 2;
+    us.fAnsiChar  = 1;
+  } else {
+    if (ch1 != '0')
+      SwitchF(us.fAnsiColor);
+    SwitchF(us.fAnsiChar);
+  }
+  return 0;
+}
+
+#if defined(GRAPH) && !defined(WIN) && !defined(QT)
+static int NProcessSwitchesNullW(int argc, char **argv, int pos);
+#endif
+
+#ifdef GRAPH
+static int NSwW(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  int pos = (int)(szSwitch - argv[0]) + 1;
+
+#ifdef WIN
+  return NProcessSwitchesW(argc, argv, pos, fOr, fAnd, fNot);
+#elif defined(QT)
+  return NProcessSwitchesQt(argc, argv, pos, fOr, fAnd, fNot);
+#else
+  return NProcessSwitchesNullW(argc, argv, pos);
+#endif
+}
+#endif
+
+static int NSwZero(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1;
+  int l = 1;
+
+  if (fAnd)    // _0 should do nothing.
+    return 0;
+  ch1 = szSwitch[l];
+  while (ch1 != chNull) {
+    switch (ch1) {
+    case 'o': us.fNoWrite    = fTrue; break;
+    case 'i': us.fNoRead     = fTrue; break;
+    case 'q': us.fNoQuit     = fTrue; break;
+    case 'X': us.fNoGraphics = fTrue; break;
+    case 'b': us.fNoPlacalc  = fTrue; break;
+    case 'n': us.fNoNetwork  = fTrue; break;
+    case '~': us.fNoExp      = fTrue; break;
+    default: FErrorSubswitch("0", ch1, fTrue); return tcError;
+    }
+    ch1 = szSwitch[++l];
+  }
+  return 0;
+}
+
+static int NSwSemi(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return nSwitchStop;   // -; means don't process the rest of the line.
+}
+
+static int NSwAt(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  return 0;   // The -@ switch is just a system flag indicator no-op.
+}
+
+static int NSwDot(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  Terminate(tcForce);   // "-." is usually used to exit the -Q loop.
+  return 0;
+}
+
+#ifdef EXPRESS
+static int NSwTilde(CONST char *szSwitch, int argc, char **argv,
+  flag fOr, flag fAnd, flag fNot, PARSECTX *pctx)
+{
+  char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
+  char **ppch;
+  int i, j;
+
+  if (ch1 == '0') {
+    SwitchF(us.fExpOff);
+    return 0;
+  }
+  i = 1 + (ch1 == 'M' || ch1 == '2' || ch1 == '3');
+  if (FErrorArgc("~", argc, i))
+    return tcError;
+  ppch = NULL;
+  if (ch1 == 'g')
+    ppch = &us.szExpConfig;
+  else if (ch1 == 'a')
+    ppch = (ch2 != '0' ? &us.szExpAspList : &us.szExpAspSumm);
+  else if (ch1 == 'm')
+    ppch = (ch2 != 'a' ? &us.szExpMid : &us.szExpMidAsp);
+  else if (ch1 == 'j')
+    ppch = (ch2 != '0' ? &us.szExpInf : &us.szExpInf0);
+  else if (ch1 == '7')
+    ppch = &us.szExpEso;
+  else if (ch1 == 'L')
+    ppch = &us.szExpCross;
+  else if (ch1 == 'E')
+    ppch = &us.szExpEph;
+  else if (ch1 == 'Z' && ch2 == 'd')
+    ppch = &us.szExpRis;
+  else if (ch1 == 'd')
+    ppch = (ch2 != 'v' ? &us.szExpDay : &us.szExpVoid);
+  else if (ch1 == 't')
+    ppch = &us.szExpTra;
+  else if (ch1 == 'P')
+    ppch = &us.szExpPart;
+  else if (ch1 == 'O')
+    ppch = &us.szExpObj;
+  else if (ch1 == 'C')
+    ppch = &us.szExpHou;
+  else if (ch1 == 'A')
+    ppch = &us.szExpAsp;
+  else if (ch1 == 'p')
+    ppch = (ch2 != '0' ? &us.szExpProg : &us.szExpProg0);
+  else if (ch1 == 'k' && ch2 == 'O')
+    ppch = &us.szExpColObj;
+  else if (ch1 == 'k' && ch2 == 'A')
+    ppch = &us.szExpColAsp;
+  else if (ch1 == 'k' && ch2 == 'v')
+    ppch = &us.szExpColFill;
+  else if (ch1 == 'F' && ch2 == chNull)
+    ppch = &us.szExpFontSig;
+  else if (ch1 == 'F' && ch2 == 'C')
+    ppch = &us.szExpFontHou;
+  else if (ch1 == 'F' && ch2 == 'O')
+    ppch = &us.szExpFontObj;
+  else if (ch1 == 'F' && ch2 == 'A')
+    ppch = &us.szExpFontAsp;
+  else if (ch1 == 'F' && ch2 == 'N')
+    ppch = &us.szExpFontNak;
+  else if (ch1 == 'F' && ch2 == 'T')
+    ppch = &us.szExpFontTxt;
+  else if (ch1 == 'v')
+    ppch = (ch2 != '3' ? &us.szExpSort : (ch2 == chNull ||
+    szSwitch[3] != '0' ? &us.szExpDecan : &us.szExpDecan2));
+  else if (ch1 == 's' && ch2 == 'd')
+    ppch = &us.szExpDegree;
+  else if (ch1 == 'U' && ch2 == 'x')
+    ppch = &us.szExpExo;
+  else if (ch1 == 'U')
+    ppch = (ch2 != '0' ? &us.szExpStar : &us.szExpAst);
+  else if (ch1 == 'I' && ch2 == 'v')
+    ppch = &us.szExpIntV;
+  else if (ch1 == 'I' && ch2 == 'V')
+    ppch = &us.szExpIntV2;
+  else if (ch1 == 'I' && ch2 == 'a')
+    ppch = &us.szExpIntA;
+  else if (ch1 == 'I' && ch2 == 'A')
+    ppch = &us.szExpIntA2;
+  else if (ch1 == 'X' && ch2 == 'v')
+    ppch = &us.szExpCorner;
+  else if (ch1 == 'X' && ch2 == 'L')
+    ppch = &us.szExpCity;
+  else if (ch1 == 'X' && ch2 == 't')
+    ppch = &us.szExpSidebar;
+  else if (ch1 == 'X' && ch2 == 'Q')
+    ppch = &us.szExpKey;
+  else if (ch1 == 'W' && ch2 == 'Q')
+    ppch = &us.szExpMenu;
+  else if (ch1 == 'q' && ch2 == '1')
+    ppch = &us.szExpCast1;
+  else if (ch1 == 'q' && ch2 == '2')
+    ppch = &us.szExpCast2;
+  else if (ch1 == 'Q' && ch2 == '1')
+    ppch = &us.szExpDisp1;
+  else if (ch1 == 'Q' && ch2 == '2')
+    ppch = &us.szExpDisp2;
+  else if (ch1 == 'Q' && ch2 == '3')
+    ppch = &us.szExpDisp3;
+  else if (ch1 == '5' && ch2 == 's')
+    ppch = &us.szExpListS;
+  else if (ch1 == '5' && ch2 == 'f')
+    ppch = &us.szExpListF;
+  else if (ch1 == '5' && ch2 == 'Y')
+    ppch = &us.szExpListY;
+  else if (ch1 == '5' && ch2 == 'i')
+    ppch = &us.szExpADB;
+  else if (ch1 == 'M') {
+    j = NFromSz(argv[1]);
+    if (FErrorValN("~M", j < 0, j, 1))
+      return tcError;
+    ExpSetMacro(j, argv[2]);
+  } else if (ch1 == '1')
+    ParseExpression(argv[1]);
+  else if (ch1 == '2') {
+    j = NFromSz(argv[1]);
+    if (FErrorValN("~2", j < 0, j, 1))
+      return tcError;
+    ExpSetString(j, argv[2], ch2 == '0');
+  } else if (ch1 == '3') {
+    j = NFromSz(argv[1]);
+    if (FErrorValN("~3", j < 0, j, 1))
+      return tcError;
+    ExpSetNums(j, argv[2]);
+  } else if (FErrorSubswitch("~", ch1, ch1 != chNull))
+    return tcError;
+  else
+    ShowParseExpression(argv[1]);
+  if (ppch != NULL)
+    FCloneSz(argv[1], ppch);
+  return i;
+}
+#endif
+
 // The registry proper: switches whose shape doesn't fit a family table
 // carry a handler. The handler owns arity, parsing, and stores, and
 // returns the count of arguments it consumed, or tcError.
@@ -3836,6 +4654,28 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"P",    grfSwPrefix, NSwP},
 #endif
   {"N",    grfSwPrefix, NSwN},  {"I",    grfSwPrefix, NSwI},
+  {"H",    grfSwPrefix, NSwH},  {"Q",    grfSwPrefix, NSwQBig},
+  {"M",    grfSwPrefix, NSwM},
+#ifdef TIME
+  {"n",    grfSwPrefix, NSwn},  {"y",    grfSwPrefix, NSwy},
+#endif
+  {"z",    grfSwPrefix, NSwz},  {"q",    grfSwPrefix, NSwq},
+  {"i",    grfSwPrefix, NSwi},  {"o",    grfSwPrefix, NSwo},
+  {">",    grfSwPrefix, NSwGreater},
+  {"",     0,           NSwDay},
+  {"+",    grfSwPrefix, NSwDay}, {"-",   grfSwPrefix, NSwDay},
+  {"r",    grfSwPrefix, NSwr},  {"5",    grfSwPrefix, NSwFive},
+  {"k",    grfSwPrefix, NSwk},
+#ifdef GRAPH
+  {"W",    grfSwPrefix, NSwW},
+#endif
+  {"0",    grfSwPrefix, NSwZero},
+  {";",    grfSwPrefix, NSwSemi},
+  {"@",    grfSwPrefix, NSwAt},
+  {".",    grfSwPrefix, NSwDot},
+#ifdef EXPRESS
+  {"~",    grfSwPrefix, NSwTilde},
+#endif
   };
 
 // Look up a switch by its full spelling and run it. Returns the count of
@@ -3970,752 +4810,10 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       continue;
     }
 
-    switch (argv[0][ich-1]) {
-
-    case 'H':
-      if (ch1 == 'c')
-        SwitchF(us.fCredit);
-      else if (ch1 == 'Y')
-        SwitchF(us.fSwitchRare);
-#ifdef ISG
-      else if (ch1 == 'X')
-        SwitchF(us.fKeyGraph);
-#endif
-      else if (ch1 == 'C')
-        SwitchF(us.fSign);
-      else if (ch1 == 'O')
-        SwitchF(us.fObject);
-      else if (ch1 == 'A')
-        SwitchF(us.fAspect);
-      else if (ch1 == 'F')
-        SwitchF(us.fConstel);
-      else if (ch1 == 'S')
-        SwitchF(us.fOrbitData);
-      else if (ch1 == '7')
-        SwitchF(us.fRay);
-      else if (ch1 == 'I')
-        SwitchF(us.fMeaning);
-      else if (ch1 == 'e') {
-        SwitchF(us.fCredit); SwitchF(us.fSwitch); SwitchF(us.fSwitchRare);
-        SwitchF(us.fKeyGraph); SwitchF(us.fSign); SwitchF(us.fObject);
-        SwitchF(us.fAspect); SwitchF(us.fConstel); SwitchF(us.fOrbitData);
-        SwitchF(us.fRay); SwitchF(us.fMeaning);
-      } else
-        SwitchF(us.fSwitch);
-      break;
-
-    case 'Q':
-      if (ch1 == '0')
-        SwitchF(us.fLoopInit);
-      SwitchF(us.fLoop);
-      break;
-
-    case 'M':
-      if (FBetween(ch1, '1', '0' + cRing)) {
-        i = (ch1 - '0') + (ch2 == '0');
-        if (FErrorArgc("M", argc, i))
-          return fFalse;
-        for (j = 1; j <= i; j++)
-          FCloneSz(argv[j], &szWheel[(ch2 == '0' && j >= i) ? 0 : j]);
-        argc -= i; argv += i;
-        break;
-      }
-      i = (ch1 == '0');
-      if (FErrorArgc("M", argc, 1+i))
-        return fFalse;
-      j = NFromSz(argv[1]);
-      if (FErrorValN("M", !FValidMacro(j), j, 1))
-        return fFalse;
-      if (i) {
-        if (FEnsureMacro(j+1))
-          FCloneSz(argv[2], &is.rgszMacro[j]);
-      } else if (j < is.cszMacro)
-        FProcessCommandLine(is.rgszMacro[j]);
-      argc -= 1+i; argv += 1+i;
-      break;
-
-    // Switches which determine the type of chart to display:
-
-    // Switches which affect how the chart parameters are obtained:
-
-#ifdef TIME
-    case 'n':
-      ci = ciCore;
-      FInputData(szNowCore);
-      if (ch1 == 'd')
-        TT = 0.0;
-      else if (ch1 == 'm') {
-        DD = 1; TT = 0.0;
-      } else if (ch1 == 'y') {
-        MM = DD = 1; TT = 0.0;
-      } else
-        ch2 = ch1;
-      if (FBetween(ch2, '1', '0' + cRing)) {
-        *rgpci[ch2 - '0'] = ciCore;
-        ciCore = ci;
-      }
-      break;
-#endif
-
-    case 'z':
-      if (ch1 == '0') {
-        if (argc <= 1 || RParseSz(argv[1], pmDst) == rLarge) {
-          i = (ciDefa.dst != 0.0);
-          SwitchF(i);
-          SS = ciDefa.dst = (i ? 1.0 : 0.0);
-        } else {
-          rT = RParseSz(argv[1], pmDst);
-          if (FErrorValR("z0", !FValidDst(rT), rT, 0))
-            return fFalse;
-          SS = ciDefa.dst = rT;
-          argc--; argv++;
-        }
-        break;
-      } else if (ch1 == 'l') {
-        if (FErrorArgc("zl", argc, 2))
-          return fFalse;
-        rT = RParseSz(argv[1], pmLon);
-        if (FErrorValR("zl", !FValidLon(rT), rT, 1))
-          return fFalse;
-        OO = ciDefa.lon = rT;
-        rT = RParseSz(argv[2], pmLat);
-        if (FErrorValR("zl", !FValidLat(rT), rT, 2))
-          return fFalse;
-        AA = ciDefa.lat = rT;
-        argc -= 2; argv += 2;
-        break;
-      } else if (ch1 == 'v') {
-        if (FErrorArgc("zv", argc, 1))
-          return fFalse;
-        us.elvDef = RParseSz(argv[1], pmElv);
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'f') {
-        if (FErrorArgc("zf", argc, 1))
-          return fFalse;
-        us.tmpDef = RParseSz(argv[1], pmTmp);
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'j') {
-        if (FErrorArgc("zj", argc, 2))
-          return fFalse;
-        ciDefa.nam = SzClone(argv[1]);
-        ciDefa.loc = SzClone(argv[2]);
-        argc -= 2; argv += 2;
-        break;
-      } else if (ch1 == 't') {
-        if (FErrorArgc("zt", argc, 1))
-          return fFalse;
-        rT = RParseSz(argv[1], pmTim);
-        if (FErrorValR("zt", !FValidTim(rT), rT, 0))
-          return fFalse;
-        TT = rT;
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'd') {
-        if (FErrorArgc("zd", argc, 1))
-          return fFalse;
-        i = NParseSz(argv[1], pmDay);
-        if (FErrorValN("zd", !FValidDay(i, MM, YY), i, 0))
-          return fFalse;
-        DD = i;
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'm') {
-        if (FErrorArgc("zm", argc, 1))
-          return fFalse;
-        i = NParseSz(argv[1], pmMon);
-        if (FErrorValN("zm", !FValidMon(i), i, 0))
-          return fFalse;
-        MM = i;
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'y') {
-        if (FErrorArgc("zy", argc, 1))
-          return fFalse;
-        i = NParseSz(argv[1], pmYea);
-        if (FErrorValN("zy", !FValidYea(i), i, 0))
-          return fFalse;
-        YY = i;
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'i') {
-        if (FErrorArgc("zi", argc, 2))
-          return fFalse;
-        ciCore.nam = SzClone(argv[1]);
-        ciCore.loc = SzClone(argv[2]);
-        argc -= 2; argv += 2;
-        break;
-      }
-#ifdef ATLAS
-      else if (ch1 == 'L') {
-        if (FErrorArgc("zL", argc, 1))
-          return fFalse;
-        if (!DisplayAtlasLookup(argv[1], 0, &i))
-          PrintWarning("City doesn't match anything in atlas.");
-        else {
-          ciDefa.lon = OO; ciDefa.lat = AA;
-        }
-        argc--; argv++;
-        break;
-      } else if (ch1 == 'N') {
-        if (FErrorArgc("zN", argc, 1))
-          return fFalse;
-        if (!DisplayAtlasLookup(argv[1], 0, &i))
-          PrintWarning("City doesn't match anything in atlas.");
-        else if (!DisplayTimezoneChanges(is.rgae[i].izn, 0, &ciCore))
-          PrintWarning("Couldn't get time zone data!");
-        else {
-          ciDefa.dst = SS; ciDefa.zon = ZZ;
-          ciDefa.lon = OO; ciDefa.lat = AA;
-          is.fDst = (SS > 0.0);
-        }
-        argc--; argv++;
-        break;
-      }
-#endif
-      else if (ch1 == 'Z') {
-        if (FErrorArgc("zZ", argc, 2))
-          return fFalse;
-        rT = RParseSz(argv[1], pmZon);
-        if (FErrorValR("z", !FValidZon(rT), rT, 1))
-          return fFalse;
-        AdjustTimeZone(&ciCore, rT, RParseSz(argv[2], pmDst));
-        argc -= 2; argv += 2;
-        break;
-      }
-      if (argc <= 1 || RParseSz(argv[1], pmZon) == rLarge)
-        ZZ -= 1.0;
-      else {
-        rT = RParseSz(argv[1], pmZon);
-        if (FErrorValR("z", !FValidZon(rT), rT, 0))
-          return fFalse;
-        ZZ = ciDefa.zon = rT;
-        argc--; argv++;
-      }
-      break;
-
-    case 'q':
-      i = (ch1 == 'y' || ch1 == 'j' || ch1 == 'L') + 2*(ch1 == 'm') +
-        3*(ch1 == 'd') + 7*(ch1 == 'a') + 8*(ch1 == 'b') + 10*(ch1 == 'c');
-      if (i <= 0) {
-        i = 4;
-        ch2 = ch1;
-      }
-      if (FErrorArgc("q", argc, i))
-        return fFalse;
-      is.fHaveInfo = fTrue;
-      ci = ciCore;
-      if (ch1 == 'j') {
-        is.JD = RFromSz(argv[1]) + rRound;
-        TT = RFract(is.JD);
-        JulianToMdy(is.JD - TT, &MM, &DD, &YY);
-        TT *= 24.0;
-        SS = ZZ = 0.0; OO = ciDefa.lon; AA = ciDefa.lat;
-      } else if (ch1 == 'L') {
-        j = NFromSz(argv[1]);
-        if (FErrorValN("qL", !FValidList(j), j, 0))
-          return fFalse;
-        ciCore = is.rgci[j];
-        is.iciCur = j;
-      } else {
-        MM = i > 1 ? NParseSz(argv[1], pmMon) : 1;
-        DD = i > 2 ? NParseSz(argv[2], pmDay) : 1;
-        YY = NParseSz(argv[3 - (i < 3) - (i < 2)], pmYea);
-        TT = i > 3 ? RParseSz(argv[4], pmTim) : (i < 3 ? 0.0 : 12.0);
-        SS = i > 7 ? RParseSz(argv[5], pmDst) : (i > 6 ? 0.0 : ciDefa.dst);
-        ZZ = i > 6 ? RParseSz(argv[5 + (i > 7)], pmZon) : ciDefa.zon;
-        OO = i > 6 ? RParseSz(argv[6 + (i > 7)], pmLon) : ciDefa.lon;
-        AA = i > 6 ? RParseSz(argv[7 + (i > 7)], pmLat) : ciDefa.lat;
-        if (FErrorValN("q", !FValidMon(MM), MM, 1))
-          return fFalse;
-        else if (FErrorValN("q", !FValidDay(DD, MM, YY), DD, 2))
-          return fFalse;
-        else if (FErrorValN("q", !FValidYea(YY), YY, 3 - (i < 3) - (i < 2)))
-          return fFalse;
-        else if (FErrorValR("q", !FValidTim(TT), TT, 4))
-          return fFalse;
-        else if (FErrorValR("q", !FValidDst(SS), SS, 5))
-          return fFalse;
-        else if (FErrorValR("q", !FValidZon(ZZ), ZZ, 5 + (i > 7)))
-          return fFalse;
-        else if (FErrorValR("q", !FValidLon(OO), OO, 6 + (i > 7)))
-          return fFalse;
-        else if (FErrorValR("q", !FValidLat(AA), AA, 7 + (i > 7)))
-          return fFalse;
-        if (i > 9) {
-          ciCore.nam = SzClone(argv[9]);
-          ciCore.loc = SzClone(argv[10]);
-        }
-      }
-      if (FBetween(ch2, '1', '0' + cRing)) {
-        *rgpci[ch2 - '0'] = ciCore;
-        ciCore = ci;
-      } else if (ch2 == 'D') {
-        ciDefa = ciCore;
-        ciCore = ci;
-      } else if (ch2 == 't') {
-        ciTran = ciCore;
-        ciCore = ci;
-      } else if (ch2 == 's') {
-        ciSave = ciCore;
-        ciCore = ci;
-      } else if (ch2 == 'g') {
-        ciGreg = ciCore;
-        ciCore = ci;
-      } else if (ch2 == 'l')
-        FAppendCIList(&ciCore);
-      argc -= i; argv += i;
-      break;
-
-    case 'i':
-      if (ch1 == 'x') {
-        SwapTemp(ciCore, ciTwin, ci);
-        break;
-      }
-      if (us.fNoRead) {
-        ErrorArgv("i");
-        return tcError;
-      }
-      if (FErrorArgc("i", argc, 1))
-        return fFalse;
-      if (ch1 == 'd') {
-        OpenDir(argv[1]);
-        argc--; argv++;
-        break;
-      }
-      ci = ciCore;
-      if (!FInputData(argv[1]))
-        return fFalse;
-      if (ch1 == 'l' || ch2 == 'l')
-        FAppendCIList(&ciCore);
-      if (FBetween(ch1, '1', '0' + cRing)) {
-        *rgpci[ch1 - '0'] = ciCore;
-        ciCore = ci;
-        *rgpcp[ch1 - '0'] = cp0;
-      } else if (ch1 == 'D') {
-        ciDefa = ciCore;
-        ciCore = ci;
-      } else if (ch1 == 't') {
-        ciTran = ciCore;
-        ciCore = ci;
-        is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT,
-          ciDefa.dst, ciDefa.zon);
-      } else if (ch1 == 's') {
-        ciSave = ciCore;
-        ciCore = ci;
-      } else if (ch1 == 'g') {
-        ciGreg = ciCore;
-        ciCore = ci;
-      }
-      argc--; argv++;
-      break;
-
-    case '>':
-      ch1 = 's';
-      // Fall through
-
-    case 'o':
-      if (us.fNoWrite) {
-        ErrorArgv("o");
-        return tcError;
-      }
-      if (FErrorArgc("o", argc, 1))
-        return fFalse;
-      if (ch1 == 's') {
-        FCloneSz(argv[1], &is.szFileScreen);
-        argc--; argv++;
-        break;
-      } else if (ch1 == '0' || ch1 == 'd' || ch1 == 'l' ||
-        ch1 == 'a' || ch1 == 'q' || ch1 == 'c' || ch1 == 'x')
-        us.nWriteFormat = FSwitchF2(us.nWriteFormat == ch1) * ch1;
-      SwitchF(us.fWriteFile);
-      FCloneSz(argv[1], &is.szFileOut);
-      argc--; argv++;
-      // Save extra lines to be output as comments to file
-      if (is.rgszComment != NULL) {
-        for (i = 0; i < is.cszComment; i++)
-          DeallocatePIf(is.rgszComment[i]);
-        DeallocateP(is.rgszComment);
-        is.rgszComment = NULL;
-      }
-      for (is.cszComment = 0; argc - is.cszComment > 1 &&
-        !FChSwitch(argv[1 + is.cszComment][0]); is.cszComment++)
-        ;
-      if (is.cszComment > 0) {
-        is.rgszComment = RgAllocate(is.cszComment, char *, "comment list");
-        ClearB((pbyte)is.rgszComment, is.cszComment * sizeof(char *));
-        for (i = 0; i < is.cszComment; i++)
-          FCloneSz(argv[1 + i], &is.rgszComment[i]);
-        argc -= is.cszComment; argv += is.cszComment;
-      }
-      break;
-
-    // Switches which affect what information is used in a chart:
-
-    case chNull:
-      if (ich <= 1)
-        break;
-      // Fall thorugh
-
-    case '+':
-    case '-':
-      pch = &argv[0][ich-1];    // Save because argv++ changes it
-      if (argc > 1 && ((rT = RFromSz(argv[1])) != 0.0 || FNumCh(argv[1][0]) ||
-        argv[1][0] == '~')) {
-        argc--; argv++;
-      } else
-        rT = 1.0;
-      if (*pch != '+')
-        neg(rT);
-      i = (int)rT;
-      if (ch1 == 't') {
-        i /= 24;
-        rT -= (real)(i*24);
-        TT += rT;
-        AddTime(&ciCore, 3, 0);
-      } else if (ch1 == 'm') {
-        AddTime(&ciCore, 5, i%12);
-        AddTime(&ciCore, 6, i/12);
-        break;
-      } else if (ch1 == 'y') {
-        AddTime(&ciCore, 6, i);
-        break;
-      }
-      j = MdyToJulian(MM, DD + i, YY);
-      JulianToMdy((real)j - 0.5, &MM, &DD, &YY);
-      break;
-
-    // Switches for relationship and comparison charts:
-
-    case 'r':
-      if (ch1 == 'P') {
-        if (FErrorArgc("r", argc, 1))
-          return fFalse;
-        j = NFromSz(argv[1]);
-        if (FErrorValN("rP", !FBetween(j, 2, cRing), j, 0))
-          return fFalse;
-        SwitchF(rgfProg[j]);
-        argc--; argv++;
-        break;
-      }
-      if (fAnd) {
-        us.nRel = rcNone;
-        break;
-      } else if (FBetween(ch1, '1', '0' + cRing)) {
-        us.nRel = -(int)(ch1-'1');
-        break;
-      }
-      i = 2 + 2*((ch1 == 'c' || ch1 == 'm') && ch2 == '0');
-      if (FErrorArgc("r", argc, i))
-        return fFalse;
-      if (ch1 == 'c')
-        us.nRel = rcComposite;
-      else if (ch1 == 'm')
-        us.nRel = rcMidpoint;
-      else if (ch1 == 'd')
-        us.nRel = rcDifference;
-#ifdef BIORHYTHM
-      else if (ch1 == 'b')
-        us.nRel = rcBiorhythm;
-#endif
-      else if (ch1 == '0')
-        us.nRel = rcDual;
-      else if (ch1 == 't')
-        us.nRel = rcTransit;
-      else if (ch1 == 'p') {
-        us.nRel = rcProgress;
-        us.nProgress = (ch2 == '0') + 2*(ch2 == '1');
-      } else
-        us.nRel = rcSynastry;
-      ci = ciCore;
-      ciCore = ciTwin;
-      if (!FInputData(argv[2]))
-        return fFalse;
-      cp2 = cp0;
-      ciTwin = ciCore;
-      ciCore = ci;
-      if (!FInputData(argv[1]))
-        return fFalse;
-      cp1 = cp0;
-      if (i > 2) {
-        j = NFromSz(argv[3]);
-        if (j < 0)
-          us.rRatio = RFromSz(argv[4]);
-        else {
-          k = NFromSz(argv[4]);
-          if (j + k == 0)
-            j = k = 1;
-          us.rRatio = (real)j / (real)(j + k);
-        }
-      }
-      argc -= i; argv += i;
-      break;
-
-#ifdef TIME
-    case 'y':
-      if (FErrorArgc("y", argc, 1))
-        return fFalse;
-      if (ch1 == 'd')
-        us.nRel = rcDifference;
-#ifdef BIORHYTHM
-      else if (ch1 == 'b')
-        us.nRel = rcBiorhythm;
-#endif
-      else if (ch1 == 't')
-        us.nRel = rcTransit;
-      else if (ch1 == 'p') {
-        us.nRel = rcProgress;
-        us.nProgress = (ch2 == '0') + 2*(ch2 == '1');
-      } else
-        us.nRel = rcDual;
-      if (!FInputData(szNowCore))
-        return fFalse;
-      ciTwin = ciCore;
-      if (!FInputData(argv[1]))
-        return fFalse;
-      argc--; argv++;
-      break;
-#endif
-
-    case '5':
-      if (ch1 == 'e' || ch1 == 'Y') {
-        i = 1 + (ch2 == '2') + (ch2 == '3')*2 + (ch2 == '4')*3;
-        if (ch1 == 'e')
-          us.nListAll = FSwitchF(us.nListAll == i) * i;
-        else
-          FEnumerateCIList(i);   // -5Y does the same as -Y5
-      } else if (ch1 == 'd')
-        FSortCIList(0);
-      else if (ch1 == 'x')
-        FSortCIList(1);
-      else if (ch1 == 'y')
-        FSortCIList(2);
-      else if (ch1 == 'n')
-        FSortCIList(3);
-      else if (ch1 == 'l')
-        FSortCIList(4);
-      else if (ch1 == 's')
-        FSortCIList(5);
-      else if (ch1 == '0')
-        is.cci = 0;
-      else if (ch1 == 'f') {
-        if (FErrorArgc("5f", argc, 2))
-          return fFalse;
-        FilterCIList(argv[1], argv[2]);
-        argc -= 2; argv += 2;
-        break;
-      } else if (ch1 == chNull)
-        SwitchF(us.fListAuto);
-      else {
-        FErrorSubswitch("5", ch1, fTrue);
-        return fFalse;
-      }
-      break;
-
-    // Switches to access graphics options:
-
-    case 'k':
-      if (ch1 == 'h') {
-        SwitchF(us.fTextHTML);
-        break;
-      }
-      if (ch1 == '1') {     // Undocumented subswitch.
-        us.fAnsiColor = 2;
-        us.fAnsiChar  = 1;
-      } else {
-        if (ch1 != '0')
-          SwitchF(us.fAnsiColor);
-        SwitchF(us.fAnsiChar);
-      }
-      break;
-
-#ifdef GRAPH
-    // Every build accepts these, even the ones with no interface to apply
-    // them to. A settings file written by the Windows or Qt build is full
-    // of -W switches, and an unknown switch does not merely get skipped --
-    // it stops Astrolog reading the rest of the file, so a console build
-    // meeting a "-WM" line silently loses everything after it.
-    case 'W':
-#ifdef WIN
-      i = NProcessSwitchesW(argc, argv, ich, fOr, fAnd, fNot);
-#elif defined(QT)
-      i = NProcessSwitchesQt(argc, argv, ich, fOr, fAnd, fNot);
-#else
-      i = NProcessSwitchesNullW(argc, argv, ich);
-#endif
-      if (i < 0)
-        return fFalse;
-      argc -= i; argv += i;
-      break;
-#endif // GRAPH
-
-    case '0':
-      if (fAnd)    // _0 should do nothing.
-        break;
-      while (ch1 != chNull) {
-        switch (ch1) {
-        case 'o': us.fNoWrite    = fTrue; break;
-        case 'i': us.fNoRead     = fTrue; break;
-        case 'q': us.fNoQuit     = fTrue; break;
-        case 'X': us.fNoGraphics = fTrue; break;
-        case 'b': us.fNoPlacalc  = fTrue; break;
-        case 'n': us.fNoNetwork  = fTrue; break;
-        case '~': us.fNoExp      = fTrue; break;
-        default: FErrorSubswitch("0", ch1, fTrue); return fFalse;
-        }
-        ch1 = argv[0][++ich];
-      }
-      break;
-
-    case '?':    // Common command line usage does the same as -H.
-      SwitchF(us.fSwitch);
-      break;
-
-    case ';':    // The -; switch means don't process the rest of the line.
-      return fTrue;
-
-    case '@':    // The -@ switch is just a system flag indicator no-op.
-      break;
-
-    case '.':                // "-." is usually used to exit the -Q loop.
-      Terminate(tcForce);
-
-#ifdef EXPRESS
-    case '~':
-      if (ch1 == '0') {
-        SwitchF(us.fExpOff);
-        break;
-      }
-      i = 1 + (ch1 == 'M' || ch1 == '2' || ch1 == '3');
-      if (FErrorArgc("~", argc, i))
-        return fFalse;
-      ppch = NULL;
-      if (ch1 == 'g')
-        ppch = &us.szExpConfig;
-      else if (ch1 == 'a')
-        ppch = (ch2 != '0' ? &us.szExpAspList : &us.szExpAspSumm);
-      else if (ch1 == 'm')
-        ppch = (ch2 != 'a' ? &us.szExpMid : &us.szExpMidAsp);
-      else if (ch1 == 'j')
-        ppch = (ch2 != '0' ? &us.szExpInf : &us.szExpInf0);
-      else if (ch1 == '7')
-        ppch = &us.szExpEso;
-      else if (ch1 == 'L')
-        ppch = &us.szExpCross;
-      else if (ch1 == 'E')
-        ppch = &us.szExpEph;
-      else if (ch1 == 'Z' && ch2 == 'd')
-        ppch = &us.szExpRis;
-      else if (ch1 == 'd')
-        ppch = (ch2 != 'v' ? &us.szExpDay : &us.szExpVoid);
-      else if (ch1 == 't')
-        ppch = &us.szExpTra;
-      else if (ch1 == 'P')
-        ppch = &us.szExpPart;
-      else if (ch1 == 'O')
-        ppch = &us.szExpObj;
-      else if (ch1 == 'C')
-        ppch = &us.szExpHou;
-      else if (ch1 == 'A')
-        ppch = &us.szExpAsp;
-      else if (ch1 == 'p')
-        ppch = (ch2 != '0' ? &us.szExpProg : &us.szExpProg0);
-      else if (ch1 == 'k' && ch2 == 'O')
-        ppch = &us.szExpColObj;
-      else if (ch1 == 'k' && ch2 == 'A')
-        ppch = &us.szExpColAsp;
-      else if (ch1 == 'k' && ch2 == 'v')
-        ppch = &us.szExpColFill;
-      else if (ch1 == 'F' && ch2 == chNull)
-        ppch = &us.szExpFontSig;
-      else if (ch1 == 'F' && ch2 == 'C')
-        ppch = &us.szExpFontHou;
-      else if (ch1 == 'F' && ch2 == 'O')
-        ppch = &us.szExpFontObj;
-      else if (ch1 == 'F' && ch2 == 'A')
-        ppch = &us.szExpFontAsp;
-      else if (ch1 == 'F' && ch2 == 'N')
-        ppch = &us.szExpFontNak;
-      else if (ch1 == 'F' && ch2 == 'T')
-        ppch = &us.szExpFontTxt;
-      else if (ch1 == 'v')
-        ppch = (ch2 != '3' ? &us.szExpSort : (ch2 == chNull ||
-        argv[0][ich+2] != '0' ? &us.szExpDecan : &us.szExpDecan2));
-      else if (ch1 == 's' && ch2 == 'd')
-        ppch = &us.szExpDegree;
-      else if (ch1 == 'U' && ch2 == 'x')
-        ppch = &us.szExpExo;
-      else if (ch1 == 'U')
-        ppch = (ch2 != '0' ? &us.szExpStar : &us.szExpAst);
-      else if (ch1 == 'I' && ch2 == 'v')
-        ppch = &us.szExpIntV;
-      else if (ch1 == 'I' && ch2 == 'V')
-        ppch = &us.szExpIntV2;
-      else if (ch1 == 'I' && ch2 == 'a')
-        ppch = &us.szExpIntA;
-      else if (ch1 == 'I' && ch2 == 'A')
-        ppch = &us.szExpIntA2;
-      else if (ch1 == 'X' && ch2 == 'v')
-        ppch = &us.szExpCorner;
-      else if (ch1 == 'X' && ch2 == 'L')
-        ppch = &us.szExpCity;
-      else if (ch1 == 'X' && ch2 == 't')
-        ppch = &us.szExpSidebar;
-      else if (ch1 == 'X' && ch2 == 'Q')
-        ppch = &us.szExpKey;
-      else if (ch1 == 'W' && ch2 == 'Q')
-        ppch = &us.szExpMenu;
-      else if (ch1 == 'q' && ch2 == '1')
-        ppch = &us.szExpCast1;
-      else if (ch1 == 'q' && ch2 == '2')
-        ppch = &us.szExpCast2;
-      else if (ch1 == 'Q' && ch2 == '1')
-        ppch = &us.szExpDisp1;
-      else if (ch1 == 'Q' && ch2 == '2')
-        ppch = &us.szExpDisp2;
-      else if (ch1 == 'Q' && ch2 == '3')
-        ppch = &us.szExpDisp3;
-      else if (ch1 == '5' && ch2 == 's')
-        ppch = &us.szExpListS;
-      else if (ch1 == '5' && ch2 == 'f')
-        ppch = &us.szExpListF;
-      else if (ch1 == '5' && ch2 == 'Y')
-        ppch = &us.szExpListY;
-      else if (ch1 == '5' && ch2 == 'i')
-        ppch = &us.szExpADB;
-      else if (ch1 == 'M') {
-        j = NFromSz(argv[1]);
-        if (FErrorValN("~M", j < 0, j, 1))
-          return fFalse;
-        ExpSetMacro(j, argv[2]);
-      } else if (ch1 == '1')
-        ParseExpression(argv[1]);
-      else if (ch1 == '2') {
-        j = NFromSz(argv[1]);
-        if (FErrorValN("~2", j < 0, j, 1))
-          return fFalse;
-        ExpSetString(j, argv[2], ch2 == '0');
-      } else if (ch1 == '3') {
-        j = NFromSz(argv[1]);
-        if (FErrorValN("~3", j < 0, j, 1))
-          return fFalse;
-        ExpSetNums(j, argv[2]);
-      } else if (FErrorSubswitch("~", ch1, ch1 != chNull))
-        return fFalse;
-      else
-        ShowParseExpression(argv[1]);
-      if (ppch != NULL)
-        FCloneSz(argv[1], ppch);
-      argc -= i; argv += i;
-      break;
-#endif
-
-    default:
-      ErrorSwitch(argv[0]);
-      return fFalse;
-    }
-    argc--; argv++;
+    // Every switch lives in the registry now; an unmatched name is
+    // simply unknown.
+    ErrorSwitch(argv[0]);
+    return fFalse;
   }
   return fTrue;
 }

@@ -300,6 +300,11 @@ of the file (A2's failure mode, gone for good).
   chart-type letters left the main parser; 460-invocation differential
   byte-identical. What remains: chart info (-n/-z/-q/-i), I/O and
   macros, relationship charts (-r*), day arithmetic, -H* help, and -W.
+  **M10 done 2026-08-29** (work log item 77): the main parser's switch
+  statement is deleted. FProcessSwitches() is 44 lines; every spelling
+  is registry-resident. The migration phase of T3 is complete -- what
+  remains of T3 is the harvest: the table-driven settings writer (T4),
+  generated -H help, and audits reading the registry.
 - **M-final**: the four parser shells reduce to dispatch loops; the
   help printers are deleted; `FOutputSettings()` is a loop plus the
   handful of genuinely bespoke sections.
@@ -919,10 +924,12 @@ each independently shippable:
 3. ~~**B3** — save/restore `is.fileIn` around nested includes~~ —
    **done 2026-08-29** (work log item 67); the interim fix until T3's
    parse context retires the channel entirely.
-4. **T3's switch registry** — promoted to next at the maintainer's
-   direction (2026-08-29): the fragility itself, not its symptoms. The
-   full design and migration plan are in T3 above; A2 is subsumed by
-   its M1 step. **M1 and M2 done 2026-08-29** — registry, driver, 39
+4. **T3's switch registry** — promoted at the maintainer's direction
+   (2026-08-29), and its migration phase is **complete**: M1-M10 moved
+   every spelling into the registry and dissolved all four parsers in
+   one day. Next in T3: the harvest — FOutputSettings() as a loop over
+   the rows (T4), generated -H help diffed against the hand-written
+   text, and the audits reading the registry instead of regexing C. **M1 and M2 done 2026-08-29** — registry, driver, 39
    switches across the -YA*, -Yj*, -YJ*, -YR*, -Y7* and -Yk* families;
    all differentials byte-identical. M3 added the parse context and
    retired is.fileIn; M4-M6 deleted NProcessSwitchesRare(),
