@@ -3048,6 +3048,19 @@ are the more useful half to read before starting something new.
     exoplanet chart, sidebar off), byte-identical; suite 3036/0;
     Windows cross-build clean.
 
+88. **The generated-help idea is closed, and with it all of T3.** The
+    -H text is pedagogical prose with many-to-one structure (one line
+    documents nine sort-key rows; section headers interleave; ifdef'd
+    composites are sprintf-built), so a generated version would
+    degenerate into an ordered (guard, string) list -- which is what
+    the PrintS sequence already is -- while registry_audit.py already
+    parses those lines and cross-checks every documented spelling
+    against the registry. No drift protection would be added. T3 now
+    stands fully closed: M1-M10 migration, registry hardening, and
+    both harvest ideas measured and closed by the same standard.
+    Remaining plan items are the documentation themes (T1, T8, A4,
+    C4) and the optional AstroGraph clone merge.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

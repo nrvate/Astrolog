@@ -554,11 +554,17 @@ reword; valid input behavior is byte-sacred.
   already closes the spelling-drift class; the value-drift class
   stays covered by the round-trip fixture's 31 sentinels. Nothing
   further to harvest here.
-- Generated `-H` help: needs help text moved onto rows *plus* an
-  explicit ordering list, because help order is pedagogical, not table
-  order. Byte-diff the generated output against the four hand-written
-  printers before deleting them. A transcription session; do it when
-  fresh.
+- Generated `-H` help: **closed as measured no-gain, 2026-08-29**
+  (work log item 88). The help lines are pedagogical prose with
+  many-to-one structure — `_a[jonOPACDm]` documents nine rows in one
+  line plus a continuation, section headers interleave, and ifdef'd
+  composites are sprintf-built — so a generated version degenerates
+  into an ordered (guard, string) list, which is exactly what the
+  PrintS sequence already is. `registry_audit.py` already parses
+  these lines and verifies every documented spelling resolves to a
+  row, so generation would add no drift protection. **T3 is now
+  fully closed**: migration (M1-M10), hardening (suite group +
+  cross-audits), and both harvest ideas measured and closed.
 
 **Next up, specified:**
 - **C3 — done 2026-08-29** (work log item 81): `FSkipEphem()` in
