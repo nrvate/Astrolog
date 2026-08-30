@@ -3517,6 +3517,114 @@ typedef struct _qttestentry {
   void (*pfn)();
 } QTTESTENTRY;
 
+// Work log item 111: the flag<->mode mapping exists once, in rgchartmode[]
+// (xscreen.cpp), and DetectGraphicsChartMode() scans its first
+// cchartmodeDetect rows in priority order -- first set flag wins. The
+// expected table here is a deliberate second copy of that mapping: row
+// order carries detection priority, so the pin has to hold the order
+// itself, not read it back from the table under test (a check that asks
+// the table what to expect passes under any reordering -- the first
+// draft of this test did exactly that, and swapping two rows proved it).
+static void TestChartModeTableQt()
+{
+  static CONST CHARTMODE rgExpected[] = {
+    {gHouse,      &us.fWheel},         {gGrid,       &us.fGrid},
+    {gMidpoint,   &us.fMidpoint},      {gHorizon,    &us.fHorizon},
+    {gOrbit,      &us.fOrbit},         {gSector,     &us.fSector},
+    {gDisposit,   &us.fInfluence},     {gEsoteric,   &us.fEsoteric},
+    {gAstroGraph, &us.fAstroGraph},    {gCalendar,   &us.fCalendar},
+    {gEphemeris,  &us.fEphemeris},     {gRising,     &us.fHorizonSearch},
+    {gLocal,      &us.fAtlasNear},     {gMoons,      &us.fMoonChart},
+    {gTraTraGra,  &us.fInDayGra},      {gTraNatGra,  &us.fTransitGra},
+    {gWheel,      &us.fListing},       {gExo,        &us.fExoTransit},
+    {gAspect,     &us.fAspList},       {gArabic,     &us.fArabic},
+    {gTraTraTim,  &us.fInDay},         {gTraTraInf,  &us.fInDayInf},
+    {gTraNatTim,  &us.fTransit},       {gTraNatInf,  &us.fTransitInf},
+    {gSign,       &us.fSign},          {gObject,     &us.fObject},
+    {gHelpAsp,    &us.fAspect},        {gConstel,    &us.fConstel},
+    {gPlanet,     &us.fOrbitData},     {gRay,        &us.fRay},
+    {gMeaning,    &us.fMeaning},       {gSwitch,     &us.fSwitch},
+    {gObscure,    &us.fSwitchRare},    {gKeystroke,  &us.fKeyGraph},
+    {gCredit,     &us.fCredit}};
+  CONST int cExpected = (int)(sizeof(rgExpected) / sizeof(CHARTMODE));
+  flag rgfSav[48];
+  int i, j, nRelSav = us.nRel;
+
+  Group("Chart mode table");
+  Check(cchartmode == cExpected && cchartmode <= 48,
+    "the table carries all %d chart modes (%d)", cExpected, cchartmode);
+  Check(cchartmodeDetect == 16,
+    "the first 16 rows are the detection rows (%d)", cchartmodeDetect);
+  for (i = 0; i < Min(cchartmode, cExpected); i++)
+    Check(rgchartmode[i].nMode == rgExpected[i].nMode &&
+      rgchartmode[i].pf == rgExpected[i].pf,
+      "row %d is {mode %d} where %d expected -- order carries priority",
+      i, rgchartmode[i].nMode, rgExpected[i].nMode);
+
+  for (i = 0; i < cchartmode; i++) {
+    rgfSav[i] = *rgchartmode[i].pf;
+    *rgchartmode[i].pf = fFalse;
+  }
+  us.nRel = rcNone;
+
+  // Each detection flag alone selects its mode, named independently of
+  // the table under test.
+  for (i = 0; i < cchartmodeDetect; i++) {
+    *rgExpected[i].pf = fTrue;
+    Check(DetectGraphicsChartMode() == rgExpected[i].nMode,
+      "detection flag %d alone detects mode %d", i, rgExpected[i].nMode);
+    *rgExpected[i].pf = fFalse;
+  }
+
+  // Priority spot checks, each driving two named flags: the old else-if
+  // chain's ordering must survive the table.
+  us.fWheel = us.fGrid = fTrue;
+  Check(DetectGraphicsChartMode() == gHouse, "-w outranks -g");
+  us.fWheel = us.fGrid = fFalse;
+  us.fMidpoint = us.fHorizon = fTrue;
+  Check(DetectGraphicsChartMode() == gMidpoint, "-m outranks -Z");
+  us.fMidpoint = us.fHorizon = fFalse;
+  us.fInDayGra = us.fTransitGra = fTrue;
+  Check(DetectGraphicsChartMode() == gTraTraGra, "-B outranks -V");
+  us.fInDayGra = us.fTransitGra = fFalse;
+  us.fListing = us.fWheel = fTrue;
+  Check(DetectGraphicsChartMode() == gHouse, "-w outranks -v's leftover flag");
+  us.fListing = us.fWheel = fFalse;
+
+  // -HA has always detected as an aspect grid, at -g's priority slot:
+  // above -m, below -w.
+  us.fAspect = fTrue;
+  Check(DetectGraphicsChartMode() == gGrid, "-HA alone detects as gGrid");
+  us.fMidpoint = fTrue;
+  Check(DetectGraphicsChartMode() == gGrid, "-HA outranks -m");
+  us.fWheel = fTrue;
+  Check(DetectGraphicsChartMode() == gHouse, "-w outranks -HA");
+  us.fAspect = us.fMidpoint = us.fWheel = fFalse;
+
+  // The rows below the boundary never detect; they fall through to the
+  // gWheel default (except gHelpAsp, whose flag is us.fAspect, above).
+  for (i = cchartmodeDetect; i < cExpected; i++) {
+    *rgExpected[i].pf = fTrue;
+    j = (rgExpected[i].nMode == gHelpAsp) ? gGrid : gWheel;
+    Check(DetectGraphicsChartMode() == j,
+      "mode %d's flag is not a detection flag", rgExpected[i].nMode);
+    *rgExpected[i].pf = fFalse;
+  }
+
+  // The value tests: biorhythm rides on us.nRel, and nothing at all is a
+  // wheel chart.
+  us.nRel = rcBiorhythm;
+  Check(DetectGraphicsChartMode() == gBiorhythm,
+    "rcBiorhythm detects with no flag set");
+  us.nRel = rcNone;
+  Check(DetectGraphicsChartMode() == gWheel, "nothing set falls back to gWheel");
+
+  for (i = 0; i < cchartmode; i++)
+    *rgchartmode[i].pf = rgfSav[i];
+  us.nRel = nRelSav;
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"context-menus",        TestContextMenusQt},
@@ -3552,7 +3660,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objdef-set",           TestObjDefSetQt},
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
-  {"atlas-sink",           TestAtlasSinkQt}};
+  {"atlas-sink",           TestAtlasSinkQt},
+  {"chartmode-table",      TestChartModeTableQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
 
 // Does any comma-separated token of the filter appear in the name?

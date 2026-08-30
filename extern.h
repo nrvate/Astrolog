@@ -1096,6 +1096,9 @@ extern void EndQt P((void));
 extern flag FProcessYXU P((CONST char *, CONST char *, flag));
 extern int DetectGraphicsChartMode P((void));
 extern flag FActionX P((void));
+extern CONST CHARTMODE rgchartmode[];
+extern CONST int cchartmode;
+extern CONST int cchartmodeDetect;
 #endif // GRAPH
 
 

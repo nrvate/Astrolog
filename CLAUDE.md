@@ -85,7 +85,7 @@ ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3046 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`).
+commit. Current state: **3127 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`).
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render

@@ -752,6 +752,19 @@ sequential byte-sacred print order with heterogeneous per-mode bodies
 no-go as `FOutputSettings()` (item 87). Take the increment with those
 boundaries or not at all.
 
+**Done 2026-08-30** (work log item 111), with exactly those boundaries:
+`rgchartmode[]` in xscreen.cpp, detection rows first in the old else-if
+chain's priority order with `cchartmodeDetect` marking the line, GUI-only
+modes guarded `WIN || QT`. `DetectGraphicsChartMode()` scans it (keeping
+two specials: `-HA` detects as gGrid at `-g`'s slot, `rcBiorhythm` is a
+value test); `ProcessState()` sets flags through it, keeping its `ClearB`
+ranges because those also clear `fAtlasLook`/`fZoneChange`, which no row
+owns; the Qt port's private copy is deleted. `PrintChart()` untouched.
+Pinned by `TestChartModeTableQt()` (81 assertions whose expected table is
+a deliberate second copy of the mapping -- the first draft read expected
+order from the table under test and survived a row swap) and by 24
+pinned-time graphics captures byte-identical across the change.
+
 **A4 — Program lifecycle assumes one shot, GUI runs it forever.**
 `InitProgram()`/`FinalizeProgram()` and friends were written for
 parse-cast-print-exit; the GUI loops inside what was a straight line,
@@ -1411,10 +1424,11 @@ difference between "contained" and "clean".
 **Phase 2 completed 2026-08-30** (work log items 96-110): tranche 1
 on the 29th-30th, tranches 2 and 3 on the 30th, every item with a
 done-note or a measured verdict above. Still open, by choice, with
-their reasons recorded at the findings: A3's shared mode table (take
-it with the measured boundaries or not at all), C2's cooked-input
-window (net first), C6's ring-ownership documentation (with Area D),
-and T1 move 3 (opportunistic, never a sweep).
+their reasons recorded at the findings: C2's cooked-input window (net
+first), C6's ring-ownership documentation (with Area D), and T1 move 3
+(opportunistic, never a sweep). A3's shared mode table, the fourth of
+that closing list, was taken later the same day with its measured
+boundaries (work log item 111; done-note at the finding).
 
 ---
 

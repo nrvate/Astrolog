@@ -3447,6 +3447,45 @@ are the more useful half to read before starting something new.
     With P8, phase 2's tranche 3 is complete: P5-P10 all carry
     done-notes or measured verdicts.
 
+111. **A3 taken: the flag<->mode mapping exists once.** `rgchartmode[]`
+    in xscreen.cpp pairs every chart mode with the us.f* flag that
+    selects it -- the 16 detection rows first, in the old else-if
+    chain's priority order, `cchartmodeDetect` marking the boundary,
+    and the GUI-only modes (gAspect..gCredit, which console builds
+    don't define) guarded `WIN || QT`. Three longhand copies collapsed
+    onto it: `DetectGraphicsChartMode()` scans it, keeping two specials
+    (-HA detects as an aspect grid at -g's priority slot; rcBiorhythm
+    is a value test on us.nRel, not a flag); Windows' `ProcessState()`
+    looks its flag up in it, keeping the `ClearB` ranges since those
+    also clear fAtlasLook/fZoneChange, which no row owns, and falling
+    back to `gi.nMode = mode` for the five projection modes that never
+    had a flag; and the port's private `rgchartmodeQt[]` is deleted.
+    `PrintChart()` untouched, per item 110's verdict.
+    - **Verified with pinned-time captures.** The first byte-diff of
+      the 24 graphics modes "failed" 23/24 -- and two captures from the
+      *same* binary also differed 23/24, which is what identified time
+      as the variable: charts cast the current moment. With `-qb`
+      pinning the chart, a HEAD-worktree build and the tree's build
+      produce 24/24 byte-identical PNGs.
+    - `TestChartModeTableQt()` (81 assertions, group `chartmode-table`)
+      pins the row order, the mapping, detection priority, the
+      specials, and the boundary. **Its expected table is a deliberate
+      second copy of the mapping**: the first draft asked the table
+      under test what order to expect, and the mandatory
+      reintroduce-the-bug run -- two detection rows swapped -- passed
+      163/163, the worthless-test trap again. The rewrite fails 3
+      assertions on the same swap, and 3 more if the -HA special is
+      dropped from detection.
+    - One knowing nuance in the port: `SyncChartModeFromFlagsQt()`
+      scans in table order, now detection-priority order rather than
+      the old menu order. It only matters when a single typed command
+      line turns on two chart-type flags at once, and the winner now
+      agrees with what detection itself would pick.
+    - Verified across builds: Qt suite 3127/0 (was 3046) and clean
+      under ASan per QT_TESTING.md's procedure; console build compiles
+      and renders a grid chart through detection; Windows build
+      compiles and both win-*.txt scenarios pass under Wine.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

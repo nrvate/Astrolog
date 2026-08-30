@@ -1131,7 +1131,7 @@ LClose:
 
 void ProcessState()
 {
-  int cmd;
+  int cmd, i, n;
 
   if (wi.fCast)            // Recasting a chart implies redrawing it too.
     wi.fRedraw = fTrue;
@@ -1145,49 +1145,18 @@ void ProcessState()
     ClearB((pbyte)&us.fCredit,
       (int)((pbyte)&us.fLoop - (pbyte)&us.fCredit));
     gi.nMode = 0;
-    switch (wi.nMode) {
-      case gBiorhythm:
-      case gWheel:      us.fListing       = fTrue; break;
-      case gHouse:      us.fWheel         = fTrue; break;
-      case gGrid:       us.fGrid          = fTrue; break;
-      case gHorizon:    us.fHorizon       = fTrue; break;
-      case gOrbit:      us.fOrbit         = fTrue; break;
-      case gSector:     us.fSector        = fTrue; break;
-      case gAstroGraph: us.fAstroGraph    = fTrue; break;
-      case gEphemeris:  us.fEphemeris     = fTrue; break;
-      case gRising:     us.fHorizonSearch = fTrue; break;
-      case gLocal:      us.fAtlasNear     = fTrue; break;
-      case gSphere:     gi.nMode = gSphere;    break;
-      case gWorldMap:   gi.nMode = gWorldMap;  break;
-      case gGlobe:      gi.nMode = gGlobe;     break;
-      case gPolar:      gi.nMode = gPolar;     break;
-      case gTelescope:  gi.nMode = gTelescope; break;
-      case gCalendar:   us.fCalendar   = fTrue; break;
-      case gDisposit:   us.fInfluence  = fTrue; break;
-      case gEsoteric:   us.fEsoteric   = fTrue; break;
-      case gAspect:     us.fAspList    = fTrue; break;
-      case gMidpoint:   us.fMidpoint   = fTrue; break;
-      case gArabic:     us.fArabic     = fTrue; break;
-      case gMoons:      us.fMoonChart  = fTrue; break;
-      case gExo:        us.fExoTransit = fTrue; break;
-      case gTraTraTim:  us.fInDay      = fTrue; break;
-      case gTraTraInf:  us.fInDayInf   = fTrue; break;
-      case gTraTraGra:  us.fInDayGra   = fTrue; break;
-      case gTraNatTim:  us.fTransit    = fTrue; break;
-      case gTraNatInf:  us.fTransitInf = fTrue; break;
-      case gTraNatGra:  us.fTransitGra = fTrue; break;
-      case gSign:       us.fSign       = fTrue; break;
-      case gObject:     us.fObject     = fTrue; break;
-      case gHelpAsp:    us.fAspect     = fTrue; break;
-      case gConstel:    us.fConstel    = fTrue; break;
-      case gPlanet:     us.fOrbitData  = fTrue; break;
-      case gRay:        us.fRay        = fTrue; break;
-      case gMeaning:    us.fMeaning    = fTrue; break;
-      case gSwitch:     us.fSwitch     = fTrue; break;
-      case gObscure:    us.fSwitchRare = fTrue; break;
-      case gKeystroke:  us.fKeyGraph   = fTrue; break;
-      case gCredit:     us.fCredit     = fTrue; break;
-    }
+    // gBiorhythm has no flag of its own -- it's the wheel listing flag
+    // plus us.nRel == rcBiorhythm, which DetectGraphicsChartMode() tests.
+    n = (wi.nMode == gBiorhythm ? gWheel : wi.nMode);
+    for (i = 0; i < cchartmode; i++)
+      if (rgchartmode[i].nMode == n) {
+        *rgchartmode[i].pf = fTrue;
+        break;
+      }
+    // The projection modes (gSphere through gTelescope) have no flag row:
+    // each is a way of drawing gi.nMode itself.
+    if (i >= cchartmode)
+      gi.nMode = wi.nMode;
     cmd = rgcmdMode[wi.nMode];
     if (cmd != wi.cmdCur) {
       if (wi.cmdCur > 0)

@@ -1638,6 +1638,13 @@ typedef struct _CrossInfo {
   real lat;    // Latitude of crossing location
 } CrossInfo;
 
+// One chart mode and the us.f* flag that selects it. rgchartmode[] in
+// xscreen.cpp is the one flag<->mode table, shared by every consumer.
+typedef struct _ChartMode {
+  int nMode;  // gWheel, gHouse, etc
+  flag *pf;   // The us.f* flag that turns this chart type on
+} CHARTMODE;
+
 typedef struct _InDayInfo {
   short source;  // First planet
   short aspect;  // The aspect first planet makes with second planet

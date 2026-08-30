@@ -1353,34 +1353,82 @@ flag FProcessYXU(CONST char *szLin, CONST char *szLnk, flag fAdd)
 
 
 
+// Every chart mode paired with the us.f* flag that selects it -- the one
+// flag<->mode table. Three consumers share it: DetectGraphicsChartMode()
+// below scans it, Windows' ProcessState() (wdriver.cpp) and the Qt port's
+// SetChartModeQt() family (qtdriver.cpp) clear and set flags through it.
+// Before this table each of the three kept its own copy of the mapping
+// and they could silently drift apart.
+//
+// Row order is load-bearing: the first cchartmodeDetect rows are the
+// modes DetectGraphicsChartMode() considers, in its priority order --
+// first row whose flag is set wins. The rows after that line are modes
+// detection has never covered (several are GUI-menu-only chart types);
+// adding one to detection means moving it above the line, in priority
+// position, not just adding it to the table.
+
+CONST CHARTMODE rgchartmode[] = {
+  // Detection rows, in priority order.
+  {gHouse,      &us.fWheel},
+  {gGrid,       &us.fGrid},     // us.fAspect also detects as gGrid, below
+  {gMidpoint,   &us.fMidpoint},
+  {gHorizon,    &us.fHorizon},
+  {gOrbit,      &us.fOrbit},
+  {gSector,     &us.fSector},
+  {gDisposit,   &us.fInfluence},
+  {gEsoteric,   &us.fEsoteric},
+  {gAstroGraph, &us.fAstroGraph},
+  {gCalendar,   &us.fCalendar},
+  {gEphemeris,  &us.fEphemeris},
+  {gRising,     &us.fHorizonSearch},
+  {gLocal,      &us.fAtlasNear},
+  {gMoons,      &us.fMoonChart},
+  {gTraTraGra,  &us.fInDayGra},
+  {gTraNatGra,  &us.fTransitGra},
+  // Modes below this line are not consulted by detection.
+  {gWheel,      &us.fListing},
+  {gExo,        &us.fExoTransit},
+#if defined(WIN) || defined(QT)
+  {gAspect,     &us.fAspList},
+  {gArabic,     &us.fArabic},
+  {gTraTraTim,  &us.fInDay},
+  {gTraTraInf,  &us.fInDayInf},
+  {gTraNatTim,  &us.fTransit},
+  {gTraNatInf,  &us.fTransitInf},
+  {gSign,       &us.fSign},
+  {gObject,     &us.fObject},
+  {gHelpAsp,    &us.fAspect},
+  {gConstel,    &us.fConstel},
+  {gPlanet,     &us.fOrbitData},
+  {gRay,        &us.fRay},
+  {gMeaning,    &us.fMeaning},
+  {gSwitch,     &us.fSwitch},
+  {gObscure,    &us.fSwitchRare},
+  {gKeystroke,  &us.fKeyGraph},
+  {gCredit,     &us.fCredit},
+#endif
+};
+
+CONST int cchartmode = (int)(sizeof(rgchartmode) / sizeof(CHARTMODE));
+CONST int cchartmodeDetect = 16;
+
+
 // Figure out what graphics mode a graphics chart should be generated in,
 // based on various command switches in effect, e.g. -L combined with -X,
 // -g combined with -X, and so on.
 
 int DetectGraphicsChartMode()
 {
-  int nMode;
+  int i;
 
-  if (us.fWheel)                   nMode = gHouse;
-  else if (us.fGrid || us.fAspect) nMode = gGrid;
-  else if (us.fMidpoint)           nMode = gMidpoint;
-  else if (us.fHorizon)            nMode = gHorizon;
-  else if (us.fOrbit)              nMode = gOrbit;
-  else if (us.fSector)             nMode = gSector;
-  else if (us.fInfluence)          nMode = gDisposit;
-  else if (us.fEsoteric)           nMode = gEsoteric;
-  else if (us.fAstroGraph)         nMode = gAstroGraph;
-  else if (us.fCalendar)           nMode = gCalendar;
-  else if (us.fEphemeris)          nMode = gEphemeris;
-  else if (us.fHorizonSearch)      nMode = gRising;
-  else if (us.fAtlasNear)          nMode = gLocal;
-  else if (us.fMoonChart)          nMode = gMoons;
-  else if (us.fInDayGra)           nMode = gTraTraGra;
-  else if (us.fTransitGra)         nMode = gTraNatGra;
-  else if (us.nRel == rcBiorhythm) nMode = gBiorhythm;
-  else                             nMode = gWheel;
-
-  return nMode;
+  for (i = 0; i < cchartmodeDetect; i++)
+    if (*rgchartmode[i].pf ||
+      // -HA has always detected as an aspect grid, at -g's priority slot.
+      (rgchartmode[i].nMode == gGrid && us.fAspect))
+      return rgchartmode[i].nMode;
+  if (us.nRel == rcBiorhythm)  // A value test, not a flag, so not a row.
+    return gBiorhythm;
+  return gWheel;
 }
 
 

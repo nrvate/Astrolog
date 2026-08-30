@@ -1262,41 +1262,13 @@ static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
 }
 
 
-// Switch chart type/mode, mirroring the chart-type switch in Windows'
-// ProcessState() (wdriver.cpp:1143-1201): clear every chart-type flag, then
-// set the one matching the new mode. See qtdriver.h for the full comment.
-
-// Every chart mode and the us.f* flag that selects it. Kept as one table
-// rather than the clear-list-plus-switch this used to be, because that
-// needed two edits per new mode and they could silently drift apart.
-// SetChartModeQt() writes it; SyncChartModeFromFlagsQt() reads it.
-
-typedef struct {
-  int nMode;
-  flag *pf;
-} CHARTMODEQT;
-
-static CONST CHARTMODEQT rgchartmodeQt[] = {
-  {gWheel,      &us.fListing},       {gHouse,      &us.fWheel},
-  {gGrid,       &us.fGrid},          {gAspect,     &us.fAspList},
-  {gMidpoint,   &us.fMidpoint},      {gHorizon,    &us.fHorizon},
-  {gOrbit,      &us.fOrbit},         {gSector,     &us.fSector},
-  {gCalendar,   &us.fCalendar},      {gDisposit,   &us.fInfluence},
-  {gEsoteric,   &us.fEsoteric},      {gAstroGraph, &us.fAstroGraph},
-  {gEphemeris,  &us.fEphemeris},     {gArabic,     &us.fArabic},
-  {gRising,     &us.fHorizonSearch}, {gLocal,      &us.fAtlasNear},
-  {gTraTraTim,  &us.fInDay},         {gTraTraInf,  &us.fInDayInf},
-  {gTraTraGra,  &us.fInDayGra},      {gTraNatTim,  &us.fTransit},
-  {gTraNatInf,  &us.fTransitInf},    {gTraNatGra,  &us.fTransitGra},
-  {gMoons,      &us.fMoonChart},     {gExo,        &us.fExoTransit},
-  {gSign,       &us.fSign},          {gObject,     &us.fObject},
-  {gHelpAsp,    &us.fAspect},        {gConstel,    &us.fConstel},
-  {gPlanet,     &us.fOrbitData},     {gRay,        &us.fRay},
-  {gMeaning,    &us.fMeaning},       {gSwitch,     &us.fSwitch},
-  {gObscure,    &us.fSwitchRare},    {gKeystroke,  &us.fKeyGraph},
-  {gCredit,     &us.fCredit} };
-
-#define cchartmodeQt (int)(sizeof(rgchartmodeQt) / sizeof(CHARTMODEQT))
+// Switch chart type/mode, the same operation as Windows' ProcessState()
+// (wdriver.cpp): clear every chart-type flag, then set the one matching the
+// new mode. See qtdriver.h for the full comment. Both go through
+// rgchartmode[] (xscreen.cpp), the one flag<->mode table -- this port kept
+// its own copy of that mapping until the table was promoted to the core.
+// SetChartModeQt() writes the flags through it; SnapChartModeQt()/
+// SyncChartModeFromFlagsQt() read them.
 
 // Move the Chart menu's radio to "mode", if it has an entry for it.
 static void CheckChartModeMenuQt(int mode)
@@ -1314,19 +1286,19 @@ void SetChartModeQt(int mode)
 {
   int i;
 
-  for (i = 0; i < cchartmodeQt; i++)
-    *rgchartmodeQt[i].pf = fFalse;
+  for (i = 0; i < cchartmode; i++)
+    *rgchartmode[i].pf = fFalse;
   // DrawChartX() switches directly on gi.nMode with no fallback if it's 0,
-  // and DetectGraphicsChartMode() (xscreen.cpp:2165, normally what
+  // and DetectGraphicsChartMode() (xscreen.cpp, normally what
   // (re)derives gi.nMode from the us.f* flags before a redraw) doesn't
   // cover several of these flags (fListing, fAspList, fArabic among them)
   // -- so rather than zero gi.nMode and rely on that detection like
   // Windows' ProcessState() does, set it directly to what was actually
   // selected, since that's already known here.
   gi.nMode = mode;
-  for (i = 0; i < cchartmodeQt; i++)
-    if (rgchartmodeQt[i].nMode == mode) {
-      *rgchartmodeQt[i].pf = fTrue;
+  for (i = 0; i < cchartmode; i++)
+    if (rgchartmode[i].nMode == mode) {
+      *rgchartmode[i].pf = fTrue;
       break;
     }
   CheckChartModeMenuQt(mode);
@@ -1354,24 +1326,24 @@ void SnapChartModeQt(flag *rgf)
 {
   int i;
 
-  for (i = 0; i < cchartmodeQt; i++)
-    rgf[i] = *rgchartmodeQt[i].pf;
+  for (i = 0; i < cchartmode; i++)
+    rgf[i] = *rgchartmode[i].pf;
 }
 
 void SyncChartModeFromFlagsQt(CONST flag *rgf)
 {
   int i;
 
-  for (i = 0; i < cchartmodeQt; i++)
-    if (*rgchartmodeQt[i].pf && !rgf[i]) {
-      SetChartModeQt(rgchartmodeQt[i].nMode);
+  for (i = 0; i < cchartmode; i++)
+    if (*rgchartmode[i].pf && !rgf[i]) {
+      SetChartModeQt(rgchartmode[i].nMode);
       return;
     }
 }
 
 int CChartModeQt()
 {
-  return cchartmodeQt;
+  return cchartmode;
 }
 
 
@@ -2371,7 +2343,7 @@ static void RunMacroQt(int iMacro)
   if (is.rgszMacro != NULL && FSzSet(is.rgszMacro[iMacro])) {
     // Same chart-type handling the Command Line dialog needs; a macro is
     // just a stored command line.
-    QVector<flag> rgfMode(cchartmodeQt);
+    QVector<flag> rgfMode(cchartmode);
     SnapChartModeQt(rgfMode.data());
     FProcessCommandLine(is.rgszMacro[iMacro]);
     SyncChartModeFromFlagsQt(rgfMode.constData());
