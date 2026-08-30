@@ -104,10 +104,10 @@ GI gi = {
 #ifdef QT
   NULL, NULL, NULL, NULL, NULL,
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   0, fFalse, 0, -1, 1,
 #endif
-#ifdef META
+#ifdef METAFILE
   NULL, MAXMETA, NULL, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 #endif
 #ifdef SVG

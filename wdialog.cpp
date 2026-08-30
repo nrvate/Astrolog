@@ -1165,7 +1165,7 @@ LInit:
 
   case WM_COMMAND:
     if (wParam == dbInNow || wParam == dbInSet) {
-#ifdef TIME
+#ifdef TIMEFUNC
       if (wParam == dbInNow) {
         GetTimeNow(&ci.mon, &ci.day, &ci.yea, &ci.tim, ciDefa.dst, ciDefa.zon);
         ci.dst = ciDefa.dst; ci.zon = ciDefa.zon;
@@ -2545,7 +2545,7 @@ flag API DlgTransit(HWND hdlg, uint message, WORD wParam, LONG lParam)
     return fFalse;
 
   case WM_COMMAND:
-#ifdef TIME
+#ifdef TIMEFUNC
     if (wParam == dbTr_tn) {
       GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
       SetEditMDYT(hdlg, dcTrMon, dcTrDay, dcTrYea, dcTrTim,
@@ -2678,7 +2678,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
     return fFalse;
 
   case WM_COMMAND:
-#ifdef TIME
+#ifdef TIMEFUNC
     if (wParam == dbPr_pn) {
       GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon);
       SetEditMDYT(hdlg, dcPrMon, dcPrDay, dcPrYea, dcPrTim,

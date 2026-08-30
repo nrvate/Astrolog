@@ -341,14 +341,14 @@ void DisplaySwitches(void)
   PrintS(" _t[p]d: <month> <day> <year>: Compute transits for a single day.");
   PrintS(" _t[p]y: <year>: Compute transits/progressions for entire year.");
   PrintS(" _t[p]Y: <year> <years>: Compute transits for a number of years.");
-#ifdef TIME
+#ifdef TIMEFUNC
   PrintS(" _t[py]n: Compute transits to natal planets for current time now.");
 #endif
   PrintS(" _T <month> <day> <year>: Display transits ordered by influence.");
   PrintS(" _Tt <month> <day> <year> <time>: Like _T but specify time too.");
   PrintS(
     " _T[t]p <month> <day> <year>: Print progressions instead of transits.");
-#ifdef TIME
+#ifdef TIMEFUNC
   PrintS(" _T[p]n: Display transits ordered by influence for current date.");
 #endif
   PrintS(" _V [..]: Like _t but graph all transits occurring during period.");
@@ -372,7 +372,7 @@ void DisplaySwitches(void)
   PrintS(" _I0: Interpretations show Sabian Symbols instead.");
 #endif
   PrintS("\nSwitches which affect how the chart parameters are obtained:");
-#ifdef TIME
+#ifdef TIMEFUNC
   PrintS(" _n: Compute chart for this exact moment using current time.");
   PrintS(" _n[d,m,y]: Compute chart for start of current day, month, year.");
 #endif
@@ -510,7 +510,7 @@ void DisplaySwitches(void)
   PrintS(" _p0 <month> <day> <year>: Cast solar arc chart for date.");
   PrintS(" _p1 <month> <day> <year>: Like _p but with solar arc cusps only.");
   PrintS(" _p[0]t <month> <day> <year> <time>: Like _p but specify time too.");
-#ifdef TIME
+#ifdef TIMEFUNC
   PrintS(" _p[0]n: Cast progressed chart based on current date now.");
 #endif
   PrintS(
@@ -550,12 +550,12 @@ void DisplaySwitches(void)
   PrintS(" _r[1-6]: Make graphics wheel chart tri-wheel, quad-wheel, etc.");
   PrintS(" _rP [2-6]: Make ring within multi-wheel be progressed.");
 #endif
-#ifdef TIME
+#ifdef TIMEFUNC
   PrintS(" _y <file>: Display current house transits for particular chart.");
 #ifdef BIORHYTHM
   PrintS(" _y[b,d,p,t] <file>: Like _r0 but compare to current time now.");
 #endif
-#endif // TIME
+#endif // TIMEFUNC
   PrintS("\nSwitches to access graphics options:");
   PrintS(" _k: Display text charts using Ansi characters and color.");
   PrintS(" _k0: Like _k but only use special characters, not Ansi color.");
@@ -1732,7 +1732,7 @@ void DisplayKeysX(void)
   PrintS(" Press '{' and '}' to rotate left/right one degree in globe.");
   PrintS(" Press '[' and ']' to decrease/increase tilt in globe display.");
   PrintS(" Press '+' and '-' to add/subtract a day from current chart.");
-#ifdef TIME
+#ifdef TIMEFUNC
   PrintS(" Press 'n' to set chart information to current time now.");
 #endif
   PrintS(" Press 'N' to toggle animation status on or off. Charts will");
@@ -1796,11 +1796,11 @@ void DisplaySwitchesX(void)
     " _Xb[w,b,p,n,c,v,a]: Set bitmap file output format to Windows bitmap");
   PrintS("  (24 bit color), Windows bitmap (16 color palette), PNG, X11");
   PrintS("  normal, X11 compact, X11 very compact, or Ascii (bmtoa).");
-#ifdef PS
+#ifdef PSCRIPT
   PrintS(" _Xp: Create PostScript vector graphic instead of bitmap file.");
   PrintS(" _Xp0: Like _Xp but create complete instead of encapsulated file.");
 #endif
-#ifdef META
+#ifdef METAFILE
   PrintS(" _XM: Create Windows metafile vector graphic instead of bitmap.");
 #endif
 #ifdef SVG

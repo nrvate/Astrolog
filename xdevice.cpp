@@ -1333,7 +1333,7 @@ flag BeginFileX()
     sprintf(sz, "(It is recommended to specify an extension of '.%s'.)\n",
       gs.ft == ftBmp ? (gs.chBmpMode == 'B' ? "bmp" : "png") :
       gs.ft == ftWmf ? "wmf" : (gs.ft == ftSVG ? "svg" : (gs.ft == ftPS ?
-#ifdef PS
+#ifdef PSCRIPT
       (gs.fPSComplete ? "ps" : "eps")
 #else
       "ps"
@@ -1404,11 +1404,11 @@ void EndFileX()
     else
       WriteXBitmap(gi.file, gi.szFileOut, gs.chBmpMode);
   }
-#ifdef PS
+#ifdef PSCRIPT
   else if (gs.ft == ftPS)
     PsEnd();
 #endif
-#ifdef META
+#ifdef METAFILE
   else if (gs.ft == ftWmf) {
     PrintProgress("Writing metafile to file.");
     WriteMeta(gi.file);
@@ -1447,7 +1447,7 @@ void EndFileX()
 }
 
 
-#ifdef PS
+#ifdef PSCRIPT
 /*
 ******************************************************************************
 ** PostScript File Routines.
@@ -1633,10 +1633,10 @@ void PsEnd()
           i != fiCourier ? rgszFontName[i] : "Courier");
   }
 }
-#endif // PS
+#endif // PSCRIPT
 
 
-#ifdef META
+#ifdef METAFILE
 /*
 ******************************************************************************
 ** Metafile Routines.
@@ -1807,7 +1807,7 @@ void WriteMeta(FILE *file)
     PutWord(*w);
   }
 }
-#endif // META
+#endif // METAFILE
 
 
 #ifdef SVG

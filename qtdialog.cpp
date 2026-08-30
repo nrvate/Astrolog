@@ -30,9 +30,9 @@
 ** Last code change made 8/24/2026.
 */
 
-// All Qt headers this file needs must be included before astrolog.h, since
-// astrolog.h defines several single word macros (META, PS, TIME, etc) that
-// collide with identifiers used inside Qt's own headers.
+// The Qt headers this file needs. They may come before or after astrolog.h
+// now that its feature macros are prefixed words (METAFILE, PSCRIPT,
+// TIMEFUNC) that collide with nothing in Qt's own headers.
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGridLayout>
@@ -2027,7 +2027,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   if (ppbNow != NULL)
     QObject::connect(ppbNow, &QPushButton::clicked, &dlg, [&rgbuilt]() {
       CI ciT;
-#ifdef TIME
+#ifdef TIMEFUNC
       GetTimeNow(&ciT.mon, &ciT.day, &ciT.yea, &ciT.tim, ciDefa.dst,
         ciDefa.zon);
       ciT.dst = ciDefa.dst; ciT.zon = ciDefa.zon;
@@ -2993,7 +2993,7 @@ void ShowTransitDialogQt()
   if (ppbNow != NULL)
     QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
       [pcbMon, pcbDay, pcbYea, pcbTim]() {
-#ifdef TIME
+#ifdef TIMEFUNC
         char szN[cchSzMax];
         int monN, dayN, yeaN;
         real timN;
@@ -3172,7 +3172,7 @@ void ShowProgressDialogQt()
   if (ppbNow != NULL)
     QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
       [pcbMon, pcbDay, pcbYea, pcbTim]() {
-#ifdef TIME
+#ifdef TIMEFUNC
         char szN[cchSzMax];
         int monN, dayN, yeaN;
         real timN;

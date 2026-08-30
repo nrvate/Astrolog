@@ -64,10 +64,10 @@
 */
 
 #ifdef QT
-/* Qt's own headers must be included before any of Astrolog's single word */
-/* feature #define's below (e.g. META, PS, TIME) are declared, because   */
-/* Qt uses several of those same bare words as enum members internally,  */
-/* and the preprocessor would otherwise mangle Qt's own header text.     */
+/* Qt's headers are included here so the types below (QImage, QPainter) */
+/* exist. The feature #define's no longer collide with Qt's own words   */
+/* (META, PS, TIME became METAFILE, PSCRIPT, TIMEFUNC), so the include  */
+/* order is a convenience now, not a requirement.                       */
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QWidget>
@@ -101,7 +101,7 @@
 #define JPLWEB /* Comment out this #define if you don't want to compile in */
                /* features to access the JPL Horizons Website online.      */
 
-#define TIME /* Comment out this #define if your compiler can't take the  */
+#define TIMEFUNC /* Comment out this #define if your compiler can't take the  */
              /* calls to the 'time' or 'localtime' functions as in time.h */
 
 #define SWITCHES /* Comment out this #define if your system can not handle */
@@ -143,10 +143,10 @@
                /* much less accurate calculation formulas to be compiled */
                /* into the program (as accessed with -bm).               */
 
-#define PS /* Comment out this #define if you don't want the ability to */
+#define PSCRIPT /* Comment out this #define if you don't want the ability to */
            /* generate charts in the PostScript graphics format.        */
 
-#define META /* Comment out this #define if you don't want the ability to  */
+#define METAFILE /* Comment out this #define if you don't want the ability to  */
              /* generate charts in the MS Windows metafile picture format. */
 
 #define SVG /* Comment out this #define if you don't want the ability to */
@@ -344,7 +344,7 @@
 #include <malloc.h>
 #include <windows.h>
 #endif
-#ifdef TIME
+#ifdef TIMEFUNC
 #include <time.h>
 #endif
 
@@ -387,10 +387,10 @@
 #define INLINE inline
 #endif // PC
 
-#ifdef PS
+#ifdef PSCRIPT
 #define VECTOR
 #endif
-#ifdef META
+#ifdef METAFILE
 #define VECTOR
 #endif
 #ifdef SVG
@@ -492,17 +492,17 @@
 #endif
 #endif // QT
 
-#ifdef PS
+#ifdef PSCRIPT
 #ifndef GRAPH
-#error "If 'PS' is defined 'GRAPH' must be too"
+#error "If 'PSCRIPT' is defined 'GRAPH' must be too"
 #endif
-#endif // PS
+#endif // PSCRIPT
 
-#ifdef META
+#ifdef METAFILE
 #ifndef GRAPH
-#error "If 'META' is defined 'GRAPH' must be too"
+#error "If 'METAFILE' is defined 'GRAPH' must be too"
 #endif
-#endif // META
+#endif // METAFILE
 
 #ifdef SVG
 #ifndef GRAPH
@@ -2308,14 +2308,14 @@ typedef struct _GraphicsInternal {
   QImage *qim;        // Off screen chart buffer (like X11's Pixmap).
   QPainter *qpaint;   // Painter open on qim while a chart is being drawn.
 #endif
-#ifdef PS             // Variables used by the PostScript generator.
+#ifdef PSCRIPT             // Variables used by the PostScript generator.
   int cStroke;        // Number of items drawn without flushing.
   flag fLineCap;      // Are line ends rounded instead of square.
   int nDash;          // How much long are dashes in lines drawn.
   int nFontPS;        // What system font are we drawing text in.
   int nLineWid;       // How wide are lines, et al, drawn with.
 #endif
-#ifdef META           // Variables used by the metafile generator.
+#ifdef METAFILE           // Variables used by the metafile generator.
   word *pwMetaCur;    // Current mem position when making metafile.
   long cbMeta;        // Maximum size allowed for metafile.
   word *pwPoly;       // Position for start of current polyline.

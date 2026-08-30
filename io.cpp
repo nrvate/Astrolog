@@ -2030,7 +2030,7 @@ flag FOutputSettings()
   PrintF("; Wheel corner decoration [type, size %, line count]\n");
   sprintf(sz, ":YXa %d          ", gs.nDashMax); PrintFSz();
   PrintF("; Dashedness limit in aspect lines drawn\n");
-#ifdef PS
+#ifdef PSCRIPT
   sprintf(sz, ":YXp %d           ", gs.nOrient); PrintFSz();
   PrintF(
     "; PostScript paper orientation [\"-1\" portrait, \"1\" landscape]\n");
@@ -2712,7 +2712,7 @@ flag FInputData(CONST char *szFile)
     }
   }
 
-#ifdef TIME
+#ifdef TIMEFUNC
   // If we are to read from the file "now" then that means use the time
   // functions to calculate the present date and time.
 

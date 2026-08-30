@@ -1429,7 +1429,7 @@ static int NSwYXf(CONST char *szSwitch, PARSEIN *pin)
   return 1;
 }
 
-#ifdef PS
+#ifdef PSCRIPT
 static int NSwYXp(CONST char *szSwitch, PARSEIN *pin)
 {
   gs.nOrient = NFromSz(pin->argv[1]);
@@ -1445,7 +1445,7 @@ static int NSwYXp0(CONST char *szSwitch, PARSEIN *pin)
   gs.yInch = RParseSz(pin->argv[2], pmLength);
   return 2;
 }
-#endif // PS
+#endif // PSCRIPT
 #endif // GRAPH
 
 #ifdef GRAPH
@@ -1481,7 +1481,7 @@ static int NSwXb(CONST char *szSwitch, PARSEIN *pin)
   return 0;
 }
 
-#ifdef PS
+#ifdef PSCRIPT
 static int NSwXp(CONST char *szSwitch, PARSEIN *pin)
 {
   if (us.fNoWrite || is.fSzInteract) {
@@ -1507,7 +1507,7 @@ static int NSwXM(CONST char *szSwitch, PARSEIN *pin)
       FCloneSz(pin->argv[j], &szWheelX[(ch2 == '0' && j >= i) ? 0 : j]);
     return i;
   }
-#ifdef META
+#ifdef METAFILE
   if (us.fNoWrite || is.fSzInteract) {
     ErrorArgv("XM");
     return tcError;
@@ -2298,7 +2298,7 @@ static int NSwp(CONST char *szSwitch, PARSEIN *pin)
     return 0;
   }
   SwitchF(us.fProgress);
-#ifdef TIME
+#ifdef TIMEFUNC
   if (ch1 == 'n') {
     GetTimeNow(&MonT, &DayT, &YeaT, &TimT, ciDefa.dst, ciDefa.zon);
     is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT,
@@ -2630,7 +2630,7 @@ static int NSwd(CONST char *szSwitch, PARSEIN *pin)
     if (us.nProgress)
       ch2 = szSwitch[++l + 1];
     i = (ch2 == 'y') + 2*(ch2 == 'Y');
-#ifdef TIME
+#ifdef TIMEFUNC
     j = i < 2 && (szSwitch[l+i+1] == 'n');
 #else
     j = fFalse;
@@ -2640,7 +2640,7 @@ static int NSwd(CONST char *szSwitch, PARSEIN *pin)
     is.fProgress = us.fInDayMonth = fTrue;
     DstT = ciDefa.dst; ZonT = ciDefa.zon;
     LonT = ciDefa.lon; LatT = ciDefa.lat;
-#ifdef TIME
+#ifdef TIMEFUNC
     if (j)
       GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
 #endif
@@ -2766,7 +2766,7 @@ static int NSwt(CONST char *szSwitch, PARSEIN *pin)
     ch1 = szSwitch[++l];
   us.fInDayMonth = (i >= 0);
   us.fInDayYear = (i >= 1);
-#ifdef TIME
+#ifdef TIMEFUNC
   if (ch1 == 'n') {
     GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
     if (i >= 2) {
@@ -2818,7 +2818,7 @@ static int NSwT(CONST char *szSwitch, PARSEIN *pin)
     SwitchF(is.fReturn);
     ch1 = szSwitch[++l];
   }
-#ifdef TIME
+#ifdef TIMEFUNC
   if (ch1 == 'n') {
     GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
     return 0;
@@ -2899,7 +2899,7 @@ static int NSwV(CONST char *szSwitch, PARSEIN *pin)
     if (i >= 3)
       us.fInDayYear = us.fInDayMonth;
   }
-#ifdef TIME
+#ifdef TIMEFUNC
   if (ch1 == 'n') {
     GetTimeNow(&MonT, &DayT, &YeaT, &TimT, DstT, ZonT);
     if (i >= 3)
@@ -3080,7 +3080,7 @@ static void SwSlotStore(char ch, CI *pci)
     FAppendCIList(&ciCore);
 }
 
-#ifdef TIME
+#ifdef TIMEFUNC
 static int NSwn(CONST char *szSwitch, PARSEIN *pin)
 {
   char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
@@ -3496,7 +3496,7 @@ static int NSwr(CONST char *szSwitch, PARSEIN *pin)
   return i;
 }
 
-#ifdef TIME
+#ifdef TIMEFUNC
 static int NSwy(CONST char *szSwitch, PARSEIN *pin)
 {
   char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
@@ -3820,7 +3820,7 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"YXU",  0,      NSwYXU, 2},   {"YXU0", 0, NSwYXU0},
   {"YXU1", 0, NSwYXU1},
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   {"YXp",  0,      NSwYXp, 1},   {"YXp0", 0, NSwYXp0, 2},
 #endif
   {"YXG",  grfSwPrefix, NSwYXG},   {"YXf",  grfSwPrefix, NSwYXf},
@@ -3848,7 +3848,7 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"XZ",   grfSwGraphics, NSwXZ},
   {"Xk",   grfSwGraphics, NSwXk},
   {"Xkv",  grfSwGraphics, NSwXk},
-#ifdef PS
+#ifdef PSCRIPT
   {"Xp",   grfSwGraphics, NSwXp},
   {"Xp0",  grfSwGraphics, NSwXp},
 #endif
@@ -3909,7 +3909,7 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"N",    grfSwPrefix, NSwN},  {"I",    grfSwPrefix, NSwI},
   {"H",    grfSwPrefix, NSwH},  
   {"M",    grfSwPrefix, NSwM},
-#ifdef TIME
+#ifdef TIMEFUNC
   {"n",    grfSwPrefix, NSwn},  {"y",    grfSwPrefix, NSwy},
 #endif
   {"z",    grfSwPrefix, NSwz},  {"q",    grfSwPrefix, NSwq},

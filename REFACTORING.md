@@ -1210,11 +1210,11 @@ on.** `TIME`, `PS`, `META`, `SWISS`, `GRAPH`... (astrolog.h:82-173)
 are effectively permanent (gotcha 8) yet force include-order
 contortions (Qt headers must precede astrolog.h because its bare words
 collide with Qt internals) and keep dead `#ifdef`-else paths alive
-(`MdyToJulian`'s unreachable `return 0`). *Direction:* minimum is the
-T8 rule ("new macros take a prefix; these three collide"); the fuller
-move — prefixing `META`/`PS`/`TIME` — is one mechanical sweep each,
-high upstream-divergence, worth it only for the three that collide.
-*Cost:* low each; decide per macro.
+(`MdyToJulian`'s unreachable `return 0`). **The colliding three were
+renamed 2026-08-30** (P7's done-note in the phase-2 plan below;
+work log item 105): `PSCRIPT`/`METAFILE`/`TIMEFUNC`, object code
+proven unchanged, the include-order rule deleted from CONVENTIONS.md.
+The non-colliding bare words stay as upstream wrote them.
 
 **H3 — One header pair is the whole module system.** Every compilation
 unit includes astrolog.h + extern.h; the "From x.cpp" comment sections
@@ -1350,12 +1350,16 @@ own concessions, in dependency order):
   one observed upstream leak (XChartMoons' early return skips its
   whole cleanup block) left for a deliberate fix. Other files keep
   the opportunistic rule.
-- **P7. Prefix the three colliding feature macros.** H2's fuller
-  move: `PS`, `META`, `TIME` are why Qt headers must precede
-  astrolog.h. One mechanical sweep per macro (build-breaks-find-all),
-  then delete the include-order rule from CONVENTIONS.md rather than
-  documenting around it. Net: all four builds + suite; no output can
-  change. *Cost: low each, high churn-width; do one and reassess.*
+- **P7 — done 2026-08-30** (work log item 105): `PS` is `PSCRIPT`,
+  `META` is `METAFILE`, `TIME` is `TIMEFUNC` — 104 preprocessor-line
+  renames across 13 files, swept by script with residue grep. The
+  net was stronger than planned: a pure rename must change no object
+  code, and it didn't — all three Linux binaries and all 33 Windows
+  objects byte-identical pre/post (the .exe itself embeds link
+  timestamps; objects are the comparable artifact). The include-order
+  rule is deleted from CONVENTIONS.md, proven dead both ways: a
+  scratch TU with astrolog.h *before* Qt headers compiles now and
+  breaks on Qt::META against the pre-sweep header.
 
 **Tranche 3 — survey first, then decide** (open findings that need
 reading before they deserve increments; each gets a measured verdict

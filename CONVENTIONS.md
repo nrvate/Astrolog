@@ -67,11 +67,12 @@ explicitly** rather than extending the alias set.
 
 ## Feature macros
 
-`TIME`, `PS`, `META`, `SWISS`, `GRAPH`, ... (astrolog.h:82-173) are
-bare always-on words. `TIME`/`PS`/`META` collide with Qt internals,
-which is why **Qt headers must be included before astrolog.h** in every
-Qt translation unit. Rule: any new feature macro takes a prefix; never
-add another bare word.
+`SWISS`, `GRAPH`, `ATLAS`, ... (astrolog.h:82-173) are bare always-on
+words. The three that collided with Qt internals were renamed 2026-08-30
+(work log item 105): `TIME` is `TIMEFUNC`, `PS` is `PSCRIPT`, `META` is
+`METAFILE`, and include order between Qt headers and astrolog.h no
+longer matters. Rule: any new feature macro takes a distinctive
+compound word like those; never add another bare word.
 
 ## Buffers and formatting
 

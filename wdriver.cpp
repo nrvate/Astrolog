@@ -583,11 +583,11 @@ int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   // Create the actual window to be used and drawn on by this instance.
 
   wi.hmenu = LoadMenu(wi.hinst, MAKEINTRESOURCE(menu));
-#ifndef PS
+#ifndef PSCRIPT
   DeleteMenu(wi.hmenu, cmdSavePS, MF_BYCOMMAND);
   DeleteMenu(wi.hmenu, cmdCopyPS, MF_BYCOMMAND);
 #endif
-#ifndef META
+#ifndef METAFILE
   DeleteMenu(wi.hmenu, cmdSavePicture, MF_BYCOMMAND);
   DeleteMenu(wi.hmenu, cmdCopyPicture, MF_BYCOMMAND);
 #endif
@@ -1268,10 +1268,10 @@ int NWmCommand(WORD wCmd)
   case cmdSaveCalendar:
   case cmdSaveText:
   case cmdSaveBitmap:
-#ifdef META
+#ifdef METAFILE
   case cmdSavePicture:
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   case cmdSavePS:
 #endif
 #ifdef SVG
@@ -1341,10 +1341,10 @@ int NWmCommand(WORD wCmd)
     break;
 
   case cmdCopyBitmap:
-#ifdef META
+#ifdef METAFILE
   case cmdCopyPicture:
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   case cmdCopyPS:
 #endif
 #ifdef SVG
@@ -1517,7 +1517,7 @@ int NWmCommand(WORD wCmd)
     WiDoDialog(DlgInfo, dlgInfo);
     break;
 
-#ifdef TIME
+#ifdef TIMEFUNC
   case cmdNow:
     Animate(10, 0);
     wi.fRedraw = fTrue;

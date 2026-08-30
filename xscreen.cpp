@@ -483,7 +483,7 @@ void Animate(int mode, int toadd)
 
   mode = NAbs(mode);
   if (mode == iAnimNow) {
-#ifdef TIME
+#ifdef TIMEFUNC
     // For the continuous chart update to present moment animation mode, go
     // get whatever time it is now.
     FInputData(szNowCore);
@@ -492,7 +492,7 @@ void Animate(int mode, int toadd)
     goto LNotNow;
 #endif
   } else {    // Otherwise add on appropriate time vector to chart info.
-#ifndef TIME
+#ifndef TIMEFUNC
 LNotNow:
 #endif
     if (us.nRel == rcDual || us.nRel <= rcTransit)
@@ -1122,7 +1122,7 @@ void InteractX()
             ciMain = ciSave;
             fCast = fTrue;
             break;
-#ifdef TIME
+#ifdef TIMEFUNC
           case 'n':
             Animate(10, 0);
             ciMain = ciCore;
@@ -1536,7 +1536,7 @@ flag FActionX()
           return fFalse;
       }
     }
-#ifdef PS
+#ifdef PSCRIPT
     else if (gs.ft == ftPS) {
       PsBegin();
       gs.nScale *= PSMUL;  // Increase chart sizes and scales behind the
@@ -1544,7 +1544,7 @@ flag FActionX()
       gs.yWin   *= PSMUL;
     }
 #endif
-#ifdef META
+#ifdef METAFILE
     else if (gs.ft == ftWmf) {
       for (gi.cbMeta = MAXMETA; gi.cbMeta > 0 &&
         (gi.bm = PAllocate(gi.cbMeta, "metafile")) == NULL;

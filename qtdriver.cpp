@@ -30,9 +30,9 @@
 ** Last code change made 8/24/2026.
 */
 
-// All Qt headers this file needs must be included before astrolog.h, since
-// astrolog.h defines several single word macros (META, PS, TIME, etc) that
-// collide with identifiers used inside Qt's own headers.
+// The Qt headers this file needs. They may come before or after astrolog.h
+// now that its feature macros are prefixed words (METAFILE, PSCRIPT,
+// TIMEFUNC) that collide with nothing in Qt's own headers.
 #include <QtWidgets/QMenuBar>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QColorDialog>

@@ -3330,6 +3330,26 @@ are the more useful half to read before starting something new.
     fix, not a conversion. 16-case -Xb battery, pairwise distinct,
     byte-identical throughout. Suite 3039/0, audits clean.
 
+105. **P7: the colliding feature macros carry real names.** `PS` is
+    `PSCRIPT`, `META` is `METAFILE`, `TIME` is `TIMEFUNC` -- 104
+    preprocessor-line renames across 13 files, swept by a script that
+    touched only lines starting with `#`, leaving the string "PS" in
+    the atlas country table and every prose comment alone (a residue
+    grep proves it). The proof a rename like this deserves: object
+    code cannot change, and it didn't -- console, Qt, and test
+    binaries byte-identical, and all 33 Windows objects too (the
+    .exe embeds link timestamps, so objects are the comparable
+    artifact; also learned: `make -f Makefile.win` objects are
+    deterministic, the exe never is). The include-order rule -- Qt
+    headers before astrolog.h, gotcha of this port since day one --
+    is deleted from CONVENTIONS.md, and the deletion is proven both
+    ways: a scratch TU including astrolog.h first compiles against
+    the new header and dies on Qt::META against the old one. The
+    three include-site comments (astrolog.h's Qt block, qtdriver,
+    qtdialog) now say the order is a convenience, not a requirement.
+    Suite 3039/0, audits clean. Names checked against mingw and Qt5
+    headers for collisions before choosing.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

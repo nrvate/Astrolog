@@ -82,7 +82,7 @@ void DrawColor(KI ki)
 
   kv = KvFromKi(ki);
   if (gi.fFile) {
-#ifdef PS
+#ifdef PSCRIPT
     if (gs.ft == ftPS) {
       if (gi.kvCur != kv) {
         PsStrokeForce();      // Render existing path with current color
@@ -91,7 +91,7 @@ void DrawColor(KI ki)
       }
     }
 #endif
-#ifdef META
+#ifdef METAFILE
     if (gs.ft == ftWmf) {
       if (!FBetween(ki, 0, cColor-1))
         ki = KiFromKv(KvFromKi(ki), fFalse);
@@ -183,7 +183,7 @@ void AdjustCoordinates(int *px, int *py)
 
 void DrawPoint(int x, int y)
 {
-#ifdef META
+#ifdef METAFILE
   int n;
 #endif
 #ifdef WINANY
@@ -219,7 +219,7 @@ void DrawPoint(int x, int y)
         }
       }
     }
-#ifdef PS
+#ifdef PSCRIPT
     else if (gs.ft == ftPS) {
       DrawColor(-(int)gi.kvCur);
       PsLineCap(fTrue);
@@ -227,7 +227,7 @@ void DrawPoint(int x, int y)
       PsStroke(2);
     }
 #endif
-#ifdef META
+#ifdef METAFILE
     else if (gs.ft == ftWmf) {
       gi.kiLineDes = gi.kiFillDes = gi.kiCur;
       MetaSelect();
@@ -298,7 +298,7 @@ void DrawSpot(int x, int y)
   int n;
 
   if (gi.fFile) {
-#ifdef PS
+#ifdef PSCRIPT
     if (gs.ft == ftPS) {
       PsLineWidth(gi.nLineWid*3);
       DrawPoint(x, y);
@@ -306,7 +306,7 @@ void DrawSpot(int x, int y)
       return;
     }
 #endif
-#ifdef META
+#ifdef METAFILE
     if (gs.ft == ftWmf) {
       gi.kiLineDes = gi.kiFillDes = gi.kiCur;
       MetaSelect();
@@ -378,7 +378,7 @@ void DrawBlock(int x1, int y1, int x2, int y2)
             BmpSetXY(&gi.bmp, x, y, gi.kvCur);
       }
     }
-#ifdef PS
+#ifdef PSCRIPT
     else if (gs.ft == ftPS) {
       DrawColor(gi.kiCur);
       fprintf(gi.file, "%d %d %d %d rf\n",
@@ -386,7 +386,7 @@ void DrawBlock(int x1, int y1, int x2, int y2)
         x2-x1+gi.nPenWid/4, y2-y1+gi.nPenWid/4);
     }
 #endif
-#ifdef META
+#ifdef METAFILE
     else if (gs.ft == ftWmf) {
       gi.kiFillDes = gi.kiCur;
       MetaSelect();
@@ -442,7 +442,7 @@ void DrawBlock(int x1, int y1, int x2, int y2)
 
 void DrawBox(int x1, int y1, int x2, int y2, int xsiz, int ysiz)
 {
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf)
     // For thin boxes in metafiles, can just output one rectangle record
     // instead of drawing each side separately as have to do otherwise.
@@ -599,7 +599,7 @@ void WinClearScreen(KI ki)
 
 void DrawClearScreen()
 {
-#ifdef PS
+#ifdef PSCRIPT
   real rT;
 
   if (gs.ft == ftPS) {
@@ -631,7 +631,7 @@ void DrawClearScreen()
     fprintf(gi.file, "%f dup scale\n", rT);
   }
 #endif
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf)
     MetaInit();        // For metafiles first go write header information.
 #endif
@@ -728,7 +728,7 @@ void DrawDash(int x1, int y1, int x2, int y2, int skip)
   }
 #endif // ISG
 
-#ifdef PS
+#ifdef PSCRIPT
   if (gs.ft == ftPS) {
 
     // For PostScript charts can save file size if we output a LineTo command
@@ -747,7 +747,7 @@ void DrawDash(int x1, int y1, int x2, int y2, int skip)
   }
 #endif
 
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf) {
 
     // For metafile charts can save file size for consecutive lines sharing
@@ -1001,7 +1001,7 @@ void DrawArc(int x1, int y1, int x2, int y2, real rRotate, real t1, real t2)
         m = u; n = v;
       }
     }
-#ifdef PS
+#ifdef PSCRIPT
     else if (gs.ft == ftPS) {
       PsLineCap(fFalse);
       PsStrokeForce();
@@ -1009,7 +1009,7 @@ void DrawArc(int x1, int y1, int x2, int y2, real rRotate, real t1, real t2)
       fprintf(gi.file, "%d %d %d %d el\n", rx, ry, x, y);
     }
 #endif
-#ifdef META
+#ifdef METAFILE
     else if (gs.ft == ftWmf) {
       gi.kiFillDes = cColor;      // Specify a hollow fill brush.
       MetaSelect();
@@ -1091,7 +1091,7 @@ void DrawEllipse2(int x1, int y1, int x2, int y2)
         qLo += 2;
       }
     }
-#ifdef PS
+#ifdef PSCRIPT
     else if (gs.ft == ftPS) {
       PsLineCap(fFalse);
       PsStrokeForce();
@@ -1099,7 +1099,7 @@ void DrawEllipse2(int x1, int y1, int x2, int y2)
       fprintf(gi.file, "%d %d %d %d ef\n", rx, ry, x, y);
     }
 #endif
-#ifdef META
+#ifdef METAFILE
     else {
       gi.kiFillDes = gi.kiCur;    // Specify a solid fill brush.
       MetaSelect();
@@ -1264,7 +1264,7 @@ void DrawFill(int x, int y, KV kv)
           iCur = 0;
       }
     }
-#ifdef META
+#ifdef METAFILE
     else if (gs.ft == ftWmf) {
       // Doesn't seem to work for background colors other than black.
       gi.kiFillDes = kvF;
@@ -1328,7 +1328,7 @@ void DrawSz(CONST char *sz, int x, int y, int dt)
   flag fBig = fFalse, fBigger = fFalse, fThin;
   wchar wch;
   char ch;
-#ifdef PS
+#ifdef PSCRIPT
   char sz2[cchSzMax];
   CONST char *pch;
 #endif
@@ -1382,7 +1382,7 @@ void DrawSz(CONST char *sz, int x, int y, int dt)
     DrawBlock(x, y, x+xFont*nScale2*cch/2-1, y+(yFont-2)*nScale2/2);
     DrawColor(kiSav);
   }
-#ifdef PS
+#ifdef PSCRIPT
   if (gs.ft == ftPS && nFont > 0) {
     PsFont(nFont);
     pch = ConvertSzToLatin(sz, sz2, cchSzMax);
@@ -1466,7 +1466,7 @@ void DrawSz(CONST char *sz, int x, int y, int dt)
         TextOutA(wi.hdc, x-nScale2/2, y-nScale2*3/2, (LPCSTR)&ch, 1);
     } else
 #endif
-#ifdef META
+#ifdef METAFILE
     if (gs.ft == ftWmf && nFont > 0) {
       gi.nFontDes = nFont;
       gi.kiTextDes = gi.kiCur;
@@ -1559,14 +1559,14 @@ void DrawSign(int i, int x, int y)
       return;
   }
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   if (gs.ft == ftPS && nFont > 0 && ch > 0) {
     PsFont(nFont);
     fprintf(gi.file, "%d %d(%s%c)center\n", x, y, PsEscape(ch), ch);
     return;
   }
 #endif
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf && nFont > 0 && ch > 0) {
     gi.nFontDes = nFont;
     gi.kiTextDes = gi.kiCur;
@@ -1638,7 +1638,7 @@ void DrawHouse(int i, int x, int y)
       return;
   }
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   if (gs.ft == ftPS && nFont > 0 && ch != -1) {
     PsFont(nFont);
     if (nFont < fiArial)
@@ -1648,7 +1648,7 @@ void DrawHouse(int i, int x, int y)
     return;
   }
 #endif
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf && nFont > 0 && ch != -1) {
     gi.nFontDes = nFont;
     gi.kiTextDes = gi.kiCur;
@@ -1846,14 +1846,14 @@ void DrawObject(int obj, int x, int y)
       return;
   }
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   if (gs.ft == ftPS && nFont > 0 && ch > 0) {
     PsFont(nFont);
     fprintf(gi.file, "%d %d(%s%c)center\n", x, y, PsEscape(ch), ch);
     return;
   }
 #endif
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf && nFont > 0 && ch > 0) {
     gi.nFontDes = nFont;
     gi.kiTextDes = gi.kiCur;
@@ -2051,14 +2051,14 @@ void DrawAspect(int asp, int x, int y)
       return;
   }
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   if (gs.ft == ftPS && nFont > 0 && ch > 0) {
     PsFont(nFont);
     fprintf(gi.file, "%d %d(%s%c)center\n", x, y, PsEscape(ch), ch);
     return;
   }
 #endif
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf && nFont > 0 && ch > 0) {
     gi.nFontDes = nFont;
     gi.kiTextDes = gi.kiCur;
@@ -2119,7 +2119,7 @@ void DrawNakshatra(int i, int x, int y)
       return;
   }
 #endif
-#ifdef PS
+#ifdef PSCRIPT
   if (gs.ft == ftPS && nFont > 0 && ch != -1) {
     PsFont(nFont);
     if (nFont < fiArial)
@@ -2129,7 +2129,7 @@ void DrawNakshatra(int i, int x, int y)
     return;
   }
 #endif
-#ifdef META
+#ifdef METAFILE
   if (gs.ft == ftWmf && nFont > 0 && ch != -1) {
     gi.nFontDes = nFont;
     gi.kiTextDes = gi.kiCur;

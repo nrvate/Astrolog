@@ -2313,7 +2313,7 @@ CONST char *SzColorHTML(KI ki)
 }
 
 
-#ifdef TIME
+#ifdef TIMEFUNC
 // Compute the date and time it is right now as the program is running using
 // the computer's internal clock. Do this by getting the number of seconds
 // which have passed since January 1, 1970 and going from there. The time
@@ -2393,7 +2393,7 @@ void GetTimeNow(int *mon, int *day, int *yea, real *tim, real dst, real zon)
   is.fDst = (dst > 0.0);
 #endif // PC
 }
-#endif // TIME
+#endif // TIMEFUNC
 
 
 // Given a string representing the complete pathname to a file, strip off all

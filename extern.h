@@ -898,10 +898,10 @@ extern KI KiCity P((int));
 #define skipword() skipbyte(); skipbyte()
 #define skiplong() skipword(); skipword()
 
-#ifdef PS
+#ifdef PSCRIPT
 #define PsEscape(ch) ((ch) == '(' || (ch) == ')' || (ch) == '\\' ? "\\" : "")
 #endif
-#ifdef META
+#ifdef METAFILE
 // Macros to output the various metafile commands used.
 #define MetaRecord(S, R) MetaLong((long)(S)); MetaWord(R)
 #define MetaSelectObject(O) MetaRecord(4, 0x12d); MetaWord(O)
@@ -934,7 +934,7 @@ extern KI KiCity P((int));
   MetaWord(1 /* FLOODFILLSURFACE */); MetaLong(C); MetaWord(Y); MetaWord(X);
 #define MetaEscape(S) MetaRecord(S, 0x626); \
   MetaWord(15 /* MFCOMMENT */); MetaWord(((S)-5)*2 /* Bytes in comment */);
-#endif // META
+#endif // METAFILE
 
 #define AdjustTextScale() gi.nScaleText = gs.nScaleText/50; \
   gi.nScaleTextT2 = gi.nScaleText * gi.nScaleT; \
