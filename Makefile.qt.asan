@@ -17,7 +17,7 @@
 #
 NAME = astrolog-qt-asan
 OBJDIR = obj-qt-asan
-OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
+OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/switch.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
  $(OBJDIR)/charts0.o $(OBJDIR)/charts1.o $(OBJDIR)/charts2.o \
  $(OBJDIR)/charts3.o $(OBJDIR)/data.o $(OBJDIR)/express.o \
  $(OBJDIR)/general.o $(OBJDIR)/intrpret.o $(OBJDIR)/io.o \

@@ -24,7 +24,7 @@ LIBS   = -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lole32 -luuid -lwinspool \
          -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32 -lurlmon
 LDFLAGS = -mwindows -static -static-libgcc -static-libstdc++
 
-SRC = astrolog.cpp atlas.cpp calc.cpp charts0.cpp charts1.cpp charts2.cpp \
+SRC = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp charts1.cpp charts2.cpp \
       charts3.cpp data.cpp express.cpp general.cpp intrpret.cpp io.cpp \
       matrix.cpp placalc.cpp placalc2.cpp swecl.cpp swedate.cpp \
       swehouse.cpp swejpl.cpp swemmoon.cpp swemplan.cpp sweph.cpp \

@@ -34,7 +34,9 @@ Work happens on branch **`qt`**.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the
-Windows-only `wdriver.cpp`/`wdialog.cpp`.
+Windows-only `wdriver.cpp`/`wdialog.cpp`. The whole command-line switch
+surface lives in `switch.cpp` (see REFACTORING.md, "The registry as
+built").
 
 Two different kinds of change reach the shared core, and the difference
 matters when merging a new upstream release:

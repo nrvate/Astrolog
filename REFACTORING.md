@@ -491,7 +491,8 @@ verdicts.
 *(Written 2026-08-29 at the end of the migration day, for the next
 session's fresh context. Everything here is verified fact, not plan.)*
 
-**Where everything lives.** All in astrolog.cpp: `rgswflag[]` (flag
+**Where everything lives.** All in switch.cpp (extracted from
+astrolog.cpp by P1, 2026-08-29): `rgswflag[]` (flag
 rows: name + `flag *`, prefix semantics applied by the dispatch),
 `rgswranged[]` (ranged setters: index domain/bounds, value kind
 `vtReal/vtBool/vtRay/vtColor` with per-kind validation and error
@@ -1240,14 +1241,14 @@ done anyway.
 **Tranche 1 — finish what the registry started** (the retrospective's
 own concessions, in dependency order):
 
-- **P1. Give the command surface its own file.** astrolog.cpp is
-  5,294 lines because the registry, ~99 handlers, and the dispatch
-  all live in it. Move them to a new `switch.cpp` (tables, handlers,
-  driver, `FProcessSwitches`, `FSwitchRegistryRow`), leaving
-  astrolog.cpp the program shell (main, InitProgram, Action). Pure
-  relocation, no edits in flight with it. Net: switch-matrix
-  byte-diff + suite + all four builds (three makefiles + win gain
-  one object). *Cost: low.*
+- **P1 — done 2026-08-29** (work log item 96): `switch.cpp` (4,453
+  lines, LF per fork convention) holds the registry, handlers,
+  dispatch, and `FProcessSwitches`; astrolog.cpp is the 896-line
+  program shell again. One extern surfaced (`AdjustRulership`, used
+  by handlers, never declared); five makefiles gained the object.
+  Matrix byte-identical over 14,378 lines — after a first run
+  tripped the harness's own short-path rule (deep-path baseline
+  emits the Swiss truncation warning; the header says so).
 - **P2. One argument pack for handlers.** The uniform 7-parameter
   handler signature threads fOr/fAnd/fNot/argc/argv/pctx into ~99
   functions that mostly ignore them. Pack them into one PARSEIN

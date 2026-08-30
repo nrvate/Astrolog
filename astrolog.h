@@ -1869,7 +1869,7 @@ typedef struct _UserSettings {
   // Corners like fPlacalcPla with nSwissEph == 3 are representable but
   // inert: fPlacalcPla wins and nSwissEph is ignored. Trap: every backend
   // suffix of -b (-bp -bm -bs -bj -bJ -ba -bU) falls through to also
-  // TOGGLE fEphemFiles (NSwb, astrolog.cpp), so a plain "-bp" with files
+  // TOGGLE fEphemFiles (NSwb, switch.cpp), so a plain "-bp" with files
   // already on turns files off. The settings writer emits forced =/_
   // prefixes and the dialogs assign the fields directly, so only a
   // hand-typed plain -b* hits that fall-through.

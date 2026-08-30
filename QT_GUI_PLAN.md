@@ -3158,6 +3158,19 @@ are the more useful half to read before starting something new.
     survey-gated (P8-P10). Same rules as phase 1: nets on every
     increment, measured closes allowed, docs in the same commit.
 
+96. **P1: the command surface has its own file.** switch.cpp (4,453
+    lines) now holds the registry tables, ~99 handlers, the dispatch,
+    and FProcessSwitches(); astrolog.cpp is back to being the 896-line
+    program shell. The cut was verified clean beforehand (no static
+    references cross the boundary in either direction) and surfaced
+    exactly one hidden dependency: AdjustRulership() was non-static
+    but never declared in extern.h. All five makefiles gained the
+    object. The switch-matrix gate came back byte-identical over
+    14,378 lines -- after the first run violated the harness's own
+    documented rule (both binaries at equally short paths; the deep
+    scratchpad baseline emitted the Swiss path-truncation warning on
+    every invocation, exactly as the header warns).
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

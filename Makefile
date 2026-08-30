@@ -17,7 +17,7 @@
 # library, and if applicable, the main X library.
 #
 NAME = astrolog
-OBJS = astrolog.o atlas.o calc.o charts0.o charts1.o charts2.o charts3.o\
+OBJS = astrolog.o switch.o atlas.o calc.o charts0.o charts1.o charts2.o charts3.o\
  data.o express.o general.o intrpret.o io.o matrix.o placalc.o placalc2.o\
  xdata.o xgeneral.o xdevice.o xcharts0.o xcharts1.o xcharts2.o xscreen.o\
  swecl.o swedate.o swehouse.o swejpl.o swemmoon.o swemplan.o sweph.o\
