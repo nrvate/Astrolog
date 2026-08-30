@@ -409,6 +409,13 @@ Two things that cost time here:
   which reads exactly like broken layout code. No audit here can see it.
 - **Regenerate `qtrcdlg.h` after any `.rc` change** and rebuild.
 - **Grep build output for `: error`**, not a narrower pattern.
+- **The console build's objects live in the repo root** (plain
+  `Makefile`), separate from `obj-qt*/`. Rebuilding the Qt binaries does
+  not touch them, so after editing shared core, `./astrolog` is stale
+  until its own `make` runs — a stale console binary once "reproduced" a
+  crash the fix had already cured (work log item 115). `make` also
+  links with `-s`: for a symbolized backtrace, rebuild with
+  `LIBS="-lm -lX11 -ldl" CPPFLAGS="-O -g ..."`.
 - **Never edit a CRLF file with a range-based regex.** One in this project
   spliced two functions together by matching across the block between
   them. Exact-string replacement only, then check
