@@ -3625,6 +3625,98 @@ static void TestChartModeTableQt()
 }
 
 
+// C2's net (REFACTORING.md): CastChart() cooks the typed chart info in
+// place inside ciCore -- an LMT or LAT zone resolved from the longitude,
+// auto-DST resolved from is.fDst, the zone folded into the time, the
+// latitude clamped off the exact poles -- and restores the typed values
+// from a stack copy 350 lines later (calc.cpp:1260 -> 1616). Two
+// contracts, pinned here before any restructure touches that window:
+// each cooked form casts the same chart as its explicitly-typed
+// equivalent, and after the cast ciCore reads exactly as typed.
+static void TestCastCookingQt()
+{
+  CI ciCoreSav = ciCore, ciMainSav = ciMain, ciT;
+  flag fDstSav = is.fDst, fPopupSav = FNoPopupQt();
+  real rSun1, rCusp1, rSun2, rCusp2, zonEquiv;
+
+  Group("Cast input cooking");
+  // A cast at the pole can warn depending on the house system, and a
+  // warning here is a modal box nothing will ever click (the
+  // TestBadInputQt() hazard).
+  SetNoPopupQt(fTrue);
+
+  // The typed chart everything below varies from: fixed date and place,
+  // so the suite's own clock never enters (work log items 109/111).
+  ciT = ciMain;
+  ciT.mon = 3; ciT.day = 15; ciT.yea = 2020;
+  ciT.tim = 10.5; ciT.dst = 0.0; ciT.zon = 6.0;
+  ciT.lon = 87.65; ciT.lat = 41.85;
+
+  // LMT: zone 24 means the time is Local Mean Time, i.e. offset lon/15.
+  ciCore = ciT; ciCore.zon = zonLMT;
+  CastChart(1);
+  rSun1 = planet[oSun]; rCusp1 = chouse[1];
+  Check(ciCore.zon == zonLMT && ciCore.tim == 10.5,
+    "an LMT chart reads as typed after the cast");
+  ciCore = ciT; ciCore.zon = ciT.lon / 15.0;
+  CastChart(1);
+  Check(planet[oSun] == rSun1 && chouse[1] == rCusp1,
+    "LMT casts the same chart as the explicit lon/15 zone");
+
+  // LAT: zone 23 is Local Apparent Time -- LMT further corrected by the
+  // equation of time, which SwissLatLmt() supplies for the chart's day.
+  ciCore = ciT; ciCore.zon = zonLAT;
+  CastChart(1);
+  rSun1 = planet[oSun]; rCusp1 = chouse[1];
+  Check(ciCore.zon == zonLAT, "a LAT chart reads as typed after the cast");
+  zonEquiv = ciT.lon / 15.0 -
+    SwissLatLmt((real)MdyToJulian(ciT.mon, ciT.day, ciT.yea));
+  ciCore = ciT; ciCore.zon = zonEquiv;
+  CastChart(1);
+  Check(planet[oSun] == rSun1 && chouse[1] == rCusp1,
+    "LAT casts the same chart as its equation-of-time zone");
+  Check(zonEquiv != ciT.lon / 15.0,
+    "the equation of time is nonzero mid-March, so LAT proved itself");
+
+  // Auto-DST: dst 24 defers to is.fDst, whichever way it points.
+  is.fDst = fTrue;
+  ciCore = ciT; ciCore.dst = dstAuto;
+  CastChart(1);
+  rSun1 = planet[oSun]; rCusp1 = chouse[1];
+  Check(ciCore.dst == dstAuto,
+    "an auto-DST chart reads as typed after the cast");
+  ciCore = ciT; ciCore.dst = 1.0;
+  CastChart(1);
+  Check(planet[oSun] == rSun1 && chouse[1] == rCusp1,
+    "auto-DST with is.fDst set casts as dst 1");
+  is.fDst = fFalse;
+  ciCore = ciT; ciCore.dst = dstAuto;
+  CastChart(1);
+  rSun2 = planet[oSun]; rCusp2 = chouse[1];
+  ciCore = ciT;
+  CastChart(1);
+  Check(planet[oSun] == rSun2 && chouse[1] == rCusp2,
+    "auto-DST with is.fDst clear casts as dst 0");
+  Check(rSun1 != rSun2, "the two DST states cast different charts");
+
+  // The exact pole is clamped just off it, and only cooked -- the typed
+  // 90 survives.
+  ciCore = ciT; ciCore.lat = rDegQuad;
+  CastChart(1);
+  rSun1 = planet[oSun]; rCusp1 = chouse[1];
+  Check(ciCore.lat == rDegQuad, "a pole chart reads as typed after the cast");
+  ciCore = ciT; ciCore.lat = rDegQuad - rSmall;
+  CastChart(1);
+  Check(planet[oSun] == rSun1 && chouse[1] == rCusp1,
+    "latitude 90 casts as the clamped rDegQuad - rSmall");
+
+  is.fDst = fDstSav;
+  ciCore = ciCoreSav; ciMain = ciMainSav;
+  CastChart(1);            // Put the shared chart state back for the rest.
+  SetNoPopupQt(fPopupSav);
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"context-menus",        TestContextMenusQt},
@@ -3661,7 +3753,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"atlas-sink",           TestAtlasSinkQt},
-  {"chartmode-table",      TestChartModeTableQt}};
+  {"chartmode-table",      TestChartModeTableQt},
+  {"cast-cooking",         TestCastCookingQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
 
 // Does any comma-separated token of the filter appear in the name?

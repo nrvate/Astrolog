@@ -3490,6 +3490,31 @@ are the more useful half to read before starting something new.
       and renders a grid chart through detection; Windows build
       compiles and both win-*.txt scenarios pass under Wine.
 
+112. **C2's net: the cast-cooking contracts are pinned.** CastChart()
+    cooks the typed chart info in place inside ciCore -- LMT/LAT zones
+    resolved from the longitude, auto-DST from is.fDst, the zone folded
+    into the time, the latitude clamped off the exact poles -- and
+    restores the typed values from a stack copy 350 lines later
+    (calc.cpp:1260 -> 1616). REFACTORING.md's C2 wants that derived
+    into locals, but net first: `TestCastCookingQt()` (group
+    `cast-cooking`, 11 assertions) pins each cooked form against its
+    explicitly-typed equivalent -- LMT vs. lon/15, LAT vs. the
+    SwissLatLmt() equation-of-time zone, auto-DST against both is.fDst
+    states, latitude 90 vs. the rDegQuad-rSmall clamp -- with exact
+    equality on planet[oSun] and chouse[1], and asserts ciCore reads
+    exactly as typed after every cast. All on a fixed 2020 date, so the
+    suite's clock never enters (the item-109 trap).
+    - Reintroduce-the-bug runs: deleting the `ciCore = ciSav` restore
+      fails 5 assertions; cooking dstAuto to 0 instead of is.fDst
+      fails 2. calc.cpp itself ships unchanged in this increment --
+      byte-identical, CRLF intact.
+    - The casts run under SetNoPopupQt(), because a pole cast may warn
+      and a warning is a modal box nothing will click -- the
+      TestBadInputQt() hazard, third time it has mattered.
+    - Suite 3138/0 (was 3127), clean under ASan. C2's restructure
+      remains open and is now unblocked; when it lands, this group is
+      the net that has to stay green.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

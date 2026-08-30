@@ -594,7 +594,7 @@ and the registry audit reminds you of the last two.
      the tables, precisely because the phase-2 batteries had trimmed
      step 3 down to builds+suite+matrix. The step-3 list is the
      battery; trimming it is how nets go stale unnoticed.
-3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3127/0),
+3. The battery: qt/win/console builds, `./run-qt-tests.sh` (3138/0),
    `tools/settings-round-trip.sh` (three legs), `defaults_audit.py`,
    `registry_audit.py`, then ASan suite and `tools/win-tests.sh` —
    those last two in parallel subshells, they're the slow tail.
@@ -906,7 +906,7 @@ documented here. *Cost:* deferral is free.
 **C2 — `CastChart` cooks the user's input in place.** It normalizes
 `ZZ`/`SS`/`TT` (LMT/LAT zones, auto-DST, zone-into-time folding)
 directly inside `ciCore` — the same storage holding what the user typed
-— and restores from a stack copy 350 lines later (calc.cpp:1228→1584).
+— and restores from a stack copy 350 lines later (calc.cpp:1260→1616).
 Verified: no early return currently sits inside the window, but any
 future one silently corrupts the chart info, and every reader of
 `ciCore` must know whether it is currently "typed" or "cooked".
@@ -915,6 +915,13 @@ design. *Direction:* derive into locals or a working copy handed to the
 house/ephemeris calls; needs care because downstream code (Matrix
 `ProcessInput()`) reads the cooked values through the same macros. Pin
 with a zone/DST/LMT round-trip test first. *Cost:* medium; net first.
+
+**Net in place 2026-08-30** (work log item 112): `TestCastCookingQt()`
+pins both contracts — each cooked form (LMT, LAT, auto-DST, the pole
+clamp) casts the same chart as its explicitly-typed equivalent, and
+ciCore reads exactly as typed after the cast. Dropping the restore
+fails 5 assertions; mis-cooking DST fails 2. The restructure itself
+stays open, now unblocked.
 
 **C3 — `ComputeEphem`'s skip predicate is write-only logic.** The
 decision "compute this object or not" is six OR'd clauses mixing four
@@ -1424,8 +1431,9 @@ difference between "contained" and "clean".
 **Phase 2 completed 2026-08-30** (work log items 96-110): tranche 1
 on the 29th-30th, tranches 2 and 3 on the 30th, every item with a
 done-note or a measured verdict above. Still open, by choice, with
-their reasons recorded at the findings: C2's cooked-input window (net
-first), C6's ring-ownership documentation (with Area D), and T1 move 3
+their reasons recorded at the findings: C2's cooked-input window (its
+net is in place since work log item 112; the restructure is what stays
+open), C6's ring-ownership documentation (with Area D), and T1 move 3
 (opportunistic, never a sweep). A3's shared mode table, the fourth of
 that closing list, was taken later the same day with its measured
 boundaries (work log item 111; done-note at the finding).
