@@ -1348,7 +1348,7 @@ own concessions, in dependency order):
   arrays (compound cleanup), DrawCalendar's chart shuffle, and
   objCenterSav (a data source, not a save) stay hand-written, plus
   one observed upstream leak (XChartMoons' early return skips its
-  whole cleanup block) left for a deliberate fix. Other files keep
+  whole cleanup block), fixed the same day (work log item 106). Other files keep
   the opportunistic rule.
 - **P7 — done 2026-08-30** (work log item 105): `PS` is `PSCRIPT`,
   `META` is `METAFILE`, `TIME` is `TIMEFUNC` — 104 preprocessor-line
@@ -1397,7 +1397,11 @@ difference between "contained" and "clean".
   and D2: work log items 65-81 carry each with its commit. T3's
   migration phase is closed; T4's drift class is closed by audit; T6's
   worst evidence (missing-branch parsers) is gone with the parsers.
-- **Bugs fixed along the way, all shared-core**: ruler2[] one short;
+- **Bugs fixed along the way, all shared-core**: XChartMoons leaking
+  its restriction overrides, fMoonMove, and the un-recast chart into
+  the session on a grid-allocation-failure exit (work log item 106,
+  found by P6's campaign survey, proven by a forced-failure probe);
+  ruler2[] one short;
   astrolog.as's stale -YR/-YRT rows; two buffer overflows (szLoc,
   szZod) plus `sprintf2` unbounded on non-Windows; -Yu never reaching
   a fixed point; :YXp0 metric double-conversion; -YD losing

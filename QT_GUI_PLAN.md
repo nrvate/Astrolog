@@ -3324,10 +3324,10 @@ are the more useful half to read before starting something new.
     cleanup, not field borrowing); DrawCalendar's Mon/MonT/cp shuffle
     is chart-swapping, not borrowing; XChartMoons' objCenterSav is a
     data source read long after its restore. One observed defect
-    recorded for a future deliberate fix: XChartMoons' FCreateGrid
+    recorded for a deliberate fix: XChartMoons' FCreateGrid
     early return skips the entire cleanup block (ignore restore,
     fMoonMove restore, the recast) -- upstream shape, needs a real
-    fix, not a conversion. 16-case -Xb battery, pairwise distinct,
+    fix, not a conversion (fixed in item 106). 16-case -Xb battery, pairwise distinct,
     byte-identical throughout. Suite 3039/0, audits clean.
 
 105. **P7: the colliding feature macros carry real names.** `PS` is
@@ -3349,6 +3349,24 @@ are the more useful half to read before starting something new.
     qtdialog) now say the order is a convenience, not a requirement.
     Suite 3039/0, audits clean. Names checked against mingw and Qt5
     headers for collisions before choosing.
+
+106. **The XChartMoons cleanup leak is fixed, and proven live.** The
+    early return item 104 recorded (bottom-charts FCreateGrid failure)
+    now lands on an LDone: label before the cleanup block -- the
+    goto-to-cleanup idiom xcharts2.cpp already uses -- so the moons
+    chart's restriction overrides, us.fMoonMove, and the recast happen
+    on every exit. Shared-core fix, no QT guard; both builds get it.
+    Proven the way the working method demands: a scratch probe (state
+    snapshot, SetChartModeQt(gMoons) with FCreateGrid forced to fail
+    by a scratch env hook, compare) prints CLEAN with the fix and LEAK
+    without it -- fMoonMove flipped and 27 ignore[] entries corrupted
+    into the session. Both scratch edits reverted before commit.
+    Valid paths proven untouched by the 16-case -Xb battery against
+    the HEAD baseline, byte-identical. Suite 3039/0, audits clean.
+    (The docs for this item shipped one commit late: the doc script's
+    assertion failed and the commit ran anyway -- rule 4's exact
+    half-commit shape, repeated because the statements were sequential
+    instead of chained.)
 
 ## Features this fork adds to both builds
 
