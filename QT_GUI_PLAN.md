@@ -2990,6 +2990,20 @@ are the more useful half to read before starting something new.
     construction; fParallel needed "=ap _a" to force (it belongs to
     the -g/-a families; -Yp is something else entirely).
 
+84. **D1 survey closed: the other "clone pairs" mostly aren't.** Read
+    closely before merging, the Listing and Grid twins are different
+    layouts (multi-chart columns + delta vs. houses and rulerships;
+    axis-labeled matrix vs. diagonal square), and the Interpret trio
+    differ in actual prose -- InterpretAspectRelation names person 2
+    where InterpretAspect says "their", has a conjunction-only
+    fallback sentence, and InterpretMidpointRelation drops the
+    life-area tail. Merging any of these trades duplication for
+    conditional-text soup, so they stay as they are, on purpose.
+    ChartAstroGraph/ChartAstroGraphRelation is the one true clone
+    left (~400 lines each, every array doubled to [2][objMax]) --
+    a dedicated-session merge with a -L differential if ever.
+    Verdicts recorded in REFACTORING.md's D1 finding.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

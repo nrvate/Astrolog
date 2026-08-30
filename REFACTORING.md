@@ -569,8 +569,20 @@ reword; valid input behavior is byte-sacred.
   midpoint lists likewise, as `ChartMidpointCore(flag fRel)` in
   charts1.cpp. 16-case differential (=m/=m0/=ma, interpret, 3D
   house, -RO, parallel — parallel needed `=ap _a` to force, -Yp was
-  the wrong switch), byte-identical. Remaining D1 pairs: Listing,
-  Grid, AstroGraph, and the Interpret trio — same method.
+  the wrong switch), byte-identical.
+- **D1 survey verdict, 2026-08-29** (work log item 84): the aspect
+  and midpoint pairs were the mechanical wins and are done. Of the
+  rest, read closely: the Listing and Grid twins are *different
+  layouts*, not clones (multi-chart columns + delta vs. houses and
+  rulerships; axis-labeled matrix + header band vs. diagonal square)
+  — merging them would be mostly `if (fRel)` noise. The Interpret
+  trio are cousins with genuinely different prose ("their X" vs.
+  naming person 2, a conjunction-only fallback, a dropped life-area
+  tail) — a merge trades duplication for conditional-text soup; skip
+  all three on purpose. AstroGraph IS a true structural clone (~400
+  lines each; relation = the same algorithm with every array doubled
+  to [2][objMax] plus transit handling) but is a dedicated-session
+  merge with a -L text differential, not a quick pair.
 - **F1** (projection helper families) and **E1** (one block per
   target in the drawing primitives) after that, with pinned-time
   captures.
@@ -821,7 +833,12 @@ high confidence.
 
 **First pair done 2026-08-29** (work log item 82): the aspect pair is
 `ChartAspectCore(flag fRel)` in charts1.cpp. **Second pair done the
-same day** (item 83): `ChartMidpointCore(flag fRel)`.
+same day** (item 83): `ChartMidpointCore(flag fRel)`. **Survey of the
+rest, same day** (item 84): Listing and Grid twins are different
+layouts, not clones; the Interpret trio differ in actual prose — all
+three stay as they are, on purpose. AstroGraph is the one true clone
+left (arrays doubled to [2][objMax]); merge it in a dedicated session
+with a -L text differential, or not at all.
 
 **D2 — DONE 2026-08-29 (work log item 79). The influence stanzas are
 twelve-line clones over table names.**
