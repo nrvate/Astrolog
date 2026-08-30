@@ -3267,6 +3267,21 @@ are the more useful half to read before starting something new.
     off case). Byte-identical old vs. new on the first post-merge run.
     Suite 3039/0, six audits, round trip, ASan suite, win-tests.
 
+102. **P6 opens: the gi.nScale family borrows (5 sites).** The Borrow
+    campaign's first family: every `nSav = gi.nScale; gi.nScale =
+    gi.nScaleTextT; ... gi.nScale = nSav;` dance in xcharts1.cpp --
+    two in XChartOrbit (sign boundaries, aspect lines), three in
+    XChartSphere (sign labels, house labels, aspect lines) -- is now
+    a braced `Borrow bScale(gi.nScale, gi.nScaleTextT)`, scoped to
+    restore at exactly the statement the hand-written restore sat at
+    (the sphere aspect site needed its own brace: DrawObjects reads
+    gi.nScale right after the old restore). Both nSav locals deleted.
+    Gate: 8-case -Xb bitmap differential (orbit/sphere x base, -Xs
+    300 -XS 100 scale contrast so a broken restore is visible, =Xe
+    =XA aspect lines, =XC and =J block-skipped variants), pairwise
+    distinct, deterministic, byte-identical after conversion. Suite
+    3039/0, audits clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

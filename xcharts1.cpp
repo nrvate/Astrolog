@@ -2686,7 +2686,7 @@ void OrbitRecord()
 void XChartOrbit()
 {
   int cx = gs.xWin / 2, cy = gs.yWin / 2, unit, x1, y1, x2, y2,
-    i, j, k, l, nSav;
+    i, j, k, l;
   real sx, sy, sz, xp, yp, xp2, yp2, xpEar = 0.0, ypEar = 0.0, rT;
   ObjDraw rgod[objMax];
   char szT[cchSzDef], chT;
@@ -2755,8 +2755,8 @@ void XChartOrbit()
     }
 
   // Draw the 12 sign boundaries from the center body to edges of screen.
-  nSav = gi.nScale;
-  gi.nScale = gi.nScaleTextT;
+  {
+  Borrow bScale(gi.nScale, gi.nScaleTextT);
   if (!gs.fHouseExtra) {
     i = us.objCenter != oSun ? oSun : oEar;
     if (!gs.fColorSign)
@@ -2779,7 +2779,7 @@ void XChartOrbit()
       DrawSign(j, k, l);
     }
   }
-  gi.nScale = nSav;
+  }
 
   // Draw internal boundary.
   DrawColor(gi.kiLite);
@@ -2835,8 +2835,7 @@ void XChartOrbit()
   if (gs.fEquator && us.nAsp > 0) {
     if (!FCreateGrid(fFalse))
       return;
-    nSav = gi.nScale;
-    gi.nScale = gi.nScaleTextT;
+    Borrow bScale(gi.nScale, gi.nScaleTextT);
     for (j = oNorm; j >= 1; j--)
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j)) {
@@ -2850,7 +2849,6 @@ void XChartOrbit()
               DrawAspect2(grid->n[i][j], k, l, i, j);
           }
         }
-    gi.nScale = nSav;
   }
 
 #ifdef SWISS
@@ -4313,7 +4311,7 @@ void XChartSphere()
 {
   char sz[cchSzDef], chT;
   int zGlyph, zGlyph2, zGlyphS, cChart, iChart, xo = 0, yo = 0, xp, yp,
-    xp2, yp2, i, j, k, k2, nSav;
+    xp2, yp2, i, j, k, k2;
   flag fHouse3D = !us.fHouse3D, fDir = !gs.fSouth, fAny = !gs.fAlt,
     fNoHorizon, fSav, f;
   real rLat, rT;
@@ -4526,8 +4524,7 @@ void XChartSphere()
 
   // Label signs.
   if (!us.fIndian) {
-    nSav = gi.nScale;
-    gi.nScale = gi.nScaleTextT;
+    Borrow bScale(gi.nScale, gi.nScaleTextT);
     for (j = 78; j >= -78; j -= 156)
       for (i = 1; i <= cSign; i++) {
         f = FSphereZodiac((real)(i*30-15), (real)j, &cr, &xp, &yp) ^ fDir;
@@ -4536,13 +4533,11 @@ void XChartSphere()
           DrawSign(i, xp, yp);
         }
       }
-    gi.nScale = nSav;
   }
 
   // Label houses.
   if (!gs.fHouseExtra) {
-    nSav = gi.nScale;
-    gi.nScale = gi.nScaleTextT;
+    Borrow bScale(gi.nScale, gi.nScaleTextT);
     for (j = 82; j >= -82; j -= 164)
       for (i = 1; i <= cSign; i++) {
         if (!fHouse3D)
@@ -4563,7 +4558,6 @@ void XChartSphere()
           DrawHouse(i, xp, yp);
         }
       }
-    gi.nScale = nSav;
   }
 
   // Label directions.
@@ -4676,8 +4670,8 @@ void XChartSphere()
     if (!FCreateGrid(fFalse))
       return;
     cp0 = cpSav;
-    nSav = gi.nScale;
-    gi.nScale = gi.nScaleTextT;
+    {
+    Borrow bScale(gi.nScale, gi.nScaleTextT);
     for (j = is.nObj; j >= 1; j--)
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j) &&
@@ -4691,7 +4685,7 @@ void XChartSphere()
             DrawAspect2(grid->n[i][j], (rgod[i].x + rgod[j].x) >> 1,
               (rgod[i].y + rgod[j].y) >> 1, i, j);
         }
-    gi.nScale = nSav;
+    }
 
     // Draw planet glyphs, and spots for actual planet locations.
     DrawObjects(rgod, is.nObj+1, 0);
