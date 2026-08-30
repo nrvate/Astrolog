@@ -1212,14 +1212,23 @@ each independently shippable:
    FProcessSwitches() cases remain -- chart types, chart info, the -R
    restrictions, -W passthroughs, and the imperative switches. M7
    onward takes them a letter family at a time.
-5. **C3, E1, D1/F1/F2** — the remaining quality increments, now
-   opportunistic. D2 done 2026-08-29: the influence stanzas ride a
-   RULERSYS family table; 3,426 output lines byte-identical across six
-   rulership-restriction states.
+5. ~~**C3, E1, D1/F1/F2** — the remaining quality increments~~ — all
+   resolved 2026-08-29 evening: C3 (FSkipEphem), D1 (two merges + the
+   survey verdicts on the rest), D2 (RULERSYS), E1 (closed as already
+   satisfied), F1 (one projection chain), F3 (DrawPrint verbs). The
+   documentation themes landed the same evening: T8 (CONVENTIONS.md),
+   A4 (the lifecycle contract, with a probe-verified correction to
+   QT_TESTING.md), C4 (the backend state table), T1 moves (1) and (2)
+   (the classification on the structs; the Borrow guard).
 
-Everything else in this file is documentation work (T1's field
-classification, T8's conventions doc, A4's lifecycle contract) that can
-interleave with the above at any pace.
+**The specified queue is empty as of 2026-08-29.** What remains is
+opportunistic by this document's own policy:
+- The AstroGraph clone merge (D1's last true pair) — a dedicated
+  block of work with a -L text differential as the net, or never.
+- F2 horizon-chart merges and A5's main() fold — when touched.
+- T1 move (3) and *Sav→Borrow conversions — per site, when touched.
+- New findings join this file the way the old ones did: with
+  evidence, an incident if there is one, and a net.
 
 ---
 
