@@ -239,11 +239,19 @@ Roughly in the order I'd take them.
    except Rising at ~490ms and the two transit grids at ~275ms.
    This is what item 4's pixel baselines want.
 
-10. **The T2 enforcement campaign, E2 onward.** REFACTORING.md, "The
-   T2 enforcement campaign" -- state, hard rules, recipe, and a ledger
-   whose pending rows (E2, E3, optionally E4) are deliberately
-   mechanical: pick the topmost pending row, follow the recipe,
-   update the row. Everything else in theme T2 is a recorded verdict.
+10. **The T2 enforcement campaign -- E4 only, and optional.**
+   REFACTORING.md, "The T2 enforcement campaign" -- state, hard rules,
+   recipe, ledger. E1, E2 and E3 landed 2026-08-30 (work log items
+   125, 127, 128); the rulership, exaltation, ray and aspect families
+   are all behind a tag, and the checked subscripts range check
+   themselves under the test build. **E4 is the last row**: the
+   ray/constellation leftovers (kRayA, whose cRay+2 dimension has a
+   real extra slot to read the sites for; szRayName/szRayWill, which
+   would need the SZ element variant; iCnstlZodiac/lonCnstlZodiac). It
+   is explicitly optional -- converting it or closing it with a
+   measured verdict both finish the theme. Everything else in T2 is a
+   recorded verdict, including the planet[]/chouse[] core, which stays
+   maintainer-gated.
 
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
