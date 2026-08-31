@@ -213,8 +213,8 @@ char *szWheelX[cRing+1] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 TBLASPK kAspB;
 TBLRAYK kRayB;
-KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem],
-  kObjB[objMax];
+GRDOBJK kObjB;
+KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem];
 
 CONST char *rgszFontName[cFont] = {szAppNameCore, "Wingdings", "Astro",
   "EnigmaAstrology", "HamburgSymbols", "Astronomicon", "StarFont Sans",

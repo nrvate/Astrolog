@@ -118,6 +118,12 @@ CHECKED_TABLE_DIMS = {
     # so the audit reads them identically; they differ from the tagged
     # TBL* tables only in what they check, not in how they are written.
     'GRDOBJB': 'objMax',
+    'GRDOBJI': 'objMax',
+    'GRDOBJK': 'objMax',
+    'GRDOBJR': 'objMax',
+    'GRDOBJSZ': 'objMax',
+    'GRDSIGR': 'cSign+1',
+    'GRDOBJSET': 'oNorm1+1',
 }
 
 
@@ -156,11 +162,22 @@ def parse_array(source, syms, name):
 
 def parse_objset(source, syms):
     """rgobjset[] rows -> five parallel lists (orb, add, inf, tinf, k)."""
+    # Either the plain array or the range-guarded struct around it, which
+    # carries its extent in the type rather than in brackets and needs
+    # one more brace level.
     m = re.search(r'OBJSET\s+rgobjset\[([^\]]*)\]\s*=\s*\{', source)
-    body = source[m.end():source.index('\n};', m.end())]
+    if m is not None:
+        dimtext = m.group(1)
+        body = source[m.end():source.index('\n};', m.end())]
+    else:
+        m = re.search(r'GRDOBJSET\s+rgobjset\s*=\s*\{\{', source)
+        if m is None:
+            raise KeyError('rgobjset')
+        dimtext = CHECKED_TABLE_DIMS['GRDOBJSET']
+        body = source[m.end():source.index('\n}};', m.end())]
     dim = re.sub(r'\b(\w+)\b',
                  lambda g: str(syms.get(g.group(1), g.group(1))),
-                 m.group(1))
+                 dimtext)
     size = int(eval(dim, {"__builtins__": {}}, {}))
     cols = ([], [], [], [], [])
     for row in re.findall(r'\{([^{}]*)\}', strip_comments(body)):
@@ -309,7 +326,8 @@ def main():
             report(f"data.cpp {name}[]: {len(vals)} values in a "
                    f"{size}-slot initializer")
     objset, objset_size = parse_objset(data, syms)
-    if len(objset[0]) != objset_size:
+    objset_short = len(objset[0]) != objset_size
+    if objset_short:
         report(f"data.cpp rgobjset[]: {len(objset[0])} rows declared "
                f"{objset_size}")
 
@@ -321,6 +339,13 @@ def main():
     szSignName = parse_string_array(data, 'szSignName')
     szColor = parse_string_array(data, 'szColor')
 
+    if objset_short:
+        # The value leg indexes these by object number, so a malformed
+        # table would crash it and bury the count finding above rather
+        # than report it.
+        report("skipping the rgobjset value checks: the table is the "
+               "wrong length, so its rows do not line up with anything")
+        return finish(asfile)
     orb, add, inf, tinf, kobj = objset
     simple = [
         ('-YR',  tables['ignore'],  0),

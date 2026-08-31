@@ -4502,6 +4502,42 @@ are the more useful half to read before starting something new.
     clean; switch matrix and a 12-case render differential identical;
     six audits clean.
 
+137. **O3 closes the object core's range guard.** `rgobjset`,
+    `szObjDisp`, `kObjB`, `rgobjList` and `rgobjList2` -- about 490 more
+    subscripts, and again not one of them changed. Three new element
+    variants (`GRDOBJK` for KI, `GRDOBJSZ` for the display names,
+    `GRDOBJSET` for the settings rows) and four boundary fixes.
+
+    `GRDOBJSET` is the one worth knowing about: the per-object settings
+    table stops at `oNorm1`, the collective fixed-star row, where every
+    other object array runs to `cObj`. Reading it with a plain object
+    number past that is exactly work log item 115's bug, which is why
+    `RObjInf()`/`RTransitInf()` clamp with `Min(i, oNorm1)`. The guard
+    now carries that smaller extent in the type, so a site that forgets
+    the macro is caught rather than reading a neighbouring global.
+
+    Its initializer needed one extra brace level, unlike every earlier
+    conversion: brace elision covers a flat list of scalars but not a
+    list of braced structs.
+
+    **ignoreMem and ignore2Mem stay plain, by verdict.** They are never
+    subscripted anywhere -- only `CopyRgb`'d wholesale -- so a guard
+    would add `.rgn` at every use and check nothing.
+
+    Nothing new found this time: suite 3213/0 first run. The dividend
+    was O2's.
+
+    defaults_audit.py learned all seven `GRD*` shapes plus the guarded
+    `rgobjset` (which it locates differently, having no bracketed
+    dimension to read). Falsifying the count leg exposed a weakness in
+    the audit itself, now fixed: a short `rgobjset` reported the row
+    count and *then* crashed the value leg on the short list, burying
+    its own finding under a traceback. It now reports both and stops.
+
+    Nets: suite 3213/0; console, Qt release, Qt test and Windows builds
+    clean; switch and influence matrices identical; a 10-case render
+    differential identical; six audits clean, re-falsified both legs.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -322,7 +322,7 @@ compile error. Definitions live in astrolog.h directly after the
 | — | sign/aspect *display* tables (szSignName family, glyph/color arrays) | closed by verdict: wrong-domain indexing is self-announcing garbage text/color, the ref count is an ocean, and no incident ever lived here | **closed** |
 | O1 | the object core's *range* guard: ignore/ignore2 | **done 2026-08-31**, work log item 135. `GRDOBJB` range-guards the subscript without tagging it, so all 338 call sites are unchanged and only 41 raw-storage boundaries moved. Proven by reverting item 134's fix: the guard aborts by name in a plain `-DQTTEST` build, no sanitizer | **done** |
 | O2 | the rest of the object core: the whole `CP` struct, force, kObjA | **done 2026-08-31**, work log item 136. `GRDOBJR`/`GRDOBJI`/`GRDSIGR` over CP's ten arrays plus force and kObjA — about 1,000 subscripts, **none of which changed**. Total cost: 11 boundary sites and three function signatures taking the table by reference instead of a decayed pointer. Found a live out-of-range read in `XChartAstroGraph()` on its first suite run | **done** |
-| O3 | rgobjset[oNorm1+1] and the remaining objMax arrays (rgobjList, starname, ignoreMem kin) | same mechanism again; rgobjset is a different extent (oNorm1+1) and its own element type | **pending, optional** |
+| O3 | rgobjset, szObjDisp, kObjB, rgobjList/rgobjList2 | **done 2026-08-31**, work log item 137. ~490 more subscripts, again none changed; `GRDOBJSET` carries the smaller `oNorm1+1` extent the settings table actually has. **ignoreMem/ignore2Mem left plain by verdict**: never subscripted at all, only CopyRgb'd, so a guard would add `.rgn` noise and check nothing | **done** |
 | — | *domain tagging* the object core (OBJT everywhere) | **reframed 2026-08-31, no longer the gated question.** The three incidents that motivated it were `ignore[-1]`, and a tag would not have caught one of them — `ignore[OBJT(-1)]` compiles. Range guarding catches all three and costs almost nothing. Tagging remains available for the day a *cross-domain* incident appears here; none has | **closed (revisit on evidence)** |
 | — | rHouseInf[cSign+6] | closed by verdict: the +5 tail slots are deliberate mixed semantics (bonus rows), not a clean sign domain | **closed** |
 | — | value-domain typing (a table declaring what its *values* index, e.g. rules[] values are objects, catching `power1[rules[s]]` misuse) | closed by verdict: real design, second-order value, invasive; revisit only if an incident of that shape ever occurs | **closed** |
@@ -335,6 +335,13 @@ colour tables — with the checked subscripts range checking themselves
 under the test build on top. **The theme is closed.** The one thing
 that could reopen it is the maintainer-gated row: typing the
 planet[]/chouse[] object core, which stays a separate decision.
+
+**The object core is now range-guarded end to end** (O1-O3, work log
+items 135-137): every objMax array a chart touches, the whole `CP`
+struct, and the per-object settings table, about 1,800 subscripts of
+which none had to change. What remains untyped there is deliberate —
+the pure-storage `Mem` arrays, and domain tagging, which is closed
+pending a cross-domain incident.
 
 The campaign's yield, for the record: E1 turned three sign-table
 subscripts out to be house indexes (the natural-sign identification,

@@ -188,7 +188,8 @@ flag rgfProg[cRing+1] = {0, fFalse, fFalse, fFalse, fFalse, fFalse, fFalse};
 GRDOBJR force;
 GridInfo *grid = NULL;
 GRDOBJI kObjA;
-int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1];
+GRDOBJI rgobjList, rgobjList2;
+int starname[cStar+1];
 char *szWheel[cRing+1] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 real rStarBrightDef[cStar+1] = {-1.0}, rStarBright[cStar+1],
   rStarBrightDistDef[cStar+1];
@@ -296,7 +297,7 @@ CONST char *szObjName[objMax+4] = {
   "Alcyone", "Andromeda", "Zeta Retic.", "Galactic C.", "Great Attr.",
 
   "1st Cusp", "4th Cusp", "7th Cusp", "10th Cusp"};         // Extra
-CONST char *szObjDisp[objMax];
+GRDOBJSZ szObjDisp;
 CONST StrLook rgObjName[] = {{"Node", oNod}, {"Nod:", oNod},
   {"Rahu", oNod}, {"Ketu", oSou},
   {"M.C.", oMC}, {"I.C.", oNad},
@@ -581,7 +582,7 @@ TBLASP kAspA = {kWhite,
 // astrolog.as. The five rulership bonus weights that rode past the end
 // of rObjInf[] live in rgrBonusInf[], where their different meaning is
 // visible instead of smuggled past the array's domain.
-OBJSET rgobjset[oNorm1+1] = {
+GRDOBJSET rgobjset = {{
   {360.0, 0.0, 30, 10, kYellow},              //  0 Earth
   {360.0, 1.0, 30, 10, kElement},             //  1 Sun
   {360.0, 1.0, 25, 4, kElement},              //  2 Moon
@@ -667,7 +668,7 @@ OBJSET rgobjset[oNorm1+1] = {
   {2.0, 0.0, 1, 2, kPlanet},                  // 82 NepCOB
   {2.0, 0.0, 1, 2, kPlanet},                  // 83 PluCOB
   {2.0, 0.0, 2, 60, kStar},                   // 84 Stars (collective)
-};
+}};
 
 // Rulership bonus weights (-Yj0's four and -Yj7's fifth), 1-based.
 real rgrBonusInf[6] = {0.0, 20, 10, 10, 10, 10};

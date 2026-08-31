@@ -1944,7 +1944,7 @@ static void TestSettingsRoundTripQt()
   CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
   // One snapshot where four parallel-array copies used to be -- the
   // struct being the point of the exercise.
-  CopyRgb((pbyte)rgobjset, (pbyte)rgosSav, sizeof(rgobjset));
+  CopyRgb((pbyte)rgobjset.rgn, (pbyte)rgosSav, sizeof(rgobjset.rgn));
 
   // Index 60 is a planetary moon, inside the range the Moon Object
   // Settings dialog edits and outside every range the writer covered.
@@ -2016,7 +2016,7 @@ static void TestSettingsRoundTripQt()
 
   CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
   CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
-  CopyRgb((pbyte)rgosSav, (pbyte)rgobjset, sizeof(rgobjset));
+  CopyRgb((pbyte)rgosSav, (pbyte)rgobjset.rgn, sizeof(rgobjset.rgn));
   is.szFileOut = szFileOutSav;
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;

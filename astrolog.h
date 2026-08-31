@@ -1701,6 +1701,19 @@ struct GRDOBJI {
   const int &operator[](int i) const
     { AssertIndex(i, cObj); return rgn[i]; }
 };
+struct GRDOBJK {
+  KI rgn[objMax];
+  KI &operator[](int i) { AssertIndex(i, cObj); return rgn[i]; }
+  const KI &operator[](int i) const
+    { AssertIndex(i, cObj); return rgn[i]; }
+};
+struct GRDOBJSZ {
+  CONST char *rgn[objMax];
+  CONST char *&operator[](int i)
+    { AssertIndex(i, cObj); return rgn[i]; }
+  CONST char *const &operator[](int i) const
+    { AssertIndex(i, cObj); return rgn[i]; }
+};
 struct GRDOBJR {
   real rgn[objMax];
   real &operator[](int i) { AssertIndex(i, cObj); return rgn[i]; }
@@ -2576,6 +2589,17 @@ typedef struct _ObjectSettings {
   real tinf;    // Influence while transiting (-YjT)
   int kolor;    // Color (-YkO)
 } OBJSET;
+
+// Its own extent: the settings table stops at oNorm1, the collective
+// fixed-star row, where the other object arrays run to cObj. Reading it
+// with a plain object number past that is item 115's bug, which is why
+// RObjInf()/RTransitInf() clamp with Min(i, oNorm1).
+struct GRDOBJSET {
+  OBJSET rgn[oNorm1+1];
+  OBJSET &operator[](int i) { AssertIndex(i, oNorm1); return rgn[i]; }
+  const OBJSET &operator[](int i) const
+    { AssertIndex(i, oNorm1); return rgn[i]; }
+};
 
 // A slot's glyph, when it has none of its own and should be drawn as its
 // name instead. DrawObject() tests the first character for 'T' rather

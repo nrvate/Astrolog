@@ -157,7 +157,7 @@ extern CI * CONST rgpci[cRing+1];
 extern flag rgfProg[cRing+1];
 
 extern GRDOBJR force;
-extern OBJSET rgobjset[oNorm1+1];
+extern GRDOBJSET rgobjset;
 extern real rgrBonusInf[6];
 extern real rHouseInf[cSign+6];
 extern TBLASPR rAspInf;
@@ -181,7 +181,8 @@ extern TBLASPR rAspInf;
 #define ObjForceMid2(vf) (((-(int)(vf)) - 1) % objMax)
 extern GridInfo *grid;
 extern GRDOBJI kObjA;
-extern int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1];
+extern GRDOBJI rgobjList, rgobjList2;
+extern int starname[cStar+1];
 
 extern GRDOBJB ignore, ignore2;
 extern byte ignorez[arMax], ignore7[rrMax], pluszone[cSector+1];
@@ -244,7 +245,8 @@ extern CONST char *szNakshatra[cNakshat+1], *rgszDecan[ddMax],
 extern real rStarBrightDef[cStar+1], rStarBright[cStar+1],
   rStarBrightDistDef[cStar+1];
 extern char *szStarCustom[cStar+1];
-extern CONST char *szObjDisp[objMax], *szAspectDisp[cAspect2+1],
+extern GRDOBJSZ szObjDisp;
+extern CONST char *szAspectDisp[cAspect2+1],
   *szAspectAbbrevDisp[cAspect2+1], *szAspectGlyphDisp[cAspect2+1];
 
 // A slot's display name is "customised" exactly when its pointer differs
@@ -792,8 +794,8 @@ extern KV rgbbmp[cColor2];
 extern TBLRAYV rgbbmpRay;
 extern TBLASPK kAspB;
 extern TBLRAYK kRayB;
-extern KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem],
-  kObjB[objMax];
+extern GRDOBJK kObjB;
+extern KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem];
 extern CONST char *rgszFontName[cFont], rgszFontAllow[6][cFont+1];
 extern CONST real rgrObjRing[oNep-oJup+3][2];
 extern CONST PT3R rgvObjRing[oNep-oJup+3];
