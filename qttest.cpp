@@ -4293,12 +4293,82 @@ static void TestRayDigitFillQt()
 }
 
 
+// Display Settings' aspect count must move in both directions. Raising
+// it un-restricts what it now includes, which needs a loop reading the
+// *old* us.nAsp -- and that loop was deleted in a transcription pass
+// (commit bf92b9e), leaving only the loop that restricts. AdjustAspectCount()
+// then recomputed the count straight back down from the restrictions, so
+// the field could be lowered and never raised: a one-way ratchet that
+// silently did nothing, and that no assertion or audit could see. Found
+// by driving a real config through the live GUI (item 7's practice).
+//
+// Windows has the same symptom by a different route -- its loop is there
+// but assigns us.nAsp before running, so it iterates zero times. Not
+// reproducing that is a deliberate divergence (QT_GUI_PLAN.md 8.12).
+//
+// The field carries no accessible name, so it is found the way the
+// deCh_L pair is: seed a distinctive value and match on it.
+
+static void TestAspectCountQt()
+{
+  int nAspSav = us.nAsp, i;
+  byte rgbSav[cAspect+1];
+
+  Group("Display Settings aspect count");
+  for (i = 1; i <= cAspect; i++)
+    rgbSav[i] = ignorea[ASPT(i)];
+
+  // A count of 11 with everything above it restricted, so the field
+  // reads "11" and nothing else in the dialog does.
+  for (i = 1; i <= cAspect; i++)
+    ignorea[ASPT(i)] = (i > 11);
+  us.nAsp = 11;
+
+  DriveModalQt(ShowDisplayDialogQt, [](QWidget *pw) {
+    QLineEdit *pe = NULL;
+    QPushButton *ppbOK = NULL;
+    for (QLineEdit *p : pw->findChildren<QLineEdit *>())
+      if (p->text() == "11") pe = p;
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK") ppbOK = p;
+    if (pe != NULL) pe->setText("20");
+    if (ppbOK != NULL) ppbOK->click();
+  });
+  Check(us.nAsp == 20, "raising the aspect count 11 -> 20 left it at %d",
+    us.nAsp);
+  Check(!ignorea[ASPT(20)],
+    "aspect 20 is still restricted after the count was raised to include "
+    "it -- the count reads high but the aspect cannot appear");
+  Check(!ignorea[ASPT(12)], "aspect 12 was not un-restricted either");
+
+  // And down again: the restricting half must still work.
+  DriveModalQt(ShowDisplayDialogQt, [](QWidget *pw) {
+    QLineEdit *pe = NULL;
+    QPushButton *ppbOK = NULL;
+    for (QLineEdit *p : pw->findChildren<QLineEdit *>())
+      if (p->text() == "20") pe = p;
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK") ppbOK = p;
+    if (pe != NULL) pe->setText("3");
+    if (ppbOK != NULL) ppbOK->click();
+  });
+  Check(us.nAsp == 3, "lowering the aspect count 20 -> 3 left it at %d",
+    us.nAsp);
+  Check(ignorea[ASPT(4)], "aspect 4 is unrestricted below a count of 3");
+
+  for (i = 1; i <= cAspect; i++)
+    ignorea[ASPT(i)] = rgbSav[i];
+  us.nAsp = nAspSav;
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"context-menus",        TestContextMenusQt},
   {"hotkeys",              TestHotkeysQt},
   {"chart-render",         TestChartRenderQt},
   {"ray-digit-fill",       TestRayDigitFillQt},
+  {"aspect-count",         TestAspectCountQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},
   {"bad-input",            TestBadInputQt},

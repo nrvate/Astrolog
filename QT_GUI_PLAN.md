@@ -206,7 +206,13 @@ Roughly in the order I'd take them.
    chart files, driven through the live GUI. It found a shared-core
    crasher (a text-chart buffer overflow on atlas-length location
    names), silent rot in the GUI-automation driver, and a file-dialog
-   parity gap — none visible to the 3000+ mechanical assertions. The
+   parity gap — none visible to the 3000+ mechanical assertions.
+   **Third session 2026-08-30** (work log item 131): found Display
+   Settings' aspect count to be a one-way ratchet — lowerable, never
+   raisable — a documented divergence that had silently reverted to the
+   Windows bug months earlier. Two ASan sweeps over every real chart
+   came back clean, so the yield was again in the GUI rather than the
+   calculation core. The
    item stays open on purpose: it is a practice, not a task. Every verification before that date was
    mechanical — does the item fire, does the dialog open, does the layout
    match. One session driving the port from a user's own settings file
@@ -877,9 +883,18 @@ are the more useful half to read before starting something new.
          assigns `us.nAsp = na` *before* the loop `for (i = us.nAsp + 1;
          i <= na; i++) ignorea[i] = fFalse;`, so that loop can never run
          and raising the aspect count doesn't actually un-restrict the
-         newly included aspects. Qt saves the old value first, so it
-         works. Keeping the working version rather than reproducing the
-         bug — flagged here so it reads as a choice, not an oversight.
+         newly included aspects. Qt runs both loops before the
+         assignment, so it works. Keeping the working version rather
+         than reproducing the bug — flagged here so it reads as a
+         choice, not an oversight.
+         **This note was false for months** (work log item 131): the
+         un-restrict loop was deleted by the transcription pass in
+         commit `bf92b9e`, and the port silently reproduced the Windows
+         bug — the count could be lowered and never raised. Restored
+         2026-08-30, and `TestAspectCountQt()` now drives the dialog
+         both directions so the claim above is checked rather than
+         asserted. A divergence documented but not tested is a
+         divergence waiting to revert.
    8.13 ~~File Settings and Graphics Settings~~ — **done 2026-08-25**
        (`DlgFile`, `DlgGraphics`). Wording and field lists were already
        right; the gaps were dropdowns, precision, and one grouping.
@@ -4142,6 +4157,62 @@ are the more useful half to read before starting something new.
     right. Falsified by reintroducing the bug, which aborts on E2's
     range assert -- a regression here is a SIGABRT, not a FAIL line,
     and the test says so in a comment.
+
+131. **The third real-data session, and the divergence that had
+    quietly reverted.** Item 7's practice again, with the maintainer's
+    config and chart files. Two ASan sweeps with E2's range asserts
+    compiled into a console build came back clean -- 625 text-chart
+    runs (25 modes x 25 real charts, 600 producing charts) and 275
+    graphics runs, every one writing a bitmap, zero sanitizer or assert
+    hits. That included `-Xv 1`..`-Xv 7`, so the Ray wheel fill ran
+    against real composed Ray lists: item 130's code on real data.
+
+    **The finding was in the GUI, not the calculation.** Setting /
+    Display Settings' "Number of Aspects to Include" could be *lowered
+    but never raised* -- a one-way ratchet that silently did nothing.
+    `DlgDisplay`'s store kept the loop that restricts aspects above the
+    new count but had lost the one that un-restricts below it, so
+    `AdjustAspectCount()` recomputed the count straight back down from
+    the restrictions. Restored, with the ordering that makes it work
+    (both loops before `us.nAsp = na`) spelled out at the site.
+
+    Three things worth keeping:
+
+    - **Not a regression from this week.** `git log -L` on those four
+      lines says commit `3c6c55a` added the dialog with the loop
+      correct -- it saved the old count in `naOld` -- and `bf92b9e`, a
+      transcription pass, deleted `naOld` and the loop together. The E3
+      commit touched the surviving line only to add its domain tag.
+      Checking that before writing anything is the difference between a
+      fix and a fix plus a wrong story.
+    - **The plan claimed the opposite, in writing.** Section 8.12
+      recorded this as a deliberate divergence where "Qt saves the old
+      value first, so it works", flagged so it would read as a choice.
+      It had been false since `bf92b9e`. The lesson is narrow and
+      general at once: **a divergence documented but not tested is a
+      divergence waiting to revert.** The new `aspect-count` group is
+      the guard, falsified two ways -- deleting the loop fails all five
+      assertions, and reproducing Windows' ordering (`us.nAsp = na`
+      before the loop) fails all five as well, which is what proves it
+      guards this divergence and not merely "some loop".
+    - **The other route was fine, and checking that mattered.** Ticking
+      an aspect's box in Aspect Settings does un-restrict, confirmed
+      live by reading the count back afterwards. So the defect narrowed
+      to one control rather than to aspect restriction generally.
+
+    Method notes, all of which cost time: `qtdrive.sh run` takes
+    `--args` exactly as `tree` does, and without it the app comes up on
+    the *repo's* astrolog.as, so a real-config test quietly measures
+    the wrong program -- the tell was a field reading 5 where the
+    config says 9. `expect-value` on a check box returns its label, not
+    its state, so a checkbox assertion has to go through an observable
+    the program computes; here that was the aspect count itself. Set
+    Colors is in the **View** menu, not Setting. And piping a long
+    sweep into `head` kills it by SIGPIPE partway: the first graphics
+    sweep "passed" over 11 of 25 files that way.
+
+    Nets: suite 3207/0; console, Qt release, Qt test and Windows builds
+    clean; six audits clean.
 
 ## Features this fork adds to both builds
 

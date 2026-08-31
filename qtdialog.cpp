@@ -4114,6 +4114,16 @@ void ShowDisplayDialogQt()
   us.nDegForm = NRcStoreRadioQt(rgbuilt, 4, 4, us.nDegForm);
   us.nCharset = NRcStoreRadioQt(rgbuilt, 8, 4, us.nCharset);
   us.nAppSep = NRcStoreRadioQt(rgbuilt, 12, 3, us.nAppSep);
+  // Raising the count has to un-restrict what it now includes, and that
+  // loop must read the *old* us.nAsp -- so both loops run before the
+  // assignment below, and the order is the whole fix. Windows has this
+  // loop but assigns us.nAsp first, so its copy iterates zero times and
+  // its aspect count can only ever be lowered; the divergence is
+  // deliberate (QT_GUI_PLAN.md 8.12). It was lost once to a
+  // transcription pass and silently reproduced the Windows bug for
+  // months, which is why TestAspectCountQt() now drives both directions.
+  for (int i = us.nAsp + 1; i <= na; i++)
+    ignorea[ASPT(i)] = fFalse;
   for (int i = na + 1; i <= cAspect; i++)
     ignorea[ASPT(i)] = fTrue;
   us.nAsp = na;
