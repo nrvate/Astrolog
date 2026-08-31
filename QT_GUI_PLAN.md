@@ -239,6 +239,12 @@ Roughly in the order I'd take them.
    except Rising at ~490ms and the two transit grids at ~275ms.
    This is what item 4's pixel baselines want.
 
+10. **The T2 enforcement campaign, E2 onward.** REFACTORING.md, "The
+   T2 enforcement campaign" -- state, hard rules, recipe, and a ledger
+   whose pending rows (E2, E3, optionally E4) are deliberately
+   mechanical: pick the topmost pending row, follow the recipe,
+   update the row. Everything else in theme T2 is a recorded verdict.
+
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
 
@@ -3891,6 +3897,19 @@ are the more useful half to read before starting something new.
     baseline must build in a short path, and error text spells the
     invocation path absolute-vs-relative; influence matrix identical;
     all six audits clean.
+
+126. **The T2 enforcement campaign is written down for hand-off.** At
+    the maintainer's request (switching to a lighter model for the
+    mechanical remainder), REFACTORING.md gained "The T2 enforcement
+    campaign (step 3) -- state, recipe, ledger": the seven hard rules
+    E1 paid for (tables only, tag-is-a-claim, element-variant naming,
+    .rgn boundaries, the audit dims map, per-file line endings, one
+    family per commit), the nine-step recipe with the exact
+    short-path-worktree matrix procedure, and a ledger with two
+    pending increments (E2 test-build range asserts, E3 the aspect
+    family, ~131 refs measured), one optional (E4), and four families
+    closed by written verdict -- including the planet[] core, which
+    stays maintainer-gated. Done-when is explicit. Docs only.
 
 ## Features this fork adds to both builds
 

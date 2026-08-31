@@ -190,9 +190,111 @@ against their loops' domains; the switch matrix is byte-identical.
 Full typing of the planet[]/chouse[] core (775 references, the
 arithmetic and varargs idioms) remains open and is a separate
 maintainer decision; the measured reasons are in the work log item.
+**The complete campaign state, recipe and ledger are in "The T2
+enforcement campaign" section below** — written so the remaining
+increments are mechanical for a follow-on session.
 
 *Cost/risk:* (1) and (2) are cheap and safe. (3) is a real project;
 don't drift into it.
+
+
+### The T2 enforcement campaign (step 3) — state, recipe, ledger
+
+*(Written 2026-08-30 after E1 shipped, at the maintainer's request, so
+the remaining increments are mechanical: everything discovered the
+expensive way during E1 is a rule or a trap below. A session should
+pick the topmost pending ledger row, follow the recipe, and update the
+row — the T3-migration working style.)*
+
+**What this is.** Explicit-constructor tag types (`SIGT`, `OBJT`, next
+`ASPT`) plus checked table types whose `operator[]` accepts only the
+tag, so wrong-domain or untagged indexing of a converted table is a
+compile error. Definitions live in astrolog.h directly after the
+`_objects` enum (they need `cSign`/`oNorm` as *enum members*, and
+`CONST` is defined later — use lowercase `const` inside the structs).
+
+**Hard rules, all learned the expensive way:**
+
+1. **Tables only.** Never give a tag type to a variable, parameter,
+   return value or struct field holding a *value* — variables stay
+   `int`. The two exceptions, both pointer-shaped: code selecting among
+   same-domain tables holds `CONST TBLSIG *` / `CONST TBLOBJ *`
+   (RULERSYS, RgRules(), InitColors are the exemplars), and functions
+   operating on a caller-chosen table take `TBLSIG &` / `TBLOBJ &`
+   (AdjustRulership, NSwRulershipCore, KvHouse). This rule is what
+   keeps the arithmetic and printf-varargs idioms from ever biting.
+2. **A tag is a claim.** Read the enclosing loop before writing
+   `SIGT(i)` vs `OBJT(i)` — mechanical tagging would re-ship exactly
+   the bug class this exists to stop. A house legitimately indexes a
+   sign table as its natural sign; those sites get `SIGT(inhouse[i])`
+   plus a one-line comment (three exist already, grep
+   "natural sign").
+3. **Element-type variants** are named `TBL<DOM>` for int, plus suffix
+   `R` real, `B` byte, `SZ` `CONST char *` as families need them. Same
+   shape as TBLSIG: member `rgn`, two operator[] overloads.
+4. **Raw-storage boundaries take `.rgn`**, and each increment's work
+   log item lists them. Known kinds: switch-registry rows (both the
+   `name` and `&name[0]` spellings occur), and any `ClearB`/`CopyRgb`
+   over a whole table. The registry's own lo/hi validation is the
+   check at that boundary.
+5. **defaults_audit.py**: add every new checked type to
+   `CHECKED_TABLE_DIMS` (type → dimension expression), then falsify by
+   deleting one value from a converted table's initializer — both the
+   count and value legs must trip (the ruler2 drill).
+6. **Line endings per file**: switch.cpp, qtdriver.cpp, qtdialog.cpp,
+   qttest.cpp and the tools are LF; every other source file is CRLF
+   (CR count == line count). Scripted edits go through bytes with the
+   right newline, exact-match, count-asserted.
+7. **One family per commit**, docs in the same commit, ledger row
+   updated in the same commit.
+
+**The recipe (E1-proven, in order):**
+
+1. Retype the declarations in data.cpp (`int name[dim] = {` becomes
+   `TBLXXX name = {`, initializer untouched — brace elision makes the
+   flat list legal) and extern.h. New element variants: add the struct
+   in astrolog.h beside TBLSIG.
+2. `make` (console). The compiler enumerates every site. Fix in
+   passes: subscripts get tags (rule 2), selector code gets typed
+   pointers (rule 1), raw boundaries get `.rgn` (rule 4). Unused
+   `ch`/`i` locals may need dropping from declarations.
+3. `make -f Makefile.qt.test -j4` — flushes qttest.cpp sites (the
+   rulership/esoteric-tables groups hold table pointers too).
+4. **Enforcement proof**, four-way, using a scratch TU:
+   correct tags compile; wrong tag, crossed tag, and untagged all
+   fail. (E1's scratch is reproducible from work log item 125.)
+5. `./run-qt-tests.sh` — expect the standing count, zero failures.
+6. `make -f Makefile.win` — zero errors.
+7. **Matrix differential**: build the pre-change baseline in a
+   **short-path** worktree — a deep path truncates the ephemeris path
+   and *changes lookups*, not just adds a warning — and symlink the
+   ephemeris in:
+   `git worktree add /tmp/b1wt HEAD~1 && cd /tmp/b1wt && ln -s
+   /shares/Astrolog/ephem ephem && make -j4`. Run
+   `tools/switch-matrix.sh` and `tools/influence-matrix.sh` on both
+   binaries; normalize the invocation-path spelling in error text
+   (`sed "s|/tmp/b1wt/|./|g"`) before diffing; demand byte-identical.
+   Remove the worktree after.
+8. All six audits, plus the rule-5 falsification.
+9. Docs and commit (rule 7).
+
+**The ledger:**
+
+| id | family | scope | status |
+|---|---|---|---|
+| E1 | rulership/exaltation/ray: 16 tables, SIGT/OBJT, TBLSIG/TBLOBJ/TBLSIGRAY | 170 subscripts, 8 selector conversions, 2 registry rows | **done 2026-08-30**, work log item 125 |
+| E2 | test-build range asserts in checked `operator[]` | astrolog.h only: under `#ifdef QTTEST`, assert the index within the array (TBLSIG 0..cSign, TBLOBJ 0..oNorm, TBLSIGRAY 0..cSign) via `<assert.h>` — the codebase's own `Assert()` is compiled out (extern.h:419) and cannot be used. Catches item 115's class (a star number into an oNorm table) dynamically wherever the suite reaches. Net: suite + deliberately-broken probe index must abort under the test build | **pending, small** |
+| E3 | aspect family: rAspAngle (44 refs), rAspOrb (28), rAspAngleDef (2), rAspInf (14), kAspA (26), ignorea (16), ignoreaMem (1) — new `ASPT` tag; TBLASP (int), TBLASPR (real), TBLASPB (byte), all dim cAspect+1 | ~131 subscripts. Traps: the cAspect2-dimensioned display tables (szAspectName and kin) are a *different, larger domain* — leave them; szModify rows are 0-based (`[asp-1]`) — value expressions, not table indexes, leave; registry rows use the `&rAspAngle[0]` spelling | **pending** |
+| E4 | ray/constellation leftovers: kRayA (cRay+2 — the +2 slot is a real extra, read the sites first), szRayName/szRayWill (SZ variant), iCnstlZodiac/lonCnstlZodiac | small; convert or close with a measured verdict, either is fine | **pending, optional** |
+| — | sign/aspect *display* tables (szSignName family, glyph/color arrays) | closed by verdict: wrong-domain indexing is self-announcing garbage text/color, the ref count is an ocean, and no incident ever lived here | **closed** |
+| — | the object-domain core: planet[]/chouse[] aliases (775 refs), ignore/ignore2/force/rgobjset/kObjA (objMax domain) | closed by verdict pending an explicit maintainer decision: this is most of the program, plus the arithmetic and varargs idioms; work log item 125 records the measured reasons | **closed (maintainer-gated)** |
+| — | rHouseInf[cSign+6] | closed by verdict: the +5 tail slots are deliberate mixed semantics (bonus rows), not a clean sign domain | **closed** |
+| — | value-domain typing (a table declaring what its *values* index, e.g. rules[] values are objects, catching `power1[rules[s]]` misuse) | closed by verdict: real design, second-order value, invasive; revisit only if an incident of that shape ever occurs | **closed** |
+
+**Done-when:** E2 and E3 landed and E4 resolved either way. At that
+point the T2 theme is finished: everything else in it is a recorded
+verdict, and the enforcement surface covers every table family that
+has ever shipped a T2 incident.
 
 ### T3 — Two 1,000+-line switch statements are the command surface
 
