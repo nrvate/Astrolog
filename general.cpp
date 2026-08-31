@@ -608,7 +608,7 @@ void SphRatio(real lon1, real lat1, real lon2, real lat2, real rRatio,
 // debilitated in sign, the planet esoterically and hierarchically and ray
 // rules or is in detriment in the sign, and return an appropriate string.
 
-char *Dignify(int obj, int sign)
+char *Dignify(OBJ obj, SIGN sign)
 {
   static char szDignify[rrMax+2];
   int sign2 = Mod12(sign+6), ray, ich;
@@ -952,7 +952,7 @@ real GetOrb(int obj1, int obj2, int asp)
 
 // Return an aspect's name, checking whether parallel aspects are on.
 
-CONST char *SzAspect(int asp)
+CONST char *SzAspect(ASPECT asp)
 {
   if (us.fParallel && asp <= aOpp)
     asp += cAspect;
@@ -962,7 +962,7 @@ CONST char *SzAspect(int asp)
 
 // Return the three letter abbreviation for an aspect.
 
-CONST char *SzAspectAbbrev(int asp)
+CONST char *SzAspectAbbrev(ASPECT asp)
 {
   if (us.fParallel && asp <= aOpp)
     asp += cAspect;
@@ -1034,7 +1034,7 @@ void SetCentric(int obj)
 
 // Return the planet or other object that an object orbits, if any.
 
-int ObjOrbit(int obj)
+OBJ ObjOrbit(OBJ obj)
 {
   if (FGeo(obj))
     return oEar;
@@ -1076,7 +1076,7 @@ int ObjOrbit(int obj)
 
 // Map a planetary moon ephemeris number to an Astrolog object index.
 
-int ObjMoons(int i)
+int ObjMoons(OBJ i)
 {
   int pla, moo, obj;
 
@@ -1095,7 +1095,7 @@ int ObjMoons(int i)
 
 // Return the diameter of an object, in km.
 
-real RObjDiam(int obj)
+real RObjDiam(OBJ obj)
 {
 #ifdef SWISS
   int i;
@@ -3144,7 +3144,7 @@ CONST char *ConvertSzToLatin(CONST char *sz, char *szBuf, int cchBuf)
 // constant, do not free it", which is why each is compared against its own
 // Def[] entry rather than assumed.
 
-void SetObjGlyphNoneCore(int obj)
+void SetObjGlyphNoneCore(OBJ obj)
 {
 #ifdef GRAPH
   FCloneSzCore(szObjGlyphNone, (char **)&szDrawObject[obj],
@@ -3163,7 +3163,7 @@ void SetObjGlyphNoneCore(int obj)
 // outright, which also folds in the FEqSz() guard every call site used
 // to carry by hand.
 
-flag SetObjDisp(int obj, CONST char *sz)
+flag SetObjDisp(OBJ obj, CONST char *sz)
 {
   if (FEqSz(sz, szObjDisp[obj]))
     return fTrue;

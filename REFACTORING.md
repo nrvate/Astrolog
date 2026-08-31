@@ -175,7 +175,10 @@ contact: -Y7C range-checked a composed ray number, not its digits, and
 an all-invalid list crashed EnsureRay() on 420/0; **(2)** introduce documentation
 typedefs (`typedef int sign; typedef int obj;`) used in signatures so a
 reader sees the domain even though the compiler doesn't enforce it —
-upstream-compatible, zero behavior; **(3)** only if (2) proves
+upstream-compatible, zero behavior — **done 2026-08-30** (work log item
+124): SIGN/OBJ/HOUSE/ASPECT/RAY in astrolog.h, eight exemplar
+signatures, the rule in CONVENTIONS.md, all 31 console objects
+byte-identical; **(3)** only if (2) proves
 insufficient, consider enum-class-style wrappers in a later, separate
 decision — that one is invasive and needs the maintainer's call.
 

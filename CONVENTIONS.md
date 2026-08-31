@@ -44,6 +44,18 @@ is keyed by. The rulership cross-table invariant is asserted by the
 suite's `rulership` group, the esoteric tables' encodings by its
 `esoteric-tables` group.
 
+**Documentation typedefs** (astrolog.h, by the domain constants):
+`SIGN`, `OBJ`, `HOUSE`, `ASPECT`, `RAY` are all `typedef int` — the
+compiler enforces nothing, and that is the point: they exist so a
+signature says which domain a parameter indexes. Rule, Borrow-style:
+**new and touched signatures use them** (`Dignify(OBJ obj, SIGN sign)`
+and the `SzAspect`/`ObjOrbit`/`SetObjDisp` families are the converted
+exemplars); existing signatures convert opportunistically, never as a
+sweep. A pure conversion must not change object code — the exemplar
+commit proved itself with byte-identical checksums of all 31 console
+objects. Don't label a parameter that is *not* a domain index:
+`ComputeHouses(int)` takes a house *system*, not a house.
+
 ## Switch-flag macros
 
 - `SwitchF(f)` applies the calling prefix's semantics to a flag:

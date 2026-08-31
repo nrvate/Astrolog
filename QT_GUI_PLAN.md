@@ -3844,6 +3844,23 @@ are the more useful half to read before starting something new.
     TestRelationshipModeQt) anchors the section. Documentation only; no
     code change.
 
+124. **T2 step (2): the index domains have names a signature can say.**
+    `SIGN`, `OBJ`, `HOUSE`, `ASPECT`, `RAY` are documentation typedefs
+    for int in astrolog.h beside the domain constants -- the compiler
+    enforces nothing, which is the step the theme chose: the enforced
+    version is step (3), explicitly the maintainer's call. Introduced
+    the Borrow way: one home, the rule in CONVENTIONS.md ("new and
+    touched signatures use them; convert opportunistically, never as a
+    sweep"), and eight exemplar signatures converted across three
+    domains -- Dignify(OBJ, SIGN), the SzAspect pair, the
+    ObjOrbit/ObjMoons/RObjDiam family (ObjOrbit's *return* is an OBJ
+    too), and SetObjGlyphNoneCore/SetObjDisp. One mislabeling trap
+    written down where it was nearly stepped in: ComputeHouses(int)
+    takes a house *system*, not a house index. Net, P7's own:
+    a pure documentation change must not move object code, and all 31
+    console objects checksum byte-identical before and after; suite
+    3195/0; Windows build compiles.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

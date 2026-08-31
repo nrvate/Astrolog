@@ -633,6 +633,22 @@
 #define cMacro    96
 #define cMSub     8
 
+/*
+** Documentation typedefs for the index domains above. Signs, objects,
+** houses, aspects and rays are all int, and these change nothing the
+** compiler checks -- their one job is to make a signature say which
+** domain a parameter indexes, because the worst bugs this codebase has
+** shipped were object numbers indexing sign-sized tables (see
+** REFACTORING.md theme T2). Use them in new and touched signatures;
+** the "none" spellings per domain are in CONVENTIONS.md.
+*/
+typedef int SIGN;    /* 1..cSign; none is -1 in sign-keyed tables     */
+typedef int OBJ;     /* 0..cObj, 0 is a real object (the Earth);      */
+                     /* none is 0 in object-keyed tables              */
+typedef int HOUSE;   /* 1..cSign                                      */
+typedef int ASPECT;  /* 1..cAspect; none is 0                         */
+typedef int RAY;     /* 1..cRay; none is 0                            */
+
 // Font size constants
 
 #define xFont  6
