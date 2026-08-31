@@ -491,8 +491,8 @@ int NPromptSwitches(char *line, char *argv[MAXSWITCHES])
 void InitRestrictions(flag fStore)
 {
   if (fStore) {
-    CopyRgb(ignore,  ignoreMem,  sizeof(ignore));
-    CopyRgb(ignore2, ignore2Mem, sizeof(ignore2));
+    CopyRgb(ignore.rgn,  ignoreMem,  sizeof(ignore.rgn));
+    CopyRgb(ignore2.rgn, ignore2Mem, sizeof(ignore2.rgn));
     CopyRgb(ignorea.rgn, ignoreaMem.rgn, sizeof(ignorea.rgn));
     CopyRgb(ignorez, ignorezMem, sizeof(ignorez));
     CopyRgb(ignore7, ignore7Mem, sizeof(ignore7));
@@ -500,8 +500,8 @@ void InitRestrictions(flag fStore)
     ignorefMem[2] = us.fIgnoreDiralt; ignorefMem[3] = us.fIgnoreDirlen;
     ignorefMem[4] = us.fIgnoreAlt0;   ignorefMem[5] = us.fIgnoreDisequ;
   } else {
-    CopyRgb(ignoreMem,  ignore,  sizeof(ignore));
-    CopyRgb(ignore2Mem, ignore2, sizeof(ignore2));
+    CopyRgb(ignoreMem,  ignore.rgn,  sizeof(ignore.rgn));
+    CopyRgb(ignore2Mem, ignore2.rgn, sizeof(ignore2.rgn));
     CopyRgb(ignoreaMem.rgn, ignorea.rgn, sizeof(ignorea.rgn));
     CopyRgb(ignorezMem, ignorez, sizeof(ignorez));
     CopyRgb(ignore7Mem, ignore7, sizeof(ignore7));

@@ -2786,11 +2786,11 @@ void ShowRestrictDialogQt()
     {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
     {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
     {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
-    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore2},
+    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore2.rgn},
     {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
 
   ShowRcRestrictQt(szTitleRestrict, rgctlRestrict, cctlRestrict,
-    dxRestrict, dyRestrict, 0, dwarfHi, ignore,
+    dxRestrict, dyRestrict, 0, dwarfHi, ignore.rgn,
     rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
 
@@ -2802,7 +2802,7 @@ void ShowStarRestrictDialogQt()
     {"dbSt_RU", 1, resClear, starLo, starHi, NULL} };
 
   ShowRcRestrictQt(szTitleStar, rgctlStar, cctlStar,
-    dxStar, dyStar, starLo, starHi, ignore,
+    dxStar, dyStar, starLo, starHi, ignore.rgn,
     rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
 
@@ -2817,11 +2817,11 @@ void ShowTransitRestrictDialogQt()
     {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
     {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
     {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
-    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore},
+    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore.rgn},
     {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
 
   ShowRcRestrictQt("Transit Object Restrictions", rgctlRestrict,
-    cctlRestrict, dxRestrict, dyRestrict, 0, dwarfHi, ignore2,
+    cctlRestrict, dxRestrict, dyRestrict, 0, dwarfHi, ignore2.rgn,
     rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
 
@@ -4158,7 +4158,7 @@ void ShowMoonRestrictDialogQt()
     {"dbMo_COB",-1, resToggle, cobLo,      cobHi,      NULL} };
 
   ShowRcRestrictQt(szTitleMoons, rgctlMoons, cctlMoons,
-    dxMoons, dyMoons, moonsLo, cobHi, ignore,
+    dxMoons, dyMoons, moonsLo, cobHi, ignore.rgn,
     rgbut, (int)(sizeof(rgbut)/sizeof(RCRESBUT)));
 }
 

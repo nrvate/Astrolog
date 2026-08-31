@@ -114,6 +114,10 @@ CHECKED_TABLE_DIMS = {
     'TBLRAYK': 'cRay+2',
     'TBLRAYV': 'cRay+2',
     'TBLRAYSZ': 'cRay+1',
+    # Range-guarded arrays (GRD*) declare their dimension the same way,
+    # so the audit reads them identically; they differ from the tagged
+    # TBL* tables only in what they check, not in how they are written.
+    'GRDOBJB': 'objMax',
 }
 
 

@@ -195,7 +195,7 @@ char *szStarCustom[cStar+1];
 
 // Restriction status of each object, as specified with -R switch.
 
-byte ignore[objMax] = {1,
+GRDOBJB ignore = {1,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,                     // Planets
   0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,                  // Minors
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,               // Cusps
@@ -207,7 +207,7 @@ byte ignore[objMax] = {1,
 
 // Restriction of objects when transiting, as specified with -RT switch.
 
-byte ignore2[objMax] = {1,
+GRDOBJB ignore2 = {1,
   0, 1, 0, 0, 0, 0, 0, 0, 0, 0,                     // Planets
   0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1,                  // Minors
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,               // Cusps

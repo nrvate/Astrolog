@@ -2010,11 +2010,11 @@ flag API DlgRestrict(HWND hdlg, uint message, WORD wParam, LONG lParam)
   switch (message) {
   case WM_INITDIALOG:
     if (wi.wCmd == cmdRes)
-      pb = ignore;
+      pb = ignore.rgn;
     else {
       SetWindowText(hdlg, "Transit Object Restrictions");
       SetDlgItemText(hdlg, dbRT, "Copy &From Standard Restriction Set");
-      pb = ignore2;
+      pb = ignore2.rgn;
     }
     for (i = 0; i <= dwarfHi; i++)
       SetCheck(dx01 + i, pb[i]);
@@ -2047,7 +2047,7 @@ flag API DlgRestrict(HWND hdlg, uint message, WORD wParam, LONG lParam)
         SetCheck(dx01 + i, !GetCheck(dx01 + i));
       break;
     case dbRT:
-      pb = (wi.wCmd == cmdRes ? ignore2 : ignore);
+      pb = (wi.wCmd == cmdRes ? ignore2.rgn : ignore.rgn);
       for (i = 0; i <= dwarfHi; i++)
         SetCheck(dx01 + i, pb[i]);
       break;
@@ -2059,7 +2059,7 @@ flag API DlgRestrict(HWND hdlg, uint message, WORD wParam, LONG lParam)
     }
 
     if (wParam == IDOK) {
-      pb = (wi.wCmd == cmdRes ? ignore : ignore2);
+      pb = (wi.wCmd == cmdRes ? ignore.rgn : ignore2.rgn);
       for (i = 0; i <= dwarfHi; i++)
         pb[i] = GetCheck(dx01 + i);
       if (!us.fCusp) {

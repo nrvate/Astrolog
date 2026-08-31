@@ -1671,6 +1671,31 @@ struct TBLASPK {
 ** representable, and this is what notices.
 */
 
+/*
+** Range-guarded arrays, which are a different tool from the checked
+** tables above and solve the other half of the problem.
+**
+** A TBL* table refuses the wrong *domain* at compile time, and says
+** nothing about range: rules[SIGT(-1)] compiles, because a tag is only
+** a claim about which domain an index came from. A GRD* array is the
+** opposite -- it takes a plain int, so no call site changes, and
+** asserts the *range* under the test build. That catches the "none"
+** value of -1 used as a subscript, which is the shape three shipped
+** bugs in this program have taken (work log items 37 and 134) and
+** which no tag would have stopped.
+**
+** Use GRD* where the domain is already obvious and the risk is a bad
+** value; use TBL* where code has historically indexed one domain's
+** table with another's. They compose: a table can be both, later.
+*/
+
+struct GRDOBJB {
+  byte rgn[objMax];
+  byte &operator[](int i) { AssertIndex(i, cObj); return rgn[i]; }
+  const byte &operator[](int i) const
+    { AssertIndex(i, cObj); return rgn[i]; }
+};
+
 struct RAYT { int n; explicit RAYT(int n_) : n(n_) {} };
 struct TBLRAY {
   int rgn[cRay+2];

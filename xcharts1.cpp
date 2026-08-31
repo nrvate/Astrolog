@@ -2985,7 +2985,7 @@ void XChartSector()
   }
 
   // Compute the planets' sector positions.
-  CopyRgb(ignore, ignoreSav, sizeof(ignore));
+  CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   CastSectors();
 
   // Figure out where to put planet glyphs.
@@ -3015,13 +3015,13 @@ void XChartSector()
   }
 
   // Draw sidebar based on normal chart positions.
-  CopyRgb(ignore, ignoreT, sizeof(ignore));
+  CopyRgb(ignore.rgn, ignoreT, sizeof(ignore.rgn));
   cp1 = cp0;
-  CopyRgb(ignoreSav, ignore, sizeof(ignore));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   CastChart(1);
-  CopyRgb(ignoreT, ignore, sizeof(ignore));
+  CopyRgb(ignoreT, ignore.rgn, sizeof(ignore.rgn));
   DrawSidebar();
-  CopyRgb(ignoreSav, ignore, sizeof(ignore));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
 }
 
 
@@ -3716,8 +3716,8 @@ void XChartMoons()
   KI kiP = -1;
 
   // If no moons unrestricted, temporarily unrestrict them all.
-  Assert(sizeof(ignore) == sizeof(ignoreSav));
-  CopyRgb(ignore, ignoreSav, sizeof(ignore));
+  Assert(sizeof(ignore.rgn) == sizeof(ignoreSav));
+  CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   count = 0;
   for (m = custLo; m <= custHi; m++) {
     if (ignore[m])
@@ -3990,7 +3990,7 @@ void XChartMoons()
   // land here too: leaving without this block used to leak the moons
   // chart's restrictions and fMoonMove into the session.
 LDone:
-  CopyRgb(ignoreSav, ignore, sizeof(ignore));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   AdjustRestrictions();
   us.fMoonMove = fMoonSav;
   CastChart(1);
@@ -4348,7 +4348,7 @@ void XChartSphere()
     cChart = 1 - (FBetween(us.nRel, rcHexaWheel, rcDual) ? us.nRel : 0);
   else {
     cChart = 2;
-    CopyRgb(ignore, ignoreSav, sizeof(ignore));
+    CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   }
   fSav = us.fRefract; us.fRefract = fFalse;
 
@@ -4651,7 +4651,7 @@ void XChartSphere()
   for (iChart = cChart; iChart >= 1; iChart--) {
     FProcessCommandLine(szWheelX[iChart]);
     if (iChart == 2 && us.nRel <= rcTransit)
-      CopyRgb(ignore2, ignore, sizeof(ignore));
+      CopyRgb(ignore2.rgn, ignore.rgn, sizeof(ignore.rgn));
     if (iChart <= 1)
       pcp = rgpcp[us.nRel <= rcDual];
     else
@@ -4723,7 +4723,7 @@ void XChartSphere()
     }
 
     if (iChart == 2 && us.nRel <= rcTransit)
-      CopyRgb(ignoreSav, ignore, sizeof(ignore));
+      CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   } // iChart
   FProcessCommandLine(szWheelX[0]);
 

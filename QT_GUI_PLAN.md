@@ -4405,6 +4405,50 @@ are the more useful half to read before starting something new.
     Nets: suite 3213/0; console, Qt release, Qt test and Windows builds
     clean; six audits clean; graphics sweep 254/0 where it reported 12.
 
+135. **The object core gets a range guard, and the gated question
+    turns out to have been the wrong one.** Taken at the maintainer's
+    direction on the one row T2 left for their decision. Measuring it
+    first changed what the increment should be.
+
+    **A domain tag would not have caught the incidents that motivated
+    this.** All three of item 134's bugs were `ignore[-1]`, and
+    `ignore[OBJT(-1)]` compiles perfectly well: a tag is a claim about
+    which *domain* an index came from, and says nothing about its
+    *range*. What catches -1 is the range assert -- and that turns out
+    to be **separable from tagging**, which is the whole finding here.
+
+    `GRDOBJB` takes a plain `int`, asserts `0..cObj` under `QTTEST`,
+    and is otherwise an array. So converting `ignore` and `ignore2`
+    changed **none of their 338 subscript sites** -- the entire cost was
+    41 raw-storage boundaries taking `.rgn` (CopyRgb/sizeof pairs, two
+    registry rows, the restriction dialogs' by-pointer array selection).
+    Compare E1: 170 subscripts by hand for the tagged equivalent.
+
+    **Proven by falsification, and the proof is the point.** Reverting
+    item 134's `FProper()` fix makes a plain `-DQTTEST` build abort on
+    `-X8` with `GRDOBJB::operator[]: Assertion (i) >= 0 && (i) <=
+    (cObj) failed` -- no sanitizer, no ASan sweep, no luck required.
+    That is the mechanism that would have caught all three of item
+    134's bugs the moment any test reached `-X8`.
+
+    Nets: suite 3213/0; console, Qt release, Qt test and Windows builds
+    clean; switch and influence matrices identical; a 10-case render
+    differential identical; six audits clean after defaults_audit.py
+    learned the `GRD*` declaration shape, re-falsified on a shortened
+    `ignore`.
+
+    **What this leaves.** O2 -- planet[]/chouse[] and the rest of the
+    objMax family -- is the same mechanism applied mechanically, and is
+    now a small job rather than the multi-session one item 125 measured,
+    because the 1,000-odd subscripts do not move. The only real work is
+    that `planet`/`chouse` are `cp0.obj`/`cp0.cusp`, members of `CP`, so
+    the guard lives in the struct and the 16 `cp*.obj`-as-pointer sites
+    take `.rgn`. **Domain tagging the object core is no longer the
+    gated question**: it is closed pending evidence, and the evidence it
+    waits for is a *cross-domain* incident here, of which there has
+    never been one -- every incident in this family has been a bad
+    value, not a wrong domain.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -70,7 +70,19 @@ identification) and say so in a comment. Code that selects among
 same-domain tables holds a `TBLSIG *`/`TBLOBJ *` (see RULERSYS,
 RgRules()); the registry's two `-Y7` rows reach the raw storage as
 `.rgn`, the one deliberately unchecked boundary. defaults_audit.py
-knows the checked declaration shape (`TBLOBJ name = {`). Two aspect
+knows the checked declaration shape (`TBLOBJ name = {`).
+
+**Two tools, and they answer different questions.** A `TBL*` checked
+table refuses the wrong *domain* at compile time and says nothing about
+range — `rules[SIGT(-1)]` compiles. A `GRD*` range-guarded array is the
+opposite: it takes a plain `int`, so converting one changes no call
+site at all, and asserts the *range* under the test build. Reach for
+`GRD*` when the domain is already obvious and the risk is a bad value —
+`-1` used as a subscript is the shape three shipped bugs here have
+taken — and for `TBL*` when one domain's table has historically been
+indexed with another's. They compose; a table can gain both.
+
+Two aspect
 traps, both live: `FIgnoreA()` and `AdjustAspectCount()` apply `ASPT`
 inside the macro, so a caller passing a non-aspect is *not* caught —
 read the call site; and the `cAspect2`-dimensioned display tables

@@ -1869,7 +1869,7 @@ void ChartSector(void)
     cpls += pluszone[i];
   }
   cp = cp0;
-  CopyRgb(ignore, ignoreSav, sizeof(ignore));
+  CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   CastSectors();
 
   AnsiColor(kDkGrayA);
@@ -1981,7 +1981,7 @@ void ChartSector(void)
       PrintSz("  . ");
   }
   PrintL();
-  CopyRgb(ignoreSav, ignore, sizeof(ignore));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   CastChart(1);
 }
 
@@ -2023,7 +2023,7 @@ static flag ChartAstroGraphCore(flag fRel)
       sprintf(sz2[0], "#1 "); sprintf(sz2[1], "#2 ");
     } else
       sz2[0][0] = chNull;
-    CopyRgb(ignore, ignore3, sizeof(ignore));
+    CopyRgb(ignore.rgn, ignore3, sizeof(ignore.rgn));
   }
 
   for (i2 = 0; i2 < cChart; i2++) {
@@ -2479,8 +2479,8 @@ flag ChartMoons()
   PT3R pt;
 
   // If no moons unrestricted, temporarily unrestrict them all.
-  Assert(sizeof(ignore) == sizeof(ignoreSav));
-  CopyRgb(ignore, ignoreSav, sizeof(ignore));
+  Assert(sizeof(ignore.rgn) == sizeof(ignoreSav));
+  CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   count = 0;
   for (m = custLo; m <= custHi; m++) {
     i = ObjOrbit(m);
@@ -2873,7 +2873,7 @@ flag ChartMoons()
   }
 
   // Restore settings and recast original chart.
-  CopyRgb(ignoreSav, ignore, sizeof(ignoreSav));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignoreSav));
   AdjustRestrictions();
   us.fMoonMove = fMoonSav;
   CastChart(1);

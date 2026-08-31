@@ -1590,7 +1590,7 @@ flag XChartRising()
 
   // Set temporary restriction list for those objects used in this chart.
   ClearB((pbyte)rgalt, sizeof(rgalt));
-  CopyRgb(ignore, ignoreSav, sizeof(ignore));
+  CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   for (i = 0; i <= cObj; i++)
     ignore[i] = fTrue;
   for (i = 0; i < imax; i++)
@@ -1773,7 +1773,7 @@ flag XChartRising()
   DrawEdge(x1, y1, x2, y2);
 
   // Restore original chart.
-  CopyRgb(ignoreSav, ignore, sizeof(ignore));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   AdjustRestrictions();
   ciCore = ciMain;
   CastChart(1);

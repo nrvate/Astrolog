@@ -1940,8 +1940,8 @@ static void TestSettingsRoundTripQt()
     "the rulership bonuses moved out whole (%g, %g)",
     rgrBonusInf[1], rgrBonusInf[5]);
 
-  CopyRgb(ignore, rgbIgnoreSav, sizeof(ignore));
-  CopyRgb(ignore2, rgbIgnore2Sav, sizeof(ignore2));
+  CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
+  CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
   // One snapshot where four parallel-array copies used to be -- the
   // struct being the point of the exercise.
   CopyRgb((pbyte)rgobjset, (pbyte)rgosSav, sizeof(rgobjset));
@@ -2014,8 +2014,8 @@ static void TestSettingsRoundTripQt()
     "a cusp's transit influence survives (%.2f, want 6.00)",
     rgobjset[iCusp].tinf);
 
-  CopyRgb(rgbIgnoreSav, ignore, sizeof(ignore));
-  CopyRgb(rgbIgnore2Sav, ignore2, sizeof(ignore2));
+  CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
+  CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
   CopyRgb((pbyte)rgosSav, (pbyte)rgobjset, sizeof(rgobjset));
   is.szFileOut = szFileOutSav;
   us.nWriteFormat = nWriteFormatSav;

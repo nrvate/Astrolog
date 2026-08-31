@@ -254,7 +254,7 @@ void CastRelation(void)
       ciCore = ciMain = ciSave;
 #endif
     if (i == 2 && us.nRel <= rcTransit) {
-      CopyRgb(ignore, ignoreSav, sizeof(ignore));
+      CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
       for (j = 0; j <= is.nObj; j++)
         ignore[j] = ignore[j] && ignore2[j];
     }
@@ -277,7 +277,7 @@ void CastRelation(void)
       t2 = t;
     *rgpcp[i] = cp0;
     if (i == 2 && us.nRel <= rcTransit)
-      CopyRgb(ignoreSav, ignore, sizeof(ignore));
+      CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   }
 
   us.fProgress = fSav;
@@ -837,7 +837,7 @@ void ChartTransitInfluence(flag fProg)
   // Cast the natal and transiting charts as with a relationship chart.
 
   cp1 = cp0;
-  CopyRgb(ignore, ignoreSav, sizeof(ignore));
+  CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   for (i = 0; i <= is.nObj; i++)
     ignore[i] = ignore2[i];
   ciCore = ciTran;
@@ -847,7 +847,7 @@ void ChartTransitInfluence(flag fProg)
   }
   CastChart(0);
   cp2 = cp0;
-  CopyRgb(ignoreSav, ignore, sizeof(ignore));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
 
   // Do a relationship aspect grid to get the transits. Have to make and
   // restore two changes to get it right for this chart: (1) Make the natal
@@ -861,7 +861,7 @@ void ChartTransitInfluence(flag fProg)
     ignore[i] = ignore[i] && ignore2[i];
   }
   f = FCreateGridRelation(fFalse);
-  CopyRgb(ignoreSav, ignore, sizeof(ignore));
+  CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   for (i = 0; i <= is.nObj; i++)
     cp1.dir[i] = ret[i];
   if (!f)

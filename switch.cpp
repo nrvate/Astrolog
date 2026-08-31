@@ -186,9 +186,9 @@ static CONST SWITCHRANGED rgswranged[] = {
     vtReal, 0, 0, NULL},
   {"YjA", "Yj", pmAspect, 0, cAspect, rAspInf.rgn,       sizeof(real),
     vtReal, 0, 0, NULL},
-  {"YR",  "YR", pmObject, 0, cObj,    ignore,            sizeof(byte),
+  {"YR",  "YR", pmObject, 0, cObj,    ignore.rgn,        sizeof(byte),
     vtBool, 0, 0, RedoRestrictions},
-  {"YRT", "YR", pmObject, 0, cObj,    ignore2,           sizeof(byte),
+  {"YRT", "YR", pmObject, 0, cObj,    ignore2.rgn,       sizeof(byte),
     vtBool, 0, 0, RedoRestrictions},
   {"Y7O", "Y7", pmObject, 0, oNorm,   rgObjRay.rgn,      sizeof(int),
     vtRay, 0, 7, NULL},
@@ -1974,10 +1974,10 @@ static int NSwR(CONST char *szSwitch, PARSEIN *pin)
   }
   fT = (ch1 == 'T');
   if (fT) {
-    pch = (char *)ignore2;
+    pch = (char *)ignore2.rgn;
     ch1 = szSwitch[2];
   } else
-    pch = (char *)ignore;
+    pch = (char *)ignore.rgn;
   if (ch1 == '0')
     for (i = 0; i <= cObj; i++)
       pch[i] = fTrue;
@@ -1986,7 +1986,8 @@ static int NSwR(CONST char *szSwitch, PARSEIN *pin)
       pch[i] = fFalse;
   else if (ch1 == '2')
     for (i = 0; i <= cObj; i++)
-      pch[i] = ((char *)(pch == (char *)ignore2 ? ignore : ignore2))[i];
+      pch[i] = ((char *)(pch == (char *)ignore2.rgn ?
+        ignore.rgn : ignore2.rgn))[i];
   else if (ch1 == 'C')
     for (i = cuspLo; i <= cuspHi; i++)
       SwitchF(pch[i]);

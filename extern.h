@@ -183,8 +183,8 @@ extern GridInfo *grid;
 extern int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1],
   kObjA[objMax];
 
-extern byte ignore[objMax], ignore2[objMax],
-  ignorez[arMax], ignore7[rrMax], pluszone[cSector+1];
+extern GRDOBJB ignore, ignore2;
+extern byte ignorez[arMax], ignore7[rrMax], pluszone[cSector+1];
 extern byte ignoreMem[objMax], ignore2Mem[objMax],
   ignorezMem[arMax], ignore7Mem[rrMax], ignorefMem[6];
 extern TBLASPB ignorea, ignoreaMem;

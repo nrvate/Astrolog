@@ -2755,7 +2755,7 @@ void WireChartSphere()
     cChart = 1 - (FBetween(us.nRel, rcHexaWheel, rcDual) ? us.nRel : 0);
   else {
     cChart = 2;
-    CopyRgb(ignore, ignoreSav, sizeof(ignore));
+    CopyRgb(ignore.rgn, ignoreSav, sizeof(ignore.rgn));
   }
 
   // Draw constellations.
@@ -3004,7 +3004,7 @@ void WireChartSphere()
   for (iChart = 1; iChart <= cChart; iChart++) {
     FProcessCommandLine(szWheelX[iChart]);
     if (iChart == 2 && us.nRel <= rcTransit)
-      CopyRgb(ignore2, ignore, sizeof(ignore));
+      CopyRgb(ignore2.rgn, ignore.rgn, sizeof(ignore.rgn));
     if (iChart <= 1)
       pcp = rgpcp[us.nRel <= rcDual];
     else
@@ -3052,7 +3052,7 @@ void WireChartSphere()
 
     cp0 = cpSav;
     if (iChart == 2 && us.nRel <= rcTransit)
-      CopyRgb(ignoreSav, ignore, sizeof(ignore));
+      CopyRgb(ignoreSav, ignore.rgn, sizeof(ignore.rgn));
   } // iChart
   FProcessCommandLine(szWheelX[0]);
 
