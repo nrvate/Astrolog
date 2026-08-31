@@ -411,6 +411,17 @@ you are hunting. Expect minutes rather than seconds — hence the
 `timeout`, which is not optional courtesy: a run that goes wrong here
 goes wrong by *hanging*, not by failing.
 
+**Point it at the switch matrix, not only the suite.** A console build
+with `-fsanitize=address -DQTTEST` driven through
+`tools/switch-matrix.sh` covers 529 invocations of the whole switch
+surface, including the error and edge shapes, and on its first ever run
+it found two real out-of-bounds bugs the suite had never reached (work
+log item 133) -- one of which segfaults the release build. Two traps:
+the plain `Makefile` has no object directory, so `make clean` before
+and after (see Build traps), and the matrix pipes each run's stderr
+through `head -2`, so a report arrives decapitated -- it tells you the
+invocation, and you re-run that one directly to get the trace.
+
 The suite is a good host because it already renders 26 chart types and
 fires all 338 menu items, so one run exercises far more than a person
 clicking could. `ProbeQt()` works under ASan too, which is how the

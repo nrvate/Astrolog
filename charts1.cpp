@@ -1891,7 +1891,17 @@ void ChartSector(void)
     AnsiColor(kObjA[i]);
     sprintf(sz, "%-4.4s: ", szObjDisp[i]); PrintSz(sz);
     r = GFromO(planet[i]);
-    sec = (int)r + 1; rgc[sec]++;
+    sec = (int)r + 1;
+    // GFromO() is (rDegMax - position)/10, so a position of exactly 0
+    // gives 36.0 and sec = 37 -- one past the end of both rgc[] and
+    // pluszone[], which hold cSector+1 entries indexed 0 through 36.
+    // That is sector 1 arrived at the long way round, so wrap rather
+    // than clamp, exactly as the graphics twin does (xcharts0.cpp, the
+    // gSector branch of DrawSidebar). Reached by any object still
+    // sitting at 0.0, not only by one truly at 0 Aries.
+    if (sec > cSector)
+      sec -= cSector;
+    rgc[sec]++;
     pls = pluszone[sec];
     cq += pls;
     kPls = (pls ? kRedA : kDkGreenA);

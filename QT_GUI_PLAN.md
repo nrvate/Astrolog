@@ -4289,6 +4289,67 @@ are the more useful half to read before starting something new.
     QT_TESTING.md's ASan section; not chased, at the maintainer's
     direction.
 
+133. **Hunting the intermittent found two other bugs, deterministically.**
+    Asked to try for the intermittent overflow again, the useful move was
+    not more suite runs -- 17 under gdb found nothing -- but pointing a
+    sanitizer at a harness that is already exhaustive. **`tools/switch-matrix.sh`
+    under a console ASan build reported two, on its first run:**
+
+        make clean
+        make NAME=/tmp/ha CPPFLAGS="-DQTTEST -fsanitize=address -g -O0 \
+          -Wno-write-strings -Wno-narrowing -Wno-comment" \
+          LIBS="-fsanitize=address -lm -lX11 -ldl" -j4
+        make clean && make -j4          # the objects are shared; see the traps
+        ASAN_OPTIONS=detect_leaks=0 tools/switch-matrix.sh /tmp/ha
+
+    Both are upstream's, and both are now fixed:
+
+    - **`ChartSector()` read one past `rgc[]` and `pluszone[]`**
+      (charts1.cpp). `GFromO(o)` is `(rDegMax - o)/10`, so a position of
+      exactly 0 gives 36.0 and `sec = 37` -- one past tables that hold
+      `cSector+1` entries indexed 0..36. The graphics twin already knew:
+      `xcharts0.cpp`'s gSector branch carries the same arithmetic with a
+      wrap and a comment explaining it. The text path never got it, so
+      it also printed sector 37, and 19 and 13 in the 18- and 12-sector
+      columns, where all three should read 1. Reached by any object
+      still sitting at 0.0, not only one truly at 0 Aries.
+    - **`-YXDD` freed or overwrote a compiled-in glyph** (switch.cpp).
+      It copied through `FCloneSz()`, which is `fDestConst = fFalse` --
+      "the destination is heap owned", so reuse its buffer if the source
+      fits and free it otherwise. A glyph still at its default is
+      neither. The sibling branch handling `-YXD`/`-YXD1` has always
+      passed the guard; this one never did, going back to the original
+      `xscreen.cpp` case the M4/M5 migration moved verbatim.
+      **`astrolog -YXDD 5 6` segfaulted the release build** -- the plain
+      switch matrix prints "Segmentation fault (core dumped)" at HEAD
+      and a settings dump after, which is the whole behavioural diff for
+      this increment.
+
+    **No unit test for the glyph one, deliberately.** A first attempt
+    passed with the bug reintroduced, and an indiscriminate test is
+    worse than none, so it was deleted rather than committed. The
+    standing net is the matrix itself: the invocation is already in it,
+    and at HEAD it crashes. The ASan recipe above belongs in the
+    pre-release checks, not the pre-commit ones -- one run, two real
+    bugs, in a harness that had been run dozens of times without one.
+
+    Not the intermittent, though: that one ASan called a *global*
+    buffer overflow and this pair are stack and heap. Still open.
+
+    Two method notes. The matrix pipes each run's stderr through
+    `head -2`, so an ASan report arrives decapitated -- it names the
+    invocation and nothing else, and the trace has to be got by
+    re-running that one invocation directly. And running the Qt suite
+    4-way parallel to hunt faster does not work: `long-strings` and the
+    new `line-drawing` both write a fixed filename under `TMPDIR`, so
+    concurrent runs clobber each other and fail 3-9 assertions that have
+    nothing wrong with them.
+
+    Nets: suite 3213/0; console, Qt release, Qt test and Windows builds
+    clean; six audits clean; the matrix ASan-clean where it reported two
+    findings before, and its only behavioural diff the crash that stopped
+    happening.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

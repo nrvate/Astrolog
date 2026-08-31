@@ -1140,8 +1140,16 @@ static int NSwYXDCore(int argc, char **argv, char chVar)
     j = NParseSz(argv[2], pmObject);
     if (FErrorValN("YXDD", !FItem(j), j, 2))
       return tcError;
-    FCloneSz(szDrawObject[j], (char **)&szDrawObject[i]);
-    FCloneSz(szDrawObject2[j], (char **)&szDrawObject2[i]);
+    // FCloneSz() means fDestConst = fFalse, i.e. "the destination is
+    // heap owned": it will reuse the old buffer if it is big enough and
+    // free it otherwise. A glyph still at its compiled-in default is
+    // neither, so -YXDD on an untouched object wrote into
+    // szDrawObjectDef[] or freed it. The else branch below has always
+    // passed the guard; this one never did.
+    FCloneSzCore(szDrawObject[j], (char **)&szDrawObject[i],
+      szDrawObject[i] == szDrawObjectDef[i]);
+    FCloneSzCore(szDrawObject2[j], (char **)&szDrawObject2[i],
+      szDrawObject2[i] == szDrawObjectDef2[i]);
   } else {
     FCloneSzCore(argv[2][0] ? argv[2] : szDrawObjectDef[i],
       (char **)&szDrawObject[i], szDrawObject[i] == szDrawObjectDef[i]);
