@@ -66,7 +66,11 @@ identification) and say so in a comment. Code that selects among
 same-domain tables holds a `TBLSIG *`/`TBLOBJ *` (see RULERSYS,
 RgRules()); the registry's two `-Y7` rows reach the raw storage as
 `.rgn`, the one deliberately unchecked boundary. defaults_audit.py
-knows the checked declaration shape (`TBLOBJ name = {`).
+knows the checked declaration shape (`TBLOBJ name = {`). Under the
+test build (`QTTEST`, which the ASAN build also defines) the subscript
+additionally range checks with `AssertIndex` — so a tag carrying an
+in-domain but out-of-range value aborts rather than misreading, and
+new code should expect the suite to catch that for it.
 
 ## Switch-flag macros
 

@@ -3911,6 +3911,51 @@ are the more useful half to read before starting something new.
     closed by written verdict -- including the planet[] core, which
     stays maintainer-gated. Done-when is explicit. Docs only.
 
+127. **T2 increment E2: the checked tables range check themselves under
+    the test build.** The compile-time half (item 125) stops a *sign*
+    index reaching an object table; it says nothing about an index that
+    is the right domain and still off the end -- item 115's shape, a
+    star number arriving where an oNorm table was expected. The three
+    checked subscripts now carry `AssertIndex(i.n, cSign/oNorm)` inside
+    `operator[]`, so that read aborts wherever the suite reaches it.
+    astrolog.h only, 23 lines.
+
+    Three things worth keeping:
+
+    - **The assert has to be the C library's.** The codebase's own
+      `Assert()` is `#define Assert(f)` unless `DEBUG` (extern.h:419),
+      and `DEBUG` is not set by any makefile here -- writing the
+      obvious thing would have compiled clean and checked nothing. So
+      `<assert.h>` directly, included under `#ifdef QTTEST` beside the
+      other conditional headers, with `AssertIndex` defined empty
+      otherwise.
+    - **It costs the shipped program nothing, and that is provable
+      rather than argued.** Every line is inside `#ifdef QTTEST`, which
+      only Makefile.qt.test and Makefile.qt.asan define. Baseline built
+      from HEAD in a short-path worktree: all 31 console objects
+      byte-identical by md5, and `astrolog` itself `cmp`-identical.
+      That subsumes the recipe's switch-matrix differential instead of
+      approximating it -- an identical binary cannot behave
+      differently -- so step 7 now records the shortcut for any future
+      release-invisible increment.
+    - **Falsified five ways.** The probe was temporarily rewritten to
+      subscript past the end and below zero on each of the three table
+      types -- `rules[SIGT(cSign+1)]`, `rules[SIGT(-1)]`,
+      `ruler1[OBJT(oNorm+1)]`, `ruler1[OBJT(-1)]`,
+      `rgSignRay2[SIGT(cSign+1)][1]` -- and each aborted with SIGABRT
+      naming its own struct and line, while the in-range control
+      returned a value and printed `survived`. A range check that never
+      fires is indistinguishable from one that is compiled out, which
+      is exactly the trap the first bullet describes.
+
+    Nets: suite 3195/0 with the asserts live, so nothing the suite
+    reaches was already indexing out of range; ASAN suite clean too
+    (Makefile.qt.asan defines QTTEST, so it gets the asserts for free);
+    console, Qt release and Windows builds clean; six audits clean;
+    the three generated tables in sync. `CHECKED_TABLE_DIMS` in
+    defaults_audit.py needed no entry -- E2 adds no new checked type,
+    only behaviour to the three that exist.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

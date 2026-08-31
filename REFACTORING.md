@@ -190,6 +190,10 @@ against their loops' domains; the switch matrix is byte-identical.
 Full typing of the planet[]/chouse[] core (775 references, the
 arithmetic and varargs idioms) remains open and is a separate
 maintainer decision; the measured reasons are in the work log item.
+E2 followed the same day (work log item 127): the same three
+subscripts now range check at run time under the test build, so an
+index of the *right* domain that still runs off the end aborts where
+the suite reaches it — the half a compile-time tag cannot see.
 **The complete campaign state, recipe and ledger are in "The T2
 enforcement campaign" section below** — written so the remaining
 increments are mechanical for a follow-on session.
@@ -275,6 +279,14 @@ compile error. Definitions live in astrolog.h directly after the
    binaries; normalize the invocation-path spelling in error text
    (`sed "s|/tmp/b1wt/|./|g"`) before diffing; demand byte-identical.
    Remove the worktree after.
+   **Shortcut when the increment is release-invisible** (E2's shape:
+   everything inside `#ifdef QTTEST`): build the baseline worktree the
+   same way, then `diff` the two trees' `md5sum *.o` and `cmp` the two
+   `astrolog` binaries. Byte-identical object code proves behaviour
+   unchanged outright, so it *subsumes* the matrix rather than
+   approximating it, and costs one build instead of two matrix runs.
+   Only claim this when no `.o` differs — one that does sends you back
+   to the matrix.
 8. All six audits, plus the rule-5 falsification.
 9. Docs and commit (rule 7).
 
@@ -283,7 +295,7 @@ compile error. Definitions live in astrolog.h directly after the
 | id | family | scope | status |
 |---|---|---|---|
 | E1 | rulership/exaltation/ray: 16 tables, SIGT/OBJT, TBLSIG/TBLOBJ/TBLSIGRAY | 170 subscripts, 8 selector conversions, 2 registry rows | **done 2026-08-30**, work log item 125 |
-| E2 | test-build range asserts in checked `operator[]` | astrolog.h only: under `#ifdef QTTEST`, assert the index within the array (TBLSIG 0..cSign, TBLOBJ 0..oNorm, TBLSIGRAY 0..cSign) via `<assert.h>` — the codebase's own `Assert()` is compiled out (extern.h:419) and cannot be used. Catches item 115's class (a star number into an oNorm table) dynamically wherever the suite reaches. Net: suite + deliberately-broken probe index must abort under the test build | **pending, small** |
+| E2 | test-build range asserts in checked `operator[]` | astrolog.h only: under `#ifdef QTTEST`, assert the index within the array (TBLSIG 0..cSign, TBLOBJ 0..oNorm, TBLSIGRAY 0..cSign) via `<assert.h>` — the codebase's own `Assert()` is compiled out (extern.h:419) and cannot be used. Catches item 115's class (a star number into an oNorm table) dynamically wherever the suite reaches. Net: suite + deliberately-broken probe index must abort under the test build | **done 2026-08-30**, work log item 127 |
 | E3 | aspect family: rAspAngle (44 refs), rAspOrb (28), rAspAngleDef (2), rAspInf (14), kAspA (26), ignorea (16), ignoreaMem (1) — new `ASPT` tag; TBLASP (int), TBLASPR (real), TBLASPB (byte), all dim cAspect+1 | ~131 subscripts. Traps: the cAspect2-dimensioned display tables (szAspectName and kin) are a *different, larger domain* — leave them; szModify rows are 0-based (`[asp-1]`) — value expressions, not table indexes, leave; registry rows use the `&rAspAngle[0]` spelling | **pending** |
 | E4 | ray/constellation leftovers: kRayA (cRay+2 — the +2 slot is a real extra, read the sites first), szRayName/szRayWill (SZ variant), iCnstlZodiac/lonCnstlZodiac | small; convert or close with a measured verdict, either is fine | **pending, optional** |
 | — | sign/aspect *display* tables (szSignName family, glyph/color arrays) | closed by verdict: wrong-domain indexing is self-announcing garbage text/color, the ref count is an ocean, and no incident ever lived here | **closed** |

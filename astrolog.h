@@ -340,6 +340,9 @@
 #include <stdlib.h>
 #endif
 #include <math.h>
+#ifdef QTTEST
+#include <assert.h>
+#endif
 #ifdef PC
 #include <malloc.h>
 #include <windows.h>
@@ -820,22 +823,36 @@ enum _objects {
 ** writer makes, visible at the call site, reviewable against the loop
 ** it sits in.
 */
+
+// The test build range checks too, so an index in the right domain but
+// past the table's end -- a star number reaching an object sized table,
+// work log item 115's shape -- aborts wherever the suite reaches it.
+// The codebase's own Assert() is compiled out unless DEBUG (extern.h).
+#ifdef QTTEST
+#define AssertIndex(n, cMax) assert((n) >= 0 && (n) <= (cMax))
+#else
+#define AssertIndex(n, cMax)
+#endif
+
 struct SIGT { int n; explicit SIGT(int n_) : n(n_) {} };
 struct OBJT { int n; explicit OBJT(int n_) : n(n_) {} };
 struct TBLSIG {
   int rgn[cSign+1];
-  int &operator[](SIGT i) { return rgn[i.n]; }
-  const int &operator[](SIGT i) const { return rgn[i.n]; }
+  int &operator[](SIGT i) { AssertIndex(i.n, cSign); return rgn[i.n]; }
+  const int &operator[](SIGT i) const
+    { AssertIndex(i.n, cSign); return rgn[i.n]; }
 };
 struct TBLOBJ {
   int rgn[oNorm+1];
-  int &operator[](OBJT i) { return rgn[i.n]; }
-  const int &operator[](OBJT i) const { return rgn[i.n]; }
+  int &operator[](OBJT i) { AssertIndex(i.n, oNorm); return rgn[i.n]; }
+  const int &operator[](OBJT i) const
+    { AssertIndex(i.n, oNorm); return rgn[i.n]; }
 };
 struct TBLSIGRAY {
   int rgn[cSign+1][cRay+1];
-  int *operator[](SIGT i) { return rgn[i.n]; }
-  const int *operator[](SIGT i) const { return rgn[i.n]; }
+  int *operator[](SIGT i) { AssertIndex(i.n, cSign); return rgn[i.n]; }
+  const int *operator[](SIGT i) const
+    { AssertIndex(i.n, cSign); return rgn[i.n]; }
 };
 
 // Aspects

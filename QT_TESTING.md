@@ -186,6 +186,21 @@ menu items fired (`firing: Chart Settings...`). A clean run does not need
 the noise, which is why it is off by default — reach for it the moment a
 run dies without saying where.
 
+**One kind of death names itself.** The checked tables (`TBLSIG`,
+`TBLOBJ`, `TBLSIGRAY`) range check their subscript under the test build
+and abort on a bad index, printing the struct and the astrolog.h line:
+
+```
+astrolog-qt-test: astrolog.h:847: int& TBLOBJ::operator[](OBJT):
+  Assertion `(i.n) >= 0 && (i.n) <= (...)' failed.
+```
+
+That is a real bug in the code under test, never a broken test — an
+index of the right domain running off the end of its table. It fires
+only under `QTTEST` (so the test and ASAN builds; work log item 127),
+which is why the same input can be quiet in `./astrolog-qt`. Debug it
+there rather than concluding the release build is fine.
+
 ## The console build, for the calculation core
 
 `make` builds the X11 binary, the quickest way to exercise the shared
