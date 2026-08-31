@@ -430,6 +430,8 @@ extern FILE *FileOpen P((CONST char *, int, char *));
 extern byte BRead P((FILE *));
 extern word WRead P((FILE *));
 extern dword LRead P((FILE *));
+extern flag FReadSzLineSkip P((FILE *, char *, int));
+extern flag FReadSzLineTrim P((FILE *, char *, int));
 extern flag FProcessSwitchFile P((CONST char *, FILE *));
 extern flag FOutputData P((void));
 extern flag FOutputAAFFile P((void));

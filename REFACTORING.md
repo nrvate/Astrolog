@@ -843,8 +843,13 @@ every reader's truncation point — and building it caught five overflow
 crashers before pinning anything (AAF's field assembly, ADB's
 city+country join, `NParseSz`/`RParseSz`'s copy-in, and
 `FErrorValR`/`FormatR` on the error path), all upstream-inherited, all
-fixed the same day. Still open here: the reader consolidation itself,
-and the SF/calendar 254-vs-1020 mismatch as its own decided change.
+fixed the same day. **Consolidation done the same evening** (work log
+item 119): `FReadSzLineSkip()`/`FReadSzLineTrim()` are the two homes,
+proven by an 11-fixture pre/post differential, byte-identical. Still
+open here: the SF/calendar 254-vs-1020 mismatch as its own decided
+change, and — put on the record by that rebuild's -Wformat-overflow
+noise — atlas.cpp's zone-error paths, which format a 254-char szLine
+into smaller buffers at six sites: the same class, unfixed.
 
 **B2 — Virtual filenames are in-band magic strings.** `FInputData`
 (io.cpp:2656) special-cases the names `nul`, `set`, `now`, `tty`,

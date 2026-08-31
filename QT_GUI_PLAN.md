@@ -3751,6 +3751,28 @@ are the more useful half to read before starting something new.
     SF/calendar 254-vs-1020 mismatch — are still open, now safe to take
     behind these pins.
 
+119. **B1 taken: the import readers exist in two helpers.** The getc
+    loop that AAF, Astrodatabank and the JPL Horizons response parser
+    each hand-rolled is `FReadSzLineSkip()`; the fgets-and-trim loop
+    that Solar Fire, calendar and (minus the trim) Quick*Chart
+    hand-rolled is `FReadSzLineTrim()`, both in io.cpp above the switch
+    file reader. Each caller passes its own buffer and limit, so the
+    per-format truncation points item 118 pinned are unchanged --
+    including, for now, Solar Fire and calendar reading cchSzMax
+    characters into a cchSzLine buffer, the mismatch the finding led
+    with, kept byte-identical here so its fix can be a decided change
+    of its own. The switch-file reader stays hand-written on purpose
+    (realloc growth is its own policy, documented at the helpers), as
+    does FInputData's format-detection peek. Net: an 11-fixture
+    differential -- every import format, control and long-line variants
+    both, driven through the console binary before and after,
+    byte-identical -- plus item 118's pins and the full suite at
+    3188/0; the Windows build compiles the same sources. The rebuild's
+    -Wformat-overflow noise also put atlas.cpp's zone-error paths on
+    the record as the same overflow class (szLine formatted into
+    smaller buffers, six sites); recorded at B1, deliberately not taken
+    here.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

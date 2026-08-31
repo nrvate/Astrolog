@@ -228,6 +228,56 @@ dword LRead(FILE *file)
 }
 
 
+// Read one line from a file into the given buffer: skip any leading
+// control characters (collapsing blank lines and line ends), then copy
+// characters until the next control character or the buffer is full,
+// whichever comes first. A longer line's remainder stays in the stream
+// and reads as the next line -- the callers' formats all treat such a
+// tail as a bad line, rather than losing it silently. Returns fFalse
+// once the file is exhausted before any content. This and the fgets
+// reader below are the one home for the fixed-buffer line reading the
+// import parsers used to hand-roll each their own way (the switch file
+// reader is the deliberate exception: its buffer realloc-grows).
+
+flag FReadSzLineSkip(FILE *file, char *szLine, int cchLine)
+{
+  char ch;
+  int i;
+
+  while (!feof(file) && (ch = getc(file)) < ' ')
+    ;
+  if (feof(file))
+    return fFalse;
+  for (szLine[0] = ch, i = 1; i < cchLine-1 && !feof(file) &&
+    (uchar)(szLine[i] = getc(file)) >= ' '; i++)
+    ;
+  szLine[i] = chNull;
+  return fTrue;
+}
+
+
+// Read one line from a file into the given buffer with fgets, stripping
+// the line end and any other trailing whitespace. Unlike the reader
+// above this does deliver empty lines, which some formats use as state
+// separators. Returns fFalse at end of file, including for a final line
+// with no line end of its own, which is what every caller's hand-rolled
+// loop did before it.
+
+flag FReadSzLineTrim(FILE *file, char *szLine, int cchLine)
+{
+  char *pch;
+
+  fgets(szLine, cchLine, file);
+  if (feof(file))
+    return fFalse;
+  for (pch = szLine; *pch; pch++)
+    ;
+  while (pch > szLine && pch[-1] <= ' ')
+    *(--pch) = chNull;
+  return fTrue;
+}
+
+
 // This is Astrolog's generic file processing routine, which handles chart
 // info files, position files, and config files. Given a file name or a file
 // handle, run through each line as a series of command switches.
@@ -454,8 +504,8 @@ flag FOutputData(void)
 
 flag FProcessAAFFile(CONST char *szFile, FILE *file)
 {
-  char szLine[cchSzLine], sz[cchSzMax], *pch, *sz1, *sz2, ch;
-  int i, grf;
+  char szLine[cchSzLine], sz[cchSzMax], *pch, *sz1, *sz2;
+  int grf;
   flag fHaveFile, fRet = fFalse;
 
   fHaveFile = (file != NULL);
@@ -468,20 +518,12 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
 
   grf = 0;
   while (grf != 3) {
-    while (!feof(file) && (ch = getc(file)) < ' ')
-      ;
-    if (feof(file))
+    if (!FReadSzLineSkip(file, szLine, cchSzLine))
       break;
-    for (szLine[0] = ch, i = 1; i < cchSzLine-1 && !feof(file) &&
-      (uchar)(szLine[i] = getc(file)) >= ' '; i++)
-      ;
-    szLine[i] = chNull;
-    if (szLine[0] == chNull)
-      continue;
     if (szLine[0] != '#') {
       sprintf(szLine,
         "The AAF file '%s' has a line not starting with '#' (character %d).",
-        szFile, (int)ch);
+        szFile, (int)szLine[0]);
       PrintWarning(szLine);
       goto LDone;
     }
@@ -656,8 +698,7 @@ flag FProcessQuickFile(CONST char *szFile, FILE *file)
       goto LDone;
   }
   do {
-    fgets(szLine, cchSzMax, file);
-    if (feof(file)) {
+    if (!FReadSzLineTrim(file, szLine, cchSzMax)) {
       fRet = fTrue;
       goto LDone;
     }
@@ -792,7 +833,7 @@ LDone:
 flag FProcessADBFile(CONST char *szFile, FILE *file)
 {
   char szLine[cchSzLine], sz[cchSzDef], szLoc1[cchSzDef], szLoc2[cchSzDef],
-    ch, *pch, *pch2;
+    *pch, *pch2;
   int i, grf, cchSz = (us.szADB == NULL ? 0 : CchSz(us.szADB));
   flag fHaveFile, fDidOne = fFalse, fDidStart, fDidEnd, fDidLon, fRet = fFalse;
 
@@ -814,14 +855,8 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
   fDidStart = fDidEnd = fFalse;
   grf = 0;
   while (!fDidEnd) {
-    while (!feof(file) && (ch = getc(file)) < ' ')
-      ;
-    if (feof(file))
+    if (!FReadSzLineSkip(file, szLine, cchSzLine))
       break;
-    for (szLine[0] = ch, i = 1; i < cchSzLine-1 && !feof(file) &&
-      (uchar)(szLine[i] = getc(file)) >= ' '; i++)
-      ;
-    szLine[i] = chNull;
     fDidLon = fFalse;
     for (pch = szLine; *pch; pch++) {
       if (FEqRgch(pch, "<adb_entry", 10, fFalse))
@@ -983,13 +1018,8 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
   }
   loop {
 
-  fgets(szLine, cchSzMax, file);
-  if (feof(file))
+  if (!FReadSzLineTrim(file, szLine, cchSzMax))
     break;
-  for (pch = szLine; *pch; pch++)
-    ;
-  while (pch > szLine && pch[-1] <= ' ')
-    *(--pch) = chNull;
 
   if (nState <= 0) {
     if (*szLine == chNull)
@@ -1117,13 +1147,8 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
   }
 
   loop {
-    fgets(szLine, cchSzMax, file);
-    if (feof(file))
+    if (!FReadSzLineTrim(file, szLine, cchSzMax))
       break;
-    for (pch = szLine; *pch; pch++)
-      ;
-    while (pch > szLine && pch[-1] <= ' ')
-      *(--pch) = chNull;
 
     if (nState < 0) {
       if (!FMatchSz("BEGIN:VEVENT", szLine))
@@ -3144,14 +3169,8 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     return fFalse;
   }
   loop {
-    while (!feof(file) && (ch = getc(file)) < ' ')
-      ;
-    if (feof(file))
+    if (!FReadSzLineSkip(file, szLine, cchSzLine))
       break;
-    for (szLine[0] = ch, i = 1; i < cchSzLine-1 && !feof(file) &&
-      (uchar)(szLine[i] = getc(file)) >= ' '; i++)
-      ;
-    szLine[i] = chNull;
     if (FBetween(phase, 0, 2)) {
       // Parse ephemeris data for one instant of time.
       for (i = 0, pch = szLine; i < 3 && *pch; pch++)
