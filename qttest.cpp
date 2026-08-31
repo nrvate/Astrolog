@@ -432,6 +432,31 @@ static void TestAllMenuActionsQt()
   });
   tClose.start(60 * nScaleTest);
   AllActionsTestQt(&rgpa);
+
+  // Firing the macro items below runs the user's own macros, and a macro
+  // may do anything a settings file can -- on this machine several load
+  // /data/med files full of -Yeb redefinitions. Whatever they do to the
+  // custom slots' identity (definition, glyph, display name) is restored
+  // after the sweep: three later groups assert untouched-slot
+  // preconditions, and whether a macro's -i target even exists depends
+  // on files outside the repository, which the suite's result must not.
+  // (Found when those files reappeared on this machine and the three
+  // groups went red with no code change at all.)
+  int rgnTypSav[cCust], rgnObjSav[cCust], rgnPntSav[cCust], rgnFlgSav[cCust];
+  char rgszGlyphSav[cCust][cchSzMax], rgszGlyph2Sav[cCust][cchSzMax];
+  char rgszDispSav[cCust][cchSzMax];
+  flag rgfGlyphDef[cCust], rgfGlyph2Def[cCust];
+  for (i = 0; i < cCust; i++) {
+    rgnTypSav[i] = rgTypSwiss[i]; rgnObjSav[i] = rgObjSwiss[i];
+    rgnPntSav[i] = rgPntSwiss[i]; rgnFlgSav[i] = rgFlgSwiss[i];
+    rgfGlyphDef[i] = (szDrawObject[custLo+i] == szDrawObjectDef[custLo+i]);
+    rgfGlyph2Def[i] =
+      (szDrawObject2[custLo+i] == szDrawObjectDef2[custLo+i]);
+    sprintf2(S(rgszGlyphSav[i]), "%s", szDrawObject[custLo+i]);
+    sprintf2(S(rgszGlyph2Sav[i]), "%s", szDrawObject2[custLo+i]);
+    sprintf2(S(rgszDispSav[i]), "%s", szObjDisp[custLo+i]);
+  }
+
   for (i = 0; i < rgpa.size(); i++) {
     // The label is the item's identity; the accelerator column after the
     // tab is display only, and carrying it here would break every
@@ -523,6 +548,32 @@ static void TestAllMenuActionsQt()
   for (k = 0; k < 40; k++)
     QApplication::processEvents(QEventLoop::AllEvents, 5 * nScaleTest);
   tClose.stop();
+
+  // Put the custom slots back (see the snapshot above the sweep). The
+  // glyph pointers can't be saved and replanted directly: a macro's
+  // redefinition frees the clone a saved pointer would point at, so the
+  // text is what was saved, and the restore frees whatever clone the
+  // sweep left before cloning the text back -- the same discipline
+  // TestObjSelGlyphQt() documents for szObjDisp.
+  for (i = 0; i < cCust; i++) {
+    rgTypSwiss[i] = rgnTypSav[i]; rgObjSwiss[i] = rgnObjSav[i];
+    rgPntSwiss[i] = rgnPntSav[i]; rgFlgSwiss[i] = rgnFlgSav[i];
+    if (szDrawObject[custLo+i] != szDrawObjectDef[custLo+i]) {
+      DeallocateP((char *)szDrawObject[custLo+i]);
+      szDrawObject[custLo+i] = szDrawObjectDef[custLo+i];
+    }
+    if (!rgfGlyphDef[i])
+      FCloneSzCore(rgszGlyphSav[i], (char **)&szDrawObject[custLo+i],
+        fTrue);
+    if (szDrawObject2[custLo+i] != szDrawObjectDef2[custLo+i]) {
+      DeallocateP((char *)szDrawObject2[custLo+i]);
+      szDrawObject2[custLo+i] = szDrawObjectDef2[custLo+i];
+    }
+    if (!rgfGlyph2Def[i])
+      FCloneSzCore(rgszGlyph2Sav[i], (char **)&szDrawObject2[custLo+i],
+        fTrue);
+    SetObjDisp(custLo+i, rgszDispSav[i]);
+  }
 
   printf("  %d menu items fired, %d switched to text\n", cfired, ctext);
 }

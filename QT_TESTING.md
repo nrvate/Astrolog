@@ -111,13 +111,27 @@ and `chart-render` most of the rest; nearly every other group is
 single-digit milliseconds. So "the suite is slow" is really "four groups
 are slow", and a debugging loop that avoids them is interactive.
 
-Two caveats, both already paid for:
+Four caveats, all already paid for:
 
 - **A group that passes alone and fails in the full run is inheriting
   state.** `menu-actions` leaves every setting wherever firing 338 items
   lands, and anything after it must set what it depends on. Dump the
   globals in a solo run and a full run and diff them (work log item 57)
   rather than guessing one variable per rebuild.
+- **Never run two suites at the same time.** The regular and ASan
+  binaries (and any capture run) write the same fixture paths under
+  `$TMPDIR` — `astrolog-qt-longstrings.txt`, `astrolog-qt-roundtrip.as`
+  and friends — so concurrent runs corrupt each other and fail groups
+  that pass alone. It looks exactly like a real regression, and it cost
+  an hour of bisecting before the collision was noticed (work log item
+  117). One suite at a time, and `pgrep -fa astrolog` for orphans first.
+- **The suite's result must not depend on files outside the repo.** The
+  menu sweep fires the user's macros, and a macro is a `-i` load of
+  whatever file the user's config names — whether those files *exist*
+  changed the suite's result once (work log item 117; three groups went
+  red with no code change). The sweep now restores the custom-slot state
+  macros can touch; anything else a fired action reads from outside the
+  tree should either be snapshotted the same way or not asserted on.
 - **An intermittent crash localises in seconds this way.** The exit-time
   heap corruption of 2026-08-28 took eight ~40-second full runs to pin to
   one test; three sub-second runs of that group alone would have answered

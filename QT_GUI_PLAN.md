@@ -3678,6 +3678,35 @@ are the more useful half to read before starting something new.
     six audits. Behavior identical by construction; the -i spot checks
     (nul, set, now, __d) and the full suite are the net.
 
+117. **The menu sweep stops leaking the user's macros into the suite.**
+    Three groups (custom-parse, objdef-set, objsel-glyph) went red with
+    no code change at all: their preconditions say nobody has touched
+    custom slot 1, and TestAllMenuActionsQt() fires the user's own macro
+    menu items, several of which are `-M0 "-i /data/med/*.dat"` loads
+    full of `-Yeb` redefinitions. Whether that dirties the slots
+    depended on whether those files exist *outside the repository* --
+    they had been missing from the macro paths on this machine, so every
+    earlier run's macro loads failed silently and the suite stayed
+    green; the moment the user restored them (reorganizing /data/med
+    while the suite was running, as it happened) the sweep started
+    really redefining slot 1 and the three groups reported on it. The
+    sweep now snapshots the custom slots' identity (all four
+    `rg*Swiss[]` arrays, both glyph tables, `szObjDisp`) and restores it
+    after firing -- text, not pointers, for the strings, since a
+    redefinition frees the clone a saved pointer would name, the same
+    szObjDisp discipline TestObjSelGlyphQt() already documents.
+    Diagnosed by bisecting group subsets down to menu-actions, then a
+    temporary per-item probe naming the exact culprit (macro "YEBSet1").
+    Two lessons written into QT_TESTING.md: the suite must not depend on
+    files outside the repo, and two suites must never run concurrently
+    (their shared $TMPDIR fixtures corrupt each other, which spent an
+    hour looking like a regression). One loose end, recorded so a
+    resurfacing has a starting point: a single full-ASan run in the
+    leaking state reported a global-buffer-overflow, with no stack
+    captured, that no run since the restore reproduces — if it comes
+    back, start from a custom slot redefined by macro to a high
+    asteroid number.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
