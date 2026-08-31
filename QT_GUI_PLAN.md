@@ -3828,6 +3828,22 @@ are the more useful half to read before starting something new.
     the new group's regression case dumps core. Suite 3195/0 (+5
     esoteric-tables); Windows build compiles the same fix.
 
+123. **C6 closed: the chart position rings' ownership is written down.**
+    CONVENTIONS.md gains "Chart position rings (cp0..cp6)", verified in
+    code rather than transcribed from memory: cp0 is the working ring
+    and is "the chart" (planet/planetalt/ret/chouse and friends are
+    macro aliases into it, refilled wholesale by every CastChart());
+    CastRelation() is the one systematic writer of cp1..cp6, casting
+    each ring from *rgpci[i] plus its szWheel[i] switches and then
+    composing cp0 from the rings per us.nRel; the -r switch handler
+    additionally seeds cp1/cp2 from cp0 so -o0 position files can be
+    relationship halves; and the time searches use cp1/cp2 as scratch
+    and restore only cp0, so those rings are not a relationship's after
+    a search. The incident that motivated the finding (relationship
+    charts losing their mode on recast, fork-fixed and pinned by
+    TestRelationshipModeQt) anchors the section. Documentation only; no
+    code change.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

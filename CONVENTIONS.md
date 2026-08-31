@@ -41,7 +41,8 @@ Two spellings of "none" coexist (the root cause of work log item 38):
 
 Before testing a table value for "none", check which domain the table
 is keyed by. The rulership cross-table invariant is asserted by the
-suite's `rulership` group.
+suite's `rulership` group, the esoteric tables' encodings by its
+`esoteric-tables` group.
 
 ## Switch-flag macros
 
@@ -64,6 +65,43 @@ suite's `rulership` group.
 `GetTimeNow(&MM, ...)` mutates a global through what reads as a local.
 Upstream-idiomatic; do not rename, but **new code writes `ciCore.mon`
 explicitly** rather than extending the alias set.
+
+## Chart position rings (cp0..cp6)
+
+The computed positions live in seven global `CP` slots (extern.h:154),
+reached by ring number through `rgpcp[]`, with `rgpci[]` holding each
+ring's chart info (`ciCore`, then `ciMain`..`ciHexa`). Ownership,
+verified in code (REFACTORING.md C6):
+
+- **`cp0` is the working ring, and `cp0` is "the chart".** Every cast
+  lands there — `CastChart()` clears and refills it wholesale — and the
+  familiar names `planet`/`planetalt`/`ret`/`chouse`/`inhouse` and
+  friends are macro aliases into it (extern.h:111-119). Code that reads
+  `planet[i]` is reading `cp0` as of the *last cast, whatever that
+  was*.
+- **`CastRelation()` (charts2.cpp) is the one systematic writer of
+  `cp1..cp6`.** For each ring it loads `*rgpci[i]`, applies that ring's
+  `szWheel[i]` switches, casts into `cp0`, and stores `*rgpcp[i] =
+  cp0`; it then composes `cp0` from the rings according to `us.nRel`
+  (synastry takes chart 1's cusps, composite midpoints them, and so
+  on). Single-chart modes never touch `cp1..cp6`, so those slots hold
+  whatever the last relationship mode left.
+- **The `-r` family handler** (switch.cpp) additionally seeds `cp1`/
+  `cp2` from `cp0` around its two `FInputData()` calls, so a
+  positions-only chart file (`-o0`, month -1) can serve as either half.
+- **The time searches treat `cp1`/`cp2` as scratch.** Transit search
+  (charts3.cpp) keeps the natal cast in `cp1` and each time slice's
+  cast in `cp2`, restores `cp0` when done — and deliberately not the
+  scratch rings. Don't read `cp1`/`cp2` after a search expecting a
+  relationship's rings.
+- Renderers that reorder rings for display (`XChartWheelRelation` and
+  kin) copy through locals or swap `cp1`/`cp2` temporarily; the sphere
+  and moons charts save into local `rgcp[]` arrays and restore.
+
+The incident behind this section: relationship charts losing their mode
+on recast needed a fork fix and a standing test
+(`TestRelationshipModeQt`). If code needs positions to *survive* a later
+cast, it must copy the ring aside itself — `cp0` will not.
 
 ## Feature macros
 

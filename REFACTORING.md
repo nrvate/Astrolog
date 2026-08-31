@@ -1028,6 +1028,11 @@ losing their mode on recast needed a fork fix and a standing test
 (`TestRelationshipModeQt`). Mostly T1; the increment is to document
 slot ownership — who writes each ring and when — as the surveys reach
 the chart code that juggles them (Area D). *Cost:* documentation.
+**Done 2026-08-30** (work log item 123): CONVENTIONS.md "Chart position
+rings" carries the verified ownership — cp0 the working ring behind the
+planet/chouse aliases, CastRelation() the one systematic writer of
+cp1..cp6, the -r handler's position-file seeding, and the searches'
+scratch use of cp1/cp2.
 
 ### Area D — text charts & interpretation, surveyed 2026-08-29
 
@@ -1479,8 +1484,9 @@ difference between "contained" and "clean".
 **Phase 2 completed 2026-08-30** (work log items 96-110): tranche 1
 on the 29th-30th, tranches 2 and 3 on the 30th, every item with a
 done-note or a measured verdict above. Still open, by choice, with
-their reasons recorded at the findings: C6's ring-ownership documentation (with Area D), and T1 move 3
-(opportunistic, never a sweep). Two of that closing list's four were
+their reasons recorded at the findings: T1 move 3
+(opportunistic, never a sweep); C6's ring-ownership documentation was
+taken 2026-08-30 (work log item 123). Two of that closing list's four were
 taken later the same day: A3's shared mode table with its measured
 boundaries (work log item 111), and C2 in its achievable shape after
 its net landed (items 112-113; the derive-into-locals no-go is
