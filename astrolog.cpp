@@ -80,7 +80,7 @@ void InitColors(void)
   for (i = 0; i <= oNorm; i++) {
     k = rgobjset[i].kolor;
     if (k == kRay || ptblRuler == NULL)
-      k = kRayA[rgObjRay[OBJT(i)]];
+      k = kRayA[RAYT(rgObjRay[OBJT(i)])];
     else if (k == kElement)
       k = (*ptblRuler)[OBJT(i)] > 0 ?
         kElemA[((*ptblRuler)[OBJT(i)]-1) & 3] : kLtGray;

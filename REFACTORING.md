@@ -195,8 +195,12 @@ subscripts now range check at run time under the test build, so an
 index of the *right* domain that still runs off the end aborts where
 the suite reaches it — the half a compile-time tag cannot see. E3
 closed the same day too (work log item 128): the eight aspect tables
-are checked as well, which leaves the theme's whole incident surface —
-every table family that has ever shipped a T2 bug — behind a tag.
+are checked as well. E4 followed and closed the campaign (item 129):
+the Ray colour and name tables, whose two extents differ inside one
+domain, plus a verdict on lonCnstlZodiac — and its first render caught
+a live out-of-bounds read in `DrawFillWheel()` that had shipped for
+years (item 130). **The theme's whole incident surface is now behind a
+tag.**
 **The complete campaign state, recipe and ledger are in "The T2
 enforcement campaign" section below** — written so the remaining
 increments are mechanical for a follow-on session.
@@ -314,18 +318,26 @@ compile error. Definitions live in astrolog.h directly after the
 | E1 | rulership/exaltation/ray: 16 tables, SIGT/OBJT, TBLSIG/TBLOBJ/TBLSIGRAY | 170 subscripts, 8 selector conversions, 2 registry rows | **done 2026-08-30**, work log item 125 |
 | E2 | test-build range asserts in checked `operator[]` | astrolog.h only: under `#ifdef QTTEST`, assert the index within the array (TBLSIG 0..cSign, TBLOBJ 0..oNorm, TBLSIGRAY 0..cSign) via `<assert.h>` — the codebase's own `Assert()` is compiled out (extern.h:419) and cannot be used. Catches item 115's class (a star number into an oNorm table) dynamically wherever the suite reaches. Net: suite + deliberately-broken probe index must abort under the test build | **done 2026-08-30**, work log item 127 |
 | E3 | aspect family: rAspAngle (44 refs), rAspOrb (28), rAspAngleDef (2), rAspInf (14), kAspA (26), ignorea (16), ignoreaMem (1) — new `ASPT` tag; TBLASP (int), TBLASPR (real), TBLASPB (byte), all dim cAspect+1 | ~131 subscripts. Traps: the cAspect2-dimensioned display tables (szAspectName and kin) are a *different, larger domain* — leave them; szModify rows are 0-based (`[asp-1]`) — value expressions, not table indexes, leave; registry rows use the `&rAspAngle[0]` spelling | **done 2026-08-30**, work log item 128 — scope extended by one table, kAspA's display twin kAspB (`TBLASPK`, KI element, 15 subscripts), rather than leave an untyped twin beside the typed original; 139 tagged subscripts, 24 files |
-| E4 | ray/constellation leftovers: kRayA (cRay+2 — the +2 slot is a real extra, read the sites first), szRayName/szRayWill (SZ variant), iCnstlZodiac/lonCnstlZodiac | small; convert or close with a measured verdict, either is fine | **pending, optional** |
+| E4 | ray/constellation leftovers: kRayA (cRay+2 — the +2 slot is a real extra, read the sites first), szRayName/szRayWill (SZ variant), iCnstlZodiac/lonCnstlZodiac | small; convert or close with a measured verdict, either is fine | **done 2026-08-30**, work log item 129 — kRayA/kRayB/rgbbmpRay/szRayName/szRayWill converted (`RAYT`, TBLRAY/TBLRAYK/TBLRAYV/TBLRAYSZ; two extents, cRay+2 for the colour tables' aggregate slot and cRay+1 for the names), iCnstlZodiac folded into `CONST TBLSIG`; **lonCnstlZodiac closed by verdict** — one subscript, cSign+2 extent, a bespoke type for a single site. Found a live out-of-bounds read (item 130) |
 | — | sign/aspect *display* tables (szSignName family, glyph/color arrays) | closed by verdict: wrong-domain indexing is self-announcing garbage text/color, the ref count is an ocean, and no incident ever lived here | **closed** |
 | — | the object-domain core: planet[]/chouse[] aliases (775 refs), ignore/ignore2/force/rgobjset/kObjA (objMax domain) | closed by verdict pending an explicit maintainer decision: this is most of the program, plus the arithmetic and varargs idioms; work log item 125 records the measured reasons | **closed (maintainer-gated)** |
 | — | rHouseInf[cSign+6] | closed by verdict: the +5 tail slots are deliberate mixed semantics (bonus rows), not a clean sign domain | **closed** |
 | — | value-domain typing (a table declaring what its *values* index, e.g. rules[] values are objects, catching `power1[rules[s]]` misuse) | closed by verdict: real design, second-order value, invasive; revisit only if an incident of that shape ever occurs | **closed** |
 
-**Done-when:** E2 and E3 landed and E4 resolved either way. **E2 and
-E3 are done (2026-08-30); only E4 remains**, and it is optional — a
-conversion or a written verdict, either closes it. At that point the
-T2 theme is finished: everything else in it is a recorded verdict, and
-the enforcement surface covers every table family that has ever
-shipped a T2 incident.
+**Done-when: met 2026-08-30.** E1-E4 all landed (work log items 125,
+127, 128, 129). Everything else in T2 is a recorded verdict, and the
+enforcement surface now covers every table family that has ever
+shipped a T2 incident — rulership, exaltation, ray, aspect and the Ray
+colour tables — with the checked subscripts range checking themselves
+under the test build on top. **The theme is closed.** The one thing
+that could reopen it is the maintainer-gated row: typing the
+planet[]/chouse[] object core, which stays a separate decision.
+
+The campaign's yield, for the record: E1 turned three sign-table
+subscripts out to be house indexes (the natural-sign identification,
+now spelled and commented), and E4's first render exposed a shipped
+out-of-bounds read reachable from two documented switches (work log
+items 129-130). Both are the theme's own predicted shape.
 
 ### T3 — Two 1,000+-line switch statements are the command surface
 

@@ -173,17 +173,17 @@ void InitColorsX()
   for (i = 0; i <= cObj; i++)
     kObjB[i]     = gs.fColor ? kObjA[i]     : gi.kiOn;
   for (i = 0; i <= cRay+1; i++)
-    kRayB[i]     = gs.fColor ? kRayA[i]     : gi.kiOn;
+    kRayB[RAYT(i)] = gs.fColor ? kRayA[RAYT(i)] : gi.kiOn;
 
   // Compute RGB colors to use for each of the Seven Rays.
   for (i = 1; i <= cRay+1; i++) {
-    ki = kRayB[i];
+    ki = kRayB[RAYT(i)];
     if (i == 2 && ki == kIndigo && rgbbmp[ki] == rgbbmpDef[ki])
-      rgbbmpRay[i] = rgbbmpDef2[ki];
+      rgbbmpRay[RAYT(i)] = rgbbmpDef2[ki];
     else if (i == 4 && ki == kYellow && rgbbmp[ki] == rgbbmpDef2[ki])
-      rgbbmpRay[i] = rgbbmpDef[ki];
+      rgbbmpRay[RAYT(i)] = rgbbmpDef[ki];
     else
-      rgbbmpRay[i] = rgbbmp[ki];
+      rgbbmpRay[RAYT(i)] = rgbbmp[ki];
   }
 }
 

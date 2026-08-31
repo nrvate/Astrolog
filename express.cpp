@@ -1586,7 +1586,7 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
   case funSigRay:  n = FValidSign(n1) ? rgSignRay[SIGT(n1)]  : 0; break;
   case funSigRay2: n = FValidSign(n1) && FValidRay(n2) ? rgSignRay2[SIGT(n1)][n2] :
     0; break;
-  case funRayCol:  n = FValidRay(n1)  ? kRayA[n1]      : 0; break;
+  case funRayCol:  n = FValidRay(n1)  ? kRayA[RAYT(n1)]: 0; break;
   case funLonSign: n = SFromZ(r1); break;
   case funLonDeg:  r = r1 - (real)((SFromZ(r1)-1)*30); break;
   case funLonHou:  n = NHousePlaceIn2D(r1); break;

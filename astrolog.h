@@ -1657,6 +1657,47 @@ struct TBLASPK {
     { AssertIndex(i.n, cAspect); return rgn[i.n]; }
 };
 
+/*
+** And for the seven Rays (T2 step 3, increment E4). Two extents share
+** the domain on purpose: the colour tables carry a cRay+1 slot past
+** the seven, an "all Rays" aggregate the wheel's ray ring and
+** InitColors() both fill, while the name tables stop at cRay. Each
+** struct asserts its own extent, so handing the aggregate index to a
+** name table is caught rather than read.
+**
+** The colour tables are also indexed by the *digits* of a composed Ray
+** number (rgbbmpRay[n%10] and kin), and -Y7C range checks the composed
+** value rather than its digits -- so a digit with no slot is
+** representable, and this is what notices.
+*/
+
+struct RAYT { int n; explicit RAYT(int n_) : n(n_) {} };
+struct TBLRAY {
+  int rgn[cRay+2];
+  int &operator[](RAYT i) { AssertIndex(i.n, cRay+1); return rgn[i.n]; }
+  const int &operator[](RAYT i) const
+    { AssertIndex(i.n, cRay+1); return rgn[i.n]; }
+};
+struct TBLRAYK {
+  KI rgn[cRay+2];
+  KI &operator[](RAYT i) { AssertIndex(i.n, cRay+1); return rgn[i.n]; }
+  const KI &operator[](RAYT i) const
+    { AssertIndex(i.n, cRay+1); return rgn[i.n]; }
+};
+struct TBLRAYV {
+  KV rgn[cRay+2];
+  KV &operator[](RAYT i) { AssertIndex(i.n, cRay+1); return rgn[i.n]; }
+  const KV &operator[](RAYT i) const
+    { AssertIndex(i.n, cRay+1); return rgn[i.n]; }
+};
+struct TBLRAYSZ {
+  CONST char *rgn[cRay+1];
+  CONST char *&operator[](RAYT i)
+    { AssertIndex(i.n, cRay); return rgn[i.n]; }
+  CONST char *const &operator[](RAYT i) const
+    { AssertIndex(i.n, cRay); return rgn[i.n]; }
+};
+
 // Where a switch line came from. Passed down by the file parsers so
 // payload switches (-YY and family) read from the file being parsed
 // instead of through a global channel; NULL when parsing the command

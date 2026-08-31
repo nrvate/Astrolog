@@ -275,7 +275,7 @@ void ChartListing(void)
           int sign, ki = kWhiteA;
           k = LookupConstel(planet[j], planetalt[j]);
           for (sign = 1; sign <= cSign; sign++)
-            if (iCnstlZodiac[sign] == k) {
+            if (iCnstlZodiac[SIGT(sign)] == k) {
               ki = kSignA(sign);
               break;
             }
@@ -1784,7 +1784,7 @@ int ChartEsoteric(flag fGetRay)
     sprintf(sz, "%-4.4s", szObjDisp[i]); PrintSz(sz);
     n = (i <= oNorm ? rgObjRay[OBJT(i)] : 0);
     if (n) {
-      AnsiColor(kRayA[n]);
+      AnsiColor(kRayA[RAYT(n)]);
       sprintf(sz, " %d", n); PrintSz(sz);
     } else
       PrintSz("  ");
@@ -1794,7 +1794,7 @@ int ChartEsoteric(flag fGetRay)
     sprintf(sz, "%.3s ", szSignName[n]); PrintSz(sz);
     for (j = 1; j <= cRay; j++)
       if (rgSignRay2[SIGT(n)][j]) {
-        AnsiColor(kRayA[j]);
+        AnsiColor(kRayA[RAYT(j)]);
         sprintf(sz, "%d", j);
         PrintSz(sz);
       }
@@ -1838,7 +1838,7 @@ int ChartEsoteric(flag fGetRay)
     chV);
   PrintSz(sz);
   for (i = 1; i <= cRay; i++) {
-    AnsiColor(kRayA[i]);
+    AnsiColor(kRayA[RAYT(i)]);
     sprintf(sz, "%d:%7d%7.1f (%d) /%5.1f%% %c%6.2f%7.1f (%d) /%5.1f%%", i,
       nRay1[i], rRay1[i], rank1[i], rRay1[i]/r1*100.0, chV,
       (real)nRay2[i] / 420.0, rRay2[i], rank2[i], rRay2[i]/r2*100.0);

@@ -1889,7 +1889,7 @@ flag FOutputSettings()
     { sprintf(sz, " %s", SzColor2(kElemA[i])); PrintFSz(); }
   PrintF("                      ; Element colors\n-Yk7 1 7   ");
   for (i = 1; i <= cRay; i++)
-    { sprintf(sz, " %s", SzColor2(kRayA[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(kRayA[RAYT(i)])); PrintFSz(); }
   PrintF("          ; Ray colors\n-Yk0 1 7   ");
   for (i = 1; i <= cRainbow; i++)
     { sprintf(sz, " %s", SzColor2(kRainbowA[i])); PrintFSz(); }
@@ -2380,7 +2380,7 @@ int NParseSz(CONST char *szEntry, int pm)
       if (FMatchSz("Ray", sz)) {
         i = atoi(sz + 3);
         if (FBetween(i, 1, cRay))
-          return kRayA[i];
+          return kRayA[RAYT(i)];
       }
       for (i = 0; i < cColor2+5; i++)
         if (FMatchSz(sz, szColor[i]))

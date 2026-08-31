@@ -58,9 +58,12 @@ objects. Don't label a parameter that is *not* a domain index:
 
 **The enforced layer** (T2 step 3, work log items 125 and 128): the
 rulership, exaltation and ray tables, and the eight aspect tables, are
-checked tables — their subscript takes `SIGT(i)`, `OBJT(i)` or
-`ASPT(i)` (explicit-constructor tags, astrolog.h) and anything else is
-a compile error. The tag is a claim:
+checked tables — their subscript takes `SIGT(i)`, `OBJT(i)`, `ASPT(i)`
+or `RAYT(i)` (explicit-constructor tags, astrolog.h) and anything else
+is a compile error. One domain may hold two extents: the Ray *colour*
+tables run 0..cRay+1, where the last slot is an "all Rays" aggregate,
+while the Ray *name* tables stop at cRay — each struct asserts its own,
+so the aggregate index cannot reach a name table. The tag is a claim:
 write it after reading the loop, not mechanically — three sites
 legitimately index sign tables by house (the natural-sign
 identification) and say so in a comment. Code that selects among

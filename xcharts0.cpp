@@ -319,11 +319,11 @@ void DrawSidebar()
           AdjustTextScale();
           rays = ChartEsoteric(fTrue);
           sprintf(sz, "Ray %d", rays/10);
-          DrawColor(kRayB[rays/10]);
+          DrawColor(kRayB[RAYT(rays/10)]);
           DrawSz(sz, 7*gi.nScaleT, 7*gi.nScaleT, dtLeft | dtTop | dtScale2);
           if (gs.nDecaType >= 4) {
             sprintf(sz, ",%d", rays%10);
-            DrawColor(kRayB[rays%10]);
+            DrawColor(kRayB[RAYT(rays%10)]);
             DrawSz(sz, 7*gi.nScaleT + 5*xFontT, 7*gi.nScaleT,
               dtLeft | dtTop | dtScale2);
           }
@@ -337,7 +337,7 @@ void DrawSidebar()
           rays = InterpretEsoteric(fTrue);
           for (i = 0; i < 5; i++) {
             sprintf(sz, "%-4.4s: Ray %d", rgEsoRayArea[i], rays%10);
-            DrawColor(kRayB[rays%10]);
+            DrawColor(kRayB[RAYT(rays%10)]);
             DrawSz(sz, 7*gi.nScaleT, 7*gi.nScaleT +
               (4-i)*gi.nScaleTextT2*yFont2, dtLeft | dtTop | dtScale2);
             rays /= 10;
@@ -606,8 +606,8 @@ void DrawSidebar()
 }
 
 
-#define KvHouseCore(obj, rule) (typ <= 0 ? rgbbmpRay[FNorm(obj) ? \
-  rgObjRay[OBJT(obj)] : cRay] : KvFromKi(kObjB[rule[SIGT(sig)]]));
+#define KvHouseCore(obj, rule) (typ <= 0 ? rgbbmpRay[RAYT(FNorm(obj) ? \
+  rgObjRay[OBJT(obj)] : cRay)] : KvFromKi(kObjB[rule[SIGT(sig)]]));
 
 // Return the color to use for filling a house area, based on the Rays or
 // colors of the planets which rule and co-rule the sign of the cusp.
@@ -692,9 +692,9 @@ flag DrawFillWheel(int x, int y, int i, int typ)
       // Ray sign fill: Based on Ray(s) of sign.
       kv2 = kv3 = 0;
       n = rgSignRay[SIGT(i)];
-      kv1 = rgbbmpRay[n%10];
-      kv2 = rgbbmpRay[n/10%10];
-      kv3 = rgbbmpRay[n/100];
+      kv1 = rgbbmpRay[RAYT(n%10)];
+      kv2 = rgbbmpRay[RAYT(n/10%10)];
+      kv3 = rgbbmpRay[RAYT(n/100)];
       kvC = (kv3 == 0 ? (kv2 == 0 ? kv1 : KvBlend(kv1, kv2, 0.5)) :
         KvBlend(KvBlend(kv1, kv2, 0.5), kv3, 0.3333));
     } else {

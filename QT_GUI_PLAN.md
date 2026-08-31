@@ -4038,6 +4038,71 @@ are the more useful half to read before starting something new.
     QT_TESTING.md's ASan section with what is known; not worth looping
     the suite for.
 
+129. **T2 increment E4 closes the campaign, and its first render found
+    a live out-of-bounds read.** `RAYT` and four checked types
+    (`TBLRAY` int, `TBLRAYK` KI, `TBLRAYV` KV, `TBLRAYSZ` the string
+    variant) cover kRayA, kRayB, rgbbmpRay, szRayName and szRayWill;
+    iCnstlZodiac becomes a plain `CONST TBLSIG`, no new type needed.
+    44 tagged subscripts, 17 files. Enforcement proven six ways, the
+    aspect tag included: `rgbbmpRay[ASPT(i)]` is a compile error now
+    that two tags exist to confuse.
+
+    **Two extents share one domain, and that is the point.** The colour
+    tables run 0..cRay+1 -- the extra slot is an "all Rays" aggregate
+    that `InitColors()` fills and the ray ring draws -- while the name
+    tables stop at cRay. Each struct asserts its own extent, so handing
+    the aggregate index to szRayName is caught rather than read.
+
+    **The bug.** `rgSignRay[]` packs up to three Rays as decimal digits,
+    and `-Y7C` range checks the *composed* number (1..1234567), not its
+    digits. `EnsureRay()` already knows this and skips a digit outside
+    1..cRay (work log item 122 hardened it after an empty list divided
+    by zero). `DrawFillWheel()` did not: `rgbbmpRay[n%10]`,
+    `[n/10%10]` and `[n/100]` index a 9-slot table straight from user
+    data, and `n/100` is not even a single digit -- for the largest
+    accepted value it is 12345. Tagging those three sites made the
+    claim explicit, and the very first render tested it:
+
+        astrolog -Y7C 1 1 999 -Xv 6 -Xo out.bmp
+        Assertion `(i.n) >= 0 && (i.n) <= (7+1)' failed.
+
+    Confirmed pre-existing and not the conversion's doing: the same
+    invocation on a HEAD build under ASan reports
+    `global-buffer-overflow ... READ of size 8` at xcharts0.cpp:695,
+    through DrawWheel/XChartWheel/DrawChartX. Shipped, upstream's, and
+    reachable from two documented switches. Fixed in its own commit
+    (item 130) so it can be offered upstream.
+
+    **Two traps cost real time getting there**, both worth knowing.
+    Reproducing it needed the *right invocation*, and three separate
+    things made a wrong one look like "not reachable": `-Xw` takes
+    arguments (`<hor> [<ver>]`), so `-Xw -Xo file` eats the output
+    switch and the error names some later switch entirely; a console
+    binary built at the scratchpad's deep path truncates the ephemeris
+    path and changes lookups; and `_X` -- the flag that keeps a console
+    run from opening a window -- also turns off the graphics the render
+    needs, so it must be dropped when `-Xo` is writing a file. Second:
+    building the scratch ASan binary with `make NAME=... CPPFLAGS=...`
+    put sanitized objects in the repo root, because the console
+    Makefile has no separate object directory. The next ordinary build
+    failed to link. `make clean` first, and expect to clean after.
+
+    **lonCnstlZodiac stays plain, by verdict.** One subscript,
+    dimension cSign+2 where the +1 is a real thirteenth boundary, so it
+    would need a bespoke type for a single site. Measured and recorded
+    rather than converted -- which the ledger allows and which is the
+    honest answer here.
+
+    Nets: suite 3195/0 with the asserts live; console, Qt release, Qt
+    test and Windows builds clean; switch matrix 14,378 lines and
+    influence matrix 3,426 identical; a new ray-surface chart
+    differential -- 19 charts, 10,442 lines, 5 renders including all
+    four `-Xv` ray fills -- identical by `cmp`, and sensitivity-checked
+    against a ray colour and a sign Ray change first. Six audits clean;
+    defaults_audit.py learned the four new types and was re-falsified
+    on kRayA, both legs. **T2's done-when is met: every table family
+    that has ever shipped an incident is behind a tag.**
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

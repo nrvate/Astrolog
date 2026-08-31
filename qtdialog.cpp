@@ -3648,7 +3648,7 @@ void ShowColorDialogQt()
   }
   for (i = 1; i <= cRay; i++) {
     rgpcbRay[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcr", i);
-    FillColorComboQt(rgpcbRay[i], kRayA[i], 0);
+    FillColorComboQt(rgpcbRay[i], kRayA[RAYT(i)], 0);
   }
   QComboBox *pcbPen = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dca", 1);
   QComboBox *pcbDeca = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dca", 2);
@@ -3696,7 +3696,7 @@ void ShowColorDialogQt()
   for (i = 0; i < cElem; i++)
     kElemA[i] = rgkElem[i];
   for (i = 1; i <= cRay; i++)
-    kRayA[i] = rgkRay[i];
+    kRayA[RAYT(i)] = rgkRay[i];
   gi.kiPen = kPen;
   gs.kiDeca = kDeca;
   InitColorsX();

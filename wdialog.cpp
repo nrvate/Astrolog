@@ -1089,7 +1089,7 @@ flag API DlgColor(HWND hdlg, uint message, WORD wParam, LONG lParam)
     for (i = 0; i < cElem; i++)
       SetEditColor(hdlg, dce0 + i, kElemA[i], 0);
     for (i = 1; i <= cRay; i++)
-      SetEditColor(hdlg, dcr1 - 1 + i, kRayA[i], 0);
+      SetEditColor(hdlg, dcr1 - 1 + i, kRayA[RAYT(i)], 0);
     SetEditColor(hdlg, dca01, gi.kiPen, 0);
     SetEditColor(hdlg, dca02, gs.kiDeca, 4);
     return fTrue;
@@ -1121,7 +1121,7 @@ flag API DlgColor(HWND hdlg, uint message, WORD wParam, LONG lParam)
           GetEdit(dcr1 - 1 + i, sz);
           l = NParseSz(sz, pmColor);
           if (k)
-            kRayA[i] = l;
+            kRayA[RAYT(i)] = l;
           else
             EnsureN(l, FValidColorA(l), "ray color");
         }

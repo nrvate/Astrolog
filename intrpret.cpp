@@ -999,7 +999,7 @@ int InterpretEsoteric(flag fGetRays)
       continue;
     }
     // Print all seven Rays and their points for this vehicle.
-    AnsiColor(kRayA[rgnSort[1]]);
+    AnsiColor(kRayA[RAYT(rgnSort[1])]);
     sprintf(sz, "%-4.4s Ray:", rgEsoRayArea[bod]); PrintSz(sz);
     k = 0;
     for (ray = 1; ray <= cRay; ray++)
@@ -1008,7 +1008,7 @@ int InterpretEsoteric(flag fGetRays)
       k = 1;
     for (ray = 1; ray <= cRay; ray++) {
       if (ray > 1)
-        AnsiColor(kRayA[rgnSort[ray]]);
+        AnsiColor(kRayA[RAYT(rgnSort[ray])]);
       sprintf(sz, " R%d (%2d%%)%s", rgnSort[ray], rgcRay[rgnSort[ray]] *
         100 / k, ray < cRay ? "," : ""); PrintSz(sz);
     }
@@ -1054,8 +1054,8 @@ int InterpretEsoteric(flag fGetRays)
     ray = (i <= oNorm ? rgObjRay[OBJT(i)] : 0);  // Stars sit above the table.
     if (ray > 0) {
       sprintf(sz, "%s is Ray %d (%s), the \"Will to %s\".\n",
-        szName, ray, szRayName[ray], szRayWill[ray]);
-      AnsiColor(kRayA[ray]); FieldWord(sz);
+        szName, ray, szRayName[RAYT(ray)], szRayWill[RAYT(ray)]);
+      AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
     }
     // Sign
     AnsiColor(kSignA(sig));
@@ -1110,8 +1110,8 @@ int InterpretEsoteric(flag fGetRays)
       FieldWord(NULL);
     for (j = 1; j <= cRay; j++) if (rgSignRay2[SIGT(sig)][j] > 0) {
       sprintf(sz, "%s is Ray %d (%s), the \"Will to %s\".\n",
-        szSignName[sig], j, szRayName[j], szRayWill[j]);
-      AnsiColor(kRayA[j]); FieldWord(sz);
+        szSignName[sig], j, szRayName[RAYT(j)], szRayWill[RAYT(j)]);
+      AnsiColor(kRayA[RAYT(j)]); FieldWord(sz);
     }
     if (us.fSabian) {
       AnsiColor(kSignA(sig));
@@ -1129,8 +1129,8 @@ int InterpretEsoteric(flag fGetRays)
       FieldWord(sz);
       for (j = 1; j <= cRay; j++) if (rgSignRay2[SIGT(hou)][j] > 0) {
         sprintf(sz, "%d%s house (%s) is Ray %d (%s), the \"Will to %s\".\n",
-          hou, szSuffix[hou], szSignName[hou], j, szRayName[j], szRayWill[j]);
-        AnsiColor(kRayA[j]); FieldWord(sz);
+          hou, szSuffix[hou], szSignName[hou], j, szRayName[RAYT(j)], szRayWill[RAYT(j)]);
+        AnsiColor(kRayA[RAYT(j)]); FieldWord(sz);
       }
     }
     // Rulerships
@@ -1138,11 +1138,11 @@ int InterpretEsoteric(flag fGetRays)
     if (pch[rrRay] == 'Y') {
       sprintf(sz, "Ray rulership! Both %s and %s are Ray %d.\n",
         szName, szSignName[sig], ray);
-      AnsiColor(kRayA[ray]); FieldWord(sz);
+      AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
     } else if (pch[rrRay] == 'z') {
       sprintf(sz, "Ray debilitation! Both %s and %s (opposite %s) are Ray "
         "%d.\n", szName, szSignName[Mod12(sig+6)], szSignName[sig], ray);
-      AnsiColor(kRayA[ray]); FieldWord(sz);
+      AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
     }
     AnsiColor(kObjA[i]);
     if (pch[rrStd] == 'R') {
@@ -1193,12 +1193,12 @@ int InterpretEsoteric(flag fGetRays)
       if (pch[rrRay] == 'Y') {
         sprintf(sz, "House Ray rulership! Both %s and %d%s house (%s) are "
           "Ray %d.\n", szName, hou, szSuffix[hou], szSignName[hou], ray);
-        AnsiColor(kRayA[ray]); FieldWord(sz);
+        AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
       } else if (pch[rrRay] == 'z') {
         sprintf(sz, "House Ray debilitation! Both %s and %d%s house (%s, "
           "opposite %s) are Ray %d.\n", szName, hou, szSuffix[hou],
           szSignName[Mod12(hou+6)], szSignName[hou], ray);
-        AnsiColor(kRayA[ray]); FieldWord(sz);
+        AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
       }
     }
     FieldWord(NULL);

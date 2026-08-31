@@ -110,6 +110,10 @@ CHECKED_TABLE_DIMS = {
     'TBLASPR': 'cAspect+1',
     'TBLASPB': 'cAspect+1',
     'TBLASPK': 'cAspect+1',
+    'TBLRAY': 'cRay+2',
+    'TBLRAYK': 'cRay+2',
+    'TBLRAYV': 'cRay+2',
+    'TBLRAYSZ': 'cRay+1',
 }
 
 

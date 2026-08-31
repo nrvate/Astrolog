@@ -1381,8 +1381,9 @@ void PrintRay()
   PrintTab(' ', 24);
   PrintSz("Will to    Signs       Slice  Planets\n\n");
   for (i = 1; i <= cRay; i++) {
-    AnsiColor(kRayA[i]);
-    sprintf(sz, "%d  %-28s  %-9s ", i, szRayName[i], szRayWill[i]);
+    AnsiColor(kRayA[RAYT(i)]);
+    sprintf(sz, "%d  %-28s  %-9s ", i,
+      szRayName[RAYT(i)], szRayWill[RAYT(i)]);
     PrintSz(sz);
     c = 0;
     for (j = 1; j <= cSign; j++)

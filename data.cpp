@@ -540,13 +540,13 @@ TBLSIG rgSignHie1 = {-1,
   oUra, oVul, oEar, oNep, oSun, oJup, oSat, oMer, oMar, oVen, oMoo, oPlu};
 TBLSIG rgSignHie2 = {-1,
   -1, -1, -1, -1, oUra, -1, -1, -1, -1, -1, oVul, -1};
-int kRayA[cRay+2] = {kBlack,
+TBLRAY kRayA = {kBlack,
   kRed, kIndigo, kForest, kYellow, kAmber, kRose, kViolet, kWhite};
-CONST char *szRayName[cRay+1] = {"",
+CONST TBLRAYSZ szRayName = {"",
   "Will & Power", "Love & Wisdom", "Active Creative Intelligence",
   "Harmony Through Conflict", "Concrete Science", "Idealism & Devotion",
   "Order & Ceremonial Magic"};
-CONST char *szRayWill[cRay+1] = {"",
+CONST TBLRAYSZ szRayWill = {"",
   "Initiate", "Unify", "Evolve", "Harmonize", "Act", "Cause", "Express"};
 
 
@@ -1052,7 +1052,7 @@ CONST char *szCnstlGenitive[cCnstl+1] = {"",
   "", "is", "", "!1is", "1tis", "", "", "",
   "2i1is", "", " is", " is", "1orum", "1inis", "1tis", ""};
 
-CONST int iCnstlZodiac[cSign+1] = {0,
+CONST TBLSIG iCnstlZodiac = {0,
   7, 78, 38, 12, 46, 86, 49, 73, 72, 16, 4, 66};
 CONST real lonCnstlZodiac[cSign+2] = {0.0,
   ZDMS(sAri, 29,  2, 44), ZDMS(sTau, 23, 23, 20), ZDMS(sCan,  0,  0,  0),

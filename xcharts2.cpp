@@ -1065,7 +1065,7 @@ void XChartEsoteric()
       sprintf(sz, "Ray %d", i);
     else
       sprintf(sz, "Average");
-    DrawColor(i <= cRay ? kRayB[i] : gi.kiOn);
+    DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
     DrawSz(sz, x1 + xs*(i-1)/8, gi.nScaleTextT2, dtCent | dtTop | dtScale2);
   }
 
@@ -1125,7 +1125,7 @@ void XChartEsoteric()
         k = x1 + (i-1)*xs/8;
         m = k + (int)((real)xs * rRaySav[i] / 8.0 / (real)gs.nRayWidth);
         u = k + (int)((real)xs * rRay[i]    / 8.0 / (real)gs.nRayWidth);
-        DrawColor(i <= cRay ? kRayB[i] : gi.kiOn);
+        DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
         DrawLine(m, n, u, v);
       }
 

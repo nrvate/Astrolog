@@ -180,7 +180,8 @@ CONST KV rgbbmpDef2[cColor2] = {
   0xff0000, 0xff00ff, 0x9f9f00, 0xffffff,
   0x3f3f3f, 0x007fff, 0x7f7fff, 0x003f7f, // Extra colors
   0x701919, 0x008000, 0x00a5ff, 0xdf3eff, 0xff3a00, 0xcc0099}; // Ray colors
-KV rgbbmp[cColor2], rgbbmpRay[cRay+2];
+KV rgbbmp[cColor2];
+TBLRAYV rgbbmpRay;
 #ifdef X11
 KV rgbind[cColor2], fg, bg;
 #endif
@@ -211,8 +212,9 @@ char *szWheelX[cRing+1] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 // For B/W graphics, all the values below are filled with black or white.
 
 TBLASPK kAspB;
+TBLRAYK kRayB;
 KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem],
-  kObjB[objMax], kRayB[cRay+2];
+  kObjB[objMax];
 
 CONST char *rgszFontName[cFont] = {szAppNameCore, "Wingdings", "Astro",
   "EnigmaAstrology", "HamburgSymbols", "Astronomicon", "StarFont Sans",

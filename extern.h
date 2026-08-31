@@ -223,8 +223,8 @@ extern CONST char *szAppName, *szSignName[cSign+1], *szSignAbbrev[cSign+1],
   *szAspectGlyph[cAspect2+1], *szAspectConfig[cAspConfig],
   *szElem[cElem], *szMode[3], *szMonth[cSign+1], *szDay[cWeek], *szZon[cZone],
   *rgszDir[4], *szSuffix[cSign+1], *szEphem[cmMax];
-extern CONST int rgAspConfig[cAspConfig], dxOff[4], dyOff[4],
-  iCnstlZodiac[cSign+1];
+extern CONST int rgAspConfig[cAspConfig], dxOff[4], dyOff[4];
+extern CONST TBLSIG iCnstlZodiac;
 extern CONST real rZon[cZone];
 extern CONST char *szObjName[objMax+4], *szCnstlName[cCnstl+1],
   *szCnstlAbbrev[cCnstl+1], *szCnstlMeaning[cCnstl+1],
@@ -269,8 +269,8 @@ extern CONST KV rgbbmp[cColor2];
 extern TBLOBJ rgObjRay, rgObjEso1, rgObjEso2, rgObjHie1, rgObjHie2;
 extern TBLSIG rgSignRay, rgSignEso1, rgSignEso2, rgSignHie1, rgSignHie2;
 extern TBLSIGRAY rgSignRay2;
-extern int kRayA[cRay+2];
-extern CONST char *szRayName[cRay+1], *szRayWill[cRay+1];
+extern TBLRAY kRayA;
+extern CONST TBLRAYSZ szRayName, szRayWill;
 
 
 // From general.cpp
@@ -788,10 +788,12 @@ extern WI wi;
 extern char *szWheelX[cRing+1];
 
 extern CONST KV rgbbmpDef[cColor2], rgbbmpDef2[cColor2];
-extern KV rgbbmp[cColor2], rgbbmpRay[cRay+2];
+extern KV rgbbmp[cColor2];
+extern TBLRAYV rgbbmpRay;
 extern TBLASPK kAspB;
+extern TBLRAYK kRayB;
 extern KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem],
-  kObjB[objMax], kRayB[cRay+2];
+  kObjB[objMax];
 extern CONST char *rgszFontName[cFont], rgszFontAllow[6][cFont+1];
 extern CONST real rgrObjRing[oNep-oJup+3][2];
 extern CONST PT3R rgvObjRing[oNep-oJup+3];

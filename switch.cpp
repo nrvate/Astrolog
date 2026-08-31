@@ -200,7 +200,7 @@ static CONST SWITCHRANGED rgswranged[] = {
     vtColor, 0, cColor2-1, NULL},
   {"Yk0", "Yk", 0,        1, cRainbow, kRainbowA,        sizeof(int),
     vtColor, 0, cColor2-1, NULL},
-  {"Yk7", "Yk", 0,        1, cRainbow, kRayA,            sizeof(int),
+  {"Yk7", "Yk", 0,        1, cRainbow, kRayA.rgn,        sizeof(int),
     vtColor, 0, cColor2-1, NULL},
   {"Yk",  "Yk", 0,        0, 8,       kMainA,            sizeof(int),
     vtColor, 0, cColor2-1, NULL}};
