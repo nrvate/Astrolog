@@ -3793,6 +3793,24 @@ are the more useful half to read before starting something new.
     atlas.cpp's zone-error paths left recorded at the finding as the
     class's known remainder.
 
+121. **The atlas zone-error paths join the bounded-formatting rule.**
+    Item 119's rebuild flagged them; this takes them. All 21 sprintf
+    sites in the four `-YY` payload loaders' error paths (atlas, zone
+    rules, zone changes, zone links -- each formats the offending
+    254-char szLine or a name from it into szErr or szAbb) are
+    `sprintf2(S())` now, plus the two compositions in
+    DisplayTimezoneChanges() the same warning flagged once the rest
+    were quiet. Reachable only from an edited timezone/atlas data file,
+    so lower stakes than item 118's five, and the net is accordingly
+    lighter: -Wformat-overflow count is zero across the console build
+    where it flagged all of them, all three builds compile, suite
+    3190/0 with the atlas-sink and ephemeris groups exercising the real
+    loaders. Deliberately no corrupt-file fixture: the loaders
+    deallocate and replace the process's live timezone tables on entry,
+    so a bad-data test would destroy suite state for every later group
+    -- item 117's leak class by construction. With this, the B1
+    overflow class has no known remaining member.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

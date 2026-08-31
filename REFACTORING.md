@@ -849,10 +849,11 @@ proven by an 11-fixture pre/post differential, byte-identical. **The
 mismatch fix closed B1 the same evening** (work log item 120): both
 call sites read their whole declared buffer, four pins falsify the
 two-token change, and the differential moves in exactly the two
-fixtures it should. What remains of the class, recorded not taken:
-atlas.cpp's zone-error paths, which format a 254-char szLine into
-smaller buffers at six sites (surfaced by -Wformat-overflow during the
-consolidation rebuild).
+fixtures it should. The class's last recorded member —
+atlas.cpp's zone-error paths — was taken the same evening (work log
+item 121): all 21 loader error sprintfs plus DisplayTimezoneChanges'
+two compositions are bounded, and -Wformat-overflow reports nothing
+across the console build. **B1 is closed with no known remainder.**
 
 **B2 — Virtual filenames are in-band magic strings.** `FInputData`
 (io.cpp:2656) special-cases the names `nul`, `set`, `now`, `tty`,

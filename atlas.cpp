@@ -976,7 +976,7 @@ flag FLoadAtlas(FILE *file, int cae)
       pae->szNam[j] = pch[j];
     pae->szNam[j] = chNull;
     if (pae->icn < 0) {
-      sprintf(szLine,
+      sprintf2(S(szLine),
         "Atlas error: City %d (%s) in unknown country/region: '%s'\n",
         i, pae->szNam, szAbb);
       PrintError(szLine);
@@ -999,8 +999,8 @@ flag FLoadAtlas(FILE *file, int cae)
           break;
     }
     if (j >= iznMax) {
-      sprintf(szAbb, "%s", pch);
-      sprintf(szLine,
+      sprintf2(S(szAbb), "%s", pch);
+      sprintf2(S(szLine),
         "Atlas error: City %d (%s) in unknown time zone: '%s'\n",
         i, pae->szNam, szAbb);
       PrintError(szLine);
@@ -1083,7 +1083,7 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
     if (*pch)
       *pch++ = chNull;
     if (CchSz(szLine) >= cchSzZon) {
-      sprintf(szErr, "Zone rule error: Rule %d (%s) is too long a string, "
+      sprintf2(S(szErr), "Zone rule error: Rule %d (%s) is too long a string, "
         "which exceeds string length limit of %d\n",
         i, szLine, cchSzZon-1);
       PrintError(szErr);
@@ -1095,7 +1095,7 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
     crue = atoi(pch);
     prun[1].irue = prun->irue + crue;
     if (prun[1].irue > irueMax) {
-      sprintf(szErr, "Zone rule error: Rule %d (%s) has %d entries, "
+      sprintf2(S(szErr), "Zone rule error: Rule %d (%s) has %d entries, "
         "which exceed total entry limit of %d\n",
         i, prun->szNam, crue, irueMax);
       PrintError(szErr);
@@ -1131,7 +1131,7 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
         *pch++ = chNull;
       n = NParseSz(pchT, pmMon);
       if (!FValidMon(n)) {
-        sprintf(szErr,
+        sprintf2(S(szErr),
           "Zone rule error: Bad month in entry %d of rule %d: '%s'\n",
           j, i, pchT);
         PrintError(szErr);
@@ -1156,7 +1156,7 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
         prue->daynum = -1;
         n = NParseSz(pchT + 4, pmWeek);
         if (!FValidWeek(n)) {
-          sprintf(szErr, "Zone rule error: "
+          sprintf2(S(szErr), "Zone rule error: "
             "Bad lastDay of week in entry %d of rule %d: '%s'\n", j, i, pchT);
           PrintError(szErr);
           return fFalse;
@@ -1167,14 +1167,14 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
         pchT[3] = chNull;
         n = NParseSz(pchT, pmWeek);
         if (!FValidWeek(n)) {
-          sprintf(szErr, "Zone rule error: "
+          sprintf2(S(szErr), "Zone rule error: "
             "Bad Day==X of week in entry %d of rule %d: '%s'\n", j, i, pchT);
           PrintError(szErr);
           return fFalse;
         }
         prue->dayweek = n;
         if (!((chT == '>' || chT == '<') && pchT[4] == '=')) {
-          sprintf(szErr, "Zone rule error: "
+          sprintf2(S(szErr), "Zone rule error: "
             "Day operator not >= or <= in entry %d of rule %d: '%s'\n",
             j, i, pchT);
           PrintError(szErr);
@@ -1204,7 +1204,7 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
 
   // Sanity check results.
   if (is.rgrun[irunMax].irue != irueMax) {
-    sprintf(szErr, "Zone rule error: The %d rules have %d entries, "
+    sprintf2(S(szErr), "Zone rule error: The %d rules have %d entries, "
       "which differs from total rule entry limit of %d\n",
       irunMax, is.rgrun[irunMax].irue, irueMax);
     PrintError(szErr);
@@ -1254,7 +1254,7 @@ flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
         break;
     }
     if (izn >= iznMax) {
-      sprintf(szErr, "Zone change error: Zone %d unknown: '%s'\n", i, szLine);
+      sprintf2(S(szErr), "Zone change error: Zone %d unknown: '%s'\n", i, szLine);
       PrintError(szErr);
       return fFalse;
     }
@@ -1262,7 +1262,7 @@ flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
     czn = atoi(pch);
     rgizcChange[i+1] = rgizcChange[i] + czn;
     if (rgizcChange[i+1] > izceMax) {
-      sprintf(szErr, "Zone change error: Zone %d (%s) has %d entries, "
+      sprintf2(S(szErr), "Zone change error: Zone %d (%s) has %d entries, "
         "which exceed total entry limit of %d\n",
         i, rgszzn[izn], czn, izceMax);
       PrintError(szErr);
@@ -1300,7 +1300,7 @@ flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
         if (FNumCh(*pchT) || (*pchT == '-' && pchT[1] > ' '))
           pzc->dst = NParseHMS(pchT);
         else if (*pchT != '-') {
-          sprintf(szErr,
+          sprintf2(S(szErr),
             "Zone change error: Unknown rule in entry %d of zone %d: '%s'\n",
             j, i, pchT);
           PrintError(szErr);
@@ -1330,7 +1330,7 @@ flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
         *pch++ = chNull;
       n = NParseSz(pchT, pmMon);
       if (!FValidMon(n)) {
-        sprintf(szErr,
+        sprintf2(S(szErr),
           "Zone change error: Bad month in entry %d of zone %d: '%s'\n",
           j, i, pchT);
         PrintError(szErr);
@@ -1365,13 +1365,13 @@ flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
   // Sanity check results.
   for (i = 0; i < is.crun; i++)
     if (!rgfUsed[i]) {
-      sprintf(szErr, "Zone change error: Rule %d (%s) is never used "
+      sprintf2(S(szErr), "Zone change error: Rule %d (%s) is never used "
         "by any zone change entry.\n", i, is.rgrun[i].szNam);
       PrintError(szErr);
       return fFalse;
     }
   if (rgizcChange[izcnMax] != izceMax) {
-    sprintf(szErr, "Zone change error: The %d zones have %d entries, "
+    sprintf2(S(szErr), "Zone change error: The %d zones have %d entries, "
       "which differs from total entry limit of %d\n",
       izcnMax, rgizcChange[izcnMax], izceMax);
     PrintError(szErr);
@@ -1416,7 +1416,7 @@ flag FLoadZoneLinks(FILE *file, int czl)
         break;
     }
     if (iznFrom >= iznMax) {
-      sprintf(szErr, "Zone link error: Link %d from unknown: '%s'\n",
+      sprintf2(S(szErr), "Zone link error: Link %d from unknown: '%s'\n",
         i, szFrom);
       PrintError(szErr);
       return fFalse;
@@ -1428,7 +1428,7 @@ flag FLoadZoneLinks(FILE *file, int czl)
         break;
     }
     if (iznTo >= iznMax) {
-      sprintf(szErr, "Zone link error: Link %d to unknown: '%s'\n", i, szTo);
+      sprintf2(S(szErr), "Zone link error: Link %d to unknown: '%s'\n", i, szTo);
       PrintError(szErr);
       return fFalse;
     }
@@ -1438,7 +1438,7 @@ flag FLoadZoneLinks(FILE *file, int czl)
       if (iznFrom == rgznChange[izc])
         break;
     if (izc < is.czcn) {
-      sprintf(szErr, "Zone link error: Link %d redirects defined: '%s'\n",
+      sprintf2(S(szErr), "Zone link error: Link %d redirects defined: '%s'\n",
         i, rgszzn[iznFrom]);
       PrintError(szErr);
       return fFalse;
@@ -1449,7 +1449,7 @@ flag FLoadZoneLinks(FILE *file, int czl)
       if (iznTo == rgznChange[izc])
         break;
     if (izc >= is.czcn) {
-      sprintf(szErr, "Zone link error: Link %d to undefined: '%s'\n",
+      sprintf2(S(szErr), "Zone link error: Link %d to undefined: '%s'\n",
         i, rgszzn[iznTo]);
       PrintError(szErr);
       return fFalse;
@@ -1465,7 +1465,7 @@ flag FLoadZoneLinks(FILE *file, int czl)
       if (izn == rgznChange[izc])
         break;
     if (izc >= is.czcn) {
-      sprintf(szErr, "Zone link error: Zone %d undefined: '%s'\n",
+      sprintf2(S(szErr), "Zone link error: Zone %d undefined: '%s'\n",
         izn, rgszzn[izn]);
       PrintError(szErr);
       return fFalse;
@@ -1936,11 +1936,11 @@ flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
       sprintf(sz2, " %s", SzHMS(dst));
     if (zon != zonPrev)
       sprintf(sz3, " & Zone %s", SzZone(RTim(zon)));
-    sprintf(sz, "%s %s: %s: %s%s%s", SzDate(mon, day, yea, fFalse),
+    sprintf2(S(sz), "%s %s: %s: %s%s%s", SzDate(mon, day, yea, fFalse),
       SzTime(tim / 3600, tim / 60 % 60, us.fSeconds ? tim % 60 : -1),
       sz1, dst == 0 ? "ST" : "DT", sz2, sz3);
     if (fDialog) {
-      sprintf(sz1, "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz);
+      sprintf2(S(sz1), "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz);
       if (pfnAtlasRow != NULL)
         pfnAtlasRow(sz1, -1);
       goto LSkip;
