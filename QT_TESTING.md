@@ -464,6 +464,17 @@ Two things that cost time here:
   crash the fix had already cured (work log item 115). `make` also
   links with `-s`: for a symbolized backtrace, rebuild with
   `LIBS="-lm -lX11 -ldl" CPPFLAGS="-O -g ..."`.
+- **A one-off console build with overridden flags clobbers those same
+  objects.** There is no separate object directory, so
+  `make NAME=/tmp/x CPPFLAGS="-fsanitize=address ..."` leaves sanitized
+  `.o` files in the repo root and the next ordinary `make` fails to
+  *link*, naming functions in `general.o` rather than anything you
+  touched (work log item 129). `make clean` before such a build and
+  after it. The same recipe is how to get a **console** ASan binary,
+  which the Qt-only `Makefile.qt.asan` does not give you — add
+  `-DQTTEST` to that `CPPFLAGS` and the checked tables' range asserts
+  come with it, which is what caught item 130. Build it at a **short
+  path**: a deep one truncates the ephemeris path and changes lookups.
 - **Never edit a CRLF file with a range-based regex.** One in this project
   spliced two functions together by matching across the block between
   them. Exact-string replacement only, then check
