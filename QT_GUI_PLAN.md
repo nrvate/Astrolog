@@ -2456,12 +2456,14 @@ are the more useful half to read before starting something new.
       assertion caught the edit landing nowhere. Row zero's definition is
       the *second* column's top. The whole diagnose-fix-verify loop was
       four sub-second `ASTROLOG_QT_TESTS=custom-parse` runs.
-    - Still open in this family: `DlgCustom`'s `WM_INITDIALOG` open-codes
-      the definition *formatter* the same way (a near-copy of
-      `SzObjSelDef()` minus the name shortcut), the Qt lookup's
-      type-to-name switch duplicates `SzObjSelName()` except for the JPL
-      Horizons web case, and the Custom Objects dialogs do not reset a
-      redefined slot's glyph the way Object Selections now does.
+    - Three things were left open in this family and **all three closed
+      later** (verified 2026-08-31, or this would still read as pending
+      work): the open-coded definition *formatter* became
+      `SzObjDefFormat()` (item 59), the lookup's type-to-name switch
+      became `SzObjSelName()` with the JPL Horizons web case folded in,
+      and the glyph rule moved into `ObjDefSet()`, which the Custom
+      Objects dialogs now store through — so a redefined slot drops the
+      old body's glyph there too.
 
 59. **The formatter followed the parser into one function, and ASan then
     caught the suite's real intermittent crasher.** `SzObjDefFormat()` is

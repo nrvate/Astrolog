@@ -188,8 +188,10 @@ this theme recorded — with wrong-domain and untagged subscripts now
 compile errors, proven both ways. 170 call sites tagged by hand
 against their loops' domains; the switch matrix is byte-identical.
 Full typing of the planet[]/chouse[] core (775 references, the
-arithmetic and varargs idioms) remains open and is a separate
-maintainer decision; the measured reasons are in the work log item.
+arithmetic and varargs idioms) was a separate maintainer decision, and
+it was taken 2026-08-31 — **as a range guard rather than a tag**, once
+measuring showed a tag would not have caught any incident that family
+has produced. O1-O3 (work log items 135-137) cover it end to end.
 E2 followed the same day (work log item 127): the same three
 subscripts now range check at run time under the test build, so an
 index of the *right* domain that still runs off the end aborts where
