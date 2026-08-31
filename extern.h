@@ -156,7 +156,7 @@ extern CP * CONST rgpcp[cRing+1];
 extern CI * CONST rgpci[cRing+1];
 extern flag rgfProg[cRing+1];
 
-extern real force[objMax];
+extern GRDOBJR force;
 extern OBJSET rgobjset[oNorm1+1];
 extern real rgrBonusInf[6];
 extern real rHouseInf[cSign+6];
@@ -180,8 +180,8 @@ extern TBLASPR rAspInf;
 #define ObjForceMid1(vf) (((-(int)(vf)) - 1) / objMax)
 #define ObjForceMid2(vf) (((-(int)(vf)) - 1) % objMax)
 extern GridInfo *grid;
-extern int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1],
-  kObjA[objMax];
+extern GRDOBJI kObjA;
+extern int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1];
 
 extern GRDOBJB ignore, ignore2;
 extern byte ignorez[arMax], ignore7[rrMax], pluszone[cSector+1];
@@ -506,11 +506,11 @@ extern real CastChart P((int));
 extern void CastSectors P((void));
 extern flag FEnsureGrid P((void));
 extern flag FAcceptAspect P((int, int, int));
-extern int GetAspect P((CONST real *, CONST real *, CONST real *,
-  CONST real *, CONST real *, CONST real *, int, int, real *));
-extern int GetParallel P((CONST real *, CONST real *, CONST real *,
-  CONST real *, CONST real *, CONST real *, CONST real *, CONST real *,
-  int, int, real *));
+extern int GetAspect P((CONST GRDOBJR &, CONST GRDOBJR &, CONST GRDOBJR &,
+  CONST GRDOBJR &, CONST GRDOBJR &, CONST GRDOBJR &, int, int, real *));
+extern int GetParallel P((CONST GRDOBJR &, CONST GRDOBJR &, CONST GRDOBJR &,
+  CONST GRDOBJR &, CONST GRDOBJR &, CONST GRDOBJR &, CONST GRDOBJR &,
+  CONST GRDOBJR &, int, int, real *));
 extern flag FCreateGrid P((flag));
 extern flag FCreateGridRelation P((flag));
 extern int NCheckEclipseSolar P((int, int, int, real *));

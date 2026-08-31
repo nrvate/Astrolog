@@ -4449,6 +4449,59 @@ are the more useful half to read before starting something new.
     never been one -- every incident in this family has been a bad
     value, not a wrong domain.
 
+136. **O2: the object core's guard reaches the whole chart, and found
+    a bug on its first run.** `GRDOBJR`, `GRDOBJI` and `GRDSIGR` over
+    `CP`'s ten arrays -- obj, alt, dir, diralt, dirlen, dist, cusp,
+    cusp3, house -- plus `force` and `kObjA`. That is roughly a thousand
+    subscripts, `planet[]`/`chouse[]`/`ret[]` and the rest of the
+    aliases included, and **not one of them changed.**
+
+    The entire cost was eleven boundary sites and three signatures. The
+    signatures are the interesting part: `GetAspect()`, `GetParallel()`
+    and `GetDistance()` took `CONST real *`, so every caller decayed a
+    guarded table into a bare pointer. Taking `CONST GRDOBJR &` instead
+    means no call site changes *and* the guard follows into the callee
+    -- E1's rule 1 exemplar, applied where it saves work rather than
+    costs it. `DrawSymbolRing()` likewise.
+
+    `cusp`/`cusp3` are the sign domain inside an object-domain struct
+    and needed their own bound, which is the one thing here that reading
+    the struct rather than the aliases makes obvious.
+
+    **It caught a real bug immediately.** The first suite run after the
+    conversion aborted:
+
+        astrolog-qt-test: astrolog.h:1706:
+          real& GRDOBJR::operator[](int):
+          Assertion `(i) >= 0 && (i) <= (cObj)' failed.    // i = 134
+
+    `XChartAstroGraph()` (xcharts1.cpp) walks `for (i = 0; i <=
+    is.nObj*2+1; i++)` with `j = i >> 1` as the actual object -- the
+    loop is doubled because each object gets two labels. Two lines used
+    `ret[i]` where every other object read in the loop, including the
+    `DrawColor()` immediately above each, uses `ret[j]`. So it read past
+    `cp0.dir` whenever `is.nObj*2+1` exceeded cObj, and used the wrong
+    object's direction for the dash pattern even when it didn't.
+    Upstream's, and on a path the suite has been firing every run.
+
+    No render moves: a 12-case differential including `-L` and `-L0` is
+    byte-identical, and the switch matrix is identical. Pure UB removal.
+
+    **A candidate for the intermittent, stated as a candidate.** `ret`
+    is `cp0.dir` and `cp0` is a global, so an overread there is a
+    *global* buffer overflow, which is what ASan called the intermittent
+    (item 129) -- and it is intermittent for the right reason, since
+    whether `is.nObj*2+1` passes cObj depends on which objects the 338
+    menu items left unrestricted. What does not fit is the glibc
+    "buffer overflow detected" sighting (item 132), which only
+    instruments the `__*_chk` family and so cannot be a plain array
+    read. Two overlapping faults would explain both. Not claimed
+    closed.
+
+    Nets: suite 3213/0; console, Qt release, Qt test and Windows builds
+    clean; switch matrix and a 12-case render differential identical;
+    six audits clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -1610,14 +1610,18 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
   case funSidDiff: r = is.rOff; break;
   case funNutat:   r = is.rNut; break;
   case funSystem:  n = us.nHouseSystem; break;
-  case funAspect:  n = GetAspect(planet, planet, planetalt, planetalt, ret,
-    ret, n1, n2, &r); SetReal(n3, r); break;
-  case funAspect2: n = GetAspect(cp1.obj, cp2.obj, cp1.alt, cp2.alt, cp1.dir,
-    cp2.dir, n1, n2, &r); SetReal(n3, r); break;
-  case funParall:  n = GetParallel(planet, planet, planetalt, planetalt,
-    ret, ret, retalt, retalt, n1, n2, &r); SetReal(n3, r); break;
-  case funParall2: n = GetParallel(cp1.obj, cp2.obj, cp1.alt, cp2.alt, cp1.dir,
-    cp2.dir, cp1.diralt, cp2.diralt, n1, n2, &r); SetReal(n3, r); break;
+  case funAspect:  n = GetAspect(planet, planet, planetalt,
+    planetalt, ret, ret, n1, n2, &r);
+    SetReal(n3, r); break;
+  case funAspect2: n = GetAspect(cp1.obj, cp2.obj, cp1.alt,
+    cp2.alt, cp1.dir, cp2.dir, n1, n2, &r);
+    SetReal(n3, r); break;
+  case funParall:  n = GetParallel(planet, planet, planetalt,
+    planetalt, ret, ret, retalt, retalt, n1, n2, &r);
+    SetReal(n3, r); break;
+  case funParall2: n = GetParallel(cp1.obj, cp2.obj, cp1.alt,
+    cp2.alt, cp1.dir, cp2.dir, cp1.diralt, cp2.diralt,
+    n1, n2, &r); SetReal(n3, r); break;
   case funGridNam: n = grid != NULL && FValidObj(n1) && FValidObj(n2) ?
     grid->n[n1][n2] : 0; break;
   case funGridVal: r = grid != NULL && FValidObj(n1) && FValidObj(n2) ?

@@ -422,14 +422,14 @@ void XChartAstroGraph()
         !ignorez[FOdd(i) ? arDes : arIC]) {
         DrawColor(ret[j] < 0.0 ? gi.kiGray : gi.kiOn);
         DrawDash((int)end1[i], y2-unit*2, (int)symbol1[i], y2-unit*4,
-          (ret[i] < 0.0 ? 1 : 0) - gs.fColor);
+          (ret[j] < 0.0 ? 1 : 0) - gs.fColor);
         DrawObject(j, gi.xTurtle, y2-unit*10);
       }
       if ((gi.xTurtle = (int)symbol2[i]) > 0 && gs.fLabel &&
         !ignorez[FOdd(i) ? arAsc : arMC]) {
         DrawColor(ret[j] < 0.0 ? gi.kiGray : gi.kiOn);
         DrawDash((int)end2[i], y1+unit*4, (int)symbol2[i], y1+unit*8,
-          (ret[i] < 0.0 ? 1 : 0) - gs.fColor);
+          (ret[j] < 0.0 ? 1 : 0) - gs.fColor);
         DrawObject(j, gi.xTurtle, y1+unit*14);
         k = FOdd(i) ? oAsc : oMC;
         l = kObjB[k]; kObjB[k] = kObjB[j];

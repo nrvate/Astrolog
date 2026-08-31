@@ -185,9 +185,10 @@ flag rgfProg[cRing+1] = {0, fFalse, fFalse, fFalse, fFalse, fFalse, fFalse};
 ******************************************************************************
 */
 
-real force[objMax];
+GRDOBJR force;
 GridInfo *grid = NULL;
-int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1], kObjA[objMax];
+GRDOBJI kObjA;
+int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1];
 char *szWheel[cRing+1] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 real rStarBrightDef[cStar+1] = {-1.0}, rStarBright[cStar+1],
   rStarBrightDistDef[cStar+1];

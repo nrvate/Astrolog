@@ -1695,6 +1695,25 @@ struct GRDOBJB {
   const byte &operator[](int i) const
     { AssertIndex(i, cObj); return rgn[i]; }
 };
+struct GRDOBJI {
+  int rgn[objMax];
+  int &operator[](int i) { AssertIndex(i, cObj); return rgn[i]; }
+  const int &operator[](int i) const
+    { AssertIndex(i, cObj); return rgn[i]; }
+};
+struct GRDOBJR {
+  real rgn[objMax];
+  real &operator[](int i) { AssertIndex(i, cObj); return rgn[i]; }
+  const real &operator[](int i) const
+    { AssertIndex(i, cObj); return rgn[i]; }
+};
+// House cusps are the sign domain, not the object one, and CP holds both.
+struct GRDSIGR {
+  real rgn[cSign+1];
+  real &operator[](int i) { AssertIndex(i, cSign); return rgn[i]; }
+  const real &operator[](int i) const
+    { AssertIndex(i, cSign); return rgn[i]; }
+};
 
 struct RAYT { int n; explicit RAYT(int n_) : n(n_) {} };
 struct TBLRAY {
@@ -1897,16 +1916,16 @@ typedef struct _ChartInfo {
 } CI;
 
 typedef struct _ChartPositions {
-  real obj[objMax];     // The zodiac positions
-  real alt[objMax];     // Ecliptic declination
-  real dir[objMax];     // Retrogradation velocity
-  real diralt[objMax];  // Latitude velocity
-  real dirlen[objMax];  // Distance velocity
+  GRDOBJR obj;          // The zodiac positions
+  GRDOBJR alt;          // Ecliptic declination
+  GRDOBJR dir;          // Retrogradation velocity
+  GRDOBJR diralt;       // Latitude velocity
+  GRDOBJR dirlen;       // Distance velocity
   PT3R pt[objMax];      // X,Y,Z coordintes in space
-  real dist[objMax];    // Distance to X,Y,Z coordinates
-  real cusp[cSign+1];   // House cusp positions
-  real cusp3[cSign+1];  // 3D house cusp positions
-  int house[objMax];    // House each object is in
+  GRDOBJR dist;         // Distance to X,Y,Z coordinates
+  GRDSIGR cusp;         // House cusp positions
+  GRDSIGR cusp3;        // 3D house cusp positions
+  GRDOBJI house;        // House each object is in
   real lonMC;           // 0 longitude converted to equatorial coordinates
 } CP;
 

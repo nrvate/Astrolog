@@ -2378,7 +2378,7 @@ static void TestObjSelDialogQt()
 
   // A midpoint has to rename the slot too, or it sits at the midpoint
   // under the name of the body it used to be.
-  ClearB((pbyte)force, sizeof(force));
+  ClearB((pbyte)force.rgn, sizeof(force));
   DriveObjSelQt(4);
   Check(force[iobj] == ForceMid(oSun, oMoo),
     "a midpoint typed into the box is stored (%.1f)", force[iobj]);
@@ -3089,7 +3089,7 @@ static void TestSharedCoreFixesQt()
   us.fFlip = us.fDecan = us.fNavamsa = fFalse;
   us.nDwad = 0; us.objOnAsc = 0; us.rHarmonic = 1.0; us.fExpOff = fTrue;
 
-  ClearB((pbyte)force, sizeof(force));
+  ClearB((pbyte)force.rgn, sizeof(force));
   ignore[oJup] = ignore[oSat] = fTrue;
   force[oFor] = ForceMid(oJup, oSat);             // -Fm 19 6 7
   planet[oJup] = planet[oSat] = 0.0;
@@ -3377,7 +3377,7 @@ static void TestForcedPositionsQt()
 
   // oFor (19) stands in for a forced position outside any one dialog's
   // range; uranLo (34) for one inside it. Both must come back.
-  ClearB((pbyte)force, sizeof(force));
+  ClearB((pbyte)force.rgn, sizeof(force));
   force[oFor] = ForceMid(1, 2);                   // -Fm 19 1 2
   force[uranLo] = ForcePos(ZD(1, 15.25));         // -F 34 Ari 15.25
 
@@ -3425,7 +3425,7 @@ static void TestForcedPositionsQt()
   // the whole settings file -- the suite shares live us/gs state, and
   // reading a full settings file back would apply several hundred settings
   // to the running program.
-  ClearB((pbyte)force, sizeof(force));
+  ClearB((pbyte)force.rgn, sizeof(force));
   if (szMid[0] != chNull)
     FProcessCommandLine(szMid);
   if (szPos[0] != chNull)

@@ -1010,7 +1010,8 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
 // of planets in a wheel chart, drawing each glyph and a line from it to a dot
 // indicating the planet's actual location.
 
-void DrawSymbolRing(real *symbol, real *xplanet, real *obj, real *dir,
+void DrawSymbolRing(real *symbol, real *xplanet,
+  CONST GRDOBJR &obj, CONST GRDOBJR &dir,
   int cx, int cy, real unitx, real unity,
   real rp, real rl1, real rl2, real rz, real rg)
 {

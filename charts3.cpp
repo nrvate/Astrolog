@@ -811,11 +811,12 @@ void ChartTransitSearch(flag fProg)
         if (us.fHouse3D && !us.fIgnoreSign && !FIgnore2(i)) {
           is.MC = mc; is.OB = ob;
           lonSav = cp0.lonMC; cp0.lonMC = cpN.lonMC;
-          CopyRgb((pbyte)cp0.cusp3, (pbyte)cuspSav, sizeof(cuspSav));
-          CopyRgb((pbyte)cpN.cusp3, (pbyte)cp0.cusp3, sizeof(cuspSav));
+          CopyRgb((pbyte)cp0.cusp3.rgn, (pbyte)cuspSav, sizeof(cuspSav));
+          CopyRgb((pbyte)cpN.cusp3.rgn, (pbyte)cp0.cusp3.rgn,
+            sizeof(cuspSav));
           e1 = cpA.obj[i]; f1 = RHousePlaceIn3D(e1, cpA.alt[i]);
           e2 = cpB.obj[i]; f2 = RHousePlaceIn3D(e2, cpB.alt[i]);
-          CopyRgb((pbyte)cuspSav, (pbyte)cp0.cusp3, sizeof(cuspSav));
+          CopyRgb((pbyte)cuspSav, (pbyte)cp0.cusp3.rgn, sizeof(cuspSav));
           cp0.lonMC = lonSav;
           s1 = SFromZ(f1)-1; s2 = SFromZ(f2)-1;
           k = NAbs(s1-s2);

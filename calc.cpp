@@ -1861,9 +1861,9 @@ flag FAcceptAspect(int obj1, int asp, int obj2)
 // two planets, determine what aspect, if any, is present between them, and
 // determine the aspect's orb too.
 
-int GetAspect(CONST real *planet1, CONST real *planet2,
-  CONST real *planetalt1, CONST real *planetalt2,
-  CONST real *ret1, CONST real *ret2, int i, int j, real *prOrb)
+int GetAspect(CONST GRDOBJR &planet1, CONST GRDOBJR &planet2,
+  CONST GRDOBJR &planetalt1, CONST GRDOBJR &planetalt2,
+  CONST GRDOBJR &ret1, CONST GRDOBJR &ret2, int i, int j, real *prOrb)
 {
   int asp;
   real rAngle, rAngle3D, rDiff, rOrb, ret1a;
@@ -1930,10 +1930,11 @@ int GetAspect(CONST real *planet1, CONST real *planet2,
 // for conjunction are used for parallel and those for opposition are used for
 // contraparallel.
 
-int GetParallel(CONST real *planet1, CONST real *planet2,
-  CONST real *planetalt1, CONST real *planetalt2,
-  CONST real *ret1, CONST real *ret2,
-  CONST real *retalt1, CONST real *retalt2, int i, int j, real *prOrb)
+int GetParallel(CONST GRDOBJR &planet1, CONST GRDOBJR &planet2,
+  CONST GRDOBJR &planetalt1, CONST GRDOBJR &planetalt2,
+  CONST GRDOBJR &ret1, CONST GRDOBJR &ret2,
+  CONST GRDOBJR &retalt1, CONST GRDOBJR &retalt2, int i, int j,
+  real *prOrb)
 {
   int asp;
   real rDiff, rOrb, azi1, azi2, alt1, alt2, dir1, dir2, altdir1, altdir2,
@@ -2014,7 +2015,8 @@ int GetParallel(CONST real *planet1, CONST real *planet2,
 // distance type aspect between the given two planets.
 
 int GetDistance(CONST PT3R *space1, CONST PT3R *space2,
-  CONST real *retlen1, CONST real *retlen2, int i, int j, real *prOrb)
+  CONST GRDOBJR &retlen1, CONST GRDOBJR &retlen2, int i, int j,
+  real *prOrb)
 {
   int asp;
   real dist1, dist2, rPct, rDiff, rOrb, retlen1a;
