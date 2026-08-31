@@ -422,6 +422,16 @@ and after (see Build traps), and the matrix pipes each run's stderr
 through `head -2`, so a report arrives decapitated -- it tells you the
 invocation, and you re-run that one directly to get the trace.
 
+**And at the graphics surface, which renders rather than parses.** The
+switch matrix drives the -X family but sends stdout to /dev/null, so it
+covers their parsing and hardly any drawing. A sweep that renders every
+graphics mode, every option on three different chart types, and each
+output writer to a file -- 254 invocations -- found five more
+out-of-bounds bugs on its first run (work log item 134), one of which
+aborts the release build. Worth rebuilding as a script if that surface
+is touched again; it is not in the repo because it is minutes per run
+and belongs with the pre-release checks.
+
 The suite is a good host because it already renders 26 chart types and
 fires all 338 menu items, so one run exercises far more than a person
 clicking could. `ProbeQt()` works under ASan too, which is how the

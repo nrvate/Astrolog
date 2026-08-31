@@ -78,7 +78,11 @@ flag FProper(int i)
       gi.nMode == gSector || FBetween(gi.nMode, gSphere, gTelescope))) {
       // Planetary moons will be drawn separately, so don't display here.
       j = ObjOrbit(i);
-      if (!ignore[j] && FHasMoon(j) &&
+      // FHasMoon() is the >= 0 guard, and it has to come first: ObjOrbit()
+      // answers -1 for a body that orbits nothing, so testing ignore[j]
+      // ahead of it reads one byte below the array. "-X8" on a wheel was
+      // enough (work log item 134).
+      if (FHasMoon(j) && !ignore[j] &&
         !(j == us.objCenter && gi.nMode != gOrbit))
         f = fFalse;
     }
@@ -295,7 +299,9 @@ flag EnumMoonsRing(int *pobjM, int *pobjP, real *pang, int *pcol, char *pch,
       if (ignore[obj])
         continue;
       objP = ObjOrbit(obj);
-      if (ignore[objP] || !FHasMoon(objP) ||
+      // FHasMoon() first: it is the >= 0 guard, and ObjOrbit() answers
+      // -1 for a body that orbits nothing.
+      if (!FHasMoon(objP) || ignore[objP] ||
         (objP == us.objCenter && gi.nMode != gOrbit) || objP == obj)
         continue;
       *pobjM = obj;
@@ -316,7 +322,9 @@ flag EnumMoonsRing(int *pobjM, int *pobjP, real *pang, int *pcol, char *pch,
     if (ignore[objM])
       continue;
     objP = ObjOrbit(objM);
-    if (ignore[objP] || !FHasMoon(objP) ||
+    // FHasMoon() first, for the reason FProper() needs it first: -1 is
+    // ObjOrbit()'s "orbits nothing", and ignore[-1] reads below the array.
+    if (!FHasMoon(objP) || ignore[objP] ||
       (objP == us.objCenter && gi.nMode != gOrbit) || objP == objM)
       continue;
     if (!fVertical) {

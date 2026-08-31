@@ -1067,13 +1067,18 @@ void WriteXBitmap(FILE *file, CONST char *szName, char mode)
   uint value;
   char szT[cchSzDef], *pchStart, *pchEnd;
 
-  // Determine variable name from filename.
-  sprintf(szT, "%s", szName);
-  for (pchEnd = szT; *pchEnd != chNull; pchEnd++)
+  // Determine variable name from filename. szName is the whole output
+  // path and has no length limit, so find its last component in szName
+  // itself and copy only that: sprintf'ing the path into szT overflowed
+  // it for any ordinary deep path (a 95-byte write into 80 bytes, work
+  // log item 134).
+  for (pchEnd = (char *)szName; *pchEnd != chNull; pchEnd++)
     ;
-  for (pchStart = pchEnd; pchStart > szT &&
+  for (pchStart = pchEnd; pchStart > szName &&
     *(pchStart-1) != '/' && *(pchStart-1) != '\\'; pchStart--)
     ;
+  sprintf2(S(szT), "%s", pchStart);
+  pchStart = szT;
   for (pchEnd = pchStart; *pchEnd != chNull && *pchEnd != '.'; pchEnd++)
     ;
   *pchEnd = chNull;
@@ -1094,9 +1099,13 @@ void WriteXBitmap(FILE *file, CONST char *szName, char mode)
         fprintf(file, "\n%s",
           mode == 'N' ? "  " : (mode == 'C' ? " " : ""));
       value = 0;
+      // The width test comes first so it actually guards the read: "^"
+      // binds tighter than "&&", so with it last the pixel was fetched
+      // and only then discarded, running off the end of the final group
+      // of columns in every row.
       for (i = (mode != 'V' ? 7 : 15); i >= 0; i--)
-        value = (value << 1) + (!(BmGetXY(x+i, y)^
-          (gs.fInverse*15))^gs.fInverse && (x + i < gs.xWin));
+        value = (value << 1) + ((x + i < gs.xWin) &&
+          ((!(BmGetXY(x+i, y)^(gs.fInverse*15)))^gs.fInverse));
       if (mode == 'N')
         putc(' ', file);
       fprintf(file, "0x");

@@ -4350,6 +4350,61 @@ are the more useful half to read before starting something new.
     findings before, and its only behavioural diff the crash that stopped
     happening.
 
+134. **The graphics surface under ASan: 254 renders, five more
+    out-of-bounds bugs.** Item 133 sanitized the *switch* matrix, which
+    drives the -X family but sends stdout to /dev/null -- so it covers
+    the parse and almost none of the drawing. This sweep renders: every
+    graphics chart mode bare, every graphics option on a wheel and on a
+    globe and a world map, and each of the other output writers, all to
+    a file under a console ASan build. 254 invocations, 12 reports,
+    five distinct defects, all upstream's and all fixed. It went from
+    12 hits to 0 in four rounds, each round's fix uncovering the next.
+
+    **Three are one mistake made three times: a bounds guard that is
+    present but sequenced after the access it guards.**
+
+    - `FProper()` (xcharts2.cpp:81), `EnumMoonsRing()` twice (302, 323):
+      each wrote `ignore[objP] || !FHasMoon(objP)`. `ObjOrbit()` answers
+      **-1** for a body that orbits nothing and `FHasMoon()` *is* the
+      `>= 0` test -- so putting it second reads `ignore[-1]`, one byte
+      below the array, which ASan names exactly. Reordering is the whole
+      fix. `-X8` on a wheel was enough to reach all three.
+    - `WriteXBitmap()` (xdevice.cpp): `BmGetXY(x+i, y)` was fetched
+      before the `(x + i < gs.xWin)` test in the same expression -- `^`
+      binds tighter than `&&`, so the pixel was read and only then
+      discarded, running off the end of the final column group of every
+      row. Heap overread on every XBM write.
+
+    These three are the shape T2's theme predicted and item 37 first
+    recorded: a "none" value of -1 used as a subscript. They are outside
+    T2's enforcement surface because `ignore[]` is the object-domain
+    core, the row that stays maintainer-gated.
+
+    **The fifth is a long string into a fixed buffer**, item 114's class
+    again: `WriteXBitmap()` did `sprintf(szT, "%s", szName)` with
+    `szT[cchSzDef]` and `szName` the whole output path -- a 95-byte write
+    into 80. It now finds the path's last component in `szName` itself
+    and copies only that, bounded. **This crashes the release build**:
+    `-Xbn`, `-Xbc` and `-Xbv` abort outright for any output path over
+    about 79 characters, which a deep directory reaches easily.
+
+    Behaviour is unchanged everywhere it did not previously crash. All
+    three `ignore[-1]` sites already continued past the object either
+    way -- only the read was illegal -- and the `BmGetXY` reorder yields
+    the identical bit, since out of bounds scored 0 before and after. A
+    12-case render differential against HEAD is byte-identical on the
+    seven cases HEAD survives, and the switch matrix is identical.
+
+    **Not the intermittent.** That one ASan called a *global* buffer
+    overflow; of these five, three are global but need `-X8`, which the
+    suite does not set, and nothing in qttest.cpp reaches
+    `WriteXBitmap()` at all. Checked rather than assumed, because a
+    fortify abort on a long path was a tempting match for the observed
+    symptom.
+
+    Nets: suite 3213/0; console, Qt release, Qt test and Windows builds
+    clean; six audits clean; graphics sweep 254/0 where it reported 12.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
