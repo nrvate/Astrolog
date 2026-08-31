@@ -197,7 +197,10 @@ astrolog-qt-test: astrolog.h:847: int& TBLOBJ::operator[](OBJT):
 ```
 
 That is a real bug in the code under test, never a broken test — an
-index of the right domain running off the end of its table. It fires
+index of the right domain running off the end of its table. A
+*regression* test for such a bug therefore fails as SIGABRT rather than
+as a FAIL line, because the assert fires before the test's own
+comparison runs; `ray-digit-fill` is the worked example and says so. It fires
 only under `QTTEST` (so the test and ASAN builds; work log item 127),
 which is why the same input can be quiet in `./astrolog-qt`. Debug it
 there rather than concluding the release build is fine.

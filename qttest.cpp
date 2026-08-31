@@ -4215,11 +4215,90 @@ static void TestLongStringsQt()
 }
 
 
+// A sign's Ray list packs its Rays as decimal digits (-Y7C), and the
+// switch range checks the composed number rather than each digit -- so a
+// digit naming no Ray reaches DrawFillWheel(), which used to index the
+// nine-slot Ray colour table with it. "-Y7C 1 1 999 -Xv 6" read
+// rgbbmpRay[9] and drew whatever followed the array (work log items
+// 129-130; ASan called it a global-buffer-overflow at xcharts0.cpp:695).
+//
+// The rule this pins is EnsureRay()'s: a digit outside 1..cRay names no
+// Ray, so it reads as absent. The three all-invalid lists below must
+// therefore render exactly like an empty list, and the valid one must
+// not -- without that last leg the test would pass on a build that had
+// stopped filling by Ray at all.
+//
+// A regression here shows up as SIGABRT, not as a FAIL line: the checked
+// table's range assert (E2) fires inside operator[] before the image
+// comparison is ever reached. That is the test working, not the test
+// broken -- proven by reintroducing the bug, which aborts exactly here.
+
+static void TestRayDigitFillQt()
+{
+  int nSav = gi.nMode, nRaySav, nFillSav;
+  real rBackSav;
+  QImage imEmpty, imValid, imTwo;
+  int i;
+  CONST int rgnBad[] = {999, 888, 909};
+  CONST char *rgszBad[] = {"999", "888", "909"};
+
+  Group("Ray digit wheel fill");
+  nRaySav = rgSignRay[SIGT(sAri)];
+  nFillSav = gs.nDecaFill;
+  rBackSav = gs.rBackPct;
+  gs.nDecaFill = 6;          // Ray sign fill.
+  gs.rBackPct = 100.0;       // DrawFillWheel() returns early below this.
+
+  rgSignRay[SIGT(sAri)] = 0;
+  SetChartModeQt(gWheel);
+  if (gi.qim != NULL)
+    imEmpty = gi.qim->copy();
+  Check(!imEmpty.isNull(), "no image rendered for an empty Ray list");
+
+  rgSignRay[SIGT(sAri)] = 123;
+  SetChartModeQt(gWheel);
+  if (gi.qim != NULL)
+    imValid = gi.qim->copy();
+  Check(!imValid.isNull() && imValid != imEmpty,
+    "Rays 1/2/3 fill the same as no Rays at all -- this test cannot see "
+    "the Ray fill, so its other legs prove nothing");
+
+  for (i = 0; i < 3; i++) {
+    rgSignRay[SIGT(sAri)] = rgnBad[i];
+    SetChartModeQt(gWheel);
+    Check(gi.qim != NULL && *gi.qim == imEmpty,
+      "Ray list \"%s\" (no digit names a Ray) did not render as an empty "
+      "list", rgszBad[i]);
+  }
+
+  // The largest value -Y7C accepts is the one that made the old code
+  // read furthest out: its third "digit" is 1234567/100 == 12345. Its
+  // low two digits are Rays 7 and 6 though, so it is not an empty list
+  // -- it must render as exactly those two, with the third absent.
+  rgSignRay[SIGT(sAri)] = 67;
+  SetChartModeQt(gWheel);
+  if (gi.qim != NULL)
+    imTwo = gi.qim->copy();
+  Check(!imTwo.isNull() && imTwo != imEmpty, "Rays 7/6 fill as no Rays");
+  rgSignRay[SIGT(sAri)] = 1234567;
+  SetChartModeQt(gWheel);
+  Check(gi.qim != NULL && *gi.qim == imTwo,
+    "Ray list \"1234567\" did not render as Rays 7 and 6 with the "
+    "third position absent");
+
+  rgSignRay[SIGT(sAri)] = nRaySav;
+  gs.nDecaFill = nFillSav;
+  gs.rBackPct = rBackSav;
+  SetChartModeQt(nSav);
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"context-menus",        TestContextMenusQt},
   {"hotkeys",              TestHotkeysQt},
   {"chart-render",         TestChartRenderQt},
+  {"ray-digit-fill",       TestRayDigitFillQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},
   {"bad-input",            TestBadInputQt},

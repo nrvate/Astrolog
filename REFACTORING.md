@@ -1669,6 +1669,10 @@ measured at the finding).
   its restriction overrides, fMoonMove, and the un-recast chart into
   the session on a grid-allocation-failure exit (work log item 106,
   found by P6's campaign survey, proven by a forced-failure probe);
+  DrawFillWheel() indexing the nine-slot Ray colour table with a digit
+  that names no Ray, reachable as `-Y7C 1 1 999 -Xv 6` (work log items
+  129-130, found by E4's tag on its first render, confirmed
+  pre-existing under ASan);
   ruler2[] one short;
   astrolog.as's stale -YR/-YRT rows; two buffer overflows (szLoc,
   szZod) plus `sprintf2` unbounded on non-Windows; -Yu never reaching

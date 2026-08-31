@@ -609,6 +609,13 @@ void DrawSidebar()
 #define KvHouseCore(obj, rule) (typ <= 0 ? rgbbmpRay[RAYT(FNorm(obj) ? \
   rgObjRay[OBJT(obj)] : cRay)] : KvFromKi(kObjB[rule[SIGT(sig)]]));
 
+// A sign's Ray list packs its Rays as decimal digits, and -Y7C range
+// checks the composed number rather than each digit, so a digit here is
+// user data that may name no Ray at all. Read such a digit as "absent"
+// -- the zero this code already uses for it -- the way EnsureRay() skips
+// it, rather than indexing the table with it.
+#define KvRayDigit(n) (FValidRay(n) ? rgbbmpRay[RAYT(n)] : (KV)0)
+
 // Return the color to use for filling a house area, based on the Rays or
 // colors of the planets which rule and co-rule the sign of the cusp.
 
@@ -692,9 +699,9 @@ flag DrawFillWheel(int x, int y, int i, int typ)
       // Ray sign fill: Based on Ray(s) of sign.
       kv2 = kv3 = 0;
       n = rgSignRay[SIGT(i)];
-      kv1 = rgbbmpRay[RAYT(n%10)];
-      kv2 = rgbbmpRay[RAYT(n/10%10)];
-      kv3 = rgbbmpRay[RAYT(n/100)];
+      kv1 = KvRayDigit(n%10);
+      kv2 = KvRayDigit(n/10%10);
+      kv3 = KvRayDigit(n/100);
       kvC = (kv3 == 0 ? (kv2 == 0 ? kv1 : KvBlend(kv1, kv2, 0.5)) :
         KvBlend(KvBlend(kv1, kv2, 0.5), kv3, 0.3333));
     } else {

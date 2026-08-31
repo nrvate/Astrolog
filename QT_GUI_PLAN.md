@@ -4103,6 +4103,46 @@ are the more useful half to read before starting something new.
     on kRayA, both legs. **T2's done-when is met: every table family
     that has ever shipped an incident is behind a tag.**
 
+130. **The Ray wheel fill reads a digit that names no Ray.** The bug
+    E4's tag exposed, fixed in its own commit so it can be offered
+    upstream -- it is upstream's, in shared core, with no `QT` guard
+    anywhere near it.
+
+    `rgSignRay[]` packs a sign's Rays as decimal digits, and `-Y7C`
+    range checks the composed number (1..1234567) rather than each
+    digit. `EnsureRay()` has known that since item 122 and skips a
+    digit outside 1..cRay. `DrawFillWheel()` did not: it indexed the
+    nine-slot `rgbbmpRay[]` with `n%10`, `n/10%10` and `n/100` straight
+    from that user data -- and the third is not a digit at all, being
+    12345 for the largest accepted value. `KvRayDigit()` now applies
+    EnsureRay's rule at the read, mapping a digit that names no Ray to
+    the zero this code already uses for "absent".
+
+    **What actually changes, measured rather than asserted.** For every
+    valid Ray list nothing moves: the switch matrix and the ray-surface
+    chart differential are byte-identical across the fix. Only lists
+    containing the digit 8 render differently, and that is the point --
+    8 is not a Ray, but slot 8 is the "all Rays" aggregate colour, so
+    the old code silently painted a sign with it. Now it reads as
+    absent, which is what EnsureRay() already believed. The genuinely
+    out-of-range lists (999 and kin) happen to render the same as
+    before, because whatever followed the array read as zero: **the
+    symptom was invisible, which is how this shipped for years. The
+    defect was the read.**
+
+    The regression test (`ray-digit-fill`, 7 assertions) renders the
+    wheel with an empty list, a valid one, three all-invalid ones and
+    the maximum, and pins each against the empty or two-Ray render. Two
+    things about it are deliberate. It has a leg asserting that a
+    *valid* list renders differently from an empty one -- without that
+    the whole test would pass on a build that had stopped filling by
+    Ray entirely. And its first version was wrong in a way worth
+    keeping: it assumed 1234567 was an all-invalid list, when its low
+    digits are Rays 7 and 6, so the test failed and the *code* was
+    right. Falsified by reintroducing the bug, which aborts on E2's
+    range assert -- a regression here is a SIGABRT, not a FAIL line,
+    and the test says so in a comment.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
