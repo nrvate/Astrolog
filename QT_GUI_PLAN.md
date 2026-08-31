@@ -248,19 +248,18 @@ Roughly in the order I'd take them.
    except Rising at ~490ms and the two transit grids at ~275ms.
    This is what item 4's pixel baselines want.
 
-10. **The T2 enforcement campaign -- E4 only, and optional.**
-   REFACTORING.md, "The T2 enforcement campaign" -- state, hard rules,
-   recipe, ledger. E1, E2 and E3 landed 2026-08-30 (work log items
-   125, 127, 128); the rulership, exaltation, ray and aspect families
-   are all behind a tag, and the checked subscripts range check
-   themselves under the test build. **E4 is the last row**: the
-   ray/constellation leftovers (kRayA, whose cRay+2 dimension has a
-   real extra slot to read the sites for; szRayName/szRayWill, which
-   would need the SZ element variant; iCnstlZodiac/lonCnstlZodiac). It
-   is explicitly optional -- converting it or closing it with a
-   measured verdict both finish the theme. Everything else in T2 is a
-   recorded verdict, including the planet[]/chouse[] core, which stays
-   maintainer-gated.
+10. **~~The T2 enforcement campaign.~~** — **finished 2026-08-31.**
+   E1-E4 tagged the families that had shipped cross-domain incidents
+   (items 125, 127-129), and O1-O3 range-guarded the object core
+   (items 135-137) after measuring that a tag would not have caught any
+   of the incidents there. REFACTORING.md's "T2 enforcement campaign"
+   section carries the whole ledger, both mechanisms, and the four
+   verdicts that closed the rest.
+   Two things are open there on purpose, and neither is a task:
+   **domain tagging the object core** waits on a cross-domain incident
+   in that family, of which there has never been one; and the
+   **`Mem` storage arrays** are never subscripted, so a guard would
+   check nothing. Both say so at the ledger row.
 
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
