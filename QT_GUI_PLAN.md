@@ -4537,6 +4537,44 @@ are the more useful half to read before starting something new.
     clean; switch and influence matrices identical; a 10-case render
     differential identical; six audits clean, re-falsified both legs.
 
+138. **The sanitizer sweeps become a tool.** Items 133 and 134 found
+    seven out-of-bounds bugs between them -- one crashing the release
+    build -- using scratch scripts that were then deleted, leaving a
+    paragraph in QT_TESTING.md describing what to rebuild. That is
+    exactly the failure the divergence list had (item 132): **prose
+    describing a check is not a check.** `tools/asan-sweep.sh` is both
+    halves, `switches` or `graphics` or neither for both, exiting
+    non-zero on anything reported.
+
+    It builds its own console binary with `-fsanitize=address` and
+    `-DQTTEST`, so the checked tables' range guards are live alongside
+    ASan -- which matters, since the guards catch the `-1` subscripts
+    ASan sees only as a one-byte underread.
+
+    Four arrangements in it are load-bearing and the header says so:
+    `make clean` on both sides of the overridden build, because the
+    plain Makefile shares the repo's object directory; a **short** path
+    for the binary, because a deep one truncates the ephemeris path and
+    changes lookups; a deliberately **long** path for the output file,
+    because an 80-byte buffer took the whole output path in
+    `WriteXBitmap()` and a short scratch directory would have hidden it;
+    and re-running any invocation the switch matrix reports, because
+    that harness pipes each run's stderr through `head -2` and a
+    sanitizer report arrives decapitated.
+
+    **Falsified in both halves and in both directions.** Reverting
+    item 134's `FProper()` fix makes the graphics half report `-X8`,
+    `-XG -X8` and `-XW -X8` and exit 1; reverting item 133's `-YXDD`
+    fix makes the switch half name `-YXDD 5 6`, recovered from the
+    decapitated report. Restoring each returns exit 0.
+
+    Writing the falsification found a defect in the tool itself: the
+    switch half appended its hit list to a file it never truncated, so
+    a **clean tree reported the previous run's hits**. A check tool that
+    cries wolf is worse than none, and it was only visible by running
+    clean *after* dirty rather than the other way round -- worth
+    remembering as the order to falsify a stateful check in.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

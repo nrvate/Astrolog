@@ -411,7 +411,8 @@ you are hunting. Expect minutes rather than seconds — hence the
 `timeout`, which is not optional courtesy: a run that goes wrong here
 goes wrong by *hanging*, not by failing.
 
-**Point it at the switch matrix, not only the suite.** A console build
+**Point it at the switch matrix, not only the suite** --
+`tools/asan-sweep.sh switches` does exactly this. A console build
 with `-fsanitize=address -DQTTEST` driven through
 `tools/switch-matrix.sh` covers 529 invocations of the whole switch
 surface, including the error and edge shapes, and on its first ever run
@@ -428,9 +429,12 @@ covers their parsing and hardly any drawing. A sweep that renders every
 graphics mode, every option on three different chart types, and each
 output writer to a file -- 254 invocations -- found five more
 out-of-bounds bugs on its first run (work log item 134), one of which
-aborts the release build. Worth rebuilding as a script if that surface
-is touched again; it is not in the repo because it is minutes per run
-and belongs with the pre-release checks.
+aborts the release build.
+
+**Both halves are `tools/asan-sweep.sh` now** (work log item 138) --
+`switches`, `graphics`, or neither argument for both. Prose describing
+a check is not a check: these two found seven bugs and then existed
+only as a paragraph, which is the same failure the divergence list had.
 
 The suite is a good host because it already renders 26 chart types and
 fires all 338 menu items, so one run exercises far more than a person

@@ -200,6 +200,25 @@ change ships in both builds. It swaps `/swe` for the bundled `ephem/`
 first, because ~887,000 files through Wine's path translation looks
 exactly like the app hanging. `QT_COMPARING_WITH_WINDOWS.md` says why.
 
+The other slow check is the sanitizer sweep, over the two surfaces the
+assertion suite barely reaches:
+
+```sh
+tools/asan-sweep.sh                    # both, ~750 invocations
+tools/asan-sweep.sh switches           # the 529-invocation switch matrix
+tools/asan-sweep.sh graphics           # ~230 renders
+```
+
+Also minutes, also pre-release rather than pre-commit, and it earns
+that on its record: the first run of each half found real out-of-bounds
+bugs in code exercised dozens of times without a sanitizer behind it
+(work log items 133-134, seven between them, one crashing the release
+build). It builds its own console binary with `-fsanitize=address` and
+`-DQTTEST`, so the checked tables' range guards are live too. Read the
+header before changing it — four of its arrangements are load-bearing,
+including that the binary needs a *short* path while the output file
+wants a *long* one.
+
 **`QT_COMPARING_WITH_WINDOWS.md` has the full workflow**, including how to
 drive either build headlessly and the environment traps that cost real
 time to rediscover (**both** builds need a window manager — Qt for its
