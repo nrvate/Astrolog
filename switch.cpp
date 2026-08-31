@@ -190,9 +190,9 @@ static CONST SWITCHRANGED rgswranged[] = {
     vtBool, 0, 0, RedoRestrictions},
   {"YRT", "YR", pmObject, 0, cObj,    ignore2,           sizeof(byte),
     vtBool, 0, 0, RedoRestrictions},
-  {"Y7O", "Y7", pmObject, 0, oNorm,   rgObjRay,          sizeof(int),
+  {"Y7O", "Y7", pmObject, 0, oNorm,   rgObjRay.rgn,      sizeof(int),
     vtRay, 0, 7, NULL},
-  {"Y7C", "Y7", pmSign,   1, cSign,   rgSignRay,         sizeof(int),
+  {"Y7C", "Y7", pmSign,   1, cSign,   rgSignRay.rgn,     sizeof(int),
     vtRay, 1, 1234567, NULL},
   {"YkO", "Yk", pmObject, 0, starLo,  &rgobjset[0].kolor, sizeof(OBJSET),
     vtColor, 0, kMax-1, NULL},
@@ -283,8 +283,8 @@ static int NSwYj7(CONST char *szSwitch, PARSEIN *pin)
 // planets those tables cover. The suite's "rulership" group pins the
 // mirror's invariants.
 
-static int NSwRulershipCore(int argc, char **argv, int *rgObj1,
-  int *rgObj2, int *rgSign1, int *rgSign2, flag fWithEarthVulcan)
+static int NSwRulershipCore(int argc, char **argv, TBLOBJ &rgObj1,
+  TBLOBJ &rgObj2, TBLSIG &rgSign1, TBLSIG &rgSign2, flag fWithEarthVulcan)
 {
   int i, j, k;
 
@@ -303,8 +303,8 @@ static int NSwRulershipCore(int argc, char **argv, int *rgObj1,
     j = k;
   if (j == k)
     k = 0;
-  rgObj1[i] = j;
-  rgObj2[i] = k;
+  rgObj1[OBJT(i)] = j;
+  rgObj2[OBJT(i)] = k;
   if (fWithEarthVulcan ? (FBetween(i, 0, oPlu) || i == oVul) :
     FBetween(i, 1, oPlu)) {
     AdjustRulership(rgSign1, rgSign2, k, i, fFalse);
@@ -343,7 +343,7 @@ static int NSwYJ0(CONST char *szSwitch, PARSEIN *pin)
   j = NParseSz(pin->argv[2], pmSign);
   if (FErrorValN("YJ", !FBetween(j, 0, cSign), j, 2))
     return tcError;
-  exalt[i] = j;
+  exalt[OBJT(i)] = j;
   return 2;
 }
 

@@ -1540,14 +1540,14 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
     (FBetween(n1, oNorm1+1, oNorm1+5) ? rgrBonusInf[n1-oNorm1] : 0.0); break;
   case funObjInfT: r = FBetween(n1, 0, oNorm1) ? rgobjset[n1].tinf : 0.0; break;
   case funObjCol:  n = FValidObj(n1)    ? kObjA[n1]     : 0; break;
-  case funObjRul:  n = FNorm(n1)        ? ruler1[n1]    : 0; break;
-  case funObjRul2: n = FNorm(n1)        ? ruler2[n1]    : 0; break;
-  case funObjEso:  n = FNorm(n1)        ? rgObjEso1[n1] : 0; break;
-  case funObjEso2: n = FNorm(n1)        ? rgObjEso2[n1] : 0; break;
-  case funObjHie:  n = FNorm(n1)        ? rgObjHie1[n1] : 0; break;
-  case funObjHie2: n = FNorm(n1)        ? rgObjHie2[n1] : 0; break;
-  case funObjExa:  n = FNorm(n1)        ? exalt[n1]     : 0; break;
-  case funObjRay:  n = FNorm(n1)        ? rgObjRay[n1]  : 0; break;
+  case funObjRul:  n = FNorm(n1)        ? ruler1[OBJT(n1)]    : 0; break;
+  case funObjRul2: n = FNorm(n1)        ? ruler2[OBJT(n1)]    : 0; break;
+  case funObjEso:  n = FNorm(n1)        ? rgObjEso1[OBJT(n1)] : 0; break;
+  case funObjEso2: n = FNorm(n1)        ? rgObjEso2[OBJT(n1)] : 0; break;
+  case funObjHie:  n = FNorm(n1)        ? rgObjHie1[OBJT(n1)] : 0; break;
+  case funObjHie2: n = FNorm(n1)        ? rgObjHie2[OBJT(n1)] : 0; break;
+  case funObjExa:  n = FNorm(n1)        ? exalt[OBJT(n1)]     : 0; break;
+  case funObjRay:  n = FNorm(n1)        ? rgObjRay[OBJT(n1)]  : 0; break;
   case funObjDist: r = FNorm(n1)        ? rObjDist[n1]  : 0.0; break;
   case funObjYear: r = FNorm(n1)        ? rObjYear[n1]  : 0.0; break;
   case funObjDiam: r = RObjDiam(n1); break;
@@ -1577,14 +1577,14 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
   case funCuspInf: r = FBetween(n1, 1, cSign+5) ? rHouseInf[n1] : 0.0; break;
   case funCuspSig: n = FValidSign(n1) ? SFromZ(chouse[n1]) : 0; break;
   case funSector:  n = FSector(n1)    ? pluszone[n1]   : 0;  break;
-  case funSigRul:  n = FValidSign(n1) ? rules[n1]      : -1; break;
-  case funSigRul2: n = FValidSign(n1) ? rules2[n1]     : -1; break;
-  case funSigEso:  n = FValidSign(n1) ? rgSignEso1[n1] : -1; break;
-  case funSigEso2: n = FValidSign(n1) ? rgSignEso2[n1] : -1; break;
-  case funSigHie:  n = FValidSign(n1) ? rgSignHie1[n1] : -1; break;
-  case funSigHie2: n = FValidSign(n1) ? rgSignHie2[n1] : -1; break;
-  case funSigRay:  n = FValidSign(n1) ? rgSignRay[n1]  : 0; break;
-  case funSigRay2: n = FValidSign(n1) && FValidRay(n2) ? rgSignRay2[n1][n2] :
+  case funSigRul:  n = FValidSign(n1) ? rules[SIGT(n1)]      : -1; break;
+  case funSigRul2: n = FValidSign(n1) ? rules2[SIGT(n1)]     : -1; break;
+  case funSigEso:  n = FValidSign(n1) ? rgSignEso1[SIGT(n1)] : -1; break;
+  case funSigEso2: n = FValidSign(n1) ? rgSignEso2[SIGT(n1)] : -1; break;
+  case funSigHie:  n = FValidSign(n1) ? rgSignHie1[SIGT(n1)] : -1; break;
+  case funSigHie2: n = FValidSign(n1) ? rgSignHie2[SIGT(n1)] : -1; break;
+  case funSigRay:  n = FValidSign(n1) ? rgSignRay[SIGT(n1)]  : 0; break;
+  case funSigRay2: n = FValidSign(n1) && FValidRay(n2) ? rgSignRay2[SIGT(n1)][n2] :
     0; break;
   case funRayCol:  n = FValidRay(n1)  ? kRayA[n1]      : 0; break;
   case funLonSign: n = SFromZ(r1); break;

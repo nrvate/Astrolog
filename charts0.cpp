@@ -889,7 +889,7 @@ void PrintObjects(void)
 
     // Print rulerships and exaltations for the planets.
 
-    j = ruler1[i]; k = ruler2[i];
+    j = ruler1[OBJT(i)]; k = ruler2[OBJT(i)];
     if (j) {
       sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
     } else
@@ -911,7 +911,7 @@ void PrintObjects(void)
       PrintSz("   ");
     PrintSz("   ");
 
-    j = exalt[i];
+    j = exalt[OBJT(i)];
     if (j) {
       sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
     } else
@@ -923,7 +923,7 @@ void PrintObjects(void)
       PrintSz("   ");
     PrintSz("  ");
 
-    j = rgObjEso1[i]; k = rgObjEso2[i];
+    j = rgObjEso1[OBJT(i)]; k = rgObjEso2[OBJT(i)];
     if (j) {
       sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
     } else
@@ -934,7 +934,7 @@ void PrintObjects(void)
     } else
       PrintSz("   ");
     PrintSz("  ");
-    j = rgObjHie1[i]; k = rgObjHie2[i];
+    j = rgObjHie1[OBJT(i)]; k = rgObjHie2[OBJT(i)];
     if (j) {
       sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
     } else
@@ -945,9 +945,9 @@ void PrintObjects(void)
     } else
       PrintSz("   ");
 
-    if (rgObjRay[i]) {
+    if (rgObjRay[OBJT(i)]) {
       PrintTab(' ', 6);
-      sprintf(sz, "%d", rgObjRay[i]); PrintSz(sz);
+      sprintf(sz, "%d", rgObjRay[OBJT(i)]); PrintSz(sz);
     }
     PrintL();
   }
@@ -1133,7 +1133,7 @@ void PrintSigns(void)
     AnsiColor(kSignA(i));
     sprintf(sz, "%-12sthe %-14s%2d%s  House of %-24s  %s\n",
       szSignName[i], szSignEnglish[i], i, szSuffix[i], szHouseTradition[i],
-      szObjDisp[rules[i]]);
+      szObjDisp[rules[SIGT(i)]]);
     PrintSz(sz);
   }
   AnsiColor(kDefault);
@@ -1143,58 +1143,60 @@ void PrintSigns(void)
     "Exalt Detriment  Fall\n\n");
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%2d  %-11s%5d ", i, szSignName[i], rgSignRay[i]);
+    sprintf(sz, "%2d  %-11s%5d ", i, szSignName[i], rgSignRay[SIGT(i)]);
     PrintSz(sz);
 
-    sprintf(sz, " %-4.4s", szObjDisp[rules[i]]); PrintSz(sz);
-    if (rules2[i] > 0) {
-      sprintf(sz, " %-4.4s", szObjDisp[rules2[i]]); PrintSz(sz);
+    sprintf(sz, " %-4.4s", szObjDisp[rules[SIGT(i)]]); PrintSz(sz);
+    if (rules2[SIGT(i)] > 0) {
+      sprintf(sz, " %-4.4s", szObjDisp[rules2[SIGT(i)]]); PrintSz(sz);
     } else
       PrintSz("     ");
     PrintSz(" ");
     for (j = 0; j <= oNorm; j++)
-      if (rgObjEso1[j] == i && !FCusp(j)) {
+      if (rgObjEso1[OBJT(j)] == i && !FCusp(j)) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     for (j = 0; j <= oNorm; j++)
-      if (rgObjEso2[j] == i && !FCusp(j)) {
+      if (rgObjEso2[OBJT(j)] == i && !FCusp(j)) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     PrintSz(" ");
     for (j = 0; j <= oNorm; j++)
-      if (rgObjHie1[j] == i && !FCusp(j)) {
+      if (rgObjHie1[OBJT(j)] == i && !FCusp(j)) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     for (j = 0; j <= oNorm; j++)
-      if (rgObjHie2[j] == i && !FCusp(j)) {
+      if (rgObjHie2[OBJT(j)] == i && !FCusp(j)) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
 
     PrintSz("   ");
     for (j = 0; j <= oNorm; j++)
-      if (exalt[j] == i && (FBetween(j, oSun, oPlu) || !ignore[j])) {
+      if (exalt[OBJT(j)] == i && (FBetween(j, oSun, oPlu) || !ignore[j])) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
 
     PrintSz(" ");
     for (j = 1; j <= oNorm; j++)
-      if (Mod12(ruler1[j]+6) == i || (ruler2[j] && Mod12(ruler2[j]+6) == i)) {
+      if (Mod12(ruler1[OBJT(j)]+6) == i ||
+        (ruler2[OBJT(j)] && Mod12(ruler2[OBJT(j)]+6) == i)) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     for (j++; j <= oPlu; j++)
-      if (Mod12(ruler1[j]+6) == i || (ruler2[j] && Mod12(ruler2[j]+6) == i)) {
+      if (Mod12(ruler1[OBJT(j)]+6) == i ||
+        (ruler2[OBJT(j)] && Mod12(ruler2[OBJT(j)]+6) == i)) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oPlu) PrintSz("     ");
     PrintSz(" ");
     for (j = 0; j <= oNorm; j++)
-      if (exalt[j] && Mod12(exalt[j]+6) == i &&
+      if (exalt[OBJT(j)] && Mod12(exalt[OBJT(j)]+6) == i &&
         (FBetween(j, oSun, oPlu) || !ignore[j])) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
@@ -1382,14 +1384,14 @@ void PrintRay()
     PrintSz(sz);
     c = 0;
     for (j = 1; j <= cSign; j++)
-      if (rgSignRay2[j][i]) {
+      if (rgSignRay2[SIGT(j)][i]) {
         sprintf(sz, " %3.3s", szSignName[j]); PrintSz(sz);
-        c += rgSignRay2[j][i];
+        c += rgSignRay2[SIGT(j)][i];
       }
     sprintf(sz, "%6.2f ", (real)c / 420.0); PrintSz(sz);
     for (j = 0; j <= oNorm; j++) {
       // Dwarf and other minor body Rays are only included if unrestricted.
-      if (rgObjRay[j] == i && !FCusp(j) &&
+      if (rgObjRay[OBJT(j)] == i && !FCusp(j) &&
         (j <= oPlu || j == oVul || !ignore[j])) {
         sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz);
       }
@@ -1413,7 +1415,8 @@ void PrintRay()
 flag ComputeArabic(int ind, real *obj, real *objalt, real *dir, real *dist,
   real *diralt, real *dirlen)
 {
-  int bit, i, n, *rgRules;
+  int bit, i, n;
+  CONST TBLSIG *rgRules;
   real rBit[3][6], rLon, rLat, rDist, rDir, rDirAlt, rDirDist;
   char ch, *pch;
   flag fRet = fTrue;
@@ -1438,7 +1441,7 @@ flag ComputeArabic(int ind, real *obj, real *objalt, real *dir, real *dist,
       rLon = chouse[n];
       i = cuspLo-1 + n;
     } else if (ch == 'r') {  // Ruler of house cusp
-      i = rgRules[SFromZ(chouse[n])];
+      i = (*rgRules)[SIGT(SFromZ(chouse[n]))];
       rLon = planet[i];
     } else if (ch == 'j') {  // 10 degrees after house cusp
       rLon = chouse[n] + 10.0;
@@ -1447,10 +1450,10 @@ flag ComputeArabic(int ind, real *obj, real *objalt, real *dir, real *dist,
       i = inhouse[n]; rLon = chouse[i];
       i = cuspLo-1 + i;
     } else if (ch == 'R') {  // Ruler of planet's house
-      i = rgRules[SFromZ(chouse[inhouse[n]])];
+      i = (*rgRules)[SIGT(SFromZ(chouse[inhouse[n]]))];
       rLon = planet[i];
     } else if (ch == 'D') {  // Dispositor / ruler of planet's position
-      i = rgRules[SFromZ(planet[n])];
+      i = (*rgRules)[SIGT(SFromZ(planet[n]))];
       rLon = planet[i];
     } else if (FBetween(ch, '0', '3')) {  // Fixed zodiac position
       rLon = (real)((ch-'0') * 100 + n);
@@ -1636,7 +1639,7 @@ void DisplayArabic(void)
         sprintf(sz, "%3.3s", ai[-k].name); PrintSz(sz);
       } else {
         if (ch == ' ' || ch == 'H' || ch == 'R' || ch == 'D') {
-          AnsiColor(kSignA(ruler1[k]));
+          AnsiColor(kSignA(ruler1[OBJT(k)]));
           sprintf(sz, "%.3s", szObjDisp[k]);
         } else if (FBetween(ch, '0', '3')) {
           k = (ch-'0') * 100 + k;

@@ -1816,26 +1816,26 @@ flag FOutputSettings()
 
   PrintF("; DEFAULT RULERSHIPS & EXALTATIONS:\n\n");
   for (i = 1; i <= 10; i++)
-    { sprintf(sz, "-YJ %.3s %.3s %.3s\n", szObjName[i], szSignName[ruler1[i]],
-    ruler2[i] <= 0 ? "0" : szSignName[ruler2[i]]); PrintFSz(); }
+    { sprintf(sz, "-YJ %.3s %.3s %.3s\n", szObjName[i], szSignName[ruler1[OBJT(i)]],
+    ruler2[OBJT(i)] <= 0 ? "0" : szSignName[ruler2[OBJT(i)]]); PrintFSz(); }
   PrintF("\n");
   for (i = 1; i <= 10; i++)
     { sprintf(sz, "-YJ0 %.3s %.3s\n", szObjName[i],
-    exalt[i] <= 0 ? "0" : szSignName[exalt[i]]); PrintFSz(); }
+    exalt[OBJT(i)] <= 0 ? "0" : szSignName[exalt[OBJT(i)]]); PrintFSz(); }
   PrintF("\n\n");
 
   PrintF("; DEFAULT RAYS:\n\n-Y7C 1 12  ");
   for (i = 1; i <= cSign; i++)
-    { sprintf(sz, " %d", rgSignRay[i]); PrintFSz(); }
+    { sprintf(sz, " %d", rgSignRay[SIGT(i)]); PrintFSz(); }
   PrintF("  ; Signs\n-Y7O 0 10  ");
   for (i = 0; i <= 10; i++)
-    { sprintf(sz, " %d", rgObjRay[i]); PrintFSz(); }
+    { sprintf(sz, " %d", rgObjRay[OBJT(i)]); PrintFSz(); }
   PrintF("             ; Planets\n-Y7O 34 42 ");
   for (i = 34; i <= 42; i++)
-    { sprintf(sz, " %d", rgObjRay[i]); PrintFSz(); }
+    { sprintf(sz, " %d", rgObjRay[OBJT(i)]); PrintFSz(); }
   PrintF("                 ; Uranians\n-Y7O 43 51 ");
   for (i = 43; i <= 51; i++)
-    { sprintf(sz, " %d", rgObjRay[i]); PrintFSz(); }
+    { sprintf(sz, " %d", rgObjRay[OBJT(i)]); PrintFSz(); }
   PrintF("                 ; Dwarfs\n\n\n");
 
   PrintF("; DEFAULT COLORS:\n; Black, White, Gray, LtGray, "

@@ -779,12 +779,13 @@ CONST int rgnTermPtolemy[cSign*2] = {
 
 int ObjTerm(real pos, int nType)
 {
-  CONST int *rgRules, *rgTerm;
+  CONST TBLSIG *rgRules;
+  CONST int *rgTerm;
   int nRet = 0, sig = SFromZ(pos) - 1, deg, i, d = 0, n;
 
   if (nType <= 0) {
     rgRules = RgRules();
-    nRet = rgRules[SFromZ(Decan(pos))];
+    nRet = (*rgRules)[SIGT(SFromZ(Decan(pos)))];
   } else if (nType == 1) {
     n = ((int)pos)/10%7;
     nRet = (0x5143276 >> (6-n)*4) & 15;

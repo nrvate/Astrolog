@@ -3136,11 +3136,12 @@ static void TestRulershipTablesQt()
 {
   static CONST struct {
     CONST char *szSystem;
-    CONST int *rgsign1, *rgsign2, *rgobj1, *rgobj2;
+    CONST TBLSIG *rgsign1, *rgsign2;
+    CONST TBLOBJ *rgobj1, *rgobj2;
   } rgfam[] = {
-    {"traditional",  rules,      rules2,     ruler1,    ruler2},
-    {"esoteric",     rgSignEso1, rgSignEso2, rgObjEso1, rgObjEso2},
-    {"hierarchical", rgSignHie1, rgSignHie2, rgObjHie1, rgObjHie2}};
+    {"traditional",  &rules,      &rules2,     &ruler1,    &ruler2},
+    {"esoteric",     &rgSignEso1, &rgSignEso2, &rgObjEso1, &rgObjEso2},
+    {"hierarchical", &rgSignHie1, &rgSignHie2, &rgObjHie1, &rgObjHie2}};
   flag fEnc, fRul, fCorul;
   int ifam, i, k;
 
@@ -3148,18 +3149,20 @@ static void TestRulershipTablesQt()
   for (ifam = 0; ifam < (int)(sizeof(rgfam)/sizeof(*rgfam)); ifam++) {
     fEnc = fRul = fCorul = fTrue;
     for (i = 1; i <= cSign; i++) {
-      k = rgfam[ifam].rgsign1[i];
+      k = (*rgfam[ifam].rgsign1)[SIGT(i)];
       fEnc &= FBetween(k, 0, oNorm);        // Every sign has a ruler.
       if (FBetween(k, 0, oNorm))
-        fRul &= (rgfam[ifam].rgobj1[k] == i || rgfam[ifam].rgobj2[k] == i);
-      k = rgfam[ifam].rgsign2[i];
+        fRul &= ((*rgfam[ifam].rgobj1)[OBJT(k)] == i ||
+          (*rgfam[ifam].rgobj2)[OBJT(k)] == i);
+      k = (*rgfam[ifam].rgsign2)[SIGT(i)];
       fEnc &= (k == -1 || FBetween(k, 0, oNorm));
       if (FBetween(k, 0, oNorm))
-        fCorul &= (rgfam[ifam].rgobj1[k] == i || rgfam[ifam].rgobj2[k] == i);
+        fCorul &= ((*rgfam[ifam].rgobj1)[OBJT(k)] == i ||
+          (*rgfam[ifam].rgobj2)[OBJT(k)] == i);
     }
     for (i = 0; i <= oNorm; i++)
-      fEnc &= FBetween(rgfam[ifam].rgobj1[i], 0, cSign) &&
-        FBetween(rgfam[ifam].rgobj2[i], 0, cSign);
+      fEnc &= FBetween((*rgfam[ifam].rgobj1)[OBJT(i)], 0, cSign) &&
+        FBetween((*rgfam[ifam].rgobj2)[OBJT(i)], 0, cSign);
     Check(fEnc, "%s tables: none is -1 sign-keyed and 0 object-keyed",
       rgfam[ifam].szSystem);
     Check(fRul, "every sign's %s ruler rules it back", rgfam[ifam].szSystem);
@@ -3190,18 +3193,18 @@ static void TestEsotericTablesQt()
 
   fOk = fTrue;
   for (i = 0; i <= oNorm; i++)
-    fOk &= FBetween(exalt[i], 0, cSign);
+    fOk &= FBetween(exalt[OBJT(i)], 0, cSign);
   Check(fOk, "every exaltation is a sign, with none spelled 0");
 
   fOk = fTrue;
   for (i = 0; i <= oNorm; i++)
-    fOk &= FBetween(rgObjRay[i], 0, cRay);
+    fOk &= FBetween(rgObjRay[OBJT(i)], 0, cRay);
   Check(fOk, "every object's ray is 1..%d, with none spelled 0", cRay);
 
   fOk = fTrue;
   for (i = 1; i <= cSign; i++) {
     c = 0;
-    for (n = rgSignRay[i]; n; n /= 10) {
+    for (n = rgSignRay[SIGT(i)]; n; n /= 10) {
       fOk &= FBetween(n % 10, 1, cRay);
       c++;
     }
@@ -3214,22 +3217,22 @@ static void TestEsotericTablesQt()
   for (i = 1; i <= cSign; i++) {
     c = 0;
     for (j = 1; j <= cRay; j++)
-      c += rgSignRay2[i][j];
+      c += rgSignRay2[SIGT(i)][j];
     fOk &= (c == 420);
   }
   Check(fOk, "every sign's derived ray proportions total 420");
 
   // The crasher: an all-invalid ray list must derive to an all-zero row,
   // not divide by zero.
-  nSav = rgSignRay[1];
-  rgSignRay[1] = 8;
+  nSav = rgSignRay[SIGT(1)];
+  rgSignRay[SIGT(1)] = 8;
   EnsureRay();
   c = 0;
   for (j = 1; j <= cRay; j++)
-    c += rgSignRay2[1][j];
+    c += rgSignRay2[SIGT(1)][j];
   Check(c == 0, "a ray list with no valid digits derives to no rays (%d)",
     c);
-  rgSignRay[1] = nSav;
+  rgSignRay[SIGT(1)] = nSav;
   EnsureRay();
 
   printf("  exaltations and ray tables carry their encodings\n");

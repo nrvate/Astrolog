@@ -74,14 +74,14 @@
 
 typedef struct _rulershipsystem {
   int rr;                        // ignore7[] slot gating the system.
-  CONST int *rgSign1, *rgSign2;  // A sign's ruler and co-ruler.
-  CONST int *rgObj1, *rgObj2;    // An object's ruled and co-ruled sign.
+  CONST TBLSIG *rgSign1, *rgSign2;  // A sign's ruler and co-ruler.
+  CONST TBLOBJ *rgObj1, *rgObj2;    // An object's ruled and co-ruled sign.
 } RULERSYS;
 
 static CONST RULERSYS rgrulersys[] = {
-  {rrStd, rules,      rules2,     ruler1,    ruler2},
-  {rrEso, rgSignEso1, rgSignEso2, rgObjEso1, rgObjEso2},
-  {rrHie, rgSignHie1, rgSignHie2, rgObjHie1, rgObjHie2}};
+  {rrStd, &rules,      &rules2,     &ruler1,    &ruler2},
+  {rrEso, &rgSignEso1, &rgSignEso2, &rgObjEso1, &rgObjEso2},
+  {rrHie, &rgSignHie1, &rgSignHie2, &rgObjHie1, &rgObjHie2}};
 #define crulersys (int)(sizeof(rgrulersys)/sizeof(*rgrulersys))
 
 
@@ -290,7 +290,7 @@ void InterpretLocation(void)
     else if (ch == 'h')
       FieldWord("This is less significant on a spiritual planetary level.");
     else if (ch == 'Y' || ch == 'z') {
-      sprintf(sz, "This expresses Ray %d energy %sly%c", rgObjRay[i],
+      sprintf(sz, "This expresses Ray %d energy %sly%c", rgObjRay[OBJT(i)],
         ch == 'Y' ? "strong" : "weak", ch == 'Y' ? '!' : '.');
       FieldWord(sz);
     }
@@ -909,7 +909,8 @@ int InterpretEsoteric(flag fGetRays)
   char sz[cchSzMax*2], szName[cchSzDef], *pch;
   int i, j, sig, hou, ray, rays = 0;
   int rgcRay[cRay+1], rgcObjRay[oVul+1][cRay+1], rgnSort[cRay+1],
-    rgcTot[cRayArea], *rgRules, *pcRay = rgcRay, bod, nObj, nDec, nLin, k, l;
+    rgcTot[cRayArea], *pcRay = rgcRay, bod, nObj, nDec, nLin, k, l;
+  CONST TBLSIG *rgRules;
   flag fIgnore7Sav[rrMax];
 
   for (i = 0; i < rrMax; i++) {
@@ -949,13 +950,13 @@ int InterpretEsoteric(flag fGetRays)
             j = i;
           else {
             // Look at Ray of dispositor planet
-            rgRules = (k < 3 ? (k == 1 ? rules : rgSignEso1) :
-              (k == 4 ? rules2 : rgSignEso2));
+            rgRules = (k < 3 ? (k == 1 ? &rules : &rgSignEso1) :
+              (k == 4 ? &rules2 : &rgSignEso2));
             sig = SFromZ(!FOdd(l) ? planet[i] : Decan(planet[i]));
-            j = rgRules[sig];
+            j = (*rgRules)[SIGT(sig)];
             if (j < 0)
               continue;
-            ray = rgObjRay[j];
+            ray = rgObjRay[OBJT(j)];
             if (ray > 0)
               rgcObjRay[i][ray] += nObj * nLin * nDec;
           }
@@ -964,7 +965,7 @@ int InterpretEsoteric(flag fGetRays)
             continue;
           sig = SFromZ(l < 3 ? planet[j] : Decan(planet[j]));
           for (ray = 1; ray <= cRay; ray++) {
-            j = rgSignRay2[sig][ray];
+            j = rgSignRay2[SIGT(sig)][ray];
             if (j > 0)
               rgcObjRay[i][ray] += nObj * nLin * nDec;
           }
@@ -1050,7 +1051,7 @@ int InterpretEsoteric(flag fGetRays)
       sprintf(sz, "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
       FieldWord(sz);
     }
-    ray = (i <= oNorm ? rgObjRay[i] : 0);  // Stars sit above the table.
+    ray = (i <= oNorm ? rgObjRay[OBJT(i)] : 0);  // Stars sit above the table.
     if (ray > 0) {
       sprintf(sz, "%s is Ray %d (%s), the \"Will to %s\".\n",
         szName, ray, szRayName[ray], szRayWill[ray]);
@@ -1072,41 +1073,42 @@ int InterpretEsoteric(flag fGetRays)
     sprintf(sz, "%s Labor of Hercules: %s.\n",
       szSignName[sig], rgEsoLabor[sig]);
     FieldWord(sz);
-    j = rules[sig];
+    j = rules[SIGT(sig)];
     if (j >= 0) {
       sprintf(sz, "%s is exoterically ruled by %s%s%s", szSignName[sig],
-        j <= oMoo ? "the " : "", szObjDisp[j], rules2[sig] >= 0 ? "" : ".");
+        j <= oMoo ? "the " : "", szObjDisp[j], rules2[SIGT(sig)] >= 0 ? "" : ".");
       FieldWord(sz);
-      if (rules2[sig] >= 0) {
-        sprintf(sz, "and %s.", szObjDisp[rules2[sig]]);
+      if (rules2[SIGT(sig)] >= 0) {
+        sprintf(sz, "and %s.", szObjDisp[rules2[SIGT(sig)]]);
         FieldWord(sz);
       }
     }
-    j = rgSignEso1[sig];
+    j = rgSignEso1[SIGT(sig)];
     if (j >= 0) {
       sprintf(sz, "%s is esoterically ruled by %s%s%s",
         szSignName[sig], j <= oMoo ? "the " : "", szObjDisp[j],
-        rgSignEso2[sig] >= 0 ? "" : ".");
+        rgSignEso2[SIGT(sig)] >= 0 ? "" : ".");
       FieldWord(sz);
-      if (rgSignEso2[sig] >= 0) {
-        sprintf(sz, "veiling %s.", szObjDisp[rgSignEso2[sig]]);
+      if (rgSignEso2[SIGT(sig)] >= 0) {
+        sprintf(sz, "veiling %s.", szObjDisp[rgSignEso2[SIGT(sig)]]);
         FieldWord(sz);
       }
     }
-    j = rgSignHie1[sig];
+    j = rgSignHie1[SIGT(sig)];
     if (j >= 0 && !fIgnore7Sav[rrHie]) {
       sprintf(sz, "%s is Hierarchically ruled by %s%s%s",
         szSignName[sig], j <= oMoo ? "the " : "", szObjDisp[j],
-        rgSignHie2[sig] >= 0 ? "" : ".");
+        rgSignHie2[SIGT(sig)] >= 0 ? "" : ".");
       FieldWord(sz);
-      if (rgSignHie2[sig] >= 0) {
-        sprintf(sz, "veiling %s.", szObjDisp[rgSignHie2[sig]]);
+      if (rgSignHie2[SIGT(sig)] >= 0) {
+        sprintf(sz, "veiling %s.", szObjDisp[rgSignHie2[SIGT(sig)]]);
         FieldWord(sz);
       }
     }
-    if (rules[sig] > 0 || rgSignEso1[sig] > 0 || rgSignHie1[sig] > 0)
+    if (rules[SIGT(sig)] > 0 || rgSignEso1[SIGT(sig)] > 0 ||
+      rgSignHie1[SIGT(sig)] > 0)
       FieldWord(NULL);
-    for (j = 1; j <= cRay; j++) if (rgSignRay2[sig][j] > 0) {
+    for (j = 1; j <= cRay; j++) if (rgSignRay2[SIGT(sig)][j] > 0) {
       sprintf(sz, "%s is Ray %d (%s), the \"Will to %s\".\n",
         szSignName[sig], j, szRayName[j], szRayWill[j]);
       AnsiColor(kRayA[j]); FieldWord(sz);
@@ -1125,7 +1127,7 @@ int InterpretEsoteric(flag fGetRays)
       sprintf(sz, "%d%s house characteristics: %s. It's an environment %s.\n",
         hou, szSuffix[hou], rgEsoHou1[hou], rgEsoHou2[hou]);
       FieldWord(sz);
-      for (j = 1; j <= cRay; j++) if (rgSignRay2[hou][j] > 0) {
+      for (j = 1; j <= cRay; j++) if (rgSignRay2[SIGT(hou)][j] > 0) {
         sprintf(sz, "%d%s house (%s) is Ray %d (%s), the \"Will to %s\".\n",
           hou, szSuffix[hou], szSignName[hou], j, szRayName[j], szRayWill[j]);
         AnsiColor(kRayA[j]); FieldWord(sz);
@@ -1146,9 +1148,9 @@ int InterpretEsoteric(flag fGetRays)
     if (pch[rrStd] == 'R') {
       sprintf(sz, "Standard rulership! %s", szName);
       FieldWord(sz);
-      if (rules2[sig] >= 0) {
+      if (rules2[SIGT(sig)] >= 0) {
         sprintf(sz, "(with %s)",
-          szObjDisp[(i == rules2[sig] ? rules : rules2)[sig]]);
+          szObjDisp[(i == rules2[SIGT(sig)] ? rules : rules2)[SIGT(sig)]]);
         FieldWord(sz);
       }
       sprintf(sz, "exoterically rules %s.\n", szSignName[sig]);
@@ -1161,8 +1163,8 @@ int InterpretEsoteric(flag fGetRays)
     if (pch[rrEso] == 'S') {
       sprintf(sz, "Esoteric rulership! %s", szName);
       FieldWord(sz);
-      if (rgSignEso2[sig] >= 0) {
-        sprintf(sz, "(veiling %s)", szObjDisp[rgSignEso2[sig]]);
+      if (rgSignEso2[SIGT(sig)] >= 0) {
+        sprintf(sz, "(veiling %s)", szObjDisp[rgSignEso2[SIGT(sig)]]);
         FieldWord(sz);
       }
       sprintf(sz, "esoterically rules %s.\n", szSignName[sig]);
@@ -1175,8 +1177,8 @@ int InterpretEsoteric(flag fGetRays)
     if (pch[rrHie] == 'H') {
       sprintf(sz, "Hierarchical rulership! %s", szName);
       FieldWord(sz);
-      if (rgSignHie2[sig] >= 0) {
-        sprintf(sz, "(veiling %s)", szObjDisp[rgSignHie2[sig]]);
+      if (rgSignHie2[SIGT(sig)] >= 0) {
+        sprintf(sz, "(veiling %s)", szObjDisp[rgSignHie2[SIGT(sig)]]);
         FieldWord(sz);
       }
       sprintf(sz, "Hierarchically rules %s.\n", szSignName[sig]);
@@ -1341,22 +1343,27 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
     for (prs = rgrulersys; prs < rgrulersys + crulersys; prs++) {
       if (ignore7[prs->rr])
         continue;
-      k = prs->rgSign1[j];          if (k > 0 && i != k) power1[k] += x;
-      k = prs->rgSign2[j];          if (k > 0 && i != k) power1[k] += x;
-      k = prs->rgSign1[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
-      k = prs->rgSign2[inhouse[i]]; if (k > 0 && i != k) power1[k] += x;
+      k = (*prs->rgSign1)[SIGT(j)];
+      if (k > 0 && i != k) power1[k] += x;
+      k = (*prs->rgSign2)[SIGT(j)];
+      if (k > 0 && i != k) power1[k] += x;
+      // A house indexes the sign tables as its natural sign here.
+      k = (*prs->rgSign1)[SIGT(inhouse[i])];
+      if (k > 0 && i != k) power1[k] += x;
+      k = (*prs->rgSign2)[SIGT(inhouse[i])];
+      if (k > 0 && i != k) power1[k] += x;
     }
   }
   for (i = 1; i <= cSign; i++) {         // Various planets get influence
     j = SFromZ(chouse[i]);               // if house cusps fall in signs
-    power1[rules[j]] += rHouseInf[i];    // they rule. (The traditional
+    power1[rules[SIGT(j)]] += rHouseInf[i];  // they rule. (The traditional
     // system counts only the primary ruler here, unguarded, as it
     // always has; the loop below walks the other two systems.)
     for (prs = rgrulersys + 1; prs < rgrulersys + crulersys; prs++) {
       if (ignore7[prs->rr])
         continue;
-      k = prs->rgSign1[j]; if (k > 0) power1[k] += rHouseInf[i];
-      k = prs->rgSign2[j]; if (k > 0) power1[k] += rHouseInf[i];
+      k = (*prs->rgSign1)[SIGT(j)]; if (k > 0) power1[k] += rHouseInf[i];
+      k = (*prs->rgSign2)[SIGT(j)]; if (k > 0) power1[k] += rHouseInf[i];
     }
   }
 
@@ -1476,9 +1483,9 @@ void ChartInfluence(void)
       for (prs = rgrulersys; prs < rgrulersys + crulersys; prs++) {
         if (ignore7[prs->rr])
           continue;
-        power1[prs->rgObj1[i]] += power[i] / 3.0;
-        if (prs->rgObj2[i])
-          power1[prs->rgObj2[i]] += power[i] / 3.0;
+        power1[(*prs->rgObj1)[OBJT(i)]] += power[i] / 3.0;
+        if ((*prs->rgObj2)[OBJT(i)])
+          power1[(*prs->rgObj2)[OBJT(i)]] += power[i] / 3.0;
       }
   }
 

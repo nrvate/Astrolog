@@ -1747,12 +1747,12 @@ int ChartEsoteric(flag fGetRay)
     r += power[i];
     n = SFromZ(planet[i]);
     for (j = 1; j <= cRay; j++) {
-      c = rgSignRay2[n][j];
+      c = rgSignRay2[SIGT(n)][j];
       if (c) {
         nRay1[j]++;
         nRay2[j] += c;
         rRay1[j] += power[i];
-        rRay2[j] += power[i] / (real)(420 / rgSignRay2[n][j]);
+        rRay2[j] += power[i] / (real)(420 / rgSignRay2[SIGT(n)][j]);
       }
     }
   }
@@ -1782,7 +1782,7 @@ int ChartEsoteric(flag fGetRay)
       continue;
     AnsiColor(kObjA[i]);
     sprintf(sz, "%-4.4s", szObjDisp[i]); PrintSz(sz);
-    n = (i <= oNorm ? rgObjRay[i] : 0);
+    n = (i <= oNorm ? rgObjRay[OBJT(i)] : 0);
     if (n) {
       AnsiColor(kRayA[n]);
       sprintf(sz, " %d", n); PrintSz(sz);
@@ -1793,7 +1793,7 @@ int ChartEsoteric(flag fGetRay)
     AnsiColor(kSignA(n));
     sprintf(sz, "%.3s ", szSignName[n]); PrintSz(sz);
     for (j = 1; j <= cRay; j++)
-      if (rgSignRay2[n][j]) {
+      if (rgSignRay2[SIGT(n)][j]) {
         AnsiColor(kRayA[j]);
         sprintf(sz, "%d", j);
         PrintSz(sz);
@@ -1801,7 +1801,7 @@ int ChartEsoteric(flag fGetRay)
     AnsiColor(kObjA[i]);
     c = 0;
     for (j = 1; j <= cRay; j++)
-      c += !rgSignRay2[n][j];
+      c += !rgSignRay2[SIGT(n)][j];
     PrintTab(' ', c - 3);
     pch = Dignify(i, n)+1;
     fRayRuler = (pch[rrRay] == 'Y');

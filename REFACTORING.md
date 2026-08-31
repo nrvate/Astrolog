@@ -181,6 +181,15 @@ signatures, the rule in CONVENTIONS.md, all 31 console objects
 byte-identical; **(3)** only if (2) proves
 insufficient, consider enum-class-style wrappers in a later, separate
 decision — that one is invasive and needs the maintainer's call.
+**Step (3) phase 1 taken 2026-08-30 at the maintainer's direction**
+(work log item 125): SIGT/OBJT tags and checked table types on the
+rulership/exaltation/ray family — the tables behind every incident
+this theme recorded — with wrong-domain and untagged subscripts now
+compile errors, proven both ways. 170 call sites tagged by hand
+against their loops' domains; the switch matrix is byte-identical.
+Full typing of the planet[]/chouse[] core (775 references, the
+arithmetic and varargs idioms) remains open and is a separate
+maintainer decision; the measured reasons are in the work log item.
 
 *Cost/risk:* (1) and (2) are cheap and safe. (3) is a real project;
 don't drift into it.

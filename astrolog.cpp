@@ -64,24 +64,26 @@
 
 void InitColors(void)
 {
-  int *rgObjRuler = ruler1, i, k;
+  CONST TBLOBJ *ptblRuler = &ruler1;
+  int i, k;
 
   // Figure out which rulership set to use for "Element" color.
   // Order: Standard rulership, esoteric, Hierarchical, exaltation, Ray.
   if (ignore7[rrStd]) {
-    if      (!ignore7[rrEso]) rgObjRuler = rgObjEso1;
-    else if (!ignore7[rrHie]) rgObjRuler = rgObjHie1;
-    else if (!ignore7[rrExa]) rgObjRuler = exalt;
-    else if (!ignore7[rrRay]) rgObjRuler = NULL;
+    if      (!ignore7[rrEso]) ptblRuler = &rgObjEso1;
+    else if (!ignore7[rrHie]) ptblRuler = &rgObjHie1;
+    else if (!ignore7[rrExa]) ptblRuler = &exalt;
+    else if (!ignore7[rrRay]) ptblRuler = NULL;
   }
 
   // Determine and assign the color of each planet.
   for (i = 0; i <= oNorm; i++) {
     k = rgobjset[i].kolor;
-    if (k == kRay || rgObjRuler == NULL)
-      k = kRayA[rgObjRay[i]];
+    if (k == kRay || ptblRuler == NULL)
+      k = kRayA[rgObjRay[OBJT(i)]];
     else if (k == kElement)
-      k = rgObjRuler[i] > 0 ? kElemA[(rgObjRuler[i]-1) & 3] : kLtGray;
+      k = (*ptblRuler)[OBJT(i)] > 0 ?
+        kElemA[((*ptblRuler)[OBJT(i)]-1) & 3] : kLtGray;
     else if (k == kPlanet) {
       // Moon colors are dim versions of the color of the planet they orbit.
       k = kObjA[!FBetween(i, cobLo, cobHi) ? ObjOrbit(i) :
@@ -107,28 +109,28 @@ void InitColors(void)
 // A planet's ruler has changed to a new sign. Adjust appropriately the
 // reverse table of mapping a sign to which planet(s) rule it.
 
-void AdjustRulership(int *rgRules1, int *rgRules2, int sig, int obj,
+void AdjustRulership(TBLSIG &rgRules1, TBLSIG &rgRules2, int sig, int obj,
   flag fPrimary)
 {
   int i;
 
   if (sig > 0) {
     // Set the primary or secondary ruler, sliding existing ruler if needed.
-    if (rgRules1[sig] != obj) {
+    if (rgRules1[SIGT(sig)] != obj) {
       if (fPrimary) {
-        rgRules2[sig] = rgRules1[sig];
-        rgRules1[sig] = obj;
+        rgRules2[SIGT(sig)] = rgRules1[SIGT(sig)];
+        rgRules1[SIGT(sig)] = obj;
       } else
-        rgRules2[sig] = obj;
+        rgRules2[SIGT(sig)] = obj;
     }
   } else {
     // A planet is set to rule nothing. Make sure no sign is ruled by it.
     for (i = 1; i <= cSign; i++) {
-      if (rgRules1[i] == obj && rgRules2[i] >= 0) {
-        rgRules1[i] = rgRules2[i];
-        rgRules2[i] = -1;
-      } else if (rgRules2[i] == obj)
-        rgRules2[i] = -1;
+      if (rgRules1[SIGT(i)] == obj && rgRules2[SIGT(i)] >= 0) {
+        rgRules1[SIGT(i)] = rgRules2[SIGT(i)];
+        rgRules2[SIGT(i)] = -1;
+      } else if (rgRules2[SIGT(i)] == obj)
+        rgRules2[SIGT(i)] = -1;
     }
   }
 }

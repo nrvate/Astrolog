@@ -99,12 +99,27 @@ def strip_comments(text):
     return re.sub(r'//[^\n]*', ' ', text)
 
 
+# The domain-checked tables (astrolog.h TBLSIG/TBLOBJ, T2 step 3) declare
+# as "TBLOBJ name = {...}" with the dimension implied by the type; this
+# maps each checked type back to its dimension expression so those
+# initializers audit exactly like the plain "int name[dim]" ones.
+CHECKED_TABLE_DIMS = {
+    'TBLSIG': 'cSign+1',
+    'TBLOBJ': 'oNorm+1',
+}
+
+
 def parse_array(source, syms, name):
     """Return (values, declared_size) for a flat numeric initializer."""
     m = re.search(r'\b' + re.escape(name) + r'\[([^\]]*)\]\s*=\s*\{', source)
     if not m:
-        raise KeyError(name)
-    dim = m.group(1).strip()
+        m = re.search(r'\b(' + '|'.join(CHECKED_TABLE_DIMS) + r')\s+' +
+                      re.escape(name) + r'\s*=\s*\{', source)
+        if not m:
+            raise KeyError(name)
+        dim = CHECKED_TABLE_DIMS[m.group(1)]
+    else:
+        dim = m.group(1).strip()
     size = None
     if dim:
         e = re.sub(r'\b(\w+)\b',

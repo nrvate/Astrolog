@@ -455,7 +455,7 @@ real rAspOrb[cAspect+1] = {0,
 
 
 
-int ruler1[oNorm+1] = {sSag,
+TBLOBJ ruler1 = {sSag,
   sLeo, sCan, sGem, sLib, sAri, sSag, sCap, sAqu, sPis, sSco,
   sSag, sVir, sAqu, sLib, sSco, sAqu, sLeo, sSco, sPis, sLib, sAri,
   sAri, sTau, sGem, sCan, sLeo, sVir, sLib, sSco, sSag, sCap, sAqu, sPis,
@@ -463,7 +463,7 @@ int ruler1[oNorm+1] = {sSag,
   sVir, sGem, sLib, sCan, sLeo, sAri, sTau, sGem, sCap,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int ruler2[oNorm+1] = {0,
+TBLOBJ ruler2 = {0,
   0, 0, sVir, sTau, sSco, sPis, sAqu, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -471,7 +471,7 @@ int ruler2[oNorm+1] = {0,
   0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int exalt[oNorm+1] = {sTau,
+TBLOBJ exalt = {sTau,
   sAri, sTau, sVir, sPis, sCap, sCan, sLib, sSco, sCan, sAqu,
   sPis, sTau, sCap, sLeo, sVir, sGem, sSag, sPis, sSag, sPis, sCap,
   sCap, sPis, sVir, sTau, sAri, sVir, sPis, sAqu, sCan, sLib, sSco, sCan,
@@ -482,13 +482,13 @@ int exalt[oNorm+1] = {sTau,
 
 // This array is the reverse of the ruler arrays.
 // Here, given a sign, return what planet rules it.
-int rules[cSign+1] = {-1,
+TBLSIG rules = {-1,
   oMar, oVen, oMer, oMoo, oSun, oMer, oVen, oPlu, oJup, oSat, oUra, oNep};
-int rules2[cSign+1] = {-1,
+TBLSIG rules2 = {-1,
   -1, -1, -1, -1, -1, -1, -1, oMar, -1, -1, oSat, oJup};
 
 // Esoteric astrology tables
-int rgObjRay[oNorm+1] = {3,
+TBLOBJ rgObjRay = {3,
   2, 4, 4, 5, 6, 2, 3, 7, 6, 1,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   1, 4, 2, 3, 1, 2, 3, 4, 5, 7, 5, 6,
@@ -496,10 +496,10 @@ int rgObjRay[oNorm+1] = {3,
   0, 0, 3, 2, 1, 4, 7, 6, 5,    // 3214765: Seven circuit Labyrinth sequence!
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int rgSignRay[cSign+1] = {0,
+TBLSIG rgSignRay = {0,
   17, 4, 2, 37, 15, 26, 3, 4, 456, 137, 5, 26};
-int rgSignRay2[cSign+1][cRay+1];
-int rgObjEso1[oNorm+1] = {sSag,
+TBLSIGRAY rgSignRay2;
+TBLOBJ rgObjEso1 = {sSag,
   sLeo, sVir, sAri, sGem, sSco, sAqu, sCap, sLib, sCan, sPis,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   sAri, sTau, sGem, sCan, sLeo, sVir, sLib, sSco, sSag, sCap, sAqu, sPis,
@@ -507,7 +507,7 @@ int rgObjEso1[oNorm+1] = {sSag,
   0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int rgObjEso2[oNorm+1] = {0,
+TBLOBJ rgObjEso2 = {0,
   0, 0, 0, 0, 0, 0, 0, 0, sLeo, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -515,7 +515,7 @@ int rgObjEso2[oNorm+1] = {0,
   0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int rgObjHie1[oNorm+1] = {sGem,
+TBLOBJ rgObjHie1 = {sGem,
   sLeo, sAqu, sSco, sCap, sSag, sVir, sLib, sAri, sCan, sPis,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   sAri, sTau, sGem, sCan, sLeo, sVir, sLib, sSco, sSag, sCap, sAqu, sPis,
@@ -523,7 +523,7 @@ int rgObjHie1[oNorm+1] = {sGem,
   0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int rgObjHie2[oNorm+1] = {0,
+TBLOBJ rgObjHie2 = {0,
   0, 0, 0, 0, 0, 0, 0, sLeo, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -531,13 +531,13 @@ int rgObjHie2[oNorm+1] = {0,
   0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int rgSignEso1[cSign+1] = {-1,
+TBLSIG rgSignEso1 = {-1,
   oMer, oVul, oVen, oNep, oSun, oMoo, oUra, oMar, oEar, oSat, oJup, oPlu};
-int rgSignEso2[cSign+1] = {-1,
+TBLSIG rgSignEso2 = {-1,
   -1, -1, -1, -1, oNep, -1, -1, -1, -1, -1, -1, -1};
-int rgSignHie1[cSign+1] = {-1,
+TBLSIG rgSignHie1 = {-1,
   oUra, oVul, oEar, oNep, oSun, oJup, oSat, oMer, oMar, oVen, oMoo, oPlu};
-int rgSignHie2[cSign+1] = {-1,
+TBLSIG rgSignHie2 = {-1,
   -1, -1, -1, -1, oUra, -1, -1, -1, -1, -1, oVul, -1};
 int kRayA[cRay+2] = {kBlack,
   kRed, kIndigo, kForest, kYellow, kAmber, kRose, kViolet, kWhite};

@@ -607,29 +607,29 @@ void DrawSidebar()
 
 
 #define KvHouseCore(obj, rule) (typ <= 0 ? rgbbmpRay[FNorm(obj) ? \
-  rgObjRay[obj] : cRay] : KvFromKi(kObjB[rule[sig]]));
+  rgObjRay[OBJT(obj)] : cRay] : KvFromKi(kObjB[rule[SIGT(sig)]]));
 
 // Return the color to use for filling a house area, based on the Rays or
 // colors of the planets which rule and co-rule the sign of the cusp.
 
-KV KvHouse(int i, int rule1[cSign+1], int rule2[cSign+1], int typ)
+KV KvHouse(int i, const TBLSIG &rule1, const TBLSIG &rule2, int typ)
 {
   KV kv1, kv2, kv;
   int sig, obj;
 
   sig = typ == 1 ? i : SFromZ(chouse[i]);
-  obj = rule1[sig];
+  obj = rule1[SIGT(sig)];
   kv1 = KvHouseCore(obj, rule1);
-  obj = rule2[sig];
+  obj = rule2[SIGT(sig)];
   kv2 = obj < 0 ? kv1 : KvHouseCore(obj, rule2);
   kv = KvBlend(kv1, kv2, 0.5);
   if (typ != 1 &&
     us.fListDecan && FBetween(us.nDecanType, ddDecanR, ddChaldea)) {
     // If decans are enabled, blend with the color of the decan cusp rulers.
     sig = SFromZ(Decan(chouse[i]));
-    obj = rule1[sig];
+    obj = rule1[SIGT(sig)];
     kv1 = KvHouseCore(obj, rule1);
-    obj = rule2[sig];
+    obj = rule2[SIGT(sig)];
     kv2 = obj < 0 ? kv1 : KvHouseCore(obj, rule2);
     kv = KvBlend(kv, KvBlend(kv1, kv2, 0.5), 0.25);
   }
@@ -691,7 +691,7 @@ flag DrawFillWheel(int x, int y, int i, int typ)
     if (gs.nDecaFill == 6 || typ != 1) {
       // Ray sign fill: Based on Ray(s) of sign.
       kv2 = kv3 = 0;
-      n = rgSignRay[i];
+      n = rgSignRay[SIGT(i)];
       kv1 = rgbbmpRay[n%10];
       kv2 = rgbbmpRay[n/10%10];
       kv3 = rgbbmpRay[n/100];
@@ -747,7 +747,8 @@ CONST int objNakshatra[9+1] = {0,
 void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
   real unity, real rh1, real rh2, real rs1)
 {
-  int nTrans = (int)(gs.rBackPct * 256.0 / 100.0), *rgRules, i, j, k, kSav,
+  CONST TBLSIG *rgRules;
+  int nTrans = (int)(gs.rBackPct * 256.0 / 100.0), i, j, k, kSav,
     x, y, nSav;
   CONST int *rgTerm;
   real rh, rs, rs2 = 0.95, r9 = 0.99, ra, rb, px, py, rDeg, hOld, h;
@@ -819,7 +820,7 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
         h = 10.0;
         k = -13;
         if (us.nDecanType <= ddDecanR)
-          k = rgRules[SFromZ(Decan(ZFromS(i) + hOld))];
+          k = (*rgRules)[SIGT(SFromZ(Decan(ZFromS(i) + hOld)))];
         else if (us.nDecanType == ddDecanS)
           k = -SFromZ(Decan(ZFromS(i) + hOld));
         else if (us.nDecanType == ddChaldea) {

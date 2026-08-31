@@ -3242,14 +3242,15 @@ void XChartDispositor()
     obj[oNorm1];
   real xCirc[oNorm1], yCirc[oNorm1];
   char sz[cchSzDef];
-  int *rgRules, oNum, xLev, yLev, xSub, ySub, cx0, cy0, cx, cy, i, j, k;
+  CONST TBLSIG *rgRules;
+  int oNum, xLev, yLev, xSub, ySub, cx0, cy0, cx, cy, i, j, k;
 
   // Determine rulership and object sets to use.
 
   rgRules = RgRules();
   oNum = 0;
   for (i = 0; i <= oNorm; i++)
-    if ((FThing(i) || gs.fAlt) && (!FIgnore(i) || (rgRules == rules ?
+    if ((FThing(i) || gs.fAlt) && (!FIgnore(i) || (rgRules == &rules ?
       FBetween(i, oSun, oMain) : (FBetween(i, oEar, oMain) || i == oVul))))
       obj[++oNum] = i;
 
@@ -3270,7 +3271,8 @@ void XChartDispositor()
     // For each planet, get its dispositor planet for current graph type.
     for (i = 1; i <= oNum; i++) {
       k = obj[i];
-      j = rgRules[xSub ? inhouse[k] : SFromZ(planet[k])];
+      // A house indexes the rules table as its natural sign here.
+      j = (*rgRules)[SIGT(xSub ? inhouse[k] : SFromZ(planet[k]))];
       for (k = 1; k <= oNum; k++)
         if (obj[k] == j)
           break;

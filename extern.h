@@ -74,7 +74,7 @@ extern int NPromptSwitches P((char *, char *[MAXSWITCHES]));
 extern flag FProcessSwitches P((int, char **, PARSECTX *));
 extern flag FSwitchRegistryRow P((int, CONST char **, int *, int *));
 extern void InitRestrictions P((flag));
-extern void AdjustRulership P((int *, int *, int, int, flag));
+extern void AdjustRulership P((TBLSIG &, TBLSIG &, int, int, flag));
 extern void InitProgram P((void));
 extern void FinalizeProgram P((flag));
 
@@ -188,9 +188,10 @@ extern byte ignoreMem[objMax], ignore2Mem[objMax], ignoreaMem[cAspect+1],
   ignorezMem[arMax], ignore7Mem[rrMax], ignorefMem[6];
 extern CONST real rAspAngleDef[cAspect+1];
 extern real rAspAngle[cAspect+1], rAspOrb[cAspect+1];
-extern int ruler1[oNorm+1], ruler2[oNorm+1], exalt[oNorm+1],
-  rules[cSign+1], rules2[cSign+1],
-  kMainA[9], kRainbowA[cRainbow+1], kElemA[cElem], kAspA[cAspect+1];
+extern TBLOBJ ruler1, ruler2, exalt;
+extern TBLSIG rules, rules2;
+extern int kMainA[9], kRainbowA[cRainbow+1], kElemA[cElem],
+  kAspA[cAspect+1];
 
 #define kBlackA   kMainA[0]
 #define kWhiteA   kMainA[1]
@@ -263,10 +264,10 @@ extern CONST char *szColor[cColor2+5];
 extern CONST KV rgbbmp[cColor2];
 #endif
 
-extern int rgObjRay[oNorm+1], rgSignRay[cSign+1], rgSignRay2[cSign+1][cRay+1],
-  rgObjEso1[oNorm+1], rgObjEso2[oNorm+1], rgObjHie1[oNorm+1],
-  rgObjHie2[oNorm+1], rgSignEso1[cSign+1], rgSignEso2[cSign+1],
-  rgSignHie1[cSign+1], rgSignHie2[cSign+1], kRayA[cRay+2];
+extern TBLOBJ rgObjRay, rgObjEso1, rgObjEso2, rgObjHie1, rgObjHie2;
+extern TBLSIG rgSignRay, rgSignEso1, rgSignEso2, rgSignHie1, rgSignHie2;
+extern TBLSIGRAY rgSignRay2;
+extern int kRayA[cRay+2];
 extern CONST char *szRayName[cRay+1], *szRayWill[cRay+1];
 
 
@@ -473,7 +474,7 @@ extern flag GetJPLHorizons P((int,
 #define AdjustAspectCount() for (us.nAsp = cAspect; us.nAsp > 0 && \
   ignorea[us.nAsp]; us.nAsp--);
 #define RgRules() (ignore7[rrStd] && ignore7[rrEso] && !ignore7[rrHie] ? \
-  rgSignHie1 : (ignore7[rrStd] && !ignore7[rrEso] ? rgSignEso1 : rules))
+  &rgSignHie1 : (ignore7[rrStd] && !ignore7[rrEso] ? &rgSignEso1 : &rules))
 
 extern CONST int rgnTermEgypt[cSign*2], rgnTermPtolemy[cSign*2];
 extern CONST char *szStarNameSwiss[cStar+1];

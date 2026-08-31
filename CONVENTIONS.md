@@ -56,6 +56,18 @@ commit proved itself with byte-identical checksums of all 31 console
 objects. Don't label a parameter that is *not* a domain index:
 `ComputeHouses(int)` takes a house *system*, not a house.
 
+**The enforced layer** (T2 step 3 phase 1, work log item 125): the
+rulership, exaltation and ray tables are checked tables — their
+subscript takes `SIGT(i)` or `OBJT(i)` (explicit-constructor tags,
+astrolog.h) and anything else is a compile error. The tag is a claim:
+write it after reading the loop, not mechanically — three sites
+legitimately index sign tables by house (the natural-sign
+identification) and say so in a comment. Code that selects among
+same-domain tables holds a `TBLSIG *`/`TBLOBJ *` (see RULERSYS,
+RgRules()); the registry's two `-Y7` rows reach the raw storage as
+`.rgn`, the one deliberately unchecked boundary. defaults_audit.py
+knows the checked declaration shape (`TBLOBJ name = {`).
+
 ## Switch-flag macros
 
 - `SwitchF(f)` applies the calling prefix's semantics to a flag:

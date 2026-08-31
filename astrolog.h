@@ -809,6 +809,35 @@ enum _objects {
   cObj = 133,
 };
 
+/*
+** The enforced layer over the documentation typedefs above, for the
+** tables whose cross-domain indexing has actually shipped bugs
+** (REFACTORING.md T2 step 3, phase 1: the rulership, exaltation and
+** ray family). A checked table's subscript demands the domain tag --
+** rules[SIGT(i)] -- so handing it an index from the wrong domain, or
+** an untagged one, is a compile error rather than a silent misread.
+** The tag constructor is explicit on purpose: the tag is a claim the
+** writer makes, visible at the call site, reviewable against the loop
+** it sits in.
+*/
+struct SIGT { int n; explicit SIGT(int n_) : n(n_) {} };
+struct OBJT { int n; explicit OBJT(int n_) : n(n_) {} };
+struct TBLSIG {
+  int rgn[cSign+1];
+  int &operator[](SIGT i) { return rgn[i.n]; }
+  const int &operator[](SIGT i) const { return rgn[i.n]; }
+};
+struct TBLOBJ {
+  int rgn[oNorm+1];
+  int &operator[](OBJT i) { return rgn[i.n]; }
+  const int &operator[](OBJT i) const { return rgn[i.n]; }
+};
+struct TBLSIGRAY {
+  int rgn[cSign+1][cRay+1];
+  int *operator[](SIGT i) { return rgn[i.n]; }
+  const int *operator[](SIGT i) const { return rgn[i.n]; }
+};
+
 // Aspects
 
 enum _aspects {

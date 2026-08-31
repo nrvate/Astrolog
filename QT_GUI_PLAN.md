@@ -3861,6 +3861,37 @@ are the more useful half to read before starting something new.
     console objects checksum byte-identical before and after; suite
     3195/0; Windows build compiles.
 
+125. **T2 step (3), phase 1: the incident tables enforce their index
+    domain.** SIGT and OBJT (astrolog.h, explicit constructors) tag the
+    two domains, and the 16 rulership, exaltation and ray tables became
+    checked tables (TBLSIG/TBLOBJ/TBLSIGRAY) whose subscript demands
+    the tag: `rules[SIGT(i)]` compiles, while `rules[OBJT(i)]`,
+    `rules[i]` and `ruler1[SIGT(i)]` are compile errors -- proven with
+    a four-way test compile. Item 38's bug class cannot be written
+    silently at these tables again. Scope held deliberately at this
+    family: full typing of planet[] and friends (775 references, the
+    arithmetic and varargs idioms) stays a separate maintainer
+    decision, recorded at the theme.
+    The churn, measured: 17 files, +264/-200; 170 tagged subscripts (93
+    SIGT, 77 OBJT), each placed after reading its loop's domain; eight
+    same-domain-generic consumers converted to typed-table pointers
+    (RULERSYS, the suite's rgfam, RgRules() and its four users,
+    KvHouse, AdjustRulership, NSwRulershipCore, InitColors); the two
+    -Y7 registry rows point at .rgn, the one deliberately unchecked
+    boundary, where the registry's own lo/hi validation applies.
+    Dividend: three sites turned out to index sign tables with a
+    *house* -- the natural-sign identification, previously invisible,
+    now spelled SIGT(inhouse[i]) with a comment at each site.
+    defaults_audit.py learned the checked declaration shape and was
+    re-falsified (a shortened ruler2 still trips both legs). Nets:
+    suite 3195/0; console and Windows builds; switch matrix 14,378
+    lines byte-identical against a HEAD worktree build -- after two
+    environmental normalizations worth remembering: a deep worktree
+    path truncates the ephemeris path and *changes lookups*, so the
+    baseline must build in a short path, and error text spells the
+    invocation path absolute-vs-relative; influence matrix identical;
+    all six audits clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

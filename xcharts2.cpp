@@ -1109,11 +1109,11 @@ void XChartEsoteric()
         continue;
       k = SFromZ(planet[i]);
       for (j = 1; j <= cRay; j++)
-        if (rgSignRay2[k][j]) {
+        if (rgSignRay2[SIGT(k)][j]) {
           if (!gs.fAlt)
             rRay[j] += power[i];
           else
-            rRay[j] += power[i] / (420 / rgSignRay2[k][j]);
+            rRay[j] += power[i] / (420 / rgSignRay2[SIGT(k)][j]);
         }
     }
     for (i = 0; i <= cRay; i++)

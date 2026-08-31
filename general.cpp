@@ -619,37 +619,37 @@ char *Dignify(OBJ obj, SIGN sign)
 
   // Check standard rulerships.
   if (!ignore7[rrStd]) {
-    if (ruler1[obj] == sign || ruler2[obj] == sign)
+    if (ruler1[OBJT(obj)] == sign || ruler2[OBJT(obj)] == sign)
       szDignify[rrStd+1] = 'R';
-    else if (ruler1[obj] == sign2 || ruler2[obj] == sign2)
+    else if (ruler1[OBJT(obj)] == sign2 || ruler2[OBJT(obj)] == sign2)
       szDignify[rrStd+1] = 'd';
   }
   if (!ignore7[rrExa]) {
-    if (exalt[obj] == sign)
+    if (exalt[OBJT(obj)] == sign)
       szDignify[rrExa+1] = 'X';
-    else if (exalt[obj] == sign2)
+    else if (exalt[OBJT(obj)] == sign2)
       szDignify[rrExa+1] = 'f';
   }
 
   // Check esoteric rulerships.
   if (!ignore7[rrEso]) {
-    if (rgObjEso1[obj] == sign || rgObjEso2[obj] == sign)
+    if (rgObjEso1[OBJT(obj)] == sign || rgObjEso2[OBJT(obj)] == sign)
       szDignify[rrEso+1] = 'S';
-    else if (rgObjEso1[obj] == sign2 || rgObjEso2[obj] == sign2)
+    else if (rgObjEso1[OBJT(obj)] == sign2 || rgObjEso2[OBJT(obj)] == sign2)
       szDignify[rrEso+1] = 's';
   }
   if (!ignore7[rrHie]) {
-    if (rgObjHie1[obj] == sign || rgObjHie2[obj] == sign)
+    if (rgObjHie1[OBJT(obj)] == sign || rgObjHie2[OBJT(obj)] == sign)
       szDignify[rrHie+1] = 'H';
-    else if (rgObjHie1[obj] == sign2 || rgObjHie2[obj] == sign2)
+    else if (rgObjHie1[OBJT(obj)] == sign2 || rgObjHie2[OBJT(obj)] == sign2)
       szDignify[rrHie+1] = 'h';
   }
   if (!ignore7[rrRay]) {
-    ray = rgObjRay[obj];
+    ray = rgObjRay[OBJT(obj)];
     if (ray > 0) {
-      if (rgSignRay2[sign][ray] > 0)
+      if (rgSignRay2[SIGT(sign)][ray] > 0)
         szDignify[rrRay+1] = 'Y';
-      else if (rgSignRay2[sign2][ray] > 0)
+      else if (rgSignRay2[SIGT(sign2)][ray] > 0)
         szDignify[rrRay+1] = 'z';
     }
   }
@@ -674,15 +674,15 @@ void EnsureRay()
 
   for (i = 1; i <= cSign; i++) {
     for (j = 1; j <= cRay; j++)
-      rgSignRay2[i][j] = 0;
+      rgSignRay2[SIGT(i)][j] = 0;
     c = 0;
-    n = rgSignRay[i];
+    n = rgSignRay[SIGT(i)];
     while (n) {
       j = n % 10;
       n /= 10;
       if (!FBetween(j, 1, cRay))
         continue;
-      rgSignRay2[i][j] = 1;
+      rgSignRay2[SIGT(i)][j] = 1;
       c++;
     }
     // A ray list with no valid digits must not divide by zero -- and it
@@ -692,7 +692,7 @@ void EnsureRay()
     if (c < 1)
       continue;
     for (j = 1; j <= cRay; j++)
-      rgSignRay2[i][j] *= 420 / c;
+      rgSignRay2[SIGT(i)][j] *= 420 / c;
   }
 }
 
