@@ -467,6 +467,33 @@ after was clean, so something in the suite's own accumulated state
 reaches it rather than any one group. When it next fires, keep the
 whole log and the `ASTROLOG_QT_TEST_VERBOSE=1` output.
 
+**Hunted deliberately on 2026-08-31, and not found.** Everything below
+came back clean, which narrows what it can be without closing it:
+
+- The suite under `-O2 -D_FORTIFY_SOURCE=3` — strictly stronger than
+  the `-O` build that reported it, since `=3` adds dynamic
+  object-size checks `=2` cannot do. Clean.
+- The 529-invocation switch matrix and a 140-render graphics sweep
+  under that same build, plus the checked tables' range guards. Clean.
+- The suite under ASan. Clean.
+- 17 runs under gdb, and the object core's range guards (work log
+  items 135-137), which now cover ~1,800 subscripts. Clean.
+
+Two candidates were checked and one survives. `WriteXBitmap()`'s
+80-byte path buffer (item 134) is the right *shape* for a fortify
+abort, but instrumenting it proves the suite never calls it at all —
+in a normal run or a `QTGRAPHDIR` capture. `XChartAstroGraph()`'s
+`ret[i]` overread (item 136) fits the ASan sighting well: `cp0.dir` is
+a global, and it is intermittent for the right reason. It cannot
+explain the fortify one, which only fires on the `__*_chk` family.
+
+**One mundane possibility deserves naming**, because that day involved
+repeated builds with overridden flags into the shared object directory
+(see Build traps): a link mixing objects compiled against different
+struct layouts produces exactly a spurious fortify abort. If it never
+recurs on a clean tree, that is the likeliest answer, and it is not a
+bug in the program.
+
 Two things that cost time here:
 
 - **ASan stops at the first error**, so a fix can reveal the next one
