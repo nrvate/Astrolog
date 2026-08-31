@@ -3707,6 +3707,50 @@ are the more useful half to read before starting something new.
     back, start from a custom slot redefined by macro to a high
     asteroid number.
 
+118. **B1's net: the import parsers' long-line behavior is pinned, and
+    building the net caught five crashers.** REFACTORING.md B1 says the
+    six file-format readers drift and to pin their truncation points
+    with fixtures before consolidating them. The file-parsers group (11
+    assertions) fixture-loads all five import formats through
+    `FInputData()` plus a 2000-character switch-file line, and pins
+    what each reader does past its own limit: a calendar SUMMARY keeps
+    its first 246 characters; a Solar Fire name line past 254 poisons
+    the whole file (its tail is eaten as the date line, so range
+    validation rejects everything); an AAF line past 1019 splits and
+    the tail's missing '#' rejects the file; the switch reader's
+    realloc growth delivers long lines whole. None of that was written
+    down anywhere before, and the consolidation must not move any of it
+    by accident.
+    Writing the fixtures crashed the program four ways before pinning
+    anything — all upstream-inherited, all reachable from a user's file
+    or command line, each found by the probe loop then frozen as a
+    regression case:
+    - `FProcessAAFFile()` assembled name and location fields into a
+      cchSzMax buffer with unbounded sprintf; any AAF field over ~250
+      characters smashed the stack. Both assemblies are `sprintf2` now.
+    - `FProcessADBFile()` joined city and country, each individually
+      capped at cchSzDef, into one cchSzDef buffer. Also `sprintf2`.
+    - `NParseSz()` and `RParseSz()` copied their argument into a
+      cchSzMax local with an unbounded loop — reachable from every
+      switch argument and import field in the program (`-m
+      Febr<300 chars>` crashed from the command line). The copies stop
+      at the buffer now, so an overlong token parses by its head.
+    - `FErrorValR()` formatted the out-of-range value itself through
+      `FormatR()` into buffers no big double fits — 1e308 in %f style
+      is over 300 characters — so *reporting* a bad value was a second
+      crash, surfaced the moment the fixed RParseSz returned an
+      astronomical value intact. szVal is cchSzLine and the assembly is
+      `sprintf2` now; pinned by a 400-digit `-q` argument in the
+      bad-input group.
+    Falsified the way the house rule demands: with the io.cpp fixes
+    reverted the group dies under the fortify checks before its first
+    assertion. Suite 3188/0 (+11 file-parsers, +1 bad-input), clean
+    under ASan; the Windows and console builds compile the same fixes,
+    and the console binary was crash-tested directly with the long
+    arguments. B1's remaining halves — the reader consolidation and the
+    SF/calendar 254-vs-1020 mismatch — are still open, now safe to take
+    behind these pins.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

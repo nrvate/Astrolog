@@ -497,9 +497,9 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
       AdvancePast(',');
       pch[-1] = chNull;
       if (*sz1 && !FEqSz(sz1, "*"))
-        sprintf(sz, "%s %s", sz2, sz1);
+        sprintf2(S(sz), "%s %s", sz2, sz1);
       else
-        sprintf(sz, "%s", sz2);
+        sprintf2(S(sz), "%s", sz2);
       ciCore.nam = SzClone(sz);
       AdvancePast(',');
       DD = NFromSz(pch);
@@ -525,9 +525,9 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
             *pch = chNull;
       }
       if (*sz1)
-        sprintf(sz, "%s, %s", sz1, sz2);
+        sprintf2(S(sz), "%s, %s", sz1, sz2);
       else
-        sprintf(sz, "%s", sz2);
+        sprintf2(S(sz), "%s", sz2);
       ciCore.loc = SzClone(sz);
       grf |= 1;
 
@@ -904,7 +904,7 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
         for (pch2 = pch; *pch2 && *pch2 != '<'; pch2++)
           ;
         CopyRgchToSz(pch, pch2 - pch, szLoc2, cchSzDef);
-        sprintf(sz, "%s, %s", szLoc1, szLoc2);
+        sprintf2(S(sz), "%s, %s", szLoc1, szLoc2);
         ConvertSzFromUTF8(sz);
         ciCore.loc = SzClone(sz);
         grf |= 1024;
@@ -2279,8 +2279,9 @@ int NParseSz(CONST char *szEntry, int pm)
   int cch, n, i;
 
   // First strip off any leading or trailing spaces.
-  for (cch = 0; (szLocal[cch] = szEntry[cch]); cch++)
+  for (cch = 0; cch < cchSzMax-1 && (szLocal[cch] = szEntry[cch]); cch++)
     ;
+  szLocal[cch] = chNull;
   while (cch && szLocal[cch-1] <= ' ')
     szLocal[--cch] = chNull;
   for (sz = szLocal; *sz && *sz <= ' '; sz++, cch--)
@@ -2432,8 +2433,9 @@ real RParseSz(CONST char *szEntry, int pm)
   real r;
 
   // First strip off any leading or trailing spaces.
-  for (cch = 0; (szLocal[cch] = szEntry[cch]); cch++)
+  for (cch = 0; cch < cchSzMax-1 && (szLocal[cch] = szEntry[cch]); cch++)
     ;
+  szLocal[cch] = chNull;
   while (cch && szLocal[cch-1] <= ' ')
     szLocal[--cch] = chNull;
   for (sz = szLocal; *sz && *sz <= ' '; sz++, cch--)

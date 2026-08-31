@@ -950,6 +950,26 @@ static void TestBadInputQt()
   PrintError("Test error; the suite expects to keep running past this.");
   Check(fTrue, "PrintError() returned instead of terminating");
 
+  // A 400-digit switch parameter, which crashed twice over before
+  // REFACTORING.md B1's net pinned it (work log item 117): NParseSz()
+  // and RParseSz() copied their argument into a cchSzMax local
+  // unbounded, and FErrorValR() then formatted the astronomical
+  // out-of-range value through two buffers too small for any big
+  // double rendered in %f style.
+  {
+    CI ciSav = ciCore;
+    char szLong[cchSzLine];
+    int i;
+
+    sprintf(szLong, "-q 3 4 2020 5:0");
+    for (i = CchSz(szLong); i < 420; i++)
+      szLong[i] = '6';
+    szLong[i] = chNull;
+    FProcessCommandLine(szLong);
+    Check(fTrue, "FProcessCommandLine() returned after a 400-digit time");
+    ciCore = ciSav;
+  }
+
   SetNoPopupQt(fSav);
   printf("  survived missing files, a bad switch and PrintError()\n");
 }
@@ -3846,6 +3866,192 @@ static void TestCastCookingQt()
 }
 
 
+// REFACTORING.md B1: the file-format importers read lines through
+// hand-rolled readers whose truncation points differ -- fgets through
+// cchSzMax (254 chars) for Solar Fire, calendar and Quick*Chart lines, a
+// getc loop bounded by cchSzLine-1 (1019) for AAF and Astrodatabank, and
+// realloc growth for switch files. These fixtures pin what each importer
+// does with a line past its own limit, which no document recorded and no
+// test observed, so B1's reader consolidation cannot move a truncation
+// point by accident. The overflow cases double as regression tests for
+// two real crashers this group's first probe run found: FProcessAAFFile
+// sprintf'd unbounded name and location fields into a cchSzMax buffer,
+// and FProcessADBFile concatenated two cchSzDef strings into one.
+static void WriteParserFileQt(CONST char *szFile, CONST char *sz)
+{
+  FILE *file = fopen(szFile, "wb");
+
+  if (file != NULL) {
+    fwrite(sz, 1, CchSz(sz), file);
+    fclose(file);
+  }
+}
+
+// Load one fixture through the real entry point, from cleared chart info
+// so a field the parser never wrote can't inherit the previous case's.
+static flag FLoadParserFileQt(CONST char *szFile)
+{
+  ciCore.nam = ciCore.loc = "";
+  MM = DD = YY = 0;
+  TT = SS = ZZ = OO = AA = 0.0;
+  return FInputData(szFile);
+}
+
+static void TestFileParsersQt()
+{
+  char szFile[cchSzMax], sz[8192], szPad[2048];
+  CI ciCoreSav = ciCore;
+  int cciSav = is.cci, i;
+  flag fHaveSav = is.fHaveInfo, fPopupSav = FNoPopupQt(), fRet;
+
+  Group("File import long lines");
+  SetNoPopupQt(fTrue);
+  for (i = 0; i < 2047; i++)
+    szPad[i] = 'P';
+  szPad[2047] = chNull;
+  sprintf(szFile, "%s/astrolog-qt-parserfixture.tmp",
+    getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+
+  // iCalendar, fgets through cchSzMax. A SUMMARY line past the limit
+  // loses the tail: the first 246 characters (254 minus "SUMMARY:")
+  // become the name, and the rest reads as an unknown keyword line.
+  WriteParserFileQt(szFile,
+    "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Cal Control\n"
+    "LOCATION:Seattle\nDTSTART:20200304T050607\nEND:VEVENT\n"
+    "END:VCALENDAR\n");
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && FEqSz(ciCore.nam, "Cal Control") &&
+    FEqSz(ciCore.loc, "Seattle") && MM == 3 && DD == 4 && YY == 2020,
+    "calendar control loads (nam '%s' loc '%s' %d/%d/%d)",
+    ciCore.nam, ciCore.loc, MM, DD, YY);
+  sprintf(sz, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:%.400s\n"
+    "LOCATION:Seattle\nDTSTART:20200304T050607\nEND:VEVENT\n"
+    "END:VCALENDAR\n", szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && CchSz(ciCore.nam) == cchSzMax-1-8 &&
+    ciCore.nam[0] == 'P' && MM == 3,
+    "calendar 400-char summary keeps its first %d characters (%d)",
+    cchSzMax-1-8, CchSz(ciCore.nam));
+
+  // Solar Fire text, fgets through cchSzMax. A name line past the limit
+  // poisons the whole file: its tail is consumed as the date line, the
+  // real date line reads as the location line, and range validation
+  // rejects everything -- no chart is appended at all.
+  WriteParserFileQt(szFile,
+    "\nCreated by Esoteric Technologies\n\n"
+    "SF Control - Natal Chart\n"
+    "Mar 4 2020, 5:06 am, +5:00\n"
+    "Seattle WA, 47N36 00, 122W19 00\n\n");
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && FEqSz(ciCore.nam, "SF Control") &&
+    FEqSz(ciCore.loc, "Seattle WA") && MM == 3 && DD == 4 && YY == 2020,
+    "Solar Fire control loads (nam '%s' loc '%s' %d/%d/%d)",
+    ciCore.nam, ciCore.loc, MM, DD, YY);
+  i = is.cci;
+  sprintf(sz, "\nCreated by Esoteric Technologies\n\n"
+    "%.300s\n"
+    "Mar 4 2020, 5:06 am, +5:00\n"
+    "Seattle WA, 47N36 00, 122W19 00\n\n", szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(!fRet && is.cci == i && CchSz(ciCore.nam) == cchSzMax-1,
+    "Solar Fire 300-char name line rejects the file (ret=%d nam %d)",
+    fRet, CchSz(ciCore.nam));
+
+  // AAF, getc loop through cchSzLine. Overlong name and location fields
+  // on a line still under that limit are truncated to the cchSzMax
+  // buffer they are assembled in -- the crasher this group first found:
+  // both assembly sprintfs were unbounded.
+  WriteParserFileQt(szFile,
+    "#A93:*,First Last,*,4.3.2020,5:06,Seattle,WA (USA)\n"
+    "#B93:2458912.5,47N36,122W19,+5:00,0\n");
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && FEqSz(ciCore.nam, "First Last") &&
+    FEqSz(ciCore.loc, "Seattle, WA, USA") && MM == 3 && DD == 4,
+    "AAF control loads (nam '%s' loc '%s' %d/%d/%d)",
+    ciCore.nam, ciCore.loc, MM, DD, YY);
+  sprintf(sz, "#A93:*,First %.400s,*,4.3.2020,5:06,Sea%.400sttle,WA (USA)\n"
+    "#B93:2458912.5,47N36,122W19,+5:00,0\n", szPad, szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && CchSz(ciCore.nam) == cchSzMax-1 &&
+    CchSz(ciCore.loc) == cchSzMax-1 && MM == 3 && DD == 4,
+    "AAF 400-char name and location truncate to %d (%d, %d)",
+    cchSzMax-1, CchSz(ciCore.nam), CchSz(ciCore.loc));
+  // And a line past cchSzLine splits: the tail reads as its own line,
+  // which can't start with '#', so the file is rejected.
+  i = is.cci;
+  sprintf(sz, "#: %.1200s\n"
+    "#A93:*,First Last,*,4.3.2020,5:06,Seattle,WA (USA)\n"
+    "#B93:2458912.5,47N36,122W19,+5:00,0\n", szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(!fRet && is.cci == i,
+    "AAF 1200-char comment line splits and rejects the file (ret=%d)",
+    fRet);
+
+  // Astrodatabank, the same getc loop. City and country each fit
+  // cchSzDef, but their joined form is truncated to it -- the second
+  // crasher: the join was an unbounded sprintf of two full buffers.
+  WriteParserFileQt(szFile,
+    "<adb_entry>\n"
+    "<x imonth=\"3\" iday=\"4\" iyear=\"2020\" sbtime_ampm=\"5:06 AM\"\n"
+    "ctimetype=\"h\" stmerid=\"5E\">\n"
+    "<sflname>ADB Control</sflname>\n"
+    "<place slong=\"122w19\" slati=\"47n36\">Seattle</place>\n"
+    "<country>USA</country>\n"
+    "</adb_entry>\n");
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && FEqSz(ciCore.nam, "ADB Control") &&
+    FEqSz(ciCore.loc, "Seattle, USA") && MM == 3 && DD == 4 && YY == 2020,
+    "ADB control loads (nam '%s' loc '%s' %d/%d/%d)",
+    ciCore.nam, ciCore.loc, MM, DD, YY);
+  sprintf(sz,
+    "<adb_entry>\n"
+    "<x imonth=\"3\" iday=\"4\" iyear=\"2020\" sbtime_ampm=\"5:06 AM\"\n"
+    "ctimetype=\"h\" stmerid=\"5E\">\n"
+    "<sflname>ADB Control</sflname>\n"
+    "<place slong=\"122w19\" slati=\"47n36\">%.79s</place>\n"
+    "<country>%.79s</country>\n"
+    "</adb_entry>\n", szPad, szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && CchSz(ciCore.loc) == cchSzDef-1 && MM == 3,
+    "ADB 79-char city and country join truncates to %d (%d)",
+    cchSzDef-1, CchSz(ciCore.loc));
+
+  // Quick*Chart, fgets whose buffer matches its limit; the fixed
+  // 100-column layout can't reach it. A control only.
+  sprintf(sz, "%-23s%-3s%-4s%-5s%-12s%-3s%-6s%-10s%-9s%-25s\n",
+    "Quick Control", "Mar", "4", "2020", "5:06am", "EST", "+5:00",
+    "122W19", "47N36", "Seattle WA");
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && FEqSz(ciCore.nam, "Quick Control") &&
+    FEqSz(ciCore.loc, "Seattle WA") && MM == 3 && DD == 4 && YY == 2020,
+    "Quick*Chart control loads (nam '%s' loc '%s' %d/%d/%d)",
+    ciCore.nam, ciCore.loc, MM, DD, YY);
+
+  // Switch files are the one reader with a growth policy: the buffer
+  // realloc-doubles, so a 2000-character line arrives whole.
+  sprintf(sz, "@0308  ; Astrolog chart info.\n-zi \"Switch Control\" "
+    "\"%.2000s\"\n-qb 3 4 2020 5:06 0 5:00 122:19W 47:36N\n", szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && FEqSz(ciCore.nam, "Switch Control") &&
+    CchSz(ciCore.loc) == 2000 && MM == 3 && DD == 4 && YY == 2020,
+    "switch file 2000-char line arrives whole (loc %d)",
+    CchSz(ciCore.loc));
+
+  remove(szFile);
+  is.cci = cciSav;
+  is.fHaveInfo = fHaveSav;
+  ciCore = ciCoreSav;
+  SetNoPopupQt(fPopupSav);
+}
+
+
 // Work log item 115: item 114's crasher class -- a user-supplied string
 // formatted through a fixed-size line buffer -- pinned across the whole
 // text chart surface rather than just the two functions caught crashing.
@@ -3953,7 +4159,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"atlas-sink",           TestAtlasSinkQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
-  {"long-strings",         TestLongStringsQt}};
+  {"long-strings",         TestLongStringsQt},
+  {"file-parsers",         TestFileParsersQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
 
 // Does any comma-separated token of the filter appear in the name?

@@ -1532,7 +1532,9 @@ flag FErrorValN(CONST char *szOpt, flag f, int nVal, int nPar)
 
 flag FErrorValR(CONST char *szOpt, flag f, real rVal, int nPar)
 {
-  char sz[cchSzMax], szPar[cchSzDef], szVal[cchSzDef];
+  // szVal must fit any double formatted with %f: an out of range value is
+  // exactly what reaches here, and 1e308 formats to over 300 characters.
+  char sz[cchSzMax], szPar[cchSzDef], szVal[cchSzLine];
 
   if (!f)
     return fFalse;
@@ -1542,10 +1544,10 @@ flag FErrorValR(CONST char *szOpt, flag f, real rVal, int nPar)
     sprintf(szPar, "parameter #%d of ", nPar);
   if (rVal != rLarge) {
     FormatR(szVal, rVal, -6);
-    sprintf(sz, "Value %s passed to %sswitch %c%s out of range.\n",
+    sprintf2(S(sz), "Value %s passed to %sswitch %c%s out of range.\n",
       szVal, szPar, chSwitch, szOpt);
   } else
-    sprintf(sz, "Bad value passed to %sswitch %c%s\n",
+    sprintf2(S(sz), "Bad value passed to %sswitch %c%s\n",
       szPar, chSwitch, szOpt);
   PrintError(sz);
   return fTrue;

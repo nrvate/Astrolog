@@ -837,6 +837,14 @@ the drift is the evidence. *Direction:* one line-reader helper with an
 explicit growth/truncation policy per caller — but first pin current
 behavior with long-line fixture tests, because the existing truncation
 points may be load-bearing for real files. *Cost:* low; net first.
+**Net landed 2026-08-30** (work log item 118): the file-parsers group
+fixture-loads all five import formats through `FInputData()` and pins
+every reader's truncation point — and building it caught five overflow
+crashers before pinning anything (AAF's field assembly, ADB's
+city+country join, `NParseSz`/`RParseSz`'s copy-in, and
+`FErrorValR`/`FormatR` on the error path), all upstream-inherited, all
+fixed the same day. Still open here: the reader consolidation itself,
+and the SF/calendar 254-vs-1020 mismatch as its own decided change.
 
 **B2 — Virtual filenames are in-band magic strings.** `FInputData`
 (io.cpp:2656) special-cases the names `nul`, `set`, `now`, `tty`,
@@ -1493,6 +1501,15 @@ measured at the finding).
   standard-object renames; is.fileIn clobbering; -YXW's missing arity
   check; -YYI dead since upstream wrote it. Every one found by a net
   built the same day.
+- **And by B1's long-line net** (work log item 118, 2026-08-30), five
+  more of the same class, all upstream-inherited: FProcessAAFFile()
+  sprintf'ing unbounded name/location fields into a cchSzMax buffer;
+  FProcessADBFile() joining two full cchSzDef strings into one;
+  NParseSz() and RParseSz() copying their argument into a cchSzMax
+  local unbounded — reachable from every switch argument in the
+  program; and FErrorValR() formatting the out-of-range value itself
+  through buffers no big double fits, so reporting the error was a
+  second crash.
 - **And after phase 2, by the real-data session and its long-strings
   battery** (work log items 114-115, 2026-08-30): PrintHeader() and
   PrintWheelCenter() overflowing 80-byte buffers on real chart
