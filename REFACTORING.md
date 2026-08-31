@@ -845,11 +845,14 @@ city+country join, `NParseSz`/`RParseSz`'s copy-in, and
 `FErrorValR`/`FormatR` on the error path), all upstream-inherited, all
 fixed the same day. **Consolidation done the same evening** (work log
 item 119): `FReadSzLineSkip()`/`FReadSzLineTrim()` are the two homes,
-proven by an 11-fixture pre/post differential, byte-identical. Still
-open here: the SF/calendar 254-vs-1020 mismatch as its own decided
-change, and — put on the record by that rebuild's -Wformat-overflow
-noise — atlas.cpp's zone-error paths, which format a 254-char szLine
-into smaller buffers at six sites: the same class, unfixed.
+proven by an 11-fixture pre/post differential, byte-identical. **The
+mismatch fix closed B1 the same evening** (work log item 120): both
+call sites read their whole declared buffer, four pins falsify the
+two-token change, and the differential moves in exactly the two
+fixtures it should. What remains of the class, recorded not taken:
+atlas.cpp's zone-error paths, which format a 254-char szLine into
+smaller buffers at six sites (surfaced by -Wformat-overflow during the
+consolidation rebuild).
 
 **B2 — Virtual filenames are in-band magic strings.** `FInputData`
 (io.cpp:2656) special-cases the names `nul`, `set`, `now`, `tty`,

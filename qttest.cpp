@@ -3866,17 +3866,20 @@ static void TestCastCookingQt()
 }
 
 
-// REFACTORING.md B1: the file-format importers read lines through
-// hand-rolled readers whose truncation points differ -- fgets through
-// cchSzMax (254 chars) for Solar Fire, calendar and Quick*Chart lines, a
-// getc loop bounded by cchSzLine-1 (1019) for AAF and Astrodatabank, and
-// realloc growth for switch files. These fixtures pin what each importer
-// does with a line past its own limit, which no document recorded and no
-// test observed, so B1's reader consolidation cannot move a truncation
-// point by accident. The overflow cases double as regression tests for
-// two real crashers this group's first probe run found: FProcessAAFFile
-// sprintf'd unbounded name and location fields into a cchSzMax buffer,
-// and FProcessADBFile concatenated two cchSzDef strings into one.
+// REFACTORING.md B1: the file-format importers read lines through what
+// used to be hand-rolled readers with drifting truncation points, now
+// the two FReadSzLine* helpers in io.cpp -- a line fits cchSzLine-1
+// (1019 chars) for AAF, Astrodatabank, Solar Fire and calendar, and
+// cchSzMax-1 (254) for Quick*Chart's fixed 100-column lines, while
+// switch files realloc-grow. Solar Fire and calendar originally read
+// only cchSzMax into their cchSzLine buffers; the buffer's declared
+// intent won (work log item 120), and the fixtures here pin both the
+// new whole-buffer reads and what each importer still does past its
+// real limit, so nothing can move a truncation point by accident. The
+// overflow cases double as regression tests for two real crashers this
+// group's first probe run found: FProcessAAFFile sprintf'd unbounded
+// name and location fields into a cchSzMax buffer, and FProcessADBFile
+// concatenated two cchSzDef strings into one.
 static void WriteParserFileQt(CONST char *szFile, CONST char *sz)
 {
   FILE *file = fopen(szFile, "wb");
@@ -3912,9 +3915,12 @@ static void TestFileParsersQt()
   sprintf(szFile, "%s/astrolog-qt-parserfixture.tmp",
     getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
 
-  // iCalendar, fgets through cchSzMax. A SUMMARY line past the limit
-  // loses the tail: the first 246 characters (254 minus "SUMMARY:")
-  // become the name, and the rest reads as an unknown keyword line.
+  // iCalendar, fgets through the whole cchSzLine buffer: a 400-char
+  // SUMMARY arrives intact (it used to truncate at 246, the old
+  // cchSzMax read this fixture caught -- work log item 120). Past the
+  // real limit the old behavior still holds: the first 1011 characters
+  // (1019 minus "SUMMARY:") become the name, and the tail reads as an
+  // unknown keyword line.
   WriteParserFileQt(szFile,
     "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:Cal Control\n"
     "LOCATION:Seattle\nDTSTART:20200304T050607\nEND:VEVENT\n"
@@ -3929,15 +3935,25 @@ static void TestFileParsersQt()
     "END:VCALENDAR\n", szPad);
   WriteParserFileQt(szFile, sz);
   fRet = FLoadParserFileQt(szFile);
-  Check(fRet && CchSz(ciCore.nam) == cchSzMax-1-8 &&
+  Check(fRet && CchSz(ciCore.nam) == 400 &&
     ciCore.nam[0] == 'P' && MM == 3,
-    "calendar 400-char summary keeps its first %d characters (%d)",
-    cchSzMax-1-8, CchSz(ciCore.nam));
+    "calendar 400-char summary arrives whole (%d)", CchSz(ciCore.nam));
+  sprintf(sz, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:%.1100s\n"
+    "LOCATION:Seattle\nDTSTART:20200304T050607\nEND:VEVENT\n"
+    "END:VCALENDAR\n", szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(fRet && CchSz(ciCore.nam) == cchSzLine-1-8 &&
+    ciCore.nam[0] == 'P' && MM == 3,
+    "calendar 1100-char summary keeps its first %d characters (%d)",
+    cchSzLine-1-8, CchSz(ciCore.nam));
 
-  // Solar Fire text, fgets through cchSzMax. A name line past the limit
-  // poisons the whole file: its tail is consumed as the date line, the
-  // real date line reads as the location line, and range validation
-  // rejects everything -- no chart is appended at all.
+  // Solar Fire text, fgets through the whole cchSzLine buffer: a
+  // 300-char name line loads now (it used to poison the whole file at
+  // 255 -- work log item 120). A name line past the real limit still
+  // does: its tail is consumed as the date line, the real date line
+  // reads as the location line, and range validation rejects
+  // everything -- no chart is appended at all.
   WriteParserFileQt(szFile,
     "\nCreated by Esoteric Technologies\n\n"
     "SF Control - Natal Chart\n"
@@ -3948,15 +3964,24 @@ static void TestFileParsersQt()
     FEqSz(ciCore.loc, "Seattle WA") && MM == 3 && DD == 4 && YY == 2020,
     "Solar Fire control loads (nam '%s' loc '%s' %d/%d/%d)",
     ciCore.nam, ciCore.loc, MM, DD, YY);
-  i = is.cci;
   sprintf(sz, "\nCreated by Esoteric Technologies\n\n"
     "%.300s\n"
     "Mar 4 2020, 5:06 am, +5:00\n"
     "Seattle WA, 47N36 00, 122W19 00\n\n", szPad);
   WriteParserFileQt(szFile, sz);
   fRet = FLoadParserFileQt(szFile);
-  Check(!fRet && is.cci == i && CchSz(ciCore.nam) == cchSzMax-1,
-    "Solar Fire 300-char name line rejects the file (ret=%d nam %d)",
+  Check(fRet && CchSz(ciCore.nam) == 300 && MM == 3 && DD == 4,
+    "Solar Fire 300-char name line loads whole (ret=%d nam %d)",
+    fRet, CchSz(ciCore.nam));
+  i = is.cci;
+  sprintf(sz, "\nCreated by Esoteric Technologies\n\n"
+    "%.1100s\n"
+    "Mar 4 2020, 5:06 am, +5:00\n"
+    "Seattle WA, 47N36 00, 122W19 00\n\n", szPad);
+  WriteParserFileQt(szFile, sz);
+  fRet = FLoadParserFileQt(szFile);
+  Check(!fRet && is.cci == i && CchSz(ciCore.nam) == cchSzLine-1,
+    "Solar Fire 1100-char name line rejects the file (ret=%d nam %d)",
     fRet, CchSz(ciCore.nam));
 
   // AAF, getc loop through cchSzLine. Overlong name and location fields

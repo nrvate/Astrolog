@@ -1018,7 +1018,7 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
   }
   loop {
 
-  if (!FReadSzLineTrim(file, szLine, cchSzMax))
+  if (!FReadSzLineTrim(file, szLine, cchSzLine))
     break;
 
   if (nState <= 0) {
@@ -1147,7 +1147,7 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
   }
 
   loop {
-    if (!FReadSzLineTrim(file, szLine, cchSzMax))
+    if (!FReadSzLineTrim(file, szLine, cchSzLine))
       break;
 
     if (nState < 0) {

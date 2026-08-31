@@ -3773,6 +3773,26 @@ are the more useful half to read before starting something new.
     smaller buffers, six sites); recorded at B1, deliberately not taken
     here.
 
+120. **B1 closed: Solar Fire and calendar lines get their whole buffer.**
+    Both parsers declare `szLine[cchSzLine]` and read it with
+    `fgets(..., cchSzMax, ...)` -- a 1020-byte buffer fed 254 bytes a
+    line, the mismatch B1 led with, which silently split every line
+    between 255 and 1019 characters. The buffer's declared intent wins:
+    both call sites now pass cchSzLine. Concretely, a 400-character
+    calendar SUMMARY used to truncate at 246 and now arrives whole, and
+    a 300-character Solar Fire name line used to poison its entire file
+    (the split tail was consumed as the date line, so range validation
+    rejected everything) and now loads. Past the real 1019 limit each
+    format's old behavior still holds and stays pinned, by two new
+    over-limit cases beside the updated ones. Net: 4 of the pins fail
+    with the two-token change reverted; suite 3190/0; the 11-fixture
+    console differential changes in exactly the two files it should
+    (cal-long, sf-long) and is byte-identical in the other nine; the
+    Windows build compiles the same fix. With this, B1 is closed:
+    net (118), consolidation (119), and the decided mismatch fix, with
+    atlas.cpp's zone-error paths left recorded at the finding as the
+    class's known remainder.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
