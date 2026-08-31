@@ -173,16 +173,19 @@ Roughly in the order I'd take them.
      chase. Measure a specific property when a specific question comes
      up, the way the sidebar width and the non-black row count were
      measured. Do not store pictures.
-5. **Decide about the deliberate divergences.** The behaviours in
-   "Known divergences from Windows" are places this port knowingly does
-   something different. Five remain, and **four of them are cases where
-   Windows looks like it has a bug** — Display Settings' aspect count that
-   cannot un-restrict anything, Daylight discarding an "Autodetect"
-   choice, Atlas City Coloring writing the aspect-glyph field, and the
-   command line dialog's save/restore. Reproducing those for parity's
-   sake would make the program worse; the recommendation is to keep them.
-   The fifth is the restriction dialogs' checkbox sense, already flipped
-   *toward* Windows.
+5. **~~Decide about the deliberate divergences.~~** — **resolved
+   2026-08-30** (work log item 132), and not the way this item expected.
+   Rather than decide whether to keep five divergences, they were
+   *tested*, and testing them settled three by itself. Display Settings'
+   aspect count turned out to have silently reverted to the Windows bug
+   months earlier — fixed in both builds now, so it is no longer a
+   divergence at all. Atlas City Coloring turned out to be documented
+   upstream (`-XL[1-5]` colours cities "when -XA is on"), so the row
+   describing it as a typo was wrong and its proposed fix would have
+   been a bug. The rest keep their behaviour and now name the test that
+   holds it; only the command line dialog's save/restore is untested,
+   and it says so. The standing rule is at the head of that section:
+   **a divergence without a test is a divergence waiting to revert.**
    The one a user met on every menu — the accelerator column reading
    `Shift+V` where Windows writes `V` — **is fixed**, see item 44, so this
    item no longer has anything urgent in it.
@@ -4214,6 +4217,78 @@ are the more useful half to read before starting something new.
     Nets: suite 3207/0; console, Qt release, Qt test and Windows builds
     clean; six audits clean.
 
+132. **The divergence list gets tests, and two of its five rows turned
+    out to be wrong.** Item 131 found a documented divergence that had
+    silently reverted; this is the pass that stops the class. The rule
+    now at the head of "Known divergences from Windows": every
+    behavioural divergence names the test that holds it, falsified
+    *against the Windows behaviour specifically*.
+
+    Why the class exists at all is structural and worth stating once.
+    The four `rc_*_audit.py` scripts all compare this port **against**
+    `astrolog.rc`, so anywhere it intends to differ from Windows is
+    outside what they can see by construction. Divergences were the one
+    body of behavioural claims with no mechanical check of any kind.
+
+    Testing the five table rows resolved three without a decision being
+    needed:
+
+    - **Display Settings' aspect count** had reverted (item 131). Now
+      fixed in *both* builds -- `wdialog.cpp` too, at the maintainer's
+      direction, so upstream can take it -- which means it stopped being
+      a divergence and moved to "Features this fork adds to both
+      builds".
+    - **Atlas City Coloring** claimed the port writes `gs.fLabelCity`
+      where Windows writes `gs.fLabelAsp`, calling that an upstream
+      typo. The note was wrong, not the code: `-H` documents
+      `-XL[1-5]` as setting "how to color cities (when -XA is on)", and
+      `xcharts0.cpp:2088` and `xcharts1.cpp:174` both read `fLabelAsp`
+      for exactly that; `-XL` is whether cities appear at all. Taking
+      the row's advice fails two assertions of the new group. Row
+      deleted with the measurement.
+    - **The restriction checkbox sense** matches Windows and always
+      did since 8.9, so it is a historical note about older Qt builds
+      rather than a live divergence, and `dialog-buttons` already pins
+      the sense.
+
+    Two rows keep their behaviour and gained guards -- Daylight
+    Autodetect surviving the chart info dialog, and the IBM
+    line-drawing adjustment not being copied. One, the command line
+    dialog's `us.fLoop`/`is.fMult` save-restore, is recorded as
+    **untested**, because its only observable is a typed line that
+    starts a multi-chart run and the in-process suite cannot drive
+    that. Saying so beats letting it look covered.
+
+    **The line-drawing test took three drafts, and each failure was the
+    same shape.** It first counted CP437 rule bytes in a rendered aspect
+    grid. That passed alone and failed in the full run, because
+    `TestAllMenuActionsQt()` fires 338 items and leaves `us.fAnsiChar`,
+    the unrestricted object set and `us.nCharset` wherever they land --
+    and the grid's size is the object count while `-Ya` encodes the same
+    rules as one byte or three. Pinning the charset to `ccIBM` then made
+    it fail *alone* as well. The third draft stopped hunting for
+    characters and rendered the same grid twice, with `gs.nFontTxt` off
+    and on, demanding the bytes match: that is the actual claim, and it
+    is immune to every one of those inherited settings. Widening the
+    `#ifdef WIN` to QT makes 3,930 bytes differ.
+
+    Also: the first version of this group ran the grid render inside the
+    dialog tests and aborted the suite several groups later with
+    "invalid stdio handle" -- calling `Action()` needs
+    `TestLongStringsQt()`'s whole prologue (no-popup, `Borrow` on
+    graphics/progress/relationship) and its epilogue (chart state put
+    back, `CastChart(1)`). It is its own group beside that test for the
+    same reason.
+
+    Nets: suite 3213/0; console, Qt release, Qt test and Windows builds
+    clean; six audits clean. One run in the middle of this work aborted
+    with glibc's "buffer overflow detected" and then passed twice --
+    the same intermittent fault ASan reported during item 129, now
+    seen by a second detector, which narrows it to a formatting or copy
+    overrun rather than a subscript. Still open, recorded in
+    QT_TESTING.md's ASan section; not chased, at the maintainer's
+    direction.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
@@ -4223,6 +4298,33 @@ be Linux only. It is deliberately shaped so it could be offered to
 CruiserOne — no `#ifdef QT` anywhere in the shared or Windows files, and
 the Swiss dependent parts guarded with `#ifdef SWISS` the way `DlgCustom`
 already guards its own.
+
+### The aspect count can be raised again
+
+Display Settings' "Number of Aspects to Include" could be lowered but
+never raised, in **both** builds, for different reasons. Windows'
+`DlgDisplay` assigns `us.nAsp = na` before the loop that un-restricts
+the newly included aspects, so that loop runs zero times. This port had
+lost the loop entirely to a transcription pass. Either way
+`AdjustAspectCount()` then recomputed the count straight back down from
+the restrictions, so the control silently did nothing and the only way
+back up was ticking boxes in Aspect Settings one aspect at a time.
+
+Both fixed 2026-08-30 by putting the assignment after both loops
+(`wdialog.cpp`, `qtdialog.cpp`), which is all it takes — the ordering is
+the whole bug. Upstream's half carries no `QT` guard, like the rest of
+this section.
+
+`TestAspectCountQt()` (`aspect-count`) drives the real dialog up from 11
+to 20 and back down to 3. It is falsified two ways: deleting the
+un-restrict loop fails all five assertions, and reproducing Windows'
+statement order fails all five too — the second is what proves it guards
+the ordering rather than the mere presence of a loop. The Windows half
+has no equivalent test; `wdialog.cpp` is Windows-only code the Qt suite
+cannot reach, and `tools/windrive.sh` cannot read a control's value
+(there is no AT-SPI under Wine), so it rests on the shared behavioural
+claim and inspection. Said plainly here rather than left to look
+covered.
 
 ### Forced object positions are saved
 
@@ -4523,6 +4625,19 @@ builds are not divergences and live in their own section above. Anything
 not on either list and not in an 8.x sub-item is unintentional — treat it
 as a bug.
 
+**Every behavioural divergence here names the test that holds it, and
+that rule is not decoration.** A divergence is the one kind of claim no
+audit can check: `rc_audit`, `rc_mnemonic_audit`, `rc_field_audit` and
+`rc_lookup_audit` all compare this port *against* `astrolog.rc`, so
+anywhere it intends to differ is outside what they can see by
+construction. Prose was the only record, and prose does not fail. When
+that was tested for the first time on 2026-08-30 (work log item 132),
+one of five rows had silently reverted to the Windows bug months
+earlier and another described a fix that would have been a bug. Adding
+a divergence without a test is how the next one rots. Falsify each one
+*against the Windows behaviour specifically* — reproducing Windows'
+version must fail the test, or it only proves "something happens here".
+
 **Deliberately different behaviour**
 
 - **Arrow keys in dialogs follow the layout, not the tab order.** Windows
@@ -4537,6 +4652,7 @@ as a bug.
   plus four times the sideways drift. Tab order is untouched and still
   matches the resource exactly. Controls that need the arrow keys for
   themselves (combo boxes, lists, text fields) keep them.
+  *Held by `TestDialogArrowKeysQt()` (`arrow-keys`).*
 
 - **Animation is one switch, not two, and only the switch moves it.**
   Upstream stores the jump rate and the running state together in
@@ -4560,8 +4676,8 @@ as a bug.
   - Stopped is one canonical state -- rate negated, pause clear -- so the
     two upstream stops can't disagree and leave the menu contradicting
     the chart.
-  - `TestAnimationStateQt()` covers it; reverting the change fails ten of
-    its assertions.
+  - `TestAnimationStateQt()` covers it (`animation`); reverting the
+    change fails ten of its assertions.
 
 - **The IBM line drawing adjustment is not copied, on purpose.**
   charts1.cpp and general.cpp turn off `us.fAnsiChar` and switch the
@@ -4575,14 +4691,40 @@ as a bug.
   render correctly, so it is a divergence that must stay. (The *graphics*
   side of `gs.nFontTxt` is not affected and does work, through `DrawSz()`
   and the Qt `DrawGlyph()`.)
+  *Held by `TestLineDrawingQt()` (`line-drawing`), which renders the
+  same aspect grid with `gs.nFontTxt` off and on and demands the bytes
+  match. It compares two renders rather than hunting for particular
+  characters because `-Ya` encodes the same rules as one byte or three,
+  and because the grid's size depends on whichever objects the previous
+  group left unrestricted — the first two drafts failed in the full run
+  while passing alone, once for each of those reasons. Widening the
+  `#ifdef WIN` to include QT makes 3,930 bytes differ.*
 
-| Where | Difference | Why |
-|---|---|---|
-| Display Settings | Raising "Number of Aspects to Include" actually un-restricts the newly included aspects | Windows assigns `us.nAsp = na` *before* the loop that would un-restrict them, so its loop can never run and raising the count silently does nothing. Kept the working version rather than reproduce the bug. |
-| Chart info dialogs | Daylight shows and offers "Autodetect" | Windows resolves `dstAuto` via `DstReal()` before display, discarding the user's "work it out for me" choice on the next OK. Showing it survives a round trip. |
-| Graphics Settings | Atlas City Coloring writes `gs.fLabelCity` | `DlgGraphics` writes `gs.fLabelAsp`, but that field is `-XA` (aspect glyphs on lines) and has nothing to do with city coloring. Treated as an upstream typo; using it would silently toggle aspect glyphs. |
-| Command line dialog | Doesn't save/restore `us.fLoop`/`is.fMult` around the call | `CommandLineX()` does. Only matters for a typed line that itself starts a multi-chart sequence. |
-| Restriction dialogs | (Since 8.9) checkbox = restricted, matching Windows | Previously "Show X" = visible, i.e. inverted. Flipped *toward* Windows, but it's a visible change to anyone used to the old Qt wording. |
+| Where | Difference | Why | Held by |
+|---|---|---|---|
+| Chart info dialogs | Daylight shows and offers "Autodetect" | Windows resolves `dstAuto` via `DstReal()` before display, discarding the user's "work it out for me" choice on the next OK. Showing it survives a round trip. | `divergences` — resolving it away on display fails the round trip |
+| Command line dialog | Doesn't save/restore `us.fLoop`/`is.fMult` around the call | `CommandLineX()` does. Only matters for a typed line that itself starts a multi-chart sequence. | **nothing yet** — the only observable is a typed line that starts a multi-chart run, which the in-process suite has no way to drive. Recorded as untested rather than left to look covered. |
+| Restriction dialogs | (Since 8.9) checkbox = restricted, matching Windows | Previously "Show X" = visible, i.e. inverted. Flipped *toward* Windows, but it's a visible change to anyone used to the old Qt wording. | not a live divergence — it *matches* Windows now, so it is a historical note about older Qt builds, and `dialog-buttons` already pins the sense through `ignore[]` |
+
+**Two rows left this table on 2026-08-30** (work log item 132), and the
+reasons are worth keeping:
+
+- **Display Settings' aspect count** was a divergence — this port
+  un-restricted the newly included aspects and Windows didn't — until
+  the loop that did it was deleted by a transcription pass and the port
+  quietly matched the bug for months. Both builds are fixed now, so it
+  is no longer a divergence at all; it moved to "Features this fork
+  adds to both builds".
+- **Graphics Settings' Atlas City Coloring** claimed the port writes
+  `gs.fLabelCity` where Windows writes `gs.fLabelAsp`, calling the
+  latter an upstream typo. Writing the test showed the note was wrong,
+  not the code: `-H` documents `-XL[1-5]` as setting "how to color
+  cities (**when -XA is on**)", and `xcharts0.cpp:2088` and
+  `xcharts1.cpp:174` both read `gs.fLabelAsp` for exactly that. `-XL`
+  is whether cities are plotted at all, so the "fix" this row proposed
+  would have wired the colouring combo to the wrong control. The port
+  writes `fLabelAsp`, matching Windows, and `divergences` pins it —
+  taking this row's old advice fails two of its assertions.
 
 **Not ported**
 

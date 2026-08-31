@@ -434,6 +434,18 @@ an intermittent: `TestAllMenuActionsQt()` leaves every setting where
 burn a session looping the suite for it — it will come around, and
 next time keep the whole log.
 
+**It came around on 2026-08-30, and narrowed.** A plain
+`./run-qt-tests.sh` aborted with glibc's `*** buffer overflow
+detected ***`, then passed twice straight after. That is a second
+detector agreeing with the first, and it sharpens the target:
+`_FORTIFY_SOURCE` only instruments the `__*_chk` family — `sprintf`,
+`strcpy`, `memcpy` and kin — so this is a **formatting or copy overrun,
+not a stray subscript**, which matches the ASan report's
+library-`pc`-into-binary-data shape. Both times the run before and
+after was clean, so something in the suite's own accumulated state
+reaches it rather than any one group. When it next fires, keep the
+whole log and the `ASTROLOG_QT_TEST_VERBOSE=1` output.
+
 Two things that cost time here:
 
 - **ASan stops at the first error**, so a fix can reveal the next one

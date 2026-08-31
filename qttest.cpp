@@ -4149,6 +4149,111 @@ static void TestFileParsersQt()
 // Work log item 115: item 114's crasher class -- a user-supplied string
 // formatted through a fixed-size line buffer -- pinned across the whole
 // text chart surface rather than just the two functions caught crashing.
+// The IBM line drawing divergence, in its own group and next to
+// TestLongStringsQt() because it shares that test's hazard: it calls
+// Action() to render a text chart to a file, which needs the chart
+// state put back afterwards or later groups inherit a half-redirected
+// output stream. Run inside the divergences group it aborted the suite
+// with "invalid stdio handle" several groups later.
+//
+// charts1.cpp and general.cpp clear us.fAnsiChar and swap the degree
+// glyph whenever gs.nFontTxt > 0, under #ifdef WIN, because the Windows
+// text window can be set to a font with no box drawing in it. This port
+// draws text charts in a fixed Liberation Mono, which has every one of
+// those characters, so copying the guard would strip the rules out of
+// grids that render correctly. Widening that ifdef to QT fails this.
+
+static void TestLineDrawingQt()
+{
+  CI ciMainSav = ciMain, ciCoreSav = ciCore;
+  int nFontSav = gs.nFontTxt, j;
+  flag rgfSav[48], fPopupSav = FNoPopupQt();
+  byte rgbIgnSav[oNorm+1];
+  static char szFont0[65536];
+  long cbFont0 = 0;
+  char szOut[cchSzMax];
+  FILE *file;
+  long cb = 0, cRule = 0;
+
+  Group("IBM line drawing");
+  SetNoPopupQt(fTrue);
+  {
+    Borrow bGraph(us.fGraphics, fFalse), bProg(us.fProgress, fFalse);
+    Borrow bRel(us.nRel, (int)rcNone);
+    // us.fAnsiChar is the precondition, not the subject: the claim is
+    // that gs.nFontTxt does not *clear* it. TestAllMenuActionsQt() fires
+    // 338 items and leaves it wherever they land, so set it here or the
+    // test reads "no rules" for the wrong reason (it did, in the full
+    // run, while passing alone).
+    Borrow bAnsi(us.fAnsiChar, (int)fTrue);
+    // Same reason, one level further: the grid's size is the number of
+    // unrestricted objects, and with almost everything restricted it
+    // renders a stub with no rules in it at all. Give the test its own
+    // object set rather than inherit 338 menu items' worth.
+    for (j = 0; j <= oNorm; j++)
+      rgbIgnSav[j] = ignore[j];
+    for (j = 0; j <= oNorm; j++)
+      ignore[j] = (j > oCore);
+    AdjustRestrictions();
+
+    for (j = 0; j < cchartmode && j < 48; j++) {
+      rgfSav[j] = *rgchartmode[j].pf;
+      *rgchartmode[j].pf = fFalse;
+    }
+    us.fGrid = fTrue;
+    sprintf(szOut, "%s/astrolog-qt-linedraw.txt",
+      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+    FCloneSz(szOut, &is.szFileScreen);
+
+    // The claim is that gs.nFontTxt changes nothing about a *text*
+    // chart here, so render the same grid with it off and on and demand
+    // the bytes match. Comparing two renders rather than hunting for
+    // particular characters keeps this independent of the charset (-Ya
+    // encodes the same rules as one byte or three) and of whichever
+    // objects an earlier group left unrestricted.
+    for (j = 0; j <= 1; j++) {
+      gs.nFontTxt = j;
+      remove(szOut);
+      Action();
+      file = fopen(szOut, "rb");
+      cb = 0;
+      if (file != NULL) {
+        int ch;
+        while ((ch = fgetc(file)) != EOF) {
+          if (j == 0) {
+            if (cb < (long)sizeof(szFont0))
+              szFont0[cb] = (char)ch;
+          } else if (cb < cbFont0 && cb < (long)sizeof(szFont0) &&
+            szFont0[cb] != (char)ch)
+            cRule++;
+          cb++;
+        }
+        fclose(file);
+      }
+      if (j == 0)
+        cbFont0 = cb;
+    }
+    remove(szOut);
+    FCloneSz(NULL, &is.szFileScreen);
+    Check(cbFont0 > 100, "the grid chart wrote %ld bytes, so this proves "
+      "nothing", cbFont0);
+    Check(cb == cbFont0 && cRule == 0,
+      "a text font changed the text chart: %ld bytes vs %ld, %ld bytes "
+      "differing -- that is the #ifdef WIN line-drawing behaviour, which "
+      "this port must not copy", cb, cbFont0, cRule);
+    gs.nFontTxt = nFontSav;
+    for (j = 0; j < cchartmode && j < 48; j++)
+      *rgchartmode[j].pf = rgfSav[j];
+    for (j = 0; j <= oNorm; j++)
+      ignore[j] = rgbIgnSav[j];
+    AdjustRestrictions();
+  }
+  ciMain = ciMainSav; ciCore = ciCoreSav;
+  CastChart(1);              // Put the shared chart state back for the rest.
+  SetNoPopupQt(fPopupSav);
+}
+
+
 // Every mode in rgchartmode[] is rendered to a file with a 120-character
 // chart name and location in place; each one surviving with output is
 // the assertion, the way TestBadInputQt() treats a crash. This is the
@@ -4362,6 +4467,71 @@ static void TestAspectCountQt()
 }
 
 
+// The guard for "Known divergences from Windows".
+//
+// A divergence is a claim about behaviour that no audit can check: the
+// four rc_*_audit.py scripts all compare this port *against*
+// astrolog.rc, so anywhere it intends to differ is outside what they
+// can see by construction. Prose was the only record, and prose does
+// not fail -- which is how Display Settings' aspect count reverted to
+// the Windows bug and stayed there for months (work log item 131).
+// Every divergence that is a testable behavioural claim gets one here.
+//
+// Already covered elsewhere, deliberately not repeated: the dialog
+// arrow keys (arrow-keys), animation's single running state
+// (animation), and the aspect count itself (aspect-count).
+
+static void TestDivergencesQt()
+{
+  Group("Windows divergences");
+
+  // Windows resolves dstAuto through DstReal() before showing it, so a
+  // chart typed as "work it out for me" comes back as a concrete 0 or 1
+  // on the next OK. This port shows Autodetect and keeps it.
+  real dstSav = ciCore.dst;
+  ciCore.dst = dstAuto;
+  DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK") p->click();
+  });
+  Check(ciCore.dst == dstAuto,
+    "an Autodetect daylight setting did not survive the chart info "
+    "dialog (dst is now %.2f) -- Windows resolves it away, this port "
+    "must not", ciCore.dst);
+  ciCore.dst = dstSav;
+
+  // Atlas City Coloring drives gs.fLabelAsp, not gs.fLabelCity, and
+  // that is correct however odd it reads: -XL plots the cities and -XA
+  // gates whether they are coloured, which the -H text states outright
+  // ("-XL[1-5]: ... set how to color cities (when -XA is on)").
+  // xcharts0.cpp:2088 and xcharts1.cpp:174 are the two readers. The
+  // plan used to call this an upstream typo and propose writing
+  // fLabelCity instead, which would have toggled whether cities appear
+  // at all -- a different control. Pinned here so the claim stays
+  // checked rather than re-argued.
+  flag fAspSav = gs.fLabelAsp, fCitySav = gs.fLabelCity;
+  int nCitySav = gs.nLabelCity;
+  gs.fLabelAsp = fFalse; gs.nLabelCity = 1;
+  DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+    for (QComboBox *p : pw->findChildren<QComboBox *>())
+      if (p->currentText() == "None")
+        p->setEditText("Rainbow");
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
+      if (p->text() == "OK") p->click();
+  });
+  Check(gs.fLabelAsp,
+    "picking a city colouring left gs.fLabelAsp clear, so the cities "
+    "will draw flat orange");
+  Check(gs.nLabelCity == 5,
+    "city colouring scheme is %d, wanted 5 (Rainbow)", gs.nLabelCity);
+  Check(gs.fLabelCity == fCitySav,
+    "picking a colouring also changed whether cities are plotted at all");
+  gs.fLabelAsp = fAspSav; gs.fLabelCity = fCitySav;
+  gs.nLabelCity = nCitySav;
+
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"context-menus",        TestContextMenusQt},
@@ -4369,6 +4539,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"chart-render",         TestChartRenderQt},
   {"ray-digit-fill",       TestRayDigitFillQt},
   {"aspect-count",         TestAspectCountQt},
+  {"divergences",          TestDivergencesQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},
   {"bad-input",            TestBadInputQt},
@@ -4403,6 +4574,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"atlas-sink",           TestAtlasSinkQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
+  {"line-drawing",         TestLineDrawingQt},
   {"long-strings",         TestLongStringsQt},
   {"file-parsers",         TestFileParsersQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))

@@ -2488,11 +2488,15 @@ flag API DlgDisplay(HWND hdlg, uint message, WORD wParam, LONG lParam)
       WiCheckMenu(cmdSecond, us.fSeconds);
       us.fSecond1K = GetCheck(dxDi_b1);
       us.fSecondHide = GetCheck(dxDi_b2);
-      us.nAsp = na;
+      // Both loops read the old us.nAsp, so the assignment comes after
+      // them: with it first, "for (i = us.nAsp + 1; i <= na; i++)" is
+      // empty and raising the aspect count never un-restricts what it
+      // now includes -- the count could be lowered and never raised.
       for (i = us.nAsp + 1; i <= na; i++)
         ignorea[ASPT(i)] = fFalse;
       for (i = na + 1; i <= cAspect; i++)
         ignorea[ASPT(i)] = fTrue;
+      us.nAsp = na;
       us.fSmartCusp = GetCheck(dxDi_YC);
       us.objRequire = nro;
       us.fParallel2 = GetCheck(dxDi_AP);
