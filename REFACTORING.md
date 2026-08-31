@@ -169,7 +169,10 @@ cross-table assertion (item 64) are this theme's pattern: **named rows
 for table initializers, and invariant assertions that machine-check the
 encodings**. The next steps, cheapest first: **(1)** extend the
 assertion approach to the remaining paired/parallel tables (exaltations,
-ray tables — Area H will enumerate); **(2)** introduce documentation
+ray tables — Area H will enumerate) — **done 2026-08-30** (work log
+item 122), and the survey found the theme's predicted bug on first
+contact: -Y7C range-checked a composed ray number, not its digits, and
+an all-invalid list crashed EnsureRay() on 420/0; **(2)** introduce documentation
 typedefs (`typedef int sign; typedef int obj;`) used in signatures so a
 reader sees the domain even though the compiler doesn't enforce it —
 upstream-compatible, zero behavior; **(3)** only if (2) proves

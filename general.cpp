@@ -685,6 +685,12 @@ void EnsureRay()
       rgSignRay2[i][j] = 1;
       c++;
     }
+    // A ray list with no valid digits must not divide by zero -- and it
+    // is reachable: -Y7C range-checks the composed number, not its
+    // digits, so "-Y7C 1 1 8 8" put an empty list here and crashed the
+    // first esoteric chart. Leave the row zero: no rays apply.
+    if (c < 1)
+      continue;
     for (j = 1; j <= cRay; j++)
       rgSignRay2[i][j] *= 420 / c;
   }

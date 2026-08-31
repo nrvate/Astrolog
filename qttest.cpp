@@ -3170,6 +3170,72 @@ static void TestRulershipTablesQt()
 }
 
 
+// T2 step (1) continued (REFACTORING.md): the same machine-checked-
+// encoding treatment for the esoteric tables the rulership group does
+// not cover. exalt[] is object-keyed, so none is 0 and every value is a
+// sign; rgObjRay[] maps objects to a single ray or 0; rgSignRay[] is a
+// decimal digit-string of rays (456 = rays 4, 5 and 6), from which
+// EnsureRay() derives rgSignRay2[] rows whose nonzero entries are the
+// per-ray proportions -- every row must total 420, the base the ray
+// charts divide by. The last case is the regression for a real crasher
+// this group found on its first survey: -Y7C range-checks the composed
+// number rather than its digits, so a list with no valid digit reached
+// EnsureRay() as c=0 and "-Y7C 1 1 8 8 -7" died on 420/0.
+static void TestEsotericTablesQt()
+{
+  flag fOk;
+  int i, j, c, n, nSav;
+
+  Group("Esoteric tables");
+
+  fOk = fTrue;
+  for (i = 0; i <= oNorm; i++)
+    fOk &= FBetween(exalt[i], 0, cSign);
+  Check(fOk, "every exaltation is a sign, with none spelled 0");
+
+  fOk = fTrue;
+  for (i = 0; i <= oNorm; i++)
+    fOk &= FBetween(rgObjRay[i], 0, cRay);
+  Check(fOk, "every object's ray is 1..%d, with none spelled 0", cRay);
+
+  fOk = fTrue;
+  for (i = 1; i <= cSign; i++) {
+    c = 0;
+    for (n = rgSignRay[i]; n; n /= 10) {
+      fOk &= FBetween(n % 10, 1, cRay);
+      c++;
+    }
+    fOk &= (c >= 1);
+  }
+  Check(fOk, "every sign's ray list has only valid digits, at least one");
+
+  EnsureRay();
+  fOk = fTrue;
+  for (i = 1; i <= cSign; i++) {
+    c = 0;
+    for (j = 1; j <= cRay; j++)
+      c += rgSignRay2[i][j];
+    fOk &= (c == 420);
+  }
+  Check(fOk, "every sign's derived ray proportions total 420");
+
+  // The crasher: an all-invalid ray list must derive to an all-zero row,
+  // not divide by zero.
+  nSav = rgSignRay[1];
+  rgSignRay[1] = 8;
+  EnsureRay();
+  c = 0;
+  for (j = 1; j <= cRay; j++)
+    c += rgSignRay2[1][j];
+  Check(c == 0, "a ray list with no valid digits derives to no rays (%d)",
+    c);
+  rgSignRay[1] = nSav;
+  EnsureRay();
+
+  printf("  exaltations and ray tables carry their encodings\n");
+}
+
+
 // A switch file can include another with -i, and switches like -YY read
 // an in-band payload from the file being parsed -- through the global
 // is.fileIn once (whose clear-on-exit bug this test caught), and now
@@ -4157,6 +4223,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"forced-positions",     TestForcedPositionsQt},
   {"shared-core",          TestSharedCoreFixesQt},
   {"rulership",            TestRulershipTablesQt},
+  {"esoteric-tables",      TestEsotericTablesQt},
   {"nested-include",       TestNestedIncludeQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},

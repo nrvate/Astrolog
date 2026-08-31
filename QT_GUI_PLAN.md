@@ -3811,6 +3811,23 @@ are the more useful half to read before starting something new.
     -- item 117's leak class by construction. With this, the B1
     overflow class has no known remaining member.
 
+122. **T2 step (1) taken for the esoteric tables, and the survey found
+    its crasher.** The rulership group's machine-checked-encoding
+    treatment (item 64) now covers what it skipped: exalt[] all signs
+    with none spelled 0, rgObjRay[] all rays 1..7 or 0, every
+    rgSignRay[] digit-string made of valid digits, and the derived
+    rgSignRay2[] rows each totalling 420 -- the proportion base the ray
+    charts divide by. Surveying that last encoding found the bug the
+    theme predicts: `-Y7C` range-checks the composed number (1..1234567)
+    rather than its digits, so `-Y7C 1 1 8 8 -7` handed EnsureRay() a
+    list with no valid ray digit, c stayed 0, and the first esoteric
+    chart died on 420/0 -- upstream-inherited, both builds, reachable
+    from the command line, a settings file, or Windows' own dialog.
+    EnsureRay() now leaves such a row zero, meaning no rays apply,
+    which the consumers already handle. Falsified: without the guard
+    the new group's regression case dumps core. Suite 3195/0 (+5
+    esoteric-tables); Windows build compiles the same fix.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
