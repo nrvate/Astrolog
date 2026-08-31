@@ -170,9 +170,9 @@ typedef struct _switchranged {
 } SWITCHRANGED;
 
 static CONST SWITCHRANGED rgswranged[] = {
-  {"YAo", "YA", pmAspect, 1, cAspect, &rAspOrb[0],       sizeof(real),
+  {"YAo", "YA", pmAspect, 1, cAspect, rAspOrb.rgn,       sizeof(real),
     vtReal, 0, 0, NULL},
-  {"YAa", "YA", pmAspect, 1, cAspect, &rAspAngle[0],     sizeof(real),
+  {"YAa", "YA", pmAspect, 1, cAspect, rAspAngle.rgn,     sizeof(real),
     vtReal, 0, 0, NULL},
   {"YAm", "YA", pmObject, 0, oNorm+1, &rgobjset[0].orb,  sizeof(OBJSET),
     vtReal, 0, 0, NULL},
@@ -184,7 +184,7 @@ static CONST SWITCHRANGED rgswranged[] = {
     vtReal, 0, 0, NULL},
   {"YjC", "Yj", pmSign,   0, cSign,   &rHouseInf[0],     sizeof(real),
     vtReal, 0, 0, NULL},
-  {"YjA", "Yj", pmAspect, 0, cAspect, &rAspInf[0],       sizeof(real),
+  {"YjA", "Yj", pmAspect, 0, cAspect, rAspInf.rgn,       sizeof(real),
     vtReal, 0, 0, NULL},
   {"YR",  "YR", pmObject, 0, cObj,    ignore,            sizeof(byte),
     vtBool, 0, 0, RedoRestrictions},
@@ -196,7 +196,7 @@ static CONST SWITCHRANGED rgswranged[] = {
     vtRay, 1, 1234567, NULL},
   {"YkO", "Yk", pmObject, 0, starLo,  &rgobjset[0].kolor, sizeof(OBJSET),
     vtColor, 0, kMax-1, NULL},
-  {"YkA", "Yk", pmAspect, 1, cAspect, kAspA,             sizeof(int),
+  {"YkA", "Yk", pmAspect, 1, cAspect, kAspA.rgn,         sizeof(int),
     vtColor, 0, cColor2-1, NULL},
   {"Yk0", "Yk", 0,        1, cRainbow, kRainbowA,        sizeof(int),
     vtColor, 0, cColor2-1, NULL},
@@ -1941,15 +1941,15 @@ static int NSwR(CONST char *szSwitch, PARSEIN *pin)
   if (ch1 == 'A') {
     if (ch2 == '0')
       for (i = 1; i <= cAspect; i++)
-        ignorea[i] = fTrue;
+        ignorea[ASPT(i)] = fTrue;
     else if (ch2 == '1')
       for (i = 1; i <= cAspect; i++)
-        ignorea[i] = fFalse;
+        ignorea[ASPT(i)] = fFalse;
     while (argc > 1 && (i = NParseSz(argv[1], pmAspect)))
       if (FErrorValN("RA", !FAspect(i), i, 0))
         return tcError;
       else {
-        SwitchF(ignorea[i]);
+        SwitchF(ignorea[ASPT(i)]);
         argc--; argv++;
       }
     AdjustAspectCount();
@@ -2108,9 +2108,9 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
     if (FErrorValN("A", !FValidAspect(i), i, 0))
       return tcError;
     for (j = us.nAsp + 1; j <= i; j++)
-      ignorea[j] = fFalse;
+      ignorea[ASPT(j)] = fFalse;
     for (j = i + 1; j <= cAspect; j++)
-      ignorea[j] = fTrue;
+      ignorea[ASPT(j)] = fTrue;
     us.nAsp = i;
     return 1;
   }
@@ -2124,13 +2124,13 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
   if (FErrorValR("A", rT < -rDegMax || rT > rDegMax, rT, 2))
     return tcError;
   if (ch1 == 'o')
-    rAspOrb[i] = rT;
+    rAspOrb[ASPT(i)] = rT;
   else if (ch1 == 'm')
     rgobjset[i].orb = rT;
   else if (ch1 == 'd')
     rgobjset[i].add = rT;
   else
-    rAspAngle[i] = rT;
+    rAspAngle[ASPT(i)] = rT;
   return 2;
 }
 

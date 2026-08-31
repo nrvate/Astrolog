@@ -3560,14 +3560,14 @@ void ShowAspectDialogQt()
     rgpeInf[i] = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "dei", i);
     rgpcbColor[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dck", i);
     if (rgpcbRes[i] != NULL)
-      rgpcbRes[i]->setChecked(ignorea[i] != 0);
+      rgpcbRes[i]->setChecked(ignorea[ASPT(i)] != 0);
     if (rgpeOrb[i] != NULL)
-      rgpeOrb[i]->setText(SzFormatRQt(rAspOrb[i], -6));
+      rgpeOrb[i]->setText(SzFormatRQt(rAspOrb[ASPT(i)], -6));
     if (rgpeAngle[i] != NULL)
-      rgpeAngle[i]->setText(SzFormatRQt(rAspAngle[i], -6));
+      rgpeAngle[i]->setText(SzFormatRQt(rAspAngle[ASPT(i)], -6));
     if (rgpeInf[i] != NULL)
-      rgpeInf[i]->setText(SzFormatRQt(rAspInf[i], 2));
-    FillColorComboQt(rgpcbColor[i], kAspA[i], 0);
+      rgpeInf[i]->setText(SzFormatRQt(rAspInf[ASPT(i)], 2));
+    FillColorComboQt(rgpcbColor[i], kAspA[ASPT(i)], 0);
   }
 
   // Restrict All, Unrestrict All, and Toggle Majors, which covers the
@@ -3604,11 +3604,11 @@ void ShowAspectDialogQt()
   for (i = 1; i <= cAspect; i++) {
     if (rgpcbRes[i] == NULL)
       continue;
-    ignorea[i] = rgpcbRes[i]->isChecked();
-    rAspOrb[i] = rgpeOrb[i]->text().toDouble();
-    rAspAngle[i] = rgpeAngle[i]->text().toDouble();
-    rAspInf[i] = rgpeInf[i]->text().toDouble();
-    kAspA[i] = NColorFromComboQt(rgpcbColor[i]);
+    ignorea[ASPT(i)] = rgpcbRes[i]->isChecked();
+    rAspOrb[ASPT(i)] = rgpeOrb[i]->text().toDouble();
+    rAspAngle[ASPT(i)] = rgpeAngle[i]->text().toDouble();
+    rAspInf[ASPT(i)] = rgpeInf[i]->text().toDouble();
+    kAspA[ASPT(i)] = NColorFromComboQt(rgpcbColor[i]);
   }
   AdjustAspectCount();
   RecastAndRedrawQt();
@@ -4115,7 +4115,7 @@ void ShowDisplayDialogQt()
   us.nCharset = NRcStoreRadioQt(rgbuilt, 8, 4, us.nCharset);
   us.nAppSep = NRcStoreRadioQt(rgbuilt, 12, 3, us.nAppSep);
   for (int i = na + 1; i <= cAspect; i++)
-    ignorea[i] = fTrue;
+    ignorea[ASPT(i)] = fTrue;
   us.nAsp = na;
   us.objRequire = nro;
   us.nScreenWidth = ni;

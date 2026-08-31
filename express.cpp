@@ -1556,10 +1556,10 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
     (cp0.dist[n1] * rAUToKm))*2.0: 0.0; break;
   case funObjSig:  n = FValidObj(n1) ? SFromZ(planet[n1]) : 0; break;
   case funAspOn:   n = FValidAspect(n1) ? !FIgnoreA(n1) : 0;   break;
-  case funAspAng:  r = FValidAspect(n1) ? rAspAngle[n1] : 0.0; break;
-  case funAspOrb:  r = FValidAspect(n1) ? rAspOrb[n1]   : 0.0; break;
-  case funAspInf:  r = FValidAspect(n1) ? rAspInf[n1]   : 0.0; break;
-  case funAspCol:  n = FValidAspect(n1) ? kAspA[n1]     : 0;   break;
+  case funAspAng:  r = FValidAspect(n1) ? rAspAngle[ASPT(n1)] : 0.0; break;
+  case funAspOrb:  r = FValidAspect(n1) ? rAspOrb[ASPT(n1)]   : 0.0; break;
+  case funAspInf:  r = FValidAspect(n1) ? rAspInf[ASPT(n1)]   : 0.0; break;
+  case funAspCol:  n = FValidAspect(n1) ? kAspA[ASPT(n1)]     : 0;   break;
   case funCusp:    r = FValidSign(n1)   ? chouse[n1]    : 0.0; break;
   case funCusp3D:  r = FValidSign(n1)   ? chouse3[n1]   : 0.0; break;
   case funCusp1:   r = FValidSign(n1)   ? cp1.cusp[n1]  : 0.0; break;

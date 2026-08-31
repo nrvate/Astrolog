@@ -210,7 +210,8 @@ char *szWheelX[cRing+1] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 // Technically, Astrolog always assumes charts are being drawn in color.
 // For B/W graphics, all the values below are filled with black or white.
 
-KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem], kAspB[cAspect+1],
+TBLASPK kAspB;
+KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem],
   kObjB[objMax], kRayB[cRay+2];
 
 CONST char *rgszFontName[cFont] = {szAppNameCore, "Wingdings", "Astro",

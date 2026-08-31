@@ -193,7 +193,10 @@ maintainer decision; the measured reasons are in the work log item.
 E2 followed the same day (work log item 127): the same three
 subscripts now range check at run time under the test build, so an
 index of the *right* domain that still runs off the end aborts where
-the suite reaches it — the half a compile-time tag cannot see.
+the suite reaches it — the half a compile-time tag cannot see. E3
+closed the same day too (work log item 128): the eight aspect tables
+are checked as well, which leaves the theme's whole incident surface —
+every table family that has ever shipped a T2 bug — behind a tag.
 **The complete campaign state, recipe and ledger are in "The T2
 enforcement campaign" section below** — written so the remaining
 increments are mechanical for a follow-on session.
@@ -286,7 +289,21 @@ compile error. Definitions live in astrolog.h directly after the
    unchanged outright, so it *subsumes* the matrix rather than
    approximating it, and costs one build instead of two matrix runs.
    Only claim this when no `.o` differs — one that does sends you back
-   to the matrix.
+   to the matrix. E3 is that counterexample: splitting a shared
+   declarator line (`byte ignore[], ignorea[], ...`) moves symbols, so
+   six objects differed and the full matrix was required.
+   **The matrices cover the switch surface, not rendering.** For a
+   family the chart code reads — the aspect tables, the ray tables —
+   add a chart differential: run both binaries over the chart modes
+   that read the family, from one fixed chart (`-qb 7 4 1976 12 0 8
+   122:19:55W 47:36:22N`), and compare with **`cmp`**, never `diff`
+   (chart output has escape sequences, so `diff` says "binary files
+   differ" and emits no `<`/`>` lines — a line count over it reads as
+   zero differences). Before trusting the result, prove the harness
+   sees the family at all: change an orb, a colour and a count, and
+   check each moves the capture. E3's first attempt had a malformed
+   `-qb` and every run printed the same parse error, identically on
+   both binaries.
 8. All six audits, plus the rule-5 falsification.
 9. Docs and commit (rule 7).
 
@@ -296,17 +313,19 @@ compile error. Definitions live in astrolog.h directly after the
 |---|---|---|---|
 | E1 | rulership/exaltation/ray: 16 tables, SIGT/OBJT, TBLSIG/TBLOBJ/TBLSIGRAY | 170 subscripts, 8 selector conversions, 2 registry rows | **done 2026-08-30**, work log item 125 |
 | E2 | test-build range asserts in checked `operator[]` | astrolog.h only: under `#ifdef QTTEST`, assert the index within the array (TBLSIG 0..cSign, TBLOBJ 0..oNorm, TBLSIGRAY 0..cSign) via `<assert.h>` — the codebase's own `Assert()` is compiled out (extern.h:419) and cannot be used. Catches item 115's class (a star number into an oNorm table) dynamically wherever the suite reaches. Net: suite + deliberately-broken probe index must abort under the test build | **done 2026-08-30**, work log item 127 |
-| E3 | aspect family: rAspAngle (44 refs), rAspOrb (28), rAspAngleDef (2), rAspInf (14), kAspA (26), ignorea (16), ignoreaMem (1) — new `ASPT` tag; TBLASP (int), TBLASPR (real), TBLASPB (byte), all dim cAspect+1 | ~131 subscripts. Traps: the cAspect2-dimensioned display tables (szAspectName and kin) are a *different, larger domain* — leave them; szModify rows are 0-based (`[asp-1]`) — value expressions, not table indexes, leave; registry rows use the `&rAspAngle[0]` spelling | **pending** |
+| E3 | aspect family: rAspAngle (44 refs), rAspOrb (28), rAspAngleDef (2), rAspInf (14), kAspA (26), ignorea (16), ignoreaMem (1) — new `ASPT` tag; TBLASP (int), TBLASPR (real), TBLASPB (byte), all dim cAspect+1 | ~131 subscripts. Traps: the cAspect2-dimensioned display tables (szAspectName and kin) are a *different, larger domain* — leave them; szModify rows are 0-based (`[asp-1]`) — value expressions, not table indexes, leave; registry rows use the `&rAspAngle[0]` spelling | **done 2026-08-30**, work log item 128 — scope extended by one table, kAspA's display twin kAspB (`TBLASPK`, KI element, 15 subscripts), rather than leave an untyped twin beside the typed original; 139 tagged subscripts, 24 files |
 | E4 | ray/constellation leftovers: kRayA (cRay+2 — the +2 slot is a real extra, read the sites first), szRayName/szRayWill (SZ variant), iCnstlZodiac/lonCnstlZodiac | small; convert or close with a measured verdict, either is fine | **pending, optional** |
 | — | sign/aspect *display* tables (szSignName family, glyph/color arrays) | closed by verdict: wrong-domain indexing is self-announcing garbage text/color, the ref count is an ocean, and no incident ever lived here | **closed** |
 | — | the object-domain core: planet[]/chouse[] aliases (775 refs), ignore/ignore2/force/rgobjset/kObjA (objMax domain) | closed by verdict pending an explicit maintainer decision: this is most of the program, plus the arithmetic and varargs idioms; work log item 125 records the measured reasons | **closed (maintainer-gated)** |
 | — | rHouseInf[cSign+6] | closed by verdict: the +5 tail slots are deliberate mixed semantics (bonus rows), not a clean sign domain | **closed** |
 | — | value-domain typing (a table declaring what its *values* index, e.g. rules[] values are objects, catching `power1[rules[s]]` misuse) | closed by verdict: real design, second-order value, invasive; revisit only if an incident of that shape ever occurs | **closed** |
 
-**Done-when:** E2 and E3 landed and E4 resolved either way. At that
-point the T2 theme is finished: everything else in it is a recorded
-verdict, and the enforcement surface covers every table family that
-has ever shipped a T2 incident.
+**Done-when:** E2 and E3 landed and E4 resolved either way. **E2 and
+E3 are done (2026-08-30); only E4 remains**, and it is optional — a
+conversion or a written verdict, either closes it. At that point the
+T2 theme is finished: everything else in it is a recorded verdict, and
+the enforcement surface covers every table family that has ever
+shipped a T2 incident.
 
 ### T3 — Two 1,000+-line switch statements are the command surface
 

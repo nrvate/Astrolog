@@ -179,7 +179,7 @@ void InterpretGeneral(void)
   for (i = 1; i <= us.nAsp; i++) {
     if (!FInterpretAsp(i))
       continue;
-    AnsiColor(kAspA[i]);
+    AnsiColor(kAspA[ASPT(i)]);
     sprintf(sz, "When planets are %s, one", szAspectName[i]);
     FieldWord(sz); sprintf(sz, szInteract[i], ""); FieldWord(sz);
     FieldWord("another.");
@@ -315,7 +315,7 @@ void InterpretAspectCore(int x, int asp, int y, int nOrb)
 
   if (!FInterpretAsp(asp) || !FInterpretObj(x) || !FInterpretObj(y))
     return;
-  AnsiColor(kAspA[asp]);
+  AnsiColor(kAspA[ASPT(asp)]);
   sprintf(sz, "%s %s %s: %s's",
     szObjDisp[x], SzAspect(asp), szObjDisp[y], szPerson);
 #ifdef EXPRESS
@@ -494,7 +494,7 @@ void InterpretInDay(int source, int aspect, int dest)
 
   } else if (FInterpretAsp(aspect) &&
     FInterpretObj(source) && FInterpretObj(dest)) {
-    AnsiColor(kAspA[aspect]);
+    AnsiColor(kAspA[ASPT(aspect)]);
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
     sprintf(sz, szInteract[aspect], szModify[1][aspect-1]);
     FieldWord(sz);
@@ -521,7 +521,7 @@ void InterpretTransit(int source, int aspect, int dest)
   // Interpret transiting planet forming aspect.
 
   if (FInterpretObj(source) && FInterpretAsp(aspect) && FInterpretObj(dest)) {
-    AnsiColor(kAspA[aspect]);
+    AnsiColor(kAspA[ASPT(aspect)]);
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
     sprintf(sz, szInteract[aspect], szModify[1][aspect-1]);
     FieldWord(sz);
@@ -622,7 +622,7 @@ void InterpretAspectRelation(int x, int y)
   asp = grid->n[y][x];
   if (!FInterpretAsp(asp) || !FInterpretObj(x) || !FInterpretObj(y))
     return;
-  AnsiColor(kAspA[asp]);
+  AnsiColor(kAspA[ASPT(asp)]);
   sprintf(sz, "%s %s %s: %s's",
     szObjDisp[x], SzAspect(asp), szObjDisp[y], szPerson1);
   FieldWord(sz); FieldWord(szMindPart[x]);
@@ -1382,7 +1382,7 @@ void ComputeInfluence(real power1[objMax], real power2[objMax])
         // once fixed stars or moons are unrestricted. Every other use in
         // the program goes through the macro; this was the one that
         // didn't, and it read off the end of the array.
-        power2[j] += rAspInf[k]*RObjInf(i)*
+        power2[j] += rAspInf[ASPT(k)]*RObjInf(i)*
           (1.0-RAbs((real)l)/3600.0/GetOrb(i, j, k));
       }
     }

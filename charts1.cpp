@@ -405,7 +405,7 @@ void PrintGridCell(int x, int y, int type, int row)
   // For aspect cells, print orb in degrees and minutes.
   if (type == 1) {
     if (n > 0) {
-      AnsiColor(kAspA[n]);
+      AnsiColor(kAspA[ASPT(n)]);
       if (row <= 2) {
         if (us.fParallel && n <= aOpp)
           n += cAspect;
@@ -550,7 +550,7 @@ flag FPrintAspectConfig(int ac, int i1, int i2, int i3, int i4)
       return fFalse;
   }
 #endif
-  AnsiColor(kAspA[rgAspConfig[ac]]);
+  AnsiColor(kAspA[ASPT(rgAspConfig[ac])]);
   sprintf(sz, "%-11s", szAspectConfig[ac]); PrintSz(sz);
   AnsiColor(kDefault);
   sprintf(sz, " %s ", ac == acS3 || ac == acGT || ac == acGC ||
@@ -979,7 +979,7 @@ void PrintAspectSummary(int *ca, int *co, int count, real rPowSum)
         PrintL();
     } else
       PrintSz("   ");
-    AnsiColor(kAspA[i]);
+    AnsiColor(kAspA[ASPT(i)]);
     sprintf(sz, "%s:%3d", SzAspectAbbrev(i), ca[i]); PrintSz(sz);
     j++;
   }
@@ -1036,7 +1036,7 @@ static void ChartAspectCore(flag fRel)
         if (k > 0) {
           ip = RObjInf(i);
           jp = RObjInf(j);
-          p = rAspInf[k] * (ip+jp)/2.0 *
+          p = rAspInf[ASPT(k)] * (ip+jp)/2.0 *
             (1.0-RAbs(fRel ? grid->v[i][j] : grid->v[j][i])/GetOrb(i, j, k));
 #ifdef EXPRESS
           // Adjust power with AstroExpression if one set. The two lists
@@ -1181,7 +1181,7 @@ void PrintAspectsToPoint(real deg, int obj, real rRet, char *szWhat)
     for (asp = us.nAsp; asp >= 1; asp--) {
       if (!FAcceptAspect(i, asp, obj >= 0 ? obj : i))
         continue;
-      rOrb = rAng - rAspAngle[asp];
+      rOrb = rAng - rAspAngle[ASPT(asp)];
       if (RAbs(rOrb) < GetOrb(i, obj >= 0 ? obj : i, asp)) {
         if (us.nAppSep == 1)
           rOrb *= RSgn2(rRet - ret[i]) * RSgn2(MinDifference(planet[i], deg));
@@ -1203,7 +1203,7 @@ void PrintAspectsToPoint(real deg, int obj, real rRet, char *szWhat)
         sprintf(sz, "      %s ", szWhat); PrintSz(sz);
         PrintZodiac(deg);
         PrintSz(" makes ");
-        AnsiColor(kAspA[asp]); PrintSz(szAspectAbbrevDisp[asp]);
+        AnsiColor(kAspA[ASPT(asp)]); PrintSz(szAspectAbbrevDisp[asp]);
         AnsiColor(kDefault); PrintSz(" to ");
         AnsiColor(kObjA[i]); sprintf(sz, "%-10.10s ", szObjDisp[i]);
         PrintSz(sz);
@@ -2655,7 +2655,7 @@ flag ChartMoons()
 
   // Geocentric moons precise Conjunct bodies.
   for (pass = 1; pass <= 2; pass++) {
-    rOrb = (pass <= 1 ? 1.0 : rAspOrb[aCon] + 1.0);
+    rOrb = (pass <= 1 ? 1.0 : rAspOrb[ASPT(aCon)] + 1.0);
     AnsiColor(kDefault);
     if (pass <= 1)
       sprintf(sz, "Precise Conjunctions between planet disks and their moons, "

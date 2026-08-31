@@ -1691,13 +1691,13 @@ flag FOutputSettings()
     ";  6-11: Inc SSx SSq Ses Qui BQn\n"
     "; 12-18: SQn Sep Nov BNv BSp TSp QNv\n"
     "; 19-24: TDc Un1 Un2 Un3 Un4 Un5\n\n-YAo 1 5    ");
-  for (i = 1; i <= 5; i++) { PrintF(" "); PrintRSz(rAspOrb[i], -6); }
+  for (i = 1; i <= 5; i++) { PrintF(" "); PrintRSz(rAspOrb[ASPT(i)], -6); }
   PrintF("      ; Major aspects\n-YAo 6 11   ");
-  for (i = 6; i <= 11; i++) { PrintF(" "); PrintRSz(rAspOrb[i], -6); }
+  for (i = 6; i <= 11; i++) { PrintF(" "); PrintRSz(rAspOrb[ASPT(i)], -6); }
   PrintF("    ; Minor aspects\n-YAo 12 18  ");
-  for (i = 12; i <= 18; i++) { PrintF(" "); PrintRSz(rAspOrb[i], -6); }
+  for (i = 12; i <= 18; i++) { PrintF(" "); PrintRSz(rAspOrb[ASPT(i)], -6); }
   PrintF("  ; Obscure aspects\n-YAo 19 24  ");
-  for (i = 19; i <= 24; i++) { PrintF(" "); PrintRSz(rAspOrb[i], -6); }
+  for (i = 19; i <= 24; i++) { PrintF(" "); PrintRSz(rAspOrb[ASPT(i)], -6); }
   PrintF("  ; Very obscure aspects\n\n");
 
   // An aspect whose angle has been changed from the standard one.
@@ -1706,11 +1706,11 @@ flag FOutputSettings()
   PrintF("; CHANGED ASPECT ANGLES:\n\n");
   fAny = fFalse;
   for (i = 1; i <= cAspect; i++) {
-    if (rAspAngle[i] == rAspAngleDef[i])
+    if (rAspAngle[ASPT(i)] == rAspAngleDef[ASPT(i)])
       continue;
     fAny = fTrue;
     sprintf(sz, "-Aa %d ", i); PrintFSz();
-    PrintRSz(rAspAngle[i], -6);
+    PrintRSz(rAspAngle[ASPT(i)], -6);
     sprintf(sz, "  ; %s\n", szAspectName[i]); PrintFSz();
   }
   if (!fAny)
@@ -1776,11 +1776,14 @@ flag FOutputSettings()
     { sprintf(sz, " %.0f", rHouseInf[i]); PrintFSz(); }
   PrintF("  ; Houses\n\n-YjA 1 5   ");
 
-  for (i = 1; i <= 5; i++) { sprintf(sz, "%4.1f", rAspInf[i]); PrintFSz(); }
+  for (i = 1; i <= 5; i++)
+    { sprintf(sz, "%4.1f", rAspInf[ASPT(i)]); PrintFSz(); }
   PrintF("          ; Major aspects\n-YjA 6 11  ");
-  for (i = 6; i <= 11; i++) { sprintf(sz, "%4.1f", rAspInf[i]); PrintFSz(); }
+  for (i = 6; i <= 11; i++)
+    { sprintf(sz, "%4.1f", rAspInf[ASPT(i)]); PrintFSz(); }
   PrintF("      ; Minor aspects\n-YjA 12 18 ");
-  for (i = 12; i <= 18; i++) { sprintf(sz, "%4.1f", rAspInf[i]); PrintFSz(); }
+  for (i = 12; i <= 18; i++)
+    { sprintf(sz, "%4.1f", rAspInf[ASPT(i)]); PrintFSz(); }
   PrintF("  ; Obscure aspects\n\n");
 
   PrintF("; DEFAULT TRANSIT INFLUENCES:\n\n-YjT 0 10  ");
@@ -1873,13 +1876,13 @@ flag FOutputSettings()
   PrintF("; Fixed stars\n\n-YkA 1 5   ");
 
   for (i = 1; i <= 5; i++)
-    { sprintf(sz, " %s", SzColor2(kAspA[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(kAspA[ASPT(i)])); PrintFSz(); }
   PrintF("          ; Major aspect colors\n-YkA 6 11  ");
   for (i = 6; i <= 11; i++)
-    { sprintf(sz, " %s", SzColor2(kAspA[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(kAspA[ASPT(i)])); PrintFSz(); }
   PrintF("      ; Minor aspect colors\n-YkA 12 18 ");
   for (i = 12; i <= 18; i++)
-    { sprintf(sz, " %s", SzColor2(kAspA[i])); PrintFSz(); }
+    { sprintf(sz, " %s", SzColor2(kAspA[ASPT(i)])); PrintFSz(); }
   PrintF("  ; Obscure aspect colors\n\n-YkC       ");
 
   for (i = eFir; i <= eWat; i++)
@@ -2390,7 +2393,7 @@ int NParseSz(CONST char *szEntry, int pm)
           return kObjA[i];
       for (i = 1; i <= cAspect; i++)
         if (FMatchSz(sz, szAspectAbbrev[i]))
-          return kAspA[i];
+          return kAspA[ASPT(i)];
       if (ch0 == '#' && CchSz(sz) == 7) {
         for (n = 1; sz[n]; n += 2)
           i = (i << 8) | (NHex(ChUncap(sz[n])) << 4) | NHex(ChUncap(sz[n+1]));

@@ -474,13 +474,13 @@ void ChartInDaySearch(flag fProg)
             // of the aspect from the angular difference, so can then treat it
             // like a conjunction.
 
-            if (MinDistance(e1, Mod(d1-rAspAngle[k])) <
-                MinDistance(e2, Mod(d2+rAspAngle[k]))) {
-              e1 = Mod(e1+rAspAngle[k]);
-              e2 = Mod(e2+rAspAngle[k]);
+            if (MinDistance(e1, Mod(d1-rAspAngle[ASPT(k)])) <
+                MinDistance(e2, Mod(d2+rAspAngle[ASPT(k)]))) {
+              e1 = Mod(e1+rAspAngle[ASPT(k)]);
+              e2 = Mod(e2+rAspAngle[ASPT(k)]);
             } else {
-              e1 = Mod(e1-rAspAngle[k]);
-              e2 = Mod(e2-rAspAngle[k]);
+              e1 = Mod(e1-rAspAngle[ASPT(k)]);
+              e2 = Mod(e2-rAspAngle[ASPT(k)]);
             }
 
             // Check to see if the aspect actually occurs during this segment,
@@ -846,13 +846,13 @@ void ChartTransitSearch(flag fProg)
 
           for (k = 1; k <= nAsp; k++) if (FAcceptAspect(i, k, j)) {
             d = cpN.obj[i]; e1 = cpA.obj[j]; e2 = cpB.obj[j];
-            if (MinDistance(e1, Mod(d-rAspAngle[k])) <
-                MinDistance(e2, Mod(d+rAspAngle[k]))) {
-              e1 = Mod(e1+rAspAngle[k]);
-              e2 = Mod(e2+rAspAngle[k]);
+            if (MinDistance(e1, Mod(d-rAspAngle[ASPT(k)])) <
+                MinDistance(e2, Mod(d+rAspAngle[ASPT(k)]))) {
+              e1 = Mod(e1+rAspAngle[ASPT(k)]);
+              e2 = Mod(e2+rAspAngle[ASPT(k)]);
             } else {
-              e1 = Mod(e1-rAspAngle[k]);
-              e2 = Mod(e2-rAspAngle[k]);
+              e1 = Mod(e1-rAspAngle[ASPT(k)]);
+              e2 = Mod(e2-rAspAngle[ASPT(k)]);
             }
 
             // Check to see if the present aspect actually occurs during the
@@ -875,9 +875,10 @@ void ChartTransitSearch(flag fProg)
               pti->dest = i;
               pti->time = RAbs(f1)/(RAbs(f1)+RAbs(f2))*divsiz +
                 (real)(div-1)*divsiz;
-              pti->posT = Mod(MinDistance(cpA.obj[j], Mod(d-rAspAngle[k])) <
-                              MinDistance(cpB.obj[j], Mod(d+rAspAngle[k])) ?
-                d-rAspAngle[k] : d+rAspAngle[k]);
+              pti->posT = Mod(
+                MinDistance(cpA.obj[j], Mod(d-rAspAngle[ASPT(k)])) <
+                MinDistance(cpB.obj[j], Mod(d+rAspAngle[ASPT(k)])) ?
+                d-rAspAngle[ASPT(k)] : d+rAspAngle[ASPT(k)]);
               pti->posN = cpN.obj[i];
               pti->retT = (cpA.dir[j] + cpB.dir[j]) / 2.0;
               occurcount++, pti++;
@@ -1309,7 +1310,7 @@ void ChartTransitGraph(flag fTrans, flag fProg)
         }
         AnsiColor(kObjA[x]);
         sprintf(sz, "%3.3s ", szObjDisp[x]); PrintSz(sz);
-        AnsiColor(kAspA[asp]);
+        AnsiColor(kAspA[ASPT(asp)]);
         sprintf(sz, "%s ", SzAspectAbbrev(asp)); PrintSz(sz);
         if (fTrans) {
           AnsiColor(kSignA(SFromZ(cp1.obj[y])));
@@ -1317,7 +1318,7 @@ void ChartTransitGraph(flag fTrans, flag fProg)
         }
         AnsiColor(kObjA[y]);
         sprintf(sz, "%3.3s ", szObjDisp[y]); PrintSz(sz);
-        AnsiColor(kAspA[asp]);
+        AnsiColor(kAspA[ASPT(asp)]);
         nMax = -1;
         for (iw = 0; iw < cSlice; iw++) {
           n = pw[iw];
@@ -1357,7 +1358,7 @@ void ChartTransitGraph(flag fTrans, flag fProg)
           }
           PrintCh(ch);
           if (fMark) {
-            AnsiColor(kAspA[asp]);
+            AnsiColor(kAspA[ASPT(asp)]);
             fMark = fFalse;
           }
         }

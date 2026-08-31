@@ -559,7 +559,7 @@ void XChartGrid(int x0, int y0)
         // If this is an aspect cell, draw glyph of aspect in effect.
         if (gs.fAlt ? x > y : x < y) {
           if (k) {
-            DrawColor(c = kAspB[k]);
+            DrawColor(c = kAspB[ASPT(k)]);
             DrawAspect2(k, x0 + gi.xTurtle, y0 + gi.yTurtle, ig, jg);
           }
 
@@ -1090,7 +1090,7 @@ void XChartHorizon()
     for (j = is.nObj; j >= 1; j--)
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j)) {
-          DrawColor(kAspB[grid->n[i][j]]);
+          DrawColor(kAspB[ASPT(grid->n[i][j])]);
           DrawDash(rgod[i].x, rgod[i].y, rgod[j].x, rgod[j].y,
             NDashAspect(i, j, grid->n[i][j], grid->v[i][j]));
           if (gs.fLabelAsp)
@@ -1491,7 +1491,7 @@ void XChartHorizonSky()
     for (j = is.nObj; j >= 1; j--)
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j)) {
-          DrawColor(kAspB[grid->n[i][j]]);
+          DrawColor(kAspB[ASPT(grid->n[i][j])]);
           DrawDash(rgod[i].x, rgod[i].y, rgod[j].x, rgod[j].y,
             NDashAspect(i, j, grid->n[i][j], grid->v[i][j]));
           if (gs.fLabelAsp)
@@ -2842,7 +2842,7 @@ void XChartOrbit()
     for (j = oNorm; j >= 1; j--)
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j)) {
-          DrawColor(kAspB[grid->n[i][j]]);
+          DrawColor(kAspB[ASPT(grid->n[i][j])]);
           DrawClip(rgod[i].x, rgod[i].y, rgod[j].x, rgod[j].y, x1, y1, x2, y2,
             NDashAspect(i, j, grid->n[i][j], grid->v[i][j]));
           if (gs.fLabelAsp) {
@@ -3114,11 +3114,12 @@ void XChartMidpoint()
           py = -SphDistance(rBase, 0.0, planet[j], planetalt[j]);
         }
         temp = RAbs(px + py) / 2.0;
-        if (temp < rAspOrb[aCon]) {
+        if (temp < rAspOrb[ASPT(aCon)]) {
           if ((gs.nDashMax >= 0) != gs.fAlt)
             nDash = (int)temp;
           else
-            nDash = (int)(temp * 2.0 / rAspOrb[aCon] * NAbs(gs.nDashMax));
+            nDash = (int)(temp * 2.0 / rAspOrb[ASPT(aCon)] *
+              NAbs(gs.nDashMax));
           DrawDash(cx+POINT1(unitx, 0.63, PX(270 - planet[i]*rxi)),
             cy+POINT1(unity, 0.63, PY(270.0 - planet[i]*rxi)),
             cx+POINT1(unitx, 0.63, PX(270.0 - planet[j]*rxi)),
@@ -3456,7 +3457,7 @@ flag DrawCalendarAspect(CONST InDayInfo *pid, int i, int iMax, int nVoid,
   if (fDoThin)
     DrawThick(fFalse);
   if (asp >= aCon) {
-    DrawColor(kAspB[asp]);
+    DrawColor(kAspB[ASPT(asp)]);
     DrawAspect(asp + (nEclipse > etNone)*cAspect2, x - z*2, y);
   } else if (asp == aSig || asp == aHou) {
     DrawColor(gi.kiOn);
@@ -3927,7 +3928,7 @@ void XChartMoons()
       if (ySub <= 0) {
         // Top charts: Show Conjunctions between planet disks in longitude.
         cp = &rgcp[xSub];
-        DrawColor(kAspB[aCon]);
+        DrawColor(kAspB[ASPT(aCon)]);
         for (j = count-1; j >= 1; j--) {
           y = rgod[j].obj;
           for (i = j-1; i >= 0; i--) {
@@ -3944,10 +3945,11 @@ void XChartMoons()
             rT = !us.fAspect3D ? MinDistance(cp->obj[x], cp->obj[y]) :
               SphDistance(cp->obj[x], cp->alt[x], cp->obj[y], cp->alt[y]);
             ang = ang1 + ang2;
-            if (rT > ang*(rAspOrb[aCon] + 1.0))
+            if (rT > ang*(rAspOrb[ASPT(aCon)] + 1.0))
               continue;
             DrawDash(rgod[i].x, rgod[i].y, rgod[j].x, rgod[j].y,
-              (int)(rT / (ang*(rAspOrb[aCon] + 1.0)) * NAbs(gs.nDashMax)));
+              (int)(rT / (ang*(rAspOrb[ASPT(aCon)] + 1.0)) *
+                NAbs(gs.nDashMax)));
             if (gs.fLabelAsp)
               DrawAspect(aCon,
                 (rgod[i].x + rgod[j].x) >> 1, (rgod[i].y + rgod[j].y) >> 1);
@@ -3962,7 +3964,7 @@ void XChartMoons()
           for (i = j-1; i >= 0; i--) {
             x = rgod[i].obj;
             if (grid->n[x][y] && ObjOrbit(x) == ObjOrbit(y)) {
-              DrawColor(kAspB[grid->n[x][y]]);
+              DrawColor(kAspB[ASPT(grid->n[x][y])]);
               DrawDash(rgod[i].x, rgod[i].y, rgod[j].x, rgod[j].y,
                 NDashAspect(x, y, grid->n[x][y], grid->v[x][y]));
               if (gs.fLabelAsp)
@@ -4682,7 +4684,7 @@ void XChartSphere()
         if (grid->n[i][j] && FProper(i) && FProper(j) &&
           (fAny || (rgod[i].f && rgod[j].f))) {
           DrawColor(rgod[i].kv == ~0 && rgod[j].kv == ~0 ?
-            kAspB[grid->n[i][j]] : gi.kiGray);
+            kAspB[ASPT(grid->n[i][j])] : gi.kiGray);
           DrawDash(rgod[i].x, rgod[i].y, rgod[j].x, rgod[j].y,
             NDashAspect(i, j, grid->n[i][j], grid->v[i][j]) +
             ((rgod[i].kv != ~0) + (rgod[j].kv != ~0))*2);

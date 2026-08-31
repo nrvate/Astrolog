@@ -3956,6 +3956,80 @@ are the more useful half to read before starting something new.
     defaults_audit.py needed no entry -- E2 adds no new checked type,
     only behaviour to the three that exist.
 
+128. **T2 increment E3: the aspect family enforces its index domain.**
+    `ASPT` and four checked table types (`TBLASP` int, `TBLASPR` real,
+    `TBLASPB` byte, `TBLASPK` KI) put the aspect tables behind the same
+    door E1 built for the rulership family: `rAspOrb[ASPT(i)]` compiles,
+    while `rAspOrb[SIGT(i)]`, `rules[ASPT(i)]`, `rAspOrb[i]` and even
+    `ASPT a = i;` are all compile errors -- proven five ways with a
+    scratch TU. Eight tables converted: rAspAngle, rAspAngleDef,
+    rAspOrb, rAspInf, ignorea, ignoreaMem, kAspA and kAspB.
+
+    Measured: 24 files, +207/-153, 139 tagged subscripts across 19
+    files, each placed after reading its loop. Four boundaries took
+    `.rgn` -- three switch-registry rows (-YAo, -YAa, -YjA, -YkA, the
+    `&rAspAngle[0]` and bare-`kAspA` spellings both) and
+    `InitRestrictions()`'s `CopyRgb` pair.
+
+    Four things worth keeping:
+
+    - **The two accessor macros carry the tag, and that is a decision,
+      not a shortcut.** `FIgnoreA(a)` and `AdjustAspectCount()` are
+      aspect predicates by contract, so tagging inside them keeps the
+      arithmetic idiom at the call sites. The price is that rule 2 has
+      to be paid at the callers instead: all eight `FIgnoreA()` sites
+      were read, and all eight are aspects. `FValidAspect()` turns out
+      to be `FBetween(asp, 0, cAspect)` -- exactly E2's assert range --
+      so the AstroExpression entry points are checked twice over.
+    - **The ledger's cAspect2 trap is real and sits two lines apart
+      from its own counterexample.** In `PrintGridCell()` and
+      `ChartAspect()` the *same variable* indexes an aspect table and
+      then, after a `+= cAspect` or `+ ...*cAspect2`, the larger
+      display tables. Tagging by pattern would have been wrong in one
+      direction or the other at four sites; reading the two lines
+      settles it every time. `szAspectDisp[]` and kin stay plain
+      arrays, per the ledger's verdict.
+    - **kAspB was added to E3's scope.** The ledger listed seven
+      tables; kAspB is kAspA's display-adjusted twin, same domain, same
+      dimension, and 15 more subscripts -- 8 of them
+      `kAspB[grid->n[i][j]]`, which is item 38's exact shape. Leaving
+      the twin untyped beside the typed original is the arrangement
+      that confuses the next reader, so it went in the same commit.
+    - **The differential had to be rebuilt before it proved
+      anything.** Object code is *not* identical here (splitting the
+      shared declarator lines moves symbols), so E2's shortcut does not
+      apply and the real matrix was needed: switch matrix 14,378 lines
+      and influence matrix 3,426 lines, both byte-identical. Those
+      cover the switch surface, not rendering, so an aspect-surface
+      chart differential was added on top -- 45 text invocations plus 7
+      graphics renders, 23,716 lines and 36MB, byte-identical by `cmp`.
+      Its **first version was worthless**: a malformed `-qb` made every
+      one of the 45 runs print the same parse error, and it "passed"
+      identically on both binaries. Checking that the harness is
+      sensitive to what it claims to test -- widening an orb, changing
+      an aspect colour, changing the aspect count each move the capture
+      -- is what caught that, and `diff` on chart output is no good
+      either: the escape sequences make it report "binary files
+      differ" and print no `<`/`>` lines, so a naive line count reads
+      as zero differences. Use `cmp`.
+
+    Nets: suite 3195/0 and ASAN clean, both with E2's range asserts
+    live on the new types, so no tag was refuted at run time; console,
+    Qt release, Qt test and Windows builds clean; six audits clean;
+    three generated tables in sync. defaults_audit.py learned all four
+    new types and was re-falsified against rAspOrb -- both the count
+    and value legs trip -- and its type alternation now sorts
+    longest-first so `TBLASP` cannot shadow `TBLASPR`.
+
+    One loose end, left open deliberately: a single ASan run reported a
+    `global-buffer-overflow` and six further runs of the same binary
+    would not repeat it, so no trace was captured. It is not on a
+    checked table (E2's asserts are live under ASan and would have
+    named it), and the fault's shape points at an intercepted libc
+    call over a global rather than a subscript. Recorded in
+    QT_TESTING.md's ASan section with what is known; not worth looping
+    the suite for.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

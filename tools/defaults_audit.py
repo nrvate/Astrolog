@@ -106,6 +106,10 @@ def strip_comments(text):
 CHECKED_TABLE_DIMS = {
     'TBLSIG': 'cSign+1',
     'TBLOBJ': 'oNorm+1',
+    'TBLASP': 'cAspect+1',
+    'TBLASPR': 'cAspect+1',
+    'TBLASPB': 'cAspect+1',
+    'TBLASPK': 'cAspect+1',
 }
 
 
@@ -113,8 +117,9 @@ def parse_array(source, syms, name):
     """Return (values, declared_size) for a flat numeric initializer."""
     m = re.search(r'\b' + re.escape(name) + r'\[([^\]]*)\]\s*=\s*\{', source)
     if not m:
-        m = re.search(r'\b(' + '|'.join(CHECKED_TABLE_DIMS) + r')\s+' +
-                      re.escape(name) + r'\s*=\s*\{', source)
+        m = re.search(r'\b(' + '|'.join(
+                          sorted(CHECKED_TABLE_DIMS, key=len, reverse=True)) +
+                      r')\s+' + re.escape(name) + r'\s*=\s*\{', source)
         if not m:
             raise KeyError(name)
         dim = CHECKED_TABLE_DIMS[m.group(1)]

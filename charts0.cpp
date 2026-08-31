@@ -1032,11 +1032,11 @@ void PrintAspects(void)
   PrintSz("Angle     Orb          Description of glyph\n\n");
   for (i = 1; i <= iMax; i++) {
     i2 = !us.fParallel ? i : i + cAspect;
-    AnsiColor(kAspA[i]);
+    AnsiColor(kAspA[ASPT(i)]);
 
     // Print aspect angle.
     sprintf(sz, "%2d %-15s(%s) %6.2f",
-      i, szAspectDisp[i2], szAspectAbbrevDisp[i2], rAspAngle[i]);
+      i, szAspectDisp[i2], szAspectAbbrevDisp[i2], rAspAngle[ASPT(i)]);
     for (pch = sz; *pch; pch++)
       ;
     while (*(--pch) == '0')
@@ -1047,7 +1047,7 @@ void PrintAspects(void)
 
     // Print aspect orb.
     PrintSz(" +/- ");
-    FormatR(sz, rAspOrb[i], -1); PrintSz(sz);
+    FormatR(sz, rAspOrb[ASPT(i)], -1); PrintSz(sz);
     PrintTab(' ', 3-CchSz(sz));
     sprintf(sz, " degrees  %s\n", szAspectGlyphDisp[i2]); PrintSz(sz);
   }
@@ -1062,16 +1062,17 @@ void PrintAspects(void)
     i2 = -1;
     // Find the next lowest angle aspect in the list of aspects.
     for (i = 1; i <= cAspect; i++)
-      if (!FIgnoreA(i) && rAspAngle[i] > rAngMin && rAspAngle[i] < rAng) {
-        rAng = rAspAngle[i];
+      if (!FIgnoreA(i) && rAspAngle[ASPT(i)] > rAngMin &&
+        rAspAngle[ASPT(i)] < rAng) {
+        rAng = rAspAngle[ASPT(i)];
         i2 = i;
       }
     // Print degree range covered by no aspect, before current aspect.
-    if ((iOld > 0 && rAspAngle[iOld]+rAspOrb[iOld] < rDegHalf) ||
-      (i2 > 0 && rAspAngle[i2]-rAspOrb[i2] > 0.0)) {
+    if ((iOld > 0 && rAspAngle[ASPT(iOld)]+rAspOrb[ASPT(iOld)] < rDegHalf) ||
+      (i2 > 0 && rAspAngle[ASPT(i2)]-rAspOrb[ASPT(i2)] > 0.0)) {
       AnsiColor(kDkGrayA);
-      r2 = (i2 < 0 ? rDegHalf : rAspAngle[i2]-rAspOrb[i2]);
-      r1 = (iOld < 0 ? 0.0 : rAspAngle[iOld]+rAspOrb[iOld]);
+      r2 = (i2 < 0 ? rDegHalf : rAspAngle[ASPT(i2)]-rAspOrb[ASPT(i2)]);
+      r1 = (iOld < 0 ? 0.0 : rAspAngle[ASPT(iOld)]+rAspOrb[ASPT(iOld)]);
       sprintf(sz, "     No aspect      covers %6.2f to %6.2f - span %6.2f",
         r1, r2, r2-r1);
       if (sz[31] == '0' && sz[32] == '0')
@@ -1091,10 +1092,11 @@ void PrintAspects(void)
     if (i2 < 0)
       break;
     // Print degree range covered by current aspect.
-    AnsiColor(kAspA[i2]);
+    AnsiColor(kAspA[ASPT(i2)]);
     sprintf(sz, "%s: %-14s covers %6.2f to %6.2f - span %6.2f\n",
-      szAspectAbbrevDisp[i2], szAspectDisp[i2], rAspAngle[i2]-rAspOrb[i2],
-      rAspAngle[i2]+rAspOrb[i2], rAspOrb[i2]*2.0);
+      szAspectAbbrevDisp[i2], szAspectDisp[i2],
+      rAspAngle[ASPT(i2)]-rAspOrb[ASPT(i2)],
+      rAspAngle[ASPT(i2)]+rAspOrb[ASPT(i2)], rAspOrb[ASPT(i2)]*2.0);
     if (sz[31] == '0' && sz[32] == '0')
       sz[30] = sz[31] = sz[32] = ' ';
     if (sz[41] == '0' && sz[42] == '0')
@@ -1102,9 +1104,9 @@ void PrintAspects(void)
     if (sz[55] == '0' && sz[56] == '0')
       sz[54] = sz[55] = sz[56] = ' ';
     PrintSz(sz);
-    rSum += Min(rAspAngle[i2]+rAspOrb[i2], rDegHalf) -
-      Max(rAspAngle[i2]-rAspOrb[i2], 0);
-    rAngMin = rAspAngle[i2];
+    rSum += Min(rAspAngle[ASPT(i2)]+rAspOrb[ASPT(i2)], rDegHalf) -
+      Max(rAspAngle[ASPT(i2)]-rAspOrb[ASPT(i2)], 0);
+    rAngMin = rAspAngle[ASPT(i2)];
     iOld = i2;
   }
   if (rSum == 0.0)

@@ -56,17 +56,24 @@ commit proved itself with byte-identical checksums of all 31 console
 objects. Don't label a parameter that is *not* a domain index:
 `ComputeHouses(int)` takes a house *system*, not a house.
 
-**The enforced layer** (T2 step 3 phase 1, work log item 125): the
-rulership, exaltation and ray tables are checked tables — their
-subscript takes `SIGT(i)` or `OBJT(i)` (explicit-constructor tags,
-astrolog.h) and anything else is a compile error. The tag is a claim:
+**The enforced layer** (T2 step 3, work log items 125 and 128): the
+rulership, exaltation and ray tables, and the eight aspect tables, are
+checked tables — their subscript takes `SIGT(i)`, `OBJT(i)` or
+`ASPT(i)` (explicit-constructor tags, astrolog.h) and anything else is
+a compile error. The tag is a claim:
 write it after reading the loop, not mechanically — three sites
 legitimately index sign tables by house (the natural-sign
 identification) and say so in a comment. Code that selects among
 same-domain tables holds a `TBLSIG *`/`TBLOBJ *` (see RULERSYS,
 RgRules()); the registry's two `-Y7` rows reach the raw storage as
 `.rgn`, the one deliberately unchecked boundary. defaults_audit.py
-knows the checked declaration shape (`TBLOBJ name = {`). Under the
+knows the checked declaration shape (`TBLOBJ name = {`). Two aspect
+traps, both live: `FIgnoreA()` and `AdjustAspectCount()` apply `ASPT`
+inside the macro, so a caller passing a non-aspect is *not* caught —
+read the call site; and the `cAspect2`-dimensioned display tables
+(`szAspectName` and kin) are a larger domain that stays plain, which
+matters because the same variable often indexes both a few lines
+apart. Under the
 test build (`QTTEST`, which the ASAN build also defines) the subscript
 additionally range checks with `AssertIndex` — so a tag carrying an
 in-domain but out-of-range value aborts rather than misreading, and

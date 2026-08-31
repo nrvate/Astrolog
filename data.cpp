@@ -219,14 +219,15 @@ byte ignore2[objMax] = {1,
 
 // Restriction status of each aspect, as specified with -RA switch.
 
-byte ignorea[cAspect+1] = {0,
+TBLASPB ignorea = {0,
   0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 byte ignorez[arMax] = {0, 0, 0, 0, 1, 1}; // Restrictions for -Zd events.
 byte ignore7[rrMax] = {0, 1, 1, 0, 1};    // Restrictions for rulership types.
 
-byte ignoreMem[objMax], ignore2Mem[objMax], ignoreaMem[cAspect+1],
+byte ignoreMem[objMax], ignore2Mem[objMax],
   ignorezMem[arMax], ignore7Mem[rrMax], ignorefMem[6];
+TBLASPB ignoreaMem;
 
 // Gauquelin sector plus zones, as specified with -Yl switch.
 
@@ -433,7 +434,7 @@ CONST char rgchEclipse[etMax+1] = "9ptPAT";
 CONST char *szAppSep[6] = {"neg", "pos", "app", "sep", "wax", "wan"};
 CONST char rgchAppSep[6+1] = "-+asxn";
 
-real rAspAngle[cAspect+1] = {0,
+TBLASPR rAspAngle = {0,
   0.0, 180.0, 90.0, 120.0, 60.0, 150.0, 30.0, 45.0, 135.0, 72.0, 144.0,
   36.0, rDegMax/7.0, 40.0, 80.0, rDegMax*2.0/7.0, rDegMax*3.0/7.0, 160.0,
   108.0, rDegMax/11.0, rDegMax*2.0/11.0, rDegMax*3.0/11.0, rDegMax*4.0/11.0,
@@ -442,13 +443,13 @@ real rAspAngle[cAspect+1] = {0,
 // The standard angles again, so FOutputSettings() can tell which ones -Aa
 // has changed and write only those, the way the object customization
 // section compares against rgObjSwissDef[].
-CONST real rAspAngleDef[cAspect+1] = {0,
+CONST TBLASPR rAspAngleDef = {0,
   0.0, 180.0, 90.0, 120.0, 60.0, 150.0, 30.0, 45.0, 135.0, 72.0, 144.0,
   36.0, rDegMax/7.0, 40.0, 80.0, rDegMax*2.0/7.0, rDegMax*3.0/7.0, 160.0,
   108.0, rDegMax/11.0, rDegMax*2.0/11.0, rDegMax*3.0/11.0, rDegMax*4.0/11.0,
   rDegMax*5.0/11.0};
 
-real rAspOrb[cAspect+1] = {0,
+TBLASPR rAspOrb = {0,
   7.0, 7.0, 7.0, 7.0, 6.0, 3.0, 3.0, 3.0, 3.0, 2.0, 2.0,
   1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
   0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
@@ -561,7 +562,7 @@ int kMainA[9] = {kBlack, kWhite, kLtGray, kDkGray,
 int kRainbowA[cRainbow+1] = {kWhite,
   kRed, kOrange, kYellow, kGreen, kCyan, kBlue, kPurple};
 int kElemA[cElem] = {kRed, kYellow, kGreen, kBlue};
-int kAspA[cAspect+1] = {kWhite,
+TBLASP kAspA = {kWhite,
   kYellow, kBlue, kRed, kGreen, kCyan,
   kMagenta, kMagenta, kOrange, kOrange, kDkCyan, kDkCyan,
   kDkCyan, kMaroon, kPurple, kPurple, kMaroon, kMaroon, kPurple,
@@ -694,7 +695,7 @@ real rHouseInf[cSign+6]  = {0,
   15, 5, 5, 5, 5};
 
 // The inherent strength of each aspect
-real rAspInf[cAspect+1] = {0.0,
+TBLASPR rAspInf = {0.0,
   1.0, 0.8, 0.8, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2,
   0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
   0.05, 0.05, 0.05, 0.05, 0.05, 0.05};

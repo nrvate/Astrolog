@@ -1622,6 +1622,41 @@ typedef byte * pbyte;
 typedef int KI;
 typedef unsigned long KV;
 
+/*
+** The enforced layer again, for the aspect domain (REFACTORING.md T2
+** step 3, increment E3) -- same shape as TBLSIG/TBLOBJ above, and
+** here rather than beside them only because real and byte are not
+** typedef'd until this section. Slot 0 is padding; real aspects run
+** aCon..cAspect. The cAspect2/cAspect3 display tables are a larger
+** domain and stay plain arrays on purpose, by the ledger's verdict.
+*/
+
+struct ASPT { int n; explicit ASPT(int n_) : n(n_) {} };
+struct TBLASP {
+  int rgn[cAspect+1];
+  int &operator[](ASPT i) { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+  const int &operator[](ASPT i) const
+    { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+};
+struct TBLASPR {
+  real rgn[cAspect+1];
+  real &operator[](ASPT i) { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+  const real &operator[](ASPT i) const
+    { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+};
+struct TBLASPB {
+  byte rgn[cAspect+1];
+  byte &operator[](ASPT i) { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+  const byte &operator[](ASPT i) const
+    { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+};
+struct TBLASPK {
+  KI rgn[cAspect+1];
+  KI &operator[](ASPT i) { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+  const KI &operator[](ASPT i) const
+    { AssertIndex(i.n, cAspect); return rgn[i.n]; }
+};
+
 // Where a switch line came from. Passed down by the file parsers so
 // payload switches (-YY and family) read from the file being parsed
 // instead of through a global channel; NULL when parsing the command

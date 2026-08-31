@@ -1383,11 +1383,11 @@ flag API DlgAspect(HWND hdlg, uint message, WORD wParam, LONG lParam)
   switch (message) {
   case WM_INITDIALOG:
     for (i = 1; i <= cAspect; i++) {
-      SetCheck(dxa01 - 1 + i, ignorea[i]);
-      SetEditR(hdlg, deo01 - 1 + i, rAspOrb[i], -6);
-      SetEditR(hdlg, dea01 - 1 + i, rAspAngle[i], -6);
-      SetEditR(hdlg, dei01 - 1 + i, rAspInf[i], 2);
-      SetEditColor(hdlg, dck01 - 1 + i, kAspA[i], 0);
+      SetCheck(dxa01 - 1 + i, ignorea[ASPT(i)]);
+      SetEditR(hdlg, deo01 - 1 + i, rAspOrb[ASPT(i)], -6);
+      SetEditR(hdlg, dea01 - 1 + i, rAspAngle[ASPT(i)], -6);
+      SetEditR(hdlg, dei01 - 1 + i, rAspInf[ASPT(i)], 2);
+      SetEditColor(hdlg, dck01 - 1 + i, kAspA[ASPT(i)], 0);
     }
     return fTrue;
 
@@ -1412,28 +1412,28 @@ flag API DlgAspect(HWND hdlg, uint message, WORD wParam, LONG lParam)
         for (i = 1; i <= cAspect; i++) {
           r = GetEditR(hdlg, deo01 - 1 + i);
           if (j)
-            rAspOrb[i] = r;
+            rAspOrb[ASPT(i)] = r;
           else
             EnsureR(r, r >= -rDegMax && r <= rDegMax, "orb");
           r = GetEditR(hdlg, dea01 - 1 + i);
           if (j)
-            rAspAngle[i] = r;
+            rAspAngle[ASPT(i)] = r;
           else
             EnsureR(r, r >= -rDegMax && r <= rDegMax, "angle");
           if (j) {
             r = GetEditR(hdlg, dei01 - 1 + i);
-            rAspInf[i] = r;
+            rAspInf[ASPT(i)] = r;
           }
           GetEdit(dck01 - 1 + i, sz);
           k = NParseSz(sz, pmColor);
           if (j)
-            kAspA[i] = k;
+            kAspA[ASPT(i)] = k;
           else
             EnsureN(k, FValidColorA(k), "color");
         }
       }
       for (i = 1; i <= cAspect; i++)
-        ignorea[i] = GetCheck(dxa01 - 1 + i);
+        ignorea[ASPT(i)] = GetCheck(dxa01 - 1 + i);
       AdjustAspectCount();
       wi.fRedraw = fTrue;
     }
@@ -2490,9 +2490,9 @@ flag API DlgDisplay(HWND hdlg, uint message, WORD wParam, LONG lParam)
       us.fSecondHide = GetCheck(dxDi_b2);
       us.nAsp = na;
       for (i = us.nAsp + 1; i <= na; i++)
-        ignorea[i] = fFalse;
+        ignorea[ASPT(i)] = fFalse;
       for (i = na + 1; i <= cAspect; i++)
-        ignorea[i] = fTrue;
+        ignorea[ASPT(i)] = fTrue;
       us.fSmartCusp = GetCheck(dxDi_YC);
       us.objRequire = nro;
       us.fParallel2 = GetCheck(dxDi_AP);

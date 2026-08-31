@@ -131,7 +131,7 @@ extern void FinalizeProgram P((flag));
 #define planetdir2(o) \
   (us.fParallel ? cp2.diralt[o] : (us.fDistance ? cp2.dirlen[o] : cp2.dir[o]))
 
-#define FIgnoreA(a) (ignorea[a] || rAspOrb[a] < 0.0)
+#define FIgnoreA(a) (ignorea[ASPT(a)] || rAspOrb[ASPT(a)] < 0.0)
 #define DEFAULT_LOC DMS(122, 19, 55), DMS(47, 36, 22)
 #define FProperGraph(o) !(!us.fGraphAll && (FCusp(o) || \
   (us.fInDayMonth && ((o) == oMoo || (us.fInDayYear && (o) <= oMar)))))
@@ -159,7 +159,8 @@ extern flag rgfProg[cRing+1];
 extern real force[objMax];
 extern OBJSET rgobjset[oNorm1+1];
 extern real rgrBonusInf[6];
-extern real rHouseInf[cSign+6], rAspInf[cAspect+1];
+extern real rHouseInf[cSign+6];
+extern TBLASPR rAspInf;
 
 // force[obj] packs three states into one real, and these helpers are the
 // only place that knows how (fun_F in express.cpp excepted: it hands the
@@ -182,16 +183,17 @@ extern GridInfo *grid;
 extern int rgobjList[objMax], rgobjList2[objMax], starname[cStar+1],
   kObjA[objMax];
 
-extern byte ignore[objMax], ignore2[objMax], ignorea[cAspect+1],
+extern byte ignore[objMax], ignore2[objMax],
   ignorez[arMax], ignore7[rrMax], pluszone[cSector+1];
-extern byte ignoreMem[objMax], ignore2Mem[objMax], ignoreaMem[cAspect+1],
+extern byte ignoreMem[objMax], ignore2Mem[objMax],
   ignorezMem[arMax], ignore7Mem[rrMax], ignorefMem[6];
-extern CONST real rAspAngleDef[cAspect+1];
-extern real rAspAngle[cAspect+1], rAspOrb[cAspect+1];
+extern TBLASPB ignorea, ignoreaMem;
+extern CONST TBLASPR rAspAngleDef;
+extern TBLASPR rAspAngle, rAspOrb;
 extern TBLOBJ ruler1, ruler2, exalt;
 extern TBLSIG rules, rules2;
-extern int kMainA[9], kRainbowA[cRainbow+1], kElemA[cElem],
-  kAspA[cAspect+1];
+extern int kMainA[9], kRainbowA[cRainbow+1], kElemA[cElem];
+extern TBLASP kAspA;
 
 #define kBlackA   kMainA[0]
 #define kWhiteA   kMainA[1]
@@ -341,7 +343,7 @@ extern int AddDay P((int, int, int, int));
 extern void AddTime P((CI *, int, int));
 extern real GetOffsetCI P((CONST CI *));
 extern real AdjustTimeZone P((CI *, real, real));
-extern real GetOrb P((int, int, int));
+extern real GetOrb P((OBJ, OBJ, ASPECT));
 extern CONST char *SzAspect P((ASPECT));
 extern CONST char *SzAspectAbbrev P((ASPECT));
 extern void RedoRestrictions P((void));
@@ -472,7 +474,7 @@ extern flag GetJPLHorizons P((int,
   ignore[is.nObj] && ignore2[is.nObj] && FForceNone(force[is.nObj]) && \
   !FObjMidSource(is.nObj); is.nObj--);
 #define AdjustAspectCount() for (us.nAsp = cAspect; us.nAsp > 0 && \
-  ignorea[us.nAsp]; us.nAsp--);
+  ignorea[ASPT(us.nAsp)]; us.nAsp--);
 #define RgRules() (ignore7[rrStd] && ignore7[rrEso] && !ignore7[rrHie] ? \
   &rgSignHie1 : (ignore7[rrStd] && !ignore7[rrEso] ? &rgSignEso1 : &rules))
 
@@ -787,7 +789,8 @@ extern char *szWheelX[cRing+1];
 
 extern CONST KV rgbbmpDef[cColor2], rgbbmpDef2[cColor2];
 extern KV rgbbmp[cColor2], rgbbmpRay[cRay+2];
-extern KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem], kAspB[cAspect+1],
+extern TBLASPK kAspB;
+extern KI kMainB[9], kRainbowB[cRainbow+1], kElemB[cElem],
   kObjB[objMax], kRayB[cRay+2];
 extern CONST char *rgszFontName[cFont], rgszFontAllow[6][cFont+1];
 extern CONST real rgrObjRing[oNep-oJup+3][2];

@@ -616,7 +616,7 @@ void PrintAspect(int obj1, real pos1, real ret1, int asp,
   }
 
   // Print name of aspect or other event.
-  AnsiColor(asp > 0 ? kAspA[asp] : kWhiteA);
+  AnsiColor(asp > 0 ? kAspA[ASPT(asp)] : kWhiteA);
   if (asp == aSig || asp == aHou)
     sprintf(sz, ret1 >= 0.0 ? "-->" : "<--");  // Print a sign change.
   else if (asp == aDir)
@@ -737,7 +737,7 @@ void ChartInDayInfluence(void)
       source[occurcount] = i; aspect[occurcount] = k; dest[occurcount] = j;
       rT = grid->v[i][j];
       power[occurcount] = (RTransitInf(i)/4.0) * (RTransitInf(j)/4.0) *
-        rAspInf[k]*(1.0-(real)RAbs(rT)/GetOrb(i, j, k));
+        rAspInf[ASPT(k)]*(1.0-(real)RAbs(rT)/GetOrb(i, j, k));
       rPowSum += power[occurcount];
       ca[k]++;
       co[i]++; co[j]++;
@@ -878,8 +878,8 @@ void ChartTransitInfluence(flag fProg)
         continue;
       source[occurcount] = i; aspect[occurcount] = k; dest[occurcount] = j;
       rT = grid->v[i][j];
-      power[occurcount] = RTransitInf(i) * (RObjInf(j)/4.0) * rAspInf[k] *
-        (1.0-(real)RAbs(rT)/GetOrb(i, j, k));
+      power[occurcount] = RTransitInf(i) * (RObjInf(j)/4.0) *
+        rAspInf[ASPT(k)] * (1.0-(real)RAbs(rT)/GetOrb(i, j, k));
       rPowSum += power[occurcount];
       ca[k]++;
       co[i]++; co[j]++;

@@ -935,11 +935,11 @@ real AdjustTimeZone(CI *pci, real zon, real dst)
 // the aspect itself, but some objects require narrow orbs, and some allow
 // wider orbs, so check for these cases.
 
-real GetOrb(int obj1, int obj2, int asp)
+real GetOrb(OBJ obj1, OBJ obj2, ASPECT asp)
 {
   real orb, r;
 
-  orb = rAspOrb[asp];
+  orb = rAspOrb[ASPT(asp)];
   r = rgobjset[Min(obj1, oNorm1)].orb;
   orb = Min(orb, r);
   r = rgobjset[Min(obj2, oNorm1)].orb;

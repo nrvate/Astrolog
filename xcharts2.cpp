@@ -801,7 +801,7 @@ void XChartGridRelation()
 
           if (gs.fAlt == us.fGridMidpoint) {
             if (k) {
-              DrawColor(c = kAspB[k]);
+              DrawColor(c = kAspB[ASPT(k)]);
               DrawAspect(k, gi.xTurtle, gi.yTurtle);
             }
           } else {
@@ -1435,7 +1435,7 @@ void XChartTransit(flag fTrans, flag fProg)
         DrawObject(x, xp, yp2);
         xp += yRow;
         n = asp;
-        DrawColor(kAspB[n]);
+        DrawColor(kAspB[ASPT(n)]);
         if (fEclipse && n <= aOpp) {
           pw2 = (*rgEph)[y][x][n];
           if (pw2 != NULL)
@@ -1481,7 +1481,7 @@ void XChartTransit(flag fTrans, flag fProg)
                 (iw > 1 && n == pw[iw-1] && n > pw[iw-2])) &&
               (iw >= cTot-1 || n > pw[iw+1] ||
                 (iw < cTot-2 && n == pw[iw+1] && n > pw[iw+2]))) ?
-              (dyp >= yRow-2 ? gi.kiOn : gi.kiLite) : kAspB[asp]);
+              (dyp >= yRow-2 ? gi.kiOn : gi.kiLite) : kAspB[ASPT(asp)]);
             DrawLineY(xo + iw, yp-1 - dyp, yp-1);
 
             // Draw eclipse strength overlaying aspect strength, if present.

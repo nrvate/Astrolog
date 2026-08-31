@@ -169,7 +169,7 @@ void InitColorsX()
   for (i = 0; i < cElem; i++)
     kElemB[i]    = gs.fColor ? kElemA[i]    : gi.kiOn;
   for (i = 0; i <= cAspect; i++)
-    kAspB[i]     = gs.fColor ? kAspA[i]     : gi.kiOn;
+    kAspB[ASPT(i)] = gs.fColor ? kAspA[ASPT(i)] : gi.kiOn;
   for (i = 0; i <= cObj; i++)
     kObjB[i]     = gs.fColor ? kObjA[i]     : gi.kiOn;
   for (i = 0; i <= cRay+1; i++)

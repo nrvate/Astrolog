@@ -1878,7 +1878,7 @@ int GetAspect(CONST real *planet1, CONST real *planet2,
   for (asp = 1; asp <= us.nAsp; asp++) {
     if (!FAcceptAspect(i, asp, j))
       continue;
-    rDiff = (!us.fAspect3D ? rAngle : rAngle3D) - rAspAngle[asp];
+    rDiff = (!us.fAspect3D ? rAngle : rAngle3D) - rAspAngle[ASPT(asp)];
     rOrb = GetOrb(i, j, asp);
 
     // If -ga switch in effect, then change the sign of the orb to correspond
@@ -1913,8 +1913,8 @@ int GetAspect(CONST real *planet1, CONST real *planet2,
 
     // If aspect within orb, return it.
     if (RAbs(rDiff) < rOrb) {
-      if (us.fAspectLat &&
-        !(RAbs((!us.fAspect3D ? rAngle3D : rAngle) - rAspAngle[asp]) < rOrb))
+      if (us.fAspectLat && !(RAbs((!us.fAspect3D ? rAngle3D : rAngle) -
+        rAspAngle[ASPT(asp)]) < rOrb))
         continue;
       if (prOrb != NULL)
         *prOrb = rDiff;
@@ -1963,7 +1963,7 @@ int GetParallel(CONST real *planet1, CONST real *planet2,
     else if (asp == aOpp)
       rDiff = alt1 + alt2;
     else {
-      retalt1a = rAspAngle[asp] / rDegHalf;
+      retalt1a = rAspAngle[ASPT(asp)] / rDegHalf;
       if (RAbs(alt1) > RAbs(alt2))
         alt2 /= retalt1a;
       else
@@ -2032,7 +2032,8 @@ int GetDistance(CONST PT3R *space1, CONST PT3R *space2,
   for (asp = 1; asp <= us.nAsp; asp++) {
     if (asp == aOpp || !FAcceptAspect(i, asp, j))
       continue;
-    rDiff = rPct - (rAspAngle[asp == aCon ? aOpp : asp] / rDegHalf * 100.0);
+    rDiff = rPct -
+      (rAspAngle[ASPT(asp == aCon ? aOpp : asp)] / rDegHalf * 100.0);
     rOrb = GetOrb(i, j, asp);
 
     // If -ga switch in effect, then change the sign of the orb to correspond

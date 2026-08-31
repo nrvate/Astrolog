@@ -1208,7 +1208,7 @@ void DrawAspectLine(int obj1, int obj2, int cx, int cy,
     x1, y1, x2, y2, nDash, nSav, col;
 
   // Get color of aspect. Modify it through AstroExpression if one defined.
-  col = kAspB[asp];
+  col = kAspB[ASPT(asp)];
 #ifdef EXPRESS
   if (!us.fExpOff && FSzSet(us.szExpColAsp)) {
     ExpSetN(iLetterW, obj1);

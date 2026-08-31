@@ -1227,17 +1227,17 @@ static void TestDialogButtonWiringQt()
   // toggle covers the first five aspects (wdialog.cpp:1380).
   byte rgbASav[cAspect+1];
   for (i = 1; i <= cAspect; i++)
-    rgbASav[i] = ignorea[i];
+    rgbASav[i] = ignorea[ASPT(i)];
   ClickInModalQt(ShowAspectDialogQt, "Toggle &Majors");
   cIn = cOut = 0;
   for (i = 1; i <= cAspect; i++)
-    if (ignorea[i] != rgbASav[i]) {
+    if (ignorea[ASPT(i)] != rgbASav[i]) {
       if (i <= 5) cIn++; else cOut++;
     }
   Check(cIn == 5, "Toggle Majors toggles the first five aspects (%d)", cIn);
   Check(cOut == 0, "and leaves the rest alone (%d)", cOut);
   for (i = 1; i <= cAspect; i++)
-    ignorea[i] = rgbASav[i];
+    ignorea[ASPT(i)] = rgbASav[i];
 
   // And the same collision on a pair of checkboxes rather than buttons:
   // dxSe_sr is "&Equatorial Latitudes" (nIdx 0) and "E&quatorial

@@ -493,7 +493,7 @@ void InitRestrictions(flag fStore)
   if (fStore) {
     CopyRgb(ignore,  ignoreMem,  sizeof(ignore));
     CopyRgb(ignore2, ignore2Mem, sizeof(ignore2));
-    CopyRgb(ignorea, ignoreaMem, sizeof(ignorea));
+    CopyRgb(ignorea.rgn, ignoreaMem.rgn, sizeof(ignorea.rgn));
     CopyRgb(ignorez, ignorezMem, sizeof(ignorez));
     CopyRgb(ignore7, ignore7Mem, sizeof(ignore7));
     ignorefMem[0] = us.fIgnoreSign;   ignorefMem[1] = us.fIgnoreDir;
@@ -502,7 +502,7 @@ void InitRestrictions(flag fStore)
   } else {
     CopyRgb(ignoreMem,  ignore,  sizeof(ignore));
     CopyRgb(ignore2Mem, ignore2, sizeof(ignore2));
-    CopyRgb(ignoreaMem, ignorea, sizeof(ignorea));
+    CopyRgb(ignoreaMem.rgn, ignorea.rgn, sizeof(ignorea.rgn));
     CopyRgb(ignorezMem, ignorez, sizeof(ignorez));
     CopyRgb(ignore7Mem, ignore7, sizeof(ignore7));
     us.fIgnoreSign   = ignorefMem[0]; us.fIgnoreDir    = ignorefMem[1];

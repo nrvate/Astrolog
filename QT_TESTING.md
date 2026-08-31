@@ -187,7 +187,8 @@ the noise, which is why it is off by default — reach for it the moment a
 run dies without saying where.
 
 **One kind of death names itself.** The checked tables (`TBLSIG`,
-`TBLOBJ`, `TBLSIGRAY`) range check their subscript under the test build
+`TBLOBJ`, `TBLSIGRAY`, and the aspect family's `TBLASP`, `TBLASPR`,
+`TBLASPB`, `TBLASPK`) range check their subscript under the test build
 and abort on a bad index, printing the struct and the astrolog.h line:
 
 ```
@@ -414,6 +415,21 @@ second instance of the esoteric-influence bug was confirmed rather than
 merely suspected from reading. Between them, ASan has found four real
 out-of-bounds bugs in this program's own chart code (plan items 24 and
 37), every one of them silent in a normal build.
+
+**Open, unattributed (2026-08-30):** one run during work log item 128
+reported a `global-buffer-overflow` and then would not repeat — six
+further runs of the same binary were clean, so no stack trace was ever
+captured. Two things are known about it. It is **not** on a checked
+table: E2's range asserts are live under ASan and would have aborted
+by name first. And the faulting `pc` sat in a shared library while the
+address sat in the binary's own data, which is the signature of an
+intercepted libc call (`memcpy`/`strlen`/`sprintf` and kin) running
+off a global — so look at the `CopyRgb`/`ClearB` boundaries and the
+`sprintf` sites, not at a subscript. The suite is a plausible host for
+an intermittent: `TestAllMenuActionsQt()` leaves every setting where
+338 menu items put it, and several charts are cast for *now*. Don't
+burn a session looping the suite for it — it will come around, and
+next time keep the whole log.
 
 Two things that cost time here:
 

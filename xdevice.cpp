@@ -2490,7 +2490,7 @@ void WireChartOrbit()
     for (j = oNorm; j >= 1; j--)
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j)) {
-          DrawColor(kAspB[grid->n[i][j]]);
+          DrawColor(kAspB[ASPT(grid->n[i][j])]);
           WireLine(x[i], y[i], z[i], x[j], y[j], z[j]);
           if (gs.fLabelAsp) {
             gi.zDefault = (z[i] + z[j]) >> 1;
@@ -3032,7 +3032,7 @@ void WireChartSphere()
     for (j = is.nObj; j >= 1; j--)
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j)) {
-          DrawColor(kAspB[grid->n[i][j]]);
+          DrawColor(kAspB[ASPT(grid->n[i][j])]);
           WireLine(rgx[i], rgy[i], rgz[i], rgx[j], rgy[j], rgz[j]);
           if (gs.fLabelAsp) {
             gi.zDefault = (rgz[i] + rgz[j]) >> 1;
