@@ -688,8 +688,30 @@ push the remaining in-function `#ifdef`s down into those bottlenecks so
 each backend is one block per primitive, not confetti. Full vtable only
 if a fifth backend ever threatens. Area E owns the plan.
 
-*Cost/risk:* medium; mechanical once the bottleneck list is verified
-against all four backends. The Windows oracle diff is the net.
+*Closed 2026-09-01 by measurement* (work log item 155). Attributing every
+backend conditional to its enclosing function says the destination is
+where they already are: all 51 in xgeneral.cpp are inside a drawing
+primitive (`DrawSz` 8, `DrawDash` 5, `DrawPoint` 4, `DrawBlock` 4,
+`DrawColor` 3, `DrawArc` 3, `DrawEllipse2` 3, `DrawThick` 2,
+`DrawClearScreen` 2, `DrawFill` 2, `KiCity` 3, file scope 4), and 32 of
+xscreen.cpp's 44 are in `InteractX`, the event loop E3 keeps per-backend
+on purpose. There is no confetti to push down. The vtable step stays
+available if a fifth backend or a new export format ever appears.
+
+*What the audit did find, and E1 got wrong:* "everything above them, all
+of xcharts*, is target-free" is false — there are **11** backend
+conditionals in the chart layer, which is precisely this theme's incident
+shape. Seven are understood divergences recorded elsewhere. One is a real
+gap: **`XChartRising()` draws without its altitude gradient on Qt**
+(xcharts2.cpp:1682), because an `#ifndef WINANY` clause forces the
+one-bit packing and, measured on the Qt screen path, every other clause
+in that condition is false. The fix has no new machinery behind it —
+`KvFromKi()` already treats a negative KI as a packed RGB — but it is a
+visible rendering change wanting a Windows side-by-side, so it is a port
+increment rather than a refactor. Item 155 carries the mechanism.
+
+*Cost/risk:* the refactor was medium and is moot. The Rising gap is small
+and wants the graphics matrix plus a Windows comparison as its net.
 
 ### T7 — Two rendering paths, selected by a global, restored by hand
 

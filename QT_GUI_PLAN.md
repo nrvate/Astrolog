@@ -5858,6 +5858,80 @@ are the more useful half to read before starting something new.
     audits and the settings round trip; ledger 318 -> 316. Qt-only
     change, so the console matrices have nothing to say about it.
 
+155. **T6's refactor has nothing left to do, and the audit it prompted
+    found a rendering gap instead.** T6 asks to "push the remaining
+    in-function `#ifdef`s down into those bottlenecks so each backend is
+    one block per primitive, not confetti", citing 52 backend
+    conditionals in xgeneral.cpp and 44 in xscreen.cpp.
+
+    **Re-measured, attributing every one to its enclosing function**
+    (51 and 44 today, so the metric matches):
+
+        xgeneral.cpp  51  DrawSz 8, DrawDash 5, DrawPoint 4, DrawBlock 4,
+                          DrawColor 3, DrawArc 3, DrawEllipse2 3,
+                          KiCity 3, DrawThick 2, DrawClearScreen 2,
+                          DrawFill 2, file scope 4
+        xscreen.cpp   44  InteractX 32, BeginX 4, InitColorsX 2,
+                          file scope 6
+        xdevice.cpp   23  BeginFileX 5, FBmpDrawBack 4, FBmpAntialias 4,
+                          FBmpDrawMap 3, FBmpDrawMap2 3, others 4
+
+    **There is no confetti.** Every branch in xgeneral.cpp is already
+    inside a drawing primitive -- which is what E1 closed by shape audit
+    on 2026-08-29 (work log item 86) -- and 32 of xscreen.cpp's 44 are in
+    `InteractX`, the event loop that E3 says is inherently per-backend
+    and stays. There is nothing to push down; the destination is where
+    they already are. Closed by measurement, like T3's harvest and T7's
+    shared half.
+
+    **But the audit was not wasted.** E1 also claimed "everything above
+    them, all of xcharts*, is target-free". That is **not true**: there
+    are 11 backend conditionals in the chart layer, and the shape T6
+    names as its incident class -- a `WIN`-only branch with no QT twin --
+    is exactly what they are. Seven are understood divergences already
+    recorded elsewhere (the Windows-only `gTraTraTim`/`gTraNatInf` chart
+    modes, `wi.nAntialias`, `DrawTurtle2`, `gs.nDecaType == 6`'s heart
+    decoration, the aspect-list scroll offset). **One is a real gap.**
+
+    **`XChartRising()` draws without its altitude gradient on Qt, and a
+    backend `#ifdef` is the only reason.** xcharts2.cpp:1682:
+
+        if (!gi.fBmp || !gs.fColor || (gi.fFile && gs.ft > ftBmp)
+        #ifndef WINANY
+          || !gi.fFile
+        #endif
+          )
+          n = (n << 1) | (alt >= 0.0);          // one bit per object
+        else
+          n = (n << 8) | (alt >= 0.0 ? 192+... : 64+...);   // a byte each
+
+    The 8-bit branch accumulates one byte per object across up to three
+    objects, which is a packed RGB -- which is why Windows hands `n`
+    straight to `BmpSetXY()` when `gi.fBmp`. Probed on the Qt screen
+    path: `gi.fBmp=1 gs.fColor=1 gi.fFile=0 gs.ft=0`, so **every other
+    clause is false and the `#ifndef WINANY` line is the only thing
+    forcing the one-bit path**. Qt's on-screen Rising chart is drawn in
+    eight flat palette colours where Windows draws a gradient.
+
+    The clause is not arbitrary: the non-Windows draw below it is
+    `DrawColor(ki[n])`, and `ki` is `KI ki[8]` -- an eight-entry palette
+    that a packed RGB would index far out of bounds. So it is load
+    bearing *as written*. But `KvFromKi()` is
+    `((ki) >= 0 ? rgbbmp[ki] : -(ki))`: a negative KI already carries a
+    packed RGB, so `DrawColor(-(KI)n)` is the gradient path without any
+    new machinery, and `gi.bmpRising` is declared and freed
+    unconditionally already -- only `BmpCopyToWin()`'s `HDC` is
+    Windows-specific.
+
+    **Not fixed here, deliberately.** It is a visible rendering change to
+    a chart, it wants a Windows side-by-side to say what the target
+    looks like, and it is a port increment rather than the refactor T6
+    asked for. Recorded with the mechanism and the one-line shape of the
+    fix so the next session starts from the measurement.
+
+    **Nets**: no code change; probe only. The measurement script is in
+    the work log rather than a tool, since it answered its question once.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
