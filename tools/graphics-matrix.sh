@@ -103,3 +103,18 @@ done
 
 rm -rf "$T"
 echo "== $runs renders, $missing produced no file"
+# And exit nonzero if any did, which this script did NOT do until
+# 2026-09-01. A render that produced no file compares equal to another
+# that also produced none, so a run where every invocation failed diffs
+# to zero against any other such run and reads exactly like a proof.
+# Measured: pointing GRAPHICS_MATRIX_CFG at a malformed settings file
+# makes all 224 renders fail, and the old script reported that as
+# success. The header above says a harness proves nothing until you
+# sabotage it; this is the harness failing its own rule.
+if [ "$missing" -gt 0 ]; then
+  echo "== NOT A VALID BASELINE: $missing of $runs renders produced no file."
+  echo "== Check the config resolves the ephemeris (GRAPHICS_MATRIX_CFG"
+  echo "== defaults to -i nrvate.as) and that the binary path is short."
+  exit 1
+fi
+exit 0

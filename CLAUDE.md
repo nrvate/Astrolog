@@ -221,7 +221,9 @@ tools/switch-matrix.sh <binary>      # 529 invocations: the switch surface,
                                      # REFACTORING.md, "The registry as
                                      # built")
 tools/influence-matrix.sh <binary>   # the same for -j/-j0/-7 output
-tools/graphics-matrix.sh <binary>    # 224 renders: every graphics chart
+tools/graphics-matrix.sh <binary>    # 224 renders, nonzero if any
+                                     # produced no file (work log item
+                                     # 163); every graphics chart
                                      # mode, every option on three chart
                                      # types that draw differently, and
                                      # every output writer, one checksum

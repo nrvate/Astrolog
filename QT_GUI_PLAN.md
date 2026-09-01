@@ -6364,6 +6364,43 @@ are the more useful half to read before starting something new.
     **Nets**: settings round trip all three legs, 36 sentinels; eight
     audits; suite 3553/0.
 
+163. **The graphics matrix counted its own failures and threw the count
+    away.** A parallel session running it in an isolated checkout got
+    `rc=0` with 115 of 224 renders missing. The tool is item 148's, and
+    its header says, in its own words, that "a render that produces NO
+    file prints MISSING and the run's tail counts them" because "a
+    harness whose invocations all fail diffs to zero and reads exactly
+    like a proof". It counted them. It printed them. Then it ended with
+
+        echo "== $runs renders, $missing produced no file"
+
+    and nothing set an exit status from `$missing`.
+
+    **Reproduced here at full strength**: pointing `GRAPHICS_MATRIX_CFG`
+    at a malformed settings file makes **all 224 renders fail**, and the
+    old script reported that as success. Two such runs diff to zero
+    against each other, which is the exact shape the header warns about,
+    written by someone who had just written the warning.
+
+    Fixed: nonzero exit when any render produced no file, with a message
+    naming the two causes worth checking first (a config that does not
+    resolve the ephemeris, and a binary at a deep path). **Falsified both
+    ways**: the malformed config now exits 1 naming 224 of 224, a normal
+    run exits 0.
+
+    **One claim from that report did not reproduce and is not written
+    down as fact.** The 115 failures were attributed to running against
+    the bundled `ephem/` rather than `/swe`. Pointing `-Yi1`, `-Yi2` and
+    `-Yi3` at `./ephem` here gives **0 of 224 missing**, so whatever
+    caused it is environmental rather than a property of the bundled
+    ephemeris, and the header says only that the config must resolve the
+    ephemeris. The exit status is what makes the difference visible
+    either way, which is the point: the fix does not depend on knowing
+    why a render failed.
+
+    **Nets**: the harness against itself, both directions; suite 3553/0;
+    unchanged behaviour otherwise -- this is a status line, not a render.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
