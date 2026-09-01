@@ -33,7 +33,7 @@ ODIR   = obj-win
 # then swallowed the message, which is how it went unnoticed.
 CFLAGS = -DWIN -DPC -D_WINDOWS -DWIN32 -D__CRT__NO_INLINE \
          -O2 -fpermissive -static -std=gnu++17 \
-         -Wno-write-strings -Wno-narrowing -Wno-comment
+         -Wno-write-strings -Wno-narrowing -Wno-comment -MMD -MP
 LIBS   = -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lole32 -luuid -lwinspool \
          -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32 -lurlmon
 LDFLAGS = -mwindows -static -static-libgcc -static-libstdc++
@@ -50,12 +50,6 @@ OBJ = $(patsubst %.cpp,$(ODIR)/%.o,$(SRC))
 astrolog.exe: $(OBJ) $(ODIR)/astrolog.res
 	$(CXX) $(LDFLAGS) -o $@ $(OBJ) $(ODIR)/astrolog.res $(LIBS)
 
-# Every object depends on the two headers this fork edits constantly.
-# Without this, a change to only a header rebuilds nothing at all, and a
-# "load-bearing" check against the freshly broken header passes against
-# the stale binary -- which is how this line got here. Same failure shape
-# as the generated-table rules above (work log item 31).
-$(OBJ): astrolog.h extern.h resource.h
 
 $(ODIR)/%.o: %.cpp | $(ODIR)
 	$(CXX) $(CFLAGS) -c $< -o $@
@@ -68,3 +62,8 @@ $(ODIR):
 
 clean:
 	rm -rf $(ODIR) astrolog.exe
+
+# Compiler-generated header dependencies; see Makefile.qt.
+-include $(OBJ:.o=.d)
+
+.PHONY: clean

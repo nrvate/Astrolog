@@ -1,10 +1,12 @@
 # Build outputs
 *.o
+*.d
 /astrolog
 /astrolog-qt
 /astrolog-qt6
 /obj-qt/
 /obj-qt6/
+/obj-qt6-test/
 
 # JetBrains IDE project files
 .idea/

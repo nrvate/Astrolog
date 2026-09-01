@@ -27,15 +27,18 @@ OBJS = astrolog.o switch.o atlas.o calc.o charts0.o charts1.o charts2.o charts3.
 # If you don't have X windows, delete the "-lX11" part from the line below:
 # If not compiling with GNUC, delete the "-ldl" part from the line below:
 LIBS = -lm -lX11 -ldl -s
-CPPFLAGS = -O -Wno-write-strings -Wno-narrowing -Wno-comment
+# -std=gnu++17 is not decoration. calc.cpp uses class template argument
+# deduction ("Borrow bciCore(ciCore);"), a C++17 feature. g++ 11 defaults
+# to gnu++17 so this build happened to work, but Makefile.win relied on
+# the same accident and mingw g++ 10 defaults to gnu++14 -- which is how
+# the Windows build went 62 commits without compiling (work log item 146).
+# Saying it out loud is the fix for the class, not just the instance.
+CPPFLAGS = -MMD -MP -O -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment
 RM = rm -f
 
 $(NAME): $(OBJS)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
-# Every object depends on the headers this fork edits constantly; see
-# the same rule in Makefile.qt for why.
-$(OBJS): astrolog.h extern.h
 
 # "make clean" cleans what this tree can build, which is four binaries and
 # four object directories, not just upstream's. That is the conventional
@@ -54,7 +57,7 @@ clean: clean-console
 # runs, and doing the same to ./astrolog-qt-test would break the suite for
 # anyone running it meanwhile.
 clean-console:
-	$(RM) $(OBJS) $(NAME)
+	$(RM) $(OBJS) $(OBJS:.o=.d) $(NAME)
 
 # This file is upstream's and builds upstream's binary: "make" produces
 # ./astrolog, the X11 one. This fork's Qt port has its own makefiles, and
@@ -82,4 +85,8 @@ win:
 all: $(NAME) qt qt-test win
 
 .PHONY: clean clean-console qt qt-test qt-asan win all
+
+# Compiler-generated header dependencies; see Makefile.qt for the
+# reasoning and what the hand-written version missed.
+-include $(OBJS:.o=.d)
 #
