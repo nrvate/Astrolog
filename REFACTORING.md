@@ -1917,8 +1917,11 @@ measured at the finding).
 
 ## Done
 
-- **T9** — the numeric oracle, 2026-08-31 (work log item 141): the first
-  net here whose reference is outside the repo. Found work log item 140
+- **T9** — the numeric oracle, 2026-08-31 (work log item 141), extended
+  2026-09-01 with three invariants needing no reference at all (item 153)
+  and a latitude/engine sweep of the house partition (item 157, which
+  found seven house systems degenerating toward the pole where the guard
+  covers two). The first net here whose reference is outside the repo. Found work log item 140
   before it was written, and its leg 5 pins item 142's `acos` domain fix
   — the long-open intermittent, which no differential net could have
   found because the wrong answer was a NaN, not a change.

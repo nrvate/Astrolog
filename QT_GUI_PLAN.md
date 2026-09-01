@@ -287,14 +287,15 @@ Roughly in the order I'd take them.
    object really is at its natal longitude. A progressed chart at zero
    elapsed time is the natal chart. Each is a few lines and each covers a
    surface nothing currently watches.
-   **Re-measured 2026-09-01: the two findings below do not reproduce on
-   the Swiss house path** — see work log item 153. Topocentric closes the
-   circle at every latitude from 45N to 88N and Pullen S.Delta has no
-   zero-width house; *Sunshine* does, at 70N and above, and is not
-   mentioned here. There are two house engines and this note never said
-   which it measured, so the text below is probably about
-   `ComputeHouses()` rather than `SwissHouse()`. Read item 153 first.
-   Sweeping leg 4 over latitude *and* engine is the next increment here.
+   **Both findings below are confirmed, and there are five more** — work
+   log item 157. (An intermediate note here said they did not reproduce;
+   that was measured at a single date and longitude and was wrong.
+   Item 153 carries the retraction.) Swept over four dates and
+   longitudes, both engines: **Pullen (S.Delta), Topocentric, Campanus,
+   Regiomontanus** degenerate on both engines and **Sunshine, APC,
+   Savard-A** on the Swiss one. `ComputeHouses()` guards two systems,
+   Placidus and Koch. Oracle leg 4b pins the set; widening the guard is
+   the open maintainer decision.
 
    Two measured findings are parked there rather than fixed, both
    maintainer calls because they change house math in both builds:
@@ -5764,11 +5765,17 @@ are the more useful half to read before starting something new.
     boundary and left the returned orb alone, so that assertion was
     passing unproven until it was aimed at properly.
 
-    **And a correction to item 141, which is the more useful half.** That
-    item parked two measured findings: "Topocentric houses run backwards
-    beyond the polar circle" and "Pullen (S.Delta) produces zero-width
-    houses at 70N and above". Re-measuring the partition over all 40
-    systems at 45N through 88N, on the Swiss house path that
+    **And a correction to item 141 -- WHICH WAS ITSELF WRONG. See item
+    157.** The paragraph below stands as written because the mistake is
+    the point: it swept 40 systems and 8 latitudes but only **one date
+    and one longitude**, and on that sample the findings genuinely do not
+    appear. With four dates they reproduce on both engines, along with
+    four more systems. Item 141 was right.
+
+    That item parked two measured findings: "Topocentric houses run
+    backwards beyond the polar circle" and "Pullen (S.Delta) produces
+    zero-width houses at 70N and above". Re-measuring the partition over
+    all 40 systems at 45N through 88N, on the Swiss house path that
     `nrvate.as` selects, **neither reproduces** -- Topocentric closes the
     circle at every latitude and Pullen S.Delta has no zero-width house.
     What does misbehave is **Sunshine, which has a zero-width house at
@@ -5994,6 +6001,71 @@ are the more useful half to read before starting something new.
     undoing was `int cColor = 0;` colliding with `#define cColor 16` in
     astrolog.h: the `c` prefix means "count of" and the namespace is
     already occupied, which CONVENTIONS.md says and I did not check.
+
+157. **Item 153's correction was itself wrong, and the real answer is
+    seven house systems, not two.** This retracts a claim made and
+    committed earlier the same day, which matters more than the finding.
+
+    Item 153 reported that item 141's two parked findings -- Topocentric
+    wrapping beyond the polar circle, Pullen (S.Delta) with zero-width
+    houses -- **do not reproduce**, and that *Sunshine* misbehaves
+    instead. That measurement swept 40 systems and 8 latitudes on the
+    Swiss engine at **one date and one longitude**. Item 141 was right
+    and item 153 was wrong: with four dates and longitudes the original
+    findings reproduce immediately, on both engines.
+
+    The lesson is the project's own rule turned on its author. "Verify a
+    diagnosis before acting on it" was followed; the sample was not
+    questioned. A single date is not a test of a claim about polar
+    behaviour, because several house constructions key off the Sun's
+    declination and December is where they break.
+
+    **What the full sweep says** -- 40 systems x 8 latitudes x 4
+    date/longitude cases x both engines, 99 bad combinations:
+
+        system            failure       engines
+        Pullen (S.Delta)  zero-width    Matrix + Swiss
+        Topocentric       cusps wrap    Matrix + Swiss
+        Sunshine          zero-width    Swiss
+        Campanus          cusps wrap    Matrix + Swiss
+        Regiomontanus     cusps wrap    Matrix + Swiss
+        APC               cusps wrap    Swiss
+        Savard-A          cusps wrap    Swiss
+
+    "Cusps wrap" means the twelve gaps sum to 1080, 1800, 3240 or 3960
+    degrees instead of 360 -- the cusps go round the circle three to
+    eleven times, so house assignment is meaningless rather than merely
+    odd. `ComputeHouses()` (calc.cpp:508) guards **two** systems,
+    Placidus and Koch, falling back to Porphyry with a warning; Swiss
+    substitutes for its own Placidus and Koch. Nothing covers the other
+    seven, and Pullen S.Delta fails at 66N -- *below* the polar circle
+    the existing guard keys on (`rDegQuad - is.OB`).
+
+    **Oracle leg 4b** now sweeps the invariant across latitude and
+    engine, which is what leg 4 could not see running at one mid latitude
+    on whichever engine was configured. It asserts the partition holds
+    for every combination outside the seven, and that all seven still
+    fail -- so a system that starts degenerating shows up, and one that
+    gets fixed shows up too. **Falsified both ways**: dropping
+    Pullen S.Delta from the set reports it as a new degeneracy; adding
+    Porphyry, which is healthy, fails the "still unfixed" half.
+
+    The set is pinned **without latitude thresholds**, and that is the
+    second lesson from the same mistake: a first version stored the
+    lowest failing latitude per system, taken from one sample, and the
+    oracle's own grid contradicted it within the hour. The latitude moves
+    with the date; the set does not.
+
+    **Not fixed, and this one really is a maintainer decision.** Widening
+    the guard changes house math for seven systems in both builds, and
+    the two engines would need it in different places -- `ComputeHouses()`
+    for the Matrix path, and something after `swe_houses_armc_ex2()` for
+    the Swiss one, since five of the seven fail there. The evidence is
+    above; the shape of the fix is the existing Placidus/Koch guard,
+    widened.
+
+    **Nets**: suite 3551/0; oracle 322 assertions, 187ms for the added
+    sweep. Test-only change.
 
 ## Features this fork adds to both builds
 

@@ -4116,6 +4116,100 @@ static void TestNumericOracleQt()
         "%s houses close the circle once (%.9f)", szSystem[i], rSum);
     }
 
+    // ---- Leg 4b: the same invariant by latitude and by ENGINE ----
+    // Leg 4 runs at one mid latitude on whichever engine is configured,
+    // which is why seven systems degenerating toward the pole went
+    // unnoticed. There are two engines -- SwissHouse() when
+    // us.fEphemFiles && !us.fPlacalcPla, Astrolog's own ComputeHouses()
+    // otherwise -- and ComputeHouses() guards exactly two systems
+    // (calc.cpp:508, Placidus and Koch fall back to Porphyry).
+    //
+    // This asserts the partition for every combination EXCEPT the ones
+    // measured as degenerate on 2026-09-01, and separately asserts that
+    // set is exactly what it was: a system that starts failing shows up,
+    // and a system that gets fixed shows up too. The table is the record
+    // of a real defect in shared core, not an excuse for it -- see work
+    // log item 157 for the measurement and the maintainer decision it
+    // is waiting on.
+    {
+      // The seven systems measured as degenerating toward the pole. No
+      // latitude threshold is stored with them on purpose: the latitude
+      // at which each first fails moves with the date and longitude (a
+      // first attempt pinned thresholds from one sample and they were
+      // wrong within the hour), so what is pinned is the SET.
+      static CONST int rgDegen[] = {
+        hsSineDelta, hsTopocentric, hsSunshine, hsCampanus,
+        hsRegiomontanus, hsAPC, hsSavardA };
+      static CONST int rgLatH[] = {45, 66, 70, 75, 82};
+      static CONST int rgMonH[] = {6, 12};
+      flag rgfSeenBad[cSystem];
+      int iEngine, iLatH, iMonH, iDeg, cUnexpected = 0, cExpectedBad = 0;
+      int cMissingBad = 0, cCase = 0;
+
+      for (i = 0; i < cSystem; i++)
+        rgfSeenBad[i] = fFalse;
+      real rSumH, rGapH, rGapMinH;
+      int iCuspH;
+      flag fExpectBad, fIsBad;
+
+      for (iEngine = 0; iEngine <= 1; iEngine++) {
+        Borrow bEngine(us.fEphemFiles, iEngine ? fTrue : fFalse);
+        for (i = 0; i < cSystem; i++) {
+          Borrow bHouseH(us.nHouseSystem, i);
+          for (iLatH = 0; iLatH < 5; iLatH++)
+            for (iMonH = 0; iMonH < 2; iMonH++) {
+              OraclePinChartQt(1976);
+              ciCore.mon = rgMonH[iMonH]; ciCore.day = 20;
+              ciCore.tim = 12.0; ciCore.zon = 0.0;
+              ciCore.lon = -15.63; ciCore.lat = (real)rgLatH[iLatH];
+              CastChart(1);
+              rSumH = 0.0; rGapMinH = rDegMax;
+              for (iCuspH = 1; iCuspH <= cSign; iCuspH++) {
+                rGapH = chouse[iCuspH == cSign ? 1 : iCuspH+1] -
+                  chouse[iCuspH];
+                if (rGapH < 0.0)
+                  rGapH += rDegMax;
+                if (rGapH < rGapMinH)
+                  rGapMinH = rGapH;
+                rSumH += rGapH;
+              }
+              fIsBad = (RAbs(rSumH - rDegMax) > 0.01 || rGapMinH < 0.001);
+              fExpectBad = fFalse;
+              for (iDeg = 0; iDeg < 7; iDeg++)
+                if (rgDegen[iDeg] == i)
+                  fExpectBad = fTrue;
+              cCase++;
+              if (fIsBad && !fExpectBad) {
+                cUnexpected++;
+                printf("    NEW polar degeneracy: %s at %dN month %d, "
+                  "%s engine (sum %.3f minGap %.4f)\n", szSystem[i],
+                  rgLatH[iLatH], rgMonH[iMonH],
+                  iEngine ? "Swiss" : "Matrix", rSumH, rGapMinH);
+              } else if (fIsBad) {
+                cExpectedBad++;
+                rgfSeenBad[i] = fTrue;
+              }
+            }
+        }
+      }
+      Check(cCase == cSystem * 5 * 2 * 2,
+        "the house sweep covered every system, latitude and engine (%d)",
+        cCase);
+      Check(cUnexpected == 0,
+        "no house system degenerates toward the pole beyond the seven "
+        "already measured (%d new)", cUnexpected);
+      for (iDeg = 0; iDeg < 7; iDeg++)
+        if (!rgfSeenBad[rgDegen[iDeg]])
+          cMissingBad++;
+      Check(cMissingBad == 0,
+        "and all seven known ones still degenerate, unfixed (%d appear "
+        "fixed -- if that is deliberate, drop them from rgDegen)",
+        cMissingBad);
+      Check(cExpectedBad > 0,
+        "the polar sweep reaches the degenerate region at all (%d cases)",
+        cExpectedBad);
+    }
+
     // ---- Leg 6: an aspect is the same aspect from either side ----
     // GetAspect(i, j) and GetAspect(j, i) ask about one pair of points,
     // and FCreateGrid() depends on their agreeing: it fills half the grid
