@@ -27,7 +27,10 @@
 #   - The plain Makefile has no object directory of its own, so building
 #     with overridden CPPFLAGS leaves sanitized objects in the repo root
 #     and the next ordinary build fails to *link*, naming functions nobody
-#     touched. Hence "make clean" both before and after.
+#     touched. Hence "make clean-console" both before and after --
+#     the narrow target, on purpose: plain "make clean" also removes
+#     the Qt builds, and this script has no business deleting the
+#     suite's binary out from under someone.
 #   - The binary must sit at a SHORT path. A deep one truncates the Swiss
 #     ephemeris path and changes lookups rather than merely warning.
 #   - The output file, by contrast, wants a LONG path on purpose: an
@@ -53,14 +56,14 @@ hits=0
 runs=0
 
 echo "== building the console ASan binary (QTTEST brings the range guards)"
-make clean >/dev/null 2>&1
+make clean-console >/dev/null 2>&1
 make NAME=$BIN -j4 \
   CPPFLAGS="-DQTTEST -fsanitize=address -g -O0 -Wno-write-strings \
     -Wno-narrowing -Wno-comment" \
   LIBS="-fsanitize=address -lm -lX11 -ldl" >"$OUT/build.log" 2>&1 || {
-  echo "build failed, see $OUT/build.log"; make clean >/dev/null 2>&1; exit 2; }
-make clean >/dev/null 2>&1
-trap 'make clean >/dev/null 2>&1' EXIT
+  echo "build failed, see $OUT/build.log"; make clean-console >/dev/null 2>&1; exit 2; }
+make clean-console >/dev/null 2>&1
+trap 'make clean-console >/dev/null 2>&1' EXIT
 
 # A sanitizer report, or any of the aborts a guard raises.
 BAD='AddressSanitizer|stack smashing|buffer overflow detected|Assertion .* failed'

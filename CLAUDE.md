@@ -100,7 +100,7 @@ is the whole reason for the `-i nrvate.as` rule below.
 ```sh
 make qt -j4                      # ./astrolog-qt
 make qt-test -j4                 # ./astrolog-qt-test
-make all -j4                     # all four, and "make clean-all" undoes it
+make all -j4                     # all four; "make clean" undoes it
                                  # (plain "make" is upstream's target and
                                  # still builds only ./astrolog, which ten
                                  # scripts here depend on)
