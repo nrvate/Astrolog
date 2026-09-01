@@ -1977,56 +1977,56 @@ FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     DEFPUSHBUTTON   "OK",IDOK,255,120,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,255,100,50,14
-    CONTROL         "&Sirius",dx01,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,5,55,10
-    CONTROL         "Canopus",dx02,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,15,55,10
-    CONTROL         "Rigil &Kentaurus",dx03,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,25,60,10
-    CONTROL         "Arcturus",dx04,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,35,55,10
-    CONTROL         "&Vega",dx05,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,45,55,10
-    CONTROL         "Capella",dx06,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,55,55,10
-    CONTROL         "Rigel",dx07,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,65,55,10
-    CONTROL         "Procyon",dx08,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,75,55,10
-    CONTROL         "&Betelgeuse",dx09,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,85,55,10
-    CONTROL         "Achernar",dx10,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,95,55,10
-    CONTROL         "Agena",dx11,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,105,55,10
-    CONTROL         "Altair",dx12,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,115,55,10
-    CONTROL         "Acrux",dx13,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,125,55,10
-    CONTROL         "Aldebaran",dx14,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,5,50,10
-    CONTROL         "Antares",dx15,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,15,50,10
-    CONTROL         "Spica",dx16,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,25,50,10
-    CONTROL         "Pollux",dx17,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,35,50,10
-    CONTROL         "Fomalhaut",dx18,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,45,50,10
-    CONTROL         "Deneb",dx19,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,55,50,10
+    CONTROL         "Achernar",dx10,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,5,55,10
+    CONTROL         "Acrux",dx13,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,15,55,10
+    CONTROL         "Adara",dx22,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,25,50,10
+    CONTROL         "Agena",dx11,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,35,55,10
+    CONTROL         "Alcyone",dx46,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,45,55,10
+    CONTROL         "Aldebaran",dx14,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,55,50,10
+    CONTROL         "Algol",dx44,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,65,55,10
+    CONTROL         "Alhena",dx39,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,75,55,10
+    CONTROL         "Alioth",dx31,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,85,55,10
+    CONTROL         "Alkaid",dx35,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,95,55,10
+    CONTROL         "Alnair",dx30,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,105,55,10
+    CONTROL         "Alnath",dx27,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,115,55,10
+    CONTROL         "Alnilam",dx28,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,5,125,55,10
+    CONTROL         "Alphard",dx42,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,5,55,10
+    CONTROL         "Altair",dx12,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,15,55,10
+    CONTROL         "&Andromeda",dx47,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,25,55,10
+    CONTROL         "Antares",dx15,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,35,50,10
+    CONTROL         "Arcturus",dx04,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,45,55,10
+    CONTROL         "Avior",dx40,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,55,55,10
     CONTROL         "Becrux",dx20,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,65,50,10
-    CONTROL         "Regulus",dx21,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,75,50,10
-    CONTROL         "Adara",dx22,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,85,50,10
-    CONTROL         "Castor",dx23,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,95,50,10
-    CONTROL         "Shaula",dx24,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,105,50,10
-    CONTROL         "Bellatrix",dx25,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,115,50,10
-    CONTROL         "Gacrux",dx26,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,125,50,10
-    CONTROL         "Alnath",dx27,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,5,55,10
-    CONTROL         "Alnilam",dx28,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,15,55,10
-    CONTROL         "Miaplacidus",dx29,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,25,55,10
-    CONTROL         "Alnair",dx30,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,35,55,10
-    CONTROL         "Alioth",dx31,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,45,55,10
-    CONTROL         "Dubhe",dx32,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,55,55,10
-    CONTROL         "Wezen",dx33,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,65,55,10
-    CONTROL         "Kaus Australis",dx34,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,75,60,10
-    CONTROL         "Alkaid",dx35,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,85,55,10
-    CONTROL         "Sargas",dx36,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,95,55,10
-    CONTROL         "Menkalinan",dx37,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,105,55,10
-    CONTROL         "Peacock",dx38,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,115,55,10
-    CONTROL         "Alhena",dx39,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,125,55,10
-    CONTROL         "Avior",dx40,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,5,55,10
-    CONTROL         "Murzim",dx41,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,15,55,10
-    CONTROL         "Alphard",dx42,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,25,55,10
-    CONTROL         "Polaris",dx43,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,35,55,10
-    CONTROL         "Algol",dx44,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,45,55,10
-    CONTROL         "Suhail",dx45,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,55,55,10
-    CONTROL         "Alcyone",dx46,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,65,55,10
-    CONTROL         "&Andromeda",dx47,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,75,55,10
-    CONTROL         "&Zeta Reticuli",dx48,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,85,55,10
-    CONTROL         "Galactic &Center",dx49,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,95,60,10
-    CONTROL         "&Great Attractor",dx50,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,105,65,10
+    CONTROL         "Bellatrix",dx25,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,75,50,10
+    CONTROL         "&Betelgeuse",dx09,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,85,55,10
+    CONTROL         "Canopus",dx02,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,95,55,10
+    CONTROL         "Capella",dx06,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,105,55,10
+    CONTROL         "Castor",dx23,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,115,50,10
+    CONTROL         "Deneb",dx19,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,70,125,50,10
+    CONTROL         "Dubhe",dx32,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,5,55,10
+    CONTROL         "Fomalhaut",dx18,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,15,50,10
+    CONTROL         "Gacrux",dx26,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,25,50,10
+    CONTROL         "Galactic &Center",dx49,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,35,60,10
+    CONTROL         "&Great Attractor",dx50,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,45,65,10
+    CONTROL         "Kaus Australis",dx34,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,55,60,10
+    CONTROL         "Menkalinan",dx37,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,65,55,10
+    CONTROL         "Miaplacidus",dx29,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,75,55,10
+    CONTROL         "Murzim",dx41,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,85,55,10
+    CONTROL         "Peacock",dx38,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,95,55,10
+    CONTROL         "Polaris",dx43,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,105,55,10
+    CONTROL         "Pollux",dx17,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,115,50,10
+    CONTROL         "Procyon",dx08,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,125,125,55,10
+    CONTROL         "Regulus",dx21,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,5,50,10
+    CONTROL         "Rigel",dx07,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,15,55,10
+    CONTROL         "Rigil &Kentaurus",dx03,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,25,60,10
+    CONTROL         "Sargas",dx36,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,35,55,10
+    CONTROL         "Shaula",dx24,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,45,50,10
+    CONTROL         "&Sirius",dx01,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,55,55,10
+    CONTROL         "Spica",dx16,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,65,50,10
+    CONTROL         "Suhail",dx45,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,75,55,10
+    CONTROL         "&Vega",dx05,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,85,55,10
+    CONTROL         "Wezen",dx33,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,95,55,10
+    CONTROL         "&Zeta Reticuli",dx48,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,190,105,55,10
     PUSHBUTTON      "&Restrict All",dbSt_RU0,255,5,50,14
     PUSHBUTTON      "&Unrestrict All",dbSt_RU1,255,25,50,14
     ICON            icon3,IDC_STATIC,270,60,21,20
