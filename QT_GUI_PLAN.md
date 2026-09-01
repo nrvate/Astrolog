@@ -6401,6 +6401,60 @@ are the more useful half to read before starting something new.
     **Nets**: the harness against itself, both directions; suite 3553/0;
     unchanged behaviour otherwise -- this is a status line, not a render.
 
+164. **The suite's intermittent was nine hard-coded temp filenames, and
+    two sessions running it at once.** Work log item 141 recorded a
+    "(0 bytes)" failure in the `long-strings` group -- "two failures in
+    about sixteen runs, not reproduced, not diagnosed, not claimed
+    fixed". A parallel session hit it hard enough today to reproduce it 7
+    times in 8 at `627480a` and 5 in 8 at `28599d4`, so it was neither
+    new nor rare; it had simply never been cornered.
+
+    **The clue was that it passes alone.** `long-strings` on its own:
+    clean every time, 5 of 5 and later 4 of 4. In the full suite: about
+    half. That reads as an inter-test interaction, and two wrong guesses
+    followed -- the group's own nested `Action()` calls not restoring
+    `is.S` (fixed anyway as hygiene, and measured as making no
+    difference: 2 of 5 became 4 of 6), and `menu-actions` leaving state,
+    which does reproduce it but only because it makes the run longer.
+
+    **It is not an interaction between tests. It is an interaction
+    between PROCESSES.** Every temporary path in qttest.cpp was a fixed
+    name -- `/tmp/astrolog-qt-longstrings.txt` and eight siblings -- and
+    the loop does `remove(szOut); Action();` per chart mode. Two suites
+    running at once share all nine. One process removes the file the
+    other is about to measure, and the measurement is exactly the
+    assertion's subject: `cb > 0`.
+
+    **Measured, and it is not subtle.** Four solo runs: clean, clean,
+    clean, clean. Four *pairs* run concurrently: every one of the eight
+    processes failed. Across those eight runs, **70 assertion failures**.
+    With the nine names carrying `getpid()`: the same four concurrent
+    pairs produce **0**.
+
+    That also explains the history. Item 141's 2-in-16 was a day with one
+    session running; today's 5-in-8 and 7-in-8 were measured while two
+    sessions were both running suites, and neither of us thought to say
+    so. **A rate that depends on who else is on the machine is not a
+    rate**, and both of us quoted ours as though it were a property of a
+    commit.
+
+    **What is NOT fixed, and is a different bug.** After the temp names
+    were made unique, six solo runs gave five clean and one `rc=134`,
+    and the concurrent set produced two `rc=134` and one `rc=139`
+    alongside its zero assertion failures. Every one of those crashes
+    ends on the same line: `free(): invalid pointer` or a segfault
+    immediately after `PrintProgress("Writing wireframe to file.")`.
+    So the wireframe writer has a memory bug of its own, roughly 1 run in
+    6, entirely independent of the temp files. `WriteWire()` walks
+    `gi.bm` -- the bitmap allocation reused as wireframe scratch -- from
+    its start to `gi.pwWireCur`, and `WireNum()`'s bound check tests the
+    offset *before* writing a 2-byte `word`. That is where to start; it
+    is not diagnosed here and this item does not claim it is.
+
+    **Nets**: 70 assertion failures across 8 concurrent runs before, 0
+    after; solo runs unaffected; suite 3553/0 when it does not hit the
+    wireframe crash.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

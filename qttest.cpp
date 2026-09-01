@@ -64,6 +64,7 @@
 #include <stdarg.h>
 #include "astrolog.h"
 #include "extern.h"
+#include <unistd.h>
 #include "qtdriver.h"
 
 #ifdef SWISS
@@ -1521,7 +1522,8 @@ static void TestTextExportQt()
   long cb = -1;
 
   Group("Text export");
-  sprintf2(S(szFile), "%s/astrolog-qt-textexport.tmp", szDir);
+  sprintf2(S(szFile), "%s/astrolog-qt-textexport-%d.tmp", szDir,
+    (int)getpid());
   CaptureTextToFileQt(szFile, fFalse);
 
   Check(is.S == fileSav,
@@ -2146,8 +2148,8 @@ static void TestSettingsRoundTripQt()
   rgobjset[iMoon].tinf = 4.0;
   rgobjset[iCusp].tinf = 6.0;
 
-  sprintf(szPath, "%s/astrolog-qt-roundtrip.as", getenv("TMPDIR") != NULL ?
-    getenv("TMPDIR") : "/tmp");
+  sprintf(szPath, "%s/astrolog-qt-roundtrip-%d.as", getenv("TMPDIR") != NULL ?
+    getenv("TMPDIR") : "/tmp", (int)getpid());
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -3188,8 +3190,8 @@ static void TestSharedCoreFixesQt()
     ciMain.nam = szLongNam; ciMain.loc = szLongLoc;
     ciCore = ciMain;
     us.fSeconds = fTrue;
-    sprintf(szOut, "%s/astrolog-qt-longloc.txt",
-      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+    sprintf(szOut, "%s/astrolog-qt-longloc-%d.txt",
+      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
     FCloneSz(szOut, &is.szFileScreen);
     us.fGraphics = fFalse;
     us.fListing = fTrue; us.fWheel = fFalse;
@@ -3488,8 +3490,8 @@ static void TestNestedIncludeQt()
   Group("Nested include");
   SetNoPopupQt(fTrue);    // a failing load must fail, not open a box
   szTmp = getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp";
-  sprintf(szInner, "%s/astrolog-qt-nest-inner.as", szTmp);
-  sprintf(szOuter, "%s/astrolog-qt-nest-outer.as", szTmp);
+  sprintf(szInner, "%s/astrolog-qt-nest-inner-%d.as", szTmp, (int)getpid());
+  sprintf(szOuter, "%s/astrolog-qt-nest-outer-%d.as", szTmp, (int)getpid());
   file = fopen(szInner, "w");
   fprintf(file, "@AD800  ; inner\n-YQ 41\n");
   fclose(file);
@@ -3619,8 +3621,8 @@ static void TestForcedPositionsQt()
   sprintf(szLine, "-WM 1 \"AstrologQtSuiteMacro\"");
   FProcessCommandLine(szLine);
 
-  sprintf(szPath, "%s/astrolog-qt-force-test.as", getenv("TMPDIR") != NULL ?
-    getenv("TMPDIR") : "/tmp");
+  sprintf(szPath, "%s/astrolog-qt-force-test-%d.as", getenv("TMPDIR") != NULL ?
+    getenv("TMPDIR") : "/tmp", (int)getpid());
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -4726,8 +4728,8 @@ static void TestFileParsersQt()
   for (i = 0; i < 2047; i++)
     szPad[i] = 'P';
   szPad[2047] = chNull;
-  sprintf(szFile, "%s/astrolog-qt-parserfixture.tmp",
-    getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+  sprintf(szFile, "%s/astrolog-qt-parserfixture-%d.tmp",
+    getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
 
   // iCalendar, fgets through the whole cchSzLine buffer: a 400-char
   // SUMMARY arrives intact (it used to truncate at 246, the old
@@ -4955,8 +4957,8 @@ static void TestLineDrawingQt()
       *rgchartmode[j].pf = fFalse;
     }
     us.fGrid = fTrue;
-    sprintf(szOut, "%s/astrolog-qt-linedraw.txt",
-      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+    sprintf(szOut, "%s/astrolog-qt-linedraw-%d.txt",
+      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
     FCloneSz(szOut, &is.szFileScreen);
 
     // The claim is that gs.nFontTxt changes nothing about a *text*
@@ -5017,6 +5019,7 @@ static void TestLongStringsQt()
 {
   static char szLongNam[121], szLongLoc[121];
   char szOut[cchSzMax];
+  FILE *fileSav;
   CI ciMainSav = ciMain, ciCoreSav = ciCore;
   flag rgfSav[48], fPopupSav = FNoPopupQt();
   long cb;
@@ -5042,15 +5045,29 @@ static void TestLongStringsQt()
     ciCore = ciMain;
     for (i = 0; i < cchartmode; i++)
       rgfSav[i] = *rgchartmode[i].pf;
-    sprintf(szOut, "%s/astrolog-qt-longstrings.txt",
-      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp");
+    sprintf(szOut, "%s/astrolog-qt-longstrings-%d.txt",
+      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
     FCloneSz(szOut, &is.szFileScreen);
 
+    // Action() opens is.S on is.szFileScreen and fclose()s it on the way
+    // out WITHOUT putting the caller's back (astrolog.cpp:151 and :338),
+    // and the whole GUI runs inside an Action() already, so every call
+    // below is a nested one. Restoring is.S is hygiene the rest of this
+    // file observes -- CaptureTextToFileQt() exists for it and carries
+    // the long reasoning.
+    //
+    // It is NOT the cause of this group's intermittent "(0 bytes)"
+    // failures, and saying so here is the point: adding this restore
+    // moved the rate from 2 of 5 to 4 of 6, which is to say not at all.
+    // Work log item 164 has what the hunt did establish, including the
+    // reproduction the fix was tested against.
+    fileSav = is.S;
     for (i = 0; i < cchartmode; i++) {
       for (j = 0; j < cchartmode; j++)
         *rgchartmode[j].pf = (j == i);
       remove(szOut);
       Action();
+      is.S = fileSav;
       cb = 0;
       file = fopen(szOut, "rb");
       if (file != NULL) {
