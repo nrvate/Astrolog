@@ -1440,6 +1440,47 @@ static void TestClearScreenQt()
   gi.nMode = nModeSav;
 }
 
+// The one text-capture dance, and the global it is easy to forget.
+// Action() opens is.S on the export file and fclose()s it on the way out
+// without putting the caller's back, so a capture that does not restore
+// it leaves the stream on a closed FILE -- and the outer Action() the
+// whole GUI runs inside fcloses the same handle again on exit, which
+// glibc aborts on. Export Chart Text Output had its own copy of the
+// dance and was missing exactly that line (work log item 154).
+//
+// is.S is put back by hand after the check so a regression here fails
+// this group instead of taking the rest of the suite down with it.
+
+static void TestTextExportQt()
+{
+  char szFile[cchSzMax];
+  FILE *fileSav = is.S;
+  flag fGraphicsSav = us.fGraphics, fHTMLSav = us.fTextHTML;
+  CONST char *szDir = getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp";
+  FILE *fileT;
+  long cb = -1;
+
+  Group("Text export");
+  sprintf2(S(szFile), "%s/astrolog-qt-textexport.tmp", szDir);
+  CaptureTextToFileQt(szFile, fFalse);
+
+  Check(is.S == fileSav,
+    "the text capture puts is.S back (Action() leaves it on a closed FILE)");
+  is.S = fileSav;
+  Check(us.fGraphics == fGraphicsSav, "and restores us.fGraphics");
+  Check(us.fTextHTML == fHTMLSav, "and restores us.fTextHTML");
+
+  fileT = fopen(szFile, "r");
+  if (fileT != NULL) {
+    fseek(fileT, 0, SEEK_END);
+    cb = ftell(fileT);
+    fclose(fileT);
+  }
+  Check(cb > 100, "and actually wrote the chart (%ld bytes)", cb);
+  unlink(szFile);
+}
+
+
 static void TestAnimationStateQt()
 {
   int nAnimSav = gs.nAnim, nDirSav = gi.nDir;
@@ -5068,6 +5109,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialog-buttons",       TestDialogButtonWiringQt},
   {"shared-symbols",       TestSharedSymbolBoxesQt},
   {"clear-screen",         TestClearScreenQt},
+  {"text-export",          TestTextExportQt},
   {"animation",            TestAnimationStateQt},
   {"mnemonics",            TestDialogMnemonicsQt},
   {"arrow-keys",           TestDialogArrowKeysQt},

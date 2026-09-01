@@ -35,7 +35,7 @@
 # Format: build, file, function, flag, count, message with numbers masked.
 #
 # Regenerate:  tools/warning_audit.py --update
-# Total: 318 warnings in 101 distinct sites.
+# Total: 316 warnings in 100 distinct sites.
 
 console+qt+qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
 console+qt+qt-test	charts2.cpp	CastRelation	-Wmaybe-uninitialized	1	‘rSav’ may be used uninitialized in this function
@@ -100,7 +100,6 @@ console+qt+qt-test+win	xdevice.cpp	FBmpDrawMap	-Wmaybe-uninitialized	1	‘cost�
 console+qt+qt-test+win	xdevice.cpp	FBmpDrawMap	-Wmaybe-uninitialized	1	‘sint’ may be used uninitialized in this function
 console+qt+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘ihi’ may be used uninitialized in this function
 console+qt+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘jhi’ may be used uninitialized in this function
-qt+qt-test	qtdialog.cpp	(unknown)	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
 qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QComboBox* AddColorComboQt(QFormLayout*, const char*, KI, int)’ defined but not used
 qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QComboBox* NewComboQt(const QString&, const QStringList&)’ defined but not used
 qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QString SzAspDlgQt(int)’ defined but not used

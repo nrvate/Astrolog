@@ -1511,12 +1511,12 @@ void ShowExportTextDialogQt()
   if (qs.isEmpty())
     return;
   QByteArray ba = qs.toLocal8Bit();
-  flag fGraphicsSave = us.fGraphics;
-  FCloneSz(ba.constData(), &is.szFileScreen);
-  us.fGraphics = fFalse;
-  Action();
-  us.fGraphics = fGraphicsSave;
-  FCloneSz(NULL, &is.szFileScreen);
+  // Was a second, hand-rolled copy of this dance, and it was missing the
+  // is.S restore -- so exporting text left the stream pointing at a
+  // closed FILE and armed a double fclose() on exit (work log item 154).
+  // us.fTextHTML is passed through rather than forced, so the File
+  // Settings "Export as HTML" choice still decides.
+  CaptureTextToFileQt(ba.constData(), us.fTextHTML);
 }
 
 
@@ -4468,7 +4468,7 @@ void ShowObjectSelDialogQt()
           // flags when every letter in it is one.
           if (od2.nTyp == 1 && od2.nPnt <= 0 && od2.nFlg <= 0 &&
             !FEqSz(szT, szObjUnknown)) {
-            char szD[cchSzMax];
+            char szD[cchSzMax + cchSzDef];
             sprintf2(S(szD), "%d %s", od2.nObj, szT);
             rgpcbDef[i2]->setEditText(szD);
           }

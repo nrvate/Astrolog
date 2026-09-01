@@ -709,19 +709,41 @@ versus file export inside the graphics path (QT_GUI_PLAN.md, "Two
 separate rendering paths"). Every caller that wants "render this, but
 elsewhere" mutates the globals and restores what it remembered to.
 
-*Incidents:* gotcha 3's partial-restore trap; `RedrawTextQt()` exists
-because text mode needed a temp-file capture of a path that only knows
-how to stream to `is.S`; the chart-capture tools each re-derive the
-same save/mutate/restore dance.
+*Incidents:* gotcha 3's partial-restore trap; Export Chart Text Output
+was a second hand-rolled copy of the text-capture dance missing the
+`is.S` restore, which left the stream on a closed `FILE` and armed a
+double `fclose()` on exit (work log item 154). `RedrawTextQt()` used to
+be a third; it was an orphan of the text-window redesign and is gone
+(item 149).
 
 *Direction:* a render-target parameter is the endgame but touches
-everything; the affordable step is **one blessed capture helper** in
-shared code — "render current chart to this file/buffer with these
-dimensions, touching nothing" — built once from the dance
-`FExportChartQt()` already does correctly, then used by every capture
-site (Qt export, test captures, Windows capture scenarios). Area E/G.
+everything. **The affordable step was taken 2026-09-01 (item 154), and
+half of what this entry proposed turned out to be wrong.**
 
-*Cost/risk:* low; it's consolidation of an idiom that exists five times.
+The *Qt* half was real: two text captures doing the same dance, one of
+them getting it wrong. `CaptureTextToFileQt()` in qtdriver.cpp is that
+dance once — `us.fGraphics`, `us.fTextHTML` and `is.S`, with the reason
+for each at the definition — and both callers use it. A `text-export`
+group holds it.
+
+The *shared-code* half does not survive inspection, and is closed by
+measurement rather than done. **Windows does not perform this dance.**
+`DlgSaveChart()` (wdialog.cpp:555) only arms the state and lets the next
+redraw export, saying so in its own comment; `wdriver.cpp`'s autosave is
+a third shape that re-runs `Action()` and restores by dividing what it
+multiplied. The Qt port cannot use the redraw-driven form, which is why
+`FExportChartQt()` is synchronous — a deliberate divergence, not
+duplication. A shared helper would have exactly one caller. The test
+captures are a fourth shape again: they save `gi.qim` directly rather
+than going through `FActionX()` at all.
+
+*What is still open:* the graphics side, where `FExportChartQt()` is
+already the one correct implementation and has no second copy to merge —
+so there is nothing to consolidate until a second caller appears.
+
+*Cost/risk:* the Qt half was low and is done. "An idiom that exists five
+times" was the estimate; it exists once per backend, differently, on
+purpose.
 
 ### T8 — The conventions live in folklore, not in a file
 

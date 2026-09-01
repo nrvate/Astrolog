@@ -869,6 +869,45 @@ void PasteChartQt()
 // print, captured via a scratch file rather than shown/redirected for
 // real. Doesn't touch us.fGraphics; callers decide how to reflect that.
 
+// Render the current chart's text output to a file, touching nothing.
+// One place, because there are three things to put back and only two of
+// them are obvious -- the third cost a reproduction to find (work log
+// item 154), and Export Chart Text Output was getting it wrong.
+//
+// us.fGraphics: Action() branches on it ("if (us.fGraphics) FActionX();
+// else PrintChart();"). If it is still true here, Action() takes the
+// *graphics* path, which for QT calls InteractQt() again -- a second,
+// nested Qt event loop.
+//
+// us.fTextHTML: the caller says which it wants rather than inheriting
+// whatever the File Settings dialog last left.
+//
+// is.S: the whole GUI runs inside an Action() call already (main ->
+// Action -> FActionX -> InteractQt), so the one below is nested. It
+// opens is.S on the file and fclose()s it on the way out, but never puts
+// the caller's back -- so is.S is left pointing at a closed FILE.
+// Everything printing through it afterwards writes to a dead handle, and
+// the outer Action() eventually fclose()s the same FILE a second time,
+// which glibc catches as "invalid stdio handle" and aborts on.
+// astrolog.cpp:464 saves and restores it around its own nested call for
+// exactly this reason.
+
+void CaptureTextToFileQt(CONST char *szFile, flag fHTML)
+{
+  flag fGraphicsSave = us.fGraphics, fTextHTMLSave = us.fTextHTML;
+  FILE *fileSave = is.S;
+
+  us.fGraphics = fFalse;
+  us.fTextHTML = fHTML;
+  FCloneSz(szFile, &is.szFileScreen);
+  Action();
+  FCloneSz(NULL, &is.szFileScreen);
+  us.fTextHTML = fTextHTMLSave;
+  us.fGraphics = fGraphicsSave;
+  is.S = fileSave;
+}
+
+
 static QString CaptureTextChartQt(flag fHTML)
 {
   char szTemp[] = "/tmp/astrolog-qt-text-XXXXXX";
@@ -876,34 +915,7 @@ static QString CaptureTextChartQt(flag fHTML)
   if (fd < 0)
     return QString();
   close(fd);
-
-  // Action() branches on us.fGraphics: "if (us.fGraphics) FActionX(); else
-  // PrintChart();" -- if it's still true here (e.g. a caller invoked this
-  // directly, without going through RedrawQt()'s own text-mode branch
-  // first), Action() takes the *graphics* path instead, which for QT ends
-  // up calling InteractQt() again -- a second, nested Qt event loop. Force
-  // it false for the duration so this helper is safe regardless of what
-  // the caller already did.
-  flag fGraphicsSave = us.fGraphics;
-  flag fTextHTMLSave = us.fTextHTML;
-  // is.S has to be saved across this too, and that is less obvious than
-  // the flags. The whole GUI runs inside an Action() call already (main
-  // -> Action -> FActionX -> InteractQt), so the Action() below is a
-  // nested one. It opens is.S on the temp file and closes it on the way
-  // out -- but leaves is.S pointing at the closed FILE. Everything that
-  // prints through is.S afterwards is then writing to a dead handle, and
-  // the outer Action() will eventually fclose() it a second time; glibc
-  // catches that as "invalid stdio handle" and aborts. astrolog.cpp:462
-  // saves and restores it around its own nested call for this reason.
-  FILE *fileSave = is.S;
-  us.fGraphics = fFalse;
-  FCloneSz(szTemp, &is.szFileScreen);
-  us.fTextHTML = fHTML;
-  Action();
-  FCloneSz(NULL, &is.szFileScreen);
-  us.fTextHTML = fTextHTMLSave;
-  us.fGraphics = fGraphicsSave;
-  is.S = fileSave;
+  CaptureTextToFileQt(szTemp, fHTML);
 
   QString qs;
   QFile file(szTemp);

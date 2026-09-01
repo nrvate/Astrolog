@@ -5792,6 +5792,72 @@ are the more useful half to read before starting something new.
     does not compile qttest.cpp, so the matrices have nothing to say
     about it and were not run.
 
+154. **T7's blessed capture helper, and the bug it was written to
+    prevent was already there.** REFACTORING.md's T7 proposes "one
+    blessed capture helper in shared code -- render current chart to this
+    file/buffer with these dimensions, touching nothing -- built once
+    from the dance `FExportChartQt()` already does correctly, then used
+    by every capture site". Read against the code, half of that is wrong
+    and the other half found a live defect.
+
+    **The shared-code half does not survive inspection.** Windows does
+    not do this dance at all. `DlgSaveChart()` (wdialog.cpp:555) only
+    *arms* the state -- `gs.ft = ftBmp; us.fGraphics = wi.fRedraw =
+    fTrue;` -- and lets the next redraw perform the export, saying so:
+    "Saving actual chart output isn't done until the next redraw."
+    `wdriver.cpp`'s autosave is a third shape again, re-running
+    `Action()` after the screen draw and restoring by *dividing* what it
+    multiplied. The Qt port cannot use the redraw-driven form, which is
+    why `FExportChartQt()` is synchronous with an explicit save/restore.
+    That is a deliberate divergence, not duplication, and a shared helper
+    would have exactly one caller. Recorded rather than done, the way
+    items 87 and 88 closed T3's harvest.
+
+    **The Qt half was real, and it was broken.** There are two text
+    captures in the port and they are the same dance:
+    `CaptureTextChartQt()` in qtdriver.cpp and `ShowExportTextDialogQt()`
+    in qtdialog.cpp -- the File menu's **Export Chart Text Output**. The
+    first saves and restores three globals; the second saved two.
+
+    The missing one is `is.S`, and the reason is not obvious, which is
+    why one copy had a paragraph about it and the other had nothing.
+    `Action()` (astrolog.cpp:151) opens `is.S` on `is.szFileScreen` and
+    `fclose()`s it at the end (astrolog.cpp:338) **without putting the
+    caller's back**. The whole GUI runs inside an `Action()` call already
+    (main -> Action -> FActionX -> InteractQt), so an export is a *nested*
+    one: afterwards `is.S` points at a closed `FILE`, everything printing
+    through it writes to a dead handle, and the outer `Action()`
+    `fclose()`s the same handle a second time on the way out, which
+    glibc catches as "invalid stdio handle" and aborts on.
+    `NPromptSwitches()` (astrolog.cpp:464) saves and restores it around
+    its own nested call for exactly this reason.
+
+    **Reproduced before it was fixed**, in the probe: `is.S == stdout` is
+    true before Export Chart Text Output's dance and false after.
+
+    `CaptureTextToFileQt()` in qtdriver.cpp is that dance, once, with the
+    three globals and the reason for each at the definition. Both callers
+    use it. The export dialog passes `us.fTextHTML` through rather than
+    forcing it, so the File Settings "Export as HTML" choice still
+    decides and nothing else about the export moves.
+
+    New `text-export` group, 4 assertions, and it puts `is.S` back by
+    hand after checking it so a regression fails this group instead of
+    taking the rest of the suite down. **Falsified**: deleting the
+    `is.S` restore fails it.
+
+    **And a correction to yesterday's claim.** Item 152 said all four
+    builds compile silently. That was measured with an *incremental*
+    `make -f Makefile.qt`, which never recompiled `qtdialog.o` -- the
+    exact trap CLAUDE.md names ("if a check claims to have rebuilt
+    something, look at the binary's timestamp"). Touching qtdialog.cpp
+    here surfaced a format-truncation warning that had been there the
+    whole time. Fixed, and all four re-verified with `make clean` first.
+
+    **Nets**: suite 3545/0; four clean builds, zero warnings each; four
+    audits and the settings round trip; ledger 318 -> 316. Qt-only
+    change, so the console matrices have nothing to say about it.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

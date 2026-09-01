@@ -170,6 +170,11 @@ void ResizeWindowToChartQt();
 void SizeChartToWindowQt();
 void ToggleFullScreenQt();
 void ClearScreenQt();
+
+// Render the current chart's text output to a file, restoring every
+// global it touches -- including is.S, which Action() leaves pointing
+// at a closed FILE. See the definition in qtdriver.cpp.
+void CaptureTextToFileQt(CONST char *szFile, flag fHTML);
 void ScrollChartQt(int nDir);
 
 #endif // __QTDRIVER_H
