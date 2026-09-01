@@ -5725,6 +5725,64 @@ are the more useful half to read before starting something new.
     carrying a verdict (items 148-151). `-Wformat-truncation=` went 45 to
     1 and `-Wunused-result` 18 to 0 on the way here.
 
+153. **The oracle gets three invariants that need no reference, and the
+    parked house findings turn out to name the wrong systems.** Item 11's
+    cheapest tranche: the properties the program must satisfy whatever
+    the numbers are, which is T9's argument in its least expensive form.
+    Three legs, seven assertions, all four of them falsified.
+
+    - **An aspect is the same aspect from either side.** `GetAspect(i, j)`
+      and `GetAspect(j, i)` ask about one pair of points, and
+      `FCreateGrid()` depends on their agreeing -- it fills half the grid
+      from `(x,y)` and reads the other half as `(y,x)`. 465 pairs, aspect
+      and orb compared both ways. Nothing had ever checked it.
+    - **A midpoint is equidistant from both sources and between them.**
+      `Midpoint2()` chooses between two candidate points 180 apart, which
+      is exactly where a sign error hides. 1,716 pairs swept.
+    - **A progressed chart at zero elapsed time is the natal chart.**
+      `CastChart()` adds `(JDp - T) / rProgDay` to the chart time, so a
+      progression whose target date *is* the natal date must land back on
+      the natal sky. Nothing else in the suite exercises the progression
+      path at all.
+
+    **Falsified, each against its own defect**: perturbing `GetOrb()`'s
+    limit fails aspect symmetry (1 of 465 -- a boundary flip, which is
+    the sensitivity you want); perturbing the orb the function *returns*
+    fails the orb half (91 of 465); disabling `Midpoint2()`'s
+    half-circle correction fails 435 of 1,716; adding a day to the
+    progression fails 27 of 31 objects. The orb half needed a second,
+    different sabotage -- the first one only moved the acceptance
+    boundary and left the returned orb alone, so that assertion was
+    passing unproven until it was aimed at properly.
+
+    **And a correction to item 141, which is the more useful half.** That
+    item parked two measured findings: "Topocentric houses run backwards
+    beyond the polar circle" and "Pullen (S.Delta) produces zero-width
+    houses at 70N and above". Re-measuring the partition over all 40
+    systems at 45N through 88N, on the Swiss house path that
+    `nrvate.as` selects, **neither reproduces** -- Topocentric closes the
+    circle at every latitude and Pullen S.Delta has no zero-width house.
+    What does misbehave is **Sunshine, which has a zero-width house at
+    70N and above**, and which item 141 does not mention.
+
+    The likely explanation is that there are two house engines and the
+    note does not say which it measured: `SwissHouse()` runs when
+    `us.fEphemFiles && !us.fPlacalcPla` and lets the library substitute
+    at extreme latitude, while Astrolog's own `ComputeHouses()`
+    (calc.cpp:502) runs otherwise and guards **only** Placidus and Koch
+    (calc.cpp:508). So the finding is probably real on the Matrix path
+    and was written down without the qualifier. **Not resolved here**:
+    the both-engines sweep is a slow measurement and the fix is a
+    maintainer decision about house math in both builds. What this item
+    contributes is that the record as written is wrong, and that leg 4 of
+    the oracle -- which runs at one mid latitude by design -- would have
+    caught the discrepancy years earlier if it swept latitude and engine.
+    That is the next increment for item 11.
+
+    **Nets**: suite 3541/0 (up 7). Test-only change; the console binary
+    does not compile qttest.cpp, so the matrices have nothing to say
+    about it and were not run.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -3753,11 +3753,8 @@ static void TextChartCaptureQt(CONST char *szDir)
 static void ProbeQt()
 {
   printf("gi.nMode=%d (gWheel=%d gHouse=%d)\n", gi.nMode, gWheel, gHouse);
-  printf("force[19]=%f  disp=%s  name=%s  renamed=%d\n",
-    force[19], szObjDisp[19], szObjName[19],
-    szObjDisp[19] != szObjName[19]);
-  printf("us.fListDecan=%d us.nDecanType=%d\n",
-    us.fListDecan, us.nDecanType);
+  printf("us.nHouseSystem=%d (%s)  fEphemFiles=%d\n",
+    us.nHouseSystem, szSystem[us.nHouseSystem], us.fEphemFiles);
 }
 
 
@@ -4021,6 +4018,102 @@ static void TestNumericOracleQt()
       Check(cBad == 0, "%s houses all have positive width", szSystem[i]);
       Check(RAbs(rSum - rDegMax) < 1.0e-9,
         "%s houses close the circle once (%.9f)", szSystem[i], rSum);
+    }
+
+    // ---- Leg 6: an aspect is the same aspect from either side ----
+    // GetAspect(i, j) and GetAspect(j, i) ask about one pair of points,
+    // and FCreateGrid() depends on their agreeing: it fills half the grid
+    // from (x,y) and reads the other half as (y,x). Nothing had ever
+    // checked it. This needs no reference outside the program -- it is
+    // the kind of invariant T9 argues for, true whatever the numbers are.
+    {
+      Borrow bApp(us.nAppSep, 0), bA3D(us.fAspect3D, fFalse);
+      Borrow bALat(us.fAspectLat, fFalse);
+      int j, aspA, aspB, cPair = 0, cBadAsp = 0, cBadOrb = 0;
+      real rOrbA, rOrbB;
+
+      OraclePinChartQt(2020);
+      CastChart(1);
+      for (i = 0; i <= is.nObj && i <= oNorm; i++) {
+        if (ignore[i])
+          continue;
+        for (j = i+1; j <= is.nObj && j <= oNorm; j++) {
+          if (ignore[j])
+            continue;
+          aspA = GetAspect(planet, planet, planetalt, planetalt,
+            ret, ret, i, j, &rOrbA);
+          aspB = GetAspect(planet, planet, planetalt, planetalt,
+            ret, ret, j, i, &rOrbB);
+          cPair++;
+          if (aspA != aspB)
+            cBadAsp++;
+          else if (aspA > 0 && RAbs(RAbs(rOrbA) - RAbs(rOrbB)) > 1.0e-9)
+            cBadOrb++;
+        }
+      }
+      Check(cPair > 100, "aspect symmetry has pairs to check (%d)", cPair);
+      Check(cBadAsp == 0,
+        "an aspect is the same aspect from either side (%d of %d differ)",
+        cBadAsp, cPair);
+      Check(cBadOrb == 0,
+        "and the same orb from either side (%d of %d differ)",
+        cBadOrb, cPair);
+    }
+
+    // ---- Leg 7: a midpoint lies halfway between its two sources ----
+    // Midpoint2() picks between two candidate points 180 apart, which is
+    // exactly where a sign error hides. The distances to each source must
+    // be equal and must add up to the distance between them.
+    {
+      real rA, rB, rMid, dAM, dMB, dAB;
+      int cPt = 0, cBadMid = 0;
+
+      for (rA = 0.0; rA < rDegMax; rA += 7.0)
+        for (rB = 0.0; rB < rDegMax; rB += 11.0) {
+          rMid = Midpoint2(rA, rB, 0.5);
+          dAM = MinDistance(rA, rMid);
+          dMB = MinDistance(rMid, rB);
+          dAB = MinDistance(rA, rB);
+          cPt++;
+          if (RAbs(dAM + dMB - dAB) > 1.0e-9 || RAbs(dAM - dMB) > 1.0e-9)
+            cBadMid++;
+        }
+      Check(cPt > 1000, "midpoint sweep has points (%d)", cPt);
+      Check(cBadMid == 0,
+        "a midpoint is equidistant from both sources and between them "
+        "(%d of %d fail)", cBadMid, cPt);
+    }
+
+    // ---- Leg 8: a progressed chart at zero elapsed time is the natal ----
+    // CastChart() adds (JDp - T) / rProgDay to the chart time, so a
+    // progression whose target date IS the natal date must land back on
+    // the natal sky. Nothing else here exercises the progression path at
+    // all, and this costs one extra cast.
+    {
+      real rgrNatal[objMax];
+      int cDiffProg = 0, cObjProg = 0;
+
+      OraclePinChartQt(2020);
+      CastChart(1);
+      for (i = 0; i <= is.nObj; i++)
+        rgrNatal[i] = planet[i];
+      {
+        Borrow bProgOn(us.fProgress, fTrue);
+        Borrow bJDp(is.JDp);
+        is.JDp = MdytszToJulian(MM, DD, YY, TT, SS, ZZ);
+        CastChart(1);
+        for (i = 0; i <= is.nObj; i++) {
+          if (ignore[i])
+            continue;
+          cObjProg++;
+          if (MinDistance(rgrNatal[i], planet[i]) > 1.0e-6)
+            cDiffProg++;
+        }
+      }
+      Check(cObjProg > 10, "progression check has objects (%d)", cObjProg);
+      Check(cDiffProg == 0,
+        "a progressed chart at zero elapsed time is the natal chart "
+        "(%d of %d moved)", cDiffProg, cObjProg);
     }
     cGood = 1;
   }
