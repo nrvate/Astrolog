@@ -6511,6 +6511,67 @@ are the more useful half to read before starting something new.
     **Nets**: suite 3553/0; 10 solo runs and 2 concurrent pairs with no
     crash; four builds clean.
 
+166. **Two buffer guards reported the overflow and then performed it.**
+    Chasing item 165's crash put two sessions in `xdevice.cpp`'s
+    wireframe code, and it turned out not to be the crash at all. Reading
+    it anyway found something else -- which is a hazard as much as a
+    result, since "we were looking there anyway" is how a coincidence
+    gets promoted into a cause. This one stands on the code, not on any
+    incident.
+
+    `WireNum()` and `WriteMetaWord()` both do:
+
+        if (offset >= limit) {
+          PrintError("... would be more than %ld bytes.");
+          Terminate(tcFatal);
+        }
+        *cursor = value;    // <-- reached anyway
+        cursor++;
+
+    **`Terminate()` returns** when `us.fNoQuit` is set -- its first two
+    lines are `if (us.fNoQuit) return;` (general.cpp:3377) -- and
+    `us.fNoQuit` is `-0q`, a documented switch that
+    `tools/switch-matrix.sh` exercises. So under `-0q` each guard prints
+    its message and then writes one word past the end of `gi.bm`, and
+    keeps doing so for the rest of the drawing. Both fixed with a
+    `return`, which is what the message already claims happens.
+
+    **No reproduction, and that is stated rather than glossed.** At the
+    default `gi.cbWire` of 8 MB the wireframe cannot get there: `gs.xWin`
+    and `gs.yWin` are clamped to `BITMAPX`/`BITMAPY` (xscreen.cpp:1573),
+    and pushing the canvas and object count as far as the clamp allows
+    plateaus at 8.88 MB of *output text*, roughly 5 MB of buffer. The
+    path is reachable when the allocation itself came back smaller --
+    `gi.cbWire` starts at MAXMETA and is reduced by MAXMETA/8 per failed
+    attempt -- so it wants memory pressure as well as `-0q`. Narrow, but
+    the code is wrong regardless of how narrow.
+
+    **Two other findings in the same function are recorded and NOT acted
+    on**, both from the parallel session, both correct and neither a
+    cause of anything observed:
+
+    - `WireNum()`'s guard tests the offset before writing a 2-byte word,
+      so the arithmetic hole is at `offset == cbWire-1`. Unreachable:
+      the cursor starts at offset 0 and advances by one word, so every
+      offset is even, and `cbWire` is `MAXMETA` decremented by
+      `MAXMETA/8`, so it is even too. An even offset never equals an odd
+      `cbWire-1`.
+    - `WriteWire()`'s loop is `while (pw < gi.pwWireCur)` with no check
+      that a whole record remains, and the segment branch reads
+      `pw[0]`..`pw[5]`. A short tail would read up to five words past the
+      cursor. Not reachable today either, because the writer only ever
+      appends complete records -- and the one thing that could have left
+      a partial record is the fall-through fixed above.
+
+    That last point is the reason to fix the fall-through even without a
+    reproduction: it was the only way to create the partial record the
+    over-read needs.
+
+    **Nets**: suite 3553/0; chart, switch and graphics matrices all 0;
+    `tools/win-tests.sh`; four builds, zero warnings each. Behaviour is
+    unchanged wherever the buffer does not overflow, which is everywhere
+    the matrices reach.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

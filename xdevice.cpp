@@ -1669,6 +1669,12 @@ void MetaWord(word w)
     sprintf2(S(sz), "Metafile would be more than %ld bytes.", gi.cbMeta);
     PrintError(sz);
     Terminate(tcFatal);
+    // Terminate() RETURNS when us.fNoQuit is set (-0q, general.cpp:3377),
+    // and without this the guard would report the overflow and then
+    // perform it -- one word past the end of gi.bm per call, for the rest
+    // of the drawing. Truncating is what the message above already claims
+    // happens (work log item 166).
+    return;
   }
   *gi.pwMetaCur = w;
   gi.pwMetaCur++;
@@ -1960,6 +1966,7 @@ void WireNum(int n)
     sprintf2(S(sz), "Wireframe would be more than %ld bytes.", gi.cbWire);
     PrintError(sz);
     Terminate(tcFatal);
+    return;      // Terminate() returns under -0q; see WriteMetaWord().
   }
   *gi.pwWireCur = (word)n;
   gi.pwWireCur++;
