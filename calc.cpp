@@ -2095,7 +2095,7 @@ flag FCreateGrid(flag fFlip)
   ClearB((pbyte)grid, sizeof(GridInfo));
 
   for (y = 0; y <= is.nObj; y++) if (!FIgnore(y))
-    for (x = 0; x <= is.nObj; x++) if (!FIgnore(x))
+    for (x = 0; x <= is.nObj; x++) if (!FIgnore(x)) {
 
       // The parameter 'flip' determines what half of the grid is filled in
       // with the aspects and what half is filled in with the midpoints.
@@ -2127,6 +2127,7 @@ flag FCreateGrid(flag fFlip)
         grid->n[x][y] = k;
         grid->v[x][y] = l - (real)((k-1)*30);
       }
+    }
   return fTrue;
 }
 
@@ -2145,7 +2146,7 @@ flag FCreateGridRelation(flag fMidpoint)
   ClearB((pbyte)grid, sizeof(GridInfo));
 
   for (y = 0; y <= is.nObj; y++) if (!FIgnore(y) || !FIgnore2(y))
-    for (x = 0; x <= is.nObj; x++) if (!FIgnore(x) || !FIgnore2(x))
+    for (x = 0; x <= is.nObj; x++) if (!FIgnore(x) || !FIgnore2(x)) {
       if (!fMidpoint) {
         // Aspect grids are represented using x,y coordinates, however note
         // that relationship aspect grids have chart #1 down the Y axis.
@@ -2171,6 +2172,7 @@ flag FCreateGridRelation(flag fMidpoint)
         grid->n[x][y] = k;
         grid->v[x][y] = l - (real)((k-1)*30);
       }
+    }
   return fTrue;
 }
 

@@ -2947,10 +2947,10 @@ flag API FRedraw(void)
       if (l == 0 && us.fTextHTML) {
         // Mark HTML clipboard fragment end character indexes.
         pch = (char *)(hpb + 39);
-        sprintf(pch, "%08d", lSize - 1);
+        sprintf(pch, "%08d", (int)(lSize - 1));
         *(pch + 8) = '\n';
         pch = (char *)(hpb + 87);
-        sprintf(pch, "%08d", lSize - 34);
+        sprintf(pch, "%08d", (int)(lSize - 34));
         *(pch + 8) = '\n';
       }
       GlobalUnlock(hglobal);

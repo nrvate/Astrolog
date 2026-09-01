@@ -755,6 +755,54 @@ return chart's object really is at its natal longitude.
 already linked) and no stored baseline (item 4 measured why baselines
 do not work here).
 
+### T10 — The compiler was diagnosing this codebase and nobody read it
+
+*Evidence.* Until 2026-09-01 no harness, audit or check in this project
+looked at a single compiler warning. `make` printed 66 at the makefiles'
+own flags and 220 with `-Wall`; the full four-build audit found **857 in
+209 sites**. Twenty-four of the 66 were `-Wformat-overflow=` — GCC
+*proving* a write past the end of a buffer, on the surface this project
+has spent two campaigns on (T5, work log items 133-134, 142-145).
+
+The gap has a named cause and it is written down elsewhere in this
+repo. The build checks match `: error:` and `^make.*\*\*\*` because a
+check matching `" error "` misses `Error 1` (work log item 145). That is
+the right rule for errors and it silently defined warnings out of
+existence.
+
+*Incident.* Two, on the day it was finally looked at (work log items
+146-147):
+
+1. **`make -f Makefile.win` had not compiled since 2026-08-29**, 62
+   commits, on a C++17 construct mingw g++ 10 rejects at its default
+   `-std`. `-fpermissive` downgraded the error, `-w` swallowed it, and
+   items 143, 144 and 145 each listed "Windows builds" among their nets
+   while the behavioural oracle produced no binary at all.
+2. **Two live buffer overflows and six varargs type mismatches**, all of
+   them named by the compiler for as long as the code had existed —
+   including a `!=` comparing a pointer to itself, which leaked every
+   `-YIC` string and which the switch matrix confirmed the moment it was
+   fixed.
+
+*Direction.* Done, as `tools/warning_audit.py` plus the
+`tools/warnings.txt` ledger: four builds compiled clean with `-Wall`,
+every warning keyed by (build, file, function, flag, message with the
+numbers masked) so that neither a resized buffer nor an inserted line
+churns the baseline, failing on removals as well as additions. What
+remains is working the ledger down — 819 in 198 sites, four campaigns,
+enumerated in QT_GUI_PLAN.md's "What to do next" item 13.
+
+*Cost/risk:* the net was low. The campaigns are not uniform:
+`-Wunused-*` is nearly free and `-Wmaybe-uninitialized` (91) is the
+opposite — at `-O` most are paths GCC cannot prove unreachable, and
+initializing a variable to silence one turns a latent bug into a
+confidently wrong answer. Read before touching.
+
+*What it does not cover.* mingw does not recognize `snprintf` as the
+builtin, so the Windows half of the audit sees no format diagnostics at
+all (45 on Linux, 0 there) — measured, not assumed. It remains the only
+diagnostic wdriver.cpp and wdialog.cpp have.
+
 ---
 
 ## The registry as built — read this before touching switch code

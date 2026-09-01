@@ -4190,7 +4190,7 @@ void XChartIndian()
       Mod12(fSouthIndian ? sig-1-n : (fNorthIndian ? n+3 : n-sig+3));
     if (fSouthIndian) {
       k = (10*gi.nScale *
-        ((!us.fWheelReverse || !FBetween(j, sTau, sLib) == us.fIndian ?
+        ((!us.fWheelReverse || (!FBetween(j, sTau, sLib)) == us.fIndian ?
         rgibox[i] : rgcbox[n]-1-rgibox[i])*2+fHouseSign - rgcbox[n])) >> 1;
       xp = rgx[j] + xb/2;
       yp = rgy[j] + yb/2 + z + k;

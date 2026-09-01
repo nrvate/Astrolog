@@ -668,6 +668,49 @@ The shared logic underneath is already covered by the Qt suite, since
 both builds call the same `calc.cpp` and `io.cpp`; what this adds is the
 Windows dialog and menu wiring, which nothing else sees.
 
+## The compiler is a harness too, and was unread until 2026-09-01
+
+```sh
+tools/warning_audit.py                 # all four builds, ~6 minutes
+tools/warning_audit.py --file io.cpp   # one file, seconds, while fixing
+tools/warning_audit.py --update        # after a fix, to move the ledger
+```
+
+It compiles console, Qt, Qt-test and Windows clean with `-Wall`,
+normalizes each warning to (build, file, function, flag, message with the
+numbers masked) and diffs that against `tools/warnings.txt` — 819
+warnings in 198 sites as of 2026-09-01. It fails on a **removed** line as
+well as an added one, so fixing something means regenerating the ledger
+and the ledger cannot drift into overstating what is left.
+
+Three things about it are worth knowing before you use it.
+
+**It is not pre-commit.** Four clean builds is minutes, like
+`tools/asan-sweep.sh` and `tools/win-tests.sh`. Use `--file` while
+working — it compiles one source file under all four flag sets in
+seconds — and the full run before a commit that touched a lot of code.
+
+**Subset runs are not a gate.** `--build console` prints its report and
+refuses to compare, because the first column is the *set* of builds that
+agree on a site: auditing one build renames every shared row and the diff
+would be pure noise.
+
+**The Windows half cannot see the format classes.** mingw redirects
+`snprintf` to `__mingw_snprintf`, which GCC does not treat as the
+builtin, so format analysis is silently absent — 45 format-truncation
+warnings under g++ 11 on Linux, 0 under mingw g++ 10. It is still the
+only diagnostic wdriver.cpp and wdialog.cpp have ever had (nothing else
+compiles them), and it found two real varargs bugs there on its first
+run.
+
+**What it caught first is the reason it exists.** `Makefile.win` carried
+`-w`. Taking it out did not reveal warnings — it revealed that the build
+had not compiled since 2026-08-29, 62 commits earlier, on a C++17
+feature mingw g++ 10 rejects at its default `-std`. `-fpermissive`
+downgraded the error and `-w` swallowed the message, and three work log
+items had listed "Windows builds" among their nets in the meantime. If a
+check claims a build compiles, look at the binary's timestamp.
+
 **When the change touches shared core, the two byte-diff harnesses are
 the real gate, and they are not pre-commit** — each needs a baseline
 binary built from the commit you are changing:

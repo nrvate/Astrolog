@@ -1413,7 +1413,7 @@ void PrintHorizonLine(real azi, real alt,
     vx = aziSun - azi;
     vy = aziMoo - azi;
     j = 1 + us.fSeconds;
-    sprintf(szFormat, " [%%%d.%df%%%d.%df] [%%%d.%df%%%d.%df]",
+    sprintf2(S(szFormat), " [%%%d.%df%%%d.%df] [%%%d.%df%%%d.%df]",
       j+5, j, j+5, j, j+5, j, j+5, j);
     sprintf(sz, szFormat,
       RAbs(vx) < rDegHalf ? vx : RSgn(vx) * (rDegMax - RAbs(vx)),

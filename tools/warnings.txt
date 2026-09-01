@@ -1,0 +1,212 @@
+# Compiler warnings, as counted by tools/warning_audit.py.
+#
+# This file is a ledger of what the compiler still objects to, not a list
+# of things that are fine. Every line here is either a defect nobody has
+# got to yet or a diagnostic somebody decided to live with; when one is
+# fixed the line disappears, and the audit fails until this file is
+# regenerated with --update. It fails on a *removed* line too, on purpose,
+# so the ledger cannot quietly overstate what is left.
+#
+# Format: build, file, function, flag, count, message with numbers masked.
+#
+# Regenerate:  tools/warning_audit.py --update
+# Total: 819 warnings in 198 distinct sites.
+
+console	xscreen.cpp	InteractX	-Wunused-variable	1	unused variable ‘buttonx’
+console	xscreen.cpp	InteractX	-Wunused-variable	1	unused variable ‘buttony’
+console+qt+qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
+console+qt+qt-test	atlas.cpp	DisplayTimezoneChanges	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	atlas.cpp	FLoadAtlas	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	atlas.cpp	FLoadAtlas	-Wunused-result	1	ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	atlas.cpp	FLoadZoneChanges	-Wformat-truncation=	2	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	atlas.cpp	FLoadZoneChanges	-Wunused-result	2	ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	atlas.cpp	FLoadZoneLinks	-Wformat-truncation=	2	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	atlas.cpp	FLoadZoneLinks	-Wunused-result	1	ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	atlas.cpp	FLoadZoneRules	-Wformat-truncation=	5	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	atlas.cpp	FLoadZoneRules	-Wunused-result	2	ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	calc.cpp	SwissEnsurePath	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	calc.cpp	SwissEnsurePath	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘int’ and ‘long unsigned int’
+console+qt+qt-test	charts0.cpp	DisplayCredits	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	charts0.cpp	PrintConstellations	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	charts1.cpp	ChartHorizon	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	charts1.cpp	ChartHorizon	-Wformat-truncation=	3	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	charts1.cpp	ChartOrbit	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	charts1.cpp	PrintHorizonLine	-Wformat-truncation=	1	‘%%’ directive output may be truncated writing N byte into a region of size between N and N
+console+qt+qt-test	charts2.cpp	CastRelation	-Wmaybe-uninitialized	1	‘rSav’ may be used uninitialized in this function
+console+qt+qt-test	charts3.cpp	ChartExoplanet	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	charts3.cpp	ChartExoplanet	-Wunused-result	3	ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	extern.h	DisplayRelation	-Wmaybe-uninitialized	1	‘k’ may be used uninitialized in this function
+console+qt+qt-test	extern.h	DisplayRelation	-Wparentheses	10	suggest parentheses around arithmetic in operand of ‘^’
+console+qt+qt-test	extern.h	DisplayRelation	-Wparentheses	6	suggest parentheses around arithmetic in operand of ‘|’
+console+qt+qt-test	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘r’ may be used uninitialized in this function
+console+qt+qt-test	general.cpp	FErrorValR	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	general.cpp	SzHMS	-Wformat-truncation=	1	‘:’ directive output may be truncated writing N byte into a region of size between N and N
+console+qt+qt-test	general.cpp	SzHMS	-Wformat-truncation=	1	‘__builtin___snprintf_chk’ output may be truncated before the last format character
+console+qt+qt-test	general.cpp	SzLocation	-Wformat-truncation=	1	‘__builtin___snprintf_chk’ output may be truncated before the last format character
+console+qt+qt-test	general.cpp	SzOffset	-Wformat-truncation=	1	‘%d’ directive output may be truncated writing between N and N bytes into a region of size N
+console+qt+qt-test	general.cpp	SzTimeR	-Wformat-truncation=	2	‘%Nd’ directive output may be truncated writing between N and N bytes into a region of size between N and N
+console+qt+qt-test	general.cpp	SzZodiac	-Wformat-truncation=	1	‘%d’ directive output may be truncated writing between N and N bytes into a region of size between N and N
+console+qt+qt-test	general.cpp	SzZone	-Wformat-truncation=	2	‘%d’ directive output may be truncated writing between N and N bytes into a region of size N
+console+qt+qt-test	intrpret.cpp	InterpretEsoteric	-Wmaybe-uninitialized	1	‘nObj’ may be used uninitialized in this function
+console+qt+qt-test	io.cpp	FInputData	-Wunused-result	5	ignoring return value of ‘int fscanf(FILE*, const char*, ...)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	io.cpp	FOutputSettings	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	io.cpp	FProcessAAFFile	-Wformat-truncation=	4	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	io.cpp	FProcessADBFile	-Wformat-truncation=	1	‘, ’ directive output may be truncated writing N bytes into a region of size between N and N
+console+qt+qt-test	io.cpp	FReadSzLineTrim	-Wunused-result	1	ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	io.cpp	FileOpen	-Wformat-truncation=	4	‘__builtin___snprintf_chk’ output may be truncated before the last format character
+console+qt+qt-test	io.cpp	GetJPLHorizons	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+console+qt+qt-test	io.cpp	OpenDir	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	io.cpp	OpenDir	-Wunused-variable	1	unused variable ‘szPath’
+console+qt+qt-test	placalc.cpp	outer_hel	-Wunused-result	3	ignoring return value of ‘size_t fread(void*, size_t, size_t, FILE*)’ declared with attribute ‘warn_unused_result’
+console+qt+qt-test	sweph.cpp	search_star_in_list	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘long int’ and ‘size_t’ {aka ‘long unsigned int’}
+console+qt+qt-test	xcharts0.cpp	DrawInfo	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
+console+qt+qt-test	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘c’ may be used uninitialized in this function
+console+qt+qt-test	xdevice.cpp	FBmpDrawBack	-Wunused-but-set-variable	1	variable ‘xLast’ set but not used
+console+qt+qt-test	xscreen.cpp	CommandLineX	-Wunused-but-set-variable	1	variable ‘fPause’ set but not used
+console+qt+qt-test+win	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘distN’ may be used uninitialized in this function
+console+qt+qt-test+win	atlas.cpp	DisplayAtlasLookup	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	atlas.cpp	DisplayTimezoneChanges	-Wmaybe-uninitialized	1	‘dst’ may be used uninitialized in this function
+console+qt+qt-test+win	atlas.cpp	DisplayTimezoneChanges	-Wmaybe-uninitialized	1	‘zon’ may be used uninitialized in this function
+console+qt+qt-test+win	calc.cpp	FObjMidSource	-Wunused-variable	1	unused variable ‘k’
+console+qt+qt-test+win	calc.cpp	GetAspect	-Wmaybe-uninitialized	1	‘rAngleND’ may be used uninitialized in this function
+console+qt+qt-test+win	calc.cpp	HousePullenSinusoidalRatio	-Wunused-but-set-variable	1	variable ‘rRatioN’ set but not used
+console+qt+qt-test+win	calc.cpp	Navamsa	-Wparentheses	1	suggest parentheses around ‘-’ in operand of ‘&’
+console+qt+qt-test+win	calc.cpp	SwissComputeAsteroid	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	calc.cpp	SwissComputeAsteroid	-Wunused-variable	1	unused variable ‘isz’
+console+qt+qt-test+win	calc.cpp	SwissHouse	-Wunused-variable	1	unused variable ‘result’
+console+qt+qt-test+win	calc.cpp	SwissTestStar	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	charts0.cpp	DisplayArabic	-Wparentheses	1	suggest parentheses around comparison in operand of ‘==’
+console+qt+qt-test+win	charts0.cpp	PrintS	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	charts0.cpp	PrintS	-Wunused-but-set-variable	1	variable ‘chNPrev’ set but not used
+console+qt+qt-test+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘ahi’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘icut’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘jcut’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartAstroGraphCore	-Wmaybe-uninitialized	1	‘pcr’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartAstroGraphCore	-Wmaybe-uninitialized	1	‘rgcr’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartAstroGraphCore	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	charts1.cpp	ChartGrid	-Wunused-but-set-variable	1	variable ‘temp’ set but not used
+console+qt+qt-test+win	charts1.cpp	ChartListing	-Wmaybe-uninitialized	1	‘k’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartListing	-Wmaybe-uninitialized	1	‘rT’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartMidpointCore	-Wmaybe-uninitialized	1	‘icut’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartMidpointCore	-Wmaybe-uninitialized	1	‘ilo’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartMidpointCore	-Wmaybe-uninitialized	1	‘jcut’ may be used uninitialized in this function
+console+qt+qt-test+win	charts1.cpp	ChartMidpointCore	-Wmaybe-uninitialized	1	‘jlo’ may be used uninitialized in this function
+console+qt+qt-test+win	charts2.cpp	ChartGridRelation	-Wunused-but-set-variable	1	variable ‘temp’ set but not used
+console+qt+qt-test+win	charts2.cpp	ChartTransitInfluence	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘cAsp’ may be used uninitialized in this function
+console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘cYea’ may be used uninitialized in this function
+console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘dYea’ may be used uninitialized in this function
+console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘ymin’ may be used uninitialized in this function
+console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	charts3.cpp	ChartTransitSearch	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	extern.h	DrawSymbolRing	-Wmaybe-uninitialized	1	‘nSav’ may be used uninitialized in this function
+console+qt+qt-test+win	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘xN’ may be used uninitialized in this function
+console+qt+qt-test+win	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘yN’ may be used uninitialized in this function
+console+qt+qt-test+win	extern.h	XChartTransit	-Wmaybe-uninitialized	1	‘cTot’ may be used uninitialized in this function
+console+qt+qt-test+win	extern.h	XChartTransit	-Wmaybe-uninitialized	1	‘xo’ may be used uninitialized in this function
+console+qt+qt-test+win	general.cpp	FSortCIList	-Wmaybe-uninitialized	1	‘fCompare’ may be used uninitialized in this function
+console+qt+qt-test+win	io.cpp	FOutputAAFFile	-Wmaybe-uninitialized	1	‘pch’ may be used uninitialized in this function
+console+qt+qt-test+win	io.cpp	FReadSzLineSkip	-Wmaybe-uninitialized	1	‘ch’ may be used uninitialized in this function
+console+qt+qt-test+win	io.cpp	RParseSz	-Wunused-variable	1	unused variable ‘cColon’
+console+qt+qt-test+win	matrix.cpp	ComputePlanets	-Wunused-but-set-variable	1	variable ‘helioz’ set but not used
+console+qt+qt-test+win	placalc.cpp	calc	-Wparentheses	1	suggest parentheses around ‘&&’ within ‘||’
+console+qt+qt-test+win	switch.cpp	FProcessSwitches	-Wunused-but-set-variable	1	variable ‘chN’ set but not used
+console+qt+qt-test+win	switch.cpp	FProcessSwitches	-Wunused-variable	1	unused variable ‘ci’
+console+qt+qt-test+win	switch.cpp	FProcessSwitches	-Wunused-variable	1	unused variable ‘j’
+console+qt+qt-test+win	switch.cpp	FProcessSwitches	-Wunused-variable	1	unused variable ‘k’
+console+qt+qt-test+win	switch.cpp	FProcessSwitches	-Wunused-variable	1	unused variable ‘pch’
+console+qt+qt-test+win	switch.cpp	FProcessSwitches	-Wunused-variable	1	unused variable ‘ppch’
+console+qt+qt-test+win	switch.cpp	FProcessSwitches	-Wunused-variable	1	unused variable ‘rT’
+console+qt+qt-test+win	switch.cpp	NSwV	-Wparentheses	1	suggest parentheses around assignment used as truth value
+console+qt+qt-test+win	xcharts0.cpp	DrawFillWheel	-Wmaybe-uninitialized	1	‘kvC’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts0.cpp	DrawMap	-Wmaybe-uninitialized	1	‘fSimple’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts0.cpp	DrawMap	-Wunused-variable	1	unused variable ‘fNext’
+console+qt+qt-test+win	xcharts0.cpp	DrawMap	-Wunused-variable	1	unused variable ‘unit’
+console+qt+qt-test+win	xcharts0.cpp	DrawObjects	-Wmaybe-uninitialized	1	‘kSav’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts0.cpp	DrawObjects	-Wsign-compare	3	comparison of integer expressions of different signedness: ‘KV’ {aka ‘long unsigned int’} and ‘int’
+console+qt+qt-test+win	xcharts0.cpp	DrawWheel	-Wmaybe-uninitialized	1	‘kSav’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts0.cpp	DrawWheel	-Wmaybe-uninitialized	1	‘rgRules’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts0.cpp	DrawWheel	-Wmaybe-uninitialized	1	‘rgTerm’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartIndian	-Wmaybe-uninitialized	1	‘kiContrast’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartIndian	-Wunused-but-set-variable	1	variable ‘xs’ set but not used
+console+qt+qt-test+win	xcharts1.cpp	XChartIndian	-Wunused-but-set-variable	1	variable ‘ys’ set but not used
+console+qt+qt-test+win	xcharts1.cpp	XChartLocal	-Wunused-but-set-variable	1	variable ‘te’ set but not used
+console+qt+qt-test+win	xcharts1.cpp	XChartOrbit	-Wunused-variable	1	unused variable ‘xpEar’
+console+qt+qt-test+win	xcharts1.cpp	XChartOrbit	-Wunused-variable	1	unused variable ‘ypEar’
+console+qt+qt-test+win	xcharts1.cpp	XChartSphere	-Wsign-compare	5	comparison of integer expressions of different signedness: ‘KV’ {aka ‘long unsigned int’} and ‘int’
+console+qt+qt-test+win	xcharts1.cpp	XChartSphere	-Wunused-but-set-variable	1	variable ‘zGlyphN’ set but not used
+console+qt+qt-test+win	xcharts1.cpp	XChartSphere	-Wunused-but-set-variable	1	variable ‘zGlyphS’ set but not used
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wmaybe-uninitialized	1	‘dRing’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wmaybe-uninitialized	1	‘xrSun’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wmaybe-uninitialized	1	‘yrSun’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wmaybe-uninitialized	2	‘xTN’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wmaybe-uninitialized	2	‘xdN’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wmaybe-uninitialized	2	‘yTN’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wmaybe-uninitialized	2	‘ydN’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wparentheses	1	suggest parentheses around comparison in operand of ‘==’
+console+qt+qt-test+win	xcharts1.cpp	XChartTelescope	-Wunused-but-set-variable	1	variable ‘radiM’ set but not used
+console+qt+qt-test+win	xcharts2.cpp	FillSymbolRing	-Wmaybe-uninitialized	1	‘ratio’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts2.cpp	XChartEphemeris	-Wmaybe-uninitialized	1	‘dx’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts2.cpp	XChartEphemeris	-Wmaybe-uninitialized	1	‘yea’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘cAsp’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘cYea’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘dYea’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘yea’ may be used uninitialized in this function
+console+qt+qt-test+win	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘ymin’ may be used uninitialized in this function
+console+qt+qt-test+win	xdevice.cpp	FAllocateBmp	-Wparentheses	3	suggest parentheses around ‘+’ in operand of ‘&’
+console+qt+qt-test+win	xdevice.cpp	FBmpDrawMap	-Wmaybe-uninitialized	1	‘cost’ may be used uninitialized in this function
+console+qt+qt-test+win	xdevice.cpp	FBmpDrawMap	-Wmaybe-uninitialized	1	‘sint’ may be used uninitialized in this function
+console+qt+qt-test+win	xdevice.cpp	WireOctahedron	-Wparentheses	2	suggest parentheses around ‘+’ in operand of ‘&’
+console+qt+qt-test+win	xdevice.cpp	WireStar	-Wunused-variable	1	unused variable ‘pch’
+console+qt+qt-test+win	xdevice.cpp	WriteBmp	-Wparentheses	2	suggest parentheses around arithmetic in operand of ‘^’
+console+qt+qt-test+win	xgeneral.cpp	DrawFill	-Wsign-compare	2	comparison of integer expressions of different signedness: ‘KI’ {aka ‘int’} and ‘KV’ {aka ‘long unsigned int’}
+console+qt+qt-test+win	xgeneral.cpp	DrawTurtle	-Wparentheses	3	suggest parentheses around assignment used as truth value
+console+qt+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘ihi’ may be used uninitialized in this function
+console+qt+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘jhi’ may be used uninitialized in this function
+qt+qt-test	qtdialog.cpp	(unknown)	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QComboBox* AddColorComboQt(QFormLayout*, const char*, KI, int)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QComboBox* NewComboQt(const QString&, const QStringList&)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QString SzAspDlgQt(int)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QString SzChartDateLineQt(const CI*)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QString SzChartNameLineQt(const CI*)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘QString SzObjDlgPlainQt(int)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘flag FChartFieldMatchQt(const char*, const char*)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘void HeadersQt(QGridLayout*, int, int, const char**)’ defined but not used
+qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘void PlaceRowQt(int, int, int, int*, int*)’ defined but not used
+qt+qt-test	qtdriver.cpp	(unknown)	-Wunused-function	1	‘void RedrawTextQt()’ defined but not used
+qt+qt-test+win	xdevice.cpp	WireDrawGlobe	-Wmaybe-uninitialized	1	‘zold’ may be used uninitialized in this function
+qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	1	‘ihi’ may be used uninitialized in this function
+qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	1	‘jhi’ may be used uninitialized in this function
+qt-test	qttest.cpp	(global scope)	-Wunused-variable	1	‘s_fWarnedQt’ defined but not used
+qt-test	qttest.cpp	TestRegistryQt	-Wunused-but-set-variable	1	variable ‘sz’ set but not used
+qt-test	qttest.cpp	TestRegistryQt	-Wunused-variable	1	unused variable ‘grf’
+qt-test	qttest.cpp	TestRegistryQt	-Wunused-variable	1	unused variable ‘tab’
+qt-test	qttest.cpp	TestSharedCoreFixesQt	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘int’ and ‘long unsigned int’
+win	astrolog.cpp	Action	-Wmaybe-uninitialized	1	‘fHTMLClip’ may be used uninitialized in this function
+win	astrolog.h	CastRelation	-Wmaybe-uninitialized	1	‘tN’ may be used uninitialized in this function
+win	astrolog.h	ComputeEphem	-Wmaybe-uninitialized	1	‘distN’ may be used uninitialized in this function
+win	atlas.cpp	DisplayAtlasLookup	-Wmaybe-uninitialized	1	‘fSav’ may be used uninitialized in this function
+win	atlas.cpp	DisplayAtlasLookup	-Wmaybe-uninitialized	1	‘nSav’ may be used uninitialized in this function
+win	calc.cpp	SwissEnsurePath	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘int’ and ‘long long unsigned int’
+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘phi’ may be used uninitialized in this function
+win	charts1.cpp	PrintChart	-Wmaybe-uninitialized	1	‘nSavAnsi’ may be used uninitialized in this function
+win	extern.h	DrawArc	-Wmaybe-uninitialized	1	‘m’ may be used uninitialized in this function
+win	extern.h	DrawArc	-Wmaybe-uninitialized	1	‘n’ may be used uninitialized in this function
+win	extern.h	XChartBiorhythm	-Wparentheses	10	suggest parentheses around arithmetic in operand of ‘^’
+win	extern.h	XChartBiorhythm	-Wparentheses	6	suggest parentheses around arithmetic in operand of ‘|’
+win	general.cpp	FSortCIList	-Wmaybe-uninitialized	1	‘rT’ may be used uninitialized in this function
+win	general.cpp	SzLocation	-Wmaybe-uninitialized	1	‘iN’ may be used uninitialized in this function
+win	general.cpp	SzLocation	-Wmaybe-uninitialized	1	‘jN’ may be used uninitialized in this function
+win	sweph.cpp	search_star_in_list	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘long long int’ and ‘size_t’ {aka ‘long long unsigned int’}
+win	wdialog.cpp	DlgPrint	-Wmaybe-uninitialized	1	‘fInverse’ may be used uninitialized in this function
+win	wdialog.cpp	DlgPrint	-Wunused-value	4	statement has no effect
+win	wdriver.cpp	FRedraw	-Wmaybe-uninitialized	1	‘hbmpOld’ may be used uninitialized in this function
+win	wdriver.cpp	FRedraw	-Wmaybe-uninitialized	1	‘hdcWin’ may be used uninitialized in this function
+win	wdriver.cpp	FRedraw	-Wmaybe-uninitialized	1	‘nScrollRow’ may be used uninitialized in this function
+win	xdevice.cpp	WireCircle	-Wmaybe-uninitialized	1	‘m’ may be used uninitialized in this function
+win	xdevice.cpp	WireCircle	-Wmaybe-uninitialized	1	‘n’ may be used uninitialized in this function
+win	xdevice.cpp	WireCircle	-Wmaybe-uninitialized	1	‘o’ may be used uninitialized in this function
+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘hfontPrev’ may be used uninitialized in this function
+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘hfont’ may be used uninitialized in this function
+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘kvSav’ may be used uninitialized in this function
+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘nSav’ may be used uninitialized in this function

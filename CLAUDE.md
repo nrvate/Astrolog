@@ -174,6 +174,28 @@ python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # first run
 ```
 
+And a seventh that is not fast and not resource-shaped: **the compiler
+itself**, which nothing here read until 2026-09-01.
+
+```sh
+tools/warning_audit.py               # all four builds clean with -Wall,
+                                     # every warning diffed against
+                                     # tools/warnings.txt (819 in 198
+                                     # sites); ~6 minutes, so pre-release
+                                     # rather than pre-commit
+tools/warning_audit.py --file io.cpp # one file, seconds, no baseline --
+                                     # the loop to use while fixing
+```
+
+It earns its place the way the sanitizer sweeps did. Its first run found
+that **`make -f Makefile.win` had not compiled since 2026-08-29**, 62
+commits, while three work log items listed "Windows builds" among their
+nets -- the oracle build was dead and the error was `Error 1`, which the
+old checks did not match. Warnings are a real signal here for a second
+reason: item 143's sweep left GCC naming every buffer still too small for
+its worst case, and two of those were live overflows (work log items
+146-147).
+
 And three **differential harnesses**, which are a different kind of check:
 each prints a normalized behavioural artifact for one binary, so two
 builds of this tree can be byte-diffed and an empty diff is the proof.

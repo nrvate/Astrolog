@@ -2281,7 +2281,7 @@ char *SzColor(KI ki)
   else {
     // Compose RGB color value.
     neg(ki);
-    sprintf2(S(szCol), "#%06x", Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
+    sprintf2(S(szCol), "#%06x", (uint)Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
   }
   return szCol;
 }
@@ -2299,7 +2299,7 @@ char *SzColor2(KI ki)
   else {
     // Compose RGB color value.
     neg(ki);
-    sprintf2(S(szCol), "#%06x", Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
+    sprintf2(S(szCol), "#%06x", (uint)Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
   }
   return szCol;
 }
@@ -2330,7 +2330,7 @@ CONST char *SzColorHTML(KI ki)
     kv = -ki;
 
   // Otherwise compose the RGB value for this color.
-  sprintf2(S(szCol), "#%06x", Rgb(RgbB(kv), RgbG(kv), RgbR(kv)));
+  sprintf2(S(szCol), "#%06x", (uint)Rgb(RgbB(kv), RgbG(kv), RgbR(kv)));
   return szCol;
 }
 

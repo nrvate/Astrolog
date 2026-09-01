@@ -635,9 +635,10 @@ void XChartWheelMulti()
     if (fQuin) {
       rT -= off;
       DrawCircle(cx, cy, (int)(unitx*rT+rRound), (int)(unity*rT+rRound));
-      if (fHexa)
+      if (fHexa) {
         rT -= off;
         DrawCircle(cx, cy, (int)(unitx*rT+rRound), (int)(unity*rT+rRound));
+      }
     }
   }
   if (fQuin)

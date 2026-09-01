@@ -18,8 +18,22 @@ ODIR   = obj-win
 # min/max are restored by wincompat.h, included at the end of astrolog.h --
 # they can't be defined on the command line because libstdc++'s c++config.h
 # undefines them partway through the include chain.
+#
+# This used to say "-w", which silences every diagnostic. wdriver.cpp and
+# wdialog.cpp are compiled by no other makefile in the tree, so that one
+# flag left them the only two source files here that nothing had ever
+# diagnosed. Replaced 2026-09-01 with the same three suppressions the
+# Linux makefiles carry, which is all -w was actually needed for: with
+# those three, this build reports zero warnings at the default level.
+#
+# -std=gnu++17 comes with it, and is not optional. mingw g++ 10 defaults to
+# gnu++14, where calc.cpp's "Borrow bciCore(ciCore);" -- class template
+# argument deduction, a C++17 feature the Linux builds get for free from
+# g++ 11's default -- is a hard error. -fpermissive downgraded it and -w
+# then swallowed the message, which is how it went unnoticed.
 CFLAGS = -DWIN -DPC -D_WINDOWS -DWIN32 -D__CRT__NO_INLINE \
-         -O2 -w -fpermissive -static
+         -O2 -fpermissive -static -std=gnu++17 \
+         -Wno-write-strings -Wno-narrowing -Wno-comment
 LIBS   = -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lole32 -luuid -lwinspool \
          -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32 -lurlmon
 LDFLAGS = -mwindows -static -static-libgcc -static-libstdc++

@@ -315,6 +315,46 @@ Roughly in the order I'd take them.
    `wdriver.cpp`/`wdialog.cpp` were left out of the sweep entirely --
    upstream-shaped, and neither matrix can exercise them.
 
+13. **Work the warning ledger down.** Added 2026-09-01 (work log items
+    146-147). `tools/warning_audit.py` holds 819 warnings in 198 sites
+    against `tools/warnings.txt`; item 147 took the six classes where a
+    diagnostic is nearly always a defect and emptied them. What is left
+    is four campaigns, not one sweep, and they are in rough
+    value-per-risk order:
+
+    - **`-Wunused-*`, 50 sites** (variable 21, but-set-variable 15,
+      function 10, value 4). Cheapest, and the one most likely to
+      surface something: an assigned-but-never-read variable is often a
+      computation somebody forgot to use. Deleting a name changes no
+      object code, which makes it self-netting the way P7's rename was.
+    - **`-Wsign-compare`, 15.** Each one is a real question -- a signed
+      loop bound against an unsigned size -- and the answer is usually
+      "cannot actually happen here", which is worth a comment rather
+      than a cast.
+    - **`-Wparentheses`, 55.** Almost all upstream's idiom. Read each,
+      parenthesize the ones that mean what they say, and *stop* at any
+      that turn out not to; a precedence bug in this family is exactly
+      the shape of item 147's `XChartIndian` site.
+    - **`-Wmaybe-uninitialized`, 91.** The largest and the least
+      trustworthy: at `-O` GCC guesses, and most of these are paths it
+      cannot prove are unreachable. Do not initialize a variable to
+      silence one -- that converts a real bug into a wrong answer.
+      Read, and only then decide.
+
+    Two are deliberately *not* on the list. **`-Wunused-result` (18)**
+    is every `fgets` whose return nobody checks, all in the atlas and
+    import loaders; each is a real "what if the file ends early" and a
+    real behaviour change to fix, so it wants its own increment with the
+    import-format tests as the net. **`-Wformat-truncation=` (45)** is
+    T5's residue and already documented at REFACTORING.md T5: the
+    compiler is naming the buffers too small for their worst case, which
+    is a sizing question per site, not a sweep.
+
+    The rule that makes this safe is the one item 147 followed: a
+    warning fix is behaviour-preserving or it is a bug fix, and either
+    way it needs the matrices. Never both in one commit without saying
+    which is which.
+
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
 
@@ -5094,9 +5134,174 @@ are the more useful half to read before starting something new.
     of *stack smashing detected* at HEAD replaced by the 164-line settings
     dump that invocation now produces; settings round trip all three legs;
     six audits clean; console, Qt, Qt-test, Windows and ASan builds all
-    compile. Every makefile carries `$(OBJS): astrolog.h extern.h`, so a
+    compile *(wrong about Windows -- it had not compiled since
+    2026-08-29; see item 146)*. Every makefile carries `$(OBJS): astrolog.h extern.h`, so a
     prototype change really does rebuild everything -- worth checking,
     because 20 signatures moved.
+
+146. **Nothing here had ever read a compiler warning, and under that
+    cover the Windows build had been broken for three days.** The
+    maintainer asked why `make` prints so many warnings. Counting them
+    produced two findings, and the second is the serious one.
+
+    **First, what the warnings are, because the obvious reading is
+    wrong.** A clean console build prints **66** at the makefile's own
+    flags and **220** with `-Wall`. Nearly every visible one sits on a
+    `sprintf2(S(...))` call -- work log item 143's sweep -- which reads
+    like the sweep introduced them. Measured against the pre-sweep
+    commit (`012303b`), it did not:
+
+        pre-sweep 012303b     HEAD before this item
+        24 -Wformat-overflow=  2 -Wformat-overflow=
+        21 -Wformat-truncation= 43 -Wformat-truncation=
+        18 -Wunused-result     18 -Wunused-result
+         3 -Wformat=            3 -Wformat=
+        -- 66 --               -- 66 --
+
+    Twenty-two sites moved class, one for one, and the total did not
+    move at all. `-Wformat-truncation` exists only for the `snprintf`
+    family -- it needs a bound to compare against -- so before the sweep
+    those same lines were bare `sprintf` with no bound, and GCC had
+    nothing to say. The sweep turned twenty-two *provable overflows*
+    into bounded truncations and left the compiler naming exactly which
+    buffers are still too small for their worst case. Item 143 said
+    "where it did not fit, undefined behaviour became truncation" in one
+    clause; this is the list it was talking about, and nobody had read
+    it.
+
+    Which is the real finding underneath: **GCC had been naming 24
+    provable buffer overflows in this tree all along.** The build checks
+    match `: error:` and `^make.*\*\*\*` deliberately, for the reason
+    CLAUDE.md gives. Warnings fell straight through that gap, and no
+    harness here has ever looked at one.
+
+    **`tools/warning_audit.py` closes the gap.** It compiles all four
+    builds clean with `-Wall`, normalizes every warning to (build, file,
+    function, flag, message with numbers masked), counts duplicates, and
+    diffs the result against `tools/warnings.txt`. The masking is not
+    cosmetic: numbers move when a buffer is resized and line numbers
+    move on every insertion above a site, so neither can anchor a
+    ledger; the function name survives both. Builds that agree collapse
+    into one row -- a shared-core warning is one fact, not three -- and a
+    count that differs between builds splits back out, which is the case
+    worth seeing because it means the warning depends on `-DQT` or
+    `-DQTTEST`. It fails on a **removed** line as well as an added one,
+    so the ledger cannot quietly overstate what is left.
+
+    **Falsified in both directions on its first real use**, which is the
+    only reason to believe it: it reported exactly the twelve sites item
+    147 fixed as GONE, and the two that changed class as NEW.
+
+    **Then the second finding.** Turning warnings on means taking `-w`
+    out of `Makefile.win`. Doing that, the build stopped compiling:
+
+        calc.cpp:1270:10: error: missing template arguments before 'bciCore'
+
+    That is not a warning `-w` was hiding. `make -f Makefile.win` at
+    HEAD, unmodified, **fails and produces no `astrolog.exe` at all**.
+    mingw g++ 10 defaults to `gnu++14`, where `Borrow bciCore(ciCore);`
+    -- class template argument deduction, which g++ 11 hands the Linux
+    builds for free -- is an error. `-fpermissive` downgraded it to a
+    diagnostic and `-w` then swallowed the message.
+
+    **It has been broken since `9822152` (T1 move 2, 2026-08-29) -- 62
+    commits and three days** -- the commit that introduced the `Borrow`
+    template and its first three uses in io.cpp. Work log items 143, 144
+    and 145 each list "Windows builds" among their nets. **All three
+    were wrong.** The behavioural oracle, the thing Windows parity is
+    measured against, was dead the whole time, and the check that should
+    have caught it is the one item 145 wrote its own lesson about:
+    *check for the compiler's failure, not for a word*. The lesson was
+    right and got applied to the Linux builds only.
+
+    Fixed with `-std=gnu++17` in `Makefile.win`, plus the three
+    `-Wno-write-strings`/`-narrowing`/`-comment` flags that are all `-w`
+    was ever doing. With those the Windows build reports **zero**
+    warnings at default level, compiles, runs under Wine, and
+    `tools/win-tests.sh` passes both scenarios again.
+
+    **One thing that build cannot do, measured rather than assumed.**
+    mingw redirects `snprintf` to `__mingw_snprintf`, which GCC does not
+    recognize as the builtin, so its format analysis is silently absent
+    there: the same tree reports 45 format-truncation warnings under
+    g++ 11 and 0 under mingw g++ 10. Turning warnings on there is still
+    worth it -- it is the only diagnostic wdriver.cpp and wdialog.cpp
+    have ever had, and it found two real ones (item 147) -- but it is
+    not the net for that class.
+
+    **Where the ledger stands after item 147: 819 warnings in 198
+    sites** -- console 210, qt 220, qt-test 225, win 164. Six classes
+    are now empty. What is left is `-Wmaybe-uninitialized` 91,
+    `-Wparentheses` 55, `-Wformat-truncation=` 45, the unused-* family
+    50, `-Wunused-result` 18 and `-Wsign-compare` 15: four separate
+    campaigns, none of them a sweep. See "What to do next".
+
+147. **The twelve warnings the compiler was right about.** Item 146's
+    first pass took the classes where a diagnostic is nearly always a
+    defect rather than a style note. Twelve sites, six classes, all but
+    two in shared core, so the Windows build takes them too.
+
+    **A memory leak nobody could see, because the test was against
+    itself.** `FinalizeProgram()`, astrolog.cpp:698:
+
+        if (szLifeArea[i] != szLifeArea[i])      // -Wtautological-compare
+          DeallocateP((char *)szLifeArea[i]);
+
+    The two lines above it read `szDesc[i] != szDescDef[i]` and
+    `szDesire[i] != szDesireDef[i]`. This one compares a pointer to
+    itself, is always false, and so never frees a life-area string that
+    `-YIC` replaced. **The switch matrix proved it:** across 75,635
+    lines the entire behavioural diff for this whole increment is one
+    line disappearing, under the invocation `-YIC 7 partnerships` --
+
+        - Number of memory allocations not freed before exiting: 1
+
+    **Two provable overflows, both bounded now.** `GetJPLHorizons()`
+    formatted up to 1,019 bytes of `szLine` into the 870-887 bytes left
+    in `szUrl[cchSzLine]`; `PrintHorizonLine()` built its format string
+    into `szFormat[cchSzDef]` unbounded. Both are item 143's "split
+    lines" bucket -- multi-line string literals its parser never
+    reached. `-Wformat-overflow=` is now **0** across all four builds.
+
+    **Six varargs type mismatches.** `SzColor`, `SzColor2` and
+    `SzColorHTML` passed a `dword` (`unsigned long`, 8 bytes on LP64) to
+    `%x`, which reads 4. `FRedraw()` in wdriver.cpp passed `long` to
+    `%d` twice, and `GetURL()` passed an `HRESULT`. Fixed with casts
+    rather than length modifiers on purpose: `dword` is 8 bytes on Linux
+    and 4 on Windows, so `%lx` would be wrong on one of them. The two in
+    wdriver.cpp are the first diagnostics that file has ever received.
+    `-Wformat=` is now **0**.
+
+    **A draw that only looked guarded.** xcharts2.cpp:638, in
+    `XChartWheelMulti()`:
+
+        if (fHexa)
+          rT -= off;
+          DrawCircle(cx, cy, ...);      // runs either way
+
+    With `fHexa` clear this redrew the circle from two lines above at an
+    unchanged `rT` -- pixel-identical, which is why it never showed. The
+    braces make it say what it does. **Netted with a bitmap
+    differential** over `-r3` through `-r6`, proven pairwise distinct
+    first (four different md5s) and then sabotage-proven: changing
+    `rT -= off` to `off*2` inside the block moves `-r6` and nothing
+    else. All four byte-identical before and after the fix.
+
+    **And three the compiler was right about in the weaker sense** --
+    correct code that reads wrong. `NParseSz()`'s hex-colour loop had
+    its byte-swap indented as though inside the loop; `XChartIndian()`
+    had `!FBetween(...) == us.fIndian` with the precedence it wanted but
+    not the parentheses; `FCreateGrid()` and `FCreateGridRelation()` had
+    an unbraced `if` wrapping an if/else chain. All three are
+    behaviour-preserving by inspection and by the matrices.
+
+    **Nets**: suite 3526/0; chart matrix **0 of 6,936**; switch matrix
+    **2 of 75,635**, being exactly the leak that stopped happening;
+    multi-wheel bitmap differential identical over four modes, sabotage
+    proven; settings round trip all three legs; six audits and three
+    generated tables clean; `tools/win-tests.sh` 2 scenarios; console,
+    Qt, Qt-test and Windows builds all compile -- and this time that
+    claim was checked rather than assumed (item 146).
 
 ## Features this fork adds to both builds
 

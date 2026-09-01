@@ -2424,7 +2424,7 @@ int NParseSz(CONST char *szEntry, int pm)
       if (ch0 == '#' && CchSz(sz) == 7) {
         for (n = 1; sz[n]; n += 2)
           i = (i << 8) | (NHex(ChUncap(sz[n])) << 4) | NHex(ChUncap(sz[n+1]));
-          i = Rgb(RgbB(i), RgbG(i), RgbR(i));
+        i = Rgb(RgbB(i), RgbG(i), RgbR(i));
         return -i;
       }
       break;
@@ -3021,7 +3021,7 @@ flag GetURL(const char *szUrl, const char *szFile)
   hr = URLDownloadToFile(NULL, szUrl, szFile, 0, NULL);
   if (!FAILED(hr))
     return fTrue;
-  sprintf2(S(sz), "Failed to download '%s' (error %08x)\n", szUrl, hr);
+  sprintf2(S(sz), "Failed to download '%s' (error %08x)\n", szUrl, (uint)hr);
 #elif defined(QT)
   // Qt Network: real TLS, a timeout, a Cancel button, an error message
   // that says which thing went wrong, and no shell anywhere near it.
@@ -3154,7 +3154,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   // plain text, so the parse below is unchanged -- verified by fetching
   // both with identical parameters and diffing: same target line, same
   // CSV rows, same $$SOE marker.
-  sprintf(szUrl, "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&"
+  sprintf2(S(szUrl), "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&"
     "COMMAND='%d%s'&"
     "OBJ_DATA='YES'&"
     "MAKE_EPHEM='YES'&"

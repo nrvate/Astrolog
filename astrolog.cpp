@@ -695,7 +695,7 @@ void FinalizeProgram(flag fSkip)
       DeallocateP((char *)szDesc[i]);
     if (szDesire[i] != szDesireDef[i])
       DeallocateP((char *)szDesire[i]);
-    if (szLifeArea[i] != szLifeArea[i])
+    if (szLifeArea[i] != szLifeAreaDef[i])
       DeallocateP((char *)szLifeArea[i]);
   }
   for (i = 0; i <= cAspect; i++) {
