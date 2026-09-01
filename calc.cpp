@@ -512,25 +512,54 @@ void HousePullenSinusoidalRatio(real Asc)
 // makes this one check serve both engines, and it will catch a system that
 // starts failing without anyone adding it to a list.
 //
-// Deliberately NOT a check on zero-width houses. Pullen (S.Delta) collapses
-// two cusps onto one degree on purpose when a quadrant is under 30 degrees
-// wide (see HousePullenSinusoidalDelta: "chouse[sAqu] = chouse[sPis] =
-// Midpoint(...)"), and its gaps still sum to 360. That is a degenerate case
-// its author wrote, not a broken partition, so it stays.
+// A zero-width house counts as degenerate too, with one family exempt.
+// Pullen (S.Delta) collapses two cusps onto one degree ON PURPOSE when a
+// quadrant is under 30 degrees wide -- see HousePullenSinusoidalDelta,
+// "chouse[sAqu] = chouse[sPis] = Midpoint(...)" -- because three houses
+// will not fit in it. That is Astrolog's own author writing a degenerate
+// case, so the three systems built by that function are skipped.
+//
+// Sunshine is not in that category, and the Swiss Ephemeris source says
+// so itself. swehouse.cpp falls back to Porphyry inside the polar circle
+// for Placidus (line 1831), Koch (1251) and Regiomontanus (1628), and its
+// Sunshine dispatch has the same fallback ready at line 1175 -- but the
+// polar check that would trigger it is commented out in BOTH Sunshine
+// solutions (2919 Makransky, 3055 Treindl):
+//
+//     // if (90 - fabs(lat) <= ecl) {
+//     //   strcpy(hsp->serr, "Sunshine in polar circle not allowed");
+//     //   return ERR;
+//     // }
+//
+// Astrolog asks for 'I', the Treindl solution, so it gets cusps the
+// library's own guard was written to refuse. Third-party code is out of
+// scope here (REFACTORING.md non-goals); this check is the boundary our
+// code presents to it, which is in scope, and it produces exactly the
+// Porphyry fallback that file uses everywhere else (work log item 160).
 
 flag FEnsureHousePartition(int housesystem)
 {
   char sz[cchSzDef];
-  real rSum = 0.0, rGap;
+  real rSum = 0.0, rGap, rGapMin = rDegMax;
+  flag fCollapseOk;
   int i;
 
+  fCollapseOk = (housesystem == hsSineDelta ||
+    housesystem == hsSineDeltaEP || housesystem == hsSineDeltaVtx);
   for (i = 1; i <= cSign; i++) {
     rGap = chouse[i == cSign ? 1 : i+1] - chouse[i];
     if (rGap < 0.0)
       rGap += rDegMax;
+    if (rGap < rGapMin)
+      rGapMin = rGap;
     rSum += rGap;
   }
-  if (RAbs(rSum - rDegMax) < 0.01)
+  // 0.001 degrees is 3.6 arcseconds. A house narrower than that is
+  // degenerate by any reading, and the threshold matches the one the
+  // oracle's leg 4b sweep uses so the two cannot disagree about what
+  // counts -- they did once, and the guard silently passed a Sunshine
+  // chart whose narrowest house was a rounding error wide.
+  if (RAbs(rSum - rDegMax) < 0.01 && (fCollapseOk || rGapMin >= 0.001))
     return fFalse;
   sprintf2(S(sz),
     "The %s system of houses is not defined at extreme latitudes.",

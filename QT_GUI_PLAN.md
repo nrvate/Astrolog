@@ -297,11 +297,12 @@ Roughly in the order I'd take them.
    fall back to Porphyry now, via a post-condition
    (`FEnsureHousePartition()`) called from **both** engines, since five
    of them fail on the Swiss path the old guard never reached.
-   **Pullen (S.Delta) and Sunshine** produce a zero-width house whose
-   gaps still sum to 360, so the guard leaves them alone. Pullen's
-   collapse is deliberate in `HousePullenSinusoidalDelta()`; Sunshine's
-   happens inside the Swiss library and is **unexamined** — see item 158.
-   Oracle leg 4b pins all of it.
+   **Sunshine** was fixed too (item 160): its zero-width house turned out
+   to be a polar guard the Swiss library's author wrote and commented out
+   in both Sunshine solutions, in a file that falls back to Porphyry for
+   Placidus, Koch and Regiomontanus. Only **Pullen (S.Delta)** collapses
+   on purpose, in Astrolog's own `HousePullenSinusoidalDelta()`, and it
+   is the one system leg 4b still expects to.
 
    Two measured findings are parked there rather than fixed, both
    maintainer calls because they change house math in both builds:
@@ -6206,6 +6207,72 @@ are the more useful half to read before starting something new.
     Two generators needed a one-line fix: `rc_accel.py` and `rc_cmd.py`
     split the resource on a literal `'\r\n'`, which found nothing the
     moment anything was LF. They use `splitlines()` now and take either.
+
+160. **Sunshine's zero-width house is a guard the library wrote and then
+    commented out.** Item 158 left two systems alone because their gaps
+    still sum to 360, and justified it by reading
+    `HousePullenSinusoidalDelta()`. That argument covers Pullen
+    (S.Delta); item 158's own correction noted it was extended to
+    Sunshine by analogy, without evidence. Read properly, the analogy is
+    wrong.
+
+    Sunshine is `ch = 'I'` handed to `swe_houses_armc_ex2()`, so the
+    behaviour is in `swehouse.cpp`. That file falls back to Porphyry
+    inside the polar circle for **Placidus** (line 1831), **Koch** (1251)
+    and **Regiomontanus** (1628), each with the same message: "within
+    polar circle, switched to Porphyry". Its Sunshine dispatch has that
+    fallback ready too, at line 1175 --
+
+        if (retc == ERR) {  // only Makransky version does this
+          strcpy(hsp->serr, "within polar circle, switched to Porphyry");
+
+    -- and the check that would return ERR is **commented out in both
+    Sunshine solutions**, Makransky at 2919 and Treindl at 3055:
+
+        // if (90 - fabs(lat) <= ecl) {
+        //   strcpy(hsp->serr, "Sunshine in polar circle not allowed");
+        //   return ERR;
+        // }
+
+    Astrolog asks for `'I'`, the Treindl solution. So it receives cusps
+    that the library's own author wrote a guard to refuse, in a file that
+    refuses them for every comparable system. That is not a deliberate
+    degenerate case; it is a disabled one.
+
+    **Fixed at the boundary, not in the library.** Third-party code is
+    out of scope (REFACTORING.md non-goals) and editing `swehouse.cpp`
+    would be a merge liability; the check Astrolog already performs on
+    the result is in scope. `FEnsureHousePartition()` now treats a
+    zero-width house as degenerate as well as a non-closing circle, and
+    produces exactly the Porphyry fallback that file uses everywhere
+    else. The three systems built by `HousePullenSinusoidalDelta()`
+    (`hsSineDelta`, `hsSineDeltaEP`, `hsSineDeltaVtx`) are exempt,
+    because that collapse **is** deliberate and is Astrolog's own.
+
+    **The two thresholds had to be made to agree, and finding that out
+    cost a wrong first attempt.** The guard first tested `rGapMin > 0.0`
+    while the oracle's sweep called anything under 0.001 degrees
+    degenerate. Sunshine's narrowest house is a rounding error rather
+    than an exact zero, so the guard passed the chart and the oracle
+    failed it -- the fix appeared not to work. Both use 0.001 now (3.6
+    arcseconds), with a comment at the guard saying why, because two
+    checks that disagree about what "degenerate" means will disagree
+    again.
+
+    Longyearbyen, June, Sunshine: cusps 9/10/11 were `25Tau59`,
+    `13Can18`, `22Leo51` -- 48 and 39 degree steps around a collapsed
+    pair -- and are now `10Gem34`, `13Can18`, `10Leo34`, with the warning
+    printed. **Falsified**: dropping the zero-width half of the condition
+    puts Sunshine back in oracle leg 4b's new-degeneracy list at 70N,
+    75N and 82N.
+
+    Leg 4b's expected-degenerate set is one system now: Pullen (S.Delta),
+    whose collapse its author wrote.
+
+    **Nets**: suite 3551/0; chart, switch and graphics matrices all 0 --
+    they are pinned at Seattle, so they prove containment and leg 4b
+    proves the fix; settings round trip; audits; `tools/win-tests.sh`;
+    four builds, zero warnings each.
 
 ## Features this fork adds to both builds
 

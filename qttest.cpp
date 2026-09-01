@@ -4144,7 +4144,7 @@ static void TestNumericOracleQt()
       // Pullen (S.Delta) collapses on purpose when a quadrant is under
       // 30 degrees wide; that is its author's degenerate case, not a
       // broken partition, so the guard leaves it alone.
-      static CONST int rgDegen[] = { hsSineDelta, hsSunshine };
+      static CONST int rgDegen[] = { hsSineDelta };
       static CONST int rgLatH[] = {45, 66, 70, 75, 82};
       static CONST int rgMonH[] = {6, 12};
       flag rgfSeenBad[cSystem];
@@ -4180,7 +4180,7 @@ static void TestNumericOracleQt()
               }
               fIsBad = (RAbs(rSumH - rDegMax) > 0.01 || rGapMinH < 0.001);
               fExpectBad = fFalse;
-              for (iDeg = 0; iDeg < 2; iDeg++)
+              for (iDeg = 0; iDeg < 1; iDeg++)
                 if (rgDegen[iDeg] == i)
                   fExpectBad = fTrue;
               cCase++;
@@ -4201,13 +4201,14 @@ static void TestNumericOracleQt()
         "the house sweep covered every system, latitude and engine (%d)",
         cCase);
       Check(cUnexpected == 0,
-        "no house system degenerates toward the pole beyond the two "
-        "left unguarded (%d new)", cUnexpected);
-      for (iDeg = 0; iDeg < 2; iDeg++)
+        "no house system degenerates toward the pole beyond Pullen "
+        "(S.Delta), whose collapse is deliberate (%d new)", cUnexpected);
+      for (iDeg = 0; iDeg < 1; iDeg++)
         if (!rgfSeenBad[rgDegen[iDeg]])
           cMissingBad++;
       Check(cMissingBad == 0,
-        "and both remaining ones still do (%d appear fixed "
+        "and Pullen (S.Delta) still collapses, as its author wrote "
+        "(%d appear changed "
         "fixed -- if that is deliberate, drop them from rgDegen)",
         cMissingBad);
       Check(cExpectedBad > 0,
