@@ -528,13 +528,13 @@ extern int rgObjSwiss[cCust], rgTypSwiss[cCust], rgPntSwiss[cCust],
   rgFlgSwiss[cCust];
 extern CONST OBJSEL rgObjSel[];
 extern CONST int cObjSel;
-extern void SzObjSelDef P((char *, int));
-extern void SzObjSelName P((char *, int, int));
+extern void SzObjSelDef P((char *, int, int));
+extern void SzObjSelName P((char *, int, int, int));
 extern flag FObjSelFlagRun P((CONST char *));
 extern void ObjDefGet P((int, OBJDEF *));
 extern void ObjDefSet P((int, CONST OBJDEF *));
 extern flag FObjIsCOBOf P((int, int));
-extern void SzObjDefFormat P((char *, CONST OBJDEF *));
+extern void SzObjDefFormat P((char *, int, CONST OBJDEF *));
 extern flag FObjDefParse P((CONST char *, OBJDEF *));
 extern flag FObjSelParse P((CONST char *, OBJDEF *));
 extern flag FObjMidSource P((int));
@@ -553,7 +553,7 @@ extern flag SwissComputeStarSort P((real, ES *));
 extern flag SwissTestStar P((char *));
 extern flag SwissComputeAsteroid P((real, ES *, flag));
 extern flag SwissComputeAsteroidSort P((real, ES *));
-extern void SwissGetObjName P((char *, int));
+extern void SwissGetObjName P((char *, int, int));
 extern flag FSwissPlanetData P((real, int, real *, real *, real *));
 extern real SwissRefract P((real));
 extern void SwissGetFileData P((real *, real *));
@@ -620,7 +620,7 @@ extern void PrintAspects P((void));
 extern void PrintSigns P((void));
 #ifdef CONSTEL
 extern CONST char *GetSzGenitive P((char *, CONST char *));
-extern void GetSzConstel P((char *, int));
+extern void GetSzConstel P((char *, int, int));
 extern void PrintConstellations P((void));
 #endif
 extern void PrintOrbit P((void));
@@ -1046,7 +1046,7 @@ extern void EclToTelescope P((real, real, TELE *, int *, int *, real*, real*));
 
 extern void XChartWheel P((void));
 extern void XChartAstroGraph P((void));
-extern KI FormatGridCell P((char *, int, int, int, flag));
+extern KI FormatGridCell P((char *, int, int, int, int, flag));
 extern void XChartGrid P((int, int));
 extern void XChartHorizon P((void));
 extern void XChartHorizonSky P((void));

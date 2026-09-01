@@ -624,7 +624,7 @@ static int NSwYe(CONST char *szSwitch, PARSEIN *pin)
   // slot still is that body.
   ObjDefSet(i + custLo, &od);
   if (j <= 1)
-    SwissGetObjName(szName, j <= 0 ? -k : k);
+    SwissGetObjName(S(szName), j <= 0 ? -k : k);
   else if (j == 5)
     sprintf2(S(szName), "%s", FValidPart(k) ? ai[k-1].name : szObjUnknown);
   else {

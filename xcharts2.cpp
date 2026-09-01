@@ -824,7 +824,7 @@ void XChartGridRelation()
           // For top and left edges, print sign and degree of the planet.
           if (y == 0 || x == 0) {
             if (x > 0 || y > 0) {
-              c = FormatGridCell(sz, -2-(y == 0), y == 0 ? i : j, 0,
+              c = FormatGridCell(S(sz), -2-(y == 0), y == 0 ? i : j, 0,
                 nScale > 3 && us.fSeconds);
             } else {
               // For extreme upper left corner, print some little arrows
@@ -834,7 +834,8 @@ void XChartGridRelation()
             }
           } else {
             // Print aspect or midpoint cells.
-            c = FormatGridCell(sz, i, j, 1 + (gs.fAlt != us.fGridMidpoint),
+            c = FormatGridCell(S(sz), i, j,
+              1 + (gs.fAlt != us.fGridMidpoint),
               nScale > 3 && us.fSeconds);
           }
           if (c >= 0)

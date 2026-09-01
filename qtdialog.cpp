@@ -4272,7 +4272,7 @@ static void LookupCustomNamesQt(QVector<QLineEdit *> &rgpeName,
     // SzObjSelName() covers every definition type now, the JPL Horizons
     // web query included, and remembers the name it answers -- so a name
     // this button shows is a name the program accepts back.
-    SzObjSelName(sz, od.nTyp, od.nObj);
+    SzObjSelName(S(sz), od.nTyp, od.nObj);
     rgpeName[i]->setText(sz);
   }
 }
@@ -4314,7 +4314,7 @@ void ShowCustomDialogQt()
     // The definition formatter lives in SzObjDefFormat() now; this used
     // to be its second open-coded copy.
     ObjDefGet(custLo + j, &od);
-    SzObjDefFormat(sz, &od);
+    SzObjDefFormat(S(sz), &od);
     peDef->setText(sz);
   }
 
@@ -4409,7 +4409,7 @@ void ShowObjectSelDialogQt()
         sprintf2(S(sz), "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
           szObjDisp[ObjForceMid2(force[iobj])]);
       } else
-        SzObjSelDef(sz, iobj);
+        SzObjSelDef(S(sz), iobj);
       pcbDef->setEditText(sz);
     }
   }
@@ -4450,7 +4450,7 @@ void ShowObjectSelDialogQt()
         // whose .se1 file isn't installed comes back "???" even though
         // the Contains field beside it is displaying its name.
         if (FObjSelParse(baDef.constData(), &od2)) {
-          SzObjSelName(szT, od2.nTyp, od2.nObj);
+          SzObjSelName(S(szT), od2.nTyp, od2.nObj);
           if (FEqSz(szT, szObjUnknown))
             for (int iSel = 0; iSel < cObjSel; iSel++)
               if (rgObjSel[iSel].nTyp == od2.nTyp &&
@@ -4552,7 +4552,7 @@ void ShowObjectSelDialogQt()
           }
         } else if (rgod[i].nTyp != rgTypSwissSav[i] ||
           rgod[i].nObj != rgObjSwissSav[i]) {
-          SzObjSelName(szT, rgod[i].nTyp, rgod[i].nObj);
+          SzObjSelName(S(szT), rgod[i].nTyp, rgod[i].nObj);
           if (!FEqSz(szT, szObjUnknown))
             str = QString(szT);
         }

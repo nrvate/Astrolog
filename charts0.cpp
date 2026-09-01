@@ -1253,12 +1253,12 @@ CONST char *GetSzGenitive(char *szGen, CONST char *szInst)
 // posessive form of its name. This basically just calls GetSzGenitive()
 // above, however it has to be called twice for names having two words.
 
-void GetSzConstel(char *szGen, int i)
+void GetSzConstel(char *szGen, int cchMax, int i)
 {
   char sz1[cchSzDef], sz2[cchSzDef], *pchSpace;
   CONST char *szInst;
 
-  sprintf(szGen, "%s", szCnstlName[i]);
+  sprintf2(szGen, cchMax, "%s", szCnstlName[i]);
   for (pchSpace = szGen; *pchSpace && *pchSpace != ' '; pchSpace++)
     ;
   szInst = szCnstlGenitive[i];
@@ -1275,7 +1275,7 @@ void GetSzConstel(char *szGen, int i)
   sprintf2(S(sz2), "%s", pchSpace+1);
   szInst = GetSzGenitive(sz1, szInst);
   GetSzGenitive(sz2, szInst);
-  sprintf(szGen, "%s %s", sz1, sz2);
+  sprintf2(szGen, cchMax, "%s %s", sz1, sz2);
 }
 
 
@@ -1303,7 +1303,7 @@ void PrintConstellations(void)
     else
       sprintf2(S(sz), "the %-18s", szCnstlMeaning[i]);
     PrintSz(sz);
-    GetSzConstel(szGen, i);
+    GetSzConstel(S(szGen), i);
     sprintf2(S(sz), " (%s)\n", szGen); PrintSz(sz);
   }
   AnsiColor(kDefault);

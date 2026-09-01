@@ -295,10 +295,15 @@ Roughly in the order I'd take them.
    Porphyry; and **Pullen (S.Delta) produces zero-width houses** at 70N
    and above. Longyearbyen at 78.2N is in the shipped atlas.
 
-12. **Finish T5: the 27 formatting calls that write into a caller's
-   buffer.** Added 2026-08-31 (work log item 143). The sweep bounded
-   1,055 of 1,231 formatting calls, and what it could not touch is the
-   sharper half: 27 sites whose destination arrives as a `char *`
+12. **Finish T5: the formatting calls that write into a caller's
+   buffer.** Added 2026-08-31 (work log item 143), **first pass done the
+   same day** (item 144): thirteen such functions became five, and 29
+   sites became eight. What is left is two coupled jobs, both described
+   at item 144 -- `FormatR` with `PchFormatExpression`/`PchFormatString`
+   and the three unbounded copy loops that call them, which is one
+   increment rather than three; and `FileOpen()`, 27 references, the one
+   with an incident already (item 68). The original shape of the problem:
+   sites whose destination arrives as a `char *`
    parameter. `sizeof` there is 8, so the mechanical conversion would
    truncate every string to seven characters *while compiling clean* --
    they need a size threaded from their callers, one function at a time,
@@ -4934,6 +4939,71 @@ are the more useful half to read before starting something new.
     risk in T5 actually lives now. `wdriver.cpp`/`wdialog.cpp` were left out
     of the sweep entirely: they are upstream-shaped Windows files and neither
     matrix can exercise them, so converting them would be unproven.
+
+144. **T5's sharper half, first pass: eight functions stop formatting into
+    a buffer whose size they do not know.** Item 143 bounded 1,055 sites
+    mechanically and stopped exactly where `sizeof` stops being the
+    answer: a destination that arrives as a `char *` parameter has
+    `sizeof` 8, so the sweep would have truncated to seven characters
+    while compiling clean. Those were left, counted, and are the work
+    here. **Thirteen functions, 29 sites, down to five and eight.**
+
+    **The convention, and it is not new.** The size follows the pointer,
+    so a caller passes both with the macro the codebase already has:
+
+        void SzObjSelName(char *sz, int cchMax, int nTyp, int nObj);
+        ...
+        SzObjSelName(S(sz), od.nTyp, od.nObj);
+
+    `S(sz)` expands to `(sz), (int)sizeof(sz)`, which is exactly two
+    arguments. Nothing had to be invented; the same macro that bounds a
+    local `sprintf2` bounds a call.
+
+    Converted: the object-name family (`SzObjSelName`, `SzObjDefFormat`,
+    `SzObjSelDef`, `SwissGetObjName` -- four functions that nest, so the
+    size threads through), `GetSzConstel`, `FJPLCacheGet`, and
+    `FormatGridCell` with its ten sites. That is 14 call sites across
+    calc.cpp, charts0.cpp, io.cpp, xcharts1/2.cpp, switch.cpp,
+    qtdialog.cpp, qttest.cpp and **wdialog.cpp** -- these are this fork's
+    own functions, so the Windows build takes the change too and compiles.
+
+    **The size parameter is not decoration.** Callers of the object-name
+    family pass `cchSzMax` twelve times and `cchSzDef` twice; a function
+    assuming either would be wrong for the other.
+
+    **One conversion needed no signature at all.**
+    `SwissComputeStar()` writes into `pes->sz`, and `ES::sz` is
+    `char sz[cchSzDef]` -- a sized array reached through a pointer, which
+    `sizeof` sees straight through. `sprintf2(S(pes->sz), ...)` just
+    works.
+
+    **One is deliberately left unbounded, and says so at the function.**
+    `WchToUTF8()` writes at most three bytes plus a terminator on every
+    branch, and `wchar` cannot reach the four-byte range, so the bound is
+    a property of the code rather than of the caller. A size parameter
+    there would be noise across four call sites. The contract is now a
+    comment instead.
+
+    **This refactor has a net the sweep did not: the compiler.** Changing
+    a prototype makes every missed caller a build error, where item 143's
+    mechanical rewrite would have compiled silently and truncated. All
+    four builds compiling *is* the coverage proof.
+
+    **Nets**: suite 3524/0; chart matrix 0 of 6,936; switch matrix 0 of
+    75,471; console, Qt, Qt-test and Windows builds all compile.
+
+    **Still open, and they are coupled.** `FormatR` (23 callers) and
+    `PchFormatExpression`/`PchFormatString` cannot be done separately:
+    `FormatR`'s one non-array caller sits *inside* `PchFormatExpression`,
+    which is itself handed a pointer walking through a caller's buffer.
+    Worse, the three loops that call the `PchFormat` pair
+    (`PrintSzFormat` and its two siblings) copy into that buffer
+    unbounded on their own account -- `*pch2 = *pch` with no end check --
+    so bounding the callee without bounding the loop would fix nothing.
+    That is one increment, not three. `FileOpen()` (27 references, writes
+    a path into `szPath`) is the other, and it is the one with an
+    incident already: work log item 68, a deep install directory
+    overflowing the ephemeris path at startup.
 
 ## Features this fork adds to both builds
 

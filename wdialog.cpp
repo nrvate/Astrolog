@@ -1644,7 +1644,7 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
       // The definition formatter lives in SzObjDefFormat() now; this
       // used to be its third open-coded copy.
       ObjDefGet(i, &od);
-      SzObjDefFormat(sz, &od);
+      SzObjDefFormat(S(sz), &od);
       SetEdit(ded01 - custLo + i, sz);
 #endif
     }
@@ -1671,7 +1671,7 @@ flag API DlgCustom(HWND hdlg, uint message, WORD wParam, LONG lParam)
           continue;
         // SzObjSelName() covers every definition type now, the JPL
         // Horizons web query included, and remembers the name it answers.
-        SzObjSelName(sz, od.nTyp, od.nObj);
+        SzObjSelName(S(sz), od.nTyp, od.nObj);
         SetEdit(den01 - custLo + i, sz);
       }
 #endif
@@ -1768,7 +1768,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         sprintf(sz, "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
           szObjDisp[ObjForceMid2(force[iobj])]);
       } else
-        SzObjSelDef(sz, iobj);
+        SzObjSelDef(S(sz), iobj);
       SetEdit(dcOs01 + i, sz);
     }
     // Focus the first body field rather than letting the dialog
@@ -1806,7 +1806,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         // .se1 file is not installed reads "???" even while the Contains
         // field beside it is displaying its name.
         if (FObjSelParse(sz, &od)) {
-          SzObjSelName(sz, od.nTyp, od.nObj);
+          SzObjSelName(S(sz), od.nTyp, od.nObj);
           if (FEqSz(sz, szObjUnknown))
             for (l = 0; l < cObjSel; l++)
               if (rgObjSel[l].nTyp == od.nTyp &&
@@ -1889,7 +1889,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
               sprintf(sz, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
           } else if (rgod[i].nTyp != rgnTyp0[i] ||
             rgod[i].nObj != rgnObj0[i]) {
-            SzObjSelName(szT, rgod[i].nTyp, rgod[i].nObj);
+            SzObjSelName(S(szT), rgod[i].nTyp, rgod[i].nObj);
             if (!FEqSz(szT, szObjUnknown))
               sprintf(sz, "%.*s", cchSzMax-1, szT);
           }

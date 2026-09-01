@@ -3068,7 +3068,8 @@ static struct {
 } rgjc[cJPLCache];
 static int cjcUsed = 0, ijcNext = 0;
 
-static flag FJPLCacheGet(CONST char *szUrl, PT3R *pt, char *szName)
+static flag FJPLCacheGet(CONST char *szUrl, PT3R *pt, char *szName,
+  int cchMax)
 {
   int i, j;
 
@@ -3076,7 +3077,7 @@ static flag FJPLCacheGet(CONST char *szUrl, PT3R *pt, char *szName)
     if (FEqSz(szUrl, rgjc[i].szUrl)) {
       for (j = 0; j < 3; j++)
         pt[j] = rgjc[i].pt[j];
-      sprintf(szName, "%s", rgjc[i].szName);
+      sprintf2(szName, cchMax, "%s", rgjc[i].szName);
       return fTrue;
     }
   return fFalse;
@@ -3186,7 +3187,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     }
   }
   // A reply we already have is the fastest and politest kind.
-  if (FJPLCacheGet(szUrl, pt, szName))
+  if (FJPLCacheGet(szUrl, pt, S(szName)))
     goto LProcess;
 
   GetURL(szUrl, szFileJPLCore);

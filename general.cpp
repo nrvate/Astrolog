@@ -2782,6 +2782,12 @@ int UTF8ToWch(CONST uchar *pch, wchar *pwch)
 
 
 // Convert a wide Unicode character to UTF8, returning the number of bytes.
+// Deliberately takes no buffer size, unlike the rest of the functions that
+// format into a caller's buffer (T5): every branch below writes at most
+// three bytes plus the terminator, and "wchar" cannot reach the four byte
+// range, so the bound is a property of the code rather than of the caller.
+// The contract is that sz has room for four bytes. Every caller passes a
+// cchSzDef buffer.
 
 int WchToUTF8(wchar wch, char *sz)
 {

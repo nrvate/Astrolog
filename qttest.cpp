@@ -2144,7 +2144,7 @@ static void TestCustomDialogParseQt()
     int iT;
 
     for (iT = 0; iT < (int)(sizeof(rgodT)/sizeof(OBJDEF)); iT++) {
-      SzObjDefFormat(szT, &rgodT[iT]);
+      SzObjDefFormat(S(szT), &rgodT[iT]);
       Check(FObjDefParse(szT, &odT) && odT.nTyp == rgodT[iT].nTyp &&
         odT.nObj == rgodT[iT].nObj && odT.nPnt == rgodT[iT].nPnt &&
         odT.nFlg == rgodT[iT].nFlg,
@@ -2440,7 +2440,7 @@ static void TestObjSelTableQt()
   Check(cObjSel > 0, "the body list is empty");
   for (i = 0; i < cObjSel; i++) {
     if (rgObjSel[i].nTyp <= 1)
-      SwissGetObjName(szName,
+      SwissGetObjName(S(szName),
         rgObjSel[i].nTyp <= 0 ? -rgObjSel[i].nObj : rgObjSel[i].nObj);
     else
       sprintf(szName, "%s", FItem(rgObjSel[i].nObj) ?
@@ -2538,14 +2538,14 @@ static void TestObjSelParseQt()
 
   rgTypSwiss[uranLo - custLo] = 1; rgObjSwiss[uranLo - custLo] = 7066;
   rgPntSwiss[uranLo - custLo] = rgFlgSwiss[uranLo - custLo] = 0;
-  SzObjSelDef(sz, uranLo);
+  SzObjSelDef(S(sz), uranLo);
   Check(FEqSz(sz, "Nessus"),
     "a slot holding 7066 showed as \"%s\", not the list name", sz);
 
   // With a suffix it must show the raw definition instead, or OK would
   // silently strip the suffix off the slot.
   rgPntSwiss[uranLo - custLo] = 1;
-  SzObjSelDef(sz, uranLo);
+  SzObjSelDef(S(sz), uranLo);
   Check(FEqSz(sz, "7066 n"),
     "a slot with a point suffix showed as \"%s\"", sz);
   Check(FObjSelParseTestQt(sz, &nTyp, &nObj, &nPnt, &nFlg) &&

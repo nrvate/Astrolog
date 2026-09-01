@@ -443,7 +443,7 @@ void XChartAstroGraph()
 
 // Compose a string to display within a graphic aspect grid cell.
 
-KI FormatGridCell(char *sz, int x, int y, int type, flag fWide)
+KI FormatGridCell(char *sz, int cchMax, int x, int y, int type, flag fWide)
 {
   char szT[cchSzDef];
   int n, d, m, s;
@@ -463,17 +463,17 @@ KI FormatGridCell(char *sz, int x, int y, int type, flag fWide)
   if (type == 1) {
     if (n > 0) {
       if (us.fDistance && !us.fParallel) {
-        sprintf(sz, "%c%f", rgchAppSep[us.nAppSep*2 + (v >= 0.0)],
+        sprintf2(sz, cchMax, "%c%f", rgchAppSep[us.nAppSep*2 + (v >= 0.0)],
           RAbs(v));
-        sprintf(&sz[fWide ? 8 : 5], "%s", "%");
+        sprintf2(SO(&sz[fWide ? 8 : 5], sz), "%s", "%");
       } else if (us.nDegForm != df360) {
         if (fWide)
           sprintf2(S(szT), "%02d", s);
-        sprintf(sz, "%c%d%c%02d'%s", rgchAppSep[us.nAppSep*2 + (v >= 0.0)],
+        sprintf2(sz, cchMax, "%c%d%c%02d'%s", rgchAppSep[us.nAppSep*2 + (v >= 0.0)],
           d, chDegL, m, szT);
         sz[fWide ? (d >= 100 ? 8 : 9) : (d >= 100 ? 5 : 6)] = chNull;
       } else {
-        sprintf(sz, "%c%f", rgchAppSep[us.nAppSep*2 + (v >= 0.0)], RAbs(v));
+        sprintf2(sz, cchMax, "%c%f", rgchAppSep[us.nAppSep*2 + (v >= 0.0)], RAbs(v));
         sz[fWide ? 8 : 5] = chNull;
       }
     } else
@@ -483,17 +483,17 @@ KI FormatGridCell(char *sz, int x, int y, int type, flag fWide)
   // For midpoint cells, print degrees and minutes.
   else if (type == 2 || (type == 0 && us.nDegForm == dfHM)) {
     if (us.nDegForm == dfHM) {
-      sprintf(sz, "%s", SzZodiac((real)((n-1)*30) + v));
+      sprintf2(sz, cchMax, "%s", SzZodiac((real)((n-1)*30) + v));
       sz[3] = sz[4]; sz[4] = sz[5]; sz[5] = 'm';
       if (fWide)
-        sprintf(sz+6, "%s", sz+8);
+        sprintf2(SO(sz+6, sz), "%s", sz+8);
       sz[fWide ? 8 : 6] = chNull;
     } else if (us.nDegForm != df360) {
       if (fWide)
         sprintf2(S(szT), "%02d", s);
-      sprintf(sz, "%2d%c%02d'%s", d, chDegL, m, szT);
+      sprintf2(sz, cchMax, "%2d%c%02d'%s", d, chDegL, m, szT);
     } else
-      sprintf(sz, fWide ? "%8.5f" : "%5.2f", RAbs(v));
+      sprintf2(sz, cchMax, fWide ? "%8.5f" : "%5.2f", RAbs(v));
   }
 
   // For main diagonal cells, print sign and degree of the planet.
@@ -502,9 +502,9 @@ KI FormatGridCell(char *sz, int x, int y, int type, flag fWide)
     if (us.nDegForm != df360) {
       if (fWide)
         sprintf2(S(szT), "%c%02d", chDegL, m);
-      sprintf(sz, "%.3s %02d%s", szSignName[n], d, szT);
+      sprintf2(sz, cchMax, "%.3s %02d%s", szSignName[n], d, szT);
     } else
-      sprintf(sz, fWide ? "%8.4f" : "%5.1f", RAbs((real)((n-1)*30) + v));
+      sprintf2(sz, cchMax, fWide ? "%8.4f" : "%5.1f", RAbs((real)((n-1)*30) + v));
   }
   return ki;
 }
@@ -585,12 +585,14 @@ void XChartGrid(int x0, int y0)
 
           // For the aspect portion, print the orb in degrees and minutes.
           if (x != y)
-            c = FormatGridCell(sz, ig, jg, 1 + (gs.fAlt ? x < y : x > y),
+            c = FormatGridCell(S(sz), ig, jg,
+              1 + (gs.fAlt ? x < y : x > y),
               nScale > 3 && us.fSeconds);
 
           // For the main diagonal, print degree and sign of each planet.
           else
-            c = FormatGridCell(sz, ig, jg, 0, nScale > 3 && us.fSeconds);
+            c = FormatGridCell(S(sz), ig, jg, 0,
+              nScale > 3 && us.fSeconds);
           if (c >= 0)
             DrawColor(c);
           DrawSz(sz, x0 + x*unit-unit/2, y0 + y*unit-3*gi.nScaleT, dtBottom);

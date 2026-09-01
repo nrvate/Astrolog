@@ -2731,12 +2731,13 @@ flag FObjSelRecall(CONST char *szName, int *pnTyp, int *pnObj)
 // usually means its file isn't installed rather than that the number is
 // wrong.
 
-void SzObjSelName(char *sz, int nTyp, int nObj)
+void SzObjSelName(char *sz, int cchMax, int nTyp, int nObj)
 {
   if (nTyp <= 1)
-    SwissGetObjName(sz, nTyp <= 0 ? -nObj : nObj);
+    SwissGetObjName(sz, cchMax, nTyp <= 0 ? -nObj : nObj);
   else if (nTyp >= 5)
-    sprintf(sz, "%s", FValidPart(nObj) ? ai[nObj-1].name : szObjUnknown);
+    sprintf2(sz, cchMax, "%s",
+      FValidPart(nObj) ? ai[nObj-1].name : szObjUnknown);
   else if (nTyp == 4) {
     // A JPL Horizons body, named by asking JPL -- over the network,
     // synchronously, the same way Windows' DlgCustom always has. Before
@@ -2746,11 +2747,11 @@ void SzObjSelName(char *sz, int nTyp, int nObj)
     real rT;
     if (!GetJPLHorizons(nObj, &rT, &rT, &rT, &rT, &rT, &rT, sz))
 #endif
-      sprintf(sz, "%s", szObjUnknown);
+      sprintf2(sz, cchMax, "%s", szObjUnknown);
   } else {
     if (nTyp == 3)
       nObj = ObjMoons(nObj);
-    sprintf(sz, "%s", FItem(nObj) ? szObjName[nObj] : szObjUnknown);
+    sprintf2(sz, cchMax, "%s", FItem(nObj) ? szObjName[nObj] : szObjUnknown);
   }
   // Whatever came back, remember it, so the name just shown is a name the
   // program will accept back.
@@ -2819,16 +2820,17 @@ flag FObjIsCOBOf(int obj, int objPla)
 // of FObjDefParse(), and like the parse it used to exist in several
 // places -- here, and open coded in both Custom Objects dialogs.
 
-void SzObjDefFormat(char *sz, CONST OBJDEF *pod)
+void SzObjDefFormat(char *sz, int cchMax, CONST OBJDEF *pod)
 {
   char *pch;
 
   if (pod->nTyp != 2)
-    sprintf(sz, "%s%d", pod->nTyp <= 0 ? "h" :
+    sprintf2(sz, cchMax, "%s%d", pod->nTyp <= 0 ? "h" :
       (pod->nTyp == 1 ? "" : (pod->nTyp == 3 ? "m" :
       (pod->nTyp == 4 ? "j" : "A"))), pod->nObj);
   else
-    sprintf(sz, pod->nObj < cobLo ? "%.3s" : "%.4s", szObjName[pod->nObj]);
+    sprintf2(sz, cchMax, pod->nObj < cobLo ? "%.3s" : "%.4s",
+      szObjName[pod->nObj]);
   for (pch = sz; *pch; pch++)
     ;
   if (pod->nPnt > 0 || pod->nFlg > 0)
@@ -2846,7 +2848,7 @@ void SzObjDefFormat(char *sz, CONST OBJDEF *pod)
 }
 
 
-void SzObjSelDef(char *sz, int iobj)
+void SzObjSelDef(char *sz, int cchMax, int iobj)
 {
   OBJDEF od;
   int i;
@@ -2855,10 +2857,10 @@ void SzObjSelDef(char *sz, int iobj)
   if (od.nPnt <= 0 && od.nFlg <= 0)
     for (i = 0; i < cObjSel; i++)
       if (rgObjSel[i].nTyp == od.nTyp && rgObjSel[i].nObj == od.nObj) {
-        sprintf(sz, "%s", rgObjSel[i].szName);
+        sprintf2(sz, cchMax, "%s", rgObjSel[i].szName);
         return;
       }
-  SzObjDefFormat(sz, &od);
+  SzObjDefFormat(sz, cchMax, &od);
 }
 
 
@@ -3504,7 +3506,7 @@ flag SwissComputeStar(real jd, ES *pes)
   if (us.fNoNutation)
     iflag |= SEFLG_NONUT;
 LNext:
-  sprintf(pes->sz, "%d", istar);
+  sprintf2(S(pes->sz), "%d", istar);
 
   // Compute the star coordinates and get the star's brightness.
   if (us.fStarMagDist) {
@@ -3926,7 +3928,7 @@ flag SwissComputeAsteroidSort(real jd, ES *pes)
 
 // Wrapper around Swiss Ephemeris planet name lookup routine.
 
-void SwissGetObjName(char *sz, int iobj)
+void SwissGetObjName(char *sz, int cchMax, int iobj)
 {
   char *pch;
 
@@ -3939,7 +3941,7 @@ void SwissGetObjName(char *sz, int iobj)
   // Check for object not found.
   for (pch = sz; *pch; pch++)
     if (FMatchSz(" not found", pch)) {
-      sprintf(sz, szObjUnknown);
+      sprintf2(sz, cchMax, "%s", szObjUnknown);
       break;
     }
 }
