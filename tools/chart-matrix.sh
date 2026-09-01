@@ -60,4 +60,16 @@ run -rb "$A" "$C"
 for sw in -v -w -j -7; do
   run $sw -I
 done
+# A polar chart, because everything above this line is Seattle and Chicago
+# and the house code behaves differently toward the pole. Work log items
+# 157, 158 and 160 changed house math for six systems and moved NOTHING in
+# this matrix, which was correct but meant the differential could not have
+# caught a regression in that work. Longyearbyen at 78N13 is in the shipped
+# atlas, and December is when the sun-declination constructions degenerate.
+QP="-qa 12 20 1976 12:00 0 15:38E 78:13N"
+for hs in 0 3 5 8 13 20; do
+  echo "== polar -c $hs"
+  env -u DISPLAY timeout 60 $B -n $QP -c $hs -w _X </dev/null 2>&1 |
+    sed "s|$T|TMP|g"
+done
 rm -rf $T

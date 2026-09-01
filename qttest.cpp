@@ -4311,6 +4311,54 @@ static void TestNumericOracleQt()
         "a progressed chart at zero elapsed time is the natal chart "
         "(%d of %d moved)", cDiffProg, cObjProg);
     }
+
+    // ---- Leg 9: a return really returns ----
+    // Astrolog has no "cast the return chart" command; -tr searches a
+    // month for the moments a transiting object conjoins its own natal
+    // position, and with -5 (us.fListAuto) each hit is appended to the
+    // chart list. So the invariant is checkable end to end: take every
+    // moment the search reports as a solar return, cast a chart for it,
+    // and the Sun must be back where it started. Nothing else in the
+    // suite exercises ChartTransitSearch() at all.
+    {
+      Borrow bList(us.fListAuto, fTrue), bRet(is.fReturn, fTrue);
+      Borrow bMonth(us.fInDayMonth, fTrue), bYear(us.fInDayYear, fFalse);
+      Borrow bDivision(us.nDivision, 48);
+      CI rgciSav[8], ciTranSav = ciTran;
+      real rNatalSun;
+      int cciSav = is.cci, cRet = 0, cBadRet = 0, j;
+
+      for (j = 0; j < 8 && j < cciSav; j++)
+        rgciSav[j] = is.rgci[j];
+      OraclePinChartQt(2020);
+      CastChart(1);
+      rNatalSun = planet[oSun];
+      // Only the Sun, in both charts, so the search reports solar
+      // returns and nothing else -- one hit per year, so one line of
+      // output rather than a month of transits.
+      for (i = 0; i <= cObj; i++)
+        ignore[i] = ignore2[i] = (i != oSun);
+      ciTran = ciCore;
+      ciTran.yea++;
+      is.cci = 0;
+      ChartTransitSearch(fFalse);
+      for (j = 0; j < is.cci; j++) {
+        ciCore = is.rgci[j];
+        CastChart(1);
+        cRet++;
+        if (MinDistance(planet[oSun], rNatalSun) > 0.01)
+          cBadRet++;
+      }
+      Check(cRet > 0,
+        "the return search found a solar return to cast (%d)", cRet);
+      Check(cBadRet == 0,
+        "and the Sun is at its natal longitude in every one (%d off by "
+        "more than 0.01 degrees)", cBadRet);
+      is.cci = cciSav;
+      for (j = 0; j < 8 && j < cciSav; j++)
+        is.rgci[j] = rgciSav[j];
+      ciTran = ciTranSav;
+    }
     cGood = 1;
   }
 

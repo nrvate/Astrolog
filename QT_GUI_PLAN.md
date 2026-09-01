@@ -6274,6 +6274,47 @@ are the more useful half to read before starting something new.
     proves the fix; settings round trip; audits; `tools/win-tests.sh`;
     four builds, zero warnings each.
 
+161. **A return really returns, and the chart matrix learns about the
+    pole.** Item 11's next oracle invariant, plus the coverage gap the
+    house work exposed.
+
+    **Leg 9: the return.** Astrolog has no "cast the return chart"
+    command -- `-tr` searches a month for the moments a transiting object
+    conjoins its own natal position, and `-5` (`us.fListAuto`) appends
+    each hit to the chart list. That makes the invariant checkable end to
+    end rather than by reimplementing the search: restrict both charts to
+    the Sun, run `ChartTransitSearch()` over the month a year after the
+    natal one, then cast every moment it reported and require the Sun to
+    be back where it started. Nothing else in the suite calls that
+    function at all.
+
+    **Falsified** where it counts -- in the search, not in the check.
+    Adding `ciEvent.tim += 24.0` before `FAppendCIList()` makes the
+    reported moment a day late, and the leg fails with the Sun one degree
+    off. A test that only perturbed its own comparison would have proven
+    nothing.
+
+    **And the matrices could not have caught any of the house work.** A
+    parallel session pointed out that items 157, 158 and 160 changed
+    house math across six systems, 205 lines in four files, and moved
+    **nothing** in 71 text charts or 224 renders. That is consistent --
+    the fixes bite toward the pole and both matrices pin Seattle and
+    Chicago -- but it means the differentials were blind to exactly the
+    code being changed, and a regression there would have diffed to zero.
+
+    `tools/chart-matrix.sh` now ends with six house systems cast at
+    **Longyearbyen, 78N13, in December**: the latitude where the
+    constructions degenerate, the month when the sun-declination ones do,
+    and a city in the shipped atlas. **Proven to have teeth**: against a
+    binary from before the guards it moves 166 lines, and all of them are
+    inside the new section -- the 6,936 lines above it are byte-identical,
+    so the case adds coverage without disturbing any.
+
+    **Nets**: suite 3553/0; switch and graphics matrices 0 against HEAD;
+    chart matrix 0 against HEAD and 166 against the pre-guard binary,
+    which is the point; settings round trip; line endings; four builds,
+    zero warnings each.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
