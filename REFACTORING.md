@@ -506,10 +506,24 @@ of the file (A2's failure mode, gone for good).
   to it -- 449 spellings resolve; its first run found and fixed -YYI,
   documented but dead behind a misspelled ifdef since upstream wrote
   it.
+  **Harvest steps 2 and 3 closed the same day, by measurement rather
+  than by doing them** (work log items 87 and 88), and with them all of
+  T3. The table-driven settings writer: of 42 simple flag emissions in
+  `FOutputSettings()` only **9** are exact registry flag rows, the rest
+  being suffix-parsed inside prefix handlers and so out of reach of any
+  row lookup. The generated `-H` help: the text is pedagogical prose
+  with many-to-one structure — one line documents nine sort-key rows,
+  section headers interleave, ifdef'd composites are `sprintf`-built —
+  so generating it would degenerate into an ordered (guard, string)
+  list, which is what the `PrintS` sequence already is, while
+  `registry_audit.py` already cross-checks every documented spelling
+  against the registry. Neither would have added drift protection.
 - **M-final**: ~~the four parser shells reduce to dispatch loops~~ —
   **happened 2026-08-29** (M10, work log item 77): the shells aren't
-  reduced, they're *gone*. The help printers and `FOutputSettings()`
-  restructure remain as harvest work, below.
+  reduced, they're *gone*.
+
+**T3 stands fully closed**: M1-M10 migration, registry hardening, and
+both harvest ideas measured and closed by the same standard.
 
 **Honest scale**: ~200 switches; M1 is the hard thinking; the family
 migrations are a session each, ~10-15 sessions total at that pace, and
@@ -536,16 +550,43 @@ the `-YjT 84` bonus rows indexing `oNorm1 + 1` past the new struct —
 found only because ASan happened to run (item 63); the spurious `-YD`
 lines from the display-name convention (item 62).
 
-*Direction:* this is T3's table again, read in the other direction —
-when a switch is table-described, save is a loop. Until then, the
-standing invariant is `tools/settings-round-trip.sh` (byte-identical
-fixed point), which should grow a second leg: a settings file with
-**every** switch family present, not just the maintainer's, so an
-unsaved switch can't hide by being unset. That leg is a good early
-increment for Area B.
+*Direction:* "this is T3's table again, read in the other direction"
+was the plan, and it was **measured and closed 2026-08-29** (work log
+item 87): only 9 of `FOutputSettings()`'s 42 simple flag emissions are
+exact registry rows, so a loop over the rows would leave two thirds of
+the writer hand-written and add a second place to look. What carries
+this theme instead is the net: `tools/settings-round-trip.sh` grew its
+full-coverage leg (B5, work log item 66) — a settings file with **every**
+switch family present, so an unsaved switch cannot hide by being unset —
+and it caught five shared-core bugs on its first run. `registry_audit.py`
+holds the other direction, every spelling the writer emits resolving to a
+row.
 
-*Cost/risk:* the round-trip extension is cheap and catches the whole
-class. The table migration is T3's schedule.
+*What is still open here, and it is the gap item 140 fell through:* the
+audit checks that every spelling the program *writes* resolves to a row,
+not that every setting *gets written*. The `-b` backend family was
+dropped by the writer for five days behind exactly that hole.
+
+**A static audit is the wrong shape for it, measured 2026-09-01.** Of the
+120 settings fields `switch.cpp` assigns, 69 are never named in
+`FOutputSettings()` — but most of those are false positives, because the
+writer composes packed values: one `:YXG %06d` line carries all six
+`gs.nGlyph*` fields without mentioning any of them, and `:YXF` does the
+same for the fonts. Separating the real gaps from the packing would mean
+teaching a script the writer's own encoding, which is a second place to
+get it wrong.
+
+*The right shape is behavioural, and two thirds of it exists.*
+`tools/settings-round-trip.sh` leg 2 flips every boolean flag at once, so
+a flag whose save-twin regresses cannot hide; leg 3 checks value switches
+against `tools/settings-fixture.as`, which sets 39 of them and declares
+what must come back. **The increment is to make leg 3's fixture cover
+every value-taking registry row, and to add a check that it does** — then
+a switch added without a save-twin fails immediately instead of in five
+days. Item 140's own family is a documented exemption from leg 2 (the
+`-0` lockdown is one-way by design), so it needs leg 3 to reach it.
+
+*Cost/risk:* low; it is a fixture and a coverage check, not a refactor.
 
 ### T5 — 1,300 unchecked `sprintf`/`strcpy` into fixed buffers — mostly closed 2026-08-31
 
@@ -1671,9 +1712,10 @@ each independently shippable:
 4. **T3's switch registry** — promoted at the maintainer's direction
    (2026-08-29), and its migration phase is **complete**: M1-M10 moved
    every spelling into the registry and dissolved all four parsers in
-   one day. Next in T3: the harvest — FOutputSettings() as a loop over
-   the rows (T4), generated -H help diffed against the hand-written
-   text, and the audits reading the registry instead of regexing C. **M1 and M2 done 2026-08-29** — registry, driver, 39
+   one day. The harvest that was to follow — FOutputSettings() as a
+   loop over the rows (T4), generated -H help, audits reading the
+   registry — was **measured and closed the same day** (work log items
+   87-88); see T3 and T4 for the numbers. **M1 and M2 done 2026-08-29** — registry, driver, 39
    switches across the -YA*, -Yj*, -YJ*, -YR*, -Y7* and -Yk* families;
    all differentials byte-identical. M3 added the parse context and
    retired is.fileIn; M4-M6 deleted NProcessSwitchesRare(),
