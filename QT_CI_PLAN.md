@@ -100,6 +100,11 @@ phases below whose job is to settle it.
 | Fonts already resolve for an installed copy | `qtdriver.cpp:2915` tries `applicationDirPath()/font` before `currentPath()/font` |
 | Dark-mode detection degrades safely off Linux | `qtdriver.cpp:4310` falls through to `nSchemeNone` when `gsettings`/`gdbus` are absent, and `ApplyColorSchemeQt()` then returns early, leaving the platform palette alone |
 | The version macro is upstream's | `astrolog.h:539`, `#define szVersionCore "8.00"` — this fork has no version of its own |
+| **The intermittent was two bugs, both found and fixed 2026-09-01** | `173e9f0`: nine hard-coded temp filenames in `qttest.cpp`, so two suites running at once deleted each other's files mid-measurement — and the deleted file *was* the assertion's subject. `21e8d97`: oracle leg 9 called `ChartTransitSearch()`, which prints through `PrintSz` into `is.S`, a stream only `Action()` opens; `putc` into it made glibc free a backup area it never allocated. Verified by `astrolog-4f`: 10 solo runs and two concurrent pairs clean |
+| **Every failure-rate number this document quoted was contaminated** | the "7 of 8 at `627480a`, 5 of 8 at `28599d4`" measurements were taken while a second session was also running suites, which is precisely what triggered bug one. Both sessions quoted a rate as a property of a commit when it was a property of who else was on the machine. Retracted, not corrected — there is no true rate to substitute |
+| **The suite was intermittently failing, and sometimes crashed** | the long-strings group reports `mode N survives 120-char name and location (0 bytes)` with N varying run to run; five runs on 2026-09-01 gave 0, 3, 1 and 4 failures plus one **segfault** and one **abort** (rc=134). Reproduced at `28599d4`, before any Qt6 work. Run alone the group passes 3/3, so it is an inter-test interaction. **ASan reproduces the failure and reports no memory error at all** |
+| That flakiness is not new, and the "rate went up today" theory did not survive measurement | work log item 141 recorded the same `(0 bytes)` signature on 2026-08-31, undiagnosed. Rebuilt and measured 2026-09-01, same recipe, 8 runs each: **`627480a` (start of day) 7 of 8 failed; `28599d4` (end of day) 5 of 8**. The rate did not rise across the day, so the commit suspected of raising it is not indicated. Both samples are n=8 and the difference is inside noise — what they support is "a long-standing, high-rate intermittent", not a direction |
+| The abort is rarer than the failure and is not localised | `rc=134` appeared 0 times in each of those 8-run samples, and twice in 3-run samples elsewhere. Nothing here says where it comes from |
 | **The suite is at 3551 assertions**, and every document naming a count is stale | measured `PASS: 3551 passed, 0 failed` on 2026-09-01. `CLAUDE.md` says 3526 (written 2026-08-31, `2645464`); `tools/win-tests.sh` says 2777 (2026-08-27, `0a33328`) |
 | **A new file can be absent from its own commit, and only a clean checkout notices** | `tools/line_endings_audit.py` was never staged in `d9c23bb` — the add used `git add $(git diff --name-only)`, which lists tracked modifications only. Three documents cited a standing audit that did not exist for anyone else until `740d149`. A CI job running from `actions/checkout` fails on that immediately; a developer's working tree never will |
 | All six fast audits pass on the tree as it stands | `rc_audit`, `rc_mnemonic_audit`, `rc_field_audit`, `rc_lookup_audit`, `defaults_audit`, `registry_audit` — run 2026-09-01, all exit 0 |
@@ -526,6 +531,60 @@ Keep `-j4` even though the runner's core count differs from this box's
 constraint — the cap in `CLAUDE.md` is about not starving the user's
 machine, and matching it here keeps one number in one place.
 **Status.** [ ]
+
+### 2.1b The suite must be deterministic before anything gates on it
+**This blocks 2.2 as a *gate*, though not as a job.**
+The suite currently fails intermittently and occasionally aborts (see the
+Verified table). **The fix is to fix it, not to accommodate it.**
+
+Stating that because the obvious accommodations are all wrong:
+
+- **Do not retry.** A step that reruns until green is not a gate, it is a
+  slower coin flip that also hides the defect. A flaky test is a bug
+  report, and CI's job is to deliver it, not to absorb it.
+- **Do not run it repeatedly to compute a pass rate.** Same objection,
+  plus it multiplies the one number this project actually cares about
+  keeping small — CI wall-clock. A single ~60 s run per push is the
+  budget; eight of them is not.
+- **Do not mark the group `continue-on-error`.** That converts a real
+  intermittent defect into a permanently ignored one.
+
+**So:** run it once, let it fail when it fails, and treat each failure as
+the bug it is. Until the intermittent is fixed, this job is *informative*
+rather than *blocking* — merge on human judgement, not on the badge. That
+is a temporary and stated position, not a policy.
+
+**Why this belongs in a CI document at all.** The intermittent has been
+present since at least 2026-08-31 and nobody noticed. Measurement since
+puts it far higher than item 141's two-in-sixteen — **7 of 8 runs failed
+at `627480a`** — which makes the oversight easier to explain and worse:
+a check this unreliable was being read as a pass because it was run once,
+by hand, at moments that happened to be lucky. CI does not need to retry
+to fix that. It needs to run once per push and be believed when it goes
+red.
+
+**And it is the sharpest caution in this file about its own method.**
+Two sessions measured the same intermittent and drew opposite conclusions
+about whether its rate had changed. Both were wrong, and not because
+n=8 cannot tell 0.625 from 0.875 — though it cannot. **The measurements
+were invalid at the source**: each session's runs were being corrupted by
+the other session's runs, through the very bug being measured. A
+measurement beats an estimate, which is this document's whole theme; but
+a measurement taken in an uncontrolled environment is not evidence, and
+two of them agreeing on a shape is not corroboration.
+
+The author of this document also proposed a wrong mechanism from good
+data — seeing both members of a concurrent pair crash identically, and
+inferring either a shared resource or a time-dependent trigger. Neither.
+Both processes ran the same deterministic test and hit the same stream
+bug; whether it aborted or segfaulted depended on what glibc found in the
+freed backup area. The pairing was an artifact of running pairs.
+**Status.** [x] unblocked 2026-09-01 by `173e9f0` and `21e8d97`. The
+no-retry position stands on its own and is not contingent on that fix:
+had CI been retrying, it would have laundered a temp-file collision
+between parallel jobs into a green badge. **CI running suites in parallel
+would have found bug one on day one** — and now cannot, which is the
+happier version of the same argument.
 
 ### 2.2 Run the suite
 **Do.** `ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem`
@@ -1423,6 +1482,29 @@ rediscovery is slowest.
   package, `-Yi1` is unset in a config, or the search path was truncated
   for length. `CLAUDE.md` already records it for a missing `/swe`. Good
   news for CI: **one assertion covers all of them.**
+- **The last line before a crash is the last *unbuffered* line, not the
+  last thing that happened.** `PrintProgress` writes to stderr, which is
+  unbuffered; the suite's own output is block-buffered once redirected to
+  a file. So a crash log ends at the last stderr write, and the code that
+  actually died may be far past it. This cost a wrong diagnosis today —
+  every crashing run ended on "Writing wireframe to file." and the
+  wireframe writer was innocent; the bug was in a transit search called
+  later. **One gdb backtrace settled what hours of log-reading could
+  not.** The same buffering also makes a running binary look hung when
+  piped (`| head` shows nothing until 4 KB accumulates). In CI: redirect
+  to a file and read it after, and never infer a crash site from output
+  order.
+- **Do not let "we were looking there anyway" promote a finding into a
+  cause.** Two real defects surfaced while hunting this crash — an
+  unreachable off-by-one in `WireNum` and a genuine bounded over-read in
+  `WriteWire`, which reads up to five words past `pwWireCur` because its
+  loop only checks `pw < gi.pwWireCur` with no room for a six-word
+  record. Both are worth fixing. Neither was the crash, and treating
+  either as the cause would have closed the hunt on a coincidence.
+- **A retry is not a gate.** Where a check is flaky, the flakiness is the
+  bug. Retrying it, averaging it, or marking it non-blocking all convert
+  a defect that announces itself into one that does not — which is the
+  same failure as a vacuous harness, arrived at from the other side.
 - **Counts written into prose rot.** Three documents in this repo assert
   the suite's assertion count and all three are wrong (Q12). Anything CI
   prints should be read from the run, not restated in a document — and
