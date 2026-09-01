@@ -8,6 +8,16 @@
 # migration (REFACTORING.md, T3) behavior-preserving. To verify a
 # change to switch parsing or the registry:
 #
+# The per-run window was "head -30" until 2026-08-31, while the filter
+# it caps selects 159 lines out of a settings dump -- so this gate, the
+# one every parser increment was proven against, was comparing 19% of
+# the surface it had already chosen, and any change past the thirtieth
+# matching line was invisible to it. The cap now clears every dump with
+# headroom (1000 is above any dump: a whole settings file is ~330
+# lines). Found by a change that ADDED five settings lines: the five
+# pushed five others off the bottom, which is what a fixed window does
+# to a diff that is supposed to be exact.
+#
 #   git worktree add /tmp/base <commit>   # the pre-change baseline
 #   make -C /tmp/base -j4                 # (never stash around this;
 #   cp /tmp/base/astrolog ./base-astrolog #  see the work log)
@@ -25,7 +35,7 @@ B=$1; T=$(mktemp -d)
 run() {
   echo "== $*"
   env -u DISPLAY $B -n "$@" _X -od $T/o.as </dev/null 2>&1 >/dev/null | sed "s|$T|TMP|g" | head -2
-  grep -E "^-YA[oamd]|^-Yj|^-YJ|^-Yk|^-YAa|^-YR|^-Y7|^-YD|^-Ye|^-zl|^-z0|^:YX|^[=_]YX|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k" $T/o.as 2>/dev/null | head -30
+  grep -E "^-YA[oamd]|^-Yj|^-YJ|^-Yk|^-YAa|^-YR|^-Y7|^-YD|^-Ye|^-zl|^-z0|^:YX|^[=_]YX|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k" $T/o.as 2>/dev/null | head -1000
   rm -f $T/o.as
 }
 run -Yj 5 5 44

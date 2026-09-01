@@ -4577,6 +4577,87 @@ are the more useful half to read before starting something new.
     clean *after* dirty rather than the other way round -- worth
     remembering as the order to falsify a stateful check in.
 
+139. **The switch matrix was comparing 19% of what it selected.**
+    `tools/switch-matrix.sh` is the gate every parser increment in this
+    project was proven against -- M1-M10, P1-P4, all "byte-identical
+    over 14,378 lines". It prints each run's stderr plus the settings
+    the run saves, filtered by a long grep, and capped the filtered set
+    at `head -30`. **That filter selects 159 lines out of a settings
+    dump, and dumps for the macro-defining invocations run past 200.**
+    So the gate had been diffing the first thirtieth of the surface it
+    had already chosen, and any behaviour past that line was invisible
+    to it -- across 529 invocations, for the whole T3 and phase-2
+    campaigns.
+
+    Found by accident, and only because the change that found it *added*
+    output: five new settings lines pushed five others off the bottom of
+    the window, and the diff showed five plausible-looking deletions
+    that were nothing of the kind. A fixed window in a harness whose
+    whole contract is "empty diff = proven" is a way to be told a
+    change is safe by a check that never looked at it.
+
+    The cap is 1000 now, above any dump (a whole settings file is ~330
+    lines). The artifact grows from 14,407 lines to 75,471, which is the
+    real size of the surface it was always supposed to cover.
+
+140. **`-bm` and `-bp` cast a chart of nothing, and said nothing.**
+
+        $ ./astrolog -bm -qa 6 15 1990 12:00 0 122W19 47N36 -v
+        Sun :  0Ari00   + 0:00'   [11th house]  +0.000
+        Moon:  0Ari00   + 0:00'   [11th house]  +12.20
+        ...                       every body, no error
+
+    `NSwb()` (switch.cpp) ends every backend suffix with an
+    unconditional `SwitchF(us.fEphemFiles)`. Two suffixes sit behind
+    `-0` guards -- `'p'`/`'m'` behind `us.fNoPlacalc`, `'J'` behind
+    `us.fNoNetwork` -- and when a guard refused, the assignment was
+    skipped but the toggle at the bottom still ran. The shipped
+    `astrolog.as` sets `=0b`, so asking for the Matrix or Placalc engine
+    turned the *working* engine off and put nothing in its place:
+    `FCmMatrix()` is `(!us.fEphemFiles && us.fMatrixPla)` and neither
+    half held. Every position stayed at the zeroed `cp0`.
+
+    Upstream's, in shared core, no `QT` anywhere near it -- the Windows
+    build does the same. Reachable from the command line with the
+    shipped settings file, and from any settings file carrying `=bm`.
+
+    **Fixed by refusing the switch** the way `us.fNoGraphics` and
+    `us.fNoRead` already do in the same file -- `ErrorArgv("bm")` and
+    `tcError`. Narrowly: only a request to turn the backend *on* is
+    refused, because the settings writer now emits `_bp`/`_bm` into
+    every saved file and those have to stay loadable under `=0b`.
+    `tools/settings-round-trip.sh` leg 2 caught that within a minute of
+    the first attempt, which is what that leg is for; `bp`/`bm`/`bJ`
+    join its exempt list for the same reason `0b`/`0n` are already on
+    it -- they are gated *by* the one-way family.
+
+    **And the settings writer dropped the whole backend.**
+    `FOutputSettings()` wrote none of `nSwissEph`, `fPlacalcPla`,
+    `fMatrixPla`, `fPlacalcAst`, `fMatrixStar` -- grep io.cpp for any of
+    the five and it was empty. Choosing Moshier or JPL in Calculation
+    Settings, saving, and reloading gave you Swiss back, silently. This
+    is the class plan item 8 declared closed on 2026-08-26; the `-b`
+    sub-family was missed, and `registry_audit.py` cannot see it because
+    it checks that every *written* spelling resolves to a row, not that
+    every setting gets written. Five lines now, placed ahead of the
+    `=b` line (which must settle `fEphemFiles` last, since every suffix
+    toggles it) and ahead of `=0b`/`=0n` (so a saved file applies its
+    backend before locking the old engines out). One forced line carries
+    `nSwissEph`, because its four spellings are mutually exclusive
+    toggles that each clear the field.
+
+    C4 surveyed this encoding on 2026-08-29 and documented the state
+    table at the field declarations. Nobody checked whether it was
+    *persisted*. The comment it left behind -- "the settings writer
+    emits forced =/_ prefixes" -- was not true when it was written.
+
+    **Net:** the 529-invocation matrix, at its new full window, diffs to
+    exactly two things and nothing else -- the five added lines in every
+    dump, and the two invocations (`=bp`, `=bm`) that now refuse and
+    write no dump at all. Suite 3520/0, six audits clean, all three
+    generated tables in sync, round trip clean on all three legs, and
+    the console, Qt release, Qt test and Windows builds all compile.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

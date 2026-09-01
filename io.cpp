@@ -1515,6 +1515,32 @@ flag FOutputSettings()
   sprintf(sz, "%cb2     ", ChDashF(us.fSecondHide)); PrintFSz();
   PrintF(
     "; Don't display :00 seconds [\"_b2\" shows anyway, \"=b2\" skips   ]\n");
+  // The ephemeris backend is five fields (astrolog.h, "-b" state table)
+  // and none of them used to be written here, so a chart cast with
+  // Moshier, JPL, Placalc or Matrix came back as Swiss on the next run.
+  // Order is load-bearing twice: every "-b" suffix also toggles
+  // fEphemFiles, so the plain "=b"/"_b" line has to come last to settle
+  // it; and the four nSwissEph spellings are mutually exclusive toggles
+  // that each clear the field, so one forced line carries the choice.
+  // These also precede the "=0b" and "=0n" lines below on purpose, so a
+  // saved file applies its backend before locking the old engines out.
+  sprintf(sz, "%-8s", us.nSwissEph == 1 ? "=bs" : us.nSwissEph == 2 ?
+    "=bj" : us.nSwissEph == 3 ? "=bJ" : "_bs"); PrintFSz();
+  PrintF(
+    "; Ephemeris backend         "
+    "[\"_bs\" Swiss \"=bs\" Mosh \"=bj\" JPL \"=bJ\" web]\n");
+  sprintf(sz, "%cbp     ", ChDashF(us.fPlacalcPla)); PrintFSz();
+  PrintF(
+    "; Use Placalc ephemeris     [\"=bp\" uses it, \"_bp\" doesn't     ]\n");
+  sprintf(sz, "%cbm     ", ChDashF(us.fMatrixPla)); PrintFSz();
+  PrintF(
+    "; Use Matrix formulas       [\"=bm\" uses them, \"_bm\" doesn't   ]\n");
+  sprintf(sz, "%cba     ", ChDashF(us.fPlacalcAst)); PrintFSz();
+  PrintF(
+    "; Skip Placalc asteroids    [\"=ba\" skips them, \"_ba\" computes ]\n");
+  sprintf(sz, "%cbU     ", ChDashF(us.fMatrixStar)); PrintFSz();
+  PrintF(
+    "; Matrix fixed stars only   [\"=bU\" uses them, \"_bU\" doesn't   ]\n");
   sprintf(sz, "%cb      ", ChDashF(us.fEphemFiles)); PrintFSz();
   PrintF(
     "; Use ephemeris files       [\"=b\" uses them, \"_b\" doesn't      ]\n");

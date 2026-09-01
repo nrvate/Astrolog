@@ -20,3 +20,5 @@ astrolog.exe
 *.swp
 *.swo
 *~
+/astrolog-qt-dbg
+/obj-qt-dbg/

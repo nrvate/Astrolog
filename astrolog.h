@@ -2091,6 +2091,15 @@ typedef struct _UserSettings {
   // already on turns files off. The settings writer emits forced =/_
   // prefixes and the dialogs assign the fields directly, so only a
   // hand-typed plain -b* hits that fall-through.
+  //   That last sentence was aspirational when it was written: the
+  // settings writer emitted NONE of these five fields, so a chart cast
+  // with Moshier, JPL, Placalc or Matrix came back as Swiss next run.
+  // It writes all five now, ahead of the "=b" line so that line settles
+  // fEphemFiles last, and ahead of "=0b"/"=0n" so a saved file applies
+  // its backend before locking the old engines out. And a suffix its -0
+  // guard refuses no longer falls through to the toggle: it is an error
+  // now, because reaching the toggle with nothing set left NO engine
+  // running and cast every body at 0Ari00'00" in silence.
   flag fPlacalcAst;  // -ba
   flag fPlacalcPla;  // -bp
   flag fMatrixPla;   // -bm

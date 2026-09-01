@@ -14,7 +14,11 @@
 #        caught the -Yu oscillation and the :YXp0 metric double-convert.
 #        Exempt: X (forced by this script's command line), 0b/0n (the -0
 #        lockdown family is one-way by design: "_0" does nothing), v3
-#        (its boolean rides in the value; the prefix is fixed "=").
+#        (its boolean rides in the value; the prefix is fixed "="), and
+#        bp/bm/bJ, which are gated BY that one-way family -- astrolog.as
+#        ships "=0b" and "=0n", so turning the old engines or the JPL web
+#        query back on is refused, loudly, by design (work log item 140).
+#        Flipping them is asking the program to do what it just forbade.
 #        Yu0 normalizes to Yu because the "0" suffix is state, not name.
 # Leg 3: tools/settings-fixture.as sets value switches to sentinels; each
 #        line's "; EXPECT <regex>" must match the resulting save. A value
@@ -42,7 +46,7 @@ fi
 python3 - "$T/rt-A.as" "$T/rt-F.as" <<'PYEOF'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
-EXEMPT = re.compile(r'^[=_](X\b|0b|0n|v3)')
+EXEMPT = re.compile(r'^[=_](X\b|0b|0n|v3|bp|bm|bJ)')
 out = []
 for ln in open(src):
     if ln and ln[0] in '=_' and not EXEMPT.match(ln):

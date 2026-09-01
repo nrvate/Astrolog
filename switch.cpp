@@ -2164,16 +2164,37 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     us.nSwissEph = FSwitchF(us.nSwissEph == 2) * 2;
   else if (ch1 == 's')
     us.nSwissEph = FSwitchF(us.nSwissEph == 1);
-  else if (ch1 == 'p' && !us.fNoPlacalc)
+  else if (ch1 == 'p') {
+    // A subswitch refused by its -0 guard used to fall out of the chain
+    // and reach the fEphemFiles toggle below anyway, turning the working
+    // backend off with nothing put in its place: with the shipped
+    // astrolog.as ("=0b"), plain "-bp" or "-bm" cast every body at
+    // 0Ari00'00" and said nothing. Refuse the whole switch instead, the
+    // way fNoGraphics and fNoRead already do. Only a request to turn the
+    // backend ON is refused: the settings writer emits "_bp"/"_bm" into
+    // every saved file, and those must stay loadable under "=0b".
+    if (us.fNoPlacalc && FSwitchF(us.fPlacalcPla)) {
+      ErrorArgv("bp");
+      return tcError;
+    }
     SwitchF(us.fPlacalcPla);
-  else if (ch1 == 'm' && !us.fNoPlacalc)
+  } else if (ch1 == 'm') {
+    if (us.fNoPlacalc && FSwitchF(us.fMatrixPla)) {
+      ErrorArgv("bm");
+      return tcError;
+    }
     SwitchF(us.fMatrixPla);
-  else if (ch1 == 'a')
+  } else if (ch1 == 'a')
     SwitchF(us.fPlacalcAst);
   else if (ch1 == 'U')
     SwitchF(us.fMatrixStar);
-  else if (ch1 == 'J' && !us.fNoNetwork)
+  else if (ch1 == 'J') {
+    if (us.fNoNetwork && FSwitchF(us.nSwissEph == 3)) {
+      ErrorArgv("bJ");
+      return tcError;
+    }
     us.nSwissEph = FSwitchF(us.nSwissEph == 3) * 3;
+  }
   SwitchF(us.fEphemFiles);
   return 0;
 }
