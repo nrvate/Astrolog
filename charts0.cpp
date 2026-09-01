@@ -96,7 +96,7 @@ void PrintW(CONST char *sz, int col)
 
 void DisplayCredits(void)
 {
-  char sz[cchSzDef], szT[cchSzDef];
+  char sz[cchSzMax], szT[cchSzDef];
 
   PrintW(NULL, -1);
 #ifdef PC
@@ -869,7 +869,7 @@ void DisplaySwitchesRare(void)
 
 void PrintObjects(void)
 {
-  char sz[cchSzDef];
+  char sz[cchSzMax];
   int i, j, k, l;
 #ifdef SWISSGRAPH
   ES es;
@@ -1285,7 +1285,7 @@ void GetSzConstel(char *szGen, int cchMax, int i)
 void PrintConstellations(void)
 {
   int i, j = eWat;
-  char szGen[cchSzDef], sz[cchSzDef], chLast = chNull;
+  char szGen[cchSzDef], sz[cchSzMax], chLast = chNull;
 
   sprintf2(S(sz), "%s constellations:\n", szAppName); PrintSz(sz);
   PrintSz("No. Name                Abbrev.   "

@@ -1776,7 +1776,7 @@ void ChartEphemeris(void)
 
 flag ChartExoplanet(flag fColor)
 {
-  char szLine[cchSzLine], sz[cchSzDef], szT[cchSzDef], *pch;
+  char szLine[cchSzLine], sz[cchSzMax], szT[cchSzDef], *pch;
   ExoData *pexod;
   real jd1, jd2, jd, off, jdMin, jda, jdb, jdChart, lon, lat, rT;
   int cexod, count = 0, dTrans, mon, day, yea, mon2, day2, yea2, hr, min, sec,

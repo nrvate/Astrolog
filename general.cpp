@@ -1554,7 +1554,7 @@ flag FErrorValR(CONST char *szOpt, flag f, real rVal, int nPar)
 {
   // szVal must fit any double formatted with %f: an out of range value is
   // exactly what reaches here, and 1e308 formats to over 300 characters.
-  char sz[cchSzMax], szPar[cchSzDef], szVal[cchSzLine];
+  char sz[cchSzLine*2], szPar[cchSzDef], szVal[cchSzLine];
 
   if (!f)
     return fFalse;
@@ -1750,7 +1750,7 @@ char ChRet(real dir)
 
 char *SzZodiac(real deg)
 {
-  static char szZod[24];
+  static char szZod[32];
   int sign, d, m;
   real s;
 
@@ -1948,7 +1948,7 @@ char *SzDegree2(real deg)
 
 char *SzHMS(int sec)
 {
-  static char szHMS[10];
+  static char szHMS[24];
   int hr, min;
   char ch;
 
@@ -2004,7 +2004,7 @@ char *SzDate(int mon, int day, int yea, int nFormat)
 
 char *SzTimeR(int hr, int min, int sec, int mil)
 {
-  static char szTim[16];
+  static char szTim[40];
   flag fSecond = !(sec < 0 || (us.fSecondHide && (sec == 0 && mil < 0)));
 
   while (min >= 60) {
@@ -2059,7 +2059,7 @@ char *SzTim(real tim)
 
 char *SzZone(real zon)
 {
-  static char szZon[7];
+  static char szZon[20];
 
   if (zon == zonLMT)
     sprintf2(S(szZon), "LMT");
@@ -2080,7 +2080,7 @@ char *SzZone(real zon)
 
 char *SzOffset(real zon, real dst, real lon)
 {
-  static char szOff[15], *pch;
+  static char szOff[24], *pch;
   real off;
   int min;
   flag fLMT;
@@ -2115,7 +2115,7 @@ char *SzOffset(real zon, real dst, real lon)
 
 char *SzLocation(real lon, real lat)
 {
-  static char szLoc[32];
+  static char szLoc[768];
   int i, j, i2, j2, i3, j3;
   real rT;
   char chDeg, chLon, chLat;

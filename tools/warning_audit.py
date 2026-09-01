@@ -40,7 +40,8 @@ default level) and it is the only net those two files have.
 But it is NOT the net for the format-truncation class. mingw redirects
 snprintf to __mingw_snprintf, which GCC does not recognize as the builtin,
 so its format analysis is silently absent there. Measured, not assumed:
-the same tree reports 44 format-truncation warnings under g++ 11 on Linux
+the same tree reported 44 format-truncation warnings under g++ 11 on
+Linux
 and 0 under mingw g++ 10.
 """
 
@@ -196,14 +197,23 @@ HEADER = """\
 # *removed* line too, on purpose, so the ledger cannot quietly overstate
 # what is left.
 #
-# As of 2026-09-01 every class in here carries a recorded verdict, so a
-# NEW line is a genuinely new warning. The verdicts, with their evidence,
-# are in QT_GUI_PLAN.md's work log:
+# Two counts matter and they are not the same. This audit compiles with
+# -Wall so it sees more than an ordinary build ever will, which is right
+# for catching regressions and wrong for knowing what the person running
+# "make" has to read. That second number is 12 warnings in 182 lines of
+# output as of 2026-09-01, down from 49 in 722 (work log item 151); the
+# ledger below is the -Wall figure.
+#
+# Every class in here carries a recorded verdict, so a NEW line is a
+# genuinely new warning. The verdicts, with their evidence, are in
+# QT_GUI_PLAN.md's work log:
 #
 #   -Wmaybe-uninitialized   item 150 -- 0 definite, and 23 of them appear
 #                           at one optimization level and not the other
-#   -Wformat-truncation=    item 150 -- bounded on purpose; the import
-#                           truncation points are asserted by the suite
+#   -Wformat-truncation=    item 151 -- twenty destinations resized; the
+#                           nine left are the asserted import truncation
+#                           points, two buffers that cannot be sized apart,
+#                           and a path that reports its own truncation
 #   -Wunused-function       item 149 -- qtdialog.cpp's documented dialog
 #                           helper toolkit, kept for the next session
 #   -Wunused-value          item 149 -- FreeProcInstance(), a Win16 no-op

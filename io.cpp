@@ -74,7 +74,7 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath,
   int cchPath)
 {
   FILE *file;
-  char szFileT[cchSzMax], szExe[cchSzMax], sz[cchSzMax], szMode[3], *pch;
+  char szFileT[cchSzMax], szExe[cchSzMax], sz[cchSzLine], szMode[3], *pch;
   CONST char *pch2;
 #ifdef ENVIRON
   char *env;
@@ -1411,7 +1411,7 @@ CONST char *szPntSwiss[] = {"", "n", "s", "p", "a"};
 
 flag FOutputSettings()
 {
-  char sz[cchSzDef];
+  char sz[cchSzMax];
   FILE *file;
   int i;
   char szForce[cchSzDef];
@@ -2235,7 +2235,7 @@ LNext:
   }
   _findclose(hFile);
 #else
-  char szFile[cchSzMax], *pchFile, *pch;
+  char szFile[cchSzLine], *pchFile, *pch;
   DIR *dir;
   struct dirent *ent;
   flag fAll = us.fWriteOld;

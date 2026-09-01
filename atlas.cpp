@@ -905,7 +905,7 @@ flag FEnsureTimezoneChanges()
 
 flag FLoadAtlas(FILE *file, int cae)
 {
-  char szLine[cchSzMax], szAbb[cchSzDef], *pch;
+  char szLine[cchSzMax], szAbb[cchSzMax], szErr[cchSzLine], *pch;
   int i, j;
   AtlasEntry *pae;
 
@@ -938,9 +938,9 @@ flag FLoadAtlas(FILE *file, int cae)
   for (i = 0; i < cae; i++) {
     pae = &is.rgae[i];
     if (fgets(szLine, cchSzMax, file) == NULL) {
-      sprintf2(S(szLine),
+      sprintf2(S(szErr),
         "Atlas error: File ended after %d of %d cities.\n", i, cae);
-      PrintError(szLine);
+      PrintError(szErr);
       return fFalse;
     }
 
@@ -981,10 +981,10 @@ flag FLoadAtlas(FILE *file, int cae)
       pae->szNam[j] = pch[j];
     pae->szNam[j] = chNull;
     if (pae->icn < 0) {
-      sprintf2(S(szLine),
+      sprintf2(S(szErr),
         "Atlas error: City %d (%s) in unknown country/region: '%s'\n",
         i, pae->szNam, szAbb);
-      PrintError(szLine);
+      PrintError(szErr);
       return fFalse;
     }
     while (*pch && *pch != '\t')
@@ -1005,10 +1005,10 @@ flag FLoadAtlas(FILE *file, int cae)
     }
     if (j >= iznMax) {
       sprintf2(S(szAbb), "%s", pch);
-      sprintf2(S(szLine),
+      sprintf2(S(szErr),
         "Atlas error: City %d (%s) in unknown time zone: '%s'\n",
         i, pae->szNam, szAbb);
-      PrintError(szLine);
+      PrintError(szErr);
       return fFalse;
     }
     pae->izn = j;
@@ -1055,7 +1055,7 @@ int NParseHMS(CONST char *sz)
 
 flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
 {
-  char szLine[cchSzMax], szErr[cchSzMax], *pch, *pchT, chT;
+  char szLine[cchSzMax], szErr[cchSzLine], *pch, *pchT, chT;
   int i, j, crue, n;
   RuleName *prun;
   RuleEntry *prue;
@@ -1240,7 +1240,7 @@ int rgznChange[iznMax], rgizcChange[iznMax+1];
 
 flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
 {
-  char szLine[cchSzMax], szErr[cchSzMax], *pch, *pchT;
+  char szLine[cchSzMax], szErr[cchSzLine], *pch, *pchT;
   int i, j, izn, czn, n;
   flag rgfUsed[iznMax];
   ZoneChange *pzc;
@@ -1419,7 +1419,7 @@ int mpznzc[iznMax];
 
 flag FLoadZoneLinks(FILE *file, int czl)
 {
-  char szLine[cchSzMax], szErr[cchSzMax], *pch, *szFrom, *szTo;
+  char szLine[cchSzMax], szErr[cchSzLine], *pch, *szFrom, *szTo;
   int i, iznFrom, iznTo, izn, izc;
 
   // Initialize list to invalid values (clear any previous data).

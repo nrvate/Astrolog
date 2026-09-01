@@ -130,7 +130,7 @@ int DrawZodiac(real deg, int n)
 
 void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
 {
-  char sz[cchSzDef], szT[cchSzDef], *pch;
+  char sz[cchSzMax], szT[cchSzDef], *pch;
   flag fT;
 
   if (szHeader != NULL)

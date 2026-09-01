@@ -1376,7 +1376,7 @@ void ChartMidpointRelation(void)
 void PrintHorizonLine(real azi, real alt,
   real aziSun, real altSun, real aziMoo, real altMoo, int hm)
 {
-  char sz[cchSzDef], szFormat[cchSzDef];
+  char sz[cchSzLine], szFormat[cchSzMax];
   real rAzi, sx, sy, vx, vy;
   int j;
 
@@ -1429,7 +1429,7 @@ void PrintHorizonLine(real azi, real alt,
 
 void ChartHorizon(void)
 {
-  char sz[cchSzDef], szFormat[cchSzDef];
+  char sz[cchSzLine], szFormat[cchSzMax];
   real azi[objMax], alt[objMax], aziSun, altSun, aziMoo, altMoo,
     rPhase, rDiam, rMag, radi, len;
   int hm = us.fPrimeVert || us.fHouse3D ? us.nHouse3D : hmHorizon, i, k;
@@ -1617,7 +1617,7 @@ void ChartHorizon(void)
 
 void ChartOrbit(void)
 {
-  char sz[cchSzMax], sz1[cchSzDef];
+  char sz[cchSzLine*2], sz1[cchSzDef];
   real x, y, z, rT;
   int i, j;
 

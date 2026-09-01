@@ -316,12 +316,15 @@ Roughly in the order I'd take them.
    upstream-shaped, and neither matrix can exercise them.
 
 13. ~~**Work the warning ledger down.**~~ — **closed 2026-09-01** (work
-    log items 146-150). Nothing in this project had ever read a compiler
+    log items 146-151). Nothing in this project had ever read a compiler
     warning; `tools/warning_audit.py` now holds all four builds against
     `tools/warnings.txt` and fails on any addition. **857 warnings in 209
-    sites down to 462 in 131, and every class still in it carries a
+    sites down to 354 in 108, and every class still in it carries a
     recorded verdict** — so the next warning to appear here will be a new
-    one.
+    one. Separately, and this is the number a person actually sees:
+    **a plain `make` prints 12 warnings in 182 lines, down from 49 in
+    722** (item 151 — the audit uses `-Wall` and an ordinary build does
+    not, so the two counts are different questions).
 
     What the campaign actually found, in rough order of how much it
     mattered:
@@ -347,6 +350,13 @@ Roughly in the order I'd take them.
     artifact rather than a defect. Initializing those to silence them
     would have converted latent bugs into confidently wrong answers.
     Eight of them are a worklist for REFACTORING.md's T7 instead.
+
+    The tail of it is worth repeating because it is a lesson about nets
+    rather than about warnings: the campaign spent five increments on a
+    ledger built with `-Wall`, and the maintainer's build — which has no
+    `-Wall` — barely moved until somebody measured *it* (item 151). A net
+    that sees more than the thing you are trying to improve is not
+    automatically a net for it.
 
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
@@ -5583,6 +5593,73 @@ are the more useful half to read before starting something new.
     `CommandLineX()`'s `fPause`). Started at 857 in 209 sites four
     increments ago. `tools/warning_audit.py` fails on any addition, so
     the next warning to appear in this tree will be a new one.
+
+151. **What the maintainer's build actually prints, which the campaign
+    had not been measuring.** Items 146-150 worked the `-Wall` ledger and
+    got it from 857 to 462. The maintainer's response was "still getting
+    tons of warnings on build", and they were right: an ordinary
+    `make` does not use `-Wall`, so what reaches the terminal is the
+    *default* set -- which was dominated by the one class item 150 had
+    given a verdict to instead of a fix.
+
+    The measurement nobody had taken: **a clean `make` printed 49
+    warnings in 722 lines of output**. The count understates it badly,
+    because every `-Wformat-truncation` drags five lines of glibc
+    `stdio2.h` `note:` behind it. Roughly 270 of those 722 lines were one
+    warning class.
+
+    **It is now 12 warnings in 182 lines**, and no behaviour moved.
+
+    **The fix was sizing, and the shape recurs everywhere.** Almost every
+    site was a buffer declared the same width as the field it holds, and
+    then written with a label in front:
+
+        char sz[cchSzDef], szT[cchSzDef];
+        ...
+        sprintf2(S(sz), "Special: Delta-T = %s", szT);
+
+    That can never provably fit, whatever the values are. Twenty
+    destinations got room for what their own format can emit -- the
+    `sz`-with-a-label family in charts0/charts1/charts3/xcharts0/io, the
+    three zone loaders' `szErr`, `FLoadAtlas`'s own error buffer (which
+    it was building inside the line it quotes from), `FErrorValR`'s, and
+    six formatted-field statics in general.cpp that were sized for the
+    values the program produces rather than for what `%d` of an `int` can
+    emit. Nothing here changes a single character the program prints:
+    these formats already fit for every value it produces.
+
+    **Two enlargements had to be reverted, and both are worth knowing.**
+    Growing `GetJPLHorizons()`'s `szUrl` only moved the warning to
+    `FJPLCachePut()`, which copies it into a `cchSzLine` struct field
+    behind a length guard GCC cannot see -- one warning either way, so it
+    stays on the site that actually truncates. And in
+    `DisplayTimezoneChanges()`, `sz` and `sz1` hand their contents to
+    each other with a prefix added *each way*, so whichever one is made
+    larger makes the other unable to fit. That pair cannot be sized
+    apart; it is left as it was.
+
+    **The twelve that remain, each with a reason.** Five are the AAF and
+    ADB import joins whose truncation points the `file-parsers` group
+    *asserts* (work log items 118-120) -- enlarging those buffers would
+    change what the importer keeps, which is a behaviour decision, not a
+    warning fix. One is the JPL URL above. One is the `sz`/`sz1` pair.
+    One is the ephemeris path, which already prints "longer than %d
+    characters, so truncated" two lines later, so the truncation is
+    reported rather than silent. The last four are `-Wunused-result`:
+    three in placalc.cpp, which is third-party, and the exoplanet
+    line-counting loop whose loop variable is load bearing (item 149).
+
+    **The lesson is about where a net points.** `tools/warning_audit.py`
+    deliberately compiles with `-Wall` so it sees more than an ordinary
+    build ever will -- which is right for catching regressions, and
+    exactly wrong for knowing what the person running `make` has to read.
+    The audit's own count went 462 to 354; the number that mattered went
+    49 to 12, and it was not in the ledger at all. It is now: the header
+    of `tools/warnings.txt` records both.
+
+    **Nets**: suite 3534/0; chart matrix 0 of 6,936; switch matrix 0 of
+    75,635; graphics matrix 0 of 224; settings round trip; six audits;
+    `tools/win-tests.sh` 2 scenarios; all four builds compile.
 
 ## Features this fork adds to both builds
 

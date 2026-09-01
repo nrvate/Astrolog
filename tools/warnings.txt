@@ -6,14 +6,23 @@
 # *removed* line too, on purpose, so the ledger cannot quietly overstate
 # what is left.
 #
-# As of 2026-09-01 every class in here carries a recorded verdict, so a
-# NEW line is a genuinely new warning. The verdicts, with their evidence,
-# are in QT_GUI_PLAN.md's work log:
+# Two counts matter and they are not the same. This audit compiles with
+# -Wall so it sees more than an ordinary build ever will, which is right
+# for catching regressions and wrong for knowing what the person running
+# "make" has to read. That second number is 12 warnings in 182 lines of
+# output as of 2026-09-01, down from 49 in 722 (work log item 151); the
+# ledger below is the -Wall figure.
+#
+# Every class in here carries a recorded verdict, so a NEW line is a
+# genuinely new warning. The verdicts, with their evidence, are in
+# QT_GUI_PLAN.md's work log:
 #
 #   -Wmaybe-uninitialized   item 150 -- 0 definite, and 23 of them appear
 #                           at one optimization level and not the other
-#   -Wformat-truncation=    item 150 -- bounded on purpose; the import
-#                           truncation points are asserted by the suite
+#   -Wformat-truncation=    item 151 -- twenty destinations resized; the
+#                           nine left are the asserted import truncation
+#                           points, two buffers that cannot be sized apart,
+#                           and a path that reports its own truncation
 #   -Wunused-function       item 149 -- qtdialog.cpp's documented dialog
 #                           helper toolkit, kept for the next session
 #   -Wunused-value          item 149 -- FreeProcInstance(), a Win16 no-op
@@ -27,44 +36,21 @@
 # Format: build, file, function, flag, count, message with numbers masked.
 #
 # Regenerate:  tools/warning_audit.py --update
-# Total: 462 warnings in 131 distinct sites.
+# Total: 354 warnings in 108 distinct sites.
 
 console+qt+qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
 console+qt+qt-test	atlas.cpp	DisplayTimezoneChanges	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
-console+qt+qt-test	atlas.cpp	FLoadAtlas	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
-console+qt+qt-test	atlas.cpp	FLoadZoneChanges	-Wformat-truncation=	2	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
-console+qt+qt-test	atlas.cpp	FLoadZoneLinks	-Wformat-truncation=	2	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
-console+qt+qt-test	atlas.cpp	FLoadZoneRules	-Wformat-truncation=	5	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
 console+qt+qt-test	calc.cpp	SwissEnsurePath	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
-console+qt+qt-test	charts0.cpp	DisplayCredits	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
-console+qt+qt-test	charts0.cpp	PrintConstellations	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
-console+qt+qt-test	charts1.cpp	ChartHorizon	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
-console+qt+qt-test	charts1.cpp	ChartHorizon	-Wformat-truncation=	3	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
-console+qt+qt-test	charts1.cpp	ChartOrbit	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
-console+qt+qt-test	charts1.cpp	PrintHorizonLine	-Wformat-truncation=	1	‘%%’ directive output may be truncated writing N byte into a region of size between N and N
 console+qt+qt-test	charts2.cpp	CastRelation	-Wmaybe-uninitialized	1	‘rSav’ may be used uninitialized in this function
-console+qt+qt-test	charts3.cpp	ChartExoplanet	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
 console+qt+qt-test	charts3.cpp	ChartExoplanet	-Wunused-result	1	ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’
 console+qt+qt-test	extern.h	DisplayRelation	-Wmaybe-uninitialized	1	‘k’ may be used uninitialized in this function
 console+qt+qt-test	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘r’ may be used uninitialized in this function
-console+qt+qt-test	general.cpp	FErrorValR	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
-console+qt+qt-test	general.cpp	SzHMS	-Wformat-truncation=	1	‘:’ directive output may be truncated writing N byte into a region of size between N and N
-console+qt+qt-test	general.cpp	SzHMS	-Wformat-truncation=	1	‘__builtin___snprintf_chk’ output may be truncated before the last format character
-console+qt+qt-test	general.cpp	SzLocation	-Wformat-truncation=	1	‘__builtin___snprintf_chk’ output may be truncated before the last format character
-console+qt+qt-test	general.cpp	SzOffset	-Wformat-truncation=	1	‘%d’ directive output may be truncated writing between N and N bytes into a region of size N
-console+qt+qt-test	general.cpp	SzTimeR	-Wformat-truncation=	2	‘%Nd’ directive output may be truncated writing between N and N bytes into a region of size between N and N
-console+qt+qt-test	general.cpp	SzZodiac	-Wformat-truncation=	1	‘%d’ directive output may be truncated writing between N and N bytes into a region of size between N and N
-console+qt+qt-test	general.cpp	SzZone	-Wformat-truncation=	2	‘%d’ directive output may be truncated writing between N and N bytes into a region of size N
 console+qt+qt-test	intrpret.cpp	InterpretEsoteric	-Wmaybe-uninitialized	1	‘nObj’ may be used uninitialized in this function
-console+qt+qt-test	io.cpp	FOutputSettings	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
 console+qt+qt-test	io.cpp	FProcessAAFFile	-Wformat-truncation=	4	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
 console+qt+qt-test	io.cpp	FProcessADBFile	-Wformat-truncation=	1	‘, ’ directive output may be truncated writing N bytes into a region of size between N and N
-console+qt+qt-test	io.cpp	FileOpen	-Wformat-truncation=	4	‘__builtin___snprintf_chk’ output may be truncated before the last format character
 console+qt+qt-test	io.cpp	GetJPLHorizons	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size between N and N
-console+qt+qt-test	io.cpp	OpenDir	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
 console+qt+qt-test	placalc.cpp	outer_hel	-Wunused-result	3	ignoring return value of ‘size_t fread(void*, size_t, size_t, FILE*)’ declared with attribute ‘warn_unused_result’
 console+qt+qt-test	sweph.cpp	search_star_in_list	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘long int’ and ‘size_t’ {aka ‘long unsigned int’}
-console+qt+qt-test	xcharts0.cpp	DrawInfo	-Wformat-truncation=	1	‘%s’ directive output may be truncated writing up to N bytes into a region of size N
 console+qt+qt-test	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘c’ may be used uninitialized in this function
 console+qt+qt-test	xscreen.cpp	CommandLineX	-Wunused-but-set-variable	1	variable ‘fPause’ set but not used
 console+qt+qt-test+win	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘distN’ may be used uninitialized in this function
