@@ -33,10 +33,22 @@ OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/switch.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.
  $(OBJDIR)/swejpl.o $(OBJDIR)/swemmoon.o $(OBJDIR)/swemplan.o \
  $(OBJDIR)/sweph.o $(OBJDIR)/swephlib.o
 
-QT_CFLAGS = $(shell pkg-config --cflags Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Network)
-QT_LIBS = $(shell pkg-config --libs Qt5Widgets Qt5Gui Qt5Core Qt5PrintSupport Qt5Network)
+# Build against whichever Qt this machine has: Qt6 when pkg-config knows
+# about it, Qt5 otherwise. One command works on a stock Ubuntu (Qt5), on a
+# newer distro, and on a CI runner with either -- which is the whole point,
+# since the alternative is a build matrix that doubles CI time to prove
+# something the version guards already handle.
+#
+# Override explicitly with "make -f Makefile.qt QT_MAJOR=5" to force one.
+# Qt6 lives outside the default pkg-config path when installed by hand, so
+# it is opt-in: PKG_CONFIG_PATH=/usr/local/qt6/lib/pkgconfig selects it.
+QT_MAJOR := $(shell pkg-config --exists Qt6Widgets && echo 6 || echo 5)
+QT_MODULES = Qt$(QT_MAJOR)Widgets Qt$(QT_MAJOR)Gui Qt$(QT_MAJOR)Core \
+ Qt$(QT_MAJOR)PrintSupport Qt$(QT_MAJOR)Network
+QT_CFLAGS = $(shell pkg-config --cflags $(QT_MODULES))
+QT_LIBS = $(shell pkg-config --libs $(QT_MODULES))
 LIBS = $(QT_LIBS) -lm -ldl
-CPPFLAGS = -DQT -O -fPIC -Wno-write-strings -Wno-narrowing -Wno-comment \
+CPPFLAGS = -DQT -O -fPIC -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment \
  $(QT_CFLAGS)
 RM = rm -f
 

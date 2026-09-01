@@ -2,7 +2,9 @@
 *.o
 /astrolog
 /astrolog-qt
+/astrolog-qt6
 /obj-qt/
+/obj-qt6/
 
 # JetBrains IDE project files
 .idea/

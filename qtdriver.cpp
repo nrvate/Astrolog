@@ -33,11 +33,24 @@
 // The Qt headers this file needs. They may come before or after astrolog.h
 // now that its feature macros are prefixed words (METAFILE, PSCRIPT,
 // TIMEFUNC) that collide with nothing in Qt's own headers.
+// qglobal.h first, so QT_VERSION and QT_VERSION_CHECK are defined for the
+// guards below however this block is later reordered. Every other Qt
+// header would define them too, but not provably.
+#include <QtCore/qglobal.h>
 #include <QtWidgets/QMenuBar>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QColorDialog>
+// QAction and QActionGroup moved from QtWidgets to QtGui in Qt6. Together
+// with QString::leftRef() further down, and the QStyleHints include below,
+// that is the entire Qt6 incompatibility in this port -- measured by
+// building it against Qt 6.8.3, not by reading release notes.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtGui/QAction>
+#include <QtGui/QActionGroup>
+#else
 #include <QtWidgets/QAction>
 #include <QtWidgets/QActionGroup>
+#endif
 #include <QtGui/QKeySequence>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QDialog>
@@ -76,6 +89,10 @@
 #include <QtCore/QSettings>
 #include <QtCore/QProcess>
 #include <QtCore/QStandardPaths>
+// Used by the Qt 6.5+ branch of NDarkPreferenceQt(). Present since Qt 5.0,
+// so it needs no guard -- but nothing included it, and nothing had ever
+// built this port on Qt6, so that branch had never once compiled.
+#include <QtGui/QStyleHints>
 #include <QtWidgets/QStyleFactory>
 #include <QtGui/QPalette>
 #include <QtGui/QColor>
@@ -4183,7 +4200,7 @@ static int NSchemeFromPortalQt(void)
   int i = str.indexOf("uint32");
   if (i < 0)
     return nSchemeNone;
-  int n = str.mid(i + 6).trimmed().leftRef(1).toInt();
+  int n = str.mid(i + 6).trimmed().left(1).toInt();
   return n == 1 ? nSchemeDark : (n == 2 ? nSchemeLight : nSchemeNone);
 }
 
