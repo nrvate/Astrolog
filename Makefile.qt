@@ -52,7 +52,7 @@ CPPFLAGS = -DQT -O -fPIC -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-com
  $(QT_CFLAGS)
 RM = rm -f
 
-$(NAME): $(OBJDIR) $(OBJS)
+$(NAME): $(OBJS)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
 $(OBJDIR):
@@ -73,7 +73,14 @@ $(OBJDIR)/qtdriver.o: qtdriver.cpp qtrcaccel.h astrolog.h qtdriver.h
 # as the generated-table rules above (work log item 31).
 $(OBJS): astrolog.h extern.h
 
-$(OBJDIR)/%.o: %.cpp
+# "| $(OBJDIR)" is an ORDER-ONLY prerequisite, and it has to be here
+# rather than on $(NAME). Listing $(OBJDIR) among $(NAME)'s ordinary
+# prerequisites does not order it before the objects: under -j make is
+# free to start compiling into a directory the mkdir has not created
+# yet, and "make clean-all && make all -j4" did exactly that --
+# "Fatal error: can't create obj-qt-test/sweph.o: No such file or
+# directory". Makefile.win had it right all along.
+$(OBJDIR)/%.o: %.cpp | $(OBJDIR)
 	g++ $(CPPFLAGS) -c -o $@ $<
 
 clean:
