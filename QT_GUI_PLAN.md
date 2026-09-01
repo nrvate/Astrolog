@@ -5303,6 +5303,110 @@ are the more useful half to read before starting something new.
     Qt, Qt-test and Windows builds all compile -- and this time that
     claim was checked rather than assumed (item 146).
 
+148. **The unused-* campaign, first pass: 30 dead locals deleted, and a
+    graphics differential built to prove it.** Item 13's first tranche.
+    GCC named 50 `-Wunused-*` sites; this takes the family from 50 to 20,
+    and the interesting part is what the reading turned up rather than
+    the deletions.
+
+    **Every one was residue, not a forgotten computation.** The campaign
+    note predicted an assigned-but-never-read variable would sometimes be
+    a computation somebody dropped. Read one at a time, all thirty were
+    the other thing:
+
+    - `FProcessSwitches()` still declared `j`, `k`, `rT`, `ch2`, `pch`,
+      `ci` and `ppch` -- the locals of the four parsers phase 2's
+      migration dissolved (M4-M6). Seven names, one of them still being
+      assigned every iteration.
+    - `temp = grid->n[x][y]` in `ChartGrid()` and `ChartGridRelation()`
+      went dead when cell formatting moved into `PrintGridCell()`, which
+      reads the grid itself.
+    - `helioz[]` in `ComputePlanets()`: a full array of heliocentric z
+      coordinates, computed and never read, because the retrograde test
+      it feeds is a 2D cross product in the ecliptic plane.
+    - `rRatio4` in `HousePullenSinusoidalRatio()` belongs to the `#else`
+      branch's empirical solver; the analytic branch that is actually
+      compiled solves the quartic in closed form and never needs it.
+      Moved to the branch that uses it.
+    - `TELE te` in `XChartLocal()` -- a projection context filled in with
+      four fields and never projected through, copied from
+      `XChartTelescope()`.
+    - `radiM` in `XChartTelescope()`: the umbra and penumbra cones need
+      the Sun and Earth radii and the two distances; the Moon's own
+      radius never enters the maths.
+    - and `xs`/`ys`, `zGlyph2`/`zGlyphS`, `xpEar`/`ypEar`, `unit`,
+      `fNext`, `ch1Prev`, `szPath`, `cColon`, `isz`, `k`, `buttonx`/
+      `buttony`, `pch`.
+
+    One is not a deletion. `xLast`/`yLast` in `FBmpDrawBack()` cache the
+    background bitmap's size, and only the Windows path reads them back;
+    elsewhere they were written and dropped. Both the declaration and the
+    reset are `#ifdef WINANY` now, which is why that row said
+    `console+qt+qt-test` and not `win`.
+
+    **`tools/graphics-matrix.sh` is new, and this increment needed it.**
+    Eleven of these sites are in `xcharts0-1.cpp`, `xdevice.cpp` and
+    `xscreen.cpp` -- drawing code. The switch matrix never renders and
+    the chart matrix renders only *text*, so between them the whole
+    graphics surface had no differential at all; phase 2's P6 built one
+    by hand for a single switch family (items 102-104) and it was not
+    kept. This is that idea, kept: 224 renders over every chart mode,
+    every option on three chart types that draw differently, and every
+    output writer, printed one checksum per render. Ten seconds a run.
+
+    Three things it cost to get right, all of them the traps this project
+    already has written down:
+
+    - **A shell variable collision made 15 renders re-run the previous
+      output file name as an argument.** They errored, produced no file,
+      and would have compared equal forever. Hence the `MISSING` marker
+      and the "N produced no file" tail -- a harness whose invocations
+      all fail diffs to zero and reads exactly like a proof.
+    - **Six renders differed between two runs of the same binary.** The
+      PostScript writer puts its output path in a `%%Title` comment, and
+      `mktemp -d` made that path new each time. Fixed paths now. Verify
+      determinism before trusting a clean diff; that check is in the
+      header.
+    - **Three invocations inherited from `tools/asan-sweep.sh` were out
+      of range** (`-Xw 200 150`, `-XI0 100 2`, and the `-XM1/3/6` prefix
+      forms). That sweep only asks whether memory was corrupted, so an
+      erroring invocation costs it nothing; here it is dead coverage.
+
+    **Falsified**: perturbing `nScl` in `DrawMap()` moves 55 of the 224
+    renders; reversing it returns an exact zero.
+
+    **Nets**: suite 3526/0; chart matrix 0 of 6,936; switch matrix 0 of
+    75,635; graphics matrix **0 of 224 renders**; all four builds
+    compile. Warning ledger 819 -> 707, sites 198 -> 168.
+
+    **Two left standing on purpose, with their verdicts.**
+
+    `CommandLineX()` (xscreen.cpp) sets a local `fPause` on a switch
+    error and on a multi-chart run, and then returns without reading it.
+    The intent is legible -- pause so the user can read the error before
+    the graphics screen comes back -- and supplying it would change what
+    the X11 build does. That is a behaviour decision, not a warning
+    cleanup, so the variable stays and this note is the record.
+
+    `SwissHouse()` discards the return of `swe_calc_ut()` when computing
+    the Sun's declination for Sunshine houses, and `xp[6]` is
+    uninitialized above it -- so a failed call feeds a garbage
+    declination into the cusps. That is the same class as the eighteen
+    unchecked `fgets` calls item 13 parks separately, and it belongs with
+    them rather than here.
+
+    **And one found by reading rather than by the compiler.**
+    `RedrawTextQt()` in qtdriver.cpp is defined and never called: the
+    port used to show text charts in their own `QTextBrowser` window, and
+    `RedrawQt()` now draws them into the canvas the way Windows does.
+    The function, the `qi.pdlgText`/`qi.ptextBrowser` fields and two
+    no-op guards are all orphans of that change -- and three comments in
+    qtdriver.cpp plus two passages in this file and REFACTORING.md still
+    describe the old design as live. The right-click path is fine
+    (`ShowContextMenu()` chooses `PmenuContextForTextQt()` off
+    `us.fGraphics`), so nothing is broken; it is dead code plus stale
+    documentation, and it gets its own increment.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

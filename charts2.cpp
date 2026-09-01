@@ -170,7 +170,7 @@ void ChartListingRelation(void)
 
 void ChartGridRelation(void)
 {
-  int i0, j0, i, j, k, temp;
+  int i0, j0, i, j, k;
 
 #ifdef INTERPRET
   if (us.fInterpret && !us.fGridMidpoint) {
@@ -207,7 +207,6 @@ void ChartGridRelation(void)
         if (ignore[i])
           continue;
         PrintCh2(k < 2 ? chC : chV);
-        temp = grid->n[i][j];
         if (k > 1 && i == j)
           AnsiColor(kReverse);
         if (k < 2)

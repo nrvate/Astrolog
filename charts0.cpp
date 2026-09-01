@@ -177,7 +177,7 @@ void DisplayCredits(void)
 void PrintS(CONST char *sz)
 {
   char ch, ch1, ch2, ch3, ch4;
-  static char ch1Prev = chNull, ch2Prev = chNull, ch3Prev = chNull,
+  static char ch2Prev = chNull, ch3Prev = chNull,
     ch4Prev = chNull;
 
   // Determine color for first part of line.
@@ -219,7 +219,7 @@ void PrintS(CONST char *sz)
   PrintL();
 
   if (ch1 != ' ') {
-    ch1Prev = ch1; ch2Prev = ch2; ch3Prev = ch3; ch4Prev = ch4;
+    ch2Prev = ch2; ch3Prev = ch3; ch4Prev = ch4;
   }
 }
 

@@ -1892,9 +1892,9 @@ void DrawMapTriangles(flag fGlobe, int nScl, CIRC *pcr, real deg)
 void DrawMap(flag fSky, flag fGlobe, real deg)
 {
   char sz[cchSzDef], chT;
-  int cx = gs.xWin/2, cy = gs.yWin/2, rx, ry, unit = 12*gi.nScale,
+  int cx = gs.xWin/2, cy = gs.yWin/2, rx, ry,
     nScl = gi.nScale, x, y, xold, yold, m, n, u, v, i, j, k, l, xp, yp;
-  flag fNext = fTrue, fSimple, fDir = (gi.nMode == gSphere && gs.fSouth),
+  flag fSimple, fDir = (gi.nMode == gSphere && gs.fSouth),
     fDidBitmap;
   real planet1[objMax], planet2[objMax], x1, y1, rT;
   ObjDraw rgod[objMax * arDir];

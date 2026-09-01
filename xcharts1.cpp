@@ -1612,7 +1612,7 @@ void XChartTelescope()
   real rglen[objMax+1], lonH, latH, xBase, yBase, xScale, yScale,
     xBase2, yBase2, xScale2, yScale2, xi, yi, diam, radi, rRatio, len, ang,
     xo, yo, xr, yr, zr, xrSun, yrSun, xrT, yrT,
-    radiS, radiE, radiM, radiU, radiP, lenS, lenM, theta, rPct;
+    radiS, radiE, radiU, radiP, lenS, lenM, theta, rPct;
   flag fFlip = gs.fEcliptic && us.rHarmonic < 0.0, fShowLabel, fShowUmbra;
   TELE te;
   ES es;
@@ -1891,7 +1891,6 @@ void XChartTelescope()
 
           radiS = rObjDiam[oSun] / 2.0;
           radiE = rObjDiam[iEar] / 2.0;
-          radiM = rObjDiam[iMoo] / 2.0;
           lenS = PtLen(space[oSun]);
           lenM = PtLen(space[iMoo]);
           lenS *= rAUToKm; lenM *= rAUToKm;
@@ -2284,7 +2283,6 @@ void XChartLocal()
   real xBase, yBase, xScale, yScale, xBase2, yBase2, xScale2, yScale2,
     xr, yr, xi, yi, lon, lat, len;
   flag fShowLabel, fDidBitmap;
-  TELE te;
   static real lonPrev = rLarge, latPrev = rLarge;
   static int objPrev = nLarge;
 
@@ -2337,9 +2335,6 @@ void XChartLocal()
   }
 
   gs.rRot = xBase; gs.rTilt = yBase;
-  te.xCent = (real)xc; te.yCent = (real)yc;
-  te.xBase = xBase; te.yBase = yBase;
-  te.xScale = xScale; te.yScale = yScale;
 
   fDidBitmap = FBmpDrawMap2(x1, y1, x2, y2,
     xBase - xi/2.0, rDegQuad - yBase - yi/2.0,
@@ -2692,7 +2687,7 @@ void XChartOrbit()
 {
   int cx = gs.xWin / 2, cy = gs.yWin / 2, unit, x1, y1, x2, y2,
     i, j, k, l;
-  real sx, sy, sz, xp, yp, xp2, yp2, xpEar = 0.0, ypEar = 0.0, rT;
+  real sx, sy, sz, xp, yp, xp2, yp2, rT;
   ObjDraw rgod[objMax];
   char szT[cchSzDef], chT;
 #ifdef SWISS
@@ -4018,7 +4013,7 @@ void XChartIndian()
   char sz[cchSzDef];
   int rgcbox[cSign+1], mpobox[objMax], rgibox[objMax],
     rgx[cSign+1], rgy[cSign+1], nTrans = (int)(gs.rBackPct * 256.0 / 100.0),
-    cx, cy, unit, x1, y1, x2, y2, x11, y11, x22, y22, xs, ys, xb, yb, xi, yi,
+    cx, cy, unit, x1, y1, x2, y2, x11, y11, x22, y22, xb, yb, xi, yi,
     xp, yp, z, i, j, k, n, sig, nGrid;
   flag fSouthIndian = (gi.nMode == gWheel && !gs.fHouseExtra),
     fNorthIndian = gi.nMode == gHouse,
@@ -4041,7 +4036,6 @@ void XChartIndian()
     xb = (x2-x1)/3; yb = (y2-y1)/3;
     x1 = cx - xb*3/2; y1 = cy - yb*3/2; x2 = cx + xb*3/2; y2 = cy + yb*3/2;
   }
-  xs = x2-x1; ys = y2-y1;
   x11 = x1 + xb; y11 = y1 + yb; x22 = x2 - xb; y22 = y2 - yb;
   ClearB((pbyte)rgcbox, sizeof(rgcbox));
   ClearB((pbyte)mpobox, sizeof(mpobox));
@@ -4320,7 +4314,7 @@ flag FSphereEarth(real azi, real alt, CONST CIRC *pcr, int *xp, int *yp)
 void XChartSphere()
 {
   char sz[cchSzDef], chT;
-  int zGlyph, zGlyph2, zGlyphS, cChart, iChart, xo = 0, yo = 0, xp, yp,
+  int zGlyph, cChart, iChart, xo = 0, yo = 0, xp, yp,
     xp2, yp2, i, j, k, k2;
   flag fHouse3D = !us.fHouse3D, fDir = !gs.fSouth, fAny = !gs.fAlt,
     fNoHorizon, fSav, f;
@@ -4341,7 +4335,6 @@ void XChartSphere()
   fNoHorizon = ignorez[0] && ignorez[1] && ignorez[2] && ignorez[3];
   zGlyph = Max(7*gi.nScale,
     (gs.fText && !gs.fDoSidebar)*Max(12, yFont*gi.nScaleText/2)*gi.nScaleT);
-  zGlyph2 = 14*gi.nScale; zGlyphS = 9*gi.nScaleT;
   cr.xc = gs.xWin >> 1; cr.yc = gs.yWin >> 1;
   cr.xr = cr.xc - zGlyph; cr.yr = cr.yc - zGlyph;
   cr2 = cr;

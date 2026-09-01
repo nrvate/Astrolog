@@ -391,7 +391,7 @@ void HousePullenSinusoidalDelta(real Asc)
 
 void HousePullenSinusoidalRatio(real Asc)
 {
-  real qSmall, rRatio, rRatio3, rRatio4, xHouse, rLo, rHi;
+  real qSmall, rRatio, rRatio3, xHouse, rLo, rHi;
   int iHouse, dir;
 
   // Start by determining the quadrant sizes.
@@ -411,7 +411,7 @@ void HousePullenSinusoidalRatio(real Asc)
       0.5*RSqr(-6.0*(qSmall-120.0)/(qSmall*rHi) - rLo + 2.0) - 0.5;
   } else
     rRatio = 0.0;
-  rRatio3 = rRatio * rRatio * rRatio; rRatio4 = rRatio3 * rRatio;
+  rRatio3 = rRatio * rRatio * rRatio;
   xHouse = qSmall / (2.0 * rRatio + 1.0);
 
 #else
@@ -420,7 +420,7 @@ void HousePullenSinusoidalRatio(real Asc)
   // 2xr^3 + xr^4 = 180-q, to see whether current r is too large or small.
   // Before binary searching, first keep doubling rHi until too large.
 
-  real qLarge = rDegHalf - qSmall;
+  real qLarge = rDegHalf - qSmall, rRatio4;
   flag fBinarySearch = fFalse;
 
   rLo = rRatio = 1.0;
@@ -2892,7 +2892,7 @@ void SzObjSelDef(char *sz, int cchMax, int iobj)
 
 flag FObjMidSource(int iObj)
 {
-  int i, k;
+  int i;
 
   for (i = 0; i <= cObj; i++)
     if (FForceMid(force[i]) &&
@@ -3740,7 +3740,7 @@ flag SwissTestStar(char *sz)
 
 flag SwissComputeAsteroid(real jd, ES *pes, flag fBack)
 {
-  int iflag, isz = 0, i;
+  int iflag, i;
   real r1, r2, r3, r4, r5, r6, rDiff;
   char sz[cchSzDef], *pch, *pchT, chT;
   static int iast = 1;

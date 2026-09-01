@@ -570,7 +570,7 @@ void ErrorCorrect(int ind, real *x, real *y, real *z)
 void ComputePlanets(void)
 {
   real helioret[uranHi+1],
-    heliox[uranHi+1], helioy[uranHi+1], helioz[uranHi+1];
+    heliox[uranHi+1], helioy[uranHi+1];
   real aber = 0.0, AU, E, EA, E1, M, XW, YW, AP, AN, _IN, X, Y, G, XS, YS, ZS;
   int ind = oSun, i;
   OE *poe;
@@ -595,8 +595,7 @@ void ComputePlanets(void)
     _IN = ReadThree(poe->in0, poe->in1, poe->in2); // Calculate inclination
     X = XW; Y = YW;
     RecToSph2(AP, AN, _IN, &X, &Y, &G);  // Rotate velocity coords
-    heliox[ind] = X; helioy[ind] = Y;
-    helioz[ind] = G;                     // Helio ecliptic rectangular
+    heliox[ind] = X; helioy[ind] = Y;    // Helio ecliptic rectangular
     X = AU*(RCos(EA)-E);                 // Perifocal coordinates for
     Y = AU*RSin(EA)*pow(1.0-E*E,0.5);    // rectangular position coordinates
     RecToSph2(AP, AN, _IN, &X, &Y, &G);  // Rotate for rectangular

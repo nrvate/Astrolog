@@ -642,7 +642,7 @@ void InteractX()
 #endif
   int fAutosize = fFalse, fResize = fFalse, fRedraw = fTrue, fNoChart = fFalse,
     fBreak = fFalse, fCast = fFalse, mousex = -1, mousey = -1,
-    buttonx = -1, buttony = -1, length, key, i;
+    length, key, i;
 
   neg(gs.nAnim);
   while (!fBreak) {

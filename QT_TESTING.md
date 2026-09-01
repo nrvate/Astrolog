@@ -718,12 +718,27 @@ binary built from the commit you are changing:
 ```sh
 git worktree add /tmp/base <commit> && make -C /tmp/base -j4
 cp /tmp/base/astrolog ./base-astrolog && git worktree remove /tmp/base --force
-tools/chart-matrix.sh  ./base-astrolog > old.txt 2>&1   # chart output
-tools/chart-matrix.sh  ./astrolog      > new.txt 2>&1
-tools/switch-matrix.sh ./base-astrolog > oldsw.txt 2>&1 # switch surface
-tools/switch-matrix.sh ./astrolog      > newsw.txt 2>&1
-diff old.txt new.txt && diff oldsw.txt newsw.txt        # empty = proven
+tools/chart-matrix.sh    ./base-astrolog > old.txt 2>&1   # chart output
+tools/chart-matrix.sh    ./astrolog      > new.txt 2>&1
+tools/switch-matrix.sh   ./base-astrolog > oldsw.txt 2>&1 # switch surface
+tools/switch-matrix.sh   ./astrolog      > newsw.txt 2>&1
+tools/graphics-matrix.sh ./base-astrolog > oldg.txt 2>&1  # the drawing code
+tools/graphics-matrix.sh ./astrolog      > newg.txt 2>&1
+diff old.txt new.txt && diff oldsw.txt newsw.txt \
+  && diff oldg.txt newg.txt                              # empty = proven
 ```
+
+**The graphics matrix is the third surface, added 2026-09-01** (work log
+item 148). The other two never draw a picture: the switch matrix renders
+nothing at all, and the chart matrix renders only *text* charts, so
+xcharts0-2.cpp, xgeneral.cpp, xdevice.cpp and xscreen.cpp had no
+differential over them until this one. 224 renders, one checksum each,
+about ten seconds. It prints `MISSING` and a count for any render that
+produced no file, because an all-erroring harness diffs to zero and reads
+exactly like a proof -- its first draft did precisely that for 15 renders,
+through a shell variable collision. Run it twice against the *same*
+binary before trusting a clean diff: six renders differed that way until
+the PostScript writer's `%%Title` stopped carrying a `mktemp` path.
 
 **They cover disjoint surfaces, and assuming otherwise wastes a day.**
 The switch matrix prints each run's stderr and the settings file it

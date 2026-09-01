@@ -567,7 +567,12 @@ flag FBmpDrawBack(Bitmap *bDest)
   byte *pb, *pb2;
   KV kv;
   static KV kvLast = -1;
-  static int nTransLast = 0, xLast = 0, yLast = 0;
+  static int nTransLast = 0;
+#ifdef WINANY
+  // Only the Windows path reads these back, to notice the background
+  // bitmap changing size; elsewhere they were set and never used.
+  static int xLast = 0, yLast = 0;
+#endif
 
   // Don't draw background if user doesn't want to.
   if (!gs.fBackDraw || !gi.fBmp)
@@ -603,7 +608,9 @@ flag FBmpDrawBack(Bitmap *bDest)
         pb += cbPixelK; pb2 += cbPixelK;
       }
     }
+#ifdef WINANY
     xLast = yLast = 0;
+#endif
   }
 
   // Determine source (on bitmap) and destination (on chart) rectangles.
@@ -2076,7 +2083,6 @@ void WireSphere(int x, int y, int z, int r)
 
 void WireStar(int x, int y, int z, ES *pes)
 {
-  char *pch = pes->sz;
   int n;
 
   // Determine star color.

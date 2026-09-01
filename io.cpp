@@ -2236,7 +2236,7 @@ LNext:
   }
   _findclose(hFile);
 #else
-  char szPath[cchSzMax], szFile[cchSzMax], *pchFile, *pch;
+  char szFile[cchSzMax], *pchFile, *pch;
   DIR *dir;
   struct dirent *ent;
   flag fAll = us.fWriteOld;
@@ -2483,7 +2483,7 @@ int NParseSz(CONST char *szEntry, int pm)
 real RParseSz(CONST char *szEntry, int pm)
 {
   char szLocal[cchSzMax], *sz, *pch, ch, chT;
-  int cch, i, cColon = 0;
+  int cch, i;
   flag fNeg = fFalse, fMeridian = fFalse;
   real r;
 

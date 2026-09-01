@@ -476,7 +476,7 @@ void PrintGridCell(int x, int y, int type, int row)
 
 void ChartGrid(void)
 {
-  int x0, y0, x, y, r, xc, yc, xg, yg, temp;
+  int x0, y0, x, y, r, xc, yc, xg, yg;
 
 #ifdef INTERPRET
   if (us.fInterpret) {    // Print interpretation instead if -I in effect.
@@ -500,7 +500,6 @@ void ChartGrid(void)
           xg = x; yg = y;
           if ((x > y) != (x0 > y0))
             SwapN(xg, yg);
-          temp = grid->n[xg][yg];
 
           // Print aspect rows.
           if (xg < yg) {

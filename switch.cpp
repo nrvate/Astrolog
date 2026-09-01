@@ -4122,14 +4122,9 @@ static int NProcessSwitchesNullW(int argc, char **argv, int pos)
 
 flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
 {
-  int ich, i, j, k;
+  int ich, i;
   flag fNot, fOr, fAnd;
-  real rT;
-  char ch1, ch2, *pch;
-  CI ci;
-#ifdef EXPRESS
-  char **ppch;
-#endif
+  char ch1;
 
   argc--; argv++;
   while (argc) {
@@ -4143,7 +4138,6 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
     }
     ich = 1 + FChSwitch(ch1);    // Leading dash?
     ch1 = argv[0][ich];
-    ch2 = (ch1 == chNull ? chNull : argv[0][ich+1]);
     // Registry-migrated switches resolve here by exact name; anything
     // else falls through to the cases below unchanged.
     PARSEIN pin;

@@ -196,7 +196,7 @@ reason: item 143's sweep left GCC naming every buffer still too small for
 its worst case, and two of those were live overflows (work log items
 146-147).
 
-And three **differential harnesses**, which are a different kind of check:
+And four **differential harnesses**, which are a different kind of check:
 each prints a normalized behavioural artifact for one binary, so two
 builds of this tree can be byte-diffed and an empty diff is the proof.
 Not pre-commit — each needs a baseline binary built from the commit you
@@ -215,11 +215,18 @@ tools/switch-matrix.sh <binary>      # 529 invocations: the switch surface,
                                      # REFACTORING.md, "The registry as
                                      # built")
 tools/influence-matrix.sh <binary>   # the same for -j/-j0/-7 output
+tools/graphics-matrix.sh <binary>    # 224 renders: every graphics chart
+                                     # mode, every option on three chart
+                                     # types that draw differently, and
+                                     # every output writer, one checksum
+                                     # each. ~10 seconds
 ```
 
-**They cover disjoint surfaces and neither substitutes for the other.**
+**They cover disjoint surfaces and none substitutes for another.**
 The switch matrix never renders a chart, so charts0-3.cpp, intrpret.cpp
-and the x*.cpp text paths are invisible to it -- work log item 143
+and the x*.cpp text paths are invisible to it; the chart matrix renders
+only *text*, so the drawing code is invisible to both and wants the
+graphics matrix (work log item 148) -- work log item 143
 changed 1,055 formatting calls, mostly in exactly that code, and the
 switch matrix was byte-identical over 75,471 lines while proving nothing
 about them. Sabotage one site and re-run before trusting a clean diff:
