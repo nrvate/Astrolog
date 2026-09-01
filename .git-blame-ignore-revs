@@ -1,0 +1,2 @@
+# Line endings normalized to LF across the tree. Skip it in blame:
+#   git blame --ignore-revs-file .git-blame-ignore-revs <file>

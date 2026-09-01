@@ -16,9 +16,9 @@ import sys
 def main():
     rcpath = sys.argv[1] if len(sys.argv) > 1 else "astrolog.rc"
     hpath = sys.argv[2] if len(sys.argv) > 2 else "resource.h"
-    with open(rcpath, newline='') as f:
-        lines = f.read().split('\r\n')
-    with open(hpath, newline='') as f:
+    with open(rcpath) as f:
+        lines = f.read().splitlines()
+    with open(hpath) as f:
         vals = dict(re.findall(r'#define\s+(cmd\w+)\s+(\d+)', f.read()))
 
     start = next(i for i, l in enumerate(lines) if re.match(r'^menu MENU\b', l))

@@ -144,7 +144,7 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Six standing audits, all currently clean — four of the port against
+Seven standing audits, all currently clean — four of the port against
 `astrolog.rc`, one of the compiled defaults against `astrolog.as`, and
 one of the switch registry against the help text and settings writer:
 
@@ -167,6 +167,9 @@ python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # ruler2[] one short on its first run.
                                      # With a file argument: count leg only,
                                      # for any .as
+python3 tools/line_endings_audit.py  # any carriage return in a tracked
+                                     # text file; the tree is LF
+                                     # everywhere since work log item 159
 python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # or FOutputSettings() writes resolves
                                      # to a registry row; found -YYI dead
@@ -350,28 +353,33 @@ On a private Xvfb display, `import -window root` is fine.
   crop from it** — it leaks unrelated windows. Target a specific window ID
   found via `xdotool search --pid`, never by name substring. (A private
   Xvfb display is exempt; see above.)
-- **Preserve CRLF in upstream files.** Most original Astrolog sources are
-  CRLF; this fork's own files are LF. A scripted edit in text mode
-  silently rewrites the whole file as LF and makes it diff as entirely
-  rewritten. Read with `newline=''` and write back the same way.
+- **The source is LF**, since 2026-09-01 (work log item 159) — the C++,
+  the headers, the makefiles this fork owns, the tools and the docs. It
+  used to be a 55/53 split with a per-file rule about preserving it, and
+  that rule drew blood repeatedly (items 145, 158). Nothing in the source
+  needed CRLF: converting left all 64 object files byte-identical, 31
+  from g++ 11 and 33 from mingw g++ 10.
 
-  The same trap has a second mouth: **reading a saved fragment back with
-  Python's default text mode strips its CRs**, so a script that stashes
-  an original line and later restores it silently converts that one line
-  to LF. Read *and* write with `newline=''` (or in binary), and assert
-  `CR == LF` after every scripted write — that assertion is what caught
-  it, on exactly one line of express.cpp (work log item 145).
+  **Four things are deliberately not LF, and `.gitattributes` lists each
+  with its reason**: binaries (`.se1`, `.ttf`, `.pdf`, `.docx`, images);
+  files Windows or VMS tooling owns (`.sln`, `.vcproj`, `.vcxproj`,
+  `.rc`, `.def`, `.url`, `makefile.com`); the third-party `font/`
+  distribution; and **the data files the program parses** (`.as`,
+  `.csv`) — those last are not cosmetic, since converting them moved
+  `tools/switch-matrix.sh` by six lines. Something in the data parsers
+  reads a CR as content; until that is found they stay as they ship.
 
-  Check with `tr -cd '\r' < file | wc -c` **against that file's own line
-  count**, not against `git show HEAD:file` — legitimately adding lines
-  changes the CR total, so comparing to HEAD flags every honest edit and
-  teaches you to ignore it. CR count == line count is the real invariant.
-  (`sweph.cpp` is the one exception: it ships from upstream with 9 CRs in
-  8621 lines. Not ours to fix.)
-- **Never edit a CRLF file with a range-based regex.** One in this project
-  matched across the gap between two functions and spliced them together,
-  producing code that looked plausible and would not compile. Exact-string
-  replacement only; if a match count is not exactly 1, stop.
+  `* -text` in `.gitattributes` stops a clone on Windows with the default
+  `core.autocrlf=true` from rewriting anything, and
+  `tools/line_endings_audit.py` fails on a CR appearing in the source.
+  **Do not run a CR-stripping sweep over the tree**: one with a
+  three-extension exclusion list corrupted 28 binaries — every `.se1`
+  ephemeris and every `.ttf` — in exactly that way.
+- **Prefer exact-string replacement over a range-based regex.** One
+  range-based edit in this project matched across the gap between two
+  functions and spliced them together, producing code that looked
+  plausible and would not compile. If a match count is not exactly 1,
+  stop.
 - **Always test with `-i nrvate.as`**, the maintainer's own settings.
   It sets `-Yi1 "/swe"`, and `SwissEnsurePath()` caches the ephemeris
   path on first use — so without it at startup every esoteric body

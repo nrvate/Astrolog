@@ -6144,6 +6144,69 @@ are the more useful half to read before starting something new.
     write" is not advice, it is the only thing standing between a
     scripted edit and a file that diffs as entirely rewritten.
 
+159. **The source becomes LF, four categories stay as they ship, and a
+    conversion sweep corrupted 28 binaries on the way.** The maintainer
+    asked whether anything still needs CRLF in 2026. Measured: no, not in
+    the source.
+
+    **The evidence.** Converting every CRLF file and rebuilding left
+    **all 64 object files byte-identical** -- 31 from g++ 11 on Linux, 33
+    from mingw g++ 10 for Windows -- which is P7's standard for a change
+    that must not touch generated code. `windres` produces the same
+    `.res` from either input. The tree was a 55/53 split, upstream's
+    files CRLF and this fork's own LF, held together by a per-file rule
+    that had been broken four times before being caught and twice more
+    since (items 145 and 158, the second one this same day).
+
+    **Four categories are deliberately not converted**, each listed in
+    `.gitattributes` with its reason:
+
+    - **Binaries** -- `.se1`, `.ttf`, `.pdf`, `.docx`, `.rtf`, images.
+    - **Files Windows or VMS tooling owns** -- `.sln`, `.vcproj`,
+      `.vcxproj`, `.rc` (Visual Studio's resource editor), `.def` (the
+      Windows linker), `.url` (Explorer's Internet Shortcut format),
+      `makefile.com` (a VMS DCL procedure).
+    - **`font/`**, a third-party distribution, table and OFL FAQ included.
+    - **The data files the program parses**, `.as` and `.csv`. **This one
+      is not cosmetic.** With `astrolog.as`, `atlas.as`, `timezone.as`
+      and `nrvate.as` converted, `tools/switch-matrix.sh` moved six lines:
+      `-0q` went from "Assuming first century C.E. is really meant
+      instead of 1908 / Couldn't find anything in atlas matching
+      location" to "Value 0 out of range from 1 to 12" twice. Something
+      in the data parsers reads a CR as content. Not diagnosed here; the
+      files stay as they ship and the diff is the evidence.
+
+    **And the sweep corrupted 28 binary files.** The conversion loop
+    excluded three extensions -- `.png`, `.ico`, `.bmp` -- so it stripped
+    `\r` bytes out of every `.se1` ephemeris, every `.ttf`, the `.pdf`s
+    and the `.docx`s. `earth.bmp` survived because it happened to be on
+    the list; nothing else did. It was caught by the maintainer reading
+    `git status`, and independently by a parallel session running the
+    suite against `./ephem` and seeing "Ephemeris file
+    ./ephem/sepl_18.se1 is damaged (0)". All 28 were restored from HEAD
+    and verified byte-identical.
+
+    Two things follow, and the second is the one that matters.
+    An exclusion list written from memory is not an exclusion list.
+    And **the guard has to be the thing that cannot be forgotten**:
+    `.gitattributes` now marks the whole tree `-text`, so a clone on
+    Windows with the default `core.autocrlf=true` cannot rewrite
+    anything, and `tools/line_endings_audit.py` is the seventh standing
+    audit. Its failure message says to add a file to the skip list rather
+    than to strip its CRs, because the message it *used* to print --
+    "Strip them: tr -d '\r' < FILE" -- was, for a few minutes, precise
+    instructions for repeating the corruption.
+
+    **Nets**: 64 objects byte-identical; four builds clean with zero
+    warnings; suite 3551/0; chart matrix 0 of 6,936; switch matrix 0 of
+    75,635 *after* the data files were put back, which is how the parser
+    sensitivity was found; graphics matrix 0 of 224; seven audits and
+    three generated tables; settings round trip; `tools/win-tests.sh`.
+
+    Two generators needed a one-line fix: `rc_accel.py` and `rc_cmd.py`
+    split the resource on a literal `'\r\n'`, which found nothing the
+    moment anything was LF. They use `splitlines()` now and take either.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
@@ -6710,17 +6773,16 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   rather than trusting a single screenshot — a screenshot of one window ID
   says nothing about whether a *different* window is still visible on top
   of or behind it.
-- **Preserve line endings when editing upstream files.** Most of the
-  original Astrolog sources are CRLF. Editing one through a script that
-  reads and writes in text mode silently rewrites the whole file as LF,
-  which makes it diff as entirely rewritten against upstream and would
-  conflict across every line on a merge. This has happened four times in
-  this project (`extern.h`, `io.cpp`, `xdata.cpp`, `xdevice.cpp`) before
-  being caught. If you script an edit, read with `newline=''`, normalise
-  to `\n` for matching, and convert back before writing. Check with
-  `tr -cd '\r' < file | wc -c` against `git show HEAD:file | tr -cd
-  '\r' | wc -c`. The fork's own files (`qtdriver.cpp`, `qtdialog.cpp`,
-  `qtdriver.h`, `Makefile.qt`, the `.md` docs) are LF.
+- **The source is LF**, since 2026-09-01 (work log item 159). It used to
+  be split — upstream's sources CRLF, this fork's own LF — and the rule to
+  preserve that per file was broken four times before being caught, and
+  twice more after (items 145, 158). Nothing in the source needed CRLF:
+  converting left all 64 object files byte-identical across both
+  toolchains. Binaries, Windows tooling, `font/` and the `.as`/`.csv`
+  data files are exempt, each for a reason `.gitattributes` states.
+  `tools/line_endings_audit.py` checks the rest. **Never run a
+  CR-stripping sweep over the tree** — one did, with a three-extension
+  exclusion list, and corrupted 28 binaries.
 - **Scripted edits that compute a replacement range by index can eat the
   next thing.** One in this project deleted an entire adjacent plan item
   because its end index overshot, and it went unnoticed for several

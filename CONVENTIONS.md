@@ -5,9 +5,11 @@ learnable without being burned. Every entry here was verified against
 the code (file references inline), not recalled. If an entry and the
 code disagree, the code moved: fix the entry.
 
-Line endings are covered by their own hard rule in `CLAUDE.md` (upstream
-files CRLF, fork files LF, CR count == line count per file). The switch
-surface has its own document: REFACTORING.md, "The registry as built".
+Line endings: the source is LF, pinned by `.gitattributes` and checked by
+`tools/line_endings_audit.py`. Binaries, the files Windows tooling owns,
+`font/`, and the `.as`/`.csv` data files the program parses stay as they
+ship — `.gitattributes` says why for each (work log item 159). The switch surface has its own document:
+REFACTORING.md, "The registry as built".
 
 ## Naming dialect
 

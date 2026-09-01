@@ -559,11 +559,9 @@ Two things that cost time here:
   `-DQTTEST` to that `CPPFLAGS` and the checked tables' range asserts
   come with it, which is what caught item 130. Build it at a **short
   path**: a deep one truncates the ephemeris path and changes lookups.
-- **Never edit a CRLF file with a range-based regex.** One in this project
-  spliced two functions together by matching across the block between
-  them. Exact-string replacement only, then check
-  `tr -cd '\r' < f | wc -c` equals the line count. Note `sweph.cpp` ships
-  from upstream with mixed endings (9 CRs in 8621 lines); not ours to fix.
+- **Never edit with a range-based regex.** One in this project spliced
+  two functions together by matching across the block between them.
+  Exact-string replacement only, and assert the match count is 1.
 
 ## Proving a regression test actually works
 
@@ -588,10 +586,12 @@ Two ways this goes wrong, both seen here:
   behaviour that is neither the bug nor the fix — and the test passed
   either way. `fTrue` was the restore. Work out what the original
   expression evaluated to, not what makes the line look inert.
-- **Most of these files are CRLF.** An exact-string patch written with
-  bare `\n` matches nothing, and a script that asserts on the match count
-  says so immediately; one that does not will happily report a pass
-  against an unmodified file. Assert `count == 1` before every write.
+- **Assert the match count before every write.** A patch that matches
+  nothing will otherwise report a pass against an unmodified file. This
+  used to bite hardest on line endings — the tree was half CRLF and a
+  patch written with bare `\n` matched nothing — and the tree is LF
+  throughout since work log item 159, but the assertion is what makes any
+  near-miss loud rather than silent.
 
 Then state the test's preconditions rather than inheriting them. The
 suite shares live `us`/`gs` state with everything that ran before it, so
@@ -603,9 +603,7 @@ precisely like the fix not working.
 That reverts the file's *whole* share of whatever you are working on, not
 the one line you broke. It happened twice in one session: once silently
 undoing 204 conversions in charts1.cpp, caught only because a running
-total stopped reconciling. And read the saved original back in binary or
-with `newline=''` — Python's default text mode strips CRs and quietly
-turns your restored line into the only LF line in a CRLF file.
+total stopped reconciling.
 
 ## Where a regression test belongs, which is not always in the suite
 
@@ -651,6 +649,7 @@ python3 tools/rc_mnemonic_audit.py
 python3 tools/rc_field_audit.py
 python3 tools/rc_lookup_audit.py
 python3 tools/defaults_audit.py
+python3 tools/line_endings_audit.py
 python3 tools/registry_audit.py
 python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h
 python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h

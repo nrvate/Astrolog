@@ -21,8 +21,8 @@ import sys
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else "astrolog.rc"
-    with open(path, newline='') as f:
-        lines = f.read().split('\r\n')
+    with open(path) as f:
+        lines = f.read().splitlines()
 
     # The menu bar is the first "MENU" block; the next one starts the
     # context menus.

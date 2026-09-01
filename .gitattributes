@@ -1,0 +1,60 @@
+# Line endings. The source this fork edits is LF; everything consumed by
+# Windows or VMS tooling, and every binary, keeps what it shipped with.
+#
+# Converted 2026-09-01 (work log item 159) from a 55/53 split between
+# upstream's CRLF and this fork's own LF. Nothing in the C++ needed CRLF:
+# converting left all 64 object files byte-identical -- 31 from g++ 11 on
+# Linux, 33 from mingw g++ 10 for Windows -- and windres produces the same
+# .res from either input.
+#
+# "-text" everywhere means git stores and checks out byte for byte and
+# never translates, so a clone on Windows with the default
+# core.autocrlf=true cannot rewrite the tree. That makes the bytes in the
+# repository the whole truth, which is why the exceptions below are listed
+# rather than left to a heuristic.
+* -text
+
+# Binary. These were damaged once by a conversion sweep whose exclusion
+# list was three extensions long, so the list is explicit now.
+*.se1    binary
+*.ttf    binary
+*.pdf    binary
+*.docx   binary
+*.rtf    binary
+*.png    binary
+*.ico    binary
+*.bmp    binary
+
+# Windows and VMS tooling, left CRLF: Visual Studio's project files and
+# resource editor, the module definition the Windows linker reads, the
+# Internet Shortcut format Explorer parses, and a VMS DCL procedure.
+# astrolog.rc is CRLF for the resource editor's sake; the generators that
+# read it (tools/rc2qt.py and friends) take either.
+*.sln     -text
+*.vcproj  -text
+*.vcxproj -text
+*.rc      -text
+*.def     -text
+*.url     -text
+*.com     -text
+
+# Third-party font distributions, left exactly as they ship -- the table
+# and the OFL FAQ that travel with them included.
+font/** -text
+
+# Data files the program itself parses, left exactly as they ship.
+# Converting them is NOT cosmetic: with astrolog.as, atlas.as, timezone.as
+# and nrvate.as converted to LF, tools/switch-matrix.sh moved six lines --
+# "-0q" reported a different chart-info parse failure. Something in the
+# data parsers reads a CR as content. Until that is found and fixed these
+# stay as they are, and the diff is the evidence (work log item 159).
+*.as   -text
+*.csv  -text
+
+# Swiss Ephemeris data the program reads the same way (the star list and
+# the orbital elements), and upstream's shipped HTML documentation. Left
+# as they ship for the same reason and to keep the diff against an
+# upstream tarball readable.
+sefstars.txt -text
+seorbel.txt  -text
+*.htm        -text
