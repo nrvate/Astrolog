@@ -42,7 +42,7 @@ CONST RCACCEL rgaccelQt[] = {
   {"Show &Graphics",               "v"},
   {"&Buffer Redraws",              "Tab"},
   {"&Redraw Screen",               "Space"},
-  {"&Clear Screen",                "Del"},
+  {"&Clear Screen",                "Backspace"},
   {"&Hourglass on Redraw",         "Alt+u"},
   {"Ch&art Resizes Window",        "Alt+Q"},
   {"&Window Resizes Chart",        "Ctrl+Alt+q"},

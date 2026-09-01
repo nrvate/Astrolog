@@ -2968,7 +2968,7 @@ static CONST HOTKEY rghotkeyQt[] = {
   {"Ctrl+0",            "List Cr&edits"},
   {"Alt+0",             "&About Astrolog..."},
   {"Space",             "&Redraw Screen"},
-  {"Del",               "&Clear Screen"},
+  {"Backspace",         "&Clear Screen"},
   {"Alt+U",             "&Hourglass on Redraw"},
   {"Alt+Shift+Q",       "Ch&art Resizes Window"},
   {"Ctrl+Alt+Q",        "&Window Resizes Chart"},

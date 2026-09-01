@@ -263,7 +263,7 @@ BEGIN
         BEGIN
             MENUITEM "&Buffer Redraws\tTab",        cmdWinBuffer
             MENUITEM "&Redraw Screen\tSpace",       cmdWinRedraw
-            MENUITEM "&Clear Screen\tDel",          cmdWinClear
+            MENUITEM "&Clear Screen\tBackspace",    cmdWinClear
             MENUITEM "&Hourglass on Redraw\tAlt+u", cmdWinHourglass
             MENUITEM SEPARATOR
             MENUITEM "Ch&art Resizes Window\tAlt+Q", cmdChartResizesWindow
