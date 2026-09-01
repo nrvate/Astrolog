@@ -298,9 +298,10 @@ Roughly in the order I'd take them.
    (`FEnsureHousePartition()`) called from **both** engines, since five
    of them fail on the Swiss path the old guard never reached.
    **Pullen (S.Delta) and Sunshine** produce a zero-width house whose
-   gaps still sum to 360, and that collapse is deliberate in
-   `HousePullenSinusoidalDelta()`, so they are left alone. Oracle leg 4b
-   pins all of it.
+   gaps still sum to 360, so the guard leaves them alone. Pullen's
+   collapse is deliberate in `HousePullenSinusoidalDelta()`; Sunshine's
+   happens inside the Swiss library and is **unexamined** — see item 158.
+   Oracle leg 4b pins all of it.
 
    Two measured findings are parked there rather than fixed, both
    maintainer calls because they change house math in both builds:
@@ -6079,11 +6080,23 @@ are the more useful half to read before starting something new.
     **Reading them separated two classes that the measurement had
     lumped together.** Pullen (S.Delta) and Sunshine produce a
     *zero-width house* -- two cusps on the same degree -- but their gaps
-    still sum to 360. And that collapse is written on purpose:
+    still sum to 360, so the circle is still covered exactly once.
+
+    For Pullen the collapse is demonstrably deliberate:
     `HousePullenSinusoidalDelta()` says
     `chouse[sAqu] = chouse[sPis] = Midpoint(...)` when a quadrant is
     under 30 degrees wide, because three houses will not fit in it. That
     is its author's degenerate case, not a broken partition.
+
+    **For Sunshine that is an assumption, and it is flagged rather than
+    claimed.** Sunshine is `ch = 'I'` handed to
+    `swe_houses_armc_ex2()` -- the behaviour is inside the Swiss
+    Ephemeris library, which this project treats as third-party
+    (REFACTORING.md non-goals). All that is established is that its gaps
+    sum to 360, which is why the guard leaves it alone; whether the
+    zero-width house is intended by the library or is a defect in it is
+    **not** established here. Checking that means reading `swehouse.c`
+    and is open.
 
     The other five -- **Topocentric, Campanus, Regiomontanus** on both
     engines, **APC** and **Savard-A** on the Swiss one -- return cusps
