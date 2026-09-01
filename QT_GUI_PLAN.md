@@ -319,12 +319,14 @@ Roughly in the order I'd take them.
     log items 146-151). Nothing in this project had ever read a compiler
     warning; `tools/warning_audit.py` now holds all four builds against
     `tools/warnings.txt` and fails on any addition. **857 warnings in 209
-    sites down to 354 in 108, and every class still in it carries a
+    sites down to 318 in 101, and every class still in it carries a
     recorded verdict** — so the next warning to appear here will be a new
     one. Separately, and this is the number a person actually sees:
-    **a plain `make` prints 12 warnings in 182 lines, down from 49 in
-    722** (item 151 — the audit uses `-Wall` and an ordinary build does
-    not, so the two counts are different questions).
+    **all four builds now compile silently** (items 151-152). A console
+    build was 49 warnings in 722 lines of output and is 0 in 32. The
+    audit uses `-Wall` and an ordinary build does not, so the two counts
+    answer different questions — everything left in the ledger is
+    invisible to `make`.
 
     What the campaign actually found, in rough order of how much it
     mattered:
@@ -5660,6 +5662,68 @@ are the more useful half to read before starting something new.
     **Nets**: suite 3534/0; chart matrix 0 of 6,936; switch matrix 0 of
     75,635; graphics matrix 0 of 224; settings round trip; six audits;
     `tools/win-tests.sh` 2 scenarios; all four builds compile.
+
+152. **All four builds compile silently.** Item 151 got an ordinary `make`
+    from 49 warnings to 12 and stopped at the ones with reasons. The
+    maintainer's answer was to keep going until it is clean, so the
+    remaining twelve were taken one at a time rather than dismissed.
+    **`make`, `make -f Makefile.qt`, `make -f Makefile.qt.test` and
+    `make -f Makefile.win` now each print zero warnings**; a console
+    build is 32 lines of output where it was 722.
+
+    Five of the twelve were the same defect, and it was worth the trip.
+    **The AAF and ADB importers assembled two fields into a buffer no
+    wider than one of them.** `FProcessADBFile()` joined a city and a
+    country -- `cchSzDef` each -- into a `cchSzDef` buffer, so a long
+    city name **discarded the country outright**; `FProcessAAFFile()` did
+    the same with name and location into a `cchSzMax` buffer. Both fields
+    are slices of one `cchSzLine` input line, so the buffers are
+    `cchSzLine*2` and `cchSzMax` now and a pair that fits on an input
+    line survives whole. This is the same code the long-line net first
+    reached in work log item 118, where the bug was that the two
+    assembly `sprintf`s were *unbounded*: bounding them stopped the
+    crash and pinned the truncation, and this finishes the job by
+    removing the truncation.
+
+    **The `file-parsers` assertions moved with it, deliberately.** They
+    read "AAF 400-char name and location truncate to 254" and "ADB
+    79-char city and country join truncates to 79"; they now read
+    "survive whole (406, 416)" and "keeps both (160)", with the
+    arithmetic spelled out at each. This is the one behaviour change in
+    the batch and it is the point of it. Falsified: putting the ADB
+    buffer back to `cchSzDef` fails the new assertion with 79.
+
+    The other seven:
+
+    - **`DisplayTimezoneChanges()`** builds `sz` from `sz1` in one block
+      and `sz1` from `sz` in another, so neither could be widened without
+      breaking the other. The two dialog rows that close the cycle got a
+      buffer of their own.
+    - **`SwissEnsurePath()`**'s `szPath` is `AS_MAXCH` because
+      `swe_set_ephe_path()` wants that width, so the destination cannot
+      grow; an explicit `%.*s` precision states the truncation snprintf
+      was already doing, in a form the compiler can check.
+    - **`GetJPLHorizons()`**'s URL and the cache entry it is copied into
+      grow together, so the length guard between them stays meaningful.
+    - **`ChartExoplanet()`**'s line counter ran one extra iteration -- the
+      one whose `fgets` failed -- which is what its `-2` compensated for.
+      It counts the lines it actually read now, and `-1`. Proven
+      equivalent on the shipped `astexo.csv` (4,545 lines, ends in a
+      newline): the `-Ux` listing is byte-identical, 271 lines.
+    - **placalc.cpp**'s three `fread` returns are third-party
+      (REFACTORING.md non-goals) and stay unreviewed, behind a
+      `#pragma GCC diagnostic` with the reason at the site.
+
+    **Nets**: suite 3534/0; chart matrix 0 of 6,936; switch matrix 0 of
+    75,635; graphics matrix 0 of 224; the `-Ux` exoplanet listing and the
+    `-N`/`-Nl`/`-Nz` atlas listings byte-identical; settings round trip;
+    six audits; `tools/win-tests.sh` 2 scenarios; four builds, all
+    silent.
+
+    The `-Wall` ledger is 318 warnings in 101 sites, down from 857 --
+    every one of them invisible to an ordinary build, and every class
+    carrying a verdict (items 148-151). `-Wformat-truncation=` went 45 to
+    1 and `-Wunused-result` 18 to 0 on the way here.
 
 ## Features this fork adds to both builds
 

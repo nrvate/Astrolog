@@ -678,11 +678,12 @@ tools/warning_audit.py --update        # after a fix, to move the ledger
 
 It compiles console, Qt, Qt-test and Windows clean with `-Wall`,
 normalizes each warning to (build, file, function, flag, message with the
-numbers masked) and diffs that against `tools/warnings.txt` — 354
-warnings in 108 sites as of 2026-09-01, down from 857. A plain `make`,
-which does not use `-Wall`, prints 12 of them; that number is the one a
-reader of the build output cares about, and it was 49 (work log item
-151). It fails on a **removed** line as
+numbers masked) and diffs that against `tools/warnings.txt` — 318
+warnings in 101 sites as of 2026-09-01, down from 857. **All four builds
+themselves compile silently**: an ordinary `make` does not use `-Wall`, so
+none of the ledger reaches the terminal. That number went 49 → 0 over work
+log items 151-152, and it is the one a reader of the build output cares
+about. It fails on a **removed** line as
 well as an added one, so fixing something means regenerating the ledger
 and the ledger cannot drift into overstating what is left.
 

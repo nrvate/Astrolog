@@ -1878,7 +1878,8 @@ flag FSetDstZon(CI *ci, int izn,
 
 flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
 {
-  char sz[cchSzMax*2], sz1[cchSzMax], sz2[cchSzDef], sz3[cchSzDef];
+  char sz[cchSzMax*2], sz1[cchSzMax], sz2[cchSzDef], sz3[cchSzDef],
+    szRow[cchSzMax*2 + cchSzDef];
   int rgmon[ichngMax], rgday[ichngMax], rgtim[ichngMax], rgiru[ichngMax],
     izn, izcn, izce, czce,
     mon, day, yea, tim, dst, zon, off, doff,
@@ -1973,9 +1974,9 @@ flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
       SzTime(tim / 3600, tim / 60 % 60, us.fSeconds ? tim % 60 : -1),
       sz1, dst == 0 ? "ST" : "DT", sz2, sz3);
     if (fDialog) {
-      sprintf2(S(sz1), "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz);
+      sprintf2(S(szRow), "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz);
       if (pfnAtlasRow != NULL)
-        pfnAtlasRow(sz1, -1);
+        pfnAtlasRow(szRow, -1);
       goto LSkip;
     }
     sprintf2(S(sz1), "%3d: ", cn); PrintSz(sz1);
@@ -2103,9 +2104,9 @@ LSkip:
           SzHMS(doff),
           dst == 0 ? "ST" : "DT", sz2);
         if (fDialog) {
-          sprintf2(S(sz), "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz1);
+          sprintf2(S(szRow), "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz1);
           if (pfnAtlasRow != NULL)
-            pfnAtlasRow(sz, -1);
+            pfnAtlasRow(szRow, -1);
           continue;
         }
         AnsiColor(kDefault);

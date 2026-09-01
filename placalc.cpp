@@ -53,6 +53,13 @@
 
 #include "placalc.h"
 
+// Third-party file (see REFACTORING.md non-goals): the three fread()
+// calls below read a fixed record from a binary ephemeris whose
+// position was just validated by *_file_posit(), and discard the
+// count. Reviewing that is out of scope here, and the warning is the
+// only thing this file contributes to an otherwise clean build.
+#pragma GCC diagnostic ignored "-Wunused-result"
+
 
 #ifdef PLACALC
 /*

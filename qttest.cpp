@@ -4456,10 +4456,14 @@ static void TestFileParsersQt()
     "Solar Fire 1100-char name line rejects the file (ret=%d nam %d)",
     fRet, CchSz(ciCore.nam));
 
-  // AAF, getc loop through cchSzLine. Overlong name and location fields
-  // on a line still under that limit are truncated to the cchSzMax
-  // buffer they are assembled in -- the crasher this group first found:
-  // both assembly sprintfs were unbounded.
+  // AAF, getc loop through cchSzLine. The name and location fields are
+  // assembled from two slices of the input line each, and the buffer they
+  // are assembled in used to be cchSzMax -- narrower than one field -- so
+  // a long name was cut at 254 and a long city dropped its country
+  // outright. It is cchSzLine*2 since 2026-09-01 (work log item 152), so
+  // a field pair that fits on one input line survives whole. This is the
+  // group that first found the crasher here: both assembly sprintfs were
+  // unbounded before work log item 118.
   WriteParserFileQt(szFile,
     "#A93:*,First Last,*,4.3.2020,5:06,Seattle,WA (USA)\n"
     "#B93:2458912.5,47N36,122W19,+5:00,0\n");
@@ -4472,10 +4476,12 @@ static void TestFileParsersQt()
     "#B93:2458912.5,47N36,122W19,+5:00,0\n", szPad, szPad);
   WriteParserFileQt(szFile, sz);
   fRet = FLoadParserFileQt(szFile);
-  Check(fRet && CchSz(ciCore.nam) == cchSzMax-1 &&
-    CchSz(ciCore.loc) == cchSzMax-1 && MM == 3 && DD == 4,
-    "AAF 400-char name and location truncate to %d (%d, %d)",
-    cchSzMax-1, CchSz(ciCore.nam), CchSz(ciCore.loc));
+  // "First " + 400 pad = 406; "Sea" + 400 pad + "ttle" + ", " + "WA, USA"
+  // = 416. Both are what the input actually carried, not a buffer limit.
+  Check(fRet && CchSz(ciCore.nam) == 406 &&
+    CchSz(ciCore.loc) == 416 && MM == 3 && DD == 4,
+    "AAF 400-char name and location survive whole (%d, %d)",
+    CchSz(ciCore.nam), CchSz(ciCore.loc));
   // And a line past cchSzLine splits: the tail reads as its own line,
   // which can't start with '#', so the file is rejected.
   i = is.cci;
@@ -4514,9 +4520,12 @@ static void TestFileParsersQt()
     "</adb_entry>\n", szPad, szPad);
   WriteParserFileQt(szFile, sz);
   fRet = FLoadParserFileQt(szFile);
-  Check(fRet && CchSz(ciCore.loc) == cchSzDef-1 && MM == 3,
-    "ADB 79-char city and country join truncates to %d (%d)",
-    cchSzDef-1, CchSz(ciCore.loc));
+  // 79 + ", " + 79 = 160. The join buffer used to be cchSzDef, the width
+  // of ONE of the two fields, so a long city name discarded the country
+  // entirely (work log item 152).
+  Check(fRet && CchSz(ciCore.loc) == 160 && MM == 3,
+    "ADB 79-char city and country join keeps both (%d)",
+    CchSz(ciCore.loc));
 
   // Quick*Chart, fgets whose buffer matches its limit; the fixed
   // 100-column layout can't reach it. A control only.

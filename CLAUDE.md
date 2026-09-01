@@ -180,7 +180,7 @@ itself**, which nothing here read until 2026-09-01.
 ```sh
 tools/warning_audit.py               # all four builds clean with -Wall,
                                      # every warning diffed against
-                                     # tools/warnings.txt (354 in 108
+                                     # tools/warnings.txt (318 in 101
                                      # sites); ~6 minutes, so pre-release
                                      # rather than pre-commit
 tools/warning_audit.py --file io.cpp # one file, seconds, no baseline --

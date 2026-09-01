@@ -200,9 +200,9 @@ HEADER = """\
 # Two counts matter and they are not the same. This audit compiles with
 # -Wall so it sees more than an ordinary build ever will, which is right
 # for catching regressions and wrong for knowing what the person running
-# "make" has to read. That second number is 12 warnings in 182 lines of
-# output as of 2026-09-01, down from 49 in 722 (work log item 151); the
-# ledger below is the -Wall figure.
+# "make" has to read. That second number is ZERO as of 2026-09-01: all
+# four builds compile silently (work log items 151-152, from 49 warnings
+# in 722 lines of output). Everything below is -Wall only.
 #
 # Every class in here carries a recorded verdict, so a NEW line is a
 # genuinely new warning. The verdicts, with their evidence, are in
@@ -210,15 +210,14 @@ HEADER = """\
 #
 #   -Wmaybe-uninitialized   item 150 -- 0 definite, and 23 of them appear
 #                           at one optimization level and not the other
-#   -Wformat-truncation=    item 151 -- twenty destinations resized; the
-#                           nine left are the asserted import truncation
-#                           points, two buffers that cannot be sized apart,
-#                           and a path that reports its own truncation
+#   -Wformat-truncation=    items 151-152 -- 45 down to 1 by sizing the
+#                           destinations; the last is qtdialog.cpp and is
+#                           -Wall only
+#   -Wunused-result         closed in item 152 (placalc.cpp is third-party
+#                           and carries a pragma with its reason)
 #   -Wunused-function       item 149 -- qtdialog.cpp's documented dialog
 #                           helper toolkit, kept for the next session
 #   -Wunused-value          item 149 -- FreeProcInstance(), a Win16 no-op
-#   -Wunused-result         item 149 -- the exoplanet counting loop, whose
-#                           loop variable is load bearing; rest third-party
 #   -Wsign-compare          third-party (sweph.cpp)
 #   -Wparentheses           third-party (placalc.cpp)
 #   -Wunused-variable       item 148 -- SwissHouse()'s discarded return

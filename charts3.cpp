@@ -1792,13 +1792,13 @@ flag ChartExoplanet(flag fColor)
     file = FileOpen(szFileExoCore, 0, NULL, 0);
     if (file == NULL)
       return fFalse;
-    for (i = 0; !feof(file); i++)
-      fgets(szLine, cchSzLine, file);
+    for (i = 0; fgets(szLine, cchSzLine, file) != NULL; i++)
+      ;
     fseek(file, 0, SEEK_SET);
     if (fgets(szLine, cchSzLine, file) == NULL)
       return fFalse;
     fTOI = CchSz(szLine) > 100;
-    cexod = i-2;
+    cexod = i-1;
     is.rgexod = RgAllocate(cexod, ExoData, "exoplanet list");
     if (is.rgexod == NULL)
       return fFalse;

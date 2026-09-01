@@ -2529,7 +2529,8 @@ void SwissEnsurePath()
   *pch = chNull;
 
   // First look for the file in the current directory, and that of executable.
-  sprintf2(S(szPath), ".%s%s", PATH_SEPARATOR, szExe);
+  sprintf2(S(szPath), ".%s%.*s", PATH_SEPARATOR,
+    (int)sizeof(szPath) - 4, szExe);
   // Next look in the directories indicated by the -Yi switch.
   for (i = 0; i < 10; i++) {
     pch = us.rgszPath[i];

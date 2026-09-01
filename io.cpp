@@ -504,7 +504,7 @@ flag FOutputData(void)
 
 flag FProcessAAFFile(CONST char *szFile, FILE *file)
 {
-  char szLine[cchSzLine], sz[cchSzMax], *pch, *sz1, *sz2;
+  char szLine[cchSzLine], sz[cchSzLine*2], *pch, *sz1, *sz2;
   int grf;
   flag fHaveFile, fRet = fFalse;
 
@@ -832,7 +832,7 @@ LDone:
 
 flag FProcessADBFile(CONST char *szFile, FILE *file)
 {
-  char szLine[cchSzLine], sz[cchSzDef], szLoc1[cchSzDef], szLoc2[cchSzDef],
+  char szLine[cchSzLine], sz[cchSzMax], szLoc1[cchSzDef], szLoc2[cchSzDef],
     *pch, *pch2;
   int i, grf, cchSz = (us.szADB == NULL ? 0 : CchSz(us.szADB));
   flag fHaveFile, fDidOne = fFalse, fDidStart, fDidEnd, fDidLon, fRet = fFalse;
@@ -3074,7 +3074,7 @@ flag GetURL(const char *szUrl, const char *szFile)
 #define cJPLCache 64
 
 static struct {
-  char szUrl[cchSzLine];
+  char szUrl[cchSzLine*2];
   PT3R pt[3];
   char szName[cchSzMax];
 } rgjc[cJPLCache];
@@ -3100,7 +3100,7 @@ static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
 {
   int j;
 
-  if (CchSz(szUrl) >= cchSzLine)
+  if (CchSz(szUrl) >= cchSzLine*2)
     return;
   sprintf(rgjc[ijcNext].szUrl, "%s", szUrl);
   for (j = 0; j < 3; j++)
@@ -3119,7 +3119,7 @@ static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
 flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   real *diralt, real *dirlen, char *szOut)
 {
-  char szUrl[cchSzLine], szLine[cchSzLine], szName[cchSzMax],
+  char szUrl[cchSzLine*2], szLine[cchSzLine], szName[cchSzMax],
     szMon[3][4], *pch, *pch2, ch;
   CI ci[3];
   PT3R pt[3];
