@@ -146,6 +146,14 @@ python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # ruler2[] one short on its first run.
                                      # With a file argument: count leg only,
                                      # for any .as
+tools/chart-matrix.sh <binary>       # every text chart the console build
+                                     # draws, over a pinned date, so two
+                                     # binaries byte-diff. The switch matrix
+                                     # below does NOT cover this: it prints
+                                     # stderr and saved settings and never
+                                     # renders a chart, so charts0-3.cpp,
+                                     # intrpret.cpp and the x*.cpp text paths
+                                     # sit outside it (work log item 143)
 tools/switch-matrix.sh <binary>      # 529-invocation switch-surface
                                      # behavior matrix; byte-diff it
                                      # between an old-commit worktree

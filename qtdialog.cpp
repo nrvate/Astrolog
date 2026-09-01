@@ -179,9 +179,9 @@ static QStringList RgstrZoneQt()
     if (szZon[i][1] && szZon[i][1] != 'D' && szZon[i][1] != 'W' &&
       szZon[i][2] && szZon[i][2] != 'D') {
       if (rZon[i] != zonLMT && rZon[i] != zonLAT)
-        sprintf(sz, "%s %s", SzZone(rZon[i]), szZon[i]);
+        sprintf2(S(sz), "%s %s", SzZone(rZon[i]), szZon[i]);
       else
-        sprintf(sz, "%s", SzZone(rZon[i]));
+        sprintf2(S(sz), "%s", SzZone(rZon[i]));
       rgstr.append(sz);
     }
   }
@@ -1620,7 +1620,7 @@ void ShowFileSettingsDialogQt()
   if (peThick != NULL) gs.nThickAdjust = peThick->text().toInt();
   gs.rBackPct = rI;
   if (peADB != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peADB->text().toLocal8Bit().constData());
     FCloneSz(sz, &us.szADB);
   }
@@ -1820,28 +1820,28 @@ void ShowGraphicsSettingsDialogQt()
   if (peDeca != NULL)  gs.nDecaSize = peDeca->text().toInt();
   if (peDelay != NULL) SetAnimDelayQt(peDelay->text().toInt());
   if (peTrack != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peTrack->text().toLocal8Bit().constData());
     gs.objTrack = FMatchSz(sz, "None") ? -1 : NParseSz(sz, pmObject);
   }
   if (pcbScale != NULL)  gs.nScale = pcbScale->currentText().toInt();
   if (pcbScaleT != NULL) gs.nScaleText = pcbScaleT->currentText().toInt();
   if (pcbCorner != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbCorner->currentText().toLocal8Bit().constData());
     for (i = 0; i < 7; i++)
       if (FMatchSz(sz, rgszWheelCornerQt[i]))
         gs.nDecaType = i;
   }
   if (pcbFill != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbFill->currentText().toLocal8Bit().constData());
     for (i = 0; i < 8; i++)
       if (FMatchSz(sz, rgszDecaFillQt[i]))
         gs.nDecaFill = i;
   }
   if (pcbCity != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbCity->currentText().toLocal8Bit().constData());
     for (i = 0; i < 6; i++)
       if (FMatchSz(sz, rgszCityColorQt[i])) {
@@ -1853,7 +1853,7 @@ void ShowGraphicsSettingsDialogQt()
   for (i = 0; i < cFontEntry; i++) {
     if (rgpcbFont[i] == NULL)
       continue;
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       rgpcbFont[i]->currentText().toLocal8Bit().constData());
     for (j = 0; j < cFont; j++)
       if (FMatchSz(sz, rgszFontDispQt[j]))
@@ -1861,7 +1861,7 @@ void ShowGraphicsSettingsDialogQt()
   }
   i = NRcStoreRadioQt(rgbuilt, 1, 3, 0);
   if (peLeft != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peLeft->text().toLocal8Bit().constData());
     j = NParseSz(sz, pmObject);
     gs.objLeft = (i == 0 ? 0 : (i == 1 ? j+1 : -j-1));
@@ -1978,7 +1978,7 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
   char sz[cchSzMax];
   int nSavChar;
 
-  sprintf(sz, "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
+  sprintf2(S(sz), "%.3s", szMonth[FValidMon(pci->mon) ? pci->mon : 1]);
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInMon"), sz,
     RgstrMonthQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInDay"),
@@ -1990,13 +1990,13 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInDst"),
     pci->dst == 0.0 ? "No" : (pci->dst == 1.0 ? "Yes" :
     (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))), RgstrDstQt());
-  sprintf(sz, "%s", SzZone(pci->zon));
+  sprintf2(S(sz), "%s", SzZone(pci->zon));
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInZon"),
     sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
   // SzLocation()'s degree byte confuses the parse back, so ask for it
   // without, the way Windows' SetEditSZOA does.
   nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
-  sprintf(sz, "%s", SzLocation(pci->lon, pci->lat));
+  sprintf2(S(sz), "%s", SzLocation(pci->lon, pci->lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInLon"), &sz[0],
@@ -2208,7 +2208,7 @@ static QString SzChartDateLineQt(CONST CI *pci)
 
   us.fAnsiChar = 2; us.nCharset = ccLatin; us.fGraphics = fTrue;
   int nDay = DayOfWeek(pci->mon, pci->day, pci->yea);
-  sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
+  sprintf2(S(sz), "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
     SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
     ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
   us.fAnsiChar = nSavChar; us.nCharset = nSavSet; us.fGraphics = fSav;
@@ -2224,7 +2224,7 @@ static QString SzChartNameLineQt(CONST CI *pci)
 {
   char sz[cchSzMax];
 
-  sprintf(sz, "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
+  sprintf2(S(sz), "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
     FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
     FSzSet(pci->loc) ? pci->loc : "");
   return QString::fromLocal8Bit(sz);
@@ -2255,13 +2255,13 @@ static void RcLoadInfoAllQt(CONST QVector<RCBUILT> &rgbuilt)
   for (i = 1; i <= cRing; i++) {
     pci = rgpci[i];
     n = DayOfWeek(pci->mon, pci->day, pci->yea);
-    sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[n],
+    sprintf2(S(sz), "%.3s %s %s (%cT Zone %s) %s", szDay[n],
       SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
       ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
     QLabel *pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 1);
     if (pl != NULL)
       pl->setText(QString::fromLatin1(sz));
-    sprintf(sz, "%s%s%s", pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ?
+    sprintf2(S(sz), "%s%s%s", pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ?
       "; " : "", pci->loc);
     pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 2);
     if (pl != NULL)
@@ -2300,9 +2300,9 @@ void ShowChartsAllDialogQt()
           // only for chart one (wdialog.cpp:1142).
           char szT[cchSzDef];
           if (i <= 1)
-            sprintf(szT, "%s", szTitleInfo);
+            sprintf2(S(szT), "%s", szTitleInfo);
           else
-            sprintf(szT, "Set Chart #%d Info", i);
+            sprintf2(S(szT), "Set Chart #%d Info", i);
           ShowChartInfoForQt(rgpci[i], szT);
           RcLoadInfoAllQt(rgbuilt);
         });
@@ -2859,10 +2859,10 @@ void ShowDefaultInfoDialogQt()
     (ciDefa.dst == 1.0 ? "Yes" :
     (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))),
     RgstrDstQt());
-  sprintf(sz, "%s", SzZone(ciDefa.zon));
+  sprintf2(S(sz), "%s", SzZone(ciDefa.zon));
   FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
   nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
-  sprintf(sz, "%s", SzLocation(ciDefa.lon, ciDefa.lat));
+  sprintf2(S(sz), "%s", SzLocation(ciDefa.lon, ciDefa.lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
   FillComboQt(pcbLon, &sz[0], RgstrLonQt());
@@ -2990,14 +2990,14 @@ void ShowTransitDialogQt()
   QLineEdit *peYears = (QLineEdit *)PwRcFindQt(rgbuilt, "deTr_tY");
   QLineEdit *peDiv = (QLineEdit *)PwRcFindQt(rgbuilt, "deTr_d");
 
-  sprintf(sz, "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
+  sprintf2(S(sz), "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
   FillComboQt(pcbMon, sz, RgstrMonthQt());
   FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
   FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
   FillComboQt(pcbTim, SzTim(TimT), RgstrTimeQt());
   FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
     (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
-  sprintf(sz, "%s", SzZone(ZonT));
+  sprintf2(S(sz), "%s", SzZone(ZonT));
   FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
   if (peYears != NULL)
     peYears->setText(QString::number(us.nEphemYears));
@@ -3013,7 +3013,7 @@ void ShowTransitDialogQt()
         int monN, dayN, yeaN;
         real timN;
         GetTimeNow(&monN, &dayN, &yeaN, &timN, ciDefa.dst, ciDefa.zon);
-        sprintf(szN, "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
+        sprintf2(S(szN), "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
         if (pcbMon != NULL) pcbMon->setEditText(szN);
         if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
         if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
@@ -3150,7 +3150,7 @@ void ShowProgressDialogQt()
     QString strCur = SzFormatRQt(us.rProgDay, -6);
     for (i = 0; i < 4; i++) {
       FormatR(szT, rgrProgQt[i], -6);
-      sprintf(sz, "%s %s", szT, rgszProgQt[i]);
+      sprintf2(S(sz), "%s %s", szT, rgszProgQt[i]);
       rgstr << sz;
       if (us.rProgDay == rgrProgQt[i])
         strCur = sz;
@@ -3162,7 +3162,7 @@ void ShowProgressDialogQt()
     QString strCur = SzFormatRQt(us.rProgCusp, -6);
     for (i = 0; i < 2; i++) {
       FormatR(szT, rgrProgCuspQt[i], -6);
-      sprintf(sz, "%s %s", szT, rgszProgCuspQt[i]);
+      sprintf2(S(sz), "%s %s", szT, rgszProgCuspQt[i]);
       rgstr << sz;
       if (us.rProgCusp == rgrProgCuspQt[i])
         strCur = sz;
@@ -3172,14 +3172,14 @@ void ShowProgressDialogQt()
   if (peArc != NULL)
     peArc->setText(us.objProgArc >= 0 ? szObjName[us.objProgArc] : "None");
 
-  sprintf(sz, "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
+  sprintf2(S(sz), "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
   FillComboQt(pcbMon, sz, RgstrMonthQt());
   FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
   FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
   FillComboQt(pcbTim, SzTim(TimT), RgstrTimeQt());
   FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
     (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
-  sprintf(sz, "%s", SzZone(ZonT));
+  sprintf2(S(sz), "%s", SzZone(ZonT));
   FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
 
   // "Now" fills the date and time with the current moment.
@@ -3192,7 +3192,7 @@ void ShowProgressDialogQt()
         int monN, dayN, yeaN;
         real timN;
         GetTimeNow(&monN, &dayN, &yeaN, &timN, ciDefa.dst, ciDefa.zon);
-        sprintf(szN, "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
+        sprintf2(S(szN), "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
         if (pcbMon != NULL) pcbMon->setEditText(szN);
         if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
         if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
@@ -3209,7 +3209,7 @@ void ShowProgressDialogQt()
   // A leading "X" on the rate means "this many years per day", inverted.
   rd = us.rProgDay;
   if (pcbRate != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbRate->currentText().toLocal8Bit().constData());
     i = (ChCap(sz[0]) == 'X');
     rd = RFromSz(sz + i);
@@ -3220,7 +3220,7 @@ void ShowProgressDialogQt()
     RFromSz(pcbCusp->currentText().toLocal8Bit().constData()) : us.rProgCusp;
   npO = us.objProgArc;
   if (peArc != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peArc->text().toLocal8Bit().constData());
     npO = NParseSz(sz, pmObject);
   }
@@ -3381,7 +3381,7 @@ void ShowChartSettingsDialogQt()
     rgchArabicSort[NRcStoreRadioQt(rgbuilt, 8,
     (int)sizeof(rgchArabicSort), 0)];
   if (pcbSort != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbSort->currentText().toLocal8Bit().constData());
     for (i = 1; i < asMax; i++)
       if (FMatchSz(sz, rgszSortQt[i]))
@@ -3390,7 +3390,7 @@ void ShowChartSettingsDialogQt()
   if (peRatio != NULL)
     us.rRatio = peRatio->text().toDouble();
   if (pcbDecan != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbDecan->currentText().toLocal8Bit().constData());
     for (i = 0; i < ddMax; i++)
       if (FMatchSz(sz, rgszDecan[i]))
@@ -3931,18 +3931,18 @@ void ShowCalcDialogQt()
   if (pcbAyan != NULL)
     rs = RFromSz(pcbAyan->currentText().toLocal8Bit().constData());
   if (pcbHouse != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbHouse->currentText().toLocal8Bit().constData());
     nc = NParseSz(sz, pmSystem);
   }
   if (peCentral != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peCentral->text().toLocal8Bit().constData());
     nh = NParseSz(sz, pmObject);
   }
   if (peHarmonic != NULL) {
     // A leading "D" means the field gives a divisor, not a multiplier.
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peHarmonic->text().toLocal8Bit().constData());
     i = (ChCap(sz[0]) == 'D');
     rx = RFromSz(sz + i);
@@ -3952,7 +3952,7 @@ void ShowCalcDialogQt()
   if (peDwad != NULL)
     n4 = peDwad->text().toInt();
   if (peSolar != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peSolar->text().toLocal8Bit().constData());
     n1 = NParseSz(sz, pmObject);
   }
@@ -3964,7 +3964,7 @@ void ShowCalcDialogQt()
   if (!FItem(n1))             { ErrorEnsureQt(&dlg, n1, "Solar chart planet"); return; }
 
   if (pcbEphem != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbEphem->currentText().toLocal8Bit().constData());
     us.fEphemFiles = us.fPlacalcPla = us.fMatrixPla = fFalse;
     us.nSwissEph = 0;
@@ -4072,11 +4072,11 @@ void ShowDisplayDialogQt()
   na = us.nAsp; nro = us.objRequire;
   ni = us.nScreenWidth; ryw = us.rStation;
   if (peAsp != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1, peAsp->text().toLocal8Bit().constData());
+    sprintf2(S(sz), "%.*s", cchSzMax-1, peAsp->text().toLocal8Bit().constData());
     na = NParseSz(sz, pmAspect);
   }
   if (peReq != NULL) {
-    sprintf(sz, "%.*s", cchSzMax-1, peReq->text().toLocal8Bit().constData());
+    sprintf2(S(sz), "%.*s", cchSzMax-1, peReq->text().toLocal8Bit().constData());
     nro = NParseSz(sz, pmObject);
   }
   if (peWid != NULL)
@@ -4406,7 +4406,7 @@ void ShowObjectSelDialogQt()
       // the user typed and what an astrologer would write. Otherwise the
       // field shows the body, as before.
       if (FForceMid(force[iobj])) {
-        sprintf(sz, "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
+        sprintf2(S(sz), "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
           szObjDisp[ObjForceMid2(force[iobj])]);
       } else
         SzObjSelDef(sz, iobj);
@@ -4438,9 +4438,9 @@ void ShowObjectSelDialogQt()
         // position but never touches a name.
         if (FObjSelMidPair(baDef.constData(), &j2, &k2)) {
           if (FItem(j2) && FItem(k2))
-            sprintf(szT, "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
+            sprintf2(S(szT), "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
           else
-            sprintf(szT, "%s", szObjUnknown);
+            sprintf2(S(szT), "%s", szObjUnknown);
           rgpeName[i2]->setText(szT);
           continue;
         }
@@ -4455,7 +4455,7 @@ void ShowObjectSelDialogQt()
             for (int iSel = 0; iSel < cObjSel; iSel++)
               if (rgObjSel[iSel].nTyp == od2.nTyp &&
                 rgObjSel[iSel].nObj == od2.nObj) {
-                sprintf(szT, "%s", rgObjSel[iSel].szName);
+                sprintf2(S(szT), "%s", rgObjSel[iSel].szName);
                 break;
               }
           // Put the number and the name in the body field together, so a
@@ -4469,11 +4469,11 @@ void ShowObjectSelDialogQt()
           if (od2.nTyp == 1 && od2.nPnt <= 0 && od2.nFlg <= 0 &&
             !FEqSz(szT, szObjUnknown)) {
             char szD[cchSzMax];
-            sprintf(szD, "%d %s", od2.nObj, szT);
+            sprintf2(S(szD), "%d %s", od2.nObj, szT);
             rgpcbDef[i2]->setEditText(szD);
           }
         } else
-          sprintf(szT, "%s", szObjUnknown);
+          sprintf2(S(szT), "%s", szObjUnknown);
         rgpeName[i2]->setText(szT);
       }
     });
@@ -4547,7 +4547,7 @@ void ShowObjectSelDialogQt()
           // name.
           j2 = ObjForceMid1(rgforce[i]); k2 = ObjForceMid2(rgforce[i]);
           if (FItem(j2) && FItem(k2)) {
-            sprintf(szT, "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
+            sprintf2(S(szT), "%.3s/%.3s", szObjDisp[j2], szObjDisp[k2]);
             str = QString(szT);
           }
         } else if (rgod[i].nTyp != rgTypSwissSav[i] ||

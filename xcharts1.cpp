@@ -468,7 +468,7 @@ KI FormatGridCell(char *sz, int x, int y, int type, flag fWide)
         sprintf(&sz[fWide ? 8 : 5], "%s", "%");
       } else if (us.nDegForm != df360) {
         if (fWide)
-          sprintf(szT, "%02d", s);
+          sprintf2(S(szT), "%02d", s);
         sprintf(sz, "%c%d%c%02d'%s", rgchAppSep[us.nAppSep*2 + (v >= 0.0)],
           d, chDegL, m, szT);
         sz[fWide ? (d >= 100 ? 8 : 9) : (d >= 100 ? 5 : 6)] = chNull;
@@ -490,7 +490,7 @@ KI FormatGridCell(char *sz, int x, int y, int type, flag fWide)
       sz[fWide ? 8 : 6] = chNull;
     } else if (us.nDegForm != df360) {
       if (fWide)
-        sprintf(szT, "%02d", s);
+        sprintf2(S(szT), "%02d", s);
       sprintf(sz, "%2d%c%02d'%s", d, chDegL, m, szT);
     } else
       sprintf(sz, fWide ? "%8.5f" : "%5.2f", RAbs(v));
@@ -501,7 +501,7 @@ KI FormatGridCell(char *sz, int x, int y, int type, flag fWide)
     ki = kSignB(n);
     if (us.nDegForm != df360) {
       if (fWide)
-        sprintf(szT, "%c%02d", chDegL, m);
+        sprintf2(S(szT), "%c%02d", chDegL, m);
       sprintf(sz, "%.3s %02d%s", szSignName[n], d, szT);
     } else
       sprintf(sz, fWide ? "%8.4f" : "%5.1f", RAbs((real)((n-1)*30) + v));
@@ -1029,13 +1029,13 @@ void XChartHorizon()
     if (i%90 == 0) {
       k = !fFlip ? i : nDegMax-i;
       if (!gs.fEcliptic)
-        sprintf(sz, "%c", *rgszDir[k/90 & 3]);
+        sprintf2(S(sz), "%c", *rgszDir[k/90 & 3]);
       else if (us.nDegForm == dfZod)
-        sprintf(sz, "%3.3s", szSignName[Mod12((k / 90)*3 + 1)]);
+        sprintf2(S(sz), "%3.3s", szSignName[Mod12((k / 90)*3 + 1)]);
       else if (us.nDegForm == dfHM)
-        sprintf(sz, "%dh", k/15);
+        sprintf2(S(sz), "%dh", k/15);
       else
-        sprintf(sz, "%d", k);
+        sprintf2(S(sz), "%d", k);
       DrawSz(sz, j, y1-2*gi.nScaleT, dtBottom | dtScale2);
     }
   }
@@ -1116,7 +1116,7 @@ void XChartHorizon()
       rT = nDegHalf - rT;
     xp = rgod[j].x  + NCosD(gi.nScale*8, rT);
     yp = rgod[j].yg + NSinD(gi.nScale*8, rT);
-    sprintf(sz, "%c", chT);
+    sprintf2(S(sz), "%c", chT);
     DrawColor(k);
     DrawSz(sz, xp, yp + gi.nScaleT*2, dtScale2);
   }
@@ -1519,7 +1519,7 @@ void XChartHorizonSky()
       rT = rT - rLat + rDegQuad;
     xp = rgod[j].x  + NCosD(gi.nScale*8, rT);
     yp = rgod[j].yg + NSinD(gi.nScale*8, rT);
-    sprintf(sz, "%c", chT);
+    sprintf2(S(sz), "%c", chT);
     DrawColor(k);
     DrawSz(sz, xp, yp + gi.nScaleT*2, dtScale2);
   }
@@ -1947,9 +1947,9 @@ void XChartTelescope()
             len = 1.0 - (RCosD(ang) / 2.0 + 0.5);
             // Display how full the Moon (or other planet) is.
             if (gs.fText && (i == gs.objTrack || ObjOrbit(i) <= oSun)) {
-              sprintf(szT, "%%s: %%.%df%%%% Full (area), "
+              sprintf2(S(szT), "%%s: %%.%df%%%% Full (area), "
                 "%%.%df%%%% Full (time)", us.fSeconds*2, us.fSeconds*2);
-              sprintf(sz, szT, szObjDisp[i], 100.0 - (len*100.0),
+              sprintf2(S(sz), szT, szObjDisp[i], 100.0 - (len*100.0),
                 100.0 - (ang / rDegHalf * 100.0));
               DrawSz(sz, xc, y2 - gi.nScaleT*10 - dy*yFontT,
                 dtCent | dtBottom | dtScale2);
@@ -2051,10 +2051,10 @@ void XChartTelescope()
                 DrawArc(xT3, yT3, xT3 + xd3, yT3 + yd3,
                   ang, dRing, dRing + rDegHalf);
               if (gs.fText) {
-                sprintf(szT, "%%s's rings: %%.%df%%%c Tilt, "
+                sprintf2(S(szT), "%%s's rings: %%.%df%%%c Tilt, "
                   "%%.%df%%%c Rotation", us.fSeconds*2, chDegL,
                   us.fSeconds*2, chDegL);
-                sprintf(sz, szT, szObjDisp[i], ang2-rDegQuad,
+                sprintf2(S(sz), szT, szObjDisp[i], ang2-rDegQuad,
                   ang);
                 DrawSz(sz, xc, y2 - gi.nScaleT*10 - dy*yFontT,
                   dtCent | dtBottom | dtScale2);
@@ -2087,7 +2087,7 @@ void XChartTelescope()
               ang2 = nDegHalf - ang2;
             xpP = xp + NCosD(gi.nScale*8, ang2);
             ypP = yp + NSinD(gi.nScale*8, ang2);
-            sprintf(sz, "%c", chT);
+            sprintf2(S(sz), "%c", chT);
             DrawColor(col);
             DrawSz(sz, xpP, ypP + gi.nScaleT*2, dtScale2);
           }
@@ -2111,17 +2111,17 @@ void XChartTelescope()
             if (nEclipse > etNone) {
               if (i2 >= 0) {
                 DrawColor(nEclipse >= etAnnular ? gi.kiOn : gi.kiLite);
-                sprintf(szT, "%%s & %%s: %%s %%s%%s %%.%df%%%%",
+                sprintf2(S(szT), "%%s & %%s: %%s %%s%%s %%.%df%%%%",
                   us.fSeconds*2);
-                sprintf(sz, szT, szObjDisp[i2], szObjDisp[i],
+                sprintf2(S(sz), szT, szObjDisp[i2], szObjDisp[i],
                   szEclipse[nEclipse], i2 == oSun ? "Solar " : "",
                   i2 == oSun && i == iMoo ? "Eclipse" : "Occultation", rPct);
               } else {
                 DrawColor(nEclipse >= etTotal ? gi.kiOn :
                   (nEclipse <= etPenumbra ? gi.kiGray : gi.kiLite));
-                sprintf(szT, "%%s & %%s: %%s Lunar Eclipse %%.%df%%%%",
+                sprintf2(S(szT), "%%s & %%s: %%s Lunar Eclipse %%.%df%%%%",
                   us.fSeconds*2);
-                sprintf(sz, szT, szObjDisp[i2 < 0 ? iEar : i2], szObjDisp[i],
+                sprintf2(S(sz), szT, szObjDisp[i2 < 0 ? iEar : i2], szObjDisp[i],
                   szEclipse[nEclipse], rPct);
               }
               DrawSz(sz, xc, y2 - gi.nScaleT*10 - dy*yFontT,
@@ -2200,12 +2200,12 @@ void XChartTelescope()
     if (!fShowLabel)
       continue;
     if (nShowMinute <= 0)
-      sprintf(sz, "%s%d", j > 0 ? "+" : "", j);
+      sprintf2(S(sz), "%s%d", j > 0 ? "+" : "", j);
     else if (nShowMinute == 1)
-      sprintf(sz, "%c%d%c%02d", j > 0 ? '+' : '-', NAbs(j)/60, chDegL,
+      sprintf2(S(sz), "%c%d%c%02d", j > 0 ? '+' : '-', NAbs(j)/60, chDegL,
         NAbs(j)%60);
     else
-      sprintf(sz, "%c%d%c%02d'%02d", j > 0 ? '+' : '-', NAbs(j)/3600, chDegL,
+      sprintf2(S(sz), "%c%d%c%02d'%02d", j > 0 ? '+' : '-', NAbs(j)/3600, chDegL,
         NAbs(j)/60%60, NAbs(j)%60);
     DrawSz(sz, k, yp + gi.nScaleTextT2, dtCent | dtScale2);
     DrawSz(sz, gs.xWin-gi.nScaleT - k, yp + gi.nScaleTextT2,
@@ -2242,10 +2242,10 @@ void XChartTelescope()
     if (us.nDegForm != df360) {
       if (gs.fColorSign)
         DrawColor(kSignB(SFromZ(ang)));
-      sprintf(sz, "%s", SzZodiac(ang));
+      sprintf2(S(sz), "%s", SzZodiac(ang));
     } else {
       us.nDegForm = dfZod;
-      sprintf(sz, "%s", SzDegree(ang));
+      sprintf2(S(sz), "%s", SzDegree(ang));
       us.nDegForm = df360;
     }
     if (us.nDegForm == dfZod)
@@ -2548,11 +2548,11 @@ void XChartLocal()
     if (!fShowLabel)
       continue;
     if (nShowMinute <= 0)
-      sprintf(sz, "%d%c", NAbs(j), j >= 0 ? 'N' : 'S');
+      sprintf2(S(sz), "%d%c", NAbs(j), j >= 0 ? 'N' : 'S');
     else if (nShowMinute == 1)
-      sprintf(sz, "%d%c%02d", NAbs(j)/60, j >= 0 ? 'N' : 'S', NAbs(j)%60);
+      sprintf2(S(sz), "%d%c%02d", NAbs(j)/60, j >= 0 ? 'N' : 'S', NAbs(j)%60);
     else
-      sprintf(sz, "%d%c%02d'%02d", NAbs(j)/3600, j >= 0 ? 'N' : 'S',
+      sprintf2(S(sz), "%d%c%02d'%02d", NAbs(j)/3600, j >= 0 ? 'N' : 'S',
         NAbs(j)/60%60, NAbs(j)%60);
     DrawSz(sz, k, yp + 2*gi.nScaleTextT, dtCent | dtScale2);
     DrawSz(sz, gs.xWin-1 - k, yp + 2*gi.nScaleTextT, dtCent | dtScale2);
@@ -2576,11 +2576,11 @@ void XChartLocal()
     while (k <= -zLimit)
       k += (zLimit << 1);
     if (nShowMinute <= 0)
-      sprintf(sz, "%d%c", NAbs(k), k >= 0 ? 'W' : 'E');
+      sprintf2(S(sz), "%d%c", NAbs(k), k >= 0 ? 'W' : 'E');
     else if (nShowMinute == 1)
-      sprintf(sz, "%d%c%02d", NAbs(k)/60, k >= 0 ? 'W' : 'E', NAbs(k)%60);
+      sprintf2(S(sz), "%d%c%02d", NAbs(k)/60, k >= 0 ? 'W' : 'E', NAbs(k)%60);
     else
-      sprintf(sz, "%d%c%02d'%02d", NAbs(k)/3600, k >= 0 ? 'W' : 'E',
+      sprintf2(S(sz), "%d%c%02d'%02d", NAbs(k)/3600, k >= 0 ? 'W' : 'E',
         NAbs(k)/60%60, NAbs(k)%60);
     DrawSz(sz, xp, 3*gi.nScaleTextT, dtCent | dtTop | dtScale2);
     if (!gs.fText)
@@ -2911,7 +2911,7 @@ void XChartOrbit()
     rT = rT - planet[j] + rDegHalf;
     i = rgod[j].x  + NCosD(gi.nScale*8, rT);
     l = rgod[j].yg + NSinD(gi.nScale*8, rT);
-    sprintf(szT, "%c", chT);
+    sprintf2(S(szT), "%c", chT);
     DrawColor(k);
     DrawSz(szT, i, l + gi.nScaleT*2, dtScale2);
   }
@@ -2967,12 +2967,12 @@ void XChartSector()
       cy+POINT1(unity, 0.88, PY((real)(i*10+175)))*yi+gi.nScale, i, 2);
     if (nTrans >= 128)
       DrawColor(fOff ? gi.kiOff : gi.kiOn);
-    sprintf(sz, "%d", i);
+    sprintf2(S(sz), "%d", i);
     DrawSz(sz, cx+POINT1(unitx, 0.88, PX((real)(i*10+175)))+
       (FBetween(i, 12, 19) ? -gi.nScale : 0),
       cy+POINT1(unity, 0.88, PY((real)(i*10+175)))*yi+gi.nScale,
       dtCent | dtScale);
-    sprintf(sz, "%c", j ? '+' : '-');
+    sprintf2(S(sz), "%c", j ? '+' : '-');
     DrawSz(sz, cx+POINT1(unitx, 0.97, PX((real)(i*10+175))),
       cy+POINT1(unity, 0.97, PY((real)(i*10+175)))*yi+gi.nScaleTextT*2,
       dtCent | dtScale2);
@@ -3070,7 +3070,7 @@ void XChartMidpoint()
   for (i = (int)(rDegMax / rHarmonic / (real)j - rSmall)*j;
     i >= 0; i -= j) {
     if (i > 0 || us.rHarmonic == 0)
-      sprintf(sz, "%d", i);
+      sprintf2(S(sz), "%d", i);
     else
       FormatR(sz, rDegMax / rHarmonic, -1);
     temp = 270.0-(real)(i*xi)*rHarmonic;
@@ -3329,7 +3329,7 @@ void XChartDispositor()
     // Loop over our two dispositor display formats: hierarchy and wheel.
     for (ySub = 0; ySub <= 1; ySub++) {
       cy = ySub * cy0 + (cy0 >> 1);
-      sprintf(sz, "%s dispositor %s", xSub ? "House" : "Sign",
+      sprintf2(S(sz), "%s dispositor %s", xSub ? "House" : "Sign",
         ySub ? "wheel" : "hierarchy");
       DrawColor(gi.kiLite);
       DrawSz(sz, cx, ySub * cy0 + 3*gi.nScaleT, dtTop);
@@ -3580,7 +3580,7 @@ void DrawCalendar(int mon, int yea, int x1, int y1, int x2, int y2)
 
   // Print the month and year in big letters at top of chart.
   DrawColor(gi.kiOn);
-  sprintf(sz, "%s, %d", szMonth[mon], yea);
+  sprintf2(S(sz), "%s, %d", szMonth[mon], yea);
   s = gi.nScale;
   gi.nScale = Min((yunit*3/2-yFont*s) / yFont, xs/15/*CchSz(sz)*/ / xFont);
   gi.nScale = (gi.nScale/s)*s;        // So scale is an even multiple of "s".
@@ -3598,9 +3598,9 @@ void DrawCalendar(int mon, int yea, int x1, int y1, int x2, int y2)
     // Print days of week at top of each column (abbreviated if need be).
     if (x < cWeek) {
       if (xunit / (xFont*gi.nScale) < 9)
-        sprintf(sz, "%.3s", szDay[xT]);
+        sprintf2(S(sz), "%.3s", szDay[xT]);
       else
-        sprintf(sz, "%s", szDay[xT]);
+        sprintf2(S(sz), "%s", szDay[xT]);
       DrawColor(kYellowB);
       y = y0 - s*3;
       DrawSz(sz, x0 + x*xunit + xunit/2, Max(y, yFont2), dtBottom | dtScale);
@@ -3616,7 +3616,7 @@ void DrawCalendar(int mon, int yea, int x1, int y1, int x2, int y2)
   for (day = 1; day <= dayHi; day = AddDay(mon, day, yea, 1)) {
     rgz[day*2] = x0 + x*xunit;
     rgz[day*2+1] = y0 + y*yunit;
-    sprintf(sz, gs.fText ? "%2d" : "%d", day);
+    sprintf2(S(sz), gs.fText ? "%2d" : "%d", day);
     DrawColor(day == Day && mon == Mon && gs.fLabel ? kGreenB :
       ((!fMonday ? (x <= 0 || x >= cWeek-1) : (x >= cWeek-2)) ? kRedB :
       gi.kiLite));
@@ -3824,7 +3824,7 @@ void XChartMoons()
     DrawCircle(cx, cy, (int)((real)xs * rRatio), (int)((real)ys * rRatio));
 
     // Label quadrants
-    sprintf(sz, "%scentric %s view", xSub ? "Helio" : (objCenterSav == oEar ?
+    sprintf2(S(sz), "%scentric %s view", xSub ? "Helio" : (objCenterSav == oEar ?
       "Geo" : szObjDisp[objCenterSav]), ySub ? "top" : "front");
     DrawColor(gi.kiLite);
     DrawSz(sz, cx, ySub * cy0 + 3*gi.nScaleT, dtTop);
@@ -3836,24 +3836,24 @@ void XChartMoons()
     } else {
       DrawColor(kObjB[oNad]);
       if (xSub <= 0)
-        sprintf(sz, "Distant (Opp %s)", szObjDisp[objCenterSav]);
+        sprintf2(S(sz), "Distant (Opp %s)", szObjDisp[objCenterSav]);
       else
-        sprintf(sz, "Distant (Full Moon)");
+        sprintf2(S(sz), "Distant (Full Moon)");
       DrawSz(sz, cx, cy - ys - 3*gi.nScaleT, dtBottom);
       DrawColor(kObjB[oMC]);
       if (xSub <= 0)
-        sprintf(sz, "Close (Con %s)", szObjDisp[objCenterSav]);
+        sprintf2(S(sz), "Close (Con %s)", szObjDisp[objCenterSav]);
       else
-        sprintf(sz, "Close (New Moon)");
+        sprintf2(S(sz), "Close (New Moon)");
       DrawSz(sz, cx, cy + ys + 3*gi.nScaleT, dtTop);
     }
     x = xs+(xFont2+4)*gi.nScaleT; y = cy+6*gi.nScaleT;
     for (i = -1; i <= 1; i += 2) {
-      sprintf(sz, "%s", i < 0 ? "Lead" : "Follow");
+      sprintf2(S(sz), "%s", i < 0 ? "Lead" : "Follow");
       DrawColor(kObjB[i < 0 ? oAsc : oDes]);
       k = CchSz(sz);
       for (j = 0; j < k; j++) {
-        sprintf(szCh, "%c", sz[j]);
+        sprintf2(S(szCh), "%c", sz[j]);
         DrawSz(szCh, cx-i*x, y+(j*yFont-k*yFont2)*gi.nScaleT, dtCent);
       }
     }
@@ -4217,12 +4217,12 @@ void XChartIndian()
       DrawObject(i, xp, yp);
     else {
       DrawColor(nTrans < 128 ? kObjB[i] : kiContrast);
-      sprintf(sz, "%.2s", szObjDisp[i]);
+      sprintf2(S(sz), "%.2s", szObjDisp[i]);
       DrawSz(sz, xp, yp, dtCent | dtScale);
     }
     if (fSouthIndian && gs.fLabelCity) {
       fOff = us.fSeconds; us.fSeconds = fFalse;
-      sprintf(sz, "%s", SzZodiac(planet[i]));
+      sprintf2(S(sz), "%s", SzZodiac(planet[i]));
       us.fSeconds = fOff;
       DrawSz(sz, xp + gi.nScale*8, yp + gs.fLabel*gi.nScaleT*2,
         dtLeft | dtScale2);
@@ -4580,7 +4580,7 @@ void XChartSphere()
         if (gs.fColorHouse)
           DrawColor(f ? gi.kiOn : gi.kiGray);
         FSphereLocal((real)i, 0.0, &cr2, &xp, &yp);
-        sprintf(sz, "%c", rgszDir[j][0]);
+        sprintf2(S(sz), "%c", rgszDir[j][0]);
         DrawSz(sz, xp, yp + gi.nScale, dtCent | dtScale2);
       }
     }
@@ -4590,7 +4590,7 @@ void XChartSphere()
       if (f || fAny) {
         DrawColor(gs.fColorHouse ? (f ? gi.kiOn : gi.kiGray) :
           kObjB[j <= 0 ? oMC : oNad]);
-        sprintf(sz, "%c", j <= 0 ? 'Z' : 'N');
+        sprintf2(S(sz), "%c", j <= 0 ? 'Z' : 'N');
         DrawSz(sz, xp, yp + gi.nScale, dtCent | dtScale2);
       }
     }
@@ -4716,7 +4716,7 @@ void XChartSphere()
         }
         xp = rgod[j].x  + NCosD(gi.nScale*8, rT);
         yp = rgod[j].yg + NSinD(gi.nScale*8, rT);
-        sprintf(sz, "%c", chT);
+        sprintf2(S(sz), "%c", chT);
         DrawColor(k);
         DrawSz(sz, xp, yp + gi.nScaleT*2, dtScale2);
       }

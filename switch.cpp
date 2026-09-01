@@ -626,11 +626,11 @@ static int NSwYe(CONST char *szSwitch, PARSEIN *pin)
   if (j <= 1)
     SwissGetObjName(szName, j <= 0 ? -k : k);
   else if (j == 5)
-    sprintf(szName, "%s", FValidPart(k) ? ai[k-1].name : szObjUnknown);
+    sprintf2(S(szName), "%s", FValidPart(k) ? ai[k-1].name : szObjUnknown);
   else {
     if (j == 3)
       k = ObjMoons(k);
-    sprintf(szName, "%s", FItem(k) ? szObjName[k] : szObjUnknown);
+    sprintf2(S(szName), "%s", FItem(k) ? szObjName[k] : szObjUnknown);
   }
   k = od.nPnt;
   if (k > 0) {

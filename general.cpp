@@ -352,9 +352,9 @@ void FormatR(char *sz, real r, int n)
 
   // If n > 100, use 100's place as minimum field length for entire number.
   if (x != 0)
-    sprintf(szT, "%%%d.%df", NAbs(x) + y + 1, y);
+    sprintf2(S(szT), "%%%d.%df", NAbs(x) + y + 1, y);
   else
-    sprintf(szT, "%%.%df", NAbs(n));
+    sprintf2(S(szT), "%%.%df", NAbs(n));
   sprintf(sz, szT, r);
   for (pch = sz; *pch; pch++)
     ;
@@ -623,7 +623,7 @@ char *Dignify(OBJ obj, SIGN sign)
   static char szDignify[rrMax+2];
   int sign2 = Mod12(sign+6), ray, ich;
 
-  sprintf(szDignify, "-_____");
+  sprintf2(S(szDignify), "-_____");
   if (obj > oNorm)
     return szDignify;
 
@@ -1441,7 +1441,7 @@ void PrintNotice(CONST char *sz)
 
   if (wi.fNoPopup)
     return;
-  sprintf(szT, "%s Notice", szAppName);
+  sprintf2(S(szT), "%s Notice", szAppName);
   MessageBox(wi.hwndMain, sz, szT, MB_ICONINFORMATION);
 #endif
 }
@@ -1470,7 +1470,7 @@ void PrintWarning(CONST char *sz)
     neg(gs.nAnim);
     WiCheckMenu(cmdAnimateNo, fFalse);
   }
-  sprintf(szT, "%s Warning", szAppName);
+  sprintf2(S(szT), "%s Warning", szAppName);
   MessageBox(wi.hwndMain, sz, szT, MB_ICONSTOP);
 #endif
 }
@@ -1503,7 +1503,7 @@ void PrintError(CONST char *sz)
     neg(gs.nAnim);
     WiCheckMenu(cmdAnimateNo, fFalse);
   }
-  sprintf(szT, "%s Error", szAppName);
+  sprintf2(S(szT), "%s Error", szAppName);
   MessageBox(wi.hwndMain, sz, szT, MB_ICONEXCLAMATION);
 #endif
 }
@@ -1518,7 +1518,7 @@ flag FErrorArgc(CONST char *szOpt, int carg, int cargMax)
   carg--;
   if (carg >= cargMax)
     return fFalse;
-  sprintf(sz, "Too few parameters to switch %c%s (%d given, %d required)",
+  sprintf2(S(sz), "Too few parameters to switch %c%s (%d given, %d required)",
     chSwitch, szOpt, carg, cargMax);
   PrintError(sz);
   return fTrue;
@@ -1536,8 +1536,8 @@ flag FErrorValN(CONST char *szOpt, flag f, int nVal, int nPar)
   if (nPar <= 0)
     szPar[0] = chNull;
   else
-    sprintf(szPar, "parameter #%d of ", nPar);
-  sprintf(sz, "Value %d passed to %sswitch %c%s out of range.\n",
+    sprintf2(S(szPar), "parameter #%d of ", nPar);
+  sprintf2(S(sz), "Value %d passed to %sswitch %c%s out of range.\n",
     nVal, szPar, chSwitch, szOpt);
   PrintError(sz);
   return fTrue;
@@ -1557,7 +1557,7 @@ flag FErrorValR(CONST char *szOpt, flag f, real rVal, int nPar)
   if (nPar <= 0)
     szPar[0] = chNull;
   else
-    sprintf(szPar, "parameter #%d of ", nPar);
+    sprintf2(S(szPar), "parameter #%d of ", nPar);
   if (rVal != rLarge) {
     FormatR(szVal, rVal, -6);
     sprintf2(S(sz), "Value %s passed to %sswitch %c%s out of range.\n",
@@ -1576,7 +1576,7 @@ void ErrorArgv(CONST char *szOpt)
 {
   char sz[cchSzDef];
 
-  sprintf(sz, "The switch %c%s is not allowed now.\n", chSwitch, szOpt);
+  sprintf2(S(sz), "The switch %c%s is not allowed now.\n", chSwitch, szOpt);
   PrintError(sz);
 }
 
@@ -1587,7 +1587,7 @@ void ErrorSwitch(CONST char *szOpt)
 {
   char sz[cchSzDef];
 
-  sprintf(sz, "Unknown switch '%s'", szOpt);
+  sprintf2(S(sz), "Unknown switch '%s'", szOpt);
   PrintError(sz);
 }
 
@@ -1600,7 +1600,7 @@ flag FErrorSubswitch(CONST char *szOpt, char chSub, flag f)
 
   if (!f)
     return fFalse;
-  sprintf(sz, "Unknown subswitch '%c%s%c' to command switch '%c%s'",
+  sprintf2(S(sz), "Unknown subswitch '%c%s%c' to command switch '%c%s'",
     chSwitch, szOpt, chSub, chSwitch, szOpt);
   PrintError(sz);
   return fTrue;
@@ -1617,9 +1617,9 @@ void ErrorEphem(CONST char *sz, long l)
   if (is.fNoEphFile)
     return;
   if (l < 0)
-    sprintf(szT, "Ephemeris file %s not found.\n", sz);
+    sprintf2(S(szT), "Ephemeris file %s not found.\n", sz);
   else
-    sprintf(szT, "Seek error in file %s at position %ld.\n", sz, l);
+    sprintf2(S(szT), "Seek error in file %s at position %ld.\n", sz, l);
   is.fNoEphFile = fTrue;
   PrintWarning(szT);
 }
@@ -1658,14 +1658,14 @@ void AnsiColor(KI k)
   cchSav = is.cchCol;
   is.cchCol = 0;
   if (is.nHTML <= 0) {
-    sprintf(sz, "%c[", chEscape);
+    sprintf2(S(sz), "%c[", chEscape);
     PrintSz(sz);
     if (k == kDefault)
       PrintCh('0');
     else if (k == kReverse) {
       PrintCh('7');
     } else {
-      sprintf(sz, "%c;%d", k > 7 ? '1' : '0', 30 + (k & 7));
+      sprintf2(S(sz), "%c;%d", k > 7 ? '1' : '0', 30 + (k & 7));
       PrintSz(sz);
     }
     PrintCh('m');
@@ -1757,13 +1757,13 @@ char *SzZodiac(real deg)
     sign = (int)deg / 30;
     d = (int)deg - sign*30;
     m = (int)(RFract(deg)*60.0);
-    sprintf(szZod, "%2d%.3s%02d", d, szSignName[sign + 1], m);
+    sprintf2(S(szZod), "%2d%.3s%02d", d, szSignName[sign + 1], m);
     if (us.fSeconds) {
       s = RFract(deg)*60.0; s = RFract(s)*60.0;
-      sprintf(&szZod[7], "'%02d\"", (int)s);
+      sprintf2(SO(&szZod[7], szZod), "'%02d\"", (int)s);
       if (us.fSecond1K) {
         s = RFract(s)*1000.0;
-        sprintf(&szZod[10], ".%03d\"", (int)s);
+        sprintf2(SO(&szZod[10], szZod), ".%03d\"", (int)s);
       }
     }
     break;
@@ -1773,13 +1773,13 @@ char *SzZodiac(real deg)
 
     d = (int)deg / 15;
     m = (int)((deg - (real)d*15.0)*4.0);
-    sprintf(szZod, "%2dh,%02dm", d, m);
+    sprintf2(S(szZod), "%2dh,%02dm", d, m);
     if (us.fSeconds) {
       s = RFract(deg)*4.0; s = RFract(s)*60.0;
-      sprintf(&szZod[7], ",%02ds", (int)s);
+      sprintf2(SO(&szZod[7], szZod), ",%02ds", (int)s);
       if (us.fSecond1K) {
         s = RFract(s)*1000.0;
-        sprintf(&szZod[10], ".%03ds", (int)s);
+        sprintf2(SO(&szZod[10], szZod), ".%03ds", (int)s);
       }
     }
     break;
@@ -1791,12 +1791,12 @@ char *SzZodiac(real deg)
     if (!us.fExpOff && FSzSet(us.szExpDegree)) {
       ExpSetR(iLetterZ, deg);
       deg = Mod(RParseExpression(us.szExpDegree));
-      sprintf(szZod, "%15.15f", deg);
+      sprintf2(S(szZod), "%15.15f", deg);
       szZod[VSeconds(7, 11, 15)] = chNull;
       break;
     }
 #endif
-    sprintf(szZod, VSeconds("%7.3f", "%11.7f", "%15.11f"), deg);
+    sprintf2(S(szZod), VSeconds("%7.3f", "%11.7f", "%15.11f"), deg);
     break;
 
   default:
@@ -1805,14 +1805,14 @@ char *SzZodiac(real deg)
     deg = Mod(deg + rSmall);
     sign = (int)(deg / (rDegMax/27.0));
     d = (int)((deg - (real)sign*(rDegMax/27.0))*40.0 / (rDegMax/27.0));
-    sprintf(szZod, "%2d%.4s%d", sign+1, szNakshatra[sign + 1], d/10 + 1);
+    sprintf2(S(szZod), "%2d%.4s%d", sign+1, szNakshatra[sign + 1], d/10 + 1);
     if (us.fSeconds) {
       if (!us.fSecond1K) {
-        sprintf(&szZod[7], ".%d%s", d%10,
+        sprintf2(SO(&szZod[7], szZod), ".%d%s", d%10,
           szSignAbbrev[Mod12((int)(deg/(rDegMax/27.0/4.0))+1)]);
       } else {
         d = (int)((deg - (real)sign*(rDegMax/27.0))*40000.0 / (rDegMax/27.0));
-        sprintf(&szZod[7], ".%04d%.3s", d%10000,
+        sprintf2(SO(&szZod[7], szZod), ".%04d%.3s", d%10000,
           szSignName[Mod12((int)(deg/(rDegMax/27.0/4.0))+1)]);
       }
     }
@@ -1839,23 +1839,23 @@ char *SzAltitude(real deg)
         VSeconds(rRound/60.0, rRound/3600.0, rRound/3600.0/1000.0));
     d = (int)deg;
     m = (int)(RFract(deg)*60.0);
-    sprintf(szAlt, "%c%2d%c%02d'", f ? '-' : '+', d, ChDeg(), m);
+    sprintf2(S(szAlt), "%c%2d%c%02d'", f ? '-' : '+', d, ChDeg(), m);
     if (us.fSeconds) {
       s = RFract(deg)*60.0; s = RFract(s)*60.0;
-      sprintf(&szAlt[7], "%02d\"", (int)s);
+      sprintf2(SO(&szAlt[7], szAlt), "%02d\"", (int)s);
       if (us.fSecond1K) {
         s = RFract(s)*1000.0;
-        sprintf(&szAlt[9], ".%03d\"", (int)s);
+        sprintf2(SO(&szAlt[9], szAlt), ".%03d\"", (int)s);
       }
     }
   } else {
     s = RAbs(deg);
     if (!us.fSeconds)
-      sprintf(szAlt, s < 10.0 ? "%c%1.4f" : "%c%2.3f", f ? '-' : '+', s);
+      sprintf2(S(szAlt), s < 10.0 ? "%c%1.4f" : "%c%2.3f", f ? '-' : '+', s);
     else if (!us.fSecond1K)
-      sprintf(szAlt, s < 10.0 ? "%c%1.7f" : "%c%2.6f", f ? '-' : '+', s);
+      sprintf2(S(szAlt), s < 10.0 ? "%c%1.7f" : "%c%2.6f", f ? '-' : '+', s);
     else
-      sprintf(szAlt, s < 10.0 ? "%c%1.11f" : "%c%2.10f", f ? '-' : '+', s);
+      sprintf2(S(szAlt), s < 10.0 ? "%c%1.11f" : "%c%2.10f", f ? '-' : '+', s);
   }
   return szAlt;
 }
@@ -1955,11 +1955,11 @@ char *SzHMS(int sec)
   sec %= 60;
   // Don't display seconds or minutes:seconds if they're zero.
   if (!us.fSeconds && min == 0 && sec == 0)
-    sprintf(szHMS, "%c%d", ch, hr);
+    sprintf2(S(szHMS), "%c%d", ch, hr);
   else if (!us.fSeconds || sec == 0)
-    sprintf(szHMS, "%c%d:%02d", ch, hr, min);
+    sprintf2(S(szHMS), "%c%d:%02d", ch, hr, min);
   else
-    sprintf(szHMS, "%c%d:%02d:%02d", ch, hr, min, sec);
+    sprintf2(S(szHMS), "%c%d:%02d:%02d", ch, hr, min, sec);
   return szHMS;
 }
 
@@ -1975,19 +1975,19 @@ char *SzDate(int mon, int day, int yea, int nFormat)
 
   if (us.fEuroDate) {
     switch (nFormat) {
-    case  3: sprintf(szDat, "%2d %.3s %d", day, szMonth[mon], yea);  break;
-    case  2: sprintf(szDat, "%2d %.3s %4d", day, szMonth[mon], yea); break;
-    case  1: sprintf(szDat, "%d %s %d", day, szMonth[mon], yea);     break;
-    case -1: sprintf(szDat, "%2d-%2d-%2d", day, mon, NAbs(yea)%100); break;
-    default: sprintf(szDat, "%2d-%2d-%4d", day, mon, yea);           break;
+    case  3: sprintf2(S(szDat), "%2d %.3s %d", day, szMonth[mon], yea);  break;
+    case  2: sprintf2(S(szDat), "%2d %.3s %4d", day, szMonth[mon], yea); break;
+    case  1: sprintf2(S(szDat), "%d %s %d", day, szMonth[mon], yea);     break;
+    case -1: sprintf2(S(szDat), "%2d-%2d-%2d", day, mon, NAbs(yea)%100); break;
+    default: sprintf2(S(szDat), "%2d-%2d-%4d", day, mon, yea);           break;
     }
   } else {
     switch (nFormat) {
-    case  3: sprintf(szDat, "%.3s %2d, %d", szMonth[mon], day, yea); break;
-    case  2: sprintf(szDat, "%.3s %2d %4d", szMonth[mon], day, yea); break;
-    case  1: sprintf(szDat, "%s %d, %d", szMonth[mon], day, yea);    break;
-    case -1: sprintf(szDat, "%2d/%2d/%2d", mon, day, NAbs(yea)%100); break;
-    default: sprintf(szDat, "%2d/%2d/%4d", mon, day, yea);           break;
+    case  3: sprintf2(S(szDat), "%.3s %2d, %d", szMonth[mon], day, yea); break;
+    case  2: sprintf2(S(szDat), "%.3s %2d %4d", szMonth[mon], day, yea); break;
+    case  1: sprintf2(S(szDat), "%s %d, %d", szMonth[mon], day, yea);    break;
+    case -1: sprintf2(S(szDat), "%2d/%2d/%2d", mon, day, NAbs(yea)%100); break;
+    default: sprintf2(S(szDat), "%2d/%2d/%4d", mon, day, yea);           break;
     }
   }
   return szDat;
@@ -2013,25 +2013,25 @@ char *SzTimeR(int hr, int min, int sec, int mil)
     hr -= 24;
   if (us.fAnsiChar == 4) {
     // Format like "01:23:45 PM", as seen in Quick*Chart files.
-    sprintf(szTim, "%02d:%02d:%02d %cM",
+    sprintf2(S(szTim), "%02d:%02d:%02d %cM",
       Mod12(hr), min, sec, hr < 12 ? 'A' : 'P');
     return szTim;
   }
   if (us.fEuroTime) {
     if (!fSecond)
-      sprintf(szTim, "%2d:%02d", hr, min);
+      sprintf2(S(szTim), "%2d:%02d", hr, min);
     else if (mil < 0)
-      sprintf(szTim, "%2d:%02d:%02d", hr, min, sec);
+      sprintf2(S(szTim), "%2d:%02d:%02d", hr, min, sec);
     else
-      sprintf(szTim, "%2d:%02d:%02d.%03d", hr, min, sec, mil);
+      sprintf2(S(szTim), "%2d:%02d:%02d.%03d", hr, min, sec, mil);
   } else {
     if (!fSecond)
-      sprintf(szTim, "%2d:%02d%cm", Mod12(hr), min, hr < 12 ? 'a' : 'p');
+      sprintf2(S(szTim), "%2d:%02d%cm", Mod12(hr), min, hr < 12 ? 'a' : 'p');
     else if (mil < 0)
-      sprintf(szTim, "%2d:%02d:%02d%cm",
+      sprintf2(S(szTim), "%2d:%02d:%02d%cm",
         Mod12(hr), min, sec, hr < 12 ? 'a' : 'p');
     else
-      sprintf(szTim, "%2d:%02d:%02d.%03d%cm",
+      sprintf2(S(szTim), "%2d:%02d:%02d.%03d%cm",
         Mod12(hr), min, sec, mil, hr < 12 ? 'a' : 'p');
   }
   is.ichLocSplit = fSecond;    // Flag whether seconds were output.
@@ -2058,13 +2058,13 @@ char *SzZone(real zon)
   static char szZon[7];
 
   if (zon == zonLMT)
-    sprintf(szZon, "LMT");
+    sprintf2(S(szZon), "LMT");
   else if (zon == zonLAT)
-    sprintf(szZon, "LAT");
+    sprintf2(S(szZon), "LAT");
   else if ((!us.fSeconds || us.fSecondHide) && RFract(RAbs(zon)) < rSmall)
-    sprintf(szZon, "%d%c", (int)RAbs(zon), zon < 0.0 ? 'E' : 'W');
+    sprintf2(S(szZon), "%d%c", (int)RAbs(zon), zon < 0.0 ? 'E' : 'W');
   else
-    sprintf(szZon, "%d:%02d%c", (int)RAbs(zon), (int)(RFract(RAbs(zon))*60.0+
+    sprintf2(S(szZon), "%d:%02d%c", (int)RAbs(zon), (int)(RFract(RAbs(zon))*60.0+
       rRound/60.0), zon < 0.0 ? 'E' : 'W');
   return szZon;
 }
@@ -2082,7 +2082,7 @@ char *SzOffset(real zon, real dst, real lon)
   flag fLMT;
 
   if (!us.fOffsetOnly)
-    sprintf(szOff, "%cT %s%s", ChDst(dst), !f1K ? "Zone " : "", SzZone(zon));
+    sprintf2(S(szOff), "%cT %s%s", ChDst(dst), !f1K ? "Zone " : "", SzZone(zon));
   else {
     fLMT = (zon == zonLMT || zon == zonLAT);
     if (dst == dstAuto)
@@ -2093,7 +2093,7 @@ char *SzOffset(real zon, real dst, real lon)
       fLMT = fTrue;
     }
     min = (int)(RFract(RAbs(off))*60.0 + rSmall);
-    sprintf(szOff, "Zone %c%d%c", !fLMT ? 'h' : 'm', NAbs((int)off),
+    sprintf2(S(szOff), "Zone %c%d%c", !fLMT ? 'h' : 'm', NAbs((int)off),
       off > 0.0 ? 'w' : 'e');
     if (min != 0) {
       for (pch = szOff; *pch; pch++)
@@ -2153,10 +2153,10 @@ char *SzLocation(real lon, real lat)
   if (us.fAnsiChar == 4) {
     // Format like "47N36,122W19", as seen in AAF files.
     if (!us.fSeconds)
-      sprintf(szLoc, "%.0f%c%02d,%.0f%c%02d",
+      sprintf2(S(szLoc), "%.0f%c%02d,%.0f%c%02d",
         RFloor(RAbs(lat)), chLat, j, RFloor(RAbs(lon)), chLon, i);
     else
-      sprintf(szLoc, "%.0f%c%02d:%02d,%.0f%c%02d:%02d",
+      sprintf2(S(szLoc), "%.0f%c%02d:%02d,%.0f%c%02d:%02d",
         RFloor(RAbs(lat)), chLat, j, j2, RFloor(RAbs(lon)), chLon, i, i2);
     return szLoc;
   }
@@ -2164,51 +2164,51 @@ char *SzLocation(real lon, real lat)
     chDeg = ChDeg();
     if (us.nDegForm != df360) {
       if (!us.fSeconds)
-        sprintf(szLoc, "%3.0f%c%02d%c%3.0f%c%02d%c",
+        sprintf2(S(szLoc), "%3.0f%c%02d%c%3.0f%c%02d%c",
           RFloor(RAbs(lon)), chDeg, i, chLon,
           RFloor(RAbs(lat)), chDeg, j, chLat);
       else if (!us.fSecond1K)
-        sprintf(szLoc, "%3.0f%c%02d'%02d%c%3.0f%c%02d'%02d%c",
+        sprintf2(S(szLoc), "%3.0f%c%02d'%02d%c%3.0f%c%02d'%02d%c",
           RFloor(RAbs(lon)), chDeg, i, i2, chLon,
           RFloor(RAbs(lat)), chDeg, j, j2, chLat);
       else
-        sprintf(szLoc, "%3.0f%c%02d'%02d.%03d%c%3.0f%c%02d'%02d.%03d%c",
+        sprintf2(S(szLoc), "%3.0f%c%02d'%02d.%03d%c%3.0f%c%02d'%02d.%03d%c",
           RFloor(RAbs(lon)), chDeg, i, i2, i3, chLon,
           RFloor(RAbs(lat)), chDeg, j, j2, j3, chLat);
     } else {
       if (!us.fSeconds)
-        sprintf(szLoc, "%6.2f%c%6.2f%c",
+        sprintf2(S(szLoc), "%6.2f%c%6.2f%c",
           RAbs(lon), chLon, RAbs(lat), chLat);
       else if (!us.fSecond1K)
-        sprintf(szLoc, "%9.5f%c%9.5f%c",
+        sprintf2(S(szLoc), "%9.5f%c%9.5f%c",
           RAbs(lon), chLon, RAbs(lat), chLat);
       else
-        sprintf(szLoc, "%13.9f%c%13.9f%c",
+        sprintf2(S(szLoc), "%13.9f%c%13.9f%c",
           RAbs(lon), chLon, RAbs(lat), chLat);
     }
   } else {
     if (us.nDegForm != df360) {
       if (!us.fSeconds)
-        sprintf(szLoc, "%3.0f%c%02d%3.0f%c%02d",
+        sprintf2(S(szLoc), "%3.0f%c%02d%3.0f%c%02d",
           RFloor(RAbs(lon)), chLon, i,
           RFloor(RAbs(lat)), chLat, j);
       else if (!us.fSecond1K)
-        sprintf(szLoc, "%3.0f%c%02d'%02d%3.0f%c%02d'%02d",
+        sprintf2(S(szLoc), "%3.0f%c%02d'%02d%3.0f%c%02d'%02d",
           RFloor(RAbs(lon)), chLon, i, i2,
           RFloor(RAbs(lat)), chLat, j, j2);
       else
-        sprintf(szLoc, "%3.0f%c%02d'%02d.%03d%3.0f%c%02d'%02d.%03d",
+        sprintf2(S(szLoc), "%3.0f%c%02d'%02d.%03d%3.0f%c%02d'%02d.%03d",
           RFloor(RAbs(lon)), chLon, i, i2, i3,
           RFloor(RAbs(lat)), chLat, j, j2, j3);
     } else {
       if (!us.fSeconds)
-        sprintf(szLoc, "%5.1f%c%5.1f%c",
+        sprintf2(S(szLoc), "%5.1f%c%5.1f%c",
           RAbs(lon), chLon, RAbs(lat), chLat);
       else if (!us.fSecond1K)
-        sprintf(szLoc, "%8.4f%c%8.4f%c",
+        sprintf2(S(szLoc), "%8.4f%c%8.4f%c",
           RAbs(lon), chLon, RAbs(lat), chLat);
       else
-        sprintf(szLoc, "%12.8f%c%12.8f%c",
+        sprintf2(S(szLoc), "%12.8f%c%12.8f%c",
           RAbs(lon), chLon, RAbs(lat), chLat);
     }
   }
@@ -2273,11 +2273,11 @@ char *SzColor(KI ki)
   static char szCol[8];
 
   if (ki >= 0)
-    sprintf(szCol, "%s", szColor[ki]);
+    sprintf2(S(szCol), "%s", szColor[ki]);
   else {
     // Compose RGB color value.
     neg(ki);
-    sprintf(szCol, "#%06x", Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
+    sprintf2(S(szCol), "#%06x", Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
   }
   return szCol;
 }
@@ -2291,11 +2291,11 @@ char *SzColor2(KI ki)
   static char szCol[8];
 
   if (ki >= 0)
-    sprintf(szCol, "%.3s", szColor[ki]);
+    sprintf2(S(szCol), "%.3s", szColor[ki]);
   else {
     // Compose RGB color value.
     neg(ki);
-    sprintf(szCol, "#%06x", Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
+    sprintf2(S(szCol), "#%06x", Rgb(RgbB(ki), RgbG(ki), RgbR(ki)));
   }
   return szCol;
 }
@@ -2326,7 +2326,7 @@ CONST char *SzColorHTML(KI ki)
     kv = -ki;
 
   // Otherwise compose the RGB value for this color.
-  sprintf(szCol, "#%06x", Rgb(RgbB(kv), RgbG(kv), RgbR(kv)));
+  sprintf2(S(szCol), "#%06x", Rgb(RgbB(kv), RgbG(kv), RgbR(kv)));
   return szCol;
 }
 
@@ -3257,7 +3257,7 @@ pbyte PAllocate(long cb, CONST char *szType)
   // Handle success or failure of the allocation.
   Assert(szType != NULL);
   if (pb == NULL) {
-    sprintf(szT, "%s: Not enough memory for %s (%ld bytes).",
+    sprintf2(S(szT), "%s: Not enough memory for %s (%ld bytes).",
       szAppName, szType, cb);
     PrintWarning(szT);
   } else {
@@ -3369,13 +3369,13 @@ void Terminate(int tc)
   if (tc == tcForce) {
     is.S = stdout;
     AnsiColor(kWhiteA);
-    sprintf(sz, "\n%s %s exited.\n", szAppName, szVersionCore);
+    sprintf2(S(sz), "\n%s %s exited.\n", szAppName, szVersionCore);
     PrintSz(sz);
   }
   if (tc == tcError && us.fLoop)
     return;
   if (us.fAnsiColor) {
-    sprintf(sz, "%c[0m", chEscape);    // Get out of any Ansi color mode.
+    sprintf2(S(sz), "%c[0m", chEscape);    // Get out of any Ansi color mode.
     PrintSz(sz);
   }
   FinalizeProgram(tc != tcOK);

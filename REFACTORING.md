@@ -547,7 +547,7 @@ increment for Area B.
 *Cost/risk:* the round-trip extension is cheap and catches the whole
 class. The table migration is T3's schedule.
 
-### T5 — 1,300 unchecked `sprintf`/`strcpy` into fixed buffers
+### T5 — 1,300 unchecked `sprintf`/`strcpy` into fixed buffers — mostly closed 2026-08-31
 
 *Evidence:* ~1,310 calls across own code (211 in charts1.cpp, 210 in
 io.cpp, 146 in intrpret.cpp...), nearly all into `char sz[cchSzMax]`
@@ -581,6 +581,36 @@ session, Area D or G.
 
 *Cost/risk:* the focused audit is cheap; the sweep would be pure churn
 under an ASan-clean suite.
+
+**The sweep happened anyway, 2026-08-31 (work log item 143), and the
+"pure churn" verdict above was wrong on two counts it could not have
+known.**
+
+First, the class stopped being hypothetical in the worst way: item 142
+was `sprintf` into a 15-byte buffer killing the process, intermittently,
+having survived two dedicated hunts. And the reason the ASan-clean suite
+did not protect against it is structural — `Makefile.qt.asan` builds at
+`-O0`, where `_FORTIFY_SOURCE` is inactive, so the leg this verdict
+leaned on ("under an ASan-clean suite") cannot see a fortify detection
+at all.
+
+Second, "churn" assumed the change could not be *proven*. At the time
+that was true: the only differential harness was
+`tools/switch-matrix.sh`, which prints stderr and saved settings and
+**never renders a chart** — so it is blind to charts0-3.cpp,
+intrpret.cpp and the x*.cpp text paths, which is where most of these
+call sites are. `tools/chart-matrix.sh` now covers exactly that, and the
+sweep is byte-identical under both: 0 of 6,112 chart lines, 0 of 75,471
+switch lines. A 1,055-site change that two byte-diffs certify is not
+churn; the same change without them would have been.
+
+1,055 of 1,171 sites are `sprintf2(S(...))`/`SO(...)` now. What is left
+is the sharp end, and it is precisely the "dangerous subset" the
+direction above pointed at: **27 sites whose destination is a `char *`
+parameter**, which cannot be fixed by this mechanism — `sizeof` on a
+parameter is 8, so converting one would silently truncate to seven
+characters while compiling clean. Those need a size threaded from their
+callers, one at a time, and that is the remaining T5 work.
 
 ### T6 — Backend `#ifdef` interleave in the shared device layer
 

@@ -4830,6 +4830,82 @@ are the more useful half to read before starting something new.
     Both fixes are shared core with no `QT` anywhere near them, so the
     Windows build gets them too.
 
+143. **T5 retired where it can be: 1,055 unbounded `sprintf` calls become
+    bounded, and the gate that could not see them gets written.** Item 142
+    was this theme drawing blood -- an intermittent that killed the process
+    and survived two hunts, and the mechanism was `sprintf` into a 15-byte
+    buffer. Fixing that one buffer by hand left the class untouched:
+    **1,171 raw `sprintf` in this fork's own files and zero `snprintf`.**
+
+    The bounded idiom already existed and was used 48 times:
+    `sprintf2(S(sz), ...)` is `snprintf(sz, sizeof(sz), ...)` (astrolog.h:413),
+    with `SO(pch, sz)` for writing at an offset. So this is a sweep onto
+    something the codebase already had, not a new convention.
+
+    **The one way it could do harm, and how that is excluded.** `sizeof` is
+    only the array's size where the array's declaration is in scope. If the
+    destination is a *parameter* -- `char *sz`, or `char sz[]`, which decays
+    -- then `sizeof(sz)` is 8, and `sprintf2(S(sz), ...)` truncates every
+    string to seven characters **while compiling without a warning**. So the
+    transformer resolves each destination against the declarations of its
+    enclosing function and of file scope, and converts only what it can prove
+    is an array. Every site is classified, none guessed:
+
+        array          1046   converted
+        offset            9   converted, via SO()
+        pointer-skip     11   destination is a char *
+        PARAM-skip       27   destination is a parameter -- the dangerous set
+        (never reached)  78   pointer arithmetic, struct members, split lines
+
+    1,055 converted, **116 left for judgment**, and the parser reports zero
+    unknowns. Writing it exposed a bug in the first version worth keeping in
+    mind: it read only the first declarator of a statement, so
+    `char szCity[cchSzMax], sz[cchSzMax], *pch;` hid `sz` and 77 sites came
+    back "unknown". A declaration list is not a declaration.
+
+    **`tools/chart-matrix.sh` is new, and this increment is why.**
+    `tools/switch-matrix.sh` prints each run's stderr and the settings file
+    it saves -- **it never renders a chart.** The whole of charts0-3.cpp,
+    intrpret.cpp and the x*.cpp text paths sit outside it, which is exactly
+    where these conversions land (charts1 204, io 200, intrpret 146, general
+    82, charts0 75). The switch matrix came back byte-identical over 75,471
+    lines while saying nothing whatever about them. The new harness runs
+    every text chart the console build can draw over a pinned date -- single
+    charts, seconds/sidereal/3D variants, relationship charts, and the
+    interpretation text -- so two binaries can be byte-diffed.
+
+    **Falsified**: shrinking one converted site's bound to 7 bytes moves the
+    chart matrix off zero. It has teeth.
+
+    Writing it also cost three lessons worth keeping. Its first version left
+    15 of 70 invocations erroring on switches given the wrong arity (`-T`
+    wants three arguments, relationship charts want two chart *files*, not
+    two `-q` blocks) -- they byte-diffed identically, so the proof held while
+    a fifth of the coverage was doing nothing. Its second version normalized
+    the `mktemp -d` path in each run's output but not in the `== ` header
+    line it echoes, so 48 lines of pure temp-directory noise looked exactly
+    like a real behavioural diff. And restoring a sabotaged file with
+    `git checkout` silently reverted that file's whole share of the sweep --
+    204 conversions in charts1.cpp, found only because the totals stopped
+    reconciling. Reverse-patch the sabotage instead.
+
+    **Nets**: chart matrix 0 of 6,936 lines over 71 invocations, none of them
+    erroring; switch matrix 0 of 75,471;
+    suite 3524/0; settings round trip all three legs; six audits clean;
+    three generated tables in sync; console, Qt, Qt-test and Windows builds
+    all compile; `tools/asan-sweep.sh` 758 invocations, 0 reported.
+    Behaviour is identical by construction wherever output
+    already fit, which is everywhere these two matrices reach; where it did
+    not fit, undefined behaviour became truncation.
+
+    **What is left, and it is the sharper half.** The 27 PARAM sites are
+    genuinely unbounded and cannot be fixed this way -- a function handed a
+    `char *` cannot know the buffer's size, so those need a size parameter
+    threaded from their callers, one at a time. That is where the remaining
+    risk in T5 actually lives now. `wdriver.cpp`/`wdialog.cpp` were left out
+    of the sweep entirely: they are upstream-shaped Windows files and neither
+    matrix can exercise them, so converting them would be unproven.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

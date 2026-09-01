@@ -848,7 +848,7 @@ char *SzCity(int iae)
   pchState = istate < 0 ? "" :
     (icn == icnUS ? rgcnus[istate].szAbb : rgcnca[istate].szAbb);
   // Country US displays as "USA" instead of full name "United States"
-  sprintf(szCity, "%s, %s%s%s", is.rgae[iae].szNam, pchState,
+  sprintf2(S(szCity), "%s, %s%s%s", is.rgae[iae].szNam, pchState,
     *pchState ? ", " : "", icn == icnUS ? "USA" : rgcnew[icn].szNam);
   return szCity;
 }
@@ -1614,14 +1614,14 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
       return fTrue;
     }
     AnsiColor(kWhite);
-    sprintf(sz, "Cities in atlas matching: %s\n", szIn); PrintSz(sz);
+    sprintf2(S(sz), "Cities in atlas matching: %s\n", szIn); PrintSz(sz);
     AnsiColor(kDefault);
   }
 
   // Display list of matches.
   for (i = 0; i < clist; i++) {
     if (!fDialog) {
-      sprintf(sz, "%3d: ", i+1);
+      sprintf2(S(sz), "%3d: ", i+1);
       PrintSz(sz);
     }
     pae = &is.rgae[rgiae[i]];
@@ -1630,9 +1630,9 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
       pch++;
     if (fTimezoneChanges) {
       zon = ZondefFromIzn(pae->izn);
-      sprintf(sz, "%s (%s, %s)", SzCity(rgiae[i]), pch, SzZone(zon));
+      sprintf2(S(sz), "%s (%s, %s)", SzCity(rgiae[i]), pch, SzZone(zon));
     } else
-      sprintf(sz, "%s (%s)", SzCity(rgiae[i]), pch);
+      sprintf2(S(sz), "%s (%s)", SzCity(rgiae[i]), pch);
     if (pfnAtlasRow != NULL) {
       pfnAtlasRow(sz, rgiae[i]);
       continue;
@@ -1859,7 +1859,7 @@ flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
   // Loop over all possible time zone areas, or just the one specified.
   if (!fDialog && iznIn < 0) {
     AnsiColor(kWhiteA);
-    sprintf(sz, "%s %s time changes\n\n", szAppName, szVersionCore);
+    sprintf2(S(sz), "%s %s time changes\n\n", szAppName, szVersionCore);
     PrintSz(sz);
     AnsiColor(kDefault);
   }
@@ -1872,16 +1872,16 @@ flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
   izcn = mpznzc[izn];
   if (!fDialog && ci == NULL) {
     AnsiColor(kWhiteA);
-    sprintf(sz, "Time changes within zone: %s", rgszzn[izn]); PrintSz(sz);
+    sprintf2(S(sz), "Time changes within zone: %s", rgszzn[izn]); PrintSz(sz);
     i = rgznChange[izcn];
     if (i != izn) {
-      sprintf(sz, " (same as %s)", rgszzn[i]); PrintSz(sz);
+      sprintf2(S(sz), " (same as %s)", rgszzn[i]); PrintSz(sz);
     }
     PrintL();
     AnsiColor(kDefault);
   }
   else if (pfnAtlasRow != NULL) {
-    sprintf(sz, "Time changes within zone: %s", rgszzn[izn]);
+    sprintf2(S(sz), "Time changes within zone: %s", rgszzn[izn]);
     pfnAtlasRow(sz, -1);
   }
   izce = rgizcChange[izcn];
@@ -1928,14 +1928,14 @@ flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
 
     // Display when the time zone offset changes.
     if (cn > 1)
-      sprintf(sz1, "Change clock %s to", SzHMS(doff));
+      sprintf2(S(sz1), "Change clock %s to", SzHMS(doff));
     else
-      sprintf(sz1, "Define clock to be");
+      sprintf2(S(sz1), "Define clock to be");
     sz2[0] = sz3[0] = chNull;
     if (dst != 0 && (dst != 3600 || us.fSeconds))
-      sprintf(sz2, " %s", SzHMS(dst));
+      sprintf2(S(sz2), " %s", SzHMS(dst));
     if (zon != zonPrev)
-      sprintf(sz3, " & Zone %s", SzZone(RTim(zon)));
+      sprintf2(S(sz3), " & Zone %s", SzZone(RTim(zon)));
     sprintf2(S(sz), "%s %s: %s: %s%s%s", SzDate(mon, day, yea, fFalse),
       SzTime(tim / 3600, tim / 60 % 60, us.fSeconds ? tim % 60 : -1),
       sz1, dst == 0 ? "ST" : "DT", sz2, sz3);
@@ -1945,10 +1945,10 @@ flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
         pfnAtlasRow(sz1, -1);
       goto LSkip;
     }
-    sprintf(sz1, "%3d: ", cn); PrintSz(sz1);
+    sprintf2(S(sz1), "%3d: ", cn); PrintSz(sz1);
     k = DayOfWeek(mon, day, yea);
     AnsiColor(kRainbowA[k + 1]);
-    sprintf(sz2, "%.3s ", szDay[k]); PrintSz(sz2);
+    sprintf2(S(sz2), "%.3s ", szDay[k]); PrintSz(sz2);
     AnsiColor(kWhiteA);
     PrintSz(sz);
     PrintL();
@@ -1974,7 +1974,7 @@ LSkip:
         if (!FBetween(iyea, pru->yea1, pru->yea2))
           continue;
         if (ici >= ichngMax) {
-          sprintf(sz, "Zone rule warning: "
+          sprintf2(S(sz), "Zone rule warning: "
             "Too many changes in rule %s within year %d.\n",
             is.rgrun[pzc2->irun].szNam, iyea);
           PrintWarning(sz);
@@ -2063,23 +2063,23 @@ LSkip:
         cn++;
         sz2[0] = chNull;
         if (dst != 0 && (dst != 3600 || us.fSeconds))
-          sprintf(sz2, " %s", SzHMS(dst));
-        sprintf(sz1, "%s %s: Change clock %s to: %s%s",
+          sprintf2(S(sz2), " %s", SzHMS(dst));
+        sprintf2(S(sz1), "%s %s: Change clock %s to: %s%s",
           SzDate(mon, day, yea, fFalse),
           SzTime(tim / 3600, tim / 60 % 60, us.fSeconds ? tim % 60 : -1),
           SzHMS(doff),
           dst == 0 ? "ST" : "DT", sz2);
         if (fDialog) {
-          sprintf(sz, "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz1);
+          sprintf2(S(sz), "%.3s %s", szDay[DayOfWeek(mon, day, yea)], sz1);
           if (pfnAtlasRow != NULL)
             pfnAtlasRow(sz, -1);
           continue;
         }
         AnsiColor(kDefault);
-        sprintf(sz, "%3d: ", cn); PrintSz(sz);
+        sprintf2(S(sz), "%3d: ", cn); PrintSz(sz);
         k = DayOfWeek(mon, day, yea);
         AnsiColor(kRainbowA[k + 1]);
-        sprintf(sz, "%.3s ", szDay[k]); PrintSz(sz);
+        sprintf2(S(sz), "%.3s ", szDay[k]); PrintSz(sz);
         AnsiColor(dst == 0 ? kDkGray : kLtGray);
         PrintSz(sz1);
         PrintL();

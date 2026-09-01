@@ -140,7 +140,7 @@ void InitColorsX()
 
     for (i = 0; i < cColor2; i++) {
       kv = rgbbmp[i];
-      sprintf(sz, "#%02x%02x%02x", RgbR(kv), RgbG(kv), RgbB(kv));
+      sprintf2(S(sz), "#%02x%02x%02x", RgbR(kv), RgbG(kv), RgbB(kv));
       XParseColor(gi.disp, cmap, sz, &xcol);
       XAllocColor(gi.disp, cmap, &xcol);
       rgbind[i] = xcol.pixel;
@@ -858,7 +858,7 @@ void InteractX()
             (real)(xevent.xbutton.x-1)/(real)(gs.xWin-2)*rDegMax;
           Lat = rDegQuad -
             (real)(xevent.xbutton.y-1)/(real)(gs.yWin-2)*181.0;
-          sprintf(sz, "Mouse is at %s.", SzLocation(Lon, Lat));
+          sprintf2(S(sz), "Mouse is at %s.", SzLocation(Lon, Lat));
           PrintProgress(sz);
         } else if (xevent.xbutton.button == Button3)
           fBreak = fTrue;

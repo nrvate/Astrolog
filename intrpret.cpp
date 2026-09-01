@@ -143,9 +143,9 @@ void InterpretGeneral(void)
     "Signs of the zodiac represent psychological characteristics.\n\n");
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%s is", szSignName[i]); FieldWord(sz);
-    sprintf(sz, "%s, and", szDesc[i]); FieldWord(sz);
-    sprintf(sz, "%s.\n", szDesire[i]); FieldWord(sz);
+    sprintf2(S(sz), "%s is", szSignName[i]); FieldWord(sz);
+    sprintf2(S(sz), "%s, and", szDesc[i]); FieldWord(sz);
+    sprintf2(S(sz), "%s.\n", szDesire[i]); FieldWord(sz);
   }
   AnsiColor(kDefault);
 
@@ -153,9 +153,9 @@ void InterpretGeneral(void)
   FieldWord("Houses represent different areas within one's life.\n\n");
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "The %d%s House is the area of life dealing with",
+    sprintf2(S(sz), "The %d%s House is the area of life dealing with",
       i, szSuffix[i]); FieldWord(sz);
-    sprintf(sz, "%s.\n", szLifeArea[i]); FieldWord(sz);
+    sprintf2(S(sz), "%s.\n", szLifeArea[i]); FieldWord(sz);
   }
   AnsiColor(kDefault);
 
@@ -168,9 +168,9 @@ void InterpretGeneral(void)
     AnsiColor(kObjA[i]);
     if (i <= oMoo || (FBetween(i, oNod, oCore) && i != oLil))
       FieldWord("The");
-    sprintf(sz, "%s%s%s represents one's", i == oFor ? "Part of " : "",
+    sprintf2(S(sz), "%s%s%s represents one's", i == oFor ? "Part of " : "",
       szObjDisp[i], i == oPal ? " Athena" : ""); FieldWord(sz);
-    sprintf(sz, "%s.\n", szMindPart[i]); FieldWord(sz);
+    sprintf2(S(sz), "%s.\n", szMindPart[i]); FieldWord(sz);
   }
   AnsiColor(kDefault);
 
@@ -180,11 +180,11 @@ void InterpretGeneral(void)
     if (!FInterpretAsp(i))
       continue;
     AnsiColor(kAspA[ASPT(i)]);
-    sprintf(sz, "When planets are %s, one", szAspectName[i]);
-    FieldWord(sz); sprintf(sz, szInteract[i], ""); FieldWord(sz);
+    sprintf2(S(sz), "When planets are %s, one", szAspectName[i]);
+    FieldWord(sz); sprintf2(S(sz), szInteract[i], ""); FieldWord(sz);
     FieldWord("another.");
     if (szTherefore[i][0]) {
-      sprintf(sz, "%s.", szTherefore[i]); FieldWord(sz);
+      sprintf2(S(sz), "%s.", szTherefore[i]); FieldWord(sz);
     }
     FieldWord(NULL);
   }
@@ -199,8 +199,8 @@ void InterpretGeneral(void)
     AnsiColor(kSignA(j));
     FieldWord(szSignName[j]);
     j = i - (j-1)*30;
-    sprintf(sz, "%d-%d:", j, j+1); FieldWord(sz);
-    sprintf(sz, "%s.", szSabian[i]); FieldWord(sz);
+    sprintf2(S(sz), "%d-%d:", j, j+1); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szSabian[i]); FieldWord(sz);
     FieldWord(NULL);
   }
   return;
@@ -223,15 +223,15 @@ void InterpretLocation(void)
         continue;
       AnsiColor(kObjA[i]);
       j = SFromZ(planet[i]);
-      sprintf(sz, "%s%s%s in %s",
+      sprintf2(S(sz), "%s%s%s in %s",
         i == oFor && !FObjDispCustom(i) ? "Part of " : "",
         szObjDisp[i],
         i == oPal && !FObjDispCustom(i) ? " Athena" : "",
         szSignName[j]);
       FieldWord(sz);
       j = (int)planet[i] - (j-1)*30;
-      sprintf(sz, "%d-%d:", j, j+1); FieldWord(sz);
-      sprintf(sz, "%s.", szSabian[(int)planet[i]]); FieldWord(sz);
+      sprintf2(S(sz), "%d-%d:", j, j+1); FieldWord(sz);
+      sprintf2(S(sz), "%s.", szSabian[(int)planet[i]]); FieldWord(sz);
       FieldWord(NULL);
     }
     return;
@@ -241,15 +241,15 @@ void InterpretLocation(void)
       continue;
     AnsiColor(kObjA[i]);
     j = SFromZ(planet[i]); ch = *Dignify(i, j);
-    sprintf(sz, "%s%s%s%s in %s", ret[i] < 0.0 ? "Retrograde " : "",
+    sprintf2(S(sz), "%s%s%s%s in %s", ret[i] < 0.0 ? "Retrograde " : "",
       i == oFor && !FObjDispCustom(i) ? "Part of " : "",
       szObjDisp[i],
       i == oPal && !FObjDispCustom(i) ? " Athena" : "",
       szSignName[j]);
     FieldWord(sz);
-    sprintf(sz, "and %d%s House:", inhouse[i], szSuffix[inhouse[i]]);
+    sprintf2(S(sz), "and %d%s House:", inhouse[i], szSuffix[inhouse[i]]);
     FieldWord(sz);
-    sprintf(sz, "%s's", szPerson); FieldWord(sz);
+    sprintf2(S(sz), "%s's", szPerson); FieldWord(sz);
 #ifdef EXPRESS
     // Prepend interpretation text if AstroExpression set to do so.
     if (!us.fExpOff && FSzSet(us.szExpIntV)) {
@@ -262,13 +262,13 @@ void InterpretLocation(void)
     // First 10 degrees or decan of sign is more emphasized by that sign.
     if (((int)planet[i]) % 30 < 10)
       FieldWord("very");
-    sprintf(sz, "%s, and", szDesc[j]); FieldWord(sz);
-    sprintf(sz, "%s.", szDesire[j]); FieldWord(sz);
+    sprintf2(S(sz), "%s, and", szDesc[j]); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szDesire[j]); FieldWord(sz);
     FieldWord("Most often this manifests");
     if (ret[i] < 0.0 && i != oNod && i != oSou)
       FieldWord("in an independent, backward, introverted manner, and");
     FieldWord("in the area of life dealing with");
-    sprintf(sz, "%s.", szLifeArea[inhouse[i]]); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szLifeArea[inhouse[i]]); FieldWord(sz);
 
     // Extra information if planet is in its ruling, exalting, etc, sign.
 
@@ -290,7 +290,7 @@ void InterpretLocation(void)
     else if (ch == 'h')
       FieldWord("This is less significant on a spiritual planetary level.");
     else if (ch == 'Y' || ch == 'z') {
-      sprintf(sz, "This expresses Ray %d energy %sly%c", rgObjRay[OBJT(i)],
+      sprintf2(S(sz), "This expresses Ray %d energy %sly%c", rgObjRay[OBJT(i)],
         ch == 'Y' ? "strong" : "weak", ch == 'Y' ? '!' : '.');
       FieldWord(sz);
     }
@@ -316,7 +316,7 @@ void InterpretAspectCore(int x, int asp, int y, int nOrb)
   if (!FInterpretAsp(asp) || !FInterpretObj(x) || !FInterpretObj(y))
     return;
   AnsiColor(kAspA[ASPT(asp)]);
-  sprintf(sz, "%s %s %s: %s's",
+  sprintf2(S(sz), "%s %s %s: %s's",
     szObjDisp[x], SzAspect(asp), szObjDisp[y], szPerson);
 #ifdef EXPRESS
   // Prepend interpretation text if AstroExpression set to do so.
@@ -329,11 +329,11 @@ void InterpretAspectCore(int x, int asp, int y, int nOrb)
   }
 #endif
   FieldWord(sz); FieldWord(szMindPart[x]);
-  sprintf(sz, szInteract[asp], szModify[Min(nOrb, 2)][asp-1]);
+  sprintf2(S(sz), szInteract[asp], szModify[Min(nOrb, 2)][asp-1]);
   FieldWord(sz);
-  sprintf(sz, "their %s.", szMindPart[y]); FieldWord(sz);
+  sprintf2(S(sz), "their %s.", szMindPart[y]); FieldWord(sz);
   if (szTherefore[asp][0]) {
-    sprintf(sz, "%s.", szTherefore[asp]); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szTherefore[asp]); FieldWord(sz);
   }
 #ifdef EXPRESS
 LAfter:
@@ -389,24 +389,24 @@ void InterpretMidpoint(int x, int y)
     return;
   n = grid->n[y][x];
   AnsiColor(kSignA(n));
-  sprintf(sz, "%s midpoint %s in %s%s", szObjDisp[x], szObjDisp[y],
+  sprintf2(S(sz), "%s midpoint %s in %s%s", szObjDisp[x], szObjDisp[y],
     szSignName[n], !us.fSabian ? ":" : ""); FieldWord(sz);
   if (us.fSabian) {
     i = (int)grid->v[y][x];
-    sprintf(sz, "%d-%d:", i, i+1); FieldWord(sz);
-    sprintf(sz, "%s.", szSabian[(n-1)*30 + i]); FieldWord(sz);
+    sprintf2(S(sz), "%d-%d:", i, i+1); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szSabian[(n-1)*30 + i]); FieldWord(sz);
     FieldWord(NULL);
     return;
   }
-  sprintf(sz, "The merging of %s's", szPerson0); FieldWord(sz);
+  sprintf2(S(sz), "The merging of %s's", szPerson0); FieldWord(sz);
   FieldWord(szMindPart[x]);
   FieldWord("with their"); FieldWord(szMindPart[y]);
   FieldWord("is");
   // First 10 degrees or decan of sign is more emphasized by that sign.
   if (grid->v[y][x] < 10.0)
     FieldWord("very");
-  sprintf(sz, "%s, and", szDesc[n]); FieldWord(sz);
-  sprintf(sz, "%s.", szDesire[n]); FieldWord(sz);
+  sprintf2(S(sz), "%s, and", szDesc[n]); FieldWord(sz);
+  sprintf2(S(sz), "%s.", szDesire[n]); FieldWord(sz);
   FieldWord("Most often this manifests in");
   rDir = 0.0;
   // Nodes are always retrograde, so that shouldn't contribute to text.
@@ -418,7 +418,7 @@ void InterpretMidpoint(int x, int y)
     FieldWord("an independent, backward, introverted manner, and");
   FieldWord("the area of life dealing with");
   i = NHousePlaceIn2D(ZFromS(n) + grid->v[y][x]);
-  sprintf(sz, "%s.", szLifeArea[i]); FieldWord(sz);
+  sprintf2(S(sz), "%s.", szLifeArea[i]); FieldWord(sz);
   FieldWord(NULL);
 }
 
@@ -435,30 +435,30 @@ void InterpretArabic(int i, real deg, real lat, real dir)
   j = SFromZ(deg);
   AnsiColor(kSignA(j));
   if (us.fSabian) {
-    sprintf(sz, "Part of %s in %s", ai[i].name, szSignName[j]);
+    sprintf2(S(sz), "Part of %s in %s", ai[i].name, szSignName[j]);
     FieldWord(sz);
     j = (int)deg - (j-1)*30;
-    sprintf(sz, "%d-%d:", j, j+1); FieldWord(sz);
-    sprintf(sz, "%s.", szSabian[(int)deg]); FieldWord(sz);
+    sprintf2(S(sz), "%d-%d:", j, j+1); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szSabian[(int)deg]); FieldWord(sz);
     FieldWord(NULL);
     return;
   }
-  sprintf(sz, "%sPart of %s in %s", dir < 0.0 ? "Retrograde " : "",
+  sprintf2(S(sz), "%sPart of %s in %s", dir < 0.0 ? "Retrograde " : "",
     ai[i].name, szSignName[j]);
   FieldWord(sz);
   h = NHousePlaceIn(deg, lat);
-  sprintf(sz, "and %d%s House:", h, szSuffix[h]); FieldWord(sz);
+  sprintf2(S(sz), "and %d%s House:", h, szSuffix[h]); FieldWord(sz);
   FieldWord("This placement is");
   // First 10 degrees or decan of sign is more emphasized by that sign.
   if ((int)deg % 30 < 10)
     FieldWord("very");
-  sprintf(sz, "%s, and", szDesc[j]); FieldWord(sz);
-  sprintf(sz, "%s.", szDesire[j]); FieldWord(sz);
+  sprintf2(S(sz), "%s, and", szDesc[j]); FieldWord(sz);
+  sprintf2(S(sz), "%s.", szDesire[j]); FieldWord(sz);
   FieldWord("Most often this manifests");
   if (dir < 0.0)
     FieldWord("in an independent, backward, introverted manner, and");
   FieldWord("in the area of life dealing with");
-  sprintf(sz, "%s.", szLifeArea[h]); FieldWord(sz);
+  sprintf2(S(sz), "%s.", szLifeArea[h]); FieldWord(sz);
   FieldWord(NULL);
 }
 #endif
@@ -486,9 +486,9 @@ void InterpretInDay(int source, int aspect, int dest)
   } else if (aspect == aSig) {
     AnsiColor(kObjA[source]);
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
-    sprintf(sz, "will be %s,", szDesc[dest]);
+    sprintf2(S(sz), "will be %s,", szDesc[dest]);
     FieldWord(sz);
-    sprintf(sz, "and it %s.\n", szDesire[dest]); FieldWord(sz);
+    sprintf2(S(sz), "and it %s.\n", szDesire[dest]); FieldWord(sz);
 
   // Interpret aspect between transiting planets.
 
@@ -496,12 +496,12 @@ void InterpretInDay(int source, int aspect, int dest)
     FInterpretObj(source) && FInterpretObj(dest)) {
     AnsiColor(kAspA[ASPT(aspect)]);
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
-    sprintf(sz, szInteract[aspect], szModify[1][aspect-1]);
+    sprintf2(S(sz), szInteract[aspect], szModify[1][aspect-1]);
     FieldWord(sz);
-    sprintf(sz, "energies of %s.", szMindPart[dest]); FieldWord(sz);
+    sprintf2(S(sz), "energies of %s.", szMindPart[dest]); FieldWord(sz);
     if (szTherefore[aspect][0]) {
       if (aspect > aCon) {
-        sprintf(sz, "%s.", szTherefore[aspect]); FieldWord(sz);
+        sprintf2(S(sz), "%s.", szTherefore[aspect]); FieldWord(sz);
       } else
         FieldWord("They will affect each other prominently.");
     }
@@ -523,17 +523,17 @@ void InterpretTransit(int source, int aspect, int dest)
   if (FInterpretObj(source) && FInterpretAsp(aspect) && FInterpretObj(dest)) {
     AnsiColor(kAspA[ASPT(aspect)]);
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
-    sprintf(sz, szInteract[aspect], szModify[1][aspect-1]);
+    sprintf2(S(sz), szInteract[aspect], szModify[1][aspect-1]);
     FieldWord(sz);
     if (source != dest) {
-      sprintf(sz, "%s's %s.", szPerson0, szMindPart[dest]);
+      sprintf2(S(sz), "%s's %s.", szPerson0, szMindPart[dest]);
     } else {
-      sprintf(sz, "the same area inside %s's makeup.", szPerson0);
+      sprintf2(S(sz), "the same area inside %s's makeup.", szPerson0);
     }
     FieldWord(sz);
     if (szTherefore[aspect][0]) {
       if (aspect > aCon) {
-        sprintf(sz, "%s.", szTherefore[aspect]); FieldWord(sz);
+        sprintf2(S(sz), "%s.", szTherefore[aspect]); FieldWord(sz);
       } else
         FieldWord("This part of their psyche will be strongly influenced.");
     }
@@ -544,7 +544,7 @@ void InterpretTransit(int source, int aspect, int dest)
   } else if (aspect == aHou && FInterpretObj(source)) {
     AnsiColor(kSignA(dest));
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
-    sprintf(sz, "is now affecting %s's area of life dealing with %s.\n",
+    sprintf2(S(sz), "is now affecting %s's area of life dealing with %s.\n",
       szPerson0, szLifeArea[dest]);
     FieldWord(sz);
   }
@@ -567,42 +567,42 @@ void InterpretSynastry(void)
       continue;
     AnsiColor(kObjA[i]);
     j = SFromZ(planet[i]); c = *Dignify(i, j);
-    sprintf(sz, "%s%s%s%s in %s,", ret[i] < 0.0 ? "Retrograde " : "",
+    sprintf2(S(sz), "%s%s%s%s in %s,", ret[i] < 0.0 ? "Retrograde " : "",
       i == oFor && !FObjDispCustom(i) ? "Part of " : "",
       szObjDisp[i],
       i == oPal && !FObjDispCustom(i) ? " Athena" : "",
       szSignName[j]);
     FieldWord(sz);
-    sprintf(sz, "in their %d%s House:", inhouse[i], szSuffix[inhouse[i]]);
+    sprintf2(S(sz), "in their %d%s House:", inhouse[i], szSuffix[inhouse[i]]);
     FieldWord(sz);
-    sprintf(sz, "%s's", szPerson2); FieldWord(sz);
+    sprintf2(S(sz), "%s's", szPerson2); FieldWord(sz);
     FieldWord(szMindPart[i]); FieldWord("is");
     // First 10 degrees or decan of sign is more emphasized by that sign.
     if (((int)planet[i]) % 30 < 10)
       FieldWord("very");
-    sprintf(sz, "%s, and", szDesc[j]); FieldWord(sz);
-    sprintf(sz, "%s.", szDesire[j]); FieldWord(sz);
+    sprintf2(S(sz), "%s, and", szDesc[j]); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szDesire[j]); FieldWord(sz);
     FieldWord("This");
     if (ret[i] < 0.0 && !FBetween(i, oNod, oSou))
       FieldWord(
         "manifests in an independent, backward, introverted manner, and");
-    sprintf(sz, "affects %s in the area of life dealing with %s.",
+    sprintf2(S(sz), "affects %s in the area of life dealing with %s.",
       szPerson1, szLifeArea[inhouse[i]]); FieldWord(sz);
 
     // Extra information if planet is in its ruling, exalting, etc, sign.
 
     if (c == 'R') {
-      sprintf(sz, "This is a major part of %s's psyche!", szPerson2);
+      sprintf2(S(sz), "This is a major part of %s's psyche!", szPerson2);
       FieldWord(sz);
     } else if (c == 'd') {
-      sprintf(sz, "(This bit plays only a minor part in %s's psyche.)",
+      sprintf2(S(sz), "(This bit plays only a minor part in %s's psyche.)",
         szPerson2);
       FieldWord(sz);
     } else if (c == 'X') {
-      sprintf(sz, "%s is affected harmoniously in this way.", szPerson1);
+      sprintf2(S(sz), "%s is affected harmoniously in this way.", szPerson1);
       FieldWord(sz);
     } else if (c == 'f') {
-      sprintf(sz, "%s is affected discordantly in this way.", szPerson1);
+      sprintf2(S(sz), "%s is affected discordantly in this way.", szPerson1);
       FieldWord(sz);
     }
     FieldWord(NULL);
@@ -623,16 +623,16 @@ void InterpretAspectRelation(int x, int y)
   if (!FInterpretAsp(asp) || !FInterpretObj(x) || !FInterpretObj(y))
     return;
   AnsiColor(kAspA[ASPT(asp)]);
-  sprintf(sz, "%s %s %s: %s's",
+  sprintf2(S(sz), "%s %s %s: %s's",
     szObjDisp[x], SzAspect(asp), szObjDisp[y], szPerson1);
   FieldWord(sz); FieldWord(szMindPart[x]);
-  sprintf(sz, szInteract[asp],
+  sprintf2(S(sz), szInteract[asp],
     szModify[Min(NAbs((int)(grid->v[y][x]*3600.0))/(150*60), 2)][asp-1]);
   FieldWord(sz);
-  sprintf(sz, "%s's %s.", szPerson2, szMindPart[y]); FieldWord(sz);
+  sprintf2(S(sz), "%s's %s.", szPerson2, szMindPart[y]); FieldWord(sz);
   if (szTherefore[asp][0]) {
     if (asp != aCon) {
-      sprintf(sz, "%s.", szTherefore[asp]); FieldWord(sz);
+      sprintf2(S(sz), "%s.", szTherefore[asp]); FieldWord(sz);
     } else
       FieldWord("These parts affect each other prominently.");
   }
@@ -667,24 +667,24 @@ void InterpretMidpointRelation(int x, int y)
     return;
   n = grid->n[x][y];
   AnsiColor(kSignA(n));
-  sprintf(sz, "%s midpoint %s in %s%s", szObjDisp[x], szObjDisp[y],
+  sprintf2(S(sz), "%s midpoint %s in %s%s", szObjDisp[x], szObjDisp[y],
     szSignName[n], !us.fSabian ? ":" : ""); FieldWord(sz);
   if (us.fSabian) {
     i = (int)grid->v[x][y];
-    sprintf(sz, "%d-%d:", i, i+1); FieldWord(sz);
-    sprintf(sz, "%s.", szSabian[(n-1)*30 + i]); FieldWord(sz);
+    sprintf2(S(sz), "%d-%d:", i, i+1); FieldWord(sz);
+    sprintf2(S(sz), "%s.", szSabian[(n-1)*30 + i]); FieldWord(sz);
     FieldWord(NULL);
     return;
   }
-  sprintf(sz, "The merging of %s's", szPerson1); FieldWord(sz);
+  sprintf2(S(sz), "The merging of %s's", szPerson1); FieldWord(sz);
   FieldWord(szMindPart[x]);
-  sprintf(sz, "with %s's", szPerson2); FieldWord(sz);
+  sprintf2(S(sz), "with %s's", szPerson2); FieldWord(sz);
   FieldWord(szMindPart[y]); FieldWord("is");
   // First 10 degrees or decan of sign is more emphasized by that sign.
   if (grid->v[x][y] < 10.0)
     FieldWord("very");
-  sprintf(sz, "%s, and", szDesc[n]); FieldWord(sz);
-  sprintf(sz, "%s.", szDesire[n]); FieldWord(sz);
+  sprintf2(S(sz), "%s, and", szDesc[n]); FieldWord(sz);
+  sprintf2(S(sz), "%s.", szDesire[n]); FieldWord(sz);
   rDir = 0.0;
   // Nodes are always retrograde, so that shouldn't contribute to text.
   if (!FBetween(x, oNod, oSou))
@@ -715,12 +715,12 @@ void InterpretAstroGraph(int obj1, int cusp1, int obj2, int cusp2)
   if (us.nRel >= rcNone) {
     FieldWord(szPerson0);
     FieldWord("can more easily");
-    sprintf(sz, "%s their %s, and also %s their %s.",
+    sprintf2(S(sz), "%s their %s, and also %s their %s.",
       szAngle[c1], szMindPart[obj1], szAngle[c2], szMindPart[obj2]);
   } else {
     FieldWord(szPerson1);
     FieldWord("can more easily");
-    sprintf(sz,
+    sprintf2(S(sz),
       "%s their %s, at the same time %s can more easily %s their %s.",
       szAngle[c1], szMindPart[obj1], szPerson2, szAngle[c2], szMindPart[obj2]);
   }
@@ -1000,7 +1000,7 @@ int InterpretEsoteric(flag fGetRays)
     }
     // Print all seven Rays and their points for this vehicle.
     AnsiColor(kRayA[RAYT(rgnSort[1])]);
-    sprintf(sz, "%-4.4s Ray:", rgEsoRayArea[bod]); PrintSz(sz);
+    sprintf2(S(sz), "%-4.4s Ray:", rgEsoRayArea[bod]); PrintSz(sz);
     k = 0;
     for (ray = 1; ray <= cRay; ray++)
       k += rgcRay[ray];
@@ -1009,7 +1009,7 @@ int InterpretEsoteric(flag fGetRays)
     for (ray = 1; ray <= cRay; ray++) {
       if (ray > 1)
         AnsiColor(kRayA[RAYT(rgnSort[ray])]);
-      sprintf(sz, " R%d (%2d%%)%s", rgnSort[ray], rgcRay[rgnSort[ray]] *
+      sprintf2(S(sz), " R%d (%2d%%)%s", rgnSort[ray], rgcRay[rgnSort[ray]] *
         100 / k, ray < cRay ? "," : ""); PrintSz(sz);
     }
     PrintL();
@@ -1030,16 +1030,16 @@ int InterpretEsoteric(flag fGetRays)
     if (ignore[i])
       continue;
     AnsiColor(kObjA[i]);
-    sprintf(szName, "%s%s%s", i == oFor && !FObjDispCustom(i) ?
+    sprintf2(S(szName), "%s%s%s", i == oFor && !FObjDispCustom(i) ?
       "Part of " : "", szObjDisp[i],
       i == oPal && !FObjDispCustom(i) ? " Athena" : "");
     sig = SFromZ(planet[i]);
     hou = inhouse[i];
-    sprintf(sz, "%s in %s%s", szName, szSignName[sig],
+    sprintf2(S(sz), "%s in %s%s", szName, szSignName[sig],
       us.fInfluenceSign ? "" : ":\n");
     FieldWord(sz);
     if (us.fInfluenceSign) {
-      sprintf(sz, "and %d%s house:\n", hou, szSuffix[hou]);
+      sprintf2(S(sz), "and %d%s house:\n", hou, szSuffix[hou]);
       FieldWord(sz);
     }
     // Planet
@@ -1048,60 +1048,60 @@ int InterpretEsoteric(flag fGetRays)
     // pointer rather than an empty string. "i <= oNorm" keeps the index
     // in bounds but says nothing about the entry, so check it too.
     if (i <= oNorm && rgEsoObj[i] != NULL && *rgEsoObj[i]) {
-      sprintf(sz, "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
+      sprintf2(S(sz), "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
       FieldWord(sz);
     }
     ray = (i <= oNorm ? rgObjRay[OBJT(i)] : 0);  // Stars sit above the table.
     if (ray > 0) {
-      sprintf(sz, "%s is Ray %d (%s), the \"Will to %s\".\n",
+      sprintf2(S(sz), "%s is Ray %d (%s), the \"Will to %s\".\n",
         szName, ray, szRayName[RAYT(ray)], szRayWill[RAYT(ray)]);
       AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
     }
     // Sign
     AnsiColor(kSignA(sig));
-    sprintf(sz, "%s esoteric lesson: %s.\n", szSignName[sig],
+    sprintf2(S(sz), "%s esoteric lesson: %s.\n", szSignName[sig],
       rgEsoLesson[sig]);
     FieldWord(sz);
-    sprintf(sz, "%s mundane mantram: \"%s.\"\n",
+    sprintf2(S(sz), "%s mundane mantram: \"%s.\"\n",
       szSignName[sig], rgEsoMantra1[sig]);
     FieldWord(sz);
-    sprintf(sz, "%s esoteric mantram: \"%s.\"\n",
+    sprintf2(S(sz), "%s esoteric mantram: \"%s.\"\n",
       szSignName[sig], rgEsoMantra2[sig]);
     FieldWord(sz);
-    sprintf(sz, "%s Light is: \"%s.\"\n", szSignName[sig], rgEsoLight[sig]);
+    sprintf2(S(sz), "%s Light is: \"%s.\"\n", szSignName[sig], rgEsoLight[sig]);
     FieldWord(sz);
-    sprintf(sz, "%s Labor of Hercules: %s.\n",
+    sprintf2(S(sz), "%s Labor of Hercules: %s.\n",
       szSignName[sig], rgEsoLabor[sig]);
     FieldWord(sz);
     j = rules[SIGT(sig)];
     if (j >= 0) {
-      sprintf(sz, "%s is exoterically ruled by %s%s%s", szSignName[sig],
+      sprintf2(S(sz), "%s is exoterically ruled by %s%s%s", szSignName[sig],
         j <= oMoo ? "the " : "", szObjDisp[j], rules2[SIGT(sig)] >= 0 ? "" : ".");
       FieldWord(sz);
       if (rules2[SIGT(sig)] >= 0) {
-        sprintf(sz, "and %s.", szObjDisp[rules2[SIGT(sig)]]);
+        sprintf2(S(sz), "and %s.", szObjDisp[rules2[SIGT(sig)]]);
         FieldWord(sz);
       }
     }
     j = rgSignEso1[SIGT(sig)];
     if (j >= 0) {
-      sprintf(sz, "%s is esoterically ruled by %s%s%s",
+      sprintf2(S(sz), "%s is esoterically ruled by %s%s%s",
         szSignName[sig], j <= oMoo ? "the " : "", szObjDisp[j],
         rgSignEso2[SIGT(sig)] >= 0 ? "" : ".");
       FieldWord(sz);
       if (rgSignEso2[SIGT(sig)] >= 0) {
-        sprintf(sz, "veiling %s.", szObjDisp[rgSignEso2[SIGT(sig)]]);
+        sprintf2(S(sz), "veiling %s.", szObjDisp[rgSignEso2[SIGT(sig)]]);
         FieldWord(sz);
       }
     }
     j = rgSignHie1[SIGT(sig)];
     if (j >= 0 && !fIgnore7Sav[rrHie]) {
-      sprintf(sz, "%s is Hierarchically ruled by %s%s%s",
+      sprintf2(S(sz), "%s is Hierarchically ruled by %s%s%s",
         szSignName[sig], j <= oMoo ? "the " : "", szObjDisp[j],
         rgSignHie2[SIGT(sig)] >= 0 ? "" : ".");
       FieldWord(sz);
       if (rgSignHie2[SIGT(sig)] >= 0) {
-        sprintf(sz, "veiling %s.", szObjDisp[rgSignHie2[SIGT(sig)]]);
+        sprintf2(S(sz), "veiling %s.", szObjDisp[rgSignHie2[SIGT(sig)]]);
         FieldWord(sz);
       }
     }
@@ -1109,26 +1109,26 @@ int InterpretEsoteric(flag fGetRays)
       rgSignHie1[SIGT(sig)] > 0)
       FieldWord(NULL);
     for (j = 1; j <= cRay; j++) if (rgSignRay2[SIGT(sig)][j] > 0) {
-      sprintf(sz, "%s is Ray %d (%s), the \"Will to %s\".\n",
+      sprintf2(S(sz), "%s is Ray %d (%s), the \"Will to %s\".\n",
         szSignName[sig], j, szRayName[RAYT(j)], szRayWill[RAYT(j)]);
       AnsiColor(kRayA[RAYT(j)]); FieldWord(sz);
     }
     if (us.fSabian) {
       AnsiColor(kSignA(sig));
       j = (int)planet[i] - (sig-1)*30;
-      sprintf(sz, "%s %d-%d Sabian Symbol:", szSignName[sig], j, j+1);
+      sprintf2(S(sz), "%s %d-%d Sabian Symbol:", szSignName[sig], j, j+1);
       FieldWord(sz);
-      sprintf(sz, "%s.", szSabian[(int)planet[i]]); FieldWord(sz);
+      sprintf2(S(sz), "%s.", szSabian[(int)planet[i]]); FieldWord(sz);
       FieldWord(NULL);
     }
     // House
     if (us.fInfluenceSign) {
       AnsiColor(kSignA(hou));
-      sprintf(sz, "%d%s house characteristics: %s. It's an environment %s.\n",
+      sprintf2(S(sz), "%d%s house characteristics: %s. It's an environment %s.\n",
         hou, szSuffix[hou], rgEsoHou1[hou], rgEsoHou2[hou]);
       FieldWord(sz);
       for (j = 1; j <= cRay; j++) if (rgSignRay2[SIGT(hou)][j] > 0) {
-        sprintf(sz, "%d%s house (%s) is Ray %d (%s), the \"Will to %s\".\n",
+        sprintf2(S(sz), "%d%s house (%s) is Ray %d (%s), the \"Will to %s\".\n",
           hou, szSuffix[hou], szSignName[hou], j, szRayName[RAYT(j)], szRayWill[RAYT(j)]);
         AnsiColor(kRayA[RAYT(j)]); FieldWord(sz);
       }
@@ -1136,66 +1136,66 @@ int InterpretEsoteric(flag fGetRays)
     // Rulerships
     pch = Dignify(i, sig)+1;
     if (pch[rrRay] == 'Y') {
-      sprintf(sz, "Ray rulership! Both %s and %s are Ray %d.\n",
+      sprintf2(S(sz), "Ray rulership! Both %s and %s are Ray %d.\n",
         szName, szSignName[sig], ray);
       AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
     } else if (pch[rrRay] == 'z') {
-      sprintf(sz, "Ray debilitation! Both %s and %s (opposite %s) are Ray "
+      sprintf2(S(sz), "Ray debilitation! Both %s and %s (opposite %s) are Ray "
         "%d.\n", szName, szSignName[Mod12(sig+6)], szSignName[sig], ray);
       AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
     }
     AnsiColor(kObjA[i]);
     if (pch[rrStd] == 'R') {
-      sprintf(sz, "Standard rulership! %s", szName);
+      sprintf2(S(sz), "Standard rulership! %s", szName);
       FieldWord(sz);
       if (rules2[SIGT(sig)] >= 0) {
-        sprintf(sz, "(with %s)",
+        sprintf2(S(sz), "(with %s)",
           szObjDisp[(i == rules2[SIGT(sig)] ? rules : rules2)[SIGT(sig)]]);
         FieldWord(sz);
       }
-      sprintf(sz, "exoterically rules %s.\n", szSignName[sig]);
+      sprintf2(S(sz), "exoterically rules %s.\n", szSignName[sig]);
       FieldWord(sz);
     } else if (pch[rrStd] == 'd') {
-      sprintf(sz, "Standard debilitation! %s is exoterically debilitated in "
+      sprintf2(S(sz), "Standard debilitation! %s is exoterically debilitated in "
         "%s.\n", szName, szSignName[sig]);
       FieldWord(sz);
     }
     if (pch[rrEso] == 'S') {
-      sprintf(sz, "Esoteric rulership! %s", szName);
+      sprintf2(S(sz), "Esoteric rulership! %s", szName);
       FieldWord(sz);
       if (rgSignEso2[SIGT(sig)] >= 0) {
-        sprintf(sz, "(veiling %s)", szObjDisp[rgSignEso2[SIGT(sig)]]);
+        sprintf2(S(sz), "(veiling %s)", szObjDisp[rgSignEso2[SIGT(sig)]]);
         FieldWord(sz);
       }
-      sprintf(sz, "esoterically rules %s.\n", szSignName[sig]);
+      sprintf2(S(sz), "esoterically rules %s.\n", szSignName[sig]);
       FieldWord(sz);
     } else if (pch[rrEso] == 's') {
-      sprintf(sz, "Esoteric debilitation! %s is esoterically debilitated in "
+      sprintf2(S(sz), "Esoteric debilitation! %s is esoterically debilitated in "
         "%s.\n", szName, szSignName[sig]);
       FieldWord(sz);
     }
     if (pch[rrHie] == 'H') {
-      sprintf(sz, "Hierarchical rulership! %s", szName);
+      sprintf2(S(sz), "Hierarchical rulership! %s", szName);
       FieldWord(sz);
       if (rgSignHie2[SIGT(sig)] >= 0) {
-        sprintf(sz, "(veiling %s)", szObjDisp[rgSignHie2[SIGT(sig)]]);
+        sprintf2(S(sz), "(veiling %s)", szObjDisp[rgSignHie2[SIGT(sig)]]);
         FieldWord(sz);
       }
-      sprintf(sz, "Hierarchically rules %s.\n", szSignName[sig]);
+      sprintf2(S(sz), "Hierarchically rules %s.\n", szSignName[sig]);
       FieldWord(sz);
     } else if (pch[rrHie] == 'h') {
-      sprintf(sz, "Hierarchical debilitation! %s is Hierarchically "
+      sprintf2(S(sz), "Hierarchical debilitation! %s is Hierarchically "
         "debilitated in %s.\n", szName, szSignName[sig]);
       FieldWord(sz);
     }
     if (us.fInfluenceSign) {
       pch = Dignify(i, hou)+1;
       if (pch[rrRay] == 'Y') {
-        sprintf(sz, "House Ray rulership! Both %s and %d%s house (%s) are "
+        sprintf2(S(sz), "House Ray rulership! Both %s and %d%s house (%s) are "
           "Ray %d.\n", szName, hou, szSuffix[hou], szSignName[hou], ray);
         AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
       } else if (pch[rrRay] == 'z') {
-        sprintf(sz, "House Ray debilitation! Both %s and %d%s house (%s, "
+        sprintf2(S(sz), "House Ray debilitation! Both %s and %d%s house (%s, "
           "opposite %s) are Ray %d.\n", szName, hou, szSuffix[hou],
           szSignName[Mod12(hou+6)], szSignName[hou], ray);
         AnsiColor(kRayA[RAYT(ray)]); FieldWord(sz);
@@ -1220,25 +1220,25 @@ void PrintEsoteric()
 
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%s esoteric lesson: %s.\n", szSignName[i],
+    sprintf2(S(sz), "%s esoteric lesson: %s.\n", szSignName[i],
       rgEsoLesson[i]);
     FieldWord(sz);
-    sprintf(sz, "%s mundane mantram: \"%s.\"\n",
+    sprintf2(S(sz), "%s mundane mantram: \"%s.\"\n",
       szSignName[i], rgEsoMantra1[i]);
     FieldWord(sz);
-    sprintf(sz, "%s esoteric mantram: \"%s.\"\n",
+    sprintf2(S(sz), "%s esoteric mantram: \"%s.\"\n",
       szSignName[i], rgEsoMantra2[i]);
     FieldWord(sz);
-    sprintf(sz, "%s Light is: \"%s.\"\n", szSignName[i], rgEsoLight[i]);
+    sprintf2(S(sz), "%s Light is: \"%s.\"\n", szSignName[i], rgEsoLight[i]);
     FieldWord(sz);
-    sprintf(sz, "%s Labor of Hercules: %s.\n",
+    sprintf2(S(sz), "%s Labor of Hercules: %s.\n",
       szSignName[i], rgEsoLabor[i]);
     FieldWord(sz);
     PrintL();
   }
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%d%s house characteristics: %s. It's an environment %s.\n",
+    sprintf2(S(sz), "%d%s house characteristics: %s. It's an environment %s.\n",
       i, szSuffix[i], rgEsoHou1[i], rgEsoHou2[i]);
     FieldWord(sz);
   }
@@ -1249,10 +1249,10 @@ void PrintEsoteric()
     if (ignore[i] || !(i <= oNorm && rgEsoObj[i] != NULL && *rgEsoObj[i]))
       continue;
     AnsiColor(kObjA[i]);
-    sprintf(szName, "%s%s%s", i == oFor && !FObjDispCustom(i) ?
+    sprintf2(S(szName), "%s%s%s", i == oFor && !FObjDispCustom(i) ?
       "Part of " : "", szObjDisp[i],
       i == oPal && !FObjDispCustom(i) ? " Athena" : "");
-    sprintf(sz, "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
+    sprintf2(S(sz), "%s esoteric meaning: %s.\n", szName, rgEsoObj[i]);
     FieldWord(sz);
   }
   AnsiColor(kDefault);
@@ -1431,22 +1431,22 @@ void ChartInfluence(void)
   SortRank(power1, rank1, is.nObj, fTrue);
   SortRank(power2, rank2, is.nObj, fTrue);
   SortRank(power,  rank,  is.nObj, fTrue);
-  sprintf(sz, "  Planet:    Position      Aspects    Total Rank  %sPercent\n",
+  sprintf2(S(sz), "  Planet:    Position      Aspects    Total Rank  %sPercent\n",
     us.fSeconds ? " " : ""); PrintSz(sz);
   for (j = 0; j <= is.nObj; j++) {
     i = rgobjList[j];
     if (FIgnore(i))
       continue;
     AnsiColor(kObjA[i]);
-    sprintf(sz, "%8.8s: ", szObjDisp[i]); PrintSz(sz);
-    sprintf(sz, "%6.1f (%2d) +%6.1f (%2d) =%7.1f (%2d) /",
+    sprintf2(S(sz), "%8.8s: ", szObjDisp[i]); PrintSz(sz);
+    sprintf2(S(sz), "%6.1f (%2d) +%6.1f (%2d) =%7.1f (%2d) /",
       power1[i], rank1[i], power2[i], rank2[i], power[i], rank[i]);
     PrintSz(sz);
-    sprintf(sz, us.fSeconds ? "%7.2f%%\n" : "%6.1f%%\n",
+    sprintf2(S(sz), us.fSeconds ? "%7.2f%%\n" : "%6.1f%%\n",
       total > 0.0 ? power[i]/total*100.0 : 0.0); PrintSz(sz);
   }
   AnsiColor(kDefault);
-  sprintf(sz, "   Total: %6.1f      +%6.1f      =%7.1f      / 100.0%s%%\n",
+  sprintf2(S(sz), "   Total: %6.1f      +%6.1f      =%7.1f      / 100.0%s%%\n",
     total1, total2, total, us.fSeconds ? "0" : ""); PrintSz(sz);
 
   // Now, print out a list of power values and relative rankings, based on the
@@ -1513,39 +1513,39 @@ void ChartInfluence(void)
   // Again, determine ranks in the array, and print everything out.
 
   SortRank(power1, rank1, cSign, fFalse);
-  sprintf(sz,
+  sprintf2(S(sz),
     "\n       Sign:  Power Rank  %sPercent  -   Element  Power  %sPercent\n",
     us.fSeconds ? " " : "", us.fSeconds ? " " : ""); PrintSz(sz);
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%11.11s: ", szSignName[i]); PrintSz(sz);
-    sprintf(sz, "%6.1f (%2d) /", power1[i], rank1[i]); PrintSz(sz);
-    sprintf(sz, us.fSeconds ? "%7.2f%%" : "%6.1f%%",
+    sprintf2(S(sz), "%11.11s: ", szSignName[i]); PrintSz(sz);
+    sprintf2(S(sz), "%6.1f (%2d) /", power1[i], rank1[i]); PrintSz(sz);
+    sprintf2(S(sz), us.fSeconds ? "%7.2f%%" : "%6.1f%%",
       total1 > 0.0 ? power1[i]/total1*100.0 : 0.0); PrintSz(sz);
     if (i <= 4) {
-      sprintf(sz, "  -%9.9s:", szElem[i-1]); PrintSz(sz);
+      sprintf2(S(sz), "  -%9.9s:", szElem[i-1]); PrintSz(sz);
       total2 = 0.0;
       for (j = 1; j < cSign; j += 4)
         total2 += power1[i-1+j];
-      sprintf(sz, us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total2,
+      sprintf2(S(sz), us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total2,
         total1 > 0.0 ? total2/total1*100.0 : 0.0); PrintSz(sz);
     } else if (i == 6) {
       AnsiColor(kDefault);
-      sprintf(sz, "  -      Mode  Power  %sPercent", us.fSeconds ? " " : "");
+      sprintf2(S(sz), "  -      Mode  Power  %sPercent", us.fSeconds ? " " : "");
       PrintSz(sz);
     } else if (i >= 7 && i <= 9) {
       AnsiColor(kModeA(i-7));
-      sprintf(sz, "  -%9.9s:", szMode[i-7]); PrintSz(sz);
+      sprintf2(S(sz), "  -%9.9s:", szMode[i-7]); PrintSz(sz);
       total2 = 0.0;
       for (j = 1; j < cSign; j += 3)
         total2 += power1[i-7+j];
-      sprintf(sz, us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total2,
+      sprintf2(S(sz), us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total2,
         total1 > 0.0 ? total2/total1*100.0 : 0.0); PrintSz(sz);
     }
     PrintL();
   }
   AnsiColor(kDefault);
-  sprintf(sz, "      Total:%7.1f      / 100.0%s%%\n",
+  sprintf2(S(sz), "      Total:%7.1f      / 100.0%s%%\n",
     total1, us.fSeconds ? "0" : ""); PrintSz(sz);
 
   // For each house, determine its power based on the power of the objects.
@@ -1582,39 +1582,39 @@ void ChartInfluence(void)
   // Again, determine ranks in the array, and print everything out.
 
   SortRank(power2, rank1, cSign, fFalse);
-  sprintf(sz,
+  sprintf2(S(sz),
     "\nHouse:  Power Rank  %sPercent  -    Element  Power  %sPercent\n",
     us.fSeconds ? " " : "", us.fSeconds ? " " : ""); PrintSz(sz);
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%3d%s: ", i, szSuffix[i]); PrintSz(sz);
-    sprintf(sz, "%6.1f (%2d) /", power2[i], rank1[i]); PrintSz(sz);
-    sprintf(sz, us.fSeconds ? "%7.2f%%" : "%6.1f%%",
+    sprintf2(S(sz), "%3d%s: ", i, szSuffix[i]); PrintSz(sz);
+    sprintf2(S(sz), "%6.1f (%2d) /", power2[i], rank1[i]); PrintSz(sz);
+    sprintf2(S(sz), us.fSeconds ? "%7.2f%%" : "%6.1f%%",
       total2 > 0.0 ? power2[i]/total2*100.0 : 0.0); PrintSz(sz);
     if (i <= 4) {
-      sprintf(sz, "  - %9.9s:", szElemHouse[i-1]); PrintSz(sz);
+      sprintf2(S(sz), "  - %9.9s:", szElemHouse[i-1]); PrintSz(sz);
       total1 = 0.0;
       for (j = 1; j < cSign; j += 4)
         total1 += power2[i-1+j];
-      sprintf(sz, us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total1,
+      sprintf2(S(sz), us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total1,
         total1 > 0.0 ? total1/total2*100.0 : 0.0); PrintSz(sz);
     } else if (i == 6) {
       AnsiColor(kDefault);
-      sprintf(sz, "  -       Mode  Power  %sPercent", us.fSeconds ? " " : "");
+      sprintf2(S(sz), "  -       Mode  Power  %sPercent", us.fSeconds ? " " : "");
       PrintSz(sz);
     } else if (i >= 7 && i <= 9) {
       AnsiColor(kModeA(i-7));
-      sprintf(sz, "  - %9.9s:", szModeHouse[i-7]); PrintSz(sz);
+      sprintf2(S(sz), "  - %9.9s:", szModeHouse[i-7]); PrintSz(sz);
       total1 = 0.0;
       for (j = 1; j < cSign; j += 3)
         total1 += power2[i-7+j];
-      sprintf(sz, us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total1,
+      sprintf2(S(sz), us.fSeconds ? "%7.1f /%7.2f%%" : "%7.1f /%6.1f%%", total1,
         total1 > 0.0 ? total1/total2*100.0 : 0.0); PrintSz(sz);
     }
     PrintL();
   }
   AnsiColor(kDefault);
-  sprintf(sz, "Total:%7.1f      / 100.0%s%%\n",
+  sprintf2(S(sz), "Total:%7.1f      / 100.0%s%%\n",
     total2, us.fSeconds ? "0" : ""); PrintSz(sz);
 }
 

@@ -830,7 +830,7 @@ void XChartGridRelation()
               // For extreme upper left corner, print some little arrows
               // pointing out chart1's planets and chart2's planets.
               c = gi.kiLite;
-              sprintf(sz, "1v 2->");
+              sprintf2(S(sz), "1v 2->");
             }
           } else {
             // Print aspect or midpoint cells.
@@ -900,7 +900,7 @@ void XChartEphemeris()
       m = x1 + NMultDiv(xs, i+dx, dx << 1);
       j = i > cSign ? 1 : i;
       DrawColor(i ? gi.kiLite : gi.kiOn);
-      sprintf(sz, "%s%d", i > 0 ? "+" : "", i);
+      sprintf2(S(sz), "%s%d", i > 0 ? "+" : "", i);
       DrawSz(sz, m, y2+2, dtTop | dtScale2);
       DrawColor(gi.kiGray);
       DrawDash(m, y1, m, y2, 2);
@@ -992,12 +992,12 @@ void XChartEphemeris()
       v-vold > (yFont-2)*gi.nScaleTextT) {
       if (cYea) {
         if (cYea <= 1)
-          sprintf(sz, "%.3s", szMonth[mon]);
+          sprintf2(S(sz), "%.3s", szMonth[mon]);
         else
-          sprintf(sz, "%4d", yea);
+          sprintf2(S(sz), "%4d", yea);
         i = (cYea <= 1 ? mon == mon0 : yea == yea0);
       } else {
-        sprintf(sz, "%2d", d);
+        sprintf2(S(sz), "%2d", d);
         i = (d == day0);
       }
       DrawColor(gs.fLabel && i ? gi.kiOn : gi.kiLite);
@@ -1070,9 +1070,9 @@ void XChartEsoteric()
     DrawColor(gi.kiGray);
     DrawDash(m, y1, m, y2, 2);
     if (i <= cRay)
-      sprintf(sz, "Ray %d", i);
+      sprintf2(S(sz), "Ray %d", i);
     else
-      sprintf(sz, "Average");
+      sprintf2(S(sz), "Average");
     DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
     DrawSz(sz, x1 + xs*(i-1)/8, gi.nScaleTextT2, dtCent | dtTop | dtScale2);
   }
@@ -1141,12 +1141,12 @@ void XChartEsoteric()
     if (d <= daytot && (!cYea || (day == 1 && (cYea <= 1 || mon == 1)))) {
       if (cYea) {
         if (cYea <= 1)
-          sprintf(sz, "%.3s", szMonth[mon]);
+          sprintf2(S(sz), "%.3s", szMonth[mon]);
         else
-          sprintf(sz, "%4d", yea);
+          sprintf2(S(sz), "%4d", yea);
         i = (cYea <= 1 ? mon == Mon : yea == Yea);
       } else {
-        sprintf(sz, "%2d", d);
+        sprintf2(S(sz), "%2d", d);
         i = (d == Day);
       }
       DrawColor(gs.fLabel && i ? gi.kiOn : gi.kiLite);
@@ -1355,11 +1355,11 @@ void XChartTransit(flag fTrans, flag fProg)
 
   DrawColor(gi.kiOn);
   if (!fMonth)
-    sprintf(sz, "%s", SzDate(ciT.mon, ciT.day, ciT.yea, fFalse));
+    sprintf2(S(sz), "%s", SzDate(ciT.mon, ciT.day, ciT.yea, fFalse));
   else if (!fYear)
-    sprintf(sz, "%3.3s%5d", szMonth[ciT.mon], ciT.yea);
+    sprintf2(S(sz), "%3.3s%5d", szMonth[ciT.mon], ciT.yea);
   else if (us.nEphemYears <= 1)
-    sprintf(sz, "%4d", ciT.yea);
+    sprintf2(S(sz), "%4d", ciT.yea);
   else
     sz[0] = chNull;
   if (CchSz(sz) * xFontT < xo)
@@ -1369,9 +1369,9 @@ void XChartTransit(flag fTrans, flag fProg)
   if (!fMonth) {
     for (x = 0; x < 24; x++) {
       if (!us.fEuroTime)
-        sprintf(sz, "%d%c", ((x+11) % 12)+1, x < 12 ? 'a' : 'p');
+        sprintf2(S(sz), "%d%c", ((x+11) % 12)+1, x < 12 ? 'a' : 'p');
       else
-        sprintf(sz, "%d", x);
+        sprintf2(S(sz), "%d", x);
       DrawSz(sz, xo + x*xWid, yp, dtLeft | dtTop | dtScale2);
     }
   } else if (!fYear) {
@@ -1380,19 +1380,19 @@ void XChartTransit(flag fTrans, flag fProg)
         n = DayOfWeek(MM, x+1, YY);
         DrawColor(kRainbowB[n+1]);
       }
-      sprintf(sz, "%d", x+1);
+      sprintf2(S(sz), "%d", x+1);
       DrawSz(sz, xo + x*xWid, yp, dtLeft | dtTop | dtScale2);
     }
   } else if (us.nEphemYears <= 1) {
     for (x = 0; x < cSign; x++) {
       if (gs.fColorSign)
         DrawColor(kElemB[x & 3]);
-      sprintf(sz, "%3.3s", szMonth[x+1]);
+      sprintf2(S(sz), "%3.3s", szMonth[x+1]);
       DrawSz(sz, xo + x*xWid, yp, dtLeft | dtTop | dtScale2);
     }
   } else {
     for (x = 0; x < cYea; x++) {
-      sprintf(sz, "%d", (fTrans || fProg ? YeaT : Yea) - dYea + x);
+      sprintf2(S(sz), "%d", (fTrans || fProg ? YeaT : Yea) - dYea + x);
       DrawSz(sz, xo + x*12*xWid, yp, dtLeft | dtTop | dtScale2);
     }
   }
@@ -1731,7 +1731,7 @@ flag XChartRising()
   // Label vertical (month) axis.
   y = y1;
   for (i = 1; i <= cSign; i++) {
-    sprintf(sz, "%.3s", szMonth[i]);
+    sprintf2(S(sz), "%.3s", szMonth[i]);
     DrawColor(gi.kiOn);
     DrawSz(sz,      xFontT/2, y, dtLeft | dtTop | dtScale2);
     DrawSz(sz, x2 + xFontT/2, y, dtLeft | dtTop | dtScale2);
@@ -1755,9 +1755,9 @@ flag XChartRising()
     x = x1 + NMultDiv(xs, i, 24);
     if (i % n == 0) {
       if (!us.fEuroTime)
-        sprintf(sz, "%d%c", ((i+11) % 12)+1, i < 12 ? 'a' : 'p');
+        sprintf2(S(sz), "%d%c", ((i+11) % 12)+1, i < 12 ? 'a' : 'p');
       else
-        sprintf(sz, "%d", i);
+        sprintf2(S(sz), "%d", i);
       DrawColor(gi.kiOn);
       DrawSz(sz, x, gi.nScaleTextT2,
         dtLeft | dtTop | dtScale2);
@@ -1842,7 +1842,7 @@ void XChartBiorhythm()
   DrawColor(gi.kiLite);
   // Label biorhythm percentages along right vertical axis.
   for (k = -100; k <= 100; k += 10) {
-    sprintf(sz, "%c%3d%%", k < 0 ? '-' : '+', NAbs(k));
+    sprintf2(S(sz), "%c%3d%%", k < 0 ? '-' : '+', NAbs(k));
     y = y1 + NMultDiv(ys, 100-k, 200);
     DrawSz(sz, (x2+gs.xWin)/2, y+2*gi.nScaleTextT, dtCent | dtScale2);
   }
@@ -1850,7 +1850,7 @@ void XChartBiorhythm()
   k = Max(us.nBioday/7, 1);
   for (j = -(us.nBioday/k)*k; j < us.nBioday; j += k) {
     x = x1 + NMultDiv(xs, j+us.nBioday, us.nBioday*2);
-    sprintf(sz, "%c%d", j < 0 ? '-' : '+', NAbs(j));
+    sprintf2(S(sz), "%c%d", j < 0 ? '-' : '+', NAbs(j));
     DrawSz(sz, x, y1-2*gi.nScaleTextT, dtBottom | dtScale2);
   }
   DrawEdge(x1, y1, x2, y2);

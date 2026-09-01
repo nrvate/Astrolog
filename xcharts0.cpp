@@ -148,12 +148,12 @@ void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
   }
 
   // Standard case: Print chart date, time, and location.
-  sprintf(sz, "%.3s %s", szDay[DayOfWeek(pci->mon, pci->day, pci->yea)],
+  sprintf2(S(sz), "%.3s %s", szDay[DayOfWeek(pci->mon, pci->day, pci->yea)],
     SzDate(pci->mon, pci->day, pci->yea, fTrue));
   DrawPrint(sz, gi.kiLite, fFalse);
   DrawPrint(SzTim(pci->tim), gi.kiLite, fTrue);
   fT = f1K || (us.fSeconds && !us.fOffsetOnly && is.ichLocSplit > 0);
-  sprintf(sz, " %s%s%s", fT ? "" : "(",
+  sprintf2(S(sz), " %s%s%s", fT ? "" : "(",
     SzOffset(pci->zon, pci->dst, pci->lon), fT ? "" : ")");
   DrawPrint(sz, gi.kiLite, fFalse);
   if (FSzSet(pci->loc))
@@ -163,19 +163,19 @@ void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
   else {
     pch = SzLocation(pci->lon, pci->lat);
     pch[is.ichLocSplit] = chNull;
-    sprintf(sz, "Longitude: %s", pch);  DrawPrint(sz, gi.kiLite, fFalse);
+    sprintf2(S(sz), "Longitude: %s", pch);  DrawPrint(sz, gi.kiLite, fFalse);
     pch += is.ichLocSplit+1;
-    sprintf(sz, "Latitude:   %s", pch); DrawPrint(sz, gi.kiLite, fFalse);
+    sprintf2(S(sz), "Latitude:   %s", pch); DrawPrint(sz, gi.kiLite, fFalse);
   }
 
   // Sometimes print extra information about chart settings.
   if (!fAll)
     return;
-  sprintf(sz, "%s%s houses", us.fHouse3D == (gi.nMode != gSphere) ?
+  sprintf2(S(sz), "%s%s houses", us.fHouse3D == (gi.nMode != gSphere) ?
     "3D " : (us.fHouse3D && gi.nMode == gSphere ? "2D " : ""),
     szSystem[is.nHouseSystem]);
   DrawPrint(sz, gi.kiLite, fFalse);
-  sprintf(sz, "%s, %s", !us.fSidereal ? "Tropical" :
+  sprintf2(S(sz), "%s, %s", !us.fSidereal ? "Tropical" :
     (!us.fSidereal2 ? "Sidereal" : "Sidereal Inv"),
     us.objCenter == oSun ?
       (!us.fBarycenter ? "Heliocentric" : "Barycentric") :
@@ -183,21 +183,21 @@ void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
       (!us.fTopoPos ? "Geocentric" : "Topocentric") :
     szObjDisp[us.objCenter]));
   DrawPrint(sz, gi.kiLite, fFalse);
-  sprintf(sz, !f1K ? "Julian Day: %13.5f" : "J. Day: %16.8f",
+  sprintf2(S(sz), !f1K ? "Julian Day: %13.5f" : "J. Day: %16.8f",
     JulianDayFromTime(is.T));
   DrawPrint(sz, gi.kiLite, fFalse);
   if (us.fProgress) {
-    sprintf(sz, "Progress To: %s", SzDate(MonT, DayT, YeaT, 3));
+    sprintf2(S(sz), "Progress To: %s", SzDate(MonT, DayT, YeaT, 3));
     DrawPrint(sz, gi.kiLite, fFalse);
   }
   if (us.objRot1 != us.objRot2 || us.fObjRotWhole) {
-    sprintf(sz, "Rotate: %.3s to %.3s%s", szObjDisp[us.objRot1],
+    sprintf2(S(sz), "Rotate: %.3s to %.3s%s", szObjDisp[us.objRot1],
       !ignore[us.objRot2] ? szObjDisp[us.objRot2] : szSignName[sAri],
       us.fObjRotWhole ? "'s sign" : "");
     DrawPrint(sz, gi.kiLite, fFalse);
   }
   if (us.objOnAsc) {
-    sprintf(sz, "Solar: %.4s%s on %.3s", szObjDisp[NAbs(us.objOnAsc)-1],
+    sprintf2(S(sz), "Solar: %.4s%s on %.3s", szObjDisp[NAbs(us.objOnAsc)-1],
       us.fSolarWhole ? "'s sign" : "",
       szObjDisp[us.objOnAsc > 0 ? oAsc : oMC]);
     DrawPrint(sz, gi.kiLite, fFalse);
@@ -213,23 +213,23 @@ void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
   if (us.rHarmonic != 1.0) {
     if (gi.nMode != gMidpoint || us.rHarmonic == 0.0) {
       FormatR(szT, us.rHarmonic, -5);
-      sprintf(sz, "Special: Harmonic %.7s", szT);
+      sprintf2(S(sz), "Special: Harmonic %.7s", szT);
     } else {
       FormatR(szT, rDegMax / us.rHarmonic, -5);
-      sprintf(sz, "Special: Dial %.7s", szT);
+      sprintf2(S(sz), "Special: Dial %.7s", szT);
     }
     DrawPrint(sz, gi.kiLite, fFalse);
   }
   if (us.nDwad == 1)
     DrawPrint("Special: Dwad mode", gi.kiLite, fFalse);
   else if (us.nDwad > 1) {
-    sprintf(sz, "Special: Dwad level %d", us.nDwad);
+    sprintf2(S(sz), "Special: Dwad level %d", us.nDwad);
     DrawPrint(sz, gi.kiLite, fFalse);
   }
   if (us.fNavamsa)
     DrawPrint("Special: Navamsa mode", gi.kiLite, fFalse);
   if (us.fMoonMove && (us.fMoons || us.fStar)) {
-    sprintf(sz, "Special: Overlay %ss",
+    sprintf2(S(sz), "Special: Overlay %ss",
       FStar(us.objCenter) ? "planet" : "moon");
     DrawPrint(sz, gi.kiLite, fFalse);
   }
@@ -237,17 +237,17 @@ void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
     DrawPrint("Special: No Nutation", gi.kiLite, fFalse);
   if (us.rDeltaT != rInvalid) {
     FormatR(szT, us.rDeltaT, -4);
-    sprintf(sz, "Special: Delta-T = %s", szT);
+    sprintf2(S(sz), "Special: Delta-T = %s", szT);
     DrawPrint(sz, gi.kiLite, fFalse);
   }
   if (us.rObjAddition != 0.0) {
-    sprintf(sz, "%s: %s (%s)", us.rObjAddition != us.rCuspAddition ?
+    sprintf2(S(sz), "%s: %s (%s)", us.rObjAddition != us.rCuspAddition ?
       "Objs" : "Time", SzHMS((int)(us.rObjAddition*3600.0 +
       rSmall*RSgn2(us.rObjAddition))*60), SzTim(Tim + us.rObjAddition));
     DrawPrint(sz, gi.kiLite, fFalse);
   }
   if (us.rCuspAddition != 0.0 && us.rCuspAddition != us.rObjAddition) {
-    sprintf(sz, "Cusp: %s (%s)", SzHMS((int)(us.rCuspAddition*3600.0 +
+    sprintf2(S(sz), "Cusp: %s (%s)", SzHMS((int)(us.rCuspAddition*3600.0 +
       rSmall*RSgn2(us.rCuspAddition))*60), SzTim(Tim + us.rCuspAddition));
     DrawPrint(sz, gi.kiLite, fFalse);
   }
@@ -318,11 +318,11 @@ void DrawSidebar()
         if (gs.nScaleText >= 100) {
           AdjustTextScale();
           rays = ChartEsoteric(fTrue);
-          sprintf(sz, "Ray %d", rays/10);
+          sprintf2(S(sz), "Ray %d", rays/10);
           DrawColor(kRayB[RAYT(rays/10)]);
           DrawSz(sz, 7*gi.nScaleT, 7*gi.nScaleT, dtLeft | dtTop | dtScale2);
           if (gs.nDecaType >= 4) {
-            sprintf(sz, ",%d", rays%10);
+            sprintf2(S(sz), ",%d", rays%10);
             DrawColor(kRayB[RAYT(rays%10)]);
             DrawSz(sz, 7*gi.nScaleT + 5*xFontT, 7*gi.nScaleT,
               dtLeft | dtTop | dtScale2);
@@ -336,7 +336,7 @@ void DrawSidebar()
           AdjustTextScale();
           rays = InterpretEsoteric(fTrue);
           for (i = 0; i < 5; i++) {
-            sprintf(sz, "%-4.4s: Ray %d", rgEsoRayArea[i], rays%10);
+            sprintf2(S(sz), "%-4.4s: Ray %d", rgEsoRayArea[i], rays%10);
             DrawColor(kRayB[RAYT(rays%10)]);
             DrawSz(sz, 7*gi.nScaleT, 7*gi.nScaleT +
               (4-i)*gi.nScaleTextT2*yFont2, dtLeft | dtTop | dtScale2);
@@ -404,7 +404,7 @@ void DrawSidebar()
 
   // Print chart header and setting information.
 
-  sprintf(sz, "%s %s", szAppName, szVersionCore);
+  sprintf2(S(sz), "%s %s", szAppName, szVersionCore);
   DrawPrint(sz, gi.kiOn, fFalse);
   if (us.nRel == rcComposite) {
     DrawInfo(&ciMain, szC1, fFalse);
@@ -512,7 +512,7 @@ void DrawSidebar()
   if (us.nHouseSystem != hsNull) {
     DrawPrint("", gi.kiLite, fFalse);
     for (i = 1; i <= cSign; i++) {
-      sprintf(sz, !f1K ? "%2d%s house: " : "%2d%s H.: ", i, szSuffix[i]);
+      sprintf2(S(sz), !f1K ? "%2d%s house: " : "%2d%s H.: ", i, szSuffix[i]);
       y = DrawPrint(sz, kSignB(i), fTrue);
       if (!us.fSeconds && (gs.nScale == 100 || gs.nFontAll == 0 ||
         !gi.fFile || gs.ft == ftBmp || gs.ft == ftSVG) && y < gs.yWin-1) {
@@ -535,7 +535,7 @@ void DrawSidebar()
       (!FCusp(i) || RAbs(planetalt[i]) > rSmall ||
       MinDistance(planet[i], chouse[i-cuspLo+1]) > rSmall)))
       continue;
-    sprintf(sz, VSeconds("%-4.4s: ", "%-3.3s: ", "%-3.3s "), szObjDisp[i]);
+    sprintf2(S(sz), VSeconds("%-4.4s: ", "%-3.3s: ", "%-3.3s "), szObjDisp[i]);
     DrawPrint(sz, kObjB[i], fTrue);
     y = DrawZodiac(planet[i], 2);
     if (!us.fSeconds && i < starLo && gi.nMode != gSector &&
@@ -547,7 +547,7 @@ void DrawSidebar()
       DrawObject(-i-1, gs.xWin-12*gi.nScale, y-(yFont/2-1)*gi.nScale);
       gi.nScale = s;
     }
-    sprintf(sz, !f1K ? "%c " : "%c", ChRet(ret[i]));
+    sprintf2(S(sz), !f1K ? "%c " : "%c", ChRet(ret[i]));
     DrawPrint(sz, gi.kiOn, fTrue);
     if (gi.nMode != gSector || !us.fSeconds) {
       fSav = us.fSeconds; us.fSeconds = fFalse;
@@ -566,9 +566,9 @@ void DrawSidebar()
       if (s > cSector)
         s -= cSector;
       if (!us.fSeconds)
-        sprintf(sz, " %2d", s);
+        sprintf2(S(sz), " %2d", s);
       else
-        sprintf(sz, "%6.3f%c", r + 1.0, pluszone[s] ? '+' : '-');
+        sprintf2(S(sz), "%6.3f%c", r + 1.0, pluszone[s] ? '+' : '-');
       DrawPrint(sz, pluszone[s] ? kRedB : kDkGreenB, fFalse);
     } else
       DrawPrint("", gi.kiOn, fFalse);
@@ -578,29 +578,29 @@ void DrawSidebar()
 
   DrawPrint("", gi.kiLite, fFalse);
   CreateElemTable(&et);
-  sprintf(sz, "Fire: %d,",   et.coElem[eFir]);
+  sprintf2(S(sz), "Fire: %d,",   et.coElem[eFir]);
   DrawPrint(sz, kElemB[eFir], fTrue);
-  sprintf(sz, " Earth: %d,", et.coElem[eEar]);
+  sprintf2(S(sz), " Earth: %d,", et.coElem[eEar]);
   DrawPrint(sz, kElemB[eEar], fFalse);
-  sprintf(sz, "Air : %d,",   et.coElem[eAir]);
+  sprintf2(S(sz), "Air : %d,",   et.coElem[eAir]);
   DrawPrint(sz, kElemB[eAir], fTrue);
-  sprintf(sz, " Water: %d",  et.coElem[eWat]);
+  sprintf2(S(sz), " Water: %d",  et.coElem[eWat]);
   DrawPrint(sz, kElemB[eWat], fFalse);
-  sprintf(sz, "Car: %d,",  et.coMode[0]); DrawPrint(sz, kModeB(0), fTrue);
-  sprintf(sz, " Fix: %d,", et.coMode[1]); DrawPrint(sz, kModeB(1), fTrue);
-  sprintf(sz, " Mut: %d",  et.coMode[2]); DrawPrint(sz, kModeB(2), fFalse);
-  sprintf(sz, "Yang: %d, Yin: %d", et.coYang, et.coYin);
+  sprintf2(S(sz), "Car: %d,",  et.coMode[0]); DrawPrint(sz, kModeB(0), fTrue);
+  sprintf2(S(sz), " Fix: %d,", et.coMode[1]); DrawPrint(sz, kModeB(1), fTrue);
+  sprintf2(S(sz), " Mut: %d",  et.coMode[2]); DrawPrint(sz, kModeB(2), fFalse);
+  sprintf2(S(sz), "Yang: %d, Yin: %d", et.coYang, et.coYin);
   DrawPrint(sz, gi.kiLite, fFalse);
   if (et.coMC > 9 && et.coIC > 9 && et.coAsc > 9 && et.coDes > 9)
     DrawPrintShift(-xFont2*gi.nScaleText/2);
-  sprintf(sz, "M: %d,",  et.coMC);  DrawPrint(sz, kElemB[eEar], fTrue);
-  sprintf(sz, " N: %d,", et.coIC);  DrawPrint(sz, kElemB[eWat], fTrue);
-  sprintf(sz, " A: %d,", et.coAsc); DrawPrint(sz, kElemB[eFir], fTrue);
-  sprintf(sz, " D: %d",  et.coDes); DrawPrint(sz, kElemB[eAir], fFalse);
-  sprintf(sz, "Ang: %d,",  et.coModeH[0]); DrawPrint(sz, kModeB(0), fTrue);
-  sprintf(sz, " Suc: %d,", et.coModeH[1]); DrawPrint(sz, kModeB(1), fTrue);
-  sprintf(sz, " Cad: %d",  et.coModeH[2]); DrawPrint(sz, kModeB(2), fFalse);
-  sprintf(sz, "Learn: %d, Share: %d", et.coLearn, et.coShare);
+  sprintf2(S(sz), "M: %d,",  et.coMC);  DrawPrint(sz, kElemB[eEar], fTrue);
+  sprintf2(S(sz), " N: %d,", et.coIC);  DrawPrint(sz, kElemB[eWat], fTrue);
+  sprintf2(S(sz), " A: %d,", et.coAsc); DrawPrint(sz, kElemB[eFir], fTrue);
+  sprintf2(S(sz), " D: %d",  et.coDes); DrawPrint(sz, kElemB[eAir], fFalse);
+  sprintf2(S(sz), "Ang: %d,",  et.coModeH[0]); DrawPrint(sz, kModeB(0), fTrue);
+  sprintf2(S(sz), " Suc: %d,", et.coModeH[1]); DrawPrint(sz, kModeB(1), fTrue);
+  sprintf2(S(sz), " Cad: %d",  et.coModeH[2]); DrawPrint(sz, kModeB(2), fFalse);
+  sprintf2(S(sz), "Learn: %d, Share: %d", et.coLearn, et.coShare);
   DrawPrint(sz, gi.kiLite, fFalse);
   us.fAnsiChar = a;
 }
@@ -2335,7 +2335,7 @@ LDone:
       rT = rDegHalf - rT;
       xp = rgod[l].x  + NCosD(gi.nScale*8, rT);
       yp = rgod[l].yg + NSinD(gi.nScale*8, rT);
-      sprintf(sz, "%c", chT);
+      sprintf2(S(sz), "%c", chT);
       DrawColor(k);
       DrawSz(sz, xp, yp + gi.nScaleT*2, dtScale2);
     }
@@ -2593,15 +2593,15 @@ void DrawChartX()
   DrawColor(gi.kiLite);
   if (fDrawText) {
     if (FNoTimeOrSpace(ciMain))
-      sprintf(sz, "(No time or space)");
+      sprintf2(S(sz), "(No time or space)");
     else if (us.nRel == rcComposite)
-      sprintf(sz, "(Composite)");
+      sprintf2(S(sz), "(Composite)");
     else {
       fSav = us.fAnsiChar;
       us.fAnsiChar =
         (gs.nFontTxt == 0 || (gs.ft != ftPS && gs.ft != ftWmf)) << 1;
       i = DayOfWeek(Mon, Day, Yea);
-      sprintf(sz, "%s%s%.3s %s %s (%s) %s%s%s",
+      sprintf2(S(sz), "%s%s%.3s %s %s (%s) %s%s%s",
         FSzSet(ciCore.nam) ? ciCore.nam : "", FSzSet(ciCore.nam) ? ", " : "",
         szDay[i], SzDate(Mon, Day, Yea, 2), SzTim(Tim),
         SzOffset(Zon, Dst, Lon), FSzSet(ciCore.loc) ? ciCore.loc : "",

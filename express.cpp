@@ -2096,7 +2096,7 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
         n = 0;
       break;
     }
-    sprintf(sz, "Function %d is undefined.", ifun);
+    sprintf2(S(sz), "Function %d is undefined.", ifun);
     PrintError(sz);
     return fFalse;
   }
@@ -2577,13 +2577,13 @@ flag FCreateTries()
     cs = ILookupTrie(xi.rgsTrieFun,
       rgfun[isz].szName, CchSz(rgfun[isz].szName), fTrue);
     if (cs != isz) {
-      sprintf(sz, "Function string %d (%s) maps to trie value %d.",
+      sprintf2(S(sz), "Function string %d (%s) maps to trie value %d.",
         isz, rgfun[isz].szName, cs);
       PrintError(sz);
       break;
     }
     if (rgfun[isz].ifun != isz) {
-      sprintf(sz, "Function %d (%s) defined in slot %d.",
+      sprintf2(S(sz), "Function %d (%s) defined in slot %d.",
         rgfun[isz].ifun, rgfun[isz].szName, isz);
       PrintError(sz);
       break;
@@ -2741,10 +2741,10 @@ flag ShowParseExpression(CONST char *sz)
 
   GetParameter(sz, &par);
   if (!par.fReal)
-    sprintf(szNum, "%d", par.n);
+    sprintf2(S(szNum), "%d", par.n);
   else
     FormatR(szNum, par.r, 6);
-  sprintf(szMsg, "Expression returned: %s\n", szNum);
+  sprintf2(S(szMsg), "Expression returned: %s\n", szNum);
   PrintNotice(szMsg);
   return fTrue;
 }

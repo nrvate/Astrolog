@@ -103,14 +103,14 @@ flag FAllocateBmp(Bitmap *b, int x, int y)
   if (x == b->x && y == b->y)
     return fTrue;
   if (x < 0 || y < 0 || x > zColmap || y > zColmap) {
-    sprintf(sz, "Can't create color bitmap larger than %d by %d!\n",
+    sprintf2(S(sz), "Can't create color bitmap larger than %d by %d!\n",
       zColmap, zColmap);
     PrintError(sz);
     return fFalse;
   }
   cb = CbColmap(x, y);
   if (cb < 0) {
-    sprintf(sz, "Can't allocate color bitmap of size %d by %d!\n", x, y);
+    sprintf2(S(sz), "Can't allocate color bitmap of size %d by %d!\n", x, y);
     PrintError(sz);
     return fFalse;
   }
@@ -1339,7 +1339,7 @@ flag BeginFileX()
 #ifndef WIN
   if (gi.szFileOut == NULL && (gs.ft != ftBmp || (gs.ft == ftBmp &&
     (gs.chBmpMode == 'B' || gs.chBmpMode == 'P')))) {
-    sprintf(sz, "(It is recommended to specify an extension of '.%s'.)\n",
+    sprintf2(S(sz), "(It is recommended to specify an extension of '.%s'.)\n",
       gs.ft == ftBmp ? (gs.chBmpMode == 'B' ? "bmp" : "png") :
       gs.ft == ftWmf ? "wmf" : (gs.ft == ftSVG ? "svg" : (gs.ft == ftPS ?
 #ifdef PSCRIPT
@@ -1355,7 +1355,7 @@ flag BeginFileX()
   loop {
 #ifndef WIN
     if (gi.szFileOut == NULL) {
-      sprintf(sz, "Enter name of file to write %s to", gs.ft == ftBmp ?
+      sprintf2(S(sz), "Enter name of file to write %s to", gs.ft == ftBmp ?
         "bitmap" : (gs.ft == ftPS ? "PostScript" : (gs.ft == ftWmf ?
         "metafile" : (gs.ft == ftSVG ? "SVG" : "wireframe"))));
       InputString(sz, sz);
@@ -1379,7 +1379,7 @@ flag BeginFileX()
     if (wi.fAutoSave)
       break;
 #endif
-    sprintf(sz, "Couldn't create output file: %s", gi.szFileOut);
+    sprintf2(S(sz), "Couldn't create output file: %s", gi.szFileOut);
     PrintWarning(sz);
     FCloneSz(NULL, &gi.szFileOut);
 #ifdef WIN
@@ -1659,7 +1659,7 @@ void MetaWord(word w)
   char sz[cchSzDef];
 
   if ((pbyte)gi.pwMetaCur - gi.bm >= gi.cbMeta) {
-    sprintf(sz, "Metafile would be more than %ld bytes.", gi.cbMeta);
+    sprintf2(S(sz), "Metafile would be more than %ld bytes.", gi.cbMeta);
     PrintError(sz);
     Terminate(tcFatal);
   }
@@ -1950,7 +1950,7 @@ void WireNum(int n)
   char sz[cchSzDef];
 
   if ((pbyte)gi.pwWireCur - gi.bm >= gi.cbWire) {
-    sprintf(sz, "Wireframe would be more than %ld bytes.", gi.cbWire);
+    sprintf2(S(sz), "Wireframe would be more than %ld bytes.", gi.cbWire);
     PrintError(sz);
     Terminate(tcFatal);
   }
@@ -2607,7 +2607,7 @@ void WireChartOrbit()
       rT = rT - planet[j] + rDegHalf;
       xd = x[j] + NCosD(7*gi.nScale, rT);
       yd = y[j] + NSinD(7*gi.nScale, rT);
-      sprintf(sz, "%c", chT);
+      sprintf2(S(sz), "%c", chT);
       DrawColor(k);
       if (!gs.fAlt || j > oVes)
         i = 0;
@@ -2946,14 +2946,14 @@ void WireChartSphere()
       if (gs.fColorHouse)
         DrawColor(gi.kiOn);
       WireSphereLocal((real)i, 0.0, zr + k, &xp, &yp, &zp);
-      sprintf(sz, "%c", rgszDir[j][0]);
+      sprintf2(S(sz), "%c", rgszDir[j][0]);
       gi.zDefault = zp;
       DrawSz(sz, xp, yp, dtCent);
     }
     for (j = -90; j <= 90; j += nDegHalf) {
       WireSphereLocal(0.0, (real)j, zr + k, &xp, &yp, &zp);
       DrawColor(gs.fColorHouse ? gi.kiOn : (kObjB[j <= 0 ? oMC : oNad]));
-      sprintf(sz, "%c", j <= 0 ? 'Z' : 'N');
+      sprintf2(S(sz), "%c", j <= 0 ? 'Z' : 'N');
       gi.zDefault = zp;
       DrawSz(sz, xp, yp, dtCent);
     }
@@ -3028,7 +3028,7 @@ void WireChartSphere()
       while (EnumMoonsRing(&i, &j, &rT, &k, &chT, fTrue)) {
         xp = rgx[j] + NCosD(zGlyph, rT);
         yp = rgy[j] + NSinD(zGlyph, rT);
-        sprintf(sz, "%c", chT);
+        sprintf2(S(sz), "%c", chT);
         DrawColor(k);
         gi.zDefault = rgz[j] - zGlyph;
         DrawSz(sz, xp, yp, dtScale2);

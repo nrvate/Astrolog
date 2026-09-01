@@ -100,17 +100,17 @@ void DisplayCredits(void)
 
   PrintW(NULL, -1);
 #ifdef PC
-  sprintf(szT, " for %s Windows", szArchCore);
+  sprintf2(S(szT), " for %s Windows", szArchCore);
 #else
   *szT = chNull;
 #endif
-  sprintf(sz, "** %s version %s%s **", szAppName, szVersionCore, szT);
+  sprintf2(S(sz), "** %s version %s%s **", szAppName, szVersionCore, szT);
 #ifdef WIN
   PrintW(sz, gs.fInverse ? kBlackA : kWhiteA);
 #else
   PrintW(sz, kWhiteA);
 #endif
-  sprintf(sz, "Released %s - By Walter D. Pullen", szDateCore);
+  sprintf2(S(sz), "Released %s - By Walter D. Pullen", szDateCore);
   PrintW(sz, kLtGrayA);
   PrintW(szAddressCore, kCyanA);
   PrintW(NULL, 0);
@@ -231,7 +231,7 @@ void DisplaySwitches(void)
 {
   char sz[cchSzDef];
 
-  sprintf(sz, "%s (version %s) command switches:", szAppName, szVersionCore);
+  sprintf2(S(sz), "%s (version %s) command switches:", szAppName, szVersionCore);
   PrintS(sz);
   PrintS(" _H: Display this help list.");
   PrintS(" _Hc: Display program credits and copyrights.");
@@ -246,7 +246,7 @@ void DisplaySwitches(void)
 #ifdef INTERPRET
   PrintS(" _HI: Display meanings of signs, houses, planets, and aspects.");
 #endif
-  sprintf(sz,
+  sprintf2(S(sz),
     " _He: Display all tables together (_Hc_H_Y_HX_HC_HO_HA%s_HS_H7%s).",
 #ifdef CONSTEL
   "_HF",
@@ -582,7 +582,7 @@ void DisplaySwitchesRare(void)
 {
   char sz[cchSzDef];
 
-  sprintf(sz, "%s (version %s) obscure command switches:",
+  sprintf2(S(sz), "%s (version %s) obscure command switches:",
     szAppName, szVersionCore);
   PrintS(sz);
   PrintS(" _Y: Display this help list.");
@@ -877,7 +877,7 @@ void PrintObjects(void)
   int mon, day, yea;
 #endif
 
-  sprintf(sz, "%s planets and objects:\n", szAppName); PrintSz(sz);
+  sprintf2(S(sz), "%s planets and objects:\n", szAppName); PrintSz(sz);
   PrintSz("Num. Name       Rule     Detriment Exalt Fall "
     "Esoteric Hierarchical Ray\n\n");
   for (l = 0; l <= oNorm; l++) {
@@ -885,69 +885,69 @@ void PrintObjects(void)
     if (ignore[i])
       continue;
     AnsiColor(kObjA[i]);
-    sprintf(sz, "%3d %-12s", i, szObjDisp[i]); PrintSz(sz);
+    sprintf2(S(sz), "%3d %-12s", i, szObjDisp[i]); PrintSz(sz);
 
     // Print rulerships and exaltations for the planets.
 
     j = ruler1[OBJT(i)]; k = ruler2[OBJT(i)];
     if (j) {
-      sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[j]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz(" ");
     if (k) {
-      sprintf(sz, "%.3s", szSignName[k]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[k]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz("  ");
     if (j) {
-      sprintf(sz, "%.3s", szSignName[Mod12(j+6)]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[Mod12(j+6)]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz(" ");
     if (k) {
-      sprintf(sz, "%.3s", szSignName[Mod12(k+6)]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[Mod12(k+6)]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz("   ");
 
     j = exalt[OBJT(i)];
     if (j) {
-      sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[j]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz("   ");
     if (j) {
-      sprintf(sz, "%.3s", szSignName[Mod12(j+6)]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[Mod12(j+6)]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz("  ");
 
     j = rgObjEso1[OBJT(i)]; k = rgObjEso2[OBJT(i)];
     if (j) {
-      sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[j]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz(" ");
     if (k) {
-      sprintf(sz, "%.3s", szSignName[k]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[k]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz("  ");
     j = rgObjHie1[OBJT(i)]; k = rgObjHie2[OBJT(i)];
     if (j) {
-      sprintf(sz, "%.3s", szSignName[j]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[j]); PrintSz(sz);
     } else
       PrintSz("   ");
     PrintSz(" ");
     if (k) {
-      sprintf(sz, "%.3s", szSignName[k]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[k]); PrintSz(sz);
     } else
       PrintSz("   ");
 
     if (rgObjRay[OBJT(i)]) {
       PrintTab(' ', 6);
-      sprintf(sz, "%d", rgObjRay[OBJT(i)]); PrintSz(sz);
+      sprintf2(S(sz), "%d", rgObjRay[OBJT(i)]); PrintSz(sz);
     }
     PrintL();
   }
@@ -959,13 +959,13 @@ void PrintObjects(void)
     for (i = starLo; i <= starHi; i++) if (!ignore[i]) {
       j = rgobjList[i];
       AnsiColor(kObjA[j]);
-      sprintf(sz, "%3d %-12s", i, szObjDisp[j]); PrintSz(sz);
-      sprintf(sz, "Star #%2d  ", i-oNorm); PrintSz(sz);
+      sprintf2(S(sz), "%3d %-12s", i, szObjDisp[j]); PrintSz(sz);
+      sprintf2(S(sz), "Star #%2d  ", i-oNorm); PrintSz(sz);
       PrintZodiac(planet[j]);
       PrintTab(' ', 3);
       PrintAltitude(planetalt[j]);
       AnsiColor(kObjA[j]);
-      sprintf(sz, " %5.2f\n", rStarBright[j-oNorm]); PrintSz(sz);
+      sprintf2(S(sz), " %5.2f\n", rStarBright[j-oNorm]); PrintSz(sz);
     }
   }
   AnsiColor(kDefault);
@@ -979,12 +979,12 @@ void PrintObjects(void)
       AnsiColor(es.ki != kDefault ? es.ki : KStar2A(es.mag));
       if (es.mag == rStarNot)
         es.mag = 99.99;
-      sprintf(sz, "%4d %-8.8s ", i, es.pchDes); PrintSz(sz);
+      sprintf2(S(sz), "%4d %-8.8s ", i, es.pchDes); PrintSz(sz);
       PrintZodiac(es.lon);
       PrintCh(' ');
       PrintAltitude(es.lat);
       AnsiColor(es.ki != kDefault ? es.ki : KStar2A(es.mag));
-      sprintf(sz, " %5.2f%s%s\n", es.mag, *es.pchNam ? " " : "", es.pchNam);
+      sprintf2(S(sz), " %5.2f%s%s\n", es.mag, *es.pchNam ? " " : "", es.pchNam);
       PrintSz(sz);
     }
   }
@@ -995,7 +995,7 @@ void PrintObjects(void)
     SwissComputeAsteroidSort(is.T, NULL);
     for (i = gs.nAstLo; SwissComputeAsteroidSort(is.T, &es); i++) {
       AnsiColor(es.ki != kDefault ? es.ki : kDefault);
-      sprintf(sz, "%6d ", i); PrintSz(sz);
+      sprintf2(S(sz), "%6d ", i); PrintSz(sz);
       PrintZodiac(es.lon);
       PrintCh(' ');
       PrintAltitude(es.lat);
@@ -1004,12 +1004,12 @@ void PrintObjects(void)
         SwissGetFileData(&jt[0], &jt[1]);
         for (j = 0; j <= 1; j++) {
           SwissRevJul(jt[j], fFalse, &mon, &day, &yea, &tim);
-          sprintf(sz, " %s%s %s%s", j <= 0 ? "(" : "",
+          sprintf2(S(sz), " %s%s %s%s", j <= 0 ? "(" : "",
             SzDate(mon, day, yea, 0), SzTim(tim), j <= 0 ? " -" : ")");
           PrintSz(sz);
         }
       }
-      sprintf(sz, " %s\n", es.sz); PrintSz(sz);
+      sprintf2(S(sz), " %s\n", es.sz); PrintSz(sz);
     }
   }
 #endif
@@ -1027,7 +1027,7 @@ void PrintAspects(void)
   real rAngMin = -rLarge, rAng, rSum = 0.0, rSum2 = 0.0, r1, r2;
 
   iMax = !us.fParallel ? cAspect : aOpp;
-  sprintf(sz,
+  sprintf2(S(sz),
     "%s aspects:\nNo. Name         Abbrev. ", szAppName); PrintSz(sz);
   PrintSz("Angle     Orb          Description of glyph\n\n");
   for (i = 1; i <= iMax; i++) {
@@ -1035,7 +1035,7 @@ void PrintAspects(void)
     AnsiColor(kAspA[ASPT(i)]);
 
     // Print aspect angle.
-    sprintf(sz, "%2d %-15s(%s) %6.2f",
+    sprintf2(S(sz), "%2d %-15s(%s) %6.2f",
       i, szAspectDisp[i2], szAspectAbbrevDisp[i2], rAspAngle[ASPT(i)]);
     for (pch = sz; *pch; pch++)
       ;
@@ -1049,7 +1049,7 @@ void PrintAspects(void)
     PrintSz(" +/- ");
     FormatR(sz, rAspOrb[ASPT(i)], -1); PrintSz(sz);
     PrintTab(' ', 3-CchSz(sz));
-    sprintf(sz, " degrees  %s\n", szAspectGlyphDisp[i2]); PrintSz(sz);
+    sprintf2(S(sz), " degrees  %s\n", szAspectGlyphDisp[i2]); PrintSz(sz);
   }
   AnsiColor(kDefault);
   if (us.fParallel)
@@ -1073,7 +1073,7 @@ void PrintAspects(void)
       AnsiColor(kDkGrayA);
       r2 = (i2 < 0 ? rDegHalf : rAspAngle[ASPT(i2)]-rAspOrb[ASPT(i2)]);
       r1 = (iOld < 0 ? 0.0 : rAspAngle[ASPT(iOld)]+rAspOrb[ASPT(iOld)]);
-      sprintf(sz, "     No aspect      covers %6.2f to %6.2f - span %6.2f",
+      sprintf2(S(sz), "     No aspect      covers %6.2f to %6.2f - span %6.2f",
         r1, r2, r2-r1);
       if (sz[31] == '0' && sz[32] == '0')
         sz[30] = sz[31] = sz[32] = ' ';
@@ -1093,7 +1093,7 @@ void PrintAspects(void)
       break;
     // Print degree range covered by current aspect.
     AnsiColor(kAspA[ASPT(i2)]);
-    sprintf(sz, "%s: %-14s covers %6.2f to %6.2f - span %6.2f\n",
+    sprintf2(S(sz), "%s: %-14s covers %6.2f to %6.2f - span %6.2f\n",
       szAspectAbbrevDisp[i2], szAspectDisp[i2],
       rAspAngle[ASPT(i2)]-rAspOrb[ASPT(i2)],
       rAspAngle[ASPT(i2)]+rAspOrb[ASPT(i2)], rAspOrb[ASPT(i2)]*2.0);
@@ -1114,7 +1114,7 @@ void PrintAspects(void)
   else
     PrintL();
   AnsiColor(kDefault);
-  sprintf(sz, "Total aspects (%.2f, %.2f%%), Total gaps (%.2f, %.2f%%)\n",
+  sprintf2(S(sz), "Total aspects (%.2f, %.2f%%), Total gaps (%.2f, %.2f%%)\n",
     rSum, rSum/rDegHalf*100.0, rSum2, rSum2/rDegHalf*100.0);
   PrintSz(sz);
 }
@@ -1128,12 +1128,12 @@ void PrintSigns(void)
   char sz[cchSzDef];
   int i, j;
 
-  sprintf(sz, "%s signs and houses:\n", szAppName); PrintSz(sz);
+  sprintf2(S(sz), "%s signs and houses:\n", szAppName); PrintSz(sz);
   PrintSz("Sign        English name     House  Traditional name");
   PrintTab(' ', 19); PrintSz("Ruler\n\n");
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%-12sthe %-14s%2d%s  House of %-24s  %s\n",
+    sprintf2(S(sz), "%-12sthe %-14s%2d%s  House of %-24s  %s\n",
       szSignName[i], szSignEnglish[i], i, szSuffix[i], szHouseTradition[i],
       szObjDisp[rules[SIGT(i)]]);
     PrintSz(sz);
@@ -1145,41 +1145,41 @@ void PrintSigns(void)
     "Exalt Detriment  Fall\n\n");
   for (i = 1; i <= cSign; i++) {
     AnsiColor(kSignA(i));
-    sprintf(sz, "%2d  %-11s%5d ", i, szSignName[i], rgSignRay[SIGT(i)]);
+    sprintf2(S(sz), "%2d  %-11s%5d ", i, szSignName[i], rgSignRay[SIGT(i)]);
     PrintSz(sz);
 
-    sprintf(sz, " %-4.4s", szObjDisp[rules[SIGT(i)]]); PrintSz(sz);
+    sprintf2(S(sz), " %-4.4s", szObjDisp[rules[SIGT(i)]]); PrintSz(sz);
     if (rules2[SIGT(i)] > 0) {
-      sprintf(sz, " %-4.4s", szObjDisp[rules2[SIGT(i)]]); PrintSz(sz);
+      sprintf2(S(sz), " %-4.4s", szObjDisp[rules2[SIGT(i)]]); PrintSz(sz);
     } else
       PrintSz("     ");
     PrintSz(" ");
     for (j = 0; j <= oNorm; j++)
       if (rgObjEso1[OBJT(j)] == i && !FCusp(j)) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     for (j = 0; j <= oNorm; j++)
       if (rgObjEso2[OBJT(j)] == i && !FCusp(j)) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     PrintSz(" ");
     for (j = 0; j <= oNorm; j++)
       if (rgObjHie1[OBJT(j)] == i && !FCusp(j)) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     for (j = 0; j <= oNorm; j++)
       if (rgObjHie2[OBJT(j)] == i && !FCusp(j)) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
 
     PrintSz("   ");
     for (j = 0; j <= oNorm; j++)
       if (exalt[OBJT(j)] == i && (FBetween(j, oSun, oPlu) || !ignore[j])) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
 
@@ -1187,20 +1187,20 @@ void PrintSigns(void)
     for (j = 1; j <= oNorm; j++)
       if (Mod12(ruler1[OBJT(j)]+6) == i ||
         (ruler2[OBJT(j)] && Mod12(ruler2[OBJT(j)]+6) == i)) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oNorm) PrintSz("     ");
     for (j++; j <= oPlu; j++)
       if (Mod12(ruler1[OBJT(j)]+6) == i ||
         (ruler2[OBJT(j)] && Mod12(ruler2[OBJT(j)]+6) == i)) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     if (j > oPlu) PrintSz("     ");
     PrintSz(" ");
     for (j = 0; j <= oNorm; j++)
       if (exalt[OBJT(j)] && Mod12(exalt[OBJT(j)]+6) == i &&
         (FBetween(j, oSun, oPlu) || !ignore[j])) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz); break;
       }
     PrintL();
   }
@@ -1271,8 +1271,8 @@ void GetSzConstel(char *szGen, int i)
     GetSzGenitive(szGen, szInst+1);
     return;
   }
-  sprintf(sz1, "%s", szGen);
-  sprintf(sz2, "%s", pchSpace+1);
+  sprintf2(S(sz1), "%s", szGen);
+  sprintf2(S(sz2), "%s", pchSpace+1);
   szInst = GetSzGenitive(sz1, szInst);
   GetSzGenitive(sz2, szInst);
   sprintf(szGen, "%s %s", sz1, sz2);
@@ -1287,7 +1287,7 @@ void PrintConstellations(void)
   int i, j = eWat;
   char szGen[cchSzDef], sz[cchSzDef], chLast = chNull;
 
-  sprintf(sz, "%s constellations:\n", szAppName); PrintSz(sz);
+  sprintf2(S(sz), "%s constellations:\n", szAppName); PrintSz(sz);
   PrintSz("No. Name                Abbrev.   "
     "Meaning            Genitive form\n\n");
   for (i = 1; i <= cCnstl; i++) {
@@ -1296,15 +1296,15 @@ void PrintConstellations(void)
       j = (j + 1) & 3;
       AnsiColor(kElemA[j]);
     }
-    sprintf(sz, "%2d: %-19s (%s) ", i, szCnstlName[i], szCnstlAbbrev[i]);
+    sprintf2(S(sz), "%2d: %-19s (%s) ", i, szCnstlName[i], szCnstlAbbrev[i]);
     PrintSz(sz);
     if (szCnstlMeaning[i][0] == ' ')
-      sprintf(sz, "%-22s", szCnstlMeaning[i]+1);
+      sprintf2(S(sz), "%-22s", szCnstlMeaning[i]+1);
     else
-      sprintf(sz, "the %-18s", szCnstlMeaning[i]);
+      sprintf2(S(sz), "the %-18s", szCnstlMeaning[i]);
     PrintSz(sz);
     GetSzConstel(szGen, i);
-    sprintf(sz, " (%s)\n", szGen); PrintSz(sz);
+    sprintf2(S(sz), " (%s)\n", szGen); PrintSz(sz);
   }
   AnsiColor(kDefault);
 }
@@ -1325,7 +1325,7 @@ void PrintOrbit(void)
     CastChart(0);
 
   // Loop over each object and print its data.
-  sprintf(sz, "%s planets:\n", szAppName); PrintSz(sz);
+  sprintf2(S(sz), "%s planets:\n", szAppName); PrintSz(sz);
   PrintSz("   Name: Distance   Year Diameter     Day       Mass Density  "
     "Axis Satellites\n\n");
   for (i = 0; i <= is.nObj; i++) {
@@ -1333,29 +1333,29 @@ void PrintOrbit(void)
       continue;
     j = rgobjList[i];
     AnsiColor(kObjA[j]);
-    sprintf(sz, "%7.7s: %8.4f", szObjDisp[j],
+    sprintf2(S(sz), "%7.7s: %8.4f", szObjDisp[j],
       j < starLo ? rObjDist[j]/rObjDist[oEar] : cp0.dist[j]/rLYToAU);
     PrintSz(sz);
     if (j < starLo) {
       if (rObjYear[j] < 1000.0)
-        sprintf(sz, " %6.2f", rObjYear[j]);
+        sprintf2(S(sz), " %6.2f", rObjYear[j]);
       else
-        sprintf(sz, " %6.0f", rObjYear[j]);
+        sprintf2(S(sz), " %6.0f", rObjYear[j]);
       PrintSz(sz);
       if (j <= oVes || j >= dwarfLo) {
         if (!us.fEuroDist)
-          sprintf(sz, " %8.4f", rObjDiam[j]/rObjDiam[oEar]);
+          sprintf2(S(sz), " %8.4f", rObjDiam[j]/rObjDiam[oEar]);
         else {
           if (rObjDiam[j] < 1000000.0)
-            sprintf(sz, " %8.1f", rObjDiam[j]);
+            sprintf2(S(sz), " %8.1f", rObjDiam[j]);
           else
-            sprintf(sz, " %8.0f", rObjDiam[j]);
+            sprintf2(S(sz), " %8.0f", rObjDiam[j]);
         }
         PrintSz(sz);
-        sprintf(sz, " %7.2f", rObjDay[j]); PrintSz(sz);
+        sprintf2(S(sz), " %7.2f", rObjDay[j]); PrintSz(sz);
         if (j <= oPlu) {
           r = rObjDiam[j]*1000.0/2.0;
-          sprintf(sz, " %10.3f %7.2f %5.2f %10d", rObjMass[j],
+          sprintf2(S(sz), " %10.3f %7.2f %5.2f %10d", rObjMass[j],
             (rObjMass[j]*5.974E24/1000.0)/((4.0/3.0)*(r*r*r)*rPi),
             rObjAxis[j], cSatellite[j]);
           PrintSz(sz);
@@ -1377,26 +1377,26 @@ void PrintRay()
   int i, j, c;
 
   EnsureRay();
-  sprintf(sz, "%s Rays:\nRay  Name", szAppName); PrintSz(sz);
+  sprintf2(S(sz), "%s Rays:\nRay  Name", szAppName); PrintSz(sz);
   PrintTab(' ', 24);
   PrintSz("Will to    Signs       Slice  Planets\n\n");
   for (i = 1; i <= cRay; i++) {
     AnsiColor(kRayA[RAYT(i)]);
-    sprintf(sz, "%d  %-28s  %-9s ", i,
+    sprintf2(S(sz), "%d  %-28s  %-9s ", i,
       szRayName[RAYT(i)], szRayWill[RAYT(i)]);
     PrintSz(sz);
     c = 0;
     for (j = 1; j <= cSign; j++)
       if (rgSignRay2[SIGT(j)][i]) {
-        sprintf(sz, " %3.3s", szSignName[j]); PrintSz(sz);
+        sprintf2(S(sz), " %3.3s", szSignName[j]); PrintSz(sz);
         c += rgSignRay2[SIGT(j)][i];
       }
-    sprintf(sz, "%6.2f ", (real)c / 420.0); PrintSz(sz);
+    sprintf2(S(sz), "%6.2f ", (real)c / 420.0); PrintSz(sz);
     for (j = 0; j <= oNorm; j++) {
       // Dwarf and other minor body Rays are only included if unrestricted.
       if (rgObjRay[OBJT(j)] == i && !FCusp(j) &&
         (j <= oPlu || j == oVul || !ignore[j])) {
-        sprintf(sz, " %-4.4s", szObjDisp[j]); PrintSz(sz);
+        sprintf2(S(sz), " %-4.4s", szObjDisp[j]); PrintSz(sz);
       }
     }
     PrintL();
@@ -1617,11 +1617,11 @@ void DisplayArabic(void)
       continue;
     }
 #endif
-    sprintf(sz, "%3d: %23.23s ", ++h, ai[l].name); PrintSz(sz);
+    sprintf2(S(sz), "%3d: %23.23s ", ++h, ai[l].name); PrintSz(sz);
     PrintZodiac(rPart[l]);
     PrintCh(ChRet(rDir[l]));
     j = NHousePlaceIn2D(rPart[l]);
-    sprintf(sz, " [%2d%s] ", j, szSuffix[j]);
+    sprintf2(S(sz), " [%2d%s] ", j, szSuffix[j]);
     AnsiColor(kSignA(j)); PrintSz(sz); AnsiColor(kDefault);
     PrintCh('(');
     for (j = 0; j < 3; j++) {
@@ -1639,18 +1639,18 @@ void DisplayArabic(void)
       ch = *pch;
       if (k < 1) {
         AnsiColor(kObjA[oFor]);
-        sprintf(sz, "%3.3s", ai[-k].name); PrintSz(sz);
+        sprintf2(S(sz), "%3.3s", ai[-k].name); PrintSz(sz);
       } else {
         if (ch == ' ' || ch == 'H' || ch == 'R' || ch == 'D') {
           AnsiColor(kSignA(ruler1[OBJT(k)]));
-          sprintf(sz, "%.3s", szObjDisp[k]);
+          sprintf2(S(sz), "%.3s", szObjDisp[k]);
         } else if (FBetween(ch, '0', '3')) {
           k = (ch-'0') * 100 + k;
           AnsiColor(kSignA(k/30+1));
-          sprintf(sz, "%2d%.3s", k%30, szSignName[k/30+1]);
+          sprintf2(S(sz), "%2d%.3s", k%30, szSignName[k/30+1]);
         } else {
           AnsiColor(kSignA(k));
-          sprintf(sz, "%3d", k);
+          sprintf2(S(sz), "%3d", k);
         }
         PrintSz(sz);
       }
@@ -1666,7 +1666,7 @@ void DisplayArabic(void)
         PrintCh(ch);
       }
       if (j < 2) {
-        sprintf(sz, " %c ", (j < 1 == us.fArabicFlip) ? '+' : '-');
+        sprintf2(S(sz), " %c ", (j < 1 == us.fArabicFlip) ? '+' : '-');
         PrintSz(sz);
       }
     }
@@ -1705,7 +1705,7 @@ void DisplayKeysX(void)
 {
   char sz[cchSzDef];
 
-  sprintf(sz, "%s graphics screen key press options (version %s):",
+  sprintf2(S(sz), "%s graphics screen key press options (version %s):",
     szAppName, szVersionCore);
   PrintS(sz);
   PrintS(" Press '?' to display this list of key options.");

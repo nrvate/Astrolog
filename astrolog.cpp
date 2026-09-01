@@ -152,7 +152,7 @@ void Action(void)
   if (is.szFileScreen) {
     is.S = fopen(is.szFileScreen, "w");
     if (is.S == NULL) {
-      sprintf(sz, "File %s can not be created.", is.szFileScreen);
+      sprintf2(S(sz), "File %s can not be created.", is.szFileScreen);
       PrintError(sz);
       is.S = stdout;
     }
@@ -172,7 +172,7 @@ void Action(void)
         "EndHTML:00010000\n"
         "StartFragment:00000196\n"
         "EndFragment:00010000\n");
-    sprintf(sz, "<html>\n<head><meta charset=\"UTF-8\"><title>Astrolog %s"
+    sprintf2(S(sz), "<html>\n<head><meta charset=\"UTF-8\"><title>Astrolog %s"
       "</title></head>\n<body>", szVersionCore); PrintSz(sz);
     if (fHTMLClip)
       PrintSz("\n<!--StartFragment -->\n");
@@ -382,7 +382,7 @@ flag FProcessCommandLine(CONST char *szLine)
     fileT = fopen(szLine, "r");
     if (fileT != NULL) {
       fclose(fileT);
-      sprintf(szCommandLine, "-i \"%s\"", szLine);
+      sprintf2(S(szCommandLine), "-i \"%s\"", szLine);
       fT = fTrue;
     }
   }
@@ -393,7 +393,7 @@ flag FProcessCommandLine(CONST char *szLine)
   argc = NParseCommandLine(szCommandLine, rgsz);
   fT = FProcessSwitches(argc, rgsz, NULL);
   if (!fT) {
-    sprintf(szCommandLine, "Failed to parse command line: %s", szLine);
+    sprintf2(S(szCommandLine), "Failed to parse command line: %s", szLine);
     PrintWarning(szCommandLine);
   }
   return fT;
@@ -464,12 +464,12 @@ int NPromptSwitches(char *line, char *argv[MAXSWITCHES])
   fileSav = is.S; is.S = stdout;
   is.cchRow = 0;
   AnsiColor(kWhiteA);
-  sprintf(sz, "** %s version %s ", szAppName, szVersionCore); PrintSz(sz);
-  sprintf(sz, "(See '%cHc' switch for copyrights and credits.) **\n",
+  sprintf2(S(sz), "** %s version %s ", szAppName, szVersionCore); PrintSz(sz);
+  sprintf2(S(sz), "(See '%cHc' switch for copyrights and credits.) **\n",
     chSwitch); PrintSz(sz);
   AnsiColor(kDefault);
   PrintSz("Enter all parameter options below. ");
-  sprintf(sz, "(Enter '%cH' for help. Enter '.' to exit.)\n", chSwitch);
+  sprintf2(S(sz), "(Enter '%cH' for help. Enter '.' to exit.)\n", chSwitch);
   PrintSz(sz);
   is.S = fileSav;
   InputString("Input command line", line);
@@ -811,13 +811,13 @@ void FinalizeProgram(flag fSkip)
   if (fSkip)
     return;
   if (is.cAlloc != 0) {
-    sprintf(sz, "Number of memory allocations not freed before exiting: %d",
+    sprintf2(S(sz), "Number of memory allocations not freed before exiting: %d",
       is.cAlloc);
     PrintWarning(sz);
   }
 #ifdef DEBUG
   else if (is.cbAllocSize != 0) {
-    sprintf(sz, "Number of memory bytes not freed before exiting: %d",
+    sprintf2(S(sz), "Number of memory bytes not freed before exiting: %d",
       is.cbAllocSize);
     PrintWarning(sz);
   }
@@ -863,7 +863,7 @@ int main()
 #endif
   ciTran = ciHexa = ciFive = ciFour = ciThre = ciTwin = ciMain = ciCore;
 #ifdef BETA
-  sprintf(szBeta, "This is a beta version of %s %s! "
+  sprintf2(S(szBeta), "This is a beta version of %s %s! "
     "That means changes are still being made and testing is not complete. "
     "If this is being run after %s %d, %d, "
     "it should be replaced with the finished release.\n\n",

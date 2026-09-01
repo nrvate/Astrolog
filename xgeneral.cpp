@@ -567,7 +567,7 @@ flag DrawGlyph(int ch, int x, int y, int fi, int nScale)
     if (cch <= 1) {
       sz[0] = ch; sz[1] = chNull;
     } else
-      sprintf(sz, "%d", -ch);
+      sprintf2(S(sz), "%d", -ch);
     GetTextExtentPoint(wi.hdc, sz, cch, &size);
     TextOut(wi.hdc, x - (size.cx >> 1), y - (size.cy >> 1), sz, cch);
   }
@@ -1666,7 +1666,7 @@ void DrawHouse(int i, int x, int y)
   if (gs.ft == ftSVG && nFont > 0 && ch > 0) {
     pch = NULL;
     if (nFont == fiArial) {
-      sprintf(sz, "%d", i);
+      sprintf2(S(sz), "%d", i);
       pch = sz;
     }
     SvgText(pch, ch, x, y, nFont, gi.nScale*yFont * nScale/100, fTrue);
@@ -1832,7 +1832,7 @@ void DrawObject(int obj, int x, int y)
   // the Sun/Moon midpoint), and it keeps its own glyph. Reported live
   // the first evening this shipped, on exactly that config line.
   if (FDrawObjectAsName(obj) && !fNoText) {
-    sprintf(szGlyph, "%.3s", szObjDisp[obj]);
+    sprintf2(S(szGlyph), "%.3s", szObjDisp[obj]);
     DrawSz(szGlyph, x, y, dtCent | dtScale2);
     return;
   }
@@ -1916,7 +1916,7 @@ void DrawObject(int obj, int x, int y)
 
   if (fNoText)
     goto LDone;
-  sprintf(szGlyph, "%.3s", szObjDisp[obj]);
+  sprintf2(S(szGlyph), "%.3s", szObjDisp[obj]);
   DrawSz(szGlyph, x, y, dtCent | dtScale2);
 LDone:
   if (fDoThin)
@@ -2147,14 +2147,14 @@ void DrawNakshatra(int i, int x, int y)
   if (gs.ft == ftSVG && nFont > 0 && ch != -1) {
     pch = NULL;
     if (nFont >= fiArial) {
-      sprintf(sz, "%d", i);
+      sprintf2(S(sz), "%d", i);
       pch = sz;
     }
     SvgText(pch, ch, x, y, nFont, gi.nScale*yFont * nScale/100, fTrue);
     return;
   }
 #endif
-  sprintf(sz, "%d", i);
+  sprintf2(S(sz), "%d", i);
   nSav = gs.nFontTxt; gs.nFontTxt = gs.nFontNak;
   DrawSz(sz, x, y + gi.nScaleT, dtScale2);
   gs.nFontTxt = nSav;
@@ -2226,7 +2226,7 @@ void DrawTurtle(CONST char *sz, int x0, int y0)
     case 'H': deltax = -1; deltay = -1; break;      // NorthWest
     default:
       deltax = deltay = 0;
-      sprintf(szErr, "Bad draw turtle action character: '%c'", chCmd);
+      sprintf2(S(szErr), "Bad draw turtle action character: '%c'", chCmd);
       PrintError(szErr);
     }
     x = gi.xTurtle;

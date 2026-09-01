@@ -74,14 +74,14 @@ void ChartListingRelation(void)
   // Print header rows.
   AnsiColor(kWhiteA);
   n = VSeconds(16, 23, 31);
-  sprintf(szFormat, " %%-%d.%ds", n, n);
+  sprintf2(S(szFormat), " %%-%d.%ds", n, n);
   for (n = 0, i = 1; i <= cChart; i++)
     n += FSzSet(rgpci[i]->nam);
   if (n > 0) {
     PrintTab(' ', 5);
     for (i = 1; i <= cChart; i++) {
       AnsiColor(kMainA[FOdd(i) ? 1 : 3]);
-      sprintf(sz, szFormat, rgpci[i]->nam); PrintSz(sz);
+      sprintf2(S(sz), szFormat, rgpci[i]->nam); PrintSz(sz);
     }
     PrintL();
   }
@@ -89,7 +89,7 @@ void ChartListingRelation(void)
   for (i = 1; i <= cChart; i++) {
     AnsiColor(kMainA[FOdd(i) ? 1 : 3]);
     if (!FNoTimeOrSpace(*rgpci[i])) {
-      sprintf(sz, "%s %s", SzDate(rgpci[i]->mon, rgpci[i]->day,
+      sprintf2(S(sz), "%s %s", SzDate(rgpci[i]->mon, rgpci[i]->day,
         rgpci[i]->yea, us.fSeconds-1), SzTim(rgpci[i]->tim));
       PrintSz(sz);
       PrintTab(' ', VSeconds(17, 24, 32) - CchSz(sz));
@@ -103,14 +103,14 @@ void ChartListingRelation(void)
     PrintTab(' ', 5);
     for (i = 1; i <= cChart; i++) {
       AnsiColor(kMainA[FOdd(i) ? 1 : 3]);
-      sprintf(sz, szFormat, rgpci[i]->loc); PrintSz(sz);
+      sprintf2(S(sz), szFormat, rgpci[i]->loc); PrintSz(sz);
     }
     PrintL();
   }
   PrintTab(' ', 5);
   for (i = 1; i <= cChart; i++) {
     AnsiColor(kMainA[FOdd(i) ? 1 : 3]);
-    sprintf(sz, szFormat, SzLocation(rgpci[i]->lon, rgpci[i]->lat));
+    sprintf2(S(sz), szFormat, SzLocation(rgpci[i]->lon, rgpci[i]->lat));
     PrintSz(sz);
   }
   AnsiColor(kDkGrayA);
@@ -136,11 +136,11 @@ void ChartListingRelation(void)
     if (FIgnore(i))
       continue;
     AnsiColor(kObjA[i]);
-    sprintf(sz, "%-4.4s:", szObjDisp[i]); PrintSz(sz);
+    sprintf2(S(sz), "%-4.4s:", szObjDisp[i]); PrintSz(sz);
     for (j = 1; j <= cChart; j++) {
       PrintCh(' ');
       PrintZodiac(rgpcp[j]->obj[i]);
-      sprintf(sz, "%c ", ChRet(rgpcp[j]->dir[i])); PrintSz(sz);
+      sprintf2(S(sz), "%c ", ChRet(rgpcp[j]->dir[i])); PrintSz(sz);
       PrintAltitude(rgpcp[j]->alt[i]);
     }
 
@@ -446,10 +446,10 @@ void PrintInDayEvent(int source, int aspect, int dest, int nVoid)
           nEclipse = NCheckEclipseLunar(us.objCenter, dest, oSun, &rPct);
           if (nEclipse > etNone) {
             AnsiColor(kWhiteA);
-            sprintf(sz, " (%s Lunar Eclipse", szEclipse[nEclipse]);
+            sprintf2(S(sz), " (%s Lunar Eclipse", szEclipse[nEclipse]);
             PrintSz(sz);
             if (us.fSeconds) {
-              sprintf(sz, " %.0f%%", rPct); PrintSz(sz);
+              sprintf2(S(sz), " %.0f%%", rPct); PrintSz(sz);
             }
             PrintSz(")");
           }
@@ -466,10 +466,10 @@ void PrintInDayEvent(int source, int aspect, int dest, int nVoid)
           rPct = rPct2;
         }
         AnsiColor(kWhiteA);
-        sprintf(sz, " (%s Occultation", szEclipse[nEclipse]);
+        sprintf2(S(sz), " (%s Occultation", szEclipse[nEclipse]);
         PrintSz(sz);
         if (us.fSeconds) {
-          sprintf(sz, " %.0f%%", rPct); PrintSz(sz);
+          sprintf2(S(sz), " %.0f%%", rPct); PrintSz(sz);
         }
         PrintSz(")");
       }
@@ -480,12 +480,12 @@ void PrintInDayEvent(int source, int aspect, int dest, int nVoid)
       nEclipse = NCheckEclipse(source, dest, &rPct);
       if (nEclipse > etNone) {
         AnsiColor(kWhiteA);
-        sprintf(sz, " (%s %s%s", szEclipse[nEclipse], source == oSun ?
+        sprintf2(S(sz), " (%s %s%s", szEclipse[nEclipse], source == oSun ?
           "Solar " : "", source == oSun && (dest == oMoo || FMoons(dest)) &&
           (us.fMoonMove || ObjOrbit(dest) == us.objCenter) ?
           "Eclipse" : "Occultation"); PrintSz(sz);
         if (us.fSeconds) {
-          sprintf(sz, " %.0f%%", rPct); PrintSz(sz);
+          sprintf2(S(sz), " %.0f%%", rPct); PrintSz(sz);
         }
         PrintSz(")");
       }
@@ -497,9 +497,9 @@ void PrintInDayEvent(int source, int aspect, int dest, int nVoid)
   // Print if the present aspect is the Moon going void of course.
   if (nVoid >= 0) {
     AnsiColor(kDefault);
-    sprintf(sz, " (v/c %d:%02d", nVoid / 3600, nVoid / 60 % 60); PrintSz(sz);
+    sprintf2(S(sz), " (v/c %d:%02d", nVoid / 3600, nVoid / 60 % 60); PrintSz(sz);
     if (us.fSeconds) {
-      sprintf(sz, ":%02d", nVoid % 60); PrintSz(sz);
+      sprintf2(S(sz), ":%02d", nVoid % 60); PrintSz(sz);
     }
     PrintCh(')');
   }
@@ -781,7 +781,7 @@ void ChartInDayInfluence(void)
   // Now display each aspect line.
 
   for (i = 0; i < occurcount; i++) {
-    sprintf(sz, "%3d: ", i+1); PrintSz(sz);
+    sprintf2(S(sz), "%3d: ", i+1); PrintSz(sz);
     j = source[i]; k = aspect[i]; l = dest[i];
     PrintAspect(j, planetval(j), planetdir(j), k,
       l, planetval(l), planetdir(l), 'D');
@@ -790,7 +790,7 @@ void ChartInDayInfluence(void)
     if (fDistance) {
       nSav = us.nDegForm; us.nDegForm = df360;
     }
-    sprintf(sz, " - %s %s", szAppSep[us.nAppSep*2 + (rT >= 0.0)],
+    sprintf2(S(sz), " - %s %s", szAppSep[us.nAppSep*2 + (rT >= 0.0)],
       SzDegree2(RAbs(rT)));
     if (fDistance) {
       us.nDegForm = nSav;
@@ -801,7 +801,7 @@ void ChartInDayInfluence(void)
     PrintSz(sz);
     AnsiColor(kDkGreenA);
     PrintSz(" - power:");
-    sprintf(sz, us.fSeconds ? "%8.4f" : "%6.2f", power[i]); PrintSz(sz);
+    sprintf2(S(sz), us.fSeconds ? "%8.4f" : "%6.2f", power[i]); PrintSz(sz);
     PrintInDayEvent(j, k, l, -1);
   }
   if (occurcount == 0)
@@ -829,7 +829,7 @@ void ChartTransitInfluence(flag fProg)
   if (!FNoTimeOrSpace(ciTran)) {
     PrintSz("Transits at: ");
     i = DayOfWeek(MonT, DayT, YeaT);
-    sprintf(sz, "%.3s %s %s (%cT Zone %s)\n", szDay[i],
+    sprintf2(S(sz), "%.3s %s %s (%cT Zone %s)\n", szDay[i],
       SzDate(MonT, DayT, YeaT, 3), SzTim(TimT), ChDst(DstT),
       SzZone(ZonT)); PrintSz(sz);
   }
@@ -924,7 +924,7 @@ void ChartTransitInfluence(flag fProg)
 
   for (i = 0; i < occurcount; i++) {
     k = aspect[i]; l = source[i]; m = dest[i];
-    sprintf(sz, "%3d: ", i+1); PrintSz(sz);
+    sprintf2(S(sz), "%3d: ", i+1); PrintSz(sz);
     PrintAspect(l, planetval2(l), planetdir2(l), k,
       dest[i], planetval1(m), planetdir1(m), fProg ? 'U' : 'T');
     rT = grid->v[l][m];
@@ -932,7 +932,7 @@ void ChartTransitInfluence(flag fProg)
     if (fDistance) {
       nSav = us.nDegForm; us.nDegForm = df360;
     }
-    sprintf(sz, " - %s %s", szAppSep[us.nAppSep*2 + (rT >= 0.0)],
+    sprintf2(S(sz), " - %s %s", szAppSep[us.nAppSep*2 + (rT >= 0.0)],
       SzDegree2(RAbs(rT)));
     if (fDistance) {
       us.nDegForm = nSav;
@@ -943,7 +943,7 @@ void ChartTransitInfluence(flag fProg)
     PrintSz(sz);
     AnsiColor(kDkGreenA);
     PrintSz(" - power: ");
-    sprintf(sz, us.fSeconds ? "%7.4f" : "%5.2f", power[i]); PrintSz(sz);
+    sprintf2(S(sz), us.fSeconds ? "%7.4f" : "%5.2f", power[i]); PrintSz(sz);
     if (k == aCon && l == dest[i]) {    // Print a "R" to mark returns.
       AnsiColor(kWhiteA);
       PrintSz(" R");
@@ -1001,10 +1001,10 @@ void ChartCalendarMonth(void)
     mon = mJan;
   AnsiColor(kWhiteA);
   PrintTab(' ', (16-CchSz(szMonth[mon])) >> 1);
-  sprintf(sz, "%s%5d\n", szMonth[mon], Yea); PrintSz(sz);
+  sprintf2(S(sz), "%s%5d\n", szMonth[mon], Yea); PrintSz(sz);
   for (i = 0; i < cWeek; i++) {
     j = !fMonday ? i : (i + 1) % 7;
-    sprintf(sz, "%.2s%c", szDay[j], i < cWeek-1 ? ' ' : '\n');
+    sprintf2(S(sz), "%.2s%c", szDay[j], i < cWeek-1 ? ' ' : '\n');
     PrintSz(sz);
   }
   j = DayOfWeek(mon, 1, Yea);
@@ -1024,7 +1024,7 @@ void ChartCalendarMonth(void)
       AnsiColor(kGreenA);
     else if (!fMonday ? (j == 0 || j == cWeek-1) : (j >= cWeek-2))
       AnsiColor(kRedA);
-    sprintf(sz, "%2d", i); PrintSz(sz);
+    sprintf2(S(sz), "%2d", i); PrintSz(sz);
     if (j == 0 || j == cWeek-1 || i == Day)
       AnsiColor(kDefault);
     if (j < cWeek-1) {
@@ -1039,7 +1039,7 @@ void ChartCalendarMonth(void)
     if (j == (!fMonday ? cWeek-1 : cWeek-2))
       AnsiColor(kRedA);
     j++;
-    sprintf(sz, "--%c", j < cWeek ? ' ' : '\n'); PrintSz(sz);
+    sprintf2(S(sz), "--%c", j < cWeek ? ' ' : '\n'); PrintSz(sz);
   }
   AnsiColor(kDefault);
 }
@@ -1063,7 +1063,7 @@ void ChartCalendarYear(void)
     for (c = 0; c < 3; c++) {
       m = r*3+c+1;
       PrintTab(' ', (16-CchSz(szMonth[m])) >> 1);
-      sprintf(sz, "%s%5d", szMonth[m], Yea); PrintSz(sz);
+      sprintf2(S(sz), "%s%5d", szMonth[m], Yea); PrintSz(sz);
       if (c < 2)
         PrintTab(' ', 20 + MONTHSPACE -
           ((16-CchSz(szMonth[m])) >> 1) - CchSz(szMonth[m]) - 5);
@@ -1072,7 +1072,7 @@ void ChartCalendarYear(void)
     for (c = 0; c < 3; c++) {
       for (d = 0; d < cWeek; d++) {
         m = !fMonday ? d : (d + 1) % 7;
-        sprintf(sz, "%.2s%c", szDay[m], d < cWeek-1 || c < 2 ? ' ' : '\n');
+        sprintf2(S(sz), "%.2s%c", szDay[m], d < cWeek-1 || c < 2 ? ' ' : '\n');
         PrintSz(sz);
       }
       if (c < 2)
@@ -1103,7 +1103,7 @@ void ChartCalendarYear(void)
             AnsiColor(kGreenA);
           else if (!fMonday ? (d == 0 || d == cWeek-1) : (d >= cWeek-2))
             AnsiColor(kRedA);
-          sprintf(sz, "%2d%c", n[c], d < cWeek-1 || c < 2 ? ' ' : '\n');
+          sprintf2(S(sz), "%2d%c", n[c], d < cWeek-1 || c < 2 ? ' ' : '\n');
           PrintSz(sz);
           if (d == 0 || d == cWeek-1 || (n[c] == Day && m == Mon))
             AnsiColor(kDefault);
@@ -1112,7 +1112,7 @@ void ChartCalendarYear(void)
         while (d < cWeek) {
           if (!fMonday ? (d == 0 || d == cWeek-1) : (d >= cWeek-2))
             AnsiColor(kRedA);
-          sprintf(sz, "--%c", d < cWeek-1 || c < 2 ? ' ' : '\n'); PrintSz(sz);
+          sprintf2(S(sz), "--%c", d < cWeek-1 || c < 2 ? ' ' : '\n'); PrintSz(sz);
           if (d == 0)
             AnsiColor(kDefault);
           d++;
@@ -1154,23 +1154,23 @@ void DisplayRelation(void)
     l = RAbs(ciMain.lat - ciTwin.lat);
     for (i = 1; i <= 10; i++) {
       AnsiColor(i <= cRainbow ? kRainbowA[i] : kDefault);
-      sprintf(szT, "%s: %%.%dlf", rgszDateDiff[i],
+      sprintf2(S(szT), "%s: %%.%dlf", rgszDateDiff[i],
         2 + us.fSeconds*(2 - (i == 7)));
       switch (i) {
-      case 1: sprintf(sz, szT, is.JD/rDayInYear);    break;
-      case 2: sprintf(sz, szT, is.JD/(rDayInYear/12.0)); break;
-      case 3: sprintf(sz, szT, is.JD/7.0);           break;
-      case 4: sprintf(sz, szT, is.JD);               break;
-      case 5: sprintf(sz, szT, is.JD*24.0);          break;
-      case 6: sprintf(sz, szT, is.JD*(24.0*60.0));   break;
-      case 7: sprintf(sz, szT, is.JD*(24.0*3600.0)); break;
-      case 8: sprintf(sz, szT, k);                 break;
-      case 9: sprintf(sz, szT, l);                 break;
+      case 1: sprintf2(S(sz), szT, is.JD/rDayInYear);    break;
+      case 2: sprintf2(S(sz), szT, is.JD/(rDayInYear/12.0)); break;
+      case 3: sprintf2(S(sz), szT, is.JD/7.0);           break;
+      case 4: sprintf2(S(sz), szT, is.JD);               break;
+      case 5: sprintf2(S(sz), szT, is.JD*24.0);          break;
+      case 6: sprintf2(S(sz), szT, is.JD*(24.0*60.0));   break;
+      case 7: sprintf2(S(sz), szT, is.JD*(24.0*3600.0)); break;
+      case 8: sprintf2(S(sz), szT, k);                 break;
+      case 9: sprintf2(S(sz), szT, l);                 break;
       case 10:
         l = SphDistance(ciMain.lon, ciMain.lat, ciTwin.lon, ciTwin.lat);
-        sprintf(sz, szT, l); PrintSz(sz);
-        sprintf(szT, " (%%.%dlf %%s)", 2 + us.fSeconds*2);
-        sprintf(sz, szT, l / 360.0 * (us.fEuroDist ? 40075.0 : 24901.0),
+        sprintf2(S(sz), szT, l); PrintSz(sz);
+        sprintf2(S(szT), " (%%.%dlf %%s)", 2 + us.fSeconds*2);
+        sprintf2(S(sz), szT, l / 360.0 * (us.fEuroDist ? 40075.0 : 24901.0),
           us.fEuroDist ? "km" : "miles");
         break;
       }
@@ -1194,7 +1194,7 @@ void DisplayRelation(void)
     else if (i == 1)
       AnsiColor(kDefault);
     j = NAbs(i);
-    sprintf(sz, "T%c%d%sDay%c:", i < 0 ? '-' : '+', j,
+    sprintf2(S(sz), "T%c%d%sDay%c:", i < 0 ? '-' : '+', j,
       j < 10 ? " " : "", j != 1 ? 's' : ' '); PrintSz(sz);
     for (j = 1; j <= 3; j++) {
       PrintCh(' ');
@@ -1209,12 +1209,12 @@ void DisplayRelation(void)
       // The biorhythm calculation is below.
 
       l = RBiorhythm(is.JD, k);
-      sprintf(sz, " at %c%3.0f%%", l < 0.0 ? '-' : '+', RAbs(l)); PrintSz(sz);
+      sprintf2(S(sz), " at %c%3.0f%%", l < 0.0 ? '-' : '+', RAbs(l)); PrintSz(sz);
 
       // Print smiley face, medium face, or sad face based on current cycle.
 
       AnsiColor(kDkGreenA);
-      sprintf(sz, " :%c", l > 50.0 ? ')' : (l < -50.0 ? '(' : '|'));
+      sprintf2(S(sz), " :%c", l > 50.0 ? ')' : (l < -50.0 ? '(' : '|'));
       PrintSz(sz);
       AnsiColor(i ? kDefault : kWhiteA);
       if (j < 3)

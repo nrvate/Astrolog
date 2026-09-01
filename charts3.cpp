@@ -193,28 +193,28 @@ void PrintInDays(InDayInfo *pid, int occurcount, int counttotal, flag fProg)
       *sz = chNull;
       k = pid[i].aspect;
       if (k > 0)
-        sprintf(sz, "%s %s %s", szObjDisp[pid[i].source],
+        sprintf2(S(sz), "%s %s %s", szObjDisp[pid[i].source],
           SzAspectAbbrev(pid[i].aspect), szObjDisp[pid[i].dest]);
       else if (k == aSig)
-        sprintf(sz, "%s enters %s", szObjDisp[pid[i].source],
+        sprintf2(S(sz), "%s enters %s", szObjDisp[pid[i].source],
           szSignName[pid[i].dest]);
       else if (k == aDir)
-        sprintf(sz, "%s S%c", szObjDisp[pid[i].source],
+        sprintf2(S(sz), "%s S%c", szObjDisp[pid[i].source],
           pid[i].dest ? chRet : 'D');
       else if (k == aDeg)
-        sprintf(sz, "%s at %s", szObjDisp[pid[i].source], SzZodiac(
+        sprintf2(S(sz), "%s at %s", szObjDisp[pid[i].source], SzZodiac(
           (real)pid[i].dest * (rDegMax / (real)(cSign * us.nSignDiv))));
       else if (k == aAlt)
-        sprintf(sz, "%s LA%c", szObjDisp[pid[i].source],
+        sprintf2(S(sz), "%s LA%c", szObjDisp[pid[i].source],
           pid[i].dest ? '+' : '-');
       else if (k == aLen)
-        sprintf(sz, "%s %s", szObjDisp[pid[i].source],
+        sprintf2(S(sz), "%s %s", szObjDisp[pid[i].source],
           pid[i].dest ? "Apo" : "Per");
       else if (k == aNod)
-        sprintf(sz, "%s LA0 %s", szObjDisp[pid[i].source],
+        sprintf2(S(sz), "%s LA0 %s", szObjDisp[pid[i].source],
           pid[i].dest ? "South" : "North");
       else if (k == aDis)
-        sprintf(sz, "%s distance equal %s", szObjDisp[pid[i].source],
+        sprintf2(S(sz), "%s distance equal %s", szObjDisp[pid[i].source],
           szObjDisp[pid[i].dest]);
       else
         Assert(fFalse);
@@ -224,9 +224,9 @@ void PrintInDays(InDayInfo *pid, int occurcount, int counttotal, flag fProg)
     }
     k = DayOfWeek(pid[i].mon, pid[i].day, pid[i].yea);
     AnsiColor(kRainbowA[k + 1]);
-    sprintf(sz, "%.3s ", szDay[k]); PrintSz(sz);
+    sprintf2(S(sz), "%.3s ", szDay[k]); PrintSz(sz);
     AnsiColor(kDefault);
-    sprintf(sz, "%s %s ",
+    sprintf2(S(sz), "%s %s ",
       SzDate(pid[i].mon, pid[i].day, pid[i].yea, fFalse),
       SzTim(pid[i].time / 60.0)); PrintSz(sz);
     PrintAspect(pid[i].source, pid[i].pos1, pid[i].ret1, pid[i].aspect,
@@ -703,16 +703,16 @@ void ChartTransitSearch(flag fProg)
   PrintSz("Transits during ");
   if (!us.fInDayMonth) {
     i = DayOfWeek(MonT, DayT, YeaT);
-    sprintf(sz, "%.3s %s", szDay[i], SzDate(MonT, DayT, YeaT, 3));
+    sprintf2(S(sz), "%.3s %s", szDay[i], SzDate(MonT, DayT, YeaT, 3));
   } else if (!us.fInDayYear)
-    sprintf(sz, "%.3s %d", szMonth[MonT], YeaT);
+    sprintf2(S(sz), "%.3s %d", szMonth[MonT], YeaT);
   else if (us.nEphemYears <= 1)
-    sprintf(sz, "%d", YeaT);
+    sprintf2(S(sz), "%d", YeaT);
   else
-    sprintf(sz, "%d through %d (%d years)", YeaT, YeaT + us.nEphemYears - 1,
+    sprintf2(S(sz), "%d through %d (%d years)", YeaT, YeaT + us.nEphemYears - 1,
       us.nEphemYears);
   PrintSz(sz);
-  sprintf(sz, " (%s)\n", SzOffset(ZonT, DstT, LonT)); PrintSz(sz);
+  sprintf2(S(sz), " (%s)\n", SzOffset(ZonT, DstT, LonT)); PrintSz(sz);
   AnsiColor(kDefault);
 
   // Save away natal chart and initialize things.
@@ -1027,13 +1027,13 @@ void ChartTransitSearch(flag fProg)
           ciEvent = ciSave;
           *sz = chNull;
           if (pti->aspect > 0)
-            sprintf(sz, "%c.%s %s N.%s", fProg ? 'P' : 'T', szObjDisp[
+            sprintf2(S(sz), "%c.%s %s N.%s", fProg ? 'P' : 'T', szObjDisp[
               pti->source], SzAspectAbbrev(pti->aspect), szObjDisp[pti->dest]);
           else if (pti->aspect == aHou)
-            sprintf(sz, "%c.%s enters N.%d%s 3D House", fProg ? 'P' : 'T',
+            sprintf2(S(sz), "%c.%s enters N.%d%s 3D House", fProg ? 'P' : 'T',
               szObjDisp[pti->source], pti->dest, szSuffix[pti->dest]);
           else if (pti->aspect == aDis)
-            sprintf(sz, "%c.%s distance equal N.%s", fProg ? 'P' : 'T',
+            sprintf2(S(sz), "%c.%s distance equal N.%s", fProg ? 'P' : 'T',
               szObjDisp[pti->source], szObjDisp[pti->dest]);
           else
             Assert(fFalse);
@@ -1044,10 +1044,10 @@ void ChartTransitSearch(flag fProg)
         if (us.fSeconds) {
           k = DayOfWeek(MonT, s1+1, YeaT);
           AnsiColor(kRainbowA[k + 1]);
-          sprintf(sz, "%.3s ", szDay[k]); PrintSz(sz);
+          sprintf2(S(sz), "%.3s ", szDay[k]); PrintSz(sz);
           AnsiColor(kDefault);
         }
-        sprintf(sz, "%s %s ", SzDate(MonT, s1+1, YeaT, fFalse),
+        sprintf2(S(sz), "%s %s ", SzDate(MonT, s1+1, YeaT, fFalse),
           SzTim(pti->time / 60.0)); PrintSz(sz);
         PrintAspect(pti->source, pti->posT, pti->retT, pti->aspect,
           pti->dest, pti->posN, cpN.dir[pti->dest], fProg ? 'u' : 't');
@@ -1056,7 +1056,7 @@ void ChartTransitSearch(flag fProg)
 
         if (pti->aspect == aCon && pti->source == pti->dest) {
           AnsiColor(kWhiteA);
-          sprintf(sz, " (%s Return)", pti->source == oSun ? "Solar" :
+          sprintf2(S(sz), " (%s Return)", pti->source == oSun ? "Solar" :
             (pti->source == oMoo ? "Lunar" : szObjDisp[pti->source]));
           PrintSz(sz);
         }
@@ -1230,11 +1230,11 @@ void ChartTransitGraph(flag fTrans, flag fProg)
   // Print chart header row(s).
   AnsiColor(kWhiteA);
   if (!fMonth)
-    sprintf(sz, "%s", SzDate(ciT.mon, ciT.day, ciT.yea, fFalse));
+    sprintf2(S(sz), "%s", SzDate(ciT.mon, ciT.day, ciT.yea, fFalse));
   else if (!fYear)
-    sprintf(sz, "%3.3s%5d", szMonth[ciT.mon], ciT.yea);
+    sprintf2(S(sz), "%3.3s%5d", szMonth[ciT.mon], ciT.yea);
   else if (us.nEphemYears <= 1)
-    sprintf(sz, "%4d", ciT.yea);
+    sprintf2(S(sz), "%4d", ciT.yea);
   else
     sz[0] = chNull;
   PrintSz(sz);
@@ -1243,9 +1243,9 @@ void ChartTransitGraph(flag fTrans, flag fProg)
 
   if (!fMonth) {
     if (!us.fEuroTime)
-      sprintf(sz, "121a2a3a4a5a6a7a8a9a1011121p2p3p4p5p6p7p8p9p1011");
+      sprintf2(S(sz), "121a2a3a4a5a6a7a8a9a1011121p2p3p4p5p6p7p8p9p1011");
     else
-      sprintf(sz, "000102030405060708091011121314151617181920212223");
+      sprintf2(S(sz), "000102030405060708091011121314151617181920212223");
     for (iw = 0; sz[iw]; iw++) {
       if (!FOdd(iw))
         AnsiColor((iw & 2) == 0 ? kLtGrayA : kDkGrayA);
@@ -1255,25 +1255,25 @@ void ChartTransitGraph(flag fTrans, flag fProg)
     for (iw = 1; iw <= (cSlice >> 1); iw++) {
       n = DayOfWeek(MM, iw, YY);
       AnsiColor(kRainbowA[n+1]);
-      sprintf(sz, "%.2s", szDay[n]); PrintSz(sz);
+      sprintf2(S(sz), "%.2s", szDay[n]); PrintSz(sz);
     }
     PrintL();
     PrintTab(' ', 12 + fTrans*4);
     for (iw = 1; iw <= (cSlice >> 1); iw++) {
       AnsiColor(FOdd(iw) ? kLtGrayA : kDkGrayA);
-      sprintf(sz, "%02d", iw); PrintSz(sz);
+      sprintf2(S(sz), "%02d", iw); PrintSz(sz);
     }
   } else if (us.nEphemYears <= 1) {
     for (iw = 1; iw <= 12; iw++) {
       AnsiColor(FOdd(iw) ? kLtGrayA : kDkGrayA);
-      sprintf(sz, "%3.3s", szMonth[iw]); PrintSz(sz);
+      sprintf2(S(sz), "%3.3s", szMonth[iw]); PrintSz(sz);
       if (iw < 12)
         PrintSz("  ");
     }
   } else {
     for (iw = 0; iw < cYea; iw++) {
       AnsiColor(!FOdd(iw) ? kLtGrayA : kDkGrayA);
-      sprintf(sz, "%-12d", (fTrans || fProg ? YeaT : Yea) - dYea + iw);
+      sprintf2(S(sz), "%-12d", (fTrans || fProg ? YeaT : Yea) - dYea + iw);
       PrintSz(sz);
     }
     PrintL();
@@ -1310,15 +1310,15 @@ void ChartTransitGraph(flag fTrans, flag fProg)
           PrintSz(!fProg ? "T." : "P.");
         }
         AnsiColor(kObjA[x]);
-        sprintf(sz, "%3.3s ", szObjDisp[x]); PrintSz(sz);
+        sprintf2(S(sz), "%3.3s ", szObjDisp[x]); PrintSz(sz);
         AnsiColor(kAspA[ASPT(asp)]);
-        sprintf(sz, "%s ", SzAspectAbbrev(asp)); PrintSz(sz);
+        sprintf2(S(sz), "%s ", SzAspectAbbrev(asp)); PrintSz(sz);
         if (fTrans) {
           AnsiColor(kSignA(SFromZ(cp1.obj[y])));
           PrintSz("N.");
         }
         AnsiColor(kObjA[y]);
-        sprintf(sz, "%3.3s ", szObjDisp[y]); PrintSz(sz);
+        sprintf2(S(sz), "%3.3s ", szObjDisp[y]); PrintSz(sz);
         AnsiColor(kAspA[ASPT(asp)]);
         nMax = -1;
         for (iw = 0; iw < cSlice; iw++) {
@@ -1547,27 +1547,27 @@ void ChartHorizonRising(void)
     if (us.fListAuto) {
       // May want to add chart for current event to chart list.
       ciEvent = ciSave;
-      sprintf(sz, "%s %s", szObjDisp[source[i]], rgszHorizon[type[i]-1]);
+      sprintf2(S(sz), "%s %s", szObjDisp[source[i]], rgszHorizon[type[i]-1]);
       ciEvent.nam = SzClone(sz);
       ciEvent.loc = ciDefa.loc;
       FAppendCIList(&ciEvent);
     }
     j = DayOfWeek(mon0, day0, yea0);
     AnsiColor(kRainbowA[j + 1]);
-    sprintf(sz, "%.3s ", szDay[j]); PrintSz(sz);
+    sprintf2(S(sz), "%.3s ", szDay[j]); PrintSz(sz);
     AnsiColor(kDefault);
-    sprintf(sz, "%s %s ", SzDate(mon0, day0, yea0, fFalse),
+    sprintf2(S(sz), "%s %s ", SzDate(mon0, day0, yea0, fFalse),
       SzTim(time[i] / 60.0));
     PrintSz(sz);
     AnsiColor(kObjA[source[i]]);
-    sprintf(sz, "%7.7s ", szObjDisp[source[i]]); PrintSz(sz);
+    sprintf2(S(sz), "%7.7s ", szObjDisp[source[i]]); PrintSz(sz);
 
     j = kSignA(SFromZ(pos[i]));
     AnsiColor(j);
-    sprintf(sz, "%c", fRet[i] > 0 ? '(' : (fRet[i] < 0 ? '[' : '<'));
+    sprintf2(S(sz), "%c", fRet[i] > 0 ? '(' : (fRet[i] < 0 ? '[' : '<'));
     PrintSz(sz);
     if (!us.fSeconds) {
-      sprintf(sz, "%.3s", szSignName[SFromZ(pos[i])]); PrintSz(sz);
+      sprintf2(S(sz), "%.3s", szSignName[SFromZ(pos[i])]); PrintSz(sz);
     } else {
       if (!us.fSecond1K)
         us.fSeconds = fFalse;
@@ -1575,21 +1575,21 @@ void ChartHorizonRising(void)
       us.fSeconds = fSav2;
       AnsiColor(j);
     }
-    sprintf(sz, "%c ", fRet[i] > 0 ? ')' : (fRet[i] < 0 ? ']' : '>'));
+    sprintf2(S(sz), "%c ", fRet[i] > 0 ? ')' : (fRet[i] < 0 ? ']' : '>'));
     PrintSz(sz);
 
     j = type[i]-1;
     AnsiColor(j < arVer ? kElemA[j] : (j == arVer ? kCyanA : kDkCyanA));
-    sprintf(sz, "%-7s", rgszHorizon[type[i]-1]); PrintSz(sz);
+    sprintf2(S(sz), "%-7s", rgszHorizon[type[i]-1]); PrintSz(sz);
     AnsiColor(kDefault);
     PrintSz(" at ");
     if (FOdd(type[i]) && type[i] <= arVer) {
       j = (int)(azialt[i]*60.0)%60;
-      sprintf(sz, "%3d%c%02d'", (int)azialt[i], chDegC, j); PrintSz(sz);
+      sprintf2(S(sz), "%3d%c%02d'", (int)azialt[i], chDegC, j); PrintSz(sz);
       if (us.fSeconds) {
-        sprintf(sz, "%02d", (int)(azialt[i]*3600.0)%60); PrintSz(sz);
+        sprintf2(S(sz), "%02d", (int)(azialt[i]*3600.0)%60); PrintSz(sz);
         if (us.fSecond1K) {
-          sprintf(sz, ".%03d", (int)(azialt[i]*3600.0*1000.0)%1000);
+          sprintf2(S(sz), ".%03d", (int)(azialt[i]*3600.0*1000.0)%1000);
           PrintSz(sz);
         }
         PrintCh('\"');
@@ -1604,7 +1604,7 @@ void ChartHorizonRising(void)
       } else {
         yV = RAbs(yA / xA); xV = 1.0;
       }
-      sprintf(sz, " (%.2f%c %.2f%c)",
+      sprintf2(S(sz), " (%.2f%c %.2f%c)",
         yV, yA < 0.0 ? 's' : 'n', xV, xA > 0.0 ? 'e' : 'w'); PrintSz(sz);
     } else
       PrintAltitude(azialt[i]);
@@ -1682,9 +1682,9 @@ void ChartEphemeris(void)
         if (FIgnore(j))
           continue;
         if (us.fSeconds)
-          sprintf(sz, "  %-10.10s", szObjDisp[j]);
+          sprintf2(S(sz), "  %-10.10s", szObjDisp[j]);
         else
-          sprintf(sz, "  %-4.4s", szObjDisp[j]);
+          sprintf2(S(sz), "  %-4.4s", szObjDisp[j]);
         PrintSz(sz);
         PrintTab(' ', (us.fParallel ? !us.fSeconds*2 : 1) + f1K*4);
       }
@@ -1731,18 +1731,18 @@ void ChartEphemeris(void)
               s = SFromZ(planet[j]);
               d = (int)planet[j] - (s-1)*30;
               m = (int)(RFract(planet[j])*60.0);
-              sprintf(sz, "%2d%s%02d", d, szSignAbbrev[s], m);
+              sprintf2(S(sz), "%2d%s%02d", d, szSignAbbrev[s], m);
               break;
             case dfHM:
               // -sh: Format position in hours/minutes.
               s = (int)Mod(planet[j] + rRound/4.0);
               d = (int)planet[j] / 15;
               m = (int)((planet[j] - (real)d*15.0)*4.0);
-              sprintf(sz, "%2dh%02dm", d, m);
+              sprintf2(S(sz), "%2dh%02dm", d, m);
               break;
             default:
               // -sd: Format position as a simple degree.
-              sprintf(sz, "%6.2f", planet[j]);
+              sprintf2(S(sz), "%6.2f", planet[j]);
               break;
             }
             PrintSz(sz);
@@ -1851,16 +1851,16 @@ flag ChartExoplanet(flag fColor)
   if (!fMonth || fInstant) {
     day = Day; day2 = Day+1;
     mon = mon2 = Mon;
-    sprintf(szT, "1 day");
+    sprintf2(S(szT), "1 day");
   } else if (!fYear) {
     mon = Mon; mon2 = Mon+1;
-    sprintf(szT, "1 month");
+    sprintf2(S(szT), "1 month");
   } else if (us.nEphemYears <= 1) {
     yea2 = Yea+1;
-    sprintf(szT, "1 year");
+    sprintf2(S(szT), "1 year");
   } else {
     yea2 = Yea + us.nEphemYears;
-    sprintf(szT, "%d year", us.nEphemYears);
+    sprintf2(S(szT), "%d year", us.nEphemYears);
   }
   jd1 = MdytszToJulian(mon, day, yea, 0.0, Dst, Zon) - 0.5;
   jd2 = MdytszToJulian(mon2, day2, yea2, 0.0, Dst, Zon) - 0.5;
@@ -1868,9 +1868,9 @@ flag ChartExoplanet(flag fColor)
   if (!fColor) {
     PrintSz("Exoplanet transits ");
     if (fInstant)
-      sprintf(sz, "taking place at chart time");
+      sprintf2(S(sz), "taking place at chart time");
     else
-      sprintf(sz, "over a %s period", szT);
+      sprintf2(S(sz), "over a %s period", szT);
     PrintSz(sz);
     PrintSz(":\nName");
     PrintTab(' ', !fTOI ? 11 : 14);
@@ -1971,7 +1971,7 @@ flag ChartExoplanet(flag fColor)
       continue;
 
     // Print current exoplanet transit event
-    sprintf(sz, fTOI ? "%-16.16s" : "%-13.13s", pexod->sz); PrintSz(sz);
+    sprintf2(S(sz), fTOI ? "%-16.16s" : "%-13.13s", pexod->sz); PrintSz(sz);
     PrintCh(' ');
     lon = pexod->ra * rDegMax / 24.0; lat = pexod->dec;
     if (!us.fEquator || !us.fEquator2) {
@@ -1986,18 +1986,18 @@ flag ChartExoplanet(flag fColor)
     PrintZodiac(lon);
     PrintCh(' ');
     PrintAltitude(lat);
-    sprintf(sz, " %4.1f", pexod->mag); PrintSz(sz);
+    sprintf2(S(sz), " %4.1f", pexod->mag); PrintSz(sz);
     n = DayOfWeek(ci.mon, ci.day, ci.yea);
     AnsiColor(kRainbowA[n + 1]);
-    sprintf(sz, " %.3s", szDay[n]); PrintSz(sz);
+    sprintf2(S(sz), " %.3s", szDay[n]); PrintSz(sz);
     AnsiColor(kDefault);
-    sprintf(sz, " %s", SzDate(ci.mon, ci.day, ci.yea, fFalse)); PrintSz(sz);
+    sprintf2(S(sz), " %s", SzDate(ci.mon, ci.day, ci.yea, fFalse)); PrintSz(sz);
     AnsiColor(kRedA);
-    sprintf(sz, " %s", SzTim(ci.tim)); PrintSz(sz);
+    sprintf2(S(sz), " %s", SzTim(ci.tim)); PrintSz(sz);
 
     AnsiColor(fOverlap ? kBlackA :
       (ci2.day != ci.day || ci2.mon != ci.mon ? kWhiteA : kYellowA));
-    sprintf(sz, " %s", SzTim(ci2.tim));
+    sprintf2(S(sz), " %s", SzTim(ci2.tim));
     if (fOverlap)
       for (pch = sz; *pch; pch++)
         *pch = ' ';
@@ -2006,11 +2006,11 @@ flag ChartExoplanet(flag fColor)
     AnsiColor(fOverlap ?
       (ci3.day != ci.day || ci3.mon != ci.mon ? kWhiteA : kYellowA) :
       (ci3.day != ci2.day || ci3.mon != ci2.mon ? kWhiteA : kGreenA));
-    sprintf(sz, " %s", SzTim(ci3.tim)); PrintSz(sz);
+    sprintf2(S(sz), " %s", SzTim(ci3.tim)); PrintSz(sz);
 
     AnsiColor(fOverlap ? kBlackA :
       (ci4.day != ci3.day || ci4.mon != ci3.mon ? kWhiteA : kYellowA));
-    sprintf(sz, " %s", SzTim(ci4.tim));
+    sprintf2(S(sz), " %s", SzTim(ci4.tim));
     if (fOverlap)
       for (pch = sz; *pch; pch++)
         *pch = ' ';
@@ -2019,7 +2019,7 @@ flag ChartExoplanet(flag fColor)
     AnsiColor(fOverlap ?
       (ci5.day != ci3.day || ci5.mon != ci3.mon ? kWhiteA : kRedA) :
       (ci5.day != ci4.day || ci5.mon != ci4.mon ? kWhiteA : kRedA));
-    sprintf(sz, " %s", SzTim(ci5.tim)); PrintSz(sz);
+    sprintf2(S(sz), " %s", SzTim(ci5.tim)); PrintSz(sz);
 
     // Print duration and overall uncertainty of this transit
     AnsiColor(kDefault);
@@ -2028,9 +2028,9 @@ flag ChartExoplanet(flag fColor)
       hr = sec / 3600;
       min = sec / 60 % 60;
       sec %= 60;
-      sprintf(sz, " %2d:%02d", hr, min); PrintSz(sz);
+      sprintf2(S(sz), " %2d:%02d", hr, min); PrintSz(sz);
       if (us.fSeconds) {
-        sprintf(sz, ":%02d", sec); PrintSz(sz);
+        sprintf2(S(sz), ":%02d", sec); PrintSz(sz);
       }
     }
     PrintL();

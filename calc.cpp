@@ -507,7 +507,7 @@ void ComputeHouses(int housesystem)
   // Don't allow polar latitudes if system not defined in polar zones.
   if ((housesystem == hsPlacidus || housesystem == hsKoch) &&
     RAbs(AA) >= rDegQuad - is.OB) {
-    sprintf(sz,
+    sprintf2(S(sz),
       "The %s system of houses is not defined at extreme latitudes.",
       szSystem[housesystem]);
     PrintWarning(sz);
@@ -2516,7 +2516,7 @@ void SwissEnsurePath()
 #ifdef WIN
   GetModuleFileName(wi.hinst, szExe, cchSzMax);
 #else
-  sprintf(szExe, "%s", is.szProgName != NULL ? is.szProgName : "");
+  sprintf2(S(szExe), "%s", is.szProgName != NULL ? is.szProgName : "");
 #endif
   for (pch = szExe; *pch; pch++)
     ;
@@ -2527,7 +2527,7 @@ void SwissEnsurePath()
   *pch = chNull;
 
   // First look for the file in the current directory, and that of executable.
-  sprintf(szPath, ".%s%s", PATH_SEPARATOR, szExe);
+  sprintf2(S(szPath), ".%s%s", PATH_SEPARATOR, szExe);
   // Next look in the directories indicated by the -Yi switch.
   for (i = 0; i < 10; i++) {
     pch = us.rgszPath[i];
@@ -2535,7 +2535,7 @@ void SwissEnsurePath()
       if ((FCapCh(*pch) || FUncapCh(*pch) || FNumCh(*pch)) &&
         !(pch[1] == ':')) {
         // If dir is relative path, then prepend the path to executable.
-        sprintf(szT, "%s", szExe);
+        sprintf2(S(szT), "%s", szExe);
         for (pch = szT; *pch; pch++)
           ;
       } else
@@ -2548,7 +2548,7 @@ void SwissEnsurePath()
 #ifdef ENVIRON
   // Next look for the file in the directory indicated by the version
   // specific system environment variable.
-  sprintf(szT, "%s%s", ENVIRONVER, szVersionCore);
+  sprintf2(S(szT), "%s%s", ENVIRONVER, szVersionCore);
   for (pch = szT; *pch && *pch != '.'; pch++)
     ;
   while (*pch && (*pch = pch[1]) != chNull)
@@ -2571,7 +2571,7 @@ void SwissEnsurePath()
     sprintf2(SO(szPath + CchSz(szPath), szPath), "%s%s", PATH_SEPARATOR,
       EPHE_DIR);
   if (CchSz(szPath) >= sizeof(szPath)-1) {
-    sprintf(szT,
+    sprintf2(S(szT),
       "Swiss Ephemeris file path longer than %d characters, so truncated.",
       (int)sizeof(szPath)-1);
     PrintWarning(szT);
@@ -2930,7 +2930,7 @@ flag FObjSelMidPair(CONST char *szIn, int *pn1, int *pn2)
 {
   char sz[cchSzMax], *pch;
 
-  sprintf(sz, "%s", szIn);
+  sprintf2(S(sz), "%s", szIn);
   for (pch = sz; *pch && *pch != '/'; pch++)
     ;
   if (*pch != '/')
@@ -3013,7 +3013,7 @@ flag FObjDefParse(CONST char *szIn, OBJDEF *pod)
     szIn++;
   if (!*szIn)
     return fFalse;
-  sprintf(sz, "%s", szIn);
+  sprintf2(S(sz), "%s", szIn);
   for (pch = sz; *pch; pch++)
     ;
   pchEnd = pch;
@@ -3433,11 +3433,11 @@ void SwissComputeStars(real jd, flag fInitBright)
     // however for a few stars need to translate to a different string.
     if (!FSzSet(szStarCustom[i])) {
       if (*szStarNameSwiss[i])
-        sprintf(sz, "%s", szStarNameSwiss[i]);
+        sprintf2(S(sz), "%s", szStarNameSwiss[i]);
       else
-        sprintf(sz, "%s", szObjName[oNorm+i]);
+        sprintf2(S(sz), "%s", szObjName[oNorm+i]);
     } else
-      sprintf(sz, "%s", szStarCustom[i]);
+      sprintf2(S(sz), "%s", szStarCustom[i]);
 
     // Compute the star location or get the star's brightness.
     swe_fixstar2(sz, jd, iflag, xx, serr);
@@ -3838,7 +3838,7 @@ LNext:
   if (FSzSet(us.szAstColor)) {
     pch = (char *)SzInList(pes->pchBest, us.szAstColor, NULL);
     if (!FSzSet(pch)) {
-      sprintf(sz, "%d", iast);
+      sprintf2(S(sz), "%d", iast);
       pch = (char *)SzInList(sz, us.szAstColor, NULL);
     }
     if (FSzSet(pch)) {
