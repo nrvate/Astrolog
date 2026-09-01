@@ -144,7 +144,7 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Seven standing audits, all currently clean — four of the port against
+Eight standing audits, all currently clean — four of the port against
 `astrolog.rc`, one of the compiled defaults against `astrolog.as`, and
 one of the switch registry against the help text and settings writer:
 
@@ -167,6 +167,9 @@ python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # ruler2[] one short on its first run.
                                      # With a file argument: count leg only,
                                      # for any .as
+python3 tools/fixture_coverage_audit.py  # every ranged settings switch
+                                     # has a round-trip fixture line;
+                                     # closes half of item 140's class
 python3 tools/line_endings_audit.py  # any carriage return in a tracked
                                      # text file; the tree is LF
                                      # everywhere since work log item 159

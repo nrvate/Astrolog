@@ -35,6 +35,28 @@ restrictions, orbs, aspect set and 13 macro names that make the program
 behave the way it does in use. Testing against the stock `astrolog.as`
 answers a question nobody has.
 
+**And `-i astrolog.as` answers no question at all — it runs zero tests
+and exits 0.** Measured 2026-09-01:
+
+```sh
+ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i nrvate.as   # PASS: 83 passed
+ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -Yi1 ephem     # runs, 19 of 39 bodies
+ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i astrolog.as # 0 bytes, exit 0
+```
+
+`astrolog.as` specifies no chart, so the program never opens a window,
+never reaches `InteractQt()`, and never calls the suite — the console
+build shows the same path plainly, exiting 2 with the version banner.
+**Exit 0 and no output is indistinguishable from a pass** in any wrapper
+that checks status rather than reading the summary line. If you want the
+bundled ephemeris rather than `/swe`, the invocation is `-Yi1 ephem`.
+
+Note what that costs you: `-Yi1 ephem` resolves 19 of the 39 listed
+bodies instead of 39, and the Object Selections group *fails* two
+assertions (`qttest.cpp` types raw ephemeris number 52872, Okyrhoe, which
+is in `/swe` but not in `ephem/`). So it is a usable ephemeris for CI, not
+a substitute for the real one.
+
 ## The fast way: a scratch probe inside qttest
 
 **This is the preferred method and it is not close.** A round trip is
@@ -649,6 +671,7 @@ python3 tools/rc_mnemonic_audit.py
 python3 tools/rc_field_audit.py
 python3 tools/rc_lookup_audit.py
 python3 tools/defaults_audit.py
+python3 tools/fixture_coverage_audit.py
 python3 tools/line_endings_audit.py
 python3 tools/registry_audit.py
 python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h

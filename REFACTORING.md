@@ -576,6 +576,16 @@ same for the fonts. Separating the real gaps from the packing would mean
 teaching a script the writer's own encoding, which is a second place to
 get it wrong.
 
+**Half of it is closed, 2026-09-01** (work log item 162): every row in
+`rgswranged[]` that is not an AstroExpression hook now has a fixture line,
+and `tools/fixture_coverage_audit.py` fails if one goes missing. Five were
+absent — `-YAa`, `-YjC`, `-Yk0`, `-Yk7`, `-Yk` — so leg 3 was proving
+nothing about the aspect angles, the house influences or three colour
+tables. The other half, `rgswitchdef[]`, is measured and open: 191 rows, 41
+declaring `carg>0`, 31 absent from the fixture, but most of those are
+imperative rather than settings, so filtering them needs a judgement per
+row. Item 140's own `-b` family lives there.
+
 *The right shape is behavioural, and two thirds of it exists.*
 `tools/settings-round-trip.sh` leg 2 flips every boolean flag at once, so
 a flag whose save-twin regresses cannot hide; leg 3 checks value switches

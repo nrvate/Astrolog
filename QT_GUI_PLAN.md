@@ -6315,6 +6315,55 @@ are the more useful half to read before starting something new.
     which is the point; settings round trip; line endings; four builds,
     zero warnings each.
 
+162. **Half of T4's gap closes, and five settings turn out to have been
+    untested.** Item 140's bug -- the whole `-b` backend family silently
+    dropped by the settings writer for five days -- fell through a hole
+    that neither standing check could see. `registry_audit.py` verifies
+    every spelling the program *writes* resolves to a row, not that every
+    setting *gets* written; and the round trip could not see it because
+    the fixture never set those fields.
+
+    A **static** audit in the other direction was measured and rejected
+    on 2026-09-01 (recorded at T4): of the 120 settings fields
+    `switch.cpp` assigns, 69 are never named in `FOutputSettings()`, but
+    most are false positives because the writer packs values -- one
+    `:YXG %06d` line carries six `gs.nGlyph*` fields without naming any.
+    A script would have to learn the writer's encoding.
+
+    **The behavioural version needs no encoding: put the switch in the
+    fixture and let leg 3 prove it round-trips.** So the question is only
+    which switches are in it. Measured: of `rgswranged[]`'s 71 rows, 54
+    are AstroExpression hooks that `-od` structurally cannot persist
+    (QT_TESTING.md says so), leaving 17 -- and **five of those had no
+    fixture line**: `-YAa` (aspect angles), `-YjC` (house influences),
+    and `-Yk0`, `-Yk7`, `-Yk` (the rainbow, ray and main colour tables).
+    Leg 3 was proving nothing about any of them.
+
+    All five now have one, and the fixture is 36 sentinels.
+    `tools/fixture_coverage_audit.py` is the eighth standing audit and
+    fails if a row loses its line. **Falsified**: deleting the `-Yk0`
+    line fails it naming that switch.
+
+    One of the five nearly read as a second item-140. `-YAa` looked
+    unsaved -- nothing in io.cpp emits that spelling -- but the writer
+    stores aspect angles as `-Aa 5 66.6`, a different spelling, and it
+    round-trips correctly. The fixture's EXPECT pattern names the *saved*
+    spelling rather than the switch, which is why it can express that at
+    all, and the audit's header says so: a missing line is not evidence
+    of a missing save.
+
+    **What is still open, measured rather than waved at.**
+    `rgswitchdef[]` has 191 rows, 41 declaring `carg>0`, of which 31 are
+    absent from the fixture. Most are imperative rather than settings --
+    `-x` casts a harmonic chart, `-XI` loads a background bitmap, `-YYt`
+    prints formatted text -- so "takes an argument" is not the same
+    question as "is a saved setting", and separating them needs a
+    judgement per row rather than a filter. That is the next increment,
+    and item 140's own `-b` family lives there.
+
+    **Nets**: settings round trip all three legs, 36 sentinels; eight
+    audits; suite 3553/0.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

@@ -37,3 +37,8 @@
 -YjA 4 4 0.7       ; EXPECT ^-YjA 1 5 .*0\.7
 -Fm 20 2 3         ; EXPECT ^-Fm 20 2 3
 -YD 5 "Ares"       ; EXPECT ^-YD 5 "Ares"
+-YAa 5 5 66.6      ; EXPECT ^-Aa 5 66\.6
+-YjC 5 5 44        ; EXPECT ^-YjC 1 12 .* 44
+-Yk0 3 3 Sky       ; EXPECT ^-Yk0 1 7 +Red Mai Sky
+-Yk7 3 3 Sky       ; EXPECT ^-Yk7 1 7 +Red Ind Sky
+-Yk 3 3 Sky        ; EXPECT ^-Yk  0 8 +Bla Whi LtG Sky
