@@ -1679,11 +1679,7 @@ flag XChartRising()
           rT = RFract(rT);
           alt = altT + (altB - altT) * rT;
         }
-        if (!gi.fBmp || !gs.fColor || (gi.fFile && gs.ft > ftBmp)
-#ifndef WINANY
-          || !gi.fFile
-#endif
-          )
+        if (!gi.fBmp || !gs.fColor || (gi.fFile && gs.ft > ftBmp))
           n = (n << 1) | (alt >= 0.0);
         else
           n = (n << 8) | (alt >= 0.0 ? 192+(int)(alt/rDegQuad*63.99) :
@@ -1702,7 +1698,7 @@ flag XChartRising()
             BmpSetXY(&gi.bmpRising, xp, yp + i,
               !gi.fBmp ? KvFromKi(ki[n]) : n);
 #else
-            DrawColor(ki[n]);
+            DrawColor(!gi.fBmp ? ki[n] : -(KI)n);
             DrawPoint(x1+1 + xp, y1+1 + yp + i);
 #endif
           } else if (gs.ft == ftBmp) {

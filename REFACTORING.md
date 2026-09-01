@@ -701,17 +701,19 @@ available if a fifth backend or a new export format ever appears.
 *What the audit did find, and E1 got wrong:* "everything above them, all
 of xcharts*, is target-free" is false — there are **11** backend
 conditionals in the chart layer, which is precisely this theme's incident
-shape. Seven are understood divergences recorded elsewhere. One is a real
-gap: **`XChartRising()` draws without its altitude gradient on Qt**
-(xcharts2.cpp:1682), because an `#ifndef WINANY` clause forces the
+shape. Seven are understood divergences recorded elsewhere. One was a real
+gap: `XChartRising()` drew without its altitude gradient on Qt
+(xcharts2.cpp:1682), because an `#ifndef WINANY` clause forced the
 one-bit packing and, measured on the Qt screen path, every other clause
-in that condition is false. The fix has no new machinery behind it —
-`KvFromKi()` already treats a negative KI as a packed RGB — but it is a
-visible rendering change wanting a Windows side-by-side, so it is a port
-increment rather than a refactor. Item 155 carries the mechanism.
+in that condition was false. **Fixed 2026-09-01** (work log item 156):
+`KvFromKi()` already reads a negative KI as a packed RGB, so the guard
+comes off and the draw becomes `DrawColor(!gi.fBmp ? ki[n] : -(KI)n)`.
+9 distinct colours to 80,595 on screen, matching the `-Xb` file render
+that was already right; the `rising-gradient` group holds it.
 
-*Cost/risk:* the refactor was medium and is moot. The Rising gap is small
-and wants the graphics matrix plus a Windows comparison as its net.
+*Cost/risk:* the refactor was medium and is moot; the one real finding
+was two lines. The remaining ten chart-layer conditionals are understood
+divergences, listed at item 155.
 
 ### T7 — Two rendering paths, selected by a global, restored by hand
 

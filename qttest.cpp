@@ -1451,6 +1451,61 @@ static void TestClearScreenQt()
 // is.S is put back by hand after the check so a regression here fails
 // this group instead of taking the rest of the suite down with it.
 
+// The Rising chart's altitude gradient, which the Qt screen path did not
+// draw until work log item 156. XChartRising() packs either one bit per
+// object -- an index into an eight-entry palette -- or one byte per
+// object, which across up to three objects is a packed RGB. An
+// "#ifndef WINANY || !gi.fFile" clause forced every non-Windows SCREEN
+// render down the one-bit path, so Qt drew eight flat colours where
+// Windows drew a gradient and where every build's -Xb file render
+// already drew one.
+//
+// Counting distinct colours separates them cheaply: the flat version has
+// under a dozen, the gradient tens of thousands. The bound sits far below
+// what was measured (80,595) so ordinary drift cannot trip it, and far
+// above the flat case.
+
+static void TestRisingGradientQt()
+{
+  int nModeSav = gi.nMode;
+  flag fGraphicsSav = us.fGraphics;
+  flag rgfIgnoreSav[objMax];
+  QSet<QRgb> setColor;
+  int x, y, i, ckv = 0;
+
+  Group("Rising chart gradient");
+  // The gradient is only reachable when the chart is in colour and has
+  // objects to plot -- XChartRising() takes the first three unrestricted
+  // ones, falling back to the Sun alone. TestAllMenuActionsQt() leaves
+  // both of those wherever 338 menu items put them, which is why this
+  // passed alone and drew three colours in the full run the first time.
+  // gi.fBmp is the 24 bit target the gradient needs; without it eight
+  // palette colours IS the right answer, and -Xbb turns it off.
+  Borrow bColor(gs.fColor, fTrue), bInv(gs.fInverse, fFalse);
+  Borrow bSec(us.fSeconds, fFalse), bBmp(gi.fBmp, fTrue);
+  for (i = 0; i < objMax; i++)
+    rgfIgnoreSav[i] = ignore[i];
+  for (i = 0; i <= cObj; i++)
+    ignore[i] = (i != oSun && i != oMoo && i != oMer);
+  us.fGraphics = fTrue;
+  SetChartModeQt(gRising);
+  Check(gi.qim != NULL, "the rising chart rendered");
+  if (gi.qim != NULL) {
+    for (y = 0; y < gi.qim->height(); y += 2)
+      for (x = 0; x < gi.qim->width(); x += 2)
+        setColor.insert(gi.qim->pixel(x, y));
+    ckv = setColor.size();
+  }
+  Check(ckv > 1000,
+    "and drew the altitude gradient, not eight flat palette colours "
+    "(%d distinct colours)", ckv);
+  for (i = 0; i < objMax; i++)
+    ignore[i] = rgfIgnoreSav[i];
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+}
+
+
 static void TestTextExportQt()
 {
   char szFile[cchSzMax];
@@ -5110,6 +5165,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"shared-symbols",       TestSharedSymbolBoxesQt},
   {"clear-screen",         TestClearScreenQt},
   {"text-export",          TestTextExportQt},
+  {"rising-gradient",      TestRisingGradientQt},
   {"animation",            TestAnimationStateQt},
   {"mnemonics",            TestDialogMnemonicsQt},
   {"arrow-keys",           TestDialogArrowKeysQt},

@@ -5932,6 +5932,69 @@ are the more useful half to read before starting something new.
     **Nets**: no code change; probe only. The measurement script is in
     the work log rather than a tool, since it answered its question once.
 
+156. **The Rising chart draws its altitude gradient on Qt.** Item 155
+    measured the gap and left it; this closes it. Two lines.
+
+    `XChartRising()` packs one value per pixel column, either one bit per
+    object -- an index into `KI ki[8]` -- or one byte per object, which
+    across up to three objects is a packed RGB. The choice was:
+
+        if (!gi.fBmp || !gs.fColor || (gi.fFile && gs.ft > ftBmp)
+        #ifndef WINANY
+          || !gi.fFile
+        #endif
+          )
+
+    That last clause sent every non-Windows **screen** render down the
+    one-bit path. Probed on Qt: `gi.fBmp=1 gs.fColor=1 gi.fFile=0
+    gs.ft=0`, so it was the only reason. Windows drew a gradient there
+    and so did every build's `-Xb` file render; only the Qt and X11
+    screens did not.
+
+    The clause was load bearing as written, because the draw it guards is
+    `DrawColor(ki[n])` into an eight-entry palette that a packed RGB
+    would index far outside. But `KvFromKi()` is
+    `((ki) >= 0 ? rgbbmp[ki] : -(ki))` -- **a negative KI already carries
+    a packed RGB**, which is how DrawPoint's own PostScript branch passes
+    one (`DrawColor(-(int)gi.kvCur)`). So the guard comes off and the
+    draw becomes `DrawColor(!gi.fBmp ? ki[n] : -(KI)n)`.
+
+    Qt's `DrawPoint()` paints `gi.kvCur` exactly, so it gets the true
+    colour. X11's `DrawColor()` maps a negative KI to the nearest palette
+    entry (`ki = KiFromKv(-ki, fTrue)`), so X11 gets an approximation --
+    which is what X11 does with every RGB value in this program, not a
+    new compromise.
+
+    **Measured, not eyeballed**: the Qt screen render goes from **9
+    distinct colours to 80,595**, and its colour profile now matches the
+    `-Xb` file render that was already correct -- black, white, the
+    191-grey frame, then a long tail of gradient shades.
+    **Falsified**: putting the clause back drops it to 16 and fails.
+
+    New `rising-gradient` group. Getting it to survive the full suite took
+    three tries and every one was the inherited-state trap this file's
+    header warns about: it passed alone and drew **3** colours in the
+    full run, then 9 after borrowing `gs.fColor` and clearing
+    restrictions, and only passed once `gi.fBmp` was borrowed too. All
+    three are genuine preconditions -- without a 24 bit target, eight
+    palette colours is the *right* answer -- so the test states them
+    rather than assuming them.
+
+    **Nets**: suite 3547/0; chart matrix 0 of 6,936; switch matrix 0 of
+    75,635; graphics matrix 0 of 224 -- the last one matters here,
+    because it renders to *files*, where the clause never applied: it
+    proves the file path did not move while the screen path did.
+    `tools/win-tests.sh` 2 scenarios; four builds, zero warnings each.
+
+    One process note. Undoing a bad edit here, I reached for
+    `git checkout qttest.cpp`, which CLAUDE.md forbids by name -- it
+    reverts the file's whole share of the change, not the one line. It
+    cost nothing this time because everything else in that file was
+    committed, which is luck rather than method. And the edit that needed
+    undoing was `int cColor = 0;` colliding with `#define cColor 16` in
+    astrolog.h: the `c` prefix means "count of" and the namespace is
+    already occupied, which CONVENTIONS.md says and I did not check.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
