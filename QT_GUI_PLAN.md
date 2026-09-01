@@ -4935,9 +4935,12 @@ are the more useful half to read before starting something new.
     genuinely unbounded and cannot be fixed this way -- a function handed a
     `char *` cannot know the buffer's size, so those need a size parameter
     threaded from their callers, one at a time. That is where the remaining
-    risk in T5 actually lives now. `wdriver.cpp`/`wdialog.cpp` were left out
-    of the sweep entirely: they are upstream-shaped Windows files and neither
-    matrix can exercise them, so converting them would be unproven.
+    risk in T5 actually lives now. **Done in items 144-145 the same day** --
+    this paragraph is left as written because the estimate was right about
+    where the risk was: two of those sites turned out to be live stack
+    smashes. `wdriver.cpp`/`wdialog.cpp` were left out of the sweep
+    entirely: they are upstream-shaped Windows files and neither matrix can
+    exercise them, so converting them would be unproven -- still true.
 
 144. **T5's sharper half, first pass: eight functions stop formatting into
     a buffer whose size they do not know.** Item 143 bounded 1,055 sites

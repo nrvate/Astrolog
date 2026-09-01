@@ -599,6 +599,48 @@ a setting an earlier test left on can make a correct fix look broken —
 `-4` left set put a forced midpoint exactly 30 degrees off, which reads
 precisely like the fix not working.
 
+**Restore by reverse-patching the exact string, never `git checkout`.**
+That reverts the file's *whole* share of whatever you are working on, not
+the one line you broke. It happened twice in one session: once silently
+undoing 204 conversions in charts1.cpp, caught only because a running
+total stopped reconciling. And read the saved original back in binary or
+with `newline=''` — Python's default text mode strips CRs and quietly
+turns your restored line into the only LF line in a CRLF file.
+
+## Where a regression test belongs, which is not always in the suite
+
+Three defects fixed on 2026-08-31 needed three different kinds of net,
+and choosing wrong is what made the day long. Work through it in this
+order:
+
+1. **Does the function write into a destination you can inspect?** Then
+   it is an ordinary in-suite `Check()`. `FormatSz()` takes its buffer as
+   a parameter, so the test hands it a small one and asserts the result
+   stayed inside.
+2. **Does it need a chart drawn?** Still in-suite — `SetChartModeQt()`
+   renders to `gi.qim` with no display. That is how the 3,000-character
+   sidebar is checked.
+3. **Does it end in `PrintSz()`?** Then it **cannot** be called from the
+   suite at all. `is.S` is opened and closed by `Action()` and by nothing
+   else, so an in-suite call writes to a stream that is not open and the
+   process dies of heap corruption later, somewhere unrelated. Either go
+   through `Action()` with `is.szFileScreen` set (as
+   `TestLongStringsQt()` does) or, if the defect is reachable from a
+   switch, make it an invocation in `tools/switch-matrix.sh` — where a
+   crash at the old commit *is* the behavioural diff that proves the fix.
+
+**A test that crashes the suite is worse than no test**, because the
+crash looks like a regression in the code under test. When the suite
+starts aborting right after you add one, suspect the test first: point
+ASan at it, which names the caller in one run, where gdb only shows
+where the damage surfaced.
+
+**And do not put a check where it cannot fail.** `-YXt` was added to the
+switch matrix next to `-YYt` and produced no diff at all, because that
+harness never renders a chart and the switch only stores a string.
+Measured, then removed. Before believing a new harness entry, break the
+thing it watches and confirm the entry moves.
+
 ## Checks worth running before a commit
 
 ```sh

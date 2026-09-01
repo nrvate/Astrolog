@@ -74,6 +74,27 @@ sudo apt install python3-pil                         # compare captures
 Only the first line is needed to build the port and run its whole test
 suite. The rest is for comparing against Windows.
 
+### On a fresh clone, before anything else
+
+Three things live in `.git/config` or on the machine, so none of them
+survive a clone and all three have bitten:
+
+```sh
+git remote -v                                    # upstream push must read
+git remote set-url --push upstream DISABLED      # DISABLED; set it yourself
+git config user.name  nrvate                     # or commits land under
+git config user.email nrvate@gmail.com           # the wrong author
+```
+
+And **`/swe` is a machine-local ephemeris mount, not part of this repo** —
+887,000-odd files, kept on the NAS. `nrvate.as` points `-Yi1`/`-Yi2`/
+`-Yi3` at it. Without it the main planets still compute (the bundled
+`ephem/` and the Moshier formulas cover them — the Sun measured 0.04
+arcsec off, 24Gem07'46.399" against 46.440")
+but **every esoteric body reads `0Ari00'00"`** — measured, not assumed —
+so anything touching the 39 esoteric bodies quietly tests nothing. That
+is the whole reason for the `-i nrvate.as` rule below.
+
 ## Build and test
 
 ```sh
@@ -304,6 +325,13 @@ On a private Xvfb display, `import -window root` is fine.
   CRLF; this fork's own files are LF. A scripted edit in text mode
   silently rewrites the whole file as LF and makes it diff as entirely
   rewritten. Read with `newline=''` and write back the same way.
+
+  The same trap has a second mouth: **reading a saved fragment back with
+  Python's default text mode strips its CRs**, so a script that stashes
+  an original line and later restores it silently converts that one line
+  to LF. Read *and* write with `newline=''` (or in binary), and assert
+  `CR == LF` after every scripted write — that assertion is what caught
+  it, on exactly one line of express.cpp (work log item 145).
 
   Check with `tr -cd '\r' < file | wc -c` **against that file's own line
   count**, not against `git show HEAD:file` — legitimately adding lines

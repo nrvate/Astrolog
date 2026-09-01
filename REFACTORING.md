@@ -1769,6 +1769,19 @@ measured at the finding).
   before it was written, and its leg 5 pins item 142's `acos` domain fix
   — the long-open intermittent, which no differential net could have
   found because the wrong answer was a NaN, not a change.
+- **T5 — closed for caller-owned destinations**, 2026-08-31 (work log
+  items 143-145). 1,141 of 1,231 formatting calls bounded: 1,055 swept
+  mechanically onto `sprintf2(S(...))`, then thirteen functions that
+  format into a buffer they do not own threaded a size through by hand,
+  down to one deliberate exception. The finding's own direction said not
+  to do this ("pure churn"); the reversal and its two reasons are
+  recorded at T5. Two of the last conversions were live stack smashes in
+  shared core, both reachable from documented switches.
+- **`tools/chart-matrix.sh`** — 2026-08-31, and the reason T5's sweep was
+  provable at all. The switch matrix never renders a chart, so
+  charts0-3.cpp, intrpret.cpp and the x*.cpp text paths had no
+  differential over them; that is now 71 invocations and 6,936 lines of
+  pinned chart output.
 - **T2 partial** — rulership cross-table invariant asserted
   (qttest.cpp `rulership` group), commit `b36415b`, 2026-08-29.
 - **T2/T4 partial** — per-object settings struct `rgobjset[]` with named

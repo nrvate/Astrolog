@@ -209,6 +209,15 @@ each verified in code:
   `-os`'s filename (else stdout) at the top, closed at the bottom.
   `PrintSz()` additionally routes `is.S == stdout` into the chart
   window on the GUI ports (TextCharQt / Win32 TextOut).
+  **"Action() owns it" is a hard contract, not a description.** Anything
+  in the `PrintSz()` family called from outside an `Action()` — from a
+  test, a dialog handler, a hook — writes into a `FILE *` nothing has
+  opened. glibc then frees a backup buffer it never allocated, and the
+  process dies of heap corruption somewhere else entirely, minutes later.
+  That cost an hour of bisecting shared core for a fault that was in the
+  caller (work log item 145). To exercise a printing function outside the
+  normal flow, set `is.szFileScreen` and go through `Action()` the way
+  `TestLongStringsQt()` does, or drive the switch as a separate process.
 - `is.nHTML` is the `-kh` HTML context: 0 = off, 1 = content
   (characters entity-escaped, columns counted), 2 = raw markup
   (tags pass through, no column counting), 3 = "no font tag open
