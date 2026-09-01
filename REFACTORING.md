@@ -652,6 +652,15 @@ against all four backends. The Windows oracle diff is the net.
 
 ### T7 — Two rendering paths, selected by a global, restored by hand
 
+*Worklist, added 2026-09-01:* `tools/warning_audit.py` names eight of the
+remaining hand-rolled save/restore pairs for free —
+`grep maybe-uninitialized tools/warnings.txt | grep -iE "Sav"` lists them
+(`DrawSymbolRing`, `DrawObjects`, `DrawWheel`, `CastRelation`,
+`PrintChart`, `DisplayAtlasLookup`, `Action`). GCC flags them because it
+cannot correlate the condition that saves with the condition that
+restores, which is precisely the property `Borrow` makes unnecessary. See
+work log item 150.
+
 *Evidence:* text (`Action()`→`PrintChart()`) and graphics
 (`FActionX()`→`DrawChartX()`) are disjoint pipelines chosen by
 `us.fGraphics`, with `gs.ft`/`gi.fFile` further multiplexing screen
@@ -792,11 +801,19 @@ churns the baseline, failing on removals as well as additions. What
 remains is working the ledger down — 819 in 198 sites, four campaigns,
 enumerated in QT_GUI_PLAN.md's "What to do next" item 13.
 
-*Cost/risk:* the net was low. The campaigns are not uniform:
-`-Wunused-*` is nearly free and `-Wmaybe-uninitialized` (91) is the
-opposite — at `-O` most are paths GCC cannot prove unreachable, and
-initializing a variable to silence one turns a latent bug into a
-confidently wrong answer. Read before touching.
+*Cost/risk:* the net was low, and the campaigns are closed (work log
+items 147-150). Four classes were fixed; two got measured verdicts
+instead. `-Wmaybe-uninitialized` (91) is the one worth knowing about:
+compiling the shared core three ways gives **0** definite
+`-Wuninitialized`, 65 "maybe" at `-O` and 58 at `-O2`, with 23
+warnings appearing at one level and not the other. That is a path
+analysis that cannot correlate two conditions, not a defect — and
+initializing those variables to silence them would have turned latent
+bugs into confidently wrong answers. **Eight of them are `nSav`,
+`kSav`, `rSav`, `fSav`: an independent census of the hand-rolled
+save/restore pairs T7 is about, and the worklist for whoever takes T7
+next.** `-Wformat-truncation=` (45) is T5's residue and is argued at
+T5.
 
 *What it does not cover.* mingw does not recognize `snprintf` as the
 builtin, so the Windows half of the audit sees no format diagnostics at

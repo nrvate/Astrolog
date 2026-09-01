@@ -315,39 +315,38 @@ Roughly in the order I'd take them.
    `wdriver.cpp`/`wdialog.cpp` were left out of the sweep entirely --
    upstream-shaped, and neither matrix can exercise them.
 
-13. **Work the warning ledger down.** Added 2026-09-01 (work log items
-    146-149). `tools/warning_audit.py` holds it against
-    `tools/warnings.txt`. Started at 857 warnings in 209 sites; **462 in
-    131 sites** now, and seven classes are empty. Items 147-149 took
-    every tranche whose fix was mechanical or whose reading was cheap.
-    Two campaigns are left, and neither is a sweep:
+13. ~~**Work the warning ledger down.**~~ — **closed 2026-09-01** (work
+    log items 146-150). Nothing in this project had ever read a compiler
+    warning; `tools/warning_audit.py` now holds all four builds against
+    `tools/warnings.txt` and fails on any addition. **857 warnings in 209
+    sites down to 462 in 131, and every class still in it carries a
+    recorded verdict** — so the next warning to appear here will be a new
+    one.
 
-    - **`-Wmaybe-uninitialized`, 91.** The largest and the least
-      trustworthy: at `-O` GCC guesses, and most of these are paths it
-      cannot prove unreachable. **Do not initialize a variable to silence
-      one** -- that converts a real bug into a confidently wrong answer,
-      which is worse than the warning. Read each, decide whether the path
-      is reachable, and where it is not, say so at the site rather than
-      papering over it. Where it *is* reachable, that is a bug and wants
-      its own note.
-    - **`-Wformat-truncation=`, 45.** T5's residue, and already argued at
-      REFACTORING.md T5: item 143 turned every unbounded `sprintf` into a
-      bounded one, and this is GCC naming the buffers whose worst case
-      still does not fit. Each is a sizing question about one buffer --
-      is the worst case reachable, and if so how big should it be -- so
-      it is per-site judgment, not a conversion.
+    What the campaign actually found, in rough order of how much it
+    mattered:
 
-    Everything else in the ledger carries a recorded verdict at work log
-    item 149: the qtdialog helper toolkit that has no current caller but
-    is documented for the next session to use, `FreeProcInstance()`'s
-    Win16 no-op, the third-party files, and the two item 148 deliberately
-    left (`SwissHouse()`'s discarded return, `CommandLineX()`'s
-    `fPause`).
+    - **`make -f Makefile.win` had not compiled for 62 commits** (item
+      146). `-w` was hiding a hard error, and three work log items had
+      listed "Windows builds" among their nets meanwhile.
+    - **Clear Screen did nothing in text mode** (item 149), found by
+      following a `defined but not used` to a window the port stopped
+      creating.
+    - **A truncated atlas silently re-parsed one line 33,219 times** and
+      blamed the time-zone rules (item 149).
+    - **A pointer compared to itself**, leaking every `-YIC` string, and
+      two provable buffer overflows (item 147).
+    - **Thirty dead locals**, every one residue rather than a forgotten
+      computation (item 148) — and `tools/graphics-matrix.sh`, built to
+      prove it, which is now the only differential over the drawing code.
 
-    The rule that makes this safe is the one items 147-149 followed: a
-    warning fix is behaviour-preserving or it is a bug fix, and either
-    way it needs the matrices. Never both in one commit without saying
-    which is which.
+    And what it deliberately did **not** do: `-Wmaybe-uninitialized` (91)
+    got a measurement instead of ninety-one edits — GCC proved zero
+    use-before-set in the whole tree, and 23 of the warnings appear at
+    one optimization level and not the other, which is an analysis
+    artifact rather than a defect. Initializing those to silence them
+    would have converted latent bugs into confidently wrong answers.
+    Eight of them are a worklist for REFACTORING.md's T7 instead.
 
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
@@ -5499,6 +5498,91 @@ are the more useful half to read before starting something new.
     `-Wunused-variable` (1) and `-Wunused-but-set-variable` (1) are the
     two item 148 left standing with their reasons: `SwissHouse()`'s
     discarded `swe_calc_ut()` return and `CommandLineX()`'s `fPause`.
+
+150. **The last two classes get verdicts rather than edits, and the
+    evidence took one measurement instead of ninety-one readings.**
+    Item 13's remaining campaigns were `-Wmaybe-uninitialized` (91) and
+    `-Wformat-truncation=` (45). Neither produced a code change, and
+    that is the finding, not a shortfall: item 13 predicted the first
+    would be mostly analysis artifacts and warned that initializing a
+    variable to silence one **converts a real bug into a confidently
+    wrong answer**. It was right, and here is what says so.
+
+    **`-Wmaybe-uninitialized`: GCC never proved one, and the set moves
+    with `-O`.** Compiling the whole shared core three ways:
+
+        -Wuninitialized  (GCC *proved* a use before set)      0
+        -Wmaybe-uninitialized at -O                          65
+        -Wmaybe-uninitialized at -O2                         58
+
+    Not one definite case in the tree. And the two "maybe" sets are not
+    the same set: **15 warnings appear only at `-O` and 8 only at `-O2`**
+    -- `dRing`, `nObj`, `rSav`, the `xd2`/`yT3` line-drawing pairs on one
+    side, `fSav`, `nSav`, `rT` on the other. A defect does not appear and
+    disappear with an optimization flag; a path analysis that cannot
+    correlate two conditions does. (`-O0` reports zero, but that proves
+    nothing -- GCC documents that this warning needs optimization to
+    exist at all. The evidence is the *proved* count being zero and the
+    set being unstable, not the `-O0` figure.)
+
+    Three read by hand, each a false positive for a different reason, and
+    each worth knowing because the shapes recur:
+
+    - `FReadSzLineSkip()` (io.cpp): `ch` is only read after a loop that
+      exits either on EOF -- which returns first -- or on having assigned
+      it. Two conditions GCC cannot correlate.
+    - `InterpretEsoteric()` (intrpret.cpp): the `switch (bod)` has cases
+      0-4 and `bod` runs `cRayArea-1` down to 0, with `cRayArea` 5. An
+      exhaustive switch that GCC does not know is exhaustive.
+    - `FSortCIList()` (general.cpp): `nMethod` is 0-5 from the switch
+      surface and `GetRadio(hdlg, dr01, dr05)` on Windows, and the switch
+      covers exactly that. Exhaustive over the reachable domain -- though
+      this one is *fragile* rather than wrong: a sixth sort method added
+      without a case would read `fCompare` uninitialized.
+
+    **The largest sub-family is a worklist for a theme that already
+    exists.** Eight of the sites are `nSav`/`kSav`/`rSav`/`fSav` --
+    a value stashed under one condition and restored under another,
+    which is REFACTORING.md's T7 and exactly what phase 2's P6 converted
+    to the `Borrow` template (work log items 102-104). GCC's list is an
+    independent census of the hand-rolled save/restore pairs P6 left
+    behind, and the right time to act on these is when T7 is worked, not
+    as a warning sweep. Cross-referenced at T7.
+
+    **`-Wformat-truncation=`: every one is bounded on purpose, and the
+    interesting ones are pinned by a test already.** Item 143 turned
+    1,055 unbounded `sprintf` calls into bounded ones; this is GCC
+    naming the buffers whose theoretical worst case still does not fit.
+    Read, the 44 sites fall into three groups and none is a defect:
+
+    - **Error messages that quote the offending input** (11 in atlas.cpp,
+      plus `general.cpp`'s `FErrorValR`): "Zone rule error: ... '%s'"
+      with a whole 254-byte line going into what is left of a 255-byte
+      buffer. Truncating the quoted line in a diagnostic is the intent.
+    - **Truncation points that are asserted** (io.cpp 542/544/570/572 and
+      942, the AAF and ADB import joins): the `file-parsers` group
+      already pins them -- "AAF 400-char name and location truncate to
+      %d", "ADB 79-char city and country join truncates to %d" -- from
+      work log items 118-120. These are the sites that used to *overflow*
+      and crash a user's chart. They now truncate, at a tested point.
+    - **Worst cases the values cannot reach**: `%d` of an hour, `%03d` of
+      a millisecond, the sidebar and credits lines. GCC assumes `%d` of
+      an `int` can be 11 characters; the value is a clamped 0-59.
+      Where truncation *is* reachable it fails visibly rather than
+      silently -- the ephemeris path prints "longer than %d characters,
+      so truncated" two lines later (calc.cpp), a truncated `-id`
+      filename fails to open, a truncated JPL URL fails to fetch.
+
+    So the ledger keeps all 45, and REFACTORING.md's T5 says why.
+
+    **Where this leaves the ledger: 462 warnings in 131 sites, and every
+    class in it now carries a recorded verdict** -- these two, plus item
+    149's (qtdialog's documented helper toolkit, `FreeProcInstance()`'s
+    Win16 no-op, the third-party files, the exoplanet counting loop) and
+    item 148's two (`SwissHouse()`'s discarded return,
+    `CommandLineX()`'s `fPause`). Started at 857 in 209 sites four
+    increments ago. `tools/warning_audit.py` fails on any addition, so
+    the next warning to appear in this tree will be a new one.
 
 ## Features this fork adds to both builds
 

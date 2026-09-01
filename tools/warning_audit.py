@@ -40,7 +40,7 @@ default level) and it is the only net those two files have.
 But it is NOT the net for the format-truncation class. mingw redirects
 snprintf to __mingw_snprintf, which GCC does not recognize as the builtin,
 so its format analysis is silently absent there. Measured, not assumed:
-the same tree reports 43 format-truncation warnings under g++ 11 on Linux
+the same tree reports 44 format-truncation warnings under g++ 11 on Linux
 and 0 under mingw g++ 10.
 """
 
@@ -191,11 +191,28 @@ HEADER = """\
 # Compiler warnings, as counted by tools/warning_audit.py.
 #
 # This file is a ledger of what the compiler still objects to, not a list
-# of things that are fine. Every line here is either a defect nobody has
-# got to yet or a diagnostic somebody decided to live with; when one is
-# fixed the line disappears, and the audit fails until this file is
-# regenerated with --update. It fails on a *removed* line too, on purpose,
-# so the ledger cannot quietly overstate what is left.
+# of things that are fine. When one is fixed the line disappears, and the
+# audit fails until this file is regenerated with --update. It fails on a
+# *removed* line too, on purpose, so the ledger cannot quietly overstate
+# what is left.
+#
+# As of 2026-09-01 every class in here carries a recorded verdict, so a
+# NEW line is a genuinely new warning. The verdicts, with their evidence,
+# are in QT_GUI_PLAN.md's work log:
+#
+#   -Wmaybe-uninitialized   item 150 -- 0 definite, and 23 of them appear
+#                           at one optimization level and not the other
+#   -Wformat-truncation=    item 150 -- bounded on purpose; the import
+#                           truncation points are asserted by the suite
+#   -Wunused-function       item 149 -- qtdialog.cpp's documented dialog
+#                           helper toolkit, kept for the next session
+#   -Wunused-value          item 149 -- FreeProcInstance(), a Win16 no-op
+#   -Wunused-result         item 149 -- the exoplanet counting loop, whose
+#                           loop variable is load bearing; rest third-party
+#   -Wsign-compare          third-party (sweph.cpp)
+#   -Wparentheses           third-party (placalc.cpp)
+#   -Wunused-variable       item 148 -- SwissHouse()'s discarded return
+#   -Wunused-but-set-var    item 148 -- CommandLineX()'s unfinished fPause
 #
 # Format: build, file, function, flag, count, message with numbers masked.
 #
