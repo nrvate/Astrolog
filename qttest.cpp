@@ -4348,7 +4348,35 @@ static void TestNumericOracleQt()
       ciTran = ciCore;
       ciTran.yea++;
       is.cci = 0;
-      ChartTransitSearch(fFalse);
+      // ChartTransitSearch() prints its results through PrintSz(), which
+      // writes to is.S -- and is.S is only ever opened by Action(). The
+      // GUI runs inside one, so is.S is that Action()'s stream, and
+      // putc()ing into it from here made glibc free a backup area it
+      // never allocated: "free(): invalid pointer", about one full-suite
+      // run in six, with a backtrace of
+      // _IO_free_backup_area <- _IO_putc <- PrintSz <- ChartTransitSearch.
+      //
+      // This is the incident CLAUDE.md records verbatim -- "a new test
+      // called a print routine outside Action(), so it wrote to a FILE *
+      // nothing had opened" -- reintroduced by leg 9 on the day that
+      // lesson was quoted twice. Give the search a stream of its own.
+      {
+        char szTmpRet[cchSzMax];
+        FILE *fileRetSav = is.S, *fileRet;
+
+        sprintf(szTmpRet, "%s/astrolog-qt-return-%d.txt",
+          getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
+          (int)getpid());
+        fileRet = fopen(szTmpRet, "w");
+        if (fileRet != NULL)
+          is.S = fileRet;
+        ChartTransitSearch(fFalse);
+        is.S = fileRetSav;
+        if (fileRet != NULL) {
+          fclose(fileRet);
+          remove(szTmpRet);
+        }
+      }
       for (j = 0; j < is.cci; j++) {
         ciCore = is.rgci[j];
         CastChart(1);

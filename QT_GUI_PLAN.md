@@ -6455,6 +6455,62 @@ are the more useful half to read before starting something new.
     after; solo runs unaffected; suite 3553/0 when it does not hit the
     wireframe crash.
 
+165. **The abort was mine, from six hours earlier, and it is the exact
+    incident CLAUDE.md records.** Item 164 fixed the suite's "(0 bytes)"
+    failures and left a separate crash: `free(): invalid pointer` or a
+    segfault, about one full-suite run in six. It localised that crash to
+    the wireframe writer, because every crashing run's last line was
+    `Writing wireframe to file.` **That localisation was wrong**, and
+    wrong for a reason this same session had already diagnosed and then
+    failed to apply: `PrintProgress()` writes to **stderr**, which is
+    unbuffered, while the suite's own output is block-buffered when
+    redirected. The last line before a crash is the last *unbuffered*
+    line, not the last thing that happened.
+
+    One `gdb` run settled it:
+
+        #9  _IO_free_backup_area (fp=0x5555562f7910)
+        #10 _IO_new_file_overflow
+        #11 __GI__IO_putc
+        #12 PrintSz(char const*)
+        #13 ChartTransitSearch(int)
+
+    `ChartTransitSearch()` is called from **oracle leg 9**, added the
+    same day in work log item 161. It prints its results through
+    `PrintSz()`, which writes to `is.S` -- and `is.S` is only ever opened
+    by `Action()`. The GUI runs inside one, so `putc()`ing into that
+    stream from a test made glibc free a backup area it never allocated.
+
+    CLAUDE.md states this verbatim, under "Working method": *"A
+    regression test can be the regression. A new test called a print
+    routine outside `Action()`, so it wrote to a `FILE *` nothing had
+    opened; glibc freed a buffer it never allocated and the suite began
+    aborting six runs in twelve."* That is work log item 145, and leg 9
+    reproduced it on a day the same lesson was quoted twice in commit
+    messages.
+
+    Fixed by giving the search a stream of its own -- a temp file, with
+    `is.S` saved and restored around the call, the pattern
+    `CaptureTextToFileQt()` uses. **10 solo runs clean where it was about
+    1 in 6, and two concurrent pairs clean.** The `gdb` backtrace is the
+    proof of mechanism; the run counts are the proof of fix.
+
+    **Two corrections owed.** The wireframe writer is exonerated: item
+    164's "WriteWire walks gi.bm ... that is where to start" sent a
+    parallel session to analyse code that was never involved, and it
+    produced a careful reading of an unchecked read there that may still
+    be worth fixing on its own merits but is not this crash. And item
+    164's "roughly 1 run in 6, independent of the temp files" was right
+    about the independence and wrong about everything else.
+
+    The general lesson is not "read backtraces" -- it is that **a
+    diagnosis from output ordering is worthless when stderr and stdout
+    have different buffering**, and this session identified exactly that
+    hazard hours before relying on the ordering anyway.
+
+    **Nets**: suite 3553/0; 10 solo runs and 2 concurrent pairs with no
+    crash; four builds clean.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
