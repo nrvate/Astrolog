@@ -1921,7 +1921,9 @@ measured at the finding).
   2026-09-01 with three invariants needing no reference at all (item 153)
   and a latitude/engine sweep of the house partition (item 157, which
   found seven house systems degenerating toward the pole where the guard
-  covers two). The first net here whose reference is outside the repo. Found work log item 140
+  covered two; five are fixed in item 158 and the other two turn out to
+  be deliberate). The first net here whose reference is outside the repo,
+  and now the only one that has found a defect in the astrology itself. Found work log item 140
   before it was written, and its leg 5 pins item 142's `acos` domain fix
   — the long-open intermittent, which no differential net could have
   found because the wrong answer was a NaN, not a change.

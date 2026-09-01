@@ -490,6 +490,7 @@ extern real RHousePlaceIn3DCore P((real, real));
 extern real RHousePlaceIn3D P((real, real));
 extern int NHousePlaceIn P((real, real));
 extern void ComputeInHouses P((void));
+extern flag FEnsureHousePartition P((int));
 extern void ComputeHouses P((int));
 extern void ComputeStars P((real, real));
 extern real Decan P((real));

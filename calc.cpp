@@ -499,6 +499,49 @@ void HousePullenSinusoidalRatio(real Asc)
 // Calculate the house cusp positions, using the specified system. Note this
 // is only called when Swiss Ephemeris is NOT computing the houses.
 
+// A set of house cusps must go around the circle exactly once: the twelve
+// gaps between consecutive cusps sum to 360 degrees. Five systems fail that
+// toward the pole -- Topocentric, Campanus and Regiomontanus on both
+// engines, APC and Savard-A on the Swiss one -- returning cusps whose gaps
+// sum to 1080, 1800, 3240 or 3960, so the cusps circle three to eleven
+// times and house assignment is meaningless rather than merely odd. The
+// existing guard above covered Placidus and Koch only, and keyed on the
+// polar circle rather than on the result (work log items 141, 157, 158).
+//
+// Checking the RESULT rather than listing systems and latitudes is what
+// makes this one check serve both engines, and it will catch a system that
+// starts failing without anyone adding it to a list.
+//
+// Deliberately NOT a check on zero-width houses. Pullen (S.Delta) collapses
+// two cusps onto one degree on purpose when a quadrant is under 30 degrees
+// wide (see HousePullenSinusoidalDelta: "chouse[sAqu] = chouse[sPis] =
+// Midpoint(...)"), and its gaps still sum to 360. That is a degenerate case
+// its author wrote, not a broken partition, so it stays.
+
+flag FEnsureHousePartition(int housesystem)
+{
+  char sz[cchSzDef];
+  real rSum = 0.0, rGap;
+  int i;
+
+  for (i = 1; i <= cSign; i++) {
+    rGap = chouse[i == cSign ? 1 : i+1] - chouse[i];
+    if (rGap < 0.0)
+      rGap += rDegMax;
+    rSum += rGap;
+  }
+  if (RAbs(rSum - rDegMax) < 0.01)
+    return fFalse;
+  sprintf2(S(sz),
+    "The %s system of houses is not defined at extreme latitudes.",
+    szSystem[housesystem]);
+  PrintWarning(sz);
+  HousePorphyry(is.Asc);
+  is.nHouseSystem = hsPorphyry;
+  return fTrue;
+}
+
+
 void ComputeHouses(int housesystem)
 {
   char sz[cchSzDef];
@@ -565,6 +608,7 @@ void ComputeHouses(int housesystem)
     housesystem = hsNull;
   }
   is.nHouseSystem = housesystem;
+  FEnsureHousePartition(housesystem);
 }
 
 
@@ -3387,8 +3431,10 @@ void SwissHouse(real jd, real lon, real lat, int housesystem, real *asc,
   // Have Astrolog compute the houses if Swiss Ephemeris didn't do so.
   if (ch == 'A')
     ComputeHouses(housesystem);
-  else
+  else {
     is.nHouseSystem = housesystem;
+    FEnsureHousePartition(housesystem);
+  }
 }
 
 

@@ -287,15 +287,20 @@ Roughly in the order I'd take them.
    object really is at its natal longitude. A progressed chart at zero
    elapsed time is the natal chart. Each is a few lines and each covers a
    surface nothing currently watches.
-   **Both findings below are confirmed, and there are five more** — work
-   log item 157. (An intermediate note here said they did not reproduce;
-   that was measured at a single date and longitude and was wrong.
-   Item 153 carries the retraction.) Swept over four dates and
-   longitudes, both engines: **Pullen (S.Delta), Topocentric, Campanus,
-   Regiomontanus** degenerate on both engines and **Sunshine, APC,
-   Savard-A** on the Swiss one. `ComputeHouses()` guards two systems,
-   Placidus and Koch. Oracle leg 4b pins the set; widening the guard is
-   the open maintainer decision.
+   ~~**Both findings below are confirmed, and there are five more**~~ —
+   **fixed 2026-09-01, work log items 157-158.** (An intermediate note
+   here said they did not reproduce; that was measured at a single date
+   and longitude and was wrong. Item 153 carries the retraction.) Seven
+   systems degenerated toward the pole; reading them split two classes.
+   **Topocentric, Campanus, Regiomontanus, APC and Savard-A** returned
+   cusps whose gaps summed to 1080–3960 degrees rather than 360 — those
+   fall back to Porphyry now, via a post-condition
+   (`FEnsureHousePartition()`) called from **both** engines, since five
+   of them fail on the Swiss path the old guard never reached.
+   **Pullen (S.Delta) and Sunshine** produce a zero-width house whose
+   gaps still sum to 360, and that collapse is deliberate in
+   `HousePullenSinusoidalDelta()`, so they are left alone. Oracle leg 4b
+   pins all of it.
 
    Two measured findings are parked there rather than fixed, both
    maintainer calls because they change house math in both builds:
@@ -6066,6 +6071,65 @@ are the more useful half to read before starting something new.
 
     **Nets**: suite 3551/0; oracle 322 assertions, 187ms for the added
     sweep. Test-only change.
+
+158. **Five house systems stop returning cusps that circle the zodiac
+    three to eleven times.** Item 157 measured seven systems degenerating
+    toward the pole and left the fix as a maintainer decision. Taken.
+
+    **Reading them separated two classes that the measurement had
+    lumped together.** Pullen (S.Delta) and Sunshine produce a
+    *zero-width house* -- two cusps on the same degree -- but their gaps
+    still sum to 360. And that collapse is written on purpose:
+    `HousePullenSinusoidalDelta()` says
+    `chouse[sAqu] = chouse[sPis] = Midpoint(...)` when a quadrant is
+    under 30 degrees wide, because three houses will not fit in it. That
+    is its author's degenerate case, not a broken partition.
+
+    The other five -- **Topocentric, Campanus, Regiomontanus** on both
+    engines, **APC** and **Savard-A** on the Swiss one -- return cusps
+    whose gaps sum to **1080, 1800, 3240 or 3960** degrees. Those do not
+    partition anything.
+
+    **The fix is a post-condition, not a list.** `FEnsureHousePartition()`
+    (calc.cpp) sums the twelve gaps and, if they do not come to 360,
+    prints the warning the Placidus/Koch guard already prints and falls
+    back to Porphyry. It is called at the end of `ComputeHouses()` and at
+    the end of `SwissHouse()`'s own branch, so **one check serves both
+    engines** -- which matters because five of the seven fail on the
+    Swiss path, where the existing guard does not reach. It also catches
+    a system that starts failing without anyone adding it to a list.
+
+    Checking the *sum* and not the minimum gap is what keeps the two
+    deliberate collapses working. That distinction is the whole reason to
+    read the code rather than act on the measurement.
+
+    **What a user sees.** Longyearbyen (78N13), December, Topocentric:
+
+        before   <9>22Can17  <10>13Can39  <11> 0Can54  <12> 4Tau09
+        after    <9> 4Sag24  <10>13Cap39  <11> 4Aqu24  <12>25Aqu09
+
+    Three consecutive cusps inside 22 degrees of Cancer, then a jump to
+    Taurus, become three clean ~30-degree steps. The Ascendant
+    (`15Pis54`) is identical either way -- it was only the intermediate
+    cusps that were meaningless -- which is why this survived so long.
+
+    **Falsified**: removing both calls puts 26 combinations back into
+    oracle leg 4b's "NEW polar degeneracy" list and fails it. The leg's
+    expected-degenerate set is two now, not seven.
+
+    **Nets**: suite 3551/0; chart matrix 0 of 6,936; switch matrix 0 of
+    75,635; graphics matrix 0 of 224 -- all three pinned at Seattle, so
+    they prove the change is confined to the latitudes it targets rather
+    than proving it works; oracle leg 4b is what proves that. Settings
+    round trip; five audits; `tools/win-tests.sh` 2 scenarios; four
+    builds, zero warnings each.
+
+    One process note, caught by the project's own rule. The inserted
+    block went in with bare `\n` and left 43 LF-only lines in a CRLF
+    file. The `CR == LF` assertion is what caught it, exactly as
+    CLAUDE.md says it would -- "assert CR == LF after every scripted
+    write" is not advice, it is the only thing standing between a
+    scripted edit and a file that diffs as entirely rewritten.
 
 ## Features this fork adds to both builds
 
