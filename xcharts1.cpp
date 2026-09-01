@@ -827,7 +827,7 @@ void XChartHorizon()
     EclToHorizon(planet[i], planetalt[i], x1, y1, xs, ys,
       &rgod[i].x, &rgod[i].y);
     rgod[i].obj = i;
-    rgod[i].kv = ~0;
+    rgod[i].kv = kvNone;
     rgod[i].f = fTrue;
   }
 
@@ -1237,7 +1237,7 @@ void XChartHorizonSky()
   for (i = 0; i <= is.nObj; i++) if (FProper(i)) {
     EclToHorizonSky(planet[i], planetalt[i], &cr, &rgod[i].x, &rgod[i].y);
     rgod[i].obj = i;
-    rgod[i].kv = ~0;
+    rgod[i].kv = kvNone;
     rgod[i].f = fTrue;
   }
 
@@ -2017,7 +2017,7 @@ void XChartTelescope()
               PtCross(vBest, vS2C, vCross);
               ang = VAngleD(&vBest, &vUp);
               len2 = VAngleD(&vBest, &vLeft);
-              if ((ang >= rDegQuad) == (len2 >= rDegQuad) == fFlip)
+              if (((ang >= rDegQuad) == (len2 >= rDegQuad)) == fFlip)
                 ang = RAbs(ang - rDegQuad);
               else
                 ang = -RAbs(ang - rDegQuad);
@@ -2721,7 +2721,7 @@ void XChartOrbit()
       OrbitPlot(&xp, &yp, NULL, sz, i, space);
     rgod[i].x = cx-(int)(xp*sx); rgod[i].y = cy+(int)(yp*sy);
     rgod[i].obj = i;
-    rgod[i].kv = ~0;
+    rgod[i].kv = kvNone;
     rgod[i].f = fTrue;
   }
 
@@ -3888,7 +3888,7 @@ void XChartMoons()
         if (rLenMax < rgrLenZ[m - custLo])
           rLenMax = rgrLenZ[m - custLo];
         rgod[count].obj = m;
-        rgod[count].kv = ~0;
+        rgod[count].kv = kvNone;
         rgod[count].f = fTrue;
         count++;
       }
@@ -4660,7 +4660,7 @@ void XChartSphere()
         f = FSphereZodiac(pcp->obj[i], pcp->alt[i], &cr, &xp, &yp) ^ fDir;
         rgod[i].obj = i;
         rgod[i].x = xp; rgod[i].y = yp;
-        rgod[i].kv = f ? ~0 : gi.kiGray;
+        rgod[i].kv = f ? kvNone : gi.kiGray;
         rgod[i].f = fAny || f;
       } else
         rgod[i].f = fFalse;
@@ -4678,11 +4678,11 @@ void XChartSphere()
       for (i = j-1; i >= 0; i--)
         if (grid->n[i][j] && FProper(i) && FProper(j) &&
           (fAny || (rgod[i].f && rgod[j].f))) {
-          DrawColor(rgod[i].kv == ~0 && rgod[j].kv == ~0 ?
+          DrawColor(rgod[i].kv == kvNone && rgod[j].kv == kvNone ?
             kAspB[ASPT(grid->n[i][j])] : gi.kiGray);
           DrawDash(rgod[i].x, rgod[i].y, rgod[j].x, rgod[j].y,
             NDashAspect(i, j, grid->n[i][j], grid->v[i][j]) +
-            ((rgod[i].kv != ~0) + (rgod[j].kv != ~0))*2);
+            ((rgod[i].kv != kvNone) + (rgod[j].kv != kvNone))*2);
           if (gs.fLabelAsp)
             DrawAspect2(grid->n[i][j], (rgod[i].x + rgod[j].x) >> 1,
               (rgod[i].y + rgod[j].y) >> 1, i, j);
@@ -4703,7 +4703,7 @@ void XChartSphere()
         FSphereZodiac(pcp->obj[j], rLat, &cr, &xp, &yp);
         FSphereZodiac(pcp->obj[j], rLat+5.0, &cr, &xp2, &yp2);
         rLat = RAngleD((real)(xp2-xp), -(real)(yp2-yp));
-        if (rgod[j].kv == ~0)
+        if (rgod[j].kv == kvNone)
           rT = -rDegQuad - rT - rLat;
         else {
           k = rgod[j].kv;

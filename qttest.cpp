@@ -1368,6 +1368,78 @@ int s_nAnimStartQt = 0;   // gs.nAnim as the program started, before any test
 // two controls meant to touch it do.
 //
 // Deliberately not Windows' behaviour; see "Known divergences".
+// Clear Screen, in both modes. Text charts draw into the same buffer the
+// graphics ones do, but ClearScreenQt() used to branch on us.fGraphics and
+// send text mode to a ClearTextWindowQt() that cleared the separate text
+// window the port stopped creating -- so the command silently did nothing
+// there. Reverting the fix makes the text half of this fail.
+
+static long CpixDifferQt()
+{
+  long cpix = 0;
+  int x, y;
+
+  if (gi.qim == NULL)
+    return -1;
+  for (y = 0; y < gi.qim->height(); y += 4)
+    for (x = 0; x < gi.qim->width(); x += 4)
+      if (gi.qim->pixel(x, y) != gi.qim->pixel(0, 0))
+        cpix++;
+  return cpix;
+}
+
+static void TestClearScreenQt()
+{
+  flag fGraphicsSav = us.fGraphics;
+  int nModeSav = gi.nMode;
+  int iMode;
+
+  Group("Clear Screen");
+
+  // iMode 0 is text, 1 is graphics. Both draw into gi.qim.
+  //
+  // The dirt is painted into the existing buffer rather than drawn, and
+  // no RedrawQt() happens here at all. Two reasons, both learned the hard
+  // way in one sitting: a rendered chart inherits whatever restrictions
+  // and chart flags earlier groups left set, so "did it draw anything" is
+  // not a stable precondition (the trap this file's header warns about,
+  // and item 141's diagnosis); and RedrawQt() in TEXT mode runs Action()
+  // with is.S pointed at stdout, which left the long-strings group
+  // failing intermittently two runs in three. What is under test is
+  // ClearScreenQt(), not the renderer.
+  for (iMode = 0; iMode <= 1; iMode++) {
+    CONST char *szMode = iMode ? "graphics" : "text";
+    us.fGraphics = iMode;
+    Check(gi.qim != NULL, "%s mode: a buffer exists", szMode);
+    if (gi.qim == NULL)
+      continue;
+    KV kvDirt = KvFromKi(gi.kiOff) ^ 0xffffff;
+    int x, y;
+    for (y = 0; y < gi.qim->height(); y++)
+      for (x = 0; x < gi.qim->width(); x++)
+        gi.qim->setPixel(x, y,
+          qRgb(RgbR(kvDirt), RgbG(kvDirt), RgbB(kvDirt)));
+    long cpixDrawn = CpixDifferQt();
+    Check(cpixDrawn == 0 && gi.qim->pixel(0, 0) !=
+      qRgb(RgbR(KvFromKi(gi.kiOff)), RgbG(KvFromKi(gi.kiOff)),
+        RgbB(KvFromKi(gi.kiOff))),
+      "%s mode: buffer dirtied to a colour that is not the background",
+      szMode);
+    ClearScreenQt();
+    long cpixAfter = CpixDifferQt();
+    Check(cpixAfter == 0,
+      "%s mode: Clear Screen left a uniform buffer (%ld pixels still "
+      "differ)", szMode, cpixAfter);
+    KV kv = KvFromKi(gi.kiOff);
+    Check(gi.qim != NULL &&
+      gi.qim->pixel(0, 0) == qRgb(RgbR(kv), RgbG(kv), RgbB(kv)),
+      "%s mode: cleared to the background colour", szMode);
+  }
+
+  us.fGraphics = fGraphicsSav;
+  gi.nMode = nModeSav;
+}
+
 static void TestAnimationStateQt()
 {
   int nAnimSav = gs.nAnim, nDirSav = gi.nDir;
@@ -2258,7 +2330,6 @@ static void TestTimerSanityQt()
 
 
 static QString s_strLookupQt;
-static flag s_fWarnedQt = fFalse;
 
 // Open Object Selections, do one thing to the first row, press OK.
 static void DriveObjSelQt(int nWhat)
@@ -3064,7 +3135,7 @@ static void TestSharedCoreFixesQt()
     szHuge[3000] = chNull;
 
     FormatSz(szHuge, S(szSmall));
-    Check(CchSz(szSmall) < sizeof(szSmall),
+    Check(CchSz(szSmall) < (int)sizeof(szSmall),
       "a 3000-character format stays inside a 100-byte destination (%d)",
       CchSz(szSmall));
 
@@ -3361,8 +3432,8 @@ static void TestNestedIncludeQt()
 // checks make both structural.
 static void TestRegistryQt()
 {
-  CONST char *rgsz[400], *sz, *pch1, *pch2;
-  int rggrf[400], rgtab[400], csw = 0, cPrefix = 0, i, j, grf, tab;
+  CONST char *rgsz[400], *pch1, *pch2;
+  int rggrf[400], rgtab[400], csw = 0, cPrefix = 0, i, j;
   flag fOk;
 
   Group("Switch registry");
@@ -3412,10 +3483,9 @@ static void TestRegistryQt()
       j++;
   Check(j == 1, "exactly one empty spelling, the day-arithmetic row");
 
-  // And every spelling the running binary's own -H text documents must
-  // resolve: sz stays unused here because the resolution check lives
-  // in tools/registry_audit.py, which parses the help source directly.
-  sz = NULL;
+  // Every spelling the running binary's own -H text documents must also
+  // resolve. That check is not here: it lives in
+  // tools/registry_audit.py, which parses the help source directly.
   printf("  %d rows, %d of them prefix rows, all invariants hold\n",
     csw, cPrefix);
 }
@@ -4895,6 +4965,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"color-scheme",         TestColorSchemeQt},
   {"dialog-buttons",       TestDialogButtonWiringQt},
   {"shared-symbols",       TestSharedSymbolBoxesQt},
+  {"clear-screen",         TestClearScreenQt},
   {"animation",            TestAnimationStateQt},
   {"mnemonics",            TestDialogMnemonicsQt},
   {"arrow-keys",           TestDialogArrowKeysQt},

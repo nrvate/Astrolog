@@ -678,8 +678,8 @@ tools/warning_audit.py --update        # after a fix, to move the ledger
 
 It compiles console, Qt, Qt-test and Windows clean with `-Wall`,
 normalizes each warning to (build, file, function, flag, message with the
-numbers masked) and diffs that against `tools/warnings.txt` — 819
-warnings in 198 sites as of 2026-09-01. It fails on a **removed** line as
+numbers masked) and diffs that against `tools/warnings.txt` — 462
+warnings in 131 sites as of 2026-09-01, down from 857. It fails on a **removed** line as
 well as an added one, so fixing something means regenerating the ledger
 and the ledger cannot drift into overstating what is left.
 

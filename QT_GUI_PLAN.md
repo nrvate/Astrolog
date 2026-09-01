@@ -316,41 +316,35 @@ Roughly in the order I'd take them.
    upstream-shaped, and neither matrix can exercise them.
 
 13. **Work the warning ledger down.** Added 2026-09-01 (work log items
-    146-147). `tools/warning_audit.py` holds 819 warnings in 198 sites
-    against `tools/warnings.txt`; item 147 took the six classes where a
-    diagnostic is nearly always a defect and emptied them. What is left
-    is four campaigns, not one sweep, and they are in rough
-    value-per-risk order:
+    146-149). `tools/warning_audit.py` holds it against
+    `tools/warnings.txt`. Started at 857 warnings in 209 sites; **462 in
+    131 sites** now, and seven classes are empty. Items 147-149 took
+    every tranche whose fix was mechanical or whose reading was cheap.
+    Two campaigns are left, and neither is a sweep:
 
-    - **`-Wunused-*`, 50 sites** (variable 21, but-set-variable 15,
-      function 10, value 4). Cheapest, and the one most likely to
-      surface something: an assigned-but-never-read variable is often a
-      computation somebody forgot to use. Deleting a name changes no
-      object code, which makes it self-netting the way P7's rename was.
-    - **`-Wsign-compare`, 15.** Each one is a real question -- a signed
-      loop bound against an unsigned size -- and the answer is usually
-      "cannot actually happen here", which is worth a comment rather
-      than a cast.
-    - **`-Wparentheses`, 55.** Almost all upstream's idiom. Read each,
-      parenthesize the ones that mean what they say, and *stop* at any
-      that turn out not to; a precedence bug in this family is exactly
-      the shape of item 147's `XChartIndian` site.
     - **`-Wmaybe-uninitialized`, 91.** The largest and the least
       trustworthy: at `-O` GCC guesses, and most of these are paths it
-      cannot prove are unreachable. Do not initialize a variable to
-      silence one -- that converts a real bug into a wrong answer.
-      Read, and only then decide.
+      cannot prove unreachable. **Do not initialize a variable to silence
+      one** -- that converts a real bug into a confidently wrong answer,
+      which is worse than the warning. Read each, decide whether the path
+      is reachable, and where it is not, say so at the site rather than
+      papering over it. Where it *is* reachable, that is a bug and wants
+      its own note.
+    - **`-Wformat-truncation=`, 45.** T5's residue, and already argued at
+      REFACTORING.md T5: item 143 turned every unbounded `sprintf` into a
+      bounded one, and this is GCC naming the buffers whose worst case
+      still does not fit. Each is a sizing question about one buffer --
+      is the worst case reachable, and if so how big should it be -- so
+      it is per-site judgment, not a conversion.
 
-    Two are deliberately *not* on the list. **`-Wunused-result` (18)**
-    is every `fgets` whose return nobody checks, all in the atlas and
-    import loaders; each is a real "what if the file ends early" and a
-    real behaviour change to fix, so it wants its own increment with the
-    import-format tests as the net. **`-Wformat-truncation=` (45)** is
-    T5's residue and already documented at REFACTORING.md T5: the
-    compiler is naming the buffers too small for their worst case, which
-    is a sizing question per site, not a sweep.
+    Everything else in the ledger carries a recorded verdict at work log
+    item 149: the qtdialog helper toolkit that has no current caller but
+    is documented for the next session to use, `FreeProcInstance()`'s
+    Win16 no-op, the third-party files, and the two item 148 deliberately
+    left (`SwissHouse()`'s discarded return, `CommandLineX()`'s
+    `fPause`).
 
-    The rule that makes this safe is the one item 147 followed: a
+    The rule that makes this safe is the one items 147-149 followed: a
     warning fix is behaviour-preserving or it is a bug fix, and either
     way it needs the matrices. Never both in one commit without saying
     which is which.
@@ -5406,6 +5400,105 @@ are the more useful half to read before starting something new.
     (`ShowContextMenu()` chooses `PmenuContextForTextQt()` off
     `us.fGraphics`), so nothing is broken; it is dead code plus stale
     documentation, and it gets its own increment.
+
+149. **Four classes closed at once, and the reading found a Qt command
+    that had silently done nothing for months.** Item 13's remaining
+    cheap tranches taken together: `-Wsign-compare`, `-Wparentheses`,
+    `-Wunused-result`, and the tail of `-Wunused-*`. Ledger 707 -> 462,
+    sites 168 -> 131.
+
+    **Clear Screen was dead in text mode, and the compiler only pointed
+    at the door.** `RedrawTextQt()` showed as `defined but not used`.
+    Following it: the port used to draw text charts into their own
+    `QTextBrowser` window, and `RedrawQt()` has since drawn them into the
+    canvas the way Windows draws into its client area. The function, the
+    `qi.pdlgText`/`qi.ptextBrowser` fields, `AddHotkeysToWindowQt()` and
+    a `hide()` guard are all orphans of that change -- and so was
+    `ClearTextWindowQt()`, which `ClearScreenQt()` still called for text
+    mode. It cleared a window that is never created, so **Clear Screen
+    did nothing at all in text mode**, while Windows' `TextClearScreen()`
+    clears its client area. One path serves both now, because both draw
+    into the same buffer; `gi.kiOff` is `kMainA[fInverse]`
+    (xscreen.cpp:162), exactly the colour Windows passes to
+    `WinClearScreen()`.
+    Three comments in qtdriver.cpp still described the retired design as
+    live; they are corrected.
+
+    The new `clear-screen` group is 8 assertions, and **reverting the fix
+    fails its text half**. Getting it right took two attempts, both
+    instructive:
+    - The first version rendered a chart and asserted something had been
+      drawn. It passed alone and failed in the full run, because the
+      chart inherits whatever restrictions and flags earlier groups left
+      set -- this file's own header trap, and item 141's diagnosis.
+    - The second version still called `RedrawQt()` in *text* mode, which
+      runs `Action()` with `is.S` pointed at stdout. That made the
+      `long-strings` group fail **two runs in three** with the same "0
+      bytes" signature as the intermittent item 141 recorded and could
+      not reproduce. Painting the dirt directly and never redrawing fixed
+      it: four consecutive clean full runs. The lesson is item 145's,
+      again -- a regression test can be the regression.
+
+    **`-Wunused-result`: the reads whose failure nobody noticed.** Each
+    of the six atlas loops reads exactly as many records as a count
+    earlier in the same file claims. When the file is short, `fgets`
+    fails, `szLine` still holds the *previous* record, and the loop
+    parses it again -- once per missing row. Measured on an atlas
+    truncated to 500 lines:
+
+        HEAD: Astrolog: Zone rule error: Day operator not >= or <= in
+              entry 5 of rule 11: ''
+        now:  Astrolog: Atlas error: File ended after 483 of 33702 cities.
+
+    The old build re-parsed one line 33,219 times and then blamed the
+    *time zone rules*, a different subsystem entirely. Same treatment for
+    `FReadSzLineTrim()` (a read error that was not EOF fell through with
+    the previous line), the old-style `-o` chart info and `-o0` position
+    readers, and the exoplanet list. Two are left on purpose: the
+    exoplanet line-counting loop, where `i` is load bearing (`cexod =
+    i-2`) and moving where it stops would change how many planets the
+    list holds, and placalc.cpp, which is third-party.
+
+    **`-Wsign-compare` was a type that had been wrong all along.**
+    `GetXY()` is declared `KI` but returns `_GetXY()` -- a packed 24 bit
+    value -- in bitmap mode, and the flood fill compared it against a
+    `KV`. The values were right, both being non-negative; the types were
+    not. `GetXY()`/`SetXY()` carry a `KV` now, which is what they always
+    carried. The other half was `rgod[].kv == ~0`: a KV tested against a
+    signed int at thirteen sites, with no name for the sentinel. It has
+    one now -- `kvNone` in astrolog.h -- which is theme T2's "none is
+    spelled three ways" closed in miniature.
+
+    **`-Wparentheses`, all 24, were correct code that reads wrong.**
+    Twelve `if (x = f())` assignments-as-conditions, `(x)&1^1` and
+    `(x)*3 + 3 & ~3` in the bitmap macros, `rgx[i+1 & 3]`,
+    `(sign-1 & 3)^...`, and two `==` chains of exactly the shape item
+    147's `XChartIndian` find had: `(j < 1 == us.fArabicFlip)` and
+    `(a >= q) == (b >= q) == fFlip`. Every one means what it already
+    did; the parentheses only make GCC agree. placalc.cpp's is left,
+    third-party.
+
+    **Nets**: suite 3534/0 across four consecutive runs; chart matrix 0
+    of 6,936; switch matrix 0 of 75,635; graphics matrix 0 of 224;
+    settings round trip; six audits and three generated tables;
+    `tools/win-tests.sh` 2 scenarios; all four builds compile.
+
+    **What the ledger still holds, with verdicts.**
+    `-Wmaybe-uninitialized` (91) and `-Wformat-truncation=` (45) are the
+    two real campaigns left and neither is a sweep.
+    `-Wunused-function` (9) is qtdialog.cpp's documented dialog helper
+    toolkit -- `NewComboQt`, `PlaceRowQt`, `HeadersQt` and the rest,
+    which QT_GUI_PLAN.md tells the next session to use rather than
+    reinvent; they are a library with no current caller, not dead weight,
+    and deleting them would contradict that advice.
+    `-Wunused-value` (4) is `FreeProcInstance()` in wdialog.cpp, a Win16
+    relic that expands to its own argument on Win32.
+    `-Wunused-result` (4), `-Wsign-compare` (2) and `-Wparentheses` (1)
+    are third-party (placalc.cpp, sweph.cpp) plus the exoplanet counting
+    loop.
+    `-Wunused-variable` (1) and `-Wunused-but-set-variable` (1) are the
+    two item 148 left standing with their reasons: `SwissHouse()`'s
+    discarded `swe_calc_ut()` return and `CommandLineX()`'s `fPause`.
 
 ## Features this fork adds to both builds
 

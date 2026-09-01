@@ -1185,18 +1185,18 @@ void DrawObjects(ObjDraw *rgod, int cod, int zEdge)
       zEdge, zEdge, gs.xWin-zEdge, gs.yWin-zEdge))
       continue;
     obj = rgod[i].obj;
-    if (rgod[i].kv != ~0) {
+    if (rgod[i].kv != kvNone) {
       kSav = kObjB[obj]; kObjB[obj] = rgod[i].kv;
     }
     DrawObject(rgod[i].obj, rgod[i].x, rgod[i].yg);
-    if (rgod[i].kv != ~0)
+    if (rgod[i].kv != kvNone)
       kObjB[obj] = kSav;
   }
 
   // Draw dots for actual object location.
   for (i = cod-1; i >= 0; i--) if (rgod[i].f) {
     obj = rgod[i].obj;
-    DrawColor(rgod[i].kv != ~0 ? rgod[i].kv : kObjB[obj]);
+    DrawColor(rgod[i].kv != kvNone ? rgod[i].kv : kObjB[obj]);
     // Draw small or large dot near glyph indicating exact object location.
     if ((gi.nMode == gHorizon &&
       (gs.fAlt || (obj > oNorm && !FOdd(gs.nAllStar)))) ||
@@ -2075,7 +2075,7 @@ LAfter:
       rgod[l].f = !FMapCalc(x1, y1, &rgod[l].x, &rgod[l].y, fGlobe, fSky,
         rT, nScl, &cr, deg);
       rgod[l].obj = i;
-      rgod[l].kv = k <= arMC ? ~0 : gi.kiLite;
+      rgod[l].kv = k <= arMC ? kvNone : gi.kiLite;
     }
   }
 

@@ -937,7 +937,12 @@ flag FLoadAtlas(FILE *file, int cae)
 
   for (i = 0; i < cae; i++) {
     pae = &is.rgae[i];
-    fgets(szLine, cchSzMax, file);
+    if (fgets(szLine, cchSzMax, file) == NULL) {
+      sprintf2(S(szLine),
+        "Atlas error: File ended after %d of %d cities.\n", i, cae);
+      PrintError(szLine);
+      return fFalse;
+    }
 
     // Parse location coordinates
     sscanf(szLine, "%lf%lf", &pae->lon, &pae->lat);
@@ -1077,7 +1082,12 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
   // Read in each rule.
   for (i = 0; i < irunMax; i++) {
     prun = &is.rgrun[i];
-    fgets(szLine, cchSzMax, file);
+    if (fgets(szLine, cchSzMax, file) == NULL) {
+      sprintf2(S(szErr),
+        "Zone rule error: File ended after %d of %d rules.\n", i, irunMax);
+      PrintError(szErr);
+      return fFalse;
+    }
     for (pch = szLine; *pch > ' '; pch++)
       ;
     if (*pch)
@@ -1105,7 +1115,13 @@ flag FLoadZoneRules(FILE *file, int irunMax, int irueMax)
     // Read in the current rule's list of rule entries.
     for (j = 0; j < crue; j++) {
       prue = &is.rgrue[prun->irue + j];
-      fgets(szLine, cchSzMax, file);
+      if (fgets(szLine, cchSzMax, file) == NULL) {
+        sprintf2(S(szErr),
+          "Zone rule error: File ended in entry %d of %d in rule %d.\n",
+          j, crue, i);
+        PrintError(szErr);
+        return fFalse;
+      }
 
       // Parse year range at which rule entry applies.
       prue->yea1 = atoi(szLine);
@@ -1244,7 +1260,13 @@ flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
 
   // Read in each zone change area.
   for (i = 0; i < izcnMax; i++) {
-    fgets(szLine, cchSzMax, file);
+    if (fgets(szLine, cchSzMax, file) == NULL) {
+      sprintf2(S(szErr),
+        "Zone change error: File ended after %d of %d zones.\n",
+        i, izcnMax);
+      PrintError(szErr);
+      return fFalse;
+    }
     for (pch = szLine; *pch > ' '; pch++)
       ;
     if (*pch)
@@ -1272,7 +1294,13 @@ flag FLoadZoneChanges(FILE *file, int izcnMax, int izceMax)
     // Read in the current zone's list of zone change entries.
     for (j = 0; j < czn; j++) {
       pzc = &is.rgzc[rgizcChange[i] + j];
-      fgets(szLine, cchSzMax, file);
+      if (fgets(szLine, cchSzMax, file) == NULL) {
+        sprintf2(S(szErr),
+          "Zone change error: File ended in entry %d of %d in zone %d.\n",
+          j, czn, i);
+        PrintError(szErr);
+        return fFalse;
+      }
 
       // Parse offset to use for this time zone.
       for (pch = szLine; *pch > ' '; pch++)
@@ -1400,7 +1428,12 @@ flag FLoadZoneLinks(FILE *file, int czl)
 
   // Read in each link.
   for (i = 0; i < czl; i++) {
-    fgets(szLine, cchSzMax, file);
+    if (fgets(szLine, cchSzMax, file) == NULL) {
+      sprintf2(S(szErr),
+        "Zone link error: File ended after %d of %d links.\n", i, czl);
+      PrintError(szErr);
+      return fFalse;
+    }
     for (pch = szFrom = szLine; *pch > ' '; pch++)
       ;
     if (*pch)
@@ -1501,7 +1534,7 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
     (us.nAtlasList > 0 ? Min(us.nAtlasList, ilistMax) : ilistMax)));
 
   // Parse city, along with comma separated state/province and country/region.
-  for (pch1 = szCity, pch2 = (char *)szIn; *pch1 = *pch2; pch1++, pch2++)
+  for (pch1 = szCity, pch2 = (char *)szIn; (*pch1 = *pch2); pch1++, pch2++)
     ;
   for (pch1 = szCity; *pch1 && *pch1 != ','; pch1++)
     ;

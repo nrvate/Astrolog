@@ -62,7 +62,7 @@
 */
 
 #define cbPixelK 3
-#define CbColmapRow(x) ((x)*cbPixelK + 3 & ~3)
+#define CbColmapRow(x) (((x)*cbPixelK + 3) & ~3)
 #define CbColmap(x, y) ((y) * CbColmapRow(x))
 #define zColmap 65535
 
@@ -84,9 +84,9 @@ void BmpSetXY(Bitmap *b, int x, int y, KV kv)
   { _SetRGB(_PbXY(b, x, y), RgbR(kv), RgbG(kv), RgbB(kv)); }
 KV BmpGetXY(CONST Bitmap *b, int x, int y)
   { return _GetXY(b, x, y); }
-void SetXY(int x, int y, KI ki)
+void SetXY(int x, int y, KV ki)
   { if (!gi.fBmp) BmSet(gi.bm, x, y, ki); else BmpSetXY(&gi.bmp, x, y, ki); }
-KI GetXY(int x, int y)
+KV GetXY(int x, int y)
   { return !gi.fBmp ? FBmGet(gi.bm, x, y) : _GetXY(&gi.bmp, x, y); }
 KI BmGetXY(int x, int y)
   { return !gi.fBmp ? FBmGet(gi.bm, x, y) : (_GetXY(&gi.bmp, x, y) > 0)*15; }
@@ -1199,10 +1199,10 @@ void WriteBmp(FILE *file)
         value = 0;
       }
       if (gs.fColor)
-        value |= (dword)FBmGet(gi.bm, x, y) << ((x & 7 ^ 1) << 2);
+        value |= (dword)FBmGet(gi.bm, x, y) << (((x & 7) ^ 1) << 2);
       else
         if (FBmGet(gi.bm, x, y))
-          value |= (dword)1 << (x & 31 ^ 7);
+          value |= (dword)1 << ((x & 31) ^ 7);
     }
     PutLong(value);
   }
@@ -2041,7 +2041,7 @@ void WireOctahedron(int x, int y, int z, int r)
   for (i = 0; i < 4; i++) {
     WireLine(rgx[i], rgy[i], z, x, y, z-r);
     WireLine(rgx[i], rgy[i], z, x, y, z+r);
-    WireLine(rgx[i], rgy[i], z, rgx[i+1 & 3], rgy[i+1 & 3], z);
+    WireLine(rgx[i], rgy[i], z, rgx[(i+1) & 3], rgy[(i+1) & 3], z);
   }
 }
 

@@ -760,7 +760,7 @@ real Navamsa(real deg)
 
   sign = SFromZ(deg);
   unit = deg - ZFromS(sign);
-  sign2 = Mod12(((sign-1 & 3)^(2*FOdd(sign-1)))*3 + (int)(unit*0.3) + 1);
+  sign2 = Mod12((((sign-1) & 3)^(2*FOdd(sign-1)))*3 + (int)(unit*0.3) + 1);
   return ZFromS(sign2) + unit;
 }
 
@@ -2572,7 +2572,7 @@ void SwissEnsurePath()
   if (FSzSet(pch))
     sprintf2(SO(szPath + CchSz(szPath), szPath), "%s%s", PATH_SEPARATOR,
       EPHE_DIR);
-  if (CchSz(szPath) >= sizeof(szPath)-1) {
+  if (CchSz(szPath) >= (int)sizeof(szPath)-1) {
     sprintf2(S(szT),
       "Swiss Ephemeris file path longer than %d characters, so truncated.",
       (int)sizeof(szPath)-1);
@@ -3727,7 +3727,7 @@ flag SwissTestStar(char *sz)
     if (pch > sz)
       *pch = chNull;
     else
-      for (pch = sz; *pch = pch[1]; pch++)
+      for (pch = sz; (*pch = pch[1]); pch++)
         ;
   }
   return fTrue;
@@ -3830,7 +3830,7 @@ LNext:
     swe_get_planet_name(iast + SE_AST_OFFSET, pch);
     // This check only needed for old style ephemeris files.
     if (*pch == '?' && pch[1] == ' ')
-      while (*pch = pch[2])
+      while ((*pch = pch[2]))
         pch++;
   }
   pes->pchBest = pes->sz;

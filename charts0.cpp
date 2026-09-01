@@ -209,7 +209,7 @@ void PrintS(CONST char *sz)
 
   // Print rest of line in default color.
   AnsiColor(kDefault);
-  while (ch = *sz) {
+  while ((ch = *sz)) {
     if (ch != '_')
       PrintCh(ch);
     else
@@ -1666,7 +1666,7 @@ void DisplayArabic(void)
         PrintCh(ch);
       }
       if (j < 2) {
-        sprintf2(S(sz), " %c ", (j < 1 == us.fArabicFlip) ? '+' : '-');
+        sprintf2(S(sz), " %c ", ((j < 1) == us.fArabicFlip) ? '+' : '-');
         PrintSz(sz);
       }
     }

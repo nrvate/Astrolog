@@ -154,10 +154,6 @@ typedef struct _qtuserinterface {
   KV kvText = 0;
   QFont fontText;
 
-  // The persistent read-only text window (see RedrawTextQt()).
-  QDialog *pdlgText = NULL;
-  QTextBrowser *ptextBrowser = NULL;
-
   // Menu items that a dialog can also change, so they need re-syncing
   // when it closes -- the job Windows does with the WiCheckMenu() calls
   // sprinkled through DlgCalc and DlgDisplay.
@@ -231,7 +227,6 @@ static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str);
 static QAction *PaFindMenuActionLooseQt(QWidget *pw, CONST QString &str);
 static void ConnectMenuQt(QAction *pa, QObject *pctx,
   std::function<void()> fn);
-static void AddHotkeysToWindowQt(QWidget *pw);   // defined below
 static QMenu *PmenuContextForChartQt();   // defined below
 static QMenu *PmenuContextForTextQt();    // defined below
 
@@ -498,8 +493,6 @@ void SetBmpWindowQt(flag f) { qi.fBmpWindow = f; }
 
 
 
-static void ClearTextWindowQt();   // defined with the text window below
-
 // Put the canvas into whichever of the two sizing modes is currently set.
 // With "window resizes chart" on, the canvas tracks the scroll area's
 // viewport and paintEvent() picks the chart size up from it. With it off
@@ -566,17 +559,22 @@ void ToggleFullScreenQt()
 // because it draws through gi.qpaint, and that only exists for the length
 // of a redraw. Filling the buffer with the background color is what that
 // would have done anyway (its DrawColor(gi.kiOff) + DrawBlock pair).
+//
+// One path serves both modes, because text charts draw into this same
+// buffer (see RedrawQt()). It used to branch on us.fGraphics and send text
+// mode to a ClearTextWindowQt() that cleared the separate text window --
+// and that window stopped being created when text moved onto the canvas,
+// so Clear Screen silently did nothing in text mode from then until
+// 2026-09-01. gi.kiOff is kMainA[fInverse] (xscreen.cpp:162), which is the
+// colour Windows' TextClearScreen() passes to WinClearScreen().
 void ClearScreenQt()
 {
-  if (us.fGraphics) {
-    if (gi.qim == NULL)
-      return;
-    KV kv = KvFromKi(gi.kiOff);
-    gi.qim->fill(QColor(RgbR(kv), RgbG(kv), RgbB(kv)));
-    if (gi.qcanvas != NULL)
-      gi.qcanvas->update();
-  } else
-    ClearTextWindowQt();
+  if (gi.qim == NULL)
+    return;
+  KV kv = KvFromKi(gi.kiOff);
+  gi.qim->fill(QColor(RgbR(kv), RgbG(kv), RgbB(kv)));
+  if (gi.qcanvas != NULL)
+    gi.qcanvas->update();
 }
 
 
@@ -703,25 +701,21 @@ void TextCharQt(int xCell, int yCell, int ch)
 }
 
 
-// Text mode (us.fGraphics false, e.g. Colored Text / Show Interpretations)
-// renders through a wholly separate path from the graphics one -- Action()
-// (astrolog.cpp) calls PrintChart() instead of FActionX()/DrawChartX(),
-// driven by is.S/is.szFileScreen rather than gi.qpaint. There's no Win32
-// window to draw text characters into here, so instead: point
-// is.szFileScreen at a temp file, ask for HTML output (so color comes from
-// real <font color> tags instead of needing an ANSI escape parser), run
-// Action(), then load the result into a persistent read-only text window.
-// Same trick already proven by ShowExportTextDialogQt() in qtdialog.cpp,
-// just re-shown in a window instead of left on disk.
+// Capturing a text chart as text. Text mode renders through a wholly
+// separate path from the graphics one -- Action() (astrolog.cpp) calls
+// PrintChart() instead of FActionX()/DrawChartX(), driven by
+// is.S/is.szFileScreen rather than gi.qpaint. So: point is.szFileScreen at
+// a temp file, optionally ask for HTML output (so colour comes from real
+// <font color> tags instead of needing an ANSI escape parser), run
+// Action(), and read the file back. Same trick ShowExportTextDialogQt()
+// in qtdialog.cpp uses.
+//
+// This used to end in a persistent QTextBrowser window. It does not any
+// more: RedrawQt() draws text charts into the canvas buffer, the way
+// Windows draws them into its client area, so the only callers left want
+// the string itself.
 
-// Clear Screen in text mode, the counterpart of Windows' TextClearScreen().
-static void ClearTextWindowQt()
-{
-  if (qi.ptextBrowser != NULL)
-    qi.ptextBrowser->clear();
-}
-
-// Shared by RedrawTextQt() and the Edit menu's Copy Chart Text Output --
+// Shared by the Edit menu's Copy Chart Text Output --
 // Print, equivalent to Windows' DlgPrint(). Two things are copied from
 // there: the chart is scaled up before rendering so it doesn't print at
 // screen resolution, and "Export Text and Print in Intuitive Manner"
@@ -921,38 +915,6 @@ static QString CaptureTextChartQt(flag fHTML)
   return qs;
 }
 
-static void RedrawTextQt()
-{
-  QString qsHtml = CaptureTextChartQt(fTrue);
-
-  if (qi.pdlgText == NULL) {
-    qi.pdlgText = new QDialog(gi.qwind, Qt::Window);
-    qi.pdlgText->setWindowTitle("Text Chart");
-    qi.pdlgText->resize(700, 550);
-    QVBoxLayout *playout = new QVBoxLayout(qi.pdlgText);
-    qi.ptextBrowser = new QTextBrowser();
-    qi.ptextBrowser->setStyleSheet("background-color: black;");
-    playout->addWidget(qi.ptextBrowser);
-    // Text charts live in this window rather than on the canvas, so
-    // their context menus hang off here. Replaces QTextBrowser's own
-    // copy/select-all menu, the same way Windows replaces the default.
-    AddHotkeysToWindowQt(qi.pdlgText);
-    qi.ptextBrowser->setContextMenuPolicy(Qt::CustomContextMenu);
-    QObject::connect(qi.ptextBrowser, &QWidget::customContextMenuRequested,
-      qi.ptextBrowser, [](CONST QPoint &pt) {
-        QMenu *pmenu = PmenuContextForTextQt();
-        if (pmenu == NULL)
-          return;
-        pmenu->exec(qi.ptextBrowser->mapToGlobal(pt));
-        delete pmenu;
-      });
-  }
-  qi.ptextBrowser->setHtml(qsHtml);
-  qi.pdlgText->show();
-  qi.pdlgText->raise();
-  qi.pdlgText->activateWindow();
-}
-
 
 // Copy Chart Text Output, equivalent to Windows' cmdCopyText: put the
 // same plain text listing Export Chart Text Output would write onto the
@@ -1009,8 +971,6 @@ void RedrawQt()
   // Note this is a different function from InitColorsX() in xscreen.cpp,
   // which sets up the backend palette instead.
   InitColors();
-  if (qi.pdlgText != NULL)
-    qi.pdlgText->hide();
   if (gi.qim != NULL) {
     delete gi.qim;
     gi.qim = NULL;
@@ -2809,8 +2769,7 @@ static void BuildAnimateMenu(QMainWindow *pwind)
 // the 11 "List Signs/Objects/Aspects/..." text listing actions. Those
 // last ones print to a text stream rather than drawing a chart, which is
 // why they go through AddChartModeTextAction() -- it forces text mode, so
-// RedrawQt() takes the RedrawTextQt() path and they land in the shared
-// text window instead of needing one of their own.
+// RedrawQt() draws them into the canvas instead of a chart.
 
 static void BuildHelpMenu(QMainWindow *pwind)
 {
@@ -2866,7 +2825,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
 
   // Each of these is a chart "mode" that's actually a plain text listing
   // (us.fGraphics forced false) rather than a picture -- see
-  // AddChartModeTextAction() and RedrawTextQt(). Field mapping verified
+  // AddChartModeTextAction(). Field mapping verified
   // against ProcessState()'s chart-mode switch, wdriver.cpp:1180-1190.
   AddChartModeTextAction(pmenu, "List Si&gns", gSign);
   AddChartModeTextAction(pmenu, "List &Objects", gObject);
@@ -3377,22 +3336,6 @@ static void ApplyHotkeysQt(QMainWindow *pwind)
   }
 }
 
-// A Qt shortcut only fires for the active window, and text charts are
-// shown in their own window rather than on the canvas -- so without this
-// every hotkey would go dead the moment text mode opened. Adding the
-// actions to that window makes their shortcuts live there too; they
-// aren't displayed, since it has no menu bar of its own.
-static void AddHotkeysToWindowQt(QWidget *pw)
-{
-  int i;
-
-  for (i = 0; i < chotkeyQt; i++) {
-    QAction *pa = PaFindMenuActionQt(gi.qwind->menuBar(),
-      QString(rghotkeyQt[i].szAction));
-    if (pa != NULL && !pw->actions().contains(pa))
-      pw->addAction(pa);
-  }
-}
 
 
 // Right-click context menus, the Qt equivalent of Windows' DoPopup()

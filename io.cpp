@@ -268,8 +268,7 @@ flag FReadSzLineTrim(FILE *file, char *szLine, int cchLine)
 {
   char *pch;
 
-  fgets(szLine, cchLine, file);
-  if (feof(file))
+  if (fgets(szLine, cchLine, file) == NULL || feof(file))
     return fFalse;
   for (pch = szLine; *pch; pch++)
     ;
@@ -2908,8 +2907,11 @@ flag FInputData(CONST char *szFile)
   } else if (FNumCh(ch)) {
     is.fHaveInfo = fTrue;
     SS = 0.0;
-    fscanf(file, "%d%d%d", &MM, &DD, &YY);
-    fscanf(file, "%lf%lf%lf%lf", &TT, &ZZ, &OO, &AA);
+    if (fscanf(file, "%d%d%d", &MM, &DD, &YY) < 3 ||
+      fscanf(file, "%lf%lf%lf%lf", &TT, &ZZ, &OO, &AA) < 4) {
+      PrintWarning("Old style chart info file ended early.");
+      goto LDone;
+    }
     TT = DecToDeg(TT); ZZ = DecToDeg(ZZ);
     OO = DecToDeg(OO); AA = DecToDeg(AA);
     if (!FValidMon(MM) || !FValidDay(DD, MM, YY) || !FValidYea(YY) ||
@@ -2946,9 +2948,15 @@ flag FInputData(CONST char *szFile)
     // already in memory so we don't have to calculate them later.
 
     for (i = 1; i <= oNorm; i++) {
-      fscanf(file, "%s%lf%lf%lf", sz, &k, &l, &m);
+      if (fscanf(file, "%s%lf%lf%lf", sz, &k, &l, &m) < 4) {
+        PrintWarning("Old style position file ended early.");
+        goto LDone;
+      }
       planet[i] = Mod((l-1.0)*30.0+k+m/60.0);
-      fscanf(file, "%s%lf%lf", sz, &k, &l);
+      if (fscanf(file, "%s%lf%lf", sz, &k, &l) < 3) {
+        PrintWarning("Old style position file ended early.");
+        goto LDone;
+      }
       if ((m = k+l/60.0) > rDegHalf)
         m = rDegMax - m;
       planetalt[i] = m;
@@ -2975,7 +2983,10 @@ flag FInputData(CONST char *szFile)
         i = oVtx-1;
     }
     for (i = 1; i <= cSign/2; i++) {
-      fscanf(file, "%s%lf%lf%lf", sz, &k, &l, &m);
+      if (fscanf(file, "%s%lf%lf%lf", sz, &k, &l, &m) < 4) {
+        PrintWarning("Old style position file ended early.");
+        goto LDone;
+      }
       chouse[i+6] = Mod((chouse[i] = Mod((l-1.0)*30.0+k+m/60.0))+rDegHalf);
     }
     for (i = 1; i <= cSign; i++)

@@ -838,9 +838,9 @@ extern CONST char *szDrawObject[objMaxG], *szDrawObject2[objMaxG],
 // From xgeneral.cpp
 
 #define BBmGet(rg, x, y) ((rg)[(y)*gi.cbBmpRow + ((x) >> 1)])
-#define FBmGet(rg, x, y) (BBmGet(rg, x, y) >> (((x)&1^1) << 2) & 15)
-#define BmSet(rg, x, y, o) BBmGet(rg, x, y) = BBmGet(rg, x, y) & \
-  15 << (((x)&1) << 2) | (o) << (((x)&1^1) << 2)
+#define FBmGet(rg, x, y) (BBmGet(rg, x, y) >> ((((x)&1)^1) << 2) & 15)
+#define BmSet(rg, x, y, o) BBmGet(rg, x, y) = (BBmGet(rg, x, y) & \
+  (15 << (((x)&1) << 2))) | ((o) << ((((x)&1)^1) << 2))
 
 #define DrawEdge(x1, y1, x2, y2) \
   DrawBox(x1, y1, x2, y2, gi.nScaleT, gi.nScaleT)
@@ -953,8 +953,8 @@ extern KI KiCity P((int));
 
 extern void BmpSetXY P((Bitmap *, int, int, KV));
 extern KV BmpGetXY P((CONST Bitmap *, int, int));
-extern void SetXY P((int, int, KI));
-extern KI GetXY P((int, int));
+extern void SetXY P((int, int, KV));
+extern KV GetXY P((int, int));
 extern KI BmGetXY P((int, int));
 extern flag FAllocateBmp P((Bitmap *, int, int));
 extern flag FLoadBmp P((CONST char *, Bitmap *, flag));

@@ -765,7 +765,7 @@ void ChartTransitSearch(flag fProg)
 
     SetCI(ciCore, MonT, us.fInDayMonth ? 1 : DayT, YeaT, 0.0, DstT, ZonT,
       LonT, LatT);
-    if (us.fProgress = fProg) {
+    if ((us.fProgress = fProg)) {
       is.JDp = MdytszToJulian(MM, DD, YY, TT, SS, ZZ);
       ciCore = ciMain;
     }
@@ -1164,7 +1164,7 @@ void ChartTransitGraph(flag fTrans, flag fProg)
     if (fTrans)
       for (obj = 0; obj <= oNorm; obj++)
         SwapN(ignore[obj], ignore2[obj]);
-    if (us.fProgress = fProg) {
+    if ((us.fProgress = fProg)) {
       is.JDp = MdytszToJulian(MM, DD, YY, TT, SS, ZZ);
       ciCore = ciMain;
     }
@@ -1795,7 +1795,8 @@ flag ChartExoplanet(flag fColor)
     for (i = 0; !feof(file); i++)
       fgets(szLine, cchSzLine, file);
     fseek(file, 0, SEEK_SET);
-    fgets(szLine, cchSzLine, file);
+    if (fgets(szLine, cchSzLine, file) == NULL)
+      return fFalse;
     fTOI = CchSz(szLine) > 100;
     cexod = i-2;
     is.rgexod = RgAllocate(cexod, ExoData, "exoplanet list");
@@ -1805,7 +1806,8 @@ flag ChartExoplanet(flag fColor)
     ClearB((pbyte)is.rgexod, sizeof(ExoData) * cexod);
     for (i = 0; i < cexod; i++) {
       // Read in data for next exoplanet
-      fgets(szLine, cchSzLine, file);
+      if (fgets(szLine, cchSzLine, file) == NULL)
+        return fFalse;
       pexod = &is.rgexod[i];
       for (pch = szLine; *pch && *pch != ','; pch++)
         ;

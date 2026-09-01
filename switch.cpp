@@ -2912,7 +2912,7 @@ static int NSwV(CONST char *szSwitch, PARSEIN *pin)
     SwitchF(is.fReturn);
     ch1 = szSwitch[++l];
   }
-  if (i = (ch1 == 'd') + 2*(ch1 == 'm') + 3*(ch1 == 'y') + 4*(ch1 == 'Y'))
+  if ((i = (ch1 == 'd') + 2*(ch1 == 'm') + 3*(ch1 == 'y') + 4*(ch1 == 'Y')))
     ch1 = szSwitch[++l];
   if (i < 1)
     i = 2;

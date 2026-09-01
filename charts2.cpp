@@ -840,7 +840,7 @@ void ChartTransitInfluence(flag fProg)
   for (i = 0; i <= is.nObj; i++)
     ignore[i] = ignore2[i];
   ciCore = ciTran;
-  if (us.fProgress = fProg) {
+  if ((us.fProgress = fProg)) {
     is.JDp = MdytszToJulian(MM, DD, YY, TT, SS, ZZ);
     ciCore = ciMain;
   }

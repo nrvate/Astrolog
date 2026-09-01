@@ -1622,6 +1622,10 @@ typedef byte * pbyte;
 typedef int KI;
 typedef unsigned long KV;
 
+// "No colour override" for ObjDraw.kv. Spelled ~0 at thirteen sites,
+// which compared a signed int against an unsigned KV at every one.
+#define kvNone ((KV)~0)
+
 /*
 ** The enforced layer again, for the aspect domain (REFACTORING.md T2
 ** step 3, increment E3) -- same shape as TBLSIG/TBLOBJ above, and

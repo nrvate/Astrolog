@@ -2117,7 +2117,7 @@ static flag ChartAstroGraphCore(flag fRel)
       y = planet2[i2][i];
       if (us.fSeconds) {
         sprintf2(S(sz), " %s ", SzLocation(0.0, y));
-        for (j = 1; sz[j] = sz[j+11 + us.fSecond1K*4]; j++)
+        for (j = 1; (sz[j] = sz[j+11 + us.fSecond1K*4]); j++)
           ;
       } else {
         sprintf2(S(sz), "%3.0f%c", RAbs(y), y < 0.0 ? 's' : 'n');
