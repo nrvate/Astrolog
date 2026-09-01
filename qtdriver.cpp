@@ -4641,6 +4641,28 @@ void BeginQt()
 #ifdef QTTEST
   s_pfnMsgPrevQt = qInstallMessageHandler(MessageFilterQt);
 #endif
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  // Qt6 always enables high-DPI scaling -- the attributes that used to
+  // turn it off were removed -- and it changed the default rounding
+  // policy from Round to PassThrough, so a fractional screen scale is
+  // applied as-is instead of being rounded to a whole number.
+  //
+  // Measured on a 115 DPI display: the Qt5 build reports devicePixelRatio
+  // 1.0 and a 1600x2560 screen; the Qt6 build, with nothing else changed,
+  // reports 1.1979 and 1336x2137. Everything drew about 20% larger, which
+  // is what a user sees as "magnified".
+  //
+  // Round is the right answer twice over. It is what Qt5 defaulted to, so
+  // the two builds agree; and the Windows build does no fractional
+  // scaling at all, so it is also what parity means here. It matters more
+  // than usual for this program because the chart is laid out in whole
+  // character cells (SetTextMetricsQt), and a fractional factor puts
+  // those cell boundaries between pixels.
+  //
+  // Must precede the QApplication constructor; it is ignored afterwards.
+  QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+    Qt::HighDpiScaleFactorRoundingPolicy::Round);
+#endif
   gi.qapp = new QApplication(s_argc, s_argv);
   QApplication::setStyle(new AstroStyleQt);
   ApplyColorSchemeQt();
