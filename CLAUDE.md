@@ -146,28 +146,41 @@ python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # ruler2[] one short on its first run.
                                      # With a file argument: count leg only,
                                      # for any .as
-tools/chart-matrix.sh <binary>       # every text chart the console build
-                                     # draws, over a pinned date, so two
-                                     # binaries byte-diff. The switch matrix
-                                     # below does NOT cover this: it prints
-                                     # stderr and saved settings and never
-                                     # renders a chart, so charts0-3.cpp,
-                                     # intrpret.cpp and the x*.cpp text paths
-                                     # sit outside it (work log item 143)
-tools/switch-matrix.sh <binary>      # 529-invocation switch-surface
-                                     # behavior matrix; byte-diff it
-                                     # between an old-commit worktree
-                                     # build and the tree's binary to
-                                     # prove a parser change (see
-                                     # REFACTORING.md, "The registry as
-                                     # built"). influence-matrix.sh is
-                                     # the same for -j/-j0/-7 output
 python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # or FOutputSettings() writes resolves
                                      # to a registry row; found -YYI dead
                                      # behind a misspelled ifdef on its
                                      # first run
 ```
+
+And three **differential harnesses**, which are a different kind of check:
+each prints a normalized behavioural artifact for one binary, so two
+builds of this tree can be byte-diffed and an empty diff is the proof.
+Not pre-commit — each needs a baseline binary built from the commit you
+are changing (`git worktree add`; the recipe is in QT_TESTING.md).
+
+```sh
+tools/chart-matrix.sh <binary>       # 71 invocations: every text chart the
+                                     # console build draws over a pinned
+                                     # date, plus seconds/sidereal/3D
+                                     # variants, transits, progressions,
+                                     # relationship charts and the
+                                     # interpretation text
+tools/switch-matrix.sh <binary>      # 529 invocations: the switch surface,
+                                     # as each run's stderr plus the
+                                     # settings it saves (see
+                                     # REFACTORING.md, "The registry as
+                                     # built")
+tools/influence-matrix.sh <binary>   # the same for -j/-j0/-7 output
+```
+
+**They cover disjoint surfaces and neither substitutes for the other.**
+The switch matrix never renders a chart, so charts0-3.cpp, intrpret.cpp
+and the x*.cpp text paths are invisible to it -- work log item 143
+changed 1,055 formatting calls, mostly in exactly that code, and the
+switch matrix was byte-identical over 75,471 lines while proving nothing
+about them. Sabotage one site and re-run before trusting a clean diff:
+a harness whose invocations all error also diffs to zero.
 
 And three tables generated from the resource. Regenerate after any `.rc`
 change; piping into `diff` is how you check they are still in sync, which
@@ -241,7 +254,20 @@ build). It builds its own console binary with `-fsanitize=address` and
 `-DQTTEST`, so the checked tables' range guards are live too. Read the
 header before changing it — four of its arrangements are load-bearing,
 including that the binary needs a *short* path while the output file
-wants a *long* one.
+wants a *long* one. It also runs `make clean` on both sides of its
+overridden build, because the plain Makefile shares the repo's object
+directory — so **it deletes `./astrolog` while it runs**, and anything
+else started against that binary meanwhile fails confusingly.
+
+**ASan is not the whole of memory safety here, and the gap cost two
+hunts.** That build is `-O0`, where glibc's `_FORTIFY_SOURCE` is
+inactive — so a *fortify*-detected overflow (`__sprintf_chk` and its
+siblings, the `*** buffer overflow detected ***` message) cannot fire
+under it at all. Work log item 142 was exactly that, and survived 17 gdb
+runs and a full ASan sweep because every hunt pointed at a build that
+structurally could not see it. When the message is "buffer overflow
+detected" rather than an ASan report, build optimized *with* symbols and
+loop it under gdb; QT_TESTING.md has the one-line override.
 
 **`QT_COMPARING_WITH_WINDOWS.md` has the full workflow**, including how to
 drive either build headlessly and the environment traps that cost real
@@ -314,6 +340,27 @@ The things that have actually caught bugs in this project:
   an invention rather than catching a defect.
 - **Verify new interactive behaviour live**, not just by code review.
   Multiple genuine bugs here only manifest at runtime.
+- **A harness proves nothing until you sabotage it either.** The same
+  rule as above, one level up. A differential whose invocations all fail
+  still diffs to zero, and reads exactly like a proof: `chart-matrix.sh`
+  shipped its first draft with 15 of 70 invocations erroring on wrong
+  switch arity, and `switch-matrix.sh` had capped its output at the first
+  30 lines of a 159-line selection **for the whole T3 and phase-2
+  campaigns** — every "byte-identical" in those work log items covered a
+  fifth of what it claimed. Break one site on purpose and watch the diff
+  move before believing a clean one.
+- **A differential can only tell you something changed.** Every harness
+  here compares the program to an older build of itself, or to the other
+  build of the same core. None of that distinguishes "correct" from
+  "unchanged", and it actively protects a wrong answer, because fixing a
+  30-year-old bug shows up as a regression. When the question is whether
+  a number is *right*, the reference has to come from outside the repo
+  (REFACTORING.md T9, work log item 141).
+- **Never `git checkout` a file to undo a sabotage** during a sweep or a
+  falsification. It reverts that file's entire share of the change, not
+  the one line you broke — twice in one session (general.cpp, then 204
+  conversions in charts1.cpp, caught only because the totals stopped
+  reconciling). Reverse-patch the exact string instead.
 - **Prefer generating from `astrolog.rc` over transcribing by hand.** The
   dialogs, the 42 context menus and the menu mnemonics were all derived
   from it. Hand transcription introduced errors every time it was used.

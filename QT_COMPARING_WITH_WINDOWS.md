@@ -36,6 +36,16 @@ python3 tools/text-chart-diff.py out/win out/qt out/cmp
 **Layout is what to compare** — column positions, row spacing, where each
 field starts.
 
+**This is not `tools/chart-matrix.sh`, and the two answer different
+questions.** That harness byte-diffs chart *text* between two builds of
+**this** tree — it is how you prove a change to shared code left output
+alone, and an empty diff is the whole result. This one compares **this
+port against Windows**, where the builds legitimately differ in font and
+rendering, so the output is images for a human to look at rather than a
+diff to be empty. Reach for chart-matrix when you changed something and
+want to know if it moved; reach for this when you want to know whether
+the port matches its spec.
+
 ### Why the Windows build is launched with `-Wt`
 
 `SwissEnsurePath()` (calc.cpp) builds the Swiss Ephemeris search path by

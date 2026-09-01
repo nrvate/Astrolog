@@ -91,7 +91,7 @@ across six esoteric bodies at once.
 
 ## Running one test group instead of all of them
 
-The suite runs 29 groups in sequence and takes tens of seconds end to
+The suite runs 45 groups in sequence and takes tens of seconds end to
 end. When one group is under investigation, run just it:
 
 ```sh
@@ -607,9 +607,13 @@ make -f Makefile.win -j4
 python3 tools/rc_audit.py
 python3 tools/rc_mnemonic_audit.py
 python3 tools/rc_field_audit.py
+python3 tools/rc_lookup_audit.py
+python3 tools/defaults_audit.py
+python3 tools/registry_audit.py
 python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h
 python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h
 python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h
+tools/settings-round-trip.sh
 ```
 
 The three `diff` lines check that the generated tables still match the
@@ -621,6 +625,34 @@ And when the change touches both builds, `tools/win-tests.sh` as well.
 The shared logic underneath is already covered by the Qt suite, since
 both builds call the same `calc.cpp` and `io.cpp`; what this adds is the
 Windows dialog and menu wiring, which nothing else sees.
+
+**When the change touches shared core, the two byte-diff harnesses are
+the real gate, and they are not pre-commit** — each needs a baseline
+binary built from the commit you are changing:
+
+```sh
+git worktree add /tmp/base <commit> && make -C /tmp/base -j4
+cp /tmp/base/astrolog ./base-astrolog && git worktree remove /tmp/base --force
+tools/chart-matrix.sh  ./base-astrolog > old.txt 2>&1   # chart output
+tools/chart-matrix.sh  ./astrolog      > new.txt 2>&1
+tools/switch-matrix.sh ./base-astrolog > oldsw.txt 2>&1 # switch surface
+tools/switch-matrix.sh ./astrolog      > newsw.txt 2>&1
+diff old.txt new.txt && diff oldsw.txt newsw.txt        # empty = proven
+```
+
+**They cover disjoint surfaces, and assuming otherwise wastes a day.**
+The switch matrix prints each run's stderr and the settings file it
+saves; it *never renders a chart*, so charts0-3.cpp, intrpret.cpp and the
+x*.cpp text paths are invisible to it. The chart matrix is the opposite.
+Work log item 143 converted 1,055 formatting calls, most of them in
+exactly the code the switch matrix cannot see, and the switch matrix came
+back byte-identical over 75,471 lines while proving nothing about them.
+
+Both must run from the repo root with equally short paths (a deep path
+truncates the ephemeris path and changes lookups), and neither lets
+"now" reach its output, so runs minutes apart still compare byte for
+byte. Sabotage one site and re-run before trusting a clean diff: a
+harness whose invocations all error still diffs to zero.
 
 ## What the suite cannot tell you
 
@@ -636,3 +668,12 @@ means two things it cannot do:
 
 It also says nothing about **keyboard focus**, which lives in the dialog
 handlers rather than the resource, so no audit sees it either.
+
+And it has only recently begun to say anything about **whether the
+numbers are right**. The `oracle` group covers planetary longitude
+(against the ephemeris library called directly), the sidereal offset, the
+built-in Matrix formulas, and house-cusp ordering. Aspects, midpoints,
+progressions, eclipses, returns, the atlas and the interpretation text
+still have no reference outside this repo: every other harness compares
+the program to *itself*, so a wrong answer that has always been wrong
+looks exactly like a right one. See REFACTORING.md's T9.

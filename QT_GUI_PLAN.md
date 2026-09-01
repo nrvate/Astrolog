@@ -111,8 +111,8 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3520
-   assertions** as of 2026-08-31; it was 1396 when first written, and has
+   display and no `xdotool`, and exits non-zero on failure. **3524
+   assertions** in 45 groups as of 2026-08-31; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, bad input, and — since item 141
    — whether the computed positions are actually right.
@@ -236,6 +236,19 @@ Roughly in the order I'd take them.
    not loadable by it. The case is now unconditional, with a third branch
    for the GUI-less builds that consumes each `-W` switch's arguments and
    ignores it. Saved settings files are portable to every build.
+   **"All fixed" was wrong, and stayed wrong for five days.** The whole
+   `-b` backend sub-family was still dropped -- `nSwissEph`,
+   `fPlacalcPla`, `fMatrixPla`, `fPlacalcAst`, `fMatrixStar`, none of
+   them written -- so choosing Moshier or JPL and saving gave Swiss back
+   in silence. Fixed 2026-08-31 (work log item 140), found by the numeric
+   oracle rather than by looking. Two lessons worth more than the fix:
+   `registry_audit.py` cannot see this class, because it checks that
+   every spelling the program *writes* resolves to a row, not that every
+   setting *gets* written -- the missing audit is the other direction.
+   And a struck-through item is a claim like any other; this one had been
+   read as settled by everyone who passed it, including C4's survey,
+   which documented the five fields' encoding on 2026-08-29 without ever
+   asking whether they were persisted.
 9. **~~A way to render a chart without the event loop.~~** — **done
    2026-08-26.** It already half existed and the claim that it didn't cost
    real time; see item 34. `TextChartCaptureQt()` in qttest.cpp had always
@@ -281,6 +294,22 @@ Roughly in the order I'd take them.
    meaningless) while Placidus and Koch are guarded and fall back to
    Porphyry; and **Pullen (S.Delta) produces zero-width houses** at 70N
    and above. Longyearbyen at 78.2N is in the shipped atlas.
+
+12. **Finish T5: the 27 formatting calls that write into a caller's
+   buffer.** Added 2026-08-31 (work log item 143). The sweep bounded
+   1,055 of 1,231 formatting calls, and what it could not touch is the
+   sharper half: 27 sites whose destination arrives as a `char *`
+   parameter. `sizeof` there is 8, so the mechanical conversion would
+   truncate every string to seven characters *while compiling clean* --
+   they need a size threaded from their callers, one function at a time,
+   which is real work rather than a sweep. They are also the sites most
+   likely to overflow, since a function formatting into someone else's
+   buffer is exactly the case where nobody owns the bound.
+   `tools/chart-matrix.sh` and `tools/switch-matrix.sh` make each one
+   provable. The 11 pointer destinations and the 78 using pointer
+   arithmetic or struct members are the same job, lower risk.
+   `wdriver.cpp`/`wdialog.cpp` were left out of the sweep entirely --
+   upstream-shaped, and neither matrix can exercise them.
 
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.

@@ -166,12 +166,30 @@ compound word like those; never add another bare word.
 
 - `cchSzDef` = 80 for one output line, `cchSzMax` = 255 for paths and
   long text, `cchSzLine` for reader buffers (astrolog.h:549-551).
-- `sprintf2` is `snprintf` unconditionally (this fork made it so after
-  finding the unbounded branch live); bounded formatting is the rule
-  for any new sprintf into a shared buffer.
+- **`sprintf2(S(sz), ...)` is the rule, not the exception.**
+  `sprintf2` is `snprintf` unconditionally (this fork made it so after
+  finding the unbounded branch live), `S(sz)` expands to
+  `(sz), (int)sizeof(sz)`, and `SO(pch, sz)` does the same for a write
+  at an offset into `sz` (astrolog.h:413-419). As of work log item 143,
+  1,055 sites were swept onto it, leaving **1,115 of the 1,231**
+  formatting calls in this fork's own files bounded. The remaining 116
+  are destinations the sweep could not prove — pointers, parameters,
+  pointer arithmetic, struct members. Plain `sprintf` in new code needs a
+  reason.
+- **Never `S()` a parameter.** `sizeof` is the array's size only where
+  the *declaration* is in scope. A destination that arrives as a
+  parameter -- `char *sz`, or `char sz[]`, which decays -- has
+  `sizeof` 8, so `sprintf2(S(sz), ...)` truncates every string to seven
+  characters **and compiles without a warning**. This is the one way the
+  bounded idiom is worse than the unbounded one. A function that formats
+  into a caller's buffer must take the size as well; the 27 sites that
+  still do not are the remaining T5 work (REFACTORING.md).
 - Text charts align by hand-counted spaces. Any change that touches
-  layout is verified by the text-diff tooling (`text-chart-capture.sh`
-  / `text-chart-diff.py`), not by eye.
+  layout is verified by tooling, not by eye:
+  `tools/chart-matrix.sh` byte-diffs every text chart between two builds
+  of *this* tree, and `text-chart-capture.sh` / `text-chart-diff.py`
+  compares this port against Windows. The switch matrix does **not**
+  cover chart output -- it never renders one.
 
 ## Output machinery
 

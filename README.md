@@ -91,11 +91,27 @@ make -f Makefile.qt.test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 3176 assertions plus startup checks, covering dialogs, context menus,
-shortcuts, chart rendering, every menu item, menu parity against
-`astrolog.rc`, and bad input. Several groups drive the real dialogs and
-assert what they leave behind, rather than calling the code underneath
-them. No X display needed; exits nonzero on failure.
+A headless suite of 3524 assertions plus startup checks, covering dialogs,
+context menus, shortcuts, chart rendering, every menu item, menu parity
+against `astrolog.rc`, and bad input. Several groups drive the real
+dialogs and assert what they leave behind, rather than calling the code
+underneath them. No X display needed; exits nonzero on failure.
+
+One group answers a different kind of question. Everything else here is
+*differential* — it can tell you an answer changed, never that it is
+right. The **numeric oracle** asks the Swiss Ephemeris library the same
+question Astrolog asks it, through an object mapping written out
+independently in the test file, and requires the same answer: exact
+agreement over 15 bodies and seven epochs from 1900 to 2080. It also
+cross-checks Astrolog's own built-in planetary formulas against Swiss,
+and requires all 40 house systems to divide the circle once. It found two
+shared-core bugs on the day it was written.
+
+Two byte-diff harnesses prove a change to shared code left behaviour
+alone. `tools/chart-matrix.sh` renders every text chart the console build
+draws over a pinned date; `tools/switch-matrix.sh` covers the whole
+command-line switch surface in 529 invocations. Run either against an
+older build of the tree and diff.
 
 It defaults to `-i nrvate.as`, the maintainer's settings file, because
 that is the only input under which the esoteric bodies resolve at all —
@@ -111,13 +127,26 @@ tools/win-tests.sh
 It takes minutes rather than seconds, so it is run when a change ships in
 both builds rather than before every commit.
 
-There are also three audits that check this port against Windows'
-resource script directly:
+There are also six standing audits — four checking this port against
+Windows' resource script, one checking the compiled defaults against the
+shipped settings file, and one checking the switch registry against the
+help text:
 
 ```
-python3 tools/rc2qt.py astrolog.rc > qtrcdlg.h   # regenerate dialog tables
-python3 tools/rc_audit.py                        # controls nothing wires up
-python3 tools/rc_mnemonic_audit.py               # "&" placement vs the .rc
+python3 tools/rc_audit.py          # dialog controls nothing wires up
+python3 tools/rc_mnemonic_audit.py # "&" placement vs the .rc
+python3 tools/rc_field_audit.py    # a control wired to the wrong setting
+python3 tools/rc_lookup_audit.py   # a by-name lookup resolving to nothing
+python3 tools/defaults_audit.py    # data.cpp initializers vs astrolog.as
+python3 tools/registry_audit.py    # documented switches that resolve nowhere
+```
+
+The dialog tables, accelerators and command IDs are *generated* from the
+resource script rather than transcribed, and regenerating them into a
+`diff` is how you check they are still in sync:
+
+```
+python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h
 ```
 
 ## Comparing against the real Windows build
@@ -161,3 +190,10 @@ Needs `g++-mingw-w64-x86-64`, `wine`, `xvfb`, `metacity`, `xdotool`,
 - **`QT_MENU_MAPPING.md`** — the Windows menu structure extracted from
   `astrolog.rc`, with command IDs. The reference the Qt menu bar is
   built against.
+- **`REFACTORING.md`** — the standing architectural review: the designs
+  that make this codebase hard to evolve, each with evidence and with the
+  incident where it drew blood, plus what has been done about them.
+- **`CONVENTIONS.md`** — the conventions the code actually follows,
+  verified and written down: naming, index domains and their "none"
+  values, the macro families, the buffer and error idioms, and how to add
+  a command. Read it before writing new code.
