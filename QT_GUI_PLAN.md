@@ -287,6 +287,15 @@ Roughly in the order I'd take them.
    object really is at its natal longitude. A progressed chart at zero
    elapsed time is the natal chart. Each is a few lines and each covers a
    surface nothing currently watches.
+   **Re-measured 2026-09-01: the two findings below do not reproduce on
+   the Swiss house path** — see work log item 153. Topocentric closes the
+   circle at every latitude from 45N to 88N and Pullen S.Delta has no
+   zero-width house; *Sunshine* does, at 70N and above, and is not
+   mentioned here. There are two house engines and this note never said
+   which it measured, so the text below is probably about
+   `ComputeHouses()` rather than `SwissHouse()`. Read item 153 first.
+   Sweeping leg 4 over latitude *and* engine is the next increment here.
+
    Two measured findings are parked there rather than fixed, both
    maintainer calls because they change house math in both builds:
    **Topocentric houses run backwards beyond the polar circle** (at 78N
