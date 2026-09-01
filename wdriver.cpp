@@ -227,7 +227,7 @@ void BootExternal(CONST char *szApp, CONST char *szFile)
     PrintWarning("File reading is disabled.");
     return;
   }
-  if (FileOpen(szFile, 2, szPath) != NULL) {
+  if (FileOpen(szFile, 2, S(szPath)) != NULL) {
     if (szApp != NULL) {
       sprintf(szCmd, "%s %s", szApp, szPath);
       WinExec(szCmd, SW_SHOW);
@@ -2659,7 +2659,7 @@ flag FEnsureFontInstalled(int fi)
   rgfFontInstalled[fi] = -1;
   if (!FSzSet(rgszFontFile[fi]))
     return fFalse;  // Definitely don't have this font file.
-  file = FileOpen(rgszFontFile[fi], 2, sz);
+  file = FileOpen(rgszFontFile[fi], 2, S(sz));
   if (file == NULL)
     return fFalse;  // Couldn't find font file.
   fclose(file);

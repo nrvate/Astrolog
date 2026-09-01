@@ -2351,7 +2351,7 @@ static void RunMacroQt(int iMacro)
     return;
   }
   if (iMacro == 1) {
-    if (FileOpen("astrolog.htm", 2, szPath) != NULL)
+    if (FileOpen("astrolog.htm", 2, S(szPath)) != NULL)
       QDesktopServices::openUrl(QUrl::fromLocalFile(szPath));
     else
       QMessageBox::warning(gi.qwind, szAppName,
@@ -2828,7 +2828,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
     CONST char *szFile = rgszDoc[i];
     ConnectMenuQt(pa, pwind, [szFile]() {
       char szPath[cchSzMax];
-      if (FileOpen(szFile, 2, szPath) != NULL)
+      if (FileOpen(szFile, 2, S(szPath)) != NULL)
         QDesktopServices::openUrl(QUrl::fromLocalFile(szPath));
       else
         QMessageBox::warning(gi.qwind, szAppName,
@@ -2847,7 +2847,7 @@ static void BuildHelpMenu(QMainWindow *pwind)
     CONST char *szFile = rgszWebsite[i];
     ConnectMenuQt(pa, pwind, [szFile]() {
       char szPath[cchSzMax];
-      if (FileOpen(szFile, 2, szPath) == NULL) {
+      if (FileOpen(szFile, 2, S(szPath)) == NULL) {
         QMessageBox::warning(gi.qwind, szAppName,
           QString("File '%1' not found.").arg(szFile));
         return;

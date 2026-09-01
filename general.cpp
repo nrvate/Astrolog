@@ -345,7 +345,7 @@ flag FEqSzSubI(CONST char *sz1, CONST char *sz2)
 // Set a string to a floating point value, with at most 'n' significant
 // fractional digits, and dropping trailing '0' characters.
 
-void FormatR(char *sz, real r, int n)
+void FormatR(char *sz, int cchMax, real r, int n)
 {
   char szT[cchSzDef], *pch;
   int x = n/100, y = NAbs(n%100);
@@ -355,7 +355,7 @@ void FormatR(char *sz, real r, int n)
     sprintf2(S(szT), "%%%d.%df", NAbs(x) + y + 1, y);
   else
     sprintf2(S(szT), "%%.%df", NAbs(n));
-  sprintf(sz, szT, r);
+  sprintf2(sz, cchMax, szT, r);
   for (pch = sz; *pch; pch++)
     ;
   while (pch > sz && *(--pch) == '0')    // Drop off any trailing 0 digits.
@@ -1382,7 +1382,11 @@ void PrintSzFormat(CONST char *sz, flag fPopup)
   char szFormat[cchSzLine], *pch2;
   CONST char *pch;
 
-  for (pch = sz, pch2 = szFormat; *pch; pch++, pch2++) {
+  // The walk itself was unbounded: every branch below writes through
+  // pch2 with no end check, and the expression escapes can each expand
+  // to an arbitrary custom string. Stop one short of the terminator.
+  for (pch = sz, pch2 = szFormat;
+    *pch && pch2 < szFormat + sizeof(szFormat) - 1; pch++, pch2++) {
     *pch2 = *pch;
     if (*pch == '\\' && (pch[1] == '\\' || pch[1] == 'n')) {
       if (pch[1] == 'n')
@@ -1392,11 +1396,11 @@ void PrintSzFormat(CONST char *sz, flag fPopup)
 #ifdef EXPRESS
     else if (*pch == '\\') {
       if (FCapCh(pch[1])) {
-        pch2 = PchFormatExpression(pch2, pch[1] - '@') - 1;
+        pch2 = PchFormatExpression(SO(pch2, szFormat), pch[1] - '@') - 1;
         pch++;
         continue;
       } else if (FUncapCh(pch[1])) {
-        pch2 = PchFormatString(pch2, pch[1] - '`') - 1;
+        pch2 = PchFormatString(SO(pch2, szFormat), pch[1] - '`') - 1;
         pch++;
         continue;
       }
@@ -1559,7 +1563,7 @@ flag FErrorValR(CONST char *szOpt, flag f, real rVal, int nPar)
   else
     sprintf2(S(szPar), "parameter #%d of ", nPar);
   if (rVal != rLarge) {
-    FormatR(szVal, rVal, -6);
+    FormatR(S(szVal), rVal, -6);
     sprintf2(S(sz), "Value %s passed to %sswitch %c%s out of range.\n",
       szVal, szPar, chSwitch, szOpt);
   } else
@@ -2225,7 +2229,7 @@ char *SzElevation(real elv)
   static char szElev[21];
   char *pch;
 
-  FormatR(szElev, us.fEuroDist ? elv : elv / rFtToM, -2);
+  FormatR(S(szElev), us.fEuroDist ? elv : elv / rFtToM, -2);
   for (pch = szElev; *pch; pch++)
     ;
   sprintf(pch, "%s", us.fEuroDist ? "m" : "ft");
@@ -2241,7 +2245,7 @@ char *SzTemperature(real tmp)
   static char szTemp[21];
   char *pch;
 
-  FormatR(szTemp, us.fEuroDist ? tmp : tmp * 9.0/5.0 + 32.0, -2);
+  FormatR(S(szTemp), us.fEuroDist ? tmp : tmp * 9.0/5.0 + 32.0, -2);
   for (pch = szTemp; *pch; pch++)
     ;
   sprintf(pch, "%s", us.fEuroDist ? "C" : "F");
@@ -2257,7 +2261,7 @@ char *SzLength(real len)
   static char szLen[21];
   char *pch;
 
-  FormatR(szLen, !us.fEuroDist ? len : len * rInToCm, -2);
+  FormatR(S(szLen), !us.fEuroDist ? len : len * rInToCm, -2);
   for (pch = szLen; *pch; pch++)
     ;
   sprintf(pch, "%s", us.fEuroDist ? "cm" : "in");

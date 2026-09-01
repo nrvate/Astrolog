@@ -531,7 +531,7 @@ static QString SzFormatRQt(real r, int n)
 {
   char sz[cchSzDef];
 
-  FormatR(sz, r, n);
+  FormatR(S(sz), r, n);
   return QString(sz);
 }
 
@@ -3149,7 +3149,7 @@ void ShowProgressDialogQt()
     QStringList rgstr;
     QString strCur = SzFormatRQt(us.rProgDay, -6);
     for (i = 0; i < 4; i++) {
-      FormatR(szT, rgrProgQt[i], -6);
+      FormatR(S(szT), rgrProgQt[i], -6);
       sprintf2(S(sz), "%s %s", szT, rgszProgQt[i]);
       rgstr << sz;
       if (us.rProgDay == rgrProgQt[i])
@@ -3161,7 +3161,7 @@ void ShowProgressDialogQt()
     QStringList rgstr;
     QString strCur = SzFormatRQt(us.rProgCusp, -6);
     for (i = 0; i < 2; i++) {
-      FormatR(szT, rgrProgCuspQt[i], -6);
+      FormatR(S(szT), rgrProgCuspQt[i], -6);
       sprintf2(S(sz), "%s %s", szT, rgszProgCuspQt[i]);
       rgstr << sz;
       if (us.rProgCusp == rgrProgCuspQt[i])

@@ -3074,7 +3074,7 @@ void XChartMidpoint()
     if (i > 0 || us.rHarmonic == 0)
       sprintf2(S(sz), "%d", i);
     else
-      FormatR(sz, rDegMax / rHarmonic, -1);
+      FormatR(S(sz), rDegMax / rHarmonic, -1);
     temp = 270.0-(real)(i*xi)*rHarmonic;
     DrawSz(sz, cx+POINT1(unitx, 0.90, PX(temp)),
       cy+POINT1(unity, 0.90, PY(temp))+gi.nScale, dtCent | dtScale);

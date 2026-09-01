@@ -212,10 +212,10 @@ void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
     DrawPrint("Special: Decan mode", gi.kiLite, fFalse);
   if (us.rHarmonic != 1.0) {
     if (gi.nMode != gMidpoint || us.rHarmonic == 0.0) {
-      FormatR(szT, us.rHarmonic, -5);
+      FormatR(S(szT), us.rHarmonic, -5);
       sprintf2(S(sz), "Special: Harmonic %.7s", szT);
     } else {
-      FormatR(szT, rDegMax / us.rHarmonic, -5);
+      FormatR(S(szT), rDegMax / us.rHarmonic, -5);
       sprintf2(S(sz), "Special: Dial %.7s", szT);
     }
     DrawPrint(sz, gi.kiLite, fFalse);
@@ -236,7 +236,7 @@ void DrawInfo(CI *pci, CONST char *szHeader, flag fAll)
   if (us.fNoNutation && !us.fSidereal)
     DrawPrint("Special: No Nutation", gi.kiLite, fFalse);
   if (us.rDeltaT != rInvalid) {
-    FormatR(szT, us.rDeltaT, -4);
+    FormatR(S(szT), us.rDeltaT, -4);
     sprintf2(S(sz), "Special: Delta-T = %s", szT);
     DrawPrint(sz, gi.kiLite, fFalse);
   }
@@ -472,18 +472,19 @@ void DrawSidebar()
     DrawColor(gs.kiDeca < kMax ? gs.kiDeca : gi.kiLite);
     for (pch2 = gs.szSidebar; *pch2;) {
       for (pch = sz; *pch2 && *pch2 != '\n' &&
-        !(*pch2 == '\\' && pch2[1] == 'n'); pch++, pch2++) {
+        !(*pch2 == '\\' && pch2[1] == 'n') &&
+        pch < sz + sizeof(sz) - 1; pch++, pch2++) {
 #ifdef EXPRESS
         // Expand escape sequences like "\A" to that custom variable.
         // Expand escape sequences like "\a" to that variable's string.
         // Expand escape sequences like "\1" to set color to that variable.
         if (*pch2 == '\\') {
           if (FCapCh(pch2[1])) {
-            pch = PchFormatExpression(pch, pch2[1] - '@') - 1;
+            pch = PchFormatExpression(SO(pch, sz), pch2[1] - '@') - 1;
             pch2++;
             continue;
           } else if (FUncapCh(pch2[1])) {
-            pch = PchFormatString(pch, pch2[1] - '`') - 1;
+            pch = PchFormatString(SO(pch, sz), pch2[1] - '`') - 1;
             pch2++;
             continue;
           } else if (FNumCh(pch2[1])) {

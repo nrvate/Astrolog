@@ -321,7 +321,7 @@ extern real Mod P((real));
 extern long Dvd P((long, long));
 extern int SzLookup P((CONST StrLook *, CONST char *));
 extern flag FEqSzSubI P((CONST char *, CONST char *));
-extern void FormatR P((char *, real, int));
+extern void FormatR P((char *, int, real, int));
 extern KV KvBlend P((KV, KV, real));
 extern KV KvHue P((real));
 extern KV KvHue2 P((real));
@@ -431,7 +431,7 @@ extern void Terminate P((int));
 #define AdvancePast(ch) while (*pch && *pch != (ch)) pch++; \
   if (*pch == (ch)) pch++;
 
-extern FILE *FileOpen P((CONST char *, int, char *));
+extern FILE *FileOpen P((CONST char *, int, char *, int));
 extern byte BRead P((FILE *));
 extern word WRead P((FILE *));
 extern dword LRead P((FILE *));
@@ -760,8 +760,8 @@ extern flag ExpSetMacro P((int, CONST char *));
 extern flag ExpSetString P((int, CONST char *, flag));
 extern flag ExpSetNums P((int, CONST char *));
 extern char *ExpGetString P((int));
-extern char *PchFormatExpression P((char *, int));
-extern char *PchFormatString P((char *, int));
+extern char *PchFormatExpression P((char *, int, int));
+extern char *PchFormatString P((char *, int, int));
 extern void ExpFinalize P((void));
 #endif
 

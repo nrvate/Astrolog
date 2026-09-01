@@ -244,7 +244,7 @@ flag FLoadBmp(CONST char *szFile, Bitmap *bmp, flag fNoHeader)
   FILE *file;
   flag fRet;
 
-  file = FileOpen(szFile, 3, NULL);
+  file = FileOpen(szFile, 3, NULL, 0);
   if (file == NULL)
     return fFalse;
   fRet = FReadBmp(bmp, file, fNoHeader);

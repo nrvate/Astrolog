@@ -91,7 +91,7 @@ make -f Makefile.qt.test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 3524 assertions plus startup checks, covering dialogs,
+A headless suite of 3526 assertions plus startup checks, covering dialogs,
 context menus, shortcuts, chart rendering, every menu item, menu parity
 against `astrolog.rc`, and bad input. Several groups drive the real
 dialogs and assert what they leave behind, rather than calling the code

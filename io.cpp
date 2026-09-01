@@ -70,7 +70,8 @@
 // program which open files to read call this routine. We look in several
 // various locations and directories for the file before giving up.
 
-FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath)
+FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath,
+  int cchPath)
 {
   FILE *file;
   char szFileT[cchSzMax], szExe[cchSzMax], sz[cchSzMax], szMode[3], *pch;
@@ -191,7 +192,7 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath)
 
 LDone:
   if (file != NULL && szPath != NULL) {
-    sprintf(szPath, "%s", sz);
+    sprintf2(szPath, cchPath, "%s", sz);
     fclose(file);
   }
   return file;
@@ -292,7 +293,7 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
   // Open a file if don't already have one.
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL);
+    file = FileOpen(szFile, 0, NULL, 0);
     if (file == NULL)
       goto LDone;
   }
@@ -510,7 +511,7 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL);
+    file = FileOpen(szFile, 0, NULL, 0);
     if (file == NULL)
       goto LDone;
   }
@@ -693,7 +694,7 @@ flag FProcessQuickFile(CONST char *szFile, FILE *file)
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL);
+    file = FileOpen(szFile, 0, NULL, 0);
     if (file == NULL)
       goto LDone;
   }
@@ -839,7 +840,7 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL);
+    file = FileOpen(szFile, 0, NULL, 0);
     if (file == NULL)
       goto LDone;
   }
@@ -1012,7 +1013,7 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL);
+    file = FileOpen(szFile, 0, NULL, 0);
     if (file == NULL)
       goto LDone;
   }
@@ -1141,7 +1142,7 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
 
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL);
+    file = FileOpen(szFile, 0, NULL, 0);
     if (file == NULL)
       goto LDone;
   }
@@ -1399,7 +1400,7 @@ flag FOutputDaedalusStar()
 
 
 #define PrintFSz() PrintF(sz)
-#define PrintRSz(r, n) FormatR(sz, r, n); PrintF(sz)
+#define PrintRSz(r, n) FormatR(S(sz), r, n); PrintF(sz)
 CONST char *szDegForm = "zhdn";
 CONST char *szTypSwiss[] = {"", "b", "O", "m", "j", "A"};
 CONST char *szPntSwiss[] = {"", "n", "s", "p", "a"};
@@ -1476,7 +1477,7 @@ flag FOutputSettings()
   PrintF(
     "; Which zodiac to use       [\"_s\" is tropical, \"=s\" is sidereal]\n");
   PrintF(":s ");
-  FormatR(sz, us.rZodiacOffset, 6);
+  FormatR(S(sz), us.rZodiacOffset, 6);
   for (i = 0; *rgZodiacOffset[i].sz; i++) {
     if (us.rZodiacOffset == rgZodiacOffset[i].r) {
       sprintf2(S(sz), "%.4s", rgZodiacOffset[i].sz);
@@ -1626,12 +1627,12 @@ flag FOutputSettings()
   PrintF(
     "; Internet Web queries      [\"=0n\" disables them, \"_0n\" allows ]\n");
 
-  PrintF("\n-Yw "); FormatR(sz, us.rStation, 5); PrintFSz();
+  PrintF("\n-Yw "); FormatR(S(sz), us.rStation, 5); PrintFSz();
   PrintF("       ; Stationary movement threshold  [0.0 is never \"S\"]\n");
   sprintf2(S(sz),
     ":pd %9.5f ; Progression degrees per day    [365 is secondary]\n",
     us.rProgDay); PrintFSz();
-  PrintF(":pC "); FormatR(sz, us.rProgCusp, 5); PrintFSz();
+  PrintF(":pC "); FormatR(S(sz), us.rProgCusp, 5); PrintFSz();
   PrintF("       ; Progressed cusp movement ratio [1.0 is quotidian]\n");
   sprintf2(S(sz), ":pO %3.3s", us.objProgArc >= 0 ? szObjName[us.objProgArc] :
     "Non"); PrintFSz();
@@ -1998,7 +1999,7 @@ flag FOutputSettings()
       // value survives instead of being rounded to whole degrees.
       rForce = RForcePos(force[i]);
       nForce = SFromZ(rForce);
-      FormatR(szForce, rForce - ZFromS(nForce), -6);
+      FormatR(S(szForce), rForce - ZFromS(nForce), -6);
       sprintf2(S(sz), "-F %d %.3s %s\n", i, szSignName[nForce], szForce);
       PrintFSz();
     } else {
@@ -2849,7 +2850,7 @@ flag FInputData(CONST char *szFile)
   // Now that the special cases are taken care of, can assume are to read from
   // a real file.
 
-  file = FileOpen(szFile, 1, NULL);
+  file = FileOpen(szFile, 1, NULL, 0);
   if (file == NULL)
     return fFalse;
   if (!fgets(sz, cchSzMax, file))
@@ -3193,7 +3194,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   GetURL(szUrl, szFileJPLCore);
 
   // Process downloaded file.
-  file = FileOpen(szFileJPLCore, 1, NULL);
+  file = FileOpen(szFileJPLCore, 1, NULL, 0);
   if (file == NULL) {
     // Error message printed inside FileOpen().
     return fFalse;

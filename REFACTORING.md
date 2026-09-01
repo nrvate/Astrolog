@@ -4,7 +4,7 @@ This is the catalog of what makes Astrolog hard to evolve and what to do
 about it. The goal is a codebase someone could read without cringing:
 maintainable, flexible, modular — while every increment keeps the program
 byte-for-byte behaving as it does today, under the nets this project
-already trusts (the 3524-assertion suite, ASan, the settings round trip,
+already trusts (the 3526-assertion suite, ASan, the settings round trip,
 the six standing audits, and the Windows build as oracle). Note the word
 "behaving": all of those but one are differential, and the exception is
 new — see T9.
@@ -604,13 +604,27 @@ sweep is byte-identical under both: 0 of 6,112 chart lines, 0 of 75,471
 switch lines. A 1,055-site change that two byte-diffs certify is not
 churn; the same change without them would have been.
 
-1,055 of 1,171 sites are `sprintf2(S(...))`/`SO(...)` now. What is left
-is the sharp end, and it is precisely the "dangerous subset" the
-direction above pointed at: **27 sites whose destination is a `char *`
-parameter**, which cannot be fixed by this mechanism — `sizeof` on a
-parameter is 8, so converting one would silently truncate to seven
-characters while compiling clean. Those need a size threaded from their
-callers, one at a time, and that is the remaining T5 work.
+1,055 of 1,171 sites became `sprintf2(S(...))`/`SO(...)` in that sweep,
+and the sharp end — the sites whose destination is a `char *` parameter,
+where `sizeof` is 8 and a mechanical conversion would silently truncate
+to seven characters while compiling clean — was **finished the same day**
+(work log items 144-145). Thirteen such functions became one: the size
+now follows the pointer, so a caller passes both with the same `S()`
+macro, and the compiler turns every missed call site into a build error.
+The exception, `WchToUTF8`, writes at most four bytes on every branch and
+says so at the function.
+
+**That last increment is the argument for this whole theme.** Two of the
+final three conversions were live stack smashes in shared core, fatal in
+the release build and present in the Windows one:
+`astrolog -YYt <3000 chars>` and `astrolog -YXt <3000 chars> -Xv 6`. Both
+were loops that walked a caller's buffer with no end check at all, which
+is the same defect as an unbounded `sprintf` wearing different clothes.
+
+**T5 is closed for caller-owned destinations.** 1,141 of 1,231
+formatting calls are bounded. The 90 that remain are pointer arithmetic,
+struct members and split-line calls — worth doing opportunistically, none
+of them a buffer whose size the code cannot know.
 
 ### T6 — Backend `#ifdef` interleave in the shared device layer
 

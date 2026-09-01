@@ -180,6 +180,17 @@ run -Ya1
 run -Yao2
 run -Ya
 run -Yq2 "-a" "-b"
+# Work log item 145: -YYt took its argument straight into a 1020-byte
+# buffer through a loop with no end check, so a long one smashed the stack
+# and cored the release build -- shared core, so the Windows build had it
+# too. A crash shows up as this run's stderr changing, which is what this
+# harness is for. The sibling defect in the graphics sidebar (-YXt) is NOT
+# here on purpose: this harness never renders, so that switch only stores a
+# string and the crash is unreachable. Measured, not assumed -- adding it
+# produced no diff at all. Its net is the 3000-character sidebar render in
+# qttest.cpp's shared-core group, which aborts if that bound is removed.
+LONGARG=`awk 'BEGIN{s="";while(length(s)<3000)s=s "Y";print s}'`
+run -YYt "$LONGARG"
 run -Yi5 "some/path"
 run -Y5
 run -Y52

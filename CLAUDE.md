@@ -79,13 +79,13 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 3524 assertions + startup checks
+./run-qt-tests.sh                # 3526 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3524 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
+commit. Current state: **3526 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
 build is `-O0`, where `_FORTIFY_SOURCE` is inactive, so it structurally
 cannot see a fortify-detected overflow. Work log item 142 was invisible
 to it for that reason and had to be caught in an optimized `-g` build.
@@ -340,6 +340,20 @@ The things that have actually caught bugs in this project:
   an invention rather than catching a defect.
 - **Verify new interactive behaviour live**, not just by code review.
   Multiple genuine bugs here only manifest at runtime.
+- **Check for the compiler's failure, not for a word.** A build check
+  matching `" error "` does not match `Error 1`, so a failing build reads
+  as clean and every test after it runs against **the stale binary the
+  failure left behind**. That happened here for a stretch, while the
+  compiler was naming the exact problem. Match `: error:` and
+  `^make.*\*\*\*`, and if a check claims to have rebuilt something,
+  look at the binary's timestamp.
+- **A regression test can be the regression.** A new test called a print
+  routine outside `Action()`, so it wrote to a `FILE *` nothing had
+  opened; glibc freed a buffer it never allocated and the suite began
+  aborting six runs in twelve. An hour went into bisecting shared core
+  for a heap corruption that was the test. ASan named it in one run after
+  gdb had only shown where it surfaced -- reach for ASan on heap
+  corruption, an optimized `-g` build on a fortify abort.
 - **A harness proves nothing until you sabotage it either.** The same
   rule as above, one level up. A differential whose invocations all fail
   still diffs to zero, and reads exactly like a proof: `chart-matrix.sh`

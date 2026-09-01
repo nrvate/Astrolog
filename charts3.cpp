@@ -1789,7 +1789,7 @@ flag ChartExoplanet(flag fColor)
 
   // Read in exoplanet data file
   if (is.rgexod == NULL) {
-    file = FileOpen(szFileExoCore, 0, NULL);
+    file = FileOpen(szFileExoCore, 0, NULL, 0);
     if (file == NULL)
       return fFalse;
     for (i = 0; !feof(file); i++)

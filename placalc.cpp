@@ -1093,7 +1093,7 @@ int lrz_file_posit(double jd, FILE **lrzfpp)
     sprintf(fname, "%s%s%d", EPHE_OUTER, filenr < 0 ? "M" : "", abs(filenr));
     if (*lrzfpp != NULL)
       fclose(*lrzfpp);
-    *lrzfpp = FileOpen(fname, 2, NULL);
+    *lrzfpp = FileOpen(fname, 2, NULL, 0);
     if (*lrzfpp == NULL) {
       ErrorEphem(fname, -1);
       return ERR;
@@ -1137,7 +1137,7 @@ int ast_file_posit(double jd, FILE **astfpp)
     sprintf(fname, "%s%s%d", EPHE_ASTER, filenr < 0 ? "M" : "", abs(filenr));
     if (*astfpp != NULL)
       fclose(*astfpp);
-    *astfpp = FileOpen(fname, 2, NULL);
+    *astfpp = FileOpen(fname, 2, NULL, 0);
     if (*astfpp == NULL) {
       ErrorEphem(fname, -1);
       return ERR;
@@ -1180,7 +1180,7 @@ int chi_file_posit(double jd, FILE **lrzfpp)
     sprintf(fname, "%s%s%d", EPHE_CHIRON, filenr < 0 ? "M" : "", abs(filenr));
     if (*lrzfpp != NULL)
       fclose(*lrzfpp);
-    *lrzfpp = FileOpen(fname, 2, NULL);
+    *lrzfpp = FileOpen(fname, 2, NULL, 0);
     if (*lrzfpp == NULL) {
       ErrorEphem(fname, -1);
       return ERR;

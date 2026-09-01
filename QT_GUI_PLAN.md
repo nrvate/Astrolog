@@ -111,7 +111,7 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3524
+   display and no `xdotool`, and exits non-zero on failure. **3526
    assertions** in 45 groups as of 2026-08-31; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, bad input, and — since item 141
@@ -295,16 +295,15 @@ Roughly in the order I'd take them.
    Porphyry; and **Pullen (S.Delta) produces zero-width houses** at 70N
    and above. Longyearbyen at 78.2N is in the shipped atlas.
 
-12. **Finish T5: the formatting calls that write into a caller's
-   buffer.** Added 2026-08-31 (work log item 143), **first pass done the
-   same day** (item 144): thirteen such functions became five, and 29
-   sites became eight. What is left is two coupled jobs, both described
-   at item 144 -- `FormatR` with `PchFormatExpression`/`PchFormatString`
-   and the three unbounded copy loops that call them, which is one
-   increment rather than three; and `FileOpen()`, 27 references, the one
-   with an incident already (item 68). The original shape of the problem:
-   sites whose destination arrives as a `char *`
-   parameter. `sizeof` there is 8, so the mechanical conversion would
+12. ~~**Finish T5: the formatting calls that write into a caller's
+   buffer.**~~ — **done 2026-08-31** (work log items 143-145). Thirteen
+   functions that format into a destination they did not own became one,
+   and that one (`WchToUTF8`) is bounded by construction with a comment
+   saying so. 1,141 of 1,231 formatting calls are bounded; the 90 left
+   are pointer arithmetic, struct members and split lines, none of them a
+   caller-owned buffer. The last increment found two live stack smashes
+   in shared core, `astrolog -YYt` and `-YXt` with a long argument, both
+   fatal in the release build and both in the Windows one too. `sizeof` there is 8, so the mechanical conversion would
    truncate every string to seven characters *while compiling clean* --
    they need a size threaded from their callers, one function at a time,
    which is real work rather than a sweep. They are also the sites most
@@ -5004,6 +5003,97 @@ are the more useful half to read before starting something new.
     a path into `szPath`) is the other, and it is the one with an
     incident already: work log item 68, a deep install directory
     overflowing the ephemeris path at startup.
+
+145. **T5's parameter half is finished, and two of the last three
+    conversions were live stack smashes.** Item 144 took thirteen
+    functions that format into a caller's buffer down to five. This takes
+    them to **one**, and that one is the deliberate exception
+    (`WchToUTF8`, whose bound is a property of the code and is now a
+    comment at the function). **1,141 of the 1,231 formatting calls in
+    this fork's own files are bounded**; the 90 left are pointer
+    arithmetic, struct members and split lines, none of them a
+    caller-owned destination.
+
+    `FileOpen()` was the easy one: 20 call sites, fifteen passing `NULL`
+    for the path and five a real `cchSzMax` buffer, so
+    `FileOpen(szFile, 2, S(szPath))` and `FileOpen(szFile, 0, NULL, 0)`.
+    It had an incident on record already -- item 68, a deep install
+    directory overflowing the ephemeris path at startup.
+
+    **The `FormatR` / `PchFormat` cluster is where the bodies were.** It
+    had to be done as one increment because the coupling is total:
+    `FormatR`'s single non-array caller is *inside*
+    `PchFormatExpression`, which is handed a pointer walking through
+    someone else's buffer, and the three loops that call that pair copy
+    into that buffer **with no end check of their own** --
+    `*pch2 = *pch`, forever. Bounding the callee alone would have fixed
+    nothing.
+
+    Two of those three loops are reachable from documented switches, and
+    both killed the release build at HEAD:
+
+        $ astrolog -YYt <3000 characters>
+        *** stack smashing detected ***: terminated
+        Aborted (core dumped)
+
+        $ astrolog -YXt <3000 characters> -Xv 6 -Xo out.bmp
+        *** stack smashing detected ***: terminated
+        Aborted (core dumped)
+
+    `-YYt` prints formatted text through `PrintSzFormat()` into
+    `szFormat[cchSzLine]` (1020 bytes); `-YXt` sets the graphics sidebar,
+    which a second loop copies through a local `sz[cchSzDef]` (80). Both
+    are upstream's, in shared core, so the Windows build had them too.
+    Both now exit 0 and truncate.
+
+    The third, `FormatSz()`, takes its destination as a parameter, so
+    `SO()` cannot help it -- the remaining space is
+    `cchMax - (pch2 - szFormat)`, computed by hand.
+
+    **Each of the three has its own falsified net, and they had to be
+    three different kinds.** `FormatSz` has an inspectable destination, so
+    it takes an in-suite assertion: a 3,000-character format into a
+    100-byte buffer, asserting the result stays inside it. The sidebar
+    needs a render, so it is an in-suite one too, driving `SetChartModeQt`
+    with `gs.szSidebar` 3,000 characters long. `-YYt` can be neither: it
+    ends in `PrintSz()`, which writes to `is.S`, a `FILE *` that only
+    `Action()` opens -- so it is an invocation in
+    `tools/switch-matrix.sh`, where its crash at HEAD is the whole
+    behavioural diff for this increment. Reverting any of the three
+    bounds makes its net abort with *stack smashing detected*, which for
+    an overflow is the test working.
+
+    **Three method notes, all of them mistakes made here first.**
+
+    *A regression test can be the regression.* Calling `PrintSzFormat()`
+    from inside the suite put characters into a stream nothing had
+    opened, and glibc freed a backup buffer it never allocated -- so the
+    suite began aborting **six runs in twelve**, and an hour went into
+    bisecting a heap corruption that was the test. ASan named it in one
+    run (`qttest.cpp:3071`) after gdb had only shown where it surfaced.
+
+    *Check for the compiler's failure, not for a word.* The build check
+    was matching `" error "`, which does not match `Error 1` -- so
+    `placalc.cpp` failed to compile for a stretch (three `FileOpen`
+    callers in a file excluded from the caller scan) while every check
+    reported "ok" **against the stale binary left behind**. The compiler
+    had been naming the exact missed callers the whole time. Match
+    `: error:` and `^make.*\*\*\*`.
+
+    *Do not put a check where it cannot fail.* `-YXt` was added to the
+    switch matrix beside `-YYt` and produced no diff at all, because that
+    harness never renders and the switch only stores a string. Measured
+    rather than assumed, and removed.
+
+    **Nets**: suite 3526/0, and 0 aborts in 12 consecutive runs against
+    6 in 12 while the bad test was in; chart matrix 0 of 6,936; switch
+    matrix diffs to exactly the crash that stopped happening -- two lines
+    of *stack smashing detected* at HEAD replaced by the 164-line settings
+    dump that invocation now produces; settings round trip all three legs;
+    six audits clean; console, Qt, Qt-test, Windows and ASan builds all
+    compile. Every makefile carries `$(OBJS): astrolog.h extern.h`, so a
+    prototype change really does rebuild everything -- worth checking,
+    because 20 signatures moved.
 
 ## Features this fork adds to both builds
 

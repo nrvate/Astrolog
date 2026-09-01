@@ -73,6 +73,7 @@
 #ifdef QTTEST
 
 // Hooks into qtdriver.cpp, where the menu tables are file static.
+extern void FormatSz P((CONST char *, char *, int));
 extern int CCtxTestQt();
 extern QMenu *PmenuCtxTestQt(int, CONST char **);
 extern int CHotkeyTestQt();
@@ -945,7 +946,7 @@ static void TestBadInputQt()
   Group("Bad input");
   SetNoPopupQt(fTrue);          // no message boxes during an automated run
 
-  Check(FileOpen("no-such-file-here.as", 0, NULL) == NULL,
+  Check(FileOpen("no-such-file-here.as", 0, NULL, 0) == NULL,
     "FileOpen() found a file that isn't there");
   Check(fTrue, "FileOpen() on a missing file returned");
 
@@ -1985,7 +1986,7 @@ static void TestSettingsRoundTripQt()
   rgobjset[iMoon].kolor = 1;
   rgobjset[iMoon].tinf = rgobjset[iCusp].tinf = 99.0;
 
-  file = FileOpen(szPath, 3, NULL);
+  file = FileOpen(szPath, 3, NULL, 0);
   Check(file != NULL, "and it can be read back");
   if (file != NULL) {
     while (fgets(szLine, cchSzMax, file) != NULL) {
@@ -3041,6 +3042,52 @@ static void TestSharedCoreFixesQt()
     CastChart(1);                   // Leave real positions for the rest.
   }
 
+  // Work log item 145: the three loops that expand "\\A"-style escapes
+  // walked their destination with no end check at all, so a format string
+  // longer than the buffer smashed the stack -- reachable, and fatal in
+  // the release build, from two documented switches:
+  //   astrolog -YYt <3000 chars>                 (PrintSzFormat)
+  //   astrolog -YXt <3000 chars> -Xv 6 -Xo x.bmp (the sidebar)
+  // FormatSz() is the same walk with an inspectable destination, so it
+  // carries the length assertion; the other two assert by surviving, the
+  // way TestBadInputQt() does. Reintroduce any of the three bounds and
+  // this group aborts rather than printing FAIL -- that is the test
+  // working, not the test broken.
+  {
+    static char szHuge[3001];
+    char szSmall[100];
+    char *szSideSav = gs.szSidebar;
+    int nModeSav = gi.nMode, nFillSav = gs.nDecaFill;
+
+    for (i = 0; i < 3000; i++)
+      szHuge[i] = 'Y';
+    szHuge[3000] = chNull;
+
+    FormatSz(szHuge, S(szSmall));
+    Check(CchSz(szSmall) < sizeof(szSmall),
+      "a 3000-character format stays inside a 100-byte destination (%d)",
+      CchSz(szSmall));
+
+    // PrintSzFormat() is deliberately NOT called here. It ends in
+    // PrintSz(), which writes to is.S -- a FILE* that only Action() opens
+    // and closes -- so calling it from inside the suite puts characters
+    // into a stream that is not open, and glibc frees a backup buffer it
+    // never allocated. That is a heap corruption in the TEST, not in the
+    // code under test, and it cost an hour of bisecting a "regression"
+    // that was the regression test. Its switch, "-YYt", is checked as a
+    // separate process in run-qt-tests.sh's startup diagnostics instead,
+    // which is where a crash reachable from the command line belongs.
+
+    gs.szSidebar = szHuge;
+    gs.nDecaFill = 6;
+    SetChartModeQt(gWheel);
+    Check(gi.qim != NULL,
+      "a 3000-character sidebar renders instead of smashing the stack");
+    gs.szSidebar = szSideSav;
+    gs.nDecaFill = nFillSav;
+    SetChartModeQt(nModeSav);
+  }
+
   // Work log item 93: a slot forced to a midpoint draws its NAME in
   // place of a glyph only when it was also renamed. A forced slot that
   // keeps its name is that body computed by another formula -- the
@@ -3409,7 +3456,7 @@ static void TestForcedPositionsQt()
   Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
 
   szMid[0] = szPos[0] = chNull;
-  file = FileOpen(szPath, 3, NULL);
+  file = FileOpen(szPath, 3, NULL, 0);
   if (file != NULL) {
     while (fgets(szLine, cchSzMax, file) != NULL) {
       if (FEqSz(szLine, "-WM 1 \"AstrologQtSuiteMacro\"\n"))

@@ -84,7 +84,7 @@ void SetEditR(HWND hdlg, int id, real r, int n)
 {
   char sz[cchSzDef];
 
-  FormatR(sz, r, n);
+  FormatR(S(sz), r, n);
   SetEdit(id, sz);
 }
 
@@ -2316,7 +2316,7 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
     SetEdit(dcSe_b, szEphem[i]);
     SetEditR(hdlg, dcSe_s, us.rZodiacOffset, 6);
     for (i = 0; *rgZodiacOffset[i].sz; i++) {
-      FormatR(sz, rgZodiacOffset[i].r, 6);
+      FormatR(S(sz), rgZodiacOffset[i].r, 6);
       for (pch = sz; *pch; pch++)
         ;
       sprintf(pch, " %s", rgZodiacOffset[i].sz);
@@ -2678,7 +2678,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
       (us.nProgress == ptMixed ? 1 : 2)), dr01, dr03);
     SetEditR(hdlg, dcPr_pd, us.rProgDay, -6);
     for (i = 0; i < 4; i++) {
-      FormatR(szT, rgrProg[i], -6);
+      FormatR(S(szT), rgrProg[i], -6);
       sprintf(sz, "%s %s", szT, rgszProg[i]);
       SetCombo(dcPr_pd, sz);
       if (us.rProgDay == rgrProg[i])
@@ -2686,7 +2686,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
     }
     SetEditR(hdlg, dcPr_pC, us.rProgCusp, -6);
     for (i = 0; i < 2; i++) {
-      FormatR(szT, rgrProgCusp[i], -6);
+      FormatR(S(szT), rgrProgCusp[i], -6);
       sprintf(sz, "%s %s", szT, rgszProgCusp[i]);
       SetCombo(dcPr_pC, sz);
       if (us.rProgCusp == rgrProgCusp[i])

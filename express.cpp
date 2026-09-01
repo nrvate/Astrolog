@@ -158,7 +158,7 @@ XI xi = {NULL, NULL, 0, NULL, 0, NULL, 0};
 extern int ILookupTrie P((CONST TRIE, CONST char *, int, flag));
 extern CONST char *PchGetParameter P((CONST char *, PAR *, int, int, flag));
 extern void GetParameter P((CONST char *, PAR *));
-extern void FormatSz P((CONST char *, char *));
+extern void FormatSz P((CONST char *, char *, int));
 extern flag FEnsureParVar P((int));
 
 // Functions
@@ -1857,7 +1857,7 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
     break;
   case funDText:
     if (FBetween(n1, 0, xi.cszExpStr-1)) {
-      FormatSz(xi.rgszExpStr[n1], sz);
+      FormatSz(xi.rgszExpStr[n1], S(sz));
       DrawSz(sz, n2, n3, dtCent);
     }
     n = n1; break;
@@ -2604,22 +2604,25 @@ flag FCreateTries()
 // AstroExpression custom variable @a, and "\a" to the AstroExpression custom
 // string indexed by custom variable @a.
 
-void FormatSz(CONST char *szIn, char *szFormat)
+void FormatSz(CONST char *szIn, char *szFormat, int cchMax)
 {
   char *pch2;
   CONST char *pch;
 
-  for (pch = szIn, pch2 = szFormat; *pch; pch++, pch2++) {
+  for (pch = szIn, pch2 = szFormat;
+    *pch && pch2 < szFormat + cchMax - 1; pch++, pch2++) {
     *pch2 = *pch;
     if (*pch == '\\') {
       if (pch[1] == '\\')
         pch++;
       else if (FCapCh(pch[1])) {
-        pch2 = PchFormatExpression(pch2, pch[1] - '@') - 1;
+        pch2 = PchFormatExpression(pch2, cchMax - (int)(pch2 - szFormat),
+          pch[1] - '@') - 1;
         pch++;
         continue;
       } else if (FUncapCh(pch[1])) {
-        pch2 = PchFormatString(pch2, pch[1] - '`') - 1;
+        pch2 = PchFormatString(pch2, cchMax - (int)(pch2 - szFormat),
+          pch[1] - '`') - 1;
         pch++;
         continue;
       }
@@ -2743,7 +2746,7 @@ flag ShowParseExpression(CONST char *sz)
   if (!par.fReal)
     sprintf2(S(szNum), "%d", par.n);
   else
-    FormatR(szNum, par.r, 6);
+    FormatR(S(szNum), par.r, 6);
   sprintf2(S(szMsg), "Expression returned: %s\n", szNum);
   PrintNotice(szMsg);
   return fTrue;
@@ -2880,16 +2883,16 @@ char *ExpGetString(int i)
 
 // Set a string to an AstroExpression custom variable.
 
-char *PchFormatExpression(char *sz, int i)
+char *PchFormatExpression(char *sz, int cchMax, int i)
 {
   char *pch;
 
   if (i >= xi.cparVar)
-    sprintf(sz, "0");
+    sprintf2(sz, cchMax, "0");
   else if (xi.rgparVar[i].fReal)
-    FormatR(sz, xi.rgparVar[i].r, 6);
+    FormatR(sz, cchMax, xi.rgparVar[i].r, 6);
   else
-    sprintf(sz, "%d", xi.rgparVar[i].n);
+    sprintf2(sz, cchMax, "%d", xi.rgparVar[i].n);
   for (pch = sz; *pch; pch++)
     ;
   return pch;
@@ -2899,7 +2902,7 @@ char *PchFormatExpression(char *sz, int i)
 // Set a string to an AstroExpression custom string that's indexed by a custom
 // variable.
 
-char *PchFormatString(char *sz, int i)
+char *PchFormatString(char *sz, int cchMax, int i)
 {
   char *pch;
 
@@ -2907,7 +2910,7 @@ char *PchFormatString(char *sz, int i)
   if (i >= 0 && i < xi.cparVar && !xi.rgparVar[i].fReal) {
     i = xi.rgparVar[i].n;
     if (i < xi.cszExpStr && FSzSet(xi.rgszExpStr[i]))
-      sprintf(sz, "%s", xi.rgszExpStr[i]);
+      sprintf2(sz, cchMax, "%s", xi.rgszExpStr[i]);
   }
   for (pch = sz; *pch; pch++)
     ;

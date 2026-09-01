@@ -1047,7 +1047,7 @@ void PrintAspects(void)
 
     // Print aspect orb.
     PrintSz(" +/- ");
-    FormatR(sz, rAspOrb[ASPT(i)], -1); PrintSz(sz);
+    FormatR(S(sz), rAspOrb[ASPT(i)], -1); PrintSz(sz);
     PrintTab(' ', 3-CchSz(sz));
     sprintf2(S(sz), " degrees  %s\n", szAspectGlyphDisp[i2]); PrintSz(sz);
   }
