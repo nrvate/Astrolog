@@ -39,4 +39,38 @@ $(OBJS): astrolog.h extern.h
 
 clean:
 	$(RM) $(OBJS) $(NAME)
+
+# This file is upstream's and builds upstream's binary: "make" produces
+# ./astrolog, the X11 one. This fork's Qt port has its own makefiles, and
+# the default target cannot simply move to it -- ten scripts here expect
+# a plain "make" to leave ./astrolog behind, including all three
+# differential matrices, tools/asan-sweep.sh (which builds with
+# NAME= overridden), tools/settings-round-trip.sh and run-qt-tests.sh.
+#
+# So the Qt builds get named targets instead. Each is exactly the command
+# CLAUDE.md documents; nothing here changes what "make" alone does.
+
+qt:
+	$(MAKE) -f Makefile.qt
+
+qt-test:
+	$(MAKE) -f Makefile.qt.test
+
+qt-asan:
+	$(MAKE) -f Makefile.qt.asan
+
+win:
+	$(MAKE) -f Makefile.win
+
+# Every build this fork has, in the order the pre-commit checks want them.
+all: $(NAME) qt qt-test win
+
+# And the counterpart to "clean", which only knows about upstream's.
+clean-all: clean
+	$(MAKE) -f Makefile.qt clean
+	$(MAKE) -f Makefile.qt.test clean
+	$(MAKE) -f Makefile.qt.asan clean
+	$(MAKE) -f Makefile.win clean
+
+.PHONY: clean qt qt-test qt-asan win all clean-all
 #

@@ -98,8 +98,12 @@ is the whole reason for the `-i nrvate.as` rule below.
 ## Build and test
 
 ```sh
-make -f Makefile.qt -j4          # ./astrolog-qt
-make -f Makefile.qt.test -j4     # ./astrolog-qt-test
+make qt -j4                      # ./astrolog-qt
+make qt-test -j4                 # ./astrolog-qt-test
+make all -j4                     # all four, and "make clean-all" undoes it
+                                 # (plain "make" is upstream's target and
+                                 # still builds only ./astrolog, which ten
+                                 # scripts here depend on)
 ./run-qt-tests.sh                # 3526 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
