@@ -4641,11 +4641,34 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
 }
 
 
+#ifdef QTTEST
+// The offscreen QPA plugin -- which every headless run of this suite and
+// both capture modes use -- emits "This plugin does not support
+// propagateSizeHints()" on each window that sets size hints, several times
+// per run. It carries no logging category, so QT_LOGGING_RULES cannot
+// filter it. Drop that one string and pass everything else through, so a
+// real Qt warning still reaches the log.
+static QtMessageHandler s_pfnMsgPrevQt = NULL;
+
+static void MessageFilterQt(QtMsgType typ, CONST QMessageLogContext &ctx,
+  CONST QString &str)
+{
+  if (str.contains(QStringLiteral("does not support propagateSizeHints")))
+    return;
+  if (s_pfnMsgPrevQt != NULL)
+    s_pfnMsgPrevQt(typ, ctx, str);
+}
+#endif
+
+
 void BeginQt()
 {
   static int s_argc = 1;
   static char *s_argv[] = { (char *)"astrolog", NULL };
 
+#ifdef QTTEST
+  s_pfnMsgPrevQt = qInstallMessageHandler(MessageFilterQt);
+#endif
   gi.qapp = new QApplication(s_argc, s_argv);
   QApplication::setStyle(new AstroStyleQt);
   ApplyColorSchemeQt();

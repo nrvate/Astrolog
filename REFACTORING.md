@@ -4,8 +4,10 @@ This is the catalog of what makes Astrolog hard to evolve and what to do
 about it. The goal is a codebase someone could read without cringing:
 maintainable, flexible, modular — while every increment keeps the program
 byte-for-byte behaving as it does today, under the nets this project
-already trusts (the 3036-assertion suite, ASan, the settings round trip,
-the six standing audits, and the Windows build as oracle).
+already trusts (the 3524-assertion suite, ASan, the settings round trip,
+the six standing audits, and the Windows build as oracle). Note the word
+"behaving": all of those but one are differential, and the exception is
+new — see T9.
 
 It is a **living document worked across many sessions**. The survey
 ledger below says which parts of the codebase have been reviewed and
@@ -655,6 +657,59 @@ absorbs the documentation halves of B4 (chart-info aliases), E3 (loop
 ownership and adding a command), G3 (label-is-an-identifier), H1's
 taxonomy note, H2's macro-prefix rule, and the B-area goto/flush
 verdicts.
+
+### T9 — Every net is differential, so none of them can say "correct"
+
+*Evidence:* `tools/switch-matrix.sh` byte-diffs the tree against an
+older build of **itself**. `tools/win-tests.sh` and
+`tools/text-chart-diff.py` compare two builds that share this core.
+`tools/asan-sweep.sh` proves no bad memory access. The six audits check
+the port against `astrolog.rc` and the defaults against `astrolog.as` —
+two artifacts of this same repo. Every one of them answers "did this
+change anything?" and none answers "is this right?". Worse, a
+differential *protects* a wrong answer: fixing a defect that shipped in
+1993 shows up as a regression in the matrix.
+
+Before 2026-08-31 the 3213-assertion suite contained **two** assertions
+about a computed number — `chouse[1]` and `chouse[5]` pinned to
+literals on the Matrix path (qttest.cpp, `cast-cooking`), whose own
+comment calls itself "matrix.cpp's only standing net". For a program
+with four planetary engines (astrolog.h's `-b` state table) and 40
+house systems, that is the whole opinion the test suite held about
+astronomy.
+
+*Incident:* work log items 140 and 142. Item 142 also shows the limit of
+the sanitizer leg: `Makefile.qt.asan` builds at `-O0`, where
+`_FORTIFY_SOURCE` is inactive, so an entire detection class — a `%3d` of
+`INT_MIN` overrunning a 15-byte buffer — was invisible to the one net
+here that looks at memory, through two prior hunts. `-bm` and `-bp` produced a chart with
+every body at 0°Aries and no error, reachable from the command line
+with the shipped `astrolog.as`, in shared core, in both builds. The
+switch matrix covered neither invocation, and had it covered them it
+would have faithfully recorded the all-zero chart as the correct
+answer.
+
+*Direction:* an **oracle** — a net whose reference is outside this
+repo. Done 2026-08-31 (work log item 141): `TestNumericOracleQt()`
+calls the ephemeris library directly, through an object mapping
+transcribed independently in qttest.cpp, and requires Astrolog's
+`planet[]` to match. Agreement measured exact (0.000000 arcsec, 15
+bodies, 7 epochs 1900–2080), plus a Matrix-vs-Swiss cross-check between
+two independent implementations of the solar system, and a partition
+invariant over all 40 house systems. 307 assertions, 37 ms, falsified
+in all four legs.
+
+*What is still differential:* everything else. The oracle covers
+planetary longitude and house-cusp ordering. Aspects, midpoints,
+progressions, eclipses, returns, the atlas and the interpretation text
+have no reference outside this repo, and the same argument applies to
+each. The cheapest next ones are the invariants that need no external
+data — an aspect is symmetric, a midpoint lies between its sources, a
+return chart's object really is at its natal longitude.
+
+*Cost/risk:* low. The oracle needed no new dependency (the library is
+already linked) and no stored baseline (item 4 measured why baselines
+do not work here).
 
 ---
 
@@ -1665,6 +1720,11 @@ measured at the finding).
 
 ## Done
 
+- **T9** — the numeric oracle, 2026-08-31 (work log item 141): the first
+  net here whose reference is outside the repo. Found work log item 140
+  before it was written, and its leg 5 pins item 142's `acos` domain fix
+  — the long-open intermittent, which no differential net could have
+  found because the wrong answer was a NaN, not a change.
 - **T2 partial** — rulership cross-table invariant asserted
   (qttest.cpp `rulership` group), commit `b36415b`, 2026-08-29.
 - **T2/T4 partial** — per-object settings struct `rgobjset[]` with named

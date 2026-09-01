@@ -61,6 +61,15 @@
 #include "extern.h"
 #include "qtdriver.h"
 
+#ifdef SWISS
+// The oracle calls the ephemeris library directly, so this file needs the
+// Swiss headers -- and the same "ret" dance calc.cpp does, since astrolog.h
+// makes "ret" a macro for cp0.dir and the Swiss headers use that name.
+#undef ret
+#include "swephexp.h"
+#define ret cp0.dir
+#endif
+
 #ifdef QTTEST
 
 // Hooks into qtdriver.cpp, where the menu tables are file static.
@@ -121,8 +130,11 @@ static void Check(flag fOk, CONST char *szFmt, ...)
   va_list ap;
 
   va_start(ap, szFmt);
-  vsprintf(sz, szFmt, ap);
-  va_end(ap);
+  vsnprintf(sz, sizeof(sz), szFmt, ap);   // A failing assertion can
+  va_end(ap);              // carry an arbitrarily wide value; this is
+                           // the same unbounded-format class the rest
+                           // of this project keeps finding, and the
+                           // check harness is no place for it.
   if (fOk)
     s_cPass++;
   else {
@@ -3632,6 +3644,280 @@ static void ProbeQt()
 }
 
 
+
+// ---- The numeric oracle ----
+//
+// Every other net in this project is differential. tools/switch-matrix.sh
+// byte-diffs the tree against an older build of ITSELF; tools/win-tests.sh
+// and the text-chart diff compare two builds that share this same core;
+// the sanitizer sweeps prove no bad memory access, not a right answer. All
+// of those can prove "unchanged". None of them can prove "correct", and a
+// differential actively locks a wrong answer in -- fixing a defect that
+// shipped in 1993 reads as a regression. Before this group the entire
+// suite contained exactly two assertions about a computed number, both
+// house cusps on the Matrix path (see TestCastCookingQt).
+//
+// So: ask the ephemeris library the same question Astrolog asks it, and
+// require the same answer. The Astrolog-object -> Swiss-body mapping below
+// is written out here on purpose rather than read from calc.cpp, so this
+// is an independent transcription and a drift in that mapping fails.
+//
+// What that actually tests is Astrolog's glue, not Swiss's arithmetic:
+// object numbering, the flag construction in FSwissPlanet(), the delta-T
+// shift, the sidereal offset, and ProcessPlanet()'s rectangular-to-zodiac
+// conversion. That glue is where every calculation bug this project has
+// found actually lived -- the star-numbered rulership tables, the missing
+// FNorm guards, the raw-rObjDiam eclipse checkers.
+//
+// Measured 2026-08-31, and the numbers are why the tolerances look the way
+// they do:
+//   * Swiss agreement is EXACT -- 0.000000 arcsec, 15 bodies, 7 epochs
+//     1900-2080, tropical and sidereal alike. rEpsSwiss is slack against
+//     future compiler reassociation, not a fudge factor.
+//   * Matrix-vs-Swiss worst case over the same epochs: Sun-Mars 0.010 deg,
+//     Jupiter-Neptune 0.255, Pluto 0.867, Chiron/Ceres/Pallas 2.33, Juno
+//     8.17, Vesta 11.01. The per-body tolerances carry about 2x headroom.
+//     This leg is catastrophe detection: it is what would have caught the
+//     all-zero chart that -bm produced for years (work log item 139).
+//   * All 40 house systems partition the circle exactly once at mid
+//     latitude: 12 positive gaps summing to 360 to within 1e-9.
+
+typedef struct _OracleBody {
+  int obj;         // Astrolog object index
+  int se;          // Swiss Ephemeris body number
+  real rTolMat;    // Matrix-engine tolerance in degrees, measured x2
+} ORACLEBODY;
+
+static CONST ORACLEBODY rgoracle[] = {
+  {oSun, SE_SUN,      0.05}, {oMoo, SE_MOON,    0.15},
+  {oMer, SE_MERCURY,  0.05}, {oVen, SE_VENUS,   0.05},
+  {oMar, SE_MARS,     0.05}, {oJup, SE_JUPITER, 0.50},
+  {oSat, SE_SATURN,   0.50}, {oUra, SE_URANUS,  0.50},
+  {oNep, SE_NEPTUNE,  0.50}, {oPlu, SE_PLUTO,   1.75},
+  {oChi, SE_CHIRON,   5.00}, {oCer, SE_CERES,   5.00},
+  {oPal, SE_PALLAS,   5.00}, {oJun, SE_JUNO,   17.00},
+  {oVes, SE_VESTA,   22.00}};
+#define coracle (int)(sizeof(rgoracle) / sizeof(ORACLEBODY))
+
+// Slack against compiler reassociation, 3.6e-6 arcsec. The measurement it
+// stands in for was exact equality.
+#define rEpsSwiss 1.0e-9
+
+// Pin the chart the way TestCastCookingQt does, so the suite's own clock
+// never enters, and borrow every cast-relevant knob: TestAllMenuActionsQt
+// fires all 338 menu items and leaves a pile of them dirty.
+static void OraclePinChartQt(int yea)
+{
+  ciCore = ciMain;
+  ciCore.mon = 3; ciCore.day = 15; ciCore.yea = yea;
+  ciCore.tim = 10.5; ciCore.dst = 0.0; ciCore.zon = 6.0;
+  ciCore.lon = 87.65; ciCore.lat = 41.85;
+  ciCore.nam = ciCore.loc = NULL;
+}
+
+static void TestNumericOracleQt()
+{
+  static CONST int rgyea[] = {1900, 1940, 1980, 2000, 2020, 2050, 2080};
+  flag fPopupSav = FNoPopupQt();
+  CI ciCoreSav = ciCore, ciMainSav = ciMain;
+  flag rgfIgnoreSav[objMax];
+  real rgrSwiss[coracle], rD;
+  double xx[6];
+  char serr[AS_MAXCH];
+  real jd;
+  int iy, i, cGood;
+
+  Group("Numeric oracle");
+  SetNoPopupQt(fTrue);
+#ifndef SWISS
+  Check(fFalse, "built without SWISS: the oracle cannot run");
+#else
+  for (i = 0; i < objMax; i++)
+    rgfIgnoreSav[i] = ignore[i];
+  {
+    // The same borrow list TestCastCookingQt's pinned-cusp check uses,
+    // plus the backend, since this group is about which engine answers.
+    Borrow bEphem(us.fEphemFiles, fTrue), bSid(us.fSidereal, fFalse);
+    Borrow bPla(us.fPlacalcPla, fFalse), bMat(us.fMatrixPla, fFalse);
+    Borrow bSwiss(us.nSwissEph, 0), bNoPla(us.fNoPlacalc, fFalse);
+    Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fFalse);
+    Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
+    Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
+    Borrow bRotW(us.fObjRotWhole, fFalse), bExp(us.fExpOff, fTrue);
+    Borrow bCtr(us.objCenter, (int)oEar), bRel(us.nRel, (int)rcNone);
+    Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+    Borrow bCusp(us.rCuspAddition, 0.0);
+    Borrow bTopo(us.fTopoPos, fFalse), bTrue(us.fTruePos, fFalse);
+    Borrow bNut(us.fNoNutation, fFalse);
+    Borrow bBary(us.fBarycenter, fFalse), bHel(us.fHouseAngle, fFalse);
+    Borrow bAsc(us.objOnAsc, 0), bRot1(us.objRot1, 0), bRot2(us.objRot2, 0);
+    // CastChart() rewrites every position AGAIN after ComputeEphem():
+    // harmonic, decan, dwad and navamsa each map planet[] through a
+    // function of itself, so a stale one silently rescrambles the sky.
+    // TestAllMenuActionsQt() fires all 338 menu items and leaves all
+    // four set -- which is how this group passed alone and failed 222
+    // assertions in the full run. TestSharedCoreFixesQt() clears the
+    // same four by hand for the same reason.
+    Borrow bHarm(us.rHarmonic, 1.0);
+    Borrow bDec(us.fDecan, fFalse), bNav(us.fNavamsa, fFalse);
+    Borrow bDwad(us.nDwad, 0);
+
+    for (i = 0; i < coracle; i++)
+      ignore[rgoracle[i].obj] = fFalse;
+
+    // ---- Leg 1: Astrolog's Swiss path IS the library's own answer ----
+    for (iy = 0; iy < 7; iy++) {
+      OraclePinChartQt(rgyea[iy]);
+      CastChart(1);
+      jd = JulianDayFromTime(is.T);
+      for (i = 0; i < coracle; i++) {
+        if (swe_calc_ut(jd, rgoracle[i].se, SEFLG_SWIEPH | SEFLG_SPEED,
+          xx, serr) < 0) {
+          Check(fFalse, "%d %s: Swiss Ephemeris refused (%s)", rgyea[iy],
+            szObjName[rgoracle[i].obj], serr);
+          rgrSwiss[i] = rLarge;
+          continue;
+        }
+        rgrSwiss[i] = xx[0];
+        rD = RAbs(planet[rgoracle[i].obj] - rgrSwiss[i]);
+        if (rD > rDegHalf)
+          rD = rDegMax - rD;
+        Check(rD < rEpsSwiss, "%d %s matches swe_calc_ut (%.6f\")",
+          rgyea[iy], szObjName[rgoracle[i].obj], rD * 3600.0);
+      }
+    }
+
+    // ---- Leg 2: the sidereal offset is applied once, not twice ----
+    // is.rSid is added in ProcessPlanet() and SEFLG_SIDEREAL subtracts the
+    // ayanamsa inside the library, which reads like a double application
+    // and measured as exact agreement instead. Pin that.
+    {
+      Borrow bSid2(us.fSidereal, fTrue);
+      OraclePinChartQt(2020);
+      CastChart(1);
+      jd = JulianDayFromTime(is.T);
+      swe_set_sid_mode(SE_SIDM_FAGAN_BRADLEY, 0.0, 0.0);
+      Check(is.rSid != 0.0, "a sidereal cast has a nonzero offset (%.6f)",
+        is.rSid);
+      for (i = 0; i < coracle; i++) {
+        if (swe_calc_ut(jd, rgoracle[i].se,
+          SEFLG_SWIEPH | SEFLG_SPEED | SEFLG_SIDEREAL, xx, serr) < 0)
+          continue;
+        rD = RAbs(planet[rgoracle[i].obj] - xx[0]);
+        if (rD > rDegHalf)
+          rD = rDegMax - rD;
+        Check(rD < rEpsSwiss, "sidereal %s matches the library (%.6f\")",
+          szObjName[rgoracle[i].obj], rD * 3600.0);
+      }
+    }
+
+    // ---- Leg 3: the Matrix engine computes the same sky ----
+    // Two independent implementations of the solar system. This is the leg
+    // that fails loudly if a backend stops computing: an all-zero chart
+    // puts every body up to 180 degrees from the truth.
+    {
+      Borrow bEph2(us.fEphemFiles, fFalse), bMat2(us.fMatrixPla, fTrue);
+      for (iy = 0; iy < 7; iy++) {
+        OraclePinChartQt(rgyea[iy]);
+        {
+          Borrow bEph3(us.fEphemFiles, fTrue), bMat3(us.fMatrixPla, fFalse);
+          CastChart(1);
+          jd = JulianDayFromTime(is.T);
+          for (i = 0; i < coracle; i++)
+            rgrSwiss[i] = swe_calc_ut(jd, rgoracle[i].se,
+              SEFLG_SWIEPH | SEFLG_SPEED, xx, serr) < 0 ? rLarge : xx[0];
+        }
+        CastChart(1);
+        for (i = 0; i < coracle; i++) {
+          if (rgrSwiss[i] == rLarge)
+            continue;
+          rD = RAbs(planet[rgoracle[i].obj] - rgrSwiss[i]);
+          if (rD > rDegHalf)
+            rD = rDegMax - rD;
+          Check(rD < rgoracle[i].rTolMat,
+            "%d Matrix %s within %.2f deg of Swiss (%.4f)", rgyea[iy],
+            szObjName[rgoracle[i].obj], rgoracle[i].rTolMat, rD);
+        }
+      }
+    }
+
+    // ---- Leg 5: coincident points are zero degrees apart, not NaN ----
+    // SphDistance() feeds acos an expression that is sin^2+cos^2 when the
+    // two points coincide -- exactly 1.0 in arithmetic, and above it for
+    // 3.75% of latitudes in double precision, where acos returns NaN. Two
+    // objects sharing a position are ordinary (a tight conjunction, or two
+    // slots both left at 0.0), and the NaN reached ChartMidpoint()'s span
+    // total and then SzDegree(), where (int)NaN is INT_MIN and "%3d" wrote
+    // past a 15-byte buffer. That is the intermittent abort of work log
+    // items 133 and 142, and it is why this leg sweeps rather than spot
+    // checks: the failing latitudes are scattered a few ULP apart.
+    {
+      int cNan = 0;
+      real rLat, rD, rMax = 0.0;
+
+      for (rLat = -89.9; rLat <= 89.9; rLat += 0.0007) {
+        rD = SphDistance(123.456, rLat, 123.456, rLat);
+        if (rD != rD)                     // The only portable NaN test.
+          cNan++;
+        else if (rD > rMax)
+          rMax = rD;
+      }
+      Check(cNan == 0,
+        "coincident points never give NaN over 256858 latitudes (%d did)",
+        cNan);
+      // Not exactly zero, and that is arithmetic rather than a defect: the
+      // spherical law of cosines resolves small distances no finer than
+      // acos(1-eps) ~ sqrt(2*eps), about 1.2e-6 degrees here. Measured
+      // worst case 2026-08-31 was 1.7e-06; the bound is an order above it.
+      // Switching to haversine would fix the precision and change every
+      // distance the program prints, so it is not on the table.
+      Check(rMax < 1.0e-5,
+        "coincident points are zero degrees apart to arithmetic (%.3g)",
+        rMax);
+      rD = SphDistance(0.0, 0.0, 180.0, 0.0);
+      Check(RAbs(rD - rDegHalf) < 1.0e-9,
+        "antipodal points are 180 degrees apart (%.9f)", rD);
+      rD = SphDistance(0.0, -90.0, 0.0, 90.0);
+      Check(RAbs(rD - rDegHalf) < 1.0e-9,
+        "pole to pole is 180 degrees (%.9f)", rD);
+    }
+
+    // ---- Leg 4: every house system partitions the circle exactly once ----
+    // SwissHouse() says "largely copied from swe_houses()" and 40 systems
+    // read the result. Whatever a system's construction, its twelve cusps
+    // must go around once: every gap positive, the gaps summing to 360.
+    for (i = 0; i < cSystem; i++) {
+      Borrow bHouse(us.nHouseSystem, i);
+      real rSum = 0.0, rGap;
+      int iCusp, cBad = 0;
+
+      OraclePinChartQt(2020);
+      CastChart(1);
+      for (iCusp = 1; iCusp <= cSign; iCusp++) {
+        rGap = chouse[iCusp == cSign ? 1 : iCusp+1] - chouse[iCusp];
+        if (rGap < 0.0)
+          rGap += rDegMax;
+        if (rGap <= 0.0)
+          cBad++;
+        rSum += rGap;
+      }
+      Check(cBad == 0, "%s houses all have positive width", szSystem[i]);
+      Check(RAbs(rSum - rDegMax) < 1.0e-9,
+        "%s houses close the circle once (%.9f)", szSystem[i], rSum);
+    }
+    cGood = 1;
+  }
+
+  for (i = 0; i < objMax; i++)
+    ignore[i] = rgfIgnoreSav[i];
+  Check(cGood == 1, "the oracle restored every borrowed setting");
+#endif
+  ciCore = ciCoreSav; ciMain = ciMainSav;
+  CastChart(1);                // Leave real positions for the rest.
+  SetNoPopupQt(fPopupSav);
+}
+
+
 // One entry per test group, so one group can be run by itself:
 //
 //   ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh        one group, ~2s
@@ -4576,7 +4862,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},
   {"long-strings",         TestLongStringsQt},
-  {"file-parsers",         TestFileParsersQt}};
+  {"file-parsers",         TestFileParsersQt},
+  {"oracle",               TestNumericOracleQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
 
 // Does any comma-separated token of the filter appear in the name?

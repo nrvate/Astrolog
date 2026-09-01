@@ -571,7 +571,17 @@ real SphDistance(real lon1, real lat1, real lon2, real lat2)
   real dLon, r;
 
   dLon = RAbs(lon1 - lon2);
-  r = RAcosD(RSinD(lat1)*RSinD(lat2) + RCosD(lat1)*RCosD(lat2)*RCosD(dLon));
+  r = RSinD(lat1)*RSinD(lat2) + RCosD(lat1)*RCosD(lat2)*RCosD(dLon);
+  // Roundoff may put it slightly outside Acos range, the same guard
+  // xdevice.cpp makes on its own Acos arguments. For two coincident
+  // points this expression is sin^2+cos^2 -- exactly 1.0 in arithmetic
+  // and above it for 3.75% of latitudes in double precision, where
+  // RAcosD() returns NaN. Any two objects sharing a position sent that
+  // NaN into ChartMidpoint()'s span total and on to SzDegree(), whose
+  // (int)NaN is INT_MIN and whose "%3d" then wrote 20-odd bytes into a
+  // 15-byte buffer: an intermittent fortify abort, hunted twice before
+  // (work log items 133 and 142).
+  r = RAcosD(Min(Max(r, -1.0), 1.0));
   return r;
 }
 
@@ -1867,22 +1877,22 @@ char *SzDegree(real deg)
         VSeconds(rRound/60.0, rRound/3600.0, rRound/3600.0/1000.0));
     d = (int)deg;
     m = (int)(RFract(deg)*60.0);
-    sprintf(szPos, "%3d%c%02d'", d, ChDeg(), m);
+    sprintf2(S(szPos), "%3d%c%02d'", d, ChDeg(), m);
     if (us.fSeconds) {
       s = RFract(deg)*60.0; s = RFract(s)*60.0;
-      sprintf(&szPos[7], "%02d\"", (int)s);
+      sprintf2(SO(&szPos[7], szPos), "%02d\"", (int)s);
       if (us.fSecond1K) {
         s = RFract(s)*1000.0;
-        sprintf(&szPos[9], ".%03d\"", (int)s);
+        sprintf2(SO(&szPos[9], szPos), ".%03d\"", (int)s);
       }
     }
   } else {
     if (!us.fSeconds)
-      sprintf(szPos, "%7.3f", deg);
+      sprintf2(S(szPos), "%7.3f", deg);
     else if (!us.fSecond1K)
-      sprintf(szPos, "%10.6f", deg);
+      sprintf2(S(szPos), "%10.6f", deg);
     else
-      sprintf(szPos, "%14.10f", deg);
+      sprintf2(S(szPos), "%14.10f", deg);
   }
   return szPos;
 }
@@ -1904,26 +1914,26 @@ char *SzDegree2(real deg)
         VSeconds(rRound/60.0, rRound/3600.0, rRound/3600.0/1000.0));
     d = (int)deg;
     m = (int)(RFract(deg)*60.0);
-    sprintf(szPos, "%d%c%02d'", d, ChDeg(), m);
+    sprintf2(S(szPos), "%d%c%02d'", d, ChDeg(), m);
     if (us.fSeconds) {
       s = RFract(deg)*60.0; s = RFract(s)*60.0;
       for (pch = szPos; *pch; pch++)
         ;
-      sprintf(pch, "%02d\"", (int)s);
+      sprintf2(SO(pch, szPos), "%02d\"", (int)s);
       if (us.fSecond1K) {
         while (*pch)
           pch++;
         s = RFract(s)*1000.0;
-        sprintf(pch-1, ".%03d\"", (int)s);
+        sprintf2(SO(pch-1, szPos), ".%03d\"", (int)s);
       }
     }
   } else {
     if (!us.fSeconds)
-      sprintf(szPos, "%.3f", deg);
+      sprintf2(S(szPos), "%.3f", deg);
     else if (!us.fSecond1K)
-      sprintf(szPos, "%.6f", deg);
+      sprintf2(S(szPos), "%.6f", deg);
     else
-      sprintf(szPos, "%.10f", deg);
+      sprintf2(S(szPos), "%.10f", deg);
   }
   return szPos;
 }

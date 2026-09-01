@@ -111,10 +111,11 @@ Roughly in the order I'd take them.
 
 3. ~~A regression check~~ — **done 2026-08-25.** `make -f
    Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3036
-   assertions** as of 2026-08-29; it was 1396 when first written, and has
+   display and no `xdotool`, and exits non-zero on failure. **3520
+   assertions** as of 2026-08-31; it was 1396 when first written, and has
    since grown to cover menu parity against `astrolog.rc` (258/258), the
-   Chart menu's graphics/text handling, and bad input.
+   Chart menu's graphics/text handling, bad input, and — since item 141
+   — whether the computed positions are actually right.
    - **How it works.** `Makefile.qt.test` builds the same sources plus
      `qttest.cpp` with `-DQTTEST` into `astrolog-qt-test`, in its own
      object directory, so the shipped binary carries no test code.
@@ -260,6 +261,26 @@ Roughly in the order I'd take them.
    in that family, of which there has never been one; and the
    **`Mem` storage arrays** are never subscripted, so a guard would
    check nothing. Both say so at the ledger row.
+
+11. **Extend the oracle.** Added 2026-08-31 (work log item 141). The
+   numeric oracle covers planetary longitude and house-cusp ordering, and
+   that is all. Aspects, midpoints, progressions, eclipses, returns, the
+   atlas and the interpretation text still have no reference outside this
+   repo, and REFACTORING.md's T9 makes the argument for why that matters:
+   every other net here is differential and can only say "unchanged".
+   The cheapest next ones need no external data at all — the invariants
+   the program must satisfy whatever the numbers are. An aspect is
+   symmetric. A midpoint lies between its two sources. A return chart's
+   object really is at its natal longitude. A progressed chart at zero
+   elapsed time is the natal chart. Each is a few lines and each covers a
+   surface nothing currently watches.
+   Two measured findings are parked there rather than fixed, both
+   maintainer calls because they change house math in both builds:
+   **Topocentric houses run backwards beyond the polar circle** (at 78N
+   the twelve cusps wrap the circle three times, so house assignment is
+   meaningless) while Placidus and Koch are guarded and fall back to
+   Porphyry; and **Pullen (S.Delta) produces zero-width houses** at 70N
+   and above. Longyearbyen at 78.2N is in the shipped atlas.
 
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
@@ -4657,6 +4678,157 @@ are the more useful half to read before starting something new.
     write no dump at all. Suite 3520/0, six audits clean, all three
     generated tables in sync, round trip clean on all three legs, and
     the console, Qt release, Qt test and Windows builds all compile.
+
+141. **The numeric oracle: the suite gets its first opinion about
+    whether the numbers are right.** Asked what would move the codebase
+    forward, and the answer was in what every net here has in common.
+    `tools/switch-matrix.sh` byte-diffs the tree against an older build
+    of *itself*; `tools/win-tests.sh` and the text-chart diff compare
+    two builds that share this core; `tools/asan-sweep.sh` proves no bad
+    memory access. All of them can prove **unchanged**. None can prove
+    **correct** -- and a differential actively locks a wrong answer in,
+    since fixing a defect that shipped in 1993 reads as a regression.
+    Before this, 3213 assertions across 44 groups contained **two**
+    about a computed number, both house cusps on the Matrix path.
+
+    That is a strange gap for a program whose entire purpose is
+    producing those numbers, with **four** planetary engines and **40**
+    house systems reading them.
+
+    `TestNumericOracleQt()` asks the ephemeris library the same question
+    Astrolog asks it and requires the same answer. The
+    Astrolog-object-to-Swiss-body mapping is written out in qttest.cpp
+    rather than read from calc.cpp, so it is an independent
+    transcription. Four legs, 307 assertions, 37ms:
+
+    - **Swiss glue.** 15 bodies x 7 epochs 1900-2080 against
+      `swe_calc_ut()`. Measured agreement is **exact** -- 0.000000
+      arcsec, every body, every epoch. The 1e-9 tolerance is slack
+      against compiler reassociation, not a fudge factor.
+    - **Sidereal.** `is.rSid` is added in `ProcessPlanet()` while
+      `SEFLG_SIDEREAL` subtracts the ayanamsa inside the library, which
+      reads like a double application. It measured exact. Pinned.
+    - **Matrix cross-check.** The same charts on Astrolog's own
+      formulas, per-body tolerances at about 2x the measured worst case
+      (Sun-Mars 0.010 deg, Jupiter-Neptune 0.255, Pluto 0.867,
+      Chiron/Ceres/Pallas 2.33, Juno 8.17, Vesta 11.01). Two independent
+      implementations of the solar system, checked against each other.
+    - **House partition.** All 40 systems: twelve positive gaps summing
+      to 360. This is the `SwissHouse()` surface whose own comment says
+      "largely copied from swe_houses()".
+
+    **Falsified in all four legs**, which is the only reason to believe
+    any of it. Perturbing `ComputeEphem`'s `planet[i]` by 1e-6 degrees
+    -- 0.0036 arcsec -- fails 120 assertions. Forcing `FCmMatrix()`
+    false, which reproduces item 140's failure exactly, fails 104.
+    Swapping two cusps in `SwissHouse()` fails 20. (A first attempt
+    perturbed `ProcessPlanet()` and changed nothing, because the Swiss
+    path sets `planet[i]` directly and never calls it -- a reminder that
+    a falsification can fail by aiming at the wrong line.)
+
+    **It found item 140 within twenty minutes**, before a line of it was
+    written, by the simple act of asking two engines the same question.
+
+    **The group passed alone and failed 222 assertions in the full run**
+    -- the inherited-state trap this file's own header warns about.
+    `CastChart()` rewrites every position *again* after `ComputeEphem()`:
+    harmonic, decan, dwad and navamsa each map `planet[]` through a
+    function of itself, and `TestAllMenuActionsQt()` leaves all four set.
+    Diagnosed by dumping globals solo and in the full run and diffing
+    them (work log item 57's method) rather than guessing one variable
+    per rebuild: 25 borrowed settings were identical and `us.fStar`
+    plus `is.nObj` were not, which was a red herring; instrumenting
+    `ComputeEphem` showed it producing the *correct* Sun and something
+    later overwriting it.
+
+    Two harness fixes travel with it. `Check()` formatted its own
+    message with unbounded `vsprintf` into a fixed buffer -- the same
+    class this project keeps finding, in the check harness itself; it is
+    `vsnprintf` now. And the offscreen QPA plugin's
+    "does not support propagateSizeHints()" warning, which has no
+    logging category and so cannot be filtered by `QT_LOGGING_RULES`,
+    is dropped by a `qInstallMessageHandler` under `QTTEST` that passes
+    every other Qt warning through.
+
+    **Suite: 3520 passed, 0 failed.**
+
+    Two things this measured and did *not* fix, both recorded rather
+    than acted on. **Topocentric houses degenerate beyond the polar
+    circle**: at 78N the twelve cusps run backwards and wrap the circle
+    three times, so house assignment is meaningless. Astrolog guards
+    Placidus and Koch at extreme latitude (`ComputeHouses()`,
+    calc.cpp:508, falls back to Porphyry with a warning) and Swiss
+    substitutes Porphyry for its own Placidus/Koch -- but nothing covers
+    Topocentric, which is the same pole construction, and Longyearbyen
+    at 78.2N is in the shipped atlas. Pullen (S.Delta) produces
+    zero-width houses at 70N and above. Both are shared core and affect
+    the Windows build; changing house math is a maintainer decision, so
+    the oracle asserts the partition invariant at mid latitude only and
+    this note carries the measurement. **And an unexplained intermittent
+    in `long-strings`**: two failures in about sixteen runs on
+    2026-08-31 ("mode 27", then "mode 11", both "0 bytes"), then zero in
+    thirty-two consecutive runs after, with and without these changes.
+    Not reproduced, not diagnosed, not claimed fixed.
+
+142. **The intermittent, caught: `acos` out of domain for two objects at
+    the same place.** Items 133 and 3a6dd79 hunted this twice -- 17 runs
+    under gdb, an ASan sweep of the whole switch matrix -- and left it
+    open, described as "a *global* buffer overflow" that would not
+    reproduce. It reproduces about one full suite run in six, and the
+    reason it kept escaping is that **the sanitizer build cannot see it**:
+    `Makefile.qt.asan` compiles at `-O0`, where `_FORTIFY_SOURCE` is
+    inactive, and this is a fortify detection. It has to be hunted in an
+    optimized build with `-g`, which is a one-line change to
+    `Makefile.qt.test`.
+
+        #13 ___sprintf_chk (s=<SzDegree(double)::szPos> "-2147483648:-21",
+                            slen=15, format="%3d%c%02d'")
+        #15 SzDegree (deg=nan(0x8000000000000)) at general.cpp:1870
+        #16 PrintMidpointSummary (count=5995, rSpanSum=nan) charts1.cpp:1239
+        #17 ChartMidpointCore (fRel=0) at charts1.cpp:1353
+
+    **Root cause, `SphDistance()` (general.cpp:574).** It hands `acos`
+    the spherical law of cosines,
+    `sin(lat1)sin(lat2) + cos(lat1)cos(lat2)cos(dLon)`. For two points at
+    the *same* position that expression is `sin^2 + cos^2`: exactly 1.0 in
+    arithmetic, and **above** 1.0 in double precision for 3.75% of
+    latitudes -- 9,636 of 256,858 in a sweep, worst excess 2.22e-16.
+    `acos` of anything past 1.0 is NaN. Two objects sharing a position is
+    not exotic: a tight conjunction does it, and so do two slots both
+    still sitting at 0.0.
+
+    The NaN then propagates. `ChartMidpoint()` adds it into `rSpanSum`,
+    `PrintMidpointSummary()` divides and calls `SzDegree()`, `(int)NaN` is
+    `INT_MIN` on x86, and `"%3d"` -- a *minimum* width, not a maximum --
+    writes `-2147483648:-2147483648'` into `static char szPos[15]`.
+    Fortify kills the process. Intermittent because whether any pair
+    coincides depends on the chart, and the group that tripped it
+    (`long-strings`) casts from the current moment.
+
+    **The codebase already knew.** `xdevice.cpp:829` guards its own two
+    `RAcosD` arguments with exactly this clamp and the comment "Roundoff
+    may put it slightly outside Acos range." `SphDistance()` never got
+    it. Fixed the same way, plus both `SzDegree()` buffers moved to the
+    bounded `sprintf2(S(...))`/`SO(...)` idiom this codebase already
+    has -- theme T5 -- so no input can overflow them again regardless.
+
+    **Falsified deterministically**, which an intermittent otherwise
+    resists: the oracle's leg 5 sweeps 256,858 latitudes and asserts no
+    NaN; reverting the clamp fails it with exactly 9,636, matching the
+    standalone measurement. Twelve consecutive full-suite runs clean
+    after the fix, against roughly one abort in six before.
+
+    Two notes. The residual distance for coincident points is ~1.7e-06
+    degrees rather than 0, which is the law of cosines' precision floor
+    (`acos(1-eps) ~ sqrt(2*eps)`) and not a defect; haversine would fix
+    it and change every distance the program prints, so it is not on the
+    table, and the test's bound says so. And `RAcos` sites at
+    calc.cpp:336 (semi-diurnal arc, `-tan(lat)tan(decl)` exceeds 1 in the
+    circumpolar case) and matrix.cpp:358 have the same shape and no
+    guard; neither has produced an incident, and neither was touched.
+
+    Both fixes are shared core with no `QT` anywhere near them, so the
+    Windows build gets them too.
 
 ## Features this fork adds to both builds
 

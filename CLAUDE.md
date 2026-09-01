@@ -79,13 +79,16 @@ suite. The rest is for comparing against Windows.
 ```sh
 make -f Makefile.qt -j4          # ./astrolog-qt
 make -f Makefile.qt.test -j4     # ./astrolog-qt-test
-./run-qt-tests.sh                # 3213 assertions + startup checks
+./run-qt-tests.sh                # 3524 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3213 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`).
+commit. Current state: **3524 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
+build is `-O0`, where `_FORTIFY_SOURCE` is inactive, so it structurally
+cannot see a fortify-detected overflow. Work log item 142 was invisible
+to it for that reason and had to be caught in an optimized `-g` build.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render
@@ -95,6 +98,19 @@ truncation points hold, all 338 menu items fire without crashing, 258/258 Window
 items present, 256 show Windows' own accelerator text, 39/39 esoteric
 bodies resolve against the ephemeris, and bad input (missing files,
 unknown switches) doesn't terminate the process.
+
+One group is not like the others. **The numeric oracle** (`oracle`, 307
+assertions) is the only net here that can say a number is *right* rather
+than *unchanged*: it asks the Swiss Ephemeris library the same question
+Astrolog asks it, through an object mapping transcribed independently in
+`qttest.cpp`, and requires the same answer -- exactly, measured at
+0.000000 arcsec over 15 bodies and 7 epochs. It also cross-checks
+Astrolog's own Matrix formulas against Swiss, and requires all 40 house
+systems to partition the circle once. Every other harness in this project
+is differential and cannot distinguish "correct" from "unchanged"; see
+work log item 141, and items 140 and 142 for the two shared-core bugs it
+found — one before a line of it was written, one a fortify abort that had
+been hunted twice and left open.
 
 Several groups drive real dialogs rather than calling into them: Object
 Selections through seven cases, the Calculation Settings ephemeris list,

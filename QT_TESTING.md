@@ -395,6 +395,26 @@ names the line, the array, and how far outside it the access went, on the
 run where the damage is *done* rather than the later run where the
 program falls over.
 
+**But ASan is not the whole of it, and one blind spot cost two hunts.**
+That build is `-O0`, and glibc's `_FORTIFY_SOURCE` is inactive without
+optimization — so a *fortify*-detected overflow (`__sprintf_chk` and
+friends) cannot fire there at all. Work log item 142 was exactly that: an
+intermittent `*** buffer overflow detected ***` that survived 17 gdb runs
+and a full ASan sweep of the switch matrix, because every hunt was
+pointed at a build that structurally could not see it. What found it was
+an optimized build with symbols — a one-line override, no makefile edit:
+
+```sh
+make -f Makefile.qt.test NAME=astrolog-qt-dbg OBJDIR=obj-qt-dbg \
+  CPPFLAGS="-DQT -DQTTEST -O -g -fPIC -Wno-write-strings -Wno-narrowing \
+  -Wno-comment $(pkg-config --cflags Qt5Widgets Qt5Network Qt5Test)" -j4
+```
+
+then loop it under `gdb -batch -ex 'run -i nrvate.as' -ex bt` until it
+aborts. **So: ASan for reads and heap, an optimized `-g` build for
+fortify aborts.** Reach for the second whenever the message is
+"buffer overflow detected" rather than an ASan report.
+
 **`Makefile.qt.asan` already exists for this.** It is `Makefile.qt.test`
 with `-fsanitize=address -g -O0` and its own name and object directory,
 so it never clobbers the normal build:
