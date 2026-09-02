@@ -231,7 +231,7 @@ python3 tools/fixture_coverage_audit.py  # ranged switches with no fixture
 python3 tools/line_endings_audit.py      # a carriage return in the source
 ```
 
-And the compiler itself: `tools/warning_audit.py` holds all four builds
+And the compiler itself: `tools/warning_audit.py` holds all five builds
 against a ledger of every warning they are known to produce, and fails on
 an addition.
 

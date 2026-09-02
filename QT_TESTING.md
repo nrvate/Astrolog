@@ -723,8 +723,9 @@ Windows dialog and menu wiring, which nothing else sees.
 ## The compiler is a harness too, and was unread until 2026-09-01
 
 ```sh
-tools/warning_audit.py                 # all four builds, ~6 minutes,
-                                       # plus Qt6 where there is one
+tools/warning_audit.py                 # all five builds, ~70 seconds,
+                                       # plus both Qt6 builds where there
+                                       # is a Qt6
 tools/warning_audit.py --file io.cpp   # one file, seconds, while fixing
 tools/warning_audit.py --update        # after a fix, to move the ledger
 

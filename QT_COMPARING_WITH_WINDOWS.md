@@ -18,10 +18,50 @@ sudo apt install xvfb metacity xdotool imagemagick   # drive it headlessly
 sudo apt install python3-pil                         # compare the captures
 ```
 
-Only the first line is needed to build and test the port itself. The rest
-is for this comparison workflow.
+Only the first line is needed to build and test the port itself. The
+second is enough for the fast numeric check below; the third and fourth
+are only for the layout and GUI comparisons further down.
 
-## Text charts
+**CI runs all of this nightly** — `tools/win-differential.sh` and
+`tools/win-tests.sh` are the "Windows parity" job — so the workflow here
+is for investigating a difference, not for noticing one.
+
+## The fastest check: does the Windows build compute the same numbers?
+
+**Start here.** It takes about 24 seconds, needs no display, no window
+manager and no input simulation, and it answers the question most changes
+actually raise — whether the shared core computes the same thing when
+compiled for Windows.
+
+```sh
+make -f Makefile.win && make wcli && make   # once
+tools/win-differential.sh out/win-diff
+```
+
+It runs the whole 71-invocation chart matrix against `astrolog-wcli.exe`
+under Wine and byte-diffs it against the Linux console build. **7,069
+lines, zero differences** as of 2026-09-02.
+
+It works because `WCLI` is not `WIN`: the program enters at
+`astrolog.cpp`'s ordinary `main()` rather than `wdriver.cpp`'s `WinMain`,
+so it can be driven from a command line. `astrolog.exe` cannot — it opens
+a window and sits there, which is why everything below exists.
+
+**What it does not cover**: it compiles neither `wdriver.cpp` nor
+`wdialog.cpp`, so it says nothing about the Windows GUI, and nothing
+about layout. For those, keep reading. It is a complement to the sections
+below, not a replacement — but if a change is to shared core, it is the
+check that will find the problem, and it costs 24 seconds.
+
+**Two normalisations it applies, each earned by a failure**: `-z0 0` is
+pinned on both sides, because `-z0 Autodetect` answers "is it daylight
+time now" and both builds now agree on that but the answer moves with the
+date; and the "SwissEph file not found" diagnostics are compared as a
+*set* rather than in sequence, because where a stderr line lands relative
+to stdout is a property of the C runtime's buffering and glibc's differs
+from msvcrt's.
+
+## Text charts, including layout
 
 ```sh
 make -f Makefile.win                        # once

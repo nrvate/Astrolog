@@ -107,7 +107,11 @@ is the whole reason for the `-i nrvate.as` rule below.
 ```sh
 make qt -j4                      # ./astrolog-qt
 make qt-test -j4                 # ./astrolog-qt-test
-make all -j4                     # all four; "make clean" undoes it
+make wcli -j4                    # ./astrolog-wcli.exe, the console
+                                 # Windows build: same core, entered at
+                                 # main() rather than WinMain, so it runs
+                                 # under Wine with no display at all
+make all -j4                     # all five; "make clean" undoes it
                                  # (plain "make" is upstream's target and
                                  # still builds only ./astrolog, which ten
                                  # scripts here depend on)
@@ -131,13 +135,13 @@ ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
 
-The five makefiles share one source list, `Makefile.srcs`: **add a
+The six makefiles share one source list, `Makefile.srcs`: **add a
 source file there, once**, in the group it belongs to, and no makefile
 changes. Header dependencies come from the compiler (`-MMD -MP`), so
 touching any header rebuilds exactly what includes it — that was not
 true before 2026-09-01, when only `astrolog.h` and `extern.h` were
 tracked and every other header rebuilt *nothing*. And `make clean` now
-removes all four builds, which is a hazard with two sessions in one
+removes all five builds, which is a hazard with two sessions in one
 tree; `make clean-console` is upstream's narrower one, which is what
 `tools/asan-sweep.sh` uses.
 
@@ -252,13 +256,13 @@ And a ninth that is not fast and not resource-shaped: **the compiler
 itself**, which nothing here read until 2026-09-01.
 
 ```sh
-tools/warning_audit.py               # all four builds clean with -Wall,
+tools/warning_audit.py               # all five builds clean with -Wall,
                                      # every warning diffed against
-                                     # tools/warnings.txt (305 in 96
-                                     # sites); ~6 minutes, so pre-release
-                                     # rather than pre-commit. Plus the
-                                     # Qt6 build, where there is a Qt6,
-                                     # against tools/warnings-qt6.txt --
+                                     # tools/warnings.txt; about 70
+                                     # seconds, not the six minutes this
+                                     # said before anyone timed it. Plus
+                                     # the two Qt6 builds, where there is
+                                     # a Qt6, against warnings-qt6.txt --
                                      # which holds only what Qt6 warns
                                      # about and Qt5 does not, and is
                                      # empty. Skipped, not failed, on a
