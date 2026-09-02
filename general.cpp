@@ -2384,20 +2384,21 @@ static real RDstAutoDetect(int mon, int day, int yea, real tim, real zon)
     return ci.dst;
 #endif
 
-  // It usually cannot. astrolog.as ships the default location as
-  // COORDINATES -- "-zl 122W19'59 47N36'35" -- and DisplayAtlasLookup()
-  // wants a place name, so with a stock configuration there is nothing
-  // to look up and this path is the one that runs. That is worth knowing
-  // about the code this replaced: the Unix branch's atlas lookup was
-  // failing too, every time, so its "hr += ci.dst" adjustment never
-  // happened and only the unconditional "is.fDst = (dst > 0.0)" showed.
+  // The atlas normally CAN answer -- astrolog.as sets a location name as
+  // well as coordinates, and "Seattle, WA, USA" resolves -- so this is a
+  // fallback rather than the usual path. Measured 2026-09-02 by moving
+  // atlas.as aside: with it, the answer is the same under TZ=CDT and
+  // TZ=UTC, because it comes from the location's rule; without it, CDT
+  // gives daylight time and UTC gives standard, because it comes from
+  // the host.
   //
-  // So fall back to asking the C library whether the HOST's timezone is
-  // on daylight time right now. tm_isdst is the same question the
-  // Windows branch was asking by comparing GetSystemTime() against
-  // GetLocalTime(), asked directly, and it works identically on both
-  // platforms -- which is what makes this one implementation rather than
-  // two that agree by luck.
+  // The fallback matters where the atlas cannot answer: no location name
+  // configured, a name not in the atlas, or atlas.as missing. Asking the
+  // C library whether the HOST's timezone is on daylight time is the
+  // same question the Windows branch was asking by comparing
+  // GetSystemTime() against GetLocalTime(), asked directly, and it works
+  // identically on both platforms -- which is what makes this one
+  // implementation rather than two that agree by luck.
   time(&timNow);
   ptm = localtime(&timNow);
   if (ptm != NULL && ptm->tm_isdst > 0)
