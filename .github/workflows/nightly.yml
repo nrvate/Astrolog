@@ -338,9 +338,17 @@ jobs:
       # is what left the orphan the comment above describes.
       - name: Run the suite
         run: |
+          # Through "script", which allocates a pty, because otherwise
+          # this measures nothing. run-qt-tests.sh echoes nothing before
+          # line 31 -- the binary is the first thing that prints -- and
+          # with stdout a plain file, stdio BLOCK-buffers it. SIGKILL
+          # then discards up to 4 KB of pending output, which is why the
+          # previous run left a suite.log holding exactly one line: Qt's
+          # own message, on unbuffered stderr. A pty makes stdio
+          # line-buffer, so at most one partial line is lost.
           set -m
           ASTROLOG_QT_EPHEM=minimal ASTROLOG_QT_TIME=1 \
-            ./run-qt-tests.sh -Yi1 ephem > suite.log 2>&1 &
+            script -q /dev/null ./run-qt-tests.sh -Yi1 ephem > suite.log 2>&1 &
           suite=$!
           for i in $(seq 1 420); do
             kill -0 "$suite" 2>/dev/null || break
