@@ -53,24 +53,33 @@ else
 fi
 arch=$(dpkg --print-architecture)
 
-stage="$out/deb-stage"
+# The staging tree goes in a temp directory, NOT in $out. It used to be
+# "$out/deb-stage", which left a directory of 50-odd files sitting beside
+# the .deb -- harmless only because the workflow uploads "*.deb" and
+# nothing else. The release job's manifest step does "find . -type f" over
+# what it downloads, so the day anything uploaded the directory instead of
+# the glob, SHA256SUMS would have covered a staging tree and the
+# line-count check would have failed with no obvious cause. An output
+# directory should contain outputs. tools/package-rpm.sh already worked
+# this way.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+stage="$tmp/deb-stage"
 tools/package-stage.sh "$stage" /usr >/dev/null
 mkdir -p "$stage/DEBIAN"
 
 # dpkg-shlibdeps wants to be run from a directory containing debian/control
 # and writes its answer into debian/substvars. Give it exactly that, in a
 # scratch dir, rather than pretending this is a full debian/ source tree.
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/debian"
-: > "$tmp/debian/control"
+mkdir -p "$tmp/shlibdeps/debian"
+: > "$tmp/shlibdeps/debian/control"
 # Its stderr is kept and printed on failure. The first draft sent it to
 # /dev/null and the first CI failure said only "dpkg-shlibdeps failed",
 # which is the same self-inflicted blindness as discarding Wine's stderr
 # in the Windows differential. Warnings on the happy path are expected --
 # it says "binaries to analyze should already be installed in their
 # package's directory", which is true and harmless here.
-( cd "$tmp" && dpkg-shlibdeps -O --ignore-missing-info \
+( cd "$tmp/shlibdeps" && dpkg-shlibdeps -O --ignore-missing-info \
     "$stage/usr/lib/astrolog/astrolog" \
     "$stage/usr/lib/astrolog/astrolog-qt" 2>"$tmp/err" ) > "$tmp/deps" || {
   echo "dpkg-shlibdeps failed -- refusing to guess dependencies:"

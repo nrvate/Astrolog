@@ -43,36 +43,69 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: tools/ci-assert-version.sh "${{ github.event.inputs.tag || github.ref_name }}"
 
-  linux:
-    name: ${{ matrix.kind }} on ${{ matrix.target }}
+  # Two jobs rather than one matrix with a conditional container. The
+  # matrix version was written first and had two faults, both caught by
+  # reading it rather than by running it: "${{ matrix.runs-on }}" parses
+  # as "matrix.runs MINUS on" in GitHub's expression syntax, because a
+  # hyphen is an operator there; and "container: ''" for the deb rows was
+  # a trick that had never been exercised. This is the same shape ci.yml
+  # has run successfully all day, which is a better thing to stake a
+  # release on than a novel one.
+  deb:
+    name: .deb on ${{ matrix.image }}
     needs: version
-    runs-on: ${{ matrix.runs-on }}
-    container: ${{ matrix.container }}
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
+
+      - name: Build
+        run: make -j4 && make qt -j4
+
+      # PKG_RELEASE=1 drops the "~date.sha" suffix, so this is the only
+      # place that produces a bare 8.00+qt.N. A branch build sorts below
+      # it, verified with dpkg --compare-versions.
+      - name: Package
+        run: PKG_RELEASE=1 tools/package-deb.sh out/package
+
+      - name: Prove it installs and runs
+        run: |
+          tools/ci-verify-linux-package.sh out/package/astrolog_*.deb \
+            ${{ matrix.image == 'ubuntu-22.04' && 'ubuntu:22.04' || 'ubuntu:24.04' }}
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: astrolog-deb-${{ matrix.image }}
+          path: out/package/*.deb
+
+  rpm:
+    name: .rpm on ${{ matrix.release }}
+    needs: version
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {kind: deb, target: ubuntu-22.04, runs-on: ubuntu-22.04, container: ''}
-          - {kind: deb, target: ubuntu-24.04, runs-on: ubuntu-24.04, container: ''}
-          - {kind: rpm, target: fedora-42,    runs-on: ubuntu-latest, container: 'fedora:42', qt: qt5-qtbase-devel}
-          - {kind: rpm, target: fedora-43,    runs-on: ubuntu-latest, container: 'fedora:43', qt: qt5-qtbase-devel}
-          # EL10 has no Qt5 outside EPEL but does have Qt6 in its own
-          # repositories, and Makefile.qt picks its modules from
-          # pkg-config, so only the package name changes. See ci.yml.
-          - {kind: rpm, target: el9,          runs-on: ubuntu-latest, container: 'rockylinux:9', qt: qt5-qtbase-devel}
-          - {kind: rpm, target: el10,         runs-on: ubuntu-latest, container: 'quay.io/rockylinux/rockylinux:10', qt: qt6-qtbase-devel}
+          - {release: fedora-42, image: 'fedora:42', qt: qt5-qtbase-devel}
+          - {release: fedora-43, image: 'fedora:43', qt: qt5-qtbase-devel}
+          # EL10 ships no Qt5 outside EPEL but does ship Qt6, and
+          # Makefile.qt picks its modules from pkg-config, so only the
+          # package name changes. See ci.yml for the measurement.
+          - {release: el9,  image: 'rockylinux:9', qt: qt5-qtbase-devel}
+          - {release: el10, image: 'quay.io/rockylinux/rockylinux:10', qt: qt6-qtbase-devel}
+    container: ${{ matrix.image }}
     steps:
-      - name: Install build dependencies (deb)
-        if: matrix.kind == 'deb'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
-
-      # CRB is where Enterprise Linux keeps qt5-qtbase-devel; on Fedora
-      # the repo does not exist and enabling it is a no-op.
-      - name: Install build dependencies (rpm)
-        if: matrix.kind == 'rpm'
+      - name: Install build dependencies
         run: |
           dnf install -y -q dnf-plugins-core || true
           (dnf config-manager --set-enabled crb || \
@@ -85,28 +118,18 @@ jobs:
       - name: Build
         run: make -j4 && make qt -j4
 
-      # PKG_RELEASE=1 drops the "~date.sha" suffix, so this is the only
-      # place that produces a bare 8.00+qt.N. A branch build sorts below
-      # it in both packagers, verified with dpkg --compare-versions and
-      # rpm.vercmp.
       - name: Package
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
-          PKG_RELEASE=1 tools/package-${{ matrix.kind }}.sh out/package
+          PKG_RELEASE=1 tools/package-rpm.sh out/package
 
       - name: Prove it installs and runs
-        run: |
-          if [ "${{ matrix.kind }}" = rpm ]; then
-            tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
-          else
-            tools/ci-verify-linux-package.sh out/package/astrolog_*.deb \
-              ${{ matrix.target == 'ubuntu-22.04' && 'ubuntu:22.04' || 'ubuntu:24.04' }}
-          fi
+        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
 
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: astrolog-${{ matrix.kind }}-${{ matrix.target }}
-          path: out/package/*.${{ matrix.kind }}
+          name: astrolog-rpm-${{ matrix.release }}
+          path: out/package/*.rpm
 
   windows:
     name: Windows package
@@ -133,7 +156,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [linux, windows]
+    needs: [deb, rpm, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -146,20 +169,13 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # A silently-empty package job must not become a release with no
-      # binaries in it. Seven artifacts: two .deb, four .rpm, one .zip.
-      # The number is exact rather than a floor, for the same reason every
-      # other count in this repository is.
+      # Seven artifacts: two .deb, four .rpm, one .zip. Exact, not a
+      # floor -- "at least one" passes a release missing five. The check
+      # is a script rather than YAML so it can be falsified without
+      # cutting a release to test it, which is the one thing nobody wants
+      # to do repeatedly.
       - name: There are seven artifacts, and a SHA256SUMS over them
-        run: |
-          ls -l dist
-          n=$(find dist -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.zip' \) | wc -l)
-          [ "$n" -eq 7 ] || { echo "expected 7 artifacts, found $n"; exit 1; }
-          ( cd dist && find . -type f ! -name SHA256SUMS -print0 | sort -z \
-              | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS >/dev/null )
-          lines=$(wc -l <dist/SHA256SUMS)
-          [ "$lines" -eq "$n" ] || { echo "SHA256SUMS covers $lines of $n"; exit 1; }
-          cat dist/SHA256SUMS
+        run: tools/ci-verify-release-dist.sh dist 7
 
       - name: Publish
         env:
