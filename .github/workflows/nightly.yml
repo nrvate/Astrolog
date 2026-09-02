@@ -352,7 +352,11 @@ jobs:
             sleep 3
             kill -KILL -"$suite" 2>/dev/null || true
           fi
-          wait "$suite"; rc=$?
+          # "|| rc=$?" and not "; rc=$?" -- under "set -e" a wait that
+          # reports 143 IS a failing command, so the shell exited right
+          # there and the tail below never ran. That is the same lost
+          # diagnostic as the pkill version, one line further down.
+          rc=0; wait "$suite" || rc=$?
           tail -60 suite.log
           [ "$rc" -eq 0 ] || {
             echo "== suite exited $rc. The last group named above is where it"
@@ -472,19 +476,23 @@ jobs:
           "built: $((Get-Item astrolog-qt.exe).Length) bytes"
           $env:PATH = "$env:QTDIR\bin;$env:PATH"
           $env:QT_QPA_PLATFORM = "offscreen"
-          # The output goes to a FILE and is read back, rather than through
-          # "2>&1 | Out-String". That pipeline is what made the first run
-          # look like the binary printed nothing: PowerShell turns stderr
-          # into ErrorRecord objects, merges them into the object stream,
-          # and Out-String renders that -- so the one stderr warning about
-          # a missing sepm9401.se1 came through and the 118-line chart on
-          # stdout did not. The chart was there all along; measured
-          # locally, the identical invocation prints it.
-          & .\astrolog-qt.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X > chart.txt 2> chart.err
-          $out = Get-Content chart.txt -Raw -ErrorAction SilentlyContinue
+          # "-os <file>" and not stdout, because a QT build writes NO
+          # chart to stdout on ANY platform. Measured on Linux: the
+          # console build prints 136 lines, ./astrolog-qt prints zero and
+          # exits 0. So the first two versions of this step were asking
+          # the binary for something it never does, and the Windows job
+          # was reporting a defect in the test.
+          #
+          # This is what the previous fix bought. That version reported
+          # "stdout (first 12 lines):" followed by nothing, which is a
+          # true statement about the program; the version before it hid
+          # the same fact behind PowerShell folding stderr into the
+          # object stream. A harness that lies costs more than one that
+          # fails.
+          & .\astrolog-qt.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os chart.txt 2> chart.err
           $chiron = (Get-Content chart.txt -ErrorAction SilentlyContinue | Where-Object { $_ -match '^Chir' } | Select-Object -First 1)
           if (-not $chiron) {
-            "No Chiron line. stdout (first 12 lines):"
+            "No Chiron line. chart.txt (first 12 lines):"
             Get-Content chart.txt -TotalCount 12 -ErrorAction SilentlyContinue
             "stderr:"; Get-Content chart.err -TotalCount 6 -ErrorAction SilentlyContinue
             exit 1 }
