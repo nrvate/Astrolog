@@ -35,18 +35,17 @@
 # Format: build, file, function, flag, count, message with numbers masked.
 #
 # Regenerate:  tools/warning_audit.py --update
-# Total: 381 warnings in 96 distinct sites.
+# Total: 381 warnings in 95 distinct sites.
 
-console+qt+qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
+console+qt+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	2	‘distN’ may be used uninitialized in this function
+console+qt+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
 console+qt+qt-test	charts2.cpp	CastRelation	-Wmaybe-uninitialized	1	‘rSav’ may be used uninitialized in this function
-console+qt+qt-test	extern.h	DisplayRelation	-Wmaybe-uninitialized	1	‘k’ may be used uninitialized in this function
-console+qt+qt-test	extern.h	DisplayRelation	-Wmultistatement-macros	1	macro expands to multiple statements
-console+qt+qt-test	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘r’ may be used uninitialized in this function
+console+qt+qt-test	extern.h	(header)	-Wmaybe-uninitialized	1	‘k’ may be used uninitialized in this function
+console+qt+qt-test	extern.h	(header)	-Wmaybe-uninitialized	1	‘r’ may be used uninitialized in this function
 console+qt+qt-test	intrpret.cpp	InterpretEsoteric	-Wmaybe-uninitialized	1	‘nObj’ may be used uninitialized in this function
 console+qt+qt-test	sweph.cpp	search_star_in_list	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘long int’ and ‘size_t’ {aka ‘long unsigned int’}
 console+qt+qt-test	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘c’ may be used uninitialized in this function
 console+qt+qt-test+wcli	xscreen.cpp	CommandLineX	-Wunused-but-set-variable	1	variable ‘fPause’ set but not used
-console+qt+qt-test+wcli+win	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘distN’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	atlas.cpp	DisplayTimezoneChanges	-Wmaybe-uninitialized	1	‘dst’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	atlas.cpp	DisplayTimezoneChanges	-Wmaybe-uninitialized	1	‘zon’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	calc.cpp	GetAspect	-Wmaybe-uninitialized	1	‘rAngleND’ may be used uninitialized in this function
@@ -66,10 +65,11 @@ console+qt+qt-test+wcli+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	
 console+qt+qt-test+wcli+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘cYea’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘dYea’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘ymin’ may be used uninitialized in this function
-console+qt+qt-test+wcli+win	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘xN’ may be used uninitialized in this function
-console+qt+qt-test+wcli+win	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘yN’ may be used uninitialized in this function
-console+qt+qt-test+wcli+win	extern.h	XChartTransit	-Wmaybe-uninitialized	1	‘cTot’ may be used uninitialized in this function
-console+qt+qt-test+wcli+win	extern.h	XChartTransit	-Wmaybe-uninitialized	1	‘xo’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘cTot’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘xN’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘xo’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘yN’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	extern.h	(header)	-Wmultistatement-macros	1	macro expands to multiple statements
 console+qt+qt-test+wcli+win	general.cpp	FSortCIList	-Wmaybe-uninitialized	1	‘fCompare’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	io.cpp	FOutputAAFFile	-Wmaybe-uninitialized	1	‘pch’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	io.cpp	FReadSzLineSkip	-Wmaybe-uninitialized	1	‘ch’ may be used uninitialized in this function
@@ -108,14 +108,13 @@ qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘flag FChartFieldMatchQt
 qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘void HeadersQt(QGridLayout*, int, int, const char**)’ defined but not used
 qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘void PlaceRowQt(int, int, int, int*, int*)’ defined but not used
 qt+qt-test+wcli+win	xdevice.cpp	WireDrawGlobe	-Wmaybe-uninitialized	1	‘zold’ may be used uninitialized in this function
-qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	1	‘ihi’ may be used uninitialized in this function
-qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	1	‘jhi’ may be used uninitialized in this function
-wcli+win	astrolog.h	CastRelation	-Wmaybe-uninitialized	1	‘tN’ may be used uninitialized in this function
-wcli+win	astrolog.h	ComputeEphem	-Wmaybe-uninitialized	1	‘distN’ may be used uninitialized in this function
+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	1	‘ihi’ may be used uninitialized in this function
+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	1	‘jhi’ may be used uninitialized in this function
+wcli+win	astrolog.h	(header)	-Wmaybe-uninitialized	1	‘tN’ may be used uninitialized in this function
+wcli+win	astrolog.h	(header)	-Wmaybe-uninitialized	3	‘distN’ may be used uninitialized in this function
 wcli+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘phi’ may be used uninitialized in this function
-wcli+win	extern.h	DrawArc	-Wmaybe-uninitialized	1	‘m’ may be used uninitialized in this function
-wcli+win	extern.h	DrawArc	-Wmaybe-uninitialized	1	‘n’ may be used uninitialized in this function
-wcli+win	extern.h	DrawArc	-Wmultistatement-macros	1	macro expands to multiple statements
+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘m’ may be used uninitialized in this function
+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘n’ may be used uninitialized in this function
 wcli+win	general.cpp	FSortCIList	-Wmaybe-uninitialized	1	‘rT’ may be used uninitialized in this function
 wcli+win	general.cpp	SzLocation	-Wmaybe-uninitialized	1	‘iN’ may be used uninitialized in this function
 wcli+win	general.cpp	SzLocation	-Wmaybe-uninitialized	1	‘jN’ may be used uninitialized in this function

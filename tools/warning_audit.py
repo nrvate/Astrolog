@@ -211,7 +211,18 @@ def parse(output, build):
         # to ignore.
         if f.startswith('/'):
             continue
-        key = (build, f, context.get(f, '(unknown)'), m.group('flag'),
+        # A warning inside a HEADER cannot be attributed from this stream,
+        # and pretending otherwise made the audit nondeterministic. The
+        # context line names the file being COMPILED; a header is compiled
+        # by every .cpp that includes it, and under -j4 that is four
+        # processes interleaved -- so "the last context line for
+        # astrolog.h" is whichever process happened to get there first.
+        # The same warning came out as SwissComputeStar here and
+        # "(unknown)" on a runner, and turned a nightly red with no code
+        # change behind it. Headers get one fixed label; file, flag and
+        # message still identify the row.
+        func = '(header)' if f.endswith('.h') else context.get(f, '(unknown)')
+        key = (build, f, func, m.group('flag'),
                mask(m.group('msg')))
         counts[key] = counts.get(key, 0) + 1
     return counts
