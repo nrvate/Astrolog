@@ -4,7 +4,9 @@
 #   tools/win-tests.sh                    # all of tools/scenarios/win-*.txt
 #   tools/win-tests.sh win-objectsel      # just one
 #
-# The Qt build has 2777 in-process assertions; the Windows build had none
+# The Qt build has thousands of in-process assertions -- run it and it
+# prints the count; do not restate it here, since the three documents that
+# did produced three different wrong answers. The Windows build had none
 # at all, which stopped mattering the moment features started shipping in
 # both. A Windows-side regression is otherwise invisible until somebody
 # opens the dialog by hand.

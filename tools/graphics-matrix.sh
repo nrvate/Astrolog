@@ -43,8 +43,27 @@ Q="-qb 7 4 1976 12 0 8 122:19:55W 47:36:22N"
 # in a %%Title comment, so a random directory made six renders differ
 # between two runs of the SAME binary. Determinism is the whole product
 # here. Kept distinctive so they cannot collide with anything real.
+# A fixed path also means two runs of this script cannot overlap: the
+# "rm -rf" below would delete the other run's working directory
+# mid-flight, and the damage would surface as a DIFF -- a false
+# regression, which is the most expensive kind of wrong answer a
+# differential can give. That is the same shape as the nine hard-coded
+# temp filenames in qttest.cpp that let two suites delete each other's
+# files mid-measurement (work log item, 2026-09-01), and this tree
+# routinely has two sessions in it.
+#
+# So: refuse rather than corrupt. The guard is a pid file, checked with
+# kill -0, so a run killed halfway leaves nothing that blocks the next
+# one. It does not change a single output byte -- verified by diffing a
+# full 224-render run before and after adding it.
 T=/tmp/astrolog-graphics-matrix
-rm -rf "$T"; mkdir -p "$T"
+if [ -f "$T/.pid" ] && kill -0 "$(cat "$T/.pid" 2>/dev/null)" 2>/dev/null; then
+  echo "== another graphics-matrix.sh (pid $(cat "$T/.pid")) is using $T."
+  echo "== The path is fixed on purpose -- see above -- so two runs cannot"
+  echo "== share it. Wait for that one, or point it elsewhere."
+  exit 1
+fi
+rm -rf "$T"; mkdir -p "$T"; echo $$ > "$T/.pid"
 O="$T/o"
 missing=0
 runs=0

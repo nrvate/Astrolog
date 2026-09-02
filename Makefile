@@ -47,6 +47,7 @@ clean: clean-console
 	$(MAKE) -f Makefile.qt.test clean
 	$(MAKE) -f Makefile.qt.asan clean
 	$(MAKE) -f Makefile.win clean
+	$(MAKE) -f Makefile.wcli clean
 	$(MAKE) -f Makefile.qt OBJDIR=obj-qt6 NAME=astrolog-qt6 clean
 	$(MAKE) -f Makefile.qt.test OBJDIR=obj-qt6-test \
 	  NAME=astrolog-qt6-test clean
@@ -100,7 +101,17 @@ qt-asan:
 QT6_PKGCONFIG ?= /usr/local/qt6/lib/pkgconfig
 QT6_LIBDIR ?= /usr/local/qt6/lib
 QT6 = PKG_CONFIG_PATH=$(QT6_PKGCONFIG)
+# A distribution's own Qt6 needs neither of those: pkg-config finds it on
+# its default path and the runtime linker finds its libraries. So both
+# variables take an empty override, which is how CI builds this --
+# "make qt6 QT6_PKGCONFIG= QT6_LIBDIR=" on a runner with qt6-base-dev
+# installed. An empty QT6_LIBDIR must produce no -rpath flag at all
+# rather than a truncated one, hence the conditional.
+ifeq ($(strip $(QT6_LIBDIR)),)
+QT6LD =
+else
 QT6LD = LDEXTRA=-Wl,-rpath,$(QT6_LIBDIR)
+endif
 
 qt6:
 	$(QT6) $(MAKE) -f Makefile.qt OBJDIR=obj-qt6 NAME=astrolog-qt6 \
@@ -113,8 +124,16 @@ qt6-test:
 win:
 	$(MAKE) -f Makefile.win
 
+# The console Windows build. Same toolchain as "win", same shared core,
+# but it enters at main() rather than WinMain, so it can be driven under
+# Wine with no display -- which is what makes the Windows differential in
+# QT_CI_PLAN.md item 6.4b cost 20 seconds instead of minutes of window
+# driving. It is in "all" because it needs nothing "win" does not.
+wcli:
+	$(MAKE) -f Makefile.wcli
+
 # Every build this fork has, in the order the pre-commit checks want them.
-all: $(NAME) qt qt-test win
+all: $(NAME) qt qt-test win wcli
 
 # "make install" puts the two commands on PATH and leaves everything else
 # exactly where it is. The data -- the ephemeris files, the atlas, the
@@ -203,7 +222,7 @@ uninstall:
 	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
-.PHONY: clean clean-console qt qt-test qt-asan qt6 qt6-test win all \
+.PHONY: clean clean-console qt qt-test qt-asan qt6 qt6-test win wcli all \
 	install uninstall
 
 # Compiler-generated header dependencies; see Makefile.qt for the

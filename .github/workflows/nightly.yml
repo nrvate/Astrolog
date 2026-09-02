@@ -1,0 +1,228 @@
+# The slow lane -- QT_CI_PLAN.md Phase 6.
+#
+# Everything here is documented in CLAUDE.md as "pre-release rather than
+# pre-commit". "Pre-release" is a promise a human keeps by remembering;
+# this is where it becomes mechanical. Both jobs have a record: the
+# warning audit's first run found that Makefile.win had not compiled for
+# 62 commits, and the first run of each half of the sanitizer sweep found
+# real out-of-bounds bugs in code that had been exercised dozens of times
+# without a sanitizer behind it -- seven between them, one crashing the
+# release build.
+#
+# A HAZARD THAT APPLIES TO THIS FILE AND NOT TO ci.yml: GitHub disables
+# scheduled workflows in a repository with no activity for 60 days. The
+# whole argument for a nightly is that it keeps a promise by existing, and
+# on a fork that goes quiet for two months it stops existing, silently,
+# leaving a green history behind it. workflow_dispatch is on both jobs so
+# there is always a manual path, and "the nightly has not run lately" is a
+# thing somebody has to notice.
+#
+# ubuntu-22.04, NOT ubuntu-latest, and the reason is specific to the
+# warning audit rather than the glibc one that governs packaging:
+# tools/warnings.txt is a ledger of what g++ 11 and mingw g++ 10 say. A
+# different major version says different things about different lines, in
+# different words, and the audit would report hundreds of differences
+# that are not regressions -- drowning the one signal it exists to give.
+# tools/ci-assert-toolchain.sh says so out loud rather than leaving the
+# next person to work backwards from 300 mystery diffs.
+
+name: Nightly
+
+on:
+  schedule:
+    # 03:17 UTC. Not on the hour: every scheduled workflow on the platform
+    # that asks for "3am" lands on :00 together.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # 6.1. All four builds with -Wall, every diagnostic diffed against the
+  # committed baseline. ~6 minutes, which is why it is not pre-commit.
+  #
+  # In CI this audit is READ-ONLY. It flags removed warnings as well as
+  # new ones, deliberately, so a legitimate fix turns this job red until
+  # tools/warnings.txt is regenerated and committed in the same change.
+  # That is correct behaviour with a workflow consequence: the baseline is
+  # part of the diff, never something CI maintains.
+  warnings:
+    name: Compiler warnings vs the baseline
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install every toolchain the audit compiles with
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
+            g++-mingw-w64-x86-64
+
+      - name: The baseline describes these compilers
+        run: tools/ci-assert-toolchain.sh
+
+      - name: All four builds, every warning diffed
+        run: tools/warning_audit.py
+
+  # 6.2. Both surfaces, ~750 invocations.
+  #
+  # Given its own job on purpose. asan-sweep.sh builds its own console
+  # binary with -fsanitize=address -DQTTEST into this same directory and
+  # runs "make clean" on both sides of that build, so it DELETES
+  # ./astrolog while it runs -- anything else on the runner that depends
+  # on that binary would fail confusingly. Four of its arrangements are
+  # load-bearing, including that the binary needs a short path while the
+  # output file wants a long one; read its header before changing it.
+  #
+  # KNOWN BLIND SPOT, and it is not a defect of the sweep: that build is
+  # -O0, where _FORTIFY_SOURCE is inactive -- 1 *_chk import against 10 in
+  # an ordinary build. Work log item 142 was exactly that class and
+  # survived a full sweep and 17 gdb runs for the reason. Nothing in this
+  # job's own output will ever mention the gap; ci.yml's fortify assertion
+  # is what covers it.
+  sanitizer:
+    name: AddressSanitizer sweep
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install the console build's dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev
+
+      # /swe will never exist here, so the sweep runs against the bundled
+      # ephemeris. The switch half never needed it; the graphics half is
+      # the one that used to be claimed impossible without it, and that
+      # claim was retracted on 2026-09-02 after measurement -- 224 renders,
+      # 0 missing, on ephem/.
+      #
+      # The path must be ABSOLUTE. asan-sweep.sh builds its binary at
+      # /tmp/astrolog-asan-sweep -- deliberately, since the binary needs a
+      # short path -- and Astrolog resolves a relative -Yi1 against the
+      # executable's own directory, so "-Yi1 ephem" there means /tmp/ephem,
+      # which does not exist. The sweep would still run and still find
+      # memory errors, but every body would fall back to Moshier and the
+      # ephemeris code paths would go unexercised, silently. Same trap as
+      # item 7.2b's baseline binary, from the other end.
+      - name: Both surfaces
+        env:
+          ASAN_SWEEP_CFG: -Yi1 ${{ github.workspace }}/ephem
+          GRAPHICS_MATRIX_CFG: -Yi1 ${{ github.workspace }}/ephem
+        run: tools/asan-sweep.sh
+
+  # 6.4b. The cheap Windows differential: the whole 71-invocation chart
+  # matrix run against astrolog-wcli.exe under Wine and byte-diffed
+  # against the Linux console build, with no display, no window manager
+  # and no input simulation. 24 seconds here.
+  #
+  # It is in the slow lane only because installing Wine is not cheap; the
+  # harness itself is fast enough for the fast lane, and if the install
+  # ever stops dominating, move it.
+  #
+  # It exercises the shared core as compiled by mingw for Windows, which
+  # is where a portability difference would live. It compiles neither
+  # wdriver.cpp nor wdialog.cpp, so it says nothing about the Windows GUI
+  # -- a complement to the oracle, never a replacement.
+  # 6.3 rides along in the same job. tools/win-tests.sh drives the real
+  # astrolog.exe through a window under Xvfb, which is the ONLY thing in
+  # this repository that exercises wdriver.cpp and wdialog.cpp
+  # behaviourally -- the differential above compiles neither. Both halves
+  # want Wine, and installing it is the expensive part, so they share a
+  # job rather than paying for it twice.
+  windows:
+    name: Windows differential, and the GUI scenarios
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install the cross toolchain and Wine
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64 libx11-dev \
+            wine wine64 xvfb metacity xdotool imagemagick
+
+      - name: Build all three binaries
+        run: make -j4 && make wcli -j4 && make -f Makefile.win -j4
+
+      # Wine writes a prefix on first run and takes a while doing it; get
+      # that out of the way before anything is timed or diffed.
+      - name: Initialise the Wine prefix
+        run: wineboot --init 2>/dev/null || true
+
+      - name: Diff the whole chart matrix
+        run: tools/win-differential.sh out/win-diff
+
+      # 6.3. Every tools/scenarios/win-*.txt, driven through a real window.
+      # windrive.sh starts its own Xvfb and its own metacity, and starts
+      # metacity with PULSE_SERVER=/nonexistent because it plays the X bell
+      # through the speakers and Astrolog rings the bell on every keystroke
+      # it does not handle. Both builds need a window manager -- Wine will
+      # not give a new dialog keyboard focus without one.
+      #
+      # It swaps /swe for the bundled ephem/ in a COPY of nrvate.as before
+      # running: ~887,000 files through Wine's path translation is
+      # indistinguishable from the app hanging. On a runner there is no
+      # /swe at all, so the swap is a no-op -- which is the case to watch,
+      # since a no-op swap and a broken one look identical from here.
+      - name: The Windows GUI scenarios
+        run: tools/win-tests.sh
+
+      - name: Keep the diff
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: windows-differential
+          path: out/win-diff/*.diff
+          if-no-files-found: ignore
+
+  # All four matrices, including the expensive one the pull-request gate
+  # leaves out. switch-matrix.sh is 1,058 invocations of five processes;
+  # here that is fine, and it is where the switch surface keeps its
+  # coverage.
+  #
+  # The base is the commit as of 24 hours ago, so the report is "what
+  # moved today". That is a different and weaker question than the gate's
+  # "what did this change move", which is exactly why the gate exists
+  # too -- if the day's diff is non-empty, the per-change runs already
+  # said which change did it.
+  differential:
+    name: All four matrices, vs 24 hours ago
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the tree with history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Install X11 headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev
+
+      - name: Diff all four against yesterday
+        run: |
+          base=$(git rev-list -1 --before='24 hours ago' HEAD)
+          if [ -z "$base" ] || [ "$base" = "$(git rev-parse HEAD)" ]; then
+            echo "No commit older than 24 hours to diff against, or nothing"
+            echo "has landed since. Nothing to report; not inventing a base."
+            exit 0
+          fi
+          tools/ci-differential.sh "$base" out/diff
+
+      - name: Keep the diffs
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: nightly-differential
+          path: out/diff/*.diff
+          if-no-files-found: ignore

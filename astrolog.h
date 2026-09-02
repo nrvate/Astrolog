@@ -78,7 +78,7 @@
 //#define PC /* Comment out this #define if you have a Unix, Mac, or other */
            /* system that isn't a generic PC running DOS or MS Windows.  */
 
-#if !defined(QT) && !defined(WIN)
+#if !defined(QT) && !defined(WIN) && !defined(WCLI)
 #define X11 /* Comment out this #define if you don't have X windows, or */
             /* else have them and don't wish to compile in X graphics.  */
 #endif
