@@ -330,7 +330,7 @@ jobs:
       # to read them.
       - name: Keep the diffs
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: differential-diffs
           path: out/diff/*.diff
@@ -386,8 +386,9 @@ jobs:
             out/package/astrolog-windows.tar.gz astrolog.exe
 
       - name: Keep the package
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          archive: false
           name: astrolog-windows
           path: out/package/astrolog-windows.tar.gz
 
@@ -437,8 +438,14 @@ jobs:
             ${{ matrix.image == 'ubuntu-22.04' && 'ubuntu:22.04' || 'ubuntu:24.04' }}
 
       - name: Keep the package
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          # archive: false uploads the file as-is instead of zipping it,
+          # so the download is the .deb itself rather than a zip holding
+          # one. Only legal for a single file, and only safe now that
+          # the codename in the version makes every .deb name unique --
+          # with archive: false the FILENAME becomes the artifact name.
+          archive: false
           name: astrolog-deb-${{ matrix.image }}
           path: out/package/*.deb
 
@@ -483,7 +490,7 @@ jobs:
           #
           # This is where keeping the Qt6 build alive (Q8) stops being
           # insurance and starts being load-bearing.
-          - {release: el9,  image: 'rockylinux:9', qt: qt5-qtbase-devel}
+          - {release: el9,  image: 'quay.io/rockylinux/rockylinux:9', qt: qt5-qtbase-devel}
           - {release: el10, image: 'quay.io/rockylinux/rockylinux:10', qt: qt6-qtbase-devel}
     container: ${{ matrix.image }}
     steps:
@@ -495,7 +502,8 @@ jobs:
           dnf install -y -q dnf-plugins-core || true
           (dnf config-manager --set-enabled crb || \
            dnf config-manager --enable crb || true) 2>/dev/null
-          dnf install -y -q gcc-c++ make git rpm-build ${{ matrix.qt }} \
+          dnf install -y -q --setopt=install_weak_deps=False \
+            gcc-c++ make git rpm-build ${{ matrix.qt }} \
             libX11-devel pkgconf-pkg-config
 
       - name: Check out the tree
@@ -524,7 +532,13 @@ jobs:
         run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
 
       - name: Keep the package
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          # archive: false uploads the file as-is instead of zipping it,
+          # so the download is the .rpm itself rather than a zip holding
+          # one. Only legal for a single file, and only safe now that
+          # the codename in the version makes every .rpm name unique --
+          # with archive: false the FILENAME becomes the artifact name.
+          archive: false
           name: astrolog-rpm-${{ matrix.release }}
           path: out/package/*.rpm

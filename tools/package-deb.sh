@@ -46,10 +46,32 @@ rev=${PKG_REV:-$(git log -1 --format=%cd --date=format:%Y%m%d 2>/dev/null || dat
 sha=${PKG_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}
 fork=$(sed -n 's/^#define szVersionFork "\([^"]*\)".*/\1/p' astrolog.h | head -1)
 [ -n "$fork" ] || { echo "cannot read szVersionFork from astrolog.h"; exit 1; }
+# The distribution codename goes in the version, which is what every PPA
+# does and what this package needs for two separate reasons.
+#
+# It is BUILT per distribution -- the Qt and glibc SONAMEs it records
+# differ -- so the artifacts have to be distinguishable, and a Debian
+# package name carries no equivalent of rpm's %{?dist}. Without it both
+# Ubuntu builds are astrolog_8.00+qt.1_amd64.deb, the release job's
+# merge-multiple download silently overwrites one with the other, and the
+# artifact count check fails with six files where seven were expected.
+# That is how this was found, and the count being exact is why it was
+# found before anyone downloaded the wrong one.
+#
+# "~" sorts BEFORE, so 8.00+qt.1~jammy < 8.00+qt.1~noble: a user moving
+# from 22.04 to 24.04 gets an upgrade rather than a downgrade, which is
+# the ordering PPAs rely on.
+# UBUNTU_CODENAME before VERSION_CODENAME: on a derivative -- Mint, Pop,
+# Devuan -- VERSION_CODENAME is the derivative's own ("victoria"), and
+# the package is compatible with the Ubuntu release underneath it, whose
+# name is the one a user recognises. Measured on Mint 21.2, which gives
+# VERSION_CODENAME=victoria and UBUNTU_CODENAME=jammy.
+codename=$(. /etc/os-release 2>/dev/null && echo "${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}")
+[ -n "$codename" ] || codename=$(. /etc/os-release 2>/dev/null && echo "${ID:-unknown}${VERSION_ID:-}")
 if [ "${PKG_RELEASE:-}" = 1 ]; then
-  pkgver="$ver+qt.$fork"
+  pkgver="$ver+qt.$fork~$codename"
 else
-  pkgver="$ver+qt.$fork~$rev.$sha"
+  pkgver="$ver+qt.$fork~$codename~$rev.$sha"
 fi
 arch=$(dpkg --print-architecture)
 

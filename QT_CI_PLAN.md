@@ -1163,6 +1163,15 @@ rather than inventing one. Symlinks would probably work for the Qt build,
 whose `applicationDirPath()` resolves through `/proc/self/exe`, but
 "probably" is not a packaging decision.
 
+**The distribution goes in the version.** `.rpm` gets it free from
+`%{?dist}` (`.fc42`, `.el9`, `.el10`); a `.deb` has no equivalent, so the
+codename is appended: `8.00+qt.1~jammy`, `8.00+qt.1~noble`. `~` sorts
+before, so jammy < noble and a 22.04→24.04 upgrade is an upgrade — the
+ordering every PPA relies on. **This was found by the release failing**:
+without it both Ubuntu builds are `astrolog_8.00+qt.1_amd64.deb`, the
+publish job's `merge-multiple` download overwrote one with the other, and
+the artifact count came back **6 of 7**. An "at least one artifact" check
+would have published a release silently missing a Debian package.
 **Verified by installing into a clean image**, not by inspecting the file:
 `ubuntu:22.04` and `fedora:42` both install it, resolve Qt from their own
 repositories, run it from `/`, and get `Chir: 16Can03`. **Falsified both
