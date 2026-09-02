@@ -276,9 +276,15 @@ every check falsified individually before it was trusted. Ten jobs:
 - **Q2** — this fork's version scheme. Blocks Phase 5 entirely; a tag
   cannot be checked against a source version that does not exist.
 - **Q11** — repair `Astrolog.vcxproj` or delete it. One line either way.
-- **Item 0.1** — is Actions enabled on this fork, and what does it cost.
-  **Nothing here has ever run on GitHub**; a green badge in this document
-  is a badge in a text file.
+- **The default branch.** ~~Item 0.1~~ is answered — Actions is enabled,
+  the repository is public so standard runners are free, and there is no
+  fork banner to click. What blocks CI is that `master` is the default
+  while all work is on `qt`, 342 commits ahead: `ci.yml` fires on push
+  and **the entire nightly lane is inert**, because `schedule:` and
+  `workflow_dispatch:` only work from the default branch. Two ways out,
+  both one action, in 0.1.
+  **And nothing here has ever run on GitHub**; a green badge in this
+  document is a badge in a text file.
 - **Phase 9 (macOS)** — deliberately not attempted. It cannot be
   falsified from here, and ground rule 1 is not negotiable for the one
   phase whose whole deliverable is a claim to a future adopter.
@@ -366,7 +372,64 @@ account, not remembered.
 **Verify.** A trivial hand-written workflow with one `run: echo` goes
 green.
 **Cost.** 10 min.
-**Status.** [ ]
+
+**Measured 2026-09-02, off the account rather than remembered:**
+
+```
+$ gh api repos/nrvate/Astrolog --jq '{private,fork,default_branch,parent}'
+{"default_branch":"master","fork":true,"parent":"CruiserOne/Astrolog","private":false}
+$ gh api repos/nrvate/Astrolog/actions/permissions
+{"enabled":true,"allowed_actions":"all","sha_pinning_required":false}
+```
+
+**Actions is already enabled, and there is nothing to click.** A fork
+normally arrives with workflows disabled and an "I understand my
+workflows, go ahead and enable them" banner on the Actions tab; this one
+does not have that state. `allowed_actions: "all"` means the pinned
+third-party actions this plan uses are permitted. 0 workflows and 0 runs
+so far, which is right — nothing has ever been pushed with a `.github/`
+in it.
+
+The repository is **public**, so standard GitHub-hosted runners cost no
+minutes. That is the assumption Phase 9 rested on and it holds; Phase 10
+is closed anyway.
+
+**But the thing that actually blocks CI is not permissions — it is the
+default branch, and it silently disables half of what is written.**
+
+`master` is the default. All work is on `qt`, which is **342 commits
+ahead of `master` and zero behind** — a strict fast-forward, no
+divergence at all. Consequences, in order of how quietly they bite:
+
+- **`ci.yml` is fine.** Its `push` trigger names `qt`, so it fires on the
+  branch work lands on.
+- **`nightly.yml`'s `schedule:` will never fire.** GitHub runs scheduled
+  workflows only from the **default branch**. A `schedule:` in a file
+  that exists only on `qt` is inert, and inert in the quietest possible
+  way: no run, no error, no badge.
+- **`workflow_dispatch` gets no "Run workflow" button** for the same
+  reason — the workflow has to be on the default branch to be dispatched
+  from the UI. So the manual escape hatch this document leans on for the
+  60-day-inactivity hazard is also absent.
+- **Putting the workflows on `master` alone does not fix it either.**
+  `master` is upstream's tree from 342 commits ago: no `tools/ci-*.sh`,
+  no `Makefile.wcli`, no `ephem/se52872.se1`, no `Makefile.srcs`. Every
+  job would fail on a missing file.
+
+**So one of these has to happen, and it is a decision rather than a
+task:**
+
+- **Make `qt` the default branch** (Settings → General → Default branch).
+  One setting, no history rewritten, and it matches where the work
+  actually is. `master` stays as the point this fork left upstream.
+- **Fast-forward `master` to `qt`** — clean, since `qt` is a strict
+  descendant — and keep `master` as the default. Then "default branch"
+  and "where work happens" stop being different things.
+
+Until one of them is done, the fast lane works and **the whole nightly
+lane is decoration**.
+**Status.** [x] answered 2026-09-02 — Actions enabled and free; the
+default branch is the real blocker and is a decision
 
 ### 0.2 Decide the trigger policy
 **Do.** Settle, and write into the workflow as a comment: which events,
@@ -1934,6 +1997,11 @@ rediscovery is slowest.
   after a force-push; and `actions/checkout` clones at `fetch-depth: 1`,
   so even `HEAD~1` is not in the checkout unless asked for. Decide which
   event Phase 7 runs on before writing it, not after.
+- **A scheduled workflow only runs from the default branch, and this
+  repository's default branch is not where the work is.** `master` is the
+  default; `qt` is 342 commits ahead of it. A `schedule:` or a
+  `workflow_dispatch:` in a file that lives only on `qt` is inert — no
+  run, no error, nothing to notice. See item 0.1 for the two ways out.
 - **A scheduled workflow switches itself off.** GitHub disables `schedule:`
   triggers in a repository with no activity for 60 days. Phase 6's whole
   argument is that a nightly job keeps a promise by existing — on a fork
