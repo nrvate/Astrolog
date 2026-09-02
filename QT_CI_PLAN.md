@@ -2021,9 +2021,19 @@ rediscovery is slowest.
   notice.
 - **A third-party action pinned to a tag is a mutable dependency.** Pin
   the SHA and write the version beside it in a comment
-  (`actions/checkout@11bd7190… # v4.2.2`), and resolve it with
+  (`actions/checkout@fbc6f399… # v5.1.0`), and resolve it with
   `git ls-remote` rather than from memory. Phases 1–3 need no third-party
   action at all, which is worth keeping true for as long as possible.
+- **But a pinned SHA also pins the Node runtime, and that is the half
+  that rots.** The first real run warned that `actions/checkout@v4.2.2`
+  and `actions/upload-artifact@v4.6.2` "target Node.js 20 but are being
+  forced to run on Node.js 24". Nothing failed; the runner substituted a
+  newer Node and said so. **The warning is the only mechanism that tells
+  you** — a floating tag would have moved silently, and a pin will
+  eventually stop being force-upgraded and break instead. So: read the
+  warnings on a green run, and re-resolve the pins when one appears.
+  Bumped to `checkout@v5.1.0` and `upload-artifact@v5.0.0` on 2026-09-02,
+  both SHAs resolved with `git ls-remote`.
 - **`tools/warning_audit.py` cannot be run with `--update` in CI**, and
   should not be. It flags *removed* warnings as well as new ones, on
   purpose, so a legitimate fix turns the job red until `tools/warnings.txt`
