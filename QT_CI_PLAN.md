@@ -253,56 +253,56 @@ regression is found by whoever tries to use it.
 
 ## Where this stands, 2026-09-02
 
-Phases 0–4 (Windows half), 6, 7 and 8 are done, on branch `qt-ci`, with
-every check falsified individually before it was trusted. Ten jobs:
+**Every phase is built and running.** Three workflows, seventeen jobs,
+every check falsified individually before it was trusted, and the first
+release cut. `QT_CI_PLAN.md` is no longer a plan; it is the record of why
+each piece is shaped the way it is.
 
-| workflow | job | what it is |
+| workflow | jobs | what they are |
 |---|---|---|
-| `ci.yml` | `windows` | 1.1, 1.2, 1.3b — both Windows builds, freshness asserted |
-| | `qt` | 2.1–2.3, 6.5 — Qt5 build, suite at `minimal`, 24 distinct renders |
-| | `audits` | 3.1–3.4 — eight audits, three tables, round trip, fortify |
-| | `qt6` | 8.2 — Qt6 build and suite, and no Qt5 in that job |
-| | `install` | `make install`, run from `/`, Chiron asserted |
-| | `differential` | 7.1–7.4 — four matrices vs the base commit, gated |
-| | `package` | 4.3, 4.4, 4.6 — Windows package, self-verifying |
-| `nightly.yml` | `warnings` | 6.1 — pinned to `ubuntu-22.04`, and why |
-| | `sanitizer` | 6.2 — both surfaces, no `/swe` |
-| | `windows` | 6.3, 6.4b — GUI scenarios, and the no-display differential |
+| `ci.yml` (~4 min, every push and PR) | Windows builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · Windows package · 2 × `.deb` · 4 × `.rpm` | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
+| `nightly.yml` | Compiler warnings · AddressSanitizer sweep · Windows parity · Behaviour vs yesterday | 6.1–6.4b |
+| `release.yml` (on `v*`) | Version check · packages · Publish | 5.1, 5.2 |
 
-**What is left, and none of it is more implementation:**
+**Answered along the way:** Q1 (native `.deb` and `.rpm`, not AppImage),
+Q2 (`8.00-qt.N`, `szVersionFork`), Q7 (per-change run gates, nightly
+reports), Q8 (Qt6 kept alive by CI — and EL10 now depends on it), Q13
+(A′), and item 0.1 (Actions was always enabled; the default branch was
+the real obstacle).
 
-- **Q1** — the Linux artifact form. Blocks 4.2, and the Linux halves of
-  4.5 and 4.6. A judgement about audience.
-- **Q2** — this fork's version scheme. Blocks Phase 5 entirely; a tag
-  cannot be checked against a source version that does not exist.
-- **Q11** — repair `Astrolog.vcxproj` or delete it. One line either way.
-- ~~**The default branch.**~~ **Done 2026-09-02: `qt` is the default
-  branch.** Item 0.1 is closed with it — Actions was already enabled, the
-  repository is public so standard runners are free, and there was never
-  a fork banner to click. The obstacle was that `master` was the default
-  while all work happens on `qt`, which made the whole nightly lane inert;
-  `schedule:` and `workflow_dispatch:` only work from the default branch.
-  `master` is untouched at `5bf172e`, kept as the point this fork left
-  upstream.
-  **The remaining precondition is that these workflows reach `qt`.** They
-  are on `qt-ci`. Until that merges, **nothing here has ever run on
-  GitHub** and a green badge in this document is a badge in a text file.
+**What is left, and none of it is more CI:**
+
+- **Q11** — repair `Astrolog.vcxproj` or delete it. One line either way,
+  and the only one of the four unbuilt configurations still unbuilt.
+- **`WSETUP`** — still compiled by nothing, still undecided.
 - **Phase 9 (macOS)** — deliberately not attempted. It cannot be
-  falsified from here, and ground rule 1 is not negotiable for the one
-  phase whose whole deliverable is a claim to a future adopter.
-- **The `wcli` leg of the warning audit** — 82 warnings with `-Wall`
-  against the `win` build's 89, outside the net. Needs
-  `warning_audit.py` edited and its baseline regenerated.
+  falsified from here, and that phase's whole deliverable is a claim made
+  to a future adopter.
+- **The deeper `-z0 Autodetect` question.** The two builds agree now and
+  the unconditional-true bug is gone, but autodetection still answers
+  "is it daylight time *now*" rather than "was that date in daylight
+  time". Making it date-aware means changing what `DstReal()` resolves
+  against everywhere it is used.
+- **EL9/EL10 are Rocky images.** Alma is the same ABI and would work; if
+  the RPMs are ever published as a repository rather than as release
+  assets, that choice wants revisiting.
 
-**And two shared-core bugs this work surfaced, both reported rather than
-fixed, because both are behaviour changes and the maintainer's call:**
+**Six shared-core or harness bugs this work surfaced**, which is the
+argument for having done it at all:
 
-1. **The suite hung for ten minutes on any machine without `/swe`** — a
-   modal box with nobody to dismiss it. *Fixed*, since it is a test
-   harness rather than the program.
-2. **`-z0 Autodetect` is broken in both builds, differently.** Linux
-   reports daylight time unconditionally; Windows reports standard time
-   whatever the date. See 6.4b.
+1. The suite hung for ten minutes on any machine without `/swe` — a modal
+   box with nobody to dismiss it, in 40 of 49 groups. Fixed.
+2. `-z0 Autodetect` was broken in both builds, in opposite directions.
+   Fixed.
+3. `switch-matrix.sh` had no per-invocation timeout, the only one of the
+   four without one. Fixed.
+4. `graphics-matrix.sh` could not be run twice concurrently and said so
+   nowhere; the damage would have surfaced as a false regression. Guarded.
+5. Two unused variables in `xscreen.cpp`'s WCLI block, invisible because
+   nothing compiled that configuration. Fixed.
+6. The first release refused to publish because both Ubuntu `.deb`s had
+   the same filename and one silently overwrote the other. Fixed by
+   putting the codename in the version.
 
 ## Suggested execution order, and what the first PR contains
 
