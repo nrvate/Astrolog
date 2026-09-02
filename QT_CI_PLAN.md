@@ -1308,7 +1308,26 @@ and asserts Chiron.
 **Falsified as this item specifies**: with `ephem/` moved aside the check
 reports `EPHEMERIS NOT FOUND: Chir:  0Ari00 …` and exits 1; restored, it
 passes. A real `make install PREFIX=…` was used, not the build tree.
-**The package half is still open** — there is no package job yet.
+**The Windows package half is still open, and WCLI cannot close it** —
+which was worth finding out, since it looked like the obvious way.
+`astrolog.exe` has no console entry point, so the Linux trick of running
+the package and asserting Chiron does not transfer; WCLI does have one
+and is the same shared core, so it seemed to substitute. It does not.
+`SwissEnsurePath()` (`calc.cpp:2579`) branches on `#ifdef WIN`: the real
+Windows build asks `GetModuleFileName()` where it lives, and every other
+build splits `argv[0]` on `chDirSep` — which `astrolog.h:1564` defines as
+`'\\'` whenever `PC` is set, and WCLI sets `PC`. So WCLI's data
+resolution is a *third* behaviour, neither the Linux one nor
+`astrolog.exe`'s, and a package test built on it would assert something
+no shipped binary does. Measured: from inside the assembled package, with
+no explicit `-Yi1`, WCLI under Wine reports `Chir: 0Ari00` — which says
+nothing about whether `astrolog.exe` would.
+**The Windows differential is unaffected**, because it passes `-Yi1`
+explicitly on both sides rather than relying on either build finding its
+own directory. Re-checked after this: 7,069 lines, identical.
+**What would actually close it**: driving the real `astrolog.exe` under
+Wine with Xvfb, which is item 6.3's machinery, pointed at an unpacked
+package rather than at the build tree.
 **Status.** [~] `make install` done and falsified 2026-09-02; the package
 smoke test waits on Phase 4
 
