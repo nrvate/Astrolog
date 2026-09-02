@@ -94,6 +94,32 @@ extern int CaccelTestQt();
 #define rgaccelQt PaccelTestQt()
 #define caccelQt CaccelTestQt()
 
+// Which ephemeris this run is expected to have, from ASTROLOG_QT_EPHEM:
+//
+//   full      (the default) the whole Swiss set, which is what
+//             "-i nrvate.as" reaches through /swe
+//   minimal   the "ephem/" directory this repository ships, which is what
+//             "-Yi1 ephem" reaches and the only thing CI can ever have
+//
+// Declared, not detected, and that is the whole design. The mode says
+// which ephemeris the run is supposed to have and the suite then checks
+// reality against that claim; a suite that surveys what is present and
+// adjusts to it can never fail, which is the vacuous-harness failure this
+// project has already paid for three times. Default "full" for the same
+// reason: the maintainer's own run must be unchanged, and a flag forgotten
+// in CI has to fail loudly rather than quietly test half as much.
+//
+// 19 is measured, not guessed -- "-Yi1 ephem" resolves 19 of the 39 rows
+// in rgObjSel[], the other 20 needing files only /swe has. See
+// QT_CI_PLAN.md item 2.0.
+#define cObjSelEphemMinimal 19
+
+static flag FEphemMinimalQt()
+{
+  CONST char *szEphem = getenv("ASTROLOG_QT_EPHEM");
+  return szEphem != NULL && FEqSzI(szEphem, "minimal");
+}
+
 static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
 static QString s_strModal;
@@ -2647,7 +2673,7 @@ static void TestObjSelDialogQt()
 static void TestObjSelTableQt()
 {
   char szName[cchSzDef];
-  int i, j, k, cCheck = 0;
+  int i, j, k, cCheck = 0, cWant;
 
   Group("Object selection table");
   Check(cObjSel > 0, "the body list is empty");
@@ -2675,7 +2701,24 @@ static void TestObjSelTableQt()
       "list says \"%s\" for type %d index %d, ephemeris says \"%s\"",
       rgObjSel[i].szName, rgObjSel[i].nTyp, rgObjSel[i].nObj, szName);
   }
-  Check(cCheck > 0, "no entry could be resolved at all, so nothing was checked");
+  // Exactly, not a floor. Two reasons, both measured 2026-09-02. A floor
+  // tests the guess: 11 of these bodies resolve with no ephemeris files at
+  // all -- "-Yi1" pointed at a directory that does not exist still answers
+  // for 11 of them from the Moshier formulas -- so "cCheck > 0" passes on a
+  // run that found nothing. And every body that fails to resolve skips its
+  // own assertion above, silently, so this number is also the count of
+  // assertions the loop actually ran: 83 passed on /swe, 63 on ephem/, 53
+  // on nothing, with no failure to show for the difference. Asserting it is
+  // the only thing standing between a thinner ephemeris and a green run
+  // that tested less.
+  cWant = FEphemMinimalQt() ? cObjSelEphemMinimal : cObjSel;
+  Check(cCheck == cWant,
+    "%d of %d bodies resolved; ASTROLOG_QT_EPHEM=%s expects exactly %d. "
+    "Fewer means the ephemeris is thinner than the mode claims, and this "
+    "group ran %d assertions where it should have run %d; more means the "
+    "mode is stale",
+    cCheck, cObjSel, FEphemMinimalQt() ? "minimal" : "full", cWant,
+    cCheck, cWant);
   printf("  %d of %d bodies resolved and matched their listed name\n",
     cCheck, cObjSel);
 }
@@ -5448,7 +5491,7 @@ static flag FTestWantedQt(CONST char *szFilter, CONST char *szName)
 
 static int NRunQtTestTableQt()
 {
-  CONST char *szFilter = getenv("ASTROLOG_QT_TESTS");
+  CONST char *szFilter = getenv("ASTROLOG_QT_TESTS"), *szEphem;
   flag fTime = szFilter != NULL || getenv("ASTROLOG_QT_TIME") != NULL;
   QElapsedTimer timerTest;
   int i, cRun = 0;
@@ -5458,7 +5501,37 @@ static int NRunQtTestTableQt()
       printf("%s\n", rgqttestQt[i].szName);
     return fFalse;
   }
+  // A misspelled mode must not mean "full" by accident. ASTROLOG_QT_EPHEM
+  // exists to make the run's coverage a stated claim, and a typo that
+  // silently falls back to the default would make it a stated wrong one.
+  szEphem = getenv("ASTROLOG_QT_EPHEM");
+  if (szEphem != NULL && !FEqSzI(szEphem, "full") &&
+    !FEqSzI(szEphem, "minimal")) {
+    printf("\nFAIL: ASTROLOG_QT_EPHEM=\"%s\" is neither \"full\" nor "
+      "\"minimal\"\n", szEphem);
+    return fTrue;
+  }
+  // No message boxes, for the whole run. This is not tidiness: a modal
+  // box in an unattended run is a hang, and it is a hang that only
+  // appears where /swe is absent -- which is every machine except the
+  // maintainer's, CI included. Found 2026-09-02 by running the suite the
+  // way CI has to run it, "-Yi1 ephem": the Chart rendering group blocked
+  // past a ten-minute timeout on the Moons chart, sitting in do_poll() at
+  // 1.9% CPU, while the same chart from the console build drew in 0.01 s.
+  // Nothing was slow; PrintWarningQt() had put up a box about a missing
+  // ephemeris file and there was nobody to dismiss it.
+  //
+  // It is set here rather than per group because 40 of the 49 groups did
+  // not set it, and every one of them was one missing ephemeris file away
+  // from the same hang. The flag gates exactly two things -- warning boxes
+  // (qtdriver.cpp:649) and the network progress dialog (:4574) -- and an
+  // automated run wants neither. A group that specifically tests popup
+  // behaviour still turns it off for itself and restores it, which is what
+  // TestExpressionFunctionsQt does.
+  SetNoPopupQt(fTrue);
   printf("Astrolog Qt test suite\n");
+  if (szEphem != NULL)
+    printf("  ephemeris mode: %s\n", szEphem);
   for (i = 0; i < cqttestQt; i++) {
     if (!FTestWantedQt(szFilter, rgqttestQt[i].szName))
       continue;
