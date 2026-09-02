@@ -282,6 +282,14 @@ reports), Q8 (Qt6 kept alive by CI — and EL10 now depends on it), Q13
 (A′), and item 0.1 (Actions was always enabled; the default branch was
 the real obstacle).
 
+**One path is still untested, and only a release can test it.**
+`repo.yml` fires on `workflow_run` of the Release workflow. That trigger
+has never fired: every repository publish so far has been a
+`workflow_dispatch`, and re-running `release.yml` against an existing tag
+fails at `gh release create` rather than exercising the chain. The next
+real release is the test. If the repository does not rebuild within a few
+minutes of one, that is where to look.
+
 **What is left, and none of it is more CI:**
 
 - **`WSETUP`** — the last configuration nothing compiles, and the last
