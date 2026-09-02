@@ -1314,12 +1314,81 @@ It is a complement to 6.4, not a replacement: it answers "does the core
 compute the same on Windows", which is most of the value, in 20 seconds
 instead of minutes of window driving.
 
-**A live question it raises.** Is DST autodetection genuinely
-platform-dependent? If it is, two builds of this program disagree about
-whether a 1991 June date is in daylight time, which is a parity bug worth
-a work log item — and one no existing harness would have found, because
-nothing compared the two builds' text output without a display before.
-**Status.** [ ] — prototype proven; needs 1.3b's guard fix first
+**That live question is answered, and the answer is worse than the
+question.** "Is DST autodetection genuinely platform-dependent?" Yes, and
+**both implementations are wrong**. Measured 2026-09-02, same chart,
+transits at a January date and a July date:
+
+| | January | July |
+|---|---|---|
+| Linux (console, Qt) | `DT Zone 8W` | `DT Zone 8W` |
+| Windows (WIN, WCLI) | `ST Zone 8W` | `ST Zone 8W` |
+
+Neither answers *"was that date in daylight time"*. `general.cpp:2346`
+splits the autodetection on `#ifdef PC` into two implementations that can
+only agree by coincidence:
+
+- **The PC side** compares `GetSystemTime()` against `GetLocalTime()` and
+  sets `is.fDst` from the host machine's **current** clock offset — the
+  answer to "is it summer here today", not "was that chart date in
+  daylight time".
+- **The non-PC side** does the right thing — looks the location up in the
+  atlas, consults the timezone-change database — and then **throws the
+  result away**: `is.fDst = (dst > 0.0)`, where `dst` is still `dstAuto`,
+  which `astrolog.h:567` defines as **24.0**. Unconditionally true.
+
+So every autodetected chart on Linux claims daylight time and every one
+on Windows denies it, in January as in July. Unpinned it cascades to 210
+differing lines of 7,071, all downstream of one `Transits at:` header,
+in the `-Tt` and `-p` sections only.
+
+**Reported, not fixed.** It is a shared-core behaviour change touching
+chart output and the maintainer's call, not a CI harness's — and the two
+sides need different fixes, so "make them agree" is not one decision.
+**This is the second shared-core bug the CI work has surfaced**, after
+the suite's ten-minute hang, and it is exactly what item 6.4b was
+predicted to be good for.
+
+**Implemented 2026-09-02 as `tools/win-differential.sh`.** 23.6 s, and
+better than the prototype: **7,069 lines, zero differences**, where the
+2026-09-01 measurement had four residual lines of path syntax. Wired into
+the nightly lane — the harness belongs in the fast lane and only the Wine
+install keeps it out.
+
+**Three normalisations, each earned by a failure rather than assumed:**
+
+1. **Do not discard Wine's stderr.** The first draft did, and
+   "SwissEph file not found" and "The Campanus system of houses is not
+   defined at extreme latitudes" promptly appeared on the Linux side and
+   nowhere on the Windows side — a harness difference dressed as a parity
+   finding. Wine emits no noise of its own here; where it does, filter by
+   its tag (`0024:fixme:`), never by dropping the stream.
+2. **Diagnostics are compared as a set, chart output as a sequence.**
+   `chart-matrix.sh` merges stderr into stdout, and where a stderr line
+   lands is a property of the C runtime's buffering — glibc's and
+   msvcrt's differ. One line landing before the chart header on Linux and
+   after it under Wine was the entire remaining difference across 7,070.
+3. **`grep -a`, not `grep`.** Chart output carries IBM line-drawing
+   bytes, so grep called the files binary and printed
+   `binary file matches` instead of the lines — a trap `QT_TESTING.md`
+   already records, met live.
+
+**Falsified three ways**, and the first attempt was wrong in an
+instructive direction:
+
+| falsification | result |
+|---|---|
+| drop `-z0 0` from the **Windows** side only | **identical** — no signal |
+| give the Windows side `-s` | **5,961 differing lines of 7,069** |
+| drop `-z0 0` from **both** sides | **210 differing lines** |
+| change a shared-core format string | identical — both sides move together, as they must |
+
+The first looked like a harness that could not see a one-sided
+difference. It is not: the Windows autodetect answer *already equals*
+`-z0 0`, so removing the pin from that side changes nothing. Dropping it
+from the Linux side is what moves — which is how the direction of the bug
+above got established.
+**Status.** [x] done 2026-09-02
 
 ### 6.5 Graphics renders — move this to the fast lane
 **Do.** `QTGRAPHDIR=<dir> ./astrolog-qt-test -i nrvate.as`, offscreen.

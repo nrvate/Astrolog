@@ -115,3 +115,49 @@ jobs:
           ASAN_SWEEP_CFG: -Yi1 ${{ github.workspace }}/ephem
           GRAPHICS_MATRIX_CFG: -Yi1 ${{ github.workspace }}/ephem
         run: tools/asan-sweep.sh
+
+  # 6.4b. The cheap Windows differential: the whole 71-invocation chart
+  # matrix run against astrolog-wcli.exe under Wine and byte-diffed
+  # against the Linux console build, with no display, no window manager
+  # and no input simulation. 24 seconds here.
+  #
+  # It is in the slow lane only because installing Wine is not cheap; the
+  # harness itself is fast enough for the fast lane, and if the install
+  # ever stops dominating, move it.
+  #
+  # It exercises the shared core as compiled by mingw for Windows, which
+  # is where a portability difference would live. It compiles neither
+  # wdriver.cpp nor wdialog.cpp, so it says nothing about the Windows GUI
+  # -- a complement to the oracle, never a replacement.
+  windows-differential:
+    name: Windows vs Linux, same core, no display
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install the cross toolchain and Wine
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64 libx11-dev wine wine64
+
+      - name: Build both sides
+        run: make -j4 && make wcli -j4
+
+      # Wine writes a prefix on first run and takes a while doing it; get
+      # that out of the way before anything is timed or diffed.
+      - name: Initialise the Wine prefix
+        run: wineboot --init 2>/dev/null || true
+
+      - name: Diff the whole chart matrix
+        run: tools/win-differential.sh out/win-diff
+
+      - name: Keep the diff
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-differential
+          path: out/win-diff/*.diff
+          if-no-files-found: ignore
