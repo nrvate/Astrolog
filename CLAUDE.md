@@ -28,10 +28,11 @@ Work happens on branch **`qt`**.
 - **`REFACTORING.md`** — the standing architectural review: what makes
   the codebase hard to evolve, with evidence, and the survey ledger that
   says which area to review next. Read it before any refactoring work.
-- **`QT_CI_PLAN.md`** — the plan for putting the builds, the suite, the
-  audits and the release artifacts under GitHub Actions, and what a macOS
-  build would cost. Its findings table is worth reading before adding any
-  check, whether or not CI ever happens.
+- **`QT_CI_PLAN.md`** — CI, packaging and releases: what each job checks,
+  how each was falsified, and the findings from building it. **Read it
+  before adding or changing a job.** Not a plan any more — it is built,
+  and the document is now the record of why each piece is shaped the way
+  it is.
 - **`CONVENTIONS.md`** — the codebase's actual conventions, verified
   and written down: naming, none-values, macro families, buffer and
   error idioms, how to add a command. Read it before writing new code.
@@ -385,6 +386,56 @@ keystroke it doesn't handle. When Qt does need it, start it as
 `PULSE_SERVER=/nonexistent metacity --sm-disable &`.
 
 On a private Xvfb display, `import -window root` is fine.
+
+## CI, and what it will not let you do
+
+Three workflows, all on `qt`, the default branch. `ci.yml` runs on every
+push and pull request, thirteen jobs in about four minutes: the two
+Windows builds, Qt5 and Qt6 builds with the suite, the audits and
+generated tables, `make install`, a behavioural differential against the
+base commit, the Windows package, two `.deb`s and four `.rpm`s.
+`nightly.yml` is the slow lane -- the warning audit, the sanitizer sweep,
+the Windows parity harnesses, and all four matrices against yesterday.
+`release.yml` publishes on a `v*` tag.
+
+**CI adds no logic.** Every step is a package install, a `make`, or one
+committed script from `tools/`. A check living only in YAML can be
+falsified only by pushing, which makes the falsification rule below
+unaffordable -- so it does not happen. The scripts are
+`tools/ci-*.sh`, and each runs in seconds on a laptop.
+
+**Three things will fail a push, and each has bitten already:**
+
+- **A behavioural change you did not declare.** The differential diffs
+  chart, influence and graphics output against the base commit. If it
+  moves, say so in a commit message:
+
+  ```
+  Behaviour-change: <one line on what moved and why>
+  ```
+
+  A differential answers "something changed", not "something broke", and
+  it actively protects a wrong answer -- fixing a 30-year-old bug looks
+  like a regression. So the opt-out is one line, not a workflow edit.
+  The *nightly* differential reports rather than gates, because failing a
+  day's aggregate punishes whoever pushed last.
+
+- **A version that disagrees with its tag.** `astrolog.h` owns
+  `szVersionFork`; the fork's version is `8.00-qt.N`. Bump it before
+  tagging, or `tools/ci-assert-version.sh` stops the release.
+
+- **A package that does not work.** Every `.deb` and `.rpm` is installed
+  into a clean container and run from `/`, asserting **Chiron** -- never
+  the Sun, which reads correctly with no ephemeris at all because
+  Astrolog falls back to Moshier in silence.
+
+**Two things to know before touching packaging.** The payload goes to
+`/usr/lib/astrolog` with wrappers in `/usr/bin`, because Astrolog
+resolves its data from the directory of its own executable. And the
+distribution goes in the version -- `.rpm` gets it from `%{?dist}`, a
+`.deb` needs the codename appended (`8.00+qt.1~jammy`), without which
+both Ubuntu builds have the same filename and one silently overwrites
+the other.
 
 ## Hard rules
 

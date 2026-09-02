@@ -31,7 +31,38 @@ into `astrolog.rc`, `wdialog.cpp` and the shared code the way upstream
 would take them. See "Features this fork adds to both builds" in
 `QT_GUI_PLAN.md`.
 
+## Installing a package
+
+Releases carry native packages, built on the distribution they target and
+installed into a clean container before publishing, so the dependency
+list comes from the binary rather than from someone's memory:
+
+| | |
+|---|---|
+| `.deb` | Ubuntu 22.04 (jammy), 24.04 (noble) |
+| `.rpm` | Fedora 42, Fedora 43, EL9 (Rocky/Alma), EL10 |
+| `.zip` | Windows, statically linked — unpack and run |
+
+```sh
+sudo apt install ./astrolog_8.00+qt.1~jammy_amd64.deb   # apt resolves Qt
+sudo dnf install ./astrolog-8.00-qt.1.el9.x86_64.rpm
+```
+
+Both `astrolog` (command line) and `astrolog-qt` (windowed) land on
+`PATH`. The binaries live in `/usr/lib/astrolog` beside their data —
+Astrolog reads its ephemeris, atlas and fonts from the directory of its
+own executable — and `/usr/bin` holds wrappers, which is the same
+arrangement `make install` uses.
+
+**EL10 is built against Qt6** because it ships no Qt5 outside EPEL, and
+depending on a third-party repository for a runtime library is a poor
+thing to put in a package. Everything else is Qt5.
+
+Versions are `8.00-qt.N`: upstream numbers the program, this numbers the
+port.
+
 ## Building
+
 
 ```
 make qt          # ./astrolog-qt
