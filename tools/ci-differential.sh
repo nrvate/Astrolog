@@ -93,24 +93,35 @@ cp "$tmp/astrolog" "$root/base-astrolog"
 
 fail=0
 moved=""
+# Each matrix is timed, and the elapsed seconds are printed whether it
+# moved or not. Not decoration: the first real CI run took this job past
+# 19 minutes for work that takes 1 m 42 s on the maintainer's box, and
+# the log said only "in progress" because a step's output is not served
+# until it ends. Eight matrix runs and two builds is the most expensive
+# job in the file, and knowing WHICH of the eight is the slow one is the
+# difference between tuning it and guessing at it.
+started=$(date +%s)
 for m in chart switch influence graphics; do
+  t0=$(date +%s)
   printf '%-10s ' "$m"
   "tools/$m-matrix.sh" ./base-astrolog >"$out/$m.base" 2>&1 || {
     echo "HARNESS FAILED on the baseline -- see $out/$m.base"; fail=1; continue; }
   "tools/$m-matrix.sh" ./astrolog      >"$out/$m.head" 2>&1 || {
     echo "HARNESS FAILED on HEAD -- see $out/$m.head"; fail=1; continue; }
   nb=$(wc -l <"$out/$m.base"); nh=$(wc -l <"$out/$m.head")
+  el=$(( $(date +%s) - t0 ))
   if diff -u "$out/$m.base" "$out/$m.head" >"$out/$m.diff" 2>&1; then
-    echo "identical ($nh lines)"
+    echo "identical ($nh lines, ${el}s for both binaries)"
     rm -f "$out/$m.diff"
   else
     nd=$(grep -c '^[-+][^-+]' "$out/$m.diff" || true)
-    echo "MOVED: $nd lines of $nh -- $out/$m.diff"
+    echo "MOVED: $nd lines of $nh, ${el}s -- $out/$m.diff"
     moved="$moved $m"
   fi
 done
 
 rm -f "$root/base-astrolog"
+echo "== $(( $(date +%s) - started ))s in the four matrices"
 
 if [ "$fail" -ne 0 ]; then
   echo "== a harness failed to run. A differential whose invocations all"
