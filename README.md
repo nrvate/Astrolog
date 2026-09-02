@@ -43,6 +43,41 @@ list comes from the binary rather than from someone's memory:
 | `.rpm` | Fedora 42, Fedora 43, EL9 (Rocky/Alma), EL10 |
 | `.zip` | Windows, statically linked — unpack and run |
 
+### From the repository (upgrades arrive on their own)
+
+```sh
+# Debian / Ubuntu
+sudo curl -fsSL -o /usr/share/keyrings/astrolog.gpg \
+  https://nrvate.github.io/Astrolog/astrolog.gpg
+. /etc/os-release
+echo "deb [signed-by=/usr/share/keyrings/astrolog.gpg] \
+  https://nrvate.github.io/Astrolog/apt ${UBUNTU_CODENAME:-$VERSION_CODENAME} main" \
+  | sudo tee /etc/apt/sources.list.d/astrolog.list
+sudo apt update && sudo apt install astrolog
+```
+
+```sh
+# Fedora (use rpm/el$releasever instead on RHEL/Rocky/Alma)
+sudo tee /etc/yum.repos.d/astrolog.repo <<'EOF'
+[astrolog]
+name=Astrolog
+baseurl=https://nrvate.github.io/Astrolog/rpm/fc$releasever
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://nrvate.github.io/Astrolog/astrolog.asc
+EOF
+sudo dnf install astrolog
+```
+
+<https://nrvate.github.io/Astrolog/> has the same instructions, generated
+from the repository itself so they cannot drift from its layout. Each
+distribution gets its own suite: one suite holding everything makes apt
+and dnf offer the highest-versioned package rather than the one built for
+your release.
+
+### Or a single file
+
 ```sh
 sudo apt install ./astrolog_8.00+qt.1.jammy_amd64.deb   # apt resolves Qt
 sudo dnf install ./astrolog-8.00-qt.1.el9.x86_64.rpm
