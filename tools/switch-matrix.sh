@@ -567,21 +567,18 @@ run -WN 100
 run -Wh
 run =0
 run _0
-# -0q is NOT in this matrix, and the reason is the whole point of the
-# matrix. It makes Terminate() return instead of exiting, so the program
-# carries on past a fatal error and formats whatever the abandoned
-# operation left in its buffers. Measured 2026-09-02 over 30 runs of one
-# binary: 28 said "Value 0 out of range from 1 to 12", one said "Assuming
-# first century C.E. is really meant instead of 1905" -- the year differs
-# every time it appears, 1901, 1902, 1905, 1908 -- and one said "Unknown
-# function: 'Q\357\277\275'", a garbage byte in a string.
+# -0q was out of this matrix for one afternoon, and is back. It makes
+# Terminate() return instead of exiting, so the program used to carry on
+# past a fatal error and format whatever InputString() left unwritten --
+# 28 runs in 30 said "Value 0 out of range from 1 to 12", one invented a
+# year, and one printed a garbage byte as an AstroExpression function
+# name. A spurious SIX-LINE move here is what .gitattributes cited for
+# years as proof that the data parsers depend on CRLF.
 #
-# A differential harness has to be deterministic or it invents diffs, and
-# this one did: a spurious SIX-LINE move here is what .gitattributes cited
-# for years as proof that the data parsers depend on CRLF, which cost a
-# real investigation (work log items 173 and 175). Put it back when the
-# uninitialized read behind it is fixed; until then it is noise wearing
-# the shape of evidence.
+# Fixed at the source (work log item 176): InputString() gives its caller
+# a defined empty string when fgets() hits EOF. 20 runs identical after,
+# so this invocation is evidence again rather than noise.
+run -0q
 run -0on
 run "-;" -A 9
 run -~ "Add 1 2"

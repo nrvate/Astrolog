@@ -1270,7 +1270,7 @@ void PrintSz(CONST char *sz)
 
       fT = us.fAnsiColor;
       us.fAnsiColor = fFalse;
-      InputString("Press return to continue scrolling", szInput);
+      InputString("Press return to continue scrolling", S(szInput));
       us.fAnsiColor = fT;
       is.cchRow = 0;
 

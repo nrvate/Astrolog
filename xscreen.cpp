@@ -533,7 +533,7 @@ void CommandLineX()
 
   ciCore = ciMain;
   fT = us.fLoop; us.fLoop = fTrue;
-  argc = NPromptSwitches(szCommandLine, rgsz);
+  argc = NPromptSwitches(S(szCommandLine), rgsz);
   is.cchRow = 0;
   is.fSzInteract = fTrue;
   if (!FProcessSwitches(argc, rgsz, NULL))

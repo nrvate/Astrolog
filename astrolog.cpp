@@ -456,7 +456,7 @@ int NParseCommandLine(char *szLine, char **argv)
 // in effect. The result of this routine is returned to the main program which
 // then processes it as done with a real command line.
 
-int NPromptSwitches(char *line, char *argv[MAXSWITCHES])
+int NPromptSwitches(char *line, int cchLine, char *argv[MAXSWITCHES])
 {
   FILE *fileSav;
   char sz[cchSzDef];
@@ -472,7 +472,7 @@ int NPromptSwitches(char *line, char *argv[MAXSWITCHES])
   sprintf2(S(sz), "(Enter '%cH' for help. Enter '.' to exit.)\n", chSwitch);
   PrintSz(sz);
   is.S = fileSav;
-  InputString("Input command line", line);
+  InputString("Input command line", line, cchLine);
   PrintL();
   return NParseCommandLine(line, argv);
 }
@@ -873,7 +873,7 @@ int main()
 
 LBegin:
   if (is.fNoSwitches) {                             // Go prompt for switches
-    argc = NPromptSwitches(szCommandLine, rgsz);    // if don't have them.
+    argc = NPromptSwitches(S(szCommandLine), rgsz); // if don't have them.
     argv = rgsz;
   }
   is.szProgName = argv[0];

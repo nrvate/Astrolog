@@ -7258,16 +7258,84 @@ are the more useful half to read before starting something new.
     deterministic or it invents evidence**, and this one invented the
     reason for a two-year exemption.
 
-    *Left open, deliberately:* the uninitialized read itself. It is
-    reachable only under `-0q`, whose entire purpose is to continue into
-    undefined territory, and finding it means running an ASan build of a
-    program that no longer stops at errors. Recorded here with its
-    measurement so the next attempt starts from evidence.
+    *Left open, deliberately* — **and taken the same day, work log item
+    176.** It was `InputString()` falling through its EOF branch because
+    `Terminate()` returns under `-0q`, and the line that does it was also
+    reading 255 bytes into three callers' 80-byte buffers, which is a
+    stack smash reachable from a documented prompt with no `-0q` at all.
 
     **Nets**: suite 3803/0; chart matrix 0 of 7,072, graphics matrix 0 of
     449, switch matrix 0 of 75,629 against a baseline built from the
     previous commit, and 0 across three runs of the same binary; five
     builds including Windows and Qt6; warning ledger regenerated.
+
+176. **The `-0q` uninitialized read, and the stack smash sitting next to
+    it.** Item 175 left the read open with its measurement. Hunting it
+    took one grep once the shape was right, and turned up a worse bug on
+    the way that needs no `-0q` at all.
+
+    **The read.** `InputString()` (io.cpp) ends its EOF branch like this:
+
+        if (fgets(sz, cchSzMax, stdin) == NULL)   // Pressing Control+d
+          Terminate(tcForce);                     // terminates the program
+        cch = CchSz(sz);                          // on some systems.
+
+    `Terminate()`'s first statement is `if (us.fNoQuit) return;`, and
+    `-0q` is what sets `us.fNoQuit`. So under that switch the EOF path
+    falls straight through to `CchSz(sz)` on a buffer `fgets` never
+    wrote. Every symptom follows: the caller's stack usually holds
+    something that parses as 0 ("Value 0 out of range from 1 to 12"),
+    sometimes a two-digit number that reads as a year ("Assuming first
+    century C.E. is really meant instead of 1905"), and once a byte that
+    reached the AstroExpression parser as a function name. No sanitizer
+    was needed and none would have been convenient: valgrind is not on
+    this machine, MSan wants clang and an instrumented libc, and an ASan
+    build times out because `-0q` at EOF **also spins** -- `NInputRange`
+    loops until the value is in range, and it never will be.
+
+    **The stack smash, which is the more serious half.** That same line
+    read a hardcoded `cchSzMax` -- 255 -- into whatever buffer the caller
+    passed. Three callers pass `char[cchSzDef]`, which is **80**:
+    `NInputRange`, `RInputRange`, and the scroll pause in general.cpp. So:
+
+        astrolog -i tty        then 251 characters at "Enter month"
+        *** stack smashing detected ***, exit 134, core dumped
+
+    `-i tty` is the documented way to enter chart information
+    interactively. No `-0q`, no unusual state, both builds, and it has
+    been there as long as the prompt has. T5's campaign bounded 1,141
+    formatting calls and never looked at the one raw `fgets`.
+
+    **Fixed together**, because they are the same line: `InputString()`
+    takes its destination's size like everything else in this tree since
+    T5, and every caller passes `S(...)`; `NPromptSwitches()` threads one
+    through as well. The EOF branch sets `sz[0] = chNull` and returns, so
+    nothing downstream parses an unwritten buffer whether `Terminate()`
+    came back or not.
+
+    **Falsified both ways.** Restoring the hardcoded size brings the
+    abort straight back (exit 134, then gone again on reverse-patch).
+    Restoring the fall-through restores the uninitialized read by
+    construction -- though not visibly in 25 runs, which the roughly
+    one-in-fifteen manifestation rate explains and does not prove; the
+    evidence that it is fixed is that 20 runs after are identical where
+    30 before produced three different outputs.
+
+    **And the harness gets its coverage back.** `run -0q` was removed
+    from `tools/switch-matrix.sh` yesterday for being nondeterministic.
+    It is deterministic now, so it is back, and the matrix diffs to zero
+    across three consecutive runs of the same binary.
+
+    *Still not fixed, and stated rather than left silent:* `-0q` at EOF
+    spins in `NInputRange` forever. That is what the switch asks for --
+    do not quit -- and changing it means deciding that EOF is not an
+    error a user can correct, which is a maintainer's call rather than a
+    bug fix.
+
+    **Nets**: suite 3803/0; chart and graphics matrices 0 against a
+    baseline built from the previous commit; switch matrix 0 across three
+    runs with the restored invocation; round trip all four legs; five
+    builds including Windows and Qt6.
 
 ## Features this fork adds to both builds
 

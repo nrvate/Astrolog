@@ -2648,7 +2648,14 @@ real RParseSz(CONST char *szEntry, int pm)
 // Stop and wait for the user to enter a line of text given a prompt to
 // display and a string buffer to fill with it.
 
-void InputString(CONST char *szPrompt, char *sz)
+// The size parameter is not decoration. This used to read a hardcoded
+// cchSzMax (255) into whatever the caller passed, and three callers pass
+// char[cchSzDef] (80): NInputRange, RInputRange, and the scroll pause in
+// general.cpp. Typing 251 characters at "Enter month for chart" -- a
+// documented prompt, reached by "astrolog -i tty" -- smashed the stack in
+// every build. Work log item 176.
+
+void InputString(CONST char *szPrompt, char *sz, int cchMax)
 {
   FILE *file;
   int cch;
@@ -2658,8 +2665,19 @@ void InputString(CONST char *szPrompt, char *sz)
   AnsiColor(kYellowA);
   PrintSz(" > ");
   AnsiColor(kDefault);
-  if (fgets(sz, cchSzMax, stdin) == NULL)    // Pressing Control+d terminates
+  if (fgets(sz, cchMax, stdin) == NULL) {    // Pressing Control+d terminates
     Terminate(tcForce);                      // the program on some systems.
+
+    // Terminate() RETURNS under -0q, and fgets() leaves the buffer
+    // untouched at EOF -- so everything below used to parse whatever the
+    // caller's stack happened to hold. That is where -0q got a year of
+    // 1905 out of nowhere, and once an AstroExpression function named
+    // from a garbage byte. Give it a defined empty string instead.
+    sz[0] = chNull;
+    is.S = file;
+    is.cchCol = 0;
+    return;
+  }
   cch = CchSz(sz);
   while (cch > 0 && sz[cch-1] < ' ')
     cch--;
@@ -2678,7 +2696,7 @@ int NInputRange(CONST char *szPrompt, int low, int high, int pm)
   int n;
 
   loop {
-    InputString(szPrompt, szLine);
+    InputString(szPrompt, S(szLine));
     n = NParseSz(szLine, pm);
     if (FBetween(n, low, high))
       return n;
@@ -2696,7 +2714,7 @@ real RInputRange(CONST char *szPrompt, real low, real high, int pm)
   real r;
 
   loop {
-    InputString(szPrompt, szLine);
+    InputString(szPrompt, S(szLine));
     r = RParseSz(szLine, pm);
     if (FBetween(r, low, high))
       return r;
@@ -2811,7 +2829,7 @@ flag FInputData(CONST char *szFile)
     TT = RInputRange("Enter time  for chart (e.g. '18:30' '6:30pm')  ",
       -2.0, 24.0, pmTim);
 #ifdef ATLAS
-    InputString("Enter name of city or location", sz);
+    InputString("Enter name of city or location", S(sz));
     ciCore.loc = SzClone(sz);
     if (DisplayAtlasLookup(sz, 0, &i)) {
       ciCore.loc = SzClone(sz);      // DisplayAtlasLookup changes ciCore.loc.
@@ -2833,10 +2851,10 @@ flag FInputData(CONST char *szFile)
       -rDegHalf, rDegHalf, pmLon);
     AA = RInputRange("Enter Latitude  of place (e.g. '47N36') ",
       -rDegQuad, rDegQuad, pmLat);
-    InputString("Enter name or title for chart ", sz);
+    InputString("Enter name or title for chart ", S(sz));
     ciCore.nam = SzClone(sz);
 #ifndef ATLAS
-    InputString("Enter name of city or location", sz);
+    InputString("Enter name of city or location", S(sz));
     ciCore.loc = SzClone(sz);
 #endif
     PrintL();

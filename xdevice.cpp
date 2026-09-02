@@ -1365,7 +1365,7 @@ flag BeginFileX()
       sprintf2(S(sz), "Enter name of file to write %s to", gs.ft == ftBmp ?
         "bitmap" : (gs.ft == ftPS ? "PostScript" : (gs.ft == ftWmf ?
         "metafile" : (gs.ft == ftSVG ? "SVG" : "wireframe"))));
-      InputString(sz, sz);
+      InputString(sz, S(sz));
       FCloneSz(sz, &gi.szFileOut);
    }
 #else
