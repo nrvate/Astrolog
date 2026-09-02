@@ -270,3 +270,60 @@ jobs:
 
       - name: Run the installed wrapper from an unrelated directory
         run: tools/ci-assert-installed.sh "$HOME/.local/bin/astrolog"
+
+  # Phase 7. The differentials -- the phase that makes CI strictly better
+  # than the local workflow rather than merely more reliable. Building a
+  # baseline by hand is what QT_TESTING.md tells a developer to do; here
+  # the base commit is already fetched, so the harness is cheaper to run
+  # than to skip, and a harness that is cheaper to run gets run.
+  #
+  # fetch-depth: 0 rather than 2. actions/checkout clones one commit by
+  # default, so even HEAD~1 is absent; depth 2 covers a single-commit push
+  # and nothing else, and github.event.before can be any distance back.
+  # The whole repository is 14.47 MiB, so full history is the cheap answer
+  # to a class of failure rather than a cost.
+  #
+  # The base SHA differs by event, and picking the wrong one is silent:
+  # pull_request builds refs/pull/N/merge and wants the PR base, push
+  # wants what was there before. On the first push to a new branch
+  # github.event.before is all zeros, and there is nothing to diff against
+  # -- the job says so and passes rather than inventing a baseline.
+  differential:
+    name: Behavioural differential vs the base commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the tree with history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Install X11 headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev
+
+      - name: Diff all four matrices against the base commit
+        env:
+          BASE_PUSH: ${{ github.event.before }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="${BASE_PR:-$BASE_PUSH}"
+          case "$base" in
+            ""|0000000000000000000000000000000000000000)
+              echo "No base commit for this event -- a new branch or the"
+              echo "first push. Nothing to diff against; not inventing one."
+              exit 0 ;;
+          esac
+          tools/ci-differential.sh "$base" out/diff
+
+      # The diffs are the report. Uploaded whether or not the step above
+      # failed, because a red differential is exactly when someone wants
+      # to read them.
+      - name: Keep the diffs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: differential-diffs
+          path: out/diff/*.diff
+          if-no-files-found: ignore

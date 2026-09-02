@@ -1302,7 +1302,23 @@ hand. On a pull request the base commit is already fetched.
 **Do.** Check out the merge base into a second directory, `make -j4`
 there, and name the result `./base-astrolog` — a path `.gitignore`
 already reserves, so the convention is already this repo's.
-**Status.** [ ]
+**Done 2026-09-02 as `tools/ci-differential.sh`**, which does all of
+Phase 7 in one script: resolves the base, builds it from a `git archive`
+extraction so nothing uncommitted leaks in, copies the binary to
+`./base-astrolog` **in the repository root** for 7.2b's reason, runs all
+four matrices on both sides with the config levers pinned identically,
+diffs, and removes the baseline afterwards. 1 m 42 s end to end on this
+box.
+**The base commit is not free after all.** `actions/checkout` clones one
+commit, so `HEAD~1` is absent; `fetch-depth: 2` covers a single-commit
+push and nothing else, and `github.event.before` can be any distance
+back. The job uses `fetch-depth: 0` — the whole repository is 14.47 MiB,
+which makes full history the cheap answer to a class of failure rather
+than a cost. And the base SHA differs by event: `pull_request` wants
+`github.event.pull_request.base.sha`, `push` wants `github.event.before`,
+which is **all zeros on the first push to a new branch** — the job says
+so and passes rather than inventing a baseline.
+**Status.** [x] done 2026-09-02
 
 ### 7.2 Run all four matrices on both binaries and diff
 **Do.**
@@ -1388,7 +1404,27 @@ erroring on wrong switch arity; `switch-matrix.sh` capped its output at
 **Do.** For each matrix: change one output-affecting line in the source,
 confirm the diff is non-empty and the job is red, reverse-patch the exact
 string.
-**Status.** [ ]
+**Falsified 2026-09-02, and it measured the disjointness claim rather
+than repeating it.**
+
+| sabotage | chart | switch | influence | graphics | job |
+|---|---|---|---|---|---|
+| none (control) | — | — | — | — | **rc=0**, 83,918 lines identical |
+| `"   Total:"` → `"   TOTAL:"` in `intrpret.cpp` | 12 | 4 | 36 | — | **rc=1** |
+| `DrawEdge(x1, y1, …)` → `y1 + 1` in `xcharts1.cpp` | — | — | — | **2** | **rc=1** |
+
+**The second row is the one worth keeping.** One pixel in the drawing
+code moved the graphics matrix by two lines and left the other three
+**byte-identical over 83,469 lines**. That is work log item 143's blind
+spot — 1,055 formatting calls changed, mostly in exactly that code, while
+the switch matrix reported byte-identical over 75,471 lines and proved
+nothing about them — demonstrated rather than argued.
+**A third sabotage refused to apply** (three matches, not one) and the run
+came back "no behavioural movement in any of the four" — a clean result
+that was really a no-op. It read exactly like a proof, which is the
+failure this whole item exists for, and the only thing that caught it was
+the helper refusing an ambiguous match.
+**Status.** [x] done and falsified 2026-09-02
 
 ### 7.4 Decide gate vs. report
 **Q7.** A differential answers "something changed", not "something
@@ -1398,7 +1434,25 @@ hard gate would make every intentional behaviour change require a
 workflow edit. Report-with-diff-attached, and a label or commit-trailer
 opt-out for intentional changes, is probably right. Settle before
 enabling.
-**Status.** [ ]
+**Settled 2026-09-02: gate, with the commit-trailer opt-out this item
+proposed.** A non-empty diff fails the job — *unless* a commit between
+base and HEAD declares it:
+
+```
+Behaviour-change: the -0q month range now rejects 0, as it always should have
+```
+
+**Tested both ways.** The same one-pixel sabotage that failed the job
+passed it once a commit carried the trailer, and the job printed the
+declaration back. The reason to gate rather than report: a report is a
+green job, and `CLAUDE.md`'s own point about nobody reading the log of a
+green job applies hardest here. The reason for the opt-out: a differential
+"actively protects a wrong answer, because fixing a 30-year-old bug shows
+up as a regression", so an intended change has to cost one line of a
+commit message rather than a workflow edit.
+**The diffs are uploaded as an artifact whether the job passes or fails**,
+because a red differential is exactly when someone wants to read them.
+**Status.** [x] settled and implemented 2026-09-02
 
 ---
 
@@ -1803,7 +1857,7 @@ names it.
 | ~~Q4~~ | ~~Does anything read `astexo.csv` at runtime?~~ **Answered: yes, it ships.** `charts3.cpp:1792`, `-XUx`. | closed |
 | ~~Q5~~ | ~~An optimized `-g` build for the fortify class?~~ **Answered: no separate build needed.** The ordinary `-O` builds already import 10–11 `*_chk` symbols, so Phase 7's matrices — which run against `./astrolog`, a normal build — already cover it. New item 3.4 asserts it stays that way. | closed |
 | Q6 | Pass criterion for the Windows-vs-Qt text diff? **Largely answered by 6.4b**: pin `-z0 0`, filter the one path-syntax diagnostic, and the Windows/Linux text matrix diffs to **zero** — 4 lines of 6,936, all cosmetic. Still open only for the *GUI* route in 6.4, which also captures layout. | 6.4, 6.4b |
-| Q7 | Are the differentials a gate or a report, and how is an intentional change signalled? | 7.4 |
+| ~~Q7~~ | ~~Are the differentials a gate or a report, and how is an intentional change signalled?~~ **Answered 2026-09-02: a gate, opted out of by a `Behaviour-change:` commit trailer.** Tested in both directions; the diffs upload as an artifact either way. | closed |
 | Q8 | **Reopened 2026-09-02, as a different question.** It used to be "build Qt6 at all?"; a working Qt6 build landed the next day (`2582015`, suite 3561/0), so it is now **"who keeps it alive?"** Qt5 remains the supported and packaged configuration. Recommendation: one CI job, `apt-get install qt6-base-dev` + `make qt6 qt6-test` + the suite, ~15 s — or a comment at the site saying it is unbuilt. Not "supported". | 8.2 |
 | ~~Q9~~ | ~~Is `-ldl` harmless on macOS?~~ **Answered: keep it on Linux, drop it on macOS.** `dladdr()` is really called (`sweph.cpp:271`); the flag is a no-op on glibc ≥ 2.34 but still needed below it, and macOS puts `dladdr` in libSystem. | closed |
 | ~~Q10~~ | ~~Does this fork distribute signed macOS binaries at all?~~ **Answered 2026-09-01: no.** Phase 9 only — builds and assertions, no artifact. See Phase 10. | closed |
