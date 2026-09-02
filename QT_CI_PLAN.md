@@ -1040,7 +1040,12 @@ item. Omitting it would give a menu item that silently draws nothing.
 at a NAS mount that exists on one machine), or any source file.
 **Verify.** Presence checks for everything required, absence checks for
 `nrvate.as` and `*.cpp`, and `SHA256SUMS` round-tripped.
-**Status.** [ ]
+**Done 2026-09-02** as `tools/package.sh windows`: 46 files, 13 MB.
+**Ground rule 3 is satisfied by the script, not by a reusable workflow.**
+swisseph reaches "one build definition, used by both CI and release" with
+`package.yml`; here the definition is `tools/package.sh`, which a release
+workflow calls unchanged and which a human can also just run.
+**Status.** [x] done 2026-09-02 (Windows only; Q1 still gates Linux)
 
 ### 4.4 Self-verify every package
 **Do.** For each package, in this order:
@@ -1055,7 +1060,26 @@ at a NAS mount that exists on one machine), or any source file.
 harness that "was byte-identical over 75,471 lines while proving nothing",
 and `switch-matrix.sh` capped its output at 30 lines of 159 for two whole
 campaigns. A manifest that covers part of a package is the same failure.
-**Status.** [ ]
+**Done 2026-09-02 as `tools/ci-verify-package.sh`, and step 5 is the
+reason there are two scripts instead of one.** The first draft generated
+the manifest and then counted its lines — comparing a number against
+itself, so it could never fail. Falsification caught it: a manifest
+truncated to **9 of 46 lines passed cleanly**. `package.sh` writes the
+manifest now and this script only checks it, which is what makes step 5
+mean anything.
+**All five falsified:**
+
+| broken | result |
+|---|---|
+| `astexo.csv` removed | `MISSING: astexo.csv` |
+| `nrvate.as` smuggled in | `FORBIDDEN: nrvate.as is in the package` |
+| a header smuggled in | `FORBIDDEN: source files in the package` |
+| a file altered after hashing | `sha256sum: WARNING: 1 computed checksum did NOT match` |
+| manifest truncated to 9 of 46 | `sha256sum -c` **passes**; step 5 says `MANIFEST INCOMPLETE` |
+
+That fourth row is the trap in one line: the manifest verified perfectly
+and covered a fifth of the package.
+**Status.** [x] done and falsified 2026-09-02
 
 ### 4.5 Smoke-test the assembled package, not the build tree
 **Goal.** Prove the thing a user downloads works, from a directory that is
@@ -1116,7 +1140,15 @@ first tagged release shipped a `swetest` that answered "Permission
 denied".
 **Do.** `chmod 0755` the binaries after download, before archiving, and
 read the mode back **out of the archive** (`tar tvzf`), not off the disk.
-**Status.** [ ]
+**Done 2026-09-02 as `tools/ci-assert-archive-mode.sh`.** Falsified three
+ways: a 0755 member passes, the same package with the binary chmod'd 0644
+fails with the offending `tar tvzf` line quoted, and a member that is not
+in the archive at all fails rather than passing vacuously.
+**The case it guards is the Linux package, which Q1 still blocks** — a
+`.zip` carries no unix modes and Windows wants none. Written now because
+the mechanism is what rots, and exercised against the Windows tarball
+because that is what exists to exercise it on.
+**Status.** [x] done and falsified 2026-09-02
 
 ---
 

@@ -327,3 +327,58 @@ jobs:
           name: differential-diffs
           path: out/diff/*.diff
           if-no-files-found: ignore
+
+  # Phase 4, the Windows half. Q1 still gates the LINUX artifact -- an
+  # AppImage carries ~70 MB of Qt closure, a .deb is ~8 MB and lets apt
+  # resolve Qt5, a tarball is trivial but "download and run" then does not
+  # work -- and that is a judgement about audience, not something to
+  # settle by building whichever is easiest. The Windows one has no such
+  # question: Makefile.win links fully static, so it is one .exe plus the
+  # data, and Q4 settled what data (astexo.csv ships; the "Show
+  # E&xoplanets" menu item reads it).
+  #
+  # Ground rule 3 is "one build definition, used by both CI and release".
+  # swisseph reaches that with a reusable workflow; here the definition is
+  # tools/package.sh, which a release workflow will call unchanged. Same
+  # guarantee, and it can be run by hand.
+  package:
+    name: Windows package, and it verifies itself
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install the cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64
+
+      - name: Build the oracle
+        run: make -f Makefile.win -j4
+
+      - name: Assemble the package
+        run: tools/package.sh windows out/package
+
+      # Presence, absence, manifest generated, manifest checked back, and
+      # the manifest's line count against the file count. That last one is
+      # not paranoia: a SHA256SUMS covering a fifth of a package passes
+      # "sha256sum -c" perfectly.
+      - name: Verify it
+        run: tools/ci-verify-package.sh out/package/astrolog-windows
+
+      # 4.6. The mode has to be read out of the archive, never off the
+      # disk. It matters for the Linux package rather than this one -- a
+      # .zip carries no unix modes -- but the mechanism is what rots, so
+      # it is exercised here where there is something to exercise it on.
+      - name: The binary is executable inside the archive
+        run: |
+          ( cd out/package && tar czf astrolog-windows.tar.gz astrolog-windows )
+          tools/ci-assert-archive-mode.sh \
+            out/package/astrolog-windows.tar.gz astrolog.exe
+
+      - name: Keep the package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: astrolog-windows
+          path: out/package/astrolog-windows.tar.gz
