@@ -82,6 +82,20 @@ jobs:
       - name: Build and sign
         run: tools/make-repo.sh pkgs public "${{ steps.pages.outputs.base_url }}"
 
+      # BEFORE deploying, not after. The first published repository built,
+      # signed, and served every URL at 200 -- and could not be installed
+      # from, because one suite holding every package made apt offer an
+      # Ubuntu 22.04 machine the noble build. Every other check passed. The
+      # only thing that would have caught it is the thing this step does:
+      # install from the repository, in a container of each distribution
+      # it claims to serve, and cast a chart.
+      #
+      # Six containers, about three minutes. It runs on a release, not on
+      # every push, and a repository that cannot be installed from is
+      # worse than no repository because it is advertised.
+      - name: Install from it, on every distribution it serves
+        run: tools/ci-verify-repo.sh public
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: public
