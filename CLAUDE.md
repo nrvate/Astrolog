@@ -106,6 +106,9 @@ make all -j4                     # all four; "make clean" undoes it
                                  # (plain "make" is upstream's target and
                                  # still builds only ./astrolog, which ten
                                  # scripts here depend on)
+make install                     # two wrappers on PATH; the data stays
+                                 # in the checkout, so the tree has to stay
+                                 # put (PREFIX=$HOME/.local needs no root)
 ./run-qt-tests.sh                # 3553 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)

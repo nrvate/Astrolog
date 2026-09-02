@@ -6726,6 +6726,62 @@ are the more useful half to read before starting something new.
     landed after the rest and repeated the clean rebuild, the byte
     comparison and the suite on its own.
 
+168. **`make install`, with the data staying in the checkout.**
+
+    There was no install target in any of the five makefiles -- measured,
+    `grep -c '^install' Makefile*` returns zero for all five -- which is
+    worth noting mainly because the maintainer's first message of the day
+    was about the warnings "on make install".
+
+    The design question was where the data goes: ephemeris files, atlas,
+    fonts, `astrolog.as`, help text. The maintainer's answer was to leave
+    it in the checkout, and that works cleanly, because of `FileOpen()`
+    (io.cpp:73): **the first place Astrolog looks for any data file is
+    the directory holding the executable**, taken from `argv[0]`
+    (astrolog.cpp:850). So what gets installed is a two-line wrapper that
+    runs the in-tree binary by absolute path, and file resolution is then
+    exactly what `./astrolog` does.
+
+    Measured from an unrelated working directory rather than assumed:
+
+        <checkout>/astrolog -i nrvate.as        finds it
+        a plain copy of the binary elsewhere    "File 'nrvate.as' not found."
+        that copy with ASTROLOG=<checkout>      finds it
+
+    So the wrapper needs neither an environment variable nor a recompile.
+    The recompile is the part worth stating: the other way to do this is
+    `-DDEFAULT_DIR=...`, which astrolog.h:184 exists precisely for, and
+    it would make `make install` compile objects with different flags
+    from the ones `make` produces, with nothing tracking the difference.
+    That is the stale-object class item 167 had just finished closing, so
+    it is not the way to install.
+
+    Falsified by diffing the installed command, run from `/tmp` through
+    `PATH`, against the in-tree binary: identical over a 116-line chart
+    whose settings file is reachable *only* through the executable's
+    directory -- `/tmp` has no `nrvate.as`, and a bare copy of the binary
+    reports it missing. `DESTDIR` stages correctly, `uninstall` removes
+    exactly what was installed, and a second `make install` is
+    idempotent.
+
+    A second check was thrown away rather than reported, which is the
+    only reason to trust the first: a relative ephemeris path
+    (`-Yi1 ephem`) also gave identical output between the two -- and
+    identical output against `-Yi1 nosuchdir` as well, so that
+    invocation never touched the path and proved nothing about it.
+
+    **The trade, said plainly:** the installed commands depend on this
+    checkout staying where it is. Move or delete the tree and they fail
+    with "no such file", which is at least legible; re-run `make install`
+    after moving it. `PREFIX ?= /usr/local`, so
+    `make install PREFIX=$HOME/.local` needs no root, and `CMDS` selects
+    which commands go in.
+
+    Not done: a `.desktop` entry for the Qt build. The tree's only icons
+    are four Windows `.ico` files, so it needs a converted PNG and a
+    decision about where that lands. The command it would point at exists
+    now either way.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
