@@ -47,6 +47,9 @@ clean: clean-console
 	$(MAKE) -f Makefile.qt.test clean
 	$(MAKE) -f Makefile.qt.asan clean
 	$(MAKE) -f Makefile.win clean
+	$(MAKE) -f Makefile.qt OBJDIR=obj-qt6 NAME=astrolog-qt6 clean
+	$(MAKE) -f Makefile.qt.test OBJDIR=obj-qt6-test \
+	  NAME=astrolog-qt6-test clean
 
 # Upstream's narrower clean, kept because tools/asan-sweep.sh needs
 # exactly it: that script builds with overridden CPPFLAGS into this same
@@ -76,6 +79,36 @@ qt-test:
 
 qt-asan:
 	$(MAKE) -f Makefile.qt.asan
+
+# Qt6 is opt-in and is not what this machine builds by default: pkg-config
+# finds Qt5, and the three Qt makefiles follow whatever it finds. A
+# hand-installed Qt6 sits outside pkg-config's search path, so building
+# against it is a matter of saying where -- and that command was run once,
+# by hand (commit ee0623e), leaving ./astrolog-qt6 and obj-qt6/ behind that
+# no target built and no clean removed. These two targets are that command
+# written down, so the Qt6 build is reproducible and cleanable rather than
+# an artifact somebody remembers making.
+#
+# Deliberately NOT part of "all": most machines have no Qt6, and there the
+# pkg-config guard would stop the build with a package name, which is the
+# right answer to "make all" only if you asked for Qt6.
+#
+# The -rpath is not optional for a hand-installed Qt6: without it the
+# binary links and then dies at startup with "libQt6PrintSupport.so.6:
+# cannot open shared object file", because /usr/local/qt6/lib is not on
+# the runtime linker path. Measured, not guessed.
+QT6_PKGCONFIG ?= /usr/local/qt6/lib/pkgconfig
+QT6_LIBDIR ?= /usr/local/qt6/lib
+QT6 = PKG_CONFIG_PATH=$(QT6_PKGCONFIG)
+QT6LD = LDEXTRA=-Wl,-rpath,$(QT6_LIBDIR)
+
+qt6:
+	$(QT6) $(MAKE) -f Makefile.qt OBJDIR=obj-qt6 NAME=astrolog-qt6 \
+	  $(QT6LD)
+
+qt6-test:
+	$(QT6) $(MAKE) -f Makefile.qt.test OBJDIR=obj-qt6-test \
+	  NAME=astrolog-qt6-test $(QT6LD)
 
 win:
 	$(MAKE) -f Makefile.win
@@ -170,7 +203,8 @@ uninstall:
 	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
-.PHONY: clean clean-console qt qt-test qt-asan win all install uninstall
+.PHONY: clean clean-console qt qt-test qt-asan qt6 qt6-test win all \
+	install uninstall
 
 # Compiler-generated header dependencies; see Makefile.qt for the
 # reasoning and what the hand-written version missed.

@@ -106,6 +106,13 @@ make all -j4                     # all four; "make clean" undoes it
                                  # (plain "make" is upstream's target and
                                  # still builds only ./astrolog, which ten
                                  # scripts here depend on)
+make qt6 -j4                     # ./astrolog-qt6, against a hand-installed
+make qt6-test -j4                # Qt6; QT6_PKGCONFIG says where it is.
+                                 # Not in "make all" -- most machines have
+                                 # no Qt6, and there the guard below would
+                                 # stop the build asking for one
+QTTESTBIN=./astrolog-qt6-test ./run-qt-tests.sh  # the suite against Qt6:
+                                 # 3561/0 there too, on 2026-09-01
 make install                     # two wrappers on PATH, a menu entry and
                                  # icons; the data stays
                                  # in the checkout, so the tree has to stay

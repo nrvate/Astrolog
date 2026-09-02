@@ -8,7 +8,12 @@
 #
 # Exits non-zero if any check fails, so it can gate a commit or CI.
 cd "$(dirname "$0")" || exit 1
-[ -x ./astrolog-qt-test ] || { echo "build it first: make -f Makefile.qt.test"; exit 1; }
+# Which binary to drive. The default is the one "make qt-test" builds;
+# the override exists for the Qt6 build ("make qt6-test" leaves
+# ./astrolog-qt6-test), which is the same sources against a different
+# Qt and wants this same suite run against it.
+BIN=${QTTESTBIN:-./astrolog-qt-test}
+[ -x "$BIN" ] || { echo "build it first: make qt-test"; exit 1; }
 
 QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
 
@@ -23,7 +28,7 @@ QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
 # argument given here still overrides it.
 [ $# -gt 0 ] || set -- -i nrvate.as
 
-$QTENV ./astrolog-qt-test "$@"
+$QTENV "$BIN" "$@"
 rc=$?
 [ $rc -eq 0 ] || exit $rc
 
@@ -41,7 +46,7 @@ echo
 echo "== Startup diagnostics =="
 fail=0
 for arg in "-i /nonexistent-astrolog-test-file.as" "-t"; do
-  out=`$QTENV ./astrolog-qt-test $arg 2>&1`
+  out=`$QTENV "$BIN" $arg 2>&1`
   rc=$?
   case $out in
     *"Must construct a QApplication"*)

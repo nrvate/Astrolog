@@ -76,7 +76,10 @@ CPPFLAGS = -MMD -MP -DQT -O -fPIC -std=gnu++17 -Wno-write-strings -Wno-narrowing
 RM = rm -f
 
 $(NAME): $(OBJS)
-	g++ -o $(NAME) $(OBJS) $(LIBS)
+# LDEXTRA is empty for every ordinary build and exists for one case:
+# a hand-installed Qt6 whose libraries are not on the runtime linker
+# path, where the top-level "make qt6" passes an -rpath through it.
+	g++ -o $(NAME) $(OBJS) $(LIBS) $(LDEXTRA)
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
