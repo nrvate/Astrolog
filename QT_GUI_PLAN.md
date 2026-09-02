@@ -6782,6 +6782,67 @@ are the more useful half to read before starting something new.
     decision about where that lands. The command it would point at exists
     now either way.
 
+169. **The Qt window had no icon at all, and now there is a menu entry to
+    match.** The desktop entry was the ask; the missing icon was found on
+    the way to it and is the more interesting half.
+
+    Windows sets its window class icon from `astrlog1.ico` --
+    `wndclass.hIcon = LoadIcon(wi.hinst, MAKEINTRESOURCE(icon))`
+    (wdriver.cpp:572), where `icon` is the resource astrolog.rc lists
+    first, with the comment that the lowest ID "ensures the application
+    icon remains consistent on all systems". **This port called
+    `setWindowIcon` nowhere.** It was invisible by inspection because
+    qtdialog.cpp already loads `astrlog3.ico` for the dialogs, so the
+    artwork looked wired up; and invisible in use because a window whose
+    icon failed to load looks exactly like a window that never asked for
+    one. Measured on a private display before the fix: no `_NET_WM_ICON`
+    property at all.
+
+    `IconAstrologQt()` (qtdriver.cpp) builds the icon from
+    `icons/astrolog{16,32,48}.png` beside the executable, falling back to
+    `astrlog1.ico`, in the two directories `PixAstrologIconQt()` and the
+    bundled fonts already search. It is set on the *application*, not the
+    window, so dialogs inherit it the way Windows' window class does.
+
+    The PNGs are the same artwork: the three frames of `astrlog1.ico`
+    extracted once, because `.ico` is not a format the icon theme spec
+    expects. Worth recording that they are **not** needed for the window
+    itself -- hiding `icons/` and leaving only the `.ico` still passes all
+    eight assertions, so Qt's ICO reader does expose all three sizes.
+    They exist for the desktop entry, which cannot use an `.ico`.
+
+    **The menu entry.** `make install` now also writes
+    `share/applications/astrolog.desktop` and the three PNGs into
+    `share/icons/hicolor/NxN/apps/astrolog.png`. Two details are the
+    whole difficulty: under `DESTDIR` staging the `Exec=` line and the
+    icon name must be the **final** paths, not the staged ones (checked --
+    a `DESTDIR` install writes `Exec=/usr/local/bin/astrolog-qt` while the
+    file itself lands under the staging root); and `Categories` may name
+    only one main category, which `desktop-file-validate` said out loud
+    -- `Education;Science;` drew "application might appear more than once
+    in the application menu", so it is `Science;Astronomy;` and the
+    validator is silent.
+
+    `QGuiApplication::setDesktopFileName("astrolog")` ties a running
+    instance to that file. Measured, since the alternative was guessing:
+    without it the main window's `WM_CLASS` reads `"astrolog-qt",
+    "Astrolog-qt"` -- the executable's name, not the desktop file's -- and
+    with it, `"astrolog", "astrolog"`.
+
+    **Verified end to end rather than by inspection**, which is the only
+    reason to believe any of it: `gtk-launch astrolog` on a private Xvfb
+    display with `XDG_DATA_DIRS` pointed at the installed prefix brings up
+    a window whose `WM_CLASS` is `astrolog` and whose `_NET_WM_ICON`
+    xprop will draw for you. The new `app-icon` group (8 assertions) is
+    falsified by hiding both icon sources: 8 of 8 fail, naming
+    `pixmap(16) comes back 0x0`.
+
+    *A method note, from a mistake made here.* Cleaning up that display,
+    `pkill -f astrolog-qt` killed an unrelated Astrolog the maintainer had
+    running. Kill the PID you started -- `xdotool getwindowpid` gives it
+    -- and never a pattern; CLAUDE.md says the same thing about
+    screenshots for the same reason.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

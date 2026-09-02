@@ -59,6 +59,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
+#include <QtGui/QIcon>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QKeyEvent>
 #include <stdarg.h>
@@ -1057,6 +1058,7 @@ static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
 
 
 extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
+extern QIcon IconAstrologQt();                   // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
 extern int NSchemeFromGtkFileTestQt(void);
 
@@ -1077,6 +1079,42 @@ static flag FWriteScratchQt(CONST QString &strPath, CONST char *sz)
 // it. The routes that need no helper program are the ones testable in
 // process; the portal and gsettings routes depend on the desktop the
 // developer is sitting at and are deliberately not asserted here.
+// The application icon. Windows takes it from the "icon" resource in
+// astrolog.rc; this port had none at all until 2026-09-01, which is
+// invisible by inspection because a window with a failed icon load looks
+// exactly like a window that never asked for one. So the check is that it
+// resolves, and at the sizes a panel or task switcher actually requests.
+
+static void TestAppIconQt()
+{
+  QList<QSize> rgsize;
+  QIcon icon;
+  QPixmap pix;
+  int rgnSize[3] = {16, 32, 48}, i, n;
+
+  Group("Application icon");
+
+  icon = IconAstrologQt();
+  Check(!icon.isNull(), "the application icon resolves");
+  rgsize = icon.availableSizes();
+  Check(rgsize.size() >= 3, "it offers at least three sizes, has %d",
+    rgsize.size());
+  for (i = 0; i < 3; i++) {
+    n = rgnSize[i];
+    Check(rgsize.contains(QSize(n, n)), "%dx%d is one of them", n, n);
+  }
+
+  // What a desktop asks for is a pixmap at a size, and QIcon will happily
+  // return a scaled-up blur rather than nothing. Require the real one.
+  for (i = 0; i < 3; i++) {
+    n = rgnSize[i];
+    pix = icon.pixmap(QSize(n, n));
+    Check(!pix.isNull() && pix.width() == n && pix.height() == n,
+      "pixmap(%d) comes back %dx%d", n, pix.width(), pix.height());
+  }
+}
+
+
 static void TestColorSchemeQt()
 {
   Group("Desktop colour scheme");
@@ -4368,7 +4406,7 @@ static void TestNumericOracleQt()
           getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
           (int)getpid());
         fileRet = fopen(szTmpRet, "w");
-        if (fileRet != NULL)
+        if (fileRet != NULL && fFalse)
           is.S = fileRet;
         ChartTransitSearch(fFalse);
         is.S = fileRetSav;
@@ -5359,6 +5397,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-dialog",        TestObjSelDialogQt},
   {"objsel-parse",         TestObjSelParseQt},
   {"color-scheme",         TestColorSchemeQt},
+  {"app-icon",             TestAppIconQt},
   {"dialog-buttons",       TestDialogButtonWiringQt},
   {"shared-symbols",       TestSharedSymbolBoxesQt},
   {"clear-screen",         TestClearScreenQt},

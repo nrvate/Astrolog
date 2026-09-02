@@ -68,6 +68,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtGui/QClipboard>
 #include <QtGui/QImage>
+#include <QtGui/QIcon>
 #include <QtGui/QFontDatabase>
 #include <QtCore/QDir>
 #include <QtCore/QVector>
@@ -4633,6 +4634,48 @@ static void MessageFilterQt(QtMsgType typ, CONST QMessageLogContext &ctx,
 #endif
 
 
+// Windows gives its window the astrlog1.ico artwork, through the "icon"
+// resource that astrolog.rc deliberately lists first so the application
+// icon "remains consistent on all systems" (wdriver.cpp:572). Qt has no
+// resource script, so the same artwork is loaded from disk: the three PNG
+// sizes this fork extracts from that .ico for its desktop entry, and the
+// .ico itself when they are not there. Both are looked for beside the
+// executable and then in the working directory, which is where
+// PixAstrologIconQt() and the bundled fonts already look.
+//
+// Not static because the suite checks it: an icon that silently fails to
+// load leaves a window that looks exactly like one that never asked for
+// an icon at all, which is how this went unnoticed until now.
+
+QIcon IconAstrologQt()
+{
+  CONST int rgnSize[3] = {16, 32, 48};
+  QStringList rgstrDir;
+  QIcon icon;
+  QString str;
+  int i, j;
+
+  rgstrDir << QCoreApplication::applicationDirPath() << QDir::currentPath();
+  for (i = 0; i < rgstrDir.size(); i++) {
+    for (j = 0; j < 3; j++) {
+      str = rgstrDir[i] + "/icons/astrolog" + QString::number(rgnSize[j]) +
+        ".png";
+      if (QFile::exists(str))
+        icon.addFile(str);
+    }
+    if (!icon.isNull())
+      break;
+    str = rgstrDir[i] + "/astrlog1.ico";
+    if (QFile::exists(str)) {
+      icon.addFile(str);
+      if (!icon.isNull())
+        break;
+    }
+  }
+  return icon;
+}
+
+
 void BeginQt()
 {
   static int s_argc = 1;
@@ -4663,11 +4706,21 @@ void BeginQt()
   QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
     Qt::HighDpiScaleFactorRoundingPolicy::Round);
 #endif
+  // Ties a running instance to astrolog.desktop, which "make install"
+  // writes. Without it a panel has to guess the association from WM_CLASS,
+  // and measured on a private display that read "astrolog-qt",
+  // "Astrolog-qt" -- the executable's name, which is not the desktop
+  // file's. With this it reads "astrolog", "astrolog" and the match is
+  // exact. Must precede the QApplication constructor.
+  QGuiApplication::setDesktopFileName(QStringLiteral("astrolog"));
   gi.qapp = new QApplication(s_argc, s_argv);
   QApplication::setStyle(new AstroStyleQt);
   ApplyColorSchemeQt();
   LoadBundledFontsQt();
   SetUiFontQt();
+  // Set on the application, not the window, so every dialog inherits it
+  // the way Windows' window class does.
+  QApplication::setWindowIcon(IconAstrologQt());
   gi.qwind = new QMainWindow();
   gi.qwind->setWindowTitle(szAppName);
   gi.qcanvas = new ChartCanvas();

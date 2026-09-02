@@ -106,10 +106,11 @@ make all -j4                     # all four; "make clean" undoes it
                                  # (plain "make" is upstream's target and
                                  # still builds only ./astrolog, which ten
                                  # scripts here depend on)
-make install                     # two wrappers on PATH; the data stays
+make install                     # two wrappers on PATH, a menu entry and
+                                 # icons; the data stays
                                  # in the checkout, so the tree has to stay
                                  # put (PREFIX=$HOME/.local needs no root)
-./run-qt-tests.sh                # 3553 assertions + startup checks
+./run-qt-tests.sh                # 3561 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
@@ -125,7 +126,7 @@ tree; `make clean-console` is upstream's narrower one, which is what
 `tools/asan-sweep.sh` uses.
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3553 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
+commit. Current state: **3561 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
 build is `-O0`, where `_FORTIFY_SOURCE` is inactive, so it structurally
 cannot see a fortify-detected overflow. Work log item 142 was invisible
 to it for that reason and had to be caught in an optimized `-g` build.
@@ -376,7 +377,10 @@ On a private Xvfb display, `import -window root` is fine.
 - **Never screenshot `import -window root` on the user's real desktop, or
   crop from it** — it leaks unrelated windows. Target a specific window ID
   found via `xdotool search --pid`, never by name substring. (A private
-  Xvfb display is exempt; see above.)
+  Xvfb display is exempt; see above.) **Stop a test instance by the PID
+  you started it with** -- `xdotool getwindowpid` if you only have the
+  window -- never `pkill -f astrolog`: that matches the maintainer's own
+  running copy, and did kill it once (work log item 169).
 - **The source is LF**, since 2026-09-01 (work log item 159) — the C++,
   the headers, the makefiles this fork owns, the tools and the docs. It
   used to be a 55/53 split with a per-file rule about preserving it, and

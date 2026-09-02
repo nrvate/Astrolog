@@ -111,6 +111,20 @@ PREFIX ?= /usr/local
 BINDIR = $(DESTDIR)$(PREFIX)/bin
 CMDS = $(NAME) astrolog-qt
 
+# The Qt build also gets a menu entry and an icon, in the two places the
+# freedesktop specs put them. Both are staged through DESTDIR, but Exec=
+# and the icon name inside the .desktop file must be the FINAL paths, not
+# the staged ones -- that is the whole distinction, and getting it wrong
+# produces a launcher that works only on the machine that built it.
+#
+# The icons are the same artwork Windows uses: astrlog1.ico is the "icon"
+# resource astrolog.rc lists first, and icons/astrolog{16,32,48}.png are
+# its three frames extracted once, since .ico is not a format the icon
+# theme spec expects. hicolor is the fallback theme every desktop reads.
+APPDIR = $(DESTDIR)$(PREFIX)/share/applications
+ICONDIR = $(DESTDIR)$(PREFIX)/share/icons/hicolor
+ICONSIZES = 16 32 48
+
 install: $(NAME) qt
 	mkdir -p $(BINDIR)
 	@for b in $(CMDS); do \
@@ -124,10 +138,36 @@ install: $(NAME) qt
 	  } > $(BINDIR)/$$b && chmod 755 $(BINDIR)/$$b && \
 	  echo "installed $(BINDIR)/$$b -> $(CURDIR)/$$b"; \
 	done
+	mkdir -p $(APPDIR)
+	@{ echo '[Desktop Entry]'; \
+	   echo 'Type=Application'; \
+	   echo 'Version=1.0'; \
+	   echo 'Name=Astrolog'; \
+	   echo 'GenericName=Astrology Chart Calculator'; \
+	   echo 'Comment=Cast and display astrological charts'; \
+	   echo 'Exec=$(PREFIX)/bin/astrolog-qt'; \
+	   echo 'Icon=astrolog'; \
+	   echo 'Terminal=false'; \
+	   echo 'Categories=Science;Astronomy;'; \
+	   echo 'Keywords=astrology;horoscope;chart;ephemeris;zodiac;'; \
+	   echo 'StartupNotify=true'; \
+	 } > $(APPDIR)/astrolog.desktop
+	@echo "installed $(APPDIR)/astrolog.desktop"
+	@for s in $(ICONSIZES); do \
+	  mkdir -p $(ICONDIR)/$${s}x$${s}/apps && \
+	  cp icons/astrolog$$s.png $(ICONDIR)/$${s}x$${s}/apps/astrolog.png && \
+	  echo "installed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
+	done
 
 uninstall:
 	@for b in $(CMDS); do \
 	  $(RM) $(BINDIR)/$$b && echo "removed $(BINDIR)/$$b"; \
+	done
+	@$(RM) $(APPDIR)/astrolog.desktop && \
+	  echo "removed $(APPDIR)/astrolog.desktop"
+	@for s in $(ICONSIZES); do \
+	  $(RM) $(ICONDIR)/$${s}x$${s}/apps/astrolog.png && \
+	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
 .PHONY: clean clean-console qt qt-test qt-asan win all install uninstall
