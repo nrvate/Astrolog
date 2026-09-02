@@ -740,6 +740,17 @@ tools/warning_audit.py                 # all five builds, ~70 seconds,
                                        # is a Qt6
 tools/warning_audit.py --file io.cpp   # one file, seconds, while fixing
 tools/warning_audit.py --update        # after a fix, to move the ledger
+```
+
+**The audit owns its own compiler flags, and that is the point.** It does
+not read `CPPFLAGS` out of the makefiles; it keeps a copy, so a warning
+class can be turned on for the audit without disturbing an ordinary
+build. `-Wno-write-strings` is the live example: all six makefiles pass
+it, the audit does not, and behind that suppression sat 1,345
+string-literal-to-`char *` conversions (work log item 174). What is left
+after that fix — six sites here and eleven in the vendored Swiss
+Ephemeris — is in `tools/warnings.txt`, so a new one appears as `NEW`
+rather than joining a crowd nobody can see.
 
 **The Qt6 build has its own ledger**, `tools/warnings-qt6.txt`, and it
 holds only what Qt6 warns about and Qt5 does not — the shared core
@@ -749,12 +760,12 @@ exists because the Qt6 build spent its whole life outside the audit: two
 deprecated `QMouseEvent::globalPos()` calls were named on every compile
 and nobody read them. Machines without a Qt6 skip that leg rather than
 failing it.
-```
 
-It compiles console, Qt, Qt-test and Windows clean with `-Wall`,
+It compiles console, Qt, Qt-test, WCLI and Windows clean with `-Wall`,
 normalizes each warning to (build, file, function, flag, message with the
-numbers masked) and diffs that against `tools/warnings.txt` — 318
-warnings in 101 sites as of 2026-09-01, down from 857. **All four builds
+numbers masked) and diffs that against `tools/warnings.txt` — 633
+warnings in 114 sites as of 2026-09-02, up from 381 because the audit
+stopped suppressing `-Wwrite-strings`. **All five builds
 themselves compile silently**: an ordinary `make` does not use `-Wall`, so
 none of the ledger reaches the terminal. That number went 49 → 0 over work
 log items 151-152, and it is the one a reader of the build output cares
@@ -764,9 +775,9 @@ and the ledger cannot drift into overstating what is left.
 
 Three things about it are worth knowing before you use it.
 
-**It is not pre-commit.** Four clean builds is minutes, like
+**It is not pre-commit.** Five clean builds is minutes, like
 `tools/asan-sweep.sh` and `tools/win-tests.sh`. Use `--file` while
-working — it compiles one source file under all four flag sets in
+working — it compiles one source file under all five flag sets in
 seconds — and the full run before a commit that touched a lot of code.
 
 **Subset runs are not a gate.** `--build console` prints its report and
