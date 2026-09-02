@@ -409,7 +409,15 @@ jobs:
           if not defined VSPATH echo No MSVC toolset found & exit /b 1
           echo Using %VSPATH%
           call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          cl /nologo /std:c++17 /EHsc /MD /O2 /W1 ^
+          rem /Zc:__cplusplus is not optional with Qt. MSVC reports
+          rem __cplusplus as 199711L regardless of /std: unless told to
+          rem be accurate, and Qt's qcompilerdetection.h checks the macro
+          rem and refuses: "Qt requires a C++17 compiler, and a suitable
+          rem value for __cplusplus". The first run with a working
+          rem toolchain died there, having compiled most of the tree
+          rem first -- so this is a compiler-configuration quirk, not an
+          rem Astrolog portability problem.
+          cl /nologo /std:c++17 /Zc:__cplusplus /EHsc /MD /O2 /W1 ^
              /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
              /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
