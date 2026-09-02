@@ -1140,7 +1140,45 @@ feature decision, not a packaging one, and it does not belong in this
 document.
 **Whichever is chosen:** build on **`ubuntu-22.04`, not `ubuntu-latest`**
 (swisseph's glibc scar).
-**Status.** [ ]
+
+**Done 2026-09-02, and the answer is both native formats rather than any
+of the three above.** `.deb` on ubuntu-22.04 and ubuntu-24.04 runners,
+`.rpm` in `fedora:42` and `fedora:43` containers. 6.0 MB and 5.9 MB.
+
+**Built on each target, never cross-built** — a package records the Qt and
+glibc SONAMEs it linked against, which is the glibc scar generalised.
+**Dependencies are computed, never written down**: `dpkg-shlibdeps` and
+`rpmbuild` read the ELF `NEEDED` entries, so the `.deb` came out asking
+for `libqt5widgets5 (>= 5.2.0~alpha1)`, `libqt5core5a (>= 5.15.1)`,
+`libx11-6` and the rest without anyone typing a package name. A
+hand-written list is wrong the first time Qt links differently and
+silently wrong after that.
+
+**The layout is not FHS-obvious, and the program is why.** Astrolog
+resolves its data from the directory of its own executable (item 7.2b
+measured what happens otherwise). So the payload goes to
+`/usr/lib/astrolog` and `/usr/bin` gets a wrapper that execs it — which
+is exactly what `make install` already does, reusing a tested mechanism
+rather than inventing one. Symlinks would probably work for the Qt build,
+whose `applicationDirPath()` resolves through `/proc/self/exe`, but
+"probably" is not a packaging decision.
+
+**Verified by installing into a clean image**, not by inspecting the file:
+`ubuntu:22.04` and `fedora:42` both install it, resolve Qt from their own
+repositories, run it from `/`, and get `Chir: 16Can03`. **Falsified both
+arms** — a package with the ephemeris removed reports
+`EPHEMERIS NOT FOUND … Chir: 0Ari00`, and one with no `Depends:` is
+caught by the unresolved-SONAME check instead.
+
+**One correction to the request that produced this.** Fedora has **no
+LTS**; each release is supported about thirteen months, so "the last two
+Fedora releases" is a list that moves every six months and lives in the
+workflow with a comment saying where to bump it. The genuinely
+long-supported RPM targets are the Enterprise Linux rebuilds at EL9/EL10,
+which is a separate decision because their Qt5 story is not Fedora's.
+**Measured**: Fedora 41, 42 and 43 all still ship `qt5-qtbase-devel`, so
+the RPM matches the Debian side on Qt5 rather than diverging to Qt6.
+**Status.** [x] done 2026-09-02
 
 ### 4.3 The Windows package
 **Goal.** The easy one. `Makefile.win` links fully static, so there are no
@@ -2172,7 +2210,7 @@ names it.
 
 | # | Question | Blocks |
 |---|---|---|
-| Q1 | AppImage, tarball, or `.deb` for the Linux artifact? **Now costed**: an AppImage carries ~70 MB of closure; a `.deb` is ~8 MB and lets apt resolve Qt5. Still a judgement call about audience. | 4.2 |
+| ~~Q1~~ | ~~AppImage, tarball, or `.deb`?~~ **Answered 2026-09-02: native packages, both formats.** `.deb` for the last two Ubuntu LTS (22.04, 24.04) and `.rpm` for the last two Fedora releases. 6.0 MB and 5.9 MB, against ~70 MB for an AppImage's Qt closure. Built on each target and verified by installing into a clean container. | closed |
 | Q2 | What version scheme does this fork own, so a tag can be checked against source? | 5.1, 5.2 |
 | ~~Q3~~ | ~~How does Phase 1 smoke-test a GUI-only `.exe`?~~ **Answered: build `WCLI` too.** One-line guard fix at `astrolog.h:81`, drop `-mwindows`, and a console Windows binary runs non-interactively under Wine. Verified 2026-09-01. | closed |
 | ~~Q4~~ | ~~Does anything read `astexo.csv` at runtime?~~ **Answered: yes, it ships.** `charts3.cpp:1792`, `-XUx`. | closed |

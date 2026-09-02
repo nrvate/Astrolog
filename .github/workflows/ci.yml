@@ -390,3 +390,110 @@ jobs:
         with:
           name: astrolog-windows
           path: out/package/astrolog-windows.tar.gz
+
+  # Q1 answered, 2026-09-02: native packages. An AppImage carries ~70 MB
+  # of Qt closure for a 2.5 MB program; a tarball leaves the user to
+  # install Qt, which is most of what a release is supposed to save them.
+  # A .deb and an .rpm let the distribution's own resolver do it.
+  #
+  # BUILT ON EACH TARGET, never cross-built. A package records the Qt and
+  # glibc SONAMEs it was linked against, and those differ per release --
+  # the same lesson as swisseph's glibc scar, in a different coat. So
+  # Ubuntu builds on Ubuntu runners and Fedora builds in Fedora
+  # containers, and dpkg-shlibdeps and rpmbuild derive the dependencies
+  # from the actual ELF headers rather than a hand-written list that is
+  # wrong the first time Qt links differently.
+  deb:
+    name: .deb on ${{ matrix.image }}
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # The last two Ubuntu LTS releases. Both are GitHub-hosted images.
+        image: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
+
+      - name: Build both binaries
+        run: make -j4 && make qt -j4
+
+      - name: Build the package
+        run: tools/package-deb.sh out/package
+
+      # The point is not that the file exists. It is that a machine which
+      # has never seen this source tree can install it, resolve Qt from
+      # its own repositories, and get right answers -- asserted on Chiron,
+      # never the Sun, which reads correctly with no ephemeris at all.
+      - name: Install it in a clean container and run it
+        run: |
+          tools/ci-verify-linux-package.sh out/package/astrolog_*.deb \
+            ${{ matrix.image == 'ubuntu-22.04' && 'ubuntu:22.04' || 'ubuntu:24.04' }}
+
+      - name: Keep the package
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: astrolog-deb-${{ matrix.image }}
+          path: out/package/*.deb
+
+  # Fedora has no LTS -- each release is supported about thirteen months --
+  # so "the last two" is a list that moves every six months. It lives here
+  # rather than in the script, and this comment is where to bump it. The
+  # genuinely long-supported RPM targets are the Enterprise Linux rebuilds
+  # at EL9/EL10, which is a separate decision because their Qt5 story is
+  # not Fedora's.
+  #
+  # Measured 2026-09-02: Fedora 41, 42 and 43 all still ship
+  # qt5-qtbase-devel, so the RPM matches the Debian side on Qt5 rather
+  # than diverging to Qt6.
+  rpm:
+    name: .rpm on fedora:${{ matrix.release }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [42, 43]
+    container: fedora:${{ matrix.release }}
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y -q gcc-c++ make git rpm-build qt5-qtbase-devel \
+            libX11-devel pkgconf-pkg-config
+
+      - name: Check out the tree
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Build both binaries
+        run: make -j4 && make qt -j4
+
+      # PKG_REV/PKG_SHA are passed in because a container checkout can
+      # leave git unable to read the repository, and the packager must not
+      # silently stamp "unknown" into a released artifact.
+      - name: Build the package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          PKG_REV=$(git log -1 --format=%cd --date=format:%Y%m%d) \
+          PKG_SHA=$(git rev-parse --short HEAD) \
+          tools/package-rpm.sh out/package
+
+      # This job already runs inside the distribution's container, so it
+      # cannot start a clean one; "local" installs the package right here
+      # instead. Weaker about Requires, since the build dependencies are
+      # present anyway, but it still exercises what is most likely to be
+      # wrong: whether the program finds its data from /usr/lib/astrolog
+      # rather than from the directory it was built in.
+      - name: Install it and run it from /
+        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
+
+      - name: Keep the package
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: astrolog-rpm-fedora${{ matrix.release }}
+          path: out/package/*.rpm
