@@ -2244,26 +2244,64 @@ compiler instead — the same diagnostic, spelled `-Wwrite-strings`:
 problem the experiment discovered; it is a suppression the tree has
 carried, and the experiment is the first thing to look behind it.
 
-Two things make it much smaller than 1,345 suggests. 1,293 of the sites —
-96% — are three data tables, and a table's worth of them is *one*
-declaration: `atlas.cpp`'s is `char *szNam;` in a 5-line struct. And 45
-are vendored Swiss Ephemeris, which this fork does not rewrite. The
-unknown is the ripple: every consumer that assigns from those tables into
-a `char *` needs `CONST` too, and that cost is not measurable without
-trying it.
+**Then it was done, and the estimate above was wrong.** This paragraph
+used to say the sweep was "its own item" and imply weeks. It is **45
+added lines**, and the reason is that 1,345 sites were five struct
+members and one function signature:
 
-For now the experiment carries `/Zc:strictStrings-` — one flag, after
-`/permissive-`, turning off exactly the sub-behaviour that collides and
-keeping the rest of the conformance Qt asked for. The point of the job is
-to find the *next* obstacle, not to spend a const-correctness sweep on the
-first one. That sweep is a real piece of work with a real payoff
-(upstream-shaped, both builds, no `QT` guard) but it is its own item.
+| declaration | where | sites it accounts for |
+|---|---|---|
+| `CN.szNam` | `atlas.cpp` | 317, across four country/state tables |
+| `FUN.szName` | `express.cpp` | 561, the AstroExpression registry |
+| `StrLook.sz`, `StrLookR.sz` | `astrolog.h` | the by-name lookup tables |
+| `AI.form`, `AI.name` | `astrolog.h` | the Arabic parts formula table |
+| `SzClone()`, `PrintAspectsToPoint()` | `extern.h` | both only read their argument |
 
-So the experiment is one nightly job — `qt-windows`, `cl.exe` with `-DQT
--DPC` and no `-DWIN`.
+The ripple everyone feared — "every consumer that assigns from those
+tables" — was **four errors in the whole tree**: four locals in
+`charts0.cpp` that walk `ai[].form`, and one array in `express.cpp` that
+feeds a trie builder already casting to `CONST`.
 
-**What a green result would not settle**, and this is the part worth
-writing down before enthusiasm meets it:
+What is left is **6 sites here and 11 in the vendored Swiss Ephemeris**,
+and they are a different problem rather than a remainder: pointers that
+genuinely hold a literal *and* a writable buffer at different times.
+`ciCore.nam`, `DisplayAtlasLookup`'s `pch1`, and `pes->pchDes` — which
+also stores an integer offset in the pointer across a save/restore. Those
+want a design decision, not a type change.
+
+So `-Wno-write-strings` stays in the six makefiles for the vendored half,
+and `/Zc:strictStrings-` stays in the MSVC job. What changed is that this
+tree's own code is conforming now, and `tools/warning_audit.py` holds it
+there by *not* passing `-Wno-write-strings` — which is exactly why that
+audit owns its flags separately from the makefiles. Baseline 381 → 633
+warnings, 95 → 114 sites, all of the growth being the 17 remaining sites
+becoming visible instead of hiding in 1,345.
+
+### And then it built
+
+2026-09-02, the `qt-windows` job:
+
+```
+built: 2040320 bytes
+```
+
+`astrolog-qt.exe` — MSVC, the open-source Qt6, and this port's own
+`qtdriver.cpp` and `qtdialog.cpp`, with `-DQT -DPC` and no `-DWIN`. One
+`cl.exe` invocation over the same source list, no qmake and no CMake,
+because there is no `Q_OBJECT` anywhere to need moc.
+
+**Every obstacle between the first attempt and that line was Qt's opinion
+of MSVC's defaults or the runner's layout** — the vcvars path (fixed with
+`vswhere`), `/Zc:__cplusplus`, `/permissive-`, `/Zc:strictStrings-`. Not
+one was a portability problem in this tree. The single genuine finding,
+the const-correctness one above, was a *suppression this tree already
+carried*, not something the port broke.
+
+The smoke test that follows the build is a separate story and was wrong
+twice; see the work log. The build itself is the result.
+
+**What the green result does not settle**, and this is the part worth
+keeping in front of the enthusiasm:
 
 - **`astrolog.rc` is a build input, not legacy.** `qtrcdlg.h` (1,903
   lines), `qtrcaccel.h` and `qtrccmd.h` are generated from it, and four
@@ -2275,6 +2313,15 @@ writing down before enthusiasm meets it:
 - **Windows users would get the Qt look, not native Win32.** That is a
   visible divergence from upstream, and this fork's spec is currently to
   match upstream.
+- **It has not been shown to *run*.** The job builds and links; the step
+  after it, which asks the binary to compute a chart, has not passed yet.
+  A link is not an execution, and this project has been caught by that
+  distinction before — which is why the job asserts Chiron rather than
+  the Sun, and why it asserts anything at all instead of stopping at
+  "built".
+- **No dialog has been opened on Windows.** Compiling `qtdialog.cpp` says
+  nothing about whether 25 dialogs lay out correctly under a Windows
+  style, and the suite has never run there.
 
 **What it would buy, and it is substantial**: the suite's 3,812
 assertions — 25 dialogs, 42 context menus, 264 shortcuts — would run
