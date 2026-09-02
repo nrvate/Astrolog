@@ -2201,6 +2201,47 @@ sidesteps Gatekeeper entirely without a certificate or a secret.
 
 ---
 
+## One Qt backend for all three platforms?
+
+Raised by the maintainer on 2026-09-02: if Qt runs on Windows and macOS
+as well as Linux, could this tree carry **one** GUI backend instead of
+three — `WIN` (`wdriver.cpp`/`wdialog.cpp`), `QT`, and `X11`? "Parity
+with Windows" would then stop being something maintained by hand, because
+both platforms would be running the same code.
+
+**The survey, done before the experiment rather than after, and it is
+shorter than expected.**
+
+| | |
+|---|---|
+| POSIX dependencies in the Qt backend | **none left.** Three `mkstemp`/`unlink` sites became `QTemporaryFile`; `io.cpp`'s `dirent` use already had an `#ifdef PC` path to `<io.h>` |
+| `Q_OBJECT` / `moc` | **none, anywhere.** So no qmake, no CMake, no build system — `cl.exe` over the same source list |
+| Linux-specific runtime behaviour | **only dark-mode detection**, and under Qt 6.5+ the code already calls `QStyleHints::colorScheme()`, which is native on Windows and macOS. The gsettings/gdbus/kdeglobals fallbacks simply would not fire |
+| Licence | `astrolog.cpp`: GPL "version 2 … or (at your option) any later version", so GPLv3 is available and LGPLv3 Qt is compatible. MSVC plus the open-source Qt is also Qt's own normal combination |
+| macOS | measured 2026-09-02: Homebrew pours Qt6 in 59 s and the port **compiles in 61 s** |
+
+So the experiment is one nightly job — `qt-windows`, `cl.exe` with `-DQT
+-DPC` and no `-DWIN`.
+
+**What a green result would not settle**, and this is the part worth
+writing down before enthusiasm meets it:
+
+- **`astrolog.rc` is a build input, not legacy.** `qtrcdlg.h` (1,903
+  lines), `qtrcaccel.h` and `qtrccmd.h` are generated from it, and four
+  of the nine audits check the port against it. The Qt dialogs are
+  *derived from* the Windows resource script.
+- **`wdriver.cpp`/`wdialog.cpp` are the oracle.** Every divergence in
+  this fork has been judged against them, and `tools/win-differential.sh`
+  and `tools/win-tests.sh` both measure against that build.
+- **Windows users would get the Qt look, not native Win32.** That is a
+  visible divergence from upstream, and this fork's spec is currently to
+  match upstream.
+
+**What it would buy, and it is substantial**: the suite's 3,812
+assertions — 25 dialogs, 42 context menus, 264 shortcuts — would run
+against the actual Windows UI, where today `tools/win-tests.sh` has two
+scenarios.
+
 ## Standing hazards
 
 Collected so they do not have to be rediscovered inside a workflow, where
