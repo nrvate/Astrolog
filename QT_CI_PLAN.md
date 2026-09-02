@@ -1162,7 +1162,43 @@ qtbase5-dev, libx11-dev and mingw all present in one job.
 breakage, and item 143's sweep left GCC naming every buffer still too
 small for its worst case — two of which were live overflows (items
 146–147).
-**Status.** [ ]
+**Done 2026-09-02, in `.github/workflows/nightly.yml`.** Three things the
+wiring turned up, in descending order of consequence:
+
+- **It cannot run on `ubuntu-latest`.** `tools/warnings.txt` is a ledger
+  of what **g++ 11 and mingw g++ 10** say; 24.04 ships g++ 13, which says
+  different things about different lines in different words. The audit
+  would report hundreds of differences, none of them regressions, and the
+  one signal it exists to give would be drowned. The job pins
+  `ubuntu-22.04` and `tools/ci-assert-toolchain.sh` says so out loud
+  rather than leaving the next reader to work backwards from 300 mystery
+  diffs. **That guard found a bug in itself on its first run**: mingw's
+  `-dumpversion` answers `10-win32`, so splitting on a dot gave
+  `10-win32` and it failed against the very toolchain it was written for.
+- **The Qt6 leg cannot run in CI at all**, and correctly skips. It needs
+  `QT6_PKGCONFIG` to point at a Qt6, and installing `qt6-base-dev` on the
+  runner would put Qt6 on pkg-config's default path — where
+  `Makefile.qt`'s `pkg-config --exists Qt6Widgets` would find it and
+  build the *qt* and *qt-test* legs against Qt6 without saying so.
+  `warnings-qt6.txt` also describes Qt 6.8.3 specifically. So the job does
+  not install Qt6 and the leg reports `qt6: skipped`; `ci.yml`'s `qt6` job
+  still proves that build compiles and passes.
+- **It is not six minutes.** Measured 2026-09-02 on this box at `-j4`:
+  **1 m 09 s** for all five builds. `CLAUDE.md` and this document both say
+  "~6 minutes". At seventy seconds the only thing keeping it out of the
+  fast lane is that it needs three toolchains in one job — worth
+  revisiting.
+
+**And it has a gap this branch created.** `Makefile.wcli` is a sixth build
+and the audit does not know about it. Measured with `-Wall`: **82
+warnings against the `win` build's 89** — overlapping heavily, but not
+identical, because `-DWCLI` compiles `xscreen.cpp`'s WCLI block that
+`-DWIN` does not. Smaller than the category it came from (CI does compile
+it, so it cannot rot into not building) but still a build outside the
+warning net. Adding it means editing `warning_audit.py` and regenerating
+the baseline; left open deliberately rather than done in a hurry beside
+another session's edits to that same file.
+**Status.** [x] wired 2026-09-02; the `wcli` leg is open
 
 ### 6.2 `tools/asan-sweep.sh`
 **Do.** Both surfaces, ~750 invocations.
@@ -1179,7 +1215,22 @@ settled — no extra build is needed**, because Phase 7's matrices already
 run against a normal `-O` binary where fortify is live, and item 3.4
 asserts that stays true. Keep this note anyway: the sweep's own output
 will never mention the gap.
-**Status.** [ ]
+**Done 2026-09-02, and run in full on the bundled ephemeris rather than
+assumed:**
+
+| half | invocations | reported | wall |
+|---|---|---|---|
+| `switches` | 529 | **0** | 3 m 57 s |
+| `graphics` | 229 | **0** | 1 m 03 s |
+
+**The ephemeris path must be absolute**, and this is the same trap as
+7.2b from the other end. `asan-sweep.sh` builds its binary at
+`/tmp/astrolog-asan-sweep` — deliberately, because the binary needs a
+*short* path — and Astrolog resolves a relative `-Yi1` against the
+executable's own directory. So `ASAN_SWEEP_CFG="-Yi1 ephem"` there means
+`/tmp/ephem`, which does not exist: the sweep would run, report zero, and
+leave every ephemeris code path unexercised without a word.
+**Status.** [x] done 2026-09-02
 
 ### 6.3 `tools/win-tests.sh` under Wine
 **Do.** Xvfb + metacity + xdotool + Wine on `ubuntu-latest`.

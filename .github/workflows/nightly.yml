@@ -1,0 +1,117 @@
+# The slow lane -- QT_CI_PLAN.md Phase 6.
+#
+# Everything here is documented in CLAUDE.md as "pre-release rather than
+# pre-commit". "Pre-release" is a promise a human keeps by remembering;
+# this is where it becomes mechanical. Both jobs have a record: the
+# warning audit's first run found that Makefile.win had not compiled for
+# 62 commits, and the first run of each half of the sanitizer sweep found
+# real out-of-bounds bugs in code that had been exercised dozens of times
+# without a sanitizer behind it -- seven between them, one crashing the
+# release build.
+#
+# A HAZARD THAT APPLIES TO THIS FILE AND NOT TO ci.yml: GitHub disables
+# scheduled workflows in a repository with no activity for 60 days. The
+# whole argument for a nightly is that it keeps a promise by existing, and
+# on a fork that goes quiet for two months it stops existing, silently,
+# leaving a green history behind it. workflow_dispatch is on both jobs so
+# there is always a manual path, and "the nightly has not run lately" is a
+# thing somebody has to notice.
+#
+# ubuntu-22.04, NOT ubuntu-latest, and the reason is specific to the
+# warning audit rather than the glibc one that governs packaging:
+# tools/warnings.txt is a ledger of what g++ 11 and mingw g++ 10 say. A
+# different major version says different things about different lines, in
+# different words, and the audit would report hundreds of differences
+# that are not regressions -- drowning the one signal it exists to give.
+# tools/ci-assert-toolchain.sh says so out loud rather than leaving the
+# next person to work backwards from 300 mystery diffs.
+
+name: Nightly
+
+on:
+  schedule:
+    # 03:17 UTC. Not on the hour: every scheduled workflow on the platform
+    # that asks for "3am" lands on :00 together.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # 6.1. All four builds with -Wall, every diagnostic diffed against the
+  # committed baseline. ~6 minutes, which is why it is not pre-commit.
+  #
+  # In CI this audit is READ-ONLY. It flags removed warnings as well as
+  # new ones, deliberately, so a legitimate fix turns this job red until
+  # tools/warnings.txt is regenerated and committed in the same change.
+  # That is correct behaviour with a workflow consequence: the baseline is
+  # part of the diff, never something CI maintains.
+  warnings:
+    name: Compiler warnings vs the baseline
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install every toolchain the audit compiles with
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
+            g++-mingw-w64-x86-64
+
+      - name: The baseline describes these compilers
+        run: tools/ci-assert-toolchain.sh
+
+      - name: All four builds, every warning diffed
+        run: tools/warning_audit.py
+
+  # 6.2. Both surfaces, ~750 invocations.
+  #
+  # Given its own job on purpose. asan-sweep.sh builds its own console
+  # binary with -fsanitize=address -DQTTEST into this same directory and
+  # runs "make clean" on both sides of that build, so it DELETES
+  # ./astrolog while it runs -- anything else on the runner that depends
+  # on that binary would fail confusingly. Four of its arrangements are
+  # load-bearing, including that the binary needs a short path while the
+  # output file wants a long one; read its header before changing it.
+  #
+  # KNOWN BLIND SPOT, and it is not a defect of the sweep: that build is
+  # -O0, where _FORTIFY_SOURCE is inactive -- 1 *_chk import against 10 in
+  # an ordinary build. Work log item 142 was exactly that class and
+  # survived a full sweep and 17 gdb runs for the reason. Nothing in this
+  # job's own output will ever mention the gap; ci.yml's fortify assertion
+  # is what covers it.
+  sanitizer:
+    name: AddressSanitizer sweep
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install the console build's dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev
+
+      # /swe will never exist here, so the sweep runs against the bundled
+      # ephemeris. The switch half never needed it; the graphics half is
+      # the one that used to be claimed impossible without it, and that
+      # claim was retracted on 2026-09-02 after measurement -- 224 renders,
+      # 0 missing, on ephem/.
+      #
+      # The path must be ABSOLUTE. asan-sweep.sh builds its binary at
+      # /tmp/astrolog-asan-sweep -- deliberately, since the binary needs a
+      # short path -- and Astrolog resolves a relative -Yi1 against the
+      # executable's own directory, so "-Yi1 ephem" there means /tmp/ephem,
+      # which does not exist. The sweep would still run and still find
+      # memory errors, but every body would fall back to Moshier and the
+      # ephemeris code paths would go unexercised, silently. Same trap as
+      # item 7.2b's baseline binary, from the other end.
+      - name: Both surfaces
+        env:
+          ASAN_SWEEP_CFG: -Yi1 ${{ github.workspace }}/ephem
+          GRAPHICS_MATRIX_CFG: -Yi1 ${{ github.workspace }}/ephem
+        run: tools/asan-sweep.sh
