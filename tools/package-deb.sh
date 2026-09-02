@@ -20,6 +20,13 @@ set -eu
 out=${1:-out/package}
 cd "$(dirname "$0")/.."
 root=$(pwd)
+# Absolute, because dpkg-shlibdeps is run from a scratch directory below
+# and a relative path stops resolving the moment we cd. This is exactly
+# how the first CI run failed while the same script passed here: the
+# local invocation happened to pass an absolute outdir and the workflow
+# passed "out/package".
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
 
 command -v dpkg-deb >/dev/null || { echo "need dpkg-deb (dpkg-dev)"; exit 1; }
 command -v dpkg-shlibdeps >/dev/null || { echo "need dpkg-shlibdeps (dpkg-dev)"; exit 1; }
@@ -49,10 +56,17 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/debian"
 : > "$tmp/debian/control"
+# Its stderr is kept and printed on failure. The first draft sent it to
+# /dev/null and the first CI failure said only "dpkg-shlibdeps failed",
+# which is the same self-inflicted blindness as discarding Wine's stderr
+# in the Windows differential. Warnings on the happy path are expected --
+# it says "binaries to analyze should already be installed in their
+# package's directory", which is true and harmless here.
 ( cd "$tmp" && dpkg-shlibdeps -O --ignore-missing-info \
     "$stage/usr/lib/astrolog/astrolog" \
-    "$stage/usr/lib/astrolog/astrolog-qt" 2>/dev/null ) > "$tmp/deps" || {
-  echo "dpkg-shlibdeps failed -- refusing to guess dependencies"; exit 1; }
+    "$stage/usr/lib/astrolog/astrolog-qt" 2>"$tmp/err" ) > "$tmp/deps" || {
+  echo "dpkg-shlibdeps failed -- refusing to guess dependencies:"
+  sed 's/^/  /' "$tmp/err"; exit 1; }
 depends=$(sed -n 's/^shlibs:Depends=//p' "$tmp/deps")
 [ -n "$depends" ] || { echo "dpkg-shlibdeps produced no dependencies -- that"
   echo "cannot be right for a dynamically linked Qt program; refusing."; exit 1; }
