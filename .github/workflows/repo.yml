@@ -19,9 +19,22 @@
 
 name: Repository
 
+# workflow_run, NOT "release: published". The release is published by
+# release.yml using the repository's own GITHUB_TOKEN, and GitHub does not
+# start a workflow run from an event that token created -- a deliberate
+# recursion guard. So a "release: published" trigger here would never
+# fire, and the repository would silently stay a release behind until
+# somebody dispatched it by hand. workflow_run is not subject to that,
+# because it keys off the workflow finishing rather than off the event
+# the token raised.
+#
+# The "success" condition matters: release.yml failing means there is
+# nothing new to publish, and rebuilding the repository from a partial
+# release would replace a working one with a worse one.
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -36,6 +49,11 @@ jobs:
     name: Build the repositories
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # A dispatch has no workflow_run context, so the condition has to
+    # allow it through as well as a successful release.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
