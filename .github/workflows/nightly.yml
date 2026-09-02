@@ -329,3 +329,81 @@ jobs:
             echo "== stopped; on Linux this run takes 47 seconds and the whole"
             echo "== suite passes 3792 assertions."
             exit "$rc"; }
+
+  # THE EXPERIMENT: does this port build as a Qt application on Windows,
+  # with Microsoft's compiler and the open-source Qt?
+  #
+  # If it does, the three backends this tree carries -- WIN
+  # (wdriver.cpp/wdialog.cpp), QT, and X11 -- could become one, and the
+  # fork's stated spec of "parity with Windows" would stop needing to be
+  # maintained by hand because both platforms would be running the same
+  # code.
+  #
+  # Two facts make it plausible rather than a project. The Qt backend has
+  # no POSIX dependency left: its three mkstemp/unlink sites became
+  # QTemporaryFile on 2026-09-02, and io.cpp's dirent use already had an
+  # "#ifdef PC" path. And the port uses NO Q_OBJECT anywhere, so there is
+  # no moc step -- which means no qmake, no CMake, no build system at all,
+  # just cl.exe over the same source list every other build uses.
+  #
+  # WHAT IT DOES NOT DECIDE. astrolog.rc is a build INPUT, not legacy:
+  # qtrcdlg.h, qtrcaccel.h and qtrccmd.h are generated from it and four
+  # audits check the port against it. And wdriver.cpp/wdialog.cpp are the
+  # behavioural oracle every divergence has been judged against. A green
+  # result here says "the code compiles as Qt on Windows", which is the
+  # first question and not the last one.
+  #
+  # Exploratory, so continue-on-error and nightly: it cannot be falsified
+  # from a machine with no MSVC, exactly like the macOS job.
+  qt-windows:
+    name: Qt on Windows (MSVC) -- experiment
+    runs-on: windows-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # aqtinstall rather than a third-party action: one pip package, no
+      # new SHA to pin, and it is the tool those actions wrap anyway.
+      - name: Install Qt for MSVC
+        shell: pwsh
+        run: |
+          pip install aqtinstall
+          aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O ${{ github.workspace }}\Qt
+          echo "QTDIR=${{ github.workspace }}\Qt\6.8.3\msvc2022_64" >> $env:GITHUB_ENV
+
+      # No moc, no build system: the same source list Makefile.srcs gives
+      # every other build, handed to cl.exe through a response file.
+      # tools/qt-srcs.py reads that list rather than keeping a copy, so a
+      # new source file does not have to be remembered in a sixth place --
+      # verified on Linux to match the real Qt build's object list exactly.
+      #
+      # -DQT selects the Qt backend. -DPC is what astrolog.h wants on
+      # Windows for <io.h> and backslash path separators, and is
+      # independent of -DWIN -- which is the whole point of the
+      # experiment: Windows without the Windows backend.
+      - name: Compile with cl.exe
+        shell: cmd
+        run: |
+          python tools\qt-srcs.py > srcs.txt || exit /b 1
+          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 call "%ProgramFiles%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+          cl /nologo /std:c++17 /EHsc /MD /O2 /W1 ^
+             /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
+             /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
+             /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
+             /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" ^
+             @srcs.txt ^
+             /Fe:astrolog-qt.exe ^
+             /link /LIBPATH:"%QTDIR%\lib" Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib ^
+             Qt6Network.lib Qt6PrintSupport.lib user32.lib gdi32.lib shell32.lib ^
+             advapi32.lib ole32.lib
+
+      - name: Did it produce a binary?
+        shell: pwsh
+        run: |
+          if (Test-Path astrolog-qt.exe) {
+            "Qt-on-Windows builds. Size: $((Get-Item astrolog-qt.exe).Length) bytes"
+          } else {
+            "No binary produced."; exit 1
+          }
