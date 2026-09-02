@@ -499,6 +499,18 @@ jobs:
       # it is a no-op, which is why this is one step rather than two.
       - name: Install build dependencies
         run: |
+          # ip_resolve=4 before anything else. EL9's dependency install
+          # took over seven minutes on a runner and 42 seconds locally,
+          # on the same image, with the same packages -- while Fedora and
+          # EL10 finished in ninety seconds. That shape is dnf trying
+          # mirrors over IPv6 and waiting out a timeout on each: the
+          # runner advertises IPv6 that does not route to those hosts,
+          # and a laptop does not. Forcing IPv4 is the standard cure and
+          # costs nothing where IPv6 works.
+          echo 'ip_resolve=4' >> /etc/dnf/dnf.conf
+          # Fewer mirrors tried, and the ones tried are not ranked by a
+          # probe that also has to time out.
+          echo 'max_parallel_downloads=8' >> /etc/dnf/dnf.conf
           dnf install -y -q dnf-plugins-core || true
           (dnf config-manager --set-enabled crb || \
            dnf config-manager --enable crb || true) 2>/dev/null
