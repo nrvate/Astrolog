@@ -468,6 +468,13 @@ The things that have actually caught bugs in this project:
   the one line you broke — twice in one session (general.cpp, then 204
   conversions in charts1.cpp, caught only because the totals stopped
   reconciling). Reverse-patch the exact string instead.
+- **`git add <file>` stages the file, not your change.** Two sessions
+  share this tree. Staging a file wholesale committed another session's
+  in-progress `&& fFalse` sabotage into `qttest.cpp`, silently disabling
+  work log item 165's stale-`FILE` fix; nothing failed, because that abort
+  was never deterministic. `git diff` what you are about to stage, and
+  `git log -S` the suspect string when a line you did not write turns up
+  in your own commit.
 - **Prefer generating from `astrolog.rc` over transcribing by hand.** The
   dialogs, the 42 context menus and the menu mnemonics were all derived
   from it. Hand transcription introduced errors every time it was used.
