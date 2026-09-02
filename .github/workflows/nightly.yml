@@ -57,6 +57,13 @@ jobs:
 
       - name: Install every toolchain the audit compiles with
         run: |
+          # Force IPv4. The el9 dnf install sat for seven minutes waiting
+          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
+          # Ubuntu runner did the same for fourteen. Same disease, other
+          # package manager: the runner advertises IPv6 that does not
+          # route to the mirrors, and every attempt waits out its timeout.
+          # Costs nothing where IPv6 works.
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
           sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
             g++-mingw-w64-x86-64
@@ -93,6 +100,13 @@ jobs:
 
       - name: Install the console build's dependencies
         run: |
+          # Force IPv4. The el9 dnf install sat for seven minutes waiting
+          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
+          # Ubuntu runner did the same for fourteen. Same disease, other
+          # package manager: the runner advertises IPv6 that does not
+          # route to the mirrors, and every attempt waits out its timeout.
+          # Costs nothing where IPv6 works.
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
           sudo apt-get install -y libx11-dev
 
@@ -146,6 +160,13 @@ jobs:
       - name: Install the cross toolchain and Wine
         run: |
           sudo dpkg --add-architecture i386
+          # Force IPv4. The el9 dnf install sat for seven minutes waiting
+          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
+          # Ubuntu runner did the same for fourteen. Same disease, other
+          # package manager: the runner advertises IPv6 that does not
+          # route to the mirrors, and every attempt waits out its timeout.
+          # Costs nothing where IPv6 works.
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
           sudo apt-get install -y g++-mingw-w64-x86-64 libx11-dev \
             wine wine64 xvfb metacity xdotool imagemagick
@@ -206,6 +227,13 @@ jobs:
 
       - name: Install X11 headers
         run: |
+          # Force IPv4. The el9 dnf install sat for seven minutes waiting
+          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
+          # Ubuntu runner did the same for fourteen. Same disease, other
+          # package manager: the runner advertises IPv6 that does not
+          # route to the mirrors, and every attempt waits out its timeout.
+          # Costs nothing where IPv6 works.
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
           sudo apt-get install -y libx11-dev
 

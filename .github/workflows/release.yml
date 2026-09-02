@@ -65,6 +65,13 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          # Force IPv4. The el9 dnf install sat for seven minutes waiting
+          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
+          # Ubuntu runner did the same for fourteen. Same disease, other
+          # package manager: the runner advertises IPv6 that does not
+          # route to the mirrors, and every attempt waits out its timeout.
+          # Costs nothing where IPv6 works.
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
           sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
 
@@ -152,6 +159,13 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: |
+          # Force IPv4. The el9 dnf install sat for seven minutes waiting
+          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
+          # Ubuntu runner did the same for fourteen. Same disease, other
+          # package manager: the runner advertises IPv6 that does not
+          # route to the mirrors, and every attempt waits out its timeout.
+          # Costs nothing where IPv6 works.
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
           sudo apt-get install -y g++-mingw-w64-x86-64
       - run: make -f Makefile.win -j4
