@@ -2220,7 +2220,44 @@ shorter than expected.**
 | Licence | `astrolog.cpp`: GPL "version 2 … or (at your option) any later version", so GPLv3 is available and LGPLv3 Qt is compatible. MSVC plus the open-source Qt is also Qt's own normal combination |
 | macOS | measured 2026-09-02: Homebrew pours Qt6 in 59 s and the port **compiles in 61 s** |
 | `-DPC`'s switch character | `chSwitch` becomes `/`, but only for **writing**: `io.cpp` uses it to emit settings files and nothing parses with it. Measured — the Linux build accepts `/qa` and casts the chart. So a Windows Qt build would write `/qb` where Linux writes `-qb`, and both read either. No interoperability problem, which is the question that mattered |
-| Astrolog's own sources under MSVC | **compiled clean** as far as `qtdialog.cpp` before Qt's own header check stopped the run |
+| Astrolog's own sources under MSVC | **not clean once MSVC is made conforming** — see below. Clean in MSVC's default mode |
+
+**The one real finding so far, measured 2026-09-02.** Qt's headers demand
+`/Zc:__cplusplus` and `/permissive-`, and both messages name the flag, so
+each was one line. But `/permissive-` implies `/Zc:strictStrings`, and
+under that a string literal is `const char[N]` and will not initialise a
+`char *`. MSVC stopped at its 100-errors-per-file cap in three files.
+
+The true scope is not MSVC's to report, so it was measured with the local
+compiler instead — the same diagnostic, spelled `-Wwrite-strings`:
+
+| | sites |
+|---|---|
+| `express.cpp` | 561 |
+| `data.cpp` | 415 |
+| `atlas.cpp` | 317 |
+| Swiss Ephemeris (`sweph`, `swephlib`, `swemplan`, `swedate`, 4 headers) | 45 |
+| everything else (`io`, `calc`, `charts0/1/3`, `astrolog.h`) | 7 |
+| **total, console build alone** | **1,345** |
+
+**All six makefiles pass `-Wno-write-strings`.** This is not a latent
+problem the experiment discovered; it is a suppression the tree has
+carried, and the experiment is the first thing to look behind it.
+
+Two things make it much smaller than 1,345 suggests. 1,293 of the sites —
+96% — are three data tables, and a table's worth of them is *one*
+declaration: `atlas.cpp`'s is `char *szNam;` in a 5-line struct. And 45
+are vendored Swiss Ephemeris, which this fork does not rewrite. The
+unknown is the ripple: every consumer that assigns from those tables into
+a `char *` needs `CONST` too, and that cost is not measurable without
+trying it.
+
+For now the experiment carries `/Zc:strictStrings-` — one flag, after
+`/permissive-`, turning off exactly the sub-behaviour that collides and
+keeping the rest of the conformance Qt asked for. The point of the job is
+to find the *next* obstacle, not to spend a const-correctness sweep on the
+first one. That sweep is a real piece of work with a real payoff
+(upstream-shaped, both builds, no `QT` guard) but it is its own item.
 
 So the experiment is one nightly job — `qt-windows`, `cl.exe` with `-DQT
 -DPC` and no `-DWIN`.

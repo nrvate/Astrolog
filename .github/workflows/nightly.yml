@@ -422,7 +422,13 @@ jobs:
           rem standards-conforming and Qt's headers check. Both messages
           rem name the flag, and neither is a complaint about this tree --
           rem Astrolog's own sources have not produced a diagnostic yet.
-          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /EHsc /MD /O2 /W1 ^
+          rem /Zc:strictStrings- goes AFTER /permissive-, which implies the
+          rem positive form. The tree initialises char * from string
+          rem literals in 1,345 places -- three data tables are 96% of it --
+          rem and all six makefiles already pass -Wno-write-strings for the
+          rem same reason. Deferred deliberately: this job exists to find the
+          rem NEXT obstacle, not to fund a const sweep. See QT_CI_PLAN.md.
+          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W1 ^
              /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
              /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
