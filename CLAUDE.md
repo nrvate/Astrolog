@@ -114,7 +114,11 @@ make qt6 -j4                     # ./astrolog-qt6, against a hand-installed
 make qt6-test -j4                # Qt6; QT6_PKGCONFIG says where it is.
                                  # Not in "make all" -- most machines have
                                  # no Qt6, and there the guard below would
-                                 # stop the build asking for one
+                                 # stop the build asking for one.
+                                 # These exist only because this machine's
+                                 # Qt6 is off pkg-config's path: "make qt"
+                                 # already picks Qt6 wherever pkg-config
+                                 # can see it
 QTTESTBIN=./astrolog-qt6-test ./run-qt-tests.sh  # the suite against Qt6:
                                  # 3561/0 there too, on 2026-09-01
 make install                     # two wrappers on PATH, a menu entry and
