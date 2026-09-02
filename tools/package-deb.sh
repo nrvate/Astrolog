@@ -33,16 +33,24 @@ command -v dpkg-shlibdeps >/dev/null || { echo "need dpkg-shlibdeps (dpkg-dev)";
 
 ver=$(sed -n 's/.*#define szVersionCore "\([^"]*\)".*/\1/p' astrolog.h | head -1)
 [ -n "$ver" ] || { echo "cannot read szVersionCore from astrolog.h"; exit 1; }
-# Q2 is still open: this fork owns no version of its own, so the package
-# version is upstream's core version plus a date-stamped fork suffix.
-# When Q2 lands, this is the one line to change.
+# Q2 answered: astrolog.h owns szVersionFork, so a release is 8.00+qt.N
+# and dpkg orders it after a bare 8.00 ("-" would be read as a Debian
+# revision separator, which is why it is "+"). Untagged builds keep the
+# date and commit after it, so a package built from a branch can never be
+# mistaken for the release of the same number.
 # PKG_REV and PKG_SHA can be supplied by the caller, because this runs
 # inside a container in CI and a git worktree's ".git" is a FILE pointing
 # at a path outside the mount -- git there fails with "not a git
 # repository: (null)". The workflow passes them in from the checkout.
 rev=${PKG_REV:-$(git log -1 --format=%cd --date=format:%Y%m%d 2>/dev/null || date +%Y%m%d)}
 sha=${PKG_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}
-pkgver="$ver+qt$rev.$sha"
+fork=$(sed -n 's/^#define szVersionFork "\([^"]*\)".*/\1/p' astrolog.h | head -1)
+[ -n "$fork" ] || { echo "cannot read szVersionFork from astrolog.h"; exit 1; }
+if [ "${PKG_RELEASE:-}" = 1 ]; then
+  pkgver="$ver+qt.$fork"
+else
+  pkgver="$ver+qt.$fork~$rev.$sha"
+fi
 arch=$(dpkg --print-architecture)
 
 stage="$out/deb-stage"

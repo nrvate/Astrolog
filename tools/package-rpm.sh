@@ -31,16 +31,27 @@ command -v rpmbuild >/dev/null || {
 
 ver=$(sed -n 's/.*#define szVersionCore "\([^"]*\)".*/\1/p' astrolog.h | head -1)
 [ -n "$ver" ] || { echo "cannot read szVersionCore from astrolog.h"; exit 1; }
-# Q2 is still open, so the release field carries the fork's identity:
-# upstream's version, then a date and commit. RPM forbids "-" in either
-# field, which is why this is not the Debian string.
+# Q2 answered: astrolog.h owns szVersionFork, so Release is qt.N. RPM
+# forbids "-" in Version and Release, which is why this is not the Debian
+# string. Untagged builds keep the date and commit after it, so a package
+# built from a branch cannot be mistaken for the release of that number.
 # PKG_REV and PKG_SHA can be supplied by the caller, because this runs
 # inside a container in CI and a git worktree's ".git" is a FILE pointing
 # at a path outside the mount -- git there fails with "not a git
 # repository: (null)". The workflow passes them in from the checkout.
 rev=${PKG_REV:-$(git log -1 --format=%cd --date=format:%Y%m%d 2>/dev/null || date +%Y%m%d)}
 sha=${PKG_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}
-rel="qt$rev.$sha"
+fork=$(sed -n 's/^#define szVersionFork "\([^"]*\)".*/\1/p' astrolog.h | head -1)
+[ -n "$fork" ] || { echo "cannot read szVersionFork from astrolog.h"; exit 1; }
+if [ "${PKG_RELEASE:-}" = 1 ]; then
+  rel="qt.$fork"
+else
+  # "~" sorts BEFORE, in rpm as in dpkg. Without it a branch build reads
+  # as newer than the release of the same number and dnf would prefer it.
+  # Measured: rpm.vercmp("8.00-qt.1.20260902.abc", "8.00-qt.1") is 1, and
+  # with the tilde it is -1.
+  rel="qt.$fork~$rev.$sha"
+fi
 
 top=$(mktemp -d)
 trap 'rm -rf "$top"' EXIT

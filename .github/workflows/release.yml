@@ -1,0 +1,167 @@
+# Publish a release when a v* tag is pushed -- QT_CI_PLAN.md Phase 5.
+#
+# GROUND RULE 3: one build definition, used by both CI and release. The
+# definition is tools/package-*.sh, which ci.yml runs on every push and
+# this runs again on a tag. A release cannot ship an artifact built by a
+# recipe CI never exercised, which is the failure swisseph's package.yml
+# exists to prevent.
+#
+# THE TAG IS CHECKED AGAINST THE SOURCE. astrolog.h owns szVersionFork; a
+# tag that disagrees with it fails the job before anything is published.
+# If they disagree, every bug report afterwards cites the wrong version
+# and nothing else in the pipeline would ever notice.
+#
+# cancel-in-progress is FALSE here, unlike ci.yml. A half-published
+# release is worse than a slow one.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (must already exist, e.g. v8.00-qt.1)'
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Cheap, and it runs alone first so a mismatched tag costs seconds
+  # rather than four package builds.
+  version:
+    name: The tag matches the source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: tools/ci-assert-version.sh "${{ github.event.inputs.tag || github.ref_name }}"
+
+  linux:
+    name: ${{ matrix.kind }} on ${{ matrix.target }}
+    needs: version
+    runs-on: ${{ matrix.runs-on }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {kind: deb, target: ubuntu-22.04, runs-on: ubuntu-22.04, container: ''}
+          - {kind: deb, target: ubuntu-24.04, runs-on: ubuntu-24.04, container: ''}
+          - {kind: rpm, target: fedora-42,    runs-on: ubuntu-latest, container: 'fedora:42'}
+          - {kind: rpm, target: fedora-43,    runs-on: ubuntu-latest, container: 'fedora:43'}
+          - {kind: rpm, target: el9,          runs-on: ubuntu-latest, container: 'rockylinux:9'}
+          - {kind: rpm, target: el10,         runs-on: ubuntu-latest, container: 'quay.io/rockylinux/rockylinux:10'}
+    steps:
+      - name: Install build dependencies (deb)
+        if: matrix.kind == 'deb'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
+
+      # CRB is where Enterprise Linux keeps qt5-qtbase-devel; on Fedora
+      # the repo does not exist and enabling it is a no-op.
+      - name: Install build dependencies (rpm)
+        if: matrix.kind == 'rpm'
+        run: |
+          dnf install -y -q dnf-plugins-core || true
+          (dnf config-manager --set-enabled crb || \
+           dnf config-manager --enable crb || true) 2>/dev/null
+          dnf install -y -q gcc-c++ make git rpm-build qt5-qtbase-devel \
+            libX11-devel pkgconf-pkg-config
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Build
+        run: make -j4 && make qt -j4
+
+      # PKG_RELEASE=1 drops the "~date.sha" suffix, so this is the only
+      # place that produces a bare 8.00+qt.N. A branch build sorts below
+      # it in both packagers, verified with dpkg --compare-versions and
+      # rpm.vercmp.
+      - name: Package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
+          PKG_RELEASE=1 tools/package-${{ matrix.kind }}.sh out/package
+
+      - name: Prove it installs and runs
+        run: |
+          if [ "${{ matrix.kind }}" = rpm ]; then
+            tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
+          else
+            tools/ci-verify-linux-package.sh out/package/astrolog_*.deb \
+              ${{ matrix.target == 'ubuntu-22.04' && 'ubuntu:22.04' || 'ubuntu:24.04' }}
+          fi
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: astrolog-${{ matrix.kind }}-${{ matrix.target }}
+          path: out/package/*.${{ matrix.kind }}
+
+  windows:
+    name: Windows package
+    needs: version
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64
+      - run: make -f Makefile.win -j4
+      - run: tools/package.sh windows out/package
+      - run: tools/ci-verify-package.sh out/package/astrolog-windows
+      # A .zip carries no unix modes and Windows wants none, so
+      # ci-assert-archive-mode.sh does not apply here -- it guards the
+      # tar-based Linux artifacts. Saying so beats a check that is
+      # "|| true"-d into meaninglessness.
+      - run: ( cd out/package && zip -qr astrolog-windows.zip astrolog-windows )
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: astrolog-windows
+          path: out/package/astrolog-windows.zip
+
+  publish:
+    name: Publish the release
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          path: dist
+          merge-multiple: true
+
+      # A silently-empty package job must not become a release with no
+      # binaries in it. Seven artifacts: two .deb, four .rpm, one .zip.
+      # The number is exact rather than a floor, for the same reason every
+      # other count in this repository is.
+      - name: There are seven artifacts, and a SHA256SUMS over them
+        run: |
+          ls -l dist
+          n=$(find dist -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.zip' \) | wc -l)
+          [ "$n" -eq 7 ] || { echo "expected 7 artifacts, found $n"; exit 1; }
+          ( cd dist && find . -type f ! -name SHA256SUMS -print0 | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS >/dev/null )
+          lines=$(wc -l <dist/SHA256SUMS)
+          [ "$lines" -eq "$n" ] || { echo "SHA256SUMS covers $lines of $n"; exit 1; }
+          cat dist/SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --title "Astrolog $TAG" --generate-notes dist/*

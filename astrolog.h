@@ -537,6 +537,29 @@
 
 #define szAppNameCore "Astrolog"
 #define szVersionCore "8.00"
+// This fork's own version, layered on upstream's. Upstream numbers the
+// program; this numbers the port, so a release tag can be checked against
+// the source it claims to have been built from -- QT_CI_PLAN.md Q2 and
+// item 5.1. Without it a tag can say anything and every bug report
+// afterwards cites the wrong version.
+//
+// Bump szVersionFork once per release. The forms it takes, all derived
+// rather than written out again:
+//
+//   source        szVersionQt        "8.00-qt.1"
+//   git tag       v8.00-qt.1
+//   .deb          Version: 8.00+qt.1   "+" sorts after a bare 8.00 in
+//                                      dpkg's ordering; "-" would be read
+//                                      as a Debian revision separator
+//   .rpm          Version: 8.00, Release: qt.1
+//
+// szVersionCore is deliberately left alone. It is what the startup
+// banner, the -H help header and express.cpp's atof() all read, so
+// changing it would move the switch matrix and every other harness that
+// captures a banner -- a behaviour change, for a number that is
+// upstream's to set.
+#define szVersionFork "1"
+#define szVersionQt   szVersionCore "-qt." szVersionFork
 #define szVerCore     "800"
 #define szDateCore    "May 2026"
 #define szAddressCore \

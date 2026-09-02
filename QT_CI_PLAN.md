@@ -2211,7 +2211,7 @@ names it.
 | # | Question | Blocks |
 |---|---|---|
 | ~~Q1~~ | ~~AppImage, tarball, or `.deb`?~~ **Answered 2026-09-02: native packages, both formats.** `.deb` for the last two Ubuntu LTS (22.04, 24.04) and `.rpm` for the last two Fedora releases. 6.0 MB and 5.9 MB, against ~70 MB for an AppImage's Qt closure. Built on each target and verified by installing into a clean container. | closed |
-| Q2 | What version scheme does this fork own, so a tag can be checked against source? | 5.1, 5.2 |
+| ~~Q2~~ | ~~What version scheme does this fork own?~~ **Answered 2026-09-02: `8.00-qt.N`.** `szVersionFork` in `astrolog.h`; tag `v8.00-qt.N`; `.deb` `8.00+qt.N`; `.rpm` Version 8.00 Release `qt.N`. `szVersionCore` is left alone because the banner and `express.cpp`'s `atof()` read it. `tools/ci-assert-version.sh` fails a tag that disagrees. | closed |
 | ~~Q3~~ | ~~How does Phase 1 smoke-test a GUI-only `.exe`?~~ **Answered: build `WCLI` too.** One-line guard fix at `astrolog.h:81`, drop `-mwindows`, and a console Windows binary runs non-interactively under Wine. Verified 2026-09-01. | closed |
 | ~~Q4~~ | ~~Does anything read `astexo.csv` at runtime?~~ **Answered: yes, it ships.** `charts3.cpp:1792`, `-XUx`. | closed |
 | ~~Q5~~ | ~~An optimized `-g` build for the fortify class?~~ **Answered: no separate build needed.** The ordinary `-O` builds already import 10–11 `*_chk` symbols, so Phase 7's matrices — which run against `./astrolog`, a normal build — already cover it. New item 3.4 asserts it stays that way. | closed |

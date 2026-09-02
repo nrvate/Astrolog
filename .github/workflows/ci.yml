@@ -453,17 +453,32 @@ jobs:
   # qt5-qtbase-devel, so the RPM matches the Debian side on Qt5 rather
   # than diverging to Qt6.
   rpm:
-    name: .rpm on fedora:${{ matrix.release }}
+    name: .rpm on ${{ matrix.release }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        release: [42, 43]
-    container: fedora:${{ matrix.release }}
+        include:
+          # Fedora: current, short-lived, bumped every six months.
+          - {release: fedora-42, image: 'fedora:42'}
+          - {release: fedora-43, image: 'fedora:43'}
+          # Enterprise Linux: ~10 years of support, which is what "LTS"
+          # means on the RPM side. Verified 2026-09-02 that both carry
+          # qt5-qtbase-devel once CRB is enabled, and that an EL9 package
+          # builds, installs and computes Chiron correctly.
+          - {release: el9,  image: 'rockylinux:9'}
+          - {release: el10, image: 'quay.io/rockylinux/rockylinux:10'}
+    container: ${{ matrix.image }}
     steps:
+      # CRB ("CodeReady Builder") is where Enterprise Linux keeps
+      # qt5-qtbase-devel; on Fedora the repo does not exist and enabling
+      # it is a no-op, which is why this is one step rather than two.
       - name: Install build dependencies
         run: |
+          dnf install -y -q dnf-plugins-core || true
+          (dnf config-manager --set-enabled crb || \
+           dnf config-manager --enable crb || true) 2>/dev/null
           dnf install -y -q gcc-c++ make git rpm-build qt5-qtbase-devel \
             libX11-devel pkgconf-pkg-config
 
@@ -495,5 +510,5 @@ jobs:
       - name: Keep the package
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: astrolog-rpm-fedora${{ matrix.release }}
+          name: astrolog-rpm-${{ matrix.release }}
           path: out/package/*.rpm
