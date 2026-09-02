@@ -127,6 +127,35 @@ Matching is a case-insensitive substring over the names in `rgqttestQt[]`
 (qttest.cpp). A filter that matches nothing fails the run rather than
 reporting an empty PASS, so a typo cannot read as success.
 
+## Running without `/swe`: `ASTROLOG_QT_EPHEM`
+
+The rule above is `-i nrvate.as`, and it stays the rule. But CI can never
+have `/swe`, and neither can a contributor, so there has to be a sanctioned
+way to run on the `ephem/` directory this repository ships — one that does
+not quietly test less.
+
+```sh
+ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem   # 3541/0, 47 s
+./run-qt-tests.sh                                        # 3561/0, 55 s
+```
+
+**The mode is declared, not detected.** It says which ephemeris the run is
+supposed to have, and the suite checks reality against that claim:
+`minimal` asserts exactly 19 of the 39 `rgObjSel[]` bodies resolve, `full`
+asserts exactly 39. Not "at least" — 11 of them resolve with no ephemeris
+files at all, from the Moshier formulas, so a floor tests the guess. Both
+directions fail: `full` on `ephem/` is red, and so is `minimal` on `/swe`.
+A misspelled value fails before any test runs. **The default is `full`**,
+so a flag forgotten in CI is loud rather than quiet.
+
+Why the count is the whole assertion: a body that does not resolve skips
+its own `Check` silently, so that number *is* how many assertions the
+group ran — 83 on `/swe`, 63 on `ephem/`, 53 with the path pointed at
+nothing, with no failure to show for the difference.
+
+**Use `-Yi1 ephem`, never `-i astrolog.as`** — see above; the `-i` form
+runs nothing and exits 0.
+
 When a filter is active — or `ASTROLOG_QT_TIME=1` on a full run — each
 group prints its wall time. Measured once: `menu-actions` is ~60% of the
 whole suite by itself (it fires all 338 menu items), with `objsel-dialog`

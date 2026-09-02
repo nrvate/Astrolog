@@ -97,3 +97,101 @@ jobs:
 
       - name: Assert astrolog-wcli.exe is actually new
         run: tools/ci-assert-fresh.sh astrolog-wcli.exe
+
+  # Phase 2. The Qt build and its suite -- the port itself, and the 3561
+  # assertions that are this project's main net.
+  qt:
+    name: Qt5 build and suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Qt5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev pkg-config
+
+      - name: Build both Qt binaries
+        run: make qt -j4 && make qt-test -j4
+
+      # ASTROLOG_QT_EPHEM=minimal is not optional here and not a
+      # convenience. /swe -- the maintainer's 887,000-file NAS mount --
+      # will never exist on a runner, and without the mode the suite
+      # resolves 19 of 39 bodies instead of 39, skips 20 assertions, and
+      # says so nowhere except in a pass count nobody compares. The mode
+      # makes the thinner run declare itself: it asserts exactly 19, and
+      # it fails if it gets 39. See QT_CI_PLAN.md items 2.0 and 2.3.
+      #
+      # "-Yi1 ephem", never "-i astrolog.as": the -i form runs zero tests
+      # and exits 0, which this plan specified for two drafts before
+      # anyone ran it.
+      - name: Run the suite against the bundled ephemeris
+        run: ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem
+
+      # Item 6.5. Four seconds, and the check is that no two renders are
+      # identical -- a blank chart matches every other blank chart, so
+      # distinctness is what says the drawing code ran.
+      - name: Render the graphics charts offscreen
+        run: |
+          QTGRAPHDIR=out/qtg ASTROLOG_QT_EPHEM=minimal \
+            ./run-qt-tests.sh -Yi1 ephem
+          tools/ci-assert-distinct.sh out/qtg 24
+
+  # Phase 3. The audits: pure Python and diff, all seconds, and they cover
+  # the .rc-derived layer that CLAUDE.md says hand transcription got wrong
+  # "every time it was used".
+  audits:
+    name: Audits and generated tables
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # line_endings_audit.py shells out to "git ls-files", so it needs a
+      # real working tree -- fine under actions/checkout, and it exits 1
+      # against a "git archive" extraction.
+      - name: The eight standing audits
+        run: |
+          python3 tools/rc_audit.py
+          python3 tools/rc_mnemonic_audit.py
+          python3 tools/rc_field_audit.py
+          python3 tools/rc_lookup_audit.py
+          python3 tools/defaults_audit.py
+          python3 tools/registry_audit.py
+          python3 tools/line_endings_audit.py
+          python3 tools/fixture_coverage_audit.py
+
+      # The pre-commit form. The plain ">" form overwrites the committed
+      # file and must never appear in a workflow.
+      - name: The three generated tables are in sync
+        run: |
+          python3 tools/rc2qt.py astrolog.rc   | diff - qtrcdlg.h
+          python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h
+          python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h
+
+      - name: Install X11 headers for the console build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev
+
+      # The console build is the one that compiles the X11 backend at all,
+      # and it is what the round trip and every differential matrix drive.
+      - name: Build the console binary
+        run: make -j4
+
+      - name: Assert it is actually new
+        run: tools/ci-assert-fresh.sh astrolog
+
+      - name: The settings round trip
+        run: tools/settings-round-trip.sh
+
+      # Item 3.4. Asserts the mechanism is present, not that any
+      # particular overflow is caught: the -O0 sanitizer build has
+      # _FORTIFY_SOURCE inactive, which is why work log item 142 survived
+      # a full ASan sweep and 17 gdb runs. This guards that the ordinary
+      # builds keep the net the sweep cannot have.
+      - name: The shipped builds still have fortify
+        run: tools/ci-assert-fortify.sh astrolog 10

@@ -98,6 +98,7 @@ phases below whose job is to settle it.
 | **The port builds against Qt6 and passes there** | `make qt6` / `make qt6-test` (commit `2582015`, 2026-09-01) build the same sources against a hand-installed Qt6 named by `QT6_PKGCONFIG`; the suite reports 3561/0 against `./astrolog-qt6-test`. This was an open prediction in this document until the morning it was already false. **Consequence: Qt6 is now a fourth build configuration**, compiled only by whoever remembers — see "The three unbuilt configurations", which it joins unless CI builds it |
 | **`WCLI` builds, links, and runs a chart under Wine with no display** | 2026-09-02: `astrolog.h`'s X11 guard widened to `&& !defined(WCLI)`, `Makefile.wcli` added (`-DWCLI`, no `-mwindows`, `SRC_WIN` omitted since `wdriver.cpp` and `wdialog.cpp` are `#ifdef WIN` end to end). Builds in 16.2 s at `-j4`, zero warnings, `PE32+ executable (console)`; `wine ./astrolog-wcli.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X` prints the same chart the Linux console build does, with no display and no window manager |
 | **The suite quietly runs fewer assertions on a thinner ephemeris, and only the pass count says so** | the `objsel` group, measured three ways 2026-09-02: `-i nrvate.as` → 39 of 39 bodies, **83 passed / 0 failed**; `-Yi1 ephem` → 19 of 39, **61 / 2**; `-Yi1 /nonexistent-ephem` → **11 of 39**, **53 / 2**. Thirty assertions stop running and nothing announces it; the failure count is pinned at 2 by the Okyrhoe pair either way. Two consequences: gating those two (item 2.3) without also asserting a count buys silence, and **11 bodies resolve with no ephemeris at all**, so any floor below 11 is vacuous |
+| **The suite hung, for everyone without `/swe`, and nothing had noticed** | running it the way CI must — `ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem` — blocked past a **ten-minute** timeout in the Chart rendering group, on the Moons chart, at **1.9% CPU in `do_poll()`**. Not slow: blocked. `PrintWarningQt()` had put up a modal box about a missing ephemeris file and there was nobody to dismiss it. **40 of the 49 groups never set `SetNoPopupQt(fTrue)`**, so every one was one missing file away from the same hang. Fixed once in the runner rather than in 40 places; that group went from >10 min to **1.16 s**, and the full suite on the bundled set is **3541/0 in 47 s** |
 | Nothing in Astrolog's own code is Linux-specific by inclusion | `<malloc.h>` is behind `#ifdef PC` in both `astrolog.h:347` and `placalc.h`; the only other POSIX headers are `<unistd.h>` and `<dirent.h>`. The three `__APPLE__`/`MACOS` hits in the tree are all inside upstream swisseph's `sweodef.h`/`swephexp.h` |
 | The QT backend cleanly displaces X11 | `astrolog.h:81`, `#if !defined(QT) && !defined(WIN)`; `Makefile.qt` links no `-lX11` |
 | Fonts already resolve for an installed copy | `qtdriver.cpp:2915` tries `applicationDirPath()/font` before `currentPath()/font` |
@@ -627,7 +628,8 @@ ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i nrvate.as
 Keep `-j4` even though the runner's core count differs from this box's
 constraint — the cap in `CLAUDE.md` is about not starving the user's
 machine, and matching it here keeps one number in one place.
-**Status.** [ ]
+**Done 2026-09-02.** `make qt -j4 && make qt-test -j4`, in the `qt` job.
+**Status.** [x]
 
 ### 2.1b The suite must be deterministic before anything gates on it
 **This blocks 2.2 as a *gate*, though not as a job.**
@@ -696,7 +698,17 @@ non-zero on any failure, so this is one line. It also runs the startup
 diagnostics as separate processes, which is exactly the part an
 in-process suite cannot reach.
 **Falsify.** Break one assertion in `qttest.cpp`; confirm red.
-**Status.** [ ]
+**Done and falsified 2026-09-02.** `Check(cObjSel > 0, ...)` changed to
+`> 99999`: the script exited 1, so the step goes red. Restored, rebuilt,
+63/0 again.
+**And running it this way is what found the hang** — see the Verified
+table. The suite had never been run against the bundled ephemeris end to
+end, because the maintainer's rule is `-i nrvate.as` and there was no
+other reason to. It blocked for ten minutes. **That is the single best
+argument in this document for CI existing**: not that it would have
+caught a regression, but that it forces the program to be run the way
+everyone who is not the maintainer runs it.
+**Status.** [x] done 2026-09-02
 
 ### 2.3 Build `ASTROLOG_QT_EPHEM` into the suite
 **Goal.** Turn "19 of 39 resolved" from a printed diagnostic into an
@@ -732,7 +744,27 @@ mode is only half wired.
 count must drop and `minimal` must go red. Then set
 `ASTROLOG_QT_EPHEM=full` on a run without `/swe` and confirm it also goes
 red — that is the assertion that stops CI silently weakening.
-**Status.** [ ]
+**Done 2026-09-02, and falsified in all four directions plus one the item
+did not ask for:**
+
+| run | result |
+|---|---|
+| `full` + `/swe` | PASS 83/0 |
+| `minimal` + `ephem/` | PASS 63/0 |
+| `full` + `ephem/` | **FAIL** — "19 of 39 resolved; expects exactly 39" |
+| `minimal` + `/swe` | **FAIL** — "39 of 39 resolved; expects exactly 19" |
+| unset + `/swe` | PASS 83/0 — the default really is `full` |
+| `ASTROLOG_QT_EPHEM=minmal` | **FAIL** before any test runs: a typo is not silently `full` |
+| one `.se1` deleted from `ephem/` | **FAIL** — "18 of 39 … ran 18 assertions where it should have run 19" |
+
+**And the count assertion turned out to be the assertion-count assertion,
+which this document had as two separate needs.** Every body that fails to
+resolve skips its own `Check` silently, so `cCheck` *is* the number of
+assertions the loop ran: 83 on `/swe`, 63 on `ephem/`, 53 pointed at
+nothing. One equality covers both. Simpler than planned, and the reason is
+worth keeping: the two things looked separate until the numbers were put
+side by side.
+**Status.** [x] done 2026-09-02
 
 ### 2.4 Document the mode where a contributor will find it
 **Do.** Add `ASTROLOG_QT_EPHEM` to `QT_TESTING.md` beside the other
@@ -747,6 +779,8 @@ itself.
 **Goal.** Phase 7 needs it, and it is the only build that compiles the
 X11 backend at all.
 **Do.** `sudo apt-get install -y libx11-dev`, `make -j4`.
+**Done 2026-09-02**, in the `audits` job rather than the `qt` one, since
+that is where the round trip and the fortify assertion need it.
 **Note.** `tools/asan-sweep.sh` runs `make clean` on both sides of its
 overridden build and therefore **deletes `./astrolog` while it runs**. If
 a future job ever runs the sweep and the matrices concurrently on one
@@ -789,7 +823,39 @@ toolchains.)
 different layers and a single break will not move them all. `CLAUDE.md`
 describes exactly what each one catches; break the thing it names, one
 at a time.
-**Status.** [ ]
+**All eight falsified, 2026-09-02**, one sabotage each, every one
+reverse-patched:
+
+| audit | what was broken | said |
+|---|---|---|
+| `rc_audit` | renamed both `dxSe_sr` rows in `qtdialog.cpp`, so the table symbol is mentioned nowhere | `Calculation 31 controls` unwired |
+| `rc_mnemonic_audit` | `"&File"` → `"F&ile"` in `qtdriver.cpp` | `850 menu labels checked, 1 mismatched` |
+| `rc_field_audit` | `dxSe_sr` rewired from `us.fEquator` to `us.fSidereal` | `MISMATCH dxSe_sr windows=us.fEquator qt=us.fSidereal` |
+| `rc_lookup_audit` | one row renamed to a symbol no control has | `UNRESOLVED … matches 0 control(s)` |
+| `defaults_audit` | one aspect orb changed in `astrolog.as` | `MISMATCH -YAo 5: .as says 5, data.cpp compiles 6` |
+| `registry_audit` | a help line's switch changed to `_QQ` | `MISSING charts0.cpp: … "QQ" resolves to no registry row` |
+| `line_endings_audit` | one CR into `README.md` | `carriage returns in 1 of 104 tracked text files` |
+| `fixture_coverage_audit` | the `-YAo` line removed from the fixture | `ranged settings switches with no fixture line (1 of 17)` |
+
+**Three attempts failed to move `registry_audit` before one did**, and the
+reason is a real limit worth writing down: `resolves()` accepts a token if
+any *prefix* row matches, because Astrolog's switches take suffix
+characters. `H` and `z` are prefix rows, so `_HQQ` and `_zqx` both
+"resolve". **The audit cannot catch a typo in the suffix of a prefix
+switch** — only a lead character that belongs to no row at all. That is
+correct modelling of the parser and a smaller net than the audit's own
+description implies.
+**And the falsification harness had a bug of its own**, which is the same
+lesson one level down: the helper read files in Python text mode, so a
+`\r` in a replacement string was normalised to `\n` and the first
+`line_endings_audit` sabotage silently became a newline insertion — the
+audit "passed" and looked innocent. The same text-mode read then
+**converted `astrolog.as` from CRLF to LF** while sabotaging
+`defaults_audit`, which is the exact conversion `.gitattributes` forbids
+and which moved `switch-matrix.sh` by six lines the last time it happened.
+Caught by `git status`, not by any audit — `line_endings_audit` skips
+`.as` by design. Restored byte-identical.
+**Status.** [x] done and falsified 2026-09-02
 
 ### 3.1b The incident that produced that audit — RESOLVED 2026-09-01
 **Kept because the failure is instructive, not because it is outstanding.**
@@ -873,10 +939,12 @@ python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h
 the pre-commit form; the plain `>` form overwrites the committed file and
 must never appear in a workflow.
 **Falsify.** Edit one line of `qtrcdlg.h` by hand; confirm red.
-**Status.** [ ]
+**In the `audits` job as of 2026-09-02**, in the pre-commit form.
+**Status.** [x]
 
 ### 3.3 The settings round trip
 **Do.** `tools/settings-round-trip.sh` (needs `./astrolog` from 2.5).
+**In the `audits` job as of 2026-09-02.**
 **Verified 2026-09-01:** all three legs pass in **0.15 s** — fixed point
 after one round trip, all flipped flags persisted, all 31 sentinels
 saved. Cheapest check in the document by a wide margin.
@@ -901,10 +969,17 @@ would again be hunted in a build that cannot see it.
 count; same for `./astrolog-qt`. Seconds, no new build.
 **Falsify.** Rebuild one target with `-O0` and confirm the count
 collapses and the step goes red.
+**Done as `tools/ci-assert-fortify.sh`, and falsified against the real
+thing rather than a synthetic one, 2026-09-02.** `make qt-asan` builds at
+`-O0`; the script reports
+`FORTIFY GONE: astrolog-qt-asan imports 1 *_chk symbols, expected at least 10`
+and exits 1, while `./astrolog` reports 10 and passes. That is
+`CLAUDE.md`'s claim about the sanitizer build — that a fortify-detected
+overflow "structurally cannot" fire in it — measured, in one command.
 **Caveat to write into the step.** This asserts the *mechanism* is
 present, not that any particular overflow is caught. It guards a net; it
-is not itself one.
-**Status.** [ ]
+is not itself one. Written into the script's header.
+**Status.** [x] done and falsified 2026-09-02
 
 ---
 
@@ -1191,7 +1266,16 @@ At four seconds this does not belong in a nightly lane; put it with
 Phase 3. It still needs a pass criterion beyond "24 files appeared"
 (see Q6's cousin: a committed checksum baseline would do it, and the
 distinctness check above is a decent vacuity guard in the meantime).
-**Status.** [ ]
+**Done 2026-09-02**, in the `qt` job, as
+`tools/ci-assert-distinct.sh out/qtg 24`. The count is exact rather than
+a floor, for the reason everything else in this document is: a floor
+tests the guess. **Falsified three ways** — an empty directory, two
+identical files, and the right files against a wrong expected count — each
+of which exits 1 and names what it found.
+**Still open**: distinctness is a vacuity guard, not a pass criterion. A
+committed checksum baseline is what would make this say "correct" rather
+than "not blank", and it is the same open question as Q6.
+**Status.** [x] done 2026-09-02, with the pass criterion still open
 
 ---
 
