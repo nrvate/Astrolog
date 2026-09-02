@@ -27,13 +27,19 @@ TWO EXEMPTIONS, both measured rather than assumed:
     covered, because the fixture's EXPECT pattern names the saved
     spelling, not the switch. "-YAa 5 5 66.6" comes back as "-Aa 5 66.6".
 
-WHAT THIS DOES NOT COVER, measured 2026-09-01: rgswitchdef[] has 191 rows,
-41 declaring carg>0, of which 31 are absent from the fixture. Most of those
-are imperative rather than settings -- "-x" casts a harmonic chart, "-XI"
-loads a background bitmap, "-YYt" prints formatted text -- so "takes an
-argument" is not the same question as "is a saved setting", and filtering
-them needs a judgement per row. That is the next increment for T4, and it
-is where item 140's own family lives.
+WHAT THIS DOES NOT COVER, and no longer needs to: rgswitchdef[] has 191
+rows, 41 declaring carg>0, of which 31 are absent from the fixture. That
+number stopped mattering on 2026-09-02, because the question it was a
+proxy for got a better answer. "Takes an argument" is not "is a saved
+setting" -- "-x" casts a harmonic chart, "-XI" loads a bitmap, "-YYt"
+prints text -- and judging 31 rows by hand was the wrong shape of work.
+
+The writer is the oracle for "is it a setting", so leg 3b of
+tools/settings-round-trip.sh asks the question directly: every value
+switch that appears in a SAVED settings file must be named by some
+EXPECT. Measured against the real output rather than a regex over source,
+which is what made it tractable -- 38 uncovered, now 0 with two measured
+exemptions. Work log item 172.
 
 Exit 0 when every non-"~" ranged row is in the fixture, 1 otherwise.
 """

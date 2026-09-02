@@ -7024,6 +7024,58 @@ are the more useful half to read before starting something new.
     inert everywhere except the crash; four builds and both Qt versions
     clean; eight audits.
 
+172. **T4's other half, and the number it was chasing turned out to be the
+    wrong question.** The open item read: `rgswitchdef[]` has 41 rows
+    declaring `carg>0`, 31 of them absent from the round-trip fixture,
+    and separating settings from imperatives "needs a judgement per row".
+    Doing that by hand would have been thirty-one judgements and a
+    permanently stale list.
+
+    **The writer is the oracle for "is it a setting."** Nothing that
+    `FOutputSettings()` does not emit can round-trip, by definition, and
+    everything it does emit should. So the check asks the question
+    directly, against the real artifact rather than a regex over source:
+    take a settings file the program actually saved, and require every
+    value switch in it to be named by some `EXPECT` in the fixture. That
+    is leg 3b of `tools/settings-round-trip.sh`, and it took the
+    per-row judgement out of the loop entirely.
+
+    Measured that way, the gap was **38 value switches saved with nothing
+    asserting they came back** -- among them `-z`, `-z0`, `-zl` and `-zf`
+    (time zone, daylight, location, temperature: the chart's own data),
+    the four `-YR*` restriction families, `-Yj0`/`-Yj7`, `-Yi1`/`-Yi2`/
+    `-Yi3` and `-M0`. Item 140's `-b` family lived in exactly this set,
+    unnoticed for five days.
+
+    All 38 now have sentinels, and every one round-tripped on the first
+    run, so this bought coverage rather than bug fixes -- 35 assertions
+    to 73. Two exemptions, each measured and each recorded beside its own
+    line rather than in a list somewhere else:
+
+    - **`:Xb`** (bitmap file type): `NSwXb()` returns `tcError` when
+      `us.fNoWrite` is set (switch.cpp:1474), and that is precisely the
+      state a settings save runs in. The writer emits a value no
+      settings file can set.
+    - **`:YXf`** (fonts): the writer emits the aggregate
+      `":YXf #%06x"` of `gs.nFontAll`, while the switch sets one
+      component at a time through a sub-letter (`YXft`, `YXfs`, ...).
+      One line saves what no single line can set.
+
+    **One thing worth knowing came out of it.** `-zl`'s saved form
+    follows the *zodiac display format*: with `:sd` set, the default
+    location serializes as decimal degrees instead of `100W00`. A display
+    switch changing how a stored setting is written is not obvious from
+    either switch's description, and it broke this fixture's own
+    expectation the moment `:sd` was added three lines above it.
+
+    **Falsified twice**, since a coverage check that cannot fail is
+    decoration: corrupting the `-Yw` save-twin makes leg 3 name the exact
+    sentinel (`leg 3 MISS: ^-Yw 3\\.5`), and deleting one line's `EXPECT`
+    makes leg 3b name the switch (`leg 3b UNCOVERED: :d`). Both restored.
+
+    **Nets**: all three round-trip legs plus 3b; suite 3802/0; eight
+    audits; four builds.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

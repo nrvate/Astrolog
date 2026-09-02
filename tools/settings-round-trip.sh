@@ -82,6 +82,43 @@ grep -oE "; EXPECT .*" tools/settings-fixture.as | sed 's/; EXPECT //' \
 while IFS= read -r rx; do
   grep -Eq "$rx" "$T/rt-S.as" || { echo "leg 3 MISS: $rx"; miss=1; }
 done < "$T/rt-expect.txt"
+# ---- Leg 3b: the fixture covers every value switch the writer emits ----
+# Leg 3 checks the sentinels somebody remembered to write. This checks that
+# somebody remembered them all: every "-x"/":x" line in the saved file must
+# be named by some EXPECT, or be one of the two spellings that provably
+# cannot be set from a settings file. That is the half of T4 that item 140
+# fell through -- the -b family was saved and nothing asserted it came
+# back, for five days.
+#
+# Flag switches are not in scope here: they save with "_" and "=" prefixes
+# and leg 2 flips every one of them.
+# Two exemptions, each measured and each recorded beside its own line in
+# tools/settings-fixture.as. "Xb*" because NSwXb() refuses when
+# us.fNoWrite is set, which is the state a save runs in; "YXf" because the
+# writer emits an aggregate the switch can only set one component at a
+# time.
+EXEMPT="Xb* YXf"
+grep -oE "^[-:][A-Za-z0-9]+" "$T/rt-S.as" | sort -u > "$T/rt-saved.txt"
+uncov=0
+while IFS= read -r sw; do
+  bare=${sw#?}
+  skip=0
+  for pat in $EXEMPT; do
+    case "$bare" in $pat) skip=1;; esac
+  done
+  [ $skip = 1 ] && continue
+  if ! grep -qF -- "$sw" "$T/rt-expect.txt"; then
+    echo "leg 3b UNCOVERED: $sw is saved and no EXPECT names it"
+    uncov=1
+  fi
+done < "$T/rt-saved.txt"
+if [ $uncov = 0 ]; then
+  echo "leg 3b PASS: every value switch the save contains has a sentinel"
+else
+  echo "leg 3b FAIL: add a fixture line, or exempt it with a measured reason"
+  fail=1
+fi
+
 if [ $miss = 0 ]; then
   echo "leg 3 PASS: all $(wc -l < "$T/rt-expect.txt") sentinels saved"
 else
