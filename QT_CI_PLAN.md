@@ -1912,6 +1912,33 @@ installs `qt6-base-dev`, builds both Qt6 binaries and runs the suite
 against `astrolog-qt6-test`. Qt5 stays the supported and packaged
 configuration and nothing about packaging changes.
 
+**Revised the same day by the maintainer, to "both supported, one
+build".** The reason given is the one this section already argued and
+then under-weighted: Qt5 is past upstream's open-source support, so the
+port has to be ready for the day a distribution drops it — while the
+maintainer's own machine is Qt5 today and users on it are the point.
+
+So the position is **not** a Qt6 migration and **not** Qt6-as-a-curiosity.
+It is what `Makefile.qt` already implements: `QT_MAJOR` asks pkg-config
+which Qt is present and builds against the better one, so a single
+`make qt` is correct on a Qt5 box and a Qt6 box alike, from the same
+sources. Measured 2026-09-02, both give `PASS: 3812 passed, 0 failed`.
+
+What this asks of CI is a second lane rather than a different job: run
+the existing checks against each Qt, rather than treating Qt6 as one
+build to keep warm. That is the CI author's call to shape.
+
+*And one measurement worth having before that lane exists.* Compiling the
+port against Qt6 with `-DQT_DISABLE_DEPRECATED_UP_TO=0x060800` — which
+does not warn but *removes* the declarations — succeeds with zero
+deprecation diagnostics. Falsified by restoring one
+`QMouseEvent::globalPos()` call, which then fails to compile rather than
+warning. So the port uses nothing deprecated on the way to Qt 6.8: the
+readiness the maintainer asked about is real today, not a plan. It is
+deliberately **not** wired into `tools/warning_audit.py` as a gate, since
+that would make a Qt6-shaped future the thing the tree optimizes for, and
+Qt5 support is a requirement rather than a legacy.
+
 **Two things the implementation turned up that the recommendation did not
 anticipate.** The job **must not install `qtbase5-dev`**: `Makefile.qt`
 picks its module names from `pkg-config --exists Qt6Widgets`, so a runner
@@ -2246,7 +2273,7 @@ names it.
 | ~~Q5~~ | ~~An optimized `-g` build for the fortify class?~~ **Answered: no separate build needed.** The ordinary `-O` builds already import 10–11 `*_chk` symbols, so Phase 7's matrices — which run against `./astrolog`, a normal build — already cover it. New item 3.4 asserts it stays that way. | closed |
 | Q6 | Pass criterion for the Windows-vs-Qt text diff? **Largely answered by 6.4b**: pin `-z0 0`, filter the one path-syntax diagnostic, and the Windows/Linux text matrix diffs to **zero** — 4 lines of 6,936, all cosmetic. Still open only for the *GUI* route in 6.4, which also captures layout. | 6.4, 6.4b |
 | ~~Q7~~ | ~~Are the differentials a gate or a report, and how is an intentional change signalled?~~ **Answered 2026-09-02: a gate, opted out of by a `Behaviour-change:` commit trailer.** Tested in both directions; the diffs upload as an artifact either way. | closed |
-| Q8 | **Reopened 2026-09-02, as a different question.** It used to be "build Qt6 at all?"; a working Qt6 build landed the next day (`2582015`, suite 3561/0), so it is now **"who keeps it alive?"** Qt5 remains the supported and packaged configuration. Recommendation: one CI job, `apt-get install qt6-base-dev` + `make qt6 qt6-test` + the suite, ~15 s — or a comment at the site saying it is unbuilt. Not "supported". | 8.2 |
+| Q8 | **Answered 2026-09-02 by the maintainer: both Qt5 and Qt6 are supported, from one build.** Not a migration and not a curiosity — `Makefile.qt` already asks pkg-config which Qt is present and builds against the better one, so a single `make qt` is right on either, and both measure `PASS: 3812 passed, 0 failed` from the same sources. Qt5 stays supported because the maintainer's own machine runs it; Qt6 is supported because Qt5 is past upstream's open-source support and the day a distribution drops it should be uneventful. **What this asks of CI is a second lane rather than a separate job**, and its shape is the CI author's call. Closed. | 8.2 |
 | ~~Q9~~ | ~~Is `-ldl` harmless on macOS?~~ **Answered: keep it on Linux, drop it on macOS.** `dladdr()` is really called (`sweph.cpp:271`); the flag is a no-op on glibc ≥ 2.34 but still needed below it, and macOS puts `dladdr` in libSystem. | closed |
 | ~~Q10~~ | ~~Does this fork distribute signed macOS binaries at all?~~ **Answered 2026-09-01: no.** Phase 9 only — builds and assertions, no artifact. See Phase 10. | closed |
 | Q11 | Repair `Astrolog.vcxproj` or delete it? **Now cheap either way**: it is exactly one `<ClCompile>` line behind. The real question is whether MSVC is a configuration this fork wants to owe anything to. See "The three unbuilt configurations". | — |

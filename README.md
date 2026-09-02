@@ -38,9 +38,12 @@ make qt          # ./astrolog-qt
 make install     # on PATH; PREFIX=$HOME/.local if you don't want root
 ```
 
-Needs the Qt5 or Qt6 development packages (`qtbase5-dev` on
-Debian/Ubuntu/Mint) and `pkg-config` — the build stops and names the
-package if they are missing. Object files go to `obj-qt/`, so this can be
+**Qt5 and Qt6 are both supported, and one build covers both**: the
+makefile asks `pkg-config` which is present and builds against the better
+one, so `make qt` is the right command on either. Needs the development
+package (`qtbase5-dev` or `qt6-base-dev` on Debian/Ubuntu/Mint) and
+`pkg-config` — the build stops and names the package if they are
+missing. Object files go to `obj-qt/`, so this can be
 built alongside the regular `astrolog` binary without interfering with it:
 plain `make` still builds the stock X11 version, and `make all` builds
 everything this tree has.

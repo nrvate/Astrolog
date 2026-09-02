@@ -191,7 +191,8 @@ Roughly in the order I'd take them.
    The one a user met on every menu — the accelerator column reading
    `Shift+V` where Windows writes `V` — **is fixed**, see item 44, so this
    item no longer has anything urgent in it.
-6. **Unfinished business, low value:** Wingdings and the plain text
+6. ~~**Unfinished business, low value:**~~ — **closed 2026-09-02 at the
+   maintainer's direction**, without work. Wingdings and the plain text
    fonts aren't bundled (see item 15) — a licensing fact rather than a
    task: Wingdings is proprietary and the rest are system fonts, and Qt
    substitutes when absent exactly as Windows does. The seven that can
@@ -7399,6 +7400,56 @@ are the more useful half to read before starting something new.
     **Nets**: suite 3812/0, up 9, and 0 failures across 5 consecutive
     runs; oracle group 575/0; chart, switch and graphics matrices 0
     against a baseline built from the previous commit.
+
+178. **Qt5 and Qt6 are both supported, from one build, by the
+    maintainer's decision — and the readiness that implies was measured
+    rather than promised.** Two directions given on 2026-09-02.
+
+    **Wingdings is closed without work.** Plan item 6 had been open since
+    2026-08-26 describing a licensing fact rather than a task. Closed at
+    the maintainer's direction; the seven fonts that can ship still do,
+    and Qt substitutes for the rest exactly as Windows does.
+
+    **Q8 is answered, and not the way the CI plan recommended.** That
+    document had settled on "known to work, kept alive by CI" the same
+    morning, with Qt5 as *the* supported configuration. The maintainer's
+    answer is both, for a reason the section had already argued and then
+    under-weighted: Qt5 is past upstream's open-source support, so the
+    port has to be ready for the day a distribution drops it — while the
+    maintainer's own machine runs Qt5 today and the users on it are the
+    point.
+
+    **This asks for almost nothing, because the build already does it.**
+    `Makefile.qt`'s `QT_MAJOR` asks pkg-config which Qt is present and
+    builds against the better one, so a single `make qt` is correct on a
+    Qt5 box and a Qt6 box alike. Measured: both give `PASS: 3812 passed,
+    0 failed` from the same sources on the same day. The `qt6` and
+    `qt6-test` targets are not a second configuration — they exist only
+    because *this* machine's Qt6 is hand-installed off pkg-config's path.
+
+    **What "ready" actually measures.** Compiling against Qt6 with
+    `-DQT_DISABLE_DEPRECATED_UP_TO=0x060800` — which does not warn but
+    **removes the declarations** — succeeds with zero deprecation
+    diagnostics. So the port uses nothing deprecated on the way to Qt 6.8;
+    the readiness is a present-tense fact, not a plan. Falsified by
+    restoring one `QMouseEvent::globalPos()` call, which then fails to
+    compile ("class QMouseEvent has no member named globalPos") rather
+    than warning.
+
+    **And it is deliberately not a gate.** Wiring that flag into
+    `tools/warning_audit.py`'s Qt6 leg was drafted and then withdrawn on
+    the maintainer's correction: a permanent no-deprecated-API rule makes
+    a Qt6-shaped future the thing the tree optimizes for, and Qt5 support
+    here is a requirement rather than a legacy. The measurement is
+    recorded at Q8 so the next person can repeat it in one command
+    instead of inheriting a constraint.
+
+    *For the CI author:* what this position wants is a second **lane** —
+    the existing checks run against each Qt — rather than one job that
+    keeps a spare build warm. Shape is theirs to choose.
+
+    **Nets**: Qt5 suite 3812/0 and Qt6 suite 3812/0, same sources; the
+    deprecation compile above, falsified.
 
 ## Features this fork adds to both builds
 
