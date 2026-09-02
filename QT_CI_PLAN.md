@@ -251,6 +251,51 @@ regression is found by whoever tries to use it.
 
 ---
 
+## Where this stands, 2026-09-02
+
+Phases 0–4 (Windows half), 6, 7 and 8 are done, on branch `qt-ci`, with
+every check falsified individually before it was trusted. Ten jobs:
+
+| workflow | job | what it is |
+|---|---|---|
+| `ci.yml` | `windows` | 1.1, 1.2, 1.3b — both Windows builds, freshness asserted |
+| | `qt` | 2.1–2.3, 6.5 — Qt5 build, suite at `minimal`, 24 distinct renders |
+| | `audits` | 3.1–3.4 — eight audits, three tables, round trip, fortify |
+| | `qt6` | 8.2 — Qt6 build and suite, and no Qt5 in that job |
+| | `install` | `make install`, run from `/`, Chiron asserted |
+| | `differential` | 7.1–7.4 — four matrices vs the base commit, gated |
+| | `package` | 4.3, 4.4, 4.6 — Windows package, self-verifying |
+| `nightly.yml` | `warnings` | 6.1 — pinned to `ubuntu-22.04`, and why |
+| | `sanitizer` | 6.2 — both surfaces, no `/swe` |
+| | `windows` | 6.3, 6.4b — GUI scenarios, and the no-display differential |
+
+**What is left, and none of it is more implementation:**
+
+- **Q1** — the Linux artifact form. Blocks 4.2, and the Linux halves of
+  4.5 and 4.6. A judgement about audience.
+- **Q2** — this fork's version scheme. Blocks Phase 5 entirely; a tag
+  cannot be checked against a source version that does not exist.
+- **Q11** — repair `Astrolog.vcxproj` or delete it. One line either way.
+- **Item 0.1** — is Actions enabled on this fork, and what does it cost.
+  **Nothing here has ever run on GitHub**; a green badge in this document
+  is a badge in a text file.
+- **Phase 9 (macOS)** — deliberately not attempted. It cannot be
+  falsified from here, and ground rule 1 is not negotiable for the one
+  phase whose whole deliverable is a claim to a future adopter.
+- **The `wcli` leg of the warning audit** — 82 warnings with `-Wall`
+  against the `win` build's 89, outside the net. Needs
+  `warning_audit.py` edited and its baseline regenerated.
+
+**And two shared-core bugs this work surfaced, both reported rather than
+fixed, because both are behaviour changes and the maintainer's call:**
+
+1. **The suite hung for ten minutes on any machine without `/swe`** — a
+   modal box with nobody to dismiss it. *Fixed*, since it is a test
+   harness rather than the program.
+2. **`-z0 Autodetect` is broken in both builds, differently.** Linux
+   reports daylight time unconditionally; Windows reports standard time
+   whatever the date. See 6.4b.
+
 ## Suggested execution order, and what the first PR contains
 
 Phases are independent enough to reorder, but the value is very unevenly
