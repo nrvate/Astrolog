@@ -301,12 +301,11 @@ Roughly in the order I'd take them.
    promise. The third found a live segfault reachable from the command
    line.
 
-   **This item is closed.** What would extend the oracle further is the
-   transit and progression *search* functions rather than the positions
-   they search over, and there is no outside reference for those either —
-   the invariant to use is that a search hit, re-cast, satisfies the
-   condition it was searching for, which is exactly what leg 9 does for
-   returns and could be repeated for `-d`, `-T` and `-E`.
+   **This item is closed**, and its own next step was taken too: legs
+   13-15 (work log item 177) do the same for the three *search*
+   functions — `ChartInDaySearch`, `ChartTransitSearch` in its ordinary
+   mode, and `ChartHorizonRising` — each checked against the condition it
+   was searching for. Two of the three had no coverage at all before.
    ~~**Both findings below are confirmed, and there are five more**~~ —
    **fixed 2026-09-01, work log items 157-158.** (An intermediate note
    here said they did not reproduce; that was measured at a single date
@@ -7336,6 +7335,70 @@ are the more useful half to read before starting something new.
     baseline built from the previous commit; switch matrix 0 across three
     runs with the restored invocation; round trip all four legs; five
     builds including Windows and Qt6.
+
+177. **The oracle reaches the searches, and each one is checked against
+    the condition it was searching for.** Item 171 closed the position
+    surfaces and left a note: the transit and progression *searches* have
+    no outside reference either, but they have leg 9's invariant -- a hit,
+    re-cast, must satisfy what the search was looking for. Three legs,
+    one per search function, and nothing in the suite had exercised two
+    of them at all.
+
+    **Leg 13, the in-day search.** Sun and Moon only, conjunction only,
+    with sign changes, direction changes and the void-of-course pass
+    turned off: every hit is then a new moon. Six months of 2020, and at
+    each hit the two are conjunct to better than 0.01 degrees. **The
+    second check is not an internal invariant at all** -- consecutive
+    hits must be 29.53 days apart, which is the synodic month, a fact
+    about the solar system rather than about this program.
+
+    The restrictions are the finding. Without them the search reports six
+    other event kinds, and the first draft asserted that every hit was an
+    exact aspect: measured, half of them were 128.9165, 101.0042,
+    73.0522 degrees -- sign ingresses and void-of-course entries, all
+    correct, none an aspect.
+
+    **Leg 14, the transit search**, in its ordinary mode rather than leg
+    9's return mode. Transiting Moon to natal Sun, conjunction only, one
+    month. **The sense of the two object tables is the opposite of the
+    obvious one**: `ChartTransitSearch()` swaps `ignore` and `ignore2`
+    around its `CastChart(-1)`, so `ignore2[]` selects the *transiting*
+    objects. Written the other way round first, the search found nothing
+    at all, which is how the leg earned its comment.
+
+    **Leg 15, the horizon search**, which has a geometric invariant
+    rather than an aspect one: the event's own name says what must be
+    true. "rises" and "sets" put the object on the horizon, "zeniths" and
+    "nadirs" on the meridian. Measured at 41.85N on 2020-03-20 the
+    altitudes come back -0.001 and 0.000 and the azimuths 270.005 and
+    90.004, so the tolerances are twenty times the observed error rather
+    than a guess -- and the azimuth convention (meridian at 270 and 90,
+    not the compass 180 and 0) is taken from that measurement rather than
+    assumed.
+
+    **This leg also caught the suite's own shared state**, which is the
+    part worth keeping. Run alone it passed; run inside the full suite it
+    reported **123** events instead of 4, because an earlier group leaves
+    `us.fInDayMonth` set and the search then swept the whole month. It
+    borrows the flag off now. QT_TESTING.md says to state a test's
+    preconditions rather than inherit them, and this is what inheriting
+    them looks like.
+
+    **Falsified one at a time**, each by shifting its own search's
+    reported time at the point where the hit is appended to the chart
+    list: the in-day leg reports six conjunctions off by more than 0.01
+    degrees, the transit leg one, the horizon leg four events in the
+    wrong place -- and legs 9 and 14 fail together on the transit
+    append, which is the right answer since they share it. All restored.
+
+    An earlier falsification attempt is worth recording because it
+    proved nothing: moving the conjunction's angle in `rAspAngleDef`
+    changed no result, because `nrvate.as` sets the live aspect angles
+    and the default table never reaches the search.
+
+    **Nets**: suite 3812/0, up 9, and 0 failures across 5 consecutive
+    runs; oracle group 575/0; chart, switch and graphics matrices 0
+    against a baseline built from the previous commit.
 
 ## Features this fork adds to both builds
 
