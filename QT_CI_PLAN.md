@@ -121,7 +121,8 @@ phases below whose job is to settle it.
 | The 20 that do not resolve are cheap in absolute terms, not free | all exist in `/swe` and total **8.0 MB** (7.9 MB with Okyrhoe: 8,320,773 bytes); measured. **No short-file variant exists for any of them** — the `s`-suffixed short files in `ephem/` ship with Astrolog, not with the Swiss set |
 | **Windows and Linux also render byte-identical graphics** | 86 of 109 sections identical outright; the other 23 are all output writers, and all but `-XM` reduce to CRLF plus an embedded output path. `-XM` (metafile) differs at byte 33 — unexplained |
 | `graphics-matrix.sh` **used to exit 0 with renders missing, and no longer does** | it printed `== $runs renders, $missing produced no file` and set no status from it; seen live at 115 of 224 MISSING with `rc=0`. Fixed 2026-09-01 (work log item 163): it now prints `NOT A VALID BASELINE` and exits 1. **A CI step does not need to parse that line** — an earlier draft of this document told it to, which would have written a parser for a bug that was already gone |
-| `graphics-matrix.sh` hard-depends on `nrvate.as` **and on `/swe`** | without the file every render reports `File 'nrvate.as' not found`; with it but on the bundled ephemeris, **115 of 224 renders fail** on `se07066s.se1` (Nessus). So this harness cannot run on `ephem/` alone — a direct argument for Q13 option B |
+| ~~`graphics-matrix.sh` hard-depends on `nrvate.as` **and on `/swe`**~~ **— retracted 2026-09-02, and it was the argument for option B** | the claim was "115 of 224 renders fail on the bundled ephemeris, so this harness cannot run on `ephem/` alone". Re-measured with `GRAPHICS_MATRIX_CFG="-Yi1 ephem"`: **224 renders, 0 produced no file**, 136 distinct checksums against 146 on `/swe`, and all 448 checksums differ between the two configurations — so the harness runs, discriminates, and is sensitive to the ephemeris. **All four differential matrices work in CI without `/swe`**, which is what Phase 7 needed and what this row said was impossible |
+| **Two of the four matrices had no config lever, and one of those hardcoded the maintainer's settings file** | `tools/influence-matrix.sh` ran `-i nrvate.as` inline, so anywhere but that one machine it computed against a different ephemeris than it was written for, silently. It takes `INFLUENCE_MATRIX_CFG` now, the way `graphics-matrix.sh` takes `GRAPHICS_MATRIX_CFG`. `chart-matrix.sh` and `switch-matrix.sh` need no lever — they take their settings from `astrolog.as`, which is tracked and already points at `ephem/` |
 | **The Windows and Linux builds compute byte-identical text charts** | full 71-invocation chart matrix, `WCLI` build under Wine vs the Linux console build: **4 differing lines of 6,936**, all of them one diagnostic's path syntax. Before pinning `-z0 0` it was 228, all cascading from one `ST` vs `DT` header |
 | **DST autodetection differs between the two builds** | `Transits at: … (ST Zone 8W)` on Windows-under-Wine against `(DT Zone 8W)` on Linux, for 1991-06-15. `TZ=UTC` does not change it — Astrolog uses its own `-z0 Autodetect`. Possibly a Wine artifact; **undetermined, and worth a work log item** |
 | **A package runs correctly from any working directory** | binary + `ephem/` + `font/` + `.as` files + `sefstars.txt` + `seorbel.txt` + `astexo.csv` = **8.8 MB, 41 files**; run from `/`, it renders a correct chart. Astrolog resolves its data from the **executable's own directory**, not the cwd |
@@ -1096,7 +1097,18 @@ and exactly what `CLAUDE.md` already documents for a missing `/swe`. Assert
 Chiron or Ceres, not the Sun.
 **Falsify.** Remove `ephem/` from the package; the step must go red. With
 the Sun assertion it stays green, which is how this was found.
-**Status.** [ ]
+**Half of this shipped early, 2026-09-02, applied to `make install`
+rather than to a package** — because `make install` is the *other*
+"does the shipped thing work" surface, it has the identical data
+resolution hazard, and nothing in this document or the tree tested it at
+all. `tools/ci-assert-installed.sh` runs the installed wrapper from `/`
+and asserts Chiron.
+**Falsified as this item specifies**: with `ephem/` moved aside the check
+reports `EPHEMERIS NOT FOUND: Chir:  0Ari00 …` and exits 1; restored, it
+passes. A real `make install PREFIX=…` was used, not the build tree.
+**The package half is still open** — there is no package job yet.
+**Status.** [~] `make install` done and falsified 2026-09-02; the package
+smoke test waits on Phase 4
 
 ### 4.6 Restore the executable bit
 **Goal.** `actions/upload-artifact` does not carry unix modes. swisseph's
@@ -1470,7 +1482,29 @@ upstream's open-source support, so the distribution question is when, not
 whether. A working Qt6 build that is *known* to still work is the cheapest
 possible insurance against that day, and it is worthless if nobody
 discovers it broke six months earlier.
-**Status.** [ ] — recommendation: build it in CI
+**Decided 2026-09-02: "known to work, kept alive by CI".** The `qt6` job
+installs `qt6-base-dev`, builds both Qt6 binaries and runs the suite
+against `astrolog-qt6-test`. Qt5 stays the supported and packaged
+configuration and nothing about packaging changes.
+
+**Two things the implementation turned up that the recommendation did not
+anticipate.** The job **must not install `qtbase5-dev`**: `Makefile.qt`
+picks its module names from `pkg-config --exists Qt6Widgets`, so a runner
+with both installed would build the *Qt5* job against Qt6 and say nothing.
+And `QT6_PKGCONFIG`/`QT6_LIBDIR` both exist only for a hand-installed Qt6 —
+a distribution's own needs neither — so the `-rpath` is now conditional and
+both take an empty override.
+
+**Falsified against a Qt6-only line**, which is the whole point of the job:
+`pevent->globalPosition()` at `qtdriver.cpp:273`, inside
+`#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)`, renamed. `make qt` stayed
+**rc=0** — structurally blind to it — and `make qt6` went **rc=2**. Same
+shape as the WCLI falsification, and the same argument.
+**Locally verified**, against the hand-installed Qt 6.8.3: builds clean,
+suite 3541/0 on the bundled ephemeris. **Not yet verified against a
+distribution Qt6**, which is what the runner will have; that is the one
+thing in this job a push will settle and this box cannot.
+**Status.** [x] decided and implemented 2026-09-02
 
 ### 8.3 Establish what Qt is actually obtainable on macOS
 **Do.** Check, at the time of doing the work rather than from memory:

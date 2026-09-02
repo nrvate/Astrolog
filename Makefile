@@ -101,7 +101,17 @@ qt-asan:
 QT6_PKGCONFIG ?= /usr/local/qt6/lib/pkgconfig
 QT6_LIBDIR ?= /usr/local/qt6/lib
 QT6 = PKG_CONFIG_PATH=$(QT6_PKGCONFIG)
+# A distribution's own Qt6 needs neither of those: pkg-config finds it on
+# its default path and the runtime linker finds its libraries. So both
+# variables take an empty override, which is how CI builds this --
+# "make qt6 QT6_PKGCONFIG= QT6_LIBDIR=" on a runner with qt6-base-dev
+# installed. An empty QT6_LIBDIR must produce no -rpath flag at all
+# rather than a truncated one, hence the conditional.
+ifeq ($(strip $(QT6_LIBDIR)),)
+QT6LD =
+else
 QT6LD = LDEXTRA=-Wl,-rpath,$(QT6_LIBDIR)
+endif
 
 qt6:
 	$(QT6) $(MAKE) -f Makefile.qt OBJDIR=obj-qt6 NAME=astrolog-qt6 \

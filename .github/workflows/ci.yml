@@ -195,3 +195,78 @@ jobs:
       # builds keep the net the sweep cannot have.
       - name: The shipped builds still have fortify
         run: tools/ci-assert-fortify.sh astrolog 10
+
+  # Q8, decided 2026-09-02: Qt6 is "known to work, kept alive by CI".
+  #
+  # Qt5 remains the supported and packaged configuration; nothing here
+  # changes that. What this job buys is that the Qt6 build cannot rot
+  # silently, which is what has happened to every other configuration in
+  # this tree that nothing compiles -- Astrolog.vcxproj has been one
+  # <ClCompile> line short since 2022, and WCLI was compiled by nothing at
+  # all from the day it was written until 2026-09-02. Qt6 arrived on
+  # 2026-09-01 and was in that category by the following morning.
+  #
+  # It must NOT install qtbase5-dev. Makefile.qt picks its module names
+  # from "pkg-config --exists Qt6Widgets", so a runner with both installed
+  # would build the "Qt5" job against Qt6 and nobody would be told.
+  #
+  # QT6_PKGCONFIG and QT6_LIBDIR are emptied because both exist for a
+  # hand-installed Qt6 -- the maintainer's is under /usr/local/qt6, off
+  # pkg-config's path and off the runtime linker's. A distribution's own
+  # Qt6 needs neither.
+  qt6:
+    name: Qt6 build and suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Qt6 (and deliberately not Qt5)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev pkg-config
+
+      - name: Build against Qt6
+        run: |
+          make qt6 -j4 QT6_PKGCONFIG= QT6_LIBDIR=
+          make qt6-test -j4 QT6_PKGCONFIG= QT6_LIBDIR=
+
+      - name: Assert the Qt6 binaries are new
+        run: |
+          tools/ci-assert-fresh.sh astrolog-qt6
+          tools/ci-assert-fresh.sh astrolog-qt6-test
+
+      - name: Run the suite against Qt6
+        run: |
+          QTTESTBIN=./astrolog-qt6-test ASTROLOG_QT_EPHEM=minimal \
+            ./run-qt-tests.sh -Yi1 ephem
+
+  # Phase 4's smallest piece, and the other "does the shipped thing work"
+  # surface. "make install" puts two wrappers on PATH and leaves the data
+  # in the checkout, so the tree has to stay put -- which means the thing
+  # to test is that the installed wrapper finds its ephemeris from an
+  # unrelated working directory. Assert Chiron, never the Sun: Astrolog
+  # falls back to the Moshier formulas silently, so the Sun reads
+  # 24Gem07'46" with the ephemeris files entirely absent, and a
+  # Sun-position check passes on a broken install (item 4.5).
+  install:
+    name: make install, then run it from elsewhere
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Qt5 and X11 headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev
+
+      - name: Build and install into a scratch prefix
+        run: |
+          make -j4 && make qt -j4
+          make install PREFIX="$HOME/.local"
+
+      - name: Run the installed wrapper from an unrelated directory
+        run: tools/ci-assert-installed.sh "$HOME/.local/bin/astrolog"
