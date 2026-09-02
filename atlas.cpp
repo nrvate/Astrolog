@@ -1523,7 +1523,7 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
   AtlasEntry *pae;
   char szCity[cchSzMax], sz[cchSzMax], *pch1, *pch2, *pch;
   int rgiae[ilistMax], rgn[ilistMax], ilistHi,
-    clist = 0, icn, istateUS, istateCA, iae, nPower, i, j, nSav, fSav;
+    clist = 0, icn, istateUS, istateCA, iae, nPower, i, j;
   flag fTimezoneChanges;
   real zon;
   if (!FEnsureAtlas())
@@ -1623,11 +1623,15 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
       clist++;
   }
 
-  // Display header.
+  // Display header. Both fields are borrowed unconditionally and
+  // assigned only in the dialog case, which is what the pair below used
+  // to do by hand -- and what GCC could not prove it did.
+  Borrow bAnsiChar(us.fAnsiChar);
+  Borrow bGraphics(us.fGraphics);
   fTimezoneChanges = FEnsureTimezoneChanges();
   if (fDialog) {
-    nSav = us.fAnsiChar; us.fAnsiChar = 2;
-    fSav = us.fGraphics; us.fGraphics = fTrue;
+    us.fAnsiChar = 2;
+    us.fGraphics = fTrue;
   } else {
     if (piae != NULL) {
 
@@ -1681,9 +1685,6 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
     else
       PrintSz("No matches found.");
   }
-  if (fDialog) {
-    us.fAnsiChar = nSav; us.fGraphics = fSav;
-  }
   return fTrue;
 }
 
@@ -1697,7 +1698,7 @@ flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
   AtlasEntry *pae;
   char sz[cchSzMax], *pch;
   int rgiae[ilistMax], rgn[ilistMax], ilistHi, clist = 0, iae, nDist,
-    i, j, nSav, fSav;
+    i, j;
   flag fTimezoneChanges;
   real rDist, zon;
   if (!FEnsureAtlas())
@@ -1728,10 +1729,14 @@ flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
       clist++;
   }
 
-  // Display header.
+  // Display header. Borrowed the same way as DisplayAtlasLookup's pair
+  // above -- and this one has an early return in the branch below, which
+  // the hand-rolled restore at the end never reached.
+  Borrow bAnsiChar(us.fAnsiChar);
+  Borrow bGraphics(us.fGraphics);
   if (fDialog) {
-    nSav = us.fAnsiChar; us.fAnsiChar = 2;
-    fSav = us.fGraphics; us.fGraphics = fTrue;
+    us.fAnsiChar = 2;
+    us.fGraphics = fTrue;
   } else {
     if (piae != NULL) {
       // If piae set, then just return index of nearest city.
@@ -1776,9 +1781,6 @@ flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
     PrintL();
   }
 
-  if (fDialog) {
-    us.fAnsiChar = nSav; us.fGraphics = fSav;
-  }
   return fTrue;
 }
 

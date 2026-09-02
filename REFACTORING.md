@@ -745,14 +745,26 @@ divergences, listed at item 155.
 
 ### T7 — Two rendering paths, selected by a global, restored by hand
 
-*Worklist, added 2026-09-01:* `tools/warning_audit.py` names eight of the
-remaining hand-rolled save/restore pairs for free —
-`grep maybe-uninitialized tools/warnings.txt | grep -iE "Sav"` lists them
-(`DrawSymbolRing`, `DrawObjects`, `DrawWheel`, `CastRelation`,
-`PrintChart`, `DisplayAtlasLookup`, `Action`). GCC flags them because it
-cannot correlate the condition that saves with the condition that
-restores, which is precisely the property `Borrow` makes unnecessary. See
-work log item 150.
+*Worklist, added 2026-09-01 — **worked and closed 2026-09-02**, work log
+item 175.* `tools/warning_audit.py` named the remaining hand-rolled
+save/restore pairs for free, because GCC cannot correlate the condition
+that saves with the condition that restores. Seven converted, one refused
+and one restructured; the ledger went from 316 warnings in 100 sites to
+305 in 96.
+
+Two patterns did the work, and both are in CONVENTIONS.md now: **borrow
+unconditionally and assign conditionally** (restoring an unchanged value
+is a no-op, and the pair can no longer disagree about whether it
+happened — `DisplayAtlasNearby` had an early `return` between its save
+and its restore and leaked two settings on that path), and **brace the
+borrow where the old restore was**, for the sites that restore
+mid-function and then rescale.
+
+The refusal is the useful one. `CastRelation`'s `rSav` looks identical
+and is not: it captures chart 1's MC *after* casting, to reinstate once
+every chart is done, so a borrow taken at function entry would restore a
+different number. Converted, measured, put back, with the reason at the
+line.
 
 *Evidence:* text (`Action()`→`PrintChart()`) and graphics
 (`FActionX()`→`DrawChartX()`) are disjoint pipelines chosen by

@@ -35,11 +35,12 @@
 # Format: build, file, function, flag, count, message with numbers masked.
 #
 # Regenerate:  tools/warning_audit.py --update
-# Total: 316 warnings in 100 distinct sites.
+# Total: 305 warnings in 96 distinct sites.
 
 console+qt+qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
 console+qt+qt-test	charts2.cpp	CastRelation	-Wmaybe-uninitialized	1	‘rSav’ may be used uninitialized in this function
 console+qt+qt-test	extern.h	DisplayRelation	-Wmaybe-uninitialized	1	‘k’ may be used uninitialized in this function
+console+qt+qt-test	extern.h	DisplayRelation	-Wmultistatement-macros	1	macro expands to multiple statements
 console+qt+qt-test	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘r’ may be used uninitialized in this function
 console+qt+qt-test	intrpret.cpp	InterpretEsoteric	-Wmaybe-uninitialized	1	‘nObj’ may be used uninitialized in this function
 console+qt+qt-test	sweph.cpp	search_star_in_list	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘long int’ and ‘size_t’ {aka ‘long unsigned int’}
@@ -65,7 +66,6 @@ console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘
 console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘cYea’ may be used uninitialized in this function
 console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘dYea’ may be used uninitialized in this function
 console+qt+qt-test+win	charts3.cpp	ChartTransitGraph	-Wmaybe-uninitialized	1	‘ymin’ may be used uninitialized in this function
-console+qt+qt-test+win	extern.h	DrawSymbolRing	-Wmaybe-uninitialized	1	‘nSav’ may be used uninitialized in this function
 console+qt+qt-test+win	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘xN’ may be used uninitialized in this function
 console+qt+qt-test+win	extern.h	XChartBiorhythm	-Wmaybe-uninitialized	1	‘yN’ may be used uninitialized in this function
 console+qt+qt-test+win	extern.h	XChartTransit	-Wmaybe-uninitialized	1	‘cTot’ may be used uninitialized in this function
@@ -76,8 +76,6 @@ console+qt+qt-test+win	io.cpp	FReadSzLineSkip	-Wmaybe-uninitialized	1	‘ch’ m
 console+qt+qt-test+win	placalc.cpp	calc	-Wparentheses	1	suggest parentheses around ‘&&’ within ‘||’
 console+qt+qt-test+win	xcharts0.cpp	DrawFillWheel	-Wmaybe-uninitialized	1	‘kvC’ may be used uninitialized in this function
 console+qt+qt-test+win	xcharts0.cpp	DrawMap	-Wmaybe-uninitialized	1	‘fSimple’ may be used uninitialized in this function
-console+qt+qt-test+win	xcharts0.cpp	DrawObjects	-Wmaybe-uninitialized	1	‘kSav’ may be used uninitialized in this function
-console+qt+qt-test+win	xcharts0.cpp	DrawWheel	-Wmaybe-uninitialized	1	‘kSav’ may be used uninitialized in this function
 console+qt+qt-test+win	xcharts0.cpp	DrawWheel	-Wmaybe-uninitialized	1	‘rgRules’ may be used uninitialized in this function
 console+qt+qt-test+win	xcharts0.cpp	DrawWheel	-Wmaybe-uninitialized	1	‘rgTerm’ may be used uninitialized in this function
 console+qt+qt-test+win	xcharts1.cpp	XChartIndian	-Wmaybe-uninitialized	1	‘kiContrast’ may be used uninitialized in this function
@@ -115,12 +113,10 @@ qt-test	astrolog.h	SwissComputeStar	-Wmaybe-uninitialized	1	‘jhi’ may be use
 win	astrolog.cpp	Action	-Wmaybe-uninitialized	1	‘fHTMLClip’ may be used uninitialized in this function
 win	astrolog.h	CastRelation	-Wmaybe-uninitialized	1	‘tN’ may be used uninitialized in this function
 win	astrolog.h	ComputeEphem	-Wmaybe-uninitialized	1	‘distN’ may be used uninitialized in this function
-win	atlas.cpp	DisplayAtlasLookup	-Wmaybe-uninitialized	1	‘fSav’ may be used uninitialized in this function
-win	atlas.cpp	DisplayAtlasLookup	-Wmaybe-uninitialized	1	‘nSav’ may be used uninitialized in this function
 win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘phi’ may be used uninitialized in this function
-win	charts1.cpp	PrintChart	-Wmaybe-uninitialized	1	‘nSavAnsi’ may be used uninitialized in this function
 win	extern.h	DrawArc	-Wmaybe-uninitialized	1	‘m’ may be used uninitialized in this function
 win	extern.h	DrawArc	-Wmaybe-uninitialized	1	‘n’ may be used uninitialized in this function
+win	extern.h	DrawArc	-Wmultistatement-macros	1	macro expands to multiple statements
 win	general.cpp	FSortCIList	-Wmaybe-uninitialized	1	‘rT’ may be used uninitialized in this function
 win	general.cpp	SzLocation	-Wmaybe-uninitialized	1	‘iN’ may be used uninitialized in this function
 win	general.cpp	SzLocation	-Wmaybe-uninitialized	1	‘jN’ may be used uninitialized in this function

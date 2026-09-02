@@ -219,7 +219,7 @@ itself**, which nothing here read until 2026-09-01.
 ```sh
 tools/warning_audit.py               # all four builds clean with -Wall,
                                      # every warning diffed against
-                                     # tools/warnings.txt (316 in 100
+                                     # tools/warnings.txt (305 in 96
                                      # sites); ~6 minutes, so pre-release
                                      # rather than pre-commit. Plus the
                                      # Qt6 build, where there is a Qt6,

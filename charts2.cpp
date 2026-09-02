@@ -271,6 +271,13 @@ void CastRelation(void)
       t = CastChart(i);
     if (i == 1) {
       t1 = t;
+      // NOT a Borrow, and it was tried: this captures chart 1's MC AFTER
+      // it is cast, to reinstate once every chart is done. A borrow taken
+      // at function entry would restore the value from BEFORE the loop,
+      // which is a different number. GCC's warning here is a false
+      // positive it cannot see past -- cChart is never below 1, so i == 1
+      // always runs -- and initializing rSav to silence it would be
+      // inventing a value. Left alone by verdict (work log item 175).
       rSav = is.MC;
     } else if (i == 2)
       t2 = t;

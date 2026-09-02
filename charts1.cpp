@@ -2888,12 +2888,14 @@ void PrintChart(flag fProg)
   int fCall = fFalse, nSav;
   flag fHaveGrid = fFalse;
 #ifdef WIN
-  // Turn off IBM line characters if displaying in font other than Terminal.
-  int nSavAnsi;
+  // Turn off IBM line characters if displaying in font other than
+  // Terminal. Borrowed unconditionally and assigned under the same
+  // condition as before: this function has returns between here and the
+  // restore, and the hand-rolled pair reached none of them.
+  Borrow bAnsiChar(us.fAnsiChar);
 
-  if (gs.nFontTxt > 0) {
-    nSavAnsi = us.fAnsiChar; us.fAnsiChar = 0;
-  }
+  if (gs.nFontTxt > 0)
+    us.fAnsiChar = 0;
 #endif
 
   if (us.fListing) {
@@ -3113,10 +3115,6 @@ void PrintChart(flag fProg)
     PrintChart(fProg);
     is.fMult = fTrue;
   }
-#ifdef WIN
-  if (gs.nFontTxt > 0)
-    us.fAnsiChar = nSavAnsi;
-#endif
 }
 
 /* charts1.cpp */

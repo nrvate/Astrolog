@@ -272,7 +272,7 @@ void DrawSidebar()
 {
   char sz[cchSzDef], *pch, *pch2;
   ET et;
-  int i, j, k, l, y, a, s, rays, nSav;
+  int i, j, k, l, y, a, s, rays;
   real r;
   flag fSav;
 
@@ -312,7 +312,11 @@ void DrawSidebar()
 
     // Print dominant Ray(s) in upper left corner of wheel.
     else if (FBetween(gs.nDecaType, 3, 5)) {
-      nSav = gs.nScaleText;
+      // The borrow is braced to end where the hand-rolled restore was:
+      // AdjustTextScale() below has to see the ORIGINAL scale, not the
+      // one this branch works in.
+      {
+      Borrow bScaleText(gs.nScaleText);
       if (gs.nDecaType <= 4) {
         gs.nScaleText = (gs.yWin / 80 / gi.nScaleT) * 50;
         if (gs.nScaleText >= 100) {
@@ -345,14 +349,14 @@ void DrawSidebar()
         }
       }
 #endif
-      gs.nScaleText = nSav;
+      }
       AdjustTextScale();
     }
 #ifdef WINANY
     else if (gs.nDecaType == 6) {
       // If decoration value 6, draw heart characters in each corner. <3
-      nSav = gi.nScale;
-      gi.nScale = (gs.yWin / 50) / gi.nScaleT * gi.nScaleT;
+      Borrow bScale(gi.nScale,
+        (gs.yWin / 50) / gi.nScaleT * gi.nScaleT);
       y = 0x2665; a = fiCourier; s = 100;
       k = gs.kiDeca < kMax ? gs.kiDeca : gi.kiGray;
       for (l = 0; l < 4; l++) {
@@ -380,7 +384,6 @@ void DrawSidebar()
         DrawColor(k);
         DrawGlyph(y, i, j, a, s);
       }
-      gi.nScale = nSav;
     }
 #endif
   }
@@ -757,7 +760,7 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
 {
   CONST TBLSIG *rgRules;
   int nTrans = (int)(gs.rBackPct * 256.0 / 100.0), i, j, k, kSav,
-    x, y, nSav;
+    x, y;
   CONST int *rgTerm;
   real rh, rs, rs2 = 0.95, r9 = 0.99, ra, rb, px, py, rDeg, hOld, h;
   flag fVector = (gs.ft == ftPS || gs.ft == ftWmf), fSimpleDecan, fOff, fSav;
@@ -854,7 +857,13 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
           k = -100 - k;
         } else if (us.nDecanType == ddConstel) {
 #ifdef CONSTEL
+          // kSav starts at the answer the "nothing was nearer" case
+          // wanted anyway, so the loop either improves on it or leaves
+          // it. Same result as the fixup this replaces, and the
+          // guarantee is now local enough for the compiler to see --
+          // which is the whole of that -Wmaybe-uninitialized report.
           h = rDegMax;
+          kSav = sAri;
           for (k = 1; k <= cSign+1; k++) {
             rDeg = Mod(lonCnstlZodiac[k] + is.rSid) - (ZFromS(i) + hOld);
             if (rDeg > 0.0 && rDeg < h) {
@@ -862,8 +871,6 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
               kSav = k;
             }
           }
-          if (h >= rDegMax)
-            kSav = sAri;
           k = kSav-1;
           if (k <= 0)
             k = cSign+1;
@@ -895,8 +902,8 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
 #endif
         rDeg = PZ(HousePlaceInX(rDeg, 0.0));
         ra = rs1 + (rs2 - rs1) * 0.20;
-        nSav = gi.nScale;
-        gi.nScale = (gi.nScale + 1) >> 1;
+        {
+        Borrow bScale(gi.nScale, (gi.nScale + 1) >> 1);
         x = cx+POINT0(unitx, ra, PX(rDeg));
         y = cy+POINT0(unity, ra, PY(rDeg));
         if (nTrans >= 128)
@@ -904,9 +911,8 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
         if (FItem(k)) {
           if (!(nTrans >= 128))
             DrawColor(kObjB[k]);
-          kSav = kObjB[k]; kObjB[k] = gi.kiCur;
+          Borrow bkObj(kObjB[k], gi.kiCur);
           DrawObject(k, x, y);
-          kObjB[k] = kSav;
         } else if (FValidSign(-k) || k == -(cSign+1)) {
           if (!(nTrans >= 128))
             DrawColor(-k <= cSign ? kSignB(-k) : gi.kiOn);
@@ -917,7 +923,7 @@ void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
             DrawColor(kObjA[objNakshatra[(k-1) % 9 + 1]]);
           DrawNakshatra(k, x, y);
         }
-        gi.nScale = nSav;
+        }
         if (!fSimpleDecan && hOld > 0.0) {
           // Draw hatch mark for this section if haven't already done so.
           rDeg = ZFromS(i) + hOld;
@@ -1017,7 +1023,7 @@ void DrawSymbolRing(real *symbol, real *xplanet,
   real rp, real rl1, real rl2, real rz, real rg)
 {
   char sz[cchSzDef], chT;
-  int col, i, j, x, y, nSav;
+  int col, i, j, x, y;
   real symbolM, temp;
 
   for (i = is.nObj; i >= 0; i--) if (FProper(i)) {
@@ -1031,8 +1037,15 @@ void DrawSymbolRing(real *symbol, real *xplanet,
         (dir[i] < 0.0 ? 1 : 0) - gs.fColor);
       if (rz > 0.0) {
         // If set, draw the planet's zodiac position on the wheel itself.
+        // The borrow is unconditional and the assignment is not, so the
+        // save and the restore cannot disagree about whether they
+        // happened -- which is the only thing the old pair could get
+        // wrong, and what GCC could not prove about it. Braced so the
+        // restore lands where the hand-rolled one did, before the
+        // rescale below.
+        {
+        Borrow bScaleText(gs.nScaleText);
         if (gs.fAutoScale) {
-          nSav = gs.nScaleText;
           j = gs.yWin / gi.nScaleT;
           j = (j < 1000 ? 2 : (j < 1400 ? 3 : 4));
           gs.nScaleText = j*50;
@@ -1052,10 +1065,9 @@ void DrawSymbolRing(real *symbol, real *xplanet,
           DrawSz(sz, cx+POINT1(unitx, rz-0.07, PX(temp)),
             cy+POINT1(unity, rz-0.07, PY(temp)) + gi.nScaleTextT2, dtScale2);
         }
-        if (gs.fAutoScale) {
-          gs.nScaleText = nSav;
-          AdjustTextScale();
         }
+        if (gs.fAutoScale)
+          AdjustTextScale();
       }
       DrawObject(i, cx+POINT1(unitx, rg, PX(temp)),
         cy+POINT1(unity, rg, PY(temp)));
@@ -1139,7 +1151,6 @@ void DrawRing(int iRing, int iRingMax,
 void DrawObjects(ObjDraw *rgod, int cod, int zEdge)
 {
   int zGlyph, zGlyph2, zGlyphS, zGlyphS2, i, j, k, k2, obj;
-  KI kSav;
 
   // Define or adjust some initial values.
   zGlyph = 7*gi.nScale; zGlyphS = 9*gi.nScaleTextT;
@@ -1185,12 +1196,15 @@ void DrawObjects(ObjDraw *rgod, int cod, int zEdge)
       zEdge, zEdge, gs.xWin-zEdge, gs.yWin-zEdge))
       continue;
     obj = rgod[i].obj;
-    if (rgod[i].kv != kvNone) {
-      kSav = kObjB[obj]; kObjB[obj] = rgod[i].kv;
+    {
+      // Borrowed unconditionally and assigned conditionally: restoring a
+      // value that never changed is a no-op, and the save and the
+      // restore can no longer disagree about whether they happened.
+      Borrow bkObj(kObjB[obj]);
+      if (rgod[i].kv != kvNone)
+        kObjB[obj] = rgod[i].kv;
+      DrawObject(rgod[i].obj, rgod[i].x, rgod[i].yg);
     }
-    DrawObject(rgod[i].obj, rgod[i].x, rgod[i].yg);
-    if (rgod[i].kv != kvNone)
-      kObjB[obj] = kSav;
   }
 
   // Draw dots for actual object location.

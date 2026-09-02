@@ -7193,6 +7193,82 @@ are the more useful half to read before starting something new.
     of 7,072 against a baseline built from the previous commit; four
     builds with no new warnings.
 
+175. **T7's worklist, and the six lines that were never about line
+    endings.** The last open entry in REFACTORING.md's plan was a
+    worklist rather than a design: `tools/warning_audit.py` names the
+    remaining hand-rolled save/restore pairs for free, because GCC cannot
+    correlate the condition that saves with the condition that restores
+    and says so as `-Wmaybe-uninitialized`. That is exactly the property
+    `Borrow` removes.
+
+    **Seven converted, one refused, one restructured.** The seven are in
+    `DrawSidebar`, `DrawSymbolRing`, `DrawObjects` (twice), `DrawWheel`,
+    `DisplayAtlasLookup` and `DisplayAtlasNearby`, plus `PrintChart`'s
+    Windows path. Two patterns did the work:
+
+    - **Borrow unconditionally, assign conditionally.** Restoring a value
+      that never changed is a no-op, and the save and the restore can no
+      longer disagree about whether they happened -- which is the only
+      thing those pairs could get wrong, and precisely what GCC could not
+      prove. `DisplayAtlasNearby` had an early `return` between its save
+      and its restore, so the hand-rolled version leaked `us.fAnsiChar`
+      and `us.fGraphics` on that path.
+    - **Brace the borrow where the old restore was.** `DrawSidebar` and
+      `DrawSymbolRing` restore mid-function and then rescale, so the
+      borrow ends at a brace and the rescale follows it.
+
+    **The refusal is the more interesting one.** `CastRelation`'s `rSav`
+    looks identical and is not: it captures chart 1's MC *after* casting,
+    to reinstate once every chart is done. A borrow taken at function
+    entry restores the value from *before* the loop, which is a different
+    number. It was converted, measured, and put back, with the reason at
+    the line. Initializing it to silence GCC would be inventing a value,
+    which item 150 already ruled out for this class.
+
+    And one loop was restructured rather than borrowed: the constellation
+    search set `kSav` inside its "found a nearer one" branch and repaired
+    it afterwards with `if (h >= rDegMax) kSav = sAri;`. Seeding `kSav`
+    with that same answer before the loop is identical in result and
+    makes the guarantee local enough for the compiler to see.
+
+    Ledger: **316 warnings in 100 sites to 305 in 96.**
+
+    **Then the harness.** Comparing the three matrices against a baseline
+    turned up six differing lines in the switch matrix -- and *six lines*
+    is the exact number `.gitattributes` had cited for years as proof
+    that the data parsers read a CR as content. It is the same six, and
+    they have nothing to do with line endings.
+
+    `run -0q` is nondeterministic. `-0q` makes `Terminate()` return
+    instead of exiting, so the program carries on past a fatal error and
+    formats whatever the abandoned operation left behind. Measured over
+    30 runs of one binary: 28 said "Value 0 out of range from 1 to 12",
+    one said "Assuming first century C.E. is really meant instead of
+    1905" -- and the year differs every time it appears, 1901, 1902, 1905,
+    1908 -- and one said `Unknown function: 'Q\357\277\275'`, a garbage
+    byte in a string. **That is an uninitialized read**, not merely
+    recovery-mode noise.
+
+    So item 173's inference is wrong and is corrected here: the six lines
+    were not the corrupted ephemeris. They were this, and any run of the
+    switch matrix could produce them at about one chance in fifteen. The
+    invocation is out of the harness with that measurement recorded at
+    the line, and the matrix now diffs to zero across three consecutive
+    runs of the same binary. **A differential harness has to be
+    deterministic or it invents evidence**, and this one invented the
+    reason for a two-year exemption.
+
+    *Left open, deliberately:* the uninitialized read itself. It is
+    reachable only under `-0q`, whose entire purpose is to continue into
+    undefined territory, and finding it means running an ASan build of a
+    program that no longer stops at errors. Recorded here with its
+    measurement so the next attempt starts from evidence.
+
+    **Nets**: suite 3803/0; chart matrix 0 of 7,072, graphics matrix 0 of
+    449, switch matrix 0 of 75,629 against a baseline built from the
+    previous commit, and 0 across three runs of the same binary; five
+    builds including Windows and Qt6; warning ledger regenerated.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

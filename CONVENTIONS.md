@@ -28,6 +28,16 @@ Upstream Hungarian, used consistently enough to trust:
   opportunistically when touched, never as a sweep. One CTAD limit:
   one `Borrow` declaration per deduced type (split
   `Borrow a(x), b(p);` when x and p differ in type).
+  - **When the old site saved under a condition, borrow anyway and
+    assign under that condition.** Restoring a value that never changed
+    is a no-op, and it removes the only thing such a pair can get wrong:
+    a save and a restore disagreeing about whether they happened.
+    `DisplayAtlasNearby()` leaked two settings for exactly that reason,
+    on a `return` between them (work log item 175).
+  - **Not every `*Sav` is a borrow.** `CastRelation()` captures a value
+    produced *during* the work, to reinstate afterwards; a borrow would
+    restore the value from before it. Read what the save is for before
+    converting it, and leave a reason at the line when the answer is no.
 - Functions: `F...` returns flag, `N...` returns int, `R...` real,
   `Sz...` string, `Ch...` char. `...2` is a variant, not a version.
 
