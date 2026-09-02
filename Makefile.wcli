@@ -1,0 +1,77 @@
+# Cross compile the *console* Windows build of Astrolog with mingw-w64.
+#
+#   make -f Makefile.wcli
+#   wine ./astrolog-wcli.exe -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X
+#
+# WCLI is upstream's third Windows configuration -- "a command line Windows
+# version that can still popup windows" (astrolog.h). It is the same shared
+# core as Makefile.win, compiled by the same toolchain for the same target,
+# but because WCLI is not WIN the program enters at astrolog.cpp's ordinary
+# main() rather than wdriver.cpp's WinMain. That one difference is the whole
+# point of this makefile: astrolog.exe cannot be driven non-interactively
+# under Wine, and astrolog-wcli.exe can, with no display, no window manager
+# and no input simulation.
+#
+# What it is for, in order of value:
+#
+#   1. The cheapest Windows differential this project has. The full
+#      71-invocation chart matrix runs against it under Wine in about
+#      20 seconds and diffs against the Linux console build; measured
+#      2026-09-01 at 4 differing lines of 6,936, all of them one
+#      diagnostic's path syntax. See QT_CI_PLAN.md item 6.4b.
+#   2. A smoke test for the Windows toolchain in CI: Makefile.win proves
+#      the oracle links, this proves the core it links actually runs.
+#
+# What it is NOT: it compiles neither wdriver.cpp nor wdialog.cpp, so it
+# says nothing about the Windows GUI. It is a complement to the oracle,
+# never a replacement -- QT_COMPARING_WITH_WINDOWS.md is still the route
+# for anything the real astrolog.exe has to answer.
+#
+# Until 2026-09-02 this configuration was compiled by nothing, and had been
+# since it was written. Reviving it cost exactly one line: astrolog.h's X11
+# guard read "#if !defined(QT) && !defined(WIN)", so a -DWCLI build defined
+# X11 and died on X11/Xlib.h -- printing zero ": error:" lines and one
+# "Error 1", which is the matcher trap CLAUDE.md warns about, encountered
+# live. See QT_CI_PLAN.md, "The three unbuilt configurations".
+
+CXX    = x86_64-w64-mingw32-g++
+ODIR   = obj-wcli
+
+# Identical to Makefile.win's, with -DWIN replaced by -DWCLI. The three
+# warning suppressions, -std=gnu++17 and -fpermissive are all needed for
+# the same reasons documented there; this build reports zero warnings at
+# the default level too.
+CFLAGS = -DWCLI -DPC -D_WINDOWS -DWIN32 -D__CRT__NO_INLINE \
+         -O2 -fpermissive -static -std=gnu++17 \
+         -Wno-write-strings -Wno-narrowing -Wno-comment -MMD -MP
+LIBS   = -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lole32 -luuid -lwinspool \
+         -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32 -lurlmon
+# No -mwindows: that is the flag that makes a mingw binary enter at WinMain
+# and detach from the console, which is exactly what this build must not do.
+LDFLAGS = -static -static-libgcc -static-libstdc++
+
+# One source list for every build; see the header there before adding a
+# source. SRC_WIN is deliberately absent -- wdriver.cpp is #ifdef WIN from
+# line 57 to the end and wdialog.cpp likewise, so both would compile to
+# empty objects.
+include Makefile.srcs
+SRC = $(SRC_CORE) $(SRC_SWISS) $(SRC_GRAPHICS)
+
+OBJ = $(patsubst %.cpp,$(ODIR)/%.o,$(SRC))
+
+astrolog-wcli.exe: $(OBJ)
+	$(CXX) $(LDFLAGS) -o $@ $(OBJ) $(LIBS)
+
+$(ODIR)/%.o: %.cpp | $(ODIR)
+	$(CXX) $(CFLAGS) -c $< -o $@
+
+$(ODIR):
+	mkdir -p $(ODIR)
+
+clean:
+	rm -rf $(ODIR) astrolog-wcli.exe
+
+# Compiler-generated header dependencies; see Makefile.qt.
+-include $(OBJ:.o=.d)
+
+.PHONY: clean

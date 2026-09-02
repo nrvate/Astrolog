@@ -47,6 +47,7 @@ clean: clean-console
 	$(MAKE) -f Makefile.qt.test clean
 	$(MAKE) -f Makefile.qt.asan clean
 	$(MAKE) -f Makefile.win clean
+	$(MAKE) -f Makefile.wcli clean
 	$(MAKE) -f Makefile.qt OBJDIR=obj-qt6 NAME=astrolog-qt6 clean
 	$(MAKE) -f Makefile.qt.test OBJDIR=obj-qt6-test \
 	  NAME=astrolog-qt6-test clean
@@ -113,8 +114,16 @@ qt6-test:
 win:
 	$(MAKE) -f Makefile.win
 
+# The console Windows build. Same toolchain as "win", same shared core,
+# but it enters at main() rather than WinMain, so it can be driven under
+# Wine with no display -- which is what makes the Windows differential in
+# QT_CI_PLAN.md item 6.4b cost 20 seconds instead of minutes of window
+# driving. It is in "all" because it needs nothing "win" does not.
+wcli:
+	$(MAKE) -f Makefile.wcli
+
 # Every build this fork has, in the order the pre-commit checks want them.
-all: $(NAME) qt qt-test win
+all: $(NAME) qt qt-test win wcli
 
 # "make install" puts the two commands on PATH and leaves everything else
 # exactly where it is. The data -- the ephemeris files, the atlas, the
@@ -203,7 +212,7 @@ uninstall:
 	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
-.PHONY: clean clean-console qt qt-test qt-asan qt6 qt6-test win all \
+.PHONY: clean clean-console qt qt-test qt-asan qt6 qt6-test win wcli all \
 	install uninstall
 
 # Compiler-generated header dependencies; see Makefile.qt for the
