@@ -49,8 +49,34 @@
 # edit.
 set -eu
 
-base=${1:?usage: ci-differential.sh <base-ref> [outdir]}
+# WHICH MATRICES. All four by default; the caller can ask for fewer.
+#
+#   tools/ci-differential.sh <base> <outdir> "chart influence graphics"
+#
+# They cover disjoint surfaces and none substitutes for another, so
+# "fewer" is a statement about WHEN each runs, never about dropping one.
+# The split exists because their costs differ by an order of magnitude and
+# a gate that takes 24 minutes is a tax rather than a check:
+#
+#   chart      142 invocations   ~2 processes each
+#   influence   48
+#   graphics   448               ~2 processes each
+#   switch    1058               ~5 each (astrolog, sed, head, grep, rm)
+#
+# switch-matrix.sh alone is roughly the process work of the other three
+# several times over. Measured on a runner 2026-09-02: the chart matrix
+# and both builds finished in 26 seconds and switch was still going when
+# the job was cancelled at 25 minutes. Nothing was hung -- there is no
+# network in the console build and no invocation blocks -- it is simply
+# 1,058 invocations of five processes on a machine where a process costs
+# a great deal more than it does on an NVMe workstation.
+#
+# So the pull-request gate runs the fast three, and the nightly lane runs
+# all four. Coverage is unchanged over a day; feedback on a change is
+# minutes rather than half an hour.
+base=${1:?usage: ci-differential.sh <base-ref> [outdir] [matrices]}
 out=${2:-out/diff}
+want=${3:-chart switch influence graphics}
 cd "$(dirname "$0")/.."
 root=$(pwd)
 
@@ -93,35 +119,57 @@ cp "$tmp/astrolog" "$root/base-astrolog"
 
 fail=0
 moved=""
-# Each matrix is timed, and the elapsed seconds are printed whether it
-# moved or not. Not decoration: the first real CI run took this job past
-# 19 minutes for work that takes 1 m 42 s on the maintainer's box, and
-# the log said only "in progress" because a step's output is not served
-# until it ends. Eight matrix runs and two builds is the most expensive
-# job in the file, and knowing WHICH of the eight is the slow one is the
-# difference between tuning it and guessing at it.
 started=$(date +%s)
-for m in chart switch influence graphics; do
-  t0=$(date +%s)
+
+# The eight runs go in parallel, which is the difference between this job
+# being a check and being a tax. Serially it was 24 minutes on a runner;
+# the four matrices are independent and each invocation is single
+# threaded, so they are pure fan-out on a multi-core runner.
+#
+# ONE EXCEPTION, and it is not negotiable: graphics-matrix.sh uses a
+# FIXED temp directory, deliberately -- the PostScript writer embeds its
+# output file name, so a random directory makes six renders differ
+# between two runs of the same binary. Determinism is that harness's whole
+# product. Its two runs therefore go one after the other inside their own
+# background job, never side by side. The guard added to that script on
+# 2026-09-02 turns a violation of this into a loud refusal rather than
+# two corrupted baselines, but the right thing is not to violate it.
+run_matrix() {   # $1 = name, runs base then head
+  "tools/$1-matrix.sh" ./base-astrolog >"$out/$1.base" 2>&1 || return 1
+  "tools/$1-matrix.sh" ./astrolog      >"$out/$1.head" 2>&1 || return 2
+}
+for m in $want; do
+  case $m in
+    graphics) ( run_matrix graphics ) & pid_graphics=$! ;;
+    *) ( "tools/$m-matrix.sh" ./base-astrolog >"$out/$m.base" 2>&1 ) & eval "pid_${m}_b=$!"
+       ( "tools/$m-matrix.sh" ./astrolog      >"$out/$m.head" 2>&1 ) & eval "pid_${m}_h=$!" ;;
+  esac
+done
+for m in $want; do
+  case $m in
+    graphics) wait $pid_graphics || { echo "graphics: HARNESS FAILED -- see $out/graphics.*"; fail=1; } ;;
+    *) eval "wait \$pid_${m}_b" || { echo "$m: HARNESS FAILED on the baseline -- see $out/$m.base"; fail=1; }
+       eval "wait \$pid_${m}_h" || { echo "$m: HARNESS FAILED on HEAD -- see $out/$m.head"; fail=1; } ;;
+  esac
+done
+el=$(( $(date +%s) - started ))
+
+for m in $want; do
   printf '%-10s ' "$m"
-  "tools/$m-matrix.sh" ./base-astrolog >"$out/$m.base" 2>&1 || {
-    echo "HARNESS FAILED on the baseline -- see $out/$m.base"; fail=1; continue; }
-  "tools/$m-matrix.sh" ./astrolog      >"$out/$m.head" 2>&1 || {
-    echo "HARNESS FAILED on HEAD -- see $out/$m.head"; fail=1; continue; }
+  [ -s "$out/$m.base" ] && [ -s "$out/$m.head" ] || { echo "no output"; fail=1; continue; }
   nb=$(wc -l <"$out/$m.base"); nh=$(wc -l <"$out/$m.head")
-  el=$(( $(date +%s) - t0 ))
   if diff -u "$out/$m.base" "$out/$m.head" >"$out/$m.diff" 2>&1; then
-    echo "identical ($nh lines, ${el}s for both binaries)"
+    echo "identical ($nh lines)"
     rm -f "$out/$m.diff"
   else
     nd=$(grep -c '^[-+][^-+]' "$out/$m.diff" || true)
-    echo "MOVED: $nd lines of $nh, ${el}s -- $out/$m.diff"
+    echo "MOVED: $nd lines of $nh -- $out/$m.diff"
     moved="$moved $m"
   fi
 done
 
 rm -f "$root/base-astrolog"
-echo "== $(( $(date +%s) - started ))s in the four matrices"
+echo "== ${el}s for [$want ], in parallel"
 
 if [ "$fail" -ne 0 ]; then
   echo "== a harness failed to run. A differential whose invocations all"
@@ -130,7 +178,7 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-[ -z "$moved" ] && { echo "== no behavioural movement in any of the four"; exit 0; }
+[ -z "$moved" ] && { echo "== no behavioural movement in:$want"; exit 0; }
 
 echo "== behaviour moved in:$moved"
 if git log --format=%B "$base..HEAD" | grep -qi '^Behaviour-change:'; then

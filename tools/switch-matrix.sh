@@ -34,7 +34,17 @@
 B=$1; T=$(mktemp -d)
 run() {
   echo "== $*"
-  env -u DISPLAY $B -n "$@" _X -od $T/o.as </dev/null 2>&1 >/dev/null | sed "s|$T|TMP|g" | head -2
+  # "timeout 60" is not decoration. This was the only one of the four
+  # matrices without it, and on 2026-09-02 that cost 24 minutes of a CI
+  # run: the chart matrix finished in 26 seconds and this one was still
+  # going when the job was cancelled, with the runner naming
+  # switch-matrix.sh as the orphan it had to kill. 529 invocations of the
+  # whole switch surface, on a machine with no /swe, no display and no
+  # window manager, is exactly where an invocation nobody anticipated
+  # blocks -- and without a bound, one of them stops the harness rather
+  # than failing in it. Both binaries get the same bound, so a timeout
+  # that happens on both sides still diffs to zero.
+  env -u DISPLAY timeout 60 $B -n "$@" _X -od $T/o.as </dev/null 2>&1 >/dev/null | sed "s|$T|TMP|g" | head -2
   grep -E "^-YA[oamd]|^-Yj|^-YJ|^-Yk|^-YAa|^-YR|^-Y7|^-YD|^-Ye|^-zl|^-z0|^:YX|^[=_]YX|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k" $T/o.as 2>/dev/null | head -1000
   rm -f $T/o.as
 }

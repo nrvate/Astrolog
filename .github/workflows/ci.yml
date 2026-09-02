@@ -288,10 +288,18 @@ jobs:
   # wants what was there before. On the first push to a new branch
   # github.event.before is all zeros, and there is nothing to diff against
   # -- the job says so and passes rather than inventing a baseline.
+  # THE FAST THREE, not all four. switch-matrix.sh is 1,058 invocations of
+  # five processes and took this job past 25 minutes on its first run,
+  # while the chart matrix and both builds finished in 26 seconds. Nothing
+  # was hung; a process simply costs far more on a runner than on an NVMe
+  # workstation. A gate that takes half an hour is a tax, not a check.
+  #
+  # The switch surface is not dropped -- the nightly lane runs all four.
+  # Coverage over a day is unchanged; feedback on a change is a minute.
   differential:
     name: Behavioural differential vs the base commit
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: Check out the tree with history
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -315,7 +323,7 @@ jobs:
               echo "first push. Nothing to diff against; not inventing one."
               exit 0 ;;
           esac
-          tools/ci-differential.sh "$base" out/diff
+          tools/ci-differential.sh "$base" out/diff "chart influence graphics"
 
       # The diffs are the report. Uploaded whether or not the step above
       # failed, because a red differential is exactly when someone wants

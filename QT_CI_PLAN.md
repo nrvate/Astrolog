@@ -1615,6 +1615,28 @@ and the same for `switch-matrix.sh`, `influence-matrix.sh` and
 switch matrix never renders a chart, the chart matrix renders only text,
 and the drawing code is invisible to both. All four, or the coverage
 claim is false.
+**But not all four in the same lane**, decided 2026-09-02 after the first
+CI run measured what they cost. Their per-invocation work differs by an
+order of magnitude:
+
+| matrix | invocations (both binaries) | processes each |
+|---|---|---|
+| chart | 142 | ~2 |
+| influence | 48 | ~2 |
+| graphics | 448 | ~2 |
+| **switch** | **1,058** | **~5** — astrolog, sed, head, grep, rm |
+
+On the runner, the chart matrix **and both builds** finished in 26
+seconds while switch was still going when the job was cancelled at 25
+minutes. **Nothing was hung** — the console build makes no network calls
+and no invocation blocks; a process simply costs far more on a runner
+than on an NVMe workstation, and switch runs several thousand of them.
+
+So the pull-request gate runs **chart, influence and graphics** and the
+nightly lane runs **all four**. Coverage over a day is unchanged, and
+feedback on a change is a minute instead of half an hour. The nightly
+one diffs against the commit of 24 hours ago — a weaker question than
+"what did this change move", which is why the gate exists as well.
 **Status.** [ ]
 
 ### 7.2b What running them actually showed, 2026-09-01

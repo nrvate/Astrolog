@@ -183,3 +183,46 @@ jobs:
           name: windows-differential
           path: out/win-diff/*.diff
           if-no-files-found: ignore
+
+  # All four matrices, including the expensive one the pull-request gate
+  # leaves out. switch-matrix.sh is 1,058 invocations of five processes;
+  # here that is fine, and it is where the switch surface keeps its
+  # coverage.
+  #
+  # The base is the commit as of 24 hours ago, so the report is "what
+  # moved today". That is a different and weaker question than the gate's
+  # "what did this change move", which is exactly why the gate exists
+  # too -- if the day's diff is non-empty, the per-change runs already
+  # said which change did it.
+  differential:
+    name: All four matrices, vs 24 hours ago
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the tree with history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Install X11 headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev
+
+      - name: Diff all four against yesterday
+        run: |
+          base=$(git rev-list -1 --before='24 hours ago' HEAD)
+          if [ -z "$base" ] || [ "$base" = "$(git rev-parse HEAD)" ]; then
+            echo "No commit older than 24 hours to diff against, or nothing"
+            echo "has landed since. Nothing to report; not inventing a base."
+            exit 0
+          fi
+          tools/ci-differential.sh "$base" out/diff
+
+      - name: Keep the diffs
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: nightly-differential
+          path: out/diff/*.diff
+          if-no-files-found: ignore
