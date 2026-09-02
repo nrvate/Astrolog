@@ -1244,8 +1244,22 @@ is no `/swe` at all, so **confirm that swap is a no-op rather than an
 error** when the mount is simply absent.
 **Bell hazard is moot on CI** (`PULSE_SERVER=/nonexistent` matters on the
 user's desktop, not a runner) but keep the flag for symmetry with the
-documented invocation.
-**Status.** [ ]
+documented invocation — and it is already inside `windrive.sh`, which
+starts its own Xvfb and its own metacity, so nothing needed adding.
+**Done 2026-09-02**, sharing the `windows` nightly job with 6.4b because
+installing Wine is the expensive part and paying for it twice is the only
+thing that would make either expensive.
+**It is not "minutes rather than seconds".** Measured here: **38.9 s** for
+both scenarios, passing. `tools/win-tests.sh`'s own header and this
+document both say minutes. Third stale number this exercise has turned up,
+after the suite's assertion count and the warning audit's six minutes.
+**The `/swe` swap is the thing to watch**, and this item was right to
+name it. On a runner there is no `/swe`, so `sed 's|"/swe"|"ephem"|'`
+matches nothing and the copy is identical to `nrvate.as` — a no-op swap
+and a working one look the same from outside. What makes it safe is that
+`nrvate.as` on a runner points at a path that does not exist, so the
+failure would be loud (every body `0Ari00`) rather than quiet.
+**Status.** [x] done 2026-09-02
 
 ### 6.4 The Windows-vs-Qt text chart diff
 **Goal.** The comparison `QT_COMPARING_WITH_WINDOWS.md` describes, run

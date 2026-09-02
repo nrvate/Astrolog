@@ -129,8 +129,14 @@ jobs:
   # is where a portability difference would live. It compiles neither
   # wdriver.cpp nor wdialog.cpp, so it says nothing about the Windows GUI
   # -- a complement to the oracle, never a replacement.
-  windows-differential:
-    name: Windows vs Linux, same core, no display
+  # 6.3 rides along in the same job. tools/win-tests.sh drives the real
+  # astrolog.exe through a window under Xvfb, which is the ONLY thing in
+  # this repository that exercises wdriver.cpp and wdialog.cpp
+  # behaviourally -- the differential above compiles neither. Both halves
+  # want Wine, and installing it is the expensive part, so they share a
+  # job rather than paying for it twice.
+  windows:
+    name: Windows differential, and the GUI scenarios
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -141,10 +147,11 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y g++-mingw-w64-x86-64 libx11-dev wine wine64
+          sudo apt-get install -y g++-mingw-w64-x86-64 libx11-dev \
+            wine wine64 xvfb metacity xdotool imagemagick
 
-      - name: Build both sides
-        run: make -j4 && make wcli -j4
+      - name: Build all three binaries
+        run: make -j4 && make wcli -j4 && make -f Makefile.win -j4
 
       # Wine writes a prefix on first run and takes a while doing it; get
       # that out of the way before anything is timed or diffed.
@@ -153,6 +160,21 @@ jobs:
 
       - name: Diff the whole chart matrix
         run: tools/win-differential.sh out/win-diff
+
+      # 6.3. Every tools/scenarios/win-*.txt, driven through a real window.
+      # windrive.sh starts its own Xvfb and its own metacity, and starts
+      # metacity with PULSE_SERVER=/nonexistent because it plays the X bell
+      # through the speakers and Astrolog rings the bell on every keystroke
+      # it does not handle. Both builds need a window manager -- Wine will
+      # not give a new dialog keyboard focus without one.
+      #
+      # It swaps /swe for the bundled ephem/ in a COPY of nrvate.as before
+      # running: ~887,000 files through Wine's path translation is
+      # indistinguishable from the app hanging. On a runner there is no
+      # /swe at all, so the swap is a no-op -- which is the case to watch,
+      # since a no-op swap and a broken one look identical from here.
+      - name: The Windows GUI scenarios
+        run: tools/win-tests.sh
 
       - name: Keep the diff
         if: always()
