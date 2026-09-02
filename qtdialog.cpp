@@ -71,7 +71,8 @@
 #include "astrolog.h"
 #include "qtdriver.h"
 
-#include <unistd.h>
+#include <QtCore/QDir>
+#include <QtCore/QTemporaryFile>
 
 #ifdef QT
 
@@ -1462,11 +1463,14 @@ void ShowExportWireDialogQt()
 
 static void CopyChartVectorQt(int ft, CONST char *szMime)
 {
-  char szTemp[] = "/tmp/astrolog-qt-copy-XXXXXX";
-  int fd = mkstemp(szTemp);
-  if (fd < 0)
+  // See PasteChartQt() in qtdriver.cpp: QTemporaryFile rather than
+  // mkstemp into a hardcoded "/tmp", so this works off POSIX too.
+  QTemporaryFile tmp(QDir::tempPath() + "/astrolog-qt-copy-XXXXXX");
+  if (!tmp.open())
     return;
-  close(fd);
+  QByteArray baTemp = tmp.fileName().toLocal8Bit();
+  char *szTemp = baTemp.data();
+  tmp.close();
 
   if (FExportChartQt(szTemp, ft)) {
     QFile file(szTemp);
@@ -1481,7 +1485,6 @@ static void CopyChartVectorQt(int ft, CONST char *szMime)
       QApplication::clipboard()->setMimeData(pmime);
     }
   }
-  unlink(szTemp);
 }
 
 void CopyChartMetafileQt() { CopyChartVectorQt(ftWmf, "image/x-wmf"); }

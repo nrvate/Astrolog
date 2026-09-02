@@ -101,7 +101,8 @@
 #include "astrolog.h"
 #include "qtdriver.h"
 
-#include <unistd.h>
+#include <QtCore/QDir>
+#include <QtCore/QTemporaryFile>
 
 #ifdef QT
 
@@ -857,9 +858,17 @@ void PrintChartQt()
 void PasteChartQt()
 {
   CONST QMimeData *pmime = QApplication::clipboard()->mimeData();
-  char szTemp[] = "/tmp/astrolog-qt-paste-XXXXXX";
+  // QTemporaryFile rather than mkstemp into a hardcoded "/tmp": it puts
+  // the file wherever the platform keeps temporaries, removes it when it
+  // goes out of scope, and is the only one of the two that exists off
+  // POSIX. These three sites were the entire non-portable surface of the
+  // Qt backend -- everything else here is Qt or already has a "#ifdef PC"
+  // path -- so this is what a Qt build on Windows would otherwise trip
+  // over first.
+  QTemporaryFile tmp(QDir::tempPath() + "/astrolog-qt-paste-XXXXXX");
+  QByteArray baTemp;
+  char *szTemp;
   flag fRet;
-  int fd;
 
   if (pmime == NULL ||
     (!pmime->hasImage() && !pmime->hasText())) {
@@ -867,10 +876,14 @@ void PasteChartQt()
       "There is nothing on the clipboard to paste.");
     return;
   }
-  fd = mkstemp(szTemp);
-  if (fd < 0)
+  if (!tmp.open())
     return;
-  close(fd);
+  // Closed but not removed: the code below reopens it by name, and on
+  // Windows an open handle would block that. The destructor still
+  // deletes it, which is what the unlink() here used to do.
+  baTemp = tmp.fileName().toLocal8Bit();
+  szTemp = baTemp.data();
+  tmp.close();
 
   if (pmime->hasImage()) {
     QImage im = qvariant_cast<QImage>(pmime->imageData());
@@ -894,7 +907,6 @@ void PasteChartQt()
       fRet = FInputData(szTemp);
     }
   }
-  unlink(szTemp);
   if (fRet)
     RecastAndRedrawQt();
 }
@@ -945,11 +957,12 @@ void CaptureTextToFileQt(CONST char *szFile, flag fHTML)
 
 static QString CaptureTextChartQt(flag fHTML)
 {
-  char szTemp[] = "/tmp/astrolog-qt-text-XXXXXX";
-  int fd = mkstemp(szTemp);
-  if (fd < 0)
+  QTemporaryFile tmp(QDir::tempPath() + "/astrolog-qt-text-XXXXXX");
+  if (!tmp.open())
     return QString();
-  close(fd);
+  QByteArray baTemp = tmp.fileName().toLocal8Bit();
+  char *szTemp = baTemp.data();
+  tmp.close();
   CaptureTextToFileQt(szTemp, fHTML);
 
   QString qs;
@@ -958,7 +971,6 @@ static QString CaptureTextChartQt(flag fHTML)
     qs = QString::fromUtf8(file.readAll());
     file.close();
   }
-  unlink(szTemp);
   return qs;
 }
 
