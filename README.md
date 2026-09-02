@@ -44,9 +44,15 @@ list comes from the binary rather than from someone's memory:
 | `.zip` | Windows, statically linked — unpack and run |
 
 ```sh
-sudo apt install ./astrolog_8.00+qt.1~jammy_amd64.deb   # apt resolves Qt
+sudo apt install ./astrolog_8.00+qt.1.jammy_amd64.deb   # apt resolves Qt
 sudo dnf install ./astrolog-8.00-qt.1.el9.x86_64.rpm
 ```
+
+The package's own version is `8.00+qt.1~jammy`, with a tilde, so that a
+22.04 build sorts below a 24.04 one and an upgrade is an upgrade. GitHub
+rewrites `~` to `.` in release asset filenames, which is why the
+downloaded file does not match; `apt` reads the version out of the
+package, not out of the name.
 
 Both `astrolog` (command line) and `astrolog-qt` (windowed) land on
 `PATH`. The binaries live in `/usr/lib/astrolog` beside their data —
