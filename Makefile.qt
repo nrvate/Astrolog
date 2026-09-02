@@ -39,8 +39,37 @@ OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,\
 QT_MAJOR := $(shell pkg-config --exists Qt6Widgets && echo 6 || echo 5)
 QT_MODULES = Qt$(QT_MAJOR)Widgets Qt$(QT_MAJOR)Gui Qt$(QT_MAJOR)Core \
  Qt$(QT_MAJOR)PrintSupport Qt$(QT_MAJOR)Network
-QT_CFLAGS = $(shell pkg-config --cflags $(QT_MODULES))
-QT_LIBS = $(shell pkg-config --libs $(QT_MODULES))
+# Stop by name when Qt is not installed, before anything compiles.
+# Without this, pkg-config prints three lines of its own advice per
+# missing module -- "add the directory containing `Qt5Widgets.pc' to
+# PKG_CONFIG_PATH", which is the wrong fix when the package simply is
+# not installed -- and then the build carries on with QT_CFLAGS empty,
+# so what actually reaches the user is
+#
+#     qtdriver.cpp:39:10: fatal error: QtCore/qglobal.h: No such file
+#
+# twenty lines below the cause, and further still under -j4. Measured
+# on 2026-09-01 with PKG_CONFIG_LIBDIR pointed at nothing.
+#
+# "clean" alone is exempt: removing object files must not need Qt. Any
+# other goal, or none, wants the guard -- hence the $(if), which reads
+# an empty MAKECMDGOALS as "the default goal", not as "nothing to do".
+QT_NEEDED := $(if $(MAKECMDGOALS),$(filter-out clean,$(MAKECMDGOALS)),default)
+ifneq ($(QT_NEEDED),)
+QT_FOUND := $(shell pkg-config --exists $(QT_MODULES) 2>/dev/null && echo yes)
+ifneq ($(QT_FOUND),yes)
+$(error Qt development files not found. pkg-config cannot find: \
+$(strip $(foreach m,$(QT_MODULES),\
+$(if $(shell pkg-config --exists $(m) 2>/dev/null && echo y),,$(m)))). \
+On Debian/Ubuntu: sudo apt install \
+$(if $(filter 6,$(QT_MAJOR)),qt6-base-dev,qtbase5-dev). If Qt is installed \
+somewhere pkg-config does not look, set PKG_CONFIG_PATH to the \
+directory holding its .pc files. See CLAUDE.md, "Prerequisites")
+endif
+endif
+
+QT_CFLAGS = $(shell pkg-config --cflags $(QT_MODULES) 2>/dev/null)
+QT_LIBS = $(shell pkg-config --libs $(QT_MODULES) 2>/dev/null)
 LIBS = $(QT_LIBS) -lm -ldl
 CPPFLAGS = -MMD -MP -DQT -O -fPIC -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment \
  $(QT_CFLAGS)

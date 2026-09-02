@@ -65,7 +65,9 @@ matters when merging a new upstream release:
 
 ```sh
 sudo apt install qtbase5-dev pkg-config              # build the Qt port
-                                                    # (Qt Network too, same package)
+                                                    # (Qt Network too, same package;
+                                                    # the makefiles stop and name
+                                                    # the package if it is missing)
 sudo apt install g++-mingw-w64-x86-64 wine           # build and run the Windows one
 sudo apt install xvfb metacity xdotool imagemagick   # drive either headlessly
 sudo apt install python3-pil                         # compare captures

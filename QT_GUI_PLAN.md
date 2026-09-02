@@ -6572,8 +6572,9 @@ are the more useful half to read before starting something new.
     unchanged wherever the buffer does not overflow, which is everywhere
     the matrices reach.
 
-167. **The build system, asked what needed work: six answers, and the two
-    that mattered could hand you a binary that did not match its source.**
+167. **The build system, asked what needed work: seven answers, and the
+    two that mattered could hand you a binary that did not match its
+    source.**
 
     It started as a smaller question -- "why does `make` not build
     `astrolog-qt` by default?" -- and the honest answer is that `Makefile`
@@ -6686,13 +6687,44 @@ are the more useful half to read before starting something new.
     identity is on Linux, and anything larger than 5 means the code
     actually changed.
 
+    **And when Qt is not installed, the build gave the wrong advice and
+    then tried anyway.** Measured rather than assumed, with
+    `PKG_CONFIG_LIBDIR` pointed at nothing: pkg-config prints three lines
+    of its own per missing module -- "add the directory containing
+    `Qt5Widgets.pc' to PKG_CONFIG_PATH", which is the wrong fix on a
+    machine that has simply not installed the package -- and then make
+    compiles anyway with `QT_CFLAGS` empty, so what actually reaches the
+    user is
+
+        qtdriver.cpp:39:10: fatal error: QtCore/qglobal.h: No such file
+
+    twenty lines below the cause, and interleaved with thirty others
+    under `-j4`. The three Qt makefiles now stop before anything
+    compiles, on one line, naming the modules pkg-config could not find
+    and the package that supplies them -- `qtbase5-dev`, or
+    `qt6-base-dev` when the Qt6 branch is selected. `clean` alone is
+    exempt, because removing object files must not require Qt and the
+    top-level `make clean` delegates to all three.
+
+    Falsified four ways, a guard that cannot fire being decoration: with
+    no Qt visible at all, each of the three stops with exit 2 and
+    compiles nothing; with a pkg-config directory holding 387 `.pc` files
+    and only `Qt5Network.pc` withheld, the message names exactly
+    `Qt5Network`; `make clean` still succeeds with no Qt, dry-run
+    included through the top-level delegation; and forcing `QT_MAJOR=6`
+    names the Qt6 modules and `qt6-base-dev`. It changes no build
+    command: `CPPFLAGS`, `LIBS` and `OBJS` expand identically to the
+    commit before it in all three makefiles.
+
     **Nets**: full clean `make all` plus the Windows and ASan builds, zero
     warnings from any of them; the expanded object list of every makefile
     compared to its pre-change expansion, set-identical in all five and
     order-identical in four; four Linux binaries byte-identical; Windows
     as above. The Linux suite and the three matrices are not listed
     because they cannot say anything here -- the binaries they would run
-    are the same bytes as the ones already tested.
+    are the same bytes as the ones already tested. The pkg-config guard
+    landed after the rest and repeated the clean rebuild, the byte
+    comparison and the suite on its own.
 
 ## Features this fork adds to both builds
 
