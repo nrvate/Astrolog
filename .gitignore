@@ -31,3 +31,9 @@ obj-wcli/
 /base-astrolog
 /astrolog-qt6-test
 /tools/__pycache__/
+
+# Baseline binaries built from an older commit for tools/*-matrix.sh
+# differentials. They belong in a worktree or /nvm/work, never here --
+# one reached a commit through "git add -A" (see the commit removing it).
+astrolog-base
+astrolog-qt-base

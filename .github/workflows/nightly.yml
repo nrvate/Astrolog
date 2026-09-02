@@ -506,3 +506,29 @@ jobs:
             exit 1 }
           if ($chiron -match '0Ari00') { "EPHEMERIS NOT FOUND: $chiron"; exit 1 }
           "Qt on Windows computes: $chiron"
+
+      # The binary leaves the runner, because the interesting questions
+      # about it cannot be answered here. This job proves it builds and
+      # computes; whether 25 dialogs lay out correctly under a Windows
+      # style, and whether the 3812-assertion suite passes, needs a real
+      # Windows desktop. Qt's own DLLs go with it -- windeployqt is the
+      # supported way to work out which, rather than guessing a list.
+      - name: Stage a runnable tree
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item astrolog-qt.exe dist\
+          & "$env:QTDIR\bin\windeployqt.exe" --release --no-translations `
+            --no-system-d3d-compiler --no-opengl-sw dist\astrolog-qt.exe
+          Copy-Item -Recurse ephem, font dist\
+          Copy-Item astrolog.as, atlas.as, timezone.as, sefstars.txt, `
+            seorbel.txt, astexo.csv, earth.bmp dist\
+          "staged $((Get-ChildItem dist -Recurse -File).Count) files, " +
+            "$([math]::Round((Get-ChildItem dist -Recurse -File | Measure-Object Length -Sum).Sum/1MB,1)) MB"
+
+      - name: Upload it
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: astrolog-qt-windows-msvc
+          path: dist/
+          retention-days: 14
