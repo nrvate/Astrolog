@@ -1956,7 +1956,7 @@ static void RcAtlasApplyQt(QListWidget *plist, QComboBox *pcbLon,
     return;
   iae = s_rgiaeQt[iRow];
   nSav = us.fAnsiChar; us.fAnsiChar = fFalse;
-  sprintf(sz, "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
+  sprintf2(S(sz), "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
   us.fAnsiChar = nSav;
   sz[is.ichLocSplit] = chNull;
   if (pcbLon != NULL) pcbLon->setEditText(&sz[0]);
@@ -4597,7 +4597,7 @@ static void LookupStarNamesQt(QVector<QLineEdit *> &rgpeName,
     QByteArray baDef = rgpeDef[i]->text().toLocal8Bit();
     sprintf(sz, "%.*s", cchSzMax-1, baDef.constData());
     if (!SwissTestStar(sz))
-      sprintf(sz, "%s", szObjUnknown);
+      sprintf2(S(sz), "%s", szObjUnknown);
     rgpeName[i]->setText(sz);
   }
 #endif

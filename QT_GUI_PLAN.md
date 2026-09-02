@@ -7153,6 +7153,45 @@ are the more useful half to read before starting something new.
     against a pre-fix baseline; round trip all four legs; eight audits;
     Windows build and its captures identical.
 
+174. **T5's tail, read one call at a time instead of counted.** The open
+    item said 90 formatting calls remained unbounded -- "pointer
+    arithmetic, struct members and split-line calls, worth doing
+    opportunistically, none of them a buffer whose size the code cannot
+    know". Reading them rather than counting them, they were three
+    different things and only one mattered.
+
+    **Two were live overflow risks.** `FJPLCachePut()` (io.cpp) guards
+    the URL it caches -- `if (CchSz(szUrl) >= cchSzLine*2) return;` --
+    and then writes the *name* into a fixed member beside it with no
+    guard at all. And `SzObjSelName()`'s seen-list (calc.cpp) copies an
+    object name into `rgObjSelSeen[].szName` the same way. Both
+    destinations are struct members, where `sizeof` works and `S()`
+    applies with no change to the idiom; the reason they were passed over
+    was the *shape* of the destination, not any real obstacle to bounding
+    them.
+
+    **Six more took `S()` or `SO()` for free**: the executable-directory
+    concatenation in `FileOpen()`, which builds a path out of `argv[0]`
+    and a user-supplied file name; the Swiss error text on both its
+    branches; the `-Ye` point-name suffix, which writes at an offset and
+    wanted `SO()`; and three display strings.
+
+    **The rest stay bare, by verdict rather than by omission.**
+    `xscreen.cpp`'s two write into a buffer `PAllocate`d to exactly the
+    length about to be written, so a bound would restate the allocation
+    one line above it. `charts2.cpp`'s are precision-limited formats
+    (`%7.7s`, `%3d`, `%2d%%`) into `cchSzMax`, where the format itself is
+    the bound. And `sweph.cpp` and its siblings are third-party.
+
+    That is the finding worth keeping: **"90 unbounded calls" was
+    measuring the spelling, not the risk.** Two of the ninety could
+    overflow, six were free to fix, and the others were already safe for
+    reasons the count could not see.
+
+    **Nets**: suite 3803/0; switch matrix 0 of 75,635 and chart matrix 0
+    of 7,072 against a baseline built from the previous commit; four
+    builds with no new warnings.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

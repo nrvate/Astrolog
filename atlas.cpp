@@ -1741,7 +1741,8 @@ flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
     }
     if (!fAstroGraph) {
       AnsiColor(kWhite);
-      sprintf(sz, "Cities in atlas nearest: %s\n", SzLocation(lon, lat));
+      sprintf2(S(sz), "Cities in atlas nearest: %s\n",
+        SzLocation(lon, lat));
       PrintSz(sz);
     }
     AnsiColor(kDefault);

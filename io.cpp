@@ -110,7 +110,7 @@ FILE *FileOpen(CONST char *szFile, int nFileMode, char *szPath,
     sprintf2(S(sz), "%s", szExe);
     for (pch = sz; *pch; pch++)
       ;
-    sprintf(pch, "%s", szFileT);
+    sprintf2(SO(pch, sz), "%s", szFileT);
     file = fopen(sz, szMode);
     if (file != NULL)
       goto LDone;
@@ -3102,10 +3102,10 @@ static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
 
   if (CchSz(szUrl) >= cchSzLine*2)
     return;
-  sprintf(rgjc[ijcNext].szUrl, "%s", szUrl);
+  sprintf2(S(rgjc[ijcNext].szUrl), "%s", szUrl);
   for (j = 0; j < 3; j++)
     rgjc[ijcNext].pt[j] = pt[j];
-  sprintf(rgjc[ijcNext].szName, "%s", szName);
+  sprintf2(S(rgjc[ijcNext].szName), "%s", szName);
   ijcNext = (ijcNext + 1) % cJPLCache;
   if (cjcUsed < cJPLCache)
     cjcUsed++;

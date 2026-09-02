@@ -636,7 +636,7 @@ static int NSwYe(CONST char *szSwitch, PARSEIN *pin)
   if (k > 0) {
     for (pch = szName; *pch; pch++)
       ;
-    sprintf(szName + Min(3, pch-szName), "%s",
+    sprintf2(SO(szName + Min(3, pch-szName), szName), "%s",
       k == 1 ? "Nor" : (k == 2 ? "Sou" : (k == 3 ? "Per" : "Api")));
   }
   SetObjDisp(i + custLo, szName);

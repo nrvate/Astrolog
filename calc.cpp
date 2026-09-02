@@ -2779,7 +2779,7 @@ void ObjSelRemember(int nTyp, int nObj, CONST char *szName)
     return;
   rgObjSelSeen[cObjSelSeenUsed].nTyp = nTyp;
   rgObjSelSeen[cObjSelSeenUsed].nObj = nObj;
-  sprintf(rgObjSelSeen[cObjSelSeenUsed].szName, "%s", szName);
+  sprintf2(S(rgObjSelSeen[cObjSelSeenUsed].szName), "%s", szName);
   cObjSelSeenUsed++;
 }
 
@@ -3338,10 +3338,10 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     if (!is.fNoEphFile) {
       is.fNoEphFile = fTrue;
 #ifdef WIN
-      sprintf(szErr, "Swiss Ephemeris returned the following error:\n\n%s",
-        serr);
+      sprintf2(S(szErr),
+        "Swiss Ephemeris returned the following error:\n\n%s", serr);
 #else
-      sprintf(szErr, "%s", serr);
+      sprintf2(S(szErr), "%s", serr);
 #endif
       PrintWarning(szErr);
     }

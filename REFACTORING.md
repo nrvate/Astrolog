@@ -673,10 +673,27 @@ the release build and present in the Windows one:
 were loops that walked a caller's buffer with no end check at all, which
 is the same defect as an unbounded `sprintf` wearing different clothes.
 
-**T5 is closed for caller-owned destinations.** 1,141 of 1,231
-formatting calls are bounded. The 90 that remain are pointer arithmetic,
-struct members and split-line calls — worth doing opportunistically, none
-of them a buffer whose size the code cannot know.
+**T5 is closed for caller-owned destinations**, and the tail is closed
+too as of 2026-09-02 (work log item 174). The remainder used to be
+described as "pointer arithmetic, struct members and split-line calls,
+worth doing opportunistically". Read one at a time rather than counted,
+they split three ways:
+
+- **Two were live overflow risks and are now bounded**: `szName` into
+  `rgjc[].szName` (io.cpp) had no length guard where the `szUrl` beside
+  it had one, and an object name into `rgObjSelSeen[].szName`
+  (calc.cpp). Both are struct members, where `sizeof` works and `S()`
+  applies unchanged — the reason they were skipped was the shape of the
+  destination, not any real obstacle.
+- **Six more took `S()` or `SO()` for free** — the `FileOpen()` path
+  concatenation, the Swiss error text, the `-Ye` point-name suffix, and
+  three display strings.
+- **The rest stay bare by verdict.** `xscreen.cpp`'s two write into a
+  buffer `PAllocate`d to the exact length of what is about to go in it,
+  so a bound would restate the allocation; `charts2.cpp`'s are
+  precision-limited formats (`%7.7s`, `%3d`) into `cchSzMax`; and the
+  Swiss and placalc files are third-party. Counting them as "unbounded"
+  was measuring the spelling rather than the risk.
 
 ### T6 — Backend `#ifdef` interleave in the shared device layer
 
