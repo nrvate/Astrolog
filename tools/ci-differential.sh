@@ -181,6 +181,28 @@ fi
 [ -z "$moved" ] && { echo "== no behavioural movement in:$want"; exit 0; }
 
 echo "== behaviour moved in:$moved"
+
+# REPORT MODE, for the nightly. The per-change gate and a day's aggregate
+# are different questions and only one of them should be able to fail.
+#
+# A gate on a pull request asks "what did THIS change move", and the
+# author is right there to answer it. A nightly asks "what moved today",
+# over everybody's commits at once -- so failing it punishes whoever
+# pushed last for a change somebody else declared badly, and a nightly
+# that is red for a legitimate reason is a nightly people stop reading.
+# That is the cry-wolf failure, which is the same disease as a vacuous
+# check caught from the other end.
+#
+# Measured on the first nightly run, 2026-09-02: it went red on 122 moved
+# chart lines that were another session's house-degeneracy fix at extreme
+# latitudes -- correct, intentional, and undeclared only because the
+# trailer convention was a day old. Exactly the case this mode exists for.
+if [ "${DIFFERENTIAL_REPORT:-}" = 1 ]; then
+  echo "== report mode: the diffs are the output, not a verdict. The"
+  echo "== per-change gate is what enforces; this says what moved today."
+  exit 0
+fi
+
 if git log --format=%B "$base..HEAD" | grep -qi '^Behaviour-change:'; then
   echo "== declared by a Behaviour-change: trailer, so this is expected:"
   git log --format=%B "$base..HEAD" | grep -i '^Behaviour-change:' | sed 's/^/     /'

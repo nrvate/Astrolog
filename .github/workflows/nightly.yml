@@ -217,7 +217,7 @@ jobs:
             echo "has landed since. Nothing to report; not inventing a base."
             exit 0
           fi
-          tools/ci-differential.sh "$base" out/diff
+          DIFFERENTIAL_REPORT=1 tools/ci-differential.sh "$base" out/diff
 
       - name: Keep the diffs
         if: always()

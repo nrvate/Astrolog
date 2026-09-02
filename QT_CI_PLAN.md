@@ -1776,9 +1776,10 @@ hard gate would make every intentional behaviour change require a
 workflow edit. Report-with-diff-attached, and a label or commit-trailer
 opt-out for intentional changes, is probably right. Settle before
 enabling.
-**Settled 2026-09-02: gate, with the commit-trailer opt-out this item
-proposed.** A non-empty diff fails the job — *unless* a commit between
-base and HEAD declares it:
+**Settled 2026-09-02: the per-change run gates, the nightly reports.**
+That distinction was not in the original answer and the first nightly run
+is what produced it — see the note below. A non-empty diff fails the
+pull-request job — *unless* a commit between base and HEAD declares it:
 
 ```
 Behaviour-change: the -0q month range now rejects 0, as it always should have
@@ -1794,6 +1795,19 @@ up as a regression", so an intended change has to cost one line of a
 commit message rather than a workflow edit.
 **The diffs are uploaded as an artifact whether the job passes or fails**,
 because a red differential is exactly when someone wants to read them.
+
+**And the nightly one reports rather than gates** (`DIFFERENTIAL_REPORT=1`),
+which the first nightly run argued for on its own. It went red on **122
+moved chart lines** that were another session's house-degeneracy fix at
+extreme latitudes — correct, intentional, and undeclared only because the
+trailer convention was one day old. A gate on a pull request asks "what
+did *this* change move" and the author is right there to answer; a
+nightly asks "what moved today" across everybody's commits, so failing it
+punishes whoever pushed last for someone else's undeclared change. **A
+nightly that is red for a legitimate reason is a nightly people stop
+reading**, which is the cry-wolf failure — the same disease as a vacuous
+check, caught from the other end. Falsified both ways on one sabotage:
+gate rc=1, report rc=0, identical diffs.
 **Status.** [x] settled and implemented 2026-09-02
 
 ---
