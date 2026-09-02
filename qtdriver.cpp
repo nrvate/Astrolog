@@ -4744,6 +4744,39 @@ void BeginQt()
 }
 
 
+// Destroy the window and the application, in that order, before the
+// process exits. Qt wants its widgets gone before the QApplication and
+// the QApplication gone before the thread that made it ends; exit() ends
+// the thread with both still alive, and Qt6 says so out loud:
+//
+//     QThreadStorage: entry 2 destroyed before end of thread 0x...
+//     QThreadStorage: entry 1 destroyed before end of thread 0x...
+//
+// twice on every clean exit, which is what the maintainer saw. Qt5 tears
+// the same state down without complaining, so this was invisible until
+// the Qt6 build existed. Measured both ways: with this, the Qt6 build
+// prints neither line, and the suite still reports 3561 of 3561.
+//
+// Both exit paths come through here -- the real binary from EndQt(),
+// which xscreen.cpp's EndX() calls once exec() returns, and the test
+// binary from below, which never reaches EndX() because it exits from
+// inside InteractQt().
+
+void ShutdownQt()
+{
+  if (gi.qwind != NULL) {
+    delete gi.qwind;      // Takes the canvas and the scroll area with it.
+    gi.qwind = NULL;
+    gi.qcanvas = NULL;
+    qi.pscroll = NULL;
+  }
+  if (gi.qapp != NULL) {
+    delete gi.qapp;
+    gi.qapp = NULL;
+  }
+}
+
+
 // Hand control over to Qt once the window is up, analogous to InteractX()'s
 // XNextEvent() loop for X11, except here Qt itself drives all further
 // keyboard, mouse, menu, and dialog interaction; this call blocks until the
@@ -4751,13 +4784,19 @@ void BeginQt()
 
 void InteractQt()
 {
+#ifdef QTTEST
+  int nT;
+#endif
+
   qi.fReady = true;
   RedrawQt();
 #ifdef QTTEST
   // The test binary comes in through the same startup path as the real
   // one, so the suite runs against a fully built window: menus, hotkeys,
   // and a drawn chart. Run it here instead of handing over to the user.
-  exit(NRunQtTestsQt());
+  nT = NRunQtTestsQt();
+  ShutdownQt();
+  exit(nT);
 #endif
   gi.qapp->exec();
   qi.fReady = false;
@@ -4772,6 +4811,7 @@ void EndQt()
     delete gi.qim;
     gi.qim = NULL;
   }
+  ShutdownQt();
 }
 
 #endif // QT
