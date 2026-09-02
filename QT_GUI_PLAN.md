@@ -7076,6 +7076,83 @@ are the more useful half to read before starting something new.
     **Nets**: all three round-trip legs plus 3b; suite 3802/0; eight
     audits; four builds.
 
+173. **The data files become LF, the reason they were not did not
+    reproduce, and the crash found on the way there was mine.** Three
+    findings, and they have to be read in that order because each one
+    was mistaken for the next.
+
+    **The claim.** `.gitattributes` held `*.as` and `*.csv` at CRLF with
+    a specific measurement: converting them moved `tools/switch-matrix.sh`
+    by six lines, and `-0q` "reported a different chart-info parse
+    failure", so "something in the data parsers reads a CR as content".
+    That was the one exemption in the LF conversion that was not about a
+    binary or a Windows tool.
+
+    **It does not reproduce.** With `astrolog.as`, `atlas.as`,
+    `timezone.as`, `astexo.csv`, `nrvate.as` and `mazegame.as` all
+    converted, measured on six surfaces:
+
+        switch matrix, 529 invocations       0 of 75,635 lines differ
+        chart matrix, 71 invocations         0 of 7,072
+        eight atlas + timezone lookups       0
+        "-0q" itself, the named invocation   identical
+        settings round trip, all four legs   pass
+        Windows text charts under Wine       identical to a CRLF capture
+
+    The likely explanation for the original six lines is unhappy: the
+    sweep that produced that measurement is the same one that corrupted
+    28 binaries, **including every `.se1` the charts are computed from**.
+    A chart-info parse failure reading differently is exactly what a
+    damaged ephemeris looks like. That is inference, not measurement --
+    the evidence is gone -- but the conversion itself is measured, and it
+    is clean. They are LF now, and `line_endings_audit.py` covers them:
+    101 tracked text files to 108.
+
+    **Then the suite started crashing, 3 runs in 10.** Segfault and
+    abort, and the last line before it was always `Writing wireframe to
+    file`. There is an open finding about exactly that writer (item 166):
+    `WriteWire()`'s loop checks that *one* word remains and then reads
+    six. So an hour went into it.
+
+    That work was not wasted -- the writer had a second and worse defect
+    next to the one already recorded. A color record is two words for a
+    palette index and **three** when the index is invalid and an RGB
+    triple follows, and the reader advanced by two unconditionally
+    whenever `gs.fColor` was clear. A three-word record then left the
+    cursor one word short and everything after it was parsed at the wrong
+    offset. Both are fixed: the length is read whether or not the color
+    is being written, and each branch checks its own record fits before
+    reading it. The graphics matrix is 0 across 224 renders, so this
+    changes no output that exists today; it closes a hazard.
+
+    **But it was not the crash.** The crash was `TestNumericOracleQt` at
+    qttest.cpp:4596 -- **leg 11, from item 171, three hours old.**
+    `DisplayAtlasNearby()` prints a city list through `is.S` on its way to
+    returning an index; the "just return the index" early exit lives in
+    its `fDialog` branch, which this call did not take. So it wrote to a
+    `FILE *` nothing had opened. That is work log item 165's hazard,
+    reintroduced **one leg after leg 12's own comment quoted it**, in the
+    same session.
+
+    Two lessons, both already written down here and both re-learned:
+
+    - **Do not reason from output ordering.** `PrintProgress()` goes to
+      unbuffered stderr; this went to a buffered stream. The wireframe
+      message was simply the last thing to escape. CLAUDE.md says this
+      in as many words, about the last time it happened.
+    - **A backtrace costs one build.** `gdb -batch -ex run -ex bt` on an
+      optimized `-g` binary named the line on the third loop, after an
+      hour of reading code.
+
+    Fixed by giving the leg a stream of its own, the way legs 9 and 12
+    already do. **3 crashes in 10 runs became 0 in 10, then 0 in 6 more
+    with the data files converted on top.**
+
+    **Nets**: suite 3803/0 and stable across 16 consecutive runs; switch
+    and chart matrices 0 against a CRLF baseline; graphics matrix 0
+    against a pre-fix baseline; round trip all four legs; eight audits;
+    Windows build and its captures identical.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

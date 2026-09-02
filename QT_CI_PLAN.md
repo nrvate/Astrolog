@@ -1417,16 +1417,16 @@ rediscovery is slowest.
 - **Never `git checkout` a file to undo a sabotage.** It reverts the
   file's entire share of the change. Twice in one session in this
   project. Reverse-patch the exact string.
-- **The source is LF, and four categories are deliberately not.** This
+- **The source is LF, and three categories are deliberately not.** This
   used to read "preserve CRLF", and it is the reverse now: work log item
   159 converted the tree, `.gitattributes` pins it with `* -text`, and
   `tools/line_endings_audit.py` fails on a carriage return in tracked
   source. What stays as it ships: binaries, files Windows or VMS tooling
-  owns (`.rc`, `.sln`, `.def`, `makefile.com`), the third-party `font/`
-  distribution, and **the data files the program parses** (`.as`,
-  `.csv`) — converting those last moved `switch-matrix.sh` output by six
-  lines, so something in the parsers reads a CR as content. A job that
-  rewrites a tracked file must not touch those.
+  owns (`.rc`, `.sln`, `.def`, `makefile.com`), and the third-party
+  `font/` distribution. **The data files** (`.as`, `.csv`) were a fourth
+  until 2026-09-02, held back by a measurement that did not reproduce;
+  they are LF now (work log item 173). A job that rewrites a tracked file
+  must still not touch the three that remain.
 - **`asan-sweep.sh` deletes `./astrolog`.** Isolate it.
 - **`/swe` will never exist on a runner.** Anything that silently needs it
   tests nothing, quietly. That is the exact failure `-i nrvate.as` exists

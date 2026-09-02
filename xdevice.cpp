@@ -1916,6 +1916,7 @@ void WriteWire(FILE *file)
 {
   word *pw = (word *)gi.bm;
   int x1, y1, z1, x2, y2, z2, n, nR, nG, nB;
+  flag fRgb;
   KV kv;
 
   if (file == NULL)
@@ -1924,17 +1925,35 @@ void WriteWire(FILE *file)
   while (pw < gi.pwWireCur) {
     if (*pw != 32768) {
 
-      // Output one line segment.
+      // Output one line segment. Six words, and the loop condition only
+      // knows that ONE remains -- so check before reading the other five
+      // rather than after (work log items 166 and 173).
+      if (pw + 6 > gi.pwWireCur)
+        break;
       x1 = (short)pw[0]; y1 = (short)pw[1]; z1 = (short)pw[2];
       x2 = (short)pw[3]; y2 = (short)pw[4]; z2 = (short)pw[5];
       fprintf(file, "%d %d %d %d %d %d\n", x1, y1, z1, x2, y2, z2);
       pw += 6;
     } else {
 
-      // Output a color change.
+      // Output a color change. The record is two words for a palette
+      // index and three when the index is invalid and an RGB triple
+      // follows (WireLine() writes it that way).
+      //
+      // **Its length has to be read whether or not the color is being
+      // written out.** This used to advance by two unconditionally when
+      // gs.fColor was clear, so a three-word record left the cursor one
+      // word short and everything after it was read at the wrong offset
+      // -- data words parsed as segment markers, and a six-word read
+      // starting anywhere, including past the end of the buffer.
+      if (pw + 2 > gi.pwWireCur)
+        break;
+      n = BLo(pw[1]);
+      fRgb = (n >= cColor2);
+      if (fRgb && pw + 3 > gi.pwWireCur)
+        break;
       if (gs.fColor) {
-        n = BLo(pw[1]);
-        if (n < cColor2) {
+        if (!fRgb) {
           kv = rgbbmp[n];
           if (kv != rgbbmpDef[n] || n >= kIndigo)
             fprintf(file, "Rgb %d %d %d\n", RgbR(kv), RgbG(kv), RgbB(kv));
@@ -1947,10 +1966,9 @@ void WriteWire(FILE *file)
             fprintf(file, "GrayN %d\n", nR);
           else
             fprintf(file, "Rgb %d %d %d\n", nR, nG, nB);
-          pw++;
         }
       }
-      pw += 2;
+      pw += 2 + fRgb;
     }
   }
 }

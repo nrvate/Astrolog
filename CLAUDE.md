@@ -408,14 +408,20 @@ On a private Xvfb display, `import -window root` is fine.
   needed CRLF: converting left all 64 object files byte-identical, 31
   from g++ 11 and 33 from mingw g++ 10.
 
-  **Four things are deliberately not LF, and `.gitattributes` lists each
-  with its reason**: binaries (`.se1`, `.ttf`, `.pdf`, `.docx`, images);
-  files Windows or VMS tooling owns (`.sln`, `.vcproj`, `.vcxproj`,
-  `.rc`, `.def`, `.url`, `makefile.com`); the third-party `font/`
-  distribution; and **the data files the program parses** (`.as`,
-  `.csv`) — those last are not cosmetic, since converting them moved
-  `tools/switch-matrix.sh` by six lines. Something in the data parsers
-  reads a CR as content; until that is found they stay as they ship.
+  **Three things are deliberately not LF, and `.gitattributes` lists
+  each with its reason**: binaries (`.se1`, `.ttf`, `.pdf`, `.docx`,
+  images); files Windows or VMS tooling owns (`.sln`, `.vcproj`,
+  `.vcxproj`, `.rc`, `.def`, `.url`, `makefile.com`); and the
+  third-party `font/` distribution.
+
+  There used to be a fourth — **the data files the program parses**
+  (`.as`, `.csv`) — held back because converting them was measured to
+  move `tools/switch-matrix.sh` by six lines, "something in the data
+  parsers reads a CR as content". **That did not reproduce**, on six
+  surfaces (work log item 173), and they are LF like everything else
+  since 2026-09-02. The likely explanation for the original measurement
+  is that the sweep which produced it also corrupted 28 binaries,
+  including every `.se1` the charts are computed from.
 
   `* -text` in `.gitattributes` stops a clone on Windows with the default
   `core.autocrlf=true` from rewriting anything, and

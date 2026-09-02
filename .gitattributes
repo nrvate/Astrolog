@@ -42,14 +42,14 @@
 # and the OFL FAQ that travel with them included.
 font/** -text
 
-# Data files the program itself parses, left exactly as they ship.
-# Converting them is NOT cosmetic: with astrolog.as, atlas.as, timezone.as
-# and nrvate.as converted to LF, tools/switch-matrix.sh moved six lines --
-# "-0q" reported a different chart-info parse failure. Something in the
-# data parsers reads a CR as content. Until that is found and fixed these
-# stay as they are, and the diff is the evidence (work log item 159).
-*.as   -text
-*.csv  -text
+# The data files the program parses (*.as, *.csv) used to be listed here
+# as CRLF-forever, on the strength of a measurement that said converting
+# them moved tools/switch-matrix.sh by six lines and changed what "-0q"
+# reported. That did not reproduce: on 2026-09-02 the switch matrix, the
+# chart matrix, eight atlas-and-timezone lookups, the "-0q" invocation
+# itself and the whole 3802-assertion suite were byte-identical with
+# every one of them converted. They are LF now like the rest of the tree,
+# and tools/line_endings_audit.py checks them. Work log item 173.
 
 # Swiss Ephemeris data the program reads the same way (the star list and
 # the orbital elements), and upstream's shipped HTML documentation. Left

@@ -29,7 +29,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = ('.se1', '.ttf', '.pdf', '.docx', '.rtf', '.png', '.ico', '.bmp',
         '.exe', '.res', '.o',
         '.sln', '.vcproj', '.vcxproj', '.rc', '.def', '.url', '.com',
-        '.as', '.csv', '.htm')
+        '.htm')
+# .as and .csv used to sit in that list. They came out on 2026-09-02:
+# the reason recorded for keeping them CRLF -- "something in the data
+# parsers reads a CR as content" -- did not reproduce on any of five
+# surfaces. See work log item 173.
 
 
 def main():

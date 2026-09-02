@@ -4588,9 +4588,31 @@ static void TestNumericOracleQt()
       // The search's own unit: miles by default, kilometres under -Yu,
       // truncated to a whole one before anything is compared.
       real rCirc = us.fEuroDist ? 40075.0 : 24901.0;
+      char szTmpAtl[cchSzMax];
+      FILE *fileAtlSav, *fileAtl;
       real rBest, rD2;
       int iaeGot, iaeWant, cBad = 0, cRange = 0, i, j;
 
+      // DisplayAtlasNearby() prints a whole city list through is.S on
+      // its way to returning the index -- the "just return the index"
+      // early exit is in the fDialog branch, and that branch does not
+      // fill *piae the way this needs. So it gets a stream of its own,
+      // which is work log item 165's hazard: this leg shipped without
+      // one, into a FILE nothing had opened, and crashed 3 runs in 10.
+      //
+      // The last line before the segfault named the WIREFRAME writer,
+      // because PrintProgress goes to unbuffered stderr while this went
+      // to a buffered stream. CLAUDE.md says not to reason from that
+      // ordering. An hour went into WriteWire() before a backtrace said
+      // qttest.cpp:4596.
+      fileAtlSav = is.S;
+      sprintf(szTmpAtl, "%s/astrolog-qt-atlas-%d.txt",
+        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
+        (int)getpid());
+      fileAtl = fopen(szTmpAtl, "w");
+      Check(fileAtl != NULL, "the atlas leg got a stream of its own");
+      if (fileAtl != NULL)
+        is.S = fileAtl;
       for (i = 0; i < 8; i++) {
         iaeGot = -1;
         if (!DisplayAtlasNearby(rgrProbe[i][0], rgrProbe[i][1], fFalse,
@@ -4631,6 +4653,12 @@ static void TestNumericOracleQt()
         Check(rD2 < 1.0, "%s's coordinates land within a degree of %s, "
           "not %.0f degrees away", rgszProbe[i], is.rgae[iaeGot].szNam,
           rD2);
+      }
+
+      is.S = fileAtlSav;
+      if (fileAtl != NULL) {
+        fclose(fileAtl);
+        remove(szTmpAtl);
       }
 
       for (j = 0; j < is.cae; j++) {
