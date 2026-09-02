@@ -1421,7 +1421,8 @@ flag ComputeArabic(int ind, real *obj, real *objalt, real *dir, real *dist,
   int bit, i, n;
   CONST TBLSIG *rgRules;
   real rBit[3][6], rLon, rLat, rDist, rDir, rDirAlt, rDirDist;
-  char ch, *pch;
+  char ch;
+  CONST char *pch;
   flag fRet = fTrue;
 
   rgRules = RgRules();
@@ -1520,7 +1521,7 @@ flag ComputeArabic(int ind, real *obj, real *objalt, real *dir, real *dist,
 
 int NCompareSzPart(int ap1, int ap2)
 {
-  char *pch1, *pch2;
+  CONST char *pch1, *pch2;
   int ich;
 
   pch1 = ai[ap1].form; pch2 = ai[ap2].form;
@@ -1548,7 +1549,8 @@ int NCompareSzPart(int ap1, int ap2)
 void DisplayArabic(void)
 {
   real rPart[cPart], rLat[cPart], rDir[cPart], rT;
-  char sz[cchSzDef], *pch, ch;
+  char sz[cchSzDef], ch;
+  CONST char *pch;
   int iPart[cPart], h, i, j, k, l;
 
   // Print header row.

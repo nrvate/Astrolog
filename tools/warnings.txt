@@ -35,7 +35,7 @@
 # Format: build, file, function, flag, count, message with numbers masked.
 #
 # Regenerate:  tools/warning_audit.py --update
-# Total: 381 warnings in 95 distinct sites.
+# Total: 633 warnings in 114 distinct sites.
 
 console+qt+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	2	‘distN’ may be used uninitialized in this function
 console+qt+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
@@ -45,10 +45,13 @@ console+qt+qt-test	extern.h	(header)	-Wmaybe-uninitialized	1	‘r’ may be used
 console+qt+qt-test	intrpret.cpp	InterpretEsoteric	-Wmaybe-uninitialized	1	‘nObj’ may be used uninitialized in this function
 console+qt+qt-test	sweph.cpp	search_star_in_list	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘long int’ and ‘size_t’ {aka ‘long unsigned int’}
 console+qt+qt-test	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘c’ may be used uninitialized in this function
+console+qt+qt-test+wcli	astrolog.h	(header)	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli	xscreen.cpp	CommandLineX	-Wunused-but-set-variable	1	variable ‘fPause’ set but not used
+console+qt+qt-test+wcli+win	atlas.cpp	DisplayAtlasLookup	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli+win	atlas.cpp	DisplayTimezoneChanges	-Wmaybe-uninitialized	1	‘dst’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	atlas.cpp	DisplayTimezoneChanges	-Wmaybe-uninitialized	1	‘zon’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	calc.cpp	GetAspect	-Wmaybe-uninitialized	1	‘rAngleND’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	calc.cpp	SwissComputeStar	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli+win	calc.cpp	SwissHouse	-Wunused-variable	1	unused variable ‘result’
 console+qt+qt-test+wcli+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘ahi’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘icut’ may be used uninitialized in this function
@@ -71,9 +74,23 @@ console+qt+qt-test+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘xo’ m
 console+qt+qt-test+wcli+win	extern.h	(header)	-Wmaybe-uninitialized	1	‘yN’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	extern.h	(header)	-Wmultistatement-macros	1	macro expands to multiple statements
 console+qt+qt-test+wcli+win	general.cpp	FSortCIList	-Wmaybe-uninitialized	1	‘fCompare’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	io.cpp	FInputData	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli+win	io.cpp	FOutputAAFFile	-Wmaybe-uninitialized	1	‘pch’ may be used uninitialized in this function
+console+qt+qt-test+wcli+win	io.cpp	FProcessCalendarFile	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli+win	io.cpp	FReadSzLineSkip	-Wmaybe-uninitialized	1	‘ch’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	placalc.cpp	calc	-Wparentheses	1	suggest parentheses around ‘&&’ within ‘||’
+console+qt+qt-test+wcli+win	swedate.cpp	init_leapsec	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	swemplan.cpp	read_elements_file	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	sweodef.h	(header)	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	sweph.cpp	fixstar_cut_string	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	sweph.cpp	load_dpsi_deps	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	sweph.cpp	read_const	-Wwrite-strings	16	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	sweph.cpp	save_star_in_struct	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	swephexp.h	(header)	-Wwrite-strings	7	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	swephlib.cpp	init_dt	-Wwrite-strings	2	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	swephlib.cpp	swe_set_astro_models	-Wwrite-strings	10	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	swephlib.cpp	swi_gen_filename	-Wwrite-strings	2	ISO C++ forbids converting a string constant to ‘char*’
+console+qt+qt-test+wcli+win	swephlib.h	(header)	-Wwrite-strings	2	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli+win	xcharts0.cpp	DrawFillWheel	-Wmaybe-uninitialized	1	‘kvC’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	xcharts0.cpp	DrawMap	-Wmaybe-uninitialized	1	‘fSimple’ may be used uninitialized in this function
 console+qt+qt-test+wcli+win	xcharts0.cpp	DrawWheel	-Wmaybe-uninitialized	1	‘rgRules’ may be used uninitialized in this function
@@ -110,6 +127,7 @@ qt+qt-test	qtdialog.cpp	(unknown)	-Wunused-function	1	‘void PlaceRowQt(int, in
 qt+qt-test+wcli+win	xdevice.cpp	WireDrawGlobe	-Wmaybe-uninitialized	1	‘zold’ may be used uninitialized in this function
 qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	1	‘ihi’ may be used uninitialized in this function
 qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	1	‘jhi’ may be used uninitialized in this function
+qt-test	qttest.cpp	FLoadParserFileQt	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 wcli+win	astrolog.h	(header)	-Wmaybe-uninitialized	1	‘tN’ may be used uninitialized in this function
 wcli+win	astrolog.h	(header)	-Wmaybe-uninitialized	3	‘distN’ may be used uninitialized in this function
 wcli+win	charts1.cpp	ChartAspectCore	-Wmaybe-uninitialized	1	‘phi’ may be used uninitialized in this function
@@ -127,6 +145,7 @@ wcli+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘hfont’ may be used uni
 wcli+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘kvSav’ may be used uninitialized in this function
 wcli+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘nSav’ may be used uninitialized in this function
 win	astrolog.cpp	Action	-Wmaybe-uninitialized	1	‘fHTMLClip’ may be used uninitialized in this function
+win	astrolog.h	(header)	-Wwrite-strings	2	ISO C++ forbids converting a string constant to ‘char*’
 win	wdialog.cpp	DlgPrint	-Wmaybe-uninitialized	1	‘fInverse’ may be used uninitialized in this function
 win	wdialog.cpp	DlgPrint	-Wunused-value	4	statement has no effect
 win	wdriver.cpp	FRedraw	-Wmaybe-uninitialized	1	‘hbmpOld’ may be used uninitialized in this function

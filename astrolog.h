@@ -1821,12 +1821,12 @@ typedef struct _parsein {
 } PARSEIN;
 
 typedef struct _StrLook {
-  char *sz;  // The string in the table
+  CONST char *sz;  // The string in the table
   int isz;   // Number the string maps to
 } StrLook;
 
 typedef struct _StrLookR {
-  char *sz;  // The string in the table
+  CONST char *sz;  // The string in the table
   real r;    // Real number the string maps to
 } StrLookR;
 
@@ -2597,8 +2597,8 @@ typedef struct _GraphicsInternal {
 #endif // GRAPH
 
 typedef struct _ArabicInfo {
-  char *form;                 // The formula to calculate it.
-  char *name;                 // The name of the Arabic part.
+  CONST char *form;                 // The formula to calculate it.
+  CONST char *name;                 // The name of the Arabic part.
 } AI;
 
 // One body the Object Selections dialog can put in a slot. The pair of

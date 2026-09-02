@@ -132,7 +132,7 @@ typedef short * TRIE;
 
 typedef struct _function {
   int ifun;     // Index of function
-  char *szName; // Name of function
+  CONST char *szName; // Name of function
   int nParam;   // Number of parameters function takes
   int nType;    // Types of return value and each parameter
 } FUN;
@@ -2557,7 +2557,7 @@ flag FCreateTries()
 #ifdef DEBUG
   char sz[cchSzDef];
 #endif
-  char *rgsz[cfun];
+  CONST char *rgsz[cfun];
   int csMax = 16000, isz, cs;
 
   xi.rgsTrieFun = RgAllocate(csMax, short, "trie");

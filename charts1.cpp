@@ -1166,7 +1166,7 @@ void ChartAspectRelation(void)
 // the main chart. Called from ChartMidpoint() and DisplayArabic() to do
 // aspects to computed midpoints or aspects to Arabic part positions.
 
-void PrintAspectsToPoint(real deg, int obj, real rRet, char *szWhat)
+void PrintAspectsToPoint(real deg, int obj, real rRet, CONST char *szWhat)
 {
   char sz[cchSzDef];
   int i, k, asp;

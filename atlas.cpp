@@ -63,7 +63,7 @@
 
 typedef struct _CountryOrRegionName {
   char szAbb[3];  // Two letter abbreviation of location
-  char *szNam;    // Full name of location
+  CONST char *szNam;    // Full name of location
 } CN;
 
 // List of world country/regions

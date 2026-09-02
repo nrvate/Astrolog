@@ -61,7 +61,15 @@ JOBS = '-j4'
 # Every build's real flags plus -Wall. Keep these in step with the
 # makefiles when those change; the audit deliberately owns its own copy so
 # that turning a warning class on here does not disturb an ordinary build.
-COMMON_NO = '-Wno-write-strings -Wno-narrowing -Wno-comment'
+# -Wno-write-strings is deliberately NOT here, and that is the point of
+# the audit owning its own flags. In C++ the warning is on by default;
+# all six makefiles switch it off, and behind that suppression sat 1,345
+# string-literal-to-char* conversions. 1,340 of them were five struct
+# members and a function signature, fixed 2026-09-02. Leaving the warning
+# ON here baselines what is left -- the genuinely mixed-use pointers and
+# the vendored Swiss Ephemeris -- so a new one shows up as NEW rather
+# than joining a crowd nobody can see.
+COMMON_NO = '-Wno-narrowing -Wno-comment'
 
 BUILDS = {
     # name:      (makefile,          flag variable, flags)

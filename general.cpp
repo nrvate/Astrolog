@@ -3307,7 +3307,7 @@ flag FCloneSzCore(CONST char *szSrc, char **pszDst, flag fDestConst)
 // changes. Strings such as chart names and locations need to be in their own
 // space and can't just be local variables in a function reading them in.
 
-char *SzClone(char *szSrc)
+char *SzClone(CONST char *szSrc)
 {
   char *szNew;
   int cb;
