@@ -3543,7 +3543,7 @@ flag DrawCalendarAspect(CONST InDayInfo *pid, int i, int iMax, int nVoid,
     DrawSz("v/c", nT, y+nScale, dtLeft | dtScale2);
   } else if (pid->source == oMoo && asp == aSig) {
     DrawColor(kSignB(pid->dest));
-    sprintf(sz, "%.3s", szSignName[pid->dest]);
+    sprintf2(S(sz), "%.3s", szSignName[pid->dest]);
     DrawSz(sz, nT, y+nScale, dtLeft | dtScale2);
   }
   return fTrue;

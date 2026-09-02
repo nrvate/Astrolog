@@ -1312,28 +1312,29 @@ void EndX()
 flag FProcessYXU(CONST char *szLin, CONST char *szLnk, flag fAdd)
 {
   char *pch;
+  int cb;
 
   // Allocate or extend allocation of star name list.
-  pch = (char *)PAllocate((fAdd ? CchSz(gs.szStarsLin) + 1 : 0) +
-    CchSz(szLin) + 1, "star name list");
+  cb = (fAdd ? CchSz(gs.szStarsLin) + 1 : 0) + CchSz(szLin) + 1;
+  pch = (char *)PAllocate(cb, "star name list");
   if (pch == NULL)
     return fFalse;
   if (fAdd)
-    sprintf(pch, "%s;%s", gs.szStarsLin, szLin);
+    sprintf2(pch, cb, "%s;%s", gs.szStarsLin, szLin);
   else
-    sprintf(pch, "%s", szLin);
+    sprintf2(pch, cb, "%s", szLin);
   DeallocatePIf(gs.szStarsLin);
   gs.szStarsLin = pch;
 
   // Allocate or extend allocation of star link list.
-  pch = (char *)PAllocate((fAdd ? CchSz(gs.szStarsLnk) + 1 : 0) +
-    CchSz(szLnk) + 2, "star link list");
+  cb = (fAdd ? CchSz(gs.szStarsLnk) + 1 : 0) + CchSz(szLnk) + 2;
+  pch = (char *)PAllocate(cb, "star link list");
   if (pch == NULL)
     return fFalse;
   if (fAdd)
-    sprintf(pch, "%s;%s", gs.szStarsLnk, szLnk);
+    sprintf2(pch, cb, "%s;%s", gs.szStarsLnk, szLnk);
   else
-    sprintf(pch, "%s", szLnk);
+    sprintf2(pch, cb, "%s", szLnk);
   DeallocatePIf(gs.szStarsLnk);
   gs.szStarsLnk = pch;
 

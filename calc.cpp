@@ -3895,7 +3895,7 @@ LNext:
   pch = pes->sz;
   *pch = chNull;
   if (FOdd(gs.nAstLabel))
-    sprintf(pch, "%d", iast);
+    sprintf2(SO(pch, pes->sz), "%d", iast);
   if (gs.nAstLabel >= 3) {
     while (*pch)
       pch++;

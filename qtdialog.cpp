@@ -1918,7 +1918,7 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
   pfnAtlasRow = AtlasRowQt;
 
   if (nWhich == 0) {                     // Lookup City
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peLoc->text().toLocal8Bit().constData());
     if (!DisplayAtlasLookup(sz, 1, &ilist))
       plist->addItem("Couldn't get atlas data!");
@@ -1928,7 +1928,7 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
     if (!DisplayAtlasNearby(lon, lat, 1, &ilist, fFalse))
       plist->addItem("Couldn't get atlas data!");
   } else {                               // Time Changes
-    sprintf(sz, "%.*s", cchSzMax-1,
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
       peLoc->text().toLocal8Bit().constData());
     pfnAtlasRow = NULL;
     if (!DisplayAtlasLookup(sz, 0, &i)) {
@@ -2393,10 +2393,10 @@ static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
   sz1[0] = sz2[0] = chNull;
   if (fFilter) {
     if (peName != NULL)
-      sprintf(sz1, "%.*s", cchSzDef-1,
+      sprintf2(S(sz1), "%.*s", cchSzDef-1,
         peName->text().toLocal8Bit().constData());
     if (peLoc != NULL)
-      sprintf(sz2, "%.*s", cchSzDef-1,
+      sprintf2(S(sz2), "%.*s", cchSzDef-1,
         peLoc->text().toLocal8Bit().constData());
   }
   for (i = 0; i < is.cci; i++) {
@@ -2438,7 +2438,7 @@ static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
     j = DayOfWeek(pci->mon, pci->day, pci->yea);
     nSav = us.fAnsiChar; us.fAnsiChar = 2;
     fSav = us.fGraphics; us.fGraphics = fTrue;
-    sprintf(sz, "%.3s %s %s (%cT Zone %s) %s %s%s%s", szDay[j],
+    sprintf2(S(sz), "%.3s %s %s (%cT Zone %s) %s %s%s%s", szDay[j],
       SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
       ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat),
       pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
@@ -4598,7 +4598,7 @@ static void LookupStarNamesQt(QVector<QLineEdit *> &rgpeName,
     if (baName.size() > 0 && !FEqSz(baName.constData(), szObjUnknown))
       continue;
     QByteArray baDef = rgpeDef[i]->text().toLocal8Bit();
-    sprintf(sz, "%.*s", cchSzMax-1, baDef.constData());
+    sprintf2(S(sz), "%.*s", cchSzMax-1, baDef.constData());
     if (!SwissTestStar(sz))
       sprintf2(S(sz), "%s", szObjUnknown);
     rgpeName[i]->setText(sz);

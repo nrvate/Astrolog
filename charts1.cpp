@@ -1387,9 +1387,9 @@ void PrintHorizonLine(real azi, real alt,
   if (!us.fHouse3D) {
     rAzi = Mod(azi * (us.nHorizon >= 4 ? -1.0 : 1.0) +
       (real)(((us.nHorizon & 3) + 4) * 90));
-    sprintf(sz, " %s", SzDegree(rAzi));
+    sprintf2(S(sz), " %s", SzDegree(rAzi));
   } else {
-    sprintf(sz, " %2d%s", SFromZ(azi),
+    sprintf2(S(sz), " %2d%s", SFromZ(azi),
       SzDegree(azi - (real)((SFromZ(azi)-1)*30)));
   }
   PrintSz(sz);
@@ -1399,10 +1399,10 @@ void PrintHorizonLine(real azi, real alt,
   } else {
     vy = RAbs(sy / sx); vx = 1.0;
   }
-  sprintf(sz, us.fSeconds ? " (%.3f%c" : " (%.2f%c", vy, sy < 0.0 ?
+  sprintf2(S(sz), us.fSeconds ? " (%.3f%c" : " (%.2f%c", vy, sy < 0.0 ?
     (hm != hmHorizon ? 'u' : 's') : (hm != hmHorizon ? 'd' : 'n'));
   PrintSz(sz);
-  sprintf(sz, us.fSeconds ? " %.3f%c)" : " %.2f%c)", vx,
+  sprintf2(S(sz), us.fSeconds ? " %.3f%c)" : " %.2f%c)", vx,
     sx > 0.0 ? 'e' : 'w');
   PrintSz(sz);
 
@@ -1414,7 +1414,7 @@ void PrintHorizonLine(real azi, real alt,
     j = 1 + us.fSeconds;
     sprintf2(S(szFormat), " [%%%d.%df%%%d.%df] [%%%d.%df%%%d.%df]",
       j+5, j, j+5, j, j+5, j, j+5, j);
-    sprintf(sz, szFormat,
+    sprintf2(S(sz), szFormat,
       RAbs(vx) < rDegHalf ? vx : RSgn(vx) * (rDegMax - RAbs(vx)),
       altSun - alt,
       RAbs(vy) < rDegHalf ? vy : RSgn(vy) * (rDegMax - RAbs(vy)),
@@ -2013,13 +2013,13 @@ static flag ChartAstroGraphCore(flag fRel)
 
   fTransit = fRel && (us.nRel == rcTransit || us.nRel == rcProgress);
   if (fTransit) {
-    sprintf(sz2[0], "%c.", us.nRel == rcTransit ? 'T' : 'P');
-    sprintf(sz2[1], "N.");
+    sprintf2(S(sz2[0]), "%c.", us.nRel == rcTransit ? 'T' : 'P');
+    sprintf2(S(sz2[1]), "N.");
     for (i = 0; i <= is.nObj; i++)
       ignore3[i] = ignore[i] && ignore2[i];
   } else {
     if (fRel) {
-      sprintf(sz2[0], "#1 "); sprintf(sz2[1], "#2 ");
+      sprintf2(S(sz2[0]), "#1 "); sprintf2(S(sz2[1]), "#2 ");
     } else
       sz2[0][0] = chNull;
     CopyRgb(ignore.rgn, ignore3, sizeof(ignore.rgn));

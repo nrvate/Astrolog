@@ -620,7 +620,7 @@ extern void PrintObjects P((void));
 extern void PrintAspects P((void));
 extern void PrintSigns P((void));
 #ifdef CONSTEL
-extern CONST char *GetSzGenitive P((char *, CONST char *));
+extern CONST char *GetSzGenitive P((char *, int, CONST char *));
 extern void GetSzConstel P((char *, int, int));
 extern void PrintConstellations P((void));
 #endif

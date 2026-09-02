@@ -1052,16 +1052,16 @@ void DrawSymbolRing(real *symbol, real *xplanet,
           AdjustTextScale();
         }
         DrawColor(kSignB(SFromZ(obj[i])));
-        sprintf(sz, "%d%c", (int)obj[i] % 30, chDegL);
+        sprintf2(S(sz), "%d%c", (int)obj[i] % 30, chDegL);
         DrawSz(sz, cx+POINT1(unitx, rz+0.03, PX(temp)),
           cy+POINT1(unity, rz+0.03, PY(temp)) + gi.nScaleTextT2, dtScale2);
-        sprintf(sz, "%02d'", (int)(RFract(obj[i])*60.0));
+        sprintf2(S(sz), "%02d'", (int)(RFract(obj[i])*60.0));
         DrawSz(sz, cx+POINT1(unitx, rz-0.03, PX(temp)),
           cy+POINT1(unity, rz-0.03, PY(temp)) + gi.nScaleTextT2, dtScale2);
         chT = ChRet(dir[i]);
         if (chT != ' ') {
           DrawColor(gi.kiOn);
-          sprintf(sz, "%c", chT);
+          sprintf2(S(sz), "%c", chT);
           DrawSz(sz, cx+POINT1(unitx, rz-0.07, PX(temp)),
             cy+POINT1(unity, rz-0.07, PY(temp)) + gi.nScaleTextT2, dtScale2);
         }
@@ -1090,7 +1090,7 @@ void DrawSymbolRing(real *symbol, real *xplanet,
   while (EnumMoonsRing(&i, &j, &symbolM, &col, &chT, fFalse)) {
     temp = symbol[j];
     x = cx+POINT1(unitx, rg, PX(temp)); y = cy+POINT1(unity, rg, PY(temp));
-    sprintf(sz, "%c", chT);
+    sprintf2(S(sz), "%c", chT);
     DrawColor(col);
     temp += symbolM;
     x += (int)((real)(6*gi.nScale+5*gi.nScaleT)*PX(temp));

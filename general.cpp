@@ -2102,7 +2102,7 @@ char *SzOffset(real zon, real dst, real lon)
     if (min != 0) {
       for (pch = szOff; *pch; pch++)
         ;
-      sprintf(pch, "%02d", min);
+      sprintf2(SO(pch, szOff), "%02d", min);
     }
   }
   return szOff;
@@ -2232,7 +2232,7 @@ char *SzElevation(real elv)
   FormatR(S(szElev), us.fEuroDist ? elv : elv / rFtToM, -2);
   for (pch = szElev; *pch; pch++)
     ;
-  sprintf(pch, "%s", us.fEuroDist ? "m" : "ft");
+  sprintf2(SO(pch, szElev), "%s", us.fEuroDist ? "m" : "ft");
   return szElev;
 }
 
@@ -2248,7 +2248,7 @@ char *SzTemperature(real tmp)
   FormatR(S(szTemp), us.fEuroDist ? tmp : tmp * 9.0/5.0 + 32.0, -2);
   for (pch = szTemp; *pch; pch++)
     ;
-  sprintf(pch, "%s", us.fEuroDist ? "C" : "F");
+  sprintf2(SO(pch, szTemp), "%s", us.fEuroDist ? "C" : "F");
   return szTemp;
 }
 
@@ -2264,7 +2264,7 @@ char *SzLength(real len)
   FormatR(S(szLen), !us.fEuroDist ? len : len * rInToCm, -2);
   for (pch = szLen; *pch; pch++)
     ;
-  sprintf(pch, "%s", us.fEuroDist ? "cm" : "in");
+  sprintf2(SO(pch, szLen), "%s", us.fEuroDist ? "cm" : "in");
   return szLen;
 }
 
@@ -2872,20 +2872,23 @@ int WchToUTF8(wchar wch, char *sz)
 {
   // 1 byte UTF8 sequence: Characters 0-127
   if (wch < 0x80) {
-    sprintf(sz, "%c", (uchar)wch);
+    sz[0] = (char)(uchar)wch; sz[1] = chNull;
     return 1;
   }
 
   // 2 byte UTF8 sequence: Characters 0x80 - 0x7ff
   if (wch < 0x800) {
-    sprintf(sz, "%c%c", (uchar)(0xc0 | (wch >> 6)),
-      (uchar)(0x80 | (wch & 0x3f)));
+    sz[0] = (char)(uchar)(0xc0 | (wch >> 6));
+    sz[1] = (char)(uchar)(0x80 | (wch & 0x3f));
+    sz[2] = chNull;
     return 2;
   }
 
   // 3 byte UTF8 sequence: Characters 0x800 - 0xffff
-  sprintf(sz, "%c%c%c", (uchar)(0xe0 | (wch >> 12)),
-    (uchar)(0x80 | ((wch >> 6) & 0x3f)), (uchar)(0x80 | (wch & 0x3f)));
+  sz[0] = (char)(uchar)(0xe0 | (wch >> 12));
+  sz[1] = (char)(uchar)(0x80 | ((wch >> 6) & 0x3f));
+  sz[2] = (char)(uchar)(0x80 | (wch & 0x3f));
+  sz[3] = chNull;
   return 3;
 }
 

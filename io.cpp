@@ -306,7 +306,7 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
   // All files have to begin with the -@ switch file type identifier.
   ch = getc(file); ungetc(ch, file);
   if (ch != '@') {
-    sprintf(szLine,
+    sprintf2(S(rgchLine),
       "The command file '%s' is not in any valid format (character %d).",
       szFile, (int)ch);
     PrintWarning(szLine);
@@ -3162,7 +3162,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
       AddTime(&ci[i], 2, -5);  // Subtract 5 minutes
     else if (i >= 2)
       AddTime(&ci[i], 2, 6);   // Add at least 5 minutes
-    sprintf(szMon[i], "%.3s", szMonth[ci[i].mon]);
+    sprintf2(S(szMon[i]), "%.3s", szMonth[ci[i].mon]);
     for (pch = szMon[i]; *pch; pch++)
       *pch = ChCap(*pch);
     hr[i] = NFloor(ci[i].tim);
@@ -3172,7 +3172,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
 
   // Compose URL to download from internet.
   if (us.fTopoPos) {
-    sprintf(szLine, "COORD_TYPE= 'GEODETIC'&"
+    sprintf2(S(szLine), "COORD_TYPE= 'GEODETIC'&"
       "SITE_COORD='%lf,%lf,%lf'&",
       -ciCore.lon, ciCore.lat, us.elvDef / 1000.0);
   } else

@@ -984,12 +984,12 @@ static void TestBadInputQt()
   Check(fTrue, "FileOpen() on a missing file returned");
 
   // The macro path proper: a command line naming a file that isn't here.
-  sprintf(sz, "-i no-such-file-here.as");
+  sprintf2(S(sz), "-i no-such-file-here.as");
   FProcessCommandLine(sz);
   Check(fTrue, "FProcessCommandLine() returned after a missing -i file");
 
   // And an outright bad switch, the other way a stale macro goes wrong.
-  sprintf(sz, "-ZZzzz");
+  sprintf2(S(sz), "-ZZzzz");
   FProcessCommandLine(sz);
   Check(fTrue, "FProcessCommandLine() returned after an unknown switch");
 
@@ -1007,7 +1007,7 @@ static void TestBadInputQt()
     char szLong[cchSzLine];
     int i;
 
-    sprintf(szLong, "-q 3 4 2020 5:0");
+    sprintf2(S(szLong), "-q 3 4 2020 5:0");
     for (i = CchSz(szLong); i < 420; i++)
       szLong[i] = '6';
     szLong[i] = chNull;
@@ -1978,7 +1978,7 @@ static void TestObjSelGlyphQt()
   // points nowhere near the cause.
   char szDispSav[cchSzMax];
   flag fDispWasOwn = (szObjDisp[iobj] == szObjName[iobj]);
-  sprintf(szDispSav, "%s", szObjDisp[iobj]);
+  sprintf2(S(szDispSav), "%s", szObjDisp[iobj]);
 
   Group("Object selection glyph");
 
@@ -2212,7 +2212,7 @@ static void TestSettingsRoundTripQt()
   rgobjset[iMoon].tinf = 4.0;
   rgobjset[iCusp].tinf = 6.0;
 
-  sprintf(szPath, "%s/astrolog-qt-roundtrip-%d.as", getenv("TMPDIR") != NULL ?
+  sprintf2(S(szPath), "%s/astrolog-qt-roundtrip-%d.as", getenv("TMPDIR") != NULL ?
     getenv("TMPDIR") : "/tmp", (int)getpid());
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
@@ -2586,7 +2586,7 @@ static void TestObjSelDialogQt()
   // glyph test below once had an independent copy of the same bug.
   char szDispSav[cchSzMax];
   flag fDispWasOwn = (szObjDisp[iobj] == szObjName[iobj]);
-  sprintf(szDispSav, "%s", szObjDisp[iobj]);
+  sprintf2(S(szDispSav), "%s", szObjDisp[iobj]);
 
   Group("Object Selections dialog");
 
@@ -2682,7 +2682,7 @@ static void TestObjSelTableQt()
       SwissGetObjName(S(szName),
         rgObjSel[i].nTyp <= 0 ? -rgObjSel[i].nObj : rgObjSel[i].nObj);
     else
-      sprintf(szName, "%s", FItem(rgObjSel[i].nObj) ?
+      sprintf2(S(szName), "%s", FItem(rgObjSel[i].nObj) ?
         szObjName[rgObjSel[i].nObj] : szObjUnknown);
     if (FEqSz(szName, szObjUnknown))
       continue;                   // No ephemeris for it here; can't judge.
@@ -2905,7 +2905,7 @@ static int NExpEvalQt(CONST char *sz)
   char szT[cchSzMax];
 
   ExpSetN(iLetterZ, -999);
-  sprintf(szT, "=z %s", sz);
+  sprintf2(S(szT), "=z %s", sz);
   ParseExpression(szT);
   return NExpGet(iLetterZ);
 }
@@ -3074,7 +3074,7 @@ static void TestChartListFilterQt()
   static char rgszNamT[3][cchSzDef];
   for (i = 0; i < 3; i++) {
     ciCore = ciMain; ciCore.yea = 1990 + i;
-    sprintf(rgszNamT[i], "AstrologSuiteChart%d", i);
+    sprintf2(S(rgszNamT[i]), "AstrologSuiteChart%d", i);
     ciCore.nam = rgszNamT[i];
     FAppendCIList(&ciCore);
   }
@@ -3271,7 +3271,7 @@ static void TestSharedCoreFixesQt()
     ciMain.nam = szLongNam; ciMain.loc = szLongLoc;
     ciCore = ciMain;
     us.fSeconds = fTrue;
-    sprintf(szOut, "%s/astrolog-qt-longloc-%d.txt",
+    sprintf2(S(szOut), "%s/astrolog-qt-longloc-%d.txt",
       getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
     FCloneSz(szOut, &is.szFileScreen);
     us.fGraphics = fFalse;
@@ -3376,7 +3376,7 @@ static void TestSharedCoreFixesQt()
   gs.yWin = 1260;
   gs.xWin = 1260 + ((SIDESIZE * gi.nScaleText) >> 1);
   i = gs.xWin; if (fSidebar) i -= (SIDESIZE * gi.nScaleText) >> 1;
-  sprintf(szLine, ":Xw %d %d", i, gs.yWin);
+  sprintf2(S(szLine), ":Xw %d %d", i, gs.yWin);
   FProcessCommandLine(szLine);
   Check(gs.xWin == 1260 + ((SIDESIZE * gi.nScaleText) >> 1),
     "a saved window width reloads to the width it was saved at");
@@ -3571,8 +3571,8 @@ static void TestNestedIncludeQt()
   Group("Nested include");
   SetNoPopupQt(fTrue);    // a failing load must fail, not open a box
   szTmp = getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp";
-  sprintf(szInner, "%s/astrolog-qt-nest-inner-%d.as", szTmp, (int)getpid());
-  sprintf(szOuter, "%s/astrolog-qt-nest-outer-%d.as", szTmp, (int)getpid());
+  sprintf2(S(szInner), "%s/astrolog-qt-nest-inner-%d.as", szTmp, (int)getpid());
+  sprintf2(S(szOuter), "%s/astrolog-qt-nest-outer-%d.as", szTmp, (int)getpid());
   file = fopen(szInner, "w");
   fprintf(file, "@AD800  ; inner\n-YQ 41\n");
   fclose(file);
@@ -3699,10 +3699,10 @@ static void TestForcedPositionsQt()
   // #ifdef WIN, so a settings file saved here silently lost every macro
   // name -- 13 of them in the config this was found with -- while the
   // Windows build kept them. Save what this build can load.
-  sprintf(szLine, "-WM 1 \"AstrologQtSuiteMacro\"");
+  sprintf2(S(szLine), "-WM 1 \"AstrologQtSuiteMacro\"");
   FProcessCommandLine(szLine);
 
-  sprintf(szPath, "%s/astrolog-qt-force-test-%d.as", getenv("TMPDIR") != NULL ?
+  sprintf2(S(szPath), "%s/astrolog-qt-force-test-%d.as", getenv("TMPDIR") != NULL ?
     getenv("TMPDIR") : "/tmp", (int)getpid());
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
@@ -4459,7 +4459,7 @@ static void TestNumericOracleQt()
         char szTmpRet[cchSzMax];
         FILE *fileRetSav = is.S, *fileRet;
 
-        sprintf(szTmpRet, "%s/astrolog-qt-return-%d.txt",
+        sprintf2(S(szTmpRet), "%s/astrolog-qt-return-%d.txt",
           getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
           (int)getpid());
         fileRet = fopen(szTmpRet, "w");
@@ -4649,7 +4649,7 @@ static void TestNumericOracleQt()
       // ordering. An hour went into WriteWire() before a backtrace said
       // qttest.cpp:4596.
       fileAtlSav = is.S;
-      sprintf(szTmpAtl, "%s/astrolog-qt-atlas-%d.txt",
+      sprintf2(S(szTmpAtl), "%s/astrolog-qt-atlas-%d.txt",
         getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
         (int)getpid());
       fileAtl = fopen(szTmpAtl, "w");
@@ -4786,7 +4786,7 @@ static void TestNumericOracleQt()
         FILE *fileIntSav = is.S, *fileInt;
         long lcb;
 
-        sprintf(szTmpInt, "%s/astrolog-qt-interp-%d.txt",
+        sprintf2(S(szTmpInt), "%s/astrolog-qt-interp-%d.txt",
           getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
           (int)getpid());
         fileInt = fopen(szTmpInt, "w");
@@ -4843,7 +4843,7 @@ static void TestNumericOracleQt()
 
       for (j = 0; j < 8 && j < cciSav; j++)
         rgciSav[j] = is.rgci[j];
-      sprintf(szTmpDay, "%s/astrolog-qt-inday-%d.txt",
+      sprintf2(S(szTmpDay), "%s/astrolog-qt-inday-%d.txt",
         getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
         (int)getpid());
 
@@ -4940,7 +4940,7 @@ static void TestNumericOracleQt()
       }
       ciTran = ciCore;
       is.cci = 0;
-      sprintf(szTmpTra, "%s/astrolog-qt-transit-%d.txt",
+      sprintf2(S(szTmpTra), "%s/astrolog-qt-transit-%d.txt",
         getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
         (int)getpid());
       fileTraSav = is.S;
@@ -5013,7 +5013,7 @@ static void TestNumericOracleQt()
       for (j = 0; j <= cObj; j++)
         ignore[j] = (j != oSun);
       is.cci = 0;
-      sprintf(szTmpHor, "%s/astrolog-qt-horizon-%d.txt",
+      sprintf2(S(szTmpHor), "%s/astrolog-qt-horizon-%d.txt",
         getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
         (int)getpid());
       fileHorSav = is.S;
@@ -5432,7 +5432,7 @@ static void TestFileParsersQt()
   for (i = 0; i < 2047; i++)
     szPad[i] = 'P';
   szPad[2047] = chNull;
-  sprintf(szFile, "%s/astrolog-qt-parserfixture-%d.tmp",
+  sprintf2(S(szFile), "%s/astrolog-qt-parserfixture-%d.tmp",
     getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
 
   // iCalendar, fgets through the whole cchSzLine buffer: a 400-char
@@ -5450,7 +5450,7 @@ static void TestFileParsersQt()
     FEqSz(ciCore.loc, "Seattle") && MM == 3 && DD == 4 && YY == 2020,
     "calendar control loads (nam '%s' loc '%s' %d/%d/%d)",
     ciCore.nam, ciCore.loc, MM, DD, YY);
-  sprintf(sz, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:%.400s\n"
+  sprintf2(S(sz), "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:%.400s\n"
     "LOCATION:Seattle\nDTSTART:20200304T050607\nEND:VEVENT\n"
     "END:VCALENDAR\n", szPad);
   WriteParserFileQt(szFile, sz);
@@ -5458,7 +5458,7 @@ static void TestFileParsersQt()
   Check(fRet && CchSz(ciCore.nam) == 400 &&
     ciCore.nam[0] == 'P' && MM == 3,
     "calendar 400-char summary arrives whole (%d)", CchSz(ciCore.nam));
-  sprintf(sz, "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:%.1100s\n"
+  sprintf2(S(sz), "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:%.1100s\n"
     "LOCATION:Seattle\nDTSTART:20200304T050607\nEND:VEVENT\n"
     "END:VCALENDAR\n", szPad);
   WriteParserFileQt(szFile, sz);
@@ -5484,7 +5484,7 @@ static void TestFileParsersQt()
     FEqSz(ciCore.loc, "Seattle WA") && MM == 3 && DD == 4 && YY == 2020,
     "Solar Fire control loads (nam '%s' loc '%s' %d/%d/%d)",
     ciCore.nam, ciCore.loc, MM, DD, YY);
-  sprintf(sz, "\nCreated by Esoteric Technologies\n\n"
+  sprintf2(S(sz), "\nCreated by Esoteric Technologies\n\n"
     "%.300s\n"
     "Mar 4 2020, 5:06 am, +5:00\n"
     "Seattle WA, 47N36 00, 122W19 00\n\n", szPad);
@@ -5494,7 +5494,7 @@ static void TestFileParsersQt()
     "Solar Fire 300-char name line loads whole (ret=%d nam %d)",
     fRet, CchSz(ciCore.nam));
   i = is.cci;
-  sprintf(sz, "\nCreated by Esoteric Technologies\n\n"
+  sprintf2(S(sz), "\nCreated by Esoteric Technologies\n\n"
     "%.1100s\n"
     "Mar 4 2020, 5:06 am, +5:00\n"
     "Seattle WA, 47N36 00, 122W19 00\n\n", szPad);
@@ -5520,7 +5520,7 @@ static void TestFileParsersQt()
     FEqSz(ciCore.loc, "Seattle, WA, USA") && MM == 3 && DD == 4,
     "AAF control loads (nam '%s' loc '%s' %d/%d/%d)",
     ciCore.nam, ciCore.loc, MM, DD, YY);
-  sprintf(sz, "#A93:*,First %.400s,*,4.3.2020,5:06,Sea%.400sttle,WA (USA)\n"
+  sprintf2(S(sz), "#A93:*,First %.400s,*,4.3.2020,5:06,Sea%.400sttle,WA (USA)\n"
     "#B93:2458912.5,47N36,122W19,+5:00,0\n", szPad, szPad);
   WriteParserFileQt(szFile, sz);
   fRet = FLoadParserFileQt(szFile);
@@ -5533,7 +5533,7 @@ static void TestFileParsersQt()
   // And a line past cchSzLine splits: the tail reads as its own line,
   // which can't start with '#', so the file is rejected.
   i = is.cci;
-  sprintf(sz, "#: %.1200s\n"
+  sprintf2(S(sz), "#: %.1200s\n"
     "#A93:*,First Last,*,4.3.2020,5:06,Seattle,WA (USA)\n"
     "#B93:2458912.5,47N36,122W19,+5:00,0\n", szPad);
   WriteParserFileQt(szFile, sz);
@@ -5558,7 +5558,7 @@ static void TestFileParsersQt()
     FEqSz(ciCore.loc, "Seattle, USA") && MM == 3 && DD == 4 && YY == 2020,
     "ADB control loads (nam '%s' loc '%s' %d/%d/%d)",
     ciCore.nam, ciCore.loc, MM, DD, YY);
-  sprintf(sz,
+  sprintf2(S(sz),
     "<adb_entry>\n"
     "<x imonth=\"3\" iday=\"4\" iyear=\"2020\" sbtime_ampm=\"5:06 AM\"\n"
     "ctimetype=\"h\" stmerid=\"5E\">\n"
@@ -5577,7 +5577,7 @@ static void TestFileParsersQt()
 
   // Quick*Chart, fgets whose buffer matches its limit; the fixed
   // 100-column layout can't reach it. A control only.
-  sprintf(sz, "%-23s%-3s%-4s%-5s%-12s%-3s%-6s%-10s%-9s%-25s\n",
+  sprintf2(S(sz), "%-23s%-3s%-4s%-5s%-12s%-3s%-6s%-10s%-9s%-25s\n",
     "Quick Control", "Mar", "4", "2020", "5:06am", "EST", "+5:00",
     "122W19", "47N36", "Seattle WA");
   WriteParserFileQt(szFile, sz);
@@ -5589,7 +5589,7 @@ static void TestFileParsersQt()
 
   // Switch files are the one reader with a growth policy: the buffer
   // realloc-doubles, so a 2000-character line arrives whole.
-  sprintf(sz, "@0308  ; Astrolog chart info.\n-zi \"Switch Control\" "
+  sprintf2(S(sz), "@0308  ; Astrolog chart info.\n-zi \"Switch Control\" "
     "\"%.2000s\"\n-qb 3 4 2020 5:06 0 5:00 122:19W 47:36N\n", szPad);
   WriteParserFileQt(szFile, sz);
   fRet = FLoadParserFileQt(szFile);
@@ -5661,7 +5661,7 @@ static void TestLineDrawingQt()
       *rgchartmode[j].pf = fFalse;
     }
     us.fGrid = fTrue;
-    sprintf(szOut, "%s/astrolog-qt-linedraw-%d.txt",
+    sprintf2(S(szOut), "%s/astrolog-qt-linedraw-%d.txt",
       getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
     FCloneSz(szOut, &is.szFileScreen);
 
@@ -5749,7 +5749,7 @@ static void TestLongStringsQt()
     ciCore = ciMain;
     for (i = 0; i < cchartmode; i++)
       rgfSav[i] = *rgchartmode[i].pf;
-    sprintf(szOut, "%s/astrolog-qt-longstrings-%d.txt",
+    sprintf2(S(szOut), "%s/astrolog-qt-longstrings-%d.txt",
       getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
     FCloneSz(szOut, &is.szFileScreen);
 

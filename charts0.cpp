@@ -1213,7 +1213,7 @@ void PrintSigns(void)
 // its genitive or posessive form. Some standard rules are used but a special
 // instructions string is passed for special cases.
 
-CONST char *GetSzGenitive(char *szGen, CONST char *szInst)
+CONST char *GetSzGenitive(char *szGen, int cchMax, CONST char *szInst)
 {
   char *pch, ch1, ch2;
   int cch;
@@ -1244,7 +1244,7 @@ CONST char *GetSzGenitive(char *szGen, CONST char *szInst)
     *(pch-2) = 'i';
     *(pch-1) = chNull;
   } else if (ch1 == 'x')     // Standard rule: 'x' ending -> 'cis'.
-    sprintf(pch-1, "cis");
+    sprintf2(pch-1, cchMax - (int)((pch-1) - szGen), "cis");
   return szInst;
 }
 
@@ -1263,18 +1263,18 @@ void GetSzConstel(char *szGen, int cchMax, int i)
     ;
   szInst = szCnstlGenitive[i];
   if (*pchSpace == chNull) {
-    GetSzGenitive(szGen, szInst);
+    GetSzGenitive(szGen, cchMax, szInst);
     return;
   }
   *pchSpace = chNull;
   if (szInst[0] == '!') {
-    GetSzGenitive(szGen, szInst+1);
+    GetSzGenitive(szGen, cchMax, szInst+1);
     return;
   }
   sprintf2(S(sz1), "%s", szGen);
   sprintf2(S(sz2), "%s", pchSpace+1);
-  szInst = GetSzGenitive(sz1, szInst);
-  GetSzGenitive(sz2, szInst);
+  szInst = GetSzGenitive(sz1, cchSzDef, szInst);
+  GetSzGenitive(sz2, cchSzDef, szInst);
   sprintf2(szGen, cchMax, "%s %s", sz1, sz2);
 }
 

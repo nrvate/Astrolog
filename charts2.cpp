@@ -560,10 +560,10 @@ void PrintAspect(int obj1, real pos1, real ret1, int asp,
     PrintSz("progr ");
 
   // Print name of first planet.
-  sprintf(sz, "%7.7s", szObjDisp[obj1]); PrintSz(sz);
+  sprintf2(S(sz), "%7.7s", szObjDisp[obj1]); PrintSz(sz);
   ki = fLon ? kSignA(SFromZ(pos1)) : kDefault;
   AnsiColor(ki);
-  sprintf(sz, " %c", ret1 > 0.0 ? '(' : (ret1 < 0.0 ? '[' : '<')); PrintSz(sz);
+  sprintf2(S(sz), " %c", ret1 > 0.0 ? '(' : (ret1 < 0.0 ? '[' : '<')); PrintSz(sz);
   if (asp == aSig && ret1 > 0.0)
     pos1 += 29.9999999;
   else if (asp == aDeg)
@@ -571,17 +571,17 @@ void PrintAspect(int obj1, real pos1, real ret1, int asp,
   if (!us.fSeconds) {
     if (fLon) {
       if (us.nDegForm == df360)
-        sprintf(sz, "%3d", (int)pos1);
+        sprintf2(S(sz), "%3d", (int)pos1);
       else if (us.nDegForm == dfHM)
-        sprintf(sz, "%2dh", (int)pos1/15);
+        sprintf2(S(sz), "%2dh", (int)pos1/15);
       else if (us.nDegForm == dfNak)
-        sprintf(sz, "%.3s", szNakshatra[(int)(pos1 / (rDegMax/27.0)) + 1]);
+        sprintf2(S(sz), "%.3s", szNakshatra[(int)(pos1 / (rDegMax/27.0)) + 1]);
       else
-        sprintf(sz, "%.3s", szSignName[SFromZ(pos1)]);
+        sprintf2(S(sz), "%.3s", szSignName[SFromZ(pos1)]);
     } else if (fPar)
-      sprintf(sz, "%c%2d", pos1 < 0 ? '-' : '+', (int)RAbs(pos1));
+      sprintf2(S(sz), "%c%2d", pos1 < 0 ? '-' : '+', (int)RAbs(pos1));
     else
-      sprintf(sz, "%2d%%", (int)pos1);
+      sprintf2(S(sz), "%2d%%", (int)pos1);
     PrintSz(sz);
   } else {
     if (!us.fSecond1K)
@@ -596,13 +596,13 @@ void PrintAspect(int obj1, real pos1, real ret1, int asp,
     } else if (fPar) {
       PrintAltitude(pos1);
     } else {
-      sprintf(sz, "%f", pos1);
-      sprintf(sz + (!us.fSecond1K ? 6 : 9), "%s", "%"); PrintSz(sz);
+      sprintf2(S(sz), "%f", pos1);
+      sprintf2(SO(sz + (!us.fSecond1K ? 6 : 9), sz), "%s", "%"); PrintSz(sz);
     }
     us.fSeconds = fSecond;
     AnsiColor(ki);
   }
-  sprintf(sz, "%c", ret1 > 0.0 ? ')' : (ret1 < 0.0 ? ']' : '>')); PrintSz(sz);
+  sprintf2(S(sz), "%c", ret1 > 0.0 ? ')' : (ret1 < 0.0 ? ']' : '>')); PrintSz(sz);
   PrintCh(' ');
 
   // Mark aspect with wax/wan for charts that don't already include it.
@@ -624,23 +624,23 @@ void PrintAspect(int obj1, real pos1, real ret1, int asp,
   // Print name of aspect or other event.
   AnsiColor(asp > 0 ? kAspA[ASPT(asp)] : kWhiteA);
   if (asp == aSig || asp == aHou)
-    sprintf(sz, ret1 >= 0.0 ? "-->" : "<--");  // Print a sign change.
+    sprintf2(S(sz), ret1 >= 0.0 ? "-->" : "<--");  // Print a sign change.
   else if (asp == aDir)
-    sprintf(sz, "S/%c", obj2 ? chRet : 'D');   // Print a direction change.
+    sprintf2(S(sz), "S/%c", obj2 ? chRet : 'D');   // Print a direction change.
   else if (asp == aDeg)
-    sprintf(sz, "At:");                        // Print a degree change.
+    sprintf2(S(sz), "At:");                        // Print a degree change.
   else if (asp == aAlt)
-    sprintf(sz, "LA%c", obj2 ? '+' : '-');     // Print a latitude extreme.
+    sprintf2(S(sz), "LA%c", obj2 ? '+' : '-');     // Print a latitude extreme.
   else if (asp == aLen)
-    sprintf(sz, "%s", obj2 ? "Apo" : "Per");   // Print a distance extreme.
+    sprintf2(S(sz), "%s", obj2 ? "Apo" : "Per");   // Print a distance extreme.
   else if (asp == aNod)
-    sprintf(sz, "LA0");                        // Print at latitude zero.
+    sprintf2(S(sz), "LA0");                        // Print at latitude zero.
   else if (asp == aDis)
-    sprintf(sz, "EqD");                        // Print at equal distance.
+    sprintf2(S(sz), "EqD");                        // Print at equal distance.
   else if (asp == 0)
-    sprintf(sz, chart == 'm' ? "&" : "with");
+    sprintf2(S(sz), chart == 'm' ? "&" : "with");
   else
-    sprintf(sz, "%s", SzAspectAbbrev(asp));    // Print an aspect.
+    sprintf2(S(sz), "%s", SzAspectAbbrev(asp));    // Print an aspect.
   PrintSz(sz);
   if (asp != aDir && asp != aAlt)
     PrintCh(' ');
@@ -650,38 +650,38 @@ void PrintAspect(int obj1, real pos1, real ret1, int asp,
     PrintSz("with ");
   if (asp == aSig) {
     AnsiColor(kSignA(obj2));
-    sprintf(sz, "%s", szSignName[obj2]); PrintSz(sz);
+    sprintf2(S(sz), "%s", szSignName[obj2]); PrintSz(sz);
   } else if (asp == aDeg) {
     PrintZodiac((real)obj2 * (rDegMax / (real)(cSign * us.nSignDiv)));
   } else if (asp == aHou) {
     AnsiColor(kSignA(obj2));
     if (chart == 't' || chart == 'u' || chart == 'T' || chart == 'U')
       PrintSz("natal ");
-    sprintf(sz, "%d%s 3D House", obj2, szSuffix[obj2]); PrintSz(sz);
+    sprintf2(S(sz), "%d%s 3D House", obj2, szSuffix[obj2]); PrintSz(sz);
   } else if (asp == aNod) {
     AnsiColor(kElemA[obj2*2+1]);
-    sprintf(sz, "%s", rgszDir[obj2*2]); PrintSz(sz);
+    sprintf2(S(sz), "%s", rgszDir[obj2*2]); PrintSz(sz);
   } else if (asp >= 0 || asp == aDis) {
     ki = fLon ? kSignA(SFromZ(pos2)) : kDefault;
     AnsiColor(ki);
     if (chart == 't' || chart == 'u' || chart == 'T' || chart == 'U')
       PrintSz("natal ");
-    sprintf(sz, "%c", ret2 > 0.0 ? '(' : (ret2 < 0.0 ? '[' : '<'));
+    sprintf2(S(sz), "%c", ret2 > 0.0 ? '(' : (ret2 < 0.0 ? '[' : '<'));
     PrintSz(sz);
     if (!us.fSeconds) {
       if (fLon) {
         if (us.nDegForm == df360)
-          sprintf(sz, "%3d", (int)pos2);
+          sprintf2(S(sz), "%3d", (int)pos2);
         else if (us.nDegForm == dfHM)
-          sprintf(sz, "%2dh", (int)pos2/15);
+          sprintf2(S(sz), "%2dh", (int)pos2/15);
         else if (us.nDegForm == dfNak)
-          sprintf(sz, "%.3s", szNakshatra[(int)(pos2 / (rDegMax/27.0)) + 1]);
+          sprintf2(S(sz), "%.3s", szNakshatra[(int)(pos2 / (rDegMax/27.0)) + 1]);
         else
-          sprintf(sz, "%.3s", szSignName[SFromZ(pos2)]);
+          sprintf2(S(sz), "%.3s", szSignName[SFromZ(pos2)]);
       } else if (fPar)
-        sprintf(sz, "%c%2d", pos2 < 0 ? '-' : '+', (int)RAbs(pos2));
+        sprintf2(S(sz), "%c%2d", pos2 < 0 ? '-' : '+', (int)RAbs(pos2));
       else
-        sprintf(sz, "%2d%%", (int)pos2);
+        sprintf2(S(sz), "%2d%%", (int)pos2);
       PrintSz(sz);
     } else {
       if (!us.fSecond1K)
@@ -691,16 +691,16 @@ void PrintAspect(int obj1, real pos1, real ret1, int asp,
       else if (fPar)
         PrintAltitude(pos2);
       else {
-        sprintf(sz, "%f", pos2);
-        sprintf(sz + (!us.fSecond1K ? 6 : 9), "%s", "%"); PrintSz(sz);
+        sprintf2(S(sz), "%f", pos2);
+        sprintf2(SO(sz + (!us.fSecond1K ? 6 : 9), sz), "%s", "%"); PrintSz(sz);
       }
       us.fSeconds = fSecond;
       AnsiColor(ki);
     }
-    sprintf(sz, "%c ", ret2 > 0.0 ? ')' : (ret2 < 0.0 ? ']' : '>'));
+    sprintf2(S(sz), "%c ", ret2 > 0.0 ? ')' : (ret2 < 0.0 ? ']' : '>'));
     PrintSz(sz);
     AnsiColor(kObjA[obj2]);
-    sprintf(sz, "%.10s", szObjDisp[obj2]); PrintSz(sz);
+    sprintf2(S(sz), "%.10s", szObjDisp[obj2]); PrintSz(sz);
   }
 
   if (chart == 'D' || chart == 'T' || chart == 'U' || chart == 'a' ||

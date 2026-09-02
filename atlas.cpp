@@ -1759,7 +1759,7 @@ flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
     if (fAstroGraph && rgn[i] >= us.nAstroGraphDist)
       break;
     if (!fDialog) {
-      sprintf(sz, "%3d: ", i+1);
+      sprintf2(S(sz), "%3d: ", i+1);
       PrintSz(sz);
     }
     pae = &is.rgae[rgiae[i]];
@@ -1768,10 +1768,10 @@ flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
       pch++;
     if (fTimezoneChanges) {
       zon = ZondefFromIzn(pae->izn);
-      sprintf(sz, "%d %s: %s (%s, %s)", rgn[i], us.fEuroDist ? "km" : "mi",
+      sprintf2(S(sz), "%d %s: %s (%s, %s)", rgn[i], us.fEuroDist ? "km" : "mi",
         SzCity(rgiae[i]), pch, SzZone(zon));
     } else
-      sprintf(sz, "%d %s: %s (%s)", rgn[i], us.fEuroDist ? "km" : "mi",
+      sprintf2(S(sz), "%d %s: %s (%s)", rgn[i], us.fEuroDist ? "km" : "mi",
         SzCity(rgiae[i]), pch);
     if (pfnAtlasRow != NULL) {
       pfnAtlasRow(sz, rgiae[i]);
@@ -1844,7 +1844,7 @@ flag FSetDstZon(CI *ci, int izn,
 
   if (ci->yea == yea && ci->mon == mon && ci->day == day &&
     RTim(tim) - ci->tim <= RTim(NAbs(doff)) && doff < 0) {
-    sprintf(sz, "Unknown whether Daylight Time is in effect!\n"
+    sprintf2(S(sz), "Unknown whether Daylight Time is in effect!\n"
       "On %s at %s local time in zone %s (%s), "
       "clocks 'fall back' by %s hour.\n"
       "Clock times within that period are ambiguous, "
@@ -1856,7 +1856,7 @@ flag FSetDstZon(CI *ci, int izn,
   }
   if (ci->yea == yeaPrev && ci->mon == monPrev && ci->day == dayPrev &&
     ci->tim - RTim(timPrev) < RTim(doffPrev) && doffPrev > 0) {
-    sprintf(sz, "Unknown whether Daylight Time is in effect!\n"
+    sprintf2(S(sz), "Unknown whether Daylight Time is in effect!\n"
       "On %s at %s local time in zone %s (%s),"
       "clocks 'spring forward' by %s hour.\n"
       "Clock times within the gap are invalid, "

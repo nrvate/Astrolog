@@ -104,7 +104,7 @@ void SetEditMDYT(HWND hdlg, int idMon, int idDay, int idYea, int idTim,
   ClearCombo(idTim);
   if (!FValidMon(mon))
     mon = 1;
-  sprintf(sz, "%.3s", szMonth[mon]);
+  sprintf2(S(sz), "%.3s", szMonth[mon]);
   SetEdit(idMon, sz);
   for (i = 1; i <= cSign; i++)
     SetCombo(idMon, szMonth[i]);
@@ -112,13 +112,13 @@ void SetEditMDYT(HWND hdlg, int idMon, int idDay, int idYea, int idTim,
     day = 1;
   SetEditN(idDay, day);
   for (i = 0; i <= 25; i += 5) {
-    sprintf(sz, "%d", Max(i, 1)); SetCombo(idDay, sz);
+    sprintf2(S(sz), "%d", Max(i, 1)); SetCombo(idDay, sz);
   }
   SetEditN(idYea, yea);
   for (i = 2020; i <= 2030; i++) {
-    sprintf(sz, "%d", i); SetCombo(idYea, sz);
+    sprintf2(S(sz), "%d", i); SetCombo(idYea, sz);
   }
-  sprintf(sz, "%s", SzTim(tim));
+  sprintf2(S(sz), "%s", SzTim(tim));
   SetEditSz(hdlg, idTim, sz);
   SetCombo(idTim, "Midnight");
   SetCombo(idTim, (char *)(us.fEuroTime ? "6:00" : "6:00am"));
@@ -141,13 +141,13 @@ void SetEditSZOA(HWND hdlg, int idDst, int idZon, int idLon, int idLat,
   ClearCombo(idLon);
   ClearCombo(idLat);
   if (dst == 0.0 || dst == 1.0 || dst == dstAuto)
-    sprintf(sz, "%s",
+    sprintf2(S(sz), "%s",
       dst == 0.0 ? "No" : (dst == 1.0 ? "Yes" : "Autodetect"));
   else
-    sprintf(sz, "%s", SzZone(dst));
+    sprintf2(S(sz), "%s", SzZone(dst));
   SetEdit(idDst, sz);
   SetCombo(idDst, "No"); SetCombo(idDst, "Yes");
-  sprintf(sz, "%s", SzZone(zon));
+  sprintf2(S(sz), "%s", SzZone(zon));
   SetEdit(idZon, (char *)(sz[0] == '+' ? &sz[1] : sz));
 
   // For the time zone dropdown, fill it out with all abbreviations of three
@@ -156,14 +156,14 @@ void SetEditSZOA(HWND hdlg, int idDst, int idZon, int idLon, int idLat,
     if (szZon[i][1] && szZon[i][1] != 'D' && szZon[i][1] != 'W' &&
       szZon[i][2] && szZon[i][2] != 'D') {
       if (rZon[i] != zonLMT && rZon[i] != zonLAT)
-        sprintf(sz, "%s %s", SzZone(rZon[i]), szZon[i]);
+        sprintf2(S(sz), "%s %s", SzZone(rZon[i]), szZon[i]);
       else
-        sprintf(sz, "%s", SzZone(rZon[i]));
+        sprintf2(S(sz), "%s", SzZone(rZon[i]));
       SetCombo(idZon, sz);
     }
   }
   nSav = us.fAnsiChar; us.fAnsiChar = fFalse;
-  sprintf(sz, "%s", SzLocation(lon, lat));
+  sprintf2(S(sz), "%s", SzLocation(lon, lat));
   us.fAnsiChar = nSav;
   sz[is.ichLocSplit] = chNull;
   SetEditSz(hdlg, idLon, &sz[0]);
@@ -244,7 +244,7 @@ void ErrorEnsure(int n, CONST char *sz)
 {
   char szT[cchSzDef];
 
-  sprintf(szT, "The value %d is not a valid %s setting.", n, sz);
+  sprintf2(S(szT), "The value %d is not a valid %s setting.", n, sz);
   PrintWarning(szT);
 }
 
@@ -385,7 +385,7 @@ flag API DlgOpenChart()
     return fFalse;
   }
   if (wi.nDlgChart > 0) {
-    sprintf(sz, "Open Chart #%d", wi.nDlgChart);
+    sprintf2(S(sz), "Open Chart #%d", wi.nDlgChart);
     if (wi.nDlgChart < 2)
       sz[10] = chNull;
     ofn.lpstrFilter = "Astrolog Files (*.as)\0*.as\0"
@@ -395,11 +395,11 @@ flag API DlgOpenChart()
       "iCalendar Files (*.ics)\0*.ics\0"
       "Text Files [Solar Fire] (*.txt)\0*.txt\0"
       "All Files (*.*)\0*.*\0";
-    sprintf(szFileName, "*.as");
+    sprintf2(S(szFileName), "*.as");
   } else {
-    sprintf(sz, "Open %s", wi.nDlgChart == 0 ? "Background" : "World Map");
+    sprintf2(S(sz), "Open %s", wi.nDlgChart == 0 ? "Background" : "World Map");
     ofn.lpstrFilter = "Windows Bitmaps (*.bmp)\0*.bmp\0All Files (*.*)\0*.*\0";
-    sprintf(szFileName, "*.bmp");
+    sprintf2(S(szFileName), "*.bmp");
   }
   ofn.lpstrTitle = sz;
   if (!GetOpenFileName((LPOPENFILENAME)&ofn))
@@ -447,7 +447,7 @@ flag API DlgSaveChart()
   }
   ofn.lpstrFilter = "Astrolog Files (*.as)\0*.as\0All Files (*.*)\0*.*\0";
   ofn.lpstrDefExt = "as";
-  sprintf(szFileName, "*.as");
+  sprintf2(S(szFileName), "*.as");
   switch (wi.wCmd) {
   case cmdSaveChart:
     ofn.lpstrTitle = "Save Chart Info";
@@ -457,7 +457,7 @@ flag API DlgSaveChart()
     break;
   case cmdSaveSettings:
     ofn.lpstrTitle = "Save Program Settings";
-    sprintf(szFileName, "%s", DEFAULT_INFOFILE);
+    sprintf2(S(szFileName), "%s", DEFAULT_INFOFILE);
     break;
   case cmdSaveList:
     ofn.lpstrTitle = "Save Chart List";
@@ -467,33 +467,33 @@ flag API DlgSaveChart()
     ofn.lpstrFilter =
       "Astrological Exchange Files (*.aaf)\0*.aaf\0All Files (*.*)\0*.*\0";
     ofn.lpstrDefExt = "aaf";
-    sprintf(szFileName, "*.aaf");
+    sprintf2(S(szFileName), "*.aaf");
     break;
   case cmdSaveQuick:
     ofn.lpstrTitle = "Save Chart Quick*Chart Format";
     ofn.lpstrFilter =
       "Quick*Chart Files (*.qck)\0*.qck\0All Files (*.*)\0*.*\0";
     ofn.lpstrDefExt = "qck";
-    sprintf(szFileName, "*.qck");
+    sprintf2(S(szFileName), "*.qck");
     break;
   case cmdSaveCalendar:
     ofn.lpstrTitle = "Save Chart Calendar Format";
     ofn.lpstrFilter =
       "iCalendar Files (*.ics)\0*.ics\0All Files (*.*)\0*.*\0";
     ofn.lpstrDefExt = "ics";
-    sprintf(szFileName, "*.ics");
+    sprintf2(S(szFileName), "*.ics");
     break;
   case cmdSaveText:
     if (!us.fTextHTML) {
       ofn.lpstrTitle = "Export Chart Text";
       ofn.lpstrFilter = "Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
       ofn.lpstrDefExt = "txt";
-      sprintf(szFileName, "*.txt");
+      sprintf2(S(szFileName), "*.txt");
     } else {
       ofn.lpstrTitle = "Export Chart HTML Text";
       ofn.lpstrFilter = "HTML Files (*.htm)\0*.txt\0All Files (*.*)\0*.*\0";
       ofn.lpstrDefExt = "htm";
-      sprintf(szFileName, "*.htm");
+      sprintf2(S(szFileName), "*.htm");
     }
     break;
   case cmdSaveBitmap:
@@ -502,13 +502,13 @@ flag API DlgSaveChart()
       ofn.lpstrFilter =
         "Windows Bitmaps (*.bmp)\0*.bmp\0All Files (*.*)\0*.*\0";
       ofn.lpstrDefExt = "bmp";
-      sprintf(szFileName, "*.bmp");
+      sprintf2(S(szFileName), "*.bmp");
     } else {
       ofn.lpstrTitle = "Export Chart PNG Bitmap";
       ofn.lpstrFilter =
         "Portable Network Graphics (*.png)\0*.png\0All Files (*.*)\0*.*\0";
       ofn.lpstrDefExt = "png";
-      sprintf(szFileName, "*.png");
+      sprintf2(S(szFileName), "*.png");
     }
     break;
   case cmdSavePicture:
@@ -516,28 +516,28 @@ flag API DlgSaveChart()
     ofn.lpstrFilter =
       "Windows Metafiles (*.wmf)\0*.wmf\0All Files (*.*)\0*.*\0";
     ofn.lpstrDefExt = "wmf";
-    sprintf(szFileName, "*.wmf");
+    sprintf2(S(szFileName), "*.wmf");
     break;
   case cmdSavePS:
     ofn.lpstrTitle = "Export Chart PostScript";
     ofn.lpstrFilter =
       "PostScript Text (*.eps)\0*.eps\0All Files (*.*)\0*.*\0";
     ofn.lpstrDefExt = "eps";
-    sprintf(szFileName, "*.eps");
+    sprintf2(S(szFileName), "*.eps");
     break;
   case cmdSaveSVG:
     ofn.lpstrTitle = "Export Chart SVG";
     ofn.lpstrFilter =
       "Scalable Vector Graphics (*.svg)\0*.svg\0All Files (*.*)\0*.*\0";
     ofn.lpstrDefExt = "svg";
-    sprintf(szFileName, "*.svg");
+    sprintf2(S(szFileName), "*.svg");
     break;
   case cmdSaveWire:
     ofn.lpstrTitle = "Export Chart Wireframe";
     ofn.lpstrFilter =
       "Daedalus Wireframes (*.dw)\0*.dw\0All Files (*.*)\0*.*\0";
     ofn.lpstrDefExt = "dw";
-    sprintf(szFileName, "*.dw");
+    sprintf2(S(szFileName), "*.dw");
     break;
   }
   if (wi.wCmd != cmdSaveWallTile && wi.wCmd != cmdSaveWallCenter &&
@@ -552,7 +552,8 @@ flag API DlgSaveChart()
       return fFalse;
     GetWindowsDirectory(ofn.lpstrFile, cchSzMax);
     pch = ofn.lpstrFile + CchSz(ofn.lpstrFile);
-    sprintf(pch, "%c%s%s", '\\', szAppName, ".bmp");
+    sprintf2(pch, cchSzMax - (int)(pch - ofn.lpstrFile),
+      "%c%s%s", '\\', szAppName, ".bmp");
   }
 
   // Saving chart info, position, or setting command files can be done here.
@@ -623,7 +624,7 @@ flag API DlgOpenDir()
   LPITEMIDLIST pidl;
   char szDir[cchSzMax], szFile[cchSzMax];
 
-  sprintf(szFile, "Select directory containing Astrolog *.%s chart files:",
+  sprintf2(S(szFile), "Select directory containing Astrolog *.%s chart files:",
     !us.fWriteOld ? "as" : "*");
   bi.hwndOwner = wi.hwnd;
   bi.pidlRoot  = NULL;
@@ -827,7 +828,7 @@ flag API DlgFile(HWND hdlg, uint message, WORD wParam, LONG lParam)
     SetEditN(deFi_YXx, gs.nThickAdjust);
     SetCheck(dxFi_XI0, !gs.fBackDraw);
     for (i = 25; i <= 100; i += 25) {
-      sprintf(sz, "%d", i);
+      sprintf2(S(sz), "%d", i);
       SetCombo(dcFi_XI1, sz);
     }
     SetEditR(hdlg, dcFi_XI1, gs.rBackPct, -3);
@@ -945,7 +946,7 @@ flag API DlgList(HWND hdlg, uint message, WORD wParam, LONG lParam)
       j = DayOfWeek(pci->mon, pci->day, pci->yea);
       nSav = us.fAnsiChar; us.fAnsiChar = 2;
       fSav = us.fGraphics; us.fGraphics = fTrue;
-      sprintf(sz, "%.3s %s %s (%cT Zone %s) %s %s%s%s", szDay[j],
+      sprintf2(S(sz), "%.3s %s %s (%cT Zone %s) %s %s%s%s", szDay[j],
         SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
         ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat),
         pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
@@ -957,7 +958,7 @@ flag API DlgList(HWND hdlg, uint message, WORD wParam, LONG lParam)
     if (i2 <= 0) {
       SetListN(dlLi, "(No charts in list)", -1, j);
     }
-    sprintf(sz, "List size: %d", i2);
+    sprintf2(S(sz), "List size: %d", i2);
     SetDlgItemText(hdlg, ds01, sz);
     HourglassOff;
     if (fFilter || (wParam == (WORD)-1 && lParam == -1))
@@ -1165,9 +1166,9 @@ flag API DlgInfo(HWND hdlg, uint message, WORD wParam, LONG lParam)
       ci = is.rgci[-wi.nDlgChart];
     if (wi.nDlgChart != 1) {
       if (wi.nDlgChart > 1)
-        sprintf(sz, "Set Chart #%d Info", wi.nDlgChart);
+        sprintf2(S(sz), "Set Chart #%d Info", wi.nDlgChart);
       else
-        sprintf(sz, "Set Chart List #%d Info", 1-wi.nDlgChart);
+        sprintf2(S(sz), "Set Chart List #%d Info", 1-wi.nDlgChart);
       SetWindowText(hdlg, sz);
     }
     SetEditSz(hdlg, deInNam, ci.nam);
@@ -1324,11 +1325,11 @@ flag API DlgInfoAll(HWND hdlg, uint message, WORD wParam, LONG lParam)
     for (i = 1; i <= cRing; i++) {
       pci = rgpci[i];
       n = DayOfWeek(pci->mon, pci->day, pci->yea);
-      sprintf(sz, "%.3s %s %s (%cT Zone %s) %s", szDay[n],
+      sprintf2(S(sz), "%.3s %s %s (%cT Zone %s) %s", szDay[n],
         SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
         ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
       SetDlgItemText(hdlg, ds01 + (i-1)*2, sz);
-      sprintf(sz, "%s%s%s", pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ?
+      sprintf2(S(sz), "%s%s%s", pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ?
         "; " : "", pci->loc);
       SetDlgItemText(hdlg, ds02 + (i-1)*2, sz);
     }
@@ -1754,7 +1755,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       iobj = uranLo + i;
       SetCheck(dxOs01 + i, !ignore[iobj]);
       SetEdit(deOs01 + i, szObjDisp[iobj]);
-      sprintf(rgszName0[i], "%.*s", cchSzDef-1, szObjDisp[iobj]);
+      sprintf2(S(rgszName0[i]), "%.*s", cchSzDef-1, szObjDisp[iobj]);
       rgnTyp0[i] = rgTypSwiss[iobj - custLo];
       rgnObj0[i] = rgObjSwiss[iobj - custLo];
       rgforce0[i] = force[iobj];
@@ -1765,7 +1766,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
       for (j = 0; j < cObjSel; j++)
         SetCombo(dcOs01 + i, rgObjSel[j].szName);
       if (FForceMid(force[iobj])) {
-        sprintf(sz, "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
+        sprintf2(S(sz), "%s/%s", szObjDisp[ObjForceMid1(force[iobj])],
           szObjDisp[ObjForceMid2(force[iobj])]);
       } else
         SzObjSelDef(S(sz), iobj);
@@ -1795,9 +1796,9 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
         // A midpoint names itself after its two halves.
         if (FObjSelMidPair(sz, &j, &k)) {
           if (FItem(j) && FItem(k))
-            sprintf(sz, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
+            sprintf2(S(sz), "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
           else
-            sprintf(sz, "%s", szObjUnknown);
+            sprintf2(S(sz), "%s", szObjUnknown);
           SetEdit(deOs01 + i, sz);
           continue;
         }
@@ -1811,7 +1812,7 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
             for (l = 0; l < cObjSel; l++)
               if (rgObjSel[l].nTyp == od.nTyp &&
                 rgObjSel[l].nObj == od.nObj) {
-                sprintf(sz, "%s", rgObjSel[l].szName);
+                sprintf2(S(sz), "%s", rgObjSel[l].szName);
                 break;
               }
           // Put the number and the name in the body field together,
@@ -1825,11 +1826,11 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
           // in it is one.
           if (od.nTyp == 1 && od.nPnt <= 0 && od.nFlg <= 0 &&
             !FEqSz(sz, szObjUnknown)) {
-            sprintf(szT, "%d %s", od.nObj, sz);
+            sprintf2(S(szT), "%d %s", od.nObj, sz);
             SetEdit(dcOs01 + i, szT);
           }
         } else
-          sprintf(sz, "%s", szObjUnknown);
+          sprintf2(S(sz), "%s", szObjUnknown);
         SetEdit(deOs01 + i, sz);
       }
     }
@@ -1886,12 +1887,12 @@ flag API DlgObjectSel(HWND hdlg, uint message, WORD wParam, LONG lParam)
             // under the name of the body it used to be.
             j = ObjForceMid1(rgforce[i]); k = ObjForceMid2(rgforce[i]);
             if (FItem(j) && FItem(k))
-              sprintf(sz, "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
+              sprintf2(S(sz), "%.3s/%.3s", szObjDisp[j], szObjDisp[k]);
           } else if (rgod[i].nTyp != rgnTyp0[i] ||
             rgod[i].nObj != rgnObj0[i]) {
             SzObjSelName(S(szT), rgod[i].nTyp, rgod[i].nObj);
             if (!FEqSz(szT, szObjUnknown))
-              sprintf(sz, "%.*s", cchSzMax-1, szT);
+              sprintf2(S(sz), "%.*s", cchSzMax-1, szT);
           }
         }
         SetObjDisp(iobj, sz);
@@ -1967,7 +1968,7 @@ flag API DlgCustomS(HWND hdlg, uint message, WORD wParam, LONG lParam)
           continue;
         GetEdit(ded01 - starLo + i, sz);
         if (!SwissTestStar(sz))
-          sprintf(sz, "%s", szObjUnknown);
+          sprintf2(S(sz), "%s", szObjUnknown);
         SetEdit(den01 - starLo + i, sz);
       }
 #endif
@@ -2319,7 +2320,7 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
       FormatR(S(sz), rgZodiacOffset[i].r, 6);
       for (pch = sz; *pch; pch++)
         ;
-      sprintf(pch, " %s", rgZodiacOffset[i].sz);
+      sprintf2(SO(pch, sz), " %s", rgZodiacOffset[i].sz);
       SetCombo(dcSe_s, sz);
       if (us.rZodiacOffset == rgZodiacOffset[i].r)
         SetEdit(dcSe_s, sz);
@@ -2679,7 +2680,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
     SetEditR(hdlg, dcPr_pd, us.rProgDay, -6);
     for (i = 0; i < 4; i++) {
       FormatR(S(szT), rgrProg[i], -6);
-      sprintf(sz, "%s %s", szT, rgszProg[i]);
+      sprintf2(S(sz), "%s %s", szT, rgszProg[i]);
       SetCombo(dcPr_pd, sz);
       if (us.rProgDay == rgrProg[i])
         SetEdit(dcPr_pd, sz);
@@ -2687,7 +2688,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
     SetEditR(hdlg, dcPr_pC, us.rProgCusp, -6);
     for (i = 0; i < 2; i++) {
       FormatR(S(szT), rgrProgCusp[i], -6);
-      sprintf(sz, "%s %s", szT, rgszProgCusp[i]);
+      sprintf2(S(sz), "%s %s", szT, rgszProgCusp[i]);
       SetCombo(dcPr_pC, sz);
       if (us.rProgCusp == rgrProgCusp[i])
         SetEdit(dcPr_pC, sz);
@@ -2789,7 +2790,7 @@ flag API DlgChart(HWND hdlg, uint message, WORD wParam, LONG lParam)
     SetCheck(dxCh_j0, us.fInfluenceSign);
     SetEditN(deCh_L,  us.nAstroGraphStep);
     SetCheck(dxCh_L0, us.fLatitudeCross);
-    sprintf(sz, "%d%s", us.nAstroGraphDist, us.fEuroDist ? "km" : "mi");
+    sprintf2(S(sz), "%d%s", us.nAstroGraphDist, us.fEuroDist ? "km" : "mi");
     SetEdit(deCh_L2, sz);
     SetCheck(dxCh_Ey, us.nEphemYears != 0);
     SetEditN(deCh_P,  us.nArabicParts);
@@ -2913,7 +2914,7 @@ flag API DlgGraphics(HWND hdlg, uint message, WORD wParam, LONG lParam)
     SetEditN(deGr_Xw_y, gs.yWin);
     SetCheck(dxGr_XQ, gs.fKeepSquare);
     for (is = 100; is <= MAXSCALE; is += 50) {
-      sprintf(sz, "%d", is);
+      sprintf2(S(sz), "%d", is);
       if (is % 100 == 0)
         SetCombo(dcGr_Xs, sz);
       SetCombo(dcGr_XSS, sz);
@@ -3105,10 +3106,10 @@ flag API DlgAbout(HWND hdlg, uint message, WORD wParam, LONG lParam)
 #ifdef DEBUG
     SetWindowText(hdlg, "About Astrolog (DEBUG)");
 #endif
-    sprintf(sz, "%s version %s for %s Windows",
+    sprintf2(S(sz), "%s version %s for %s Windows",
       szAppName, szVersionCore, szArchCore);
     SetDlgItemText(hdlg, ds01, sz);
-    sprintf(sz, "Released %s", szDateCore);
+    sprintf2(S(sz), "Released %s", szDateCore);
     SetDlgItemText(hdlg, ds02, sz);
     return fTrue;
 

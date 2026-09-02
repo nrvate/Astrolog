@@ -101,7 +101,7 @@ int NProcessSwitchesW(int pos, PARSEIN *pin)
         return tcError;
       i--;
       j = i/12;
-      sprintf(sz, "%s\t%s%s%sF%d", pin->argv[2],
+      sprintf2(S(sz), "%s\t%s%s%sF%d", pin->argv[2],
         j == 2 || j == 4 || j >= 6           ? "Ctrl+"  : "",
         j == 3 || j >= 5                     ? "Alt+"   : "",
         j == 1 || j == 4 || j == 5 || j == 7 ? "Shift+" : "", i % 12 + 1);
@@ -154,9 +154,9 @@ int NProcessSwitchesW(int pos, PARSEIN *pin)
     if (FErrorArgc("WT", pin->argc, 1))
       return tcError;
     if (*pin->argv[1])
-      sprintf(sz, "%s %s: %s", szAppName, szVersionCore, pin->argv[1]);
+      sprintf2(S(sz), "%s %s: %s", szAppName, szVersionCore, pin->argv[1]);
     else
-      sprintf(sz, "%s %s", szAppName, szVersionCore);
+      sprintf2(S(sz), "%s %s", szAppName, szVersionCore);
     SetWindowText(wi.hwnd, sz);
     darg++;
     break;
@@ -229,12 +229,12 @@ void BootExternal(CONST char *szApp, CONST char *szFile)
   }
   if (FileOpen(szFile, 2, S(szPath)) != NULL) {
     if (szApp != NULL) {
-      sprintf(szCmd, "%s %s", szApp, szPath);
+      sprintf2(S(szCmd), "%s %s", szApp, szPath);
       WinExec(szCmd, SW_SHOW);
     } else
       ShellExecute(NULL, NULL, szPath, NULL, NULL, SW_SHOW);
   } else {
-    sprintf(szCmd, "File '%s' not found!", szFile);
+    sprintf2(S(szCmd), "File '%s' not found!", szFile);
     PrintWarning(szCmd);
   }
 }
@@ -701,7 +701,7 @@ int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     NWmCommand(cmdSizeWindowFull);
   }
 #ifdef BETA
-  sprintf(sz, "This is a beta version of %s %s! "
+  sprintf2(S(sz), "This is a beta version of %s %s! "
     "That means changes are still being made and testing is not complete. "
     "If this is being run after %s %d, %d, "
     "it should be replaced with the finished release.",
@@ -2470,7 +2470,7 @@ int NWmCommand(WORD wCmd)
         else if (i == 40)
           return -1;
       } else {
-        sprintf(sz, "Macro number %d is not defined.", i);
+        sprintf2(S(sz), "Macro number %d is not defined.", i);
         PrintWarning(sz);
       }
       break;
@@ -2846,10 +2846,10 @@ flag API FRedraw(void)
     gs.ft != (!wi.fAutoSaveWire ? ftBmp : ftWire)) {
     gs.ft = !wi.fAutoSaveWire ? ftBmp : ftWire;
     if (!wi.fAutoSaveNum)
-      sprintf(szFile, "%s",
+      sprintf2(S(szFile), "%s",
         !wi.fAutoSaveWire ? szFileAutoCore : "astrolog.dw");
     else {
-      sprintf(szFile, "ast%05d.%s", wi.nAutoSaveNum,
+      sprintf2(S(szFile), "ast%05d.%s", wi.nAutoSaveNum,
         !wi.fAutoSaveWire ? (gs.chBmpMode != 'P' ? "bmp" : "png") : "dw");
       wi.nAutoSaveNum++;
     }
@@ -2947,10 +2947,10 @@ flag API FRedraw(void)
       if (l == 0 && us.fTextHTML) {
         // Mark HTML clipboard fragment end character indexes.
         pch = (char *)(hpb + 39);
-        sprintf(pch, "%08d", (int)(lSize - 1));
+        sprintf2(pch, (int)(lSize - 39), "%08d", (int)(lSize - 1));
         *(pch + 8) = '\n';
         pch = (char *)(hpb + 87);
-        sprintf(pch, "%08d", (int)(lSize - 34));
+        sprintf2(pch, (int)(lSize - 87), "%08d", (int)(lSize - 34));
         *(pch + 8) = '\n';
       }
       GlobalUnlock(hglobal);
@@ -3041,7 +3041,7 @@ flag FCreateShortcut(CONST char *szDir, CONST char *szName,
   hr = pisl->SetWorkingDirectory(sz);
   if (FAILED(hr))
     goto LExit;
-  sprintf(pch, "\\%s", szFile);
+  sprintf2(SO(pch, sz), "\\%s", szFile);
   hr = pisl->SetPath(sz);
   if (FAILED(hr))
     goto LExit;
@@ -3055,10 +3055,10 @@ flag FCreateShortcut(CONST char *szDir, CONST char *szName,
   hr = pisl->QueryInterface(IID_IPersistFile, (LPVOID *)&pipf);
   if (FAILED(hr))
     goto LExit;
-  sprintf(sz, "%s", szDir);
+  sprintf2(S(sz), "%s", szDir);
   for (pch = sz; *pch; pch++)
     ;
-  sprintf(pch, "\\%s.lnk", szName);
+  sprintf2(SO(pch, sz), "\\%s.lnk", szName);
   MultiByteToWideChar(CP_ACP, 0, sz, -1, wsz, cchSzMax);
   hr = pipf->Save(wsz, fTrue);
   if (FAILED(hr))
@@ -3081,7 +3081,7 @@ void DeleteShortcut(CONST char *szDir, CONST char *szFile)
 {
   char sz[cchSzMax];
 
-  sprintf(sz, "%s\\%s.lnk", szDir, szFile);
+  sprintf2(S(sz), "%s\\%s.lnk", szDir, szFile);
   _unlink(sz);
 }
 
@@ -3096,7 +3096,7 @@ flag FCreateDesktopIcon()
 
   SHGetSpecialFolderLocation(wi.hwnd, CSIDL_DESKTOPDIRECTORY, &pidl);
   SHGetPathFromIDList(pidl, szDir);
-  sprintf(szName, "%s %s", szAppName, szVersionCore);
+  sprintf2(S(szName), "%s %s", szAppName, szVersionCore);
   fRet = FCreateShortcut(szDir, szName,
     "astrolog.exe", "Astrolog executable", 0);
   if (!fRet)
@@ -3118,7 +3118,7 @@ flag FCreateProgramGroup(flag fAll)
   SHGetPathFromIDList(pidl, szDir);
   for (pch = szDir; *pch; pch++)
     ;
-  sprintf(pch, "\\Astrolog");
+  sprintf2(SO(pch, szDir), "\\Astrolog");
   if (!CreateDirectory(szDir, NULL)) {
     if (GetLastError() != ERROR_ALREADY_EXISTS)
       goto LError;
@@ -3142,7 +3142,7 @@ flag FCreateProgramGroup(flag fAll)
   DeleteShortcut(szDir, "Astrolog 7.80");
 
   // Add main shortcuts in folder.
-  sprintf(szName, "%s %s", szAppName, szVersionCore);
+  sprintf2(S(szName), "%s %s", szAppName, szVersionCore);
   if (!FCreateShortcut(szDir, szName,
     "astrolog.exe", "Astrolog executable", -1))
     goto LError;
@@ -3172,10 +3172,10 @@ flag FRegisterExtensions()
   char szExe[cchSzMax], szIco[cchSzMax], *pch;
 
   GetModuleFileName(wi.hinst, szExe, cchSzMax);
-  sprintf(szIco, "%s,1", szExe);
+  sprintf2(S(szIco), "%s,1", szExe);
   for (pch = szExe; *pch; pch++)
     ;
-  sprintf(pch, "%s", " %1");
+  sprintf2(SO(pch, szExe), "%s", " %1");
 
   // Define .as extension and point it to Astrolog File Type.
   if (RegCreateKey(HKEY_CURRENT_USER,

@@ -2137,11 +2137,11 @@ CONST char *PchGetParameter(CONST char *pchCur, PAR *rgpar, int ifun,
     pchCur++;
   if (*pchCur == chNull) {
     if (ifun >= 0) {
-      sprintf(szT, " (%d required) of function %s", rgfun[ifun].nParam,
+      sprintf2(S(szT), " (%d required) of function %s", rgfun[ifun].nParam,
         rgfun[ifun].szName);
     } else
       *szT = chNull;
-    sprintf(sz, "Couldn't get parameter %d%s due to end of line.\n", iParam,
+    sprintf2(S(sz), "Couldn't get parameter %d%s due to end of line.\n", iParam,
       szT);
     PrintWarning(sz);
     goto LError;
@@ -2264,7 +2264,7 @@ CONST char *PchGetParameter(CONST char *pchCur, PAR *rgpar, int ifun,
 
   // Error if can't parse contents.
   CopyRgchToSz(pchParam, cch, szT, cchSzMax);
-  sprintf(sz, "Unknown function: '%s'\nContext: '", szT);
+  sprintf2(S(sz), "Unknown function: '%s'\nContext: '", szT);
   for (pchEdit = sz; *pchEdit; pchEdit++)
     ;
   pchT = pchCur;
