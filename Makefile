@@ -17,11 +17,10 @@
 # library, and if applicable, the main X library.
 #
 NAME = astrolog
-OBJS = astrolog.o switch.o atlas.o calc.o charts0.o charts1.o charts2.o charts3.o\
- data.o express.o general.o intrpret.o io.o matrix.o placalc.o placalc2.o\
- xdata.o xgeneral.o xdevice.o xcharts0.o xcharts1.o xcharts2.o xscreen.o\
- swecl.o swedate.o swehouse.o swejpl.o swemmoon.o swemplan.o sweph.o\
- swephlib.o
+# The source list lives in one file for all five builds; see the header
+# there before adding a source.
+include Makefile.srcs
+OBJS = $(patsubst %.cpp,%.o,$(SRC_CORE) $(SRC_GRAPHICS) $(SRC_SWISS))
 
 
 # If you don't have X windows, delete the "-lX11" part from the line below:

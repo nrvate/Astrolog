@@ -1359,8 +1359,8 @@ calc.cpp:2453-4000); (c) the fork's object-selection/OBJDEF store and
 parsers (calc.cpp:2642-3038), which are naming/settings code, not
 computation, and landed here mainly to stay `#ifdef`-free for both
 builds. *Direction:* low urgency; if the OBJDEF code grows again, give
-it its own file in both Makefiles. Until then the boundary is
-documented here. *Cost:* deferral is free.
+it its own file -- one line in `Makefile.srcs` now, not an edit to each
+of five makefiles. Until then the boundary is documented here. *Cost:* deferral is free.
 
 **C2 — `CastChart` cooks the user's input in place.** It normalizes
 `ZZ`/`SS`/`TT` (LMT/LAT zones, auto-DST, zone-into-time folding)
@@ -1811,7 +1811,9 @@ own concessions, in dependency order):
   lines, LF per fork convention) holds the registry, handlers,
   dispatch, and `FProcessSwitches`; astrolog.cpp is the 896-line
   program shell again. One extern surfaced (`AdjustRulership`, used
-  by handlers, never declared); five makefiles gained the object.
+  by handlers, never declared); five makefiles gained the object, which
+  is a cost that no longer exists -- the source list is `Makefile.srcs`
+  since 2026-09-01 (work log item 167).
   Matrix byte-identical over 14,378 lines — after a first run
   tripped the harness's own short-path rule (deep-path baseline
   emits the Swiss truncation warning; the header says so).

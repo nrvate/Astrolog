@@ -1,0 +1,41 @@
+# The source list, in one place instead of five.
+#
+# Every build in this tree compiles the same core and differs only in which
+# backend it adds: the console/X11 one adds nothing, the three Qt ones add
+# qtdriver.cpp and qtdialog.cpp (and qttest.cpp when the suite is compiled
+# in), and the Windows one adds wdialog.cpp and wdriver.cpp. That was true
+# before this file existed too -- it was just written out five times, and
+# adding one source file meant editing five makefiles. Work log item 96
+# records the day that bit: "five makefiles gained the object", one edit
+# per file, and nothing in the tree would have noticed a missed one except
+# a link error in whichever build was compiled last.
+#
+# So: add a source file here, once, in the group it belongs to. No makefile
+# needs to change.
+#
+# The groups exist for one reason beyond tidiness -- they preserve each
+# build's original link order exactly, so the four Linux binaries come out
+# byte-for-byte identical to the hand-written lists they replaced. The
+# Windows build listed the same files in a different order (alphabetical,
+# with wdialog/wdriver in the middle), so its objects are ordered by these
+# groups now; same set, same program, different layout.
+
+# The engine: everything that computes a chart or reads and writes one.
+SRC_CORE = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp \
+  charts1.cpp charts2.cpp charts3.cpp data.cpp express.cpp general.cpp \
+  intrpret.cpp io.cpp matrix.cpp placalc.cpp placalc2.cpp
+
+# The graphics half: chart drawing and the device backends it draws to.
+SRC_GRAPHICS = xdata.cpp xgeneral.cpp xdevice.cpp xcharts0.cpp \
+  xcharts1.cpp xcharts2.cpp xscreen.cpp
+
+# The Swiss Ephemeris library, vendored. Upstream's files, not this
+# fork's -- see CLAUDE.md on sweph.cpp's line endings.
+SRC_SWISS = swecl.cpp swedate.cpp swehouse.cpp swejpl.cpp swemmoon.cpp \
+  swemplan.cpp sweph.cpp swephlib.cpp
+
+# The three backends. Exactly one of QT and WIN is compiled into a binary;
+# TEST rides along with QT when the in-process suite is wanted (-DQTTEST).
+SRC_QT   = qtdriver.cpp qtdialog.cpp
+SRC_TEST = qttest.cpp
+SRC_WIN  = wdialog.cpp wdriver.cpp

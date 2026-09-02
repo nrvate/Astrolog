@@ -6572,6 +6572,128 @@ are the more useful half to read before starting something new.
     unchanged wherever the buffer does not overflow, which is everywhere
     the matrices reach.
 
+167. **The build system, asked what needed work: six answers, and the two
+    that mattered could hand you a binary that did not match its source.**
+
+    It started as a smaller question -- "why does `make` not build
+    `astrolog-qt` by default?" -- and the honest answer is that `Makefile`
+    is upstream's and builds upstream's binary, while this fork's three Qt
+    makefiles are its own. Ten scripts here expect a plain `make` to leave
+    `./astrolog` behind, so the default target cannot simply move. Named
+    targets instead (`make qt`, `make qt-test`, `make qt-asan`, `make win`,
+    `make all`), each exactly the command CLAUDE.md already documented.
+    That was `87a5390`. Everything below came out of looking properly
+    afterwards.
+
+    **A parallel build could compile into a directory that did not exist
+    yet.** `make all -j4` failed on a fresh tree with
+
+        Fatal error: can't create obj-qt-test/sweph.o: No such file
+        or directory
+
+    reported by the maintainer, not by anything here. All three Qt
+    makefiles listed `$(OBJDIR)` among `$(NAME)`'s *ordinary*
+    prerequisites, which does not order it before the objects -- under
+    `-j` make is free to start a compile before the `mkdir`. `Makefile.win`
+    had the order-only form (`| $(ODIR)`) all along; the Qt three now do
+    too. The new `all` target did not create this race, it just made the
+    tree cold often enough to hit it (`743817c`).
+
+    **`make clean` cleaned a third of the tree.** It is upstream's target,
+    and upstream never knew about three Qt binaries and their object
+    directories. Now it removes what the tree can build, which is the
+    conventional expectation; `clean-console` keeps upstream's narrower
+    behaviour because `tools/asan-sweep.sh` needs exactly it, and the
+    comment there says why (`47baa42`). **This has a sharp edge worth
+    stating:** it deletes all four binaries, so a second session sharing
+    the tree loses them mid-run. That happened here within the hour --
+    five checks appeared to fail at once, and the cause was the other
+    session's `clean`.
+
+    **A header change rebuilt nothing.** All five makefiles tracked
+    exactly two headers by hand:
+
+        $(OBJS): astrolog.h extern.h
+
+    That line *was* the dependency graph -- itself a fix, from `01f52b1`,
+    for the fork's own two headers. Everything else a source includes was
+    invisible. Measured by touching a header and counting what `make -n`
+    would then compile:
+
+        placalc.h    0 objects        swephexp.h   0
+        sweodef.h    0                (every build, all five makefiles)
+
+    Zero. This is the stale-binary class CLAUDE.md warns about -- "if a
+    check claims to have rebuilt something, look at the binary's
+    timestamp" -- except that nothing here was even claiming. Editing a
+    Swiss Ephemeris header and re-running the suite would have tested the
+    *old* objects and reported 3553/0.
+
+    Fixed with `-MMD -MP` plus `-include $(OBJS:.o=.d)` in all five: the
+    compiler writes each object's real dependency list as it compiles it,
+    and make reads it back next time. The hand-written line is deleted.
+    Counted from the generated `.d` files afterwards, in the console
+    build: `placalc.h` reaches 2 objects, `swephexp.h` and `sweodef.h` 9
+    each, and `astrolog.h` and `extern.h` all 31 -- which is what the
+    hand-written line had right, and the whole of what it had right.
+
+    **The console makefile named no C++ standard.** `calc.cpp` uses class
+    template argument deduction (`Borrow bciCore(ciCore);`), a C++17
+    feature; g++ 11 defaults to `gnu++17`, so it compiled by accident.
+    `Makefile.win` relied on the same accident and mingw g++ 10 defaults
+    to `gnu++14` -- which is how the Windows build went 62 commits without
+    compiling (item 146). Saying it out loud is the fix for the class, not
+    just the instance, so `-std=gnu++17` is now explicit in both, with
+    that reasoning at the flag (`20ffda7`).
+
+    **`Qt5Test`/`Qt6Test` was linked into two builds and used by neither.**
+    Nothing in the tree includes `<QtTest>`; the five "QtTest" hits are
+    this project's own `NRunQtTestsQt`/`NRunQtTestTableQt`, which are not
+    Qt Test at all. Dropped from `Makefile.qt.test` and `Makefile.qt.asan`.
+
+    **And the source list was written out five times.** Adding one source
+    file meant editing five makefiles, in five different notations, with
+    nothing in the tree able to notice a missed one except a link error in
+    whichever build happened to be compiled last. Item 96 records the day
+    that bit: "five makefiles gained the object." `Makefile.srcs` now holds
+    it once, in five groups -- core, graphics, Swiss, and one per backend
+    -- and each makefile derives its own object paths with `patsubst`.
+
+    **The groups are not decoration: they preserve each build's original
+    link order**, which is what makes the change provable. After a full
+    clean rebuild, `astrolog`, `astrolog-qt`, `astrolog-qt-test` and
+    `astrolog-qt-asan` are **byte-for-byte identical** to the binaries the
+    hand-written lists produced, and stayed identical through a second
+    rebuild triggered by the header touches above.
+
+    The Windows build is the one exception, said plainly: it had listed
+    the same files alphabetically, with `wdialog`/`wdriver` in the middle,
+    and no grouping can spell both that order and the Linux one without
+    naming every file twice. Its objects are ordered by these groups now.
+    Same set, different layout -- 335,919 bytes of `astrolog.exe` move.
+    What was checked instead: the same 6,563 defined symbols, the same
+    file size to the byte, the eight captured text charts identical
+    between an old-order and a new-order link (866 lines,
+    `tools/text-chart-capture.sh` run twice), and `tools/win-tests.sh`
+    passing both scenarios.
+
+    **A finding worth keeping from that check: `astrolog.exe` *is*
+    byte-reproducible.** Two links of identical objects differ in exactly
+    five bytes, at offsets 137-138 and 217-219 -- all of them inside the
+    PE header, where `objdump -p` reports a different Time/Date. So
+    "5 bytes differ" is
+    available as a proof for future Windows work, the same way byte
+    identity is on Linux, and anything larger than 5 means the code
+    actually changed.
+
+    **Nets**: full clean `make all` plus the Windows and ASan builds, zero
+    warnings from any of them; the expanded object list of every makefile
+    compared to its pre-change expansion, set-identical in all five and
+    order-identical in four; four Linux binaries byte-identical; Windows
+    as above. The Linux suite and the three matrices are not listed
+    because they cannot say anything here -- the binaries they would run
+    are the same bytes as the ones already tested.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

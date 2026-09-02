@@ -11,18 +11,11 @@
 #
 NAME = astrolog-qt-test
 OBJDIR = obj-qt-test
-OBJS = $(OBJDIR)/astrolog.o $(OBJDIR)/switch.o $(OBJDIR)/atlas.o $(OBJDIR)/calc.o \
- $(OBJDIR)/charts0.o $(OBJDIR)/charts1.o $(OBJDIR)/charts2.o \
- $(OBJDIR)/charts3.o $(OBJDIR)/data.o $(OBJDIR)/express.o \
- $(OBJDIR)/general.o $(OBJDIR)/intrpret.o $(OBJDIR)/io.o \
- $(OBJDIR)/matrix.o $(OBJDIR)/placalc.o $(OBJDIR)/placalc2.o \
- $(OBJDIR)/xdata.o $(OBJDIR)/xgeneral.o $(OBJDIR)/xdevice.o \
- $(OBJDIR)/xcharts0.o $(OBJDIR)/xcharts1.o $(OBJDIR)/xcharts2.o \
- $(OBJDIR)/xscreen.o $(OBJDIR)/qtdriver.o $(OBJDIR)/qtdialog.o \
- $(OBJDIR)/qttest.o \
- $(OBJDIR)/swecl.o $(OBJDIR)/swedate.o $(OBJDIR)/swehouse.o \
- $(OBJDIR)/swejpl.o $(OBJDIR)/swemmoon.o $(OBJDIR)/swemplan.o \
- $(OBJDIR)/sweph.o $(OBJDIR)/swephlib.o
+# The source list lives in one file for all five builds; see the header
+# there before adding a source.
+include Makefile.srcs
+OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,\
+  $(SRC_CORE) $(SRC_GRAPHICS) $(SRC_QT) $(SRC_TEST) $(SRC_SWISS))
 
 # Build against whichever Qt this machine has: Qt6 when pkg-config knows
 # about it, Qt5 otherwise. One command works on a stock Ubuntu (Qt5), on a

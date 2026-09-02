@@ -38,12 +38,12 @@ LIBS   = -lgdi32 -lcomdlg32 -lcomctl32 -lshell32 -lole32 -luuid -lwinspool \
          -ladvapi32 -luser32 -lkernel32 -lwinmm -lmswsock -lws2_32 -lurlmon
 LDFLAGS = -mwindows -static -static-libgcc -static-libstdc++
 
-SRC = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp charts1.cpp charts2.cpp \
-      charts3.cpp data.cpp express.cpp general.cpp intrpret.cpp io.cpp \
-      matrix.cpp placalc.cpp placalc2.cpp swecl.cpp swedate.cpp \
-      swehouse.cpp swejpl.cpp swemmoon.cpp swemplan.cpp sweph.cpp \
-      swephlib.cpp wdialog.cpp wdriver.cpp xcharts0.cpp xcharts1.cpp \
-      xcharts2.cpp xdata.cpp xdevice.cpp xgeneral.cpp xscreen.cpp
+# The source list lives in one file for all five builds; see the header
+# there before adding a source. This build orders its objects by those
+# groups rather than the alphabetical order it used to spell out; same
+# set of files, different link layout.
+include Makefile.srcs
+SRC = $(SRC_CORE) $(SRC_SWISS) $(SRC_WIN) $(SRC_GRAPHICS)
 
 OBJ = $(patsubst %.cpp,$(ODIR)/%.o,$(SRC))
 

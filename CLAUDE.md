@@ -104,13 +104,23 @@ make all -j4                     # all four; "make clean" undoes it
                                  # (plain "make" is upstream's target and
                                  # still builds only ./astrolog, which ten
                                  # scripts here depend on)
-./run-qt-tests.sh                # 3526 assertions + startup checks
+./run-qt-tests.sh                # 3553 assertions + startup checks
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
 
+The five makefiles share one source list, `Makefile.srcs`: **add a
+source file there, once**, in the group it belongs to, and no makefile
+changes. Header dependencies come from the compiler (`-MMD -MP`), so
+touching any header rebuilds exactly what includes it — that was not
+true before 2026-09-01, when only `astrolog.h` and `extern.h` were
+tracked and every other header rebuilt *nothing*. And `make clean` now
+removes all four builds, which is a hazard with two sessions in one
+tree; `make clean-console` is upstream's narrower one, which is what
+`tools/asan-sweep.sh` uses.
+
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3526 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
+commit. Current state: **3553 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
 build is `-O0`, where `_FORTIFY_SOURCE` is inactive, so it structurally
 cannot see a fortify-detected overflow. Work log item 142 was invisible
 to it for that reason and had to be caught in an optimized `-g` build.
