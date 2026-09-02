@@ -1,0 +1,99 @@
+# Continuous integration for the Qt/Linux fork of Astrolog.
+#
+# WHAT THIS IS FOR, in one incident: "make -f Makefile.win" had not
+# compiled since 2026-08-29 -- 62 commits -- while three work log items
+# listed "Windows builds" among their nets. The oracle this fork measures
+# itself against was dead, and the error was "Error 1", which the checks
+# in use at the time did not match. One job that cross-compiles it on
+# every push would have caught that on the first one. That is this file.
+#
+# THE PLAN. QT_CI_PLAN.md is the working document: what each job is for,
+# how to know it worked, and -- the part this project cares about most --
+# how to prove it is not vacuous. Read its ground rules before adding a
+# job here. The two that bite hardest:
+#
+#   1. Every job is falsified once, deliberately, before it is trusted.
+#      Break the thing it claims to check, watch it go red, put it back,
+#      and write what happened in the work log. A green check mark is a
+#      very convincing way to display "I did nothing".
+#   2. Never pipe a build into anything that swallows its exit status
+#      (| tee, || true, set +e). "run:" fails on non-zero exit, and that
+#      is the whole mechanism.
+#
+# AND ONE RULE THIS FILE KEEPS: CI adds no logic. Every step is either a
+# package install, a make invocation, or one committed script from
+# tools/. Nothing is checked here that cannot be checked identically on a
+# developer's machine in seconds -- which is what makes rule 1 affordable.
+#
+# Third-party actions are pinned to a commit SHA, not a tag: a tag is a
+# mutable dependency, and this repository's whole subject is checks that
+# rot without saying so.
+#
+# TRIGGERS (QT_CI_PLAN.md item 0.2). Work happens on "qt", not "master",
+# and it happens as direct pushes -- there are no merge commits on the
+# branch and never have been. So "push" is the trigger that actually
+# fires today. "pull_request" is listed because it costs nothing and
+# covers the day one is opened; note that the two events build different
+# commits (pull_request builds refs/pull/N/merge, push builds what
+# landed), so a branch listed under both runs everything twice. That is
+# why only "qt" and "master" are listed under push and no branch filter
+# is given for pull_request.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [qt, master]
+  workflow_dispatch:
+
+# Item 0.3. One run per branch; a newer push makes an older run pointless.
+# Release workflows will opt out of this -- a half-published release is
+# worse than a slow one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+# Ground rule 5: no workflow gets more than read access until the release
+# phase, which is the only one that needs anything else.
+permissions:
+  contents: read
+
+jobs:
+  # Item 1.1 and 1.2, plus the WCLI build from 1.3b. The single
+  # highest-value job in the plan: if nothing else is ever done, do this.
+  windows:
+    name: Windows builds (mingw-w64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install the cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-mingw-w64-x86-64
+
+      # 1.1. The oracle. wdriver.cpp and wdialog.cpp are compiled by no
+      # other makefile in the tree, so this job is the only thing in
+      # existence that diagnoses them.
+      - name: Build astrolog.exe
+        run: make -f Makefile.win
+
+      - name: Assert astrolog.exe is actually new
+        run: tools/ci-assert-fresh.sh astrolog.exe
+
+      # 1.3b. The console Windows build: the same shared core compiled by
+      # the same toolchain, entering at main() rather than WinMain, so it
+      # can be driven non-interactively under Wine. It was compiled by
+      # nothing at all until 2026-09-02, which is the exact failure this
+      # job exists to prevent -- so it is built here from the day it
+      # started existing rather than left to rot the way Astrolog.vcxproj
+      # did. Running it under Wine is item 6.4b and belongs in the slow
+      # lane; this step only proves it still compiles and links.
+      - name: Build astrolog-wcli.exe
+        run: make -f Makefile.wcli
+
+      - name: Assert astrolog-wcli.exe is actually new
+        run: tools/ci-assert-fresh.sh astrolog-wcli.exe

@@ -87,14 +87,17 @@ phases below whose job is to settle it.
 
 | Fact | Evidence |
 |---|---|
-| No CI exists today | no `.github/` in the tree |
-| The repo is small enough to check out whole | 155 tracked files, `size-pack` 14.47 MiB, `.git` 28 MB |
-| All runtime data is tracked and small | `ephem/` 2.1 MB (11 files), `font/` 2.7 MB; total non-source payload ~5 MB |
+| CI exists as of 2026-09-02 | `.github/workflows/ci.yml`, one job: the two Windows builds and their freshness assertions (PR 1). Everything else in this document is still unwritten |
+| The repo is small enough to check out whole | 164 tracked files, `size-pack` 14.47 MiB, `.git` 28 MB (re-counted 2026-09-02; it was 155 the day before, which is the rate these numbers move at) |
+| All runtime data is tracked and small | `ephem/` 2.2 MB (12 files), `font/` 2.7 MB; total non-source payload ~5 MB |
 | The Windows build is fully static | `Makefile.win`: `-static -static-libgcc -static-libstdc++`; the package is one `.exe` plus data |
 | **`Astrolog.vcxproj` is stale and would not link** | it does not list `switch.cpp`, which this fork added in `a78436f`; the project file's last commit is `95fd050`, 2022-04-01, "Upload all version 7.40 files". It targets `v142`, `Win32`/`x86` only |
 | Three separate binaries are needed to run everything | `./astrolog` (plain `Makefile`, needs libX11) drives all four matrices and `settings-round-trip.sh`; `./astrolog-qt-test` runs the suite; `./astrolog.exe` is the oracle |
 | Build cost is trivial | measured here, `g++ -O` with Qt5 includes: `calc.cpp` 1.75 s, `qtdriver.cpp` 3.29 s, `general.cpp` 1.44 s; 33 objects ⇒ ~60–70 s serial |
 | The Qt port uses no Qt6-removed API | no `QRegExp`, `QDesktopWidget`, `qrand`, `setCodec`, `SkipEmptyParts`, `QApplication::desktop()`, `QLinkedList`, `QStringRef`, `toSet()`. It already calls `horizontalAdvance` and already carries `QT_VERSION` guards at 5.12 and 6.5 |
+| **The port builds against Qt6 and passes there** | `make qt6` / `make qt6-test` (commit `2582015`, 2026-09-01) build the same sources against a hand-installed Qt6 named by `QT6_PKGCONFIG`; the suite reports 3561/0 against `./astrolog-qt6-test`. This was an open prediction in this document until the morning it was already false. **Consequence: Qt6 is now a fourth build configuration**, compiled only by whoever remembers — see "The three unbuilt configurations", which it joins unless CI builds it |
+| **`WCLI` builds, links, and runs a chart under Wine with no display** | 2026-09-02: `astrolog.h`'s X11 guard widened to `&& !defined(WCLI)`, `Makefile.wcli` added (`-DWCLI`, no `-mwindows`, `SRC_WIN` omitted since `wdriver.cpp` and `wdialog.cpp` are `#ifdef WIN` end to end). Builds in 16.2 s at `-j4`, zero warnings, `PE32+ executable (console)`; `wine ./astrolog-wcli.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X` prints the same chart the Linux console build does, with no display and no window manager |
+| **The suite quietly runs fewer assertions on a thinner ephemeris, and only the pass count says so** | the `objsel` group, measured three ways 2026-09-02: `-i nrvate.as` → 39 of 39 bodies, **83 passed / 0 failed**; `-Yi1 ephem` → 19 of 39, **61 / 2**; `-Yi1 /nonexistent-ephem` → **11 of 39**, **53 / 2**. Thirty assertions stop running and nothing announces it; the failure count is pinned at 2 by the Okyrhoe pair either way. Two consequences: gating those two (item 2.3) without also asserting a count buys silence, and **11 bodies resolve with no ephemeris at all**, so any floor below 11 is vacuous |
 | Nothing in Astrolog's own code is Linux-specific by inclusion | `<malloc.h>` is behind `#ifdef PC` in both `astrolog.h:347` and `placalc.h`; the only other POSIX headers are `<unistd.h>` and `<dirent.h>`. The three `__APPLE__`/`MACOS` hits in the tree are all inside upstream swisseph's `sweodef.h`/`swephexp.h` |
 | The QT backend cleanly displaces X11 | `astrolog.h:81`, `#if !defined(QT) && !defined(WIN)`; `Makefile.qt` links no `-lX11` |
 | Fonts already resolve for an installed copy | `qtdriver.cpp:2915` tries `applicationDirPath()/font` before `currentPath()/font` |
@@ -105,9 +108,9 @@ phases below whose job is to settle it.
 | **The suite was intermittently failing, and sometimes crashed** | the long-strings group reports `mode N survives 120-char name and location (0 bytes)` with N varying run to run; five runs on 2026-09-01 gave 0, 3, 1 and 4 failures plus one **segfault** and one **abort** (rc=134). Reproduced at `28599d4`, before any Qt6 work. Run alone the group passes 3/3, so it is an inter-test interaction. **ASan reproduces the failure and reports no memory error at all** |
 | That flakiness is not new, and the "rate went up today" theory did not survive measurement | work log item 141 recorded the same `(0 bytes)` signature on 2026-08-31, undiagnosed. Rebuilt and measured 2026-09-01, same recipe, 8 runs each: **`627480a` (start of day) 7 of 8 failed; `28599d4` (end of day) 5 of 8**. The rate did not rise across the day, so the commit suspected of raising it is not indicated. Both samples are n=8 and the difference is inside noise — what they support is "a long-standing, high-rate intermittent", not a direction |
 | The abort is rarer than the failure and is not localised | `rc=134` appeared 0 times in each of those 8-run samples, and twice in 3-run samples elsewhere. Nothing here says where it comes from |
-| **The suite is at 3551 assertions**, and every document naming a count is stale | measured `PASS: 3551 passed, 0 failed` on 2026-09-01. `CLAUDE.md` says 3526 (written 2026-08-31, `2645464`); `tools/win-tests.sh` says 2777 (2026-08-27, `0a33328`) |
+| **A count written into prose is stale before the ink dries, this document included** | it asserted 3551 in three places on 2026-09-01 and was wrong by the next morning — the suite prints 3561 at `c3960f7`. `CLAUDE.md` said 3526, `tools/win-tests.sh` says 2777. Four documents, four different numbers, none of them the program's. **The count is not restated here any more**: CI reads it out of the run, and where a count must be *asserted* it belongs in code beside what produces it (item 2.3) |
 | **A new file can be absent from its own commit, and only a clean checkout notices** | `tools/line_endings_audit.py` was never staged in `d9c23bb` — the add used `git add $(git diff --name-only)`, which lists tracked modifications only. Three documents cited a standing audit that did not exist for anyone else until `740d149`. A CI job running from `actions/checkout` fails on that immediately; a developer's working tree never will |
-| All six fast audits pass on the tree as it stands | `rc_audit`, `rc_mnemonic_audit`, `rc_field_audit`, `rc_lookup_audit`, `defaults_audit`, `registry_audit` — run 2026-09-01, all exit 0 |
+| All eight fast audits pass on the tree as it stands | `rc_audit`, `rc_mnemonic_audit`, `rc_field_audit`, `rc_lookup_audit`, `defaults_audit`, `registry_audit`, `line_endings_audit`, `fixture_coverage_audit` — re-run 2026-09-02, all exit 0, and the three generated tables all diff clean. It said "six" on 2026-09-01, before the last two existed |
 | The three generated tables are in sync, and are ending-agnostic **as of `d9c23bb`** | all three diffs clean, and each generator against a CR-stripped `astrolog.rc` now produces byte-identical output. **This was not true before `d9c23bb`**: the old `rc_accel.py` and `rc_cmd.py` did `f.read().split('\r\n')` and collapsed on LF input (421 bytes and 0 bytes against a 12,275-byte table); only `rc2qt.py` was always safe. Falsified properly: junk input gives 100 / 0 / 0 bytes, so all three read the path they are given |
 | **The minimal ephemeris is already checked in** | `ephem/` holds `sepl_18.se1` (planets), `semo_18.se1` (Moon), `seas_18.se1` (main asteroids incl. Chiron) and 8 individual TNO short files — 2.1 MB, 1800–2400 |
 | **`astrolog.as` already points at it** | `astrolog.as:63`, `-Yi1 "ephem"`. `nrvate.as:46` is what overrides to `/swe` |
@@ -116,7 +119,7 @@ phases below whose job is to settle it.
 | Making the bundled set pass costs 92 KB | `/swe/se52872.se1` is 93,806 bytes. Adding that one file clears both failures. Reaching 39/39 costs **7.9 MB** for 21 files |
 | The 20 that do not resolve are cheap in absolute terms, not free | all exist in `/swe` and total **8.0 MB** (7.9 MB with Okyrhoe: 8,320,773 bytes); measured. **No short-file variant exists for any of them** — the `s`-suffixed short files in `ephem/` ship with Astrolog, not with the Swiss set |
 | **Windows and Linux also render byte-identical graphics** | 86 of 109 sections identical outright; the other 23 are all output writers, and all but `-XM` reduce to CRLF plus an embedded output path. `-XM` (metafile) differs at byte 33 — unexplained |
-| `graphics-matrix.sh` **exits 0 with renders missing** | its last line is `echo "== $runs renders, $missing produced no file"` — nothing sets a non-zero status from `$missing`. A CI step must parse that line. Seen live at 115 of 224 MISSING with `rc=0` |
+| `graphics-matrix.sh` **used to exit 0 with renders missing, and no longer does** | it printed `== $runs renders, $missing produced no file` and set no status from it; seen live at 115 of 224 MISSING with `rc=0`. Fixed 2026-09-01 (work log item 163): it now prints `NOT A VALID BASELINE` and exits 1. **A CI step does not need to parse that line** — an earlier draft of this document told it to, which would have written a parser for a bug that was already gone |
 | `graphics-matrix.sh` hard-depends on `nrvate.as` **and on `/swe`** | without the file every render reports `File 'nrvate.as' not found`; with it but on the bundled ephemeris, **115 of 224 renders fail** on `se07066s.se1` (Nessus). So this harness cannot run on `ephem/` alone — a direct argument for Q13 option B |
 | **The Windows and Linux builds compute byte-identical text charts** | full 71-invocation chart matrix, `WCLI` build under Wine vs the Linux console build: **4 differing lines of 6,936**, all of them one diagnostic's path syntax. Before pinning `-z0 0` it was 228, all cascading from one `ST` vs `DT` header |
 | **DST autodetection differs between the two builds** | `Transits at: … (ST Zone 8W)` on Windows-under-Wine against `(DT Zone 8W)` on Linux, for 1991-06-15. `TZ=UTC` does not change it — Astrolog uses its own `-z0 Autodetect`. Possibly a Wine artifact; **undetermined, and worth a work log item** |
@@ -142,7 +145,6 @@ phases below whose job is to settle it.
 | The exact resolvable-body count under the bundled `ephem/` is 19, not 18 or 20 | 2.0 |
 | GitHub Actions minutes are free for this public fork, macOS runners included | 0.1 |
 | Apple clang compiles the shared core | 9.1 |
-| The port builds against Qt6 | 8.1 |
 | Homebrew still ships a usable `qt@5`; whether an arm64 Qt5 exists at all | 8.3 |
 | macOS `QAction::menuRole` relocation does not break the menu-parity tests | 9.3 |
 | `-ldl` links on macOS (SDK `libdl.tbd`) or must simply be dropped | 9.1 |
@@ -190,6 +192,7 @@ platform.
 | `./astrolog-qt-test` | `Makefile.qt.test` | same | `run-qt-tests.sh`, `QTTEXTDIR`/`QTGRAPHDIR` captures |
 | `./astrolog-qt-asan` | `Makefile.qt.asan` | same | (asan-sweep builds its own console binary) |
 | `./astrolog.exe` | `Makefile.win` | `g++-mingw-w64-x86-64` | the oracle; the Windows package; `win-tests.sh`, `text-chart-capture.sh` under Wine |
+| `./astrolog-wcli.exe` | `Makefile.wcli` | same | the Windows differential (6.4b) — the only Windows binary that runs non-interactively under Wine |
 
 ## The three unbuilt configurations
 
@@ -201,8 +204,9 @@ still — it rots, silently, and then somebody trusts it.
 | Configuration | Sites | Compiled by | State |
 |---|---|---|---|
 | `Astrolog.vcxproj` | — | nothing | one `<ClCompile>` line behind (`switch.cpp`); targets `v142`, `Win32` only |
-| `WCLI` | 19 | nothing | **builds** — after one-line guard fix at `astrolog.h:81` and dropping `-mwindows`; verified running under Wine 2026-09-01 (1.3b, 6.4b) |
+| ~~`WCLI`~~ | 19 | **`Makefile.wcli`, and CI** | **resolved 2026-09-02** — decided "build it in CI", which is one step in the existing Windows job and no new dependency. Guard widened at `astrolog.h:81`, `-mwindows` dropped, and it runs charts under Wine with no display (1.3b, 6.4b) |
 | `WSETUP` | 10 | nothing | unknown |
+| **Qt6** | — | `make qt6` / `make qt6-test`, by hand | **new on 2026-09-01, and already in this category.** It needs a Qt6 that most machines do not have, so it is outside `make all` by design — which is exactly the shape the other three rows have. A runner can `apt install qt6-base-dev` in seconds, so CI is the *cheapest* place to keep it alive, not the most expensive |
 
 Compare with what *is* built: `WIN` by `Makefile.win`, `QT` by three
 makefiles. And note that `Makefile.win` itself spent 62 commits broken
@@ -218,14 +222,30 @@ per configuration, and write the decision down:
 - **Keep it explicitly unbuilt** — legitimate, but then say so in a
   comment at the site, so the next reader does not assume it works.
 
-The one thing that is not a decision is leaving it as it is. **`WCLI` now
-has a demonstrated use case, not a speculative one** — it is the cheapest
-Windows differential this project has (6.4b), and reviving it cost one
-line. That is a fairly strong argument for "build it in CI"; `WSETUP` is
-Windows installer machinery this fork has no use for; `Astrolog.vcxproj`
-is upstream's and repairing it costs one line, so the question there is
-purely whether MSVC is a configuration this fork wants to owe anything
-to.
+The one thing that is not a decision is leaving it as it is.
+
+**`WCLI`: decided 2026-09-02 — build it in CI.** It had a demonstrated
+use case rather than a speculative one (it is the cheapest Windows
+differential this project has, 6.4b), reviving it cost one line of
+shared core, and building it costs one step in a job that already
+installs the toolchain. `Makefile.wcli` exists; `.github/workflows/ci.yml`
+compiles it. The row above is struck out because the category no longer
+holds it.
+
+**`WSETUP`: still undecided**, and the weakest case of the four — Windows
+installer machinery this fork has no use for. "Keep it explicitly
+unbuilt", with a comment at the site, is the likely answer.
+
+**`Astrolog.vcxproj`: still undecided.** Upstream's, exactly one
+`<ClCompile>` line behind, so repairing it is trivial; the real question
+is whether MSVC is a configuration this fork wants to owe anything to.
+
+**Qt6: newly undecided, and it should not stay that way for long.** It is
+the only one of the four that a contributor can plausibly *depend* on —
+somebody on a distribution without `qtbase5-dev` will build `make qt6`
+and believe the result. Building it in CI costs one runner-installed
+package and about fifteen seconds; the alternative is that its next
+regression is found by whoever tries to use it.
 
 ---
 
@@ -234,12 +254,14 @@ to.
 Phases are independent enough to reorder, but the value is very unevenly
 distributed and the first commit should reflect that.
 
-**PR 1 — "CI: build the Windows oracle" (half a day).** Phase 0 entire,
-plus items 1.1 and 1.2. One workflow file, two jobs' worth of YAML, and
-it closes the failure this whole document was written for. Falsify 1.1
-before opening the PR, and put what you broke and what the job said in
-the work log. **Stop there and merge.** A green Windows build landing on
-its own is worth more than a large branch that is still being debugged.
+**PR 1 — "CI: build the Windows oracle" (half a day). Done 2026-09-02,
+on branch `qt-ci`.** Phase 0 entire, plus 1.1, 1.2 and — because the
+guard fix landed at the same time — 1.3b. One workflow file, one job,
+four steps, two committed scripts' worth of logic, and it closes the
+failure this whole document was written for. Both checks falsified
+locally in a throwaway worktree; see their items for what was broken and
+what the build said. **It has not run on GitHub yet**, which is item 0.1
+and is the maintainer's to do.
 
 **PR 2 — "CI: the Qt build and its suite" (a day).** Phase 2 entire.
 Settle Q13 first because 2.3 depends on it, and expect the mode to be the
@@ -307,17 +329,32 @@ ran all 13 jobs twice, and cancelling one is *not* the fix because the two
 events build different commits (`pull_request` builds
 `refs/pull/N/merge`, the merge result; `push` builds the squash that
 lands).
-**Proposed starting point.** `pull_request:` for everything, plus
-`push: branches: [qt, master]`, plus `workflow_dispatch:`. Note that this
-fork's work happens on `qt`, not `master` — 346 commits vs 41.
-**Status.** [ ]
+**Adopted, 2026-09-02, as proposed.** `pull_request:` for everything,
+plus `push: branches: [qt, master]`, plus `workflow_dispatch:`, with the
+reasoning written into `ci.yml`'s header.
+**One fact that was not in the proposal and changes what it means.**
+`git log --merges qt` returns **nothing** — this repository has no merge
+commits and has never had a pull request. So `push` is the trigger that
+fires, `pull_request` is a bet on a future that may not arrive, and
+anything designed around a PR's base commit — **Phase 7's differentials,
+which are written that way** — has no event to hang on today. Keeping
+`pull_request` listed costs nothing; assuming it will fire costs Phase 7.
+**Status.** [x] done 2026-09-02
 
 ### 0.3 Decide the concurrency and permissions defaults
 **Do.** `concurrency: { group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}, cancel-in-progress: true }` and
 `permissions: { contents: read }` at the top of `ci.yml`. Release
 workflows opt into `contents: write` separately and never cancel
 in-progress.
-**Status.** [ ]
+**Done as specified**, both at the top of `ci.yml`. Two things were added
+that this item did not ask for and the next job should keep:
+`timeout-minutes` on the job, so a hang costs fifteen minutes rather than
+six hours of billed time; and **third-party actions pinned to a commit
+SHA rather than a tag** (`actions/checkout@11bd7190…`, v4.2.2, resolved
+with `git ls-remote` rather than from memory). A tag is a mutable
+dependency, and a document whose whole subject is checks that rot without
+saying so should not have one.
+**Status.** [x] done 2026-09-02
 
 ### 0.4 Confirm nothing in `.gitignore` swallows the workflows
 **Verified already** — `.gitignore` covers build outputs, `.idea/`,
@@ -346,8 +383,18 @@ makefile in the tree, so they are the two files this job uniquely
 protects. Confirm red, revert with an exact-string reverse patch, **not**
 `git checkout` (`CLAUDE.md`'s rule; it reverts the file's whole share of
 a change).
+**Falsified 2026-09-02**, in a throwaway `git worktree` rather than the
+working tree, because a second session was building in it and a
+deliberate syntax error would have read as their bug. Dropped the
+semicolon after `MSG msg;` at `wdriver.cpp:555`. `make -f Makefile.win`
+exited **2**, with four `: error:` lines and
+`make: *** [Makefile.win:55: obj-win/wdriver.o] Error 1` — so the step
+goes red on exit status alone and nothing has to match a word. Restored
+by reverse-patching the exact string; `git diff --stat` then showed the
+file untouched.
 **Cost.** ~2 min of runner time; 30 min to write and falsify.
-**Status.** [ ]
+**Status.** [x] written and falsified 2026-09-02; has not yet run on
+GitHub
 
 ### 1.2 Assert the binary is actually new
 **Goal.** Close the stale-binary trap at the CI level. `CLAUDE.md`: "if a
@@ -357,8 +404,19 @@ and is newer than every `.cpp` and `.h` in the tree. On a fresh runner
 this is trivially true, which is the point — it costs nothing and it
 catches the day someone adds caching or an incremental build and the
 guarantee quietly disappears.
-**Falsify.** `touch astrolog.cpp` after the build; the step must fail.
-**Status.** [ ]
+**Done as `tools/ci-assert-fresh.sh`, not as a workflow step**, so it can
+be falsified in a second on a developer's machine instead of minutes at a
+time by pushing. That is a general rule this file now keeps — see the
+header of `ci.yml`.
+**Falsified 2026-09-02, twice, and better than the item asked for.** The
+`touch` case is synthetic; the real one is free. After 1.1's sabotage the
+failed build left the previous `astrolog.exe` sitting on disk — exactly
+the stale binary that read as a pass for 62 commits — and the script
+said so:
+`NOT FRESH: astrolog.exe is older than the sources it is built from -- ./wdriver.cpp`,
+exit 1. With the binary removed entirely it reports
+`NOT FRESH: astrolog.exe does not exist -- the build step did not produce it.`
+**Status.** [x] written and falsified 2026-09-02
 
 ### 1.3 Smoke-test under Wine — Q3
 **Goal.** Prove the `.exe` runs, not just that it linked.
@@ -412,7 +470,24 @@ Sun : 24Gem07   + 0:00' (-) [ 1st house] …
 from `Makefile.win`. **Payoff:** see 6.4b — it turns out to be much more
 than a smoke test.
 **Do not let this hold up 1.1.**
-**Status.** [ ] — (b) proven viable; needs the `astrolog.h:81` guard fix
+**Done 2026-09-02, and it shipped with 1.1 rather than after it.** The
+guard fix is one line — `astrolog.h:81` now reads
+`#if !defined(QT) && !defined(WIN) && !defined(WCLI)` — and
+`Makefile.wcli` is `Makefile.win` with `-DWIN` → `-DWCLI`, `-mwindows`
+dropped, `SRC_WIN` omitted and no resource step. It builds in 16.2 s at
+`-j4` with zero warnings, `make wcli` and `make all` reach it, and
+`.gitignore` covers its outputs.
+**Falsified against the thing it uniquely protects**, which is the point
+of building it at all. Dropping the semicolon after
+`wndclass.lpfnWndProc = WndProcWCLI;` — `xscreen.cpp:425`, inside
+`#ifdef WCLI` — left `make -f Makefile.win` at **rc=0**, blind, and took
+`make -f Makefile.wcli` to **rc=2**. There are 33 such sites in the tree
+and until 2026-09-02 nothing compiled any of them.
+**What is deliberately *not* in the job yet:** running it under Wine.
+That is 6.4b, it needs a Wine install on the runner, and it belongs in
+the slow lane. The CI step proves it compiles and links; the local
+invocation in `Makefile.wcli`'s header proves it runs.
+**Status.** [x] done 2026-09-02
 
 ---
 
@@ -493,7 +568,29 @@ contributor without `/swe` needs. Then take **B** as a separate, cheap
 follow-up: 8 MB once buys CI the same net the maintainer has, and A's
 permanent asymmetry is the kind of thing that is invisible until it costs
 a release.
-**Status.** [ ]
+
+**A′ taken, 2026-09-02.** `ephem/se52872.se1`, 93,806 bytes, copied from
+`/swe`. Measured before and after, same command:
+
+```
+ASTROLOG_QT_TESTS=objsel ./run-qt-tests.sh -Yi1 ephem
+  before:  19 of 39 bodies resolved …  FAIL: 61 passed, 2 failed
+  after:   19 of 39 bodies resolved …  PASS: 63 passed, 0 failed
+```
+
+**The resolved-body count did not move**, which is the useful part:
+Okyrhoe is typed as a raw ephemeris number by two assertions and is not
+one of the 39 rows in `rgObjSel[]`, so **19 remains the number item 2.3
+asserts** and A′ removed a special case without introducing one. The
+suite on `/swe` is unaffected (3561/0, unchanged).
+**On redistribution**, since this item asks for it and it is not settled
+by precedent alone: the file is one more Astrodienst `.se1` of the same
+kind as the `seas_18.se1` already tracked here, `.gitattributes` already
+marks `*.se1` binary, and the repository already ships eleven. That is
+the precedent, not a licence review — **B, at 8.0 MB and 20 more files,
+is where a real one is owed.**
+**Status.** [x] A′ done 2026-09-02; **B still open** and still the thing
+that would make CI as strong a net as a local run
 
 ### 2.0b Measured, 2026-09-01 — and it changed the plan
 **Done.** Two of the three predictions this item existed to test were
@@ -610,12 +707,18 @@ with `Check(cCheck > 0, ...)` and a `printf` of `cCheck` against
 `cObjSel`; replace the floor with an equality against the mode's expected
 count. Keep the `printf` — a number in the log is how the next person
 learns what changed.
-**Handle the two Okyrhoe assertions**, `qttest.cpp:2535` and `:2537`.
-They are the reason the bundled set currently *fails* rather than
-degrading (2.0b). Two ways: gate them on the mode, or add
-`/swe/se52872.se1` (92 KB) to `ephem/` so the minimal set covers them.
-The second is smaller than it sounds and removes a special case instead
-of adding one — see Q13.
+**The two Okyrhoe assertions are already handled**, `qttest.cpp:2535` and
+`:2537`. They were the reason the bundled set *failed* rather than
+degrading (2.0b); `ephem/se52872.se1` landed 2026-09-02 and the group is
+63/0 on the bundled set. **So this item is now only about the count**,
+and the count is still 19 — see 2.0.
+**Assert the number of assertions too, not only the body count.** The
+`objsel` group runs 83 assertions on `/swe`, 63 on `ephem/`, and 53 with
+the ephemeris path pointed at nothing — and *reports success* in the last
+case except for what the Okyrhoe pair happened to catch, which A′ has now
+removed. Thirty assertions can stop running with nothing to show for it.
+The body count alone does not cover that; a mode-keyed expected count
+does, and it is the same one line.
 **Then survey the rest of the suite.** Those two were found by running
 it, not by reading it, so assume there are others. Any group whose coverage depends on
 ephemeris breadth needs the same treatment or an explicit note that it
@@ -1203,36 +1306,40 @@ enabling.
 
 ---
 
-# Phase 8 — The Qt6 probe — CONDITIONAL, and lower priority than its
-# position suggests
+# Phase 8 — Qt6 — NO LONGER A PROBE, AND NOT A MIGRATION
 
-**This project is Qt5 and should stay Qt5. Nothing in Phases 0–7 wants
-Qt6, and this phase is not a migration.**
+**Rewritten 2026-09-02. Everything below the first section used to be a
+prediction; the tree overtook it in a day.** This phase was written on
+2026-09-01 as a conditional prerequisite for a macOS runner, saying that
+`qt6-base-dev` was "not installed, not needed" and that whether the port
+built against Qt6 was an open question. By the next morning `make qt6`
+and `make qt6-test` existed (commit `2582015`), the suite passed 3561/0
+against `./astrolog-qt6-test`, and a Qt6-driven fix had landed in
+`qtdriver.cpp` (`adfb23c`).
 
-Stating that plainly because an earlier draft did not, and the omission
-made a prerequisite look like a direction of travel. The facts, measured
-on this box (Linux Mint 21.2, an Ubuntu 22.04 base):
+**The position on Linux has not changed and should not: this project is
+Qt5.** The port is built, packaged and prescribed against `qtbase5-dev`,
+`make all` does not build Qt6, and none of Phases 0–7 wants it. What
+changed is not the direction of travel, it is what exists.
 
-| | |
-|---|---|
-| `qtbase5-dev` | installed, **5.15.3** — what the port builds against |
-| `qt6-base-dev` | available (6.2.4), **not installed**, not needed |
+**So the question is no longer "build Qt6?" — it is "who keeps the Qt6
+build alive?"** A configuration that exists and is compiled by nobody is
+the subject of an entire section of this document, and Qt6 walked into
+that category on the day it was created. It is also the *easiest* of the
+four to keep out of it: `Makefile` reaches Qt6 through `QT6_PKGCONFIG`,
+which on this box points at a hand-installed `/usr/local/qt6`, but on a
+runner is one `apt-get install qt6-base-dev` and the distribution's own
+pkg-config path. That is a fifteen-second job, and it is the concrete
+proposal Q8 now asks about.
 
-The Linux port works, the packaging target ships Qt5, and `CLAUDE.md`
-prescribes `qtbase5-dev`. There is no Linux-side reason to touch Qt6.
-
-**The only thing that wants it is Phase 9**, and only if Q8.3 comes back
-saying Qt5 cannot be obtained on a macOS runner. Since macOS is scoped to
-"it compiles and the assertions pass, in the hope someone adopts it"
-(Phase 10 is closed), this phase inherits that priority: **do it if and
-when Phase 9 is actually attempted, and not before.**
-
-**What is already known, for free, and is not a plan:** a grep found no
+**What was true and is still worth having recorded:** a grep found no
 Qt6-removed API in the port — no `QRegExp`, `QDesktopWidget`, `qrand`,
 `setCodec`, `SkipEmptyParts`, `QApplication::desktop()`; it already calls
 `horizontalAdvance` and already carries `QT_VERSION` guards at 5.12 and
-6.5. That is a cheap fact worth having recorded. It is not a reason to
-act.
+6.5. The build then confirmed it. **That is worth a note about method:
+the grep was right, and it was still not evidence** — the same document
+called it "evidence, not a build" at the time, correctly, and the build
+is what settled it.
 
 **One long-horizon note, to watch rather than act on.** Qt5 is past
 upstream's open-source support, so some future distribution will stop
@@ -1243,28 +1350,43 @@ being conditional. Check the target distribution's Qt5 availability at
 that point rather than assuming today's answer.
 
 ### 8.1 Build against Qt6 on Linux
-**Do.** `sudo apt install qt6-base-dev`; parameterize `Makefile.qt`'s
-`pkg-config` module names (`Qt5Widgets` → `Qt6Widgets`, etc.) behind a
-variable rather than forking the makefile. Note Qt6 requires C++17, so
-`-std=gnu++17` becomes mandatory — the same flag `Makefile.win` already
-needs and documents (mingw g++ 10 defaults to gnu++14, where
-`calc.cpp`'s `Borrow bciCore(ciCore);` is a hard error).
-**Expectation, and it is only that.** A grep found no Qt6-removed API in
-the port. That is evidence, not a build.
-**Verify.** Compiles, then `./run-qt-tests.sh` passes against the Qt6
-binary.
-**Record.** Every diagnostic, in the work log. This is the input to the
-macOS estimate.
-**Cost.** Hours, mostly waiting on the first compile.
-**Status.** [ ]
+**Done, by someone else, before this item was started.** Commit
+`2582015`, 2026-09-01. It landed as `qt6` and `qt6-test` targets in the
+top `Makefile` that re-enter `Makefile.qt` and `Makefile.qt.test` with
+`OBJDIR`/`NAME` overridden and `PKG_CONFIG_PATH` pointed at
+`QT6_PKGCONFIG` — which is the shape this item asked for ("parameterize
+rather than fork the makefile"), reached without reading it.
+**Outcome.** Compiles; `QTTESTBIN=./astrolog-qt6-test ./run-qt-tests.sh`
+reports 3561/0. `-std=gnu++17` was indeed required, as predicted here and
+for the reason `Makefile.win` documents.
+**What is still open is not the build, it is the upkeep** — 8.2.
+**Status.** [x] done 2026-09-01 (`2582015`), recorded here 2026-09-02
 
 ### 8.2 Decide whether Qt6 is supported, or merely known to work
-**Q8 — and the default answer is "neither, yet."** Supporting both is a
-matrix dimension forever. Supporting Qt6 only breaks anyone on an older
-distro. **Staying on Qt5 and not building Qt6 at all is the correct
-position** until something concrete demands otherwise, and the only
-candidate is a macOS runner that cannot get Qt5.
-**Status.** [ ] — default: no action
+**Q8, and it is a different question than it was.** The old default
+answer — "neither; stay Qt5 and don't build Qt6 at all" — described a
+tree where no Qt6 build existed. One does now, and it works, so the
+choice is between three positions rather than two:
+
+- **Known to work, kept alive by CI.** One job, `apt-get install
+  qt6-base-dev`, `make qt6 && make qt6-test`, run the suite against it.
+  Qt5 stays the supported configuration and nothing about packaging
+  changes; what CI buys is that the Qt6 build cannot rot silently, which
+  is what happens to every other configuration in this tree that nothing
+  compiles. **Recommended**, and it is roughly fifteen seconds of runner
+  time.
+- **Known to work, not kept alive.** Honest only if the makefile says so
+  at the site: a comment reading "this target is not built by CI and may
+  not compile" is a legitimate decision and a silent one is not.
+- **Supported.** A matrix dimension forever, and nothing yet demands it.
+  Not now.
+
+**A reason the first option is worth more than its cost.** Qt5 is past
+upstream's open-source support, so the distribution question is when, not
+whether. A working Qt6 build that is *known* to still work is the cheapest
+possible insurance against that day, and it is worthless if nobody
+discovers it broke six months earlier.
+**Status.** [ ] — recommendation: build it in CI
 
 ### 8.3 Establish what Qt is actually obtainable on macOS
 **Do.** Check, at the time of doing the work rather than from memory:
@@ -1414,6 +1536,39 @@ rediscovery is slowest.
 
 - **A green job that did nothing looks exactly like a green job that
   worked.** Ground rule 1 exists for this. Every job, falsified once.
+- **CI adds no logic.** Every step is a package install, a `make`, or one
+  committed script from `tools/`. A check that lives only inside YAML can
+  only be falsified by pushing — minutes a try, in a place where nobody
+  reads the log of a green job — and ground rule 1 then quietly stops
+  being affordable. Item 1.2 is `tools/ci-assert-fresh.sh` for exactly
+  this reason, and it was falsified twice in about a second.
+- **There are no pull requests in this repository.** `git log --merges qt`
+  returns nothing; work lands as direct pushes. So `pull_request` never
+  fires today, and **anything designed around a PR's base commit has no
+  event** — which is how Phase 7 is written ("on a pull request the base
+  commit is already fetched"). On a push the base is
+  `github.event.before`, which is all-zeros on branch creation and wrong
+  after a force-push; and `actions/checkout` clones at `fetch-depth: 1`,
+  so even `HEAD~1` is not in the checkout unless asked for. Decide which
+  event Phase 7 runs on before writing it, not after.
+- **A scheduled workflow switches itself off.** GitHub disables `schedule:`
+  triggers in a repository with no activity for 60 days. Phase 6's whole
+  argument is that a nightly job keeps a promise by existing — on a fork
+  that goes quiet for two months it stops existing, silently, leaving a
+  green history behind it. Keep `workflow_dispatch` on everything in that
+  lane, and treat "the nightly has not run" as a condition somebody has to
+  notice.
+- **A third-party action pinned to a tag is a mutable dependency.** Pin
+  the SHA and write the version beside it in a comment
+  (`actions/checkout@11bd7190… # v4.2.2`), and resolve it with
+  `git ls-remote` rather than from memory. Phases 1–3 need no third-party
+  action at all, which is worth keeping true for as long as possible.
+- **`tools/warning_audit.py` cannot be run with `--update` in CI**, and
+  should not be. It flags *removed* warnings as well as new ones, on
+  purpose, so a legitimate fix turns the job red until `tools/warnings.txt`
+  is committed in the same change. That is correct behaviour and it is a
+  workflow consequence: the baseline is part of the diff, not a thing CI
+  maintains.
 - **Never `git checkout` a file to undo a sabotage.** It reverts the
   file's entire share of the change. Twice in one session in this
   project. Reverse-patch the exact string.
@@ -1531,18 +1686,71 @@ names it.
 | ~~Q5~~ | ~~An optimized `-g` build for the fortify class?~~ **Answered: no separate build needed.** The ordinary `-O` builds already import 10–11 `*_chk` symbols, so Phase 7's matrices — which run against `./astrolog`, a normal build — already cover it. New item 3.4 asserts it stays that way. | closed |
 | Q6 | Pass criterion for the Windows-vs-Qt text diff? **Largely answered by 6.4b**: pin `-z0 0`, filter the one path-syntax diagnostic, and the Windows/Linux text matrix diffs to **zero** — 4 lines of 6,936, all cosmetic. Still open only for the *GUI* route in 6.4, which also captures layout. | 6.4, 6.4b |
 | Q7 | Are the differentials a gate or a report, and how is an intentional change signalled? | 7.4 |
-| Q8 | Is Qt6 supported, or merely known to work? **Default answer: neither — stay Qt5.** The Linux port and its packaging target are Qt5; only a Phase 9 macOS runner could force the question. Reprioritised 2026-09-01 after the framing was challenged. | 8.2 |
+| Q8 | **Reopened 2026-09-02, as a different question.** It used to be "build Qt6 at all?"; a working Qt6 build landed the next day (`2582015`, suite 3561/0), so it is now **"who keeps it alive?"** Qt5 remains the supported and packaged configuration. Recommendation: one CI job, `apt-get install qt6-base-dev` + `make qt6 qt6-test` + the suite, ~15 s — or a comment at the site saying it is unbuilt. Not "supported". | 8.2 |
 | ~~Q9~~ | ~~Is `-ldl` harmless on macOS?~~ **Answered: keep it on Linux, drop it on macOS.** `dladdr()` is really called (`sweph.cpp:271`); the flag is a no-op on glibc ≥ 2.34 but still needed below it, and macOS puts `dladdr` in libSystem. | closed |
 | ~~Q10~~ | ~~Does this fork distribute signed macOS binaries at all?~~ **Answered 2026-09-01: no.** Phase 9 only — builds and assertions, no artifact. See Phase 10. | closed |
 | Q11 | Repair `Astrolog.vcxproj` or delete it? **Now cheap either way**: it is exactly one `<ClCompile>` line behind. The real question is whether MSVC is a configuration this fork wants to owe anything to. See "The three unbuilt configurations". | — |
 | ~~Q12~~ | ~~3526 or 2777?~~ **Answered: neither. Measured 3551 on 2026-09-01.** `2777` was written 2026-08-27 (`0a33328`), `3526` on 2026-08-31 (`2645464`); the suite has grown since. The lesson is not to pick a winner but to stop duplicating a number that rots by construction — the suite prints its own count, and three documents asserting it produced three wrong answers. | closed |
-| Q13 | Minimal ephemeris only (A), check in the missing 8.0 MB (B), or fetch and cache in CI (C)? The mode gets built either way. | 2.0, 2.3 |
+| ~~Q13~~ | ~~Minimal ephemeris only (A), check in the missing 8.0 MB (B), or fetch and cache in CI (C)?~~ **A′ done 2026-09-02**: `ephem/se52872.se1`, 93,806 bytes, so the bundled set passes with no gating and item 2.3 loses its special case. **B remains open as a cheap follow-up** — 8.0 MB buys CI the same 39/39 net the maintainer has, and until it is taken CI is a weaker net than a local run. The mode gets built either way. | 2.3 |
 
 ## Work log
 
 Same convention as `QT_GUI_PLAN.md`: one entry per item actually done,
 recording what it turned out to be rather than what was planned. Every
 falsification gets an entry saying what was broken and what the job said.
+
+**2026-09-02 — PR 1 exists, and reviewing this document first was worth
+more than PR 1.** The review came before the work, and it found five
+claims that had gone stale in a single day — the day *after* the document
+was written. Ranked by what they would have cost:
+
+1. **Phase 8 was describing a world that ended overnight.** It said
+   `qt6-base-dev` was "not installed, not needed" and filed "the port
+   builds against Qt6" as an open prediction. `make qt6` had landed the
+   previous evening and the suite passed 3561/0 against it. Phase 8 is
+   rewritten and Q8 is reopened as a different question: not "build
+   Qt6?" but "who keeps the Qt6 build alive?" — because it is a *fourth*
+   configuration in the "compiled by nobody" category, on the day it was
+   created.
+2. **`graphics-matrix.sh` had been fixed and the document had not
+   noticed**, still instructing a CI step to parse its last line for
+   missing renders. Writing that parser would have been work spent on a
+   bug that was already gone.
+3. **The suite count.** This document asserted 3551 in three places while
+   closing Q12 with the lesson *"stop duplicating a number that rots by
+   construction"*. It was wrong by the next morning. The numbers are out
+   now; CI reads the count from the run.
+4. Six fast audits are eight; 155 tracked files are 164. Both re-measured
+   rather than adjusted.
+
+**And three findings that were not staleness but gaps**, since they
+change what CI can be here: **this repository has no pull requests at
+all** (`git log --merges qt` is empty), which is the event Phase 7's
+differentials are designed around; **GitHub disables scheduled workflows
+after 60 days of repository inactivity**, which is the mechanism Phase 6
+relies on to keep a promise a human would forget; and **the suite runs
+fewer assertions on a thinner ephemeris and only the pass count says so**
+— 83 on `/swe`, 63 on `ephem/`, 53 pointed at nothing.
+
+**What shipped.** `.github/workflows/ci.yml` with one job: the two
+Windows builds and a freshness assertion on each. `Makefile.wcli` and a
+one-line guard widening at `astrolog.h:81` revive `WCLI`, which nothing
+had compiled since it was written. `tools/ci-assert-fresh.sh` is item
+1.2, as a script rather than YAML, so it falsifies in a second instead of
+a push. `ephem/se52872.se1` closes Q13 as A′.
+
+**Both checks falsified, in a throwaway `git worktree`** rather than the
+working tree — a second session was building in that tree, and a
+deliberate syntax error there would have read as their bug. Details in
+1.1, 1.2 and 1.3b. The sharpest of the three: breaking a line inside
+`#ifdef WCLI` left `make -f Makefile.win` at **rc=0** and took
+`make -f Makefile.wcli` to **rc=2**, which is the whole argument for
+building the second one.
+
+**What is not done and should not be read as done.** The workflow has
+never run on GitHub. Item 0.1 — confirming Actions is enabled and what it
+costs on this fork — is unchecked, and a green badge here is currently a
+green badge in a text file.
 
 **2026-09-01 — item 2.0b measured, and it found a live data-corruption
 incident.** Testing this document's own claim that CI could run against
