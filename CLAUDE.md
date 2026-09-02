@@ -121,12 +121,12 @@ make qt6-test -j4                # Qt6; QT6_PKGCONFIG says where it is.
                                  # already picks Qt6 wherever pkg-config
                                  # can see it
 QTTESTBIN=./astrolog-qt6-test ./run-qt-tests.sh  # the suite against Qt6:
-                                 # 3561/0 there too, on 2026-09-01
+                                 # the suite passes there too
 make install                     # two wrappers on PATH, a menu entry and
                                  # icons; the data stays
                                  # in the checkout, so the tree has to stay
                                  # put (PREFIX=$HOME/.local needs no root)
-./run-qt-tests.sh                # 3561 assertions + startup checks
+./run-qt-tests.sh                # the whole suite + startup checks;
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
@@ -142,7 +142,11 @@ tree; `make clean-console` is upstream's narrower one, which is what
 `tools/asan-sweep.sh` uses.
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3561 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make qt-asan`) — but note that
+commit. It prints its own count and that count grows every week, so this
+document does not restate it — three documents once asserted three
+different wrong numbers, which is what closed Q13 in `QT_CI_PLAN.md`. The
+state that matters is **0 failed**, and CI runs it on every push. The
+full suite is also clean under AddressSanitizer (`make qt-asan`) — but note that
 build is `-O0`, where `_FORTIFY_SOURCE` is inactive, so it structurally
 cannot see a fortify-detected overflow. Work log item 142 was invisible
 to it for that reason and had to be caught in an optimized `-g` build.
