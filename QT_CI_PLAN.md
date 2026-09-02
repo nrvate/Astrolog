@@ -263,6 +263,16 @@ each piece is shaped the way it is.
 | `ci.yml` (~4 min, every push and PR) | Windows builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · Windows package · 2 × `.deb` · 4 × `.rpm` | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
 | `nightly.yml` | Compiler warnings · AddressSanitizer sweep · Windows parity · Behaviour vs yesterday | 6.1–6.4b |
 | `release.yml` (on `v*`) | Version check · packages · Publish | 5.1, 5.2 |
+| `repo.yml` (on release) | Build the repositories · Publish to Pages | 4.7 |
+
+**Signed apt and dnf repositories are live** at
+<https://nrvate.github.io/Astrolog/>, rebuilt from every release so old
+versions stay installable. Verified by installing from the live URL:
+Ubuntu 22.04 gets `~jammy`, Fedora 42 gets `.fc42`, Rocky 9 gets `.el9`,
+each with its signature checked. **One suite per distribution** — a
+single suite makes apt and dnf offer the highest-versioned package rather
+than the one built for the running release, which is the whole point of
+building per distribution undone at the last step.
 
 **Answered along the way:** Q1 (native `.deb` and `.rpm`, not AppImage),
 Q2 (`8.00-qt.N`, `szVersionFork`), Q7 (per-change run gates, nightly
