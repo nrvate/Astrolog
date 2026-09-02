@@ -125,6 +125,7 @@
     <ClCompile Include="matrix.cpp" />
     <ClCompile Include="placalc.cpp" />
     <ClCompile Include="placalc2.cpp" />
+    <ClCompile Include="switch.cpp" />
     <ClCompile Include="swecl.cpp" />
     <ClCompile Include="swedate.cpp" />
     <ClCompile Include="swehouse.cpp" />

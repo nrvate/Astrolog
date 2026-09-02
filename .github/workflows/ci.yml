@@ -177,6 +177,7 @@ jobs:
           python3 tools/registry_audit.py
           python3 tools/line_endings_audit.py
           python3 tools/fixture_coverage_audit.py
+          python3 tools/vcxproj_audit.py
 
       # The pre-commit form. The plain ">" form overwrites the committed
       # file and must never appear in a workflow.
@@ -610,3 +611,70 @@ jobs:
           archive: false
           name: astrolog-rpm-${{ matrix.release }}
           path: out/package/*.rpm
+
+  # Q11 answered 2026-09-02: repair it and build it. Astrolog.vcxproj had
+  # been one <ClCompile> line behind since a78436f added switch.cpp, and
+  # rotting quietly is what happens to every configuration nothing
+  # compiles -- this repository has now found that three times (WCLI,
+  # Qt6, and this). One job makes it real.
+  #
+  # It is the only job here that is not also runnable on the maintainer's
+  # machine, since MSVC is Windows-only. That is the cost of keeping the
+  # configuration, and it is why the project file is checked against
+  # Makefile.srcs by the audits as well: a missing source should fail on
+  # Linux in a second, not on a Windows runner in a minute.
+  msvc:
+    name: MSVC project
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
+
+      # v142 is the toolset the project asks for and windows-latest does
+      # not ship it, so it retargets to whatever is installed. That is the
+      # honest thing for a file this fork does not otherwise maintain:
+      # the question is whether the SOURCE still compiles under MSVC, not
+      # whether a 2019 toolset is still available.
+      - name: Build
+        run: msbuild Astrolog.vcxproj -p:Configuration=Release -p:Platform=Win32 -p:PlatformToolset=v143 -v:minimal
+
+      - name: The binary exists and is new
+        shell: bash
+        run: |
+          find . -name 'Astrolog.exe' -newer Astrolog.vcxproj | grep . || {
+            echo "MSVC produced no Astrolog.exe newer than the project file"; exit 1; }
+
+  # Phase 9. Scoped to "it compiles and the suite passes", because the
+  # maintainer owns no Apple hardware and nothing beyond that can be
+  # verified here. The deliverable is adoptability: a dated, reproducible
+  # statement that the port builds and passes on macOS, which is exactly
+  # what someone considering picking up the Mac side cannot find out
+  # without doing the work first.
+  #
+  # THIS IS THE ONE JOB IN THE FILE THAT WAS NOT FALSIFIED BEFORE IT WAS
+  # TRUSTED. Every other check here was broken on purpose and watched go
+  # red first; this one cannot be, from a machine with no macOS. Read a
+  # green result accordingly -- it says the suite passed offscreen, not
+  # that a person can use the menus. QT_CI_PLAN.md item 9.3 has the list
+  # of what nobody has looked at.
+  macos:
+    name: macOS build + suite
+    runs-on: macos-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install Qt
+        run: brew install qt@5 pkg-config || brew install qt pkg-config
+
+      - name: Build
+        run: |
+          export PKG_CONFIG_PATH="$(brew --prefix qt@5 2>/dev/null)/lib/pkgconfig:$PKG_CONFIG_PATH"
+          make qt -j4 && make qt-test -j4
+
+      - name: Run the suite
+        run: ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem
