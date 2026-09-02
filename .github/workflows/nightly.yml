@@ -35,6 +35,16 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
+# One nightly at a time. Without this a dispatch does not supersede the
+# run already going, and two of every job proceed in parallel -- six
+# runners doing the same work, including two macOS ones at the most
+# expensive multiplier. A newer nightly is strictly better than an older
+# one, so cancelling is right here, unlike release.yml where a
+# half-published release is worse than a slow one.
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
