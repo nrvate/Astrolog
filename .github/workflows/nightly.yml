@@ -303,15 +303,29 @@ jobs:
       # in when it stopped. Exactly how the ten-minute Linux hang was
       # localised -- to a modal box in the Chart rendering group -- in one
       # run instead of several.
+      # The watchdog kills the BINARY, not the script, and the output goes
+      # to a file rather than through a pipe. Both matter. Killing the
+      # script leaves its child running, and an orphan holding the pipe
+      # open means "tail" never sees EOF and the step hangs anyway --
+      # which is what the first version did, turning a seven-minute
+      # watchdog into a twelve-minute job timeout. Reading the log after
+      # the fact also sidesteps the buffering that makes a piped, running
+      # binary look silent, which QT_TESTING.md records as having
+      # confounded three probes.
+      #
+      # pkill by name is safe here in a way it is not on a developer's
+      # machine, where CLAUDE.md forbids it because it matches the
+      # maintainer's own running copy. A runner has exactly one.
       - name: Run the suite
         run: |
-          set -o pipefail
-          # perl's alarm, not timeout(1): macOS ships no timeout, and
-          # "brew install coreutils" to get one would add a minute to
-          # every run for a watchdog.
+          ( sleep 420; pkill -f astrolog-qt-test ) & watchdog=$!
           ASTROLOG_QT_EPHEM=minimal ASTROLOG_QT_TIME=1 \
-            perl -e 'alarm 420; exec @ARGV' ./run-qt-tests.sh -Yi1 ephem 2>&1 | tail -60 || {
-              rc=$?
-              echo "== suite exited $rc. The last group named above is where it"
-              echo "== stopped; on Linux this run takes 47 seconds."
-              exit $rc; }
+            ./run-qt-tests.sh -Yi1 ephem > suite.log 2>&1
+          rc=$?
+          kill "$watchdog" 2>/dev/null || true
+          tail -60 suite.log
+          [ "$rc" -eq 0 ] || {
+            echo "== suite exited $rc. The last group named above is where it"
+            echo "== stopped; on Linux this run takes 47 seconds and the whole"
+            echo "== suite passes 3792 assertions."
+            exit "$rc"; }
