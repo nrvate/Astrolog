@@ -282,12 +282,21 @@ Roughly in the order I'd take them.
    atlas and the interpretation text still have no reference outside this
    repo, and REFACTORING.md's T9 makes the argument for why that matters:
    every other net here is differential and can only say "unchanged".
-   The cheapest next ones need no external data at all — the invariants
-   the program must satisfy whatever the numbers are. An aspect is
-   symmetric. A midpoint lies between its two sources. A return chart's
-   object really is at its natal longitude. A progressed chart at zero
-   elapsed time is the natal chart. Each is a few lines and each covers a
-   surface nothing currently watches.
+   ~~The cheapest next ones need no external data at all — the
+   invariants the program must satisfy whatever the numbers are.~~ —
+   **those four are done**, 2026-09-01: legs 6-9 in `TestNumericOracleQt`
+   are aspect symmetry, a midpoint lying halfway between its sources, a
+   progressed chart at zero elapsed time equalling the natal, and a
+   return chart's object actually being at its natal longitude. Leg 4b
+   added the house-partition invariant across latitude *and* engine,
+   which is what caught the five degenerate systems.
+
+   **What still has no reference outside this repo**: eclipses, the
+   atlas, and the interpretation text. Eclipses are the one with an
+   external answer available — the Swiss library computes them directly,
+   so that leg is the same shape as leg 1. The atlas and the
+   interpretation text have no oracle short of a second implementation,
+   and are honestly better served by invariants than by a reference.
    ~~**Both findings below are confirmed, and there are five more**~~ —
    **fixed 2026-09-01, work log items 157-158.** (An intermediate note
    here said they did not reproduce; that was measured at a single date
