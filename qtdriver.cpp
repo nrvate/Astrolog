@@ -260,6 +260,23 @@ static flag FRotatableQt()
 }
 
 
+// Where a mouse event happened in screen coordinates. Qt6 deprecated
+// globalPos() in favour of globalPosition(), which returns a QPointF and
+// does not exist in Qt5; this is the one spelling both accept. Two call
+// sites, and the Qt6 build named them on every compile -- nothing was
+// reading that build's warnings, because tools/warning_audit.py covered
+// the other four.
+
+static QPoint PtGlobalQt(CONST QMouseEvent *pevent)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  return pevent->globalPosition().toPoint();
+#else
+  return pevent->globalPos();
+#endif
+}
+
+
 class ChartCanvas : public QWidget
 {
 public:
@@ -326,7 +343,7 @@ protected:
       // Charts a drag can rotate hold their menu until the button comes
       // back up, so that dragging one doesn't end in a popup.
       if (!FRotatableQt())
-        ShowContextMenu(pevent->globalPos());
+        ShowContextMenu(PtGlobalQt(pevent));
       return;
     }
     if (pevent->button() != Qt::LeftButton)
@@ -368,7 +385,7 @@ protected:
     // The rotatable charts' menu appears now instead of on button down,
     // and only if this drag didn't actually rotate anything.
     if (pevent->button() == Qt::RightButton && FRotatableQt() && !fRotated)
-      ShowContextMenu(pevent->globalPos());
+      ShowContextMenu(PtGlobalQt(pevent));
   }
 
 private:

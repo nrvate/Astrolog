@@ -1,0 +1,20 @@
+# Compiler warnings from the Qt6 build, as counted by
+# tools/warning_audit.py.
+#
+# Separate from tools/warnings.txt on purpose. That file's first column
+# names the set of builds that agree on a site, so folding a fifth build
+# into it would rewrite nearly every line -- and rewrite it back on the
+# many machines that have no Qt6. This one is checked only where a Qt6
+# exists to check against, and skipped, not failed, everywhere else.
+#
+# It exists because the Qt6 build spent its whole life outside the audit:
+# two deprecated QMouseEvent::globalPos() calls were named on every
+# compile and nobody read them. Both now go through PtGlobalQt(), the one
+# spelling Qt5 and Qt6 both accept, and this ledger is empty.
+#
+# An empty ledger is the goal, not an oversight. A NEW line here is a
+# warning the Qt6 build has and the Qt5 build does not.
+#
+# Regenerate:  tools/warning_audit.py --update   (needs a Qt6)
+# Total: 0 warnings in 0 distinct sites.
+

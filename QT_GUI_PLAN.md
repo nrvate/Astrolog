@@ -6871,6 +6871,63 @@ are the more useful half to read before starting something new.
     -- and never a pattern; CLAUDE.md says the same thing about
     screenshots for the same reason.
 
+170. **The Qt6 build had never had its warnings read, and the audit built
+    to prevent exactly that covered the other four.** The maintainer ran
+    `make qt6`, saw two `-Wdeprecated-declarations` lines go past, and
+    asked why they had not been caught. Two answers, and the second one
+    is worse.
+
+    **The structural answer.** `tools/warning_audit.py` holds four builds
+    against `tools/warnings.txt`: console, qt, qt-test, win. The Qt6
+    build arrived at commit `ee0623e` and was never added, so from the
+    day it existed it compiled outside every net this project has for
+    compiler output -- the net whose own charter (item 146) is that
+    nothing here had ever read a warning.
+
+    **The behavioural answer.** Both lines appeared in *this session's*
+    own build output, twice, hours apart. They were read, classified as
+    "pre-existing Qt6-only deprecations, unrelated", and not mentioned.
+    That is the same failure as not looking, with an extra step, and it
+    is worth writing down because the audit alone would not have stopped
+    it: an audit that does not cover a build produces silence, and
+    silence is what a clean build looks like.
+
+    **The warnings themselves.** `QMouseEvent::globalPos()` is deprecated
+    in Qt6 in favour of `globalPosition()`, which returns a `QPointF` and
+    does not exist in Qt5. Two call sites, both handing a screen position
+    to `ShowContextMenu()`. `PtGlobalQt()` is the one spelling both
+    accept, behind the `QT_VERSION_CHECK(6, 0, 0)` guard the tree already
+    uses for `QAction`'s move to QtGui.
+
+    **The ledger.** Qt6 gets its own file, `tools/warnings-qt6.txt`, and
+    it is deliberately not folded into the main one: that ledger's first
+    column names the set of builds agreeing on a site, so a fifth build
+    would rewrite nearly every line -- and rewrite it back on any machine
+    without a Qt6, which is most of them. The Qt6 leg is **skipped, not
+    failed**, where no Qt6 is installed, so the audit stays a gate
+    everywhere.
+
+    It holds only what Qt6 warns about and Qt5 does not. The first
+    generation produced 79 warnings in 73 sites, all of them shared-core
+    lines already in the main ledger under three other builds; subtracting
+    what the Qt5 build says leaves **zero**, which is the right resting
+    state and makes any future Qt6-specific warning a single visible line.
+
+    **Falsified**: putting one call site back to `globalPos()` makes
+    `tools/warning_audit.py --file qtdriver.cpp` print
+
+        qt6  qtdriver.cpp  mousePressEvent  -Wdeprecated-declarations  1
+        'QPoint QMouseEvent::globalPos() const' is deprecated
+
+    attributed to `qt6` alone, and reverse-patching it silences the audit
+    again. `--file` covers Qt6 too now, so the seconds-long loop sees what
+    the six-minute one does.
+
+    **Nets**: both suites 3561/0 (Qt5 and Qt6); `make qt6` and `make qt`
+    compile with zero warnings at their own flags; the four-build ledger
+    unchanged at 316 in 100 sites, which is the check that this did not
+    disturb it.
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

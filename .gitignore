@@ -28,3 +28,4 @@ astrolog.exe
 /obj-qt-dbg/
 /base-astrolog
 /astrolog-qt6-test
+/tools/__pycache__/

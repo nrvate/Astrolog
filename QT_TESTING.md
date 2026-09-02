@@ -694,9 +694,19 @@ Windows dialog and menu wiring, which nothing else sees.
 ## The compiler is a harness too, and was unread until 2026-09-01
 
 ```sh
-tools/warning_audit.py                 # all four builds, ~6 minutes
+tools/warning_audit.py                 # all four builds, ~6 minutes,
+                                       # plus Qt6 where there is one
 tools/warning_audit.py --file io.cpp   # one file, seconds, while fixing
 tools/warning_audit.py --update        # after a fix, to move the ledger
+
+**The Qt6 build has its own ledger**, `tools/warnings-qt6.txt`, and it
+holds only what Qt6 warns about and Qt5 does not — the shared core
+produces the same 73 sites under either, and they are already in the main
+ledger. It is empty, which is the goal state and not an oversight. It
+exists because the Qt6 build spent its whole life outside the audit: two
+deprecated `QMouseEvent::globalPos()` calls were named on every compile
+and nobody read them. Machines without a Qt6 skip that leg rather than
+failing it.
 ```
 
 It compiles console, Qt, Qt-test and Windows clean with `-Wall`,

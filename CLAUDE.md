@@ -221,9 +221,16 @@ tools/warning_audit.py               # all four builds clean with -Wall,
                                      # every warning diffed against
                                      # tools/warnings.txt (316 in 100
                                      # sites); ~6 minutes, so pre-release
-                                     # rather than pre-commit
+                                     # rather than pre-commit. Plus the
+                                     # Qt6 build, where there is a Qt6,
+                                     # against tools/warnings-qt6.txt --
+                                     # which holds only what Qt6 warns
+                                     # about and Qt5 does not, and is
+                                     # empty. Skipped, not failed, on a
+                                     # machine with no Qt6
 tools/warning_audit.py --file io.cpp # one file, seconds, no baseline --
-                                     # the loop to use while fixing
+                                     # the loop to use while fixing; it
+                                     # covers Qt6 too where present
 ```
 
 It earns its place the way the sanitizer sweeps did. Its first run found
