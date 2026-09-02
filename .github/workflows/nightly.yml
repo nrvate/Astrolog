@@ -254,3 +254,44 @@ jobs:
           name: nightly-differential
           path: out/diff/*.diff
           if-no-files-found: ignore
+
+  # Phase 9. Scoped to "it compiles and the suite passes", because the
+  # maintainer owns no Apple hardware and nothing beyond that can be
+  # verified here. The deliverable is adoptability: a dated, reproducible
+  # statement that the port builds and passes on macOS, which is what
+  # someone considering picking up the Mac side cannot find out without
+  # doing the work first.
+  #
+  # IT IS IN THE NIGHTLY LANE AND NOT THE FAST ONE, and it took a wasted
+  # runner to learn why. The first attempt ran "brew install qt@5", which
+  # Homebrew has deprecated -- so instead of pouring a bottle it started
+  # building Qt from source, and sat there for over ten minutes inside a
+  # workflow whose whole run is otherwise four. "Does it still build on
+  # macOS" is a daily question, not a per-push one.
+  #
+  # Qt6, not Qt5, for the same reason: it is a current bottle and installs
+  # in seconds, and Makefile.qt picks its modules from pkg-config, so
+  # nothing else changes. The EL10 package is built against Qt6 too.
+  #
+  # TWO THINGS TO READ HONESTLY. This is the one job in any of these
+  # workflows that was NOT falsified before it was trusted -- it cannot
+  # be, from a machine with no macOS -- and it is continue-on-error, so it
+  # reports rather than gates, like the nightly differential. A green
+  # result says the suite passed offscreen; it does not say a person can
+  # use the menus. QT_CI_PLAN.md item 9.3 lists what nobody has looked at.
+  macos:
+    name: macOS build + suite
+    runs-on: macos-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install Qt6
+        run: brew install qt pkg-config
+
+      - name: Build
+        run: make qt -j4 && make qt-test -j4
+
+      - name: Run the suite
+        run: ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem

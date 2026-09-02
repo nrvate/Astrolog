@@ -646,35 +646,3 @@ jobs:
         run: |
           find . -name 'Astrolog.exe' -newer Astrolog.vcxproj | grep . || {
             echo "MSVC produced no Astrolog.exe newer than the project file"; exit 1; }
-
-  # Phase 9. Scoped to "it compiles and the suite passes", because the
-  # maintainer owns no Apple hardware and nothing beyond that can be
-  # verified here. The deliverable is adoptability: a dated, reproducible
-  # statement that the port builds and passes on macOS, which is exactly
-  # what someone considering picking up the Mac side cannot find out
-  # without doing the work first.
-  #
-  # THIS IS THE ONE JOB IN THE FILE THAT WAS NOT FALSIFIED BEFORE IT WAS
-  # TRUSTED. Every other check here was broken on purpose and watched go
-  # red first; this one cannot be, from a machine with no macOS. Read a
-  # green result accordingly -- it says the suite passed offscreen, not
-  # that a person can use the menus. QT_CI_PLAN.md item 9.3 has the list
-  # of what nobody has looked at.
-  macos:
-    name: macOS build + suite
-    runs-on: macos-latest
-    timeout-minutes: 40
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-
-      - name: Install Qt
-        run: brew install qt@5 pkg-config || brew install qt pkg-config
-
-      - name: Build
-        run: |
-          export PKG_CONFIG_PATH="$(brew --prefix qt@5 2>/dev/null)/lib/pkgconfig:$PKG_CONFIG_PATH"
-          make qt -j4 && make qt-test -j4
-
-      - name: Run the suite
-        run: ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem
