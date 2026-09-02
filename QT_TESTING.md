@@ -384,9 +384,21 @@ automated run that stops partway and never returns; the Windows build
 painting its menu bar and nothing else; a chart mode that "renders slowly"
 when it is not rendering at all.
 
-`SetNoPopupQt(fTrue)` is the escape, which the captures and
-`TestBadInputQt()` use. On the Windows binary it is `-Wt`. There is no
-command-line escape in the Qt build.
+`SetNoPopupQt(fTrue)` is the escape. On the Windows binary it is `-Wt`.
+There is no command-line escape in the Qt build.
+
+**The suite sets it once, for every group**, in `NRunQtTestTableQt()`.
+It used to be per-group, and 40 of the 49 groups did not — which cost ten
+minutes of a CI run on 2026-09-02 before anyone noticed. The Chart
+rendering group blocked on the Moons chart at 1.9% CPU in `do_poll()`
+while the same chart from the console build drew in 0.01 s: not slow,
+waiting, on a box about a missing ephemeris file.
+
+**It only appears where `/swe` is absent**, which is every machine except
+the maintainer's — so `-i nrvate.as` hides it and `-Yi1 ephem` finds it.
+That is the general shape: a hazard that the sanctioned local invocation
+cannot reach is one only CI or a contributor will hit, and they will hit
+it first.
 
 Recognising it from outside, with no debugger:
 
