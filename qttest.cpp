@@ -4406,7 +4406,7 @@ static void TestNumericOracleQt()
           getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
           (int)getpid());
         fileRet = fopen(szTmpRet, "w");
-        if (fileRet != NULL && fFalse)
+        if (fileRet != NULL)
           is.S = fileRet;
         ChartTransitSearch(fFalse);
         is.S = fileRetSav;
