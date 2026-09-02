@@ -97,6 +97,19 @@
 
 //#define WSETUP /* Comment out this #define if you don't want to compile a */
                /* modern Windows version that can do its own (un)setup.   */
+               /*                                                         */
+               /* NOTHING IN THIS TREE COMPILES WSETUP, and nothing has   */
+               /* for as long as the fork has existed. Its ~10 sites are  */
+               /* therefore unverified: not merely stale, but broken in   */
+               /* ways no one can see. That is measured rather than       */
+               /* feared -- the three other configurations nobody         */
+               /* compiled all turned out to be unbuildable. WCLI defined */
+               /* X11 and died on Xlib.h; Astrolog.vcxproj needed three   */
+               /* fixes, two of which only a compiler could find; the Qt6 */
+               /* build was outside every warning net from the day it     */
+               /* appeared. Assume the same of WSETUP until something     */
+               /* builds it. QT_CI_PLAN.md, "The three unbuilt            */
+               /* configurations", has the decision this is waiting on.   */
 
 #define JPLWEB /* Comment out this #define if you don't want to compile in */
                /* features to access the JPL Horizons Website online.      */
