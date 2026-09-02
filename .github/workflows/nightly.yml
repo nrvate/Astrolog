@@ -417,7 +417,12 @@ jobs:
           rem toolchain died there, having compiled most of the tree
           rem first -- so this is a compiler-configuration quirk, not an
           rem Astrolog portability problem.
-          cl /nologo /std:c++17 /Zc:__cplusplus /EHsc /MD /O2 /W1 ^
+          rem /permissive- is the second flag Qt asks for by name, for the
+          rem same reason as the first: MSVC's defaults are not
+          rem standards-conforming and Qt's headers check. Both messages
+          rem name the flag, and neither is a complaint about this tree --
+          rem Astrolog's own sources have not produced a diagnostic yet.
+          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /EHsc /MD /O2 /W1 ^
              /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
              /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
