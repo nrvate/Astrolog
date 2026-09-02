@@ -1947,6 +1947,20 @@ measured at the finding).
 
 ## Done
 
+- **T4 — closed 2026-09-02** (work log item 172), both halves. The drift
+  class went to `registry_audit.py` on 2026-08-29; the coverage half is
+  leg 3b of `tools/settings-round-trip.sh`, which asks the writer instead
+  of the registry: every value switch appearing in a settings file the
+  program actually saved must be named by an EXPECT. That turned 31 rows
+  needing a hand judgement into a mechanical check, found 38 saved
+  switches with nothing asserting them — the chart's own time zone,
+  daylight, location and temperature among them — and left two
+  exemptions, each measured and recorded beside its own line.
+- **T5's tail — closed 2026-09-02** (work log item 174). Read one call at
+  a time rather than counted: two of the ninety could actually overflow
+  (both struct members, where `S()` applied unchanged), six took a bound
+  for free, and the rest were already safe for reasons a count could not
+  see.
 - **T9** — the numeric oracle, 2026-08-31 (work log item 141), extended
   2026-09-01 with three invariants needing no reference at all (item 153)
   and a latitude/engine sweep of the house partition (item 157, which
@@ -1956,7 +1970,14 @@ measured at the finding).
   and now the only one that has found a defect in the astrology itself. Found work log item 140
   before it was written, and its leg 5 pins item 142's `acos` domain fix
   — the long-open intermittent, which no differential net could have
-  found because the wrong answer was a NaN, not a change.
+  found because the wrong answer was a NaN, not a change. Extended
+  again 2026-09-02 (item 171) to eclipses, the atlas and the
+  interpretation tables: the eclipse leg is the only place in this
+  project where **two independent implementations of the same astronomy**
+  are set against each other — Astrolog's own 3D geometry against the
+  Swiss library's eclipse finder, 60 solar and 40 lunar and 55 midpoints
+  where there must be none — and the interpretation leg found a NULL
+  dereference reachable from a documented switch.
 - **T5 — closed for caller-owned destinations**, 2026-08-31 (work log
   items 143-145). 1,141 of 1,231 formatting calls bounded: 1,055 swept
   mechanically onto `sprintf2(S(...))`, then thirteen functions that

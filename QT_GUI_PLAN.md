@@ -276,7 +276,8 @@ Roughly in the order I'd take them.
    **`Mem` storage arrays** are never subscripted, so a guard would
    check nothing. Both say so at the ledger row.
 
-11. **Extend the oracle.** Added 2026-08-31 (work log item 141). The
+11. ~~**Extend the oracle.**~~ — **closed 2026-09-02** (work log items
+   153, 157-158, 171). Added 2026-08-31 (work log item 141). The
    numeric oracle covers planetary longitude and house-cusp ordering, and
    that is all. Aspects, midpoints, progressions, eclipses, returns, the
    atlas and the interpretation text still have no reference outside this
