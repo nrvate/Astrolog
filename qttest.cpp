@@ -4809,6 +4809,267 @@ static void TestNumericOracleQt()
         Check(cShort == 0, "the interpretation leg got its own stream");
       }
     }
+
+    // ---- Leg 13: the in-day search finds real conjunctions ----
+    // The search functions have no reference outside this repo, and
+    // unlike positions they have no library to ask. What they do have is
+    // the same invariant leg 9 uses for returns: **a hit, re-cast, must
+    // satisfy the condition it was searching for.** Nothing else in the
+    // suite exercises ChartInDaySearch() at all.
+    //
+    // Restricted to the Sun and Moon with conjunction as the only
+    // aspect, and with sign and direction changes and the
+    // void-of-course pass turned off, every hit is a new moon. Without
+    // those restrictions the search reports six other event kinds and
+    // half the hits are not aspects -- measured, and the first draft of
+    // this leg asserted otherwise.
+    //
+    // Two things are checked, and the second is not an internal
+    // invariant at all: the separation at each hit, and the interval
+    // between consecutive hits, which must be the synodic month. That
+    // number belongs to the solar system rather than to this program.
+    {
+      Borrow bList(us.fListAuto, fTrue), bRet(is.fReturn, fFalse);
+      Borrow bMonth(us.fInDayMonth, fTrue), bYear(us.fInDayYear, fFalse);
+      Borrow bDiv(us.nDivision, 48), bAsp(us.nAsp, 1);
+      Borrow bSign(us.fIgnoreSign, fTrue), bDir(us.fIgnoreDir, fTrue);
+      Borrow bDalt(us.fIgnoreDiralt, fTrue), bDlen(us.fIgnoreDirlen, fTrue);
+      CI rgciSav[8], ciMainSav2 = ciMain;
+      real rgjdNew[8], rSep, rGap;
+      char szTmpDay[cchSzMax];
+      FILE *fileDaySav, *fileDay;
+      int cciSav = is.cci, cNew = 0, cBadSep = 0, cGap = 0, cBadGap = 0,
+        iMon, j;
+
+      for (j = 0; j < 8 && j < cciSav; j++)
+        rgciSav[j] = is.rgci[j];
+      sprintf(szTmpDay, "%s/astrolog-qt-inday-%d.txt",
+        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
+        (int)getpid());
+
+      for (iMon = 1; iMon <= 6; iMon++) {
+        OraclePinUtQt(2020, iMon, 1, 0.0);
+        ciMain = ciCore;
+        CastChart(1);
+        for (j = 0; j <= cObj; j++)
+          ignore[j] = ignore2[j] = !(j == oSun || j == oMoo);
+        is.cci = 0;
+        // The search prints; give it a stream of its own (item 165).
+        fileDaySav = is.S;
+        fileDay = fopen(szTmpDay, "w");
+        if (fileDay != NULL)
+          is.S = fileDay;
+        ChartInDaySearch(fFalse);
+        is.S = fileDaySav;
+        if (fileDay != NULL) {
+          fclose(fileDay);
+          remove(szTmpDay);
+        }
+        for (j = 0; j < is.cci; j++) {
+          ciCore = is.rgci[j];
+          CastChart(1);
+          rSep = MinDistance(planet[oSun], planet[oMoo]);
+          if (rSep > 0.01)
+            cBadSep++;
+          if (cNew < 8)
+            rgjdNew[cNew] = JulianDayFromTime(is.T);
+          cNew++;
+        }
+      }
+      is.cci = cciSav;
+      for (j = 0; j < 8 && j < cciSav; j++)
+        is.rgci[j] = rgciSav[j];
+      ciMain = ciMainSav2;
+
+      Check(cNew >= 6, "the in-day search found a new moon in each of six "
+        "months (%d)", cNew);
+      Check(cBadSep == 0, "and the Sun and Moon are conjunct at every one "
+        "(%d off by more than 0.01 degrees)", cBadSep);
+
+      // 29.530588 days is the synodic month. Individual lunations vary
+      // by several hours either way, so the tolerance is half a day.
+      for (j = 1; j < cNew && j < 8; j++) {
+        rGap = rgjdNew[j] - rgjdNew[j-1];
+        cGap++;
+        if (RAbs(rGap - 29.530588) > 0.5)
+          cBadGap++;
+      }
+      Check(cGap >= 5 && cBadGap == 0,
+        "and consecutive ones are a synodic month apart (%d gaps, %d "
+        "outside 29.53 +/- 0.5 days)", cGap, cBadGap);
+    }
+
+    // ---- Leg 14: a transit really transits ----
+    // The same invariant as leg 13, on the other search. Leg 9 already
+    // uses ChartTransitSearch() in RETURN mode, where the transiting
+    // object comes back to its own natal place; this is the ordinary
+    // mode, where it reaches a different object's.
+    //
+    // Transiting Moon to natal Sun, conjunction only: that recurs every
+    // synodic month, so one month of search is enough to have hits, and
+    // the invariant is exact -- at the reported moment the transiting
+    // Moon's longitude is the NATAL Sun's, not its own.
+    {
+      Borrow bList(us.fListAuto, fTrue), bRet(is.fReturn, fFalse);
+      Borrow bMonth(us.fInDayMonth, fTrue), bYear(us.fInDayYear, fFalse);
+      Borrow bDiv(us.nDivision, 48), bAsp(us.nAsp, 1);
+      Borrow bSign(us.fIgnoreSign, fTrue), bDir(us.fIgnoreDir, fTrue);
+      Borrow bDalt(us.fIgnoreDiralt, fTrue), bDlen(us.fIgnoreDirlen, fTrue);
+      CI rgciSav[8], ciTranSav2 = ciTran, ciMainSav3 = ciMain;
+      real rNatalSun2, rSep2;
+      char szTmpTra[cchSzMax];
+      FILE *fileTraSav, *fileTra;
+      int cciSav = is.cci, cTra = 0, cBadTra = 0, j;
+
+      for (j = 0; j < 8 && j < cciSav; j++)
+        rgciSav[j] = is.rgci[j];
+
+      OraclePinUtQt(2020, 3, 1, 0.0);
+      ciMain = ciCore;
+      CastChart(1);
+      rNatalSun2 = planet[oSun];
+      // Transiting Moon only, natal Sun only. The sense of the two
+      // tables is the opposite of the obvious one: ChartTransitSearch()
+      // swaps them around its CastChart(-1), so ignore2[] selects the
+      // TRANSITING objects and ignore[] the natal ones. Written the
+      // other way round first, and the search found nothing at all --
+      // which is what a leg like this is for.
+      for (j = 0; j <= cObj; j++) {
+        ignore[j] = (j != oSun);
+        ignore2[j] = (j != oMoo);
+      }
+      ciTran = ciCore;
+      is.cci = 0;
+      sprintf(szTmpTra, "%s/astrolog-qt-transit-%d.txt",
+        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
+        (int)getpid());
+      fileTraSav = is.S;
+      fileTra = fopen(szTmpTra, "w");
+      if (fileTra != NULL)
+        is.S = fileTra;
+      ChartTransitSearch(fFalse);
+      is.S = fileTraSav;
+      if (fileTra != NULL) {
+        fclose(fileTra);
+        remove(szTmpTra);
+      }
+      for (j = 0; j < is.cci; j++) {
+        ciCore = is.rgci[j];
+        CastChart(1);
+        cTra++;
+        rSep2 = MinDistance(planet[oMoo], rNatalSun2);
+        if (rSep2 > 0.01)
+          cBadTra++;
+      }
+      is.cci = cciSav;
+      for (j = 0; j < 8 && j < cciSav; j++)
+        is.rgci[j] = rgciSav[j];
+      ciTran = ciTranSav2; ciMain = ciMainSav3;
+
+      Check(cTra > 0, "the transit search found the Moon reaching the "
+        "natal Sun (%d)", cTra);
+      Check(cBadTra == 0, "and it is there at every reported moment "
+        "(%d off by more than 0.01 degrees)", cBadTra);
+    }
+
+    // ---- Leg 15: a rising is on the horizon and a zenith is on the
+    // meridian ----
+    // The third search, and the one with a geometric invariant rather
+    // than an aspect one. ChartHorizonRising() reports four events a day
+    // per object; re-cast each and convert the object to horizon
+    // coordinates, and the event's own name says what must be true:
+    // "rises" and "sets" put it on the horizon, "zeniths" and "nadirs"
+    // put it on the meridian. Measured at 41.85N on 2020-03-20 the
+    // altitudes come back -0.001 and 0.000 and the azimuths 270.005 and
+    // 90.004, so the tolerances below are twenty times the observed
+    // error rather than a guess.
+    //
+    // Note the azimuth convention: Astrolog's meridian is 270 and 90,
+    // not the compass 180 and 0. Taken from the measurement, not from
+    // an assumption about which way the numbers run.
+    {
+      // The month and year flags are borrowed OFF, not left alone. This
+      // leg wants one day; run inside the full suite it found 123 events
+      // instead of 4, because an earlier group leaves us.fInDayMonth set
+      // and the search then swept the month. Running the oracle group
+      // alone hid it -- which is exactly the inter-test interaction
+      // QT_TESTING.md says to state preconditions for rather than
+      // inherit.
+      Borrow bList(us.fListAuto, fTrue);
+      Borrow bHMon(us.fInDayMonth, fFalse), bHYea(us.fInDayYear, fFalse);
+      CI rgciSav[8], ciMainSav4 = ciMain;
+      real azi, alt, mc, kT, rAltZen = -rLarge, rAltNad = rLarge;
+      char szTmpHor[cchSzMax], *pchNam;
+      FILE *fileHorSav, *fileHor;
+      int cciSav = is.cci, cHor = 0, cBadHor = 0, cKind = 0, j;
+
+      for (j = 0; j < 8 && j < cciSav; j++)
+        rgciSav[j] = is.rgci[j];
+
+      OraclePinUtQt(2020, 3, 20, 0.0);
+      ciCore.lon = 87.65; ciCore.lat = 41.85;
+      ciMain = ciCore;
+      CastChart(1);
+      for (j = 0; j <= cObj; j++)
+        ignore[j] = (j != oSun);
+      is.cci = 0;
+      sprintf(szTmpHor, "%s/astrolog-qt-horizon-%d.txt",
+        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
+        (int)getpid());
+      fileHorSav = is.S;
+      fileHor = fopen(szTmpHor, "w");
+      if (fileHor != NULL)
+        is.S = fileHor;
+      ChartHorizonRising();
+      is.S = fileHorSav;
+      if (fileHor != NULL) {
+        fclose(fileHor);
+        remove(szTmpHor);
+      }
+
+      for (j = 0; j < is.cci; j++) {
+        ciCore = is.rgci[j];
+        pchNam = (char *)is.rgci[j].nam;
+        CastChart(1);
+        mc = planet[oMC]; kT = planetalt[oMC];
+        EclToEqu(&mc, &kT);
+        EclToHoriz(&azi, &alt, planet[oSun], planetalt[oSun], mc, Lat);
+        cHor++;
+        if (pchNam == NULL) {
+          cBadHor++;
+          continue;
+        }
+        if (strstr(pchNam, "rises") != NULL || strstr(pchNam, "sets") != NULL) {
+          cKind++;
+          if (RAbs(alt) > 0.02)
+            cBadHor++;
+        } else if (strstr(pchNam, "zeniths") != NULL) {
+          cKind++;
+          rAltZen = alt;
+          if (RAbs(MinDifference(azi, 270.0)) > 0.02)
+            cBadHor++;
+        } else if (strstr(pchNam, "nadirs") != NULL) {
+          cKind++;
+          rAltNad = alt;
+          if (RAbs(MinDifference(azi, 90.0)) > 0.02)
+            cBadHor++;
+        }
+      }
+      is.cci = cciSav;
+      for (j = 0; j < 8 && j < cciSav; j++)
+        is.rgci[j] = rgciSav[j];
+      ciMain = ciMainSav4;
+
+      Check(cHor == 4, "the horizon search reports four Sun events in a "
+        "day (%d)", cHor);
+      Check(cKind == 4, "each naming which one it is (%d recognized)",
+        cKind);
+      Check(cBadHor == 0, "and each is where its name says: horizon for "
+        "rise and set, meridian for zenith and nadir (%d off)", cBadHor);
+      Check(rAltZen > rAltNad,
+        "with the Sun higher at its zenith than its nadir (%.1f vs %.1f)",
+        rAltZen, rAltNad);
+    }
     cGood = 1;
   }
 
