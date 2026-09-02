@@ -55,10 +55,13 @@ jobs:
         include:
           - {kind: deb, target: ubuntu-22.04, runs-on: ubuntu-22.04, container: ''}
           - {kind: deb, target: ubuntu-24.04, runs-on: ubuntu-24.04, container: ''}
-          - {kind: rpm, target: fedora-42,    runs-on: ubuntu-latest, container: 'fedora:42'}
-          - {kind: rpm, target: fedora-43,    runs-on: ubuntu-latest, container: 'fedora:43'}
-          - {kind: rpm, target: el9,          runs-on: ubuntu-latest, container: 'rockylinux:9'}
-          - {kind: rpm, target: el10,         runs-on: ubuntu-latest, container: 'quay.io/rockylinux/rockylinux:10'}
+          - {kind: rpm, target: fedora-42,    runs-on: ubuntu-latest, container: 'fedora:42', qt: qt5-qtbase-devel}
+          - {kind: rpm, target: fedora-43,    runs-on: ubuntu-latest, container: 'fedora:43', qt: qt5-qtbase-devel}
+          # EL10 has no Qt5 outside EPEL but does have Qt6 in its own
+          # repositories, and Makefile.qt picks its modules from
+          # pkg-config, so only the package name changes. See ci.yml.
+          - {kind: rpm, target: el9,          runs-on: ubuntu-latest, container: 'rockylinux:9', qt: qt5-qtbase-devel}
+          - {kind: rpm, target: el10,         runs-on: ubuntu-latest, container: 'quay.io/rockylinux/rockylinux:10', qt: qt6-qtbase-devel}
     steps:
       - name: Install build dependencies (deb)
         if: matrix.kind == 'deb'
@@ -74,7 +77,7 @@ jobs:
           dnf install -y -q dnf-plugins-core || true
           (dnf config-manager --set-enabled crb || \
            dnf config-manager --enable crb || true) 2>/dev/null
-          dnf install -y -q gcc-c++ make git rpm-build qt5-qtbase-devel \
+          dnf install -y -q gcc-c++ make git rpm-build ${{ matrix.qt }} \
             libX11-devel pkgconf-pkg-config
 
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0

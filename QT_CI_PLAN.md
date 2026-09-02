@@ -1867,6 +1867,21 @@ choice is between three positions rather than two:
   is what happens to every other configuration in this tree that nothing
   compiles. **Recommended**, and it is roughly fifteen seconds of runner
   time.
+  **And it stopped being insurance on 2026-09-02.** Enterprise Linux 10
+  ships **no Qt5** in its own repositories — only via EPEL, which would
+  make every user of the EL10 package need a third-party repo for a
+  runtime dependency — but it does ship Qt6. So the EL10 `.rpm` is built
+  against Qt6, and it is the first thing that actually *depends* on that
+  build working. Measured with base + CRB only:
+
+  | | `qt5-qtbase-devel` | `qt6-qtbase-devel` |
+  |---|---|---|
+  | EL9 | yes | no |
+  | EL10 | **no** | **yes** |
+
+  Nothing but the package name changes, because `Makefile.qt` already
+  picks its modules from `pkg-config --exists Qt6Widgets`. The EL10
+  package links `libQt6Core`, installs and computes Chiron.
 - **Known to work, not kept alive.** Honest only if the makefile says so
   at the site: a comment reading "this target is not built by CI and may
   not compile" is a legitimate decision and a silent one is not.

@@ -461,14 +461,30 @@ jobs:
       matrix:
         include:
           # Fedora: current, short-lived, bumped every six months.
-          - {release: fedora-42, image: 'fedora:42'}
-          - {release: fedora-43, image: 'fedora:43'}
+          - {release: fedora-42, image: 'fedora:42', qt: qt5-qtbase-devel}
+          - {release: fedora-43, image: 'fedora:43', qt: qt5-qtbase-devel}
           # Enterprise Linux: ~10 years of support, which is what "LTS"
-          # means on the RPM side. Verified 2026-09-02 that both carry
-          # qt5-qtbase-devel once CRB is enabled, and that an EL9 package
-          # builds, installs and computes Chiron correctly.
-          - {release: el9,  image: 'rockylinux:9'}
-          - {release: el10, image: 'quay.io/rockylinux/rockylinux:10'}
+          # means on the RPM side.
+          #
+          # THE QT PACKAGE DIFFERS, and it is not a detail. Measured
+          # 2026-09-02 with only base + CRB enabled, no third-party repo:
+          #
+          #             qt5-qtbase-devel   qt6-qtbase-devel
+          #   EL9       yes                no
+          #   EL10      no                 yes
+          #
+          # EL10 can get Qt5 from EPEL, but then every user installing
+          # this package needs EPEL too, for a runtime dependency. Qt6 is
+          # in EL10's own repositories, so that is what it builds against
+          # -- and Makefile.qt already picks its module names from
+          # "pkg-config --exists Qt6Widgets", so nothing but the package
+          # name changes. Verified: EL10 links libQt6Core, packages,
+          # installs and computes Chiron.
+          #
+          # This is where keeping the Qt6 build alive (Q8) stops being
+          # insurance and starts being load-bearing.
+          - {release: el9,  image: 'rockylinux:9', qt: qt5-qtbase-devel}
+          - {release: el10, image: 'quay.io/rockylinux/rockylinux:10', qt: qt6-qtbase-devel}
     container: ${{ matrix.image }}
     steps:
       # CRB ("CodeReady Builder") is where Enterprise Linux keeps
@@ -479,7 +495,7 @@ jobs:
           dnf install -y -q dnf-plugins-core || true
           (dnf config-manager --set-enabled crb || \
            dnf config-manager --enable crb || true) 2>/dev/null
-          dnf install -y -q gcc-c++ make git rpm-build qt5-qtbase-devel \
+          dnf install -y -q gcc-c++ make git rpm-build ${{ matrix.qt }} \
             libX11-devel pkgconf-pkg-config
 
       - name: Check out the tree
