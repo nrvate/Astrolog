@@ -307,6 +307,20 @@ jobs:
       - name: Run the installed wrapper from an unrelated directory
         run: tools/ci-assert-installed.sh "$HOME/.local/bin/astrolog"
 
+      # "make uninstall" is documented in README.md and CLAUDE.md and had
+      # never been run by anything. A target nobody executes is the same
+      # category as a configuration nobody compiles, and this repository
+      # has found three of those broken. It checks the removal is complete
+      # -- a dangling wrapper on PATH is a program that says "No such file
+      # or directory" months later -- and no wider than it should be: the
+      # directories are shared with every other application, and removing
+      # ~/.local/share/applications shows up as somebody else's missing
+      # menu entry.
+      - name: And uninstall removes exactly what it installed
+        run: |
+          make uninstall PREFIX="$HOME/.local"
+          tools/ci-assert-uninstalled.sh "$HOME/.local"
+
   # Phase 7. The differentials -- the phase that makes CI strictly better
   # than the local workflow rather than merely more reliable. Building a
   # baseline by hand is what QT_TESTING.md tells a developer to do; here
