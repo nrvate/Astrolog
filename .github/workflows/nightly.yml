@@ -282,7 +282,10 @@ jobs:
   macos:
     name: macOS build + suite
     runs-on: macos-latest
-    timeout-minutes: 20
+    # Build is about two minutes -- Qt6 pours in 59s and the port compiles
+    # in 61s, both measured. The suite is 47s on Linux. Twelve minutes is
+    # generous for that and cheap when something hangs.
+    timeout-minutes: 12
     continue-on-error: true
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -293,5 +296,22 @@ jobs:
       - name: Build
         run: make qt -j4 && make qt-test -j4
 
+      # Bounded, timed and line-buffered, so a hang produces a DIAGNOSIS
+      # rather than a job that stops. A step's output is not served until
+      # the step ends, so an unbounded run that hits the job timeout tells
+      # you only that macOS is unhappy; this tells you which group it was
+      # in when it stopped. Exactly how the ten-minute Linux hang was
+      # localised -- to a modal box in the Chart rendering group -- in one
+      # run instead of several.
       - name: Run the suite
-        run: ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem
+        run: |
+          set -o pipefail
+          # perl's alarm, not timeout(1): macOS ships no timeout, and
+          # "brew install coreutils" to get one would add a minute to
+          # every run for a watchdog.
+          ASTROLOG_QT_EPHEM=minimal ASTROLOG_QT_TIME=1 \
+            perl -e 'alarm 420; exec @ARGV' ./run-qt-tests.sh -Yi1 ephem 2>&1 | tail -60 || {
+              rc=$?
+              echo "== suite exited $rc. The last group named above is where it"
+              echo "== stopped; on Linux this run takes 47 seconds."
+              exit $rc; }
