@@ -291,12 +291,21 @@ Roughly in the order I'd take them.
    added the house-partition invariant across latitude *and* engine,
    which is what caught the five degenerate systems.
 
-   **What still has no reference outside this repo**: eclipses, the
-   atlas, and the interpretation text. Eclipses are the one with an
-   external answer available — the Swiss library computes them directly,
-   so that leg is the same shape as leg 1. The atlas and the
-   interpretation text have no oracle short of a second implementation,
-   and are honestly better served by invariants than by a reference.
+   ~~**What still has no reference outside this repo**: eclipses, the
+   atlas, and the interpretation text.~~ — **all three done 2026-09-02,
+   work log item 171.** Legs 10-12: 60 solar and 40 lunar eclipses
+   against the Swiss library's own eclipse finder plus 55 midpoints where
+   there must be none, the atlas's nearest-city search against a
+   brute-force scan, and the interpretation tables against the shape they
+   promise. The third found a live segfault reachable from the command
+   line.
+
+   **This item is closed.** What would extend the oracle further is the
+   transit and progression *search* functions rather than the positions
+   they search over, and there is no outside reference for those either —
+   the invariant to use is that a search hit, re-cast, satisfies the
+   condition it was searching for, which is exactly what leg 9 does for
+   returns and could be repeated for `-d`, `-T` and `-E`.
    ~~**Both findings below are confirmed, and there are five more**~~ —
    **fixed 2026-09-01, work log items 157-158.** (An intermediate note
    here said they did not reproduce; that was measured at a single date
@@ -6936,6 +6945,84 @@ are the more useful half to read before starting something new.
     compile with zero warnings at their own flags; the four-build ledger
     unchanged at 316 in 100 sites, which is the check that this did not
     disturb it.
+
+171. **The oracle reaches eclipses, the atlas and the interpretation
+    tables -- and the last of those was a segfault reachable from the
+    command line.** Plan item 11's remaining three surfaces, taken
+    together because the third one stopped being a test-coverage job
+    halfway through.
+
+    **Leg 10, eclipses, is the strongest kind of check this project can
+    make**: two independent implementations of the same astronomy, set
+    against each other. Astrolog decides whether an eclipse is happening
+    from its own 3D geometry -- `NCheckEclipseSolar()` walks `space[]`
+    with real body diameters -- and never asks the Swiss library, which
+    has its own eclipse finder. So `swe_sol_eclipse_when_glob()` and
+    `swe_lun_eclipse_when()` are an outside answer, not the same code
+    consulted twice.
+
+    Three questions per eclipse, and the third is what a detector-only
+    check would miss: does Astrolog see one at the moment the library
+    names, does it call it the same kind, and does it see **nothing**
+    halfway between two consecutive ones. Over five epochs from 1900 to
+    2060: 60 solar eclipses, 55 midpoints, 40 lunar. **Every one agrees
+    except a single case**, and it is the boundary rather than an error
+    -- the total lunar eclipse of 2021-05-26 was total for about fifteen
+    minutes at magnitude 1.009, Astrolog measures 98.9% umbral overlap
+    and calls it partial. Named by date in the test, because a threshold
+    there would hide the next real one.
+
+    **Leg 11, the atlas, caught its own author twice.** The first draft
+    probed eight world cities and passed -- while resolving Chicago's
+    coordinates to Korla, in Xinjiang. Astrolog's longitude is positive
+    *west*, and both sides of the comparison used the same wrong sign, so
+    they agreed with each other about the wrong city. Adding "and the
+    answer is within a degree of the city those coordinates belong to"
+    is what made the convention itself part of the check.
+
+    Then the invariant turned out to be wrong about the code: the search
+    truncates each distance to a whole unit before comparing
+    (`nDist = (int)rDist`, in miles unless `-Yu`), so Chicago's
+    coordinates legitimately return Bridgeport and Sydney's return Surry
+    Hills -- ties broken by table order. The assertion that survives is
+    the one the code actually implements: no city the search skipped is a
+    whole unit closer than the one it chose. Both drafts were caught by
+    sabotaging the search, not by reading it.
+
+    **Leg 12 found a live NULL dereference.** The plan expected
+    invariants here and got a bug. `szThereforeDef[]` is declared
+    `[cAspect+1]` -- 25 entries -- and its initializer listed 19, so
+    `szTherefore[19..24]` were **NULL** rather than `""`. The guard
+    `FInterpretAsp()` tests `szInteract[]`, which *is* fully initialized,
+    and `intrpret.cpp` then reads `szTherefore[asp][0]` at six sites. The
+    switch that reaches it is documented and shipping:
+
+        astrolog -A 24 -YIA 19 "is %sopposed to" -I
+
+    Segmentation fault, core dumped, measured at exit 139. `-YIA` sets
+    the interaction text for an aspect; setting one above 18 makes
+    `FInterpretAsp()` true for a row whose "therefore" half does not
+    exist. **Both builds**, since none of this is guarded -- and the same
+    class as `ruler2[]` being one short, which is what `defaults_audit`
+    was written for and does not cover here because these are text
+    tables rather than numeric ones.
+
+    Fixed by completing the initializer. Causation proven both ways:
+    shortening it again brings the segfault straight back, and the suite
+    names it as "6 were NULL" rather than waiting for a crash.
+
+    The leg asserts what these tables can actually promise, which is
+    **not** that every row has text -- they are sparse on purpose,
+    Astrolog interpreting ten aspects and four angles. It asserts that no
+    row is NULL at any index the switches reach, and that the populated
+    shape stays put: eleven aspects with interaction text, twelve signs
+    with all three of theirs.
+
+    **Nets**: suite 3802/0, up 241; oracle group 565/0; chart matrix 0 of
+    7,072 lines and switch matrix 0 of 75,635 against a baseline built
+    from the previous commit, which is what says the data.cpp change is
+    inert everywhere except the crash; four builds and both Qt versions
+    clean; eight audits.
 
 ## Features this fork adds to both builds
 

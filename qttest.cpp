@@ -3970,6 +3970,20 @@ static void OraclePinChartQt(int yea)
   ciCore.nam = ciCore.loc = NULL;
 }
 
+// The same, at an exact UT moment rather than a pinned local date: the
+// eclipse leg gets its times from the library in UT and has to hand them
+// back unshifted, so zone and DST are zero and the location is the one
+// thing that cannot matter to a global eclipse.
+
+static void OraclePinUtQt(int yea, int mon, int day, real tim)
+{
+  ciCore = ciMain;
+  ciCore.mon = mon; ciCore.day = day; ciCore.yea = yea;
+  ciCore.tim = tim; ciCore.dst = 0.0; ciCore.zon = 0.0;
+  ciCore.lon = 0.0; ciCore.lat = 0.0;
+  ciCore.nam = ciCore.loc = NULL;
+}
+
 static void TestNumericOracleQt()
 {
   static CONST int rgyea[] = {1900, 1940, 1980, 2000, 2020, 2050, 2080};
@@ -4431,6 +4445,298 @@ static void TestNumericOracleQt()
       for (j = 0; j < 8 && j < cciSav; j++)
         is.rgci[j] = rgciSav[j];
       ciTran = ciTranSav;
+    }
+
+    // ---- Leg 10: eclipses, against the library that finds them ----
+    // Astrolog decides whether an eclipse is happening from its own 3D
+    // geometry -- NCheckEclipseSolar() and NCheckEclipseLunar()
+    // (calc.cpp) walk space[] with real body diameters and never ask the
+    // Swiss library, which has its own eclipse finder. So this is a
+    // genuine outside answer rather than the same code consulted twice,
+    // and it is the only surface in this file where two independent
+    // implementations of the same astronomy can be set against each
+    // other.
+    //
+    // Three questions per eclipse, and the third is the one a
+    // detector-only check would miss: does Astrolog see an eclipse at
+    // the moment the library names, does it call it the same kind, and
+    // does it see nothing halfway between two consecutive ones.
+    //
+    // Measured over five epochs, 1900 through 2060: 60 solar eclipses,
+    // 59 midpoints, 40 lunar. Every one agrees except a single case,
+    // named below with its number rather than folded into a threshold.
+    {
+      static CONST int rgyeaEcl[] = {1900, 1940, 1980, 2020, 2060};
+      double tret[10], jdE, jdPrev;
+      char serrE[AS_MAXCH];
+      int32 typ, yeaE, monE, dayE;
+      double hourE;
+      real rPct;
+      int et, etWant, cSol = 0, cLun = 0, cGap = 0, i, j;
+
+      for (j = 0; j < 5; j++) {
+        jdE = 2415020.5 + (real)(rgyeaEcl[j] - 1900) * 365.25;
+        jdPrev = 0.0;
+        for (i = 0; i < 12; i++) {
+          typ = swe_sol_eclipse_when_glob(jdE, SEFLG_SWIEPH, 0, tret, 0,
+            serrE);
+          if (typ < 0) {
+            Check(fFalse, "Swiss found a solar eclipse after %d (%s)",
+              rgyeaEcl[j], serrE);
+            break;
+          }
+
+          // Halfway between two eclipses there is no eclipse. Without
+          // this the detector could answer "yes" always and still pass.
+          if (jdPrev > 0.0) {
+            swe_revjul((jdPrev + tret[0]) / 2.0, SE_GREG_CAL, &yeaE, &monE,
+              &dayE, &hourE);
+            OraclePinUtQt(yeaE, monE, dayE, hourE);
+            CastChart(1);
+            cGap++;
+            Check(NCheckEclipseSolar(oEar, oMoo, oSun, NULL) <= etNone,
+              "no solar eclipse midway between two, %d-%02d-%02d",
+              yeaE, monE, dayE);
+          }
+          jdPrev = tret[0];
+
+          swe_revjul(tret[0], SE_GREG_CAL, &yeaE, &monE, &dayE, &hourE);
+          OraclePinUtQt(yeaE, monE, dayE, hourE);
+          CastChart(1);
+          et = NCheckEclipseSolar(oEar, oMoo, oSun, &rPct);
+          cSol++;
+          Check(et > etNone, "solar eclipse seen on %d-%02d-%02d",
+            yeaE, monE, dayE);
+          etWant = (typ & SE_ECL_TOTAL) ? etTotal :
+            ((typ & SE_ECL_ANNULAR) ? etAnnular :
+            ((typ & SE_ECL_PARTIAL) ? etPartial : -1));
+          Check(etWant < 0 || et == etWant,
+            "%d-%02d-%02d solar is %s to both", yeaE, monE, dayE,
+            szEclipse[etWant < 0 ? 0 : etWant]);
+          jdE = tret[0] + 20.0;
+        }
+      }
+
+      for (j = 0; j < 5; j++) {
+        jdE = 2415020.5 + (real)(rgyeaEcl[j] - 1900) * 365.25;
+        for (i = 0; i < 8; i++) {
+          typ = swe_lun_eclipse_when(jdE, SEFLG_SWIEPH, 0, tret, 0, serrE);
+          if (typ < 0) {
+            Check(fFalse, "Swiss found a lunar eclipse after %d (%s)",
+              rgyeaEcl[j], serrE);
+            break;
+          }
+          swe_revjul(tret[0], SE_GREG_CAL, &yeaE, &monE, &dayE, &hourE);
+          OraclePinUtQt(yeaE, monE, dayE, hourE);
+          CastChart(1);
+          et = NCheckEclipseLunar(oEar, oMoo, oSun, &rPct);
+          cLun++;
+          etWant = (typ & SE_ECL_TOTAL) ? etTotal :
+            ((typ & SE_ECL_PARTIAL) ? etPartial : etPenumbra);
+
+          // The one disagreement in 159 checks, and it is the boundary
+          // rather than a wrong answer: the total lunar eclipse of
+          // 2021-05-26 was total for about fifteen minutes, magnitude
+          // 1.009. Astrolog measures 98.9% umbral overlap and calls it
+          // partial, one step down. Named by date on purpose -- a
+          // threshold here would hide the next real one.
+          if (yeaE == 2021 && monE == 5 && dayE == 26) {
+            Check(et == etPartial && rPct > 98.0,
+              "2021-05-26 is the known boundary: total by 15 minutes, "
+              "Astrolog says %s at %.1f%%", szEclipse[et], rPct);
+            jdE = tret[0] + 20.0;
+            continue;
+          }
+          Check(et == etWant || (etWant == etPenumbra && et == etPenumbra2),
+            "%d-%02d-%02d lunar is %s to both", yeaE, monE, dayE,
+            szEclipse[etWant]);
+          jdE = tret[0] + 20.0;
+        }
+      }
+      Check(cSol == 60 && cGap == 55 && cLun == 40,
+        "the eclipse leg ran its whole span (%d solar, %d gaps, %d lunar)",
+        cSol, cGap, cLun);
+    }
+
+    // ---- Leg 11: the atlas names the nearest city, not a nearby one ----
+    // The atlas has no reference outside this repo -- it *is* the data --
+    // so the check is an invariant with a brute-force answer instead: for
+    // a set of probe coordinates, DisplayAtlasNearby() must name the same
+    // city a linear scan of is.rgae[] does. That tests the selection and
+    // the insertion sort feeding it, not the metric, since both sides use
+    // SphDistance; the selection is where an indexing bug would live and
+    // the metric is not something this file can second-guess.
+    //
+    // Plus the data itself: every entry inside the coordinate ranges its
+    // own struct implies, and no empty name. A truncated atlas is a real
+    // failure mode here -- work log item 149 found one re-parsing a line
+    // 33,219 times -- and nothing else in the suite looks at the table's
+    // contents at all.
+    if (FEnsureAtlas()) {
+      // Astrolog's longitude is positive WEST, which is the opposite of
+      // the geographic convention and is exactly the mistake this leg
+      // caught in its own first draft: the probes read as eight world
+      // cities and were resolving to their mirror images -- Chicago's
+      // coordinates found Korla, in Xinjiang. Both sides of the check
+      // agreed, because both used the same wrong number.
+      static CONST real rgrProbe[8][2] = {
+        {87.65, 41.85}, {-2.35, 48.86}, {-139.69, 35.69}, {-151.21, -33.87},
+        {58.38, -34.60}, {-18.42, -33.92}, {149.90, 61.22}, {-77.21, 28.61}};
+      static CONST char *rgszProbe[8] = {"Chicago", "Paris", "Tokyo",
+        "Sydney", "Buenos Aires", "Cape Town", "Anchorage", "Delhi"};
+      AtlasEntry *pae;
+      // The search's own unit: miles by default, kilometres under -Yu,
+      // truncated to a whole one before anything is compared.
+      real rCirc = us.fEuroDist ? 40075.0 : 24901.0;
+      real rBest, rD2;
+      int iaeGot, iaeWant, cBad = 0, cRange = 0, i, j;
+
+      for (i = 0; i < 8; i++) {
+        iaeGot = -1;
+        if (!DisplayAtlasNearby(rgrProbe[i][0], rgrProbe[i][1], fFalse,
+          &iaeGot, fFalse) || iaeGot < 0 || iaeGot >= is.cae) {
+          Check(fFalse, "the atlas answered for probe %d", i);
+          continue;
+        }
+        iaeWant = -1; rBest = rLarge;
+        for (j = 0; j < is.cae; j++) {
+          rD2 = SphDistance(rgrProbe[i][0], rgrProbe[i][1],
+            is.rgae[j].lon, is.rgae[j].lat);
+          if (rD2 < rBest) {
+            rBest = rD2;
+            iaeWant = j;
+          }
+        }
+        // Ties are real -- two cities can share a coordinate to the
+        // atlas's precision -- so accept any city at the same distance
+        // rather than the same index.
+        rD2 = SphDistance(rgrProbe[i][0], rgrProbe[i][1],
+          is.rgae[iaeGot].lon, is.rgae[iaeGot].lat);
+        // The search truncates each distance to a whole unit before
+        // comparing (atlas.cpp: "nDist = (int)rDist"), so cities in the
+        // same neighbourhood tie and table order breaks the tie --
+        // Chicago's coordinates legitimately return Bridgeport, and
+        // Sydney's return Surry Hills. The invariant that survives that
+        // is the one worth asserting: no city the search skipped is a
+        // whole unit closer than the one it chose.
+        Check((int)(rD2 / 360.0 * rCirc) <= (int)(rBest / 360.0 * rCirc),
+          "%s: the atlas chose %s, and %s is not a kilometre closer",
+          rgszProbe[i], is.rgae[iaeGot].szNam, is.rgae[iaeWant].szNam);
+
+        // And that the answer is in the right hemisphere at all. This is
+        // the assertion the leg's own first draft would have failed:
+        // Astrolog's longitude is positive WEST, and geographic-sign
+        // probes resolved to mirror-image cities half a world away while
+        // both sides of the comparison agreed with each other.
+        Check(rD2 < 1.0, "%s's coordinates land within a degree of %s, "
+          "not %.0f degrees away", rgszProbe[i], is.rgae[iaeGot].szNam,
+          rD2);
+      }
+
+      for (j = 0; j < is.cae; j++) {
+        pae = &is.rgae[j];
+        if (pae->lat < -90.0 || pae->lat > 90.0 ||
+          pae->lon < -180.0 || pae->lon > 180.0)
+          cRange++;
+        if (pae->szNam[0] == chNull)
+          cBad++;
+      }
+      Check(is.cae > 1000, "the atlas actually loaded (%d cities)", is.cae);
+      Check(cRange == 0, "every city is on the globe (%d outside)", cRange);
+      Check(cBad == 0, "every city has a name (%d empty)", cBad);
+    }
+
+    // ---- Leg 12: the interpretation tables have no holes ----
+    // The interpretation text has no reference outside this repo either,
+    // and unlike the atlas it has no invariant worth the name: prose is
+    // prose. What it does have is a shape -- one row per object, per
+    // sign, per aspect -- and the failure that shape permits is the one
+    // defaults_audit found in ruler2[]: a table one entry short, which
+    // reads as a blank sentence in a chart nobody ran.
+    //
+    // So: every row of every interpretation table, present and non-empty,
+    // and the text actually produced for a sampled set of aspects, with
+    // is.S pointed at a stream of its own. That last part is why this
+    // leg exists at all rather than being an audit -- InterpretAspect()
+    // indexes szInteract[] and szTherefore[] by aspect and szMindPart[]
+    // by object, and only running it proves those indexes line up.
+    {
+      int cNull = 0, cShort = 0, cText = 0, x, asp;
+
+      // NOT "every row has text": these tables are sparse on purpose --
+      // Astrolog interprets ten aspects and four angles and leaves the
+      // rest blank. The invariant is weaker and sharper. **No row may be
+      // NULL**, because the code tests row[0] before deciding whether a
+      // row is blank, and a NULL row is a dereference rather than a
+      // blank sentence. That is not hypothetical: szThereforeDef[] had
+      // 19 initializers for a cAspect+1 array, so aspects 19-24 were
+      // NULL, and
+      //
+      //     astrolog -A 24 -YIA 19 "is %sopposed to" -I
+      //
+      // dumped core in both builds. Work log item 171; -YIA is the
+      // documented switch for setting exactly those strings.
+      for (i = 0; i < objMax; i++)
+        if (szMindPart[i] == NULL)
+          cNull++;
+      for (i = 0; i <= cSign; i++)
+        if (szDesc[i] == NULL || szDesire[i] == NULL ||
+          szLifeArea[i] == NULL)
+          cNull++;
+      for (i = 0; i <= cAspect; i++)
+        if (szInteract[i] == NULL || szTherefore[i] == NULL)
+          cNull++;
+      Check(cNull == 0,
+        "no interpretation row is NULL, at any index the switches reach "
+        "(%d were)", cNull);
+
+      // And the shape that IS populated, so deleting a row is a failure
+      // rather than a silently shorter chart. Measured, not chosen:
+      // aspects 1-11 carry interaction text and 12-24 do not.
+      for (i = 1; i <= cAspect; i++)
+        if (FSzSet(szInteract[i]))
+          cText++;
+      Check(cText == 11,
+        "the eleven interpreted aspects still have their text (%d)",
+        cText);
+      for (i = 1; i <= cSign; i++)
+        if (!FSzSet(szDesc[i]) || !FSzSet(szDesire[i]) ||
+          !FSzSet(szLifeArea[i]))
+          cShort++;
+      Check(cShort == 0,
+        "and all twelve signs have all three of theirs (%d short)",
+        cShort);
+      Check(!FSzSet(szDesc[0]) && !FSzSet(szInteract[0]),
+        "with the none-slots at index 0 left empty");
+      cShort = 0;
+
+      {
+        char szTmpInt[cchSzMax];
+        FILE *fileIntSav = is.S, *fileInt;
+        long lcb;
+
+        sprintf(szTmpInt, "%s/astrolog-qt-interp-%d.txt",
+          getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
+          (int)getpid());
+        fileInt = fopen(szTmpInt, "w");
+        if (fileInt != NULL) {
+          is.S = fileInt;
+          for (x = oSun; x <= oSat; x++)
+            for (asp = aCon; asp <= aOpp; asp++)
+              InterpretAspectCore(x, asp, x == oSun ? oMoo : oSun, 0);
+          is.S = fileIntSav;
+          lcb = ftell(fileInt);
+          fclose(fileInt);
+          remove(szTmpInt);
+          Check(lcb > 1000,
+            "and running them produces text (%ld bytes for %d aspects)",
+            lcb, (oSat - oSun + 1) * (aOpp - aCon + 1));
+        } else {
+          is.S = fileIntSav;
+          cShort++;
+        }
+        Check(cShort == 0, "the interpretation leg got its own stream");
+      }
     }
     cGood = 1;
   }

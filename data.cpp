@@ -1217,11 +1217,17 @@ CONST char *szInteractDef[cAspect+1] = {"",
   "", "", "", "", "", "", "", "", "", "", "", "", ""};
 CONST char *szInteract[cAspect+1];
 
+// This initializer used to stop at 19 entries for a cAspect+1 array, so
+// szTherefore[19..24] were NULL rather than "". FInterpretAsp() gates on
+// szInteract[], which IS fully initialized, and intrpret.cpp then reads
+// szTherefore[asp][0] -- so "-A 24 -YIA 19 <text> -I" dereferenced NULL
+// and dumped core. Same class as ruler2[] being one short, and reachable
+// in both builds. See work log item 171.
 CONST char *szThereforeDef[cAspect+1] = {"",
   "Both parts are prominent in their psyche", "Balance is needed",
   "Adaptation is required by both sides", "", "",
   "They can often relate in a discordant way", "", "", "", "", "",
-  "", "", "", "", "", "", ""};
+  "", "", "", "", "", "", "", "", "", "", "", "", ""};
 CONST char *szTherefore[cAspect+1];
 
 // Modifier array makes the interpretation stronger for narrower orbs.
