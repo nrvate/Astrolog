@@ -297,7 +297,8 @@ jobs:
           # Costs nothing where IPv6 works.
           echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
-          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
+            desktop-file-utils
 
       - name: Build and install into a scratch prefix
         run: |
@@ -306,6 +307,15 @@ jobs:
 
       - name: Run the installed wrapper from an unrelated directory
         run: tools/ci-assert-installed.sh "$HOME/.local/bin/astrolog"
+
+      # A malformed .desktop file does not error, it simply never appears
+      # in the menu -- invisible until somebody says "I installed it and
+      # there's nothing in my applications list". Same for an Icon= naming
+      # something nobody installed: the entry shows a blank square. Both
+      # are generated in two places, the Makefile and package-stage.sh, so
+      # they can drift from each other as well as from the spec.
+      - name: The desktop entry is valid and its icon exists
+        run: tools/ci-assert-desktop.sh "$HOME/.local"
 
       # "make uninstall" is documented in README.md and CLAUDE.md and had
       # never been run by anything. A target nobody executes is the same
