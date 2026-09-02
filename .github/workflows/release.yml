@@ -36,7 +36,7 @@ jobs:
   # Cheap, and it runs alone first so a mismatched tag costs seconds
   # rather than four package builds.
   version:
-    name: The tag matches the source
+    name: Version check
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -168,7 +168,7 @@ jobs:
           path: out/package/astrolog-windows.zip
 
   publish:
-    name: Publish the release
+    name: Publish
     needs: [deb, rpm, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 15

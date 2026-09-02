@@ -48,7 +48,7 @@ jobs:
   # That is correct behaviour with a workflow consequence: the baseline is
   # part of the diff, never something CI maintains.
   warnings:
-    name: Compiler warnings vs the baseline
+    name: Compiler warnings
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -136,7 +136,7 @@ jobs:
   # want Wine, and installing it is the expensive part, so they share a
   # job rather than paying for it twice.
   windows:
-    name: Windows differential, and the GUI scenarios
+    name: Windows parity
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -178,7 +178,7 @@ jobs:
 
       - name: Keep the diff
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-differential
           path: out/win-diff/*.diff
@@ -195,7 +195,7 @@ jobs:
   # too -- if the day's diff is non-empty, the per-change runs already
   # said which change did it.
   differential:
-    name: All four matrices, vs 24 hours ago
+    name: Behaviour vs yesterday
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
@@ -221,7 +221,7 @@ jobs:
 
       - name: Keep the diffs
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-differential
           path: out/diff/*.diff

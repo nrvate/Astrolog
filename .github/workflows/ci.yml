@@ -63,7 +63,7 @@ jobs:
   # Item 1.1 and 1.2, plus the WCLI build from 1.3b. The single
   # highest-value job in the plan: if nothing else is ever done, do this.
   windows:
-    name: Windows builds (mingw-w64)
+    name: Windows builds
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -101,7 +101,7 @@ jobs:
   # Phase 2. The Qt build and its suite -- the port itself, and the 3561
   # assertions that are this project's main net.
   qt:
-    name: Qt5 build and suite
+    name: Qt5 build + suite
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -143,7 +143,7 @@ jobs:
   # the .rc-derived layer that CLAUDE.md says hand transcription got wrong
   # "every time it was used".
   audits:
-    name: Audits and generated tables
+    name: Audits
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -215,7 +215,7 @@ jobs:
   # pkg-config's path and off the runtime linker's. A distribution's own
   # Qt6 needs neither.
   qt6:
-    name: Qt6 build and suite
+    name: Qt6 build + suite
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -251,7 +251,7 @@ jobs:
   # 24Gem07'46" with the ephemeris files entirely absent, and a
   # Sun-position check passes on a broken install (item 4.5).
   install:
-    name: make install, then run it from elsewhere
+    name: System install
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -297,7 +297,7 @@ jobs:
   # The switch surface is not dropped -- the nightly lane runs all four.
   # Coverage over a day is unchanged; feedback on a change is a minute.
   differential:
-    name: Behavioural differential vs the base commit
+    name: Behaviour vs base
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -350,7 +350,7 @@ jobs:
   # tools/package.sh, which a release workflow will call unchanged. Same
   # guarantee, and it can be run by hand.
   package:
-    name: Windows package, and it verifies itself
+    name: Windows package
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
