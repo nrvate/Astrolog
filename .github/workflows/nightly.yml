@@ -323,16 +323,36 @@ jobs:
       # binary look silent, which QT_TESTING.md records as having
       # confounded three probes.
       #
-      # pkill by name is safe here in a way it is not on a developer's
-      # machine, where CLAUDE.md forbids it because it matches the
-      # maintainer's own running copy. A runner has exactly one.
+      # It kills by PID, not by name. The first version used "pkill -f
+      # astrolog-qt-test" with a comment arguing that CLAUDE.md's ban on
+      # pkill was a developer-machine rule and a runner has exactly one
+      # copy. The run disproved it: the step exited 143 having printed
+      # nothing at all, not even the "tail" that follows the kill on the
+      # very next line -- so what died was the step, not the suite, and
+      # the diagnostic this whole arrangement exists to produce was lost.
+      # A pattern that matches more than you meant is the entire reason
+      # for the rule, and CI is not the exception.
+      #
+      # "set -m" puts the suite in its own process group so killing
+      # -PGID takes the binary with the script; killing the script alone
+      # is what left the orphan the comment above describes.
       - name: Run the suite
         run: |
-          ( sleep 420; pkill -f astrolog-qt-test ) & watchdog=$!
+          set -m
           ASTROLOG_QT_EPHEM=minimal ASTROLOG_QT_TIME=1 \
-            ./run-qt-tests.sh -Yi1 ephem > suite.log 2>&1
-          rc=$?
-          kill "$watchdog" 2>/dev/null || true
+            ./run-qt-tests.sh -Yi1 ephem > suite.log 2>&1 &
+          suite=$!
+          for i in $(seq 1 420); do
+            kill -0 "$suite" 2>/dev/null || break
+            sleep 1
+          done
+          if kill -0 "$suite" 2>/dev/null; then
+            echo "== still running after 420s; killing process group $suite"
+            kill -TERM -"$suite" 2>/dev/null || kill -TERM "$suite" 2>/dev/null || true
+            sleep 3
+            kill -KILL -"$suite" 2>/dev/null || true
+          fi
+          wait "$suite"; rc=$?
           tail -60 suite.log
           [ "$rc" -eq 0 ] || {
             echo "== suite exited $rc. The last group named above is where it"
@@ -452,8 +472,21 @@ jobs:
           "built: $((Get-Item astrolog-qt.exe).Length) bytes"
           $env:PATH = "$env:QTDIR\bin;$env:PATH"
           $env:QT_QPA_PLATFORM = "offscreen"
-          $out = & .\astrolog-qt.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1 | Out-String
-          $chiron = ($out -split "`n" | Where-Object { $_ -match '^Chir' } | Select-Object -First 1)
-          if (-not $chiron) { "No Chiron line. Output:"; $out -split "`n" | Select-Object -First 8; exit 1 }
+          # The output goes to a FILE and is read back, rather than through
+          # "2>&1 | Out-String". That pipeline is what made the first run
+          # look like the binary printed nothing: PowerShell turns stderr
+          # into ErrorRecord objects, merges them into the object stream,
+          # and Out-String renders that -- so the one stderr warning about
+          # a missing sepm9401.se1 came through and the 118-line chart on
+          # stdout did not. The chart was there all along; measured
+          # locally, the identical invocation prints it.
+          & .\astrolog-qt.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X > chart.txt 2> chart.err
+          $out = Get-Content chart.txt -Raw -ErrorAction SilentlyContinue
+          $chiron = (Get-Content chart.txt -ErrorAction SilentlyContinue | Where-Object { $_ -match '^Chir' } | Select-Object -First 1)
+          if (-not $chiron) {
+            "No Chiron line. stdout (first 12 lines):"
+            Get-Content chart.txt -TotalCount 12 -ErrorAction SilentlyContinue
+            "stderr:"; Get-Content chart.err -TotalCount 6 -ErrorAction SilentlyContinue
+            exit 1 }
           if ($chiron -match '0Ari00') { "EPHEMERIS NOT FOUND: $chiron"; exit 1 }
           "Qt on Windows computes: $chiron"
