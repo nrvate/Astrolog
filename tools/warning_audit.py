@@ -106,6 +106,15 @@ QT6_BASELINE = os.path.join(ROOT, 'tools', 'warnings-qt6.txt')
 QT6_BUILD = ('Makefile.qt', 'CPPFLAGS',
              '-DQT -O -fPIC -Wall ' + COMMON_NO + ' $(QT_CFLAGS)')
 QT6_ARGS = ['OBJDIR=obj-qt6', 'NAME=astrolog-qt6']
+# The Qt6 build of the suite. CI compiles it ("make qt6-test") and runs
+# 3792 assertions against it, but nothing read its warnings until this
+# entry -- and qttest.cpp is the largest and most actively edited Qt
+# consumer in the tree, so a Qt6 deprecation there is exactly what this
+# ledger exists to show.
+QT6_TEST_BUILD = ('Makefile.qt.test', 'CPPFLAGS',
+                  '-DQT -DQTTEST -O -fPIC -Wall ' + COMMON_NO +
+                  ' $(QT_CFLAGS)')
+QT6_TEST_ARGS = ['OBJDIR=obj-qt6-test', 'NAME=astrolog-qt6-test']
 
 
 def qt6_env():
@@ -157,6 +166,9 @@ def run_build(name, clean=True):
     if name == 'qt6':
         makefile, var, flags = QT6_BUILD
         extra, env = QT6_ARGS, qt6_env()
+    elif name == 'qt6-test':
+        makefile, var, flags = QT6_TEST_BUILD
+        extra, env = QT6_TEST_ARGS, qt6_env()
     else:
         makefile, var, flags = BUILDS[name]
         extra, env = [], None
@@ -401,16 +413,23 @@ def audit_qt6(update, base_counts, clean=True):
     if qt6_env() is None:
         print('qt6: skipped, no Qt6 at %s' % QT6_PKGCONFIG)
         return 0
-    sys.stderr.write('building qt6 ...\n')
-    output, failed = run_build('qt6', clean=clean)
-    if failed:
-        sys.stderr.write('\nqt6 FAILED TO BUILD -- audit aborted.\n')
-        for line in output.splitlines():
-            if RE_ERROR.search(line):
-                sys.stderr.write('  %s\n' % line)
-        return 2
-    counts = {k: v for k, v in parse(output, 'qt6').items()
-              if ('qt',) + k[1:] not in base_counts}
+    # Both Qt6 builds, each measured against its Qt5 twin: the point is
+    # what Qt6 says and Qt5 does not, so the shared core's warnings --
+    # already in tools/warnings.txt -- subtract out and what remains is
+    # the Qt6-specific set.
+    counts = {}
+    for name, twin in (('qt6', 'qt'), ('qt6-test', 'qt-test')):
+        sys.stderr.write('building %s ...\n' % name)
+        output, failed = run_build(name, clean=clean)
+        if failed:
+            sys.stderr.write('\n%s FAILED TO BUILD -- audit aborted.\n' % name)
+            for line in output.splitlines():
+                if RE_ERROR.search(line):
+                    sys.stderr.write('  %s\n' % line)
+            return 2
+        for k, v in parse(output, 'qt6').items():
+            if (twin,) + k[1:] not in base_counts:
+                counts[k] = max(counts.get(k, 0), v)
     lines = report_lines(counts)
     total = sum(counts.values())
 
