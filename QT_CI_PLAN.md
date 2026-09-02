@@ -253,10 +253,12 @@ regression is found by whoever tries to use it.
 
 ## Where this stands, 2026-09-02
 
-**Every phase is built and running.** Three workflows, seventeen jobs,
-every check falsified individually before it was trusted, and the first
-release cut. `QT_CI_PLAN.md` is no longer a plan; it is the record of why
-each piece is shaped the way it is.
+**Every phase is built and running.** Four workflows, 22 jobs, every
+check falsified individually before it was trusted — with one stated
+exception, the macOS job, which cannot be falsified from a machine with
+no macOS and says so in the file. The first release is cut and the
+package repository is live. `QT_CI_PLAN.md` is no longer a plan; it is
+the record of why each piece is shaped the way it is.
 
 | workflow | jobs | what they are |
 |---|---|---|
@@ -282,12 +284,15 @@ the real obstacle).
 
 **What is left, and none of it is more CI:**
 
-- **Q11** — repair `Astrolog.vcxproj` or delete it. One line either way,
-  and the only one of the four unbuilt configurations still unbuilt.
-- **`WSETUP`** — still compiled by nothing, still undecided.
-- **Phase 9 (macOS)** — deliberately not attempted. It cannot be
-  falsified from here, and that phase's whole deliverable is a claim made
-  to a future adopter.
+- **`WSETUP`** — the last configuration nothing compiles, and the last
+  thing on this list that is purely a decision.
+- **The macOS suite hangs.** Phase 9's build half is answered: Homebrew
+  pours Qt6 in 59 s and the port compiles in 61 s, so **the port builds
+  on macOS**. The suite then runs past six minutes where Linux takes 47,
+  which is the signature of something waiting rather than something slow
+  — the same shape as the Linux hang fixed earlier, and the next nightly
+  is instrumented to name the group it stops in. That is a real finding
+  for an adopter either way.
 - **The deeper `-z0 Autodetect` question.** The two builds agree now and
   the unconditional-true bug is gone, but autodetection still answers
   "is it daylight time *now*" rather than "was that date in daylight
