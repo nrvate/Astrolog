@@ -276,15 +276,17 @@ every check falsified individually before it was trusted. Ten jobs:
 - **Q2** — this fork's version scheme. Blocks Phase 5 entirely; a tag
   cannot be checked against a source version that does not exist.
 - **Q11** — repair `Astrolog.vcxproj` or delete it. One line either way.
-- **The default branch.** ~~Item 0.1~~ is answered — Actions is enabled,
-  the repository is public so standard runners are free, and there is no
-  fork banner to click. What blocks CI is that `master` is the default
-  while all work is on `qt`, 342 commits ahead: `ci.yml` fires on push
-  and **the entire nightly lane is inert**, because `schedule:` and
-  `workflow_dispatch:` only work from the default branch. Two ways out,
-  both one action, in 0.1.
-  **And nothing here has ever run on GitHub**; a green badge in this
-  document is a badge in a text file.
+- ~~**The default branch.**~~ **Done 2026-09-02: `qt` is the default
+  branch.** Item 0.1 is closed with it — Actions was already enabled, the
+  repository is public so standard runners are free, and there was never
+  a fork banner to click. The obstacle was that `master` was the default
+  while all work happens on `qt`, which made the whole nightly lane inert;
+  `schedule:` and `workflow_dispatch:` only work from the default branch.
+  `master` is untouched at `5bf172e`, kept as the point this fork left
+  upstream.
+  **The remaining precondition is that these workflows reach `qt`.** They
+  are on `qt-ci`. Until that merges, **nothing here has ever run on
+  GitHub** and a green badge in this document is a badge in a text file.
 - **Phase 9 (macOS)** — deliberately not attempted. It cannot be
   falsified from here, and ground rule 1 is not negotiable for the one
   phase whose whole deliverable is a claim to a future adopter.
@@ -416,20 +418,26 @@ divergence at all. Consequences, in order of how quietly they bite:
   no `Makefile.wcli`, no `ephem/se52872.se1`, no `Makefile.srcs`. Every
   job would fail on a missing file.
 
-**So one of these has to happen, and it is a decision rather than a
-task:**
+**Decided and done, 2026-09-02: `qt` is the default branch.**
 
-- **Make `qt` the default branch** (Settings → General → Default branch).
-  One setting, no history rewritten, and it matches where the work
-  actually is. `master` stays as the point this fork left upstream.
-- **Fast-forward `master` to `qt`** — clean, since `qt` is a strict
-  descendant — and keep `master` as the default. Then "default branch"
-  and "where work happens" stop being different things.
+```
+$ gh api -X PATCH repos/nrvate/Astrolog -f default_branch=qt
+{"default_branch":"qt","fork":true,"visibility":"public"}
+```
 
-Until one of them is done, the fast lane works and **the whole nightly
-lane is decoration**.
-**Status.** [x] answered 2026-09-02 — Actions enabled and free; the
-default branch is the real blocker and is a decision
+Chosen over fast-forwarding `master` because it is a setting rather than
+a history change, and because it makes the repository honest about where
+the last 343 commits went. `master` is untouched at `5bf172e` and stays
+as the point this fork left upstream; both branches still exist; there
+were no open pull requests to retarget.
+
+**One consequence to know about**, since it is the reason the choice was
+free: a scheduled workflow now runs from `qt`, and `qt` is where the
+work is, so `schedule:` and `workflow_dispatch:` will both behave once
+the workflows are on it. They are on `qt-ci`. **Merging that branch is
+now the only thing between this document and a real run.**
+**Status.** [x] done 2026-09-02 — Actions enabled and free, `qt` is the
+default branch, workflows still to merge
 
 ### 0.2 Decide the trigger policy
 **Do.** Settle, and write into the workflow as a comment: which events,
@@ -1997,11 +2005,13 @@ rediscovery is slowest.
   after a force-push; and `actions/checkout` clones at `fetch-depth: 1`,
   so even `HEAD~1` is not in the checkout unless asked for. Decide which
   event Phase 7 runs on before writing it, not after.
-- **A scheduled workflow only runs from the default branch, and this
-  repository's default branch is not where the work is.** `master` is the
-  default; `qt` is 342 commits ahead of it. A `schedule:` or a
-  `workflow_dispatch:` in a file that lives only on `qt` is inert — no
-  run, no error, nothing to notice. See item 0.1 for the two ways out.
+- **A scheduled workflow only runs from the default branch.** A
+  `schedule:` or a `workflow_dispatch:` in a file that is not on it is
+  inert — no run, no error, nothing to notice. This bit here: `master`
+  was the default while every commit went to `qt`, which made the whole
+  nightly lane decoration. Fixed on 2026-09-02 by making `qt` the
+  default (item 0.1), and worth re-checking the day the default changes
+  again or a workflow is added on a side branch.
 - **A scheduled workflow switches itself off.** GitHub disables `schedule:`
   triggers in a repository with no activity for 60 days. Phase 6's whole
   argument is that a nightly job keeps a promise by existing — on a fork
