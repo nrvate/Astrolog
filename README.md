@@ -34,14 +34,22 @@ would take them. See "Features this fork adds to both builds" in
 ## Building
 
 ```
-make -f Makefile.qt
-./astrolog-qt
+make qt          # ./astrolog-qt
+make install     # on PATH; PREFIX=$HOME/.local if you don't want root
 ```
 
-Needs the Qt5 development packages (`qtbase5-dev` on Debian/Ubuntu/Mint)
-and `pkg-config`. Object files go to `obj-qt/`, so this can be built
-alongside the regular `astrolog` binary without interfering with it —
-`make` still builds the stock X11 version.
+Needs the Qt5 or Qt6 development packages (`qtbase5-dev` on
+Debian/Ubuntu/Mint) and `pkg-config` — the build stops and names the
+package if they are missing. Object files go to `obj-qt/`, so this can be
+built alongside the regular `astrolog` binary without interfering with it:
+plain `make` still builds the stock X11 version, and `make all` builds
+everything this tree has.
+
+`make install` deliberately leaves the data where it is — the ephemeris
+files, the atlas, the fonts, `astrolog.as` — and installs small wrappers
+that run the in-tree binary, along with a menu entry and icons for the Qt
+build. The checkout therefore has to stay put; re-run `make install` if you
+move it, or `make uninstall` to remove what it wrote.
 
 ## Status
 
@@ -87,11 +95,11 @@ ASTROLOG_QT_THEME=light ./astrolog-qt
 ## Tests
 
 ```
-make -f Makefile.qt.test
+make qt-test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 3526 assertions plus startup checks, covering dialogs,
+A headless suite of 3561 assertions plus startup checks, covering dialogs,
 context menus, shortcuts, chart rendering, every menu item, menu parity
 against `astrolog.rc`, and bad input. Several groups drive the real
 dialogs and assert what they leave behind, rather than calling the code
