@@ -109,11 +109,12 @@ Roughly in the order I'd take them.
    - Verified: `v` toggles graphics/text both ways and from either
      window, and Alt+Shift+N switches to the transit-and-natal chart.
 
-3. ~~A regression check~~ — **done 2026-08-25.** `make -f
-   Makefile.qt.test && ./run-qt-tests.sh`. Runs headless in seconds, no X
-   display and no `xdotool`, and exits non-zero on failure. **3526
-   assertions** in 45 groups as of 2026-08-31; it was 1396 when first written, and has
-   since grown to cover menu parity against `astrolog.rc` (258/258), the
+3. ~~A regression check~~ — **done 2026-08-25.** `make qt-test &&
+   ./run-qt-tests.sh`. Runs headless in seconds, no X display and no
+   `xdotool`, and exits non-zero on failure. It was 1396 assertions when
+   first written and prints its own count now — the only number that
+   stays right, after three documents asserted three different wrong
+   ones. It has grown to cover menu parity against `astrolog.rc` (258/258), the
    Chart menu's graphics/text handling, bad input, and — since item 141
    — whether the computed positions are actually right.
    - **How it works.** `Makefile.qt.test` builds the same sources plus
@@ -336,8 +337,8 @@ Roughly in the order I'd take them.
     log items 146-151). Nothing in this project had ever read a compiler
     warning; `tools/warning_audit.py` now holds all four builds against
     `tools/warnings.txt` and fails on any addition. **857 warnings in 209
-    sites down to 318 in 101, and every class still in it carries a
-    recorded verdict** — so the next warning to appear here will be a new
+    sites down to 318 in 101 at the campaign's close, and every class
+    still in it carries a recorded verdict** — so the next warning to appear here will be a new
     one. Separately, and this is the number a person actually sees:
     **all four builds now compile silently** (items 151-152). A console
     build was 49 warnings in 722 lines of output and is 0 in 32. The
@@ -377,6 +378,31 @@ Roughly in the order I'd take them.
     that sees more than the thing you are trying to improve is not
     automatically a net for it.
 
+14. ~~**The build system, and packaging.**~~ — **done 2026-09-01** (work
+    log items 167-169), on the maintainer's ask. Six defects, and two of
+    them could hand you a binary that did not match its source: header
+    dependencies were tracked by hand, so touching `placalc.h` rebuilt
+    **zero** objects in every build; the console makefile named no C++
+    standard, which is the accident `Makefile.win` had already died of;
+    plus a parallel-build race, a `make clean` that cleaned a third of
+    the tree, an unused Qt Test module, and the source list written out
+    five times. `Makefile.srcs` holds it once now, and the four Linux
+    binaries came out byte-identical afterwards, which is what makes that
+    provable rather than argued.
+
+    Then `make install`, shaped by the maintainer's answer to where the
+    data goes: it stays in the checkout, and what installs is a wrapper
+    that runs the in-tree binary, plus a menu entry and icons. On the way
+    to the desktop entry: **the Qt window had never had an icon at all**,
+    where Windows sets one from `astrlog1.ico`. And `make qt6` /
+    `make qt6-test`, so the Qt6 build is a target rather than an artifact
+    somebody remembers making.
+
+    **Still open, and it has its own document: CI.** `QT_CI_PLAN.md`
+    covers putting these builds, the suite, the audits and the release
+    artifacts under GitHub Actions. Nothing here runs on push, which is
+    how `Makefile.win` went 62 commits without compiling.
+
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
 
@@ -390,9 +416,11 @@ are shaped to be offerable upstream rather than to be easy to strip, so
 expect real merge work there. See "Features this fork adds to both
 builds".
 
-Diff against the upstream tarball rather than assuming, and keep line
-endings intact when editing those files, which is its own trap (see
-"Working pattern" at the end).
+Diff against the upstream tarball rather than assuming. The line-ending
+trap that used to sit here is gone: the tree is LF throughout since work
+log item 159, pinned by `.gitattributes` and checked by
+`tools/line_endings_audit.py`. Upstream's tarball is not, so expect the
+diff itself to be noisy.
 
 ## How this fork's Qt backend works
 
@@ -7305,12 +7333,12 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
 
 ## Working pattern / verification methodology
 
-- Build with `make -f Makefile.qt -j4`; binary is `./astrolog-qt`.
+- Build with `make qt -j4`; binary is `./astrolog-qt`.
 - Compile-check after every change before testing live — this codebase
   has caught real preprocessor/linkage mistakes this way every session.
-- **Run the test suite before every commit.** `make -f Makefile.qt.test`
-  then `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
-  failure. 2847 assertions covering dialog titles, the 42 context menus,
+- **Run the test suite before every commit.** `make qt-test` then
+  `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
+  failure. Assertions covering dialog titles, the 42 context menus,
   264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window

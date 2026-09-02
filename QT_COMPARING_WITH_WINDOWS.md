@@ -25,7 +25,7 @@ is for this comparison workflow.
 
 ```sh
 make -f Makefile.win                        # once
-make -f Makefile.qt.test                    # once
+make qt-test                                # once
 
 tools/text-chart-capture.sh out/win         # the Windows build, under Wine
 QTTEXTDIR=out/qt ./run-qt-tests.sh          # this port

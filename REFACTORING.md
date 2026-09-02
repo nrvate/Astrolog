@@ -4,8 +4,8 @@ This is the catalog of what makes Astrolog hard to evolve and what to do
 about it. The goal is a codebase someone could read without cringing:
 maintainable, flexible, modular — while every increment keeps the program
 byte-for-byte behaving as it does today, under the nets this project
-already trusts (the 3526-assertion suite, ASan, the settings round trip,
-the six standing audits, and the Windows build as oracle). Note the word
+already trusts (the assertion suite, ASan, the settings round trip,
+the eight standing audits, and the Windows build as oracle). Note the word
 "behaving": all of those but one are differential, and the exception is
 new — see T9.
 
@@ -256,10 +256,11 @@ compile error. Definitions live in astrolog.h directly after the
    `CHECKED_TABLE_DIMS` (type → dimension expression), then falsify by
    deleting one value from a converted table's initializer — both the
    count and value legs must trip (the ruler2 drill).
-6. **Line endings per file**: switch.cpp, qtdriver.cpp, qtdialog.cpp,
-   qttest.cpp and the tools are LF; every other source file is CRLF
-   (CR count == line count). Scripted edits go through bytes with the
-   right newline, exact-match, count-asserted.
+6. **Line endings**: the whole source tree is LF since work log item
+   159, pinned by `.gitattributes` and checked by
+   `tools/line_endings_audit.py`. This rule used to be per-file, and the
+   half-CRLF tree it described drew blood twice. Scripted edits still go
+   through bytes, exact-match, count-asserted.
 7. **One family per commit**, docs in the same commit, ledger row
    updated in the same commit.
 
@@ -273,7 +274,7 @@ compile error. Definitions live in astrolog.h directly after the
    passes: subscripts get tags (rule 2), selector code gets typed
    pointers (rule 1), raw boundaries get `.rgn` (rule 4). Unused
    `ch`/`i` locals may need dropping from declarations.
-3. `make -f Makefile.qt.test -j4` — flushes qttest.cpp sites (the
+3. `make qt-test -j4` — flushes qttest.cpp sites (the
    rulership/esoteric-tables groups hold table pointers too).
 4. **Enforcement proof**, four-way, using a scratch TU:
    correct tags compile; wrong tag, crossed tag, and untagged all
@@ -312,7 +313,7 @@ compile error. Definitions live in astrolog.h directly after the
    check each moves the capture. E3's first attempt had a malformed
    `-qb` and every run printed the same parse error, identically on
    both binaries.
-8. All six audits, plus the rule-5 falsification.
+8. All eight audits, plus the rule-5 falsification.
 9. Docs and commit (rule 7).
 
 **The ledger:**
@@ -813,7 +814,7 @@ verdicts.
 *Evidence:* `tools/switch-matrix.sh` byte-diffs the tree against an
 older build of **itself**. `tools/win-tests.sh` and
 `tools/text-chart-diff.py` compare two builds that share this core.
-`tools/asan-sweep.sh` proves no bad memory access. The six audits check
+`tools/asan-sweep.sh` proves no bad memory access. The eight audits check
 the port against `astrolog.rc` and the defaults against `astrolog.as` —
 two artifacts of this same repo. Every one of them answers "did this
 change anything?" and none answers "is this right?". Worse, a

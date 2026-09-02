@@ -269,6 +269,16 @@ English label text from `astrolog.rc`; changing a label is an
 interface change, and the suite's 42-context-menu/264-shortcut/258-
 parity checks are what enforce it.
 
+## Adding a source file
+
+One line in `Makefile.srcs`, in the group it belongs to — core, graphics,
+Swiss, or one of the three backends (`SRC_QT`, `SRC_TEST`, `SRC_WIN`).
+All five makefiles derive their object lists from it, so nothing else
+changes. Before 2026-09-01 this was five edits in five notations and work
+log item 96 records the day one was nearly missed. A new `#include` needs
+no makefile change either: header dependencies come from the compiler
+(`-MMD -MP`).
+
 ## Object taxonomy
 
 Chained range constants (`custLo = uranLo`, `oNorm = cobHi`, ...;

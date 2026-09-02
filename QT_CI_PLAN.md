@@ -526,7 +526,7 @@ ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i nrvate.as
 
 ### 2.1 Build both Qt binaries
 **Do.** `sudo apt-get install -y qtbase5-dev pkg-config`, then
-`make -f Makefile.qt -j4` and `make -f Makefile.qt.test -j4`.
+`make qt -j4` and `make qt-test -j4`.
 Keep `-j4` even though the runner's core count differs from this box's
 constraint — the cap in `CLAUDE.md` is about not starving the user's
 machine, and matching it here keeps one number in one place.
@@ -654,7 +654,7 @@ runner, that is a race. Keep them in separate jobs.
 
 # Phase 3 — The fast audits
 
-Seven standing audits plus three generated-table diffs. All pure Python
+Eight standing audits plus three generated-table diffs. All pure Python
 or `diff`, all seconds, all currently clean. This is the cheapest phase
 in the document and it protects the `.rc`-derived layer that `CLAUDE.md`
 says hand transcription got wrong "every time it was used".
@@ -676,8 +676,9 @@ python3 tools/fixture_coverage_audit.py # added 2026-09-01; found five
 **`line_endings_audit.py` shells out to `git ls-files`**, so it needs a
 real working tree — fine under `actions/checkout`, but it exits 1 with a
 `CalledProcessError` against a `git archive` extraction. Verified both
-ways; in the repo it reports *"line endings clean: 97 tracked text files,
-no carriage returns"*.
+ways; in the repo it reports *"line endings clean: N tracked text files,
+no carriage returns"* — N was 97 when this was written and is 100 now, so
+match on the wording rather than the count.
 (`tools/warning_audit.py` belongs to Phase 6 — six minutes, all four
 toolchains.)
 **Verify.** Each exits 0.
@@ -1011,7 +1012,7 @@ automatically for the first time. Both halves run on one Linux runner.
 **Do.**
 ```
 make -f Makefile.win && tools/text-chart-capture.sh out/win
-make -f Makefile.qt.test -j4 && QTTEXTDIR=out/qt ./run-qt-tests.sh
+make qt-test -j4 && QTTEXTDIR=out/qt ./run-qt-tests.sh
 python3 tools/text-chart-diff.py out/win out/qt out/cmp
 ```
 **Q6: what is the pass criterion?** For *this* route — driving the real
@@ -1416,11 +1417,16 @@ rediscovery is slowest.
 - **Never `git checkout` a file to undo a sabotage.** It reverts the
   file's entire share of the change. Twice in one session in this
   project. Reverse-patch the exact string.
-- **Preserve CRLF.** Most original Astrolog sources are CRLF; this fork's
-  own files are LF. Any workflow step that rewrites a tracked file in
-  text mode silently converts it. If a job ever writes into the tree,
-  assert `CR count == line count` afterwards. `sweph.cpp` is the one
-  exception (9 CRs in 8621 lines, upstream's).
+- **The source is LF, and four categories are deliberately not.** This
+  used to read "preserve CRLF", and it is the reverse now: work log item
+  159 converted the tree, `.gitattributes` pins it with `* -text`, and
+  `tools/line_endings_audit.py` fails on a carriage return in tracked
+  source. What stays as it ships: binaries, files Windows or VMS tooling
+  owns (`.rc`, `.sln`, `.def`, `makefile.com`), the third-party `font/`
+  distribution, and **the data files the program parses** (`.as`,
+  `.csv`) — converting those last moved `switch-matrix.sh` output by six
+  lines, so something in the parsers reads a CR as content. A job that
+  rewrites a tracked file must not touch those.
 - **`asan-sweep.sh` deletes `./astrolog`.** Isolate it.
 - **`/swe` will never exist on a runner.** Anything that silently needs it
   tests nothing, quietly. That is the exact failure `-i nrvate.as` exists

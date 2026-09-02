@@ -99,7 +99,8 @@ make qt-test
 ./run-qt-tests.sh
 ```
 
-A headless suite of 3561 assertions plus startup checks, covering dialogs,
+A headless suite of over 3,500 assertions plus startup checks — it prints
+its own count, which is the only number that stays right — covering dialogs,
 context menus, shortcuts, chart rendering, every menu item, menu parity
 against `astrolog.rc`, and bad input. Several groups drive the real
 dialogs and assert what they leave behind, rather than calling the code
@@ -115,11 +116,14 @@ cross-checks Astrolog's own built-in planetary formulas against Swiss,
 and requires all 40 house systems to divide the circle once. It found two
 shared-core bugs on the day it was written.
 
-Two byte-diff harnesses prove a change to shared code left behaviour
-alone. `tools/chart-matrix.sh` renders every text chart the console build
-draws over a pinned date; `tools/switch-matrix.sh` covers the whole
-command-line switch surface in 529 invocations. Run either against an
-older build of the tree and diff.
+Four byte-diff harnesses prove a change to shared code left behaviour
+alone, and they cover disjoint surfaces. `tools/chart-matrix.sh` renders
+every text chart the console build draws over a pinned date;
+`tools/switch-matrix.sh` covers the whole command-line switch surface in
+529 invocations; `tools/graphics-matrix.sh` covers the drawing code, which
+neither of the others reaches, in 224 renders; `tools/influence-matrix.sh`
+covers the influence charts. Run any of them against an older build of the
+tree and diff.
 
 It defaults to `-i nrvate.as`, the maintainer's settings file, because
 that is the only input under which the esoteric bodies resolve at all —
@@ -135,10 +139,11 @@ tools/win-tests.sh
 It takes minutes rather than seconds, so it is run when a change ships in
 both builds rather than before every commit.
 
-There are also six standing audits — four checking this port against
+There are also eight standing audits — four checking this port against
 Windows' resource script, one checking the compiled defaults against the
-shipped settings file, and one checking the switch registry against the
-help text:
+shipped settings file, one checking the switch registry against the help
+text, one checking that every ranged switch has a round-trip fixture, and
+one checking line endings:
 
 ```
 python3 tools/rc_audit.py          # dialog controls nothing wires up
@@ -147,7 +152,13 @@ python3 tools/rc_field_audit.py    # a control wired to the wrong setting
 python3 tools/rc_lookup_audit.py   # a by-name lookup resolving to nothing
 python3 tools/defaults_audit.py    # data.cpp initializers vs astrolog.as
 python3 tools/registry_audit.py    # documented switches that resolve nowhere
+python3 tools/fixture_coverage_audit.py  # ranged switches with no fixture
+python3 tools/line_endings_audit.py      # a carriage return in the source
 ```
+
+And the compiler itself: `tools/warning_audit.py` holds all four builds
+against a ledger of every warning they are known to produce, and fails on
+an addition.
 
 The dialog tables, accelerators and command IDs are *generated* from the
 resource script rather than transcribed, and regenerating them into a

@@ -28,6 +28,10 @@ Work happens on branch **`qt`**.
 - **`REFACTORING.md`** — the standing architectural review: what makes
   the codebase hard to evolve, with evidence, and the survey ledger that
   says which area to review next. Read it before any refactoring work.
+- **`QT_CI_PLAN.md`** — the plan for putting the builds, the suite, the
+  audits and the release artifacts under GitHub Actions, and what a macOS
+  build would cost. Its findings table is worth reading before adding any
+  check, whether or not CI ever happens.
 - **`CONVENTIONS.md`** — the codebase's actual conventions, verified
   and written down: naming, none-values, macro families, buffer and
   error idioms, how to add a command. Read it before writing new code.
@@ -133,7 +137,7 @@ tree; `make clean-console` is upstream's narrower one, which is what
 `tools/asan-sweep.sh` uses.
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. Current state: **3561 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make -f Makefile.qt.asan`) — but note that
+commit. Current state: **3561 passed, 0 failed**, startup diagnostics ok. The full suite is also clean under AddressSanitizer (`make qt-asan`) — but note that
 build is `-O0`, where `_FORTIFY_SOURCE` is inactive, so it structurally
 cannot see a fortify-detected overflow. Work log item 142 was invisible
 to it for that reason and had to be caught in an optimized `-g` build.
@@ -144,8 +148,9 @@ non-blank, all 35 text chart modes survive 120-character chart names
 and locations, the five import file formats parse and their long-line
 truncation points hold, all 338 menu items fire without crashing, 258/258 Windows menu
 items present, 256 show Windows' own accelerator text, 39/39 esoteric
-bodies resolve against the ephemeris, and bad input (missing files,
-unknown switches) doesn't terminate the process.
+bodies resolve against the ephemeris, the application icon resolves at
+all three sizes, and bad input (missing files, unknown switches) doesn't
+terminate the process.
 
 One group is not like the others. **The numeric oracle** (`oracle`, 307
 assertions) is the only net here that can say a number is *right* rather
@@ -172,8 +177,9 @@ the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
 Eight standing audits, all currently clean — four of the port against
-`astrolog.rc`, one of the compiled defaults against `astrolog.as`, and
-one of the switch registry against the help text and settings writer:
+`astrolog.rc`, one of the compiled defaults against `astrolog.as`, one of
+the switch registry against the help text and settings writer, one of
+round-trip fixture coverage, and one of line endings:
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
@@ -207,7 +213,7 @@ python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # first run
 ```
 
-And a seventh that is not fast and not resource-shaped: **the compiler
+And a ninth that is not fast and not resource-shaped: **the compiler
 itself**, which nothing here read until 2026-09-01.
 
 ```sh

@@ -79,7 +79,7 @@ static void ProbeQt()
 ```
 
 ```sh
-make -f Makefile.qt.test -j4
+make qt-test -j4
 env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
   ASTROLOG_QT_PROBE=1 ./astrolog-qt-test -i nrvate.as
 ```
@@ -113,8 +113,9 @@ across six esoteric bodies at once.
 
 ## Running one test group instead of all of them
 
-The suite runs 45 groups in sequence and takes tens of seconds end to
-end. When one group is under investigation, run just it:
+The suite runs every group in sequence and takes tens of seconds end to
+end; `ASTROLOG_QT_TESTS=list` prints their names, one per line.
+When one group is under investigation, run just it:
 
 ```sh
 ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh       # one group, well under a second
@@ -442,7 +443,7 @@ with `-fsanitize=address -g -O0` and its own name and object directory,
 so it never clobbers the normal build:
 
 ```sh
-make -f Makefile.qt.asan -j4
+make qt-asan -j4
 env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
   ASAN_OPTIONS=detect_leaks=0 timeout 600 ./astrolog-qt-asan -i nrvate.as
 ```
@@ -664,8 +665,8 @@ thing it watches and confirm the entry moves.
 ## Checks worth running before a commit
 
 ```sh
-make -f Makefile.qt -j4 && make -f Makefile.qt.test -j4 && ./run-qt-tests.sh
-make -f Makefile.win -j4
+make qt -j4 && make qt-test -j4 && ./run-qt-tests.sh
+make win -j4
 python3 tools/rc_audit.py
 python3 tools/rc_mnemonic_audit.py
 python3 tools/rc_field_audit.py
@@ -737,8 +738,8 @@ downgraded the error and `-w` swallowed the message, and three work log
 items had listed "Windows builds" among their nets in the meantime. If a
 check claims a build compiles, look at the binary's timestamp.
 
-**When the change touches shared core, the two byte-diff harnesses are
-the real gate, and they are not pre-commit** — each needs a baseline
+**When the change touches shared core, the byte-diff harnesses are the
+real gate, and they are not pre-commit** — each needs a baseline
 binary built from the commit you are changing:
 
 ```sh
