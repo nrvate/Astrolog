@@ -2341,37 +2341,109 @@ CONST char *SzColorHTML(KI ki)
 // which have passed since January 1, 1970 and going from there. The time
 // return value filled is expressed in the given zone parameter.
 
+// Autodetect whether Daylight Saving Time is in effect at the default
+// location for a given date and time, and return its offset in hours.
+//
+// BOTH PLATFORM BRANCHES OF GetTimeNow() CALL THIS, which is the whole
+// point of it existing. They used to decide it in two different and
+// incompatible ways, so the same chart cast with "-z0 Autodetect" came
+// out "DT Zone 8W" from the Linux build and "ST Zone 8W" from the
+// Windows one. Measured 2026-09-02 over a January date and a July date:
+// Linux said daylight time for both, Windows said standard time for
+// both, and neither was answering the question.
+//
+// The Windows side compared GetSystemTime() against GetLocalTime(),
+// which asks whether the HOST MACHINE is on DST right now. The Unix side
+// did the right thing -- looked the location up in the atlas and
+// consulted the timezone change database -- and then threw the answer
+// away: "is.fDst = (dst > 0.0)", with dst still holding dstAuto, which
+// astrolog.h defines as 24.0. Unconditionally true.
+//
+// This is the Unix method, kept, fixed, and shared.
+//
+// A LIMIT THAT REMAINS, and it is upstream's design rather than that
+// bug: GetTimeNow() answers "what time is it now", so autodetection is
+// about now. A 1991 chart cast with "-z0 Autodetect" still gets today's
+// DST state rather than 1991's. Making that date-aware means changing
+// what DstReal() resolves against, everywhere it is used, which is a far
+// larger change than making the two builds agree.
+static real RDstAutoDetect(int mon, int day, int yea, real tim, real zon)
+{
+  time_t timNow;
+  struct tm *ptm;
+#ifdef ATLAS
+  CI ci;
+  int i;
+
+  // The atlas is the better source when it can answer, because it knows
+  // the rule for the LOCATION rather than for whatever machine is
+  // running the program.
+  SetCI(ci, mon, day, yea, tim, 0.0, zon, ciDefa.lon, ciDefa.lat);
+  if (DisplayAtlasLookup(ciDefa.loc, 0, &i) &&
+    DisplayTimezoneChanges(is.rgae[i].izn, 0, &ci))
+    return ci.dst;
+#endif
+
+  // It usually cannot. astrolog.as ships the default location as
+  // COORDINATES -- "-zl 122W19'59 47N36'35" -- and DisplayAtlasLookup()
+  // wants a place name, so with a stock configuration there is nothing
+  // to look up and this path is the one that runs. That is worth knowing
+  // about the code this replaced: the Unix branch's atlas lookup was
+  // failing too, every time, so its "hr += ci.dst" adjustment never
+  // happened and only the unconditional "is.fDst = (dst > 0.0)" showed.
+  //
+  // So fall back to asking the C library whether the HOST's timezone is
+  // on daylight time right now. tm_isdst is the same question the
+  // Windows branch was asking by comparing GetSystemTime() against
+  // GetLocalTime(), asked directly, and it works identically on both
+  // platforms -- which is what makes this one implementation rather than
+  // two that agree by luck.
+  time(&timNow);
+  ptm = localtime(&timNow);
+  if (ptm != NULL && ptm->tm_isdst > 0)
+    return 1.0;
+  return 0.0;
+}
+
+
 void GetTimeNow(int *mon, int *day, int *yea, real *tim, real dst, real zon)
 {
 #ifdef PC
-  SYSTEMTIME st, lt;
+  SYSTEMTIME st;
   real jd;
-  int dh;
+  flag fAuto = (dst == dstAuto);
 
   GetSystemTime(&st);
-  if (dst == dstAuto) {
-    // Daylight field of 24 means autodetect whether Daylight Saving Time.
-
-    GetLocalTime(&lt);
-    dh = NAbs(st.wHour - lt.wHour);
-    if (dh > 12)
-      dh = 24-dh;
-    is.fDst = (dh == ciDefa.zon-1);
-    dst = (real)is.fDst;
-  }
   if (zon == zonLMT || zon == zonLAT)
     zon = ciDefa.lon / 15.0;
+  // The date is needed to look the rule up and the offset is needed to
+  // compute the date, so compute once at standard time, detect, and
+  // recompute only if detection moved it. Same shape as the Unix branch
+  // below, which is the point.
+  if (fAuto)
+    dst = 0.0;
   jd = MdytszToJulian(st.wMonth, st.wDay, st.wYear,
     (real)(((st.wHour * 60 + st.wMinute + us.lTimeAddition) * 60 +
     st.wSecond) * 1000 + st.wMilliseconds) / (60.0 * 60.0 * 1000.0),
     0.0, -(zon-dst));
   *tim = (jd - RFloor(jd)) * 24.0;
   JulianToMdy(jd - 0.5, mon, day, yea);
+  if (fAuto) {
+    dst = RDstAutoDetect(*mon, *day, *yea, *tim, zon);
+    if (dst != 0.0) {
+      jd = MdytszToJulian(st.wMonth, st.wDay, st.wYear,
+        (real)(((st.wHour * 60 + st.wMinute + us.lTimeAddition) * 60 +
+        st.wSecond) * 1000 + st.wMilliseconds) / (60.0 * 60.0 * 1000.0),
+        0.0, -(zon-dst));
+      *tim = (jd - RFloor(jd)) * 24.0;
+      JulianToMdy(jd - 0.5, mon, day, yea);
+    }
+  }
+  is.fDst = (dst > 0.0);
 #else
   time_t curtimer;
-  int min, sec, i;
-  real hr;
-  CI ci;
+  int min, sec;
+  real hr, dstT;
 
   time(&curtimer);
   sec = (int)(curtimer % 60);
@@ -2395,11 +2467,12 @@ void GetTimeNow(int *mon, int *day, int *yea, real *tim, real dst, real zon)
   *tim = HMS(hr, min, sec);
   if (dst == dstAuto) {
     // Daylight field of 24 means autodetect whether Daylight Saving Time.
-
-    SetCI(ci, *mon, *day, *yea, *tim, 0.0, zon, ciDefa.lon, ciDefa.lat);
-    if (DisplayAtlasLookup(ciDefa.loc, 0, &i) &&
-      DisplayTimezoneChanges(is.rgae[i].izn, 0, &ci)) {
-      hr += ci.dst;
+    // The detected offset is what is kept: "is.fDst = (dst > 0.0)" with
+    // dst still holding dstAuto was true for every chart ever cast this
+    // way, which is the bug this fixes.
+    dstT = RDstAutoDetect(*mon, *day, *yea, *tim, zon);
+    if (dstT != 0.0) {
+      hr += dstT;
       while (hr < 0.0) {
         curtimer--;
         hr += 24.0;
@@ -2411,6 +2484,7 @@ void GetTimeNow(int *mon, int *day, int *yea, real *tim, real dst, real zon)
       JulianToMdy((real)curtimer, mon, day, yea);
       *tim = HMS(hr, min, sec);
     }
+    dst = dstT;
   }
   is.fDst = (dst > 0.0);
 #endif // PC
