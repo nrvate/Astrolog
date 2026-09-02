@@ -1328,6 +1328,57 @@ the mechanism is what rots, and exercised against the Windows tarball
 because that is what exists to exercise it on.
 **Status.** [x] done and falsified 2026-09-02
 
+### 4.7 Publish apt and dnf repositories
+**Not in the original plan**, which stopped at release assets. A user
+downloading a file per release is most of packaging undone: the point is
+`apt install astrolog` and then upgrades arriving on their own.
+**Done 2026-09-02.** `tools/make-repo.sh` builds both from a directory of
+packages; `.github/workflows/repo.yml` publishes them to GitHub Pages,
+rebuilt from **every** release so old versions stay installable. Live at
+<https://nrvate.github.io/Astrolog/>.
+**One suite per distribution**, and the first publish is why. It built,
+signed, and served every URL at 200 — and could not be installed from: a
+single suite makes apt see `~jammy` and `~noble` as two versions of one
+package and offer the highest, so Ubuntu 22.04 was handed the noble build
+and refused it. dnf had the same fault (`qt.1.fc43` > `qt.1.el9` as
+strings). **Nothing short of installing from the live URL would have
+shown it.**
+**So the workflow installs from what it built, before deploying** —
+`tools/ci-verify-repo.sh`, six containers, install and cast a chart,
+suites discovered from the tree so a new distribution cannot be silently
+left untested. Falsified by recreating the single-suite bug.
+**It is the one workflow that needs a secret**, a deliberate exception to
+ground rule 5: apt refuses an unsigned repository and dnf needs
+`gpgcheck=0`, which is a bad habit to teach in an install instruction.
+**Three signing traps, all found by running it**: apt's `signed-by=`
+wants a *binary* keyring from a `.gpg` file while dnf's `gpgkey=` wants
+the armoured form; dnf's `gpgcheck=1` checks *package* signatures, so the
+`.rpm`s must be signed before `createrepo_c` runs, because signing
+rewrites them; and rpm execs `%__gpg_sign_cmd`'s first word without
+searching `PATH`, so a bare `gpg` reads as "gpg is missing" when it is
+installed.
+**And the trigger was a no-op.** It fired on `release: published`, but
+the release is published by `release.yml` using `GITHUB_TOKEN`, and
+GitHub does not start a workflow run from an event that token created.
+`workflow_run` on the Release workflow, gated on success, is what
+actually fires.
+**Status.** [x] done 2026-09-02
+
+### 4.8 Test `make uninstall`
+**Also not in the original plan.** It is documented in `README.md` and
+`CLAUDE.md` and had never been run by anything — a target nobody executes
+is the same category as a configuration nobody compiles, and this
+repository has found three of those broken.
+**Done 2026-09-02** as `tools/ci-assert-uninstalled.sh`, in the same job
+that installs. It checks the removal is complete (a wrapper left on
+`PATH` becomes "No such file or directory" months later) and no wider
+than it should be (`bin`, `share/applications` and `share/icons/hicolor`
+belong to every application; removing the directories shows up as
+somebody else's missing menu entry).
+**The real one passes** — six files installed, six removed, directories
+intact — and the check fails while they are present.
+**Status.** [x] done and falsified 2026-09-02
+
 ---
 
 # Phase 5 — Release on a tag
