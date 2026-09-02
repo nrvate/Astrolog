@@ -80,6 +80,16 @@ BUILDS = {
     'win':       ('Makefile.win',    'CFLAGS',
                   '-DWIN -DPC -D_WINDOWS -DWIN32 -D__CRT__NO_INLINE -O2 '
                   '-fpermissive -static -std=gnu++17 -Wall ' + COMMON_NO),
+    # The console Windows build. Same toolchain and nearly the same core
+    # as 'win', but -DWCLI compiles xscreen.cpp's WCLI block that -DWIN
+    # does not, so it is not covered by that entry: measured at 82 -Wall
+    # warnings against win's 89, overlapping heavily and not identically.
+    # It was outside every net here from the day Makefile.wcli was added
+    # until this entry, which is the same "compiled by something, read by
+    # nothing" gap the Qt6 build had.
+    'wcli':      ('Makefile.wcli',   'CFLAGS',
+                  '-DWCLI -DPC -D_WINDOWS -DWIN32 -D__CRT__NO_INLINE -O2 '
+                  '-fpermissive -static -std=gnu++17 -Wall ' + COMMON_NO),
 }
 
 # The Qt6 build is deliberately NOT in BUILDS, and the reason is the

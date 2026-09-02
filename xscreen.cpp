@@ -641,8 +641,15 @@ void InteractX()
   int nMsg;
 #endif
   int fAutosize = fFalse, fResize = fFalse, fRedraw = fTrue, fNoChart = fFalse,
-    fBreak = fFalse, fCast = fFalse, mousex = -1, mousey = -1,
+    fBreak = fFalse, fCast = fFalse,
     length, key, i;
+#ifdef X11
+  // Only the X11 event loop tracks the pointer. Declared unconditionally,
+  // these were two unused variables in every WCLI build -- invisible
+  // until Makefile.wcli joined the warning audit, because nothing
+  // compiled that configuration.
+  int mousex = -1, mousey = -1;
+#endif
 
   neg(gs.nAnim);
   while (!fBreak) {
