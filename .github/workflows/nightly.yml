@@ -386,8 +386,19 @@ jobs:
         shell: cmd
         run: |
           python tools\qt-srcs.py > srcs.txt || exit /b 1
-          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          if errorlevel 1 call "%ProgramFiles%\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+          rem vswhere, not a hardcoded edition path. The first attempt
+          rem guessed Enterprise then Community under
+          rem "Microsoft Visual Studio\2022\" and found neither -- the
+          rem runner image moves, and the edition is not something to
+          rem guess at. vswhere ships with every installer since 2017 and
+          rem answers where the toolset actually is.
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * ^
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ^
+            -property installationPath`) do set "VSPATH=%%i"
+          if not defined VSPATH echo No MSVC toolset found & exit /b 1
+          echo Using %VSPATH%
+          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
           cl /nologo /std:c++17 /EHsc /MD /O2 /W1 ^
              /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
