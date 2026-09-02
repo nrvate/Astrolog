@@ -2219,6 +2219,8 @@ shorter than expected.**
 | Linux-specific runtime behaviour | **only dark-mode detection**, and under Qt 6.5+ the code already calls `QStyleHints::colorScheme()`, which is native on Windows and macOS. The gsettings/gdbus/kdeglobals fallbacks simply would not fire |
 | Licence | `astrolog.cpp`: GPL "version 2 … or (at your option) any later version", so GPLv3 is available and LGPLv3 Qt is compatible. MSVC plus the open-source Qt is also Qt's own normal combination |
 | macOS | measured 2026-09-02: Homebrew pours Qt6 in 59 s and the port **compiles in 61 s** |
+| `-DPC`'s switch character | `chSwitch` becomes `/`, but only for **writing**: `io.cpp` uses it to emit settings files and nothing parses with it. Measured — the Linux build accepts `/qa` and casts the chart. So a Windows Qt build would write `/qb` where Linux writes `-qb`, and both read either. No interoperability problem, which is the question that mattered |
+| Astrolog's own sources under MSVC | **compiled clean** as far as `qtdialog.cpp` before Qt's own header check stopped the run |
 
 So the experiment is one nightly job — `qt-windows`, `cl.exe` with `-DQT
 -DPC` and no `-DWIN`.

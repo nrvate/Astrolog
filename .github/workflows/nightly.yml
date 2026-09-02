@@ -428,11 +428,21 @@ jobs:
              Qt6Network.lib Qt6PrintSupport.lib user32.lib gdi32.lib shell32.lib ^
              advapi32.lib ole32.lib
 
-      - name: Did it produce a binary?
+      # Not just "did it link" -- does it compute? A Qt build has
+      # astrolog.cpp's ordinary main(), because that is inside "#ifndef
+      # WIN" and this build does not define WIN. So unlike astrolog.exe it
+      # can be driven from a command line, and the same Chiron assertion
+      # the Linux packages use applies: 0Ari00 is the no-ephemeris answer,
+      # and the Sun reads correctly even with no ephemeris at all.
+      - name: Does it run, and compute?
         shell: pwsh
         run: |
-          if (Test-Path astrolog-qt.exe) {
-            "Qt-on-Windows builds. Size: $((Get-Item astrolog-qt.exe).Length) bytes"
-          } else {
-            "No binary produced."; exit 1
-          }
+          if (-not (Test-Path astrolog-qt.exe)) { "No binary produced."; exit 1 }
+          "built: $((Get-Item astrolog-qt.exe).Length) bytes"
+          $env:PATH = "$env:QTDIR\bin;$env:PATH"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $out = & .\astrolog-qt.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1 | Out-String
+          $chiron = ($out -split "`n" | Where-Object { $_ -match '^Chir' } | Select-Object -First 1)
+          if (-not $chiron) { "No Chiron line. Output:"; $out -split "`n" | Select-Object -First 8; exit 1 }
+          if ($chiron -match '0Ari00') { "EPHEMERIS NOT FOUND: $chiron"; exit 1 }
+          "Qt on Windows computes: $chiron"
