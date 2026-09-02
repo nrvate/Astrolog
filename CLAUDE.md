@@ -181,10 +181,11 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Eight standing audits, all currently clean — four of the port against
-`astrolog.rc`, one of the compiled defaults against `astrolog.as`, one of
-the switch registry against the help text and settings writer, one of
-round-trip fixture coverage, and one of line endings:
+Nine standing audits, all currently clean and all run by CI — four of the
+port against `astrolog.rc`, one of the compiled defaults against
+`astrolog.as`, one of the switch registry against the help text and
+settings writer, one of round-trip fixture coverage, one of line endings,
+and one of the MSVC project against the makefile's source list:
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
@@ -216,6 +217,31 @@ python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # to a registry row; found -YYI dead
                                      # behind a misspelled ifdef on its
                                      # first run
+python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
+                                     # sources Makefile.win compiles. It
+                                     # was one short for years, so MSVC
+                                     # gave a link error nothing explained
+```
+
+CI runs all nine, plus a set of assertions that are scripts rather than
+workflow steps so they can be falsified in a second instead of by
+pushing. They are worth knowing about because several are useful by hand:
+
+```sh
+tools/ci-assert-fresh.sh astrolog.exe        # a build product is newer
+                                             # than every .cpp and .h
+tools/ci-assert-fortify.sh astrolog 10       # the shipped build still
+                                             # imports glibc's *_chk
+tools/ci-assert-toolchain.sh                 # the compilers match the
+                                             # ones warnings.txt describes
+tools/ci-assert-distinct.sh out/qtg 24       # no two renders identical
+tools/ci-assert-installed.sh ~/.local/bin/astrolog   # run it from "/",
+tools/ci-assert-uninstalled.sh ~/.local              # then undo it
+tools/ci-assert-version.sh v8.00-qt.1        # a tag matches astrolog.h
+tools/ci-verify-package.sh out/package/astrolog-windows
+tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
+tools/ci-verify-repo.sh public                         # clean container
+tools/ci-differential.sh origin/qt out/diff  # four matrices vs a commit
 ```
 
 And a ninth that is not fast and not resource-shaped: **the compiler
