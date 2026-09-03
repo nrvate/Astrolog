@@ -12,6 +12,12 @@
 .idea/
 /astrolog-qt-test
 /astrolog-qt-asan
+# The UBSan artifacts had no entries at all, which is how a 12.7 MB
+# astrolog-ubsan reached a commit: tools/ubsan-sweep.sh builds it, "make
+# clean-console" does not remove it, and one "git add -A" swept it in.
+/astrolog-ubsan
+/astrolog-qt-ubsan
+/obj-qt-ubsan/
 /obj-qt-test/
 /obj-qt-asan/
 obj-win/
