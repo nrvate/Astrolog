@@ -3716,12 +3716,17 @@ static void TestForcedPositionsQt()
   file = FileOpen(szPath, 3, NULL, 0);
   if (file != NULL) {
     while (fgets(szLine, cchSzMax, file) != NULL) {
-      if (FEqSz(szLine, "-WM 1 \"AstrologQtSuiteMacro\"\n"))
-        fFoundMacro = fTrue;
       for (i = 0; szLine[i]; i++)          // Keep the line, minus its \n.
         ;
       while (i > 0 && szLine[i-1] < ' ')
         szLine[--i] = chNull;
+      // All three comparisons happen AFTER that strip. The macro one used
+      // to run before it and carry a literal "\n" in the pattern, which
+      // matches on a platform whose line terminator is one byte and never
+      // matches on Windows, where fgets hands back "...\"\r\n". It cost
+      // one of the 15 failures in the first Windows run of this suite.
+      if (FEqSz(szLine, "-WM 1 \"AstrologQtSuiteMacro\""))
+        fFoundMacro = fTrue;
       if (FEqSz(szLine, "-Fm 19 1 2"))
         CopyRgb((pbyte)szLine, (pbyte)szMid, i+1);
       else if (FEqSz(szLine, "-F 34 Ari 15.25"))
