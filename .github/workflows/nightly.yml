@@ -75,25 +75,35 @@ jobs:
           # Costs nothing where IPv6 works.
           echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
-          # qt6-base-dev as well. Without it warning_audit.py printed
-          # "qt6: skipped, no Qt6 at /usr/local/qt6/lib/pkgconfig" on every
-          # nightly and moved on -- so tools/warnings-qt6.txt, the ledger
-          # of what Qt6 warns about and Qt5 does not, was never checked by
-          # anything. It is empty, and an empty baseline nothing verifies
-          # is indistinguishable from a clean one.
-          sudo apt-get install -y qtbase5-dev qt6-base-dev pkg-config libx11-dev \
+          # NO qt6-base-dev, and the reason is worth the space because
+          # installing it looks like the obvious fix and does nothing.
+          #
+          # warning_audit.py's Qt6 leg skips here -- "qt6: skipped, no Qt6"
+          # -- so tools/warnings-qt6.txt is checked by nothing. Installing
+          # qt6-base-dev was tried on 2026-09-03 and changed the message
+          # and not the outcome: measured in the ubuntu:22.04 image
+          # itself, that package ships ZERO pkg-config files, so
+          # "pkg-config --exists Qt6Widgets" cannot succeed on this runner
+          # whatever PKG_CONFIG_PATH says.
+          #
+          # And the runner cannot simply move. This job is pinned to
+          # ubuntu-22.04 for its COMPILER: tools/warnings.txt is a ledger
+          # of what g++ 11 says, and ci-assert-toolchain.sh fails if the
+          # major version differs, because g++ 13 objects to things g++ 11
+          # does not. ubuntu-latest has Qt6 with .pc files and g++ 13, so
+          # the two requirements are mutually exclusive on one runner.
+          #
+          # Closing this properly means a separate job on a newer image
+          # with its own baseline for that compiler. Left open rather than
+          # papered over -- see QT_CI_PLAN.md.
+          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
             g++-mingw-w64-x86-64
 
       - name: The baseline describes these compilers
         run: tools/ci-assert-toolchain.sh
 
       - name: All four builds, every warning diffed
-        # QT6_PKGCONFIG emptied for the reason ci.yml's qt6 job empties it:
-        # the default points at the maintainer's hand-built Qt6 under
-        # /usr/local/qt6, off pkg-config's path. A distribution's own Qt6
-        # needs no help being found, and leaving the default in place is
-        # precisely what made the Qt6 leg skip.
-        run: QT6_PKGCONFIG= tools/warning_audit.py
+        run: tools/warning_audit.py
 
   # 6.2. Both surfaces, ~750 invocations.
   #

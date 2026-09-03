@@ -3086,3 +3086,30 @@ Three things worth keeping:
 
 Both blobs stay in history. Removing them means rewriting published
 history, which is the maintainer's call rather than a CI tick's.
+
+**2026-09-03 — the Qt6 warning ledger cannot be checked on the runner that
+checks the others, and installing Qt6 does not fix it.** `warning_audit.py`
+has always printed `qt6: skipped, no Qt6` in the nightly, so
+`tools/warnings-qt6.txt` — the ledger of what Qt6 warns about and Qt5 does
+not — is verified by nothing. It is empty, and an empty baseline nothing
+checks is indistinguishable from a clean one.
+
+Adding `qt6-base-dev` to that job looked like the fix. It is not, and the
+measurement says why: **the `ubuntu:22.04` image's `qt6-base-dev` ships
+zero pkg-config files**, checked in the image itself, so
+`pkg-config --exists Qt6Widgets` cannot succeed there whatever
+`PKG_CONFIG_PATH` holds. The message changed from naming a path to naming
+an empty one; the skip did not move.
+
+Nor can the job move to a newer image. It is pinned to `ubuntu-22.04` for
+its **compiler**: `tools/warnings.txt` is a ledger of what g++ 11 says,
+and `ci-assert-toolchain.sh` fails when the major version differs, because
+g++ 13 objects to things g++ 11 does not. `ubuntu-latest` has Qt6 with
+`.pc` files *and* g++ 13. The two requirements cannot be met on one runner.
+
+**Open.** Closing it means a second warnings job on a newer image with its
+own baseline for that compiler — which is a real piece of work, since the
+first run of a new baseline is a wall of warnings that has to be read
+rather than accepted. Recorded rather than papered over, because a
+`qt6-base-dev` in that install line would have looked like the problem was
+solved.
