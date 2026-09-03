@@ -271,7 +271,7 @@ jobs:
       # the staged payload, an uninstall) runs on a lane that has it.
       #
       # ci.yml deliberately does not: nsis plus wine is about two minutes
-      # on a lane whose whole point is thirteen jobs in four.
+      # on a lane whose whole point is fourteen jobs in four.
       - name: Build and verify the NSIS installer
         run: |
           sudo apt-get install -y nsis

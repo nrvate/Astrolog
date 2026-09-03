@@ -231,11 +231,13 @@ tools/win-tests.sh
 It takes minutes rather than seconds, so it is run when a change ships in
 both builds rather than before every commit.
 
-There are also eight standing audits — four checking this port against
+There are also ten standing audits — four checking this port against
 Windows' resource script, one checking the compiled defaults against the
 shipped settings file, one checking the switch registry against the help
-text, one checking that every ranged switch has a round-trip fixture, and
-one checking line endings:
+text, one checking that every ranged switch has a round-trip fixture, one
+checking line endings, one checking the MSVC project against the
+makefile's source list, and one checking the Qt build's own source groups
+and headers:
 
 ```
 python3 tools/rc_audit.py          # dialog controls nothing wires up
@@ -246,6 +248,9 @@ python3 tools/defaults_audit.py    # data.cpp initializers vs astrolog.as
 python3 tools/registry_audit.py    # documented switches that resolve nowhere
 python3 tools/fixture_coverage_audit.py  # ranged switches with no fixture
 python3 tools/line_endings_audit.py      # a carriage return in the source
+python3 tools/vcxproj_audit.py     # the MSVC project vs Makefile.win
+python3 tools/qt_srcs_audit.py     # the Qt build's source groups, and no
+                                   # unguarded POSIX header in them
 ```
 
 And the compiler itself: `tools/warning_audit.py` holds all five builds

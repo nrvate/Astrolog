@@ -5,7 +5,7 @@ about it. The goal is a codebase someone could read without cringing:
 maintainable, flexible, modular — while every increment keeps the program
 byte-for-byte behaving as it does today, under the nets this project
 already trusts (the assertion suite, ASan, the settings round trip,
-the eight standing audits, and the Windows build as oracle). Note the word
+the ten standing audits, and the Windows build as oracle). Note the word
 "behaving": all of those but one are differential, and the exception is
 new — see T9.
 
@@ -315,7 +315,7 @@ compile error. Definitions live in astrolog.h directly after the
    check each moves the capture. E3's first attempt had a malformed
    `-qb` and every run printed the same parse error, identically on
    both binaries.
-8. All eight audits, plus the rule-5 falsification.
+8. All ten audits, plus the rule-5 falsification.
 9. Docs and commit (rule 7).
 
 **The ledger:**
@@ -845,7 +845,7 @@ verdicts.
 *Evidence:* `tools/switch-matrix.sh` byte-diffs the tree against an
 older build of **itself**. `tools/win-tests.sh` and
 `tools/text-chart-diff.py` compare two builds that share this core.
-`tools/asan-sweep.sh` proves no bad memory access. The eight audits check
+`tools/asan-sweep.sh` proves no bad memory access. The ten audits check
 the port against `astrolog.rc` and the defaults against `astrolog.as` —
 two artifacts of this same repo. Every one of them answers "did this
 change anything?" and none answers "is this right?". Worse, a

@@ -76,10 +76,24 @@ sudo apt install qtbase5-dev pkg-config              # build the Qt port
 sudo apt install g++-mingw-w64-x86-64 wine           # build and run the Windows one
 sudo apt install xvfb metacity xdotool imagemagick   # drive either headlessly
 sudo apt install python3-pil                         # compare captures
+sudo apt install nsis                                # build the Windows
+                                                     # installer; makensis
+                                                     # runs natively on
+                                                     # Linux, and only
+                                                     # *verifying* the
+                                                     # result needs wine
 ```
 
 Only the first line is needed to build the port and run its whole test
 suite. The rest is for comparing against Windows.
+
+**macOS is built only in CI**, on GitHub's `macos-14` runners, because
+nobody working on this has a Mac. `tools/package-macos.sh` makes the
+`.app` bundle and the `.dmg`; it needs `macdeployqt` from a Homebrew Qt
+and nothing else. Notarization would need a paid Apple Developer account
+and is **not** done -- the bundle is ad-hoc signed (`codesign -s -`),
+which is mandatory on Apple Silicon and is enough to run, but a user's
+first launch still goes through Gatekeeper's right-click-Open.
 
 ### On a fresh clone, before anything else
 
@@ -193,7 +207,8 @@ Ten standing audits, all currently clean and all run by CI — four of the
 port against `astrolog.rc`, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of round-trip fixture coverage, one of line endings,
-and one of the MSVC project against the makefile's source list:
+one of the MSVC project against the makefile's source list, and one of
+the Qt build's own source groups and headers:
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
@@ -249,7 +264,7 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # gave a link error nothing explained
 ```
 
-CI runs all nine, plus a set of assertions that are scripts rather than
+CI runs all ten, plus a set of assertions that are scripts rather than
 workflow steps so they can be falsified in a second instead of by
 pushing. They are worth knowing about because several are useful by hand:
 
@@ -268,10 +283,19 @@ tools/ci-verify-package.sh out/package/astrolog-windows
 tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
 tools/ci-verify-repo.sh public                         # clean container
 tools/ci-differential.sh origin/qt out/diff  # four matrices vs a commit
+tools/ci-verify-release-dist.sh dist 9       # the release ships exactly
+                                             # nine artifacts and
+                                             # SHA256SUMS covers them all
+tools/ci-verify-windows-installer.sh out/astrolog-setup.exe  # install and
+                                             # uninstall it under Wine
+tools/ci-assert-clang-clean.sh               # the macOS compiler, whose
+                                             # warnings are not gcc's
+tools/ci-assert-green.sh                     # wait for CI on this commit
+                                             # before tagging a release
 ```
 
-And a ninth that is not fast and not resource-shaped: **the compiler
-itself**, which nothing here read until 2026-09-01.
+And an eleventh that is not fast and not resource-shaped: **the
+compiler itself**, which nothing here read until 2026-09-01.
 
 ```sh
 tools/warning_audit.py               # all five builds clean with -Wall,
@@ -422,7 +446,31 @@ itself:
 tools/asan-sweep.sh                    # both, ~750 invocations
 tools/asan-sweep.sh switches           # the 529-invocation switch matrix
 tools/asan-sweep.sh graphics           # ~230 renders
+tools/ubsan-sweep.sh                   # the same two surfaces under
+                                       # -fsanitize=undefined, which
+                                       # catches arithmetic UB ASan
+                                       # cannot see. Currently clean
+                                       # over 142 chart invocations and
+                                       # 224 renders
 ```
+
+**The one net here that can say a number is *right*** rather than
+unchanged, from outside this repository entirely:
+
+```sh
+tools/swetest-oracle.sh ./astrolog /path/to/swetest "$PWD/ephem"
+```
+
+It builds nothing. Point it at a `swetest` compiled from **upstream**
+Swiss Ephemeris -- `aloistr/swisseph`, `SE_VERSION "2.10.03"`, exactly
+the version this tree vendors -- and it asks both programs the same 50
+questions. Upstream at the same version means a disagreement is about
+*Astrolog's integration*, not about two Swisses differing. It refuses to
+run unless `sepl_18.se1`, `semo_18.se1` and `seas_18.se1` are actually
+present, because upstream silently answers from Moshier when they are
+not, and the difference hides in the last decimals (Sun on 15.6.1990:
+84 deg 7'46.3995 from Swiss, 84 deg 7'46.4407 from Moshier). The nightly
+clones and builds it in about 25 seconds.
 
 **And a third surface the sweep does not reach**, added 2026-09-03 and
 run by the nightly beside those two: the Qt suite itself.
@@ -484,22 +532,32 @@ On a private Xvfb display, `import -window root` is fine.
 
 ## CI, and what it will not let you do
 
-Three workflows, all on `qt`, the default branch. `ci.yml` runs on every
-push and pull request, thirteen jobs in about four minutes: the two
+Four workflows, all on `qt`, the default branch. `ci.yml` runs on every
+push and pull request, fourteen jobs in about four minutes: the two
 Windows builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, `make install`, a behavioural differential against the
 base commit, the Windows package, two `.deb`s and four `.rpm`s.
-`nightly.yml` is the slow lane -- the warning audit, the sanitizer sweep,
-the Windows parity harnesses, all four matrices against yesterday, and
-two `continue-on-error` experiments: macOS, and **Qt on Windows**, which
-compiles this port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
-`-DWIN`) and uploads the result so it can be run on a real desktop.
-`release.yml` publishes on a `v*` tag.
+`nightly.yml` is the slow lane -- six jobs: the warning audit, the
+sanitizer sweeps (ASan and UBSan), the Windows parity harnesses, all four
+matrices against yesterday, the external Swiss oracle, and two
+`continue-on-error` experiments: **macOS**, which builds the port, runs
+the suite and packages a `.dmg`, and **Qt on Windows**, which compiles
+this port with MSVC and the open-source Qt6 (`-DQT -DPC`, no `-DWIN`) and
+uploads the result so it can be run on a real desktop. Both have been
+green for some time now; the flag stays because neither has a maintainer
+who would notice a break.
+
+`release.yml` publishes on a `v*` tag: nine artifacts -- four `.rpm`s,
+two `.deb`s, a `.dmg`, the Windows `.zip` and the NSIS
+`astrolog-setup.exe` -- each verified before publication, with a
+SHA256SUMS that is checked to cover every one of them. `repo.yml` chains
+off it on `workflow_run` and rebuilds the apt/yum repository from the
+published packages.
 
 The Windows experiment is worth knowing about for one reason: it is the
 only net here that is a **different platform** rather than a stricter
 tool on the same one, and that turned out to be a distinct kind of net.
-Four sanitizer sweeps, nine audits and a warning ledger across five
+Four sanitizer sweeps, ten audits and a warning ledger across five
 builds never mentioned `qttest.cpp`'s `#include <unistd.h>`, because on
 Linux it is correct. Compiling the file under MSVC found it in one run,
 along with 15 `getpid()` and 11 hardcoded `"/tmp"` fallbacks behind it.

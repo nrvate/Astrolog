@@ -167,7 +167,7 @@ jobs:
       # line_endings_audit.py shells out to "git ls-files", so it needs a
       # real working tree -- fine under actions/checkout, and it exits 1
       # against a "git archive" extraction.
-      - name: The eight standing audits
+      - name: The ten standing audits
         run: |
           python3 tools/rc_audit.py
           python3 tools/rc_mnemonic_audit.py
@@ -474,7 +474,7 @@ jobs:
       # reason: nsis is an 850 KB package and makensis takes seconds,
       # while VERIFYING an installer means wine, a prefix, a silent
       # install and an uninstall -- minutes, on a lane whose point is
-      # thirteen jobs in four.
+      # fourteen jobs in four.
       #
       # So the build is here, where it makes the artifact people actually
       # download from a CI run, and the verification stays on the nightly

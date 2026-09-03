@@ -32,7 +32,7 @@ repo=${3:-${GITHUB_REPOSITORY:?set GITHUB_REPOSITORY or pass the repo}}
 # is a foot-gun rather than a check. It failed exactly that way the first
 # time it ran, on v8.00-qt.6.
 #
-# The bound is generous because ci.yml is thirteen jobs in about four
+# The bound is generous because ci.yml is fourteen jobs in about four
 # minutes, and a release is not a thing anyone does in a hurry.
 wait=${CI_GREEN_WAIT:-900}
 waited=0
