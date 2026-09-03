@@ -341,6 +341,33 @@ tools/ci-verify-release-dist.sh dist 9       # the release ships exactly
                                              # SHA256SUMS covers them all
 tools/ci-verify-windows-installer.sh out/astrolog-setup.exe  # install and
                                              # uninstall it under Wine
+tools/ci-verify-windows-starts.sh out/package/astrolog-windows
+                                             # and that the packaged .exe
+                                             # STARTS: run under Xvfb,
+                                             # require a window titled
+                                             # "Astrolog". The strong form
+                                             # -- that it computes -- is
+                                             # impossible, since
+                                             # astrolog.exe has no console
+                                             # entry point and cannot be
+                                             # driven to write a chart and
+                                             # exit. QT_CI_PLAN.md 4.4
+tools/win-console-checks.sh                  # Windows path handling the
+                                             # Linux nets cannot see: a
+                                             # -Yi that does not exist is
+                                             # still searched, a
+                                             # drive-lettered one stays
+                                             # absolute, a bare one is
+                                             # made exe-relative
+python3 tools/qt_windows_dist_audit.py dist  # the Qt-on-Windows artifact
+                                             # is complete before it is
+                                             # uploaded: both binaries,
+                                             # the Qt runtime, all three
+                                             # platform plugins, the
+                                             # icons, the whole ephemeris.
+                                             # Two of those are there
+                                             # because their absence cost
+                                             # a run
 tools/ci-assert-clang-clean.sh               # the macOS compiler, whose
                                              # warnings are not gcc's
 tools/ci-assert-green.sh                     # wait for CI on this commit
