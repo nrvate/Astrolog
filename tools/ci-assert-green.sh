@@ -26,21 +26,41 @@ sha=${1:?usage: ci-assert-green.sh <sha> [workflow-file] [repo]}
 wf=${2:-ci.yml}
 repo=${3:-${GITHUB_REPOSITORY:?set GITHUB_REPOSITORY or pass the repo}}
 
-runs=$(gh run list --repo "$repo" --workflow "$wf" --commit "$sha" \
-  --limit 20 --json status,conclusion,databaseId 2>/dev/null || echo '[]')
-
-n=$(printf '%s' "$runs" | grep -c '"databaseId"' || true)
-if [ "${n:-0}" -eq 0 ]; then
-  echo "no $wf run found for $sha"
-  echo "A release should be cut from a commit CI has actually seen."
-  exit 1
-fi
-
-concl=$(printf '%s' "$runs" \
-  | sed 's/},{/}\n{/g' | grep -o '"conclusion":"[^"]*"' \
-  | head -1 | cut -d'"' -f4)
-case $concl in
-  success) echo "CI green: $wf concluded success for $sha"; exit 0 ;;
-  "")      echo "$wf is still running for $sha -- wait for it, or re-tag"; exit 1 ;;
-  *)       echo "$wf concluded '$concl' for $sha; refusing to release"; exit 1 ;;
-esac
+# WAIT for it, do not merely test it. Pushing a commit and its tag
+# together starts ci.yml and release.yml at the same instant, so a gate
+# that failed on "still running" would fail almost every release -- which
+# is a foot-gun rather than a check. It failed exactly that way the first
+# time it ran, on v8.00-qt.6.
+#
+# The bound is generous because ci.yml is thirteen jobs in about four
+# minutes, and a release is not a thing anyone does in a hurry.
+wait=${CI_GREEN_WAIT:-900}
+waited=0
+while :; do
+  runs=$(gh run list --repo "$repo" --workflow "$wf" --commit "$sha" \
+    --limit 20 --json status,conclusion,databaseId 2>/dev/null || echo '[]')
+  n=$(printf '%s' "$runs" | grep -c '"databaseId"' || true)
+  if [ "${n:-0}" -eq 0 ]; then
+    echo "no $wf run found for $sha"
+    echo "A release should be cut from a commit CI has actually seen."
+    exit 1
+  fi
+  concl=$(printf '%s' "$runs" \
+    | sed 's/},{/}\n{/g' | grep -o '"conclusion":"[^"]*"' \
+    | head -1 | cut -d'"' -f4)
+  case $concl in
+    success)
+      echo "CI green: $wf concluded success for $sha"
+      [ "$waited" -gt 0 ] && echo "  (after waiting ${waited}s for it)"
+      exit 0 ;;
+    "")
+      [ "$waited" -ge "$wait" ] && {
+        echo "$wf still running for $sha after ${wait}s; giving up"; exit 1; }
+      [ "$waited" -eq 0 ] && echo "$wf is still running for $sha; waiting"
+      sleep 15
+      waited=$((waited + 15)) ;;
+    *)
+      echo "$wf concluded '$concl' for $sha; refusing to release"
+      exit 1 ;;
+  esac
+done
