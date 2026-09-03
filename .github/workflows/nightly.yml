@@ -409,6 +409,21 @@ jobs:
             echo "== suite passes 3792 assertions."
             exit "$rc"; }
 
+      # The log leaves the runner whether the suite passed or not. "tail
+      # -80" is enough to see where a failure stopped, and not enough for
+      # anything else: this job passed 3786 where Linux passes 3792 on the
+      # same ephemeris, and the six cannot be accounted for without the
+      # per-group assertion counts, of which 32 of 48 groups' worth had
+      # already scrolled off. Three separate fixes to this step have now
+      # been about it discarding its own evidence.
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-suite-log
+          path: suite.log
+          retention-days: 14
+
   # THE EXPERIMENT: does this port build as a Qt application on Windows,
   # with Microsoft's compiler and the open-source Qt?
   #
