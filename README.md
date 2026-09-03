@@ -43,7 +43,7 @@ list comes from the binary rather than from someone's memory:
 | `.rpm` | Fedora 42, Fedora 43, EL9 (Rocky/Alma), EL10 |
 | `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs |
 | `.zip` | Windows, statically linked — unpack and run, no install needed |
-| `.dmg` | macOS 11+, Apple Silicon — see the note below |
+| `.dmg` | macOS, Apple Silicon only — read the note below before downloading |
 
 Every package carries the ephemeris for all **39 esoteric bodies** the
 Object Selections dialog offers — the centaurs, the trans-Neptunians and
@@ -56,6 +56,28 @@ not an error, not a warning, just a plausible-looking position at the
 first degree of Aries. A wrong answer that looks like an answer is worse
 than a missing feature, so the files ship.
 
+
+**The macOS build is the least proven thing here, and you should know
+that before downloading it.** Nobody working on this fork owns a Mac. It
+is built, and its 3832 assertions are run, entirely on GitHub's
+`macos-latest` runner — currently **macOS 26 on Apple Silicon**. No human
+has ever launched it. Since 2026-09-03 the nightly also uploads a
+screenshot of all 25 dialogs and every chart type, so at least somebody
+can *look* at it, but that is a picture from CI and not a person using
+the program.
+
+Two consequences follow, and neither is hypothetical:
+
+- **Intel Macs are not built at all.** The runner is arm64, nothing sets
+  up a universal binary, so the `.dmg` is Apple Silicon only.
+- **The bundle claims `LSMinimumSystemVersion 11.0` and nothing sets a
+  deployment target**, so the binary is compiled against whatever SDK the
+  runner has — macOS 26 today, with Homebrew Qt bottled for it. That claim
+  of 11.0 is very probably wrong and is certainly untested. If it refuses
+  to launch on an older macOS, that is why.
+
+Linux and Windows are the builds that get used. Treat the `.dmg` as
+best-effort.
 
 **macOS needs one extra step, once.** The app is ad-hoc signed but not
 *notarized*, because notarizing requires an Apple Developer subscription
