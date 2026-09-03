@@ -2629,7 +2629,7 @@ names it.
 | ~~Q10~~ | ~~Does this fork distribute signed macOS binaries at all?~~ **Answered 2026-09-01: no. Superseded 2026-09-03: yes, ad-hoc signed.** Every release now ships `astrolog-<version>-macos.dmg`, built by `tools/package-macos.sh` on a `macos-14` runner and signed `codesign -s -`, which is mandatory on Apple Silicon and enough to run. It is **not notarized** — that needs a paid Apple Developer account — so a browser download is quarantined and the release notes say so on the page. First shipped in v8.00-qt.3. | closed, then reopened and answered differently |
 | ~~Q11~~ | ~~Repair `Astrolog.vcxproj` or delete it?~~ **Answered 2026-09-02: repair it and build it in CI.** "Exactly one line behind" was wrong — it needed three fixes, two of which only a compiler could have found. | closed |
 | ~~Q12~~ | ~~3526 or 2777?~~ **Answered: neither. Measured 3551 on 2026-09-01.** `2777` was written 2026-08-27 (`0a33328`), `3526` on 2026-08-31 (`2645464`); the suite has grown since. The lesson is not to pick a winner but to stop duplicating a number that rots by construction — the suite prints its own count, and three documents asserting it produced three wrong answers. | closed |
-| ~~Q13~~ | ~~Minimal ephemeris only (A), check in the missing 8.0 MB (B), or fetch and cache in CI (C)?~~ **A′ done 2026-09-02**: `ephem/se52872.se1`, 93,806 bytes, so the bundled set passes with no gating and item 2.3 loses its special case. **B taken 2026-09-03**: the 20 files measured at 7.8 MB, and `ephem/` now resolves 39 of 39. The suite reports 3832/0 under `ASTROLOG_QT_EPHEM=minimal` and under `/swe` alike, where minimal used to run 21 assertions in that group against a local run's 41. Verified byte-identical to the source after copying, because this tree has corrupted `.se1` files before. Neither the chart nor the graphics matrix moved by a single line, which is its own finding: **the differential harnesses never exercised the esoteric bodies at all**, and `objsel-table` is the only net that does. | closed |
+| ~~Q13~~ | ~~Minimal ephemeris only (A), check in the missing 8.0 MB (B), or fetch and cache in CI (C)?~~ **A′ done 2026-09-02**: `ephem/se52872.se1`, 93,806 bytes, so the bundled set passes with no gating and item 2.3 loses its special case. **B taken 2026-09-03**: the 20 files measured at 7.8 MB, and `ephem/` now resolves 39 of 39. The suite reports 3832/0 under `ASTROLOG_QT_EPHEM=minimal` and under `/swe` alike, where minimal used to run 21 assertions in that group against a local run's 41. Verified byte-identical to the source after copying, because this tree has corrupted `.se1` files before. **Corrected same day**: that measurement was wrong. `graphics-matrix.sh` defaults to `GRAPHICS_MATRIX_CFG="-i nrvate.as"`, which reads `/swe` — so the run that reported "no lines differ" could not see a change to `ephem/` at all. Under the config CI actually uses, `-Yi1 ephem`, adding the files moves **8 lines**. CI passed regardless, for a structural reason worth knowing: `ci-differential.sh` runs both binaries against the *current tree's data*, so a **data** change is invisible to it by construction. It compares binaries, not ephemerides. | closed |
 
 ## Work log
 
@@ -2882,3 +2882,30 @@ That is three spellings of one version across the release — `8.00+qt.3`
 for dpkg, `8.00-qt.3` in an rpm filename, and a split pair in rpm
 metadata — and none of them is negotiable. The repository had been
 correct the entire time.
+
+**2026-09-03 — `-XE 1 20` had been an inert line in the graphics matrix
+for its whole life.** Chasing whether the new ephemeris files changed any
+render turned up something else: `-XE 1 20` renders **byte-identically to
+no `-XE` at all**, in every one of the twenty chart modes tested.
+
+The reason is not that `-XE` is broken. The asteroid loop stops at the
+first body it cannot compute, and asteroid 9 has no ephemeris file — so
+the range drew nothing, not even asteroids 1 through 8, which resolve
+perfectly. Measured under `-XG`: `-XE 1 8` gives `a09566b8`, `-XE 1 9` and
+`-XE 1 20` both give `783eb0a5`, and `783eb0a5` is bare `-XG`.
+
+Replaced with `-XE 1 8`, the largest low range that fully resolves, and
+`-XE 433 433` — Eros, a single body from the newly bundled set, written as
+a single body rather than a range because a range that silently truncates
+is precisely what went wrong. 224 renders became 227, and removing five
+ephemeris files now moves **16** lines of the matrix where it moved 8.
+
+Two lessons, and the second is the more useful:
+
+1. A harness entry can be inert for years while looking like coverage.
+   This one survived every review because `-XE 1 20` is a *plausible*
+   range, and nothing checked that it drew anything.
+2. **The measurement that found it was itself wrong first.** The "no
+   lines differ" result above came from a matrix run reading `/swe`
+   rather than `ephem/`, because that is the script's default. Two wrong
+   measurements in a row, on the same question, in the same hour.

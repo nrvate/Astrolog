@@ -98,11 +98,28 @@ for base in "" -XG -XW; do
            "-XU 2" "-XU 3" -XUx -XC -XJ -X8 -Xi -Xt -Xu -Xx -Xx0 -Xl \
            -Xe -Xj -XQ -XQ0 -Xr -Xm -X3 -XN -XF "-Xs 100" "-Xs 400" \
            "-XS 100" "-XS 400" "-Xw 400 300" "-Xw 2000 1500" "-X1 5" \
-           "-X2 9" "-XI0 0 0" "-XI0 100 1" "-Xk 5" "-Xkv 9" "-XE 1 20" \
-           "-XE0 1 5" "-XE3 1 5"; do
+           "-X2 9" "-XI0 0 0" "-XI0 100 1" "-Xk 5" "-Xkv 9" "-XE 1 8" \
+           "-XE 433 433" "-XE0 1 5" "-XE3 1 5"; do
     g $base $o
   done
 done
+# The -XE ranges are chosen, not arbitrary, and the one they replaced was
+# testing nothing.
+#
+# "-XE 1 20" rendered BYTE-IDENTICALLY to no -XE at all, in every chart
+# mode, because the asteroid loop stops at the first body it cannot
+# compute and asteroid 9 has no ephemeris file. So the range drew nothing
+# -- not even asteroids 1 to 8, which do resolve -- and the entry had been
+# an inert line in this matrix for its whole life. Measured: -XE 1 8 gives
+# a09566b8 under -XG, -XE 1 9 and -XE 1 20 both give 783eb0a5, which is
+# bare -XG.
+#
+# 1..8 is the largest low range that fully resolves from the bundled
+# ephem/, and 5..8 of it are the esoteric files added 2026-09-03, so this
+# line also covers those arriving. 433 is Eros, one of the same batch, and
+# is here as a single body rather than a range: a range that silently
+# truncates is exactly what went wrong above.
+
 # -XM1/-XM3/-XM6 are prefix forms wanting extra arguments; they belong to
 # the switch matrix, not here, since they error before rendering.
 for w in -Xb -Xbw -Xbb -Xbp -Xbn -Xbc -Xbv -Xba -XM \
