@@ -3056,3 +3056,33 @@ That was measured on deliberately broken code: a use-after-free and a null
 dereference that `-fsyntax-only` reported not at all and `-c` reported
 both. And it **does** work on C++ in GCC 11, contrary to the
 "C only" reputation the documentation of earlier versions earned it.
+
+**2026-09-03 — two build artifacts reached commits, and only one was
+noticed.** `git add -A` swept `astrolog-qt-ubsan` (26.6 MB) into
+`5aa4572` and `astrolog-ubsan` (12.7 MB) into `273a0ac`. 39.3 MB into a
+repository whose `.git` was 56 MB.
+
+The first self-corrected: `tools/ubsan-sweep.sh` deletes its own Qt binary
+at the end, so the next `git add -A` recorded the deletion. It was tracked
+for exactly one commit and nothing ever said so. The second stayed, and
+CI failed on it — `line_endings_audit.py`, the only check that could see
+it, because a binary is full of carriage returns.
+
+Three things worth keeping:
+
+1. **The catch was incidental.** Nothing here checks for tracked build
+   artifacts; a line-ending audit noticed because ELF happens to contain
+   `\r`. Its message led with "carriage returns in 1 of 156 tracked TEXT
+   files" and advised stripping them, which on an ELF destroys it. Fixed:
+   it recognises ELF/PE/Mach-O magic and now leads with what the file is.
+2. **`.gitignore` covered `astrolog-qt-asan` and `obj-qt-asan/` and had no
+   entry for any UBSan artifact.** The sanitizer added on the same day
+   inherited none of the older one's hygiene.
+3. **The count in the first fix's commit message was wrong.** It said
+   "this was the only one", from a sweep of the current index — true, and
+   incomplete, because the other had already been removed by a script
+   rather than by anyone noticing. A question asked of the index cannot
+   see what history holds.
+
+Both blobs stay in history. Removing them means rewriting published
+history, which is the maintainer's call rather than a CI tick's.
