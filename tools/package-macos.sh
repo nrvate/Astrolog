@@ -122,6 +122,52 @@ printf '   MacOS:     '; ls "$app/Contents/MacOS" | tr '\n' ' '; echo
 printf '   ephem:     '; ls "$app/Contents/MacOS/ephem" 2>/dev/null | wc -l | tr -d ' '
 printf ' files\n   Resources: '; ls "$app/Contents/Resources" | tr '\n' ' '; echo
 
+# Does it depend on anything that will not be on the target machine? This
+# runs on a builder where Homebrew Qt exists, so a binary still linking
+# /opt/homebrew loads perfectly here and fails on every Mac that has not
+# installed Qt -- which is every Mac this .dmg is for. macdeployqt is
+# supposed to rewrite those to @executable_path/../Frameworks, and it
+# printed a page of "Cannot resolve rpath" errors doing it, so this is
+# not a hypothetical.
+#
+# The Linux packages have had exactly this check since they existed:
+# ci-verify-linux-package.sh runs ldd and greps for "not found". otool -L
+# is the same question in the same spirit.
+# Is it a valid BUNDLE, not merely a directory with a binary in it?
+# Every other check here runs Contents/MacOS/Astrolog directly, which
+# bypasses the bundle machinery completely -- a malformed Info.plist, or
+# a CFBundleExecutable naming a file that is not there, passes all of
+# them and fails the instant someone double-clicks. plutil and a couple
+# of existence tests cost nothing and cover the one path a user takes
+# that none of the rest of this script does.
+echo "== is it a well-formed bundle?"
+plutil -lint "$app/Contents/Info.plist" >/dev/null \
+  || { echo "   Info.plist is not valid property list"; exit 1; }
+exe=$(plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
+[ -x "$app/Contents/MacOS/$exe" ] \
+  || { echo "   CFBundleExecutable is '$exe' and there is no such executable"; exit 1; }
+icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
+[ -f "$app/Contents/Resources/$icon.icns" ] \
+  || { echo "   CFBundleIconFile is '$icon' and Resources/$icon.icns is missing"; exit 1; }
+plv=$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")
+[ "$plv" = "$ver" ] \
+  || { echo "   Info.plist says version $plv, the build says $ver"; exit 1; }
+echo "   Info.plist valid; executable '$exe', icon '$icon.icns', version $plv"
+
+echo "== does it depend on anything outside the bundle?"
+bad=$(otool -L "$app/Contents/MacOS/Astrolog" \
+  | awk 'NR>1{print $1}' \
+  | grep -E '^(/opt/homebrew|/usr/local|/opt/local)' || true)
+if [ -n "$bad" ]; then
+  echo "   FAILED: links libraries that will not exist on a user's Mac:"
+  printf '%s\n' "$bad" | sed 's/^/     /'
+  echo "   macdeployqt should have rewritten these to @executable_path."
+  exit 1
+fi
+otool -L "$app/Contents/MacOS/Astrolog" | awk 'NR>1{print $1}' \
+  | grep -c "@executable_path\|@rpath" | sed 's/^/   /' | tr -d '\n'
+echo " bundled-relative references, none pointing at Homebrew"
+
 echo "== does the bundled binary compute?"
 # stderr is kept and PRINTED ON EVERY FAILURE PATH, not only the missing
 # -line one. The first version showed it only when Chiron was absent, so
