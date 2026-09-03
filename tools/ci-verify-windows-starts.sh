@@ -53,13 +53,19 @@ done
 PULSE_SERVER=/nonexistent DISPLAY=$DISP metacity --sm-disable >/dev/null 2>&1 &
 wm=$!
 
-( cd "$dir" && DISPLAY=$DISP WINEDEBUG=-all wine ./astrolog.exe >/dev/null 2>&1 ) &
+# Keep the program's own output. The first version sent it to /dev/null
+# and then, on failure, printed four lines of speculation about what might
+# have gone wrong -- while Wine's account of it had already been thrown
+# away. That is the same mistake tools/package-macos.sh documents making
+# and fixing: a check that discards the evidence it exists to collect.
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+( cd "$dir" && DISPLAY=$DISP WINEDEBUG=-all wine ./astrolog.exe >"$log" 2>&1 ) &
 ap=$!
 # Search for ASTROLOG'S window, not for any window. With a window manager
 # running there is always at least one -- metacity has its own -- and the
 # first version took the last id xdotool returned, which was metacity's.
-# "Any window at all" is tracked separately so a failure can say whether
-# nothing came up or something did and it was not ours.
+#
 # A DEADLINE, not an iteration count. The first version polled 4000 times
 # and that was a proxy for time that varies by machine: locally each pass
 # costs enough that 4000 is minutes, on a CI runner two xdotool calls take
@@ -68,15 +74,36 @@ ap=$!
 # It reported the program as never opening a window when it had not been
 # given a chance to.
 deadline=$(( $(date +%s) + ${WINSTART_TIMEOUT:-180} ))
-wid=""; other=""
+wid=""; died=""; status=""
 while [ -z "$wid" ] && [ "$(date +%s)" -lt "$deadline" ]; do
   wid=$(DISPLAY=$DISP xdotool search --onlyvisible --name '^Astrolog' 2>/dev/null | tail -1)
   [ -n "$wid" ] && break
-  [ -z "$other" ] && other=$(DISPLAY=$DISP xdotool search --onlyvisible --name . 2>/dev/null | tail -1)
+  # A program that has exited is not going to open a window later, and
+  # waiting the remaining deadline out teaches nothing. But "wine has
+  # returned" is not quite "the app is gone" -- the launcher can hand off
+  # -- so this shortens the wait to a grace period rather than failing on
+  # the spot, and reports the exit status either way.
+  if [ -z "$died" ] && ! kill -0 $ap 2>/dev/null; then
+    died=yes; status=0
+    wait $ap 2>/dev/null || status=$?
+    grace=$(( $(date +%s) + 10 ))
+    [ "$grace" -lt "$deadline" ] && deadline=$grace
+  fi
   sleep 0.25
 done
 title=""
 [ -n "$wid" ] && title=$(DISPLAY=$DISP xdotool getwindowname "$wid" 2>/dev/null || true)
+
+# Collect what is on the display BEFORE tearing it down. The old version
+# recorded only whether some other window existed, which answered "is the
+# display working" and nothing else; the names say whether metacity is
+# alone up there or Wine put up a crash dialog nobody could see.
+wins=""
+[ -n "$wid" ] || wins=$(DISPLAY=$DISP xdotool search --onlyvisible --name . 2>/dev/null \
+  | while read -r w; do
+      printf '     %-10s %s\n' "$w" \
+        "$(DISPLAY=$DISP xdotool getwindowname "$w" 2>/dev/null || echo '(unnamed)')"
+    done)
 
 kill $ap 2>/dev/null || true
 DISPLAY=$DISP WINEDEBUG=-all wineserver -k 2>/dev/null || true
@@ -86,16 +113,27 @@ wait 2>/dev/null || true
 
 [ -n "$wid" ] || {
   echo "THE PACKAGED PROGRAM NEVER OPENED A WINDOW."
-  if [ -n "$other" ]; then
-    echo "== Something else mapped one, so the display and the window"
-    echo "== manager work: the program started and put up nothing."
+  if [ -n "$died" ]; then
+    echo "== The process EXITED, status $status, without mapping a window."
+    echo "== It is statically linked and needs no runtime, so this is a"
+    echo "== crash on startup or a corrupt binary, not a missing DLL."
   else
-    echo "== Nothing mapped a window at all, so suspect the display"
-    echo "== rather than the program."
+    echo "== The process was still running when the ${WINSTART_TIMEOUT:-180}s"
+    echo "== deadline expired -- it started and hung rather than crashing."
+    echo "== Raise WINSTART_TIMEOUT if a slow runner is the real answer."
   fi
-  echo "== It is statically linked and needs no runtime, so a failure here"
-  echo "== is a crash on startup or a corrupt binary, not a missing DLL."
-  echo "== Waited ${WINSTART_TIMEOUT:-180}s; raise WINSTART_TIMEOUT if a"
-  echo "== slow runner is the real answer."
+  if [ -n "$wins" ]; then
+    echo "== Windows that WERE mapped (so the display and WM work):"
+    printf '%s\n' "$wins"
+  else
+    echo "== Nothing mapped a window at all, not even metacity, so"
+    echo "== suspect the display rather than the program."
+  fi
+  echo "== What the program said:"
+  if [ -s "$log" ]; then
+    sed 's/^/     /' "$log" | head -40
+  else
+    echo "     (nothing on stdout or stderr)"
+  fi
   exit 1; }
 echo "windows package starts: window titled '$title'"
