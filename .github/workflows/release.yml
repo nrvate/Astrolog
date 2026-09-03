@@ -190,11 +190,22 @@ jobs:
       - run: make -f Makefile.win -j4
       - run: tools/package.sh windows out/package
       - run: tools/ci-verify-package.sh out/package/astrolog-windows
+      # Seven of the nine release assets carry the version in their
+      # filename because their packaging formats demand it. These two did
+      # not, so a user who downloaded two releases ended up with
+      # "astrolog-setup.exe" and "astrolog-setup (1).exe" and no way to
+      # tell which was which. Nothing depends on a stable
+      # releases/latest/download/ URL -- checked -- and the .dmg already
+      # names itself this way, so this is the majority spelling, not a new
+      # one. The CI artifacts keep their unversioned names on purpose:
+      # those are scoped to a run that already knows its own commit.
+      - name: The version these artifacts are named for
+        run: echo "VER=$(tools/ci-assert-version.sh)" >> "$GITHUB_ENV"
       # A .zip carries no unix modes and Windows wants none, so
       # ci-assert-archive-mode.sh does not apply here -- it guards the
       # tar-based Linux artifacts. Saying so beats a check that is
       # "|| true"-d into meaninglessness.
-      - run: ( cd out/package && zip -qr astrolog-windows.zip astrolog-windows )
+      - run: ( cd out/package && zip -qr "astrolog-$VER-windows.zip" astrolog-windows )
 
       # And an installer, from the same staged directory, so the two
       # artifacts cannot drift. NSIS because makensis runs natively on
@@ -223,15 +234,15 @@ jobs:
       - run: sudo dpkg --add-architecture i386
       - run: sudo apt-get update
       - run: sudo apt-get install -y nsis wine wine64 wine32
-      - run: tools/package-windows-installer.sh out/package/astrolog-windows out/package/astrolog-setup.exe
-      - run: tools/ci-verify-windows-installer.sh out/package/astrolog-setup.exe out/package/astrolog-windows
+      - run: tools/package-windows-installer.sh out/package/astrolog-windows "out/package/astrolog-$VER-setup.exe"
+      - run: tools/ci-verify-windows-installer.sh "out/package/astrolog-$VER-setup.exe" out/package/astrolog-windows
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: astrolog-windows
           path: |
-            out/package/astrolog-windows.zip
-            out/package/astrolog-setup.exe
+            out/package/astrolog-*-windows.zip
+            out/package/astrolog-*-setup.exe
 
   # macOS ships an ad-hoc signed .app in a .dmg, and nothing more. That is
   # the whole free tier: codesign -s - costs nothing and is MANDATORY on
@@ -307,7 +318,14 @@ jobs:
           and EL9/EL10. Or use the [signed repository](https://nrvate.github.io/Astrolog/)
           so upgrades arrive on their own.
 
-          **Windows** — unpack the `.zip` and run. Statically linked.
+          **Windows** — run `astrolog-<version>-setup.exe`. It installs to
+          Program Files, adds a Start Menu entry and an Add/Remove Programs
+          row, and uninstalls cleanly. It is **not** code-signed, so
+          SmartScreen will show "Windows protected your PC" — choose *More
+          info*, then *Run anyway*. If you would rather not run an
+          installer at all, the `.zip` is the same files: unpack it
+          anywhere and run `astrolog.exe`. Both are statically linked and
+          need no runtime.
 
           **macOS** — the app is ad-hoc signed but not *notarized*, so a
           download through a browser is quarantined and macOS says it is
