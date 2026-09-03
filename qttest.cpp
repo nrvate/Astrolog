@@ -110,10 +110,23 @@ extern int CaccelTestQt();
 // reason: the maintainer's own run must be unchanged, and a flag forgotten
 // in CI has to fail loudly rather than quietly test half as much.
 //
-// 19 is measured, not guessed -- "-Yi1 ephem" resolves 19 of the 39 rows
-// in rgObjSel[], the other 20 needing files only /swe has. See
-// QT_CI_PLAN.md item 2.0.
-#define cObjSelEphemMinimal 19
+// This was 19, measured: "-Yi1 ephem" resolved 19 of the 39 rows in
+// rgObjSel[] and the other 20 needed files only /swe had. So CI ran this
+// group at half strength -- 21 assertions where a local run did 41 --
+// which is QT_CI_PLAN.md Q13 saying "until B is taken CI is a weaker net
+// than a local run", quantified.
+//
+// B is taken. The 20 files are bundled (7.8 MB), so "minimal" and "full"
+// now resolve the same 39 and CI has the net the maintainer has.
+//
+// The constant stays rather than collapsing into cObjSel at the use site,
+// for two reasons. It is the thing a future thinning of ephem/ would have
+// to change, and changing it is exactly the moment to ask out loud whether
+// CI should get weaker. And the check reads "more means the mode is
+// stale" -- which is how this very change announced itself, failing with
+// "39 of 39 resolved; minimal expects exactly 19" the moment the files
+// landed, before anyone had to remember to look.
+#define cObjSelEphemMinimal cObjSel
 
 static flag FEphemMinimalQt()
 {

@@ -109,12 +109,22 @@ git config user.email nrvate@gmail.com           # the wrong author
 
 And **`/swe` is a machine-local ephemeris mount, not part of this repo** —
 887,000-odd files, kept on the NAS. `nrvate.as` points `-Yi1`/`-Yi2`/
-`-Yi3` at it. Without it the main planets still compute (the bundled
-`ephem/` and the Moshier formulas cover them — the Sun measured 0.04
-arcsec off, 24Gem07'46.399" against 46.440")
-but **every esoteric body reads `0Ari00'00"`** — measured, not assumed —
-so anything touching the 39 esoteric bodies quietly tests nothing. That
-is the whole reason for the `-i nrvate.as` rule below.
+`-Yi3` at it.
+
+**Since 2026-09-03 the bundled `ephem/` covers all 39 esoteric bodies on
+its own**, so `-Yi1 ephem` and `/swe` resolve the same 39 and the suite
+measures 3832/0 either way. It used to resolve 19 of 39, which meant CI
+ran that group at half strength — 21 assertions where a local run did 41.
+Closing it cost 7.8 MB and 20 files (`QT_CI_PLAN.md` Q13, option B).
+
+`/swe` is still what `-i nrvate.as` reaches and still the larger set by
+several orders of magnitude; what changed is that a run without it is no
+longer quietly weaker. What a run without *any* ephemeris does is
+unchanged and still the trap: the main planets keep computing, because
+Moshier covers them — the Sun measured 0.04 arcsec off, 24Gem07'46.399"
+against 46.440" — while **every esoteric body reads `0Ari00'00"`**. That
+is measured, not assumed, and it is why the packaging checks assert on
+Chiron and never on the Sun.
 
 ## Build and test
 
