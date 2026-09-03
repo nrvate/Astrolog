@@ -189,7 +189,7 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Nine standing audits, all currently clean and all run by CI — four of the
+Ten standing audits, all currently clean and all run by CI — four of the
 port against `astrolog.rc`, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of round-trip fixture coverage, one of line endings,
@@ -225,6 +225,15 @@ python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # to a registry row; found -YYI dead
                                      # behind a misspelled ifdef on its
                                      # first run
+python3 tools/qt_srcs_audit.py       # tools/qt-srcs.py asks Makefile.srcs
+                                     # for exactly the groups the Qt
+                                     # makefiles compile. It reads that
+                                     # file, so a renamed group stops it
+                                     # loudly -- but a NEW group would
+                                     # leave it quietly one short, and
+                                     # that surfaces as a link error on a
+                                     # Windows runner attributed to
+                                     # nothing
 python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # sources Makefile.win compiles. It
                                      # was one short for years, so MSVC

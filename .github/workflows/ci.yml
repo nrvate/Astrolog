@@ -178,6 +178,7 @@ jobs:
           python3 tools/line_endings_audit.py
           python3 tools/fixture_coverage_audit.py
           python3 tools/vcxproj_audit.py
+          python3 tools/qt_srcs_audit.py
 
       # The pre-commit form. The plain ">" form overwrites the committed
       # file and must never appear in a workflow.

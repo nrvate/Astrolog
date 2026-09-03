@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Check tools/qt-srcs.py against the makefiles it stands in for.
+
+The MSVC experiment in .github/workflows/nightly.yml cannot use make: it
+compiles the Qt port with cl.exe over a response file. tools/qt-srcs.py
+produces that list, and reads Makefile.srcs so it does not become a
+second copy of it.
+
+Reading Makefile.srcs protects against one drift and not the other. If a
+group is renamed or deleted, qt-srcs.py stops with "cannot find SRC_X"
+and the build fails loudly. But if a makefile starts using a NEW group,
+qt-srcs.py's own list of group names is short by one, and it emits a list
+that is quietly missing those sources -- which surfaces as a link error
+on a Windows runner, in a nightly, attributed to nothing.
+
+So: the groups the Qt makefiles reference must be exactly the groups
+qt-srcs.py asks for. Seconds to run, and it fails on a laptop instead of
+on a runner.
+"""
+
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# (makefile, qt-srcs.py argv) pairs. SRC_WIN is deliberately absent from
+# both sides: the Qt build is Windows-without-the-Windows-backend.
+PAIRS = [('Makefile.qt', []), ('Makefile.qt.test', ['--test'])]
+
+
+def groups_used(makefile):
+    text = open(os.path.join(ROOT, makefile)).read()
+    return set(re.findall(r'\$\((SRC_[A-Z_]+)\)', text))
+
+
+def groups_asked(argv):
+    text = open(os.path.join(ROOT, 'tools', 'qt-srcs.py')).read()
+    m = re.search(r"names\s*=\s*\[([^\]]*)\]", text)
+    if m is None:
+        sys.stderr.write("cannot find the group list in qt-srcs.py\n")
+        sys.exit(1)
+    names = set(re.findall(r"'(SRC_[A-Z_]+)'", m.group(1)))
+    if '--test' in argv:
+        for extra in re.findall(r"names\.append\('(SRC_[A-Z_]+)'\)", text):
+            names.add(extra)
+    return names
+
+
+def main():
+    bad = 0
+    for makefile, argv in PAIRS:
+        used, asked = groups_used(makefile), groups_asked(argv)
+        label = 'qt-srcs.py %s' % (' '.join(argv) or '(no args)')
+        if used != asked:
+            bad = 1
+            print('%s does not match %s:' % (label, makefile))
+            for g in sorted(used - asked):
+                print('  %s is compiled by %s and NOT in qt-srcs.py'
+                      % (g, makefile))
+            for g in sorted(asked - used):
+                print('  %s is in qt-srcs.py and NOT compiled by %s'
+                      % (g, makefile))
+    if bad:
+        print('\nThe MSVC build would compile a different set of sources '
+              'than\nmake does. Fix the group list in tools/qt-srcs.py.')
+        return 1
+    print('qt-srcs audit clean: %d makefiles, group lists agree'
+          % len(PAIRS))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

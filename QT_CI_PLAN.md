@@ -2407,7 +2407,7 @@ keeping in front of the enthusiasm:
 
 - **`astrolog.rc` is a build input, not legacy.** `qtrcdlg.h` (1,903
   lines), `qtrcaccel.h` and `qtrccmd.h` are generated from it, and four
-  of the nine audits check the port against it. The Qt dialogs are
+  of the ten audits check the port against it. The Qt dialogs are
   *derived from* the Windows resource script.
 - **`wdriver.cpp`/`wdialog.cpp` are the oracle.** Every divergence in
   this fork has been judged against them, and `tools/win-differential.sh`
