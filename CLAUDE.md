@@ -312,6 +312,15 @@ tools/ci-verify-zip.sh out/package/a.zip out/package/astrolog-windows
                                              # staged
 tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
 tools/ci-verify-repo.sh public                         # clean container
+tools/ci-verify-published-release.sh v8.00-qt.4  # download the RELEASE and
+                                             # verify it as a user would:
+                                             # the manifest must name
+                                             # exactly the published
+                                             # assets, and every digest
+                                             # must match. Not a gate --
+                                             # the assets do not exist
+                                             # until the release job has
+                                             # finished
 tools/ci-verify-live-repo.sh                 # and that the DEPLOYED site
                                              # serves it: a Pages deploy
                                              # can succeed and publish the
