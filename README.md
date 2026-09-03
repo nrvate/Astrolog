@@ -41,7 +41,8 @@ list comes from the binary rather than from someone's memory:
 |---|---|
 | `.deb` | Ubuntu 22.04 (jammy), 24.04 (noble) |
 | `.rpm` | Fedora 42, Fedora 43, EL9 (Rocky/Alma), EL10 |
-| `.zip` | Windows, statically linked — unpack and run |
+| `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs |
+| `.zip` | Windows, statically linked — unpack and run, no install needed |
 | `.dmg` | macOS 11+, Apple Silicon — see the note below |
 
 **macOS needs one extra step, once.** The app is ad-hoc signed but not

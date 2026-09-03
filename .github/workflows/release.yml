@@ -195,10 +195,32 @@ jobs:
       # tar-based Linux artifacts. Saying so beats a check that is
       # "|| true"-d into meaninglessness.
       - run: ( cd out/package && zip -qr astrolog-windows.zip astrolog-windows )
+
+      # And an installer, from the same staged directory, so the two
+      # artifacts cannot drift. NSIS because makensis runs natively on
+      # Linux -- this job already cross-compiles with mingw and now
+      # packages with nsis, on one ubuntu runner and no Windows anywhere.
+      #
+      # Verified under Wine rather than merely built: installed silently,
+      # compared file-for-file against the staged payload, uninstalled,
+      # and checked that nothing was left. Wine is the only automatable
+      # option here, not a compromise -- the installer requests admin, and
+      # UAC cannot prompt a non-interactive session, which hung a Windows
+      # VM for ten minutes when tried. See the script's header.
+      # wine as well as nsis: the verification below installs the thing.
+      # The nightly's Windows parity job already installs wine for the
+      # same reason, so this is a known-good package set on this runner
+      # rather than a new dependency to discover in a release.
+      - run: sudo apt-get install -y nsis wine wine64
+      - run: tools/package-windows-installer.sh out/package/astrolog-windows out/package/astrolog-setup.exe
+      - run: tools/ci-verify-windows-installer.sh out/package/astrolog-setup.exe out/package/astrolog-windows
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: astrolog-windows
-          path: out/package/astrolog-windows.zip
+          path: |
+            out/package/astrolog-windows.zip
+            out/package/astrolog-setup.exe
 
   # macOS ships an ad-hoc signed .app in a .dmg, and nothing more. That is
   # the whole free tier: codesign -s - costs nothing and is MANDATORY on
@@ -244,13 +266,14 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # Eight artifacts: two .deb, four .rpm, one .zip, one .dmg. Exact,
-      # not a floor -- "at least one" passes a release missing six. The
+      # Nine artifacts: two .deb, four .rpm, one .zip, one .exe installer,
+      # one .dmg. Exact, not a floor -- "at least one" passes a release
+      # missing seven. The
       # check is a script rather than YAML so it can be falsified without
       # cutting a release to test it, which is the one thing nobody wants
       # to do repeatedly.
-      - name: There are eight artifacts, and a SHA256SUMS over them
-        run: tools/ci-verify-release-dist.sh dist 8
+      - name: There are nine artifacts, and a SHA256SUMS over them
+        run: tools/ci-verify-release-dist.sh dist 9
 
       - name: Publish
         env:
