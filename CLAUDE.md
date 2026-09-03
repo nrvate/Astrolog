@@ -429,8 +429,23 @@ Windows builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, `make install`, a behavioural differential against the
 base commit, the Windows package, two `.deb`s and four `.rpm`s.
 `nightly.yml` is the slow lane -- the warning audit, the sanitizer sweep,
-the Windows parity harnesses, and all four matrices against yesterday.
+the Windows parity harnesses, all four matrices against yesterday, and
+two `continue-on-error` experiments: macOS, and **Qt on Windows**, which
+compiles this port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
+`-DWIN`) and uploads the result so it can be run on a real desktop.
 `release.yml` publishes on a `v*` tag.
+
+The Windows experiment is worth knowing about for one reason: it is the
+only net here that is a **different platform** rather than a stricter
+tool on the same one, and that turned out to be a distinct kind of net.
+Four sanitizer sweeps, nine audits and a warning ledger across five
+builds never mentioned `qttest.cpp`'s `#include <unistd.h>`, because on
+Linux it is correct. Compiling the file under MSVC found it in one run,
+along with 15 `getpid()` and 11 hardcoded `"/tmp"` fallbacks behind it.
+Two costs come with it, both measured rather than assumed: Qt6 does not
+run on Windows 7 at all (`Qt6Core.dll` imports `SetThreadDescription`,
+and the PE header claims minimum OS 6.0, so the obvious check lies), and
+Qt 5.15.2 no longer compiles against a current MSVC.
 
 **CI adds no logic.** Every step is a package install, a `make`, or one
 committed script from `tools/`. A check living only in YAML can be

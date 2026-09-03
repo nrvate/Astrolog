@@ -2356,6 +2356,44 @@ Qt5 remains supported on **Linux**, where it is what the maintainer's
 machine has and what distributions ship. macOS is Qt6 already, Homebrew
 having deprecated `qt@5` into a source build.
 
+### And then it found a real one
+
+Everything above was Qt's opinion of MSVC's defaults. On 2026-09-02 the
+job earned its place properly, the first time it complained about this
+tree rather than about a compiler flag:
+
+```
+qttest.cpp(68): fatal error C1083: Cannot open include file: 'unistd.h'
+```
+
+`qtdriver.cpp` and `qtdialog.cpp` shed `<unistd.h>` when three
+`mkstemp`/`unlink` sites became `QTemporaryFile`. `qttest.cpp` kept it,
+and nothing noticed, because no Windows build had ever compiled the
+suite. Separating the Qt methods from the POSIX calls -- 19 `close()` and
+1 `write()` are `pw->close()` and `QFile::write()` -- leaves:
+
+| | |
+|---|---|
+| 15 | `getpid()` |
+| 11 | `getenv("TMPDIR") != NULL ? … : "/tmp"` |
+| 1 | `unlink()` |
+
+Now `QCoreApplication::applicationPid()`, `QDir::tempPath()` and
+`QFile::remove()`. The `"/tmp"` fallback is worth singling out: it is not
+merely unportable, it is *wrong* on Windows, and would have written into
+`\tmp` on whatever drive happened to be current.
+
+**What found it is the point.** Four sanitizer sweeps, nine audits and a
+warning ledger across five builds never mentioned `<unistd.h>`, because
+on Linux it is correct. A second platform is a different kind of net from
+a stricter tool on the same one, and this is the evidence for that claim
+rather than the assertion of it.
+
+A sweep of every other source the Qt/Windows build compiles found two
+more POSIX headers, both already guarded: `io.cpp`'s `<dirent.h>` behind
+`#ifdef PC` (to `<io.h>`), and `sweph.cpp`'s `<dlfcn.h>` behind
+`#ifdef __GNUC__`.
+
 ### Still unproven, and it is the interesting part
 
 The binary computes. Nothing yet says a *dialog* is right. The suite is
