@@ -46,7 +46,9 @@ is acted on, its entry records the commit and moves to Done.
   churn, not clarity. Document the conventions instead (see T8).
 - **Third-party code is out of scope**: `swe*.cpp/h` (Swiss Ephemeris),
   `placalc*.cpp`, `swemptab.h`. Only the *boundary* our code presents to
-  them is reviewable.
+  them is reviewable. **But see "The vendored Swiss Ephemeris" below** —
+  out of scope for *refactoring* is not the same as out of scope for
+  *known defects*, and there are eight of the latter.
 - **Don't "fix" a Windows quirk in the shared core** without checking the
   real Windows build first; several look like bugs and are load-bearing
   (`inv()` on non-boolean fields, gotcha 6 in QT_GUI_PLAN.md).
@@ -948,6 +950,55 @@ all (45 on Linux, 0 there) — measured, not assumed. It remains the only
 diagnostic wdriver.cpp and wdialog.cpp have.
 
 ---
+
+## The vendored Swiss Ephemeris, and eight known defects in it
+
+**Astrolog is 40% Swiss Ephemeris by line count.** 43,369 lines of
+`swe*.cpp/h` against 64,727 of Astrolog's own, compiled into every one of
+the six builds as `SRC_SWISS` in `Makefile.srcs`. That is upstream
+Astrolog's design, not this fork's, and it is easy to work here for a
+long time without noticing.
+
+The version is stock **2.10.03** (`sweph.h:65`). A separate fork,
+`nrvate/swisseph`, is the *same* base release plus a thread-safety patch
+series, and it ships `notes/UPSTREAM-BUGS.md`: thirteen defects found
+there and **each verified still present upstream**. The interesting
+question for this tree is which of them Astrolog can actually reach.
+
+**Five are unreachable**, because Astrolog does not vendor the files:
+`swehel.c` (defects 1-3), `swephgen4.c` (13) and `setest/` (12) are not
+in `SRC_SWISS`.
+
+**Eight are in files Astrolog compiles**, and of those, two are reachable
+through the 26 Swiss entry points Astrolog actually calls:
+
+| # | Defect | Severity | reachable here? |
+|---|---|---|---|
+| 6 | `swe_calc_pctr()` depends on what was computed before it | Correctness | **yes** — Astrolog calls it |
+| 11 | changing the ephemeris path does not re-read what was loaded from it | Correctness | **yes** — Astrolog calls `swe_set_ephe_path()` |
+| 4 | `swe_set_jpl_file()` then Horizons, segfault | Crash | no — Astrolog never calls `swe_set_jpl_file()` |
+| 5 | `SEFLG_JPLHOR` contaminates later calls | Correctness | not with Astrolog's flags |
+| 7 | `swe_get_astro_models()` overruns the caller's buffer | Memory | no — not called |
+| 8 | JPL reader trusts the file's `ksize`/`ncf` | Memory | only with a JPL file |
+| 9 | `sprintf(serr, "…%s…")` overflows `serr`, ~37 sites | Memory | the two quoted sites are in `swecl.cpp:1651`/`2461`, in functions Astrolog does not call — but 73 `sprintf(serr` calls are compiled in and the reachable subset is unmeasured |
+| 10 | changing the precession model does not invalidate the obliquity cache | Correctness | unmeasured |
+
+**Defect 11 is not hypothetical here — this project already documents its
+symptom as unavoidable.** `QT_TESTING.md` says a `-Yi` set after the first
+computation does not recover the esoteric bodies, "not because of
+Astrolog's own latch … but because the Swiss Ephemeris library caches its
+orbital-elements state internally on the first (failed) load", verified
+live with a probe in work log item 90. That is defect 11, observed from
+this side, written down as a fact of life. The fork treats it as a bug and
+fixes it.
+
+**What to do about it is a decision, not a task.** Porting a fix into
+vendored code means owning a divergence from stock 2.10.03 forever, and
+the numeric oracle exists because that code is delicate. But "third-party,
+out of scope" was a reasonable rule when the alternative was reading
+43,000 lines looking for trouble; it is a weaker rule when someone has
+already found the trouble, verified it against this exact version, and
+written down the fix.
 
 ## The registry as built — read this before touching switch code
 
