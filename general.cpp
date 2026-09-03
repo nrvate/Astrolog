@@ -1263,8 +1263,16 @@ void PrintSz(CONST char *sz)
         fprintf(is.S, "%s", szInput);
     }
 #ifndef WIN
+    // Not paging once stdin is exhausted. A pager asks a reader to press
+    // return; when there is no reader left, the ask is answered by EOF
+    // and the only thing it can produce is the Terminate() above. The
+    // first page still prompts -- feof() is false until something has
+    // actually read -- so Control+d still ends the program, which is what
+    // InputString() documents. It is the SECOND and later pages that had
+    // nothing to gain and, under -0q where Terminate() returns, prompted
+    // once per screen for the rest of the run.
     if (ch == '\n' && is.S == stdout &&
-      us.nScrollRow > 0 && is.cchRow >= us.nScrollRow) {
+      us.nScrollRow > 0 && is.cchRow >= us.nScrollRow && !feof(stdin)) {
 
       // If have printed 'n' rows, stop and wait for a line to be entered.
 
@@ -3450,11 +3458,32 @@ void Assert(flag f)
 
 void Terminate(int tc)
 {
+  // Terminate() is re-entrant, and used to recurse without a base case.
+  // It prints "Astrolog exited" through PrintSz(); PrintSz() pages the
+  // screen once -YQ rows have gone by; paging asks InputString() for a
+  // keypress; and InputString() calls Terminate() when stdin is at end
+  // of file. So a -YQ 24 run whose output was piped -- which is what
+  // astrolog.as's own comment suggests setting, and what every script
+  // and every CI harness does -- went round that loop until the stack
+  // ran out and died with SIGSEGV. Measured at ~24,900 frames deep.
+  //
+  // The exit line is printed at most once. The flag is never cleared
+  // because every path that sets it ends in exit(): -0q returns above,
+  // and the -Q loop's early return is tcError, which does not print.
+  //
+  // This and the feof() test in PrintSz() are INDEPENDENT: each one alone
+  // breaks the cycle, measured by removing them one at a time -- only
+  // with both gone does the crash come back. They are both kept because
+  // they answer different questions. That one says "do not page when
+  // nothing can read"; this one says "Terminate() must not re-enter",
+  // which stays true whatever else learns to call it while printing.
+  static flag fInTerminate = fFalse;
   char sz[cchSzDef];
 
   if (us.fNoQuit)
     return;
-  if (tc == tcForce) {
+  if (tc == tcForce && !fInTerminate) {
+    fInTerminate = fTrue;
     is.S = stdout;
     AnsiColor(kWhiteA);
     sprintf2(S(sz), "\n%s %s exited.\n", szAppName, szVersionCore);

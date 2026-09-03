@@ -62,6 +62,41 @@ done
 [ $fail -eq 0 ] || { echo "FAIL: startup diagnostics"; exit 1; }
 echo "  a startup warning reaches stderr instead of aborting"
 
+# Paging plus a closed stdin must not eat the stack.
+#
+# Terminate() prints "Astrolog exited" through PrintSz(); PrintSz() stops
+# to page once -YQ rows have gone by; paging asks InputString() to read a
+# line; and InputString() calls Terminate() when stdin is at end of file.
+# Nothing broke that cycle, so "-YQ 24" with the output piped -- which is
+# what astrolog.as's own comment suggests setting, and what every script
+# and every harness in this repository does -- recursed about 24,900
+# frames deep and died on SIGSEGV.
+#
+# It hid for so long because this tree's astrolog.as ships "-YQ 0", so no
+# harness here had the pager on. The assertion is only that the process
+# does not die on a signal: exiting 2 is correct and documented, since an
+# end-of-file on stdin is how Control+d is delivered.
+#
+# In-process tests cannot see this. The stack is gone by the time anything
+# could report on it.
+echo
+echo "== Pager with no reader =="
+fail=0
+for q in 24 1; do
+  $QTENV "$BIN" -YQ $q -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 \
+    -R1 _X </dev/null >/dev/null 2>&1
+  rc=$?
+  if [ $rc -ge 128 ]; then
+    echo "  FAIL: '-YQ $q' with stdin closed died on signal `expr $rc - 128`"
+    echo "        Terminate() -> PrintSz() -> InputString() -> Terminate()"
+    echo "        has lost its base case again."
+    fail=1
+  else
+    echo "  ok: '-YQ $q' with stdin closed exited $rc"
+  fi
+done
+[ $fail -eq 0 ] || { echo "FAIL: pager recursion"; exit 1; }
+
 # A -Yi directory the user typed goes into the ephemeris search path even
 # if it does not exist. This is a regression test for a real bug: the path
 # builder filtered every candidate through stat(), which is right for the
