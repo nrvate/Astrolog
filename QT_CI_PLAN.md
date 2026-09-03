@@ -3026,3 +3026,33 @@ work log item 169).
 Item 4.4 stays open for the strong form — "the installed Windows package
 computes a correct chart" — which needs the GUI driven with `xdotool`, and
 that is `tools/win-tests.sh`'s territory rather than a package check's.
+
+**2026-09-03 — GCC's static analyzer, run once over the fork's own
+sources, and what it did not find.** After two real bugs came out of the
+first UBSan run over the Qt suite, the same question — what surface has
+never met what tool — pointed at `-fanalyzer`, which nothing here had ever
+used. Nineteen files, every one of the fork's own `.cpp` (the vendored
+Swiss set excluded), several minutes each.
+
+**One diagnostic, and it is a false positive.** A null dereference of
+`pchCur` at `express.cpp:2138`, traced from `ShowParseExpression` through
+`GetParameter`. Every step on that path is in fact guarded:
+
+* `express.cpp:2062` wraps the macro call in
+  `FSzSet(xi.rgszExpMacro[n1])`, and `FSzSet` is
+  `((sz) != NULL && *(sz) != chNull)` — a null check the analyzer does not
+  model, because it is a macro rather than a function it can reason about.
+* Both recursive call sites check the result: `if (pchCur == NULL) return
+  NULL;` at 2256, and `while (pch != NULL && ...)` at 2297.
+
+So the answer is "clean", and the cost of establishing that was one
+afternoon of machine time and no code change. Recorded here so the next
+person does not re-run it expecting a haul.
+
+Two things worth keeping from it anyway. **`-fanalyzer` needs `-c`, not
+`-fsyntax-only`** — the analysis runs during code generation, so a syntax
+check silently produces zero diagnostics and looks like a clean result.
+That was measured on deliberately broken code: a use-after-free and a null
+dereference that `-fsyntax-only` reported not at all and `-c` reported
+both. And it **does** work on C++ in GCC 11, contrary to the
+"C only" reputation the documentation of earlier versions earned it.
