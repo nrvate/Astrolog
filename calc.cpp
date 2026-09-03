@@ -2619,9 +2619,77 @@ void CreateElemTable(ET *pet)
 
 typedef struct _EphemDirList {
   char rgsz[cDirEphemMax][cchSzMax];
+  flag rgfExplicit[cDirEphemMax];   // the user named this one themselves
+  flag rgfHas[cDirEphemMax];        // and it actually holds an ephemeris
   int cDir;
   int cDropped;                // named a directory but had no room
 } EDL;
+
+
+// The files Swiss Ephemeris actually asks a search path for.
+//
+// Measured, not assumed: strace on a run in a directory containing
+// nothing but the binary shows it try sepl_18.se1, semo_18.se1,
+// seas_18.se1, sefstars.txt, sedeltat.txt and swe_deltat.txt in EVERY
+// entry of the path, in that order, before giving up on each.
+//
+// A directory holding any one of these is an ephemeris directory. That
+// is the whole basis for handing Swiss a path that is known good rather
+// than a list of places one might be -- see SwissEnsurePath().
+//
+// "_18" is the 1800-2399 block the standard distribution ships and the
+// one virtually every installation has, so it is tried first and nearly
+// always answers immediately. The other blocks are listed so that an
+// installation covering only distant dates is still recognised; they
+// cost one stat() each, and only on a directory that has already failed
+// every common case.
+
+static CONST char *rgszEphemFileQ[] = {
+  "sepl_18.se1", "semo_18.se1", "seas_18.se1",
+  "sefstars.txt", "seorbel.txt", "seasnam.txt",
+  "sedeltat.txt", "swe_deltat.txt", "seleapsec.txt",
+  "sepl_00.se1", "sepl_06.se1", "sepl_12.se1",
+  "sepl_24.se1", "sepl_30.se1", "seplm18.se1"};
+
+#define cEphemFileQ (int)(sizeof(rgszEphemFileQ) / sizeof(char *))
+
+
+// Does this directory hold anything Swiss will ask it for?
+//
+// The name built here must be the name swi_fopen() will build, or this
+// answers a different question than the one that matters. It does: Swiss
+// copies the directory, appends DIR_GLUE unless one is already there,
+// and appends the file name. So does this.
+//
+// A happy consequence on Windows. The old code asked stat() about the
+// DIRECTORY, and MSVC's stat() fails on a bare drive letter and, by its
+// own documentation, on a trailing backslash for anything but a root --
+// which is how "-Yi1 M:\ephe\" pointing at a perfectly good directory
+// once vanished from the search path in silence. Asking about a FILE
+// inside it has neither quirk, so the case that caused that bug is now
+// answered correctly rather than merely exempted from the check.
+
+static flag FDirHasEphemQ(CONST char *szDir)
+{
+  char szT[cchSzMax];
+  int i, cch;
+  flag fSep;
+
+  cch = CchSz(szDir);
+  // szExe already ends in a separator and "." does not, so test rather
+  // than always inserting one: "//" is harmless on Unix but a doubled
+  // backslash after a drive letter is not worth finding out about.
+  fSep = (cch > 0 && (szDir[cch-1] == chDirSep || szDir[cch-1] == '/'));
+  for (i = 0; i < cEphemFileQ; i++) {
+    if (fSep)
+      sprintf2(S(szT), "%s%s", szDir, rgszEphemFileQ[i]);
+    else
+      sprintf2(S(szT), "%s%c%s", szDir, chDirSep, rgszEphemFileQ[i]);
+    if (FFileExists(szT))
+      return fTrue;
+  }
+  return fFalse;
+}
 
 
 // Append one directory to the list, unless it is empty or already
@@ -2635,14 +2703,38 @@ typedef struct _EphemDirList {
 // 242-byte budget on directories that can never match.
 //
 // The distinction is not tidiness. Applying the existence check to -Yi
-// was a real bug: on Windows, stat() fails on a bare drive letter ("M:"),
-// and MSVC's documents it as failing on a trailing backslash for anything
-// but a root -- so "-Yi1 M:\ephe\" pointing at a perfectly good
-// directory vanished from the search path, with no message, and Swiss
-// then reported a "not found in PATH" listing that simply did not contain
-// what the user had asked for. A switch the user typed is an instruction,
-// not a hint to be second-guessed by a heuristic; if it is wrong, the
-// right place to find that out is the diagnostic that names it.
+// was a real bug, described above FDirHasEphemQ(): a directory the user
+// named could vanish from the search path with no message at all.
+//
+// It matters less than it did, because what reaches Swiss is now chosen
+// by asking each directory for a file rather than by asking stat() about
+// the directory. It is kept because rgfExplicit[] still decides what
+// survives a squeeze, and because a -Yi is an instruction about where to
+// look for every kind of file Astrolog opens, not only an ephemeris --
+// astrolog.as ships "-Yi2 font" for exactly that reason.
+
+// Are these the same directory? Compared with any trailing separator
+// ignored, because the candidates arrive in both shapes: the working
+// directory is ".", the executable's own directory is built by truncating
+// after its separator and so ends in one, and on this machine those are
+// frequently the same place. Comparing the strings raw put "." and "./"
+// in the path as two entries, which is exactly the sort of thing that
+// used to fill a 256-byte buffer.
+
+static flag FEqDirQ(CONST char *sz1, CONST char *sz2)
+{
+  int cch1 = CchSz(sz1), cch2 = CchSz(sz2);
+
+  while (cch1 > 1 && (sz1[cch1-1] == chDirSep || sz1[cch1-1] == '/'))
+    cch1--;
+  while (cch2 > 1 && (sz2[cch2-1] == chDirSep || sz2[cch2-1] == '/'))
+    cch2--;
+  // Case-sensitive, as the raw comparison this replaces was. Windows
+  // paths are not, so "C:\\Ephem" and "C:\\ephem" still make two entries
+  // there; that is a separate change and not one to slip in here.
+  return cch1 == cch2 && FEqRgch(sz1, sz2, cch1, fFalse);
+}
+
 
 static void AddDirEphemQ(EDL *pedl, CONST char *szDir, flag fExplicit)
 {
@@ -2651,8 +2743,12 @@ static void AddDirEphemQ(EDL *pedl, CONST char *szDir, flag fExplicit)
   if (!FSzSet(szDir))
     return;
   for (i = 0; i < pedl->cDir; i++)
-    if (FEqSz(pedl->rgsz[i], szDir))
+    if (FEqDirQ(pedl->rgsz[i], szDir)) {
+      // Named twice, once as a guess and once by the user. The user's
+      // claim on it is the one that matters when the path is trimmed.
+      pedl->rgfExplicit[i] |= fExplicit;
       return;
+    }
   if (!fExplicit && !FDirExists(szDir))
     return;
   if (pedl->cDir >= cDirEphemMax) {
@@ -2660,6 +2756,8 @@ static void AddDirEphemQ(EDL *pedl, CONST char *szDir, flag fExplicit)
     return;
   }
   sprintf2(pedl->rgsz[pedl->cDir], cchSzMax, "%s", szDir);
+  pedl->rgfExplicit[pedl->cDir] = fExplicit;
+  pedl->rgfHas[pedl->cDir] = FDirHasEphemQ(szDir);
   pedl->cDir++;
 }
 
@@ -2669,20 +2767,43 @@ static void AddDirEphemQ(EDL *pedl, CONST char *szDir, flag fExplicit)
 // the caller can say which were lost instead of letting Swiss silently
 // swap the whole path for its own defaults.
 
-static int CDirJoinEphemQ(CONST EDL *pedl, char *szPath, int cchPath)
+// Join selected directories into the one string Swiss takes. fWhich picks
+// which entries go in: the ones that hold an ephemeris, or all of them.
+//
+// Returns the number that did not fit. Entries the USER named survive a
+// squeeze and guesses are dropped first, because a -Yi the user typed
+// disappearing from the path with no message is the exact failure this
+// whole routine exists to prevent -- and a guess that is dropped costs
+// nothing, since a guess is only ever a place an ephemeris might be.
+
+#define fJoinFound  fTrue
+#define fJoinAll    fFalse
+
+static int CDirJoinEphemQ(CONST EDL *pedl, char *szPath, int cchPath,
+  flag fFoundOnly)
 {
-  int i, cch = 0, cchT;
+  int i, iPass, cch = 0, cchT, cLost = 0;
 
   *szPath = chNull;
-  for (i = 0; i < pedl->cDir; i++) {
-    cchT = CchSz(pedl->rgsz[i]) + (cch > 0);
-    if (cch + cchT >= cchPath)
-      return pedl->cDir - i;
-    if (cch > 0)
-      cch += sprintf2(szPath + cch, cchPath - cch, "%c", chEphemSep);
-    cch += sprintf2(szPath + cch, cchPath - cch, "%s", pedl->rgsz[i]);
-  }
-  return 0;
+  // Two passes so that a squeeze drops guesses rather than instructions.
+  // Order within each pass is the order the directories were added, which
+  // is the search precedence and is not disturbed.
+  for (iPass = 0; iPass < 2; iPass++)
+    for (i = 0; i < pedl->cDir; i++) {
+      if (pedl->rgfExplicit[i] != (iPass == 0))
+        continue;
+      if (fFoundOnly && !pedl->rgfHas[i])
+        continue;
+      cchT = CchSz(pedl->rgsz[i]) + (cch > 0);
+      if (cch + cchT >= cchPath) {
+        cLost++;
+        continue;
+      }
+      if (cch > 0)
+        cch += sprintf2(szPath + cch, cchPath - cch, "%c", chEphemSep);
+      cch += sprintf2(szPath + cch, cchPath - cch, "%s", pedl->rgsz[i]);
+    }
+  return cLost;
 }
 
 
@@ -2694,14 +2815,15 @@ void SwissEnsurePath()
   char szPath[AS_MAXCH], szExe[cchSzMax], szT[cchSzMax];
   CONST char *pchDir;
   char *pch;
-  int i, cLost;
+  int i, cLost, cFound;
+  flag fExplicitEmpty;
 #ifdef ENVIRON
   char *env;
 #endif
 
   if (is.fSwissPathSet)
     return;
-  edl.cDir = edl.cDropped = 0;
+  ClearB((pbyte)&edl, sizeof(EDL));
 
   // Get directory containing Astrolog executable.
 #ifdef WIN
@@ -2755,11 +2877,67 @@ void SwissEnsurePath()
   // A directory specified at compile time.
   AddDirEphemQ(&edl, EPHE_DIR, fFalse);
 
-  cLost = CDirJoinEphemQ(&edl, szPath, cchEphemPathMax + 1);
-  if (cLost > 0 || edl.cDropped > 0) {
-    sprintf2(S(szT), "Ephemeris search path is full: %d of %d directories "
-      "dropped. Use fewer or shorter -Yi paths.",
-      cLost + edl.cDropped, edl.cDir + edl.cDropped);
+  // Hand Swiss the directories that HAVE an ephemeris, not every one
+  // that might.
+  //
+  // Swiss stores the whole path in a single 256-byte buffer and, when
+  // what it is given does not fit, does not truncate -- swe_set_ephe_path
+  // throws the entire path away and substitutes its compile-time default.
+  // It then re-splits the string and stops after 20 pieces, gluing a
+  // 21st directory onto the 20th. Five ordinary directories under a home
+  // directory or a CI checkout are enough to exceed 255 characters, and
+  // what the user sees is an ephemeris that cannot be found and a
+  // diagnostic naming a path they never asked for.
+  //
+  // Growing that buffer only moves the wall. Astrolog knows how to answer
+  // the question instead: each candidate has already been asked whether
+  // it holds any file Swiss will look for (FDirHasEphemQ), so the path
+  // handed over can be the one or two directories that actually have
+  // one. Both are short, so no length or count limit can bind.
+  //
+  // Normally this is a single directory. It is two when the .se1 files
+  // and Swiss's text data (sefstars.txt and friends) are installed
+  // apart, which is how this project's own packages are laid out.
+  cFound = 0;
+  for (i = 0; i < edl.cDir; i++)
+    cFound += edl.rgfHas[i];
+
+  if (cFound > 0) {
+    cLost = CDirJoinEphemQ(&edl, szPath, cchEphemPathMax + 1, fJoinFound);
+    // cLost cannot be nonzero here in any real installation -- these are
+    // the directories that answered, and there are one or two of them --
+    // but the count is checked rather than assumed, because "it cannot
+    // happen" is how the old code came to drop paths in silence.
+    if (cLost > 0)
+      PrintWarning("Ephemeris path too long even after resolving it. "
+        "This should not be reachable; please report it.");
+  } else {
+    // Nothing answered. Fall back to exactly what this routine did
+    // before -- every candidate, in the same order -- because a probe
+    // that recognises nothing must not be allowed to make things worse
+    // than not probing. A user whose ephemeris is somewhere this does
+    // not recognise still gets the old behaviour.
+    cLost = CDirJoinEphemQ(&edl, szPath, cchEphemPathMax + 1, fJoinAll);
+    // And say so, but ONLY when the user named a directory themselves.
+    // A run with no ephemeris at all is supported and quiet: the main
+    // planets still compute, because Moshier covers them. Warning on
+    // every such run would be noise. Warning when someone typed -Yi and
+    // it held nothing is the case that is actually actionable, and it is
+    // the one that sent them looking at the path in the first place.
+    fExplicitEmpty = fFalse;
+    for (i = 0; i < edl.cDir; i++)
+      if (edl.rgfExplicit[i])
+        fExplicitEmpty = fTrue;
+    if (fExplicitEmpty) {
+      sprintf2(S(szT), "No ephemeris files in any directory searched. "
+        "Looked for %s and %d others in %d directories.",
+        rgszEphemFileQ[0], cEphemFileQ - 1, edl.cDir);
+      PrintWarning(szT);
+    }
+  }
+  if (edl.cDropped > 0) {
+    sprintf2(S(szT), "Too many ephemeris directories: %d past the limit "
+      "of %d were ignored.", edl.cDropped, cDirEphemMax);
     PrintWarning(szT);
   }
   swe_set_ephe_path(szPath);

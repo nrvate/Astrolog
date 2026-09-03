@@ -56,37 +56,60 @@ epath() {
 
 echo "== Windows path handling ($bin under Wine)"
 
-# 1. THE REGRESSION. An explicit -Yi is an instruction. It goes in the
-#    path whether or not stat() can see it, because a user who mistypes
-#    one has to be able to find it in the diagnostic.
-p=$(epath -Yi1 'C:\nosuchdir')
-case $p in
-  *'C:\nosuchdir'*) ok "a -Yi directory that does not exist is still searched" ;;
-  *) bad "'-Yi1 C:\\nosuchdir' never reached the path: [$p]" ;;
-esac
+# The directory used as a probe must actually HOLD an ephemeris.
+#
+# That is the contract now, and it is the whole point: Astrolog asks each
+# candidate whether it has a file Swiss will open and hands over only the
+# ones that answer. Swiss keeps the entire path in a 256-byte buffer and,
+# when what it is given does not fit, discards ALL of it and substitutes
+# its own compile-time default -- so an entry that can never match is not
+# free, it costs a real one. astrolog.as used to ship "-Yi3 source",
+# naming a directory that exists in no build at all.
+#
+# These checks were originally written the other way round, asserting
+# that a NONEXISTENT -Yi still reached the path. That was right when the
+# path was every candidate; it is wrong now, and it is the reason this
+# file failed the first time it ran after the change.
+wdir=$(winepath -w "$PWD/ephem" 2>/dev/null || true)
+[ -n "$wdir" ] || { echo "  winepath could not map $PWD/ephem; cannot run"; exit 2; }
+[ -f ephem/sepl_18.se1 ] || { echo "  ephem/sepl_18.se1 missing; cannot run"; exit 2; }
 
-# 2. A path with a drive letter is absolute and must NOT be rewritten
+# 1. A path with a drive letter is absolute and must NOT be rewritten
 #    relative to the executable. "C:\x" becoming
 #    "C:\Program Files\Astrolog\C:\x" is the failure this catches.
 #
-#    Stated POSITIVELY, as ";C:\nosuchdir" -- the entry preceded by the
-#    separator rather than by a backslash. The first draft asked instead
-#    that "\C:\nosuchdir" be absent, which is vacuously true when the
-#    directory is absent altogether: it passed cleanly under a sabotage
-#    that deleted the entry, which is precisely the "a harness whose
-#    invocations all fail still reads as a proof" trap.
+#    Stated POSITIVELY -- the entry present in its own right. An earlier
+#    draft asked that a doubled prefix be ABSENT, which is vacuously true
+#    when the entry is absent altogether: it passed under a sabotage that
+#    deleted it, which is exactly the "a harness whose invocations all
+#    fail still reads as a proof" trap.
+p=$(epath -Yi1 "$wdir")
 case $p in
-  *';C:\nosuchdir'*) ok "a drive-lettered -Yi is left absolute" ;;
-  *) bad "a drive-lettered path is not its own path entry: [$p]" ;;
+  "$wdir"*) ok "a drive-lettered -Yi is left absolute" ;;
+  *) bad "drive-lettered '$wdir' is not the first path entry: [$p]" ;;
 esac
 
-# 3. The complement: a path with no drive letter IS relative to the
+# 2. The complement: a path with no drive letter IS relative to the
 #    executable, not to the working directory. Documented behaviour that
-#    a bundle layout depends on -- see SwissEnsurePath().
-p2=$(epath -Yi1 'relephem')
+#    a bundle layout depends on -- see SwissEnsurePath(). It must land on
+#    the very same absolute directory as case 1.
+p2=$(epath -Yi1 'ephem')
 case $p2 in
-  *':\'*'relephem'*) ok "a relative -Yi is resolved against the executable" ;;
-  *) bad "'-Yi1 relephem' was not made exe-relative: [$p2]" ;;
+  "$wdir"*) ok "a relative -Yi is resolved against the executable" ;;
+  *) bad "'-Yi1 ephem' did not resolve to [$wdir]: [$p2]" ;;
+esac
+
+# 3. THE REGRESSION, in its current form. A -Yi that holds no ephemeris
+#    is not handed to Swiss at all. This is what keeps the buffer from
+#    filling with directories that cannot answer -- and a drive letter is
+#    the right probe for it, because Windows' stat() fails on a bare one
+#    and on a trailing backslash, which is how "-Yi1 M:\swe" was once
+#    dropped for the WRONG reason. It is dropped here for the right one,
+#    and a drive-lettered directory that does exist is kept by case 1.
+p3=$(epath -Yi1 'C:\nosuchdir')
+case $p3 in
+  *'C:\nosuchdir'*) bad "'-Yi1 C:\nosuchdir' was handed to Swiss: [$p3]" ;;
+  *) ok "a -Yi holding no ephemeris is not handed to Swiss" ;;
 esac
 
 # There is deliberately no separator check here. It was written, and it

@@ -58,11 +58,18 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 
 
 ; FILE PATHS (-Yi1 through -Yi9):
-; For example, point -Yi1 to ephemeris dir, -Yi2 to font dir, etc.
+; Extra directories to search for any file Astrolog opens: chart files,
+; fonts, atlas data, and the Swiss Ephemeris. A relative path here is
+; relative to the PROGRAM'S OWN directory, not the one you happen to be
+; in, so these keep working wherever Astrolog is started from.
+;
+; You do not have to list the ephemeris first, or at all when it sits
+; beside the program. Astrolog checks each of these for actual ephemeris
+; files and hands the Swiss library only the directories that have them,
+; so a font or chart directory listed here costs nothing.
 
 -Yi1 "ephem"
 -Yi2 "font"
--Yi3 "source"
 
 
 ; DEFAULT RESTRICTIONS:

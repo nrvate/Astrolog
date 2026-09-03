@@ -131,11 +131,51 @@ case $out in
 esac
 case $out in
   *"$probe"*)
-    echo "  ok: a -Yi directory that does not exist is still searched" ;;
+    echo "  FAIL: '-Yi1 $probe' was handed to Swiss Ephemeris."
+    echo "        It holds no ephemeris. Swiss keeps the whole path in a"
+    echo "        256-byte buffer and DISCARDS ALL OF IT when it does not"
+    echo "        fit, so every entry that cannot match costs a real one."
+    exit 1 ;;
   *)
-    echo "  FAIL: '-Yi1 $probe' never reached the ephemeris path."
-    echo "        An explicit -Yi is an instruction, not a hint. A user"
-    echo "        who mistypes one must see it in the diagnostic."
+    echo "  ok: a -Yi holding no ephemeris is not handed to Swiss" ;;
+esac
+
+# The other half, and the one that is easy to lose while fixing the first:
+# a -Yi that DOES hold an ephemeris must reach Swiss. Without this, a
+# resolver that simply dropped every -Yi would pass the check above.
+out2=`$QTENV "$BIN" -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+case $out2 in
+  *"not found in PATH"*) ;;
+  *)
+    echo "  FAIL: no \"not found in PATH\" line in the -Yi1 ephem run."
+    echo "        Broken check, not a failed assertion."
+    exit 1 ;;
+esac
+case $out2 in
+  *ephem*)
+    echo "  ok: a -Yi holding an ephemeris is handed to Swiss" ;;
+  *)
+    echo "  FAIL: '-Yi1 ephem' never reached the ephemeris path, and that"
+    echo "        directory has sepl_18.se1 in it. A -Yi the user typed"
+    echo "        which really does hold an ephemeris must be searched."
+    exit 1 ;;
+esac
+
+# And the user is told when nothing they named has one. This needs a
+# directory with no ephemeris anywhere near it -- the repository root has
+# sefstars.txt, and the binary's own directory is always a candidate --
+# so the binary is copied somewhere bare and run from there.
+tmpd=`mktemp -d`
+cp "$BIN" "$tmpd/" 2>/dev/null &&   out3=`cd "$tmpd" && $QTENV "./\`basename $BIN\`" -Yi1 "$probe" \
+        -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+rm -rf "$tmpd"
+case $out3 in
+  *"No ephemeris files in any directory searched"*)
+    echo "  ok: naming a directory with no ephemeris in it says so" ;;
+  *)
+    echo "  FAIL: no ephemeris anywhere and -Yi1 named by the user, and"
+    echo "        nothing said so. That silence is what sends people to"
+    echo "        read the path in the first place."
     exit 1 ;;
 esac
 

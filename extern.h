@@ -432,6 +432,7 @@ extern void Terminate P((int));
   if (*pch == (ch)) pch++;
 
 extern flag FDirExists P((CONST char *));
+extern flag FFileExists P((CONST char *));
 extern FILE *FileOpen P((CONST char *, int, char *, int));
 extern byte BRead P((FILE *));
 extern word WRead P((FILE *));

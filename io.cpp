@@ -76,6 +76,21 @@ flag FDirExists(CONST char *szDir)
 }
 
 
+// Does a plain file exist? Same reasoning and the same header as above.
+// SwissEnsurePath() uses it to ask a candidate directory whether it
+// actually holds an ephemeris, instead of handing Swiss every directory
+// that might and letting it find out.
+
+flag FFileExists(CONST char *szFile)
+{
+  struct stat st;
+
+  if (!FSzSet(szFile))
+    return fFalse;
+  return stat(szFile, &st) == 0 && (st.st_mode & S_IFDIR) == 0;
+}
+
+
 /*
 ******************************************************************************
 ** File IO Routines.
