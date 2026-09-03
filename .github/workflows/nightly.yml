@@ -587,6 +587,16 @@ jobs:
           Copy-Item astrolog-qt-test.exe dist\
           & "$env:QTDIR\bin\windeployqt.exe" --release --no-translations `
             --no-system-d3d-compiler --no-opengl-sw dist\astrolog-qt.exe
+          # windeployqt ships only the "windows" platform plugin, and the
+          # suite needs "offscreen": run-qt-tests.sh sets
+          # QT_QPA_PLATFORM=offscreen so 3812 assertions can run with no
+          # display. Without it the binary exits at once with "Could not
+          # find the Qt platform plugin", and with the windows plugin
+          # instead it blocks forever -- a guestcontrol process runs in
+          # session 0, which has no desktop to attach a window to. Both
+          # measured, the second by a ten-minute hang.
+          Copy-Item "$env:QTDIR\plugins\platforms\qoffscreen.dll" dist\platforms\
+          Copy-Item "$env:QTDIR\plugins\platforms\qminimal.dll" dist\platforms\
           Copy-Item -Recurse ephem, font dist\
           Copy-Item astrolog.as, atlas.as, timezone.as, sefstars.txt, `
             seorbel.txt, astexo.csv, earth.bmp dist\
