@@ -412,13 +412,34 @@ negative lookup over `vboxsf` in that 887,000-file directory measured
 all. `QT_COMPARING_WITH_WINDOWS.md` has the long form.
 
 The other slow check is the sanitizer sweep, over the two surfaces the
-assertion suite barely reaches:
+assertion suite barely reaches -- and, since 2026-09-03, over the suite
+itself:
 
 ```sh
 tools/asan-sweep.sh                    # both, ~750 invocations
 tools/asan-sweep.sh switches           # the 529-invocation switch matrix
 tools/asan-sweep.sh graphics           # ~230 renders
 ```
+
+**And a third surface the sweep does not reach**, added 2026-09-03 and
+run by the nightly beside those two: the Qt suite itself.
+`asan-sweep.sh` builds its own *console* binary, so all 3,812 assertions
+-- 25 dialogs, 42 context menus, every menu item -- ran under no
+sanitizer at all, even though `make qt-asan` had existed the whole time
+and this file called the suite "clean under AddressSanitizer". It was
+not: a mechanical POSIX sweep had left a `QByteArray` temporary's
+`constData()` bound to a variable, and the read-after-free was invisible
+on Linux and a SIGSEGV on macOS.
+
+```sh
+make qt-asan && ASAN_OPTIONS=detect_leaks=0 \
+  env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
+  ASTROLOG_QT_EPHEM=minimal ./astrolog-qt-asan -Yi1 ephem
+```
+
+`detect_leaks=0` because a Qt harness that exits without unwinding its
+widgets leaks by construction -- 10,769 bytes in 115 allocations, none of
+it a defect this is looking for.
 
 Also minutes, also pre-release rather than pre-commit, and it earns
 that on its record: the first run of each half found real out-of-bounds
