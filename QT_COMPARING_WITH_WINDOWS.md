@@ -297,3 +297,59 @@ pre-commit check. Run it when something ships in both builds: the shared
 logic underneath is already covered by the Qt suite, since both call the
 same `calc.cpp` and `io.cpp`, and what this adds is the Windows dialog and
 menu wiring.
+
+## The Qt port on real Windows
+
+Everything above compares this port against `astrolog.exe` under Wine.
+Since 2026-09-03 there is a second, stronger comparison: the port itself,
+compiled by MSVC against the open-source Qt6, running on Windows.
+
+The nightly's `qt-windows` job builds it and uploads
+`astrolog-Qt6-windows-msvc` — both `astrolog-qt.exe` and
+`astrolog-qt-test.exe`, Qt's DLLs chosen by `windeployqt`, and the data
+files. Download that, then:
+
+```sh
+export WINVM_USER=... WINVM_PASS=...
+tools/win-vm-suite.sh <vm-name> <unpacked-artifact> 'E:\swe'
+```
+
+It copies the tree in over VirtualBox's Guest Additions channel and runs
+all 3,812 assertions headless. **No network is involved** — a VM on an
+internal network with no DHCP works, which is what made this possible at
+all.
+
+**Four things about it are not obvious, and each cost a run to find.**
+They are also in the script's header, which is the copy that will not go
+stale:
+
+1. `QT_QPA_PLATFORM=offscreen`, and the plugin has to be in the artifact.
+   `windeployqt` ships only `windows`; the job copies `qoffscreen.dll` in
+   beside it.
+2. **Do not fall back to the `windows` plugin.** A `guestcontrol` process
+   runs in session 0, which has a window station but no desktop, so the
+   first widget blocks forever — ten minutes, then a PID to kill.
+3. **Point the ephemeris at a local disk, never a shared folder.** A
+   negative lookup over `vboxsf` in a directory of 887,000 files measured
+   **1.9 s**, against 90 ms for a hit. That turns a 0.3 s chart into 32 s
+   and looks exactly like a hang. `wmic logicaldisk get deviceid,drivetype`
+   tells you which you have: type 3 is a local disk, type 4 is a network
+   redirector.
+4. Qt6 needs **Windows 10 or later**. `Qt6Core.dll` statically imports
+   `SetThreadDescription`, so on Windows 7 the loader fails before
+   `main()` and you get an instant exit with no message. The PE header
+   says minimum OS 6.0, so the obvious check actively misleads.
+
+### What the first run said
+
+`3797 passed, 15 failed`, and none of the fifteen were the port:
+
+| | |
+|---|---|
+| 8 | the artifact shipped no icon at all — neither `icons/` nor `astrlog1.ico` |
+| 6 | the test redirected `HOME`, but `QDir::homePath()` prefers `USERPROFILE` on Windows |
+| 1 | a comparison carrying a literal `\n`, which cannot match `\r\n` |
+
+The last is the interesting one: that assertion had been testing "the
+line ends in exactly `\n`" for as long as it existed, on the only
+platform where it ever ran. All three are fixed.
