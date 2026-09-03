@@ -28,7 +28,8 @@ wf=${NIGHTLY_WORKFLOW:-nightly.yml}
 maxage=${MAX_AGE_H:-30}
 
 command -v gh >/dev/null || { echo "gh not found"; exit 2; }
-T_SKIP=$(mktemp); trap 'rm -f "$T_SKIP"' EXIT
+T_SKIP=$(mktemp); T_JOBS=$(mktemp)
+trap 'rm -f "$T_SKIP" "$T_JOBS"' EXIT
 
 # success or failure only. A CANCELLED run is the concurrency group doing
 # its job -- a newer push superseded it -- and its jobs are cancelled
@@ -62,7 +63,22 @@ if [ "$then_s" -gt 0 ]; then
 fi
 
 gh api "repos/$repo/actions/runs/$id/jobs" \
-  -q '.jobs[]|"\(.conclusion // .status)\t\(.name)"' | sed 's/^/   /'
+  -q '.jobs[]|"\(.conclusion // .status)\t\(.name)"' >"$T_JOBS"
+sed 's/^/   /' "$T_JOBS"
+
+# Is the Qt6 warning ledger checked by SOMETHING in this run?
+#
+# The warnings job skips its Qt6 leg because that runner has no Qt6, and
+# the allowlist below tolerates that skip. It may only do so while some
+# other job actually checks the ledger -- otherwise the allowlist is a
+# standing promise that nothing keeps, which is precisely the failure
+# this scan was written to catch, reintroduced one level up.
+#
+# So the tolerance is conditional. Delete the warnings-qt6 job and this
+# goes back to failing on the skip, loudly, instead of quietly passing.
+qt6job=$(awk -F'\t' '$2 ~ /Qt6 warning ledger/{print $1; exit}' "$T_JOBS")
+qt6job=${qt6job:-absent}
+echo "   (Qt6 ledger job: $qt6job)"
 
 bad=$(gh api "repos/$repo/actions/runs/$id/jobs" \
   -q '.jobs[]|.name as $j|.steps[]
@@ -93,21 +109,30 @@ bad=$(gh api "repos/$repo/actions/runs/$id/jobs" \
 # pattern earns a line here by being a deliberate, documented skip; "it
 # was already there" is not a reason.
 #
-# The qt6 entry is the awkward one and is allowed for a stated reason
-# rather than a good one: warning_audit.py cannot check the Qt6 warning
-# ledger on the runner that checks the others. That job is pinned to
-# ubuntu-22.04 because tools/warnings.txt is a ledger of what g++ 11 says,
-# and that image's qt6-base-dev ships no pkg-config files at all --
-# measured in the image. ubuntu-latest has the .pc files and g++ 13, so
-# one runner cannot do both. It is filed as OPEN in QT_CI_PLAN.md, and it
-# is allowlisted here only so that this check is not permanently red over
-# a known constraint: a check that always fails is one people stop
-# reading, which is the failure this whole scan exists to prevent. When
-# that item is closed, DELETE this line -- an allowlist entry that
-# outlives its reason hides the next skip behind it.
+# The qt6 entry is the awkward one, and it is CONDITIONAL rather than
+# unconditional. warning_audit.py cannot check the Qt6 warning ledger on
+# the runner that checks the others: that job is pinned to ubuntu-22.04
+# because tools/warnings.txt is a ledger of what g++ 11 says, and that
+# image's qt6-base-dev ships no pkg-config files at all -- measured in
+# the image. ubuntu-latest has the .pc files and g++ 13. One runner
+# cannot do both, so the leg skips there and always will.
+#
+# That skip was allowlisted flat for a while, which meant the ledger was
+# verified by nothing and the allowlist said so in a comment nobody had
+# to read. The warnings-qt6 job now checks it on a newer image, using
+# --qt6-only: the Qt6 leg is a DIFFERENCE between each Qt6 build and its
+# Qt5 twin in the same run, so a newer compiler subtracts out on both
+# sides and only the Qt6-specific set remains.
+#
+# The skip is therefore tolerated only while that job is present and
+# green -- see $qt6job above. An allowlist entry that outlives its reason
+# hides the next skip behind it, so this one is wired to its reason
+# instead of describing it.
 allowed_skip() {
   case $1 in
-    *"qt6: skipped, no Qt6"*)      return 0 ;;  # see below -- a real open item
+    *"qt6: skipped, no Qt6"*)      # only while warnings-qt6 covers it
+                                   [ "$qt6job" = success ] && return 0
+                                   return 1 ;;
     *"skipped on purpose"*)        return 0 ;;  # menu parity: 12 Windows-only items
     *"Skipping plugin q"*)         return 0 ;;  # windeployqt, choosing backends
     *"sprintf("*|*"printf("*)      return 0 ;;  # a compiler quoting source, not a skip
