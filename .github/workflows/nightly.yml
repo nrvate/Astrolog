@@ -398,13 +398,28 @@ jobs:
   # Exploratory, so continue-on-error and nightly: it cannot be falsified
   # from a machine with no MSVC, exactly like the macOS job.
   qt-windows:
-    # Both Qt majors, because the answer differs by more than a version
-    # number: Qt 6 dropped Windows 7, and Qt6Core.dll statically imports
-    # SetThreadDescription (Windows 10 1607+), so a Qt6 build does not
-    # start there at all -- measured, an instant exit with no output,
-    # because the loader fails before main(). Qt 5.15 still supports it.
-    # Linux already builds against both from one Makefile.qt; this makes
-    # Windows say the same thing rather than assuming it.
+    # Qt6 only on Windows, and the Qt5 leg that briefly lived here is
+    # worth a note because the reasoning is not obvious.
+    #
+    # Qt 5.15.2 -- the last open source 5.15, from 2020 -- does not
+    # compile against a current MSVC at all: qvarlengtharray.h uses
+    # stdext::checked_array_iterator, a Microsoft STL extension now behind
+    # an opt-in macro, so Qt's own header fails before any Astrolog source
+    # is reached. That is fixable with one /D, but it is a workaround on a
+    # dead Qt that will keep needing new workarounds.
+    #
+    # The one thing it bought was Windows 7: Qt6Core.dll statically
+    # imports SetThreadDescription (Windows 10 1607+), so a Qt6 build does
+    # not start on 7 -- measured in a VM, an instant exit with no output,
+    # the loader failing before main(). And the PE header says minimum OS
+    # 6.0, which would tell you the opposite.
+    #
+    # So this is the honest cost of a Qt-only Windows build, recorded
+    # rather than discovered later: it is Windows 10 and later, where
+    # wdriver.cpp runs on 7 and 8. Qt5 stays supported on LINUX, where it
+    # is what the maintainer's machine has and distributions still ship
+    # it; macOS is Qt6 already, Homebrew having deprecated qt@5 into a
+    # source build.
     name: Qt ${{ matrix.qt }} on Windows (MSVC) -- experiment
     runs-on: windows-latest
     timeout-minutes: 30
@@ -417,10 +432,6 @@ jobs:
             aqtarch: win64_msvc2022_64
             qtdir: msvc2022_64
             libpfx: Qt6
-          - qt: "5.15.2"
-            aqtarch: win64_msvc2019_64
-            qtdir: msvc2019_64
-            libpfx: Qt5
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
