@@ -298,6 +298,25 @@ logic underneath is already covered by the Qt suite, since both call the
 same `calc.cpp` and `io.cpp`, and what this adds is the Windows dialog and
 menu wiring.
 
+## The installer, and why it is tested under Wine
+
+`tools/package-windows-installer.sh` builds an NSIS installer, and
+`tools/ci-verify-windows-installer.sh` installs it, compares the result
+against the staged payload, uninstalls it and checks nothing is left --
+all under Wine, in a throwaway `WINEPREFIX`.
+
+**Do not try to run it through `guestcontrol` on the Windows VM.** The
+installer declares `RequestExecutionLevel admin`, because it writes to
+Program Files and HKLM. UAC cannot prompt a non-interactive session, so
+the attempt hangs: measured at a full ten-minute timeout, with
+`consent.exe` — the elevation prompt — left running in the guest and not
+killable from that session. Wine has no UAC and runs the same script
+faithfully otherwise.
+
+That splits the same way the macOS Gatekeeper note does. The part a
+machine can check is checked; the part that needs a person double-clicking
+is written down rather than faked.
+
 ## The Qt port on real Windows
 
 Everything above compares this port against `astrolog.exe` under Wine.

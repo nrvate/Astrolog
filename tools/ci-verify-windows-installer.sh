@@ -14,6 +14,21 @@
 # NSIS supports /S for silent and /D= for the directory, so all of that is
 # checkable without a Windows machine. A throwaway WINEPREFIX keeps it
 # away from any Wine setup the developer already has.
+#
+# WINE IS NOT A SECOND-BEST HERE, IT IS THE ONLY AUTOMATABLE OPTION.
+# tools/astrolog.nsi declares RequestExecutionLevel admin, because it
+# installs to Program Files and writes HKLM. On real Windows that means
+# UAC, and UAC cannot prompt a non-interactive session: running this
+# installer through VBoxManage guestcontrol on a Windows 10 VM hung for a
+# full ten-minute timeout, and the guest was left with consent.exe --
+# the elevation prompt itself -- sitting there waiting for an answer that
+# could never arrive. It could not even be killed from that session.
+#
+# So: Wine for the automated check, which exercises the file layout, the
+# uninstaller and the payload comparison, and a human double-click for
+# the elevation path. That is the same shape as the macOS Gatekeeper
+# note -- the part a machine can check, checked; the part that needs a
+# person, said out loud instead of faked.
 set -e
 
 setup=${1:?usage: ci-verify-windows-installer.sh <setup.exe> <staged-dir>}
