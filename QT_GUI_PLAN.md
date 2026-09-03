@@ -7451,6 +7451,58 @@ are the more useful half to read before starting something new.
     **Nets**: Qt5 suite 3812/0 and Qt6 suite 3812/0, same sources; the
     deprecation compile above, falsified.
 
+179. **A `-Yi` path is an instruction, not a hint — reported from
+    Windows, and my own regression.** The user's ephemeris lives on
+    `M:\swe`, and the ephemeris path did not contain it. Swiss's "not
+    found in PATH" diagnostic listed every directory *except* the one
+    `-Yi1` had named.
+
+    The path-list refactor (the `EDL` list that replaced the 256-byte
+    concatenated string) filtered every candidate through
+    `FDirExists()`. That is right for the directories Astrolog *guesses*
+    at — the working directory, the executable's own directory, the
+    compile-time `EPHE_DIR` — because the filter exists to stop guesses
+    spending a 242-byte budget on directories that can never match. It is
+    wrong for the ones the user *named*.
+
+    It surfaces on Windows because that is where `stat()` is fussy:
+    it fails on a bare drive letter, and MSVC documents it as failing on
+    a trailing backslash for anything but a root. `-Yi1 M:\swe\`
+    pointing at a real directory was therefore dropped.
+
+    **Two things made it worse than a wrong answer.** The drop was
+    silent — a directory removed by the existence check was never counted
+    in `cDropped`, so no warning mentioned it. And because it never
+    reached the path, it never reached Swiss's diagnostic either. The one
+    message that could have explained the problem was the message that
+    hid it. That is the general shape worth remembering: *a filter
+    applied before the diagnostic removes the evidence that the filter
+    ran.*
+
+    Fixed by giving `AddDirEphemQ()` an `fExplicit` flag. `-Yi` paths and
+    the `ASTROLOG` environment variables are kept whatever `stat()`
+    thinks; only the three guesses are filtered. Measured under Wine
+    against a real `M:` drive, before and after:
+
+    | `-Yi1` value | before | after |
+    | --- | --- | --- |
+    | `M:\swe` | works | works |
+    | `M:\swe\` | works | works |
+    | `M:` | dropped silently | `M:\` in the path |
+    | `M:\nosuchdir` | dropped silently | named in the diagnostic |
+
+    Wine's `stat()` is more permissive than Windows' own, so the first
+    two rows passing here is **not** evidence they passed on the
+    reporter's machine. The mechanism is what was removed.
+
+    Regression test in `run-qt-tests.sh`'s startup section rather than
+    the in-process suite, because `SwissEnsurePath()` caches on first use
+    and an in-process assertion cannot ask the question twice. The probe
+    is a directory that does not exist, precisely because that is the
+    case the filter used to remove. Falsified: with the fix reverted the
+    suite fails that assertion and exits 1.
+
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
