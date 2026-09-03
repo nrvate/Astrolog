@@ -7944,7 +7944,8 @@ reasons are worth keeping:
 
 | Thing | Why |
 |---|---|
-| `wi.*` fields in File/Graphics Settings — bitmap-from-window, antialias level, no-popup, no-auto-redraw | Win32-only `WI` struct. |
+| `wi.*` fields in File/Graphics Settings — bitmap-from-window, no-popup, no-auto-redraw | Win32-only `WI` struct. |
+| **Antialiasing does nothing to the picture.** `-Wx` and `-Xx0` are accepted, stored in `qi.nAntialias`, shown in Graphics Settings and round-tripped through settings — the *setting* is not skipped. What is skipped is the drawing: `wdriver.cpp:2775` renders the chart at `wi.nAntialias` times the client size and shrinks it back down, and `qtdriver.cpp` says in as many words that "nothing here does that yet". | Measured 2026-09-03 while chasing a slow animation. The consequence is visible in both directions and worth stating: with antialiasing on, the **Windows** build draws every animation frame at 6x linear — 36x the pixels, the shipped default for `-Wx` — while the Qt build draws it once. Qt therefore animates markedly faster and looks slightly rougher. The shipped `astrolog.as` has `_Xx0`, so this only bites someone who turned it on. |
 | Wingdings, and the plain text families (Arial, Courier New, Consolas, Lucida Console, Cascadia Mono) | Offered in the font pickers, but not bundled — Wingdings is proprietary and the rest are system fonts. Qt substitutes when absent, as Windows does. |
 | Open Charts in Folder skips Astrolog's own data files | Matches Windows, which does the same, since a folder of charts often sits alongside them. |
 
