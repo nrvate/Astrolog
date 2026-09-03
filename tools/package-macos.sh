@@ -214,7 +214,15 @@ ls -lh "$dmg" | awk '{print "   "$5"  "$9}'
 # worth making. Same reasoning as installing every .deb and .rpm into a
 # clean container rather than trusting dpkg-deb's exit code.
 echo "== does the app inside the .dmg run?"
-vol=$(hdiutil attach "$dmg" -nobrowse -readonly | awk '/\/Volumes\//{sub(/^[^\/]*\/Volumes/,"/Volumes"); print; exit}')
+# hdiutil prints tab-separated columns: device, UUID, mount point. Take
+# the LAST field, because a volume name contains spaces ("Astrolog
+# 8.00-qt.6") and splitting on whitespace would cut it in half. The first
+# attempt tried to strip everything before "/Volumes" with a substitution
+# anchored on a run of non-slash characters, which matches nothing here
+# because the line begins "/dev/disk32s1" -- so $vol held the whole line
+# and the check reported "no Chiron line" about a path that could not
+# exist.
+vol=$(hdiutil attach "$dmg" -nobrowse -readonly | awk -F'\t' '/\/Volumes\//{print $NF; exit}')
 [ -n "$vol" ] || { echo "   could not mount $dmg"; exit 1; }
 trap 'hdiutil detach "$vol" -quiet 2>/dev/null || true' EXIT
 "$vol/Astrolog.app/Contents/MacOS/Astrolog" \
