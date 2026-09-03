@@ -60,11 +60,20 @@ ap=$!
 # first version took the last id xdotool returned, which was metacity's.
 # "Any window at all" is tracked separately so a failure can say whether
 # nothing came up or something did and it was not ours.
-wid=""; other=""; n=0
-while [ $n -lt 4000 ] && [ -z "$wid" ]; do
+# A DEADLINE, not an iteration count. The first version polled 4000 times
+# and that was a proxy for time that varies by machine: locally each pass
+# costs enough that 4000 is minutes, on a CI runner two xdotool calls take
+# about 4 ms and the whole loop expired in EIGHTEEN SECONDS -- long before
+# Wine had finished starting a GUI for the first time in a fresh prefix.
+# It reported the program as never opening a window when it had not been
+# given a chance to.
+deadline=$(( $(date +%s) + ${WINSTART_TIMEOUT:-180} ))
+wid=""; other=""
+while [ -z "$wid" ] && [ "$(date +%s)" -lt "$deadline" ]; do
   wid=$(DISPLAY=$DISP xdotool search --onlyvisible --name '^Astrolog' 2>/dev/null | tail -1)
+  [ -n "$wid" ] && break
   [ -z "$other" ] && other=$(DISPLAY=$DISP xdotool search --onlyvisible --name . 2>/dev/null | tail -1)
-  n=$((n+1))
+  sleep 0.25
 done
 title=""
 [ -n "$wid" ] && title=$(DISPLAY=$DISP xdotool getwindowname "$wid" 2>/dev/null || true)
@@ -86,5 +95,7 @@ wait 2>/dev/null || true
   fi
   echo "== It is statically linked and needs no runtime, so a failure here"
   echo "== is a crash on startup or a corrupt binary, not a missing DLL."
+  echo "== Waited ${WINSTART_TIMEOUT:-180}s; raise WINSTART_TIMEOUT if a"
+  echo "== slow runner is the real answer."
   exit 1; }
 echo "windows package starts: window titled '$title'"
