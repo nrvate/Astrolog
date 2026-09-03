@@ -869,6 +869,28 @@ The things that have actually caught bugs in this project:
   campaigns** — every "byte-identical" in those work log items covered a
   fifth of what it claimed. Break one site on purpose and watch the diff
   move before believing a clean one.
+- **Ask what your measurement cannot see, before believing it.** Four
+  times in one session (2026-09-03) the instrument was wrong and the
+  program was fine, and each would have produced a confident false claim:
+
+  * a blank-dialog detector sampled an 8x8 grid and called Object
+    Selections empty — 860x790 with 548 colours, every sample point
+    landing on the background between the controls. Smooth-scaling to
+    16x16 cannot miss content that way, because every source pixel
+    contributes somewhere.
+  * "no other build artifact is tracked" came from sweeping the *index*.
+    A second one had been committed and removed by a script hours
+    earlier; the index cannot see what history holds.
+  * `-Yeb Vulcan 433` looked like it deleted the object. It renames it to
+    `???`, and every grep used to look for it was name-based.
+  * `ps | grep "[m]etacity"` reported three leaked processes. They were
+    the shell running the grep: the echo two words earlier contained the
+    plain word. `ps -C` matches the executable and reported zero.
+
+  The shape is always the same — the check had a blind spot exactly where
+  the answer was. Before reporting a defect from a measurement, ask what
+  that measurement would fail to see, and measure again a different way.
+
 - **A differential can only tell you something changed.** Every harness
   here compares the program to an older build of itself, or to the other
   build of the same core. None of that distinguishes "correct" from
