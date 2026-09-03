@@ -62,6 +62,39 @@ stray=$(find "$dir" -type f ! -name SHA256SUMS ! \( "$@" \) | head -5)
 ( cd "$dir" && sha256sum -c SHA256SUMS >/dev/null ) || {
   echo "SHA256SUMS does not verify against the files it names"; exit 1; }
 
+# Every artifact names the version it was built from -- since the Windows
+# .zip and .exe were renamed, all nine do. So check it, because "nine
+# files, all checksummed" says nothing about WHICH build they came from,
+# and the way a release goes wrong here is one stale artifact among eight
+# fresh ones: an artifact-download that resolved to a previous run, or a
+# package job that was skipped and left yesterday's file behind. That
+# publishes cleanly and looks complete.
+#
+# Two spellings, because the packaging formats disagree and neither is
+# negotiable: .rpm, .dmg, .zip and .exe carry "8.00-qt.3", while a .deb
+# needs "8.00+qt.3" -- dpkg treats "-" as the start of the Debian revision.
+if [ -f astrolog.h ] && [ -x tools/ci-assert-version.sh ]; then
+  # NOT "want": that is already the expected artifact COUNT, set from $2
+  # at the top of this script, and shadowing it made the manifest check
+  # below compare a line count against a version string.
+  wantver=$(tools/ci-assert-version.sh)
+  wantdeb=$(echo "$wantver" | sed 's/-qt\./+qt./')
+  bad=""
+  for f in $(find "$dir" -type f \( "$@" \)); do
+    case ${f##*/} in
+      *"$wantver"*|*"$wantdeb"*) ;;
+      *) bad="$bad $f" ;;
+    esac
+  done
+  [ -z "$bad" ] || {
+    echo "WRONG VERSION in a release artifact. astrolog.h says $wantver:"
+    for f in $bad; do echo "  $f"; done
+    echo "== One stale artifact among fresh ones publishes cleanly and"
+    echo "== looks complete. Check which package job reused an old file."
+    exit 1; }
+  echo "all $wantver artifacts present and named for that version"
+fi
+
 lines=$(wc -l <"$dir/SHA256SUMS")
 [ "$lines" -eq "$want" ] || {
   echo "MANIFEST INCOMPLETE: $lines lines for $want artifacts."; exit 1; }
