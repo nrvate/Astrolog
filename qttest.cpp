@@ -421,7 +421,14 @@ static void TestContextMenusQt()
   for (i = 0; i < cmenu; i++) {
     QMenu *pmenu = PmenuCtxTestQt(i, &szName);
     QList<QAction *> rgpa = pmenu->actions();
+    QSize sizeMenu = pmenu->sizeHint();
     Check(rgpa.size() > 0, "%s: built empty", szName);
+    // A menu that resolves every entry and asks for no room is a menu
+    // nobody can click. sizeHint() answers without showing the popup,
+    // which matters because these run with no display.
+    Check(sizeMenu.width() >= 20 && sizeMenu.height() >= 10,
+      "%s: wants %dx%d, too small to be clickable", szName,
+      sizeMenu.width(), sizeMenu.height());
     for (j = 0; j < rgpa.size(); j++) {
       if (rgpa[j]->isSeparator())
         continue;
@@ -429,6 +436,11 @@ static void TestContextMenusQt()
       Check(rgpa[j]->isEnabled(),
         "%s: entry \"%s\" did not resolve to a menu bar item",
         szName, rgpa[j]->text().toLocal8Bit().constData());
+      // And that it has a LABEL. An entry with empty text resolves,
+      // enables, and fires -- and is invisible to whoever is looking for
+      // it. Every check above would pass on a menu of blank rows.
+      Check(!rgpa[j]->text().trimmed().isEmpty(),
+        "%s: entry %d resolves and enables but has no label", szName, j);
     }
     delete pmenu;
   }
