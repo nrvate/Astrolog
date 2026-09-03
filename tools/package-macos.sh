@@ -48,6 +48,36 @@ out=$(mkdir -p "${1:-out/macos}" && cd "${1:-out/macos}" && pwd)
 [ -x ./astrolog-qt ] || { echo "build it first: make qt"; exit 2; }
 
 ver=$(tools/ci-assert-version.sh)
+
+# The minimum macOS this bundle can honestly claim, read out of the binary
+# rather than asserted.
+#
+# Info.plist used to hardcode LSMinimumSystemVersion 11.0 while NOTHING in
+# this tree set MACOSX_DEPLOYMENT_TARGET or -mmacosx-version-min. So the
+# binary was built against whatever SDK the runner had -- macos-26-arm64
+# today, with Homebrew Qt bottled for Tahoe -- and the bundle advertised
+# 11.0 regardless. A bundle that promises an OS it cannot run on fails at
+# launch with a message about the wrong thing.
+#
+# Rather than guess a target that Homebrew's Qt may or may not support,
+# take what the linker actually recorded. LC_BUILD_VERSION carries "minos"
+# on anything modern; LC_VERSION_MIN_MACOSX carried "version" on older
+# toolchains, so both are tried. If neither is readable the old 11.0 is
+# kept and said out loud, because silently stamping a guess is what this
+# is fixing.
+minos=$(otool -l ./astrolog-qt 2>/dev/null \
+  | awk '/LC_BUILD_VERSION/,0' | awk '/minos/{print $2; exit}')
+if [ -z "$minos" ]; then
+  minos=$(otool -l ./astrolog-qt 2>/dev/null \
+    | awk '/LC_VERSION_MIN_MACOSX/,0' | awk '/version/{print $2; exit}')
+fi
+if [ -z "$minos" ]; then
+  echo "   WARNING: could not read a minimum OS from the binary;"
+  echo "   LSMinimumSystemVersion stays 11.0 and is unverified."
+  minos=11.0
+else
+  echo "   minimum macOS, read from the binary: $minos"
+fi
 app="$out/Astrolog.app"
 rm -rf "$out"; mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
@@ -92,7 +122,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>           <string>APPL</string>
   <key>CFBundleShortVersionString</key>    <string>$ver</string>
   <key>CFBundleVersion</key>               <string>$ver</string>
-  <key>LSMinimumSystemVersion</key>        <string>11.0</string>
+  <key>LSMinimumSystemVersion</key>        <string>$minos</string>
   <key>NSHighResolutionCapable</key>       <true/>
   <key>NSHumanReadableCopyright</key>
     <string>Astrolog is free software under the GNU GPL v2 or later.</string>

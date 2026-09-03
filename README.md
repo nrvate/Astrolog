@@ -70,11 +70,14 @@ Two consequences follow, and neither is hypothetical:
 
 - **Intel Macs are not built at all.** The runner is arm64, nothing sets
   up a universal binary, so the `.dmg` is Apple Silicon only.
-- **The bundle claims `LSMinimumSystemVersion 11.0` and nothing sets a
-  deployment target**, so the binary is compiled against whatever SDK the
-  runner has — macOS 26 today, with Homebrew Qt bottled for it. That claim
-  of 11.0 is very probably wrong and is certainly untested. If it refuses
-  to launch on an older macOS, that is why.
+- **The minimum macOS it declares is whatever the runner built against**,
+  which is currently macOS 26. Nothing sets a deployment target, so the
+  binary links against the runner's SDK; `Info.plist` used to advertise
+  11.0 regardless, which was a promise the build could not keep. The
+  bundle now reads the real minimum out of the binary with `otool` and
+  stamps that, so the claim is true — but it means an older Mac may
+  legitimately refuse to launch it, and that is the honest answer rather
+  than a launch failure blamed on something else.
 
 Linux and Windows are the builds that get used. Treat the `.dmg` as
 best-effort.
