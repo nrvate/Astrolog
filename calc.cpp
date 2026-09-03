@@ -2598,8 +2598,24 @@ void CreateElemTable(ET *pet)
 // deduplicated, and dropped, and the string is a serialization detail
 // produced once at the boundary where Swiss demands one.
 
-#define cDirEphemMax 20        // ".", exe, 10 -Yi, 3 env, EPHE_DIR, slack
+// Not slack: 20 is Swiss's own ceiling. swe_set_ephe_path() parses with
+// swi_cutstr(s, PATH_SEPARATOR, cpos, 20), which stops cutting once it
+// has 20 pieces -- so a 21st directory does not get ignored, it gets
+// GLUED to the 20th and the pair becomes one nonexistent path. Handing
+// Swiss more than it will cut is worse than dropping the extras here,
+// where cDropped can say so. ".", exe, 10 -Yi, 3 env, EPHE_DIR is 16.
+#define cDirEphemMax 20
 #define cchEphemPathMax (AS_MAXCH-1-13)   // swe_set_ephe_path()'s real cap
+
+// PATH_SEPARATOR is a character CLASS, not a separator. Swiss defines it
+// as ";:" on Unix meaning "semicolon or colon may be used", and passes it
+// to strchr() as a set. Joining with the whole string works -- swi_cutstr
+// skips runs of delimiters, so ";:" does not produce an empty entry --
+// but it spends two bytes of a 242-byte budget on every join and prints
+// diagnostics like ".;:/usr/share/ephem;:/usr/share/font". One character
+// is enough. It has to be the semicolon: PATH_SEPARATOR is ";" alone on
+// Windows, where a colon would split "C:\ephem" after the drive letter.
+#define chEphemSep (PATH_SEPARATOR[0])
 
 typedef struct _EphemDirList {
   char rgsz[cDirEphemMax][cchSzMax];
@@ -2644,11 +2660,11 @@ static int CDirJoinEphemQ(CONST EDL *pedl, char *szPath, int cchPath)
 
   *szPath = chNull;
   for (i = 0; i < pedl->cDir; i++) {
-    cchT = CchSz(pedl->rgsz[i]) + (cch > 0 ? CchSz(PATH_SEPARATOR) : 0);
+    cchT = CchSz(pedl->rgsz[i]) + (cch > 0);
     if (cch + cchT >= cchPath)
       return pedl->cDir - i;
     if (cch > 0)
-      cch += sprintf2(szPath + cch, cchPath - cch, "%s", PATH_SEPARATOR);
+      cch += sprintf2(szPath + cch, cchPath - cch, "%c", chEphemSep);
     cch += sprintf2(szPath + cch, cchPath - cch, "%s", pedl->rgsz[i]);
   }
   return 0;

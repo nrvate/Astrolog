@@ -2715,3 +2715,63 @@ found:
    away from passing.
 
 The guards remain open; see 3.1b.
+
+
+**2026-09-03 — the release refused to publish, counting seven of the
+nine artifacts it was printing on screen.** `v8.00-qt.3` built every
+package, verified the NSIS installer three ways, and then failed
+`Publish`:
+
+```
+WRONG ARTIFACT COUNT: 7, expected exactly 9.
+== what is there:
+  ...nine files, listed in full...
+```
+
+The counter in `tools/ci-verify-release-dist.sh` matched `*.deb -o *.rpm
+-o *.zip`, written when those were the only kinds. `.dmg` and `.exe`
+joined the release later.
+
+The number is the boring half. **The shape is the finding: the script
+held the same list twice, in two places that must stay exact
+complements** — the artifact count, and the stray-file check ("anything
+that is *not* an artifact would be published too"). Whichever copy you
+update, the other is now wrong, and the two failure modes point opposite
+directions. Updating only the count gets what happened. Updating only the
+stray list would have failed the release with *"STRAY FILES ... these
+would be published too"* naming the two artifacts it exists to publish.
+
+One list now, `kinds`, with both `find` expressions generated from it. A
+new artifact type is one word in one place, and the two checks cannot
+disagree about what an artifact is. Falsified against the real filenames
+three ways: nine passes, eight fails with the right count, and an
+unrecognized file is reported as a stray rather than dropped from
+SHA256SUMS.
+
+**And the same day, `PATH_SEPARATOR` turned out to be a character class.**
+Swiss defines it as `";:"` on Unix — the comment in `sweodef.h` reads
+*"semicolon or colon may be used"* — and passes it to `strchr()` as a
+set. `CDirJoinEphemQ()` was joining with the whole two-byte string, which
+works (`swi_cutstr` skips runs of delimiters, so no empty entry appears)
+but spends two bytes of a 242-byte budget on every join and prints
+diagnostics like `.;:/usr/share/ephem;:/usr/share/font`. Now
+`.;./ephem;./font/`.
+
+Two things came out of reading that code that the byte count did not:
+
+1. **`cDirEphemMax` being 20 is not slack, it is Swiss's own ceiling.**
+   `swe_set_ephe_path()` parses with `swi_cutstr(s, PATH_SEPARATOR, cpos,
+   20)`, which stops cutting once it has 20 pieces. A 21st directory is
+   not ignored — it is *glued to the 20th*, and the pair becomes one
+   nonexistent path. The constant now says so, because the next person to
+   raise it would have had no way to know.
+2. **The obvious name for the new constant was already taken, by a
+   different separator.** `chDirSep` is `'/'` on Unix and `'\\'` on
+   Windows — directory glue, used twenty lines further down to walk back
+   through the executable's own path. A `#define chDirSep
+   (PATH_SEPARATOR[0])` above those uses would have compiled, warned
+   about a macro redefinition, and silently made the exe-path parser
+   search for `';'`. Renamed to `chEphemSep` before building. Filed here
+   because it is the third time in this project that a plausible name has
+   collided with an existing one in the same translation unit, and the
+   only thing standing between it and a shipped bug was `-Wall`.
