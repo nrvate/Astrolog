@@ -398,10 +398,29 @@ jobs:
   # Exploratory, so continue-on-error and nightly: it cannot be falsified
   # from a machine with no MSVC, exactly like the macOS job.
   qt-windows:
-    name: Qt on Windows (MSVC) -- experiment
+    # Both Qt majors, because the answer differs by more than a version
+    # number: Qt 6 dropped Windows 7, and Qt6Core.dll statically imports
+    # SetThreadDescription (Windows 10 1607+), so a Qt6 build does not
+    # start there at all -- measured, an instant exit with no output,
+    # because the loader fails before main(). Qt 5.15 still supports it.
+    # Linux already builds against both from one Makefile.qt; this makes
+    # Windows say the same thing rather than assuming it.
+    name: Qt ${{ matrix.qt }} on Windows (MSVC) -- experiment
     runs-on: windows-latest
     timeout-minutes: 30
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - qt: "6.8.3"
+            aqtarch: win64_msvc2022_64
+            qtdir: msvc2022_64
+            libpfx: Qt6
+          - qt: "5.15.2"
+            aqtarch: win64_msvc2019_64
+            qtdir: msvc2019_64
+            libpfx: Qt5
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -411,8 +430,8 @@ jobs:
         shell: pwsh
         run: |
           pip install aqtinstall
-          aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -O ${{ github.workspace }}\Qt
-          echo "QTDIR=${{ github.workspace }}\Qt\6.8.3\msvc2022_64" >> $env:GITHUB_ENV
+          aqt install-qt windows desktop ${{ matrix.qt }} ${{ matrix.aqtarch }} -O ${{ github.workspace }}\Qt
+          echo "QTDIR=${{ github.workspace }}\Qt\${{ matrix.qt }}\${{ matrix.qtdir }}" >> $env:GITHUB_ENV
 
       # No moc, no build system: the same source list Makefile.srcs gives
       # every other build, handed to cl.exe through a response file.
@@ -467,9 +486,11 @@ jobs:
              /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" ^
              @srcs.txt ^
              /Fe:astrolog-qt.exe ^
-             /link /LIBPATH:"%QTDIR%\lib" Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib ^
-             Qt6Network.lib Qt6PrintSupport.lib user32.lib gdi32.lib shell32.lib ^
-             advapi32.lib ole32.lib
+             /link /LIBPATH:"%QTDIR%\lib" ^
+             ${{ matrix.libpfx }}Widgets.lib ${{ matrix.libpfx }}Gui.lib ^
+             ${{ matrix.libpfx }}Core.lib ${{ matrix.libpfx }}Network.lib ^
+             ${{ matrix.libpfx }}PrintSupport.lib ^
+             user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
 
       # Not just "did it link" -- does it compute? A Qt build has
       # astrolog.cpp's ordinary main(), because that is inside "#ifndef
@@ -529,6 +550,6 @@ jobs:
       - name: Upload it
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: astrolog-qt-windows-msvc
+          name: astrolog-${{ matrix.libpfx }}-windows-msvc
           path: dist/
           retention-days: 14
