@@ -75,14 +75,25 @@ jobs:
           # Costs nothing where IPv6 works.
           echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
-          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
+          # qt6-base-dev as well. Without it warning_audit.py printed
+          # "qt6: skipped, no Qt6 at /usr/local/qt6/lib/pkgconfig" on every
+          # nightly and moved on -- so tools/warnings-qt6.txt, the ledger
+          # of what Qt6 warns about and Qt5 does not, was never checked by
+          # anything. It is empty, and an empty baseline nothing verifies
+          # is indistinguishable from a clean one.
+          sudo apt-get install -y qtbase5-dev qt6-base-dev pkg-config libx11-dev \
             g++-mingw-w64-x86-64
 
       - name: The baseline describes these compilers
         run: tools/ci-assert-toolchain.sh
 
       - name: All four builds, every warning diffed
-        run: tools/warning_audit.py
+        # QT6_PKGCONFIG emptied for the reason ci.yml's qt6 job empties it:
+        # the default points at the maintainer's hand-built Qt6 under
+        # /usr/local/qt6, off pkg-config's path. A distribution's own Qt6
+        # needs no help being found, and leaving the default in place is
+        # precisely what made the Qt6 leg skip.
+        run: QT6_PKGCONFIG= tools/warning_audit.py
 
   # 6.2. Both surfaces, ~750 invocations.
   #
