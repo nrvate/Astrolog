@@ -35,7 +35,7 @@
 # Format: build, file, function, flag, count, message with numbers masked.
 #
 # Regenerate:  tools/warning_audit.py --update
-# Total: 633 warnings in 114 distinct sites.
+# Total: 628 warnings in 113 distinct sites.
 
 console+qt+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	2	‘distN’ may be used uninitialized in this function
 console+qt+qt-test	astrolog.h	(header)	-Wmaybe-uninitialized	2	‘tN’ may be used uninitialized in this function
@@ -45,7 +45,6 @@ console+qt+qt-test	extern.h	(header)	-Wmaybe-uninitialized	1	‘r’ may be used
 console+qt+qt-test	intrpret.cpp	InterpretEsoteric	-Wmaybe-uninitialized	1	‘nObj’ may be used uninitialized in this function
 console+qt+qt-test	sweph.cpp	search_star_in_list	-Wsign-compare	1	comparison of integer expressions of different signedness: ‘long int’ and ‘size_t’ {aka ‘long unsigned int’}
 console+qt+qt-test	xcharts2.cpp	XChartEsoteric	-Wmaybe-uninitialized	1	‘c’ may be used uninitialized in this function
-console+qt+qt-test+wcli	astrolog.h	(header)	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli	xscreen.cpp	CommandLineX	-Wunused-but-set-variable	1	variable ‘fPause’ set but not used
 console+qt+qt-test+wcli+win	atlas.cpp	DisplayAtlasLookup	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 console+qt+qt-test+wcli+win	atlas.cpp	DisplayTimezoneChanges	-Wmaybe-uninitialized	1	‘dst’ may be used uninitialized in this function
@@ -145,7 +144,7 @@ wcli+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘hfont’ may be used uni
 wcli+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘kvSav’ may be used uninitialized in this function
 wcli+win	xgeneral.cpp	DrawSz	-Wmaybe-uninitialized	1	‘nSav’ may be used uninitialized in this function
 win	astrolog.cpp	Action	-Wmaybe-uninitialized	1	‘fHTMLClip’ may be used uninitialized in this function
-win	astrolog.h	(header)	-Wwrite-strings	2	ISO C++ forbids converting a string constant to ‘char*’
+win	astrolog.h	(header)	-Wwrite-strings	1	ISO C++ forbids converting a string constant to ‘char*’
 win	wdialog.cpp	DlgPrint	-Wmaybe-uninitialized	1	‘fInverse’ may be used uninitialized in this function
 win	wdialog.cpp	DlgPrint	-Wunused-value	4	statement has no effect
 win	wdriver.cpp	FRedraw	-Wmaybe-uninitialized	1	‘hbmpOld’ may be used uninitialized in this function
