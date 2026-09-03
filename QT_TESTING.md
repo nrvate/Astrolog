@@ -13,6 +13,32 @@ Windows one. This file is about observing *this* build.
 ./astrolog-qt -i nrvate.as          # and the same -i for every tool below
 ```
 
+**A relative `-Yi` path is relative to the EXECUTABLE, not to the working
+directory.** `SwissEnsurePath()` says so — "If dir is relative path, then
+prepend the path to executable" — and it applies to anything not starting
+with `/` or a drive letter. That is fine when the binary sits in the
+checkout, which is why nothing here ever noticed: `-Yi1 ephem` and
+`-Yi1 sub/dir/ephem` both resolve correctly from the repository root.
+
+It stops being fine the moment the binary moves. A macOS `.app` puts the
+executable in `Contents/MacOS`, so a script that passed a *cwd*-relative
+`out/macos/Astrolog.app/Contents/MacOS/ephem` produced
+
+```
+not found in PATH '...Contents/MacOS/out/macos/Astrolog.app/Contents/MacOS/ephem'
+```
+
+— the path prefixed with itself, every body reading `0Ari00`, and a
+release stopped at its own pre-ship check (v8.00-qt.3). **Pass an
+absolute path from any script that runs a binary from somewhere other
+than the tree.** It reproduces on Linux in three commands, which is where
+it was diagnosed:
+
+```sh
+mkdir -p /tmp/b/Contents/MacOS && cp astrolog ephem -r /tmp/b/Contents/MacOS/
+cd /tmp && /tmp/b/Contents/MacOS/astrolog -Yi1 b/Contents/MacOS/ephem   -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1 | grep -E "^Chir|not found"
+```
+
 `nrvate.as` is the maintainer's own settings file and is the only
 realistic test input. It carries `-Yi1 "/swe"`, the path to the ephemeris
 collection — **without it every esoteric body reads `???`**, and a `-Yi`
