@@ -534,11 +534,40 @@ jobs:
       # style, and whether the 3812-assertion suite passes, needs a real
       # Windows desktop. Qt's own DLLs go with it -- windeployqt is the
       # supported way to work out which, rather than guessing a list.
+      # The same source list again with -DQTTEST, which is what
+      # run-qt-tests.sh drives. Without it the artifact can only be
+      # eyeballed; with it, 3812 assertions -- 25 dialogs, 42 context
+      # menus, 264 shortcuts -- can run on a real Windows desktop, which
+      # is the one question this job structurally cannot answer itself.
+      # A second cl.exe pass over the same sources is about a minute.
+      - name: Compile the test build too
+        shell: cmd
+        run: |
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * ^
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ^
+            -property installationPath`) do set "VSPATH=%%i"
+          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          python tools\qt-srcs.py --test > srcst.txt || exit /b 1
+          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W1 ^
+             /DQT /DQTTEST /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
+             /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
+             /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
+             /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" ^
+             @srcst.txt ^
+             /Fe:astrolog-qt-test.exe ^
+             /link /LIBPATH:"%QTDIR%\lib" ^
+             ${{ matrix.libpfx }}Widgets.lib ${{ matrix.libpfx }}Gui.lib ^
+             ${{ matrix.libpfx }}Core.lib ${{ matrix.libpfx }}Network.lib ^
+             ${{ matrix.libpfx }}PrintSupport.lib ^
+             user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
+
       - name: Stage a runnable tree
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item astrolog-qt.exe dist\
+          Copy-Item astrolog-qt-test.exe dist\
           & "$env:QTDIR\bin\windeployqt.exe" --release --no-translations `
             --no-system-d3d-compiler --no-opengl-sw dist\astrolog-qt.exe
           Copy-Item -Recurse ephem, font dist\
