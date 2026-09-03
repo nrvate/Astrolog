@@ -55,8 +55,35 @@ run() {
 }
 [ "$want" = both ] || [ "$want" = chart ] && \
   run "chart matrix (142 invocations)" "tools/chart-matrix.sh ./astrolog-ubsan"
+# The switch surface. ASan has always covered it and UBSan never had, which
+# is the same shape of gap that hid two real bugs in the Qt suite until
+# 2026-09-03. Measured clean on its first run; kept so it stays that way.
+[ "$want" = both ] || [ "$want" = switch ] && \
+  run "switch matrix (529 invocations)" "tools/switch-matrix.sh ./astrolog-ubsan"
 [ "$want" = both ] || [ "$want" = graphics ] && \
   run "graphics matrix (224 renders)" "env GRAPHICS_MATRIX_CFG='-Yi1 ephem' tools/graphics-matrix.sh ./astrolog-ubsan"
+
+# The Qt suite, which nothing ran under UBSan until 2026-09-03 and which
+# gave up two real bugs on its first run: an eight-byte store into the
+# four-byte mtSize field of every metafile written on 64-bit Unix, and a
+# read one past the end of space[] in XChartTelescope(). Neither is
+# visible to AddressSanitizer -- both stay inside an allocated object --
+# which is the whole reason this surface is worth a second sanitizer
+# rather than a faster one.
+#
+# Its own OBJDIR, so it cannot collide with the console build above.
+if [ "$want" = both ] || [ "$want" = qt ]; then
+  if make qt-ubsan -j4 >/dev/null 2>&1 && [ -x ./astrolog-qt-ubsan ]; then
+    ldd ./astrolog-qt-ubsan 2>/dev/null | grep -qi ubsan || {
+      echo "== Qt suite: BUILD NOT INSTRUMENTED, skipping"
+      echo "   Check that LIBS (not LDFLAGS) carries -fsanitize=undefined."; rc=1; }
+    run "Qt suite (4539 assertions)" \
+      "env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= ./astrolog-qt-ubsan -Yi1 ephem"
+    rm -rf obj-qt-ubsan ./astrolog-qt-ubsan
+  else
+    echo "== Qt suite: no Qt build available, skipped"
+  fi
+fi
 
 echo "== restoring the tree's objects (the Makefile ignores OBJDIR)"
 make clean-console >/dev/null 2>&1 || true

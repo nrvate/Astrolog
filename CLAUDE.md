@@ -576,12 +576,19 @@ itself:
 tools/asan-sweep.sh                    # both, ~750 invocations
 tools/asan-sweep.sh switches           # the 529-invocation switch matrix
 tools/asan-sweep.sh graphics           # ~230 renders
-tools/ubsan-sweep.sh                   # the same two surfaces under
-                                       # -fsanitize=undefined, which
-                                       # catches arithmetic UB ASan
-                                       # cannot see. Currently clean
-                                       # over 142 chart invocations and
-                                       # 224 renders
+tools/ubsan-sweep.sh                   # -fsanitize=undefined over the
+                                       # chart matrix, the switch matrix,
+                                       # the graphics matrix AND the Qt
+                                       # suite. Its first run over the Qt
+                                       # suite found two real bugs ASan
+                                       # structurally cannot see: an
+                                       # 8-byte store into a 4-byte
+                                       # metafile header field, and a read
+                                       # one past the end of space[].
+                                       # Both stay inside an allocated
+                                       # object, so no redzone is touched
+                                       # and only the TYPE gives them away
+tools/ubsan-sweep.sh qt                # just the Qt suite, ~2 minutes
 ```
 
 **The one net here that can say a number is *right*** rather than
