@@ -44,6 +44,7 @@ check="set -e
     cd /
     command -v astrolog >/dev/null || { echo 'NO-WRAPPER'; exit 1; }
     ldd /usr/lib/astrolog/astrolog-qt | grep -q 'not found' && { echo 'UNRESOLVED-QT-DEPS'; ldd /usr/lib/astrolog/astrolog-qt | grep 'not found'; exit 1; }
+    echo \"SE1-COUNT=\$(ls /usr/lib/astrolog/ephem/*.se1 2>/dev/null | wc -l)\"
     astrolog $chart"
 
 if [ "$image" = local ]; then
@@ -62,6 +63,30 @@ else
     $check" 2>&1) || {
     echo "PACKAGE FAILED on $image:"; printf '%s\n' "$out" | tail -15; exit 1; }
 fi
+
+# The whole ephemeris shipped, not just enough of it to answer.
+#
+# Chiron below is the BEHAVIOURAL check and stays the important one -- it
+# proves the installed program finds and reads its data from
+# /usr/lib/astrolog. But Chiron lives in seas_18.se1, which was in the
+# 12-file set this repository shipped for months. It cannot notice the 20
+# files added for the esoteric bodies going missing, and those are exactly
+# what a packaging change would drop: they are most of the payload now,
+# and a package that silently loses them still passes every other check
+# here while twenty bodies in the Object Selections dialog quietly return
+# 0Ari00'00".
+#
+# So: an exact count, matching what the repository ships. Exact rather
+# than a floor, for the reason every count in this project is exact -- a
+# floor tests the guess.
+want_se1=$(ls ephem/*.se1 2>/dev/null | wc -l | tr -d ' ')
+got_se1=$(printf '%s\n' "$out" | sed -n 's/^SE1-COUNT=//p' | head -1)
+[ -n "$got_se1" ] && [ "$got_se1" = "$want_se1" ] || {
+  echo "EPHEMERIS INCOMPLETE on $image: the installed package has"
+  echo "${got_se1:-no} .se1 files where this tree ships $want_se1."
+  echo "A package that loses them still computes Chiron -- that file was"
+  echo "always there -- while twenty esoteric bodies return 0Ari00'00\"."
+  exit 1; }
 
 chiron=$(printf '%s\n' "$out" | grep -E '^Chir' | head -1 || true)
 [ -n "$chiron" ] || {
