@@ -114,9 +114,11 @@ sudo dnf install ./astrolog-8.00-qt.1.el9.x86_64.rpm
 
 The package's own version is `8.00+qt.1~jammy`, with a tilde, so that a
 22.04 build sorts below a 24.04 one and an upgrade is an upgrade. GitHub
-rewrites `~` to `.` in release asset filenames, which is why the
-downloaded file does not match; `apt` reads the version out of the
-package, not out of the name.
+rewrote `~` to `.` in release asset filenames. Since v8.00-qt.4 the
+release does that rename itself, before hashing, so the uploaded name,
+the name inside `SHA256SUMS` and the name you download are one string.
+`apt` reads the version out of the package rather than out of the name,
+so nothing about installation changes either way.
 
 Both `astrolog` (command line) and `astrolog-qt` (windowed) land on
 `PATH`. The binaries live in `/usr/lib/astrolog` beside their data —

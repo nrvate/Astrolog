@@ -294,6 +294,30 @@ jobs:
       # check is a script rather than YAML so it can be falsified without
       # cutting a release to test it, which is the one thing nobody wants
       # to do repeatedly.
+      # GitHub rewrites "~" to "." in a release asset's filename, and it
+      # does it at UPLOAD time -- so a SHA256SUMS generated before the
+      # upload names two files that the release then does not serve.
+      #
+      # Measured on v8.00-qt.3: the manifest said
+      # "astrolog_8.00+qt.3~jammy_amd64.deb", the release served
+      # "astrolog_8.00+qt.3.jammy_amd64.deb", the bytes were identical, and
+      # a user running "sha256sum -c SHA256SUMS" over the downloaded set
+      # got "FAILED open or read" on both .deb files. That reads like
+      # corruption or tampering and is neither, which is the worst way for
+      # an integrity check to be wrong.
+      #
+      # Rename BEFORE the manifest is generated, so the uploaded name, the
+      # name inside SHA256SUMS and the name a user downloads are the same
+      # string. Only the filename changes: the Debian version inside the
+      # package keeps its "~", which is what dpkg actually orders on.
+      - name: Rename what GitHub would rename anyway
+        run: |
+          for f in dist/*'~'*; do
+            [ -e "$f" ] || continue
+            mv -- "$f" "$(printf '%s' "$f" | tr '~' '.')"
+          done
+          ls dist
+
       - name: There are nine artifacts, and a SHA256SUMS over them
         run: tools/ci-verify-release-dist.sh dist 9
 

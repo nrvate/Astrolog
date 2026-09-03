@@ -57,6 +57,18 @@ stray=$(find "$dir" -type f ! -name SHA256SUMS ! \( "$@" \) | head -5)
   echo "STRAY FILES in $dir -- these would be published too:"
   echo "$stray" | sed 's/^/  /'; exit 1; }
 
+# No "~" in any artifact name. GitHub rewrites it to "." at upload time,
+# so a manifest generated over a "~" name describes a file the release
+# does not serve -- v8.00-qt.3 shipped exactly that, and "sha256sum -c"
+# reported FAILED on both .deb files whose bytes were perfect.
+tilde=$(find "$dir" -type f -name '*~*' | head -5)
+[ -z "$tilde" ] || {
+  echo "TILDE IN AN ARTIFACT NAME -- GitHub will rewrite these on upload"
+  echo "and SHA256SUMS will name files the release does not serve:"
+  echo "$tilde" | sed 's/^/  /'
+  echo "== Rename them to their published form before hashing."
+  exit 1; }
+
 ( cd "$dir" && find . -type f ! -name SHA256SUMS -print0 | sort -z \
     | xargs -0 sha256sum > SHA256SUMS )
 ( cd "$dir" && sha256sum -c SHA256SUMS >/dev/null ) || {
