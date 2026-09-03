@@ -417,11 +417,21 @@ jobs:
       # than run. Four separate fixes to this step have now been about it
       # discarding its own evidence.
       #
-      # The count to expect here is 3786, not Linux's 3792. The six are
-      # the Print item, which this build skips because QPrintDialog is the
-      # native NSPrintPanel and runs its own Cocoa modal loop. Measured
-      # rather than reasoned: forcing the same skip on a Linux build takes
-      # it from 3792 to exactly 3786.
+      # The count to expect here is 3786, not Linux's 3792, and the log
+      # this step uploads is what proves the six are benign. Diffing the
+      # per-group assertion counts against a Linux run of the same
+      # configuration gives 48 groups on both sides and exactly one line
+      # of difference:
+      #
+      #   < [Firing every menu item: 957 assertions]
+      #   > [Firing every menu item: 951 assertions]
+      #
+      # Six, in the one group that skips the Print item -- QPrintDialog is
+      # the native NSPrintPanel here and runs its own Cocoa modal loop, so
+      # the closer this group arms never gets a turn. Every other group
+      # runs the same number of assertions on both platforms, which is the
+      # thing worth knowing: a lower total is otherwise indistinguishable
+      # from a group that silently did not run.
       - name: Keep the log
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
