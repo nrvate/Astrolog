@@ -45,6 +45,18 @@ list comes from the binary rather than from someone's memory:
 | `.zip` | Windows, statically linked — unpack and run, no install needed |
 | `.dmg` | macOS 11+, Apple Silicon — see the note below |
 
+Every package carries the ephemeris for all **39 esoteric bodies** the
+Object Selections dialog offers — the centaurs, the trans-Neptunians and
+the named asteroids, not just the main planets. That is why a package is
+about 13 MB rather than 6.
+
+It is worth the size for one reason. Without those files the dialog still
+*offers* all 39, and the twenty it cannot compute return `0Ari00'00"` —
+not an error, not a warning, just a plausible-looking position at the
+first degree of Aries. A wrong answer that looks like an answer is worse
+than a missing feature, so the files ship.
+
+
 **macOS needs one extra step, once.** The app is ad-hoc signed but not
 *notarized*, because notarizing requires an Apple Developer subscription
 and a signing secret in this repository. So a `.dmg` downloaded through a
