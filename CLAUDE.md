@@ -344,6 +344,27 @@ tools/warning_audit.py --file io.cpp # one file, seconds, no baseline --
                                      # covers Qt6 too where present
 ```
 
+And a twelfth that asks the one question none of the others do -- not
+"did this change?" but **"is this code reached at all?"**:
+
+```sh
+tools/coverage-report.sh             # builds an instrumented binary, runs
+                                     # all four matrices against it, and
+                                     # reports per-file line coverage.
+                                     # Tens of minutes: the build is -O0
+                                     # and the switch matrix is 529
+                                     # invocations. Pre-release, never
+                                     # pre-commit
+```
+
+It exists because `graphics-matrix.sh` carried `-XE 1 20` from the day it
+was written and that renders **byte-identically to no `-XE` at all** --
+the asteroid loop stops at the first body it cannot compute and asteroid 9
+has no file. An inert entry still diffs to zero, which is exactly what a
+passing differential looks like. Its first run also found `placalc.cpp`
+and `placalc2.cpp` at **0.00%**, 698 lines that are compiled, linked and
+called from `calc.cpp` and that no matrix executes -- see QT_CI_PLAN.md.
+
 It earns its place the way the sanitizer sweeps did. Its first run found
 that **`make -f Makefile.win` had not compiled since 2026-08-29**, 62
 commits, while three work log items listed "Windows builds" among their

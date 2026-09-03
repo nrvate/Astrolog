@@ -2909,3 +2909,48 @@ Two lessons, and the second is the more useful:
    lines differ" result above came from a matrix run reading `/swe`
    rather than `ephem/`, because that is the script's default. Two wrong
    measurements in a row, on the same question, in the same hour.
+
+**2026-09-03 — measuring what the differentials execute, instead of
+guessing.** After `-XE 1 20` turned out to have been inert since the day it
+was written, the obvious question was how many others are. Anecdote does
+not scale; `gcov` does. `tools/coverage-report.sh` builds an instrumented
+console binary, runs all four matrices against it and reports per-file
+line coverage.
+
+The four matrices together, over the fork's own sources:
+
+| coverage | lines | file |
+|---|---|---|
+| **0.00%** | 563 | `placalc.cpp` |
+| **0.00%** | 135 | `placalc2.cpp` |
+| 5.02% | 3166 | `swecl.cpp` |
+| 19.66% | 773 | `xscreen.cpp` |
+| 20.49% | 1142 | `express.cpp` |
+| 29.25% | 294 | `matrix.cpp` |
+| 43.18% | 1957 | `io.cpp` |
+| 46.62% | 1613 | `xdevice.cpp` |
+| 47.43% | 2994 | `xcharts1.cpp` |
+
+**`placalc.cpp` at 0% is not dead code.** Removing both files from
+`Makefile.srcs` fails to link: `calc.cpp` calls `julday()`, `revjul()` and
+`FPlacalcPlanet()`. They are compiled, linked and referenced, and no
+matrix executes a line of them.
+
+The reason took some digging and is worth writing down. `-bp` selects the
+Placalc backend and is refused with *"The switch -bp is not allowed now."*
+because the shipped `astrolog.as` contains `=0b`, which sets
+`us.fNoPlacalc` — and `switch.cpp:3653` is `case 'b': us.fNoPlacalc =
+fTrue;`, a **one-way latch with no switch that clears it**. Every matrix
+run reads that settings file, so the Placalc and Matrix backends are
+unreachable in all of them.
+
+Run without `astrolog.as` present, `-bp` is accepted, and then the trap
+documented at `switch.cpp:2168` bites: the backend suffixes of `-b` also
+*toggle* `fEphemFiles`, so a plain `-bp` turns the files off and every
+body reads `0Ari00'00"`. `-bp -b` computes, but agrees with Swiss at
+display precision, so whether it reached Placalc is still unproven.
+
+Left open rather than guessed at: whether a matrix should cover Placalc,
+and how to invoke it so that it demonstrably does. What is settled is that
+698 lines of a linked, called backend currently have no differential
+coverage at all, and that the number came from measurement.
