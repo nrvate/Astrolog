@@ -294,8 +294,15 @@ pushing. They are worth knowing about because several are useful by hand:
 ```sh
 tools/ci-assert-fresh.sh astrolog.exe        # a build product is newer
                                              # than every .cpp and .h
-tools/ci-assert-fortify.sh astrolog 10       # the shipped build still
-                                             # imports glibc's *_chk
+tools/ci-assert-fortify.sh astrolog 10       # the shipped builds still
+tools/ci-assert-fortify.sh astrolog-qt 10    # import glibc's *_chk --
+                                             # BOTH, because both ship:
+                                             # every .deb and .rpm carries
+                                             # them with a wrapper each on
+                                             # PATH, and only the console
+                                             # one was checked until
+                                             # 2026-09-03. Measured 10 and
+                                             # 11 respectively
 tools/ci-assert-toolchain.sh                 # the compilers match the
                                              # ones warnings.txt describes
 tools/ci-assert-distinct.sh out/qtg 24       # no two renders identical
