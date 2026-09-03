@@ -514,6 +514,18 @@ static void TestAllMenuActionsQt()
     if (str.contains("Quit") || str.contains("Exit") ||
       str.startsWith("Open ") || str.contains("Website"))
       continue;
+#ifdef __APPLE__
+    // Print is the same class of thing on macOS and only there.
+    // QPrintDialog is the native NSPrintPanel, which runs its own Cocoa
+    // modal loop rather than Qt's -- so the repeating closer above, which
+    // dismisses every other modal in this group, cannot see it and the
+    // run hangs. Measured: the suite stopped here for the full 420 s
+    // watchdog, and the last line before it was "firing: P&rint...".
+    // On X11 and Windows QPrintDialog is a QDialog and closes normally,
+    // so this skip is deliberately not portable.
+    if (str.contains("rint"))
+      continue;
+#endif
     // Anything that puts up a modal dialog blocks here forever, since
     // nothing is driving the event loop to dismiss it. Rather than guess
     // which items those are from their labels -- the first attempt did
