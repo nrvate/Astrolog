@@ -206,6 +206,10 @@ jobs:
       # tar-based Linux artifacts. Saying so beats a check that is
       # "|| true"-d into meaninglessness.
       - run: ( cd out/package && zip -qr "astrolog-$VER-windows.zip" astrolog-windows )
+      # The archive, not the directory it was made from. The .exe installer
+      # is installed and compared file-for-file under Wine before shipping;
+      # the .zip was created and uploaded and never opened again.
+      - run: tools/ci-verify-zip.sh "out/package/astrolog-$VER-windows.zip" out/package/astrolog-windows
 
       # And an installer, from the same staged directory, so the two
       # artifacts cannot drift. NSIS because makensis runs natively on

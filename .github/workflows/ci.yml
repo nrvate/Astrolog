@@ -478,6 +478,9 @@ jobs:
       #
       # The NSIS installer is deliberately NOT built here. It needs nsis
       - run: ( cd out/package && zip -qr astrolog-windows.zip astrolog-windows )
+      # The archive, not the directory it was made from. Everything above
+      # audits the staged tree; nothing had ever opened the .zip again.
+      - run: tools/ci-verify-zip.sh out/package/astrolog-windows.zip out/package/astrolog-windows
 
       # BUILD the installer here, do not verify it. Those are different
       # costs and conflating them kept the .exe off this lane for no

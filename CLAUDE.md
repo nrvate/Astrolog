@@ -303,6 +303,13 @@ tools/ci-assert-installed.sh ~/.local/bin/astrolog   # run it from "/",
 tools/ci-assert-uninstalled.sh ~/.local              # then undo it
 tools/ci-assert-version.sh v8.00-qt.1        # a tag matches astrolog.h
 tools/ci-verify-package.sh out/package/astrolog-windows
+tools/ci-verify-zip.sh out/package/a.zip out/package/astrolog-windows
+                                             # the ARCHIVE, not the tree
+                                             # it was made from: it
+                                             # extracts, unpacks as one
+                                             # directory, and is
+                                             # byte-identical to what was
+                                             # staged
 tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
 tools/ci-verify-repo.sh public                         # clean container
 tools/ci-verify-live-repo.sh                 # and that the DEPLOYED site
