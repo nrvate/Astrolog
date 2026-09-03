@@ -347,7 +347,13 @@ jobs:
           # own message, on unbuffered stderr. A pty makes stdio
           # line-buffer, so at most one partial line is lost.
           set -m
-          ASTROLOG_QT_EPHEM=minimal ASTROLOG_QT_TIME=1 \
+          # ASTROLOG_QT_TEST_VERBOSE names each menu item before firing
+          # it, flushed. The last run localised the hang to the "Firing
+          # every menu item" group -- 338 items -- and stopped there. This
+          # is the difference between knowing the group and knowing the
+          # item, and the hook was already in qttest.cpp waiting to be
+          # switched on.
+          ASTROLOG_QT_EPHEM=minimal ASTROLOG_QT_TIME=1 ASTROLOG_QT_TEST_VERBOSE=1 \
             script -q /dev/null ./run-qt-tests.sh -Yi1 ephem > suite.log 2>&1 &
           suite=$!
           for i in $(seq 1 420); do
@@ -365,7 +371,7 @@ jobs:
           # there and the tail below never ran. That is the same lost
           # diagnostic as the pkill version, one line further down.
           rc=0; wait "$suite" || rc=$?
-          tail -60 suite.log
+          tail -80 suite.log
           [ "$rc" -eq 0 ] || {
             echo "== suite exited $rc. The last group named above is where it"
             echo "== stopped; on Linux this run takes 47 seconds and the whole"
