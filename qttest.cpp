@@ -640,6 +640,14 @@ static void TestAllMenuActionsQt()
     // tab is display only, and carrying it here would break every
     // comparison below against a label from astrolog.rc.
     QString str = rgpa[i]->text().section(QChar('\t'), 0, 0);
+    // Every item has a label. The menu-parity group checks that Windows'
+    // 258 items are PRESENT, by label; it says nothing about the other
+    // eighty this build offers, and nothing anywhere requires a menu bar
+    // entry to have any text at all. A blank row fires, enables, and
+    // cannot be found by whoever wants it.
+    if (!rgpa[i]->isSeparator())
+      Check(!str.trimmed().isEmpty(),
+        "menu bar item %d has no label", i);
     // Quit would end the run. The doc and website items hand a file or a
     // URL to the desktop, which isn't this suite's business to trigger.
     if (str.contains("Quit") || str.contains("Exit") ||
