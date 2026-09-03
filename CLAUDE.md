@@ -225,7 +225,16 @@ python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # to a registry row; found -YYI dead
                                      # behind a misspelled ifdef on its
                                      # first run
-python3 tools/qt_srcs_audit.py       # tools/qt-srcs.py asks Makefile.srcs
+python3 tools/qt_srcs_audit.py       # two checks on the MSVC Qt build,
+                                     # which is a nightly and so is the
+                                     # slowest place to learn anything.
+                                     # No unguarded POSIX-only header in
+                                     # any source it compiles -- that is
+                                     # how qttest.cpp's <unistd.h> got
+                                     # to a Windows runner, invisible to
+                                     # every Linux net because on Linux
+                                     # it is correct. And: tools/qt-srcs.py
+                                     # asks Makefile.srcs
                                      # for exactly the groups the Qt
                                      # makefiles compile. It reads that
                                      # file, so a renamed group stops it
