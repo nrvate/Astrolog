@@ -89,4 +89,23 @@ case $out in
     echo "        who mistypes one must see it in the diagnostic."
     exit 1 ;;
 esac
+
+# The entries are joined with ONE character. PATH_SEPARATOR is ";:" here --
+# a character class Swiss hands to strchr(), its own comment reading
+# "semicolon or colon may be used" -- so joining with the whole string
+# works, and quietly spends two bytes of a 242-byte budget on every entry.
+#
+# This assertion lives on Linux specifically. The same check was written
+# for tools/win-console-checks.sh first and PASSED under a sabotage that
+# reintroduced the bug, because PATH_SEPARATOR is ";" alone on Windows and
+# the broken and correct code emit the same character there. Here the two
+# differ, so this can actually fail.
+case $out in
+  *';:'*)
+    echo "  FAIL: ephemeris path entries are joined with ';:'."
+    echo "        PATH_SEPARATOR is a character class, not a separator."
+    exit 1 ;;
+  *)
+    echo "  ok: path entries are joined with a single character" ;;
+esac
 exit 0

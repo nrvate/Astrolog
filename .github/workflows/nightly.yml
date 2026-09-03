@@ -249,6 +249,15 @@ jobs:
       - name: Initialise the Wine prefix
         run: wineboot --init 2>/dev/null || true
 
+      # Path handling first: it is seconds, and it is the surface the
+      # chart differential structurally cannot see. win-differential.sh
+      # diffs what the two builds COMPUTE; this asks what the ephemeris
+      # search path ends up CONTAINING, which is where the platforms
+      # actually differ -- a different CRT, a different stat(), drive
+      # letters. A real bug shipped in that gap; see work log item 179.
+      - name: Windows path handling
+        run: tools/win-console-checks.sh
+
       - name: Diff the whole chart matrix
         run: tools/win-differential.sh out/win-diff
 
