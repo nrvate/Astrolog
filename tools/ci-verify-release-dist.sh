@@ -1,7 +1,7 @@
 #!/bin/sh
 # Verify the set of artifacts a release is about to publish.
 #
-#   tools/ci-verify-release-dist.sh dist 7
+#   tools/ci-verify-release-dist.sh dist 9
 #
 # QT_CI_PLAN.md item 5.2. Two failures this prevents, both of which
 # publish successfully and look fine:
@@ -26,21 +26,33 @@ want=${2:?usage: ci-verify-release-dist.sh <dir> <expected-count>}
 
 [ -d "$dir" ] || { echo "NO DIST: $dir is not a directory."; exit 1; }
 
-got=$(find "$dir" -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.zip' \) | wc -l)
+# The artifact kinds this project releases. ONE list, because the count
+# below and the stray check further down are exact complements of each
+# other, and keeping two copies of the list is precisely how they drifted:
+# .dmg and .exe joined the release, only the count knew nothing about
+# them, and v8.00-qt.3 failed to publish reporting "7" while printing all
+# nine files it had just refused to count.
+kinds='deb rpm zip dmg exe'
+
+# Build the find expression once: -name *.deb -o -name *.rpm -o ...
+set --; for k in $kinds; do set -- "$@" -o -name "*.$k"; done
+shift   # drop the leading -o
+
+got=$(find "$dir" -type f \( "$@" \) | wc -l)
 if [ "$got" -ne "$want" ]; then
   echo "WRONG ARTIFACT COUNT: $got, expected exactly $want."
   echo "== what is there:"
   find "$dir" -type f | sed 's/^/  /'
   echo "== A release with fewer binaries than it claims is worse than no"
   echo "== release: it looks complete. Check which package job produced"
-  echo "== nothing."
+  echo "== nothing. If a new KIND of artifact was added, it needs to be"
+  echo "== in the 'kinds' list at the top of this script."
   exit 1
 fi
 
 # Anything that is not an artifact should not be here, and would end up
 # in the manifest and in the release.
-stray=$(find "$dir" -type f ! -name '*.deb' ! -name '*.rpm' ! -name '*.zip' \
-        ! -name SHA256SUMS | head -5)
+stray=$(find "$dir" -type f ! -name SHA256SUMS ! \( "$@" \) | head -5)
 [ -z "$stray" ] || {
   echo "STRAY FILES in $dir -- these would be published too:"
   echo "$stray" | sed 's/^/  /'; exit 1; }
