@@ -948,6 +948,16 @@ jobs:
           "staged $((Get-ChildItem dist -Recurse -File).Count) files, " +
             "$([math]::Round((Get-ChildItem dist -Recurse -File | Measure-Object Length -Sum).Sum/1MB,1)) MB"
 
+      # Before uploading, check the tree is one somebody can actually run.
+      # Everything above assembles it and nothing looked at the result --
+      # the same gap the Windows .zip had. Both extra platform-plugin
+      # copies and the icons exist because their absence already cost a
+      # run, and the icons one was reported as a port defect rather than
+      # as the packaging gap it was.
+      - name: The staged tree is complete
+        shell: bash
+        run: python3 tools/qt_windows_dist_audit.py dist
+
       - name: Upload it
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
