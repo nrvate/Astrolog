@@ -467,17 +467,30 @@ jobs:
       # and asking why Windows was getting a tarball.
       #
       # The NSIS installer is deliberately NOT built here. It needs nsis
-      # and wine installed, which is about two minutes on a lane whose
-      # whole point is thirteen jobs in four. release.yml and the nightly
-      # build and verify it.
       - run: ( cd out/package && zip -qr astrolog-windows.zip astrolog-windows )
+
+      # BUILD the installer here, do not verify it. Those are different
+      # costs and conflating them kept the .exe off this lane for no
+      # reason: nsis is an 850 KB package and makensis takes seconds,
+      # while VERIFYING an installer means wine, a prefix, a silent
+      # install and an uninstall -- minutes, on a lane whose point is
+      # thirteen jobs in four.
+      #
+      # So the build is here, where it makes the artifact people actually
+      # download from a CI run, and the verification stays on the nightly
+      # and release lanes that have time for it. A broken installer would
+      # still be caught before it ships; it just would not be caught
+      # within four minutes of the push.
+      - run: sudo apt-get install -y nsis
+      - run: tools/package-windows-installer.sh out/package/astrolog-windows out/package/astrolog-setup.exe
 
       - name: Keep the package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          archive: false
           name: astrolog-windows
-          path: out/package/astrolog-windows.zip
+          path: |
+            out/package/astrolog-windows.zip
+            out/package/astrolog-setup.exe
 
   # Q1 answered, 2026-09-02: native packages. An AppImage carries ~70 MB
   # of Qt closure for a 2.5 MB program; a tarball leaves the user to
