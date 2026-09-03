@@ -362,12 +362,15 @@ And a thirteenth that asks the one question none of the others do -- not
 
 ```sh
 tools/coverage-report.sh             # builds an instrumented binary, runs
-                                     # all four matrices against it, and
-                                     # reports per-file line coverage.
-                                     # Tens of minutes: the build is -O0
-                                     # and the switch matrix is 529
-                                     # invocations. Pre-release, never
-                                     # pre-commit
+                                     # all four matrices AND the 3832-
+                                     # assertion suite against it, and
+                                     # reports per-file line coverage --
+                                     # then asserts the set executed by
+                                     # NEITHER is exactly placalc.cpp and
+                                     # placalc2.cpp. Tens of minutes: the
+                                     # build is -O0 and the switch matrix
+                                     # is 529 invocations. In the nightly;
+                                     # never pre-commit
 ```
 
 It exists because `graphics-matrix.sh` carried `-XE 1 20` from the day it
@@ -601,10 +604,11 @@ push and pull request, fourteen jobs in about four minutes: the two
 Windows builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, `make install`, a behavioural differential against the
 base commit, the Windows package, two `.deb`s and four `.rpm`s.
-`nightly.yml` is the slow lane -- six jobs: the warning audit, the
+`nightly.yml` is the slow lane -- seven jobs: the warning audit, the
 sanitizer sweeps (ASan and UBSan), the Windows parity harnesses, all four
-matrices against yesterday, the external Swiss oracle, and two
-`continue-on-error` experiments: **macOS**, which builds the port, runs
+matrices against yesterday, the external Swiss oracle, a coverage run that
+asserts nothing NEW has become untested, and two `continue-on-error`
+experiments: **macOS**, which builds the port, runs
 the suite and packages a `.dmg`, and **Qt on Windows**, which compiles
 this port with MSVC and the open-source Qt6 (`-DQT -DPC`, no `-DWIN`) and
 uploads the result so it can be run on a real desktop. Both have been

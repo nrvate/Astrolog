@@ -83,11 +83,39 @@ if [ "${COVERAGE_SKIP_SUITE:-0}" != "1" ] && [ -f Makefile.qt.test ]; then
     ' | grep -vE "/usr/|\.h$" | sort -n > "$out/coverage-suite.txt"
     echo "== executed by NEITHER the matrices NOR the suite"
     awk -F'\t' 'NR==FNR{p[$3]=$1; l[$3]=$2; next}
+                 ($3 in p) && p[$3]+0==0 && $1+0==0 { print $3 }' \
+      "$out/coverage-suite.txt" "$out/coverage.txt" \
+      | LC_ALL=C sort > "$out/dead.txt"
+    awk -F'\t' 'NR==FNR{p[$3]=$1; l[$3]=$2; next}
                  ($3 in p) && p[$3]+0==0 && $1+0==0 {
                    printf "   %6s lines  %s\n", l[$3], $3; t+=l[$3] }
                  END{ if(t) printf "   TOTAL: %d lines nothing here executes\n", t
                       else print "   (none)" }' \
       "$out/coverage-suite.txt" "$out/coverage.txt"
+
+    # Exact, like every other count in this project. The known pair is
+    # placalc.cpp and placalc2.cpp, unreachable because "=0b" in the
+    # shipped astrolog.as sets us.fNoPlacalc and switch.cpp has no switch
+    # that clears it. A file JOINING that list is the signal: either new
+    # code arrived with no net behind it, or a harness stopped reaching
+    # code it used to. A file LEAVING it is good news that still has to be
+    # recorded here, so the expected set never drifts into folklore.
+    # LC_ALL=C on BOTH sides. Under a default locale sort ignores
+    # punctuation, so "placalc2.cpp" collates before "placalc.cpp"; under
+    # C it collates after. Two sorts that disagree make identical sets
+    # look different, which is a false alarm that trains people to ignore
+    # the check.
+    printf 'placalc.cpp\nplacalc2.cpp\n' | LC_ALL=C sort > "$out/dead.want"
+    if ! diff -q "$out/dead.want" "$out/dead.txt" >/dev/null 2>&1; then
+      echo "   THE UNTESTED SET CHANGED:"
+      diff "$out/dead.want" "$out/dead.txt" | sed 's/^/     /'
+      echo "   < expected, > measured. Update the expected set in this"
+      echo "   script only after saying in the commit message which net"
+      echo "   changed and why."
+      COVERAGE_DEAD_CHANGED=1
+    else
+      echo "   unchanged: exactly the two known-unreachable files"
+    fi
     rm -rf obj-qt-cov ./astrolog-qt-cov
   else
     echo "   Qt suite build failed; matrices-only report"
@@ -101,3 +129,4 @@ make -j4 >/dev/null
 [ -x ./astrolog ] || { echo "   FAILED to rebuild ./astrolog"; exit 1; }
 echo "   ./astrolog rebuilt uninstrumented"
 echo "report in $out/coverage.txt"
+[ "${COVERAGE_DEAD_CHANGED:-0}" = "0" ] || exit 1
