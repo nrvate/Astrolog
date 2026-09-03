@@ -923,6 +923,28 @@ jobs:
           astrolog-qt-test.exe -Yi1 ephem
           if errorlevel 1 exit /b 1
 
+      # And a LOOK at it, the same as macOS gets. This is the other
+      # platform nobody routinely opens: the suite proves 25 dialogs open
+      # with the right titles, and cannot say whether a control sits off
+      # the edge or a label is truncated under Windows' default font --
+      # which is exactly where a Qt layout tuned on Linux would break.
+      # QWidget::grab() paints through Qt, so this needs no desktop.
+      - name: Screenshot every dialog
+        if: always()
+        shell: cmd
+        run: |
+          set QT_QPA_PLATFORM=offscreen
+          set QTSHOTDIR=out\shots
+          astrolog-qt-test.exe -Yi1 ephem
+          exit /b 0
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: windows-qt-screenshots-${{ matrix.libpfx }}
+          path: out/shots
+          if-no-files-found: warn
+
       # Say what happened where the run summary shows it. Both experiments
       # are continue-on-error, which means a failure inside them leaves the
       # RUN green and someone has to go looking at job level to find it.

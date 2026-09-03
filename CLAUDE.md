@@ -518,6 +518,22 @@ window manager:
 QTGRAPHDIR=out/qtg ./run-qt-tests.sh   # 24 chart types, about 3 seconds
 ```
 
+And the **dialogs** as pictures, which is a different question from
+whether they open:
+
+```sh
+env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
+  QTSHOTDIR=out/shots ./astrolog-qt-test -Yi1 ephem
+```
+
+All 25, one PNG each. `QWidget::grab()` paints through Qt rather than
+asking the window system for pixels, so it needs no display. The suite
+already proves each dialog opens with the right title; what it cannot say
+is whether a control sits off the edge, a label is truncated, or a layout
+collapses under a platform's default font. The nightly captures these on
+**macOS** and on **Qt-for-Windows** and uploads them, because those are
+the two platforms nobody here opens by hand.
+
 The Windows build has assertions of its own now — not many, and slow, but
 it is no longer the only half with none:
 
