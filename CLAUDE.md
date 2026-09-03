@@ -388,7 +388,15 @@ tools/ci-assert-nightly.sh                   # is the SLOW lane healthy at
                                              # because a schedule that
                                              # stopped firing reports no
                                              # failures and reads exactly
-                                             # like one that passes
+                                             # like one that passes.
+                                             # And it reads the logs of
+                                             # PASSING jobs for steps that
+                                             # succeeded while skipping
+                                             # what they were meant to do
+                                             # -- three of those were found
+                                             # by hand on 2026-09-03,
+                                             # every one behind a green
+                                             # job
 ```
 
 And a twelfth that is not fast and not resource-shaped: **the

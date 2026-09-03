@@ -28,6 +28,7 @@ wf=${NIGHTLY_WORKFLOW:-nightly.yml}
 maxage=${MAX_AGE_H:-30}
 
 command -v gh >/dev/null || { echo "gh not found"; exit 2; }
+T_SKIP=$(mktemp); trap 'rm -f "$T_SKIP"' EXIT
 
 # success or failure only. A CANCELLED run is the concurrency group doing
 # its job -- a newer push superseded it -- and its jobs are cancelled
@@ -74,4 +75,58 @@ bad=$(gh api "repos/$repo/actions/runs/$id/jobs" \
   printf '%s\n' "$bad"
   exit 1; }
 
-echo "nightly clean: every step in run $id succeeded or was skipped"
+# And now the part a conclusion cannot show: a step that SUCCEEDED while
+# doing nothing.
+#
+# Three of these were found by hand on 2026-09-03, all behind green jobs.
+# The Swiss oracle printed "no astrolog at ./astrolog" and failed, which
+# was the visible one. The other two simply skipped: the Qt leg of
+# ubsan-sweep.sh said "no Qt build available" because Qt was installed by
+# a later step, and warning_audit.py said "no Qt6" because that job never
+# installed one -- so the leg that had just found two real bugs, and the
+# entire Qt6 warning ledger, contributed nothing while reporting success.
+#
+# A skip prints one line in the middle of a passing log, and nobody reads
+# a passing log. This does.
+#
+# ALLOWED is annotated because an unexplained skip is the whole point. A
+# pattern earns a line here by being a deliberate, documented skip; "it
+# was already there" is not a reason.
+allowed_skip() {
+  case $1 in
+    *"skipped on purpose"*)        return 0 ;;  # menu parity: 12 Windows-only items
+    *"Skipping plugin q"*)         return 0 ;;  # windeployqt, choosing backends
+    *"sprintf("*|*"printf("*)      return 0 ;;  # a compiler quoting source, not a skip
+    *"not available\", star_nr"*)  return 0 ;;  # ditto, swisseph's own message
+  esac
+  return 1
+}
+
+unexplained=""
+for jid in $(gh api "repos/$repo/actions/runs/$id/jobs" -q '.jobs[].id'); do
+  jname=$(gh api "repos/$repo/actions/jobs/$jid" -q '.name' 2>/dev/null)
+  log=$(gh api "repos/$repo/actions/jobs/$jid/logs" 2>/dev/null | tr -d '\r')
+  [ -n "$log" ] || continue
+  # Lines the runner echoes back from the script itself start with the
+  # ANSI command colour; they are the source of the check, not its output.
+  printf '%s\n' "$log" \
+    | grep -iE "skipped|skipping|no .* available|not available" \
+    | grep -v '\[36;1m' \
+    | while IFS= read -r line; do
+        allowed_skip "$line" && continue
+        printf '   [%s] %s\n' "$jname" "$(printf '%s' "$line" | sed 's/^[^ ]* //')"
+      done
+done > "$T_SKIP" 2>/dev/null || true
+unexplained=$(cat "$T_SKIP" 2>/dev/null || true)
+rm -f "$T_SKIP"
+
+[ -z "$unexplained" ] || {
+  echo "STEPS THAT PASSED WHILE SKIPPING SOMETHING:"
+  printf '%s\n' "$unexplained"
+  echo "== Each of these reported success. If the skip is deliberate, add"
+  echo "== the pattern to allowed_skip() in this script WITH THE REASON."
+  echo "== If it is not, something is not running that you think is."
+  exit 1; }
+
+echo "nightly clean: every step in run $id succeeded, and none skipped"
+echo "silently"
