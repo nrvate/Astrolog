@@ -446,7 +446,15 @@ jobs:
       - name: Install Qt for MSVC
         shell: pwsh
         run: |
-          pip install aqtinstall
+          # aqtinstall is pinned for the same reason every action here is
+          # pinned to a SHA: this job's inputs should change when someone
+          # changes them. It reaches out to Qt's own mirrors, parses their
+          # layout, and a release that changes how it names an archive or
+          # resolves a mirror would break the build with no commit behind
+          # it -- the hardest kind of failure to read, because the diff
+          # that "caused" it is empty. 3.3.0 is what the runs that
+          # established this job all used.
+          pip install aqtinstall==3.3.0
           aqt install-qt windows desktop ${{ matrix.qt }} ${{ matrix.aqtarch }} -O ${{ github.workspace }}\Qt
           echo "QTDIR=${{ github.workspace }}\Qt\${{ matrix.qt }}\${{ matrix.qtdir }}" >> $env:GITHUB_ENV
 
