@@ -2841,3 +2841,44 @@ what else has already run in the same working directory.
 Reproduced locally before fixing, by moving `./astrolog` aside and
 re-running: the same message, and the same 50-comparison pass once it is
 put back.
+
+**2026-09-03 — v8.00-qt.3 published, and the whole chain ran for the first
+time.** Nine artifacts, each verified before publication, plus a
+SHA256SUMS covering all of them; then `repo.yml` chained off it and
+rebuilt the apt and dnf repositories, including its own "install from it,
+on every distribution it serves". The nightly on the same commit is clean
+in all six jobs, and the external Swiss oracle inside it reported *50
+comparisons, worst deviation 0.0005 degrees* — its first successful run.
+
+The tag was **moved** rather than bumped. `v8.00-qt.3` had been pushed
+days earlier and had never produced a release, so nothing referenced it;
+moving a pointer to a version that has not shipped is what a tag is for.
+`ci-assert-green.sh` refused twice before it was allowed to, both times
+correctly: each new push superseded the previous CI run via the
+concurrency group, and a *cancelled* run is not a green one.
+
+**And one gap remained after all of it.** `ci-verify-repo.sh` checks the
+repository `repo.yml` just built, in the job that built it. What nothing
+checked was the half that happens afterwards — the Pages deploy. A deploy
+can succeed and serve the previous commit with every check upstream of it
+green. `tools/ci-verify-live-repo.sh` fetches the indexes over HTTPS the
+way apt and dnf will and requires the version to be in them, for all six
+distributions.
+
+Writing it produced a good demonstration of why a harness gets sabotaged
+before it is believed. Its first run reported **four of six distributions
+broken** — apt fine, every rpm repository missing the version. Both
+failures were in the check:
+
+1. The `primary.xml` href was extracted as the whole
+   `location href="..."/` string rather than the attribute value, so
+   `curl` was handed a URL containing a quote and failed with "bad/illegal
+   format", which reads like a missing file.
+2. **RPM does not store a version string at all.** `primary.xml` splits it
+   into `ver="8.00" rel="qt.3.fc42"`, so `8.00-qt.3` appears nowhere in
+   the metadata. Grepping for it can only ever fail.
+
+That is three spellings of one version across the release — `8.00+qt.3`
+for dpkg, `8.00-qt.3` in an rpm filename, and a split pair in rpm
+metadata — and none of them is negotiable. The repository had been
+correct the entire time.

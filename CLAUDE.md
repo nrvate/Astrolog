@@ -282,6 +282,16 @@ tools/ci-assert-version.sh v8.00-qt.1        # a tag matches astrolog.h
 tools/ci-verify-package.sh out/package/astrolog-windows
 tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
 tools/ci-verify-repo.sh public                         # clean container
+tools/ci-verify-live-repo.sh                 # and that the DEPLOYED site
+                                             # serves it: a Pages deploy
+                                             # can succeed and publish the
+                                             # previous commit, with every
+                                             # check upstream of it green.
+                                             # By hand after a release,
+                                             # never a gate -- propagation
+                                             # is not instant and a check
+                                             # retried until it passes is
+                                             # not a check
 tools/ci-differential.sh origin/qt out/diff  # four matrices vs a commit
 tools/ci-verify-release-dist.sh dist 9       # the release ships exactly
                                              # nine artifacts and
