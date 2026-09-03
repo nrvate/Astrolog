@@ -634,16 +634,14 @@ jobs:
           rem and all six makefiles already pass -Wno-write-strings for the
           rem same reason. Deferred deliberately: this job exists to find the
           rem NEXT obstacle, not to fund a const sweep. See QT_CI_PLAN.md.
+          rem _CRT_SECURE_NO_WARNINGS below silences C4996: MSVC deprecates
+          rem fopen, getenv, strcpy and sscanf for _s variants that exist
+          rem only on its own compiler, 850 of them at /W3. A portability
+          rem opinion rather than a defect. NOTE: rem cannot appear between
+          rem "cl" and its last "^" continuation -- cmd passes the word to
+          rem the compiler as a source file, and the build dies with
+          rem "LNK1181: cannot open input file 'rem.obj'". It did.
           cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
-             rem _CRT_SECURE_NO_WARNINGS: MSVC deprecates fopen, getenv,
-             rem strcpy and sscanf in favour of _s variants that exist only
-             rem on Microsoft's compiler -- 850 of them at /W3, across this
-             rem tree and vendored Swiss alike. A portability opinion, not a
-             rem defect: the code is correct standard C, and adopting _s
-             rem would make it non-portable to the four other compilers
-             rem that build this tree. Silenced deliberately, and said so
-             rem here, which is the difference between a decision and an
-             rem oversight.
              /D_CRT_SECURE_NO_WARNINGS ^
              /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
@@ -714,16 +712,14 @@ jobs:
             -property installationPath`) do set "VSPATH=%%i"
           call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
           python tools\qt-srcs.py --test > srcst.txt || exit /b 1
+          rem _CRT_SECURE_NO_WARNINGS below silences C4996: MSVC deprecates
+          rem fopen, getenv, strcpy and sscanf for _s variants that exist
+          rem only on its own compiler, 850 of them at /W3. A portability
+          rem opinion rather than a defect. NOTE: rem cannot appear between
+          rem "cl" and its last "^" continuation -- cmd passes the word to
+          rem the compiler as a source file, and the build dies with
+          rem "LNK1181: cannot open input file 'rem.obj'". It did.
           cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
-             rem _CRT_SECURE_NO_WARNINGS: MSVC deprecates fopen, getenv,
-             rem strcpy and sscanf in favour of _s variants that exist only
-             rem on Microsoft's compiler -- 850 of them at /W3, across this
-             rem tree and vendored Swiss alike. A portability opinion, not a
-             rem defect: the code is correct standard C, and adopting _s
-             rem would make it non-portable to the four other compilers
-             rem that build this tree. Silenced deliberately, and said so
-             rem here, which is the difference between a decision and an
-             rem oversight.
              /D_CRT_SECURE_NO_WARNINGS ^
              /DQT /DQTTEST /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
