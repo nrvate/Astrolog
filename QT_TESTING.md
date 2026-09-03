@@ -39,6 +39,14 @@ mkdir -p /tmp/b/Contents/MacOS && cp astrolog ephem -r /tmp/b/Contents/MacOS/
 cd /tmp && /tmp/b/Contents/MacOS/astrolog -Yi1 b/Contents/MacOS/ephem   -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1 | grep -E "^Chir|not found"
 ```
 
+Every other `-Yi` in this tree is safe, and the audit is worth recording
+so it is not redone: `ci-differential.sh` and six workflow steps all pass
+`-Yi1 ephem` to a binary that sits *beside* `ephem/` — in the checkout,
+or in a differential worktree with its own copy. Resolving against the
+executable is not merely harmless there, it is the more correct of the
+two readings. `tools/package-macos.sh` was the only place that moved the
+binary away from its data.
+
 `nrvate.as` is the maintainer's own settings file and is the only
 realistic test input. It carries `-Yi1 "/swe"`, the path to the ephemeris
 collection — **without it every esoteric body reads `???`**, and a `-Yi`
