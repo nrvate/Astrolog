@@ -739,7 +739,28 @@ jobs:
           # that "caused" it is empty. 3.3.0 is what the runs that
           # established this job all used.
           pip install aqtinstall==3.3.0
-          aqt install-qt windows desktop ${{ matrix.qt }} ${{ matrix.aqtarch }} -O ${{ github.workspace }}\Qt
+          # Retry, because the failure mode here is a MIRROR and not the
+          # tool. Observed 2026-09-03: aqt was redirected to
+          # qt.mirror.constant.com and stopped with "Specified path is
+          # bad: lib/cmake/Qt6/QtPostProcess.cmake" -- an incomplete
+          # archive on one mirror, nothing to do with this repository, and
+          # a commit-less failure of exactly the kind the pin above exists
+          # to avoid. aqt picks a mirror per run, so another attempt is
+          # usually a different mirror.
+          #
+          # Three attempts, not a loop until it works: if every mirror is
+          # serving a bad archive that is worth failing on, and this job is
+          # continue-on-error so a real outage does not turn the nightly
+          # red on its own.
+          $ok = $false
+          foreach ($i in 1..3) {
+            aqt install-qt windows desktop ${{ matrix.qt }} ${{ matrix.aqtarch }} -O ${{ github.workspace }}\Qt
+            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
+            Write-Host "aqt attempt $i failed (exit $LASTEXITCODE); retrying against another mirror"
+            Remove-Item -Recurse -Force "${{ github.workspace }}\Qt" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 15
+          }
+          if (-not $ok) { Write-Host "aqt failed three times"; exit 1 }
           echo "QTDIR=${{ github.workspace }}\Qt\${{ matrix.qt }}\${{ matrix.qtdir }}" >> $env:GITHUB_ENV
 
       # No moc, no build system: the same source list Makefile.srcs gives
