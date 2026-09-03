@@ -2805,3 +2805,39 @@ is on every runner already, and the keys and values alternate, so
 
 Falsified by building an installer with `-DVERSION=9.99-qt.99` on purpose:
 the check names both versions and exits 1, and exits 0 on the real one.
+
+**2026-09-03 — the external oracle never ran, and the commit adding it
+said it did.** `b56f511` is titled "The external oracle runs in CI after
+all: a clone and a build is 25s". It does not run. It has failed on every
+nightly since it was added, on its first execution and every one after,
+with:
+
+```
+no astrolog at ./astrolog
+```
+
+The clone and the build were fine — the log shows `ar: creating libswe.a`
+right before the guard fires. What is missing is Astrolog itself. The
+step was put in the sanitizer job because that is the slow lane, and
+**nothing in that job ever builds `./astrolog`**: both sweeps compile
+their own instrumented binaries and run `make clean` on either side of
+doing so. `asan-sweep.sh`'s header says so in as many words, and
+`CLAUDE.md` repeats it — *"it deletes `./astrolog` while it runs"*. It was
+written down, in two places, and still walked into.
+
+The fix is one `make -j4` in the step, deliberately unsanitized: the
+question is whether a *number* is right, and an instrumented binary
+answers it identically but slower, on paths the sweeps have just covered.
+
+**The transferable part is not the fix.** A step was added, a commit
+message asserted it worked, and the assertion was never checked against a
+run. Every other check in this document was falsified before being
+believed; this one was not, because it had passed *by hand* on the
+developer's machine — where `./astrolog` happens to exist, since
+everything else builds it. Passing locally is not evidence a CI step
+passes, and the environments differ in exactly the way that matters here:
+what else has already run in the same working directory.
+
+Reproduced locally before fixing, by moving `./astrolog` aside and
+re-running: the same message, and the same 50-comparison pass once it is
+put back.

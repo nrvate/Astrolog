@@ -186,6 +186,18 @@ jobs:
       # seconds.
       - name: Astrolog against upstream Swiss Ephemeris's own swetest
         run: |
+          # ./astrolog does not exist at this point, and never did in this
+          # job. Nothing here builds it: both sweeps above compile their
+          # OWN instrumented binaries and run "make clean" on either side
+          # of doing so, which is documented in asan-sweep.sh's header and
+          # is exactly why this step failed on its first and every
+          # subsequent run with "no astrolog at ./astrolog".
+          #
+          # A plain build, not a sanitized one, on purpose: this check is
+          # about whether a NUMBER is right. An instrumented binary would
+          # give the same answer several times slower, and the sanitizers
+          # have already had their turn on these paths.
+          make -j4
           git clone -q --depth 1 https://github.com/aloistr/swisseph.git /tmp/swe
           make -C /tmp/swe swetest -j4 >/dev/null
           tools/swetest-oracle.sh ./astrolog /tmp/swe/swetest "$PWD/ephem"
