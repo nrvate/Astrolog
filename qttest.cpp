@@ -1103,6 +1103,7 @@ static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
 
 extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
 extern QIcon IconAstrologQt();                   // qtdriver.cpp
+extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
 extern int NSchemeFromGtkFileTestQt(void);
 
@@ -1179,16 +1180,14 @@ static void TestColorSchemeQt()
   Check(dir.isValid(), "a scratch directory to write config files into");
   if (!dir.isValid())
     return;
-  // Both variables, because QDir::homePath() does not read the same one
-  // everywhere: on Windows it prefers USERPROFILE and only falls back to
-  // HOME, so setting HOME alone pointed these six assertions at the real
-  // home directory and they failed in the first Windows run of this
-  // suite. Setting both is portable and keeps the test testing the
-  // parsing rather than the platform.
-  QByteArray baProfile = qgetenv("USERPROFILE");
-  QByteArray baHome = qgetenv("HOME");
-  qputenv("HOME", dir.path().toLocal8Bit());
-  qputenv("USERPROFILE", dir.path().toLocal8Bit());
+  // Not the environment. QDir::homePath() reads HOME only on Unix; on
+  // Windows it resolves through SHGetKnownFolderPath(FOLDERID_Profile),
+  // which no qputenv can redirect -- setting HOME, and then HOME and
+  // USERPROFILE together, both left these six assertions reading the
+  // real home directory and failing on Windows. SetHomeTestQt() is a
+  // seam in the QTTEST build instead, so what is being tested is the INI
+  // parsing rather than the platform's idea of where a user lives.
+  SetHomeTestQt(dir.path().toLocal8Bit().constData());
 
   // kdeglobals. This is a regression test with a specific target: the
   // section is [Colors:Window], and QSettings cannot read a key out of a
@@ -1232,8 +1231,7 @@ static void TestColorSchemeQt()
   QFile::remove(strGtk);
   Check(NSchemeFromGtkFileTestQt() == -1, "no settings.ini at all says nothing");
 
-  qputenv("HOME", baHome);
-  qputenv("USERPROFILE", baProfile);
+  SetHomeTestQt("");
   printf("  the desktop's light/dark preference is read from each source\n");
 }
 

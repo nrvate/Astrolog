@@ -4317,9 +4317,24 @@ static QString SzIniValueQt(CONST QString &strPath, CONST char *szSect,
 // which there are many. Needs no helper program, so this still works on a
 // machine with no glib tools installed.
 
+#ifdef QTTEST
+// Where the two config-file probes below look for a home directory. The
+// suite has to point them at a scratch tree, and cannot do it with the
+// environment: QDir::homePath() reads HOME only on Unix, and on Windows
+// resolves through SHGetKnownFolderPath(FOLDERID_Profile), which no
+// qputenv can redirect. Setting HOME and then USERPROFILE both failed
+// there, six assertions at a time, before this was understood.
+static QString s_strHomeQt;
+void SetHomeTestQt(CONST char *sz) { s_strHomeQt = QString(sz); }
+#define HomeDirQt() (s_strHomeQt.isEmpty() ? QDir::homePath() : s_strHomeQt)
+#else
+#define HomeDirQt() QDir::homePath()
+#endif
+
+
 static int NSchemeFromKdeQt(void)
 {
-  QStringList ls = SzIniValueQt(QDir::homePath() + "/.config/kdeglobals",
+  QStringList ls = SzIniValueQt(HomeDirQt() + "/.config/kdeglobals",
     "Colors:Window", "BackgroundNormal").split(QChar(','));
 
   if (ls.size() < 3)
@@ -4334,7 +4349,7 @@ static int NSchemeFromKdeQt(void)
 
 static int NSchemeFromGtkFileQt(void)
 {
-  QString strPath = QDir::homePath() + "/.config/gtk-3.0/settings.ini";
+  QString strPath = HomeDirQt() + "/.config/gtk-3.0/settings.ini";
   QString str;
 
   str = SzIniValueQt(strPath, "Settings",
