@@ -379,6 +379,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libx11-dev
 
+      # Fast, and it belongs here rather than with the pure-Python audits
+      # because it needs a built binary and renders 227 bitmaps.
+      #
+      # It answers a question the differential in the next step cannot: an
+      # option that changes nothing still diffs to zero between two builds,
+      # which is indistinguishable from a passing differential. "-XE 1 20"
+      # sat in the matrix that way from the day it was written.
+      - name: No inert options in the graphics matrix
+        run: make -j4 && python3 tools/inert_option_audit.py
+
       - name: Diff all four matrices against the base commit
         env:
           BASE_PUSH: ${{ github.event.before }}

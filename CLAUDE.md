@@ -213,12 +213,13 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Ten standing audits, all currently clean and all run by CI — four of the
+Eleven standing audits, all currently clean and all run by CI — four of the
 port against `astrolog.rc`, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of round-trip fixture coverage, one of line endings,
-one of the MSVC project against the makefile's source list, and one of
-the Qt build's own source groups and headers:
+one of the MSVC project against the makefile's source list, one of
+the Qt build's own source groups and headers, and one of the graphics
+matrix's own options:
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
@@ -268,13 +269,25 @@ python3 tools/qt_srcs_audit.py       # two checks on the MSVC Qt build,
                                      # that surfaces as a link error on a
                                      # Windows runner attributed to
                                      # nothing
+python3 tools/inert_option_audit.py  # every option in the graphics matrix
+                                     # moves at least one render, or says
+                                     # in an annotated allowlist why it
+                                     # cannot. "-XE 1 20" rendered exactly
+                                     # like no -XE at all -- the asteroid
+                                     # loop stops at the first body with no
+                                     # ephemeris file -- and sat there
+                                     # looking like coverage, because an
+                                     # inert entry still diffs to zero.
+                                     # Needs ./astrolog, so it runs in the
+                                     # differential job rather than with
+                                     # the pure-Python audits
 python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # sources Makefile.win compiles. It
                                      # was one short for years, so MSVC
                                      # gave a link error nothing explained
 ```
 
-CI runs all ten, plus a set of assertions that are scripts rather than
+CI runs all eleven, plus a set of assertions that are scripts rather than
 workflow steps so they can be falsified in a second instead of by
 pushing. They are worth knowing about because several are useful by hand:
 
@@ -324,7 +337,7 @@ tools/ci-assert-nightly.sh                   # is the SLOW lane healthy at
                                              # like one that passes
 ```
 
-And an eleventh that is not fast and not resource-shaped: **the
+And a twelfth that is not fast and not resource-shaped: **the
 compiler itself**, which nothing here read until 2026-09-01.
 
 ```sh
@@ -344,7 +357,7 @@ tools/warning_audit.py --file io.cpp # one file, seconds, no baseline --
                                      # covers Qt6 too where present
 ```
 
-And a twelfth that asks the one question none of the others do -- not
+And a thirteenth that asks the one question none of the others do -- not
 "did this change?" but **"is this code reached at all?"**:
 
 ```sh
@@ -608,7 +621,7 @@ published packages.
 The Windows experiment is worth knowing about for one reason: it is the
 only net here that is a **different platform** rather than a stricter
 tool on the same one, and that turned out to be a distinct kind of net.
-Four sanitizer sweeps, ten audits and a warning ledger across five
+Four sanitizer sweeps, eleven audits and a warning ledger across five
 builds never mentioned `qttest.cpp`'s `#include <unistd.h>`, because on
 Linux it is correct. Compiling the file under MSVC found it in one run,
 along with 15 `getpid()` and 11 hardcoded `"/tmp"` fallbacks behind it.
