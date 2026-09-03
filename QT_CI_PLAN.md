@@ -2954,3 +2954,47 @@ Left open rather than guessed at: whether a matrix should cover Placalc,
 and how to invoke it so that it demonstrably does. What is settled is that
 698 lines of a linked, called backend currently have no differential
 coverage at all, and that the number came from measurement.
+
+**2026-09-03, later — the same measurement against the other half of the
+apparatus, and a definitive answer.** The matrices are not the only net;
+the 3832-assertion Qt suite is the other, and it reaches different code.
+Measured, they are genuinely complementary rather than overlapping:
+
+| file | matrices | Qt suite |
+|---|---|---|
+| `xdevice.cpp` | 46.6% | 14.6% |
+| `express.cpp` | 20.5% | 38.6% |
+| `swecl.cpp` | 5.0% | 22.3% |
+| `switch.cpp` | 77.7% | 39.3% |
+
+So the interesting number is not either column but what **both** miss.
+Over the 29 files measured by both:
+
+```
+   563 lines  placalc.cpp
+   135 lines  placalc2.cpp
+   TOTAL: 698 lines nothing in this project executes
+```
+
+That is the whole list. Every other file in the build is entered by at
+least one net. 698 lines are compiled, linked, called from `calc.cpp`, and
+never run by anything — for the reason recorded above: `-0b` in the
+shipped `astrolog.as` is a one-way latch that makes the Placalc backend
+unselectable, and every net reads that file.
+
+The next blind spots after those, by best-of-both:
+
+| best of both | lines | file |
+|---|---|---|
+| 9.66% | 383 | `swejpl.cpp` |
+| 14.56% | 206 | `swedate.cpp` |
+| 22.33% | 3166 | `swecl.cpp` |
+| 38.64% | 1142 | `express.cpp` |
+| 39.88% | 2119 | `swephlib.cpp` |
+| 41.86% | 1739 | `swehouse.cpp` |
+
+`swejpl.cpp` and `swecl.cpp` are the JPL-file and eclipse paths, both
+needing data this repository does not ship, so low coverage there is
+expected rather than alarming. `swehouse.cpp` at 41.9% is the surprise
+worth a look: the suite asserts all 40 house systems partition the circle,
+and that still leaves more than half the file unentered.

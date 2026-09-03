@@ -62,6 +62,38 @@ gcov -n ./*.gcda 2>/dev/null | awk '
 ' | grep -vE "/usr/|\.h$" | sort -n > "$out/coverage.txt"
 awk -F'\t' '{printf "   %6s%%  %6s lines  %s\n", $1, $2, $3}' "$out/coverage.txt"
 
+# The Qt suite is the other half of the apparatus and reaches different
+# code: measured, xdevice.cpp is 46.6% from the matrices and 14.6% from
+# the suite, while express.cpp is 20.5% from the matrices and 38.6% from
+# the suite. Neither substitutes for the other, so the interesting number
+# is what BOTH miss. Its own OBJDIR, so its .gcda cannot collide with the
+# console build's, which land in the tree root.
+if [ "${COVERAGE_SKIP_SUITE:-0}" != "1" ] && [ -f Makefile.qt.test ]; then
+  echo "== building and running the Qt suite under coverage"
+  make -f Makefile.qt.test NAME=astrolog-qt-cov OBJDIR=obj-qt-cov \
+    CPPFLAGS='-MMD -MP -DQT -DQTTEST -O0 -g -fPIC -std=gnu++17 --coverage \
+      -Wno-write-strings -Wno-narrowing -Wno-comment $(QT_CFLAGS)' \
+    LDEXTRA='--coverage' -j4 >/dev/null 2>&1 || true
+  if [ -x ./astrolog-qt-cov ]; then
+    rm -f obj-qt-cov/*.gcda
+    QTTESTBIN=./astrolog-qt-cov ./run-qt-tests.sh >"$out/suite.txt" 2>&1 || true
+    gcov -n -o obj-qt-cov obj-qt-cov/*.gcda 2>/dev/null | awk '
+      /^File/ { f=$2; gsub(/'"'"'/,"",f) }
+      /^Lines executed/ { split($0,a,":"); split(a[2],b,"% of "); print b[1]"\t"b[2]"\t"f }
+    ' | grep -vE "/usr/|\.h$" | sort -n > "$out/coverage-suite.txt"
+    echo "== executed by NEITHER the matrices NOR the suite"
+    awk -F'\t' 'NR==FNR{p[$3]=$1; l[$3]=$2; next}
+                 ($3 in p) && p[$3]+0==0 && $1+0==0 {
+                   printf "   %6s lines  %s\n", l[$3], $3; t+=l[$3] }
+                 END{ if(t) printf "   TOTAL: %d lines nothing here executes\n", t
+                      else print "   (none)" }' \
+      "$out/coverage-suite.txt" "$out/coverage.txt"
+    rm -rf obj-qt-cov ./astrolog-qt-cov
+  else
+    echo "   Qt suite build failed; matrices-only report"
+  fi
+fi
+
 echo "== restoring the tree"
 make clean-console >/dev/null 2>&1 || true
 rm -f ./*.gcda ./*.gcno ./astrolog-cov
