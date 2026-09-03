@@ -730,8 +730,10 @@ kind as the `seas_18.se1` already tracked here, `.gitattributes` already
 marks `*.se1` binary, and the repository already ships eleven. That is
 the precedent, not a licence review — **B, at 8.0 MB and 20 more files,
 is where a real one is owed.**
-**Status.** [x] A′ done 2026-09-02; **B still open** and still the thing
-that would make CI as strong a net as a local run
+**Status.** [x] A′ done 2026-09-02; **[x] B done 2026-09-03** — the 20
+files measured at 7.8 MB, `ephem/` resolves 39 of 39, and the suite reports
+3832/0 under `ASTROLOG_QT_EPHEM=minimal` and against `/swe` alike. CI is
+now as strong a net as a local run on this surface.
 
 ### 2.0b Measured, 2026-09-01 — and it changed the plan
 **Done.** Two of the three predictions this item existed to test were
@@ -2998,3 +3000,29 @@ needing data this repository does not ship, so low coverage there is
 expected rather than alarming. `swehouse.cpp` at 41.9% is the surprise
 worth a look: the suite asserts all 40 house systems partition the circle,
 and that still leaves more than half the file unentered.
+
+**2026-09-03 — the Windows package half, re-tested and partly closed.**
+Item 4.4 has said the Windows package cannot be verified the way the Linux
+one is: `astrolog.exe` has no console entry point, so "install it, run it
+from `/`, assert Chiron" does not transfer, and WCLI resolves its data
+through a different branch of `SwissEnsurePath()` so it does not
+substitute. **Both halves re-tested and both still hold.** `astrolog.exe`
+blocks forever under `wine ... -os file`, with a display and without: it
+is a `WinMain` program and always opens a window, so it cannot be driven
+to write a chart and exit.
+
+What can be asserted is weaker, and nothing was asserting it at all:
+**the packaged binary starts.** `tools/ci-verify-windows-starts.sh` runs
+it under Xvfb and requires a window whose title begins "Astrolog" —
+measured, `Astrolog 8.00`. That covers a statically-linked `.exe` missing
+a DLL, a corrupt build, and a binary that crashes on startup, none of
+which a file listing or a checksum can see. Falsified with a truncated
+`astrolog.exe`: no window, exit 1.
+
+It kills by the PID it started. `pkill -f astrolog` matches the
+maintainer's own running copy and has killed it before (`QT_GUI_PLAN.md`
+work log item 169).
+
+Item 4.4 stays open for the strong form — "the installed Windows package
+computes a correct chart" — which needs the GUI driven with `xdotool`, and
+that is `tools/win-tests.sh`'s territory rather than a package check's.

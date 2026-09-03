@@ -322,6 +322,17 @@ jobs:
       - name: Windows path handling
         run: tools/win-console-checks.sh
 
+      # The packaged .exe starts. QT_CI_PLAN.md item 4.4 records that the
+      # Windows half of the package check is open because astrolog.exe has
+      # no console entry point and cannot be driven to write a chart and
+      # exit -- re-tested and still true. This asserts the weaker thing
+      # nothing asserted at all: that the binary a user unpacks runs, finds
+      # what it needs and puts up its own window.
+      - name: The packaged Windows program starts
+        run: |
+          tools/package.sh windows out/pkg
+          tools/ci-verify-windows-starts.sh out/pkg/astrolog-windows
+
       - name: Diff the whole chart matrix
         run: tools/win-differential.sh out/win-diff
 
