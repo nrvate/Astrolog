@@ -119,8 +119,20 @@
                /* That it links is not that it works: nothing has run it,  */
                /* and its menu items -- Open Directory, Setup User, the    */
                /* registry (un)install -- are exactly the parts a link     */
-               /* cannot check. QT_CI_PLAN.md, "The three unbuilt          */
-               /* configurations", has the decision this is waiting on.    */
+               /* cannot check.                                            */
+               /*                                                          */
+               /* DECIDED 2026-09-03 by the maintainer: KEEP IT, unbuilt,  */
+               /* with a comment at every site. Not deleted, because it    */
+               /* builds and is upstream's code; not built, because        */
+               /* nothing here needs a Windows installer and building it   */
+               /* would mean owning eleven sites nobody has run. Each of   */
+               /* those sites now says so where a reader will be standing, */
+               /* which is the whole point -- the failure this guards      */
+               /* against is someone finding an #ifdef WSETUP block and    */
+               /* assuming it works because it is in the tree.             */
+               /*                                                          */
+               /* To build it anyway: -DWSETUP plus -lshlwapi in           */
+               /* Makefile.win's LIBS, for SHDeleteKey. Nothing else.      */
 
 #define JPLWEB /* Comment out this #define if you don't want to compile in */
                /* features to access the JPL Horizons Website online.      */
@@ -388,6 +400,8 @@
 #define WINANY
 #include <windows.h>
 #include <commdlg.h>
+// WSETUP: builds, but nothing compiles it and nothing has run it.
+// See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
 #include <objbase.h>
 #include <comdef.h>
@@ -498,6 +512,8 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 #endif
 #endif // WIN
 
+// WSETUP: builds, but nothing compiles it and nothing has run it.
+// See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
 #ifndef WIN
 #error "If 'WSETUP' is defined 'WIN' must be too"

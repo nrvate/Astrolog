@@ -189,6 +189,8 @@ int NProcessSwitchesW(int pos, PARSEIN *pin)
     SwitchF(wi.fAutoSave);
     break;
 
+  // WSETUP: builds, but nothing compiles it and nothing has run it.
+  // See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
   case 'S':
     if (ch1 == 'g')
@@ -619,6 +621,9 @@ int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   DeleteMenu(wi.hmenu, cmdDocAtlas,     MF_BYCOMMAND);
   DeleteMenu(wi.hmenu, cmdDocTimezone,  MF_BYCOMMAND);
 #endif
+  // The LIVE branch: every build this tree produces takes it, and
+  // deletes the setup menu items because the code behind them is not
+  // compiled. The #ifdef half is what astrolog.h describes.
 #ifndef WSETUP
   DeleteMenu(wi.hmenu, cmdOpenDir,        MF_BYCOMMAND);
   DeleteMenu(wi.hmenu, cmdSetupUser,      MF_BYCOMMAND);
@@ -1257,6 +1262,8 @@ int NWmCommand(WORD wCmd)
     DlgSaveChart();
     break;
 
+  // WSETUP: builds, but nothing compiles it and nothing has run it.
+  // See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
   case cmdOpenDir:
     DlgOpenDir();
@@ -2430,6 +2437,8 @@ int NWmCommand(WORD wCmd)
     us.fGraphics = fFalse;
     break;
 
+  // WSETUP: builds, but nothing compiles it and nothing has run it.
+  // See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
   case cmdSetupAll:
   case cmdSetupUser:
@@ -3002,6 +3011,8 @@ flag API FRedraw(void)
 }
 
 
+// WSETUP: builds, but nothing compiles it and nothing has run it.
+// See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
 /*
 ******************************************************************************

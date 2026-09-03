@@ -1976,6 +1976,8 @@ flag FEvalFunction(int ifun, PAR *rgpar, char *rgpchEval[2])
 #endif
     break;
   case funWsetup:
+  // WSETUP: builds, but nothing compiles it and nothing has run it.
+  // See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
     n = 1;
 #else

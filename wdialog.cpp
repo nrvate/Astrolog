@@ -613,6 +613,8 @@ flag API DlgSaveChart()
 }
 
 
+// WSETUP: builds, but nothing compiles it and nothing has run it.
+// See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
 // Bring up the Windows standard folder selection dialog, and open all the
 // Astrolog files within that folder into the chart list. Called from the

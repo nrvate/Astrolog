@@ -2238,6 +2238,8 @@ static int NSws(CONST char *szSwitch, PARSEIN *pin)
   char ch1 = szSwitch[1], ch2 = ch1 == chNull ? chNull : szSwitch[2];
   real rT;
   int darg = 0;
+  // WSETUP: builds, but nothing compiles it and nothing has run it.
+  // See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
   int i;
 #endif
@@ -2260,6 +2262,8 @@ static int NSws(CONST char *szSwitch, PARSEIN *pin)
     us.nDegForm = df360;
   else if (ch1 == 'n')
     us.nDegForm = dfNak;
+  // WSETUP: builds, but nothing compiles it and nothing has run it.
+  // See astrolog.h's WSETUP comment before trusting anything here.
 #ifdef WSETUP
   else if (ch1 == 'e')    // -setup switch for Windows
     i = FCreateProgramGroup(fFalse) && FCreateDesktopIcon() &&
