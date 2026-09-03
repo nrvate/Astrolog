@@ -631,6 +631,22 @@ jobs:
           # Fewer mirrors tried, and the ones tried are not ranked by a
           # probe that also has to time out.
           echo 'max_parallel_downloads=8' >> /etc/dnf/dnf.conf
+          # And BOUND the tail. ip_resolve=4 moved the median but not the
+          # worst case: measured across six CI runs this step took 28, 91,
+          # 111, 139, 362 and 589 seconds, on the same image with the same
+          # packages, while el10 took 92 and Fedora 25-30. That spread is
+          # mirror selection -- most attempts are fine and an occasional
+          # one is waited out. timeout/retries put a ceiling on a bad
+          # mirror instead of letting dnf sit on it, and fastestmirror=False
+          # removes a ranking probe that is itself a round of timeouts.
+          #
+          # Verified in the real rockylinux:9 image that this installs the
+          # same set: 54 s, rc=0, qt5-qtbase-devel 5.15.9, g++ working --
+          # against 55 s without it. The IMPROVEMENT cannot be measured
+          # from here, because the pathology is on GitHub's network and not
+          # reproducible on a laptop; what is verified is that bounding the
+          # wait does not break the install.
+          printf 'timeout=20\nretries=2\nfastestmirror=False\n' >> /etc/dnf/dnf.conf
           dnf install -y -q dnf-plugins-core || true
           (dnf config-manager --set-enabled crb || \
            dnf config-manager --enable crb || true) 2>/dev/null
