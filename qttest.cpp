@@ -63,9 +63,10 @@
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QKeyEvent>
 #include <stdarg.h>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QFile>
 #include "astrolog.h"
 #include "extern.h"
-#include <unistd.h>
 #include "qtdriver.h"
 
 #ifdef SWISS
@@ -1581,13 +1582,14 @@ static void TestTextExportQt()
   char szFile[cchSzMax];
   FILE *fileSav = is.S;
   flag fGraphicsSav = us.fGraphics, fHTMLSav = us.fTextHTML;
-  CONST char *szDir = getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp";
+  QByteArray baDir = QDir::tempPath().toLocal8Bit();
+  CONST char *szDir = baDir.constData();
   FILE *fileT;
   long cb = -1;
 
   Group("Text export");
   sprintf2(S(szFile), "%s/astrolog-qt-textexport-%d.tmp", szDir,
-    (int)getpid());
+    (int)QCoreApplication::applicationPid());
   CaptureTextToFileQt(szFile, fFalse);
 
   Check(is.S == fileSav,
@@ -1603,7 +1605,7 @@ static void TestTextExportQt()
     fclose(fileT);
   }
   Check(cb > 100, "and actually wrote the chart (%ld bytes)", cb);
-  unlink(szFile);
+  QFile::remove(QString(szFile));
 }
 
 
@@ -2212,8 +2214,9 @@ static void TestSettingsRoundTripQt()
   rgobjset[iMoon].tinf = 4.0;
   rgobjset[iCusp].tinf = 6.0;
 
-  sprintf2(S(szPath), "%s/astrolog-qt-roundtrip-%d.as", getenv("TMPDIR") != NULL ?
-    getenv("TMPDIR") : "/tmp", (int)getpid());
+  sprintf2(S(szPath), "%s/astrolog-qt-roundtrip-%d.as",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -3272,7 +3275,8 @@ static void TestSharedCoreFixesQt()
     ciCore = ciMain;
     us.fSeconds = fTrue;
     sprintf2(S(szOut), "%s/astrolog-qt-longloc-%d.txt",
-      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
+      QDir::tempPath().toLocal8Bit().constData(),
+      (int)QCoreApplication::applicationPid());
     FCloneSz(szOut, &is.szFileScreen);
     us.fGraphics = fFalse;
     us.fListing = fTrue; us.fWheel = fFalse;
@@ -3570,9 +3574,9 @@ static void TestNestedIncludeQt()
 
   Group("Nested include");
   SetNoPopupQt(fTrue);    // a failing load must fail, not open a box
-  szTmp = getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp";
-  sprintf2(S(szInner), "%s/astrolog-qt-nest-inner-%d.as", szTmp, (int)getpid());
-  sprintf2(S(szOuter), "%s/astrolog-qt-nest-outer-%d.as", szTmp, (int)getpid());
+  szTmp = QDir::tempPath().toLocal8Bit().constData();
+  sprintf2(S(szInner), "%s/astrolog-qt-nest-inner-%d.as", szTmp, (int)QCoreApplication::applicationPid());
+  sprintf2(S(szOuter), "%s/astrolog-qt-nest-outer-%d.as", szTmp, (int)QCoreApplication::applicationPid());
   file = fopen(szInner, "w");
   fprintf(file, "@AD800  ; inner\n-YQ 41\n");
   fclose(file);
@@ -3702,8 +3706,7 @@ static void TestForcedPositionsQt()
   sprintf2(S(szLine), "-WM 1 \"AstrologQtSuiteMacro\"");
   FProcessCommandLine(szLine);
 
-  sprintf2(S(szPath), "%s/astrolog-qt-force-test-%d.as", getenv("TMPDIR") != NULL ?
-    getenv("TMPDIR") : "/tmp", (int)getpid());
+  sprintf2(S(szPath), "%s/astrolog-qt-force-test-%d.as", QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -4460,8 +4463,8 @@ static void TestNumericOracleQt()
         FILE *fileRetSav = is.S, *fileRet;
 
         sprintf2(S(szTmpRet), "%s/astrolog-qt-return-%d.txt",
-          getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
-          (int)getpid());
+          QDir::tempPath().toLocal8Bit().constData(),
+          (int)QCoreApplication::applicationPid());
         fileRet = fopen(szTmpRet, "w");
         if (fileRet != NULL)
           is.S = fileRet;
@@ -4650,8 +4653,8 @@ static void TestNumericOracleQt()
       // qttest.cpp:4596.
       fileAtlSav = is.S;
       sprintf2(S(szTmpAtl), "%s/astrolog-qt-atlas-%d.txt",
-        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
-        (int)getpid());
+        QDir::tempPath().toLocal8Bit().constData(),
+        (int)QCoreApplication::applicationPid());
       fileAtl = fopen(szTmpAtl, "w");
       Check(fileAtl != NULL, "the atlas leg got a stream of its own");
       if (fileAtl != NULL)
@@ -4787,8 +4790,8 @@ static void TestNumericOracleQt()
         long lcb;
 
         sprintf2(S(szTmpInt), "%s/astrolog-qt-interp-%d.txt",
-          getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
-          (int)getpid());
+          QDir::tempPath().toLocal8Bit().constData(),
+          (int)QCoreApplication::applicationPid());
         fileInt = fopen(szTmpInt, "w");
         if (fileInt != NULL) {
           is.S = fileInt;
@@ -4844,8 +4847,8 @@ static void TestNumericOracleQt()
       for (j = 0; j < 8 && j < cciSav; j++)
         rgciSav[j] = is.rgci[j];
       sprintf2(S(szTmpDay), "%s/astrolog-qt-inday-%d.txt",
-        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
-        (int)getpid());
+        QDir::tempPath().toLocal8Bit().constData(),
+        (int)QCoreApplication::applicationPid());
 
       for (iMon = 1; iMon <= 6; iMon++) {
         OraclePinUtQt(2020, iMon, 1, 0.0);
@@ -4941,8 +4944,8 @@ static void TestNumericOracleQt()
       ciTran = ciCore;
       is.cci = 0;
       sprintf2(S(szTmpTra), "%s/astrolog-qt-transit-%d.txt",
-        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
-        (int)getpid());
+        QDir::tempPath().toLocal8Bit().constData(),
+        (int)QCoreApplication::applicationPid());
       fileTraSav = is.S;
       fileTra = fopen(szTmpTra, "w");
       if (fileTra != NULL)
@@ -5014,8 +5017,8 @@ static void TestNumericOracleQt()
         ignore[j] = (j != oSun);
       is.cci = 0;
       sprintf2(S(szTmpHor), "%s/astrolog-qt-horizon-%d.txt",
-        getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp",
-        (int)getpid());
+        QDir::tempPath().toLocal8Bit().constData(),
+        (int)QCoreApplication::applicationPid());
       fileHorSav = is.S;
       fileHor = fopen(szTmpHor, "w");
       if (fileHor != NULL)
@@ -5433,7 +5436,7 @@ static void TestFileParsersQt()
     szPad[i] = 'P';
   szPad[2047] = chNull;
   sprintf2(S(szFile), "%s/astrolog-qt-parserfixture-%d.tmp",
-    getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
+    QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
 
   // iCalendar, fgets through the whole cchSzLine buffer: a 400-char
   // SUMMARY arrives intact (it used to truncate at 246, the old
@@ -5662,7 +5665,7 @@ static void TestLineDrawingQt()
     }
     us.fGrid = fTrue;
     sprintf2(S(szOut), "%s/astrolog-qt-linedraw-%d.txt",
-      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
+      QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
     FCloneSz(szOut, &is.szFileScreen);
 
     // The claim is that gs.nFontTxt changes nothing about a *text*
@@ -5750,7 +5753,7 @@ static void TestLongStringsQt()
     for (i = 0; i < cchartmode; i++)
       rgfSav[i] = *rgchartmode[i].pf;
     sprintf2(S(szOut), "%s/astrolog-qt-longstrings-%d.txt",
-      getenv("TMPDIR") != NULL ? getenv("TMPDIR") : "/tmp", (int)getpid());
+      QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
     FCloneSz(szOut, &is.szFileScreen);
 
     // Action() opens is.S on is.szFileScreen and fclose()s it on the way
