@@ -89,7 +89,13 @@ PLIST
 printf 'APPL????' > "$app/Contents/PkgInfo"
 
 echo "== macdeployqt"
-"$(brew --prefix qt)/bin/macdeployqt" "$app" -always-overwrite
+# Homebrew's Qt is keg-only and split across qtbase/qtsvg/..., and
+# macdeployqt prints "Cannot resolve rpath" for every framework it cannot
+# find that way -- QtPdf, QtSvg, QtVirtualKeyboard, libbrotli, libwebp.
+# Astrolog links none of those; they are transitive references inside Qt's
+# own plugins. The errors are noise on this Qt and the deploy still
+# produces a working bundle, which the run below is what actually decides.
+"$(brew --prefix qt)/bin/macdeployqt" "$app" -always-overwrite || true
 
 echo "== ad-hoc signature"
 codesign --force --deep --sign - "$app"
@@ -98,16 +104,36 @@ codesign --verify --deep --strict "$app" && echo "   signature verifies"
 # Run it before shipping it. The binary is inside the bundle now, with
 # macdeployqt's rewritten library paths, which is the arrangement that
 # actually gets downloaded -- and the one a plain "make qt" never tests.
+echo "== what is actually in the bundle"
+printf '   MacOS:     '; ls "$app/Contents/MacOS" | tr '\n' ' '; echo
+printf '   ephem:     '; ls "$app/Contents/MacOS/ephem" 2>/dev/null | wc -l | tr -d ' '
+printf ' files\n   Resources: '; ls "$app/Contents/Resources" | tr '\n' ' '; echo
+
 echo "== does the bundled binary compute?"
-chart=$(QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/Astrolog" \
+# stderr is kept and PRINTED ON EVERY FAILURE PATH, not only the missing
+# -line one. The first version showed it only when Chiron was absent, so
+# a Chiron reading 0Ari00 -- the ephemeris-not-found case, which is the
+# failure this is most likely to hit -- reported the symptom and threw
+# away Astrolog's own "not found in PATH '...'" line naming what it
+# searched. That is the fourth time in this project a check has discarded
+# the evidence it existed to collect.
+QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/Astrolog" \
   -Yi1 "$app/Contents/MacOS/ephem" \
-  -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os "$out/chart.txt" 2>&1 || true)
-grep -q '^Chir' "$out/chart.txt" 2>/dev/null || {
-  echo "   no Chiron line. Output was:"; echo "$chart" | head -5
-  head -5 "$out/chart.txt" 2>/dev/null; exit 1; }
+  -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os "$out/chart.txt" \
+  >"$out/run.out" 2>&1 || true
+fail=""
+grep -q '^Chir' "$out/chart.txt" 2>/dev/null || fail="no Chiron line"
+grep -q "0Ari00" "$out/chart.txt" 2>/dev/null && fail="ephemeris not found"
+if [ -n "$fail" ]; then
+  echo "   FAILED: $fail"
+  echo "   --- the program said ---"
+  sed 's/^/   /' "$out/run.out" | head -10
+  echo "   --- chart.txt, first 6 ---"
+  sed 's/^/   /' "$out/chart.txt" 2>/dev/null | head -6
+  exit 1
+fi
 grep '^Chir' "$out/chart.txt" | head -1 | sed 's/^/   /'
-grep -q "0Ari00" "$out/chart.txt" && { echo "   EPHEMERIS NOT FOUND"; exit 1; }
-rm -f "$out/chart.txt"
+rm -f "$out/chart.txt" "$out/run.out"
 
 echo "== dmg"
 hdiutil create -volname "Astrolog $ver" -srcfolder "$app" \
