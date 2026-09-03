@@ -461,7 +461,12 @@
 // named. That one sizeof cannot catch; this one it can, so it should.
 template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 #define S(sz) (sz), (int)CchArray(sz)
-#define SO(pch, sz) (pch), (CchArray(sz) - ((pch) - (sz)))
+// (int) on SO too, for the same reason S() has it: CchArray() returns
+// size_t and the subtraction stays size_t, so every SO() call passing an
+// int parameter is a narrowing conversion. GCC says nothing; MSVC says
+// C4267 "possible loss of data" -- but only at /W3, which is why four
+// sites sat unmentioned while the job ran at /W1.
+#define SO(pch, sz) (pch), (int)(CchArray(sz) - ((pch) - (sz)))
 #else
 #define S(sz) (sz), (int)sizeof(sz)
 #define SO(pch, sz) (pch), (sizeof(sz) - ((pch) - (sz)))
