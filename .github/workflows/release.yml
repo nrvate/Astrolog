@@ -181,9 +181,38 @@ jobs:
           name: astrolog-windows
           path: out/package/astrolog-windows.zip
 
+  # macOS ships an ad-hoc signed .app in a .dmg, and nothing more. That is
+  # the whole free tier: codesign -s - costs nothing and is MANDATORY on
+  # Apple Silicon, where arm64 will not execute an unsigned binary at all.
+  # Notarization is what removes the Gatekeeper prompt for someone who
+  # downloads through a browser, and it needs a Developer ID and a secret
+  # in this repository -- ground rule 5, the one line in QT_CI_PLAN.md
+  # nothing is allowed to cross.
+  #
+  # Phase 10 read that as "no macOS binaries" and said so for two days.
+  # That conflated "cannot ship a frictionless artifact" with "cannot ship
+  # one", and they are not the same: the artifact below runs perfectly
+  # after a right-click -> Open, or one xattr command, or a curl download
+  # that never gets quarantined in the first place. Plenty of open source
+  # projects ship exactly this.
+  macos:
+    name: macOS .app and .dmg
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: brew install qt pkg-config
+      - run: make qt -j4
+      - run: tools/package-macos.sh out/macos
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: astrolog-macos
+          path: out/macos/*.dmg
+
   publish:
     name: Publish
-    needs: [deb, rpm, windows]
+    needs: [deb, rpm, windows, macos]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -196,13 +225,13 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # Seven artifacts: two .deb, four .rpm, one .zip. Exact, not a
-      # floor -- "at least one" passes a release missing five. The check
-      # is a script rather than YAML so it can be falsified without
+      # Eight artifacts: two .deb, four .rpm, one .zip, one .dmg. Exact,
+      # not a floor -- "at least one" passes a release missing six. The
+      # check is a script rather than YAML so it can be falsified without
       # cutting a release to test it, which is the one thing nobody wants
       # to do repeatedly.
-      - name: There are seven artifacts, and a SHA256SUMS over them
-        run: tools/ci-verify-release-dist.sh dist 7
+      - name: There are eight artifacts, and a SHA256SUMS over them
+        run: tools/ci-verify-release-dist.sh dist 8
 
       - name: Publish
         env:
