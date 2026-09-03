@@ -92,7 +92,27 @@ echo "   uninstall.exe present"
 
 echo "== uninstalling silently"
 timeout 600 wine "$dst/uninstall.exe" /S >/dev/null 2>&1 || true
-sleep 3
+# An NSIS uninstaller cannot delete itself while it is running, so it
+# copies itself to $TEMP and re-executes DETACHED. The wine call above
+# returns as soon as the parent exits, which is BEFORE the copy has
+# removed uninstall.exe and the directory.
+#
+# This used to be "sleep 3" -- a guess at how long that takes, which was
+# right most of the time and wrong often enough to fail a nightly with
+# "uninstall left 1 files behind: .../uninstall.exe". The same mistake
+# as the iteration count in ci-verify-windows-starts.sh: a fixed wait is
+# not a wait for anything.
+#
+# wineserver -w blocks until every process in the prefix has exited,
+# which is exactly the condition, and it returns as soon as that is true
+# rather than always costing the full delay. The poll after it is a
+# backstop for the case where wineserver has already gone away.
+timeout "${UNINSTALL_TIMEOUT:-180}" wineserver -w 2>/dev/null || true
+deadline=$(( $(date +%s) + ${UNINSTALL_TIMEOUT:-180} ))
+while [ -d "$dst" ] && [ "$(date +%s)" -lt "$deadline" ]; do
+  [ "$(find "$dst" -type f 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ] && break
+  sleep 1
+done
 if [ -d "$dst" ]; then
   left=$(find "$dst" -type f 2>/dev/null | wc -l | tr -d ' ')
   [ "$left" -eq 0 ] || {
