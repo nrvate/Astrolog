@@ -24,6 +24,26 @@ set -eu
 
 tag=${1:?usage: ci-verify-published-release.sh <tag> [repo]}
 repo=${2:-${GITHUB_REPOSITORY:-nrvate/Astrolog}}
+
+# Releases published BEFORE the rename fix, which all carry a manifest
+# naming two .deb files GitHub does not serve. They are reported and
+# skipped rather than failed, so this can run nightly against the newest
+# tag without being red for a reason nobody is going to act on -- a check
+# that is always red is a check people stop reading.
+#
+# The list is closed and will never grow: every release from v8.00-qt.4 on
+# renames before hashing. If a tag NOT on this list fails, that is the
+# fix having regressed, which is the whole point of running it.
+case " v8.00-qt.1 v8.00-qt.2 v8.00-qt.3 " in
+  *" $tag "*)
+    echo "== $tag predates the SHA256SUMS rename fix"
+    echo "   Its manifest names two .deb files GitHub does not serve, because"
+    echo "   the '~' rewrite happens at upload and the manifest was written"
+    echo "   before it. Known, recorded, and not repaired retroactively:"
+    echo "   that would change what is publicly served."
+    echo "skipped: $tag is a known pre-fix release"
+    exit 0 ;;
+esac
 command -v gh >/dev/null || { echo "gh not found"; exit 2; }
 
 # Two directories, not one. The first draft wrote its working lists into

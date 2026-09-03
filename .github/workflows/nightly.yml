@@ -424,6 +424,22 @@ jobs:
           path: out/diff/*.diff
           if-no-files-found: ignore
 
+      # The newest PUBLISHED release, verified the way a user does: the
+      # manifest must name exactly the assets GitHub serves, and every
+      # digest must match. Every other check in this file looks at what a
+      # runner built; this is the only one that looks at what was shipped.
+      # It found that every release before v8.00-qt.4 carries a manifest
+      # naming two .deb files the release does not serve -- those tags are
+      # skipped by name inside the script, and anything newer is asserted.
+      - name: The newest published release verifies as downloaded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 \
+                  --json tagName --jq '.[0].tagName')
+          [ -n "$tag" ] || { echo "no releases yet; nothing to verify"; exit 0; }
+          tools/ci-verify-published-release.sh "$tag" "$GITHUB_REPOSITORY"
+
   # Phase 9. Scoped to "it compiles and the suite passes", because the
   # maintainer owns no Apple hardware and nothing beyond that can be
   # verified here. The deliverable is adoptability: a dated, reproducible
