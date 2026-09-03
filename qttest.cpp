@@ -1754,9 +1754,13 @@ static void TestDialogMnemonicsQt()
       Check(pcb != NULL, "%s is on the dialog", rg[k].szLabel);
       if (pcb == NULL)
         continue;
-      flag fWas = pcb->isChecked();
+      // fTrue/fFalse rather than the bool straight from Qt: "flag" is an
+      // int, and MSVC warns C4805 on mixing bool with it in a comparison.
+      // Benign here -- both sides are 0 or 1 -- but it is the exact shape
+      // of a real mistake, and the codebase's own type is flag.
+      flag fWas = pcb->isChecked() ? fTrue : fFalse;
       tap(rg[k].szCh);
-      Check(pcb->isChecked() != fWas,
+      Check((pcb->isChecked() ? fTrue : fFalse) != fWas,
         "bare '%s' toggles %s", rg[k].szCh, rg[k].szLabel);
       tap(rg[k].szCh);
     }

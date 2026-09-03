@@ -58,7 +58,13 @@
 // position was just validated by *_file_posit(), and discard the
 // count. Reviewing that is out of scope here, and the warning is the
 // only thing this file contributes to an otherwise clean build.
+// __GNUC__ guards it because MSVC does not know "#pragma GCC" and says
+// so twice per compile as C4068. Clang defines __GNUC__ and understands
+// the pragma, so this covers both compilers that need it and neither
+// that does not.
+#ifdef __GNUC__
 #pragma GCC diagnostic ignored "-Wunused-result"
+#endif
 
 
 #ifdef PLACALC

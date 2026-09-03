@@ -334,8 +334,16 @@ jobs:
       - name: Install Qt6
         run: brew install qt pkg-config
 
+      # Keep the build log. tools/warning_audit.py covers five GCC builds
+      # and knows nothing about clang, so this job compiled 260 warnings a
+      # night that nobody read -- all of them 'sprintf' is deprecated, all
+      # of them in vendored Swiss Ephemeris, and none in a file this
+      # codebase wrote.
       - name: Build
-        run: make qt -j4 && make qt-test -j4
+        run: make qt -j4 2>&1 | tee build.log && make qt-test -j4 2>&1 | tee -a build.log
+
+      - name: No clang warnings in our own sources
+        run: tools/ci-assert-clang-clean.sh build.log 300
 
       # Bounded, timed and line-buffered, so a hang produces a DIAGNOSIS
       # rather than a job that stops. A step's output is not served until
@@ -602,13 +610,22 @@ jobs:
           rem standards-conforming and Qt's headers check. Both messages
           rem name the flag, and neither is a complaint about this tree --
           rem Astrolog's own sources have not produced a diagnostic yet.
+          rem /W3, not /W1. /W1 is MSVC's quietest setting and this job ran
+          rem at it from the day it was written, which made "the MSVC build
+          rem is clean" a much weaker statement than it sounded: three
+          rem warnings total across the whole tree, two of them a #pragma
+          rem GCC that MSVC cannot read. /W3 is the level that finds
+          rem signed/unsigned mismatches, truncation and uninitialised
+          rem locals -- the things a second compiler is worth having FOR.
+          rem /W4 is noisier than it is useful on a codebase this old.
+          rem
           rem /Zc:strictStrings- goes AFTER /permissive-, which implies the
           rem positive form. The tree initialises char * from string
           rem literals in 1,345 places -- three data tables are 96% of it --
           rem and all six makefiles already pass -Wno-write-strings for the
           rem same reason. Deferred deliberately: this job exists to find the
           rem NEXT obstacle, not to fund a const sweep. See QT_CI_PLAN.md.
-          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W1 ^
+          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
              /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
              /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
@@ -678,7 +695,7 @@ jobs:
             -property installationPath`) do set "VSPATH=%%i"
           call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
           python tools\qt-srcs.py --test > srcst.txt || exit /b 1
-          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W1 ^
+          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
              /DQT /DQTTEST /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
              /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
              /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
