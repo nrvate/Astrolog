@@ -2775,3 +2775,33 @@ Two things came out of reading that code that the byte count did not:
    because it is the third time in this project that a plausible name has
    collided with an existing one in the same translation unit, and the
    only thing standing between it and a shipped bug was `-Wall`.
+
+**2026-09-03 — the installer's Properties tab was blank.** `astrolog.nsi`
+took `VERSION` on the command line and used it for the window title, the
+`Software\Astrolog` registry key and the Add/Remove Programs row, but
+declared no `VIProductVersion`, so the PE carried no version resource at
+all. Right-clicking `astrolog-setup.exe`, choosing Properties and opening
+Details showed nothing: no product name, no version, no copyright. That
+is what corporate software inventories read, and it is one of the things
+that makes an unsigned installer look worse than it is.
+
+The reason it was missing is worth writing down, because it is a trap
+rather than an oversight. **`VIProductVersion` is not the version
+string.** It must be exactly four dot-separated numbers, and `makensis`
+rejects `8.00-qt.3` outright rather than coercing it. So there are two
+defines now, not one: `VERSION` for everything a human reads, and
+`VERSIONQUAD` — `8.0.0.3`, derived in the packaging script from the same
+`szVersionFork` everything else uses, with the leading zero stripped so
+Explorer does not show `8.00.0.3`.
+
+Because `VERSION` arrives on the command line, nothing structurally stops
+a caller passing a stale one, and a wrong version in Add/Remove Programs
+is invisible until a user has two Astrologs installed side by side. So
+`tools/ci-verify-windows-installer.sh` now reads the resource back out of
+the built `.exe` and requires it to equal what `astrolog.h` says. It uses
+`strings -el` rather than `exiftool`: the resource is UTF-16LE, binutils
+is on every runner already, and the keys and values alternate, so
+`grep -A1 -x ProductVersion` is the whole extraction.
+
+Falsified by building an installer with `-DVERSION=9.99-qt.99` on purpose:
+the check names both versions and exits 1, and exits 0 on the real one.

@@ -16,6 +16,26 @@
 !ifndef SRCDIR
   !error "SRCDIR not defined -- use tools/package-windows-installer.sh"
 !endif
+!ifndef VERSIONQUAD
+  !error "VERSIONQUAD not defined -- use tools/package-windows-installer.sh"
+!endif
+
+; The version resource Explorer reads on the Properties / Details tab,
+; and that corporate software inventories and SmartScreen heuristics look
+; for. Without it the installer's own properties are blank, which is both
+; unhelpful and one of the things that makes an unsigned .exe look worse
+; than it is.
+;
+; VIProductVersion is not the version string: it must be exactly four
+; DOT-SEPARATED NUMBERS, so "8.00-qt.3" is rejected outright by makensis.
+; The script derives 8.0.0.3 from it and passes both, which is why there
+; are two defines here rather than one.
+VIProductVersion "${VERSIONQUAD}"
+VIAddVersionKey "ProductName"      "Astrolog"
+VIAddVersionKey "ProductVersion"   "${VERSION}"
+VIAddVersionKey "FileVersion"      "${VERSION}"
+VIAddVersionKey "FileDescription"  "Astrolog ${VERSION} Setup"
+VIAddVersionKey "LegalCopyright"   "Copyright (C) 1991-2026 Walter D. Pullen. GNU GPL v2 or later."
 
 Name "Astrolog ${VERSION}"
 OutFile "${OUTFILE}"

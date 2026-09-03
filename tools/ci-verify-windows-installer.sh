@@ -37,6 +37,25 @@ staged=${2:?usage: ci-verify-windows-installer.sh <setup.exe> <staged-dir>}
 [ -d "$staged" ] || { echo "no such staged directory: $staged"; exit 2; }
 command -v wine >/dev/null || { echo "wine not found"; exit 2; }
 
+# The version resource, before anything slow. This is the drift check:
+# tools/astrolog.nsi takes VERSION on the command line, so nothing stops
+# a caller passing a stale one, and a wrong version in Add/Remove Programs
+# is invisible until a user reports two Astrologs installed side by side.
+#
+# "strings -el" rather than exiftool: the resource is UTF-16LE and binutils
+# is already on every runner, so this costs no new package. The keys and
+# values alternate, hence grep -A1 on an exact match.
+echo "== the version Explorer and Add/Remove Programs will show"
+want=$(tools/ci-assert-version.sh)
+for key in ProductVersion FileVersion; do
+  got=$(strings -el "$setup" | grep -A1 -x "$key" | sed -n 2p)
+  [ "$got" = "$want" ] || {
+    echo "   $key in the installer is '$got', astrolog.h says '$want'"
+    echo "   The installer would tell users it is a version it is not."
+    exit 1; }
+done
+echo "   ProductVersion and FileVersion both read $want"
+
 WINEPREFIX=$(mktemp -d)/pfx
 export WINEPREFIX WINEDEBUG=-all
 trap 'rm -rf "$(dirname "$WINEPREFIX")"' EXIT
