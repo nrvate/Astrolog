@@ -30,7 +30,20 @@
 # longer argument.
 set -e
 
-out=${1:-out/macos}
+# ABSOLUTE, and this is not tidiness. Astrolog resolves a -Yi path that
+# starts with a letter RELATIVE TO ITS OWN EXECUTABLE, not to the working
+# directory -- SwissEnsurePath() says so: "If dir is relative path, then
+# prepend the path to executable". Inside a bundle the executable lives in
+# Contents/MacOS, so a cwd-relative "out/macos/Astrolog.app/Contents/
+# MacOS/ephem" became
+#
+#   .../Contents/MacOS/out/macos/Astrolog.app/Contents/MacOS/ephem
+#
+# and every body read 0Ari00. That failed the v8.00-qt.3 release, and it
+# reproduces on Linux in three commands with the binary copied into a
+# fake Contents/MacOS -- which is where it was diagnosed, rather than by
+# another round trip through a macOS runner.
+out=$(mkdir -p "${1:-out/macos}" && cd "${1:-out/macos}" && pwd)
 [ "$(uname)" = Darwin ] || { echo "macOS only (uname says $(uname))"; exit 2; }
 [ -x ./astrolog-qt ] || { echo "build it first: make qt"; exit 2; }
 
