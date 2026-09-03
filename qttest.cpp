@@ -522,7 +522,12 @@ static void TestAllMenuActionsQt()
     // run hangs. Measured: the suite stopped here for the full 420 s
     // watchdog, and the last line before it was "firing: P&rint...".
     // On X11 and Windows QPrintDialog is a QDialog and closes normally,
-    // so this skip is deliberately not portable.
+    // so this skip is deliberately not portable. It costs exactly six
+    // assertions: a macOS run reports 3786 where Linux reports 3792 on
+    // the same ephemeris, and forcing this branch on in a Linux build
+    // reproduces 3786 exactly. That is the whole difference between the
+    // platforms -- worth knowing, because a lower count is otherwise
+    // indistinguishable from a group that silently did not run.
     if (str.contains("rint"))
       continue;
 #endif
