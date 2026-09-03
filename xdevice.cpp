@@ -1823,8 +1823,28 @@ void WriteMeta(FILE *file)
 #endif
   MetaRestoreDc();
   MetaRecord(3, 0);    // End record
-  *(long *)(gi.bm + 22 + 6) =
-    ((long)((pbyte)gi.pwMetaCur - gi.bm) - 22) / 2;
+  // Two words, not *(long *). A metafile's mtSize is a 32 bit field, and
+  // "long" is 32 bits only on Windows: on every 64 bit Unix this wrote
+  // EIGHT bytes into a four byte slot and took the two fields after it
+  // with it. Measured on a real file before the fix -- mtNoObjects read 0
+  // where MetaInit had written 81, and mtMaxRecord read 0 where it had
+  // written 17. Every .wmf this program produced on Linux or macOS
+  // carried that.
+  //
+  // Found by UBSan, which called it a misaligned store: gi.bm+28 is four
+  // byte aligned and an eight byte type wants eight. The alignment was
+  // the symptom; the width was the bug. AddressSanitizer never saw it,
+  // because the write stays inside gi.bm's own allocation.
+  //
+  // WLo/WHi in sequence is how MetaLong() writes every other long in this
+  // file, so this now matches the format it is writing.
+  {
+    word *pwSize = (word *)(gi.bm + 22 + 6);
+    long lSize = ((long)((pbyte)gi.pwMetaCur - gi.bm) - 22) / 2;
+
+    pwSize[0] = WLo(lSize);
+    pwSize[1] = WHi(lSize);
+  }
   for (w = (word *)gi.bm; w < gi.pwMetaCur; w++) {
     PutWord(*w);
   }

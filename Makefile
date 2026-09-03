@@ -81,6 +81,9 @@ qt-test:
 qt-asan:
 	$(MAKE) -f Makefile.qt.asan
 
+qt-ubsan:
+	$(MAKE) -f Makefile.qt.ubsan
+
 # Qt6 is opt-in and is not what this machine builds by default: pkg-config
 # finds Qt5, and the three Qt makefiles follow whatever it finds. A
 # hand-installed Qt6 sits outside pkg-config's search path, so building

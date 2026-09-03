@@ -1716,10 +1716,24 @@ void XChartTelescope()
   te.xScale = xScale; te.yScale = yScale;
 
   // Sort planets in order of distance.
+  //
+  // rgobj[] and rglen[] are objMax+1 long because the sort below wants a
+  // sentinel at cObj+1. space[] is not: it is cp0.pt, declared
+  // PT3R pt[objMax], so cObj+1 is one past its end. This loop read it,
+  // and the value went straight into rglen[cObj+1], which the line after
+  // the loop overwrites -- an out-of-bounds read feeding a dead store.
+  //
+  // AddressSanitizer cannot see this. space[] is a member of a global
+  // struct, so reading one element past it stays inside the allocated
+  // object and no redzone is touched. UBSan's bounds check knows the
+  // ARRAY TYPE and reported it three times, once per coordinate, the
+  // first time the Qt suite was ever run under it.
   for (i = 0; i <= cObj+1; i++) {
     rgobj[i] = i;
-    xr = space[i].x; yr = space[i].y; zr = space[i].z;
-    rglen[i] = RLength3(xr, yr, zr);
+    if (i <= cObj) {
+      xr = space[i].x; yr = space[i].y; zr = space[i].z;
+      rglen[i] = RLength3(xr, yr, zr);
+    }
   }
   rglen[iEar] = rSmall;
   rglen[cObj+1] = 1/rSmall;
