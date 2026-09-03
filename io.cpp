@@ -52,11 +52,28 @@
 */
 
 #include "astrolog.h"
+#include <sys/stat.h>
 #ifdef PC
 #include <io.h>
 #else
 #include <dirent.h>
 #endif
+
+
+// Does a directory exist? <sys/stat.h> is one of the few POSIX-named
+// headers Windows really does ship, on both MSVC and mingw, so this needs
+// no #ifdef. Used to keep directories that cannot match anything out of
+// the ephemeris search path, which is a fixed-size string with a hard
+// limit -- see SwissEnsurePath().
+
+flag FDirExists(CONST char *szDir)
+{
+  struct stat st;
+
+  if (!FSzSet(szDir))
+    return fFalse;
+  return stat(szDir, &st) == 0 && (st.st_mode & S_IFDIR) != 0;
+}
 
 
 /*

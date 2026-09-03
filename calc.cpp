@@ -2574,18 +2574,103 @@ void CreateElemTable(ET *pet)
 #include "swephlib.h"
 #define ret cp0.dir
 
+// The ephemeris search path, as the list of directories it actually is.
+//
+// It used to be a single 256-byte string, appended to by ten scattered
+// sprintf2() calls, with the length checked once at the end. That shape
+// caused the same failure over and over, because it hid three separate
+// problems inside one buffer:
+//
+//   - The real limit is not 255. swe_set_ephe_path() accepts at most
+//     AS_MAXCH-1-13 = 242 characters, and over that it does not truncate,
+//     it DISCARDS the path and substitutes SE_EPHE_PATH -- which on Unix
+//     is ".:/users/ephe2/:/users/ephe/", two directories from the Swiss
+//     author's own machine that have never existed here. So a path
+//     between 243 and 254 characters passed Astrolog's check, produced no
+//     warning at all, and silently lost every ephemeris file.
+//   - "Truncated" was the wrong word for a total loss, so the warning
+//     that did fire described the wrong failure.
+//   - Nothing dropped directories that do not exist, so a deep build tree
+//     or a bundle layout ran out of room on entries that could never have
+//     matched anything.
+//
+// A list fixes all three by construction: entries can be counted,
+// deduplicated, and dropped, and the string is a serialization detail
+// produced once at the boundary where Swiss demands one.
+
+#define cDirEphemMax 20        // ".", exe, 10 -Yi, 3 env, EPHE_DIR, slack
+#define cchEphemPathMax (AS_MAXCH-1-13)   // swe_set_ephe_path()'s real cap
+
+typedef struct _EphemDirList {
+  char rgsz[cDirEphemMax][cchSzMax];
+  int cDir;
+  int cDropped;                // named a directory but had no room
+} EDL;
+
+
+// Append one directory to the list, unless it is empty, already present,
+// or does not exist. Each of those is a directory Swiss would search and
+// never match in, and the whole reason this list overflowed was carrying
+// them.
+
+static void AddDirEphemQ(EDL *pedl, CONST char *szDir)
+{
+  int i;
+
+  if (!FSzSet(szDir))
+    return;
+  for (i = 0; i < pedl->cDir; i++)
+    if (FEqSz(pedl->rgsz[i], szDir))
+      return;
+  if (!FDirExists(szDir))
+    return;
+  if (pedl->cDir >= cDirEphemMax) {
+    pedl->cDropped++;
+    return;
+  }
+  sprintf2(pedl->rgsz[pedl->cDir], cchSzMax, "%s", szDir);
+  pedl->cDir++;
+}
+
+
+// Join the list into the one string Swiss takes. Returns the number of
+// directories that did NOT fit, which is the only interesting failure:
+// the caller can say which were lost instead of letting Swiss silently
+// swap the whole path for its own defaults.
+
+static int CDirJoinEphemQ(CONST EDL *pedl, char *szPath, int cchPath)
+{
+  int i, cch = 0, cchT;
+
+  *szPath = chNull;
+  for (i = 0; i < pedl->cDir; i++) {
+    cchT = CchSz(pedl->rgsz[i]) + (cch > 0 ? CchSz(PATH_SEPARATOR) : 0);
+    if (cch + cchT >= cchPath)
+      return pedl->cDir - i;
+    if (cch > 0)
+      cch += sprintf2(szPath + cch, cchPath - cch, "%s", PATH_SEPARATOR);
+    cch += sprintf2(szPath + cch, cchPath - cch, "%s", pedl->rgsz[i]);
+  }
+  return 0;
+}
+
+
 // Set up path for Swiss Ephemeris to search in for ephemeris files.
 
 void SwissEnsurePath()
 {
-  char szPath[AS_MAXCH], *pch;
+  static EDL edl;
+  char szPath[AS_MAXCH], szExe[cchSzMax], szT[cchSzMax];
+  CONST char *pchDir;
+  char *pch;
+  int i, cLost;
 #ifdef ENVIRON
-  char szExe[cchSzMax], szT[cchSzMax], *env;
+  char *env;
 #endif
-  int i, j;
 
   if (is.fSwissPathSet)
     return;
+  edl.cDir = edl.cDropped = 0;
 
   // Get directory containing Astrolog executable.
 #ifdef WIN
@@ -2601,67 +2686,49 @@ void SwissEnsurePath()
     pch++;
   *pch = chNull;
 
-  // First look for the file in the current directory, and that of executable.
-  sprintf2(S(szPath), ".%s%.*s", PATH_SEPARATOR,
-    (int)sizeof(szPath) - 4, szExe);
-  // Next look in the directories indicated by the -Yi switch.
+  // The current directory, and the one holding the executable.
+  AddDirEphemQ(&edl, ".");
+  AddDirEphemQ(&edl, szExe);
+
+  // The directories named by the -Yi switch. A relative one is relative
+  // to the EXECUTABLE, not to the working directory, which is worth
+  // knowing before writing a script: a bundle whose binary sits in
+  // Contents/MacOS turned a cwd-relative path into that path prefixed
+  // with itself. See QT_TESTING.md.
   for (i = 0; i < 10; i++) {
-    pch = us.rgszPath[i];
-    if (FSzSet(pch)) {
-      // Skip a directory an earlier -Yi switch already named. Searching the
-      // same directory twice can never find anything the first search
-      // missed, and a miss is not free: measured at 1.9 seconds against a
-      // directory of 887,000 files over a network filesystem, against 90 ms
-      // for a hit. A config setting -Yi1/-Yi2/-Yi3 to one directory -- the
-      // obvious way to write "look here" -- drew a chart in 98 seconds that
-      // takes 33 with the duplicates dropped, for byte-identical output.
-      for (j = 0; j < i; j++)
-        if (FSzSet(us.rgszPath[j]) && FEqSz(us.rgszPath[j], pch))
-          break;
-      if (j < i)
-        continue;
-      if ((FCapCh(*pch) || FUncapCh(*pch) || FNumCh(*pch)) &&
-        !(pch[1] == ':')) {
-        // If dir is relative path, then prepend the path to executable.
-        sprintf2(S(szT), "%s", szExe);
-        for (pch = szT; *pch; pch++)
-          ;
-      } else
-        pch = szT;
-      sprintf2(SO(pch, szT), "%s", us.rgszPath[i]);
-      sprintf2(SO(szPath + CchSz(szPath), szPath), "%s%s", PATH_SEPARATOR,
-        szT);
-    }
+    pchDir = us.rgszPath[i];
+    if (!FSzSet(pchDir))
+      continue;
+    if ((FCapCh(*pchDir) || FUncapCh(*pchDir) || FNumCh(*pchDir)) &&
+      !(pchDir[1] == ':'))
+      sprintf2(S(szT), "%s%s", szExe, pchDir);
+    else
+      sprintf2(S(szT), "%s", pchDir);
+    AddDirEphemQ(&edl, szT);
   }
+
 #ifdef ENVIRON
-  // Next look for the file in the directory indicated by the version
-  // specific system environment variable.
+  // The version specific system environment variable, then the general
+  // one, then the version prefix.
   sprintf2(S(szT), "%s%s", ENVIRONVER, szVersionCore);
   for (pch = szT; *pch && *pch != '.'; pch++)
     ;
   while (*pch && (*pch = pch[1]) != chNull)
     pch++;
   env = getenv(szT);
-  if (FSzSet(env))
-    sprintf2(SO(szPath + CchSz(szPath), szPath), "%s%s", PATH_SEPARATOR, env);
-  // Next look in the directory in the general environment variable.
-  env = getenv(ENVIRONALL);
-  if (FSzSet(env))
-    sprintf2(SO(szPath + CchSz(szPath), szPath), "%s%s", PATH_SEPARATOR, env);
-  // Next look in the directory in the version prefix environment variable.
-  env = getenv(ENVIRONVER);
-  if (FSzSet(env))
-    sprintf2(SO(szPath + CchSz(szPath), szPath), "%s%s", PATH_SEPARATOR, env);
+  AddDirEphemQ(&edl, env);
+  AddDirEphemQ(&edl, getenv(ENVIRONALL));
+  AddDirEphemQ(&edl, getenv(ENVIRONVER));
 #endif
-  // Finally look in a directory specified at compile time.
-  pch = EPHE_DIR;
-  if (FSzSet(pch))
-    sprintf2(SO(szPath + CchSz(szPath), szPath), "%s%s", PATH_SEPARATOR,
-      EPHE_DIR);
-  if (CchSz(szPath) >= (int)sizeof(szPath)-1) {
-    sprintf2(S(szT),
-      "Swiss Ephemeris file path longer than %d characters, so truncated.",
-      (int)sizeof(szPath)-1);
+
+  // A directory specified at compile time.
+  AddDirEphemQ(&edl, EPHE_DIR);
+
+  cLost = CDirJoinEphemQ(&edl, szPath, cchEphemPathMax + 1);
+  if (cLost > 0 || edl.cDropped > 0) {
+    sprintf2(S(szT), "Ephemeris search path is full: %d of %d directories "
+      "dropped. Use fewer or shorter -Yi paths.",
+      cLost + edl.cDropped, edl.cDir + edl.cDropped);
     PrintWarning(szT);
   }
   swe_set_ephe_path(szPath);

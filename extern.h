@@ -431,6 +431,7 @@ extern void Terminate P((int));
 #define AdvancePast(ch) while (*pch && *pch != (ch)) pch++; \
   if (*pch == (ch)) pch++;
 
+extern flag FDirExists P((CONST char *));
 extern FILE *FileOpen P((CONST char *, int, char *, int));
 extern byte BRead P((FILE *));
 extern word WRead P((FILE *));
