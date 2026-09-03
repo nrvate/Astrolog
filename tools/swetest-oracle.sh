@@ -16,10 +16,19 @@
 # swemplan.cpp returned a wrong Jupiter, both sides of that comparison
 # would return it together.
 #
-# swetest is a different binary, from a different source tree, maintained
-# by someone else, on a different Swiss lineage (2.10.03-ts.10 against
-# this tree's stock 2.10.03). When it and Astrolog agree, that is evidence
-# about the number rather than about consistency.
+# swetest is a different binary from a different source tree, built from
+# UPSTREAM Swiss Ephemeris -- aloistr/swisseph, SE_VERSION "2.10.03",
+# which is exactly the version this tree vendors. That matters: the
+# reference should be the canonical source at the same version, not
+# somebody's patched fork, so that a disagreement means "Astrolog's
+# integration is wrong" rather than "the two Swisses differ".
+#
+# UPSTREAM SILENTLY FALLS BACK TO MOSHIER when the .se1 files are
+# missing, which would compare Moshier against Swiss and call it a
+# result. The difference is small enough to look like rounding -- Sun on
+# 15.6.1990 is 84 deg 7'46.3995 from Swiss and 84 deg 7'46.4407 from
+# Moshier, 0.04 arcsec apart -- so this checks the ephemeris files are
+# there before trusting anything.
 #
 # IT IS a CI check, in the nightly, which was not obvious at first: the
 # fork is a public repository and a shallow clone plus "make swetest"
@@ -35,6 +44,14 @@ E=${3:-/swe}
 [ -x "$A" ] || { echo "no astrolog at $A"; exit 2; }
 [ -x "$T" ] || { echo "no swetest at $T -- build one in a swisseph checkout"; exit 2; }
 [ -d "$E" ] || { echo "no ephemeris directory at $E"; exit 2; }
+# The three files the ten planets need. Without them upstream swetest
+# answers from Moshier without saying so, and the comparison becomes
+# meaningless while still looking like a pass.
+for f in sepl_18.se1 semo_18.se1 seas_18.se1; do
+  [ -f "$E/$f" ] || { echo "$E has no $f -- swetest would silently answer"
+                      echo "from Moshier and this comparison would prove nothing."
+                      exit 2; }
+done
 
 # TWO PARSING TRAPS, both of which read as Astrolog computing a wrong
 # number before they were understood:
