@@ -115,7 +115,38 @@ for dist in "$repo"/rpm/*/; do
     *0Ari00*|none) echo "BAD: ${chiron:-no chart}"; fail=1 ;;
     *) echo "ok" ;;
   esac
+
+  # The rpm upgrade path, for the same reason as the apt one above: a
+  # fresh install cannot exercise it, and it is what every existing user
+  # does. dnf reports the versions oldest-first, so head and tail are the
+  # other way round from apt-cache madison.
+  printf '%-12s %-38s ' "$d" "upgrade"
+  out=$(docker run --rm -v "$repo":/repo:ro "$img" sh -c "
+      rpm --import /repo/astrolog.asc
+      printf '[astrolog]\nname=Astrolog\nbaseurl=file:///repo/rpm/$d\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=file:///repo/astrolog.asc\n' \
+        > /etc/yum.repos.d/astrolog.repo
+      vers=\$(dnf -y -q --disablerepo='*' --enablerepo=astrolog list --showduplicates astrolog 2>/dev/null \
+              | awk '/^astrolog/ {print \$2}')
+      old=\$(printf '%s\n' \"\$vers\" | head -1)
+      new=\$(printf '%s\n' \"\$vers\" | tail -1)
+      [ -z \"\$old\" ] && { echo NOVERSIONS; exit 1; }
+      [ \"\$old\" = \"\$new\" ] && { echo SINGLEVERSION; exit 0; }
+      dnf -y -q install astrolog-\$old >/dev/null 2>&1 || { echo OLDFAILED; exit 1; }
+      dnf -y -q upgrade astrolog >/dev/null 2>&1 || { echo UPGRADEFAILED; exit 1; }
+      echo \"UPGRADED \$old -> \$(rpm -q --qf '%{VERSION}-%{RELEASE}' astrolog)\"
+      cd / && astrolog $chart" 2>&1) || {
+    echo "UPGRADE FAILED"; printf '%s\n' "$out" | tail -6 | sed 's/^/    /'; fail=1; continue; }
+  case $out in
+    *SINGLEVERSION*) echo "skipped (only one version in the repository)"; continue ;;
+  esac
+  chiron=$(printf '%s\n' "$out" | grep -E '^Chir' | head -1 || true)
+  case ${chiron:-none} in
+    *0Ari00*|none)
+      echo "BROKEN AFTER UPGRADE: ${chiron:-no chart}"
+      printf '%s\n' "$out" | grep -E 'UPGRADED|FAILED' | sed 's/^/    /'; fail=1 ;;
+    *) echo "ok  $(printf '%s\n' "$out" | grep -o 'UPGRADED .*' || true)" ;;
+  esac
 done
 
 [ "$fail" -eq 0 ] || { echo "== the repository cannot be installed from"; exit 1; }
-echo "== every suite installs and computes a real chart"
+echo "== every suite installs, upgrades, and computes a real chart"
