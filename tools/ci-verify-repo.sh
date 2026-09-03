@@ -84,7 +84,18 @@ for dist in "$repo"/apt/dists/*/; do
       apt-get install -y -qq astrolog=\$old >/dev/null 2>&1 || { echo OLDFAILED; exit 1; }
       apt-get install -y -qq --only-upgrade astrolog >/dev/null 2>&1 || { echo UPGRADEFAILED; exit 1; }
       echo \"UPGRADED \$old -> \$(dpkg-query -W -f='\${Version}' astrolog)\"
-      cd / && astrolog $chart" 2>&1) || {
+      cd / && astrolog $chart
+      # And removal, in the same container, so the third leg of the
+      # package lifecycle costs nothing extra. A package that leaves files
+      # behind on purge is a real defect and a policy violation, and
+      # nothing here had ever removed one.
+      apt-get purge -y -qq astrolog >/dev/null 2>&1 || { echo PURGEFAILED; exit 1; }
+      for p in /usr/lib/astrolog /usr/bin/astrolog /usr/bin/astrolog-qt \
+               /usr/share/applications/astrolog.desktop; do
+        [ -e \"\$p\" ] && echo \"LEFTOVER \$p\"
+      done
+      find /usr/share/icons -name 'astrolog*' 2>/dev/null | sed 's/^/LEFTOVER /'
+      echo PURGED" 2>&1) || {
     echo "UPGRADE FAILED"; printf '%s\n' "$out" | tail -6 | sed 's/^/    /'; fail=1; continue; }
   case $out in
     *SINGLEVERSION*) echo "skipped (only one version in the repository)"; continue ;;
@@ -94,7 +105,15 @@ for dist in "$repo"/apt/dists/*/; do
     *0Ari00*|none)
       echo "BROKEN AFTER UPGRADE: ${chiron:-no chart}"
       printf '%s\n' "$out" | grep -E 'UPGRADED|FAILED' | sed 's/^/    /'; fail=1 ;;
-    *) echo "ok  $(printf '%s\n' "$out" | grep -o 'UPGRADED .*' || true)" ;;
+    *) left=$(printf '%s\n' "$out" | grep '^LEFTOVER ' || true)
+       if [ -n "$left" ]; then
+         echo "FILES LEFT BEHIND AFTER REMOVAL:"
+         printf '%s\n' "$left" | sed 's/^LEFTOVER /    /'; fail=1
+       elif ! printf '%s\n' "$out" | grep -q '^PURGED$'; then
+         echo "REMOVAL FAILED"; printf '%s\n' "$out" | tail -4 | sed 's/^/    /'; fail=1
+       else
+         echo "ok  $(printf '%s\n' "$out" | grep -o 'UPGRADED .*' || true), removed clean"
+       fi ;;
   esac
 done
 
@@ -134,7 +153,14 @@ for dist in "$repo"/rpm/*/; do
       dnf -y -q install astrolog-\$old >/dev/null 2>&1 || { echo OLDFAILED; exit 1; }
       dnf -y -q upgrade astrolog >/dev/null 2>&1 || { echo UPGRADEFAILED; exit 1; }
       echo \"UPGRADED \$old -> \$(rpm -q --qf '%{VERSION}-%{RELEASE}' astrolog)\"
-      cd / && astrolog $chart" 2>&1) || {
+      cd / && astrolog $chart
+      dnf -y -q remove astrolog >/dev/null 2>&1 || { echo PURGEFAILED; exit 1; }
+      for p in /usr/lib/astrolog /usr/bin/astrolog /usr/bin/astrolog-qt \
+               /usr/share/applications/astrolog.desktop; do
+        [ -e \"\$p\" ] && echo \"LEFTOVER \$p\"
+      done
+      find /usr/share/icons -name 'astrolog*' 2>/dev/null | sed 's/^/LEFTOVER /'
+      echo PURGED" 2>&1) || {
     echo "UPGRADE FAILED"; printf '%s\n' "$out" | tail -6 | sed 's/^/    /'; fail=1; continue; }
   case $out in
     *SINGLEVERSION*) echo "skipped (only one version in the repository)"; continue ;;
@@ -144,7 +170,15 @@ for dist in "$repo"/rpm/*/; do
     *0Ari00*|none)
       echo "BROKEN AFTER UPGRADE: ${chiron:-no chart}"
       printf '%s\n' "$out" | grep -E 'UPGRADED|FAILED' | sed 's/^/    /'; fail=1 ;;
-    *) echo "ok  $(printf '%s\n' "$out" | grep -o 'UPGRADED .*' || true)" ;;
+    *) left=$(printf '%s\n' "$out" | grep '^LEFTOVER ' || true)
+       if [ -n "$left" ]; then
+         echo "FILES LEFT BEHIND AFTER REMOVAL:"
+         printf '%s\n' "$left" | sed 's/^LEFTOVER /    /'; fail=1
+       elif ! printf '%s\n' "$out" | grep -q '^PURGED$'; then
+         echo "REMOVAL FAILED"; printf '%s\n' "$out" | tail -4 | sed 's/^/    /'; fail=1
+       else
+         echo "ok  $(printf '%s\n' "$out" | grep -o 'UPGRADED .*' || true), removed clean"
+       fi ;;
   esac
 done
 
