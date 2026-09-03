@@ -134,9 +134,16 @@ QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/Astrolog" \
   -Yi1 "$app/Contents/MacOS/ephem" \
   -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os "$out/chart.txt" \
   >"$out/run.out" 2>&1 || true
+# The CHIRON line, not the whole chart. -R1 renders 118 bodies including
+# 32 planetary moons, whose files live in sat/ and are not in the bundled
+# 12-file ephem/ -- so "does 0Ari00 appear anywhere" can never pass here,
+# and failed v8.00-qt.5 on a bundle that was perfectly good. Chiron comes
+# from seas_18.se1, which IS bundled, which is exactly why every other
+# package check in this repository asserts on Chiron and nothing else.
 fail=""
-grep -q '^Chir' "$out/chart.txt" 2>/dev/null || fail="no Chiron line"
-grep -q "0Ari00" "$out/chart.txt" 2>/dev/null && fail="ephemeris not found"
+chir=$(grep '^Chir' "$out/chart.txt" 2>/dev/null | head -1)
+[ -n "$chir" ] || fail="no Chiron line"
+case $chir in *0Ari00*) fail="ephemeris not found: $chir" ;; esac
 if [ -n "$fail" ]; then
   echo "   FAILED: $fail"
   echo "   --- the program said ---"
@@ -168,8 +175,12 @@ trap 'hdiutil detach "$vol" -quiet 2>/dev/null || true' EXIT
   -Yi1 "$vol/Astrolog.app/Contents/MacOS/ephem" \
   -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os "$out/dmg.txt" \
   >"$out/dmg.out" 2>&1 || true
-if ! grep -q '^Chir' "$out/dmg.txt" 2>/dev/null || grep -q "0Ari00" "$out/dmg.txt" 2>/dev/null; then
-  echo "   FAILED from the mounted volume $vol"
+chir=$(grep '^Chir' "$out/dmg.txt" 2>/dev/null | head -1)
+bad=""
+[ -n "$chir" ] || bad="no Chiron line"
+case $chir in *0Ari00*) bad="ephemeris not found" ;; esac
+if [ -n "$bad" ]; then
+  echo "   FAILED from the mounted volume $vol: $bad"
   sed 's/^/   /' "$out/dmg.out" | head -8
   exit 1
 fi

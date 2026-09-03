@@ -613,7 +613,7 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 // changing it would move the switch matrix and every other harness that
 // captures a banner -- a behaviour change, for a number that is
 // upstream's to set.
-#define szVersionFork "5"
+#define szVersionFork "6"
 #define szVersionQt   szVersionCore "-qt." szVersionFork
 #define szVerCore     "800"
 #define szDateCore    "May 2026"
