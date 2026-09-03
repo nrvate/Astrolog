@@ -7502,6 +7502,84 @@ are the more useful half to read before starting something new.
     case the filter used to remove. Falsified: with the fix reverted the
     suite fails that assertion and exits 1.
 
+    *(Superseded by item 180, which changes what reaches Swiss at all.
+    The assertion described in the last paragraph asserted the old
+    contract and was rewritten there; the bug this item fixed stays
+    fixed, by a mechanism that does not depend on `stat()` at all.)*
+
+180. **Astrolog finds the ephemeris; Swiss is handed the answer, not the
+    question.** *(2026-09-03)* Reported as "I can't get the Swiss
+    ephemeris path to work, it gives me an error about the path, and
+    shows a path that doesn't include what the `-Yi1` switch sets."
+
+    The path was every directory an ephemeris *might* be in -- the
+    working directory, the program's own, ten `-Yi` paths, three
+    environment variables, a compile-time default -- joined into one
+    string and handed to `swe_set_ephe_path()`.
+
+    **Swiss keeps that string in a 256-byte buffer, and when what it is
+    given does not fit it does not truncate. It discards the whole path
+    and substitutes its compile-time default.** It then re-splits and
+    stops after 20 pieces, gluing a 21st directory onto the 20th. Five
+    ordinary directories under a home directory or a CI checkout exceed
+    255 characters easily, and what the user sees is an ephemeris that
+    cannot be found and a diagnostic naming a path they never set.
+
+    The first fix attempted was to grow the buffer to 4096. The
+    maintainer rejected it -- *"please refactor path handling to make
+    this a non-issue"* -- and was right: a bigger buffer is still a
+    buffer. The design they asked for instead is the one that dissolves
+    it. *"I would like the application to find the ephemeris and hand
+    the known good path to swe. Just. One. Path."*
+
+    So each candidate is now **asked** whether it holds a file Swiss will
+    open, and only the ones that answer are handed over. The list of
+    filenames was measured with `strace` rather than guessed: a run in a
+    bare directory asks every path entry for `sepl_18.se1`,
+    `semo_18.se1`, `seas_18.se1`, `sefstars.txt`, `sedeltat.txt` and
+    `swe_deltat.txt`, in that order. Normally one directory answers. Two
+    do when the `.se1` files and Swiss's text data are installed apart,
+    which is how this project's own packages are laid out -- so "just one
+    path" is one in the common case and never more than a handful, all
+    short, and no length or count limit can bind again.
+
+    **The probe builds the same filename `swi_fopen()` will build.** That
+    is the property the whole thing rests on, and it is also what turns
+    item 179 from an exemption into a fix: `stat()` on a *directory*
+    fails on a bare drive letter and, per MSVC, on a trailing backslash,
+    which is how `-Yi1 M:\swe` vanished. `stat()` on a file inside it has
+    neither quirk. Verified under Wine with an `M:` drive mapped to a
+    real ephemeris: both `M:\` and the bare `M:` resolve and Chiron
+    computes.
+
+    **And the root cause was in the shipped configuration.**
+    `astrolog.as` sent `-Yi1 ephem`, `-Yi2 font` and `-Yi3 source` into
+    that 256-byte buffer, and **`source/` exists in no build** -- not in
+    the repository, not in any package. `-Yi` is a general file search
+    path rather than an ephemeris one, which is why `font` legitimately
+    belongs there and now costs nothing. The phantom entry is gone.
+
+    Two smaller things fell out. `"."` and `"./"` went in as two entries,
+    because the dedupe compared raw strings while the working directory
+    and the program directory arrive in different shapes. And the
+    fallback is exactly the old list in the old order, so a probe that
+    recognises nothing cannot be worse than not probing.
+
+    Falsified three ways: a probe that always says yes puts the
+    nonexistent directory back; a resolver that drops what the user named
+    fails 58 oracle assertions; suppressing the new diagnostic fails the
+    third assertion. The differential moved 2 chart lines and 18 switch
+    lines, every one of them the path string itself:
+    `.;./;./ephem;./font/` became `./ephem;./`.
+
+    Found on the way, and unrelated: **piping the output of a paged run
+    overflowed the stack.** `Terminate()` prints through `PrintSz()`,
+    `PrintSz()` pages once `-YQ` rows have gone by, paging asks
+    `InputString()` for a line, and `InputString()` calls `Terminate()`
+    at end of file. About 24,900 frames, then SIGSEGV. It hid because
+    this tree's `astrolog.as` ships `-YQ 0`, so no harness here ever had
+    the pager on. Two independent guards, measured one at a time.
+
 
 ## Features this fork adds to both builds
 

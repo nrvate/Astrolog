@@ -182,7 +182,15 @@ esac
 # The entries are joined with ONE character. PATH_SEPARATOR is ";:" here --
 # a character class Swiss hands to strchr(), its own comment reading
 # "semicolon or colon may be used" -- so joining with the whole string
-# works, and quietly spends two bytes of a 242-byte budget on every entry.
+# works, and spends two bytes per entry rather than one while printing
+# diagnostics like ".;:/usr/share/ephem".
+#
+# The 256-byte buffer this used to be measured against is no longer what
+# makes it matter, since Astrolog now hands over only the one or two
+# directories that hold an ephemeris. What is left is the diagnostic: a
+# path printed with ";:" between entries reads as though something is
+# wrong with it, and sends whoever is debugging one in the wrong
+# direction.
 #
 # This assertion lives on Linux specifically. The same check was written
 # for tools/win-console-checks.sh first and PASSED under a sabotage that
