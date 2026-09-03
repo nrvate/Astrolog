@@ -65,6 +65,7 @@
 #include <stdarg.h>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
+#include <QtCore/QRegularExpression>
 #include "astrolog.h"
 #include "extern.h"
 #include "qtdriver.h"
@@ -246,9 +247,11 @@ typedef struct {
   CONST char *szTitle;   // Expected title, or NULL to only require one.
 } DLGTEST;
 
-static void TestDialogsQt()
-{
-  CONST DLGTEST rgdlg[] = {
+// One table, used by TestDialogsQt() below and by DialogShotCaptureQt().
+// At file scope on purpose: a screenshot set that drifts from the dialogs
+// actually tested is a baseline of the wrong thing, and two hand-kept
+// lists is how that happens.
+static CONST DLGTEST rgdlgQt[] = {
     {ShowFileSettingsDialogQt,     "File Settings"},
     {ShowGraphicsSettingsDialogQt, "Graphics Settings"},
     {ShowChartInfoDialogQt,        "Set Chart Info"},
@@ -274,7 +277,13 @@ static void TestDialogsQt()
     {ShowDisplayDialogQt,          "Display Settings"},
     {ShowCommandLineDialogQt,      "Enter Command Line"},
     {ShowAboutDialogQt,            "About Astrolog"} };
-  int i, cdlg = (int)(sizeof(rgdlg) / sizeof(DLGTEST));
+#define cdlgQt ((int)(sizeof(rgdlgQt) / sizeof(DLGTEST)))
+
+
+static void TestDialogsQt()
+{
+  CONST DLGTEST *rgdlg = rgdlgQt;
+  int i, cdlg = cdlgQt;
 
   Group("Dialogs");
   for (i = 0; i < cdlg; i++) {
@@ -1147,6 +1156,40 @@ static flag FWriteScratchQt(CONST QString &strPath, CONST char *sz)
 // invisible by inspection because a window with a failed icon load looks
 // exactly like a window that never asked for one. So the check is that it
 // resolves, and at the sizes a panel or task switcher actually requests.
+
+// Save every dialog as a PNG, for a visual baseline. QTSHOTDIR=<dir>.
+//
+// The suite already asserts each dialog OPENS and carries the right
+// title, which is what an assertion can do. What it cannot say is whether
+// the thing looks right -- a control off the edge, a label truncated, a
+// layout that collapses under a platform's default font. Those are the
+// failures a screenshot catches and no title check ever will, and macOS
+// is where they would appear first, since nobody working on this has a
+// Mac to look at one on.
+//
+// QWidget::grab() renders the widget through Qt's own paint path rather
+// than asking the window system for pixels, so it works under the
+// offscreen platform with no display at all -- which is the only way this
+// can run in CI.
+static void DialogShotCaptureQt(CONST char *szDir)
+{
+  QDir().mkpath(QString(szDir));
+  for (int i = 0; i < cdlgQt; i++) {
+    QString strName = QString(rgdlgQt[i].szTitle).toLower()
+      .replace(QRegularExpression("[^a-z0-9]+"), "-");
+    QString strPath = QString("%1/%2.png").arg(szDir).arg(strName);
+    DriveModalQt(rgdlgQt[i].pfn, [&strPath](QWidget *pw) {
+      QPixmap pix = pw->grab();
+      if (!pix.isNull())
+        pix.save(strPath, "PNG");
+      pw->close();
+    });
+    printf("  %s%s\n", QFile::exists(strPath) ? "" : "MISSING ",
+      strPath.toUtf8().constData());
+  }
+}
+
+
 
 static void TestAppIconQt()
 {
@@ -6294,6 +6337,10 @@ int NRunQtTestsQt()
   if (getenv("QTTEXTDIR") != NULL) {
     TextChartCaptureQt(getenv("QTTEXTDIR"));
     return 0;
+  }
+  if (getenv("QTSHOTDIR") != NULL) {
+    DialogShotCaptureQt(getenv("QTSHOTDIR"));
+    return fFalse;
   }
   s_nAnimStartQt = gs.nAnim;
   return NRunQtTestTableQt();

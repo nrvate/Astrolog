@@ -601,6 +601,34 @@ jobs:
       #
       # tools/package-macos.sh runs the bundled binary and requires a
       # Chiron line, so a break in macdeployqt's library rewriting, in the
+      # A LOOK at the thing, which no assertion gives. The suite proves
+      # every dialog opens and carries the right title; it cannot say
+      # whether a control sits off the edge, a label is truncated, or a
+      # layout collapses under a platform's default font. Those are the
+      # failures a picture catches, and macOS is where they would show
+      # first, because nobody working on this has a Mac to look at one on.
+      #
+      # QWidget::grab() paints through Qt rather than asking the window
+      # system for pixels, so it runs under the offscreen platform with no
+      # display. Charts too: QTGRAPHDIR was never set on this runner, so
+      # the drawing code had no macOS capture of any kind.
+      - name: Screenshot every dialog, and every chart type
+        if: always()
+        run: |
+          export QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=
+          QTSHOTDIR=out/shots ./astrolog-qt-test -Yi1 ephem || true
+          QTGRAPHDIR=out/charts ./run-qt-tests.sh -Yi1 ephem >/dev/null 2>&1 || true
+          echo "dialogs: $(ls out/shots 2>/dev/null | wc -l)  charts: $(ls out/charts 2>/dev/null | wc -l)"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: macos-screenshots
+          path: |
+            out/shots
+            out/charts
+          if-no-files-found: warn
+
       # ad-hoc signature, or in the data layout fails here rather than in
       # a user's Downloads folder.
       - name: Build the .app and .dmg
