@@ -213,6 +213,40 @@ static void Check(flag fOk, CONST char *szFmt, ...)
 // screenshot and no assertion here noticed at all.
 static QSize s_sizeDlgQt;
 static flag s_fDlgFlatQt;
+static QString s_strDlgClipQt;   // first control found outside the dialog
+
+// Does any visible control extend past the dialog that owns it?
+//
+// This is the failure everyone means by "a control sits off the edge",
+// and it is the one thing a screenshot shows instantly and no assertion
+// here could see. Qt knows the answer without an image: every child has a
+// geometry and the dialog has a rect.
+//
+// Only direct, visible children with a real size are considered. A hidden
+// page of a stack legitimately sits anywhere, a zero-sized widget has no
+// position worth checking, and a nested child is bounded by its own
+// parent rather than by the window. One pixel of tolerance, because a
+// frame that lands exactly on the boundary is not a defect.
+static QString StrClippedChildQt(QWidget *pw)
+{
+  QRect rcOwn = pw->rect().adjusted(-1, -1, 1, 1);
+
+  for (QObject *pobj : pw->children()) {
+    QWidget *pch = qobject_cast<QWidget *>(pobj);
+    if (pch == NULL || !pch->isVisible() || pch->isWindow())
+      continue;
+    if (pch->width() <= 0 || pch->height() <= 0)
+      continue;
+    if (!rcOwn.contains(pch->geometry()))
+      return QString("%1 %2 at (%3,%4 %5x%6) outside %7x%8")
+        .arg(QString(pch->metaObject()->className()))
+        .arg(pch->objectName().isEmpty() ? QString("(unnamed)")
+                                         : pch->objectName())
+        .arg(pch->x()).arg(pch->y()).arg(pch->width()).arg(pch->height())
+        .arg(pw->width()).arg(pw->height());
+  }
+  return QString();
+}
 
 // Is the image a single flat colour?
 //
@@ -254,6 +288,7 @@ static QString StrOpenDialogQt(void (*pfn)())
   strTitle = QString();
   s_sizeDlgQt = QSize();
   s_fDlgFlatQt = fTrue;
+  s_strDlgClipQt = QString();
   // Stoppable timers rather than singleShot, so nothing outlives this
   // call. A queued close that is still pending when the dialog has
   // already been dealt with goes on to close whatever modal window the
@@ -272,6 +307,7 @@ static QString StrOpenDialogQt(void (*pfn)())
       strTitle = pw->windowTitle();
       s_sizeDlgQt = pix.size();
       s_fDlgFlatQt = FPixmapFlatQt(pix);
+      s_strDlgClipQt = StrClippedChildQt(pw);
       pw->close();
     }
   });
@@ -350,6 +386,8 @@ static void TestDialogsQt()
         s_sizeDlgQt.width(), s_sizeDlgQt.height());
       Check(!s_fDlgFlatQt, "%s: rendered as one flat colour -- it opened "
         "with the right title and drew nothing", rgdlg[i].szTitle);
+      Check(s_strDlgClipQt.isEmpty(), "%s: a control is outside the dialog: %s",
+        rgdlg[i].szTitle, s_strDlgClipQt.toLocal8Bit().constData());
     }
   }
   printf("  %d dialogs opened, drew something, and closed\n", cdlg);
