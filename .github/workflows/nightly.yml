@@ -459,6 +459,20 @@ jobs:
       # how v8.00-qt.3 and qt.4 came to be tagged and never published.
       # A nightly artifact is the thing to hand somebody who says "does
       # this run on your Mac?" without spending a version number on it.
+      - name: Say so in the run summary
+        if: always()
+        run: |
+          {
+            echo "### macOS"
+            echo "- suite: $(grep -hoE '^(PASS|FAIL): .*' suite.log 2>/dev/null | tail -1 || echo 'did not report')"
+            if ls out/macos/*.dmg >/dev/null 2>&1; then
+              echo "- packaged: $(ls -lh out/macos/*.dmg | awk '{print $9" "$5}')"
+            else
+              echo "- **no .dmg produced**"
+            fi
+            echo "- job status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload it
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -703,6 +717,26 @@ jobs:
           copy "%QTDIR%\bin\Qt6*.dll" . >nul
           astrolog-qt-test.exe -Yi1 ephem
           if errorlevel 1 exit /b 1
+
+      # Say what happened where the run summary shows it. Both experiments
+      # are continue-on-error, which means a failure inside them leaves the
+      # RUN green and someone has to go looking at job level to find it.
+      # A summary line is the difference between "the nightly passed" and
+      # "the nightly passed and here is what each platform actually did".
+      - name: Say so in the run summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Qt ${{ matrix.qt }} on Windows (MSVC)"
+            if [ -f astrolog-qt.exe ]; then
+              echo "- built \`astrolog-qt.exe\`, $(stat -c%s astrolog-qt.exe 2>/dev/null || stat -f%z astrolog-qt.exe) bytes"
+            else
+              echo "- **did not build**"
+            fi
+            [ -f astrolog-qt-test.exe ] && echo "- built the -DQTTEST binary too"
+            echo "- job status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stage a runnable tree
         shell: pwsh
