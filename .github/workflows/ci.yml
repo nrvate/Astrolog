@@ -130,6 +130,19 @@ jobs:
       - name: Build both Qt binaries
         run: make qt -j4 && make qt-test -j4
 
+      # The Qt binary is fortified too, and only the console one was ever
+      # checked. Both are shipped -- every .deb and .rpm carries both, with
+      # a wrapper for each on PATH -- so a flag change that dropped
+      # _FORTIFY_SOURCE from the GUI build would have gone unnoticed.
+      # Measured: astrolog-qt imports 11 *_chk symbols where astrolog
+      # imports 10, so a floor of 10 fits both without pinning either.
+      #
+      # Here rather than beside the console check, because that one runs in
+      # the audits job, which builds only ./astrolog -- the check would
+      # have failed on a missing file rather than on anything real.
+      - name: The Qt build still has _FORTIFY_SOURCE
+        run: tools/ci-assert-fortify.sh astrolog-qt 10
+
       # ASTROLOG_QT_EPHEM=minimal is not optional here and not a
       # convenience. /swe -- the maintainer's 887,000-file NAS mount --
       # will never exist on a runner, and without the mode the suite
