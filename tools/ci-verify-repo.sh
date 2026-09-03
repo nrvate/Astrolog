@@ -59,6 +59,43 @@ for dist in "$repo"/apt/dists/*/; do
     *0Ari00*|none) echo "BAD: ${chiron:-no chart}"; fail=1 ;;
     *) echo "ok" ;;
   esac
+
+  # And the UPGRADE path, which a fresh install cannot exercise. This is
+  # where packaging actually breaks: a conffile prompt that hangs a
+  # non-interactive run, a file that moved between versions, a maintainer
+  # script that fails only when something is already installed. The
+  # repository serves every release, so the path is real for every user
+  # who installed before today.
+  #
+  # Oldest to newest, not version-to-version: one hop over the whole
+  # history is the strongest single case, and it is what someone who
+  # installed once and ran "apt upgrade" months later actually does.
+  printf '%-12s %-38s ' "$code" "upgrade"
+  out=$(docker run --rm -v "$repo":/repo:ro "$img" sh -c "
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq >/dev/null 2>&1
+      cp /repo/astrolog.gpg /usr/share/keyrings/
+      echo 'deb [signed-by=/usr/share/keyrings/astrolog.gpg] file:///repo/apt $code main' \
+        > /etc/apt/sources.list.d/astrolog.list
+      apt-get update -qq >/dev/null 2>&1
+      old=\$(apt-cache madison astrolog | awk -F'|' '{gsub(/ /,\"\",\$2); print \$2}' | tail -1)
+      new=\$(apt-cache madison astrolog | awk -F'|' '{gsub(/ /,\"\",\$2); print \$2}' | head -1)
+      [ \"\$old\" = \"\$new\" ] && { echo SINGLEVERSION; exit 0; }
+      apt-get install -y -qq astrolog=\$old >/dev/null 2>&1 || { echo OLDFAILED; exit 1; }
+      apt-get install -y -qq --only-upgrade astrolog >/dev/null 2>&1 || { echo UPGRADEFAILED; exit 1; }
+      echo \"UPGRADED \$old -> \$(dpkg-query -W -f='\${Version}' astrolog)\"
+      cd / && astrolog $chart" 2>&1) || {
+    echo "UPGRADE FAILED"; printf '%s\n' "$out" | tail -6 | sed 's/^/    /'; fail=1; continue; }
+  case $out in
+    *SINGLEVERSION*) echo "skipped (only one version in the repository)"; continue ;;
+  esac
+  chiron=$(printf '%s\n' "$out" | grep -E '^Chir' | head -1 || true)
+  case ${chiron:-none} in
+    *0Ari00*|none)
+      echo "BROKEN AFTER UPGRADE: ${chiron:-no chart}"
+      printf '%s\n' "$out" | grep -E 'UPGRADED|FAILED' | sed 's/^/    /'; fail=1 ;;
+    *) echo "ok  $(printf '%s\n' "$out" | grep -o 'UPGRADED .*' || true)" ;;
+  esac
 done
 
 for dist in "$repo"/rpm/*/; do

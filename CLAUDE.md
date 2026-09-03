@@ -311,7 +311,11 @@ tools/ci-verify-zip.sh out/package/a.zip out/package/astrolog-windows
                                              # byte-identical to what was
                                              # staged
 tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
-tools/ci-verify-repo.sh public                         # clean container
+tools/ci-verify-repo.sh public                         # clean container,
+                                             # and now the UPGRADE path
+                                             # too: oldest version in the
+                                             # repository, then upgrade,
+                                             # then assert Chiron
 tools/ci-verify-published-release.sh v8.00-qt.4  # download the RELEASE and
                                              # verify it as a user would:
                                              # the manifest must name
