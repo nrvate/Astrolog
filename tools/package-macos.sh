@@ -122,6 +122,17 @@ printf '   MacOS:     '; ls "$app/Contents/MacOS" | tr '\n' ' '; echo
 printf '   ephem:     '; ls "$app/Contents/MacOS/ephem" 2>/dev/null | wc -l | tr -d ' '
 printf ' files\n   Resources: '; ls "$app/Contents/Resources" | tr '\n' ' '; echo
 
+# That count was printed and never checked. Check it: the esoteric-body
+# files are most of the bundle's payload, and the Chiron assertion further
+# down cannot see them go -- seas_18.se1, where Chiron lives, was in the
+# original 12-file set and would still answer.
+want_se1=$(ls ephem/*.se1 2>/dev/null | wc -l | tr -d ' ')
+got_se1=$(ls "$app/Contents/MacOS/ephem"/*.se1 2>/dev/null | wc -l | tr -d ' ')
+[ "$want_se1" -gt 0 ] && [ "$got_se1" = "$want_se1" ] || {
+  echo "   FAILED: bundle has $got_se1 .se1 files, this tree ships $want_se1"
+  exit 1; }
+echo "   ephem complete: $got_se1 of $want_se1 .se1 files"
+
 # Does it depend on anything that will not be on the target machine? This
 # runs on a builder where Homebrew Qt exists, so a binary still linking
 # /opt/homebrew loads perfectly here and fails on every Mac that has not
@@ -182,7 +193,7 @@ QT_QPA_PLATFORM=offscreen "$app/Contents/MacOS/Astrolog" \
   >"$out/run.out" 2>&1 || true
 # The CHIRON line, not the whole chart. -R1 renders 118 bodies including
 # 32 planetary moons, whose files live in sat/ and are not in the bundled
-# 12-file ephem/ -- so "does 0Ari00 appear anywhere" can never pass here,
+# ephem/ at all -- so "does 0Ari00 appear anywhere" can never pass here,
 # and failed v8.00-qt.5 on a bundle that was perfectly good. Chiron comes
 # from seas_18.se1, which IS bundled, which is exactly why every other
 # package check in this repository asserts on Chiron and nothing else.
