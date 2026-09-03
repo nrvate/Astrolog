@@ -1162,8 +1162,16 @@ static void TestColorSchemeQt()
   Check(dir.isValid(), "a scratch directory to write config files into");
   if (!dir.isValid())
     return;
+  // Both variables, because QDir::homePath() does not read the same one
+  // everywhere: on Windows it prefers USERPROFILE and only falls back to
+  // HOME, so setting HOME alone pointed these six assertions at the real
+  // home directory and they failed in the first Windows run of this
+  // suite. Setting both is portable and keeps the test testing the
+  // parsing rather than the platform.
+  QByteArray baProfile = qgetenv("USERPROFILE");
   QByteArray baHome = qgetenv("HOME");
   qputenv("HOME", dir.path().toLocal8Bit());
+  qputenv("USERPROFILE", dir.path().toLocal8Bit());
 
   // kdeglobals. This is a regression test with a specific target: the
   // section is [Colors:Window], and QSettings cannot read a key out of a
@@ -1208,6 +1216,7 @@ static void TestColorSchemeQt()
   Check(NSchemeFromGtkFileTestQt() == -1, "no settings.ini at all says nothing");
 
   qputenv("HOME", baHome);
+  qputenv("USERPROFILE", baProfile);
   printf("  the desktop's light/dark preference is read from each source\n");
 }
 

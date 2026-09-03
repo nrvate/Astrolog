@@ -597,9 +597,18 @@ jobs:
           # measured, the second by a ten-minute hang.
           Copy-Item "$env:QTDIR\plugins\platforms\qoffscreen.dll" dist\platforms\
           Copy-Item "$env:QTDIR\plugins\platforms\qminimal.dll" dist\platforms\
-          Copy-Item -Recurse ephem, font dist\
+          # icons/ too, and not as an afterthought. IconAstrologQt() tries
+          # icons/astrolog{16,32,48}.png beside the executable and then
+          # falls back to astrlog1.ico, and the suite's "Application icon"
+          # group asserts all three sizes resolve at their exact size
+          # rather than as a scaled blur. The artifact had NEITHER source,
+          # which cost 8 of the 15 failures in the first Windows run of
+          # the suite -- a packaging gap reported as a port defect.
+          # Confirmed by removing both locally: 0 passed, 8 failed, the
+          # same eight. Removing only icons/ still passes, off the .ico.
+          Copy-Item -Recurse ephem, font, icons dist\
           Copy-Item astrolog.as, atlas.as, timezone.as, sefstars.txt, `
-            seorbel.txt, astexo.csv, earth.bmp dist\
+            seorbel.txt, astexo.csv, earth.bmp, astrlog1.ico dist\
           "staged $((Get-ChildItem dist -Recurse -File).Count) files, " +
             "$([math]::Round((Get-ChildItem dist -Recurse -File | Measure-Object Length -Sum).Sum/1MB,1)) MB"
 
