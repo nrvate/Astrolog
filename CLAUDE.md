@@ -292,6 +292,16 @@ tools/ci-assert-clang-clean.sh               # the macOS compiler, whose
                                              # warnings are not gcc's
 tools/ci-assert-green.sh                     # wait for CI on this commit
                                              # before tagging a release
+tools/ci-assert-nightly.sh                   # is the SLOW lane healthy at
+                                             # all -- a different question,
+                                             # and the one nothing asked
+                                             # while the nightly sat red
+                                             # for days. Also fails if the
+                                             # newest run is over 30h old,
+                                             # because a schedule that
+                                             # stopped firing reports no
+                                             # failures and reads exactly
+                                             # like one that passes
 ```
 
 And an eleventh that is not fast and not resource-shaped: **the
