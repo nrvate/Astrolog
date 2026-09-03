@@ -170,7 +170,16 @@ jobs:
           # Costs nothing where IPv6 works.
           echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
-          sudo apt-get install -y libx11-dev
+          # qtbase5-dev here rather than inside the Qt-ASan step further
+          # down, which is where it used to be installed. ubsan-sweep.sh
+          # runs BEFORE that step and asks for a Qt build; with Qt not
+          # yet present it printed "no Qt build available, skipped" and
+          # moved on. So the UBSan leg that found two real bugs on that
+          # surface -- an 8-byte store into a 4-byte metafile field, and
+          # a read one past the end of space[] -- contributed nothing to
+          # any nightly it ran in. Installed once, up front, both
+          # sanitizer steps have it.
+          sudo apt-get install -y libx11-dev qtbase5-dev pkg-config
 
       # /swe will never exist here, so the sweep runs against the bundled
       # ephemeris. The switch half never needed it; the graphics half is
@@ -260,7 +269,6 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           QT_QPA_PLATFORMTHEME: ''
         run: |
-          sudo apt-get install -y qtbase5-dev pkg-config
           make qt-asan -j4
           ASTROLOG_QT_EPHEM=minimal ./astrolog-qt-asan -Yi1 ephem
 
