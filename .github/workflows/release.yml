@@ -238,5 +238,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
+          # --notes-file, not --generate-notes alone. The generated notes
+          # are the commit list, and the one thing someone downloading the
+          # .dmg needs is not in it: macOS will refuse to open the app,
+          # with a dialog saying it is damaged, until Gatekeeper's
+          # quarantine flag is cleared. Telling them on the page they are
+          # standing on beats telling them in a README they have no reason
+          # to open, and "damaged" reads as a broken binary rather than as
+          # a missing $99 subscription. --generate-notes still runs; this
+          # is prepended to it.
+          cat > notes.md <<'NOTES'
+          ### Installing
+
+          **Linux** — `.deb` for Ubuntu 22.04/24.04, `.rpm` for Fedora 42/43
+          and EL9/EL10. Or use the [signed repository](https://nrvate.github.io/Astrolog/)
+          so upgrades arrive on their own.
+
+          **Windows** — unpack the `.zip` and run. Statically linked.
+
+          **macOS** — the app is ad-hoc signed but not *notarized*, so a
+          download through a browser is quarantined and macOS says it is
+          damaged. It is not. Either right-click the app and choose
+          **Open**, or run once:
+
+          ```sh
+          xattr -dr com.apple.quarantine /Applications/Astrolog.app
+          ```
+
+          A download fetched with `curl` is never quarantined and just runs.
+
+          ---
+          NOTES
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --title "Astrolog $TAG" --generate-notes dist/*
+            --title "Astrolog $TAG" --notes-file notes.md \
+            --generate-notes dist/*
