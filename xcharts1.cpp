@@ -465,7 +465,7 @@ KI FormatGridCell(char *sz, int cchMax, int x, int y, int type, flag fWide)
       if (us.fDistance && !us.fParallel) {
         sprintf2(sz, cchMax, "%c%f", rgchAppSep[us.nAppSep*2 + (v >= 0.0)],
           RAbs(v));
-        sprintf2(SO(&sz[fWide ? 8 : 5], sz), "%s", "%");
+        sprintf2(&sz[fWide ? 8 : 5], cchMax - (fWide ? 8 : 5), "%s", "%");
       } else if (us.nDegForm != df360) {
         if (fWide)
           sprintf2(S(szT), "%02d", s);
@@ -486,7 +486,7 @@ KI FormatGridCell(char *sz, int cchMax, int x, int y, int type, flag fWide)
       sprintf2(sz, cchMax, "%s", SzZodiac((real)((n-1)*30) + v));
       sz[3] = sz[4]; sz[4] = sz[5]; sz[5] = 'm';
       if (fWide)
-        sprintf2(SO(sz+6, sz), "%s", sz+8);
+        sprintf2(sz+6, cchMax-6, "%s", sz+8);
       sz[fWide ? 8 : 6] = chNull;
     } else if (us.nDegForm != df360) {
       if (fWide)

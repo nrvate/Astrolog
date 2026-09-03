@@ -424,8 +424,23 @@
 // unbounded on non-Windows builds -- a deep install directory crashed
 // startup in FileOpen()'s path probing under glibc fortify.
 #define sprintf2 snprintf
+#ifdef __cplusplus
+// S() and SO() are sizeof, and sizeof a POINTER is 8 -- so handing either
+// one a pointer that looks like a buffer compiles silently and bounds the
+// write at eight bytes. CchArray() only binds to a real array, so that
+// mistake becomes a compile error instead of a truncation. It costs
+// nothing: N is a compile-time constant and the call inlines away.
+//
+// This is the same class as the two SO() bugs found on 2026-09-02, where
+// the pointer was real but pointed into a different object than the one
+// named. That one sizeof cannot catch; this one it can, so it should.
+template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
+#define S(sz) (sz), (int)CchArray(sz)
+#define SO(pch, sz) (pch), (CchArray(sz) - ((pch) - (sz)))
+#else
 #define S(sz) (sz), (int)sizeof(sz)
 #define SO(pch, sz) (pch), (sizeof(sz) - ((pch) - (sz)))
+#endif
 #else
 #define sprintf2 sprintf
 #define S(sz) (sz)
