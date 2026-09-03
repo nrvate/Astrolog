@@ -2394,13 +2394,33 @@ more POSIX headers, both already guarded: `io.cpp`'s `<dirent.h>` behind
 `#ifdef PC` (to `<io.h>`), and `sweph.cpp`'s `<dlfcn.h>` behind
 `#ifdef __GNUC__`.
 
-### Still unproven, and it is the interesting part
+### And then the whole suite passed
 
-The binary computes. Nothing yet says a *dialog* is right. The suite is
-what would say it -- 25 dialogs, 42 context menus, 264 shortcuts, 3,812
-assertions, and it runs headless under `QT_QPA_PLATFORM=offscreen`, so
-`guestcontrol` alone is enough with no desktop involved. CI now compiles
-`astrolog-qt-test.exe` beside the program for exactly that.
+2026-09-03, in a Windows 10 VM, against the artifact the nightly builds:
+
+```
+== w10test: PASS: 3812 passed, 0 failed
+```
+
+The same 3,812 as Linux. 25 dialogs opened and closed with the right
+titles, 42 context menus resolved, 264 shortcuts bound and unique, 338
+menu items fired, the numeric oracle's 307 assertions against the Swiss
+Ephemeris library -- all of it, on Windows, in a build with no `WIN` in
+it.
+
+**Getting there took four runs and fifteen failures, and not one of them
+was the port.** Worth listing, because the ratio is the point:
+
+| run | failures | what they were |
+|---|---|---|
+| 1 | 15 | 8 no icon in the artifact, 6 a redirected `HOME` Windows ignores, 1 a comparison carrying a literal `\n` |
+| 2 | 6 | the same 6 -- `USERPROFILE` was the wrong guess too |
+| 3 | 0 | `SetHomeTestQt()`, a seam instead of a third guess |
+
+The `\n` one is the keeper: that assertion had been testing "the line
+ends in exactly `\n`" for as long as it existed, on the only platform
+where it ever ran. Three were defects in the test, one in the packaging,
+and the port itself never moved.
 
 **What the green result does not settle**, and this is the part worth
 keeping in front of the enthusiasm:

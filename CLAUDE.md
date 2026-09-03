@@ -402,7 +402,10 @@ WINVM_USER=... WINVM_PASS=... \
 ```
 
 copies it into a VirtualBox VM over the Guest Additions channel, **no
-network involved**, and runs all 3,812 assertions headless. Its header
+network involved**, and runs all 3,812 assertions headless. It passes
+there: `PASS: 3812 passed, 0 failed`, 2026-09-03, the same count as
+Linux -- 25 dialogs, 42 context menus, 264 shortcuts and the numeric
+oracle, in a build with no `WIN` in it. Its header
 lists four traps, each of which cost a run: the offscreen plugin has to
 be IN the artifact (`windeployqt` ships only `windows`), the `windows`
 plugin blocks forever because a guestcontrol process has no desktop, the
