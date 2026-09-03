@@ -107,9 +107,20 @@
                /* X11 and died on Xlib.h; Astrolog.vcxproj needed three   */
                /* fixes, two of which only a compiler could find; the Qt6 */
                /* build was outside every warning net from the day it     */
-               /* appeared. Assume the same of WSETUP until something     */
-               /* builds it. QT_CI_PLAN.md, "The three unbuilt            */
-               /* configurations", has the decision this is waiting on.   */
+               /* appeared.                                               */
+               /*                                                         */
+               /* MEASURED 2026-09-03, and WSETUP is not like those three: */
+               /* it BUILDS. -DWSETUP through Makefile.win compiles every  */
+               /* site and links with one library added, -lshlwapi, for    */
+               /* SHDeleteKey. 3,218,020 bytes against the normal build's  */
+               /* 2.9 MB. So the sites are stale rather than broken, and   */
+               /* the cost of keeping it is one linker flag.               */
+               /*                                                         */
+               /* That it links is not that it works: nothing has run it,  */
+               /* and its menu items -- Open Directory, Setup User, the    */
+               /* registry (un)install -- are exactly the parts a link     */
+               /* cannot check. QT_CI_PLAN.md, "The three unbuilt          */
+               /* configurations", has the decision this is waiting on.    */
 
 #define JPLWEB /* Comment out this #define if you don't want to compile in */
                /* features to access the JPL Horizons Website online.      */
