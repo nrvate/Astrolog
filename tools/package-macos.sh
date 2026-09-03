@@ -149,6 +149,31 @@ grep '^Chir' "$out/chart.txt" | head -1 | sed 's/^/   /'
 rm -f "$out/chart.txt" "$out/run.out"
 
 echo "== dmg"
+dmg="$out/astrolog-$ver-macos.dmg"
 hdiutil create -volname "Astrolog $ver" -srcfolder "$app" \
-  -ov -quiet -format UDZO "$out/astrolog-$ver-macos.dmg"
-ls -lh "$out/astrolog-$ver-macos.dmg" | awk '{print "   "$5"  "$9}'
+  -ov -quiet -format UDZO "$dmg"
+ls -lh "$dmg" | awk '{print "   "$5"  "$9}'
+
+# Mount it and run the app from INSIDE, which is the only copy anyone
+# will ever launch. Everything above tested the staging directory: a
+# read-only compressed volume is a different filesystem with different
+# permissions, and "it worked in out/macos" has never been the claim
+# worth making. Same reasoning as installing every .deb and .rpm into a
+# clean container rather than trusting dpkg-deb's exit code.
+echo "== does the app inside the .dmg run?"
+vol=$(hdiutil attach "$dmg" -nobrowse -readonly | awk '/\/Volumes\//{sub(/^[^\/]*\/Volumes/,"/Volumes"); print; exit}')
+[ -n "$vol" ] || { echo "   could not mount $dmg"; exit 1; }
+trap 'hdiutil detach "$vol" -quiet 2>/dev/null || true' EXIT
+"$vol/Astrolog.app/Contents/MacOS/Astrolog" \
+  -Yi1 "$vol/Astrolog.app/Contents/MacOS/ephem" \
+  -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os "$out/dmg.txt" \
+  >"$out/dmg.out" 2>&1 || true
+if ! grep -q '^Chir' "$out/dmg.txt" 2>/dev/null || grep -q "0Ari00" "$out/dmg.txt" 2>/dev/null; then
+  echo "   FAILED from the mounted volume $vol"
+  sed 's/^/   /' "$out/dmg.out" | head -8
+  exit 1
+fi
+grep '^Chir' "$out/dmg.txt" | head -1 | sed 's/^/   /'
+codesign --verify --deep --strict "$vol/Astrolog.app" \
+  && echo "   signature still verifies after packaging"
+rm -f "$out/dmg.txt" "$out/dmg.out"
