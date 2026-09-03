@@ -2300,6 +2300,70 @@ carried*, not something the port broke.
 The smoke test that follows the build is a separate story and was wrong
 twice; see the work log. The build itself is the result.
 
+### And then it ran, on real Windows
+
+The runner can only say "it compiles and computes a chart". So the job
+uploads what it builds, and the artifact went into a Windows 10 VM driven
+by `VBoxManage guestcontrol` -- no network needed, the Guest Additions
+channel carries files and processes both ways, and `controlvm
+screenshotpng` can see the framebuffer without touching the host desktop.
+
+Measured 2026-09-02, ephemeris on a **local disk**:
+
+```
+astrolog-qt.exe -Yi1 E:\swe -R1     0.295 s     121 bodies
+121 zodiac positions compared against Linux:    0 differences
+```
+
+Not "close" -- the same digits, including all 39 esoteric bodies and the
+33 planetary moons. The same comparison against the *console mingw* build
+on the same VM had already come back at 2 differing lines in 2,812, and
+both were the same "file not found" warning differing only in path
+separator and in where stdout and stderr interleaved.
+
+### The cost nobody had priced: Qt6 is Windows 10 and later
+
+The first attempt to run it was on Windows 7, and it exited instantly
+with no output and no message. Not a port problem:
+
+```
+Qt6Core.dll imports SetThreadDescription          (Windows 10 1607+)
+Qt6Core.dll imports api-ms-win-core-synch-l1-2-0
+```
+
+Both static, so the loader fails before `main()`. Qt 6 dropped Windows 7
+at 6.0. **And the obvious check is worse than useless**: the PE header
+says minimum OS version **6.0**, which is Vista, and would tell you the
+binary is fine. Only the import table is honest.
+
+A Qt5 leg was added to cover Windows 7 and removed within the hour. Qt
+5.15.2 -- the last open source 5.15, dated 2020 -- does not compile
+against a current MSVC at all: `qvarlengtharray.h` uses
+`stdext::checked_array_iterator`, a Microsoft STL extension now behind an
+opt-in macro, so Qt's own header fails before any Astrolog source is
+reached. One `/D` fixes it; a workaround on a dead Qt only earns more
+workarounds.
+
+So the honest statement of the trade, which belongs beside every argument
+for collapsing the backends:
+
+| | runs on |
+|---|---|
+| `wdriver.cpp` (Win32) | Windows 7, 8, 10, 11 |
+| this port, Qt6 | **Windows 10 and later** |
+
+Qt5 remains supported on **Linux**, where it is what the maintainer's
+machine has and what distributions ship. macOS is Qt6 already, Homebrew
+having deprecated `qt@5` into a source build.
+
+### Still unproven, and it is the interesting part
+
+The binary computes. Nothing yet says a *dialog* is right. The suite is
+what would say it -- 25 dialogs, 42 context menus, 264 shortcuts, 3,812
+assertions, and it runs headless under `QT_QPA_PLATFORM=offscreen`, so
+`guestcontrol` alone is enough with no desktop involved. CI now compiles
+`astrolog-qt-test.exe` beside the program for exactly that.
+
 **What the green result does not settle**, and this is the part worth
 keeping in front of the enthusiasm:
 
