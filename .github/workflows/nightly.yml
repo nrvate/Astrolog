@@ -663,6 +663,33 @@ jobs:
              ${{ matrix.libpfx }}PrintSupport.lib ^
              user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
 
+      # Run the suite HERE, not only in a VM by hand. The runner has
+      # everything needed: the -DQTTEST binary, Qt's DLLs, and
+      # qoffscreen.dll -- which is the whole trick, because a Windows
+      # runner has no desktop and the "windows" platform plugin blocks
+      # forever on the first widget. Offscreen needs no display at all.
+      #
+      # Until now these 3812 assertions ran on Windows only when someone
+      # copied an artifact into a VirtualBox VM and invoked
+      # tools/win-vm-suite.sh, which is a real check and not a repeatable
+      # one. 25 dialogs, 42 context menus, 264 shortcuts and 338 menu
+      # items are exactly the surface a Windows port can break without
+      # any Linux net noticing.
+      #
+      # ASTROLOG_QT_EPHEM=minimal because the bundled ephem/ carries 19 of
+      # the 39 esoteric bodies, and the suite refuses to quietly run 19
+      # assertions where it should run 39.
+      - name: Run the suite on Windows
+        shell: cmd
+        run: |
+          set QT_QPA_PLATFORM=offscreen
+          set ASTROLOG_QT_EPHEM=minimal
+          if not exist platforms mkdir platforms
+          copy "%QTDIR%\plugins\platforms\qoffscreen.dll" platforms\ >nul
+          copy "%QTDIR%\bin\Qt6*.dll" . >nul
+          astrolog-qt-test.exe -Yi1 ephem
+          if errorlevel 1 exit /b 1
+
       - name: Stage a runnable tree
         shell: pwsh
         run: |
