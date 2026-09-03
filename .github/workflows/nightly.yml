@@ -170,6 +170,25 @@ jobs:
       - name: UndefinedBehaviorSanitizer over both matrices
         run: tools/ubsan-sweep.sh
 
+      # The one check here whose reference comes from OUTSIDE this
+      # repository. Everything else compares Astrolog to an older build of
+      # itself or to the other build of the same core -- REFACTORING.md T9
+      # says so, and adds that a differential "actively protects a wrong
+      # answer". qttest.cpp's numeric oracle looks like the exception and
+      # is not one: it links the SAME vendored Swiss, so a wrong Jupiter
+      # would appear identically on both sides and agree perfectly.
+      #
+      # swetest is a different binary from a different source tree on a
+      # different Swiss lineage (2.10.03-ts.10 against this tree's stock
+      # 2.10.03). A clone plus a build is 25 seconds, measured, which is
+      # cheap for the only evidence here about a NUMBER rather than about
+      # consistency.
+      - name: Astrolog against Swiss Ephemeris's own swetest
+        run: |
+          git clone -q --depth 1 https://github.com/nrvate/swisseph.git /tmp/swe
+          make -C /tmp/swe swetest -j4 >/dev/null
+          tools/swetest-oracle.sh ./astrolog /tmp/swe/swetest "$PWD/ephem"
+
       - name: The Qt suite under AddressSanitizer
         env:
           ASAN_OPTIONS: detect_leaks=0

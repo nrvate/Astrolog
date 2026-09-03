@@ -21,9 +21,12 @@
 # this tree's stock 2.10.03). When it and Astrolog agree, that is evidence
 # about the number rather than about consistency.
 #
-# NOT A CI CHECK. It needs a swisseph checkout that no runner has, exactly
-# like tools/win-vm-suite.sh needs a VirtualBox VM. Run it by hand when a
-# change touches calc.cpp, matrix.cpp or anything under swe*.
+# IT IS a CI check, in the nightly, which was not obvious at first: the
+# fork is a public repository and a shallow clone plus "make swetest"
+# is 25 seconds measured (22 to clone, 2.8 to build), against the bundled
+# 12-file ephem/ rather than the 887,000-file collection. Run it by hand
+# too when a change touches calc.cpp, matrix.cpp or anything under swe*,
+# because the nightly is a slow way to learn you broke an ephemeris.
 set -e
 
 A=${1:-./astrolog}
