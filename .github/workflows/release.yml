@@ -211,7 +211,18 @@ jobs:
       # The nightly's Windows parity job already installs wine for the
       # same reason, so this is a known-good package set on this runner
       # rather than a new dependency to discover in a release.
-      - run: sudo apt-get install -y nsis wine wine64
+      # i386 as well, and this is not optional. An NSIS installer STUB is
+      # always a 32-bit PE32 executable even when the payload it installs
+      # is 64-bit -- "file" says "PE32 Intel 80386" for the setup.exe and
+      # "PE32+ x86-64" for the astrolog.exe inside it. Wine cannot run the
+      # stub without 32-bit support, so the verification below found
+      # "NOTHING INSTALLED" on a perfectly good installer.
+      #
+      # The nightly's Windows parity job has had this line since it was
+      # written, which is why the same check passes there and failed here.
+      - run: sudo dpkg --add-architecture i386
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y nsis wine wine64 wine32
       - run: tools/package-windows-installer.sh out/package/astrolog-windows out/package/astrolog-setup.exe
       - run: tools/ci-verify-windows-installer.sh out/package/astrolog-setup.exe out/package/astrolog-windows
 

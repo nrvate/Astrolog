@@ -47,7 +47,9 @@ dst="$WINEPREFIX/drive_c/astrotest"
 echo "== installing silently"
 timeout 600 wine "$(cd "$(dirname "$setup")" && pwd)/$(basename "$setup")" \
   /S '/D=C:\astrotest' >/dev/null 2>&1 || true
-[ -d "$dst" ] || { echo "   NOTHING INSTALLED into C:\\astrotest"; exit 1; }
+# printf, not echo: "\a" is a bell in echo, and this line printed
+# "NOTHING INSTALLED into C:strotest" the one time it fired.
+[ -d "$dst" ] || { printf '   NOTHING INSTALLED into C:%castrotest\n' 92; exit 1; }
 echo "   $(find "$dst" -type f | wc -l | tr -d ' ') files"
 
 echo "== is everything the package staged actually there?"
