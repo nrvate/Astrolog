@@ -61,4 +61,32 @@ for arg in "-i /nonexistent-astrolog-test-file.as" "-t"; do
 done
 [ $fail -eq 0 ] || { echo "FAIL: startup diagnostics"; exit 1; }
 echo "  a startup warning reaches stderr instead of aborting"
+
+# A -Yi directory the user typed goes into the ephemeris search path even
+# if it does not exist. This is a regression test for a real bug: the path
+# builder filtered every candidate through stat(), which is right for the
+# directories Astrolog GUESSES at and wrong for the ones the user NAMED.
+# On Windows stat() fails on a bare drive letter and, per MSVC's own
+# documentation, on a trailing backslash -- so "-Yi1 M:\swe\" pointing at
+# a real directory disappeared from the path with no message at all, and
+# the "not found in PATH" diagnostic listed everything except the thing
+# the user had asked for.
+#
+# A nonexistent directory is the right probe precisely because it is the
+# case the filter used to remove. If it survives, an existing one does.
+# It must also still be VISIBLE: the whole value of keeping it is that a
+# mistyped path shows up in the diagnostic instead of vanishing.
+echo
+echo "== Ephemeris search path =="
+probe=/nonexistent-astrolog-ephem-probe
+out=`$QTENV "$BIN" -Yi1 "$probe" -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+case $out in
+  *"$probe"*)
+    echo "  ok: a -Yi directory that does not exist is still searched" ;;
+  *)
+    echo "  FAIL: '-Yi1 $probe' never reached the ephemeris path."
+    echo "        An explicit -Yi is an instruction, not a hint. A user"
+    echo "        who mistypes one must see it in the diagnostic."
+    exit 1 ;;
+esac
 exit 0

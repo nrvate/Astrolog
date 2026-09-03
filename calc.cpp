@@ -2624,12 +2624,27 @@ typedef struct _EphemDirList {
 } EDL;
 
 
-// Append one directory to the list, unless it is empty, already present,
-// or does not exist. Each of those is a directory Swiss would search and
-// never match in, and the whole reason this list overflowed was carrying
-// them.
+// Append one directory to the list, unless it is empty or already
+// present.
+//
+// fExplicit means the user named this directory themselves, with -Yi or
+// an environment variable. Those are kept whatever stat() thinks of them.
+// Only the guesses -- the working directory, the executable's own
+// directory, and the compile-time EPHE_DIR -- are dropped for not
+// existing, and that filter exists solely to stop them spending a
+// 242-byte budget on directories that can never match.
+//
+// The distinction is not tidiness. Applying the existence check to -Yi
+// was a real bug: on Windows, stat() fails on a bare drive letter ("M:"),
+// and MSVC's documents it as failing on a trailing backslash for anything
+// but a root -- so "-Yi1 M:\ephe\" pointing at a perfectly good
+// directory vanished from the search path, with no message, and Swiss
+// then reported a "not found in PATH" listing that simply did not contain
+// what the user had asked for. A switch the user typed is an instruction,
+// not a hint to be second-guessed by a heuristic; if it is wrong, the
+// right place to find that out is the diagnostic that names it.
 
-static void AddDirEphemQ(EDL *pedl, CONST char *szDir)
+static void AddDirEphemQ(EDL *pedl, CONST char *szDir, flag fExplicit)
 {
   int i;
 
@@ -2638,7 +2653,7 @@ static void AddDirEphemQ(EDL *pedl, CONST char *szDir)
   for (i = 0; i < pedl->cDir; i++)
     if (FEqSz(pedl->rgsz[i], szDir))
       return;
-  if (!FDirExists(szDir))
+  if (!fExplicit && !FDirExists(szDir))
     return;
   if (pedl->cDir >= cDirEphemMax) {
     pedl->cDropped++;
@@ -2703,8 +2718,8 @@ void SwissEnsurePath()
   *pch = chNull;
 
   // The current directory, and the one holding the executable.
-  AddDirEphemQ(&edl, ".");
-  AddDirEphemQ(&edl, szExe);
+  AddDirEphemQ(&edl, ".", fFalse);
+  AddDirEphemQ(&edl, szExe, fFalse);
 
   // The directories named by the -Yi switch. A relative one is relative
   // to the EXECUTABLE, not to the working directory, which is worth
@@ -2720,7 +2735,7 @@ void SwissEnsurePath()
       sprintf2(S(szT), "%s%s", szExe, pchDir);
     else
       sprintf2(S(szT), "%s", pchDir);
-    AddDirEphemQ(&edl, szT);
+    AddDirEphemQ(&edl, szT, fTrue);
   }
 
 #ifdef ENVIRON
@@ -2732,13 +2747,13 @@ void SwissEnsurePath()
   while (*pch && (*pch = pch[1]) != chNull)
     pch++;
   env = getenv(szT);
-  AddDirEphemQ(&edl, env);
-  AddDirEphemQ(&edl, getenv(ENVIRONALL));
-  AddDirEphemQ(&edl, getenv(ENVIRONVER));
+  AddDirEphemQ(&edl, env, fTrue);
+  AddDirEphemQ(&edl, getenv(ENVIRONALL), fTrue);
+  AddDirEphemQ(&edl, getenv(ENVIRONVER), fTrue);
 #endif
 
   // A directory specified at compile time.
-  AddDirEphemQ(&edl, EPHE_DIR);
+  AddDirEphemQ(&edl, EPHE_DIR, fFalse);
 
   cLost = CDirJoinEphemQ(&edl, szPath, cchEphemPathMax + 1);
   if (cLost > 0 || edl.cDropped > 0) {
