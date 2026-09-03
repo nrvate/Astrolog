@@ -454,6 +454,20 @@ jobs:
       - name: Build the .app and .dmg
         run: tools/package-macos.sh out/macos
 
+      # Upload it here too. release.yml was the only place a .dmg could
+      # be obtained, so testing one meant cutting a release -- which is
+      # how v8.00-qt.3 and qt.4 came to be tagged and never published.
+      # A nightly artifact is the thing to hand somebody who says "does
+      # this run on your Mac?" without spending a version number on it.
+      - name: Upload it
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: astrolog-macos-nightly
+          path: out/macos/*.dmg
+          retention-days: 14
+          if-no-files-found: warn
+
   # THE EXPERIMENT: does this port build as a Qt application on Windows,
   # with Microsoft's compiler and the open-source Qt?
   #

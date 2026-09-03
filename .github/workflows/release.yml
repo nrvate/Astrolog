@@ -43,6 +43,25 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: tools/ci-assert-version.sh "${{ github.event.inputs.tag || github.ref_name }}"
 
+      # And that CI was green on this commit. Everything else in this
+      # workflow checks the ARTIFACTS -- every .deb and .rpm installed
+      # into a clean container and asked for Chiron, the Windows package
+      # unpacked and run, the macOS bundle launched from the mounted .dmg.
+      # None of that re-runs the program's 3,812 assertions, the ten
+      # audits, or the behavioural differential, because those belong to
+      # ci.yml.
+      #
+      # Which is fine as long as ci.yml passed on the commit being tagged,
+      # and nothing checked that. A tag on a red commit would produce
+      # packages that install perfectly and compute a correct Chiron while
+      # carrying whatever ci.yml had caught -- the Chiron assertion is
+      # deliberately shallow, its job being to prove the ephemeris was
+      # found rather than to re-test the program.
+      - name: CI was green on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/ci-assert-green.sh "${{ github.sha }}"
+
   # Two jobs rather than one matrix with a conditional container. The
   # matrix version was written first and had two faults, both caught by
   # reading it rather than by running it: "${{ matrix.runs-on }}" parses
