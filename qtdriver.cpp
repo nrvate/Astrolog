@@ -1519,6 +1519,61 @@ static void BuildFileMenu(QMainWindow *pwind)
 }
 
 
+// Defined with the rest of the colour-scheme code near the bottom of this
+// file; the View menu needs them several thousand lines earlier.
+QString StrThemePrefQt(void);
+void SetThemePrefQt(CONST char *sz);
+void ApplyColorSchemeQt(void);
+
+
+// The interface theme submenu: System, Light, Dark, exclusive.
+//
+// A menu rather than a control in a dialog, because every dialog in this
+// port is generated from astrolog.rc by tools/rc2qt.py and audited against
+// it by four separate checks. A hand-added control would be a permanent
+// divergence in the one place this project keeps mechanically honest. The
+// menus are hand-built already, and Windows has no such setting to diverge
+// from -- it follows the OS and always has.
+//
+// Exclusivity by hand rather than QActionGroup: that class lives in
+// QtWidgets on Qt5 and moved to QtGui in Qt6, and this file builds against
+// both. Three checkboxes and one lambda is cheaper than the #if.
+
+static void BuildThemeMenuQt(QMenu *pmenuWin)
+{
+  struct { CONST char *szLabel, *szValue; } rgTheme[] = {
+    {"&System",  "auto" },
+    {"&Light",   "light"},
+    {"&Dark",    "dark" }};
+  QMenu *pmenuTheme = pmenuWin->addMenu("&Interface Theme");
+  QString strNow = StrThemePrefQt();
+  QAction *rgpa[3];
+  int i;
+
+  for (i = 0; i < 3; i++) {
+    rgpa[i] = pmenuTheme->addAction(rgTheme[i].szLabel);
+    rgpa[i]->setCheckable(true);
+    rgpa[i]->setChecked(strNow == QString(rgTheme[i].szValue));
+  }
+  for (i = 0; i < 3; i++) {
+    CONST char *szValue = rgTheme[i].szValue;
+    QAction *pa0 = rgpa[0], *pa1 = rgpa[1], *pa2 = rgpa[2];
+    ConnectMenuQt(rgpa[i], pmenuWin,
+      [szValue, pa0, pa1, pa2]() {
+        SetThemePrefQt(szValue);
+        pa0->setChecked(QString(szValue) == "auto");
+        pa1->setChecked(QString(szValue) == "light");
+        pa2->setChecked(QString(szValue) == "dark");
+        // Qt propagates a palette change to every existing widget, so the
+        // menus and dialogs restyle without a restart. The chart is drawn
+        // by this port rather than by Qt, so it needs telling.
+        ApplyColorSchemeQt();
+        RedrawForceQt();
+      });
+  }
+}
+
+
 static void BuildViewMenu(QMainWindow *pwind)
 {
   QMenu *pmenu = pwind->menuBar()->addMenu("&View");
@@ -1551,6 +1606,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paClear = pmenuWin->addAction("&Clear Screen");
   ConnectMenuQt(paClear, pwind,
     []() { ClearScreenQt(); });
+  BuildThemeMenuQt(pmenuWin);
   QAction *paHourglass = pmenuWin->addAction("&Hourglass on Redraw");
   paHourglass->setCheckable(true);
   paHourglass->setChecked(qi.fHourglass != fFalse);
@@ -4368,6 +4424,69 @@ static int NSchemeFromGtkFileQt(void)
 // Cheapest and most explicit first, then the standard, then per desktop,
 // then the files that need no helper program at all.
 
+// The interface theme the user chose, or "auto". This is window chrome,
+// not an astrological setting, so it does NOT live in the .as settings
+// file: Windows Astrolog keeps its own GUI preferences out of there for
+// the same reason, and putting it there would mean a new switch in the
+// registry, a new line in FOutputSettings(), and a round-trip fixture,
+// for something no chart depends on. QSettings puts it in
+// ~/.config/Astrolog/Astrolog.conf on Linux, the registry on Windows and
+// a plist on macOS, without this having to know which.
+
+#define szThemeOrgQt  "Astrolog"
+#define szThemeKeyQt  "Interface/Theme"
+
+// IniFormat explicitly, not NativeFormat. Two reasons, and the second is
+// the one that mattered: NativeFormat is the registry on Windows and a
+// plist on macOS, so the file would be in a different KIND of place on
+// each platform and a bug in one could not be reproduced on another. And
+// IniFormat is the only format QSettings::setPath() can redirect, which
+// is what lets the suite exercise this without writing into the config of
+// whoever is running the tests.
+static QSettings *PSettingsThemeQt(void)
+{
+  return new QSettings(QSettings::IniFormat, QSettings::UserScope,
+    szThemeOrgQt, szThemeOrgQt);
+}
+
+QString StrThemePrefQt(void)
+{
+  QSettings *psettings = PSettingsThemeQt();
+  QString str = psettings->value(szThemeKeyQt, "auto").toString();
+
+  delete psettings;
+  return str.trimmed().toLower();
+}
+
+void SetThemePrefQt(CONST char *sz)
+{
+  QSettings *psettings = PSettingsThemeQt();
+
+  psettings->setValue(szThemeKeyQt, QString(sz));
+  psettings->sync();
+  delete psettings;
+}
+
+
+// Did the user actually ASK for light, rather than light merely being
+// what detection settled on? Only an explicit answer justifies overriding
+// a palette the platform theme produced.
+
+static flag FThemeLightForcedQt(void)
+{
+  CONST char *szEnv = getenv("ASTROLOG_QT_THEME");
+
+  if (szEnv != NULL) {
+    QString str = QString(szEnv).trimmed().toLower();
+    if (str == "light")
+      return fTrue;
+    if (str == "dark")
+      return fFalse;
+  }
+  return StrThemePrefQt() == "light";
+}
+
+
 static int NDarkPreferenceQt(void)
 {
   CONST char *szEnv;
@@ -4381,6 +4500,18 @@ static int NDarkPreferenceQt(void)
     if (str == "light")
       return nSchemeLight;
     // "auto", "system", or anything else: detect as normal.
+  }
+
+  // The environment variable stays above this on purpose. It is how the
+  // suite and QT_TESTING.md check a change under both schemes, and a
+  // developer forcing one for a single run should not have to know, or
+  // disturb, what the user picked in the menu.
+  {
+    QString strPref = StrThemePrefQt();
+    if (strPref == "dark")
+      return nSchemeDark;
+    if (strPref == "light")
+      return nSchemeLight;
   }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
   // Qt answers this itself from 6.5 on, and none of the rest need run.
@@ -4408,6 +4539,16 @@ static int NDarkPreferenceQt(void)
 // ever runs once, at startup, against whatever desktop the developer
 // happens to be sitting at.
 
+// Point the theme preference at a scratch directory, so the assertions
+// below neither read nor write the config of whoever is running them.
+void SetThemeConfigDirTestQt(CONST char *szDir)
+{
+  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+    QString(szDir));
+}
+
+int NDarkPreferenceTestQt(void) { return NDarkPreferenceQt(); }
+
 flag FThemeNameDarkTestQt(CONST char *sz)
   { return FThemeNameDarkQt(QString(sz)) ? fTrue : fFalse; }
 int NSchemeFromKdeTestQt(void) { return NSchemeFromKdeQt(); }
@@ -4426,8 +4567,29 @@ void ApplyColorSchemeQt(void)
   QStyle *pstyle;
   QPalette pal;
 
-  if (NDarkPreferenceQt() != nSchemeDark)
+  if (NDarkPreferenceQt() != nSchemeDark) {
+    // Going the other way, which only a runtime choice can ask for.
+    //
+    // The condition is deliberately "the user SAID light", not "we did not
+    // detect dark". Detection returns nSchemeNone on a desktop it does not
+    // recognise, and on a dark one that would be indistinguishable from a
+    // light answer -- so keying off the absence of dark would force a
+    // light palette onto a dark desktop whose detection merely failed,
+    // which is the one outcome worse than not following it at all.
+    if (FThemeLightForcedQt() &&
+      QApplication::palette().color(QPalette::Window).lightness() < 128) {
+      pstyle = QStyleFactory::create("Fusion");
+      if (pstyle != NULL) {
+        // standardPalette(), not a default-constructed QPalette: the
+        // latter is whatever is currently set, which at this point is the
+        // dark one being undone.
+        pal = pstyle->standardPalette();
+        QApplication::setStyle(new AstroStyleQt(pstyle));
+        QApplication::setPalette(pal);
+      }
+    }
     return;
+  }
 
   // A platform theme that already produced a dark palette knows the real
   // desktop colours, which are better than anything invented here. This is

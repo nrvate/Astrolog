@@ -1105,6 +1105,11 @@ extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
 extern QIcon IconAstrologQt();                   // qtdriver.cpp
 extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
+extern void SetThemeConfigDirTestQt(CONST char *);
+extern int NDarkPreferenceTestQt(void);
+extern QString StrThemePrefQt(void);
+extern void SetThemePrefQt(CONST char *);
+extern void ApplyColorSchemeQt(void);
 extern int NSchemeFromGtkFileTestQt(void);
 
 // Write sz to the named file, creating its directory.
@@ -1233,6 +1238,71 @@ static void TestColorSchemeQt()
 
   SetHomeTestQt("");
   printf("  the desktop's light/dark preference is read from each source\n");
+
+  // The saved interface theme: View / Window Settings / Interface Theme.
+  // Redirected into a scratch directory first -- these write a real
+  // preference file, and writing into the config of whoever is running
+  // the suite would be a side effect, not a test.
+  QTemporaryDir dirCfg;
+  Check(dirCfg.isValid(), "a scratch directory for the theme preference");
+  if (dirCfg.isValid()) {
+    SetThemeConfigDirTestQt(dirCfg.path().toUtf8().constData());
+
+    Check(StrThemePrefQt() == "auto", "with nothing saved, the theme is auto");
+
+    // The environment variable outranks the saved preference, because it
+    // is how a developer checks one run under the other scheme without
+    // disturbing what the user chose. Both directions, so this cannot
+    // pass by the two happening to agree.
+    // The env var is unset around each "is the SAVED theme honoured"
+    // assertion. The first draft left it set to "light" across the saved-
+    // light check, which therefore passed on the env var and would have
+    // passed with the saved preference ignored entirely. Sabotage found
+    // it. The two saved-theme checks also have to be a PAIR: detection
+    // returns one fixed value on any given machine, so a build that
+    // ignored the preference can satisfy at most one of them, whichever
+    // desktop the suite runs on.
+    qunsetenv("ASTROLOG_QT_THEME");
+    SetThemePrefQt("dark");
+    Check(StrThemePrefQt() == "dark", "a saved theme survives a round trip");
+    Check(NDarkPreferenceTestQt() == 1, "a saved dark theme is honoured");
+    SetThemePrefQt("light");
+    Check(NDarkPreferenceTestQt() == 0, "a saved light theme is honoured");
+
+    SetThemePrefQt("dark");
+    qputenv("ASTROLOG_QT_THEME", "light");
+    Check(NDarkPreferenceTestQt() == 0, "the env var outranks a saved dark");
+    SetThemePrefQt("light");
+    qputenv("ASTROLOG_QT_THEME", "dark");
+    Check(NDarkPreferenceTestQt() == 1, "the env var outranks a saved light");
+    qunsetenv("ASTROLOG_QT_THEME");
+
+    // "auto" must fall through to detection rather than pinning a value.
+    // Asserting the detected answer would be asserting whatever desktop
+    // the test happens to run on, so assert that it is A detection: the
+    // same thing the sources above returned.
+    SetThemePrefQt("auto");
+    Check(StrThemePrefQt() == "auto", "auto round-trips as auto");
+    SetThemePrefQt("");
+    Check(StrThemePrefQt() != "dark" && StrThemePrefQt() != "light",
+      "an empty preference is not read as a choice");
+
+    // And that choosing one actually REPAINTS. Detection returning the
+    // right number is worth nothing if the palette never moves, which is
+    // exactly the half a "the setting is saved" test would miss.
+    QPalette palWas = QApplication::palette();
+    SetThemePrefQt("dark");
+    ApplyColorSchemeQt();
+    Check(QApplication::palette().color(QPalette::Window).lightness() < 128,
+      "choosing Dark actually darkens the palette");
+    SetThemePrefQt("light");
+    ApplyColorSchemeQt();
+    Check(QApplication::palette().color(QPalette::Window).lightness() >= 128,
+      "and choosing Light brings it back");
+    SetThemePrefQt("auto");
+    QApplication::setPalette(palWas);
+  }
+  printf("  the saved interface theme is honoured, and the env var beats it\n");
 }
 
 

@@ -173,7 +173,7 @@ What it covers: 25 dialogs open/close with the right titles, 42 context
 menus resolve, 264 shortcuts bound and unique, 26 chart types render
 non-blank, all 35 text chart modes survive 120-character chart names
 and locations, the five import file formats parse and their long-line
-truncation points hold, all 338 menu items fire without crashing, 258/258 Windows menu
+truncation points hold, all 341 menu items fire without crashing, 258/258 Windows menu
 items present, 256 show Windows' own accelerator text, 39/39 esoteric
 bodies resolve against the ephemeris, the application icon resolves at
 all three sizes, and bad input (missing files, unknown switches) doesn't
@@ -668,6 +668,17 @@ the other.
   `NDarkPreferenceQt()` in `qtdriver.cpp`; `ASTROLOG_QT_THEME=dark|light`
   forces it either way, which is also how to check a change under both.
   Work log item 50 has the reasoning, including two `QSettings` traps.
+
+  Since 2026-09-03 the user can also choose, in **View / Window Settings
+  / Interface Theme**: System, Light or Dark. It is stored with
+  `QSettings` in `IniFormat` rather than in the `.as` settings file,
+  because it is window chrome rather than an astrological setting — the
+  same reason Windows keeps its GUI preferences out of there. The
+  environment variable deliberately outranks the saved choice, so a
+  developer forcing one run does not disturb what the user picked.
+  **This is the Qt build only.** `Makefile.win` builds `wdriver.cpp` with
+  native Win32 menus, which follow Windows' own theming and know nothing
+  about any of this.
 
 ## Working method
 
