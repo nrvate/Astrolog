@@ -36,6 +36,18 @@ SKIP = ('.se1', '.ttf', '.pdf', '.docx', '.rtf', '.png', '.ico', '.bmp',
 # surfaces. See work log item 173.
 
 
+
+def FCompiled(data):
+    """Does this look like a compiled object rather than text?
+
+    Magic numbers only -- no "file" subprocess, because this audit runs on
+    a Windows runner too and must not depend on one. ELF, PE, and both
+    Mach-O byte orders cover everything this tree can produce.
+    """
+    return (data[:4] == b'\x7fELF' or data[:2] == b'MZ' or
+            data[:4] in (b'\xfe\xed\xfa\xce', b'\xfe\xed\xfa\xcf',
+                         b'\xce\xfa\xed\xfe', b'\xcf\xfa\xed\xfe'))
+
 def main():
     out = subprocess.run(['git', 'ls-files', '-z'], cwd=ROOT,
                          stdout=subprocess.PIPE, check=True).stdout
@@ -54,17 +66,39 @@ def main():
             data = fh.read()
         cFile += 1
         if b'\r' in data:
-            bad.append((f, data.count(b'\r'), data.count(b'\n')))
+            bad.append((f, data.count(b'\r'), data.count(b'\n'),
+                        FCompiled(data)))
     if bad:
-        print('carriage returns in %d of %d tracked text files:' %
-              (len(bad), cFile))
-        for f, cr, lf in bad:
-            print('  %-24s CR=%d LF=%d' % (f, cr, lf))
-        print('\nSource in this tree is LF (work log item 159). If one of')
-        print('these is source, strip its CRs. If it is a binary, or a file')
-        print('Windows tooling or the program itself parses, add it to SKIP')
-        print('and to .gitattributes instead -- a sweep that stripped CRs')
-        print('from .se1 and .ttf files corrupted 28 of them once already.')
+        # A compiled binary is the likeliest cause and the most misleading
+        # to report as a line-ending problem, so it is separated out and
+        # said first. Measured 2026-09-03: a 12.7 MB astrolog-ubsan was
+        # committed by "git add -A", and this audit -- the only thing that
+        # caught it -- announced it as "carriage returns in 1 of 156
+        # tracked TEXT files" and advised stripping them. Following that
+        # advice on an ELF destroys it. The check was right and its wording
+        # sent you the wrong way.
+        objs = [b for b in bad if b[3]]
+        txts = [b for b in bad if not b[3]]
+        if objs:
+            print('COMPILED BINARIES ARE TRACKED -- these are build')
+            print('artifacts, not source, and should not be in the tree:')
+            for f, cr, lf, _ in objs:
+                print('  %-24s %d bytes' % (f, os.path.getsize(
+                    os.path.join(ROOT, f))))
+            print('\nDo NOT strip carriage returns from these; that would')
+            print('corrupt them. Remove them and add them to .gitignore:')
+            for f, _, _, _ in objs:
+                print('  git rm --cached %s' % f)
+        if txts:
+            print('carriage returns in %d of %d tracked text files:' %
+                  (len(txts), cFile))
+            for f, cr, lf, _ in txts:
+                print('  %-24s CR=%d LF=%d' % (f, cr, lf))
+            print('\nSource in this tree is LF (work log item 159). If one of')
+            print('these is source, strip its CRs. If it is a binary, or a file')
+            print('Windows tooling or the program itself parses, add it to SKIP')
+            print('and to .gitattributes instead -- a sweep that stripped CRs')
+            print('from .se1 and .ttf files corrupted 28 of them once already.')
         return 1
     print('line endings clean: %d tracked text files, no carriage returns'
           % cFile)
