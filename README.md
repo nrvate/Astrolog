@@ -70,14 +70,17 @@ Two consequences follow, and neither is hypothetical:
 
 - **Intel Macs are not built at all.** The runner is arm64, nothing sets
   up a universal binary, so the `.dmg` is Apple Silicon only.
-- **The minimum macOS it declares is whatever the runner built against**,
-  which is currently macOS 26. Nothing sets a deployment target, so the
-  binary links against the runner's SDK; `Info.plist` used to advertise
-  11.0 regardless, which was a promise the build could not keep. The
-  bundle now reads the real minimum out of the binary with `otool` and
-  stamps that, so the claim is true — but it means an older Mac may
-  legitimately refuse to launch it, and that is the honest answer rather
-  than a launch failure blamed on something else.
+- **It needs a very recent macOS, and the bundle now says which.**
+  Measured on the runner: the program binary reports a minimum of
+  **26.0**, because nothing sets a deployment target and it links against
+  whatever SDK GitHub's `macos-latest` has. `Info.plist` used to advertise
+  11.0 regardless — a promise the build could not keep. The packaging step
+  now reads the minimum out of every Mach-O in the finished bundle,
+  Homebrew's Qt libraries included, and stamps the highest one. So the
+  claim is true, and the honest consequence is that an older Mac will
+  refuse to launch it rather than failing with a message about something
+  else. Lowering that would mean not using Homebrew's Qt, which is a
+  bigger change than anyone without a Mac should be making.
 
 Linux and Windows are the builds that get used. Treat the `.dmg` as
 best-effort.

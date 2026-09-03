@@ -65,18 +65,19 @@ ver=$(tools/ci-assert-version.sh)
 # toolchains, so both are tried. If neither is readable the old 11.0 is
 # kept and said out loud, because silently stamping a guess is what this
 # is fixing.
-minos=$(otool -l ./astrolog-qt 2>/dev/null \
-  | awk '/LC_BUILD_VERSION/,0' | awk '/minos/{print $2; exit}')
-if [ -z "$minos" ]; then
-  minos=$(otool -l ./astrolog-qt 2>/dev/null \
-    | awk '/LC_VERSION_MIN_MACOSX/,0' | awk '/version/{print $2; exit}')
-fi
+minos_of() {    # highest macOS this one Mach-O admits to needing
+  otool -l "$1" 2>/dev/null | awk '/LC_BUILD_VERSION/,0' \
+    | awk '/minos/{print $2; exit}'
+  otool -l "$1" 2>/dev/null | awk '/LC_VERSION_MIN_MACOSX/,0' \
+    | awk '/version/{print $2; exit}'
+}
+minos=$(minos_of ./astrolog-qt | head -1)
 if [ -z "$minos" ]; then
   echo "   WARNING: could not read a minimum OS from the binary;"
   echo "   LSMinimumSystemVersion stays 11.0 and is unverified."
   minos=11.0
 else
-  echo "   minimum macOS, read from the binary: $minos"
+  echo "   minimum macOS, read from the program binary: $minos"
 fi
 app="$out/Astrolog.app"
 rm -rf "$out"; mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -139,6 +140,38 @@ echo "== macdeployqt"
 # own plugins. The errors are noise on this Qt and the deploy still
 # produces a working bundle, which the run below is what actually decides.
 "$(brew --prefix qt)/bin/macdeployqt" "$app" -always-overwrite || true
+
+# NOW correct the plist, because only now is the bundle complete.
+#
+# Reading the minimum off our own binary was not enough, and the first
+# version of this did exactly that. macdeployqt copies Qt's dylibs and
+# plugins in AFTER the plist is written, and each of those carries its own
+# minimum -- Homebrew pours a bottle built for the runner's macOS, so they
+# can easily demand more than our binary does. dyld refuses on the highest
+# requirement in the bundle, not on the one in Info.plist, so a plist that
+# names only the program's own minimum still misleads.
+#
+# Highest wins, over every Mach-O in the bundle. sort -V rather than sort:
+# "9.0" must come before "26.0", and a lexical sort puts it after.
+echo "== the minimum macOS the WHOLE bundle needs"
+allmin=$(find "$app" -type f \( -perm -u+x -o -name '*.dylib' \) 2>/dev/null \
+  | while read -r m; do
+      file "$m" 2>/dev/null | grep -q Mach-O || continue
+      minos_of "$m" | head -1
+    done | grep -E '^[0-9]+' | sort -V | tail -1)
+if [ -n "$allmin" ] && [ "$allmin" != "$minos" ]; then
+  echo "   the program needs $minos, but something in the bundle needs $allmin"
+  minos=$allmin
+fi
+if [ -n "$allmin" ]; then
+  plutil -replace LSMinimumSystemVersion -string "$allmin" \
+    "$app/Contents/Info.plist" 2>/dev/null \
+    && echo "   LSMinimumSystemVersion set to $allmin" \
+    || echo "   WARNING: could not rewrite LSMinimumSystemVersion"
+else
+  echo "   WARNING: read no minimum from any Mach-O in the bundle;"
+  echo "   LSMinimumSystemVersion stays $minos and is unverified."
+fi
 
 echo "== ad-hoc signature"
 codesign --force --deep --sign - "$app"
