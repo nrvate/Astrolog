@@ -92,8 +92,22 @@ bad=$(gh api "repos/$repo/actions/runs/$id/jobs" \
 # ALLOWED is annotated because an unexplained skip is the whole point. A
 # pattern earns a line here by being a deliberate, documented skip; "it
 # was already there" is not a reason.
+#
+# The qt6 entry is the awkward one and is allowed for a stated reason
+# rather than a good one: warning_audit.py cannot check the Qt6 warning
+# ledger on the runner that checks the others. That job is pinned to
+# ubuntu-22.04 because tools/warnings.txt is a ledger of what g++ 11 says,
+# and that image's qt6-base-dev ships no pkg-config files at all --
+# measured in the image. ubuntu-latest has the .pc files and g++ 13, so
+# one runner cannot do both. It is filed as OPEN in QT_CI_PLAN.md, and it
+# is allowlisted here only so that this check is not permanently red over
+# a known constraint: a check that always fails is one people stop
+# reading, which is the failure this whole scan exists to prevent. When
+# that item is closed, DELETE this line -- an allowlist entry that
+# outlives its reason hides the next skip behind it.
 allowed_skip() {
   case $1 in
+    *"qt6: skipped, no Qt6"*)      return 0 ;;  # see below -- a real open item
     *"skipped on purpose"*)        return 0 ;;  # menu parity: 12 Windows-only items
     *"Skipping plugin q"*)         return 0 ;;  # windeployqt, choosing backends
     *"sprintf("*|*"printf("*)      return 0 ;;  # a compiler quoting source, not a skip
