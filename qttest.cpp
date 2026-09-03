@@ -1114,6 +1114,86 @@ static void TestMenuParityQt()
 
 /*
 ******************************************************************************
+** Menu items Windows does not have.
+******************************************************************************
+*/
+
+// The group above walks Windows' 258 items and checks each is present
+// here. That direction is blind to an item this port ADDS -- a knowing
+// divergence, a debug leftover, or one command wired in twice under two
+// names -- and the sweep that fires every item says so itself: "it says
+// nothing about the other eighty this build offers". Nothing did.
+//
+// So this walks the other way. Every leaf action in the menu bar must be
+// a Windows item, a macro slot, or listed here WITH ITS REASON. A new
+// Qt-only item fails until someone writes down why it exists, which is
+// the same bargain rgparityQt's twelve fSkip rows make in the other
+// direction.
+
+static CONST struct { CONST char *szLabel, *szWhy; } rgqtonlyQt[] = {
+  {"System", "View > Window Settings > Interface Theme. Qt5 has no API "
+             "for the desktop's colour scheme and its gtk3 platform "
+             "theme supplies no palette, so the port detects dark mode "
+             "itself (NDarkPreferenceQt) and offers the override that "
+             "detection makes necessary. Windows themes the frame for "
+             "its app and needs no such menu."},
+  {"Light",  "ditto -- forces light whatever the desktop says"},
+  {"Dark",   "ditto -- forces dark"} };
+
+#define cqtonlyQt (int)(sizeof(rgqtonlyQt) / sizeof(rgqtonlyQt[0]))
+
+static void TestMenuExtraQt()
+{
+  QList<QAction *> rgpa;
+  int i, j, cExtra = 0, cSlot = 0, cUnknown = 0;
+
+  Group("Menu items beyond Windows' set");
+  AllActionsTestQt(&rgpa);
+  for (i = 0; i < rgpa.size(); i++) {
+    // The 96 macro slots are excluded by what they ARE. Their labels are
+    // user data: -WM renames any of them, and this machine's own
+    // nrvate.as renames thirteen -- so a list of labels would pass here
+    // and fail on someone else's settings file.
+    if (rgpa[i]->property("astrologMacro").isValid()) {
+      cSlot++;
+      continue;
+    }
+    QString str = rgpa[i]->text().section(QChar('\t'), 0, 0).remove('&');
+    if (str.trimmed().isEmpty())
+      continue;                 // TestAllMenuActionsQt already fails this
+    for (j = 0; j < cparityQt; j++)
+      if (QString(rgparityQt[j].szLabel).remove('&') == str)
+        break;
+    if (j < cparityQt)
+      continue;
+    cExtra++;
+    for (j = 0; j < cqtonlyQt; j++)
+      if (QString(rgqtonlyQt[j].szLabel) == str)
+        break;
+    if (j >= cqtonlyQt)
+      cUnknown++;
+    Check(j < cqtonlyQt,
+      "\"%s\" is in this port's menus, is not one of Windows' items, "
+      "and is not in rgqtonlyQt with a reason",
+      str.toLocal8Bit().constData());
+  }
+  // Not a tautology: the property is set in BuildMacroMenus() and read
+  // here, so a build that stopped generating the slots -- or stopped
+  // marking them -- lands on this line rather than dumping 96 unexplained
+  // labels into the check above and burying whatever else moved.
+  // Against cMacro, astrolog.h's own constant, rather than a literal 96.
+  Check(cSlot == cMacro, "%d macro slots expected, found %d",
+    cMacro, cSlot);
+  // "all accounted for" was printed unconditionally at first, which made
+  // the summary line contradict the FAIL directly above it.
+  printf("  %d menu items beyond Windows' set, %s; %d macro slots\n",
+    cExtra, cUnknown == 0 ? "all accounted for" : "SOME UNEXPLAINED",
+    cSlot);
+}
+
+
+/*
+******************************************************************************
 ** Bad input.
 ******************************************************************************
 */
@@ -6305,6 +6385,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"divergences",          TestDivergencesQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},
+  {"menu-extra",           TestMenuExtraQt},
   {"bad-input",            TestBadInputQt},
   {"forced-positions",     TestForcedPositionsQt},
   {"shared-core",          TestSharedCoreFixesQt},

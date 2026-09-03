@@ -2455,6 +2455,14 @@ static void BuildMacroMenus(QMenu *pmenu, QMainWindow *pwind)
       // The shortcut makes the key work without opening the menu, which
       // is how Windows' accelerator table has it.
       pa->setShortcut(QKeySequence(SzMacroKeyQt(iSet, iKey)));
+#ifdef QTTEST
+      // TestMenuExtraQt() walks this menu bar looking for items Windows
+      // does not have, and cannot key on these labels: -WM makes every
+      // one of them user data, and this machine's own nrvate.as renames
+      // thirteen. Mark them, so that audit skips them for what they are
+      // rather than for what they happen to be called.
+      pa->setProperty("astrologMacro", iMacro);
+#endif
       ConnectMenuQt(pa, pwind,
         [iMacro]() { RunMacroQt(iMacro); });
     }
