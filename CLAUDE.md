@@ -392,6 +392,25 @@ change ships in both builds. It swaps `/swe` for the bundled `ephem/`
 first, because ~887,000 files through Wine's path translation looks
 exactly like the app hanging. `QT_COMPARING_WITH_WINDOWS.md` says why.
 
+And since 2026-09-03 the port itself runs on Windows, not only under
+Wine. The nightly uploads `astrolog-Qt6-windows-msvc` -- the program and
+the `-DQTTEST` build -- and:
+
+```sh
+WINVM_USER=... WINVM_PASS=... \
+  tools/win-vm-suite.sh <vm> <unpacked-artifact> 'E:\swe'
+```
+
+copies it into a VirtualBox VM over the Guest Additions channel, **no
+network involved**, and runs all 3,812 assertions headless. Its header
+lists four traps, each of which cost a run: the offscreen plugin has to
+be IN the artifact (`windeployqt` ships only `windows`), the `windows`
+plugin blocks forever because a guestcontrol process has no desktop, the
+ephemeris must be on a **local disk** rather than a shared folder (a
+negative lookup over `vboxsf` in that 887,000-file directory measured
+1.9 s against 90 ms for a hit), and Qt6 does not start on Windows 7 at
+all. `QT_COMPARING_WITH_WINDOWS.md` has the long form.
+
 The other slow check is the sanitizer sweep, over the two surfaces the
 assertion suite barely reaches:
 
