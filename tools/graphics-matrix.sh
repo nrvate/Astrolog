@@ -37,7 +37,37 @@ set -e
 cd "$(dirname "$0")/.." || exit 1
 B=$1
 [ -x "$B" ] || { echo "usage: $0 <astrolog-binary> "; exit 2; }
-CFG=${GRAPHICS_MATRIX_CFG:--i nrvate.as}
+# Default "-Yi1 ephem", the same thing ci-differential.sh sets, so a run
+# by hand and a run in CI measure the SAME thing. It used to default to
+# "-i nrvate.as" -- one developer's personal settings file, pointing at a
+# machine-local /swe mount that no clone has.
+#
+# That default cost a real measurement. Asked whether adding ephemeris
+# files to ephem/ changed any render, this script answered "no lines
+# differ" -- because it was reading /swe and could not see ephem/ at all.
+# Re-run with "-Yi1 ephem" the same change moves 8 lines. A harness whose
+# default points somewhere other than the thing under test does not fail;
+# it answers a different question and looks like a proof.
+CFG=${GRAPHICS_MATRIX_CFG:--Yi1 ephem}
+
+# And CHECK the config resolves an ephemeris before rendering 227 times
+# against it. The existing guard at the bottom catches renders that
+# produce no file, which is a different failure: a config pointing at the
+# wrong ephemeris renders perfectly, 227 times, and answers a question
+# nobody asked.
+#
+# Chiron, because it reads 0Ari00'00" with no ephemeris while the Sun
+# computes correctly from Moshier -- the same reason every packaging check
+# here asserts on Chiron and never on the Sun.
+_chk=$(env -u DISPLAY timeout 60 "$1" $CFG \
+  -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X </dev/null 2>/dev/null \
+  | grep -m1 '^Chir' || true)
+case ${_chk:-none} in
+  none)     echo "CONFIG BROKEN: '$CFG' produced no chart at all."; exit 2 ;;
+  *0Ari00*) echo "CONFIG RESOLVES NO EPHEMERIS: '$CFG' gives $_chk"
+            echo "== Every render below would succeed and measure nothing."
+            exit 2 ;;
+esac
 Q="-qb 7 4 1976 12 0 8 122:19:55W 47:36:22N"
 # Fixed paths, not mktemp: the PostScript writer puts its output file name
 # in a %%Title comment, so a random directory made six renders differ

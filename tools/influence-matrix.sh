@@ -16,7 +16,18 @@ B=$1
 # Both sides of a differential must use the same value, which is the same
 # rule as the binary's path length: the output is not comparable across
 # configurations. Measured 2026-09-02: switching this changes real numbers.
-CFG=${INFLUENCE_MATRIX_CFG:--i nrvate.as}
+# Default "-Yi1 ephem", the same thing ci-differential.sh sets, so a run
+# by hand and a run in CI measure the SAME thing. It used to default to
+# "-i nrvate.as" -- one developer's personal settings file, pointing at a
+# machine-local /swe mount that no clone has.
+#
+# That default cost a real measurement. Asked whether adding ephemeris
+# files to ephem/ changed any render, this script answered "no lines
+# differ" -- because it was reading /swe and could not see ephem/ at all.
+# Re-run with "-Yi1 ephem" the same change moves 8 lines. A harness whose
+# default points somewhere other than the thing under test does not fail;
+# it answers a different question and looks like a proof.
+CFG=${INFLUENCE_MATRIX_CFG:--Yi1 ephem}
 for r7 in "0 0 0 0 0" "1 0 1 1 1" "1 1 0 1 1" "0 1 1 1 1" "1 1 1 0 0" "0 0 1 0 1"; do
   for chart in "-j" "-j0" "-j -J" "-7"; do
     echo "== -YR7 $r7 $chart"
