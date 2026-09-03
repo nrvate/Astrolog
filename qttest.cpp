@@ -3588,16 +3588,25 @@ static void TestEsotericTablesQt()
 static void TestNestedIncludeQt()
 {
   char szInner[cchSzMax], szOuter[cchSzMax];
-  CONST char *szTmp;
+  // The QByteArray has to outlive the pointer into it. toLocal8Bit()
+  // returns a temporary, so "szTmp = QDir::tempPath().toLocal8Bit()
+  // .constData()" leaves szTmp dangling at the semicolon -- which Linux
+  // survived, reading bytes nothing had reused yet, and macOS did not:
+  // SIGSEGV in this group, in the first run that got far enough to
+  // reach it. Every other site passes the expression straight to
+  // sprintf2(), where the temporary lives to the end of the call.
+  QByteArray baTmp = QDir::tempPath().toLocal8Bit();
+  CONST char *szTmp = baTmp.constData();
   FILE *file;
   int nScrollSav = us.nScrollRow;
   flag fRet, fPopupSav = FNoPopupQt();
 
   Group("Nested include");
   SetNoPopupQt(fTrue);    // a failing load must fail, not open a box
-  szTmp = QDir::tempPath().toLocal8Bit().constData();
-  sprintf2(S(szInner), "%s/astrolog-qt-nest-inner-%d.as", szTmp, (int)QCoreApplication::applicationPid());
-  sprintf2(S(szOuter), "%s/astrolog-qt-nest-outer-%d.as", szTmp, (int)QCoreApplication::applicationPid());
+  sprintf2(S(szInner), "%s/astrolog-qt-nest-inner-%d.as", szTmp,
+    (int)QCoreApplication::applicationPid());
+  sprintf2(S(szOuter), "%s/astrolog-qt-nest-outer-%d.as", szTmp,
+    (int)QCoreApplication::applicationPid());
   file = fopen(szInner, "w");
   fprintf(file, "@AD800  ; inner\n-YQ 41\n");
   fclose(file);

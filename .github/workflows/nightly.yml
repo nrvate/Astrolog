@@ -140,6 +140,37 @@ jobs:
           GRAPHICS_MATRIX_CFG: -Yi1 ${{ github.workspace }}/ephem
         run: tools/asan-sweep.sh
 
+      # A third surface the sweep does not reach. asan-sweep.sh builds its
+      # own CONSOLE binary and drives the switch matrix and the graphics
+      # renders; the Qt suite -- 3812 assertions, every dialog and menu --
+      # ran under no sanitizer at all, even though "make qt-asan" has
+      # existed the whole time and CLAUDE.md called the suite "clean under
+      # AddressSanitizer".
+      #
+      # It was not, on 2026-09-03. A mechanical sweep replacing POSIX calls
+      # with Qt ones left
+      #
+      #   szTmp = QDir::tempPath().toLocal8Bit().constData();
+      #
+      # where the QByteArray is a temporary and szTmp dangles at the
+      # semicolon. Linux read bytes nothing had reused and passed 3812/0;
+      # macOS segfaulted. This build reports it as a plain
+      # heap-use-after-free in one run -- so it was catchable here all
+      # along, by a net nobody had strung.
+      #
+      # detect_leaks=0 because a Qt harness that exits without unwinding
+      # its widgets leaks by construction: 10,769 bytes in 115
+      # allocations, none of it a defect this is looking for.
+      - name: The Qt suite under AddressSanitizer
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          QT_QPA_PLATFORM: offscreen
+          QT_QPA_PLATFORMTHEME: ''
+        run: |
+          sudo apt-get install -y qtbase5-dev pkg-config
+          make qt-asan -j4
+          ASTROLOG_QT_EPHEM=minimal ./astrolog-qt-asan -Yi1 ephem
+
   # 6.4b. The cheap Windows differential: the whole 71-invocation chart
   # matrix run against astrolog-wcli.exe under Wine and byte-diffed
   # against the Linux console build, with no display, no window manager
