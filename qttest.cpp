@@ -204,11 +204,56 @@ static void Check(flag fOk, CONST char *szFmt, ...)
 // queue the inspection before opening it. This runs "pfn", waits for
 // whatever modal window it puts up, records the title, and closes it.
 
+// What a grab of the dialog showed, recorded beside its title because the
+// widget is only in hand for the instant before it is closed.
+//
+// A title check cannot see a dialog that opens as a blank rectangle, or
+// one whose layout collapsed to nothing. Those are real failures with a
+// correct title, and they are what a person notices immediately in a
+// screenshot and no assertion here noticed at all.
+static QSize s_sizeDlgQt;
+static flag s_fDlgFlatQt;
+
+// Is the image a single flat colour?
+//
+// By SMOOTH-SCALING to 16x16 and asking whether the result is uniform,
+// not by sampling a grid of the original. The first version did sample a
+// grid -- 8x8 points at regular intervals -- and reported Object
+// Selections as blank on its first run. It is not: 860x790 with 548
+// distinct colours. Every one of those 64 points had landed on the
+// dialog background, which is 44% of the image, because a regular grid on
+// a regular layout hits the gaps between the controls.
+//
+// Scaling cannot miss content that way: every source pixel contributes to
+// some destination pixel, so anything drawn anywhere moves a value.
+static flag FPixmapFlatQt(CONST QPixmap &pix)
+{
+  QImage img, imgT;
+  QRgb rgbFirst;
+  int x, y;
+
+  img = pix.toImage();
+  if (img.isNull() || img.width() < 2 || img.height() < 2)
+    return fTrue;
+  imgT = img.scaled(16, 16, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+  if (imgT.isNull())
+    return fTrue;
+  rgbFirst = imgT.pixel(0, 0);
+  for (y = 0; y < imgT.height(); y++)
+    for (x = 0; x < imgT.width(); x++)
+      if (imgT.pixel(x, y) != rgbFirst)
+        return fFalse;
+  return fTrue;
+}
+
+
 static QString StrOpenDialogQt(void (*pfn)())
 {
   static QString strTitle;
 
   strTitle = QString();
+  s_sizeDlgQt = QSize();
+  s_fDlgFlatQt = fTrue;
   // Stoppable timers rather than singleShot, so nothing outlives this
   // call. A queued close that is still pending when the dialog has
   // already been dealt with goes on to close whatever modal window the
@@ -223,7 +268,10 @@ static QString StrOpenDialogQt(void (*pfn)())
     if (pw == NULL)
       pw = QApplication::activePopupWidget();
     if (pw != NULL) {
+      QPixmap pix = pw->grab();
       strTitle = pw->windowTitle();
+      s_sizeDlgQt = pix.size();
+      s_fDlgFlatQt = FPixmapFlatQt(pix);
       pw->close();
     }
   });
@@ -289,11 +337,22 @@ static void TestDialogsQt()
   for (i = 0; i < cdlg; i++) {
     QString str = StrOpenDialogQt(rgdlg[i].pfn);
     Check(!str.isEmpty(), "%s: no dialog appeared", rgdlg[i].szTitle);
-    if (!str.isEmpty())
+    if (!str.isEmpty()) {
       Check(str == rgdlg[i].szTitle, "expected title \"%s\", got \"%s\"",
         rgdlg[i].szTitle, str.toLocal8Bit().constData());
+      // And that it DREW something. A dialog can carry the right title and
+      // still render as an empty rectangle -- a layout that collapsed, a
+      // paint that never ran. The bounds are deliberately loose: this is
+      // meant to catch nothing-at-all, not to pin a layout that a font
+      // change may legitimately move.
+      Check(s_sizeDlgQt.width() >= 100 && s_sizeDlgQt.height() >= 50,
+        "%s: rendered %dx%d, too small to be a dialog", rgdlg[i].szTitle,
+        s_sizeDlgQt.width(), s_sizeDlgQt.height());
+      Check(!s_fDlgFlatQt, "%s: rendered as one flat colour -- it opened "
+        "with the right title and drew nothing", rgdlg[i].szTitle);
+    }
   }
-  printf("  %d dialogs opened and closed\n", cdlg);
+  printf("  %d dialogs opened, drew something, and closed\n", cdlg);
 }
 
 
