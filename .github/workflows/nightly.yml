@@ -244,6 +244,21 @@ jobs:
       # indistinguishable from the app hanging. On a runner there is no
       # /swe at all, so the swap is a no-op -- which is the case to watch,
       # since a no-op swap and a broken one look identical from here.
+      # The installer, nightly. This job already has mingw, wine and a
+      # Wine prefix -- everything tools/ci-verify-windows-installer.sh
+      # needs -- so nsis is the only addition, and the check that costs
+      # real time (a silent install, a file-for-file comparison against
+      # the staged payload, an uninstall) runs on a lane that has it.
+      #
+      # ci.yml deliberately does not: nsis plus wine is about two minutes
+      # on a lane whose whole point is thirteen jobs in four.
+      - name: Build and verify the NSIS installer
+        run: |
+          sudo apt-get install -y nsis
+          tools/package.sh windows out/pkg
+          tools/package-windows-installer.sh out/pkg/astrolog-windows out/pkg/astrolog-setup.exe
+          tools/ci-verify-windows-installer.sh out/pkg/astrolog-setup.exe out/pkg/astrolog-windows
+
       - name: The Windows GUI scenarios
         run: tools/win-tests.sh
 

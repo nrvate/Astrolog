@@ -460,12 +460,24 @@ jobs:
           tools/ci-assert-archive-mode.sh \
             out/package/astrolog-windows.tar.gz astrolog.exe
 
+      # Upload the .zip, which is what a release ships, not the .tar.gz
+      # above -- that one exists only to give ci-assert-archive-mode.sh a
+      # tar to read modes out of, and uploading it made CI's artifact a
+      # format no user ever receives. Noticed by someone downloading it
+      # and asking why Windows was getting a tarball.
+      #
+      # The NSIS installer is deliberately NOT built here. It needs nsis
+      # and wine installed, which is about two minutes on a lane whose
+      # whole point is thirteen jobs in four. release.yml and the nightly
+      # build and verify it.
+      - run: ( cd out/package && zip -qr astrolog-windows.zip astrolog-windows )
+
       - name: Keep the package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           archive: false
           name: astrolog-windows
-          path: out/package/astrolog-windows.tar.gz
+          path: out/package/astrolog-windows.zip
 
   # Q1 answered, 2026-09-02: native packages. An AppImage carries ~70 MB
   # of Qt closure for a 2.5 MB program; a tarball leaves the user to
