@@ -42,6 +42,22 @@ list comes from the binary rather than from someone's memory:
 | `.deb` | Ubuntu 22.04 (jammy), 24.04 (noble) |
 | `.rpm` | Fedora 42, Fedora 43, EL9 (Rocky/Alma), EL10 |
 | `.zip` | Windows, statically linked — unpack and run |
+| `.dmg` | macOS 11+, Apple Silicon — see the note below |
+
+**macOS needs one extra step, once.** The app is ad-hoc signed but not
+*notarized*, because notarizing requires an Apple Developer subscription
+and a signing secret in this repository. So a `.dmg` downloaded through a
+browser carries Gatekeeper's quarantine flag and macOS will refuse to
+open it. Either right-click the app and choose **Open** (which offers a
+one-time override the double-click does not), or:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Astrolog.app
+```
+
+A download fetched with `curl` is never quarantined in the first place
+and simply runs. None of this is a signal about the binary — it is what
+every un-notarized macOS build looks like.
 
 ### From the repository (upgrades arrive on their own)
 

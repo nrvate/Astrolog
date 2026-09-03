@@ -440,6 +440,20 @@ jobs:
           path: suite.log
           retention-days: 14
 
+      # Build the .dmg here too, not only in release.yml. Packaging that
+      # runs once per release is packaging that breaks between releases
+      # and tells you at the worst moment -- the same argument that put
+      # the Windows and Linux packages in this pipeline rather than in a
+      # release checklist. It costs about two minutes on a job that
+      # already has Qt installed and the port built.
+      #
+      # tools/package-macos.sh runs the bundled binary and requires a
+      # Chiron line, so a break in macdeployqt's library rewriting, in the
+      # ad-hoc signature, or in the data layout fails here rather than in
+      # a user's Downloads folder.
+      - name: Build the .app and .dmg
+        run: tools/package-macos.sh out/macos
+
   # THE EXPERIMENT: does this port build as a Qt application on Windows,
   # with Microsoft's compiler and the open-source Qt?
   #
