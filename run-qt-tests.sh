@@ -80,6 +80,20 @@ echo
 echo "== Ephemeris search path =="
 probe=/nonexistent-astrolog-ephem-probe
 out=`$QTENV "$BIN" -Yi1 "$probe" -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+# Both assertions read Swiss's own "not found in PATH" line, which is the
+# only place the assembled path is observable from outside the process. If
+# that line is absent the run proves nothing either way, so say so rather
+# than blaming the thing being measured -- this runs on macOS too, where
+# nobody working on this can reproduce a failure by hand.
+case $out in
+  *"not found in PATH"*) ;;
+  *)
+    echo "  FAIL: no \"not found in PATH\" line to read the path from."
+    echo "        The probe cannot see anything; this is a broken check,"
+    echo "        not a failed assertion. Run the command by hand:"
+    echo "          $BIN -Yi1 $probe -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X"
+    exit 1 ;;
+esac
 case $out in
   *"$probe"*)
     echo "  ok: a -Yi directory that does not exist is still searched" ;;
