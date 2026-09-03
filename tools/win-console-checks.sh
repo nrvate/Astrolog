@@ -83,10 +83,14 @@ wdir=$(winepath -w "$PWD/ephem" 2>/dev/null || true)
 #    when the entry is absent altogether: it passed under a sabotage that
 #    deleted it, which is exactly the "a harness whose invocations all
 #    fail still reads as a proof" trap.
+#    Position is NOT asserted. -Yi comes after the working directory and
+#    the program's own in the documented search order, and pinning it to
+#    the front here once made this file fail for a change that was
+#    restoring that order rather than breaking it.
 p=$(epath -Yi1 "$wdir")
 case $p in
-  "$wdir"*) ok "a drive-lettered -Yi is left absolute" ;;
-  *) bad "drive-lettered '$wdir' is not the first path entry: [$p]" ;;
+  "$wdir"*|*";$wdir"*) ok "a drive-lettered -Yi is left absolute" ;;
+  *) bad "drive-lettered '$wdir' is not a path entry of its own: [$p]" ;;
 esac
 
 # 2. The complement: a path with no drive letter IS relative to the
@@ -95,7 +99,7 @@ esac
 #    the very same absolute directory as case 1.
 p2=$(epath -Yi1 'ephem')
 case $p2 in
-  "$wdir"*) ok "a relative -Yi is resolved against the executable" ;;
+  "$wdir"*|*";$wdir"*) ok "a relative -Yi is resolved against the executable" ;;
   *) bad "'-Yi1 ephem' did not resolve to [$wdir]: [$p2]" ;;
 esac
 

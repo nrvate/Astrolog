@@ -2782,12 +2782,12 @@ static void AddDirEphemQ(EDL *pedl, CONST char *szDir, flag fExplicit)
 static int CDirJoinEphemQ(CONST EDL *pedl, char *szPath, int cchPath,
   flag fFoundOnly)
 {
+  flag rgfIn[cDirEphemMax];
   int i, iPass, cch = 0, cchT, cLost = 0;
 
-  *szPath = chNull;
-  // Two passes so that a squeeze drops guesses rather than instructions.
-  // Order within each pass is the order the directories were added, which
-  // is the search precedence and is not disturbed.
+  // WHICH entries go in is decided in two passes, so that a squeeze drops
+  // guesses rather than instructions...
+  ClearB((pbyte)rgfIn, sizeof(rgfIn));
   for (iPass = 0; iPass < 2; iPass++)
     for (i = 0; i < pedl->cDir; i++) {
       if (pedl->rgfExplicit[i] != (iPass == 0))
@@ -2799,10 +2799,27 @@ static int CDirJoinEphemQ(CONST EDL *pedl, char *szPath, int cchPath,
         cLost++;
         continue;
       }
-      if (cch > 0)
-        cch += sprintf2(szPath + cch, cchPath - cch, "%c", chEphemSep);
-      cch += sprintf2(szPath + cch, cchPath - cch, "%s", pedl->rgsz[i]);
+      rgfIn[i] = fTrue;
+      cch += cchT;
     }
+
+  // ...but the ORDER they are written in is the order they were added,
+  // which is the documented search precedence: the working directory,
+  // then the program's own, then -Yi, then the environment, then the
+  // compile-time default. Swiss takes the first hit, so emitting the
+  // explicit ones first -- which the two passes above would otherwise do
+  // -- would quietly let a -Yi override the working directory. That may
+  // even be the better rule, but it is a separate decision and not one
+  // to make as a side effect of deciding what fits.
+  cch = 0;
+  *szPath = chNull;
+  for (i = 0; i < pedl->cDir; i++) {
+    if (!rgfIn[i])
+      continue;
+    if (cch > 0)
+      cch += sprintf2(szPath + cch, cchPath - cch, "%c", chEphemSep);
+    cch += sprintf2(szPath + cch, cchPath - cch, "%s", pedl->rgsz[i]);
+  }
   return cLost;
 }
 
