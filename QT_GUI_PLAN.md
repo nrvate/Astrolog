@@ -7565,6 +7565,26 @@ are the more useful half to read before starting something new.
     fallback is exactly the old list in the old order, so a probe that
     recognises nothing cannot be worse than not probing.
 
+    **The squeeze taught one more thing.** Preferring the user's
+    directories when the fallback runs out of room was done with two
+    passes over the list, explicit first -- and that also *emitted* them
+    first, which silently changed the documented search order (working
+    directory, program's own, `-Yi`, environment, compile-time default).
+    Swiss takes the first hit, so a `-Yi` would have quietly overridden
+    the working directory. That may be the better rule; it is a separate
+    decision, and not one to make as a side effect of deciding what fits
+    in a buffer. The two passes now only *mark* what goes in and a third
+    loop writes them in the original order. Measured: nine explicit
+    directories totalling 567 characters against a 242-character budget
+    keep the first three and drop six, with the working directory still
+    first.
+
+    Nothing here noticed that reordering. **CI's differential did**, on
+    the commit that fixed it -- which moved the path string again and
+    carried no `Behaviour-change:` trailer, so the push was refused.
+    That gate is the only reason the accidental order was ever written
+    down rather than shipped.
+
     Falsified three ways: a probe that always says yes puts the
     nonexistent directory back; a resolver that drops what the user named
     fails 58 oracle assertions; suppressing the new diagnostic fails the
