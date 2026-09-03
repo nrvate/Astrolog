@@ -51,48 +51,63 @@ def FCompiled(data):
 def main():
     out = subprocess.run(['git', 'ls-files', '-z'], cwd=ROOT,
                          stdout=subprocess.PIPE, check=True).stdout
-    bad, cFile = [], 0
+    bad, objs, cFile = [], [], 0
     for name in out.split(b'\0'):
         if not name:
             continue
         f = name.decode('utf-8', 'replace')
-        if (f.lower().endswith(SKIP) or f.startswith('font/') or
-                f in ('sefstars.txt', 'seorbel.txt')):
-            continue
         path = os.path.join(ROOT, f)
         if not os.path.isfile(path):
             continue
         with open(path, 'rb') as fh:
             data = fh.read()
+
+        # The compiled-object check runs on EVERY tracked file, before
+        # SKIP and regardless of carriage returns. Both of those
+        # qualifications were wrong when this was first written:
+        #
+        #   - nesting it under "has a CR" made it depend on an ELF
+        #     happening to contain \r. A large one always does; a small or
+        #     stripped object need not, and then nothing sees it.
+        #   - SKIP holds '.exe', '.o' and '.res', so a committed
+        #     astrolog.exe was skipped entirely -- the extensions most
+        #     likely to BE a build artifact were the ones exempt from
+        #     noticing.
+        #
+        # It cannot false-positive on the data this tree legitimately
+        # tracks: .se1, .ttf, .pdf, .docx, .png, .ico and .bmp all start
+        # with something else.
+        if FCompiled(data):
+            objs.append((f, len(data)))
+            continue
+
+        if (f.lower().endswith(SKIP) or f.startswith('font/') or
+                f in ('sefstars.txt', 'seorbel.txt')):
+            continue
         cFile += 1
         if b'\r' in data:
-            bad.append((f, data.count(b'\r'), data.count(b'\n'),
-                        FCompiled(data)))
-    if bad:
-        # A compiled binary is the likeliest cause and the most misleading
-        # to report as a line-ending problem, so it is separated out and
-        # said first. Measured 2026-09-03: a 12.7 MB astrolog-ubsan was
-        # committed by "git add -A", and this audit -- the only thing that
-        # caught it -- announced it as "carriage returns in 1 of 156
-        # tracked TEXT files" and advised stripping them. Following that
-        # advice on an ELF destroys it. The check was right and its wording
-        # sent you the wrong way.
-        objs = [b for b in bad if b[3]]
-        txts = [b for b in bad if not b[3]]
+            bad.append((f, data.count(b'\r'), data.count(b'\n')))
+    if objs or bad:
+        # The binary case first: it is the likeliest cause and the most
+        # misleading to report as a line-ending problem. Measured
+        # 2026-09-03: a 12.7 MB astrolog-ubsan was committed by
+        # "git add -A", and this audit -- the only thing that caught it --
+        # announced it as "carriage returns in 1 of 156 tracked TEXT
+        # files" and advised stripping them. Following that advice on an
+        # ELF destroys it.
         if objs:
             print('COMPILED BINARIES ARE TRACKED -- these are build')
             print('artifacts, not source, and should not be in the tree:')
-            for f, cr, lf, _ in objs:
-                print('  %-24s %d bytes' % (f, os.path.getsize(
-                    os.path.join(ROOT, f))))
+            for f, n in objs:
+                print('  %-24s %d bytes' % (f, n))
             print('\nDo NOT strip carriage returns from these; that would')
             print('corrupt them. Remove them and add them to .gitignore:')
-            for f, _, _, _ in objs:
+            for f, _ in objs:
                 print('  git rm --cached %s' % f)
-        if txts:
+        if bad:
             print('carriage returns in %d of %d tracked text files:' %
-                  (len(txts), cFile))
-            for f, cr, lf, _ in txts:
+                  (len(bad), cFile))
+            for f, cr, lf in bad:
                 print('  %-24s CR=%d LF=%d' % (f, cr, lf))
             print('\nSource in this tree is LF (work log item 159). If one of')
             print('these is source, strip its CRs. If it is a binary, or a file')
