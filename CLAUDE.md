@@ -720,8 +720,8 @@ Five workflows, all on `qt`, the default branch. `ci.yml` runs on every
 push and pull request, about sixteen jobs in five or six minutes: the
 mingw Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, `make install`, a behavioural differential against the
-base commit, the `.deb`s and `.rpm`s for every distribution
-`tools/distros.py` names, and the **Windows package**,
+base commit, one `.deb` and one `.rpm` to prove the packaging recipe,
+and the **Windows package**,
 which is `windows-qt.yml` called as a reusable workflow. That one
 compiles the port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
 `-DWIN`) on a Windows runner, runs the suite there, starts the staged
@@ -763,6 +763,13 @@ in April 2027. Only EL9 and EL10 are written down. Fedora and Ubuntu
 26.04 build against Qt6, EL9 and the older Ubuntus against Qt5, EL10
 against Qt6. Both workflows compute both matrices from it, and both
 repository verifiers read their list from it.
+
+**A push builds one row per family; a release builds them all.** The
+newest Fedora and the newest Ubuntu LTS (`distros.py rpm --push`,
+`deb --push`) prove the packaging recipe on every change; the other rows
+differ only in image and Qt package name, and a row-specific break
+fails the release before anything is published. Seven package jobs per
+push had become forty percent of the fast lane's job time.
 
 **What is used is the committed snapshot, `tools/distros.json`.** Every
 read is from that file and needs no network, so a build is a function

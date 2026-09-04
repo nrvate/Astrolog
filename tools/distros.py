@@ -3,6 +3,8 @@
 
     python3 tools/distros.py rpm          # GitHub Actions matrix, as JSON
     python3 tools/distros.py deb          # ditto for the .deb rows
+    python3 tools/distros.py rpm --push   # just the newest row of the
+    python3 tools/distros.py deb --push   # family: what a PUSH builds
     python3 tools/distros.py dists        # jammy noble resolute fc43 fc44 el9 el10
     python3 tools/distros.py image fc43   # the container image for a dist
     python3 tools/distros.py count        # how many Linux packages a
@@ -35,6 +37,17 @@ buys that "ask on every run" did not:
 
 The cost is that the red must be answered by a person running
 --update and committing, which is the point.
+
+A PUSH BUILDS ONE ROW PER FAMILY; A RELEASE BUILDS THEM ALL. "--push"
+gives the newest Ubuntu LTS and the newest Fedora, which is enough to
+prove the packaging recipe -- the stage script, the packager, the
+wrapper layout, the clean-container install -- on every change. The
+rows differ only in image and Qt package name, and a row-specific break
+(EL9's Qt5 living in CRB, 22.04 having no Qt6 pkg-config) fails the
+release before anything is published, which is a commit away. Seven
+package jobs on every push had become forty percent of the fast lane's
+job time once the rpm rows verified in clean containers; two is the
+recipe proven and the rest deferred to the moment it matters.
 
 Before this, every distribution row was written out by hand in four
 files -- ci.yml, release.yml, ci-verify-repo.sh and ci-verify-live-repo.sh
@@ -374,10 +387,17 @@ def main(argv):
         return 0
     if what == "check":
         return check()
+    push = "--push" in argv
     if what == "rpm":
-        print(json.dumps({"include": snapshot()["rpm"]}))
+        rows = snapshot()["rpm"]
+        if push:
+            rows = [r for r in rows if r["dist"].startswith("fc")][-1:]
+        print(json.dumps({"include": rows}))
     elif what == "deb":
-        print(json.dumps({"include": snapshot()["deb"]}))
+        rows = snapshot()["deb"]
+        if push:
+            rows = rows[-1:]
+        print(json.dumps({"include": rows}))
     elif what == "dists":
         d = snapshot()
         print(" ".join([r["codename"] for r in d["deb"]] + [r["dist"] for r in d["rpm"]]))

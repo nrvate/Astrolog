@@ -519,13 +519,18 @@ jobs:
       deb: ${{ steps.deb.outputs.matrix }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      # ONE ROW PER FAMILY ON A PUSH -- the newest Fedora and the newest
+      # Ubuntu LTS -- and every row on a release. The rows differ only in
+      # image and Qt package name; one of each proves the recipe (stage,
+      # package, wrapper layout, clean-container install) on every change,
+      # and a row-specific break fails the release before anything is
+      # published. Seven package jobs per push had become forty percent of
+      # this lane's job time once the rpm rows verified in clean
+      # containers. tools/distros.py says the rest.
       - id: rpm
-        run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
-      # The .deb rows: every Ubuntu LTS in standard support, built inside
-      # ubuntu:<version> containers so no runner image has to exist for a
-      # row to.
+        run: echo "matrix=$(python3 tools/distros.py rpm --push)" >> "$GITHUB_OUTPUT"
       - id: deb
-        run: echo "matrix=$(python3 tools/distros.py deb)" >> "$GITHUB_OUTPUT"
+        run: echo "matrix=$(python3 tools/distros.py deb --push)" >> "$GITHUB_OUTPUT"
 
   # Does the snapshot still match what Fedora and Ubuntu answer today?
   # The first push after a release ships or ages out goes red HERE, and
