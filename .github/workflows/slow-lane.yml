@@ -59,63 +59,6 @@ permissions:
   contents: read
 
 jobs:
-  # 6.1. Every build with -Wall, every diagnostic diffed against the
-  # committed ledger -- which is EMPTY since 2026-09-04, so this job is
-  # "no compiler warning anywhere in the fork's own code", on whatever
-  # compiler ubuntu-latest carries today.
-  #
-  # In CI this audit is READ-ONLY. A new warning turns it red, and the
-  # answer is to fix the warning, not to record it: tools/warnings.txt
-  # says so in its header. It flags a REMOVED line too, deliberately, so
-  # the ledger cannot overstate what is left; with nothing in it, that
-  # half is moot until someone adds a line back.
-  #
-  # ubuntu-latest, no longer ubuntu-22.04. The pin existed to keep 113
-  # known lines stable across compiler versions -- g++ 13 words things
-  # differently from g++ 11 -- and tools/ci-assert-toolchain.sh refused
-  # any other major version for that reason. With the ledger empty the
-  # pin protected nothing, and it cost the one thing this image lacks:
-  # Qt6 with pkg-config files. Measured before the move, in an
-  # ubuntu:24.04 container with g++ 13 and mingw 13: six NEW warnings
-  # against the empty ledger, every one fixed the same evening, one of
-  # them a real defect (an snprintf whose source and destination
-  # overlapped, xcharts1.cpp FormatGridCell). A newer compiler finding
-  # more is the job's purpose now, not a threat to it.
-  #
-  # The Qt6 leg runs HERE, in the same audit, because this image has the
-  # .pc files; the separate "Qt6 warning ledger" job that existed only
-  # to work around the 22.04 pin is folded back in. QT6_PKGCONFIG is
-  # emptied because its default points at the maintainer's hand-built
-  # Qt6 under /usr/local/qt6, off pkg-config's path; a distribution's
-  # own needs no help being found.
-  warnings:
-    name: Compiler warnings
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - name: Check out the tree
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - name: Install every toolchain the audit compiles with
-        run: tools/ci-deps.sh qtbase5-dev qt6-base-dev pkg-config libx11-dev g++-mingw-w64-x86-64
-      - name: Every build, every warning diffed against an empty ledger
-        run: QT6_PKGCONFIG= tools/warning_audit.py
-
-  # 6.2. Both surfaces, ~750 invocations.
-  #
-  # Given its own job on purpose. asan-sweep.sh builds its own console
-  # binary with -fsanitize=address -DQTTEST into this same directory and
-  # runs "make clean" on both sides of that build, so it DELETES
-  # ./astrolog while it runs -- anything else on the runner that depends
-  # on that binary would fail confusingly. Four of its arrangements are
-  # load-bearing, including that the binary needs a short path while the
-  # output file wants a long one; read its header before changing it.
-  #
-  # KNOWN BLIND SPOT, and it is not a defect of the sweep: that build is
-  # -O0, where _FORTIFY_SOURCE is inactive -- 1 *_chk import against 10 in
-  # an ordinary build. Work log item 142 was exactly that class and
-  # survived a full sweep and 17 gdb runs for the reason. Nothing in this
-  # job's own output will ever mention the gap; ci.yml's fortify assertion
-  # is what covers it.
   # What does the whole test apparatus never execute? Every other job here
   # answers "did this change?"; this one answers "is this reached at all?",
   # and it exists because "-XE 1 20" sat inert in the graphics matrix from

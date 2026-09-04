@@ -722,7 +722,8 @@ On a private Xvfb display, `import -window root` is fine.
 Five workflows, all on `qt`, the default branch. `ci.yml` runs on every
 push and pull request, about sixteen jobs in five or six minutes: the
 mingw Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
-generated tables, `make install`, a behavioural differential against the
+generated tables, the compiler-warning audit against its empty ledger,
+`make install`, a behavioural differential against the
 base commit, one `.deb` and one `.rpm` to prove the packaging recipe,
 and the **Windows package**,
 which is `windows-qt.yml` called as a reusable workflow. That one
@@ -733,13 +734,14 @@ it and builds the NSIS installer on Linux and installs and uninstalls
 that under Wine.
 
 `slow-lane.yml` is what CLAUDE.md elsewhere calls pre-release: the
-warning audit against an empty ledger, on whatever compiler
-`ubuntu-latest` carries, Qt6 leg included; the sanitizer sweeps (ASan and
-UBSan) and the external Swiss oracle, each a job of its own; the Windows
-parity harnesses under Wine; the MSVC build of the Win32 project file; a
-coverage run that asserts nothing NEW has become untested; and
-**macOS**, which builds the port, runs the suite and packages the
-`.dmg`.
+sanitizer sweeps (ASan and UBSan) and the external Swiss oracle, each a
+job of its own; the Windows parity harnesses under Wine; the MSVC build
+of the Win32 project file; a coverage run that asserts nothing NEW has
+become untested; and **macOS**, which builds the port, runs the suite
+and packages the `.dmg`. The warning audit is in the push lane since
+2026-09-04 (night): with the ledger empty, a new warning is a thing to
+fix now, not at the next tag, and the job fits under the Windows
+build's wall time.
 **It has no schedule.** It was a nightly until 2026-09-04, and the
 nightly gated nothing: the strongest checks in the repository ran on a
 timer nobody was required to read, the schedule had fired once in its

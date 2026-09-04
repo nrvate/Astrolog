@@ -202,6 +202,29 @@ jobs:
       - name: The shipped builds still have fortify
         run: tools/ci-assert-fortify.sh astrolog 10
 
+  # The compiler is a harness too, and since 2026-09-04 (night) it is a
+  # PUSH-LANE one. tools/warnings.txt, the ledger of what -Wall says
+  # across every build, is empty; a new warning in the fork's own code
+  # is a thing to fix, and learning about it at the next tag -- where
+  # this job lived until now, in the slow lane -- inverted that message
+  # by a week. About three minutes, under the Windows build's five, so
+  # it costs a job and no wall time. Every build, both Qts, on whatever
+  # compiler ubuntu-latest carries: the runner pin that once kept 113
+  # known lines stable across g++ versions went with the lines. The
+  # ledger's own header says the rest; the vendored Swiss sources are
+  # exempted in Makefile.srcs.
+  warnings:
+    name: Compiler warnings
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Install every toolchain the audit compiles with
+        run: tools/ci-deps.sh qtbase5-dev qt6-base-dev pkg-config libx11-dev g++-mingw-w64-x86-64
+      - name: Every build, every warning diffed against an empty ledger
+        run: QT6_PKGCONFIG= tools/warning_audit.py
+
   # Q8, decided 2026-09-02: Qt6 is "known to work, kept alive by CI".
   #
   # Qt5 remains the supported and packaged configuration; nothing here
