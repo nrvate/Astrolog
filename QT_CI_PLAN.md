@@ -3234,3 +3234,48 @@ in either called workflow that starts with `astrolog-` would be
 published as a release asset, and `ci-verify-release-dist.sh` would
 fail the release on the stray. That is the intended failure, and the
 prefix rule is written at the top of `windows-qt.yml`.
+
+**2026-09-04, later — making the slow lane a gate found the flake in
+it.** The first dispatched run failed "Windows parity" at "The packaged
+Windows program starts": exit status 255, no window, nothing on stdout
+or stderr, metacity mapped. That step had failed in three of the
+previous five nightly runs and been fixed three times — a window
+manager, a wall-clock deadline, better diagnostics — each fix real and
+none the cause. As a nightly that was a red run somebody read or did
+not; as a release gate it is a release that fails at random, so it had
+to be found.
+
+The status was the clue. Astrolog's own exits go through `Terminate()`,
+which calls `exit(NAbs(tc))` and cannot produce 255. `WinMain` returns
+-1 in exactly two places — `RegisterClass` failing and `CreateWindow`
+failing — and both call `PrintError()` first, which on Windows is a
+`MessageBox` that needs the same display driver the window did. So:
+a process that could not create a window and could not say so.
+
+The steps before it in that job boot the Wine prefix and run the
+console checks with **no DISPLAY**. `wineserver` lingers three seconds
+after its last client exits, and `explorer.exe` with it, having loaded
+no display driver. If the startup check reaches `wine` inside that
+window — Xvfb and metacity coming up in under three seconds on a fast
+runner — the program joins that session, `CreateWindow` returns NULL,
+and the shell sees 255. `WINEDEBUG=-all`, set so Wine's fixme noise
+stayed out of the log, also silenced the one line that would have
+named it: `err:winediag:nodrv_CreateWindow`. Slower runners passed.
+
+Reproduced on the maintainer's machine, same Wine 6.0.3 as the runner:
+boot a fresh prefix with `DISPLAY` unset, run a console program, run the
+check at once — 255, no window, four of four attempts the other way
+round with a display had passed. Put `wineserver -w` between the two
+and it opens "Astrolog 8.00". The fix in
+`tools/ci-verify-windows-starts.sh` is `wineserver -k` then
+`wineserver -w` before launching, so the program always starts a
+session of its own with the display it is given, and `WINEDEBUG=err+all`
+so the next failure of any kind carries Wine's account of it. The
+diagnostic text also stops asserting "a crash on startup or a corrupt
+binary" as the only reading of a silent exit, since for three runs it
+was neither.
+
+`tools/windrive.sh` had killed the server before every run "because it
+outlives the app, and a leftover one makes the next run flaky" since it
+was written. The knowledge was in the tree, one file over.
+

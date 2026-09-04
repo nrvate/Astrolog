@@ -686,11 +686,21 @@ jobs:
                   --json tagName --jq '.[0].tagName')
           [ -n "$tag" ] || { echo "no releases yet; nothing to verify"; exit 0; }
           tools/ci-verify-published-release.sh "$tag" "$GITHUB_REPOSITORY"
+      # For the distributions THAT release was built for, read off its
+      # asset names -- not for the matrix's current list, which the day
+      # after a Fedora release lands names one nothing has been published
+      # for yet. That was the first thing this job reported, correctly
+      # and uselessly, on 2026-09-04.
       - name: The deployed repository serves it
         run: |
           tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 \
                   --json tagName --jq '.[0].tagName')
           [ -n "$tag" ] || exit 0
-          tools/ci-verify-live-repo.sh "${tag#v}"
+          dists=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets \
+                    --jq '.assets[].name' \
+                  | sed -n 's/.*[~.]\(jammy\|noble\)_amd64\.deb$/\1/p; s/.*\.\(fc[0-9]*\|el[0-9]*\)\.x86_64\.rpm$/\1/p' \
+                  | sort -u | paste -sd' ')
+          echo "$tag was built for: $dists"
+          DISTS="$dists" tools/ci-verify-live-repo.sh "${tag#v}"
         env:
           GH_TOKEN: ${{ github.token }}

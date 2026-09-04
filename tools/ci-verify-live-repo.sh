@@ -44,11 +44,22 @@ get() { curl -sSfL --max-time 40 "$1" 2>/dev/null; }
 
 echo "== $base, looking for $ver"
 
-# The list of what must be served comes from tools/distros.py, the one
-# place the matrix is defined. Its Fedora rows move twice a year; a list
-# written here would say fc42 until somebody noticed.
-dists=$(python3 tools/distros.py dists 2>/dev/null) || {
-  echo "cannot determine the distribution list (tools/distros.py failed)"; exit 2; }
+# The list of what must be served: DISTS in the environment if set,
+# otherwise tools/distros.py, the one place the matrix is defined. Its
+# Fedora rows move twice a year; a list written here would say fc42
+# until somebody noticed.
+#
+# DISTS exists because the two questions differ. "Does the site serve
+# the version I just released, for every distribution that release was
+# built for" is answered by passing the distributions read off the
+# release's own asset names -- the slow lane's "published" job does
+# that. "For every distribution the matrix names TODAY" is the default,
+# and is the wrong question the day after a Fedora release lands: it
+# fails on the new one until the next tag, for a reason nobody can act
+# on, which is the fastest way to teach people to ignore a check.
+dists=${DISTS:-$(python3 tools/distros.py dists 2>/dev/null)} || true
+[ -n "$dists" ] || {
+  echo "cannot determine the distribution list (tools/distros.py failed and DISTS is unset)"; exit 2; }
 for code in $dists; do
   case $code in fc*|el*) continue ;; esac
   url="$base/apt/dists/$code/main/binary-amd64/Packages"

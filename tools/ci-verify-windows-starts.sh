@@ -58,9 +58,31 @@ wm=$!
 # have gone wrong -- while Wine's account of it had already been thrown
 # away. That is the same mistake tools/package-macos.sh documents making
 # and fixing: a check that discards the evidence it exists to collect.
+# END ANY WINE SESSION THAT IS STILL RUNNING, and wait until it has gone.
+# This is the flake. Three CI failures in five runs, three "fixes", and
+# the cause was never the program: the steps before this one boot the
+# prefix and run console programs with NO DISPLAY, wineserver lingers
+# for three seconds after its last client exits, and if this script
+# reaches "wine" inside that window the program joins a session whose
+# explorer.exe loaded no display driver. CreateWindow then returns NULL,
+# the MessageBox that would report it needs the same driver, WinMain
+# returns -1, and the shell sees 255 -- with nothing printed, because
+# WINEDEBUG=-all also silenced Wine's own "no driver could be loaded".
+# Whether Xvfb and metacity took more or less than three seconds to come
+# up decided the outcome.
+#
+# Reproduced on 2026-09-04 by booting a prefix with DISPLAY unset and
+# running this immediately: 255, no window. With "wineserver -w" between
+# the two: a window titled "Astrolog 8.00". tools/windrive.sh has killed
+# the server for the same reason since it was written.
+DISPLAY=$DISP WINEDEBUG=-all wineserver -k 2>/dev/null || true
+WINEDEBUG=-all wineserver -w 2>/dev/null || true
+
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
-( cd "$dir" && DISPLAY=$DISP WINEDEBUG=-all wine ./astrolog.exe >"$log" 2>&1 ) &
+# err+all, not -all: Wine's error channel is the evidence when the
+# program exits without a window, and -all threw it away.
+( cd "$dir" && DISPLAY=$DISP WINEDEBUG=err+all wine ./astrolog.exe >"$log" 2>&1 ) &
 ap=$!
 # Search for ASTROLOG'S window, not for any window. With a window manager
 # running there is always at least one -- metacity has its own -- and the
@@ -116,7 +138,10 @@ wait 2>/dev/null || true
   if [ -n "$died" ]; then
     echo "== The process EXITED, status $status, without mapping a window."
     echo "== It is statically linked and needs no runtime, so this is a"
-    echo "== crash on startup or a corrupt binary, not a missing DLL."
+    echo "== crash on startup, a corrupt binary, or -- status 255 with"
+    echo "== nothing said -- a Wine session with no display driver, which"
+    echo "== this script ends before starting and which Wine's err channel"
+    echo "== below would name."
   else
     echo "== The process was still running when the ${WINSTART_TIMEOUT:-180}s"
     echo "== deadline expired -- it started and hung rather than crashing."
