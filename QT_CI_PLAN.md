@@ -3529,3 +3529,41 @@ tag, not by this push; the notes script was run here and rendered both
 lists with no token left over, and the `retire` job is the same script
 call Publish made this afternoon, moved.
 
+**2026-09-04, late — the sanitizer split and the single Windows compile.**
+Two more from the fourth look, both measured on the runs that carried
+them.
+
+*The sanitizer job was four serial jobs wearing one name* (`a3d0c37`).
+ASan over the matrices, UBSan over the matrices and the Qt suite, the
+Qt suite under ASan, and the Swiss oracle each have a job now, with
+their own dependencies and the comment that explains them. Dispatched:
+eleven jobs green, **421 s wall against 959** for the release the night
+before; ASan over the matrices is the long pole at 417 s, and a failure
+would be named for the net that found it.
+
+*The Windows job compiled the shared core twice for a difference that
+was not there* (`9fe82d7`). `-DQTTEST` changes three files; its one
+core-side effect, `AssertIndex()`, is an `assert()`, and the MSVC build
+has passed `/DNDEBUG` since it was written -- so the 31 shared sources
+compiled to the same object code both times, and the Windows test build
+never had the range guard the Linux one (`Makefile.qt.test`, no NDEBUG)
+has. Now: the 31 once into `obj\`, the three Qt sources once per binary,
+two links. Measured on the push:
+
+| | before | after |
+|---|---|---|
+| compile step(s) | 61 s + 55 s | 64 s |
+| Windows build job | 254 s | 159 s |
+| push lane wall | 368 s | 282 s |
+| `astrolog.exe` | 2,061,824 bytes | 2,061,824 bytes |
+| suite on Windows | 4543/0 | 4543/0 |
+
+The byte-identical program is what identical core objects look like.
+`qt-srcs.py --only core|qt|test` gives the split; the groups still come
+from `Makefile.srcs`.
+
+What is left of the fourth look's list is the two gates nobody can
+falsify from here, the size of this record, a runner image GitHub will
+retire, and six tags whose releases were pruned. None of it is a
+change.
+
