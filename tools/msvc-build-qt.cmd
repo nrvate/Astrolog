@@ -48,6 +48,14 @@ rem                     exist only on this compiler -- 850 of them at /W3.
 rem   /DQT /DPC         the Qt backend, and what astrolog.h wants on
 rem                     Windows for <io.h> and backslash separators. No
 rem                     /DWIN: this is Windows without the Windows backend.
+rem   /MP               compile the source files in parallel, one cl.exe
+rem                     worker per core. Without it cl.exe takes the 34
+rem                     files one at a time: measured 109 s for the
+rem                     program and 106 s for the test build on a 4-core
+rem                     runner, 215 of the job's 311 seconds, on every
+rem                     push. Safe here because nothing uses /Yc, /Yu,
+rem                     #import or /showIncludes, which are the things
+rem                     /MP cannot combine with.
 rem
 rem NOTE: rem cannot appear between "cl" and its last "^" continuation --
 rem cmd passes the word to the compiler as a source file and the link
@@ -101,7 +109,7 @@ for /f "usebackq tokens=*" %%v in (`python tools\version.py`) do set "VERSTR=%%v
 if not defined VERRC exit /b 1
 rc /nologo /I. /DVERSIONRC=%VERRC% /DVERSIONSTR=\"%VERSTR%\" /fo "%OUT%.res" tools\astrolog-qt.rc || exit /b 1
 
-cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
+cl /nologo /MP /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
    /D_CRT_SECURE_NO_WARNINGS ^
    /DQT %TESTDEF% /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
    /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
