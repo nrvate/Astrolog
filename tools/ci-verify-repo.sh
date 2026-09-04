@@ -30,12 +30,14 @@ fail=0
 # used to be a case statement of its own, which is how it came to name
 # fedora:42 for months after Fedora 42 stopped receiving updates.
 #
-# A suite the repository serves but the CURRENT matrix no longer builds
-# -- a Fedora release that has aged out, whose packages older releases
-# still carry -- is reported and skipped rather than verified. Its
-# container image still exists, but its mirrors are on their way to the
-# archive, and a check that fails for a reason nobody will act on is a
-# check people stop reading. It is said out loud below, not hidden.
+# Every suite the repository serves MUST be one the matrix builds today.
+# tools/collect-release-packages.sh filters the packages before the
+# repository is built, so a suite that reaches here and is not in the
+# list is a bug in that filter, not a distribution that aged out -- and
+# it fails, loudly, rather than being reported and skipped. There was an
+# "aged out, not verified" branch here for a few hours on 2026-09-04,
+# between the day the list moved into the script and the day the filter
+# made it unreachable.
 current=$(python3 tools/distros.py dists 2>/dev/null) || {
   echo "cannot determine the distribution list (tools/distros.py failed)"; exit 1; }
 image_for() {
@@ -44,21 +46,14 @@ image_for() {
     *) echo '' ;;
   esac
 }
-aged_out() {
-  case " $current " in
-    *" $1 "*) return 1 ;;
-  esac
-  echo "$1: served, but no longer in the build matrix -- not verified"
-  return 0
-}
 
 for dist in "$repo"/apt/dists/*/; do
   [ -d "$dist" ] || continue
   code=$(basename "$dist")
-  aged_out "$code" && continue
   img=$(image_for "$code")
-  [ -n "$img" ] || { echo "NO IMAGE MAPPED for apt suite '$code' -- add one to"
-                     echo "tools/distros.py rather than leaving a suite untested."; fail=1; continue; }
+  [ -n "$img" ] || { echo "SUITE NOT IN THE MATRIX: apt/$code is served but tools/distros.py"
+                     echo "does not build it. tools/collect-release-packages.sh should have"
+                     echo "dropped it; a served suite nothing verifies is a bug here."; fail=1; continue; }
   printf '%-12s %-38s ' "$code" "$img"
   out=$(docker run --rm -v "$repo":/repo:ro "$img" sh -c "
       export DEBIAN_FRONTEND=noninteractive
@@ -135,9 +130,10 @@ done
 for dist in "$repo"/rpm/*/; do
   [ -d "$dist" ] || continue
   d=$(basename "$dist")
-  aged_out "$d" && continue
   img=$(image_for "$d")
-  [ -n "$img" ] || { echo "NO IMAGE MAPPED for rpm dist '$d' -- add one to tools/distros.py."; fail=1; continue; }
+  [ -n "$img" ] || { echo "SUITE NOT IN THE MATRIX: rpm/$d is served but tools/distros.py"
+                     echo "does not build it. tools/collect-release-packages.sh should have"
+                     echo "dropped it; a served suite nothing verifies is a bug here."; fail=1; continue; }
   printf '%-12s %-38s ' "$d" "$img"
   out=$(docker run --rm -v "$repo":/repo:ro "$img" sh -c "
       rpm --import /repo/astrolog.asc
