@@ -347,6 +347,14 @@ tools/ci-verify-published-release.sh v8.00-qt.4  # download the RELEASE and
                                              # until the release job has
                                              # finished
 tools/ci-verify-live-repo.sh                 # and that the DEPLOYED site
+DISTS="jammy noble fc43 fc44 el9 el10" tools/ci-verify-live-repo.sh
+                                             # -- with the RELEASE's own
+                                             # distribution list when the
+                                             # matrix has gained a row
+                                             # since that release, as the
+                                             # slow lane's job passes it;
+                                             # the default list names what
+                                             # is built today.
                                              # serves it: a Pages deploy
                                              # can succeed and publish the
                                              # previous commit, with every

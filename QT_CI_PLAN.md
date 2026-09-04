@@ -273,11 +273,11 @@ files. Five releases are cut and the package repository is live.
 
 | workflow | jobs | what they are |
 |---|---|---|
-| `ci.yml` (every push and PR, ~5–6 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · MSVC project · Which distributions · 2 × `.deb` · 4 × `.rpm` · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
+| `ci.yml` (every push and PR, ~5–6 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · MSVC project · Which distributions · N × `.deb` (every Ubuntu LTS in standard support, built in containers) · N × `.rpm` (Fedora current + previous, EL9, EL10) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
 | `windows-qt.yml` (reusable; called by `ci.yml` and `release.yml`) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
 | `slow-lane.yml` (reusable + dispatch; **no schedule**) | Compiler warnings · Qt6 warning ledger · What nothing executes · AddressSanitizer sweep (+UBSan, +Swiss oracle, +Qt suite under ASan) · Windows parity · macOS build + suite + `.dmg` · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
-| `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · 2 × `.deb` · N × `.rpm` · Publish | 5.1, 5.2 |
-| `repo.yml` (on release) | Build the repositories · Publish to Pages | 4.7 |
+| `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · N × `.deb` · N × `.rpm` · Publish (then retires every release but the newest two) | 5.1, 5.2 |
+| `repo.yml` (on release) | Build the repositories (from the remaining releases, for the distributions built today) · Publish to Pages | 4.7 |
 
 **Three decisions, all the maintainer's, all on 2026-09-04:**
 
@@ -3438,4 +3438,19 @@ machine runs), Qt6 from 26.04.
 
 Seven Linux package jobs per push now, not six, and the last hand-written
 distribution row is EL9/EL10.
+
+*What the runner and the site said afterwards.* CI on the commit:
+seventeen jobs, green, about three and a half minutes wall; the three
+Ubuntu rows built inside their containers in 94 s (22.04), 144 s
+(24.04) and 107 s (26.04), the Windows job at 208 s with `/MP` and the
+cache against 311 s the day before. The dispatched repository rebuild
+printed `dropping astrolog-8.00-qt.5.fc42.x86_64.rpm: fc42 is no
+longer built`, verified every remaining suite (install, upgrade qt.5 to
+qt.6, remove clean; fc44 single-version), and after the Pages deploy
+`rpm/fc42/` answers 404, `rpm/fc44/` 200, and each apt suite lists
+exactly `8.00+qt.5` and `8.00+qt.6`. The `resolute` package reaches the
+site with the next tag; until then `ci-verify-live-repo.sh` wants the
+release's own list (`DISTS=...`, as the slow lane's job passes it),
+since the default list now names a distribution nothing has been
+published for.
 
