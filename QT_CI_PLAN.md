@@ -363,10 +363,10 @@ built), and item 0.1 (`qt` is the default branch).
 
 - **`WSETUP`** — the last configuration nothing compiles, and the last
   thing on this list that is purely a decision.
-- **Ubuntu 26.04 LTS shipped in April 2026** and the `.deb` matrix still
-  says 22.04 and 24.04. Whether GitHub offers `ubuntu-26.04` as a runner
-  is the question, and it is a runner-image question rather than a
-  support-window one, which is why that row is static.
+- ~~**Ubuntu 26.04 LTS shipped in April 2026** and the `.deb` matrix still
+  says 22.04 and 24.04.~~ **Done 2026-09-04, later**: the `.deb` rows
+  build inside `ubuntu:<version>` containers now and are asked of
+  Launchpad, so 26.04 is a row and 22.04 retires itself in April 2027.
 - **The deeper `-z0 Autodetect` question.** The two builds agree now and
   the unconditional-true bug is gone, but autodetection still answers
   "is it daylight time *now*" rather than "was that date in daylight
@@ -3384,4 +3384,58 @@ images, and `actions/runner-images` lists no `ubuntu-26.04` yet.
 at slow-lane.yml runs, which since today are only by-hand dispatches;
 the run worth asking about is a release run, where the lane's jobs
 actually execute.
+
+**2026-09-04, later still — old releases are pruned, and Ubuntu is asked
+for.** Two maintainer decisions after the release, both from the second
+look's list of what was still off.
+
+*Pruning.* "We absolutely want to prune old releases." The site had
+been serving every package ever published, Fedora 42's included, and
+`ci-verify-repo.sh` was describing that suite as served-but-not-verified
+— honest, and not a state anyone wanted. Two scripts, on the two axes:
+
+- `tools/prune-releases.sh [keep] [--dry-run]` retires every release but
+  the newest N. Two by default, the smallest number that leaves the
+  repository's upgrade check something to upgrade from. Run by
+  `release.yml`'s Publish job right after `gh release create`, so cutting
+  a release is what retires the ones before it. The git tags stay; the
+  assets go, which is why `--dry-run` exists and was run first. Run by
+  hand the same afternoon: v8.00-qt.1 through qt.4 deleted, six tags
+  still on the remote.
+- `tools/collect-release-packages.sh` replaces the inline download loop
+  in `repo.yml` and keeps only packages for distributions
+  `tools/distros.py` names today, printing each one it drops. Run by
+  hand against the two remaining releases: eleven kept, one dropped —
+  qt.5's `fc42`.
+
+Between them the site serves the newest two releases for the
+distributions currently built, which is exactly the set the rebuild
+installs, upgrades and verifies in a clean container.
+
+*Ubuntu 26.04.* The answer to "what can we do" was that the `.deb` jobs
+never needed to run ON a runner image; the rpm jobs have always run
+INSIDE `fedora:<version>` containers and a Docker image exists the day
+a release does. `tools/build-in-container.sh <image> <qt-package>
+deb|rpm` does that for either family, from the host, so the strong
+verification stays: `ci-verify-linux-package.sh` still installs the
+result into a fresh container afterwards. Measured before it was wired
+in, the way the Fedora 44 row was:
+
+| image | Qt | build + package | verified in a clean image |
+|---|---|---|---|
+| `ubuntu:26.04` (resolute) | qt6-base-dev, Qt 6.10.2 | 65 s | Chiron 16Can03; Depends computed as `libqt6core6t64 (>= 6.10.2)` … |
+| `ubuntu:22.04` (jammy) | qtbase5-dev, Qt 5.15 | 52 s | Chiron 16Can03; Depends computed as `libqt5core5a (>= 5.15.1)` … |
+
+With the runner image out of the picture, Ubuntu is asked for like
+Fedora: Launchpad's series API, every LTS within Canonical's five years
+of standard support — 22.04, 24.04, 26.04 today — with endoflife.date
+as the fallback and `UBUNTU_RELEASES` as the override, and a loud exit
+when neither answers. **Not Launchpad's own `supported` flag**, which is
+true for 20.04 as well because Ubuntu Pro extends it; that is support a
+user pays for. Qt5 up to 24.04 (22.04's `qt6-base-dev` ships no
+pkg-config files, measured; 24.04 keeps the Qt5 lane the maintainer's
+machine runs), Qt6 from 26.04.
+
+Seven Linux package jobs per push now, not six, and the last hand-written
+distribution row is EL9/EL10.
 

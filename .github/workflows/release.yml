@@ -116,45 +116,29 @@ jobs:
     needs: version
     uses: ./.github/workflows/windows-qt.yml
 
-  # Two jobs rather than one matrix with a conditional container. The
-  # matrix version was written first and had two faults, both caught by
-  # reading it rather than by running it: "${{ matrix.runs-on }}" parses
-  # as "matrix.runs MINUS on" in GitHub's expression syntax, because a
-  # hyphen is an operator there; and "container: ''" for the deb rows was
-  # a trick that had never been exercised. This is the same shape ci.yml
-  # has run successfully all day, which is a better thing to stake a
-  # release on than a novel one.
+  # The .deb rows, built inside ubuntu:<version> containers by
+  # tools/build-in-container.sh and proven in a fresh one -- the same
+  # steps ci.yml runs on every push, with PKG_RELEASE=1 so the version
+  # carries no ~date.sha suffix. Two jobs rather than one matrix with a
+  # conditional container: the rpm rows run INSIDE their container and
+  # verify with "local", the deb rows run Docker from the host and verify
+  # in a clean image; that difference is worth keeping visible.
   deb:
     name: .deb on ${{ matrix.image }}
     needs: matrix
-    runs-on: ${{ matrix.image }}
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      # From tools/distros.py, like the rpm rows. Static in the script,
-      # because these are runner images and whether "ubuntu-26.04" exists
-      # as one is not something an API this workflow trusts can answer.
       matrix: ${{ fromJSON(needs.matrix.outputs.deb) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Install build dependencies
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
-
-      - name: Build
-        run: make -j4 && make qt -j4
-
-      # PKG_RELEASE=1: no ~date.sha suffix, this is the version.
-      - name: Package
-        run: PKG_RELEASE=1 tools/package-deb.sh out/package
+      - name: Build and package, inside ${{ matrix.container }}
+        run: PKG_RELEASE=1 tools/build-in-container.sh ${{ matrix.container }} ${{ matrix.qt }} deb out/package
 
       - name: Prove it installs and runs
-        run: |
-          tools/ci-verify-linux-package.sh out/package/astrolog_*.deb \
-            ${{ matrix.container }}
+        run: tools/ci-verify-linux-package.sh out/package/astrolog_*.deb ${{ matrix.container }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -313,3 +297,16 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
             --title "Astrolog $TAG" --notes-file notes.md \
             --generate-notes dist/*
+
+      # Cutting a release is what retires the ones before the last two.
+      # The maintainer's decision, 2026-09-04: old releases are pruned,
+      # because repo.yml rebuilds the site from every release and a
+      # package for a distribution the matrix no longer builds would
+      # otherwise be served, untested, forever. Two are kept so the
+      # repository's upgrade check still has something to upgrade from.
+      # The tags stay. The script says the rest, and --dry-run shows what
+      # it would do.
+      - name: Retire the releases before the last two
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/prune-releases.sh 2

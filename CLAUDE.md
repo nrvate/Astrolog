@@ -317,6 +317,20 @@ tools/ci-verify-zip.sh out/package/a.zip out/package/astrolog-windows
                                              # directory, and is
                                              # byte-identical to what was
                                              # staged
+tools/build-in-container.sh ubuntu:26.04 qt6-base-dev deb out/package
+                                             # build both binaries and
+                                             # package them inside a
+                                             # distribution's own image;
+                                             # how every .deb row is built
+                                             # and how a new row is proven
+                                             # before it is wired in
+tools/prune-releases.sh 2 --dry-run          # what cutting a release
+                                             # would retire; without
+                                             # --dry-run it retires them
+tools/collect-release-packages.sh pkgs       # every remaining release's
+                                             # packages, minus the
+                                             # distributions no longer
+                                             # built -- named as dropped
 tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
 tools/ci-verify-repo.sh public                         # clean container,
                                              # and now the UPGRADE path
@@ -728,14 +742,32 @@ ASan sweep being the long pole. `repo.yml` chains off it on
 `workflow_run` and rebuilds the apt/yum repository from the published
 packages.
 
-**The distribution list lives in `tools/distros.py` and nowhere else.**
-Fedora's two rows are *asked for*, of Fedora's own release service
-(Bodhi, `state=current`, the newest two), because the hand-written list
-said 42 and 43 for four months after 42 stopped receiving updates and 44
-shipped. Fedora builds against Qt6, EL9 against Qt5, EL10 against Qt6;
-the Ubuntu rows are static because they are runner images. Both
-workflows compute their `.rpm` matrix from it, and both repository
-verifiers read their list from it.
+**The distribution list lives in `tools/distros.py` and nowhere else,
+and most of it is asked for rather than written.** Fedora's two rows
+come from Fedora's own release service (Bodhi, `state=current`, the
+newest two), because the hand-written list said 42 and 43 for four
+months after 42 stopped receiving updates and 44 shipped. Ubuntu's rows
+come from Launchpad: every LTS within Canonical's five years of standard
+support, which is 22.04, 24.04 and 26.04 today and loses 22.04 by itself
+in April 2027. Only EL9 and EL10 are written down. Fedora and Ubuntu
+26.04 build against Qt6, EL9 and the older Ubuntus against Qt5, EL10
+against Qt6. Both workflows compute both matrices from it, and both
+repository verifiers read their list from it.
+
+**The `.deb` rows build inside `ubuntu:<version>` containers**
+(`tools/build-in-container.sh`), not on GitHub's runner images, which is
+what made asking for them possible: a Docker image exists the day a
+release does, and Ubuntu 26.04 had been out five months with no runner
+image. Docker runs from the host, so the package is still installed into
+a fresh container afterwards and asked for Chiron.
+
+**Old releases are pruned.** Cutting a release retires every release but
+the newest two (`tools/prune-releases.sh`, run by Publish; the tags
+stay), and the repository rebuild keeps only packages for distributions
+the matrix builds today (`tools/collect-release-packages.sh`, which
+names what it drops). So the site serves exactly what its own rebuild
+installed, upgraded and verified in a clean container -- never a
+package for a release that has aged out.
 
 **Qt is the one interface, on every platform, since 2026-09-04.** The
 Win32 build in `wdriver.cpp`/`wdialog.cpp` is still compiled on every

@@ -443,58 +443,33 @@ jobs:
     name: Windows package
     uses: ./.github/workflows/windows-qt.yml
 
-  # Q1 answered, 2026-09-02: native packages. An AppImage carries ~70 MB
-  # of Qt closure for a 2.5 MB program; a tarball leaves the user to
-  # install Qt, which is most of what a release is supposed to save them.
-  # A .deb and an .rpm let the distribution's own resolver do it.
-  #
-  # BUILT ON EACH TARGET, never cross-built. A package records the Qt and
-  # glibc SONAMEs it was linked against, and those differ per release --
-  # the same lesson as swisseph's glibc scar, in a different coat. So
-  # Ubuntu builds on Ubuntu runners and Fedora builds in Fedora
-  # containers, and dpkg-shlibdeps and rpmbuild derive the dependencies
-  # from the actual ELF headers rather than a hand-written list that is
-  # wrong the first time Qt links differently.
+  # Item 4.2, the .deb. Built INSIDE ubuntu:<version> with
+  # tools/build-in-container.sh, not ON a runner image: the rows come
+  # from tools/distros.py, which asks Launchpad for every LTS in standard
+  # support, and a Docker image exists the day a release does where a
+  # runner image may never (Ubuntu 26.04 shipped in April 2026; there was
+  # no ubuntu-26.04 runner in September). Docker runs from the host, so
+  # the strong check stays: the package is then installed into a FRESH
+  # container, Qt resolved from the distribution's own repositories, and
+  # asked for Chiron -- never the Sun, which reads correctly with no
+  # ephemeris at all.
   deb:
     name: .deb on ${{ matrix.image }}
     needs: matrix
-    runs-on: ${{ matrix.image }}
-    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
-      # The last two Ubuntu LTS releases, from tools/distros.py: image is
-      # the runner, container the clean image the package is proven in.
       matrix: ${{ fromJSON(needs.matrix.outputs.deb) }}
     steps:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Install build dependencies
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
+      - name: Build both binaries and package, inside ${{ matrix.container }}
+        run: tools/build-in-container.sh ${{ matrix.container }} ${{ matrix.qt }} deb out/package
 
-      - name: Build both binaries
-        run: make -j4 && make qt -j4
-
-      - name: Build the package
-        run: tools/package-deb.sh out/package
-
-      # The point is not that the file exists. It is that a machine which
-      # has never seen this source tree can install it, resolve Qt from
-      # its own repositories, and get right answers -- asserted on Chiron,
-      # never the Sun, which reads correctly with no ephemeris at all.
       - name: Install it in a clean container and run it
-        run: |
-          tools/ci-verify-linux-package.sh out/package/astrolog_*.deb \
-            ${{ matrix.container }}
+        run: tools/ci-verify-linux-package.sh out/package/astrolog_*.deb ${{ matrix.container }}
 
       - name: Keep the package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -539,9 +514,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - id: rpm
         run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
-      # The .deb rows are static in the script -- they are runner images,
-      # and no Ubuntu 26.04 image exists yet (checked 2026-09-04) -- but
-      # they come from the same place, so there is one list and not two.
+      # The .deb rows are asked for too: every Ubuntu LTS in standard
+      # support, from Launchpad, built inside ubuntu:<version> containers
+      # so no runner image has to exist for a row to.
       - id: deb
         run: echo "matrix=$(python3 tools/distros.py deb)" >> "$GITHUB_OUTPUT"
 

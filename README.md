@@ -39,11 +39,17 @@ list comes from the binary rather than from someone's memory:
 
 | | |
 |---|---|
-| `.deb` | Ubuntu 22.04 (jammy), 24.04 (noble) |
+| `.deb` | every Ubuntu LTS still in standard support (asked of Launchpad at build time: 22.04, 24.04 and 26.04 as of September 2026, each built inside that release's own container) |
 | `.rpm` | the two current Fedora releases (asked of Fedora's release service at build time, so a stale list cannot ship), EL9 (Rocky/Alma), EL10 |
 | `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs. **Windows 10 or later** |
 | `.zip` | Windows, the same files — unpack and run, no install needed. The Qt build with its runtime included, since v8.00-qt.6; releases before that shipped the native Win32 build, which ran on Windows 7 |
 | `.dmg` | macOS, Apple Silicon only — read the note below before downloading |
+
+Only the two newest releases are kept. Cutting a release retires the
+ones before it, and the [package repository](https://nrvate.github.io/Astrolog/)
+serves those two, for the distributions currently built — so what it
+serves is exactly what its own rebuild installed, upgraded and verified
+in a clean container. Older tags stay in git; their assets do not.
 
 Every package carries the ephemeris for all **39 esoteric bodies** the
 Object Selections dialog offers — the centaurs, the trans-Neptunians and

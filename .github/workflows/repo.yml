@@ -64,16 +64,14 @@ jobs:
           sudo apt-get install -y apt-utils createrepo-c gnupg rpm
 
       # Every release, so old versions stay installable.
+      # Every release that still exists -- release.yml prunes to the newest
+      # two -- and only the distributions tools/distros.py names today.
+      # What the filter drops is printed by name; the site serves what the
+      # matrix builds and nothing it does not.
       - name: Collect the packages from every release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p pkgs
-          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --json tagName --jq '.[].tagName'); do
-            gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
-              -p '*.deb' -p '*.rpm' -D pkgs --clobber || true
-          done
-          ls -l pkgs
+        run: tools/collect-release-packages.sh pkgs
 
       # The key never touches the disk outside the runner's own GNUPGHOME,
       # and the job has contents:read only.
