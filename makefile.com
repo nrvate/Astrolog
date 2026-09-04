@@ -25,8 +25,6 @@ $ CC GENERAL
 $ CC INTRPRET
 $ CC IO
 $ CC MATRIX
-$ CC PLACALC
-$ CC PLACALC2
 $ CC XCHARTS0
 $ CC XCHARTS1
 $ CC XCHARTS2
@@ -55,8 +53,6 @@ $ link/exe=astrolog.exe -
 	INTRPRET.obj, -
 	IO.obj, -
 	MATRIX.obj, -
-	PLACALC.obj, -
-	PLACALC2.obj, -
 	XCHARTS0.obj, -
 	XCHARTS1.obj, -
 	XCHARTS2.obj, -

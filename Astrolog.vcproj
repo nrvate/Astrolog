@@ -187,10 +187,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\placalc.h"
-				>
-			</File>
-			<File
 				RelativePath=".\resource.h"
 				>
 			</File>
@@ -304,14 +300,6 @@
 			</File>
 			<File
 				RelativePath=".\matrix.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\placalc.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\placalc2.cpp"
 				>
 			</File>
 			<File

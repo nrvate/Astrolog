@@ -1247,8 +1247,7 @@ BEGIN
     LTEXT           "Astrolog Website mirror: http://www.magitech.com/astrolog/astrolog.htm",IDC_STATIC,32,40,240,8
     LTEXT           "Main ephemeris databases and calculation routines are from the library",IDC_STATIC,32,52,240,8
     LTEXT           "'Swiss Ephemeris' by Astrodienst AG, subject to license for Swiss",IDC_STATIC,32,60,240,8
-    LTEXT           "Ephemeris Free Edition at http://www.astro.com/swisseph. Old 'Placalc'",IDC_STATIC,32,68,240,8
-    LTEXT           "library and formulas are by Alois Treindl, also from Astrodienst AG.",IDC_STATIC,32,76,240,8
+    LTEXT           "Ephemeris Free Edition at http://www.astro.com/swisseph.",IDC_STATIC,32,68,240,8
     LTEXT           "Original planetary calculation formulas were converted from",IDC_STATIC,32,88,240,8
     LTEXT           "routines by James Neely, as listed in 'Manual of Computer Programming",IDC_STATIC,32,96,230,9
     LTEXT           "for Astrologers' by Michael Erlewine, available from Matrix Software.",IDC_STATIC,32,104,240,8

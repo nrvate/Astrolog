@@ -65,13 +65,14 @@ jobs:
   # the day it was written -- an entry that changes nothing still diffs to
   # zero, which is what a passing differential looks like.
   #
-  # It gates on an EXACT set: placalc.cpp and placalc2.cpp, unreachable
-  # because "=0b" in the shipped astrolog.as sets us.fNoPlacalc and nothing
-  # clears it. A file joining that list means new code arrived with no net,
-  # or a harness stopped reaching what it used to.
+  # It gates on an EXACT set, and since 2026-09-04 that set is EMPTY: the
+  # two files it used to name, placalc.cpp and placalc2.cpp, were removed
+  # rather than tested once the report had shown nothing reached them. A
+  # file joining the set means new code arrived with no net, or a harness
+  # stopped reaching what it used to.
   #
   # Slow by construction: the instrumented build is -O0 and the switch
-  # matrix alone is 529 invocations, plus the 3832-assertion suite.
+  # matrix alone is 529 invocations, plus the whole suite.
   coverage:
     name: What nothing executes
     runs-on: ubuntu-22.04
