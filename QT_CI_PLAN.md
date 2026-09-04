@@ -3653,3 +3653,60 @@ way for a differential to be wrong. Falsified on a synthetic raw file
 carrying that line. Not retried inside the harness -- a retry inside a
 check is a check that cannot fail.
 
+**2026-09-04, late night — the Placalc backend is removed.** "placalc
+should be effectively dead at this point. can we just surgically remove
+it, entirely?" It was dead: 698 lines in `placalc.cpp` and
+`placalc2.cpp` that the coverage report's first run found nothing
+executing, behind `-bp`, which the shipped `astrolog.as` locks out with
+`=0b` and nothing clears. Commit `0390a36`, 25 files, 2,912 lines
+deleted, 141 added; its message lists what went.
+
+Surgical means a checklist, and this is what the survey turned up
+before anything was cut: the two sources and a header; a `PLACALC`
+compile switch with eleven `#ifdef` blocks under it across seven files;
+two settings fields and a third whose name said Placalc but whose job
+was locking Matrix out too (`fNoPlacalc`, now `fNoOldCalc`); five
+`FCm*()` macros carrying a "not Placalc" negation; the Placalc arm of
+the ephemeris loop, of both Julian-day conversions, of `FSkipEphem()`
+and of the Uranian dispatch; an error printer only it called; an entry
+in the calculation-method enum and the table it indexed, so the
+numbering shrank; a line in each Calculation Settings dialog, Windows
+and Qt; a `-H` line; two settings-writer lines; a credit sentence in
+two About texts; three sources lines in the project file and one in
+`Makefile.srcs`; the coverage report's expected-dead set; a
+clang-warning exemption; a round-trip fixture comment; and a test that
+asserted Placalc was *offered*.
+
+Two decisions inside it. **`-bp` and `-ba` are still accepted**, because
+the settings writer emitted `_bp` and `_ba` into every file it saved
+before today and a saved file must keep loading: the off forms are
+silent, the on forms print one notice that the Swiss Ephemeris is used
+instead and continue, and neither reaches the `-b` fall-through that
+toggles ephemeris files. And **the positional defaults initializer**
+lost two entries with the two fields -- the first attempt lost one,
+every later default shifted by a slot, and the compiler said so as a
+`double` landing in a `char *`; the block now names which field each
+entry is.
+
+| | |
+|---|---|
+| builds under `-Wall`, five GCC plus two Qt6 | 0 warnings |
+| suite | 4544/0, up one: "Placalc is never offered" |
+| audits (registry, vcxproj, qt-srcs, fixtures, defaults, line endings) | clean |
+| `-H` and saved settings | no mention |
+| console binary | 39 KB smaller |
+| coverage report's expected untested set | empty |
+
+One stall during the nets, recorded because it looked like a
+regression for a minute: the suite script's ephemeris-path probe sat
+asleep on a Unix socket with no CPU used, while the same command run
+by hand exited at once. Killed by PID; the whole script re-run clean
+in 57 s with every startup probe passing. Environmental, and the
+second time today a hang was Wine's or the desktop's rather than the
+program's.
+
+Not touched: `astrolog.htm`, upstream's manual, which still documents
+`-bp`. It is upstream's file, shipped as they wrote it, and this fork
+stopped merging upstream at item 63; editing it would be the start of
+a fork of the manual as well.
+
