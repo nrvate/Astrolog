@@ -3454,3 +3454,38 @@ release's own list (`DISTS=...`, as the slow lane's job passes it),
 since the default list now names a distribution nothing has been
 published for.
 
+**2026-09-04, evening — the second look's four smells, taken in order.**
+The maintainer took the list as given: "I'll take the fixes in your
+order." Four commits, each measured:
+
+1. **The MSVC project job out of the fast lane** (`a376ae0`). It
+   compiled the Win32 program under MSVC on a Windows runner per push,
+   and that program is the oracle now, not the product. It gates
+   releases from the slow lane instead; dispatched there the same
+   evening and passed in 56 s.
+2. **The rpm rows verify to the deb standard** (`e1d38bc`). They ran
+   inside `container: fedora:44` and verified with `local`, where a
+   wrong `Requires` line is invisible. They build through
+   `tools/build-in-container.sh` from the host now and are installed
+   into a fresh image. Proven here first: fedora:44 in 98 s, rockylinux:9
+   in 72 s, each computing Chiron in a clean image of itself. On the
+   runner the rows cost more than before -- 154 to 174 s for Fedora
+   against about 90 -- because a fresh container's dnf replaces a
+   pre-warmed job container and a second container is started to verify
+   in. That is the price of the stronger check and it is paid on every
+   push: job time rose from about 1,530 to about 1,865 seconds, wall
+   from 339 to 368.
+3. **Two dead guards removed** (`d42ff78`): the "served, but no longer
+   in the build matrix" branch that the collect filter had made
+   unreachable, and the published-release verifier's skip list for
+   three releases that no longer exist. A suite served and not built
+   now fails as the bug it would be.
+4. **The matrix is a committed snapshot** (`e0e2930`). `tools/distros.json`
+   is what every read uses, so a build is a function of its commit and
+   no network is touched except by `distros.py check`, which the matrix
+   job runs first and which fails the first push after a release ships
+   or ages out, naming the row and `--update`. Falsified three ways
+   before wiring: no snapshot, an edited snapshot, a forced live answer.
+
+CI on the four: sixteen jobs, green, 368 s wall.
+
