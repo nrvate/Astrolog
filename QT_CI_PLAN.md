@@ -3489,3 +3489,43 @@ order." Four commits, each measured:
 
 CI on the four: sixteen jobs, green, 368 s wall.
 
+**2026-09-04, night — the third look's four smells, and what the push
+lane costs now.** Taken in the order recommended, one commit each:
+
+1. **The drift check is its own job** (`3e5bcaa`). Inside the matrix
+   job it would have turned the first push after a Fedora release red
+   and skipped every package job for it -- the "punishes whoever pushed
+   last" shape, reintroduced by the author the same afternoon he cited
+   it. Now the packages build from the snapshot regardless, the run
+   shows a red job named "The distribution snapshot is current", and
+   `release.yml` keeps the hard gate.
+2. **A push builds one row per family** (`19d5c2b`): the newest Ubuntu
+   LTS and the newest Fedora, through `distros.py deb --push` and
+   `rpm --push`. A release builds every row. The rows differ only in
+   image and Qt package name, and a row-specific break fails the release
+   before anything is published.
+3. **The release notes are `tools/release-notes.md`** (`588d2d9`),
+   filled in by `tools/release-notes.sh`, instead of a heredoc with
+   every backtick escaped inside `release.yml`.
+4. **The prune is a job of its own after Publish** (`d57890b`), so a
+   failure there is a red job named for what failed beside a green
+   Publish, not a red run named Publish.
+
+Measured on the push that carried them:
+
+| | before (this morning) | after |
+|---|---|---|
+| jobs per push | 17 | 12 |
+| job time | about 1,865 s | 1,190 s |
+| wall | 368 s | 368 s |
+
+Wall did not move because it is bounded by the Windows build (254 s)
+plus the installer job that needs it (108 s), and neither is packaging.
+The job time is what runner minutes and queue contention are made of,
+and it fell by more than a third.
+
+Items 3 and 4 touch only `release.yml` and are exercised by the next
+tag, not by this push; the notes script was run here and rendered both
+lists with no token left over, and the `retire` job is the same script
+call Publish made this afternoon, moved.
+
