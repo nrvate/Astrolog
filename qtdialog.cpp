@@ -3173,8 +3173,7 @@ static CONST char *rgszAboutQt[] = {
   "",
   "Main ephemeris databases and calculation routines are from the library",
   "'Swiss Ephemeris' by Astrodienst AG, subject to license for Swiss",
-  "Ephemeris Free Edition at http://www.astro.com/swisseph. Old 'Placalc'",
-  "library and formulas are by Alois Treindl, also from Astrodienst AG.",
+  "Ephemeris Free Edition at http://www.astro.com/swisseph.",
   "",
   "Original planetary calculation formulas were converted from",
   "routines by James Neely, as listed in 'Manual of Computer Programming",
@@ -3558,7 +3557,7 @@ void ShowCalcDialogQt()
     // running the cm* constants in numeric order: JPL Web sits after the
     // three Swiss entries there, not last, and an ephemeris the user has
     // switched off is left out entirely -- no JPL Web under "-0n", no
-    // Placalc or Matrix under "-0p". Offering one that is disabled invites
+    // Matrix under "-0b". Offering one that is disabled invites
     // a lookup that cannot happen. The selection is read back by name
     // below rather than by index, so a shorter list needs nothing else.
 #ifdef SWISS
@@ -3570,18 +3569,13 @@ void ShowCalcDialogQt()
     if (!us.fNoNetwork)
       pcbEphem->addItem(szEphem[cmJPLWeb]);
 #endif
-#ifdef PLACALC
-    if (!us.fNoPlacalc)
-      pcbEphem->addItem(szEphem[cmPlacalc]);
-#endif
 #ifdef MATRIX
-    if (!us.fNoPlacalc)
+    if (!us.fNoOldCalc)
       pcbEphem->addItem(szEphem[cmMatrix]);
 #endif
     pcbEphem->addItem(szEphem[cmNone]);
     pcbEphem->setEditText(szEphem[!us.fEphemFiles ?
-      (us.fMatrixPla ? cmMatrix : cmNone) :
-      (us.fPlacalcPla ? cmPlacalc : us.nSwissEph)]);
+      (us.fMatrixPla ? cmMatrix : cmNone) : us.nSwissEph]);
   }
   if (pcbAyan != NULL) {
     // The list offers the named ayanamsas with their offsets, and the
@@ -3669,17 +3663,13 @@ void ShowCalcDialogQt()
   if (pcbEphem != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbEphem->currentText().toLocal8Bit().constData());
-    us.fEphemFiles = us.fPlacalcPla = us.fMatrixPla = fFalse;
+    us.fEphemFiles = us.fMatrixPla = fFalse;
     us.nSwissEph = 0;
 #ifdef SWISS
     if (FMatchSz(sz, szEphem[cmSwiss]))        { us.fEphemFiles = fTrue; us.nSwissEph = 0; }
     else if (FMatchSz(sz, szEphem[cmMoshier])) { us.fEphemFiles = fTrue; us.nSwissEph = 1; }
     else if (FMatchSz(sz, szEphem[cmJPL]))     { us.fEphemFiles = fTrue; us.nSwissEph = 2; }
     else if (FMatchSz(sz, szEphem[cmJPLWeb]))  { us.fEphemFiles = fTrue; us.nSwissEph = 3; }
-#endif
-#ifdef PLACALC
-    if (FMatchSz(sz, szEphem[cmPlacalc]))
-      us.fEphemFiles = us.fPlacalcPla = fTrue;
 #endif
 #ifdef MATRIX
     if (FMatchSz(sz, szEphem[cmMatrix]))

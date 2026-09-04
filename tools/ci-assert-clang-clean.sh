@@ -61,7 +61,7 @@ ours=""
 for r in $raw; do
   real=$(resolve_src "$r")
   case $real in
-    swe*|placalc*) ;;                 # vendored, counted below not failed on
+    swe*) ;;                         # vendored, counted below not failed on
     *) ours="$ours$real
 " ;;
   esac
@@ -83,7 +83,7 @@ n=0
 for r in $raw; do
   real=$(resolve_src "$r")
   case $real in
-    swe*|placalc*)
+    swe*)
       c=$(grep -acE "(^|[^A-Za-z0-9_])$r:[0-9]+:[0-9]+: warning:" "$log" || true)
       n=$((n + ${c:-0})) ;;
   esac

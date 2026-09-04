@@ -80,17 +80,11 @@ US us = {
 #endif
   0, 0, 0,
 
-  // Main subflags
-  0, 0, 0, 0, 0, 0,
-#ifdef PLACALC
-#ifndef SWISS
-  1,
-#else
-  0,
-#endif
-#else
-  0,
-#endif // PLACALC
+  // Main subflags: fLoopInit, fSabian, fSeconds, fSecond1K, fSecondHide,
+  // then fMatrixPla (on only when no ephemeris is compiled in), then
+  // fMatrixStar through fListAuto. Two entries fewer than before
+  // 2026-09-04, when fPlacalcAst and fPlacalcPla sat between them.
+  0, 0, 0, 0, 0,
 #ifdef EPHEM
   0,
 #else
@@ -409,7 +403,7 @@ CONST char *szSuffix[cSign+1] = {"",
 
 CONST char *szEphem[cmMax] = {
   "Swiss Ephemeris 2.10.03", "Moshier Formulas 2.10.03",
-  "JPL Ephemeris 2.10.03", "Placalc Ephemeris", "Matrix Formulas",
+  "JPL Ephemeris 2.10.03", "Matrix Formulas",
   "JPL Horizons Web Query", "None"};
 
 CONST StrLookR rgZodiacOffset[] = {{"Fagan-Bradley", 0.0},

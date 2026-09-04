@@ -23,7 +23,7 @@
 # The engine: everything that computes a chart or reads and writes one.
 SRC_CORE = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp \
   charts1.cpp charts2.cpp charts3.cpp data.cpp express.cpp general.cpp \
-  intrpret.cpp io.cpp matrix.cpp placalc.cpp placalc2.cpp
+  intrpret.cpp io.cpp matrix.cpp
 
 # The graphics half: chart drawing and the device backends it draws to.
 SRC_GRAPHICS = xdata.cpp xgeneral.cpp xdevice.cpp xcharts0.cpp \

@@ -120,10 +120,7 @@ void DisplayCredits(void)
   PrintW("'Swiss Ephemeris' by Astrodienst AG, subject to license for Swiss",
     kGreenA);
   PrintW(
-    "Ephemeris Free Edition at http://www.astro.com/swisseph. Old 'Placalc'",
-    kGreenA);
-  PrintW(
-    "library and formulas are by Alois Treindl, also from Astrodienst AG.",
+    "Ephemeris Free Edition at http://www.astro.com/swisseph.",
     kGreenA);
   PrintW("Original planetary calculation formulas were converted from",
     kDkGreenA);
@@ -475,13 +472,8 @@ void DisplaySwitches(void)
   PrintS(
     " _bs: Use less accurate Moshier formulas instead of Swiss Ephemeris.");
 #endif
-#ifdef PLACALC
-  if (!us.fNoPlacalc)
-    PrintS(
-      " _bp: Use less accurate Placalc ephemeris instead of Swiss Ephemeris.");
-#endif
 #ifdef MATRIX
-  if (!us.fNoPlacalc) {
+  if (!us.fNoOldCalc) {
     PrintS(" _bm: Use inaccurate Matrix formulas when ephemeris unavailable.");
     PrintS(" _bU: Use inaccurate Matrix formulas for fixed stars only.");
   }
@@ -652,7 +644,7 @@ void DisplaySwitchesRare(void)
     "  barycentric, true node, true position, or topocentric for object.");
 #endif
 #ifdef MATRIX
-  if (!us.fNoPlacalc) {
+  if (!us.fNoOldCalc) {
     PrintS(
       " _YE <obj> <semi-major axis> <eccentricity (3)> <inclination (3)>");
     PrintS("  <perihelion (3)> <ascending node (3)> <time offset (3)>:");

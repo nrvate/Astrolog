@@ -138,14 +138,13 @@ extern void FinalizeProgram P((flag));
 #define FProperEphem2(o) (!(us.nRel <= rcTransit ? ignore2[o] : ignore[o]) && \
   !(gs.fAlt && ((o) == oMoo || (o) == oFor)))
 
-#define FCmSwissAny() (us.fEphemFiles && !us.fPlacalcPla)
-#define FCmSwissEph() (us.fEphemFiles && !us.fPlacalcPla && us.nSwissEph <= 0)
-#define FCmSwissMosh() (us.fEphemFiles && !us.fPlacalcPla && us.nSwissEph == 1)
-#define FCmSwissJPL() (us.fEphemFiles && !us.fPlacalcPla && us.nSwissEph == 2)
-#define FCmSwissStar() (us.fEphemFiles && !us.fPlacalcPla && !us.fMatrixStar)
-#define FCmPlacalc() (us.fEphemFiles && us.fPlacalcPla)
+#define FCmSwissAny() (us.fEphemFiles)
+#define FCmSwissEph() (us.fEphemFiles && us.nSwissEph <= 0)
+#define FCmSwissMosh() (us.fEphemFiles && us.nSwissEph == 1)
+#define FCmSwissJPL() (us.fEphemFiles && us.nSwissEph == 2)
+#define FCmSwissStar() (us.fEphemFiles && !us.fMatrixStar)
 #define FCmMatrix() (!us.fEphemFiles && us.fMatrixPla)
-#define FCmJPLWeb() (us.fEphemFiles && !us.fPlacalcPla && us.nSwissEph >= 3)
+#define FCmJPLWeb() (us.fEphemFiles && us.nSwissEph >= 3)
 
 extern US us;
 extern IS is;
@@ -370,7 +369,6 @@ extern flag FErrorValR P((CONST char *, flag, real, int));
 extern void ErrorArgv P((CONST char *));
 extern void ErrorSwitch P((CONST char *));
 extern flag FErrorSubswitch P((CONST char *, char, flag));
-extern void ErrorEphem P((CONST char *, long));
 extern void AnsiColor P((KI));
 extern void PrintZodiac P((real));
 extern char ChRet P((real));
@@ -600,15 +598,6 @@ extern void ComputePlanets P((void));
 extern void ComputeLunar P((real *, real *, real *, real *));
 #endif
 
-
-#ifdef PLACALC
-// From placalc2.cpp
-
-extern flag FPlacalcPlanet
-  P((int, real, flag, real *, real *, real *, real *, real *, real *));
-extern double julday P((int, int, int, double, int));
-extern void revjul P((double, int, int *, int *, int *, double *));
-#endif
 
 
 // From charts0.cpp

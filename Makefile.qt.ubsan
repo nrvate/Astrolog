@@ -107,7 +107,7 @@ clean:
 # it actually included, and the "-include" below feeds them back in.
 #
 # The hand-written version tracked exactly two headers, astrolog.h and
-# extern.h, so touching placalc.h or swephexp.h rebuilt NOTHING and left
+# extern.h, so touching swephexp.h rebuilt NOTHING and left
 # objects that did not match their source -- measured, not supposed. That
 # is the stale-binary class CLAUDE.md warns about ("if a check claims to
 # have rebuilt something, look at the binary's timestamp"), with no check

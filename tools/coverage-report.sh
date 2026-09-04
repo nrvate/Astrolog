@@ -93,19 +93,16 @@ if [ "${COVERAGE_SKIP_SUITE:-0}" != "1" ] && [ -f Makefile.qt.test ]; then
                       else print "   (none)" }' \
       "$out/coverage-suite.txt" "$out/coverage.txt"
 
-    # Exact, like every other count in this project. The known pair is
-    # placalc.cpp and placalc2.cpp, unreachable because "=0b" in the
-    # shipped astrolog.as sets us.fNoPlacalc and switch.cpp has no switch
-    # that clears it. A file JOINING that list is the signal: either new
-    # code arrived with no net behind it, or a harness stopped reaching
-    # code it used to. A file LEAVING it is good news that still has to be
-    # recorded here, so the expected set never drifts into folklore.
-    # LC_ALL=C on BOTH sides. Under a default locale sort ignores
-    # punctuation, so "placalc2.cpp" collates before "placalc.cpp"; under
-    # C it collates after. Two sorts that disagree make identical sets
-    # look different, which is a false alarm that trains people to ignore
-    # the check.
-    printf 'placalc.cpp\nplacalc2.cpp\n' | LC_ALL=C sort > "$out/dead.want"
+    # Exact, like every other count in this project, and the expected set
+    # is EMPTY since 2026-09-04. It used to be placalc.cpp and
+    # placalc2.cpp, 698 lines unreachable because "=0b" in the shipped
+    # astrolog.as locked the backend out and nothing cleared it -- the
+    # first run of this report found them, and the maintainer removed
+    # them rather than test them. A file JOINING the set is the signal:
+    # either new code arrived with no net behind it, or a harness stopped
+    # reaching code it used to. LC_ALL=C on BOTH sides, so two sorts
+    # cannot disagree about an identical set.
+    : > "$out/dead.want"
     if ! diff -q "$out/dead.want" "$out/dead.txt" >/dev/null 2>&1; then
       echo "   THE UNTESTED SET CHANGED:"
       diff "$out/dead.want" "$out/dead.txt" | sed 's/^/     /'

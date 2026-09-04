@@ -2300,18 +2300,14 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
     if (!us.fNoNetwork)
       SetCombo(dcSe_b, szEphem[cmJPLWeb]);
 #endif
-#ifdef PLACALC
-    if (!us.fNoPlacalc)
-      SetCombo(dcSe_b, szEphem[cmPlacalc]);
-#endif
 #ifdef MATRIX
-    if (!us.fNoPlacalc)
+    if (!us.fNoOldCalc)
       SetCombo(dcSe_b, szEphem[cmMatrix]);
 #endif
     SetCombo(dcSe_b, szEphem[cmNone]);
     i = FCmSwissEph() ? cmSwiss : (FCmSwissMosh() ? cmMoshier :
-      (FCmSwissJPL() ? cmJPL : (FCmPlacalc() ? cmPlacalc :
-      (FCmMatrix() ? cmMatrix : (FCmJPLWeb() ? cmJPLWeb : cmNone)))));
+      (FCmSwissJPL() ? cmJPL :
+      (FCmMatrix() ? cmMatrix : (FCmJPLWeb() ? cmJPLWeb : cmNone))));
     SetEdit(dcSe_b, szEphem[i]);
     SetEditR(hdlg, dcSe_s, us.rZodiacOffset, 6);
     for (i = 0; *rgZodiacOffset[i].sz; i++) {
@@ -2368,7 +2364,7 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
       EnsureN(n4, FValidDwad(n4), "dwad nesting");
       EnsureN(n1, FItem(n1), "Solar chart planet");
       GetEdit(dcSe_b, sz);
-      us.fEphemFiles = us.fPlacalcPla = us.fMatrixPla = fFalse;
+      us.fEphemFiles = us.fMatrixPla = fFalse;
       us.nSwissEph = 0;
 #ifdef SWISS
       if (FMatchSz(sz, szEphem[cmSwiss])) {
@@ -2380,10 +2376,6 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
       } else if (FMatchSz(sz, szEphem[cmJPLWeb])) {
         us.fEphemFiles = fTrue; us.nSwissEph = 3;
       }
-#endif
-#ifdef PLACALC
-      if (FMatchSz(sz, szEphem[cmPlacalc]))
-        us.fEphemFiles = us.fPlacalcPla = fTrue;
 #endif
 #ifdef MATRIX
       if (FMatchSz(sz, szEphem[cmMatrix]))

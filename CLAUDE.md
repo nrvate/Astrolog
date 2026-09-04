@@ -458,8 +458,11 @@ tools/coverage-report.sh             # builds an instrumented binary, runs
                                      # Qt suite against it, and
                                      # reports per-file line coverage --
                                      # then asserts the set executed by
-                                     # NEITHER is exactly placalc.cpp and
-                                     # placalc2.cpp. Tens of minutes: the
+                                     # NEITHER is EMPTY. It was
+                                     # placalc.cpp and placalc2.cpp until
+                                     # 2026-09-04, when the maintainer
+                                     # removed the backend rather than
+                                     # test it. Tens of minutes: the
                                      # build is -O0 and the switch matrix
                                      # is 529 invocations. In the slow
                                      # lane; never pre-commit
@@ -470,8 +473,10 @@ was written and that renders **byte-identically to no `-XE` at all** --
 the asteroid loop stops at the first body it cannot compute and asteroid 9
 has no file. An inert entry still diffs to zero, which is exactly what a
 passing differential looks like. Its first run also found `placalc.cpp`
-and `placalc2.cpp` at **0.00%**, 698 lines that are compiled, linked and
-called from `calc.cpp` and that no matrix executes -- see QT_CI_PLAN.md.
+and `placalc2.cpp` at **0.00%**, 698 lines that were compiled, linked and
+called from `calc.cpp` and that no matrix executed -- see QT_CI_PLAN.md.
+They are gone since 2026-09-04, and `-bp`/`-ba` are accepted as retired
+spellings so saved settings files still load.
 
 It earns its place the way the sanitizer sweeps did. Its first run found
 that **`make -f Makefile.win` had not compiled since 2026-08-29**, 62

@@ -92,7 +92,6 @@
   <ItemGroup>
     <ClInclude Include="astrolog.h" />
     <ClInclude Include="extern.h" />
-    <ClInclude Include="placalc.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="swehouse.h" />
     <ClInclude Include="swejpl.h" />
@@ -125,8 +124,6 @@
     <ClCompile Include="intrpret.cpp" />
     <ClCompile Include="io.cpp" />
     <ClCompile Include="matrix.cpp" />
-    <ClCompile Include="placalc.cpp" />
-    <ClCompile Include="placalc2.cpp" />
     <ClCompile Include="switch.cpp" />
     <ClCompile Include="swecl.cpp" />
     <ClCompile Include="swedate.cpp" />

@@ -171,9 +171,6 @@
               /* Ephemeris most accurate calculation features and formulas */
               /* to be compiled into the program (as accessed with -b).    */
 
-#define PLACALC /* Comment out this #define if you don't want the Placalc */
-                /* less accurate calculation features and formulas to be  */
-                /* compiled into the program (as accessed with -bp).      */
 
 #define MATRIX /* Comment out this #define if you don't want the Matrix  */
                /* much less accurate calculation formulas to be compiled */
@@ -360,9 +357,6 @@
 #define SWISSGRAPH
 #endif
 #endif // SWISS
-#ifdef PLACALC
-#define EPHEM
-#endif
 #ifdef GRAPH
 #ifdef CONSTEL
 #define CONSTELGRAPH
@@ -480,12 +474,6 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 /*
 ** Make sure only legal combinations of options are active.
 */
-
-#ifdef PLACALC
-#ifndef MATRIX
-#error "If 'PLACALC' is defined 'MATRIX' must be too"
-#endif
-#endif // PLACALC
 
 #ifdef X11
 #ifndef GRAPH
@@ -1250,11 +1238,10 @@ enum _calculationmethod {
   cmSwiss   = 0,  // Swiss Ephemeris (standard ephemeris files)
   cmMoshier = 1,  // Swiss Ephemeris (Moshier formulas)
   cmJPL     = 2,  // Swiss Ephemeris (JPL ephemeris file)
-  cmPlacalc = 3,  // Old Placalc ephemeris
-  cmMatrix  = 4,  // Very old Matrix formulas
-  cmJPLWeb  = 5,  // JPL Horizons internet Web query
-  cmNone    = 6,  // No calculation method
-  cmMax     = 7,
+  cmMatrix  = 3,  // Very old Matrix formulas
+  cmJPLWeb  = 4,  // JPL Horizons internet Web query
+  cmNone    = 5,  // No calculation method
+  cmMax     = 6,
 };
 
 // Position Display Format
@@ -2158,37 +2145,35 @@ typedef struct _UserSettings {
   flag fSeconds;     // -b0
   flag fSecond1K;    // -b1
   flag fSecondHide;  // -b2
-  // The ephemeris backend is chosen by five fields together (these four,
+  // The ephemeris backend is chosen by three fields together (these two,
   // fEphemFiles above, and nSwissEph below), read through the FCm*()
   // macros in extern.h -- use those, not the raw fields:
-  //   fEphemFiles fPlacalcPla nSwissEph = backend
-  //        0           -          -       Matrix formulas (fMatrixPla
-  //                                       names this state for the GUI)
-  //        1           1          -       Placalc (fPlacalcAst suppresses
-  //                                       its four main asteroids)
-  //        1           0          0       Swiss Ephemeris files
-  //        1           0          1       Moshier analytic (-bs)
-  //        1           0          2       JPL ephemeris file (-bj)
-  //        1           0          3       JPL Horizons web query (-bJ)
+  //   fEphemFiles nSwissEph = backend
+  //        0          -       Matrix formulas (fMatrixPla names this
+  //                           state for the GUI)
+  //        1          0       Swiss Ephemeris files
+  //        1          1       Moshier analytic (-bs)
+  //        1          2       JPL ephemeris file (-bj)
+  //        1          3       JPL Horizons web query (-bJ)
   // fMatrixStar computes fixed stars with Matrix even when Swiss is on.
-  // Corners like fPlacalcPla with nSwissEph == 3 are representable but
-  // inert: fPlacalcPla wins and nSwissEph is ignored. Trap: every backend
-  // suffix of -b (-bp -bm -bs -bj -bJ -ba -bU) falls through to also
-  // TOGGLE fEphemFiles (NSwb, switch.cpp), so a plain "-bp" with files
-  // already on turns files off. The settings writer emits forced =/_
-  // prefixes and the dialogs assign the fields directly, so only a
+  // Trap: every backend suffix of -b (-bm -bs -bj -bJ -bU) falls through
+  // to also TOGGLE fEphemFiles (NSwb, switch.cpp), so a plain "-bm" with
+  // files already on turns files off. The settings writer emits forced
+  // =/_ prefixes and the dialogs assign the fields directly, so only a
   // hand-typed plain -b* hits that fall-through.
   //   That last sentence was aspirational when it was written: the
-  // settings writer emitted NONE of these five fields, so a chart cast
-  // with Moshier, JPL, Placalc or Matrix came back as Swiss next run.
-  // It writes all five now, ahead of the "=b" line so that line settles
-  // fEphemFiles last, and ahead of "=0b"/"=0n" so a saved file applies
-  // its backend before locking the old engines out. And a suffix its -0
-  // guard refuses no longer falls through to the toggle: it is an error
-  // now, because reaching the toggle with nothing set left NO engine
-  // running and cast every body at 0Ari00'00" in silence.
-  flag fPlacalcAst;  // -ba
-  flag fPlacalcPla;  // -bp
+  // settings writer emitted NONE of these fields, so a chart cast with
+  // Moshier, JPL or Matrix came back as Swiss next run. It writes them
+  // all now, ahead of the "=b" line so that line settles fEphemFiles
+  // last, and ahead of "=0b"/"=0n" so a saved file applies its backend
+  // before locking the old engine out. And a suffix its -0 guard refuses
+  // no longer falls through to the toggle: it is an error now, because
+  // reaching the toggle with nothing set left NO engine running and cast
+  // every body at 0Ari00'00" in silence.
+  //   The Placalc backend (-bp, with -ba for its asteroids) was removed
+  // on 2026-09-04: 698 lines nothing in the project executed, behind a
+  // switch the shipped astrolog.as locks out. Both spellings are still
+  // accepted so saved settings files load; see NSwb.
   flag fMatrixPla;   // -bm
   flag fMatrixStar;  // -bU
   flag fEquator;     // -sr
@@ -2238,7 +2223,7 @@ typedef struct _UserSettings {
   flag fNoRead;        // -0i
   flag fNoQuit;        // -0q
   flag fNoGraphics;    // -0X
-  flag fNoPlacalc;     // -0b
+  flag fNoOldCalc;     // -0b (once -0b also locked Placalc out)
   flag fNoNetwork;     // -0n
   flag fNoExp;         // -0~
   flag fExpOff;        // -~0

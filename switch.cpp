@@ -2164,29 +2164,35 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     us.nSwissEph = FSwitchF(us.nSwissEph == 2) * 2;
   else if (ch1 == 's')
     us.nSwissEph = FSwitchF(us.nSwissEph == 1);
-  else if (ch1 == 'p') {
+  else if (ch1 == 'p' || ch1 == 'a') {
+    // The Placalc backend was removed on 2026-09-04 (698 lines nothing
+    // executed, behind a switch the shipped astrolog.as locks out), but
+    // its two spellings stay ACCEPTED: the settings writer emitted
+    // "_bp" and "_ba" into every file it saved before then, and a saved
+    // file must keep loading. The off forms are silent. A request to turn
+    // it on -- "=bp", or a bare "-bp" toggle -- is answered with what
+    // actually happens, once, rather than refused: refusing would abort
+    // loading a settings file over an engine that no longer exists.
+    // Neither form reaches the fEphemFiles toggle below.
+    if (FSwitchF(fFalse))
+      PrintWarning("The Placalc ephemeris has been removed; "
+        "the Swiss Ephemeris is used instead.");
+    return 0;
+  } else if (ch1 == 'm') {
     // A subswitch refused by its -0 guard used to fall out of the chain
     // and reach the fEphemFiles toggle below anyway, turning the working
     // backend off with nothing put in its place: with the shipped
-    // astrolog.as ("=0b"), plain "-bp" or "-bm" cast every body at
-    // 0Ari00'00" and said nothing. Refuse the whole switch instead, the
-    // way fNoGraphics and fNoRead already do. Only a request to turn the
-    // backend ON is refused: the settings writer emits "_bp"/"_bm" into
-    // every saved file, and those must stay loadable under "=0b".
-    if (us.fNoPlacalc && FSwitchF(us.fPlacalcPla)) {
-      ErrorArgv("bp");
-      return tcError;
-    }
-    SwitchF(us.fPlacalcPla);
-  } else if (ch1 == 'm') {
-    if (us.fNoPlacalc && FSwitchF(us.fMatrixPla)) {
+    // astrolog.as ("=0b"), a plain "-bm" cast every body at 0Ari00'00"
+    // and said nothing. Refuse the whole switch instead, the way
+    // fNoGraphics and fNoRead already do. Only a request to turn the
+    // backend ON is refused: the settings writer emits "_bm" into every
+    // saved file, and that must stay loadable under "=0b".
+    if (us.fNoOldCalc && FSwitchF(us.fMatrixPla)) {
       ErrorArgv("bm");
       return tcError;
     }
     SwitchF(us.fMatrixPla);
-  } else if (ch1 == 'a')
-    SwitchF(us.fPlacalcAst);
-  else if (ch1 == 'U')
+  } else if (ch1 == 'U')
     SwitchF(us.fMatrixStar);
   else if (ch1 == 'J') {
     if (us.fNoNetwork && FSwitchF(us.nSwissEph == 3)) {
@@ -3650,7 +3656,7 @@ static int NSwZero(CONST char *szSwitch, PARSEIN *pin)
     case 'i': us.fNoRead     = fTrue; break;
     case 'q': us.fNoQuit     = fTrue; break;
     case 'X': us.fNoGraphics = fTrue; break;
-    case 'b': us.fNoPlacalc  = fTrue; break;
+    case 'b': us.fNoOldCalc  = fTrue; break;
     case 'n': us.fNoNetwork  = fTrue; break;
     case '~': us.fNoExp      = fTrue; break;
     default: FErrorSubswitch("0", ch1, fTrue); return tcError;

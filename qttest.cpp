@@ -3453,30 +3453,31 @@ static void TestChartListFilterQt()
 
 static void TestEphemerisListQt()
 {
-  flag fNetSav = us.fNoNetwork, fPlaSav = us.fNoPlacalc;
+  flag fNetSav = us.fNoNetwork, fOldSav = us.fNoOldCalc;
   QString str;
 
   Group("Ephemeris list");
 
-  us.fNoNetwork = us.fNoPlacalc = fTrue;
+  us.fNoNetwork = us.fNoOldCalc = fTrue;
   str = StrEphemListQt();
   Check(!str.isEmpty(), "the ephemeris list was found at all (modal seen: \"%s\")",
     s_strComboWin.toLocal8Bit().constData());
   Check(!str.contains("Web"),
     "no web query offered when web queries are off: %s",
     str.toLocal8Bit().constData());
-  Check(!str.contains("Placalc") && !str.contains("Matrix"),
-    "no Placalc or Matrix offered when those are off: %s",
+  Check(!str.contains("Matrix"),
+    "no Matrix offered when it is off: %s",
     str.toLocal8Bit().constData());
   Check(str.contains("Swiss"), "Swiss Ephemeris is still offered");
 
-  us.fNoNetwork = us.fNoPlacalc = fFalse;
+  us.fNoNetwork = us.fNoOldCalc = fFalse;
   str = StrEphemListQt();
   Check(str.contains("Web"), "the web query is offered when allowed");
-  Check(str.contains("Placalc") && str.contains("Matrix"),
-    "Placalc and Matrix are offered when allowed");
+  Check(str.contains("Matrix"), "Matrix is offered when allowed");
+  Check(!str.contains("Placalc"),
+    "Placalc is never offered: the backend was removed on 2026-09-04");
 
-  us.fNoNetwork = fNetSav; us.fNoPlacalc = fPlaSav;
+  us.fNoNetwork = fNetSav; us.fNoOldCalc = fOldSav;
   printf("  the ephemeris list omits what the user switched off\n");
 }
 
@@ -4418,8 +4419,8 @@ static void TestNumericOracleQt()
     // The same borrow list TestCastCookingQt's pinned-cusp check uses,
     // plus the backend, since this group is about which engine answers.
     Borrow bEphem(us.fEphemFiles, fTrue), bSid(us.fSidereal, fFalse);
-    Borrow bPla(us.fPlacalcPla, fFalse), bMat(us.fMatrixPla, fFalse);
-    Borrow bSwiss(us.nSwissEph, 0), bNoPla(us.fNoPlacalc, fFalse);
+    Borrow bMat(us.fMatrixPla, fFalse);
+    Borrow bSwiss(us.nSwissEph, 0), bNoOld(us.fNoOldCalc, fFalse);
     Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fFalse);
     Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
     Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
@@ -4590,7 +4591,7 @@ static void TestNumericOracleQt()
     // Leg 4 runs at one mid latitude on whichever engine is configured,
     // which is why seven systems degenerating toward the pole went
     // unnoticed. There are two engines -- SwissHouse() when
-    // us.fEphemFiles && !us.fPlacalcPla, Astrolog's own ComputeHouses()
+    // us.fEphemFiles, Astrolog's own ComputeHouses()
     // otherwise -- and ComputeHouses() guards exactly two systems
     // (calc.cpp:508, Placidus and Koch fall back to Porphyry).
     //

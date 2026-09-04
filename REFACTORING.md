@@ -1502,7 +1502,11 @@ corners.** `fEphemFiles`, `fPlacalcPla`, `fMatrixPla`, `fMatrixStar`,
 `nSwissEph` 0-3 jointly encode one choice (astrolog.h:1806-1820);
 illegal combinations are representable, meaning lives in negations
 ("ephem files but not Placalc" = Swiss), and each math entry point
-dispatches longhand. *Direction:* document the reachable state space
+dispatches longhand. *(2026-09-04: the Placalc backend is removed, and
+`fPlacalcPla` and `fPlacalcAst` with it; the selector is two flags and
+an int now, the "not Placalc" negation is gone from every `FCm*()`
+macro, and the state table in astrolog.h has five rows instead of
+six.)* *Direction:* document the reachable state space
 (which switch sequences produce what); collapsing to one derived enum
 is worthwhile but belongs to the T3 table work, since the flags are set
 by switch parsing. *Cost:* documentation now, enum later.

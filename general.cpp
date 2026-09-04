@@ -1619,25 +1619,6 @@ flag FErrorSubswitch(CONST char *szOpt, char chSub, flag f)
 }
 
 
-#ifdef PLACALC
-// Print error messages dealing with ephemeris file access.
-
-void ErrorEphem(CONST char *sz, long l)
-{
-  char szT[cchSzDef];
-
-  if (is.fNoEphFile)
-    return;
-  if (l < 0)
-    sprintf2(S(szT), "Ephemeris file %s not found.\n", sz);
-  else
-    sprintf2(S(szT), "Seek error in file %s at position %ld.\n", sz, l);
-  is.fNoEphFile = fTrue;
-  PrintWarning(szT);
-}
-#endif
-
-
 // Set an Ansi or MS Windows text color.
 
 void AnsiColor(KI k)

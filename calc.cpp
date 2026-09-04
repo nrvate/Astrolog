@@ -77,12 +77,7 @@ long MdyToJulian(int mon, int day, int yea)
     (mon < ciGreg.mon || (mon == ciGreg.mon && day < ciGreg.day))))
     fGreg = fFalse;
 #ifdef SWISS
-  if (!us.fPlacalcPla)
-    jd = SwissJulDay(mon, day, yea, 12.0, fGreg) + rRound;
-#endif
-#ifdef PLACALC
-  if (us.fPlacalcPla)
-    jd = julday(mon, day, yea, 12.0, fGreg) + rRound;
+  jd = SwissJulDay(mon, day, yea, 12.0, fGreg) + rRound;
 #endif
   return (long)RFloor(jd);
 #else
@@ -116,16 +111,8 @@ void JulianToMdy(real JD, int *mon, int *day, int *yea)
   }
 #endif
 #ifdef SWISS
-  if (!us.fPlacalcPla) {
-    SwissRevJul(JD, JD >= 2299171.0 /* Oct 15, 1582 */, mon, day, yea, &tim);
-    return;
-  }
-#endif
-#ifdef PLACALC
-  if (us.fPlacalcPla) {
-    revjul(JD, JD >= 2299171.0 /* Oct 15, 1582 */, mon, day, yea, &tim);
-    return;
-  }
+  SwissRevJul(JD, JD >= 2299171.0 /* Oct 15, 1582 */, mon, day, yea, &tim);
+  return;
 #endif
   *mon = mJan; *day = 1; *yea = 2026;
 }
@@ -1036,7 +1023,7 @@ CONST int rgObjJPL[cThing+1] = {0/*399*/, 10, 301,
 // Each if is one reason to skip, checked in the order the old inline
 // condition chain OR'd them together.
 
-flag FSkipEphem(int i, int objCentCalc, flag fSwiss, flag fJPLPla)
+flag FSkipEphem(int i, int objCentCalc, flag fJPLPla)
 {
   // Restricted, and nothing else needs it: the Sun, Moon, and Earth are
   // always computed, as is a Node whose opposite Node is unrestricted,
@@ -1053,13 +1040,7 @@ flag FSkipEphem(int i, int objCentCalc, flag fSwiss, flag fJPLPla)
   // when JPL Horizons does its own centering, or the Swiss Ephemeris is
   // computing a barycentric Earth.
   if (i == objCentCalc && !fJPLPla &&
-    !(fSwiss && objCentCalc == oEar && us.fBarycenter))
-    return fTrue;
-
-  // The Placalc backend computes nothing from Fortune onward, and the
-  // -ba setting suppresses its four main asteroids.
-  if (!fSwiss && (i >= oFor ||
-    (us.fPlacalcAst && FBetween(i, oCer, oVes))))
+    !(objCentCalc == oEar && us.fBarycenter))
     return fTrue;
 
   // JPL Horizons mode has no Earth entry in rgObjJPL[]: the Earth is
@@ -1083,7 +1064,7 @@ void ComputeEphem(real t)
   int objCentCalc, objOrbit, imax, i, j;
   real r1, r2, r3, r4, r5, r6, dist1 = 0.0, dist2 = 0.0, objPla, altPla, objEar, altEar,
     rT;
-  flag fSwiss = !us.fPlacalcPla, fJPLPla, fJPL, fRet;
+  flag fJPLPla, fJPL, fRet;
   PT3R ptPla, ptEar, vEar;
 #ifdef JPLWEB
   flag fSav;
@@ -1092,19 +1073,19 @@ void ComputeEphem(real t)
   // Can compute the positions of Sun through Pluto, Chiron, the four
   // asteroids, Lilith, North Node, and Uranians using ephemeris files.
 
-  fJPLPla = fSwiss && us.nSwissEph == 3;
+  fJPLPla = us.nSwissEph == 3;
   objCentCalc = us.objCenter;
   if (objCentCalc > oNorm || FNodal(objCentCalc) ||
-    (!fSwiss && objCentCalc != oEar) || (fJPLPla && us.objCenter > oSun) ||
+    (fJPLPla && us.objCenter > oSun) ||
     FJPL(FCust(objCentCalc) && rgTypSwiss[objCentCalc - custLo] == 4))
     objCentCalc = oSun;
 
   imax = Min(oNorm, is.nObj); imax = Max(imax, oSun);
   for (i = oEar; i <= imax; i++) {
-    if (FSkipEphem(i, objCentCalc, fSwiss, fJPLPla))
+    if (FSkipEphem(i, objCentCalc, fJPLPla))
       continue;
 
-    // Calculate planet using Swiss Ephemeris, Placalc, or JPL Horizons
+    // Calculate planet using Swiss Ephemeris or JPL Horizons
     fRet = fFalse;
     fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) ||
       (fJPLPla && FBetween(i, 0, cThing) && rgObjJPL[i] > 0));
@@ -1123,18 +1104,13 @@ void ComputeEphem(real t)
 #ifdef SWISS
       if (FCust(i) && rgTypSwiss[i - custLo] == 5)
         fRet = fTrue;
-      else if (fSwiss) {
+      else {
         objOrbit = us.fMoonMove ? ObjOrbit(i) : -1;
         if (objOrbit < 0 || objOrbit == oSun)
           objOrbit = objCentCalc;
         fRet = FSwissPlanet(i, JulianDayFromTime(t), objOrbit,
           &r1, &r2, &r3, &r4, &r5, &r6);
       }
-#endif
-#ifdef PLACALC
-      if (!fSwiss)
-        fRet = FPlacalcPlanet(i, JulianDayFromTime(t), objCentCalc != oEar,
-          &r1, &r2, &r3, &r4, &r5, &r6);
 #endif
     }
     if (!fRet)
@@ -1194,13 +1170,13 @@ void ComputeEphem(real t)
   } // i
 
   // If Sun is solar system barycenter, offset it by Earth's position.
-  if (us.fBarycenter && fSwiss && !fJPLPla && objCentCalc == oEar) {
+  if (us.fBarycenter && !fJPLPla && objCentCalc == oEar) {
     PtNeg2(space[oSun], space[oEar]);
     ProcessPlanet(oSun, 0.0);
   }
 
   // The central object should be opposite the Sun (or the Earth).
-  if (fSwiss && !FNodal(us.objCenter)) {
+  if (!FNodal(us.objCenter)) {
     i = (objCentCalc != oSun ? oSun : oEar);
     PtNeg2(space[objCentCalc], space[i]);
   }
@@ -1218,7 +1194,7 @@ void ComputeEphem(real t)
   if (objCentCalc != oEar)
     for (i = oNod; i <= oLil; i++) if (!ignore[i]) {
       PtAdd2(space[i], space[oEar]);
-      if (fSwiss && us.objCenter > oSun && !FNodal(us.objCenter)) {
+      if (us.objCenter > oSun && !FNodal(us.objCenter)) {
         PtSub2(space[i], space[oSun]);
       }
       ProcessPlanet(i, is.rSid);
@@ -1234,7 +1210,7 @@ void ComputeEphem(real t)
       fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) || (fJPLPla &&
         (i == oEar || (FBetween(i, 0, cThing) && rgObjJPL[i] > 0))));
       // Don't shift if Swiss Ephemeris already shifted for us.
-      if (fSwiss && !fJPL && !FNodal(i) && !FNodal(us.objCenter) &&
+      if (!fJPL && !FNodal(i) && !FNodal(us.objCenter) &&
         us.objCenter <= oNorm && us.objCenter == objCentCalc)
         continue;
       if (fJPL && !fJPLPla && us.objCenter == objCentCalc)
@@ -1261,7 +1237,7 @@ void ComputeEphem(real t)
       // Don't relocate if Swiss Ephemeris already relocated earlier.
       fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) || (fJPLPla &&
         (i == oEar || (FBetween(i, 0, cThing) && rgObjJPL[i] > 0))));
-      if (fSwiss && us.objCenter <= oNorm && !fJPL)
+      if (us.objCenter <= oNorm && !fJPL)
         continue;
       // Don't relocate if object already orbits Sun or central planet.
       j = ObjOrbit(i);
@@ -1413,7 +1389,7 @@ real CastChart(int nContext)
 #ifdef MATRIX
   // Go calculate planet, Moon, and North Node positions.
 
-  if (FCmMatrix() || (FCmPlacalc() && us.fUranian)) {
+  if (FCmMatrix()) {
     ComputePlanets();
     if (!ignore[oMoo] || !ignore[oNod] || !ignore[oSou] || !ignore[oFor]) {
       ComputeLunar(&planet[oMoo], &planetalt[oMoo],
