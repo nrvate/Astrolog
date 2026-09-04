@@ -3567,3 +3567,36 @@ falsify from here, the size of this record, a runner image GitHub will
 retire, and six tags whose releases were pruned. None of it is a
 change.
 
+**2026-09-04, night — the warnings ledger is empty.** The maintainer
+asked why the warnings were being kept rather than fixed, and the honest
+answer was that each class had a verdict saying "not now" and nobody had
+come back. So: fixed. The ledger held 113 lines that morning; what they
+were and what was done is in the header of `tools/warnings.txt` and in
+commit `5f2aa40`'s message. The numbers:
+
+| | before | after |
+|---|---|---|
+| `-Wall` warning lines across the four GCC builds | 502 | 0 |
+| ledger entries | 113 | 0 |
+| the Qt6 ledger | 0 | 0 |
+| suite | 4543/0 | 4543/0 |
+| chart matrix vs the previous commit | | identical, 7,072 lines |
+| influence matrix | | identical, 762 lines |
+| switch matrix | | identical, 42,874 lines |
+| graphics matrix | | identical, 455 checksums |
+
+The vendored Swiss Ephemeris is exempted in `Makefile.srcs` rather than
+edited -- `-Wno-write-strings -Wno-sign-compare` on its objects, with
+`override` so the audit's command-line flags do not displace it -- and
+that exemption removed the header-attributed sites too, since those
+literals are instantiated only when the vendored sources are compiled.
+
+What changes about the ledger's meaning: a new line in it is now a new
+warning in the fork's own code, and the answer is to fix it rather than
+to record it with a verdict. The `ubuntu-22.04` pin on the warnings job
+was there to keep 113 known lines stable across compiler versions; with
+nothing to keep stable, the pin's only remaining purpose is to stop a
+newer g++'s new warnings from turning the job red -- which is now the
+job's purpose. That is the next thing to try, and it is a CI change,
+not a code one.
+
