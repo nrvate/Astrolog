@@ -58,11 +58,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Tools
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y apt-utils createrepo-c gnupg rpm
-
+        run: tools/ci-deps.sh apt-utils createrepo-c gnupg rpm
       # Every release, so old versions stay installable.
       # Every release that still exists -- release.yml prunes to the newest
       # two -- and only the distributions tools/distros.py names today.

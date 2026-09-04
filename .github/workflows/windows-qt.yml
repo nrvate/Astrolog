@@ -256,11 +256,7 @@ jobs:
       # silent uninstall, require nothing left. The script's header says
       # why Wine is the only automatable route (UAC).
       - name: Install NSIS and Wine
-        run: |
-          sudo dpkg --add-architecture i386
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y nsis wine wine64 wine32
+        run: tools/ci-deps.sh --i386 nsis wine wine64 wine32
       - run: tools/package-windows-installer.sh out/package/astrolog-windows "out/package/astrolog-$VER-setup.exe"
       - run: tools/ci-verify-windows-installer.sh "out/package/astrolog-$VER-setup.exe" out/package/astrolog-windows
 

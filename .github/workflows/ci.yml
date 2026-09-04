@@ -71,17 +71,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install the cross toolchain
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y g++-mingw-w64-x86-64
-
+        run: tools/ci-deps.sh g++-mingw-w64-x86-64
       # 1.1. The oracle. wdriver.cpp and wdialog.cpp are compiled by no
       # other makefile in the tree, so this job is the only thing in
       # existence that diagnoses them.
@@ -116,17 +106,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install Qt5
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y qtbase5-dev pkg-config
-
+        run: tools/ci-deps.sh qtbase5-dev pkg-config
       - name: Build both Qt binaries
         run: make qt -j4 && make qt-test -j4
 
@@ -202,17 +182,7 @@ jobs:
           python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h
 
       - name: Install X11 headers for the console build
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev
-
+        run: tools/ci-deps.sh libx11-dev
       # The console build is the one that compiles the X11 backend at all,
       # and it is what the round trip and every differential matrix drive.
       - name: Build the console binary
@@ -259,17 +229,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install Qt6 (and deliberately not Qt5)
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y qt6-base-dev pkg-config
-
+        run: tools/ci-deps.sh qt6-base-dev pkg-config
       - name: Build against Qt6
         run: |
           make qt6 -j4 QT6_PKGCONFIG= QT6_LIBDIR=
@@ -302,18 +262,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install Qt5 and X11 headers
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
-            desktop-file-utils
-
+        run: tools/ci-deps.sh qtbase5-dev pkg-config libx11-dev desktop-file-utils
       - name: Build and install into a scratch prefix
         run: |
           make -j4 && make qt -j4
@@ -381,17 +330,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install X11 headers
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev
-
+        run: tools/ci-deps.sh libx11-dev
       # Fast, and it belongs here rather than with the pure-Python audits
       # because it needs a built binary and renders 227 bitmaps.
       #

@@ -77,40 +77,32 @@ jobs:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
+      # NO qt6-base-dev, and the reason is worth the space because
+      # installing it looks like the obvious fix and does nothing.
+      #
+      # warning_audit.py's Qt6 leg skips here -- "qt6: skipped, no Qt6"
+      # -- so tools/warnings-qt6.txt is checked by nothing. Installing
+      # qt6-base-dev was tried on 2026-09-03 and changed the message
+      # and not the outcome: measured in the ubuntu:22.04 image
+      # itself, that package ships ZERO pkg-config files, so
+      # "pkg-config --exists Qt6Widgets" cannot succeed on this runner
+      # whatever PKG_CONFIG_PATH says.
+      #
+      # And the runner cannot simply move. This job is pinned to
+      # ubuntu-22.04 for its COMPILER: tools/warnings.txt is a ledger
+      # of what g++ 11 says, and ci-assert-toolchain.sh fails if the
+      # major version differs, because g++ 13 objects to things g++ 11
+      # does not. ubuntu-latest has Qt6 with .pc files and g++ 13, so
+      # the two requirements are mutually exclusive on one runner.
+      #
+      # So the Qt6 ledger is checked by the warnings-qt6 job below, on
+      # ubuntu-latest, with --qt6-only: that leg is a DIFFERENCE between
+      # each Qt6 build and its Qt5 twin under the same compiler, so the
+      # compiler subtracts out and no second baseline is needed.
+      # tools/ci-assert-slow-lane.sh tolerates this job's skip only while
+      # that job is green.
       - name: Install every toolchain the audit compiles with
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          # NO qt6-base-dev, and the reason is worth the space because
-          # installing it looks like the obvious fix and does nothing.
-          #
-          # warning_audit.py's Qt6 leg skips here -- "qt6: skipped, no Qt6"
-          # -- so tools/warnings-qt6.txt is checked by nothing. Installing
-          # qt6-base-dev was tried on 2026-09-03 and changed the message
-          # and not the outcome: measured in the ubuntu:22.04 image
-          # itself, that package ships ZERO pkg-config files, so
-          # "pkg-config --exists Qt6Widgets" cannot succeed on this runner
-          # whatever PKG_CONFIG_PATH says.
-          #
-          # And the runner cannot simply move. This job is pinned to
-          # ubuntu-22.04 for its COMPILER: tools/warnings.txt is a ledger
-          # of what g++ 11 says, and ci-assert-toolchain.sh fails if the
-          # major version differs, because g++ 13 objects to things g++ 11
-          # does not. ubuntu-latest has Qt6 with .pc files and g++ 13, so
-          # the two requirements are mutually exclusive on one runner.
-          #
-          # Closing this properly means a separate job on a newer image
-          # with its own baseline for that compiler. Left open rather than
-          # papered over -- see QT_CI_PLAN.md.
-          sudo apt-get install -y qtbase5-dev pkg-config libx11-dev \
-            g++-mingw-w64-x86-64
-
+        run: tools/ci-deps.sh qtbase5-dev pkg-config libx11-dev g++-mingw-w64-x86-64
       - name: The baseline describes these compilers
         run: tools/ci-assert-toolchain.sh
 
@@ -141,11 +133,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install both Qts
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y qtbase5-dev qt6-base-dev pkg-config libx11-dev
-
+        run: tools/ci-deps.sh qtbase5-dev qt6-base-dev pkg-config libx11-dev
       # QT6_PKGCONFIG emptied: its default points at the maintainer's
       # hand-built Qt6 under /usr/local/qt6, which is off pkg-config's
       # path. A distribution's own needs no help being found.
@@ -190,11 +178,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install the build dependencies
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev qtbase5-dev pkg-config
-
+        run: tools/ci-deps.sh libx11-dev qtbase5-dev pkg-config
       - name: Coverage of the four matrices and the Qt suite
         run: tools/coverage-report.sh out/coverage
 
@@ -247,23 +231,39 @@ jobs:
   # memory errors, but every body would fall back to Moshier and the
   # ephemeris code paths would go unexercised, silently. Same trap as
   # item 7.2b's baseline binary, from the other end.
-  asan:
-    name: ASan over the switch and graphics matrices
+  # Two jobs for the two surfaces, since 2026-09-04 (late): with the four
+  # sanitizer checks already in parallel, "both surfaces" in one job was
+  # the release's long pole at 417 s, and asan-sweep.sh takes the surface
+  # as its argument. Each builds its own instrumented binary; the
+  # matrices are disjoint, so nothing is measured twice.
+  asan-switches:
+    name: ASan over the switch matrix
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install the console build's dependencies
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev
-      - name: Both surfaces
+        run: tools/ci-deps.sh libx11-dev
+      - name: The 529-invocation switch matrix
+        env:
+          ASAN_SWEEP_CFG: -Yi1 ${{ github.workspace }}/ephem
+        run: tools/asan-sweep.sh switches
+
+  asan-graphics:
+    name: ASan over the graphics matrix
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Install the console build's dependencies
+        run: tools/ci-deps.sh libx11-dev
+      - name: Every graphics render
         env:
           ASAN_SWEEP_CFG: -Yi1 ${{ github.workspace }}/ephem
           GRAPHICS_MATRIX_CFG: -Yi1 ${{ github.workspace }}/ephem
-        run: tools/asan-sweep.sh
+        run: tools/asan-sweep.sh graphics
 
   # UndefinedBehaviorSanitizer, which is a different net rather than a
   # cheaper one. ASan finds memory errors; UBSan finds signed overflow,
@@ -287,10 +287,7 @@ jobs:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install both builds' dependencies
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev qtbase5-dev pkg-config
+        run: tools/ci-deps.sh libx11-dev qtbase5-dev pkg-config
       - name: UndefinedBehaviorSanitizer over both matrices
         run: tools/ubsan-sweep.sh
 
@@ -322,10 +319,7 @@ jobs:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install the Qt build's dependencies
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev qtbase5-dev pkg-config
+        run: tools/ci-deps.sh libx11-dev qtbase5-dev pkg-config
       - name: The Qt suite under AddressSanitizer
         env:
           ASAN_OPTIONS: detect_leaks=0
@@ -363,10 +357,7 @@ jobs:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install the console build's dependencies
-        run: |
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev
+        run: tools/ci-deps.sh libx11-dev
       - name: Astrolog against upstream Swiss Ephemeris's own swetest
         run: |
           make -j4
@@ -402,19 +393,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install the cross toolchain and Wine
-        run: |
-          sudo dpkg --add-architecture i386
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y g++-mingw-w64-x86-64 libx11-dev \
-            wine wine64 xvfb metacity xdotool imagemagick
-
+        run: tools/ci-deps.sh --i386 g++-mingw-w64-x86-64 libx11-dev wine wine64 xvfb metacity xdotool imagemagick
       - name: Build all three binaries
         run: make -j4 && make wcli -j4 && make -f Makefile.win -j4
 
