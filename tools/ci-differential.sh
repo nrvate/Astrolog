@@ -206,9 +206,14 @@ if [ "${DIFFERENTIAL_REPORT:-}" = 1 ]; then
   exit 0
 fi
 
-if git log --format=%B "$base..HEAD" | grep -qi '^Behaviour-change:'; then
+# $basesha..$headsha, the SHAs resolved when the binaries were built,
+# not "$base..HEAD" resolved now. Given "HEAD~1" as the base, a commit
+# made while the matrices ran moved both ends: the range searched held
+# only the new commit and the declaration in the one that was measured
+# went unseen. Happened once, 2026-09-04, on a declared change.
+if git log --format=%B "$basesha..$headsha" | grep -qi '^Behaviour-change:'; then
   echo "== declared by a Behaviour-change: trailer, so this is expected:"
-  git log --format=%B "$base..HEAD" | grep -i '^Behaviour-change:' | sed 's/^/     /'
+  git log --format=%B "$basesha..$headsha" | grep -i '^Behaviour-change:' | sed 's/^/     /'
   exit 0
 fi
 echo "== and no commit between $basesha and $headsha declares it."
