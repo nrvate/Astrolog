@@ -82,8 +82,7 @@
 // setEditText(), because adding the first item resets the current index
 // and would overwrite the edit text.
 
-// Fill a combo the resource already placed, the counterpart of
-// NewComboQt() for the transcribed dialogs.
+// Fill a combo the resource already placed, for the transcribed dialogs.
 static void FillComboQt(QComboBox *pcb, CONST QString &strCur,
   CONST QStringList &rgstr)
 {
@@ -95,17 +94,6 @@ static void FillComboQt(QComboBox *pcb, CONST QString &strCur,
     pcb->addItem(rgstr[i]);
   pcb->setEditText(strCur);
 }
-
-static QComboBox *NewComboQt(CONST QString &strCur, CONST QStringList &rgstr)
-{
-  QComboBox *pcb = new QComboBox();
-
-  pcb->setEditable(true);
-  pcb->addItems(rgstr);
-  pcb->setEditText(strCur);
-  return pcb;
-}
-
 
 // The suggestion lists Windows puts on the chart info fields, from
 // SetEditMDYT() and SetEditSZOA() in wdialog.cpp. Kept identical to
@@ -535,222 +523,6 @@ static QString SzFormatRQt(real r, int n)
   FormatR(S(sz), r, n);
   return QString(sz);
 }
-
-// The object labels Windows' dialogs actually show, taken from the CONTROL
-// entries of dlgRestrict in astrolog.rc. They aren't szObjName[]: Windows
-// spells out "Pallas Athena" and "Part of Fortune" where the internal name
-// is the abbreviated "Pallas" and "Fortune". The "&" mnemonics are the ones
-// Windows assigns, and Qt reads them the same way, so this brings the
-// keyboard shortcuts across too.
-
-static CONST char *rgszObjDlgQt[] = {
-  "&Earth", "&Sun", "M&oon",
-  "Mercur&y", "&Venus", "&Mars",
-  "&Jupiter", "Sa&turn", "Ur&anus",
-  "&Neptune", "&Pluto", "&Chiron",
-  "Ceres", "Pallas Athena", "Juno",
-  "Vesta", "North Node", "South Node",
-  "Lilith", "Part of Fortune", "Vertex",
-  "East Point", "Ascendant", "&2nd Cusp",
-  "&3rd Cusp", "Nadir", "&5th Cusp",
-  "&6th Cusp", "&Descendant", "&8th Cusp",
-  "&9th Cusp", "Mid&heaven", "&11th Cusp",
-  "12th Cusp", "Vu&lcan", "Cupido",
-  "Hades", "Zeus", "Kronos",
-  "Apollon", "Admetos", "Vulkanus",
-  "Poseidon", "Hygiea", "Pholus",
-  "Eris", "Haumea", "Makemake",
-  "Gonggong", "Quaoar", "Sedna",
-  "Orcus" };
-#define cszObjDlgQt (int)(sizeof(rgszObjDlgQt) / sizeof(char *))
-
-// And the moon and COB labels, from dlgMoons the same way. Windows writes
-// "Jupiter COB" where the internal name is the abbreviated "JupCOB".
-static CONST char *rgszMoonDlgQt[] = {
-  "P&hobos",
-  "&Deimos",
-  "&Ganymede",
-  "&Callisto",
-  "&Io",
-  "&Europa",
-  "&Titan",
-  "Rhea",
-  "Iapetus",
-  "Dione",
-  "Tethys",
-  "Enceladus",
-  "Mimas",
-  "Hyperion",
-  "Titania",
-  "Oberon",
-  "Umbriel",
-  "Ariel",
-  "Miranda",
-  "Triton",
-  "Proteus",
-  "Nereid",
-  "Char&on",
-  "Hydra",
-  "Nix",
-  "Kerberos",
-  "Styx",
-  "Jupiter COB",
-  "Saturn COB",
-  "Uranus COB",
-  "Neptune COB",
-  "Pluto COB" };
-#define cszMoonDlgQt (int)(sizeof(rgszMoonDlgQt) / sizeof(char *))
-
-// The aspect labels from dlgAspect, likewise. Windows writes out
-// "Conjunction" and "Opposition" where szAspectName[] has the short
-// "Conjunct" and "Opposite", and spells TriDecile with an i.
-static CONST char *rgszAspDlgQt[] = {
-  "&Conjunction",
-  "&Opposition",
-  "&Square",
-  "&Trine",
-  "Se&xtile",
-  "&Inconjunct",
-  "S&emiSextile",
-  "SemiSquare",
-  "SesquiQuadrate",
-  "&Quintile",
-  "&BiQuintile",
-  "SemiQuintile",
-  "Se&ptile",
-  "&Novile",
-  "BiNovile",
-  "BiSeptile",
-  "TriSeptile",
-  "QuatroNovile",
-  "TriDecile",
-  "Undecile",
-  "BiUndecile",
-  "TriUndecile",
-  "QuadUndecile",
-  "QuinUndecile" };
-#define cszAspDlgQt (int)(sizeof(rgszAspDlgQt) / sizeof(char *))
-
-// The label for aspect "i" (1 based, as the aspect arrays are).
-static QString SzAspDlgQt(int i)
-{
-  if (i >= 1 && i - 1 < cszAspDlgQt && rgszAspDlgQt[i-1][0] != chNull)
-    return QString(rgszAspDlgQt[i-1]);
-  return QString(szAspectName[i]);
-}
-
-// And the fixed star labels from dlgStar. Windows writes "Rigil
-// Kentaurus", "Kaus Australis" and "Great Attractor" in full where the
-// internal names are truncated to fit a text column.
-static CONST char *rgszStarDlgQt[] = {
-  "&Sirius",
-  "Canopus",
-  "Rigil &Kentaurus",
-  "Arcturus",
-  "&Vega",
-  "Capella",
-  "Rigel",
-  "Procyon",
-  "&Betelgeuse",
-  "Achernar",
-  "Agena",
-  "Altair",
-  "Acrux",
-  "Aldebaran",
-  "Antares",
-  "Spica",
-  "Pollux",
-  "Fomalhaut",
-  "Deneb",
-  "Becrux",
-  "Regulus",
-  "Adara",
-  "Castor",
-  "Shaula",
-  "Bellatrix",
-  "Gacrux",
-  "Alnath",
-  "Alnilam",
-  "Miaplacidus",
-  "Alnair",
-  "Alioth",
-  "Dubhe",
-  "Wezen",
-  "Kaus Australis",
-  "Alkaid",
-  "Sargas",
-  "Menkalinan",
-  "Peacock",
-  "Alhena",
-  "Avior",
-  "Murzim",
-  "Alphard",
-  "Polaris",
-  "Algol",
-  "Suhail",
-  "Alcyone",
-  "&Andromeda",
-  "&Zeta Reticuli",
-  "Galactic &Center",
-  "&Great Attractor" };
-#define cszStarDlgQt (int)(sizeof(rgszStarDlgQt) / sizeof(char *))
-
-// The label for object "i" in a dialog: the Windows one where there is
-// one, otherwise the internal name. The Windows strings carry "&"
-// mnemonics, which is right for a checkbox -- Qt reads them the same way
-// -- but a QLabel renders the "&" literally, giving "&2nd Cusp". The
-// grids that label a row with static text want SzObjDlgPlainQt().
-static QString SzObjDlgQt(int i)
-{
-  if (i >= starLo && i - starLo < cszStarDlgQt &&
-    rgszStarDlgQt[i - starLo][0] != chNull)
-    return QString(rgszStarDlgQt[i - starLo]);
-  if (i >= moonsLo && i - moonsLo < cszMoonDlgQt &&
-    rgszMoonDlgQt[i - moonsLo][0] != chNull)
-    return QString(rgszMoonDlgQt[i - moonsLo]);
-  if (i >= 0 && i < cszObjDlgQt && rgszObjDlgQt[i][0] != chNull)
-    return QString(rgszObjDlgQt[i]);
-  return QString(szObjName[i]);
-}
-
-// Same label with the mnemonic marker removed, for static text.
-static QString SzObjDlgPlainQt(int i)
-{
-  return SzObjDlgQt(i).remove(QChar('&'));
-}
-
-// Windows lays its per-row setting grids out in several columns side by
-// side, sized to fit, rather than one tall scrolling list -- see the
-// repeated control X positions in each dlg* block of astrolog.rc. These
-// two put a Qt QGridLayout into the same shape.
-//
-// PlaceRowQt() says where row "i" lands given how many rows go in a
-// column and how many fields a row has. Grid row 0 is left for the column
-// headers, and one grid column between blocks acts as a gutter.
-
-static void PlaceRowQt(int i, int cRowPerCol, int cField, int *pnRow,
-  int *pnCol)
-{
-  *pnRow = i % cRowPerCol + 1;
-  *pnCol = (i / cRowPerCol) * (cField + 2);
-}
-
-// Add the header labels above every column block. "rgsz" lists the field
-// headings, left to right, not counting the row's name column.
-static void HeadersQt(QGridLayout *pgrid, int cCol, int cField,
-  CONST char **rgsz)
-{
-  int iCol, iField, nBase;
-
-  for (iCol = 0; iCol < cCol; iCol++) {
-    nBase = iCol * (cField + 2);
-    for (iField = 0; iField < cField; iField++)
-      pgrid->addWidget(new QLabel(rgsz[iField]), 0, nBase + 1 + iField);
-    if (iCol < cCol-1)
-      pgrid->setColumnMinimumWidth(nBase + cField + 1, 12);
-  }
-}
-
 
 /*
 ******************************************************************************
@@ -2195,45 +1967,6 @@ void ShowOpenChart2DialogQt()
 }
 
 
-// One chart's date/zone/location summary, as Windows formats it for the
-// Charts and Chart List dialogs. Those force us.fAnsiChar/us.fGraphics so
-// SzDate() and friends emit a real degree sign rather than the ASCII ':'
-// fallback; do the same, and additionally pin us.nCharset to Latin-1 so
-// the byte that comes back is predictable (ChDeg() would otherwise pick
-// the IBM codepage degree at 0xF8 depending on the user's -Ya setting).
-// That byte isn't valid UTF-8 either way, hence decoding as Latin-1.
-
-static QString SzChartDateLineQt(CONST CI *pci)
-{
-  char sz[cchSzMax];
-  int nSavChar = us.fAnsiChar, nSavSet = us.nCharset;
-  flag fSav = us.fGraphics;
-
-  us.fAnsiChar = 2; us.nCharset = ccLatin; us.fGraphics = fTrue;
-  int nDay = DayOfWeek(pci->mon, pci->day, pci->yea);
-  sprintf2(S(sz), "%.3s %s %s (%cT Zone %s) %s", szDay[nDay],
-    SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
-    ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
-  us.fAnsiChar = nSavChar; us.nCharset = nSavSet; us.fGraphics = fSav;
-  return QString::fromLatin1(sz);
-}
-
-
-// The same chart's "name; location". Kept separate from the line above
-// because this is user entered text that really may be UTF-8, so it must
-// not be swept up in that function's Latin-1 decode.
-
-static QString SzChartNameLineQt(CONST CI *pci)
-{
-  char sz[cchSzMax];
-
-  sprintf2(S(sz), "%s%s%s", FSzSet(pci->nam) ? pci->nam : "",
-    FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
-    FSzSet(pci->loc) ? pci->loc : "");
-  return QString::fromLocal8Bit(sz);
-}
-
-
 // The multi-chart manager, equivalent to Windows' DlgInfoAll ("Charts #3
 // Through #6" on the Info menu, though it covers all six): a summary line
 // per chart slot with buttons to load a file into it or edit its info,
@@ -2347,22 +2080,6 @@ void ShowChartsAllDialogQt()
 // Open Charts in Folder also fills. Charts can be sorted, filtered,
 // edited, deleted, loaded into any of the six chart slots, or copied back
 // out of one.
-
-// Case insensitive substring test matching Windows' filter loop, guarding
-// the NULL name/location that Windows' version would dereference.
-static flag FChartFieldMatchQt(CONST char *szField, CONST char *szFind)
-{
-  int j;
-
-  if (!FSzSet(szFind))
-    return fTrue;
-  if (!FSzSet(szField))
-    return fFalse;
-  for (j = 0; szField[j]; j++)
-    if (FEqSzSubI(szFind, &szField[j]))
-      return fTrue;
-  return fFalse;
-}
 
 // Chart List, transcribed from dlgList. The list holds every chart read in
 // this session; the buttons down the right sort it, move a chart into one
@@ -2649,23 +2366,6 @@ static void FillColorComboQt(QComboBox *pcb, KI ki, int nExtra)
   for (i = 0; i < iMax; i++)
     pcb->addItem(szColor[i]);
   pcb->setEditText(SzColor(ki));
-}
-
-static QComboBox *NewColorComboQt(KI ki, int nExtra)
-{
-  QComboBox *pcb = new QComboBox();
-
-  FillColorComboQt(pcb, ki, nExtra);
-  return pcb;
-}
-
-static QComboBox *AddColorComboQt(QFormLayout *pform, CONST char *szLabel,
-  KI ki, int nExtra)
-{
-  QComboBox *pcb = NewColorComboQt(ki, nExtra);
-
-  pform->addRow(QString(szLabel) + ":", pcb);
-  return pcb;
 }
 
 static int NColorFromComboQt(QComboBox *pcb);

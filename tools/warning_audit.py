@@ -271,31 +271,29 @@ HEADER = """\
 # *removed* line too, on purpose, so the ledger cannot quietly overstate
 # what is left.
 #
-# Two counts matter and they are not the same. This audit compiles with
-# -Wall so it sees more than an ordinary build ever will, which is right
-# for catching regressions and wrong for knowing what the person running
-# "make" has to read. That second number is ZERO as of 2026-09-01: all
-# four builds compile silently (work log items 151-152, from 49 warnings
-# in 722 lines of output). Everything below is -Wall only.
+# IT IS EMPTY, since 2026-09-04, and that is the state to keep it in. It
+# held 113 lines that morning -- 79 -Wmaybe-uninitialized, 18
+# -Wwrite-strings, 9 unused functions, 7 singles -- each with a recorded
+# verdict, and the maintainer's question was the right one: why not fix
+# them? So they were fixed, in about a hundred places, none of which
+# changes what the code does (the differential matrices and the suite
+# were byte-identical before and after): every variable GCC could not
+# prove assigned is initialised at its declaration, the unused dialog
+# helpers are deleted, the Win16 no-op calls are gone, the one macro is
+# a do/while, the one condition has its parentheses, and the string
+# literals that land in a char * carry the cast the file already used.
 #
-# Every class in here carries a recorded verdict, so a NEW line is a
-# genuinely new warning. The verdicts, with their evidence, are in
-# QT_GUI_PLAN.md's work log:
+# The vendored Swiss Ephemeris is the one exemption, and it is in the
+# makefiles rather than here: Makefile.srcs compiles its objects with
+# -Wno-write-strings -Wno-sign-compare, because those files are held at
+# upstream's exact version for tools/swetest-oracle.sh and an edit to
+# quiet a warning would make every future comparison a diff first.
 #
-#   -Wmaybe-uninitialized   item 150 -- 0 definite, and 23 of them appear
-#                           at one optimization level and not the other
-#   -Wformat-truncation=    items 151-152 -- 45 down to 1 by sizing the
-#                           destinations; the last is qtdialog.cpp and is
-#                           -Wall only
-#   -Wunused-result         closed in item 152 (placalc.cpp is third-party
-#                           and carries a pragma with its reason)
-#   -Wunused-function       item 149 -- qtdialog.cpp's documented dialog
-#                           helper toolkit, kept for the next session
-#   -Wunused-value          item 149 -- FreeProcInstance(), a Win16 no-op
-#   -Wsign-compare          third-party (sweph.cpp)
-#   -Wparentheses           third-party (placalc.cpp)
-#   -Wunused-variable       item 148 -- SwissHouse()'s discarded return
-#   -Wunused-but-set-var    item 148 -- CommandLineX()'s unfinished fPause
+# So a NEW line here is a genuinely new warning, in the fork's own code,
+# and the answer is to fix it -- not to add it. This audit compiles with
+# -Wall, which sees more than an ordinary build ever will; the person
+# running plain "make" has read nothing from the compiler since
+# 2026-09-01, and now neither does -Wall.
 #
 # Format: build, file, function, flag, count, message with numbers masked.
 #

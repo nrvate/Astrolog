@@ -222,11 +222,11 @@ Astrodienst Juldate is relative 31 Dec 1949, noon. */
   ** heliocentric MOON or EARTH
   ** geocentric any planet except MOON or nodes or LILITH
   */
-  if (calc_helio && (planet == MOON || planet == EARTH)
-    || calc_geo && planet != MOON
+  if ((calc_helio && (planet == MOON || planet == EARTH))
+    || (calc_geo && planet != MOON
     && planet != MEAN_NODE
     && planet != TRUE_NODE
-    && planet != LILITH) {
+    && planet != LILITH)) {
     if (earthrem.calculation_time != jd_ad) {
       hel (EARTH, jd_ad, alng, arad, azet, alngspeed, &rp, &zp);
       /* store earthdata for geocentric calculation: */

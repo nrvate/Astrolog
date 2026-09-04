@@ -39,3 +39,23 @@ SRC_SWISS = swecl.cpp swedate.cpp swehouse.cpp swejpl.cpp swemmoon.cpp \
 SRC_QT   = qtdriver.cpp qtdialog.cpp
 SRC_TEST = qttest.cpp
 SRC_WIN  = wdialog.cpp wdriver.cpp
+
+# The vendored Swiss Ephemeris is compiled with two warning classes off:
+# -Wwrite-strings (string literals into char *, 80-odd sites in sweph.cpp
+# alone) and -Wsign-compare (two in search_star_in_list). They are
+# upstream's code, held at SE_VERSION 2.10.03 so tools/swetest-oracle.sh
+# compares like with like, and editing them to satisfy a warning would
+# make every future comparison against upstream a diff first. The
+# fork's own sources get no such exemption; tools/warning_audit.py holds
+# them to zero. "override", because the audit passes CPPFLAGS or CFLAGS
+# on the command line, which would otherwise take precedence over a
+# target-specific assignment. Every object path a makefile here uses is
+# named, so the one rule serves all of them; an unused form names files
+# nothing builds, which make ignores.
+SWISS_NOWARN = -Wno-write-strings -Wno-sign-compare
+SWISS_OBJS = $(patsubst %.cpp,%.o,$(SRC_SWISS)) \
+  $(patsubst %.cpp,$(OBJDIR)/%.o,$(SRC_SWISS)) \
+  $(patsubst %.cpp,$(ODIR)/%.o,$(SRC_SWISS))
+$(SWISS_OBJS): override CPPFLAGS += $(SWISS_NOWARN)
+$(SWISS_OBJS): override CFLAGS += $(SWISS_NOWARN)
+

@@ -909,7 +909,7 @@ int InterpretEsoteric(flag fGetRays)
   char sz[cchSzMax*2], szName[cchSzDef], *pch;
   int i, j, sig, hou, ray, rays = 0;
   int rgcRay[cRay+1], rgcObjRay[oVul+1][cRay+1], rgnSort[cRay+1],
-    rgcTot[cRayArea], *pcRay = rgcRay, bod, nObj, nDec, nLin, k, l;
+    rgcTot[cRayArea], *pcRay = rgcRay, bod, nObj = 0, nDec, nLin, k, l;
   CONST TBLSIG *rgRules;
   flag fIgnore7Sav[rrMax];
 

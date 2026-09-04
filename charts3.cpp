@@ -1094,7 +1094,7 @@ void ChartTransitGraph(flag fTrans, flag fProg)
   TransGraInfo *rgEph;
   word **ppw, *pw, *pw2;
   char sz[cchSzDef];
-  int cAsp, cSlice, cYea, dYea, occurcount = 0, ymin, x0, y0, x, y, asp,
+  int cAsp = 0, cSlice, cYea = 0, dYea = 0, occurcount = 0, ymin = 0, x0, y0, x, y, asp,
     iw, iwFocus, nMax, n, ch, obj, et;
   flag fMonth = us.fInDayMonth, fYear = us.fInDayYear, fMark, fEclipse =
     us.fEclipse && !fTrans && !us.fParallel;

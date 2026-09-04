@@ -1081,7 +1081,7 @@ flag FSkipEphem(int i, int objCentCalc, flag fSwiss, flag fJPLPla)
 void ComputeEphem(real t)
 {
   int objCentCalc, objOrbit, imax, i, j;
-  real r1, r2, r3, r4, r5, r6, dist1, dist2, objPla, altPla, objEar, altEar,
+  real r1, r2, r3, r4, r5, r6, dist1 = 0.0, dist2 = 0.0, objPla, altPla, objEar, altEar,
     rT;
   flag fSwiss = !us.fPlacalcPla, fJPLPla, fJPL, fRet;
   PT3R ptPla, ptEar, vEar;
@@ -1939,7 +1939,7 @@ int GetAspect(CONST GRDOBJR &planet1, CONST GRDOBJR &planet2,
   CONST GRDOBJR &ret1, CONST GRDOBJR &ret2, int i, int j, real *prOrb)
 {
   int asp;
-  real rAngle, rAngle3D, rDiff, rOrb, ret1a;
+  real rAngle, rAngle3D = 0.0, rDiff, rOrb, ret1a;
 
   // Compute the angle between the two planets.
   rAngle = MinDistance(planet1[i], planet2[j]);
@@ -3724,7 +3724,7 @@ void SwissHouse(real jd, real lon, real lat, int housesystem, real *asc,
     // Need Sun declination for Sunshine houses.
     int flags = SEFLG_SPEED | SEFLG_EQUATORIAL;
     double xp[6];
-    int result = swe_calc_ut(jd, SE_SUN, flags, xp, NULL);
+    swe_calc_ut(jd, SE_SUN, flags, xp, NULL);
     ascmc[9] = xp[1];
   }
   if (swe_houses_armc_ex2(armc, lat, eps + nutlo[1], ch, cusp, ascmc,
@@ -3858,7 +3858,7 @@ flag SwissComputeStar(real jd, ES *pes)
 {
   char serr[AS_MAXCH], *pch, *pchT, chT;
   int iflag, isz = 0, i;
-  double xx[6], dist1, dist2;
+  double xx[6], dist1 = 0.0, dist2 = 0.0;
   static real lonPrev = 0.0, latPrev = 0.0;
   static int istar = 1;
 
@@ -3969,7 +3969,7 @@ LNext:
     pes->pchDes = pch;
     pes->pchBest = *pes->pchNam ? pes->pchNam : pes->pchDes;
   } else {
-    pes->pchDes = "";
+    pes->pchDes = (char *)"";
     pes->pchBest = pes->pchNam;
   }
 

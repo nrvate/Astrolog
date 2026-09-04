@@ -665,7 +665,7 @@ flag API DlgPrint()
   DOCINFO doci;
   int xPrint, yPrint;
   int xClient, yClient;
-  flag fInverse;
+  flag fInverse = fFalse;
 
   // Bring up the Windows print dialog.
   wi.fNoUpdate = fFalse;
@@ -708,8 +708,6 @@ flag API DlgPrint()
   doci.lpszDocName = szAppName;
   doci.lpszOutput = NULL;
   if (StartDoc(hdc, &doci) < 0) {
-    FreeProcInstance(lpAbortDlg);
-    FreeProcInstance(lpAbortProc);
     DeleteDC(hdc);
     return fFalse;
   }
@@ -760,8 +758,6 @@ flag API DlgPrint()
   }
   EnableWindow(wi.hwnd, fTrue);
   DestroyWindow(wi.hwndAbort);
-  FreeProcInstance(lpAbortDlg);
-  FreeProcInstance(lpAbortProc);
   DeleteDC(hdc);
   return fTrue;
 }

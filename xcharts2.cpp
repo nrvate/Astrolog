@@ -107,7 +107,7 @@ flag FProper(int i)
 void FillSymbolRing(real *symbol, real factor)
 {
   real orb = DEFORB*256.0/(real)gs.yWin*(real)gi.nScale*factor, orb1, orb2,
-    ratio, k1, k2, temp;
+    ratio = 0.0, k1, k2, temp;
   int i, j, j1, j2, l;
   flag rgf[oPlu+1], fMoved = fTrue;
 
@@ -857,9 +857,9 @@ void XChartEphemeris()
 {
   real symbol[cObj*2+2], objSav[objMax], rT;
   char sz[cchSzDef];
-  int cYea, unit = 6*gi.nScale, daytot, d = 1, dd, day, mon, yea, monsiz,
+  int cYea, unit = 6*gi.nScale, daytot, d = 1, dd, day, mon, yea = 0, monsiz,
     mon0, day0, yea0, x1, y1, x2, y2, xs, ys, m, n, u,
-    v = 0, vold = nNegative, i, j, dx;
+    v = 0, vold = nNegative, i, j, dx = 0;
   flag fSav;
 
   cYea = us.nEphemYears;    // Is -EY on to do multiple years at once?
@@ -1047,7 +1047,7 @@ void XChartEsoteric()
   real rRay[cRay+2], rRaySav[cRay+2], power1[objMax], power2[objMax],
     power[oNorm+1];
   char sz[cchSzDef];
-  int cYea, daytot, d = 1, dd, day, mon, yea, monsiz,
+  int cYea, daytot, d = 1, dd, day, mon, yea = 0, monsiz,
     x1, y1, x2, y2, xs, ys, m, n, u, v = 0, i, j, k;
 
   EnsureRay();
@@ -1196,8 +1196,8 @@ void XChartTransit(flag fTrans, flag fProg)
   TransGraInfo *rgEph;
   word **ppw, *pw, *pw2;
   char sz[cchSzDef];
-  int cYea, dYea, cAsp, cSect, cTot, ymin, x0, y0, x, y, asp, iw, iwFocus = -1,
-    nMax, n, obj, iy, yRow, cRow = 0, xWid, xo, yo, iSect, iFrac, xp, yp, yp2,
+  int cYea = 0, dYea = 0, cAsp = 0, cSect, cTot = 0, ymin = 0, x0, y0, x, y, asp, iw, iwFocus = -1,
+    nMax, n, obj, iy, yRow, cRow = 0, xWid, xo = 0, yo, iSect, iFrac, xp, yp, yp2,
     dyp, et;
   flag fMonth = us.fInDayMonth, fYear = us.fInDayYear, fEclipse =
     us.fEclipse && !fTrans && !us.fParallel;
@@ -1789,9 +1789,9 @@ flag XChartRising()
 void XChartBiorhythm()
 {
   char sz[cchSzDef];
-  CONST char *c;
-  real jd, r, a;
-  int x1, x2, xs, cx, y1, y2, ys, cy, i, j, k, x, y, x0, y0;
+  CONST char *c = NULL;
+  real jd, r = 0.0, a;
+  int x1, x2, xs, cx, y1, y2, ys, cy, i, j, k, x, y, x0 = 0, y0 = 0;
 
   k = xFontT*6;
   x1 = k; x2 = gs.xWin-k; xs = x2-x1; cx = (x1+x2)/2;

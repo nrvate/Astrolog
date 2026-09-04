@@ -949,9 +949,9 @@ extern KI KiCity P((int));
   MetaWord(15 /* MFCOMMENT */); MetaWord(((S)-5)*2 /* Bytes in comment */);
 #endif // METAFILE
 
-#define AdjustTextScale() gi.nScaleText = gs.nScaleText/50; \
+#define AdjustTextScale() do { gi.nScaleText = gs.nScaleText/50; \
   gi.nScaleTextT2 = gi.nScaleText * gi.nScaleT; \
-  gi.nScaleTextT = gi.nScaleTextT2 >> 1;
+  gi.nScaleTextT = gi.nScaleTextT2 >> 1; } while (0)
 #define WirePoint(x, y, z) WireLine(x, y, z, x, y, z)
 
 extern void BmpSetXY P((Bitmap *, int, int, KV));
@@ -1137,7 +1137,8 @@ extern WI wi;
 extern OPENFILENAME ofn;
 extern PRINTDLG prd;
 extern CHOOSECOLOR chc;
-extern char szFileName[cchSzMaxFile], szFileTitle[cchSzMaxFile], *szFileTemp;
+extern char szFileName[cchSzMaxFile], szFileTitle[cchSzMaxFile];
+extern CONST char *szFileTemp;
 
 #define TextClearScreen() WinClearScreen(gs.fInverse ? kWhiteA : kBlackA)
 #define CheckMenu(cmd, f) \

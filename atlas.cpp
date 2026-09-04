@@ -1550,7 +1550,7 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
     pch2++;
   if (*pch2 == chNull) {
     pch2 = pch1;
-    pch1 = "";
+    pch1 = (char *)"";
   }
 
   // Determine the country/region, and state/province, if any.
@@ -1885,7 +1885,7 @@ flag DisplayTimezoneChanges(int iznIn, flag fDialog, CI *ci)
     szRow[cchSzMax*2 + cchSzDef];
   int rgmon[ichngMax], rgday[ichngMax], rgtim[ichngMax], rgiru[ichngMax],
     izn, izcn, izce, czce,
-    mon, day, yea, tim, dst, zon, off, doff,
+    mon, day, yea, tim, dst = 0, zon = 0, off, doff,
     monPrev, dayPrev, yeaPrev, timPrev, dstPrev, zonPrev, offPrev, doffPrev,
     iyea, yea2, irue, crue, cn, ici, idMon, dd, i, j, k;
   ZoneChange *pzc, *pzc2;

@@ -274,7 +274,7 @@ dword LRead(FILE *file)
 
 flag FReadSzLineSkip(FILE *file, char *szLine, int cchLine)
 {
-  char ch;
+  char ch = chNull;
   int i;
 
   while (!feof(file) && (ch = getc(file)) < ' ')
@@ -651,7 +651,7 @@ LDone:
 
 flag FOutputAAFFile(void)
 {
-  char sz[cchSzMax], *pch;
+  char sz[cchSzMax], *pch = NULL;
   FILE *file;
   int nSav;
   flag fSav;
@@ -1186,7 +1186,7 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
       if (!FMatchSz("BEGIN:VEVENT", szLine))
         continue;
       nState = 0;
-      ciCore.nam = ciCore.loc = "";
+      ciCore.nam = ciCore.loc = (char *)"";
       continue;
     }
     if (FMatchSz("SUMMARY:", szLine))
@@ -2969,7 +2969,7 @@ flag FInputData(CONST char *szFile)
       PrintWarning("Values in old style chart info file are out of range.");
       goto LDone;
     }
-    ciCore.nam = ciCore.loc = "";
+    ciCore.nam = ciCore.loc = (char *)"";
     if (!us.fWriteOld) {
       // Set chart name to filename (minus path and extension) unless -Yo on.
       sprintf2(S(sz), "%s", szFile);

@@ -653,7 +653,7 @@ KV KvHouse(int i, const TBLSIG &rule1, const TBLSIG &rule2, int typ)
 
 flag DrawFillWheel(int x, int y, int i, int typ)
 {
-  KV kvC, kvF, kv1, kv2, kv3;
+  KV kvC = 0, kvF, kv1, kv2, kv3;
   int nTrans, n, typ2;
   real rDeg;
 
@@ -758,10 +758,10 @@ CONST int objNakshatra[9+1] = {0,
 void DrawWheel(real *xsign, real *xhouse, int cx, int cy, real unitx,
   real unity, real rh1, real rh2, real rs1)
 {
-  CONST TBLSIG *rgRules;
+  CONST TBLSIG *rgRules = NULL;
   int nTrans = (int)(gs.rBackPct * 256.0 / 100.0), i, j, k, kSav,
     x, y;
-  CONST int *rgTerm;
+  CONST int *rgTerm = NULL;
   real rh, rs, rs2 = 0.95, r9 = 0.99, ra, rb, px, py, rDeg, hOld, h;
   flag fVector = (gs.ft == ftPS || gs.ft == ftWmf), fSimpleDecan, fOff, fSav;
 
@@ -1908,7 +1908,7 @@ void DrawMap(flag fSky, flag fGlobe, real deg)
   char sz[cchSzDef], chT;
   int cx = gs.xWin/2, cy = gs.yWin/2, rx, ry,
     nScl = gi.nScale, x, y, xold, yold, m, n, u, v, i, j, k, l, xp, yp;
-  flag fSimple, fDir = (gi.nMode == gSphere && gs.fSouth),
+  flag fSimple = fFalse, fDir = (gi.nMode == gSphere && gs.fSouth),
     fDidBitmap;
   real planet1[objMax], planet2[objMax], x1, y1, rT;
   ObjDraw rgod[objMax * arDir];

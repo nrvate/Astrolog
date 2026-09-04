@@ -5782,7 +5782,7 @@ static void WriteParserFileQt(CONST char *szFile, CONST char *sz)
 // so a field the parser never wrote can't inherit the previous case's.
 static flag FLoadParserFileQt(CONST char *szFile)
 {
-  ciCore.nam = ciCore.loc = "";
+  ciCore.nam = ciCore.loc = (char *)"";
   MM = DD = YY = 0;
   TT = SS = ZZ = OO = AA = 0.0;
   return FInputData(szFile);

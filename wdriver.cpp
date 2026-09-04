@@ -2738,12 +2738,12 @@ flag API FRedraw(void)
 {
   // Local variables used in drawing on the screen.
   PAINTSTRUCT ps;
-  HDC hdcWin;
+  HDC hdcWin = NULL;
   HCURSOR hcurPrev = NULL;
-  HBITMAP hbmpOld;
+  HBITMAP hbmpOld = NULL;
   HFONT hfontOld = NULL;
   char szFile[cchSzDef];
-  int nScrollRow, i;
+  int nScrollRow = 0, i;
   flag fSmartText = fFalse, fAnsiColor, fAnsiChar, fSmartHTML = fFalse,
     fInverse;
 

@@ -230,7 +230,7 @@ void CastRelation(void)
 {
   byte ignoreSav[objMax];
   int i, j, cChart;
-  real t1, t2, t, rSav, rRatio;
+  real t1 = 0.0, t2 = 0.0, t, rSav = 0.0, rRatio;
   flag fSav;
 #ifdef SWISS
   real rT, rLon, rLat;
@@ -1146,7 +1146,7 @@ void DisplayRelation(void)
 {
   char sz[cchSzDef], szT[cchSzDef];
   int i;
-  real k, l;
+  real k = 0.0, l;
 #ifdef BIORHYTHM
   int j;
 #endif

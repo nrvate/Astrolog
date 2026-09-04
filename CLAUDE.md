@@ -432,9 +432,14 @@ compiler itself**, which nothing here read until 2026-09-01.
 ```sh
 tools/warning_audit.py               # all five builds clean with -Wall,
                                      # every warning diffed against
-                                     # tools/warnings.txt; about 70
-                                     # seconds, not the six minutes this
-                                     # said before anyone timed it. Plus
+                                     # tools/warnings.txt -- which is
+                                     # EMPTY since 2026-09-04, so a new
+                                     # line is a warning to fix, not to
+                                     # record; the vendored Swiss sources
+                                     # are exempted in Makefile.srcs
+                                     # instead. About 70 seconds, not the
+                                     # six minutes this said before
+                                     # anyone timed it. Plus
                                      # the two Qt6 builds, where there is
                                      # a Qt6, against warnings-qt6.txt --
                                      # which holds only what Qt6 warns

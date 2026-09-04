@@ -144,7 +144,7 @@ void Action(void)
 {
   char sz[cchSzMax];
   int cSequenceLine = us.cSequenceLine, iList, iList2, iLine, i;
-  flag fDoList, fHTML, fHTMLClip;
+  flag fDoList, fHTML, fHTMLClip = fFalse;
 
   // If the -os switch is in effect, open a file and set a global to
   // internally 'redirect' all screen output to.

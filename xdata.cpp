@@ -153,7 +153,7 @@ CHOOSECOLOR chc = {
 
 char szFileName[cchSzMaxFile];
 char szFileTitle[cchSzMaxFile];
-char *szFileTemp = szFileTempCore;
+CONST char *szFileTemp = szFileTempCore;
 #endif
 
 #ifdef WCLI

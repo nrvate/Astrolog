@@ -143,8 +143,8 @@ void ChartListing(void)
 {
   ET et;
   char sz[cchSzMax];
-  int i, j, k, l;
-  real rT;
+  int i, j, k = 0, l;
+  real rT = 0.0;
   flag fSav;
 
   CreateElemTable(&et);
@@ -1011,8 +1011,8 @@ static void ChartAspectCore(flag fRel)
 {
   int ca[cAspect + 1], co[objMax];
   char sz[cchSzDef], *pch;
-  int icut, jcut, ihi, jhi, ahi, i0, j0, i, j, k, count = 0, nSav;
-  real ip, jp, vcut = (real)nLarge, vhi, phi, v, p, rPowSum = 0.0, rT;
+  int icut = 0, jcut = 0, ihi = 0, jhi = 0, ahi = 0, i0, j0, i, j, k, count = 0, nSav;
+  real ip, jp, vcut = (real)nLarge, vhi, phi = 0.0, v, p, rPowSum = 0.0, rT;
   flag fDistance = us.fDistance && !us.fParallel;
 
   ClearB((pbyte)ca, sizeof(ca));
@@ -1261,7 +1261,7 @@ static void ChartMidpointCore(flag fRel)
 {
   int cs[cSign + 1];
   char sz[cchSzDef];
-  int icut, jcut, ilo, jlo, i, j, count = 0;
+  int icut = 0, jcut = 0, ilo = 0, jlo = 0, i, j, count = 0;
   real rSpanSum = 0.0, mcut = -1.0, mlo, m, mid, dist, midalt,
     deg1, alt1, dir1, deg2, alt2, dir2;
 
@@ -1995,7 +1995,7 @@ void ChartSector(void)
 
 static flag ChartAstroGraphCore(flag fRel)
 {
-  CrossInfo *rgcr, *pcr, crT;
+  CrossInfo *rgcr = NULL, *pcr = NULL, crT;
   char sz[cchSzDef], sz2[2][4];
   real planet1[2][objMax], planet2[2][objMax], mc[2][objMax], ic[2][objMax],
     asc[2][objMax], des[2][objMax], asc1[2][objMax], des1[2][objMax],

@@ -704,7 +704,7 @@ flag FBmpDrawMap()
   Bitmap *bmp = &gi.bmp;
   int nScl = 1, yWin2, xc, yc, zc, x1, x2, y1, y2, xi, yi, n, n2;
   real deg = Mod(rDegMax - gs.rRot), lonS, latS, rxc, ryc, rzc,
-    lon, lat, lat0, rT, rLen, sint, cost, sina, cosa;
+    lon, lat, lat0, rT, rLen, sint = 0.0, cost = 0.0, sina, cosa;
   KV kv;
   flag fDoEclipse = fFalse;
 
@@ -2054,7 +2054,7 @@ void WireSpot(int x, int y, int z)
 
 void WireCircle(int x, int y, int z, real r, real tilt, real rot)
 {
-  int m, n, o, u, v, w, i, di;
+  int m = 0, n = 0, o = 0, u, v, w, i, di;
   real alt, azi;
 
   i = NAbs((int)r) << 1;
@@ -2211,7 +2211,7 @@ void WireMapCalc(real x1, real y1, int *xp, int *yp, int *zp, flag fSky,
 
 void WireDrawGlobe(flag fSky, real deg)
 {
-  int rz, unit = 12*gi.nScale, x, y, z, xold, yold, zold,
+  int rz, unit = 12*gi.nScale, x, y, z, xold, yold, zold = 0,
     m, n, o, u, v, w, i, j, k, l;
   real planet1[objMax], planet2[objMax], x1, y1, rT;
   ES es;

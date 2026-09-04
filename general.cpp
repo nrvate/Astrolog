@@ -2124,7 +2124,7 @@ char *SzOffset(real zon, real dst, real lon)
 char *SzLocation(real lon, real lat)
 {
   static char szLoc[768];
-  int i, j, i2, j2, i3, j3;
+  int i, j, i2, j2, i3 = 0, j3 = 0;
   real rT;
   char chDeg, chLon, chLat;
   flag fSav = us.fSeconds;
@@ -2576,8 +2576,8 @@ flag FSortCIList(int nMethod)
 {
   int ig, gap, i, j;
   CI ciT, *pci1, *pci2;
-  real *rgr = NULL, rT;
-  flag fCompare;
+  real *rgr = NULL, rT = 0.0;
+  flag fCompare = fFalse;
 #ifdef EXPRESS
   CP cpSav;
 #endif

@@ -529,23 +529,19 @@ LNotNow:
 void CommandLineX()
 {
   char szCommandLine[cchSzMax], *rgsz[MAXSWITCHES];
-  int argc, fT, fPause = fFalse;
+  int argc, fT;
 
   ciCore = ciMain;
   fT = us.fLoop; us.fLoop = fTrue;
   argc = NPromptSwitches(S(szCommandLine), rgsz);
   is.cchRow = 0;
   is.fSzInteract = fTrue;
-  if (!FProcessSwitches(argc, rgsz, NULL))
-    fPause = fTrue;
-  else {
+  if (FProcessSwitches(argc, rgsz, NULL)) {
     is.fMult = fFalse;
     FPrintTables();
-    if (is.fMult) {
+    if (is.fMult)
       ClearB((pbyte)&us.fCredit,
         (int)((pbyte)&us.fLoop - (pbyte)&us.fCredit));
-      fPause = fTrue;
-    }
   }
 
   is.fSzInteract = fFalse;

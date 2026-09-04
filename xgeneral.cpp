@@ -962,7 +962,7 @@ flag FDrawClip(int x1, int y1, int x2, int y2, int xl, int yl, int xh, int yh,
 
 void DrawArc(int x1, int y1, int x2, int y2, real rRotate, real t1, real t2)
 {
-  int x, y, rx, ry, m, n, u, v, i, di;
+  int x, y, rx, ry, m = 0, n = 0, u, v, i, di;
   real rS, rC, dx, dy, dx2, dy2, dt, t;
 #ifdef QT
   // Unlike X11 and Windows below, Qt has no arc primitive here. Rather
@@ -1333,9 +1333,9 @@ void DrawSz(CONST char *sz, int x, int y, int dt)
   CONST char *pch;
 #endif
 #ifdef WINANY
-  HFONT hfont, hfontPrev;
-  KV kvSav;
-  int nSav;
+  HFONT hfont = NULL, hfontPrev = NULL;
+  KV kvSav = 0;
+  int nSav = 0;
 #endif
 
   cch = CwchSz(sz);

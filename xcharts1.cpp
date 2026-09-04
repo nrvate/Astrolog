@@ -1611,7 +1611,7 @@ void XChartTelescope()
     zLimit, nShowMinute;
   real rglen[objMax+1], lonH, latH, xBase, yBase, xScale, yScale,
     xBase2, yBase2, xScale2, yScale2, xi, yi, diam, radi, rRatio, len, ang,
-    xo, yo, xr, yr, zr, xrSun, yrSun, xrT, yrT,
+    xo, yo, xr, yr, zr, xrSun = 0.0, yrSun = 0.0, xrT, yrT,
     radiS, radiE, radiU, radiP, lenS, lenM, theta, rPct;
   flag fFlip = gs.fEcliptic && us.rHarmonic < 0.0, fShowLabel, fShowUmbra;
   TELE te;
@@ -1624,9 +1624,9 @@ void XChartTelescope()
   ES *pes1, *pes2;
 #endif
   // Variables for Saturn's or other planet's rings
-  real radi2, len2, ang2, theta2, dRing, xr2, yr2, radi3;
-  int iRng, iJup, iSat, iUra, iNep, xT2, yT2, xd2, yd2, xp2, yp2, xT3, yT3,
-    xd3, yd3;
+  real radi2, len2, ang2, theta2, dRing = 0.0, xr2, yr2, radi3;
+  int iRng, iJup, iSat, iUra, iNep, xT2 = 0, yT2 = 0, xd2 = 0, yd2 = 0, xp2, yp2, xT3 = 0, yT3 = 0,
+    xd3 = 0, yd3 = 0;
   PT3R ptSat, ptCen, vS2C, vCross, vBest, vUp, vLeft;
 
   // Initialize variables.
@@ -4035,7 +4035,7 @@ void XChartIndian()
     fTextHouse = (gs.nFontHou == 0),
     fHouseSign = (us.nHouseSystem == hsWhole || us.nHouseSystem == hsNull),
     fOff;
-  KI kiContrast;
+  KI kiContrast = 0;
 
   // Initialize box size and other variables
   if (gs.fText && gs.fDoSidebar)
