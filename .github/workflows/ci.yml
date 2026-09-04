@@ -495,11 +495,9 @@ jobs:
   #
   # THE ROWS USED COME FROM tools/distros.json, THE COMMITTED SNAPSHOT --
   # so a build is a function of its commit and a matrix cannot change
-  # under an empty diff. The live services are asked by the "check" step
-  # only, which fails this job the first push after a release ships or
-  # ages out, naming the row and the one command that updates the
-  # snapshot for a commit somebody reads. The same arrangement as the
-  # warning ledger.
+  # under an empty diff. This job reads the snapshot and nothing else;
+  # the live services are asked by the "drift" job below, which is
+  # deliberately NOT in this job's path.
   #
   # The Qt package differs by row, and it is not a detail. Measured
   # 2026-09-02 with only base + CRB enabled, no third-party repo: EL9 has
@@ -521,8 +519,6 @@ jobs:
       deb: ${{ steps.deb.outputs.matrix }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - name: The snapshot still matches what Fedora and Ubuntu answer
-        run: python3 tools/distros.py check
       - id: rpm
         run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
       # The .deb rows: every Ubuntu LTS in standard support, built inside
@@ -530,6 +526,28 @@ jobs:
       # row to.
       - id: deb
         run: echo "matrix=$(python3 tools/distros.py deb)" >> "$GITHUB_OUTPUT"
+
+  # Does the snapshot still match what Fedora and Ubuntu answer today?
+  # The first push after a release ships or ages out goes red HERE, and
+  # only here, naming the row and "tools/distros.py --update", the one
+  # command that rewrites the snapshot for a commit somebody reads.
+  #
+  # A job of its own, on purpose. The first version ran this inside the
+  # matrix job, which every package job needs, so a Fedora release would
+  # have turned an unrelated push red AND skipped all seven package jobs
+  # -- the shape this repository already rejected once for the nightly
+  # differential: failing an aggregate punishes whoever pushed last.
+  # Here the packages still build from the committed rows, the run still
+  # shows a red X, and the red says exactly what to do. release.yml keeps
+  # the same check as a hard gate, where a release should not proceed on
+  # rows its history does not carry.
+  drift:
+    name: The distribution snapshot is current
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: python3 tools/distros.py check
 
   rpm:
     name: .rpm on ${{ matrix.release }}
