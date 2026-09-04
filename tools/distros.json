@@ -1,0 +1,51 @@
+{
+  "deb": [
+    {
+      "codename": "jammy",
+      "container": "ubuntu:22.04",
+      "image": "ubuntu-22.04",
+      "qt": "qtbase5-dev",
+      "version": "22.04"
+    },
+    {
+      "codename": "noble",
+      "container": "ubuntu:24.04",
+      "image": "ubuntu-24.04",
+      "qt": "qtbase5-dev",
+      "version": "24.04"
+    },
+    {
+      "codename": "resolute",
+      "container": "ubuntu:26.04",
+      "image": "ubuntu-26.04",
+      "qt": "qt6-base-dev",
+      "version": "26.04"
+    }
+  ],
+  "rpm": [
+    {
+      "dist": "fc43",
+      "image": "fedora:43",
+      "qt": "qt6-qtbase-devel",
+      "release": "fedora-43"
+    },
+    {
+      "dist": "fc44",
+      "image": "fedora:44",
+      "qt": "qt6-qtbase-devel",
+      "release": "fedora-44"
+    },
+    {
+      "dist": "el9",
+      "image": "quay.io/rockylinux/rockylinux:9",
+      "qt": "qt5-qtbase-devel",
+      "release": "el9"
+    },
+    {
+      "dist": "el10",
+      "image": "quay.io/rockylinux/rockylinux:10",
+      "qt": "qt6-qtbase-devel",
+      "release": "el10"
+    }
+  ]
+}

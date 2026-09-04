@@ -2,12 +2,39 @@
 """The one place the Linux distribution matrix is defined.
 
     python3 tools/distros.py rpm          # GitHub Actions matrix, as JSON
-    python3 tools/distros.py deb          # ditto for the .deb rows: every
-                                          # Ubuntu LTS in standard support
+    python3 tools/distros.py deb          # ditto for the .deb rows
     python3 tools/distros.py dists        # jammy noble resolute fc43 fc44 el9 el10
     python3 tools/distros.py image fc43   # the container image for a dist
     python3 tools/distros.py count        # how many Linux packages a
                                           # release ships (deb + rpm)
+    python3 tools/distros.py check        # does what Fedora and Ubuntu
+                                          # answer TODAY still match the
+                                          # committed snapshot? exit 1
+                                          # with the difference if not
+    python3 tools/distros.py --update     # rewrite the snapshot from the
+                                          # live answer (then commit it)
+
+THE ANSWER USED IS THE COMMITTED ONE. rpm, deb, dists, image and count
+all read tools/distros.json, the snapshot, and never touch the network.
+The live services are asked by "check" and "--update" only. This is the
+same arrangement as the warning ledger: a baseline in the tree, a CI
+step that fails when reality has moved away from it, and one command
+that updates the baseline for a commit somebody reads. Two things this
+buys that "ask on every run" did not:
+
+  - A build is a function of its commit. Two pushes an hour apart build
+    the same rows unless a commit between them changed the snapshot,
+    and a matrix cannot change with an empty diff -- which is how the
+    first version of this script worked, and is a category of
+    nondeterminism this repository otherwise does not have.
+  - A change in the answer is an EVENT someone sees: the "Which
+    distributions" job goes red on the first push after Fedora ships,
+    naming the release and the command. Before, the row would have
+    quietly appeared in the next run's matrix and the artifact count
+    with it.
+
+The cost is that the red must be answered by a person running
+--update and committing, which is the point.
 
 Before this, every distribution row was written out by hand in four
 files -- ci.yml, release.yml, ci-verify-repo.sh and ci-verify-live-repo.sh
@@ -266,7 +293,7 @@ def fedora_releases():
     sys.exit(1)
 
 
-def rpm_rows():
+def rpm_rows_live():
     rows = []
     for v in fedora_releases():
         rows.append({"release": "fedora-%d" % v, "dist": "fc%d" % v,
@@ -274,11 +301,64 @@ def rpm_rows():
     return rows + EL
 
 
+SNAPSHOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "distros.json")
+
+
+def live():
+    return {"deb": deb_rows(), "rpm": rpm_rows_live()}
+
+
+def snapshot():
+    try:
+        with open(SNAPSHOT) as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        sys.stderr.write("distros: no %s -- run 'tools/distros.py --update' and commit it\n" % SNAPSHOT)
+        sys.exit(1)
+    for k in ("deb", "rpm"):
+        if not isinstance(data.get(k), list) or not data[k]:
+            sys.stderr.write("distros: %s has no %s rows\n" % (SNAPSHOT, k))
+            sys.exit(1)
+    return data
+
+
+def write_snapshot(data):
+    with open(SNAPSHOT, "w", newline="\n") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+
+
+def describe(rows, key):
+    return ", ".join(r[key] for r in rows)
+
+
+def check():
+    """Exit 1, with the difference, when the live answer has moved."""
+    want = live()
+    have = snapshot()
+    drift = []
+    for k, key in (("deb", "image"), ("rpm", "release")):
+        if want[k] != have[k]:
+            drift.append("  %s: snapshot has %s\n       live answer is %s"
+                         % (k, describe(have[k], key), describe(want[k], key)))
+    if drift:
+        print("THE DISTRIBUTION MATRIX HAS MOVED since tools/distros.json was written:")
+        print("\n".join(drift))
+        print("== A release shipped, or one aged out. Run 'python3 tools/distros.py")
+        print("== --update', read the diff, and commit it. Nothing builds for the")
+        print("== new row until that commit exists, on purpose.")
+        return 1
+    print("distros: snapshot matches the live answer (%s; %s)"
+          % (describe(have["deb"], "image"), describe(have["rpm"], "release")))
+    return 0
+
+
 def image_for(dist):
-    for r in deb_rows():
+    data = snapshot()
+    for r in data["deb"]:
         if r["codename"] == dist:
             return r["container"]
-    for r in rpm_rows():
+    for r in data["rpm"]:
         if r["dist"] == dist:
             return r["image"]
     return ""
@@ -286,12 +366,21 @@ def image_for(dist):
 
 def main(argv):
     what = argv[1] if len(argv) > 1 else ""
+    if what == "--update":
+        data = live()
+        write_snapshot(data)
+        print("distros: wrote %s (%s; %s) -- commit it"
+              % (SNAPSHOT, describe(data["deb"], "image"), describe(data["rpm"], "release")))
+        return 0
+    if what == "check":
+        return check()
     if what == "rpm":
-        print(json.dumps({"include": rpm_rows()}))
+        print(json.dumps({"include": snapshot()["rpm"]}))
     elif what == "deb":
-        print(json.dumps({"include": deb_rows()}))
+        print(json.dumps({"include": snapshot()["deb"]}))
     elif what == "dists":
-        print(" ".join([r["codename"] for r in deb_rows()] + [r["dist"] for r in rpm_rows()]))
+        d = snapshot()
+        print(" ".join([r["codename"] for r in d["deb"]] + [r["dist"] for r in d["rpm"]]))
     elif what == "image":
         if len(argv) < 3:
             sys.stderr.write("usage: distros.py image <dist>\n")
@@ -301,10 +390,11 @@ def main(argv):
             return 1
         print(img)
     elif what == "count":
-        print(len(deb_rows()) + len(rpm_rows()))
+        d = snapshot()
+        print(len(d["deb"]) + len(d["rpm"]))
     else:
         sys.stderr.write(__doc__.split("\n\n")[0] + "\n")
-        sys.stderr.write("usage: distros.py rpm|deb|dists|image <dist>|count\n")
+        sys.stderr.write("usage: distros.py rpm|deb|dists|image <dist>|count|check|--update\n")
         return 2
     return 0
 

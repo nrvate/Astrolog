@@ -764,6 +764,16 @@ in April 2027. Only EL9 and EL10 are written down. Fedora and Ubuntu
 against Qt6. Both workflows compute both matrices from it, and both
 repository verifiers read their list from it.
 
+**What is used is the committed snapshot, `tools/distros.json`.** Every
+read is from that file and needs no network, so a build is a function
+of its commit. The live services are asked only by `tools/distros.py
+check`, which the "Which distributions" job runs first and which fails
+the first push after a release ships or ages out -- naming the row and
+`tools/distros.py --update`, the one command that rewrites the snapshot
+for a commit somebody reads. The same arrangement as the warning ledger,
+for the same reason: a matrix that can change under an empty diff is a
+kind of nondeterminism this repository otherwise does not have.
+
 **The `.deb` rows build inside `ubuntu:<version>` containers**
 (`tools/build-in-container.sh`), not on GitHub's runner images, which is
 what made asking for them possible: a Docker image exists the day a
