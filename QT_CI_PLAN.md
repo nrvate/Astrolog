@@ -41,7 +41,11 @@ than to skip — and a harness that is cheaper to run gets run.
 Third: the slow checks. `warning_audit.py` (~6 min), `tools/asan-sweep.sh`
 (minutes), `tools/win-tests.sh` (minutes) are all documented as
 "pre-release rather than pre-commit". "Pre-release" is a promise a human
-keeps by remembering. A nightly job keeps it by existing.
+keeps by remembering. A nightly job keeps it by existing. *(That was the
+2026-09-01 answer. The 2026-09-04 one is stronger: the slow lane gates
+the release, so "pre-release" is enforced by the release itself, and a
+promise kept by a schedule turned out to be kept by nobody — see "Where
+this stands".)*
 
 ## Ground rules
 
@@ -141,6 +145,14 @@ phases below whose job is to settle it.
 | The Qt binary's dependency closure is large | 41 shared libraries, **~70 MB** measured with `du -Lch` over `ldd` output. `Qt5Network` alone drags in `libgssapi_krb5`, `libkrb5`, `libk5crypto`, `libcom_err`, `libkrb5support` |
 
 ### Not verified — settle these, don't assume them
+
+*(Every row below was settled by the item it names, by 2026-09-03. Kept
+as written because the point of the table was the discipline, not the
+rows: the bundled ephemeris resolves 39 of 39 since Q13 option B, Actions
+is free on this public fork including macOS, Apple clang compiles the
+core, Homebrew's `qt@5` is a source build so macOS uses Qt6, the
+menu-role relocation broke nothing, `-ldl` is dropped on macOS, and the
+Linux artifact is native packages rather than an AppImage.)*
 
 | Claim | Which item settles it |
 |---|---|
@@ -1069,7 +1081,10 @@ began answering `Ephemeris file ./ephem/sepl_18.se1 is damaged (0).`
 The data was restored from HEAD the same day; all 28 are byte-identical
 to their committed blobs again, verified.
 
-**The guards that would stop it recurring are still open:**
+**The guards that would stop it recurring are still open** *(as of this
+entry; both closed by work log item 159 in `QT_GUI_PLAN.md` on
+2026-09-01 — `.gitattributes` names every binary class and
+`tools/line_endings_audit.py` exempts them and recognises ELF/PE/Mach-O)*:
 
 1. `.gitattributes` lists only `*.png`, `*.ico`, `*.bmp` as binary. That
    is precisely why `earth.bmp` survived and nothing else did. `*.se1`,
@@ -1374,6 +1389,12 @@ and asserts Chiron.
 reports `EPHEMERIS NOT FOUND: Chir:  0Ari00 …` and exits 1; restored, it
 passes. A real `make install PREFIX=…` was used, not the build tree.
 **The Windows package half is still open, and WCLI cannot close it** —
+*(superseded 2026-09-04: the Windows package is the Qt build now, which
+has `main()`, and `windows-qt.yml` runs the very binary it ships with
+`-os` and asserts Chiron on the Windows runner, then installs the
+staged tree under Wine and compares it file for file. The strong form
+is closed for what ships; what follows is why it could not be closed
+for the Win32 build)* —
 which was worth finding out, since it looked like the obvious way.
 `astrolog.exe` has no console entry point, so the Linux trick of running
 the package and asserting Chiron does not transfer; WCLI does have one
@@ -1496,8 +1517,10 @@ chose to leave it rather than move a published tag.
 
 # Phase 6 — The slow lane
 
-Nightly (`schedule:`) plus `workflow_dispatch`. Everything here is
-documented as "pre-release rather than pre-commit"; CI is where that
+Nightly (`schedule:`) plus `workflow_dispatch` — **as built on
+2026-09-02; since 2026-09-04 `workflow_call` from `release.yml` plus
+`workflow_dispatch`, and no schedule.** Everything here is documented as
+"pre-release rather than pre-commit"; a release gate is where that
 promise becomes mechanical.
 
 ### 6.1 `tools/warning_audit.py`
@@ -1520,7 +1543,12 @@ wiring turned up, in descending order of consequence:
   diffs. **That guard found a bug in itself on its first run**: mingw's
   `-dumpversion` answers `10-win32`, so splitting on a dot gave
   `10-win32` and it failed against the very toolchain it was written for.
-- **The Qt6 leg cannot run in CI at all**, and correctly skips. It needs
+- **The Qt6 leg cannot run in CI at all**, and correctly skips *(in this
+  job; since 2026-09-03 the separate `warnings-qt6` job runs
+  `warning_audit.py --qt6-only` on `ubuntu-latest`, where Qt6 has
+  pkg-config files, and `ci-assert-slow-lane.sh` tolerates this job's
+  skip only while that one is green — see the note under the 2026-09-03
+  ledger entry below)*. It needs
   `QT6_PKGCONFIG` to point at a Qt6, and installing `qt6-base-dev` on the
   runner would put Qt6 on pkg-config's default path — where
   `Makefile.qt`'s `pkg-config --exists Qt6Widgets` would find it and
@@ -1543,7 +1571,9 @@ it, so it cannot rot into not building) but still a build outside the
 warning net. Adding it means editing `warning_audit.py` and regenerating
 the baseline; left open deliberately rather than done in a hurry beside
 another session's edits to that same file.
-**Status.** [x] wired 2026-09-02; the `wcli` leg is open
+**Status.** [x] wired 2026-09-02; the `wcli` leg is open *(closed since:
+`tools/warning_audit.py` carries a `wcli` build against `Makefile.wcli`
+and CLAUDE.md's "all five builds" counts it)*
 
 ### 6.2 `tools/asan-sweep.sh`
 **Do.** Both surfaces, ~750 invocations.
@@ -1834,6 +1864,10 @@ nightly lane runs **all four**. Coverage over a day is unchanged, and
 feedback on a change is a minute instead of half an hour. The nightly
 one diffs against the commit of 24 hours ago — a weaker question than
 "what did this change move", which is why the gate exists as well.
+*(The nightly differential was dropped on 2026-09-04 with the schedule.
+The switch matrix now runs in CI only inside `tools/coverage-report.sh`,
+which executes it rather than diffing it; diffing all four is a by-hand
+`tools/ci-differential.sh` against a chosen commit.)*
 **Status.** [ ]
 
 ### 7.2b What running them actually showed, 2026-09-01
@@ -1955,8 +1989,9 @@ commit message rather than a workflow edit.
 **The diffs are uploaded as an artifact whether the job passes or fails**,
 because a red differential is exactly when someone wants to read them.
 
-**And the nightly one reports rather than gates** (`DIFFERENTIAL_REPORT=1`),
-which the first nightly run argued for on its own. It went red on **122
+**And the nightly one reports rather than gates** (`DIFFERENTIAL_REPORT=1`)
+*(dropped 2026-09-04; the mode stays in the script for by-hand aggregate
+runs)*, which the first nightly run argued for on its own. It went red on **122
 moved chart lines** that were another session's house-degeneracy fix at
 extreme latitudes — correct, intentional, and undeclared only because the
 trailer convention was one day old. A gate on a pull request asks "what
@@ -2222,7 +2257,14 @@ nothing on Linux or Windows.
 
 ---
 
-# Phase 10 — macOS: a shippable app — NOT DOING
+# Phase 10 — macOS: a shippable app — NOT DOING *(reversed: it ships)*
+
+**Superseded 2026-09-03 (Q10, answered differently): every release since
+v8.00-qt.3 ships `astrolog-<version>-macos.dmg`, ad-hoc signed and not
+notarized, built by `tools/package-macos.sh` — and since 2026-09-04 by
+the slow lane's macOS job, after the suite has passed on that binary.
+The reasoning below is what was decided on 2026-09-01 and why, kept
+because the notarization half of it still holds.**
 
 **Closed 2026-09-01 by the maintainer's decision. Q10 is answered: this
 fork does not distribute macOS binaries.** Written down rather than
@@ -2259,6 +2301,13 @@ sidesteps Gatekeeper entirely without a certificate or a secret.
 ---
 
 ## One Qt backend for all three platforms?
+
+**Answered 2026-09-04 by the maintainer: yes.** Qt is the one interface
+on Linux, Windows and macOS; the Windows release is the Qt build
+(`windows-qt.yml`), and `wdriver.cpp`/`wdialog.cpp` stay compiled and
+driven under Wine as the behavioural oracle only. "Where this stands"
+has the shape of it; what follows is the survey and the experiment that
+made the decision possible.
 
 Raised by the maintainer on 2026-09-02: if Qt runs on Windows and macOS
 as well as Linux, could this tree carry **one** GUI backend instead of
@@ -2536,7 +2585,9 @@ rediscovery is slowest.
   nightly lane decoration. Fixed on 2026-09-02 by making `qt` the
   default (item 0.1), and worth re-checking the day the default changes
   again or a workflow is added on a side branch.
-- **A scheduled workflow switches itself off.** GitHub disables `schedule:`
+- **A scheduled workflow switches itself off.** *(No workflow here has a
+  schedule since 2026-09-04; kept because the next person to add one
+  will meet this.)* GitHub disables `schedule:`
   triggers in a repository with no activity for 60 days. Phase 6's whole
   argument is that a nightly job keeps a promise by existing — on a fork
   that goes quiet for two months it stops existing, silently, leaving a
@@ -3168,6 +3219,18 @@ first run of a new baseline is a wall of warnings that has to be read
 rather than accepted. Recorded rather than papered over, because a
 `qt6-base-dev` in that install line would have looked like the problem was
 solved.
+
+**Closed the same day, and the paragraph above was wrong about the cost
+(`c989607`).** No second baseline is needed, because the Qt6 leg is a
+*difference*: `audit_qt6()` measures each Qt6 build against its Qt5 twin
+built in the same run by the same compiler, so whatever g++ 13 says about
+the shared core appears on both sides and subtracts out, leaving exactly
+the Qt6-specific set `warnings-qt6.txt` holds. `--qt6-only` builds the
+two Qt5 twins for their counts, skips the g++ 11 baseline, gates on the
+Qt6 ledger alone, and treats a missing Qt6 as a failure rather than a
+skip. The `warnings-qt6` job runs it on `ubuntu-latest`; the `warnings`
+job stays on 22.04 for its compiler; `ci-assert-slow-lane.sh` tolerates
+the 22.04 skip only while `warnings-qt6` is green.
 
 **2026-09-04 — the nightly is gone, Fedora is asked for, and Windows
 ships the Qt build.** Three maintainer decisions in one session, all

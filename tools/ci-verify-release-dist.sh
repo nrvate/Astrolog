@@ -75,7 +75,7 @@ tilde=$(find "$dir" -type f -name '*~*' | head -5)
   echo "SHA256SUMS does not verify against the files it names"; exit 1; }
 
 # Every artifact names the version it was built from -- since the Windows
-# .zip and .exe were renamed, all nine do. So check it, because "nine
+# .zip and .exe were renamed, all of them do. So check it, because "N
 # files, all checksummed" says nothing about WHICH build they came from,
 # and the way a release goes wrong here is one stale artifact among eight
 # fresh ones: an artifact-download that resolved to a previous run, or a

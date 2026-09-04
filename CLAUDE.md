@@ -113,7 +113,7 @@ And **`/swe` is a machine-local ephemeris mount, not part of this repo** —
 
 **Since 2026-09-03 the bundled `ephem/` covers all 39 esoteric bodies on
 its own**, so `-Yi1 ephem` and `/swe` resolve the same 39 and the suite
-measures 3832/0 either way. It used to resolve 19 of 39, which meant CI
+passes with the same count either way. It used to resolve 19 of 39, which meant CI
 ran that group at half strength — 21 assertions where a local run did 41.
 Closing it cost 7.8 MB and 20 files (`QT_CI_PLAN.md` Q13, option B).
 
@@ -344,8 +344,11 @@ tools/ci-verify-live-repo.sh                 # and that the DEPLOYED site
                                              # not a check
 tools/ci-differential.sh origin/qt out/diff  # four matrices vs a commit
 tools/ci-verify-release-dist.sh dist 9       # the release ships exactly
-                                             # nine artifacts and
-                                             # SHA256SUMS covers them all
+                                             # this many artifacts and
+                                             # SHA256SUMS covers them all;
+                                             # release.yml computes the
+                                             # number from tools/distros.py
+                                             # (Linux packages + 3)
 tools/ci-verify-windows-installer.sh out/astrolog-setup.exe  # install and
                                              # uninstall it under Wine
 tools/ci-verify-windows-starts.sh out/package/astrolog-windows
@@ -422,8 +425,8 @@ And a thirteenth that asks the one question none of the others do -- not
 
 ```sh
 tools/coverage-report.sh             # builds an instrumented binary, runs
-                                     # all four matrices AND the 3832-
-                                     # assertion suite against it, and
+                                     # all four matrices AND the whole
+                                     # Qt suite against it, and
                                      # reports per-file line coverage --
                                      # then asserts the set executed by
                                      # NEITHER is exactly placalc.cpp and
@@ -573,10 +576,11 @@ WINVM_USER=... WINVM_PASS=... \
 ```
 
 copies it into a VirtualBox VM over the Guest Additions channel, **no
-network involved**, and runs all 3,812 assertions headless. It passes
-there: `PASS: 3812 passed, 0 failed`, 2026-09-03, the same count as
-Linux -- 25 dialogs, 42 context menus, 264 shortcuts and the numeric
-oracle, in a build with no `WIN` in it. Its header
+network involved**, and runs the whole suite headless. It passed there
+on 2026-09-03 with the same count as Linux -- 25 dialogs, 42 context
+menus, 264 shortcuts and the numeric oracle, in a build with no `WIN`
+in it -- and `windows-qt.yml` now runs the same suite on every push, on
+a GitHub Windows runner, with the same count as Linux again. Its header
 lists four traps, each of which cost a run: the offscreen plugin has to
 be IN the artifact (`windeployqt` ships only `windows`), the `windows`
 plugin blocks forever because a guestcontrol process has no desktop, the
@@ -628,7 +632,7 @@ lane clones and builds it in about 25 seconds.
 
 **And a third surface the sweep does not reach**, added 2026-09-03 and
 run by the slow lane beside those two: the Qt suite itself.
-`asan-sweep.sh` builds its own *console* binary, so all 3,812 assertions
+`asan-sweep.sh` builds its own *console* binary, so the whole suite
 -- 25 dialogs, 42 context menus, every menu item -- ran under no
 sanitizer at all, even though `make qt-asan` had existed the whole time
 and this file called the suite "clean under AddressSanitizer". It was

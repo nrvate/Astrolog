@@ -337,7 +337,7 @@ tools/win-vm-suite.sh <vm-name> <unpacked-artifact> 'E:\swe'
 ```
 
 It copies the tree in over VirtualBox's Guest Additions channel and runs
-all 3,812 assertions headless. **No network is involved** — a VM on an
+the whole suite headless. **No network is involved** — a VM on an
 internal network with no DHCP works, which is what made this possible at
 all.
 

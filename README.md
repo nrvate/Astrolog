@@ -59,7 +59,7 @@ than a missing feature, so the files ship.
 
 **The macOS build is the least proven thing here, and you should know
 that before downloading it.** Nobody working on this fork owns a Mac. It
-is built, and its 3832 assertions are run, entirely on GitHub's
+is built, and its whole test suite is run, entirely on GitHub's
 `macos-latest` runner — currently **macOS 26 on Apple Silicon**. No human
 has ever launched it. Since 2026-09-03 the slow lane also uploads a
 screenshot of all 25 dialogs and every chart type, so at least somebody
