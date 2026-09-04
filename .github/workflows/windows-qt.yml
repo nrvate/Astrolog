@@ -1,0 +1,273 @@
+# The Windows package: the Qt port, built with MSVC, packaged as a zip
+# and an installer. A reusable workflow, called by ci.yml on every push
+# and by release.yml on a tag, so the artifact a release ships is built
+# by exactly the recipe every push has been exercising.
+#
+# THIS IS WHAT WINDOWS USERS GET, since 2026-09-04. Before that the
+# release shipped the Win32 build from wdriver.cpp, cross-compiled with
+# mingw and statically linked, and this job was an "experiment" in the
+# nightly that uploaded a Qt build nobody downloaded. The maintainer's
+# decision: the Qt port is the one interface on every platform. The
+# Win32 build is still compiled on every push (ci.yml "Windows builds",
+# "MSVC project") and still driven under Wine by the slow lane's
+# "Windows parity" job, because it is the behavioural oracle the whole
+# port is measured against -- it is just no longer what ships.
+#
+# The honest cost, recorded here rather than discovered later: Qt6 is
+# Windows 10 and later. Qt6Core.dll imports SetThreadDescription
+# (Windows 10 1607+), so this build does not start on 7 or 8 -- measured
+# in a VM, an instant exit with no output, the loader failing before
+# main(). The PE header claims minimum OS 6.0, which would tell you the
+# opposite. wdriver.cpp ran on 7. Qt 5.15.2, the last open source 5.15,
+# does not compile against a current MSVC at all (qvarlengtharray.h uses
+# a Microsoft STL extension now behind an opt-in macro), so there is no
+# Qt5 route back to Windows 7 without maintaining workarounds on a dead
+# Qt.
+#
+# Two jobs, because the two halves need different machines. The BUILD
+# needs MSVC and a Qt for MSVC, so it runs on Windows -- and that is
+# also the one place the program can be started with its real platform
+# plugin and asked to open a window. The PACKAGE half needs makensis,
+# unzip and Wine, all of which are on an Ubuntu runner and none of which
+# are needed on Windows; and the install/uninstall check under Wine is
+# the proven one, where the same check on real Windows would meet UAC
+# (tools/ci-verify-windows-installer.sh says why).
+#
+# Two kinds of artifact leave here, and their NAMES are load-bearing:
+# release.yml's publish job downloads "astrolog-*" and publishes every
+# file it gets, so only what ships may start with that prefix. The
+# staged tree, the test build and the screenshots do not.
+
+name: Windows (Qt)
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Qt 6.8.3 on Windows (MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      QT_VERSION: "6.8.3"
+      QT_ARCH: win64_msvc2022_64
+      QT_SUBDIR: msvc2022_64
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # The Qt install is cached, and the reason is not speed. aqt
+      # fetches from a mirror it picks per run, and one mirror serving an
+      # incomplete archive -- observed 2026-09-03, "Specified path is
+      # bad: lib/cmake/Qt6/QtPostProcess.cmake" -- fails the job with no
+      # commit behind it. While this was a continue-on-error nightly that
+      # was tolerable; as a per-push job and a release gate it is not,
+      # and "retry until a mirror works" is not a gate either. A cache
+      # hit asks no mirror anything. The key names every input, so a
+      # version bump is a miss and a fresh install, as it should be.
+      - name: Cached Qt
+        id: qt-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ github.workspace }}\Qt
+          key: qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}-aqt3.3.0
+
+      # aqtinstall rather than a third-party action: one pip package, no
+      # new SHA to pin, and it is the tool those actions wrap anyway.
+      # Pinned, because it reaches out to Qt's mirrors and parses their
+      # layout, and a release that changes how it names an archive would
+      # break the build with an empty diff.
+      - name: Install Qt for MSVC
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          pip install aqtinstall==3.3.0
+          $ok = $false
+          foreach ($i in 1..3) {
+            aqt install-qt windows desktop $env:QT_VERSION $env:QT_ARCH -O ${{ github.workspace }}\Qt
+            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
+            Write-Host "aqt attempt $i failed (exit $LASTEXITCODE); retrying against another mirror"
+            Remove-Item -Recurse -Force "${{ github.workspace }}\Qt" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 15
+          }
+          if (-not $ok) { Write-Host "aqt failed three times"; exit 1 }
+
+      - name: Where Qt is
+        shell: pwsh
+        run: echo "QTDIR=${{ github.workspace }}\Qt\$env:QT_VERSION\$env:QT_SUBDIR" >> $env:GITHUB_ENV
+
+      # No moc, no build system: tools/qt-srcs.py reads Makefile.srcs,
+      # the same source list every other build uses, and
+      # tools/msvc-build-qt.cmd holds the one flag list both binaries are
+      # compiled with. The program is /SUBSYSTEM:WINDOWS -- no console
+      # beside the GUI -- and the test build is a console program, so
+      # its PASS/FAIL reaches this log. The script says why.
+      - name: Compile the program
+        shell: cmd
+        run: tools\msvc-build-qt.cmd astrolog.exe
+
+      - name: Compile the test build too
+        shell: cmd
+        run: tools\msvc-build-qt.cmd astrolog-qt-test.exe --test
+
+      # Not just "did it link" -- does it compute? The Qt build has
+      # astrolog.cpp's ordinary main(), so it can be driven from a command
+      # line, and the same Chiron assertion the Linux packages use
+      # applies: 0Ari00 is the no-ephemeris answer, and the Sun reads
+      # correctly even with no ephemeris at all.
+      #
+      # "-os <file>" and not stdout, for two reasons that agree: a QT
+      # build writes no chart to stdout on any platform (measured on
+      # Linux: the console build prints 136 lines, ./astrolog-qt prints
+      # zero), and a WINDOWS-subsystem process has no stdout to write to
+      # anyway.
+      - name: Does it run, and compute?
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:QTDIR\bin;$env:PATH"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $p = Start-Process -FilePath .\astrolog.exe -ArgumentList '-Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os chart.txt' -Wait -PassThru -NoNewWindow
+          "exit $($p.ExitCode)"
+          $chiron = (Get-Content chart.txt -ErrorAction SilentlyContinue | Where-Object { $_ -match '^Chir' } | Select-Object -First 1)
+          if (-not $chiron) {
+            "No Chiron line. chart.txt (first 12 lines):"
+            Get-Content chart.txt -TotalCount 12 -ErrorAction SilentlyContinue
+            exit 1 }
+          if ($chiron -match '0Ari00') { "EPHEMERIS NOT FOUND: $chiron"; exit 1 }
+          "Qt on Windows computes: $chiron"
+
+      # The 3812-assertion suite, on Windows, with no desktop involved:
+      # qoffscreen.dll is the trick, because a runner's "windows"
+      # platform plugin would want a window station and the suite does
+      # not need one. 25 dialogs, 42 context menus, 264 shortcuts and 338
+      # menu items are exactly the surface a Windows port can break
+      # without any Linux net noticing.
+      - name: Run the suite on Windows
+        shell: cmd
+        run: |
+          set QT_QPA_PLATFORM=offscreen
+          set ASTROLOG_QT_EPHEM=minimal
+          if not exist platforms mkdir platforms
+          copy "%QTDIR%\plugins\platforms\qoffscreen.dll" platforms\ >nul
+          copy "%QTDIR%\bin\Qt6*.dll" . >nul
+          astrolog-qt-test.exe -Yi1 ephem
+          if errorlevel 1 exit /b 1
+
+      # And a LOOK at it, the same as macOS gets: the suite proves 25
+      # dialogs open with the right titles, and cannot say whether a
+      # control sits off the edge or a label is truncated under Windows'
+      # default font -- which is exactly where a Qt layout tuned on Linux
+      # would break. QWidget::grab() paints through Qt, so no desktop.
+      - name: Screenshot every dialog
+        if: always()
+        shell: cmd
+        run: |
+          set QT_QPA_PLATFORM=offscreen
+          set QTSHOTDIR=out\shots
+          astrolog-qt-test.exe -Yi1 ephem
+          exit /b 0
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: windows-qt-screenshots
+          path: out/shots
+          if-no-files-found: warn
+
+      # The tree a user gets. windeployqt decides which Qt DLLs, the
+      # script adds what it does not: the offscreen and minimal platform
+      # plugins, the MSVC runtime, the icons and the data. Its header
+      # says why each is there, and every reason is a run that was lost.
+      - name: Stage the package
+        shell: pwsh
+        run: python tools/package-windows-qt.py dist --exe astrolog.exe
+
+      - name: The staged tree is complete
+        shell: pwsh
+        run: python tools/qt_windows_dist_audit.py dist
+
+      # The one check only this machine can make: start it with the
+      # REAL platform plugin and require a window. A missing DLL, a
+      # missing qwindows.dll, a runtime the runner has and a user will
+      # not -- each is an exit without a window, and a file listing sees
+      # none of them. The suite runs offscreen and so proves nothing
+      # about any of this.
+      - name: The staged program starts and opens a window
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File tools/win-qt-starts.ps1 dist 90
+
+      - name: Upload the staged tree
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-qt-dist
+          path: dist/
+          if-no-files-found: error
+
+      # The same tree plus the -DQTTEST build, for tools/win-vm-suite.sh:
+      # the suite ran here under offscreen, but a real Windows desktop
+      # with the windows plugin is a different question, and this is
+      # what gets copied into a VM to ask it. Not shipped, and the
+      # audit's --test form says so both ways.
+      - name: Stage the test build beside it
+        shell: pwsh
+        run: |
+          Copy-Item -Recurse dist test-dist
+          Copy-Item astrolog-qt-test.exe test-dist\
+          python tools/qt_windows_dist_audit.py test-dist --test
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-qt-test-build
+          path: test-dist/
+          retention-days: 14
+
+  package:
+    name: Windows zip and installer
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-qt-dist
+          path: out/package/astrolog-windows
+
+      # What came back is what was staged: the manifest was written on
+      # the Windows runner and is verified here, on a different machine,
+      # after an upload and a download. Modes do not survive that trip
+      # and do not matter to Windows.
+      - name: Verify the tree after the round trip
+        run: tools/ci-verify-package.sh out/package/astrolog-windows
+
+      - name: The version these artifacts are named for
+        run: echo "VER=$(tools/ci-assert-version.sh)" >> "$GITHUB_ENV"
+
+      - run: ( cd out/package && zip -qr "astrolog-$VER-windows.zip" astrolog-windows )
+      - run: tools/ci-verify-zip.sh "out/package/astrolog-$VER-windows.zip" out/package/astrolog-windows
+
+      # makensis runs natively on Linux, which is why the installer is
+      # built here. Wine is for verifying it: silent install into a
+      # throwaway prefix, compare the installed tree to the staged one,
+      # silent uninstall, require nothing left. The script's header says
+      # why Wine is the only automatable route (UAC).
+      - name: Install NSIS and Wine
+        run: |
+          sudo dpkg --add-architecture i386
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y nsis wine wine64 wine32
+      - run: tools/package-windows-installer.sh out/package/astrolog-windows "out/package/astrolog-$VER-setup.exe"
+      - run: tools/ci-verify-windows-installer.sh "out/package/astrolog-$VER-setup.exe" out/package/astrolog-windows
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: astrolog-windows
+          path: |
+            out/package/astrolog-*-windows.zip
+            out/package/astrolog-*-setup.exe
+          if-no-files-found: error

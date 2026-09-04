@@ -5,11 +5,12 @@
     python3 tools/qt-srcs.py --test     # and the in-process suite
 
 Makefile.srcs is the single source list for every build here, and the
-makefiles read it directly. A build that cannot use make -- the MSVC
-experiment in .github/workflows/nightly.yml compiles with cl.exe, since
-the port has no Q_OBJECT and therefore no moc step and therefore no need
-for a build system -- still must not keep its own copy of the list, or it
-becomes the sixth place a new source file has to be remembered.
+makefiles read it directly. A build that cannot use make -- the Windows
+package, which tools/msvc-build-qt.cmd compiles with cl.exe for
+.github/workflows/windows-qt.yml, since the port has no Q_OBJECT and
+therefore no moc step and therefore no need for a build system -- still
+must not keep its own copy of the list, or it becomes the sixth place a
+new source file has to be remembered.
 
 The Qt build is SRC_CORE + SRC_GRAPHICS + SRC_SWISS + SRC_QT, which is
 what Makefile.qt uses. SRC_WIN is deliberately absent.

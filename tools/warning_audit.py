@@ -226,7 +226,7 @@ def parse(output, build):
         # processes interleaved -- so "the last context line for
         # astrolog.h" is whichever process happened to get there first.
         # The same warning came out as SwissComputeStar here and
-        # "(unknown)" on a runner, and turned a nightly red with no code
+        # "(unknown)" on a runner, and turned the slow lane red with no code
         # change behind it. Headers get one fixed label; file, flag and
         # message still identify the row.
         func = '(header)' if f.endswith('.h') else context.get(f, '(unknown)')

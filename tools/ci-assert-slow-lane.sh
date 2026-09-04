@@ -1,31 +1,37 @@
 #!/bin/sh
-# Did the last nightly actually pass, and how old is it?
+# Did the last slow-lane run actually pass, and did every step of it do
+# what it claims?
 #
-#   tools/ci-assert-nightly.sh [repo]
+#   tools/ci-assert-slow-lane.sh [repo]
 #
 # Exists because of a failure this project had no way to notice. The
-# external Swiss oracle was added to nightly.yml in b56f511, whose commit
-# message says "The external oracle runs in CI after all". It never ran
-# once: every nightly since failed that step with "no astrolog at
-# ./astrolog", and the nightly was red for days while work continued
-# against it. Nothing was watching, because "the nightly" is a web page
-# somebody has to remember to open.
+# external Swiss oracle was added to the slow lane in b56f511, whose
+# commit message says "The external oracle runs in CI after all". It never
+# ran once: every run since failed that step with "no astrolog at
+# ./astrolog", and the lane was red for days while work continued
+# against it. Nothing was watching, because a scheduled workflow is a web
+# page somebody has to remember to open.
+#
+# Since 2026-09-04 the lane has no schedule: release.yml calls it and
+# gates on it, so a red run blocks a release rather than sitting there.
+# What this still answers is the part a job's conclusion cannot show --
+# a step that SUCCEEDED while skipping the thing it exists to do -- and
+# it reads the logs of passing jobs to find one. Run it after a release
+# or a dispatch.
 #
 # ci-assert-green.sh answers "did ci.yml pass for THIS COMMIT", which is
-# the pre-release gate. This answers the other question -- "is the slow
-# lane healthy at all" -- which nothing asked.
+# the pre-release gate. This answers "is the slow lane healthy at all".
 #
-# Two ways to fail, and the second is the quiet one:
-#
-#   - a job or step did not succeed
-#   - the newest run is older than MAX_AGE_H hours, meaning the schedule
-#     itself stopped firing. A workflow that no longer runs reports no
-#     failures, which reads exactly like a workflow that passes.
+# MAX_AGE_H, if set, also fails when the newest run is older than that
+# many hours. It was the default when the lane was scheduled, because a
+# schedule that stops firing reports no failures and reads exactly like
+# one that passes. A lane that runs on releases has no expected cadence,
+# so it is off unless asked for.
 set -eu
 
 repo=${1:-${GITHUB_REPOSITORY:-nrvate/Astrolog}}
-wf=${NIGHTLY_WORKFLOW:-nightly.yml}
-maxage=${MAX_AGE_H:-30}
+wf=${SLOW_LANE_WORKFLOW:-slow-lane.yml}
+maxage=${MAX_AGE_H:-}
 
 command -v gh >/dev/null || { echo "gh not found"; exit 2; }
 T_SKIP=$(mktemp); T_JOBS=$(mktemp)
@@ -52,7 +58,7 @@ echo "== $wf run $id, created $when"
 # Age. date -d is GNU; on a Mac this is the BSD form, so try both rather
 # than silently skipping the check that catches a dead schedule.
 then_s=$(date -d "$when" +%s 2>/dev/null || date -j -f '%Y-%m-%dT%H:%M:%SZ' "$when" +%s 2>/dev/null || echo 0)
-if [ "$then_s" -gt 0 ]; then
+if [ "$then_s" -gt 0 ] && [ -n "$maxage" ]; then
   age=$(( ( $(date +%s) - then_s ) / 3600 ))
   echo "   $age hours old"
   [ "$age" -le "$maxage" ] || {
@@ -87,7 +93,7 @@ bad=$(gh api "repos/$repo/actions/runs/$id/jobs" \
       |"   \(.conclusion)  [\($j)] \(.name)"' || true)
 
 [ -z "$bad" ] || {
-  echo "NIGHTLY NOT CLEAN -- steps that did not pass:"
+  echo "SLOW LANE NOT CLEAN -- steps that did not pass:"
   printf '%s\n' "$bad"
   exit 1; }
 
@@ -135,6 +141,7 @@ allowed_skip() {
                                    return 1 ;;
     *"skipped on purpose"*)        return 0 ;;  # menu parity: 12 Windows-only items
     *"Skipping plugin q"*)         return 0 ;;  # windeployqt, choosing backends
+                                                 # (windows-qt.yml, if pointed there)
     *"sprintf("*|*"printf("*)      return 0 ;;  # a compiler quoting source, not a skip
     *"not available\", star_nr"*)  return 0 ;;  # ditto, swisseph's own message
   esac
@@ -167,5 +174,5 @@ rm -f "$T_SKIP"
   echo "== If it is not, something is not running that you think is."
   exit 1; }
 
-echo "nightly clean: every step in run $id succeeded, and none skipped"
+echo "slow lane clean: every step in run $id succeeded, and none skipped"
 echo "silently"

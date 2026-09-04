@@ -252,7 +252,7 @@ python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # behind a misspelled ifdef on its
                                      # first run
 python3 tools/qt_srcs_audit.py       # two checks on the MSVC Qt build,
-                                     # which is a nightly and so is the
+                                     # which runs on Windows and so is the
                                      # slowest place to learn anything.
                                      # No unguarded POSIX-only header in
                                      # any source it compiles -- that is
@@ -379,24 +379,22 @@ tools/ci-assert-clang-clean.sh               # the macOS compiler, whose
                                              # warnings are not gcc's
 tools/ci-assert-green.sh                     # wait for CI on this commit
                                              # before tagging a release
-tools/ci-assert-nightly.sh                   # is the SLOW lane healthy at
+tools/ci-assert-slow-lane.sh                 # is the SLOW lane healthy at
                                              # all -- a different question,
                                              # and the one nothing asked
-                                             # while the nightly sat red
-                                             # for days. Also fails if the
-                                             # newest run is over 30h old,
-                                             # because a schedule that
-                                             # stopped firing reports no
-                                             # failures and reads exactly
-                                             # like one that passes.
-                                             # And it reads the logs of
-                                             # PASSING jobs for steps that
-                                             # succeeded while skipping
-                                             # what they were meant to do
-                                             # -- three of those were found
-                                             # by hand on 2026-09-03,
-                                             # every one behind a green
-                                             # job
+                                             # while it was a nightly and
+                                             # sat red for days. It reads
+                                             # the logs of PASSING jobs for
+                                             # steps that succeeded while
+                                             # skipping what they were
+                                             # meant to do -- three of
+                                             # those were found by hand on
+                                             # 2026-09-03, every one behind
+                                             # a green job. The lane gates
+                                             # releases now rather than
+                                             # running on a timer, so the
+                                             # staleness check is off
+                                             # unless MAX_AGE_H is set
 ```
 
 And a twelfth that is not fast and not resource-shaped: **the
@@ -431,8 +429,8 @@ tools/coverage-report.sh             # builds an instrumented binary, runs
                                      # NEITHER is exactly placalc.cpp and
                                      # placalc2.cpp. Tens of minutes: the
                                      # build is -O0 and the switch matrix
-                                     # is 529 invocations. In the nightly;
-                                     # never pre-commit
+                                     # is 529 invocations. In the slow
+                                     # lane; never pre-commit
 ```
 
 It exists because `graphics-matrix.sh` carried `-XE 1 20` from the day it
@@ -545,9 +543,10 @@ All 25, one PNG each. `QWidget::grab()` paints through Qt rather than
 asking the window system for pixels, so it needs no display. The suite
 already proves each dialog opens with the right title; what it cannot say
 is whether a control sits off the edge, a label is truncated, or a layout
-collapses under a platform's default font. The nightly captures these on
-**macOS** and on **Qt-for-Windows** and uploads them, because those are
-the two platforms nobody here opens by hand.
+collapses under a platform's default font. The slow lane captures these
+on **macOS** and the Windows package workflow on **Windows**, and both
+upload them, because those are the two platforms nobody here opens by
+hand.
 
 The Windows build has assertions of its own now — not many, and slow, but
 it is no longer the only half with none:
@@ -562,8 +561,11 @@ first, because ~887,000 files through Wine's path translation looks
 exactly like the app hanging. `QT_COMPARING_WITH_WINDOWS.md` says why.
 
 And since 2026-09-03 the port itself runs on Windows, not only under
-Wine. The nightly uploads `astrolog-Qt6-windows-msvc` -- the program and
-the `-DQTTEST` build -- and:
+Wine -- and since 2026-09-04 **it is the Windows product**: the release
+ships the Qt build, compiled with MSVC by `windows-qt.yml`, and the Win32
+build from `wdriver.cpp` is compiled and driven only as the oracle.
+Every CI run uploads `windows-qt-test-build` -- the shipped tree plus the
+`-DQTTEST` build -- and:
 
 ```sh
 WINVM_USER=... WINVM_PASS=... \
@@ -621,11 +623,11 @@ questions. Upstream at the same version means a disagreement is about
 run unless `sepl_18.se1`, `semo_18.se1` and `seas_18.se1` are actually
 present, because upstream silently answers from Moshier when they are
 not, and the difference hides in the last decimals (Sun on 15.6.1990:
-84 deg 7'46.3995 from Swiss, 84 deg 7'46.4407 from Moshier). The nightly
-clones and builds it in about 25 seconds.
+84 deg 7'46.3995 from Swiss, 84 deg 7'46.4407 from Moshier). The slow
+lane clones and builds it in about 25 seconds.
 
 **And a third surface the sweep does not reach**, added 2026-09-03 and
-run by the nightly beside those two: the Qt suite itself.
+run by the slow lane beside those two: the Qt suite itself.
 `asan-sweep.sh` builds its own *console* binary, so all 3,812 assertions
 -- 25 dialogs, 42 context menus, every menu item -- ran under no
 sanitizer at all, even though `make qt-asan` had existed the whole time
@@ -684,40 +686,66 @@ On a private Xvfb display, `import -window root` is fine.
 
 ## CI, and what it will not let you do
 
-Four workflows, all on `qt`, the default branch. `ci.yml` runs on every
-push and pull request, fourteen jobs in about four minutes: the two
-Windows builds, Qt5 and Qt6 builds with the suite, the audits and
+Five workflows, all on `qt`, the default branch. `ci.yml` runs on every
+push and pull request, about fifteen jobs in five or six minutes: the two
+Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, `make install`, a behavioural differential against the
-base commit, the Windows package, two `.deb`s and four `.rpm`s.
-`nightly.yml` is the slow lane -- seven jobs: the warning audit, the
-sanitizer sweeps (ASan and UBSan), the Windows parity harnesses, all four
-matrices against yesterday, the external Swiss oracle, a coverage run that
-asserts nothing NEW has become untested, and two `continue-on-error`
-experiments: **macOS**, which builds the port, runs
-the suite and packages a `.dmg`, and **Qt on Windows**, which compiles
-this port with MSVC and the open-source Qt6 (`-DQT -DPC`, no `-DWIN`) and
-uploads the result so it can be run on a real desktop. Both have been
-green for some time now; the flag stays because neither has a maintainer
-who would notice a break.
+base commit, two `.deb`s, four `.rpm`s, and the **Windows package**,
+which is `windows-qt.yml` called as a reusable workflow. That one
+compiles the port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
+`-DWIN`) on a Windows runner, runs the suite there, starts the staged
+program with its real platform plugin and requires a window, then zips
+it and builds the NSIS installer on Linux and installs and uninstalls
+that under Wine.
 
-`release.yml` publishes on a `v*` tag: nine artifacts -- four `.rpm`s,
-two `.deb`s, a `.dmg`, the Windows `.zip` and the NSIS
-`astrolog-setup.exe` -- each verified before publication, with a
-SHA256SUMS that is checked to cover every one of them. `repo.yml` chains
-off it on `workflow_run` and rebuilds the apt/yum repository from the
-published packages.
+`slow-lane.yml` is what CLAUDE.md elsewhere calls pre-release: the
+warning audit and the Qt6 warning ledger, the sanitizer sweeps (ASan and
+UBSan) and the external Swiss oracle, the Windows parity harnesses under
+Wine, a coverage run that asserts nothing NEW has become untested, and
+**macOS**, which builds the port, runs the suite and packages the `.dmg`.
+**It has no schedule.** It was a nightly until 2026-09-04, and the
+nightly gated nothing: the strongest checks in the repository ran on a
+timer nobody was required to read, the schedule had fired once in its
+life, and GitHub switches schedules off after 60 quiet days anyway. Now
+`release.yml` calls it and its Publish job needs every job in it. If
+nothing changes and nothing is released, nothing runs; a release runs
+everything. `workflow_dispatch` runs it by hand against any commit.
 
-The Windows experiment is worth knowing about for one reason: it is the
+`release.yml` publishes on a `v*` tag: the two `.deb`s, the `.rpm`s for
+the distributions `tools/distros.py` names, the `.dmg` from the slow
+lane's macOS job, and the Windows `.zip` and `astrolog-setup.exe` from
+`windows-qt.yml` -- each verified before publication, with a SHA256SUMS
+that is checked to cover exactly that many. About twenty minutes, the
+ASan sweep being the long pole. `repo.yml` chains off it on
+`workflow_run` and rebuilds the apt/yum repository from the published
+packages.
+
+**The distribution list lives in `tools/distros.py` and nowhere else.**
+Fedora's two rows are *asked for*, of Fedora's own release service
+(Bodhi, `state=current`, the newest two), because the hand-written list
+said 42 and 43 for four months after 42 stopped receiving updates and 44
+shipped. Fedora builds against Qt6, EL9 against Qt5, EL10 against Qt6;
+the Ubuntu rows are static because they are runner images. Both
+workflows compute their `.rpm` matrix from it, and both repository
+verifiers read their list from it.
+
+**Qt is the one interface, on every platform, since 2026-09-04.** The
+Win32 build in `wdriver.cpp`/`wdialog.cpp` is still compiled on every
+push and still driven under Wine by the slow lane, because it is the
+behavioural oracle every divergence is judged against -- but it no
+longer ships. The honest cost, measured rather than assumed: Qt6 is
+Windows 10 and later (`Qt6Core.dll` imports `SetThreadDescription`, and
+the PE header claims minimum OS 6.0, so the obvious check lies), and Qt
+5.15.2 no longer compiles against a current MSVC, so there is no Qt
+route back to Windows 7.
+
+The Windows build is worth knowing about for one more reason: it is the
 only net here that is a **different platform** rather than a stricter
 tool on the same one, and that turned out to be a distinct kind of net.
 Four sanitizer sweeps, eleven audits and a warning ledger across five
 builds never mentioned `qttest.cpp`'s `#include <unistd.h>`, because on
 Linux it is correct. Compiling the file under MSVC found it in one run,
 along with 15 `getpid()` and 11 hardcoded `"/tmp"` fallbacks behind it.
-Two costs come with it, both measured rather than assumed: Qt6 does not
-run on Windows 7 at all (`Qt6Core.dll` imports `SetThreadDescription`,
-and the PE header claims minimum OS 6.0, so the obvious check lies), and
-Qt 5.15.2 no longer compiles against a current MSVC.
 
 **CI adds no logic.** Every step is a package install, a `make`, or one
 committed script from `tools/`. A check living only in YAML can be
@@ -738,8 +766,6 @@ unaffordable -- so it does not happen. The scripts are
   A differential answers "something changed", not "something broke", and
   it actively protects a wrong answer -- fixing a 30-year-old bug looks
   like a regression. So the opt-out is one line, not a workflow edit.
-  The *nightly* differential reports rather than gates, because failing a
-  day's aggregate punishes whoever pushed last.
 
 - **A version that disagrees with its tag.** `astrolog.h` owns
   `szVersionFork`; the fork's version is `8.00-qt.N`. Bump it before

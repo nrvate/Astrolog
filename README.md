@@ -40,9 +40,9 @@ list comes from the binary rather than from someone's memory:
 | | |
 |---|---|
 | `.deb` | Ubuntu 22.04 (jammy), 24.04 (noble) |
-| `.rpm` | Fedora 42, Fedora 43, EL9 (Rocky/Alma), EL10 |
-| `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs |
-| `.zip` | Windows, statically linked — unpack and run, no install needed |
+| `.rpm` | the two current Fedora releases (asked of Fedora's release service at build time, so a stale list cannot ship), EL9 (Rocky/Alma), EL10 |
+| `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs. **Windows 10 or later** |
+| `.zip` | Windows, the same files — unpack and run, no install needed. The Qt build with its runtime included, since v8.00-qt.6; releases before that shipped the native Win32 build, which ran on Windows 7 |
 | `.dmg` | macOS, Apple Silicon only — read the note below before downloading |
 
 Every package carries the ephemeris for all **39 esoteric bodies** the
@@ -61,10 +61,11 @@ than a missing feature, so the files ship.
 that before downloading it.** Nobody working on this fork owns a Mac. It
 is built, and its 3832 assertions are run, entirely on GitHub's
 `macos-latest` runner — currently **macOS 26 on Apple Silicon**. No human
-has ever launched it. Since 2026-09-03 the nightly also uploads a
+has ever launched it. Since 2026-09-03 the slow lane also uploads a
 screenshot of all 25 dialogs and every chart type, so at least somebody
 can *look* at it, but that is a picture from CI and not a person using
-the program.
+the program. Since 2026-09-04 that same job produces the `.dmg` a release
+ships, so the Mac binary that is published is one whose suite passed.
 
 Two consequences follow, and neither is hypothetical:
 

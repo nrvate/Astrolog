@@ -1,21 +1,42 @@
-# The slow lane -- QT_CI_PLAN.md Phase 6.
+# The slow lane -- QT_CI_PLAN.md Phase 6 -- and, since 2026-09-04, a
+# RELEASE GATE rather than a nightly.
 #
-# Everything here is documented in CLAUDE.md as "pre-release rather than
-# pre-commit". "Pre-release" is a promise a human keeps by remembering;
-# this is where it becomes mechanical. Both jobs have a record: the
-# warning audit's first run found that Makefile.win had not compiled for
-# 62 commits, and the first run of each half of the sanitizer sweep found
-# real out-of-bounds bugs in code that had been exercised dozens of times
-# without a sanitizer behind it -- seven between them, one crashing the
-# release build.
+# Everything here is what CLAUDE.md calls "pre-release rather than
+# pre-commit". It has a record: the warning audit's first run found that
+# Makefile.win had not compiled for 62 commits, the first run of each
+# half of the sanitizer sweep found real out-of-bounds bugs in code that
+# had been exercised dozens of times without a sanitizer behind it, and
+# the Swiss oracle is the only net in the project that can say a number
+# is right rather than unchanged.
 #
-# A HAZARD THAT APPLIES TO THIS FILE AND NOT TO ci.yml: GitHub disables
-# scheduled workflows in a repository with no activity for 60 days. The
-# whole argument for a nightly is that it keeps a promise by existing, and
-# on a fork that goes quiet for two months it stops existing, silently,
-# leaving a green history behind it. workflow_dispatch is on both jobs so
-# there is always a manual path, and "the nightly has not run lately" is a
-# thing somebody has to notice.
+# It used to run on a schedule, and the schedule was the wrong shape for
+# it, for three reasons that were all measured before it was removed:
+#
+#   - It gated nothing. The strongest checks in the repository ran on a
+#     timer nobody was required to read, which is why
+#     tools/ci-assert-slow-lane.sh had to be written: the lane sat red
+#     for days while work continued against it.
+#   - The schedule had fired once in its life. Every other run was a
+#     manual dispatch. And GitHub disables scheduled workflows in a
+#     repository with no pushes for 60 days, so on a fork that goes
+#     quiet it would have stopped existing silently, leaving a green
+#     history behind it.
+#   - "If nothing changes and nothing is released, no action is needed."
+#     The maintainer's framing, and the right one: these checks are
+#     about what ships. They run when something is about to.
+#
+# So release.yml calls this workflow and its Publish job needs every job
+# here, which makes each of them a gate on the release. workflow_dispatch
+# stays for running it by hand against any commit -- cheap, and the only
+# way to get a macOS artifact without spending a version number.
+#
+# The two jobs that were "continue-on-error experiments" -- macOS, and
+# the Qt build on Windows -- are experiments no longer. macOS produces
+# the .dmg the release ships and is a gate; the Windows build moved to
+# windows-qt.yml, where it produces the Windows package, and is a gate
+# there. Neither can be falsified from the maintainer's machine, which
+# has no macOS and no MSVC; both have been green for long enough to be
+# trusted with that caveat said out loud.
 #
 # ubuntu-22.04, NOT ubuntu-latest, and the reason is specific to the
 # warning audit rather than the glibc one that governs packaging:
@@ -26,24 +47,15 @@
 # tools/ci-assert-toolchain.sh says so out loud rather than leaving the
 # next person to work backwards from 300 mystery diffs.
 
-name: Nightly
+name: Slow lane
 
 on:
-  schedule:
-    # 03:17 UTC. Not on the hour: every scheduled workflow on the platform
-    # that asks for "3am" lands on :00 together.
-    - cron: '17 3 * * *'
+  workflow_call:
   workflow_dispatch:
 
-# One nightly at a time. Without this a dispatch does not supersede the
-# run already going, and two of every job proceed in parallel -- six
-# runners doing the same work, including two macOS ones at the most
-# expensive multiplier. A newer nightly is strictly better than an older
-# one, so cancelling is right here, unlike release.yml where a
-# half-published release is worse than a slow one.
-concurrency:
-  group: nightly
-  cancel-in-progress: true
+# No concurrency group of its own. Called from release.yml it runs under
+# that workflow's group, which never cancels; dispatched by hand, two
+# runs at once are merely wasteful.
 
 permissions:
   contents: read
@@ -233,7 +245,7 @@ jobs:
           # moved on. So the UBSan leg that found two real bugs on that
           # surface -- an 8-byte store into a 4-byte metafile field, and
           # a read one past the end of space[] -- contributed nothing to
-          # any nightly it ran in. Installed once, up front, both
+          # any run it was in. Installed once, up front, both
           # sanitizer steps have it.
           sudo apt-get install -y libx11-dev qtbase5-dev pkg-config
 
@@ -412,21 +424,6 @@ jobs:
       # indistinguishable from the app hanging. On a runner there is no
       # /swe at all, so the swap is a no-op -- which is the case to watch,
       # since a no-op swap and a broken one look identical from here.
-      # The installer, nightly. This job already has mingw, wine and a
-      # Wine prefix -- everything tools/ci-verify-windows-installer.sh
-      # needs -- so nsis is the only addition, and the check that costs
-      # real time (a silent install, a file-for-file comparison against
-      # the staged payload, an uninstall) runs on a lane that has it.
-      #
-      # ci.yml deliberately does not: nsis plus wine is about two minutes
-      # on a lane whose whole point is fourteen jobs in four.
-      - name: Build and verify the NSIS installer
-        run: |
-          sudo apt-get install -y nsis
-          tools/package.sh windows out/pkg
-          tools/package-windows-installer.sh out/pkg/astrolog-windows out/pkg/astrolog-setup.exe
-          tools/ci-verify-windows-installer.sh out/pkg/astrolog-setup.exe out/pkg/astrolog-windows
-
       - name: The Windows GUI scenarios
         run: tools/win-tests.sh
 
@@ -438,72 +435,6 @@ jobs:
           path: out/win-diff/*.diff
           if-no-files-found: ignore
 
-  # All four matrices, including the expensive one the pull-request gate
-  # leaves out. switch-matrix.sh is 1,058 invocations of five processes;
-  # here that is fine, and it is where the switch surface keeps its
-  # coverage.
-  #
-  # The base is the commit as of 24 hours ago, so the report is "what
-  # moved today". That is a different and weaker question than the gate's
-  # "what did this change move", which is exactly why the gate exists
-  # too -- if the day's diff is non-empty, the per-change runs already
-  # said which change did it.
-  differential:
-    name: Behaviour vs yesterday
-    runs-on: ubuntu-22.04
-    timeout-minutes: 60
-    steps:
-      - name: Check out the tree with history
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          fetch-depth: 0
-
-      - name: Install X11 headers
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev
-
-      - name: Diff all four against yesterday
-        run: |
-          base=$(git rev-list -1 --before='24 hours ago' HEAD)
-          if [ -z "$base" ] || [ "$base" = "$(git rev-parse HEAD)" ]; then
-            echo "No commit older than 24 hours to diff against, or nothing"
-            echo "has landed since. Nothing to report; not inventing a base."
-            exit 0
-          fi
-          DIFFERENTIAL_REPORT=1 tools/ci-differential.sh "$base" out/diff
-
-      - name: Keep the diffs
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nightly-differential
-          path: out/diff/*.diff
-          if-no-files-found: ignore
-
-      # The newest PUBLISHED release, verified the way a user does: the
-      # manifest must name exactly the assets GitHub serves, and every
-      # digest must match. Every other check in this file looks at what a
-      # runner built; this is the only one that looks at what was shipped.
-      # It found that every release before v8.00-qt.4 carries a manifest
-      # naming two .deb files the release does not serve -- those tags are
-      # skipped by name inside the script, and anything newer is asserted.
-      - name: The newest published release verifies as downloaded
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 \
-                  --json tagName --jq '.[0].tagName')
-          [ -n "$tag" ] || { echo "no releases yet; nothing to verify"; exit 0; }
-          tools/ci-verify-published-release.sh "$tag" "$GITHUB_REPOSITORY"
-
   # Phase 9. Scoped to "it compiles and the suite passes", because the
   # maintainer owns no Apple hardware and nothing beyond that can be
   # verified here. The deliverable is adoptability: a dated, reproducible
@@ -511,31 +442,33 @@ jobs:
   # someone considering picking up the Mac side cannot find out without
   # doing the work first.
   #
-  # IT IS IN THE NIGHTLY LANE AND NOT THE FAST ONE, and it took a wasted
+  # IT IS IN THE SLOW LANE AND NOT THE FAST ONE, and it took a wasted
   # runner to learn why. The first attempt ran "brew install qt@5", which
   # Homebrew has deprecated -- so instead of pouring a bottle it started
   # building Qt from source, and sat there for over ten minutes inside a
-  # workflow whose whole run is otherwise four. "Does it still build on
-  # macOS" is a daily question, not a per-push one.
+  # workflow whose whole run is otherwise four.
   #
   # Qt6, not Qt5, for the same reason: it is a current bottle and installs
   # in seconds, and Makefile.qt picks its modules from pkg-config, so
-  # nothing else changes. The EL10 package is built against Qt6 too.
+  # nothing else changes. The EL10 and Fedora packages are built against
+  # Qt6 too.
   #
-  # TWO THINGS TO READ HONESTLY. This is the one job in any of these
-  # workflows that was NOT falsified before it was trusted -- it cannot
-  # be, from a machine with no macOS -- and it is continue-on-error, so it
-  # reports rather than gates, like the nightly differential. A green
-  # result says the suite passed offscreen; it does not say a person can
-  # use the menus. QT_CI_PLAN.md item 9.3 lists what nobody has looked at.
+  # TWO THINGS TO READ HONESTLY. This is one of two jobs that were NOT
+  # falsified before being trusted -- it cannot be, from a machine with
+  # no macOS. And since 2026-09-04 it GATES: the .dmg it uploads is the
+  # one the release publishes, so the shipped Mac binary is one that has
+  # passed the suite, which release.yml's own macOS job never ran. A
+  # green result says the suite passed offscreen; it does not say a
+  # person can use the menus. QT_CI_PLAN.md item 9.3 lists what nobody
+  # has looked at.
   macos:
     name: macOS build + suite
     runs-on: macos-latest
     # Build is about two minutes -- Qt6 pours in 59s and the port compiles
-    # in 61s, both measured. The suite is 47s on Linux. Twelve minutes is
-    # generous for that and cheap when something hangs.
-    timeout-minutes: 12
-    continue-on-error: true
+    # in 61s, both measured. The suite is 47s on Linux, six minutes here,
+    # and the .dmg is another minute. Twenty-five is generous for that
+    # and cheap when something hangs.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -698,11 +631,11 @@ jobs:
       - name: Build the .app and .dmg
         run: tools/package-macos.sh out/macos
 
-      # Upload it here too. release.yml was the only place a .dmg could
-      # be obtained, so testing one meant cutting a release -- which is
-      # how v8.00-qt.3 and qt.4 came to be tagged and never published.
-      # A nightly artifact is the thing to hand somebody who says "does
-      # this run on your Mac?" without spending a version number on it.
+      # This .dmg is the one the release ships: release.yml's Publish job
+      # downloads every "astrolog-*" artifact of its run, and this job is
+      # called from it. A dispatched run makes the same artifact, which
+      # is the thing to hand somebody who says "does this run on your
+      # Mac?" without spending a version number on it.
       - name: Say so in the run summary
         if: always()
         run: |
@@ -718,384 +651,46 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload it
-        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: astrolog-macos-nightly
+          name: astrolog-macos
           path: out/macos/*.dmg
-          retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
 
-  # THE EXPERIMENT: does this port build as a Qt application on Windows,
-  # with Microsoft's compiler and the open-source Qt?
+  # The newest PUBLISHED release, verified the way a user does: the
+  # manifest must name exactly the assets GitHub serves, and every digest
+  # must match. Every other check in this file looks at what a runner
+  # built; this is the only one that looks at what was shipped. It found
+  # that every release before v8.00-qt.4 carries a manifest naming two
+  # .deb files the release does not serve -- those tags are skipped by
+  # name inside the script, and anything newer is asserted.
   #
-  # If it does, the three backends this tree carries -- WIN
-  # (wdriver.cpp/wdialog.cpp), QT, and X11 -- could become one, and the
-  # fork's stated spec of "parity with Windows" would stop needing to be
-  # maintained by hand because both platforms would be running the same
-  # code.
-  #
-  # Two facts make it plausible rather than a project. The Qt backend has
-  # no POSIX dependency left: its three mkstemp/unlink sites became
-  # QTemporaryFile on 2026-09-02, and io.cpp's dirent use already had an
-  # "#ifdef PC" path. And the port uses NO Q_OBJECT anywhere, so there is
-  # no moc step -- which means no qmake, no CMake, no build system at all,
-  # just cl.exe over the same source list every other build uses.
-  #
-  # WHAT IT DOES NOT DECIDE. astrolog.rc is a build INPUT, not legacy:
-  # qtrcdlg.h, qtrcaccel.h and qtrccmd.h are generated from it and four
-  # audits check the port against it. And wdriver.cpp/wdialog.cpp are the
-  # behavioural oracle every divergence has been judged against. A green
-  # result here says "the code compiles as Qt on Windows", which is the
-  # first question and not the last one.
-  #
-  # Exploratory, so continue-on-error and nightly: it cannot be falsified
-  # from a machine with no MSVC, exactly like the macOS job.
-  qt-windows:
-    # Qt6 only on Windows, and the Qt5 leg that briefly lived here is
-    # worth a note because the reasoning is not obvious.
-    #
-    # Qt 5.15.2 -- the last open source 5.15, from 2020 -- does not
-    # compile against a current MSVC at all: qvarlengtharray.h uses
-    # stdext::checked_array_iterator, a Microsoft STL extension now behind
-    # an opt-in macro, so Qt's own header fails before any Astrolog source
-    # is reached. That is fixable with one /D, but it is a workaround on a
-    # dead Qt that will keep needing new workarounds.
-    #
-    # The one thing it bought was Windows 7: Qt6Core.dll statically
-    # imports SetThreadDescription (Windows 10 1607+), so a Qt6 build does
-    # not start on 7 -- measured in a VM, an instant exit with no output,
-    # the loader failing before main(). And the PE header says minimum OS
-    # 6.0, which would tell you the opposite.
-    #
-    # So this is the honest cost of a Qt-only Windows build, recorded
-    # rather than discovered later: it is Windows 10 and later, where
-    # wdriver.cpp runs on 7 and 8. Qt5 stays supported on LINUX, where it
-    # is what the maintainer's machine has and distributions still ship
-    # it; macOS is Qt6 already, Homebrew having deprecated qt@5 into a
-    # source build.
-    name: Qt ${{ matrix.qt }} on Windows (MSVC) -- experiment
-    runs-on: windows-latest
-    timeout-minutes: 30
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - qt: "6.8.3"
-            aqtarch: win64_msvc2022_64
-            qtdir: msvc2022_64
-            libpfx: Qt6
+  # Only when dispatched by hand. Called from release.yml this would
+  # verify the PREVIOUS release, which is true but not what anyone
+  # dispatching a release wants gated on, and the one being cut does not
+  # exist yet. The live repository check is here for the same reason:
+  # both answer "did the last release land", and that is a question for
+  # afterwards.
+  published:
+    name: The published release, as downloaded
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-
-      # aqtinstall rather than a third-party action: one pip package, no
-      # new SHA to pin, and it is the tool those actions wrap anyway.
-      - name: Install Qt for MSVC
-        shell: pwsh
+      - name: The newest release verifies as downloaded
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # aqtinstall is pinned for the same reason every action here is
-          # pinned to a SHA: this job's inputs should change when someone
-          # changes them. It reaches out to Qt's own mirrors, parses their
-          # layout, and a release that changes how it names an archive or
-          # resolves a mirror would break the build with no commit behind
-          # it -- the hardest kind of failure to read, because the diff
-          # that "caused" it is empty. 3.3.0 is what the runs that
-          # established this job all used.
-          pip install aqtinstall==3.3.0
-          # Retry, because the failure mode here is a MIRROR and not the
-          # tool. Observed 2026-09-03: aqt was redirected to
-          # qt.mirror.constant.com and stopped with "Specified path is
-          # bad: lib/cmake/Qt6/QtPostProcess.cmake" -- an incomplete
-          # archive on one mirror, nothing to do with this repository, and
-          # a commit-less failure of exactly the kind the pin above exists
-          # to avoid. aqt picks a mirror per run, so another attempt is
-          # usually a different mirror.
-          #
-          # Three attempts, not a loop until it works: if every mirror is
-          # serving a bad archive that is worth failing on, and this job is
-          # continue-on-error so a real outage does not turn the nightly
-          # red on its own.
-          $ok = $false
-          foreach ($i in 1..3) {
-            aqt install-qt windows desktop ${{ matrix.qt }} ${{ matrix.aqtarch }} -O ${{ github.workspace }}\Qt
-            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
-            Write-Host "aqt attempt $i failed (exit $LASTEXITCODE); retrying against another mirror"
-            Remove-Item -Recurse -Force "${{ github.workspace }}\Qt" -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 15
-          }
-          if (-not $ok) { Write-Host "aqt failed three times"; exit 1 }
-          echo "QTDIR=${{ github.workspace }}\Qt\${{ matrix.qt }}\${{ matrix.qtdir }}" >> $env:GITHUB_ENV
-
-      # No moc, no build system: the same source list Makefile.srcs gives
-      # every other build, handed to cl.exe through a response file.
-      # tools/qt-srcs.py reads that list rather than keeping a copy, so a
-      # new source file does not have to be remembered in a sixth place --
-      # verified on Linux to match the real Qt build's object list exactly.
-      #
-      # -DQT selects the Qt backend. -DPC is what astrolog.h wants on
-      # Windows for <io.h> and backslash path separators, and is
-      # independent of -DWIN -- which is the whole point of the
-      # experiment: Windows without the Windows backend.
-      - name: Compile with cl.exe
-        shell: cmd
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 \
+                  --json tagName --jq '.[0].tagName')
+          [ -n "$tag" ] || { echo "no releases yet; nothing to verify"; exit 0; }
+          tools/ci-verify-published-release.sh "$tag" "$GITHUB_REPOSITORY"
+      - name: The deployed repository serves it
         run: |
-          python tools\qt-srcs.py > srcs.txt || exit /b 1
-          rem vswhere, not a hardcoded edition path. The first attempt
-          rem guessed Enterprise then Community under
-          rem "Microsoft Visual Studio\2022\" and found neither -- the
-          rem runner image moves, and the edition is not something to
-          rem guess at. vswhere ships with every installer since 2017 and
-          rem answers where the toolset actually is.
-          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * ^
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ^
-            -property installationPath`) do set "VSPATH=%%i"
-          if not defined VSPATH echo No MSVC toolset found & exit /b 1
-          echo Using %VSPATH%
-          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          rem /Zc:__cplusplus is not optional with Qt. MSVC reports
-          rem __cplusplus as 199711L regardless of /std: unless told to
-          rem be accurate, and Qt's qcompilerdetection.h checks the macro
-          rem and refuses: "Qt requires a C++17 compiler, and a suitable
-          rem value for __cplusplus". The first run with a working
-          rem toolchain died there, having compiled most of the tree
-          rem first -- so this is a compiler-configuration quirk, not an
-          rem Astrolog portability problem.
-          rem /permissive- is the second flag Qt asks for by name, for the
-          rem same reason as the first: MSVC's defaults are not
-          rem standards-conforming and Qt's headers check. Both messages
-          rem name the flag, and neither is a complaint about this tree --
-          rem Astrolog's own sources have not produced a diagnostic yet.
-          rem /W3, not /W1. /W1 is MSVC's quietest setting and this job ran
-          rem at it from the day it was written, which made "the MSVC build
-          rem is clean" a much weaker statement than it sounded: three
-          rem warnings total across the whole tree, two of them a #pragma
-          rem GCC that MSVC cannot read. /W3 is the level that finds
-          rem signed/unsigned mismatches, truncation and uninitialised
-          rem locals -- the things a second compiler is worth having FOR.
-          rem /W4 is noisier than it is useful on a codebase this old.
-          rem
-          rem /Zc:strictStrings- goes AFTER /permissive-, which implies the
-          rem positive form. The tree initialises char * from string
-          rem literals in 1,345 places -- three data tables are 96% of it --
-          rem and all six makefiles already pass -Wno-write-strings for the
-          rem same reason. Deferred deliberately: this job exists to find the
-          rem NEXT obstacle, not to fund a const sweep. See QT_CI_PLAN.md.
-          rem _CRT_SECURE_NO_WARNINGS below silences C4996: MSVC deprecates
-          rem fopen, getenv, strcpy and sscanf for _s variants that exist
-          rem only on its own compiler, 850 of them at /W3. A portability
-          rem opinion rather than a defect. NOTE: rem cannot appear between
-          rem "cl" and its last "^" continuation -- cmd passes the word to
-          rem the compiler as a source file, and the build dies with
-          rem "LNK1181: cannot open input file 'rem.obj'". It did.
-          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
-             /D_CRT_SECURE_NO_WARNINGS ^
-             /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
-             /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
-             /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
-             /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" ^
-             @srcs.txt ^
-             /Fe:astrolog-qt.exe ^
-             /link /LIBPATH:"%QTDIR%\lib" ^
-             ${{ matrix.libpfx }}Widgets.lib ${{ matrix.libpfx }}Gui.lib ^
-             ${{ matrix.libpfx }}Core.lib ${{ matrix.libpfx }}Network.lib ^
-             ${{ matrix.libpfx }}PrintSupport.lib ^
-             user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
-
-      # Not just "did it link" -- does it compute? A Qt build has
-      # astrolog.cpp's ordinary main(), because that is inside "#ifndef
-      # WIN" and this build does not define WIN. So unlike astrolog.exe it
-      # can be driven from a command line, and the same Chiron assertion
-      # the Linux packages use applies: 0Ari00 is the no-ephemeris answer,
-      # and the Sun reads correctly even with no ephemeris at all.
-      - name: Does it run, and compute?
-        shell: pwsh
-        run: |
-          if (-not (Test-Path astrolog-qt.exe)) { "No binary produced."; exit 1 }
-          "built: $((Get-Item astrolog-qt.exe).Length) bytes"
-          $env:PATH = "$env:QTDIR\bin;$env:PATH"
-          $env:QT_QPA_PLATFORM = "offscreen"
-          # "-os <file>" and not stdout, because a QT build writes NO
-          # chart to stdout on ANY platform. Measured on Linux: the
-          # console build prints 136 lines, ./astrolog-qt prints zero and
-          # exits 0. So the first two versions of this step were asking
-          # the binary for something it never does, and the Windows job
-          # was reporting a defect in the test.
-          #
-          # This is what the previous fix bought. That version reported
-          # "stdout (first 12 lines):" followed by nothing, which is a
-          # true statement about the program; the version before it hid
-          # the same fact behind PowerShell folding stderr into the
-          # object stream. A harness that lies costs more than one that
-          # fails.
-          & .\astrolog-qt.exe -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -os chart.txt 2> chart.err
-          $chiron = (Get-Content chart.txt -ErrorAction SilentlyContinue | Where-Object { $_ -match '^Chir' } | Select-Object -First 1)
-          if (-not $chiron) {
-            "No Chiron line. chart.txt (first 12 lines):"
-            Get-Content chart.txt -TotalCount 12 -ErrorAction SilentlyContinue
-            "stderr:"; Get-Content chart.err -TotalCount 6 -ErrorAction SilentlyContinue
-            exit 1 }
-          if ($chiron -match '0Ari00') { "EPHEMERIS NOT FOUND: $chiron"; exit 1 }
-          "Qt on Windows computes: $chiron"
-
-      # The binary leaves the runner, because the interesting questions
-      # about it cannot be answered here. This job proves it builds and
-      # computes; whether 25 dialogs lay out correctly under a Windows
-      # style, and whether the 3812-assertion suite passes, needs a real
-      # Windows desktop. Qt's own DLLs go with it -- windeployqt is the
-      # supported way to work out which, rather than guessing a list.
-      # The same source list again with -DQTTEST, which is what
-      # run-qt-tests.sh drives. Without it the artifact can only be
-      # eyeballed; with it, 3812 assertions -- 25 dialogs, 42 context
-      # menus, 264 shortcuts -- can run on a real Windows desktop, which
-      # is the one question this job structurally cannot answer itself.
-      # A second cl.exe pass over the same sources is about a minute.
-      - name: Compile the test build too
-        shell: cmd
-        run: |
-          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * ^
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ^
-            -property installationPath`) do set "VSPATH=%%i"
-          call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
-          python tools\qt-srcs.py --test > srcst.txt || exit /b 1
-          rem _CRT_SECURE_NO_WARNINGS below silences C4996: MSVC deprecates
-          rem fopen, getenv, strcpy and sscanf for _s variants that exist
-          rem only on its own compiler, 850 of them at /W3. A portability
-          rem opinion rather than a defect. NOTE: rem cannot appear between
-          rem "cl" and its last "^" continuation -- cmd passes the word to
-          rem the compiler as a source file, and the build dies with
-          rem "LNK1181: cannot open input file 'rem.obj'". It did.
-          cl /nologo /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 ^
-             /D_CRT_SECURE_NO_WARNINGS ^
-             /DQT /DQTTEST /DPC /DWIN32 /D_WINDOWS /DNDEBUG ^
-             /I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" ^
-             /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" ^
-             /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" ^
-             @srcst.txt ^
-             /Fe:astrolog-qt-test.exe ^
-             /link /LIBPATH:"%QTDIR%\lib" ^
-             ${{ matrix.libpfx }}Widgets.lib ${{ matrix.libpfx }}Gui.lib ^
-             ${{ matrix.libpfx }}Core.lib ${{ matrix.libpfx }}Network.lib ^
-             ${{ matrix.libpfx }}PrintSupport.lib ^
-             user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
-
-      # Run the suite HERE, not only in a VM by hand. The runner has
-      # everything needed: the -DQTTEST binary, Qt's DLLs, and
-      # qoffscreen.dll -- which is the whole trick, because a Windows
-      # runner has no desktop and the "windows" platform plugin blocks
-      # forever on the first widget. Offscreen needs no display at all.
-      #
-      # Until now these 3812 assertions ran on Windows only when someone
-      # copied an artifact into a VirtualBox VM and invoked
-      # tools/win-vm-suite.sh, which is a real check and not a repeatable
-      # one. 25 dialogs, 42 context menus, 264 shortcuts and 338 menu
-      # items are exactly the surface a Windows port can break without
-      # any Linux net noticing.
-      #
-      # ASTROLOG_QT_EPHEM=minimal because the bundled ephem/ carries 19 of
-      # the 39 esoteric bodies, and the suite refuses to quietly run 19
-      # assertions where it should run 39.
-      - name: Run the suite on Windows
-        shell: cmd
-        run: |
-          set QT_QPA_PLATFORM=offscreen
-          set ASTROLOG_QT_EPHEM=minimal
-          if not exist platforms mkdir platforms
-          copy "%QTDIR%\plugins\platforms\qoffscreen.dll" platforms\ >nul
-          copy "%QTDIR%\bin\Qt6*.dll" . >nul
-          astrolog-qt-test.exe -Yi1 ephem
-          if errorlevel 1 exit /b 1
-
-      # And a LOOK at it, the same as macOS gets. This is the other
-      # platform nobody routinely opens: the suite proves 25 dialogs open
-      # with the right titles, and cannot say whether a control sits off
-      # the edge or a label is truncated under Windows' default font --
-      # which is exactly where a Qt layout tuned on Linux would break.
-      # QWidget::grab() paints through Qt, so this needs no desktop.
-      - name: Screenshot every dialog
-        if: always()
-        shell: cmd
-        run: |
-          set QT_QPA_PLATFORM=offscreen
-          set QTSHOTDIR=out\shots
-          astrolog-qt-test.exe -Yi1 ephem
-          exit /b 0
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: windows-qt-screenshots-${{ matrix.libpfx }}
-          path: out/shots
-          if-no-files-found: warn
-
-      # Say what happened where the run summary shows it. Both experiments
-      # are continue-on-error, which means a failure inside them leaves the
-      # RUN green and someone has to go looking at job level to find it.
-      # A summary line is the difference between "the nightly passed" and
-      # "the nightly passed and here is what each platform actually did".
-      - name: Say so in the run summary
-        if: always()
-        shell: bash
-        run: |
-          {
-            echo "### Qt ${{ matrix.qt }} on Windows (MSVC)"
-            if [ -f astrolog-qt.exe ]; then
-              echo "- built \`astrolog-qt.exe\`, $(stat -c%s astrolog-qt.exe 2>/dev/null || stat -f%z astrolog-qt.exe) bytes"
-            else
-              echo "- **did not build**"
-            fi
-            [ -f astrolog-qt-test.exe ] && echo "- built the -DQTTEST binary too"
-            echo "- job status: ${{ job.status }}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Stage a runnable tree
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item astrolog-qt.exe dist\
-          Copy-Item astrolog-qt-test.exe dist\
-          & "$env:QTDIR\bin\windeployqt.exe" --release --no-translations `
-            --no-system-d3d-compiler --no-opengl-sw dist\astrolog-qt.exe
-          # windeployqt ships only the "windows" platform plugin, and the
-          # suite needs "offscreen": run-qt-tests.sh sets
-          # QT_QPA_PLATFORM=offscreen so 3812 assertions can run with no
-          # display. Without it the binary exits at once with "Could not
-          # find the Qt platform plugin", and with the windows plugin
-          # instead it blocks forever -- a guestcontrol process runs in
-          # session 0, which has no desktop to attach a window to. Both
-          # measured, the second by a ten-minute hang.
-          Copy-Item "$env:QTDIR\plugins\platforms\qoffscreen.dll" dist\platforms\
-          Copy-Item "$env:QTDIR\plugins\platforms\qminimal.dll" dist\platforms\
-          # icons/ too, and not as an afterthought. IconAstrologQt() tries
-          # icons/astrolog{16,32,48}.png beside the executable and then
-          # falls back to astrlog1.ico, and the suite's "Application icon"
-          # group asserts all three sizes resolve at their exact size
-          # rather than as a scaled blur. The artifact had NEITHER source,
-          # which cost 8 of the 15 failures in the first Windows run of
-          # the suite -- a packaging gap reported as a port defect.
-          # Confirmed by removing both locally: 0 passed, 8 failed, the
-          # same eight. Removing only icons/ still passes, off the .ico.
-          Copy-Item -Recurse ephem, font, icons dist\
-          Copy-Item astrolog.as, atlas.as, timezone.as, sefstars.txt, `
-            seorbel.txt, astexo.csv, earth.bmp, astrlog1.ico dist\
-          "staged $((Get-ChildItem dist -Recurse -File).Count) files, " +
-            "$([math]::Round((Get-ChildItem dist -Recurse -File | Measure-Object Length -Sum).Sum/1MB,1)) MB"
-
-      # Before uploading, check the tree is one somebody can actually run.
-      # Everything above assembles it and nothing looked at the result --
-      # the same gap the Windows .zip had. Both extra platform-plugin
-      # copies and the icons exist because their absence already cost a
-      # run, and the icons one was reported as a port defect rather than
-      # as the packaging gap it was.
-      - name: The staged tree is complete
-        shell: bash
-        run: python3 tools/qt_windows_dist_audit.py dist
-
-      - name: Upload it
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: astrolog-${{ matrix.libpfx }}-windows-msvc
-          path: dist/
-          retention-days: 14
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 \
+                  --json tagName --jq '.[0].tagName')
+          [ -n "$tag" ] || exit 0
+          tools/ci-verify-live-repo.sh "${tag#v}"
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,16 +1,23 @@
 #!/bin/sh
-# Assemble a runnable package for one platform.
+# Assemble a runnable tree of the WIN32 build -- the oracle, not the
+# product.
 #
 #   tools/package.sh windows [outdir]
 #
-# QT_CI_PLAN.md item 4.3. The Windows one is the easy one: Makefile.win
-# links -static -static-libgcc -static-libstdc++, so the package is one
-# .exe plus the data files, with no DLLs to chase.
+# QT_CI_PLAN.md item 4.3. Until 2026-09-04 this was the Windows package:
+# Makefile.win links -static -static-libgcc -static-libstdc++, so it is
+# one .exe plus the data files, with no DLLs to chase. The maintainer
+# then made the Qt port the one interface on every platform, and the
+# Windows package is tools/package-windows-qt.py's tree, built on a
+# Windows runner by .github/workflows/windows-qt.yml.
 #
-# The Linux package is deliberately absent. Q1 is still open -- AppImage
-# (~70 MB of Qt closure), a tarball with a documented apt prerequisite, or
-# a .deb (~8 MB, apt resolves Qt5) -- and that is a judgement about
-# audience, not something to settle by writing whichever is easiest.
+# This stays because the slow lane's "Windows parity" job still needs a
+# runnable tree of the Win32 build to start under Wine
+# (tools/ci-verify-windows-starts.sh): that build is what every
+# differential harness measures the port against, and a tree of it that
+# does not start is a broken oracle. The Linux packages are
+# tools/package-deb.sh and tools/package-rpm.sh (Q1 answered: native
+# packages).
 #
 # WHAT SHIPS is not obvious and each entry was checked rather than
 # guessed:

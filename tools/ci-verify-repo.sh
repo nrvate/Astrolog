@@ -26,24 +26,39 @@ command -v docker >/dev/null || { echo "need docker"; exit 1; }
 chart='-qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X'
 fail=0
 
+# The distribution list lives in tools/distros.py and nowhere else; this
+# used to be a case statement of its own, which is how it came to name
+# fedora:42 for months after Fedora 42 stopped receiving updates.
+#
+# A suite the repository serves but the CURRENT matrix no longer builds
+# -- a Fedora release that has aged out, whose packages older releases
+# still carry -- is reported and skipped rather than verified. Its
+# container image still exists, but its mirrors are on their way to the
+# archive, and a check that fails for a reason nobody will act on is a
+# check people stop reading. It is said out loud below, not hidden.
+current=$(python3 tools/distros.py dists 2>/dev/null) || {
+  echo "cannot determine the distribution list (tools/distros.py failed)"; exit 1; }
 image_for() {
-  case $1 in
-    jammy)  echo ubuntu:22.04 ;;
-    noble)  echo ubuntu:24.04 ;;
-    fc42)   echo fedora:42 ;;
-    fc43)   echo fedora:43 ;;
-    el9)    echo quay.io/rockylinux/rockylinux:9 ;;
-    el10)   echo quay.io/rockylinux/rockylinux:10 ;;
-    *)      echo '' ;;
+  case " $current " in
+    *" $1 "*) python3 tools/distros.py image "$1" 2>/dev/null ;;
+    *) echo '' ;;
   esac
+}
+aged_out() {
+  case " $current " in
+    *" $1 "*) return 1 ;;
+  esac
+  echo "$1: served, but no longer in the build matrix -- not verified"
+  return 0
 }
 
 for dist in "$repo"/apt/dists/*/; do
   [ -d "$dist" ] || continue
   code=$(basename "$dist")
+  aged_out "$code" && continue
   img=$(image_for "$code")
   [ -n "$img" ] || { echo "NO IMAGE MAPPED for apt suite '$code' -- add one to"
-                     echo "image_for() rather than leaving a suite untested."; fail=1; continue; }
+                     echo "tools/distros.py rather than leaving a suite untested."; fail=1; continue; }
   printf '%-12s %-38s ' "$code" "$img"
   out=$(docker run --rm -v "$repo":/repo:ro "$img" sh -c "
       export DEBIAN_FRONTEND=noninteractive
@@ -120,8 +135,9 @@ done
 for dist in "$repo"/rpm/*/; do
   [ -d "$dist" ] || continue
   d=$(basename "$dist")
+  aged_out "$d" && continue
   img=$(image_for "$d")
-  [ -n "$img" ] || { echo "NO IMAGE MAPPED for rpm dist '$d'."; fail=1; continue; }
+  [ -n "$img" ] || { echo "NO IMAGE MAPPED for rpm dist '$d' -- add one to tools/distros.py."; fail=1; continue; }
   printf '%-12s %-38s ' "$d" "$img"
   out=$(docker run --rm -v "$repo":/repo:ro "$img" sh -c "
       rpm --import /repo/astrolog.asc

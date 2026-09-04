@@ -427,96 +427,21 @@ jobs:
           path: out/diff/*.diff
           if-no-files-found: ignore
 
-  # Phase 4, the Windows half. Q1 still gates the LINUX artifact -- an
-  # AppImage carries ~70 MB of Qt closure, a .deb is ~8 MB and lets apt
-  # resolve Qt5, a tarball is trivial but "download and run" then does not
-  # work -- and that is a judgement about audience, not something to
-  # settle by building whichever is easiest. The Windows one has no such
-  # question: Makefile.win links fully static, so it is one .exe plus the
-  # data, and Q4 settled what data (astexo.csv ships; the "Show
-  # E&xoplanets" menu item reads it).
+  # Item 4.3, and since 2026-09-04 the WINDOWS PACKAGE IS THE QT BUILD.
+  # A reusable workflow, because release.yml calls the same one: ground
+  # rule 3, one build definition used by both CI and release. It compiles
+  # the port with MSVC on a Windows runner, runs the 3812-assertion suite
+  # there, starts the staged program with its real platform plugin and
+  # requires a window, then zips it and builds the NSIS installer on
+  # Linux and installs and uninstalls that under Wine. The file says why
+  # each half runs where it does.
   #
-  # Ground rule 3 is "one build definition, used by both CI and release".
-  # swisseph reaches that with a reusable workflow; here the definition is
-  # tools/package.sh, which a release workflow will call unchanged. Same
-  # guarantee, and it can be run by hand.
-  package:
+  # The Win32 build is still compiled above and still driven under Wine
+  # by the slow lane, because it is the behavioural oracle -- it is no
+  # longer what ships.
+  windows-qt:
     name: Windows package
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    steps:
-      - name: Check out the tree
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-
-      - name: Install the cross toolchain
-        run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y g++-mingw-w64-x86-64
-
-      - name: Build the oracle
-        run: make -f Makefile.win -j4
-
-      - name: Assemble the package
-        run: tools/package.sh windows out/package
-
-      # Presence, absence, manifest generated, manifest checked back, and
-      # the manifest's line count against the file count. That last one is
-      # not paranoia: a SHA256SUMS covering a fifth of a package passes
-      # "sha256sum -c" perfectly.
-      - name: Verify it
-        run: tools/ci-verify-package.sh out/package/astrolog-windows
-
-      # 4.6. The mode has to be read out of the archive, never off the
-      # disk. It matters for the Linux package rather than this one -- a
-      # .zip carries no unix modes -- but the mechanism is what rots, so
-      # it is exercised here where there is something to exercise it on.
-      - name: The binary is executable inside the archive
-        run: |
-          ( cd out/package && tar czf astrolog-windows.tar.gz astrolog-windows )
-          tools/ci-assert-archive-mode.sh \
-            out/package/astrolog-windows.tar.gz astrolog.exe
-
-      # Upload the .zip, which is what a release ships, not the .tar.gz
-      # above -- that one exists only to give ci-assert-archive-mode.sh a
-      # tar to read modes out of, and uploading it made CI's artifact a
-      # format no user ever receives. Noticed by someone downloading it
-      # and asking why Windows was getting a tarball.
-      #
-      # The NSIS installer is deliberately NOT built here. It needs nsis
-      - run: ( cd out/package && zip -qr astrolog-windows.zip astrolog-windows )
-      # The archive, not the directory it was made from. Everything above
-      # audits the staged tree; nothing had ever opened the .zip again.
-      - run: tools/ci-verify-zip.sh out/package/astrolog-windows.zip out/package/astrolog-windows
-
-      # BUILD the installer here, do not verify it. Those are different
-      # costs and conflating them kept the .exe off this lane for no
-      # reason: nsis is an 850 KB package and makensis takes seconds,
-      # while VERIFYING an installer means wine, a prefix, a silent
-      # install and an uninstall -- minutes, on a lane whose point is
-      # fourteen jobs in four.
-      #
-      # So the build is here, where it makes the artifact people actually
-      # download from a CI run, and the verification stays on the nightly
-      # and release lanes that have time for it. A broken installer would
-      # still be caught before it ships; it just would not be caught
-      # within four minutes of the push.
-      - run: sudo apt-get install -y nsis
-      - run: tools/package-windows-installer.sh out/package/astrolog-windows out/package/astrolog-setup.exe
-
-      - name: Keep the package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: astrolog-windows
-          path: |
-            out/package/astrolog-windows.zip
-            out/package/astrolog-setup.exe
+    uses: ./.github/workflows/windows-qt.yml
 
   # Q1 answered, 2026-09-02: native packages. An AppImage carries ~70 MB
   # of Qt closure for a 2.5 MB program; a tarball leaves the user to
@@ -582,49 +507,45 @@ jobs:
           name: astrolog-deb-${{ matrix.image }}
           path: out/package/*.deb
 
-  # Fedora has no LTS -- each release is supported about thirteen months --
-  # so "the last two" is a list that moves every six months. It lives here
-  # rather than in the script, and this comment is where to bump it. The
-  # genuinely long-supported RPM targets are the Enterprise Linux rebuilds
-  # at EL9/EL10, which is a separate decision because their Qt5 story is
-  # not Fedora's.
+  # THE DISTRIBUTION LIST IS NOT HERE. tools/distros.py is the one place
+  # it is defined; this job asks it. Fedora has no LTS -- each release is
+  # supported about thirteen months -- and "the last two" written here
+  # by hand said 42 and 43 for four months after 42 had stopped receiving
+  # updates and 44 had shipped. The script asks Fedora's own release
+  # service instead (Bodhi, state=current) and takes the newest two. EL9
+  # and EL10 are written in the script, since Enterprise Linux moves
+  # every three years and is bounded by nothing an API should decide.
   #
-  # Measured 2026-09-02: Fedora 41, 42 and 43 all still ship
-  # qt5-qtbase-devel, so the RPM matches the Debian side on Qt5 rather
-  # than diverging to Qt6.
+  # The Qt package differs by row, and it is not a detail. Measured
+  # 2026-09-02 with only base + CRB enabled, no third-party repo: EL9 has
+  # qt5-qtbase-devel and no Qt6; EL10 has qt6-qtbase-devel and no Qt5
+  # (EPEL has it, but then every user needs EPEL for a runtime
+  # dependency). Fedora has both and builds against Qt6, because Fedora
+  # will drop Qt5 before EL9 does and a row that selects its release
+  # automatically should not depend on a library that release is on its
+  # way to removing. Makefile.qt picks its module names from pkg-config,
+  # so nothing but the package name changes. Verified 2026-09-03 in a
+  # fedora:44 container: links libQt6Core, packages, installs, computes
+  # Chiron.
+  matrix:
+    name: Which distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rpm: ${{ steps.rpm.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - id: rpm
+        run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
+
   rpm:
     name: .rpm on ${{ matrix.release }}
+    needs: matrix
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # Fedora: current, short-lived, bumped every six months.
-          - {release: fedora-42, image: 'fedora:42', qt: qt5-qtbase-devel}
-          - {release: fedora-43, image: 'fedora:43', qt: qt5-qtbase-devel}
-          # Enterprise Linux: ~10 years of support, which is what "LTS"
-          # means on the RPM side.
-          #
-          # THE QT PACKAGE DIFFERS, and it is not a detail. Measured
-          # 2026-09-02 with only base + CRB enabled, no third-party repo:
-          #
-          #             qt5-qtbase-devel   qt6-qtbase-devel
-          #   EL9       yes                no
-          #   EL10      no                 yes
-          #
-          # EL10 can get Qt5 from EPEL, but then every user installing
-          # this package needs EPEL too, for a runtime dependency. Qt6 is
-          # in EL10's own repositories, so that is what it builds against
-          # -- and Makefile.qt already picks its module names from
-          # "pkg-config --exists Qt6Widgets", so nothing but the package
-          # name changes. Verified: EL10 links libQt6Core, packages,
-          # installs and computes Chiron.
-          #
-          # This is where keeping the Qt6 build alive (Q8) stops being
-          # insurance and starts being load-bearing.
-          - {release: el9,  image: 'quay.io/rockylinux/rockylinux:9', qt: qt5-qtbase-devel}
-          - {release: el10, image: 'quay.io/rockylinux/rockylinux:10', qt: qt6-qtbase-devel}
+      matrix: ${{ fromJSON(needs.matrix.outputs.rpm) }}
     container: ${{ matrix.image }}
     steps:
       # CRB ("CodeReady Builder") is where Enterprise Linux keeps

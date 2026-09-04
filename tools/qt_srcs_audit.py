@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check tools/qt-srcs.py against the makefiles it stands in for.
 
-The MSVC experiment in .github/workflows/nightly.yml cannot use make: it
+The MSVC build in .github/workflows/windows-qt.yml cannot use make: it
 compiles the Qt port with cl.exe over a response file. tools/qt-srcs.py
 produces that list, and reads Makefile.srcs so it does not become a
 second copy of it.
@@ -11,7 +11,7 @@ group is renamed or deleted, qt-srcs.py stops with "cannot find SRC_X"
 and the build fails loudly. But if a makefile starts using a NEW group,
 qt-srcs.py's own list of group names is short by one, and it emits a list
 that is quietly missing those sources -- which surfaces as a link error
-on a Windows runner, in a nightly, attributed to nothing.
+on a Windows runner, attributed to nothing.
 
 So: the groups the Qt makefiles reference must be exactly the groups
 qt-srcs.py asks for. Seconds to run, and it fails on a laptop instead of
@@ -49,7 +49,7 @@ def groups_asked(argv):
 
 # Headers that do not exist on Windows. An include of one of these at
 # the top level of a file the Qt build compiles is a Windows build break
-# waiting for a nightly to find it -- which is exactly how qttest.cpp's
+# waiting for a Windows runner to find it -- which is exactly how qttest.cpp's
 # <unistd.h> was found, after four sanitizer sweeps and a warning ledger
 # across five builds had all been silent about it, because on Linux it is
 # correct. Inside any #if/#ifdef it is somebody's deliberate branch:

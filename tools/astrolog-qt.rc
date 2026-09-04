@@ -1,0 +1,68 @@
+// Resources for the Qt build of Astrolog on Windows.
+//
+// astrolog.rc is the Win32 build's resource script: 28 dialogs, the
+// menus, the accelerators, and the icons. The Qt build draws all of that
+// itself and needs none of it -- except that a Windows executable with no
+// icon resource shows as a blank page in Explorer, in the Start Menu and
+// on the taskbar until its first window is up, and one with no
+// VERSIONINFO has a blank Properties / Details tab. Both are the things
+// that make an unsigned download look worse than it is.
+//
+// Compiled by tools/msvc-build-qt.cmd with rc.exe, which takes the
+// version on the command line so this file never carries a copy of it:
+//
+//   rc /DVERSIONRC=8,0,0,5 /DVERSIONSTR="8.00-qt.5" /fo astrolog-qt.res
+//      tools\astrolog-qt.rc
+//
+// The icon is the same astrlog1.ico the Win32 build uses, so the two
+// programs look the same in a folder listing. IconAstrologQt() in
+// qtdriver.cpp sets the WINDOW icon at runtime from icons/*.png; this is
+// the FILE icon, which only a resource can provide.
+//
+// Checked on Linux with mingw's windres, which reads the same syntax.
+// The quotes around the string need one more level of escaping there
+// than for rc.exe, because windres hands its -D values to the
+// preprocessor through a shell, which eats a bare pair:
+//   x86_64-w64-mingw32-windres -DVERSIONRC=8,0,0,5 -DVERSIONSTR='\"8.00-qt.5\"'
+//       -I. -o /dev/null tools/astrolog-qt.rc
+
+#include <windows.h>
+
+#ifndef VERSIONRC
+#error "VERSIONRC not defined -- use tools/msvc-build-qt.cmd"
+#endif
+#ifndef VERSIONSTR
+#error "VERSIONSTR not defined -- use tools/msvc-build-qt.cmd"
+#endif
+
+// The first ICON resource in the file is the one Explorer shows.
+IDI_ICON1 ICON "astrlog1.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    VERSIONRC
+ PRODUCTVERSION VERSIONRC
+ FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+ FILEFLAGS      0
+ FILEOS         VOS_NT_WINDOWS32
+ FILETYPE       VFT_APP
+ FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName",      "Astrolog"
+      VALUE "FileDescription",  "Astrolog"
+      VALUE "FileVersion",      VERSIONSTR
+      VALUE "InternalName",     "astrolog"
+      VALUE "LegalCopyright",   "Copyright (C) 1991-2026 Walter D. Pullen. GNU GPL v2 or later."
+      VALUE "OriginalFilename", "astrolog.exe"
+      VALUE "ProductName",      "Astrolog"
+      VALUE "ProductVersion",   VERSIONSTR
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

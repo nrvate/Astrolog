@@ -3,7 +3,7 @@
 #
 #   tools/win-vm-suite.sh <vm> <dist-dir> [ephemeris-path]
 #
-# <dist-dir> is the astrolog-Qt6-windows-msvc artifact from nightly.yml,
+# <dist-dir> is the windows-qt-test-build artifact from windows-qt.yml,
 # unpacked. The default ephemeris path is the bundled ephem\ beside the
 # binary, which is complete enough for every group except the esoteric
 # bodies -- pass a full ephemeris directory to cover those.
@@ -18,7 +18,7 @@
 #      DHCP is fine. Guest Additions must be running (RunLevel >= 2).
 #
 #   2. QT_QPA_PLATFORM=offscreen is required, and the plugin has to be
-#      in the artifact. windeployqt ships only "windows"; nightly.yml
+#      in the artifact. windeployqt ships only "windows"; the stager
 #      copies qoffscreen.dll in beside it.
 #
 #   3. Do NOT fall back to the windows plugin. A guestcontrol process

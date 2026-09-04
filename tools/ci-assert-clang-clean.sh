@@ -29,7 +29,7 @@ expect=${2:-}
 # Resolve each warning to a file that REALLY EXISTS before classifying it.
 #
 # The build is "make qt -j4 | tee build.log", so two compilers can write
-# the same line and their output interleaves mid-line. A nightly failed
+# the same line and their output interleaves mid-line. A slow-lane run failed
 # on exactly that: a stray character was spliced onto the front of a
 # warning, making it read
 #

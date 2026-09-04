@@ -251,66 +251,121 @@ regression is found by whoever tries to use it.
 
 ---
 
-## Where this stands, 2026-09-02
+## Where this stands, 2026-09-04
 
-**Every phase is built and running.** Four workflows, 22 jobs, every
-check falsified individually before it was trusted — with one stated
-exception, the macOS job, which cannot be falsified from a machine with
-no macOS and says so in the file. The first release is cut and the
-package repository is live. `QT_CI_PLAN.md` is no longer a plan; it is
-the record of why each piece is shaped the way it is.
+**Every phase is built and running, and the shape changed on 2026-09-04.**
+Five workflows now, every check falsified individually before it was
+trusted — with two stated exceptions, macOS and the MSVC build, which
+cannot be falsified from a machine with neither and say so in their
+files. Five releases are cut and the package repository is live.
 
 | workflow | jobs | what they are |
 |---|---|---|
-| `ci.yml` (~4 min, every push and PR) | Windows builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · Windows package · 2 × `.deb` · 4 × `.rpm` | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
-| `nightly.yml` | Compiler warnings · AddressSanitizer sweep · Windows parity · Behaviour vs yesterday | 6.1–6.4b |
-| `release.yml` (on `v*`) | Version check · packages · Publish | 5.1, 5.2 |
+| `ci.yml` (every push and PR, ~5–6 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · MSVC project · Which distributions · 2 × `.deb` · 4 × `.rpm` · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
+| `windows-qt.yml` (reusable; called by `ci.yml` and `release.yml`) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
+| `slow-lane.yml` (reusable + dispatch; **no schedule**) | Compiler warnings · Qt6 warning ledger · What nothing executes · AddressSanitizer sweep (+UBSan, +Swiss oracle, +Qt suite under ASan) · Windows parity · macOS build + suite + `.dmg` · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
+| `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · 2 × `.deb` · N × `.rpm` · Publish | 5.1, 5.2 |
 | `repo.yml` (on release) | Build the repositories · Publish to Pages | 4.7 |
+
+**Three decisions, all the maintainer's, all on 2026-09-04:**
+
+1. **The nightly is gone; the slow lane gates the release.** "If things
+   are not changing and new releases are not created, no action is
+   needed." The nightly had gated nothing, its schedule had fired once
+   in its life (every other run was a dispatch), and GitHub disables a
+   schedule after 60 quiet days regardless. `release.yml` now calls
+   `slow-lane.yml` and its Publish job needs every job in it. A release
+   takes about twenty minutes instead of six; the ASan sweep is the long
+   pole. The "Behaviour vs yesterday" job was dropped outright — `ci.yml`
+   diffs every push against its base, and "since yesterday" means
+   nothing without a daily run — and its published-release check became
+   a dispatch-only job, because called from a release it would verify
+   the *previous* one.
+
+2. **Fedora is asked, not written down.** Both workflows still built
+   Fedora 42 — end-of-life since May — and neither built 44, current
+   since April. The matrix was defined in four files. It is defined in
+   `tools/distros.py` now: the two current releases from Bodhi
+   (`state=current`, `id_prefix=FEDORA`, the two highest), with
+   endoflife.date as the outage fallback and `FEDORA_RELEASES` as the
+   override, EL9/EL10 static in the same file, Ubuntu static because
+   those are runner images. Both workflows compute their matrix from it
+   through a `Which distributions` job; both repository verifiers read
+   their list from it, and a suite the repository still serves but the
+   matrix no longer builds is *reported and skipped* rather than
+   verified against a container whose mirrors are on their way to the
+   archive. Docker Hub's tag list was the first idea and the wrong one:
+   it carries 45 and 46 today as prerelease images. **Fedora builds
+   against Qt6**, because Fedora will drop Qt5 before EL9 does and a row
+   that picks its release automatically should not depend on a library
+   that release is retiring; verified in a `fedora:44` container before
+   the change was pushed — links Qt 6.11, packages, installs, computes
+   Chiron.
+
+3. **Qt is the one interface. The Windows release is the Qt build.** The
+   nightly's "experiment" — this port compiled with MSVC against the
+   open-source Qt6, `-DQT -DPC` and no `-DWIN` — is `windows-qt.yml`
+   now, a reusable workflow `ci.yml` runs on every push and `release.yml`
+   runs on a tag. It builds `astrolog.exe` (`/SUBSYSTEM:WINDOWS` with
+   `/ENTRY:mainCRTStartup`, so `main()` still runs and no console opens
+   beside the GUI; an icon and a VERSIONINFO resource from
+   `tools/astrolog-qt.rc`), runs the 3,812-assertion suite on the
+   Windows runner under `offscreen`, stages the tree with
+   `tools/package-windows-qt.py` (windeployqt's DLLs, the offscreen and
+   minimal plugins, the MSVC runtime found through vswhere, the data,
+   a LF manifest), audits it, and then does the one thing only that
+   machine can: starts it with the real `windows` platform plugin and
+   requires a window titled "Astrolog" (`tools/win-qt-starts.ps1`). The
+   tree goes to an Ubuntu job that verifies the manifest after the
+   round trip, zips it, builds the NSIS installer, and installs and
+   uninstalls that under Wine — the proven path, where the same check
+   on real Windows would meet UAC. The Win32 build in `wdriver.cpp` is
+   still compiled on every push and still driven under Wine by "Windows
+   parity", because it is the oracle every divergence is judged against;
+   `tools/package.sh` still stages it for the starts-under-Wine check.
+   It no longer ships. The honest cost: Windows 10 or later.
+
+   The Linux half of that pipeline — staging, audit, manifest, zip,
+   installer, Wine install/uninstall — was run end to end on the
+   maintainer's machine before the push, against a stubbed Qt tree and
+   the Win32 binary as a stand-in, and both the stager and the audit
+   were falsified (a missing plugin, a missing runtime, each refused).
+   The Windows half can only be falsified by pushing, and was.
 
 **Signed apt and dnf repositories are live** at
 <https://nrvate.github.io/Astrolog/>, rebuilt from every release so old
-versions stay installable. Verified by installing from the live URL:
-Ubuntu 22.04 gets `~jammy`, Fedora 42 gets `.fc42`, Rocky 9 gets `.el9`,
-each with its signature checked. **One suite per distribution** — a
-single suite makes apt and dnf offer the highest-versioned package rather
-than the one built for the running release, which is the whole point of
-building per distribution undone at the last step.
+versions stay installable. **One suite per distribution** — a single
+suite makes apt and dnf offer the highest-versioned package rather than
+the one built for the running release. Consequence of decision 2: until
+the next release, `tools/ci-verify-live-repo.sh` fails on `fc44` — the
+repository serves what was published, and nothing has been published
+for Fedora 44 yet. That is the check being right.
 
 **Answered along the way:** Q1 (native `.deb` and `.rpm`, not AppImage),
-Q2 (`8.00-qt.N`, `szVersionFork`), Q7 (per-change run gates, nightly
-reports), Q8 (Qt6 kept alive by CI — and EL10 now depends on it), Q13
-(A′), and item 0.1 (Actions was always enabled; the default branch was
-the real obstacle).
-
-**One path is still untested, and only a release can test it.**
-`repo.yml` fires on `workflow_run` of the Release workflow. That trigger
-has never fired: every repository publish so far has been a
-`workflow_dispatch`, and re-running `release.yml` against an existing tag
-fails at `gh release create` rather than exercising the chain. The next
-real release is the test. If the repository does not rebuild within a few
-minutes of one, that is where to look.
+Q2 (`8.00-qt.N`, `szVersionFork`), Q7 (per-change run gates), Q8 (Qt6
+kept alive by CI — and EL10 and Fedora depend on it), Q13 (B), Q10
+(ad-hoc signed `.dmg`, not notarized), Q11 (the vcxproj is repaired and
+built), and item 0.1 (`qt` is the default branch).
 
 **What is left, and none of it is more CI:**
 
 - **`WSETUP`** — the last configuration nothing compiles, and the last
   thing on this list that is purely a decision.
-- **The macOS suite hangs.** Phase 9's build half is answered: Homebrew
-  pours Qt6 in 59 s and the port compiles in 61 s, so **the port builds
-  on macOS**. The suite then runs past six minutes where Linux takes 47,
-  which is the signature of something waiting rather than something slow
-  — the same shape as the Linux hang fixed earlier, and the next nightly
-  is instrumented to name the group it stops in. That is a real finding
-  for an adopter either way.
+- **Ubuntu 26.04 LTS shipped in April 2026** and the `.deb` matrix still
+  says 22.04 and 24.04. Whether GitHub offers `ubuntu-26.04` as a runner
+  is the question, and it is a runner-image question rather than a
+  support-window one, which is why that row is static.
 - **The deeper `-z0 Autodetect` question.** The two builds agree now and
   the unconditional-true bug is gone, but autodetection still answers
   "is it daylight time *now*" rather than "was that date in daylight
   time". Making it date-aware means changing what `DstReal()` resolves
   against everywhere it is used.
-- **EL9/EL10 are Rocky images.** Alma is the same ABI and would work; if
-  the RPMs are ever published as a repository rather than as release
-  assets, that choice wants revisiting.
+- **EL9/EL10 are Rocky images.** Alma is the same ABI and would work.
+- **Two build artifacts, 39 MB, are in git history permanently**
+  (`5aa4572`, `273a0ac`). Removing them rewrites published history,
+  which is the maintainer's call.
 
-**Six shared-core or harness bugs this work surfaced**, which is the
+**Six shared-core or harness bugs the CI work surfaced**, which is the
 argument for having done it at all:
 
 1. The suite hung for ten minutes on any machine without `/swe` — a modal
@@ -3113,3 +3168,69 @@ first run of a new baseline is a wall of warnings that has to be read
 rather than accepted. Recorded rather than papered over, because a
 `qt6-base-dev` in that install line would have looked like the problem was
 solved.
+
+**2026-09-04 — the nightly is gone, Fedora is asked for, and Windows
+ships the Qt build.** Three maintainer decisions in one session, all
+recorded in "Where this stands" above with their reasons; this entry is
+what the work turned out to be.
+
+*What was wrong before anyone touched it.* The Fedora rows said 42 and
+43 in four files. Fedora 42 had been end-of-life since 2026-05-27 and 44
+current since 2026-04-28 — measured against Bodhi and endoflife.date,
+which agreed. The "Where this stands" section was dated two days earlier
+and wrong on three counts: it listed the nightly with four jobs when it
+had eight, said the macOS suite hangs when it passed in six minutes, and
+said the release-to-repository trigger had never fired when it had
+fired four times that day. CLAUDE.md said seven nightly jobs. A project
+with a written rule about counts in prose rotting had let them rot.
+
+*The nightly.* Removing the schedule cost nothing that was being used.
+What it held was moved, not deleted: every job that produced a check is
+in `slow-lane.yml` and gates the release; the macOS job stopped being
+`continue-on-error` and now uploads the `.dmg` the release publishes, so
+`release.yml` lost its own macOS job, which had built and packaged
+without ever running the suite. The Qt-on-Windows job left for
+`windows-qt.yml`. "Behaviour vs yesterday" was dropped. The one thing
+that had to change its nature was `tools/ci-assert-nightly.sh`, now
+`ci-assert-slow-lane.sh`: its staleness check assumed a cadence, and a
+lane that runs on releases has none, so that check is off unless
+`MAX_AGE_H` is set.
+
+*Fedora.* `tools/distros.py` was tested three ways before it was wired
+in: Bodhi answering (43, 44), Bodhi unreachable and endoflife.date
+answering the same, and both unreachable — which exits 1 with a message
+naming `FEDORA_RELEASES`, because a matrix that guesses is worse than a
+red job. The Fedora 44 package was then built the way CI builds it,
+inside a `fedora:44` container on the maintainer's machine, against
+`qt6-qtbase-devel`: `rpmbuild` produced it, it installed, ran from `/`,
+and computed Chiron at 16Can03, with `libQt6Core.so.6(Qt_6.11)` in its
+computed Requires.
+
+*Windows.* Five new tools and one changed one. `tools/msvc-build-qt.cmd`
+is the two inline `cl.exe` blocks made one script with one flag list;
+the only difference between the two binaries it builds is `/DQTTEST`
+and the subsystem. `tools/astrolog-qt.rc` gives the executable an icon
+and a version resource, and was compiled on Linux with mingw's
+`windres` — which found that windres passes `-D` values through a
+shell, so the string needs `'\"8.00-qt.5\"'` there where `rc.exe` takes
+`\"8.00-qt.5\"`. `tools/version.py` exists because that `.cmd` cannot
+run `ci-assert-version.sh`, and its first draft read `szVersionFork` as
+the whole version and printed `5`. `tools/package-windows-qt.py` stages
+the tree, and its dry run on Linux with a stub `windeployqt` and a stub
+redist directory fed the real `qt_windows_dist_audit.py`,
+`ci-verify-package.sh`, `ci-verify-zip.sh`, `package-windows-installer.sh`
+and `ci-verify-windows-installer.sh` under Wine, all of which passed on
+the stubbed tree with the Win32 binary standing in — and refused when a
+plugin or the runtime was removed. `tools/win-qt-starts.ps1` is the
+check that needs Windows, and the only new logic that could not be run
+here.
+
+*A hazard worth its own line.* The release's Publish job downloads
+artifacts by the pattern `astrolog-*` and publishes everything it gets.
+The called workflows upload more than what ships — a staged tree, a test
+build, screenshots, logs, a coverage report — and every one of those is
+named without the prefix so the pattern leaves it behind. A new upload
+in either called workflow that starts with `astrolog-` would be
+published as a release asset, and `ci-verify-release-dist.sh` would
+fail the release on the stray. That is the intended failure, and the
+prefix rule is written at the top of `windows-qt.yml`.

@@ -98,7 +98,7 @@ timeout 600 wine "$dst/uninstall.exe" /S >/dev/null 2>&1 || true
 # removed uninstall.exe and the directory.
 #
 # This used to be "sleep 3" -- a guess at how long that takes, which was
-# right most of the time and wrong often enough to fail a nightly with
+# right most of the time and wrong often enough to fail a run with
 # "uninstall left 1 files behind: .../uninstall.exe". The same mistake
 # as the iteration count in ci-verify-windows-starts.sh: a fixed wait is
 # not a wait for anything.

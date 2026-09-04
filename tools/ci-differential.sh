@@ -71,7 +71,7 @@ set -eu
 # 1,058 invocations of five processes on a machine where a process costs
 # a great deal more than it does on an NVMe workstation.
 #
-# So the pull-request gate runs the fast three, and the nightly lane runs
+# So the pull-request gate runs the fast three, and a by-hand run runs
 # all four. Coverage is unchanged over a day; feedback on a change is
 # minutes rather than half an hour.
 base=${1:?usage: ci-differential.sh <base-ref> [outdir] [matrices]}
@@ -182,7 +182,10 @@ fi
 
 echo "== behaviour moved in:$moved"
 
-# REPORT MODE, for the nightly. The per-change gate and a day's aggregate
+# REPORT MODE, DIFFERENTIAL_REPORT=1, written for a nightly that no longer
+# exists (the slow lane stopped being scheduled on 2026-09-04) and kept
+# because the reasoning holds for any aggregate run, such as diffing a
+# release against the previous tag by hand. The per-change gate and an aggregate
 # are different questions and only one of them should be able to fail.
 #
 # A gate on a pull request asks "what did THIS change move", and the

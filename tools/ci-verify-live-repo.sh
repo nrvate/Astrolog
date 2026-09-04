@@ -44,7 +44,13 @@ get() { curl -sSfL --max-time 40 "$1" 2>/dev/null; }
 
 echo "== $base, looking for $ver"
 
-for code in jammy noble; do
+# The list of what must be served comes from tools/distros.py, the one
+# place the matrix is defined. Its Fedora rows move twice a year; a list
+# written here would say fc42 until somebody noticed.
+dists=$(python3 tools/distros.py dists 2>/dev/null) || {
+  echo "cannot determine the distribution list (tools/distros.py failed)"; exit 2; }
+for code in $dists; do
+  case $code in fc*|el*) continue ;; esac
   url="$base/apt/dists/$code/main/binary-amd64/Packages"
   body=$(get "$url" || true)
   if [ -z "$body" ]; then
@@ -58,7 +64,8 @@ for code in jammy noble; do
   esac
 done
 
-for dist in fc42 fc43 el9 el10; do
+for dist in $dists; do
+  case $dist in fc*|el*) ;; *) continue ;; esac
   md=$(get "$base/rpm/$dist/repodata/repomd.xml" || true)
   if [ -z "$md" ]; then
     echo "   FAIL: rpm/$dist -- no repomd.xml"; fail=1; continue

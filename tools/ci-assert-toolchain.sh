@@ -11,7 +11,7 @@
 # regressions -- which is worse than not running it, because the signal
 # it exists to give is drowned.
 #
-# So the nightly job pins ubuntu-22.04, and this says so out loud rather
+# So the slow-lane job pins ubuntu-22.04, and this says so out loud rather
 # than leaving the next person to work backwards from 300 mystery diffs.
 # If the runner image moves, or the baseline is regenerated on something
 # else, the two numbers here are the one place to change.

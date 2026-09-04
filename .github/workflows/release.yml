@@ -1,15 +1,27 @@
 # Publish a release when a v* tag is pushed -- QT_CI_PLAN.md Phase 5.
 #
 # GROUND RULE 3: one build definition, used by both CI and release. The
-# definition is tools/package-*.sh, which ci.yml runs on every push and
-# this runs again on a tag. A release cannot ship an artifact built by a
-# recipe CI never exercised, which is the failure swisseph's package.yml
-# exists to prevent.
+# Linux definition is tools/package-*.sh, which ci.yml runs on every push
+# and this runs again on a tag. The Windows and macOS definitions are
+# whole workflows -- windows-qt.yml and the macOS job of slow-lane.yml --
+# which ci.yml and this file both CALL, so the artifact a release ships
+# was built by exactly the recipe every push exercised. A release cannot
+# ship an artifact built by a recipe CI never ran, which is the failure
+# swisseph's package.yml exists to prevent.
 #
 # THE TAG IS CHECKED AGAINST THE SOURCE. astrolog.h owns szVersionFork; a
 # tag that disagrees with it fails the job before anything is published.
 # If they disagree, every bug report afterwards cites the wrong version
 # and nothing else in the pipeline would ever notice.
+#
+# THE SLOW LANE GATES THE RELEASE, since 2026-09-04. It used to be a
+# nightly that gated nothing: the sanitizer sweeps, the external Swiss
+# oracle, the warning ledger, the Windows parity harnesses and the macOS
+# suite all ran on a timer nobody was required to read. Now Publish
+# needs every one of them. A release takes about twenty minutes instead
+# of six, the ASan sweep being the long pole, and that is the price of
+# "the strongest checks in the repository ran on what shipped" being a
+# true sentence.
 #
 # cancel-in-progress is FALSE here, unlike ci.yml. A half-published
 # release is worse than a slow one.
@@ -34,7 +46,7 @@ permissions:
 
 jobs:
   # Cheap, and it runs alone first so a mismatched tag costs seconds
-  # rather than four package builds.
+  # rather than twenty minutes of package builds and sanitizer sweeps.
   version:
     name: Version check
     runs-on: ubuntu-latest
@@ -47,9 +59,9 @@ jobs:
       # workflow checks the ARTIFACTS -- every .deb and .rpm installed
       # into a clean container and asked for Chiron, the Windows package
       # unpacked and run, the macOS bundle launched from the mounted .dmg.
-      # None of that re-runs the program's 3,812 assertions, the ten
-      # audits, or the behavioural differential, because those belong to
-      # ci.yml.
+      # The slow lane re-runs the suite under sanitizers and on macOS,
+      # but the ten audits and the behavioural differential belong to
+      # ci.yml alone.
       #
       # Which is fine as long as ci.yml passed on the commit being tagged,
       # and nothing checked that. A tag on a red commit would produce
@@ -61,6 +73,45 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: tools/ci-assert-green.sh "${{ github.sha }}"
+
+  # The distribution list is tools/distros.py's, as in ci.yml: Fedora's
+  # two current releases asked of Fedora's own release service, EL9 and
+  # EL10 written down. Asked once here, so every job in this run agrees
+  # on the answer -- a Fedora release landing between two jobs' queries
+  # would otherwise have the rpm matrix and the artifact count disagree.
+  matrix:
+    name: Which distributions
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rpm: ${{ steps.rpm.outputs.matrix }}
+      count: ${{ steps.count.outputs.count }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - id: rpm
+        run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
+      # Linux packages plus the Windows zip, the Windows installer and
+      # the macOS .dmg. The release must contain EXACTLY this many.
+      - id: count
+        run: echo "count=$(( $(python3 tools/distros.py count) + 3 ))" >> "$GITHUB_OUTPUT"
+
+  # Everything CLAUDE.md calls pre-release: sanitizers, the Swiss oracle,
+  # the warning ledger, Windows parity under Wine, and the macOS build,
+  # suite and .dmg. Its macOS job uploads "astrolog-macos", which Publish
+  # collects.
+  slow-lane:
+    name: Slow lane
+    needs: version
+    uses: ./.github/workflows/slow-lane.yml
+
+  # The Windows package: the Qt port built with MSVC, the suite run on
+  # Windows, the zip and the installer built and verified on Linux. It
+  # uploads "astrolog-windows", which Publish collects.
+  windows:
+    name: Windows
+    needs: version
+    uses: ./.github/workflows/windows-qt.yml
 
   # Two jobs rather than one matrix with a conditional container. The
   # matrix version was written first and had two faults, both caught by
@@ -78,18 +129,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Static, and the same two rows tools/distros.py holds: these are
+        # runner images, and whether "ubuntu-26.04" exists as one is not
+        # something an API this workflow trusts can answer.
         image: [ubuntu-22.04, ubuntu-24.04]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Install build dependencies
         run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
           echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
           sudo apt-get update
           sudo apt-get install -y qtbase5-dev pkg-config libx11-dev dpkg-dev
@@ -97,9 +145,7 @@ jobs:
       - name: Build
         run: make -j4 && make qt -j4
 
-      # PKG_RELEASE=1 drops the "~date.sha" suffix, so this is the only
-      # place that produces a bare 8.00+qt.N. A branch build sorts below
-      # it, verified with dpkg --compare-versions.
+      # PKG_RELEASE=1: no ~date.sha suffix, this is the version.
       - name: Package
         run: PKG_RELEASE=1 tools/package-deb.sh out/package
 
@@ -115,51 +161,22 @@ jobs:
 
   rpm:
     name: .rpm on ${{ matrix.release }}
-    needs: version
+    needs: matrix
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - {release: fedora-42, image: 'fedora:42', qt: qt5-qtbase-devel}
-          - {release: fedora-43, image: 'fedora:43', qt: qt5-qtbase-devel}
-          # EL10 ships no Qt5 outside EPEL but does ship Qt6, and
-          # Makefile.qt picks its modules from pkg-config, so only the
-          # package name changes. See ci.yml for the measurement.
-          - {release: el9,  image: 'quay.io/rockylinux/rockylinux:9', qt: qt5-qtbase-devel}
-          - {release: el10, image: 'quay.io/rockylinux/rockylinux:10', qt: qt6-qtbase-devel}
+      matrix: ${{ fromJSON(needs.matrix.outputs.rpm) }}
     container: ${{ matrix.image }}
     steps:
+      # The dnf settings are ci.yml's, with the measurements that
+      # produced them: IPv4 only, a bounded mirror timeout, no ranking
+      # probe. CRB is where Enterprise Linux keeps qt5-qtbase-devel; on
+      # Fedora the repo does not exist and enabling it is a no-op.
       - name: Install build dependencies
         run: |
-          # ip_resolve=4 before anything else. EL9's dependency install
-          # took over seven minutes on a runner and 42 seconds locally,
-          # on the same image, with the same packages -- while Fedora and
-          # EL10 finished in ninety seconds. That shape is dnf trying
-          # mirrors over IPv6 and waiting out a timeout on each: the
-          # runner advertises IPv6 that does not route to those hosts,
-          # and a laptop does not. Forcing IPv4 is the standard cure and
-          # costs nothing where IPv6 works.
           echo 'ip_resolve=4' >> /etc/dnf/dnf.conf
-          # Fewer mirrors tried, and the ones tried are not ranked by a
-          # probe that also has to time out.
           echo 'max_parallel_downloads=8' >> /etc/dnf/dnf.conf
-          # And BOUND the tail. ip_resolve=4 moved the median but not the
-          # worst case: measured across six CI runs this step took 28, 91,
-          # 111, 139, 362 and 589 seconds, on the same image with the same
-          # packages, while el10 took 92 and Fedora 25-30. That spread is
-          # mirror selection -- most attempts are fine and an occasional
-          # one is waited out. timeout/retries put a ceiling on a bad
-          # mirror instead of letting dnf sit on it, and fastestmirror=False
-          # removes a ranking probe that is itself a round of timeouts.
-          #
-          # Verified in the real rockylinux:9 image that this installs the
-          # same set: 54 s, rc=0, qt5-qtbase-devel 5.15.9, g++ working --
-          # against 55 s without it. The IMPROVEMENT cannot be measured
-          # from here, because the pathology is on GitHub's network and not
-          # reproducible on a laptop; what is verified is that bounding the
-          # wait does not break the install.
           printf 'timeout=20\nretries=2\nfastestmirror=False\n' >> /etc/dnf/dnf.conf
           dnf install -y -q dnf-plugins-core || true
           (dnf config-manager --set-enabled crb || \
@@ -178,6 +195,10 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
           PKG_RELEASE=1 tools/package-rpm.sh out/package
 
+      # "local": this job already runs inside the distribution's
+      # container and cannot start a clean one. Weaker about Requires,
+      # still the check that matters -- does it find its data from
+      # /usr/lib/astrolog rather than from the directory it was built in.
       - name: Prove it installs and runs
         run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
 
@@ -186,116 +207,9 @@ jobs:
           name: astrolog-rpm-${{ matrix.release }}
           path: out/package/*.rpm
 
-  windows:
-    name: Windows package
-    needs: version
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - run: |
-          # Force IPv4. The el9 dnf install sat for seven minutes waiting
-          # out IPv6 mirror attempts, and on 2026-09-02 an apt-get on an
-          # Ubuntu runner did the same for fourteen. Same disease, other
-          # package manager: the runner advertises IPv6 that does not
-          # route to the mirrors, and every attempt waits out its timeout.
-          # Costs nothing where IPv6 works.
-          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4 >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y g++-mingw-w64-x86-64
-      - run: make -f Makefile.win -j4
-      - run: tools/package.sh windows out/package
-      - run: tools/ci-verify-package.sh out/package/astrolog-windows
-      # Seven of the nine release assets carry the version in their
-      # filename because their packaging formats demand it. These two did
-      # not, so a user who downloaded two releases ended up with
-      # "astrolog-setup.exe" and "astrolog-setup (1).exe" and no way to
-      # tell which was which. Nothing depends on a stable
-      # releases/latest/download/ URL -- checked -- and the .dmg already
-      # names itself this way, so this is the majority spelling, not a new
-      # one. The CI artifacts keep their unversioned names on purpose:
-      # those are scoped to a run that already knows its own commit.
-      - name: The version these artifacts are named for
-        run: echo "VER=$(tools/ci-assert-version.sh)" >> "$GITHUB_ENV"
-      # A .zip carries no unix modes and Windows wants none, so
-      # ci-assert-archive-mode.sh does not apply here -- it guards the
-      # tar-based Linux artifacts. Saying so beats a check that is
-      # "|| true"-d into meaninglessness.
-      - run: ( cd out/package && zip -qr "astrolog-$VER-windows.zip" astrolog-windows )
-      # The archive, not the directory it was made from. The .exe installer
-      # is installed and compared file-for-file under Wine before shipping;
-      # the .zip was created and uploaded and never opened again.
-      - run: tools/ci-verify-zip.sh "out/package/astrolog-$VER-windows.zip" out/package/astrolog-windows
-
-      # And an installer, from the same staged directory, so the two
-      # artifacts cannot drift. NSIS because makensis runs natively on
-      # Linux -- this job already cross-compiles with mingw and now
-      # packages with nsis, on one ubuntu runner and no Windows anywhere.
-      #
-      # Verified under Wine rather than merely built: installed silently,
-      # compared file-for-file against the staged payload, uninstalled,
-      # and checked that nothing was left. Wine is the only automatable
-      # option here, not a compromise -- the installer requests admin, and
-      # UAC cannot prompt a non-interactive session, which hung a Windows
-      # VM for ten minutes when tried. See the script's header.
-      # wine as well as nsis: the verification below installs the thing.
-      # The nightly's Windows parity job already installs wine for the
-      # same reason, so this is a known-good package set on this runner
-      # rather than a new dependency to discover in a release.
-      # i386 as well, and this is not optional. An NSIS installer STUB is
-      # always a 32-bit PE32 executable even when the payload it installs
-      # is 64-bit -- "file" says "PE32 Intel 80386" for the setup.exe and
-      # "PE32+ x86-64" for the astrolog.exe inside it. Wine cannot run the
-      # stub without 32-bit support, so the verification below found
-      # "NOTHING INSTALLED" on a perfectly good installer.
-      #
-      # The nightly's Windows parity job has had this line since it was
-      # written, which is why the same check passes there and failed here.
-      - run: sudo dpkg --add-architecture i386
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y nsis wine wine64 wine32
-      - run: tools/package-windows-installer.sh out/package/astrolog-windows "out/package/astrolog-$VER-setup.exe"
-      - run: tools/ci-verify-windows-installer.sh "out/package/astrolog-$VER-setup.exe" out/package/astrolog-windows
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: astrolog-windows
-          path: |
-            out/package/astrolog-*-windows.zip
-            out/package/astrolog-*-setup.exe
-
-  # macOS ships an ad-hoc signed .app in a .dmg, and nothing more. That is
-  # the whole free tier: codesign -s - costs nothing and is MANDATORY on
-  # Apple Silicon, where arm64 will not execute an unsigned binary at all.
-  # Notarization is what removes the Gatekeeper prompt for someone who
-  # downloads through a browser, and it needs a Developer ID and a secret
-  # in this repository -- ground rule 5, the one line in QT_CI_PLAN.md
-  # nothing is allowed to cross.
-  #
-  # Phase 10 read that as "no macOS binaries" and said so for two days.
-  # That conflated "cannot ship a frictionless artifact" with "cannot ship
-  # one", and they are not the same: the artifact below runs perfectly
-  # after a right-click -> Open, or one xattr command, or a curl download
-  # that never gets quarantined in the first place. Plenty of open source
-  # projects ship exactly this.
-  macos:
-    name: macOS .app and .dmg
-    needs: version
-    runs-on: macos-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - run: brew install qt pkg-config
-      - run: make qt -j4
-      - run: tools/package-macos.sh out/macos
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: astrolog-macos
-          path: out/macos/*.dmg
-
   publish:
     name: Publish
-    needs: [deb, rpm, windows, macos]
+    needs: [matrix, deb, rpm, windows, slow-lane]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -303,17 +217,18 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
+      # "astrolog-*" and nothing else. The called workflows upload more
+      # than what ships -- the staged Windows tree, the test build,
+      # screenshots, the suite log, the coverage report -- and every one
+      # of those is named WITHOUT the prefix so this pattern leaves it
+      # behind. A stray file here would be published as a release asset,
+      # and ci-verify-release-dist.sh below fails on one.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
+          pattern: astrolog-*
           merge-multiple: true
 
-      # Nine artifacts: two .deb, four .rpm, one .zip, one .exe installer,
-      # one .dmg. Exact, not a floor -- "at least one" passes a release
-      # missing seven. The
-      # check is a script rather than YAML so it can be falsified without
-      # cutting a release to test it, which is the one thing nobody wants
-      # to do repeatedly.
       # GitHub rewrites "~" to "." in a release asset's filename, and it
       # does it at UPLOAD time -- so a SHA256SUMS generated before the
       # upload names two files that the release then does not serve.
@@ -338,8 +253,13 @@ jobs:
           done
           ls dist
 
-      - name: There are nine artifacts, and a SHA256SUMS over them
-        run: tools/ci-verify-release-dist.sh dist 9
+      # Exact, not a floor -- "at least one" passes a release missing
+      # seven. The count is the matrix job's, so a Fedora release landing
+      # changes both sides of the comparison together. The check is a
+      # script rather than YAML so it can be falsified without cutting a
+      # release to test it.
+      - name: Exactly the expected artifacts, and a SHA256SUMS over them
+        run: tools/ci-verify-release-dist.sh dist "${{ needs.matrix.outputs.count }}"
 
       - name: Publish
         env:
@@ -347,40 +267,42 @@ jobs:
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           # --notes-file, not --generate-notes alone. The generated notes
-          # are the commit list, and the one thing someone downloading the
-          # .dmg needs is not in it: macOS will refuse to open the app,
-          # with a dialog saying it is damaged, until Gatekeeper's
-          # quarantine flag is cleared. Telling them on the page they are
-          # standing on beats telling them in a README they have no reason
-          # to open, and "damaged" reads as a broken binary rather than as
-          # a missing $99 subscription. --generate-notes still runs; this
+          # are the commit list, and the things someone downloading needs
+          # are not in it: macOS will refuse to open the app until
+          # Gatekeeper's quarantine flag is cleared, and Windows will
+          # warn about an unsigned installer. Telling them on the page
+          # they are standing on beats telling them in a README they
+          # have no reason to open. --generate-notes still runs; this
           # is prepended to it.
-          cat > notes.md <<'NOTES'
+          fedoras=$(python3 tools/distros.py rpm 2>/dev/null \
+                    | grep -o 'fedora-[0-9]*' | sed 's/fedora-//' | paste -sd/)
+          cat > notes.md <<NOTES
           ### Installing
 
-          **Linux** — `.deb` for Ubuntu 22.04/24.04, `.rpm` for Fedora 42/43
+          **Linux** — \`.deb\` for Ubuntu 22.04/24.04, \`.rpm\` for Fedora ${fedoras:-current}
           and EL9/EL10. Or use the [signed repository](https://nrvate.github.io/Astrolog/)
           so upgrades arrive on their own.
 
-          **Windows** — run `astrolog-<version>-setup.exe`. It installs to
+          **Windows** — run \`astrolog-<version>-setup.exe\`. It installs to
           Program Files, adds a Start Menu entry and an Add/Remove Programs
           row, and uninstalls cleanly. It is **not** code-signed, so
           SmartScreen will show "Windows protected your PC" — choose *More
           info*, then *Run anyway*. If you would rather not run an
-          installer at all, the `.zip` is the same files: unpack it
-          anywhere and run `astrolog.exe`. Both are statically linked and
-          need no runtime.
+          installer at all, the \`.zip\` is the same files: unpack it
+          anywhere and run \`astrolog.exe\`. This is the Qt build of
+          Astrolog, the same program as on Linux and macOS, with its
+          runtime included; it needs **Windows 10 or later**.
 
           **macOS** — the app is ad-hoc signed but not *notarized*, so a
           download through a browser is quarantined and macOS says it is
           damaged. It is not. Either right-click the app and choose
           **Open**, or run once:
 
-          ```sh
+          \`\`\`sh
           xattr -dr com.apple.quarantine /Applications/Astrolog.app
-          ```
+          \`\`\`
 
-          A download fetched with `curl` is never quarantined and just runs.
+          A download fetched with \`curl\` is never quarantined and just runs.
 
           ---
           NOTES

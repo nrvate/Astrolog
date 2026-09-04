@@ -30,12 +30,12 @@
 # Moshier, 0.04 arcsec apart -- so this checks the ephemeris files are
 # there before trusting anything.
 #
-# IT IS a CI check, in the nightly, which was not obvious at first: the
+# IT IS a CI check, in the slow lane, which was not obvious at first: the
 # fork is a public repository and a shallow clone plus "make swetest"
 # is 25 seconds measured (22 to clone, 2.8 to build), against the bundled
 # 12-file ephem/ rather than the 887,000-file collection. Run it by hand
 # too when a change touches calc.cpp, matrix.cpp or anything under swe*,
-# because the nightly is a slow way to learn you broke an ephemeris.
+# because a release gate is a slow way to learn you broke an ephemeris.
 set -e
 
 A=${1:-./astrolog}

@@ -18,8 +18,8 @@
 #
 # Deliberately NOT a release gate: the assets do not exist until after the
 # release job finishes, and a check that has to be retried until the CDN
-# agrees is not a check. Run it after a release, or from the nightly
-# against the newest tag.
+# agrees is not a check. Run it after a release, or dispatch the slow
+# lane, whose "published" job runs it against the newest tag.
 set -eu
 
 tag=${1:?usage: ci-verify-published-release.sh <tag> [repo]}
@@ -27,7 +27,7 @@ repo=${2:-${GITHUB_REPOSITORY:-nrvate/Astrolog}}
 
 # Releases published BEFORE the rename fix, which all carry a manifest
 # naming two .deb files GitHub does not serve. They are reported and
-# skipped rather than failed, so this can run nightly against the newest
+# skipped rather than failed, so this can run routinely against the newest
 # tag without being red for a reason nobody is going to act on -- a check
 # that is always red is a check people stop reading.
 #
