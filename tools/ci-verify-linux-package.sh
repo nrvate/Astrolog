@@ -48,11 +48,14 @@ check="set -e
     astrolog $chart"
 
 if [ "$image" = local ]; then
-  # For the RPM job, which already runs INSIDE the distribution's
-  # container and so cannot start one of its own. A weaker test than a
-  # clean image -- the build dependencies are already present, so it
-  # proves less about Requires -- but it still exercises the thing most
-  # likely to be wrong, which is whether the program finds its data from
+  # For a caller that is itself INSIDE a distribution's container and so
+  # cannot start one of its own -- which was every rpm job in CI until
+  # 2026-09-04, and is nothing in CI since; both families now build
+  # through tools/build-in-container.sh from the host and verify in a
+  # fresh image. Kept for by-hand use. A weaker test than a clean image
+  # -- the build dependencies are already present, so it proves less
+  # about Requires -- but it still exercises the thing most likely to be
+  # wrong, which is whether the program finds its data from
   # /usr/lib/astrolog rather than from the directory it was built in.
   out=$(sh -c "$install >/dev/null 2>&1; $check" 2>&1) || {
     echo "PACKAGE FAILED locally:"; printf '%s\n' "$out" | tail -15; exit 1; }

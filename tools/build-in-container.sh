@@ -19,12 +19,13 @@
 #
 # Why a script and not "container:" in the job. A job that runs inside
 # the container cannot start a second, CLEAN container to prove the
-# package installs there, so the rpm jobs verify with the weaker "local"
-# mode -- the build dependencies are already present, so a wrong
-# Requires line is invisible. Running Docker from the host keeps the
-# strong check: tools/ci-verify-linux-package.sh installs the result
-# into a fresh image afterwards, resolving Qt from the distribution's
-# own repositories, and asks it for Chiron.
+# package installs there. The rpm jobs used to run that way and verify
+# with the weaker "local" mode -- the build dependencies already present,
+# so a wrong Requires line invisible -- until 2026-09-04, when they moved
+# to this script too. Running Docker from the host keeps the strong
+# check for both families: tools/ci-verify-linux-package.sh installs the
+# result into a fresh image afterwards, resolving Qt from the
+# distribution's own repositories, and asks it for Chiron.
 #
 # The tree is mounted read-write, because make writes object files into
 # it; the object directories are the same ones a host build uses, so run

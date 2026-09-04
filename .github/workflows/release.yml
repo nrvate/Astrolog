@@ -74,11 +74,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: tools/ci-assert-green.sh "${{ github.sha }}"
 
-  # The distribution list is tools/distros.py's, as in ci.yml: Fedora's
-  # two current releases asked of Fedora's own release service, EL9 and
-  # EL10 written down. Asked once here, so every job in this run agrees
-  # on the answer -- a Fedora release landing between two jobs' queries
-  # would otherwise have the rpm matrix and the artifact count disagree.
+  # The distribution list is tools/distros.json's, as in ci.yml: the
+  # committed snapshot of what Fedora's and Ubuntu's release services
+  # answered, checked here against what they answer today. A release
+  # that lands on a drift day fails at this job with the one command
+  # that updates the snapshot, and is cut again from the commit that
+  # carries it -- on purpose: the rows a release ships for should be in
+  # its history, not in an API's mood that morning.
   matrix:
     name: Which distributions
     needs: version
@@ -90,6 +92,8 @@ jobs:
       count: ${{ steps.count.outputs.count }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: The snapshot still matches what Fedora and Ubuntu answer
+        run: python3 tools/distros.py check
       - id: rpm
         run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
       - id: deb
@@ -119,10 +123,9 @@ jobs:
   # The .deb rows, built inside ubuntu:<version> containers by
   # tools/build-in-container.sh and proven in a fresh one -- the same
   # steps ci.yml runs on every push, with PKG_RELEASE=1 so the version
-  # carries no ~date.sha suffix. Two jobs rather than one matrix with a
-  # conditional container: the rpm rows run INSIDE their container and
-  # verify with "local", the deb rows run Docker from the host and verify
-  # in a clean image; that difference is worth keeping visible.
+  # carries no ~date.sha suffix. Two jobs rather than one matrix over
+  # both families only because the package name, the family and the
+  # artifact name differ per row; the steps are the same script.
   deb:
     name: .deb on ${{ matrix.image }}
     needs: matrix
@@ -153,45 +156,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.rpm) }}
-    container: ${{ matrix.image }}
     steps:
-      # The dnf settings are ci.yml's, with the measurements that
-      # produced them: IPv4 only, a bounded mirror timeout, no ranking
-      # probe. CRB is where Enterprise Linux keeps qt5-qtbase-devel; on
-      # Fedora the repo does not exist and enabling it is a no-op.
-      - name: Install build dependencies
-        run: |
-          echo 'ip_resolve=4' >> /etc/dnf/dnf.conf
-          echo 'max_parallel_downloads=8' >> /etc/dnf/dnf.conf
-          printf 'timeout=20\nretries=2\nfastestmirror=False\n' >> /etc/dnf/dnf.conf
-          dnf install -y -q dnf-plugins-core || true
-          (dnf config-manager --set-enabled crb || \
-           dnf config-manager --enable crb || true) 2>/dev/null
-          dnf install -y -q --setopt=install_weak_deps=False \
-            gcc-c++ make git rpm-build ${{ matrix.qt }} \
-            libX11-devel pkgconf-pkg-config
-
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Build
-        run: make -j4 && make qt -j4
+      # The same shape as the .deb rows, and the same script. Until
+      # 2026-09-04 (later) this job ran INSIDE the container and had to
+      # verify with "local", where the build dependencies are already
+      # present and a wrong Requires line is invisible. Docker from the
+      # host keeps the strong check: a fresh image, Qt resolved from the
+      # distribution's own repositories, Chiron asserted.
+      - name: Build and package, inside ${{ matrix.image }}
+        run: PKG_RELEASE=1 tools/build-in-container.sh ${{ matrix.image }} ${{ matrix.qt }} rpm out/package
 
-      - name: Package
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
-          PKG_RELEASE=1 tools/package-rpm.sh out/package
-
-      # "local": this job already runs inside the distribution's
-      # container and cannot start a clean one. Weaker about Requires,
-      # still the check that matters -- does it find its data from
-      # /usr/lib/astrolog rather than from the directory it was built in.
       - name: Prove it installs and runs
-        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
+        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm ${{ matrix.image }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: astrolog-rpm-${{ matrix.release }}
           path: out/package/*.rpm
+
 
   publish:
     name: Publish

@@ -488,9 +488,18 @@ jobs:
   # supported about thirteen months -- and "the last two" written here
   # by hand said 42 and 43 for four months after 42 had stopped receiving
   # updates and 44 had shipped. The script asks Fedora's own release
-  # service instead (Bodhi, state=current) and takes the newest two. EL9
-  # and EL10 are written in the script, since Enterprise Linux moves
-  # every three years and is bounded by nothing an API should decide.
+  # service (Bodhi, state=current, the newest two) and Ubuntu's
+  # (Launchpad, every LTS in standard support); EL9 and EL10 are written
+  # in the script, since Enterprise Linux moves every three years and is
+  # bounded by nothing an API should decide.
+  #
+  # THE ROWS USED COME FROM tools/distros.json, THE COMMITTED SNAPSHOT --
+  # so a build is a function of its commit and a matrix cannot change
+  # under an empty diff. The live services are asked by the "check" step
+  # only, which fails this job the first push after a release ships or
+  # ages out, naming the row and the one command that updates the
+  # snapshot for a commit somebody reads. The same arrangement as the
+  # warning ledger.
   #
   # The Qt package differs by row, and it is not a detail. Measured
   # 2026-09-02 with only base + CRB enabled, no third-party repo: EL9 has
@@ -512,11 +521,13 @@ jobs:
       deb: ${{ steps.deb.outputs.matrix }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: The snapshot still matches what Fedora and Ubuntu answer
+        run: python3 tools/distros.py check
       - id: rpm
         run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
-      # The .deb rows are asked for too: every Ubuntu LTS in standard
-      # support, from Launchpad, built inside ubuntu:<version> containers
-      # so no runner image has to exist for a row to.
+      # The .deb rows: every Ubuntu LTS in standard support, built inside
+      # ubuntu:<version> containers so no runner image has to exist for a
+      # row to.
       - id: deb
         run: echo "matrix=$(python3 tools/distros.py deb)" >> "$GITHUB_OUTPUT"
 
@@ -528,72 +539,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.rpm) }}
-    container: ${{ matrix.image }}
     steps:
-      # CRB ("CodeReady Builder") is where Enterprise Linux keeps
-      # qt5-qtbase-devel; on Fedora the repo does not exist and enabling
-      # it is a no-op, which is why this is one step rather than two.
-      - name: Install build dependencies
-        run: |
-          # ip_resolve=4 before anything else. EL9's dependency install
-          # took over seven minutes on a runner and 42 seconds locally,
-          # on the same image, with the same packages -- while Fedora and
-          # EL10 finished in ninety seconds. That shape is dnf trying
-          # mirrors over IPv6 and waiting out a timeout on each: the
-          # runner advertises IPv6 that does not route to those hosts,
-          # and a laptop does not. Forcing IPv4 is the standard cure and
-          # costs nothing where IPv6 works.
-          echo 'ip_resolve=4' >> /etc/dnf/dnf.conf
-          # Fewer mirrors tried, and the ones tried are not ranked by a
-          # probe that also has to time out.
-          echo 'max_parallel_downloads=8' >> /etc/dnf/dnf.conf
-          # And BOUND the tail. ip_resolve=4 moved the median but not the
-          # worst case: measured across six CI runs this step took 28, 91,
-          # 111, 139, 362 and 589 seconds, on the same image with the same
-          # packages, while el10 took 92 and Fedora 25-30. That spread is
-          # mirror selection -- most attempts are fine and an occasional
-          # one is waited out. timeout/retries put a ceiling on a bad
-          # mirror instead of letting dnf sit on it, and fastestmirror=False
-          # removes a ranking probe that is itself a round of timeouts.
-          #
-          # Verified in the real rockylinux:9 image that this installs the
-          # same set: 54 s, rc=0, qt5-qtbase-devel 5.15.9, g++ working --
-          # against 55 s without it. The IMPROVEMENT cannot be measured
-          # from here, because the pathology is on GitHub's network and not
-          # reproducible on a laptop; what is verified is that bounding the
-          # wait does not break the install.
-          printf 'timeout=20\nretries=2\nfastestmirror=False\n' >> /etc/dnf/dnf.conf
-          dnf install -y -q dnf-plugins-core || true
-          (dnf config-manager --set-enabled crb || \
-           dnf config-manager --enable crb || true) 2>/dev/null
-          dnf install -y -q --setopt=install_weak_deps=False \
-            gcc-c++ make git rpm-build ${{ matrix.qt }} \
-            libX11-devel pkgconf-pkg-config
-
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Build both binaries
-        run: make -j4 && make qt -j4
+      # The same shape as the .deb rows, and the same script. Until
+      # 2026-09-04 (later) this job ran INSIDE the container -- "container:
+      # fedora:44" -- and so could not start a clean one to prove the
+      # package in; it verified with "local", where the build dependencies
+      # are already present and a wrong Requires line is invisible. Docker
+      # from the host keeps the strong check the .deb rows always had: a
+      # fresh image of the same distribution, Qt resolved from its own
+      # repositories, Chiron asserted -- never the Sun, which reads
+      # correctly with no ephemeris at all.
+      #
+      # The dnf settings that the inline install used to carry (IPv4 only,
+      # a bounded mirror timeout, no ranking probe, CRB enabled) live in
+      # the script now, with the measurements that produced them.
+      - name: Build both binaries and package, inside ${{ matrix.image }}
+        run: tools/build-in-container.sh ${{ matrix.image }} ${{ matrix.qt }} rpm out/package
 
-      # PKG_REV/PKG_SHA are passed in because a container checkout can
-      # leave git unable to read the repository, and the packager must not
-      # silently stamp "unknown" into a released artifact.
-      - name: Build the package
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          PKG_REV=$(git log -1 --format=%cd --date=format:%Y%m%d) \
-          PKG_SHA=$(git rev-parse --short HEAD) \
-          tools/package-rpm.sh out/package
-
-      # This job already runs inside the distribution's container, so it
-      # cannot start a clean one; "local" installs the package right here
-      # instead. Weaker about Requires, since the build dependencies are
-      # present anyway, but it still exercises what is most likely to be
-      # wrong: whether the program finds its data from /usr/lib/astrolog
-      # rather than from the directory it was built in.
-      - name: Install it and run it from /
-        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm local
+      - name: Install it in a clean container and run it
+        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm ${{ matrix.image }}
 
       - name: Keep the package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -606,3 +573,4 @@ jobs:
           archive: false
           name: astrolog-rpm-${{ matrix.release }}
           path: out/package/*.rpm
+
