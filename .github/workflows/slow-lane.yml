@@ -657,6 +657,50 @@ jobs:
           path: out/macos/*.dmg
           if-no-files-found: error
 
+  # Q11 answered 2026-09-02: repair it and build it. Astrolog.vcxproj had
+  # been one <ClCompile> line behind since a78436f added switch.cpp, and
+  # rotting quietly is what happens to every configuration nothing
+  # compiles -- this repository has now found that three times (WCLI,
+  # Qt6, and this). One job makes it real.
+  #
+  # IN THE SLOW LANE SINCE 2026-09-04, not the fast one. It compiles the
+  # Win32 build -- wdriver.cpp under MSVC -- which since that morning is
+  # the oracle and not the product; the Qt build that ships is compiled
+  # with MSVC on every push by windows-qt.yml, and the mingw build in
+  # ci.yml still guards "Makefile.win compiles" in two minutes on Linux.
+  # A Windows runner per push for a configuration whose only consumer is
+  # tools/vcxproj_audit.py was the wrong price for it. Here it gates a
+  # release, which is when a vcxproj that has stopped compiling matters.
+  #
+  # It is the only job in this lane not also runnable on the maintainer's
+  # machine, since MSVC is Windows-only. That is the cost of keeping the
+  # configuration, and it is why the project file is checked against
+  # Makefile.srcs by the audits as well: a missing source should fail on
+  # Linux in a second, not on a Windows runner in a minute.
+  msvc:
+    name: MSVC project
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
+
+      # v142 is the toolset the project asks for and windows-latest does
+      # not ship it, so it retargets to whatever is installed. That is the
+      # honest thing for a file this fork does not otherwise maintain:
+      # the question is whether the SOURCE still compiles under MSVC, not
+      # whether a 2019 toolset is still available.
+      - name: Build
+        run: msbuild Astrolog.vcxproj -p:Configuration=Release -p:Platform=Win32 -p:PlatformToolset=v143 -v:minimal
+
+      - name: The binary exists and is new
+        shell: bash
+        run: |
+          find . -name 'Astrolog.exe' -newer Astrolog.vcxproj | grep . || {
+            echo "MSVC produced no Astrolog.exe newer than the project file"; exit 1; }
+
   # The newest PUBLISHED release, verified the way a user does: the
   # manifest must name exactly the assets GitHub serves, and every digest
   # must match. Every other check in this file looks at what a runner

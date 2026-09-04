@@ -717,10 +717,11 @@ On a private Xvfb display, `import -window root` is fine.
 ## CI, and what it will not let you do
 
 Five workflows, all on `qt`, the default branch. `ci.yml` runs on every
-push and pull request, about fifteen jobs in five or six minutes: the two
-Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
+push and pull request, about sixteen jobs in five or six minutes: the
+mingw Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, `make install`, a behavioural differential against the
-base commit, two `.deb`s, four `.rpm`s, and the **Windows package**,
+base commit, the `.deb`s and `.rpm`s for every distribution
+`tools/distros.py` names, and the **Windows package**,
 which is `windows-qt.yml` called as a reusable workflow. That one
 compiles the port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
 `-DWIN`) on a Windows runner, runs the suite there, starts the staged
@@ -731,8 +732,9 @@ that under Wine.
 `slow-lane.yml` is what CLAUDE.md elsewhere calls pre-release: the
 warning audit and the Qt6 warning ledger, the sanitizer sweeps (ASan and
 UBSan) and the external Swiss oracle, the Windows parity harnesses under
-Wine, a coverage run that asserts nothing NEW has become untested, and
-**macOS**, which builds the port, runs the suite and packages the `.dmg`.
+Wine, the MSVC build of the Win32 project file, a coverage run that
+asserts nothing NEW has become untested, and **macOS**, which builds the
+port, runs the suite and packages the `.dmg`.
 **It has no schedule.** It was a nightly until 2026-09-04, and the
 nightly gated nothing: the strongest checks in the repository ran on a
 timer nobody was required to read, the schedule had fired once in its

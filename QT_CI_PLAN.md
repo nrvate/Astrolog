@@ -273,9 +273,9 @@ files. Five releases are cut and the package repository is live.
 
 | workflow | jobs | what they are |
 |---|---|---|
-| `ci.yml` (every push and PR, ~5–6 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · MSVC project · Which distributions · N × `.deb` (every Ubuntu LTS in standard support, built in containers) · N × `.rpm` (Fedora current + previous, EL9, EL10) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
+| `ci.yml` (every push and PR, ~5–6 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · Which distributions · N × `.deb` (every Ubuntu LTS in standard support, built in containers) · N × `.rpm` (Fedora current + previous, EL9, EL10) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
 | `windows-qt.yml` (reusable; called by `ci.yml` and `release.yml`) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
-| `slow-lane.yml` (reusable + dispatch; **no schedule**) | Compiler warnings · Qt6 warning ledger · What nothing executes · AddressSanitizer sweep (+UBSan, +Swiss oracle, +Qt suite under ASan) · Windows parity · macOS build + suite + `.dmg` · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
+| `slow-lane.yml` (reusable + dispatch; **no schedule**) | Compiler warnings · Qt6 warning ledger · What nothing executes · AddressSanitizer sweep (+UBSan, +Swiss oracle, +Qt suite under ASan) · Windows parity · MSVC project · macOS build + suite + `.dmg` · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
 | `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · N × `.deb` · N × `.rpm` · Publish (then retires every release but the newest two) | 5.1, 5.2 |
 | `repo.yml` (on release) | Build the repositories (from the remaining releases, for the distributions built today) · Publish to Pages | 4.7 |
 
