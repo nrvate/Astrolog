@@ -457,13 +457,14 @@ jobs:
   # wrong the first time Qt links differently.
   deb:
     name: .deb on ${{ matrix.image }}
+    needs: matrix
     runs-on: ${{ matrix.image }}
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      matrix:
-        # The last two Ubuntu LTS releases. Both are GitHub-hosted images.
-        image: [ubuntu-22.04, ubuntu-24.04]
+      # The last two Ubuntu LTS releases, from tools/distros.py: image is
+      # the runner, container the clean image the package is proven in.
+      matrix: ${{ fromJSON(needs.matrix.outputs.deb) }}
     steps:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -493,7 +494,7 @@ jobs:
       - name: Install it in a clean container and run it
         run: |
           tools/ci-verify-linux-package.sh out/package/astrolog_*.deb \
-            ${{ matrix.image == 'ubuntu-22.04' && 'ubuntu:22.04' || 'ubuntu:24.04' }}
+            ${{ matrix.container }}
 
       - name: Keep the package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -533,10 +534,16 @@ jobs:
     timeout-minutes: 5
     outputs:
       rpm: ${{ steps.rpm.outputs.matrix }}
+      deb: ${{ steps.deb.outputs.matrix }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - id: rpm
         run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
+      # The .deb rows are static in the script -- they are runner images,
+      # and no Ubuntu 26.04 image exists yet (checked 2026-09-04) -- but
+      # they come from the same place, so there is one list and not two.
+      - id: deb
+        run: echo "matrix=$(python3 tools/distros.py deb)" >> "$GITHUB_OUTPUT"
 
   rpm:
     name: .rpm on ${{ matrix.release }}

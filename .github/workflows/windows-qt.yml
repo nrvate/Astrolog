@@ -139,12 +139,13 @@ jobs:
           if ($chiron -match '0Ari00') { "EPHEMERIS NOT FOUND: $chiron"; exit 1 }
           "Qt on Windows computes: $chiron"
 
-      # The 3812-assertion suite, on Windows, with no desktop involved:
+      # The whole suite, on Windows, with no desktop involved:
       # qoffscreen.dll is the trick, because a runner's "windows"
       # platform plugin would want a window station and the suite does
-      # not need one. 25 dialogs, 42 context menus, 264 shortcuts and 338
-      # menu items are exactly the surface a Windows port can break
-      # without any Linux net noticing.
+      # not need one. 25 dialogs, 42 context menus, 264 shortcuts and
+      # every menu item are exactly the surface a Windows port can break
+      # without any Linux net noticing. It prints its own count; the
+      # same count as Linux is the assertion worth reading.
       - name: Run the suite on Windows
         shell: cmd
         run: |
