@@ -3628,3 +3628,28 @@ is deleted: it refused any compiler but the ledger's, and the ledger no
 longer has one. `ci-assert-slow-lane.sh` no longer tolerates a Qt6 skip
 under any condition, since the job now runs where Qt6 is.
 
+**2026-09-04, night — a Wine loader failure, and what it looked like.**
+The slow lane dispatched on the runner-pin commit went red in "Windows
+parity", at the chart-matrix differential: *776 differing lines of
+7,069*. Every line after the `-L` chart was missing on the Windows
+side, and in their place one line:
+
+```
+err:virtual:virtual_alloc_first_teb wine: failed to map the shared user data: c0000018
+```
+
+That is Wine failing to create a process -- `STATUS_CONFLICTING_ADDRESSES`
+mapping its shared user data page -- before a byte of Astrolog runs.
+Reproduced locally? No: the same commit, the same Wine 6.0.3, the same
+harness, *identical: Windows and Linux compute the same text charts*
+over 7,069 lines. The failed job was re-run on the runner, alone, and
+passed in 180 s with the same differential identical and the GUI
+scenarios green -- the whole dispatch reads success now. The harness
+says what happened when it happens again, rather than counting the
+missing chart as hundreds of differences: `tools/win-differential.sh`
+looks for Wine's own error lines first and exits 3 naming them, because
+an infrastructure failure that reads as a behavioural one is the worst
+way for a differential to be wrong. Falsified on a synthetic raw file
+carrying that line. Not retried inside the harness -- a retry inside a
+check is a check that cannot fail.
+

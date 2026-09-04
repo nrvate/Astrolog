@@ -112,6 +112,32 @@ tools/chart-matrix.sh "$tmp/lin" 2>&1 | normalize >"$out/linux.raw"
 echo "== windows (wine)"
 tools/chart-matrix.sh "$tmp/win" 2>&1 | normalize >"$out/windows.raw"
 
+# WINE ITSELF CAN FAIL TO START A PROCESS, and when it does the chart
+# that invocation was meant to produce is simply absent from the
+# Windows side -- which the diff below then reports as hundreds of
+# "differing lines", an infrastructure failure dressed as a parity
+# finding. Seen on a GitHub runner on 2026-09-04: every line after the
+# -L chart missing, and in their place
+#
+#   err:virtual:virtual_alloc_first_teb wine: failed to map the shared user data: c0000018
+#
+# STATUS_CONFLICTING_ADDRESSES mapping Wine's shared user data page,
+# before a byte of Astrolog ran; the same commit, the same Wine 6.0.3
+# and this harness were identical over 7,069 lines on the maintainer's
+# machine, and the job passed when re-run. So Wine's own error lines
+# are looked for first and named, with a distinct exit code, so that
+# nobody reads "776 differing lines" and goes looking in charts1.cpp.
+# Not retried here: a retry inside a check is a check that cannot fail.
+if grep -aqE 'wine: failed|wine: could not|err:virtual:|err:module:' "$out/windows.raw"; then
+  echo "WINE COULD NOT START A PROCESS -- an infrastructure failure, not a"
+  echo "== parity finding. Wine said:"
+  grep -aE 'wine: failed|wine: could not|err:virtual:|err:module:' "$out/windows.raw" | sort -u | sed 's/^/   /'
+  echo "== The charts after that point are missing from the Windows side."
+  echo "== Re-run the job; if it recurs on a machine, that machine's Wine"
+  echo "== or kernel is the thing to look at."
+  exit 3
+fi
+
 # Diagnostics are compared as a SET, chart output as a sequence.
 #
 # chart-matrix.sh merges stderr into stdout, and where a stderr line lands
