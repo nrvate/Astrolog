@@ -303,8 +303,6 @@ tools/ci-assert-fortify.sh astrolog-qt 10    # import glibc's *_chk --
                                              # one was checked until
                                              # 2026-09-03. Measured 10 and
                                              # 11 respectively
-tools/ci-assert-toolchain.sh                 # the compilers match the
-                                             # ones warnings.txt describes
 tools/ci-assert-distinct.sh out/qtg 24       # no two renders identical
 tools/ci-assert-installed.sh ~/.local/bin/astrolog   # run it from "/",
 tools/ci-assert-uninstalled.sh ~/.local              # then undo it
@@ -735,11 +733,13 @@ it and builds the NSIS installer on Linux and installs and uninstalls
 that under Wine.
 
 `slow-lane.yml` is what CLAUDE.md elsewhere calls pre-release: the
-warning audit and the Qt6 warning ledger, the sanitizer sweeps (ASan and
-UBSan) and the external Swiss oracle, the Windows parity harnesses under
-Wine, the MSVC build of the Win32 project file, a coverage run that
-asserts nothing NEW has become untested, and **macOS**, which builds the
-port, runs the suite and packages the `.dmg`.
+warning audit against an empty ledger, on whatever compiler
+`ubuntu-latest` carries, Qt6 leg included; the sanitizer sweeps (ASan and
+UBSan) and the external Swiss oracle, each a job of its own; the Windows
+parity harnesses under Wine; the MSVC build of the Win32 project file; a
+coverage run that asserts nothing NEW has become untested; and
+**macOS**, which builds the port, runs the suite and packages the
+`.dmg`.
 **It has no schedule.** It was a nightly until 2026-09-04, and the
 nightly gated nothing: the strongest checks in the repository ran on a
 timer nobody was required to read, the schedule had fired once in its

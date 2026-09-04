@@ -344,20 +344,18 @@ def main():
     if args.file:
         return one_file(args.file)
 
-    # --qt6-only exists because the Qt6 ledger cannot be checked on the
-    # runner that checks the others. That job is pinned to ubuntu-22.04
-    # because tools/warnings.txt is a ledger of what g++ 11 says, and that
-    # image ships no pkg-config files for Qt6 at all -- so pkg-config can
-    # never find it there. ubuntu-latest has the .pc files and g++ 13.
+    # --qt6-only was written for a day when the Qt6 ledger could not be
+    # checked on the runner that checked the others: that job was pinned
+    # to ubuntu-22.04 for its compiler, and that image ships no pkg-config
+    # files for Qt6. Since 2026-09-04 the ledger is empty, the pin is
+    # gone, and the one warnings job runs on ubuntu-latest with Qt6
+    # present, so the full audit covers the Qt6 leg itself. The mode
+    # stays for by-hand use on a machine with both Qts.
     #
-    # The Qt6 leg is the one part that survives the move, because it is a
-    # DIFFERENCE: each Qt6 build is measured against its Qt5 twin in the
-    # same run, on the same compiler, so what a newer g++ says about the
-    # shared core subtracts out on both sides. Only the Qt6-specific set
-    # remains, which is what tools/warnings-qt6.txt holds.
-    #
-    # So: build the two twins for their counts, skip the g++ 11 baseline
-    # entirely, and gate on the Qt6 ledger alone.
+    # The Qt6 leg is a DIFFERENCE: each Qt6 build is measured against its
+    # Qt5 twin in the same run, on the same compiler, so what the compiler
+    # says about the shared core subtracts out on both sides. Only the
+    # Qt6-specific set remains, which is what tools/warnings-qt6.txt holds.
     if args.qt6_only:
         args.build = ['qt', 'qt-test']
     builds = args.build or sorted(BUILDS)

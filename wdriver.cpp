@@ -2744,8 +2744,8 @@ flag API FRedraw(void)
   HFONT hfontOld = NULL;
   char szFile[cchSzDef];
   int nScrollRow = 0, i;
-  flag fSmartText = fFalse, fAnsiColor, fAnsiChar, fSmartHTML = fFalse,
-    fInverse;
+  flag fSmartText = fFalse, fAnsiColor = fFalse, fAnsiChar = fFalse,
+    fSmartHTML = fFalse, fInverse = fFalse;
 
   // Local variables used for copying to the Windows clipboard.
   HFILE hfile;

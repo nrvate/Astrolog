@@ -1149,10 +1149,14 @@ extern CONST char *szFileTemp;
 #define RadioMenu(cmd1, cmd2, i) \
   CheckMenuRadioItem(wi.hmenu, (uint)cmd1, (uint)cmd2, i, MF_BYCOMMAND);
 #define WiRadioMenu(cmd1, cmd2, i) RadioMenu(cmd1, cmd2, i); wi.fMenu = fTrue
+// FreeProcInstance() used to follow the DialogBox(). It is a Win16 no-op
+// that Win32 keeps as a macro expanding to nothing, and mingw g++ 13
+// reports each of the 27 expansions as "statement has no effect".
+// MakeProcInstance() is the same kind of no-op but returns its argument,
+// so the assignment stays.
 #define WiDoDialog(pfn, dlg) \
   dlgproc = (DLGPROC)MakeProcInstance(pfn, wi.hinst); \
-  DialogBox(wi.hinst, MAKEINTRESOURCE(dlg), wi.hwnd, dlgproc); \
-  FreeProcInstance((FARPROC)dlgproc)
+  DialogBox(wi.hinst, MAKEINTRESOURCE(dlg), wi.hwnd, dlgproc)
 
 #define SetCheck(id, f) CheckDlgButton(hdlg, id, f)
 #define SetRadio(id, idLo, idHi) CheckRadioButton(hdlg, idLo, idHi, id)

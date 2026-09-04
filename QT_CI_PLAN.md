@@ -3600,3 +3600,31 @@ newer g++'s new warnings from turning the job red -- which is now the
 job's purpose. That is the next thing to try, and it is a CI change,
 not a code one.
 
+**2026-09-04, night — the warnings job loses its runner pin.** With the
+ledger empty, the `ubuntu-22.04` pin protected nothing, and it cost the
+one thing that image lacks, Qt6 with pkg-config files. Before moving
+the job, the question was asked the only way it can be answered: the
+audit was run in an `ubuntu:24.04` container, g++ 13 and mingw 13,
+against the empty ledger. Six new warnings:
+
+| | where | what |
+|---|---|---|
+| 2 | `xcharts1.cpp` `XChartLocal` | `xp2`, `yp2` maybe uninitialized (the ledger masks digits, so they read `xpN`) |
+| 3 | `wdriver.cpp` `FRedraw` | `fAnsiChar`, `fAnsiColor`, `fInverse` maybe uninitialized |
+| 27 sites | `extern.h` `WiDoDialog` | `FreeProcInstance()`, a Win16 no-op, reported by mingw 13 as a statement with no effect at every expansion |
+| 1 | `xcharts1.cpp` `FormatGridCell` | **a real one**: `snprintf` shifting a string two characters left in place, source and destination overlapping, which the standard leaves undefined; g++ 13's `-Wrestrict` names it |
+
+All fixed. The overlap became `CopyRgb()` with `CchSz()` rather than
+`memmove()`, because the fork has never called a `<string.h>` function
+outside the vendored Swiss sources and g++ 13 had no declaration for it
+-- the first attempt did not compile there, which the container found
+before the runner would have. Re-run on the fixed tree: `warning audit
+clean: 0 warnings in 0 sites` on both compilers, Qt6 leg included.
+
+So `slow-lane.yml`'s warnings job runs on `ubuntu-latest` now, installs
+both Qts, and the separate "Qt6 warning ledger" job that existed only
+to work around the pin is folded back in. `tools/ci-assert-toolchain.sh`
+is deleted: it refused any compiler but the ledger's, and the ledger no
+longer has one. `ci-assert-slow-lane.sh` no longer tolerates a Qt6 skip
+under any condition, since the job now runs where Qt6 is.
+

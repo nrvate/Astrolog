@@ -152,8 +152,9 @@ bad=$(gh api "repos/$repo/actions/runs/$id/jobs" \
 # instead of describing it.
 allowed_skip() {
   case $1 in
-    *"qt6: skipped, no Qt6"*)      # only while warnings-qt6 covers it
-                                   [ "$qt6job" = success ] && return 0
+    *"qt6: skipped, no Qt6"*)      # never: the warnings job runs on an
+                                   # image with Qt6 since 2026-09-04, and
+                                   # this skip would mean it lost it
                                    return 1 ;;
     *"skipped on purpose"*)        return 0 ;;  # menu parity: 12 Windows-only items
     *"Skipping plugin q"*)         return 0 ;;  # windeployqt, choosing backends

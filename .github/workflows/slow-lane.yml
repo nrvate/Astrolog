@@ -38,14 +38,12 @@
 # has no macOS and no MSVC; both have been green for long enough to be
 # trusted with that caveat said out loud.
 #
-# ubuntu-22.04, NOT ubuntu-latest, and the reason is specific to the
-# warning audit rather than the glibc one that governs packaging:
-# tools/warnings.txt is a ledger of what g++ 11 and mingw g++ 10 say. A
-# different major version says different things about different lines, in
-# different words, and the audit would report hundreds of differences
-# that are not regressions -- drowning the one signal it exists to give.
-# tools/ci-assert-toolchain.sh says so out loud rather than leaving the
-# next person to work backwards from 300 mystery diffs.
+# Most jobs here run on ubuntu-22.04, for the glibc that governs what the
+# packages can link against. The warnings job does not, since 2026-09-04:
+# it used to be pinned there for its compiler, because tools/warnings.txt
+# was a ledger of what g++ 11 says, and it is on ubuntu-latest now
+# because that ledger is empty and a newer compiler finding something is
+# what the job is for. The job's own comment has the measurements.
 
 name: Slow lane
 
@@ -61,84 +59,46 @@ permissions:
   contents: read
 
 jobs:
-  # 6.1. All four builds with -Wall, every diagnostic diffed against the
-  # committed baseline. ~6 minutes, which is why it is not pre-commit.
+  # 6.1. Every build with -Wall, every diagnostic diffed against the
+  # committed ledger -- which is EMPTY since 2026-09-04, so this job is
+  # "no compiler warning anywhere in the fork's own code", on whatever
+  # compiler ubuntu-latest carries today.
   #
-  # In CI this audit is READ-ONLY. It flags removed warnings as well as
-  # new ones, deliberately, so a legitimate fix turns this job red until
-  # tools/warnings.txt is regenerated and committed in the same change.
-  # That is correct behaviour with a workflow consequence: the baseline is
-  # part of the diff, never something CI maintains.
+  # In CI this audit is READ-ONLY. A new warning turns it red, and the
+  # answer is to fix the warning, not to record it: tools/warnings.txt
+  # says so in its header. It flags a REMOVED line too, deliberately, so
+  # the ledger cannot overstate what is left; with nothing in it, that
+  # half is moot until someone adds a line back.
+  #
+  # ubuntu-latest, no longer ubuntu-22.04. The pin existed to keep 113
+  # known lines stable across compiler versions -- g++ 13 words things
+  # differently from g++ 11 -- and tools/ci-assert-toolchain.sh refused
+  # any other major version for that reason. With the ledger empty the
+  # pin protected nothing, and it cost the one thing this image lacks:
+  # Qt6 with pkg-config files. Measured before the move, in an
+  # ubuntu:24.04 container with g++ 13 and mingw 13: six NEW warnings
+  # against the empty ledger, every one fixed the same evening, one of
+  # them a real defect (an snprintf whose source and destination
+  # overlapped, xcharts1.cpp FormatGridCell). A newer compiler finding
+  # more is the job's purpose now, not a threat to it.
+  #
+  # The Qt6 leg runs HERE, in the same audit, because this image has the
+  # .pc files; the separate "Qt6 warning ledger" job that existed only
+  # to work around the 22.04 pin is folded back in. QT6_PKGCONFIG is
+  # emptied because its default points at the maintainer's hand-built
+  # Qt6 under /usr/local/qt6, off pkg-config's path; a distribution's
+  # own needs no help being found.
   warnings:
     name: Compiler warnings
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Check out the tree
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-
-      # NO qt6-base-dev, and the reason is worth the space because
-      # installing it looks like the obvious fix and does nothing.
-      #
-      # warning_audit.py's Qt6 leg skips here -- "qt6: skipped, no Qt6"
-      # -- so tools/warnings-qt6.txt is checked by nothing. Installing
-      # qt6-base-dev was tried on 2026-09-03 and changed the message
-      # and not the outcome: measured in the ubuntu:22.04 image
-      # itself, that package ships ZERO pkg-config files, so
-      # "pkg-config --exists Qt6Widgets" cannot succeed on this runner
-      # whatever PKG_CONFIG_PATH says.
-      #
-      # And the runner cannot simply move. This job is pinned to
-      # ubuntu-22.04 for its COMPILER: tools/warnings.txt is a ledger
-      # of what g++ 11 says, and ci-assert-toolchain.sh fails if the
-      # major version differs, because g++ 13 objects to things g++ 11
-      # does not. ubuntu-latest has Qt6 with .pc files and g++ 13, so
-      # the two requirements are mutually exclusive on one runner.
-      #
-      # So the Qt6 ledger is checked by the warnings-qt6 job below, on
-      # ubuntu-latest, with --qt6-only: that leg is a DIFFERENCE between
-      # each Qt6 build and its Qt5 twin under the same compiler, so the
-      # compiler subtracts out and no second baseline is needed.
-      # tools/ci-assert-slow-lane.sh tolerates this job's skip only while
-      # that job is green.
       - name: Install every toolchain the audit compiles with
-        run: tools/ci-deps.sh qtbase5-dev pkg-config libx11-dev g++-mingw-w64-x86-64
-      - name: The baseline describes these compilers
-        run: tools/ci-assert-toolchain.sh
-
-      - name: All four builds, every warning diffed
-        run: tools/warning_audit.py
-
-  # The Qt6 warning ledger, which the job above cannot check.
-  #
-  # tools/warnings.txt is a ledger of what g++ 11 says, so that job is
-  # pinned to ubuntu-22.04 -- and that image ships no pkg-config files for
-  # Qt6 at all, measured in the image, so pkg-config can never find it
-  # there. ubuntu-latest has the .pc files and g++ 13. One runner cannot
-  # do both.
-  #
-  # The Qt6 leg is the one part that survives the move, because it is a
-  # DIFFERENCE: each Qt6 build is measured against its Qt5 twin in the same
-  # run on the same compiler, so whatever a newer g++ says about the shared
-  # core subtracts out on both sides and only the Qt6-specific set remains.
-  # --qt6-only builds the two twins for their counts, skips the g++ 11
-  # baseline, and gates on tools/warnings-qt6.txt alone -- which until now
-  # was an empty ledger that nothing verified.
-  warnings-qt6:
-    name: Qt6 warning ledger
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out the tree
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-
-      - name: Install both Qts
-        run: tools/ci-deps.sh qtbase5-dev qt6-base-dev pkg-config libx11-dev
-      # QT6_PKGCONFIG emptied: its default points at the maintainer's
-      # hand-built Qt6 under /usr/local/qt6, which is off pkg-config's
-      # path. A distribution's own needs no help being found.
-      - name: What Qt6 warns about and Qt5 does not
-        run: QT6_PKGCONFIG= tools/warning_audit.py --qt6-only
+        run: tools/ci-deps.sh qtbase5-dev qt6-base-dev pkg-config libx11-dev g++-mingw-w64-x86-64
+      - name: Every build, every warning diffed against an empty ledger
+        run: QT6_PKGCONFIG= tools/warning_audit.py
 
   # 6.2. Both surfaces, ~750 invocations.
   #

@@ -486,7 +486,13 @@ KI FormatGridCell(char *sz, int cchMax, int x, int y, int type, flag fWide)
       sprintf2(sz, cchMax, "%s", SzZodiac((real)((n-1)*30) + v));
       sz[3] = sz[4]; sz[4] = sz[5]; sz[5] = 'm';
       if (fWide)
-        sprintf2(sz+6, cchMax-6, "%s", sz+8);
+        // In place, two characters left. Not sprintf2(): source and
+        // destination overlap, which snprintf leaves undefined and g++ 13's
+        // -Wrestrict reports. CopyRgb() copies forward, byte by byte, so a
+        // move to a LOWER address through it is well defined -- and it is
+        // this codebase's own idiom, where memmove() would be its first
+        // <string.h> call outside the vendored Swiss sources.
+        CopyRgb((CONST byte *)(sz+8), (byte *)(sz+6), CchSz(sz+8) + 1);
       sz[fWide ? 8 : 6] = chNull;
     } else if (us.nDegForm != df360) {
       if (fWide)
@@ -2292,7 +2298,7 @@ void XChartTelescope()
 void XChartLocal()
 {
   char sz[cchSzDef];
-  int xunit, yunit, x1, y1, x2, y2, xs, ys, xc, yc, xp, yp, xp2, yp2,
+  int xunit, yunit, x1, y1, x2, y2, xs, ys, xc, yc, xp, yp, xp2 = 0, yp2 = 0,
     m1, n1, m2, n2, i, j, k, l, zLimit, nShowMinute;
   real xBase, yBase, xScale, yScale, xBase2, yBase2, xScale2, yScale2,
     xr, yr, xi, yi, lon, lat, len;
