@@ -2,7 +2,15 @@
 # Did the last slow-lane run actually pass, and did every step of it do
 # what it claims?
 #
-#   tools/ci-assert-slow-lane.sh [repo]
+#   tools/ci-assert-slow-lane.sh [repo] [run-id]
+#
+# With no run id: the newest completed run of slow-lane.yml, which since
+# 2026-09-04 means the newest by-hand dispatch. With one: that run, of
+# any workflow -- and the one worth naming is a RELEASE run, because the
+# slow lane's jobs now execute inside release.yml through workflow_call,
+# so "did the lane pass on what shipped, and did every step of it do
+# what it claims" is a question about the release run, not about any
+# run of slow-lane.yml at all.
 #
 # Exists because of a failure this project had no way to notice. The
 # external Swiss oracle was added to the slow lane in b56f511, whose
@@ -42,13 +50,21 @@ trap 'rm -f "$T_SKIP" "$T_JOBS"' EXIT
 # rather than failed. Counting those as failures made the first version of
 # this script report a perfectly healthy repository as broken, which is
 # the fastest way to teach someone to ignore a check.
-run=$(gh run list --repo "$repo" --workflow "$wf" --limit 20 \
-        --json databaseId,status,conclusion,createdAt \
-        -q '[.[]|select(.status=="completed")
-             |select(.conclusion=="success" or .conclusion=="failure")][0]' \
-        2>/dev/null || true)
-[ -n "$run" ] && [ "$run" != "null" ] || {
-  echo "no completed $wf run found in $repo"; exit 1; }
+runid=${2:-${SLOW_LANE_RUN:-}}
+if [ -n "$runid" ]; then
+  run=$(gh run view "$runid" --repo "$repo" \
+          --json databaseId,status,conclusion,createdAt,workflowName 2>/dev/null || true)
+  [ -n "$run" ] || { echo "no run $runid in $repo"; exit 1; }
+  wf=$(printf '%s' "$run" | sed -n 's/.*"workflowName":"\([^"]*\)".*/\1/p')
+else
+  run=$(gh run list --repo "$repo" --workflow "$wf" --limit 20 \
+          --json databaseId,status,conclusion,createdAt \
+          -q '[.[]|select(.status=="completed")
+               |select(.conclusion=="success" or .conclusion=="failure")][0]' \
+          2>/dev/null || true)
+  [ -n "$run" ] && [ "$run" != "null" ] || {
+    echo "no completed $wf run found in $repo"; exit 1; }
+fi
 
 id=$(printf '%s' "$run" | sed -n 's/.*"databaseId":\([0-9]*\).*/\1/p')
 when=$(printf '%s' "$run" | sed -n 's/.*"createdAt":"\([^"]*\)".*/\1/p')

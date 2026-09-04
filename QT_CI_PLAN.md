@@ -3342,3 +3342,46 @@ was neither.
 outlives the app, and a leftover one makes the next run flaky" since it
 was written. The knowledge was in the tree, one file over.
 
+**2026-09-04, v8.00-qt.6 — the first release through the new shape, and
+what it measured.** Tagged after `ci-assert-green.sh` on the full SHA
+(the first attempt passed a short SHA, which `gh run list --commit`
+does not match, and the script correctly refused rather than tagging
+a commit CI "had not seen"). Every job the release now depends on ran
+and passed: the slow lane's seven, the Windows build and installer, two
+`.deb`s, four `.rpm`s including Fedora 43 and 44 chosen by the matrix
+job, and Publish. `ci-verify-published-release.sh` downloaded all nine
+artifacts and every digest matched; the notes carried the computed
+"Ubuntu 22.04/24.04" and "Fedora 43/44"; `ci-assert-slow-lane.sh`,
+pointed at the release run, found every step of all eighteen jobs
+succeeded with none silently skipped.
+
+| | |
+|---|---|
+| release wall time | about 18 minutes, created 06:15:47Z |
+| long pole | AddressSanitizer sweep, 996 s |
+| next | macOS build + suite 325 s, coverage 324 s, Windows build 297 s |
+| Windows artifacts | `.zip` 26.2 MB, `setup.exe` 21.2 MB — the Qt build with its runtime, against 14.1 and 12.6 for the Win32 build it replaced |
+
+Two per-push costs were taken off the Windows job the same morning,
+each measured before and after on the runner:
+
+- **`/MP`.** `cl.exe` compiled the 34 sources one at a time: 109 s for
+  the program and 106 s for the test build, 215 of the job's 311
+  seconds. With one worker per core: 61 s and 55 s.
+- **The Qt cache.** A hit restores in 8–10 s and asks no mirror
+  anything; the miss on the first run installed and saved it. Pinned to
+  `actions/cache` v5.1.0 rather than v4.3.0, because v4 targets Node 20
+  and every run carried the runner's warning that it was being forced
+  onto Node 24.
+
+And the last hand-written distribution list is gone: the `.deb` rows in
+both workflows come from `tools/distros.py` through the same job as the
+rpm rows, with the container named in the row instead of by an inline
+expression. They stay static in the script because they are runner
+images, and `actions/runner-images` lists no `ubuntu-26.04` yet.
+
+`tools/ci-assert-slow-lane.sh` takes a run id now. Without one it looks
+at slow-lane.yml runs, which since today are only by-hand dispatches;
+the run worth asking about is a release run, where the lane's jobs
+actually execute.
+

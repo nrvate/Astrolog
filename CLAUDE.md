@@ -383,6 +383,7 @@ tools/ci-assert-clang-clean.sh               # the macOS compiler, whose
 tools/ci-assert-green.sh                     # wait for CI on this commit
                                              # before tagging a release
 tools/ci-assert-slow-lane.sh                 # is the SLOW lane healthy at
+tools/ci-assert-slow-lane.sh nrvate/Astrolog <release-run-id>
                                              # all -- a different question,
                                              # and the one nothing asked
                                              # while it was a nightly and
@@ -397,7 +398,10 @@ tools/ci-assert-slow-lane.sh                 # is the SLOW lane healthy at
                                              # releases now rather than
                                              # running on a timer, so the
                                              # staleness check is off
-                                             # unless MAX_AGE_H is set
+                                             # unless MAX_AGE_H is set --
+                                             # and the run worth naming is
+                                             # a RELEASE run, since that is
+                                             # where the lane's jobs execute
 ```
 
 And a twelfth that is not fast and not resource-shaped: **the
