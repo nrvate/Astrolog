@@ -102,16 +102,15 @@ jobs:
       # No moc, no build system: tools/qt-srcs.py reads Makefile.srcs,
       # the same source list every other build uses, and
       # tools/msvc-build-qt.cmd holds the one flag list both binaries are
-      # compiled with. The program is /SUBSYSTEM:WINDOWS -- no console
-      # beside the GUI -- and the test build is a console program, so
-      # its PASS/FAIL reaches this log. The script says why.
-      - name: Compile the program
+      # compiled with. ONE compile of the 31 shared sources, the three
+      # Qt sources per binary, two links: -DQTTEST changes only those
+      # three here, because its core-side effect is an assert() and this
+      # build passes /DNDEBUG. The program is /SUBSYSTEM:WINDOWS -- no
+      # console beside the GUI -- and the test build is a console
+      # program, so its PASS/FAIL reaches this log. The script says why.
+      - name: Compile both binaries
         shell: cmd
-        run: tools\msvc-build-qt.cmd astrolog.exe
-
-      - name: Compile the test build too
-        shell: cmd
-        run: tools\msvc-build-qt.cmd astrolog-qt-test.exe --test
+        run: tools\msvc-build-qt.cmd
 
       # Not just "did it link" -- does it compute? The Qt build has
       # astrolog.cpp's ordinary main(), so it can be driven from a command
