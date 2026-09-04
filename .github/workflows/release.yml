@@ -249,15 +249,29 @@ jobs:
             --title "Astrolog $TAG" --notes-file notes.md \
             --generate-notes dist/*
 
-      # Cutting a release is what retires the ones before the last two.
-      # The maintainer's decision, 2026-09-04: old releases are pruned,
-      # because repo.yml rebuilds the site from every release and a
-      # package for a distribution the matrix no longer builds would
-      # otherwise be served, untested, forever. Two are kept so the
-      # repository's upgrade check still has something to upgrade from.
-      # The tags stay. The script says the rest, and --dry-run shows what
-      # it would do.
-      - name: Retire the releases before the last two
-        env:
+  # Cutting a release is what retires the ones before the last two. The
+  # maintainer's decision, 2026-09-04: old releases are pruned, because
+  # repo.yml rebuilds the site from every release and a package for a
+  # distribution the matrix no longer builds would otherwise be served,
+  # untested, forever. Two are kept so the repository's upgrade check
+  # still has something to upgrade from. The tags stay. The script says
+  # the rest, and --dry-run shows what it would do.
+  #
+  # A JOB OF ITS OWN, after Publish, not a step inside it. As a step, a
+  # prune that failed -- a deleted tag, an API hiccup -- would have left
+  # the release published and the run red, reading as a failed release.
+  # As a job the run is still red, but Publish is green and the red job
+  # is named for what actually failed. repo.yml chains off this
+  # workflow's conclusion, so it still rebuilds only when both succeeded.
+  retire:
+    name: Retire the releases before the last two
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - env:
           GH_TOKEN: ${{ github.token }}
         run: tools/prune-releases.sh 2
