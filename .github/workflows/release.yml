@@ -18,6 +18,16 @@ on:
         description: 'Tag to publish (must already exist and match astrolog.h)'
         required: true
         type: string
+      # A dispatch with this off builds and tests everything and stops
+      # short of the release. Without it, the only way to find out
+      # whether this workflow works is to publish -- which is how a
+      # release workflow comes to be tested for the first time by the
+      # release that needed it.
+      publish:
+        description: 'Publish the release. Off for a dry run.'
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: release-${{ github.event.inputs.tag || github.ref_name }}
@@ -118,6 +128,8 @@ jobs:
   publish:
     name: Publish
     needs: [linux, windows, macos]
+    # A tag always publishes; a dispatch only when asked.
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -147,6 +159,7 @@ jobs:
   retire:
     name: Retire the releases before the last two
     needs: publish
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

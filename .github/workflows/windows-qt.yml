@@ -46,13 +46,10 @@ on:
       package:
         description: >-
           Build the zip and the NSIS installer, and drive that installer
-          under Wine. Always true for a release. On a push it is true
-          only when the commit touches the packaging inputs, because it
-          is release-grade work -- about 94 s, behind a 183 s build, on
-          the fast lane's critical path -- proving a recipe whose inputs
-          change a few times a month. The BUILD and the SUITE run either
-          way: those are what a push is for. See ci.yml's "Windows
-          packaging inputs" job.
+          under Wine -- about 94 s behind a 183 s build. Always true for
+          a release, which since 2026-09-05 is the only caller. The BUILD
+          and the SUITE run either way, so a dispatch can ask for those
+          alone.
         required: false
         default: true
         type: boolean

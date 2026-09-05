@@ -163,6 +163,14 @@ make qt6-test -j4                # Qt6; QT6_PKGCONFIG says where it is.
                                  # can see it
 QTTESTBIN=./astrolog-qt6-test ./run-qt-tests.sh  # the suite against Qt6:
                                  # the suite passes there too
+make check                       # what CI used to run on every push:
+                                 # generated tables, ten audits, the
+                                 # builds, the suite, the assertion
+                                 # scripts' self-test. 53 s, and
+                                 # tools/check.sh says what it leaves
+                                 # out (the differential, the container
+                                 # build check, the sanitizers, the
+                                 # warning audit, the Swiss oracle)
 make install                     # two wrappers on PATH, a menu entry and
                                  # icons; the data stays
                                  # in the checkout, so the tree has to stay
@@ -714,6 +722,13 @@ keystroke it doesn't handle. When Qt does need it, start it as
 On a private Xvfb display, `import -window root` is fine.
 
 ## CI, and what it will not let you do
+
+**`make check` is the pre-commit command**, since nothing runs on a
+push any more: 53 seconds for the generated tables, the ten audits, both
+builds, the suite and the assertion scripts' self-test. A dispatch of
+`release.yml` with `publish` off is the other half -- it builds and
+tests on all three platforms without publishing, so the release workflow
+is not first exercised by the release that needs it.
 
 **Two workflows, and they run only on a tag.** The maintainer's decision,
 2026-09-05: CI builds the binaries a user cannot build themselves and

@@ -154,6 +154,12 @@ wcli:
 # Every build this fork has, in the order the pre-commit checks want them.
 all: $(NAME) qt qt-test win wcli
 
+# What CI used to run on every push, now that it runs only on a tag:
+# generated tables, audits, builds, the suite, the assertion scripts.
+# tools/check.sh says what it leaves out and why.
+check:
+	tools/check.sh
+
 # "make install" puts the two commands on PATH and leaves everything else
 # exactly where it is. The data -- the ephemeris files, the atlas, the
 # fonts, astrolog.as, the help text -- stays in this checkout on purpose,
@@ -241,7 +247,7 @@ uninstall:
 	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
-.PHONY: default clean clean-console qt qt-test qt-asan qt-ubsan qt6 qt6-test win wcli all \
+.PHONY: default check clean clean-console qt qt-test qt-asan qt-ubsan qt6 qt6-test win wcli all \
 	install uninstall
 
 # Compiler-generated header dependencies; see Makefile.qt for the
