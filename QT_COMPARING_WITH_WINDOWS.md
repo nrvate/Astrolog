@@ -24,10 +24,11 @@ Only the first line is needed to build and test the port itself. The
 second is enough for the fast numeric check below; the third and fourth
 are only for the layout and GUI comparisons further down.
 
-**CI runs all of this before every release** — `tools/win-differential.sh`
-and `tools/win-tests.sh` are the slow lane's "Windows parity" job, which
-`release.yml` gates on — so the workflow here is for investigating a
-difference, not for noticing one.
+**Nothing runs this for you any more.** `tools/win-differential.sh` and
+`tools/win-tests.sh` were a CI job until 2026-09-05, when CI became
+tag-only and kept just the builds; they are worth running by hand after
+a change that reaches shared core, and the workflow here is for
+investigating a difference either way.
 
 ## The fastest check: does the Windows build compute the same numbers?
 
@@ -328,7 +329,7 @@ compiled by MSVC against the open-source Qt6, running on Windows. Since
 2026-09-04 that build is **what the release ships for Windows**; the
 Win32 `astrolog.exe` the rest of this document drives is the oracle only.
 
-`windows-qt.yml` builds it on every push and uploads
+`windows-qt.yml` builds it on a release or a dispatch and uploads
 `windows-qt-test-build` — the shipped tree (`astrolog.exe`, Qt's DLLs
 chosen by `windeployqt`, the MSVC runtime, the data files) plus
 `astrolog-qt-test.exe`. Download that, then:

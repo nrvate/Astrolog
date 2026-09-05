@@ -950,8 +950,8 @@ T5.
 
 *(The ledger has been empty since 2026-09-04 (`5f2aa40`), the 91 and 45
 residues included; a new warning is a failure to fix now, not a line to
-record. The audit covers five builds plus the two Qt6 legs, and runs in
-the push lane.)*
+record. The audit covers five builds plus the two Qt6 legs, and is run
+by hand since CI went tag-only on 2026-09-05.)*
 
 *What it does not cover.* mingw does not recognize `snprintf` as the
 builtin, so the Windows half of the audit sees no format diagnostics at

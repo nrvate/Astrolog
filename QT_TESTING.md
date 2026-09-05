@@ -828,9 +828,12 @@ and the ledger cannot drift into overstating what is left.
 
 Three things about it are worth knowing before you use it.
 
-**It is nearly pre-commit.** The full run is about 70 seconds, and it
-runs in the push lane on every push, so a warning that slips past you is
-found within minutes. Use `--file` while working — it compiles one source
+**It is pre-commit, and nothing else runs it.** The full run is about 70
+seconds. It was a push-lane job until 2026-09-05; since CI became
+tag-only, a warning nobody runs this for is a warning nobody sees --
+"make check" deliberately leaves it out for the 70 seconds, so run it
+yourself after a change that touches many files. Use `--file` while
+working — it compiles one source
 file under all five flag sets in seconds — and the full run before a
 commit that touched a lot of code.
 
