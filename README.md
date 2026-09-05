@@ -48,9 +48,13 @@ package repository: they were dropped on 2026-09-05, because the
 download counts showed nothing outside the project's own automation had
 ever fetched one, and a seven-distribution matrix is a poor thing to
 maintain for that. Building takes two commands and about twenty seconds
-on a modern machine, and `tools/build-check.sh` proves those commands
-still work on twelve distributions — Ubuntu 22.04/24.04/26.04, Debian
-12/13, Fedora 43/44, Rocky 9/10, Arch, openSUSE Tumbleweed and Alpine.
+on a modern machine. `tools/build-check.sh` runs exactly the commands
+below in a container of each distribution and casts a chart with the
+result; **last run 2026-09-05, twelve of twelve** — Ubuntu
+22.04/24.04/26.04, Debian 12/13, Fedora 43/44, Rocky 9/10, Arch,
+openSUSE Tumbleweed and Alpine. It needs Docker and about ten minutes,
+so it is run by hand before a release rather than on every change; if
+the date above is old, that is what it means.
 
 ```sh
 # Debian, Ubuntu, Mint

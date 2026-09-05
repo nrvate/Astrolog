@@ -80,6 +80,47 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # What moved since the previous release, as a REPORT rather than a
+  # gate. The four behavioural matrices -- chart, switch, influence,
+  # graphics -- diffed against the previous tag, in the one place left
+  # that runs anything: between releases nothing compares this program's
+  # output to anything, which is the real cost of a tag-only CI and is
+  # worth at least seeing at the moment a release is cut.
+  #
+  # Not a gate on purpose. Over a whole release span most movement is
+  # intended, and a check that fails every release is a check nobody
+  # reads. It lands in the run summary; read it before announcing.
+  differential:
+    name: What moved since the last release
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - name: Dependencies
+        run: tools/ci-deps.sh libx11-dev
+      - name: Against the previous release tag
+        env:
+          REF: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          base=$(git describe --tags --abbrev=0 "$REF^" 2>/dev/null || true)
+          [ -n "$base" ] || { echo "no earlier tag to compare against"; exit 0; }
+          echo "### Behaviour against $base" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          DIFFERENTIAL_REPORT=1 tools/ci-differential.sh "$base" out/diff \
+            2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: release-differential
+          path: out/diff
+          if-no-files-found: ignore
+          retention-days: 30
+
   windows:
     name: Windows
     needs: version
@@ -162,6 +203,23 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
             --title "Astrolog $TAG" --notes-file tools/release-notes.md \
             --generate-notes dist/*
+
+  # The last mile, and the only check that looks at what a user actually
+  # gets: download every published asset, require the manifest to name
+  # exactly them, and require every digest to match. It can only run
+  # after publication, so a failure means "published and wrong" -- which
+  # is precisely the thing worth being told.
+  published:
+    name: The release, as downloaded
+    needs: publish
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/ci-verify-published-release.sh "${{ github.event.inputs.tag || github.ref_name }}"
 
   retire:
     name: Retire the releases before the last two

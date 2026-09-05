@@ -319,13 +319,6 @@ a memory. They are worth knowing about because several are
 useful by hand:
 
 ```sh
-tools/ci-touched.sh HEAD~1 tools/astrolog.nsi   # does a range touch
-                                             # these paths? true/false,
-                                             # and true when it cannot
-                                             # tell. Written for the push
-                                             # lane that no longer exists;
-                                             # kept because the question
-                                             # comes up by hand
 tools/ci-selftest.sh                         # every ci-*.sh below, fed
                                              # input it must refuse; its
                                              # first run refused three of
@@ -768,7 +761,12 @@ not.
 catch a mistake earlier:
 
 ```sh
-make check                          # everything local, ~1 minute
+make check                          # everything local, ~2 minutes
+tools/build-check.sh                # the source build on twelve
+                                    # distributions, ~10 min, Docker --
+                                    # this is what README.md's install
+                                    # instructions promise, and nothing
+                                    # else checks it
 vi astrolog.h                       # bump szVersionFork
 tools/ci-assert-version.sh v8.00-qt.N   # the tag you are about to make
 git commit && git push origin qt

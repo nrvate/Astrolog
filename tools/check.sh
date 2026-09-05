@@ -70,6 +70,19 @@ fi
 if [ -d "${QT6_PKGCONFIG:-/usr/local/qt6/lib/pkgconfig}" ]; then
   step "build: Qt6"                   make qt6 -j4
   step "build: Qt6 test binary"       make qt6-test -j4
+  # And RUN it. Building proves it compiles; the Qt6 binary is a
+  # different Qt with different defaults -- rounding policy, font
+  # database, the QFontDatabase statics -- and the suite is what says it
+  # behaves. A CI job ran this until 2026-09-05; nothing did between
+  # then and now.
+  printf '%-34s ' "the suite, against Qt6"
+  if QTTESTBIN=./astrolog-qt6-test ASTROLOG_QT_EPHEM=minimal \
+       tools/ci-run-suite.sh 600 /tmp/check-suite-qt6.log -Yi1 ephem \
+       >/tmp/check-qt6.out 2>&1; then
+    grep -hoE '^PASS: .*' /tmp/check-suite-qt6.log | tail -1
+  else
+    echo FAILED; tail -20 /tmp/check-qt6.out | sed 's/^/    /'; fail=1
+  fi
 else
   printf '%-34s %s\n' "build: Qt6" "skipped -- no Qt6 outside pkg-config"
 fi
