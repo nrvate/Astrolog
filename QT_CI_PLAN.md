@@ -3893,3 +3893,50 @@ decision `tools/prune-releases.sh` states ("THE GIT TAGS STAY") and
 README.md already tells a user ("Older tags stay in git; their assets do
 not"). No change; recording it so the next reader does not re-open it.
 
+**2026-09-05, evening — CI is two workflows and runs only on a tag.**
+The maintainer, after watching the repository job install packages in
+fourteen containers: "i am not convinced building packages for
+redhat/el/fedora/ubuntu and maintaining the repos is worth it", and then
+the shape: build the Windows and macOS binaries for users without
+compilers, make sure `make` works on any popular distribution, "then we
+can slim down CI to building some binaries, and we should only run
+actions when a release gets tagged."
+
+*What the numbers said.* Download counts on the two kept releases were
+fourteen per Linux package and twelve per Windows and macOS asset --
+which is exactly this project's own automation: the release verifier
+fetches every asset, the repository rebuild fetches only packages, and
+the difference between the two numbers is the two rebuilds. Nothing
+outside CI had ever downloaded anything. Against that, 1,685 lines
+existed only for Linux packaging and the repository, and the matrix
+needed maintaining as Fedora shipped and Ubuntu LTSes aged out.
+
+*What replaced it.* `tools/build-check.sh`: build this tree, from a `git
+archive` of HEAD so nothing already built can make it pass, in a
+container of each popular distribution, then cast a chart and require
+Chiron. Twelve pass -- Ubuntu 22.04/24.04/26.04, Debian 12/13, Fedora
+43/44, Rocky 9/10, Arch, openSUSE Tumbleweed and Alpine (musl, which
+nobody had ever tried) -- every one computing `16Can03` for the same
+chart. The package names it uses per distribution are the useful part:
+they are what README.md now tells a user to install, verified rather
+than remembered.
+
+*What went.* `ci.yml`, `slow-lane.yml`, `linux-package.yml`, `repo.yml`,
+and with them `distros.py`/`distros.json`, `make-repo.sh`,
+`collect-release-packages.sh`, `build-in-container.sh`,
+`package-deb.sh`, `package-rpm.sh`, `ci-verify-linux-package.sh`,
+`ci-verify-repo.sh`, `ci-verify-live-repo.sh`, `ci-assert-slow-lane.sh`
+and `release-notes.sh`.
+
+*What stayed, and this is the part worth being honest about.* Every
+check this document spent weeks building still exists as a script and
+still works: the suite, the eleven audits, the four differential
+matrices, the sanitizer sweeps, the warning audit, the numeric oracle,
+the Windows parity harnesses. What went away is that anything runs them
+for you. A commit is now trusted because somebody ran them, not because
+a badge is green. `release.yml` runs the suite once before publishing --
+version check, Linux build and suite, Windows through `windows-qt.yml`,
+macOS with the pinned Qt, then publish exactly three artifacts and
+retire all but the newest two -- so a release cannot ship a tree whose
+suite fails, and that is the whole of the automatic safety net.
+

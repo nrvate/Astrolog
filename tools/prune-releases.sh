@@ -9,7 +9,7 @@
 #   - repo.yml rebuilds the apt/dnf repository from EVERY release, so a
 #     package built for a distribution that has since left the matrix --
 #     Fedora 42, end-of-life since May -- stays on the site forever,
-#     served and never again verified. ci-verify-repo.sh reports such a
+#     served and never again verified. The repository checks reported such a
 #     suite as "served, but no longer in the build matrix -- not
 #     verified", which is honest and is not a state anyone wants.
 #   - Six releases were cut in two days while CI was being built, and
@@ -18,7 +18,7 @@
 #
 # "Newest N" and not "newer than a date", because a release is only
 # superseded by another release. The default of 2 is the smallest number
-# that keeps ci-verify-repo.sh's upgrade check meaningful -- it installs
+# that kept the repository's upgrade check meaningful -- it installed
 # the oldest version the repository serves and upgrades to the newest,
 # and with one version there is nothing to upgrade from.
 #

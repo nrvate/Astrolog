@@ -16,7 +16,7 @@
 # (tools/ci-verify-windows-starts.sh): that build is what every
 # differential harness measures the port against, and a tree of it that
 # does not start is a broken oracle. The Linux packages are
-# tools/package-deb.sh and tools/package-rpm.sh (Q1 answered: native
+# the Linux packaging scripts, removed 2026-09-05 (Q1 answered: native
 # packages).
 #
 # WHAT SHIPS is not obvious and each entry was checked rather than

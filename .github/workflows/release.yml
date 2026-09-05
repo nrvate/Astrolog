@@ -1,31 +1,12 @@
-# Publish a release when a v* tag is pushed -- QT_CI_PLAN.md Phase 5.
+# Everything CI does, and it does it only when a release is tagged.
 #
-# GROUND RULE 3: one build definition, used by both CI and release. The
-# Linux definition is tools/package-*.sh, which ci.yml runs on every push
-# and this runs again on a tag. The Windows and macOS definitions are
-# whole workflows -- windows-qt.yml and the macOS job of slow-lane.yml --
-# which ci.yml and this file both CALL, so the artifact a release ships
-# was built by exactly the recipe every push exercised. A release cannot
-# ship an artifact built by a recipe CI never ran, which is the failure
-# swisseph's package.yml exists to prevent.
-#
-# THE TAG IS CHECKED AGAINST THE SOURCE. astrolog.h owns szVersionFork; a
-# tag that disagrees with it fails the job before anything is published.
-# If they disagree, every bug report afterwards cites the wrong version
-# and nothing else in the pipeline would ever notice.
-#
-# THE SLOW LANE GATES THE RELEASE, since 2026-09-04. It used to be a
-# nightly that gated nothing: the sanitizer sweeps, the external Swiss
-# oracle, the warning ledger, the Windows parity harnesses and the macOS
-# suite all ran on a timer nobody was required to read. Now Publish
-# needs every one of them. A release takes about twenty minutes instead
-# of six, the ASan sweep being the long pole, and that is the price of
-# "the strongest checks in the repository ran on what shipped" being a
-# true sentence.
-#
-# cancel-in-progress is FALSE here, unlike ci.yml. A half-published
-# release is worse than a slow one.
-
+# The shape is the maintainer's, 2026-09-05: build the binaries people
+# cannot build themselves -- Windows and macOS -- and leave Linux to
+# "install these packages, then make", which tools/build-check.sh proves
+# on twelve distributions. There is no push lane. The suite, the audits,
+# the sanitizer sweeps, the differentials and the warning audit are all
+# still here as scripts and are run by hand; what runs automatically is
+# this, on a tag.
 name: Release
 
 on:
@@ -34,215 +15,135 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (must already exist, e.g. v8.00-qt.1)'
+        description: 'Tag to publish (must already exist and match astrolog.h)'
         required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  # Cheap, and it runs alone first so a mismatched tag costs seconds
-  # rather than twenty minutes of package builds and sanitizer sweeps.
+  # Cheap and first: a tag that disagrees with szVersionFork means every
+  # bug report afterwards cites the wrong version.
   version:
     name: Version check
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: tools/ci-assert-version.sh "${{ github.event.inputs.tag || github.ref_name }}"
 
-      # And that CI was green on this commit. Everything else in this
-      # workflow checks the ARTIFACTS -- every .deb and .rpm installed
-      # into a clean container and asked for Chiron, the Windows package
-      # unpacked and run, the macOS bundle launched from the mounted .dmg.
-      # The slow lane re-runs the suite under sanitizers and on macOS,
-      # but the ten audits and the behavioural differential belong to
-      # ci.yml alone.
-      #
-      # Which is fine as long as ci.yml passed on the commit being tagged,
-      # and nothing checked that. A tag on a red commit would produce
-      # packages that install perfectly and compute a correct Chiron while
-      # carrying whatever ci.yml had caught -- the Chiron assertion is
-      # deliberately shallow, its job being to prove the ephemeris was
-      # found rather than to re-test the program.
-      - name: CI was green on this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: tools/ci-assert-green.sh "${{ github.sha }}"
-
-  # The distribution list is tools/distros.json's, as in ci.yml: the
-  # committed snapshot of what Fedora's and Ubuntu's release services
-  # answered, checked here against what they answer today. A release
-  # that lands on a drift day fails at this job with the one command
-  # that updates the snapshot, and is cut again from the commit that
-  # carries it -- on purpose: the rows a release ships for should be in
-  # its history, not in an API's mood that morning.
-  matrix:
-    name: Which distributions
+  # The tree itself, once, before anything is shipped: both Linux
+  # binaries and the whole suite. Two minutes, and it is the only thing
+  # standing between a bad commit and three published artifacts.
+  linux:
+    name: Linux build + suite
     needs: version
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      rpm: ${{ steps.rpm.outputs.matrix }}
-      deb: ${{ steps.deb.outputs.matrix }}
-      count: ${{ steps.count.outputs.count }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - name: The snapshot still matches what Fedora and Ubuntu answer
-        run: python3 tools/distros.py check
-      - id: rpm
-        run: echo "matrix=$(python3 tools/distros.py rpm)" >> "$GITHUB_OUTPUT"
-      - id: deb
-        run: echo "matrix=$(python3 tools/distros.py deb)" >> "$GITHUB_OUTPUT"
-      # Linux packages plus the Windows zip, the Windows installer and
-      # the macOS .dmg. The release must contain EXACTLY this many.
-      - id: count
-        run: echo "count=$(( $(python3 tools/distros.py count) + 3 ))" >> "$GITHUB_OUTPUT"
+      - name: Dependencies
+        run: tools/ci-deps.sh qtbase5-dev pkg-config libx11-dev
+      - run: make -j4 && make qt-test -j4
+      - name: The suite
+        env:
+          ASTROLOG_QT_EPHEM: minimal
+        run: tools/ci-run-suite.sh 600 suite.log -Yi1 ephem
+      - name: Every assertion script refuses what it must
+        run: tools/ci-selftest.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: linux-suite-log
+          path: suite.log
+          retention-days: 14
 
-  # Everything CLAUDE.md calls pre-release: sanitizers, the Swiss oracle,
-  # the warning ledger, Windows parity under Wine, and the macOS build,
-  # suite and .dmg. Its macOS job uploads "astrolog-macos", which Publish
-  # collects.
-  slow-lane:
-    name: Slow lane
-    needs: version
-    uses: ./.github/workflows/slow-lane.yml
-
-  # The Windows package: the Qt port built with MSVC, the suite run on
-  # Windows, the zip and the installer built and verified on Linux. It
-  # uploads "astrolog-windows", which Publish collects.
   windows:
     name: Windows
     needs: version
     uses: ./.github/workflows/windows-qt.yml
-    # Explicit, though it is the default: a release always builds the zip
-    # and the installer and drives that installer under Wine. A push does
-    # it only when it touches the packaging (ci.yml), so this is the run
-    # where that path is always proven -- before anything is published.
     with:
       package: true
 
-  # The .deb rows, built inside ubuntu:<version> containers by
-  # tools/build-in-container.sh and proven in a fresh one -- the same
-  # steps ci.yml runs on every push, with PKG_RELEASE=1 so the version
-  # carries no ~date.sha suffix. Two jobs rather than one matrix over
-  # both families only because the package name, the family and the
-  # artifact name differ per row; the steps are the same script.
-  # Every row of both families, through the same reusable workflow the
-  # push lane calls with one row each; see its header. "release: true"
-  # puts PKG_RELEASE=1 in the version and uploads each artifact zipped,
-  # so its name survives for Publish's "astrolog-*" pattern below.
-  deb:
-    name: Linux
-    needs: matrix
-    uses: ./.github/workflows/linux-package.yml
-    with:
-      kind: deb
-      matrix: ${{ needs.matrix.outputs.deb }}
-      release: true
-
-
-  rpm:
-    name: Linux
-    needs: matrix
-    uses: ./.github/workflows/linux-package.yml
-    with:
-      kind: rpm
-      matrix: ${{ needs.matrix.outputs.rpm }}
-      release: true
-
-
+  macos:
+    name: macOS
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 25
+    env:
+      QT_VERSION: "6.8.3"
+      # Without it clang records the host's version as the binary's
+      # minimum and the .dmg claims a macOS nobody has yet.
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: brew install pkg-config
+      - name: Cached Qt
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0, Node 24
+        with:
+          path: ~/Qt
+          key: qt-mac-${{ env.QT_VERSION }}-clang_64-qtbase-qttools-aqt3.3.0-nodsym
+      - name: Qt ${{ env.QT_VERSION }}, pinned
+        run: tools/ci-macos-qt.sh "$QT_VERSION" "$HOME/Qt" >> "$GITHUB_ENV"
+      # "shell: bash" is bash -eo pipefail; the default -e reports tee's
+      # status, and a failed make read as a green step.
+      - name: Build
+        shell: bash
+        run: make qt -j4 2>&1 | tee build.log && make qt-test -j4 2>&1 | tee -a build.log
+      - name: No clang warnings in our own sources
+        run: tools/ci-assert-clang-clean.sh build.log 300
+      - name: The suite
+        env:
+          ASTROLOG_QT_EPHEM: minimal
+        run: tools/ci-run-suite.sh 420 suite.log -Yi1 ephem
+      - name: Build the .app and .dmg
+        run: tools/package-macos.sh out/macos
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: astrolog-macos
+          path: out/macos/*.dmg
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: macos-suite-log
+          path: suite.log
+          retention-days: 14
 
   publish:
     name: Publish
-    needs: [matrix, deb, rpm, windows, slow-lane]
+    needs: [linux, windows, macos]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-
-      # "astrolog-*" and nothing else. The called workflows upload more
-      # than what ships -- the staged Windows tree, the test build,
-      # screenshots, the suite log, the coverage report -- and every one
-      # of those is named WITHOUT the prefix so this pattern leaves it
-      # behind. A stray file here would be published as a release asset,
-      # and ci-verify-release-dist.sh below fails on one.
+      # Only the shipped artifacts carry the "astrolog-" prefix; the logs
+      # and screenshots do not, so this pattern leaves them behind.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           pattern: astrolog-*
           merge-multiple: true
-
-      # GitHub rewrites "~" to "." in a release asset's filename, and it
-      # does it at UPLOAD time -- so a SHA256SUMS generated before the
-      # upload names two files that the release then does not serve.
-      #
-      # Measured on v8.00-qt.3: the manifest said
-      # "astrolog_8.00+qt.3~jammy_amd64.deb", the release served
-      # "astrolog_8.00+qt.3.jammy_amd64.deb", the bytes were identical, and
-      # a user running "sha256sum -c SHA256SUMS" over the downloaded set
-      # got "FAILED open or read" on both .deb files. That reads like
-      # corruption or tampering and is neither, which is the worst way for
-      # an integrity check to be wrong.
-      #
-      # Rename BEFORE the manifest is generated, so the uploaded name, the
-      # name inside SHA256SUMS and the name a user downloads are the same
-      # string. Only the filename changes: the Debian version inside the
-      # package keeps its "~", which is what dpkg actually orders on.
-      - name: Rename what GitHub would rename anyway
-        run: |
-          for f in dist/*'~'*; do
-            [ -e "$f" ] || continue
-            mv -- "$f" "$(printf '%s' "$f" | tr '~' '.')"
-          done
-          ls dist
-
-      # Exact, not a floor -- "at least one" passes a release missing
-      # seven. The count is the matrix job's, so a Fedora release landing
-      # changes both sides of the comparison together. The check is a
-      # script rather than YAML so it can be falsified without cutting a
-      # release to test it.
-      - name: Exactly the expected artifacts, and a SHA256SUMS over them
-        run: tools/ci-verify-release-dist.sh dist "${{ needs.matrix.outputs.count }}"
-
+      # Three: the Windows zip, the Windows installer, the macOS .dmg.
+      # Exact, not a floor -- a release missing one looks complete.
+      - name: Exactly three artifacts, and a SHA256SUMS over them
+        run: tools/ci-verify-release-dist.sh dist 3
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          # --notes-file, not --generate-notes alone. The generated notes
-          # are the commit list, and the things someone downloading needs
-          # are not in it: macOS will refuse to open the app until
-          # Gatekeeper's quarantine flag is cleared, and Windows will
-          # warn about an unsigned installer. That text is
-          # tools/release-notes.md -- prose, in a file anyone can read and
-          # fix -- and tools/release-notes.sh fills in the distribution
-          # lists. --generate-notes still runs; this is prepended to it.
-          tools/release-notes.sh > notes.md
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --title "Astrolog $TAG" --notes-file notes.md \
+            --title "Astrolog $TAG" --notes-file tools/release-notes.md \
             --generate-notes dist/*
 
-  # Cutting a release is what retires the ones before the last two. The
-  # maintainer's decision, 2026-09-04: old releases are pruned, because
-  # repo.yml rebuilds the site from every release and a package for a
-  # distribution the matrix no longer builds would otherwise be served,
-  # untested, forever. Two are kept so the repository's upgrade check
-  # still has something to upgrade from. The tags stay. The script says
-  # the rest, and --dry-run shows what it would do.
-  #
-  # A JOB OF ITS OWN, after Publish, not a step inside it. As a step, a
-  # prune that failed -- a deleted tag, an API hiccup -- would have left
-  # the release published and the run red, reading as a failed release.
-  # As a job the run is still red, but Publish is green and the red job
-  # is named for what actually failed. repo.yml chains off this
-  # workflow's conclusion, so it still rebuilds only when both succeeded.
   retire:
     name: Retire the releases before the last two
     needs: publish

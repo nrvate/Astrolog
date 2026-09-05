@@ -1,8 +1,9 @@
 ### Installing
 
-**Linux** — `.deb` for Ubuntu @UBUNTUS@, `.rpm` for Fedora @FEDORAS@
-and EL9/EL10. Or use the [signed repository](https://nrvate.github.io/Astrolog/)
-so upgrades arrive on their own.
+**Linux** — build it: `sudo apt install g++ make pkg-config libx11-dev
+qt6-base-dev`, then `make -j4`. The README lists the package names for
+Fedora, Rocky, Arch, openSUSE and Alpine, and `tools/build-check.sh`
+proves those commands on all twelve.
 
 **Windows** — run `astrolog-<version>-setup.exe`. It installs to
 Program Files, adds a Start Menu entry and an Add/Remove Programs

@@ -15,7 +15,7 @@
 # did the same for fourteen. Same disease, other package manager: the
 # runner advertises IPv6 that does not route to the mirrors, and every
 # attempt waits out its timeout. Forcing IPv4 costs nothing where IPv6
-# works. (tools/build-in-container.sh carries the dnf spelling of the
+# works. (The container build scripts carried the dnf spelling of the
 # same fix, with the numbers that produced it.)
 #
 # --i386 adds the architecture first, for Wine: wine32 is an i386

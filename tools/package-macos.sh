@@ -206,7 +206,7 @@ echo "   ephem complete: $got_se1 of $want_se1 .se1 files"
 # not a hypothetical.
 #
 # The Linux packages have had exactly this check since they existed:
-# ci-verify-linux-package.sh runs ldd and greps for "not found". otool -L
+# A Linux package check would run ldd and grep for "not found". otool -L
 # is the same question in the same spirit.
 # Is it a valid BUNDLE, not merely a directory with a binary in it?
 # Every other check here runs Contents/MacOS/Astrolog directly, which

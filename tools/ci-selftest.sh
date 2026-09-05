@@ -18,14 +18,11 @@
 # input must exit nonzero and a known-good one must exit zero. A script
 # that accepts the bad input is the finding.
 #
-# What it cannot cover, and why: the scripts that need Docker
-# (ci-verify-linux-package.sh, ci-verify-repo.sh), Wine
+# What it cannot cover, and why: the scripts that need Wine
 # (ci-verify-windows-installer.sh, ci-verify-windows-starts.sh), a
-# network (ci-verify-live-repo.sh, ci-verify-published-release.sh,
-# ci-assert-slow-lane.sh; ci-assert-green.sh under SELFTEST_ONLINE), the
-# package tree (ci-verify-package.sh's good path) or apt (ci-deps.sh).
-# Each of those is falsified where it runs, and their bad paths that
-# need none of that are here.
+# network (ci-verify-published-release.sh, and ci-assert-green.sh under
+# SELFTEST_ONLINE) or apt (ci-deps.sh). Each is falsified where it runs,
+# and their bad paths that need none of that are here.
 set -u
 cd "$(dirname "$0")/.."
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT

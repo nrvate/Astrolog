@@ -15,7 +15,7 @@ and since v8.00-qt.6 the interface every platform ships — Linux, Windows
 and macOS. Upstream's Linux build uses X11 directly and is driven by
 single-keystroke commands; this one gives you the same nine menus and
 25 dialogs a Windows user would recognise. The native Win32 build is
-still compiled on every push, as the behavioural reference the port is
+still compiled and driven by hand, as the behavioural reference the port is
 judged against.
 
 The port itself changes almost nothing in the shared calculation or
@@ -33,68 +33,57 @@ into `astrolog.rc`, `wdialog.cpp` and the shared code the way upstream
 would take them. See "Features this fork adds to both builds" in
 `QT_GUI_PLAN.md`.
 
-## Installing a package
+## Installing
 
-Releases carry native packages, built on the distribution they target and
-installed into a clean container before publishing, so the dependency
-list comes from the binary rather than from someone's memory:
+Releases carry the two binaries a user cannot easily build themselves:
 
 | | |
 |---|---|
-| `.deb` | every Ubuntu LTS still in standard support, from a committed snapshot of Launchpad's list that every push checks against the live service: 22.04, 24.04 and 26.04 as of September 2026, each built inside that release's own container |
-| `.rpm` | the two current Fedora releases (the same arrangement, against Fedora's release service, so a stale list stops a push rather than shipping), EL9 (Rocky/Alma), EL10 |
 | `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs. **Windows 10 or later** |
-| `.zip` | Windows, the same files — unpack and run, no install needed. The Qt build with its runtime included, since v8.00-qt.6; releases before that shipped the native Win32 build, which ran on Windows 7 |
+| `.zip` | Windows, the same files — unpack and run, no install needed. The Qt build with its runtime included |
 | `.dmg` | macOS 12 or later, Apple Silicon only — read the note below before downloading |
 
-Only the two newest releases are kept. Cutting a release retires the
-ones before it, and the [package repository](https://nrvate.github.io/Astrolog/)
-serves those two, for the distributions currently built — so what it
-serves is exactly what its own rebuild installed, upgraded and verified
-in a clean container. Older tags stay in git; their assets do not.
+**On Linux, build it.** There are no `.deb` or `.rpm` packages and no
+package repository: they were dropped on 2026-09-05, because the
+download counts showed nothing outside the project's own automation had
+ever fetched one, and a seven-distribution matrix is a poor thing to
+maintain for that. Building takes two commands and about twenty seconds
+on a modern machine, and `tools/build-check.sh` proves those commands
+still work on twelve distributions — Ubuntu 22.04/24.04/26.04, Debian
+12/13, Fedora 43/44, Rocky 9/10, Arch, openSUSE Tumbleweed and Alpine.
 
-Every package carries the ephemeris for all **39 esoteric bodies** the
-Object Selections dialog offers — the centaurs, the trans-Neptunians and
-the named asteroids, not just the main planets. That is why a package is
-about 13 MB rather than 6.
+```sh
+# Debian, Ubuntu, Mint
+sudo apt install g++ make pkg-config libx11-dev qt6-base-dev   # qtbase5-dev on 22.04/24.04
+# Fedora, Rocky, Alma
+sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel
+# Arch
+sudo pacman -S gcc make pkgconf libx11 qt6-base
+# openSUSE
+sudo zypper install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-base-devel
+# Alpine
+doas apk add g++ make pkgconf libx11-dev qt6-qtbase-dev
 
-It is worth the size for one reason. Without those files the dialog still
-*offers* all 39, and every one it cannot compute returns `0Ari00'00"` —
-not an error, not a warning, just a plausible-looking position at the
-first degree of Aries. A wrong answer that looks like an answer is worse
-than a missing feature, so the files ship.
+git clone https://github.com/nrvate/Astrolog && cd Astrolog
+make -j4          # ./astrolog (console) and ./astrolog-qt (windowed)
+make install      # optional: both on PATH, plus a menu entry and icons
+```
 
+`make install` leaves the data where it is — the ephemeris, the atlas,
+the fonts, `astrolog.as` — and installs wrappers that run the in-tree
+binaries, so the checkout has to stay put. `PREFIX=$HOME/.local` needs no
+root.
 
-**The macOS build is the least proven thing here, and you should know
-that before downloading it.** Nobody working on this fork owns a Mac. It
-is built, and its whole test suite is run, entirely on GitHub's
-`macos-latest` runner — currently **macOS 26 on Apple Silicon** — against
-Qt 6.8.3, pinned since 2026-09-05 to the version Windows ships with;
-before that it took whatever Qt Homebrew carried that day. No human
-has ever launched it. Since 2026-09-03 the slow lane also uploads a
-screenshot of all 25 dialogs and every chart type, so at least somebody
-can *look* at it, but that is a picture from CI and not a person using
-the program. Since 2026-09-04 that same job produces the `.dmg` a release
-ships, so the Mac binary that is published is one whose suite passed.
+Only the two newest releases are kept; cutting a release retires the ones
+before it. Older tags stay in git; their assets do not.
 
-Two consequences follow, and neither is hypothetical:
+The tree carries the ephemeris for all **39 esoteric bodies** the Object
+Selections dialog offers — the centaurs, the trans-Neptunians and the
+named asteroids, not just the main planets — so a clone computes
+everything the program can compute.
 
-- **Intel Macs are not built at all.** The runner is arm64, nothing sets
-  up a universal binary, so the `.dmg` is Apple Silicon only.
-- **It needs a very recent macOS, and the bundle now says which.**
-  Measured on the runner: the program binary reports a minimum of
-  **26.0**, because nothing sets a deployment target and it links against
-  whatever SDK GitHub's `macos-latest` has. `Info.plist` used to advertise
-  11.0 regardless — a promise the build could not keep. The packaging step
-  now reads the minimum out of every Mach-O in the finished bundle,
-  Homebrew's Qt libraries included, and stamps the highest one. So the
-  claim is true, and the honest consequence is that an older Mac will
-  refuse to launch it rather than failing with a message about something
-  else. Lowering that would mean not using Homebrew's Qt, which is a
-  bigger change than anyone without a Mac should be making.
-
-Linux and Windows are the builds that get used. Treat the `.dmg` as
-best-effort.
+Versions are `8.00-qt.N`: upstream numbers the program, this numbers the
+port.
 
 **macOS needs one extra step, once.** The app is ad-hoc signed but not
 *notarized*, because notarizing requires an Apple Developer subscription
@@ -111,67 +100,6 @@ A download fetched with `curl` is never quarantined in the first place
 and simply runs. None of this is a signal about the binary — it is what
 every un-notarized macOS build looks like.
 
-### From the repository (upgrades arrive on their own)
-
-```sh
-# Debian / Ubuntu
-sudo curl -fsSL -o /usr/share/keyrings/astrolog.gpg \
-  https://nrvate.github.io/Astrolog/astrolog.gpg
-. /etc/os-release
-echo "deb [signed-by=/usr/share/keyrings/astrolog.gpg] \
-  https://nrvate.github.io/Astrolog/apt ${UBUNTU_CODENAME:-$VERSION_CODENAME} main" \
-  | sudo tee /etc/apt/sources.list.d/astrolog.list
-sudo apt update && sudo apt install astrolog
-```
-
-```sh
-# Fedora (use rpm/el$releasever instead on RHEL/Rocky/Alma)
-sudo tee /etc/yum.repos.d/astrolog.repo <<'EOF'
-[astrolog]
-name=Astrolog
-baseurl=https://nrvate.github.io/Astrolog/rpm/fc$releasever
-enabled=1
-gpgcheck=1
-repo_gpgcheck=1
-gpgkey=https://nrvate.github.io/Astrolog/astrolog.asc
-EOF
-sudo dnf install astrolog
-```
-
-<https://nrvate.github.io/Astrolog/> has the same instructions, generated
-from the repository itself so they cannot drift from its layout. Each
-distribution gets its own suite: one suite holding everything makes apt
-and dnf offer the highest-versioned package rather than the one built for
-your release.
-
-### Or a single file
-
-```sh
-sudo apt install ./astrolog_8.00+qt.1.jammy_amd64.deb   # apt resolves Qt
-sudo dnf install ./astrolog-8.00-qt.1.el9.x86_64.rpm
-```
-
-The package's own version is `8.00+qt.1~jammy`, with a tilde, so that a
-22.04 build sorts below a 24.04 one and an upgrade is an upgrade. GitHub
-rewrote `~` to `.` in release asset filenames. Since v8.00-qt.4 the
-release does that rename itself, before hashing, so the uploaded name,
-the name inside `SHA256SUMS` and the name you download are one string.
-`apt` reads the version out of the package rather than out of the name,
-so nothing about installation changes either way.
-
-Both `astrolog` (command line) and `astrolog-qt` (windowed) land on
-`PATH`. The binaries live in `/usr/lib/astrolog` beside their data —
-Astrolog reads its ephemeris, atlas and fonts from the directory of its
-own executable — and `/usr/bin` holds wrappers, which is the same
-arrangement `make install` uses.
-
-**Fedora, Ubuntu 26.04 and EL10 are built against Qt6.** EL10 ships no
-Qt5 outside EPEL, and depending on a third-party repository for a
-runtime library is a poor thing to put in a package; Fedora will drop
-Qt5 first. Ubuntu 22.04, 24.04 and EL9 are built against Qt5.
-
-Versions are `8.00-qt.N`: upstream numbers the program, this numbers the
-port.
 
 ## Building
 
@@ -273,7 +201,7 @@ tree and diff.
 
 It defaults to `-i nrvate.as`, the maintainer's settings file, which
 reaches the full ephemeris at `/swe`. Since 2026-09-03 the bundled
-`ephem/` resolves the same 39 bodies, so CI runs the suite with
+`ephem/` resolves the same 39 bodies, so the release run runs the suite with
 `-Yi1 ephem` and gets the same count; before that, a run without `/swe`
 quietly skipped a fifth of the checks.
 

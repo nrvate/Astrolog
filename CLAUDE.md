@@ -187,7 +187,7 @@ included, which is a hazard with two sessions in one tree;
 commit. It prints its own count and that count grows every week, so this
 document does not restate it — three documents once asserted three
 different wrong numbers, which is what closed Q13 in `QT_CI_PLAN.md`. The
-state that matters is **0 failed**, and CI runs it on every push. The
+state that matters is **0 failed**, and the release run runs it. The
 full suite is also clean under AddressSanitizer (`make qt-asan`) — but note that
 build is `-O0`, where `_FORTIFY_SOURCE` is inactive, so it structurally
 cannot see a fortify-detected overflow. Work log item 142 was invisible
@@ -306,17 +306,18 @@ CI runs all eleven, plus a set of assertions that are scripts rather than
 workflow steps so they can be falsified in a second instead of by
 pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
 input it must refuse and, where cheap, input it must accept -- 49 cases,
-run by the install job on every push -- so the falsification is a check
-rather than a memory. They are worth knowing about because several are
+run by the release lane -- so the falsification is a check rather than
+a memory. They are worth knowing about because several are
 useful by hand:
 
 ```sh
 tools/ci-touched.sh HEAD~1 tools/astrolog.nsi   # does a range touch
                                              # these paths? true/false,
                                              # and true when it cannot
-                                             # tell. ci.yml asks it
-                                             # whether a push needs the
-                                             # Windows installer built
+                                             # tell. Written for the push
+                                             # lane that no longer exists;
+                                             # kept because the question
+                                             # comes up by hand
 tools/ci-selftest.sh                         # every ci-*.sh below, fed
                                              # input it must refuse; its
                                              # first run refused three of
@@ -338,13 +339,11 @@ tools/ci-assert-fresh.sh astrolog.exe        # a build product is newer
                                              # than every .cpp and .h
 tools/ci-assert-fortify.sh astrolog 10       # the shipped builds still
 tools/ci-assert-fortify.sh astrolog-qt 10    # import glibc's *_chk --
-                                             # BOTH, because both ship:
-                                             # every .deb and .rpm carries
-                                             # them with a wrapper each on
-                                             # PATH, and only the console
-                                             # one was checked until
-                                             # 2026-09-03. Measured 10 and
-                                             # 11 respectively
+                                             # BOTH, because a Linux user
+                                             # builds and runs both, and
+                                             # only the console one was
+                                             # checked until 2026-09-03.
+                                             # Measured 10 and 11
 tools/ci-assert-distinct.sh out/qtg 24       # no two renders identical
 tools/ci-assert-installed.sh ~/.local/bin/astrolog   # run it from "/",
 tools/ci-assert-uninstalled.sh ~/.local              # then undo it
@@ -357,28 +356,9 @@ tools/ci-verify-zip.sh out/package/a.zip out/package/astrolog-windows
                                              # directory, and is
                                              # byte-identical to what was
                                              # staged
-tools/build-in-container.sh ubuntu:26.04 qt6-base-dev deb out/package
-                                             # build both binaries and
-                                             # package them inside a
-                                             # distribution's own image;
-                                             # how every .deb row is built
-                                             # and how a new row is proven
-                                             # before it is wired in
 tools/prune-releases.sh 2 --dry-run          # what cutting a release
                                              # would retire; without
                                              # --dry-run it retires them
-tools/collect-release-packages.sh pkgs       # every remaining release's
-                                             # packages, minus the
-                                             # distributions no longer
-                                             # built -- named as dropped
-tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
-tools/ci-verify-repo.sh public       # by hand since 2026-09-05, when it
-                                     # left repo.yml: fourteen containers
-                                     #                       clean container,
-                                             # and now the UPGRADE path
-                                             # too: oldest version in the
-                                             # repository, then upgrade,
-                                             # then assert Chiron
 tools/ci-verify-published-release.sh v8.00-qt.4  # download the RELEASE and
                                              # verify it as a user would:
                                              # the manifest must name
@@ -388,35 +368,12 @@ tools/ci-verify-published-release.sh v8.00-qt.4  # download the RELEASE and
                                              # the assets do not exist
                                              # until the release job has
                                              # finished
-tools/ci-verify-live-repo.sh                 # and that the DEPLOYED site
-DISTS="jammy noble fc43 fc44 el9 el10" tools/ci-verify-live-repo.sh
-                                             # -- with the RELEASE's own
-                                             # distribution list when the
-                                             # matrix has gained a row
-                                             # since that release, as the
-                                             # slow lane's job passes it;
-                                             # the default list names what
-                                             # is built today.
-                                             # serves it: a Pages deploy
-                                             # can succeed and publish the
-                                             # previous commit, with every
-                                             # check upstream of it green.
-                                             # ONE attempt, after
-                                             # repo.yml waits three
-                                             # minutes for the deploy --
-                                             # a check retried until it
-                                             # passes is not a check.
-                                             # With no argument it looks
-                                             # for the newest PUBLISHED
-                                             # release, since that is
-                                             # what a site serves
 tools/ci-differential.sh origin/qt out/diff  # four matrices vs a commit
-tools/ci-verify-release-dist.sh dist 9       # the release ships exactly
-                                             # this many artifacts and
-                                             # SHA256SUMS covers them all;
-                                             # release.yml computes the
-                                             # number from tools/distros.py
-                                             # (Linux packages + 3)
+tools/ci-verify-release-dist.sh dist 3       # the release ships exactly
+                                             # three artifacts -- the
+                                             # Windows zip, the installer
+                                             # and the .dmg -- and
+                                             # SHA256SUMS covers them all
 tools/ci-verify-windows-installer.sh out/astrolog-setup.exe  # install and
                                              # uninstall it under Wine
 tools/ci-verify-windows-starts.sh out/package/astrolog-windows
@@ -448,28 +405,9 @@ python3 tools/qt_windows_dist_audit.py dist  # the Qt-on-Windows artifact
                                              # a run
 tools/ci-assert-clang-clean.sh               # the macOS compiler, whose
                                              # warnings are not gcc's
-tools/ci-assert-green.sh                     # wait for CI on this commit
-                                             # before tagging a release
-tools/ci-assert-slow-lane.sh                 # is the SLOW lane healthy at
-tools/ci-assert-slow-lane.sh nrvate/Astrolog <release-run-id>
-                                             # all -- a different question,
-                                             # and the one nothing asked
-                                             # while it was a nightly and
-                                             # sat red for days. It reads
-                                             # the logs of PASSING jobs for
-                                             # steps that succeeded while
-                                             # skipping what they were
-                                             # meant to do -- three of
-                                             # those were found by hand on
-                                             # 2026-09-03, every one behind
-                                             # a green job. The lane gates
-                                             # releases now rather than
-                                             # running on a timer, so the
-                                             # staleness check is off
-                                             # unless MAX_AGE_H is set --
-                                             # and the run worth naming is
-                                             # a RELEASE run, since that is
-                                             # where the lane's jobs execute
+tools/ci-assert-green.sh <sha>               # wait for the release run
+                                             # on a commit (the only runs
+                                             # there are now)
 ```
 
 And a twelfth that is not fast and not resource-shaped: **the
@@ -633,7 +571,7 @@ All 25, one PNG each. `QWidget::grab()` paints through Qt rather than
 asking the window system for pixels, so it needs no display. The suite
 already proves each dialog opens with the right title; what it cannot say
 is whether a control sits off the edge, a label is truncated, or a layout
-collapses under a platform's default font. The slow lane captures these
+collapses under a platform's default font. The release run captures these
 on **macOS** and the Windows package workflow on **Windows**, and both
 upload them, because those are the two platforms nobody here opens by
 hand.
@@ -666,8 +604,8 @@ copies it into a VirtualBox VM over the Guest Additions channel, **no
 network involved**, and runs the whole suite headless. It passed there
 on 2026-09-03 with the same count as Linux -- 25 dialogs, 42 context
 menus, 264 shortcuts and the numeric oracle, in a build with no `WIN`
-in it -- and `windows-qt.yml` now runs the same suite on every push, on
-a GitHub Windows runner, with the same count as Linux again. Its header
+in it -- and `windows-qt.yml` runs the same suite on a GitHub Windows
+runner whenever a release is tagged, with the same count as Linux. Its header
 lists four traps, each of which cost a run: the offscreen plugin has to
 be IN the artifact (`windeployqt` ships only `windows`), the `windows`
 plugin blocks forever because a guestcontrol process has no desktop, the
@@ -718,7 +656,7 @@ not, and the difference hides in the last decimals (Sun on 15.6.1990:
 lane clones and builds it in about 25 seconds.
 
 **And a third surface the sweep does not reach**, added 2026-09-03 and
-run by the slow lane beside those two: the Qt suite itself.
+worth running beside those two: the Qt suite itself.
 `asan-sweep.sh` builds its own *console* binary, so the whole suite
 -- 25 dialogs, 42 context menus, every menu item -- ran under no
 sanitizer at all, even though `make qt-asan` had existed the whole time
@@ -777,161 +715,67 @@ On a private Xvfb display, `import -window root` is fine.
 
 ## CI, and what it will not let you do
 
-Six workflows, all on `qt`, the default branch. `ci.yml` runs on every
-push and pull request, in four or five minutes: the
-mingw Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
-generated tables, the compiler-warning audit against its empty ledger,
-`make install` (which also runs `tools/ci-selftest.sh`), a behavioural
-differential against the base commit, one `.deb` and one `.rpm` to
-prove the packaging recipe,
-and the **Windows package**,
-which is `windows-qt.yml` called as a reusable workflow. That one
-compiles the port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
-`-DWIN`) on a Windows runner, runs the suite there, starts the staged
-program with its real platform plugin and requires a window, then zips
-it and builds the NSIS installer on Linux and installs and uninstalls
-that under Wine.
+**Two workflows, and they run only on a tag.** The maintainer's decision,
+2026-09-05: CI builds the binaries a user cannot build themselves and
+nothing else. There is no push lane. The suite, the audits, the
+sanitizer sweeps, the differentials, the warning audit and the numeric
+oracle are all still here, still work, and are run **by hand** -- this
+document lists them above, and they are the reason a commit is trusted;
+what changed is that nothing runs them for you.
 
-Two of those jobs are conditional, and both conditions are scripts.
-**The `.deb` and `.rpm` jobs are `linux-package.yml`**, one reusable
-workflow both lanes call -- with one row per family on a push and every
-row on a release. **The Windows zip and installer run on a push only
-when it touches the packaging** (`tools/ci-touched.sh`, which answers
-"true" whenever it cannot tell); the Windows *build* and *suite* run
-either way, and a release always does all of it. **The drift job
-warns rather than fails**: a stale distribution snapshot is a calendar
-event, and `release.yml` still refuses to publish against one.
+`release.yml` fires on `v*` and does five things: assert the tag matches
+`szVersionFork`, build both Linux binaries and run the whole suite,
+build the Windows zip and installer (through `windows-qt.yml`, the
+reusable workflow that compiles the port with MSVC and Qt 6.8.3 on a
+Windows runner, runs the suite there and verifies the installer under
+Wine), build the macOS `.app` and `.dmg` against a pinned Qt, then
+publish exactly three artifacts with a `SHA256SUMS` over them and retire
+every release but the newest two.
 
-`slow-lane.yml` is what CLAUDE.md elsewhere calls pre-release: the
-sanitizer sweeps -- ASan over the switch matrix, ASan over the graphics
-matrix, the Qt suite under ASan, and UBSan over all of it -- and the
-external Swiss oracle, each a job of its own; the Windows parity
-harnesses under Wine; the MSVC build
-of the Win32 project file; a coverage run that asserts nothing NEW has
-become untested; and **macOS**, which builds the port, runs the suite
-and packages the `.dmg`. The warning audit is in the push lane since
-2026-09-04 (night): with the ledger empty, a new warning is a thing to
-fix now, not at the next tag, and the job fits under the Windows
-build's wall time.
-**It has no schedule.** It was a nightly until 2026-09-04, and the
-nightly gated nothing: the strongest checks in the repository ran on a
-timer nobody was required to read, the schedule had fired once in its
-life, and GitHub switches schedules off after 60 quiet days anyway. Now
-`release.yml` calls it and its Publish job needs every job in it. If
-nothing changes and nothing is released, nothing runs; a release runs
-everything. `workflow_dispatch` runs it by hand against any commit.
+**Linux users build from source**, which is why `tools/build-check.sh`
+exists: it builds this tree, from a `git archive` of HEAD, in a
+container of each popular distribution and casts a chart with the result.
+Twelve of them pass as of 2026-09-05 -- Ubuntu 22.04/24.04/26.04, Debian
+12/13, Fedora 43/44, Rocky 9/10, Arch, openSUSE Tumbleweed and Alpine --
+each computing Chiron identically. Run it after anything that touches
+the build: it is the only check that the instructions in README.md are
+still true.
 
-`release.yml` publishes on a `v*` tag: the two `.deb`s, the `.rpm`s for
-the distributions `tools/distros.py` names, the `.dmg` from the slow
-lane's macOS job, and the Windows `.zip` and `astrolog-setup.exe` from
-`windows-qt.yml` -- each verified before publication, with a SHA256SUMS
-that is checked to cover exactly that many. Sixteen minutes for
-v8.00-qt.8, with the then-unsplit ASan sweep the long pole at 919 s; the
-sweep has since been split into three jobs (2026-09-04) and the slow lane
-alone measured 383 s on the dispatch that followed, so the next release
-is the measurement. `repo.yml` chains off it on
-`workflow_run` and rebuilds the apt/yum repository from the published
-packages.
+**What went, and where its coverage lives now.** The `.deb` and `.rpm`
+packages, the signed apt/dnf repository and the GitHub Pages site are
+gone (2026-09-05): the download counts said nothing outside CI had ever
+fetched one, and the matrix cost more to maintain than that. `make` on a
+supported distribution is the Linux answer, proven by the check above.
+The push lane and the slow lane are gone with them; their scripts are
+not.
 
-**The distribution list lives in `tools/distros.py` and nowhere else,
-and most of it is asked for rather than written.** Fedora's two rows
-come from Fedora's own release service (Bodhi, `state=current`, the
-newest two), because the hand-written list said 42 and 43 for four
-months after 42 stopped receiving updates and 44 shipped. Ubuntu's rows
-come from Launchpad: every LTS within Canonical's five years of standard
-support, which is 22.04, 24.04 and 26.04 today and loses 22.04 by itself
-in April 2027. Only EL9 and EL10 are written down. Fedora and Ubuntu
-26.04 build against Qt6, EL9 and the older Ubuntus against Qt5, EL10
-against Qt6. Both workflows compute both matrices from it, and both
-repository verifiers read their list from it.
-
-**A push builds one row per family; a release builds them all.** The
-newest Fedora and the newest Ubuntu LTS (`distros.py rpm --push`,
-`deb --push`) prove the packaging recipe on every change; the other rows
-differ only in image and Qt package name, and a row-specific break
-fails the release before anything is published. Seven package jobs per
-push had become forty percent of the fast lane's job time.
-
-**What is used is the committed snapshot, `tools/distros.json`.** Every
-read is from that file and needs no network, so a build is a function
-of its commit. The live services are asked only by `tools/distros.py
-check`, which the "Which distributions" job runs first and which fails
-the first push after a release ships or ages out -- naming the row and
-`tools/distros.py --update`, the one command that rewrites the snapshot
-for a commit somebody reads. The same arrangement as the warning ledger,
-for the same reason: a matrix that can change under an empty diff is a
-kind of nondeterminism this repository otherwise does not have.
-
-**The `.deb` rows build inside `ubuntu:<version>` containers**
-(`tools/build-in-container.sh`), not on GitHub's runner images, which is
-what made asking for them possible: a Docker image exists the day a
-release does, and Ubuntu 26.04 had been out five months with no runner
-image. Docker runs from the host, so the package is still installed into
-a fresh container afterwards and asked for Chiron.
-
-**Old releases are pruned.** Cutting a release retires every release but
-the newest two (`tools/prune-releases.sh`, run by Publish; the tags
-stay), and the repository rebuild keeps only packages for distributions
-the matrix builds today (`tools/collect-release-packages.sh`, which
-names what it drops). So the site serves exactly what its own rebuild
-installed, upgraded and verified in a clean container -- never a
-package for a release that has aged out.
-
-**Qt is the one interface, on every platform, since 2026-09-04.** The
-Win32 build in `wdriver.cpp`/`wdialog.cpp` is still compiled on every
-push and still driven under Wine by the slow lane, because it is the
-behavioural oracle every divergence is judged against -- but it no
-longer ships. The honest cost, measured rather than assumed: Qt6 is
-Windows 10 and later (`Qt6Core.dll` imports `SetThreadDescription`, and
-the PE header claims minimum OS 6.0, so the obvious check lies), and Qt
-5.15.2 no longer compiles against a current MSVC, so there is no Qt
-route back to Windows 7.
-
-The Windows build is worth knowing about for one more reason: it is the
-only net here that is a **different platform** rather than a stricter
-tool on the same one, and that turned out to be a distinct kind of net.
-Four sanitizer sweeps, eleven audits and a warning ledger across five
-builds never mentioned `qttest.cpp`'s `#include <unistd.h>`, because on
-Linux it is correct. Compiling the file under MSVC found it in one run,
-along with 15 `getpid()` and 11 hardcoded `"/tmp"` fallbacks behind it.
-
-**CI adds no logic.** Every step is a package install, a `make`, or one
-committed script from `tools/`. A check living only in YAML can be
-falsified only by pushing, which makes the falsification rule below
-unaffordable -- so it does not happen. The scripts are
-`tools/ci-*.sh`, and each runs in seconds on a laptop.
-
-**Three things will fail a push, and each has bitten already:**
-
-- **A behavioural change you did not declare.** The differential diffs
-  all four matrices -- chart, switch, influence and graphics -- against
-  the base commit (the switch matrix again since 2026-09-05, once it ran
-  four wide). If it moves, say so in a commit message:
-
-  ```
-  Behaviour-change: <one line on what moved and why>
-  ```
-
-  A differential answers "something changed", not "something broke", and
-  it actively protects a wrong answer -- fixing a 30-year-old bug looks
-  like a regression. So the opt-out is one line, not a workflow edit.
+**Two things still fail a release, and each has bitten already:**
 
 - **A version that disagrees with its tag.** `astrolog.h` owns
   `szVersionFork`; the fork's version is `8.00-qt.N`. Bump it before
   tagging, or `tools/ci-assert-version.sh` stops the release.
 
-- **A package that does not work.** Every `.deb` and `.rpm` is installed
-  into a clean container and run from `/`, asserting **Chiron** -- never
-  the Sun, which reads correctly with no ephemeris at all because
-  Astrolog falls back to Moshier in silence.
+- **A release that does not carry exactly three artifacts.** The Windows
+  zip, the Windows installer and the macOS `.dmg`, with a `SHA256SUMS`
+  that covers them. Exact, not a floor: a release missing one looks
+  complete.
 
-**Two things to know before touching packaging.** The payload goes to
-`/usr/lib/astrolog` with wrappers in `/usr/bin`, because Astrolog
-resolves its data from the directory of its own executable. And the
-distribution goes in the version -- `.rpm` gets it from `%{?dist}`, a
-`.deb` needs the codename appended (`8.00+qt.1~jammy`), without which
-both Ubuntu builds have the same filename and one silently overwrites
-the other.
+**Qt is the one interface, on every platform, since 2026-09-04.** The
+Win32 build in `wdriver.cpp`/`wdialog.cpp` is still the behavioural
+oracle every divergence is judged against, and `Makefile.win` still
+compiles it -- by hand now, like everything else. The honest cost of
+shipping Qt on Windows, measured rather than assumed: Qt6 is Windows 10
+and later (`Qt6Core.dll` imports `SetThreadDescription`, and the PE
+header claims minimum OS 6.0, so the obvious check lies), and Qt 5.15.2
+no longer compiles against a current MSVC, so there is no Qt route back
+to Windows 7.
+
+**CI adds no logic.** Every step is a package install, a `make`, or one
+committed script from `tools/`. A check living only in YAML can be
+falsified only by pushing, which is now the slowest loop in the project
+rather than merely an awkward one. The scripts are `tools/ci-*.sh`,
+`tools/ci-selftest.sh` feeds each of them input it must refuse, and each
+runs in seconds on a laptop.
 
 ## Hard rules
 
