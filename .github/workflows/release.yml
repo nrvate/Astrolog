@@ -106,8 +106,17 @@ jobs:
         env:
           REF: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          base=$(git describe --tags --abbrev=0 "$REF^" 2>/dev/null || true)
+          # The tag before this one. On a tag push REF exists and "REF^"
+          # is the previous release; on a DRY RUN the tag named has
+          # usually not been created yet -- the recipe in CLAUDE.md runs
+          # the dry run before tagging -- so fall back to the newest tag
+          # HEAD can see, which is that same previous release. Without
+          # the fallback a dry run reported "no earlier tag" and compared
+          # nothing, quietly.
+          base=$(git describe --tags --abbrev=0 "$REF^" 2>/dev/null \
+                 || git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
           [ -n "$base" ] || { echo "no earlier tag to compare against"; exit 0; }
+          echo "comparing against $base"
           echo "### Behaviour against $base" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           DIFFERENTIAL_REPORT=1 tools/ci-differential.sh "$base" out/diff \
