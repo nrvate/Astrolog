@@ -3949,3 +3949,39 @@ macOS with the pinned Qt, then publish exactly three artifacts and
 retire all but the newest two -- so a release cannot ship a tree whose
 suite fails, and that is the whole of the automatic safety net.
 
+**2026-09-05, later — the restructure gets a local gate and a dry run.**
+Two gaps the tag-only shape left, and a third the runner found.
+
+*Nothing ran the checks any more, and the list of them lived in
+CLAUDE.md rather than in a command.* `make check` is that command:
+generated tables, ten audits, both Linux builds, the mingw Win32 oracle
+and the Qt6 build where those toolchains exist, the suite, and the
+assertion scripts' self-test -- in the order that fails fastest. 53 s
+without the extra toolchains, 116 s with them. Its header says what it
+deliberately leaves out (the differential, `build-check.sh`, the
+sanitizers, the warning audit, the Swiss oracle), because a check script
+that quietly covers less than the reader assumes is worse than none.
+Falsified twice: a doctored generated table and a failing audit each
+stop it. `release.yml`'s Linux job runs the same command, so the one
+automatic gate cannot check less than the person who tagged did.
+
+*`release.yml` could only be exercised by publishing* -- which is how a
+release workflow comes to be tested for the first time by the release
+that needed it. A dispatch now takes `publish`, default on; with it off
+everything builds and tests and the Publish and Retire jobs skip. Three
+dry runs, and each earned its place: the first proved the workflow at
+all, the second the Linux job after it became `make check`, the third
+the mingw install. Wall 356 s, jobs 43/193/137/206/93 s, Publish and
+Retire skipped.
+
+*And the runner found the third gap by saying so.* `make check` printed
+"build: Win32 oracle (mingw) skipped -- no x86_64-w64-mingw32-g++",
+which is honest and also a hole: the oracle compiled nowhere in CI, and
+the last time nothing watched it it went 62 commits without compiling.
+The Linux job installs mingw now; the third dry run built it.
+
+Also swept: every header that still named `ci.yml`, `slow-lane.yml` or
+`repo.yml` as though it ran -- including `ci-assert-green.sh`, which
+still *defaulted* to waiting on `ci.yml` and would have waited forever
+-- and the "where this stands" table, which listed six workflows.
+
