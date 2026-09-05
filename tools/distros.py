@@ -9,6 +9,8 @@
     python3 tools/distros.py image fc43   # the container image for a dist
     python3 tools/distros.py count        # how many Linux packages a
                                           # release ships (deb + rpm)
+    python3 tools/distros.py check --warn # ditto, but a warning and exit
+                                          # 0: what the PUSH lane runs
     python3 tools/distros.py check        # does what Fedora and Ubuntu
                                           # answer TODAY still match the
                                           # committed snapshot? exit 1
@@ -345,8 +347,17 @@ def describe(rows, key):
     return ", ".join(r[key] for r in rows)
 
 
-def check():
-    """Exit 1, with the difference, when the live answer has moved."""
+def check(warn=False):
+    """Exit 1, with the difference, when the live answer has moved.
+
+    With warn=True, say the same thing as a GitHub warning annotation and
+    exit 0. That is what the PUSH lane wants: the snapshot going stale is
+    a calendar event -- Fedora ships, an Ubuntu LTS ages out -- and it
+    would otherwise redden the next push whatever that push contained,
+    for a reason invisible in its diff. The RELEASE lane calls this
+    without the flag, so a stale snapshot still stops a release, which is
+    the moment it actually matters.
+    """
     want = live()
     have = snapshot()
     drift = []
@@ -355,11 +366,20 @@ def check():
             drift.append("  %s: snapshot has %s\n       live answer is %s"
                          % (k, describe(have[k], key), describe(want[k], key)))
     if drift:
+        if warn:
+            print("::warning title=The distribution snapshot is stale::"
+                  "A Fedora or Ubuntu release has shipped or aged out. Run "
+                  "'python3 tools/distros.py --update' and commit the diff. "
+                  "A release will not publish until you do.")
         print("THE DISTRIBUTION MATRIX HAS MOVED since tools/distros.json was written:")
         print("\n".join(drift))
         print("== A release shipped, or one aged out. Run 'python3 tools/distros.py")
         print("== --update', read the diff, and commit it. Nothing builds for the")
         print("== new row until that commit exists, on purpose.")
+        if warn:
+            print("== Not failing this push: --warn was given. The release lane")
+            print("== calls this without it and does fail.")
+            return 0
         return 1
     print("distros: snapshot matches the live answer (%s; %s)"
           % (describe(have["deb"], "image"), describe(have["rpm"], "release")))
@@ -386,7 +406,7 @@ def main(argv):
               % (SNAPSHOT, describe(data["deb"], "image"), describe(data["rpm"], "release")))
         return 0
     if what == "check":
-        return check()
+        return check(warn="--warn" in argv)
     push = "--push" in argv
     if what == "rpm":
         rows = snapshot()["rpm"]

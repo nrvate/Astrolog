@@ -899,8 +899,22 @@ enum _objects {
 // past the table's end -- a star number reaching an object sized table,
 // work log item 115's shape -- aborts wherever the suite reaches it.
 // The codebase's own Assert() is compiled out unless DEBUG (extern.h).
+//
+// NOT assert(), and that is the whole point of FailIndexQt(). assert()
+// is inert under NDEBUG, and the MSVC build passes /DNDEBUG -- one
+// compile serves both the program and the -DQTTEST binary, which is
+// what makes that build a single compile. So from the day the port
+// first ran on Windows until 2026-09-05, the Windows suite reported
+// the same assertion count as Linux with this guard compiled out of it
+// entirely. This one does not consult NDEBUG, so the checked tables are
+// checked wherever QTTEST is defined -- MSVC and the ASan console build
+// included.
 #ifdef QTTEST
-#define AssertIndex(n, cMax) assert((n) >= 0 && (n) <= (cMax))
+// Plain "const": this is above the #define CONST further down the file.
+void FailIndexQt(const char *szFile, int nLine, long n, long cMax);
+#define AssertIndex(n, cMax) \
+  ((void)(((n) >= 0 && (n) <= (cMax)) ? 0 : \
+   (FailIndexQt(__FILE__, __LINE__, (long)(n), (long)(cMax)), 0)))
 #else
 #define AssertIndex(n, cMax)
 #endif

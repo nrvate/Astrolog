@@ -3480,4 +3480,21 @@ void Terminate(int tc)
   exit(NAbs(tc));
 }
 
+
+#ifdef QTTEST
+// The checked tables' range guard (AssertIndex, astrolog.h) reports here
+// rather than through assert(), because assert() is inert under NDEBUG
+// and the MSVC build defines it -- see the comment at the macro. Here in
+// general.cpp rather than qttest.cpp because tools/asan-sweep.sh builds
+// the CONSOLE binary with -DQTTEST, and qttest.cpp is not in that build.
+
+void FailIndexQt(const char *szFile, int nLine, long n, long cMax)
+{
+  fprintf(stderr, "AssertIndex: %s:%d: index %ld outside 0..%ld\n",
+    szFile, nLine, n, cMax);
+  fflush(stderr);
+  abort();
+}
+#endif
+
 /* general.cpp */

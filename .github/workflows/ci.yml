@@ -548,7 +548,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - run: python3 tools/distros.py check
+      # --warn, so a stale snapshot annotates this push instead of
+      # reddening it. The snapshot going stale is a calendar event: it
+      # happens when Fedora ships or an Ubuntu LTS ages out, and the push
+      # that catches it has nothing to do with it. release.yml's matrix
+      # job runs the same check WITHOUT --warn, so a stale snapshot still
+      # stops a release before anything is published -- which is where
+      # the answer has to be right.
+      - run: python3 tools/distros.py check --warn
 
   rpm:
     name: .rpm on ${{ matrix.release }}
