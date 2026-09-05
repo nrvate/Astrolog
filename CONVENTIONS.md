@@ -7,8 +7,9 @@ code disagree, the code moved: fix the entry.
 
 Line endings: the source is LF, pinned by `.gitattributes` and checked by
 `tools/line_endings_audit.py`. Binaries, the files Windows tooling owns,
-`font/`, and the `.as`/`.csv` data files the program parses stay as they
-ship — `.gitattributes` says why for each (work log item 159). The switch surface has its own document:
+and `font/` stay as they ship — `.gitattributes` says why for each (work
+log item 159); the `.as`/`.csv` data files were held back at first and
+are LF since 2026-09-02 (item 173). The switch surface has its own document:
 REFACTORING.md, "The registry as built".
 
 ## Naming dialect
@@ -123,14 +124,14 @@ new code should expect the suite to catch that for it.
 
 ## Chart-info aliases
 
-`MM DD YY TT SS ZZ OO AA` (extern.h:83-90) alias `ciCore` fields, so
+`MM DD YY TT SS ZZ OO AA` (extern.h:84-91) alias `ciCore` fields, so
 `GetTimeNow(&MM, ...)` mutates a global through what reads as a local.
 Upstream-idiomatic; do not rename, but **new code writes `ciCore.mon`
 explicitly** rather than extending the alias set.
 
 ## Chart position rings (cp0..cp6)
 
-The computed positions live in seven global `CP` slots (extern.h:154),
+The computed positions live in seven global `CP` slots (extern.h:153),
 reached by ring number through `rgpcp[]`, with `rgpci[]` holding each
 ring's chart info (`ciCore`, then `ciMain`..`ciHexa`). Ownership,
 verified in code (REFACTORING.md C6):
@@ -167,7 +168,7 @@ cast, it must copy the ring aside itself — `cp0` will not.
 
 ## Feature macros
 
-`SWISS`, `GRAPH`, `ATLAS`, ... (astrolog.h:82-173) are bare always-on
+`SWISS`, `GRAPH`, `ATLAS`, ... (astrolog.h:82-206) are bare always-on
 words. The three that collided with Qt internals were renamed 2026-08-30
 (work log item 105): `TIME` is `TIMEFUNC`, `PS` is `PSCRIPT`, `META` is
 `METAFILE`, and include order between Qt headers and astrolog.h no
@@ -177,12 +178,12 @@ compound word like those; never add another bare word.
 ## Buffers and formatting
 
 - `cchSzDef` = 80 for one output line, `cchSzMax` = 255 for paths and
-  long text, `cchSzLine` for reader buffers (astrolog.h:549-551).
+  long text, `cchSzLine` for reader buffers (astrolog.h:623-625).
 - **`sprintf2(S(sz), ...)` is the rule, not the exception.**
   `sprintf2` is `snprintf` unconditionally (this fork made it so after
   finding the unbounded branch live), `S(sz)` expands to
   `(sz), (int)sizeof(sz)`, and `SO(pch, sz)` does the same for a write
-  at an offset into `sz` (astrolog.h:413-419). As of work log item 143,
+  at an offset into `sz` (astrolog.h:440-471). As of work log item 143,
   1,055 sites were swept onto it and the rest threaded a size through by
   hand, leaving **1,141 of the 1,231** formatting calls in this fork's
   own files bounded. Plain `sprintf` in new code needs a reason.
@@ -242,7 +243,7 @@ each verified in code:
 - Column layout is hand-counted spaces. Any change that could touch
   layout is verified with the text-diff tooling
   (`tools/text-chart-capture.sh` / `text-chart-diff.py`), not by eye.
-- `PrintS()` (charts0.cpp:177) colorizes the help screens by parsing
+- `PrintS()` (charts0.cpp:174) colorizes the help screens by parsing
   the help text's own characters, with static cross-call state.
 - `FieldWord()` accumulates into a static buffer; `FieldWord(NULL)`
   flushes it. Interpretation code depends on that flush discipline.
@@ -260,7 +261,7 @@ each verified in code:
 
 Four loops own the keystroke/menu surface:
 
-- X11 and the Windows CLI build share `InteractX()` (xscreen.cpp:629).
+- X11 and the Windows CLI build share `InteractX()` (xscreen.cpp:625).
 - The Windows GUI has `WndProc()` (wdriver.cpp), one `WM_COMMAND`
   switch over resource ids.
 - The Qt port runs Qt's loop and binds each menu action by **label**:
@@ -283,7 +284,7 @@ parity checks are what enforce it.
 
 One line in `Makefile.srcs`, in the group it belongs to — core, graphics,
 Swiss, or one of the three backends (`SRC_QT`, `SRC_TEST`, `SRC_WIN`).
-All six makefiles derive their object lists from it, so nothing else
+All seven makefiles derive their object lists from it, so nothing else
 changes. Before 2026-09-01 this was five edits in five notations and work
 log item 96 records the day one was nearly missed. A new `#include` needs
 no makefile change either: header dependencies come from the compiler
@@ -292,7 +293,7 @@ no makefile change either: header dependencies come from the compiler
 ## Object taxonomy
 
 Chained range constants (`custLo = uranLo`, `oNorm = cobHi`, ...;
-astrolog.h:658-683) with composing predicate macros (`FItem`, `FNorm`,
+astrolog.h:764-777) with composing predicate macros (`FItem`, `FNorm`,
 `FThing`, `FCust`, `FStar`...). Insert a category by adjusting the
 chain; never compare raw numbers where a predicate exists. For new
 per-item tables, the named-row struct pattern (`OBJSET`/`rgobjset[]`,

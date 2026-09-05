@@ -30,7 +30,7 @@
 
 NAME = astrolog-qt-ubsan
 OBJDIR = obj-qt-ubsan
-# The source list lives in one file for all five builds; see the header
+# The source list lives in one file for every build; see the header
 # there before adding a source.
 include Makefile.srcs
 OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,\

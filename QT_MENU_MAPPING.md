@@ -121,7 +121,7 @@ Info [P]
 Setting [P]
   Sidereal Zodiac [T] cmdSidereal
   Heliocentric [T] cmdHeliocentric
-  House System [P]  -- 22 house systems, all [S]: Placidus, Koch, Campanus,
+  House System [P]  -- 23 house systems, all [S]: Placidus, Koch, Campanus,
     Regiomontanus, Topocentric, Alcabitius, Krusinski, A.P.C., Savard-A, ---,
     Porphyry, Pullen(S.Ratio), Pullen(S.Delta), ---, Meridian, Morinus,
     Horizon, Carter P.Equat., Sunshine, Sripati, ---, Equal, Equal(MC),
@@ -223,7 +223,10 @@ Help [P]
   Switches/Obscure Switches/Keystrokes/Credits [A] x11 (prints a text listing)
   ---
   Setup [P]  -- Windows-only installer actions (cmdSetupUser/All/Desktop/
-    Extension, cmdUnsetup) -- NOT APPLICABLE to Linux, skip entirely
+    Extension, cmdUnsetup) -- not applicable on Linux or macOS, and
+    skipped on Windows too now that the Qt build ships there (qtdriver.cpp
+    skips Setup and Print Setup on every platform): a decision, not a
+    non-issue
   About Astrolog... [D] cmdHelpAbout
 ```
 
@@ -249,4 +252,5 @@ Help [P]
   wiring rather than new behaviour — each Qt entry proxies to the menu bar
   action rather than reimplementing the command.
 - Windows-only items (Setup submenu, Print Setup's native dialog) don't
-  apply to the Qt/Linux build and should be skipped rather than stubbed.
+  apply to the Qt build — on Windows as well, since the Qt build ships
+  there now — and are skipped rather than stubbed.

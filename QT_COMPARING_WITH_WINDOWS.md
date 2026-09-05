@@ -3,8 +3,10 @@
 Parity with Windows is this port's spec, so the most useful thing in the
 repo is the ability to run the *actual* Windows binary next to the Qt one
 and look. `Makefile.win` cross-compiles it with mingw-w64 from the same
-`wdriver.cpp`, `wdialog.cpp` and `astrolog.rc` a Windows user runs — not
-an approximation — and it runs under Wine.
+`wdriver.cpp`, `wdialog.cpp` and `astrolog.rc` the Win32 build is made
+from — not an approximation — and it runs under Wine. Since 2026-09-04
+that build is the behavioural oracle and no longer ships; a Windows user
+runs the Qt port (see "The Qt port on real Windows" below).
 
 This has repeatedly settled questions that reading the code got wrong.
 Use it before concluding that something diverges.
@@ -35,7 +37,7 @@ actually raise — whether the shared core computes the same thing when
 compiled for Windows.
 
 ```sh
-make -f Makefile.win && make wcli && make   # once
+make -f Makefile.win && make wcli && make astrolog   # once
 tools/win-differential.sh out/win-diff
 ```
 
@@ -171,7 +173,7 @@ values the two sides are character-for-character identical.
 Two things look like divergences and are not:
 
 - **The header gains a second line whenever a chart *name* is set.**
-  `charts1.cpp:91` emits a newline after the name. If one side has a name
+  `charts1.cpp:96` emits a newline after the name. If one side has a name
   and the other doesn't, every row below shifts by one.
 - **Cusp values differ if the two sides disagree about 3D houses.** The
   header says `3D Placidus Houses` rather than `Placidus Houses` when

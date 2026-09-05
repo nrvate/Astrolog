@@ -342,8 +342,10 @@ jobs:
   # was hung; a process simply costs far more on a runner than on an NVMe
   # workstation. A gate that takes half an hour is a tax, not a check.
   #
-  # The switch surface is not dropped -- the nightly lane runs all four.
-  # Coverage over a day is unchanged; feedback on a change is a minute.
+  # No lane diffs the switch surface since the nightly went (2026-09-04):
+  # the slow lane's ASan job EXECUTES the switch matrix rather than
+  # diffing it, and tools/ci-differential.sh with no third argument diffs
+  # all four by hand -- QT_CI_PLAN.md 7.2 says why that is the trade.
   differential:
     name: Behaviour vs base
     runs-on: ubuntu-latest

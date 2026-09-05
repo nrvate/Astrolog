@@ -1,4 +1,4 @@
-# Astrolog 8.00 — with a Qt GUI for Linux
+# Astrolog 8.00 — with a Qt GUI for Linux, Windows and macOS
 
 This is a fork of Astrolog 8.00 (released May 31, 2026), described at
 http://www.astrolog.org/astrolog.htm and originally copied from
@@ -10,11 +10,13 @@ code, is Walter D. Pullen's work. See LICENSE.HTM.
 
 ## What this fork adds
 
-A **Qt GUI backend for Linux**, with the menus and dialogs the Windows
-build has. Upstream's Linux build uses X11 directly and is driven by
+A **Qt GUI backend**, with the menus and dialogs the Windows build has,
+and since v8.00-qt.6 the interface every platform ships — Linux, Windows
+and macOS. Upstream's Linux build uses X11 directly and is driven by
 single-keystroke commands; this one gives you the same nine menus and
-~28 dialogs a Windows user would recognise, so the two builds can be
-used more or less interchangeably.
+25 dialogs a Windows user would recognise. The native Win32 build is
+still compiled on every push, as the behavioural reference the port is
+judged against.
 
 The port itself changes almost nothing in the shared calculation or
 rendering core, and where it must, it does so inside `#ifdef QT`. The new
@@ -39,8 +41,8 @@ list comes from the binary rather than from someone's memory:
 
 | | |
 |---|---|
-| `.deb` | every Ubuntu LTS still in standard support (asked of Launchpad at build time: 22.04, 24.04 and 26.04 as of September 2026, each built inside that release's own container) |
-| `.rpm` | the two current Fedora releases (asked of Fedora's release service at build time, so a stale list cannot ship), EL9 (Rocky/Alma), EL10 |
+| `.deb` | every Ubuntu LTS still in standard support, from a committed snapshot of Launchpad's list that every push checks against the live service: 22.04, 24.04 and 26.04 as of September 2026, each built inside that release's own container |
+| `.rpm` | the two current Fedora releases (the same arrangement, against Fedora's release service, so a stale list stops a push rather than shipping), EL9 (Rocky/Alma), EL10 |
 | `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs. **Windows 10 or later** |
 | `.zip` | Windows, the same files — unpack and run, no install needed. The Qt build with its runtime included, since v8.00-qt.6; releases before that shipped the native Win32 build, which ran on Windows 7 |
 | `.dmg` | macOS, Apple Silicon only — read the note below before downloading |
@@ -57,7 +59,7 @@ the named asteroids, not just the main planets. That is why a package is
 about 13 MB rather than 6.
 
 It is worth the size for one reason. Without those files the dialog still
-*offers* all 39, and the twenty it cannot compute return `0Ari00'00"` —
+*offers* all 39, and every one it cannot compute returns `0Ari00'00"` —
 not an error, not a warning, just a plausible-looking position at the
 first degree of Aries. A wrong answer that looks like an answer is worse
 than a missing feature, so the files ship.
@@ -161,9 +163,10 @@ Astrolog reads its ephemeris, atlas and fonts from the directory of its
 own executable — and `/usr/bin` holds wrappers, which is the same
 arrangement `make install` uses.
 
-**EL10 is built against Qt6** because it ships no Qt5 outside EPEL, and
-depending on a third-party repository for a runtime library is a poor
-thing to put in a package. Everything else is Qt5.
+**Fedora, Ubuntu 26.04 and EL10 are built against Qt6.** EL10 ships no
+Qt5 outside EPEL, and depending on a third-party repository for a
+runtime library is a poor thing to put in a package; Fedora will drop
+Qt5 first. Ubuntu 22.04, 24.04 and EL9 are built against Qt5.
 
 Versions are `8.00-qt.N`: upstream numbers the program, this numbers the
 port.
@@ -266,9 +269,11 @@ neither of the others reaches, in 224 renders; `tools/influence-matrix.sh`
 covers the influence charts. Run any of them against an older build of the
 tree and diff.
 
-It defaults to `-i nrvate.as`, the maintainer's settings file, because
-that is the only input under which the esoteric bodies resolve at all —
-without it a fifth of the checks skip themselves silently.
+It defaults to `-i nrvate.as`, the maintainer's settings file, which
+reaches the full ephemeris at `/swe`. Since 2026-09-03 the bundled
+`ephem/` resolves the same 39 bodies, so CI runs the suite with
+`-Yi1 ephem` and gets the same count; before that, a run without `/swe`
+quietly skipped a fifth of the checks.
 
 The Windows build has a small suite of its own, driving the real binary
 under Wine:
@@ -304,9 +309,9 @@ python3 tools/qt_srcs_audit.py     # the Qt build's source groups, and no
 python3 tools/inert_option_audit.py  # a matrix option that changes nothing
 ```
 
-And the compiler itself: `tools/warning_audit.py` holds all five builds
-against a ledger of every warning they are known to produce, and fails on
-an addition.
+And the compiler itself: `tools/warning_audit.py` compiles all five
+builds, plus the two Qt6 ones where a Qt6 exists, with `-Wall` against
+`tools/warnings.txt` — which is empty, so any warning at all fails.
 
 The dialog tables, accelerators and command IDs are *generated* from the
 resource script rather than transcribed, and regenerating them into a

@@ -87,7 +87,8 @@ sudo apt install nsis                                # build the Windows
 Only the first line is needed to build the port and run its whole test
 suite. The rest is for comparing against Windows.
 
-**macOS is built only in CI**, on GitHub's `macos-14` runners, because
+**macOS is built only in CI**, on GitHub's `macos-latest` runners (macOS
+26 on Apple Silicon at the last run), because
 nobody working on this has a Mac. `tools/package-macos.sh` makes the
 `.app` bundle and the `.dmg`; it needs `macdeployqt` from a Homebrew Qt
 and nothing else. Notarization would need a paid Apple Developer account
@@ -161,14 +162,15 @@ ASTROLOG_QT_TESTS=animation ./run-qt-tests.sh   # just one group, <1s
                                  # (=list names them; see QT_TESTING.md)
 ```
 
-The six makefiles share one source list, `Makefile.srcs`: **add a
+The seven makefiles share one source list, `Makefile.srcs`: **add a
 source file there, once**, in the group it belongs to, and no makefile
 changes. Header dependencies come from the compiler (`-MMD -MP`), so
 touching any header rebuilds exactly what includes it — that was not
 true before 2026-09-01, when only `astrolog.h` and `extern.h` were
-tracked and every other header rebuilt *nothing*. And `make clean` now
-removes all five builds, which is a hazard with two sessions in one
-tree; `make clean-console` is upstream's narrower one, which is what
+tracked and every other header rebuilt *nothing*. And `make clean`
+removes every build the tree can make, the sanitizer and Qt6 ones
+included, which is a hazard with two sessions in one tree;
+`make clean-console` is upstream's narrower one, which is what
 `tools/asan-sweep.sh` uses.
 
 `run-qt-tests.sh` is headless — no X display needed. Run it before every
@@ -191,8 +193,9 @@ bodies resolve against the ephemeris, the application icon resolves at
 all three sizes, and bad input (missing files, unknown switches) doesn't
 terminate the process.
 
-One group is not like the others. **The numeric oracle** (`oracle`, 307
-assertions) is the only net here that can say a number is *right* rather
+One group is not like the others. **The numeric oracle** (`oracle`, 575
+assertions on 2026-09-05, up from 307 when it was written) is the only
+net here that can say a number is *right* rather
 than *unchanged*: it asks the Swiss Ephemeris library the same question
 Astrolog asks it, through an object mapping transcribed independently in
 `qttest.cpp`, and requires the same answer -- exactly, measured at
@@ -727,7 +730,7 @@ On a private Xvfb display, `import -window root` is fine.
 ## CI, and what it will not let you do
 
 Five workflows, all on `qt`, the default branch. `ci.yml` runs on every
-push and pull request, about sixteen jobs in five or six minutes: the
+push and pull request, thirteen jobs in four or five minutes: the
 mingw Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, the compiler-warning audit against its empty ledger,
 `make install`, a behavioural differential against the
@@ -741,8 +744,10 @@ it and builds the NSIS installer on Linux and installs and uninstalls
 that under Wine.
 
 `slow-lane.yml` is what CLAUDE.md elsewhere calls pre-release: the
-sanitizer sweeps (ASan and UBSan) and the external Swiss oracle, each a
-job of its own; the Windows parity harnesses under Wine; the MSVC build
+sanitizer sweeps -- ASan over the switch matrix, ASan over the graphics
+matrix, the Qt suite under ASan, and UBSan over all of it -- and the
+external Swiss oracle, each a job of its own; the Windows parity
+harnesses under Wine; the MSVC build
 of the Win32 project file; a coverage run that asserts nothing NEW has
 become untested; and **macOS**, which builds the port, runs the suite
 and packages the `.dmg`. The warning audit is in the push lane since
@@ -761,8 +766,11 @@ everything. `workflow_dispatch` runs it by hand against any commit.
 the distributions `tools/distros.py` names, the `.dmg` from the slow
 lane's macOS job, and the Windows `.zip` and `astrolog-setup.exe` from
 `windows-qt.yml` -- each verified before publication, with a SHA256SUMS
-that is checked to cover exactly that many. About twenty minutes, the
-ASan sweep being the long pole. `repo.yml` chains off it on
+that is checked to cover exactly that many. Sixteen minutes for
+v8.00-qt.8, with the then-unsplit ASan sweep the long pole at 919 s; the
+sweep has since been split into three jobs (2026-09-04) and the slow lane
+alone measured 383 s on the dispatch that followed, so the next release
+is the measurement. `repo.yml` chains off it on
 `workflow_run` and rebuilds the apt/yum repository from the published
 packages.
 

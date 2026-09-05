@@ -45,7 +45,8 @@ is acted on, its entry records the commit and moves to Done.
   are consistent and greppable; renaming thousands of identifiers buys
   churn, not clarity. Document the conventions instead (see T8).
 - **Third-party code is out of scope**: `swe*.cpp/h` (Swiss Ephemeris),
-  `placalc*.cpp`, `swemptab.h`. Only the *boundary* our code presents to
+  `swemptab.h` *(and `placalc*.cpp`, until the Placalc backend was
+  removed on 2026-09-04)*. Only the *boundary* our code presents to
   them is reviewable. **But see "The vendored Swiss Ephemeris" below** —
   out of scope for *refactoring* is not the same as out of scope for
   *known defects*, and there are eight of the latter.
@@ -694,7 +695,8 @@ they split three ways:
   buffer `PAllocate`d to the exact length of what is about to go in it,
   so a bound would restate the allocation; `charts2.cpp`'s are
   precision-limited formats (`%7.7s`, `%3d`) into `cchSzMax`; and the
-  Swiss and placalc files are third-party. Counting them as "unbounded"
+  Swiss and placalc files are third-party *(placalc removed 2026-09-04)*.
+  Counting them as "unbounded"
   was measuring the spelling rather than the risk.
 
 ### T6 — Backend `#ifdef` interleave in the shared device layer
@@ -856,7 +858,8 @@ Before 2026-08-31 the 3213-assertion suite contained **two** assertions
 about a computed number — `chouse[1]` and `chouse[5]` pinned to
 literals on the Matrix path (qttest.cpp, `cast-cooking`), whose own
 comment calls itself "matrix.cpp's only standing net". For a program
-with four planetary engines (astrolog.h's `-b` state table) and 40
+with four planetary engines (astrolog.h's `-b` state table; three since
+2026-09-04) and 40
 house systems, that is the whole opinion the test suite held about
 astronomy.
 
@@ -864,7 +867,8 @@ astronomy.
 the sanitizer leg: `Makefile.qt.asan` builds at `-O0`, where
 `_FORTIFY_SOURCE` is inactive, so an entire detection class — a `%3d` of
 `INT_MIN` overrunning a 15-byte buffer — was invisible to the one net
-here that looks at memory, through two prior hunts. `-bm` and `-bp` produced a chart with
+here that looks at memory, through two prior hunts. `-bm` and `-bp` *(a
+retired spelling since 2026-09-04)* produced a chart with
 every body at 0°Aries and no error, reachable from the command line
 with the shipped `astrolog.as`, in shared core, in both builds. The
 switch matrix covered neither invocation, and had it covered them it
@@ -944,6 +948,11 @@ save/restore pairs T7 is about, and the worklist for whoever takes T7
 next.** `-Wformat-truncation=` (45) is T5's residue and is argued at
 T5.
 
+*(The ledger has been empty since 2026-09-04 (`5f2aa40`), the 91 and 45
+residues included; a new warning is a failure to fix now, not a line to
+record. The audit covers five builds plus the two Qt6 legs, and runs in
+the push lane.)*
+
 *What it does not cover.* mingw does not recognize `snprintf` as the
 builtin, so the Windows half of the audit sees no format diagnostics at
 all (45 on Linux, 0 there) — measured, not assumed. It remains the only
@@ -955,7 +964,8 @@ diagnostic wdriver.cpp and wdialog.cpp have.
 
 **Astrolog is 40% Swiss Ephemeris by line count.** 43,369 lines of
 `swe*.cpp/h` against 64,727 of Astrolog's own, compiled into every one of
-the six builds as `SRC_SWISS` in `Makefile.srcs`. That is upstream
+the seven builds as `SRC_SWISS` in `Makefile.srcs` (`Makefile.qt.ubsan`
+since 2026-09-03). That is upstream
 Astrolog's design, not this fork's, and it is easy to work here for a
 long time without noticing.
 
@@ -1152,7 +1162,8 @@ reword; valid input behavior is byte-sacred.
 
 **Next up, specified:**
 - **C3 — done 2026-08-29** (work log item 81): `FSkipEphem()` in
-  calc.cpp, five sequential ifs each carrying its verified reason
+  calc.cpp, five sequential ifs *(four since 2026-09-04; the Placalc
+  clause left with the backend)* each carrying its verified reason
   (the JPL-Earth clause's reason was checked against `rgObjJPL[]`
   before writing it down, and came out different from the first
   guess). Net: 11-case `-v` position differential old-vs-new under
@@ -1199,7 +1210,8 @@ reword; valid input behavior is byte-sacred.
   orders QT before X11, and DrawSz's density is dictated by its
   per-character loop over seven text targets — restructuring it
   risks text rendering for zero behavioral gain. No code change.
-- **Next: the T3 harvest** — FOutputSettings() as a loop over
+- ~~**Next: the T3 harvest**~~ *(measured and closed 2026-08-29 — T3/T4
+  above)* — FOutputSettings() as a loop over
   registry rows under the byte-stable-layout constraint (the
   round-trip script plus a byte-diff of the saved file is the net),
   then generated -H help with its explicit ordering list.
@@ -1209,7 +1221,8 @@ trusting it; pin renders to literal constants, never to mutable
 globals (the midpoint-glyph flake needed two rounds — item 79);
 check `git show --stat` file counts after committing; kill orphaned
 `astrolog-qt` processes left by interrupted suite runs (startup
-diagnostics children); CRLF check is CR count == line count per file.
+diagnostics children); line endings: the tree is LF and
+`tools/line_endings_audit.py` fails on any carriage return (T2 rule 6).
 
 ## Area findings
 
@@ -1426,7 +1439,7 @@ table enumerates the switch surface.
 matrix.cpp gets a clean verdict: it is the oldest code and a coherent
 single-purpose backend (the built-in "Matrix" math), reached only
 through dispatch fronts like `MdyToJulian()` (calc.cpp:66) that pick
-Matrix/Placalc/Swiss per call. Leave it alone — with one carve-out
+Matrix/Swiss per call *(Placalc removed 2026-09-04)*. Leave it alone — with one carve-out
 taken under C2 (item 113): `CuspTopocentric()` no longer receives its
 pole latitudes smuggled through `AA` in the wrong unit. Credit also to the
 `FCm*` backend predicates (extern.h:140-147) — the capability tests are
@@ -1495,7 +1508,7 @@ diagnosable at runtime. Behavior-preserving by construction; the suite
 plus a Windows text-diff is the net. *Cost:* low, good early increment.
 
 **Done 2026-08-29** (work log item 81): extracted as `FSkipEphem()`,
-five named sequential ifs, same clause order.
+five named sequential ifs, same clause order *(four since 2026-09-04)*.
 
 **C4 — The backend selector is three flags and an int with unreachable
 corners.** `fEphemFiles`, `fPlacalcPla`, `fMatrixPla`, `fMatrixStar`,
@@ -1515,7 +1528,8 @@ by switch parsing. *Cost:* documentation now, enum later.
 corners, and the -b fall-through toggle trap are documented at the
 field declarations (astrolog.h). Better news found while writing it:
 the derived reading layer already exists — the `FCm*()` macros in
-extern.h are eight named predicates over the five fields, and the
+extern.h are eight named predicates over the five fields *(seven over
+four since 2026-09-04)*, and the
 dialogs already collapse the choice to a six-value list. The enum
 step would relocate, not create, the meaning; deferred indefinitely.
 

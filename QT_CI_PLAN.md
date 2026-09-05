@@ -89,6 +89,14 @@ phases below whose job is to settle it.
 
 ### Verified
 
+*(Checked 2026-09-01/02, and left as the measurements they were. Rows
+overtaken since: CI is five workflows, not one job; the fork has its own
+version, `szVersionFork` in `astrolog.h`; `ephem/` is 32 files and 10 MB
+and resolves 39 of 39 bodies since 2026-09-03, so the 12-file, 19-of-39
+and 61/2 rows are history; `placalc.h` went with the Placalc backend on
+2026-09-04; and the "one left" configuration, `WSETUP`, was decided on
+2026-09-03 — kept, unbuilt.)*
+
 | Fact | Evidence |
 |---|---|
 | CI exists as of 2026-09-02 | `.github/workflows/ci.yml`, one job: the two Windows builds and their freshness assertions (PR 1). Everything else in this document is still unwritten |
@@ -201,11 +209,13 @@ platform.
 
 | Binary | Makefile | Needs | Used by |
 |---|---|---|---|
-| `./astrolog` | `Makefile` | `libx11-dev` | `chart-matrix.sh`, `switch-matrix.sh`, `influence-matrix.sh`, `graphics-matrix.sh`, `settings-round-trip.sh` |
+| `./astrolog` | `Makefile` (`make astrolog`; plain `make` builds this and `./astrolog-qt` together since 2026-09-04) | `libx11-dev` | `chart-matrix.sh`, `switch-matrix.sh`, `influence-matrix.sh`, `graphics-matrix.sh`, `settings-round-trip.sh` |
 | `./astrolog-qt` | `Makefile.qt` | `qtbase5-dev`, `pkg-config` | the shipped Linux app |
 | `./astrolog-qt-test` | `Makefile.qt.test` | same | `run-qt-tests.sh`, `QTTEXTDIR`/`QTGRAPHDIR` captures |
-| `./astrolog-qt-asan` | `Makefile.qt.asan` | same | (asan-sweep builds its own console binary) |
-| `./astrolog.exe` | `Makefile.win` | `g++-mingw-w64-x86-64` | the oracle; the Windows package; `win-tests.sh`, `text-chart-capture.sh` under Wine |
+| `./astrolog-qt-asan` | `Makefile.qt.asan` | same | the Qt suite under ASan (asan-sweep builds its own console binary) |
+| `./astrolog-qt-ubsan` | `Makefile.qt.ubsan` | same | `ubsan-sweep.sh`'s Qt leg |
+| `./astrolog.exe` (Win32) | `Makefile.win` | `g++-mingw-w64-x86-64` | the oracle only, since 2026-09-04; `win-tests.sh`, `text-chart-capture.sh` and the starts-under-Wine check |
+| `astrolog.exe` (Qt, MSVC) | `tools/msvc-build-qt.cmd` in `windows-qt.yml` | Qt 6.8.3, MSVC | **the shipped Windows package**: the zip and the NSIS installer |
 | `./astrolog-wcli.exe` | `Makefile.wcli` | same | the Windows differential (6.4b) — the only Windows binary that runs non-interactively under Wine |
 
 ## The three unbuilt configurations
@@ -246,37 +256,30 @@ installs the toolchain. `Makefile.wcli` exists; `.github/workflows/ci.yml`
 compiles it. The row above is struck out because the category no longer
 holds it.
 
-**`WSETUP`: still undecided**, and the weakest case of the four — Windows
-installer machinery this fork has no use for. "Keep it explicitly
-unbuilt", with a comment at the site, is the likely answer.
-
-**`Astrolog.vcxproj`: still undecided.** Upstream's, exactly one
-`<ClCompile>` line behind, so repairing it is trivial; the real question
-is whether MSVC is a configuration this fork wants to owe anything to.
-
-**Qt6: newly undecided, and it should not stay that way for long.** It is
-the only one of the four that a contributor can plausibly *depend* on —
-somebody on a distribution without `qtbase5-dev` will build `make qt6`
-and believe the result. Building it in CI costs one runner-installed
-package and about fifteen seconds; the alternative is that its next
-regression is found by whoever tries to use it.
+*(Three paragraphs stood here calling `WSETUP`, `Astrolog.vcxproj` and
+Qt6 "still undecided". The table above overtook all three: the vcxproj
+was repaired and is built by the slow lane (2026-09-02), Qt6 is built
+with the suite on every push, and `WSETUP` was decided on 2026-09-03 --
+kept, deliberately unbuilt, commented at every site.)*
 
 ---
 
 ## Where this stands, 2026-09-04
 
-**Every phase is built and running, and the shape changed on 2026-09-04.**
+**Every phase is built and running, and the shape changed on 2026-09-04
+(one item excepted: 9.3, the macOS divergence list, is still unwritten).**
 Five workflows now, every check falsified individually before it was
 trusted — with two stated exceptions, macOS and the MSVC build, which
 cannot be falsified from a machine with neither and say so in their
-files. Five releases are cut and the package repository is live.
+files. Eight releases have been cut, the newest two are kept, and the
+package repository is live.
 
 | workflow | jobs | what they are |
 |---|---|---|
-| `ci.yml` (every push and PR, ~5–6 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · System install · Behaviour vs base · Which distributions · N × `.deb` (every Ubuntu LTS in standard support, built in containers) · N × `.rpm` (Fedora current + previous, EL9, EL10) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, 7.1–7.4, 8.2 |
+| `ci.yml` (every push and PR, ~4–5 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · Compiler warnings · System install · Behaviour vs base · Which distributions · The distribution snapshot is current · one `.deb` and one `.rpm` (the newest row of each family, built in containers; every row on a release) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, Phase 6 warnings |
 | `windows-qt.yml` (reusable; called by `ci.yml` and `release.yml`) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
-| `slow-lane.yml` (reusable + dispatch; **no schedule**) | Compiler warnings · Qt6 warning ledger · What nothing executes · ASan over the matrices · UBSan over the matrices and the Qt suite · The Qt suite under ASan · Astrolog against upstream Swiss Ephemeris · Windows parity · MSVC project · macOS build + suite + `.dmg` · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
-| `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · N × `.deb` · N × `.rpm` · Publish (then retires every release but the newest two) | 5.1, 5.2 |
+| `slow-lane.yml` (reusable + dispatch; **no schedule**) | What nothing executes · ASan over the switch matrix · ASan over the graphics matrix · UBSan over the matrices and the Qt suite · The Qt suite under ASan · Astrolog against upstream Swiss Ephemeris · Windows parity · MSVC project · macOS build + suite + `.dmg` · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
+| `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · N × `.deb` · N × `.rpm` · Publish · Retire (every release but the newest two; the tags stay) | 5.1, 5.2 |
 | `repo.yml` (on release) | Build the repositories (from the remaining releases, for the distributions built today) · Publish to Pages | 4.7 |
 
 **Three decisions, all the maintainer's, all on 2026-09-04:**
@@ -312,7 +315,12 @@ files. Five releases are cut and the package repository is live.
    that picks its release automatically should not depend on a library
    that release is retiring; verified in a `fedora:44` container before
    the change was pushed — links Qt 6.11, packages, installs, computes
-   Chiron.
+   Chiron. *(Superseded later the same day: Ubuntu rows come from
+   Launchpad too, every read is from the committed snapshot
+   `tools/distros.json` with `distros.py check` as the drift job, and the
+   served-but-unbuilt skip was removed — a served suite the matrix does
+   not build fails, and `collect-release-packages.sh` stops it being
+   served at all.)*
 
 3. **Qt is the one interface. The Windows release is the Qt build.** The
    nightly's "experiment" — this port compiled with MSVC against the
@@ -321,7 +329,7 @@ files. Five releases are cut and the package repository is live.
    runs on a tag. It builds `astrolog.exe` (`/SUBSYSTEM:WINDOWS` with
    `/ENTRY:mainCRTStartup`, so `main()` still runs and no console opens
    beside the GUI; an icon and a VERSIONINFO resource from
-   `tools/astrolog-qt.rc`), runs the 3,812-assertion suite on the
+   `tools/astrolog-qt.rc`), runs the whole suite on the
    Windows runner under `offscreen`, stages the tree with
    `tools/package-windows-qt.py` (windeployqt's DLLs, the offscreen and
    minimal plugins, the MSVC runtime found through vswhere, the data,
@@ -345,13 +353,13 @@ files. Five releases are cut and the package repository is live.
    The Windows half can only be falsified by pushing, and was.
 
 **Signed apt and dnf repositories are live** at
-<https://nrvate.github.io/Astrolog/>, rebuilt from every release so old
-versions stay installable. **One suite per distribution** — a single
+<https://nrvate.github.io/Astrolog/>, rebuilt from the newest two
+releases, for the distributions built today. **One suite per distribution** — a single
 suite makes apt and dnf offer the highest-versioned package rather than
-the one built for the running release. Consequence of decision 2: until
-the next release, `tools/ci-verify-live-repo.sh` fails on `fc44` — the
-repository serves what was published, and nothing has been published
-for Fedora 44 yet. That is the check being right.
+the one built for the running release. (Between decision 2 and the qt.7
+release, `tools/ci-verify-live-repo.sh` failed on `fc44` because nothing
+had been published for Fedora 44 yet — the check being right. qt.7 and
+qt.8 ship it.)
 
 **Answered along the way:** Q1 (native `.deb` and `.rpm`, not AppImage),
 Q2 (`8.00-qt.N`, `szVersionFork`), Q7 (per-change run gates), Q8 (Qt6
@@ -361,8 +369,9 @@ built), and item 0.1 (`qt` is the default branch).
 
 **What is left, and none of it is more CI:**
 
-- **`WSETUP`** — the last configuration nothing compiles, and the last
-  thing on this list that is purely a decision.
+- ~~**`WSETUP`** — the last configuration nothing compiles, and the last
+  thing on this list that is purely a decision.~~ **Decided 2026-09-03**:
+  kept, deliberately unbuilt, commented at every site.
 - ~~**Ubuntu 26.04 LTS shipped in April 2026** and the `.deb` matrix still
   says 22.04 and 24.04.~~ **Done 2026-09-04, later**: the `.deb` rows
   build inside `ubuntu:<version>` containers now and are asked of
@@ -982,7 +991,7 @@ side by side.
 it. That hard rule exists precisely because running without `/swe` tests
 less; the mode does not weaken it, it makes the weaker run declare
 itself.
-**Status.** [ ]
+**Status.** [~] `ASTROLOG_QT_EPHEM` is documented in QT_TESTING.md; CLAUDE.md's "always test with -i nrvate.as" rule does not yet mention it
 
 ### 2.5 Build the plain console binary too
 **Goal.** Phase 7 needs it, and it is the only build that compiles the
@@ -994,13 +1003,13 @@ that is where the round trip and the fortify assertion need it.
 overridden build and therefore **deletes `./astrolog` while it runs**. If
 a future job ever runs the sweep and the matrices concurrently on one
 runner, that is a race. Keep them in separate jobs.
-**Status.** [ ]
+**Status.** [x] done 2026-09-02, as the text above records
 
 ---
 
 # Phase 3 — The fast audits
 
-Eight standing audits plus three generated-table diffs. All pure Python
+Eight standing audits plus three generated-table diffs. *(eleven since: `qt_srcs_audit.py`, `vcxproj_audit.py` and `inert_option_audit.py` came later)* All pure Python
 or `diff`, all seconds, all currently clean. This is the cheapest phase
 in the document and it protects the `.rc`-derived layer that `CLAUDE.md`
 says hand transcription got wrong "every time it was used".
@@ -1025,8 +1034,8 @@ real working tree — fine under `actions/checkout`, but it exits 1 with a
 ways; in the repo it reports *"line endings clean: N tracked text files,
 no carriage returns"* — N was 97 when this was written and is 100 now, so
 match on the wording rather than the count.
-(`tools/warning_audit.py` belongs to Phase 6 — six minutes, all four
-toolchains.)
+(`tools/warning_audit.py` belongs to Phase 6 — about 70 seconds, five
+builds plus the two Qt6 legs, and in the push lane since 2026-09-04.)
 **Verify.** Each exits 0.
 **Falsify.** Each audit needs its own sabotage, because they check
 different layers and a single break will not move them all. `CLAUDE.md`
@@ -1137,7 +1146,7 @@ categories and a reason for each.
 …" to "Value 0 out of range from 1 to 12", which is a *month*. So the
 change is in chart-info parsing, not the atlas lookup. Undiagnosed; the
 four files ship unconverted and `.gitattributes` cites this. **A
-differential found a real parser bug in data nobody thought of as code.**
+differential found a real parser bug in data nobody thought of as code.** *(It did not reproduce — work log item 173; the four files are LF since 2026-09-02.)*
 **Status.** [x] resolved 2026-09-01 (`d9c23bb`, `740d149`)
 
 ### 3.2 Diff the three generated tables
@@ -1160,7 +1169,7 @@ must never appear in a workflow.
 **Verified 2026-09-01:** all three legs pass in **0.15 s** — fixed point
 after one round trip, all flipped flags persisted, all 31 sentinels
 saved. Cheapest check in the document by a wide margin.
-**Status.** [ ]
+**Status.** [x] in the audits job
 
 ### 3.4 Assert the shipped builds still have fortify
 **Goal.** Keep a net that already exists and that nothing currently
@@ -1198,7 +1207,7 @@ is not itself one. Written into the script's header.
 # Phase 4 — Packaging
 
 From here on, follow swisseph's structure: a reusable `package.yml` with
-`on: workflow_call`, called by both `ci.yml` and `release.yml`.
+`on: workflow_call`, called by both `ci.yml` and `release.yml`. *(`package.yml` was never created under that name: `windows-qt.yml` is the reusable workflow both call, and the Linux rows are built per distribution by `tools/build-in-container.sh`.)*
 
 ### 4.1 Create `package.yml` as a reusable workflow
 **Do.** `on: workflow_call`, `permissions: contents: read`. `ci.yml`
@@ -1206,7 +1215,7 @@ gains a `package:` job that is just `uses: ./.github/workflows/package.yml`.
 **Rationale.** Ground rule 3. Astrolog already has the crack this closes:
 `Astrolog.vcxproj` is a second, unbuilt Windows build definition that has
 been rotting since 2022 (it does not list `switch.cpp`).
-**Status.** [ ]
+**Status.** [x] met by `windows-qt.yml` (reusable, called by both) — see Phase 10
 
 ### 4.2 The Linux package — decide the form first
 **Open question Q1, must be settled before writing this job.** The Qt app
@@ -1304,6 +1313,10 @@ swisseph reaches "one build definition, used by both CI and release" with
 `package.yml`; here the definition is `tools/package.sh`, which a release
 workflow calls unchanged and which a human can also just run.
 **Status.** [x] done 2026-09-02 (Windows only; Q1 still gates Linux)
+*(Superseded 2026-09-04: the shipped Windows package is the Qt build,
+staged by `tools/package-windows-qt.py` inside `windows-qt.yml`;
+`package.sh windows` stages the Win32 build only for the starts-under-Wine
+check.)*
 
 ### 4.4 Self-verify every package
 **Do.** For each package, in this order:
@@ -1439,7 +1452,7 @@ downloading a file per release is most of packaging undone: the point is
 `apt install astrolog` and then upgrades arriving on their own.
 **Done 2026-09-02.** `tools/make-repo.sh` builds both from a directory of
 packages; `.github/workflows/repo.yml` publishes them to GitHub Pages,
-rebuilt from **every** release so old versions stay installable. Live at
+rebuilt from **every** release so old versions stay installable. *(Since 2026-09-04 the newest two releases only, for the distributions built today — `tools/prune-releases.sh`, `tools/collect-release-packages.sh`.)* Live at
 <https://nrvate.github.io/Astrolog/>.
 **One suite per distribution**, and the first publish is why. It built,
 signed, and served every URL at 200 — and could not be installed from: a
@@ -1496,7 +1509,7 @@ matches the source's version, for a reason worth keeping: if they
 disagree, every bug report afterwards cites the wrong version.
 Astrolog needs something like `8.00-qt.N` in a macro this fork owns, so
 the same assertion is possible.
-**Status.** [ ]
+**Status.** [x] `8.00-qt.N`, `szVersionFork` in `astrolog.h`; `tools/ci-assert-version.sh` stops a release whose tag disagrees
 
 ### 5.2 `release.yml`
 **Do.** `on: push: tags: ['v*']` plus `workflow_dispatch` with a tag
@@ -1511,7 +1524,7 @@ release with no binaries in it.
 **Note.** Tag the *merged* commit, not the branch tip you bumped on —
 swisseph shipped a release whose tag was unreachable from `main` and
 chose to leave it rather than move a published tag.
-**Status.** [ ]
+**Status.** [x] built; as built it calls `slow-lane.yml` and `windows-qt.yml`, and a `retire` job follows Publish — see "Where this stands"
 
 ---
 
@@ -1542,13 +1555,10 @@ wiring turned up, in descending order of consequence:
   rather than leaving the next reader to work backwards from 300 mystery
   diffs. **That guard found a bug in itself on its first run**: mingw's
   `-dumpversion` answers `10-win32`, so splitting on a dot gave
-  `10-win32` and it failed against the very toolchain it was written for.
-- **The Qt6 leg cannot run in CI at all**, and correctly skips *(in this
-  job; since 2026-09-03 the separate `warnings-qt6` job runs
-  `warning_audit.py --qt6-only` on `ubuntu-latest`, where Qt6 has
-  pkg-config files, and `ci-assert-slow-lane.sh` tolerates this job's
-  skip only while that one is green — see the note under the 2026-09-03
-  ledger entry below)*. It needs
+  `10-win32` and it failed against the very toolchain it was written for. *(Both gone on 2026-09-04: the job runs on `ubuntu-latest` in `ci.yml`, and the toolchain guard was deleted when the ledger emptied.)*
+- **The Qt6 leg cannot run in CI at all**, and correctly skips *(Overtaken 2026-09-04: the warnings job runs in `ci.yml` on
+  `ubuntu-latest` with both Qts, the `warnings-qt6` job is gone, and
+  `ci-assert-slow-lane.sh` tolerates no Qt6 skip.)*. It needs
   `QT6_PKGCONFIG` to point at a Qt6, and installing `qt6-base-dev` on the
   runner would put Qt6 on pkg-config's default path — where
   `Makefile.qt`'s `pkg-config --exists Qt6Widgets` would find it and
@@ -1868,7 +1878,7 @@ one diffs against the commit of 24 hours ago — a weaker question than
 The switch matrix now runs in CI only inside `tools/coverage-report.sh`,
 which executes it rather than diffing it; diffing all four is a by-hand
 `tools/ci-differential.sh` against a chosen commit.)*
-**Status.** [ ]
+**Status.** [x] built; the fast lane runs three matrices, and the switch matrix is executed by the slow lane's ASan job rather than diffed
 
 ### 7.2b What running them actually showed, 2026-09-01
 **Done, and it moved two things in this document from claim to
@@ -2159,7 +2169,7 @@ open-source Qt 5.15 arm64 macOS build exists; what
 `jurplel/install-qt-action` can still fetch.
 **Why this is the crux.** If the answer is "Qt6 or nothing on Apple
 silicon", then 8.1 is not optional for macOS, and the two phases merge.
-**Status.** [ ]
+**Status.** [x] settled: scope stops at "compiles and the suite passes"
 
 ---
 
@@ -2204,8 +2214,8 @@ Can be done entirely on a CI runner without owning a Mac. Depends on 8.3.
     works, but the makefile should take `CXX` from the environment.
 **Known-good already.** `<malloc.h>` is behind `#ifdef PC`; the QT
 backend displaces X11 by construction; `placalc2.cpp:708` determines byte
-order at runtime rather than assuming it.
-**Status.** [ ]
+order at runtime rather than assuming it. *(file removed with the Placalc backend, 2026-09-04)*
+**Status.** [x] the `macos` job in `slow-lane.yml` builds the port, runs the suite and packages the `.dmg`
 
 ### 9.2 Run the suite headless on macOS
 **Do.** `QT_QPA_PLATFORM=offscreen` exists on macOS, and
@@ -2215,7 +2225,7 @@ supports. So the existing script should work unchanged.
 `NSchemeFromGSettingsQt` have nothing to read on macOS; the gtk-file
 tests write into a scratch dir and should still pass. Record which
 assertions behave differently rather than deleting them.
-**Status.** [ ]
+**Status.** [x] the `macos` job in `slow-lane.yml` builds the port, runs the suite and packages the `.dmg`
 
 ### 9.3 Write the known-unfinished list for whoever adopts the Mac side
 **Goal.** This is the phase's real output. Parity with Windows is this
@@ -2541,20 +2551,20 @@ keeping in front of the enthusiasm:
 - **Windows users would get the Qt look, not native Win32.** That is a
   visible divergence from upstream, and this fork's spec is currently to
   match upstream.
-- **It has not been shown to *run*.** The job builds and links; the step
+- ~~**It has not been shown to *run*.** The job builds and links; the step
   after it, which asks the binary to compute a chart, has not passed yet.
   A link is not an execution, and this project has been caught by that
   distinction before — which is why the job asserts Chiron rather than
   the Sun, and why it asserts anything at all instead of stopping at
-  "built".
-- **No dialog has been opened on Windows.** Compiling `qtdialog.cpp` says
+  "built".~~ *(overtaken: it ran and the whole suite passed, as the two subsections above record, and `windows-qt.yml` runs it on every push)*
+- ~~**No dialog has been opened on Windows.** Compiling `qtdialog.cpp` says
   nothing about whether 25 dialogs lay out correctly under a Windows
-  style, and the suite has never run there.
+  style, and the suite has never run there.~~ *(overtaken: it ran and the whole suite passed, as the two subsections above record, and `windows-qt.yml` runs it on every push)*
 
 **What it would buy, and it is substantial**: the suite's 3,812
 assertions — 25 dialogs, 42 context menus, 264 shortcuts — would run
 against the actual Windows UI, where today `tools/win-tests.sh` has two
-scenarios.
+scenarios. *(superseded by the 2026-09-04 decision the section header announces)*
 
 ## Standing hazards
 
@@ -2641,7 +2651,7 @@ rediscovery is slowest.
   already happened once, to 28 files (3.1b). Any step that rewrites
   tracked files needs an explicit binary exclusion, and
   `.gitattributes`'s current list — `*.png`, `*.ico`, `*.bmp` — is not
-  it.
+  it. *(It lists eight binary classes now, each with its reason — work log item 159.)*
 - **Piped stdout is block-buffered, so a running binary looks silent.**
   `./astrolog-qt-test … | head` shows nothing until 4 KB accumulates or
   the process exits, which is indistinguishable from a hang and cost
@@ -2676,7 +2686,7 @@ rediscovery is slowest.
   the atlas/timezone parsers reads a CR as content — undiagnosed, found
   by `astrolog-4f` on 2026-09-01, and the reason those four files ship
   unconverted. **A live bug**, and an argument for the differentials
-  covering data files and not only code.
+  covering data files and not only code. *(Did not reproduce — work log item 173; the `.as`/`.csv` files are LF since 2026-09-02 and the earlier bullet in this list says so.)*
 - **Two checks with different thresholds for the same property will
   disagree eventually.** A house-degeneracy guard tested `rGapMin > 0.0`
   while the oracle sweep used 0.001 degrees; Sunshine's narrowest house is
@@ -2725,7 +2735,7 @@ names it.
 
 | # | Question | Blocks |
 |---|---|---|
-| ~~Q1~~ | ~~AppImage, tarball, or `.deb`?~~ **Answered 2026-09-02: native packages, both formats.** `.deb` for the last two Ubuntu LTS (22.04, 24.04) and `.rpm` for the last two Fedora releases. 6.0 MB and 5.9 MB, against ~70 MB for an AppImage's Qt closure. Built on each target and verified by installing into a clean container. | closed |
+| ~~Q1~~ | ~~AppImage, tarball, or `.deb`?~~ **Answered 2026-09-02: native packages, both formats.** `.deb` for the last two Ubuntu LTS (22.04, 24.04) and `.rpm` for the last two Fedora releases. *(2026-09-04: jammy, noble, resolute; fc43, fc44, el9, el10 — from `tools/distros.json`.)* 6.0 MB and 5.9 MB, against ~70 MB for an AppImage's Qt closure. Built on each target and verified by installing into a clean container. | closed |
 | ~~Q2~~ | ~~What version scheme does this fork own?~~ **Answered 2026-09-02: `8.00-qt.N`.** `szVersionFork` in `astrolog.h`; tag `v8.00-qt.N`; `.deb` `8.00+qt.N`; `.rpm` Version 8.00 Release `qt.N`. `szVersionCore` is left alone because the banner and `express.cpp`'s `atof()` read it. `tools/ci-assert-version.sh` fails a tag that disagrees. | closed |
 | ~~Q3~~ | ~~How does Phase 1 smoke-test a GUI-only `.exe`?~~ **Answered: build `WCLI` too.** One-line guard fix at `astrolog.h:81`, drop `-mwindows`, and a console Windows binary runs non-interactively under Wine. Verified 2026-09-01. | closed |
 | ~~Q4~~ | ~~Does anything read `astexo.csv` at runtime?~~ **Answered: yes, it ships.** `charts3.cpp:1792`, `-XUx`. | closed |
@@ -3627,6 +3637,10 @@ to work around the pin is folded back in. `tools/ci-assert-toolchain.sh`
 is deleted: it refused any compiler but the ledger's, and the ledger no
 longer has one. `ci-assert-slow-lane.sh` no longer tolerates a Qt6 skip
 under any condition, since the job now runs where Qt6 is.
+
+*(Moved once more the same night: `eb10127` put the job in `ci.yml` as
+the push-lane `warnings` job, so the slow lane has no warnings job at
+all.)*
 
 **2026-09-04, night — a Wine loader failure, and what it looked like.**
 The slow lane dispatched on the runner-pin commit went red in "Windows

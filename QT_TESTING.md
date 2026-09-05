@@ -40,8 +40,8 @@ cd /tmp && /tmp/b/Contents/MacOS/astrolog -Yi1 b/Contents/MacOS/ephem   -qa 6 15
 ```
 
 Every other `-Yi` in this tree is safe, and the audit is worth recording
-so it is not redone: `ci-differential.sh` and six workflow steps all pass
-`-Yi1 ephem` to a binary that sits *beside* `ephem/` — in the checkout,
+so it is not redone: `ci-differential.sh` and every workflow step that
+runs the suite pass `-Yi1 ephem` to a binary that sits *beside* `ephem/` — in the checkout,
 or in a differential worktree with its own copy. Resolving against the
 executable is not merely harmless there, it is the more correct of the
 two readings. `tools/package-macos.sh` was the only place that moved the
@@ -74,7 +74,7 @@ and exits 0.** Measured 2026-09-01:
 
 ```sh
 ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i nrvate.as   # PASS: 83 passed
-ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -Yi1 ephem     # runs, 19 of 39 bodies
+ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -Yi1 ephem     # 39 of 39 since 2026-09-03
 ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i astrolog.as # 0 bytes, exit 0
 ```
 
@@ -85,11 +85,12 @@ build shows the same path plainly, exiting 2 with the version banner.
 that checks status rather than reading the summary line. If you want the
 bundled ephemeris rather than `/swe`, the invocation is `-Yi1 ephem`.
 
-Note what that costs you: `-Yi1 ephem` resolves 19 of the 39 listed
-bodies instead of 39, and the Object Selections group *fails* two
+It used to cost you something: until 2026-09-03 `-Yi1 ephem` resolved 19
+of the 39 listed bodies, and the Object Selections group *failed* two
 assertions (`qttest.cpp` types raw ephemeris number 52872, Okyrhoe, which
-is in `/swe` but not in `ephem/`). So it is a usable ephemeris for CI, not
-a substitute for the real one.
+was in `/swe` but not in `ephem/`). The bundled set covers all 39 now, so
+`-Yi1 ephem` runs the suite at full strength; `/swe` is still the larger
+set by orders of magnitude, and `-i nrvate.as` is what reaches it.
 
 ## The fast way: a scratch probe inside qttest
 
@@ -169,30 +170,35 @@ way to run on the `ephem/` directory this repository ships — one that does
 not quietly test less.
 
 ```sh
-ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem   # 3541/0, 47 s
-./run-qt-tests.sh                                        # 3561/0, 55 s
+ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem   # the same count
+./run-qt-tests.sh                                        # as this, since
+                                                         # 2026-09-03
 ```
 
 **The mode is declared, not detected.** It says which ephemeris the run is
 supposed to have, and the suite checks reality against that claim:
-`minimal` asserts exactly 19 of the 39 `rgObjSel[]` bodies resolve, `full`
-asserts exactly 39. Not "at least" — 11 of them resolve with no ephemeris
-files at all, from the Moshier formulas, so a floor tests the guess. Both
-directions fail: `full` on `ephem/` is red, and so is `minimal` on `/swe`.
+`minimal` asserted exactly 19 of the 39 `rgObjSel[]` bodies resolve and
+`full` exactly 39; since 2026-09-03 the bundled set resolves all 39, so
+both modes assert 39 and `minimal` stays as a declaration that fails
+loudly if `ephem/` is ever thinned again. Not "at least" — 11 of them
+resolve with no ephemeris files at all, from the Moshier formulas, so a
+floor tests the guess. A wrong declaration fails: `minimal` against a
+thinned set would be red, and so would `full` against nothing.
 A misspelled value fails before any test runs. **The default is `full`**,
 so a flag forgotten in CI is loud rather than quiet.
 
 Why the count is the whole assertion: a body that does not resolve skips
 its own `Check` silently, so that number *is* how many assertions the
-group ran — 83 on `/swe`, 63 on `ephem/`, 53 with the path pointed at
-nothing, with no failure to show for the difference.
+group ran — measured 2026-09-02 as 83 on `/swe`, 63 on `ephem/` and 53
+with the path pointed at nothing, with no failure to show for the
+difference; `ephem/` has matched `/swe` since 2026-09-03.
 
 **Use `-Yi1 ephem`, never `-i astrolog.as`** — see above; the `-i` form
 runs nothing and exits 0.
 
 When a filter is active — or `ASTROLOG_QT_TIME=1` on a full run — each
 group prints its wall time. Measured once: `menu-actions` is ~60% of the
-whole suite by itself (it fires all 338 menu items), with `objsel-dialog`
+whole suite by itself (it fires all 341 menu items), with `objsel-dialog`
 and `chart-render` most of the rest; nearly every other group is
 single-digit milliseconds. So "the suite is slow" is really "four groups
 are slow", and a debugging loop that avoids them is interactive.
@@ -293,7 +299,8 @@ there rather than concluding the release build is fine.
 
 ## The console build, for the calculation core
 
-`make` builds the X11 binary, the quickest way to exercise the shared
+`make astrolog` builds the X11 binary (plain `make` builds it and the Qt
+port together since 2026-09-04), the quickest way to exercise the shared
 calculation and text rendering with no GUI in the way:
 
 ```sh
@@ -508,6 +515,10 @@ make -f Makefile.qt.test NAME=astrolog-qt-dbg OBJDIR=obj-qt-dbg \
   -Wno-comment $(pkg-config --cflags Qt5Widgets Qt5Network Qt5Test)" -j4
 ```
 
+That is a Qt5 recipe: where pkg-config sees Qt6, `Makefile.qt.test` builds
+against Qt6 and its own `QT_CFLAGS`, so substitute the Qt6 module names or
+let the makefile's flags stand and add only `-g`.
+
 then loop it under `gdb -batch -ex 'run -i nrvate.as' -ex bt` until it
 aborts. **So: ASan for reads and heap, an optimized `-g` build for
 fortify aborts.** Reach for the second whenever the message is
@@ -536,8 +547,9 @@ with `-fsanitize=address -DQTTEST` driven through
 surface, including the error and edge shapes, and on its first ever run
 it found two real out-of-bounds bugs the suite had never reached (work
 log item 133) -- one of which segfaults the release build. Two traps:
-the plain `Makefile` has no object directory, so `make clean` before
-and after (see Build traps), and the matrix pipes each run's stderr
+the plain `Makefile` has no object directory, so `make clean-console`
+before and after (see Build traps; plain `make clean` deletes every
+build in the tree, the test binary included), and the matrix pipes each run's stderr
 through `head -2`, so a report arrives decapitated -- it tells you the
 invocation, and you re-run that one directly to get the trace.
 
@@ -555,7 +567,7 @@ a check is not a check: these two found seven bugs and then existed
 only as a paragraph, which is the same failure the divergence list had.
 
 The suite is a good host because it already renders 26 chart types and
-fires all 338 menu items, so one run exercises far more than a person
+fires all 341 menu items, so one run exercises far more than a person
 clicking could. `ProbeQt()` works under ASan too, which is how the
 second instance of the esoteric-influence bug was confirmed rather than
 merely suspected from reading. Between them, ASan has found four real
@@ -573,7 +585,7 @@ intercepted libc call (`memcpy`/`strlen`/`sprintf` and kin) running
 off a global — so look at the `CopyRgb`/`ClearB` boundaries and the
 `sprintf` sites, not at a subscript. The suite is a plausible host for
 an intermittent: `TestAllMenuActionsQt()` leaves every setting where
-338 menu items put it, and several charts are cast for *now*. Don't
+341 menu items put it, and several charts are cast for *now*. Don't
 burn a session looping the suite for it — it will come around, and
 next time keep the whole log.
 
@@ -651,8 +663,9 @@ Two things that cost time here:
   `make NAME=/tmp/x CPPFLAGS="-fsanitize=address ..."` leaves sanitized
   `.o` files in the repo root and the next ordinary `make` fails to
   *link*, naming functions in `general.o` rather than anything you
-  touched (work log item 129). `make clean` before such a build and
-  after it. The same recipe is how to get a **console** ASan binary,
+  touched (work log item 129). `make clean-console` before such a build
+  and after it -- plain `make clean` deletes every build in the tree
+  since 2026-09-01, the test binary included. The same recipe is how to get a **console** ASan binary,
   which the Qt-only `Makefile.qt.asan` does not give you — add
   `-DQTTEST` to that `CPPFLAGS` and the checked tables' range asserts
   come with it, which is what caught item 130. Build it at a **short
@@ -750,6 +763,9 @@ python3 tools/defaults_audit.py
 python3 tools/fixture_coverage_audit.py
 python3 tools/line_endings_audit.py
 python3 tools/registry_audit.py
+python3 tools/qt_srcs_audit.py
+python3 tools/vcxproj_audit.py
+python3 tools/inert_option_audit.py     # needs ./astrolog
 python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h
 python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h
 python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h
@@ -779,17 +795,18 @@ tools/warning_audit.py --update        # after a fix, to move the ledger
 **The audit owns its own compiler flags, and that is the point.** It does
 not read `CPPFLAGS` out of the makefiles; it keeps a copy, so a warning
 class can be turned on for the audit without disturbing an ordinary
-build. `-Wno-write-strings` is the live example: all six makefiles pass
+build. `-Wno-write-strings` is the live example: all seven makefiles pass
 it, the audit does not, and behind that suppression sat 1,345
 string-literal-to-`char *` conversions (work log item 174). What is left
-after that fix — six sites here and eleven in the vendored Swiss
-Ephemeris — is in `tools/warnings.txt`, so a new one appears as `NEW`
-rather than joining a crowd nobody can see.
+after that fix was six sites here and eleven in the vendored Swiss
+Ephemeris. Those are gone too: `tools/warnings.txt` has been EMPTY since
+2026-09-04, with the vendored Swiss sources exempted in `Makefile.srcs`
+(`-Wno-write-strings -Wno-sign-compare`) instead, so any warning at all
+is a failure to fix, not a line to record.
 
 **The Qt6 build has its own ledger**, `tools/warnings-qt6.txt`, and it
-holds only what Qt6 warns about and Qt5 does not — the shared core
-produces the same 73 sites under either, and they are already in the main
-ledger. It is empty, which is the goal state and not an oversight. It
+holds only what Qt6 warns about and Qt5 does not — the shared core warns
+the same under either, and the main ledger covers it. It is empty, which is the goal state and not an oversight. It
 exists because the Qt6 build spent its whole life outside the audit: two
 deprecated `QMouseEvent::globalPos()` calls were named on every compile
 and nobody read them. Machines without a Qt6 skip that leg rather than
@@ -799,7 +816,7 @@ It compiles console, Qt, Qt-test, WCLI and Windows clean with `-Wall`,
 normalizes each warning to (build, file, function, flag, message with the
 numbers masked) and diffs that against `tools/warnings.txt` — 633
 warnings in 114 sites as of 2026-09-02, up from 381 because the audit
-stopped suppressing `-Wwrite-strings`. **All five builds
+stopped suppressing `-Wwrite-strings`, and **0 since 2026-09-04**. **All five builds
 themselves compile silently**: an ordinary `make` does not use `-Wall`, so
 none of the ledger reaches the terminal. That number went 49 → 0 over work
 log items 151-152, and it is the one a reader of the build output cares
@@ -809,10 +826,11 @@ and the ledger cannot drift into overstating what is left.
 
 Three things about it are worth knowing before you use it.
 
-**It is not pre-commit.** Five clean builds is minutes, like
-`tools/asan-sweep.sh` and `tools/win-tests.sh`. Use `--file` while
-working — it compiles one source file under all five flag sets in
-seconds — and the full run before a commit that touched a lot of code.
+**It is nearly pre-commit.** The full run is about 70 seconds, and it
+runs in the push lane on every push, so a warning that slips past you is
+found within minutes. Use `--file` while working — it compiles one source
+file under all five flag sets in seconds — and the full run before a
+commit that touched a lot of code.
 
 **Subset runs are not a gate.** `--build console` prints its report and
 refuses to compare, because the first column is the *set* of builds that

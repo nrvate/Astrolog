@@ -63,7 +63,7 @@ JOBS = '-j4'
 # that turning a warning class on here does not disturb an ordinary build.
 # -Wno-write-strings is deliberately NOT here, and that is the point of
 # the audit owning its own flags. In C++ the warning is on by default;
-# all six makefiles switch it off, and behind that suppression sat 1,345
+# all seven makefiles switch it off, and behind that suppression sat 1,345
 # string-literal-to-char* conversions. 1,340 of them were five struct
 # members and a function signature, fixed 2026-09-02. Leaving the warning
 # ON here baselines what is left -- the genuinely mixed-use pointers and

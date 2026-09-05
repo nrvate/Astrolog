@@ -17,7 +17,7 @@
 # library, and if applicable, the main X library.
 #
 NAME = astrolog
-# The source list lives in one file for all five builds; see the header
+# The source list lives in one file for every build; see the header
 # there before adding a source.
 include Makefile.srcs
 OBJS = $(patsubst %.cpp,%.o,$(SRC_CORE) $(SRC_GRAPHICS) $(SRC_SWISS))
@@ -57,13 +57,16 @@ $(NAME): $(OBJS)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
 
-# "make clean" cleans what this tree can build, which is four binaries and
-# four object directories, not just upstream's. That is the conventional
-# expectation and it was surprising before.
+# "make clean" cleans everything this tree can build -- eight binaries
+# and their object directories, the sanitizer and Qt6 builds included --
+# not just upstream's. That is the conventional expectation and it was
+# surprising before. (The UBSan build was missing from the list until
+# 2026-09-05, so "removes every build" was one short of true.)
 clean: clean-console
 	$(MAKE) -f Makefile.qt clean
 	$(MAKE) -f Makefile.qt.test clean
 	$(MAKE) -f Makefile.qt.asan clean
+	$(MAKE) -f Makefile.qt.ubsan clean
 	$(MAKE) -f Makefile.win clean
 	$(MAKE) -f Makefile.wcli clean
 	$(MAKE) -f Makefile.qt OBJDIR=obj-qt6 NAME=astrolog-qt6 clean
@@ -238,7 +241,7 @@ uninstall:
 	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
-.PHONY: default clean clean-console qt qt-test qt-asan qt6 qt6-test win wcli all \
+.PHONY: default clean clean-console qt qt-test qt-asan qt-ubsan qt6 qt6-test win wcli all \
 	install uninstall
 
 # Compiler-generated header dependencies; see Makefile.qt for the

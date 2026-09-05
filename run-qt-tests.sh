@@ -25,7 +25,10 @@ QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
 # rather than fail. That was 20 assertions and 20 of 39 bodies quietly not
 # tested, in the exact command CLAUDE.md gives as the pre-commit check,
 # while CLAUDE.md's own hard rule says always to pass this file. Any
-# argument given here still overrides it.
+# argument given here still overrides it. (Since 2026-09-03 the bundled
+# ephem/ resolves the same 39 bodies, so "-Yi1 ephem" runs the suite at
+# the same strength; the default stays because it is the maintainer's
+# configuration and what the hard rule says to test with.)
 [ $# -gt 0 ] || set -- -i nrvate.as
 
 $QTENV "$BIN" "$@"

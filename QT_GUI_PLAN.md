@@ -44,7 +44,7 @@ field-by-field against their `Dlg*` in wdialog.cpp and their resource
 block in astrolog.rc — the item-8 sweep covered the settings dialogs,
 item 14 covered the four outside it. The Qt build now also animates,
 prints, pastes, runs all 96 macros, and renders the bundled astrology
-fonts. Items 1-15 below are the complete record, each one saying what was
+fonts. The work log below is the complete record, each item saying what was
 found and what was deliberately left.
 
 **So there is no queue to pick up from.** If you are here to do work,
@@ -97,11 +97,12 @@ Roughly in the order I'd take them.
      `[`, and so on). Three commands needed a hand-mapped label where
      this port's wording differs: Exit/Quit, Save Chart Info, Open
      Documentation.
-   - **23 accelerators are deliberately unbound**, and all of them belong
-     to command groups already listed as out of scope: the Setup submenu,
-     the Window Settings submenu, Print Setup, and the wallpaper modes —
-     plus the four text-scrolling ones, which the text window's own
-     scrollbar handles.
+   - **A fixed set of accelerators is deliberately unbound** (the suite's
+     `hotkeys` group asserts the exact set), and all of them belong to
+     command groups already listed as out of scope: the Setup submenu,
+     Print Setup, and the wallpaper modes — plus the four text-scrolling
+     ones, which the text window's own scrollbar handles. (The Window
+     Settings submenu was in this list until item 18 bound its three.)
    - **Shortcuts had to be added to the text chart window too.** A Qt
      shortcut fires only for the active window, and text charts live in
      their own window, so without `AddHotkeysToWindowQt()` every hotkey
@@ -240,7 +241,8 @@ Roughly in the order I'd take them.
    ignores it. Saved settings files are portable to every build.
    **"All fixed" was wrong, and stayed wrong for five days.** The whole
    `-b` backend sub-family was still dropped -- `nSwissEph`,
-   `fPlacalcPla`, `fMatrixPla`, `fPlacalcAst`, `fMatrixStar`, none of
+   `fPlacalcPla`, `fMatrixPla`, `fPlacalcAst`, `fMatrixStar` *(the two
+   Placalc ones went with the backend on 2026-09-04)*, none of
    them written -- so choosing Moshier or JPL and saving gave Swiss back
    in silence. Fixed 2026-08-31 (work log item 140), found by the numeric
    oracle rather than by looking. Two lessons worth more than the fix:
@@ -324,13 +326,12 @@ Roughly in the order I'd take them.
    on purpose, in Astrolog's own `HousePullenSinusoidalDelta()`, and it
    is the one system leg 4b still expects to.
 
-   Two measured findings are parked there rather than fixed, both
-   maintainer calls because they change house math in both builds:
-   **Topocentric houses run backwards beyond the polar circle** (at 78N
-   the twelve cusps wrap the circle three times, so house assignment is
-   meaningless) while Placidus and Koch are guarded and fall back to
-   Porphyry; and **Pullen (S.Delta) produces zero-width houses** at 70N
-   and above. Longyearbyen at 78.2N is in the shipped atlas.
+   One measured finding is parked there rather than fixed, a maintainer
+   call because it changes house math in both builds: **Pullen (S.Delta)
+   produces zero-width houses** at 70N and above. (Topocentric used to be
+   listed beside it — twelve cusps wrapping the circle three times at
+   78N — and falls back through `FEnsureHousePartition()` now, as this
+   item says above.) Longyearbyen at 78.2N is in the shipped atlas.
 
 12. ~~**Finish T5: the formatting calls that write into a caller's
    buffer.**~~ — **done 2026-08-31** (work log items 143-145). Thirteen
@@ -348,7 +349,8 @@ Roughly in the order I'd take them.
    buffer is exactly the case where nobody owns the bound.
    `tools/chart-matrix.sh` and `tools/switch-matrix.sh` make each one
    provable. The 11 pointer destinations and the 78 using pointer
-   arithmetic or struct members are the same job, lower risk.
+   arithmetic or struct members are the same job, lower risk. *(Done —
+   item 174 read all 90 and closed them.)*
    `wdriver.cpp`/`wdialog.cpp` were left out of the sweep entirely --
    upstream-shaped, and neither matrix can exercise them.
 
@@ -358,7 +360,9 @@ Roughly in the order I'd take them.
     `tools/warnings.txt` and fails on any addition. **857 warnings in 209
     sites down to 318 in 101 at the campaign's close, and every class
     still in it carries a recorded verdict** — so the next warning to appear here will be a new
-    one. Separately, and this is the number a person actually sees:
+    one. *(The ledger is empty since 2026-09-04 and the audit covers all
+    five builds plus Qt6; a new warning is now a thing to fix, not to
+    record.)* Separately, and this is the number a person actually sees:
     **all four builds now compile silently** (items 151-152). A console
     build was 49 warnings in 722 lines of output and is 0 in 32. The
     audit uses `-Wall` and an ordinary build does not, so the two counts
@@ -417,16 +421,18 @@ Roughly in the order I'd take them.
     `make qt6-test`, so the Qt6 build is a target rather than an artifact
     somebody remembers making.
 
-    **Still open, and it has its own document: CI.** `QT_CI_PLAN.md`
-    covers putting these builds, the suite, the audits and the release
-    artifacts under GitHub Actions. Nothing here runs on push, which is
-    how `Makefile.win` went 62 commits without compiling.
+    **CI is built, and it has its own document.** `QT_CI_PLAN.md` is the
+    record of it: `ci.yml` runs the builds, the suite, the audits and the
+    differential on every push, and `slow-lane.yml` runs from
+    `release.yml`. Before it existed, `Makefile.win` went 62 commits
+    without compiling.
 
 **If upstream releases a new Astrolog**, this fork's changes to shared
 code come in two kinds and they merge differently.
 
 *Porting* changes are small and confined to `#ifdef QT` branches;
-`grep -ln "ifdef QT" *.cpp *.h` finds all of them.
+`grep -lnE "ifdef QT|defined\(QT\)" *.cpp *.h` finds all of them (nine
+files use the `defined(QT)` form).
 
 *Features added to both builds* are not guarded at all, on purpose —
 `calc.cpp` has zero `ifdef QT` in it, and the Object Selections dialog
@@ -611,9 +617,10 @@ diff itself to be noisy.
    tracking arrays (`s_rgpaChartMode`/`s_rgnChartMode`/`s_cChartMode`),
    only ever look up by mode value.
 8. **Compile-time feature macros are effectively always on.** `SWISS`,
-   `PLACALC`, `MATRIX`, `JPLWEB`, `CONSTEL`, `ARABIC`, `BIORHYTHM`, `PS`,
+   `MATRIX`, `JPLWEB`, `CONSTEL`, `ARABIC`, `BIORHYTHM`, `PS`,
    `META`, `SVG`, `WIRE` are all `#define`d by default in astrolog.h and
-   nothing in `Makefile.qt` undefines any of them — so don't assume a
+   nothing in `Makefile.qt` undefines any of them (`PLACALC` went with
+   its backend on 2026-09-04) — so don't assume a
    Windows feature gated behind one of these is unavailable without
    actually checking; it's compiled into the Qt build too.
 9. **Menu-checkmark staleness: follow Windows, case by case.** *(Revised
@@ -717,6 +724,11 @@ Aspects, and the Window Settings `[P]` submenu (item 18 — this section
 used to say the whole submenu was skipped as Win32-only, which is no
 longer true).
 
+**Interface Theme** (System / Light / Dark, under Window Settings) is this
+port's own since 2026-09-03, stored with `QSettings` rather than in the
+`.as` file; Windows has no counterpart, the way the Setting section flags
+Object Selections.
+
 **Buffer Redraws** is the one item still absent, deliberately: it toggles
 whether Win32 draws through an off-screen bitmap, and Qt composites every
 widget off-screen regardless, so there is nothing for it to switch. An
@@ -751,12 +763,12 @@ Code review of those two beforehand also turned up and fixed a real NULL
 deref crash — see the commit "Fix NULL deref saving a chart list with an
 unnamed chart".
 
-**Note for testing anything in this port:** the Qt build has no headless
-mode — it always enters the Qt event loop, so command line style checks
-(`./astrolog-qt -i foo.as -o bar.as`) just hang rather than running and
-exiting. Verification has to be either through the GUI or by reasoning
-about shared code in io.cpp/general.cpp, which the console build does
-exercise.
+**Note for testing anything in this port:** the release binary always
+enters the Qt event loop, so command line style checks
+(`./astrolog-qt -i foo.as -o bar.as`) sit in a window rather than running
+and exiting. Ask questions through the test binary's probe and capture
+modes instead (`ASTROLOG_QT_PROBE`, `QTTEXTDIR`, `QTGRAPHDIR`, `QTSHOTDIR`
+— QT_TESTING.md), or through the console build for shared code.
 
 ### Setting — COMPLETE, plus one item Windows didn't have
 All items done: Sidereal Zodiac, Heliocentric, House System (22-item
@@ -801,7 +813,7 @@ Notes on the Graphics Settings port:
 - Skipped as Win32-only (`WI` struct): "Don't Automatically Redraw
   Screen" (`wi.fNoUpdate`). The animation update delay was skipped for
   the same reason and is now **in** — item 12 gave the Qt build a real
-  animation loop, so `s_nTimerDelay` stands in for `wi.nTimerDelay`.
+  animation loop, so `qi.nTimerDelay` stands in for `wi.nTimerDelay`.
 - The six font selection combos (`gs.nFontTxt`/`Sig`/`Hou`/`Obj`/`Asp`/
   `Nak`) were once skipped as unportable Windows GDI face names. That was
   only half true — the fonts ship *with Astrolog*, in `font/`. Item 15
@@ -811,9 +823,10 @@ Notes on the Graphics Settings port:
   aspect glyphs on lines — the Chart Effects toggle) and is unrelated to
   cities; the `-XL` switch that owns `gs.nLabelCity` toggles
   `gs.fLabelCity` (xscreen.cpp). Reproducing it faithfully would make the
-  combo silently toggle aspect glyphs, so this port writes
-  `gs.fLabelCity`. Upstream typo, not a porting choice — worth reporting
-  upstream if anyone ever files bugs against CruiserOne/Astrolog.
+  combo silently toggle aspect glyphs, so this port once
+  wrote `gs.fLabelCity`. That was wrong: Atlas City Coloring writes
+  `gs.fLabelAsp`, matching Windows (`qtdialog.cpp`) — see Known
+  divergences, item 132.
 - The wheel-corner/fill/city label tables live in `wdialog.cpp` (not
   compiled into the QT build), so qtdialog.cpp has its own copies,
   including Windows' non-array display order for corner types. Keep in
@@ -1267,7 +1280,7 @@ are the more useful half to read before starting something new.
     - **About was missing its entire credits and license block.** It
       showed a version line and a release date; Windows' `dlgAbout`
       carries authorship, both websites, the Swiss Ephemeris and Placalc
-      attributions, the Neely/Erlewine formula credit, GeoNames, the TZ
+      attributions *(the Placalc line went with the backend, 2026-09-04)*, the Neely/Erlewine formula credit, GeoNames, the TZ
       database, the PostScript credit, and the GPL notice — which says in
       terms that these notices "must not be changed or removed by any
       user or editor of the program". Restored verbatim, with URLs
@@ -1994,7 +2007,8 @@ are the more useful half to read before starting something new.
     - **The ephemeris list offered what the user had switched off.**
       Windows builds that dropdown in a fixed order and omits entries the
       restrictions forbid: no JPL Web under `-0n`, no Placalc or Matrix
-      under `-0p`. The Qt build ran the `cm*` constants in numeric order
+      under `-0p` *(the switch is `-0b`, and since 2026-09-04 Placalc is
+      not in the list on either build)*. The Qt build ran the `cm*` constants in numeric order
       and added all seven unconditionally -- so with `nrvate.as`, which
       sets **both** restrictions, the list offered "JPL Horizons Web
       Query" to a user who had disabled web queries. It also listed JPL
@@ -3268,7 +3282,8 @@ are the more useful half to read before starting something new.
 89. **C4: the backend selector's state space is written down.** The
     five fields that jointly choose the ephemeris backend now carry a
     state table at their declarations (astrolog.h): the six reachable
-    backends, the inert corners (fPlacalcPla wins over nSwissEph),
+    backends, the inert corners (fPlacalcPla wins over nSwissEph) *(both
+    Placalc fields removed 2026-09-04; the table is smaller now)*,
     and the trap that every -b backend suffix falls through to also
     toggle fEphemFiles -- benign in practice because the settings
     writer emits forced prefixes and the dialogs assign fields
@@ -4788,7 +4803,9 @@ are the more useful half to read before starting something new.
     `us.fNoRead` already do in the same file -- `ErrorArgv("bm")` and
     `tcError`. Narrowly: only a request to turn the backend *on* is
     refused, because the settings writer now emits `_bp`/`_bm` into
-    every saved file and those have to stay loadable under `=0b`.
+    every saved file and those have to stay loadable under `=0b`. *(Placalc
+    removed 2026-09-04: `-bp` is a retired spelling, `fNoPlacalc` is
+    `fNoOldCalc`, and only `_bm` is written.)*
     `tools/settings-round-trip.sh` leg 2 caught that within a minute of
     the first attempt, which is what that leg is for; `bp`/`bm`/`bJ`
     join its exempt list for the same reason `0b`/`0n` are already on
@@ -5532,7 +5549,8 @@ are the more useful half to read before starting something new.
     readers, and the exoplanet list. Two are left on purpose: the
     exoplanet line-counting loop, where `i` is load bearing (`cexod =
     i-2`) and moving where it stops would change how many planets the
-    list holds, and placalc.cpp, which is third-party.
+    list holds, and placalc.cpp, which is third-party *(removed
+    2026-09-04; the ledger is empty)*.
 
     **`-Wsign-compare` was a type that had been wrong all along.**
     `GetXY()` is declared `KI` but returns `_GetXY()` -- a packed 24 bit
@@ -5837,7 +5855,8 @@ are the more useful half to read before starting something new.
 
     The likely explanation is that there are two house engines and the
     note does not say which it measured: `SwissHouse()` runs when
-    `us.fEphemFiles && !us.fPlacalcPla` and lets the library substitute
+    `us.fEphemFiles && !us.fPlacalcPla` *(`FCmSwissAny()` since the Placalc
+    removal)* and lets the library substitute
     at extreme latitude, while Astrolog's own `ComputeHouses()`
     (calc.cpp:502) runs otherwise and guards **only** Placidus and Koch
     (calc.cpp:508). So the finding is probably real on the Matrix path
@@ -7655,6 +7674,35 @@ are the more useful half to read before starting something new.
     check exists to catch (`^make.*\*\*\*`, not a word). The leg names
     `astrolog` now, and the whole audit run locally afterwards is clean.
 
+182. **Every document read against the tree, 2026-09-05.** "Review and
+    update all documentation." Five reviewers, one per document group,
+    each given the same ground-truth brief and told to verify before
+    citing, with a mechanical cross-check on top: every `tools/` path,
+    workflow file, make target and source file a document names must
+    exist, and every count CLAUDE.md states was checked against the
+    suite's own output. 102 hunks across eleven files. The stale
+    classes, roughly in order of how often they appeared: the Placalc
+    backend described as present (a dozen sites in five documents); the
+    bundled `ephem/` described as resolving 19 of 39 (QT_TESTING.md's
+    whole minimal/full section, README.md, `run-qt-tests.sh`'s own
+    comment); the warning ledger described as populated (four
+    documents); "six makefiles" and "five builds" after
+    `Makefile.qt.ubsan` arrived; the Win32 build described as what a
+    Windows user runs; and CLAUDE.md's own numbers -- sixteen CI jobs
+    (thirteen), twenty release minutes (sixteen, measured), `macos-14`
+    (`macos-latest`, macOS 26 at the last run), an oracle of 307
+    assertions (575). Two things came from the checks and not from any
+    reader: `make clean` had never cleaned the UBSan build, and
+    QT_MENU_MAPPING.md counted 22 house systems where the resource has
+    23. Work-log entries were annotated, never rewritten.
+
+    One trap for next time. The editors applying the lists were cut off
+    by a rate limit part-way through, and one of them had overwritten
+    the shared scratch helper first, so two edits reported "ok" that had
+    not happened. The diff review caught both, which is the step that
+    cannot be skipped -- and a helper in a shared scratch directory
+    wants a name nobody else will pick.
+
 
 ## Features this fork adds to both builds
 
@@ -8125,7 +8173,7 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
 - **Run the test suite before every commit.** `make qt-test` then
   `./run-qt-tests.sh` — headless, no display needed, exits nonzero on
   failure. Assertions covering dialog titles, the 42 context menus,
-  264 shortcuts, 26 chart types rendering non-blank, all 338 menu items
+  264 shortcuts, 26 chart types rendering non-blank, all 341 menu items
   firing, 258/258 menu parity against `astrolog.rc`, and bad input. The
   suite runs inside the real program from `InteractQt()` after the window
   and menus are up, so it shares live `us`/`gs`/`gi` state — a test that
@@ -8228,8 +8276,9 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   preserve that per file was broken four times before being caught, and
   twice more after (items 145, 158). Nothing in the source needed CRLF:
   converting left all 64 object files byte-identical across both
-  toolchains. Binaries, Windows tooling, `font/` and the `.as`/`.csv`
-  data files are exempt, each for a reason `.gitattributes` states.
+  toolchains. Binaries, Windows tooling and `font/` are exempt, each for
+  a reason `.gitattributes` states; the `.as`/`.csv` data files were held
+  back at first and are LF since 2026-09-02 (item 173).
   `tools/line_endings_audit.py` checks the rest. **Never run a
   CR-stripping sweep over the tree** — one did, with a three-extension
   exclusion list, and corrupted 28 binaries.
