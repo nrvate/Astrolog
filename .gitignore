@@ -18,6 +18,18 @@
 /astrolog-ubsan
 /astrolog-qt-ubsan
 /obj-qt-ubsan/
+
+# The coverage build, same hazard one step further: tools/coverage-report.sh
+# builds ./astrolog-cov with --coverage and removes it at the end, so it
+# survives only an interrupted run -- which is exactly when someone types
+# "git add -A". The .gcno files it emits beside every object survive the
+# same way, and .gcda are written by running it.
+/astrolog-cov
+*.gcda
+*.gcno
+# tools/asan-sweep.sh builds into /tmp; this is the name a by-hand
+# "make NAME=astrolog-asan" leaves behind.
+/astrolog-asan
 /obj-qt-test/
 /obj-qt-asan/
 obj-win/
