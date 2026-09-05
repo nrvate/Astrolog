@@ -169,8 +169,10 @@ ASTROLOG_QT_THEME=light ./astrolog-qt
 ## Tests
 
 ```
-make qt-test
-./run-qt-tests.sh
+make check                 # what to run before a commit: generated
+                           # tables, ten audits, both builds, the suite
+                           # and the assertion scripts, about a minute
+make qt-test && ./run-qt-tests.sh    # just the suite
 ```
 
 A headless suite of over 3,500 assertions plus startup checks — it prints

@@ -764,6 +764,23 @@ supported distribution is the Linux answer, proven by the check above.
 The push lane and the slow lane are gone with them; their scripts are
 not.
 
+**Cutting a release**, in order, because nothing runs on a push to
+catch a mistake earlier:
+
+```sh
+make check                          # everything local, ~1 minute
+vi astrolog.h                       # bump szVersionFork
+tools/ci-assert-version.sh v8.00-qt.N   # the tag you are about to make
+git commit && git push origin qt
+gh workflow run release.yml -f tag=v8.00-qt.N -f publish=false
+                                    # optional dry run: builds and tests
+                                    # all three platforms, publishes
+                                    # nothing
+git tag -a v8.00-qt.N -m "Astrolog 8.00-qt.N" && git push origin v8.00-qt.N
+tools/ci-assert-green.sh <sha>      # wait for the release run
+tools/ci-verify-published-release.sh v8.00-qt.N   # as a user downloads it
+```
+
 **Two things still fail a release, and each has bitten already:**
 
 - **A version that disagrees with its tag.** `astrolog.h` owns
