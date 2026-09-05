@@ -14,12 +14,25 @@
 # over HTTPS the way apt and dnf will, and require the version to be in
 # it, for every distribution.
 #
-# NOT a CI gate, deliberately. Pages propagation is not instant and a
-# check that is retried until it passes is not a check. Run it after a
-# release, by hand, once the deploy has settled.
+# ONE attempt, after the caller has waited. Pages propagation is not
+# instant, and a check retried until it passes is not a check -- so
+# repo.yml sleeps a fixed grace period after the deploy and then runs
+# this exactly once (2026-09-05; before that nothing confirmed the
+# deployed site at all and this was a by-hand step nobody was required
+# to take). By hand it is the same command.
 set -eu
 
-ver=${1:-$(tools/ci-assert-version.sh 2>/dev/null || echo "")}
+# The version to look for. Given one, that one. Otherwise the newest
+# PUBLISHED release, asked of gh -- because the site serves releases,
+# while astrolog.h carries whatever the checkout is, which after a
+# release is the same commit and after any later push is not. Without
+# gh, astrolog.h is the fallback and by-hand use is unchanged.
+ver=${1:-}
+if [ -z "$ver" ] && command -v gh >/dev/null 2>&1; then
+  ver=$(gh release list --repo "${GITHUB_REPOSITORY:-nrvate/Astrolog}" \
+          --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null | sed 's/^v//')
+fi
+ver=${ver:-$(tools/ci-assert-version.sh 2>/dev/null || echo "")}
 base=${2:-https://nrvate.github.io/Astrolog}
 [ -n "$ver" ] || { echo "usage: ci-verify-live-repo.sh <version> [base-url]"; exit 2; }
 command -v curl >/dev/null || { echo "curl not found"; exit 2; }

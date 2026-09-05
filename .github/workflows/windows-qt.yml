@@ -42,6 +42,20 @@ name: Windows (Qt)
 
 on:
   workflow_call:
+    inputs:
+      package:
+        description: >-
+          Build the zip and the NSIS installer, and drive that installer
+          under Wine. Always true for a release. On a push it is true
+          only when the commit touches the packaging inputs, because it
+          is release-grade work -- about 94 s, behind a 183 s build, on
+          the fast lane's critical path -- proving a recipe whose inputs
+          change a few times a month. The BUILD and the SUITE run either
+          way: those are what a push is for. See ci.yml's "Windows
+          packaging inputs" job.
+        required: false
+        default: true
+        type: boolean
   workflow_dispatch:
 
 permissions:
@@ -226,6 +240,9 @@ jobs:
 
   package:
     name: Windows zip and installer
+    # Skipped, not failed, when a push does not touch the packaging: the
+    # release lane always runs it, and it gates publication there.
+    if: ${{ inputs.package || github.event_name == 'workflow_dispatch' }}
     needs: build
     runs-on: ubuntu-22.04
     timeout-minutes: 30

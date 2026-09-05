@@ -119,6 +119,12 @@ jobs:
     name: Windows
     needs: version
     uses: ./.github/workflows/windows-qt.yml
+    # Explicit, though it is the default: a release always builds the zip
+    # and the installer and drives that installer under Wine. A push does
+    # it only when it touches the packaging (ci.yml), so this is the run
+    # where that path is always proven -- before anything is published.
+    with:
+      package: true
 
   # The .deb rows, built inside ubuntu:<version> containers by
   # tools/build-in-container.sh and proven in a fresh one -- the same
@@ -126,55 +132,29 @@ jobs:
   # carries no ~date.sha suffix. Two jobs rather than one matrix over
   # both families only because the package name, the family and the
   # artifact name differ per row; the steps are the same script.
+  # Every row of both families, through the same reusable workflow the
+  # push lane calls with one row each; see its header. "release: true"
+  # puts PKG_RELEASE=1 in the version and uploads each artifact zipped,
+  # so its name survives for Publish's "astrolog-*" pattern below.
   deb:
-    name: .deb on ${{ matrix.image }}
+    name: Linux
     needs: matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.deb) }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+    uses: ./.github/workflows/linux-package.yml
+    with:
+      kind: deb
+      matrix: ${{ needs.matrix.outputs.deb }}
+      release: true
 
-      - name: Build and package, inside ${{ matrix.container }}
-        run: PKG_RELEASE=1 tools/build-in-container.sh ${{ matrix.container }} ${{ matrix.qt }} deb out/package
-
-      - name: Prove it installs and runs
-        run: tools/ci-verify-linux-package.sh out/package/astrolog_*.deb ${{ matrix.container }}
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: astrolog-deb-${{ matrix.image }}
-          path: out/package/*.deb
 
   rpm:
-    name: .rpm on ${{ matrix.release }}
+    name: Linux
     needs: matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.rpm) }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+    uses: ./.github/workflows/linux-package.yml
+    with:
+      kind: rpm
+      matrix: ${{ needs.matrix.outputs.rpm }}
+      release: true
 
-      # The same shape as the .deb rows, and the same script. Until
-      # 2026-09-04 (later) this job ran INSIDE the container and had to
-      # verify with "local", where the build dependencies are already
-      # present and a wrong Requires line is invisible. Docker from the
-      # host keeps the strong check: a fresh image, Qt resolved from the
-      # distribution's own repositories, Chiron asserted.
-      - name: Build and package, inside ${{ matrix.image }}
-        run: PKG_RELEASE=1 tools/build-in-container.sh ${{ matrix.image }} ${{ matrix.qt }} rpm out/package
-
-      - name: Prove it installs and runs
-        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm ${{ matrix.image }}
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: astrolog-rpm-${{ matrix.release }}
-          path: out/package/*.rpm
 
 
   publish:

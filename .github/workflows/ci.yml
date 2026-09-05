@@ -435,9 +435,39 @@ jobs:
   # The Win32 build is still compiled above and still driven under Wine
   # by the slow lane, because it is the behavioural oracle -- it is no
   # longer what ships.
+  # Does this push touch what the Windows zip and installer are made
+  # from? tools/ci-touched.sh answers, and answers "true" whenever it
+  # cannot tell (no base, a base not in the clone), because a check
+  # skipped for lack of an answer is the worst outcome of the three.
+  # Fifteen seconds here to decide whether to spend ninety.
+  windows-packaging:
+    name: Windows packaging inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      touched: ${{ steps.t.outputs.touched }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+      - id: t
+        env:
+          BASE_PUSH: ${{ github.event.before }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+        run: |
+          echo "touched=$(tools/ci-touched.sh "${BASE_PR:-$BASE_PUSH}" \
+            tools/package-windows-qt.py tools/package-windows-installer.sh \
+            tools/astrolog.nsi tools/ci-verify-package.sh tools/ci-verify-zip.sh \
+            tools/ci-verify-windows-installer.sh tools/qt_windows_dist_audit.py \
+            .github/workflows/windows-qt.yml ephem font)" >> "$GITHUB_OUTPUT"
+      - run: echo "packaging touched -- ${{ steps.t.outputs.touched }}"
+
   windows-qt:
     name: Windows package
+    needs: windows-packaging
     uses: ./.github/workflows/windows-qt.yml
+    with:
+      package: ${{ needs.windows-packaging.outputs.touched == 'true' }}
 
   # Item 4.2, the .deb. Built INSIDE ubuntu:<version> with
   # tools/build-in-container.sh, not ON a runner image: the rows come
@@ -449,35 +479,19 @@ jobs:
   # container, Qt resolved from the distribution's own repositories, and
   # asked for Chiron -- never the Sun, which reads correctly with no
   # ephemeris at all.
+  # The four package jobs -- .deb and .rpm, here and in release.yml --
+  # are one reusable workflow since 2026-09-05; see its header. A PUSH
+  # builds the newest row of each family ("--push"), which proves the
+  # recipe; a RELEASE builds every row, and a row-specific break fails
+  # the release before anything is published.
   deb:
-    name: .deb on ${{ matrix.image }}
+    name: Linux
     needs: matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.deb) }}
-    steps:
-      - name: Check out the tree
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+    uses: ./.github/workflows/linux-package.yml
+    with:
+      kind: deb
+      matrix: ${{ needs.matrix.outputs.deb }}
 
-      - name: Build both binaries and package, inside ${{ matrix.container }}
-        run: tools/build-in-container.sh ${{ matrix.container }} ${{ matrix.qt }} deb out/package
-
-      - name: Install it in a clean container and run it
-        run: tools/ci-verify-linux-package.sh out/package/astrolog_*.deb ${{ matrix.container }}
-
-      - name: Keep the package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          # archive: false uploads the file as-is instead of zipping it,
-          # so the download is the .deb itself rather than a zip holding
-          # one. Only legal for a single file, and only safe now that
-          # the codename in the version makes every .deb name unique --
-          # with archive: false the FILENAME becomes the artifact name.
-          archive: false
-          name: astrolog-deb-${{ matrix.image }}
-          path: out/package/*.deb
 
   # THE DISTRIBUTION LIST IS NOT HERE. tools/distros.py is the one place
   # it is defined; this job asks it. Fedora has no LTS -- each release is
@@ -558,45 +572,11 @@ jobs:
       - run: python3 tools/distros.py check --warn
 
   rpm:
-    name: .rpm on ${{ matrix.release }}
+    name: Linux
     needs: matrix
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.matrix.outputs.rpm) }}
-    steps:
-      - name: Check out the tree
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+    uses: ./.github/workflows/linux-package.yml
+    with:
+      kind: rpm
+      matrix: ${{ needs.matrix.outputs.rpm }}
 
-      # The same shape as the .deb rows, and the same script. Until
-      # 2026-09-04 (later) this job ran INSIDE the container -- "container:
-      # fedora:44" -- and so could not start a clean one to prove the
-      # package in; it verified with "local", where the build dependencies
-      # are already present and a wrong Requires line is invisible. Docker
-      # from the host keeps the strong check the .deb rows always had: a
-      # fresh image of the same distribution, Qt resolved from its own
-      # repositories, Chiron asserted -- never the Sun, which reads
-      # correctly with no ephemeris at all.
-      #
-      # The dnf settings that the inline install used to carry (IPv4 only,
-      # a bounded mirror timeout, no ranking probe, CRB enabled) live in
-      # the script now, with the measurements that produced them.
-      - name: Build both binaries and package, inside ${{ matrix.image }}
-        run: tools/build-in-container.sh ${{ matrix.image }} ${{ matrix.qt }} rpm out/package
-
-      - name: Install it in a clean container and run it
-        run: tools/ci-verify-linux-package.sh out/package/astrolog-*.rpm ${{ matrix.image }}
-
-      - name: Keep the package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          # archive: false uploads the file as-is instead of zipping it,
-          # so the download is the .rpm itself rather than a zip holding
-          # one. Only legal for a single file, and only safe now that
-          # the codename in the version makes every .rpm name unique --
-          # with archive: false the FILENAME becomes the artifact name.
-          archive: false
-          name: astrolog-rpm-${{ matrix.release }}
-          path: out/package/*.rpm
 
