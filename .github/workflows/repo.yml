@@ -94,19 +94,31 @@ jobs:
       - name: Build and sign
         run: tools/make-repo.sh pkgs public "${{ steps.pages.outputs.base_url }}"
 
-      # BEFORE deploying, not after. The first published repository built,
-      # signed, and served every URL at 200 -- and could not be installed
-      # from, because one suite holding every package made apt offer an
-      # Ubuntu 22.04 machine the noble build. Every other check passed. The
-      # only thing that would have caught it is the thing this step does:
-      # install from the repository, in a container of each distribution
-      # it claims to serve, and cast a chart.
+      # There was a step here that installed from the repository in a
+      # container of every distribution it serves -- fourteen containers,
+      # a fresh install and an upgrade each. The maintainer removed it on
+      # 2026-09-05: "the package builds should be reliable enough not to
+      # need this level of insanity", after it had run for eight minutes
+      # and not finished. Three minutes when it was written, seven and a
+      # half at the last release, and growing with every distribution row.
       #
-      # Six containers, about three minutes. It runs on a release, not on
-      # every push, and a repository that cannot be installed from is
-      # worse than no repository because it is advertised.
-      - name: Install from it, on every distribution it serves
-        run: tools/ci-verify-repo.sh public
+      # What still covers what it covered, and what does not:
+      #
+      #   the PACKAGES -- covered, and earlier. linux-package.yml installs
+      #   every .deb and .rpm into a CLEAN container of its own
+      #   distribution and asks it for Chiron, on the release that builds
+      #   them and on every push for one row per family.
+      #
+      #   the INDEX -- partly. The verify job below fetches the deployed
+      #   indexes over HTTPS and requires this version in each, which is
+      #   what apt and dnf read, but it does not install. The bug this
+      #   step was written for -- one suite holding every package, so
+      #   apt offered an Ubuntu 22.04 machine the noble build -- would
+      #   now be caught only if it changed what the index says.
+      #
+      # tools/ci-verify-repo.sh is still there and still correct; it is a
+      # by-hand tool now. Run it on "public" after a repository build if
+      # something about suites, signing or the upgrade path is in doubt.
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
