@@ -32,7 +32,7 @@ repo=${3:-${GITHUB_REPOSITORY:?set GITHUB_REPOSITORY or pass the repo}}
 # is a foot-gun rather than a check. It failed exactly that way the first
 # time it ran, on v8.00-qt.6.
 #
-# The bound is generous because ci.yml is fourteen jobs in about four
+# The bound is generous because ci.yml is thirteen jobs in about four
 # minutes, and a release is not a thing anyone does in a hurry.
 wait=${CI_GREEN_WAIT:-900}
 waited=0
@@ -41,7 +41,19 @@ while :; do
     --limit 20 --json status,conclusion,databaseId 2>/dev/null || echo '[]')
   n=$(printf '%s' "$runs" | grep -c '"databaseId"' || true)
   if [ "${n:-0}" -eq 0 ]; then
-    echo "no $wf run found for $sha"
+    # A run takes a while to APPEAR after a push -- GitHub queues it,
+    # and "gh run list --commit" is empty until then. Started seconds
+    # after "git push" on 2026-09-05, this found nothing, said CI had
+    # never seen the commit, and gave up while the run was being
+    # created. So give a run time to appear before deciding it never
+    # will; a commit CI has really never seen still fails, just later.
+    if [ "$waited" -lt "${CI_GREEN_APPEAR:-180}" ]; then
+      [ "$waited" -eq 0 ] && echo "no $wf run for $sha yet; waiting for one to appear"
+      sleep 15
+      waited=$((waited + 15))
+      continue
+    fi
+    echo "no $wf run found for $sha after ${waited}s"
     echo "A release should be cut from a commit CI has actually seen."
     exit 1
   fi
