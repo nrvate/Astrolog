@@ -123,19 +123,33 @@ jobs:
       - name: The Qt build still has _FORTIFY_SOURCE
         run: tools/ci-assert-fortify.sh astrolog-qt 10
 
-      # ASTROLOG_QT_EPHEM=minimal is not optional here and not a
-      # convenience. /swe -- the maintainer's 887,000-file NAS mount --
-      # will never exist on a runner, and without the mode the suite
-      # resolves 19 of 39 bodies instead of 39, skips 20 assertions, and
-      # says so nowhere except in a pass count nobody compares. The mode
-      # makes the thinner run declare itself: it asserts exactly 19, and
-      # it fails if it gets 39. See QT_CI_PLAN.md items 2.0 and 2.3.
+      # ASTROLOG_QT_EPHEM=minimal declares which ephemeris the run is
+      # supposed to have. /swe -- the maintainer's 887,000-file NAS mount
+      # -- will never exist on a runner; until 2026-09-03 the bundled set
+      # resolved 19 of 39 bodies and this mode asserted exactly that, so
+      # the thinner run declared itself instead of hiding in a pass count.
+      # The bundled set resolves all 39 now and both modes assert 39; the
+      # declaration stays so a thinned ephem/ fails loudly. See
+      # QT_CI_PLAN.md items 2.0 and 2.3.
       #
       # "-Yi1 ephem", never "-i astrolog.as": the -i form runs zero tests
       # and exits 0, which this plan specified for two drafts before
       # anyone ran it.
+      #
+      # Through tools/ci-run-suite.sh -- the watchdog, process group and
+      # pty the macOS job learned the hard way, one script for every
+      # platform -- with the whole log kept when it fails.
       - name: Run the suite against the bundled ephemeris
-        run: ASTROLOG_QT_EPHEM=minimal ./run-qt-tests.sh -Yi1 ephem
+        env:
+          ASTROLOG_QT_EPHEM: minimal
+        run: tools/ci-run-suite.sh 600 suite.log -Yi1 ephem
+      - name: Keep the suite log
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qt5-suite-log
+          path: suite.log
+          retention-days: 14
 
       # Item 6.5. Four seconds, and the check is that no two renders are
       # identical -- a blank chart matches every other blank chart, so
@@ -266,9 +280,17 @@ jobs:
           tools/ci-assert-fresh.sh astrolog-qt6-test
 
       - name: Run the suite against Qt6
-        run: |
-          QTTESTBIN=./astrolog-qt6-test ASTROLOG_QT_EPHEM=minimal \
-            ./run-qt-tests.sh -Yi1 ephem
+        env:
+          QTTESTBIN: ./astrolog-qt6-test
+          ASTROLOG_QT_EPHEM: minimal
+        run: tools/ci-run-suite.sh 600 suite.log -Yi1 ephem
+      - name: Keep the suite log
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qt6-suite-log
+          path: suite.log
+          retention-days: 14
 
   # Phase 4's smallest piece, and the other "does the shipped thing work"
   # surface. "make install" puts two wrappers on PATH and leaves the data
@@ -319,6 +341,17 @@ jobs:
           make uninstall PREFIX="$HOME/.local"
           tools/ci-assert-uninstalled.sh "$HOME/.local"
 
+      # Every tools/ci-*.sh script, fed input it must refuse and input it
+      # must accept. Here because this job has both binaries, so the
+      # install round trip runs for real; and online, so the gh-backed
+      # case runs too. tools/ci-selftest.sh says why it exists.
+      - name: Every assertion script refuses what it must
+        env:
+          SELFTEST_ONLINE: "1"
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: tools/ci-selftest.sh
+
   # Phase 7. The differentials -- the phase that makes CI strictly better
   # than the local workflow rather than merely more reliable. Building a
   # baseline by hand is what QT_TESTING.md tells a developer to do; here
@@ -336,16 +369,13 @@ jobs:
   # wants what was there before. On the first push to a new branch
   # github.event.before is all zeros, and there is nothing to diff against
   # -- the job says so and passes rather than inventing a baseline.
-  # THE FAST THREE, not all four. switch-matrix.sh is 1,058 invocations of
-  # five processes and took this job past 25 minutes on its first run,
-  # while the chart matrix and both builds finished in 26 seconds. Nothing
-  # was hung; a process simply costs far more on a runner than on an NVMe
-  # workstation. A gate that takes half an hour is a tax, not a check.
-  #
-  # No lane diffs the switch surface since the nightly went (2026-09-04):
-  # the slow lane's ASan job EXECUTES the switch matrix rather than
-  # diffing it, and tools/ci-differential.sh with no third argument diffs
-  # all four by hand -- QT_CI_PLAN.md 7.2 says why that is the trade.
+  # ALL FOUR matrices, since 2026-09-05. The switch matrix was left out
+  # from 2026-09-02: 1,058 invocations of seven processes each took this
+  # job past 25 minutes on a runner (the chart matrix and both builds
+  # took 26 seconds), so the switch surface -- the settings writer and
+  # the help text -- was diffed by no lane at all. tools/switch-matrix.sh
+  # runs four workers of four processes now, byte-identical output, 40 s
+  # to 16 s on a workstation; this job's duration is the runner's number.
   differential:
     name: Behaviour vs base
     runs-on: ubuntu-latest
@@ -380,7 +410,7 @@ jobs:
               echo "first push. Nothing to diff against; not inventing one."
               exit 0 ;;
           esac
-          tools/ci-differential.sh "$base" out/diff "chart influence graphics"
+          tools/ci-differential.sh "$base" out/diff
 
       # The diffs are the report. Uploaded whether or not the step above
       # failed, because a red differential is exactly when someone wants

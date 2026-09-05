@@ -1,6 +1,7 @@
 #!/bin/sh
 # Build Astrolog.app and a .dmg from it. macOS only; run on a runner or a
-# Mac with Homebrew Qt6 installed.
+# Mac with a Qt6: the pinned one tools/ci-macos-qt.sh installs (it names
+# its macdeployqt in MACDEPLOYQT), or Homebrew's.
 #
 #   tools/package-macos.sh [outdir]        # default: out/macos
 #
@@ -139,7 +140,7 @@ echo "== macdeployqt"
 # Astrolog links none of those; they are transitive references inside Qt's
 # own plugins. The errors are noise on this Qt and the deploy still
 # produces a working bundle, which the run below is what actually decides.
-"$(brew --prefix qt)/bin/macdeployqt" "$app" -always-overwrite || true
+"${MACDEPLOYQT:-$(brew --prefix qt)/bin/macdeployqt}" "$app" -always-overwrite || true
 
 # NOW correct the plist, because only now is the bundle complete.
 #

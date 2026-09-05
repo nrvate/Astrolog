@@ -381,6 +381,8 @@ jobs:
   macos:
     name: macOS build + suite
     runs-on: macos-latest
+    env:
+      QT_VERSION: "6.8.3"
     # Build is about two minutes -- Qt6 pours in 59s and the port compiles
     # in 61s, both measured. The suite is 47s on Linux, six minutes here,
     # and the .dmg is another minute. Twenty-five is generous for that
@@ -389,8 +391,23 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - name: Install Qt6
-        run: brew install qt pkg-config
+      - name: Install pkg-config
+        run: brew install pkg-config
+
+      # Qt is PINNED here, not "brew install qt": until 2026-09-05 the
+      # .dmg a release shipped was built against whatever Qt Homebrew
+      # carried that day, on the one platform nobody working on this can
+      # open. Same version as Windows, same installer, cached the same
+      # way; the script writes the pkg-config files the installer's
+      # package lacks, and says why. The key names everything that
+      # decides what the cache holds.
+      - name: Cached Qt
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0, Node 24
+        with:
+          path: ~/Qt
+          key: qt-mac-${{ env.QT_VERSION }}-clang_64-qtbase-qttools-aqt3.3.0-nodsym
+      - name: Qt ${{ env.QT_VERSION }}, pinned
+        run: tools/ci-macos-qt.sh "$QT_VERSION" "$HOME/Qt" >> "$GITHUB_ENV"
 
       # Keep the build log. tools/warning_audit.py covers five GCC builds
       # and knows nothing about clang, so this job compiled 260 warnings a
@@ -403,78 +420,17 @@ jobs:
       - name: No clang warnings in our own sources
         run: tools/ci-assert-clang-clean.sh build.log 300
 
-      # Bounded, timed and line-buffered, so a hang produces a DIAGNOSIS
-      # rather than a job that stops. A step's output is not served until
-      # the step ends, so an unbounded run that hits the job timeout tells
-      # you only that macOS is unhappy; this tells you which group it was
-      # in when it stopped. Exactly how the ten-minute Linux hang was
-      # localised -- to a modal box in the Chart rendering group -- in one
-      # run instead of several.
-      # The watchdog kills the BINARY, not the script, and the output goes
-      # to a file rather than through a pipe. Both matter. Killing the
-      # script leaves its child running, and an orphan holding the pipe
-      # open means "tail" never sees EOF and the step hangs anyway --
-      # which is what the first version did, turning a seven-minute
-      # watchdog into a twelve-minute job timeout. Reading the log after
-      # the fact also sidesteps the buffering that makes a piped, running
-      # binary look silent, which QT_TESTING.md records as having
-      # confounded three probes.
-      #
-      # It kills by PID, not by name. The first version used "pkill -f
-      # astrolog-qt-test" with a comment arguing that CLAUDE.md's ban on
-      # pkill was a developer-machine rule and a runner has exactly one
-      # copy. The run disproved it: the step exited 143 having printed
-      # nothing at all, not even the "tail" that follows the kill on the
-      # very next line -- so what died was the step, not the suite, and
-      # the diagnostic this whole arrangement exists to produce was lost.
-      # A pattern that matches more than you meant is the entire reason
-      # for the rule, and CI is not the exception.
-      #
-      # "set -m" puts the suite in its own process group so killing
-      # -PGID takes the binary with the script; killing the script alone
-      # is what left the orphan the comment above describes.
+      # The suite, bounded and diagnosable: tools/ci-run-suite.sh is the
+      # forty lines that lived here until 2026-09-05 -- watchdog, process
+      # group, pty, log read after the fact -- each learned from a run
+      # that lost its own diagnostic, and each falsifiable on a laptop now
+      # ("tools/ci-run-suite.sh 5 x.log" shows the kill path in five
+      # seconds). ci.yml runs the suite through the same script, so Linux
+      # and macOS share one watchdog rather than one platform's copy.
       - name: Run the suite
-        run: |
-          # Through "script", which allocates a pty, because otherwise
-          # this measures nothing. run-qt-tests.sh echoes nothing before
-          # line 31 -- the binary is the first thing that prints -- and
-          # with stdout a plain file, stdio BLOCK-buffers it. SIGKILL
-          # then discards up to 4 KB of pending output, which is why the
-          # previous run left a suite.log holding exactly one line: Qt's
-          # own message, on unbuffered stderr. A pty makes stdio
-          # line-buffer, so at most one partial line is lost.
-          set -m
-          # ASTROLOG_QT_TEST_VERBOSE names each menu item before firing
-          # it, flushed. The last run localised the hang to the "Firing
-          # every menu item" group -- 338 items -- and stopped there. This
-          # is the difference between knowing the group and knowing the
-          # item, and the hook was already in qttest.cpp waiting to be
-          # switched on.
-          ASTROLOG_QT_EPHEM=minimal ASTROLOG_QT_TIME=1 ASTROLOG_QT_TEST_VERBOSE=1 \
-            script -q /dev/null ./run-qt-tests.sh -Yi1 ephem > suite.log 2>&1 &
-          suite=$!
-          for i in $(seq 1 420); do
-            kill -0 "$suite" 2>/dev/null || break
-            sleep 1
-          done
-          if kill -0 "$suite" 2>/dev/null; then
-            echo "== still running after 420s; killing process group $suite"
-            kill -TERM -"$suite" 2>/dev/null || kill -TERM "$suite" 2>/dev/null || true
-            sleep 3
-            kill -KILL -"$suite" 2>/dev/null || true
-          fi
-          # "|| rc=$?" and not "; rc=$?" -- under "set -e" a wait that
-          # reports 143 IS a failing command, so the shell exited right
-          # there and the tail below never ran. That is the same lost
-          # diagnostic as the pkill version, one line further down.
-          rc=0; wait "$suite" || rc=$?
-          tail -80 suite.log
-          [ "$rc" -eq 0 ] || {
-            echo "== suite exited $rc. The last group named above is where it"
-            echo "== stopped; on Linux this run takes 47 seconds and the whole"
-            echo "== suite passes 3792 assertions -- 3786 here, the six being"
-            echo "== the Print item this build skips."
-            exit "$rc"; }
+        env:
+          ASTROLOG_QT_EPHEM: minimal
+        run: tools/ci-run-suite.sh 420 suite.log -Yi1 ephem
 
       # The log leaves the runner whether the suite passed or not. "tail
       # -80" is enough to see where a failure stopped and not enough for
@@ -483,8 +439,9 @@ jobs:
       # than run. Four separate fixes to this step have now been about it
       # discarding its own evidence.
       #
-      # The count to expect here is 3786, not Linux's 3792, and the log
-      # this step uploads is what proves the six are benign. Diffing the
+      # The count to expect here is six below Linux's, and the log this
+      # step uploads is what proves the six are benign (the numbers below
+      # are the 2026-09-03 measurement; the totals have grown since). Diffing the
       # per-group assertion counts against a Linux run of the same
       # configuration gives 48 groups on both sides and exactly one line
       # of difference:

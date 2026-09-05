@@ -31,22 +31,45 @@
 # and the ephemeris resolve identically. Charts of "now" never reach
 # the output -- only stderr and saved settings -- so runs minutes
 # apart still compare byte-for-byte.
-B=$1; T=$(mktemp -d)
+# One invocation, in worker mode: "$0 --one <tmpdir> <index> <binary>".
+# The driver below queues every "run" line as a file of arguments, one
+# per line (no argument here carries a newline; several carry a space),
+# and xargs runs the queue MATRIX_JOBS wide (default 4). Each worker
+# writes to its own file and the driver prints them in queue order, so
+# the output is byte-for-byte what the serial version printed -- the
+# per-invocation temp directory is normalised to TMP exactly as before,
+# and MATRIX_JOBS=1 is the serial version.
+#
+# Why: the serial form was seven processes per invocation, 529 times,
+# and on a GitHub runner that was 25 minutes -- long enough that the
+# switch surface was dropped from the push differential (ci.yml) and
+# diffed by nobody. Fewer processes and four workers is the difference
+# between a tax and a check; see QT_CI_PLAN.md for the measurements.
+if [ "${1:-}" = "--one" ]; then
+  T=$2; i=$3; B=$4; W=$T/w/$i
+  mkdir -p "$W"
+  set --
+  while IFS= read -r a; do set -- "$@" "$a"; done < "$T/in/$i"
+  {
+    echo "== $*"
+    # The first two lines of stderr, with the temp path normalised. awk
+    # does what "sed | head -2" did in one process instead of two; the
+    # loop is a literal replace, so a temp path with regex characters
+    # in it cannot mis-match.
+    env -u DISPLAY timeout 60 $B -n "$@" _X -od $W/o.as </dev/null 2>&1 >/dev/null \
+      | awk -v t="$W" '{ i = index($0, t); while (i) { $0 = substr($0, 1, i - 1) "TMP" substr($0, i + length(t)); i = index($0, t) } print } NR >= 2 { exit }'
+    # The relevant settings lines. "-m 1000" is the cap "head -1000"
+    # provided; see the header for why it is 1000 and not 30.
+    grep -m 1000 -E "^-YA[oamd]|^-Yj|^-YJ|^-Yk|^-YAa|^-YR|^-Y7|^-YD|^-Ye|^-zl|^-z0|^:YX|^[=_]YX|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k" $W/o.as 2>/dev/null
+  } > "$T/out/$i"
+  rm -rf "$W"
+  exit 0
+fi
+
+B=$1; T=$(mktemp -d); mkdir -p "$T/in" "$T/out"; n=0
 run() {
-  echo "== $*"
-  # "timeout 60" is not decoration. This was the only one of the four
-  # matrices without it, and on 2026-09-02 that cost 24 minutes of a CI
-  # run: the chart matrix finished in 26 seconds and this one was still
-  # going when the job was cancelled, with the runner naming
-  # switch-matrix.sh as the orphan it had to kill. 529 invocations of the
-  # whole switch surface, on a machine with no /swe, no display and no
-  # window manager, is exactly where an invocation nobody anticipated
-  # blocks -- and without a bound, one of them stops the harness rather
-  # than failing in it. Both binaries get the same bound, so a timeout
-  # that happens on both sides still diffs to zero.
-  env -u DISPLAY timeout 60 $B -n "$@" _X -od $T/o.as </dev/null 2>&1 >/dev/null | sed "s|$T|TMP|g" | head -2
-  grep -E "^-YA[oamd]|^-Yj|^-YJ|^-Yk|^-YAa|^-YR|^-Y7|^-YD|^-Ye|^-zl|^-z0|^:YX|^[=_]YX|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k" $T/o.as 2>/dev/null | head -1000
-  rm -f $T/o.as
+  n=$((n + 1))
+  if [ $# -gt 0 ]; then printf '%s\n' "$@" > "$T/in/$n"; else : > "$T/in/$n"; fi
 }
 run -Yj 5 5 44
 run -Yj Mar Jup 41 42
@@ -599,5 +622,8 @@ run -M 99
 run -q 99 15 2020
 run -r one.as
 run -0z
+
+seq 1 "$n" | xargs -P "${MATRIX_JOBS:-4}" -I{} sh "$0" --one "$T" {} "$B"
+i=1; while [ "$i" -le "$n" ]; do cat "$T/out/$i"; i=$((i + 1)); done
 rm -f outtest.as screentest.txt
-rmdir $T 2>/dev/null
+rm -rf "$T"
