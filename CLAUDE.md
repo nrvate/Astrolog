@@ -372,13 +372,8 @@ tools/collect-release-packages.sh pkgs       # every remaining release's
                                              # distributions no longer
                                              # built -- named as dropped
 tools/ci-verify-linux-package.sh pkg.deb ubuntu:22.04  # install it in a
-tools/ci-verify-repo.sh public       # BY HAND since 2026-09-05, when the
-                                     # maintainer took it out of repo.yml:
-                                     # fourteen containers and eight
-                                     # minutes for a question the package
-                                     # jobs mostly answer at build time.
-                                     # Reach for it when suites, signing
-                                     # or the upgrade path are in doubt
+tools/ci-verify-repo.sh public       # by hand since 2026-09-05, when it
+                                     # left repo.yml: fourteen containers
                                      #                       clean container,
                                              # and now the UPGRADE path
                                              # too: oldest version in the
