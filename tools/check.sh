@@ -17,6 +17,9 @@
 #   tools/build-check.sh              the source build on twelve distributions
 #   tools/asan-sweep.sh, ubsan-sweep.sh, coverage-report.sh
 #   tools/warning_audit.py            70 s, five builds, empty ledger
+#
+# The mingw Win32 and Qt6 builds ARE here, when this machine has their
+# toolchains, because each has silently stopped compiling before.
 #   tools/swetest-oracle.sh           numbers against upstream Swiss
 set -eu
 cd "$(dirname "$0")/.."
@@ -49,6 +52,27 @@ for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
 done
 step "build: console and Qt"     make -j4
 step "build: the test binary"    make qt-test -j4
+
+# The other two toolchains, when this machine has them. Both are here
+# because their absence has cost this project real time: Makefile.win
+# went 62 commits without compiling while three work log items listed
+# "Windows builds" among their nets, and the Qt6 build was an artifact
+# somebody remembered making until CI kept it alive. CI does not any
+# more, so this does -- when the toolchain is absent it says skipped
+# rather than passing quietly.
+if command -v x86_64-w64-mingw32-g++ >/dev/null 2>&1; then
+  step "build: Win32 oracle (mingw)"  make win -j4
+  step "build: Windows console"       make wcli -j4
+else
+  printf '%-34s %s\n' "build: Win32 oracle (mingw)" \
+    "skipped -- no x86_64-w64-mingw32-g++"
+fi
+if [ -d "${QT6_PKGCONFIG:-/usr/local/qt6/lib/pkgconfig}" ]; then
+  step "build: Qt6"                   make qt6 -j4
+  step "build: Qt6 test binary"       make qt6-test -j4
+else
+  printf '%-34s %s\n' "build: Qt6" "skipped -- no Qt6 outside pkg-config"
+fi
 step "inert options"             python3 tools/inert_option_audit.py
 step "the assertion scripts"     tools/ci-selftest.sh
 printf '%-34s ' "the suite"
