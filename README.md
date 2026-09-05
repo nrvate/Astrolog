@@ -68,7 +68,9 @@ than a missing feature, so the files ship.
 **The macOS build is the least proven thing here, and you should know
 that before downloading it.** Nobody working on this fork owns a Mac. It
 is built, and its whole test suite is run, entirely on GitHub's
-`macos-latest` runner — currently **macOS 26 on Apple Silicon**. No human
+`macos-latest` runner — currently **macOS 26 on Apple Silicon** — against
+Qt 6.8.3, pinned since 2026-09-05 to the version Windows ships with;
+before that it took whatever Qt Homebrew carried that day. No human
 has ever launched it. Since 2026-09-03 the slow lane also uploads a
 screenshot of all 25 dialogs and every chart type, so at least somebody
 can *look* at it, but that is a picture from CI and not a person using

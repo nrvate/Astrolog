@@ -89,9 +89,19 @@ suite. The rest is for comparing against Windows.
 
 **macOS is built only in CI**, on GitHub's `macos-latest` runners (macOS
 26 on Apple Silicon at the last run), because
-nobody working on this has a Mac. `tools/package-macos.sh` makes the
-`.app` bundle and the `.dmg`; it needs `macdeployqt` from a Homebrew Qt
-and nothing else. Notarization would need a paid Apple Developer account
+nobody working on this has a Mac. The Qt it builds against is
+**pinned**, since 2026-09-05: `tools/ci-macos-qt.sh` installs Qt 6.8.3
+-- the version and installer the Windows job uses -- caches it, and
+writes the pkg-config files the installer's package lacks; before that
+the job ran `brew install qt`, so a release's `.dmg` was built against
+whatever Qt Homebrew carried that day. Getting the pinned build to a
+green job took four dispatches, each one layer deeper than the last, and
+the script's header records all three layers (the runner's Python
+policy, a 6.8.3 header against new Xcode, `@rpath` frameworks). The job
+is faster for it: 156 s from a cold cache against about 300 with
+Homebrew. `tools/package-macos.sh` makes the `.app` bundle and the
+`.dmg`; it needs `macdeployqt` from that Qt (`MACDEPLOYQT`) or from a
+Homebrew one, and nothing else. Notarization would need a paid Apple Developer account
 and is **not** done -- the bundle is ad-hoc signed (`codesign -s -`),
 which is mandatory on Apple Silicon and is enough to run, but a user's
 first launch still goes through Gatekeeper's right-click-Open.
@@ -294,9 +304,30 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
 
 CI runs all eleven, plus a set of assertions that are scripts rather than
 workflow steps so they can be falsified in a second instead of by
-pushing. They are worth knowing about because several are useful by hand:
+pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
+input it must refuse and, where cheap, input it must accept -- 49 cases,
+run by the install job on every push -- so the falsification is a check
+rather than a memory. They are worth knowing about because several are
+useful by hand:
 
 ```sh
+tools/ci-selftest.sh                         # every ci-*.sh below, fed
+                                             # input it must refuse; its
+                                             # first run refused three of
+                                             # the AUTHOR's inputs, each a
+                                             # script being stricter than
+                                             # assumed
+tools/ci-run-suite.sh 420 suite.log -Yi1 ephem
+                                             # the suite under the watchdog,
+                                             # process group and pty every
+                                             # CI platform runs it under;
+                                             # "5" in place of 420 shows
+                                             # the kill path in five seconds
+tools/ci-macos-qt.sh 6.8.3 ~/Qt              # the pinned macOS Qt, with
+                                             # the pkg-config files the
+                                             # installer's package lacks;
+                                             # runs on Linux too, which is
+                                             # how it was proven
 tools/ci-assert-fresh.sh astrolog.exe        # a build product is newer
                                              # than every .cpp and .h
 tools/ci-assert-fortify.sh astrolog 10       # the shipped builds still
@@ -509,7 +540,12 @@ tools/switch-matrix.sh <binary>      # 529 invocations: the switch surface,
                                      # as each run's stderr plus the
                                      # settings it saves (see
                                      # REFACTORING.md, "The registry as
-                                     # built")
+                                     # built"). Four workers since
+                                     # 2026-09-05, MATRIX_JOBS=1 for the
+                                     # serial form, byte-identical output
+                                     # either way: 16 s here, 71 s on a
+                                     # runner, which is why it is back in
+                                     # the push differential
 tools/influence-matrix.sh <binary>   # the same for -j/-j0/-7 output
 tools/graphics-matrix.sh <binary>    # 224 renders, nonzero if any
                                      # produced no file (work log item
@@ -845,8 +881,9 @@ unaffordable -- so it does not happen. The scripts are
 **Three things will fail a push, and each has bitten already:**
 
 - **A behavioural change you did not declare.** The differential diffs
-  chart, influence and graphics output against the base commit. If it
-  moves, say so in a commit message:
+  all four matrices -- chart, switch, influence and graphics -- against
+  the base commit (the switch matrix again since 2026-09-05, once it ran
+  four wide). If it moves, say so in a commit message:
 
   ```
   Behaviour-change: <one line on what moved and why>

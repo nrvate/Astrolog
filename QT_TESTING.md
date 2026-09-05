@@ -544,7 +544,9 @@ goes wrong by *hanging*, not by failing.
 `tools/asan-sweep.sh switches` does exactly this. A console build
 with `-fsanitize=address -DQTTEST` driven through
 `tools/switch-matrix.sh` covers 529 invocations of the whole switch
-surface, including the error and edge shapes, and on its first ever run
+surface -- four workers since 2026-09-05, `MATRIX_JOBS=1` for the serial
+form, byte-identical output either way -- including the error and edge
+shapes, and on its first ever run
 it found two real out-of-bounds bugs the suite had never reached (work
 log item 133) -- one of which segfaults the release build. Two traps:
 the plain `Makefile` has no object directory, so `make clean-console`

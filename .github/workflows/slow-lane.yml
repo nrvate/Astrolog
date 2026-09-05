@@ -383,6 +383,11 @@ jobs:
     runs-on: macos-latest
     env:
       QT_VERSION: "6.8.3"
+      # The lowest macOS Qt 6.8 runs on. Without it clang records the
+      # host's version as the binary's minimum -- 26.0 on this runner --
+      # and package-macos.sh, which reads the minimum off the bundle
+      # rather than asserting one, wrote that into the .dmg.
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
     # Build is about two minutes -- Qt6 pours in 59s and the port compiles
     # in 61s, both measured. The suite is 47s on Linux, six minutes here,
     # and the .dmg is another minute. Twenty-five is generous for that

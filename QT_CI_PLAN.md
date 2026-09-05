@@ -276,9 +276,9 @@ package repository is live.
 
 | workflow | jobs | what they are |
 |---|---|---|
-| `ci.yml` (every push and PR, ~4–5 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · Compiler warnings · System install · Behaviour vs base · Which distributions · The distribution snapshot is current · one `.deb` and one `.rpm` (the newest row of each family, built in containers; every row on a release) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, Phase 6 warnings |
+| `ci.yml` (every push and PR, ~4–5 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · Compiler warnings · System install · Behaviour vs base (all four matrices since 2026-09-05; 124 s against 53 with three) · Which distributions · The distribution snapshot is current · one `.deb` and one `.rpm` (the newest row of each family, built in containers; every row on a release) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, Phase 6 warnings |
 | `windows-qt.yml` (reusable; called by `ci.yml` and `release.yml`) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
-| `slow-lane.yml` (reusable + dispatch; **no schedule**) | What nothing executes · ASan over the switch matrix · ASan over the graphics matrix · UBSan over the matrices and the Qt suite · The Qt suite under ASan · Astrolog against upstream Swiss Ephemeris · Windows parity · MSVC project · macOS build + suite + `.dmg` · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
+| `slow-lane.yml` (reusable + dispatch; **no schedule**) | What nothing executes · ASan over the switch matrix · ASan over the graphics matrix · UBSan over the matrices and the Qt suite · The Qt suite under ASan · Astrolog against upstream Swiss Ephemeris · Windows parity · MSVC project · macOS build + suite + `.dmg` (Qt 6.8.3 pinned since 2026-09-05) · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
 | `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · N × `.deb` · N × `.rpm` · Publish · Retire (every release but the newest two; the tags stay) | 5.1, 5.2 |
 | `repo.yml` (on release) | Build the repositories (from the remaining releases, for the distributions built today) · Publish to Pages | 4.7 |
 
@@ -1878,7 +1878,7 @@ one diffs against the commit of 24 hours ago — a weaker question than
 The switch matrix now runs in CI only inside `tools/coverage-report.sh`,
 which executes it rather than diffing it; diffing all four is a by-hand
 `tools/ci-differential.sh` against a chosen commit.)*
-**Status.** [x] built; the fast lane runs three matrices, and the switch matrix is executed by the slow lane's ASan job rather than diffed
+**Status.** [x] built; all four matrices on every push since 2026-09-05 -- 124 s on a runner against 53 with three, once `switch-matrix.sh` ran four wide -- and the switch matrix is executed under ASan by the slow lane as well
 
 ### 7.2b What running them actually showed, 2026-09-01
 **Done, and it moved two things in this document from claim to
@@ -3724,3 +3724,75 @@ Not touched: `astrolog.htm`, upstream's manual, which still documents
 stopped merging upstream at item 63; editing it would be the start of
 a fork of the manual as well.
 
+**2026-09-05 — the fourth look's four smells, in the order given.**
+"Where are the smells in the CI now?" and then "do it". Ten were listed;
+the four that ranked highest, taken in the order the answer gave them.
+
+*The macOS Qt floated.* `brew install qt` on `macos-latest` meant a
+release's `.dmg` was built against whatever Qt Homebrew carried that
+day, on the one platform nobody here can open. `tools/ci-macos-qt.sh`
+installs Qt 6.8.3 through aqtinstall -- the Windows job's version and
+tool -- caches it, and writes the five pkg-config files `Makefile.qt`
+needs, because the installer's macOS package has none. That was learned
+by downloading the package onto a Linux machine with the same aqt
+command: no `lib/pkgconfig`, no `include/` symlinks, headers inside the
+frameworks, 1.8 GB of which the `.dSYM` bundles are most (442 MB
+pruned, 32 s to install). Four dispatches to a green macOS job, each one
+layer deeper than the last, each recorded in the script's header: the
+runner's Python refuses a bare `pip install` (PEP 668); Qt 6.8.3's
+`qyieldcpu.h` calls `__yield()` under `__has_builtin`, which the clang
+in Xcode 16.3 and later answers yes to without declaring it -- Qt fixed
+that in 6.9 with `<arm_acle.h>`, 6.8.3 is the newest 6.8 the open-source
+installer has, and the same include on the command line is the fix; and
+the installer's frameworks carry `@rpath` install names, so the binary
+needs an rpath that Homebrew's absolute-path frameworks never did. Along
+the way the Build step turned out to have masked a failed make since it
+was written: `make | tee` under GitHub's default `bash -e` reports tee's
+status, so the compiler's error sat unread in `build.log` while the
+suite step failed on "build it first". It is `shell: bash` -- GitHub's
+`bash -eo pipefail` -- now. Result: the suite passes 4538 (six below
+Linux, the Print item, as the step's comment has always said), 25
+dialogs and 24 charts captured, the `.dmg` built, and the job takes
+156 s from a cold cache against about 300 with Homebrew.
+
+*The assertion scripts' failure paths.* Twenty-two `tools/ci-*.sh`
+scripts gated pushes and releases, and the record that each had been
+falsified lived in this document. `tools/ci-selftest.sh` feeds every
+one input it must refuse and, where cheap, input it must accept -- 49
+cases, in the install job because that job has both binaries for the
+install round trip and a token for the gh-backed case. Its first run
+refused three of MY inputs, each a script being stricter than assumed:
+uninstall must leave the shared directories behind, the zip check
+verifies the whole payload against the tree's own `ephem/` count and
+`font/`, and the release check verifies the version in every artifact
+name. Falsified by making `ci-assert-version.sh` accept everything:
+caught.
+
+*The watchdog in YAML.* The macOS suite ran inside forty lines of
+workflow -- watchdog loop, process group, pty, log read afterwards --
+every line learned from a lost diagnostic and none falsifiable except
+by pushing. `tools/ci-run-suite.sh` is those lines, run by the Qt5 and
+Qt6 jobs as well, so every platform has one watchdog. Its first full
+run found a trap of its own: under a pty stdin is a terminal, and a
+startup check that expects EOF waited until the 600 s watchdog fired,
+after the whole suite had passed; stdin comes from `/dev/null` inside
+the pty now, 44 s and PASS, and a 5 s limit still kills, exits 124 and
+names the group. Its wording had a bug too -- "killed by the watchdog"
+about a suite that had exited on its own in a second, a `${killed:+}`
+that expands for 0 -- found by reading the third macOS run's output.
+
+*The switch surface diffed by nobody.* The serial matrix was 25 minutes
+on a runner, so the push differential ran three matrices and the
+settings writer and help text were compared by no lane. The matrix
+queues its 529 invocations and runs them four wide with four processes
+each instead of seven, in the same order: byte-identical to the serial
+output and run to run, 40 s to 16 s on a workstation. On a runner the
+four-matrix differential is 124 s against 53 with three; the slow
+lane's ASan-over-the-switch-matrix job went from 343 s to 174, and the
+coverage job from 321 to 273.
+
+One thing the pin makes possible, set in the same commit as this entry:
+the bundle claimed macOS 26.0 as its minimum, because nothing set a
+deployment target and clang takes the host's, while Qt 6.8.3's frameworks
+run on macOS 12. The job sets `MACOSX_DEPLOYMENT_TARGET=12.0`; the
+dispatch after this commit reports what the bundle claims.
