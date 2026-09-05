@@ -362,9 +362,13 @@ Linux users build from source, which `tools/build-check.sh` proves.
    were falsified (a missing plugin, a missing runtime, each refused).
    The Windows half can only be falsified by pushing, and was.
 
-**Signed apt and dnf repositories are live** at
+**Signed apt and dnf repositories were live** at
 <https://nrvate.github.io/Astrolog/>, rebuilt from the newest two
-releases, for the distributions built today. **One suite per distribution** — a single
+releases, for the distributions built today. *(Retired 2026-09-05 with
+the Linux packages. Nothing rebuilds the site now: it still serves what
+the v8.00-qt.9 rebuild left, so anyone who configured it stays on that
+version and is told nothing. What to do about that is open -- see the
+last work log entry.)* **One suite per distribution** — a single
 suite makes apt and dnf offer the highest-versioned package rather than
 the one built for the running release. (Between decision 2 and the qt.7
 release, `tools/ci-verify-live-repo.sh` failed on `fc44` because nothing
@@ -1461,7 +1465,7 @@ because that is what exists to exercise it on.
 downloading a file per release is most of packaging undone: the point is
 `apt install astrolog` and then upgrades arriving on their own.
 **Done 2026-09-02.** `tools/make-repo.sh` builds both from a directory of
-packages; `.github/workflows/repo.yml` publishes them to GitHub Pages,
+packages; `.github/workflows/repo.yml` published them to GitHub Pages,
 rebuilt from **every** release so old versions stay installable. *(Since 2026-09-04 the newest two releases only, for the distributions built today — `tools/prune-releases.sh`, `tools/collect-release-packages.sh`.)* Live at
 <https://nrvate.github.io/Astrolog/>.
 **One suite per distribution**, and the first publish is why. It built,
