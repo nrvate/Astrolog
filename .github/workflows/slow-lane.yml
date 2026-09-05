@@ -414,7 +414,13 @@ jobs:
       # night that nobody read -- all of them 'sprintf' is deprecated, all
       # of them in vendored Swiss Ephemeris, and none in a file this
       # codebase wrote.
+      # "shell: bash" is GitHub's "bash -eo pipefail"; the default is "-e"
+      # alone, under which this pipeline reports tee's exit status and a
+      # failed make read as a green step -- which it did on 2026-09-05,
+      # with the suite step then failing on "build it first" and the
+      # compiler's own error sitting unread in build.log.
       - name: Build
+        shell: bash
         run: make qt -j4 2>&1 | tee build.log && make qt-test -j4 2>&1 | tee -a build.log
 
       - name: No clang warnings in our own sources

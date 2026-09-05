@@ -26,6 +26,16 @@
 # - The qtbase+qttools archives are 1.8 GB, of which the debug-symbol
 #   .dSYM bundles are most; they are removed, and what is left is what
 #   the cache keeps. macdeployqt is in qttools.
+#
+# - 6.8.3 is the newest 6.8 the open-source installer offers, and its
+#   qyieldcpu.h does "#if __has_builtin(__yield) __yield();" -- which the
+#   clang in Xcode 16.3 and later answers yes to without declaring the
+#   function, so every Qt compile fails with "implicitly declaring
+#   library function '__yield'" (the first pinned build did, 2026-09-05,
+#   on macOS 26). Qt fixed it in 6.9 by including <arm_acle.h>, which
+#   declares __yield as an inline intrinsic; the same include, given on
+#   the command line through Qt6Core's Cflags below, is the fix here and
+#   is scoped to this generated file.
 set -eu
 ver=${1:?usage: ci-macos-qt.sh <version> <dir>}
 dir=${2:?usage: ci-macos-qt.sh <version> <dir>}
@@ -67,7 +77,8 @@ for m in Core Gui Widgets PrintSupport Network; do
     echo "Description: Qt $m module, from the Qt installer; this file was written by tools/ci-macos-qt.sh"
     echo "Version: $ver"
     echo "Libs: -F\${libdir} -framework Qt$m"
-    echo "Cflags: -F\${libdir} -I\${libdir}/Qt$m.framework/Headers -DQT_${up}_LIB"
+    extra=""; [ "$m" = Core ] && extra=" -include arm_acle.h"
+    echo "Cflags: -F\${libdir} -I\${libdir}/Qt$m.framework/Headers -DQT_${up}_LIB$extra"
     [ -z "$req" ] || echo "Requires: $req"
   } > "$q/lib/pkgconfig/Qt6$m.pc"
 done

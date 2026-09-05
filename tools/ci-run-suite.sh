@@ -113,7 +113,8 @@ group=$(grep -hoE '^== [A-Z].*' "$log" 2>/dev/null | tail -1)
 if [ "$rc" -ne 0 ]; then
   fails=$(grep -nE '^  FAIL  ' "$log" 2>/dev/null | head -40)
   [ -z "$fails" ] || { echo "== failing assertions (first 40):"; printf '%s\n' "$fails"; }
-  echo "== suite exited $rc${killed:+ (killed by the watchdog after ${limit}s)}"
+  if [ "$killed" -eq 1 ]; then echo "== suite exited $rc: killed by the watchdog after ${limit}s"
+  else echo "== suite exited $rc"; fi
   [ -n "$group" ] && echo "== the last group named in the log: $group"
   [ -n "$summary" ] && echo "== $summary"
   exit "$rc"
