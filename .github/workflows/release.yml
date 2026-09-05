@@ -1,4 +1,8 @@
-# Everything CI does, and it does it only when a release is tagged.
+# Everything CI does, and it does it only when a release is tagged --
+# or when someone dispatches it with "publish" off, which builds and
+# tests all three platforms and stops before the release. Do that before
+# tagging: it is the only way to find out whether this workflow works
+# without publishing, and CLAUDE.md's release recipe includes it.
 #
 # The shape is the maintainer's, 2026-09-05: build the binaries people
 # cannot build themselves -- Windows and macOS -- and leave Linux to

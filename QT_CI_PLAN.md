@@ -275,7 +275,7 @@ is who runs them. Read the last two entries of the work log first.
 
 | workflow | jobs | what they are |
 |---|---|---|
-| `release.yml` (on `v*`, or a dispatch) | Version check · Linux build + suite · Windows (calls `windows-qt.yml`) · macOS build + suite + `.dmg` · Publish · Retire | 5.1, 5.2, 9.x. A dispatch can set `publish: false` and stop before the release |
+| `release.yml` (on `v*`, or a dispatch with `publish: false` for a dry run) | Version check · Linux check (`make check`) · What moved since the last release · Windows (calls `windows-qt.yml`) · macOS build + suite + `.dmg` · Publish · Retire | 5.1, 5.2, 9.x. A dispatch can set `publish: false` and stop before the release |
 | `windows-qt.yml` (reusable; called by `release.yml`, dispatchable) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
 
 **By hand, and this is now the whole of the safety net a commit gets:**
