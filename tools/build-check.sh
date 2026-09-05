@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Does this tree build, from a clean checkout, on a popular distribution?
 #
 #   tools/build-check.sh                 # every image below
@@ -52,14 +52,42 @@ IMAGES='ubuntu:22.04 ubuntu:24.04 ubuntu:26.04 debian:12 debian:13
         quay.io/rockylinux/rockylinux:10 archlinux:latest
         opensuse/tumbleweed alpine:3.22'
 
+# The package names here and the ones README.md tells a user to install
+# are two copies of one fact, and the second copy was wrong: until
+# 2026-09-05 the README told Rocky and Alma users to install
+# qt6-qtbase-devel, which EL9 does not have, while this script built EL9
+# against qt5-qtbase-devel and passed. So compare the two sets, both
+# ways, before running anything -- a name here that the README never
+# mentions is an instruction nobody was given, and a name there that no
+# recipe installs is an instruction nobody tested.
+check_readme() {
+  ours=$(for i in $IMAGES; do recipe "$i"; done \
+    | tr ' ' '\n' | grep -E '^(g\+\+|gcc|gcc-c\+\+|make|pkg-config|pkgconf|pkgconf-pkg-config|libx11-dev|libX11-devel|libx11|qt[56]?-?[a-z-]*dev[a-z]*)$' \
+    | sort -u)
+  theirs=$(sed -n '/^# Debian, Ubuntu, Mint/,/^git clone/p' README.md \
+    | grep -vE '^#' | tr ' ' '\n' \
+    | grep -E '^(g\+\+|gcc|gcc-c\+\+|make|pkg-config|pkgconf|pkgconf-pkg-config|libx11-dev|libX11-devel|libx11|qt[56]?-?[a-z-]*dev[a-z]*)$' \
+    | sort -u)
+  only_here=$(comm -23 <(printf '%s\n' "$ours") <(printf '%s\n' "$theirs"))
+  only_there=$(comm -13 <(printf '%s\n' "$ours") <(printf '%s\n' "$theirs"))
+  [ -z "$only_here$only_there" ] && { echo "== README package names match this script's"; return 0; }
+  [ -z "$only_here" ] || { echo "INSTALLED HERE, NOT IN README.md -- nobody is told to install:"
+                           printf '%s\n' "$only_here" | sed 's/^/   /'; }
+  [ -z "$only_there" ] || { echo "IN README.md, INSTALLED BY NOTHING HERE -- untested instruction:"
+                            printf '%s\n' "$only_there" | sed 's/^/   /'; }
+  return 1
+}
+
+[ "${1:-}" != "--readme" ] || { check_readme; exit $?; }
 [ "${1:-}" != "--list" ] || { echo $IMAGES; exit 0; }
 [ $# -eq 0 ] || IMAGES="$*"
 
+check_readme || fail_readme=1
 src=$(mktemp -d); trap 'rm -rf "$src"' EXIT
 git archive HEAD | tar -x -C "$src"
 echo "== source: git archive HEAD ($(git rev-parse --short HEAD)), $(find "$src" -name '*.cpp' | wc -l) sources"
 
-fail=0
+fail=${fail_readme:-0}
 for img in $IMAGES; do
   rec=$(recipe "$img")
   [ -n "$rec" ] || { echo "$img: no recipe -- add one to tools/build-check.sh"; fail=1; continue; }
