@@ -48,8 +48,8 @@ package repository: they were dropped on 2026-09-05, because the
 download counts showed nothing outside the project's own automation had
 ever fetched one, and a seven-distribution matrix is a poor thing to
 maintain for that. Building takes two commands and about twenty seconds
-on a modern machine. `tools/build-check.sh` runs exactly the commands
-below in a container of each distribution and casts a chart with the
+on a modern machine. `tools/build-check.sh` holds these package
+lists and runs them in a container of each distribution and casts a chart with the
 result; **last run 2026-09-05, twelve of twelve** — Ubuntu
 22.04/24.04/26.04, Debian 12/13, Fedora 43/44, Rocky 9/10, Arch,
 openSUSE Tumbleweed and Alpine. It needs Docker and about ten minutes,
@@ -58,9 +58,17 @@ the date above is old, that is what it means.
 
 ```sh
 # Debian, Ubuntu, Mint
-sudo apt install g++ make pkg-config libx11-dev qt6-base-dev   # qtbase5-dev on 22.04/24.04
-# Fedora, Rocky, Alma
+sudo apt install g++ make pkg-config libx11-dev qt6-base-dev
+# qtbase5-dev instead on Ubuntu 22.04 and 24.04 and on Debian 12, which
+# have no Qt6 development package; the makefile builds against whichever
+# pkg-config finds
+# Fedora
 sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel
+# Rocky / Alma / RHEL 9 and 10 — the Qt package differs, and CRB holds
+# libX11-devel on both
+sudo dnf config-manager --set-enabled crb
+sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel \
+  qt5-qtbase-devel      # EL9; use qt6-qtbase-devel on EL10, which has no Qt5
 # Arch
 sudo pacman -S gcc make pkgconf libx11 qt6-base
 # openSUSE
