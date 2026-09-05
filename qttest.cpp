@@ -1326,6 +1326,12 @@ extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
 extern void SetThemeConfigDirTestQt(CONST char *);
 extern int NDarkPreferenceTestQt(void);
+extern QString StrConsoleFontQt(void);
+extern int NConsoleFontSizeQt(void);
+extern void SetConsoleFontQt(CONST char *szFamily, int nSize);
+extern QStringList RgstrConsoleFontQt(void);
+extern flag FConsoleAntialiasQt(void);
+extern void SetConsoleAntialiasQt(flag f);
 extern QString StrThemePrefQt(void);
 extern void SetThemePrefQt(CONST char *);
 extern void ApplyColorSchemeQt(void);
@@ -1415,6 +1421,69 @@ static void TestAppIconQt()
     Check(!pix.isNull() && pix.width() == n && pix.height() == n,
       "pixmap(%d) comes back %dx%d", n, pix.width(), pix.height());
   }
+}
+
+
+// The console font: that the bundled faces actually SHIP and load, and
+// that the preference round trips. The faces are the point -- the picker
+// is only as good as the files beside the binary, and a font/ that lost
+// them would leave a list of one on a machine with nothing else
+// installed, which is exactly what nobody would notice.
+
+static void TestConsoleFontQt()
+{
+  CONST char *rgszWant[] = {"Liberation Mono", "JetBrains Mono",
+    "IBM Plex Mono", "Source Code Pro", "Hack", "Fira Code"};
+  QStringList rgstr = RgstrConsoleFontQt();
+  char sz[cchSzMax];
+  int i;
+
+  Group("Console font");
+  for (i = 0; i < (int)(sizeof(rgszWant)/sizeof(char *)); i++) {
+    sprintf2(S(sz), "%s is bundled and loaded", rgszWant[i]);
+    Check(rgstr.contains(QString(rgszWant[i])), sz);
+  }
+  Check(rgstr.size() >= 6, "the picker offers at least the bundled faces");
+  // The bundled ones come first, in order, so the list does not depend on
+  // what the machine happens to have.
+  Check(rgstr.size() > 0 && rgstr[0] == QString("Liberation Mono"),
+    "the default face heads the list");
+
+  QTemporaryDir dir;
+  Check(dir.isValid(), "a scratch directory for the preference");
+  if (!dir.isValid())
+    return;
+  // SetThemeConfigDirTestQt() is the seam, not SetHomeTestQt(): QSettings
+  // resolves its path once, at startup, so moving HOME afterwards leaves
+  // it reading -- and writing -- the config of whoever is running the
+  // suite. The first version of this test did exactly that, and said so
+  // by failing on a default that the developer's own config had already
+  // answered.
+  SetThemeConfigDirTestQt(dir.path().toUtf8().constData());
+
+  SetConsoleFontQt("JetBrains Mono", 18);
+  Check(StrConsoleFontQt() == QString("JetBrains Mono"),
+    "the chosen face round trips");
+  Check(NConsoleFontSizeQt() == 18, "the chosen size round trips");
+  SetConsoleFontQt("", 0);
+  Check(StrConsoleFontQt().isEmpty(), "an empty face means the default");
+  Check(NConsoleFontSizeQt() == 0, "size 0 means follow Character Scale");
+  // Out of range is refused rather than stored, so a hand edited config
+  // cannot ask for a 2 pixel or a 2000 pixel chart.
+  SetConsoleFontQt("Hack", 900);
+  Check(NConsoleFontSizeQt() == 0, "an absurd size reads as automatic");
+
+  // Antialiasing: on unless it has been turned off, because Qt's own
+  // default is on and that is what the rest of the desktop does.
+  Check(FConsoleAntialiasQt(), "smoothing defaults to on");
+  SetConsoleAntialiasQt(fFalse);
+  Check(!FConsoleAntialiasQt(), "turning smoothing off round trips");
+  SetConsoleAntialiasQt(fTrue);
+  Check(FConsoleAntialiasQt(), "and back on again");
+
+  // Left pointing at the scratch directory, as the theme test leaves it:
+  // every group that touches these settings redirects first, and the
+  // process is about to exit anyway.
 }
 
 
@@ -6405,6 +6474,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-dialog",        TestObjSelDialogQt},
   {"objsel-parse",         TestObjSelParseQt},
   {"color-scheme",         TestColorSchemeQt},
+  {"console-font",         TestConsoleFontQt},
   {"app-icon",             TestAppIconQt},
   {"dialog-buttons",       TestDialogButtonWiringQt},
   {"shared-symbols",       TestSharedSymbolBoxesQt},

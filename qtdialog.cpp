@@ -3691,6 +3691,15 @@ void ShowCalcDialogQt()
 }
 
 
+// The console font preference lives in qtdriver.cpp, beside the theme
+// one, and is declared here the way that file's own helpers are.
+extern QString StrConsoleFontQt(void);
+extern int NConsoleFontSizeQt(void);
+extern void SetConsoleFontQt(CONST char *szFamily, int nSize);
+extern flag FConsoleAntialiasQt(void);
+extern void SetConsoleAntialiasQt(flag f);
+extern QStringList RgstrConsoleFontQt(void);
+
 // Display settings, equivalent to Windows' DlgDisplay: date/time/number
 // formatting, aspect count and requirements, eclipse display, and the
 // angle/rulership restriction checkbox grids.
@@ -3755,10 +3764,72 @@ void ShowDisplayDialogQt()
   if (peSta != NULL)
     peSta->setText(SzFormatRQt(us.rStation, -6));
 
+  // The console font picker, which Windows' dlgDisplay has no counterpart
+  // for. Added here rather than to astrolog.rc on purpose: the resource
+  // is the Windows build's too, and a control there would be dead in it.
+  // So the resource's own layout is left exactly as it is and this row is
+  // added underneath, with the buttons moved down to make room -- the
+  // same arrangement the Interface Theme menu items use, and stored in
+  // the same place (QSettings, not the .as file), because which face the
+  // text window uses is window chrome rather than an astrological
+  // setting.
+  QFontMetrics fmDlg(dlg.font());
+  int dxBase = fmDlg.averageCharWidth(), dyBase = fmDlg.height();
+  // In the resource's own units. Its content ends at y 250 (the Rising
+  // and Setting group, 215 + 35) with the buttons at 235, so the new row
+  // goes at 254 and the buttons move to 272 -- below everything rather
+  // than on top of the group box, which is what putting it at the old
+  // button line did.
+  int yRow = 254, dyRow = 37;
+  QWidget *pwOk = PwRcFindQt(rgbuilt, "IDOK");
+  QWidget *pwCancel = PwRcFindQt(rgbuilt, "IDCANCEL");
+  if (pwOk != NULL)
+    pwOk->move(pwOk->x(), pwOk->y() + dyRow * dyBase / 8);
+  if (pwCancel != NULL)
+    pwCancel->move(pwCancel->x(), pwCancel->y() + dyRow * dyBase / 8);
+  dlg.setFixedSize(dlg.width(), dlg.height() + dyRow * dyBase / 8);
+
+  QLabel *plFont = new QLabel("Console &Font:", &dlg);
+  QComboBox *pcbFont = new QComboBox(&dlg);
+  QLabel *plSize = new QLabel("Si&ze:", &dlg);
+  QComboBox *pcbSize = new QComboBox(&dlg);
+  QCheckBox *pchAa = new QCheckBox("&Smooth", &dlg);
+  plFont->setGeometry(5 * dxBase / 4, (yRow + 2) * dyBase / 8,
+    48 * dxBase / 4, 12 * dyBase / 8);
+  pcbFont->setGeometry(54 * dxBase / 4, yRow * dyBase / 8,
+    112 * dxBase / 4, 14 * dyBase / 8);
+  plSize->setGeometry(172 * dxBase / 4, (yRow + 2) * dyBase / 8,
+    16 * dxBase / 4, 12 * dyBase / 8);
+  pcbSize->setGeometry(190 * dxBase / 4, yRow * dyBase / 8,
+    38 * dxBase / 4, 14 * dyBase / 8);
+  pchAa->setGeometry(233 * dxBase / 4, (yRow + 2) * dyBase / 8,
+    42 * dxBase / 4, 12 * dyBase / 8);
+  pchAa->setToolTip("Antialias the text charts");
+  pchAa->setChecked(FConsoleAntialiasQt());
+  plFont->setBuddy(pcbFont);
+  plSize->setBuddy(pcbSize);
+  pcbFont->addItems(RgstrConsoleFontQt());
+  QString strFont = StrConsoleFontQt();
+  int iFont = pcbFont->findText(strFont.isEmpty() ?
+    QString("Liberation Mono") : strFont);
+  pcbFont->setCurrentIndex(Max(iFont, 0));
+  // "Character Scale" is the -Xs behaviour this had before there was a
+  // choice, and stays the default so nothing moves for anyone who does
+  // not open this.
+  pcbSize->addItem("Character Scale", 0);
+  for (int nSize = 8; nSize <= 32; nSize += (nSize < 20 ? 1 : 2))
+    pcbSize->addItem(QString::number(nSize), nSize);
+  int nSizeNow = NConsoleFontSizeQt();
+  pcbSize->setCurrentIndex(Max(pcbSize->findData(nSizeNow), 0));
+
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
   if (dlg.exec() != QDialog::Accepted)
     return;
+
+  SetConsoleFontQt(pcbFont->currentText().toLocal8Bit().constData(),
+    pcbSize->currentData().toInt());
+  SetConsoleAntialiasQt(pchAa->isChecked());
 
   // Validate before writing anything, as Windows does, so one bad field
   // can't leave the settings half applied.

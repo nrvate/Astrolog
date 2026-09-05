@@ -697,14 +697,34 @@ void PrintWarningQt(CONST char *sz, flag fError)
 // The chart is laid out in character cells either way, so the columns still
 // line up; the text is simply rendered at a size the face was drawn for.
 // The size still follows gs.nScale, so Character Scale keeps working.
+// Defined further down, beside the theme preference they share a file
+// with; forward declared here the way StrThemePrefQt() is above.
+QString StrConsoleFontQt(void);
+int NConsoleFontSizeQt(void);
+flag FConsoleAntialiasQt(void);
+
 static void SetTextMetricsQt()
 {
-  int nPix = Max(gs.nScale * 13 / 200, 9);
+  int nPix = Max(gs.nScale * 13 / 200, 9), nPref = NConsoleFontSizeQt();
+  QString strFamily = StrConsoleFontQt();
 
-  qi.fontText = QFont("Liberation Mono");
+  // The user's choice wins over both defaults, and each half is
+  // independent: a family with no size still follows Character Scale.
+  if (nPref > 0)
+    nPix = nPref;
+  qi.fontText = QFont(strFamily.isEmpty() ?
+    QString("Liberation Mono") : strFamily);
   qi.fontText.setPixelSize(nPix);
   qi.fontText.setFixedPitch(fTrue);
-  qi.fontText.setStyleHint(QFont::Monospace, QFont::PreferQuality);
+  // Both halves of it. The style strategy is what the FONT engine does
+  // when it rasterises a glyph; the render hint below, set on the
+  // painter, is what the PAINTER does when it draws one. Qt has both on
+  // by default, which is why this looked antialiased already -- saying
+  // it out loud is what makes turning it OFF possible.
+  qi.fontText.setStyleHint(QFont::Monospace, FConsoleAntialiasQt() ?
+    QFont::PreferQuality : QFont::NoAntialias);
+  qi.fontText.setStyleStrategy(FConsoleAntialiasQt() ?
+    QFont::PreferAntialias : QFont::NoAntialias);
   QFontMetrics fm(qi.fontText);
   qi.xChar = fm.horizontalAdvance(QChar('M'));
   qi.yChar = fm.height();
@@ -1062,6 +1082,8 @@ void RedrawQt()
   // text chart instead of going black while a second window holds it.
   if (!us.fGraphics) {
     SetTextMetricsQt();
+    gi.qpaint->setRenderHint(QPainter::TextAntialiasing,
+      FConsoleAntialiasQt());
     gi.qpaint->setFont(qi.fontText);
     qi.kvText = KvFromKi(kLtGrayA);
     is.cchRow = is.cchCol = is.cchColMax = 0;
@@ -3032,8 +3054,15 @@ static void LoadBundledFontsQt()
     // The interface font, bundled so the dialogs transcribed from the
     // Windows resource fit their boxes wherever this runs.
     "LiberationSans-Regular.ttf", "LiberationSans-Bold.ttf",
-    // And the monospaced face text charts are drawn in.
-    "LiberationMono-Regular.ttf", "LiberationMono-Bold.ttf" };
+    // And the monospaced faces text charts are drawn in. Liberation Mono
+    // is the default and what Windows' text window gets through Courier
+    // New; the rest are bundled so the console font list is the same on
+    // every platform rather than whatever that machine has installed.
+    // Each ships its licence beside it in font/.
+    "LiberationMono-Regular.ttf", "LiberationMono-Bold.ttf",
+    "JetBrainsMono-Regular.ttf", "IBMPlexMono-Regular.ttf",
+    "SourceCodePro-Regular.ttf", "Hack-Regular.ttf",
+    "FiraCode-Regular.ttf" };
   QStringList rgstrDir;
   int i, j;
 
@@ -4456,6 +4485,105 @@ static QSettings *PSettingsThemeQt(void)
   return new QSettings(QSettings::IniFormat, QSettings::UserScope,
     szThemeOrgQt, szThemeOrgQt);
 }
+
+// The console font: which face text charts are drawn in, and at what
+// size. Stored beside the theme and for the same reason -- window chrome
+// rather than an astrological setting, so it stays out of the .as file
+// this build shares with Windows.
+//
+// "" is the built-in default (Liberation Mono). Size 0 means follow -Xs,
+// the Character Scale, exactly as before this existed.
+
+#define szFontKeyQt      "Interface/ConsoleFont"
+#define szFontSizeKeyQt  "Interface/ConsoleFontSize"
+#define szFontAaKeyQt    "Interface/ConsoleAntialias"
+
+QString StrConsoleFontQt(void)
+{
+  QSettings *psettings = PSettingsThemeQt();
+  QString str = psettings->value(szFontKeyQt, "").toString();
+
+  delete psettings;
+  return str.trimmed();
+}
+
+int NConsoleFontSizeQt(void)
+{
+  QSettings *psettings = PSettingsThemeQt();
+  int n = psettings->value(szFontSizeKeyQt, 0).toInt();
+
+  delete psettings;
+  return n >= 6 && n <= 48 ? n : 0;
+}
+
+void SetConsoleFontQt(CONST char *szFamily, int nSize)
+{
+  QSettings *psettings = PSettingsThemeQt();
+
+  psettings->setValue(szFontKeyQt, QString(szFamily));
+  psettings->setValue(szFontSizeKeyQt, nSize);
+  psettings->sync();
+  delete psettings;
+}
+
+
+// Antialiasing, on by default because Qt's own default is on and that is
+// what every other application on the desktop does. Off is a real
+// preference rather than a curiosity: at small sizes a hinted bitmap-ish
+// face is sharper without it, and on a remote X display it is faster.
+
+flag FConsoleAntialiasQt(void)
+{
+  QSettings *psettings = PSettingsThemeQt();
+  flag f = psettings->value(szFontAaKeyQt, true).toBool();
+
+  delete psettings;
+  return f;
+}
+
+void SetConsoleAntialiasQt(flag f)
+{
+  QSettings *psettings = PSettingsThemeQt();
+
+  psettings->setValue(szFontAaKeyQt, (bool)f);
+  psettings->sync();
+  delete psettings;
+}
+
+
+// The faces the picker offers: the bundled ones that are actually there,
+// in a deliberate order, then every other fixed pitch family the system
+// has. Qt6 made the QFontDatabase methods static and deprecated
+// constructing one, so both spellings are here.
+
+QStringList RgstrConsoleFontQt(void)
+{
+  CONST char *rgszBundled[] = {"Liberation Mono", "JetBrains Mono",
+    "IBM Plex Mono", "Source Code Pro", "Hack", "Fira Code"};
+  QStringList rgstr, rgstrAll;
+  int i;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+  rgstrAll = QFontDatabase::families();
+#else
+  QFontDatabase fdb;
+  rgstrAll = fdb.families();
+#endif
+  for (i = 0; i < (int)(sizeof(rgszBundled)/sizeof(char *)); i++)
+    if (rgstrAll.contains(QString(rgszBundled[i])))
+      rgstr << QString(rgszBundled[i]);
+  for (i = 0; i < rgstrAll.size(); i++) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    flag fFixed = QFontDatabase::isFixedPitch(rgstrAll[i]);
+#else
+    flag fFixed = fdb.isFixedPitch(rgstrAll[i]);
+#endif
+    if (fFixed && !rgstr.contains(rgstrAll[i]))
+      rgstr << rgstrAll[i];
+  }
+  return rgstr;
+}
+
 
 QString StrThemePrefQt(void)
 {
