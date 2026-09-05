@@ -4001,8 +4001,12 @@ and the rpm metadata answer 404 and the last apt path was a CDN copy
 with a ten-minute life. Their `apt update` now fails rather than
 succeeding emptily, which is the point.
 
-One thing left behind on purpose: the `REPO_GPG_PRIVATE_KEY` secret,
-which signed those repositories and is now used by nothing. Deleting a
-secret is the maintainer's to do, and an unused one costs nothing but a
-line in a settings page.
+The `REPO_GPG_PRIVATE_KEY` secret that signed those repositories went
+with it, on the maintainer's word: `gh secret delete`, and the
+repository now holds no secrets at all. Worth knowing if a signed
+repository is ever wanted again -- GitHub held a copy of that key and
+does not any more, so it would have to come from wherever it was
+generated, or be a new key that every existing subscriber would have to
+trust afresh. Nothing in this tree needed it: `make-repo.sh` was the
+only consumer and went on 2026-09-05.
 
