@@ -47,30 +47,32 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - run: tools/ci-assert-version.sh "${{ github.event.inputs.tag || github.ref_name }}"
 
-  # The tree itself, once, before anything is shipped: both Linux
-  # binaries and the whole suite. Two minutes, and it is the only thing
-  # standing between a bad commit and three published artifacts.
+  # The tree itself, once, before anything is shipped -- and through the
+  # same command a developer runs before committing, so the release
+  # cannot check less than they do: generated tables, ten audits, both
+  # binaries, the suite, and the assertion scripts' self-test. It is the
+  # only thing standing between a bad commit and three published
+  # artifacts.
   linux:
-    name: Linux build + suite
+    name: Linux check
     needs: version
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Dependencies
         run: tools/ci-deps.sh qtbase5-dev pkg-config libx11-dev
-      - run: make -j4 && make qt-test -j4
-      - name: The suite
+      - name: make check
         env:
-          ASTROLOG_QT_EPHEM: minimal
-        run: tools/ci-run-suite.sh 600 suite.log -Yi1 ephem
-      - name: Every assertion script refuses what it must
-        run: tools/ci-selftest.sh
+          SELFTEST_ONLINE: "1"
+          GH_TOKEN: ${{ github.token }}
+        run: make check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
           name: linux-suite-log
-          path: suite.log
+          path: /tmp/check-suite.log
+          if-no-files-found: ignore
           retention-days: 14
 
   windows:

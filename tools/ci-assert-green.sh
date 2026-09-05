@@ -4,36 +4,32 @@
 #
 #   tools/ci-assert-green.sh <sha> [workflow-file] [repo]
 #
-# The release pipeline verifies a great deal about its own artifacts --
-# every .deb and .rpm is installed into a clean container and asked for
-# Chiron, the Windows package is unpacked and run, the macOS bundle is
-# launched out of the mounted .dmg. What none of that covers is the
-# program's own 3,812 assertions, the ten audits, or the behavioural
-# differential, because those belong to ci.yml and a release does not
-# re-run them.
+# Written when a push lane existed and a release did not re-run its
+# checks: a tag on a red commit would have produced artifacts that
+# install and compute perfectly while carrying whatever that lane had
+# caught. Since 2026-09-05 the release runs the suite itself, and the
+# only runs on a commit are release runs -- so this is now the way to
+# wait for one, and the default workflow below says so.
 #
-# Which is fine as long as ci.yml actually passed on the commit being
-# tagged. Nothing checked that. A tag on a red commit would produce
-# packages that install perfectly and compute a correct Chiron while
-# carrying whatever ci.yml had caught -- and the Chiron assertion is
-# deliberately shallow, because its job is to prove the ephemeris was
-# found rather than to re-test the program.
+# The checks a release still does not run are the differential, the
+# sanitizer sweeps and the warning audit; "make check" is the local
+# stand-in, and CLAUDE.md lists the rest.
 #
 # gh needs GH_TOKEN in the environment, which every workflow already has.
 set -e
 
 sha=${1:?usage: ci-assert-green.sh <sha> [workflow-file] [repo]}
-wf=${2:-ci.yml}
+wf=${2:-release.yml}
 repo=${3:-${GITHUB_REPOSITORY:?set GITHUB_REPOSITORY or pass the repo}}
 
 # WAIT for it, do not merely test it. Pushing a commit and its tag
-# together starts ci.yml and release.yml at the same instant, so a gate
+# together used to start two workflows at the same instant, so a gate
 # that failed on "still running" would fail almost every release -- which
 # is a foot-gun rather than a check. It failed exactly that way the first
 # time it ran, on v8.00-qt.6.
 #
-# The bound is generous because ci.yml is thirteen jobs in about four
-# minutes, and a release is not a thing anyone does in a hurry.
+# The bound is generous because a release run builds on three platforms,
+# and a release is not a thing anyone does in a hurry.
 wait=${CI_GREEN_WAIT:-900}
 waited=0
 while :; do

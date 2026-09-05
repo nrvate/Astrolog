@@ -8,7 +8,7 @@
 #
 # Exit status is the suite's, or 124 if the watchdog had to kill it.
 #
-# This used to be forty lines of shell inside slow-lane.yml's macOS job,
+# This used to be forty lines of shell inside a workflow's macOS job,
 # and every one of its arrangements had been learned from a run that
 # lost its own diagnostic (the comments there are preserved below as
 # the reasons). Logic in a workflow can only be falsified by pushing, so

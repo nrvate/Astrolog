@@ -14,7 +14,7 @@
 # the question could not be answered is the worst of the three outcomes,
 # so the fallback is to do the work.
 #
-# Used by ci.yml to decide whether a push needs the Windows zip and
+# Was used to decide whether a push needed the Windows zip and
 # installer built and driven under Wine. That is release-grade work --
 # about 94 s behind a 183 s build, on the fast lane's critical path --
 # and the inputs it covers change a few times a month. A release always

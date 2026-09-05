@@ -42,8 +42,8 @@
 #
 # Why: the serial form was seven processes per invocation, 529 times,
 # and on a GitHub runner that was 25 minutes -- long enough that the
-# switch surface was dropped from the push differential (ci.yml) and
-# diffed by nobody. Fewer processes and four workers is the difference
+# switch surface was dropped from the push differential and diffed by
+# nobody. Fewer processes and four workers is the difference
 # between a tax and a check; see QT_CI_PLAN.md for the measurements.
 if [ "${1:-}" = "--one" ]; then
   T=$2; i=$3; B=$4; W=$T/w/$i

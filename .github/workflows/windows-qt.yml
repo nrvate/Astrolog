@@ -1,17 +1,17 @@
 # The Windows package: the Qt port, built with MSVC, packaged as a zip
-# and an installer. A reusable workflow, called by ci.yml on every push
-# and by release.yml on a tag, so the artifact a release ships is built
-# by exactly the recipe every push has been exercising.
+# and an installer. A reusable workflow, called by release.yml on a tag
+# and dispatchable on its own, which is how the recipe gets exercised
+# between releases.
 #
 # THIS IS WHAT WINDOWS USERS GET, since 2026-09-04. Before that the
 # release shipped the Win32 build from wdriver.cpp, cross-compiled with
 # mingw and statically linked, and this job was an "experiment" in the
 # nightly that uploaded a Qt build nobody downloaded. The maintainer's
 # decision: the Qt port is the one interface on every platform. The
-# Win32 build is still compiled on every push (ci.yml "Windows builds",
-# "MSVC project") and still driven under Wine by the slow lane's
-# "Windows parity" job, because it is the behavioural oracle the whole
-# port is measured against -- it is just no longer what ships.
+# Win32 build is still the behavioural oracle the whole port is measured
+# against -- Makefile.win compiles it and tools/win-tests.sh drives it
+# under Wine, by hand since CI became tag-only. It is just no longer
+# what ships.
 #
 # The honest cost, recorded here rather than discovered later: Qt6 is
 # Windows 10 and later. Qt6Core.dll imports SetThreadDescription

@@ -264,24 +264,33 @@ kept, deliberately unbuilt, commented at every site.)*
 
 ---
 
-## Where this stands, 2026-09-04
+## Where this stands, 2026-09-05
 
-**Every phase is built and running, and the shape changed on 2026-09-04
-(one item excepted: 9.3, the macOS divergence list, is still unwritten).**
-Six workflows now, every check falsified individually before it was
-trusted — with two stated exceptions, macOS and the MSVC build, which
-cannot be falsified from a machine with neither and say so in their
-files. Eight releases have been cut, the newest two are kept, and the
-package repository is live.
+**Two workflows, and they run only on a tag.** Everything below this
+section is the record of how CI got built, phase by phase, and most of
+it describes machinery that no longer runs automatically. That is not
+rot: the checks all still exist as scripts and still work, and the
+entries are why each is shaped the way it is. What changed on 2026-09-05
+is who runs them. Read the last two entries of the work log first.
 
 | workflow | jobs | what they are |
 |---|---|---|
-| `ci.yml` (every push and PR, ~4–5 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · Compiler warnings · System install · Behaviour vs base (all four matrices since 2026-09-05; 124 s against 53 with three) · Which distributions · The distribution snapshot is current · one `.deb` and one `.rpm` (the newest row of each family, built in containers; every row on a release) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, Phase 6 warnings |
-| `windows-qt.yml` (reusable; called by `ci.yml` and `release.yml`) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
-| `linux-package.yml` (reusable; called by both lanes, once per family) | One row of one distribution: build both binaries in that distribution's own container, install the package in a CLEAN one and ask it for Chiron, keep the artifact | 4.2, 4.6 |
-| `slow-lane.yml` (reusable + dispatch; **no schedule**) | What nothing executes · ASan over the switch matrix · ASan over the graphics matrix · UBSan over the matrices and the Qt suite · The Qt suite under ASan · Astrolog against upstream Swiss Ephemeris · Windows parity · MSVC project · macOS build + suite + `.dmg` (Qt 6.8.3 pinned since 2026-09-05) · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
-| `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · N × `.deb` · N × `.rpm` · Publish · Retire (every release but the newest two; the tags stay) | 5.1, 5.2 |
-| `repo.yml` (on release) | Build the repositories (from the remaining releases, for the distributions built today) · Publish to Pages | 4.7 |
+| `release.yml` (on `v*`, or a dispatch) | Version check · Linux build + suite · Windows (calls `windows-qt.yml`) · macOS build + suite + `.dmg` · Publish · Retire | 5.1, 5.2, 9.x. A dispatch can set `publish: false` and stop before the release |
+| `windows-qt.yml` (reusable; called by `release.yml`, dispatchable) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
+
+**By hand, and this is now the whole of the safety net a commit gets:**
+`make check` (generated tables, ten audits, both builds, the suite, the
+assertion scripts' self-test, 53 s), `tools/build-check.sh` (the source
+build in a container of twelve distributions),
+`tools/ci-differential.sh` (four matrices against another commit),
+`tools/asan-sweep.sh` and `tools/ubsan-sweep.sh`,
+`tools/warning_audit.py`, `tools/coverage-report.sh`,
+`tools/swetest-oracle.sh`, and the Windows parity harnesses under Wine.
+
+**Nine releases have been cut and the newest two are kept.** The Linux
+packages and the signed apt/dnf repository were removed on 2026-09-05;
+Linux users build from source, which `tools/build-check.sh` proves.
+
 
 **Three decisions, all the maintainer's, all on 2026-09-04:**
 

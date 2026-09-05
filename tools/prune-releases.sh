@@ -6,9 +6,9 @@
 # The maintainer's decision, 2026-09-04: old releases are pruned. Two
 # reasons, both measured that day:
 #
-#   - repo.yml rebuilds the apt/dnf repository from EVERY release, so a
-#     package built for a distribution that has since left the matrix --
-#     Fedora 42, end-of-life since May -- stays on the site forever,
+#   - the apt/dnf repository was rebuilt from EVERY release, so a
+#     package built for a distribution that had since left the matrix --
+#     Fedora 42, end-of-life since May -- stayed on the site forever,
 #     served and never again verified. The repository checks reported such a
 #     suite as "served, but no longer in the build matrix -- not
 #     verified", which is honest and is not a state anyone wants.
@@ -27,10 +27,11 @@
 # question for the reflog. The assets are what go, and that is not
 # reversible: --dry-run says what would be deleted and deletes nothing.
 #
-# Run from release.yml's Publish job right after "gh release create", so
-# that cutting a release is what retires the ones before it -- and
-# repo.yml, which chains off the release, rebuilds the site from what is
-# left. Runnable by hand with the same token gh already has.
+# Run from release.yml's own Retire job, so that cutting a release is
+# what retires the ones before it. Runnable by hand with the same token
+# gh already has. (The repository it fed went with the Linux packages on
+# 2026-09-05; keeping two releases is now simply what the project
+# serves.)
 set -eu
 
 keep=2; dry=""; repo=${GITHUB_REPOSITORY:-nrvate/Astrolog}
