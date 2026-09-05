@@ -36,6 +36,15 @@
 #   declares __yield as an inline intrinsic; the same include, given on
 #   the command line through Qt6Core's Cflags below, is the fix here and
 #   is scoped to this generated file.
+#
+# - Its frameworks carry "@rpath/QtCore.framework/..." install names, so
+#   a binary linked against them needs an rpath to lib/ or dyld reports
+#   "Library not loaded ... no LC_RPATH's found" -- the third pinned run
+#   did, at the suite's first instruction. Homebrew's frameworks have
+#   absolute install names and never needed one. Qt6Core's Libs below
+#   carry "-Wl,-rpath,<lib>" for the in-tree binaries; macdeployqt
+#   rewrites the bundle's copy to @executable_path/../Frameworks, which
+#   is the installer's normal flow.
 set -eu
 ver=${1:?usage: ci-macos-qt.sh <version> <dir>}
 dir=${2:?usage: ci-macos-qt.sh <version> <dir>}
@@ -76,7 +85,8 @@ for m in Core Gui Widgets PrintSupport Network; do
     echo "Name: Qt6 $m"
     echo "Description: Qt $m module, from the Qt installer; this file was written by tools/ci-macos-qt.sh"
     echo "Version: $ver"
-    echo "Libs: -F\${libdir} -framework Qt$m"
+    rpath=""; [ "$m" = Core ] && rpath=" -Wl,-rpath,\${libdir}"
+    echo "Libs: -F\${libdir} -framework Qt$m$rpath"
     extra=""; [ "$m" = Core ] && extra=" -include arm_acle.h"
     echo "Cflags: -F\${libdir} -I\${libdir}/Qt$m.framework/Headers -DQT_${up}_LIB$extra"
     [ -z "$req" ] || echo "Requires: $req"
