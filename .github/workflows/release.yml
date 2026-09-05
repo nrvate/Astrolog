@@ -60,8 +60,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      # mingw as well as Qt, so "make check" builds the Win32 oracle here
+      # rather than skipping it. That build compiles nowhere else now,
+      # and it went 62 commits without compiling the last time nothing
+      # watched it -- while three work log items listed "Windows builds"
+      # among their nets. About 30 s of apt for 40 s of compile.
       - name: Dependencies
-        run: tools/ci-deps.sh qtbase5-dev pkg-config libx11-dev
+        run: tools/ci-deps.sh qtbase5-dev pkg-config libx11-dev g++-mingw-w64-x86-64
       - name: make check
         env:
           SELFTEST_ONLINE: "1"
