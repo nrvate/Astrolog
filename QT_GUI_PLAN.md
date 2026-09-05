@@ -7644,6 +7644,17 @@ are the more useful half to read before starting something new.
     `sh -n` on the five scripts, both workflows parsed, the line-endings
     audit clean.
 
+    **And a fourth, found by CI rather than by the search.**
+    `warning_audit.py` runs `make -f Makefile -j4 CPPFLAGS=...` for its
+    console leg, list-form from Python, and the sweep that found the three
+    shell callers looked for a bare `make` in shell text and never matched
+    `['make', '-f', makefile, ...]` with the makefile in a variable. The push
+    went red in the warnings job with `obj-qt/qtdriver.o` failing to
+    compile -- the Qt sub-make under the console's flags, with no Qt
+    include path -- which is exactly the failure the audit's own build
+    check exists to catch (`^make.*\*\*\*`, not a word). The leg names
+    `astrolog` now, and the whole audit run locally afterwards is clean.
+
 
 ## Features this fork adds to both builds
 

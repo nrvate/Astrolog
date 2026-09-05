@@ -43,10 +43,11 @@ RM = rm -f
 # removing every build (2026-09-01): from then on "make clean && make &&
 # ./astrolog-qt" deleted the Qt binary and never rebuilt it -- and before
 # then it had been quietly running a STALE one that survived the narrower
-# clean. The scripts name their target now ("make astrolog"). Three of
-# them MUST: tools/asan-sweep.sh, tools/ubsan-sweep.sh and
-# tools/coverage-report.sh build with NAME= and CPPFLAGS= given on the
-# command line, and make forwards command-line variables to every
+# clean. The scripts name their target now ("make astrolog"). Four of
+# them MUST: tools/asan-sweep.sh, tools/ubsan-sweep.sh,
+# tools/coverage-report.sh and tools/warning_audit.py build with NAME=
+# or CPPFLAGS= given on the command line, and make forwards command-line
+# variables to every
 # sub-make through MAKEFLAGS, so without a target the Qt sub-make would
 # build the port under the console binary's name with the console
 # binary's flags -- two builds writing the same file.

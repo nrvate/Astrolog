@@ -184,8 +184,15 @@ def run_build(name, clean=True):
         subprocess.run(['make', '-f', makefile, 'clean'] + extra, cwd=ROOT,
                        env=env, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL)
+    # The console makefile's default goal builds the Qt port too (since
+    # 2026-09-04), and the CPPFLAGS= given here would reach that sub-make
+    # through MAKEFLAGS and compile qtdriver.cpp with no Qt include path.
+    # Name the console binary, which is all this leg audits. The push
+    # that moved the default went red here before this line existed.
+    target = ['astrolog'] if makefile == 'Makefile' else []
     p = subprocess.run(['make', '-f', makefile, JOBS, '%s=%s' % (var, flags)]
-                       + extra, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                       + target + extra, cwd=ROOT, env=env,
+                       stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, text=True, errors='replace')
     failed = p.returncode != 0 or bool(RE_ERROR.search(p.stdout))
     return p.stdout, failed
