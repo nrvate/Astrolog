@@ -29,12 +29,22 @@
 set -eu
 ver=${1:?usage: ci-macos-qt.sh <version> <dir>}
 dir=${2:?usage: ci-macos-qt.sh <version> <dir>}
+case $dir in /*) ;; *) dir=$PWD/$dir ;; esac   # aqt runs elsewhere, below
 q=$dir/$ver/macos
 
 if [ ! -x "$q/bin/macdeployqt" ]; then
   echo "== installing Qt $ver into $dir (aqtinstall 3.3.0, qtbase + qttools)" >&2
-  python3 -m pip install -q "aqtinstall==3.3.0" >&2
-  python3 -m aqt install-qt mac desktop "$ver" clang_64 --archives qtbase qttools -O "$dir" >&2
+  # aqt in a throwaway virtual environment: the runner's Python refuses a
+  # bare "pip install" (PEP 668, "externally-managed-environment"), which
+  # is how the first run of this script failed. The venv is not part of
+  # what is cached; only the Qt tree is.
+  venv=$(mktemp -d)/aqt
+  python3 -m venv "$venv" >&2
+  "$venv/bin/pip" install -q "aqtinstall==3.3.0" >&2
+  # Run aqt from the venv's directory: it writes aqtinstall.log into the
+  # current directory, and that should not be the checkout.
+  (cd "$(dirname "$venv")" && "$venv/bin/aqt" install-qt mac desktop "$ver" clang_64 --archives qtbase qttools -O "$dir") >&2
+  rm -rf "$(dirname "$venv")"
   find "$q" -name '*.dSYM' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 else
   echo "== Qt $ver already in $dir" >&2
