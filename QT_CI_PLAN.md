@@ -90,7 +90,7 @@ phases below whose job is to settle it.
 ### Verified
 
 *(Checked 2026-09-01/02, and left as the measurements they were. Rows
-overtaken since: CI is five workflows, not one job; the fork has its own
+overtaken since: CI is six workflows, not one job; the fork has its own
 version, `szVersionFork` in `astrolog.h`; `ephem/` is 32 files and 10 MB
 and resolves 39 of 39 bodies since 2026-09-03, so the 12-file, 19-of-39
 and 61/2 rows are history; `placalc.h` went with the Placalc backend on
@@ -268,7 +268,7 @@ kept, deliberately unbuilt, commented at every site.)*
 
 **Every phase is built and running, and the shape changed on 2026-09-04
 (one item excepted: 9.3, the macOS divergence list, is still unwritten).**
-Five workflows now, every check falsified individually before it was
+Six workflows now, every check falsified individually before it was
 trusted — with two stated exceptions, macOS and the MSVC build, which
 cannot be falsified from a machine with neither and say so in their
 files. Eight releases have been cut, the newest two are kept, and the
@@ -278,6 +278,7 @@ package repository is live.
 |---|---|---|
 | `ci.yml` (every push and PR, ~4–5 min) | Win32 builds · Qt5 build + suite · Qt6 build + suite · Audits · Compiler warnings · System install · Behaviour vs base (all four matrices since 2026-09-05; 124 s against 53 with three) · Which distributions · The distribution snapshot is current · one `.deb` and one `.rpm` (the newest row of each family, built in containers; every row on a release) · **Windows package** (calls `windows-qt.yml`) | 1.1–1.3b, 2.1–2.3, 3.1–3.4, 4.2–4.6, 6.5, Phase 6 warnings |
 | `windows-qt.yml` (reusable; called by `ci.yml` and `release.yml`) | Qt 6.8.3 on Windows (MSVC): build, suite, window check, stage · Windows zip and installer, verified under Wine | 4.3, 4.4, Phase 10 |
+| `linux-package.yml` (reusable; called by both lanes, once per family) | One row of one distribution: build both binaries in that distribution's own container, install the package in a CLEAN one and ask it for Chiron, keep the artifact | 4.2, 4.6 |
 | `slow-lane.yml` (reusable + dispatch; **no schedule**) | What nothing executes · ASan over the switch matrix · ASan over the graphics matrix · UBSan over the matrices and the Qt suite · The Qt suite under ASan · Astrolog against upstream Swiss Ephemeris · Windows parity · MSVC project · macOS build + suite + `.dmg` (Qt 6.8.3 pinned since 2026-09-05) · The published release, as downloaded (dispatch only) | 6.1–6.4b, 9.x |
 | `release.yml` (on `v*`) | Version check · Which distributions · Slow lane · Windows · N × `.deb` · N × `.rpm` · Publish · Retire (every release but the newest two; the tags stay) | 5.1, 5.2 |
 | `repo.yml` (on release) | Build the repositories (from the remaining releases, for the distributions built today) · Publish to Pages | 4.7 |
@@ -3862,6 +3863,28 @@ and a red job means the site is wrong. The script looks for the newest
 PUBLISHED release now rather than the checkout's version, since that is
 what a site serves -- run by hand against the live site it resolved
 8.00-qt.8 and passed.
+
+*What the fast lane costs now, measured on the first fully green run of
+this shape (`bf5c72f`).* Wall **203 s**, against 244-298 s before; 1,167
+runner-seconds across thirteen jobs. The long poles are the compiler
+warning audit at 183 s and the MSVC build and suite at 160; "Behaviour
+vs base" is 117 s with FOUR matrices, where three used to be 53 -- the
+switch matrix costs about a minute of that and is worth it. The zip and
+installer were skipped on that push, which is the gate's false branch
+working: the commit touched `tools/msvc-build-qt.cmd`, which is the
+build and not the packaging. Its true branch was proven by dispatching
+`windows-qt.yml`, where the package job always runs.
+
+One thing this batch got wrong and the runner caught. The guard's
+`FailIndexQt()` was defined behind `#ifdef QTTEST` in general.cpp, and
+the MSVC build compiles the core WITHOUT `/DQTTEST` and three files with
+it: three LNK2019s on the first Windows run after the change. It is
+unconditional now, and the local reproduction is one compile each way --
+general.cpp without the flag defines the symbol, a translation unit with
+it carries the undefined reference. The same run showed that
+qtdriver.cpp and qtdialog.cpp reference the guard too, through the
+checked tables' inline subscripts, so the Windows suite gains more from
+it than qttest.cpp's own 23 sites.
 
 *The sixth was already answered.* "Sixteen tags with no assets" was a
 miscount: ten of the eighteen are upstream's own version tags, which
