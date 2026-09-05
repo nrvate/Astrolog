@@ -191,8 +191,8 @@ included, which is a hazard with two sessions in one tree;
 `make clean-console` is upstream's narrower one, which is what
 `tools/asan-sweep.sh` uses.
 
-`run-qt-tests.sh` is headless — no X display needed. Run it before every
-commit. It prints its own count and that count grows every week, so this
+`run-qt-tests.sh` is headless — no X display needed. `make check` runs
+it along with everything else worth running before a commit. It prints its own count and that count grows every week, so this
 document does not restate it — three documents once asserted three
 different wrong numbers, which is what closed Q13 in `QT_CI_PLAN.md`. The
 state that matters is **0 failed**, and the release run runs it. The

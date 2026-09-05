@@ -754,7 +754,15 @@ thing it watches and confirm the entry moves.
 
 ## Checks worth running before a commit
 
+**`make check` runs everything in this list**, in the order that fails
+fastest, in about two minutes -- it is what CI used to do on every push,
+and since 2026-09-05 nothing does it for you. The list is kept out
+long-hand because knowing which check answers which question is the
+point, and because a failure names one of these commands.
+
 ```sh
+make check                              # all of the below, one command
+
 make qt -j4 && make qt-test -j4 && ./run-qt-tests.sh
 make win -j4
 python3 tools/rc_audit.py
