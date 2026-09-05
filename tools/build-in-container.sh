@@ -71,7 +71,6 @@ docker run --rm -v "$PWD:/src" -w /src \
   "$image" sh -ec "
     $install
     make -j4 >/dev/null
-    make qt -j4 >/dev/null
     $package
     chown -R $(id -u):$(id -g) $out obj-qt 2>/dev/null || true
     find . -maxdepth 1 -user 0 -exec chown $(id -u):$(id -g) {} + 2>/dev/null || true

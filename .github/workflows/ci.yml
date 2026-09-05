@@ -185,8 +185,10 @@ jobs:
         run: tools/ci-deps.sh libx11-dev
       # The console build is the one that compiles the X11 backend at all,
       # and it is what the round trip and every differential matrix drive.
+      # The target is named because a plain "make" builds the Qt port too,
+      # and this job installs no Qt.
       - name: Build the console binary
-        run: make -j4
+        run: make astrolog -j4
 
       - name: Assert it is actually new
         run: tools/ci-assert-fresh.sh astrolog
@@ -362,7 +364,7 @@ jobs:
       # which is indistinguishable from a passing differential. "-XE 1 20"
       # sat in the matrix that way from the day it was written.
       - name: No inert options in the graphics matrix
-        run: make -j4 && python3 tools/inert_option_audit.py
+        run: make astrolog -j4 && python3 tools/inert_option_audit.py
 
       - name: Diff all four matrices against the base commit
         env:

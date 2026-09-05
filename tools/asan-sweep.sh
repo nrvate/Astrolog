@@ -57,7 +57,9 @@ runs=0
 
 echo "== building the console ASan binary (QTTEST brings the range guards)"
 make clean-console >/dev/null 2>&1
-make NAME=$BIN -j4 \
+# The target is named: a plain "make" builds the Qt port too, and NAME= and
+# CPPFLAGS= given on the command line reach that sub-make through MAKEFLAGS.
+make NAME=$BIN $BIN -j4 \
   CPPFLAGS="-DQTTEST -fsanitize=address -g -O0 -Wno-write-strings \
     -Wno-narrowing -Wno-comment" \
   LIBS="-fsanitize=address -lm -lX11 -ldl" >"$OUT/build.log" 2>&1 || {

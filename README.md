@@ -183,8 +183,8 @@ package (`qtbase5-dev` or `qt6-base-dev` on Debian/Ubuntu/Mint) and
 `pkg-config` — the build stops and names the package if they are
 missing. Object files go to `obj-qt/`, so this can be
 built alongside the regular `astrolog` binary without interfering with it:
-plain `make` still builds the stock X11 version, and `make all` builds
-everything this tree has.
+plain `make` builds the stock X11 version and the Qt port together, and
+`make all` builds everything this tree has, the Windows binaries included.
 
 `make install` deliberately leaves the data where it is — the ephemeris
 files, the atlas, the fonts, `astrolog.as` — and installs small wrappers

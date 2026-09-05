@@ -840,7 +840,7 @@ real gate, and they are not pre-commit** — each needs a baseline
 binary built from the commit you are changing:
 
 ```sh
-git worktree add /tmp/base <commit> && make -C /tmp/base -j4
+git worktree add /tmp/base <commit> && make -C /tmp/base astrolog -j4
 cp /tmp/base/astrolog ./base-astrolog && git worktree remove /tmp/base --force
 tools/chart-matrix.sh    ./base-astrolog > old.txt 2>&1   # chart output
 tools/chart-matrix.sh    ./astrolog      > new.txt 2>&1

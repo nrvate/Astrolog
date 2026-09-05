@@ -264,7 +264,7 @@ jobs:
         run: tools/ci-deps.sh libx11-dev
       - name: Astrolog against upstream Swiss Ephemeris's own swetest
         run: |
-          make -j4
+          make astrolog -j4
           git clone -q --depth 1 https://github.com/aloistr/swisseph.git /tmp/swe
           make -C /tmp/swe swetest -j4 >/dev/null
           tools/swetest-oracle.sh ./astrolog /tmp/swe/swetest "$PWD/ephem"
@@ -299,7 +299,7 @@ jobs:
       - name: Install the cross toolchain and Wine
         run: tools/ci-deps.sh --i386 g++-mingw-w64-x86-64 libx11-dev wine wine64 xvfb metacity xdotool imagemagick
       - name: Build all three binaries
-        run: make -j4 && make wcli -j4 && make -f Makefile.win -j4
+        run: make astrolog -j4 && make wcli -j4 && make -f Makefile.win -j4
 
       # Wine writes a prefix on first run and takes a while doing it; get
       # that out of the way before anything is timed or diffed.

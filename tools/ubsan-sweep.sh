@@ -33,7 +33,8 @@ want=${1:-both}
 cd "$(dirname "$0")/.."
 
 echo "== building with -fsanitize=undefined"
-make NAME=astrolog-ubsan \
+# Target named for the reason tools/asan-sweep.sh gives at its build line.
+make NAME=astrolog-ubsan astrolog-ubsan \
   CPPFLAGS="-MMD -MP -O1 -g -std=gnu++17 -fsanitize=undefined \
     -Wno-write-strings -Wno-narrowing -Wno-comment" \
   LIBS="-lm -lX11 -ldl -fsanitize=undefined" -j4 >/dev/null

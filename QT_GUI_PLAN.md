@@ -6627,7 +6627,9 @@ are the more useful half to read before starting something new.
     `astrolog-qt` by default?" -- and the honest answer is that `Makefile`
     is upstream's and builds upstream's binary, while this fork's three Qt
     makefiles are its own. Ten scripts here expect a plain `make` to leave
-    `./astrolog` behind, so the default target cannot simply move. Named
+    `./astrolog` behind, so the default target cannot simply move. *(It
+    moved on 2026-09-04, item 181, once those scripts named their
+    target.)* Named
     targets instead (`make qt`, `make qt-test`, `make qt-asan`, `make win`,
     `make all`), each exactly the command CLAUDE.md already documented.
     That was `87a5390`. Everything below came out of looking properly
@@ -7599,6 +7601,48 @@ are the more useful half to read before starting something new.
     at end of file. About 24,900 frames, then SIGSEGV. It hid because
     this tree's `astrolog.as` ships `-YQ 0`, so no harness here ever had
     the pager on. Two independent guards, measured one at a time.
+
+181. **`make` builds `./astrolog` and `./astrolog-qt` together.** The
+    maintainer's rule, 2026-09-04: on Linux, plain `make` always builds
+    both. Item 167 had kept the default at upstream's binary because ten
+    scripts expected a plain `make` to leave `./astrolog` behind, and that
+    held right up until `make clean` started removing every build
+    (`47baa42`, 2026-09-01). From then on `make clean && make &&
+    ./astrolog-qt` deleted the Qt binary and never rebuilt it -- five such
+    rounds in one evening's shell history, and a tree with no
+    `astrolog-qt`, no `astrolog-qt-test` and no `obj-qt*` directory at
+    all. Before that date the same sequence had been quietly running a
+    **stale** Qt binary that survived the narrower clean, which is the
+    worse of the two outcomes and the one nothing reported.
+
+    What moved: a `default: $(NAME) qt` rule ahead of `$(NAME)`, so the
+    first rule in the file is no longer upstream's. `make all` is still
+    the five. Every script and CI step that wants the console binary
+    alone names it now (`make astrolog`): both sides of
+    `ci-differential.sh`, the restore at the end of `coverage-report.sh`,
+    and the audits, differential, oracle and Windows-parity jobs, which
+    install no Qt and would otherwise stop on `Makefile.qt`'s
+    missing-package guard. `build-in-container.sh` drops its `make qt`
+    line, since `make` covers it.
+
+    **Three of them had to name it, and the reason is measured rather
+    than assumed.** `asan-sweep.sh`, `ubsan-sweep.sh` and
+    `coverage-report.sh` build with `NAME=` and `CPPFLAGS=` on the command
+    line, and make forwards command-line variables to every sub-make
+    through `MAKEFLAGS`. `make -n NAME=astrolog-asan
+    CPPFLAGS=-fsanitize=address` with no target showed the Qt sub-make
+    linking `obj-qt/*.o` to `astrolog-asan` right after the console link
+    to the same name: two builds writing one file, the second with Qt's
+    libraries and the first's flags. With the target named,
+    `Makefile.qt` is not invoked at all.
+
+    **Nets**: from `make clean`, one `make -j4` produced both binaries in
+    24 s with no warning and no jobserver complaint; `make -n` with the
+    target named touches `Makefile.qt` zero times; the suite, 0 failed;
+    the four-matrix differential against `HEAD~1` identical on every
+    surface, and neither of its build logs mentions `Makefile.qt`;
+    `sh -n` on the five scripts, both workflows parsed, the line-endings
+    audit clean.
 
 
 ## Features this fork adds to both builds

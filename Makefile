@@ -35,6 +35,23 @@ LIBS = -lm -lX11 -ldl -s
 CPPFLAGS = -MMD -MP -O -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment
 RM = rm -f
 
+# "make" alone builds two binaries on Linux: upstream's X11 one and this
+# fork's Qt port, side by side. The maintainer's rule, 2026-09-04.
+#
+# It used to build only ./astrolog, because ten scripts expected a plain
+# "make" to leave ./astrolog behind. That held until "make clean" started
+# removing every build (2026-09-01): from then on "make clean && make &&
+# ./astrolog-qt" deleted the Qt binary and never rebuilt it -- and before
+# then it had been quietly running a STALE one that survived the narrower
+# clean. The scripts name their target now ("make astrolog"). Three of
+# them MUST: tools/asan-sweep.sh, tools/ubsan-sweep.sh and
+# tools/coverage-report.sh build with NAME= and CPPFLAGS= given on the
+# command line, and make forwards command-line variables to every
+# sub-make through MAKEFLAGS, so without a target the Qt sub-make would
+# build the port under the console binary's name with the console
+# binary's flags -- two builds writing the same file.
+default: $(NAME) qt
+
 $(NAME): $(OBJS)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
@@ -62,15 +79,10 @@ clean: clean-console
 clean-console:
 	$(RM) $(OBJS) $(OBJS:.o=.d) $(NAME)
 
-# This file is upstream's and builds upstream's binary: "make" produces
-# ./astrolog, the X11 one. This fork's Qt port has its own makefiles, and
-# the default target cannot simply move to it -- ten scripts here expect
-# a plain "make" to leave ./astrolog behind, including all three
-# differential matrices, tools/asan-sweep.sh (which builds with
-# NAME= overridden), tools/settings-round-trip.sh and run-qt-tests.sh.
-#
-# So the Qt builds get named targets instead. Each is exactly the command
-# CLAUDE.md documents; nothing here changes what "make" alone does.
+# This file is upstream's and builds upstream's binary as $(NAME); this
+# fork's Qt port has its own makefiles, reached through the named targets
+# below. Each is exactly the command CLAUDE.md documents, and "default"
+# above is what "make" alone runs.
 
 qt:
 	$(MAKE) -f Makefile.qt
@@ -225,7 +237,7 @@ uninstall:
 	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
-.PHONY: clean clean-console qt qt-test qt-asan qt6 qt6-test win wcli all \
+.PHONY: default clean clean-console qt qt-test qt-asan qt6 qt6-test win wcli all \
 	install uninstall
 
 # Compiler-generated header dependencies; see Makefile.qt for the

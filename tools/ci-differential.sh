@@ -104,7 +104,7 @@ mkdir -p "$out"
 
 # The head binary. Built here rather than assumed, so the two sides are
 # built the same way by the same make.
-make -j4 >"$out/build-head.log" 2>&1 || {
+make astrolog -j4 >"$out/build-head.log" 2>&1 || {
   echo "HEAD BUILD FAILED -- see $out/build-head.log"; tail -20 "$out/build-head.log"; exit 1; }
 
 # The baseline, built from a clean extraction so nothing uncommitted leaks
@@ -112,7 +112,7 @@ make -j4 >"$out/build-head.log" 2>&1 || {
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 git archive "$base" | tar -x -C "$tmp"
-( cd "$tmp" && make -j4 ) >"$out/build-base.log" 2>&1 || {
+( cd "$tmp" && make astrolog -j4 ) >"$out/build-base.log" 2>&1 || {
   echo "BASE BUILD FAILED at $basesha -- see $out/build-base.log"
   tail -20 "$out/build-base.log"; exit 1; }
 cp "$tmp/astrolog" "$root/base-astrolog"

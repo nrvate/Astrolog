@@ -136,9 +136,11 @@ make wcli -j4                    # ./astrolog-wcli.exe, the console
                                  # main() rather than WinMain, so it runs
                                  # under Wine with no display at all
 make all -j4                     # all five; "make clean" undoes it
-                                 # (plain "make" is upstream's target and
-                                 # still builds only ./astrolog, which ten
-                                 # scripts here depend on)
+                                 # (plain "make" builds ./astrolog and
+                                 # ./astrolog-qt together, since
+                                 # 2026-09-04; a script that wants the
+                                 # console binary alone says
+                                 # "make astrolog")
 make qt6 -j4                     # ./astrolog-qt6, against a hand-installed
 make qt6-test -j4                # Qt6; QT6_PKGCONFIG says where it is.
                                  # Not in "make all" -- most machines have

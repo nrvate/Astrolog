@@ -36,7 +36,8 @@ mkdir -p "$out"
 echo "== building an instrumented console binary"
 make clean-console >/dev/null 2>&1 || true
 rm -f ./*.gcda ./*.gcno
-make NAME=astrolog-cov \
+# Target named for the reason tools/asan-sweep.sh gives at its build line.
+make NAME=astrolog-cov astrolog-cov \
   CPPFLAGS="-MMD -MP -O0 -g -std=gnu++17 --coverage \
     -Wno-write-strings -Wno-narrowing -Wno-comment" \
   LIBS="-lm -lX11 -ldl --coverage" -j4 >/dev/null
@@ -122,7 +123,7 @@ fi
 echo "== restoring the tree"
 make clean-console >/dev/null 2>&1 || true
 rm -f ./*.gcda ./*.gcno ./astrolog-cov
-make -j4 >/dev/null
+make astrolog -j4 >/dev/null
 [ -x ./astrolog ] || { echo "   FAILED to rebuild ./astrolog"; exit 1; }
 echo "   ./astrolog rebuilt uninstrumented"
 echo "report in $out/coverage.txt"
