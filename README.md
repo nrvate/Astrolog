@@ -45,7 +45,7 @@ list comes from the binary rather than from someone's memory:
 | `.rpm` | the two current Fedora releases (the same arrangement, against Fedora's release service, so a stale list stops a push rather than shipping), EL9 (Rocky/Alma), EL10 |
 | `.exe` | Windows installer — Start Menu entry, uninstaller, Add/Remove Programs. **Windows 10 or later** |
 | `.zip` | Windows, the same files — unpack and run, no install needed. The Qt build with its runtime included, since v8.00-qt.6; releases before that shipped the native Win32 build, which ran on Windows 7 |
-| `.dmg` | macOS, Apple Silicon only — read the note below before downloading |
+| `.dmg` | macOS 12 or later, Apple Silicon only — read the note below before downloading |
 
 Only the two newest releases are kept. Cutting a release retires the
 ones before it, and the [package repository](https://nrvate.github.io/Astrolog/)

@@ -3794,5 +3794,7 @@ coverage job from 321 to 273.
 One thing the pin makes possible, set in the same commit as this entry:
 the bundle claimed macOS 26.0 as its minimum, because nothing set a
 deployment target and clang takes the host's, while Qt 6.8.3's frameworks
-run on macOS 12. The job sets `MACOSX_DEPLOYMENT_TARGET=12.0`; the
-dispatch after this commit reports what the bundle claims.
+run on macOS 12. The job sets `MACOSX_DEPLOYMENT_TARGET=12.0`, and the
+dispatch after that commit reported the bundle at 12.0 -- the program
+binary and the whole bundle alike -- with the suite still 4538 and the
+job at 122 s on a cache hit.

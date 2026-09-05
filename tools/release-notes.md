@@ -14,7 +14,7 @@ anywhere and run `astrolog.exe`. This is the Qt build of
 Astrolog, the same program as on Linux and macOS, with its
 runtime included; it needs **Windows 10 or later**.
 
-**macOS** — the app is ad-hoc signed but not *notarized*, so a
+**macOS** (12 or later, Apple Silicon) — the app is ad-hoc signed but not *notarized*, so a
 download through a browser is quarantined and macOS says it is
 damaged. It is not. Either right-click the app and choose
 **Open**, or run once:
