@@ -14,12 +14,8 @@
 # over HTTPS the way apt and dnf will, and require the version to be in
 # it, for every distribution.
 #
-# ONE attempt, after the caller has waited. Pages propagation is not
-# instant, and a check retried until it passes is not a check -- so
-# repo.yml sleeps a fixed grace period after the deploy and then runs
-# this exactly once (2026-09-05; before that nothing confirmed the
-# deployed site at all and this was a by-hand step nobody was required
-# to take). By hand it is the same command.
+# By hand, after a release. With no argument it looks for the newest
+# published release.
 set -eu
 
 # The version to look for. Given one, that one. Otherwise the newest
