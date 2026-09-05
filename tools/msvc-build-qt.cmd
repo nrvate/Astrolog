@@ -25,11 +25,13 @@ rem core -- a bad index there is a shared-core bug, which those builds
 rem catch. What Windows adds to the suite is platform behaviour, not a
 rem second look at the same tables.
 rem
-rem qttest.cpp itself IS compiled with /DQTTEST here, and its own 23
-rem checked subscripts -- the ones typing raw ephemeris numbers into
-rem tables -- were inert until 2026-09-05 for a different reason: the
-rem guard was an assert() and this build passes /DNDEBUG. It calls
-rem FailIndexQt() now, which does not consult NDEBUG, so those are live.
+rem The three files that ARE compiled with /DQTTEST here do get the
+rem guard, and did not until 2026-09-05: it was an assert() and this
+rem build passes /DNDEBUG. It calls FailIndexQt() now, which does not
+rem consult NDEBUG. That function is therefore defined UNCONDITIONALLY
+rem in general.cpp -- guarded by "#ifdef QTTEST" it is absent from the
+rem core compiled here without it, and the first run after the change
+rem said so in three LNK2019s.
 rem
 rem So: the 31 shared sources once, into obj\; qtdriver.cpp and
 rem qtdialog.cpp twice, into obj-app\ and obj-test\ (the latter with

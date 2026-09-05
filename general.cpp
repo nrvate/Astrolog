@@ -3481,12 +3481,19 @@ void Terminate(int tc)
 }
 
 
-#ifdef QTTEST
 // The checked tables' range guard (AssertIndex, astrolog.h) reports here
 // rather than through assert(), because assert() is inert under NDEBUG
 // and the MSVC build defines it -- see the comment at the macro. Here in
 // general.cpp rather than qttest.cpp because tools/asan-sweep.sh builds
 // the CONSOLE binary with -DQTTEST, and qttest.cpp is not in that build.
+//
+// NOT behind "#ifdef QTTEST", and that is not an oversight. The MSVC
+// build compiles the core ONCE WITHOUT /DQTTEST and qtdriver.cpp,
+// qtdialog.cpp and qttest.cpp WITH it -- one compile serving both
+// binaries -- so a definition guarded here is missing exactly where
+// those three reference it. Measured, on a Windows runner, as three
+// LNK2019s. Six lines nothing calls unless QTTEST is defined is the
+// price of that arrangement, and it is smaller than the alternatives.
 
 void FailIndexQt(const char *szFile, int nLine, long n, long cMax)
 {
@@ -3495,6 +3502,5 @@ void FailIndexQt(const char *szFile, int nLine, long n, long cMax)
   fflush(stderr);
   abort();
 }
-#endif
 
 /* general.cpp */
