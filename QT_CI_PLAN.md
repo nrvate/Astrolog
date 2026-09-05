@@ -365,10 +365,12 @@ Linux users build from source, which `tools/build-check.sh` proves.
 **Signed apt and dnf repositories were live** at
 <https://nrvate.github.io/Astrolog/>, rebuilt from the newest two
 releases, for the distributions built today. *(Retired 2026-09-05 with
-the Linux packages. Nothing rebuilds the site now: it still serves what
-the v8.00-qt.9 rebuild left, so anyone who configured it stays on that
-version and is told nothing. What to do about that is open -- see the
-last work log entry.)* **One suite per distribution** — a single
+the Linux packages, and then taken down the same day: GitHub Pages is
+disabled for this repository and every URL under it is 404. The
+alternative was leaving it frozen at v8.00-qt.9, where anyone who had
+configured it would have kept a working source that silently never
+updated again. A 404 makes "apt update" fail, which is the honest
+version of the same news.)* **One suite per distribution** — a single
 suite makes apt and dnf offer the highest-versioned package rather than
 the one built for the running release. (Between decision 2 and the qt.7
 release, `tools/ci-verify-live-repo.sh` failed on `fc44` because nothing
@@ -3988,4 +3990,19 @@ Also swept: every header that still named `ci.yml`, `slow-lane.yml` or
 `repo.yml` as though it ran -- including `ci-assert-green.sh`, which
 still *defaulted* to waiting on `ci.yml` and would have waited forever
 -- and the "where this stands" table, which listed six workflows.
+
+**2026-09-05, evening — the package site is taken down.** "take the site
+down." It had been serving the apt and dnf repositories as the
+v8.00-qt.9 rebuild left them, with nothing left to rebuild it, so a user
+who had followed the old instructions held a repository that would never
+mention another version. Pages is disabled for the repository:
+`gh api -X DELETE repos/nrvate/Astrolog/pages`, after which the index
+and the rpm metadata answer 404 and the last apt path was a CDN copy
+with a ten-minute life. Their `apt update` now fails rather than
+succeeding emptily, which is the point.
+
+One thing left behind on purpose: the `REPO_GPG_PRIVATE_KEY` secret,
+which signed those repositories and is now used by nothing. Deleting a
+secret is the maintainer's to do, and an unused one costs nothing but a
+line in a settings page.
 
