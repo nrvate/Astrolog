@@ -236,7 +236,8 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Eleven standing audits, all currently clean and all run by CI — four of the
+Eleven standing audits, all currently clean and all run by `make check`
+(and so by a release, which runs the same command) — four of the
 port against `astrolog.rc`, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of round-trip fixture coverage, one of line endings,
@@ -310,9 +311,9 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # gave a link error nothing explained
 ```
 
-CI runs all eleven, plus a set of assertions that are scripts rather than
-workflow steps so they can be falsified in a second instead of by
-pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
+`make check` runs all eleven, plus a set of assertions that are scripts
+rather than workflow steps so they can be falsified in a second instead
+of by pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
 input it must refuse and, where cheap, input it must accept -- 49 cases,
 run by the release lane -- so the falsification is a check rather than
 a memory. They are worth knowing about because several are
