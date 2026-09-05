@@ -13,16 +13,23 @@ rem over the same 34 sources -- 61 s and 55 s with /MP, the push lane's
 rem long pole. But -DQTTEST, the only thing that distinguishes them,
 rem changes three files: qtdriver.cpp and qtdialog.cpp carry the test
 rem hooks, and qttest.cpp is the suite. The other 31 -- the core, the
-rem graphics code, the vendored Swiss Ephemeris -- compile to the same
-rem object code either way ON THIS PLATFORM, and the reason is worth
-rem stating rather than assuming: astrolog.h's one core-side use of
-rem QTTEST is AssertIndex(), the range guard on the checked tables, and
-rem it is an assert(). This build passes /DNDEBUG, so on Windows that
-rem guard has been compiled out of the test build since the day the
-rem build was written. The Linux test build (Makefile.qt.test, no
-rem NDEBUG), where the sanitizers also run, keeps the guard live; here
-rem nothing is lost by sharing the core objects, because there was
-rem nothing there to lose.
+rem graphics code, the vendored Swiss Ephemeris -- are compiled ONCE,
+rem without /DQTTEST, and linked into both binaries. What that costs is
+rem worth stating rather than glossing: astrolog.h's one core-side use
+rem of QTTEST is AssertIndex(), the range guard on the checked tables,
+rem so the core's 178 checked subscripts are unguarded in the Windows
+rem test binary. They are guarded where that buys something: the Linux
+rem test build (Makefile.qt.test) and the ASan console build compile the
+rem same core WITH -DQTTEST and no NDEBUG, and those tables are shared
+rem core -- a bad index there is a shared-core bug, which those builds
+rem catch. What Windows adds to the suite is platform behaviour, not a
+rem second look at the same tables.
+rem
+rem qttest.cpp itself IS compiled with /DQTTEST here, and its own 23
+rem checked subscripts -- the ones typing raw ephemeris numbers into
+rem tables -- were inert until 2026-09-05 for a different reason: the
+rem guard was an assert() and this build passes /DNDEBUG. It calls
+rem FailIndexQt() now, which does not consult NDEBUG, so those are live.
 rem
 rem So: the 31 shared sources once, into obj\; qtdriver.cpp and
 rem qtdialog.cpp twice, into obj-app\ and obj-test\ (the latter with

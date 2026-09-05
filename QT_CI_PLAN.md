@@ -3798,3 +3798,75 @@ run on macOS 12. The job sets `MACOSX_DEPLOYMENT_TARGET=12.0`, and the
 dispatch after that commit reported the bundle at 12.0 -- the program
 binary and the whole bundle alike -- with the suite still 4538 and the
 job at 122 s on a cache hit.
+
+**2026-09-05, later — the six that were left, and one of them was
+already answered.** The four above were the top of a list of ten; "do
+it" covered those, and then "continue until smells are addressed"
+covered the rest.
+
+*The range guard did not depend on NDEBUG any more, and what that is
+actually worth.* `AssertIndex()` was `assert()`, and the MSVC build
+passes `/DNDEBUG`. It calls `FailIndexQt()` now -- in `general.cpp`,
+because `tools/asan-sweep.sh` builds the CONSOLE binary with `-DQTTEST`
+and `qttest.cpp` is not in that build -- and falsified by sabotaging the
+macro to always fail: a `-DQTTEST -DNDEBUG` console build aborts at exit
+134 on a real chart, naming file, line, index and bound. **But the
+commit message for that change overstated it, and the correction
+belongs here.** On Windows the 31 core sources are compiled ONCE
+without `/DQTTEST` and linked into both binaries -- that is what makes
+it a single compile -- so the core's 178 checked subscripts were never
+guarded there for a plainer reason than NDEBUG, and still are not. What
+the fix does buy on Windows is `qttest.cpp`'s own 23 subscripts, the
+ones that type raw ephemeris numbers into tables, which were inert
+because of NDEBUG and are live now. The core's are guarded where that
+buys something: the Linux test build and the ASan console build compile
+the same core with `-DQTTEST` and no NDEBUG, and a bad index there is a
+shared-core bug. `tools/msvc-build-qt.cmd`'s comment said the shared
+sources "compile to the same object code either way"; it now says what
+is actually shared and what is actually lost.
+
+*The calendar stopped reddening pushes.* The drift job failed the first
+push after Fedora ships or an Ubuntu LTS ages out, whatever that push
+contained. `distros.py check --warn` says the same thing as a GitHub
+warning annotation and exits 0; `release.yml`'s matrix job runs the
+check WITHOUT the flag, so a stale snapshot still stops a release before
+anything is published, which is where the answer has to be right.
+Falsified both ways against a deliberately stale snapshot.
+
+*Four package jobs became one.* `.deb` and `.rpm`, in `ci.yml` and in
+`release.yml`, were four copies of the same five steps, and they had
+already drifted -- different step names for the same command, a comment
+about the dnf settings in one copy only. `linux-package.yml` is one
+reusable workflow both lanes call; the `release` input carries the two
+real differences (`PKG_RELEASE=1`, and whether the artifact is uploaded
+zipped so its NAME survives for Publish's `astrolog-*` pattern). The two
+families spell their rows differently -- `container`/`image` against
+`image`/`release` -- and that is now resolved in one expression instead
+of being a reason to keep two copies.
+
+*The Windows zip and installer are release-grade work.* 94 s behind a
+183 s build, on the fast lane's critical path, proving a recipe whose
+inputs change a few times a month. A release always builds and drives
+them; a push does when it touches the packaging. `tools/ci-touched.sh`
+answers, and answers "true" whenever it cannot tell -- no base, an
+all-zero base, a base not in the clone -- because a check skipped for
+lack of an answer is the worst of the three outcomes. Every branch
+falsified.
+
+*And the deployed site is checked.* `ci-verify-repo.sh` checks the
+repository in the job that built it, before deployment; a Pages deploy
+can then publish the previous commit with everything upstream green.
+`repo.yml` waits three minutes and asks once, over HTTPS, the way apt
+and dnf will. Not a retry loop: one attempt after a fixed grace period,
+and a red job means the site is wrong. The script looks for the newest
+PUBLISHED release now rather than the checkout's version, since that is
+what a site serves -- run by hand against the live site it resolved
+8.00-qt.8 and passed.
+
+*The sixth was already answered.* "Sixteen tags with no assets" was a
+miscount: ten of the eighteen are upstream's own version tags, which
+never had assets from this fork, and the six retired fork tags are a
+decision `tools/prune-releases.sh` states ("THE GIT TAGS STAY") and
+README.md already tells a user ("Older tags stay in git; their assets do
+not"). No change; recording it so the next reader does not re-open it.
+

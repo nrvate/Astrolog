@@ -311,6 +311,12 @@ rather than a memory. They are worth knowing about because several are
 useful by hand:
 
 ```sh
+tools/ci-touched.sh HEAD~1 tools/astrolog.nsi   # does a range touch
+                                             # these paths? true/false,
+                                             # and true when it cannot
+                                             # tell. ci.yml asks it
+                                             # whether a push needs the
+                                             # Windows installer built
 tools/ci-selftest.sh                         # every ci-*.sh below, fed
                                              # input it must refuse; its
                                              # first run refused three of
@@ -393,11 +399,15 @@ DISTS="jammy noble fc43 fc44 el9 el10" tools/ci-verify-live-repo.sh
                                              # can succeed and publish the
                                              # previous commit, with every
                                              # check upstream of it green.
-                                             # By hand after a release,
-                                             # never a gate -- propagation
-                                             # is not instant and a check
-                                             # retried until it passes is
-                                             # not a check
+                                             # ONE attempt, after
+                                             # repo.yml waits three
+                                             # minutes for the deploy --
+                                             # a check retried until it
+                                             # passes is not a check.
+                                             # With no argument it looks
+                                             # for the newest PUBLISHED
+                                             # release, since that is
+                                             # what a site serves
 tools/ci-differential.sh origin/qt out/diff  # four matrices vs a commit
 tools/ci-verify-release-dist.sh dist 9       # the release ships exactly
                                              # this many artifacts and
@@ -765,12 +775,13 @@ On a private Xvfb display, `import -window root` is fine.
 
 ## CI, and what it will not let you do
 
-Five workflows, all on `qt`, the default branch. `ci.yml` runs on every
-push and pull request, thirteen jobs in four or five minutes: the
+Six workflows, all on `qt`, the default branch. `ci.yml` runs on every
+push and pull request, in four or five minutes: the
 mingw Win32 builds, Qt5 and Qt6 builds with the suite, the audits and
 generated tables, the compiler-warning audit against its empty ledger,
-`make install`, a behavioural differential against the
-base commit, one `.deb` and one `.rpm` to prove the packaging recipe,
+`make install` (which also runs `tools/ci-selftest.sh`), a behavioural
+differential against the base commit, one `.deb` and one `.rpm` to
+prove the packaging recipe,
 and the **Windows package**,
 which is `windows-qt.yml` called as a reusable workflow. That one
 compiles the port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
@@ -778,6 +789,16 @@ compiles the port with MSVC and the open-source Qt6 (`-DQT -DPC`, no
 program with its real platform plugin and requires a window, then zips
 it and builds the NSIS installer on Linux and installs and uninstalls
 that under Wine.
+
+Two of those jobs are conditional, and both conditions are scripts.
+**The `.deb` and `.rpm` jobs are `linux-package.yml`**, one reusable
+workflow both lanes call -- with one row per family on a push and every
+row on a release. **The Windows zip and installer run on a push only
+when it touches the packaging** (`tools/ci-touched.sh`, which answers
+"true" whenever it cannot tell); the Windows *build* and *suite* run
+either way, and a release always does all of it. **The drift job
+warns rather than fails**: a stale distribution snapshot is a calendar
+event, and `release.yml` still refuses to publish against one.
 
 `slow-lane.yml` is what CLAUDE.md elsewhere calls pre-release: the
 sanitizer sweeps -- ASan over the switch matrix, ASan over the graphics
