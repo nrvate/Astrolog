@@ -1581,12 +1581,21 @@ flag FOutputSettings()
     "; Wheel subdivision type    [Change \"0\" to desired subdivision ]\n");
   // nAspectSort is an index, not the switch letter that set it, so map
   // it back through the same order the -a handler reads.
-  sprintf2(S(sz), "-a%c     ", "jonOPACDM"[us.nAspectSort]); PrintFSz();
+  // ":a", not "-a". CHART TYPE IS NOT A SAVED SETTING, and both of these
+  // lines used to change it: NSwa() opens with SwitchF(us.fAspList) and
+  // NSwm() with SwitchF(us.fMidpoint), so a saved file came back up in
+  // the aspect list or the midpoint listing instead of the user's chart.
+  // Reported from a real settings file, 2026-09-06. The ":" prefix sets
+  // neither -- FSwitchF() returns the flag unchanged when none of fOr,
+  // fAnd and fNot is set -- while the sort letter still lands.
+  sprintf2(S(sz), ":a%c     ", "jonOPACDM"[us.nAspectSort]); PrintFSz();
   PrintF(
     "; Aspect list sort order    [j power, o orb, n orb value, O name]\n");
-  sprintf2(S(sz), "%cma     ", ChDashF(us.fMidAspect)); PrintFSz();
+  // "-Yma", not "-ma": the flag without the chart. ":" cannot help here,
+  // because this one IS a boolean and ":" would leave it unchanged.
+  sprintf2(S(sz), "%cYma    ", ChDashF(us.fMidAspect)); PrintFSz();
   PrintF(
-    "; Aspects to midpoints too  [\"=ma\" shows them, \"_ma\" doesn't  ]\n");
+    "; Aspects to midpoints too  [\"=Yma\" shows them, \"_Yma\" doesn't]\n");
   sprintf2(S(sz), ":w %d    ", us.nWheelRows); PrintFSz();
   PrintF(
     "; Wheel chart text rows     [Change \"0\" to desired wheel rows  ]\n");

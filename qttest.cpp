@@ -3175,6 +3175,7 @@ static void TestInterfaceSettingsQt()
     StrThemePrefQt().toUtf8().constData());
 
   QFile::remove(QString::fromLocal8Bit(szPath));   // Not unlink(): no <unistd.h> on the Windows build.
+
   SetConsoleFontQt(strConSav.toUtf8().constData(), nConSav);
   SetConsoleAntialiasQt(fConSav);
   SetMenuFontQt(strMenSav.toUtf8().constData(), nMenSav);

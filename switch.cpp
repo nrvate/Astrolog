@@ -100,6 +100,12 @@ static CONST SWITCHFLAG rgswflag[] = {
   {"Y",   &us.fSwitchRare},  {"YT",  &us.fTruePos},
   {"YV",  &us.fTopoPos},     {"Yf",  &us.fRefract},
   {"Yh",  &us.fBarycenter},  {"Ym",  &us.fMoonMove},
+  // The "aspects to midpoints too" flag on its own. "-ma" also sets it,
+  // but NSwm() unconditionally SwitchF()s us.fMidpoint on the way, so
+  // "-ma" is a request for the midpoint CHART as well -- fine from a
+  // command line, wrong in a settings file, where it silently changed
+  // what chart the program came up in. FOutputSettings() writes this.
+  {"Yma", &us.fMidAspect},
   {"Yn",  &us.fTrueNode},    {"Yn0", &us.fNoNutation},
   {"Ynn", &us.fNaturalNode}, {"Yd",  &us.fEuroDate},
   {"Yt",  &us.fEuroTime},    {"Yv",  &us.fEuroDist},

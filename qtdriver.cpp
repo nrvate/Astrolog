@@ -5123,6 +5123,18 @@ void FinalizeQt(void)
     DeallocatePIf(qi.rgszMSub[i]);
     qi.rgszMSub[i] = NULL;
   }
+
+  // The two interface font names, cloned by SetConsoleFontQt() and
+  // SetMenuFontQt() through FCloneSz() -- which allocates through
+  // PAllocate(), so an unfreed one is counted by the exit-time check in
+  // astrolog.cpp. They arrived with -WF/-WG on 2026-09-06 and this was
+  // not updated, so a settings file naming both fonts produced exactly
+  // "Number of memory allocations not freed before exiting: 2" on every
+  // quit. Reported from a real session.
+  DeallocatePIf(qi.szFontCon);
+  qi.szFontCon = NULL;
+  DeallocatePIf(qi.szFontMen);
+  qi.szFontMen = NULL;
 }
 
 

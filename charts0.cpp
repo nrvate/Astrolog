@@ -589,6 +589,7 @@ void DisplaySwitchesRare(void)
   PrintS(" _Yf: Local horizon positions affected by atmospheric refraction.");
   PrintS(" _Yh: Compute location of solar system barycenter instead of Sun.");
   PrintS(" _Ym: Position planetary moons around current central object.");
+  PrintS(" _Yma: Include aspects to midpoints, without the midpoint chart.");
   PrintS(
     " _Ys [<offset>]: Sidereal zodiac positions in plane of solar system.");
   PrintS(" _Yn: Compute location of true instead of mean nodes and Lilith.");
