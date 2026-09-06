@@ -122,11 +122,26 @@ And **`/swe` is a machine-local ephemeris mount, not part of this repo** —
 887,000-odd files, kept on the NAS. `nrvate.as` points `-Yi1`/`-Yi2`/
 `-Yi3` at it.
 
-**Since 2026-09-03 the bundled `ephem/` covers all 39 esoteric bodies on
-its own**, so `-Yi1 ephem` and `/swe` resolve the same 39 and the suite
+**The bundled `ephem/` covers all 39 esoteric bodies on its own** since
+2026-09-03, so `-Yi1 ephem` and `/swe` resolve the same 39 and the suite
 passes with the same count either way. It used to resolve 19 of 39, which meant CI
 ran that group at half strength — 21 assertions where a local run did 41.
 Closing it cost 7.8 MB and 20 files (`QT_CI_PLAN.md` Q13, option B).
+
+**It carries more than those 39 since 2026-09-05**, at the maintainer's
+request: the three main files, the first 29 main-belt asteroids (Ceres
+to Amphitrite), and the 39 outer bodies of `astromcp`'s `ObjGroup.OUTER`
+— the centaurs, the trans-Neptunians and the named outer objects, from
+Pholus to Chiminigagua. 75 files, 23 MB, against 32 files and 10 MB
+before. Ceres, Pallas, Juno and Vesta need no file of their own --
+`seas_18.se1` computes them, which is how four corrupt ones went
+unnoticed; see `tools/check-ephem.sh`. Eight of those files are there for a third reason and are not in
+either group: Astrolog's own Object Selections list offers Eros,
+Hidalgo, Lilith, Icarus, Apollo, Aten, Phaethon and Hylonome, so
+dropping them would make the shipped program read `0Ari00'00"` for
+bodies its own dialog offers. Nothing outside that 79 resolves: a
+typed number with no file is the same `0Ari00'00"`, which is how each
+addition was checked.
 
 `/swe` is still what `-i nrvate.as` reaches and still the larger set by
 several orders of magnitude; what changed is that a run without it is no

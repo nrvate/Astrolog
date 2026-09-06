@@ -87,6 +87,7 @@ else
   printf '%-34s %s\n' "build: Qt6" "skipped -- no Qt6 outside pkg-config"
 fi
 step "inert options"             python3 tools/inert_option_audit.py
+step "the bundled ephemeris"     tools/check-ephem.sh
 step "the assertion scripts"     tools/ci-selftest.sh
 printf '%-34s ' "the suite"
 if ASTROLOG_QT_EPHEM=minimal tools/ci-run-suite.sh 600 /tmp/check-suite.log \
