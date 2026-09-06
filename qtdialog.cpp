@@ -3202,10 +3202,12 @@ void ShowAboutDialogQt()
 
   dlg.setWindowTitle("About Astrolog");
   QVBoxLayout *playout = new QVBoxLayout(&dlg);
-  // Windows' first two lines say "for <arch> Windows"; say what this
-  // build actually is instead.
+  // Windows' first two lines say "for <arch> Windows". This build says
+  // only which interface it is: the same Qt binary now ships on Linux,
+  // Windows and macOS, so naming a platform here was wrong on two of
+  // them -- the Windows package said "for Linux (Qt)".
   QLabel *plabelVer = new QLabel(
-    QString("%1 version %2 for Linux (Qt)").arg(szAppName, szVersionCore));
+    QString("%1 version %2 (Qt)").arg(szAppName, szVersionCore));
   QFont fontBold = plabelVer->font();
   fontBold.setBold(true);
   plabelVer->setFont(fontBold);
