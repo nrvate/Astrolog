@@ -82,7 +82,12 @@
 ; is serialized, so this pattern deliberately stops before the format.
 -zl 100W00 50N00        ; EXPECT ^-zl 100
 -M0 3 "-i fixture"      ; EXPECT ^-M0 3 "-i fixture"
--an                     ; EXPECT ^-an
+:an                     ; EXPECT ^:an
+; ":an", not "-an": the writer emits the colon form since 2026-09-06,
+; because "-a<sort>" also turns the aspect-list CHART on (NSwa opens with
+; SwitchF(us.fAspList)) and chart type is not a saved setting. Leg 4
+; checks that class directly.
+=Yma                    ; EXPECT ^=Yma
 ; :Xb (bitmap file type) has no fixture line on purpose: NSwXb()
 ; returns tcError when us.fNoWrite is set (switch.cpp:1474), and
 ; that is exactly the state a settings save runs in, so the value

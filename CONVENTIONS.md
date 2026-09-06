@@ -121,6 +121,37 @@ new code should expect the suite to catch that for it.
   selector): a suffixed switch handler may fall through and apply
   `SwitchF` to a second flag — read the handler before assuming a
   suffix is independent.
+- **`:` is the fourth prefix, and it is the one a settings file wants.**
+  `-` `=` `_` set `fNot` / `fOr` / `fAnd`; `:` sets none of them, and
+  `FSwitchF()` then returns the flag *unchanged*. So `:a<sort>` sets the
+  aspect sort and leaves `us.fAspList` alone, where `-a<sort>` turns the
+  aspect-list chart on as well.
+
+## Writing a setting to the settings file
+
+**Chart type is not a saved setting**, and the writer must not emit a
+switch that changes one. This is easy to get wrong, because the spelling
+that carries a setting is often *also* a chart-type switch: `NSwa()`
+opens with `SwitchF(us.fAspList)` and `NSwm()` with
+`SwitchF(us.fMidpoint)`, so `-aj` and `=ma` ask for the aspect list and
+the midpoint listing on the way to setting a sort order and a flag.
+
+Both were in `FOutputSettings()` from 2026-08-26 to 2026-09-06, so every
+settings file this fork saved came back up in the wrong chart. Nothing
+caught it: `registry_audit.py` checks that a written spelling *resolves*,
+not what it does, and the round trip checks the value comes back, not
+what else moved. It was reported by the maintainer, from his own saved
+file.
+
+So, when adding a line to `FOutputSettings()`:
+
+- If it carries a **value**, write it with `:` — `:a%c`, not `-a%c`.
+- If it carries a **flag**, `:` cannot help (it would leave the flag
+  unchanged), so the flag needs a spelling that is *only* that flag. Add
+  a row to `rgswflag[]` rather than reusing a chart switch: `-Yma` sets
+  `us.fMidAspect` and nothing else, which is what the writer emits.
+- Then check what you wrote actually round-trips **into the same chart**:
+  save a file, load it, and look at the chart type, not just the value.
 
 ## Chart-info aliases
 

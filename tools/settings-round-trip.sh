@@ -133,8 +133,36 @@ else
   fail=1
 fi
 
+# ---- Leg 4: a saved file must come back to the SAME CHART ----
+# CHART TYPE IS NOT A SAVED SETTING, and the other three legs cannot see
+# a writer that changes one. Leg 1 asks for a fixed point, and the wrong
+# chart type is perfectly stable; leg 3 asks whether a value came back,
+# not what else moved with it.
+#
+# It happened: FOutputSettings() wrote "-aj" and "=ma" from 2026-08-26 to
+# 2026-09-06, and NSwa()/NSwm() open with SwitchF(us.fAspList) and
+# SwitchF(us.fMidpoint), so every saved file came up in the aspect list or
+# the midpoint listing instead of the user's chart. Reported by the
+# maintainer from his own file, caught by no net here.
+#
+# The chart info lines are stripped before replaying, because a saved file
+# legitimately carries a default name and location and this is asking
+# about SETTINGS. What is left must reproduce the chart byte for byte.
+$AST _X -q 1 1 2000 0 </dev/null >"$T/rt-c1.txt" 2>&1
+$AST _X -od "$T/rt-C.as" -q 1 1 2000 0 </dev/null >/dev/null 2>&1
+grep -vE "^[-:=_]z|^-n\b" "$T/rt-C.as" > "$T/rt-C2.as"
+$AST -i "$T/rt-C2.as" _X -q 1 1 2000 0 </dev/null >"$T/rt-c2.txt" 2>&1
+if cmp -s "$T/rt-c1.txt" "$T/rt-c2.txt"; then
+  echo "leg 4 PASS: a saved file reproduces the same chart"
+else
+  echo "leg 4 FAIL: loading saved settings changed the chart:"
+  diff "$T/rt-c1.txt" "$T/rt-c2.txt" | head -12
+  fail=1
+fi
+
 rm -f "$T/rt-A.as" "$T/rt-B.as" "$T/rt-F.as" "$T/rt-G.as" "$T/rt-H.as" \
   "$T/rt-S.as" "$T/rt-S2.as" "$T/rt-ftok.txt" "$T/rt-gtok.txt" \
-  "$T/rt-expect.txt"
-[ $fail = 0 ] && echo "PASS: settings round trip, all three legs" \
+  "$T/rt-expect.txt" "$T/rt-C.as" "$T/rt-C2.as" "$T/rt-c1.txt" \
+  "$T/rt-c2.txt"
+[ $fail = 0 ] && echo "PASS: settings round trip, all four legs" \
   || { echo "FAIL: settings round trip"; exit 1; }
