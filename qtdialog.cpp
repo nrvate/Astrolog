@@ -911,13 +911,30 @@ typedef struct {
   flag fInvert;   // The box shows the opposite of the flag.
 } RCFLAG;
 
+// qobject_cast, not a C cast, and only here for now. Everywhere else in
+// this file a control's type is written next to the id by the same hand,
+// so a mismatch is visible while reading; these two are driven by a
+// TABLE, where the id is data and nothing local says what type it names.
+// A row pointing at anything but a checkbox would reach setChecked()
+// through the wrong type, which is undefined behaviour rather than a
+// wrong answer -- and no audit here would see it: rc_lookup_audit checks
+// that an id resolves to exactly one control, and rc_field_audit that it
+// is wired to the right setting, neither that the control is the KIND the
+// code then calls. qobject_cast returns NULL on a mismatch, which the
+// existing guard already handles.
+static QCheckBox *PcbRcFlagQt(CONST QVector<RCBUILT> &rgbuilt,
+  CONST RCFLAG *pflag)
+{
+  return qobject_cast<QCheckBox *>(pflag->nIdx >= 0 ?
+    PwRcFindIdxQt(rgbuilt, pflag->szId, pflag->nIdx) :
+    PwRcFindQt(rgbuilt, pflag->szId));
+}
+
 static void RcLoadFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
   CONST RCFLAG *rgflag, int cflag)
 {
   for (int i = 0; i < cflag; i++) {
-    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
-      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
-      PwRcFindQt(rgbuilt, rgflag[i].szId));
+    QCheckBox *pcb = PcbRcFlagQt(rgbuilt, &rgflag[i]);
     if (pcb != NULL)
       pcb->setChecked((*rgflag[i].pf != 0) != (rgflag[i].fInvert != 0));
   }
@@ -927,9 +944,7 @@ static void RcStoreFlagsQt(CONST QVector<RCBUILT> &rgbuilt,
   CONST RCFLAG *rgflag, int cflag)
 {
   for (int i = 0; i < cflag; i++) {
-    QCheckBox *pcb = (QCheckBox *)(rgflag[i].nIdx >= 0 ?
-      PwRcFindIdxQt(rgbuilt, rgflag[i].szId, rgflag[i].nIdx) :
-      PwRcFindQt(rgbuilt, rgflag[i].szId));
+    QCheckBox *pcb = PcbRcFlagQt(rgbuilt, &rgflag[i]);
     if (pcb != NULL)
       *rgflag[i].pf = (pcb->isChecked() != (rgflag[i].fInvert != 0));
   }

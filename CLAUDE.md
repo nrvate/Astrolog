@@ -278,6 +278,16 @@ python3 tools/rc_lookup_audit.py     # a by-name lookup that resolves to no
                                      # all 24 concatenated and the symbols
                                      # recur, so a table-wide check passes on
                                      # nearly anything
+python3 tools/rc_flagtype_audit.py   # a dialog flag bound to a control
+                                     # that is not a checkbox. The RCFLAG
+                                     # table is DATA -- nothing beside an
+                                     # id says what kind of control it
+                                     # names -- and RcLoadFlagsQt() calls
+                                     # setChecked() on whatever comes
+                                     # back. rc_lookup_audit checks that
+                                     # an id resolves; rc_field_audit that
+                                     # it is wired to the right setting;
+                                     # neither that it is the right KIND
 python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # values vs astrolog.as, incl. the
                                      # known-preference allowlist; found

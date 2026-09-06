@@ -60,8 +60,9 @@ gen  "dialogs from astrolog.rc"  qtrcdlg.h   python3 tools/rc2qt.py astrolog.rc
 gen  "accelerators"              qtrcaccel.h python3 tools/rc_accel.py astrolog.rc
 gen  "command ids"               qtrccmd.h   python3 tools/rc_cmd.py astrolog.rc resource.h
 for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
-         defaults_audit registry_audit line_endings_audit \
-         fixture_coverage_audit qt_srcs_audit vcxproj_audit; do
+         rc_flagtype_audit defaults_audit registry_audit \
+         line_endings_audit fixture_coverage_audit qt_srcs_audit \
+         vcxproj_audit; do
   step "$a" python3 "tools/$a.py"
 done
 step "build: console and Qt"     make -j4
