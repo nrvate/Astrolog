@@ -915,7 +915,14 @@ runs in seconds on a laptop.
   Fusion and the palette is dark. `ApplyTitleBarThemeQt()` asks Windows
   for a dark title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`, resolved through
   `QLibrary` so no `windows.h`); on Linux the bar belongs to the window
-  manager and the call is a no-op.
+  manager and the call is a no-op. It paints the caption, its text and
+  the border in the scheme's own colours too, which is **Windows 11 only**
+  -- 10 refuses those three and keeps the black bar dark mode gives it.
+  The caption **font** is not reachable that way at all: it is the
+  system's non-client metrics font, so it does not follow the Menu Font
+  setting, and matching it would mean drawing our own title bar. That was
+  put to the maintainer on 2026-09-06 and declined -- the native bar
+  stays, which is also what the Win32 oracle has.
 
   Two font choices live in the same file for the same reason, both in
   **Display Settings**: the *console* font, which text charts are drawn
