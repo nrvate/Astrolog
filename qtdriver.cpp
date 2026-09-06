@@ -5308,7 +5308,21 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
       if (file.write(ba) != ba.size())
         strErr = QString("Couldn't finish writing %1")
           .arg(QString::fromUtf8(szFile));
+      // close() FLUSHES, and it returns void -- a write that only fails
+      // when the buffer reaches the disk (no space, an I/O error, a full
+      // quota) reports it here and nowhere else. Checking write() alone
+      // called those downloads successful and left a truncated file
+      // behind for the parser to find, which is worse than no file: the
+      // ephemeris and atlas downloads both land in files this program
+      // then reads back.
       file.close();
+      if (strErr.isEmpty() && file.error() != QFileDevice::NoError)
+        strErr = QString("Couldn't finish writing %1: %2")
+          .arg(QString::fromUtf8(szFile)).arg(file.errorString());
+      // A half-written file is not a partial success. Take it away, so
+      // the next run downloads again instead of parsing a truncated one.
+      if (!strErr.isEmpty())
+        file.remove();
     }
   }
   prep->deleteLater();
