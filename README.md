@@ -90,14 +90,13 @@ Only the two newest releases are kept; cutting a release retires the ones
 before it. Older tags stay in git; their assets do not.
 
 The tree carries the ephemeris for every body the Object Selections
-dialog offers — all **39 esoteric bodies**, the centaurs and the
-trans-Neptunians — and since September 2026 rather more: the first 29
-main-belt asteroids, Ceres to Amphitrite, and 39 outer bodies from
-Pholus out to Chiminigagua. 75 files, 23 MB, so a clone computes
-everything the program can compute and a good deal it has no menu entry
-for. Any body outside that set reads `0Ari00'00"` rather than failing,
-which is the signature to know: it means the file was not found, not
-that the position is zero.
+dialog offers, and the dialog offers every body the tree carries: the
+first **29 main-belt asteroids**, Ceres to Amphitrite, and **39 outer
+bodies**, the centaurs and trans-Neptunian dwarfs from Pholus out to
+Chiminigagua, alongside the planets and the Moon. 67 files, 19 MB, so a
+clone computes everything the program offers. A body outside that set
+reads `0Ari00'00"` rather than failing, which is the signature to know:
+the file was not found, and the position is not zero.
 
 Versions are `8.00-qt.N`: upstream numbers the program, this numbers the
 port.

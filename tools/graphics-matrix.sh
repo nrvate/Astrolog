@@ -128,8 +128,8 @@ for base in "" -XG -XW; do
            "-XU 2" "-XU 3" -XUx -XC -XJ -X8 -Xi -Xt -Xu -Xx -Xx0 -Xl \
            -Xe -Xj -XQ -XQ0 -Xr -Xm -X3 -XN -XF "-Xs 100" "-Xs 400" \
            "-XS 100" "-XS 400" "-Xw 400 300" "-Xw 2000 1500" "-X1 5" \
-           "-X2 9" "-XI0 0 0" "-XI0 100 1" "-Xk 5" "-Xkv 9" "-XE 1 8" \
-           "-XE 433 433" "-XE0 1 5" "-XE3 1 5"; do
+           "-X2 9" "-XI0 0 0" "-XI0 100 1" "-Xk 5" "-Xkv 9" "-XE 1 29" \
+           "-XE 7066 7066" "-XE0 1 5" "-XE3 1 5"; do
     g $base $o
   done
 done
@@ -144,11 +144,14 @@ done
 # a09566b8 under -XG, -XE 1 9 and -XE 1 20 both give 783eb0a5, which is
 # bare -XG.
 #
-# 1..8 is the largest low range that fully resolves from the bundled
-# ephem/, and 5..8 of it are the esoteric files added 2026-09-03, so this
-# line also covers those arriving. 433 is Eros, one of the same batch, and
-# is here as a single body rather than a range: a range that silently
-# truncates is exactly what went wrong above.
+# 1..29 is the largest low range that fully resolves from the bundled
+# ephem/, which since 2026-09-05 carries the first 29 main belt
+# asteroids; 30 is the first with no file, and "-XE 1 30" renders
+# byte-identically to bare -XG, measured, exactly as "-XE 1 20" used to.
+# 7066 is Nessus, here as a single body rather than a range: a range that
+# silently truncates is what went wrong above. It replaced 433 (Eros) on
+# 2026-09-05, when that file left the bundle and this line went inert --
+# caught by tools/inert_option_audit.py, which exists for this.
 
 # -XM1/-XM3/-XM6 are prefix forms wanting extra arguments; they belong to
 # the switch matrix, not here, since they error before rendering.

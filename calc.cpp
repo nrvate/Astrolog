@@ -2984,45 +2984,52 @@ CONST OBJSEL rgObjSel[] = {
   {0, SE_VULKANUS - SE_FICT_OFFSET_1, "Vulkanus"},
   {0, SE_POSEIDON - SE_FICT_OFFSET_1, "Poseidon"},
 
-  // The dwarf planets and larger trans Neptunians, as the defaults have
-  // them. Pholus is type 2 here because rgTypSwissDef[] makes it so, and
-  // that definition needs no ephemeris file; 5145 can still be typed.
-  {1,     10, "Hygiea"},
-  {2,   oPho, "Pholus"},
-  {1, 136199, "Eris"},
-  {1, 136108, "Haumea"},
-  {1, 136472, "Makemake"},
-  {1, 225088, "Gonggong"},
-  {1,  50000, "Quaoar"},
-  {1,  90377, "Sedna"},
-  {1,  90482, "Orcus"},
-  {1, 120347, "Salacia"},
-
-  // Centaurs.
+  // THIS LIST IS THE BUNDLE. Every body below has its ephemeris in
+  // ephem/, and every asteroid file in ephem/ is below -- that is the
+  // rule the list is kept to, and tools/check-ephem.sh keeps the files
+  // honest from the other side. Before 2026-09-05 it was a hand-picked
+  // 38 that included Eros, Hidalgo, Icarus, Apollo, Aten and Phaethon,
+  // which nobody had asked for and which the maintainer did not
+  // recognise; those files are gone with their entries.
+  //
+  // Chiron and Pholus need no file of their own: seas_18.se1 computes
+  // Chiron, and Pholus has a built-in definition (type 2 here, from
+  // rgTypSwissDef[]), which is why it is spelled differently.
   {1,   2060, "Chiron"},
-  {1,   7066, "Nessus"},
-  {1,   8405, "Asbolus"},
-  {1,  10199, "Chariklo"},
-  {1,  10370, "Hylonome"},
+  {2,   oPho, "Pholus"},
 
-  // Other trans Neptunians.
-  {1,  20000, "Varuna"},
-  {1,  28978, "Ixion"},
-  {1,  38628, "Huya"},
-  {1,  42355, "Typhon"},
+  // The first 29 main belt asteroids, Ceres to Amphitrite. The first
+  // four and Hygiea are first class objects in Astrolog already; they
+  // are offered here too because a Uranian or dwarf slot can hold any
+  // of them.
+  {1,      1, "Ceres"}, {1,      2, "Pallas"}, {1,      3, "Juno"},
+  {1,      4, "Vesta"}, {1,      5, "Astraea"}, {1,      6, "Hebe"},
+  {1,      7, "Iris"}, {1,      8, "Flora"}, {1,      9, "Metis"},
+  {1,     10, "Hygiea"}, {1,     11, "Parthenope"}, {1,     12, "Victoria"},
+  {1,     13, "Egeria"}, {1,     14, "Irene"}, {1,     15, "Eunomia"},
+  {1,     16, "Psyche"}, {1,     17, "Thetis"}, {1,     18, "Melpomene"},
+  {1,     19, "Fortuna"}, {1,     20, "Massalia"}, {1,     21, "Lutetia"},
+  {1,     22, "Kalliope"}, {1,     23, "Thalia"}, {1,     24, "Themis"},
+  {1,     25, "Phocaea"}, {1,     26, "Proserpina"}, {1,     27, "Euterpe"},
+  {1,     28, "Bellona"}, {1,     29, "Amphitrite"},
 
-  // Main belt asteroids often wanted in a chart.
-  {1,      5, "Astraea"},
-  {1,      6, "Hebe"},
-  {1,      7, "Iris"},
-  {1,      8, "Flora"},
-  {1,    433, "Eros"},
-  {1,    944, "Hidalgo"},
-  {1,   1181, "Lilith"},
-  {1,   1566, "Icarus"},
-  {1,   1862, "Apollo"},
-  {1,   2062, "Aten"},
-  {1,   3200, "Phaethon"}};
+  // The outer solar system: centaurs, the trans Neptunian dwarfs, and
+  // the named objects out to Chiminigagua. This is astromcp's
+  // ObjGroup.OUTER, which is where the maintainer keeps the list of
+  // outer bodies worth having.
+  {1,   7066, "Nessus"}, {1,   8405, "Asbolus"}, {1,  10199, "Chariklo"},
+  {1,  15810, "Arawn"}, {1,  19521, "Chaos"}, {1,  20000, "Varuna"},
+  {1,  28978, "Ixion"}, {1,  38083, "Rhadamanthus"}, {1,  38628, "Huya"},
+  {1,  42355, "Typhon"}, {1,  47171, "Lempo"}, {1,  49036, "Pelion"},
+  {1,  50000, "Quaoar"}, {1,  52872, "Okyrhoe"}, {1,  55565, "Aya"},
+  {1,  55576, "Amycus"}, {1,  55637, "Uni"}, {1,  65489, "Ceto"},
+  {1,  78799, "Xewioso"}, {1,  79360, "Sila-Nunam"}, {1,  90377, "Sedna"},
+  {1,  90482, "Orcus"}, {1,  90568, "Goibniu"}, {1, 120347, "Salacia"},
+  {1, 136108, "Haumea"}, {1, 136199, "Eris"}, {1, 136472, "Makemake"},
+  {1, 145451, "Rumina"}, {1, 145452, "Ritona"}, {1, 174567, "Varda"},
+  {1, 208996, "Achlys"}, {1, 225088, "Gonggong"}, {1, 307261, "Mani"},
+  {1, 341520, "Mors-Somnus"}, {1, 463368, "Eurytus"}, {1, 471325, "Taowu"},
+  {1, 474640, "Alicanto"}, {1, 532037, "Chiminigagua"},};
 CONST int cObjSel = (int)(sizeof(rgObjSel) / sizeof(OBJSEL));
 
 // Names this session has seen the ephemeris give for a body number.
