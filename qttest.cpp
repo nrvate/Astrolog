@@ -49,6 +49,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
@@ -1440,6 +1441,58 @@ static void TestDialogFitQt()
       rgdlgQt[i].szTitle, dxWorst, dyWorst, szWorst);
   }
   printf("  no control sits off the edge of its dialog\n");
+
+  // And the other half of the same question: a label that WRAPPED still
+  // has to fit its box vertically. This is the specific risk the layout
+  // rewrite created -- it stopped shrinking a label's font to make the
+  // text fit and started wrapping instead, but the boxes are the
+  // resource's and their heights did not change, so a label that goes to
+  // two lines in a one-line box loses the second line. Nothing shows
+  // that: the dialog opens, the title is right, and the text is simply
+  // cut off.
+  int cWrap = 0;
+  for (int i = 0; i < cdlgQt; i++) {
+    int dyWorst = 0;
+    char szWorst[cchSzMax];
+
+    szWorst[0] = chNull;
+    DriveModalQt(rgdlgQt[i].pfn, [&dyWorst, &szWorst, &cWrap](QWidget *pw) {
+      CONST QObjectList rgobj = pw->children();
+      for (int j = 0; j < rgobj.size(); j++) {
+        QLabel *pl = qobject_cast<QLabel *>(rgobj[j]);
+        if (pl == NULL || !pl->wordWrap() || pl->isHidden() ||
+          pl->text().isEmpty())
+          continue;
+        // What the wrapped text needs at the width it was given, against
+        // the height the resource gave it.
+        cWrap++;
+        int dyWant = pl->heightForWidth(pl->width());
+        if (dyWant - pl->height() > dyWorst) {
+          dyWorst = dyWant - pl->height();
+          sprintf2(S(szWorst), "\"%s\" wants %d has %d",
+            pl->text().left(28).toUtf8().constData(), dyWant, pl->height());
+        }
+      }
+      pw->close();
+    });
+    Check(dyWorst <= 0, "%s: a wrapped label still fits its box (%s)",
+      rgdlgQt[i].szTitle, szWorst[0] != chNull ? szWorst : "none wrapped");
+  }
+  // A check that examined nothing would pass too. The layout only turns
+  // wrapping on for a label whose text overflows its box, so if no label
+  // anywhere wrapped, the loop above asserted nothing at all and the fact
+  // that it "passed" would be meaningless.
+  // A check that examined nothing would pass too. Measured 2026-09-06:
+  // 37 labels have wrapping enabled and THREE of them genuinely take two
+  // lines -- "Atlas City Coloring:", "Daylight Saving:" and "Correction
+  // for Now:" -- each wanting 40px against boxes of 47 to 50. The margin
+  // is comfortable and scales with the font (the same three want 64
+  // against 76-80 at a 20pt interface font), which is why this passes
+  // rather than being tight. Falsified by shrinking a wrapped label's box
+  // to two thirds: six dialogs fail, naming the label and both numbers.
+  Check(cWrap > 0, "and some label actually wraps, or the above proves "
+    "nothing (%d)", cWrap);
+  printf("  and no wrapped label is cut off by the box it wraps inside\n");
 }
 
 
