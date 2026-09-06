@@ -1019,7 +1019,7 @@ extern flag EnumExoplanets P((ES *));
 
 extern void DrawLeyLine P((real, real, real, real));
 extern void DrawLeyLines P((real));
-extern void DrawMapTriangles P((flag, int, CIRC *, real));
+extern void DrawMapTriangles P((flag, real, CIRC *, real));
 extern void DrawMap P((flag, flag, real));
 extern void DrawChartX P((void));
 

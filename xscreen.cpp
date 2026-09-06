@@ -670,14 +670,30 @@ void InteractX()
     // be a certain size, so correct if a resize was attempted.
 
     if (fMap) {
-      length = nDegMax*gi.nScale;
-      if (gs.xWin != length) {
-        gs.xWin = length;
-        fResize = fTrue;
-      }
-      length = nDegHalf*gi.nScale;
+      // A world map is 360 degrees by 180, so it takes whichever of the
+      // window's axes runs out first and keeps that 2:1 ratio. Letterboxed
+      // rather than stretched: a map with the geography squashed to fit a
+      // 16:9 window is worse than one with a margin.
+      //
+      // It used to be pinned to exactly nDegMax*gi.nScale -- one pixel per
+      // degree times the Character Scale -- which capped the map at
+      // 1440x720 however large the display, and made -Xs the only way to
+      // grow it. On a 2560-wide window that is a postcard filling 28% of
+      // the width. The projection takes a real scale now (rScaleMap), so
+      // the map fills the window exactly instead of in whole steps.
+      //
+      // The old size is the FLOOR, which is what keeps this from changing
+      // anything for a window that was already at or below it: the map
+      // still gets its old pixels and its scrollbars, and only a larger
+      // window gains. Half-height first so the two are exactly 2:1 --
+      // deriving the height by halving an odd width would not be.
+      length = Max(Min(gs.xWin >> 1, gs.yWin), nDegHalf*gi.nScale);
       if (gs.yWin != length) {
         gs.yWin = length;
+        fResize = fTrue;
+      }
+      if (gs.xWin != length*2) {
+        gs.xWin = length*2;
         fResize = fTrue;
       }
     } else if (gi.nMode == gGrid) {
@@ -1552,8 +1568,21 @@ flag FActionX()
       }
     }
 #endif
-    gs.xWin = nDegMax*gi.nScale;
-    gs.yWin = nDegHalf*gi.nScale;
+    // Fit the 360x180 map into the window instead of pinning it to
+    // nDegMax*gi.nScale, which capped it at 1440x720 however large the
+    // display -- 28% of the width of a 2560 window. rScaleMap makes the
+    // projection take a real scale, so this fills exactly rather than in
+    // whole steps of -Xs. The old size is the floor, so a window at or
+    // below it renders exactly as it always did.
+    //
+    // IDEMPOTENT ON PURPOSE. This runs on every redraw and overwrites
+    // gs.xWin with its own answer, so the fit must not consume the text
+    // strip: subtracting yAdd here would take another yAdd off the map on
+    // each redraw and the map would walk down to nothing. Feeding the
+    // result back in gives Min(n, n+yAdd) == n, which is a fixed point.
+    n = Max(Min(gs.xWin >> 1, gs.yWin), nDegHalf*gi.nScale);
+    gs.xWin = n*2;
+    gs.yWin = n;
     if (gs.fText)
       gs.yWin += yAdd;
   }

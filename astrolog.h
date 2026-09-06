@@ -1647,10 +1647,20 @@ public:
 #define PY(A) RSinD(A)
 #define PZ(A) PlaceInX(A)
 
-// Compute Mollweide projection in pixel scale given latitude.
-#define RMollweide(y) RSqr((real)Sq(180*nScl) - 4.0*Sq((y)*(real)nScl))
-#define NMollweide(y) \
-  ((int)(RSqr((real)(Sq(180*nScl) - 4*Sq((y)*nScl))) + rRound))
+// Pixels per degree on a rectangular world map. The WINDOW sets this,
+// not the Character Scale: xscreen.cpp sizes a map chart to the largest
+// 360x180 rectangle that fits, so this is a real and the map fills the
+// window exactly rather than in whole steps of -Xs. It used to be the
+// integer gi.nScale, which pinned the map to 1440x720 at most.
+#define rScaleMap ((real)gs.xWin / rDegMax)
+
+// Compute Mollweide projection in pixel scale given latitude. The scale
+// is a PARAMETER rather than a variable captured from wherever the macro
+// happens to be expanded -- it read a name "nScl" out of the caller's
+// scope before, which silently tied every user to that spelling and to
+// its being an int.
+#define RMollweide(y, r) RSqr(Sq(rDegHalf*(r)) - 4.0*Sq((y)*(r)))
+#define NMollweide(y, r) ((int)(RMollweide(y, r) + rRound))
 
 // Do settings indicate the current chart should have the info sidebar?
 #define fSidebar \

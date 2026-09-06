@@ -761,7 +761,8 @@ flag FBmpDrawMap()
       BmpSetAll(bmp, KvFromKi(gi.kiOff));
     for (y2 = 0; y2 < yWin2; y2++) {
       y1 = y2 * gi.bmpWorld.y / yWin2;
-      rT = RMollweide((real)y2 * rDegHalf / (real)yWin2 - rDegQuad);
+      rT = RMollweide((real)y2 * rDegHalf / (real)yWin2 - rDegQuad,
+        (real)nScl);
       n = (gs.xWin - (int)(rT * (real)gs.xWin / rDegHalf)) >> 1;
       if (x1 == 0 || x2 == 0)
         BmpCopyBlock(&gi.bmpWorld, 0, y1, gi.bmpWorld.x-1, y1,
@@ -2369,7 +2370,7 @@ void WireDrawGlobe(flag fSky, real deg)
 
   // Draw grid of triangles or squares over the planet.
 
-  DrawMapTriangles(fTrue, rz, NULL, deg);
+  DrawMapTriangles(fTrue, (real)rz, NULL, deg);   // globe: integer radius
 
 #ifdef ATLAS
   // Draw locations of cities from atlas.

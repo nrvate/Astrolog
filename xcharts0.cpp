@@ -1652,7 +1652,7 @@ flag FGlobeCalc(real x1, real y1, int *u, int *v, CONST CIRC *pcr, real deg)
 // corresponding to them. Covers maps, globes, and chart spheres.
 
 flag FMapCalc(real x1, real y1, int *xp, int *yp, flag fGlobe, flag fSky,
-  real rT, int nScl, CONST CIRC *pcr, real deg)
+  real rT, real rScl, CONST CIRC *pcr, real deg)
 {
   int j, k, u, v;
 
@@ -1666,12 +1666,13 @@ flag FMapCalc(real x1, real y1, int *xp, int *yp, flag fGlobe, flag fSky,
     j = FGlobeCalc(x1, y1, &u, &v, pcr, deg) ? nNegative : u;
     k = v;
   } else {
-    j = (int)(x1 * (real)nScl);
-    k = (int)(y1 * (real)nScl);
-    if (k >= nDegHalf*nScl)
+    j = (int)(x1 * rScl);
+    k = (int)(y1 * rScl);
+    if (k >= (int)(rDegHalf * rScl))
       k--;
     if (gs.fMollweide)
-      j = 180*nScl + (int)((x1-180.0) * RMollweide(y1-90.0) / 180.0 + rRound);
+      j = (int)(rDegHalf * rScl) + (int)((x1 - rDegHalf) *
+        RMollweide(y1 - rDegQuad, rScl) / rDegHalf + rRound);
   }
   *xp = j; *yp = k;
   return (j == nNegative);
@@ -1688,10 +1689,10 @@ void DrawLeyLine(real l1, real f1, real l2, real f2)
   // Convert vertical fractional distance to a corresponding coordinate.
   f1 = rDegQuad - RAsin(f1)/rPiHalf*rDegQuad;
   f2 = rDegQuad - RAsin(f2)/rPiHalf*rDegQuad;
-  DrawWrap((int)(l1*(real)gi.nScale+rRound),
-           (int)(f1*(real)gi.nScale+rRound),
-           (int)(l2*(real)gi.nScale+rRound),
-           (int)(f2*(real)gi.nScale+rRound), 0, gs.xWin-1);
+  DrawWrap((int)(l1*rScaleMap+rRound),
+           (int)(f1*rScaleMap+rRound),
+           (int)(l2*rScaleMap+rRound),
+           (int)(f2*rScaleMap+rRound), 0, gs.xWin-1);
 }
 
 
@@ -1730,7 +1731,7 @@ void DrawLeyLines(real deg)
 // between them.
 
 void DrawMapLine(real lon1, real lat1, real lon2, real lat2,
-  flag fGlobe, int nScl, CIRC *pcr, real deg)
+  flag fGlobe, real rScl, CIRC *pcr, real deg)
 {
   int x1, y1, x2, y2;
   real lon3, lat3;
@@ -1741,8 +1742,8 @@ void DrawMapLine(real lon1, real lat1, real lon2, real lat2,
   // Recursive case: Draw each half of the line separately.
   if (SphDistance(lon1, lat1, lon2, lat2) > 10.0) {
     SphRatio(lon1, lat1, lon2, lat2, 0.5, &lon3, &lat3);
-    DrawMapLine(lon1, lat1, lon3, lat3, fGlobe, nScl, pcr, deg);
-    DrawMapLine(lon3, lat3, lon2, lat2, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon1, lat1, lon3, lat3, fGlobe, rScl, pcr, deg);
+    DrawMapLine(lon3, lat3, lon2, lat2, fGlobe, rScl, pcr, deg);
     return;
   }
 
@@ -1751,14 +1752,14 @@ void DrawMapLine(real lon1, real lat1, real lon2, real lat2,
   lat2 = rDegQuad - lat2;
 #ifdef WIRE
   if (gs.ft == ftWire) {
-    WireGlobeCalc(lon1, lat1, &x1, &y1, &z1, nScl, deg);
-    WireGlobeCalc(lon2, lat2, &x2, &y2, &z2, nScl, deg);
+    WireGlobeCalc(lon1, lat1, &x1, &y1, &z1, (int)rScl, deg);
+    WireGlobeCalc(lon2, lat2, &x2, &y2, &z2, (int)rScl, deg);
     WireLine(x1, y1, z1, x2, y2, z2);
     return;
   }
 #endif
-  if (!FMapCalc(lon1, lat1, &x1, &y1, fGlobe, -1, 0.0, nScl, pcr, deg) &&
-    !FMapCalc(lon2, lat2, &x2, &y2, fGlobe, -1, 0.0, nScl, pcr, deg)) {
+  if (!FMapCalc(lon1, lat1, &x1, &y1, fGlobe, -1, 0.0, rScl, pcr, deg) &&
+    !FMapCalc(lon2, lat2, &x2, &y2, fGlobe, -1, 0.0, rScl, pcr, deg)) {
     if (gi.nMode != gWorldMap || gs.fMollweide) {
       if (NAbs(x2-x1) < (pcr->xr >> 2))
         DrawLine(x1, y1, x2, y2);
@@ -1777,7 +1778,8 @@ void DrawMapLine(real lon1, real lat1, real lon2, real lat2,
 // triangles should be nested a specified number of levels deep.
 
 void DrawMapTriangle(real lon1, real lat1, real lon2, real lat2, real lon3,
-  real lat3, flag fGlobe, int nScl, CIRC *pcr, real deg, int nLevel, int grf)
+  real lat3, flag fGlobe, real rScl, CIRC *pcr, real deg, int nLevel,
+  int grf)
 {
   real x1, y1, x2, y2, x3, y3;
 
@@ -1786,13 +1788,13 @@ void DrawMapTriangle(real lon1, real lat1, real lon2, real lat2, real lon3,
     SphRatio(lon1, lat1, lon2, lat2, 0.5, &x1, &y1);
     SphRatio(lon2, lat2, lon3, lat3, 0.5, &x2, &y2);
     SphRatio(lon3, lat3, lon1, lat1, 0.5, &x3, &y3);
-    DrawMapTriangle(x1,   y1,   x2, y2, x3, y3, fGlobe, nScl, pcr, deg,
+    DrawMapTriangle(x1,   y1,   x2, y2, x3, y3, fGlobe, rScl, pcr, deg,
       nLevel-1, 7);
-    DrawMapTriangle(lon1, lat1, x1, y1, x3, y3, fGlobe, nScl, pcr, deg,
+    DrawMapTriangle(lon1, lat1, x1, y1, x3, y3, fGlobe, rScl, pcr, deg,
       nLevel-1, grf & 5);
-    DrawMapTriangle(lon2, lat2, x1, y1, x2, y2, fGlobe, nScl, pcr, deg,
+    DrawMapTriangle(lon2, lat2, x1, y1, x2, y2, fGlobe, rScl, pcr, deg,
       nLevel-1, grf & 5);
-    DrawMapTriangle(lon3, lat3, x2, y2, x3, y3, fGlobe, nScl, pcr, deg,
+    DrawMapTriangle(lon3, lat3, x2, y2, x3, y3, fGlobe, rScl, pcr, deg,
       nLevel-1, grf & 5);
     return;
   }
@@ -1804,11 +1806,11 @@ void DrawMapTriangle(real lon1, real lat1, real lon2, real lat2, real lon3,
     lon3 = Mod(lon3 + deg);
   }
   if (grf & 1)
-    DrawMapLine(lon1, lat1, lon2, lat2, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon1, lat1, lon2, lat2, fGlobe, rScl, pcr, deg);
   if (grf & 2)
-    DrawMapLine(lon2, lat2, lon3, lat3, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon2, lat2, lon3, lat3, fGlobe, rScl, pcr, deg);
   if (grf & 4)
-    DrawMapLine(lon3, lat3, lon1, lat1, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon3, lat3, lon1, lat1, fGlobe, rScl, pcr, deg);
 }
 
 
@@ -1817,7 +1819,7 @@ void DrawMapTriangle(real lon1, real lat1, real lon2, real lat2, real lon3,
 
 void DrawMapSquare(real lon1, real lat1, real lon2, real lat2,
   real lon3, real lat3, real lon4, real lat4,
-  flag fGlobe, int nScl, CIRC *pcr, real deg, int nLevel, int grf)
+  flag fGlobe, real rScl, CIRC *pcr, real deg, int nLevel, int grf)
 {
   real x0, y0, x1, y1, x2, y2, x3, y3, x4, y4;
 
@@ -1832,13 +1834,13 @@ void DrawMapSquare(real lon1, real lat1, real lon2, real lat2,
     SphRatio(lon2, lat2, lon3, lat3, 0.5, &x2, &y2);
     SphRatio(lon3, lat3, lon4, lat4, 0.5, &x3, &y3);
     SphRatio(lon4, lat4, lon1, lat1, 0.5, &x4, &y4);
-    DrawMapSquare(lon1, lat1, x1, y1, x0, y0, x4, y4, fGlobe, nScl, pcr, deg,
+    DrawMapSquare(lon1, lat1, x1, y1, x0, y0, x4, y4, fGlobe, rScl, pcr, deg,
       nLevel-1, (grf | 2) & 11);
-    DrawMapSquare(x1, y1, lon2, lat2, x2, y2, x0, y0, fGlobe, nScl, pcr, deg,
+    DrawMapSquare(x1, y1, lon2, lat2, x2, y2, x0, y0, fGlobe, rScl, pcr, deg,
       nLevel-1, (grf | 4) &  7);
-    DrawMapSquare(x0, y0, x2, y2, lon3, lat3, x3, y3, fGlobe, nScl, pcr, deg,
+    DrawMapSquare(x0, y0, x2, y2, lon3, lat3, x3, y3, fGlobe, rScl, pcr, deg,
       nLevel-1, (grf | 8) & 14);
-    DrawMapSquare(x4, y4, x0, y0, x3, y3, lon4, lat4, fGlobe, nScl, pcr, deg,
+    DrawMapSquare(x4, y4, x0, y0, x3, y3, lon4, lat4, fGlobe, rScl, pcr, deg,
       nLevel-1, (grf | 1) & 13);
     return;
   }
@@ -1851,19 +1853,19 @@ void DrawMapSquare(real lon1, real lat1, real lon2, real lat2,
     lon4 = Mod(lon4 + deg);
   }
   if (grf & 1)
-    DrawMapLine(lon1, lat1, lon2, lat2, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon1, lat1, lon2, lat2, fGlobe, rScl, pcr, deg);
   if (grf & 2)
-    DrawMapLine(lon2, lat2, lon3, lat3, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon2, lat2, lon3, lat3, fGlobe, rScl, pcr, deg);
   if (grf & 4)
-    DrawMapLine(lon3, lat3, lon4, lat4, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon3, lat3, lon4, lat4, fGlobe, rScl, pcr, deg);
   if (grf & 8)
-    DrawMapLine(lon4, lat4, lon1, lat1, fGlobe, nScl, pcr, deg);
+    DrawMapLine(lon4, lat4, lon1, lat1, fGlobe, rScl, pcr, deg);
 }
 
 
 // Draw a grid of triangles or squares over the surface of the planet.
 
-void DrawMapTriangles(flag fGlobe, int nScl, CIRC *pcr, real deg)
+void DrawMapTriangles(flag fGlobe, real rScl, CIRC *pcr, real deg)
 {
   real x1, y1;
   int i;
@@ -1874,13 +1876,13 @@ void DrawMapTriangles(flag fGlobe, int nScl, CIRC *pcr, real deg)
     i = gs.nTriangles - 1;
     for (x1 = 0.0; x1 < rDegMax; x1 += 72.0) {
       DrawMapTriangle(x1,       y1, x1+72.0,   y1, x1+36.0,  90.0,
-        fGlobe, nScl, pcr, deg, i, 5);
+        fGlobe, rScl, pcr, deg, i, 5);
       DrawMapTriangle(x1,       y1, x1+72.0,   y1, x1+36.0, -y1,
-        fGlobe, nScl, pcr, deg, i, 4);
+        fGlobe, rScl, pcr, deg, i, 4);
       DrawMapTriangle(x1+36.0, -y1, x1+108.0, -y1, x1+72,   -90.0,
-        fGlobe, nScl, pcr, deg, i, 5);
+        fGlobe, rScl, pcr, deg, i, 5);
       DrawMapTriangle(x1+36.0, -y1, x1+108.0, -y1, x1+72,    y1,
-        fGlobe, nScl, pcr, deg, i, 4);
+        fGlobe, rScl, pcr, deg, i, 4);
     }
   } else if (gs.nTriangles < 0) {
     DrawColor(kRedB);
@@ -1888,10 +1890,10 @@ void DrawMapTriangles(flag fGlobe, int nScl, CIRC *pcr, real deg)
     i = -gs.nTriangles - 1;
     for (x1 = 0.0; x1 < rDegMax; x1 += rDegQuad)
       DrawMapSquare(x1, y1, x1, -y1, x1+90.0, -y1, x1+90.0, y1,
-        fGlobe, nScl, pcr, deg, i, 11);
+        fGlobe, rScl, pcr, deg, i, 11);
     for (x1 = -y1; x1 <= y1; x1 += y1*2.0)
       DrawMapSquare(0.0, x1, 90.0, x1, 180.0, x1, 270.0, x1,
-        fGlobe, nScl, pcr, deg, i, 0);
+        fGlobe, rScl, pcr, deg, i, 0);
   }
 }
 
@@ -1907,7 +1909,13 @@ void DrawMap(flag fSky, flag fGlobe, real deg)
 {
   char sz[cchSzDef], chT;
   int cx = gs.xWin/2, cy = gs.yWin/2, rx, ry,
-    nScl = gi.nScale, x, y, xold, yold, m, n, u, v, i, j, k, l, xp, yp;
+    x, y, xold, yold, m, n, u, v, i, j, k, l, xp, yp;
+  // Pixels per degree. A globe is still drawn at the integer Character
+  // Scale -- it is sized as a circle, not as a 360x180 rectangle -- but a
+  // rectangular map takes its scale from the window, so it fills whatever
+  // it is given. When the window is the size the map used to be forced
+  // to, the two are equal to the pixel and nothing moves.
+  real rScl;
   flag fSimple = fFalse, fDir = (gi.nMode == gSphere && gs.fSouth),
     fDidBitmap;
   real planet1[objMax], planet2[objMax], x1, y1, rT;
@@ -1923,6 +1931,7 @@ void DrawMap(flag fSky, flag fGlobe, real deg)
 #endif
 
   // Set up some variables.
+  rScl = fGlobe ? (real)gi.nScale : rScaleMap;
   fDidBitmap = !fSky && FBmpDrawMap();
   rx = cx-1; ry = cy-1;
   if (gi.nMode == gSphere) {
@@ -1942,7 +1951,7 @@ void DrawMap(flag fSky, flag fGlobe, real deg)
         rT = (real)xT+deg;
         if (rT >= rDegMax)
           rT -= rDegMax;
-        DrawPoint((int)(rT*(real)nScl), yT*nScl);
+        DrawPoint((int)(rT*rScl), (int)(yT*rScl));
       }
 #endif
 
@@ -2012,15 +2021,15 @@ void DrawMap(flag fSky, flag fGlobe, real deg)
       // proportional to internal coordinates. For the Mollweide projection
       // have to apply a factor to the horizontal positioning though.
 
-      m = (int)(Mod((real)xold + deg)*(real)nScl);
-      u = (int)(Mod((real)x + deg)*(real)nScl);
+      m = (int)(Mod((real)xold + deg)*rScl);
+      u = (int)(Mod((real)x + deg)*rScl);
       if (NAbs(u-m) <= nDegHalf) {
-        n = yold*nScl;
-        v = y*nScl;
+        n = (int)(yold*rScl);
+        v = (int)(y*rScl);
         if (gs.fMollweide && gi.nMode != gAstroGraph) {
-          j = nDegHalf*nScl;
-          m = j + NMultDiv(m-j, NMollweide(yold-90), j);
-          u = j + NMultDiv(u-j, NMollweide(y   -90), j);
+          j = (int)(rDegHalf*rScl);
+          m = j + NMultDiv(m-j, NMollweide(yold-90, rScl), j);
+          u = j + NMultDiv(u-j, NMollweide(y   -90, rScl), j);
         }
 #ifdef CONSTEL
         if (fSky && i > 0) {
@@ -2044,9 +2053,11 @@ LAfter:
       if (gs.fMollweide && gi.nMode != gAstroGraph)
         for (j = -1; j <= 1; j += 2)
           for (xold = 0, y = 89; y >= 0; y--, xold = x)
-            for (x = NMollweide(y), i = -1; i <= 1; i += 2)
-              DrawLine(180*nScl + i*xold - (i==1), (90+j*(y+1))*nScl - (j==1),
-                180*nScl + i*x - (i==1), (90+j*y)*nScl - (j==1));
+            for (x = NMollweide(y, rScl), i = -1; i <= 1; i += 2)
+              DrawLine((int)(rDegHalf*rScl) + i*xold - (i==1),
+                (int)((90+j*(y+1))*rScl) - (j==1),
+                (int)(rDegHalf*rScl) + i*x - (i==1),
+                (int)((90+j*y)*rScl) - (j==1));
     } else
       DrawEllipse(0, 0, gs.xWin-1, gs.yWin-1);
   }
@@ -2087,7 +2098,7 @@ LAfter:
       }
       l = j*objMax + i;
       rgod[l].f = !FMapCalc(x1, y1, &rgod[l].x, &rgod[l].y, fGlobe, fSky,
-        rT, nScl, &cr, deg);
+        rT, rScl, &cr, deg);
       rgod[l].obj = i;
       rgod[l].kv = k <= arMC ? kvNone : gi.kiLite;
     }
@@ -2095,7 +2106,7 @@ LAfter:
 
   // Draw grid of triangles or squares over the planet.
 
-  DrawMapTriangles(fGlobe, nScl, &cr, deg);
+  DrawMapTriangles(fGlobe, rScl, &cr, deg);
 
 #ifdef ATLAS
   // Draw locations of cities from atlas.
@@ -2111,7 +2122,7 @@ LAfter:
         x1 += rDegMax;
       else if (x1 >= rDegMax)
         x1 -= rDegMax;
-      if (!FMapCalc(x1, y1, &j, &k, fGlobe, -1, 0.0, nScl, &cr, deg)) {
+      if (!FMapCalc(x1, y1, &j, &k, fGlobe, -1, 0.0, rScl, &cr, deg)) {
         if (gs.fLabelAsp) {
           l = KiCity(i);
           if (l == ~0)
@@ -2145,14 +2156,14 @@ LAfter:
         x1 = Tropical((real)j);
         y1 = (real)k;
         EclToEqu(&x1, &y1);
-        if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, nScl, &cr, deg))
+        if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, rScl, &cr, deg))
           DrawPoint(j, k);
       }
       if (l >= 0 && gs.fLabel) {
         x1 = Tropical((real)(l*30 + 15));
         y1 = 0.0;
         EclToEqu(&x1, &y1);
-        if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, nScl, &cr, deg))
+        if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, rScl, &cr, deg))
           DrawSign(l+1, j, k);
       }
     }
@@ -2164,7 +2175,7 @@ LAfter:
     DrawColor(kPurpleB);
     for (i = 0; i < nDegMax; i++) {
       x1 = (real)i; y1 = 90.0;
-      if (!FMapCalc(x1, y1, &j, &k, fGlobe, -1, 0.0, nScl, &cr, deg))
+      if (!FMapCalc(x1, y1, &j, &k, fGlobe, -1, 0.0, rScl, &cr, deg))
         DrawPoint(j, k);
     }
   }
@@ -2175,7 +2186,7 @@ LAfter:
     DrawColor(kMagentaB);
     for (i = 0; i < nDegMax; i++) {
       x1 = (real)i; y1 = 90.0 - Lat;
-      if (!FMapCalc(x1, y1, &j, &k, fGlobe, -1, 0.0, nScl, &cr, deg))
+      if (!FMapCalc(x1, y1, &j, &k, fGlobe, -1, 0.0, rScl, &cr, deg))
         DrawPoint(j, k);
     }
   }
@@ -2190,7 +2201,7 @@ LAfter:
       x1 = es.lon; y1 = es.lat;
       x1 = Tropical(x1);
       EclToEqu(&x1, &y1);
-      if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, nScl, &cr, deg))
+      if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, rScl, &cr, deg))
         DrawStar(j, k, &es);
     }
     DrawColor(gi.kiLite);
@@ -2199,11 +2210,11 @@ LAfter:
       x1 = pes1->lon; y1 = pes1->lat;
       x1 = Tropical(x1);
       EclToEqu(&x1, &y1);
-      if (!FMapCalc(x1, y1, &xp, &yp, fGlobe, fSky, rT, nScl, &cr, deg)) {
+      if (!FMapCalc(x1, y1, &xp, &yp, fGlobe, fSky, rT, rScl, &cr, deg)) {
         x1 = pes2->lon; y1 = pes2->lat;
         x1 = Tropical(x1);
         EclToEqu(&x1, &y1);
-        if (!FMapCalc(x1, y1, &xp2, &yp2, fGlobe, fSky, rT, nScl, &cr, deg)) {
+        if (!FMapCalc(x1, y1, &xp2, &yp2, fGlobe, fSky, rT, rScl, &cr, deg)) {
           if (gi.nMode != gWorldMap || gs.fMollweide) {
             if (NAbs(xp2 - xp) < (rx >> 1) && NAbs(yp2 - yp) < ry)
               DrawLine(xp, yp, xp2, yp2);
@@ -2223,7 +2234,7 @@ LAfter:
       x1 = es.lon; y1 = es.lat;
       x1 = Tropical(x1);
       EclToEqu(&x1, &y1);
-      if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, nScl, &cr, deg))
+      if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, rScl, &cr, deg))
         DrawStar(j, k, &es);
     }
   }
@@ -2235,7 +2246,7 @@ LAfter:
     EnumExoplanets(NULL);
     while (EnumExoplanets(&es)) {
       x1 = es.lon; y1 = es.lat;
-      if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, nScl, &cr, deg))
+      if (!FMapCalc(x1, y1, &j, &k, fGlobe, fSky, rT, rScl, &cr, deg))
         DrawStar(j, k, &es);
     }
   }
@@ -2279,7 +2290,7 @@ LAfter:
           else
             y1 -= rDegQuad;
         }
-        if (!FMapCalc(x1, y1, &x, &y, fGlobe, fSky, rT, nScl, &cr, deg)) {
+        if (!FMapCalc(x1, y1, &x, &y, fGlobe, fSky, rT, rScl, &cr, deg)) {
           if (xold > nNegative && (k < arDir || NAbs(yold-y) < (ry >> 2))) {
             if (gi.nMode != gWorldMap || gs.fMollweide) {
               if (NAbs(xold-x) < (rx >> 2))
@@ -2309,7 +2320,7 @@ LAfter:
         x1 = Mod(x1 + rDegQuad);
         CoorXform(&x1, &y1, rDegQuad + planet2[i]);
         x1 = Mod(x1 - rDegQuad + planet1[i]);
-        if (!FMapCalc(x1, y1, &x, &y, fGlobe, fSky, rT, nScl, &cr, deg)) {
+        if (!FMapCalc(x1, y1, &x, &y, fGlobe, fSky, rT, rScl, &cr, deg)) {
           if (xold > nNegative) {
             if (gi.nMode != gWorldMap || gs.fMollweide) {
               if (NAbs(xold-x) < (rx >> 2))
@@ -2333,7 +2344,7 @@ LAfter:
 
   if (us.fLatitudeCross &&
     !FMapCalc(Mod(rDegHalf - Lon + (!fGlobe ? deg : 0.0)), rDegQuad - Lat,
-    &j, &k, fGlobe, -1, 0.0, nScl, &cr, deg)) {
+    &j, &k, fGlobe, -1, 0.0, rScl, &cr, deg)) {
     DrawColor(kMagentaB);
     DrawSpot(j, k);
   }
