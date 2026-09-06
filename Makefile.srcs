@@ -52,7 +52,18 @@ SRC_WIN  = wdialog.cpp wdriver.cpp
 # target-specific assignment. Every object path a makefile here uses is
 # named, so the one rule serves all of them; an unused form names files
 # nothing builds, which make ignores.
-SWISS_NOWARN = -Wno-write-strings -Wno-sign-compare
+#
+# -Wno-deprecated-declarations is the third, and it is clang's: macOS
+# marks sprintf(3) deprecated in its own headers, so Apple's compiler
+# reported 254 of them across eight vendored files -- sweph.cpp 85,
+# swephlib.cpp 62, swecl.cpp 36, swemplan.cpp 25, swejpl.cpp 20,
+# swehouse.cpp 12, swemmoon.cpp and swedate.cpp 6 each -- and zero in
+# this fork's own sources, which use sprintf2() (snprintf). Measured on
+# the v8.00-qt.11 release run. gcc does not warn about it at all, so
+# this changes nothing on Linux or mingw; it silences the class for the
+# files nobody here may edit, and leaves it live for the files we do.
+SWISS_NOWARN = -Wno-write-strings -Wno-sign-compare \
+  -Wno-deprecated-declarations
 SWISS_OBJS = $(patsubst %.cpp,%.o,$(SRC_SWISS)) \
   $(patsubst %.cpp,$(OBJDIR)/%.o,$(SRC_SWISS)) \
   $(patsubst %.cpp,$(ODIR)/%.o,$(SRC_SWISS))

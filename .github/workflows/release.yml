@@ -166,8 +166,14 @@ jobs:
       - name: Build
         shell: bash
         run: make qt -j4 2>&1 | tee build.log && make qt-test -j4 2>&1 | tee -a build.log
-      - name: No clang warnings in our own sources
-        run: tools/ci-assert-clang-clean.sh build.log 300
+      # 0, not 300. The bound was an allowance for the vendored Swiss
+      # sources' 254 sprintf deprecations, which Makefile.srcs silences
+      # at those files since 2026-09-05. With them gone the honest bound
+      # is none at all: a warning here now is either ours, which fails,
+      # or a NEW class in vendored code that a new SDK invented, which
+      # fails and wants another -Wno- flag with a reason beside it.
+      - name: No clang warnings, ours or vendored
+        run: tools/ci-assert-clang-clean.sh build.log 0
       - name: The suite
         env:
           ASTROLOG_QT_EPHEM: minimal
