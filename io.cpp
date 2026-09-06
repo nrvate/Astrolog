@@ -675,9 +675,20 @@ flag FOutputAAFFile(void)
   fSav = us.fEuroTime; us.fEuroTime = fTrue;
   fprintf(file, ",*,%d.%d.%d,%s,", Day, Mon, Yea, SzTim(Tim));
   us.fEuroTime = fSav;
-  if (FSzSet(ciMain.loc))
-    for (pch = ciMain.loc; *pch && *pch != ','; pch++)
-      putc(*pch, file);
+  // pch is assigned ONLY inside this guard and the name one above it, so
+  // a chart with neither a name nor a location left it at its NULL
+  // initializer -- and the "if (!*pch)" below dereferenced it. That is a
+  // segfault on "astrolog -q 1 1 2000 0 -oa file.aaf", which is nothing
+  // more exotic than casting a chart and saving it as AAF. It hid behind
+  // the default settings file, which sets both fields with -zj, so only a
+  // chart that replaces them reaches it.
+  //
+  // An empty string rather than a guard at the test: it takes the same
+  // "*" branch the no-location case already wanted, and leaves the loop
+  // that follows reading a terminator instead of a wild pointer.
+  pch = FSzSet(ciMain.loc) ? ciMain.loc : (char *)"";
+  for (; *pch && *pch != ','; pch++)
+    putc(*pch, file);
   putc(',', file);
   if (!*pch)
     putc('*', file);

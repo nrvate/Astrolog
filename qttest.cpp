@@ -1457,6 +1457,58 @@ static void TestLongCommandLineQt()
 }
 
 
+// Every "Save Chart As" format, for a chart carrying NO name and NO
+// location.
+//
+// FOutputAAFFile() dereferenced a NULL pch in exactly that case and
+// segfaulted -- "astrolog -q 1 1 2000 0 -oa file.aaf", which is casting a
+// chart and saving it. It hid behind the default settings file, which
+// fills both fields with -zj, so only a chart that replaces them reaches
+// it. Nothing here wrote any of these formats, so nothing could have
+// caught it.
+//
+// Written with the fields EMPTY on purpose: that is the case the writers
+// have to survive, and the case a chart cast from bare coordinates
+// actually produces.
+
+static void TestChartExportQt()
+{
+  CONST char rgchFmt[] = {'d', 'l', 'a', 'q', 'c'};
+  CONST char *rgszFmt[] = {"settings", "chart list", "AAF", "Quick*Chart",
+    "iCalendar"};
+  char szPath[cchSzMax], *szFileOutSav = is.szFileOut, *szNamSav, *szLocSav;
+  int nWriteFormatSav = us.nWriteFormat, i;
+  flag fNoWriteSav = us.fNoWrite;
+
+  Group("Chart export formats");
+
+  szNamSav = ciMain.nam; szLocSav = ciMain.loc;
+  ciMain.nam = ciMain.loc = NULL;
+  us.fNoWrite = fFalse;
+
+  for (i = 0; i < (int)sizeof(rgchFmt); i++) {
+    sprintf2(S(szPath), "%s/astrolog-qt-export-%d-%c",
+      QDir::tempPath().toLocal8Bit().constData(),
+      (int)QCoreApplication::applicationPid(), rgchFmt[i]);
+    us.nWriteFormat = rgchFmt[i];
+    is.szFileOut = szPath;
+    // Reaching the assertion is most of the point: the AAF writer did not
+    // return at all for this chart, it took the process down.
+    Check(FOutputData(),
+      "%s writes a chart with no name and no location", rgszFmt[i]);
+    Check(QFileInfo(QString::fromLocal8Bit(szPath)).size() > 0,
+      "and the %s file it wrote is not empty", rgszFmt[i]);
+    QFile::remove(QString::fromLocal8Bit(szPath));
+  }
+
+  ciMain.nam = szNamSav; ciMain.loc = szLocSav;
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+  us.fNoWrite = fNoWriteSav;
+  printf("  every export format survives a chart with empty fields\n");
+}
+
+
 static void TestDialogFitQt()
 {
   Group("Dialog controls fit their dialog");
@@ -7085,6 +7137,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
+  {"chart-export",         TestChartExportQt},
   {"dialog-fit",           TestDialogFitQt},
   {"long-command-line",    TestLongCommandLineQt},
   {"atlas-sink",           TestAtlasSinkQt},
