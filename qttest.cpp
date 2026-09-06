@@ -1485,6 +1485,12 @@ static void TestConsoleFontQt()
   // what is already built, or the menus would keep the old face until the
   // next start.
   QWidget wOpen;
+  // And a menu bar specifically, because the menus are what this is for
+  // and they are not an ordinary widget: a platform theme registers a
+  // font of its own for QMenu and QMenuBar, which is why they can look
+  // nothing like the rest of the interface. Setting the application font
+  // with no class name is what discards those.
+  QMenuBar *pmb = new QMenuBar(&wOpen);
   QFont fontStart = QApplication::font();
   SetMenuFontQt("JetBrains Mono", 13);
   Check(StrMenuFontQt() == QString("JetBrains Mono"),
@@ -1500,6 +1506,8 @@ static void TestConsoleFontQt()
     "and its size");
   Check(wOpen.font().family() == QString("JetBrains Mono"),
     "a widget already built follows it");
+  Check(pmb->font().family() == QString("JetBrains Mono"),
+    "and so does a menu bar, which the platform themes claim");
 
   // Smoothing, which is why this exists: the console font asks for
   // antialiasing by name and the interface one did not, so on a desktop
