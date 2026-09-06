@@ -623,6 +623,13 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 #define cchSzDef  80
 #define cchSzMax  255
 #define cchSzLine (cchSzMax*4)
+
+// How deeply settings files may include each other with -i before the
+// nesting is treated as a loop. Files legitimately nest a level or two --
+// astrolog.as naming a chart file, say -- and never twenty; unbounded
+// nesting is a stack overflow, since each level carries a cchSzLine
+// buffer and a MAXSWITCHES argv (io.cpp, FProcessSwitchFile).
+#define cFileDepthMax 20
 #define dwCanary  0x87654321
 #define nDegMax   360
 #define nDegHalf  180

@@ -1471,6 +1471,57 @@ static void TestLongCommandLineQt()
 // have to survive, and the case a chart cast from bare coordinates
 // actually produces.
 
+// A settings file that includes itself, and two that include each other.
+//
+// -i inside a settings file recurses into FProcessSwitchFile(), and
+// nothing bounded it. Each level carries a cchSzLine line buffer and a
+// MAXSWITCHES argv on the stack, so it does not take long: a file whose
+// only content is "-i <its own name>" segfaulted, and so did two files
+// naming each other -- which is the one a user reaches by accident.
+//
+// The popup is suppressed: refusing raises a warning, and in this build
+// that is a modal message box the suite would stop dead on.
+
+static void TestFileRecursionQt()
+{
+  char szDeep[cchSzMax], szA[cchSzMax], szB[cchSzMax];
+  flag fPopupSav = FNoPopupQt();
+  QTemporaryDir dir;
+
+  Group("Settings file recursion");
+
+  Check(dir.isValid(), "a scratch directory for the files");
+  if (!dir.isValid())
+    return;
+  sprintf2(S(szDeep), "%s/self.as", dir.path().toLocal8Bit().constData());
+  sprintf2(S(szA), "%s/a.as", dir.path().toLocal8Bit().constData());
+  sprintf2(S(szB), "%s/b.as", dir.path().toLocal8Bit().constData());
+
+  QFile fileDeep(QString::fromLocal8Bit(szDeep));
+  if (fileDeep.open(QIODevice::WriteOnly))
+    { fileDeep.write(QString("@AD800\n-i %1\n").arg(szDeep).toLocal8Bit());
+      fileDeep.close(); }
+  QFile fileA(QString::fromLocal8Bit(szA));
+  if (fileA.open(QIODevice::WriteOnly))
+    { fileA.write(QString("@AD800\n-i %1\n").arg(szB).toLocal8Bit());
+      fileA.close(); }
+  QFile fileB(QString::fromLocal8Bit(szB));
+  if (fileB.open(QIODevice::WriteOnly))
+    { fileB.write(QString("@AD800\n-i %1\n").arg(szA).toLocal8Bit());
+      fileB.close(); }
+
+  SetNoPopupQt(fTrue);
+  // Returning at all is the assertion. Before the depth guard neither of
+  // these came back -- the process died of a stack overflow.
+  FProcessSwitchFile(szDeep, NULL);
+  Check(fTrue, "a file that includes itself returns instead of recursing");
+  FProcessSwitchFile(szA, NULL);
+  Check(fTrue, "and so do two that include each other");
+  SetNoPopupQt(fPopupSav);
+  printf("  a settings file cannot include itself forever\n");
+}
+
+
 static void TestChartExportQt()
 {
   CONST char rgchFmt[] = {'d', 'l', 'a', 'q', 'c'};
@@ -7138,6 +7189,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
   {"chart-export",         TestChartExportQt},
+  {"file-recursion",       TestFileRecursionQt},
   {"dialog-fit",           TestDialogFitQt},
   {"long-command-line",    TestLongCommandLineQt},
   {"atlas-sink",           TestAtlasSinkQt},

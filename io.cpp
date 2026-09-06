@@ -318,8 +318,22 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
 {
   char rgchLine[cchSzLine], *argv[MAXSWITCHES], *szLine = rgchLine, *szNew, ch;
   int argc, cchLine = cchSzLine, i;
-  flag fHaveFile, fRet = fFalse;
+  flag fHaveFile, fRet = fFalse, fDepth = fFalse;
   PARSECTX ctx;
+
+  // A settings file can include another with -i, and nothing stopped one
+  // from including ITSELF, or two from including each other. That is
+  // unbounded recursion, and each level costs a cchSzLine line buffer
+  // plus a MAXSWITCHES argv on this frame, so the stack runs out quickly:
+  // a file whose only content is "-i <its own name>" segfaults, and so do
+  // two files naming each other. Both measured on 2026-09-06.
+  //
+  // Refused with a warning at a depth no honest file reaches. Counted
+  // around the whole body rather than at the -i switch, so it bounds
+  // every route back in here, and decremented on every exit path --
+  // which is why the increment sits after the early returns above it and
+  // the decrement is at LDone.
+  static int cFileDepth = 0;
 
   // Open a file if don't already have one.
   fHaveFile = (file != NULL);
@@ -328,6 +342,15 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
     if (file == NULL)
       goto LDone;
   }
+  if (cFileDepth >= cFileDepthMax) {
+    sprintf2(S(rgchLine), "Settings files are nested more than %d deep at "
+      "'%s', which usually means a file includes itself.", cFileDepthMax,
+      szFile);
+    PrintWarning(rgchLine);
+    goto LDone;
+  }
+  cFileDepth++;
+  fDepth = fTrue;
   // The context is how payload switches (-YY and family) read the rest
   // of this file. It lives on this stack frame, so a file included with
   // -i from inside another file can't disturb the outer file's channel
@@ -381,6 +404,8 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
   fRet = fTrue;
 
 LDone:
+  if (fDepth)      // Only if this call actually took a level.
+    cFileDepth--;
   if (szLine != rgchLine)
     DeallocateP(szLine);
   if (!fHaveFile && file != NULL)
