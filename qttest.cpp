@@ -1403,6 +1403,60 @@ static void DialogShotCaptureQt(CONST char *szDir)
 // and applied to the whole dialog (RRcTextRatioQt), so a font, a
 // platform, or a translated string can push a control out.
 
+// A command line longer than the buffer it is copied into.
+//
+// FProcessCommandLine() declares char szCommandLine[cchSzLine] and then
+// CopyRgb()s CchSz(szLine)+1 bytes into it with nothing in between, so a
+// longer string smashed the stack: measured as *** stack smashing
+// detected ***, SIGABRT and a core file, from
+//   astrolog -M0 1 "<1500 characters>" -M 1
+// A macro is the reachable path, and an AstroExpression string is
+// another. Neither GUI can reach it -- Windows caps its Enter Command
+// Line box at cchSzLine and the Qt one at cchSzMax -- which is why it
+// went unnoticed; it is the programmatic callers that hand this a string
+// nobody measured.
+//
+// The popup is suppressed because the refusal raises a warning, and in
+// this build with a QApplication alive that is a MODAL MESSAGE BOX. The
+// suite would stop dead on it rather than fail.
+
+static void TestLongCommandLineQt()
+{
+  char szLong[cchSzLine*2], szFits[cchSzLine];
+  flag fPopupSav = FNoPopupQt();
+  int i;
+
+  Group("Over-long command line");
+
+  // Both strings are VALID command lines -- "-n " repeated, which casts a
+  // chart for now and does nothing else -- so the only thing that differs
+  // between them is the length. A string of filler would be refused for
+  // being nonsense and the two assertions would agree for the wrong
+  // reason.
+  for (i = 0; i + 3 < (int)sizeof(szFits); i += 3)
+    CopyRgb((pbyte)"-n ", (pbyte)&szFits[i], 3);
+  szFits[i] = chNull;
+  for (i = 0; i + 3 < (int)sizeof(szLong); i += 3)
+    CopyRgb((pbyte)"-n ", (pbyte)&szLong[i], 3);
+  szLong[i] = chNull;
+  Check(CchSz(szFits) < cchSzLine && CchSz(szLong) > cchSzLine,
+    "one line fits the buffer and one does not (%d, %d, limit %d)",
+    CchSz(szFits), CchSz(szLong), cchSzLine);
+
+  SetNoPopupQt(fTrue);
+  // Refused rather than truncated: half a command line is a different
+  // command line. Reaching the next assertion at all is most of the
+  // point -- before the fix this call did not return, it aborted the
+  // process with *** stack smashing detected ***.
+  Check(!FProcessCommandLine(szLong),
+    "a command line over the buffer is refused, not copied into it");
+  Check(FProcessCommandLine(szFits),
+    "and one that fits is still processed (%d chars)", CchSz(szFits));
+  SetNoPopupQt(fPopupSav);
+  printf("  a long command line is refused instead of smashing the stack\n");
+}
+
+
 static void TestDialogFitQt()
 {
   Group("Dialog controls fit their dialog");
@@ -7031,6 +7085,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
   {"dialog-fit",           TestDialogFitQt},
+  {"long-command-line",    TestLongCommandLineQt},
   {"atlas-sink",           TestAtlasSinkQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},

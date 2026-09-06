@@ -377,6 +377,27 @@ flag FProcessCommandLine(CONST char *szLine)
     return fTrue;
   cb = CchSz(szLine)+1;
 
+  // szCommandLine is cchSzLine bytes and the copy below is a straight
+  // CopyRgb of cb of them, with nothing between the two. A longer line
+  // therefore smashed the stack: "-M0 1 <1500 characters>" followed by
+  // "-M 1" aborts with *** stack smashing detected *** and dumps core.
+  // Reachable from a macro, from an AstroExpression string, and from
+  // anything else that hands this a string it did not measure. Neither
+  // GUI can reach it -- Windows caps its Enter Command Line box at
+  // cchSzLine and the Qt one at cchSzMax -- which is why it survived.
+  //
+  // REFUSED, not truncated. Half a command line is a different command
+  // line, not a shorter one: cutting "-Yi1 "/some/path"" in the middle
+  // leaves a switch pointing somewhere else entirely, and doing that
+  // quietly is worse than doing nothing loudly.
+  if (cb > cchSzLine) {
+    sprintf2(S(szCommandLine),
+      "Command line is %d characters, over the limit of %d, and was ignored.",
+      cb-1, cchSzLine-1);
+    PrintWarning(szCommandLine);
+    return fFalse;
+  }
+
   // Check for filename on command line.
   if (!FChSwitch(szLine[0])) {
     fileT = fopen(szLine, "r");
