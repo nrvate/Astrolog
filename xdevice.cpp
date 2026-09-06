@@ -972,17 +972,6 @@ flag FBmpDrawMap2(int x1, int y1, int x2, int y2,
 
   if (!gi.fBmp || (gi.fFile && gs.ft != ftBmp))
     return fFalse;
-#ifdef QT
-  // Same hole FBmpDrawMap() has, and the same fix. Only the file export
-  // path and the WINANY block below have a destination bitmap to draw
-  // into; drawing interactively on QT leaves "bmp" pointing at gi.bmp,
-  // which is the export buffer and is never allocated here, so the
-  // BmpSetAll() below wrote through a null pointer and took the process
-  // with it. Bail out and let the caller fall back to its vector drawn
-  // map, exactly as when the Earth bitmap fails to load.
-  if (!gi.fFile)
-    return fFalse;
-#endif
   if (gi.bmpWorld.rgb == NULL && !FLoadBmp(BITMAP_EARTH, &gi.bmpWorld, fFalse))
     return fFalse;
 #ifdef WINANY
@@ -990,6 +979,25 @@ flag FBmpDrawMap2(int x1, int y1, int x2, int y2,
     if (!FAllocateBmp(&wi.bmpWin, gs.xWin, gs.yWin))
       return fFalse;
     bmp = &wi.bmpWin;
+  }
+#endif
+#ifdef QT
+  // The same thing WINANY does just above, and for the same reason this
+  // function's sibling FBmpDrawMap() needed it: "bmp" starts out pointing
+  // at gi.bmp, the file export buffer, which nothing allocates on the
+  // screen path -- so the BmpSetAll() below wrote through a null pointer.
+  // This used to bail out here instead, which stopped the crash by
+  // dropping the feature: the local space chart (-Nl) fell back to its
+  // vector map on screen while file output got the detailed one.
+  //
+  // No 2:1 fit here, unlike FBmpDrawMap(): this draws into a rectangle
+  // the CALLER chose inside a full canvas bitmap, so the canvas is the
+  // right size to compose at, exactly as WINANY composes at gs.xWin by
+  // gs.yWin.
+  if (!gi.fFile) {
+    if (gi.qpaint == NULL || !FAllocateBmp(&gi.bmp, gs.xWin, gs.yWin))
+      return fFalse;
+    bmp = &gi.bmp;
   }
 #endif
 
@@ -1012,6 +1020,13 @@ flag FBmpDrawMap2(int x1, int y1, int x2, int y2,
 #ifdef WINANY
   if (!gi.fFile)
     BmpCopyToWin(bmp, wi.hdc, 0, 0);
+#endif
+#ifdef QT
+  if (!gi.fFile) {
+    QImage qimMap((CONST uchar *)bmp->rgb, bmp->x, bmp->y,
+      bmp->clRow << 2, QImage::Format_BGR888);
+    gi.qpaint->drawImage(0, 0, qimMap);
+  }
 #endif
   return fTrue;
 }
