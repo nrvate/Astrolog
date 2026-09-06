@@ -755,6 +755,15 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
       }
       if (pw == NULL)
         continue;
+      // Give the widget the resource's own id as its Qt object name.
+      // PwRcFindQt() looks controls up through the table below rather
+      // than by object name, so nothing in the program needs this -- but
+      // without it a control is not addressable from OUTSIDE the dialog
+      // function at all, which means findChild() returns NULL and any
+      // test that reaches for a field silently does nothing instead of
+      // failing. Costs a string per control, once, at construction.
+      if (pctl->szId != NULL && *pctl->szId)
+        pw->setObjectName(QString::fromLatin1(pctl->szId));
       (*prgbuilt)[i].pctl = pctl;
       (*prgbuilt)[i].pw = pw;
     }
@@ -1632,6 +1641,37 @@ void ShowGraphicsSettingsDialogQt()
   if (!FValidGraphX(nx)) { ErrorEnsureQt(&dlg, nx, "horizontal size"); return; }
   if (!FValidGraphY(ny)) { ErrorEnsureQt(&dlg, ny, "vertical size"); return; }
 
+  // The other numeric fields, checked the same way and BEFORE anything is
+  // stored, so a bad one refuses the dialog instead of half-applying it.
+  // They were read straight into the settings with no check at all, while
+  // the switches that set the same fields have always validated them --
+  // and QString::toInt() answers 0 for an empty or non-numeric field, so
+  // the bad value is one keystroke away rather than a deliberate act.
+  //
+  // The delay is the one that bites: SetAnimDelayQt(0) is
+  // QTimer::setInterval(0), which fires as fast as the event loop will
+  // let it, for as long as the program runs. -WN has refused 0 since
+  // forever (FValidTimer is 1..32000); this dialog accepted it.
+  //
+  // The grid cell count is the one that matters most quietly: it bounds
+  // loops that index object arrays in the grid chart, so a value past
+  // cObj is an out-of-range read rather than a strange picture.
+  int nDelay = peDelay != NULL ? peDelay->text().toInt() : NAnimDelayQt();
+  int nGrid = peGrid != NULL ? peGrid->text().toInt() : gs.nGridCell;
+  int nDeca = peDeca != NULL ? peDeca->text().toInt() : gs.nDecaSize;
+  real rRotN = peRot != NULL ? peRot->text().toDouble() : gs.rRot;
+  real rTiltN = peTilt != NULL ? peTilt->text().toDouble() : gs.rTilt;
+  if (!FValidTimer(nDelay))
+    { ErrorEnsureQt(&dlg, nDelay, "animation delay"); return; }
+  if (!FValidGrid(nGrid))
+    { ErrorEnsureQt(&dlg, nGrid, "grid cell count"); return; }
+  if (!FValidDecaSize(nDeca))
+    { ErrorEnsureQt(&dlg, nDeca, "wheel corner size"); return; }
+  if (!FValidRotation(rRotN))
+    { ErrorEnsureQt(&dlg, (int)rRotN, "horizon rotation"); return; }
+  if (!FValidTilt(rTiltN))
+    { ErrorEnsureQt(&dlg, (int)rTiltN, "horizon tilt"); return; }
+
   RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   if (pcbNoUpd != NULL)
     SetNoUpdateQt(pcbNoUpd->isChecked());
@@ -1639,13 +1679,13 @@ void ShowGraphicsSettingsDialogQt()
     ((pcbStar2 != NULL && pcbStar2->isChecked()) << 1);
   flag fResize = (gs.xWin != nx || gs.yWin != ny);
   gs.xWin = nx; gs.yWin = ny;
-  if (peGrid != NULL)  gs.nGridCell = peGrid->text().toInt();
+  gs.nGridCell = nGrid;
   if (peSpace != NULL) gs.cspace = peSpace->text().toInt();
   if (peAU != NULL)    gs.rspace = peAU->text().toDouble();
-  if (peRot != NULL)   gs.rRot = peRot->text().toDouble();
-  if (peTilt != NULL)  gs.rTilt = peTilt->text().toDouble();
-  if (peDeca != NULL)  gs.nDecaSize = peDeca->text().toInt();
-  if (peDelay != NULL) SetAnimDelayQt(peDelay->text().toInt());
+  gs.rRot = rRotN;
+  gs.rTilt = rTiltN;
+  gs.nDecaSize = nDeca;
+  SetAnimDelayQt(nDelay);
   if (peTrack != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       peTrack->text().toLocal8Bit().constData());

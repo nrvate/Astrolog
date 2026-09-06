@@ -1580,6 +1580,54 @@ static void TestFileRecursionQt()
 }
 
 
+// The Graphics Settings dialog refuses a numeric field the switches would
+// refuse, instead of storing it.
+//
+// Every one of those fields went straight into the settings with no check
+// -- while -WN, -Yg and the rest have always validated the same fields --
+// and QString::toInt() answers 0 for an empty or non-numeric box, so the
+// bad value was one keystroke away. The delay is the one that bites:
+// SetAnimDelayQt(0) is QTimer::setInterval(0), a timer that fires as fast
+// as the event loop allows for as long as the program runs.
+
+static void TestGraphicsFieldsQt()
+{
+  int nDelaySav = NAnimDelayQt(), nGridSav = gs.nGridCell;
+
+  Group("Graphics Settings field validation");
+
+  DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+    QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_WN");
+    if (pe != NULL)
+      pe->setText("0");
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK")
+        ppb->click();
+  });
+  Check(NAnimDelayQt() == nDelaySav,
+    "an animation delay of 0 is refused, not stored (%d, want %d)",
+    NAnimDelayQt(), nDelaySav);
+
+  // And the dialog still applies a GOOD value, or "refuses everything"
+  // would pass the assertion above just as well.
+  DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+    QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_WN");
+    if (pe != NULL)
+      pe->setText("250");
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK")
+        ppb->click();
+  });
+  Check(NAnimDelayQt() == 250,
+    "while a delay inside the range is applied (%d, want 250)",
+    NAnimDelayQt());
+
+  SetAnimDelayQt(nDelaySav);
+  gs.nGridCell = nGridSav;
+  printf("  the dialog validates what the switches validate\n");
+}
+
+
 static void TestChartExportQt()
 {
   CONST char rgchFmt[] = {'d', 'l', 'a', 'q', 'c'};
@@ -7246,6 +7294,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
+  {"graphics-fields",      TestGraphicsFieldsQt},
   {"chart-export",         TestChartExportQt},
   {"file-recursion",       TestFileRecursionQt},
   {"dialog-fit",           TestDialogFitQt},
