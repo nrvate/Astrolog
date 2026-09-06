@@ -4198,6 +4198,13 @@ LNext:
   }
 #endif
 
+  // The body's own number, which is NOT the caller's loop counter: this
+  // enumeration skips a body with no ephemeris file, and the sorted form
+  // returns them in magnitude or name order, so a counter drifts off the
+  // moment either happens. PrintObjects() printed that counter until
+  // 2026-09-05 and labelled Bellona as 27 with asteroid 27 absent.
+  pes->nAst = iast;
+
   // Determine asteroid display name.
   pch = pes->sz;
   *pch = chNull;

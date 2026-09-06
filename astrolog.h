@@ -2054,6 +2054,8 @@ typedef struct _ExtraStar {
   char *pchDes;       // Star's designation name.
   char *pchBest;      // Best available name.
   KI ki;              // Color to use for star.
+  int nAst;           // Asteroid's own number, for the asteroid
+                      // enumerations; 0 for stars and exoplanets.
 } ES;
 
 // The state classification (REFACTORING.md T1): US holds user intent --

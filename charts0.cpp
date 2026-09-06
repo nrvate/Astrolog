@@ -987,11 +987,11 @@ void PrintObjects(void)
     SwissComputeAsteroidSort(is.T, NULL);
     for (i = gs.nAstLo; SwissComputeAsteroidSort(is.T, &es); i++) {
       AnsiColor(es.ki != kDefault ? es.ki : kDefault);
-      sprintf2(S(sz), "%6d ", i); PrintSz(sz);
+      sprintf2(S(sz), "%6d ", es.nAst); PrintSz(sz);
       PrintZodiac(es.lon);
       PrintCh(' ');
       PrintAltitude(es.lat);
-      if (gs.fPrintMap && i > 4) {
+      if (gs.fPrintMap && es.nAst > 4) {
         // Print date range covered by ephemeris files.
         SwissGetFileData(&jt[0], &jt[1]);
         for (j = 0; j <= 1; j++) {
