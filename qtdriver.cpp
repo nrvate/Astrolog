@@ -395,7 +395,7 @@ protected:
     if (pevent->modifiers() & Qt::AltModifier) {
       if (fMap && !gs.fConstel && !gs.fMollweide) {
         SetChartLocation(pevent->pos());
-        ptDraw = QPoint();
+        fDrawAnchor = fFalse;
       }
       return;
     }
@@ -430,7 +430,15 @@ protected:
   }
 
 private:
-  QPoint ptDraw;    // Where the last scribble left off, or null for none.
+  // Where the last scribble left off, and whether there IS one. The flag
+  // is not redundant with the point: QPoint::isNull() means BOTH
+  // coordinates are zero, and (0,0) is the canvas's top left corner --
+  // a perfectly good place to click. Using the point's own null state as
+  // the sentinel meant that after clicking that one pixel, the next
+  // Shift+click drew no line and the next Ctrl+click no rectangle,
+  // because the anchor read as absent.
+  QPoint ptDraw;
+  flag fDrawAnchor = fFalse;
   QPoint ptRot;     // Where the right button drag in progress last was.
   flag fRotated;    // Has that drag rotated the chart? (Windows' wi.fMoved.)
 
@@ -517,7 +525,7 @@ private:
     // Ctrl+click draws a rectangle, Ctrl+Shift+click an ellipse, in both
     // cases from the last remembered point to this one.
     if (mods & Qt::ControlModifier) {
-      if (ptDraw.isNull())
+      if (!fDrawAnchor)
         return;
       QPainter p(gi.qim);
       p.setPen(QPen(col, Max((!gs.fThick ? 0 : 2) + gs.nThickAdjust, 0)));
@@ -529,7 +537,7 @@ private:
 
     // Shift+click draws a line from the last point to this one.
     } else if (mods & Qt::ShiftModifier) {
-      if (ptDraw.isNull())
+      if (!fDrawAnchor)
         return;
       QPainter p(gi.qim);
       p.setPen(QPen(col, Max((!gs.fThick ? 0 : 2) + gs.nThickAdjust, 0)));
@@ -537,8 +545,10 @@ private:
 
       // Only a drag advances the anchor. A deliberate Shift+click leaves it
       // alone, so several lines can be fanned out from the same point.
-      if (fDrag)
+      if (fDrag) {
         ptDraw = pt;
+        fDrawAnchor = fTrue;
+      }
 
     // A plain click sets a single pixel and remembers where it was. This
     // ignores pen thickness, exactly as Windows' SetPixel() does.
@@ -547,6 +557,7 @@ private:
         pt.y() >= 0 && pt.y() < gi.qim->height())
         gi.qim->setPixel(pt, col.rgb());
       ptDraw = pt;
+      fDrawAnchor = fTrue;
     }
     update();
   }
