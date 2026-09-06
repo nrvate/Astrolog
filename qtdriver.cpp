@@ -3033,16 +3033,59 @@ static void BuildAstrologMenus(QMainWindow *pwind)
 // close enough to MS Shell Dlg to lay out the same way, so the interface
 // uses it and the bundled copy means that holds on any machine.
 //
-// The point size stays whatever the desktop asked for, so its scaling
-// still applies -- only the family changes.
-static void SetUiFontQt()
-{
-  QFont font("Liberation Sans");
+// That is the default rather than the law: the user can pick any family
+// and size in Display Settings, beside the console font, and this is
+// what applies the choice. Called at startup and again from that dialog,
+// so a new face reaches the menus and the already built window without a
+// restart; what it takes to make that true on both Qt versions is at the
+// bottom of the function.
+//
+// The point size stays whatever the desktop asked for unless the user
+// says otherwise, so desktop scaling still applies with no preference
+// set. The desktop's own size is remembered on the first call, because
+// after the first change QApplication::font() reports what WE set and
+// "follow the desktop" would then mean "follow the last choice".
+QString StrMenuFontQt(void);
+int NMenuFontSizeQt(void);
+flag FMenuAntialiasQt(void);
 
-  if (QFontInfo(font).family() != QString("Liberation Sans"))
-    return;                       // Not there: keep the desktop's font.
-  font.setPointSizeF(QApplication::font().pointSizeF());
+void ApplyUiFontQt(void)
+{
+  static real rPointDesktop = 0.0;
+  QString strFamily = StrMenuFontQt();
+  int nSize = NMenuFontSizeQt();
+
+  if (rPointDesktop <= 0.0) {
+    rPointDesktop = QApplication::font().pointSizeF();
+    // A font defined in pixels has no point size; ask what it resolves to.
+    if (rPointDesktop <= 0.0)
+      rPointDesktop = QFontInfo(QApplication::font()).pointSizeF();
+  }
+  QFont font(strFamily.isEmpty() ? QString("Liberation Sans") : strFamily);
+  if (strFamily.isEmpty() &&
+    QFontInfo(font).family() != QString("Liberation Sans"))
+    font = QApplication::font();  // Not there: keep the desktop's font.
+  font.setPointSizeF(nSize > 0 ? (real)nSize : rPointDesktop);
+  // Why this exists at all: on a Windows desktop with ClearType off, the
+  // menus and dialogs came out unantialiased while the text charts were
+  // crisp, because the console font asks for antialiasing by name and
+  // this one did not. PreferOutline is in there too so the request can be
+  // honoured -- a bitmap face has nothing to antialias.
+  font.setStyleStrategy(FMenuAntialiasQt() ?
+    (QFont::StyleStrategy)(QFont::PreferOutline | QFont::PreferAntialias) :
+    QFont::NoAntialias);
   QApplication::setFont(font);
+
+  // Qt5 pushes a new application font into the widgets that already
+  // exist. Qt6 does not, and Qt6 is what the Windows build ships, so
+  // there the menus kept the old face until the next start. Measured
+  // both ways with a small test program rather than reasoned about:
+  // sending each widget the change is right on both, and on Qt5 it is
+  // the event it has already had.
+  QEvent evt(QEvent::ApplicationFontChange);
+  CONST QWidgetList rgpw = QApplication::allWidgets();
+  for (int i = 0; i < rgpw.size(); i++)
+    QApplication::sendEvent(rgpw[i], &evt);
 }
 
 
@@ -4551,15 +4594,16 @@ void SetConsoleAntialiasQt(flag f)
 }
 
 
-// The faces the picker offers: the bundled ones that are actually there,
-// in a deliberate order, then every other fixed pitch family the system
-// has. Qt6 made the QFontDatabase methods static and deprecated
-// constructing one, so both spellings are here.
+// The faces a picker offers: the bundled ones that are actually there, in
+// a deliberate order, then every other family the system has -- fixed
+// pitch only for the console, where the chart's columns depend on it, and
+// everything for the interface, where they don't. Qt6 made the
+// QFontDatabase methods static and deprecated constructing one, so both
+// spellings are here.
 
-QStringList RgstrConsoleFontQt(void)
+static QStringList RgstrFontQt(CONST char **rgszBundled, int cBundled,
+  flag fFixedOnly)
 {
-  CONST char *rgszBundled[] = {"Liberation Mono", "JetBrains Mono",
-    "IBM Plex Mono", "Source Code Pro", "Hack", "Fira Code"};
   QStringList rgstr, rgstrAll;
   int i;
 
@@ -4569,7 +4613,7 @@ QStringList RgstrConsoleFontQt(void)
   QFontDatabase fdb;
   rgstrAll = fdb.families();
 #endif
-  for (i = 0; i < (int)(sizeof(rgszBundled)/sizeof(char *)); i++)
+  for (i = 0; i < cBundled; i++)
     if (rgstrAll.contains(QString(rgszBundled[i])))
       rgstr << QString(rgszBundled[i]);
   for (i = 0; i < rgstrAll.size(); i++) {
@@ -4578,10 +4622,90 @@ QStringList RgstrConsoleFontQt(void)
 #else
     flag fFixed = fdb.isFixedPitch(rgstrAll[i]);
 #endif
-    if (fFixed && !rgstr.contains(rgstrAll[i]))
+    if ((fFixed || !fFixedOnly) && !rgstr.contains(rgstrAll[i]))
       rgstr << rgstrAll[i];
   }
   return rgstr;
+}
+
+QStringList RgstrConsoleFontQt(void)
+{
+  CONST char *rgszBundled[] = {"Liberation Mono", "JetBrains Mono",
+    "IBM Plex Mono", "Source Code Pro", "Hack", "Fira Code"};
+
+  return RgstrFontQt(rgszBundled,
+    (int)(sizeof(rgszBundled)/sizeof(char *)), fTrue);
+}
+
+
+// The interface font, which the menus, the dialogs and every label are
+// drawn in. Same three settings as the console one and stored the same
+// way, because it is the same kind of thing: window chrome, not an
+// astrological setting, so it stays out of the .as file this build shares
+// with Windows.
+//
+// "" means Liberation Sans, which is what the dialogs are measured
+// against (see ApplyUiFontQt); size 0 means follow the desktop.
+
+#define szMenuFontKeyQt      "Interface/MenuFont"
+#define szMenuFontSizeKeyQt  "Interface/MenuFontSize"
+#define szMenuAaKeyQt        "Interface/MenuAntialias"
+
+QString StrMenuFontQt(void)
+{
+  QSettings *psettings = PSettingsThemeQt();
+  QString str = psettings->value(szMenuFontKeyQt, "").toString();
+
+  delete psettings;
+  return str.trimmed();
+}
+
+int NMenuFontSizeQt(void)
+{
+  QSettings *psettings = PSettingsThemeQt();
+  int n = psettings->value(szMenuFontSizeKeyQt, 0).toInt();
+
+  delete psettings;
+  return n >= 6 && n <= 48 ? n : 0;
+}
+
+void SetMenuFontQt(CONST char *szFamily, int nSize)
+{
+  QSettings *psettings = PSettingsThemeQt();
+
+  psettings->setValue(szMenuFontKeyQt, QString(szFamily));
+  psettings->setValue(szMenuFontSizeKeyQt, nSize);
+  psettings->sync();
+  delete psettings;
+}
+
+flag FMenuAntialiasQt(void)
+{
+  QSettings *psettings = PSettingsThemeQt();
+  flag f = psettings->value(szMenuAaKeyQt, true).toBool();
+
+  delete psettings;
+  return f;
+}
+
+void SetMenuAntialiasQt(flag f)
+{
+  QSettings *psettings = PSettingsThemeQt();
+
+  psettings->setValue(szMenuAaKeyQt, (bool)f);
+  psettings->sync();
+  delete psettings;
+}
+
+// Not fixed pitch only: this one is proportional text, and Liberation
+// Sans leads the list because it is what the dialog boxes are sized for.
+
+QStringList RgstrMenuFontQt(void)
+{
+  CONST char *rgszBundled[] = {"Liberation Sans"};
+
+  return RgstrFontQt(rgszBundled,
+    (int)(sizeof(rgszBundled)/sizeof(char *)), fFalse);
 }
 
 
@@ -5059,7 +5183,7 @@ void BeginQt()
   QApplication::setStyle(new AstroStyleQt);
   ApplyColorSchemeQt();
   LoadBundledFontsQt();
-  SetUiFontQt();
+  ApplyUiFontQt();
   // Set on the application, not the window, so every dialog inherits it
   // the way Windows' window class does.
   QApplication::setWindowIcon(IconAstrologQt());

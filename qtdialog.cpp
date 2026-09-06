@@ -3727,14 +3727,52 @@ void ShowCalcDialogQt()
 }
 
 
-// The console font preference lives in qtdriver.cpp, beside the theme
-// one, and is declared here the way that file's own helpers are.
+// The font preferences live in qtdriver.cpp, beside the theme one, and
+// are declared here the way that file's own helpers are. Two sets of the
+// same three settings: the console font is the one text charts are drawn
+// in, the menu font is the one everything else is.
 extern QString StrConsoleFontQt(void);
 extern int NConsoleFontSizeQt(void);
 extern void SetConsoleFontQt(CONST char *szFamily, int nSize);
 extern flag FConsoleAntialiasQt(void);
 extern void SetConsoleAntialiasQt(flag f);
 extern QStringList RgstrConsoleFontQt(void);
+extern QString StrMenuFontQt(void);
+extern int NMenuFontSizeQt(void);
+extern void SetMenuFontQt(CONST char *szFamily, int nSize);
+extern flag FMenuAntialiasQt(void);
+extern void SetMenuAntialiasQt(flag f);
+extern QStringList RgstrMenuFontQt(void);
+extern void ApplyUiFontQt(void);
+
+
+// One row of the font picker: a label, the family, "Size:", the size, and
+// the antialias checkbox, laid out left to right at the widths they
+// actually measure. Fixed boxes in the resource's units were what clipped
+// "Console Font:" behind the combo beside it and left the size combo
+// showing "Charac" for "Character Scale". The two combo widths are passed
+// in rather than measured here so both rows line up. Returns the x the
+// row needs, so the dialog can be widened to the wider of them.
+
+static int XLayoutFontRowQt(QWidget **rgpw, int xLeft, int yRow,
+  int dxLab, int dxFace, int dxSize, int dxPad, int dyCtl)
+{
+  int rgdx[5], x = xLeft, i, dy;
+
+  rgdx[0] = dxLab;
+  rgdx[1] = dxFace;
+  rgdx[2] = rgpw[2]->sizeHint().width();
+  rgdx[3] = dxSize;
+  rgdx[4] = rgpw[4]->sizeHint().width();
+  for (i = 0; i < 5; i++) {
+    // The combos get the row's full height; a label or checkbox is
+    // centred on it at the height it asks for.
+    dy = (i == 1 || i == 3) ? dyCtl : rgpw[i]->sizeHint().height();
+    rgpw[i]->setGeometry(x, yRow + (dyCtl - dy)/2, rgdx[i], dy);
+    x += rgdx[i] + ((i == 0 || i == 2) ? dxPad/2 : dxPad);
+  }
+  return x - dxPad + xLeft;
+}
 
 // Display settings, equivalent to Windows' DlgDisplay: date/time/number
 // formatting, aspect count and requirements, eclipse display, and the
@@ -3800,63 +3838,103 @@ void ShowDisplayDialogQt()
   if (peSta != NULL)
     peSta->setText(SzFormatRQt(us.rStation, -6));
 
-  // The console font picker, which Windows' dlgDisplay has no counterpart
-  // for. Added here rather than to astrolog.rc on purpose: the resource
-  // is the Windows build's too, and a control there would be dead in it.
-  // So the resource's own layout is left exactly as it is and this row is
+  // The font pickers, which Windows' dlgDisplay has no counterpart for.
+  // Added here rather than to astrolog.rc on purpose: the resource is the
+  // Windows build's too, and a control there would be dead in it. So the
+  // resource's own layout is left exactly as it is and these two rows are
   // added underneath, with the buttons moved down to make room -- the
   // same arrangement the Interface Theme menu items use, and stored in
   // the same place (QSettings, not the .as file), because which face the
-  // text window uses is window chrome rather than an astrological
-  // setting.
+  // window uses is window chrome rather than an astrological setting.
   QFontMetrics fmDlg(dlg.font());
   int dxBase = fmDlg.averageCharWidth(), dyBase = fmDlg.height();
   // In the resource's own units. Its content ends at y 250 (the Rising
-  // and Setting group, 215 + 35) with the buttons at 235, so the new row
-  // goes at 254 and the buttons move to 272 -- below everything rather
-  // than on top of the group box, which is what putting it at the old
-  // button line did.
-  int yRow = 254, dyRow = 37;
+  // and Setting group, 215 + 35), so the first row goes at 254 and the
+  // second 20 below it, the resource's own spacing for a row of controls
+  // 14 tall. The buttons then move below both -- below everything rather
+  // than on top of the group box, which is what putting them at the old
+  // button line did. How far they move is measured from where they
+  // actually are rather than assumed, and the dialog grows by the same.
+  int yRow = 254, dyRow = 20, dyCtl = 14 * dyBase / 8;
+  int yBtn = (yRow + dyRow) * dyBase / 8 + dyCtl + dyBase;
   QWidget *pwOk = PwRcFindQt(rgbuilt, "IDOK");
   QWidget *pwCancel = PwRcFindQt(rgbuilt, "IDCANCEL");
+  int dyGrow = pwOk != NULL ? Max(yBtn - pwOk->y(), 0) :
+    (dyRow + 20) * dyBase / 8;
   if (pwOk != NULL)
-    pwOk->move(pwOk->x(), pwOk->y() + dyRow * dyBase / 8);
+    pwOk->move(pwOk->x(), pwOk->y() + dyGrow);
   if (pwCancel != NULL)
-    pwCancel->move(pwCancel->x(), pwCancel->y() + dyRow * dyBase / 8);
-  dlg.setFixedSize(dlg.width(), dlg.height() + dyRow * dyBase / 8);
+    pwCancel->move(pwCancel->x(), pwCancel->y() + dyGrow);
 
   QLabel *plFont = new QLabel("Console &Font:", &dlg);
   QComboBox *pcbFont = new QComboBox(&dlg);
-  QLabel *plSize = new QLabel("Si&ze:", &dlg);
+  QLabel *plSize = new QLabel("Size:", &dlg);
   QComboBox *pcbSize = new QComboBox(&dlg);
   QCheckBox *pchAa = new QCheckBox("&Smooth", &dlg);
-  plFont->setGeometry(5 * dxBase / 4, (yRow + 2) * dyBase / 8,
-    48 * dxBase / 4, 12 * dyBase / 8);
-  pcbFont->setGeometry(54 * dxBase / 4, yRow * dyBase / 8,
-    112 * dxBase / 4, 14 * dyBase / 8);
-  plSize->setGeometry(172 * dxBase / 4, (yRow + 2) * dyBase / 8,
-    16 * dxBase / 4, 12 * dyBase / 8);
-  pcbSize->setGeometry(190 * dxBase / 4, yRow * dyBase / 8,
-    38 * dxBase / 4, 14 * dyBase / 8);
-  pchAa->setGeometry(233 * dxBase / 4, (yRow + 2) * dyBase / 8,
-    42 * dxBase / 4, 12 * dyBase / 8);
+  QLabel *plMenu = new QLabel("M&enu Font:", &dlg);
+  QComboBox *pcbMenu = new QComboBox(&dlg);
+  QLabel *plMenuSize = new QLabel("Size:", &dlg);
+  QComboBox *pcbMenuSize = new QComboBox(&dlg);
+  QCheckBox *pchMenuAa = new QCheckBox("Sm&ooth", &dlg);
   pchAa->setToolTip("Antialias the text charts");
+  pchMenuAa->setToolTip("Antialias the menus and dialogs");
   pchAa->setChecked(FConsoleAntialiasQt());
+  pchMenuAa->setChecked(FMenuAntialiasQt());
   plFont->setBuddy(pcbFont);
   plSize->setBuddy(pcbSize);
+  plMenu->setBuddy(pcbMenu);
+  plMenuSize->setBuddy(pcbMenuSize);
   pcbFont->addItems(RgstrConsoleFontQt());
+  pcbMenu->addItems(RgstrMenuFontQt());
   QString strFont = StrConsoleFontQt();
   int iFont = pcbFont->findText(strFont.isEmpty() ?
     QString("Liberation Mono") : strFont);
   pcbFont->setCurrentIndex(Max(iFont, 0));
-  // "Character Scale" is the -Xs behaviour this had before there was a
-  // choice, and stays the default so nothing moves for anyone who does
-  // not open this.
+  QString strMenu = StrMenuFontQt();
+  int iMenu = pcbMenu->findText(strMenu.isEmpty() ?
+    QString("Liberation Sans") : strMenu);
+  pcbMenu->setCurrentIndex(Max(iMenu, 0));
+  // "Character Scale" is the -Xs behaviour the console had before there
+  // was a choice, and "Desktop Size" is what the interface followed, so
+  // each stays the default and nothing moves for anyone who does not open
+  // this.
   pcbSize->addItem("Character Scale", 0);
   for (int nSize = 8; nSize <= 32; nSize += (nSize < 20 ? 1 : 2))
     pcbSize->addItem(QString::number(nSize), nSize);
-  int nSizeNow = NConsoleFontSizeQt();
-  pcbSize->setCurrentIndex(Max(pcbSize->findData(nSizeNow), 0));
+  pcbSize->setCurrentIndex(Max(pcbSize->findData(NConsoleFontSizeQt()), 0));
+  pcbMenuSize->addItem("Desktop Size", 0);
+  for (int nSize = 7; nSize <= 20; nSize += (nSize < 14 ? 1 : 2))
+    pcbMenuSize->addItem(QString::number(nSize), nSize);
+  pcbMenuSize->setCurrentIndex(
+    Max(pcbMenuSize->findData(NMenuFontSizeQt()), 0));
+
+  // Now that both know what they hold, measure. The family combos are
+  // capped: a system with a few hundred families has one with a very long
+  // name in it, and sizeHint() would make the dialog as wide as that.
+  QWidget *rgpwCon[5] = {plFont, pcbFont, plSize, pcbSize, pchAa};
+  QWidget *rgpwMen[5] = {plMenu, pcbMenu, plMenuSize, pcbMenuSize,
+    pchMenuAa};
+  int xLeft = 5 * dxBase / 4, dxPad = dxBase * 2;
+  int dxLab = Max(plFont->sizeHint().width(), plMenu->sizeHint().width());
+  int dxFace = Min(Max(pcbFont->sizeHint().width(),
+    pcbMenu->sizeHint().width()), 28 * dxBase);
+  int dxSize = Max(pcbSize->sizeHint().width(),
+    pcbMenuSize->sizeHint().width());
+  int xEnd = XLayoutFontRowQt(rgpwCon, xLeft, yRow * dyBase / 8,
+    dxLab, dxFace, dxSize, dxPad, dyCtl);
+  xEnd = Max(xEnd, XLayoutFontRowQt(rgpwMen, xLeft,
+    (yRow + dyRow) * dyBase / 8, dxLab, dxFace, dxSize, dxPad, dyCtl));
+
+  // Widen only if the rows need it, and take the buttons along so they
+  // stay on the right edge they were laid out against.
+  int dxGrow = Max(xEnd - dlg.width(), 0);
+  if (dxGrow > 0) {
+    if (pwOk != NULL)
+      pwOk->move(pwOk->x() + dxGrow, pwOk->y());
+    if (pwCancel != NULL)
+      pwCancel->move(pwCancel->x() + dxGrow, pwCancel->y());
+  }
+  dlg.setFixedSize(dlg.width() + dxGrow, dlg.height() + dyGrow);
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
@@ -3866,6 +3944,13 @@ void ShowDisplayDialogQt()
   SetConsoleFontQt(pcbFont->currentText().toLocal8Bit().constData(),
     pcbSize->currentData().toInt());
   SetConsoleAntialiasQt(pchAa->isChecked());
+  SetMenuFontQt(pcbMenu->currentText().toLocal8Bit().constData(),
+    pcbMenuSize->currentData().toInt());
+  SetMenuAntialiasQt(pchMenuAa->isChecked());
+  // The interface font is applied here rather than at the next start:
+  // QApplication::setFont() reaches every widget that hasn't been given
+  // one of its own, which is the menus and this dialog's own children.
+  ApplyUiFontQt();
 
   // Validate before writing anything, as Windows does, so one bad field
   // can't leave the settings half applied.

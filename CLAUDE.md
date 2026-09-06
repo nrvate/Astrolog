@@ -901,6 +901,17 @@ runs in seconds on a laptop.
   native Win32 menus, which follow Windows' own theming and know nothing
   about any of this.
 
+  Two font choices live in the same file for the same reason, both in
+  **Display Settings**: the *console* font, which text charts are drawn
+  in, and the *menu* font, which everything else is. Each is a family, a
+  size and a Smooth toggle (`Interface/ConsoleFont*`,
+  `Interface/MenuFont*`, `Interface/*Antialias`). `ApplyUiFontQt()` in
+  `qtdriver.cpp` applies the interface one, at startup and again when the
+  dialog closes, so a new face reaches the menus without a restart.
+  Antialiasing is named explicitly on both, which is the point of it: on
+  a desktop with ClearType off the menus came out jagged beside a crisp
+  text chart, because only the console font had asked.
+
 ## Working method
 
 The things that have actually caught bugs in this project:

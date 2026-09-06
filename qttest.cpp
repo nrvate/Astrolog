@@ -1308,6 +1308,13 @@ extern void SetConsoleFontQt(CONST char *szFamily, int nSize);
 extern QStringList RgstrConsoleFontQt(void);
 extern flag FConsoleAntialiasQt(void);
 extern void SetConsoleAntialiasQt(flag f);
+extern QString StrMenuFontQt(void);
+extern int NMenuFontSizeQt(void);
+extern void SetMenuFontQt(CONST char *szFamily, int nSize);
+extern QStringList RgstrMenuFontQt(void);
+extern flag FMenuAntialiasQt(void);
+extern void SetMenuAntialiasQt(flag f);
+extern void ApplyUiFontQt(void);
 extern QString StrThemePrefQt(void);
 extern void SetThemePrefQt(CONST char *);
 extern void ApplyColorSchemeQt(void);
@@ -1456,6 +1463,65 @@ static void TestConsoleFontQt()
   Check(!FConsoleAntialiasQt(), "turning smoothing off round trips");
   SetConsoleAntialiasQt(fTrue);
   Check(FConsoleAntialiasQt(), "and back on again");
+
+  // The interface font: the same three settings again, for the face the
+  // menus and dialogs are drawn in rather than the text charts.
+  QStringList rgstrMenu = RgstrMenuFontQt();
+  Check(rgstrMenu.size() > 0 && rgstrMenu[0] == QString("Liberation Sans"),
+    "the dialogs' own face heads the interface list");
+  // Proportional faces are in this one and not in the console one, which
+  // is the whole difference between the two lists. Counted rather than
+  // compared by length: with the interface list wrongly filtered to fixed
+  // pitch it is still LONGER than the console one, by the bundled face at
+  // its head, so a length comparison passes on the bug.
+  int cProp = 0;
+  for (i = 0; i < rgstrMenu.size(); i++)
+    if (!QFontInfo(QFont(rgstrMenu[i])).fixedPitch())
+      cProp++;
+  Check(cProp > 1, "the interface list offers proportional faces too");
+
+  // A widget built BEFORE the change, because applying it to the window
+  // already on screen is the point: QApplication::setFont() has to reach
+  // what is already built, or the menus would keep the old face until the
+  // next start.
+  QWidget wOpen;
+  QFont fontStart = QApplication::font();
+  SetMenuFontQt("JetBrains Mono", 13);
+  Check(StrMenuFontQt() == QString("JetBrains Mono"),
+    "the chosen interface face round trips");
+  Check(NMenuFontSizeQt() == 13, "the chosen interface size round trips");
+  SetMenuFontQt("JetBrains Mono", 900);
+  Check(NMenuFontSizeQt() == 0, "an absurd interface size reads as automatic");
+  SetMenuFontQt("JetBrains Mono", 13);
+  ApplyUiFontQt();
+  Check(QApplication::font().family() == QString("JetBrains Mono"),
+    "applying it changes the interface font");
+  Check((int)(QApplication::font().pointSizeF() + rRound) == 13,
+    "and its size");
+  Check(wOpen.font().family() == QString("JetBrains Mono"),
+    "a widget already built follows it");
+
+  // Smoothing, which is why this exists: the console font asks for
+  // antialiasing by name and the interface one did not, so on a desktop
+  // with it off the menus came out jagged beside a crisp text chart.
+  Check(FMenuAntialiasQt(), "interface smoothing defaults to on");
+  Check((QApplication::font().styleStrategy() & QFont::PreferAntialias)
+    != 0, "smoothing is asked for by name");
+  SetMenuAntialiasQt(fFalse);
+  ApplyUiFontQt();
+  Check(!FMenuAntialiasQt(), "turning interface smoothing off round trips");
+  Check(QApplication::font().styleStrategy() == QFont::NoAntialias,
+    "and reaches the font");
+
+  // Put it back the way startup left it, since every group after this one
+  // measures dialogs in this font.
+  SetMenuFontQt("", 0);
+  SetMenuAntialiasQt(fTrue);
+  ApplyUiFontQt();
+  Check(QApplication::font().family() == fontStart.family(),
+    "an empty interface face means the default again");
+  Check(QApplication::font().pointSizeF() == fontStart.pointSizeF(),
+    "and size 0 means the desktop's own size again");
 
   // Left pointing at the scratch directory, as the theme test leaves it:
   // every group that touches these settings redirects first, and the
