@@ -1323,6 +1323,7 @@ extern void ApplyUiFontQt(void);
 extern QString StrThemePrefQt(void);
 extern void SetThemePrefQt(CONST char *);
 extern void ApplyColorSchemeQt(void);
+extern unsigned long LRgbrefFromCoQt(CONST QColor &co);
 extern int NSchemeFromGtkFileTestQt(void);
 
 // Write sz to the named file, creating its directory.
@@ -1717,6 +1718,17 @@ static void TestColorSchemeQt()
       }
     Check(dMax >= 25,
       "an unchecked toggle is visible against the surface (%d)", dMax);
+
+    // The one piece of arithmetic behind the Windows title bar. A
+    // COLORREF is 0x00BBGGRR, so a colour handed to it straight comes out
+    // with red and blue swapped -- a wrong dark bar rather than none, and
+    // nothing on this platform would ever show it.
+    Check(LRgbrefFromCoQt(QColor(0x2B, 0x31, 0x38)) == 0x38312B,
+      "a caption colour is packed as Windows reads it (0x%06lX)",
+      LRgbrefFromCoQt(QColor(0x2B, 0x31, 0x38)));
+    Check(LRgbrefFromCoQt(QColor(0xFF, 0x00, 0x00)) == 0x0000FF,
+      "and red does not come out blue (0x%06lX)",
+      LRgbrefFromCoQt(QColor(0xFF, 0x00, 0x00)));
 
     SetThemePrefQt("light");
     ApplyColorSchemeQt();

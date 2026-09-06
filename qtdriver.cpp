@@ -4994,6 +4994,27 @@ void ApplyColorSchemeQt(void)
 // manager, which follows the desktop's own theme and takes no
 // instruction from a client.
 
+// A COLORREF, which is 0x00BBGGRR -- the reverse byte order of every
+// other colour in this file, and the sort of thing that is wrong until
+// something checks it. Compiled everywhere, used only on Windows, so the
+// suite can check it on the machine the work is done on.
+
+unsigned long LRgbrefFromCoQt(CONST QColor &co)
+{
+  return ((unsigned long)co.blue() << 16) |
+    ((unsigned long)co.green() << 8) | (unsigned long)co.red();
+}
+
+// Windows' own numbering, from dwmapi.h. The first is all Windows 10 has;
+// the other three arrived with Windows 11 and are simply refused before
+// it, which leaves the black bar that dark mode alone produces.
+#define dwmaDarkQt     20   // DWMWA_USE_IMMERSIVE_DARK_MODE (19 in 1809)
+#define dwmaDarkOldQt  19
+#define dwmaBorderQt   34   // DWMWA_BORDER_COLOR
+#define dwmaCaptionQt  35   // DWMWA_CAPTION_COLOR
+#define dwmaTextQt     36   // DWMWA_TEXT_COLOR
+#define lColorDefaultQt 0xFFFFFFFF   // DWMWA_COLOR_DEFAULT: hand it back
+
 void ApplyTitleBarThemeQt(QWidget *pw)
 {
 #ifdef Q_OS_WIN
@@ -5001,6 +5022,7 @@ void ApplyTitleBarThemeQt(QWidget *pw)
     unsigned long);
   static PFNDWMSETQT pfn = NULL;
   static flag fResolved = fFalse;
+  unsigned long lCaption, lText, lBorder;
   int nOn;
 
   if (pw == NULL)
@@ -5016,8 +5038,22 @@ void ApplyTitleBarThemeQt(QWidget *pw)
   // winId() is what creates the native window, so ask for it before
   // handing the handle over.
   void *hwnd = (void *)pw->winId();
-  if (pfn(hwnd, 20, &nOn, sizeof(nOn)) != 0)
-    pfn(hwnd, 19, &nOn, sizeof(nOn));
+  if (pfn(hwnd, dwmaDarkQt, &nOn, sizeof(nOn)) != 0)
+    pfn(hwnd, dwmaDarkOldQt, &nOn, sizeof(nOn));
+
+  // Dark mode on its own gives the caption plain black, which is darker
+  // than anything else in the scheme. Painted here in the window's own
+  // gunmetal instead, with the same soft grey the menus use for text, so
+  // the bar reads as part of the dialog rather than a hole above it. In
+  // light mode each is handed back to Windows rather than set to a light
+  // colour, so the desktop's own accent still shows.
+  lCaption = nOn ? LRgbrefFromCoQt(coWindDarkQt) : lColorDefaultQt;
+  lText = nOn ? LRgbrefFromCoQt(coTextDarkQt) : lColorDefaultQt;
+  lBorder = nOn ? LRgbrefFromCoQt(QColor(coWindDarkQt).darker(130)) :
+    lColorDefaultQt;
+  pfn(hwnd, dwmaCaptionQt, &lCaption, sizeof(lCaption));
+  pfn(hwnd, dwmaTextQt, &lText, sizeof(lText));
+  pfn(hwnd, dwmaBorderQt, &lBorder, sizeof(lBorder));
 #else
   (void)pw;
 #endif
