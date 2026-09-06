@@ -1655,11 +1655,19 @@ public:
 #define PZ(A) PlaceInX(A)
 
 // Pixels per degree on a rectangular world map. The WINDOW sets this,
-// not the Character Scale: xscreen.cpp sizes a map chart to the largest
-// 360x180 rectangle that fits, so this is a real and the map fills the
-// window exactly rather than in whole steps of -Xs. It used to be the
-// integer gi.nScale, which pinned the map to 1440x720 at most.
-#define rScaleMap ((real)gs.xWin / rDegMax)
+// not the Character Scale, and it is a real, so the map fills the window
+// exactly rather than in whole steps of -Xs. It used to be the integer
+// gi.nScale, which pinned the map to 1440x720 however large the display.
+//
+// BOTH axes, because the two callers arrive with different shapes. The
+// file path (FActionX, xscreen.cpp) has already fitted gs.xWin/yWin to
+// 2:1, so the width governs and the height term changes nothing. The
+// SCREEN path never passes through FActionX at all -- RedrawQt() sizes
+// the buffer to the widget and calls DrawChartX() directly -- so there
+// gs.yWin is the window's height, and taking the width alone drew a map
+// taller than the buffer and clipped it in any window wider than twice
+// its height.
+#define rScaleMap Min((real)gs.xWin / rDegMax, (real)gs.yWin / rDegHalf)
 
 // Compute Mollweide projection in pixel scale given latitude. The scale
 // is a PARAMETER rather than a variable captured from wherever the macro
