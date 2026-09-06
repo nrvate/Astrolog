@@ -621,28 +621,24 @@ static CONST RCCTL *PctlBuiltQt(CONST QVector<RCBUILT> *prg, int i)
 // Shrink one control's own font until its text fits the box the resource
 // gave it. Only the text changes size; the box stays where it is, so the
 // dialog keeps Windows' proportions.
-static void RcFitTextQt(QWidget *pw, CONST QString &str, int dxBox)
+// How much wider than its box a control's text is, as a ratio. 1.0 or
+// less means it fits.
+//
+// This used to SHRINK the control's font until the text fitted, down to
+// 70% and then wrapping. That fitted, and it looked it: every dialog was
+// a patchwork of type sizes, worst on Windows where the font is not the
+// one the resource was measured against. The resource's boxes are in
+// dialog units derived from the dialog font, so the honest fix is to
+// make the unit bigger for the whole dialog and let the dialog grow --
+// one type size everywhere, the layout still Windows'.
+static real RRcTextRatioQt(QWidget *pw, CONST QString &str, int dxBox)
 {
   if (str.isEmpty() || dxBox <= 0)
-    return;
-  QFont font = pw->font();
-  real rPt = font.pointSizeF();
+    return 1.0;
+  QFontMetrics fm(pw->font());
+  int dxText = fm.horizontalAdvance(str) + 6;
 
-  for (int i = 0; i < 8; i++) {
-    QFontMetrics fm(font);
-    if (fm.horizontalAdvance(str) + 4 <= dxBox || font.pointSizeF() < rPt*0.7)
-      break;
-    font.setPointSizeF(font.pointSizeF() - 0.5);
-  }
-  if (font.pointSizeF() < rPt)
-    pw->setFont(font);
-
-  // Still too wide even shrunk: let it wrap, which is what Windows' static
-  // text does. "Atlas City Coloring:" in its 35 unit box is the one case.
-  QFontMetrics fmFinal(font);
-  QLabel *pl = qobject_cast<QLabel *>(pw);
-  if (pl != NULL && fmFinal.horizontalAdvance(str) + 4 > dxBox)
-    pl->setWordWrap(fTrue);
+  return dxText <= dxBox ? 1.0 : (real)dxText / (real)dxBox;
 }
 
 
@@ -745,17 +741,51 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
       (*prgbuilt)[i].pw = pw;
     }
 
-  // Keep the base units Windows' own: one horizontal unit is a quarter of
-  // the font's average character width, one vertical an eighth of its line
-  // height. Widening them so the longest label fits was tried and is
-  // wrong -- "Atlas City Coloring:" sits in a 35 unit box and would have
-  // demanded a base of 19 against the natural 9, very nearly doubling the
-  // width of the whole dialog for one label. Windows just wraps that label
-  // onto two lines, which is what static text does there.
+  // MEASURE FIRST, THEN LAY OUT ONCE. Every control's text is measured
+  // against the box the resource gave it, and the widest overflow sets
+  // one horizontal unit for the whole dialog. The dialog grows by the
+  // same factor, so the layout stays exactly the resource's proportions
+  // and every control keeps the dialog font at its own size.
   //
-  // So labels wrap, and any other text control that doesn't fit its box in
-  // this font grows on its own rather than dragging the dialog with it.
-  // The proportions then stay exactly the resource's.
+  // What this replaced, on the maintainer's word ("the text for options
+  // is of variable size and rather sloppy looking... make the text fixed
+  // size and expand the dialog to fit as needed"): each control that
+  // overflowed had its own font shrunk, in half-point steps to 70%, and
+  // then wrapped. Every dialog came out a patchwork of type sizes,
+  // worst on Windows, whose dialog font is not the one MS Shell Dlg's
+  // units were measured against.
+  //
+  // The cap is 1.5, so a single pathological string cannot double a
+  // dialog. Past it a label wraps and anything else is clipped by its
+  // box, which is visible and therefore fixable, rather than silently
+  // shrunk.
+  real rScale = 1.0;
+  for (i = 0; i < cctl; i++) {
+    CONST RCCTL *pctlM = PctlBuiltQt(prgbuilt, i);
+    QWidget *pwM = (*prgbuilt)[i].pw;
+    if (pwM == NULL || pctlM == NULL)
+      continue;
+    // LABELS ARE NOT MEASURED. They wrap, which is what Windows' static
+    // text does, and letting one drive the scale is how the first
+    // attempt at this took the graphics dialog from 887 to 1597 pixels
+    // wide for the sake of "Atlas City Coloring:". What must not wrap --
+    // a checkbox, a radio, a button, a group title -- is what sets it.
+    if (pctlM->nType != ctlCheck && pctlM->nType != ctlRadio &&
+      pctlM->nType != ctlButton && pctlM->nType != ctlGroup)
+      continue;
+    int dxInd = (pctlM->nType == ctlCheck || pctlM->nType == ctlRadio) ?
+      pwM->style()->pixelMetric(QStyle::PM_IndicatorWidth) + 6 : 0;
+    // A group box's own title sits in its top border, so it is measured
+    // against the box's width the same way; its children are measured
+    // separately and independently.
+    rScale = Max(rScale, RRcTextRatioQt(pwM,
+      QString(pctlM->szText).remove(QChar('&')),
+      pctlM->dx * dxBase / 4 - dxInd));
+  }
+  if (rScale > 1.5)
+    rScale = 1.5;
+  dxBase = (int)((real)dxBase * rScale + 0.999);
+
   pdlg->setFixedSize(dxDlg * dxBase / 4, dyDlg * dyBase / 8);
   for (i = 0; i < cctl; i++) {
     CONST RCCTL *pctl = PctlBuiltQt(prgbuilt, i);
@@ -773,10 +803,14 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
     if (pctl->nType == ctlLabel || pctl->nType == ctlCheck ||
       pctl->nType == ctlRadio || pctl->nType == ctlButton) {
       // A checkbox or radio spends part of its width on the indicator.
+      // Anything still over the box after the scale above is a label, and
+      // it wraps rather than shrinking.
       int dxInd = (pctl->nType == ctlCheck || pctl->nType == ctlRadio) ?
         pw->style()->pixelMetric(QStyle::PM_IndicatorWidth) + 6 : 0;
-      RcFitTextQt(pw, QString(pctl->szText).remove(QChar('&')),
-        dxCtl - dxInd);
+      QLabel *plFit = qobject_cast<QLabel *>(pw);
+      if (plFit != NULL && RRcTextRatioQt(pw,
+        QString(pctl->szText).remove(QChar('&')), dxCtl - dxInd) > 1.0)
+        plFit->setWordWrap(fTrue);
     }
     QLabel *plWrap = qobject_cast<QLabel *>(pw);
     if (plWrap != NULL && plWrap->wordWrap())
