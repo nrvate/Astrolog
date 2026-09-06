@@ -959,13 +959,30 @@ void PasteChartQt()
         "Could not read the bitmap on the clipboard.");
   } else {
     QFile file(szTemp);
-    fRet = file.open(QIODevice::WriteOnly);
-    if (fRet) {
-      file.write(pmime->text().toLocal8Bit());
+    QByteArray baText = pmime->text().toLocal8Bit();
+    // Did the clipboard text reach the disk whole? The write and the
+    // FLUSH both have to say so: close() returns void and flushes there,
+    // so a failure that only appears when the buffer is written -- no
+    // space, an I/O error -- is reported through error() and nowhere
+    // else. Unchecked, the consequence here is not a lost file but a
+    // misleading one: FInputData() parses whatever did get written and
+    // reports a malformed chart, blaming the clipboard for a full disk.
+    flag fWrote = file.open(QIODevice::WriteOnly);
+    if (fWrote) {
+      fWrote = (file.write(baText) == baText.size());
       file.close();
-      // FInputData() prints its own diagnostics on a malformed file.
-      fRet = FInputData(szTemp);
+      fWrote = fWrote && file.error() == QFileDevice::NoError;
     }
+    // FInputData() prints its own diagnostics on a malformed file, so
+    // only the file trouble before it needs saying -- but it does need
+    // saying. The image branch above reports what it cannot use; this one
+    // reported nothing, so a paste that failed looked exactly like a menu
+    // item that does nothing.
+    if (!fWrote)
+      QMessageBox::warning(gi.qwind, szAppName,
+        QString("Could not write the clipboard text to a temporary file: "
+          "%1").arg(file.errorString()));
+    fRet = fWrote && FInputData(szTemp);
   }
   if (fRet)
     RecastAndRedrawQt();
