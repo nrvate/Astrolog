@@ -4127,19 +4127,38 @@ flag SwissComputeAsteroid(real jd, ES *pes, flag fBack)
     iflag |= SEFLG_NONUT;
 
   // Calling with empty parameters means initialize to first asteroid.
-#ifdef EXPRESS
 LNext:
-#endif
   if (pes == NULL) {
     iast = fBack ? gs.nAstHi : gs.nAstLo;
     return fTrue;
   } else if (iast < Max(gs.nAstLo, 1) || iast > gs.nAstHi)
     return fFalse;
 
-  // Compute the asteroid coordinates.
+  // Compute the asteroid coordinates. A body with no ephemeris file is
+  // SKIPPED, not the end of the range.
+  //
+  // Returning fFalse here ended the whole enumeration at the first miss,
+  // which made "-XE <low> <high>" draw NOTHING whenever the range began
+  // at, or reached, a body the ephemeris does not have -- not a partial
+  // set, nothing, and the chart came out byte-identical to one drawn
+  // with no -XE at all. That is invisible by construction: the option
+  // still runs, still renders, still checksums. It cost this project two
+  // findings. "-XE 1 20" sat in the graphics matrix from the day it was
+  // written, inert for its whole life because asteroid 9 had no file;
+  // and on 2026-09-05 "-XE 433 433" went inert the moment Eros left the
+  // bundle. Both were caught by tools/inert_option_audit.py, which had
+  // to be written for exactly this.
+  //
+  // Skipping is also what a user means: "draw asteroids 1 to 100" asks
+  // for the ones that exist. The cost is that a range whose bodies are
+  // mostly absent now attempts every number in it rather than stopping,
+  // so a very wide range is slow rather than instantly empty -- an
+  // honest cost for an honest answer, and the range is the user's own.
   if (!FSwissPlanet(iast + SE_AST_OFFSET, jd, us.objCenter,
-    &r1, &r2, &r3, &r4, &r5, &r6))
-    return fFalse;
+    &r1, &r2, &r3, &r4, &r5, &r6)) {
+    iast += (fBack ? -1 : 1);
+    goto LNext;
+  }
   pes->lon = Mod(r1 + is.rSid);
   pes->lat = r2;
   pes->dir = r3;

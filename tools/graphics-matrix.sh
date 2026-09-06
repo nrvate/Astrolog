@@ -122,13 +122,24 @@ for m in "" -XX -XX0 -XW -XW0 -XG -XG0 -XP -XP0 -XZ \
          -g -g0 -Z -Z0 -L -L0 -7 -l -d -E -j -8 -5 -k0 -v -w -m -S; do
   g $m
 done
-for base in "" -XG -XW; do
+# "-Xw 800 400" is a base, not an option, so that -XQ can be TESTED
+# rather than allowlisted: it only does anything when the bitmap is not
+# square, which was an annotated claim in inert_option_audit.py until
+# 2026-09-05 and is now a render that moves (measured: it changes an
+# 800x400 chart and leaves a square one alone).
+# The non-square base has to be rendered ALONE as well, or every option
+# under it reads as moving a render: the audit compares an option to its
+# base's own checksum, and a base it never saw has none. That mistake
+# reported seven allowlisted options as newly live for a few minutes on
+# 2026-09-05, which a direct render disproved in one command.
+g -Xw 800 400
+for base in "" -XG -XW "-Xw 800 400"; do
   for o in "-Xv 0" "-Xv 1" "-Xv 2" "-Xv 3" "-Xv 4" "-Xv 5" "-Xv 6" \
            "-Xv 7" -Xv0 -XA -XL "-XL 1" "-XL 3" "-XL 5" -XU "-XU 0" \
            "-XU 2" "-XU 3" -XUx -XC -XJ -X8 -Xi -Xt -Xu -Xx -Xx0 -Xl \
            -Xe -Xj -XQ -XQ0 -Xr -Xm -X3 -XN -XF "-Xs 100" "-Xs 400" \
            "-XS 100" "-XS 400" "-Xw 400 300" "-Xw 2000 1500" "-X1 5" \
-           "-X2 9" "-XI0 0 0" "-XI0 100 1" "-Xk 5" "-Xkv 9" "-XE 1 29" \
+           "-X2 9" "-XI0 0 0" "-XI0 100 1" "-Xk 5" "-Xkv 9" "-XE 1 40" \
            "-XE 7066 7066" "-XE0 1 5" "-XE3 1 5"; do
     g $base $o
   done
@@ -144,14 +155,18 @@ done
 # a09566b8 under -XG, -XE 1 9 and -XE 1 20 both give 783eb0a5, which is
 # bare -XG.
 #
-# 1..29 is the largest low range that fully resolves from the bundled
-# ephem/, which since 2026-09-05 carries the first 29 main belt
-# asteroids; 30 is the first with no file, and "-XE 1 30" renders
-# byte-identically to bare -XG, measured, exactly as "-XE 1 20" used to.
-# 7066 is Nessus, here as a single body rather than a range: a range that
-# silently truncates is what went wrong above. It replaced 433 (Eros) on
-# 2026-09-05, when that file left the bundle and this line went inert --
-# caught by tools/inert_option_audit.py, which exists for this.
+# 1..40 deliberately runs past the bundle. Since 2026-09-05
+# SwissComputeAsteroid() SKIPS a body with no ephemeris file instead of
+# ending the range there, so this draws the 29 that ship and steps over
+# 30..40 -- and the line stays honest whichever way the bundle changes,
+# which is the whole reason the range no longer has to match it. Before
+# that fix a range reaching one missing body drew NOTHING, and both
+# "-XE 1 20" and "-XE 433 433" sat here inert, rendering
+# byte-identically to bare -XG while looking like coverage.
+#
+# 7066 is Nessus, a single bundled body: the one shape that is still
+# inert if its file goes, since a range with nothing in it draws
+# nothing. tools/inert_option_audit.py is what says so.
 
 # -XM1/-XM3/-XM6 are prefix forms wanting extra arguments; they belong to
 # the switch matrix, not here, since they error before rendering.

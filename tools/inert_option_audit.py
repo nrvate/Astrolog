@@ -31,8 +31,8 @@ ALLOWED = {
     "-Xbw":    "same writer, Windows-bitmap variant",
     "-XS 100": "100% is the default text size; -XS 400 in the same family is live",
     "-Xv 1":   "the default fill style; -Xv 0 and 2..7 in the same family are live",
-    "-XQ":     "only matters when the bitmap is not square; the harness uses the default size",
-    "-XQ0":    "same, the off form",
+    "-XQ0":    "the off form, which is the default; -XQ itself is live "
+               "against the non-square base",
     "-Xj":     "draws trails BETWEEN chart updates -- animation only, not one render",
     "-XN":     "animates map time instead of rotating -- animation only",
     "-Xk 5":   "sets the interactive scribble pen colour; nothing scribbles here",
@@ -43,7 +43,7 @@ ALLOWED = {
     "-k0":     "Ansi text colouring, not drawing",
 }
 
-BASES = ("-XG", "-XW", "-g")
+BASES = ("-XG", "-XW", "-g", "-Xw 800 400")
 
 
 def pairs(text):

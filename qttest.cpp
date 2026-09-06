@@ -6504,7 +6504,7 @@ static flag FTestWantedQt(CONST char *szFilter, CONST char *szName)
 
 static int NRunQtTestTableQt()
 {
-  CONST char *szFilter = getenv("ASTROLOG_QT_TESTS"), *szEphem;
+  CONST char *szFilter = getenv("ASTROLOG_QT_TESTS");
   flag fTime = szFilter != NULL || getenv("ASTROLOG_QT_TIME") != NULL;
   QElapsedTimer timerTest;
   int i, cRun = 0;
@@ -6533,8 +6533,6 @@ static int NRunQtTestTableQt()
   // TestExpressionFunctionsQt does.
   SetNoPopupQt(fTrue);
   printf("Astrolog Qt test suite\n");
-  if (szEphem != NULL)
-    printf("  ephemeris mode: %s\n", szEphem);
   for (i = 0; i < cqttestQt; i++) {
     if (!FTestWantedQt(szFilter, rgqttestQt[i].szName))
       continue;
