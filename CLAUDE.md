@@ -225,8 +225,9 @@ menus resolve, 264 shortcuts bound and unique, 26 chart types render
 non-blank, all 35 text chart modes survive 120-character chart names
 and locations, the five import file formats parse and their long-line
 truncation points hold, all 341 menu items fire without crashing, 258/258 Windows menu
-items present, 256 show Windows' own accelerator text, 39/39 esoteric
-bodies resolve against the ephemeris, the application icon resolves at
+items present, 256 show Windows' own accelerator text, every body the
+Object Selections list offers resolves against the bundled ephemeris and
+answers to the name the file gives it (78 as of 2026-09-05), the application icon resolves at
 all three sizes, and bad input (missing files, unknown switches) doesn't
 terminate the process.
 

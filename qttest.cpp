@@ -117,8 +117,10 @@ extern int CaccelTestQt();
 // which is QT_CI_PLAN.md Q13 saying "until B is taken CI is a weaker net
 // than a local run", quantified.
 //
-// B is taken. The 20 files are bundled (7.8 MB), so "minimal" and "full"
-// now resolve the same 39 and CI has the net the maintainer has.
+// B is taken. The 20 files are bundled, so "minimal" and "full" resolve
+// the same set and CI has the net the maintainer has. The set has grown
+// since: 78 rows against 67 files as of 2026-09-05, the first 29 main
+// belt asteroids and 39 outer bodies, all of them bundled.
 //
 // The constant stays rather than collapsing into cObjSel at the use site,
 // for two reasons. It is the thing a future thinning of ephem/ would have
@@ -126,7 +128,9 @@ extern int CaccelTestQt();
 // CI should get weaker. And the check reads "more means the mode is
 // stale" -- which is how this very change announced itself, failing with
 // "39 of 39 resolved; minimal expects exactly 19" the moment the files
-// landed, before anyone had to remember to look.
+// landed, before anyone had to remember to look. It is one number now,
+// cObjSel, precisely because the list and the bundle are the same set --
+// see rgObjSel[] in calc.cpp.
 #define cObjSelEphemMinimal cObjSel
 
 static flag FEphemMinimalQt()
@@ -3130,8 +3134,11 @@ static void TestObjSelTableQt()
   // for 11 of them from the Moshier formulas -- so "cCheck > 0" passes on a
   // run that found nothing. And every body that fails to resolve skips its
   // own assertion above, silently, so this number is also the count of
-  // assertions the loop actually ran: 83 passed on /swe, 63 on ephem/, 53
-  // on nothing, with no failure to show for the difference. Asserting it is
+  // assertions the loop actually ran. Measured 2026-09-02, when the list
+  // was 39 rows: 83 passed on /swe, 63 on ephem/, 53 on nothing, with no
+  // failure to show for the difference. The list is 78 rows now and both
+  // ephemerides answer for all of them, which is the point of keeping
+  // them one set. Asserting it is
   // the only thing standing between a thinner ephemeris and a green run
   // that tested less.
   cWant = FEphemMinimalQt() ? cObjSelEphemMinimal : cObjSel;

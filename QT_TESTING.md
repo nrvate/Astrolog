@@ -73,8 +73,10 @@ answers a question nobody has.
 and exits 0.** Measured 2026-09-01:
 
 ```sh
-ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i nrvate.as   # PASS: 83 passed
-ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -Yi1 ephem     # 39 of 39 since 2026-09-03
+ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i nrvate.as   # 78 of 78 bodies
+ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -Yi1 ephem     # the same 78:
+                                                           # the bundle IS
+                                                           # the list
 ASTROLOG_QT_TESTS=objsel ./astrolog-qt-test -i astrolog.as # 0 bytes, exit 0
 ```
 
