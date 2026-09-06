@@ -51,6 +51,10 @@ IMAGES='ubuntu:22.04 ubuntu:24.04 ubuntu:26.04 debian:12 debian:13
         fedora:43 fedora:44 quay.io/rockylinux/rockylinux:9
         quay.io/rockylinux/rockylinux:10 archlinux:latest
         opensuse/tumbleweed alpine:3.22'
+# Kept whole, because an argument narrows IMAGES and check_readme has to
+# see all of them either way. Set here rather than below the early exits,
+# where "--readme" would find it empty.
+ALL_IMAGES=$IMAGES
 
 # The package names here and the ones README.md tells a user to install
 # are two copies of one fact, and the second copy was wrong: until
@@ -60,8 +64,13 @@ IMAGES='ubuntu:22.04 ubuntu:24.04 ubuntu:26.04 debian:12 debian:13
 # ways, before running anything -- a name here that the README never
 # mentions is an instruction nobody was given, and a name there that no
 # recipe installs is an instruction nobody tested.
+# Always over EVERY image, never over a narrowed list: run with one
+# image and the other eleven distributions' package names would all read
+# as "in README.md, installed by nothing here" -- eight lines of alarm
+# about nothing, which is what checking one distribution after a release
+# produced.
 check_readme() {
-  ours=$(for i in $IMAGES; do recipe "$i"; done \
+  ours=$(for i in $ALL_IMAGES; do recipe "$i"; done \
     | tr ' ' '\n' | grep -E '^(g\+\+|gcc|gcc-c\+\+|make|pkg-config|pkgconf|pkgconf-pkg-config|libx11-dev|libX11-devel|libx11|qt[56]?-?[a-z-]*dev[a-z]*)$' \
     | sort -u)
   theirs=$(sed -n '/^# Debian, Ubuntu, Mint/,/^git clone/p' README.md \
