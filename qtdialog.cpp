@@ -1076,7 +1076,14 @@ void ShowSaveChartDialogQt()
   if (qs.isEmpty())
     return;
   QByteArray ba = qs.toLocal8Bit();
-  is.szFileOut = SzClone((char *)ba.constData());
+  // FCloneSz, like the seven other save dialogs in this file and like the
+  // -o switch handler. SzClone() with a plain assignment DROPPED whatever
+  // is.szFileOut already pointed at, so every Save Chart after the first
+  // leaked the previous path -- and invisibly, because SzClone()
+  // deliberately un-counts its own allocation, so the exit-time "not
+  // freed" check could not see it either. FCloneSz frees the old value
+  // before taking the new one.
+  FCloneSz(ba.constData(), &is.szFileOut);
   us.nWriteFormat = 0;
   if (!FOutputData())
     QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
