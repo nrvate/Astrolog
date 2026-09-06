@@ -783,6 +783,29 @@ static void SetTextMetricsQt()
   if (qi.yChar < 1) qi.yChar = 12;
 }
 
+// "Antialias Lines" (gs.fAntialias, Graphics / Chart Effects), applied
+// the way Qt does it rather than the way Windows has to.
+//
+// GDI has no antialiasing, so Windows fakes it two ways: render at a
+// multiple and shrink (wi.fSmoothZoom), or walk the finished bitmap
+// blending 2x2 blocks whose diagonals match (FBmpAntialias, xdevice.cpp).
+// The port had neither -- FBmpAntialias() reads gi.bmp, which is the file
+// export buffer and unallocated on screen, so it returns early -- and
+// nothing set QPainter's own hint either, so the menu item did nothing.
+//
+// A render hint rather than a port of the 2x2 pass: it antialiases while
+// drawing instead of inferring edges from the result, and costs nothing
+// when off. Safe for DrawFill(), which compares exact pixel colours to
+// find its boundary: a softened edge pixel is still not the background
+// colour, so a fill stops sooner rather than leaking through.
+
+static void ApplyAntialiasQt(void)
+{
+  if (gi.qpaint != NULL)
+    gi.qpaint->setRenderHint(QPainter::Antialiasing, gs.fAntialias);
+}
+
+
 // Called from AnsiColor() (general.cpp) for each colour change.
 void TextColorQt(KI ki)
 {
@@ -886,6 +909,7 @@ void PrintChartQt()
     } else {
       gi.qim->fill(gs.fInverse ? Qt::white : Qt::black);
       gi.qpaint = new QPainter(gi.qim);
+      ApplyAntialiasQt();
       InitColors();
       gi.nScaleT = 1;
       AdjustTextScale();
@@ -1138,6 +1162,7 @@ void RedrawQt()
   gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
   gi.qim->fill(Qt::black);
   gi.qpaint = new QPainter(gi.qim);
+  ApplyAntialiasQt();
   // With no mode set, work one out from the chart flags the way FActionX
   // does (xscreen.cpp:2208). DetectGraphicsChartMode() falls through to
   // gWheel, which is how switching back to graphics from a text only chart
