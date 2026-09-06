@@ -59,6 +59,11 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
+// For the dark scheme assertions: an indicator is drawn into an image and
+// measured against what it sits on.
+#include <QtGui/QPainter>
+#include <QtWidgets/QStyle>
+#include <QtWidgets/QStyleOption>
 #include <QtGui/QIcon>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QKeyEvent>
@@ -1667,6 +1672,52 @@ static void TestColorSchemeQt()
     ApplyColorSchemeQt();
     Check(QApplication::palette().color(QPalette::Window).lightness() < 128,
       "choosing Dark actually darkens the palette");
+    // What the dark palette is actually made of. Each of these was a
+    // complaint before it was an assertion.
+    QPalette palDark = QApplication::palette();
+    QColor coBg = palDark.color(QPalette::Window);
+    QColor coFg = palDark.color(QPalette::WindowText);
+    Check(coFg.lightness() < 240,
+      "dialog text is a gray rather than white (%d)", coFg.lightness());
+    Check(coFg.lightness() - coBg.lightness() >= 120,
+      "and still well clear of the surface it is on (%d)",
+      coFg.lightness() - coBg.lightness());
+    // Qt derives frames, group box lines and sunken panels from these,
+    // and a default-constructed palette carries the LIGHT ones -- so a
+    // dark dialog was drawn with light-theme edges.
+    CONST QPalette::ColorRole rgrole[] = {QPalette::Light,
+      QPalette::Midlight, QPalette::Mid, QPalette::Dark, QPalette::Shadow};
+    for (int iRole = 0;
+      iRole < (int)(sizeof(rgrole)/sizeof(QPalette::ColorRole)); iRole++)
+      Check(palDark.color(rgrole[iRole]).lightness() < 128,
+        "the shade Qt draws edges from is dark too (%d: %d)", iRole,
+        palDark.color(rgrole[iRole]).lightness());
+
+    // And the toggles beside menu items, which is where this started:
+    // Fusion derives their outline by DARKENING the window colour, so on
+    // a dark palette they came out black on black. Drawn here exactly as
+    // a menu draws one, and measured against what it sits on.
+    QImage im(24, 24, QImage::Format_RGB32);
+    im.fill(coBg);
+    {
+      QPainter paint(&im);
+      QStyleOptionButton optBox;
+      optBox.rect = QRect(4, 4, 16, 16);
+      optBox.state = QStyle::State_Enabled;
+      optBox.palette = palDark;
+      QApplication::style()->drawPrimitive(QStyle::PE_IndicatorCheckBox,
+        &optBox, &paint, NULL);
+    }
+    int dMax = 0, x, y;
+    for (y = 0; y < im.height(); y++)
+      for (x = 0; x < im.width(); x++) {
+        int d = QColor(im.pixel(x, y)).lightness() - coBg.lightness();
+        if (d > dMax)
+          dMax = d;
+      }
+    Check(dMax >= 25,
+      "an unchecked toggle is visible against the surface (%d)", dMax);
+
     SetThemePrefQt("light");
     ApplyColorSchemeQt();
     Check(QApplication::palette().color(QPalette::Window).lightness() >= 128,
@@ -3332,6 +3383,64 @@ static QString StrEphemListQt()
     pw->close();
   });
   return s_strCombo;
+}
+
+
+// The time as the Set Chart Info dialog puts it in its own field, which
+// is a different question from what SzTim() returns: the field is what
+// the user reads.
+static QString s_strTimField;
+
+static QString StrChartInfoTimeQt()
+{
+  s_strTimField = QString();
+  DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
+    QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
+    for (int i = 0; i < rg.size(); i++) {
+      QStringList items;
+      for (int j = 0; j < rg[i]->count(); j++)
+        items << rg[i]->itemText(j);
+      // The time field is the one offering Midnight and Noon, found the
+      // same way the ephemeris list above is: these controls are built
+      // from the resource and carry no object name.
+      if (items.contains("Midnight")) {
+        s_strTimField = rg[i]->currentText();
+        break;
+      }
+    }
+    pw->close();
+  });
+  return s_strTimField;
+}
+
+
+static void TestChartInfoTimeQt()
+{
+  real timSav = ciCore.tim;
+  QString str;
+
+  Group("Chart info time field");
+
+  // 8:15 in the morning: one digit of hour, which is where the padding
+  // shows. SzTim() writes " 8:15am" so a text chart's rows line up under
+  // each other; in an edit box that is just an indent, and the field sat
+  // beside a dropdown whose own entries are unpadded.
+  ciCore.tim = 8.25;
+  str = StrChartInfoTimeQt();
+  Check(!str.isEmpty(), "the time field was found at all");
+  Check(!str.startsWith(' '), "a one digit hour is not indented: \"%s\"",
+    str.toLocal8Bit().constData());
+  Check(str.startsWith("8:15"), "and it is still the right time: \"%s\"",
+    str.toLocal8Bit().constData());
+
+  // Two digits, where there was never any padding to trim: the same field
+  // has to be untouched.
+  ciCore.tim = 14.5;
+  str = StrChartInfoTimeQt();
+  Check(str.startsWith(us.fEuroTime ? "14:30" : "2:30"),
+    "a two digit hour is unchanged: \"%s\"", str.toLocal8Bit().constData());
+
+  ciCore.tim = timSav;
 }
 
 
@@ -6518,6 +6627,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},
   {"chart-list",           TestChartListFilterQt},
+  {"info-time",            TestChartInfoTimeQt},
   {"expression-hooks",     TestExpressionHooksQt},
   {"accel-text",           TestAccelTextQt},
   {"expression-functions", TestExpressionFunctionsQt},

@@ -129,6 +129,17 @@ static QStringList RgstrYearQt()
   return rgstr;
 }
 
+// SzTim() pads the hour to two columns so a text chart's rows line up
+// under each other. An edit field has nothing to line up with, so there
+// the padding reads as an indent: 8:15am showed as " 8:15am", beside a
+// dropdown whose own entries are unpadded. Trimmed for the fields only --
+// the text charts, and the summary lines that imitate them, still pad.
+
+static QString StrTimEditQt(real tim)
+{
+  return QString::fromLatin1(SzTim(tim)).trimmed();
+}
+
 static QStringList RgstrTimeQt()
 {
   QStringList rgstr;
@@ -414,9 +425,16 @@ public:
 };
 
 
+// Defined in qtdriver.cpp beside the palette it belongs with.
+extern void ApplyTitleBarThemeQt(QWidget *pw);
+
 static void PrepareDialogQt(QDialog *pdlg)
 {
   static NoComboWheelQt filter;
+
+  // The title bar is not ours to paint on Windows unless we ask, and a
+  // dark dialog under a white header was the last light thing left.
+  ApplyTitleBarThemeQt(pdlg);
 
   for (QComboBox *pcb : pdlg->findChildren<QComboBox *>()) {
     pcb->setFocusPolicy(Qt::StrongFocus);
@@ -1794,8 +1812,8 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
     QString::number(pci->day), RgstrDayQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInYea"),
     QString::number(pci->yea), RgstrYearQt());
-  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInTim"), SzTim(pci->tim),
-    RgstrTimeQt());
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInTim"),
+    StrTimEditQt(pci->tim), RgstrTimeQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInDst"),
     pci->dst == 0.0 ? "No" : (pci->dst == 1.0 ? "Yes" :
     (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))), RgstrDstQt());
@@ -2731,7 +2749,7 @@ void ShowTransitDialogQt()
   FillComboQt(pcbMon, sz, RgstrMonthQt());
   FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
   FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
-  FillComboQt(pcbTim, SzTim(TimT), RgstrTimeQt());
+  FillComboQt(pcbTim, StrTimEditQt(TimT), RgstrTimeQt());
   FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
     (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
   sprintf2(S(sz), "%s", SzZone(ZonT));
@@ -2754,7 +2772,7 @@ void ShowTransitDialogQt()
         if (pcbMon != NULL) pcbMon->setEditText(szN);
         if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
         if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
-        if (pcbTim != NULL) pcbTim->setEditText(SzTim(timN));
+        if (pcbTim != NULL) pcbTim->setEditText(StrTimEditQt(timN));
 #endif
       });
 
@@ -2913,7 +2931,7 @@ void ShowProgressDialogQt()
   FillComboQt(pcbMon, sz, RgstrMonthQt());
   FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
   FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
-  FillComboQt(pcbTim, SzTim(TimT), RgstrTimeQt());
+  FillComboQt(pcbTim, StrTimEditQt(TimT), RgstrTimeQt());
   FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
     (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
   sprintf2(S(sz), "%s", SzZone(ZonT));
@@ -2933,7 +2951,7 @@ void ShowProgressDialogQt()
         if (pcbMon != NULL) pcbMon->setEditText(szN);
         if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
         if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
-        if (pcbTim != NULL) pcbTim->setEditText(SzTim(timN));
+        if (pcbTim != NULL) pcbTim->setEditText(StrTimEditQt(timN));
 #endif
       });
 

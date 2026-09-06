@@ -95,6 +95,9 @@
 // built this port on Qt6, so that branch had never once compiled.
 #include <QtGui/QStyleHints>
 #include <QtWidgets/QStyleFactory>
+// For the checkbox and radio indicators AstroStyleQt redraws on a dark
+// palette: the option type it has to copy, rather than slice.
+#include <QtWidgets/QStyleOption>
 #include <QtGui/QPalette>
 #include <QtGui/QColor>
 
@@ -103,6 +106,9 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QTemporaryFile>
+// For the one Windows call this file makes, resolved by name so no
+// windows.h is needed: see ApplyTitleBarThemeQt().
+#include <QtCore/QLibrary>
 
 #ifdef QT
 
@@ -1546,6 +1552,7 @@ static void BuildFileMenu(QMainWindow *pwind)
 QString StrThemePrefQt(void);
 void SetThemePrefQt(CONST char *sz);
 void ApplyColorSchemeQt(void);
+void ApplyTitleBarThemeQt(QWidget *pw);
 
 
 // The interface theme submenu: System, Light, Dark, exclusive.
@@ -1590,6 +1597,7 @@ static void BuildThemeMenuQt(QMenu *pmenuWin)
         // menus and dialogs restyle without a restart. The chart is drawn
         // by this port rather than by Qt, so it needs telling.
         ApplyColorSchemeQt();
+        ApplyTitleBarThemeQt(gi.qwind);
         RedrawForceQt();
       });
   }
@@ -4287,6 +4295,60 @@ public:
       return QDialogButtonBox::GnomeLayout;
     return QProxyStyle::styleHint(hint, popt, pw, pret);
   }
+
+  // Fusion draws a checkbox or radio outline by DARKENING the window
+  // colour, which is right on a light desktop and invisible on a dark
+  // one -- the toggle beside a menu item came out #2a2a2a on #353535,
+  // black on black. Qt has a fallback for exactly this and it never
+  // fires: it asks whether the window colour's lightness is 0, which is
+  // true only of pure black.
+  //
+  // So on a dark palette these two primitives are drawn with a lightened
+  // copy of it, which is where Fusion reads the outline and the box fill
+  // from. Nothing else is touched, and a light palette or a style that is
+  // not Fusion takes the ordinary path.
+  void drawPrimitive(PrimitiveElement pe, CONST QStyleOption *popt,
+    QPainter *ppaint, CONST QWidget *pw = NULL) const override
+  {
+    if ((pe == PE_IndicatorCheckBox || pe == PE_IndicatorRadioButton) &&
+      popt != NULL && FDarkFusionQt(popt->palette)) {
+      CONST QStyleOptionButton *pbtn =
+        qstyleoption_cast<CONST QStyleOptionButton *>(popt);
+      QStyleOptionButton optBtn;
+      QStyleOption optAny;
+      QStyleOption *poptDraw;
+
+      // Copied as the type it really is: Fusion's checkbox branch starts
+      // with a qstyleoption_cast, and a sliced option would draw nothing.
+      if (pbtn != NULL) {
+        optBtn = *pbtn;
+        poptDraw = &optBtn;
+      } else {
+        optAny = *popt;
+        poptDraw = &optAny;
+      }
+      poptDraw->palette.setColor(QPalette::Window,
+        poptDraw->palette.color(QPalette::Window).lighter(250));
+      poptDraw->palette.setColor(QPalette::Base,
+        poptDraw->palette.color(QPalette::Base).lighter(150));
+      QProxyStyle::drawPrimitive(pe, poptDraw, ppaint, pw);
+      return;
+    }
+    QProxyStyle::drawPrimitive(pe, popt, ppaint, pw);
+  }
+
+private:
+  // Both halves matter. A dark palette under a style that paints its own
+  // colours -- Breeze under KDE, say -- needs none of this and would be
+  // harmed by it, and Fusion under a light palette is already correct.
+  flag FDarkFusionQt(CONST QPalette &pal) const
+  {
+    QStyle *pbase = baseStyle();
+
+    return pal.color(QPalette::Window).lightness() < 128 && pbase != NULL &&
+      pbase->objectName().compare(QString("fusion"), Qt::CaseInsensitive)
+      == 0;
+  }
 };
 
 
@@ -4819,11 +4881,30 @@ int NSchemeFromGtkFileTestQt(void) { return NSchemeFromGtkFileQt(); }
 // Follow the desktop into dark mode, if it's in it and Qt hasn't already
 // worked that out for itself.
 
+// The dark scheme, in one place. Gunmetal with a blue cast for the
+// chrome, a darkened emerald for what is selected, and a soft cool gray
+// for text -- white on near-black is what made the dialogs read as
+// glaring. Measured contrast of coText on coWind is 7.7:1, which clears
+// WCAG AAA for body text with room to spare, so this is softer without
+// being dim.
+
+#define coWindDarkQt  QColor(0x2B, 0x31, 0x38)   // gunmetal, faintly blue
+#define coBtnDarkQt   QColor(0x33, 0x3A, 0x42)   // a shade up: raised
+#define coBaseDarkQt  QColor(0x21, 0x26, 0x2B)   // a field sits below
+#define coAltDarkQt   QColor(0x30, 0x37, 0x3E)
+#define coTextDarkQt  QColor(0xC6, 0xCE, 0xD4)   // soft gray, not white
+#define coDimDarkQt   QColor(0x70, 0x79, 0x81)   // disabled
+#define coHighDarkQt  QColor(0x1E, 0x7A, 0x5C)   // darkened emerald
+#define coHiTxDarkQt  QColor(0xEA, 0xF3, 0xEE)
+#define coLinkDarkQt  QColor(0x5C, 0xB8, 0x99)   // the same green, lifted
+#define coTipDarkQt   QColor(0x3A, 0x42, 0x4A)
+#define coShadDarkQt  QColor(0x14, 0x18, 0x1B)
+
 void ApplyColorSchemeQt(void)
 {
-  QColor coWind(0x35, 0x35, 0x35), coBase(0x2A, 0x2A, 0x2A),
-    coText(0xFF, 0xFF, 0xFF), coHigh(0x2A, 0x82, 0xDA),
-    coDim(0x7F, 0x7F, 0x7F);
+  QColor coWind = coWindDarkQt, coBase = coBaseDarkQt,
+    coText = coTextDarkQt, coHigh = coHighDarkQt, coDim = coDimDarkQt,
+    coBtn = coBtnDarkQt;
   QStyle *pstyle;
   QPalette pal;
 
@@ -4866,25 +4947,80 @@ void ApplyColorSchemeQt(void)
   pal.setColor(QPalette::Window, coWind);
   pal.setColor(QPalette::WindowText, coText);
   pal.setColor(QPalette::Base, coBase);
-  pal.setColor(QPalette::AlternateBase, coWind);
-  pal.setColor(QPalette::ToolTipBase, coWind);
+  pal.setColor(QPalette::AlternateBase, coAltDarkQt);
+  pal.setColor(QPalette::ToolTipBase, coTipDarkQt);
   pal.setColor(QPalette::ToolTipText, coText);
   pal.setColor(QPalette::Text, coText);
-  pal.setColor(QPalette::Button, coWind);
+  pal.setColor(QPalette::Button, coBtn);
   pal.setColor(QPalette::ButtonText, coText);
-  pal.setColor(QPalette::BrightText, QColor(0xFF, 0x40, 0x40));
-  pal.setColor(QPalette::Link, coHigh);
+  pal.setColor(QPalette::BrightText, QColor(0xFF, 0x6B, 0x6B));
+  pal.setColor(QPalette::Link, coLinkDarkQt);
+  pal.setColor(QPalette::LinkVisited, coLinkDarkQt.darker(120));
   pal.setColor(QPalette::Highlight, coHigh);
-  pal.setColor(QPalette::HighlightedText, QColor(0x00, 0x00, 0x00));
+  pal.setColor(QPalette::HighlightedText, coHiTxDarkQt);
+  // The shades Qt derives for frames, group box lines and sunken panels.
+  // A default-constructed palette carries the LIGHT ones, so leaving
+  // these alone drew a dark dialog with light-theme edges -- part of why
+  // the dark mode never looked all of a piece.
+  pal.setColor(QPalette::Light, coBtn.lighter(140));
+  pal.setColor(QPalette::Midlight, coBtn.lighter(115));
+  pal.setColor(QPalette::Mid, coWind.darker(115));
+  pal.setColor(QPalette::Dark, coWind.darker(140));
+  pal.setColor(QPalette::Shadow, coShadDarkQt);
   pal.setColor(QPalette::Disabled, QPalette::Text, coDim);
   pal.setColor(QPalette::Disabled, QPalette::ButtonText, coDim);
   pal.setColor(QPalette::Disabled, QPalette::WindowText, coDim);
   pal.setColor(QPalette::Disabled, QPalette::HighlightedText, coDim);
-  pal.setColor(QPalette::Disabled, QPalette::Highlight, QColor(0x50,0x50,0x50));
+  pal.setColor(QPalette::Disabled, QPalette::Highlight, coWind.lighter(130));
+  pal.setColor(QPalette::Disabled, QPalette::Base, coWind);
+  pal.setColor(QPalette::Disabled, QPalette::Button, coWind);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
   pal.setColor(QPalette::PlaceholderText, coDim);
 #endif
   QApplication::setPalette(pal);
+}
+
+
+// Windows draws a window's title bar itself, and hands an application a
+// light one unless it asks otherwise -- so every dark dialog came up
+// under a white header. DWMWA_USE_IMMERSIVE_DARK_MODE is the ask: 20
+// since Windows 10 20H1, 19 in 1809, and nothing at all before that,
+// where the call is simply refused and the bar stays as it was.
+//
+// Resolved by name through QLibrary rather than linked, so the build
+// needs no new library and this file needs no windows.h -- which on this
+// tree is worth avoiding, since the core's own macros collide with it.
+// A no-op everywhere else: on Linux the title bar belongs to the window
+// manager, which follows the desktop's own theme and takes no
+// instruction from a client.
+
+void ApplyTitleBarThemeQt(QWidget *pw)
+{
+#ifdef Q_OS_WIN
+  typedef long (*PFNDWMSETQT)(void *, unsigned long, CONST void *,
+    unsigned long);
+  static PFNDWMSETQT pfn = NULL;
+  static flag fResolved = fFalse;
+  int nOn;
+
+  if (pw == NULL)
+    return;
+  if (!fResolved) {
+    fResolved = fTrue;
+    pfn = (PFNDWMSETQT)QLibrary::resolve(QString("dwmapi"),
+      "DwmSetWindowAttribute");
+  }
+  if (pfn == NULL)
+    return;
+  nOn = (NDarkPreferenceQt() == nSchemeDark);
+  // winId() is what creates the native window, so ask for it before
+  // handing the handle over.
+  void *hwnd = (void *)pw->winId();
+  if (pfn(hwnd, 20, &nOn, sizeof(nOn)) != 0)
+    pfn(hwnd, 19, &nOn, sizeof(nOn));
+#else
+  (void)pw;
+#endif
 }
 
 
@@ -5189,6 +5325,7 @@ void BeginQt()
   QApplication::setWindowIcon(IconAstrologQt());
   gi.qwind = new QMainWindow();
   gi.qwind->setWindowTitle(szAppName);
+  ApplyTitleBarThemeQt(gi.qwind);
   gi.qcanvas = new ChartCanvas();
   qi.pscroll = new QScrollArea();
   qi.pscroll->setWidget(gi.qcanvas);

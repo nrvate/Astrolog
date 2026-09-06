@@ -901,6 +901,22 @@ runs in seconds on a laptop.
   native Win32 menus, which follow Windows' own theming and know nothing
   about any of this.
 
+  The dark palette itself is one block of `#define co*DarkQt` at the top
+  of `ApplyColorSchemeQt()`: gunmetal with a blue cast, a darkened
+  emerald for selection, and a **soft gray** for text -- white on
+  near-black read as glaring. Two traps live there, both now asserted in
+  the `color-scheme` group. Qt derives frames and group box lines from
+  `Light`/`Midlight`/`Mid`/`Dark`, and a default-constructed palette
+  carries the **light** ones, so a dark dialog got light-theme edges. And
+  Fusion draws a checkbox or radio outline by *darkening* the window
+  colour, which on a dark palette is invisible -- black on black beside a
+  menu item; `AstroStyleQt::drawPrimitive()` redraws those two primitives
+  with a lightened copy of the palette, and only when the base style is
+  Fusion and the palette is dark. `ApplyTitleBarThemeQt()` asks Windows
+  for a dark title bar (`DWMWA_USE_IMMERSIVE_DARK_MODE`, resolved through
+  `QLibrary` so no `windows.h`); on Linux the bar belongs to the window
+  manager and the call is a no-op.
+
   Two font choices live in the same file for the same reason, both in
   **Display Settings**: the *console* font, which text charts are drawn
   in, and the *menu* font, which everything else is. Each is a family, a
