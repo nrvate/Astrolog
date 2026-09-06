@@ -623,7 +623,7 @@ extern void DisplayArabic P((void));
 #ifdef GRAPH
 extern void DisplayKeysX P((void));
 extern void DisplaySwitchesX P((void));
-#ifdef WIN
+#if defined(WIN) || defined(QT)
 extern void DisplaySwitchesW P((void));
 #endif
 #endif // GRAPH
@@ -1242,6 +1242,16 @@ extern CONST char *SzMacroSubNameQt P((int));
 extern flag FHourglassQt P((void));
 extern int NAnimDelayQt P((void));
 extern int NAntialiasQt P((void));
+/* The interface settings, which live in astrolog.as like everything  */
+/* else. The font names are char * rather than QString because        */
+/* io.cpp, which writes them, is shared core and sees no Qt headers.  */
+extern CONST char *SzConsoleFontQt P((void));
+extern int NConsoleFontSizeQt P((void));
+extern flag FConsoleAntialiasQt P((void));
+extern CONST char *SzMenuFontQt P((void));
+extern int NMenuFontSizeQt P((void));
+extern flag FMenuAntialiasQt P((void));
+extern int NThemePrefQt P((void));
 /* Text charts draw into the chart window, as they do on Windows.        */
 extern void TextCharQt P((int, int, int));
 extern void TextColorQt P((KI));

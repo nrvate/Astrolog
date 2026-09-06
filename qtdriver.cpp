@@ -236,6 +236,22 @@ typedef struct _qtuserinterface {
   int xWind = 0, yWind = 0;     // Window position from -Ww
   flag fWindPos = fFalse;
 
+  // The interface settings, from -WF, -WG and -WI. They live here rather
+  // than in a QSettings file so that Astrolog has one configuration file
+  // on every platform -- the same astrolog.as the rest of these come
+  // from -- instead of a second one per platform beside it.
+  //
+  // NULL family means the built-in default (Liberation Mono for the
+  // chart, Liberation Sans for the interface); size 0 means follow -Xs
+  // for the chart and the desktop for the interface.
+  char *szFontCon = NULL;       // -WF: chart text face and size
+  int nFontConSize = 0;
+  flag fFontConAA = fTrue;      // =WFa
+  char *szFontMen = NULL;       // -WG: interface face and size
+  int nFontMenSize = 0;
+  flag fFontMenAA = fTrue;      // =WGa
+  int nThemePref = 0;           // -WI: 0 follow desktop, 1 light, 2 dark
+
   // The Animate menu's run/pause pair (see the note at BuildAnimateMenu).
   QAction *paAnimRun = NULL, *paAnimPause = NULL;
 } QTUI;
@@ -2629,6 +2645,15 @@ CONST char *SzMacroSubNameQt(int i)
 flag FHourglassQt() { return qi.fHourglass; }
 
 
+// Defined with the rest of the interface settings, far below; declared
+// here the way StrThemePrefQt() is, because the switches that set them
+// are parsed long before that point in the file.
+#define nFontSizeMinQt 6
+#define nFontSizeMaxQt 48
+void SetConsoleFontQt(CONST char *szFamily, int nSize);
+void SetMenuFontQt(CONST char *szFamily, int nSize);
+void SetThemePrefNQt(int n);
+
 int NProcessSwitchesQt(int pos, PARSEIN *pin)
 {
   int darg = 0, i, j;
@@ -2711,6 +2736,53 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
       return tcError;
     i = NFromSz(pin->argv[1]);
     qi.nAntialias = i;
+    darg++;
+    break;
+
+  case 'F':
+  case 'G':
+    // The two interface fonts: -WF "<family>" <size> for the chart text,
+    // -WG "<family>" <size> for the menus and dialogs, and =WFa / =WGa
+    // for whether each is antialiased. An empty family or a size outside
+    // the accessors' range means "no preference", which is also what an
+    // absent switch means, so the two spell the same thing.
+    {
+      flag fCon = (pin->argv[0][pos] == 'F');
+      if (ch1 == 'a') {
+        // Not SwitchF() on a ternary: the macro expands to "f = ...", and
+        // "a ? b : c = d" binds as "a ? b : (c = d)", so only one of the
+        // two would ever be assigned.
+        flag *pf = fCon ? &qi.fFontConAA : &qi.fFontMenAA;
+        *pf = FSwitchF(*pf);
+        break;
+      }
+      if (FErrorArgc(fCon ? "WF" : "WG", pin->argc, 2))
+        return tcError;
+      i = NFromSz(pin->argv[2]);
+      // 0 is "no preference" and legal; anything else has to be a size a
+      // window can actually be drawn in. Refused rather than clamped, the
+      // way -Wx and every other ranged switch here refuses, so a typo in
+      // a hand-edited astrolog.as is reported instead of silently
+      // becoming something else.
+      if (FErrorValN(fCon ? "WF" : "WG", i != 0 &&
+        !FBetween(i, nFontSizeMinQt, nFontSizeMaxQt), i, 2))
+        return tcError;
+      if (fCon)
+        SetConsoleFontQt(pin->argv[1], i);
+      else
+        SetMenuFontQt(pin->argv[1], i);
+      darg += 2;
+    }
+    break;
+
+  case 'I':
+    // The interface theme, as the number the settings file carries.
+    if (FErrorArgc("WI", pin->argc, 1))
+      return tcError;
+    i = NFromSz(pin->argv[1]);
+    if (FErrorValN("WI", !FBetween(i, 0, 2), i, 0))
+      return tcError;
+    SetThemePrefNQt(i);
     darg++;
     break;
 
@@ -4566,69 +4638,46 @@ static int NSchemeFromGtkFileQt(void)
 // Cheapest and most explicit first, then the standard, then per desktop,
 // then the files that need no helper program at all.
 
-// The interface theme the user chose, or "auto". This is window chrome,
-// not an astrological setting, so it does NOT live in the .as settings
-// file: Windows Astrolog keeps its own GUI preferences out of there for
-// the same reason, and putting it there would mean a new switch in the
-// registry, a new line in FOutputSettings(), and a round-trip fixture,
-// for something no chart depends on. QSettings puts it in
-// ~/.config/Astrolog/Astrolog.conf on Linux, the registry on Windows and
-// a plist on macOS, without this having to know which.
+// The interface settings -- the theme, and the two fonts -- live in
+// astrolog.as with everything else, reached through -WI, -WF and -WG.
+//
+// They used to be in a QSettings file of their own, on the reasoning that
+// window chrome is not an astrological setting. That bought nothing and
+// cost a second configuration file in a different place on each platform:
+// ~/.config/Astrolog/Astrolog.ini on Linux, elsewhere on Windows and
+// macOS. Astrolog already has a settings file that is the same file
+// everywhere, that the user already knows how to edit, and that "File /
+// Save Program Settings" already writes -- so these belong in it, and a
+// GUI-only switch sitting in astrolog.as is not new either: -WN, -Wx and
+// -Ww have always done exactly that.
+//
+// The accessors below are the whole interface to these values; nothing
+// outside this file touches qi's fields directly.
 
-#define szThemeOrgQt  "Astrolog"
-#define szThemeKeyQt  "Interface/Theme"
-
-// IniFormat explicitly, not NativeFormat. Two reasons, and the second is
-// the one that mattered: NativeFormat is the registry on Windows and a
-// plist on macOS, so the file would be in a different KIND of place on
-// each platform and a bug in one could not be reproduced on another. And
-// IniFormat is the only format QSettings::setPath() can redirect, which
-// is what lets the suite exercise this without writing into the config of
-// whoever is running the tests.
-static QSettings *PSettingsThemeQt(void)
-{
-  return new QSettings(QSettings::IniFormat, QSettings::UserScope,
-    szThemeOrgQt, szThemeOrgQt);
-}
+// The size limits both fonts share, declared with the switch that sets
+// them. The switch refuses anything outside them; the accessors clamp as
+// well, so a value that reached the field some other way still reads as
+// "no preference" rather than as an unreadable window.
 
 // The console font: which face text charts are drawn in, and at what
-// size. Stored beside the theme and for the same reason -- window chrome
-// rather than an astrological setting, so it stays out of the .as file
-// this build shares with Windows.
-//
-// "" is the built-in default (Liberation Mono). Size 0 means follow -Xs,
-// the Character Scale, exactly as before this existed.
-
-#define szFontKeyQt      "Interface/ConsoleFont"
-#define szFontSizeKeyQt  "Interface/ConsoleFontSize"
-#define szFontAaKeyQt    "Interface/ConsoleAntialias"
+// size. Empty family is the built-in default (Liberation Mono); size 0
+// means follow -Xs, the Character Scale, exactly as before this existed.
 
 QString StrConsoleFontQt(void)
 {
-  QSettings *psettings = PSettingsThemeQt();
-  QString str = psettings->value(szFontKeyQt, "").toString();
-
-  delete psettings;
-  return str.trimmed();
+  return QString(qi.szFontCon != NULL ? qi.szFontCon : "").trimmed();
 }
 
 int NConsoleFontSizeQt(void)
 {
-  QSettings *psettings = PSettingsThemeQt();
-  int n = psettings->value(szFontSizeKeyQt, 0).toInt();
-
-  delete psettings;
-  return n >= 6 && n <= 48 ? n : 0;
+  return FBetween(qi.nFontConSize, nFontSizeMinQt, nFontSizeMaxQt) ?
+    qi.nFontConSize : 0;
 }
 
 void SetConsoleFontQt(CONST char *szFamily, int nSize)
 {
-  QSettings *psettings = PSettingsThemeQt();
-
-  psettings->setValue(szFontKeyQt, QString(szFamily));
-  psettings->setValue(szFontSizeKeyQt, nSize);
-  psettings->sync();
-  delete psettings;
+  FCloneSz(szFamily, &qi.szFontCon);
+  qi.nFontConSize = nSize;
 }
 
 
@@ -4639,20 +4688,28 @@ void SetConsoleFontQt(CONST char *szFamily, int nSize)
 
 flag FConsoleAntialiasQt(void)
 {
-  QSettings *psettings = PSettingsThemeQt();
-  flag f = psettings->value(szFontAaKeyQt, true).toBool();
-
-  delete psettings;
-  return f;
+  return qi.fFontConAA;
 }
 
 void SetConsoleAntialiasQt(flag f)
 {
-  QSettings *psettings = PSettingsThemeQt();
+  qi.fFontConAA = f;
+}
 
-  psettings->setValue(szFontAaKeyQt, (bool)f);
-  psettings->sync();
-  delete psettings;
+
+// The same two families as plain strings, for FOutputSettings(), which is
+// shared core and so cannot be handed a QString. Never NULL: an absent
+// preference is the empty name, which is what the switch writes and what
+// the parser reads back as "no preference".
+
+CONST char *SzConsoleFontQt(void)
+{
+  return qi.szFontCon != NULL ? qi.szFontCon : "";
+}
+
+CONST char *SzMenuFontQt(void)
+{
+  return qi.szFontMen != NULL ? qi.szFontMen : "";
 }
 
 
@@ -4702,61 +4759,36 @@ QStringList RgstrConsoleFontQt(void)
 
 // The interface font, which the menus, the dialogs and every label are
 // drawn in. Same three settings as the console one and stored the same
-// way, because it is the same kind of thing: window chrome, not an
-// astrological setting, so it stays out of the .as file this build shares
-// with Windows.
+// way, in astrolog.as under -WG.
 //
-// "" means Liberation Sans, which is what the dialogs are measured
-// against (see ApplyUiFontQt); size 0 means follow the desktop.
-
-#define szMenuFontKeyQt      "Interface/MenuFont"
-#define szMenuFontSizeKeyQt  "Interface/MenuFontSize"
-#define szMenuAaKeyQt        "Interface/MenuAntialias"
+// Empty family means Liberation Sans, which is what the dialogs are
+// measured against (see ApplyUiFontQt); size 0 means follow the desktop.
 
 QString StrMenuFontQt(void)
 {
-  QSettings *psettings = PSettingsThemeQt();
-  QString str = psettings->value(szMenuFontKeyQt, "").toString();
-
-  delete psettings;
-  return str.trimmed();
+  return QString(qi.szFontMen != NULL ? qi.szFontMen : "").trimmed();
 }
 
 int NMenuFontSizeQt(void)
 {
-  QSettings *psettings = PSettingsThemeQt();
-  int n = psettings->value(szMenuFontSizeKeyQt, 0).toInt();
-
-  delete psettings;
-  return n >= 6 && n <= 48 ? n : 0;
+  return FBetween(qi.nFontMenSize, nFontSizeMinQt, nFontSizeMaxQt) ?
+    qi.nFontMenSize : 0;
 }
 
 void SetMenuFontQt(CONST char *szFamily, int nSize)
 {
-  QSettings *psettings = PSettingsThemeQt();
-
-  psettings->setValue(szMenuFontKeyQt, QString(szFamily));
-  psettings->setValue(szMenuFontSizeKeyQt, nSize);
-  psettings->sync();
-  delete psettings;
+  FCloneSz(szFamily, &qi.szFontMen);
+  qi.nFontMenSize = nSize;
 }
 
 flag FMenuAntialiasQt(void)
 {
-  QSettings *psettings = PSettingsThemeQt();
-  flag f = psettings->value(szMenuAaKeyQt, true).toBool();
-
-  delete psettings;
-  return f;
+  return qi.fFontMenAA;
 }
 
 void SetMenuAntialiasQt(flag f)
 {
-  QSettings *psettings = PSettingsThemeQt();
-
-  psettings->setValue(szMenuAaKeyQt, (bool)f);
-  psettings->sync();
-  delete psettings;
+  qi.fFontMenAA = f;
 }
 
 // Not fixed pitch only: this one is proportional text, and Liberation
@@ -4771,22 +4803,34 @@ QStringList RgstrMenuFontQt(void)
 }
 
 
+// The theme the user chose. Held as the small number -WI writes, and
+// spoken about as a name everywhere else, because a name is what the menu
+// and the tests deal in. Anything unrecognized is "auto", so a
+// hand-edited astrolog.as cannot leave the window in no theme at all.
+
+#define nThemeAutoQt   0
+#define nThemeLightQt  1
+#define nThemeDarkQt   2
+
 QString StrThemePrefQt(void)
 {
-  QSettings *psettings = PSettingsThemeQt();
-  QString str = psettings->value(szThemeKeyQt, "auto").toString();
-
-  delete psettings;
-  return str.trimmed().toLower();
+  return qi.nThemePref == nThemeLightQt ? QString("light") :
+    qi.nThemePref == nThemeDarkQt ? QString("dark") : QString("auto");
 }
 
 void SetThemePrefQt(CONST char *sz)
 {
-  QSettings *psettings = PSettingsThemeQt();
+  QString str = QString(sz).trimmed().toLower();
 
-  psettings->setValue(szThemeKeyQt, QString(sz));
-  psettings->sync();
-  delete psettings;
+  qi.nThemePref = str == "light" ? nThemeLightQt :
+    str == "dark" ? nThemeDarkQt : nThemeAutoQt;
+}
+
+int NThemePrefQt(void) { return qi.nThemePref; }
+
+void SetThemePrefNQt(int n)
+{
+  qi.nThemePref = FBetween(n, nThemeAutoQt, nThemeDarkQt) ? n : nThemeAutoQt;
 }
 
 
@@ -4860,14 +4904,6 @@ static int NDarkPreferenceQt(void)
 // The suite exercises the detection above, which outside the tests only
 // ever runs once, at startup, against whatever desktop the developer
 // happens to be sitting at.
-
-// Point the theme preference at a scratch directory, so the assertions
-// below neither read nor write the config of whoever is running them.
-void SetThemeConfigDirTestQt(CONST char *szDir)
-{
-  QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
-    QString(szDir));
-}
 
 int NDarkPreferenceTestQt(void) { return NDarkPreferenceQt(); }
 

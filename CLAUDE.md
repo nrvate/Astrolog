@@ -891,15 +891,39 @@ runs in seconds on a laptop.
   Work log item 50 has the reasoning, including two `QSettings` traps.
 
   Since 2026-09-03 the user can also choose, in **View / Window Settings
-  / Interface Theme**: System, Light or Dark. It is stored with
-  `QSettings` in `IniFormat` rather than in the `.as` settings file,
-  because it is window chrome rather than an astrological setting — the
-  same reason Windows keeps its GUI preferences out of there. The
-  environment variable deliberately outranks the saved choice, so a
-  developer forcing one run does not disturb what the user picked.
-  **This is the Qt build only.** `Makefile.win` builds `wdriver.cpp` with
-  native Win32 menus, which follow Windows' own theming and know nothing
-  about any of this.
+  / Interface Theme**: System, Light or Dark. The environment variable
+  deliberately outranks the chosen theme, so a developer forcing one run
+  does not disturb what the user picked. **This is the Qt build only.**
+  `Makefile.win` builds `wdriver.cpp` with native Win32 menus, which
+  follow Windows' own theming and know nothing about any of this.
+
+  **There is one configuration file, and it is `astrolog.as`**, since
+  2026-09-06. The theme and the two fonts are `-WI`, `-WF`/`=WFa` and
+  `-WG`/`=WGa` in it, alongside `-WN`, `-Wx` and `-Ww`, which have always
+  been GUI-only switches living in that file. They spent two days in a
+  `QSettings` file of their own on the reasoning that window chrome is
+  not an astrological setting; that bought nothing and cost a second
+  config in a different place per platform, so the maintainer had it
+  merged back.
+
+  Three consequences, none of them obvious:
+
+  - **They persist on "File / Save Program Settings" and not before**,
+    like every other setting. A font picked in a dialog applies at once
+    and is gone next launch unless the settings are saved.
+  - **Every build has to consume them**, not just the one that acts on
+    them: `astrolog.as` is read by all of them, and an unknown switch is
+    a hard startup failure (`Astrolog: Unknown switch`, exit 1). So the
+    arity lives in three places -- `NProcessSwitchesQt()` acts,
+    `NProcessSwitchesNullW()` in `switch.cpp` and `NProcessSwitchesW()`
+    in `wdriver.cpp` consume. Get one wrong and the switch *after* the
+    font is read as its argument, which is why the round-trip fixture
+    ends in a `-c Camp` whose house system is asserted.
+  - **The font name is quoted by the writer**, and that is the part that
+    breaks: unquoted, "Bitstream Vera Serif" comes back as "Bitstream",
+    and an empty name makes the *size* the family. The
+    `interface-settings` group asserts both, and both were confirmed by
+    sabotage.
 
   The dark palette itself is one block of `#define co*DarkQt` at the top
   of `ApplyColorSchemeQt()`: gunmetal with a blue cast, a darkened
@@ -927,8 +951,8 @@ runs in seconds on a laptop.
   Two font choices live in the same file for the same reason, both in
   **Display Settings**: the *console* font, which text charts are drawn
   in, and the *menu* font, which everything else is. Each is a family, a
-  size and a Smooth toggle (`Interface/ConsoleFont*`,
-  `Interface/MenuFont*`, `Interface/*Antialias`). `ApplyUiFontQt()` in
+  size and a Smooth toggle (`-WF`/`=WFa` and `-WG`/`=WGa` in
+  `astrolog.as`). `ApplyUiFontQt()` in
   `qtdriver.cpp` applies the interface one, at startup and again when the
   dialog closes, so a new face reaches the menus without a restart.
   Antialiasing is named explicitly on both, which is the point of it: on

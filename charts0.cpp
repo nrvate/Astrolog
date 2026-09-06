@@ -560,8 +560,13 @@ void DisplaySwitches(void)
 
 #ifdef GRAPH
   DisplaySwitchesX();
-#ifdef WIN
-  DisplaySwitchesW();  // Windows version has its own set of switches too.
+#if defined(WIN) || defined(QT)
+  // Both GUI builds have this set of switches, and both accept all of
+  // them -- the Qt build stores what it acts on and consumes the rest, so
+  // that one astrolog.as loads everywhere. It went undocumented there
+  // until the interface settings moved into that file and a user editing
+  // it by hand had no way to look one up.
+  DisplaySwitchesW();
 #endif
 #endif // GRAPH
 }
@@ -1891,18 +1896,18 @@ void DisplaySwitchesX(void)
 }
 
 
-#ifdef WIN
-// Print a list of every command switch dealing with the Windows features
+#if defined(WIN) || defined(QT)
+// Print a list of every command switch dealing with the windowed features
 // that can be passed to the program, and a description of what it does.
-// This is part of what the -H switch prints in the MS Windows version.
+// This is part of what the -H switch prints in the two GUI builds.
 
 void DisplaySwitchesW(void)
 {
-  PrintS("\nSwitches to access Windows options:");
-  PrintS(" _W <value>: Run given Windows menu command internally.");
+  PrintS("\nSwitches to access window options:");
+  PrintS(" _W <value>: Run given menu command internally.");
   PrintS(" _WN <1-32000>: Set animation update delay in milliseconds.");
-  PrintS(" _WM <1-96> <text>: Set Windows menu text for macro command.");
-  PrintS(" _WM0 <0-7> <text>: Set Windows menu text for macro submenu.");
+  PrintS(" _WM <1-96> <text>: Set menu text for macro command.");
+  PrintS(" _WM0 <0-7> <text>: Set menu text for macro submenu.");
   PrintS(" _Wn: Don't redraw screen until user forces update.");
   PrintS(" _Wh: Set hourglass cursor when redrawing chart.");
   PrintS(" _Wt: Don't display warning and error popup messages.");
@@ -1910,6 +1915,11 @@ void DisplaySwitchesW(void)
   PrintS(" _WB <0-24> <0-24>: Set window scrollbar positions.");
   PrintS(" _WT <string>: Set title bar text of Astrolog window.");
   PrintS(" _Wx <1-12>: Set antialias graphics level of detail.");
+  PrintS(" _WI <0-2>: Set interface theme: 0 desktop, 1 light, 2 dark.");
+  PrintS(" _WF <font> <6-48>: Set font and size charts draw text in.");
+  PrintS(" _WFa: Antialias the font that charts draw text in.");
+  PrintS(" _WG <font> <6-48>: Set font and size menus and dialogs use.");
+  PrintS(" _WGa: Antialias the font that menus and dialogs use.");
   PrintS(" _Wb: Bitmaps are saved and copied from the Windows screen.");
   PrintS(" _Wo: Continually autosave graphics screen to bitmap file.");
   PrintS(" _Wo0: Continually autosave graphics screen to numbered files.");

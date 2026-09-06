@@ -1305,7 +1305,6 @@ extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
 extern QIcon IconAstrologQt();                   // qtdriver.cpp
 extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
-extern void SetThemeConfigDirTestQt(CONST char *);
 extern int NDarkPreferenceTestQt(void);
 extern QString StrConsoleFontQt(void);
 extern int NConsoleFontSizeQt(void);
@@ -1438,17 +1437,19 @@ static void TestConsoleFontQt()
   Check(rgstr.size() > 0 && rgstr[0] == QString("Liberation Mono"),
     "the default face heads the list");
 
-  QTemporaryDir dir;
-  Check(dir.isValid(), "a scratch directory for the preference");
-  if (!dir.isValid())
-    return;
-  // SetThemeConfigDirTestQt() is the seam, not SetHomeTestQt(): QSettings
-  // resolves its path once, at startup, so moving HOME afterwards leaves
-  // it reading -- and writing -- the config of whoever is running the
-  // suite. The first version of this test did exactly that, and said so
-  // by failing on a default that the developer's own config had already
-  // answered.
-  SetThemeConfigDirTestQt(dir.path().toUtf8().constData());
+  // These settings live in astrolog.as now, which means they are ordinary
+  // program state rather than a file on disk: nothing to redirect, and
+  // nothing of the developer's to read or overwrite. There WAS something,
+  // and it mattered -- the first version of this test moved HOME and
+  // still read the running developer's config, because QSettings resolves
+  // its path once at startup; the version after that captured the
+  // application font before establishing a baseline, and so failed on a
+  // machine whose saved font differed. Both failure modes are gone with
+  // the file. What remains is to put back whatever the run started with,
+  // since the rest of the suite draws with these.
+  QString strConSave = StrConsoleFontQt(), strMenSave = StrMenuFontQt();
+  int nConSave = NConsoleFontSizeQt(), nMenSave = NMenuFontSizeQt();
+  flag fConSave = FConsoleAntialiasQt(), fMenSave = FMenuAntialiasQt();
 
   SetConsoleFontQt("JetBrains Mono", 18);
   Check(StrConsoleFontQt() == QString("JetBrains Mono"),
@@ -1486,12 +1487,11 @@ static void TestConsoleFontQt()
       cProp++;
   Check(cProp > 1, "the interface list offers proportional faces too");
 
-  // Establish the no-preference baseline first, in the scratch config the
-  // redirect above points at. Startup read the REAL one, so on a machine
-  // where the user has chosen a menu font -- as the maintainer's has,
-  // which is how this was found -- "back to how startup left it" is not
-  // the default at all, and the restore assertions below would be
-  // comparing against that person's taste.
+  // Establish the no-preference baseline before capturing what "default"
+  // looks like. A settings file can carry a menu font -- the maintainer's
+  // does, which is how this was found -- and then "back to how startup
+  // left it" is not the default at all, so the restore assertions below
+  // would be comparing against that person's taste.
   SetMenuFontQt("", 0);
   SetMenuAntialiasQt(fTrue);
   ApplyUiFontQt();
@@ -1537,8 +1537,7 @@ static void TestConsoleFontQt()
   Check(QApplication::font().styleStrategy() == QFont::NoAntialias,
     "and reaches the font");
 
-  // Put it back the way startup left it, since every group after this one
-  // measures dialogs in this font.
+  // Back to no preference, which is the baseline captured above.
   SetMenuFontQt("", 0);
   SetMenuAntialiasQt(fTrue);
   ApplyUiFontQt();
@@ -1547,9 +1546,14 @@ static void TestConsoleFontQt()
   Check(QApplication::font().pointSizeF() == fontStart.pointSizeF(),
     "and size 0 means the desktop's own size again");
 
-  // Left pointing at the scratch directory, as the theme test leaves it:
-  // every group that touches these settings redirects first, and the
-  // process is about to exit anyway.
+  // And then back to whatever the settings file actually asked for, since
+  // every group after this one measures dialogs in that font. Nothing is
+  // written anywhere: these live in memory until the user saves settings.
+  SetConsoleFontQt(strConSave.toUtf8().constData(), nConSave);
+  SetConsoleAntialiasQt(fConSave);
+  SetMenuFontQt(strMenSave.toUtf8().constData(), nMenSave);
+  SetMenuAntialiasQt(fMenSave);
+  ApplyUiFontQt();
 }
 
 
@@ -1627,16 +1631,15 @@ static void TestColorSchemeQt()
   SetHomeTestQt("");
   printf("  the desktop's light/dark preference is read from each source\n");
 
-  // The saved interface theme: View / Window Settings / Interface Theme.
-  // Redirected into a scratch directory first -- these write a real
-  // preference file, and writing into the config of whoever is running
-  // the suite would be a side effect, not a test.
-  QTemporaryDir dirCfg;
-  Check(dirCfg.isValid(), "a scratch directory for the theme preference");
-  if (dirCfg.isValid()) {
-    SetThemeConfigDirTestQt(dirCfg.path().toUtf8().constData());
+  // The chosen interface theme: View / Window Settings / Interface Theme.
+  // It lives in astrolog.as with everything else, so this writes nothing
+  // to disk and there is no config of the running developer's to redirect
+  // away from -- only the value the run started with to put back.
+  {
+    QString strThemeSave = StrThemePrefQt();
 
-    Check(StrThemePrefQt() == "auto", "with nothing saved, the theme is auto");
+    SetThemePrefQt("auto");
+    Check(StrThemePrefQt() == "auto", "with nothing chosen, the theme is auto");
 
     // The environment variable outranks the saved preference, because it
     // is how a developer checks one run under the other scheme without
@@ -1744,10 +1747,11 @@ static void TestColorSchemeQt()
     ApplyColorSchemeQt();
     Check(QApplication::palette().color(QPalette::Window).lightness() >= 128,
       "and choosing Light brings it back");
-    SetThemePrefQt("auto");
+    SetThemePrefQt(strThemeSave.toUtf8().constData());
+    ApplyColorSchemeQt();
     QApplication::setPalette(palWas);
   }
-  printf("  the saved interface theme is honoured, and the env var beats it\n");
+  printf("  the chosen interface theme is honoured, and the env var beats it\n");
 }
 
 
@@ -2820,6 +2824,137 @@ static void TestSettingsRoundTripQt()
   us.fNoWrite = fNoWriteSav;
   AdjustRestrictions();
   printf("  what Save Program Settings writes is what it reads back\n");
+}
+
+
+// The interface settings -- the theme and the two fonts -- through the
+// same path: out to a settings file and back in through the switch
+// parser. This is the whole claim of moving them out of a QSettings file
+// of their own, so it is asserted rather than assumed.
+//
+// The face names deliberately contain spaces. That is the part that can
+// actually break: the writer quotes them and the parser has to put them
+// back together, and a name arriving as just "Bitstream" would still look
+// like a font to every other check here.
+
+static void TestInterfaceSettingsQt()
+{
+  char szPath[cchSzMax], szLine[cchSzMax], *szFileOutSav;
+  QString strConSav, strMenSav, strThemeSav;
+  int nConSav, nMenSav, nWriteFormatSav;
+  flag fConSav, fMenSav, fNoWriteSav;
+  FILE *file;
+  int i;
+
+  Group("Interface settings in the settings file");
+
+  strConSav = StrConsoleFontQt(); nConSav = NConsoleFontSizeQt();
+  strMenSav = StrMenuFontQt();    nMenSav = NMenuFontSizeQt();
+  fConSav = FConsoleAntialiasQt(); fMenSav = FMenuAntialiasQt();
+  strThemeSav = StrThemePrefQt();
+  szFileOutSav = is.szFileOut;
+  nWriteFormatSav = us.nWriteFormat;
+  fNoWriteSav = us.fNoWrite;
+
+  SetConsoleFontQt("Bitstream Vera Sans Mono", 18);
+  SetConsoleAntialiasQt(fFalse);
+  SetMenuFontQt("Bitstream Vera Serif", 14);
+  SetMenuAntialiasQt(fTrue);
+  SetThemePrefQt("dark");
+
+  sprintf2(S(szPath), "%s/astrolog-qt-interface-%d.as",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+  is.szFileOut = szPath;
+  Check(FOutputSettings(), "Save Program Settings wrote the file");
+
+  // Clobber every one of them, so anything the file failed to carry stays
+  // wrong rather than merely looking right.
+  SetConsoleFontQt("Courier", 9);
+  SetConsoleAntialiasQt(fTrue);
+  SetMenuFontQt("Courier", 9);
+  SetMenuAntialiasQt(fFalse);
+  SetThemePrefQt("light");
+
+  file = FileOpen(szPath, 3, NULL, 0);
+  Check(file != NULL, "and it can be read back");
+  if (file != NULL) {
+    while (fgets(szLine, cchSzMax, file) != NULL) {
+      // Only the switches under test, so replaying cannot disturb the
+      // several hundred other settings the file carries.
+      if (!FEqSzPrefixQt(szLine, "-WF") && !FEqSzPrefixQt(szLine, "-WG") &&
+        !FEqSzPrefixQt(szLine, "-WI") && !FEqSzPrefixQt(szLine, "_WFa") &&
+        !FEqSzPrefixQt(szLine, "=WFa") && !FEqSzPrefixQt(szLine, "_WGa") &&
+        !FEqSzPrefixQt(szLine, "=WGa"))
+        continue;
+      for (i = 0; szLine[i]; i++)
+        ;
+      while (i > 0 && szLine[i-1] < ' ')
+        szLine[--i] = chNull;
+      FProcessCommandLine(szLine);
+    }
+    fclose(file);
+  }
+
+  Check(StrConsoleFontQt() == QString("Bitstream Vera Sans Mono"),
+    "a chart font whose name has spaces survives whole (\"%s\")",
+    SzConsoleFontQt());
+  Check(NConsoleFontSizeQt() == 18,
+    "and its size (%d, want 18)", NConsoleFontSizeQt());
+  Check(!FConsoleAntialiasQt(), "chart font smoothing off survives");
+  Check(StrMenuFontQt() == QString("Bitstream Vera Serif"),
+    "the interface font survives whole (\"%s\")", SzMenuFontQt());
+  Check(NMenuFontSizeQt() == 14,
+    "and its size (%d, want 14)", NMenuFontSizeQt());
+  Check(FMenuAntialiasQt(), "interface font smoothing on survives");
+  Check(StrThemePrefQt() == QString("dark"),
+    "and the chosen theme (\"%s\")",
+    StrThemePrefQt().toUtf8().constData());
+
+  // An empty face and size 0 are what "no preference" looks like, and
+  // they have to survive the same trip: an empty name is where a writer
+  // that forgot its quotes turns one switch into the next one's argument.
+  SetConsoleFontQt("", 0);
+  SetMenuFontQt("", 0);
+  SetThemePrefQt("auto");
+  Check(FOutputSettings(), "no preference writes a file too");
+  SetConsoleFontQt("Courier", 9);
+  SetMenuFontQt("Courier", 9);
+  SetThemePrefQt("dark");
+  file = FileOpen(szPath, 3, NULL, 0);
+  if (file != NULL) {
+    while (fgets(szLine, cchSzMax, file) != NULL) {
+      if (!FEqSzPrefixQt(szLine, "-WF") && !FEqSzPrefixQt(szLine, "-WG") &&
+        !FEqSzPrefixQt(szLine, "-WI"))
+        continue;
+      for (i = 0; szLine[i]; i++)
+        ;
+      while (i > 0 && szLine[i-1] < ' ')
+        szLine[--i] = chNull;
+      FProcessCommandLine(szLine);
+    }
+    fclose(file);
+  }
+  Check(StrConsoleFontQt().isEmpty() && NConsoleFontSizeQt() == 0,
+    "an empty chart font comes back empty (\"%s\" %d)",
+    SzConsoleFontQt(), NConsoleFontSizeQt());
+  Check(StrMenuFontQt().isEmpty() && NMenuFontSizeQt() == 0,
+    "and so does an empty interface font (\"%s\" %d)",
+    SzMenuFontQt(), NMenuFontSizeQt());
+  Check(StrThemePrefQt() == QString("auto"), "and auto comes back auto");
+
+  QFile::remove(QString::fromLocal8Bit(szPath));   // Not unlink(): no <unistd.h> on the Windows build.
+  SetConsoleFontQt(strConSav.toUtf8().constData(), nConSav);
+  SetConsoleAntialiasQt(fConSav);
+  SetMenuFontQt(strMenSav.toUtf8().constData(), nMenSav);
+  SetMenuAntialiasQt(fMenSav);
+  SetThemePrefQt(strThemeSav.toUtf8().constData());
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+  us.fNoWrite = fNoWriteSav;
+  printf("  the interface settings live in astrolog.as with everything else\n");
 }
 
 
@@ -6674,6 +6809,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objdef-set",           TestObjDefSetQt},
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
+  {"interface-settings",   TestInterfaceSettingsQt},
   {"atlas-sink",           TestAtlasSinkQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},

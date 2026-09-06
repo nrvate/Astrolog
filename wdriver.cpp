@@ -179,6 +179,22 @@ int NProcessSwitchesW(int pos, PARSEIN *pin)
     SwitchF(wi.fBmpWindow);
     break;
 
+  case 'F':
+  case 'G':
+  case 'I':
+    // The Qt build's interface settings: the chart and menu fonts, and
+    // the light/dark theme. This build takes its fonts and its theming
+    // from Windows itself, so there is nothing here to set -- but the two
+    // builds share astrolog.as, so the arguments still have to be
+    // consumed or every switch after them is read as one of these.
+    if (pin->argv[0][pos] != 'I' && ch1 == 'a')
+      break;
+    i = (pin->argv[0][pos] == 'I' ? 1 : 2);
+    if (FErrorArgc("W", pin->argc, i))
+      return tcError;
+    darg += i;
+    break;
+
   case 'o':
     if (ch1 == '0' || ch2 == '0') {
       SwitchF(wi.fAutoSaveNum);

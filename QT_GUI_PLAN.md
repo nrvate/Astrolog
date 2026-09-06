@@ -725,9 +725,11 @@ used to say the whole submenu was skipped as Win32-only, which is no
 longer true).
 
 **Interface Theme** (System / Light / Dark, under Window Settings) is this
-port's own since 2026-09-03, stored with `QSettings` rather than in the
-`.as` file; Windows has no counterpart, the way the Setting section flags
-Object Selections.
+port's own since 2026-09-03, stored in `astrolog.as` as `-WI` like every
+other setting -- it was in a `QSettings` file of its own for two days, and
+the maintainer had it merged back on 2026-09-06 so the program has one
+configuration file on every platform. Windows has no counterpart, the way
+the Setting section flags Object Selections.
 
 **Buffer Redraws** is the one item still absent, deliberately: it toggles
 whether Win32 draws through an off-screen bitmap, and Qt composites every

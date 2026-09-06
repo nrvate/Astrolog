@@ -4108,6 +4108,11 @@ static int NProcessSwitchesNullW(int argc, char **argv, int pos)
   int carg;
 
   switch (argv[0][pos]) {
+  case 'F':                       // -WF "<family>" <size>, and =WFa
+  case 'G':                       // -WG "<family>" <size>, and =WGa
+    // The "a" suffix is the antialiasing flag, which takes no argument.
+    carg = argv[0][pos+1] == 'a' ? 0 : 2;
+    break;
   case 'M':                       // -WM <n> "<name>", -WM0 <n> "<name>"
   case 'w':                       // -Ww <x> <y>
   case 'B':                       // -WB <x> <y>
@@ -4117,6 +4122,7 @@ static int NProcessSwitchesNullW(int argc, char **argv, int pos)
   case 'N':                       // -WN <ms>
   case 'T':                       // -WT "<title>"
   case 'x':                       // -Wx <level>
+  case 'I':                       // -WI <theme>
     carg = 1;
     break;
   default:                        // -Wh, -Wn, -Wt, -Wb, -WZ, -Wo*, -WS*

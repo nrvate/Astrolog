@@ -2221,6 +2221,23 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cWh      ", ChDashF(FHourglassQt())); PrintFSz();
   PrintF("; Hourglass cursor on redraw     "
     "[\"=Wh\" has hourglass, \"_Wh\" doesn't]\n");
+  sprintf2(S(sz), "-WI %d    ", NThemePrefQt()); PrintFSz();
+  PrintF("; Interface theme                "
+    "[\"0\" desktop, \"1\" light, \"2\" dark ]\n");
+  sprintf2(S(sz), "-WF \"%s\" %d ", SzConsoleFontQt(), NConsoleFontSizeQt());
+  PrintFSz();
+  PrintF("; Chart text font and size       "
+    "[Empty name and 0 follow -Xs       ]\n");
+  sprintf2(S(sz), "%cWFa     ", ChDashF(FConsoleAntialiasQt())); PrintFSz();
+  PrintF("; Antialias the chart text font  "
+    "[\"=WFa\" smooths it, \"_WFa\" doesn't]\n");
+  sprintf2(S(sz), "-WG \"%s\" %d ", SzMenuFontQt(), NMenuFontSizeQt());
+  PrintFSz();
+  PrintF("; Interface font and size        "
+    "[Empty name and 0 follow desktop   ]\n");
+  sprintf2(S(sz), "%cWGa     ", ChDashF(FMenuAntialiasQt())); PrintFSz();
+  PrintF("; Antialias the interface font   "
+    "[\"=WGa\" smooths it, \"_WGa\" doesn't]\n");
 #endif
 
   sprintf2(S(sz), "\n; %s\n", DEFAULT_INFOFILE); PrintFSz();
