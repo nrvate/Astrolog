@@ -258,6 +258,24 @@ typedef struct _qtuserinterface {
 
 static QTUI qi;
 
+// Room left in one of qi's fixed menu tables, checked the way the shared
+// core's checked tables are (AssertIndex, astrolog.h -- live under
+// QTTEST, inert in a shipping build).
+//
+// Each of those tables is an array with a running count and no guard, so
+// adding a 17th relationship chart or a 9th restriction category would
+// write past the end into whatever member of qi follows it. They cannot
+// overflow from today's code -- every entry is added by a literal call
+// during menu construction -- and that is exactly why the guard is worth
+// having: the failure would arrive with some future menu item, silently,
+// as corruption of a neighbouring field rather than as a crash at the
+// write.
+//
+// The bound comes from the array itself rather than a constant beside it,
+// so resizing one cannot leave its guard behind.
+#define AssertRoomQt(c, rg) \
+  AssertIndex(c, (int)(sizeof(rg)/sizeof((rg)[0])) - 1)
+
 
 // The widget the chart is actually painted onto. Astrolog keeps rendering
 // into an off screen buffer (gi.qim, the Qt analog of X11's Pixmap) via the
@@ -1282,6 +1300,7 @@ static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
   ConnectMenuQt(pa, pa, [mode]() {
     SetChartModeQt(mode);
   });
+  AssertRoomQt(qi.cChartMode, qi.rgpaChartMode);
   qi.rgpaChartMode[qi.cChartMode] = pa;
   qi.rgnChartMode[qi.cChartMode] = mode;
   qi.cChartMode++;
@@ -1318,6 +1337,7 @@ static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
       qi.paGraphics->setChecked(fFalse);
     SetChartModeQt(mode);
   });
+  AssertRoomQt(qi.cChartMode, qi.rgpaChartMode);
   qi.rgpaChartMode[qi.cChartMode] = pa;
   qi.rgnChartMode[qi.cChartMode] = mode;
   qi.cChartMode++;
@@ -1467,6 +1487,7 @@ static QAction *AddRelAction(QMenu *pmenu, QActionGroup *pgroup,
   ConnectMenuQt(pa, pa, [rc, fToggle]() {
     SetRelQt(fToggle ? (us.nRel ? rcNone : rcDual) : rc);
   });
+  AssertRoomQt(qi.cRel, qi.rgpaRel);
   qi.rgpaRel[qi.cRel] = pa;
   qi.rgnRel[qi.cRel] = rc;
   qi.cRel++;
@@ -1885,6 +1906,7 @@ static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
   pa->setCheckable(true);
   pa->setChecked(pfield != NULL ? *pfield != 0 : !ignore[lo]);
   if (pfield != NULL && qi.ccatres < (int)(sizeof(qi.rgcatres)/sizeof(CATRES))) {
+    AssertRoomQt(qi.ccatres, qi.rgcatres);
     CATRES *pcat = &qi.rgcatres[qi.ccatres++];
     pcat->pa = pa; pcat->pfield = pfield; pcat->lo = lo; pcat->hi = hi;
     pcat->fTransit = fTransit;
