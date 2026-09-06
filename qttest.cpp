@@ -3146,6 +3146,15 @@ static flag FWantInterfaceQt(CONST char *sz)
     FEqSzPrefixQt(sz, "=WGa");
 }
 
+// The three File Settings flags -Wn/-Wt/-Wb, which the switches ignored
+// and the writer skipped until 2026-09-06.
+static flag FWantWinFlagQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "_Wn") || FEqSzPrefixQt(sz, "=Wn") ||
+    FEqSzPrefixQt(sz, "_Wt") || FEqSzPrefixQt(sz, "=Wt") ||
+    FEqSzPrefixQt(sz, "_Wb") || FEqSzPrefixQt(sz, "=Wb");
+}
+
 static flag FWantInterfaceValueQt(CONST char *sz)
 {
   return FEqSzPrefixQt(sz, "-WF") || FEqSzPrefixQt(sz, "-WG") ||
@@ -3357,6 +3366,27 @@ static void TestInterfaceSettingsQt()
     "and so does an empty interface font (\"%s\" %d)",
     SzMenuFontQt(), NMenuFontSizeQt());
   Check(StrThemePrefQt() == QString("auto"), "and auto comes back auto");
+
+  // The three File Settings flags. Editable in the GUI since the port
+  // began and impossible to keep: NProcessSwitchesQt() accepted -Wn, -Wt
+  // and -Wb as no-ops, so FOutputSettings() rightly refused to write a
+  // round trip that did not exist. Both halves work now, so this asserts
+  // the whole loop rather than either end of it.
+  {
+    flag fUpdSav = FNoUpdateQt(), fPopSav = FNoPopupQt(),
+      fBmpSav = FBmpWindowQt();
+    int cLine;
+
+    SetNoUpdateQt(fTrue); SetNoPopupQt(fTrue); SetBmpWindowQt(fFalse);
+    Check(FOutputSettings(), "the window flags write to a settings file");
+    SetNoUpdateQt(fFalse); SetNoPopupQt(fFalse); SetBmpWindowQt(fTrue);
+    cLine = CReplaySettingsQt(szPath, FWantWinFlagQt);
+    Check(cLine == 3, "all three come back (%d lines)", cLine);
+    Check(FNoUpdateQt(), "\"don't update\" survives");
+    Check(FNoPopupQt(), "\"no popups\" survives");
+    Check(!FBmpWindowQt(), "and a flag saved OFF comes back off");
+    SetNoUpdateQt(fUpdSav); SetNoPopupQt(fPopSav); SetBmpWindowQt(fBmpSav);
+  }
 
   // ARITY, ON ONE COMMAND LINE. Everything above replays a settings file,
   // and a settings file cannot see an arity bug: each line is parsed on

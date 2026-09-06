@@ -2864,9 +2864,27 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
     darg++;
     break;
 
-  // Win32-only behaviour with no Qt counterpart. Accepted so that a shared
-  // astrolog.as keeps loading; each is a no-op here.
-  case 'n': case 't': case 'b': case 'Z':
+  // The same three flags Windows sets here, and this build has all three
+  // -- qi.fNoUpdate, qi.fNoPopup and qi.fBmpWindow, each with a dialog
+  // control editing it. They were accepted as no-ops, which meant a
+  // setting the GUI offers could not be written down: FOutputSettings()
+  // left them out too, on the honest grounds that writing a switch this
+  // build ignored would claim a round trip that did not happen.
+  case 'n':
+    SwitchF(qi.fNoUpdate);
+    break;
+
+  case 't':
+    SwitchF(qi.fNoPopup);
+    break;
+
+  case 'b':
+    SwitchF(qi.fBmpWindow);
+    break;
+
+  // Screen saver mode, which has no counterpart here. Accepted so that a
+  // shared astrolog.as keeps loading.
+  case 'Z':
     break;
 
   case 'o':

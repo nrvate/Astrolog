@@ -2234,10 +2234,14 @@ flag FOutputSettings()
 #ifdef QT
   // The same settings, for this build. Windows reads its macro names back
   // out of the live Win32 menu; here they are held directly, so this is
-  // the same information from a different place. Only what
-  // NProcessSwitchesQt() actually stores is written: -Wn, -Wt and -Wb are
-  // accepted as no-ops there, so writing them would claim a round trip
-  // that doesn't happen.
+  // the same information from a different place.
+  //
+  // -Wn, -Wt and -Wb are written now. They were left out while
+  // NProcessSwitchesQt() accepted them as no-ops -- writing a switch this
+  // build ignored would have claimed a round trip that did not happen --
+  // but the File Settings dialog edits all three, so the effect was a
+  // setting the GUI offers and no file could keep. The switches set the
+  // flags since 2026-09-06, so they round trip.
   PrintF("\n\n");
   PrintF("; MENU NAMES:\n\n");
   fAny = fFalse;
@@ -2266,6 +2270,15 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cWh      ", ChDashF(FHourglassQt())); PrintFSz();
   PrintF("; Hourglass cursor on redraw     "
     "[\"=Wh\" has hourglass, \"_Wh\" doesn't]\n");
+  sprintf2(S(sz), "%cWn      ", ChDashF(FNoUpdateQt())); PrintFSz();
+  PrintF("; Buffer redraws                 "
+    "[\"=Wn\" buffers, \"_Wn\" on screen    ]\n");
+  sprintf2(S(sz), "%cWt      ", ChDashF(FNoPopupQt())); PrintFSz();
+  PrintF("; Don't show popup messages      "
+    "[\"=Wt\" doesn't show, \"_Wt\" shows   ]\n");
+  sprintf2(S(sz), "%cWb      ", ChDashF(FBmpWindowQt())); PrintFSz();
+  PrintF("; Export bitmaps based on window "
+    "[\"=Wb\" from window, \"_Wb\" created  ]\n");
   sprintf2(S(sz), "-WI %d    ", NThemePrefQt()); PrintFSz();
   PrintF("; Interface theme                "
     "[\"0\" desktop, \"1\" light, \"2\" dark ]\n");
