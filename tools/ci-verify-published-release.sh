@@ -28,8 +28,8 @@ repo=${2:-${GITHUB_REPOSITORY:-nrvate/Astrolog}}
 # There used to be a skip list here for v8.00-qt.1 through qt.3, whose
 # manifests named two .deb files GitHub does not serve (the "~" rewrite
 # happened at upload, after the manifest was written). Those releases
-# were pruned on 2026-09-04 -- tools/prune-releases.sh keeps the newest
-# two -- so the list would have matched nothing forever. Every release
+# were pruned on 2026-09-04, back when a release retired all but the
+# newest two, so the list would have matched nothing forever. Every release
 # that exists renames before hashing, and a failure here is that fix
 # having regressed, which is the whole point of running it.
 command -v gh >/dev/null || { echo "gh not found"; exit 2; }

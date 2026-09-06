@@ -175,8 +175,6 @@ jobs:
       - name: No clang warnings, ours or vendored
         run: tools/ci-assert-clang-clean.sh build.log 0
       - name: The suite
-        env:
-          ASTROLOG_QT_EPHEM: minimal
         run: tools/ci-run-suite.sh 420 suite.log -Yi1 ephem
       - name: Build the .app and .dmg
         run: tools/package-macos.sh out/macos
@@ -240,16 +238,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: tools/ci-verify-published-release.sh "${{ github.event.inputs.tag || github.ref_name }}"
 
-  retire:
-    name: Retire the releases before the last two
-    needs: publish
-    if: github.event_name == 'push' || inputs.publish
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        run: tools/prune-releases.sh 2
+  # There is no retire job. Until 2026-09-05 this workflow deleted every
+  # release but the newest two, because the apt and dnf repository was
+  # rebuilt from every release and would otherwise serve packages for
+  # distributions the matrix no longer built. That repository is gone,
+  # and with it the argument: what pruning does now is delete Windows and
+  # macOS binaries somebody might still want. tools/prune-releases.sh
+  # went with the job; git has it if the reasoning ever comes back.

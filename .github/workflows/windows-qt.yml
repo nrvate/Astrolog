@@ -160,7 +160,6 @@ jobs:
         shell: cmd
         run: |
           set QT_QPA_PLATFORM=offscreen
-          set ASTROLOG_QT_EPHEM=minimal
           if not exist platforms mkdir platforms
           copy "%QTDIR%\plugins\platforms\qoffscreen.dll" platforms\ >nul
           copy "%QTDIR%\bin\Qt6*.dll" . >nul

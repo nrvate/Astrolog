@@ -86,8 +86,10 @@ the fonts, `astrolog.as` — and installs wrappers that run the in-tree
 binaries, so the checkout has to stay put. `PREFIX=$HOME/.local` needs no
 root.
 
-Only the two newest releases are kept; cutting a release retires the ones
-before it. Older tags stay in git; their assets do not.
+Every release stays. Until September 2026 cutting one retired all but
+the newest two, because a package repository was rebuilt from them; with
+that gone there is no reason to delete binaries somebody may still
+want.
 
 The tree carries the ephemeris for every body the Object Selections
 dialog offers, and the dialog offers every body the tree carries: the

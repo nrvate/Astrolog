@@ -96,48 +96,20 @@ extern int CaccelTestQt();
 #define rgaccelQt PaccelTestQt()
 #define caccelQt CaccelTestQt()
 
-// Which ephemeris this run is expected to have, from ASTROLOG_QT_EPHEM:
+// The bundled ephem/ and the body list are one set: every row of
+// rgObjSel[] has its file here, and every asteroid file here is a row.
+// So the suite asserts one number -- all of them resolve -- and there is
+// nothing for a run to declare.
 //
-//   full      (the default) the whole Swiss set, which is what
-//             "-i nrvate.as" reaches through /swe
-//   minimal   the "ephem/" directory this repository ships, which is what
-//             "-Yi1 ephem" reaches and the only thing CI can ever have
-//
-// Declared, not detected, and that is the whole design. The mode says
-// which ephemeris the run is supposed to have and the suite then checks
-// reality against that claim; a suite that surveys what is present and
-// adjusts to it can never fail, which is the vacuous-harness failure this
-// project has already paid for three times. Default "full" for the same
-// reason: the maintainer's own run must be unchanged, and a flag forgotten
-// in CI has to fail loudly rather than quietly test half as much.
-//
-// This was 19, measured: "-Yi1 ephem" resolved 19 of the 39 rows in
-// rgObjSel[] and the other 20 needed files only /swe had. So CI ran this
-// group at half strength -- 21 assertions where a local run did 41 --
-// which is QT_CI_PLAN.md Q13 saying "until B is taken CI is a weaker net
-// than a local run", quantified.
-//
-// B is taken. The 20 files are bundled, so "minimal" and "full" resolve
-// the same set and CI has the net the maintainer has. The set has grown
-// since: 78 rows against 67 files as of 2026-09-05, the first 29 main
-// belt asteroids and 39 outer bodies, all of them bundled.
-//
-// The constant stays rather than collapsing into cObjSel at the use site,
-// for two reasons. It is the thing a future thinning of ephem/ would have
-// to change, and changing it is exactly the moment to ask out loud whether
-// CI should get weaker. And the check reads "more means the mode is
-// stale" -- which is how this very change announced itself, failing with
-// "39 of 39 resolved; minimal expects exactly 19" the moment the files
-// landed, before anyone had to remember to look. It is one number now,
-// cObjSel, precisely because the list and the bundle are the same set --
-// see rgObjSel[] in calc.cpp.
-#define cObjSelEphemMinimal cObjSel
+// There used to be ASTROLOG_QT_EPHEM, "full" against /swe and "minimal"
+// against ephem/, because the bundle answered for 19 of 39 rows and a
+// run on ephem/ tested half as much while passing. Declaring the mode
+// was how that stopped being invisible. Bundling the other 20 files made
+// both modes assert the same number, and on 2026-09-05 the bundle and
+// the list became the same set by construction, so the knob had two
+// settings that could not differ. It went; the assertion it protected
+// stayed, and is stronger for having one answer.
 
-static flag FEphemMinimalQt()
-{
-  CONST char *szEphem = getenv("ASTROLOG_QT_EPHEM");
-  return szEphem != NULL && FEqSzI(szEphem, "minimal");
-}
 
 static int s_cPass = 0, s_cFail = 0;
 static CONST char *s_szGroup = "";
@@ -3141,14 +3113,13 @@ static void TestObjSelTableQt()
   // them one set. Asserting it is
   // the only thing standing between a thinner ephemeris and a green run
   // that tested less.
-  cWant = FEphemMinimalQt() ? cObjSelEphemMinimal : cObjSel;
+  cWant = cObjSel;
   Check(cCheck == cWant,
-    "%d of %d bodies resolved; ASTROLOG_QT_EPHEM=%s expects exactly %d. "
-    "Fewer means the ephemeris is thinner than the mode claims, and this "
-    "group ran %d assertions where it should have run %d; more means the "
-    "mode is stale",
-    cCheck, cObjSel, FEphemMinimalQt() ? "minimal" : "full", cWant,
-    cCheck, cWant);
+    "%d of %d bodies resolved, expected all of them. Fewer means the "
+    "bundled ephemeris no longer answers for everything rgObjSel[] "
+    "offers, and this group ran %d assertions where it should have run "
+    "%d -- see tools/check-ephem.sh for the same set from the other side",
+    cCheck, cObjSel, cCheck, cWant);
   printf("  %d of %d bodies resolved and matched their listed name\n",
     cCheck, cObjSel);
 }
@@ -6542,16 +6513,6 @@ static int NRunQtTestTableQt()
     for (i = 0; i < cqttestQt; i++)
       printf("%s\n", rgqttestQt[i].szName);
     return fFalse;
-  }
-  // A misspelled mode must not mean "full" by accident. ASTROLOG_QT_EPHEM
-  // exists to make the run's coverage a stated claim, and a typo that
-  // silently falls back to the default would make it a stated wrong one.
-  szEphem = getenv("ASTROLOG_QT_EPHEM");
-  if (szEphem != NULL && !FEqSzI(szEphem, "full") &&
-    !FEqSzI(szEphem, "minimal")) {
-    printf("\nFAIL: ASTROLOG_QT_EPHEM=\"%s\" is neither \"full\" nor "
-      "\"minimal\"\n", szEphem);
-    return fTrue;
   }
   // No message boxes, for the whole run. This is not tidiness: a modal
   // box in an unattended run is a hang, and it is a hang that only

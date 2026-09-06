@@ -76,7 +76,7 @@ if [ -d "${QT6_PKGCONFIG:-/usr/local/qt6/lib/pkgconfig}" ]; then
   # behaves. A CI job ran this until 2026-09-05; nothing did between
   # then and now.
   printf '%-34s ' "the suite, against Qt6"
-  if QTTESTBIN=./astrolog-qt6-test ASTROLOG_QT_EPHEM=minimal \
+  if QTTESTBIN=./astrolog-qt6-test \
        tools/ci-run-suite.sh 600 /tmp/check-suite-qt6.log -Yi1 ephem \
        >/tmp/check-qt6.out 2>&1; then
     grep -hoE '^PASS: .*' /tmp/check-suite-qt6.log | tail -1
@@ -90,7 +90,7 @@ step "inert options"             python3 tools/inert_option_audit.py
 step "the bundled ephemeris"     tools/check-ephem.sh
 step "the assertion scripts"     tools/ci-selftest.sh
 printf '%-34s ' "the suite"
-if ASTROLOG_QT_EPHEM=minimal tools/ci-run-suite.sh 600 /tmp/check-suite.log \
+if tools/ci-run-suite.sh 600 /tmp/check-suite.log \
      -Yi1 ephem >/tmp/check-suite.out 2>&1; then
   grep -hoE '^PASS: .*' /tmp/check-suite.log | tail -1
 else

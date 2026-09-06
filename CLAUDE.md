@@ -378,9 +378,6 @@ tools/ci-verify-zip.sh out/package/a.zip out/package/astrolog-windows
                                              # directory, and is
                                              # byte-identical to what was
                                              # staged
-tools/prune-releases.sh 2 --dry-run          # what cutting a release
-                                             # would retire; without
-                                             # --dry-run it retires them
 tools/ci-verify-published-release.sh v8.00-qt.4  # download the RELEASE and
                                              # verify it as a user would:
                                              # the manifest must name
@@ -690,7 +687,7 @@ on Linux and a SIGSEGV on macOS.
 ```sh
 make qt-asan && ASAN_OPTIONS=detect_leaks=0 \
   env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= \
-  ASTROLOG_QT_EPHEM=minimal ./astrolog-qt-asan -Yi1 ephem
+  ./astrolog-qt-asan -Yi1 ephem
 ```
 
 `detect_leaks=0` because a Qt harness that exits without unwinding its
@@ -758,8 +755,9 @@ build the Windows zip and installer (through `windows-qt.yml`, the
 reusable workflow that compiles the port with MSVC and Qt 6.8.3 on a
 Windows runner, runs the suite there and verifies the installer under
 Wine), build the macOS `.app` and `.dmg` against a pinned Qt, then
-publish exactly three artifacts with a `SHA256SUMS` over them and retire
-every release but the newest two.
+publish exactly three artifacts with a `SHA256SUMS` over them. Nothing
+is retired: releases used to be pruned to the newest two because a
+package repository was rebuilt from them, and that repository is gone.
 
 **Linux users build from source**, which is why `tools/build-check.sh`
 exists: it builds this tree, from a `git archive` of HEAD, in a
