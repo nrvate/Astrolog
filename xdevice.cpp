@@ -711,15 +711,6 @@ flag FBmpDrawMap()
   // Do nothing if not drawing bitmaps, or if the Earth bitmap fails to load.
   if (!gi.fBmp || (gi.fFile && gs.ft != ftBmp))
     return fFalse;
-#ifdef QT
-  // Below, only the file export and WINANY (GDI) cases allocate a
-  // destination bitmap to draw the map into; interactively on QT there
-  // isn't one, so bail out here and let the caller's existing vector drawn
-  // map fallback (DrawMap() in xcharts0.cpp, when this returns fFalse)
-  // handle it instead, same as when the Earth bitmap itself fails to load.
-  if (!gi.fFile)
-    return fFalse;
-#endif
   if (gi.bmpWorld.rgb == NULL && !FLoadBmp(BITMAP_EARTH, &gi.bmpWorld, fFalse))
     return fFalse;
   yWin2 = gs.yWin;
@@ -730,6 +721,38 @@ flag FBmpDrawMap()
     if (!FAllocateBmp(&wi.bmpWin, gs.xWin, yWin2))
       return fFalse;
     bmp = &wi.bmpWin;
+  }
+#endif
+#ifdef QT
+  // The same thing WINANY does just above, for the same reason: the
+  // portable composition below needs a real Bitmap to draw into, and
+  // gi.bmp is the file export buffer, which nothing allocates on the
+  // screen path. This used to bail out here instead and let the caller
+  // fall back to its vector map, so "Use Detailed World Map" was a menu
+  // item that did nothing on screen while still working for file output.
+  //
+  // gi.bmp is the right buffer to borrow rather than a new one: the
+  // export path allocates it itself whenever it runs (xscreen.cpp),
+  // FAllocateBmp() resizes rather than leaks when the dimensions differ,
+  // and astrolog.cpp already frees it at exit beside its three siblings.
+  int xWinSavQt = gs.xWin, yWinSavQt = gs.yWin;
+  if (!gi.fFile) {
+    // Compose at the same 2:1 rectangle the VECTOR map uses, not at the
+    // whole canvas. The window is whatever shape the user drags it to,
+    // and stretching the Earth to fill it distorts the geography.
+    // Windows never meets this: FActionX has already fitted a map chart
+    // to 2:1 before it gets here, and the screen path does not pass
+    // through FActionX at all. rScaleMap is read here while gs.xWin and
+    // gs.yWin still hold the window, and read again by the caller's
+    // vector overlay after they are put back, so both get the same
+    // number and the coastlines line up with the lines drawn over them.
+    int nFit = (int)(rDegHalf * rScaleMap);
+    gs.xWin = nFit*2; gs.yWin = nFit; yWin2 = nFit;
+    if (gi.qpaint == NULL || !FAllocateBmp(&gi.bmp, gs.xWin, yWin2)) {
+      gs.xWin = xWinSavQt; gs.yWin = yWinSavQt;
+      return fFalse;
+    }
+    bmp = &gi.bmp;
   }
 #endif
   if (gs.fMollweide && us.fEclipse &&
@@ -919,6 +942,19 @@ flag FBmpDrawMap()
 #ifdef WINANY
   if (!gi.fFile)
     BmpCopyToWin(bmp, wi.hdc, 0, 0);
+#endif
+#ifdef QT
+  // Blit what the code above composed onto the chart image, the
+  // counterpart of BmpCopyToWin() just above. Same wrap FBmpDrawBack()
+  // uses: a Bitmap row is 3 bytes per pixel in B,G,R order padded out to
+  // a long boundary, which is exactly Format_BGR888 with a stride of
+  // clRow*4, so this borrows the buffer rather than copying it.
+  if (!gi.fFile) {
+    QImage qimMap((CONST uchar *)bmp->rgb, bmp->x, bmp->y,
+      bmp->clRow << 2, QImage::Format_BGR888);
+    gi.qpaint->drawImage(0, 0, qimMap);
+    gs.xWin = xWinSavQt; gs.yWin = yWinSavQt;
+  }
 #endif
   return fTrue;
 }
