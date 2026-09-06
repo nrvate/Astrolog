@@ -972,8 +972,13 @@ static void RcLoadRadioSzQt(CONST QVector<RCBUILT> &rgbuilt,
   QButtonGroup *pgroup = NULL;
 
   for (int i = 0; i < cRadio; i++) {
+    // qobject_cast for the same reason RcLoadFlagsQt() uses one: szId is
+    // a PARAMETER here, so nothing local says what kind of control it
+    // names, and the calls below are virtual. A wrong id would reach
+    // them through the wrong type. The NULL guard that follows already
+    // handles what a failed cast returns.
     QRadioButton *prb =
-      (QRadioButton *)PwRcFindIdxQt(rgbuilt, szId, nFirst + i);
+      qobject_cast<QRadioButton *>(PwRcFindIdxQt(rgbuilt, szId, nFirst + i));
     if (prb == NULL)
       continue;
     if (pgroup == NULL)
@@ -988,8 +993,13 @@ static int NRcStoreRadioSzQt(CONST QVector<RCBUILT> &rgbuilt,
   CONST char *szId, int nFirst, int cRadio, int nDefault)
 {
   for (int i = 0; i < cRadio; i++) {
+    // qobject_cast for the same reason RcLoadFlagsQt() uses one: szId is
+    // a PARAMETER here, so nothing local says what kind of control it
+    // names, and the calls below are virtual. A wrong id would reach
+    // them through the wrong type. The NULL guard that follows already
+    // handles what a failed cast returns.
     QRadioButton *prb =
-      (QRadioButton *)PwRcFindIdxQt(rgbuilt, szId, nFirst + i);
+      qobject_cast<QRadioButton *>(PwRcFindIdxQt(rgbuilt, szId, nFirst + i));
     if (prb != NULL && prb->isChecked())
       return i;
   }
