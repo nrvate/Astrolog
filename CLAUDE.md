@@ -917,11 +917,23 @@ runs in seconds on a laptop.
     arity lives in three places -- `NProcessSwitchesQt()` acts,
     `NProcessSwitchesNullW()` in `switch.cpp` and `NProcessSwitchesW()`
     in `wdriver.cpp` consume. Get one wrong and the switch *after* the
-    font is read as its argument, which is why the round-trip fixture
-    ends in a `-c Camp` whose house system is asserted. **Triplicated on
-    purpose is still triplicated**: every `-W` switch has worked this way
-    since the port began, and adding one means remembering all three.
-    Nothing checks that they agree.
+    font is read as its argument. **Triplicated on purpose is still
+    triplicated**: every `-W` switch has worked this way since the port
+    began, and adding one means remembering all three.
+
+    **Test arity on ONE COMMAND LINE, never in a settings file.** A
+    settings file parses each line on its own, so a switch that consumes
+    one argument too many runs off the end of its line and the next line
+    starts clean -- the bug is invisible. Two checks in this tree were
+    first written the weak way and proved much less than they claimed.
+    The strong forms: the `interface-settings` group processes all five
+    on one line and asserts *every* one of them took, and
+    `tools/scenarios/win-switch-arity.txt` does the Win32 half through a
+    window title. Assert the FLAG right after a value switch, not just
+    the last switch on the line -- over-consuming by one eats the flag
+    and leaves a trailing sentinel still reachable, which is how the
+    first draft of that assertion passed with the arity deliberately
+    broken.
   - **`-H` documents what a build IMPLEMENTS, not what it accepts.** Both
     GUI builds accept every `-W` switch, for the reason above; the Qt
     build then does nothing with `-W`, `-Wn`, `-Wt`, `-WB`, `-Wb`,

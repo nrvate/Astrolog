@@ -54,7 +54,17 @@ for scn in "$@"; do
   # Not a pipeline: piping into sed would report sed's exit status, and
   # every scenario would "pass".
   out=$(mktemp)
-  if tools/windrive.sh run "$scn" --args "-i $CFG" >"$out" 2>&1; then
+  # A scenario may ask for extra command line switches with a header line
+  # "# args: ...". That is the only way to test the SWITCH PARSER over
+  # here, as opposed to the menus: astrolog.exe has no console mode, so
+  # what a switch did can only be observed through the window it changes.
+  #
+  # Not quoted through: windrive.sh expands $ARGS unquoted, so an argument
+  # containing a space splits into several. Keep header args single words
+  # -- the quoting path is covered by the Qt suite's round trip, which can
+  # read the value back directly.
+  extra=$(sed -n 's/^# args: *//p' "$scn" | head -1)
+  if tools/windrive.sh run "$scn" --args "-i $CFG $extra" >"$out" 2>&1; then
     pass=$((pass+1))
   else
     fail=$((fail+1)); failed="$failed $name"

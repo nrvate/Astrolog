@@ -1,0 +1,29 @@
+# The Win32 half of the interface switches, which nothing else checks.
+#
+# -WF, -WG and -WI are Qt-build settings, but astrolog.as is shared, so
+# wdriver.cpp has to CONSUME them with the right argument counts or every
+# switch after one of them is read as its argument. That arity is written
+# out three times -- NProcessSwitchesQt() acts on them,
+# NProcessSwitchesNullW() in switch.cpp and NProcessSwitchesW() in
+# wdriver.cpp consume them -- and nothing compares the three.
+#
+# The Linux nets cover two of the three, and both must use ONE COMMAND
+# LINE. A settings file cannot see an arity bug at all: each line is
+# parsed on its own, so a switch that eats one argument too many just runs
+# off the end of its line and the next line starts clean. The first
+# version of this check put the switches in a settings file and proved
+# much less than it claimed.
+#
+# HOW IT WORKS: -WT is last, and sets the title to "Astrolog 8.00: X". If
+# any switch before it consumes one argument too few or too many, -WT is
+# swallowed as somebody's argument and the title stays the default -- or
+# the parse fails outright and the program puts up "Astrolog Error".
+# Falsified 2026-09-06 by making -WF take one argument instead of two and
+# rebuilding: this scenario failed, and the window that came up was titled
+# "Astrolog Error" -- the parse stopping is as good a signal as the title
+# not changing, and both mean the same thing here.
+#
+# Single-word font names on purpose; see win-tests.sh on why header args
+# cannot contain spaces. Quoting is the Qt round trip's job.
+# args: -WI 2 -WF Monospace 18 _WFa -WG Monospace 14 =WGa -WT ArityProbe
+expect-window Astrolog 8.00: ArityProbe

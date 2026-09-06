@@ -1382,6 +1382,67 @@ static void DialogShotCaptureQt(CONST char *szDir)
 
 
 
+// Does every control actually FIT inside the dialog that holds it?
+//
+// CLAUDE.md names this as the thing the suite cannot say: "the suite
+// already proves each dialog opens with the right title; what it cannot
+// say is whether a control sits off the edge". A screenshot shows it to
+// a person, but nobody looks at 25 screenshots on three platforms, and
+// the dialogs are setFixedSize() -- so a control past the edge is not
+// scrolled to, it is gone.
+//
+// This is cheap to assert because RcBuildDialogQt() makes every control
+// a DIRECT child of the dialog, positioned in absolute coordinates from
+// the resource. No scroll areas, no nesting: a child's geometry() is
+// already in the dialog's own coordinates, and anything outside the
+// dialog's rect is off the edge.
+//
+// It is worth having because the layout is computed rather than fixed:
+// one scale factor is derived from the widest string that must not wrap
+// and applied to the whole dialog (RRcTextRatioQt), so a font, a
+// platform, or a translated string can push a control out.
+
+static void TestDialogFitQt()
+{
+  Group("Dialog controls fit their dialog");
+
+  for (int i = 0; i < cdlgQt; i++) {
+    int dxWorst = 0, dyWorst = 0;
+    char szWorst[cchSzMax];
+
+    szWorst[0] = chNull;
+    DriveModalQt(rgdlgQt[i].pfn, [&dxWorst, &dyWorst, &szWorst](QWidget *pw) {
+      QRect rcDlg = pw->rect();
+      CONST QObjectList rgobj = pw->children();
+      for (int j = 0; j < rgobj.size(); j++) {
+        QWidget *pwc = qobject_cast<QWidget *>(rgobj[j]);
+        // Windows of their own (a combo's popup view is one) are not laid
+        // out in the dialog's coordinates at all.
+        if (pwc == NULL || pwc->isWindow() || pwc->isHidden())
+          continue;
+        QRect rc = pwc->geometry();
+        if (rc.isEmpty())
+          continue;
+        int dx = rc.right() - rcDlg.right(), dy = rc.bottom() - rcDlg.bottom();
+        dx = Max(dx, -rc.left()); dy = Max(dy, -rc.top());
+        if (dx > dxWorst || dy > dyWorst) {
+          if (dx > dxWorst) dxWorst = dx;
+          if (dy > dyWorst) dyWorst = dy;
+          sprintf2(S(szWorst), "%s \"%s\"",
+            pwc->metaObject()->className(),
+            pwc->property("text").toString().left(24).toUtf8().constData());
+        }
+      }
+      pw->close();
+    });
+    Check(dxWorst <= 0 && dyWorst <= 0,
+      "%s: every control is inside it (worst %+d,%+d %s)",
+      rgdlgQt[i].szTitle, dxWorst, dyWorst, szWorst);
+  }
+  printf("  no control sits off the edge of its dialog\n");
+}
+
+
 static void TestAppIconQt()
 {
   QList<QSize> rgsize;
@@ -2968,6 +3029,43 @@ static void TestInterfaceSettingsQt()
     "and so does an empty interface font (\"%s\" %d)",
     SzMenuFontQt(), NMenuFontSizeQt());
   Check(StrThemePrefQt() == QString("auto"), "and auto comes back auto");
+
+  // ARITY, ON ONE COMMAND LINE. Everything above replays a settings file,
+  // and a settings file cannot see an arity bug: each line is parsed on
+  // its own, so a switch that consumes one argument too many just runs
+  // off the end of its own line and the next line starts clean. Sharing
+  // one argv is the case that bites -- a miscount there eats the switch
+  // that FOLLOWS. Found the hard way: the Win32 build was checked with a
+  // settings file ending in "-c Camp" and that proved less than claimed.
+  //
+  // -WI is last and is the sentinel: it only takes effect if every switch
+  // before it consumed exactly its own arguments.
+  // EVERY switch on the line is checked, not just the last one. The first
+  // draft asserted only the trailing -WI and passed with the arity
+  // deliberately broken: consuming one argument too many ate the "_WFa"
+  // between the two fonts, and -WI -- two tokens further on -- was still
+  // reached. The flag immediately after a value switch is what a miscount
+  // actually destroys, so that is what has to be asserted.
+  SetThemePrefQt("auto");
+  SetConsoleFontQt("Courier", 9);
+  SetMenuFontQt("Courier", 9);
+  SetConsoleAntialiasQt(fTrue);
+  SetMenuAntialiasQt(fFalse);
+  FProcessCommandLine((char *)
+    "-WF Monospace 18 _WFa -WG Monospace 14 =WGa -WI 2");
+  Check(StrConsoleFontQt() == QString("Monospace") &&
+    NConsoleFontSizeQt() == 18,
+    "on one command line the chart font takes (\"%s\" %d)",
+    SzConsoleFontQt(), NConsoleFontSizeQt());
+  Check(!FConsoleAntialiasQt(),
+    "and the flag right after it is not eaten by it");
+  Check(StrMenuFontQt() == QString("Monospace") && NMenuFontSizeQt() == 14,
+    "and the interface font after that (\"%s\" %d)",
+    SzMenuFontQt(), NMenuFontSizeQt());
+  Check(FMenuAntialiasQt(), "and the flag after THAT one either");
+  Check(StrThemePrefQt() == QString("dark"),
+    "and the switch that ends the line is still reached (\"%s\")",
+    StrThemePrefQt().toUtf8().constData());
 
   QFile::remove(QString::fromLocal8Bit(szPath));   // Not unlink(): no <unistd.h> on the Windows build.
   SetConsoleFontQt(strConSav.toUtf8().constData(), nConSav);
@@ -6879,6 +6977,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-glyph",         TestObjSelGlyphQt},
   {"settings-roundtrip",   TestSettingsRoundTripQt},
   {"interface-settings",   TestInterfaceSettingsQt},
+  {"dialog-fit",           TestDialogFitQt},
   {"atlas-sink",           TestAtlasSinkQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
