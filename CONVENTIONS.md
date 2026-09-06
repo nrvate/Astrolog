@@ -244,6 +244,42 @@ compound word like those; never add another bare word.
   compares this port against Windows. The switch matrix does **not**
   cover chart output -- it never renders one.
 
+## Owning a string: FCloneSz, SzClone, and which one
+
+There are two, they are not interchangeable, and picking the wrong one
+is a use-after-free rather than a leak. Both allocate; the difference is
+what happens to the pointer that was there.
+
+- **`FCloneSz(sz, &pszDst)`** frees `*pszDst` first, then puts a fresh
+  copy in it. For a field with ONE owner: `is.szFileOut`, `us.szADB`,
+  `szStarCustom[]`, the macro strings. The switch handlers use it, the
+  dialogs use it, and they agree.
+- **`SzClone(sz)`** returns a copy and takes no destination, so the
+  caller assigns and the old pointer is simply let go. That looks like a
+  leak and is deliberate — it even *decrements* `is.cAlloc` on the way
+  out so the exit-time "allocations not freed" check does not count it.
+
+The reason is aliasing. **A `CI`'s `nam` and `loc` are shared, and
+nothing may free them.** A `CI` is copied by value all over the program
+— `ciCore` into `ciMain`, `ciTwin` and the whole chart ring at startup,
+into `ciSave` by the chart info dialog, into every chart list entry — so
+one string is reachable through several `CI`s at once. `io.cpp` assigns
+`SzClone()` in eight places and `wdialog.cpp` in two, and none of them
+frees anything.
+
+The Qt port used `FCloneSz` on `ci.nam`/`ci.loc` in four places until
+2026-09-06, which pulled the string out from under every other `CI`
+still holding it: load a chart, rename it in the dialog, and
+`ciMain.nam` — what the chart header prints from — was freed memory.
+AddressSanitizer did not catch it, because the suite edits a name and
+never reads an aliased copy afterwards. The Windows build was what
+settled it: same dialog, same field, `ci.nam = SzClone(sz)`.
+
+`SetObjDisp()` is the third shape and the one to copy when a field can
+hold either an allocation or a static: it deallocates only when the
+current value is custom, and passes that same test to `FCloneSzCore()`
+as `fDestConst` so a static `szObjName[]` can never be freed.
+
 ## Output machinery
 
 The text pipeline is modal global state (REFACTORING.md D3); the modes,
