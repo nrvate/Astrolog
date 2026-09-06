@@ -3279,6 +3279,69 @@ static void TestObjSelDialogQt()
     "and the slot is named after it, not the body it used to be (%s)",
     szObjDisp[iobj]);
 
+  // What the dialog chose has to reach the settings file, or the user
+  // picks their bodies again every launch. The cases above assert that
+  // the dialog SET something; that it SURVIVES is a different question,
+  // and the one a user actually has. The gap is the shape of work log
+  // item 140: a writer that omits a setting is invisible both to
+  // registry_audit.py, which only checks that what IS written resolves,
+  // and to the round trip, whose fixture never set it.
+  //
+  // Here, not after the six cases below: case 4 leaves a midpoint in
+  // force[iobj] and renames the slot, so a re-run of case 0 down there
+  // does not produce a clean "Chiron" and this would be measuring the
+  // leftovers. Slot state on exit is what case 0 already left.
+  {
+    char szPath[cchSzMax], szLine[cchSzMax], *szFileOutSav = is.szFileOut;
+    int nWriteFormatSav = us.nWriteFormat, i;
+    flag fNoWriteSav = us.fNoWrite;
+    FILE *file;
+
+    sprintf2(S(szPath), "%s/astrolog-qt-objsel-%d.as",
+      QDir::tempPath().toLocal8Bit().constData(),
+      (int)QCoreApplication::applicationPid());
+    us.fNoWrite = fFalse;
+    us.nWriteFormat = 'd';
+    is.szFileOut = szPath;
+    Check(FOutputSettings(), "Save Program Settings wrote the file");
+
+    // Aim the slot somewhere else entirely, so a file that carries
+    // nothing leaves it wrong rather than accidentally right.
+    rgObjSwiss[iobj - custLo] = 433;
+    FCloneSzCore("NotChiron", (char **)&szObjDisp[iobj],
+      szObjDisp[iobj] == szObjName[iobj]);
+
+    file = FileOpen(szPath, 3, NULL, 0);
+    Check(file != NULL, "and it can be read back");
+    if (file != NULL) {
+      while (fgets(szLine, cchSzMax, file) != NULL) {
+        // NOT FEqSzPrefixQt(): it requires the switch to END at the
+        // prefix, and the writer emits the body type as a suffix --
+        // "-Yeb 34 2060". Matching "-Ye" with that helper silently never
+        // fires, which is exactly how this test first "failed".
+        if (!(szLine[0] == '-' && szLine[1] == 'Y' &&
+          (szLine[2] == 'e' || szLine[2] == 'D')))
+          continue;
+        for (i = 0; szLine[i]; i++)
+          ;
+        while (i > 0 && szLine[i-1] < ' ')
+          szLine[--i] = chNull;
+        FProcessCommandLine(szLine);
+      }
+      fclose(file);
+    }
+    Check(rgObjSwiss[iobj - custLo] == 2060,
+      "the body the dialog chose survives a save and load (%d, want 2060)",
+      rgObjSwiss[iobj - custLo]);
+    Check(FEqSz(szObjDisp[iobj], "Chiron"),
+      "and so does the name it gave the slot (%s)", szObjDisp[iobj]);
+
+    QFile::remove(QString::fromLocal8Bit(szPath));
+    is.szFileOut = szFileOutSav;
+    us.nWriteFormat = nWriteFormatSav;
+    us.fNoWrite = fNoWriteSav;
+  }
+
   DriveObjSelQt(1);
   Check(rgObjSwiss[iobj - custLo] == 52872,
     "a raw ephemeris number sets the body (obj %d)",
@@ -3347,7 +3410,7 @@ static void TestObjSelDialogQt()
     FCloneSzCore(szDispSav, (char **)&szObjDisp[iobj],
       szObjDisp[iobj] == szObjName[iobj]);
   AdjustRestrictions();
-  printf("  the dialog sets the body and names it\n");
+  printf("  the dialog sets the body, names it, and it reaches the file\n");
 }
 
 
