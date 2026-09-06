@@ -1471,54 +1471,89 @@ static void TestLongCommandLineQt()
 // have to survive, and the case a chart cast from bare coordinates
 // actually produces.
 
-// A settings file that includes itself, and two that include each other.
+// Settings files that include each other with -i.
 //
-// -i inside a settings file recurses into FProcessSwitchFile(), and
-// nothing bounded it. Each level carries a cchSzLine line buffer and a
-// MAXSWITCHES argv on the stack, so it does not take long: a file whose
-// only content is "-i <its own name>" segfaulted, and so did two files
-// naming each other -- which is the one a user reaches by accident.
+// -i recurses into FProcessSwitchFile(), and nothing bounded it. Each
+// level carries a cchSzLine line buffer and a MAXSWITCHES argv on the
+// frame, so the stack goes quickly: a file whose only content is "-i
+// <its own name>" segfaulted, and so did two files naming each other,
+// which is the one a user reaches by accident.
 //
-// The popup is suppressed: refusing raises a warning, and in this build
-// that is a modal message box the suite would stop dead on.
+// Tested as two CHAINS either side of the limit rather than by breaking
+// the guard: a chain shorter than cFileDepthMax must load, a chain longer
+// than it must be refused, and moving the limit flips one or the other.
+// The deepest file in each chain sets "=b0", so "did it load" is a
+// setting that either arrived or did not -- not a return value, which
+// says nothing here: a refused inner file does NOT propagate failure
+// outward, so the outer call reports success either way. An earlier
+// version of this test asserted that return and could not fail.
+//
+// The popup is suppressed because refusing raises a warning, and in this
+// build that is a modal message box the suite would stop dead on.
 
 static void TestFileRecursionQt()
 {
-  char szDeep[cchSzMax], szA[cchSzMax], szB[cchSzMax];
-  flag fPopupSav = FNoPopupQt();
+  flag fPopupSav = FNoPopupQt(), fSecondsSav = us.fSeconds;
   QTemporaryDir dir;
+  char szHead[cchSzMax], szPath[cchSzMax], szSelf[cchSzMax];
+  int rgcDepth[2], i, j;
 
   Group("Settings file recursion");
 
   Check(dir.isValid(), "a scratch directory for the files");
   if (!dir.isValid())
     return;
-  sprintf2(S(szDeep), "%s/self.as", dir.path().toLocal8Bit().constData());
-  sprintf2(S(szA), "%s/a.as", dir.path().toLocal8Bit().constData());
-  sprintf2(S(szB), "%s/b.as", dir.path().toLocal8Bit().constData());
-
-  QFile fileDeep(QString::fromLocal8Bit(szDeep));
-  if (fileDeep.open(QIODevice::WriteOnly))
-    { fileDeep.write(QString("@AD800\n-i %1\n").arg(szDeep).toLocal8Bit());
-      fileDeep.close(); }
-  QFile fileA(QString::fromLocal8Bit(szA));
-  if (fileA.open(QIODevice::WriteOnly))
-    { fileA.write(QString("@AD800\n-i %1\n").arg(szB).toLocal8Bit());
-      fileA.close(); }
-  QFile fileB(QString::fromLocal8Bit(szB));
-  if (fileB.open(QIODevice::WriteOnly))
-    { fileB.write(QString("@AD800\n-i %1\n").arg(szA).toLocal8Bit());
-      fileB.close(); }
-
+  rgcDepth[0] = cFileDepthMax - 5;    // comfortably inside the limit
+  rgcDepth[1] = cFileDepthMax + 5;    // comfortably past it
   SetNoPopupQt(fTrue);
-  // Returning at all is the assertion. Before the depth guard neither of
-  // these came back -- the process died of a stack overflow.
-  FProcessSwitchFile(szDeep, NULL);
-  Check(fTrue, "a file that includes itself returns instead of recursing");
-  FProcessSwitchFile(szA, NULL);
-  Check(fTrue, "and so do two that include each other");
+
+  for (i = 0; i < 2; i++) {
+    for (j = 0; j < rgcDepth[i]; j++) {
+      QString str;
+      sprintf2(S(szPath), "%s/chain%d-%d.as",
+        dir.path().toLocal8Bit().constData(), i, j);
+      if (j + 1 < rgcDepth[i])
+        str = QString("@AD800\n-i %1/chain%2-%3.as\n")
+          .arg(dir.path()).arg(i).arg(j + 1);
+      else
+        str = QString("@AD800\n=b0\n");
+      QFile file(QString::fromLocal8Bit(szPath));
+      if (file.open(QIODevice::WriteOnly)) {
+        file.write(str.toLocal8Bit());
+        file.close();
+      }
+      if (j == 0)
+        sprintf2(S(szHead), "%s", szPath);
+    }
+    us.fSeconds = fFalse;
+    FProcessSwitchFile(szHead, NULL);
+    if (i == 0)
+      Check(us.fSeconds, "a chain %d deep loads, and its last file is read",
+        rgcDepth[i]);
+    else
+      Check(!us.fSeconds, "a chain %d deep is refused before the stack goes",
+        rgcDepth[i]);
+  }
+
+  // And the shape that actually reaches a user: one file naming itself.
+  // Reaching this assertion at all is most of it -- before the guard the
+  // process died here and Check() could not run.
+  sprintf2(S(szSelf), "%s/self.as", dir.path().toLocal8Bit().constData());
+  {
+    QFile file(QString::fromLocal8Bit(szSelf));
+    if (file.open(QIODevice::WriteOnly)) {
+      file.write(QString("@AD800\n-i %1\n=b0\n").arg(
+        QString::fromLocal8Bit(szSelf)).toLocal8Bit());
+      file.close();
+    }
+  }
+  us.fSeconds = fFalse;
+  FProcessSwitchFile(szSelf, NULL);
+  Check(!us.fSeconds, "a file that includes itself is stopped, not recursed");
+
+  us.fSeconds = fSecondsSav;
   SetNoPopupQt(fPopupSav);
-  printf("  a settings file cannot include itself forever\n");
+  printf("  settings files cannot include each other forever\n");
 }
 
 
