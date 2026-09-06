@@ -285,7 +285,7 @@ static QTUI qi;
 static QAction *PaFindMenuActionQt(QWidget *pw, CONST QString &str);
 static QAction *PaFindMenuActionLooseQt(QWidget *pw, CONST QString &str);
 static void ConnectMenuQt(QAction *pa, QObject *pctx,
-  std::function<void()> fn);
+  std::function<void()> fn, flag fRegister = fTrue);
 static QMenu *PmenuContextForChartQt();   // defined below
 static QMenu *PmenuContextForTextQt();    // defined below
 
@@ -3603,11 +3603,22 @@ static int NCmdFromLabelQt(CONST QString &str)
 }
 
 static void ConnectMenuQt(QAction *pa, QObject *pctx,
-  std::function<void()> fn)
+  std::function<void()> fn, flag fRegister)
 {
   int cmd = NCmdFromLabelQt(pa->text());
 
-  if (cmd > 0)
+  // fRegister is fFalse for context menu entries, and has to be. This
+  // list exists so an AstroExpression that answers with a DIFFERENT
+  // command id can find that command's handler, and every command
+  // already has a menu bar entry that registered one at startup --
+  // BuildAstrologMenus() runs once. A context menu is rebuilt on every
+  // right click and deleted when it closes, so registering its entries
+  // appended to this list forever: 14 of the 411 context labels resolve
+  // to a command id, so a session of right clicking grew it without
+  // bound. Nothing broke, because the menu bar entries were appended
+  // first and the lookup below takes the first match -- it just grew,
+  // and the scan with it.
+  if (cmd > 0 && fRegister)
     s_rgcmdfnQt.append(qMakePair(cmd, fn));
   QObject::connect(pa, &QAction::triggered, pctx, [cmd, fn]() {
     int n = cmd;
@@ -4197,7 +4208,7 @@ static QMenu *PmenuBuildContextQt(CONST CTXITEM *rgitem, int citem)
     pa->setChecked(paSrc->isChecked());
     pa->setEnabled(paSrc->isEnabled());
     ConnectMenuQt(pa, pa,
-      [paSrc]() { paSrc->trigger(); });
+      [paSrc]() { paSrc->trigger(); }, fFalse);
   }
   return pmenu;
 }
@@ -4981,6 +4992,10 @@ static int NDarkPreferenceQt(void)
 // happens to be sitting at.
 
 int NDarkPreferenceTestQt(void) { return NDarkPreferenceQt(); }
+
+// How many command handlers are registered. Building context menus must
+// not change it; see ConnectMenuQt().
+int CCmdFnTestQt(void) { return s_rgcmdfnQt.size(); }
 
 flag FThemeNameDarkTestQt(CONST char *sz)
   { return FThemeNameDarkQt(QString(sz)) ? fTrue : fFalse; }

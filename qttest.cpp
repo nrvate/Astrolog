@@ -394,10 +394,19 @@ static void TestDialogsQt()
 // isn't there, which is the mistake worth catching. Same reasoning for
 // the hotkey test below.
 
+extern int CCmdFnTestQt(void);   // qtdriver.cpp
+
 static void TestContextMenusQt()
 {
   CONST char *szName;
   int i, j, cmenu = CCtxTestQt(), citem = 0;
+  // A context menu is rebuilt on every right click and thrown away when
+  // it closes, so building one must not leave anything behind. It used
+  // to: ConnectMenuQt() registered a command handler for any entry whose
+  // label resolved to a command id, and 14 of the 411 context labels do,
+  // so the list grew for the life of the session. Counted around the
+  // loop below, which builds all of them.
+  int ccmdfn = CCmdFnTestQt();
 
   Group("Context menus");
   for (i = 0; i < cmenu; i++) {
@@ -426,6 +435,9 @@ static void TestContextMenusQt()
     }
     delete pmenu;
   }
+  Check(CCmdFnTestQt() == ccmdfn,
+    "building %d context menus registered nothing new (%d, was %d)",
+    cmenu, CCmdFnTestQt(), ccmdfn);
   printf("  %d menus, %d entries, all resolved\n", cmenu, citem);
 }
 
