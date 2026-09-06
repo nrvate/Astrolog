@@ -1486,6 +1486,16 @@ static void TestConsoleFontQt()
       cProp++;
   Check(cProp > 1, "the interface list offers proportional faces too");
 
+  // Establish the no-preference baseline first, in the scratch config the
+  // redirect above points at. Startup read the REAL one, so on a machine
+  // where the user has chosen a menu font -- as the maintainer's has,
+  // which is how this was found -- "back to how startup left it" is not
+  // the default at all, and the restore assertions below would be
+  // comparing against that person's taste.
+  SetMenuFontQt("", 0);
+  SetMenuAntialiasQt(fTrue);
+  ApplyUiFontQt();
+
   // A widget built BEFORE the change, because applying it to the window
   // already on screen is the point: QApplication::setFont() has to reach
   // what is already built, or the menus would keep the old face until the
