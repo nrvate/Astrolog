@@ -2005,10 +2005,22 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
     return;
   }
   QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
+  // SzClone and assign, NOT FCloneSz. A CI's nam and loc are copied
+  // around by value all over this program -- ciCore into ciMain, ciTwin
+  // and the whole chart ring at startup, into ciSave by the dialog below,
+  // into every entry of the chart list -- so several CIs share one
+  // string, and nothing anywhere frees one. That is what SzClone() is
+  // for, and why it deliberately un-counts its own allocation: these are
+  // meant to outlive every copy. io.cpp does it this way in eight places
+  // and wdialog.cpp, the oracle, in two.
+  //
+  // FCloneSz FREES the old pointer, so editing a name here pulled it out
+  // from under every other CI still holding it -- ciMain's, which is what
+  // the chart header prints from.
   if (peName != NULL)
-    FCloneSz(peName->text().toLocal8Bit().constData(), &ci.nam);
+    ci.nam = SzClone(peName->text().toLocal8Bit().constData());
   if (peLoc != NULL)
-    FCloneSz(peLoc->text().toLocal8Bit().constData(), &ci.loc);
+    ci.loc = SzClone(peLoc->text().toLocal8Bit().constData());
   *pci = ci;
   ciSave = ci;
   RecastAndRedrawQt();
@@ -2748,10 +2760,22 @@ void ShowDefaultInfoDialogQt()
     us.tmpDef = RParseSz(ba.constData(), pmTmp); }
   if (pcbCor != NULL)
     us.lTimeAddition = pcbCor->currentText().toLong();
+  // SzClone and assign, NOT FCloneSz. A CI's nam and loc are copied
+  // around by value all over this program -- ciCore into ciMain, ciTwin
+  // and the whole chart ring at startup, into ciSave by the dialog below,
+  // into every entry of the chart list -- so several CIs share one
+  // string, and nothing anywhere frees one. That is what SzClone() is
+  // for, and why it deliberately un-counts its own allocation: these are
+  // meant to outlive every copy. io.cpp does it this way in eight places
+  // and wdialog.cpp, the oracle, in two.
+  //
+  // FCloneSz FREES the old pointer, so editing a name here pulled it out
+  // from under every other CI still holding it -- ciMain's, which is what
+  // the chart header prints from.
   if (peName != NULL)
-    FCloneSz(peName->text().toLocal8Bit().constData(), &ci.nam);
+    ci.nam = SzClone(peName->text().toLocal8Bit().constData());
   if (peLoc != NULL)
-    FCloneSz(peLoc->text().toLocal8Bit().constData(), &ci.loc);
+    ci.loc = SzClone(peLoc->text().toLocal8Bit().constData());
   ciDefa = ci;
   RecastAndRedrawQt();
 }
