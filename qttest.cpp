@@ -1452,8 +1452,31 @@ static void TestLongCommandLineQt()
     "a command line over the buffer is refused, not copied into it");
   Check(FProcessCommandLine(szFits),
     "and one that fits is still processed (%d chars)", CchSz(szFits));
+  // The same class, one buffer further in: DisplayAtlasLookup() copied
+  // its argument into a cchSzMax stack buffer one character at a time
+  // with nothing stopping it, so "-zN <260 characters>" aborted -- and
+  // the city field of the chart info dialog reaches it in both builds, so
+  // a long paste was enough.
+  //
+  // The ordinary lookup is asserted FIRST and deliberately: it proves the
+  // atlas actually loaded, without which DisplayAtlasLookup() returns
+  // before it reaches the copy and the long-name case would prove nothing.
+  {
+    int iae = 0;
+
+    Check(DisplayAtlasLookup("Seattle, WA, USA", 0, &iae),
+      "an ordinary city resolves, so the atlas is loaded");
+    szLong[cchSzLine] = chNull;    // still far past cchSzMax
+    // Not asserted on its own return -- a miss is the correct answer to a
+    // 1020-character city. What is asserted is that the atlas still works
+    // AFTERWARDS, which fails if the over-long name walked over anything,
+    // and which cannot run at all if it aborts.
+    DisplayAtlasLookup(szLong, 0, &iae);
+    Check(DisplayAtlasLookup("Seattle, WA, USA", 0, &iae),
+      "and an over-long name leaves the atlas intact behind it");
+  }
   SetNoPopupQt(fPopupSav);
-  printf("  a long command line is refused instead of smashing the stack\n");
+  printf("  over-long input is truncated or refused, never copied blind\n");
 }
 
 

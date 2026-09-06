@@ -160,6 +160,12 @@ all: $(NAME) qt qt-test win wcli
 check:
 	tools/check.sh
 
+# The same list plus the two extra toolchains, a second run of the whole
+# suite against Qt6, and the slower audits. Minutes rather than seconds,
+# so it is what a release wants and not what an edit wants.
+check-full:
+	tools/check.sh full
+
 # "make install" puts the two commands on PATH and leaves everything else
 # exactly where it is. The data -- the ephemeris files, the atlas, the
 # fonts, astrolog.as, the help text -- stays in this checkout on purpose,
@@ -247,7 +253,7 @@ uninstall:
 	  echo "removed $(ICONDIR)/$${s}x$${s}/apps/astrolog.png"; \
 	done
 
-.PHONY: default check clean clean-console qt qt-test qt-asan qt-ubsan qt6 qt6-test win wcli all \
+.PHONY: default check check-full clean clean-console qt qt-test qt-asan qt-ubsan qt6 qt6-test win wcli all \
 	install uninstall
 
 # Compiler-generated header dependencies; see Makefile.qt for the

@@ -1,8 +1,17 @@
 #!/bin/sh
 # What CI used to run on every push, in one command, on this machine.
 #
-#   tools/check.sh          # about two minutes
+#   tools/check.sh          # FAST -- the pre-commit loop
 #   make check              # the same thing
+#   tools/check.sh full     # everything, for a release
+#   make check-full
+#
+# TWO MODES, because one command cannot be both. The fast one is what you
+# run after an edit: the generated tables, the audits, the three builds
+# your change can actually break, and the suite. The full one adds the
+# other two toolchains, a second run of the whole suite against Qt6, and
+# the slower audits -- worth minutes before a release, not after every
+# edit. Running the slow one by reflex is how a check stops being run.
 #
 # CI became tag-only on 2026-09-05, so nothing runs these for you any
 # more. This is the list, in the order that fails fastest: the generated
@@ -23,6 +32,11 @@
 #   tools/swetest-oracle.sh           numbers against upstream Swiss
 set -eu
 cd "$(dirname "$0")/.."
+mode=${1:-fast}
+case $mode in
+  fast|full) ;;
+  *) echo "usage: check.sh [fast|full]"; exit 2 ;;
+esac
 fail=0
 step() {
   name=$1; shift
@@ -60,14 +74,15 @@ step "build: the test binary"    make qt-test -j4
 # somebody remembered making until CI kept it alive. CI does not any
 # more, so this does -- when the toolchain is absent it says skipped
 # rather than passing quietly.
-if command -v x86_64-w64-mingw32-g++ >/dev/null 2>&1; then
+if [ "$mode" = full ] && command -v x86_64-w64-mingw32-g++ >/dev/null 2>&1; then
   step "build: Win32 oracle (mingw)"  make win -j4
   step "build: Windows console"       make wcli -j4
-else
+elif [ "$mode" = full ]; then
   printf '%-34s %s\n' "build: Win32 oracle (mingw)" \
     "skipped -- no x86_64-w64-mingw32-g++"
 fi
-if [ -d "${QT6_PKGCONFIG:-/usr/local/qt6/lib/pkgconfig}" ]; then
+if [ "$mode" = full ] && \
+   [ -d "${QT6_PKGCONFIG:-/usr/local/qt6/lib/pkgconfig}" ]; then
   step "build: Qt6"                   make qt6 -j4
   step "build: Qt6 test binary"       make qt6-test -j4
   # And RUN it. Building proves it compiles; the Qt6 binary is a
@@ -83,12 +98,14 @@ if [ -d "${QT6_PKGCONFIG:-/usr/local/qt6/lib/pkgconfig}" ]; then
   else
     echo FAILED; tail -20 /tmp/check-qt6.out | sed 's/^/    /'; fail=1
   fi
-else
+elif [ "$mode" = full ]; then
   printf '%-34s %s\n' "build: Qt6" "skipped -- no Qt6 outside pkg-config"
 fi
-step "inert options"             python3 tools/inert_option_audit.py
-step "the bundled ephemeris"     tools/check-ephem.sh
-step "the assertion scripts"     tools/ci-selftest.sh
+if [ "$mode" = full ]; then
+  step "inert options"           python3 tools/inert_option_audit.py
+  step "the bundled ephemeris"   tools/check-ephem.sh
+  step "the assertion scripts"   tools/ci-selftest.sh
+fi
 printf '%-34s ' "the suite"
 if tools/ci-run-suite.sh 600 /tmp/check-suite.log \
      -Yi1 ephem >/tmp/check-suite.out 2>&1; then
@@ -97,4 +114,9 @@ else
   echo FAILED; tail -20 /tmp/check-suite.out | sed 's/^/    /'; fail=1
 fi
 [ "$fail" -eq 0 ] || { echo "== something above failed"; exit 1; }
-echo "== all clear"
+if [ "$mode" = fast ]; then
+  echo "== all clear (fast; \"make check-full\" adds mingw, Qt6 and the"
+  echo "   slower audits, and is what a release wants)"
+else
+  echo "== all clear"
+fi

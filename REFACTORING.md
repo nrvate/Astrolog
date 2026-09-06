@@ -1192,7 +1192,11 @@ reword; valid input behavior is byte-sacred.
   all three on purpose. AstroGraph IS a true structural clone (~400
   lines each; relation = the same algorithm with every array doubled
   to [2][objMax] plus transit handling) but is a dedicated-session
-  merge with a -L text differential, not a quick pair.
+  merge with a -L text differential, not a quick pair. **Taken
+  2026-08-30 as P5** (5c983e3): ChartAstroGraphCore(flag fRel) in
+  charts1.cpp, both public names three-line wrappers. This list read
+  "next up" for a week after the work was done, which is how a stale
+  pointer sends the next session looking for something finished.
 - **F1 — done 2026-08-29** (work log item 85): the three projection
   chain families collapsed onto one static `*ToProj()` set over a
   `PROJ` context in xcharts1.cpp; the eighteen public names stay as

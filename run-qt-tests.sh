@@ -16,6 +16,18 @@ BIN=${QTTESTBIN:-./astrolog-qt-test}
 [ -x "$BIN" ] || { echo "build it first: make qt-test"; exit 1; }
 
 QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
+# The startup probes below run the binary as its own process and read its
+# output through command substitution. That waits for the PIPE, not for
+# the process, so one that writes its answer and then fails to exit is
+# left running while this script reports "ok" and moves on -- and they
+# accumulate, one per suite run. REFACTORING.md lists "kill orphaned
+# astrolog-qt processes left by interrupted suite runs" as a standing
+# house habit, which is the symptom of exactly this.
+#
+# A watchdog turns that silent leak into a bounded wait. 60s is far above
+# what any probe needs (each is one chart) and far below anything a person
+# would sit through.
+QTRUN="timeout 60 $QTENV"
 
 # Default to the maintainer's settings file, because running without it is
 # not a milder test, it is a quieter one. nrvate.as carries -Yi1 "/swe",
@@ -49,7 +61,7 @@ echo
 echo "== Startup diagnostics =="
 fail=0
 for arg in "-i /nonexistent-astrolog-test-file.as" "-t"; do
-  out=`$QTENV "$BIN" $arg 2>&1`
+  out=`$QTRUN "$BIN" $arg 2>&1`
   rc=$?
   case $out in
     *"Must construct a QApplication"*)
@@ -86,7 +98,7 @@ echo
 echo "== Pager with no reader =="
 fail=0
 for q in 24 1; do
-  $QTENV "$BIN" -YQ $q -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 \
+  $QTRUN "$BIN" -YQ $q -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 \
     -R1 _X </dev/null >/dev/null 2>&1
   rc=$?
   if [ $rc -ge 128 ]; then
@@ -117,7 +129,7 @@ done
 echo
 echo "== Ephemeris search path =="
 probe=/nonexistent-astrolog-ephem-probe
-out=`$QTENV "$BIN" -Yi1 "$probe" -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+out=`$QTRUN "$BIN" -Yi1 "$probe" -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
 # Both assertions read Swiss's own "not found in PATH" line, which is the
 # only place the assembled path is observable from outside the process. If
 # that line is absent the run proves nothing either way, so say so rather
@@ -146,7 +158,7 @@ esac
 # The other half, and the one that is easy to lose while fixing the first:
 # a -Yi that DOES hold an ephemeris must reach Swiss. Without this, a
 # resolver that simply dropped every -Yi would pass the check above.
-out2=`$QTENV "$BIN" -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+out2=`$QTRUN "$BIN" -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
 case $out2 in
   *"not found in PATH"*) ;;
   *)

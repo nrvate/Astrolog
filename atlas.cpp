@@ -1534,8 +1534,14 @@ flag DisplayAtlasLookup(CONST char *szIn, flag fDialog, int *piae)
     (us.nAtlasList > 0 ? Min(us.nAtlasList, ilistMax) : ilistMax)));
 
   // Parse city, along with comma separated state/province and country/region.
-  for (pch1 = szCity, pch2 = (char *)szIn; (*pch1 = *pch2); pch1++, pch2++)
-    ;
+  //
+  // BOUNDED. This copied szIn into szCity[cchSzMax] one character at a
+  // time with nothing stopping it, so a city name longer than the buffer
+  // smashed the stack: "-zN <260 characters>" aborts. The city field of
+  // the chart info dialog reaches this in both builds, so a long paste
+  // was enough. Truncating is the right answer -- a 255-character city
+  // name matches nothing, and a lookup miss says so.
+  sprintf2(S(szCity), "%s", szIn);
   for (pch1 = szCity; *pch1 && *pch1 != ','; pch1++)
     ;
   if (*pch1)
