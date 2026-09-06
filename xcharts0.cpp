@@ -352,7 +352,12 @@ void DrawSidebar()
       }
       AdjustTextScale();
     }
-#ifdef WINANY
+#if defined(WINANY) || defined(QT)
+    // WINANY only until 2026-09-06, and only because DrawGlyph() was
+    // Windows-only when this was written. The port has had its own since
+    // the font work, so this drew nothing on Qt while the Graphics
+    // Settings dialog happily offered the option: rgszWheelCornerQt[] has
+    // all seven, and rgiWheelCornerOrderQt[] lists this one.
     else if (gs.nDecaType == 6) {
       // If decoration value 6, draw heart characters in each corner. <3
       Borrow bScale(gi.nScale,
