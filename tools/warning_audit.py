@@ -113,7 +113,18 @@ QT6_PKGCONFIG = os.environ.get('QT6_PKGCONFIG', '/usr/local/qt6/lib/pkgconfig')
 QT6_BASELINE = os.path.join(ROOT, 'tools', 'warnings-qt6.txt')
 QT6_BUILD = ('Makefile.qt', 'CPPFLAGS',
              '-DQT -O -fPIC -Wall ' + COMMON_NO + ' $(QT_CFLAGS)')
-QT6_ARGS = ['OBJDIR=obj-qt6', 'NAME=astrolog-qt6']
+# The -rpath the Makefile's own qt6 target adds, which this has to add
+# too. It builds to the SAME output name, so without it the audit leaves
+# behind an astrolog-qt6 that links and then dies at startup with
+# "libQt6PrintSupport.so.6: cannot open shared object file" -- and a
+# later "make qt6-test" does NOT repair it, because the bad binary is
+# newer than every source and make has nothing to do. The sequence that
+# hits it is the documented one: run this audit, then "make check".
+# Empty QT6_LIBDIR must produce no flag at all rather than a truncated
+# one, the same conditional the Makefile has.
+QT6_LIBDIR = os.environ.get('QT6_LIBDIR', '/usr/local/qt6/lib')
+QT6_LD = (['LDEXTRA=-Wl,-rpath,' + QT6_LIBDIR] if QT6_LIBDIR.strip() else [])
+QT6_ARGS = ['OBJDIR=obj-qt6', 'NAME=astrolog-qt6'] + QT6_LD
 # The Qt6 build of the suite. CI compiles it ("make qt6-test") and runs
 # 3792 assertions against it, but nothing read its warnings until this
 # entry -- and qttest.cpp is the largest and most actively edited Qt
@@ -122,7 +133,8 @@ QT6_ARGS = ['OBJDIR=obj-qt6', 'NAME=astrolog-qt6']
 QT6_TEST_BUILD = ('Makefile.qt.test', 'CPPFLAGS',
                   '-DQT -DQTTEST -O -fPIC -Wall ' + COMMON_NO +
                   ' $(QT_CFLAGS)')
-QT6_TEST_ARGS = ['OBJDIR=obj-qt6-test', 'NAME=astrolog-qt6-test']
+QT6_TEST_ARGS = ['OBJDIR=obj-qt6-test',
+                 'NAME=astrolog-qt6-test'] + QT6_LD
 
 
 def qt6_env():

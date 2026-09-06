@@ -2700,6 +2700,78 @@ static flag FEqSzPrefixQt(CONST char *szLine, CONST char *szSwitch)
 }
 
 
+// Replay the switch lines a test cares about out of a saved settings
+// file, which is what "did this setting survive being saved?" means in
+// practice. Four tests wanted this loop and had four copies of it.
+//
+// It returns the number of lines replayed, and that is not a convenience.
+// The failure mode of a hand-written filter is matching NOTHING: the
+// replay then restores nothing, the setting stays at whatever the test
+// clobbered it to, and the assertion reports that the PROGRAM lost the
+// setting. That happened here -- FEqSzPrefixQt() above requires the
+// switch to END at the prefix, and the object writer emits "-Yeb 34
+// 2060", so a "-Ye" filter never fired. Callers assert the count.
+
+static int CReplaySettingsQt(CONST char *szPath,
+  flag (*pfnWant)(CONST char *))
+{
+  char szLine[cchSzMax];
+  FILE *file;
+  int i, cLine = 0;
+
+  file = FileOpen(szPath, 3, NULL, 0);
+  if (file == NULL)
+    return -1;
+  while (fgets(szLine, cchSzMax, file) != NULL) {
+    if (!pfnWant(szLine))
+      continue;
+    for (i = 0; szLine[i]; i++)          // Keep the line, minus its \n.
+      ;
+    while (i > 0 && szLine[i-1] < ' ')
+      szLine[--i] = chNull;
+    FProcessCommandLine(szLine);
+    cLine++;
+  }
+  fclose(file);
+  return cLine;
+}
+
+
+// The four filters, one per caller. Only the switches under test, so a
+// replay cannot disturb the several hundred other settings the file
+// carries.
+
+static flag FWantObjSetQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "-YR") || FEqSzPrefixQt(sz, "-YRT") ||
+    FEqSzPrefixQt(sz, "-YAm") || FEqSzPrefixQt(sz, "-YAd") ||
+    FEqSzPrefixQt(sz, "-Yj") || FEqSzPrefixQt(sz, "-YjT") ||
+    FEqSzPrefixQt(sz, "-YkO");
+}
+
+static flag FWantInterfaceQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "-WF") || FEqSzPrefixQt(sz, "-WG") ||
+    FEqSzPrefixQt(sz, "-WI") || FEqSzPrefixQt(sz, "_WFa") ||
+    FEqSzPrefixQt(sz, "=WFa") || FEqSzPrefixQt(sz, "_WGa") ||
+    FEqSzPrefixQt(sz, "=WGa");
+}
+
+static flag FWantInterfaceValueQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "-WF") || FEqSzPrefixQt(sz, "-WG") ||
+    FEqSzPrefixQt(sz, "-WI");
+}
+
+// Not FEqSzPrefixQt(): the object writer puts the body type in the switch
+// itself -- "-Yeb 34 2060" -- so there is nothing for that helper's
+// end-of-switch check to land on.
+static flag FWantObjDefQt(CONST char *sz)
+{
+  return sz[0] == '-' && sz[1] == 'Y' && (sz[2] == 'e' || sz[2] == 'D');
+}
+
+
 // Does a settings file bring back what it was written from?
 //
 // Save Program Settings is the only way a user keeps anything, and until
@@ -2721,8 +2793,7 @@ static void TestSettingsRoundTripQt()
   char *szFileOutSav = is.szFileOut;
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite;
-  char szPath[cchSzMax], szLine[cchSzMax];
-  FILE *file;
+  char szPath[cchSzMax];
 
   Group("Settings file round trip");
 
@@ -2775,25 +2846,8 @@ static void TestSettingsRoundTripQt()
   rgobjset[iMoon].kolor = 1;
   rgobjset[iMoon].tinf = rgobjset[iCusp].tinf = 99.0;
 
-  file = FileOpen(szPath, 3, NULL, 0);
-  Check(file != NULL, "and it can be read back");
-  if (file != NULL) {
-    while (fgets(szLine, cchSzMax, file) != NULL) {
-      // Only the switches under test, so replaying cannot disturb the
-      // several hundred other settings the file carries.
-      if (!FEqSzPrefixQt(szLine, "-YR") && !FEqSzPrefixQt(szLine, "-YRT") &&
-        !FEqSzPrefixQt(szLine, "-YAm") && !FEqSzPrefixQt(szLine, "-YAd") &&
-        !FEqSzPrefixQt(szLine, "-Yj") && !FEqSzPrefixQt(szLine, "-YjT") &&
-        !FEqSzPrefixQt(szLine, "-YkO"))
-        continue;
-      for (i = 0; szLine[i]; i++)
-        ;
-      while (i > 0 && szLine[i-1] < ' ')
-        szLine[--i] = chNull;
-      FProcessCommandLine(szLine);
-    }
-    fclose(file);
-  }
+  i = CReplaySettingsQt(szPath, FWantObjSetQt);
+  Check(i > 0, "and it can be read back (%d lines replayed)", i);
 
   Check(ignore[iMoon] == fFalse,
     "a natal restriction on a moon survives (ignore[%d] is %d, want 0)",
@@ -2839,11 +2893,10 @@ static void TestSettingsRoundTripQt()
 
 static void TestInterfaceSettingsQt()
 {
-  char szPath[cchSzMax], szLine[cchSzMax], *szFileOutSav;
+  char szPath[cchSzMax], *szFileOutSav;
   QString strConSav, strMenSav, strThemeSav;
   int nConSav, nMenSav, nWriteFormatSav;
   flag fConSav, fMenSav, fNoWriteSav;
-  FILE *file;
   int i;
 
   Group("Interface settings in the settings file");
@@ -2878,25 +2931,8 @@ static void TestInterfaceSettingsQt()
   SetMenuAntialiasQt(fFalse);
   SetThemePrefQt("light");
 
-  file = FileOpen(szPath, 3, NULL, 0);
-  Check(file != NULL, "and it can be read back");
-  if (file != NULL) {
-    while (fgets(szLine, cchSzMax, file) != NULL) {
-      // Only the switches under test, so replaying cannot disturb the
-      // several hundred other settings the file carries.
-      if (!FEqSzPrefixQt(szLine, "-WF") && !FEqSzPrefixQt(szLine, "-WG") &&
-        !FEqSzPrefixQt(szLine, "-WI") && !FEqSzPrefixQt(szLine, "_WFa") &&
-        !FEqSzPrefixQt(szLine, "=WFa") && !FEqSzPrefixQt(szLine, "_WGa") &&
-        !FEqSzPrefixQt(szLine, "=WGa"))
-        continue;
-      for (i = 0; szLine[i]; i++)
-        ;
-      while (i > 0 && szLine[i-1] < ' ')
-        szLine[--i] = chNull;
-      FProcessCommandLine(szLine);
-    }
-    fclose(file);
-  }
+  i = CReplaySettingsQt(szPath, FWantInterfaceQt);
+  Check(i == 5, "and all five lines read back (%d)", i);
 
   Check(StrConsoleFontQt() == QString("Bitstream Vera Sans Mono"),
     "a chart font whose name has spaces survives whole (\"%s\")",
@@ -2923,20 +2959,8 @@ static void TestInterfaceSettingsQt()
   SetConsoleFontQt("Courier", 9);
   SetMenuFontQt("Courier", 9);
   SetThemePrefQt("dark");
-  file = FileOpen(szPath, 3, NULL, 0);
-  if (file != NULL) {
-    while (fgets(szLine, cchSzMax, file) != NULL) {
-      if (!FEqSzPrefixQt(szLine, "-WF") && !FEqSzPrefixQt(szLine, "-WG") &&
-        !FEqSzPrefixQt(szLine, "-WI"))
-        continue;
-      for (i = 0; szLine[i]; i++)
-        ;
-      while (i > 0 && szLine[i-1] < ' ')
-        szLine[--i] = chNull;
-      FProcessCommandLine(szLine);
-    }
-    fclose(file);
-  }
+  i = CReplaySettingsQt(szPath, FWantInterfaceValueQt);
+  Check(i == 3, "the three value lines read back (%d)", i);
   Check(StrConsoleFontQt().isEmpty() && NConsoleFontSizeQt() == 0,
     "an empty chart font comes back empty (\"%s\" %d)",
     SzConsoleFontQt(), NConsoleFontSizeQt());
@@ -3292,10 +3316,9 @@ static void TestObjSelDialogQt()
   // does not produce a clean "Chiron" and this would be measuring the
   // leftovers. Slot state on exit is what case 0 already left.
   {
-    char szPath[cchSzMax], szLine[cchSzMax], *szFileOutSav = is.szFileOut;
+    char szPath[cchSzMax], *szFileOutSav = is.szFileOut;
     int nWriteFormatSav = us.nWriteFormat, i;
     flag fNoWriteSav = us.fNoWrite;
-    FILE *file;
 
     sprintf2(S(szPath), "%s/astrolog-qt-objsel-%d.as",
       QDir::tempPath().toLocal8Bit().constData(),
@@ -3311,25 +3334,8 @@ static void TestObjSelDialogQt()
     FCloneSzCore("NotChiron", (char **)&szObjDisp[iobj],
       szObjDisp[iobj] == szObjName[iobj]);
 
-    file = FileOpen(szPath, 3, NULL, 0);
-    Check(file != NULL, "and it can be read back");
-    if (file != NULL) {
-      while (fgets(szLine, cchSzMax, file) != NULL) {
-        // NOT FEqSzPrefixQt(): it requires the switch to END at the
-        // prefix, and the writer emits the body type as a suffix --
-        // "-Yeb 34 2060". Matching "-Ye" with that helper silently never
-        // fires, which is exactly how this test first "failed".
-        if (!(szLine[0] == '-' && szLine[1] == 'Y' &&
-          (szLine[2] == 'e' || szLine[2] == 'D')))
-          continue;
-        for (i = 0; szLine[i]; i++)
-          ;
-        while (i > 0 && szLine[i-1] < ' ')
-          szLine[--i] = chNull;
-        FProcessCommandLine(szLine);
-      }
-      fclose(file);
-    }
+    i = CReplaySettingsQt(szPath, FWantObjDefQt);
+    Check(i > 0, "and the object lines read back (%d)", i);
     Check(rgObjSwiss[iobj - custLo] == 2060,
       "the body the dialog chose survives a save and load (%d, want 2060)",
       rgObjSwiss[iobj - custLo]);

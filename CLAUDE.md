@@ -918,7 +918,17 @@ runs in seconds on a laptop.
     `NProcessSwitchesNullW()` in `switch.cpp` and `NProcessSwitchesW()`
     in `wdriver.cpp` consume. Get one wrong and the switch *after* the
     font is read as its argument, which is why the round-trip fixture
-    ends in a `-c Camp` whose house system is asserted.
+    ends in a `-c Camp` whose house system is asserted. **Triplicated on
+    purpose is still triplicated**: every `-W` switch has worked this way
+    since the port began, and adding one means remembering all three.
+    Nothing checks that they agree.
+  - **`-H` documents what a build IMPLEMENTS, not what it accepts.** Both
+    GUI builds accept every `-W` switch, for the reason above; the Qt
+    build then does nothing with `-W`, `-Wn`, `-Wt`, `-WB`, `-Wb`,
+    `-Wo*`, `-WS*` and `-WZ`. `DisplaySwitchesW()` prints the shared ones
+    to both and keeps those behind `#ifdef WIN`, or a Linux user is told
+    the program will set up a Windows program group. Nothing checks this
+    split either -- it was got wrong on the first attempt.
   - **The font name is quoted by the writer**, and that is the part that
     breaks: unquoted, "Bitstream Vera Serif" comes back as "Bitstream",
     and an empty name makes the *size* the family. The

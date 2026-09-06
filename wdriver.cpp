@@ -190,7 +190,8 @@ int NProcessSwitchesW(int pos, PARSEIN *pin)
     if (pin->argv[0][pos] != 'I' && ch1 == 'a')
       break;
     i = (pin->argv[0][pos] == 'I' ? 1 : 2);
-    if (FErrorArgc("W", pin->argc, i))
+    if (FErrorArgc(pin->argv[0][pos] == 'I' ? "WI" :
+      pin->argv[0][pos] == 'F' ? "WF" : "WG", pin->argc, i))
       return tcError;
     darg += i;
     break;

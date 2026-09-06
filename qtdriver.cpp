@@ -2650,6 +2650,9 @@ flag FHourglassQt() { return qi.fHourglass; }
 // are parsed long before that point in the file.
 #define nFontSizeMinQt 6
 #define nFontSizeMaxQt 48
+#define nThemeAutoQt   0
+#define nThemeLightQt  1
+#define nThemeDarkQt   2
 void SetConsoleFontQt(CONST char *szFamily, int nSize);
 void SetMenuFontQt(CONST char *szFamily, int nSize);
 void SetThemePrefNQt(int n);
@@ -2780,7 +2783,7 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
     if (FErrorArgc("WI", pin->argc, 1))
       return tcError;
     i = NFromSz(pin->argv[1]);
-    if (FErrorValN("WI", !FBetween(i, 0, 2), i, 0))
+    if (FErrorValN("WI", !FBetween(i, nThemeAutoQt, nThemeDarkQt), i, 0))
       return tcError;
     SetThemePrefNQt(i);
     darg++;
@@ -4807,10 +4810,7 @@ QStringList RgstrMenuFontQt(void)
 // spoken about as a name everywhere else, because a name is what the menu
 // and the tests deal in. Anything unrecognized is "auto", so a
 // hand-edited astrolog.as cannot leave the window in no theme at all.
-
-#define nThemeAutoQt   0
-#define nThemeLightQt  1
-#define nThemeDarkQt   2
+// nTheme*Qt are declared with the switch that parses them, far above.
 
 QString StrThemePrefQt(void)
 {

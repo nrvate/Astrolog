@@ -1900,19 +1900,26 @@ void DisplaySwitchesX(void)
 // Print a list of every command switch dealing with the windowed features
 // that can be passed to the program, and a description of what it does.
 // This is part of what the -H switch prints in the two GUI builds.
+//
+// THE SPLIT BELOW IS THE POINT, and getting it wrong is worse than not
+// printing the list at all. Both builds ACCEPT every -W switch, because
+// they share astrolog.as and an unknown switch is a fatal startup error
+// -- but accepting one so a file loads is not the same as implementing
+// it, and only the second is worth documenting. The Qt build consumes
+// -Wn, -Wt, -WB, -Wb, -Wo* and -WZ and does nothing with them, and -W
+// takes a Win32 menu command ID that has no meaning there; -WS* offers
+// to create a Windows program group, desktop icon or file association,
+// none of which exist on a Linux desktop. Printing those under -H would
+// be advertising features that are not there.
 
 void DisplaySwitchesW(void)
 {
   PrintS("\nSwitches to access window options:");
-  PrintS(" _W <value>: Run given menu command internally.");
   PrintS(" _WN <1-32000>: Set animation update delay in milliseconds.");
   PrintS(" _WM <1-96> <text>: Set menu text for macro command.");
   PrintS(" _WM0 <0-7> <text>: Set menu text for macro submenu.");
-  PrintS(" _Wn: Don't redraw screen until user forces update.");
   PrintS(" _Wh: Set hourglass cursor when redrawing chart.");
-  PrintS(" _Wt: Don't display warning and error popup messages.");
   PrintS(" _Ww <hor> <ver>: Set upper left coordinates of window.");
-  PrintS(" _WB <0-24> <0-24>: Set window scrollbar positions.");
   PrintS(" _WT <string>: Set title bar text of Astrolog window.");
   PrintS(" _Wx <1-12>: Set antialias graphics level of detail.");
   PrintS(" _WI <0-2>: Set interface theme: 0 desktop, 1 light, 2 dark.");
@@ -1920,6 +1927,12 @@ void DisplaySwitchesW(void)
   PrintS(" _WFa: Antialias the font that charts draw text in.");
   PrintS(" _WG <font> <6-48>: Set font and size menus and dialogs use.");
   PrintS(" _WGa: Antialias the font that menus and dialogs use.");
+#ifdef WIN
+  // Win32 only, because only wdriver.cpp acts on these.
+  PrintS(" _W <value>: Run given Windows menu command internally.");
+  PrintS(" _Wn: Don't redraw screen until user forces update.");
+  PrintS(" _Wt: Don't display warning and error popup messages.");
+  PrintS(" _WB <0-24> <0-24>: Set window scrollbar positions.");
   PrintS(" _Wb: Bitmaps are saved and copied from the Windows screen.");
   PrintS(" _Wo: Continually autosave graphics screen to bitmap file.");
   PrintS(" _Wo0: Continually autosave graphics screen to numbered files.");
@@ -1930,6 +1943,7 @@ void DisplaySwitchesW(void)
   PrintS(" _WSx: Setup registering Windows file extensions for program.");
   PrintS(" _WSu: Unregister Windows file extensions for program.");
   PrintS(" _WZ: Treat program as screen saver, and exit on next user input.");
+#endif
 }
 #endif
 #endif // GRAPH
