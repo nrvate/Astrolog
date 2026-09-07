@@ -1276,6 +1276,200 @@ void ComputeEphem(real t)
 #endif
 
 
+// Subprocedures of CastChart(). Each is one self-contained phase of the chart
+// cast, extracted from the 400-line CastChart() body. They read and write the
+// same globals (planet[], chouse[], is.*, us.*, cp0) that CastChart() does;
+// they are called inside CastChart()'s cooked-ciCore window, after positions
+// are computed and before the final sort and house assignment.
+
+
+// Apply solar arc or mixed progression offsets to planet and house positions.
+// This is the block that was inline in CastChart() under
+// "if (us.fProgress && us.nProgress != ptCast)".
+
+static void ComputeChartProgressions()
+{
+  real r, r2;
+  int i, k;
+
+  // Compute true arc based on planet movement, or a fixed rate offset.
+#ifdef SWISS
+  if (us.objProgArc >= 0) {
+    FSwissPlanet(us.objProgArc, JulianDayFromTime(is.Tp), us.objCenter,
+      &r, &r2, &r2, &r2, &r2, &r2);
+    r = Mod(r + is.rSid);
+    r2 = (us.nProgress == ptSolarArc ? MinDifference(planet[us.objProgArc],
+      r) : MinDifference(r, planet[us.objProgArc]));
+    r = r2 / (us.rProgDay / rDayInYear);
+  } else
+#endif
+  {
+    r2 = JulianDayFromTime(us.nProgress == ptSolarArc ? is.T : is.Tp);
+    r = (is.JDp - r2 - 0.5) / us.rProgDay;
+  }
+#ifdef EXPRESS
+  // Adjust progression arc with AstroExpression.
+  if (!us.fExpOff && FSzSet(us.szExpProg0)) {
+    ExpSetR(iLetterX, is.JDp);
+    ExpSetR(iLetterY, r2);
+    ExpSetR(iLetterZ, r);
+    ParseExpression(us.szExpProg0);
+    r = RExpGet(iLetterZ);
+  }
+#endif
+  // Full solar arc progressions apply offset to all planets.
+  if (us.nProgress == ptSolarArc) {
+    for (i = 0; i <= is.nObj; i++) {
+      if (i == oFor)
+        i = cuspHi+1;    // Skip over house cusp objects handled below.
+      planet[i] = Mod(planet[i] + r);
+    }
+  }
+  // Mixed solar arc progressions only apply offset to house cusps.
+  r /= us.rProgCusp;
+  for (i = oFor; i <= cuspHi; i++)
+    planet[i] = Mod(planet[i] + r);
+  for (i = 1; i <= cSign; i++)
+    chouse[i] = Mod(chouse[i] + r);
+#ifdef SWISS
+  // May want to recalculate cusps based on the new position of the MC.
+  if (us.fProgRAMC) {
+    k = us.fGeodetic; us.fGeodetic = fTrue;
+    r = Tropical(planet[oMC]); r2 = 0.0;
+    EclToEqu(&r, &r2);
+    r = Untropical(r);
+    SwissHouse(us.nProgress == ptSolarArc ? is.T : is.Tp,
+      rDegMax - r, AA, us.nHouseSystem, &r, &r, &r, &r, &r, &r, &r, &r);
+    us.fGeodetic = k;
+    for (i = 1; i <= cSign; i++)
+      planet[cuspLo-1 + i] = chouse[i];
+  }
+#endif
+}
+
+
+// If -x harmonic chart in effect, then multiply all planet positions.
+
+static void ApplyHarmonicChart()
+{
+  int i;
+
+  if (us.rHarmonic != 1.0)
+    for (i = 0; i <= is.nObj; i++)
+      planet[i] = Mod(planet[i] * us.rHarmonic);
+}
+
+
+// If -Y1 chart rotation in effect, then rotate the planets accordingly.
+
+static void ApplyChartRotation()
+{
+  real r;
+  int i, k;
+
+  if (us.objRot1 != us.objRot2 || us.fObjRotWhole) {
+    r = planet[us.objRot2];
+    if (us.fObjRotWhole)
+      r = (real)((SFromZ(r)-1)*30);
+    r -= planet[us.objRot1];
+    k = Max(is.nObj, o12h);
+    for (i = 0; i <= k; i++)
+      planet[i] = Mod(planet[i] + r);
+  }
+}
+
+
+// Check to see if are -F forcing any objects to be particular values.
+
+static void ApplyForcedObjects()
+{
+  int i, k, k2;
+
+  for (i = 0; i <= is.nObj; i++)
+    if (!FForceNone(force[i])) {
+      if (FForcePos(force[i])) {
+        // Force to a specific zodiac position.
+        planet[i] = RForcePos(force[i]);
+        planetalt[i] = ret[i] = retalt[i] = retlen[i] = 0.0;
+      } else {
+        // Force to a midpoint of two other positions.
+        k = ObjForceMid1(force[i]); k2 = ObjForceMid2(force[i]);
+        planet[i] = Midpoint(planet[k], planet[k2]);
+        planetalt[i] = (planetalt[k] + planetalt[k2]) / 2.0;
+        ret[i] = (ret[k] + ret[k2]) / 2.0;
+        retalt[i] = (retalt[k] + retalt[k2]) / 2.0;
+        retlen[i] = (retlen[k] + retlen[k2]) / 2.0;
+      }
+    }
+}
+
+
+// If -1 or -2 solar chart in effect, then rotate the houses accordingly.
+
+static void ApplySolarChartHouses()
+{
+  real r;
+  int i;
+
+  if (us.objOnAsc) {
+    r = planet[NAbs(us.objOnAsc)-1];
+    if (us.fSolarWhole)
+      r = ZFromS(SFromZ(r));
+    r -= (us.objOnAsc > 0 ? is.Asc : is.MC);
+    for (i = 1; i <= cSign; i++)
+      chouse[i] = Mod(chouse[i] + r + rSmall);
+  }
+}
+
+
+// If -f domal chart switch in effect, switch planet and house positions.
+
+static void ApplyDomalFlip()
+{
+  real housetemp[cSign+1];
+  int i, k;
+
+  if (us.fFlip) {
+    ComputeInHouses();
+    for (i = 0; i <= is.nObj; i++) {
+      k = inhouse[i];
+      inhouse[i] = SFromZ(planet[i]);
+      planet[i] = ZFromS(k)+MinDistance(chouse[k], planet[i]) /
+        MinDistance(chouse[k], chouse[Mod12(k+1)])*30.0;
+    }
+    for (i = 1; i <= cSign; i++) {
+      k = NHousePlaceIn2D(ZFromS(i));
+      housetemp[i] = ZFromS(k)+MinDistance(chouse[k], ZFromS(i)) /
+        MinDistance(chouse[k], chouse[Mod12(k+1)])*30.0;
+    }
+    for (i = 1; i <= cSign; i++)
+      chouse[i] = housetemp[i];
+  }
+}
+
+
+// If -3 decan, -4 dwad, or -9 navamsa chart switch in effect, edit planet
+// positions accordingly.
+
+static void ApplyDecanDwadNavamsa()
+{
+  int i, k;
+
+  if (us.fDecan)
+    for (i = 0; i <= is.nObj; i++)
+      planet[i] = Decan(planet[i]);
+
+  if (us.nDwad > 0)
+    for (k = 0; k < us.nDwad; k++)
+      for (i = 0; i <= is.nObj; i++)
+        planet[i] = Dwad(planet[i]);
+
+  if (us.fNavamsa)
+    for (i = 0; i <= is.nObj; i++)
+      planet[i] = Navamsa(planet[i]);
+}
+
+
 // This is probably the main routine in all of Astrolog. It generates a chart,
 // calculating the positions of all the celestial bodies and house cusps,
 // based on the current chart information, and saves them for use by any of
@@ -1283,8 +1477,8 @@ void ComputeEphem(real t)
 
 real CastChart(int nContext)
 {
-  real housetemp[cSign+1], r, r2;
-  int i, k, k2;
+  real r;
+  int i, k;
 
   is.nContext = nContext;
 #ifdef EXPRESS
@@ -1481,150 +1675,16 @@ real CastChart(int nContext)
     }
 
   // Now, may have to modify the base positions calculated above based on what
-  // type of chart is being generated. To begin with: Solar arc progressions
-  // apply an offset to planets and/or houses.
+  // type of chart is being generated.
 
-  if (us.fProgress && us.nProgress != ptCast) {
-    // Compute true arc based on planet movement, or a fixed rate offset.
-#ifdef SWISS
-    if (us.objProgArc >= 0) {
-      FSwissPlanet(us.objProgArc, JulianDayFromTime(is.Tp), us.objCenter,
-        &r, &r2, &r2, &r2, &r2, &r2);
-      r = Mod(r + is.rSid);
-      r2 = (us.nProgress == ptSolarArc ? MinDifference(planet[us.objProgArc],
-        r) : MinDifference(r, planet[us.objProgArc]));
-      r = r2 / (us.rProgDay / rDayInYear);
-    } else
-#endif
-    {
-      r2 = JulianDayFromTime(us.nProgress == ptSolarArc ? is.T : is.Tp);
-      r = (is.JDp - r2 - 0.5) / us.rProgDay;
-    }
-#ifdef EXPRESS
-    // Adjust progression arc with AstroExpression.
-    if (!us.fExpOff && FSzSet(us.szExpProg0)) {
-      ExpSetR(iLetterX, is.JDp);
-      ExpSetR(iLetterY, r2);
-      ExpSetR(iLetterZ, r);
-      ParseExpression(us.szExpProg0);
-      r = RExpGet(iLetterZ);
-    }
-#endif
-    // Full solar arc progressions apply offset to all planets.
-    if (us.nProgress == ptSolarArc) {
-      for (i = 0; i <= is.nObj; i++) {
-        if (i == oFor)
-          i = cuspHi+1;    // Skip over house cusp objects handled below.
-        planet[i] = Mod(planet[i] + r);
-      }
-    }
-    // Mixed solar arc progressions only apply offset to house cusps.
-    r /= us.rProgCusp;
-    for (i = oFor; i <= cuspHi; i++)
-      planet[i] = Mod(planet[i] + r);
-    for (i = 1; i <= cSign; i++)
-      chouse[i] = Mod(chouse[i] + r);
-#ifdef SWISS
-    // May want to recalculate cusps based on the new position of the MC.
-    if (us.fProgRAMC) {
-      k = us.fGeodetic; us.fGeodetic = fTrue;
-      r = Tropical(planet[oMC]); r2 = 0.0;
-      EclToEqu(&r, &r2);
-      r = Untropical(r);
-      SwissHouse(us.nProgress == ptSolarArc ? is.T : is.Tp,
-        rDegMax - r, AA, us.nHouseSystem, &r, &r, &r, &r, &r, &r, &r, &r);
-      us.fGeodetic = k;
-      for (i = 1; i <= cSign; i++)
-        planet[cuspLo-1 + i] = chouse[i];
-    }
-#endif
-  }
-
-  // If -x harmonic chart in effect, then multiply all planet positions.
-
-  if (us.rHarmonic != 1.0)
-    for (i = 0; i <= is.nObj; i++)
-      planet[i] = Mod(planet[i] * us.rHarmonic);
-
-  // If -Y1 chart rotation in effect, then rotate the planets accordingly.
-
-  if (us.objRot1 != us.objRot2 || us.fObjRotWhole) {
-    r = planet[us.objRot2];
-    if (us.fObjRotWhole)
-      r = (real)((SFromZ(r)-1)*30);
-    r -= planet[us.objRot1];
-    k = Max(is.nObj, o12h);
-    for (i = 0; i <= k; i++)
-      planet[i] = Mod(planet[i] + r);
-  }
-
-  // Check to see if are -F forcing any objects to be particular values.
-
-  for (i = 0; i <= is.nObj; i++)
-    if (!FForceNone(force[i])) {
-      if (FForcePos(force[i])) {
-        // Force to a specific zodiac position.
-        planet[i] = RForcePos(force[i]);
-        planetalt[i] = ret[i] = retalt[i] = retlen[i] = 0.0;
-      } else {
-        // Force to a midpoint of two other positions.
-        k = ObjForceMid1(force[i]); k2 = ObjForceMid2(force[i]);
-        planet[i] = Midpoint(planet[k], planet[k2]);
-        planetalt[i] = (planetalt[k] + planetalt[k2]) / 2.0;
-        ret[i] = (ret[k] + ret[k2]) / 2.0;
-        retalt[i] = (retalt[k] + retalt[k2]) / 2.0;
-        retlen[i] = (retlen[k] + retlen[k2]) / 2.0;
-      }
-    }
-
-  // If -1 or -2 solar chart in effect, then rotate the houses accordingly.
-
-  if (us.objOnAsc) {
-    r = planet[NAbs(us.objOnAsc)-1];
-    if (us.fSolarWhole)
-      r = ZFromS(SFromZ(r));
-    r -= (us.objOnAsc > 0 ? is.Asc : is.MC);
-    for (i = 1; i <= cSign; i++)
-      chouse[i] = Mod(chouse[i] + r + rSmall);
-  }
-
-  // If -f domal chart switch in effect, switch planet and house positions.
-
-  if (us.fFlip) {
-    ComputeInHouses();
-    for (i = 0; i <= is.nObj; i++) {
-      k = inhouse[i];
-      inhouse[i] = SFromZ(planet[i]);
-      planet[i] = ZFromS(k)+MinDistance(chouse[k], planet[i]) /
-        MinDistance(chouse[k], chouse[Mod12(k+1)])*30.0;
-    }
-    for (i = 1; i <= cSign; i++) {
-      k = NHousePlaceIn2D(ZFromS(i));
-      housetemp[i] = ZFromS(k)+MinDistance(chouse[k], ZFromS(i)) /
-        MinDistance(chouse[k], chouse[Mod12(k+1)])*30.0;
-    }
-    for (i = 1; i <= cSign; i++)
-      chouse[i] = housetemp[i];
-  }
-
-  // If -3 decan chart switch in effect, edit planet positions accordingly.
-
-  if (us.fDecan)
-    for (i = 0; i <= is.nObj; i++)
-      planet[i] = Decan(planet[i]);
-
-  // If -4 dwad chart switch in effect, edit planet positions accordingly.
-
-  if (us.nDwad > 0)
-    for (k = 0; k < us.nDwad; k++)
-      for (i = 0; i <= is.nObj; i++)
-        planet[i] = Dwad(planet[i]);
-
-  // If -9 navamsa chart switch in effect, edit planet positions accordingly.
-
-  if (us.fNavamsa)
-    for (i = 0; i <= is.nObj; i++)
-      planet[i] = Navamsa(planet[i]);
+  if (us.fProgress && us.nProgress != ptCast)
+    ComputeChartProgressions();
+  ApplyHarmonicChart();
+  ApplyChartRotation();
+  ApplyForcedObjects();
+  ApplySolarChartHouses();
+  ApplyDomalFlip();
+  ApplyDecanDwadNavamsa();
 
   // Sort planet and star positions now that all positions are finalized.
 
@@ -3979,14 +4039,67 @@ LNext:
 }
 
 
+// Sort the ES array is.rgesSort[0..ces-1] by the star sort mode in
+// us.nStarSort. fStar means use pchBest for name comparison (stars, whose
+// display name may be the description rather than the catalog name) and
+// include the 'b' (brightness) case; asteroids use sz for names and have
+// no brightness. The 'z', 'l', and 'v' cases are identical for both.
+//
+// The two callers — SwissComputeStarSort and SwissComputeAsteroidSort —
+// had the same insertion sort with this dispatch inlined; this is the one
+// copy.
+
+static void SortESArray(int ces, flag fStar)
+{
+  ES es;
+  int i, j;
+
+  for (i = 1; i < ces; i++) {
+    j = i-1;
+
+    // Compare names for -Un switch.
+    if (us.nStarSort == 'n') while (j >= 0 && NCompareSz(
+      is.rgesSort[j].sz + (fStar ? (time_t)is.rgesSort[j].pchBest : 0),
+      is.rgesSort[j+1].sz + (fStar ? (time_t)is.rgesSort[j+1].pchBest : 0)) > 0) {
+      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
+      j--;
+
+    // Compare brightnesses for -Ub switch (stars only).
+    } else if (fStar && us.nStarSort == 'b') while (j >= 0 &&
+      is.rgesSort[j].mag > is.rgesSort[j+1].mag) {
+      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
+      j--;
+
+    // Compare zodiac locations for -Uz switch.
+    } else if (us.nStarSort == 'z') while (j >= 0 &&
+      is.rgesSort[j].lon > is.rgesSort[j+1].lon) {
+      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
+      j--;
+
+    // Compare latitudes for -Ul switch.
+    } else if (us.nStarSort == 'l') while (j >= 0 &&
+      is.rgesSort[j].lat > is.rgesSort[j+1].lat) {
+      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
+      j--;
+
+    // Compare velocities for -Uv switch.
+    } else if (us.nStarSort == 'v') while (j >= 0 &&
+      is.rgesSort[j].dir > is.rgesSort[j+1].dir) {
+      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
+      j--;
+    }
+  }
+}
+
+
 // Like SwissComputeStar(), but potentially apply the star sorting method to
 // the order stars are returned.
 
 flag SwissComputeStarSort(real jd, ES *pes)
 {
   static int ces = 0, istar = 0;
-  int i, j;
-  ES es, *pes2;
+  int i;
+  ES *pes2;
 
   // Simple cases when not sorting or when sorted list has been created.
   if (us.nStarSort <= 0)
@@ -4023,41 +4136,7 @@ flag SwissComputeStarSort(real jd, ES *pes)
       pes2->pchDes = (char *)(pes2->pchDes - pes2->sz);
     pes2->pchBest = (char *)(pes2->pchBest - pes2->sz);
   }
-  for (i = 1; i < ces; i++) {
-    j = i-1;
-
-    // Compare star names for -Un switch.
-    if (us.nStarSort == 'n') while (j >= 0 && NCompareSz(
-      is.rgesSort[j].sz + (time_t)is.rgesSort[j].pchBest,
-      is.rgesSort[j+1].sz + (time_t)is.rgesSort[j+1].pchBest) > 0) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-
-    // Compare star brightnesses for -Ub switch.
-    } else if (us.nStarSort == 'b') while (j >= 0 &&
-      is.rgesSort[j].mag > is.rgesSort[j+1].mag) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-
-    // Compare star zodiac locations for -Uz switch.
-    } else if (us.nStarSort == 'z') while (j >= 0 &&
-      is.rgesSort[j].lon > is.rgesSort[j+1].lon) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-
-    // Compare star latitudes for -Ul switch.
-    } else if (us.nStarSort == 'l') while (j >= 0 &&
-      is.rgesSort[j].lat > is.rgesSort[j+1].lat) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-
-    // Compare star velocities for -Uv switch.
-    } else if (us.nStarSort == 'v') while (j >= 0 &&
-      is.rgesSort[j].dir > is.rgesSort[j+1].dir) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-    }
-  }
+  SortESArray(ces, fTrue);
   for (i = 0; i < ces; i++) {
     pes2 = &is.rgesSort[i];
     pes2->pchNam = pes2->sz + (time_t)(pes2->pchNam);
@@ -4245,8 +4324,7 @@ LNext:
 flag SwissComputeAsteroidSort(real jd, ES *pes)
 {
   static int ces = 0, iast = 0;
-  int i, j;
-  ES es;
+  int i;
 
   // Simple cases when not sorting or when sorted list has been created.
   if (us.nStarSort <= 0)
@@ -4275,34 +4353,7 @@ flag SwissComputeAsteroidSort(real jd, ES *pes)
   ces = i;
   iast = 0;
 
-  for (i = 1; i < ces; i++) {
-    j = i-1;
-
-    // Compare asteroid names for -Un switch.
-    if (us.nStarSort == 'n') while (j >= 0 && NCompareSz(
-      is.rgesSort[j].sz, is.rgesSort[j+1].sz) > 0) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-
-    // Compare asteroid zodiac locations for -Uz switch.
-    } else if (us.nStarSort == 'z') while (j >= 0 &&
-      is.rgesSort[j].lon > is.rgesSort[j+1].lon) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-
-    // Compare asteroid latitudes for -Ul switch.
-    } else if (us.nStarSort == 'l') while (j >= 0 &&
-      is.rgesSort[j].lat > is.rgesSort[j+1].lat) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-
-    // Compare asteroid velocities for -Uv switch.
-    } else if (us.nStarSort == 'v') while (j >= 0 &&
-      is.rgesSort[j].dir > is.rgesSort[j+1].dir) {
-      SwapTemp(is.rgesSort[j], is.rgesSort[j+1], es);
-      j--;
-    }
-  }
+  SortESArray(ces, fFalse);
   return fTrue;
 }
 #endif
