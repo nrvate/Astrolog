@@ -9928,6 +9928,40 @@ are the more useful half to read before starting something new.
     only looked unmatched because the detector reads one `#if` at a time:
     the Qt branch sits immediately above it and is identical.
 
+236. **Two more help lines documented to Windows only.** `DisplayKeysX()`
+    described the right button's drag and context menu, the left button's
+    scribble, and `Press 'B'` to resize the chart to the window -- all
+    behind `#ifdef WIN`/`WINANY`. This port does all three: the mouse
+    handling is a line-for-line port of `wdriver.cpp:836-1030`, and
+    Shift+B is in the hotkey table. Same class as item 226, found by the
+    same sweep -- taught, for this pass, that a `WIN` block is matched
+    when a `QT` branch sits within eight lines either side of it, which is
+    how the `AnsiColor()` pair above is written. That took the list from
+    93 blocks to 70 and made the remainder worth reading.
+
+    `Press 'B'` is Shift+B, and that is not a guess: an accelerator is
+    case sensitive in this program, `astrolog.rc:3220` binds `"B"` with
+    `SHIFT` to `cmdSizeChartToWindow`, and `rghotkeyQt` spells it
+    `Shift+B`. X11 keeps its own `'B'` line -- there it saves the window
+    to the root background, a different command with its own line already.
+
+    Verified with `strings` on all three builds: the Qt binary gained both
+    lines, the Windows one still has them, the console build has neither.
+    The assertion checks that the commands those lines describe exist
+    here, since the help itself is a run of `PrintS()` calls with no state
+    to read back -- and it reads the **hotkey** table rather than the
+    accelerator TEXT table, which carries the resource's own `"B"`
+    verbatim and would have failed for the wrong reason. It did, on the
+    first draft.
+
+    **One candidate from the same list was dropped rather than fixed.**
+    `FPrintTables()` returns early in graphics mode on Windows, and the
+    reasoning that this port would therefore print a table and skip
+    drawing the chart did not survive contact: `./astrolog-qt -H` opens
+    its window and draws normally. No measured defect, so no change; the
+    hypothesis is recorded so the next sweep does not spend the same hour
+    on it.
+
 
 ## Features this fork adds to both builds
 

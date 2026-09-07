@@ -3362,6 +3362,50 @@ static void TestGraphicsSizeQt()
 // more rows than fit, scrolling to the end has to show something
 // different from the top.
 
+// The two key and mouse help lines this build implements and did not
+// document. Same class as the "-W" switch help: "-H documents what a
+// build IMPLEMENTS, not what it accepts", and nothing checked it.
+//
+// DisplayKeysX() described the right button's drag and context menu, the
+// left button's scribble, and Shift+B ("Press 'B'" -- an accelerator is
+// case sensitive here) to Windows only. This port does all three: the
+// mouse handling is a line-for-line port of wdriver.cpp's, and Shift+B is
+// in the hotkey table.
+//
+// Asserted through the menu item rather than the help text, because the
+// help is a run of PrintS() calls with no state to read back: what can be
+// checked here is that the command the line describes really exists.
+
+static void TestKeyHelpQt()
+{
+  Group("Key help lines");
+
+  Check(PaFindActionTestQt("Si&ze Chart to Window") != NULL,
+    "\"Size Chart to Window\" is a real menu item, so the 'B' line "
+    "applies to this build");
+  {
+    // rghotkeyQt, not the accelerator TEXT table: the resource writes the
+    // column as "\tB", because a capital letter is Astrolog's own
+    // spelling of Shift, and the text table carries that verbatim. What
+    // actually binds the key is the hotkey table, and there it is spelt
+    // out.
+    CONST char *szKey, *szAction, *szFound = NULL;
+    int i, chotkey = CHotkeyTestQt();
+
+    for (i = 0; i < chotkey; i++) {
+      HotkeyTestQt(i, &szKey, &szAction);
+      if (FEqSz(szAction, "Si&ze Chart to Window"))
+        szFound = szKey;
+    }
+    Check(szFound != NULL && FEqSz(szFound, "Shift+B"),
+      "on Shift+B, which is what \"Press 'B'\" means (\"%s\")",
+      SzSet(szFound));
+  }
+  Check(PaFindActionTestQt("&Redraw Screen") != NULL,
+    "the chart window is real, so the mouse lines apply too");
+}
+
+
 static void TestChartScrollQt()
 {
   int nModeSav = gi.nMode, xSav = gs.xWin, ySav = gs.yWin;
@@ -11098,6 +11142,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"font-pack",            TestFontPackQt},
   {"combo-pick",           TestComboPickQt},
   {"screen-colors",        TestScreenColorsQt},
+  {"key-help",             TestKeyHelpQt},
   {"chart-scroll",         TestChartScrollQt},
   {"notice",               TestNoticeQt},
   {"orb-grid",             TestOrbGridQt},

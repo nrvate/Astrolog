@@ -1737,7 +1737,12 @@ void DisplayKeysX(void)
 #ifdef X11
   PrintS(" Press 'B' to save current window contents to root background.");
 #endif
-#ifdef WIN
+#if defined(WIN) || defined(QT)
+  // A capital letter here is Shift plus that letter -- Astrolog's
+  // accelerators are case sensitive -- and both GUI builds bind Shift+B
+  // to "Size Chart to Window" (astrolog.rc:3220 and the Qt hotkey table).
+  // X11 keeps its own 'B', which saves the window to the root background,
+  // and is a different command with its own line above.
   PrintS(" Press 'B' to resize chart display to full size of window.");
 #endif
   PrintS(" Press 'Q' to resize chart display to a square.");
@@ -1788,7 +1793,12 @@ void DisplayKeysX(void)
   PrintS(" Middle mouse button: Print coordinates of pointer on world map.");
   PrintS(" Right  mouse button: Close window and exit the program.");
 #endif
-#ifdef WINANY
+#if defined(WINANY) || defined(QT)
+  // Both GUI builds do all of this, and the Qt one was ported from the
+  // Win32 handler line for line -- right drag to rotate a map or globe,
+  // Alt+click a world map to move the chart there, scribble with the left
+  // button, and the context menu on the right (wdriver.cpp:836-1030,
+  // qtdriver.cpp's canvas). It was documented to only one of them.
   PrintL();
   PrintS(" Left  mouse button: Scribble lines over chart in window.");
   PrintS(" Right mouse button: Drag maps or show chart's context menu.");
