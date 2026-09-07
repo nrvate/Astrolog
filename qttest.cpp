@@ -4445,6 +4445,107 @@ static void TestScreenOptionsQt()
 }
 
 
+// The three chart EXPORT formats -- Astrological Exchange (.aaf),
+// Quick*Chart (.qck) and iCalendar (.ics) -- written back out and read in
+// again. Nothing tested these writers at all, and all three are one menu
+// item each in the File menu.
+//
+// They read ciMain, not ciCore: "Mon"/"Day"/"Yea"/"Tim" are ciMain
+// members (extern.h:96) and FOutputAAFFile() names ciMain.nam directly.
+// The first two drafts of this set ciCore alone and compared against a
+// file holding whatever ciMain still had -- the startup chart -- which
+// looked exactly like the writers ignoring their input.
+//
+// iCalendar is lossy by construction and the expectations say so rather
+// than working around it: the format stores one UTC timestamp, so the
+// zone and the daylight flag come back zero, the time comes back shifted
+// to UTC, and the location comes back as the DEFAULT because an .ics
+// event carries no coordinates.
+static void TestExportRoundTripQt()
+{
+  static CONST struct {
+    flag (*pfn)(void);
+    CONST char *szExt, *szName;
+    flag fKeepsZone;             // .ics does not.
+  } rgt[] = {
+    {FOutputAAFFile,      "aaf", "Astrological Exchange", fTrue},
+    {FOutputQuickFile,    "qck", "Quick*Chart",           fTrue},
+    {FOutputCalendarFile, "ics", "iCalendar",             fFalse} };
+  char szPath[cchSzMax];
+  char *szFileOutSav = is.szFileOut;
+  int nWriteFormatSav = us.nWriteFormat, cciSav = is.cci, i;
+  flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
+  CI ciWant, ciSav = ciCore, ciMainSav = ciMain;
+
+  Group("Chart export formats round trip");
+  SetNoPopupQt(fTrue);
+  us.fNoWrite = fFalse;
+  ClearB((pbyte)&ciWant, sizeof(CI));
+  ciWant.mon = 3; ciWant.day = 14; ciWant.yea = 1959;
+  ciWant.tim = 15.5; ciWant.dst = 1.0; ciWant.zon = 5.0;
+  ciWant.lon = 71.0 + 4.0/60.0; ciWant.lat = 42.0 + 21.0/60.0;
+  ciWant.nam = SzClone("Probe Name");
+  ciWant.loc = SzClone("Probe City");
+
+  for (i = 0; i < (int)(sizeof(rgt)/sizeof(rgt[0])); i++) {
+    CI ciBack;
+    flag fW, fR;
+
+    ciCore = ciMain = ciWant;
+    is.cci = 0;
+    FAppendCIList(&ciWant);
+    sprintf2(S(szPath), "%s/astrolog-qt-roundtrip-%d.%s",
+      QDir::tempPath().toLocal8Bit().constData(),
+      (int)QCoreApplication::applicationPid(), rgt[i].szExt);
+    FCloneSz(szPath, &is.szFileOut);
+    us.nWriteFormat = 0;
+    fW = rgt[i].pfn();
+    is.szFileOut = szFileOutSav;
+    us.nWriteFormat = nWriteFormatSav;
+
+    is.cci = 0;
+    ClearB((pbyte)&ciCore, sizeof(CI));
+    fR = FInputData(szPath);
+    ciBack = ciCore;
+    QFile::remove(QString::fromLocal8Bit(szPath));
+
+    Check(fW && fR, "%s writes a file Astrolog can read back",
+      rgt[i].szName);
+    Check(ciBack.mon == ciWant.mon && ciBack.day == ciWant.day &&
+      ciBack.yea == ciWant.yea,
+      "and the date survives it (%d/%d/%d)", ciBack.mon, ciBack.day,
+      ciBack.yea);
+    // The name survives every format. The location does too, except that
+    // the AAF writer appends its own empty state field.
+    Check(FSzSet(ciBack.nam) && FEqSz(ciBack.nam, ciWant.nam),
+      "and the name (\"%s\")", SzSet(ciBack.nam));
+    Check(FSzSet(ciBack.loc) && FMatchSz(ciWant.loc, ciBack.loc),
+      "and the location (\"%s\")", SzSet(ciBack.loc));
+    if (rgt[i].fKeepsZone) {
+      Check(ciBack.tim == ciWant.tim && ciBack.dst == ciWant.dst &&
+        ciBack.zon == ciWant.zon,
+        "and the time with its zone (%.4f, dst %.1f, zone %.1f)",
+        ciBack.tim, ciBack.dst, ciBack.zon);
+      Check(RAbs(ciBack.lon - ciWant.lon) < 0.02 &&
+        RAbs(ciBack.lat - ciWant.lat) < 0.02,
+        "and the coordinates (%.4f, %.4f)", ciBack.lon, ciBack.lat);
+    } else {
+      // Not a workaround: an .ics event is one UTC timestamp and no
+      // place, so this is the whole of what the format can carry.
+      Check(ciBack.zon == 0.0 && ciBack.dst == 0.0 &&
+        RAbs(ciBack.tim - (ciWant.tim + ciWant.zon - ciWant.dst)) < 0.01,
+        "and the time comes back in UTC, which is all an .ics event "
+        "carries (%.4f, dst %.1f, zone %.1f)", ciBack.tim, ciBack.dst,
+        ciBack.zon);
+    }
+  }
+
+  ciCore = ciSav; ciMain = ciMainSav; is.cci = cciSav;
+  us.fNoWrite = fNoWriteSav;
+  SetNoPopupQt(fPopupSav);
+}
+
+
 static void TestJetTrailQt()
 {
   flag fTrailSav = gs.fJetTrail, fGraphicsSav = us.fGraphics;
@@ -11933,6 +12034,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"text-extent",          TestTextExtentQt},
   {"jet-trail",            TestJetTrailQt},
   {"screen-options",       TestScreenOptionsQt},
+  {"export-roundtrip",     TestExportRoundTripQt},
   {"credit-colors",        TestCreditColorsQt},
   {"transit-mode",         TestTransitModeQt},
   {"menu-actions",         TestAllMenuActionsQt},

@@ -10578,6 +10578,45 @@ are the more useful half to read before starting something new.
       is, it is not the port's.
 
 
+249. **The three chart export formats, round tripped.** Astrological
+    Exchange (`.aaf`), Quick*Chart (`.qck`) and iCalendar (`.ics`) are one
+    File menu item each, and **nothing tested those writers at all** --
+    `image_audit.py` validates the picture formats and there was no
+    equivalent for these. New group `export-roundtrip`: write each, read
+    it back with `FInputData()`, and require the chart to come back.
+
+    No bug found, which is worth saying plainly. What the group is really
+    worth is the two things it took to write it, both recorded because
+    each looked like a bug for a while:
+
+    * **The writers read `ciMain`, not `ciCore`.** `Mon`/`Day`/`Yea`/`Tim`
+      are `ciMain` members (`extern.h:96`) and `FOutputAAFFile()` names
+      `ciMain.nam` directly. The first two drafts set `ciCore` alone and
+      compared against a file holding whatever `ciMain` still had -- the
+      startup chart -- which reads exactly like the writers ignoring their
+      input. In the GUI the two agree, because every recast assigns one to
+      the other; in a probe they do not.
+    * **`FInputData()` on these formats APPENDS to the chart list**, and
+      sets `ciCore` from the last record read. So a loop over the three
+      formats that does not reset `is.cci` writes each file with the
+      previous format's read-back still in the list, and compares against
+      the wrong record. The first draft's `.qck` file had two rows in it
+      for that reason.
+
+    The expectations say what each format can carry rather than working
+    around what it cannot. `.aaf` and `.qck` return the date, time, zone,
+    daylight flag, coordinates, name and location. `.ics` is one UTC
+    timestamp and no place, so the time comes back shifted to UTC with the
+    zone and daylight flag zero and the location defaulted -- asserted in
+    that shape, so a writer that stopped converting to UTC would fail.
+    And `.aaf` returns the location with a trailing `, *`, its own empty
+    state field, which is why that comparison is `FMatchSz` and not
+    `FEqSz`.
+
+    Falsified by adding one to the day the Quick*Chart writer emits, which
+    fails at "3/15/1959".
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows
