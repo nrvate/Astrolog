@@ -8057,6 +8057,64 @@ are the more useful half to read before starting something new.
     width/height attributes at all. Ask what the measurement cannot see,
     every time.
 
+189. **The time zone engine was right and nothing said so.** A review of
+    the atlas and timezone surface, driven from the console build against
+    facts about the world rather than against a previous build. Six
+    cities across five continents came back at the right coordinates, and
+    the DST engine was correct on every date tried -- including three
+    that a naive implementation gets wrong:
+
+    * 15 March **2006** is standard time in Seattle and 15 March **2007**
+      is daylight time, because the United States moved the start from
+      the first Sunday in April to the second Sunday in March effective
+      2007.
+    * 15 January **1974** is *daylight* time. The Emergency Daylight
+      Saving Time Energy Conservation Act put the country on year-round
+      DST from 6 January that year.
+    * 7 March 2020 standard, 8 March 2020 daylight -- the transition day
+      itself.
+
+    Sydney is on daylight time in January and standard in July; Mumbai,
+    Kathmandu and Adelaide sit on half and quarter hour offsets. All
+    correct. The chart list was checked in the same pass -- it grows by
+    500 and copies properly, round-trips byte-identically through `-ol`,
+    and all six `-5` sorts order correctly, the AstroExpression one
+    included.
+
+    **What was missing is that none of it was tested.** There was no
+    assertion anywhere about a coordinate or a DST rule, and this is a
+    surface where correctness is checkable from *outside the repository*
+    -- the answers are facts about the world. That is the same argument
+    work log item 141 made for the ephemeris numbers, and the same kind
+    of net: the `atlas-zone` group, six cities within a tenth of a degree
+    and thirteen zone rules exactly.
+
+    Two notes on how it is written, both learned by getting them wrong
+    first. Coordinates are compared **numerically with a tolerance**, not
+    as the string `SzLocation()` produces: the string form pads longitude
+    to three columns, and two of the six expectations failed on a leading
+    space. And a tenth of a degree is about 11 km -- inside a metro area,
+    nowhere near another city -- so a GeoNames refresh does not break it
+    while a wrong city does. The signed value is compared rather than the
+    absolute one, so a longitude sign flip fails here instead of quietly
+    relocating every chart to the opposite hemisphere.
+
+    **The table falsifies itself**, which matters because every assertion
+    in it is an equality: it holds both answers for the same city on
+    different dates and four different zone offsets, so no constant reply
+    passes -- not "always standard", not "always daylight", not "always a
+    whole hour". The coordinate half was falsified in the writing, three
+    of six expectations wrong on the first run and all three named.
+
+    One thing that looked like a bug and was not: `-5s` left the chart
+    list in its original order. That sort is by AstroExpression
+    (`us.szExpListS`), and with none set the sort key is the index, so
+    the order is unchanged by design -- `~5s "Lat"` orders by latitude
+    and `~5s "Sub 0 Lat"` reverses it. The first probe used `@Lat`, which
+    is not the syntax, and the engine reports real errors clearly
+    ("Unknown function: 'NoSuchFunction'") but had nothing to say about
+    that one.
+
 
 ## Features this fork adds to both builds
 

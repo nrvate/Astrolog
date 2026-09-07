@@ -6771,6 +6771,163 @@ static void TestAtlasSinkQt()
 }
 
 
+/*
+******************************************************************************
+** The atlas and the time zone engine, against the world.
+******************************************************************************
+*/
+
+// Every other net in this suite is differential or structural: it says a
+// number did not change, or that a file is well formed. This one says a
+// number is RIGHT, and it can, because the answers come from outside the
+// program entirely -- the coordinates of six cities and the dates the
+// United States and Australia moved their clocks. Those are facts about
+// the world, not about this repository, so a regression in the atlas
+// data or the timezone rules shows up here as a wrong answer rather than
+// as a diff somebody has to judge.
+//
+// The DST dates are chosen to be the ones a rule change moved, since a
+// naive implementation gets the ordinary cases right:
+//
+//   * 15 March 2006 is standard time in Seattle and 15 March 2007 is
+//     daylight time. The US moved the start from the first Sunday in
+//     April to the second Sunday in March, effective 2007.
+//   * 15 January 1974 is DAYLIGHT time. The Emergency Daylight Saving
+//     Time Energy Conservation Act put the whole country on year-round
+//     DST from 6 January that year.
+//   * 7 March 2020 is standard and 8 March 2020 is daylight -- the
+//     transition day itself, where an off-by-one lands.
+//   * Sydney is on daylight time in January and standard time in July,
+//     which is the sign of the whole southern hemisphere.
+//   * Mumbai, Kathmandu and Adelaide are on half and quarter hour
+//     offsets, where a zone stored as a whole number of hours breaks.
+//
+// The table falsifies itself, which matters because these are all
+// "equals" assertions: it holds both answers for the same city on
+// different dates (Seattle is standard on 15 March 2006 and daylight on
+// 15 March 2007), and four different zone offsets, so no constant reply
+// -- always standard, always daylight, always a whole hour -- passes it.
+// The coordinate half was falsified in the writing: three of the six
+// expectations were wrong on the first run and it named all three.
+//
+// Coordinates are compared as the string a user reads rather than as a
+// signed real, so the test cannot be written to agree with a sign
+// convention it got wrong.
+
+// Degrees WEST and degrees NORTH, from an atlas that is not this one.
+// Astrolog stores longitude positive west, which SzLocation() renders as
+// the "W"/"E" suffix -- so a sign flip in either field fails here rather
+// than quietly relocating every chart to the opposite hemisphere.
+//
+// A tenth of a degree is about 11 km: comfortably inside a metropolitan
+// area, and nowhere near another city. Comparing formatted strings was
+// tried first and is worse -- SzLocation() pads longitude to three
+// columns, so two of these read as failures over a leading space.
+
+typedef struct {
+  CONST char *szCity;
+  real degW, degN;
+} ATLASCITY;
+
+static CONST ATLASCITY rgatlascityQt[] = {
+  {"Seattle, WA, USA",    122.33,  47.61},
+  {"Tokyo, Japan",       -139.69,  35.69},
+  {"Sydney, Australia",  -151.21, -33.87},
+  {"Reykjavik, Iceland",   21.94,  64.15},
+  {"Quito, Ecuador",       78.52,  -0.22},
+  {"Mumbai, India",       -72.88,  19.08} };
+#define catlascityQt ((int)(sizeof(rgatlascityQt) / sizeof(ATLASCITY)))
+#define rAtlasSlopQt 0.1
+
+typedef struct {
+  CONST char *szCity;
+  int mon, day, yea;
+  real zon;                 // Hours west of UTC.
+  flag fDst;                // On daylight time that day?
+  CONST char *szWhy;
+} ATLASZONE;
+
+static CONST ATLASZONE rgatlaszoneQt[] = {
+  {"Seattle, WA, USA",     1, 15, 1990,  8.0,   fFalse, "winter"},
+  {"Seattle, WA, USA",     6, 15, 1990,  8.0,   fTrue,  "summer"},
+  {"Seattle, WA, USA",     3, 15, 2006,  8.0,   fFalse, "the old April rule"},
+  {"Seattle, WA, USA",     3, 15, 2007,  8.0,   fTrue,  "the 2007 rule change"},
+  {"Seattle, WA, USA",     1, 15, 1974,  8.0,   fTrue,  "year-round DST, 1974"},
+  {"Seattle, WA, USA",     3,  7, 2020,  8.0,   fFalse, "the day before"},
+  {"Seattle, WA, USA",     3,  8, 2020,  8.0,   fTrue,  "the transition day"},
+  {"Seattle, WA, USA",    11,  1, 2020,  8.0,   fFalse, "back to standard"},
+  {"Sydney, Australia",    1, 15, 2020, -10.0,  fTrue,  "southern summer"},
+  {"Sydney, Australia",    7, 15, 2020, -10.0,  fFalse, "southern winter"},
+  {"Mumbai, India",        6, 15, 2020,  -5.5,  fFalse, "a half hour zone"},
+  {"Kathmandu, Nepal",     6, 15, 2020,  -5.75, fFalse, "a quarter hour zone"},
+  {"Adelaide, Australia",  1, 15, 2020,  -9.5,  fTrue,  "half hour plus DST"} };
+#define catlaszoneQt ((int)(sizeof(rgatlaszoneQt) / sizeof(ATLASZONE)))
+
+// Swallow the rows the console path prints, so driving the atlas here
+// does not scribble a city listing through the suite's output.
+static void SinkAtlasRowQt(CONST char *, int) { }
+
+static void TestAtlasZoneQt()
+{
+  void (*pfnSav)(CONST char *, int) = pfnAtlasRow;
+  CI ciCoreSav = ciCore, ciMainSav = ciMain;
+  int i, iae;
+
+  Group("Atlas and time zones");
+  pfnAtlasRow = SinkAtlasRowQt;
+
+  iae = 1;
+  if (!DisplayAtlasLookup(rgatlascityQt[0].szCity, fFalse, &iae)) {
+    pfnAtlasRow = pfnSav;
+    printf("  skipped: no atlas data, so there is nothing to check\n");
+    return;
+  }
+
+  for (i = 0; i < catlascityQt; i++) {
+    iae = 1;
+    flag fFound = DisplayAtlasLookup(rgatlascityQt[i].szCity, fFalse, &iae);
+    Check(fFound, "%s is in the atlas", rgatlascityQt[i].szCity);
+    if (!fFound)
+      continue;
+    Check(RAbs(ciCore.lon - rgatlascityQt[i].degW) < rAtlasSlopQt &&
+      RAbs(ciCore.lat - rgatlascityQt[i].degN) < rAtlasSlopQt,
+      "%s is within %g degrees of %.2fW %.2fN (got %s)",
+      rgatlascityQt[i].szCity, rAtlasSlopQt, rgatlascityQt[i].degW,
+      rgatlascityQt[i].degN, SzLocation(ciCore.lon, ciCore.lat));
+  }
+
+  for (i = 0; i < catlaszoneQt; i++) {
+    CONST ATLASZONE *paz = &rgatlaszoneQt[i];
+
+    iae = 1;
+    flag fFound = DisplayAtlasLookup(paz->szCity, fFalse, &iae);
+    Check(fFound, "%s is in the atlas", paz->szCity);
+    if (!fFound)
+      continue;
+    // The date has to be set before asking, because which rule applies
+    // is the whole question.
+    ciCore.mon = paz->mon; ciCore.day = paz->day; ciCore.yea = paz->yea;
+    ciCore.tim = 12.0;
+    flag fZone = DisplayTimezoneChanges(is.rgae[iae].izn, fFalse, &ciCore);
+    Check(fZone, "%s has time zone data", paz->szCity);
+    if (!fZone)
+      continue;
+    Check(ciCore.zon == paz->zon,
+      "%s %d/%d/%d is zone %g (got %g)", paz->szCity, paz->mon, paz->day,
+      paz->yea, paz->zon, ciCore.zon);
+    Check((ciCore.dst != 0.0) == (paz->fDst != fFalse),
+      "%s %d/%d/%d is %s -- %s (got dst %g)", paz->szCity, paz->mon,
+      paz->day, paz->yea, paz->fDst ? "daylight time" : "standard time",
+      paz->szWhy, ciCore.dst);
+  }
+
+  pfnAtlasRow = pfnSav;
+  ciCore = ciCoreSav; ciMain = ciMainSav;
+  printf("  %d cities placed and %d zone rules held\n",
+    catlascityQt, catlaszoneQt);
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -7678,6 +7835,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialog-fit",           TestDialogFitQt},
   {"long-command-line",    TestLongCommandLineQt},
   {"atlas-sink",           TestAtlasSinkQt},
+  {"atlas-zone",           TestAtlasZoneQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},
