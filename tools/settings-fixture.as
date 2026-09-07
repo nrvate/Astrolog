@@ -7,6 +7,9 @@
 -n  ; chart for the current moment, so no interactive prompt blocks -od
     ; EXPECT ^-n
 
+; Before "-A", because every "-RA" ends in AdjustAspectCount() and would
+; recompute the count from the restrictions it just set.
+-RA1 4 9           ; EXPECT ^-RA1 4 9
 -A 11              ; EXPECT ^-A 11
 -c Whol            ; EXPECT ^-c Whol
 :w 4               ; EXPECT ^:w 4

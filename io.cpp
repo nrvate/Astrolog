@@ -1592,9 +1592,6 @@ flag FOutputSettings()
   sprintf2(S(sz), "%csr0    ", ChDashF(us.fEquator2)); PrintFSz();
   PrintF(
     "; Latitudes or declinations [\"_sr0\" shows lat., \"=sr0\" declin. ]\n");
-  sprintf2(S(sz), "-A %d    ", us.nAsp); PrintFSz();
-  PrintF(
-    "; Number of aspects         [Change \"5\" to desired number      ]\n");
   sprintf2(S(sz), "%c3      ", ChDashF(us.fDecan)); PrintFSz();
   PrintF(
     "; Decan positions           [\"=3\" is decans, \"_3\" is normal   ]\n");
@@ -2057,7 +2054,29 @@ flag FOutputSettings()
   for (i = 0; i < arDir; i++) PrintF(SzNumF(ignorez[i]));
   PrintF("   ; Restrict angle events: rising, zenith, setting, nadir\n-YRp ");
   PrintF(SzNumF(ignorez[arVer])); PrintF(SzNumF(ignorez[arAnt]));
-  PrintF("       ; Restrict prime vertical: vertex, antivertex\n\n\n");
+  PrintF("       ; Restrict prime vertical: vertex, antivertex\n");
+  // Which individual aspects are restricted. "-A <count>" above carries
+  // only the contiguous case, because us.nAsp is DERIVED from this array
+  // -- AdjustAspectCount() walks down from cAspect to the first
+  // unrestricted aspect -- so an aspect switched off in the Aspect
+  // Restrictions dialog with a later one left on was lost entirely.
+  // "-RA1" allows them all, and the numbers after it switch off the ones
+  // that were off. The trailing ";" ends the list of its own accord:
+  // NParseSz(";", pmAspect) is 0, and the loop stops on a zero.
+  PrintF("-RA1");
+  for (i = 1; i <= cAspect; i++)
+    if (ignorea[ASPT(i)]) {
+      sprintf2(S(sz), " %d", i); PrintFSz();
+    }
+  PrintF(" ; Restricted aspects, by number\n");
+  // And the count after them, not before: every "-RA" ends in
+  // AdjustAspectCount(), which recomputes us.nAsp from the array, so a
+  // "-A" line earlier in the file would be undone by the line above. The
+  // two agree whenever the Aspect Settings dialog set them, since it
+  // keeps them in step; when they disagree the explicit count wins, which
+  // is what it did before this line existed.
+  sprintf2(S(sz), "-A %d", us.nAsp); PrintFSz();
+  PrintF(" ; Number of aspects [Change \"5\" to desired number]\n\n\n");
 
   PrintF("; DEFAULT ASPECT ORBS:\n"
     ";  1- 5: Con Opp Squ Tri Sex\n"

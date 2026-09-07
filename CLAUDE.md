@@ -248,14 +248,19 @@ work log item 141, and items 140 and 142 for the two shared-core bugs it
 found — one before a line of it was written, one a fortify abort that had
 been hunted twice and left open.
 
-**The settings field sweep** (`settings-fields`) is the other. Every check
-before it asked about the settings somebody had thought to ask about, and
-each one found more; this one generates its vocabulary from the struct
-instead. `settingsfields.h`, generated from `astrolog.h`, names all 342
-fields, and the group saves the settings, poisons every field it can,
-replays the file and reports what did not come back. Its first run found
-**206 lost settings**, the AstroExpression hooks being 46 of them. Nothing
-here can fall behind the writer again without the group saying so by name.
+**The settings sweeps** are the other. Every check before them asked about
+the settings somebody had thought to ask about, and each one found more;
+these generate their vocabulary instead. `settings-fields` reads
+`settingsfields.h`, generated from `astrolog.h`, which names all 342 scalar
+members of `US` and `GS`; `settings-arrays` covers the 24 global arrays the
+Restrictions, Object Settings, Aspect Settings and Set Colors dialogs edit,
+which no field sweep can see. Both save the settings, poison everything,
+replay the file and report what did not come back, by name and by index.
+The field sweep's first run found **206 lost settings**, the
+AstroExpression hooks being 46 of them; the array sweep found the aspect
+restrictions, which `us.nAsp` cannot carry because it is *derived* from
+them. Nothing here can fall behind the writer again without a group saying
+so by name.
 
 Several groups drive real dialogs rather than calling into them: Object
 Selections through seven cases, the Calculation Settings ephemeris list,

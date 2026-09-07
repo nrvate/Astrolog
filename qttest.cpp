@@ -5656,6 +5656,225 @@ static void TestSettingsFieldsQt()
 }
 
 
+// ---- The settings that are not fields ----
+//
+// The sweep above reads settingsfields.h and so sees every scalar member of
+// US and GS. It cannot see the rest of the configuration, which lives in
+// global arrays: the restrictions, the per-object settings, the aspect and
+// house influence tables, the rulerships, the palette. Those are what the
+// Restrictions, Object Settings, Aspect Settings and Set Colors dialogs
+// edit, and until this group the only assertions on them were at a handful
+// of sample indices somebody had picked.
+//
+// Same method: save, poison every byte, replay, compare. Reported by array
+// and by the first index that differs, since "rgobjset moved" is not a
+// finding and "rgobjset[60].orb" is.
+
+typedef struct _setarray {
+  CONST char *szName;
+  void *pv;             // The array's first element
+  int cb;               // Its size in bytes
+  char ch;              // b byte, i int, r real, o OBJSET
+  int iLo, iHi;         // The elements that are settings; iHi < 0 is "all"
+  CONST char *szWhy;    // NULL when it has to survive
+} SETARRAY;
+
+static void TestSettingsArraysQt()
+{
+  SETARRAY rgsetarray[] = {
+    // iLo is 1 wherever element 0 is unused padding -- the aspect, sign and
+    // rulership tables are all indexed from 1 -- and iHi names the last
+    // element the writer's own loop reaches. Both are transcribed from
+    // FOutputSettings(), and a bound set too wide fails loudly here rather
+    // than quietly, which is the direction to be wrong in.
+    {"ignore",      ignore.rgn,      sizeof(ignore.rgn),      'b',
+      0, cObj, NULL},
+    {"ignore2",     ignore2.rgn,     sizeof(ignore2.rgn),     'b',
+      0, cObj, NULL},
+    {"ignorez",     ignorez,         sizeof(ignorez),         'b',
+      0, arAnt, NULL},
+    {"ignore7",     ignore7,         sizeof(ignore7),         'b',
+      0, rrMax-1, NULL},
+    {"ignorea",     ignorea.rgn,     sizeof(ignorea.rgn),     'b',
+      1, cAspect, NULL},
+    {"rgobjset",    rgobjset.rgn,    sizeof(rgobjset.rgn),    'o',
+      0, oNorm1, NULL},
+    {"force",       force.rgn,       sizeof(force.rgn),       'r',
+      0, cObj, NULL},
+    {"rgrBonusInf", rgrBonusInf,     sizeof(rgrBonusInf),     'r',
+      1, 5, NULL},
+    {"rHouseInf",   rHouseInf,       sizeof(rHouseInf),       'r',
+      1, cSign+5, NULL},
+    {"rAspInf",     rAspInf.rgn,     sizeof(rAspInf.rgn),     'r',
+      1, 18, NULL},
+    {"rAspAngle",   rAspAngle.rgn,   sizeof(rAspAngle.rgn),   'r',
+      1, cAspect, NULL},
+    {"rAspOrb",     rAspOrb.rgn,     sizeof(rAspOrb.rgn),     'r',
+      1, cAspect, NULL},
+    {"ruler1",      ruler1.rgn,      sizeof(ruler1.rgn),      'i',
+      1, 10, NULL},
+    {"ruler2",      ruler2.rgn,      sizeof(ruler2.rgn),      'i',
+      1, 10, NULL},
+    {"exalt",       exalt.rgn,       sizeof(exalt.rgn),       'i',
+      1, 10, NULL},
+    {"kAspA",       kAspA.rgn,       sizeof(kAspA.rgn),       'i',
+      1, 18, NULL},
+    {"kMainA",      kMainA,          sizeof(kMainA),          'i',
+      0, 8, NULL},
+    {"kRainbowA",   kRainbowA,       sizeof(kRainbowA),       'i',
+      1, cRainbow, NULL},
+    {"kElemA",      kElemA,          sizeof(kElemA),          'i',
+      0, cElem-1, NULL},
+    // Derived, and the deriving is what puts them right.
+    {"rules",       rules.rgn,       sizeof(rules.rgn),       'i', 1, cSign,
+     "sign-keyed view of ruler1[], rebuilt by the \"-YJ\" reader"},
+    {"rules2",      rules2.rgn,      sizeof(rules2.rgn),      'i', 1, cSign,
+     "sign-keyed view of ruler2[], the same"},
+    {"kObjA",       kObjA.rgn,       sizeof(kObjA.rgn),       'i', 0, cObj,
+     "computed from rgobjset[].kolor and the rulership colors, not stored"},
+    {"starname",    starname,        sizeof(starname),        'i', 1, cStar,
+     "the star sort order for this run, rebuilt whenever stars are cast"},
+    {"pluszone",    pluszone,        sizeof(pluszone),        'b',
+      1, cSector,
+     "the sector plus zones, which are compiled in and have no switch"} };
+  int csetarray = (int)(sizeof(rgsetarray)/sizeof(SETARRAY));
+  char szPath[cchSzMax];
+  QVector<QByteArray> rgbaSav(csetarray), rgbaWant(csetarray);
+  char *szFileOutSav = is.szFileOut;
+  int nWriteFormatSav = us.nWriteFormat;
+  flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
+  int i, j, cb, cLost = 0, cStale = 0;
+
+  Group("Settings arrays");
+  SetNoPopupQt(fTrue);
+
+  // The PRISTINE state, which is what gets put back at the end. Taken
+  // before the fill below, or the fill would be what every later group
+  // inherits -- every object forced to a position, and every aspect at a
+  // made-up angle.
+  for (i = 0; i < csetarray; i++)
+    rgbaSav[i] = QByteArray((CONST char *)rgsetarray[i].pv,
+      rgsetarray[i].cb);
+
+  // Two arrays are written only where they differ from a default, so an
+  // element left at its default round trips through a writer that skips
+  // it. Give them all a non-default value first, the way the field sweep
+  // gives every string one, so the question asked is the useful one.
+  for (i = 0; i <= cObj; i++)
+    force[i] = ForcePos((real)((i * 7) % 360));
+  // Whole degrees and a half, not "the default plus one": the writer emits
+  // six decimals, and a default like 360/7 has more than that, so the fill
+  // would come back a few bits out and read as a loss it is not.
+  for (i = 1; i <= cAspect; i++)
+    rAspAngle[ASPT(i)] = (real)((i * 7) % 180) + 0.5;
+  // And the aspect restrictions, whose line carries a LIST: with none
+  // restricted the list is empty, and an empty list comes back from a
+  // writer that emits nothing just as well as from one that emits the
+  // line. Restricting every third aspect is what makes the check bite.
+  for (i = 1; i <= cAspect; i++)
+    ignorea[ASPT(i)] = (i % 3) == 0;
+  AdjustAspectCount();
+
+  // And the state the file has to bring back, which is the filled one.
+  for (i = 0; i < csetarray; i++)
+    rgbaWant[i] = QByteArray((CONST char *)rgsetarray[i].pv,
+      rgsetarray[i].cb);
+
+  sprintf2(S(szPath), "%s/astrolog-qt-arrays-%d.as",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+  is.szFileOut = szPath;
+  Check(FOutputSettings(), "the settings writer wrote a file to ask about");
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+
+  // Poison by type, so the new value stays in the neighbourhood of the old
+  // and nothing the reader touches on the way past goes out of range.
+  for (i = 0; i < csetarray; i++) {
+    SETARRAY *psa = &rgsetarray[i];
+    if (psa->ch == 'b') {
+      for (j = 0; j < psa->cb; j++)
+        ((byte *)psa->pv)[j] ^= 1;
+    } else if (psa->ch == 'i') {
+      for (j = 0; j < psa->cb / (int)sizeof(int); j++)
+        ((int *)psa->pv)[j] ^= 1;
+    } else if (psa->ch == 'r') {
+      for (j = 0; j < psa->cb / (int)sizeof(real); j++)
+        ((real *)psa->pv)[j] += 1.0;
+    } else {
+      for (j = 0; j <= oNorm1; j++) {
+        rgobjset.rgn[j].orb += 1.0;  rgobjset.rgn[j].add += 1.0;
+        rgobjset.rgn[j].inf += 1.0;  rgobjset.rgn[j].tinf += 1.0;
+        rgobjset.rgn[j].kolor ^= 1;
+      }
+    }
+  }
+
+  Check(FProcessSwitchFile(szPath, NULL),
+    "and the file it wrote loads back with every array poisoned");
+
+  for (i = 0; i < csetarray; i++) {
+    SETARRAY *psa = &rgsetarray[i];
+    CONST byte *pbWas = (CONST byte *)rgbaWant[i].constData();
+    CONST byte *pbIs = (CONST byte *)psa->pv;
+    int ib = -1;
+
+    {
+      int cbElem = psa->ch == 'b' ? 1 : (psa->ch == 'i' ?
+        (int)sizeof(int) : (psa->ch == 'r' ? (int)sizeof(real) :
+        (int)sizeof(OBJSET)));
+      for (cb = psa->iLo * cbElem; cb < (psa->iHi + 1) * cbElem &&
+        cb < psa->cb; cb++)
+        if (pbWas[cb] != pbIs[cb]) {
+          ib = cb;
+          break;
+        }
+    }
+    if (psa->szWhy == NULL) {
+      if (ib >= 0) {
+        int cbElem = psa->ch == 'b' ? 1 : (psa->ch == 'i' ?
+          (int)sizeof(int) : (psa->ch == 'r' ? (int)sizeof(real) :
+          (int)sizeof(OBJSET)));
+        int iElem = ib / cbElem;
+        char szWas[cchSzDef], szIs[cchSzDef];
+
+        if (psa->ch == 'b')
+          sprintf2(S(szWas), "%d", (int)pbWas[iElem]),
+          sprintf2(S(szIs), "%d", (int)pbIs[iElem]);
+        else if (psa->ch == 'i')
+          sprintf2(S(szWas), "%d", ((CONST int *)pbWas)[iElem]),
+          sprintf2(S(szIs), "%d", ((CONST int *)pbIs)[iElem]);
+        else if (psa->ch == 'r')
+          sprintf2(S(szWas), "%.4f", ((CONST real *)pbWas)[iElem]),
+          sprintf2(S(szIs), "%.4f", ((CONST real *)pbIs)[iElem]);
+        else
+          sprintf2(S(szWas), "(objset)"), sprintf2(S(szIs), "(objset)");
+        Check(fFalse, "%s[%d] did not survive a save and reload "
+          "(was %s, back as %s)", psa->szName, iElem, szWas, szIs);
+        cLost++;
+      }
+    } else if (ib < 0) {
+      Check(fFalse, "%s survives now; drop its entry (\"%s\")",
+        psa->szName, psa->szWhy);
+      cStale++;
+    }
+  }
+
+  for (i = 0; i < csetarray; i++)
+    CopyRgb((pbyte)rgbaSav[i].constData(), (pbyte)rgsetarray[i].pv,
+      rgsetarray[i].cb);
+  us.fNoWrite = fNoWriteSav;
+  SetNoPopupQt(fPopupSav);
+  remove(szPath);
+  AdjustRestrictions();
+  AdjustAspectCount();
+  printf("  %d settings arrays asked, %d lost, %d stale excuses\n",
+    csetarray, cLost, cStale);
+}
+
+
 // Graphics mode is view state, not a setting, and a settings file must not
 // be able to turn the GUI off. "Save Program Settings" with a text chart on
 // screen writes "_X"; the window is created inside FActionX(), which
@@ -8970,6 +9189,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"nested-include",       TestNestedIncludeQt},
   {"graphics-mode",        TestGraphicsModeSourceQt},
   {"settings-fields",      TestSettingsFieldsQt},
+  {"settings-arrays",      TestSettingsArraysQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},

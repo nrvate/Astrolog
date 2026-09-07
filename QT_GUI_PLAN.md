@@ -8785,6 +8785,43 @@ are the more useful half to read before starting something new.
     the one item 202 named: a display preference spelt as a sub-letter of a
     chart type switch cannot be written at all.
 
+204. **And the settings that are not fields.** A struct sweep cannot see
+    the configuration that lives in global arrays -- the restrictions, the
+    per-object settings, the aspect and house influence tables, the
+    rulerships, the palette -- which is what the Restrictions, Object
+    Settings, Aspect Settings and Set Colors dialogs edit, and where the
+    only assertions were at a handful of sample indices somebody had
+    picked. `settings-arrays` asks the same question of all 24 of them,
+    reporting by array and by the first index that differs.
+
+    It found one thing, and it is a good one: **the aspect restrictions
+    were never saved.** `us.nAsp` is written, but `AdjustAspectCount()`
+    *derives* that count from `ignorea[]` -- it walks down from `cAspect`
+    to the first unrestricted aspect -- so the count carries only the
+    contiguous case. An aspect switched off in the Aspect Restrictions
+    dialog with a later one left on was lost entirely. `-RA1` followed by
+    the restricted numbers carries the array, and the `-A` count moved to
+    *after* it, because every `-RA` ends in `AdjustAspectCount()` and would
+    otherwise undo the line above it.
+
+    Three of the twelve first-run failures were the check's own fault, and
+    each is worth knowing. Every one of them was at index 0, which in the
+    aspect, sign and rulership tables is unused padding, so the table
+    carries the range the writer's own loop reaches. Two arrays are written
+    only where they differ from a default -- `force[]` and `rAspAngle[]` --
+    so an element left at its default round trips through a writer that
+    skips it, and both are filled with non-defaults first, as are the
+    aspect restrictions whose line carries a list. And `rAspAngle` was
+    filled with "the default plus one", which for a default of 360/7 has
+    more decimals than the writer's six: it came back a few bits out and
+    read as a loss it was not.
+
+    Same trap as item 203's, in the same place: the snapshot for the
+    *restore* has to be taken before the fill, or every later group
+    inherits every object forced to a position and every aspect at a
+    made-up angle. Four assertions in the eclipse search failed exactly
+    that way before the two snapshots were separated.
+
 
 ## Features this fork adds to both builds
 
