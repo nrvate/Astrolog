@@ -30,6 +30,11 @@
 -YkO 5 5 Pink      ; EXPECT ^-YkO 0 10 .*Pin
 -YkA 3 3 Sky       ; EXPECT ^-YkA 1 5 +Yel Blu Sky
 -YJ Mar Cap 0      ; EXPECT ^-YJ Mar Cap
+; And a zero FIRST ruler, which the line above cannot reach: szSignName[0]
+; is the empty string, so the writer used to emit "-YJ Ura  0" -- two
+; arguments where the switch takes three, and the saved file would not
+; load back. Reachable from astrolog.as's own macro 41.
+-YJ Ura 0 0        ; EXPECT ^-YJ Ura 0 0
 -YJ0 Mar Aqu       ; EXPECT ^-YJ0 Mar Aqu
 -Y7O 5 5 7         ; EXPECT ^-Y7O 0 10 +3 +2 4 4 5 7
 -Y7C 3 3 45        ; EXPECT ^-Y7C 1 12 +17 +4 45

@@ -29,6 +29,18 @@ QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
 # would sit through.
 QTRUN="timeout 60 $QTENV"
 
+# And every probe reads from /dev/null, which is the other half of the
+# same leak. Astrolog prompts for chart info it was not given, and these
+# probes hand it deliberately broken input -- so one of them asking a
+# question is not a hypothetical. With stdin inherited from whatever
+# started this script, a question means a read on a live terminal or
+# socket that never answers, and the probe sits there until the watchdog
+# above fires. Measured: the "-Yi1 <nonexistent>" probe blocked in
+# unix_stream_data_wait with stdin as a socket, and finished instantly
+# with "</dev/null". The "Pager with no reader" section already did this,
+# for its own reasons; every other probe wants it too.
+QTIN=/dev/null
+
 # Default to the maintainer's settings file, because running without it is
 # not a milder test, it is a quieter one. nrvate.as carries -Yi1 "/swe",
 # and SwissEnsurePath() caches the ephemeris search path the first time it
@@ -61,7 +73,7 @@ echo
 echo "== Startup diagnostics =="
 fail=0
 for arg in "-i /nonexistent-astrolog-test-file.as" "-t"; do
-  out=`$QTRUN "$BIN" $arg 2>&1`
+  out=`$QTRUN "$BIN" $arg <"$QTIN" 2>&1`
   rc=$?
   case $out in
     *"Must construct a QApplication"*)
@@ -129,7 +141,8 @@ done
 echo
 echo "== Ephemeris search path =="
 probe=/nonexistent-astrolog-ephem-probe
-out=`$QTRUN "$BIN" -Yi1 "$probe" -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+out=`$QTRUN "$BIN" -Yi1 "$probe" -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X \
+  <"$QTIN" 2>&1`
 # Both assertions read Swiss's own "not found in PATH" line, which is the
 # only place the assembled path is observable from outside the process. If
 # that line is absent the run proves nothing either way, so say so rather
@@ -158,7 +171,8 @@ esac
 # The other half, and the one that is easy to lose while fixing the first:
 # a -Yi that DOES hold an ephemeris must reach Swiss. Without this, a
 # resolver that simply dropped every -Yi would pass the check above.
-out2=`$QTRUN "$BIN" -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+out2=`$QTRUN "$BIN" -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X \
+  <"$QTIN" 2>&1`
 case $out2 in
   *"not found in PATH"*) ;;
   *)
@@ -181,8 +195,9 @@ esac
 # sefstars.txt, and the binary's own directory is always a candidate --
 # so the binary is copied somewhere bare and run from there.
 tmpd=`mktemp -d`
-cp "$BIN" "$tmpd/" 2>/dev/null &&   out3=`cd "$tmpd" && $QTENV "./\`basename $BIN\`" -Yi1 "$probe" \
-        -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X 2>&1`
+cp "$BIN" "$tmpd/" 2>/dev/null &&
+  out3=`cd "$tmpd" && $QTRUN "./\`basename $BIN\`" -Yi1 "$probe" \
+        -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X <"$QTIN" 2>&1`
 rm -rf "$tmpd"
 case $out3 in
   *"No ephemeris files in any directory searched"*)

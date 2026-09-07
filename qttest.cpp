@@ -2776,6 +2776,189 @@ static void TestMenuResyncQt()
 }
 
 
+/*
+******************************************************************************
+** Pressing OK twice is the same as pressing it once.
+******************************************************************************
+*/
+
+// A dialog normalises what it shows, and that is by design: with seconds
+// switched off, 5:47:55pm displays as "5:47pm" and comes back parsed as
+// 5:47:00. Windows does the identical thing from the identical pair of
+// calls -- SzTim() to fill the box, RParseSz(sz, pmTim) to read it -- so
+// the FIRST OK legitimately moves settings.
+//
+// The second one must not. A setting that keeps drifting every time the
+// dialog is visited is the defect this looks for: a value losing
+// precision on each round trip, a list growing an entry, a flag that
+// toggles where it should set. That class is invisible to every other
+// group here, because each of those asks whether one named field came
+// back right rather than whether the dialog as a whole is settled.
+//
+// Two things make it work without a per-dialog table of exceptions,
+// which is the shape this project has learned not to write:
+//
+//   * The comparison is a SAVED SETTINGS FILE, not a memcmp of us and
+//     gs. Those structs carry char * fields that FCloneSz() reallocates
+//     on every OK -- us.szADB does it whether or not the box changed --
+//     so their bytes differ while nothing about the settings does.
+//     FOutputSettings() writes the values, which is the question. It
+//     also covers ignore[], rgobjset[] and the rest for free.
+//   * Chart info is not in that file, so ciMain's eight numeric fields
+//     are compared beside it.
+//
+// Putting the settings back afterward is done by SAVING them first and
+// LOADING that file at the end, not by a struct copy of us and gs. Two
+// reasons, and the first is a bug rather than a preference: a copy taken
+// before an OK holds char * fields that the OK has since freed, so
+// assigning it back is a use-after-free. The second is that this group
+// visits all 25 dialogs and OKs each of them twice, which normalises a
+// great deal -- and a later group that pins ten fields by hand and
+// inherits the eleventh then fails on the leftovers rather than on its
+// own subject. Reload through the program's own parser and every
+// setting the file covers goes back at once, pointers included.
+
+static flag FSaveSettingsToQt(CONST char *szPath)
+{
+  char *szSav = is.szFileOut;
+  flag f;
+
+  is.szFileOut = (char *)szPath;
+  f = FOutputSettings();
+  is.szFileOut = szSav;
+  return f;
+}
+
+static QByteArray BaReadFileQt(CONST QString &strPath)
+{
+  QFile file(strPath);
+
+  if (!file.open(QIODevice::ReadOnly))
+    return QByteArray();
+  return file.readAll();
+}
+
+static void ClickOkInModalQt(void (*pfnOpen)())
+{
+  DriveModalQt(pfnOpen, [](QWidget *pw) {
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") {
+        ppb->click();
+        return;
+      }
+    pw->close();
+  });
+}
+
+// Run "fnApply" twice, saving the settings after each, and say whether
+// the second run left them where the first did. On a difference,
+// *pstrWhere gets the first settings line that moved, so the field is
+// findable without re-running anything by hand. Returns -1 if a save
+// failed, which is a different answer from "it drifted".
+
+static int NSettlesQt(CONST QString &strDir, std::function<void()> fnApply,
+  QString *pstrWhere)
+{
+  QString strA = strDir + "/a.as", strB = strDir + "/b.as";
+  QByteArray baA = strA.toLocal8Bit(), baB = strB.toLocal8Bit();
+
+  fnApply();
+  if (!FSaveSettingsToQt(baA.constData()))
+    return -1;
+  fnApply();
+  if (!FSaveSettingsToQt(baB.constData()))
+    return -1;
+
+  QByteArray ba1 = BaReadFileQt(strA), ba2 = BaReadFileQt(strB);
+  QFile::remove(strA);
+  QFile::remove(strB);
+  if (ba1.isEmpty() || ba2.isEmpty())
+    return -1;
+  if (ba1 == ba2)
+    return fTrue;
+  QList<QByteArray> rg1 = ba1.split('\n'), rg2 = ba2.split('\n');
+  for (int j = 0; j < rg1.size() && j < rg2.size(); j++)
+    if (rg1[j] != rg2[j]) {
+      *pstrWhere = QString::fromLatin1(rg1[j].trimmed()) + " -> " +
+        QString::fromLatin1(rg2[j].trimmed());
+      break;
+    }
+  return fFalse;
+}
+
+static void TestOkSettlesQt()
+{
+  QString strDir = QDir::tempPath() + QString("/astrolog-qt-ok-%1")
+    .arg((int)QCoreApplication::applicationPid());
+  int nWriteFormatSav = us.nWriteFormat, cDrift = 0, i, n;
+  flag fNoWriteSav = us.fNoWrite;
+  CI ciSav = ciMain, ciCoreSav = ciCore;
+  QString strWhere;
+
+  Group("OK settles");
+  QDir().mkpath(strDir);
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+
+  // Everything this group is about to normalise, written down first.
+  QString strWas = strDir + "/was.as";
+  QByteArray baWas = strWas.toLocal8Bit();
+  Check(FSaveSettingsToQt(baWas.constData()),
+    "the settings this group is about to disturb are saved first");
+
+  // The detector first, against something that definitely drifts. Every
+  // assertion below is "no difference", and a comparison that cannot
+  // find one passes all 25 while proving nothing -- so make it find one.
+  int nScaleSav = gs.nScale;
+  n = NSettlesQt(strDir, []() {
+    gs.nScale = gs.nScale >= 400 ? 100 : gs.nScale + 100;
+  }, &strWhere);
+  Check(n == fFalse, "a setting that moves on every pass is caught (%d)", n);
+  // ":Xs", not "-Xs": FOutputSettings() writes the values-only prefix.
+  Check(strWhere.contains("Xs "),
+    "and the line that moved is named (\"%s\")",
+    strWhere.toLocal8Bit().constData());
+  gs.nScale = nScaleSav;
+
+  for (i = 0; i < cdlgQt; i++) {
+    void (*pfn)() = rgdlgQt[i].pfn;
+    CI ci1;
+
+    ClickOkInModalQt(pfn);                   // the normalising pass
+    ci1 = ciMain;
+    strWhere.clear();
+    n = NSettlesQt(strDir, [pfn]() { ClickOkInModalQt(pfn); }, &strWhere);
+    if (n < 0) {
+      Check(fFalse, "%s: could not save the settings to compare",
+        rgdlgQt[i].szTitle);
+      continue;
+    }
+    if (n == fFalse)
+      cDrift++;
+    Check(n != fFalse, "%s: a second OK moved the settings again (%s)",
+      rgdlgQt[i].szTitle, strWhere.toLocal8Bit().constData());
+    Check(ciMain.mon == ci1.mon && ciMain.day == ci1.day &&
+      ciMain.yea == ci1.yea && ciMain.tim == ci1.tim &&
+      ciMain.dst == ci1.dst && ciMain.zon == ci1.zon &&
+      ciMain.lon == ci1.lon && ciMain.lat == ci1.lat,
+      "%s: a second OK left the chart info alone", rgdlgQt[i].szTitle);
+  }
+
+  if (!FProcessSwitchFile(baWas.constData(), NULL)) {
+    Check(fFalse, "and put back through the program's own parser (kept: %s)",
+      baWas.constData());
+  } else
+    QFile::remove(strWas);
+  QDir().rmdir(strDir);
+  ciMain = ciSav; ciCore = ciCoreSav;
+  us.nWriteFormat = nWriteFormatSav;
+  us.fNoWrite = fNoWriteSav;
+  AdjustRestrictions();
+  printf("  %d dialogs settle on the first OK, %d still drifting\n",
+    cdlgQt - cDrift, cDrift);
+}
+
+
 static void TestDialogMnemonicsQt()
 {
   Group("Dialog mnemonic keys");
@@ -7487,7 +7670,16 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"line-drawing",         TestLineDrawingQt},
   {"long-strings",         TestLongStringsQt},
   {"file-parsers",         TestFileParsersQt},
-  {"oracle",               TestNumericOracleQt}};
+  {"oracle",               TestNumericOracleQt},
+  // LAST ON PURPOSE, and the runner asserts it stays last. This group
+  // opens all 25 dialogs and OKs each of them twice, which is the point
+  // of it; what a dialog's OK legitimately re-applies does not all live
+  // in a settings file, so reloading one puts most of the state back but
+  // not the drawing tables. Run before "midpoint-glyph" it left Chiron's
+  // slot carrying a glyph again, and that group -- which pins ten globals
+  // by hand and inherits the eleventh -- failed on the leftovers rather
+  // than on its own subject.
+  {"ok-settles",           TestOkSettlesQt}};
 #define cqttestQt (int)(sizeof(rgqttestQt) / sizeof(QTTESTENTRY))
 
 // Does any comma-separated token of the filter appear in the name?
@@ -7546,6 +7738,12 @@ static int NRunQtTestTableQt()
   // TestExpressionFunctionsQt does.
   SetNoPopupQt(fTrue);
   printf("Astrolog Qt test suite\n");
+  // See the note on that entry: it disturbs state no settings file
+  // carries, so anything after it inherits the disturbance and fails on
+  // the leftovers. Cheaper to assert than to rediscover.
+  Check(FMatchSz(rgqttestQt[cqttestQt-1].szName, "ok-settles"),
+    "\"ok-settles\" is still the last group in the table (found \"%s\")",
+    rgqttestQt[cqttestQt-1].szName);
   for (i = 0; i < cqttestQt; i++) {
     if (!FTestWantedQt(szFilter, rgqttestQt[i].szName))
       continue;

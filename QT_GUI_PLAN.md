@@ -7837,6 +7837,120 @@ are the more useful half to read before starting something new.
     now reads as `windows=!gs.fBackDraw qt=gs.fBackDraw`. Falsified in
     both spellings.
 
+185. **A settings file this program saved would not load back.** Found
+    by asking a question no group here had asked: *does pressing OK
+    twice differ from pressing it once?* A dialog normalises what it
+    shows -- with seconds off, 5:47:55pm displays as "5:47pm" and comes
+    back parsed as 5:47:00, from the same `SzTim()`/`RParseSz()` pair
+    Windows uses -- so the first OK legitimately moves settings. The
+    second must not.
+
+    Three things moved on a first OK and all three were **upstream
+    behaviour, not defects**, which is the half of this worth recording:
+    `ciMain.tim` losing its seconds (the round trip above; with
+    `us.fSeconds` on it survives to within a last bit); `gs.yWin`, the
+    canvas telling the chart its size in "window resizes chart" mode;
+    and `us.szADB`, which `FCloneSz()` reallocates on every OK whether
+    the box changed or not -- `wdialog.cpp` does the identical
+    `GetEdit`/`FCloneSz` pair. Measured, checked against the oracle, and
+    left alone.
+
+    The real find was in `FOutputSettings()` (io.cpp), shared core with
+    no `QT` in it, so **the Windows build has it too**:
+
+        for (i = 1; i <= 10; i++)
+          sprintf2(S(sz), "-YJ %.3s %.3s %.3s\n", szObjName[i],
+            szSignName[ruler1[OBJT(i)]],
+            ruler2[OBJT(i)] <= 0 ? "0" : szSignName[ruler2[OBJT(i)]]);
+
+    The *second* rulership is guarded against zero and the first is not.
+    `szSignName[0]` is the empty string, so an object with no primary
+    ruler wrote `-YJ Ura  0` -- two arguments where the switch takes
+    three. Load that file and Astrolog stops:
+
+        $ astrolog -n -YJ Ura 0 0 -od saved.as
+        $ astrolog -i saved.as -n
+        Astrolog: Too few parameters to switch -YJ (2 given, 3 required)
+
+    Not a corner: `astrolog.as` ships a macro (`M0 41`) whose text
+    contains `-YJ Ura 0 0`, so running the program's own macro and then
+    File / Save Program Settings produces a settings file the program
+    refuses to read. One-line fix, the same guard the neighbouring line
+    already had.
+
+    **A fixture already covered `-YJ` and covered the wrong half.**
+    `tools/settings-fixture.as` had `-YJ Mar Cap 0`, which exercises a
+    zero *second* ruler -- the guarded one. A zero first ruler is a
+    different line and now has one. That is the shape to watch for in
+    the other fixtures: a sentinel that exercises the branch which was
+    always right.
+
+    The check itself is the `ok-settles` group: for each of the 25
+    dialogs, OK it, save the settings, OK it again, save again, and
+    require the two files to be identical, with `ciMain`'s eight numeric
+    fields compared beside them because chart info is not in that file.
+    Comparing saved files rather than `memcmp`ing `us` and `gs` is what
+    makes it need no per-dialog exception table -- those structs carry
+    `char *` fields that are reallocated on every OK, so their bytes
+    differ while nothing about the settings does. It also removes a
+    hazard: a struct copy taken before an OK holds pointers the OK has
+    since freed, so putting it back is a use-after-free, and the first
+    draft of this did exactly that.
+
+    Its own detector is falsified inside the group rather than by
+    sabotage: before the 25 dialogs it runs the same two-pass comparison
+    over something that provably drifts (a scale that changes every
+    pass) and requires the comparison to catch it and name the line.
+    Every other assertion in the group is "no difference", and a
+    comparison that cannot find one would pass all 25 while proving
+    nothing.
+
+    **It runs last, and the runner asserts it stays last.** It opens
+    every dialog and OKs each twice, which is the point of it, and not
+    all of what a dialog's OK re-applies lives in a settings file --
+    reloading one puts most of the state back but not the drawing
+    tables. Run before `midpoint-glyph` it left Chiron's slot carrying a
+    glyph again, and that group, which pins ten globals by hand and
+    inherits the eleventh, failed on the leftovers rather than on its
+    own subject. The ordering is a comment in three places and a runtime
+    check in one, because a comment alone had already cost the time it
+    was meant to save.
+
+186. **The one probe the watchdog never reached, and the reason it
+    mattered.** Found while chasing the group above: two
+    `astrolog-qt-test` processes still running, one of them **93 minutes**
+    after the run that started it had reported "ok" and exited. Both were
+    blocked in `unix_stream_data_wait` with fd 0 a socket -- reading
+    stdin, forever.
+
+    `run-qt-tests.sh` already documents this exact failure at the top of
+    the file: a probe read through command substitution waits for the
+    *pipe*, not for the process, so one that writes its answer and fails
+    to exit is left running while the script says "ok" and moves on.
+    `QTRUN="timeout 60 $QTENV"` was added to bound it. Two gaps:
+
+    * **The last probe used `$QTENV`, not `$QTRUN`.** It is the one that
+      copies the binary to a bare temp directory, and it was the only
+      probe with nothing bounding it at all -- which is why it was the
+      one still alive an hour and a half later.
+    * **No probe closed stdin.** Astrolog prompts for chart info it was
+      not given, and these probes hand it deliberately broken input, so
+      a probe asking a question is not hypothetical. With stdin inherited
+      from whatever started the script, the question goes to a live
+      socket that never answers. Measured both ways: the
+      `-Yi1 <nonexistent>` probe blocks indefinitely as the script ran
+      it, and finishes instantly with `</dev/null`. The "Pager with no
+      reader" section already redirected, for its own reasons; the rest
+      now do too.
+
+    Worth stating plainly because the symptom is misleading: the script
+    reports every check "ok" and exits 0 while leaving a process behind,
+    so the leak is invisible from the run that caused it and only shows
+    up as a machine that has slowly filled with orphans.
+    `REFACTORING.md` lists "kill orphaned astrolog-qt processes left by
+    interrupted suite runs" as a standing house habit -- that habit is
+    the symptom, and this is one more piece of the cause.
+
 
 ## Features this fork adds to both builds
 
@@ -7874,6 +7988,29 @@ cannot reach, and `tools/windrive.sh` cannot read a control's value
 (there is no AT-SPI under Wine), so it rests on the shared behavioural
 claim and inspection. Said plainly here rather than left to look
 covered.
+
+### A settings file with a ruler-less object would not load back
+
+`FOutputSettings()` guarded the *second* rulership against zero and not
+the first:
+
+    sprintf2(S(sz), "-YJ %.3s %.3s %.3s\n", szObjName[i],
+      szSignName[ruler1[OBJT(i)]],
+      ruler2[OBJT(i)] <= 0 ? "0" : szSignName[ruler2[OBJT(i)]]);
+
+`szSignName[0]` is the empty string, so an object with no primary ruler
+wrote `-YJ Ura  0`: two arguments where the switch takes three. Saving
+settings then produced a file this program refuses to read --
+
+    Astrolog: Too few parameters to switch -YJ (2 given, 3 required)
+
+-- which is a hard startup failure, not a warning. Reachable from the
+program's own shipped macro: `astrolog.as`'s `M0 41` contains
+`-YJ Ura 0 0`. Upstream's defect, in shared core with no `QT` in it, so
+the Windows build has it too; the fix is the guard the neighbouring line
+already had, and is its own commit so it can be offered separately.
+`tools/settings-fixture.as` gained a line for it -- it already had
+`-YJ Mar Cap 0`, which exercises the half that was always right.
 
 ### Forced object positions are saved
 
