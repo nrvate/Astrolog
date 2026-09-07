@@ -8909,6 +8909,32 @@ are the more useful half to read before starting something new.
     Falsified by pointing one table row at the wrong field and watching the
     sweep name `us.fGridConfig`.
 
+207. **The redraw hook never fired for a text chart.** Found reviewing
+    `RedrawQt()`, which is the port's most-executed function and had not
+    been read end to end since it was written.
+
+    `-~Q3` is the AstroExpression that runs once the screen has been
+    repainted. Windows fires it after the whole paint and in **both**
+    modes -- `wdriver.cpp:2929`, outside the `if (!us.fGraphics)` block
+    above it -- while `RedrawQt()`'s text branch returns before ever
+    reaching it. So a hook set while a text chart was on screen simply did
+    not run, and the `AstroExpression hooks` group had never asked: it
+    called `RedrawQt()` in whatever mode the suite happened to be in, which
+    is graphics.
+
+    `NotifyRedrawQt()` now, called from the two places `RedrawQt()`
+    finishes. Measured before the fix -- `@z` read 0 where the hook sets it
+    to 4242 -- and falsified after by removing the text branch's call.
+
+    Two divergences in `PasteChartQt()` were checked in the same pass and
+    are correct, but were undocumented, which is the same thing as being
+    unverified for the next person to diff this against `wdriver.cpp`.
+    `FLoadBmp()`'s `fNoHeader` is `fTrue` on Windows because `CF_DIB`
+    hands over a bitmap with no file header, and `fFalse` here because
+    `QImage::save()` writes a real `.bmp`. And this build sets `gi.fBmp`
+    on a paste where Windows sets it only in `cmdOpenBackground` -- the
+    same slot, loaded the same way. Both now say so beside the code.
+
 
 ## Features this fork adds to both builds
 

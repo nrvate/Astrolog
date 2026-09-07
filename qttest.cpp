@@ -4687,6 +4687,19 @@ static void TestExpressionHooksQt()
   Check(NExpGet(iLetterZ) == 4242,
     "the redraw notification hook fires (@z is %d)", NExpGet(iLetterZ));
 
+  // And in TEXT mode as well, which is the half this missed: Windows fires
+  // it after the whole paint, in both modes (wdriver.cpp:2929, outside the
+  // "if (!us.fGraphics)" block above it), and RedrawQt()'s text branch
+  // returned before ever reaching it. A "-~Q3" hook simply never ran while
+  // a text chart was on screen.
+  {
+    Borrow bGraph(us.fGraphics, fFalse);
+    ExpSetN(iLetterZ, 0);
+    RedrawQt();
+    Check(NExpGet(iLetterZ) == 4242,
+      "and fires for a text chart too (@z is %d)", NExpGet(iLetterZ));
+  }
+
   // And is not fired when expressions are switched off wholesale.
   us.fExpOff = fTrue;
   ExpSetN(iLetterZ, 0);

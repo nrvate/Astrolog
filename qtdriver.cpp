@@ -989,6 +989,15 @@ void PasteChartQt()
     if (im.isNull() || !im.save(szTemp, "BMP"))
       fRet = fFalse;
     else {
+      // Two deliberate differences from Windows' FFilePaste(), both from
+      // the clipboard being reached differently. Its fNoHeader argument is
+      // fTrue there because CF_DIB hands over a device independent bitmap
+      // with no 14-byte BITMAPFILEHEADER on it; QImage::save() writes a
+      // real .bmp, header and all, so this one has to read it as a file.
+      // And Windows leaves gi.fBmp alone here while setting it in
+      // cmdOpenBackground, which loads a bitmap into the same slot -- the
+      // pasted image is what a 24-bit surface is FOR, so this sets it in
+      // both places rather than in one.
       fRet = FLoadBmp(szTemp, &gi.bmpBack, fFalse);
       if (fRet)
         gi.fBmp = fTrue;
@@ -1148,6 +1157,22 @@ void RedrawForceQt()
 }
 
 
+// "-~Q3", fired once the screen has been repainted. Windows does this
+// after the whole paint and in BOTH modes -- wdriver.cpp:2929, outside the
+// "if (!us.fGraphics)" block above it -- so it is called from the two
+// places RedrawQt() finishes rather than only from the graphics one, which
+// is where it used to sit. A hook set while a text chart was on screen
+// never ran at all.
+
+static void NotifyRedrawQt(void)
+{
+#ifdef EXPRESS
+  if (!us.fExpOff && FSzSet(us.szExpDisp3))
+    ParseExpression(us.szExpDisp3);
+#endif
+}
+
+
 void RedrawQt()
 {
   if (qi.fNoUpdate)
@@ -1219,6 +1244,7 @@ void RedrawQt()
     gs.xWin = dxWin; gs.yWin = dyWin;
     if (gi.qcanvas != NULL)
       gi.qcanvas->update();
+    NotifyRedrawQt();
     return;
   }
 
@@ -1261,14 +1287,7 @@ void RedrawQt()
   // Chart Resizes Window: fit the window around whatever was just drawn.
   if (qi.fChartWindow)
     ResizeWindowToChartQt();
-#ifdef EXPRESS
-  // Notify AstroExpression the screen has just been redrawn, as Windows
-  // does at the end of its own redraw. The X11 path fires this too, but
-  // from a block xscreen.cpp excludes both GUI builds from, so this one
-  // never reached it.
-  if (!us.fExpOff && FSzSet(us.szExpDisp3))
-    ParseExpression(us.szExpDisp3);
-#endif
+  NotifyRedrawQt();
 }
 
 
