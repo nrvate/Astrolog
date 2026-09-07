@@ -597,6 +597,19 @@ static void TestChartRenderQt()
 //   us.fFlip 1, us.fGeodetic 1, us.fDecan 1, us.fHouse3D 1,
 //   us.fIndian 1, us.nHouseSystem 22, gs.fColor 0, gs.nScale 200
 //
+//   And the two window-sizing flags, which are checkable menu items like
+//   the rest and so come out INVERTED from their defaults:
+//
+//   qi.fChartWindow  1   "Chart Resizes Window" -- RedrawQt() then fits
+//                        the window around the chart after every redraw
+//   qi.fWindowChart  0   "Window Resizes Chart" -- the canvas stops
+//                        writing its own size back into gs.xWin/gs.yWin
+//
+//   Both were missing from this list until 2026-09-07, and both silenced
+//   an assertion that measured window geometry: one made the group skip
+//   itself, the other corrected the very bug it was checking for. See
+//   TestGraphicsSizeQt(), which pins them.
+//
 // A group asserting on positions, dates or rendering pins what it needs
 // from that list and restores it -- field by field, never by assigning a
 // saved US or GS back, since both carry char * fields other code frees.
