@@ -10,6 +10,10 @@
 
 # JetBrains IDE project files
 .idea/
+
+# Per-session scratch from an agent tool: .zcode/plans/plan-sess_*.md,
+# one file per session, no part of the build or the docs.
+.zcode/
 /astrolog-qt-test
 /astrolog-qt-asan
 # The UBSan artifacts had no entries at all, which is how a 12.7 MB
