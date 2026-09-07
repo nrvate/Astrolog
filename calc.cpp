@@ -1803,29 +1803,37 @@ void CastSectors()
     for (s2 = 0; s2 < occurcount && source[s2] != i; s2++)
       ;
     if (s2 == occurcount) {
-LFail:
       // If we failed to find a rising/setting bracket around our time,
       // automatically restrict that planet so it doesn't show up.
       ignore[i] = fTrue;
       continue;
     }
-LRetry:
-    // One rising or setting event was found. Now search for the next one.
-    s1 = s2;
-    for (s2 = s1 + 1; s2 < occurcount && source[s2] != i; s2++)
-      ;
-    if (s2 == occurcount)
-      goto LFail;
-    // Reject the two events if either (1) they're both the same, i.e. both
-    // rising or both setting, or (2) they don't bracket the chart's time.
-    if (type[s2] == type[s1] || time[s1] > 18.0*60.0 || time[s2] < 18.0*60.0)
-      goto LRetry;
-    // Cool, found the rising/setting bracket. The sector position is the
-    // proportion the chart time is between the two event times.
-    planet[i] = (18.0*60.0 - time[s1])/(time[s2] - time[s1])*rDegHalf;
-    if (type[s1] == 2)
-      planet[i] += rDegHalf;
-    planet[i] = Mod(rDegMax - planet[i]);
+    // Search for a valid rising/setting bracket around the chart's time.
+    {
+    flag fFound = fFalse;
+    for (;;) {
+      // One rising or setting event was found. Now search for the next one.
+      s1 = s2;
+      for (s2 = s1 + 1; s2 < occurcount && source[s2] != i; s2++)
+        ;
+      if (s2 == occurcount)
+        break;
+      // Reject the two events if either (1) they're both the same, i.e. both
+      // rising or both setting, or (2) they don't bracket the chart's time.
+      if (type[s2] == type[s1] || time[s1] > 18.0*60.0 || time[s2] < 18.0*60.0)
+        continue;
+      // Cool, found the rising/setting bracket. The sector position is the
+      // proportion the chart time is between the two event times.
+      planet[i] = (18.0*60.0 - time[s1])/(time[s2] - time[s1])*rDegHalf;
+      if (type[s1] == 2)
+        planet[i] += rDegHalf;
+      planet[i] = Mod(rDegMax - planet[i]);
+      fFound = fTrue;
+      break;
+    }
+    if (!fFound)
+      ignore[i] = fTrue;
+    }
   }
 
   // Restore original chart info since have overwritten it.
@@ -3877,7 +3885,8 @@ flag SwissComputeStar(real jd, ES *pes)
   iflag = GetSwissFlags();
   if (us.objCenter != oEar)
     iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
-LNext:
+
+  for (;;) {
   sprintf2(S(pes->sz), "%d", istar);
 
   // Compute the star coordinates and get the star's brightness.
@@ -3929,7 +3938,7 @@ LNext:
   istar++;
   if ((pes->lon == lonPrev && pes->lat == latPrev) ||
     (pes->mag == rStarNot && !us.fGraphAll))
-    goto LNext;
+    continue;
   lonPrev = pes->lon; latPrev = pes->lat;
 
 #ifdef EXPRESS
@@ -3941,7 +3950,7 @@ LNext:
     ExpSetR(iLetterY, pes->dir);
     ExpSetR(iLetterZ, pes->mag);
     if (!NParseExpression(us.szExpStar))
-      goto LNext;
+      continue;
     pes->lon = Mod(RExpGet(iLetterW));
     pes->lat = RExpGet(iLetterX);
     pes->dir = RExpGet(iLetterY);
@@ -3967,7 +3976,7 @@ LNext:
     ((*pes->pchDes && SzInList(pes->pchDes, us.szStarsList, NULL) != NULL) ||
     (*pes->pchNam && SzInList(pes->pchNam, us.szStarsList, NULL) != NULL)) !=
     us.fStarsList)
-    goto LNext;
+    continue;
   pes->ki = kDefault;
   if (FSzSet(us.szStarsColor)) {
     pch = (char *)SzInList(pes->pchBest, us.szStarsColor, NULL);
@@ -3986,6 +3995,7 @@ LNext:
       gi.rges[isz] = *pes;
   }
 #endif
+  }
   return fTrue;
 }
 
@@ -4141,7 +4151,7 @@ flag SwissComputeAsteroid(real jd, ES *pes, flag fBack)
     iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
 
   // Calling with empty parameters means initialize to first asteroid.
-LNext:
+  for (;;) {
   if (pes == NULL) {
     iast = fBack ? gs.nAstHi : gs.nAstLo;
     return fTrue;
@@ -4167,7 +4177,7 @@ LNext:
   if (!FSwissPlanet(iast + SE_AST_OFFSET, jd, us.objCenter,
     &r1, &r2, &r3, &r4, &r5, &r6)) {
     iast += (fBack ? -1 : 1);
-    goto LNext;
+    continue;
   }
   pes->lon = Mod(r1 + is.rSid);
   pes->lat = r2;
@@ -4200,7 +4210,7 @@ LNext:
     ExpSetR(iLetterZ, pes->dir);
     if (!NParseExpression(us.szExpAst)) {
       iast += (fBack ? -1 : 1);
-      goto LNext;
+      continue;
     }
     pes->lon = Mod(RExpGet(iLetterX));
     pes->lat = RExpGet(iLetterY);
@@ -4253,6 +4263,7 @@ LNext:
     }
   }
 
+  }
   iast += (fBack ? -1 : 1);
   return fTrue;
 }
