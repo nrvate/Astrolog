@@ -652,6 +652,16 @@ static void TestAllMenuActionsQt()
   // on files outside the repository, which the suite's result must not.
   // (Found when those files reappeared on this machine and the three
   // groups went red with no code change at all.)
+  // And one setting, out of all the ones this sweep toggles: "Timed
+  // Exposure" (gs.fJetTrail). Every other flag it leaves behind changes
+  // what a later group's chart CONTAINS, which those groups pin for
+  // themselves; this one changes how every redraw in the process works
+  // from then on -- the buffer is kept and not cleared (work log item
+  // 247) -- so a later render carries the one before it. Left set by the
+  // sweep it took five assertions in two groups down, among them
+  // "a plain wheel is drawn on black", which read back white because the
+  // white background of the previous group's render was still there.
+  flag fJetTrailSav = gs.fJetTrail;
   int rgnTypSav[cCust], rgnObjSav[cCust], rgnPntSav[cCust], rgnFlgSav[cCust];
   char rgszGlyphSav[cCust][cchSzMax], rgszGlyph2Sav[cCust][cchSzMax];
   char rgszDispSav[cCust][cchSzMax];
@@ -820,6 +830,8 @@ static void TestAllMenuActionsQt()
         fTrue);
     SetObjDisp(custLo+i, rgszDispSav[i]);
   }
+
+  gs.fJetTrail = fJetTrailSav;
 
   printf("  %d menu items fired, %d switched to text\n", cfired, ctext);
 }
@@ -4206,7 +4218,7 @@ static void TestTextExtentQt()
       SetChartModeQt(rgt[i].nMode);
       rgc[k] = 0;
       if (gi.qim != NULL) {
-        int kvBg = gi.qim->pixel(1, 1) & 0xffffff;
+        QRgb kvBg = gi.qim->pixel(1, 1) & 0xffffff;
         for (y = 0; y < gi.qim->height(); y++)
           for (x = 0; x < gi.qim->width(); x++)
             if ((gi.qim->pixel(x, y) & 0xffffff) != kvBg)
@@ -4254,6 +4266,62 @@ static void TestTextExtentQt()
     }
   }
 
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+}
+
+
+// "Timed Exposure" (gs.fJetTrail, "-Xj"), which draws each chart over the
+// last so an animation leaves trails. Windows implements it by having
+// DrawClearScreen() return without erasing (xgeneral.cpp:639); this path
+// allocated a fresh buffer and filled it on every redraw, so that early
+// return had nothing left to protect and the menu item did nothing at all
+// on screen.
+//
+// It is invisible to every other net here on purpose: tools/graphics-
+// matrix.sh renders "-Xj" and inert_option_audit.py carries it on the
+// allowlist, with the reason that it "draws trails BETWEEN chart updates
+// -- animation only, not one render". Two renders are the smallest thing
+// that can see it.
+//
+// Strictly more ink, not a threshold: the second render adds whatever the
+// first drew and the second does not cover, so the counts cannot be equal
+// unless the buffer was cleared. Measured at 158,527 against 151,633.
+static void TestJetTrailQt()
+{
+  flag fTrailSav = gs.fJetTrail, fGraphicsSav = us.fGraphics;
+  int nModeSav = gi.nMode, xWinSav = gs.xWin, yWinSav = gs.yWin;
+  real rRotSav = gs.rRot;
+  int iPass, x, y, rgcInk[2];
+
+  Group("Timed Exposure leaves a trail");
+  us.fGraphics = fTrue;
+  gs.xWin = gs.yWin = 600;
+  for (iPass = 0; iPass < 2; iPass++) {
+    gs.fJetTrail = (iPass != 0);
+    gs.rRot = 0.0;
+    SetChartModeQt(gGlobe);
+    RedrawQt();
+    gs.rRot = 90.0;
+    RedrawQt();
+    rgcInk[iPass] = 0;
+    if (gi.qim != NULL) {
+      QRgb kvBg = gi.qim->pixel(1, 1) & 0xffffff;
+      for (y = 0; y < gi.qim->height(); y++)
+        for (x = 0; x < gi.qim->width(); x++)
+          if ((gi.qim->pixel(x, y) & 0xffffff) != kvBg)
+            rgcInk[iPass]++;
+    }
+  }
+  Check(rgcInk[0] > 1000, "two renders draw something (%d pixels of ink)",
+    rgcInk[0]);
+  Check(rgcInk[1] > rgcInk[0],
+    "and with Timed Exposure on the second keeps what the first drew "
+    "(%d pixels against %d)", rgcInk[1], rgcInk[0]);
+
+  gs.fJetTrail = fTrailSav;
+  gs.rRot = rRotSav;
   gs.xWin = xWinSav; gs.yWin = yWinSav;
   us.fGraphics = fGraphicsSav;
   SetChartModeQt(nModeSav);
@@ -11706,6 +11774,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"chart-store",          TestChartStoreQt},
   {"window-size",          TestWindowSizeQt},
   {"text-extent",          TestTextExtentQt},
+  {"jet-trail",            TestJetTrailQt},
   {"credit-colors",        TestCreditColorsQt},
   {"transit-mode",         TestTransitModeQt},
   {"menu-actions",         TestAllMenuActionsQt},

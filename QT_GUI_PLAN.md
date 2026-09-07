@@ -10454,6 +10454,55 @@ are the more useful half to read before starting something new.
     0..0.
 
 
+247. **"Timed Exposure" did nothing on screen.** `gs.fJetTrail` -- the
+    `-Xj` switch, Graphics / Chart Effects -- draws each chart over the
+    last so an animation leaves trails. Windows implements it inside
+    `DrawClearScreen()` (`xgeneral.cpp:639`), which simply **returns
+    without erasing**. `RedrawQt()` allocated a fresh `QImage` and filled
+    it on every redraw, so that early return had nothing left to protect
+    and the menu item was inert.
+
+    Measured before touching anything: two renders of a globe at
+    rotations 0 and 90 left **151,650 pixels of ink with the option on and
+    151,650 with it off**, to the pixel.
+
+    The buffer is kept and left unfilled now when the option is on, the
+    chart is a graphics one, and the buffer is still the right size. Text
+    charts always reallocate -- their buffer is the size of the text (item
+    246) -- and a resized window has nothing to carry over. "Clear Screen"
+    still clears, as it does on Windows, which forces the flag off around
+    its own erase (`wdriver.cpp:1393`).
+
+    **Invisible to every other net here, on purpose.**
+    `tools/graphics-matrix.sh` renders `-Xj` and
+    `tools/inert_option_audit.py` carries it on the allowlist with the
+    reason "draws trails BETWEEN chart updates -- animation only, not one
+    render". Two renders are the smallest thing that can see it, and no
+    harness did two until now.
+
+    New group `jet-trail`, and the bound is **strictly more ink**, not a
+    threshold: the second render adds whatever the first drew and the
+    second does not cover, so the counts cannot be equal unless the buffer
+    was cleared. 158,527 against 151,633, and exactly equal with the fix
+    disabled.
+
+    Found while reading `wdriver.cpp`'s View menu handlers for something
+    else -- `cmdWinClear` saves and restores `gs.fJetTrail` around its
+    erase, which is only worth doing if the flag otherwise stops one.
+
+    **It took five assertions in two other groups down first**, which is
+    the interesting part. `menu-actions` fires every menu item, "Timed
+    Exposure" among them, and leaves whatever it toggled for the groups
+    after it -- deliberately, because those pin what they need. That was
+    safe while this flag did nothing. Now it changes how every redraw in
+    the process works, so `screen-colors` read a plain wheel's background
+    as **white**: the white background of the previous group's render was
+    still in the buffer. `menu-actions` restores this one flag now, and
+    the comment there says why this one and not the others: every other
+    flag it leaves behind changes what a later chart CONTAINS, and this
+    one changes what drawing MEANS.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows

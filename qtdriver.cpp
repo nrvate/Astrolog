@@ -1341,14 +1341,31 @@ void RedrawQt()
   // Note this is a different function from InitColorsX() in xscreen.cpp,
   // which sets up the backend palette instead.
   InitColors();
-  if (gi.qim != NULL) {
-    delete gi.qim;
-    gi.qim = NULL;
-  }
   if (gs.xWin < 1)
     gs.xWin = 1;
   if (gs.yWin < 1)
     gs.yWin = 1;
+  // "Timed Exposure" (gs.fJetTrail, "-Xj", Graphics / Chart Effects):
+  // KEEP the buffer and do not clear it, so each chart draws over the last
+  // and an animation leaves trails. Windows does it inside
+  // DrawClearScreen() (xgeneral.cpp:639), which returns without erasing;
+  // this path allocated a fresh QImage and filled it on every redraw, so
+  // that early return had nothing left to protect and the menu item did
+  // NOTHING on screen. Measured: two renders of a globe at different
+  // rotations left 151,650 pixels of ink with the option on and 151,650
+  // with it off, to the pixel.
+  //
+  // Graphics only, and only when the buffer is still the right size --
+  // a text chart's buffer is the size of the TEXT and is rebuilt each
+  // time, and a resized window has nothing to carry over anyway. "Clear
+  // Screen" still clears, as it does on Windows, which forces the flag off
+  // around its own erase (wdriver.cpp:1393).
+  flag fTrail = gs.fJetTrail && us.fGraphics && gi.qim != NULL &&
+    gi.qim->width() == gs.xWin && gi.qim->height() == gs.yWin;
+  if (!fTrail && gi.qim != NULL) {
+    delete gi.qim;
+    gi.qim = NULL;
+  }
   // Keep the buffer the size of the widget, then draw into a square part
   // of it if the chart wants that. Windows does the squaring in FActionX
   // (xscreen.cpp:2275) when "Ensure Square Charts Remain Square" is on and
@@ -1358,7 +1375,8 @@ void RedrawQt()
   // DrawChartX() and never passes through FActionX, so it does the same
   // thing itself.
   int dxWin = gs.xWin, dyWin = gs.yWin;
-  gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
+  if (gi.qim == NULL)
+    gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
   // InitColorsX() is what turns "Reverse Background" (gs.fInverse) and
   // "Monochrome" (gs.fColor) into the colours the drawing code actually
   // reads: gi.kiOn, kiOff, kiLite and kiGray, and the whole *B family --
@@ -1377,7 +1395,8 @@ void RedrawQt()
   // And the background is gi.kiOff, not black. Same colour ClearScreenQt()
   // uses, and what Windows' TextClearScreen() resolves to.
   KV kvBack = KvFromKi(gi.kiOff);
-  gi.qim->fill(QColor(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack)));
+  if (!fTrail)
+    gi.qim->fill(QColor(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack)));
   gi.qpaint = new QPainter(gi.qim);
   ApplyAntialiasQt();
   // With no mode set, work one out from the chart flags the way FActionX
