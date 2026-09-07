@@ -298,7 +298,7 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Sixteen standing audits, all currently clean and all run by `make check`
+Seventeen standing audits, all currently clean and all run by `make check`
 (and so by a release, which runs the same command) — seven of the
 port against `astrolog.rc`, one of the Qt GUI against the Windows one, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
@@ -307,10 +307,20 @@ one of round-trip fixture coverage, one of line endings,
 one of the MSVC project against the makefile's source list, one of
 the Qt build's own source groups and headers, one of the right-click
 menus against the menu resources, and one of the image
-writers against the format specifications. That last one needs a built
-`./astrolog`, so it runs after the build step rather than with the
-pure-Python ones. A seventeenth is listed below with them and is **not**
-run by `make check`: the graphics matrix's own options.
+writers against the format specifications, and one that every option in
+the graphics matrix still MOVES a render. The last two need a built
+`./astrolog`, so they run after the build step rather than with the
+pure-Python ones.
+
+The inert-option audit joined `make check` on 2026-09-07, and the reason
+is worth keeping: it used to live in the push differential, and when that
+lane went, the one check that can tell a live option from a dead one ran
+nowhere. A refactor then left `SwissComputeStar()` never returning
+success -- `-XG -XU` drew the same ink as `-XG` alone, no stars at all,
+and every `-XE` render sat until the harness timed it out. The commit
+that broke it verified against the switch matrix, the chart matrix and
+the suite, none of which render graphics. Ten seconds, and it names both
+halves in one run.
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
@@ -518,16 +528,24 @@ python3 tools/inert_option_audit.py  # every option in the graphics matrix
                                      # ephemeris file -- and sat there
                                      # looking like coverage, because an
                                      # inert entry still diffs to zero.
-                                     # Needs ./astrolog, so it runs in the
-                                     # differential job rather than with
-                                     # the pure-Python audits
+                                     # It caught a second one on
+                                     # 2026-09-07: "-XU" drawing no stars
+                                     # because SwissComputeStar() had
+                                     # stopped returning success. Needs
+                                     # ./astrolog, so make check runs it
+                                     # after the build rather than with
+                                     # the pure-Python audits -- it used
+                                     # to be in the push differential, and
+                                     # from the day that lane went it ran
+                                     # nowhere, which is how the -XU
+                                     # regression got in
 python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # sources Makefile.win compiles. It
                                      # was one short for years, so MSVC
                                      # gave a link error nothing explained
 ```
 
-`make check` runs all fifteen, plus a set of assertions that are scripts
+`make check` runs all seventeen, plus a set of assertions that are scripts
 rather than workflow steps so they can be falsified in a second instead
 of by pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
 input it must refuse and, where cheap, input it must accept -- 49 cases,

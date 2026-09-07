@@ -80,6 +80,17 @@ step "build: the test binary"    make qt-test -j4
 step "image_audit"               python3 tools/image_audit.py
 step "image_audit --selftest"    python3 tools/image_audit.py --selftest
 
+# Also needs the console binary, and it is here because nothing ran it.
+# It used to live in the push differential, and there is no push lane any
+# more -- so from the day that went, the one check that asks "does this
+# option still MOVE a render" ran nowhere. A refactor then made
+# SwissComputeStar() never return success: "-XG -XU" drew the same ink as
+# "-XG" alone, no stars at all, and every "-XE" render sat until the
+# harness timed it out. This audit names both in one run; the commit that
+# broke it verified against the switch matrix, the chart matrix and the
+# suite, none of which render graphics. Roughly ten seconds.
+step "inert_option_audit"        python3 tools/inert_option_audit.py
+
 # The "-W" argument counts, which are written out three times and which
 # nothing compared. The Qt consumer and the Win32 one each had five
 # spellings checked; NProcessSwitchesNullW() had none, and it is the one
@@ -123,7 +134,6 @@ elif [ "$mode" = full ]; then
   printf '%-34s %s\n' "build: Qt6" "skipped -- no Qt6 outside pkg-config"
 fi
 if [ "$mode" = full ]; then
-  step "inert options"           python3 tools/inert_option_audit.py
   step "the bundled ephemeris"   tools/check-ephem.sh
   step "the assertion scripts"   tools/ci-selftest.sh
 fi

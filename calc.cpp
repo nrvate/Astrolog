@@ -3995,8 +3995,15 @@ flag SwissComputeStar(real jd, ES *pes)
       gi.rges[isz] = *pes;
   }
 #endif
-  }
+  // Falling off the end here means the star passed every filter, so it is
+  // the one to hand back. The "return" has to be INSIDE the loop: with it
+  // after the closing brace, a good star looped instead of returning, and
+  // the only ways out left were the three "return fFalse" paths above --
+  // so the first call ran to the end of sefstars.txt and reported
+  // failure. Measured as "-XG -XU" drawing exactly the ink "-XG" alone
+  // draws, i.e. no stars at all.
   return fTrue;
+  }
 }
 
 
@@ -4263,9 +4270,13 @@ flag SwissComputeAsteroid(real jd, ES *pes, flag fBack)
     }
   }
 
-  }
+  // As in SwissComputeStar() above, and worse: the step to the next
+  // asteroid rode out of the loop with the "return", so the success path
+  // recomputed the same body forever. That is what made every "-XE"
+  // render in tools/graphics-matrix.sh sit until its 120-second timeout.
   iast += (fBack ? -1 : 1);
   return fTrue;
+  }
 }
 
 

@@ -10687,6 +10687,55 @@ instead. If `astrolog.tzc` is ever replaced with a file that does trip it,
 this is the note that explains the wall of dialogs.
 
 
+251. **`-XU` drew no stars and `-XE` never finished, from a refactor that
+    said "no control flow change".** Commit `8dc0a6c` turned three `goto`
+    sites in `calc.cpp` into `for(;;)` + `continue`. In two of the three the new
+    loop's closing brace landed *before* the function's trailing
+    `return fTrue;` rather than after it, so the success path -- reached by
+    falling off the end of the body, as it had been by falling out of the
+    label -- looped instead of returning.
+
+    `SwissComputeStar()`: the only exits left were the three
+    `return fFalse` paths, so the first call ran the whole of
+    `sefstars.txt` and reported failure. Measured: `-XG -XU` inked 165,197
+    pixels, which is exactly what `-XG` alone inks. Not "fewer stars" --
+    none, in the graphics render and in the `-v` text listing both.
+
+    `SwissComputeAsteroid()`: worse, because `iast += (fBack ? -1 : 1)`
+    rode out of the loop with the `return`. The success path recomputed the
+    same body forever. Every `-XE` entry in `tools/graphics-matrix.sh` sat
+    until its `timeout 120` and reported `MISSING`.
+
+    **Why it got in, which is the part worth keeping.** The commit
+    verified itself against `switch-matrix.sh`, `chart-matrix.sh` and the
+    suite, and all three were genuinely byte-identical -- the switch matrix
+    renders no chart, and the chart matrix renders no stars. The harness
+    that moves is `graphics-matrix.sh`, and that one needs a baseline
+    binary nobody builds for a routine commit. CLAUDE.md already says these
+    three surfaces are disjoint; this is what that costs when the disjoint
+    one is skipped.
+
+    **Two nets, because one of them cannot exist.**
+    `tools/inert_option_audit.py` asks whether an option still *moves* a
+    render, which is exactly this failure, and it named all six affected
+    entries in one run against the broken build. It had been living in the
+    push differential, and from the day that lane was removed it ran
+    nowhere -- so it is a `make check` step now, ten seconds after the
+    build. The suite gets `swiss-enumerate`, which calls
+    `SwissComputeStar()` forty times and requires forty stars and forward
+    motion; falsified by moving the return back out (0 of 40, both Checks
+    fail). The asteroid half deliberately has no suite assertion: with the
+    bug that call *hangs* rather than returning wrong, and a suite that
+    hangs is worse than one that fails, so its net is the audit, whose
+    renders are under a timeout by construction.
+
+    Verified after the fix: `graphics-matrix.sh` byte-identical to the
+    pre-window baseline, 0 `MISSING`; all eight `-U` sort modes over both
+    `-XU` and `-XE 1 20`, 8,952 listing rows, byte-identical -- which also
+    covers `cea600b`'s consolidation of the two duplicate insertion sorts
+    into `SortESArray()`, a path no harness had reached either.
+
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

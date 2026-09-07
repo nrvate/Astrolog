@@ -6889,6 +6889,57 @@ static void TestObjSelDialogQt()
 }
 
 
+// SwissComputeStar() enumerates the sefstars.txt catalogue one body per
+// call and says "I found one" by RETURNING fTrue -- and that return is
+// what a refactor lost, by closing its new for(;;) loop before it rather
+// than after. A star that passed every filter looped instead of being
+// handed back, so the first call ran the whole catalogue and reported
+// failure, and "-XU" drew and listed nothing at all.
+//
+// It hid because nothing asked. The switch matrix renders no chart and
+// the chart matrix renders no stars, so both stayed byte-identical
+// across the break; only tools/graphics-matrix.sh moved, and that is a
+// differential nobody runs without a baseline binary to compare against.
+// This asks directly, in the suite, with no baseline.
+//
+// SwissComputeAsteroid() had the identical defect and cannot be asserted
+// here: with it, the success path never advances the asteroid number, so
+// a call HANGS rather than returning the wrong thing, and a suite that
+// hangs is worse than one that fails. Its net is
+// tools/inert_option_audit.py, which make check runs and whose renders
+// are under a timeout by construction.
+
+static void TestSwissEnumerateQt()
+{
+  ES es;
+  real lonFirst;
+  char szFirst[cchSzDef];
+  int cGot = 0, cAdvance = 0;
+
+  Group("Swiss body enumeration");
+  ClearB((pbyte)&es, sizeof(ES));
+  SwissComputeStar(0.0, NULL);
+  *szFirst = chNull; lonFirst = -1.0;
+  while (cGot < 40 && SwissComputeStar(is.T, &es)) {
+    if (cGot == 0) {
+      lonFirst = es.lon;
+      sprintf2(S(szFirst), "%s", es.sz);
+    } else if (es.lon != lonFirst)
+      cAdvance++;
+    cGot++;
+  }
+  // Not a floor of zero dressed up: with the return in the wrong place
+  // this is 0, and with it right it is the loop's own cap.
+  Check(cGot == 40,
+    "SwissComputeStar() returns a star per call (%d of 40 asked for; 0 "
+    "means the success path never returns, or ephem/ has no sefstars.txt)",
+    cGot);
+  Check(cAdvance > 0,
+    "and each call moves on rather than handing back \"%s\" again",
+    szFirst);
+}
+
+
 static void TestObjSelTableQt()
 {
   char szName[cchSzDef];
@@ -12155,6 +12206,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"expression-hooks",     TestExpressionHooksQt},
   {"accel-text",           TestAccelTextQt},
   {"expression-functions", TestExpressionFunctionsQt},
+  {"swiss-enumerate",      TestSwissEnumerateQt},
   {"objsel-table",         TestObjSelTableQt},
   {"timers",               TestTimerSanityQt},
   {"objsel-dialog",        TestObjSelDialogQt},
