@@ -256,15 +256,17 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Twelve standing audits, all currently clean and all run by `make check`
+Thirteen standing audits, all currently clean and all run by `make check`
 (and so by a release, which runs the same command) — six of the
 port against `astrolog.rc`, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of round-trip fixture coverage, one of line endings,
 one of the MSVC project against the makefile's source list, and one of
-the Qt build's own source groups and headers. A thirteenth is listed
-below with them and is **not** run by `make check`: the graphics
-matrix's own options, which needs a built `./astrolog`:
+the Qt build's own source groups and headers, and one of the image
+writers against the format specifications. That last one needs a built
+`./astrolog`, so it runs after the build step rather than with the
+pure-Python ones. A fourteenth is listed below with them and is **not**
+run by `make check`: the graphics matrix's own options.
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
@@ -350,6 +352,30 @@ python3 tools/qt_srcs_audit.py       # two checks on the MSVC Qt build,
                                      # that surfaces as a link error on a
                                      # Windows runner attributed to
                                      # nothing
+python3 tools/image_audit.py         # every image Astrolog writes is a
+                                     # VALID file of its format -- BMP's
+                                     # size field against the real file
+                                     # size and its 4-byte row padding,
+                                     # every PNG chunk CRC and an IDAT
+                                     # that inflates (so zlib checks the
+                                     # Adler too) to exactly
+                                     # h*(w*3+1), the XBM element count,
+                                     # one ASCII row per pixel row,
+                                     # PostScript and SVG structure. And
+                                     # that all eleven writers agree on
+                                     # how big the picture is.
+                                     # graphics-matrix.sh checksums the
+                                     # same renders, which says they did
+                                     # not CHANGE and nothing about
+                                     # whether they were ever right: a
+                                     # writer that has always emitted a
+                                     # short row diffs to zero every
+                                     # time. "--selftest" corrupts a
+                                     # render of five formats and
+                                     # requires the complaint. Needs
+                                     # ./astrolog, so make check runs it
+                                     # after the build rather than with
+                                     # the pure-Python audits
 python3 tools/inert_option_audit.py  # every option in the graphics matrix
                                      # moves at least one render, or says
                                      # in an annotated allowlist why it
@@ -368,7 +394,7 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # gave a link error nothing explained
 ```
 
-`make check` runs all twelve, plus a set of assertions that are scripts
+`make check` runs all thirteen, plus a set of assertions that are scripts
 rather than workflow steps so they can be falsified in a second instead
 of by pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
 input it must refuse and, where cheap, input it must accept -- 49 cases,

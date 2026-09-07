@@ -7995,6 +7995,68 @@ are the more useful half to read before starting something new.
     reached it as "(null)", which is one line per format and covers the
     whole class rather than the one writer.
 
+188. **Eleven image writers, checked against their formats instead of
+    against yesterday's build.** A review of the graphics export surface,
+    driven from the console build: write every format, then actually look
+    at what came out. All eleven were correct -- 24-bit and 4-bit BMP,
+    PNG, three XBM variants, ASCII, encapsulated and complete PostScript,
+    SVG and the Daedalus wireframe, at sizes from the 180 minimum to the
+    4096 maximum. Two things that looked wrong were not:
+
+    * `-Xw 900 700` produces an 860x700 picture, and `-Xw 180 180` a
+      340x180 one. Not a clamp and not a rounding bug: the chart is
+      squared to the smaller of the two arguments and a 160-pixel sidebar
+      is added to the width. The shipped default, 760x600, is exactly
+      that -- 600 square plus 160.
+    * `-Xbv` is an X10-style XBM with `short` elements rather than
+      `char`, which PIL reports as truncated. The writer packs 16 pixels
+      per element, LSB first, and steps `x` by 16; both correct.
+
+    What was missing is any check that they *stay* right.
+    `graphics-matrix.sh` renders through all of these and checksums each,
+    which is a **differential**: it says the bytes did not change, and
+    says nothing about whether they were ever right. A writer that has
+    always emitted a wrong Adler-32, a short row, or a header length that
+    disagrees with the data behind it diffs to zero every single time.
+    This is the same gap work log item 141 opened for the numbers, one
+    surface over.
+
+    `tools/image_audit.py` asks the other question, against the format
+    specifications: BMP's size field against the real file size and its
+    4-byte row padding at both depths, every PNG chunk's CRC-32 and an
+    IDAT that inflates -- which makes zlib check the Adler-32 on the way
+    -- to exactly `h*(w*3+1)`, the XBM element count against
+    `h*ceil(w/bits)`, one ASCII row per pixel row at the right width, and
+    the structural markers of PostScript and SVG.
+
+    And one check no single format can make: **all eleven must agree on
+    how big the picture is.** That number is deliberately not written
+    down here -- the squaring rule above lives in the program, and
+    transcribing it would make this audit wrong the day the rule
+    changed. Two writers are excluded from the exact match with a reason
+    each, not because they were awkward: complete PostScript's
+    `%%BoundingBox` is the page rather than the image, and the SVG
+    carries a viewBox at a fixed multiple of the pixel size -- so the SVG
+    is checked on the shape that multiple cannot change.
+
+    **Its falsification is a check, not a memory.** `--selftest` renders
+    five formats, corrupts each in the one way its checker is supposed to
+    notice -- an untrue BMP size field, a flipped byte inside an IDAT, an
+    XBM one element short, an ASCII row a character short, an SVG that is
+    no longer XML -- and requires the complaint. Every assertion in the
+    audit is "this file is well formed", and a checker that cannot
+    recognise a malformed file passes all eleven while proving nothing.
+    Both run in `make check`, after the build step because they need
+    `./astrolog`.
+
+    Writing it also cost three false alarms, all of them the audit's own,
+    and they are worth naming because each looked exactly like a program
+    bug: `\w*` in the XBM regex did not match the hyphen this audit's own
+    temp filenames put in the array name; complete PostScript's page-sized
+    bounding box read as a size disagreement; and the SVG has no
+    width/height attributes at all. Ask what the measurement cannot see,
+    every time.
+
 
 ## Features this fork adds to both builds
 

@@ -68,6 +68,15 @@ done
 step "build: console and Qt"     make -j4
 step "build: the test binary"    make qt-test -j4
 
+# Needs the console binary, so it goes after the build rather than up
+# with the pure-Python audits. Eleven image writers, each checked against
+# its own format instead of against a previous build -- the one question
+# graphics-matrix.sh structurally cannot ask. Its --selftest corrupts a
+# render of each and requires the complaint, so a checker that has
+# stopped checking says so here rather than at the next release.
+step "image_audit"               python3 tools/image_audit.py
+step "image_audit --selftest"    python3 tools/image_audit.py --selftest
+
 # The other two toolchains, when this machine has them. Both are here
 # because their absence has cost this project real time: Makefile.win
 # went 62 commits without compiling while three work log items listed
