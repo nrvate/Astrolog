@@ -9410,6 +9410,43 @@ are the more useful half to read before starting something new.
     working copy now. Falsified by putting `ciDefa` back: the field reads
     "Current moment now".
 
+222. **Two settings the Graphics Settings dialog edited and then didn't
+    finish.** A new axis on the same method: comparing how many times each
+    backend touches each `is.` and `gi.` field, rather than each
+    shared-core function. `gi.rgspace` read three on Windows against
+    **zero** here; `gi.nFontPrev` two against one.
+
+    **The orbit trail buffer is a heap overflow.** `gi.rgspace` is
+    allocated once, as `oNorm1*gs.cspace` entries, and every allocation
+    site guards on the pointer being NULL (xdevice.cpp:2608,
+    xcharts1.cpp:2810) -- so whoever changes the count has to free it.
+    The `-YXj` switch handler does (switch.cpp:1277) and so does Windows'
+    dialog (wdialog.cpp:3014). This one assigned `gs.cspace` and nothing
+    else, and `xcharts1.cpp:2693` then writes at `gi.ispace*oNorm1` with
+    `gi.ispace` cycling modulo the **new** count: raise it from 4 to 16 in
+    the dialog, draw an orbit chart, and it writes four times past the end
+    of the allocation. Asserted **both** ways -- freeing unconditionally
+    would throw away the trail the user is watching on every unrelated OK
+    -- and each direction falsified separately.
+
+    **`gs.nFontAll` is not a cache.** The dialog stored the six
+    `gs.nFont*` fields and never repacked them, and that value is what
+    "Save Program Settings" writes as `:YXf #%06x` (io.cpp:2572), what the
+    metafile writer sizes its object table from (xdevice.cpp:1808 and
+    1866), and what File Settings' "Use Astrolog Font" box reads. So a
+    font picked in the dialog was **saved wrong**, and a metafile could
+    declare an object count out of step with the fonts the drawing then
+    selected. `gi.nFontPrev` with it, which is what File Settings
+    multiplies by when the box is re-ticked -- nothing here had ever
+    written it, so unticking and re-ticking restored whatever
+    `astrolog.as` had rather than what the user had just chosen.
+
+    The assertion sets **all six** combo boxes rather than one, and that
+    is not thoroughness: `rc2qt.py` splits the trailing digit off a
+    resource symbol into an index, so all six carry the object name
+    `dcGr_Xf` and `findChild()` cannot tell them apart. The first draft
+    asked for `dcGr_Xf1`, got nothing, and failed on the wrong thing.
+
 
 ## Features this fork adds to both builds
 

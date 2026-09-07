@@ -1730,7 +1730,25 @@ void ShowGraphicsSettingsDialogQt()
   flag fResize = (gs.xWin != nx || gs.yWin != ny);
   gs.xWin = nx; gs.yWin = ny;
   gs.nGridCell = nGrid;
-  if (peSpace != NULL) gs.cspace = peSpace->text().toInt();
+  // gi.rgspace is allocated once, as oNorm1*gs.cspace entries, and every
+  // allocation site guards on it being NULL (xdevice.cpp:2608,
+  // xcharts1.cpp:2810) -- so a CHANGED count has to free it or the next
+  // render walks a bigger ring than the buffer holds. xcharts1.cpp:2693
+  // writes at gi.ispace*oNorm1 with gi.ispace cycling modulo the NEW
+  // gs.cspace, which is a heap overflow, not a wrong picture. Windows
+  // frees it here (wdialog.cpp:3014) and so does the "-YXj" switch
+  // handler; this assigned the field and nothing else.
+  if (peSpace != NULL) {
+    int cspaceNew = peSpace->text().toInt();
+
+    if (gs.cspace != cspaceNew) {
+      gs.cspace = cspaceNew;
+      if (gi.rgspace != NULL) {
+        DeallocateP(gi.rgspace);
+        gi.rgspace = NULL;
+      }
+    }
+  }
   if (peAU != NULL)    gs.rspace = peAU->text().toDouble();
   gs.rRot = rRotN;
   gs.rTilt = rTiltN;
@@ -1776,6 +1794,25 @@ void ShowGraphicsSettingsDialogQt()
       if (FMatchSz(sz, rgszFontDispQt[j]))
         *rgpnFont[i] = j;
   }
+  // gs.nFontAll is the six fields above PACKED, and it is not a cache:
+  // "Save Program Settings" writes it as ":YXf #%06x" (io.cpp:2572), the
+  // metafile writer sizes its object table from it (xdevice.cpp:1808 and
+  // 1866) and File Settings' "Use Astrolog Font" box reads it. Storing
+  // the six without recomputing it meant a font chosen here was SAVED
+  // WRONG and could put a metafile's declared object count out of step
+  // with the fonts the drawing then selected.
+  //
+  // gi.nFontPrev with it: that is what File Settings multiplies by when
+  // the box is ticked again (qtdialog.cpp, "gs.nFontAll = checked *
+  // gi.nFontPrev"), so without this, unticking and re-ticking restored
+  // whatever astrolog.as had rather than what the user just picked.
+  // Windows does both, in this order, at wdialog.cpp:3067; so does the
+  // "-YXf" switch handler (switch.cpp:1446).
+  gs.nFontAll = gs.nFontTxt*0x100000 + gs.nFontSig*0x10000 +
+    gs.nFontHou*0x1000 + gs.nFontObj*0x100 + gs.nFontAsp*0x10 +
+    gs.nFontNak;
+  if (gs.nFontAll != 0)
+    gi.nFontPrev = gs.nFontAll;
   i = NRcStoreRadioQt(rgbuilt, 1, 3, 0);
   if (peLeft != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,

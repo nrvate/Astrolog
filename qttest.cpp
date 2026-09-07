@@ -2874,6 +2874,151 @@ static void TestNowButtonQt(void (*pfnOpen)(), CONST char *szDst,
 }
 
 
+// The orbital-trail buffer, gi.rgspace, and the Graphics Settings field
+// that sizes it ("Orbit trail steps", -YXj, gs.cspace).
+//
+// It is allocated ONCE, as oNorm1*gs.cspace entries, and every allocation
+// site guards on the pointer being NULL (xdevice.cpp:2608,
+// xcharts1.cpp:2810). So whoever changes the count has to free it. The
+// "-YXj" switch handler does (switch.cpp:1277) and so does Windows'
+// Graphics Settings dialog (wdialog.cpp:3014); this port's assigned the
+// field and nothing else.
+//
+// That is a heap overflow rather than a wrong picture:
+// xcharts1.cpp:2693 writes at gi.ispace*oNorm1 with gi.ispace cycling
+// modulo the NEW gs.cspace, so raising the count from 4 to 16 in the
+// dialog and drawing an orbit chart writes four times past the end of
+// the buffer.
+//
+// Both directions. Freeing unconditionally would throw away the trail
+// the user is watching every time they press OK on an unrelated setting.
+
+static void DriveSpaceCountQt(int cspace)
+{
+  DriveModalQt(ShowGraphicsSettingsDialogQt, [cspace](QWidget *pw) {
+    QLineEdit *peSpace = pw->findChild<QLineEdit *>("deGr_YXj");
+
+    if (peSpace != NULL)
+      peSpace->setText(QString::number(cspace));
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") {
+        ppb->click();
+        return;
+      }
+    pw->close();
+  });
+}
+
+
+// gs.nFontAll, the packed form of the six graphics font settings, and
+// gi.nFontPrev, the copy File Settings restores from.
+//
+// The Graphics Settings dialog stored the six fields and recomputed
+// neither. That is not a cache going stale in private: "Save Program
+// Settings" writes gs.nFontAll as ":YXf #%06x" (io.cpp:2572), so a font
+// chosen in the dialog was SAVED WRONG; the metafile writer sizes its
+// object table from it (xdevice.cpp:1808 and 1866); and File Settings'
+// "Use Astrolog Font" box reads it and, when re-ticked, multiplies
+// gi.nFontPrev -- which nothing here ever wrote, so that restored
+// whatever astrolog.as had rather than what the user picked.
+//
+// Windows does both, in this order, at wdialog.cpp:3067, and so does the
+// "-YXf" switch handler.
+
+static void TestFontPackQt()
+{
+  int nFontAllSav = gs.nFontAll, nFontPrevSav = gi.nFontPrev;
+  int nTxtSav = gs.nFontTxt, nSigSav = gs.nFontSig, nHouSav = gs.nFontHou;
+  int nObjSav = gs.nFontObj, nAspSav = gs.nFontAsp, nNakSav = gs.nFontNak;
+  int nWant;
+
+  Group("Graphics font packing");
+
+  // Start from "no fonts at all", so the packed value the dialog must
+  // produce cannot be the one it already held.
+  gs.nFontTxt = gs.nFontSig = gs.nFontHou = 0;
+  gs.nFontObj = gs.nFontAsp = gs.nFontNak = 0;
+  gs.nFontAll = 0;
+  gi.nFontPrev = 0;
+
+  // All six font combos, not one: rc2qt.py splits the trailing digit off
+  // a resource symbol into an index, so the six share the object name
+  // "dcGr_Xf" and findChild() cannot tell them apart. Setting them all
+  // asks the same question and needs no such guess.
+  int cFound = 0;
+  DriveModalQt(ShowGraphicsSettingsDialogQt, [&cFound](QWidget *pw) {
+    for (QComboBox *pcb : pw->findChildren<QComboBox *>("dcGr_Xf")) {
+      pcb->setEditText("Wingdings");
+      cFound++;
+    }
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") {
+        ppb->click();
+        return;
+      }
+    pw->close();
+  });
+
+  Check(cFound == 6, "the dialog has six font combo boxes (found %d)",
+    cFound);
+  Check(gs.nFontSig == 1 && gs.nFontNak == 1,
+    "and it stored what was picked in them (sig %d, nak %d)",
+    gs.nFontSig, gs.nFontNak);
+  nWant = gs.nFontTxt*0x100000 + gs.nFontSig*0x10000 +
+    gs.nFontHou*0x1000 + gs.nFontObj*0x100 + gs.nFontAsp*0x10 +
+    gs.nFontNak;
+  Check(gs.nFontAll == nWant,
+    "and gs.nFontAll is the six of them packed, which is what the "
+    "settings writer and the metafile writer read (#%06x, wanted #%06x)",
+    gs.nFontAll, nWant);
+  Check(gi.nFontPrev == gs.nFontAll,
+    "and gi.nFontPrev followed it, so File Settings restores this set "
+    "rather than the last one (#%06x)", gi.nFontPrev);
+
+  gs.nFontAll = nFontAllSav; gi.nFontPrev = nFontPrevSav;
+  gs.nFontTxt = nTxtSav; gs.nFontSig = nSigSav; gs.nFontHou = nHouSav;
+  gs.nFontObj = nObjSav; gs.nFontAsp = nAspSav; gs.nFontNak = nNakSav;
+}
+
+
+static void TestOrbitBufferQt()
+{
+  int cspaceSav = gs.cspace;
+
+  Group("Orbit trail buffer");
+
+  // Start from nothing allocated: the pointer is reallocated on demand,
+  // so dropping whatever is there costs a redraw and no correctness.
+  if (gi.rgspace != NULL) {
+    DeallocateP(gi.rgspace);
+    gi.rgspace = NULL;
+  }
+  gs.cspace = 4;
+  gi.rgspace = RgAllocate(oNorm1*gs.cspace, PT3R, "orbits");
+  gi.cspace = gi.ispace = 0;
+  Check(gi.rgspace != NULL, "a buffer sized for four steps is allocated");
+
+  DriveSpaceCountQt(4);
+  Check(gs.cspace == 4, "OK with the count unchanged leaves it at 4 (%d)",
+    gs.cspace);
+  Check(gi.rgspace != NULL,
+    "and keeps the trail the user is watching");
+
+  DriveSpaceCountQt(16);
+  Check(gs.cspace == 16, "the dialog stored the new count (%d)", gs.cspace);
+  Check(gi.rgspace == NULL,
+    "and dropped the buffer sized for the old one, which the next render "
+    "would have written past the end of");
+
+  if (gi.rgspace != NULL) {
+    DeallocateP(gi.rgspace);
+    gi.rgspace = NULL;
+  }
+  gs.cspace = cspaceSav;
+  gi.cspace = gi.ispace = 0;
+}
+
+
 static void TestNowButtonsQt()
 {
   CI ciDefaSav = ciDefa, ciTranSav = ciTran;
@@ -10042,6 +10187,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"lockdown",             TestLockdownQt},
   {"chart-now",            TestChartNowQt},
   {"now-buttons",          TestNowButtonsQt},
+  {"font-pack",            TestFontPackQt},
+  {"orbit-buffer",         TestOrbitBufferQt},
   {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},
   {"restrict-recall",      TestRestrictRecallQt},
