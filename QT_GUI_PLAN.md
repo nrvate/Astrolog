@@ -10445,6 +10445,14 @@ are the more useful half to read before starting something new.
       direction: a whole-image statistic is hostage to everything else in
       the image.
 
+    And the payoff, which the group also asserts: with the canvas the size
+    of the chart, the scroll area finally has something to scroll. On a 56
+    row aspect grid in a 700x700 window the vertical scrollbar reads
+    **0..180** where it had no range at all, and "Scroll to End" reaches
+    180 -- so the four Scroll commands, the scrollbar and the mouse wheel
+    all work on text charts now. Falsified with the rest: the bar reads
+    0..0.
+
 
 ### A knowing divergence found in the same sweep, and left alone
 

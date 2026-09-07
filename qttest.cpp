@@ -49,6 +49,8 @@
 #endif
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QScrollArea>
+#include <QtWidgets/QScrollBar>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QRadioButton>
@@ -4214,6 +4216,42 @@ static void TestTextExtentQt()
     Check(rgc[0] == rgc[1] && rgc[0] > 1000,
       "%s draws the same in a 600x600 window as in a 1400x1400 one "
       "(%d pixels of ink against %d)", rgt[i].sz, rgc[0], rgc[1]);
+  }
+
+  // And the point of sizing the canvas to the text: the scroll area now
+  // has something to scroll, so the four Scroll commands, the scrollbar
+  // and the mouse wheel all reach the rest of a long chart. Before this
+  // the canvas was the viewport, the bar had no range at all, and the
+  // menu items moved nothing.
+  {
+    QScrollArea *psa = gi.qwind != NULL ?
+      gi.qwind->findChild<QScrollArea *>() : NULL;
+
+    if (psa == NULL)
+      printf("  no scroll area\n");
+    else {
+      QSize sizeSav = gi.qwind->size();
+
+      gi.qwind->resize(700, 700);
+      QApplication::processEvents();
+      gs.xWin = gs.yWin = 600;
+      SetChartModeQt(gGrid);
+      QApplication::processEvents();
+      Check(psa->verticalScrollBar()->maximum() > 0,
+        "and the scroll area has a range to scroll over (canvas %d tall "
+        "in a %d viewport, bar 0..%d)", gi.qcanvas->height(),
+        psa->viewport()->height(), psa->verticalScrollBar()->maximum());
+      ScrollChartQt(2);
+      QApplication::processEvents();
+      Check(psa->verticalScrollBar()->value() ==
+        psa->verticalScrollBar()->maximum(),
+        "and \"Scroll to End\" reaches the bottom of it (%d of %d)",
+        psa->verticalScrollBar()->value(),
+        psa->verticalScrollBar()->maximum());
+      ScrollChartQt(0);
+      gi.qwind->resize(sizeSav);
+      QApplication::processEvents();
+    }
   }
 
   gs.xWin = xWinSav; gs.yWin = yWinSav;
@@ -8619,28 +8657,9 @@ static void TextChartCaptureQt(CONST char *szDir)
 // Nothing here is a test. Do not add assertions; put those in the suite.
 static void ProbeQt()
 {
-  int iPass, x, y, cTop, rgcInk[2], cy;
-  QRgb rgkv[2];
-
-  rgkv[0] = (QRgb)(0xff000000 | KvFromKi(kWhiteA));
-  rgkv[1] = (QRgb)(0xff000000 | KvFromKi(kBlackA));
-  us.fGraphics = fFalse;
-  gs.xWin = 1200; gs.yWin = 900;
-  us.fAnsiColor = 1;
-  for (iPass = 0; iPass < 2; iPass++) {
-    gs.fInverse = (iPass != 0);
-    SetChartModeQt(gCredit);
-    cy = gi.qim->height();
-    cTop = cy / 8;
-    rgcInk[iPass] = 0;
-    for (y = 0; y < cTop; y++)
-      for (x = 0; x < gi.qim->width(); x++)
-        if ((QRgb)(gi.qim->pixel(x, y) | 0xff000000) == rgkv[iPass])
-          rgcInk[iPass]++;
-    printf("pass %d: buffer %dx%d, top %d rows, ink pixels %d\n", iPass,
-      gi.qim->width(), cy, cTop, rgcInk[iPass]);
-  }
-  gs.fInverse = fFalse;
+  printf("gi.nMode=%d (gWheel=%d gHouse=%d)\n", gi.nMode, gWheel, gHouse);
+  printf("us.nHouseSystem=%d (%s)  fEphemFiles=%d\n",
+    us.nHouseSystem, szSystem[us.nHouseSystem], us.fEphemFiles);
 }
 
 
