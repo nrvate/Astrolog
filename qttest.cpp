@@ -579,6 +579,28 @@ static void TestChartRenderQt()
 //
 // Skipped: anything whose label ends in "..." (those open a dialog and
 // would block; the dialog test covers them), and Quit.
+//
+// WHAT IT LEAVES BEHIND, measured, because every group after it inherits
+// this and three separate assertions in one week failed on the leftovers
+// rather than on their own subject:
+//
+//   us.nRel      -7    a relationship chart -- RecastAndRedrawQt() then
+//                      goes down CastRelation(), which rewrites ciMain
+//   us.objCenter oSun  heliocentric; NCheckEclipseLunar() returns
+//                      etUndefined outright when the centre IS the Sun
+//   us.fEquator  1     ecliptic converted to equatorial -- and the loop
+//                      skips restricted objects, so a restricted body
+//                      keeps ECLIPTIC coordinates while the rest do not
+//   ignore[oSun] 1     the Sun restricted, which is what makes the line
+//                      above visible
+//   us.fSidereal 1, us.nDwad 1, us.fNavamsa 1, us.objOnAsc 2,
+//   us.fFlip 1, us.fGeodetic 1, us.fDecan 1, us.fHouse3D 1,
+//   us.fIndian 1, us.nHouseSystem 22, gs.fColor 0, gs.nScale 200
+//
+// A new group that asserts on positions, dates or rendering pins what it
+// depends on and restores it -- field by field, never by assigning a
+// saved US or GS struct back, since both carry char * fields other code
+// frees. See the eclipse and animation groups for worked examples.
 
 static void TestAllMenuActionsQt()
 {
@@ -1314,6 +1336,9 @@ static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
 }
 
 
+extern void AnimTickTestQt(void);                 // qtdriver.cpp
+extern flag FAnimTickBusyTestQt(void);
+extern void SetAnimTickBusyTestQt(flag);
 extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
 extern QIcon IconAstrologQt();                   // qtdriver.cpp
 extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
@@ -2639,8 +2664,51 @@ static void TestAnimationStateQt()
     "and both agree it is stopped");
 #undef FRunningQt
 
+  // A TICK MUST NOT RUN INSIDE ANOTHER TICK. Casting a chart can enter a
+  // nested event loop -- FGetUrlQt() runs one for the length of a JPL
+  // Horizons fetch, and so does any modal a cast puts up -- and this
+  // timer keeps firing inside one. Unguarded, the second tick advances
+  // the chart again, casts it at a new time, misses the reply cache
+  // because the time is part of its key, and starts another fetch inside
+  // the first. Frames arriving faster than a web service answers nest
+  // without bound.
+  //
+  // The contract is testable without a network or a nested loop: while a
+  // tick is in progress, another one does nothing at all. Both halves
+  // are asserted, because "does nothing" passes just as well on a tick
+  // that never worked.
+  // Pin what a frame depends on rather than inheriting it: a direction
+  // of zero advances nothing, and a relationship chart sends
+  // RecastAndRedrawQt() down CastRelation(), which rewrites ciMain from
+  // the two charts being compared and puts back the very date the tick
+  // just moved. Both were inherited from TestAllMenuActionsQt() in the
+  // full run, where this assertion failed while passing on its own.
+  int nRelSav2 = us.nRel;
+  us.nRel = rcNone;
+  gi.nDir = 1;
+  gs.nAnim = iAnimDay; gi.fPause = fFalse;   // running, a day a frame
+  ciCore.mon = 6; ciCore.day = 15; ciCore.yea = 1990; ciCore.tim = 12.0;
+  ciMain = ciCore;
+  CI ciBefore = ciMain;
+  AnimTickTestQt();
+  Check(!FEqCI(ciMain, ciBefore), "a tick advances the chart (%d/%d/%d)",
+    ciMain.mon, ciMain.day, ciMain.yea);
+  Check(!FAnimTickBusyTestQt(), "and clears its own guard on the way out");
+
+  ciBefore = ciMain;
+  SetAnimTickBusyTestQt(fTrue);          // as if a tick were in progress
+  AnimTickTestQt();
+  SetAnimTickBusyTestQt(fFalse);
+  Check(FEqCI(ciMain, ciBefore),
+    "a tick fired inside another one does nothing (%d/%d/%d)",
+    ciMain.mon, ciMain.day, ciMain.yea);
+
+  us.nRel = nRelSav2;
   gs.nAnim = nAnimSav; gi.nDir = nDirSav; gi.fPause = fPauseSav;
-  ciCore = ciSav;
+  // ciMain as well as ciCore: the ticks above moved both, and a later
+  // group that inherits a chart three days from where it thinks it is
+  // fails on the leftovers rather than on its own subject.
+  ciCore = ciMain = ciSav;
   CastChart(1);
   printf("  one switch starts and stops it; nothing else moves the chart\n");
 }

@@ -3003,17 +3003,54 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
 }
 
 
+// One animation frame. Advance the chart and redraw it.
+//
+// A TICK MUST NOT RUN INSIDE ANOTHER TICK, and it is not enough to say
+// so: casting a chart can enter a nested event loop, and this timer keeps
+// firing inside one. Two routes reach it.
+//
+// A "j<n>" custom object is fetched from JPL Horizons, and FGetUrlQt()
+// runs a nested QEventLoop while it waits. The tick fires inside that,
+// advances the chart, casts it at a NEW time -- which misses the reply
+// cache, because the time is part of the URL that keys it -- and starts
+// another fetch inside the first. A public web service answering in
+// 400ms against a 100ms frame interval nests four deep per frame and
+// does not stop: a stack of progress dialogs, each Cancel aborting only
+// its own level. The other route is any modal a cast puts up, a warning
+// box among them, which is the same shape with no network involved.
+//
+// The guard is one flag rather than stopping the timer, because a
+// stopped timer has to be restarted on every path out of the cast --
+// including the ones that throw a dialog -- and a missed restart leaves
+// the animation dead with no way back short of toggling it.
+
+static flag s_fAnimTickQt = fFalse;
+
+static void AnimTickQt(void)
+{
+  // Same guard Windows' WM_TIMER uses. Note gs.nAnim < 1 covers both
+  // "off" (negative, remembering the rate) and "never set".
+  if (gs.nAnim < 1 || gi.fPause)
+    return;
+  if (s_fAnimTickQt)
+    return;
+  s_fAnimTickQt = fTrue;
+  Animate(gs.nAnim, gi.nDir);
+  RecastAndRedrawQt();
+  s_fAnimTickQt = fFalse;
+}
+
+#ifdef QTTEST
+void AnimTickTestQt(void) { AnimTickQt(); }
+flag FAnimTickBusyTestQt(void) { return s_fAnimTickQt; }
+void SetAnimTickBusyTestQt(flag f) { s_fAnimTickQt = f; }
+#endif
+
 static void StartAnimTimerQt(QMainWindow *pwind)
 {
   qi.ptimerAnim = new QTimer(pwind);
-  QObject::connect(qi.ptimerAnim, &QTimer::timeout, pwind, []() {
-    // Same guard Windows' WM_TIMER uses. Note gs.nAnim < 1 covers both
-    // "off" (negative, remembering the rate) and "never set".
-    if (gs.nAnim < 1 || gi.fPause)
-      return;
-    Animate(gs.nAnim, gi.nDir);
-    RecastAndRedrawQt();
-  });
+  QObject::connect(qi.ptimerAnim, &QTimer::timeout, pwind,
+    []() { AnimTickQt(); });
   qi.ptimerAnim->start(qi.nTimerDelay);
 }
 

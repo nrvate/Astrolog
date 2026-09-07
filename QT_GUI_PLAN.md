@@ -8188,6 +8188,64 @@ are the more useful half to read before starting something new.
     relearning: print the number, do not reason about which flag it
     might be.
 
+191. **An animation frame could start inside another one.** A review of
+    the Qt-specific network path turned this up one layer above it.
+    `StartAnimTimerQt()` connected the timer straight to
+    `Animate(); RecastAndRedrawQt();` with nothing stopping that from
+    running *inside itself* -- and casting a chart can enter a nested
+    event loop, which is exactly where this timer keeps firing.
+
+    Two routes reach it, and the first is the reason it matters:
+
+    * A `j<n>` custom object is fetched from JPL Horizons, and
+      `FGetUrlQt()` runs a nested `QEventLoop` while it waits. The tick
+      fires inside that loop, advances the chart, and casts it at a
+      **new time** -- which misses the reply cache, because io.cpp keys
+      that cache on the URL and the time is part of the URL. So it
+      starts another fetch inside the first. A public web service
+      answering in 400 ms against a 100 ms frame interval nests four
+      deep per frame and does not stop: a stack of progress dialogs,
+      each Cancel button aborting only its own level.
+    * Any modal a cast puts up, a warning box among them. Same shape,
+      no network involved.
+
+    The fix is one flag in the tick rather than stopping the timer for
+    the duration of the cast. A stopped timer has to be restarted on
+    every path out, including the ones that throw a dialog, and a missed
+    restart leaves the animation dead with no way back short of toggling
+    it off and on.
+
+    The contract is testable with no network and no nested loop, which
+    is why the test is three lines rather than a harness: while a tick
+    is in progress, another tick does nothing at all. Both halves are
+    asserted -- a tick advances the chart, and a tick fired while the
+    guard is set does not -- because "does nothing" passes just as well
+    on a tick that never worked. The two are the same call with only the
+    flag differing and demand opposite outcomes, so no constant
+    behaviour passes both.
+
+    **And this group failed the full run too, for the third time in a
+    week**, on state `TestAllMenuActionsQt()` leaves behind. Here the
+    inherited `us.nRel` of -7 sent `RecastAndRedrawQt()` down
+    `CastRelation()`, which rewrites `ciMain` from the two charts being
+    compared and puts back the very date the tick had just moved -- so
+    "a tick advances the chart" failed while passing on its own. Three
+    times is a pattern rather than an accident, so the measured leftover
+    list is now written down above `TestAllMenuActionsQt()` itself:
+    `nRel`, `objCenter`, `fEquator`, a restricted Sun, sidereal, dwad,
+    navamsa, solar chart, flip, geodetic, decan, 3D houses, Indian
+    wheel, house system 22, monochrome and double scale. A new group
+    asserting on positions, dates or rendering pins what it needs from
+    that list rather than bisecting for it.
+
+    The rest of `FGetUrlQt()` was read in the same pass and is sound:
+    the timeout aborts the reply rather than the loop, the three failure
+    kinds are distinguished, `close()` is checked because it is where a
+    flush failure surfaces, and a half-written file is removed rather
+    than left for the parser. The progress dialog is `WindowModal` on the
+    main window, so the menu routes into a second fetch are already
+    blocked; the timer was the one that was not.
+
 
 ## Features this fork adds to both builds
 
