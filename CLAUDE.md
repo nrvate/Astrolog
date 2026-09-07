@@ -957,6 +957,20 @@ make qt-asan && ASAN_OPTIONS=detect_leaks=0 \
 widgets leaks by construction -- 10,769 bytes in 115 allocations, none of
 it a defect this is looking for.
 
+**It takes about thirteen minutes, and it will look stalled for stretches
+of that.** `nScaleTest` in `qttest.cpp` multiplies every timer in the
+suite by 10 under ASan, on purpose -- a delay that wins the race against
+a dialog in a normal build loses it there -- so each group that drives a
+modal waits up to 30 seconds per dialog rather than 3. Measured
+2026-09-07: 642 s of group time, and "Graphics Settings field validation"
+alone accounts for minutes of it. Two things follow. Do not put it under
+a 420 s or 600 s watchdog; `tools/ci-run-suite.sh` wants 3600 here. And
+do not diagnose a hang from the log going quiet: with stdout to a plain
+file stdio block-buffers, so the last group named is not the group it is
+in -- run it through `tools/ci-run-suite.sh`, which gives it a pty, and
+believe that instead. Both mistakes were made on the day this paragraph
+was written, and the run they were made about finished clean.
+
 Also minutes, also pre-release rather than pre-commit, and it earns
 that on its record: the first run of each half found real out-of-bounds
 bugs in code exercised dozens of times without a sanitizer behind it
