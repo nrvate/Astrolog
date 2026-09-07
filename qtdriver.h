@@ -41,6 +41,17 @@ flag FNoUpdateQt();
 flag FNoPopupQt();
 void SetNoPopupQt(flag f);
 flag FBmpWindowQt();
+// "Window Resizes Chart", Windows' wi.fWindowChart. Read by the Graphics
+// Settings dialog, which has to resize the window when the chart size
+// changes and that flag is on -- or the window's size immediately
+// overwrites the size the user just typed.
+flag FWindowChartQt();
+void SetWindowChartQt(flag f);
+// "Chart Resizes Window", Windows' wi.fChartWindow. RedrawQt() fits the
+// window around the chart when it is on, which is why anything measuring
+// the window has to know its state.
+flag FChartWindowQt();
+void SetChartWindowQt(flag f);
 void SetBmpWindowQt(flag f);
 int NAntialiasQt();
 void SetAntialiasQt(int n);

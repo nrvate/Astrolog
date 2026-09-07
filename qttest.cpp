@@ -1331,6 +1331,7 @@ extern void SetAnimTickBusyTestQt(flag);
 extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
 extern flag FBootPathTestQt(CONST char *, char *, int);  // qtdriver.cpp
 extern flag FRunCommandLineTestQt(CONST char *);  // qtdialog.cpp
+extern QSize SizeChartViewportTestQt();          // qtdriver.cpp
 extern QIcon IconAstrologQt();                   // qtdriver.cpp
 extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
@@ -2924,6 +2925,81 @@ static void DriveSpaceCountQt(int cspace)
 //
 // Windows does both, in this order, at wdialog.cpp:3067, and so does the
 // "-YXf" switch handler.
+
+// The chart size typed into Graphics Settings, which came back smaller
+// than it was typed.
+//
+// The dialog resized the WINDOW to the chart's size. A window is bigger
+// than its chart viewport by the menu bar and the frame, and with "Window
+// Resizes Chart" on -- the default -- the viewport's size is written
+// straight back into gs.xWin/gs.yWin by the canvas. So 640 by 480 became
+// 640 by rather less than 480, silently, and reopening the dialog showed
+// the reduced number. ResizeWindowToChartQt() measures the chrome and
+// adds it; that is what it exists for, and Windows calls its equivalent
+// here (wdialog.cpp:3006).
+
+static void TestGraphicsSizeQt()
+{
+  int xWinSav = gs.xWin, yWinSav = gs.yWin;
+  flag fWinChartSav = FWindowChartQt(), fChartWinSav = FChartWindowQt();
+  int xWant = 640, yWant = 480;
+
+  Group("Chart size from Graphics Settings");
+
+  // "Chart Resizes Window" OFF, which is the default and the state the
+  // bug appears in. With it on, RedrawQt() fits the window around the
+  // chart at the end of the dialog and quietly corrects the mistake --
+  // and an earlier group leaves it on, so the assertion below passed in
+  // the full suite with the bug deliberately present while failing when
+  // the group ran alone. Measured, not guessed: window 640x505 against
+  // 640x480 for the same sabotaged build.
+  SetChartWindowQt(fFalse);
+
+  // Turned ON rather than skipped when it is off. The first draft
+  // returned early with a message, and in the full suite that is exactly
+  // what happened -- an earlier group had left it off, so the group
+  // reported "0 assertions" and proved nothing while passing. A test
+  // that quietly does not run is worse than one that fails.
+  SetWindowChartQt(fTrue);
+  // Somewhere else to start from, so "took what was typed" and "left it
+  // alone" are different answers.
+  gs.xWin = 500; gs.yWin = 400;
+  DriveModalQt(ShowGraphicsSettingsDialogQt, [xWant, yWant](QWidget *pw) {
+    QLineEdit *peX = pw->findChild<QLineEdit *>("deGr_Xw_x");
+    QLineEdit *peY = pw->findChild<QLineEdit *>("deGr_Xw_y");
+
+    if (peX != NULL) peX->setText(QString::number(xWant));
+    if (peY != NULL) peY->setText(QString::number(yWant));
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") {
+        ppb->click();
+        return;
+      }
+    pw->close();
+  });
+  QApplication::processEvents(QEventLoop::AllEvents, 200 * nScaleTest);
+
+  // The VIEWPORT, not gs.yWin. Both are true statements, but only one of
+  // them is measured deterministically here: gs.yWin is written back by
+  // the canvas's paint handler, and whether that has run by now depends
+  // on what the previous group left the window doing. The first draft
+  // asserted gs.yWin, bit when the group ran alone, and passed in the
+  // full suite with the bug deliberately present -- which is the same as
+  // no assertion.
+  QSize sizeView = SizeChartViewportTestQt();
+  Check(sizeView.width() == xWant && sizeView.height() == yWant,
+    "the chart viewport is the size that was typed (%d by %d, wanted "
+    "%d by %d; window %d by %d)", sizeView.width(), sizeView.height(),
+    xWant, yWant, gi.qwind != NULL ? gi.qwind->width() : -1,
+    gi.qwind != NULL ? gi.qwind->height() : -1);
+
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  SetWindowChartQt(fWinChartSav);
+  SetChartWindowQt(fChartWinSav);
+  ResizeWindowToChartQt();
+  RedrawQt();
+}
+
 
 static void TestFontPackQt()
 {
@@ -10187,6 +10263,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"lockdown",             TestLockdownQt},
   {"chart-now",            TestChartNowQt},
   {"now-buttons",          TestNowButtonsQt},
+  {"graphics-size",        TestGraphicsSizeQt},
   {"font-pack",            TestFontPackQt},
   {"orbit-buffer",         TestOrbitBufferQt},
   {"atlas-apply",          TestAtlasApplyQt},

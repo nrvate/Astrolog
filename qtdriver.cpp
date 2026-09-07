@@ -583,6 +583,31 @@ flag FNoUpdateQt() { return qi.fNoUpdate; }
 void SetNoUpdateQt(flag f) { qi.fNoUpdate = f; }
 
 flag FNoPopupQt() { return qi.fNoPopup; }
+flag FWindowChartQt() { return qi.fWindowChart; }
+void SetWindowChartQt(flag f)
+{
+  qi.fWindowChart = f;
+  ApplySizeModeQt();
+}
+
+flag FChartWindowQt() { return qi.fChartWindow; }
+
+void SetChartWindowQt(flag f)
+{
+  qi.fChartWindow = f;
+  if (f)
+    ResizeWindowToChartQt();
+}
+
+#ifdef QTTEST
+// The chart viewport's size, which is what "the chart is 640 by 480"
+// actually means to a user: the window is bigger than this by the menu
+// bar and the frame.
+QSize SizeChartViewportTestQt()
+{
+  return qi.pscroll != NULL ? qi.pscroll->viewport()->size() : QSize();
+}
+#endif
 void SetNoPopupQt(flag f) { qi.fNoPopup = f; }
 flag FBmpWindowQt() { return qi.fBmpWindow; }
 void SetBmpWindowQt(flag f) { qi.fBmpWindow = f; }

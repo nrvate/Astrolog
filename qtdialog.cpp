@@ -1823,8 +1823,21 @@ void ShowGraphicsSettingsDialogQt()
   for (i = 0; i < cglyph; i++)
     *rgglyph[i].pn = NRcStoreRadioSzQt(rgbuilt, "drg", rgglyph[i].nFirst,
       rgglyph[i].cRadio, *rgglyph[i].pn - 1) + 1;
-  if (fResize && gs.xWin > 0 && gs.yWin > 0)
-    gi.qwind->resize(gs.xWin, gs.yWin);
+  // ResizeWindowToChartQt(), not a bare resize() of the window to the
+  // chart's size: the window is bigger than its chart viewport by the
+  // menu bar and the frame, and with "Window Resizes Chart" on (the
+  // default) the viewport's size is then written straight back into
+  // gs.xWin/gs.yWin by the canvas -- so typing 800 by 600 here produced
+  // a chart of 800 by rather less than 600, silently, and reopening the
+  // dialog showed the reduced number. That function measures the chrome
+  // and adds it, which is what it exists for.
+  //
+  // Guarded on the flag, as Windows guards it on wi.fWindowChart
+  // (wdialog.cpp:3006): with the chart keeping its own size there is
+  // nothing to correct, and the canvas is resized to match it by
+  // RedrawQt() instead.
+  if (fResize && FWindowChartQt())
+    ResizeWindowToChartQt();
   RedoMenuQt();
   RecastAndRedrawQt();
 }

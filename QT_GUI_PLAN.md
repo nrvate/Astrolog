@@ -9447,6 +9447,46 @@ are the more useful half to read before starting something new.
     `dcGr_Xf` and `findChild()` cannot tell them apart. The first draft
     asked for `dcGr_Xf1`, got nothing, and failed on the wrong thing.
 
+223. **A chart size typed into Graphics Settings came back smaller than
+    it was typed.** Third from the field sweep --
+    `ResizeWindowToChart` reads one on Windows against zero here.
+
+    The dialog resized the **window** to the chart's size. A window is
+    bigger than its chart viewport by the menu bar and the frame, and with
+    "Window Resizes Chart" on -- the default -- the viewport's size is
+    written straight back into `gs.xWin`/`gs.yWin` by the canvas's paint
+    handler. So 640 by 480 became 640 by **455**, silently, and reopening
+    the dialog showed the reduced number. `ResizeWindowToChartQt()`
+    measures the chrome and adds it; that is what it exists for, and
+    Windows calls its equivalent at the same point, guarded on the same
+    flag (wdialog.cpp:3006).
+
+    **The assertion took three goes, and both failures are the interesting
+    part.**
+
+    The first asserted `gs.yWin`. That is written back by a *paint*, and
+    whether the paint has run by the time the check reads it depends on
+    what the previous group left the window doing -- so it bit when the
+    group ran alone and was silent in the full suite. Asking about the
+    viewport instead measures the same claim without a paint round trip.
+
+    The second **did not run at all**. It skipped itself with a message
+    when "Window Resizes Chart" was off, and in the full suite an earlier
+    group had left it off: `0 assertions`, reported as a pass. The group
+    turns the flag on now rather than declining to test.
+
+    The third still passed in the full suite with the bug deliberately
+    present. Measured rather than guessed: the same sabotaged build gave
+    window 640x505 alone and 640x480 in the suite, because an earlier
+    group leaves **"Chart Resizes Window"** on, and `RedrawQt()` then fits
+    the window around the chart at the end of the dialog and quietly
+    corrects the mistake. The group pins that flag to its default too.
+
+    Three drafts, three different ways for a test to be silent, all of
+    them in the same group. The lesson is the one this project keeps
+    relearning: run the new assertion **in the full suite with the bug put
+    back**, not only on its own.
+
 
 ## Features this fork adds to both builds
 
