@@ -101,6 +101,7 @@
 -Yi3 "fixsrc"           ; EXPECT ^-Yi3 "fixsrc"
 -YkC Pur Ora Pin Cya    ; EXPECT ^-YkC +Pur Ora Pin Cya
 :YXG 212121             ; EXPECT ^:YXG 212121
+:Xk Pur                 ; EXPECT ^:Xk Pur
 -zj "Fixture Name" "Fixture Place"  ; EXPECT ^-zj "Fixture Name"
 :sd                     ; EXPECT ^:sd
 ; :YXf has no fixture line either: the writer emits the aggregate

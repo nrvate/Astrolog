@@ -8594,6 +8594,32 @@ are the more useful half to read before starting something new.
     that matter are the negatives -- a name that already ends in `.dat`
     keeps it, because a user who typed that meant it.
 
+200. **A setting the dialog offers and the writer drops, again.** A
+    review of the Set Colors dialog. It edits five things -- `kMainA[]`,
+    `kRainbowA[]`, `kElemA[]`, `kRayA[]`, `gi.kiPen` and `gs.kiDeca` --
+    and `FOutputSettings()` writes every one of them except the pen
+    colour. So a colour picked there, or from the sixteen-item Pen Color
+    menu, was gone on the next launch.
+
+    The tempting explanation is that `gi` holds runtime state and only
+    `gs` is persisted. Two things rule it out: the writer already emits
+    `gi.fBmp` and `gi.nScaleText`, and `gs.kiDeca` is set by the **same
+    switch** (`-Xk` against `-Xkv`) and edited in the **same dialog**,
+    and has always been saved. An asymmetry that sharp is an oversight,
+    not a policy. `-Xk` is also documented in `-H`, which is the line
+    this project treats as the promise to the user.
+
+    Shared core, so both builds gain it. Verified by round trip rather
+    than by reading: `-Xk Red` then `-od` now writes `:Xk Red`, and
+    loading that file back reproduces it. The fixture line is what leg 3b
+    of `settings-round-trip.sh` demands as soon as the save contains a
+    value switch, so this cannot regress quietly.
+
+    The rest of the dialog is sound: the validate-everything-then-store
+    order is right, `FValidColorA()` gates each entry, `kDeca` correctly
+    also accepts `kMax`, and the KV/QRgb byte orders are kept apart by
+    the proper accessors.
+
 
 ## Features this fork adds to both builds
 
@@ -8631,6 +8657,20 @@ cannot reach, and `tools/windrive.sh` cannot read a control's value
 (there is no AT-SPI under Wine), so it rests on the shared behavioural
 claim and inspection. Said plainly here rather than left to look
 covered.
+
+### The pen scribble colour was set but never saved
+
+`-Xk` is a documented switch ("Set current pen scribble color"), reached
+from the Set Colors dialog and from a sixteen-item Pen Color menu in both
+builds. `FOutputSettings()` did not write it, so it went back to the
+default on every launch.
+
+Two things rule out "`gi` is deliberately not persisted": the writer
+already emits `gi.fBmp` and `gi.nScaleText`, and the neighbouring
+`gs.kiDeca` -- set by the *same switch* and edited in the *same dialog* --
+has always been written, as `:Xkv`. One line beside it, and a fixture in
+`tools/settings-fixture.as`, which is what leg 3b of the round trip
+requires now that the save contains the switch.
 
 ### The Quick*Chart writer put "(null)" in the file
 
