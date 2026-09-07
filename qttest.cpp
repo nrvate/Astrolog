@@ -621,7 +621,7 @@ static void TestChartRenderQt()
 static void TestAllMenuActionsQt()
 {
   QList<QAction *> rgpa;
-  int i, k, cfired = 0, cmodal = 0, ctext = 0, x, y;
+  int i, k, cfired = 0, cmodal = 0, ctext = 0, cskip = 0, x, y;
   long cpix;
 
   Group("Firing every menu item");
@@ -703,14 +703,20 @@ static void TestAllMenuActionsQt()
     // run hangs. Measured: the suite stopped here for the full 420 s
     // watchdog, and the last line before it was "firing: P&rint...".
     // On X11 and Windows QPrintDialog is a QDialog and closes normally,
-    // so this skip is deliberately not portable. It costs exactly six
-    // assertions: a macOS run reports 3786 where Linux reports 3792 on
-    // the same ephemeris, and forcing this branch on in a Linux build
-    // reproduces 3786 exactly. That is the whole difference between the
-    // platforms -- worth knowing, because a lower count is otherwise
-    // indistinguishable from a group that silently did not run.
-    if (str.contains("rint"))
+    // so this skip is deliberately not portable.
+    //
+    // It is the ONE reason a macOS run reports a lower total than Linux
+    // and Windows, which agree with each other exactly. Two items, three
+    // assertions each, six in all. The count it skips is asserted below
+    // rather than described here: this comment used to quote the totals
+    // of the day (3786 against 3792) and they were 1,300 assertions out
+    // of date within a fortnight, which makes a stale note worse than
+    // none -- somebody checking a real discrepancy against it would have
+    // been told the wrong thing twice.
+    if (str.contains("rint")) {
+      cskip++;
       continue;
+    }
 #endif
     // Anything that puts up a modal dialog blocks here forever, since
     // nothing is driving the event loop to dismiss it. Rather than guess
@@ -833,7 +839,24 @@ static void TestAllMenuActionsQt()
 
   gs.fJetTrail = fJetTrailSav;
 
-  printf("  %d menu items fired, %d switched to text\n", cfired, ctext);
+  // Said out loud, on every platform, because the comment above worried
+  // about exactly this: a lower total is otherwise indistinguishable from
+  // a group that silently did not run. Now the log names the difference
+  // and its size, and the assertion moves if a third "Print" item is ever
+  // added -- which would change the cross-platform delta with nothing
+  // else noticing.
+#ifdef __APPLE__
+  Check(cskip == 2,
+    "the two Print items are skipped on macOS and nothing else is, so "
+    "this run is exactly 6 assertions short of a Linux one (%d skipped)",
+    cskip);
+#else
+  Check(cskip == 0,
+    "nothing is skipped for being a native print dialog off macOS (%d)",
+    cskip);
+#endif
+  printf("  %d menu items fired, %d switched to text, %d skipped\n",
+    cfired, ctext, cskip);
 }
 
 
