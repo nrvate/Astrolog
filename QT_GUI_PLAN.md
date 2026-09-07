@@ -9289,6 +9289,127 @@ are the more useful half to read before starting something new.
     Chasing rows was always going to lose. The maintainer customises more
     slots over time and the suite has no say in which.
 
+219. **"Chart for Now" on a transit chart threw the natal chart away.**
+    Fifth from the call-count sweep: `Animate` reads four sites on Windows
+    against three here, and the missing one is `cmdNow`.
+
+    Windows' Info menu command is `Animate(iAnimNow, 0)` and a redraw, and
+    the whole of the difference is **which chart** the present moment
+    lands in. `Animate()` chooses: the twin slot for a comparison chart or
+    a transit (`us.nRel == rcDual || us.nRel <= rcTransit`), the transit
+    slot and `is.JDp` with it for a progression, and the main chart only
+    otherwise.
+
+    This port called `FInputData(szNowCore)` and `RecastAndRedrawQt()`,
+    which assigns `ciMain` unconditionally. So on a transit chart -- the
+    obvious place to want "now" -- pressing `n` **replaced the natal chart
+    with today** rather than moving the transits to it, and the chart the
+    user had been looking at was simply gone.
+
+    `RedrawQt()` and not `RecastAndRedrawQt()`, for work log item 212's
+    reason: `Animate()` casts the chart itself, and Windows' `cmdNow` sets
+    `wi.fRedraw` without `wi.fCast`, so nothing casts twice there either.
+
+    Asserted in both shapes -- the plain chart always worked, and a fix
+    that broke it would be worse than the bug. The transit half is pinned
+    with sentinel years in `ciMain` and `ciTwin`, so it says which chart
+    moved and which did not. Falsified by putting the two old lines back:
+    3 passed, 2 failed, with the natal chart reading 2026.
+
+    The group forces a wheel first, deliberately. `Animate()` returns
+    after rotating and casts nothing at all when the chart on screen is an
+    astro-graph or a globe with map animation on, so without that the
+    assertion would be asking its question of a path that never runs.
+
+220. **The suite's intermittent abort, third hunt, caught in one
+    backtrace -- and then made impossible to have again.** `make check`
+    failed twice in four runs with `free(): invalid pointer` and a
+    segfault, both ending on `Writing wireframe to file.` That is the
+    same signature item 164 chased into the wireframe writer and item 165
+    exonerated it from, and it is the same class CLAUDE.md records under
+    "a regression test can be the regression".
+
+    **The instrument was the thing.** In a normal build a freed `FILE`
+    often still looks usable, so the abort is roughly one run in three and
+    the *last unbuffered line* is a red herring. Under AddressSanitizer
+    the freed object is poisoned, its vtable reads NULL, and glibc's
+    `_IO_vtable_check` fires **every run**. One `gdb -batch` over the ASan
+    build gave the whole thing:
+
+        #9  __GI___overflow (f=0x515002921180, ch=27)
+        #10 PrintSz (sz="\033[")            general.cpp:1274
+        #11 AnsiColor (k=11)                 general.cpp:1668
+        #12 PrintProgress ("Creating graphics chart in memory.")
+        #13 DrawChartX()                     xcharts0.cpp:2486
+        #15 FExportChartQt(...)              qtdialog.cpp:1240
+        #17 TestChartExportQt()              qttest.cpp:1716
+
+    `is.S` is opened by `Action()` and by nothing else, and `Action()`
+    `fclose()`s it on the way out **without putting the caller's back**.
+    `TestSharedCoreFixesQt` points `is.szFileScreen` at a file and calls
+    `Action()` twice, so every group after it ran with `is.S` on a closed
+    stream; `PrintProgress()` goes through `AnsiColor()`, which writes an
+    escape sequence to `is.S` before its own message reaches stderr, and
+    that is the `putc` that aborts.
+
+    **The fix is not the interesting half.** `NRunQtTestTableQt()` now
+    remembers `is.S` before the table and, after every group, says **which
+    group** moved it and puts it back. That turns a crash three groups
+    downstream into a named assertion, and one leak no longer takes the
+    rest of the run with it.
+
+    Its first run found a **second** leak the hunt had not been looking
+    for: `TestLineDrawingQt`, same shape, `Action()` in a loop with
+    `is.szFileScreen` set. Two groups, one of which nobody had suspected
+    in three hunts across two sessions.
+
+    **Nets**: suite 4987/0 with `-Yi1 ephem` and with `-i nrvate.as`; the
+    ASan run, which aborted on the first attempt before this, completes.
+
+    The general lesson is the one item 165 reached for and this makes
+    structural: a class of bug that has cost three hunts should end up
+    with a **detector**, not a third fix. And when a bug is intermittent,
+    ask which build makes it deterministic before spending a run on
+    guessing -- ASan was the difference between "1 in 3, ends near the
+    wireframe writer" and a backtrace naming the function.
+
+221. **"Now" in the Transit and Progression dialogs filled in four of six
+    fields.** The same shape as item 217, found by looking for it once
+    that one was understood: a button that fills a form and leaves one box
+    holding the *previous* chart's value.
+
+    Windows sets the date, the time, **and** the Daylight and Zone boxes
+    in one `SetEditSZOA()` call from `ciDefa` (wdialog.cpp:2585 and 2718).
+    This port set the four date and time boxes and stopped.
+
+    It is a wrong answer rather than a missing convenience.
+    `GetTimeNow(&mon, &day, &yea, &tim, ciDefa.dst, ciDefa.zon)` returns
+    the present moment **expressed in ciDefa's zone and daylight
+    setting**, and OK reads the zone back out of those two boxes. Left
+    holding the old chart's zone, "Now" produced a transit chart that was
+    not now -- out by the difference between the two zones, silently, in
+    the button whose only job is to say when now is.
+
+    Both dialogs, because the two are copies of each other; the fix had to
+    be made twice and so does the assertion. Sentinels go in both boxes
+    first, or a field that happened to agree with `ciDefa` would pass on
+    its own. The expected zone is `ciDefa.zon` put through the same
+    formatting the dialog uses when it loads, not a literal -- the first
+    draft asserted `"5"` and the box says `"5W"`, which is `SzZone()`'s
+    business and not the subject. Falsified by disabling the Daylight
+    write: 3 passed, 2 failed, both reading "sentinelD".
+
+    **And the Chart Info dialog's "Now" has the opposite problem**, found
+    in the same read: it wrote two fields it should have left alone.
+    Windows' `dbInNow` assigns date, time, zone, daylight and coordinates
+    into its working copy and **nothing else**, so the name and location
+    survive the button. This port built a fresh `CI` -- which meant every
+    field had to be assigned something -- and took the name and location
+    from `ciDefa`. `ciDefa.nam` is "Current moment now", so typing a
+    name and pressing "Now" replaced it. They come from the dialog's own
+    working copy now. Falsified by putting `ciDefa` back: the field reads
+    "Current moment now".
+
 
 ## Features this fork adds to both builds
 

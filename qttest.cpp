@@ -2797,6 +2797,184 @@ static QString StrApplyInfoQt(int mon, int day, int yea)
 #endif
 
 
+// "Chart for Now", which is not the same command in a relationship chart.
+//
+// Windows' cmdNow is Animate(iAnimNow, 0), and Animate() chooses which
+// chart the present moment lands in: the twin slot for a comparison or a
+// transit chart, the transit slot (and is.JDp with it) for a progression,
+// the main chart only otherwise. This port called FInputData() and
+// RecastAndRedrawQt(), which assigns ciMain unconditionally -- so on a
+// transit chart the menu item REPLACED THE NATAL CHART with today
+// instead of moving the transits to it, and the chart the user had been
+// looking at was gone.
+//
+// Both shapes, because the plain one always worked and a fix that broke
+// it would be worse than the bug.
+
+// The "Now" button in the Transit and Progression dialogs, which filled
+// in four of the six fields it is supposed to.
+//
+// Windows sets the date, the time, AND the Daylight and Zone boxes, in
+// one SetEditSZOA() call from ciDefa (wdialog.cpp:2585 and 2718). This
+// port set only the four date and time boxes -- and that is a wrong
+// answer, not a missing convenience: GetTimeNow() is asked for the
+// present moment expressed in ciDefa's zone and daylight setting, while
+// OK reads the zone back out of the two boxes. Left holding the previous
+// chart's zone, "Now" produced a transit chart that was not now, out by
+// the difference between the two zones.
+//
+// Both dialogs, because the two are copies of each other and the fix had
+// to be made twice.
+
+static void TestNowButtonQt(void (*pfnOpen)(), CONST char *szDst,
+  CONST char *szZon, CONST char *szWhich)
+{
+  QString strDst, strZon;
+
+  DriveModalQt(pfnOpen, [&](QWidget *pw) {
+    QComboBox *pcbDst = pw->findChild<QComboBox *>(szDst);
+    QComboBox *pcbZon = pw->findChild<QComboBox *>(szZon);
+    QPushButton *ppbNow = NULL;
+
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text().contains("Now"))
+        ppbNow = ppb;
+    if (pcbDst != NULL && pcbZon != NULL && ppbNow != NULL) {
+      // Sentinels the button has to overwrite. Without them a field that
+      // happened to agree with ciDefa would pass on its own.
+      pcbDst->setEditText("sentinelD");
+      pcbZon->setEditText("sentinelZ");
+      ppbNow->click();
+      strDst = pcbDst->currentText();
+      strZon = pcbZon->currentText();
+    }
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "Cancel")
+        ppb->click();
+  });
+
+  // Compared against ciDefa put through the same formatting the dialog
+  // uses when it loads, rather than against a literal: what "5 hours
+  // west" reads as in that box is SzZone()'s business, and the claim
+  // here is that the button writes ciDefa's zone, not that it writes any
+  // particular spelling.
+  {
+    char szWant[cchSzDef];
+    CONST char *pchWant;
+
+    sprintf2(S(szWant), "%s", SzZone(ciDefa.zon));
+    pchWant = szWant[0] == '+' ? &szWant[1] : szWant;
+    Check(strDst == "Yes",
+      "%s: \"Now\" sets Daylight from the default chart info (\"%s\")",
+      szWhich, strDst.toLocal8Bit().constData());
+    Check(strZon == QString(pchWant),
+      "%s: and the time zone with it (\"%s\", wanted \"%s\")",
+      szWhich, strZon.toLocal8Bit().constData(), pchWant);
+  }
+}
+
+
+static void TestNowButtonsQt()
+{
+  CI ciDefaSav = ciDefa, ciTranSav = ciTran;
+  flag fPopupSav = FNoPopupQt();
+
+  Group("Transit and progression Now");
+  SetNoPopupQt(fTrue);
+
+  // A default chart info whose zone and daylight are not the transit
+  // chart's, so "took ciDefa's" and "left the old value" are different
+  // answers.
+  ciDefa.dst = 1.0; ciDefa.zon = 5.0;
+  ciTran.dst = 0.0; ciTran.zon = 8.0;
+
+  TestNowButtonQt(ShowTransitDialogQt, "dcTrDst", "dcTrZon", "transit");
+  TestNowButtonQt(ShowProgressDialogQt, "dcPrDst", "dcPrZon", "progression");
+
+  // The Chart Info dialog's "Now", which has the opposite problem: it
+  // wrote two fields it should have left alone. Windows' dbInNow assigns
+  // date, time, zone, daylight and coordinates into its working copy and
+  // NOTHING else (wdialog.cpp:1206), so the name and location survive the
+  // button. This took them from ciDefa, which for most users is empty --
+  // so typing a name and pressing "Now" erased it.
+  //
+  // The pointers are swapped rather than cloned over: FCloneSz() frees
+  // what is there, and ciCore's strings are shared with ciMain. The
+  // dialog is cancelled, so nothing writes them back.
+  {
+    static char szNamT[] = "ProbeNowName";
+    char *pszNamSav = ciCore.nam;
+    QString strNam;
+
+    ciCore.nam = szNamT;
+    DriveModalQt(ShowChartInfoDialogQt, [&](QWidget *pw) {
+      QLineEdit *peNam = pw->findChild<QLineEdit *>("deInNam");
+      QPushButton *ppbNow = NULL;
+
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text().contains("Now"))
+          ppbNow = ppb;
+      if (peNam != NULL && ppbNow != NULL) {
+        ppbNow->click();
+        strNam = peNam->text();
+      }
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text() == "Cancel")
+          ppb->click();
+    });
+    ciCore.nam = pszNamSav;
+    Check(strNam == QString(szNamT),
+      "chart info: \"Now\" keeps the chart's name (\"%s\")",
+      strNam.toLocal8Bit().constData());
+  }
+
+  ciDefa = ciDefaSav; ciTran = ciTranSav;
+  SetNoPopupQt(fPopupSav);
+}
+
+
+static void TestChartNowQt()
+{
+  CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciCoreSav = ciCore;
+  int nRelSav = us.nRel, nModeSav = gi.nMode;
+  QAction *pa = PaFindActionTestQt("Chart for &Now");
+
+  Group("Chart for Now");
+  Check(pa != NULL, "\"Chart for Now\" is on the Info menu");
+  if (pa == NULL)
+    return;
+
+  // A wheel, not a map: Animate() returns after rotating and casts
+  // nothing at all when the chart on screen is an astro-graph or a globe
+  // with map animation on, so this would ask its question of a code path
+  // that never runs.
+  SetChartModeQt(gWheel);
+
+  SetRelQt(rcNone);
+  ciMain.yea = 1899; ciMain.mon = 3; ciMain.day = 4;
+  ciCore = ciMain;
+  pa->trigger();
+  Check(ciMain.yea != 1899,
+    "on a single chart it sets the main chart to now (yea %d)", ciMain.yea);
+
+  SetRelQt(rcTransit);
+  ciMain.yea = 1899; ciMain.mon = 3; ciMain.day = 4;
+  ciTwin.yea = 1898; ciTwin.mon = 5; ciTwin.day = 6;
+  ciCore = ciMain;
+  pa->trigger();
+  Check(ciMain.yea == 1899,
+    "on a transit chart the natal chart is left where it was (yea %d)",
+    ciMain.yea);
+  Check(ciTwin.yea != 1898,
+    "and the transiting chart is the one moved to now (yea %d)",
+    ciTwin.yea);
+
+  SetRelQt(nRelSav);
+  SetChartModeQt(nModeSav);
+  ciMain = ciMainSav; ciTwin = ciTwinSav; ciCore = ciCoreSav;
+}
+
+
 static void TestAtlasApplyQt()
 {
   Group("Atlas Apply Info");
@@ -2804,10 +2982,17 @@ static void TestAtlasApplyQt()
   printf("  built without ATLAS\n");
 #else
   CI ciSav = ciCore, ciMainSav = ciMain;
+  flag fPopupSav = FNoPopupQt();
   QString strJul, strJan;
 
+  // Apply Info warns through PrintWarning() when the Location field
+  // holds no city it can find -- which, in this build, is a MODAL box
+  // raised from inside a modal dialog. It should not fire here, and if
+  // the atlas ever goes missing it must not stop the run either.
+  SetNoPopupQt(fTrue);
   strJul = StrApplyInfoQt(7, 1, 1990);
   strJan = StrApplyInfoQt(1, 1, 1990);
+  SetNoPopupQt(fPopupSav);
   ciCore = ciSav; ciMain = ciMainSav;
 
   Check(strJul == "Yes",
@@ -5365,12 +5550,19 @@ static void TestSharedCoreFixesQt()
     sprintf2(S(szOut), "%s/astrolog-qt-longloc-%d.txt",
       QDir::tempPath().toLocal8Bit().constData(),
       (int)QCoreApplication::applicationPid());
+    FILE *fileSSav = is.S;
     FCloneSz(szOut, &is.szFileScreen);
     us.fGraphics = fFalse;
     us.fListing = fTrue; us.fWheel = fFalse;
     Action();                       // PrintHeader() path (-v listing).
+    is.S = fileSSav;
     us.fListing = fFalse; us.fWheel = fTrue;
     Action();                       // PrintWheelCenter() path (-w wheel).
+    // Action() opens is.S on is.szFileScreen and fclose()s it on the way
+    // out without putting the caller's back, so leaving it moved arms an
+    // abort in whatever prints next -- see the guard in
+    // NRunQtTestTableQt(), which is where this one was finally caught.
+    is.S = fileSSav;
     us.fWheel = fWheelSav; us.fListing = fListSav;
     us.fGraphics = fGraphSav;
     FCloneSz(NULL, &is.szFileScreen);
@@ -9446,10 +9638,15 @@ static void TestLineDrawingQt()
     // particular characters keeps this independent of the charset (-Ya
     // encodes the same rules as one byte or three) and of whichever
     // objects an earlier group left unrestricted.
+    FILE *fileSSav = is.S;
     for (j = 0; j <= 1; j++) {
       gs.nFontTxt = j;
       remove(szOut);
       Action();
+      // Action() fcloses the stream it opened on is.szFileScreen without
+      // putting the caller's back; leaving it moved arms an abort in
+      // whatever prints next. See the guard in NRunQtTestTableQt().
+      is.S = fileSSav;
       file = fopen(szOut, "rb");
       cb = 0;
       if (file != NULL) {
@@ -9843,6 +10040,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"atlas-zone",           TestAtlasZoneQt},
   {"eclipses",             TestEclipseQt},
   {"lockdown",             TestLockdownQt},
+  {"chart-now",            TestChartNowQt},
+  {"now-buttons",          TestNowButtonsQt},
   {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},
   {"restrict-recall",      TestRestrictRecallQt},
@@ -9933,12 +10132,40 @@ static int NRunQtTestTableQt()
   Check(FMatchSz(rgqttestQt[cqttestQt-1].szName, "ok-settles"),
     "\"ok-settles\" is still the last group in the table (found \"%s\")",
     rgqttestQt[cqttestQt-1].szName);
+  // is.S is opened by Action() and by nothing else, and Action() fcloses
+  // it on the way out without putting the caller's back. A group that
+  // points is.szFileScreen at a file and runs Action() therefore leaves
+  // is.S on a CLOSED FILE, and the next thing that prints -- which is
+  // usually a PrintProgress() several groups later, through AnsiColor()
+  // and PrintSz() -- aborts the process with "glibc detected an invalid
+  // stdio handle".
+  //
+  // This has now cost three hunts. CLAUDE.md records the first ("A
+  // regression test can be the regression"), work log item 165 the
+  // second, and item 164 spent its effort on the wireframe writer because
+  // the last line before the abort was the last UNBUFFERED line rather
+  // than the last thing that happened. It is intermittent in a normal
+  // build because a freed FILE often still looks usable; under
+  // AddressSanitizer it is every run, which is how the third one was
+  // caught, in one gdb backtrace.
+  //
+  // So stop diagnosing it and detect it: remember what is.S was before
+  // the table, and after every group say WHICH GROUP moved it. Repaired
+  // as well as reported, because one leak should not take the rest of the
+  // run down with it.
+  FILE *fileSStart = is.S;
   for (i = 0; i < cqttestQt; i++) {
     if (!FTestWantedQt(szFilter, rgqttestQt[i].szName))
       continue;
     cRun++;
     timerTest.start();
     rgqttestQt[i].pfn();
+    if (is.S != fileSStart) {
+      Check(fFalse, "group \"%s\" left is.S on another stream; "
+        "Action() has closed it and the next print would abort",
+        rgqttestQt[i].szName);
+      is.S = fileSStart;
+    }
     if (fTime)
       printf("  [%s: %d ms]\n", rgqttestQt[i].szName,
         (int)timerTest.elapsed());

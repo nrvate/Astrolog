@@ -2021,14 +2021,20 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbInNow");
   QPushButton *ppbSet = (QPushButton *)PwRcFindQt(rgbuilt, "dbInSet");
   if (ppbNow != NULL)
-    QObject::connect(ppbNow, &QPushButton::clicked, &dlg, [&rgbuilt]() {
+    QObject::connect(ppbNow, &QPushButton::clicked, &dlg, [&rgbuilt, &ci]() {
       CI ciT;
 #ifdef TIMEFUNC
       GetTimeNow(&ciT.mon, &ciT.day, &ciT.yea, &ciT.tim, ciDefa.dst,
         ciDefa.zon);
       ciT.dst = ciDefa.dst; ciT.zon = ciDefa.zon;
       ciT.lon = ciDefa.lon; ciT.lat = ciDefa.lat;
-      ciT.nam = ciDefa.nam; ciT.loc = ciDefa.loc;
+      // The NAME and LOCATION stay the chart's, and are the two fields
+      // Windows deliberately leaves alone here: dbInNow assigns date,
+      // time, zone, daylight and coordinates into its working copy and
+      // nothing else (wdialog.cpp:1206), so the strings survive. This
+      // took them from ciDefa instead, which for most users is empty --
+      // so typing a name and pressing "Now" erased it.
+      ciT.nam = ci.nam; ciT.loc = ci.loc;
       RcLoadChartInfoQt(rgbuilt, &ciT);
 #endif
     });
@@ -3051,7 +3057,7 @@ void ShowTransitDialogQt()
   QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbTr_tn");
   if (ppbNow != NULL)
     QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
-      [pcbMon, pcbDay, pcbYea, pcbTim]() {
+      [pcbMon, pcbDay, pcbYea, pcbTim, pcbDst, pcbZon]() {
 #ifdef TIMEFUNC
         char szN[cchSzMax];
         int monN, dayN, yeaN;
@@ -3062,6 +3068,22 @@ void ShowTransitDialogQt()
         if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
         if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
         if (pcbTim != NULL) pcbTim->setEditText(StrTimEditQt(timN));
+        // And the Daylight and Zone fields, which this used to leave
+        // alone. Windows sets all six in one SetEditSZOA() call
+        // (wdialog.cpp:2585 and 2718), and it is not cosmetic:
+        // GetTimeNow() above returns the present moment expressed in
+        // ciDefa's zone and daylight setting, while OK reads the zone
+        // out of these two boxes. Leave them holding the old chart's
+        // zone and "Now" produces a transit chart that is not now, out
+        // by the difference between the two.
+        if (pcbDst != NULL)
+          pcbDst->setEditText(ciDefa.dst == 0.0 ? "No" :
+            (ciDefa.dst == 1.0 ? "Yes" :
+            (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
+        if (pcbZon != NULL) {
+          sprintf2(S(szN), "%s", SzZone(ciDefa.zon));
+          pcbZon->setEditText(szN[0] == '+' ? &szN[1] : szN);
+        }
 #endif
       });
 
@@ -3230,7 +3252,7 @@ void ShowProgressDialogQt()
   QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbPr_pn");
   if (ppbNow != NULL)
     QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
-      [pcbMon, pcbDay, pcbYea, pcbTim]() {
+      [pcbMon, pcbDay, pcbYea, pcbTim, pcbDst, pcbZon]() {
 #ifdef TIMEFUNC
         char szN[cchSzMax];
         int monN, dayN, yeaN;
@@ -3241,6 +3263,22 @@ void ShowProgressDialogQt()
         if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
         if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
         if (pcbTim != NULL) pcbTim->setEditText(StrTimEditQt(timN));
+        // And the Daylight and Zone fields, which this used to leave
+        // alone. Windows sets all six in one SetEditSZOA() call
+        // (wdialog.cpp:2585 and 2718), and it is not cosmetic:
+        // GetTimeNow() above returns the present moment expressed in
+        // ciDefa's zone and daylight setting, while OK reads the zone
+        // out of these two boxes. Leave them holding the old chart's
+        // zone and "Now" produces a transit chart that is not now, out
+        // by the difference between the two.
+        if (pcbDst != NULL)
+          pcbDst->setEditText(ciDefa.dst == 0.0 ? "No" :
+            (ciDefa.dst == 1.0 ? "Yes" :
+            (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
+        if (pcbZon != NULL) {
+          sprintf2(S(szN), "%s", SzZone(ciDefa.zon));
+          pcbZon->setEditText(szN[0] == '+' ? &szN[1] : szN);
+        }
 #endif
       });
 

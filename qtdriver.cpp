@@ -2010,10 +2010,23 @@ static void BuildInfoMenu(QMainWindow *pwind)
   QAction *paInfo = pmenu->addAction("Set Chart &Info...");
   ConnectMenuQt(paInfo, pwind,
     []() { ShowChartInfoDialogQt(); });
+  // Windows' cmdNow is Animate(iAnimNow, 0) and a redraw, and the whole
+  // of the difference is WHICH CHART gets set to now. Animate() puts it
+  // in the twin slot for a comparison chart, in the transit slot (and
+  // is.JDp with it) for a transit or progression, and only otherwise in
+  // the main chart. This called FInputData() and RecastAndRedrawQt(),
+  // which assigns ciMain unconditionally -- so "Chart for Now" on a
+  // transit chart REPLACED THE NATAL CHART with the present moment
+  // instead of moving the transits to it.
+  //
+  // RedrawQt() and not RecastAndRedrawQt(), for the reason work log item
+  // 212 records: Animate() casts the chart itself, and Windows' cmdNow
+  // sets wi.fRedraw without wi.fCast, so nothing casts a second time
+  // there either.
   QAction *paNow = pmenu->addAction("Chart for &Now");
   ConnectMenuQt(paNow, pwind, []() {
-    FInputData(szNowCore);
-    RecastAndRedrawQt();
+    Animate(iAnimNow, 0);
+    RedrawQt();
   });
   QAction *paDefault = pmenu->addAction("D&efault Chart Info...");
   ConnectMenuQt(paDefault, pwind,
