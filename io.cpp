@@ -1644,6 +1644,27 @@ flag FOutputSettings()
   sprintf2(S(sz), ":d %d   ", us.nDivision); PrintFSz();
   PrintF(
     "; Searching divisions       [Change \"48\" to desired divisions  ]\n");
+  // The ":" prefix on the five below is load-bearing. Each of these
+  // switches sets a value AND toggles a chart type flag -- NSwN ends in
+  // SwitchF(us.fAtlasLook), NSwP in SwitchF(us.fArabic), NSwL in
+  // SwitchF(us.fAstroGraph), NSwXL in SwitchF(gs.fLabelCity) -- and
+  // chart type is not a saved setting. ":" sets neither: FSwitchF()
+  // returns the flag unchanged when none of fOr, fAnd and fNot is set,
+  // while the value still lands.
+  sprintf2(S(sz), ":L %d %d ", us.nAstroGraphStep, us.nAstroGraphDist);
+  PrintFSz();
+  PrintF(
+    "; Astro-Graph step, distance[Degrees between lines, and around  ]\n");
+  sprintf2(S(sz), ":P%c %d  ", us.nArabicSort <= 0 ? 'i' :
+    (char)us.nArabicSort, us.nArabicParts); PrintFSz();
+  PrintF(
+    "; Arabic parts, sort order  [\"i\" index, \"z\" zodiac, \"n\" name  ]\n");
+  sprintf2(S(sz), ":N %d   ", us.nAtlasList); PrintFSz();
+  PrintF(
+    "; Atlas rows to list        [Change to desired number of cities ]\n");
+  sprintf2(S(sz), "-Yb %d   ", us.nBioday); PrintFSz();
+  PrintF(
+    "; Biorhythm day cycle       [Change \"1\" to desired day length   ]\n");
   sprintf2(S(sz), "%c5      ", ChDashF(us.fListAuto)); PrintFSz();
   PrintF(
     "; Transits go to chart list [\"=5\" sets list, \"_5\" does nothing ]\n");
@@ -2140,6 +2161,12 @@ flag FOutputSettings()
   sprintf2(S(sz), ":Xv %d            ", gs.nDecaFill); PrintFSz();
   PrintF(
     "; Wheel fill    [\"0\" none, \"1\" standard, \"2\" rainbow, etc.  ]\n");
+  // The colouring choice as well as the flag: NSwXL sets gs.nLabelCity
+  // from the sub-letter, and the "%cXL" line above carries only
+  // gs.fLabelCity. ":" again, so this line does not toggle that flag.
+  sprintf2(S(sz), ":XL%d            ", gs.nLabelCity); PrintFSz();
+  PrintF(
+    "; Atlas city coloring       [\"1\" through \"5\", when -XA is on   ]\n");
   sprintf2(S(sz), ":Xk %s          ", SzColor2(gi.kiPen)); PrintFSz();
   PrintF(
     "; Pen scribble color\n");
