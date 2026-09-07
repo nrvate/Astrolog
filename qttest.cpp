@@ -3281,10 +3281,15 @@ static void TestFontPackQt()
   // a resource symbol into an index, so the six share the object name
   // "dcGr_Xf" and findChild() cannot tell them apart. Setting them all
   // asks the same question and needs no such guess.
+  //
+  // "Consolas" and not "Wingdings", which the first draft used: each slot
+  // takes only the fonts rgszFontAllow[] says can draw its glyphs, and
+  // Wingdings is refused by three of the six. Index 11 is one of the
+  // three allowed in all of them.
   int cFound = 0;
   DriveModalQt(ShowGraphicsSettingsDialogQt, [&cFound](QWidget *pw) {
     for (QComboBox *pcb : pw->findChildren<QComboBox *>("dcGr_Xf")) {
-      pcb->setEditText("Wingdings");
+      pcb->setEditText("Consolas");
       cFound++;
     }
     for (QPushButton *ppb : pw->findChildren<QPushButton *>())
@@ -3297,7 +3302,7 @@ static void TestFontPackQt()
 
   Check(cFound == 6, "the dialog has six font combo boxes (found %d)",
     cFound);
-  Check(gs.nFontSig == 1 && gs.nFontNak == 1,
+  Check(gs.nFontSig == 11 && gs.nFontNak == 11,
     "and it stored what was picked in them (sig %d, nak %d)",
     gs.nFontSig, gs.nFontNak);
   nWant = gs.nFontTxt*0x100000 + gs.nFontSig*0x10000 +
@@ -3310,6 +3315,79 @@ static void TestFontPackQt()
   Check(gi.nFontPrev == gs.nFontAll,
     "and gi.nFontPrev followed it, so File Settings restores this set "
     "rather than the last one (#%06x)", gi.nFontPrev);
+
+  // Which fonts each slot OFFERS, and what it does with one typed in.
+  //
+  // rgszFontAllow[] says which of the 14 fonts can draw each kind of
+  // glyph, and Windows filters every combo by it (wdialog.cpp:2956) and
+  // filters again when reading the box back (3051). This offered all 14
+  // everywhere and took whatever matched -- so a slot could be given a
+  // font with no glyphs for it, which then drew wrong and vanished on the
+  // next save and reload, since "-YXf" zeroes exactly that.
+  //
+  // The text slot allows 5 of the 14 ("0---------ABCD"), so a count is
+  // the whole assertion for the list half.
+  {
+    int cItem = -1;
+
+    gs.nFontTxt = 0;
+    DriveModalQt(ShowGraphicsSettingsDialogQt, [&cItem](QWidget *pw) {
+      QList<QComboBox *> rg = pw->findChildren<QComboBox *>("dcGr_Xf");
+      if (!rg.isEmpty())
+        cItem = rg[0]->count();
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text() == "Cancel") { ppb->click(); return; }
+      pw->close();
+    });
+    Check(cItem == 5,
+      "the chart text font offers the five fonts that can draw it (%d)",
+      cItem);
+  }
+
+  // Typing, which an editable combo still allows. Three cases, all of
+  // them Windows' behaviour:
+  //
+  //  "Astro"     -> the font of that name, not Astronomicon. FMatchSz()
+  //                 takes a prefix of three or more, so "Astrolog",
+  //                 "Astro" and "Astronomicon" all match it; Windows
+  //                 checks index 2 FIRST for exactly this reason and
+  //                 this took the LAST match.
+  //  "Wingdings" -> refused in the text slot, which does not allow it,
+  //                 and falls back to Astrolog's own font.
+  //  nonsense    -> the same fallback, rather than leaving what was
+  //                 there, so a typo is visible.
+  {
+    static CONST struct {
+      int iSlot;
+      CONST char *szType;
+      int nWant;
+      CONST char *szWhat;
+    } rgt[] = {
+      {1, "Astro",      2, "\"Astro\" in the signs slot is the Astro font"},
+      {0, "Wingdings",  0, "a font the text slot forbids falls back"},
+      {0, "Nonesuch",   0, "and so does a name that matches nothing"}};
+    int iT;
+    int *rgpn[6] = {&gs.nFontTxt, &gs.nFontSig, &gs.nFontHou,
+      &gs.nFontObj, &gs.nFontAsp, &gs.nFontNak};
+
+    for (iT = 0; iT < (int)(sizeof(rgt)/sizeof(*rgt)); iT++) {
+      int iSlot = rgt[iT].iSlot;
+      CONST char *szType = rgt[iT].szType;
+
+      *rgpn[iSlot] = 11;              // Consolas: allowed everywhere
+      DriveModalQt(ShowGraphicsSettingsDialogQt,
+        [iSlot, szType](QWidget *pw) {
+        QList<QComboBox *> rg = pw->findChildren<QComboBox *>("dcGr_Xf");
+        if (iSlot < rg.size())
+          rg[iSlot]->setEditText(szType);
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "OK") { ppb->click(); return; }
+        pw->close();
+      });
+      Check(*rgpn[iSlot] == rgt[iT].nWant, "%s (%d, want %d)",
+        rgt[iT].szWhat, *rgpn[iSlot], rgt[iT].nWant);
+    }
+  }
 
   gs.nFontAll = nFontAllSav; gi.nFontPrev = nFontPrevSav;
   gs.nFontTxt = nTxtSav; gs.nFontSig = nSigSav; gs.nFontHou = nHouSav;

@@ -9677,6 +9677,44 @@ are the more useful half to read before starting something new.
     audit and not the mnemonic one; moving one *action* field fails the
     mnemonic audit and not the context one.
 
+229. **Every font offered in every slot, and "Astro" selecting
+    Astronomicon.** Found looking for the *other* hand-copied tables after
+    item 228 -- the six combo box lists `qtdialog.cpp` duplicates from
+    `wdialog.cpp` because that file is Win32 only. All six contents match
+    exactly (city colour, wheel corner, deca fill, aspect sort, the two
+    progression lists); what did not match was **how the font lists are
+    built and read back**.
+
+    `rgszFontAllow[6][cFont+1]` says which of the 14 fonts can draw each
+    kind of glyph, and Windows uses it twice: to filter what each combo
+    offers (wdialog.cpp:2956) and to filter again when reading the box
+    back (3051). The chart text slot allows **5** of the 14. This offered
+    all 14 in all six.
+
+    Picking one of the other nine drew the chart with a font that has no
+    glyphs for that slot -- and the choice then vanished on the next save
+    and reload, because `-YXf` zeroes a font its slot does not allow
+    (switch.cpp:1438). Silently reverting is the part that makes it a bug
+    rather than a rough edge.
+
+    **And the read-back had its own bug.** Windows scans the table in the
+    order **2, 0, 1, 3, 4, ...** with a comment saying why: "Astro font in
+    slot #2 gets checked first, since it's a substring". `FMatchSz()`
+    matches a prefix of three characters or more, so the typed word
+    "Astro" matches "Astrolog", "Astro" **and** "Astronomicon". This
+    scanned 0 upward and kept the **last** match, so "Astro" selected
+    Astronomicon. It also had no fallback, so a name matching nothing left
+    the previous font instead of Windows' "default to Astrolog", which is
+    what makes a typo visible.
+
+    Ported whole, loop order and all. Falsified by putting the old two
+    loops back: four assertions, reading 14 offered, "Astro" as 5, a
+    forbidden font stored, and a typo silently ignored.
+
+    The existing `font-pack` group had to change with it: it set all six
+    combos to Wingdings, which three of the six slots refuse. It uses
+    Consolas now, one of the three fonts allowed everywhere, and says why.
+
 
 ## Features this fork adds to both builds
 

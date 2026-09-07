@@ -1671,8 +1671,17 @@ void ShowGraphicsSettingsDialogQt()
     if (rgpcbFont[i] == NULL)
       continue;
     rgpcbFont[i]->setEditable(fTrue);
+    // Only the fonts this slot can actually draw with. rgszFontAllow[]
+    // says which, FValidFont() is the test the rest of the program uses,
+    // and Windows filters the same way (wdialog.cpp:2956) -- the text
+    // slot allows 5 of the 14, not all of them. Offering the other 9 in
+    // it meant picking one, watching the chart draw with a font that has
+    // no glyphs for it, and then finding the choice silently gone after
+    // a save and reload, because "-YXf" zeroes a font a slot does not
+    // allow (switch.cpp:1438).
     for (j = 0; j < cFont; j++)
-      rgpcbFont[i]->addItem(rgszFontDispQt[j]);
+      if (FValidFont(i, j))
+        rgpcbFont[i]->addItem(rgszFontDispQt[j]);
     rgpcbFont[i]->setEditText(rgszFontDispQt[*rgpnFont[i]]);
   }
 
@@ -1824,9 +1833,24 @@ void ShowGraphicsSettingsDialogQt()
       continue;
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       rgpcbFont[i]->currentText().toLocal8Bit().constData());
-    for (j = 0; j < cFont; j++)
-      if (FMatchSz(sz, rgszFontDispQt[j]))
-        *rgpnFont[i] = j;
+    // Windows' loop, order and all (wdialog.cpp:3050). Three things it
+    // does that a plain 0..cFont-1 scan does not:
+    //
+    // The ORDER is 2, 0, 1, 3, 4, ... -- "Astro" is checked before
+    // "Astrolog" and "Astronomicon" because FMatchSz() takes a prefix of
+    // three characters or more, so all three match the typed word "Astro"
+    // and only the exact one should win. This took the LAST match instead
+    // of the first, so "Astro" selected Astronomicon.
+    //
+    // It skips fonts this slot does not allow, which the list above no
+    // longer offers but an editable combo can still be typed into.
+    //
+    // And no match at all falls back to Astrolog's own font rather than
+    // leaving whatever was there, which is what makes a typo visible.
+    for (j = 2; j < cFont; j += (j == 2 ? -2 : (j == 1 ? 2 : 1)))
+      if (FValidFont(i, j) && FMatchSz(sz, rgszFontDispQt[j]))
+        break;
+    *rgpnFont[i] = j < cFont ? j : 0;
   }
   // gs.nFontAll is the six fields above PACKED, and it is not a cache:
   // "Save Program Settings" writes it as ":YXf #%06x" (io.cpp:2572), the
