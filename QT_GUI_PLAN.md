@@ -10775,6 +10775,31 @@ this is the note that explains the wall of dialogs.
     every out-of-range read as a difference.
 
 
+253. **The startup probes had not run on macOS for as long as they have
+    existed.** `run-qt-tests.sh` prefixed each with `timeout 60`. macOS
+    ships no `timeout` -- GNU coreutils installs it as `gtimeout`, and
+    Homebrew's coreutils is not on a runner by default -- so every probe
+    exited 127, "command not found".
+
+    127 is nonzero, and the two probes that ask only for a nonzero exit
+    printed `ok` for a binary that never ran. The release job went green
+    on macOS on that basis for as long as no probe needed a real answer.
+    The first one that did -- item 251's restriction-recall probe, added
+    the same day -- failed there and nowhere else, which is what exposed
+    the rest.
+
+    Two changes. The watchdog resolves to `timeout`, then `gtimeout`,
+    then nothing, and says so when it is nothing. And before reporting on
+    any binary the script runs one known-good chart through the same
+    prefix and refuses outright if that fails -- the cheap half of the
+    lesson, since a probe that never executed cannot fail, and a section
+    of them reads exactly like a section that passed.
+
+    Found by the `publish=false` dispatch that CLAUDE.md's release recipe
+    calls optional. It is not: Linux and Windows were green in the same
+    run.
+
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

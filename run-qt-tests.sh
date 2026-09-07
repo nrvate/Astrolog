@@ -27,7 +27,32 @@ QTENV="env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME="
 # A watchdog turns that silent leak into a bounded wait. 60s is far above
 # what any probe needs (each is one chart) and far below anything a person
 # would sit through.
-QTRUN="timeout 60 $QTENV"
+#
+# AND IT HAS TO EXIST. macOS ships no "timeout" -- GNU coreutils installs
+# it as "gtimeout" there, and Homebrew's coreutils is not on a runner by
+# default. Every probe below then died with 127, "command not found", and
+# 127 is nonzero: the two checks that ask only for a nonzero exit printed
+# "ok" for a binary that never ran, and the release job went green on
+# macOS for as long as no probe needed a real answer. The first one that
+# did -- the restriction-recall probe added 2026-09-07 -- failed there and
+# nowhere else, which is what exposed the rest.
+QTTIMEOUT=
+for _t in timeout gtimeout; do
+  command -v "$_t" >/dev/null 2>&1 && { QTTIMEOUT="$_t 60"; break; }
+done
+QTRUN="$QTTIMEOUT $QTENV"
+
+# Prove the runner can run the binary before trusting anything it says
+# about one. This is the cheap half of the lesson above: a probe that
+# never executed cannot fail, and a section of them reads exactly like a
+# section that passed.
+if ! $QTRUN "$BIN" -Yi1 ephem -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X \
+     </dev/null >/dev/null 2>&1; then
+  echo "the startup probes cannot run '$BIN' -- refusing to report on it"
+  [ -n "$QTTIMEOUT" ] || echo "  (no timeout(1) or gtimeout(1) on PATH)"
+  exit 1
+fi
+[ -n "$QTTIMEOUT" ] || echo "note: no timeout(1); startup probes run unbounded"
 
 # And every probe reads from /dev/null, which is the other half of the
 # same leak. Astrolog prompts for chart info it was not given, and these
