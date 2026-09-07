@@ -2441,8 +2441,16 @@ static void RcLoadInfoAllQt(CONST QVector<RCBUILT> &rgbuilt)
     QLabel *pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 1);
     if (pl != NULL)
       pl->setText(QString::fromLatin1(sz));
-    sprintf2(S(sz), "%s%s%s", pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ?
-      "; " : "", pci->loc);
+    // SzSet() on both, as RcFillChartListQt() already does and for the
+    // same reason: a CI's nam and loc are NULL until something sets them,
+    // and ciThre through ciSixt start that way (data.cpp:160). Passing a
+    // NULL to "%s" is undefined behaviour, and what glibc does with it is
+    // print the word -- measured, the four slot labels read
+    // "(null)(null)". Windows has the identical unguarded form
+    // (wdialog.cpp:1343); this is the fourth site of that shape found
+    // here, after the three chart list filters.
+    sprintf2(S(sz), "%s%s%s", SzSet(pci->nam),
+      FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "", SzSet(pci->loc));
     pl = (QLabel *)PwRcFindIdxQt(rgbuilt, "ds", (i-1)*2 + 2);
     if (pl != NULL)
       pl->setText(QString::fromLatin1(sz));

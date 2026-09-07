@@ -4546,6 +4546,71 @@ static void TestExportRoundTripQt()
 }
 
 
+// A CI's nam and loc are NULL until something sets them -- ciThre through
+// ciSixt start that way (data.cpp:160), and ciDefa's stay NULL through a
+// run that never found an astrolog.as to take "-zj" from. Two dialogs
+// print them with "%s", which is undefined behaviour on a NULL and which
+// glibc answers by printing the word: measured, the "Charts #3 Through
+// #6" slot labels read "(null)(null)".
+//
+// The chart list's three filters were the first three sites of this shape
+// found here and are guarded already; the entry below pins that, and the
+// slot dialog is the fourth.
+static void TestNullNamesQt()
+{
+  char *rgszNamSav[cRing+1], *rgszLocSav[cRing+1];
+  int cciSav = is.cci, i;
+  QStringList lstBad;
+
+  Group("Charts with no name or location");
+  for (i = 1; i <= cRing; i++) {
+    rgszNamSav[i] = rgpci[i]->nam;
+    rgszLocSav[i] = rgpci[i]->loc;
+    rgpci[i]->nam = NULL;
+    rgpci[i]->loc = NULL;
+  }
+
+  DriveModalQt(ShowChartsAllDialogQt, [&lstBad](QWidget *pw) {
+    for (QLabel *pl : pw->findChildren<QLabel *>())
+      if (pl->text().contains("null"))
+        lstBad.append(pl->text());
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "Cancel") { ppb->click(); return; }
+    pw->close();
+  });
+  Check(lstBad.isEmpty(),
+    "the chart slot dialog prints nothing for a chart with no name "
+    "(%d label%s reading \"%s\")", (int)lstBad.size(),
+    lstBad.size() == 1 ? "" : "s",
+    lstBad.isEmpty() ? "" : lstBad[0].toLocal8Bit().constData());
+
+  // The same for the chart list, whose filters were the first three sites
+  // of this found and are guarded; this keeps them that way.
+  is.cci = 0;
+  FAppendCIList(rgpci[1]);
+  lstBad.clear();
+  DriveModalQt(ShowChartListDialogQt, [&lstBad](QWidget *pw) {
+    for (QListWidget *plw : pw->findChildren<QListWidget *>())
+      for (int j = 0; j < plw->count(); j++)
+        if (plw->item(j)->text().contains("null"))
+          lstBad.append(plw->item(j)->text());
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "Cancel") { ppb->click(); return; }
+    pw->close();
+  });
+  Check(lstBad.isEmpty(),
+    "and so does the chart list (%d row%s reading \"%s\")",
+    (int)lstBad.size(), lstBad.size() == 1 ? "" : "s",
+    lstBad.isEmpty() ? "" : lstBad[0].toLocal8Bit().constData());
+
+  is.cci = cciSav;
+  for (i = 1; i <= cRing; i++) {
+    rgpci[i]->nam = rgszNamSav[i];
+    rgpci[i]->loc = rgszLocSav[i];
+  }
+}
+
+
 static void TestJetTrailQt()
 {
   flag fTrailSav = gs.fJetTrail, fGraphicsSav = us.fGraphics;
@@ -12035,6 +12100,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"jet-trail",            TestJetTrailQt},
   {"screen-options",       TestScreenOptionsQt},
   {"export-roundtrip",     TestExportRoundTripQt},
+  {"null-names",           TestNullNamesQt},
   {"credit-colors",        TestCreditColorsQt},
   {"transit-mode",         TestTransitModeQt},
   {"menu-actions",         TestAllMenuActionsQt},

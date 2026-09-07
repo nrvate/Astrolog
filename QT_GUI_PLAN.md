@@ -10617,6 +10617,39 @@ are the more useful half to read before starting something new.
     fails at "3/15/1959".
 
 
+250. **"Charts #3 Through #6" printed `(null)(null)`.** A CI's `nam` and
+    `loc` are NULL until something sets them -- `ciThre` through `ciSixt`
+    start that way (`data.cpp:160`), and `ciDefa`'s stay NULL through a run
+    that never found an `astrolog.as` to take `-zj` from. The slot dialog
+    printed both with `%s`, which is undefined behaviour on a NULL and
+    which glibc answers by printing the word. Measured: all six slot labels
+    read `(null)(null)`.
+
+    **The fourth site of this exact shape found here.** The other three
+    are the chart list's name, location and AstroExpression filters, and
+    the comment above them already says "the rest of the program tests
+    these two with `FSzSet()`; only the three list filters did not". This
+    one was the exception to that sentence.
+
+    `SzSet()` on both, which is what `RcFillChartListQt()` twenty lines
+    away already does. Windows has the identical unguarded form
+    (`wdialog.cpp:1343`), so this is upstream's shape corrected on the side
+    that can be tested here -- the same call the three filters got.
+
+    New group `null-names`: null every ring slot's name and location, open
+    the slot dialog and the chart list, and require no label or row to
+    contain "null". Falsified by putting both back: six labels and one row
+    reading `(null)(null)`.
+
+    Reachability is thin and worth stating rather than overselling. The
+    GUI cannot produce a NULL name -- the Chart Info dialog stores
+    `SzClone(text)`, which is never NULL -- so what reaches it is a run
+    with no settings file, which is the same source the chart list comment
+    records as having "dumped core in both builds" for the filters. Fixed
+    because it is undefined behaviour with a two-call fix and a visible
+    symptom, not because a user is likely to be looking at it.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows
