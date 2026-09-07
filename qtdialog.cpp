@@ -2266,7 +2266,7 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
   // SzClone and assign, NOT FCloneSz. A CI's nam and loc are copied
   // around by value all over this program -- ciCore into ciMain, ciTwin
-  // and the whole chart ring at startup, into ciSave by the dialog below,
+  // and the whole chart ring at startup, into ciSave by Store Chart Info,
   // into every entry of the chart list -- so several CIs share one
   // string, and nothing anywhere frees one. That is what SzClone() is
   // for, and why it deliberately un-counts its own allocation: these are
@@ -2281,7 +2281,11 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
   if (peLoc != NULL)
     ci.loc = SzClone(peLoc->text().toLocal8Bit().constData());
   *pci = ci;
-  ciSave = ci;
+  // No "ciSave = ci" here. Windows' DlgInfo OK handler (wdialog.cpp:1238)
+  // writes rgpci[] and nothing else; ciSave is the Chart menu's Store slot
+  // and SetRelQt()'s midpoint stash, and this dialog filling it made the
+  // Recall button hand back the last info OK'd rather than the last info
+  // stored, and lost the chart a midpoint mode was meant to return to.
   RecastAndRedrawQt();
 }
 
@@ -3125,7 +3129,7 @@ void ShowDefaultInfoDialogQt()
     us.lTimeAddition = NFieldQt(pcbCor->currentText());
   // SzClone and assign, NOT FCloneSz. A CI's nam and loc are copied
   // around by value all over this program -- ciCore into ciMain, ciTwin
-  // and the whole chart ring at startup, into ciSave by the dialog below,
+  // and the whole chart ring at startup, into ciSave by Store Chart Info,
   // into every entry of the chart list -- so several CIs share one
   // string, and nothing anywhere frees one. That is what SzClone() is
   // for, and why it deliberately un-counts its own allocation: these are

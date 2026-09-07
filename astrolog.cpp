@@ -260,7 +260,19 @@ LNextLine:
     ciMain = ciCore;
     CastRelation();
   }
-#ifndef WIN
+  // Not in a GUI. There ciSave is the "Store Chart Info" slot the Chart
+  // menu fills and "Recall Chart Info" reads, and the stash SetRel() /
+  // SetRelQt() keep the pre-midpoint chart in. A GUI runs Action() again
+  // for every redraw of a text chart, so leaving this in overwrote both:
+  // Recall handed back the chart already on screen, and a midpoint chart
+  // took the midpoint of its own last midpoint and walked toward the twin
+  // a little further on every redraw -- the bug charts2.cpp:250 describes
+  // as fixed, still live down the text path. Measured: 2000-01-01,
+  // 2004-12-31, 2007-07-02, 2008-10-01 over four redraws against a twin
+  // in 2010. The console builds cast once and exit, so there the
+  // assignment is what makes charts3.cpp's event lists inherit the chart
+  // just cast.
+#if !defined(WIN) && !defined(QT)
   ciSave = ciMain;
 #endif
 

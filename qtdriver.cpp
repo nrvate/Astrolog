@@ -811,6 +811,22 @@ void PrintNoticeQt(CONST char *sz)
 }
 
 
+// The "-YB" switch, which exists to be put in a macro so a chart can ring
+// the bell. Windows calls MessageBeep() (switch.cpp, NSwYB); every other
+// build writes chBell to stdout, which in a GUI goes to the terminal it
+// was launched from, or nowhere at all from a desktop launcher. Qt has
+// the same system sound MessageBeep() asks for.
+
+void BeepQt(void)
+{
+  if (QApplication::instance() == NULL) {
+    putchar(chBell);
+    return;
+  }
+  QApplication::beep();
+}
+
+
 /*
 ******************************************************************************
 ** Text charts drawn into the chart window.

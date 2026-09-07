@@ -991,10 +991,12 @@ static int NSwYP(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYB(CONST char *szSwitch, PARSEIN *pin)
 {
-#ifndef WIN
-  putchar(chBell);
-#else
+#if defined(WIN)
   MessageBeep((UINT)-1);
+#elif defined(QT)
+  BeepQt();
+#else
+  putchar(chBell);
 #endif
   return 0;
 }

@@ -4113,6 +4113,110 @@ static void TestChartNowQt()
 }
 
 
+// "Store Chart Info" and "Recall Chart Info" (Chart menu), and the
+// midpoint stash that shares the same variable.
+//
+// ciSave has two jobs in a GUI: it is the Store slot Recall reads, and it
+// is where SetRelQt() parks the chart a Time Space Midpoint mode has to
+// return to -- charts2.cpp:252 reads it on every recast so the midpoint is
+// taken from the chart as loaded rather than from the previous midpoint.
+// Action() used to overwrite it (astrolog.cpp, "#if !defined(WIN) &&
+// !defined(QT)"), and a text chart runs Action() on every redraw, so both
+// jobs failed down that path and only that path.
+static void TestChartStoreQt()
+{
+  CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciCoreSav = ciCore;
+  CI ciSaveSav = ciSave;
+  flag fGraphicsSav = us.fGraphics;
+  int nRelSav = us.nRel, nModeSav = gi.nMode, yea1, yea2, yea3;
+  QAction *paStore = PaFindActionTestQt("&Store Chart Info");
+  QAction *paRecall = PaFindActionTestQt("Re&call Chart Info");
+  QByteArray baDir = QDir::tempPath().toLocal8Bit();
+  FILE *fileSav = is.S;
+  char szT[cchSzMax];
+
+  Group("Store and recall chart info");
+  Check(paStore != NULL && paRecall != NULL,
+    "Store and Recall are both on the Chart menu");
+  if (paStore == NULL || paRecall == NULL)
+    return;
+
+  SetChartModeQt(gWheel);
+  SetRelQt(rcNone);
+
+  // Store chart A, move to chart B, redraw a TEXT chart, recall.
+  us.fGraphics = fFalse;
+  ciMain.yea = 1990; ciCore = ciMain;
+  paStore->trigger();
+  ciMain.yea = 2000; ciCore = ciMain;
+  RedrawQt();
+  paRecall->trigger();
+  Check(ciMain.yea == 1990,
+    "a text chart redraw between Store and Recall leaves the stored chart "
+    "alone (yea %d)", ciMain.yea);
+
+  // Same, across the other Action() a GUI runs: the text capture behind
+  // Save Text, Copy Text and printing.
+  ciMain.yea = 1990; ciCore = ciMain;
+  paStore->trigger();
+  ciMain.yea = 2000; ciCore = ciMain;
+  sprintf2(S(szT), "%s/astrolog-qt-store-%d.tmp", baDir.constData(),
+    (int)QCoreApplication::applicationPid());
+  CaptureTextToFileQt(szT, fFalse);
+  is.S = fileSav;
+  QFile::remove(QString(szT));
+  paRecall->trigger();
+  Check(ciMain.yea == 1990,
+    "and so does a text capture (Save Text, Copy Text, printing) (yea %d)",
+    ciMain.yea);
+
+  // The Chart Info dialog must not fill the Store slot either. Windows'
+  // DlgInfo OK handler writes rgpci[] and nothing else (wdialog.cpp:1238).
+  ciMain.yea = 1990; ciCore = ciMain;
+  paStore->trigger();
+  ciCore.yea = 2000; ciMain = ciCore;
+  DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") { ppb->click(); return; }
+  });
+  paRecall->trigger();
+  Check(ciMain.yea == 1990,
+    "and so does OK in the Chart Info dialog (yea %d)", ciMain.yea);
+
+  // The midpoint stash. Two charts twenty years apart, so a chart that
+  // walks toward the twin does so by years rather than by rounding.
+  SetRelQt(rcNone);
+  ciMain.mon = 1; ciMain.day = 1; ciMain.yea = 1990; ciMain.tim = 0.0;
+  ciMain.dst = 0.0; ciMain.zon = 0.0; ciMain.lon = 0.0; ciMain.lat = 0.0;
+  ciTwin = ciMain; ciTwin.yea = 2010;
+  ciCore = ciMain;
+  us.fGraphics = fFalse;
+  SetRelQt(rcMidpoint);
+  yea1 = ciMain.yea;
+  RedrawQt();
+  yea2 = ciMain.yea;
+  RedrawQt();
+  yea3 = ciMain.yea;
+  Check(yea1 == 2000,
+    "the midpoint of 1990 and 2010 is 2000 (yea %d)", yea1);
+  Check(yea2 == yea1 && yea3 == yea1,
+    "and redrawing it as text does not walk it toward the twin "
+    "(%d, %d, %d)", yea1, yea2, yea3);
+
+  // And leaving midpoint mode still hands back the chart it started from.
+  SetRelQt(rcNone);
+  Check(ciMain.yea == 1990,
+    "leaving midpoint mode restores the chart it was entered from (yea %d)",
+    ciMain.yea);
+
+  SetRelQt(nRelSav);
+  SetChartModeQt(nModeSav);
+  us.fGraphics = fGraphicsSav;
+  ciMain = ciMainSav; ciTwin = ciTwinSav; ciCore = ciCoreSav;
+  ciSave = ciSaveSav;
+}
+
+
 static void TestAtlasApplyQt()
 {
   Group("Atlas Apply Info");
@@ -11153,6 +11257,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   // three. Measured at 42 s after it and 0.5 s before.
   {"text-pager",           TestPagerQt},
   {"chart-scroll",         TestChartScrollQt},
+  {"chart-store",          TestChartStoreQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},
   {"menu-extra",           TestMenuExtraQt},

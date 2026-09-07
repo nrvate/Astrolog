@@ -37,6 +37,7 @@ void RecastAndRedrawQt();
 void RedrawQt();
 void PrintWarningQt(CONST char *sz, flag fError);
 void PrintNoticeQt(CONST char *sz);
+void BeepQt(void);
 void RedrawForceQt();
 flag FNoUpdateQt();
 flag FNoPopupQt();

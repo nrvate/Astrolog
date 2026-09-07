@@ -10016,6 +10016,99 @@ are the more useful half to read before starting something new.
     GUI. Only driving `RedrawQt()` directly, with a fifo held open, showed
     it.
 
+238. **"Store Chart Info" stored nothing, and a text midpoint chart walked
+    toward its twin.** Both from one line, and from the same `#ifndef WIN`
+    sweep that produced item 237.
+
+    `ciSave` has two jobs in a GUI. It is the slot the Chart menu's
+    **Store Chart Info** fills and **Recall Chart Info** reads. And it is
+    where `SetRel()`/`SetRelQt()` park the chart a Time Space Midpoint
+    mode has to return to -- `charts2.cpp:252` reads it on every recast so
+    the midpoint is taken from the chart as *loaded* rather than from the
+    previous midpoint, which is what stops the chart drifting toward the
+    twin a little further on each redraw.
+
+    `Action()` ended with `ciSave = ciMain`, guarded only by `#ifndef WIN`.
+    In the console builds that is deliberate and load bearing: they cast
+    once and exit, and it is what makes `charts3.cpp`'s event lists
+    inherit the chart just cast. A GUI runs `Action()` again for **every
+    redraw of a text chart** (`RedrawQt()`, `qtdriver.cpp`) and for every
+    text capture behind Save Text, Copy Text and printing
+    (`CaptureTextToFileQt()`). So both jobs failed, and only down the text
+    path -- a graphics redraw goes to `DrawChartX()` and never calls
+    `Action()`, which is why this survived every graphics net in the tree.
+
+    Measured with the scratch probe, chart stored at 1990 and the screen
+    moved to 2000:
+
+    ```
+    after store:            ciSave.yea=1990
+    after text redraw:      ciSave.yea=2000
+    after Save Text:        ciSave.yea=2000
+    after graphics redraw:  ciSave.yea=1990
+    ```
+
+    And a midpoint chart between 1990 and 2010, redrawn as text four
+    times:
+
+    ```
+    midpoint text:      2000-01-01 2004-12-31 2007-07-02 2008-10-01
+    midpoint graphics:  2000-01-01 2000-01-01 2000-01-01 2000-01-01
+    ```
+
+    That is the exact bug `charts2.cpp:250`'s comment describes as fixed,
+    still live down the path nobody had looked at. Leaving midpoint mode
+    then handed back 2007 instead of 1990.
+
+    The guard is now `#if !defined(WIN) && !defined(QT)`.
+
+    **A second write had to go with it.** `ShowChartInfoForQt()` ended
+    `*pci = ci; ciSave = ci;`. Windows' `DlgInfo` OK handler
+    (`wdialog.cpp:1238`) writes `rgpci[]` and nothing else. The extra line
+    arrived with the dialog's Recall button (commit `aaff872`) and made
+    Recall hand back *the last info OK'd* rather than the last info
+    **stored** -- and, with the fix above in place, it would still have
+    lost the chart a midpoint mode was meant to return to, every time the
+    dialog was closed with OK.
+
+    New group `chart-store`, eight assertions, both halves falsified
+    separately: putting `#ifndef WIN` back fails five of them, putting
+    `ciSave = ci` back fails exactly the one about the dialog. It sits
+    before `menu-actions` in the table for the reason item 236 records.
+
+239. **`-YB` beeped into a terminal nobody was reading.** From the same
+    sweep. `NSwYB()` in `switch.cpp` called `MessageBeep()` on Windows and
+    `putchar(chBell)` everywhere else. The switch exists to be put in a
+    **macro**, so a chart can ring the bell; in the Qt GUI `putchar` goes
+    to the process's stdout, which is the terminal it was launched from
+    if there was one and nowhere at all from a desktop launcher.
+    `BeepQt()` (`qtdriver.cpp`) asks Qt for the same system sound, and
+    falls back to `putchar` when there is no `QApplication` yet -- the
+    shape `PrintNoticeQt()` already settled.
+
+    **Not asserted, deliberately.** Testing it means capturing file
+    descriptor 1, which needs `dup`/`dup2` and so an unguarded
+    `<unistd.h>` in `qttest.cpp` -- exactly what `qt_srcs_audit.py`
+    exists to stop. A test that could not fail would be worth less than
+    saying so here.
+
+### A knowing divergence found in the same sweep, and left alone
+
+`BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows
+when `gi.szFileOut` is `NULL`; every other build prints a filename
+recommendation and then **prompts on stdin** for one. So
+`astrolog-qt -Xb` with no `-Xo` asks "Enter name of file to write bitmap
+to" on the terminal, where Windows would ignore the request and open the
+window. Measured: with stdin at `/dev/null` the Qt build exits 2 and
+never opens a window at all.
+
+It is left as it is. The prompt is a working console affordance on the
+platform this is developed on, `FActionX()` is reached only at startup
+and from `FExportChartQt()` (which always sets the name), so no running
+event loop can block on it, and `-Xb` without `-Xo` produces no bitmap
+either way. Worth knowing about if the Windows package ever grows a
+shortcut that passes `-Xb`.
+
 
 ## Features this fork adds to both builds
 
