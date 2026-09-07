@@ -9189,6 +9189,37 @@ are the more useful half to read before starting something new.
     and must not appear in the file captured without Smart Save. That one
     fails when the swap is removed.
 
+216. **Enter Command Line cut everything past 254 characters, silently.**
+    Third finding from the same call-count sweep as 213 and 215:
+    `FProcessCommandLine` reads three on Windows against one here, and the
+    site that is missing is the Command Line dialog -- which does the same
+    job open-coded, with a buffer of the wrong size.
+
+    Windows reads its box with `GetDlgItemText(hdlg, deCo, sz, cchSzLine)`
+    and comments the size: "Longer cchSzLine string", 1020 characters.
+    This copied into `cchSzMax`, 255.
+
+    Silent is the whole of it. `FProcessCommandLine()` **refuses** a line
+    longer than its own buffer, with a message, and its comment says why:
+    "half a command line is a different command line, not a shorter one:
+    cutting `-Yi1 "/some/path"` in the middle leaves a switch pointing
+    somewhere else entirely". Truncating one layer above it defeated
+    exactly that reasoning -- and worse than the case it was written for,
+    because a person typing into a box does not know 254 is a limit.
+
+    The body is `FRunCommandLineQt()` now, split out the way
+    `COpenChartDirQt()` is, so the assertion can drive it with no modal
+    dialog in front of it. A line of 275 characters with `-YQ 137` at the
+    end of it: the switch has to still run.
+
+    **The first draft of that line was padded with `-n `, and failed with
+    the fix in place.** `NParseCommandLine()` stops at `MAXSWITCHES` (100)
+    parameters and warns, and 275 characters of `-n ` is 92 of them plus
+    the sentinel's two -- close enough that the drop had nothing to do
+    with the buffer. Padding with `-YQ 0 ` is two tokens per six
+    characters and stays well clear. Falsified by putting `cchSzMax` back:
+    7 passed, 1 failed.
+
 
 ## Features this fork adds to both builds
 

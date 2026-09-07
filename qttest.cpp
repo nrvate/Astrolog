@@ -1330,6 +1330,7 @@ extern flag FAnimTickBusyTestQt(void);
 extern void SetAnimTickBusyTestQt(flag);
 extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
 extern flag FBootPathTestQt(CONST char *, char *, int);  // qtdriver.cpp
+extern flag FRunCommandLineTestQt(CONST char *);  // qtdialog.cpp
 extern QIcon IconAstrologQt();                   // qtdriver.cpp
 extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
@@ -1471,6 +1472,41 @@ static void TestLongCommandLineQt()
     "a command line over the buffer is refused, not copied into it");
   Check(FProcessCommandLine(szFits),
     "and one that fits is still processed (%d chars)", CchSz(szFits));
+
+  // The Enter Command Line box has a buffer of its OWN, and it was the
+  // wrong size: cchSzMax, so everything past 254 characters was silently
+  // cut, while Windows reads its box with cchSzLine and comments the
+  // size (wdialog.cpp:1073). Silent is the part that matters -- the
+  // refusal above exists because half a command line is a different
+  // command line, and truncating one layer up defeated it.
+  //
+  // A line long enough to have been cut, with an observable switch at the
+  // very END of it, which is the only place the difference shows.
+  {
+    CI ciSav = ciCore, ciMainSav = ciMain;
+    int nScrollSav = us.nScrollRow;
+    char szCmd[cchSzLine];
+    int cch = 0;
+
+    // Padded with the same switch it ends with, and not with "-n " as the
+    // draft above it: NParseCommandLine() stops at MAXSWITCHES (100)
+    // parameters and says so, and 300 characters of "-n " is 100 of them,
+    // so the sentinel was dropped for a reason that had nothing to do
+    // with the buffer. Two tokens per six characters keeps it well under.
+    while (cch < cchSzMax + 20)
+      cch += sprintf2(SO(&szCmd[cch], szCmd), "-YQ 0 ");
+    sprintf2(SO(&szCmd[cch], szCmd), "-YQ 137");
+    Check(CchSz(szCmd) > cchSzMax && CchSz(szCmd) < cchSzLine,
+      "a line longer than the old buffer and shorter than the new "
+      "(%d chars, %d, %d)", CchSz(szCmd), cchSzMax, cchSzLine);
+    us.nScrollRow = 0;
+    FRunCommandLineTestQt(szCmd);
+    Check(us.nScrollRow == 137,
+      "and the switch at the end of it still runs (nScrollRow %d)",
+      us.nScrollRow);
+    us.nScrollRow = nScrollSav;
+    ciCore = ciSav; ciMain = ciMainSav;
+  }
   // The same class, one buffer further in: DisplayAtlasLookup() copied
   // its argument into a cchSzMax stack buffer one character at a time
   // with nothing stopping it, so "-zN <260 characters>" aborted -- and

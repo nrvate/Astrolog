@@ -3386,6 +3386,53 @@ void ShowChartSettingsDialogQt()
 // us.fLoop/is.fMult around the call -- those matter for a line that
 // itself starts a new multi chart sequence, an edge case skipped here.
 
+// Run the switches typed into the Enter Command Line box. Split out so a
+// test can drive it with no modal dialog in front of it, the same reason
+// COpenChartDirQt() is split out of its directory picker.
+//
+// cchSzLine (1020), not cchSzMax (255). Windows reads its own box with
+// GetDlgItemText(hdlg, deCo, sz, cchSzLine) and comments the size --
+// "Longer cchSzLine string" -- while this copied into a cchSzMax buffer
+// and silently cut everything past 254 characters. Silent is the part
+// that matters: FProcessCommandLine() REFUSES a line longer than its own
+// buffer rather than truncating it, and says why, because half a command
+// line is a different command line and not a shorter one. Truncating one
+// layer above it defeated exactly that.
+
+static flag FRunCommandLineQt(CONST QString &qsLine)
+{
+  char szLine[cchSzLine];
+  char *rgsz[MAXSWITCHES];
+  QByteArray ba = qsLine.toLocal8Bit();
+  int argc;
+  flag fRet;
+
+  strncpy(szLine, ba.constData(), cchSzLine-1);
+  szLine[cchSzLine-1] = chNull;
+  argc = NParseCommandLine(szLine, rgsz);
+  ciCore = ciMain;
+  // A chart-type switch has to be routed back through SetChartModeQt(),
+  // or gi.nMode and the Chart menu stay where the menus last put them.
+  QVector<flag> rgfMode(CChartModeQt());
+  SnapChartModeQt(rgfMode.data());
+  fRet = (argc > 0 && FProcessSwitches(argc, rgsz, NULL));
+  ciMain = ciCore;
+  InitColorsX();
+  SyncChartModeFromFlagsQt(rgfMode.constData());
+  RedoMenuQt();
+  RecastAndRedrawQt();
+  return fRet;
+}
+
+
+#ifdef QTTEST
+flag FRunCommandLineTestQt(CONST char *szLine)
+{
+  return FRunCommandLineQt(QString::fromUtf8(szLine));
+}
+#endif
+
+
 void ShowCommandLineDialogQt()
 {
   QDialog dlg(gi.qwind);
@@ -3409,25 +3456,9 @@ void ShowCommandLineDialogQt()
 
   if (pcbExp != NULL)
     us.fExpOff = !pcbExp->isChecked();
-  char szLine[cchSzMax];
-  QByteArray ba = peLine->text().toLocal8Bit();
-  strncpy(szLine, ba.constData(), cchSzMax-1);
-  szLine[cchSzMax-1] = chNull;
-  char *rgsz[MAXSWITCHES];
-  int argc = NParseCommandLine(szLine, rgsz);
-  ciCore = ciMain;
-  // A chart-type switch has to be routed back through SetChartModeQt(),
-  // or gi.nMode and the Chart menu stay where the menus last put them.
-  QVector<flag> rgfMode(CChartModeQt());
-  SnapChartModeQt(rgfMode.data());
-  if (argc <= 0 || !FProcessSwitches(argc, rgsz, NULL))
+  if (!FRunCommandLineQt(peLine->text()))
     QMessageBox::warning(gi.qwind, szAppName,
       "One or more switches were not understood.");
-  ciMain = ciCore;
-  InitColorsX();
-  SyncChartModeFromFlagsQt(rgfMode.constData());
-  RedoMenuQt();
-  RecastAndRedrawQt();
 }
 
 
