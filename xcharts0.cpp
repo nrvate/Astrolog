@@ -2563,14 +2563,22 @@ void DrawChartX()
   case gMoons:
     XChartMoons();
     break;
-#ifdef WIN
+// A GUI can be showing a transit LIST (gTraTraTim/gTraTraInf, set by the
+// Transits dialog, which turns graphics off for them) and then have
+// graphics turned back on under it -- the mode stays what it was. With no
+// case here the switch draws no chart body at all, just the frame and the
+// sidebar: measured in the Qt build as gTraTraTim and gTraTraInf
+// rendering byte-identically to each other and differing from a wheel by
+// only the sidebar's 84,452 pixels. Windows draws the graph; so does this
+// now.
+#if defined(WIN) || defined(QT)
   case gTraTraTim:
   case gTraTraInf:
 #endif
   case gTraTraGra:
     XChartTransit(fFalse, is.fProgress);
     break;
-#ifdef WIN
+#if defined(WIN) || defined(QT)
   case gTraNatTim:
   case gTraNatInf:
 #endif

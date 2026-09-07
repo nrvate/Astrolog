@@ -105,7 +105,13 @@ void DisplayCredits(void)
   *szT = chNull;
 #endif
   sprintf2(S(sz), "** %s version %s%s **", szAppName, szVersionCore, szT);
-#ifdef WIN
+  // Both GUIs paint the text canvas in gi.kiOff, which "Reverse
+  // Background" makes WHITE -- so this one line, the only one in the box
+  // drawn in kWhiteA, went white on white. Measured in the Qt build: 19
+  // pixel rows of the credits chart vanished. The console builds print to
+  // a terminal, where white is right whatever the terminal's own
+  // background is.
+#if defined(WIN) || defined(QT)
   PrintW(sz, gs.fInverse ? kBlackA : kWhiteA);
 #else
   PrintW(sz, kWhiteA);

@@ -10092,6 +10092,87 @@ are the more useful half to read before starting something new.
     exists to stop. A test that could not fail would be worth less than
     saying so here.
 
+240. **The credits box lost a line under Reverse Background.** The sweep
+    run the *other* way -- `#ifdef WIN` in shared core with no `QT` in the
+    block, the direction that finds a correction Windows makes for its GUI
+    and this build never got. 54 hits, nearly all Win32 GDI internals; two
+    were behavioural.
+
+    `DisplayCredits()` draws its version line -- `** Astrolog version
+    8.00 **` -- in `kWhiteA`, and everything else in the box in red, grey,
+    cyan, green or yellow. Windows picks `kBlackA` instead when
+    `gs.fInverse` is on, because both GUIs paint the text canvas in
+    `gi.kiOff`, which "Reverse Background" makes **white**. This build had
+    upstream's non-Windows branch, so the line went white on white.
+
+    Measured on the rendered chart, by ink per scanline: on black,
+    rows 31-49 carry 9 to 183 pixels each; on white the same rows carry
+    **6**, which is the box's two vertical edges and nothing else. 19
+    pixel rows of a 1600x1360 image, gone.
+
+    **The assertion took five attempts, and four of them passed with the
+    bug present.** Worth recording in full, because every one of them
+    looked reasonable:
+
+    * *ink colour* -- "is there any pure black on the white render".
+      Other lines in the box already put about a thousand pure-black
+      pixels there, and most of the missing line's own ink is antialiased
+      rather than pure: 162 pure-black pixels against 1,456 of ink.
+    * *ink presence per row* -- "every row with ink on black has ink on
+      white". The box's two vertical edges put six pixels on every row
+      inside it, so no row ever reaches zero.
+    * *text bands* -- count maximal runs of rows above the bare-edge
+      floor, and require the same count on both. The floor was measured
+      as the smallest non-zero row in the image, which a stray antialiased
+      pixel somewhere else pushes to 1.
+    * *total ink across the image* -- the two backgrounds antialiase
+      differently, and at the size the full suite renders this at, that
+      drift (261 pixels) is the same size as the missing line (about 470).
+    * **the biggest single-row difference in ink** works, and pinning
+      `us.fAnsiColor` is what makes it work at all. `AnsiColor()` maps
+      every colour to `kLtGrayA` when Ansi colour is off -- "Colored Text"
+      in the View menu, which is off in a run with no settings file -- so
+      the version line came out grey, visible on either background, and
+      the group produced **identical numbers with the bug present and
+      absent**, to the pixel. That is the fourth measurement in this
+      document that could not see the thing it was measuring. With the pin
+      in, and the render size pinned too (at 760x600 the box does not
+      fit): 9 and 13 with the fix, 162 and 120 without, across the two
+      configurations the suite runs in. The bound is 50.
+
+241. **Four transit chart modes drew no chart at all.** The second
+    behavioural hit from the same sweep.
+
+    `DrawChartX()` has `case gTraTraTim: case gTraTraInf:` and
+    `case gTraNatTim: case gTraNatInf:` falling into the two transit graph
+    cases -- behind `#ifdef WIN`. Those four modes are the transit
+    *lists*, and both builds' Transits dialog turns graphics off when it
+    selects one. Nothing turns it back off again: pick a list, then View /
+    Graphics Chart, and `gi.nMode` is still the list mode. Windows draws
+    the graph. Here the switch matched nothing and drew **no chart body at
+    all** -- the frame, the sidebar and the footer, and inside them
+    nothing.
+
+    Measured: with the four modes rendered as graphics, `gTraTraTim` and
+    `gTraTraInf` came out **byte-identical to each other** and differed
+    from a plain wheel by only 84,452 pixels, all of it the sidebar. After
+    the fix, 663,595. And `gTraTraTim` still differs from `gTraTraGra`,
+    which is not a bug and is worth writing down: `FProper()`
+    (`xcharts2.cpp:95`) applies `FProperGraph()` only when `gi.nMode` is
+    one of the two *graph* modes, so a list mode drawn as graphics shows
+    more bodies. Windows does exactly the same. Confirmed by rendering
+    with the list mode's flags and the graph mode's `gi.nMode`: **0
+    differing pixels**.
+
+    The baseline the assertion uses is `gCredit` -- a mode `DrawChartX()`
+    genuinely has no case for, drawn through the same clear, frame and
+    footer code. Two such modes render **identically**, so the floor a
+    missing case leaves is not "small", it is zero: the group asserts that
+    too, which is what makes its 1,000 pixel bound mean anything.
+    Falsified with `#ifdef WIN` put back: all four report 0 changed
+    pixels.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows
@@ -10108,6 +10189,25 @@ and from `FExportChartQt()` (which always sets the name), so no running
 event loop can block on it, and `-Xb` without `-Xo` produces no bitmap
 either way. Worth knowing about if the Windows package ever grows a
 shortcut that passes `-Xb`.
+
+
+### A third one, measured and left alone
+
+`KiCity()` (`xgeneral.cpp`) colours atlas cities by their **current** time
+zone offset -- Graphics Settings' "Show Cities: Current Zone", which this
+port offers -- and to do it, loops `DisplayTimezoneChanges()` over every
+one of the time zone areas. Windows wraps that loop in
+`wi.fNoPopup = fTrue`, because the function can `PrintWarning()` on a
+malformed zone rule, and in a GUI that is a modal box **per zone, inside a
+paint**. This build has `SetNoPopupQt()` and no such guard.
+
+Measured before deciding: a world map rendered with `-XW -XA -XL4` over
+the whole atlas, against the shipped `astrolog.tzc`, produces **zero**
+"Zone rule warning" lines. The condition the guard protects against does
+not arise with today's data, so adding the guard would mean shipping six
+lines of code that no assertion in this tree can exercise. Recorded here
+instead. If `astrolog.tzc` is ever replaced with a file that does trip it,
+this is the note that explains the wall of dialogs.
 
 
 ## Features this fork adds to both builds

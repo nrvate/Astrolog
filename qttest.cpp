@@ -4113,6 +4113,214 @@ static void TestChartNowQt()
 }
 
 
+// The credits box under "Reverse Background". Both GUIs paint the text
+// canvas in gi.kiOff, which gs.fInverse makes WHITE, and DisplayCredits()
+// draws its version line -- the only line in the box in kWhiteA -- white
+// on white. Windows picks kBlackA there instead; charts0.cpp does the
+// same for this build now.
+static void TestCreditColorsQt()
+{
+  flag fInvSav = gs.fInverse, fGraphicsSav = us.fGraphics;
+  int nModeSav = gi.nMode, iPass, x, y, cRowBad = 0, cRowInk = 0;
+  int xWinSav = gs.xWin, yWinSav = gs.yWin, nAnsiSav = us.fAnsiColor;
+  QVector<int> rgcInk[2];
+  int cy = 0;
+
+  Group("Credits box under both backgrounds");
+
+  us.fGraphics = fFalse;
+  // Pin the render size, and Ansi colour. The second one is the whole
+  // question: AnsiColor() maps EVERY colour to kLtGrayA when
+  // us.fAnsiColor is off ("Colored Text" in the View menu, off in a run
+  // with no settings file), so the version line comes out grey, visible
+  // on either background, and this group passed identically with the bug
+  // present and absent -- measured at 72,254 and 71,993 pixels of ink
+  // both ways, to the pixel. The size matters for a smaller reason: at
+  // 760x600 the box does not fit.
+  gs.xWin = 1200; gs.yWin = 900;
+  us.fAnsiColor = 1;
+  for (iPass = 0; iPass < 2; iPass++) {
+    QRgb kvBack;
+
+    gs.fInverse = (iPass != 0);
+    SetChartModeQt(gCredit);
+    if (gi.qim == NULL)
+      continue;
+    kvBack = (QRgb)(0xff000000 | KvFromKi(gi.kiOff));
+    if (cy == 0)
+      cy = gi.qim->height();
+    rgcInk[iPass].resize(gi.qim->height());
+    for (y = 0; y < gi.qim->height(); y++) {
+      int c = 0;
+      for (x = 0; x < gi.qim->width(); x++)
+        if ((QRgb)(gi.qim->pixel(x, y) | 0xff000000) != kvBack)
+          c++;
+      rgcInk[iPass][y] = c;
+    }
+  }
+  Check(rgcInk[0].size() == cy && rgcInk[1].size() == cy && cy > 0,
+    "the credits chart renders the same size either way");
+  if (rgcInk[0].size() != cy || rgcInk[1].size() != cy)
+    goto LDone;
+
+  // Per ROW, and on the DIFFERENCE in ink rather than on its presence.
+  // Three weaker forms were tried first and each passes with the bug:
+  //
+  //   ink COLOUR ("any pure black on the white render") -- other lines in
+  //     the box already put a thousand pure-black pixels there, and most
+  //     of the missing line's own ink is antialiased rather than pure.
+  //   ink PRESENCE per row ("a row with ink on black has ink on white") --
+  //     the box's two vertical edges put six pixels on every row, so no
+  //     row ever reaches zero.
+  //   TOTAL ink across the image -- the two backgrounds antialiase
+  //     differently, and at the size the full suite renders this at, that
+  //     drift (261 pixels) is the same size as the missing line (about
+  //     470).
+  //
+  // The same characters are drawn either way, so row for row the ink
+  // counts track each other within antialiasing. A lost line does not:
+  // its rows fall to the six pixels of box edge.
+  // The biggest single-row difference in ink, not a total and not a
+  // colour. The same characters are drawn on either background, so row
+  // for row the counts track each other to within antialiasing; a line
+  // drawn in the background's own colour does not, and its rows fall to
+  // the six pixels of box edge.
+  //
+  // Three weaker forms were tried first and each passes with the bug:
+  //
+  //   ink COLOUR ("any pure black on the white render") -- other lines in
+  //     the box already put a thousand pure-black pixels there, and most
+  //     of the missing line's own ink is antialiased rather than pure.
+  //   ink PRESENCE per row ("a row with ink on black has ink on white") --
+  //     the box's two vertical edges put six pixels on every row, so no
+  //     row ever reaches zero.
+  //   TOTAL ink across the image -- the two backgrounds antialiase
+  //     differently, and that drift is the same size as the missing line.
+  //
+  // Measured across both configurations the suite runs in: 9 and 13 with
+  // the fix, 162 and 120 without.
+  {
+    int nMax = 0, d;
+    for (y = 0; y < cy; y++) {
+      cRowInk += rgcInk[0][y];
+      d = NAbs(rgcInk[0][y] - rgcInk[1][y]);
+      if (d > nMax)
+        nMax = d;
+    }
+    cRowBad = nMax;
+    Check(cRowInk > 10000, "and draws the box (%d pixels of ink)", cRowInk);
+    Check(nMax < 50,
+      "and loses no line to Reverse Background -- the version line is the "
+      "only one in the box drawn in kWhiteA (worst row differs by %d "
+      "pixels)", nMax);
+  }
+
+LDone:
+  gs.fInverse = fInvSav;
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  us.fAnsiColor = nAnsiSav;
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+}
+
+
+// The four transit LIST modes with graphics turned back on under them.
+//
+// The Transits dialog turns graphics off for gTraTraTim/gTraTraInf/
+// gTraNatTim/gTraNatInf, in both builds. Nothing turns it back off again
+// if the user then picks View / Graphics Chart, and gi.nMode stays where
+// the dialog left it -- so DrawChartX() switches on a mode it has a case
+// for only under "#ifdef WIN", and drew no chart body at all: just the
+// frame, the sidebar and the footer.
+//
+// The baseline is a mode that legitimately has no case, gCredit. It is
+// drawn through the same clear/frame/footer code, so "differs from that
+// by a lot" says a body was drawn without depending on what the body
+// looks like.
+static void TestTransitModeQt()
+{
+  int rgnMode[4] = {gTraTraTim, gTraTraInf, gTraNatTim, gTraNatInf};
+  int nModeSav = gi.nMode, nEphemYearsSav = us.nEphemYears, nAspSav;
+  flag fGraphicsSav = us.fGraphics;
+  flag fMonthSav = us.fInDayMonth, fYearSav = us.fInDayYear;
+  byte rgfIgnoreSav[objMax];
+  QImage imBase, imBase2;
+  int i, x, y, cBase = 0, cDiff;
+
+  Group("Transit list modes drawn as graphics");
+
+  // Keep the graph cheap: one day, one year of ephemeris, three bodies.
+  us.fInDayMonth = us.fInDayYear = fFalse;
+  us.nEphemYears = 1;
+  nAspSav = us.nAsp;
+  us.nAsp = 1;
+  for (i = 0; i < objMax; i++)
+    rgfIgnoreSav[i] = ignore[i];
+  for (i = 0; i <= cObj; i++)
+    ignore[i] = (i != oSun && i != oMoo && i != oMer);
+
+  us.fGraphics = fTrue;
+  SetChartModeQt(gCredit);
+  us.fGraphics = fTrue;
+  RedrawQt();
+  if (gi.qim != NULL)
+    imBase = gi.qim->copy();
+  // A second mode that also has no case in DrawChartX(), for the noise
+  // floor: whatever two bodiless renders differ by is frame and footer,
+  // not chart.
+  us.fGraphics = fTrue;
+  SetChartModeQt(gSign);
+  us.fGraphics = fTrue;
+  RedrawQt();
+  if (gi.qim != NULL)
+    imBase2 = gi.qim->copy();
+  Check(!imBase.isNull() && !imBase2.isNull() &&
+    imBase.size() == imBase2.size(),
+    "two modes with no chart body still render a frame");
+  if (imBase.isNull() || imBase2.isNull() || imBase.size() != imBase2.size())
+    goto LDone;
+  // Every pixel, not a sample: the lines a transit graph draws are one
+  // pixel wide, and sampling every other pixel each way threw away 98% of
+  // them -- measured, 20,349 differing pixels down to 208. The renders
+  // are what this group costs, not the walks.
+  for (y = 0; y < imBase.height(); y++)
+    for (x = 0; x < imBase.width(); x++)
+      if (imBase.pixel(x, y) != imBase2.pixel(x, y))
+        cBase++;
+
+  for (i = 0; i < 4; i++) {
+    us.fGraphics = fTrue;
+    SetChartModeQt(rgnMode[i]);
+    us.fGraphics = fTrue;
+    RedrawQt();
+    cDiff = 0;
+    if (gi.qim != NULL && gi.qim->size() == imBase.size())
+      for (y = 0; y < imBase.height(); y++)
+        for (x = 0; x < imBase.width(); x++)
+          if (gi.qim->pixel(x, y) != imBase.pixel(x, y))
+            cDiff++;
+    Check(cDiff > 1000,
+      "mode %d draws a chart body, not just the frame (%d changed pixels; "
+      "two bodiless modes differ by %d)", rgnMode[i], cDiff, cBase);
+  }
+  // What makes the bound above mean anything: two modes DrawChartX() has
+  // no case for render byte for byte the same, so the floor a missing
+  // case leaves is not "small", it is zero.
+  Check(cBase == 0,
+    "and two bodiless modes render identically, so that floor is zero, "
+    "not merely small (%d differing pixels)", cBase);
+
+LDone:
+  for (i = 0; i < objMax; i++)
+    ignore[i] = rgfIgnoreSav[i];
+  us.nAsp = nAspSav;
+  us.nEphemYears = nEphemYearsSav;
+  us.fInDayMonth = fMonthSav; us.fInDayYear = fYearSav;
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+}
+
+
 // "Store Chart Info" and "Recall Chart Info" (Chart menu), and the
 // midpoint stash that shares the same variable.
 //
@@ -11258,6 +11466,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"text-pager",           TestPagerQt},
   {"chart-scroll",         TestChartScrollQt},
   {"chart-store",          TestChartStoreQt},
+  {"credit-colors",        TestCreditColorsQt},
+  {"transit-mode",         TestTransitModeQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},
   {"menu-extra",           TestMenuExtraQt},
