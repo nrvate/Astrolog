@@ -8409,6 +8409,43 @@ are the more useful half to read before starting something new.
     `CReplaySettingsQt()` documents, where a filter matching no lines
     reports that the program lost a setting.
 
+195. **The chart list's filter was never made permanent.** Plan item 42
+    ran this same axis by hand in 2026-08 -- shared functions
+    `wdialog.cpp` calls that `qtdialog.cpp` does not -- and found the
+    chart list ignoring its AstroExpression filter. It ported the
+    *display* half. `FilterCIList()` was still on the list, and this is
+    what it does.
+
+    Windows' `DlgList` narrows what the list SHOWS when Filter is
+    pressed, and then, on OK **with no chart selected**, calls
+    `FilterCIList()` to drop the charts that do not match out of
+    `is.rgci[]` for good. Its own comment says so: *"Only permanently
+    filter on OK if no chart is selected."* The Qt dialog refilled the
+    display and threw the narrowing away when it closed, so a user with
+    four hundred charts could preview a filter but never apply it.
+
+    Ported with the same condition, including the Windows detail that a
+    selected chart means "load this one" rather than "narrow the list".
+
+    **The axis is now audited rather than swept by hand.** Two filters
+    take it from 72 names to 17: only functions declared in `extern.h`
+    count, and functions *defined* in wdriver.cpp or wdialog.cpp are
+    excluded as Win32 by construction -- which is what removes `Dlg*`,
+    `SetEdit*`, `WndProc` and `RedoMenu`. The remaining seventeen are
+    allowlisted with a reason each, and one of those reasons is a
+    finding in itself: **`EnsureRay()` is not a gap.** Windows calls it
+    when the ray restriction is lifted, but every consumer of the table
+    it derives already calls it first -- charts0, charts1, xcharts2 and
+    intrpret all do -- so the dialog call is belt and braces. Checked
+    rather than assumed, and written down so the next sweep does not
+    re-open it.
+
+    That makes three axes in one script, and between them they have now
+    found five bugs: `-0q` and `-0X` doing nothing, `-N`/`-Nz` surviving
+    a chart-type change, "Recall" handing back compiled defaults, and
+    this. Falsified the same way as the others, by removing the fix on a
+    scratch copy and watching it name the function.
+
 
 ## Features this fork adds to both builds
 

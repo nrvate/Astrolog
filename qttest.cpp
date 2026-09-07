@@ -4763,6 +4763,36 @@ static void TestChartListFilterQt()
     s_cRowList, s_strRow0.toLocal8Bit().constData());
 
   us.szExpListF = szSav;
+
+  // And OK with nothing selected makes a showing filter PERMANENT, which
+  // is what FilterCIList() does and what Windows says in as many words:
+  // "Only permanently filter on OK if no chart is selected."
+  // The display half of this dialog's filter was ported in plan item 42;
+  // this half was not, so pressing Filter and then OK narrowed the list
+  // on Windows and threw the narrowing away here.
+  //
+  // Both directions asserted. Without the second the first passes on a
+  // dialog that drops the whole list, and without the first it passes on
+  // one that filters nothing.
+  int cciBefore = is.cci;
+  DriveModalQt(ShowChartListDialogQt, [](QWidget *pw) {
+    QLineEdit *pe = pw->findChild<QLineEdit *>("deLi_n");
+    if (pe != NULL)
+      pe->setText("SuiteChart1");
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text().contains("Filter") && !ppb->text().contains("Remove"))
+        ppb->click();
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") { ppb->click(); return; }
+    pw->close();
+  });
+  Check(is.cci == 1,
+    "Filter then OK narrows the list for good (%d charts, was %d)",
+    is.cci, cciBefore);
+  Check(is.cci > 0 && FEqSz(is.rgci[0].nam, "AstrologSuiteChart1"),
+    "and the one left is the one that matched (\"%s\")",
+    is.cci > 0 ? SzSet(is.rgci[0].nam) : "");
+
   is.cci = cciSav;
   printf("  the chart list honours its AstroExpression filter\n");
 }

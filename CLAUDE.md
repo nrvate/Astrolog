@@ -340,7 +340,20 @@ python3 tools/backend_parity_audit.py # every us./gs. setting the WINDOWS
                                      # chart-type change here and being
                                      # cleared on Windows. Allowlist
                                      # entries carry a reason each, like
-                                     # inert_option_audit
+                                     # inert_option_audit. A THIRD check
+                                     # compares shared-core FUNCTION
+                                     # calls -- the axis with the best
+                                     # record, three bugs so far: the
+                                     # chart list's AstroExpression
+                                     # filter, "Recall" handing back
+                                     # compiled defaults, and that same
+                                     # dialog's filter never being made
+                                     # permanent. Two filters take it
+                                     # from 72 names to 17: only
+                                     # extern.h declarations count, and
+                                     # anything DEFINED in wdriver.cpp
+                                     # or wdialog.cpp is Win32 by
+                                     # construction
 python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # values vs astrolog.as, incl. the
                                      # known-preference allowlist; found

@@ -2348,7 +2348,12 @@ void ShowChartListDialogQt()
   auto iSlot = [&rgbuilt]() -> int {
     return NRcStoreRadioQt(rgbuilt, 6, 6, 0) + 1;
   };
-  auto refill = [plist, plSize, peName, peLoc](flag fFilter) {
+  // Whether the list on screen is currently narrowed. Windows keeps the
+  // same state in a static "fFilter" and uses it for one thing beyond
+  // redrawing: see the OK handling at the end of this function.
+  flag fFiltered = fFalse;
+  auto refill = [plist, plSize, peName, peLoc, &fFiltered](flag fFilter) {
+    fFiltered = fFilter;
     RcFillChartListQt(plist, plSize, peName, peLoc, fFilter);
   };
 
@@ -2419,6 +2424,21 @@ void ShowChartListDialogQt()
     if (iSlot() == 1)
       ciCore = is.rgci[ici];
     RecastAndRedrawQt();
+    return;
+  }
+
+  // And with nothing selected, a filter that is showing becomes
+  // PERMANENT: FilterCIList() drops the charts that do not match out of
+  // is.rgci[] for good. Windows does exactly this and says so --
+  // "Only permanently filter on OK if no chart is selected."
+  // (wdialog.cpp:1023). Plan item 42's pass over this dialog ported the
+  // display half of the filter, including the AstroExpression, and left
+  // this half behind: pressing Filter and then OK narrowed the list on
+  // Windows and threw the narrowing away here.
+  if (fFiltered && peName != NULL && peLoc != NULL) {
+    QByteArray baName = peName->text().toLocal8Bit();
+    QByteArray baLoc = peLoc->text().toLocal8Bit();
+    FilterCIList(baName.constData(), baLoc.constData());
   }
 }
 

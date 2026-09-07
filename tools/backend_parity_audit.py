@@ -163,7 +163,85 @@ def chart_flag_gaps():
     return [f for f in inRange if f not in rows and f not in cleared], None
 
 
+# The third axis, and the one with the best record: SHARED-CORE FUNCTIONS
+# the Windows GUI calls and the Qt GUI never does. It has found three
+# bugs -- the chart list's AstroExpression filter (plan item 42), the
+# restriction "Recall" button handing back compiled defaults instead of
+# the user's, and that same dialog's filter never being made permanent.
+#
+# Two filters keep the noise down to something an allowlist can carry.
+# Only functions declared in extern.h count, so Win32 API calls are out;
+# and functions DEFINED in wdriver.cpp or wdialog.cpp are out too, since
+# those are Win32 by construction -- that is what removes Dlg*, SetEdit*,
+# WndProc, RedoMenu and the rest, 72 names down to 17.
+
+ALLOWFN = {
+    "CchSz": "string length; the Qt code uses QString",
+    "ClearB": "memset over a struct range; Qt clears through tables",
+    "PAllocate": "Astrolog's allocator; Qt objects are new/delete",
+    "DeallocateP": "ditto",
+    "ConvertSzToLatin": "Win32 dialogs are ANSI; Qt controls are Unicode",
+    "DrawClearScreen": "draws through gi.qpaint, which only exists for the "
+                       "length of a redraw -- ClearScreenQt() fills the "
+                       "buffer instead, which is what it would have done",
+    "EnsureRay": "derives rgSignRay2[] from rgSignRay[]. Windows calls it "
+                 "when the ray restriction is lifted; every consumer of "
+                 "that table already calls it first (charts0, charts1, "
+                 "xcharts2, intrpret), so the dialog call is belt and "
+                 "braces. Checked rather than assumed",
+    "FBmpDrawBack": "Win32 background blitting; xdevice.cpp has Qt paths",
+    "FBmpShrinkToWin": "takes HDCs",
+    "FProcessSwitchFile": "startup reads astrolog.as in astrolog.cpp, "
+                          "which both non-Windows builds share",
+    "InitProgram": "called from astrolog.cpp's main, shared",
+    "FinalizeProgram": "ditto",
+    "InitRestrictions": "called from astrolog.cpp's main under #ifdef QT, "
+                        "at the point wdriver.cpp calls it -- work log "
+                        "item 194",
+    "OpenDir": "Win32 directory walk; ShowOpenChartDirDialogQt uses QDir",
+    "PrintError": "PrintWarningQt() puts both kinds in a message box",
+    "PrintNotice": "ditto",
+    "ResizeWindowToChart": "#ifdef WINANY only; ResizeWindowToChartQt()",
+}
+
+
+def function_gaps():
+    with open("extern.h", newline="") as f:
+        core = set(re.findall(r"\b(\w+)\s*P\(\(", f.read()))
+    if not core:
+        return None, "cannot find any P(( declarations in extern.h"
+
+    def calls(paths):
+        out = set()
+        for path in paths:
+            with open(path, newline="") as f:
+                out |= set(re.findall(r"\b(\w+)\s*\(", strip_comments(f.read())))
+        return out
+
+    wsrc = ""
+    for path in WIN:
+        with open(path, newline="") as f:
+            wsrc += strip_comments(f.read())
+    here = set(re.findall(r"^\s*(?:\w[\w *]*?)\b(\w+)\s*\([^;]*\)\s*$",
+                          wsrc, re.M))
+    missing = sorted(((calls(WIN) & core) - (calls(QT) & core)) - here)
+    return [f for f in missing if f not in ALLOWFN], None
+
+
 def main():
+    gapsFn, err = function_gaps()
+    if err is not None:
+        print(err)
+        return 1
+    if gapsFn:
+        for f in gapsFn:
+            print("  %-20s called by the Windows GUI and by nothing in the "
+                  "Qt one" % (f + "()"))
+        print("\nEither the Qt backend is missing behaviour the oracle has,")
+        print("or it does the same job another way -- in which case add it")
+        print("to ALLOWFN WITH THE REASON.")
+        return 1
+
     gapsChart, err = chart_flag_gaps()
     if err is not None:
         print(err + " -- this audit reads all three by shape.")
@@ -207,8 +285,10 @@ def main():
 
     print("backend parity clean: %d us./gs. fields in the Windows GUI, "
           "%d also in the Qt GUI, %d allowlisted with reasons; and every "
-          "chart-type flag Windows clears is cleared here too"
-          % (len(win), len(win) - len(missing), len(ALLOW)))
+          "chart-type flag Windows clears is cleared here too, and "
+          "every shared-core function it calls is called here or "
+          "allowlisted (%d)"
+          % (len(win), len(win) - len(missing), len(ALLOW), len(ALLOWFN)))
     return 0
 
 
