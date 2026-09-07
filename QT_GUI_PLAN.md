@@ -9487,6 +9487,56 @@ are the more useful half to read before starting something new.
     relearning: run the new assertion **in the full suite with the bug put
     back**, not only on its own.
 
+224. **Menu items that change a setting another item displays, and the one
+    place that closes the class.** Found by listing every Windows handler
+    that calls `WiCheckMenu(cmdOther, ...)` -- a check mark for a command
+    other than the one being handled -- and looking for the Qt
+    counterpart. Ten such sites in `wdriver.cpp`; this port had matched
+    some and missed four.
+
+    - "Show Constellation Lines" turns on `gs.fAllStar`, which is "Show
+      Full Star List" two items up the menu.
+    - "Show Info Sidebar" turns on `gs.fText`, which is "Show Chart Info".
+    - "Draw South Indian", "Draw North Indian" and "Draw East Indian" all
+      turn on `gs.fIndianWheel` ("Show Indian Wheels"), and two of them
+      also set `gs.fHouseExtra` ("Show House Details").
+
+    In each case the other item went on displaying the opposite of what
+    the program was doing, and `RedoMenuQt()` -- which re-derives every
+    check mark from its own setting -- was called from only three places
+    in the whole build, none of them a menu action.
+
+    **Fixed in `ConnectMenuQt()`, once**, rather than at the four sites:
+    every menu action re-derives every registered check mark after its
+    handler returns. That is safe by construction and not by review --
+    each entry in `rgmcheckQt` was registered with a predicate that
+    *reads* the setting behind it, so re-deriving can only ever agree with
+    the program's own state, and `RedoMenuQt()` is a pure read that
+    already excludes the chart-type radio. Windows needs its ten by-hand
+    calls because Win32 menus have no such predicate; this port does not.
+
+    **And the same handlers hid a second bug.** Character Scale's
+    "Decrease" and "Increase" left `gs.fAutoScale` alone. With "Autoscale
+    Glyphs" (`-XQ0`) on, `FActionX()` recomputes `gs.nScale` from the
+    window size for the duration of the draw (xscreen.cpp:1495) -- so on a
+    wheel, a house wheel or a sector chart those two menu items **had no
+    visible effect at all**. Windows clears the flag, and the two "Text"
+    items beside them in the same submenu already did, which is what makes
+    this an oversight rather than a decision.
+
+    Falsified three ways: removing the central re-derive fails three
+    assertions (alone and in the full suite), and removing the
+    `gs.fAutoScale` line fails the fourth.
+
+    The group's own first run in the full suite failed for a fourth
+    reason, and it is worth recording beside item 223's three: "Show
+    Constellation Lines" is a **toggle**, over `qi.fStarLine`, which has
+    no accessor outside `qtdriver.cpp` -- and `menu-actions` leaves it
+    **on**, so triggering it once turned the lines off and took the
+    branch that sets nothing. The group reads the state off the item's own
+    check mark now, which is exactly what the fix above makes
+    trustworthy, and asserts the starting state rather than assuming it.
+
 
 ## Features this fork adds to both builds
 

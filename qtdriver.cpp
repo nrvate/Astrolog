@@ -2438,13 +2438,24 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   AddSelectAction(pmenuScale, pgroupScale, "&Large", 300, &gs.nScale, fFalse);
   AddSelectAction(pmenuScale, pgroupScale, "&Huge", 400, &gs.nScale, fFalse);
   pmenuScale->addSeparator();
+  // Both clear gs.fAutoScale, which is what Windows does at
+  // wdriver.cpp:1972 and 1981 and what the two "Text" items below already
+  // did. Without it "Autoscale Glyphs" (-XQ0) recomputes gs.nScale from
+  // the window size inside FActionX() (xscreen.cpp:1495) and these two
+  // menu items have NO VISIBLE EFFECT at all. (Windows re-bullets
+  // Small/Medium/Large/Huge here too; ConnectMenuQt() does that for every
+  // item.)
   QAction *paScaleDn = pmenuScale->addAction("&Decrease");
   ConnectMenuQt(paScaleDn, pwind, []() {
-    if (gs.nScale > 100) { gs.nScale -= 100; RedrawQt(); }
+    if (gs.nScale > 100) {
+      gs.nScale -= 100; gs.fAutoScale = fFalse; RedrawQt();
+    }
   });
   QAction *paScaleUp = pmenuScale->addAction("&Increase");
   ConnectMenuQt(paScaleUp, pwind, []() {
-    if (gs.nScale < MAXSCALE) { gs.nScale += 100; RedrawQt(); }
+    if (gs.nScale < MAXSCALE) {
+      gs.nScale += 100; gs.fAutoScale = fFalse; RedrawQt();
+    }
   });
   pmenuScale->addSeparator();
   QAction *paTextDn = pmenuScale->addAction("D&ecrease Text");
@@ -2470,6 +2481,10 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   ConnectMenuQt(paSidebar, pwind, [paSidebar]() {
     gs.fDoSidebar = !gs.fDoSidebar;
     paSidebar->setChecked(gs.fDoSidebar != 0);
+    // Turning the sidebar on turns "Show Chart Info" on with it, which is
+    // an item of its own; Windows corrects that item here by hand
+    // (WiCheckMenu(cmdGraphicsText, fTrue), wdriver.cpp:2020) and
+    // ConnectMenuQt() re-derives it for this port.
     if (gs.fDoSidebar)
       gs.fText = fTrue;
     RedrawQt();
@@ -2516,6 +2531,11 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
       for (ppch = szDrawConstelLine; *ppch != NULL; ppch += 2)
         if (!FProcessYXU(ppch[0], ppch[1], ppch != szDrawConstelLine))
           break;
+      // Turns on "Show Full Star List", an item of its own two lines up
+      // the menu. Windows corrects that item's check mark here by hand
+      // (WiCheckMenu(cmdGraphicsAllStar, fTrue), wdriver.cpp:2087); this
+      // port re-derives every check mark after any menu action instead,
+      // in ConnectMenuQt().
       gs.fAllStar = fTrue;
     } else
       FProcessYXU("", "", fFalse);
@@ -3895,8 +3915,26 @@ static void ConnectMenuQt(QAction *pa, QObject *pctx,
       n = NExpGet(iLetterZ);
     }
 #endif
+    // Every check mark re-derived from its own setting after ANY menu
+    // action, which is the one place that can close a whole class of bug:
+    // a handler that changes a flag some OTHER item displays and leaves
+    // that item claiming the opposite. Windows corrects each one by hand
+    // with WiCheckMenu(cmdOther, ...) and there are ten such sites in
+    // wdriver.cpp; this port had matched some and missed others -- "Show
+    // Constellation Lines" turning on "Show Full Star List", "Show Info
+    // Sidebar" turning on "Show Chart Info", and all three "Draw <x>
+    // Indian" items turning on "Show Indian Wheels" and "Show House
+    // Details".
+    //
+    // Safe by construction rather than by review: every entry in
+    // rgmcheckQt was registered with a predicate that READS the setting
+    // behind it (PaRegisterCheckQt), so re-deriving can only ever agree
+    // with the program's own state. RedoMenuQt() is a pure read and
+    // deliberately excludes the chart-type radio, which has machinery of
+    // its own.
     if (n == cmd) {
       fn();
+      RedoMenuQt();
       return;
     }
     if (n <= 0)                      // Expression vetoed the command.
@@ -3904,6 +3942,7 @@ static void ConnectMenuQt(QAction *pa, QObject *pctx,
     for (int i = 0; i < s_rgcmdfnQt.size(); i++)
       if (s_rgcmdfnQt[i].first == n) {
         s_rgcmdfnQt[i].second();
+        RedoMenuQt();
         return;
       }
   });

@@ -2951,6 +2951,98 @@ static void DriveSpaceCountQt(int cspace)
 // adds it; that is what it exists for, and Windows calls its equivalent
 // here (wdialog.cpp:3006).
 
+// Menu items that change a setting ANOTHER item displays.
+//
+// Windows corrects the other item's check mark by hand in the same
+// breath -- WiCheckMenu(cmdOther, ...), ten such sites in wdriver.cpp --
+// and this port had matched some and missed others, so an item went on
+// claiming the opposite of what the program was doing. ConnectMenuQt()
+// re-derives every registered check mark after any menu action now,
+// which closes the class rather than the four instances.
+//
+// Also here because it is the same handlers: Character Scale's Decrease
+// and Increase left gs.fAutoScale alone, and with "Autoscale Glyphs"
+// (-XQ0) on, FActionX() recomputes gs.nScale from the window size for
+// the duration of the draw (xscreen.cpp:1495) -- so those two menu items
+// had NO VISIBLE EFFECT at all. Windows clears it, and the two "Text"
+// items beside them already did.
+
+static void TestMenuSideEffectsQt()
+{
+  QAction *paSide = PaFindActionTestQt("Show Info &Sidebar");
+  QAction *paText = PaFindActionTestQt("Show Chart &Info");
+  QAction *paLine = PaFindActionTestQt("Show Constellation &Lines");
+  QAction *paStar = PaFindActionTestQt("Show Full &Star List");
+  QAction *paIndS = PaFindActionTestQt("Draw &South Indian");
+  QAction *paInd = PaFindActionTestQt("Show &Indian Wheels");
+  QAction *paDown = PaFindActionTestQt("&Decrease");
+  flag fSideSav = gs.fDoSidebar, fTextSav = gs.fText;
+  flag fStarSav = gs.fAllStar, fIndSav = gs.fIndianWheel;
+  flag fAutoSav = gs.fAutoScale, fHouseSav = gs.fHouseExtra;
+  int nScaleSav = gs.nScale, nModeSav = gi.nMode;
+
+  Group("Menu side effects");
+  Check(paSide != NULL && paText != NULL && paLine != NULL &&
+    paStar != NULL && paIndS != NULL && paInd != NULL && paDown != NULL,
+    "the seven menu items this is about are all present");
+  if (paSide == NULL || paText == NULL || paLine == NULL ||
+    paStar == NULL || paIndS == NULL || paInd == NULL || paDown == NULL)
+    return;
+
+  // Sidebar on forces "Show Chart Info" on.
+  gs.fDoSidebar = fFalse; gs.fText = fFalse;
+  RedoMenuQt();
+  paSide->trigger();
+  Check(gs.fText && paText->isChecked(),
+    "the sidebar turns chart info on, and its item says so (flag %d, "
+    "mark %d)", gs.fText, (int)paText->isChecked());
+
+  // Constellation lines force the full star list on. This one is a
+  // TOGGLE, over qi.fStarLine, which has no accessor out here -- and
+  // "menu-actions" leaves it on, so triggering it once turned the lines
+  // OFF and this failed in the full suite while passing alone. Read the
+  // state off the item's own check mark, which RedoMenuQt() keeps
+  // honest, and put it where this needs it.
+  RedoMenuQt();
+  if (paLine->isChecked())
+    paLine->trigger();
+  Check(!paLine->isChecked(),
+    "constellation lines start off, whatever an earlier group left");
+  gs.fAllStar = fFalse;
+  RedoMenuQt();
+  paLine->trigger();
+  Check(gs.fAllStar && paStar->isChecked(),
+    "constellation lines turn the full star list on, and its item says "
+    "so (flag %d, mark %d)", gs.fAllStar, (int)paStar->isChecked());
+  paLine->trigger();               // back off, it edits the star list
+
+  // "Draw South Indian" forces "Show Indian Wheels" on.
+  gs.fIndianWheel = fFalse;
+  RedoMenuQt();
+  paIndS->trigger();
+  Check(gs.fIndianWheel && paInd->isChecked(),
+    "South Indian turns Indian wheels on, and its item says so (flag %d, "
+    "mark %d)", gs.fIndianWheel, (int)paInd->isChecked());
+
+  // Character Scale / Decrease clears autoscaling, or it does nothing at
+  // all on the chart types that autoscale.
+  gs.fAutoScale = fTrue;
+  gs.nScale = 300;
+  paDown->trigger();
+  Check(gs.nScale == 200, "Decrease steps the character scale down (%d)",
+    gs.nScale);
+  Check(!gs.fAutoScale,
+    "and turns autoscaling off, or the render would overrule it");
+
+  gs.fDoSidebar = fSideSav; gs.fText = fTextSav;
+  gs.fAllStar = fStarSav; gs.fIndianWheel = fIndSav;
+  gs.fAutoScale = fAutoSav; gs.fHouseExtra = fHouseSav;
+  gs.nScale = nScaleSav;
+  SetChartModeQt(nModeSav);
+  RedoMenuQt();
+}
+
+
 static void TestGraphicsSizeQt()
 {
   int xWinSav = gs.xWin, yWinSav = gs.yWin;
@@ -10276,6 +10368,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"lockdown",             TestLockdownQt},
   {"chart-now",            TestChartNowQt},
   {"now-buttons",          TestNowButtonsQt},
+  {"menu-side-effects",    TestMenuSideEffectsQt},
   {"graphics-size",        TestGraphicsSizeQt},
   {"font-pack",            TestFontPackQt},
   {"orbit-buffer",         TestOrbitBufferQt},
