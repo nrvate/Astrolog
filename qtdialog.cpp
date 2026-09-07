@@ -2332,8 +2332,8 @@ static void RcFillChartListQt(QListWidget *plist, QLabel *plSize,
     sprintf2(S(sz), "%.3s %s %s (%cT Zone %s) %s %s%s%s", szDay[j],
       SzDate(pci->mon, pci->day, pci->yea, 3), SzTim(pci->tim),
       ChDst(pci->dst), SzZone(pci->zon), SzLocation(pci->lon, pci->lat),
-      pci->nam, FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
-      pci->loc);
+      SzSet(pci->nam), FSzSet(pci->nam) && FSzSet(pci->loc) ? "; " : "",
+      SzSet(pci->loc));
     us.fAnsiChar = nSav; us.fGraphics = fSav;
     plist->addItem(QString::fromLatin1(sz));
     s_rgiciQt.append(i);
@@ -2380,6 +2380,26 @@ void ShowChartListDialogQt()
     fFiltered = fFilter;
     RcFillChartListQt(plist, plSize, peName, peLoc, fFilter);
   };
+  // Refill and put the highlight back where it was, which is what Windows
+  // does after the actions that leave the list on screen: it remembers the
+  // row, refills, clamps to the new length and re-selects (LB_SETCURSEL,
+  // wdialog.cpp:1019). Without it the selection is lost every time, so
+  // deleting three charts means selecting three times.
+  //
+  // Sort, Delete All, Filter and Remove Filter do NOT restore it there,
+  // and do not here: they are the four that fall outside that block.
+  // A row of -1 means nothing was selected, and Windows leaves that alone
+  // rather than inventing a selection, so this does too.
+  auto refillAt = [plist, refill](int iRow) {
+    refill(fFalse);
+    if (plist == NULL || iRow < 0)
+      return;
+    int cRow = s_rgiciQt.size();
+    // One row holding -1 is the "(No charts in list)" placeholder.
+    if (cRow < 1 || (cRow == 1 && s_rgiciQt[0] < 0))
+      return;
+    plist->setCurrentRow(iRow < cRow ? iRow : cRow - 1);
+  };
 
   struct { CONST char *szId; int nAct; } rgbut[] = {
     {"dbLi_sl", 0}, {"dbLi_da", 1}, {"dbLi_f", 2}, {"dbLi_fr", 3},
@@ -2390,8 +2410,9 @@ void ShowChartListDialogQt()
       continue;
     int nAct = rgbut[i].nAct;
     QObject::connect(ppb, &QPushButton::clicked, &dlg,
-      [nAct, &rgbuilt, plist, iciSel, iSlot, refill]() {
+      [nAct, &rgbuilt, plist, iciSel, iSlot, refill, refillAt]() {
         int ici = iciSel(), i2;
+        int iRow = plist != NULL ? plist->currentRow() : -1;
         switch (nAct) {
         case 0:                                   // Sort List
           FSortCIList(NRcStoreRadioQt(rgbuilt, 1, 5, 0));
@@ -2415,10 +2436,16 @@ void ShowChartListDialogQt()
           if (iSlot() == 1)
             ciCore = is.rgci[ici];
           RecastAndRedrawQt();
-          break;
+          // Nothing about the list changed, so it is not refilled at all
+          // -- which is also why Windows returns here rather than falling
+          // into its own refill.
+          return;
         case 5:                                   // Copy From slot
           FAppendCIList(rgpci[iSlot()]);
-          break;
+          // The chart just added is the one to highlight, as Windows does
+          // with its "j = is.cci-1".
+          refillAt(is.cci - 1);
+          return;
         case 6:                                   // Edit Chart
           ShowChartInfoForQt(&is.rgci[ici], "Set Chart List Info");
           break;
@@ -2430,7 +2457,7 @@ void ShowChartListDialogQt()
           is.cci--;
           break;
         }
-        refill(fFalse);
+        refillAt(iRow);
       });
   }
 

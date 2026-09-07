@@ -4807,6 +4807,44 @@ static void TestChartListFilterQt()
     "and the one left is the one that matched (\"%s\")",
     is.cci > 0 ? SzSet(is.rgci[0].nam) : "");
 
+  // The list keeps its selection across the actions that leave it on
+  // screen. Windows remembers the row, refills, clamps and re-selects
+  // (wdialog.cpp:1019); this port refilled and lost it, so deleting three
+  // charts meant selecting three times. Delete is the one to drive: it is
+  // the action a person repeats.
+  {
+    Borrow bCci(is.cci, cciSav);
+    int cciWas;
+
+    is.cci = 0;
+    for (i = 0; i < 3; i++) {
+      ciCore = ciMain; ciCore.yea = 1990 + i;
+      ciCore.nam = rgszNamT[i];
+      FAppendCIList(&ciCore);
+    }
+    cciWas = is.cci;
+    DriveModalQt(ShowChartListDialogQt, [](QWidget *pw) {
+      QListWidget *pl = pw->findChild<QListWidget *>("dlLi");
+      if (pl != NULL)
+        pl->setCurrentRow(1);
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text().contains("Delete") && !ppb->text().contains("All")) {
+          ppb->click();
+          break;
+        }
+      // Read the selection back out before the dialog goes away.
+      s_cRowList = pl != NULL ? pl->currentRow() : -99;
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text() == "Cancel") { ppb->click(); return; }
+      pw->close();
+    });
+    Check(is.cci == cciWas - 1, "Delete Chart removed one (%d of %d)",
+      is.cci, cciWas);
+    Check(s_cRowList == 1,
+      "and the highlight stayed on row 1 rather than being lost (%d)",
+      s_cRowList);
+  }
+
   // A chart with NO name at all, which the three list filters used to
   // walk straight off. ciDefa.nam is NULL until astrolog.as sets it with
   // "-zj", so a run started where that file is not found has a NULL name

@@ -8991,13 +8991,36 @@ are the more useful half to read before starting something new.
     filters out. Falsified by removing one guard and watching the group
     segfault.
 
-    The Chart List has one more divergence, left alone deliberately:
-    Windows restores the list selection after Sort, Delete and Copy From
-    slot (`LB_SETCURSEL` with the index clamped, `wdialog.cpp:1019`) and
-    this port refills without it, so the selection is lost after each. It
-    is a real parity gap and a real annoyance -- three deletes means three
-    re-selections -- but it is behaviour rather than a defect, and worth
-    doing as its own change rather than folded into a crash fix.
+    The Chart List had one more divergence, left to item 210 rather than
+    folded into a crash fix.
+
+210. **The chart list lost its selection after every action.** Windows
+    remembers the row, refills, clamps to the new length and re-selects
+    (`LB_SETCURSEL`, `wdialog.cpp:1019`); this port refilled and left the
+    highlight nowhere, so deleting three charts meant selecting three
+    times.
+
+    Which four actions restore it is not a judgement call, and reading
+    `wdialog.cpp` closely is what settles it: Sort, Delete All, Filter and
+    Remove Filter fall outside the block that computes the row, and do NOT
+    restore. Set To Slot changes nothing about the list and returns
+    without refilling at all. Copy From slot highlights the chart it just
+    appended, `is.cci-1`. Edit Chart and Delete Chart restore the row they
+    started on, clamped. All five behaviours are matched, including the
+    one that is "do nothing".
+
+    A row of -1 means nothing was selected, and Windows leaves that alone
+    rather than inventing a selection, so this does too.
+
+    Asserted by driving the real dialog: select row 1, click Delete, read
+    `currentRow()` back before the dialog closes. Falsified by putting the
+    plain refill back -- the row reads -1.
+
+    One more line in the same function, found while reading it: the list
+    text passed `pci->nam` and `pci->loc` straight to `%s`, which is
+    undefined for the NULL these two can hold and which item 209 showed is
+    reachable. glibc prints "(null)" and so does MSVC, so this was a wart
+    rather than a crash; `SzSet()` on both now, as everywhere else.
 
 
 ## Features this fork adds to both builds
