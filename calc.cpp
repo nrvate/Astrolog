@@ -439,49 +439,6 @@ void HousePullenSinusoidalRatio(real Asc)
 }
 
 
-// Compute the cusp positions using the Equal (Ascendant) house system.
-#define HouseEqual() HouseEqualGeneric(is.Asc)
-
-// This house system is just like the Equal system except that we start our 12
-// equal segments from the Midheaven instead of the Ascendant.
-#define HouseEqualMC() HouseEqualGeneric(is.MC + rDegQuad)
-
-// The "Whole" house system is like the Equal system with 30 degree houses,
-// where the 1st house starts at zero degrees of the sign of the Ascendant.
-#define HouseWhole() HouseEqualGeneric((real)((SFromZ(is.Asc)-1)*30))
-
-// Like "Whole" houses but the 10th house starts at the sign of the MC.
-#define HouseWholeMC() \
-  HouseEqualGeneric((real)((SFromZ(is.MC)-1)*30) + rDegQuad)
-
-// The "Vedic" house system is like the Equal system except each house starts
-// 15 degrees earlier. The Asc falls in the middle of the 1st house.
-#define HouseVedic() HouseEqualGeneric(is.Asc - 15.0)
-
-// Like "Vedic" houses bit the MC falls in the middle of the 10th house.
-#define HouseVedicMC() HouseEqualGeneric(is.MC + rDegQuad - 15.0)
-
-// Balanced Equal house systems split the difference between Asc and MC.
-#define HouseEqualBalanced() HouseEqualGeneric(Midpoint(is.Asc, is.MC) + 45.0)
-#define HouseWholeBalanced() HouseEqualGeneric((real)\
-  ((SFromZ(Midpoint(is.Asc, is.MC) + 15.0)-1)*30 + 30.0))
-#define HouseVedicBalanced() HouseEqualGeneric(Midpoint(is.Asc, is.MC) + 30.0)
-
-// East Point Equal house systems are based around the East Point.
-#define HouseEqualEP() HouseEqualGeneric(is.EP)
-#define HouseWholeEP() HouseEqualGeneric((real)((SFromZ(is.EP)-1)*30))
-#define HouseVedicEP() HouseEqualGeneric(is.EP - 15.0)
-
-// Vertex Equal house systems are based around the Antivertex.
-#define HouseEqualVertex() HouseEqualGeneric(is.Vtx + rDegHalf)
-#define HouseWholeVertex() \
-  HouseEqualGeneric((real)((SFromZ(is.Vtx + rDegHalf)-1)*30))
-#define HouseVedicVertex() HouseEqualGeneric(is.Vtx + rDegHalf - 15.0)
-
-// In "Null" houses, the cusps are fixed to start at their corresponding sign,
-// i.e. the 1st house is always at 0 degrees Aries, etc.
-#define HouseNull() HouseEqualGeneric(0.0)
-
 
 // Calculate the house cusp positions, using the specified system. Note this
 // is only called when Swiss Ephemeris is NOT computing the houses.
@@ -592,35 +549,35 @@ void ComputeHouses(int housesystem)
   case hsMorinus:       HouseMorinus();        break;
   case hsTopocentric:   HouseTopocentric();    break;
 #endif
-  case hsEqual:         HouseEqual();          break;
+  case hsEqual:         HouseEqualGeneric(is.Asc);          break;
   case hsPorphyry:      HousePorphyry(is.Asc); break;
   case hsAlcabitius:    HouseAlcabitius();     break;
-  case hsEqualMC:       HouseEqualMC();        break;
+  case hsEqualMC:       HouseEqualGeneric(is.MC + rDegQuad);        break;
   case hsSineRatio:     HousePullenSinusoidalRatio(is.Asc); break;
   case hsSineDelta:     HousePullenSinusoidalDelta(is.Asc); break;
-  case hsWhole:         HouseWhole();          break;
-  case hsVedic:         HouseVedic();          break;
+  case hsWhole:         HouseEqualGeneric((real)((SFromZ(is.Asc)-1)*30));          break;
+  case hsVedic:         HouseEqualGeneric(is.Asc - 15.0);          break;
   case hsSripati:       HouseSripati();        break;
 
   // New experimental house systems follow:
-  case hsWholeMC:       HouseWholeMC();        break;
-  case hsVedicMC:       HouseVedicMC();        break;
-  case hsEqualBalanced: HouseEqualBalanced();  break;
-  case hsWholeBalanced: HouseWholeBalanced();  break;
-  case hsVedicBalanced: HouseVedicBalanced();  break;
-  case hsEqualEP:       HouseEqualEP();        break;
-  case hsWholeEP:       HouseWholeEP();        break;
-  case hsVedicEP:       HouseVedicEP();        break;
-  case hsEqualVertex:   HouseEqualVertex();    break;
-  case hsWholeVertex:   HouseWholeVertex();    break;
-  case hsVedicVertex:   HouseVedicVertex();    break;
+  case hsWholeMC:       HouseEqualGeneric((real)((SFromZ(is.MC)-1)*30) + rDegQuad);        break;
+  case hsVedicMC:       HouseEqualGeneric(is.MC + rDegQuad - 15.0);        break;
+  case hsEqualBalanced: HouseEqualGeneric(Midpoint(is.Asc, is.MC) + 45.0);  break;
+  case hsWholeBalanced: HouseEqualGeneric((real)((SFromZ(Midpoint(is.Asc, is.MC) + 15.0)-1)*30 + 30.0));  break;
+  case hsVedicBalanced: HouseEqualGeneric(Midpoint(is.Asc, is.MC) + 30.0);  break;
+  case hsEqualEP:       HouseEqualGeneric(is.EP);        break;
+  case hsWholeEP:       HouseEqualGeneric((real)((SFromZ(is.EP)-1)*30));        break;
+  case hsVedicEP:       HouseEqualGeneric(is.EP - 15.0);        break;
+  case hsEqualVertex:   HouseEqualGeneric(is.Vtx + rDegHalf);    break;
+  case hsWholeVertex:   HouseEqualGeneric((real)((SFromZ(is.Vtx + rDegHalf)-1)*30));    break;
+  case hsVedicVertex:   HouseEqualGeneric(is.Vtx + rDegHalf - 15.0);    break;
   case hsPorphyryEP:    HousePorphyry(is.EP);  break;
   case hsPorphyryVtx:   HousePorphyry(Vtx);    break;
   case hsSineRatioEP:   HousePullenSinusoidalRatio(is.EP); break;
   case hsSineRatioVtx:  HousePullenSinusoidalRatio(Vtx);   break;
   case hsSineDeltaEP:   HousePullenSinusoidalDelta(is.EP); break;
   case hsSineDeltaVtx:  HousePullenSinusoidalDelta(Vtx);   break;
-  default:              HouseNull();
+  default:              HouseEqualGeneric(0.0);
     housesystem = hsNull;
   }
   is.nHouseSystem = housesystem;
@@ -3535,6 +3492,33 @@ static flag FSwissFromObj(int obj, int *piobj)
 }
 
 
+// Build the Swiss Ephemeris iflag bitmask from the common settings shared
+// by all five Swiss computation functions: ephemeris type, sidereal mode,
+// nutation, and true-position. The heliocentric/barycentric and
+// topocentric flags vary by caller (which center, which object, whether
+// topo applies at all) and are added inline after this call. Has the side
+// effect of calling swe_set_sid_mode() when sidereal mode is on.
+
+static int GetSwissFlags()
+{
+  int iflag;
+
+  iflag = SEFLG_SPEED;
+  iflag |= (us.nSwissEph <= 0 ? SEFLG_SWIEPH :
+    (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
+  if (us.fSidereal) {
+    swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
+      SE_SIDBIT_SSY_PLANE, 0.0, 0.0);
+    iflag |= SEFLG_SIDEREAL;
+  }
+  if (us.fNoNutation)
+    iflag |= SEFLG_NONUT;
+  if (us.fTruePos)
+    iflag |= SEFLG_TRUEPOS;
+  return iflag;
+}
+
+
 flag FSwissPlanet(int ind, real jd, int indCent,
   real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
 {
@@ -3590,22 +3574,11 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     iobj = ind;
 
   // Convert Astrolog calculation settings to Swiss Ephemeris flags.
-  iflag = SEFLG_SPEED;
-  iflag |= (us.nSwissEph <= 0 ? SEFLG_SWIEPH :
-    (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
-  if (us.fSidereal) {
-    swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
-      SE_SIDBIT_SSY_PLANE, 0.0, 0.0);
-    iflag |= SEFLG_SIDEREAL;
-  }
+  iflag = GetSwissFlags();
   if (fHelio && !FNodal(ind))
     iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
   else if (!fHelio && ind <= oSun && us.fBarycenter)
     iflag |= SEFLG_BARYCTR;
-  if (us.fNoNutation)
-    iflag |= SEFLG_NONUT;
-  if (us.fTruePos)
-    iflag |= SEFLG_TRUEPOS;
   if (us.fTopoPos && !fHelio) {
     swe_set_topo(-OO, AA, us.elvDef);
     iflag |= SEFLG_TOPOCTR;
@@ -3830,20 +3803,9 @@ void SwissComputeStars(real jd, flag fInitBright)
   SwissEnsurePath();
   if (!fInitBright) {
     jd = JulianDayFromTime(jd);
-    iflag = SEFLG_SPEED;
-    iflag |= (us.nSwissEph <= 0 ? SEFLG_SWIEPH :
-      (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
-    if (us.fSidereal) {
-      swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
-        SE_SIDBIT_SSY_PLANE, 0.0, 0.0);
-      iflag |= SEFLG_SIDEREAL;
-    }
+    iflag = GetSwissFlags();
     if (us.objCenter != oEar)
       iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
-    if (us.fTruePos)
-      iflag |= SEFLG_TRUEPOS;
-    if (us.fNoNutation)
-      iflag |= SEFLG_NONUT;
   } else {
     jd = rJD2000;
     iflag = SEFLG_SPEED | SEFLG_SWIEPH | SEFLG_HELCTR;
@@ -3912,20 +3874,9 @@ flag SwissComputeStar(real jd, ES *pes)
 
   // Determine Swiss Ephemeris flags.
   jd = JulianDayFromTime(jd);
-  iflag = SEFLG_SPEED;
-  iflag |= (us.nSwissEph <= 0 ? SEFLG_SWIEPH :
-    (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
-  if (us.fSidereal) {
-    swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
-      SE_SIDBIT_SSY_PLANE, 0.0, 0.0);
-    iflag |= SEFLG_SIDEREAL;
-  }
+  iflag = GetSwissFlags();
   if (us.objCenter != oEar)
     iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
-  if (us.fTruePos)
-    iflag |= SEFLG_TRUEPOS;
-  if (us.fNoNutation)
-    iflag |= SEFLG_NONUT;
 LNext:
   sprintf2(S(pes->sz), "%d", istar);
 
@@ -4185,20 +4136,9 @@ flag SwissComputeAsteroid(real jd, ES *pes, flag fBack)
 
   // Determine Swiss Ephemeris flags.
   jd = JulianDayFromTime(jd);
-  iflag = SEFLG_SPEED;
-  iflag |= (us.nSwissEph <= 0 ? SEFLG_SWIEPH :
-    (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
-  if (us.fSidereal) {
-    swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
-      SE_SIDBIT_SSY_PLANE, 0.0, 0.0);
-    iflag |= SEFLG_SIDEREAL;
-  }
+  iflag = GetSwissFlags();
   if (us.objCenter != oEar)
     iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
-  if (us.fTruePos)
-    iflag |= SEFLG_TRUEPOS;
-  if (us.fNoNutation)
-    iflag |= SEFLG_NONUT;
 
   // Calling with empty parameters means initialize to first asteroid.
 LNext:
@@ -4402,20 +4342,9 @@ flag FSwissPlanetData(real jd, int ind, real *rPhase, real *rDiam, real *rMag)
   else
     return fFalse;
 
-  iflag = SEFLG_SPEED;
-  iflag |= (us.nSwissEph <= 0 ? SEFLG_SWIEPH :
-    (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
-  if (us.fSidereal) {
-    swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
-      SE_SIDBIT_SSY_PLANE, 0.0, 0.0);
-    iflag |= SEFLG_SIDEREAL;
-  }
+  iflag = GetSwissFlags();
   if (ind <= oSun && us.fBarycenter)
     iflag |= SEFLG_BARYCTR;
-  if (us.fNoNutation)
-    iflag |= SEFLG_NONUT;
-  if (us.fTruePos)
-    iflag |= SEFLG_TRUEPOS;
   if (us.fTopoPos) {
     swe_set_topo(-OO, AA, us.elvDef);
     iflag |= SEFLG_TOPOCTR;
