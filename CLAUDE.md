@@ -1054,14 +1054,32 @@ tools/build-check.sh                # the source build on twelve
 vi astrolog.h                       # bump szVersionFork
 tools/ci-assert-version.sh v8.00-qt.N   # the tag you are about to make
 git commit && git push origin qt
-gh workflow run release.yml -f tag=v8.00-qt.N -f publish=false
+gh workflow run release.yml -R nrvate/Astrolog \
+  -f tag=v8.00-qt.N -f publish=false
                                     # optional dry run: builds and tests
                                     # all three platforms, publishes
                                     # nothing
 git tag -a v8.00-qt.N -m "Astrolog 8.00-qt.N" && git push origin v8.00-qt.N
-tools/ci-assert-green.sh <sha>      # wait for the release run
+GITHUB_REPOSITORY=nrvate/Astrolog tools/ci-assert-green.sh <sha>
+                                    # wait for the release run
 tools/ci-verify-published-release.sh v8.00-qt.N   # as a user downloads it
 ```
+
+**`gh` needs `-R nrvate/Astrolog` on every command here.** This checkout
+is a fork, and with no default set `gh` resolves to the PARENT --
+`CruiserOne/Astrolog`. Measured 2026-09-07: `gh release list` with no
+`-R` returns upstream's v8.00, v7.80, v7.70 and reports "release not
+found" for `v8.00-qt.14`, which does exist on the fork; `gh run list`
+comes back empty. The same resolution applies to `gh workflow run`, so a
+dispatch without `-R` aims at a repository this account cannot write to.
+It fails rather than doing damage, which is why it is a trap and not a
+disaster -- the failure looks like the workflow being broken.
+`gh repo set-default nrvate/Astrolog` fixes it for a checkout, but that
+lives in `.git/config` and does not survive a clone, like the two guards
+under "On a fresh clone" above. `tools/ci-assert-green.sh` and
+`tools/ci-verify-published-release.sh` do not have the problem: the first
+demands `GITHUB_REPOSITORY` or an explicit argument, and the second
+defaults to `nrvate/Astrolog`.
 
 **Two things still fail a release, and each has bitten already:**
 
