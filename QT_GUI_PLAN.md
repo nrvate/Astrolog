@@ -10245,6 +10245,12 @@ are the more useful half to read before starting something new.
     rather than `astrolog.as`, two days out of date since the maintainer
     had them merged back.
 
+    Run against **Qt6** as well as Qt5, which this one warranted: it is the
+    only change in a while that turns on Qt widget behaviour rather than
+    on Astrolog's own state, and `setEditable()` changes which of
+    `currentText()` and `currentData()` means anything. 5,083 assertions,
+    no failures, on both.
+
 
 ### A knowing divergence found in the same sweep, and left alone
 
