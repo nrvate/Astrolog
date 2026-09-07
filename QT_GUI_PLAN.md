@@ -9617,6 +9617,34 @@ are the more useful half to read before starting something new.
     new guard makes the audit noisier rather than blinder. Falsified by
     deleting the `-Wt` line again: one failure, naming it.
 
+227. **The one `-W` value this build did not check.** Same family as 226,
+    the other half of the handler. Comparing `FErrorValN` calls between
+    `NProcessSwitchesW()` and `NProcessSwitchesQt()`: `-WN`, `-WM`,
+    `-WM0`, `-WI`, `-WF` and `-WG` all check their argument in both, and
+    **`-Wx` checked it in only one**. The comment above the Qt case said
+    "so just validate and remember the value"; it remembered.
+
+    Nothing here reads the number -- Qt's antialiasing is a render hint,
+    not a supersample factor -- so the harm is entirely in what gets
+    written down. This build's **own File Settings dialog** refuses
+    anything outside 1-12, so the switch was the only way to get a value
+    the dialog would then display back at you; and `wdriver.cpp:168`
+    refuses the same range, so a settings file written here could carry a
+    value the Win32 build rejects, when one `astrolog.as` is meant to load
+    everywhere.
+
+    **That second consequence is read, not measured, and the attempt to
+    measure it is worth recording.** `astrolog-wcli.exe` accepts `-Wx 0`
+    and `-Wx 13` under Wine without complaint -- not because Windows
+    allows them, but because the console Windows build routes `-W` through
+    `NProcessSwitchesNullW()`, the consuming stub, and never reaches
+    `wdriver.cpp`'s handler at all. Only the real `astrolog.exe` would
+    answer, and that needs a display. The claim in the comment says which
+    half is which.
+
+    Falsified alone and in the full suite: four assertions, `-Wx 0` and
+    `-Wx 13` both stored.
+
 
 ## Features this fork adds to both builds
 

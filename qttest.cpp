@@ -4756,6 +4756,28 @@ static void TestInterfaceSettingsQt()
     Check(FEqSz(SzSet(SzMacroSubNameQt(0)), "ProbeSubName"),
       "and a renamed macro submenu (\"%s\")", SzSet(SzMacroSubNameQt(0)));
 
+    // And the antialias level's RANGE, which only the switch could get
+    // wrong: this build's own File Settings dialog has checked it since
+    // it was written, and the switch accepted anything. Nothing here
+    // reads the number -- Qt's antialiasing is a render hint, not a
+    // supersample factor -- so the harm is in what gets written down: a
+    // value the dialog can never produce, saved into astrolog.as and
+    // shown back in that dialog, and refused by the Win32 build's own
+    // handler (wdriver.cpp:168).
+    SetAntialiasQt(6);
+    SetNoPopupQt(fTrue);            // the refusal raises an error box
+    Check(!FProcessCommandLine((char *)"-Wx 0"),
+      "\"-Wx 0\" is refused, not stored");
+    Check(NAntialiasQt() == 6, "and the level is left alone (%d)",
+      NAntialiasQt());
+    Check(!FProcessCommandLine((char *)"-Wx 13"),
+      "\"-Wx 13\" is refused too, the range being 1 to 12");
+    Check(NAntialiasQt() == 6, "and that leaves it alone as well (%d)",
+      NAntialiasQt());
+    Check(FProcessCommandLine((char *)"-Wx 12"),
+      "while the top of the range is accepted");
+    Check(NAntialiasQt() == 12, "and stored (%d)", NAntialiasQt());
+
     SetAnimDelayQt(nDelaySav);
     SetAntialiasQt(nAaSav);
     sprintf2(S(szLine), "-WM 1 \"%s\"", baMacSav.constData());

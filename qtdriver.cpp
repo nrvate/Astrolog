@@ -3062,9 +3062,27 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
     // Antialiasing zoom scale. Windows renders the chart at this multiple
     // and shrinks it down; nothing here does that yet, so just validate
     // and remember the value so it survives a settings round trip.
+    //
+    // The validation is not decoration even though nothing here reads the
+    // number -- Qt's antialiasing is a render hint, not a supersample
+    // factor. The comment above always claimed to validate and did not,
+    // and the number is written straight back into astrolog.as, so what
+    // was accepted here got saved. Two reasons it should not be:
+    //
+    // This build's own File Settings dialog refuses anything outside
+    // 1-12 (qtdialog.cpp, FValidAntialias), so the switch was the only
+    // way to get a value the dialog would then display back at you. And
+    // NProcessSwitchesW() refuses the same range (wdriver.cpp:168), so a
+    // settings file written here could carry a value the Win32 build
+    // rejects -- one astrolog.as is meant to load everywhere. That second
+    // one is read from wdriver.cpp rather than measured: "astrolog-wcli"
+    // routes "-W" through NProcessSwitchesNullW(), which only consumes,
+    // so the console Windows build cannot demonstrate it.
     if (FErrorArgc("Wx", pin->argc, 1))
       return tcError;
     i = NFromSz(pin->argv[1]);
+    if (FErrorValN("Wx", !FValidAntialias(i), i, 0))
+      return tcError;
     qi.nAntialias = i;
     darg++;
     break;
