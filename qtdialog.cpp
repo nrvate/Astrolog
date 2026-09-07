@@ -1697,24 +1697,46 @@ void ShowGraphicsSettingsDialogQt()
       pcbScaleT->addItem(QString::number(i));
     pcbScaleT->setEditText(QString::number(gs.nScaleText));
   }
+  // Each of these three shows a setting by using it as an INDEX into a
+  // name table, and each is bounded here first. The switches that write
+  // them validate ("-YXv" against FValidDecaType, "-Xv" against
+  // FValidDecaFill, "-XL[1-5]" by construction) and so does the store
+  // side below, so nothing a user can do reaches an out of range value
+  // today -- but an unbounded index is undefined behaviour whether or not
+  // anything reaches it, and UndefinedBehaviorSanitizer reports all three
+  // on every run of the suite, because the group that tests them poisons
+  // the setting to -1 first exactly as this project's discipline says to.
+  // Measured with the settings at -1: the fill combo displayed
+  // "Tertiary1", which is rgszProgQt[3] -- a string from the Progressions
+  // dialog's rate list, read from before the start of the array. The
+  // other two displayed nothing, because what they read was NULL.
+  //
+  // Windows has the identical unguarded read (wdialog.cpp:2949, 2953 and
+  // 2974); this is upstream's shape, corrected on the side that can be
+  // tested here.
   if (pcbCorner != NULL) {
     pcbCorner->setEditable(fTrue);
     // Windows lists these in its own order, not array order.
     for (i = 0; i < 7; i++)
       pcbCorner->addItem(rgszWheelCornerQt[rgiWheelCornerOrderQt[i]]);
-    pcbCorner->setEditText(rgszWheelCornerQt[gs.nDecaType]);
+    pcbCorner->setEditText(rgszWheelCornerQt[
+      FValidDecaType(gs.nDecaType) ? gs.nDecaType : 0]);
   }
   if (pcbFill != NULL) {
     pcbFill->setEditable(fTrue);
     for (i = 0; i < 8; i++)
       pcbFill->addItem(rgszDecaFillQt[i]);
-    pcbFill->setEditText(rgszDecaFillQt[gs.nDecaFill]);
+    pcbFill->setEditText(rgszDecaFillQt[
+      FValidDecaFill(gs.nDecaFill) ? gs.nDecaFill : 0]);
   }
   if (pcbCity != NULL) {
+    // No FValid macro for this one: "-XL[1-5]" can only set 1 to 5, and 0
+    // is "None", so the range is the length of the table.
+    int nCity = gs.fLabelAsp ? gs.nLabelCity : 0;
     pcbCity->setEditable(fTrue);
     for (i = 0; i < 6; i++)
       pcbCity->addItem(rgszCityColorQt[i]);
-    pcbCity->setEditText(rgszCityColorQt[gs.fLabelAsp ? gs.nLabelCity : 0]);
+    pcbCity->setEditText(rgszCityColorQt[FBetween(nCity, 0, 5) ? nCity : 0]);
   }
   for (i = 0; i < cFontEntry; i++) {
     rgpcbFont[i] = (QComboBox *)PwRcFindIdxQt(rgbuilt, "dcGr_Xf", i);

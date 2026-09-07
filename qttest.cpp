@@ -3835,6 +3835,44 @@ static void TestComboPickQt()
     }
   }
 
+  // The same three settings, read back with the setting OUT OF RANGE.
+  // Each combo shows its value by using it as an index into a name table,
+  // and none of the three checked the index. Not reachable by a user --
+  // the switches validate and so does the dialog's own store side -- but
+  // it is undefined behaviour either way, and this group's own poisoning
+  // above is what UndefinedBehaviorSanitizer was reporting on every run.
+  //
+  // Measured before the guard, with the settings at -1: the fill combo
+  // displayed "Tertiary1", which is rgszProgQt[3] -- a string from the
+  // Progressions dialog's rate list, read from before the start of the
+  // array -- and the other two displayed nothing, having read NULL.
+  {
+    static CONST char *rgszId[3] = {"dcGr_YXv", "dcGr_Xv", "dcGr_XL"};
+    int *rgpn[3] = {&gs.nDecaType, &gs.nDecaFill, &gs.nLabelCity};
+    int iT;
+
+    gs.fLabelAsp = fTrue;
+    for (iT = 0; iT < 3; iT++) {
+      QString str;
+      CONST char *szId = rgszId[iT];
+
+      *rgpn[iT] = -1;
+      DriveModalQt(ShowGraphicsSettingsDialogQt, [szId, &str](QWidget *pw) {
+        QComboBox *pcb = pw->findChild<QComboBox *>(szId);
+        if (pcb != NULL)
+          str = pcb->currentText();
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "Cancel") { ppb->click(); return; }
+        pw->close();
+      });
+      Check(str == QString("None"),
+        "%s with its setting out of range shows the first entry rather "
+        "than reading past the table (\"%s\")", szId,
+        str.toLocal8Bit().constData());
+      *rgpn[iT] = 0;
+    }
+  }
+
   gs.nDecaType = nDecaTypeSav; gs.nDecaFill = nDecaFillSav;
   gs.nLabelCity = nLabelCitySav; gs.fLabelAsp = fLabelAspSav;
 }

@@ -10312,6 +10312,50 @@ are the more useful half to read before starting something new.
     nothing here can run. Recorded rather than guessed at.
 
 
+245. **Three combo boxes read past the start of their name tables.** Found
+    by running `tools/ubsan-sweep.sh qt` -- the surface CLAUDE.md says is
+    worth a second sanitizer, and which nothing had run in a while. Three
+    reports, all in `ShowGraphicsSettingsDialogQt()`:
+
+    ```
+    qtdialog.cpp:1705: index -1 out of bounds for type 'char *[7]'
+    qtdialog.cpp:1711: index -1 out of bounds for type 'char *[8]'
+    qtdialog.cpp:1717: index -1 out of bounds for type 'char *[6]'
+    ```
+
+    Wheel corner style, deca fill and city colour each display their
+    setting by using it as an **index into a name table**, and none of the
+    three checked the index.
+
+    **No user can reach it**, and that is worth stating plainly rather than
+    dressing the finding up: `-YXv` validates against `FValidDecaType`,
+    `-Xv` against `FValidDecaFill`, `-XL[1-5]` can only produce 1 to 5,
+    and the dialog's own store side bounds all three (`i < 7 ? i : 0` and
+    friends). What reaches it is the suite: `combo-pick` poisons each
+    setting to -1 before opening the dialog, which is this project's own
+    discipline for not letting a test pass on the value it started with.
+    So the reports were the harness finding a real defect through a door
+    only the harness opens.
+
+    Real all the same, and measured rather than argued: with the settings
+    at -1 the fill combo displayed **"Tertiary1"**, which is
+    `rgszProgQt[3]` -- a string from the *Progressions* dialog's rate list,
+    read from before the start of the array -- and the other two displayed
+    nothing, having read a NULL pointer that `QString` happened to
+    tolerate. Pressing OK on that then falls through the store loop and
+    silently rewrites the setting to 0.
+
+    Bounded with the switches' own predicates, so the dialog and the
+    switch agree about what is in range -- the same principle as
+    `FValidFontSizeQt()` in item 243. Three assertions in `combo-pick`
+    require the first entry ("None") when the setting is out of range;
+    removing the guards fails all three, with exactly the strings above.
+
+    **Windows has the identical unguarded read** (`wdialog.cpp:2949`,
+    `2953`, `2974`). This is upstream's shape, corrected on the side that
+    can be tested here.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows
