@@ -10200,6 +10200,52 @@ are the more useful half to read before starting something new.
       Chart dialog already did, two hundred lines away.
 
 
+243. **Display Settings destroyed a font setting it could not display.**
+    Found by asking a question no audit here asks: **which combo boxes
+    are not editable?** All 202 `COMBOBOX` entries in `astrolog.rc` are
+    `CBS_DROPDOWN` -- there is not one `CBS_DROPDOWNLIST` in the file --
+    so every ported combo takes typed text. A probe that opened all 25
+    dialogs and listed the non-editable ones found exactly four, all in
+    Display Settings, all unnamed: the two font family pickers and the
+    two font size pickers, which are this fork's own additions and so
+    have no resource entry and no oracle.
+
+    That is not a cosmetic difference. `-WF` and `-WG` take **any family
+    name** and **any size from 6 to 48** (or 0 for "no preference"). The
+    dialog offers the machine's **fixed pitch** families and about twenty
+    round sizes. Anything outside either had nowhere to be shown, so
+    `findText()` / `findData()` returned -1, `Max(-1, 0)` selected the
+    first entry, and OK wrote *that* back.
+
+    Measured, opening the dialog and pressing OK with nothing touched:
+
+    ```
+    before    console "Liberation Mono" 21   menu "Liberation Sans" 15
+    after OK  console "Liberation Mono" 0    menu "Liberation Sans" 0
+    ```
+
+    and a proportional console face came back as whichever fixed-pitch
+    family sorted first. Both are reachable by hand-editing `astrolog.as`,
+    which is the documented way these are set.
+
+    All four are editable now, the current value is shown whether or not
+    the list carries it, and the size is read back from the **text**
+    rather than from `currentData()` -- an editable combo whose text was
+    typed has no current index, so its data is empty and `toInt()` reads
+    0, which is the same bug wearing a different hat. `FValidFontSizeQt()`
+    is what `-WF` already validates against, so the dialog and the switch
+    now accept the same thing, and an out-of-range typed size is refused
+    through this dialog's own `ErrorEnsureQt()` rather than clamped.
+
+    Four cases in the `interface-settings` group, falsified in two halves:
+    putting the index-based size selection back fails two of them, putting
+    the index-based family selection back fails the fourth.
+
+    Also fixed while there: a comment claiming these live in `QSettings`
+    rather than `astrolog.as`, two days out of date since the maintainer
+    had them merged back.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows

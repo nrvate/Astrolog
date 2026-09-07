@@ -4417,6 +4417,26 @@ static int XLayoutFontRowQt(QWidget **rgpw, int xLeft, int yRow,
 // Display Settings, transcribed from dlgDisplay. The checkbox to flag
 // mapping is taken from Windows' own DlgDisplay handler.
 
+// The "no preference" entry in each of the two font size combos: 0 in
+// astrolog.as, and a word rather than a number on screen because that is
+// what it means. Named here so the load side and the read-back agree.
+static CONST char *szFontSizeAutoQt = "Character Scale";
+static CONST char *szMenuSizeAutoQt = "Desktop Size";
+
+// One of those two words, or a number. Returns -1 for anything else, which
+// FValidFontSizeQt() rejects and the caller reports.
+static int NFontSizeFieldQt(CONST QString &str, CONST char *szAuto)
+{
+  QString strT = str.trimmed();
+
+  if (strT.isEmpty() || strT == QString(szAuto))
+    return 0;
+  for (int i = 0; i < strT.size(); i++)
+    if (!strT[i].isDigit())
+      return -1;
+  return NFieldQt(strT);
+}
+
 void ShowDisplayDialogQt()
 {
   CONST RCFLAG rgflag[] = {
@@ -4480,8 +4500,11 @@ void ShowDisplayDialogQt()
   // resource's own layout is left exactly as it is and these two rows are
   // added underneath, with the buttons moved down to make room -- the
   // same arrangement the Interface Theme menu items use, and stored in
-  // the same place (QSettings, not the .as file), because which face the
-  // window uses is window chrome rather than an astrological setting.
+  // the same place: astrolog.as, as "-WF"/"=WFa" and "-WG"/"=WGa". They
+  // spent two days in a QSettings file of their own, on the reasoning
+  // that window chrome is not an astrological setting; that bought
+  // nothing and cost a second configuration file in a different place
+  // per platform, so the maintainer had it merged back.
   QFontMetrics fmDlg(dlg.font());
   int dxBase = fmDlg.averageCharWidth(), dyBase = fmDlg.height();
   // In the resource's own units. Its content ends at y 250 (the Rising
@@ -4520,29 +4543,44 @@ void ShowDisplayDialogQt()
   plSize->setBuddy(pcbSize);
   plMenu->setBuddy(pcbMenu);
   plMenuSize->setBuddy(pcbMenuSize);
+  // Editable, like every combo box in astrolog.rc (all 202 of them are
+  // CBS_DROPDOWN), and for the same reason: these four are the only
+  // controls for settings the switches accept a wider range for than any
+  // list can hold. "-WF" takes any family name and any size from 6 to 48;
+  // the family list here is the FIXED PITCH faces this machine has and
+  // the size list about twenty round numbers. Anything outside either had
+  // no way of being shown, so the combo fell back on its first entry and
+  // OK wrote that -- measured: console size 21 and menu size 15 came back
+  // as 0 from one open-and-OK, and a proportional console face came back
+  // as whatever fixed-pitch family sorted first.
+  pcbFont->setEditable(fTrue);
+  pcbMenu->setEditable(fTrue);
+  pcbSize->setEditable(fTrue);
+  pcbMenuSize->setEditable(fTrue);
   pcbFont->addItems(RgstrConsoleFontQt());
   pcbMenu->addItems(RgstrMenuFontQt());
   QString strFont = StrConsoleFontQt();
-  int iFont = pcbFont->findText(strFont.isEmpty() ?
-    QString("Liberation Mono") : strFont);
-  pcbFont->setCurrentIndex(Max(iFont, 0));
+  if (strFont.isEmpty())
+    strFont = "Liberation Mono";
+  pcbFont->setEditText(strFont);
   QString strMenu = StrMenuFontQt();
-  int iMenu = pcbMenu->findText(strMenu.isEmpty() ?
-    QString("Liberation Sans") : strMenu);
-  pcbMenu->setCurrentIndex(Max(iMenu, 0));
+  if (strMenu.isEmpty())
+    strMenu = "Liberation Sans";
+  pcbMenu->setEditText(strMenu);
   // "Character Scale" is the -Xs behaviour the console had before there
   // was a choice, and "Desktop Size" is what the interface followed, so
   // each stays the default and nothing moves for anyone who does not open
   // this.
-  pcbSize->addItem("Character Scale", 0);
+  pcbSize->addItem(szFontSizeAutoQt, 0);
   for (int nSize = 8; nSize <= 32; nSize += (nSize < 20 ? 1 : 2))
     pcbSize->addItem(QString::number(nSize), nSize);
-  pcbSize->setCurrentIndex(Max(pcbSize->findData(NConsoleFontSizeQt()), 0));
-  pcbMenuSize->addItem("Desktop Size", 0);
+  pcbSize->setEditText(NConsoleFontSizeQt() > 0 ?
+    QString::number(NConsoleFontSizeQt()) : QString(szFontSizeAutoQt));
+  pcbMenuSize->addItem(szMenuSizeAutoQt, 0);
   for (int nSize = 7; nSize <= 20; nSize += (nSize < 14 ? 1 : 2))
     pcbMenuSize->addItem(QString::number(nSize), nSize);
-  pcbMenuSize->setCurrentIndex(
-    Max(pcbMenuSize->findData(NMenuFontSizeQt()), 0));
+  pcbMenuSize->setEditText(NMenuFontSizeQt() > 0 ?
+    QString::number(NMenuFontSizeQt()) : QString(szMenuSizeAutoQt));
 
   // Now that both know what they hold, measure. The family combos are
   // capped: a system with a few hundred families has one with a very long
@@ -4577,11 +4615,20 @@ void ShowDisplayDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
+  // The size comes from the TEXT, not from currentData(): an editable
+  // combo whose text was typed rather than picked has no current index,
+  // so its data is empty and toInt() would read 0.
+  int nSizeCon = NFontSizeFieldQt(pcbSize->currentText(), szFontSizeAutoQt);
+  int nSizeMen = NFontSizeFieldQt(pcbMenuSize->currentText(),
+    szMenuSizeAutoQt);
+  if (!FValidFontSizeQt(nSizeCon))
+    { ErrorEnsureQt(&dlg, nSizeCon, "console font size"); return; }
+  if (!FValidFontSizeQt(nSizeMen))
+    { ErrorEnsureQt(&dlg, nSizeMen, "menu font size"); return; }
   SetConsoleFontQt(pcbFont->currentText().toLocal8Bit().constData(),
-    pcbSize->currentData().toInt());
+    nSizeCon);
   SetConsoleAntialiasQt(pchAa->isChecked());
-  SetMenuFontQt(pcbMenu->currentText().toLocal8Bit().constData(),
-    pcbMenuSize->currentData().toInt());
+  SetMenuFontQt(pcbMenu->currentText().toLocal8Bit().constData(), nSizeMen);
   SetMenuAntialiasQt(pchMenuAa->isChecked());
   // The interface font is applied here rather than at the next start:
   // QApplication::setFont() reaches every widget that hasn't been given

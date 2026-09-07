@@ -40,6 +40,9 @@ void PrintNoticeQt(CONST char *sz);
 void BeepQt(void);
 // "Export Chart Text", whose title, filter and extension all follow
 // us.fTextHTML the way Windows' cmdSaveText does.
+// What "-WF"/"-WG" accept for a font size, and so what Display Settings
+// must accept: 0 for "no preference", else a size a window can be drawn in.
+flag FValidFontSizeQt(int n);
 CONST char *SzExportTextTitleQt(void);
 CONST char *SzExportTextFilterQt(void);
 CONST char *SzExportTextExtQt(void);

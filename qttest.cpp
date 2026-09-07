@@ -5794,6 +5794,45 @@ static void TestInterfaceSettingsQt()
 
   QFile::remove(QString::fromLocal8Bit(szPath));   // Not unlink(): no <unistd.h> on the Windows build.
 
+  // And the dialog that edits them has to survive a value it does not
+  // offer. "-WF"/"-WG" take any family name and any size from 6 to 48;
+  // Display Settings shows the machine's FIXED PITCH families and about
+  // twenty round sizes, so anything outside either had nowhere to be
+  // displayed, the combo fell back on its first entry, and OK wrote that
+  // back. Opening the dialog and pressing OK destroyed the setting.
+  {
+    static CONST struct {
+      CONST char *szCon, *szMen, *szWhy;
+      int nCon, nMen;
+    } rgt[] = {
+      {"Liberation Mono",  "Liberation Sans",  "a size between the list's",
+       21, 15},
+      {"Liberation Mono",  "Liberation Sans",  "the ends of the range",
+       48, 6},
+      {"Liberation Mono",  "Liberation Sans",  "no preference at all",
+       0, 0},
+      {"Liberation Serif", "Liberation Serif",
+       "a proportional face the console list cannot carry", 12, 12} };
+
+    for (i = 0; i < (int)(sizeof(rgt)/sizeof(rgt[0])); i++) {
+      SetConsoleFontQt(rgt[i].szCon, rgt[i].nCon);
+      SetMenuFontQt(rgt[i].szMen, rgt[i].nMen);
+      DriveModalQt(ShowDisplayDialogQt, [](QWidget *pw) {
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "OK") { ppb->click(); return; }
+        pw->close();
+      });
+      Check(StrConsoleFontQt() == QString(rgt[i].szCon) &&
+        NConsoleFontSizeQt() == rgt[i].nCon &&
+        StrMenuFontQt() == QString(rgt[i].szMen) &&
+        NMenuFontSizeQt() == rgt[i].nMen,
+        "Display Settings' OK keeps %s (\"%s\" %d, \"%s\" %d)",
+        rgt[i].szWhy, StrConsoleFontQt().toUtf8().constData(),
+        NConsoleFontSizeQt(), StrMenuFontQt().toUtf8().constData(),
+        NMenuFontSizeQt());
+    }
+  }
+
   SetConsoleFontQt(strConSav.toUtf8().constData(), nConSav);
   SetConsoleAntialiasQt(fConSav);
   SetMenuFontQt(strMenSav.toUtf8().constData(), nMenSav);

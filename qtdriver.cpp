@@ -5138,6 +5138,16 @@ int NConsoleFontSizeQt(void)
     qi.nFontConSize : 0;
 }
 
+
+// What "-WF"/"-WG" accept, so the Display Settings dialog can accept the
+// same thing. Zero means "no preference": character scale for the console
+// font, the desktop's own size for the menu one.
+
+flag FValidFontSizeQt(int n)
+{
+  return n == 0 || FBetween(n, nFontSizeMinQt, nFontSizeMaxQt);
+}
+
 void SetConsoleFontQt(CONST char *szFamily, int nSize)
 {
   FCloneSz(szFamily, &qi.szFontCon);
