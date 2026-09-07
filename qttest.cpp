@@ -7334,6 +7334,76 @@ static void TestCopyTextBomQt()
 }
 
 
+/*
+******************************************************************************
+** What the Object Restrictions dialog's "Recall" button hands back.
+******************************************************************************
+*/
+
+// dbRe_YRi in astrolog.rc is a "Recall" push button, and both builds
+// have it. It restores the restrictions from ignoreMem[], the set
+// InitRestrictions(fTrue) last stored.
+//
+// Windows stores that straight after reading astrolog.as and the command
+// line (wdriver.cpp:711), so Recall hands back what the user's settings
+// file set up. InitProgram() also stores it, but before either has been
+// read -- so a build that does not repeat the call after the switches
+// hands back the COMPILED defaults instead, throwing away whatever the
+// settings file restricted. This port did not repeat it.
+//
+// Startup is what is being asserted, so the two arrays are snapshotted by
+// the runner before any group has had a chance to touch restrictions.
+// That also makes the check independent of where this group sits in the
+// table, which is worth something given how many assertions in this suite
+// have failed on another group's leftovers.
+//
+// In a plain run the two are equal either way, because astrolog.as
+// restricts nothing the compiled defaults do not -- tools/defaults_audit.py
+// is what keeps that true. So run-qt-tests.sh runs this group a second
+// time in its startup diagnostics with "-YR 0 0 1" on the command line,
+// where they are equal only if the store really did happen after the
+// switches.
+
+static byte s_rgbIgnoreStartQt[objMax], s_rgbIgnoreMemStartQt[objMax];
+
+static void TestRestrictRecallQt()
+{
+  int i, cDiff = 0;
+
+  Group("Restriction recall");
+  for (i = 0; i < objMax; i++)
+    cDiff += (s_rgbIgnoreStartQt[i] != s_rgbIgnoreMemStartQt[i]);
+  Check(cDiff == 0,
+    "Recall remembers the restrictions startup ended with, not the "
+    "compiled defaults (%d object(s) differ)", cDiff);
+  if (cDiff > 0)
+    for (i = 0; i < objMax; i++)
+      if (s_rgbIgnoreStartQt[i] != s_rgbIgnoreMemStartQt[i]) {
+        printf("    first at object %d (%s): startup %d, remembered %d\n",
+          i, szObjName[i], s_rgbIgnoreStartQt[i], s_rgbIgnoreMemStartQt[i]);
+        break;
+      }
+  // And when the command line restricted something, say so out loud.
+  // The compiled default leaves the Sun unrestricted, and InitProgram()
+  // stores the remembered set before a single switch has been read -- so
+  // "startup has the Sun restricted and the remembered set does too" is
+  // only reachable if the store was repeated AFTER the switches. That is
+  // the whole claim, and it is what run-qt-tests.sh's "-YR 0 0 1" probe
+  // exists to reach.
+  if (getenv("ASTROLOG_QT_RECALL_PROBE") != NULL) {
+    // The switch has to have taken, or the assertion below is about
+    // nothing -- the same trap CReplaySettingsQt() documents, where a
+    // filter that matches no lines reports the program lost a setting.
+    Check(s_rgbIgnoreStartQt[oSun],
+      "the probe's \"-R Sun\" restricted the Sun at startup");
+    Check(s_rgbIgnoreMemStartQt[oSun],
+      "and that reached the remembered set, which the compiled default "
+      "-- Sun unrestricted, stored before any switch -- cannot explain");
+  }
+  printf("  the remembered set is the one startup left\n");
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -8262,6 +8332,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"eclipses",             TestEclipseQt},
   {"lockdown",             TestLockdownQt},
   {"copy-text-bom",        TestCopyTextBomQt},
+  {"restrict-recall",      TestRestrictRecallQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},
@@ -8335,6 +8406,11 @@ static int NRunQtTestTableQt()
   // TestExpressionFunctionsQt does.
   SetNoPopupQt(fTrue);
   printf("Astrolog Qt test suite\n");
+  // Taken before any group runs, because what it records is a fact about
+  // STARTUP and every group after this is free to change restrictions.
+  // See TestRestrictRecallQt().
+  CopyRgb(ignore.rgn, s_rgbIgnoreStartQt, sizeof(ignore.rgn));
+  CopyRgb(ignoreMem, s_rgbIgnoreMemStartQt, sizeof(ignoreMem));
   // See the note on that entry: it disturbs state no settings file
   // carries, so anything after it inherits the disturbance and fails on
   // the leftovers. Cheaper to assert than to rediscover.

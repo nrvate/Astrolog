@@ -8363,6 +8363,52 @@ are the more useful half to read before starting something new.
     selected decides what the listing says, so asserting on the word
     "Astrolog" passed alone and failed in the suite.
 
+194. **"Recall" handed back the compiled defaults, not the user's.** The
+    parity sweep from item 193 was run again on a different axis --
+    shared-core *functions* the Windows GUI calls and the Qt GUI never
+    does -- and 72 names came back. All but a handful are Win32 by
+    nature: `Dlg*`, `SetEdit*`, `WndProc`, `RedoMenu`,
+    `FCreateProgramGroup`. One was not.
+
+    `InitRestrictions(fTrue)` stores the current restrictions into
+    `ignoreMem[]` and friends. That set is what the **"Recall" push
+    button** in the Object Restrictions dialog restores from --
+    `dbRe_YRi` in astrolog.rc, present in both builds, and wired here
+    already.
+
+    `InitProgram()` stores it once, at startup, **before** `astrolog.as`
+    or the command line have been read. Windows then stores it *again*
+    right after `FProcessCommandLine()` (wdriver.cpp:711), so Recall
+    hands back the restrictions the user's settings file set up. This
+    port never repeated the call, so Recall handed back the compiled-in
+    defaults and threw away whatever the settings file had restricted --
+    for a user whose `astrolog.as` restricts the Uranians and the
+    asteroids, one press of Recall un-restricted the lot.
+
+    Fixed at the point Windows does it, guarded with `#ifdef QT` rather
+    than moved into `InitProgram()`: the console build has no such
+    button and keeps upstream's behaviour.
+
+    **Testing it needed the startup diagnostics, which is what they are
+    for.** The suite runs after its own event loop is up, and by then
+    startup is over -- so the runner snapshots `ignore[]` and
+    `ignoreMem[]` before any group runs, and `TestRestrictRecallQt()`
+    compares the snapshots. That also makes the check independent of
+    where the group sits in the table, which is worth something given
+    how many assertions here have failed on another group's leftovers.
+
+    In a plain run the two agree either way, because `astrolog.as`
+    restricts nothing the defaults do not -- `defaults_audit.py` is what
+    keeps that true. So `run-qt-tests.sh` runs the group a second time
+    with **`-R Sun`** on the command line, where the compiled default
+    leaves the Sun unrestricted, so the remembered set can only agree if
+    the store really happened after the switches. And the probe asserts
+    that the switch *took* before asserting what it implies: the first
+    spelling tried was `-YR 0 0 1`, which restricted nothing, and would
+    have passed while proving nothing -- the same trap
+    `CReplaySettingsQt()` documents, where a filter matching no lines
+    reports that the program lost a setting.
+
 
 ## Features this fork adds to both builds
 

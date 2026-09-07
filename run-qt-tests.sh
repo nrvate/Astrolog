@@ -138,6 +138,34 @@ done
 # case the filter used to remove. If it survives, an existing one does.
 # It must also still be VISIBLE: the whole value of keeping it is that a
 # mistyped path shows up in the diagnostic instead of vanishing.
+# The Object Restrictions dialog has a "Recall" button, and what it hands
+# back is the restrictions InitRestrictions(fTrue) last stored. Windows
+# stores that after reading astrolog.as and the command line; this build
+# only had InitProgram()'s store, from before either was read, so Recall
+# handed back the COMPILED defaults and discarded whatever the settings
+# file restricted.
+#
+# In a plain run the two sets agree either way, because astrolog.as
+# restricts nothing the defaults do not. "-R Sun" restricts the Sun on
+# the command line, where the compiled default leaves it unrestricted --
+# so the remembered set can only agree if the store really did happen
+# after the switches. In process, after its own event loop is up, the
+# suite cannot see this: by then startup is over.
+echo
+echo "== Restriction recall at startup =="
+out=`ASTROLOG_QT_RECALL_PROBE=1 ASTROLOG_QT_TESTS=restrict-recall \
+  $QTRUN "$BIN" -Yi1 ephem -R Sun <"$QTIN" 2>&1`
+case $out in
+  *"0 failed"*)
+    echo "  ok: a command line restriction reaches the remembered set" ;;
+  *)
+    echo "  FAIL: the restrictions Recall hands back are not the ones"
+    echo "        startup ended with. InitRestrictions(fTrue) has to run"
+    echo "        after the switches, as it does in wdriver.cpp."
+    echo "$out" | sed 's/^/        /'
+    exit 1 ;;
+esac
+
 echo
 echo "== Ephemeris search path =="
 probe=/nonexistent-astrolog-ephem-probe

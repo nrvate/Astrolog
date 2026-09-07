@@ -903,6 +903,19 @@ LBegin:
       is.fNoSwitches = fTrue;
       goto LBegin;
     }
+#ifdef QT
+    // Windows does this at the same point -- straight after its own
+    // FProcessCommandLine(), wdriver.cpp:711 -- and it matters because
+    // the Object Restrictions dialog has a "Recall" button (dbRe_YRi in
+    // astrolog.rc) that restores from this remembered set. InitProgram()
+    // stored it before astrolog.as or the command line had been read, so
+    // without this the button in a GUI build hands back the COMPILED
+    // defaults and throws away whatever the user's settings file
+    // restricted. The console build has no such button and keeps
+    // upstream's behaviour, which is why this is guarded rather than
+    // moved into InitProgram().
+    InitRestrictions(fTrue);
+#endif
     Action();
   }
   if (us.fLoop || us.fNoQuit) {  // If -Q in effect loop back and get switch
