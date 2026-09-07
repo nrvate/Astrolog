@@ -1860,27 +1860,97 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
   s_plistAtlasQt = NULL;
 }
 
-// "Apply Info": copy the highlighted atlas row into the location fields.
-static void RcAtlasApplyQt(QListWidget *plist, QComboBox *pcbLon,
-  QComboBox *pcbLat, QComboBox *pcbZon, QLineEdit *peLoc)
+// "Apply Info": copy the selected atlas row -- or, failing that, the city
+// already typed in the Location field -- into the location, zone and
+// Daylight fields, and put the atlas's own spelling of the city back into
+// Location. Windows' dbInAppl, wdialog.cpp:324.
+//
+// Two of those were WRONG ANSWERS rather than missing conveniences. The
+// zone came from ZondefFromIzn(), which is the zone area's LATEST offset
+// -- today's, with no history in it -- and Daylight Saving was never
+// touched at all. Windows asks DisplayTimezoneChanges(izn, fFalse, &ci),
+// which walks that zone's change table for the chart's own date and fills
+// in BOTH. So a summer birthday in a daylight zone was cast an hour out,
+// and any date before the last zone change got the modern offset, both
+// silently and both from the button whose whole purpose is to get this
+// right.
+//
+// The date it asks about comes from the DIALOG, not from the last cast
+// chart, since that is what the user is in the middle of typing. The
+// Defaults dialog has no date fields, which is exactly what Windows'
+// "fDefault" skips -- and it is why this takes rgbuilt and looks its own
+// controls up: the two dialogs spell them "dcIn*" and "dcDe*".
+
+static void RcAtlasApplyQt(QListWidget *plist,
+  CONST QVector<RCBUILT> &rgbuilt, flag fDefault)
 {
   char sz[cchSzMax];
-  int iRow, iae, nSav;
+  CI ci;
+  int iRow, iae = -1, nSav;
 
   if (plist == NULL)
     return;
+  QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt,
+    fDefault ? "deDeLoc" : "deInLoc");
   iRow = plist->currentRow();
-  if (iRow < 0 || iRow >= s_rgiaeQt.size() || s_rgiaeQt[iRow] < 0)
-    return;
-  iae = s_rgiaeQt[iRow];
+  if (iRow >= 0 && iRow < s_rgiaeQt.size())
+    iae = s_rgiaeQt[iRow];
+  if (iae < 0) {
+    // Nothing usable picked from the list: fall back to the Location
+    // field, so the button also works for a city typed rather than
+    // chosen. That fallback was missing too.
+    if (peLoc == NULL)
+      return;
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
+      peLoc->text().toLocal8Bit().constData());
+    if (!DisplayAtlasLookup(sz, 0, &iae)) {
+      PrintWarning("Please have a valid city selected in 'Atlas Lookups', "
+        "or a valid city already in the 'Location' field.");
+      return;
+    }
+  }
+
+  ci = ciMain;
+  if (!fDefault) {
+    QComboBox *pcbT;
+    if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInMon")) != NULL)
+      ci.mon = NParseSz(pcbT->currentText().toLocal8Bit().constData(), pmMon);
+    if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInDay")) != NULL)
+      ci.day = NParseSz(pcbT->currentText().toLocal8Bit().constData(), pmDay);
+    if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInYea")) != NULL)
+      ci.yea = NParseSz(pcbT->currentText().toLocal8Bit().constData(), pmYea);
+    if ((pcbT = (QComboBox *)PwRcFindQt(rgbuilt, "dcInTim")) != NULL)
+      ci.tim = RParseSz(pcbT->currentText().toLocal8Bit().constData(), pmTim);
+  }
+  if (!DisplayTimezoneChanges(is.rgae[iae].izn, 0, &ci))
+    PrintWarning("Couldn't get time zone data!");
+
+  QComboBox *pcbDst = (QComboBox *)PwRcFindQt(rgbuilt,
+    fDefault ? "dcDeDst" : "dcInDst");
+  QComboBox *pcbZon = (QComboBox *)PwRcFindQt(rgbuilt,
+    fDefault ? "dcDeZon" : "dcInZon");
+  QComboBox *pcbLon = (QComboBox *)PwRcFindQt(rgbuilt,
+    fDefault ? "dcDeLon" : "dcInLon");
+  QComboBox *pcbLat = (QComboBox *)PwRcFindQt(rgbuilt,
+    fDefault ? "dcDeLat" : "dcInLat");
+
+  // The same formatting SetEditSZOA() uses on Windows, and the same
+  // RcLoadChartInfoQt() puts in these fields when the dialog opens.
+  if (pcbDst != NULL) {
+    sprintf2(S(sz), "%s", ci.dst == 0.0 ? "No" : (ci.dst == 1.0 ? "Yes" :
+      (ci.dst == dstAuto ? "Autodetect" : SzZone(ci.dst))));
+    pcbDst->setEditText(sz);
+  }
+  if (pcbZon != NULL) {
+    sprintf2(S(sz), "%s", SzZone(ci.zon));
+    pcbZon->setEditText(sz[0] == '+' ? &sz[1] : sz);
+  }
   nSav = us.fAnsiChar; us.fAnsiChar = fFalse;
   sprintf2(S(sz), "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
   us.fAnsiChar = nSav;
   sz[is.ichLocSplit] = chNull;
   if (pcbLon != NULL) pcbLon->setEditText(&sz[0]);
   if (pcbLat != NULL) pcbLat->setEditText(&sz[is.ichLocSplit+1]);
-  if (pcbZon != NULL)
-    pcbZon->setEditText(SzZone(ZondefFromIzn(is.rgae[iae].izn)));
   if (peLoc != NULL) peLoc->setText(SzCity(iae));
 }
 #endif // ATLAS
@@ -1991,8 +2061,8 @@ static void ShowChartInfoForQt(CI *pci, CONST char *szTitle)
         RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ci); });
   if (ppbAppl != NULL)
     QObject::connect(ppbAppl, &QPushButton::clicked, &dlg,
-      [plist, pcbLon, pcbLat, pcbZon, peLoc]() {
-        RcAtlasApplyQt(plist, pcbLon, pcbLat, pcbZon, peLoc); });
+      [plist, &rgbuilt]() {
+        RcAtlasApplyQt(plist, rgbuilt, fFalse); });
 #endif
 
   RcWireOkCancelQt(&dlg, rgbuilt);
@@ -2861,8 +2931,8 @@ void ShowDefaultInfoDialogQt()
         RcAtlasRunQt(plist, 2, peLoc, pcbLon, pcbLat, &ciT); });
   if (ppbAppl != NULL)
     QObject::connect(ppbAppl, &QPushButton::clicked, &dlg,
-      [plist, pcbLon, pcbLat, pcbZon, peLoc]() {
-        RcAtlasApplyQt(plist, pcbLon, pcbLat, pcbZon, peLoc); });
+      [plist, &rgbuilt]() {
+        RcAtlasApplyQt(plist, rgbuilt, fTrue); });
 #endif
 
   RcWireOkCancelQt(&dlg, rgbuilt);

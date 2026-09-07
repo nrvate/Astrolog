@@ -2735,6 +2735,91 @@ static void TestTextExportQt()
 }
 
 
+// The Chart Info dialog's "Apply Info" button, which is the whole point of
+// the atlas: pick a city, and the location, zone and Daylight fields fill
+// themselves in.
+//
+// Two of those were wrong answers here. The zone came from
+// ZondefFromIzn(), the zone area's LATEST offset, and Daylight Saving was
+// never written at all -- so a summer date in a daylight zone was cast an
+// hour out by the button whose job is to prevent exactly that. Windows
+// asks DisplayTimezoneChanges(izn, fFalse, &ci) for the chart's own date
+// and fills in both (wdialog.cpp:324).
+//
+// Both directions, and that is the assertion rather than a nicety: a fix
+// that simply wrote "Yes" would pass a July check on its own. Measured
+// through the probe before it was written -- Seattle, izn 135, reads
+// dst 1.00 in July 1990 and 0.00 in January, zone 8 either way.
+//
+// Driven through the real dialog rather than against the helper, because
+// the bug was in the WIRING: the computation it now calls was always
+// there and always right.
+
+#ifdef ATLAS
+static QString StrApplyInfoQt(int mon, int day, int yea)
+{
+  QString strDst;
+
+  DriveModalQt(ShowChartInfoDialogQt, [&](QWidget *pw) {
+    QLineEdit *peLoc = pw->findChild<QLineEdit *>("deInLoc");
+    QComboBox *pcbMon = pw->findChild<QComboBox *>("dcInMon");
+    QComboBox *pcbDay = pw->findChild<QComboBox *>("dcInDay");
+    QComboBox *pcbYea = pw->findChild<QComboBox *>("dcInYea");
+    QComboBox *pcbDst = pw->findChild<QComboBox *>("dcInDst");
+    QListWidget *plist = pw->findChild<QListWidget *>("dlIn");
+    QPushButton *ppbCity = pw->findChild<QPushButton *>("dbInCity");
+    QPushButton *ppbAppl = pw->findChild<QPushButton *>("dbInAppl");
+
+    if (peLoc == NULL || pcbMon == NULL || pcbDst == NULL ||
+      plist == NULL || ppbCity == NULL || ppbAppl == NULL) {
+      strDst = "controls missing";
+    } else {
+      pcbMon->setEditText(QString(szMonth[mon]).left(3));
+      if (pcbDay != NULL) pcbDay->setEditText(QString::number(day));
+      if (pcbYea != NULL) pcbYea->setEditText(QString::number(yea));
+      // A sentinel the button has to overwrite. Without it "No" in
+      // January proves nothing -- it is also what the field already said.
+      pcbDst->setEditText("sentinel");
+      peLoc->setText("Seattle");
+      ppbCity->click();
+      if (plist->count() > 0)
+        plist->setCurrentRow(0);
+      ppbAppl->click();
+      strDst = pcbDst->currentText();
+    }
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "Cancel")
+        ppb->click();
+    pw->close();
+  });
+  return strDst;
+}
+#endif
+
+
+static void TestAtlasApplyQt()
+{
+  Group("Atlas Apply Info");
+#ifndef ATLAS
+  printf("  built without ATLAS\n");
+#else
+  CI ciSav = ciCore, ciMainSav = ciMain;
+  QString strJul, strJan;
+
+  strJul = StrApplyInfoQt(7, 1, 1990);
+  strJan = StrApplyInfoQt(1, 1, 1990);
+  ciCore = ciSav; ciMain = ciMainSav;
+
+  Check(strJul == "Yes",
+    "Apply Info sets Daylight Saving for Seattle in July 1990 (\"%s\")",
+    strJul.toLocal8Bit().constData());
+  Check(strJan == "No",
+    "and clears it for the same city in January (\"%s\")",
+    strJan.toLocal8Bit().constData());
+#endif
+}
+
+
 static void TestAnimationStateQt()
 {
   int nAnimSav = gs.nAnim, nDirSav = gi.nDir;
@@ -3447,6 +3532,43 @@ static void TestMidpointGlyphQt()
 // Row 1 (Cupido) on purpose: nrvate.as redefines row 0 already, so that
 // slot's glyph is the sentinel before the test starts and there would be
 // nothing to observe. This one still holds its own glyph.
+// Force one custom-object slot to its COMPILED default: no user
+// definition, and both glyph pointers back at the shared constant rather
+// than a clone. Three groups need that state and none of them can assume
+// it.
+//
+// They used to assume it, and went about it by picking a row the
+// maintainer had not customised yet -- "row 1 still holds its own body",
+// "Hades: pristine under nrvate.as". That is a race with a file the suite
+// is REQUIRED to load: run-qt-tests.sh defaults to "-i nrvate.as", which
+// CLAUDE.md's hard rule says to test with. The race was lost when that
+// file grew "-Yeb 35 10199", which is row 1, and the documented
+// pre-commit command failed three assertions that "make check" (which
+// passes "-Yi1 ephem") could not see. Establish the state instead of
+// hoping for it.
+//
+// rgTypSwissDef[]/rgObjSwissDef[] are what the writer already compares
+// against to decide which slots to save, so they are the right meaning of
+// "default" here too.
+
+static void ResetCustomSlotQt(int iobj)
+{
+  int i = iobj - custLo;
+
+  if (szDrawObject[iobj] != szDrawObjectDef[iobj]) {
+    DeallocateP((char *)szDrawObject[iobj]);
+    szDrawObject[iobj] = szDrawObjectDef[iobj];
+  }
+  if (szDrawObject2[iobj] != szDrawObjectDef2[iobj]) {
+    DeallocateP((char *)szDrawObject2[iobj]);
+    szDrawObject2[iobj] = szDrawObjectDef2[iobj];
+  }
+  rgTypSwiss[i] = rgTypSwissDef[i];
+  rgObjSwiss[i] = rgObjSwissDef[i];
+  rgPntSwiss[i] = rgFlgSwiss[i] = 0;
+}
+
+
 static void TestObjSelGlyphQt()
 {
   int iobj = uranLo + 1;
@@ -3466,8 +3588,11 @@ static void TestObjSelGlyphQt()
 
   Group("Object selection glyph");
 
-  Check(szDrawObject[iobj] == szDrawObjectDef[iobj],
-    "the slot starts out holding its own body's glyph");
+  ResetCustomSlotQt(iobj);
+  Check(szDrawObject[iobj] == szDrawObjectDef[iobj] &&
+    rgObjSwiss[iobj - custLo] != 10199,
+    "the slot holds its own body's glyph, and not the body about to be "
+    "put in it");
 
   DriveModalQt(ShowObjectSelDialogQt, [](QWidget *pw) {
     QComboBox *pcb = NULL;
@@ -4036,16 +4161,21 @@ static void TestCustomDialogParseQt()
 {
   int nTypSav = rgTypSwiss[0], nObjSav = rgObjSwiss[0];
   int nPntSav = rgPntSwiss[0], nFlgSav = rgFlgSwiss[0];
-  // Row 1 too, for the glyph: row 0's slot is already redefined by
-  // nrvate.as, so its glyph is the sentinel before the test starts and
-  // proves nothing. Row 1 still holds its own body and its own glyph.
+  // Row 1 too, for the glyph, and normalized rather than assumed: which
+  // rows carry their own glyph depends on the settings file the suite
+  // loaded, and this used to pick a row on that basis and lose the race.
+  // See ResetCustomSlotQt().
   int iobj1 = custLo + 1;
   int nTyp1Sav = rgTypSwiss[1], nObj1Sav = rgObjSwiss[1];
   int nPnt1Sav = rgPntSwiss[1], nFlg1Sav = rgFlgSwiss[1];
 
   Group("Custom objects parse");
-  Check(szDrawObject[iobj1] == szDrawObjectDef[iobj1],
-    "row 1's slot starts out holding its own body's glyph");
+  ResetCustomSlotQt(custLo);
+  ResetCustomSlotQt(iobj1);
+  Check(szDrawObject[iobj1] == szDrawObjectDef[iobj1] &&
+    rgObjSwiss[1] != 52872,
+    "row 1's slot holds its own body's glyph, and not the body about to "
+    "be put in it");
 
   DriveModalQt(ShowCustomDialogQt, [](QWidget *pw) {
     QLineEdit *peDef = NULL;
@@ -4152,11 +4282,15 @@ static void TestCustomDialogParseQt()
 // unconditional drop), and changing only the point drops it.
 static void TestObjDefSetQt()
 {
-  int iobj = custLo + 2;   // Hades: pristine under nrvate.as
+  int iobj = custLo + 2;
   OBJDEF od, odSav;
 
   Group("Object definition store");
 
+  // Normalized, not chosen for being untouched: this row used to be
+  // picked as "Hades: pristine under nrvate.as", which is a race with the
+  // maintainer's own settings. See ResetCustomSlotQt().
+  ResetCustomSlotQt(iobj);
   ObjDefGet(iobj, &odSav);
   Check(szDrawObject[iobj] == szDrawObjectDef[iobj],
     "the slot starts out holding its own body's glyph");
@@ -9709,6 +9843,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"atlas-zone",           TestAtlasZoneQt},
   {"eclipses",             TestEclipseQt},
   {"lockdown",             TestLockdownQt},
+  {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},
   {"restrict-recall",      TestRestrictRecallQt},
   {"printing",             TestPrintQt},

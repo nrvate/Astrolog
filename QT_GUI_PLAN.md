@@ -9220,6 +9220,75 @@ are the more useful half to read before starting something new.
     characters and stays well clear. Falsified by putting `cchSzMax` back:
     7 passed, 1 failed.
 
+217. **The atlas's "Apply Info" button never set Daylight Saving.** Fourth
+    from the same sweep -- `DisplayTimezoneChanges` two on Windows against
+    one here, `DisplayAtlasLookup` three against two -- and the worst of
+    the four, because it is a **wrong number in a cast chart** rather than
+    a missing refusal or a truncated string.
+
+    Windows' `dbInAppl` resolves the city, then asks
+    `DisplayTimezoneChanges(is.rgae[i].izn, fFalse, &ci)` for the chart's
+    own date and writes **both** `ci.dst` and `ci.zon` into the dialog.
+    This port wrote the zone from `ZondefFromIzn()` -- the zone area's
+    *latest* offset, today's, with no history in it -- and **never touched
+    the Daylight Saving field at all**. So picking a city for a summer
+    birthday left Daylight on whatever it happened to say, and the chart
+    was cast an hour out by the button whose entire purpose is to get that
+    right.
+
+    Two smaller things were missing with it: the date comes from the
+    **dialog** now rather than from the last cast chart, since that is
+    what the user is in the middle of typing (Windows reads its four edits
+    for anything but the Defaults dialog), and pressing Apply Info with a
+    city *typed* rather than *picked* falls back to looking up the
+    Location field instead of doing nothing.
+
+    Measured through the probe before anything was written, rather than
+    assumed: Seattle is atlas entry 32493, zone area 135, and reads
+    `dst 1.00` on 1 July 1990 against `0.00` on 1 January, zone 8 either
+    way. So the *zone* half of the bug is invisible for Seattle and the
+    *daylight* half is a clean hour.
+
+    Asserted by driving the real dialog -- type "Seattle", click Lookup
+    City, take row 0, click Apply Info, read the Daylight field -- because
+    the bug was in the **wiring**: the computation it now calls was always
+    there and always right. **Both directions**, with a sentinel in the
+    field first, since a fix that simply wrote "Yes" would pass a July
+    check on its own and "No" in January is also what the field already
+    said. Falsified twice: not writing the field fails both (1 passed, 2
+    failed), and not reading the date from the dialog fails the January
+    one (2 passed, 1 failed).
+
+218. **`./run-qt-tests.sh` failed three assertions and `make check` could
+    not see it.** Found while running the documented bare command rather
+    than the one `make check` runs.
+
+    The two are not the same run. `make check` passes `-Yi1 ephem`;
+    `run-qt-tests.sh` with no arguments defaults to `-i nrvate.as`, which
+    is what CLAUDE.md's hard rule says to test with and what a person
+    typing the command gets. Three object-customization assertions
+    depended on a custom-object slot still holding its **compiled**
+    definition, and went about it by picking a row the maintainer had not
+    customised yet -- the comments say so out loud: "row 1 still holds its
+    own body", "Hades: pristine under nrvate.as".
+
+    That is a race with a file the suite is required to load, and it was
+    lost: `nrvate.as` now carries `-Yeb 35 10199`, which is row 1. The
+    slot already held Chariklo, so the dialog re-asserting Chariklo
+    deliberately **kept** the glyph (which is `ObjDefSet()`'s documented
+    rule) and the assertion that it dropped failed.
+
+    `ResetCustomSlotQt()` establishes the state instead of hoping for it:
+    both glyph pointers back to the shared constant, freeing any clone,
+    and the definition back to `rgTypSwissDef[]`/`rgObjSwissDef[]` --
+    which is the same meaning of "default" the settings writer already
+    uses to decide which slots to save. The three groups call it, and each
+    assertion now also says the body it is about to store is not the one
+    already there, so the same trap cannot be walked into again.
+
+    Chasing rows was always going to lose. The maintainer customises more
+    slots over time and the suite has no say in which.
+
 
 ## Features this fork adds to both builds
 
