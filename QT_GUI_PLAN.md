@@ -9022,6 +9022,31 @@ are the more useful half to read before starting something new.
     reachable. glibc prints "(null)" and so does MSVC, so this was a wart
     rather than a crash; `SzSet()` on both now, as everywhere else.
 
+211. **Export Chart Bitmap could never write a PNG.** Found reading the
+    file save paths against `wdialog.cpp`.
+
+    `ShowExportBitmapDialogQt()` began with `gs.chBmpMode = 'B'`. That is
+    the field File Settings' "Export Bitmaps in PNG Format" box edits, and
+    both the extension the dialog offers and the writer that produces the
+    file read it -- so forcing it meant the command always wrote a Windows
+    `.bmp`, **and silently turned that box off on the way past**, which
+    "Save Program Settings" then recorded.
+
+    Windows sets that field in exactly one place, `cmdCopyBitmap`
+    (`wdriver.cpp:1353`), because a bitmap going onto the Windows
+    clipboard has to be a real one. Its `cmdSaveBitmap` leaves the setting
+    alone and switches title, filter and extension on it in three branches
+    (`wdialog.cpp:499`). This port's copy path hands the `QImage` straight
+    to the clipboard and needs no such field, so the line had simply
+    landed on the wrong command. It is gone, and the title and filter
+    follow the setting the way Windows' do.
+
+    Asserted on the MAGIC BYTES, not the extension: the dialog chooses the
+    extension and the writer chooses the content, and it was the content
+    that was wrong. `FExportChartToFileTestQt()` reaches the export
+    without a file picker, the way `PrintChartToFileTestQt()` reaches
+    printing without a printer.
+
 
 ## Features this fork adds to both builds
 

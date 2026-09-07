@@ -101,6 +101,7 @@ extern QMenu *PmenuCtxTestQt(int, CONST char **);
 extern int CHotkeyTestQt();
 extern void HotkeyTestQt(int, CONST char **, CONST char **);
 extern QAction *PaFindActionTestQt(CONST char *);
+extern flag FExportChartToFileTestQt(CONST char *, int);
 extern void AllActionsTestQt(QList<QAction *> *);
 extern QAction *PaFindLooseTestQt(CONST char *, CONST char **);
 typedef struct _RcAccel { CONST char *szLabel, *szAccel; } RCACCEL;
@@ -1648,6 +1649,48 @@ static void TestChartExportQt()
   flag fNoWriteSav = us.fNoWrite;
 
   Group("Chart export formats");
+
+  // Export Chart Bitmap writes what File Settings' "Export Bitmaps in PNG
+  // Format" asks for. It used to force gs.chBmpMode to 'B' first, so it
+  // could never write a PNG and turned that box off on the way past.
+  // Windows sets that field in one place only, cmdCopyBitmap, because a
+  // bitmap going onto the Windows clipboard has to be a real one.
+  //
+  // The magic bytes, not the extension: the extension is chosen by the
+  // file dialog and the content by the writer, and it is the content that
+  // was wrong.
+  {
+    Borrow bMode(gs.chBmpMode, 'B');
+    Borrow bNoWrite(us.fNoWrite, fFalse);
+    struct { char ch; CONST char *szMagic; CONST char *szWhat; } rgbmp[] = {
+      {'B', "BM", "a Windows bitmap"}, {'P', "\x89PNG", "a PNG"} };
+    char szBmp[cchSzMax];
+    int ib;
+
+    for (ib = 0; ib < 2; ib++) {
+      QFile file;
+      QByteArray ba;
+
+      sprintf2(S(szBmp), "%s/astrolog-qt-bmpmode-%d-%c",
+        QDir::tempPath().toLocal8Bit().constData(),
+        (int)QCoreApplication::applicationPid(), rgbmp[ib].ch);
+      remove(szBmp);
+      gs.chBmpMode = rgbmp[ib].ch;
+      Check(FExportChartToFileTestQt(szBmp, ftBmp),
+        "Export Chart Bitmap writes %s", rgbmp[ib].szWhat);
+      Check(gs.chBmpMode == rgbmp[ib].ch,
+        "and leaves the PNG setting where it found it (%c)", gs.chBmpMode);
+      file.setFileName(QString::fromLocal8Bit(szBmp));
+      if (file.open(QIODevice::ReadOnly)) {
+        ba = file.read(4);
+        file.close();
+      }
+      Check(ba.startsWith(QByteArray(rgbmp[ib].szMagic,
+        rgbmp[ib].ch == 'B' ? 2 : 4)),
+        "and what it wrote really is %s", rgbmp[ib].szWhat);
+      remove(szBmp);
+    }
+  }
 
   szNamSav = ciMain.nam; szLocSav = ciMain.loc;
   ciMain.nam = ciMain.loc = NULL;

@@ -1280,6 +1280,17 @@ static flag FExportChartQt(CONST char *szFile, int ft)
 // works it out for itself, which only the bitmap does -- bmp or png,
 // depending on gs.chBmpMode, the same branch DlgSaveChart takes.
 
+#ifdef QTTEST
+// The graphics export without the file picker, so the suite can exercise
+// what the Export menu items do -- the same reason PrintChartToFileTestQt()
+// exists in qtdriver.cpp.
+flag FExportChartToFileTestQt(CONST char *szFile, int ft)
+{
+  return FExportChartQt(szFile, ft);
+}
+#endif
+
+
 static void ShowExportGraphicsDialogQt(CONST char *szTitle,
   CONST char *szFilter, int ft, CONST char *szExt)
 {
@@ -1296,11 +1307,23 @@ static void ShowExportGraphicsDialogQt(CONST char *szTitle,
     QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
 }
 
+// Note what this does NOT do: force gs.chBmpMode. Windows sets that to 'B'
+// in exactly one place, cmdCopyBitmap (wdriver.cpp:1353), because a bitmap
+// going onto the Windows clipboard has to be a real one; its Export Chart
+// Bitmap leaves the setting alone and writes whatever File Settings' "Export
+// Bitmaps in PNG Format" says. Setting it here instead meant this command
+// could never write a PNG -- and silently turned that box off, since the
+// extension two lines above and the writer both read the same field.
 void ShowExportBitmapDialogQt()
 {
-  gs.chBmpMode = 'B';
-  ShowExportGraphicsDialogQt("Export Chart Bitmap",
-    "Windows Bitmaps (*.bmp)", ftBmp, NULL);
+  // Title, filter and extension all follow the setting, which is what
+  // Windows' cmdSaveBitmap does in as many branches (wdialog.cpp:499).
+  flag fPng = (gs.chBmpMode == 'P');
+
+  ShowExportGraphicsDialogQt(fPng ? "Export Chart PNG Bitmap" :
+    "Export Chart Bitmap", fPng ?
+    "Portable Network Graphics (*.png)" : "Windows Bitmaps (*.bmp)",
+    ftBmp, NULL);
 }
 
 void ShowExportMetafileDialogQt()
