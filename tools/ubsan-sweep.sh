@@ -78,7 +78,11 @@ if [ "$want" = both ] || [ "$want" = qt ]; then
     ldd ./astrolog-qt-ubsan 2>/dev/null | grep -qi ubsan || {
       echo "== Qt suite: BUILD NOT INSTRUMENTED, skipping"
       echo "   Check that LIBS (not LDFLAGS) carries -fsanitize=undefined."; rc=1; }
-    run "Qt suite (4539 assertions)" \
+    # No assertion count in the label. It was "4539 assertions" and the
+    # suite had grown to 4728 by the time anyone read it -- the same drift
+    # CLAUDE.md refuses to restate counts because of. The run prints its
+    # own, which is the only number that is true when you see it.
+    run "Qt suite" \
       "env -u DISPLAY QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME= ./astrolog-qt-ubsan -Yi1 ephem"
     rm -rf obj-qt-ubsan ./astrolog-qt-ubsan
   else
