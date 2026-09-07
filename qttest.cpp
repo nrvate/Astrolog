@@ -3261,6 +3261,67 @@ static void TestGraphicsSizeQt()
 }
 
 
+// The three plain combo boxes in Graphics Settings whose store loop kept
+// the LAST prefix match instead of the first exact one.
+//
+// FMatchSz() matches a prefix of three characters or more, and two of
+// these lists contain entries that are prefixes of other entries: "Region"
+// is a prefix of "Region+State", and "Rays 1" of both "Rays 1,2" and
+// "Rays 12345". Keeping the last match therefore stored a DIFFERENT row
+// than the one clicked -- from the dropdown, not from typing, which is
+// what makes it worth an assertion rather than a note. Windows uses
+// FEqSzI() and breaks on the first (wdialog.cpp:3038, 3044, 3080).
+
+static void TestComboPickQt()
+{
+  int nDecaTypeSav = gs.nDecaType, nLabelCitySav = gs.nLabelCity;
+  flag fLabelAspSav = gs.fLabelAsp;
+  int nDecaFillSav = gs.nDecaFill;
+
+  Group("Graphics Settings combo picks");
+
+  {
+    static CONST struct {
+      CONST char *szId, *szPick;
+      int nWant;
+      int *pn;
+      CONST char *szWhat;
+    } rgt[] = {
+      {"dcGr_YXv", "Rays 1",     3, &gs.nDecaType,
+       "\"Rays 1\" is Rays 1, not Rays 12345"},
+      {"dcGr_YXv", "Rays 12345", 5, &gs.nDecaType,
+       "and the longer one is still itself"},
+      {"dcGr_XL",  "Region",     1, &gs.nLabelCity,
+       "\"Region\" is Region, not Region+State"},
+      {"dcGr_XL",  "Region+State", 2, &gs.nLabelCity,
+       "and Region+State is still itself"},
+      {"dcGr_Xv",  "Rainbow RYB", 3, &gs.nDecaFill,
+       "and a list with no prefix pairs is unaffected"}};
+    int iT;
+
+    for (iT = 0; iT < (int)(sizeof(rgt)/sizeof(*rgt)); iT++) {
+      CONST char *szId = rgt[iT].szId, *szPick = rgt[iT].szPick;
+
+      *rgt[iT].pn = -1;
+      DriveModalQt(ShowGraphicsSettingsDialogQt, [szId, szPick](QWidget *pw) {
+        QComboBox *pcb = pw->findChild<QComboBox *>(szId);
+
+        if (pcb != NULL)
+          pcb->setEditText(szPick);
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "OK") { ppb->click(); return; }
+        pw->close();
+      });
+      Check(*rgt[iT].pn == rgt[iT].nWant, "%s (%d, want %d)",
+        rgt[iT].szWhat, *rgt[iT].pn, rgt[iT].nWant);
+    }
+  }
+
+  gs.nDecaType = nDecaTypeSav; gs.nDecaFill = nDecaFillSav;
+  gs.nLabelCity = nLabelCitySav; gs.fLabelAsp = fLabelAspSav;
+}
+
+
 static void TestFontPackQt()
 {
   int nFontAllSav = gs.nFontAll, nFontPrevSav = gi.nFontPrev;
@@ -10626,6 +10687,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"menu-side-effects",    TestMenuSideEffectsQt},
   {"graphics-size",        TestGraphicsSizeQt},
   {"font-pack",            TestFontPackQt},
+  {"combo-pick",           TestComboPickQt},
   {"orbit-buffer",         TestOrbitBufferQt},
   {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},

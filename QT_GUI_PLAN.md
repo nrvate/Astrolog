@@ -9715,6 +9715,45 @@ are the more useful half to read before starting something new.
     combos to Wingdings, which three of the six slots refuse. It uses
     Consolas now, one of the three fonts allowed everywhere, and says why.
 
+230. **Clicking "Region" set "Region+State", and "Rays 1" set "Rays
+    12345".** Item 229 found one instance of a shape; this is the sweep
+    for the rest of it -- every `FMatchSz()` loop in `qtdialog.cpp`
+    against the Windows loop it came from.
+
+    Windows reads these three Graphics Settings combos with `FEqSzI()`,
+    breaking on the **first exact** match and defaulting to 0
+    (wdialog.cpp:3038, 3044, 3080). This port used `FMatchSz()`, which
+    matches a **prefix of three characters or more**, and kept the
+    **last** match.
+
+    Two of the three lists contain entries that are prefixes of other
+    entries: "Region" of "Region+State", and "Rays 1" of both "Rays 1,2"
+    and "Rays 12345". So picking either of those rows **from the
+    dropdown** stored a different row. That is what separates this from a
+    typing nicety: no partial input is involved, the exact string the
+    combo itself supplies selects the wrong setting.
+
+    The third list, the deca fill, has no prefix pairs and was unaffected
+    -- it is in the group anyway, as the control that says the change did
+    not break the ordinary case.
+
+    **Two of the loops in that dialog are NOT changed and that was
+    checked, not assumed.** The aspect sort uses `FMatchSz`, last match,
+    and starts at index 1 -- and so does Windows, exactly, so index 0 is
+    unreachable in both and that is upstream's business. The decan list
+    already broke on the first match with Windows' fallback.
+
+    Falsified by restoring the two loops: two assertions, reading 5 for
+    "Rays 1" and 2 for "Region".
+
+    **Also swept and clean in the same pass:** the other five combo lists
+    `qtdialog.cpp` copies from `wdialog.cpp` are identical string for
+    string, every radio group's `(first, count)` range and its value
+    mapping match Windows -- including the six glyph runs, `nHouse3D`'s
+    one-based offset and the PostScript orientation's three-way -- and the
+    Chart Settings dialog's two sort radios go through the same ranges by
+    a different spelling.
+
 
 ## Features this fork adds to both builds
 

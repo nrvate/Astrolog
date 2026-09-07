@@ -1804,29 +1804,50 @@ void ShowGraphicsSettingsDialogQt()
   gs.objTrack = nTrack;
   gs.nScale = nScaleN;
   gs.nScaleText = nScaleTN;
+  // FEqSzI() and break on the FIRST match, which is what Windows does for
+  // all three of these (wdialog.cpp:3038, 3044, 3080), rather than
+  // FMatchSz() keeping the LAST.
+  //
+  // FMatchSz() matches a prefix of three characters or more, and two of
+  // these lists contain entries that are prefixes of other entries -- so
+  // picking a row from the dropdown could store a DIFFERENT row:
+  // "Region" also matched "Region+State", and "Rays 1" matched both
+  // "Rays 1,2" and "Rays 12345", with the last one winning. Same shape as
+  // the font list's "Astro" selecting Astronomicon, and reachable by
+  // clicking rather than typing.
+  //
+  // The two integer settings fall back to 0 when nothing matches, again
+  // as Windows does. The city colour pair does not: Windows leaves both
+  // fields alone in that case (i lands on 6 and neither branch runs), and
+  // so does this.
   if (pcbCorner != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbCorner->currentText().toLocal8Bit().constData());
     for (i = 0; i < 7; i++)
-      if (FMatchSz(sz, rgszWheelCornerQt[i]))
-        gs.nDecaType = i;
+      if (FEqSzI(sz, rgszWheelCornerQt[i]))
+        break;
+    gs.nDecaType = i < 7 ? i : 0;
   }
   if (pcbFill != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbFill->currentText().toLocal8Bit().constData());
     for (i = 0; i < 8; i++)
-      if (FMatchSz(sz, rgszDecaFillQt[i]))
-        gs.nDecaFill = i;
+      if (FEqSzI(sz, rgszDecaFillQt[i]))
+        break;
+    gs.nDecaFill = i < 8 ? i : 0;
   }
   if (pcbCity != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbCity->currentText().toLocal8Bit().constData());
     for (i = 0; i < 6; i++)
-      if (FMatchSz(sz, rgszCityColorQt[i])) {
-        gs.fLabelAsp = (i > 0);
-        if (i > 0)
-          gs.nLabelCity = i;
-      }
+      if (FEqSzI(sz, rgszCityColorQt[i]))
+        break;
+    if (i <= 0)
+      gs.fLabelAsp = fFalse;
+    else if (i < 6) {
+      gs.fLabelAsp = fTrue;
+      gs.nLabelCity = i;
+    }
   }
   for (i = 0; i < cFontEntry; i++) {
     if (rgpcbFont[i] == NULL)
