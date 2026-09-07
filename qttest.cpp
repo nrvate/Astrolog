@@ -10535,6 +10535,29 @@ static void TestSaveSuffixQt()
       rgt[i].szWant, rgt[i].szWhy, str.toLocal8Bit().constData());
   }
   printf("  a typed name gets the format's extension, and keeps its own\n");
+
+  // The other half of the same Windows code (DlgSaveChart, cmdSaveText):
+  // title, filter AND extension all follow us.fTextHTML. Only the
+  // extension did here, so "Export as HTML" opened a picker titled
+  // "Export Chart Text" filtered to "*.txt" -- which hides the .htm files
+  // already in the folder from the command about to write one.
+  {
+    flag fHTMLSav = us.fTextHTML;
+
+    us.fTextHTML = fFalse;
+    Check(FEqSz(SzExportTextTitleQt(), "Export Chart Text") &&
+      FEqSz(SzExportTextExtQt(), "txt") &&
+      FEqSz(SzExportTextFilterQt(), "Text Files (*.txt);;All Files (*)"),
+      "plain text export offers \"%s\", \"%s\", .%s",
+      SzExportTextTitleQt(), SzExportTextFilterQt(), SzExportTextExtQt());
+    us.fTextHTML = fTrue;
+    Check(FEqSz(SzExportTextTitleQt(), "Export Chart HTML Text") &&
+      FEqSz(SzExportTextExtQt(), "htm") &&
+      FEqSz(SzExportTextFilterQt(), "HTML Files (*.htm);;All Files (*)"),
+      "and HTML export offers \"%s\", \"%s\", .%s",
+      SzExportTextTitleQt(), SzExportTextFilterQt(), SzExportTextExtQt());
+    us.fTextHTML = fHTMLSav;
+  }
 }
 
 

@@ -1083,7 +1083,7 @@ void ShowSaveChartDialogQt()
   if (FNoWriteQt())
     return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart", QString(),
-    "Astrolog Chart Files (*.as);;All Files (*)");
+    "Astrolog Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
   qs = StrDefaultSuffixQt(qs, "as");
@@ -1113,7 +1113,7 @@ void ShowSaveChartPositionsDialogQt()
   if (FNoWriteQt())
     return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart Positions",
-    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
+    QString(), "Astrolog Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
   qs = StrDefaultSuffixQt(qs, "as");
@@ -1135,7 +1135,7 @@ void ShowSaveSettingsDialogQt()
   if (FNoWriteQt())
     return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Program Settings",
-    DEFAULT_INFOFILE, "Astrolog Chart Files (*.as);;All Files (*)");
+    DEFAULT_INFOFILE, "Astrolog Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
   qs = StrDefaultSuffixQt(qs, "as");
@@ -1190,7 +1190,7 @@ void ShowSaveCalendarDialogQt()
   if (FNoWriteQt())
     return;
   QString qs = QFileDialog::getSaveFileName(gi.qwind,
-    "Save Chart iCalendar Format", QString(),
+    "Save Chart Calendar Format", QString(),
     "iCalendar Files (*.ics);;All Files (*)");
   if (qs.isEmpty())
     return;
@@ -1419,16 +1419,37 @@ void CopyChartWireQt()     { CopyChartVectorQt(ftWire, NULL); }
 // still-undesigned on-screen text display QT is missing (see the Help
 // menu's list actions).
 
+// Title, filter and extension, all three of which Windows switches on
+// us.fTextHTML (wdialog.cpp, cmdSaveText). Only the extension did here, so
+// choosing "Export as HTML" in File Settings still opened a picker titled
+// "Export Chart Text" filtered to "*.txt" -- which hides the .htm files
+// already in the folder.
+
+CONST char *SzExportTextTitleQt(void)
+{
+  return !us.fTextHTML ? "Export Chart Text" : "Export Chart HTML Text";
+}
+
+CONST char *SzExportTextFilterQt(void)
+{
+  return !us.fTextHTML ? "Text Files (*.txt);;All Files (*)" :
+    "HTML Files (*.htm);;All Files (*)";
+}
+
+CONST char *SzExportTextExtQt(void)
+{
+  return !us.fTextHTML ? "txt" : "htm";
+}
+
 void ShowExportTextDialogQt()
 {
   if (FNoWriteQt())
     return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Export Chart Text",
-    QString(), "Text Files (*.txt);;All Files (*)");
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, SzExportTextTitleQt(),
+    QString(), SzExportTextFilterQt());
   if (qs.isEmpty())
     return;
-  // txt or htm, exactly as Windows picks between them on us.fTextHTML.
-  qs = StrDefaultSuffixQt(qs, !us.fTextHTML ? "txt" : "htm");
+  qs = StrDefaultSuffixQt(qs, SzExportTextExtQt());
   QByteArray ba = qs.toLocal8Bit();
   // us.fTextHTML is passed through rather than forced, so the File
   // Settings "Export as HTML" choice still decides.
@@ -2823,7 +2844,7 @@ void ShowSaveChartListDialogQt()
     return;
   }
   QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart List",
-    QString(), "Astrolog Chart Files (*.as);;All Files (*)");
+    QString(), "Astrolog Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
   qs = StrDefaultSuffixQt(qs, "as");

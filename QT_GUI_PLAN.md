@@ -10173,6 +10173,33 @@ are the more useful half to read before starting something new.
     pixels.
 
 
+242. **The file pickers, read against `DlgOpenChart` and `DlgSaveChart`.**
+    A different axis from the `#ifdef` sweeps: the eleven
+    `QFileDialog::get*FileName()` calls in `qtdialog.cpp` against the
+    `ofn.lpstrTitle` / `lpstrFilter` / `lpstrDefExt` each one is a port
+    of. Nothing checks these -- the suite proves the 25 *modal* dialogs
+    open with the right titles, and a native file picker is neither.
+
+    The Open Chart filter was already Windows' seven rows verbatim. Three
+    things were not:
+
+    * **"Export Chart Text" ignored HTML.** Windows switches the title to
+      "Export Chart HTML Text" and the filter to `HTML Files (*.htm)` on
+      `us.fTextHTML` (`wdialog.cpp`, `cmdSaveText`); only the extension
+      did so here. So turning on "Export as HTML" in File Settings opened
+      a picker titled for plain text and filtered to `*.txt`, which hides
+      the `.htm` files already in the folder from the command about to
+      write one. Now three accessors, `SzExportTextTitleQt()` /
+      `SzExportTextFilterQt()` / `SzExportTextExtQt()`, so the suite can
+      ask; falsified by pinning the filter to the text one, which fails
+      the HTML half and leaves the plain half passing.
+    * **"Save Chart iCalendar Format"** -- Windows titles it "Save Chart
+      Calendar Format".
+    * **"Astrolog Chart Files (*.as)"** in the four `.as` savers, where
+      Windows says "Astrolog Files (*.as)" -- as this port's own Open
+      Chart dialog already did, two hundred lines away.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows

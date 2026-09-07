@@ -38,6 +38,11 @@ void RedrawQt();
 void PrintWarningQt(CONST char *sz, flag fError);
 void PrintNoticeQt(CONST char *sz);
 void BeepQt(void);
+// "Export Chart Text", whose title, filter and extension all follow
+// us.fTextHTML the way Windows' cmdSaveText does.
+CONST char *SzExportTextTitleQt(void);
+CONST char *SzExportTextFilterQt(void);
+CONST char *SzExportTextExtQt(void);
 void RedrawForceQt();
 flag FNoUpdateQt();
 flag FNoPopupQt();
