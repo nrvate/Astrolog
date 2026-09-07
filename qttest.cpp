@@ -3272,6 +3272,81 @@ static void TestGraphicsSizeQt()
 // what makes it worth an assertion rather than a note. Windows uses
 // FEqSzI() and breaks on the first (wdialog.cpp:3038, 3044, 3080).
 
+// Numeric dialog fields, read through Astrolog's own parsers.
+//
+// Windows reads every one of them with GetEditN()/GetEditR(), which are
+// NFromSz() and RFromSz() -- and those accept more than a plain decimal:
+// "#1f" is hexadecimal, "##1010" binary, and either kind may be an
+// ASTROEXPRESSION when it starts with "~". QString::toInt() and
+// toDouble() accept none of that and answer 0, so all three spellings
+// worked on Windows and silently became zero here, in about forty
+// fields.
+//
+// Driven through the Graphics Settings dialog because it has both an
+// integer field and a real one, and because a value of 0 in either is
+// refused by the validation added earlier -- so "became zero" is a
+// visible failure rather than a quiet one.
+
+static void TestFieldParseQt()
+{
+  int nGridSav = gs.nGridCell;
+  real rRotSav = gs.rRot;
+  flag fExpSav = us.fExpOff;
+
+  Group("Numeric field parsing");
+
+  {
+    static CONST struct {
+      CONST char *szId, *szType;
+      int nWant;
+      CONST char *szWhat;
+    } rgt[] = {
+      {"deGr_YXg", "24",       24, "a plain decimal"},
+      {"deGr_YXg", "#18",      24, "hexadecimal, which Windows accepts"},
+      {"deGr_YXg", "##11000",  24, "and binary"},
+      {"deGr_YXg", "~Add 20 4", 24, "and an AstroExpression"}};
+    int iT;
+
+    us.fExpOff = fFalse;
+    for (iT = 0; iT < (int)(sizeof(rgt)/sizeof(*rgt)); iT++) {
+      CONST char *szId = rgt[iT].szId, *szType = rgt[iT].szType;
+
+      gs.nGridCell = 1;
+      DriveModalQt(ShowGraphicsSettingsDialogQt, [szId, szType](QWidget *pw) {
+        QLineEdit *pe = pw->findChild<QLineEdit *>(szId);
+
+        if (pe != NULL)
+          pe->setText(szType);
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "OK") { ppb->click(); return; }
+        pw->close();
+      });
+      Check(gs.nGridCell == rgt[iT].nWant, "\"%s\" reads as %d -- %s (%d)",
+        szType, rgt[iT].nWant, rgt[iT].szWhat, gs.nGridCell);
+    }
+  }
+
+  // And a real, which takes the expression form but not the two bases.
+  gs.rRot = 0.0;
+  DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+    QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_XW");
+
+    if (pe != NULL)
+      pe->setText("~Add 30 15");
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") { ppb->click(); return; }
+    pw->close();
+  });
+  Check(gs.rRot == 45.0,
+    "and a real field takes an AstroExpression too (%.2f)",
+    (double)gs.rRot);
+
+  us.fExpOff = fExpSav;
+  gs.nGridCell = nGridSav;
+  gs.rRot = rRotSav;
+}
+
+
 static void TestComboPickQt()
 {
   int nDecaTypeSav = gs.nDecaType, nLabelCitySav = gs.nLabelCity;
@@ -10688,6 +10763,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"graphics-size",        TestGraphicsSizeQt},
   {"font-pack",            TestFontPackQt},
   {"combo-pick",           TestComboPickQt},
+  {"field-parse",          TestFieldParseQt},
   {"orbit-buffer",         TestOrbitBufferQt},
   {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},

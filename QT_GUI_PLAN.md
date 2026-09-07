@@ -9754,6 +9754,37 @@ are the more useful half to read before starting something new.
     Chart Settings dialog's two sort radios go through the same ranges by
     a different spelling.
 
+231. **Forty numeric fields that could not take hex, binary, or an
+    AstroExpression.** The other direction of items 229-230: not what the
+    dialogs write, but how they READ.
+
+    Windows reads every numeric field through `GetEditN()`/`GetEditR()`
+    (wdialog.cpp:194 and 205), which are `NFromSz()` and `RFromSz()` --
+    Astrolog's own parsers, and they take more than a plain decimal. A
+    leading `#` makes an integer hexadecimal and `##` makes it binary, and
+    **either kind may be an AstroExpression** when it starts with `~`,
+    evaluated on the spot. This port used `QString::toInt()` and
+    `toDouble()`, which accept none of that and answer **0**.
+
+    So `#18`, `##11000` and `~Add 20 4` all worked on Windows and silently
+    became zero here, in about forty fields -- which is every number this
+    port's dialogs read. Two helpers, `NFieldQt()` and `RFieldQt()`, and
+    38 call sites.
+
+    Asserted through Graphics Settings because it has both an integer
+    field and a real one, and because zero in either is refused by the
+    validation item 225 added -- so "became zero" fails visibly rather
+    than quietly. Falsified by putting `toInt()`/`toDouble()` back inside
+    the two helpers: four assertions, every alternative spelling reading
+    0.
+
+    **The assertion's own first draft was wrong about the syntax**, and
+    the way it failed is worth keeping: `~ 20 4 +` returned **4**, not 24
+    and not 0, because AstroExpressions are prefix and not postfix -- the
+    parser read the last token it understood. A test asserting `== 24`
+    caught it; one asserting "not zero" would have passed on a wrong
+    answer.
+
 
 ## Features this fork adds to both builds
 

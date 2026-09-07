@@ -539,6 +539,35 @@ static QString SzFormatRQt(real r, int n)
   return QString(sz);
 }
 
+
+// And the other direction. Windows reads every numeric dialog field
+// through GetEditN()/GetEditR() (wdialog.cpp:194 and 205), which are
+// NFromSz() and RFromSz() -- Astrolog's own parsers, and they accept more
+// than a plain decimal. A leading "#" makes an integer hexadecimal and
+// "##" makes it binary, and EITHER kind may be an AstroExpression when it
+// starts with "~", evaluated on the spot.
+//
+// QString::toInt() and toDouble() accept none of that and answer 0, so
+// every one of those spellings worked on Windows and silently became zero
+// here -- in about forty fields, which is every number this port's
+// dialogs read.
+
+static int NFieldQt(CONST QString &str)
+{
+  QByteArray ba = str.toLocal8Bit();
+
+  return NFromSz(ba.constData());
+}
+
+
+static real RFieldQt(CONST QString &str)
+{
+  QByteArray ba = str.toLocal8Bit();
+
+  return RFromSz(ba.constData());
+}
+
+
 /*
 ******************************************************************************
 ** Dialogs transcribed from astrolog.rc.
@@ -1472,7 +1501,7 @@ void ShowFileSettingsDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  nwx = peAnti != NULL ? peAnti->text().toInt() : NAntialiasQt();
+  nwx = peAnti != NULL ? NFieldQt(peAnti->text()) : NAntialiasQt();
   rI = pcbPct != NULL ?
     RFromSz(pcbPct->currentText().toLocal8Bit().constData()) : gs.rBackPct;
   if (!FValidAntialias(nwx)) { ErrorEnsureQt(&dlg, nwx, "antialias"); return; }
@@ -1504,7 +1533,7 @@ void ShowFileSettingsDialogQt()
     gs.fAntialias = fFalse;
   else
     SetAntialiasQt(nwx);
-  if (peThick != NULL) gs.nThickAdjust = peThick->text().toInt();
+  if (peThick != NULL) gs.nThickAdjust = NFieldQt(peThick->text());
   gs.rBackPct = rI;
   if (peADB != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
@@ -1697,8 +1726,8 @@ void ShowGraphicsSettingsDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  int nx = peX != NULL ? peX->text().toInt() : gs.xWin;
-  int ny = peY != NULL ? peY->text().toInt() : gs.yWin;
+  int nx = peX != NULL ? NFieldQt(peX->text()) : gs.xWin;
+  int ny = peY != NULL ? NFieldQt(peY->text()) : gs.yWin;
   if (!FValidGraphX(nx)) { ErrorEnsureQt(&dlg, nx, "horizontal size"); return; }
   if (!FValidGraphY(ny)) { ErrorEnsureQt(&dlg, ny, "vertical size"); return; }
 
@@ -1715,11 +1744,11 @@ void ShowGraphicsSettingsDialogQt()
   // The grid cell count is the one that matters most quietly: it bounds
   // loops that index object arrays in the grid chart, so a value past
   // cObj is an out-of-range read rather than a strange picture.
-  int nDelay = peDelay != NULL ? peDelay->text().toInt() : NAnimDelayQt();
-  int nGrid = peGrid != NULL ? peGrid->text().toInt() : gs.nGridCell;
-  int nDeca = peDeca != NULL ? peDeca->text().toInt() : gs.nDecaSize;
-  real rRotN = peRot != NULL ? peRot->text().toDouble() : gs.rRot;
-  real rTiltN = peTilt != NULL ? peTilt->text().toDouble() : gs.rTilt;
+  int nDelay = peDelay != NULL ? NFieldQt(peDelay->text()) : NAnimDelayQt();
+  int nGrid = peGrid != NULL ? NFieldQt(peGrid->text()) : gs.nGridCell;
+  int nDeca = peDeca != NULL ? NFieldQt(peDeca->text()) : gs.nDecaSize;
+  real rRotN = peRot != NULL ? RFieldQt(peRot->text()) : gs.rRot;
+  real rTiltN = peTilt != NULL ? RFieldQt(peTilt->text()) : gs.rTilt;
   if (!FValidTimer(nDelay))
     { ErrorEnsureQt(&dlg, nDelay, "animation delay"); return; }
   if (!FValidGrid(nGrid))
@@ -1742,10 +1771,10 @@ void ShowGraphicsSettingsDialogQt()
   // choices: toInt() answers 0 for anything it cannot parse, and 0 is
   // outside all three integer ranges.
   int nScaleN = pcbScale != NULL ?
-    pcbScale->currentText().toInt() : gs.nScale;
+    NFieldQt(pcbScale->currentText()) : gs.nScale;
   int nScaleTN = pcbScaleT != NULL ?
-    pcbScaleT->currentText().toInt() : gs.nScaleText;
-  real rSpaceN = peAU != NULL ? peAU->text().toDouble() : gs.rspace;
+    NFieldQt(pcbScaleT->currentText()) : gs.nScaleText;
+  real rSpaceN = peAU != NULL ? RFieldQt(peAU->text()) : gs.rspace;
   int nTrack = gs.objTrack, nLeft = 0;
 
   if (peTrack != NULL) {
@@ -1786,7 +1815,7 @@ void ShowGraphicsSettingsDialogQt()
   // frees it here (wdialog.cpp:3014) and so does the "-YXj" switch
   // handler; this assigned the field and nothing else.
   if (peSpace != NULL) {
-    int cspaceNew = peSpace->text().toInt();
+    int cspaceNew = NFieldQt(peSpace->text());
 
     if (gs.cspace != cspaceNew) {
       gs.cspace = cspaceNew;
@@ -3093,7 +3122,7 @@ void ShowDefaultInfoDialogQt()
   if (pcbTmp != NULL) { ba = pcbTmp->currentText().toLocal8Bit();
     us.tmpDef = RParseSz(ba.constData(), pmTmp); }
   if (pcbCor != NULL)
-    us.lTimeAddition = pcbCor->currentText().toLong();
+    us.lTimeAddition = NFieldQt(pcbCor->currentText());
   // SzClone and assign, NOT FCloneSz. A CI's nam and loc are copied
   // around by value all over this program -- ciCore into ciMain, ciTwin
   // and the whole chart ring at startup, into ciSave by the dialog below,
@@ -3230,8 +3259,8 @@ void ShowTransitDialogQt()
     RParseSz(pcbDst->currentText().toLocal8Bit().constData(), pmDst) : DstT;
   zon = pcbZon != NULL ?
     RParseSz(pcbZon->currentText().toLocal8Bit().constData(), pmZon) : ZonT;
-  nty = peYears != NULL ? peYears->text().toInt() : us.nEphemYears;
-  nd = peDiv != NULL ? peDiv->text().toInt() : us.nDivision;
+  nty = peYears != NULL ? NFieldQt(peYears->text()) : us.nEphemYears;
+  nd = peDiv != NULL ? NFieldQt(peDiv->text()) : us.nDivision;
 
   if (!FValidMon(mon))           { ErrorEnsureQt(&dlg, mon, "month"); return; }
   if (!FValidYea(yea))           { ErrorEnsureQt(&dlg, yea, "year"); return; }
@@ -3560,12 +3589,12 @@ void ShowChartSettingsDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
-  nw = peWheel != NULL ? peWheel->text().toInt() : us.nWheelRows;
-  nl = peStep != NULL ? peStep->text().toInt() : us.nAstroGraphStep;
-  nl2 = peDist != NULL ? peDist->text().toInt() : us.nAstroGraphDist;
-  np = pePart != NULL ? pePart->text().toInt() : us.nArabicParts;
-  nn = peCity != NULL ? peCity->text().toInt() : us.nAtlasList;
-  yb = peBio != NULL ? peBio->text().toInt() : us.nBioday;
+  nw = peWheel != NULL ? NFieldQt(peWheel->text()) : us.nWheelRows;
+  nl = peStep != NULL ? NFieldQt(peStep->text()) : us.nAstroGraphStep;
+  nl2 = peDist != NULL ? NFieldQt(peDist->text()) : us.nAstroGraphDist;
+  np = pePart != NULL ? NFieldQt(pePart->text()) : us.nArabicParts;
+  nn = peCity != NULL ? NFieldQt(peCity->text()) : us.nAtlasList;
+  yb = peBio != NULL ? NFieldQt(peBio->text()) : us.nBioday;
   if (!FValidWheel(nw))       { ErrorEnsureQt(&dlg, nw, "wheel row"); return; }
   if (!FValidAstrograph(nl))  { ErrorEnsureQt(&dlg, nl, "astrocartography step"); return; }
   if (nl2 < 0)                { ErrorEnsureQt(&dlg, nl2, "latitude crossing count"); return; }
@@ -3595,7 +3624,7 @@ void ShowChartSettingsDialogQt()
         us.nAspectSort = i;
   }
   if (peRatio != NULL)
-    us.rRatio = peRatio->text().toDouble();
+    us.rRatio = RFieldQt(peRatio->text());
   if (pcbDecan != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbDecan->currentText().toLocal8Bit().constData());
@@ -3844,9 +3873,9 @@ void ShowAspectDialogQt()
     if (rgpcbRes[i] == NULL)
       continue;
     ignorea[ASPT(i)] = rgpcbRes[i]->isChecked();
-    rAspOrb[ASPT(i)] = rgpeOrb[i]->text().toDouble();
-    rAspAngle[ASPT(i)] = rgpeAngle[i]->text().toDouble();
-    rAspInf[ASPT(i)] = rgpeInf[i]->text().toDouble();
+    rAspOrb[ASPT(i)] = RFieldQt(rgpeOrb[i]->text());
+    rAspAngle[ASPT(i)] = RFieldQt(rgpeAngle[i]->text());
+    rAspInf[ASPT(i)] = RFieldQt(rgpeInf[i]->text());
     kAspA[ASPT(i)] = NColorFromComboQt(rgpcbColor[i]);
   }
   AdjustAspectCount();
@@ -3985,9 +4014,9 @@ void ShowObjectDialogQt()
   for (i = 0; i <= oCore; i++) {
     if (rgpeOrb[i] == NULL)
       continue;
-    rgobjset[i].orb = rgpeOrb[i]->text().toDouble();
-    rgobjset[i].add = rgpeAdd[i]->text().toDouble();
-    rgobjset[i].inf = rgpeInf[i]->text().toDouble();
+    rgobjset[i].orb = RFieldQt(rgpeOrb[i]->text());
+    rgobjset[i].add = RFieldQt(rgpeAdd[i]->text());
+    rgobjset[i].inf = RFieldQt(rgpeInf[i]->text());
     rgobjset[i].kolor = NColorFromComboQt(rgpcbColor[i]);
   }
   RecastAndRedrawQt();
@@ -4040,9 +4069,9 @@ void ShowObject2DialogQt()
     if (rgpeOrb[j] == NULL)
       continue;
     i = rgi[j];
-    rgobjset[i].orb = rgpeOrb[j]->text().toDouble();
-    rgobjset[i].add = rgpeAdd[j]->text().toDouble();
-    rgobjset[i].inf = rgpeInf[j]->text().toDouble();
+    rgobjset[i].orb = RFieldQt(rgpeOrb[j]->text());
+    rgobjset[i].add = RFieldQt(rgpeAdd[j]->text());
+    rgobjset[i].inf = RFieldQt(rgpeInf[j]->text());
     rgobjset[i].kolor = NColorFromComboQt(rgpcbColor[j]);
   }
   RecastAndRedrawQt();
@@ -4184,7 +4213,7 @@ void ShowCalcDialogQt()
       rx = rDegMax / rx;
   }
   if (peDwad != NULL)
-    n4 = peDwad->text().toInt();
+    n4 = NFieldQt(peDwad->text());
   if (peSolar != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       peSolar->text().toLocal8Bit().constData());
@@ -4466,9 +4495,9 @@ void ShowDisplayDialogQt()
     nro = NParseSz(sz, pmObject);
   }
   if (peWid != NULL)
-    ni = peWid->text().toInt();
+    ni = NFieldQt(peWid->text());
   if (peSta != NULL)
-    ryw = peSta->text().toDouble();
+    ryw = RFieldQt(peSta->text());
   if (!FValidAspect(na)) {
     ErrorEnsureQt(&dlg, na, "aspect count");
     return;
@@ -4604,9 +4633,9 @@ void ShowMoonObjectDialogQt()
     j = i - moonsLo;
     if (rgpeOrb[j] == NULL)
       continue;
-    rgobjset[i].orb = rgpeOrb[j]->text().toDouble();
-    rgobjset[i].add = rgpeAdd[j]->text().toDouble();
-    rgobjset[i].inf = rgpeInf[j]->text().toDouble();
+    rgobjset[i].orb = RFieldQt(rgpeOrb[j]->text());
+    rgobjset[i].add = RFieldQt(rgpeAdd[j]->text());
+    rgobjset[i].inf = RFieldQt(rgpeInf[j]->text());
     rgobjset[i].kolor = NColorFromComboQt(rgpcbColor[j]);
   }
   RecastAndRedrawQt();
