@@ -9978,6 +9978,44 @@ are the more useful half to read before starting something new.
     chart draws should not have its inputs chosen by the group before it.
     The object-set pin stays, for that reason rather than for speed.
 
+237. **The text pager froze the window.** The same sweep run the other
+    way round -- `#ifndef WIN` rather than `#ifdef WIN`, which is where a
+    behaviour Windows deliberately *removes* for its GUI would be
+    inherited here.
+
+    `-YQ <rows>` stops a text chart after that many rows and asks the
+    reader to press return. In the Qt GUI `is.S == stdout` means the chart
+    is being drawn into the **canvas**, so the prompt went somewhere
+    nobody could answer and `InputString()` blocked the whole event loop.
+
+    Measured, with a stdin that stays open: `RedrawQt()` on a text chart
+    with `-YQ 3` **never returned** -- killed at 25 seconds, having drawn
+    nothing. With stdin at `/dev/null`, which is what a desktop launcher
+    gives, it instead ate one silent read per chart and then carried on.
+    And `-YQ` is a setting `FOutputSettings()` writes, so anyone who had
+    ever set it owned a GUI that hung on text charts.
+
+    Windows takes the whole block out with `#ifndef WIN`. This build
+    cannot: with graphics off (`_X`) it is a console program, and there
+    the pager is right -- `run-qt-tests.sh` has two probes that exercise
+    it. `gi.qwind` is the difference, NULL until `BeginQt()` has made a
+    window, so that is the guard.
+
+    **A regression here is a hang, not a failure**, which is why the
+    assertion is on the row count reaching the far side of the limit: the
+    pager resets `is.cchRow` at every prompt, so a build that paged and
+    somehow returned would come back short too. Falsified with stdin at
+    `/dev/null` so it could not hang: the guard removed, the run does not
+    fail, it **exits 2** in the middle of that group, because the prompt
+    reads EOF and `Terminate(tcForce)` ends the process.
+
+    Three earlier measurements pointed away from this and are worth
+    recording as such: `./astrolog-qt -YQ 5 -v` from a shell stays up,
+    `wchan` reads `do_poll` rather than a read on stdin, and the same run
+    with `_X` exits 2 -- which is console mode behaving correctly, not the
+    GUI. Only driving `RedrawQt()` directly, with a fifo held open, showed
+    it.
+
 
 ## Features this fork adds to both builds
 

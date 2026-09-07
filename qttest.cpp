@@ -3406,6 +3406,53 @@ static void TestKeyHelpQt()
 }
 
 
+// The text pager, which froze the window.
+//
+// "-YQ <rows>" stops after that many rows and asks the reader to press
+// return. In the Qt GUI "is.S == stdout" means the chart is being drawn
+// into the CANVAS, so the prompt went somewhere nobody could answer and
+// InputString() blocked the entire event loop. Windows removes the whole
+// block with "#ifndef WIN"; this build cannot, because it is also a
+// console program when graphics are off, so the guard is gi.qwind.
+//
+// Measured before the fix, with a stdin that stays open: RedrawQt() on a
+// text chart with "-YQ 3" never returned -- killed at 25 seconds, having
+// drawn nothing. After: it returns, with 23 rows drawn. And "-YQ" is a
+// setting FOutputSettings() writes, so anyone who ever set it had a GUI
+// that hung on text charts.
+//
+// A regression here shows up as a HANG rather than a failure, caught by
+// the watchdog in ci-run-suite.sh. That is why the assertion is on the
+// row count reaching the far side of the limit: the pager resets
+// is.cchRow every time it prompts, so a build that paged and somehow
+// returned would come back short as well.
+
+static void TestPagerQt()
+{
+  int nScrollSav = us.nScrollRow, nModeSav = gi.nMode;
+  flag fGraphicsSav = us.fGraphics;
+
+  Group("Text pager in a window");
+
+  us.fGraphics = fFalse;
+  SetChartModeQt(gWheel);
+  us.nScrollRow = 3;
+  is.cchRow = 0;
+  RedrawQt();
+  us.nScrollRow = nScrollSav;
+
+  Check(is.cchRow > 3,
+    "a text chart draws past the \"-YQ\" limit instead of stopping to "
+    "ask a question nobody can answer (%d rows)", is.cchRow);
+  Check(gi.qwind != NULL,
+    "and it is a window that makes that the right answer");
+
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+  RedrawQt();
+}
+
+
 static void TestChartScrollQt()
 {
   int nModeSav = gi.nMode, xSav = gs.xWin, ySav = gs.yWin;
@@ -11104,6 +11151,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   // tidiness one: a transit graph in the state that group leaves behind
   // takes five seconds a render rather than a tenth, and this draws
   // three. Measured at 42 s after it and 0.5 s before.
+  {"text-pager",           TestPagerQt},
   {"chart-scroll",         TestChartScrollQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},

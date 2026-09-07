@@ -1284,7 +1284,25 @@ void PrintSz(CONST char *sz)
     // InputString() documents. It is the SECOND and later pages that had
     // nothing to gain and, under -0q where Terminate() returns, prompted
     // once per screen for the rest of the run.
+    //
+    // And not when a WINDOW is up. In the Qt build "is.S == stdout" means
+    // the chart is being drawn into the canvas, so the prompt goes
+    // somewhere nobody can answer and InputString() blocks the entire
+    // event loop. Measured: RedrawQt() on a text chart with "-YQ 3" and a
+    // stdin that stays open never returns, and "-YQ" is a setting
+    // FOutputSettings() writes -- so anyone who ever set it had a GUI
+    // that froze on text charts. With stdin at /dev/null, which is what a
+    // desktop launcher gives, it instead ate one silent read per chart.
+    //
+    // Windows removes the whole block with "#ifndef WIN". This build
+    // cannot: it is also a console program when graphics are off ("_X"),
+    // and there the pager is right -- run-qt-tests.sh has two probes that
+    // exercise it. gi.qwind is the difference, NULL until BeginQt() has
+    // made a window.
     if (ch == '\n' && is.S == stdout &&
+#ifdef QT
+      gi.qwind == NULL &&
+#endif
       us.nScrollRow > 0 && is.cchRow >= us.nScrollRow && !feof(stdin)) {
 
       // If have printed 'n' rows, stop and wait for a line to be entered.
