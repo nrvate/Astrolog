@@ -368,7 +368,16 @@ protected:
     // chart -- with that off the chart keeps its size and this widget is
     // sized to match it (ApplySizeModeQt), so redrawing to fit here
     // would fight that and repaint forever.
-    if (qi.fReady && qi.fWindowChart &&
+    //
+    // Graphics only. A text chart's canvas is the size of the TEXT, which
+    // can be larger than the window on purpose so the scroll area can
+    // reach the rest of it; chasing that here would write the text's width
+    // into gs.xWin and make "Save Program Settings" record it as the chart
+    // size. Nothing is lost by not chasing: a text chart's layout does not
+    // depend on gs.xWin at all -- its width comes from what it prints and
+    // from us.fClip80/us.nScreenWidth -- so there is nothing to re-lay-out
+    // when the window changes.
+    if (qi.fReady && qi.fWindowChart && us.fGraphics &&
       width() >= 1 && height() >= 1 &&
       (gi.qim == NULL || gi.qim->width() != width() ||
       gi.qim->height() != height())) {
@@ -1389,14 +1398,76 @@ void RedrawQt()
     qi.kvText = KvFromKi(kLtGrayA);
     is.cchRow = is.cchCol = is.cchColMax = 0;
     FILE *fileSav = is.S;
+    flag fMultSav;
     is.S = stdout;
     Action();
+
+    // A text chart is as big as it prints, and that has nothing to do with
+    // the window: is.cchColMax and is.cchRow come from the chart and from
+    // us.fClip80/us.nScreenWidth. Drawn into a buffer the size of the
+    // window, anything past the edge was simply GONE -- measured at the
+    // compiled default 600x600 window, the aspect grid prints 56 rows and
+    // 40 of them fit, and the ephemeris listing prints 99 columns where 75
+    // fit. Windows loses nothing there because its window scrolls over a
+    // virtual area (the wi.xScroll/wi.yScroll offsets in PrintSz); this
+    // port's answer is the scroll area it already has, which needs the
+    // canvas to be the size of the text.
+    //
+    // Two passes only when the first did not fit, and the second is
+    // PrintChart() rather than Action(): the chart is already cast, and
+    // repeating Action() would cast it again and fire the "-~Q1"/"-~Q2"
+    // display hooks a second time.
+    int dxText = is.cchColMax * qi.xChar + 8;
+    int dyText = (is.cchRow + 1) * qi.yChar;
+    if (dxText > gi.qim->width() || dyText > gi.qim->height()) {
+      delete gi.qpaint;
+      delete gi.qim;
+      // Bounded by what the canvas can be, which is Astrolog's own chart
+      // size limit: the canvas carries setMaximumSize(BITMAPX, BITMAPY),
+      // and a buffer larger than the canvas would put the excess back out
+      // of reach, which is the bug this is fixing.
+      gi.qim = new QImage(Min(Max(dxText, dxWin), BITMAPX),
+        Min(Max(dyText, dyWin), BITMAPY), QImage::Format_RGB32);
+      gi.qim->fill(QColor(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack)));
+      gi.qpaint = new QPainter(gi.qim);
+      gi.qpaint->setRenderHint(QPainter::TextAntialiasing,
+        FConsoleAntialiasQt());
+      gi.qpaint->setFont(qi.fontText);
+      qi.kvText = KvFromKi(kLtGrayA);
+      is.cchRow = is.cchCol = is.cchColMax = 0;
+      // Action()'s own text half, minus the cast and minus the "-~Q1" /
+      // "-~Q2" hooks, both of which the first pass already did. Calling
+      // PrintChart() alone was tried and is wrong: the eleven Help menu
+      // chart types -- the credits, the sign and object lists, the
+      // keystroke list -- are printed by FPrintTables(), not by
+      // PrintChart(), so a second pass without it redrew the ordinary
+      // chart in their place. Only the "credit-colors" group under
+      // "-i nrvate.as" caught that, because only there was the box big
+      // enough to need a second pass at all.
+      fMultSav = is.fMult;
+      is.fMult = fFalse;
+      if (!FPrintTables()) {
+        if (is.fMult) {
+          PrintL2();
+          is.fMult = fFalse;
+        }
+        PrintChart(is.fProgress);
+      }
+      is.fMult = fMultSav;
+    }
     is.S = fileSav;
     delete gi.qpaint;
     gi.qpaint = NULL;
     gs.xWin = dxWin; gs.yWin = dyWin;
-    if (gi.qcanvas != NULL)
+    if (gi.qcanvas != NULL) {
+      // The scroll area sizes the canvas to the viewport when "Window
+      // Resizes Chart" is on, which is exactly what must not happen here.
+      // ApplySizeModeQt() puts it back on the way to the next graphics
+      // chart.
+      qi.pscroll->setWidgetResizable(fFalse);
+      gi.qcanvas->resize(gi.qim->width(), gi.qim->height());
       gi.qcanvas->update();
+    }
     NotifyRedrawQt();
     return;
   }
@@ -1431,10 +1502,10 @@ void RedrawQt()
   if (gi.qcanvas != NULL) {
     // With the chart keeping its own size, the canvas has to be resized to
     // match whenever the chart changes size, or the scroll area would keep
-    // scrolling over the old extent.
-    if (!qi.fWindowChart &&
-      (gi.qcanvas->width() != gs.xWin || gi.qcanvas->height() != gs.yWin))
-      gi.qcanvas->resize(gs.xWin, gs.yWin);
+    // scrolling over the old extent. ApplySizeModeQt() does that, and also
+    // puts setWidgetResizable() back to what "Window Resizes Chart" says
+    // -- which the text branch above turns off while a text chart is up.
+    ApplySizeModeQt();
     gi.qcanvas->update();
   }
   // Chart Resizes Window: fit the window around whatever was just drawn.

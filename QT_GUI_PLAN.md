@@ -1429,6 +1429,8 @@ are the more useful half to read before starting something new.
       tracks the viewport, exactly as before. With it off the canvas is
       sized to the chart and real scrollbars appear when the chart is
       larger than the window.
+    - Text charts size the canvas to the TEXT rather than to the window,
+      for the same reason and by the same mechanism; see work log item 246.
     - That is why none of Windows' `wi.xScroll` / `gi.xOffset` panning
       arithmetic (xscreen.cpp:396) is ported: Qt scrolls the viewport
       itself, and gets mouse wheel and keyboard scrolling for free. The
@@ -10354,6 +10356,94 @@ are the more useful half to read before starting something new.
     **Windows has the identical unguarded read** (`wdialog.cpp:2949`,
     `2953`, `2974`). This is upstream's shape, corrected on the side that
     can be tested here.
+
+
+246. **Text charts bigger than the window were cut off with nothing able
+    to reach the rest.** The worst defect found in a while, and reachable
+    at the compiled default window size with no settings changed at all.
+
+    A text chart is as big as it prints. `is.cchColMax` and `is.cchRow`
+    come from the chart and from `us.fClip80`/`us.nScreenWidth` -- not from
+    the window. This port drew them into a buffer sized `gs.xWin` by
+    `gs.yWin`, so anything past the edge was simply gone. Measured at
+    600x600, which is what `xdata.cpp` starts with:
+
+    ```
+    wheel       23 rows x  78 cols      (75 columns fit)
+    ephemeris   31 rows x  99 cols      (75 fit)
+    grid        56 rows x  69 cols      (40 rows fit)
+    ```
+
+    So the aspect grid lost 16 of its 56 rows and the ephemeris listing a
+    quarter of its width, with no scrollbar, no menu command and no window
+    size able to bring them back on an ordinary screen.
+
+    Windows loses nothing: `PrintSz()`'s `WIN` branch draws each character
+    at `(is.cchCol - 1 - wi.xScroll * 10) * wi.xChar` by
+    `(is.cchRow - wi.yScroll * 10) * wi.yChar`, so the fixed window scrolls
+    over a virtual area. **That mechanism was tried here first and put
+    back**: porting the vertical half made Page Down move `nScrollPage`
+    units of ten rows -- sixty rows -- which for a 56 row chart scrolls the
+    whole thing off the top. That is faithful, and on Windows the usable
+    control for a chart that size is the scrollbar rather than the menu.
+    A Qt text canvas sized to the viewport has no scrollbar to offer.
+
+    The fix is the one this document already describes as the port's
+    design (see "The canvas lives in a `QScrollArea`"): make the canvas the
+    size of the chart and let the scroll area do the rest. Three parts:
+
+    * The text branch of `RedrawQt()` measures what the chart printed, and
+      when it did not fit, reallocates the buffer to `Max(text, window)`
+      -- bounded by `BITMAPX`/`BITMAPY`, since the canvas carries that
+      maximum and a buffer past it would put the excess back out of reach.
+      The second pass is `PrintChart()`, not `Action()`: the chart is
+      already cast, and repeating `Action()` would cast it again and fire
+      the `-~Q1`/`-~Q2` display hooks twice. `is.fMult` is borrowed around
+      it, because `PrintChart()` reads it to decide on a separator.
+    * The canvas is then sized to the buffer, with
+      `setWidgetResizable(fFalse)`; the graphics path calls
+      `ApplySizeModeQt()`, which puts the scroll area back to what "Window
+      Resizes Chart" says.
+    * `paintEvent()` no longer chases the canvas size in text mode. It
+      would otherwise write the *text's* width into `gs.xWin`, and "Save
+      Program Settings" would record that as the chart size. Nothing is
+      lost by not chasing, for the reason at the top: a text chart's layout
+      does not depend on `gs.xWin`.
+
+    New group `text-extent`, and the invariant is **ink, not rows**: the
+    same characters are drawn either way, so a 600x600 window and a
+    1400x1400 one must produce exactly the same number of non-background
+    pixels. Measured at a difference of **0** over three charts. Falsified
+    by disabling the reallocation: the grid loses 11,858 pixels of ink, the
+    ephemeris 27,426, the wheel 2,193.
+
+    **Two things this broke on the way, both caught by running the suite in
+    BOTH configurations**, which is the only reason they were seen:
+
+    * The second pass was `PrintChart()` alone at first. Eleven chart types
+      -- the credits, the sign and object lists, the keystroke list, every
+      Help menu listing -- are printed by `FPrintTables()`, not by
+      `PrintChart()`, so those redrew the ordinary chart in their place.
+      Only `credit-colors` under `-i nrvate.as` caught it, because only
+      there is the box big enough to need a second pass at all.
+    * `credit-colors` itself then failed for a different reason, and its
+      metric had to be replaced. Both of its earlier forms -- total ink,
+      and the biggest per-row difference in ink -- worked only while the
+      box was being **clipped**. With the whole box visible, the two
+      "Special thanks" lines at the bottom came into view; they are drawn
+      in `kBlueA`, and blue antialiases against black and against white
+      differently enough to move one row by **309 pixels**, twice what the
+      version line itself is worth. It counts the ink COLOUR in the top
+      eighth of the box now -- the region that holds the border and the
+      version line and nothing else -- which is a zero tolerance test: the
+      same glyphs either way, so 295 white pixels on black and 295 black
+      on white, and 22 against 22 in the other configuration. With the bug
+      the white render has **0**.
+
+      That is the third metric this one assertion has been through, and the
+      lesson is the one item 240 already recorded, arriving from a new
+      direction: a whole-image statistic is hostage to everything else in
+      the image.
 
 
 ### A knowing divergence found in the same sweep, and left alone
