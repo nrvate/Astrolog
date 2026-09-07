@@ -1051,17 +1051,53 @@ void PasteChartQt()
 //   is.S          the nested Action() opens it on the file and fcloses
 //                 it, but never restores the caller's -- leaving is.S on
 //                 a closed FILE and arming a double fclose at exit.
+//
+// And "Export Text and Print in Intuitive Manner" (us.fSmartSave, "-YO",
+// on by DEFAULT), which is the whole of what Windows does around its own
+// three text captures -- Save Text, Copy Text and printing a text chart,
+// wdriver.cpp:2777 and 2852. Two shapes, chosen the way Windows chooses
+// them, on whether the capture is HTML:
+//
+//   plain text: turn off Ansi colour and Ansi characters, so an exported
+//               ".txt" is text rather than a file full of "ESC[1;31m"
+//               and code page 437 box edges. Nothing did this here, and
+//               "Colored Text" in the View menu turns BOTH of those on.
+//   HTML:       force the white-background palette instead. Astrolog's
+//               HTML page has a white body and SzColorHTML() reads
+//               rgbbmp[], so without the swap a chart written for a black
+//               background is printed onto a white page. Ansi characters
+//               go off here too, as they do on Windows.
+//
+// InitColorPalette() is a no-op unless "Alternate Color Palette"
+// (gs.fAltPalette) is on, which is what makes the second palette exist;
+// calling it either way is what Windows does.
 
 void CaptureTextToFileQt(CONST char *szFile, flag fHTML)
 {
   flag fGraphicsSave = us.fGraphics, fTextHTMLSave = us.fTextHTML;
+  flag fAnsiColorSave = us.fAnsiColor, fAnsiCharSave = us.fAnsiChar;
+  flag fInverseSave = gs.fInverse, fSmart = us.fSmartSave;
   FILE *fileSave = is.S;
 
   us.fGraphics = fFalse;
   us.fTextHTML = fHTML;
+  if (fSmart) {
+    us.fAnsiChar = fFalse;
+    if (!fHTML)
+      us.fAnsiColor = fFalse;
+    else {
+      gs.fInverse = fTrue;
+      InitColorPalette(1);
+    }
+  }
   FCloneSz(szFile, &is.szFileScreen);
   Action();
   FCloneSz(NULL, &is.szFileScreen);
+  if (fSmart && fHTML)
+    InitColorPalette(fInverseSave);
+  gs.fInverse = fInverseSave;
+  us.fAnsiChar = fAnsiCharSave;
+  us.fAnsiColor = fAnsiColorSave;
   us.fTextHTML = fTextHTMLSave;
   us.fGraphics = fGraphicsSave;
   is.S = fileSave;

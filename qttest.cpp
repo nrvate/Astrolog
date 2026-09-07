@@ -2610,6 +2610,92 @@ static void TestTextExportQt()
   }
   Check(cb > 100, "and actually wrote the chart (%ld bytes)", cb);
   QFile::remove(QString(szFile));
+
+  // The HTML half of "Export Text and Print in Intuitive Manner"
+  // (us.fSmartSave, "-YO"), which is the shape Windows uses for printing
+  // a text chart and for Save/Copy Text with HTML output on. Astrolog's
+  // HTML page has a white body and SzColorHTML() reads rgbbmp[], so
+  // without the swap a chart coloured for a black background is printed
+  // onto a white one. Windows does InitColorPalette(1) for the length of
+  // the capture and puts it back (wdriver.cpp:2864 and 2902); nothing
+  // here did.
+  //
+  // Only observable with "Alternate Color Palette" on, since that is what
+  // makes the second palette exist -- InitColorPalette() is a no-op
+  // otherwise, on both builds.
+  {
+    flag fAltSav = gs.fAltPalette, fColorSav = us.fAnsiColor;
+    flag fSmartSav = us.fSmartSave, fInvSav = gs.fInverse;
+    flag fCharSav = us.fAnsiChar;
+    KV rgbbmpSav[cColor2];
+    QByteArray baOff, baOn;
+    QFile fileHtml;
+
+    CopyRgb((pbyte)rgbbmp, (pbyte)rgbbmpSav, sizeof(rgbbmp));
+    gs.fAltPalette = fTrue;
+    us.fAnsiColor = fTrue;
+    // Ansi CHARACTERS off in both captures on purpose. Smart Save turns
+    // them off as well, and with them left on the two files differ over
+    // the box edges alone -- which is a true difference and the wrong
+    // one, and it made this pass with the palette swap sabotaged.
+    us.fAnsiChar = fFalse;
+
+    us.fSmartSave = fFalse;
+    QFile::remove(QString(szFile));
+    CaptureTextToFileQt(szFile, fTrue);
+    fileHtml.setFileName(QString(szFile));
+    if (fileHtml.open(QIODevice::ReadOnly))
+      baOff = fileHtml.readAll();
+    fileHtml.close();
+
+    us.fSmartSave = fTrue;
+    QFile::remove(QString(szFile));
+    CaptureTextToFileQt(szFile, fTrue);
+    fileHtml.setFileName(QString(szFile));
+    if (fileHtml.open(QIODevice::ReadOnly))
+      baOn = fileHtml.readAll();
+    fileHtml.close();
+    QFile::remove(QString(szFile));
+
+    Check(baOff.size() > 100 && baOn.size() > 100,
+      "both HTML captures wrote a chart (%d and %d bytes)",
+      (int)baOff.size(), (int)baOn.size());
+    Check(baOff != baOn,
+      "and Smart Save colours the HTML one for a white page instead");
+    Check(memcmp(rgbbmp, rgbbmpSav, sizeof(rgbbmp)) == 0,
+      "and puts the palette back when it is done");
+    Check(gs.fInverse == fInvSav, "and gs.fInverse with it");
+
+    // The assertion above cannot isolate the palette, and that matters:
+    // gs.fInverse alone moves the file, because the chart header's colour
+    // follows it (charts0.cpp:109). The first draft of this passed with
+    // the palette swap deliberately broken for exactly that reason. So
+    // ask about the palette directly -- bright green, which the two
+    // tables disagree about (0x00ff00 against 0x009f00) and which every
+    // text chart uses.
+    {
+      QByteArray baAlt, baStd;
+
+      gs.fAltPalette = fTrue;
+      InitColorPalette(1);
+      baAlt = SzColorHTML(kGreen);
+      InitColorPalette(0);
+      baStd = SzColorHTML(kGreen);
+      Check(!baAlt.isEmpty() && baAlt != baStd,
+        "the two palettes disagree about bright green (\"%s\" against "
+        "\"%s\")", baAlt.constData(), baStd.constData());
+      Check(baOn.contains(baAlt),
+        "and the Smart Save capture wrote the white-page one");
+      Check(!baOff.contains(baAlt),
+        "where the capture without it did not");
+    }
+
+    us.fSmartSave = fSmartSav;
+    us.fAnsiColor = fColorSav;
+    us.fAnsiChar = fCharSav;
+    gs.fAltPalette = fAltSav;
+    CopyRgb((pbyte)rgbbmpSav, (pbyte)rgbbmp, sizeof(rgbbmp));
+  }
 }
 
 
@@ -8208,7 +8294,13 @@ static void TestCopyTextBomQt()
   // paste target convert.
   {
     flag fAnsiCharSav = us.fAnsiChar, fAnsiColorSav = us.fAnsiColor;
+    flag fSmartSaveSav = us.fSmartSave;
     us.fAnsiChar = fTrue; us.fAnsiColor = fFalse;
+    // Smart Save off, or there are no IBM line characters to ask about:
+    // it is what strips them, on Windows and now here. This block is
+    // about the ENCODING of what does get copied, so it has to reach the
+    // path where something is. The pair below is the other half.
+    us.fSmartSave = fFalse;
     us.nCharsetOut = ccNone;
     // gHouse, not gWheel. rgchartmode[] maps gHouse to us.fWheel and
     // gWheel to us.fListing (xscreen.cpp:1392 and 1409), so the obvious
@@ -8226,6 +8318,26 @@ static void TestCopyTextBomQt()
       "IBM line characters survive the trip to the clipboard");
     Check(str.contains(QChar(0x2502)) || str.contains(QChar(0x2500)),
       "and arrive as real box drawing, not as something else");
+
+    // "Export Text and Print in Intuitive Manner" (us.fSmartSave, "-YO"),
+    // which is on by DEFAULT and which this build ignored: Windows turns
+    // Ansi characters and Ansi colour off around Save Text and Copy Text
+    // (wdriver.cpp:2777), so an exported ".txt" is text. Here it was a
+    // file of "ESC[1;31m" and code page 437 box edges whenever "Colored
+    // Text" was on. Both halves, since the assertions above are the
+    // "off" half only for the characters.
+    us.fAnsiChar = fTrue; us.fAnsiColor = fTrue;
+    us.fSmartSave = fTrue;
+    QApplication::clipboard()->setText(QString("sentinel"));
+    pa->trigger();
+    str = QApplication::clipboard()->text();
+    Check(!str.isEmpty() && str != QString("sentinel"),
+      "with Smart Save on the copy still happens");
+    Check(!str.contains(QChar(0x2502)) && !str.contains(QChar(0x2500)),
+      "and it strips the box drawing, as Windows does");
+    Check(!str.contains(QChar(0x1B)),
+      "and the Ansi colour escapes with it");
+    us.fSmartSave = fSmartSaveSav;
     us.fAnsiChar = fAnsiCharSav; us.fAnsiColor = fAnsiColorSav;
   }
 

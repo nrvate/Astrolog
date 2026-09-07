@@ -9145,6 +9145,50 @@ are the more useful half to read before starting something new.
     `ShowOpenChartDialogQt()` is now three lines calling
     `ShowOpenChartIntoDialogQt(1)`, and there is one filter list.
 
+215. **An exported text chart was full of `ESC[1;31m`.** "Export Text and
+    Print in Intuitive Manner" (`us.fSmartSave`, `-YO`) is **on by
+    default** -- `astrolog.as` line 46 says `=YO` -- and this build had
+    never looked at it for text. Found the same way as item 213, one axis
+    over: comparing shared-core *call counts* between the two GUI
+    backends rather than which names appear. `InitColorPalette` read
+    three on Windows against one here.
+
+    Windows wraps all three of its text captures -- Save Text, Copy Text
+    and printing a text chart (wdriver.cpp:2777 and 2852) -- in one of two
+    shapes:
+
+    - **plain text**: `us.fAnsiColor` and `us.fAnsiChar` off, so an
+      exported `.txt` is text rather than a file of ANSI escapes and code
+      page 437 box edges. **"Colored Text" in the View menu turns both of
+      those on**, which is what makes this reachable at all.
+    - **HTML**: `gs.fInverse` on and `InitColorPalette(1)`, so the chart
+      is coloured for the white page Astrolog's HTML actually has --
+      `SzColorHTML()` reads `rgbbmp[]`, which is the table that call
+      swaps. `us.fAnsiChar` off here too.
+
+    All three of this port's captures already funnel through
+    `CaptureTextToFileQt()`, and Windows chooses between the two shapes on
+    exactly the argument that funnel already takes, so the whole of it is
+    seven lines there. The graphics print path keeps its own
+    `us.fSmartSave` handling, which is what Windows' `DlgPrint()` does and
+    is a different thing.
+
+    **The existing regression test for item 196 had to be told to turn
+    Smart Save off.** It asserts that IBM line characters survive the trip
+    to the clipboard, and with the default on there are no line characters
+    to survive -- Windows strips them too. It now pins the flag off, says
+    why, and is followed by the other half: with Smart Save on, no box
+    drawing and no escapes.
+
+    **The HTML assertion needed two goes.** "The two captures differ" is
+    satisfied by `gs.fInverse` alone, because the chart header's colour
+    follows it (charts0.cpp:109) -- so the first draft passed with the
+    palette swap deliberately broken. It asks about the palette directly
+    now: bright green, which the two tables disagree about (`0x00ff00`
+    against `0x009f00`), must appear in the file as the white-page value
+    and must not appear in the file captured without Smart Save. That one
+    fails when the swap is removed.
+
 
 ## Features this fork adds to both builds
 
