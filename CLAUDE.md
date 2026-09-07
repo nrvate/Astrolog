@@ -297,17 +297,18 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Fifteen standing audits, all currently clean and all run by `make check`
-(and so by a release, which runs the same command) — six of the
+Sixteen standing audits, all currently clean and all run by `make check`
+(and so by a release, which runs the same command) — seven of the
 port against `astrolog.rc`, one of the Qt GUI against the Windows one, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of the settings dialogs against the settings writer,
 one of round-trip fixture coverage, one of line endings,
-one of the MSVC project against the makefile's source list, and one of
-the Qt build's own source groups and headers, and one of the image
+one of the MSVC project against the makefile's source list, one of
+the Qt build's own source groups and headers, one of the right-click
+menus against the menu resources, and one of the image
 writers against the format specifications. That last one needs a built
 `./astrolog`, so it runs after the build step rather than with the
-pure-Python ones. A sixteenth is listed below with them and is **not**
+pure-Python ones. A seventeenth is listed below with them and is **not**
 run by `make check`: the graphics matrix's own options.
 
 ```sh
@@ -359,6 +360,27 @@ python3 tools/rc_casttype_audit.py   # a control cast to the WRONG QT
                                      # QWidget * or QAbstractButton *
                                      # say nothing and are not counted
                                      # against
+python3 tools/rc_context_audit.py    # every RIGHT CLICK menu entry against
+                                     # the menu resource it was
+                                     # transcribed from. The suite's own
+                                     # group checks that each entry
+                                     # RESOLVES to a menu bar item and
+                                     # says so: it "deliberately says
+                                     # nothing about what is in these
+                                     # menus". This is the other half, and
+                                     # its first run found 19 labels in 18
+                                     # of the 42 menus with the mnemonic
+                                     # on the wrong letter -- because
+                                     # Windows gives one command
+                                     # DIFFERENT labels in different
+                                     # menus ("Print &Nearest Second" on
+                                     # the menu bar, "Print Nearest
+                                     # &Second" in every text popup) and
+                                     # the port reused the menu bar's.
+                                     # rc_mnemonic_audit.py owns the
+                                     # second field of a CTXITEM row and
+                                     # masks the first, or the two
+                                     # contradict each other
 python3 tools/backend_parity_audit.py # every us./gs. setting the WINDOWS
                                      # GUI acts on, the Qt GUI acts on
                                      # too -- the other half of

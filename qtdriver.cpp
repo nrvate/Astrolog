@@ -4070,7 +4070,7 @@ static CONST CTXITEM rgctxIndianQt[] = {
   {"Aspect Grid &Highlights Main Axis",     "Show &Glyphs on Aspect Lines"},
   {"Two &Letter Object Labels",             "Show Glyph &Labels"},
   {"Show &Degrees on Wheel",                "Show C&ities"},
-  {"Show Info &Sidebar",                    "Show Info &Sidebar"} };
+  {"Show &Info Sidebar",                    "Show Info &Sidebar"} };
 
 // Windows' menuG, the Grid chart.
 static CONST CTXITEM rgctxGridQt[] = {
@@ -4309,18 +4309,18 @@ static CONST CTXITEM rgctxTelescopeQt[] = {
   {"O&utline Occulted Planets",                 "Modif&y Chart"},
   {"&Label Planets",                            "Show Glyph &Labels"},
   {"Show &Big Planet Dots",                     "Modify &Display"},
-  {"Show Full &Star List",                      "Show Full &Star List"},
+  {"Show &Full Star List",                      "Show Full &Star List"},
   {"Show E&xoplanets",                          "Show E&xoplanets"},
   {"Show Degree &Grid",                         "Show C&ities"},
   {NULL, NULL},
-  {"Use Ecliptic &Axis",                        "Use Ecliptic &Axis"} };
+  {"Use &Ecliptic Axis",                        "Use Ecliptic &Axis"} };
 
 // Windows' menu_V, the Standard listing text chart.
 static CONST CTXITEM rgctxTxtListQt[] = {
   {"&View Graphics Mode Wheel",                 "Show &Graphics"},
   {NULL, NULL},
   {"Toggle &Comparison Chart",                  "Com&parison Chart"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"},
+  {"Print Nearest &Second",                     "Print &Nearest Second"},
   {"House Placements Based on &3D Houses",      "&3D Houses"} };
 
 // Windows' menu_W, the House wheel text chart.
@@ -4328,7 +4328,7 @@ static CONST CTXITEM rgctxTxtWheelQt[] = {
   {"&View Graphic House Wheel",                 "Show &Graphics"},
   {NULL, NULL},
   {"&Indian Sign Arrangement",                  "&Indian Wheel Order"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"},
+  {"Print Nearest &Second",                     "Print &Nearest Second"},
   {"House Placements Based on &3D Houses",      "&3D Houses"} };
 
 // Windows' menu_G, the Grid text chart.
@@ -4336,14 +4336,14 @@ static CONST CTXITEM rgctxTxtGridQt[] = {
   {"&View Graphic Grid",                        "Show &Graphics"},
   {NULL, NULL},
   {"Toggle &Comparison Chart",                  "Com&parison Chart"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"},
+  {"Print Nearest &Second",                     "Print &Nearest Second"},
   {"&Parallel Aspects",                         "&Parallel Aspects"},
   {"&Applying Aspects",                         "&Applying Aspects"} };
 
 // Windows' menu_A, the Aspect list text chart.
 static CONST CTXITEM rgctxTxtAspectQt[] = {
   {"Toggle &Comparison Chart",                  "Com&parison Chart"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"},
+  {"Print Nearest &Second",                     "Print &Nearest Second"},
   {"&Parallel Aspects",                         "&Parallel Aspects"},
   {"&Applying Aspects",                         "&Applying Aspects"} };
 
@@ -4352,7 +4352,7 @@ static CONST CTXITEM rgctxTxtMidpointQt[] = {
   {"&View Graphic Dial Chart",                  "Show &Graphics"},
   {NULL, NULL},
   {"Toggle &Comparison Chart",                  "Com&parison Chart"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"},
+  {"Print Nearest &Second",                     "Print &Nearest Second"},
   {"Show &Latitude Midpoints Too",              "&Parallel Aspects"},
   {"Midpoints are &3D",                         "&3D Houses"} };
 
@@ -4360,20 +4360,20 @@ static CONST CTXITEM rgctxTxtMidpointQt[] = {
 static CONST CTXITEM rgctxTxtHorizonQt[] = {
   {"&View Graphic Horizon Chart",               "Show &Graphics"},
   {NULL, NULL},
-  {"Print &Nearest Second",                     "Print &Nearest Second"},
+  {"Print Nearest &Second",                     "Print &Nearest Second"},
   {"Show &3D House Placements",                 "&3D Houses"} };
 
 // Windows' menu_S, the Orbit text chart.
 static CONST CTXITEM rgctxTxtOrbitQt[] = {
   {"&View Graphic Orbit Chart",                 "Show &Graphics"},
   {NULL, NULL},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_H, the Sector text chart.
 static CONST CTXITEM rgctxTxtSectorQt[] = {
   {"&View Graphic Sector Wheel",                "Show &Graphics"},
   {NULL, NULL},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_K, the Calendar text chart.
 static CONST CTXITEM rgctxTxtCalendarQt[] = {
@@ -4397,37 +4397,37 @@ static CONST CTXITEM rgctxTxtAstroGraphQt[] = {
   {"&View Graphic Astro-Graph Chart",           "Show &Graphics"},
   {NULL, NULL},
   {"Ignore Planet &Latitudes",                  "&3D Houses"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_E, the Ephemeris text chart.
 static CONST CTXITEM rgctxTxtEphemerisQt[] = {
   {"&View Graphic Ephemeris",                   "Show &Graphics"},
   {NULL, NULL},
   {"Ephemeris Shows &Latitudes",                "&Parallel Aspects"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_P, the Arabic parts text chart.
 static CONST CTXITEM rgctxTxtArabicQt[] = {
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_I, the Rising text chart.
 static CONST CTXITEM rgctxTxtRisingQt[] = {
   {"&View Graphic Rising Chart",                "Show &Graphics"},
   {NULL, NULL},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_N, the Nearest cities text chart.
 static CONST CTXITEM rgctxTxtLocalQt[] = {
   {"&View Graphic Local Space Chart",           "Show &Graphics"},
   {NULL, NULL},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_8, the Moons text chart.
 static CONST CTXITEM rgctxTxtMoonsQt[] = {
   {"&View Graphic Moons Chart",                 "Show &Graphics"},
   {NULL, NULL},
   {"&Parallel Aspects",                         "&Parallel Aspects"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_Ux, the Exoplanets text chart.
 static CONST CTXITEM rgctxTxtExoQt[] = {
@@ -4437,13 +4437,13 @@ static CONST CTXITEM rgctxTxtExoQt[] = {
 // Windows' menu_D, the Transit times text chart.
 static CONST CTXITEM rgctxTxtInDayQt[] = {
   {"&Parallel Aspects",                         "&Parallel Aspects"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_T, the Transit influence text chart.
 static CONST CTXITEM rgctxTxtTransInfQt[] = {
   {"&Parallel Aspects",                         "&Parallel Aspects"},
   {"&Applying Aspects",                         "&Applying Aspects"},
-  {"Print &Nearest Second",                     "Print &Nearest Second"} };
+  {"Print Nearest &Second",                     "Print &Nearest Second"} };
 
 // Windows' menu_B, the Transit graph text chart.
 static CONST CTXITEM rgctxTxtTransGraQt[] = {

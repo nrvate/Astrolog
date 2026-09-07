@@ -9645,6 +9645,38 @@ are the more useful half to read before starting something new.
     Falsified alone and in the full suite: four assertions, `-Wx 0` and
     `-Wx 13` both stored.
 
+228. **Nineteen context menu entries with the mnemonic on the wrong
+    letter, in 18 of the 42 menus.** The right-click menus were derived
+    from `astrolog.rc` by hand and nothing kept them in step; the suite's
+    own group says so out loud -- it checks that every entry **resolves**
+    to a menu bar item and "deliberately says nothing about *what* is in
+    these menus".
+
+    The mistake is one Windows sets a trap for: it gives a single command
+    **different labels in different menus**. `cmdSecond` is "Print
+    &Nearest Second" on the menu bar and "Print Nearest &Second" in every
+    text chart's popup. The port reused the menu bar spelling in all 16 of
+    those popups, plus "Show Info &Sidebar" for `menuV2`'s "Show &Info
+    Sidebar" and two more in the Telescope menu. A mnemonic is functional
+    in a Qt popup, so the letter that works on Windows did nothing here
+    and another one did.
+
+    **The audit had to be split, not just added.** `rc_mnemonic_audit.py`
+    scans every string literal in `qtdriver.cpp` and requires anything
+    matching a menu bar label to carry the menu bar's mnemonic -- which is
+    exactly the assumption that produced the bug, and it duly failed on
+    the fix. A `CTXITEM` row is *{what this popup calls the command, which
+    menu bar item to act through}*: the second field belongs to the menu
+    bar and stays where it was, the first belongs to the resource's own
+    menu, and `tools/rc_context_audit.py` now compares all 234 of them
+    entry for entry. The mnemonic audit masks the first field before its
+    scan -- by rewriting the text, so it stays "every string literal" and
+    cannot be fooled by a label that also appears somewhere ordinary.
+
+    Falsified both ways: moving one popup label back fails the context
+    audit and not the mnemonic one; moving one *action* field fails the
+    mnemonic audit and not the context one.
+
 
 ## Features this fork adds to both builds
 

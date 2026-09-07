@@ -52,6 +52,19 @@ def RgrcItems():
     return rgrc
 
 
+def MaskCtxLabels(qt):
+    """Blank the first field of every CTXITEM row.
+
+    Done by rewriting the text rather than by parsing the tables, so the
+    scan below stays "every string literal in the file" and cannot be
+    fooled by a label that also appears somewhere ordinary.
+    """
+    def blank(m):
+        return re.sub(r'\{\s*"(?:[^"\\]|\\.)*"\s*,', '{ "",', m.group(0))
+    return re.sub(r'static CONST CTXITEM \w+\[\] = \{.*?\n\s*\};',
+                  blank, qt, flags=re.S)
+
+
 def main():
     rgrc = RgrcItems()
     qt = io.open(QT, encoding="latin-1", newline="").read()
@@ -59,6 +72,17 @@ def main():
     # Every string literal in the file, not just the ones in Add*Action()
     # calls -- the context menu and hotkey tables name menu items by label
     # too, and those have to track the same spelling.
+    #
+    # With ONE exception, and it is the whole reason rc_context_audit.py
+    # exists: a CTXITEM row is {what this popup calls the command, which
+    # menu bar item to act through}, and Windows deliberately gives one
+    # command different labels in the two places -- cmdSecond is "Print
+    # &Nearest Second" on the menu bar and "Print Nearest &Second" in
+    # every text chart's popup. So the FIRST field of each row must not be
+    # measured against the menu bar; it belongs to astrolog.rc's own menu
+    # resource, which rc_context_audit.py compares it to. The second field
+    # is a menu bar label and is still checked here.
+    qt = MaskCtxLabels(qt)
     rgbad, cok = [], 0
     for sz in re.findall(r'"((?:[^"\\\n]|\\.)*)"', qt):
         if "&" not in sz:
