@@ -79,6 +79,14 @@ step "build: the test binary"    make qt-test -j4
 step "image_audit"               python3 tools/image_audit.py
 step "image_audit --selftest"    python3 tools/image_audit.py --selftest
 
+# The "-W" argument counts, which are written out three times and which
+# nothing compared. The Qt consumer and the Win32 one each had five
+# spellings checked; NProcessSwitchesNullW() had none, and it is the one
+# with no behaviour to notice a wrong count by. Both binaries, because
+# they are two of the three implementations.
+step "w-switch-arity (console)"  tools/w-switch-arity.sh ./astrolog
+step "w-switch-arity (Qt)"       tools/w-switch-arity.sh ./astrolog-qt-test
+
 # The other two toolchains, when this machine has them. Both are here
 # because their absence has cost this project real time: Makefile.win
 # went 62 commits without compiling while three work log items listed

@@ -180,6 +180,16 @@ rm -f "$T/r/astrolog_$vdeb~jammy_amd64.deb"; : > "$T/r/astrolog-0.00-qt.0.el9.x8
 expect fail "release-dist: an artifact from another version" tools/ci-verify-release-dist.sh "$T/r" 3
 expect fail "release-dist: a directory that does not exist" tools/ci-verify-release-dist.sh "$T/nodist" 1
 
+# w-switch-arity.sh: a binary that does not exist must be refused, and so
+# must one that is not Astrolog -- "true" consumes nothing and writes no
+# settings file, which is exactly the shape a wrong argument count makes.
+expect fail "w-switch-arity: a binary that is not there" tools/w-switch-arity.sh "$T/nosuch"
+if [ -x /bin/true ]; then
+  expect fail "w-switch-arity: a binary that writes no settings" tools/w-switch-arity.sh /bin/true
+else
+  skip "w-switch-arity: no /bin/true to stand in for a broken binary"
+fi
+
 # ci-assert-green.sh: a commit no run exists for must fail, once the
 # appearance window (0 here) has passed. Needs gh and a network.
 if [ "${SELFTEST_ONLINE:-0}" = 1 ]; then

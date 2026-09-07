@@ -504,6 +504,31 @@ a memory. They are worth knowing about because several are
 useful by hand:
 
 ```sh
+tools/w-switch-arity.sh ./astrolog            # every "-W" spelling's
+tools/w-switch-arity.sh ./astrolog-qt-test   # argument count, on ONE
+                                             # command line, against two of
+                                             # the three consumers. The
+                                             # arity is written out three
+                                             # times and nothing compared
+                                             # them: the Qt one and the
+                                             # Win32 one had five spellings
+                                             # checked each, and
+                                             # NProcessSwitchesNullW() had
+                                             # none -- the one of the three
+                                             # with no behaviour to notice
+                                             # a wrong count by. Its first
+                                             # draft passed with three
+                                             # arities deliberately broken,
+                                             # twice: a leftover token only
+                                             # gives the game away if it
+                                             # fails to resolve, and most
+                                             # do not ("1", "10", "20",
+                                             # "0" are registry rows and
+                                             # any WORD matches a prefix
+                                             # row), and it did not remove
+                                             # the settings file between
+                                             # runs, so a refused parse
+                                             # found the previous run's
 tools/ci-selftest.sh                         # every ci-*.sh below, fed
                                              # input it must refuse; its
                                              # first run refused three of

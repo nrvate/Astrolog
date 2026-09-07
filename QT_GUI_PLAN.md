@@ -8935,6 +8935,39 @@ are the more useful half to read before starting something new.
     on a paste where Windows sets it only in `cmdOpenBackground` -- the
     same slot, loaded the same way. Both now say so beside the code.
 
+208. **The `-W` argument counts, and a check that took three goes to
+    become one.** The arity of the interface switches is written out three
+    times -- `NProcessSwitchesQt()` acts on them, `NProcessSwitchesNullW()`
+    and `NProcessSwitchesW()` consume them so a shared `astrolog.as` still
+    loads -- and nothing compared the three. The Qt consumer had five
+    spellings checked by the `interface-settings` group and the Win32 one
+    five by `tools/scenarios/win-switch-arity.txt`;
+    **`NProcessSwitchesNullW()` had none**, and it is the one of the three
+    with no behaviour at all to notice a wrong count by: a bare table of
+    numbers, wrong until somebody's settings file stops loading.
+
+    All three agree, measured rather than read. `tools/w-switch-arity.sh`
+    keeps them that way over all 22 spellings, on one command line, for
+    two of the three consumers.
+
+    **It passed twice with three arities deliberately broken**, and both
+    reasons are worth carrying:
+
+    - A leftover argument only gives a too-few count away if it *fails to
+      resolve*, and most tokens resolve. `1`, `10`, `20`, `50` and `0` are
+      registry rows, and any WORD matches a prefix row -- `Monospace`
+      resolves as `-M`, `ProbeName` as `-P`. The first draft used exactly
+      those. Every argument is a number measured to be an unknown switch
+      on its own now.
+    - It did not remove the settings file between runs. A refused parse
+      writes nothing, so the grep found the *previous* run's sentinel.
+      That is this project's own stale-artifact trap, in a check written
+      to catch a different one.
+
+    `-WI` is the one spelling whose too-few direction this cannot cover:
+    it takes 0, 1 or 2 and all three resolve as switches. The Qt suite
+    asserts that one by its effect instead.
+
 
 ## Features this fork adds to both builds
 
