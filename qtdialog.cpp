@@ -95,6 +95,55 @@ static void FillComboQt(QComboBox *pcb, CONST QString &strCur,
   pcb->setEditText(strCur);
 }
 
+
+// Daylight setting as the dialogs' combo fields display it: No, Yes,
+// Autodetect, or the explicit offset. The ternary chain this replaces
+// was carried by seven call sites.
+
+static QString SzDstEditQt(real dst)
+{
+  return dst == 0.0 ? "No" : (dst == 1.0 ? "Yes" :
+    (dst == dstAuto ? "Autodetect" : SzZone(dst)));
+}
+
+
+// A time zone as the dialogs' combo fields display it: SzZone()'s text
+// without the leading '+' it puts on positive offsets, which the parse
+// back reads fine but the list does not contain. Seven call sites
+// carried this strip.
+
+static QString SzZoneEditQt(real zon)
+{
+  char sz[cchSzMax];
+
+  sprintf2(S(sz), "%s", SzZone(zon));
+  return sz[0] == '+' ? &sz[1] : sz;
+}
+
+
+// Copy a dialog field's text into a fixed char buffer, truncated to
+// cchSzMax-1 characters plus the terminator. The one home for the
+// truncating copy the dialog store sides hand-rolled over twenty of.
+
+static void SzFieldQt(char *szDst, CONST QString &str)
+{
+  sprintf2(szDst, cchSzMax, "%.*s", cchSzMax-1,
+    str.toLocal8Bit().constData());
+}
+
+
+// The name of an object number for display in a dialog field, or "None"
+// for the -1 "no object" convention. Bounds-checked: settings arrive in
+// this file from astrolog.as before any validator has run, and an
+// unbounded index is undefined behaviour whether or not anything
+// reaches it -- the same rule the deca and city combos below the
+// Graphics dialog follow (see the comment at their guard).
+
+static CONST char *SzObjNameQt(int obj)
+{
+  return FBetween(obj, 0, cObj) ? szObjName[obj] : "None";
+}
+
 // The suggestion lists Windows puts on the chart info fields, from
 // SetEditMDYT() and SetEditSZOA() in wdialog.cpp. Kept identical to
 // Windows including the year range, which upstream hardcodes.
@@ -867,36 +916,48 @@ static void RcWireOkCancelQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt)
 }
 
 
+// Wire a dialog's "Now" button: fill the six date and time fields with
+// the present moment, expressed in the default chart's daylight and
+// zone settings. The Transit and Progression dialogs carried
+// byte-identical copies of this lambda. Filling Daylight and Zone too
+// is not cosmetic: GetTimeNow() returns the present moment expressed in
+// ciDefa's zone and daylight setting, while OK reads the zone out of
+// these two boxes. Leave them holding the old chart's zone and "Now"
+// produces a transit chart that is not now, out by the difference
+// between the two. Windows sets all six in one SetEditSZOA() call
+// (wdialog.cpp:2585 and 2718).
 
-
-
-#ifdef QTTEST
-// Every text control in every transcribed dialog, with the width the
-// resource gives it, for the font fitting diagnostic in qttest.cpp.
-void RcAllTablesTestQt(QVector<QPair<QString,int> > *prg)
+static void WireNowButtonQt(QDialog *pdlg, CONST QVector<RCBUILT> &rgbuilt,
+  CONST char *szButton, QComboBox *pcbMon, QComboBox *pcbDay,
+  QComboBox *pcbYea, QComboBox *pcbTim, QComboBox *pcbDst,
+  QComboBox *pcbZon)
 {
-  struct { CONST RCCTL *rgctl; int cctl; } rgtab[] = {
-    {rgctlRestrict, cctlRestrict}, {rgctlStar, cctlStar},
-    {rgctlMoons, cctlMoons}, {rgctlObject, cctlObject},
-    {rgctlObject2, cctlObject2}, {rgctlObjectM, cctlObjectM},
-    {rgctlAspect, cctlAspect}, {rgctlColor, cctlColor},
-    {rgctlCustom, cctlCustom}, {rgctlCustomS, cctlCustomS},
-    {rgctlCalc, cctlCalc}, {rgctlDisplay, cctlDisplay},
-    {rgctlChart, cctlChart}, {rgctlGraphics, cctlGraphics} };
-  prg->clear();
-  for (int i = 0; i < (int)(sizeof(rgtab)/sizeof(rgtab[0])); i++)
-    for (int j = 0; j < rgtab[i].cctl; j++) {
-      CONST RCCTL *pctl = &rgtab[i].rgctl[j];
-      if (pctl->szText[0] == 0 || pctl->dx <= 0)
-        continue;
-      if (pctl->nType != ctlLabel && pctl->nType != ctlCheck &&
-        pctl->nType != ctlRadio && pctl->nType != ctlButton)
-        continue;
-      prg->append(qMakePair(QString(pctl->szText).remove(QChar('&')),
-        pctl->dx));
-    }
-}
+  QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, szButton);
+
+  if (ppbNow == NULL)
+    return;
+  QObject::connect(ppbNow, &QPushButton::clicked, pdlg,
+    [pcbMon, pcbDay, pcbYea, pcbTim, pcbDst, pcbZon]() {
+#ifdef TIMEFUNC
+      char szN[cchSzMax];
+      int monN, dayN, yeaN;
+      real timN;
+
+      GetTimeNow(&monN, &dayN, &yeaN, &timN, ciDefa.dst, ciDefa.zon);
+      sprintf2(S(szN), "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
+      if (pcbMon != NULL) pcbMon->setEditText(szN);
+      if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
+      if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
+      if (pcbTim != NULL) pcbTim->setEditText(StrTimEditQt(timN));
+      if (pcbDst != NULL)
+        pcbDst->setEditText(SzDstEditQt(ciDefa.dst));
+      if (pcbZon != NULL)
+        pcbZon->setEditText(SzZoneEditQt(ciDefa.zon));
 #endif
+    });
+}
+
+
 
 // A checkbox in a transcribed dialog and the flag it edits. Extracted from
 // the SetCheck/GetCheck pairs in Windows' own dialog handlers rather than
@@ -1078,27 +1139,46 @@ QString StrDefaultSuffixTestQt(CONST QString &str, CONST char *szExt)
 #endif
 
 
-void ShowSaveChartDialogQt()
+// The shared body of the Save dialogs: pick a file, default its suffix,
+// and run the writer with the path cloned into is.szFileOut, warning on
+// failure. The export family has its twin in ShowExportGraphicsDialogQt;
+// this side stores the path for the -o handler's reuse, and passes the
+// write format, which several of the dialogs select with (a wrapper
+// that does not change it passes us.nWriteFormat back, a no-op).
+// FCloneSz, like the -o switch handler: SzClone() with a plain
+// assignment DROPPED whatever is.szFileOut already pointed at, so every
+// Save Chart after the first leaked the previous path -- and
+// invisibly, because SzClone() deliberately un-counts its own
+// allocation, so the exit-time "not freed" check could not see it
+// either. FCloneSz frees the old value before taking the new one.
+// Cancelling does nothing, including to nWriteFormat.
+
+static void SaveFileAsQt(CONST char *szTitle, CONST char *szStart,
+  CONST char *szFilter, CONST char *szExt, int nWriteFormat,
+  flag (*pfnWrite)(void), CONST char *szError)
 {
+  QString qs, qsStart;
+
   if (FNoWriteQt())
     return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart", QString(),
-    "Astrolog Files (*.as);;All Files (*)");
+  qsStart = (szStart != NULL ? QString(szStart) : QString());
+  qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, qsStart,
+    QString(szFilter) + ";;All Files (*)");
   if (qs.isEmpty())
     return;
-  qs = StrDefaultSuffixQt(qs, "as");
+  qs = StrDefaultSuffixQt(qs, szExt);
   QByteArray ba = qs.toLocal8Bit();
-  // FCloneSz, like the seven other save dialogs in this file and like the
-  // -o switch handler. SzClone() with a plain assignment DROPPED whatever
-  // is.szFileOut already pointed at, so every Save Chart after the first
-  // leaked the previous path -- and invisibly, because SzClone()
-  // deliberately un-counts its own allocation, so the exit-time "not
-  // freed" check could not see it either. FCloneSz frees the old value
-  // before taking the new one.
   FCloneSz(ba.constData(), &is.szFileOut);
-  us.nWriteFormat = 0;
-  if (!FOutputData())
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
+  us.nWriteFormat = nWriteFormat;
+  if (!pfnWrite())
+    QMessageBox::warning(gi.qwind, szAppName, szError);
+}
+
+
+void ShowSaveChartDialogQt()
+{
+  SaveFileAsQt("Save Chart", NULL, "Astrolog Files (*.as)", "as", 0,
+    FOutputData, "Could not write that chart file.");
 }
 
 
@@ -1110,18 +1190,8 @@ void ShowSaveChartDialogQt()
 
 void ShowSaveChartPositionsDialogQt()
 {
-  if (FNoWriteQt())
-    return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart Positions",
-    QString(), "Astrolog Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  qs = StrDefaultSuffixQt(qs, "as");
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  us.nWriteFormat = '0';
-  if (!FOutputData())
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that chart file.");
+  SaveFileAsQt("Save Chart Positions", NULL, "Astrolog Files (*.as)", "as",
+    '0', FOutputData, "Could not write that chart file.");
 }
 
 
@@ -1132,18 +1202,9 @@ void ShowSaveChartPositionsDialogQt()
 
 void ShowSaveSettingsDialogQt()
 {
-  if (FNoWriteQt())
-    return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Program Settings",
-    DEFAULT_INFOFILE, "Astrolog Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  qs = StrDefaultSuffixQt(qs, "as");
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputSettings())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that settings file.");
+  SaveFileAsQt("Save Program Settings", DEFAULT_INFOFILE,
+    "Astrolog Files (*.as)", "as", us.nWriteFormat, FOutputSettings,
+    "Could not write that settings file.");
 }
 
 
@@ -1154,52 +1215,23 @@ void ShowSaveSettingsDialogQt()
 
 void ShowSaveAAFDialogQt()
 {
-  if (FNoWriteQt())
-    return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind,
-    "Save Chart Exchange Format", QString(),
-    "Astrological Exchange Files (*.aaf);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  qs = StrDefaultSuffixQt(qs, "aaf");
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputAAFFile())
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that AAF file.");
+  SaveFileAsQt("Save Chart Exchange Format", NULL,
+    "Astrological Exchange Files (*.aaf)", "aaf", us.nWriteFormat,
+    FOutputAAFFile, "Could not write that AAF file.");
 }
 
 void ShowSaveQuickDialogQt()
 {
-  if (FNoWriteQt())
-    return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind,
-    "Save Chart Quick*Chart Format", QString(),
-    "Quick*Chart Files (*.qck);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  qs = StrDefaultSuffixQt(qs, "qck");
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputQuickFile())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that Quick*Chart file.");
+  SaveFileAsQt("Save Chart Quick*Chart Format", NULL,
+    "Quick*Chart Files (*.qck)", "qck", us.nWriteFormat,
+    FOutputQuickFile, "Could not write that Quick*Chart file.");
 }
 
 void ShowSaveCalendarDialogQt()
 {
-  if (FNoWriteQt())
-    return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind,
-    "Save Chart Calendar Format", QString(),
-    "iCalendar Files (*.ics);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  qs = StrDefaultSuffixQt(qs, "ics");
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  if (!FOutputCalendarFile())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that iCalendar file.");
+  SaveFileAsQt("Save Chart Calendar Format", NULL,
+    "iCalendar Files (*.ics)", "ics", us.nWriteFormat,
+    FOutputCalendarFile, "Could not write that iCalendar file.");
 }
 
 
@@ -1557,8 +1589,7 @@ void ShowFileSettingsDialogQt()
   if (peThick != NULL) gs.nThickAdjust = NFieldQt(peThick->text());
   gs.rBackPct = rI;
   if (peADB != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peADB->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peADB->text());
     FCloneSz(sz, &us.szADB);
   }
   if (peInchX != NULL)
@@ -1670,14 +1701,13 @@ void ShowGraphicsSettingsDialogQt()
   if (peY != NULL)     peY->setText(QString::number(gs.yWin));
   if (peGrid != NULL)  peGrid->setText(QString::number(gs.nGridCell));
   if (peSpace != NULL) peSpace->setText(QString::number(gs.cspace));
-  if (peTrack != NULL) peTrack->setText(gs.objTrack >= 0 ?
-    szObjName[gs.objTrack] : "None");
+  if (peTrack != NULL) peTrack->setText(SzObjNameQt(gs.objTrack));
   if (peAU != NULL)    peAU->setText(SzFormatRQt(gs.rspace, -6));
   if (peRot != NULL)   peRot->setText(SzFormatRQt(gs.rRot, -3));
   if (peTilt != NULL)  peTilt->setText(SzFormatRQt(gs.rTilt, -3));
   if (peDelay != NULL) peDelay->setText(QString::number(NAnimDelayQt()));
-  if (peLeft != NULL)  peLeft->setText(szObjName[gs.objLeft == 0 ? oSun :
-    NAbs(gs.objLeft)-1]);
+  if (peLeft != NULL)  peLeft->setText(SzObjNameQt(
+    gs.objLeft == 0 ? oSun : NAbs(gs.objLeft)-1));
   if (peDeca != NULL)  peDeca->setText(QString::number(gs.nDecaSize));
 
   QComboBox *pcbScale = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_Xs");
@@ -1754,7 +1784,8 @@ void ShowGraphicsSettingsDialogQt()
     for (j = 0; j < cFont; j++)
       if (FValidFont(i, j))
         rgpcbFont[i]->addItem(rgszFontDispQt[j]);
-    rgpcbFont[i]->setEditText(rgszFontDispQt[*rgpnFont[i]]);
+    rgpcbFont[i]->setEditText(rgszFontDispQt[
+      FBetween(*rgpnFont[i], 0, cFont-1) ? *rgpnFont[i] : 0]);
   }
 
   RcLoadRadioQt(rgbuilt, 1, 3,
@@ -1821,13 +1852,11 @@ void ShowGraphicsSettingsDialogQt()
   int nTrack = gs.objTrack, nLeft = 0;
 
   if (peTrack != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peTrack->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peTrack->text());
     nTrack = FMatchSz(sz, "None") ? -1 : NParseSz(sz, pmObject);
   }
   if (peLeft != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peLeft->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peLeft->text());
     nLeft = NParseSz(sz, pmObject);
   }
   if (!FValidScale(nScaleN))
@@ -1893,24 +1922,21 @@ void ShowGraphicsSettingsDialogQt()
   // fields alone in that case (i lands on 6 and neither branch runs), and
   // so does this.
   if (pcbCorner != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbCorner->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbCorner->currentText());
     for (i = 0; i < 7; i++)
       if (FEqSzI(sz, rgszWheelCornerQt[i]))
         break;
     gs.nDecaType = i < 7 ? i : 0;
   }
   if (pcbFill != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbFill->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbFill->currentText());
     for (i = 0; i < 8; i++)
       if (FEqSzI(sz, rgszDecaFillQt[i]))
         break;
     gs.nDecaFill = i < 8 ? i : 0;
   }
   if (pcbCity != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbCity->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbCity->currentText());
     for (i = 0; i < 6; i++)
       if (FEqSzI(sz, rgszCityColorQt[i]))
         break;
@@ -1924,8 +1950,7 @@ void ShowGraphicsSettingsDialogQt()
   for (i = 0; i < cFontEntry; i++) {
     if (rgpcbFont[i] == NULL)
       continue;
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      rgpcbFont[i]->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, rgpcbFont[i]->currentText());
     // Windows' loop, order and all (wdialog.cpp:3050). Three things it
     // does that a plain 0..cFont-1 scan does not:
     //
@@ -2030,8 +2055,7 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
   pfnAtlasRow = AtlasRowQt;
 
   if (nWhich == 0) {                     // Lookup City
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peLoc->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peLoc->text());
     if (!DisplayAtlasLookup(sz, 1, &ilist))
       plist->addItem("Couldn't get atlas data!");
   } else if (nWhich == 1) {              // Nearby Cities
@@ -2040,8 +2064,7 @@ static void RcAtlasRunQt(QListWidget *plist, int nWhich, QLineEdit *peLoc,
     if (!DisplayAtlasNearby(lon, lat, 1, &ilist, fFalse))
       plist->addItem("Couldn't get atlas data!");
   } else {                               // Time Changes
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peLoc->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peLoc->text());
     pfnAtlasRow = NULL;
     if (!DisplayAtlasLookup(sz, 0, &i)) {
       pfnAtlasRow = NULL;
@@ -2098,8 +2121,7 @@ static void RcAtlasApplyQt(QListWidget *plist,
     // chosen. That fallback was missing too.
     if (peLoc == NULL)
       return;
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peLoc->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peLoc->text());
     if (!DisplayAtlasLookup(sz, 0, &iae)) {
       PrintWarning("Please have a valid city selected in 'Atlas Lookups', "
         "or a valid city already in the 'Location' field.");
@@ -2134,14 +2156,10 @@ static void RcAtlasApplyQt(QListWidget *plist,
   // The same formatting SetEditSZOA() uses on Windows, and the same
   // RcLoadChartInfoQt() puts in these fields when the dialog opens.
   if (pcbDst != NULL) {
-    sprintf2(S(sz), "%s", ci.dst == 0.0 ? "No" : (ci.dst == 1.0 ? "Yes" :
-      (ci.dst == dstAuto ? "Autodetect" : SzZone(ci.dst))));
-    pcbDst->setEditText(sz);
+    pcbDst->setEditText(SzDstEditQt(ci.dst));
   }
-  if (pcbZon != NULL) {
-    sprintf2(S(sz), "%s", SzZone(ci.zon));
-    pcbZon->setEditText(sz[0] == '+' ? &sz[1] : sz);
-  }
+  if (pcbZon != NULL)
+    pcbZon->setEditText(SzZoneEditQt(ci.zon));
   nSav = us.fAnsiChar; us.fAnsiChar = fFalse;
   sprintf2(S(sz), "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
   us.fAnsiChar = nSav;
@@ -2173,11 +2191,9 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInTim"),
     StrTimEditQt(pci->tim), RgstrTimeQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInDst"),
-    pci->dst == 0.0 ? "No" : (pci->dst == 1.0 ? "Yes" :
-    (pci->dst == dstAuto ? "Autodetect" : SzZone(pci->dst))), RgstrDstQt());
-  sprintf2(S(sz), "%s", SzZone(pci->zon));
+    SzDstEditQt(pci->dst), RgstrDstQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInZon"),
-    sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+    SzZoneEditQt(pci->zon), RgstrZoneQt());
   // SzLocation()'s degree byte confuses the parse back, so ask for it
   // without, the way Windows' SetEditSZOA does.
   nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
@@ -2873,17 +2889,8 @@ void ShowSaveChartListDialogQt()
       "There is no chart list in memory.");
     return;
   }
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Chart List",
-    QString(), "Astrolog Files (*.as);;All Files (*)");
-  if (qs.isEmpty())
-    return;
-  qs = StrDefaultSuffixQt(qs, "as");
-  QByteArray ba = qs.toLocal8Bit();
-  FCloneSz(ba.constData(), &is.szFileOut);
-  us.nWriteFormat = 'l';
-  if (!FOutputData())
-    QMessageBox::warning(gi.qwind, szAppName,
-      "Could not write that chart list file.");
+  SaveFileAsQt("Save Chart List", NULL, "Astrolog Files (*.as)", "as", 'l',
+    FOutputData, "Could not write that chart list file.");
 }
 
 
@@ -3014,16 +3021,7 @@ static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
       });
   }
 
-  QPushButton *ppbOK = (QPushButton *)PwRcFindQt(rgbuilt, "IDOK");
-  QPushButton *ppbCancel = (QPushButton *)PwRcFindQt(rgbuilt, "IDCANCEL");
-  if (ppbOK != NULL) {
-    ppbOK->setDefault(fTrue);
-    QObject::connect(ppbOK, &QPushButton::clicked, &dlg, &QDialog::accept);
-  }
-  if (ppbCancel != NULL)
-    QObject::connect(ppbCancel, &QPushButton::clicked, &dlg,
-      &QDialog::reject);
-
+  RcWireOkCancelQt(&dlg, rgbuilt);
   if (dlg.exec() != QDialog::Accepted)
     return;
   for (i = lo; i <= hi; i++)
@@ -3126,12 +3124,8 @@ void ShowDefaultInfoDialogQt()
   // Formatted the way Windows' DlgDefault does it (SetEditSZOA), not as
   // raw numbers -- see ShowChartInfoForQt() for the same treatment and
   // the reasoning about SzLocation()'s degree byte.
-  FillComboQt(pcbDst, ciDefa.dst == 0.0 ? "No" :
-    (ciDefa.dst == 1.0 ? "Yes" :
-    (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))),
-    RgstrDstQt());
-  sprintf2(S(sz), "%s", SzZone(ciDefa.zon));
-  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  FillComboQt(pcbDst, SzDstEditQt(ciDefa.dst), RgstrDstQt());
+  FillComboQt(pcbZon, SzZoneEditQt(ciDefa.zon), RgstrZoneQt());
   nSavChar = us.fAnsiChar; us.fAnsiChar = fFalse;
   sprintf2(S(sz), "%s", SzLocation(ciDefa.lon, ciDefa.lat));
   us.fAnsiChar = nSavChar;
@@ -3278,47 +3272,15 @@ void ShowTransitDialogQt()
   FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
   FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
   FillComboQt(pcbTim, StrTimEditQt(TimT), RgstrTimeQt());
-  FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
-    (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
-  sprintf2(S(sz), "%s", SzZone(ZonT));
-  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  FillComboQt(pcbDst, SzDstEditQt(DstT), RgstrDstQt());
+  FillComboQt(pcbZon, SzZoneEditQt(ZonT), RgstrZoneQt());
   if (peYears != NULL)
     peYears->setText(QString::number(us.nEphemYears));
   if (peDiv != NULL)
     peDiv->setText(QString::number(us.nDivision));
 
-  QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbTr_tn");
-  if (ppbNow != NULL)
-    QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
-      [pcbMon, pcbDay, pcbYea, pcbTim, pcbDst, pcbZon]() {
-#ifdef TIMEFUNC
-        char szN[cchSzMax];
-        int monN, dayN, yeaN;
-        real timN;
-        GetTimeNow(&monN, &dayN, &yeaN, &timN, ciDefa.dst, ciDefa.zon);
-        sprintf2(S(szN), "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
-        if (pcbMon != NULL) pcbMon->setEditText(szN);
-        if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
-        if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
-        if (pcbTim != NULL) pcbTim->setEditText(StrTimEditQt(timN));
-        // And the Daylight and Zone fields, which this used to leave
-        // alone. Windows sets all six in one SetEditSZOA() call
-        // (wdialog.cpp:2585 and 2718), and it is not cosmetic:
-        // GetTimeNow() above returns the present moment expressed in
-        // ciDefa's zone and daylight setting, while OK reads the zone
-        // out of these two boxes. Leave them holding the old chart's
-        // zone and "Now" produces a transit chart that is not now, out
-        // by the difference between the two.
-        if (pcbDst != NULL)
-          pcbDst->setEditText(ciDefa.dst == 0.0 ? "No" :
-            (ciDefa.dst == 1.0 ? "Yes" :
-            (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
-        if (pcbZon != NULL) {
-          sprintf2(S(szN), "%s", SzZone(ciDefa.zon));
-          pcbZon->setEditText(szN[0] == '+' ? &szN[1] : szN);
-        }
-#endif
-      });
+  WireNowButtonQt(&dlg, rgbuilt, "dbTr_tn",
+    pcbMon, pcbDay, pcbYea, pcbTim, pcbDst, pcbZon);
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
@@ -3469,51 +3431,19 @@ void ShowProgressDialogQt()
     FillComboQt(pcbCusp, strCur, rgstr);
   }
   if (peArc != NULL)
-    peArc->setText(us.objProgArc >= 0 ? szObjName[us.objProgArc] : "None");
+    peArc->setText(SzObjNameQt(us.objProgArc));
 
   sprintf2(S(sz), "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
   FillComboQt(pcbMon, sz, RgstrMonthQt());
   FillComboQt(pcbDay, QString::number(DayT), RgstrDayQt());
   FillComboQt(pcbYea, QString::number(YeaT), RgstrYearQt());
   FillComboQt(pcbTim, StrTimEditQt(TimT), RgstrTimeQt());
-  FillComboQt(pcbDst, DstT == 0.0 ? "No" : (DstT == 1.0 ? "Yes" :
-    (DstT == dstAuto ? "Autodetect" : SzZone(DstT))), RgstrDstQt());
-  sprintf2(S(sz), "%s", SzZone(ZonT));
-  FillComboQt(pcbZon, sz[0] == '+' ? &sz[1] : sz, RgstrZoneQt());
+  FillComboQt(pcbDst, SzDstEditQt(DstT), RgstrDstQt());
+  FillComboQt(pcbZon, SzZoneEditQt(ZonT), RgstrZoneQt());
 
   // "Now" fills the date and time with the current moment.
-  QPushButton *ppbNow = (QPushButton *)PwRcFindQt(rgbuilt, "dbPr_pn");
-  if (ppbNow != NULL)
-    QObject::connect(ppbNow, &QPushButton::clicked, &dlg,
-      [pcbMon, pcbDay, pcbYea, pcbTim, pcbDst, pcbZon]() {
-#ifdef TIMEFUNC
-        char szN[cchSzMax];
-        int monN, dayN, yeaN;
-        real timN;
-        GetTimeNow(&monN, &dayN, &yeaN, &timN, ciDefa.dst, ciDefa.zon);
-        sprintf2(S(szN), "%.3s", szMonth[FValidMon(monN) ? monN : 1]);
-        if (pcbMon != NULL) pcbMon->setEditText(szN);
-        if (pcbDay != NULL) pcbDay->setEditText(QString::number(dayN));
-        if (pcbYea != NULL) pcbYea->setEditText(QString::number(yeaN));
-        if (pcbTim != NULL) pcbTim->setEditText(StrTimEditQt(timN));
-        // And the Daylight and Zone fields, which this used to leave
-        // alone. Windows sets all six in one SetEditSZOA() call
-        // (wdialog.cpp:2585 and 2718), and it is not cosmetic:
-        // GetTimeNow() above returns the present moment expressed in
-        // ciDefa's zone and daylight setting, while OK reads the zone
-        // out of these two boxes. Leave them holding the old chart's
-        // zone and "Now" produces a transit chart that is not now, out
-        // by the difference between the two.
-        if (pcbDst != NULL)
-          pcbDst->setEditText(ciDefa.dst == 0.0 ? "No" :
-            (ciDefa.dst == 1.0 ? "Yes" :
-            (ciDefa.dst == dstAuto ? "Autodetect" : SzZone(ciDefa.dst))));
-        if (pcbZon != NULL) {
-          sprintf2(S(szN), "%s", SzZone(ciDefa.zon));
-          pcbZon->setEditText(szN[0] == '+' ? &szN[1] : szN);
-        }
-#endif
-      });
+  WireNowButtonQt(&dlg, rgbuilt, "dbPr_pn",
+    pcbMon, pcbDay, pcbYea, pcbTim, pcbDst, pcbZon);
 
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
@@ -3524,8 +3454,7 @@ void ShowProgressDialogQt()
   // A leading "X" on the rate means "this many years per day", inverted.
   rd = us.rProgDay;
   if (pcbRate != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbRate->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbRate->currentText());
     i = (ChCap(sz[0]) == 'X');
     rd = RFromSz(sz + i);
     if (i != 0 && rd != 0.0)
@@ -3535,8 +3464,7 @@ void ShowProgressDialogQt()
     RFromSz(pcbCusp->currentText().toLocal8Bit().constData()) : us.rProgCusp;
   npO = us.objProgArc;
   if (peArc != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peArc->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peArc->text());
     npO = NParseSz(sz, pmObject);
   }
   mon = pcbMon != NULL ?
@@ -3647,13 +3575,15 @@ void ShowChartSettingsDialogQt()
     pcbSort->setEditable(fTrue);
     for (i = 0; i < asMax; i++)
       pcbSort->addItem(rgszSortQt[i]);
-    pcbSort->setEditText(rgszSortQt[us.nAspectSort]);
+    pcbSort->setEditText(rgszSortQt[
+      FBetween(us.nAspectSort, 0, asMax-1) ? us.nAspectSort : 0]);
   }
   if (pcbDecan != NULL) {
     pcbDecan->setEditable(fTrue);
     for (i = 0; i < ddMax; i++)
       pcbDecan->addItem(rgszDecan[i]);
-    pcbDecan->setEditText(rgszDecan[us.fListDecan ? us.nDecanType : 0]);
+    pcbDecan->setEditText(rgszDecan[
+      us.fListDecan && FValidDecan(us.nDecanType) ? us.nDecanType : 0]);
   }
 
   for (i = 0; i < (int)sizeof(rgchStarSort); i++)
@@ -3696,8 +3626,7 @@ void ShowChartSettingsDialogQt()
     rgchArabicSort[NRcStoreRadioQt(rgbuilt, 8,
     (int)sizeof(rgchArabicSort), 0)];
   if (pcbSort != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbSort->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbSort->currentText());
     for (i = 1; i < asMax; i++)
       if (FMatchSz(sz, rgszSortQt[i]))
         us.nAspectSort = i;
@@ -3705,8 +3634,7 @@ void ShowChartSettingsDialogQt()
   if (peRatio != NULL)
     us.rRatio = RFieldQt(peRatio->text());
   if (pcbDecan != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbDecan->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbDecan->currentText());
     for (i = 0; i < ddMax; i++)
       if (FMatchSz(sz, rgszDecan[i]))
         break;
@@ -4301,7 +4229,8 @@ void ShowCalcDialogQt()
 #endif
     pcbEphem->addItem(szEphem[cmNone]);
     pcbEphem->setEditText(szEphem[!us.fEphemFiles ?
-      (us.fMatrixPla ? cmMatrix : cmNone) : us.nSwissEph]);
+      (us.fMatrixPla ? cmMatrix : cmNone) :
+      (FBetween(us.nSwissEph, 0, cmMax-1) ? us.nSwissEph : cmNone)]);
   }
   if (pcbAyan != NULL) {
     // The list offers the named ayanamsas with their offsets, and the
@@ -4321,7 +4250,8 @@ void ShowCalcDialogQt()
     pcbHouse->setEditable(fTrue);
     for (i = 0; i < cSystem; i++)
       pcbHouse->addItem(szSystem[i]);
-    pcbHouse->setEditText(szSystem[us.nHouseSystem]);
+    pcbHouse->setEditText(szSystem[
+      FBetween(us.nHouseSystem, 0, cSystem-1) ? us.nHouseSystem : 0]);
   }
 
   QLineEdit *peCentral = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_h");
@@ -4329,14 +4259,14 @@ void ShowCalcDialogQt()
   QLineEdit *peDwad = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deSe_", 4);
   QLineEdit *peSolar = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deSe_", 1);
   if (peCentral != NULL)
-    peCentral->setText(szObjName[us.objCenter]);
+    peCentral->setText(SzObjNameQt(us.objCenter));
   if (peHarmonic != NULL)
     peHarmonic->setText(SzFormatRQt(us.rHarmonic, -6));
   if (peDwad != NULL)
     peDwad->setText(QString::number(us.nDwad));
   if (peSolar != NULL)
-    peSolar->setText(szObjName[us.objOnAsc == 0 ? oSun :
-      NAbs(us.objOnAsc)-1]);
+    peSolar->setText(SzObjNameQt(us.objOnAsc == 0 ? oSun :
+      NAbs(us.objOnAsc)-1));
 
   // dr01..dr03 pick what sits on the Ascendant; dr04..dr06 the 3D house
   // frame of reference.
@@ -4354,19 +4284,16 @@ void ShowCalcDialogQt()
   if (pcbAyan != NULL)
     rs = RFromSz(pcbAyan->currentText().toLocal8Bit().constData());
   if (pcbHouse != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbHouse->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbHouse->currentText());
     nc = NParseSz(sz, pmSystem);
   }
   if (peCentral != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peCentral->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peCentral->text());
     nh = NParseSz(sz, pmObject);
   }
   if (peHarmonic != NULL) {
     // A leading "D" means the field gives a divisor, not a multiplier.
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peHarmonic->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peHarmonic->text());
     i = (ChCap(sz[0]) == 'D');
     rx = RFromSz(sz + i);
     if (i != 0 && rx != 0.0)
@@ -4375,8 +4302,7 @@ void ShowCalcDialogQt()
   if (peDwad != NULL)
     n4 = NFieldQt(peDwad->text());
   if (peSolar != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peSolar->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peSolar->text());
     n1 = NParseSz(sz, pmObject);
   }
   if (!FValidOffset(rs))      { ErrorEnsureQt(&dlg, (int)rs, "zodiac offset"); return; }
@@ -4387,8 +4313,7 @@ void ShowCalcDialogQt()
   if (!FItem(n1))             { ErrorEnsureQt(&dlg, n1, "Solar chart planet"); return; }
 
   if (pcbEphem != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      pcbEphem->currentText().toLocal8Bit().constData());
+    SzFieldQt(sz, pcbEphem->currentText());
     us.fEphemFiles = us.fMatrixPla = fFalse;
     us.nSwissEph = 0;
 #ifdef SWISS
@@ -4542,7 +4467,7 @@ void ShowDisplayDialogQt()
   if (peAsp != NULL)
     peAsp->setText(QString::number(us.nAsp));
   if (peReq != NULL)
-    peReq->setText(us.objRequire >= 0 ? szObjName[us.objRequire] : "None");
+    peReq->setText(SzObjNameQt(us.objRequire));
   if (peWid != NULL)
     peWid->setText(QString::number(us.nScreenWidth));
   if (peSta != NULL)
@@ -4694,11 +4619,11 @@ void ShowDisplayDialogQt()
   na = us.nAsp; nro = us.objRequire;
   ni = us.nScreenWidth; ryw = us.rStation;
   if (peAsp != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1, peAsp->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peAsp->text());
     na = NParseSz(sz, pmAspect);
   }
   if (peReq != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1, peReq->text().toLocal8Bit().constData());
+    SzFieldQt(sz, peReq->text());
     nro = NParseSz(sz, pmObject);
   }
   if (peWid != NULL)

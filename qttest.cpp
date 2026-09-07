@@ -328,6 +328,7 @@ static CONST DLGTEST rgdlgQt[] = {
     {ShowFileSettingsDialogQt,     "File Settings"},
     {ShowGraphicsSettingsDialogQt, "Graphics Settings"},
     {ShowChartInfoDialogQt,        "Set Chart Info"},
+    {ShowChartInfo2DialogQt,       "Set Chart #2 Info"},
     {ShowChartsAllDialogQt,        "Charts #3 through #6"},
     {ShowChartListDialogQt,        "Chart List"},
     {ShowColorDialogQt,            "Set Colors"},
