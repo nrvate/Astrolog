@@ -256,19 +256,30 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Eleven standing audits, all currently clean and all run by `make check`
-(and so by a release, which runs the same command) — four of the
+Twelve standing audits, all currently clean and all run by `make check`
+(and so by a release, which runs the same command) — six of the
 port against `astrolog.rc`, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of round-trip fixture coverage, one of line endings,
-one of the MSVC project against the makefile's source list, one of
-the Qt build's own source groups and headers, and one of the graphics
-matrix's own options:
+one of the MSVC project against the makefile's source list, and one of
+the Qt build's own source groups and headers. A thirteenth is listed
+below with them and is **not** run by `make check`: the graphics
+matrix's own options, which needs a built `./astrolog`:
 
 ```sh
 python3 tools/rc_audit.py            # dialog controls nothing wires up
 python3 tools/rc_mnemonic_audit.py   # "&" placement, all 850 label sites
-python3 tools/rc_field_audit.py      # a control wired to the *wrong* setting
+python3 tools/rc_field_audit.py      # a control wired to the *wrong*
+                                     # setting, or to the right one at
+                                     # the opposite POLARITY -- a box
+                                     # that shows the reverse of the
+                                     # truth. The four inverted controls
+                                     # ("Don't Draw Background" and the
+                                     # rest, SetCheck(ctl, !gs.f...) on
+                                     # Windows) had no field check at all
+                                     # until 2026-09-06: the leading "!"
+                                     # made them invisible to this rather
+                                     # than wrong
 python3 tools/rc_lookup_audit.py     # a by-name lookup that resolves to no
                                      # control, or more than one, in the
                                      # dialog using it -- the layer below
@@ -288,6 +299,22 @@ python3 tools/rc_flagtype_audit.py   # a dialog flag bound to a control
                                      # an id resolves; rc_field_audit that
                                      # it is wired to the right setting;
                                      # neither that it is the right KIND
+python3 tools/rc_casttype_audit.py   # a control cast to the WRONG QT
+                                     # CLASS. Every dialog reaches its
+                                     # controls back through
+                                     # PwRcFindQt(), which returns
+                                     # QWidget *, and casts the result
+                                     # with a C style cast -- checked by
+                                     # neither the compiler nor Qt. Let
+                                     # a COMBOBOX become an EDITTEXT in
+                                     # astrolog.rc and the next line
+                                     # calls currentText() on a
+                                     # QLineEdit. 119 lookups, per
+                                     # dialog like rc_lookup_audit and
+                                     # for the same reason; casts to
+                                     # QWidget * or QAbstractButton *
+                                     # say nothing and are not counted
+                                     # against
 python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # values vs astrolog.as, incl. the
                                      # known-preference allowlist; found
@@ -341,7 +368,7 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # gave a link error nothing explained
 ```
 
-`make check` runs all eleven, plus a set of assertions that are scripts
+`make check` runs all twelve, plus a set of assertions that are scripts
 rather than workflow steps so they can be falsified in a second instead
 of by pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
 input it must refuse and, where cheap, input it must accept -- 49 cases,

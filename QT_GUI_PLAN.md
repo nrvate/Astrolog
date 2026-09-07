@@ -7784,6 +7784,59 @@ are the more useful half to read before starting something new.
     in: with a `RedoMenuQt()` that did nothing, every "RedoMenuQt() does"
     assertion fails, and no sabotage is needed to know that.
 
+184. **Two holes in the resource audits, both about what a lookup is
+    rather than where it points.** Reviewing the dialog layer turned up
+    118 casts of this shape:
+
+        QComboBox *pcb = (QComboBox *)PwRcFindQt(rgbuilt, "dcGr_Xs");
+
+    `PwRcFindQt()` returns `QWidget *`, and that is a C style cast, so
+    neither the compiler nor Qt checks it. Let a COMBOBOX become an
+    EDITTEXT in astrolog.rc, regenerate, and the pointer is still real
+    and still non-NULL -- and the next line calls `currentText()` on a
+    `QLineEdit`. Undefined behaviour whose symptom is a crash somewhere
+    else, or silent nonsense. Four audits already read these tables and
+    none of them looks at the type on the left of the assignment:
+    `rc_lookup_audit` asks whether the id resolves, `rc_field_audit`
+    which setting it drives, `rc_flagtype_audit` whether a flag-bound id
+    is a checkbox.
+
+    `tools/rc_casttype_audit.py` is the fifth. `RcBuildDialogQt()` maps
+    each `ctl*` kind to exactly one widget class, so the correct type is
+    a lookup, not a judgement. Per dialog, for the reason
+    `rc_lookup_audit.py` sets out at length -- qtrcdlg.h holds all 24
+    concatenated and the ids recur. Casts to `QWidget *` or
+    `QAbstractButton *` are legal for anything and are not counted
+    against. **119 lookups, all correct**, so this found no bug; it was
+    falsified from both sides instead, on copies in a scratch directory
+    rather than in the tree -- retype one lookup and it names the
+    function, the id and both types; change that control's kind in the
+    generated table instead and it says the same thing the other way
+    round.
+
+    The second hole was in an audit that already existed, and it was
+    real coverage missing rather than a net that could not exist.
+    `rc_field_audit` read Windows' bindings with a regex requiring the
+    argument to start with `us.` or `gs.`:
+
+        SetCheck(dxFi_XI0, !gs.fBackDraw);
+
+    A leading `!` doesn't match, so the binding was not wrong here --
+    it was **absent**. Four controls, all inverted on Windows: "Don't
+    Draw Background", "Skip PostScript Header", "Expressions Off" and
+    one eclipse box. None of the four had any field check at all, and
+    the audit's own count said 65 where it should have said 69.
+
+    Polarity is part of the wiring: a box bound to the right flag the
+    wrong way round shows the reverse of the truth, silently, and no
+    other check here would notice. Both sides are read for it now --
+    Windows' `!`, and Qt's two spellings, the RCFLAG table's fourth
+    column (which `RcLoadFlagsQt()` XORs the flag with) and a `!` in a
+    hand written `setChecked()`. **All four were already right.** What
+    was missing was anything that would have said so, and a mismatch
+    now reads as `windows=!gs.fBackDraw qt=gs.fBackDraw`. Falsified in
+    both spellings.
+
 
 ## Features this fork adds to both builds
 
