@@ -7951,6 +7951,50 @@ are the more useful half to read before starting something new.
     interrupted suite runs" as a standing house habit -- that habit is
     the symptom, and this is one more piece of the cause.
 
+187. **"(null)" written into a data file.** Reviewing the export
+    formats by round-tripping each one through the console build --
+    save a chart, read it back, look at what came out -- the
+    Quick\*Chart file read:
+
+        (null)                 JUN 15, 199012:34:00 PM ...  (null)
+
+    `FOutputQuickFile()` (io.cpp) hands `pci->nam` and `pci->loc`
+    straight to `fprintf("%-23.23s", ...)`, and both are NULL on a chart
+    that was never named -- which is the *default* state, not a corner:
+    `-qa` sets a time and place and no name. Passing NULL to a `%s` is
+    undefined behaviour; glibc's "(null)" extension is the friendly
+    outcome, and the unfriendly one is a crash on a libc that does not
+    have it. Even on glibc it writes six characters of C library
+    internals into a file another program is meant to parse.
+
+    **This fork has fixed this exact class twice already**, and the
+    comment left behind by the second one says so: io.cpp:1382 reads
+    "Guard the unset name/location that chart slots 3-6 start life with,
+    the same way the chart info writer above already does." Every other
+    writer in the file guards -- the chart info writer and the positions
+    writer walk the string only inside `if (FSzSet(...))`, AAF does the
+    same, iCalendar substitutes "Astrolog chart" and "Default location".
+    `FOutputQuickFile()` was the one missed. Upstream's defect, shared
+    core, so the Windows build has it too.
+
+    Two neighbours were checked and left alone, which is the other half
+    of a review: `charts1.cpp`'s `PrintWheelCenter()` has the same
+    unguarded `sprintf2("%s", ciMain.nam)` at case 1 and `.loc` at case
+    3, but the row index arithmetic above the switch bumps `irow` past
+    those cases when the string is unset, so they are unreachable. And
+    `-ol` round-tripping into an interactive prompt is a chart *list*
+    load, which sets the list rather than the current chart -- the same
+    in both builds, since the code is shared.
+
+    **The net that existed asked the wrong question.** The
+    `chart-export` group already wrote all five formats with
+    `ciMain.nam` and `.loc` set to NULL -- it was written after the AAF
+    writer took the process down on exactly that input -- and then
+    asserted the file was *not empty*. Not empty is not the same as not
+    garbage. It now also reads each file back and requires that no field
+    reached it as "(null)", which is one line per format and covers the
+    whole class rather than the one writer.
+
 
 ## Features this fork adds to both builds
 
@@ -7988,6 +8032,16 @@ cannot reach, and `tools/windrive.sh` cannot read a control's value
 (there is no AT-SPI under Wine), so it rests on the shared behavioural
 claim and inspection. Said plainly here rather than left to look
 covered.
+
+### The Quick*Chart writer put "(null)" in the file
+
+`FOutputQuickFile()` hands `pci->nam` and `pci->loc` to
+`fprintf("%-23.23s", ...)` unguarded, and both are NULL on a chart that
+was never named -- the default state. Passing NULL to a `%s` is
+undefined behaviour; where it does not crash it writes the literal text
+"(null)" into a file another program parses. Every other writer in
+io.cpp guards, two of them because this fork fixed them; `SzSet()` is
+the idiom and is what these use now. Upstream's defect, shared core.
 
 ### A settings file with a ruler-less object would not load back
 

@@ -1667,6 +1667,19 @@ static void TestChartExportQt()
       "%s writes a chart with no name and no location", rgszFmt[i]);
     Check(QFileInfo(QString::fromLocal8Bit(szPath)).size() > 0,
       "and the %s file it wrote is not empty", rgszFmt[i]);
+    // Not empty is not the same as not garbage. ciMain.nam and .loc are
+    // NULL above, and a writer that hands NULL to a "%s" has undefined
+    // behaviour -- where it does not crash, glibc writes the literal
+    // text "(null)" into a file another program is meant to read. The
+    // Quick*Chart writer did exactly that, in both fields, while every
+    // other writer here guarded with FSzSet(). Cheap to ask of all five.
+    QFile fileT(QString::fromLocal8Bit(szPath));
+    QByteArray ba;
+    if (fileT.open(QIODevice::ReadOnly))
+      ba = fileT.readAll();
+    fileT.close();
+    Check(!ba.contains("(null)"),
+      "and no unset field reached the %s file as \"(null)\"", rgszFmt[i]);
     QFile::remove(QString::fromLocal8Bit(szPath));
   }
 
