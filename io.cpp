@@ -1915,8 +1915,16 @@ flag FOutputSettings()
   PrintF(" ; In Esoteric, Hierarchical, Ray ruling (signs, houses)\n\n\n");
 
   PrintF("; DEFAULT RULERSHIPS & EXALTATIONS:\n\n");
+  // Both rulerships need the "0" guard, not just the second. szSignName[0]
+  // is the empty string, so an object with no primary ruler wrote
+  // "-YJ Ura  0" -- two arguments where the switch takes three, and the
+  // file this program had just saved would not load back:
+  // "Astrolog: Too few parameters to switch -YJ (2 given, 3 required)",
+  // a hard startup failure. Reachable from a shipped macro: astrolog.as's
+  // own M0 41 contains "-YJ Ura 0 0".
   for (i = 1; i <= 10; i++)
-    { sprintf2(S(sz), "-YJ %.3s %.3s %.3s\n", szObjName[i], szSignName[ruler1[OBJT(i)]],
+    { sprintf2(S(sz), "-YJ %.3s %.3s %.3s\n", szObjName[i],
+    ruler1[OBJT(i)] <= 0 ? "0" : szSignName[ruler1[OBJT(i)]],
     ruler2[OBJT(i)] <= 0 ? "0" : szSignName[ruler2[OBJT(i)]]); PrintFSz(); }
   PrintF("\n");
   for (i = 1; i <= 10; i++)
