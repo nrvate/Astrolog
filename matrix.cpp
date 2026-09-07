@@ -178,10 +178,14 @@ long MatrixMdyToJulian(int mon, int day, int yea)
   long im, j;
 
   im = 12*(yea + 4800) + mon - 3;
-  j = (2*(im%12) + 7 + 365*im)/12;
-  j += day + im/48 - 32083;
+  // Dvd() rather than "/", and a Dvd-based mod: for years before 4800 BC,
+  // im is negative, and C division truncates toward zero where this
+  // algorithm needs floor -- the reverse conversion below has used Dvd()
+  // for exactly that reason all along. For im >= 0 the two agree.
+  j = Dvd(2*(im - 12*Dvd(im, 12)) + 7 + 365*im, 12);
+  j += day + Dvd(im, 48) - 32083;
   if (j > 2299171)                // Take care of dates in Gregorian calendar.
-    j += im/4800 - im/1200 + 38;
+    j += Dvd(im, 4800) - Dvd(im, 1200) + 38;
   return j;
 }
 
@@ -356,8 +360,6 @@ real CuspPlacidus(real deg, real FF, flag fNeg)
     // This formula works except at 0 latitude (AA == 0.0).
     XS = X*RSin(R1)*RTanD(is.OB)*RTanD(AA == 0.0 ? 0.0001 : AA);
     XS = RAcos(XS);
-    if (XS < 0.0)
-      XS += rPi;
     R1 = RFromD(is.RA) + (fNeg ? rPi-(XS/FF) : (XS/FF));
   }
   LO = RAtn(RTan(R1)/RCosD(is.OB));
@@ -520,13 +522,13 @@ real ReadThree(real r0, real r1, real r2)
 // Another coordinate transformation. This is used by the ComputePlanets()
 // procedure to rotate rectangular coordinates by a certain amount.
 
-void RecToSph2(real AP, real AN, real _IN, real *X, real *Y, real *G)
+void RecToSph2(real AP, real AN, real rInc, real *X, real *Y, real *G)
 {
   real R, D, A;
 
   RecToPol(*X, *Y, &A, &R); A += AP; PolToRec(A, R, X, Y);
   D = *X; *X = *Y; *Y = 0.0; RecToPol(*X, *Y, &A, &R);
-  A += _IN; PolToRec(A, R, X, Y);
+  A += rInc; PolToRec(A, R, X, Y);
   *G = *Y; *Y = *X; *X = D; RecToPol(*X, *Y, &A, &R); A += AN;
   if (A < 0.0)
     A += 2.0*rPi;
@@ -539,11 +541,12 @@ void RecToSph2(real AP, real AN, real _IN, real *X, real *Y, real *G)
 
 void ErrorCorrect(int ind, real *x, real *y, real *z)
 {
-  real U, V, W, A, S0, T0[4], *pr;
+  real U, V, W, A, S0, T0[4];
+  CONST real *pr;
   int IK, IJ, irError;
 
   irError = cErrorCount[ind-oJup];
-  pr = (real *)&rErrorData[iErrorOffset[ind-oJup]];
+  pr = &rErrorData[iErrorOffset[ind-oJup]];
   for (IK = 1; IK <= 3; IK++) {
     if (ind == oJup && IK == 3) {
       T0[3] = 0.0;
@@ -571,10 +574,14 @@ void ComputePlanets(void)
 {
   real helioret[uranHi+1],
     heliox[uranHi+1], helioy[uranHi+1];
-  real aber = 0.0, AU, E, EA, E1, M, XW, YW, AP, AN, _IN, X, Y, G, XS, YS, ZS;
+  real aber = 0.0, AU, E, EA, E1, M, XW, YW, AP, AN, rInc, X, Y, G, XS, YS, ZS;
   int ind = oSun, i;
   OE *poe;
 
+  // The stride skips the Moon (oSun+2 passes over it: ComputeLunar()
+  // computes the Moon separately, since unlike the planets it orbits the
+  // Earth), and skips Vulcan (the jump from cPlanet lands on uranLo+1:
+  // Vulcan has no OE row, having no real orbit to give one).
   for (ind = oSun; ind <= (us.fUranian ? uranHi : cPlanet);
     ind += (ind == oSun ? 2 : (ind == cPlanet ? uranLo+1-cPlanet : 1))) {
     if (ignore[ind] && ind > oSun && ind != us.objCenter)
@@ -592,13 +599,13 @@ void ComputePlanets(void)
     YW = AU*E1*pow(1.0-E*E,0.5)*RCos(EA);
     AP = ReadThree(poe->ap0, poe->ap1, poe->ap2);
     AN = ReadThree(poe->an0, poe->an1, poe->an2);
-    _IN = ReadThree(poe->in0, poe->in1, poe->in2); // Calculate inclination
+    rInc = ReadThree(poe->in0, poe->in1, poe->in2); // Calculate inclination
     X = XW; Y = YW;
-    RecToSph2(AP, AN, _IN, &X, &Y, &G);  // Rotate velocity coords
+    RecToSph2(AP, AN, rInc, &X, &Y, &G);  // Rotate velocity coords
     heliox[ind] = X; helioy[ind] = Y;    // Helio ecliptic rectangular
     X = AU*(RCos(EA)-E);                 // Perifocal coordinates for
     Y = AU*RSin(EA)*pow(1.0-E*E,0.5);    // rectangular position coordinates
-    RecToSph2(AP, AN, _IN, &X, &Y, &G);  // Rotate for rectangular
+    RecToSph2(AP, AN, rInc, &X, &Y, &G);  // Rotate for rectangular
     XS = X; YS = Y; ZS = G;              // position coordinates
     if (FBetween(ind, oJup, oPlu))
       ErrorCorrect(ind, &XS, &YS, &ZS);
@@ -635,6 +642,8 @@ void ComputePlanets(void)
       PtSub2(space[i], space[ind]);
     }
   }
+  // Same stride as the loop above: the Moon is still not an orbiter of
+  // the Sun here, and its helio arrays were never filled.
   for (i = 0; i <= (us.fUranian ? uranHi : cPlanet);
     i += (i == oSun ? 2 : (i == cPlanet ? uranLo+1-cPlanet : 1))) {
     if ((ignore[i] && i > oSun) || i == ind)
