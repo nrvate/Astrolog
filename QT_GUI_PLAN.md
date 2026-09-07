@@ -8300,6 +8300,69 @@ are the more useful half to read before starting something new.
     event rather than by calling `close()`, so the half that is supposed
     to succeed does not end the test run.
 
+193. **`-N` stapled an atlas listing to every chart afterwards.** The
+    sweep that found item 192's two lockdown switches was worth turning
+    into a standing check, and doing that found a third bug -- a
+    different one, from a second question the same script can ask.
+
+    `tools/backend_parity_audit.py` compares the `us.*` and `gs.*` fields
+    the Windows GUI acts on against the ones the Qt GUI acts on. It is
+    the other half of `rc_field_audit`, which sees only what a dialog
+    control binds; command handlers and enforcement points live outside
+    that. **Comments are stripped first**, and that is not tidiness: its
+    own first run reported a field as "no longer missing" because a
+    comment in qtdriver.cpp had just started explaining what that field
+    does. An audit a comment can satisfy is not an audit.
+
+    Its second check is the one that found the bug, and it derives its
+    expectation from the oracle rather than transcribing it. Windows
+    clears the chart-type flags by zeroing two raw byte ranges of the US
+    struct -- `us.fListing` through `us.fVelocity`, and `us.fCredit`
+    through `us.fLoop`. `SetChartModeQt()` instead walks `rgchartmode[]`
+    and clears each flag it names, which is the better shape and is
+    **not the same set**: a flag inside one of those ranges with no table
+    row is cleared on Windows and was not cleared here.
+
+    Two were. `us.fAtlasLook` (`-N`) and `us.fZoneChange` (`-Nz`) are
+    additive text listings -- charts1.cpp *appends* each to whatever the
+    chart already printed, which is measured, not assumed: `-N -v`
+    prints the wheel listing and then the atlas listing. So with `-N`
+    set from a settings file, a macro or Enter Command Line, every chart
+    the user picked from then on carried an atlas dump on the end, for
+    the rest of the session -- **and this port has no menu item for
+    either flag**, so there was no way to turn it back off short of
+    another command line. Windows clears both the moment a chart type is
+    picked.
+
+    The audit reads the two range bounds out of the struct, so a flag
+    added upstream between them fails this rather than going quietly
+    missing. Falsified by removing the fix on a scratch copy, where it
+    names both flags.
+
+    Two things checked in the same sweep and left alone. `us.fLoop` and
+    `us.nScrollRow`/`us.nCharsetOut` are not gaps: the first appears in
+    Windows only as the upper *address bound* of that `ClearB`, and the
+    other two are a Win32 text pager and a Win32 clipboard format, both
+    of which Qt does differently. The eleven "List Signs"/"List Objects"
+    flags are reached through `rgchartmode[]` by `SetChartModeQt()` and
+    so never named in the Qt sources. All fourteen are allowlisted with
+    the reason, the way `inert_option_audit.py` requires.
+
+    **And one small thing fixed along the way.** Astrolog writes a UTF-8
+    byte order mark at the head of the file when `us.nCharsetOut` is
+    `ccUTF8` (`-Yao3`). That is right for a file and wrong for a capture
+    into memory: `QString::fromUtf8()` does not strip it, so it reached
+    the clipboard as an invisible U+FEFF first character for Copy Chart
+    Text Output, and reached `QTextDocument::setHtml()` as a stray one
+    before `<html>` when printing a text chart. The file export path
+    keeps its BOM, which is what a file wants. The test asserts both
+    ends -- that the file it captures from *does* begin with a BOM, and
+    that the clipboard does not -- because "no BOM" passes just as well
+    on an empty clipboard. It also had to pin the chart type, for the
+    fourth time in this run of items: whatever an earlier group left
+    selected decides what the listing says, so asserting on the word
+    "Astrolog" passed alone and failed in the suite.
+
 
 ## Features this fork adds to both builds
 

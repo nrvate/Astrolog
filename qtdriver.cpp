@@ -1117,6 +1117,16 @@ static QString CaptureTextChartQt(flag fHTML)
     qs = QString::fromUtf8(file.readAll());
     file.close();
   }
+  // Astrolog writes a UTF-8 byte order mark at the head of the file when
+  // us.nCharsetOut is ccUTF8 ("-Yao3"). That is right for a file and
+  // wrong for a string: QString::fromUtf8() does not strip it, so it
+  // survives as U+FEFF -- an invisible first character on the clipboard
+  // for Copy Chart Text Output, and a stray one before "<html>" when
+  // PrintChartQt() hands this to QTextDocument::setHtml(). The file
+  // export path writes its own file and keeps its BOM, which is what a
+  // file wants; this is the capture-into-memory path and does not.
+  if (qs.startsWith(QChar(0xFEFF)))
+    qs.remove(0, 1);
   return qs;
 }
 
@@ -1535,6 +1545,19 @@ void SetChartModeQt(int mode)
 
   for (i = 0; i < cchartmode; i++)
     *rgchartmode[i].pf = fFalse;
+  // Two more that walking the table cannot reach. Windows clears a raw
+  // struct byte range here (us.fListing through us.fVelocity, plus
+  // us.fCredit through us.fLoop -- wdriver.cpp:1164), and that range
+  // holds fAtlasLook ("-N") and fZoneChange ("-Nz"), neither of which
+  // has an rgchartmode[] row. Both are ADDITIVE listings: charts1.cpp
+  // appends each to whatever the chart already printed. So left set they
+  // staple an atlas dump onto the end of every chart picked afterwards,
+  // for the rest of the session -- and this port has no menu item for
+  // either, so there is no way to turn them back off short of another
+  // command line. tools/backend_parity_audit.py derives that range from
+  // the struct and fails if a flag in it is neither in the table nor
+  // named here, so a new one upstream cannot slip past.
+  us.fAtlasLook = us.fZoneChange = fFalse;
   // DrawChartX() switches directly on gi.nMode with no fallback if it's 0,
   // and DetectGraphicsChartMode() (xscreen.cpp, normally what
   // (re)derives gi.nMode from the us.f* flags before a redraw) doesn't

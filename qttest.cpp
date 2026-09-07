@@ -39,6 +39,7 @@
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMenuBar>
+#include <QtGui/QClipboard>
 // QAction moved to QtGui in Qt6; see the same guard in qtdriver.cpp.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QtGui/QAction>
@@ -7256,6 +7257,83 @@ static void TestLockdownQt()
 }
 
 
+// Copy Chart Text Output, with the output codepage set to UTF-8.
+//
+// Astrolog writes a byte order mark at the head of a UTF-8 file, which is
+// right for a file and wrong for a capture into memory:
+// QString::fromUtf8() does not strip it, so it reached the clipboard as
+// an invisible U+FEFF first character, and reached
+// QTextDocument::setHtml() as a stray one before "<html>" when printing a
+// text chart. Both halves asserted -- the text still arrives, and it
+// starts where it should -- because "no BOM" passes just as well on an
+// empty clipboard.
+
+static void TestCopyTextBomQt()
+{
+  int nCharsetOutSav = us.nCharsetOut;
+  flag fGraphicsSav = us.fGraphics;
+
+  Group("Copy text codepage");
+  QAction *pa = PaFindActionTestQt("Copy Chart &Text Output");
+  Check(pa != NULL, "Copy Chart Text Output is on the menu bar");
+  if (pa == NULL)
+    return;
+  // Pin the chart being captured, not just "text mode". Whatever chart
+  // type an earlier group left selected decides what the listing says,
+  // and a relationship chart prints a different header -- so asserting
+  // on the word "Astrolog" without pinning this failed in the full run
+  // while passing on its own. The measured leftovers are listed above
+  // TestAllMenuActionsQt().
+  QVector<flag> rgfSav(cchartmode);
+  int i, nRelSav = us.nRel;
+  for (i = 0; i < cchartmode; i++)
+    rgfSav[i] = *rgchartmode[i].pf;
+  us.nRel = rcNone;
+  us.fGraphics = fFalse;
+  SetChartModeQt(gWheel);
+  us.fGraphics = fFalse;
+
+  for (int i = 0; i < 2; i++) {
+    CONST char *szWhat = (i == 0 ? "the default codepage" : "UTF-8");
+    us.nCharsetOut = (i == 0 ? ccNone : ccUTF8);
+    QApplication::clipboard()->setText(QString("sentinel"));
+    pa->trigger();
+    QString str = QApplication::clipboard()->text();
+    Check(str.contains("Astrolog"), "%s: a text chart reaches the clipboard",
+      szWhat);
+    Check(!str.startsWith(QChar(0xFEFF)),
+      "%s: and does not start with a byte order mark", szWhat);
+  }
+
+  // And the mark really is there to be stripped. Without this the pair
+  // above passes on a build that never writes one, which is the same
+  // assertion as no assertion.
+  QString strPath = QDir::tempPath() + QString("/astrolog-qt-bom-%1.txt")
+    .arg((int)QCoreApplication::applicationPid());
+  QByteArray baPath = strPath.toLocal8Bit();
+  char *szScreenSav = is.szFileScreen;
+  us.nCharsetOut = ccUTF8;
+  QFile::remove(strPath);
+  CaptureTextToFileQt(baPath.constData(), fFalse);
+  QFile fileT(strPath);
+  QByteArray baFile;
+  if (fileT.open(QIODevice::ReadOnly))
+    baFile = fileT.read(8);
+  fileT.close();
+  Check(baFile.startsWith("\xEF\xBB\xBF"),
+    "the file this captures from does begin with a UTF-8 BOM");
+  QFile::remove(strPath);
+  is.szFileScreen = szScreenSav;
+
+  us.nCharsetOut = nCharsetOutSav;
+  us.fGraphics = fGraphicsSav;
+  us.nRel = nRelSav;
+  for (i = 0; i < cchartmode; i++)
+    *rgchartmode[i].pf = rgfSav[i];
+  printf("  the clipboard gets the text and nothing in front of it\n");
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -7362,6 +7440,23 @@ static void TestChartModeTableQt()
     "rcBiorhythm detects with no flag set");
   us.nRel = rcNone;
   Check(DetectGraphicsChartMode() == gWheel, "nothing set falls back to gWheel");
+
+  // Picking a chart type clears the two additive listings that have no
+  // row in the table above. Windows does it by zeroing a raw struct
+  // range that happens to contain them (wdriver.cpp:1164);
+  // SetChartModeQt() walks the table, which cannot reach them, so it
+  // names them. Left set they are not merely stale -- charts1.cpp
+  // APPENDS each to whatever the chart printed, so an atlas dump follows
+  // every chart the user picks from then on, and this port has no menu
+  // item for either to turn it back off.
+  flag fAtlasSav = us.fAtlasLook, fZoneSav = us.fZoneChange;
+  us.fAtlasLook = us.fZoneChange = fTrue;
+  SetChartModeQt(gWheel);
+  Check(!us.fAtlasLook,
+    "picking a chart type clears the atlas listing (-N)");
+  Check(!us.fZoneChange,
+    "and the time zone change listing (-Nz)");
+  us.fAtlasLook = fAtlasSav; us.fZoneChange = fZoneSav;
 
   for (i = 0; i < cchartmode; i++)
     *rgchartmode[i].pf = rgfSav[i];
@@ -8166,6 +8261,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"atlas-zone",           TestAtlasZoneQt},
   {"eclipses",             TestEclipseQt},
   {"lockdown",             TestLockdownQt},
+  {"copy-text-bom",        TestCopyTextBomQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},

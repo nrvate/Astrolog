@@ -256,9 +256,9 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Thirteen standing audits, all currently clean and all run by `make check`
+Fourteen standing audits, all currently clean and all run by `make check`
 (and so by a release, which runs the same command) — six of the
-port against `astrolog.rc`, one of the compiled defaults against
+port against `astrolog.rc`, one of the Qt GUI against the Windows one, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
 settings writer, one of round-trip fixture coverage, one of line endings,
 one of the MSVC project against the makefile's source list, and one of
@@ -317,6 +317,30 @@ python3 tools/rc_casttype_audit.py   # a control cast to the WRONG QT
                                      # QWidget * or QAbstractButton *
                                      # say nothing and are not counted
                                      # against
+python3 tools/backend_parity_audit.py # every us./gs. setting the WINDOWS
+                                     # GUI acts on, the Qt GUI acts on
+                                     # too -- the other half of
+                                     # rc_field_audit, which only sees
+                                     # what a dialog control binds.
+                                     # Command handlers and enforcement
+                                     # points live outside that. It
+                                     # found -0q and -0X doing nothing
+                                     # at all here on the run that
+                                     # produced it. Comments are
+                                     # stripped first, and that is not
+                                     # tidiness: its own first run
+                                     # passed a field because a comment
+                                     # had just started mentioning it.
+                                     # A second check derives Windows'
+                                     # two ClearB() ranges from the US
+                                     # struct and requires every flag in
+                                     # them to be an rgchartmode[] row
+                                     # or named in SetChartModeQt() --
+                                     # that found -N and -Nz surviving a
+                                     # chart-type change here and being
+                                     # cleared on Windows. Allowlist
+                                     # entries carry a reason each, like
+                                     # inert_option_audit
 python3 tools/defaults_audit.py      # data.cpp initializer counts and
                                      # values vs astrolog.as, incl. the
                                      # known-preference allowlist; found
@@ -394,7 +418,7 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # gave a link error nothing explained
 ```
 
-`make check` runs all thirteen, plus a set of assertions that are scripts
+`make check` runs all fourteen, plus a set of assertions that are scripts
 rather than workflow steps so they can be falsified in a second instead
 of by pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
 input it must refuse and, where cheap, input it must accept -- 49 cases,
