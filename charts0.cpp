@@ -1934,13 +1934,21 @@ void DisplaySwitchesW(void)
   PrintS(" _WFa: Antialias the font that charts draw text in.");
   PrintS(" _WG <font> <6-48>: Set font and size menus and dialogs use.");
   PrintS(" _WGa: Antialias the font that menus and dialogs use.");
+#if defined(WIN) || defined(QT)
+  // Both GUI builds act on these three: each has a flag of its own, the
+  // File Settings dialog edits all three in both, and FOutputSettings()
+  // writes all three. They sat behind "#ifdef WIN" while the Qt build
+  // still ignored them, and stayed there after it stopped -- so a Linux
+  // user's own astrolog.as carried "=Wn", "_Wt" and "=Wb" lines that the
+  // program's own help did not mention.
+  PrintS(" _Wn: Don't redraw screen until user forces update.");
+  PrintS(" _Wt: Don't display warning and error popup messages.");
+  PrintS(" _Wb: Bitmaps are saved and copied from the Windows screen.");
+#endif
 #ifdef WIN
   // Win32 only, because only wdriver.cpp acts on these.
   PrintS(" _W <value>: Run given Windows menu command internally.");
-  PrintS(" _Wn: Don't redraw screen until user forces update.");
-  PrintS(" _Wt: Don't display warning and error popup messages.");
   PrintS(" _WB <0-24> <0-24>: Set window scrollbar positions.");
-  PrintS(" _Wb: Bitmaps are saved and copied from the Windows screen.");
   PrintS(" _Wo: Continually autosave graphics screen to bitmap file.");
   PrintS(" _Wo0: Continually autosave graphics screen to numbered files.");
   PrintS(" _Wo3: Autosave graphics screen to wireframe instead of bitmap.");

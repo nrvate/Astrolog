@@ -9579,6 +9579,44 @@ are the more useful half to read before starting something new.
     known starting value and names the exact result the good input must
     produce.
 
+226. **Three switches the Qt build implements, edits in a dialog, and
+    writes into the user's file -- and does not document.** CLAUDE.md
+    names this exact hazard and says nothing checks it: *"`-H` documents
+    what a build IMPLEMENTS, not what it accepts... Nothing checks this
+    split either -- it was got wrong on the first attempt."* It was wrong
+    again, in the other direction.
+
+    `-Wn` (buffer redraws), `-Wt` (don't show popup messages) and `-Wb`
+    (export bitmaps from window content) each set a `qi` flag here, are
+    edited by three File Settings check boxes, and are written by
+    `FOutputSettings()`. Their help lines sat inside `DisplaySwitchesW()`'s
+    `#ifdef WIN` -- correct while the Qt build merely consumed them as
+    no-ops, and left there when it stopped. So a Linux user's own
+    `astrolog.as` carried `=Wn`, `_Wt` and `=Wb` lines the program's own
+    help did not mention.
+
+    The three lines are `#if defined(WIN) || defined(QT)` now, which is
+    the shape CLAUDE.md prescribes for widening a `WIN` branch this port
+    wants too; `-W`, `-WB`, `-Wo*`, `-WS*` and `-WZ` stay Win32-only,
+    because those really are no-ops here. Verified by `strings` on all
+    three builds rather than by reading: the Qt binary gained the three
+    lines and still lacks "Run given Windows menu command internally", the
+    Windows binary has all of them, and the console build has none.
+
+    **And the check that was missing.** `registry_audit.py` asked whether
+    every documented or written spelling resolves to a registry row; it
+    could not see a spelling that is *written and not documented*.
+    `w_switch_gap()` closes that for the `-W` family, which is the family
+    where the two builds diverge: every `-W` the Qt arm of
+    `FOutputSettings()` writes must be documented by `DisplaySwitchesW()`
+    on a line a Qt build actually compiles.
+
+    That needs a small `#if` walker, since the whole question is which
+    lines each build sees. It knows the four shapes these two functions
+    use and errs toward *including* a line it does not understand, so a
+    new guard makes the audit noisier rather than blinder. Falsified by
+    deleting the `-Wt` line again: one failure, naming it.
+
 
 ## Features this fork adds to both builds
 

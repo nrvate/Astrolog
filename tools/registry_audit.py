@@ -88,6 +88,89 @@ def writer_spellings():
     return out
 
 
+def qt_active_lines(text):
+    """The lines of "text" a QT (non-WIN) build actually compiles.
+
+    A tiny #if walker, not a preprocessor: it understands the four shapes
+    this file uses -- "#ifdef WIN", "#ifdef QT", "#if defined(WIN) ||
+    defined(QT)" and a plain "#else"/"#endif" -- and treats anything else
+    as leaving the state alone. That is enough to answer the one question
+    below, and a shape it does not know errs toward INCLUDING the line, so
+    a new guard makes the audit noisier rather than blinder.
+    """
+    out, stack = [], []
+    for line in text.split('\n'):
+        t = line.strip()
+        if t.startswith('#if'):
+            if re.match(r'#ifdef\s+WIN\b', t) or \
+               re.match(r'#if\s+defined\(WIN\)\s*$', t):
+                stack.append(False)
+            elif re.match(r'#ifn?def\s+QT\b', t):
+                stack.append(t.startswith('#ifdef'))
+            else:
+                stack.append(True)      # WIN||QT, and everything else
+            continue
+        if t.startswith('#else'):
+            if stack:
+                stack[-1] = not stack[-1]
+            continue
+        if t.startswith('#endif'):
+            if stack:
+                stack.pop()
+            continue
+        if all(stack):
+            out.append(line)
+    return out
+
+
+def w_switches_documented():
+    """The "-W" spellings DisplaySwitchesW() documents to a Qt build."""
+    s = read('charts0.cpp')
+    ia = s.index('void DisplaySwitchesW(void)')
+    ib = s.index('\n}\n', ia)
+    out = set()
+    for line in qt_active_lines(s[ia:ib]):
+        m = re.search(r'"\s[_=-](W[A-Za-z0-9]*)', line)
+        if m:
+            out.add(m.group(1))
+    return out
+
+
+def w_switches_written():
+    """The "-W" spellings FOutputSettings() writes in its #ifdef QT arm."""
+    s = read('io.cpp')
+    ia = s.index('flag FOutputSettings()')
+    ib = s.index('\n}\n', ia)
+    out = set()
+    for line in qt_active_lines(s[ia:ib]):
+        for m in re.finditer(r'"(?:%c|[-=_:])(W[A-Za-z0-9]*)', line):
+            out.add(m.group(1))
+    return out
+
+
+def w_switch_gap():
+    """A switch the Qt build writes into the user's astrolog.as but does
+    not document.
+
+    "-H documents what a build IMPLEMENTS, not what it accepts", and
+    nothing checked the split -- CLAUDE.md says so, and it was wrong:
+    "-Wn", "-Wt" and "-Wb" set flags here, the File Settings dialog edits
+    all three, FOutputSettings() writes all three, and DisplaySwitchesW()
+    kept their help behind "#ifdef WIN". A user's own settings file
+    carried three lines the program's help did not mention.
+
+    Written-but-undocumented is the direction that matters; the reverse
+    (documented and not written) is normal, since most switches are
+    actions rather than settings.
+    """
+    doc, wrote = w_switches_documented(), w_switches_written()
+    if not doc or not wrote:
+        return [f"parsed {len(doc)} documented and {len(wrote)} written "
+                f"\"-W\" spellings; one of them should not be empty"]
+    return [f"\"-{w}\" is written into astrolog.as by the Qt build and "
+            f"documented only to Windows" for w in sorted(wrote - doc)]
+
+
 def main():
     rows = registry_rows()
     if len(rows) < 240:
@@ -103,12 +186,16 @@ def main():
             print(f"MISSING {src}: documented/written spelling "
                   f"\"{name}\" resolves to no registry row")
             bad += 1
+    for msg in w_switch_gap():
+        print("MISSING charts0.cpp: " + msg)
+        bad += 1
     if bad:
         print(f"FAIL: {bad} unresolved spelling(s) "
               f"({len(seen)} checked, {len(rows)} rows)")
         return 1
     print(f"OK: registry audit clean -- {len(seen)} documented/written "
-          f"spellings all resolve against {len(rows)} rows")
+          f"spellings all resolve against {len(rows)} rows, and every "
+          f"\"-W\" the Qt build writes is documented to it")
     return 0
 
 
