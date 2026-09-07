@@ -1280,7 +1280,22 @@ void DrawFill(int x, int y, KV kv)
     // Breadth first search flood fill directly against the QImage buffer,
     // same algorithm as the bitmap file case above.
     QRgb qrgbB = QColorFromKv(kvB).rgb(), qrgbF = QColorFromKv(kvF).rgb();
-    if (gi.qim->pixel(x, y) != qrgbB)
+    // Bounded by the IMAGE, not by FOnWin(). The bitmap branch above can
+    // use FOnWin() because there the buffer IS gs.xWin by gs.yWin; here
+    // gi.qim is whatever the caller allocated, and the print path sizes
+    // it to the printer page instead. So FOnWin() said yes on coordinates
+    // outside the image, and every one of them reached QImage::pixel(),
+    // which answers 0 with a warning on stderr -- 538 of them per suite
+    // run once printing started rendering through this path.
+    //
+    // The warning is not the defect, it is the symptom. gi.kiOff is BLACK
+    // in most of these renders, so qrgbB is 0 and an out-of-range read
+    // returns 0 == qrgbB: the test passes, setPixel() is called on a
+    // coordinate the image does not have, and the point goes onto a
+    // queue of fixed size iFillMax that wraps when full. The fill spends
+    // its budget outside the picture.
+    QRect rcImQt = gi.qim->rect();
+    if (!rcImQt.contains(x, y) || gi.qim->pixel(x, y) != qrgbB)
       return;
     gi.qim->setPixel(x, y, qrgbF);
     iTop = 1; iCur = 0;
@@ -1289,7 +1304,8 @@ void DrawFill(int x, int y, KV kv)
       x = rgpt[iCur].x; y = rgpt[iCur].y;
       for (d = 0; d < 4; d++) {
         xnew = x + dxOff[d]; ynew = y + dyOff[d];
-        if (!FOnWin(xnew, ynew) || gi.qim->pixel(xnew, ynew) != qrgbB)
+        if (!rcImQt.contains(xnew, ynew) || !FOnWin(xnew, ynew) ||
+          gi.qim->pixel(xnew, ynew) != qrgbB)
           continue;
         if (iTop == iCur)
           continue;

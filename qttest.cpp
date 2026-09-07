@@ -6940,6 +6940,80 @@ static void TestSwissEnumerateQt()
 }
 
 
+// DrawFill() floods against the QImage buffer, and what bounds it is the
+// IMAGE -- not FOnWin(), which measures gs.xWin by gs.yWin. Those two are
+// the same size in an ordinary screen redraw and different whenever the
+// caller allocated the buffer itself, which printing does: it renders at
+// the page size while gs.xWin still holds the window's.
+//
+// The symptom was 538 "QImage::pixel: coordinate (x,y) out of range"
+// warnings per suite run, which Qt writes and then answers with 0. That 0
+// is the defect rather than the noise: gi.kiOff is black in these renders,
+// so the returned 0 EQUALS the background the fill is looking for, the
+// point is accepted, and setPixel() is called on a pixel the image does
+// not have. The queue behind it is a fixed iFillMax that wraps when full,
+// so the fill spends its budget outside the picture.
+//
+// Counted through a Qt message handler because that is the only place the
+// access is observable from: QImage guards it, so there is no crash and no
+// sanitizer report to catch instead.
+
+static int s_cRangeMsgQt = 0;
+static QtMessageHandler s_pfnMsgSavQt = NULL;
+
+static void MsgCountRangeQt(QtMsgType nType, CONST QMessageLogContext &ctx,
+  CONST QString &str)
+{
+  if (str.contains(QLatin1String("out of range")))
+    s_cRangeMsgQt++;
+  if (s_pfnMsgSavQt != NULL)
+    s_pfnMsgSavQt(nType, ctx, str);
+}
+
+
+static void TestFillBoundsQt()
+{
+  QImage *pqimSav = gi.qim;
+  QPainter *pqpaintSav = gi.qpaint;
+  int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode;
+  flag fGraphicsSav = us.fGraphics, fColorSav = gs.fColor;
+  int i;
+  CONST int rgnMode[] = {gWheel, gHouse, gAstroGraph};
+
+  Group("Fill stays inside the image");
+
+  us.fGraphics = fTrue;
+  gs.fColor = fTrue;
+  // The buffer deliberately smaller than the window the drawing code
+  // measures itself against, which is exactly the shape printing creates.
+  // Without this the two agree and the check cannot fail either way.
+  gs.xWin = 700; gs.yWin = 700;
+  s_cRangeMsgQt = 0;
+  s_pfnMsgSavQt = qInstallMessageHandler(MsgCountRangeQt);
+  for (i = 0; i < (int)(sizeof(rgnMode)/sizeof(rgnMode[0])); i++) {
+    gi.qim = new QImage(400, 400, QImage::Format_RGB32);
+    gi.qim->fill(Qt::black);
+    gi.qpaint = new QPainter(gi.qim);
+    InitColors();
+    gi.nScaleT = 1;
+    AdjustTextScale();
+    gi.nMode = rgnMode[i];
+    DrawChartX();
+    delete gi.qpaint; gi.qpaint = NULL;
+    delete gi.qim;
+  }
+  qInstallMessageHandler(s_pfnMsgSavQt);
+  gi.qim = pqimSav; gi.qpaint = pqpaintSav;
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  us.fGraphics = fGraphicsSav; gs.fColor = fColorSav;
+  gi.nMode = nModeSav;
+
+  Check(s_cRangeMsgQt == 0,
+    "nothing reads or writes outside a chart buffer smaller than "
+    "gs.xWin by gs.yWin (%d out-of-range access(es))", s_cRangeMsgQt);
+}
+
+
 static void TestObjSelTableQt()
 {
   char szName[cchSzDef];
@@ -11066,9 +11140,21 @@ static void TestPrintQt()
           set.insert(im.pixel(x, y));
       return set.size();
     };
+    // Same size first, and not as a formality: the loop below walked
+    // imBlank's bounds and read imDrawn at them, and Qt answers an
+    // out-of-range pixel() with 0 and a warning on stderr. Every one of
+    // those reads counts as a difference, so "cDiff > 100" would pass on
+    // two images that differ only in SHAPE -- and the suite was printing
+    // 538 of those warnings per run. Assert the shape, then compare.
+    Check(imBlank.size() == imDrawn.size(),
+      "the two renders are the same size, so comparing them means "
+      "something (%dx%d against %dx%d)",
+      imBlank.width(), imBlank.height(), imDrawn.width(), imDrawn.height());
     int cDiff = 0;
-    for (int y = 0; y < imBlank.height(); y += 2)
-      for (int x = 0; x < imBlank.width(); x += 2)
+    int yMax = Min(imBlank.height(), imDrawn.height());
+    int xMax = Min(imBlank.width(), imDrawn.width());
+    for (int y = 0; y < yMax; y += 2)
+      for (int x = 0; x < xMax; x += 2)
         cDiff += (imBlank.pixel(x, y) != imDrawn.pixel(x, y));
     Check(cColour(imBlank) <= 2,
       "DrawChartX() with gi.nMode unset draws nothing (%d colours)",
@@ -12207,6 +12293,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"accel-text",           TestAccelTextQt},
   {"expression-functions", TestExpressionFunctionsQt},
   {"swiss-enumerate",      TestSwissEnumerateQt},
+  {"fill-bounds",          TestFillBoundsQt},
   {"objsel-table",         TestObjSelTableQt},
   {"timers",               TestTimerSanityQt},
   {"objsel-dialog",        TestObjSelDialogQt},

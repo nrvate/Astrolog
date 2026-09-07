@@ -10736,6 +10736,45 @@ this is the note that explains the wall of dialogs.
     into `SortESArray()`, a path no harness had reached either.
 
 
+252. **The Qt flood fill was bounded by the window, not by the image it
+    was filling.** `DrawFill()`'s `#ifdef QT` branch guarded each
+    neighbour with `FOnWin()`, which measures `gs.xWin` by `gs.yWin`. The
+    bitmap branch above it can do that, because there the buffer *is*
+    those dimensions. `gi.qim` is whatever the caller allocated, and since
+    item 197 printing allocates it at the printer page size while
+    `gs.xWin` still holds the window's -- so `FOnWin()` said yes on
+    coordinates the image did not have, and the seed read had no bound at
+    all.
+
+    **The warning is not the defect.** Qt answers an out-of-range
+    `pixel()` with 0 and a line on stderr, and the suite was printing 538
+    of them a run. But `gi.kiOff` is black in these renders, so `qrgbB` is
+    0 and that returned 0 *equals the background the fill is looking
+    for*: the point passes the test, `setPixel()` is called on a pixel
+    that does not exist, and it goes onto a queue of fixed size
+    `iFillMax` that wraps when full. The fill spends its budget outside
+    the picture. No crash, no sanitizer report -- QImage guards both ends
+    -- which is why this survived an ASan sweep, a UBSan sweep and a
+    byte-identical graphics differential in the same session.
+
+    Bounded by `gi.qim->rect()` now, on the seed and on every neighbour,
+    with `FOnWin()` kept beside it because the window clip is still the
+    drawing code's own.
+
+    **Dated by its own noise.** `/nvm/work` holds suite logs from either
+    side of it: 0 warnings at 20:19 and 20:45 on 2026-09-06, 10 at 22:17,
+    538 by 01:38 -- so it arrived with item 197, which is what first
+    rendered through this path at a size of its own.
+
+    New group `fill-bounds`, which is the only shape that can see it: a
+    Qt message handler counting "out of range", around three chart modes
+    drawn into a 400x400 buffer with `gs.xWin`/`gs.yWin` at 700. 283
+    accesses with the bug, 0 without. `TestPrintQt()`'s image comparison
+    also asserts the two renders are the same size now -- it was walking
+    one image's bounds and reading the other, which would have counted
+    every out-of-range read as a difference.
+
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
