@@ -3333,6 +3333,86 @@ static void TestGraphicsSizeQt()
 // always being set -- that is exactly why backend_parity_audit.py, which
 // works per field, could not see this.
 
+// PrintNotice(), the third kind of message, which had no Qt branch.
+//
+// PrintWarning() and PrintError() have routed to PrintWarningQt() since
+// the port began. PrintNotice() fell through to the plain non-Windows
+// path and wrote to STDERR, where a window has nobody reading it --
+// Windows shows an information box. Two things reach it: the "-YYT"
+// switch and an AstroExpression asking to show a value.
+//
+// The popup is suppressed for the whole run (NRunQtTestTableQt sets
+// qi.fNoPopup), so what this can assert is that PrintNotice() takes the
+// Qt path and returns without writing anything: is.S must be untouched
+// and nothing may reach the text stream. Before the fix it printed to
+// stderr, which is invisible here -- so the real subject is that "-YYT"
+// no longer goes through PrintSz() at all, which IS observable: it used
+// to land in the captured text.
+
+static void TestNoticeQt()
+{
+  char szFile[cchSzMax];
+  QByteArray baDir = QDir::tempPath().toLocal8Bit();
+  flag fPopupSav = FNoPopupQt(), fGraphicsSav = us.fGraphics;
+  int iT;
+
+  Group("Notice messages");
+  SetNoPopupQt(fTrue);
+  // "-YYt" is a no-op in graphics mode ("if (!us.fGraphics)",
+  // switch.cpp:729) and the suite leaves that on, so without this the
+  // plain half wrote nothing and proved nothing. "-YYT" has no such
+  // guard, which is the asymmetry this group is about.
+  us.fGraphics = fFalse;
+
+  sprintf2(S(szFile), "%s/astrolog-qt-notice-%d.txt", baDir.constData(),
+    (int)QCoreApplication::applicationPid());
+
+  // The output stream is redirected around the switch itself, because
+  // that is when the text is printed -- a capture taken afterwards would
+  // see nothing either way, which is how the first draft of this passed
+  // with the fix deliberately removed.
+  //
+  // Opening a FILE and putting is.S back is the same discipline
+  // CaptureTextToFileQt() uses. See the guard in NRunQtTestTableQt() for
+  // what happens when a group forgets the second half.
+  for (iT = 0; iT <= 1; iT++) {
+    CONST char *szSwitch = iT == 0 ?
+      "-YYt \"ProbeNoticeText\"" : "-YYT \"ProbeNoticePopup\"";
+    FILE *fileSav = is.S, *fileT;
+    QByteArray ba;
+    QFile fileRead;
+
+    QFile::remove(QString(szFile));
+    fileT = fopen(szFile, "w");
+    Check(fileT != NULL, "a scratch stream opens");
+    if (fileT == NULL)
+      continue;
+    is.S = fileT;
+    FProcessCommandLine((char *)szSwitch);
+    is.S = fileSav;
+    fclose(fileT);
+
+    fileRead.setFileName(QString(szFile));
+    if (fileRead.open(QIODevice::ReadOnly))
+      ba = fileRead.readAll();
+    fileRead.close();
+    QFile::remove(QString(szFile));
+
+    if (iT == 0)
+      Check(ba.contains("ProbeNoticeText"),
+        "\"-YYt\" prints its string as ordinary text (%d bytes)",
+        (int)ba.size());
+    else
+      Check(!ba.contains("ProbeNoticePopup"),
+        "and \"-YYT\" does not -- it asks for a popup, which this build "
+        "can now show (%d bytes)", (int)ba.size());
+  }
+
+  us.fGraphics = fGraphicsSav;
+  SetNoPopupQt(fPopupSav);
+}
+
+
 static void TestScreenColorsQt()
 {
   flag fInvSav = gs.fInverse, fColorSav = gs.fColor;
@@ -10965,6 +11045,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"font-pack",            TestFontPackQt},
   {"combo-pick",           TestComboPickQt},
   {"screen-colors",        TestScreenColorsQt},
+  {"notice",               TestNoticeQt},
   {"orb-grid",             TestOrbGridQt},
   {"field-parse",          TestFieldParseQt},
   {"orbit-buffer",         TestOrbitBufferQt},

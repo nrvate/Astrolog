@@ -36,6 +36,7 @@ void RecastAndRedrawQt();
 // the chart is drawn, such as colors.
 void RedrawQt();
 void PrintWarningQt(CONST char *sz, flag fError);
+void PrintNoticeQt(CONST char *sz);
 void RedrawForceQt();
 flag FNoUpdateQt();
 flag FNoPopupQt();

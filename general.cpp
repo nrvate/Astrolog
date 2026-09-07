@@ -1429,7 +1429,11 @@ void PrintSzFormat(CONST char *sz, flag fPopup)
 #endif
   }
   *pch2 = chNull;
-#ifdef WIN
+  // "-YYT" asks for this as a popup and "-YYt" as plain text, and both
+  // GUI builds can show one. It was WIN only while PrintNotice() had no
+  // Qt branch, so "-YYT" in this build wrote to stderr, where a window
+  // has nobody reading it.
+#if defined(WIN) || defined(QT)
   if (fPopup)
     PrintNotice(szFormat);
   else
@@ -1457,6 +1461,10 @@ void PrintProgress(CONST char *sz)
 
 void PrintNotice(CONST char *sz)
 {
+#ifdef QT
+  PrintNoticeQt(sz);
+  return;
+#endif
 #ifndef WIN
   AnsiColor(kYellowA);
   fprintf(stderr, "%s\n", sz);

@@ -9865,6 +9865,34 @@ are the more useful half to read before starting something new.
     monochrome render and under 90% of a colour one. That passes alone and
     in the full suite for the same reason rather than by a wider bound.
 
+234. **The third kind of message had no Qt branch at all.**
+    `PrintWarning()` and `PrintError()` have routed to `PrintWarningQt()`
+    since the port began; **`PrintNotice()` did not**, so it fell through
+    to the plain non-Windows path and wrote to **stderr** -- which a
+    window has nobody reading. Windows shows an information box
+    (general.cpp:1470).
+
+    Two things reach it: the `-YYT` switch, and an AstroExpression asking
+    to show a value (express.cpp:2753). And `PrintSzFormat()`'s choice
+    between the popup and plain text was itself `#ifdef WIN`, correctly so
+    while there was no Qt notice to show -- both are widened together.
+
+    `PrintNoticeQt()` is `PrintWarningQt()`'s shape on purpose: the same
+    `qi.fNoPopup` suppression, the same no-`QApplication`-yet fallback to
+    stderr, the same title format. Windows' own icon and wording carry
+    over as `QMessageBox::information` and "Astrolog Notice".
+
+    **Two false starts, and both are the same lesson from opposite
+    sides.** The assertion first captured the text *after* running the
+    switch -- but the printing happens *during* it, so a later capture saw
+    nothing either way and the check passed with the fix removed. And once
+    it redirected `is.S` around the switch itself, the `-YYt` half wrote
+    **0 bytes**: that switch is a no-op in graphics mode
+    (`if (!us.fGraphics)`, switch.cpp:729) and the suite leaves graphics
+    on. `-YYT` has no such guard, which is exactly the asymmetry the group
+    is about. Falsified by narrowing the guard back: the popup switch's
+    16 bytes land in the text stream.
+
 
 ## Features this fork adds to both builds
 

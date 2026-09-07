@@ -753,6 +753,30 @@ void PrintWarningQt(CONST char *sz, flag fError)
 }
 
 
+// The third kind. PrintWarning() and PrintError() have routed here since
+// the port began; PrintNotice() did not, so it fell through to the plain
+// non-Windows path and wrote to STDERR -- invisible in a window. Windows
+// shows an information box (MessageBox with MB_ICONINFORMATION,
+// general.cpp:1470), and two things reach it here: the "-YYT" switch, and
+// an AstroExpression asking to show a value (express.cpp:2753).
+//
+// Same shape as PrintWarningQt() above, deliberately: the popup
+// suppression, the no-QApplication-yet fallback and the title format are
+// all the ones that function already settled.
+
+void PrintNoticeQt(CONST char *sz)
+{
+  if (FNoPopupQt())
+    return;
+  if (QApplication::instance() == NULL) {
+    fprintf(stderr, "%s\n", sz);
+    return;
+  }
+  QMessageBox::information(gi.qwind,
+    QString("%1 Notice").arg(szAppName), QString::fromLatin1(sz));
+}
+
+
 /*
 ******************************************************************************
 ** Text charts drawn into the chart window.
