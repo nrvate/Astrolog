@@ -1172,9 +1172,23 @@ void PrintSz(CONST char *sz)
 #ifdef QT
     // Text charts draw into the chart window, as they do on Windows just
     // below, rather than being written out and shown somewhere else.
+    //
+    // The encoding is decided here rather than in the driver, because a
+    // UTF-8 character is two or three BYTES and only this loop can step
+    // over the rest of them. Without that a UTF-8 chart name drew one IBM
+    // glyph per byte and every column after it was off by the number of
+    // continuation bytes -- measured as cchCol 4 for a three-character
+    // string. The Windows branch below has always advanced pch this way.
     if (is.S == stdout) {
-      if ((byte)ch >= ' ')
-        TextCharQt(is.cchCol - 1, is.cchRow, ch);
+      if ((byte)ch >= ' ') {
+        if (us.nCharset >= ccUTF8)
+          pch += (UTF8ToWch((uchar *)pch, &wch) - 1);
+        else if ((uchar)ch >= 128 && us.nCharset != ccLatin)
+          wch = WchFromChIBM((uchar)ch);
+        else
+          wch = (uchar)ch;
+        TextCharQt(is.cchCol - 1, is.cchRow, wch);
+      }
     } else
 #endif
 #ifdef WIN

@@ -8959,6 +8959,44 @@ static void TestLineDrawingQt()
 
   Group("IBM line drawing");
   SetNoPopupQt(fTrue);
+
+  // One character, not its bytes. PrintSz()'s Qt branch handed the driver
+  // each raw byte, so with "-Ya3" -- UTF-8, which Display Settings offers
+  // as a radio button -- a chart name drew one IBM glyph per byte and
+  // every column after it was off by the number of continuation bytes.
+  // is.cchCol is the measurement: it counts what the text engine thinks it
+  // has drawn, and the Windows branch has always stepped over the rest of
+  // a multi-byte character the same way.
+  //
+  // is.S has to be stdout for the duration, and not because the test wants
+  // output: that is the condition the branch under test is guarded by, and
+  // with is.S left wherever the previous group put it PrintSz() falls
+  // through to putc() on a FILE the suite no longer owns. That segfaulted
+  // four groups later, which is this project's own recorded trap -- a
+  // regression test that is the regression.
+  {
+    Borrow bChar(us.nCharset, (int)ccNone);
+    Borrow bNoDisp(us.fNoDisplay, fFalse);
+    Borrow bHTML(is.nHTML, 0);
+    Borrow bClip(us.fClip80, fFalse);
+    FILE *pfileSav = is.S;
+    int nCharsetT;
+
+    is.S = stdout;
+    for (nCharsetT = ccNone; nCharsetT <= ccUTF8; nCharsetT++) {
+      int cchWant = nCharsetT >= ccUTF8 ? 3 : 4;
+
+      us.nCharset = nCharsetT;
+      is.cchCol = is.cchRow = is.cchColMax = 0;
+      // "aez" with an e-acute in the middle: four bytes, three characters.
+      PrintSz("a\xC3\xA9z");
+      Check(is.cchCol == cchWant,
+        "-Ya%d draws %d cells for \"a<e-acute>z\" (got %d)",
+        nCharsetT, cchWant, is.cchCol);
+    }
+    is.S = pfileSav;
+    is.cchCol = is.cchRow = is.cchColMax = 0;
+  }
   {
     Borrow bGraph(us.fGraphics, fFalse), bProg(us.fProgress, fFalse);
     Borrow bRel(us.nRel, (int)rcNone);

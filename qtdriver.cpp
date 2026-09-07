@@ -800,17 +800,15 @@ void TextColorQt(KI ki)
 }
 
 // Called from PrintSz() (general.cpp) for each character, with the cell
-// the text engine has reached.
-void TextCharQt(int xCell, int yCell, int ch)
+// the text engine has reached and the character already decoded to a wide
+// one. The decoding is that caller's job because a UTF-8 character spans
+// two or three bytes and only the loop reading them can step over the
+// rest; see the "#ifdef QT" branch there.
+void TextCharQt(int xCell, int yCell, int wch)
 {
   if (gi.qpaint == NULL)
     return;
-  wchar wch = (uchar)ch;
 
-  // Astrolog's text charts draw their boxes with IBM code page glyphs, so
-  // map the high bytes to what they mean rather than showing Latin-1.
-  if ((uchar)ch >= 128 && us.nCharset != ccLatin)
-    wch = WchFromChIBM((uchar)ch);
   gi.qpaint->setPen(QColor(RgbR(qi.kvText), RgbG(qi.kvText),
     RgbB(qi.kvText)));
   gi.qpaint->drawText(xCell * qi.xChar + 4, (yCell + 1) * qi.yChar,
