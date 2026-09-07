@@ -1,19 +1,46 @@
 # The standing refactoring review
 
-This is the catalog of what makes Astrolog hard to evolve and what to do
-about it. The goal is a codebase someone could read without cringing:
-maintainable, flexible, modular — while every increment keeps the program
-byte-for-byte behaving as it does today, under the nets this project
-already trusts (the assertion suite, ASan, the settings round trip,
-the eleven standing audits, and the Windows build as oracle). Note the word
-"behaving": all of those but one are differential, and the exception is
-new — see T9.
+**Read this first: the campaign is over, and this is its record.** All
+ten cross-cutting themes are closed or deliberately reduced to
+opportunistic work. All eight areas were surveyed on 2026-08-29 and their
+findings are done, or measured and closed with the measurement. The
+specified queue emptied on 2026-08-29; phase 2 completed on 2026-08-30.
+There is no next area to pick and no backlog to work down. What is left
+is one paragraph, in "What is still open" below.
 
-It is a **living document worked across many sessions**. The survey
-ledger below says which parts of the codebase have been reviewed and
-which haven't; a session picks the next pending area, reads it deeply,
-adds findings, and updates the ledger. Findings accumulate here; when one
-is acted on, its entry records the commit and moves to Done.
+So do not read this looking for a task. Read it for two other things,
+both of which it is still the only source of:
+
+- **The evidence.** Every theme carries the incidents that justified it —
+  the actual bugs a design caused, cited to work log items. That is what
+  makes a proposed change here arguable rather than a matter of taste,
+  and it is why CLAUDE.md says to read this before refactoring anything.
+- **The verdicts that say NOT to do something.** Several entries are
+  measurements proving a plausible refactor buys nothing, or costs more
+  than it returns: T6's device vtable, C2's derive-into-locals, T1's
+  move 3, P4. Those are the most perishable knowledge in the document,
+  because the idea will occur to somebody again.
+
+What the campaign was for: a codebase someone could read without
+cringing, while every increment keeps the program byte-for-byte behaving
+as it does today, under the nets this project already trusts (the
+assertion suite, ASan and UBSan, the settings round trip, the seventeen
+standing audits, the four differential matrices, and the Windows build as
+oracle). Note the word "behaving": all of those but one are differential,
+and the exception is T9's numeric oracle.
+
+## What is still open
+
+1. **T1 move 3** — converting the remaining hand-rolled `*Sav`
+   save/restore pairs to the `Borrow` guard. Explicitly *opportunistic,
+   never as a sweep*: take one when you are already editing the function,
+   and never otherwise. The reason is at T1.
+2. **Nothing else.** Every other finding in this document is done, or
+   carries a measured verdict saying why it should not be.
+
+If a new area or theme is genuinely wanted, add it with the same evidence
+standard as the rest — a finding without an incident is taste, and this
+document has never accepted taste.
 
 ## Ground rules
 
@@ -25,6 +52,21 @@ is acted on, its entry records the commit and moves to Done.
    build computes, prints, or saves. `tools/settings-round-trip.sh`,
    `./run-qt-tests.sh`, ASan, and where relevant a text-chart diff
    against the Windows build are the proof, run before every commit.
+
+   **And that list is not sufficient for calc or graphics code — proven
+   2026-09-07, work log item 251.** A commit titled "no control flow
+   change" turned three `goto` sites in `calc.cpp` into `for(;;)` and
+   put two of the closing braces before the function's `return fTrue`
+   rather than after it. It verified against `switch-matrix.sh`,
+   `chart-matrix.sh` and the suite; all three were genuinely
+   byte-identical, because the switch matrix renders no chart and the
+   chart matrix renders no stars. Meanwhile `-XU` drew and listed no
+   stars at all and `-XE` looped forever. **`tools/graphics-matrix.sh`
+   against a baseline worktree is required for anything touching
+   `calc.cpp` or the `x*.cpp` files**, and `tools/inert_option_audit.py`
+   — a `make check` step since that day — is the cheap standing half of
+   it. The three differential surfaces are disjoint; CLAUDE.md says so,
+   and this is what skipping the disjoint one costs.
 3. **Windows parity remains the spec** for the Qt port. Refactoring the
    shared core must keep `Makefile.win` compiling and behaving
    identically — it is the behavioural oracle precisely because it
@@ -54,7 +96,11 @@ is acted on, its entry records the commit and moves to Done.
   real Windows build first; several look like bugs and are load-bearing
   (`inv()` on non-boolean fields, gotcha 6 in QT_GUI_PLAN.md).
 
-## How a session works this document
+## How a session worked this document
+
+Kept because the method is reusable, not because there is a queue: every
+area below is surveyed and every theme is closed. Use this shape if a new
+area is ever added.
 
 1. Open the survey ledger, pick the topmost area still `pending`.
 2. Read the area's files properly — structure, data flow, who calls what
@@ -86,8 +132,9 @@ sits in: themes and area findings are ordered most-worth-doing first.
 | G. Frontends & satellites | qtdriver/qtdialog (9345), express.cpp (2936), atlas.cpp (2171) | **surveyed 2026-08-29** — findings G1-G4 |
 | H. Data model & headers | astrolog.h (2457), extern.h (1243), data.cpp (1702) | **surveyed 2026-08-29** — findings H1-H3 |
 
-The area order is deliberate: B and C sit under everything else, and
-what the themes prescribe (a settings table, index types) lands there
+**No area is pending, and none has been since 2026-08-29.** The order was
+deliberate while it mattered: B and C sit under everything else, and what
+the themes prescribed (a settings table, index types) landed there
 first. wdriver.cpp/wdialog.cpp are surveyed only as the oracle — they
 are upstream's and stay upstream-shaped.
 
@@ -602,7 +649,7 @@ days. Item 140's own family is a documented exemption from leg 2 (the
 
 *Cost/risk:* low; it is a fixture and a coverage check, not a refactor.
 
-### T5 — 1,300 unchecked `sprintf`/`strcpy` into fixed buffers — mostly closed 2026-08-31
+### T5 — 1,300 unchecked `sprintf`/`strcpy` into fixed buffers — closed 2026-08-31, tail 2026-09-02
 
 *Evidence:* ~1,310 calls across own code (211 in charts1.cpp, 210 in
 io.cpp, 146 in intrpret.cpp...), nearly all into `char sz[cchSzMax]`

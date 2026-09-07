@@ -25,9 +25,12 @@ Work happens on branch **`qt`**.
   headless-automation traps specific to doing that.
 - **`QT_MENU_MAPPING.md`** — the Windows menu structure extracted from
   `astrolog.rc`, with command IDs.
-- **`REFACTORING.md`** — the standing architectural review: what makes
-  the codebase hard to evolve, with evidence, and the survey ledger that
-  says which area to review next. Read it before any refactoring work.
+- **`REFACTORING.md`** — the record of a finished campaign, not a plan:
+  all ten themes closed, all eight areas surveyed, the queue empty since
+  2026-08-29. What it is still the only source of is the *evidence* —
+  the bug each design actually caused — and the measured verdicts saying
+  a plausible refactor is not worth doing. Read it before any
+  refactoring work, for those two things.
 - **`QT_CI_PLAN.md`** — CI, packaging and releases: what each job checks,
   how each was falsified, and the findings from building it. **Read it
   before adding or changing a job.** Not a plan any more — it is built,
