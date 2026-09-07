@@ -7152,6 +7152,110 @@ static void TestEclipseQt()
 }
 
 
+/*
+******************************************************************************
+** The "-0" lockdown family, in the build that never looked at it.
+******************************************************************************
+*/
+
+// "-0" is one-way by design: "_0 does nothing", so a settings file or a
+// command line can lock the program down and nothing can unlock it. That
+// is the whole point of the family, and it means a build that fails to
+// enforce one of them is not merely inconsistent, it has a switch that
+// silently does nothing at all.
+//
+// Two of them were exactly that here. Windows refuses WM_CLOSE under
+// us.fNoQuit and forces us.fGraphics off under us.fNoGraphics; neither
+// flag was referenced anywhere in qtdriver.cpp or qtdialog.cpp. Found by
+// counting each flag's uses in the two GUI backends side by side, which
+// is the sweep CLAUDE.md prescribes for exactly this shape -- a WIN-only
+// branch with no QT in it.
+//
+// The others were already enforced, and deeper than the GUI: BeginFileX()
+// refuses to open an output file under us.fNoWrite, so "-0o" blocks both
+// "-os" and "-Xb" without either backend saying anything. Measured, both
+// ways, rather than assumed.
+
+static void TestLockdownQt()
+{
+  flag fNoQuitSav = us.fNoQuit, fNoGraphicsSav = us.fNoGraphics;
+  flag fGraphicsSav = us.fGraphics, fPopupSav = FNoPopupQt();
+
+  Group("Lockdown switches");
+  SetNoPopupQt(fTrue);           // the refusal warns; not in a test run
+
+  // -0X: graphics forced off before the chart is drawn, and the View
+  // menu's check mark corrected with it, which is what Windows does in
+  // the same breath.
+  us.fNoGraphics = fFalse;
+  us.fGraphics = fTrue;
+  RedrawQt();
+  Check(us.fGraphics, "without -0X a graphics chart stays graphics");
+  us.fNoGraphics = fTrue;
+  us.fGraphics = fTrue;
+  RedrawQt();
+  Check(!us.fGraphics, "with -0X it is turned back off before drawing");
+  QAction *paGr = PaFindActionTestQt("Show &Graphics");
+  Check(paGr != NULL && !paGr->isChecked(),
+    "and the View menu item stops claiming graphics are on");
+  us.fNoGraphics = fFalse;
+
+  // -0q: a close is refused. Sent as an event rather than by calling
+  // close(), so the half of this that is SUPPOSED to succeed does not
+  // end the test run.
+  if (gi.qwind != NULL) {
+    QCloseEvent evClose;
+    us.fNoQuit = fFalse;
+    QApplication::sendEvent(gi.qwind, &evClose);
+    Check(evClose.isAccepted(), "without -0q a close is accepted");
+    QCloseEvent evClose2;
+    us.fNoQuit = fTrue;
+    QApplication::sendEvent(gi.qwind, &evClose2);
+    Check(!evClose2.isAccepted(), "with -0q it is refused");
+    us.fNoQuit = fFalse;
+  }
+
+  // -0o: the writers themselves refuse, which is where this one has
+  // always been enforced and is why both GUI backends can leave most of
+  // it alone. Both halves, because "never writes anything" would pass
+  // the first on its own.
+  //
+  // Deliberately NOT asserted here: that CaptureTextToFileQt() refuses.
+  // It does not, and neither does Windows -- cmdCopyText sits above the
+  // "if (us.fNoWrite) break;" that gates cmdCopyBitmap and the four
+  // vector copies, so Copy Chart Text writes its temp file under -0o in
+  // both builds, and so does printing a text chart. Asserting otherwise
+  // was this test's first draft, and it was the test that was wrong.
+  QString strPath = QDir::tempPath() +
+    QString("/astrolog-qt-lockdown-%1.as")
+    .arg((int)QCoreApplication::applicationPid());
+  QByteArray baPath = strPath.toLocal8Bit();
+  flag fNoWriteSav = us.fNoWrite;
+  int nWriteFormatSav = us.nWriteFormat;
+  char *szFileOutSav = is.szFileOut;
+
+  QFile::remove(strPath);
+  us.nWriteFormat = 'd';
+  is.szFileOut = (char *)baPath.constData();
+  us.fNoWrite = fTrue;
+  Check(!FOutputSettings() && !QFile::exists(strPath),
+    "with -0o the settings writer refuses and writes nothing");
+  us.fNoWrite = fFalse;
+  Check(FOutputSettings() && QFileInfo(strPath).size() > 0,
+    "and without it the same call writes the file");
+  QFile::remove(strPath);
+  us.fNoWrite = fNoWriteSav;
+  us.nWriteFormat = nWriteFormatSav;
+  is.szFileOut = szFileOutSav;
+
+  us.fNoQuit = fNoQuitSav; us.fNoGraphics = fNoGraphicsSav;
+  us.fGraphics = fGraphicsSav;
+  SetNoPopupQt(fPopupSav);
+  RedrawQt();
+  printf("  three lockdown switches enforced, both ways each\n");
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -8061,6 +8165,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"atlas-sink",           TestAtlasSinkQt},
   {"atlas-zone",           TestAtlasZoneQt},
   {"eclipses",             TestEclipseQt},
+  {"lockdown",             TestLockdownQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},

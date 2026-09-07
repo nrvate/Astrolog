@@ -8246,6 +8246,60 @@ are the more useful half to read before starting something new.
     main window, so the menu routes into a second fetch are already
     blocked; the timer was the one that was not.
 
+192. **Two lockdown switches that did nothing in this build.** The `-0`
+    family is one-way by design -- `_0` does nothing, so a settings file
+    or a command line can lock the program down and nothing can unlock
+    it. That is the point of it, and it means a backend that fails to
+    enforce one does not merely differ: it has a switch that silently
+    does nothing at all.
+
+    Found by counting each flag's uses in the two GUI backends side by
+    side, which is the sweep CLAUDE.md prescribes for exactly this shape:
+
+        us.fNoQuit      wdriver 1   qtdriver 0   qtdialog 0
+        us.fNoGraphics  wdriver 1   qtdriver 0   qtdialog 0
+
+    * **`-0q`, "do not allow quitting."** Windows refuses `WM_CLOSE`
+      outright with "Program exiting is not allowed now."
+      (wdriver.cpp:1130). This port referenced the flag nowhere, so File
+      / Exit closed the window, the Alt+F4 macro closed it, and so did
+      the window manager's own button. Fixed with an event filter on
+      `gi.qwind` rather than a `QMainWindow` subclass -- the window is a
+      plain `QMainWindow`, and a filter catches all three routes where
+      guarding the two menu handlers would have missed the third.
+    * **`-0X`, "do not allow graphics."** Windows forces
+      `us.fGraphics` off at the end of every command and corrects the
+      menu check mark in the same breath (wdriver.cpp:2507). This port
+      did neither, so the View menu turned graphics straight back on.
+      Fixed at the top of `RedrawQt()`, which is the same point: after
+      whatever the user asked for, before the chart is drawn.
+
+    A third was already enforced and deeper than either GUI:
+    `BeginFileX()` refuses to open an output file under `us.fNoWrite`,
+    so `-0o` blocks `-os` and `-Xb` without either backend saying
+    anything. Measured both ways rather than assumed.
+
+    **One gap remains open on purpose and one was the test's fault.**
+    `CopyChartVectorQt()` now carries the `FNoWriteQt()` check Windows
+    has on the same commands; without it a locked-down build still
+    created the temp file before failing deeper in. Nothing survived
+    that failure, so there is no separately observable difference and no
+    test for it -- the point is that a switch meaning "no file output"
+    should not reach a file creation. And the first draft of the test
+    asserted that `CaptureTextToFileQt()` refuses under `-0o`. It does
+    not, and neither does Windows: `cmdCopyText` sits *above* the
+    `if (us.fNoWrite) break;` that gates the bitmap and the four vector
+    copies, so Copy Chart Text writes its temp file under `-0o` in both
+    builds, and so does printing a text chart. The test was wrong, not
+    the program.
+
+    The `lockdown` group asserts all three switches with both answers
+    each -- graphics stay on without `-0X` and go off with it, a close is
+    accepted without `-0q` and refused with it, the settings writer
+    writes without `-0o` and refuses with it. The close is sent as an
+    event rather than by calling `close()`, so the half that is supposed
+    to succeed does not end the test run.
+
 
 ## Features this fork adds to both builds
 

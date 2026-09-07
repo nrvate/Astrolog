@@ -323,6 +323,35 @@ static QPoint PtGlobalQt(CONST QMouseEvent *pevent)
 }
 
 
+// "-0q" forbids quitting, and Windows refuses WM_CLOSE outright when it
+// is set, with "Program exiting is not allowed now." (wdriver.cpp:1130).
+// This port never referenced us.fNoQuit at all, so the one lockdown
+// switch whose entire purpose is that the user cannot leave did nothing
+// here: File / Exit closed the window, so did the Alt+F4 macro, so did
+// the window manager's own button.
+//
+// An event filter rather than a QMainWindow subclass, because gi.qwind is
+// a plain QMainWindow -- and it catches every route to a close rather
+// than the two that go through a menu handler. The last of those three is
+// the one guarding the handlers would have missed.
+
+class NoQuitFilterQt : public QObject {
+public:
+  NoQuitFilterQt(QObject *pparent) : QObject(pparent) { }
+
+protected:
+  bool eventFilter(QObject *pobj, QEvent *pev) override
+  {
+    if (pev->type() == QEvent::Close && us.fNoQuit) {
+      PrintWarningQt("Program exiting is not allowed now.", fFalse);
+      pev->ignore();
+      return true;
+    }
+    return QObject::eventFilter(pobj, pev);
+  }
+};
+
+
 class ChartCanvas : public QWidget
 {
 public:
@@ -1138,6 +1167,17 @@ void RedrawQt()
 {
   if (qi.fNoUpdate)
     return;
+  // "-0X" forbids graphics, and Windows enforces it at the end of every
+  // command (wdriver.cpp:2507) -- which is this point: after whatever the
+  // user asked for, before the chart is drawn. This port never referenced
+  // us.fNoGraphics at all, so the switch did nothing here and the View
+  // menu could turn graphics straight back on. Windows corrects its own
+  // menu check mark in the same breath, so this does too.
+  if (us.fNoGraphics && us.fGraphics) {
+    us.fGraphics = fFalse;
+    if (qi.paGraphics != NULL)
+      qi.paGraphics->setChecked(fFalse);
+  }
   // Astrolog's own Action() calls this before every chart it renders, and
   // the drawing code depends on it: InitColors() is what turns the
   // element and ray colors (kElemA/kRayA, which the Colors dialog edits)
@@ -5670,6 +5710,7 @@ void BeginQt()
   // the way Windows' window class does.
   QApplication::setWindowIcon(IconAstrologQt());
   gi.qwind = new QMainWindow();
+  gi.qwind->installEventFilter(new NoQuitFilterQt(gi.qwind));
   gi.qwind->setWindowTitle(szAppName);
   ApplyTitleBarThemeQt(gi.qwind);
   gi.qcanvas = new ChartCanvas();

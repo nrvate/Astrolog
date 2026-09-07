@@ -1328,6 +1328,18 @@ void ShowExportWireDialogQt()
 
 static void CopyChartVectorQt(int ft, CONST char *szMime)
 {
+  // Windows starts its cmdCopyBitmap/Picture/PS/SVG/Wire case with
+  // "if (us.fNoWrite) break;" (wdriver.cpp:1338) and this port did not,
+  // so a build locked down with "-0o" still created the temp file below
+  // before failing deeper in. Nothing survived it -- BeginFileX() refuses
+  // to open the output -- so there is no separately observable difference
+  // and no test to write for it; the point is that a switch meaning "no
+  // file output" should not reach a file creation at all.
+  //
+  // Copy Chart Text is deliberately NOT guarded, here or on Windows:
+  // cmdCopyText sits above that line, in its own case.
+  if (FNoWriteQt())
+    return;
   // See PasteChartQt() in qtdriver.cpp: QTemporaryFile rather than
   // mkstemp into a hardcoded "/tmp", so this works off POSIX too.
   QTemporaryFile tmp(QDir::tempPath() + "/astrolog-qt-copy-XXXXXX");
