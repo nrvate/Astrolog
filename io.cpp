@@ -850,8 +850,13 @@ flag FOutputQuickFile(void)
       goto LDone;
     }
 
-    // Output line of 101 characters.
-    fprintf(file, "%-23.23s", pci->nam);
+    // Output line of 101 characters. SzSet() on the two user strings:
+    // pci->nam and pci->loc are NULL on a chart that was never named,
+    // which every other writer here already guards -- passing NULL to a
+    // "%s" is undefined behaviour, and where it does not crash outright
+    // it writes the literal text "(null)" into a data file another
+    // program is meant to read.
+    fprintf(file, "%-23.23s", SzSet(pci->nam));
     fprintf(file, "%c%c%c", szMonth[pci->mon][0],
       ChCap(szMonth[pci->mon][1]), ChCap(szMonth[pci->mon][2]));
     fSav1 = us.fAnsiChar; us.fAnsiChar = 4;
@@ -884,7 +889,7 @@ flag FOutputQuickFile(void)
       'E' : 'W', j, j2);
     fprintf(file, " %02d%c%02d'%02d", (int)RAbs(rLat), rLat < 0.0 ?
       'S' : 'N', k, k2);
-    fprintf(file, " %-25.25s \n", pci->loc);
+    fprintf(file, " %-25.25s \n", SzSet(pci->loc));
   }
 
   fRet = fTrue;
