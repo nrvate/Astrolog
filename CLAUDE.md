@@ -1183,8 +1183,17 @@ runs in seconds on a laptop.
     broken.
   - **`-H` documents what a build IMPLEMENTS, not what it accepts.** Both
     GUI builds accept every `-W` switch, for the reason above; the Qt
-    build then does nothing with `-W`, `-Wn`, `-Wt`, `-WB`, `-Wb`,
-    `-Wo*`, `-WS*` and `-WZ`. `DisplaySwitchesW()` prints the shared ones
+    build then does nothing with `-W`, `-WB`, `-Wb`, `-Wo*`, `-WS*` and
+    `-WZ`. **`-Wn` and `-Wt` are implemented here** and were listed among
+    the do-nothings by mistake: the first sets `qi.fNoUpdate`, which
+    `RedrawQt()` returns early on, and the second sets `qi.fNoPopup`, which
+    suppresses every message box. `-Wb` is the one that is stored and
+    inert -- `qi.fBmpWindow` is read by the settings writer and an
+    AstroExpression and by nothing that draws -- and it is documented to
+    both builds anyway, because this build WRITES it into `astrolog.as`
+    and a user who finds it there has to be able to look it up. Its help
+    line still says "the Windows screen", which is the wording half of the
+    trap described just below. `DisplaySwitchesW()` prints the shared ones
     to both and keeps those behind `#ifdef WIN`, or a Linux user is told
     the program will set up a Windows program group. Nothing checks this
     split either -- it was got wrong on the first attempt.

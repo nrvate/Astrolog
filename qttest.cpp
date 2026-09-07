@@ -3484,6 +3484,37 @@ static void TestChartScrollQt()
   if (paEnd == NULL || paHome == NULL)
     return;
 
+  // The PAGE step, which nothing pinned: this group only ever exercised
+  // the two limits. Windows' WM_VSCROLL moves wi.yScroll by nScrollPage
+  // for SB_PAGEUP/SB_PAGEDOWN, and xcharts2.cpp reads qi.nScrollChart
+  // exactly as it reads wi.yScroll, so a different step here means the
+  // transit graph pages a different distance than it does there. It used
+  // to be nScrollDiv/8, which is half.
+  {
+    int nSav = NScrollChartQt();
+
+    ScrollChartQt(0);
+    ScrollChartQt(1);
+    Check(NScrollChartQt() == nScrollPage,
+      "one Page Down moves the chart fraction by nScrollPage, as Windows' "
+      "SB_PAGEDOWN does (%d, wanted %d)", NScrollChartQt(), nScrollPage);
+    ScrollChartQt(-1);
+    Check(NScrollChartQt() == 0,
+      "and Page Up brings it back (%d)", NScrollChartQt());
+    // Put it back. Home then Page Down lands exactly on nSav because
+    // every way of moving this value -- Home, End, and these two -- deals
+    // in whole pages, and nScrollDiv is a multiple of nScrollPage. That
+    // is an invariant rather than an obvious truth, so it is asserted
+    // instead of assumed: a step added later that is not a whole page
+    // would otherwise leave the next group a value this one invented.
+    ScrollChartQt(0);
+    while (NScrollChartQt() < nSav)
+      ScrollChartQt(1);
+    Check(NScrollChartQt() == nSav,
+      "and the group hands the chart fraction back as it found it "
+      "(%d, was %d)", NScrollChartQt(), nSav);
+  }
+
   // Its own object set, both sides of the transit, for the reason
   // TestLineDrawingQt() gives: the subject is which ROWS get drawn, and
   // inheriting whatever the last group left would decide that instead.

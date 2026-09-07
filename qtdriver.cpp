@@ -720,9 +720,15 @@ void ScrollChartQt(int nDir)
   // that pages its own rows draws none of what is past the bottom, so
   // the scroll area has nothing to scroll to and these four menu items
   // could never reach it -- see qi.nScrollChart.
+  //
+  // A page is nScrollPage, which is what Windows' WM_VSCROLL moves
+  // wi.yScroll by (wdriver.cpp, SB_PAGEUP/SB_PAGEDOWN). This used to be
+  // "nScrollDiv / 8", which is 3 against Windows' 6, so the transit graph
+  // paged half as far here -- and xcharts2.cpp reads this fraction exactly
+  // as it reads wi.yScroll there. Nothing documented the 8.
   switch (nDir) {
-  case -1: qi.nScrollChart -= nScrollDiv / 8; break;
-  case  1: qi.nScrollChart += nScrollDiv / 8; break;
+  case -1: qi.nScrollChart -= nScrollPage; break;
+  case  1: qi.nScrollChart += nScrollPage; break;
   case  0: qi.nScrollChart = 0; break;
   case  2: qi.nScrollChart = nScrollDiv; break;
   }
