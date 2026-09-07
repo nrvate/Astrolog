@@ -10532,6 +10532,34 @@ are the more useful half to read before starting something new.
     -- pinning `QPainter::Antialiasing` off instead of following
     `gs.fAntialias` -- which fails the group at "0 pixels".
 
+    **Widened to the six FONT slots**, which are values rather than
+    toggles and a fork-specific surface of their own -- `rgszFontAllow[]`,
+    `FValidFont()`, the dialog's filtering -- and which reach the font
+    five different ways (`DrawSz()`, `DrawSign()`, `DrawHouse()`,
+    `DrawObject()`, `DrawAspect()`). Each must change the screen when set
+    to a face the allow table permits. Falsified by pinning `fFontQt` off
+    in `DrawSz()`, which fails "Text font" at 0 pixels and leaves the
+    other four passing -- they draw glyph characters by their own routes,
+    which is the point of testing them separately.
+
+    `gGrid` earns its place in the mode list for the same reason: the
+    aspect font is drawn nowhere else, and the first draft left it out and
+    failed on exactly that.
+
+    One more allowlist entry, `gs.nFontNak`. Nakshatras are drawn only in
+    the 27 division decan ring (`us.nDecanType = dd27`), which no chart in
+    the mode list shows; and `DrawNakshatra()` ends by borrowing
+    `gs.nFontTxt` and calling `DrawSz()`, so the Text font entry is what
+    proves that path wired. Verified by reading `xgeneral.cpp:2157`, not
+    assumed.
+
+    A note for whoever writes the next one of these: **`FValidFont(n, i)`
+    is `(slot, font)`**, and the macro bounds only its SECOND argument.
+    The probe that produced this group had them the other way round and
+    was reading `rgszFontAllow[]` out of bounds; every shipped call site
+    passes a literal 0 to 5 or the dialog's own bounded index, so nothing
+    real was at risk, but the swap is silent.
+
     **Two things the sweep raised and neither is a port bug**, recorded so
     the next reader does not re-chase them:
 

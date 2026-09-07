@@ -4311,7 +4311,12 @@ typedef struct {
 
 static void TestScreenOptionsQt()
 {
-  static CONST int rgnMode[5] = {gWheel, gGlobe, gWorldMap, gSphere, gOrbit};
+  // gGrid earns its place: the aspect font is drawn nowhere else, and the
+  // first draft of the font half below left it out and failed on exactly
+  // that.
+  static CONST int rgnMode[6] = {gWheel, gGrid, gGlobe, gWorldMap, gSphere,
+    gOrbit};
+#define cnModeScreenOpt ((int)(sizeof(rgnMode)/sizeof(rgnMode[0])))
   SCREENOPT rgt[] = {
     {&gs.fBorder,      "Show Border",         NULL},
     {&gs.fText,        "Show Chart Info",     NULL},
@@ -4340,7 +4345,7 @@ static void TestScreenOptionsQt()
     flag fSav = *rgt[i].pf;
     int cDiff = 0, nModeMoved = 0;
 
-    for (k = 0; k < 5 && cDiff <= 0; k++) {
+    for (k = 0; k < cnModeScreenOpt && cDiff <= 0; k++) {
       QImage imOff, imOn;
 
       *rgt[i].pf = fFalse;
@@ -4372,9 +4377,71 @@ static void TestScreenOptionsQt()
         "(chart mode %d, %d pixels)", rgt[i].szName, nModeMoved, cDiff);
   }
 
+  // The same question of the six FONT slots, which are values rather than
+  // toggles: each has to change what the screen shows when set to a face
+  // rgszFontAllow[] says it can draw with. Worth asking separately -- the
+  // slots are a fork-specific surface (the allow table, FValidFont(), the
+  // dialog's filtering) and DrawSz(), DrawSign(), DrawHouse(),
+  // DrawObject() and DrawAspect() each reach the font their own way.
+  {
+    struct { int *pn; CONST char *szName, *szWhyInert; } rgtf[] = {
+      {&gs.nFontTxt, "Text font",       NULL},
+      {&gs.nFontSig, "Sign font",       NULL},
+      {&gs.nFontHou, "House font",      NULL},
+      {&gs.nFontObj, "Object font",     NULL},
+      {&gs.nFontAsp, "Aspect font",     NULL},
+      {&gs.nFontNak, "Nakshatra font",
+       "nakshatras are only drawn in the 27 division decan ring "
+       "(us.nDecanType = dd27), which no chart in this mode list shows. "
+       "DrawNakshatra() ends by borrowing gs.nFontTxt and calling DrawSz(), "
+       "so the Text font entry above is what proves that path wired"} };
+    int iT;
+
+    for (iT = 0; iT < (int)(sizeof(rgtf)/sizeof(rgtf[0])); iT++) {
+      int nSav = *rgtf[iT].pn, cDiff = 0, nFontMoved = 0, nModeMoved = 0, n;
+
+      for (n = 1; n < cFont && cDiff <= 0; n++) {
+        if (!FValidFont(iT, n))     // (slot, font) -- NOT the other way
+          continue;                 // round; the macro bounds only the
+        for (k = 0; k < cnModeScreenOpt && cDiff <= 0; k++) { // argument.
+          QImage imOff, imOn;
+
+          *rgtf[iT].pn = 0;
+          SetChartModeQt(rgnMode[k]);
+          RedrawQt();
+          if (gi.qim == NULL)
+            continue;
+          imOff = gi.qim->copy();
+          *rgtf[iT].pn = n;
+          SetChartModeQt(rgnMode[k]);
+          RedrawQt();
+          if (gi.qim == NULL || gi.qim->size() != imOff.size())
+            continue;
+          imOn = gi.qim->copy();
+          for (y = 0; y < imOff.height(); y++)
+            for (x = 0; x < imOff.width(); x++)
+              if (imOff.pixel(x, y) != imOn.pixel(x, y))
+                cDiff++;
+          if (cDiff > 0) {
+            nFontMoved = n; nModeMoved = rgnMode[k];
+          }
+        }
+      }
+      *rgtf[iT].pn = nSav;
+      if (rgtf[iT].szWhyInert != NULL)
+        Check(cDiff <= 0, "\"%s\" moves no screen render here: %s",
+          rgtf[iT].szName, rgtf[iT].szWhyInert);
+      else
+        Check(cDiff > 0, "\"%s\" changes what the screen shows "
+          "(font %d, chart mode %d, %d pixels)", rgtf[iT].szName,
+          nFontMoved, nModeMoved, cDiff);
+    }
+  }
+
   gs.xWin = xWinSav; gs.yWin = yWinSav;
   us.fGraphics = fGraphicsSav;
   SetChartModeQt(nModeSav);
+#undef cnModeScreenOpt
 }
 
 
