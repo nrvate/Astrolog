@@ -3287,6 +3287,109 @@ static void TestGraphicsSizeQt()
 // refused by the validation added earlier -- so "became zero" is a
 // visible failure rather than a quiet one.
 
+// The four orb-and-colour grids, which stored whatever was typed.
+//
+// Windows validates every row of these dialogs BEFORE storing any of
+// them -- its "for (j = 0; j <= 1; j++)" two-pass loop -- and refuses on
+// a bad orb, a bad orb addition or a bad colour. All four of this port's
+// stored straight through.
+//
+// The colour is memory safety rather than a strange picture: KvFromKi()
+// is "ki >= 0 ? rgbbmp[ki] : -ki", and rgbbmp[] has cColor2 entries, so a
+// number typed into a colour box indexes it unbounded on every redraw.
+// Same shape as the telescope planet field.
+//
+// The Aspect Settings dialog stands for all four here: the four store
+// loops are copies of one another and the colour reader is shared, so a
+// grid apiece would be four tests of one function. Both directions, and
+// the refusal is measured by the setting NOT moving.
+
+static void TestOrbGridQt()
+{
+  real rOrbSav = rAspOrb[ASPT(1)], rAngSav = rAspAngle[ASPT(1)];
+  int kSav = kAspA[ASPT(1)];
+  flag fPopupSav = FNoPopupQt();
+
+  Group("Orb grid validation");
+  SetNoPopupQt(fTrue);            // the refusal is a message box
+
+  {
+    // Each row names a field, a value that must be refused, and a good
+    // value that must LAND -- a different one from the starting value, or
+    // "the dialog applied nothing" would pass the second half as easily
+    // as the first. That was this group's first draft.
+    static CONST struct {
+      CONST char *szId;     // control family: orb, angle or colour
+      int iDup;             // which row -- aspect 1, the conjunction
+      CONST char *szBad, *szGood;
+      int iField;           // 0 orb, 1 angle, 2 colour
+      real rWant;           // what the good value must produce
+      CONST char *szWhat;
+    } rgt[] = {
+      {"deo", 0, "400",  "9",     0,  9.0, "an orb past 360 degrees"},
+      {"dea", 0, "-400", "45",    1, 45.0, "an angle past -360"},
+      {"dck", 0, "999",  "Red",   2,  0.0, "a colour index past the palette"}};
+    int iT;
+
+    for (iT = 0; iT < (int)(sizeof(rgt)/sizeof(*rgt)); iT++) {
+      CONST char *szId = rgt[iT].szId, *szBad = rgt[iT].szBad;
+      CONST char *szGood = rgt[iT].szGood;
+      int iDup = rgt[iT].iDup;
+
+      rAspOrb[ASPT(1)] = 7.0; rAspAngle[ASPT(1)] = 0.0; kAspA[ASPT(1)] = 15;
+      DriveModalQt(ShowAspectDialogQt, [szId, iDup, szBad](QWidget *pw) {
+        QList<QWidget *> rg = pw->findChildren<QWidget *>(szId);
+        if (iDup < rg.size()) {
+          QLineEdit *pe = qobject_cast<QLineEdit *>(rg[iDup]);
+          QComboBox *pcb = qobject_cast<QComboBox *>(rg[iDup]);
+          if (pe != NULL)
+            pe->setText(szBad);
+          else if (pcb != NULL)
+            pcb->setEditText(szBad);
+        }
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "OK") { ppb->click(); return; }
+        pw->close();
+      });
+      Check(rAspOrb[ASPT(1)] == 7.0 && rAspAngle[ASPT(1)] == 0.0 && kAspA[ASPT(1)] == 15,
+        "%s is refused and nothing is stored (%.1f %.1f %d)",
+        rgt[iT].szWhat, (double)rAspOrb[ASPT(1)], (double)rAspAngle[ASPT(1)], kAspA[ASPT(1)]);
+
+      // And the same field with a good value still applies, or "refuses
+      // everything" would pass the line above just as well.
+      DriveModalQt(ShowAspectDialogQt, [szId, iDup, szGood](QWidget *pw) {
+        QList<QWidget *> rg = pw->findChildren<QWidget *>(szId);
+        if (iDup < rg.size()) {
+          QLineEdit *pe = qobject_cast<QLineEdit *>(rg[iDup]);
+          QComboBox *pcb = qobject_cast<QComboBox *>(rg[iDup]);
+          if (pe != NULL)
+            pe->setText(szGood);
+          else if (pcb != NULL)
+            pcb->setEditText(szGood);
+        }
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "OK") { ppb->click(); return; }
+        pw->close();
+      });
+      {
+        real rGot = rgt[iT].iField == 0 ? rAspOrb[ASPT(1)] :
+          (rgt[iT].iField == 1 ? rAspAngle[ASPT(1)] :
+          (real)kAspA[ASPT(1)]);
+        real rWant = rgt[iT].iField == 2 ?
+          (real)NParseSz(rgt[iT].szGood, pmColor) : rgt[iT].rWant;
+
+        Check(rGot == rWant && rWant != 15.0,
+          "and \"%s\" in the same field is applied (%.1f, want %.1f)",
+          rgt[iT].szGood, (double)rGot, (double)rWant);
+      }
+    }
+  }
+
+  rAspOrb[ASPT(1)] = rOrbSav; rAspAngle[ASPT(1)] = rAngSav; kAspA[ASPT(1)] = kSav;
+  SetNoPopupQt(fPopupSav);
+}
+
+
 static void TestFieldParseQt()
 {
   int nGridSav = gs.nGridCell;
@@ -10763,6 +10866,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"graphics-size",        TestGraphicsSizeQt},
   {"font-pack",            TestFontPackQt},
   {"combo-pick",           TestComboPickQt},
+  {"orb-grid",             TestOrbGridQt},
   {"field-parse",          TestFieldParseQt},
   {"orbit-buffer",         TestOrbitBufferQt},
   {"atlas-apply",          TestAtlasApplyQt},

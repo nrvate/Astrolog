@@ -3869,6 +3869,32 @@ void ShowAspectDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
+  // Windows validates every row BEFORE storing any of them -- its
+  // "for (j = 0; j <= 1; j++)" two-pass loop (wdialog.cpp:1426) -- so one
+  // bad value refuses the dialog instead of half-applying it. This stored
+  // straight through.
+  //
+  // The colour is the one that matters beyond tidiness. KvFromKi() is
+  // "ki >= 0 ? rgbbmp[ki] : -ki" and rgbbmp[] holds cColor2 entries, so a
+  // number typed into a colour box is an unbounded index into it on every
+  // redraw. Same shape as the telescope planet field, and Windows guards
+  // it in all four of these dialogs with the validator each range wants.
+  for (i = 1; i <= cAspect; i++) {
+    real rOrb, rAng;
+    int kT;
+
+    if (rgpcbRes[i] == NULL)
+      continue;
+    rOrb = RFieldQt(rgpeOrb[i]->text());
+    rAng = RFieldQt(rgpeAngle[i]->text());
+    kT = NColorFromComboQt(rgpcbColor[i]);
+    if (!FBetween(rOrb, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rOrb, "orb"); return; }
+    if (!FBetween(rAng, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rAng, "angle"); return; }
+    if (!FValidColorA(kT))
+      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+  }
   for (i = 1; i <= cAspect; i++) {
     if (rgpcbRes[i] == NULL)
       continue;
@@ -4011,6 +4037,32 @@ void ShowObjectDialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
+  // Windows validates every row BEFORE storing any of them -- its
+  // "for (j = 0; j <= 1; j++)" two-pass loop (wdialog.cpp:1480) -- so one
+  // bad value refuses the dialog instead of half-applying it. This stored
+  // straight through.
+  //
+  // The colour is the one that matters beyond tidiness. KvFromKi() is
+  // "ki >= 0 ? rgbbmp[ki] : -ki" and rgbbmp[] holds cColor2 entries, so a
+  // number typed into a colour box is an unbounded index into it on every
+  // redraw. Same shape as the telescope planet field, and Windows guards
+  // it in all four of these dialogs with the validator each range wants.
+  for (i = 0; i <= oCore; i++) {
+    real rOrb, rAdd;
+    int kT;
+
+    if (rgpeOrb[i] == NULL)
+      continue;
+    rOrb = RFieldQt(rgpeOrb[i]->text());
+    rAdd = RFieldQt(rgpeAdd[i]->text());
+    kT = NColorFromComboQt(rgpcbColor[i]);
+    if (!FBetween(rOrb, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rOrb, "max orb"); return; }
+    if (!FBetween(rAdd, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rAdd, "orb addition"); return; }
+    if (!FValidColor2A(kT))
+      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+  }
   for (i = 0; i <= oCore; i++) {
     if (rgpeOrb[i] == NULL)
       continue;
@@ -4065,6 +4117,35 @@ void ShowObject2DialogQt()
   if (dlg.exec() != QDialog::Accepted)
     return;
 
+  // Windows validates every row BEFORE storing any of them -- its
+  // "for (j = 0; j <= 1; j++)" two-pass loop (wdialog.cpp:1540) -- so one
+  // bad value refuses the dialog instead of half-applying it. This stored
+  // straight through.
+  //
+  // The colour is the one that matters beyond tidiness. KvFromKi() is
+  // "ki >= 0 ? rgbbmp[ki] : -ki" and rgbbmp[] holds cColor2 entries, so a
+  // number typed into a colour box is an unbounded index into it on every
+  // redraw. Same shape as the telescope planet field, and Windows guards
+  // it in all four of these dialogs with the validator each range wants.
+  for (j = 0; j < rgi.size(); j++) {
+    real rOrb, rAdd;
+    int kT;
+
+    if (rgpeOrb[j] == NULL)
+      continue;
+    i = rgi[j];
+    rOrb = RFieldQt(rgpeOrb[j]->text());
+    rAdd = RFieldQt(rgpeAdd[j]->text());
+    kT = NColorFromComboQt(rgpcbColor[j]);
+    if (!FBetween(rOrb, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rOrb, "max orb"); return; }
+    if (!FBetween(rAdd, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rAdd, "orb addition"); return; }
+    // The stars row takes kStar as well, which the ranges before it do
+    // not; Windows picks the validator the same way.
+    if (!(i < starLo ? FValidColor2A(kT) : FValidColorSA(kT)))
+      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+  }
   for (j = 0; j < rgi.size(); j++) {
     if (rgpeOrb[j] == NULL)
       continue;
@@ -4629,6 +4710,33 @@ void ShowMoonObjectDialogQt()
     us.fMoonChartSep = pcbSep->isChecked();
   if (pcbWheel != NULL)
     gs.fMoonWheel = pcbWheel->isChecked();
+  // Windows validates every row BEFORE storing any of them -- its
+  // "for (j = 0; j <= 1; j++)" two-pass loop (wdialog.cpp:1600) -- so one
+  // bad value refuses the dialog instead of half-applying it. This stored
+  // straight through.
+  //
+  // The colour is the one that matters beyond tidiness. KvFromKi() is
+  // "ki >= 0 ? rgbbmp[ki] : -ki" and rgbbmp[] holds cColor2 entries, so a
+  // number typed into a colour box is an unbounded index into it on every
+  // redraw. Same shape as the telescope planet field, and Windows guards
+  // it in all four of these dialogs with the validator each range wants.
+  for (i = moonsLo; i <= cobHi; i++) {
+    real rOrb, rAdd;
+    int kT;
+
+    j = i - moonsLo;
+    if (rgpeOrb[j] == NULL)
+      continue;
+    rOrb = RFieldQt(rgpeOrb[j]->text());
+    rAdd = RFieldQt(rgpeAdd[j]->text());
+    kT = NColorFromComboQt(rgpcbColor[j]);
+    if (!FBetween(rOrb, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rOrb, "max orb"); return; }
+    if (!FBetween(rAdd, -rDegMax, rDegMax))
+      { ErrorEnsureQt(&dlg, (int)rAdd, "orb addition"); return; }
+    if (!FValidColorMA(kT))
+      { ErrorEnsureQt(&dlg, kT, "color"); return; }
+  }
   for (i = moonsLo; i <= cobHi; i++) {
     j = i - moonsLo;
     if (rgpeOrb[j] == NULL)

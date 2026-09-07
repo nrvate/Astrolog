@@ -9785,6 +9785,42 @@ are the more useful half to read before starting something new.
     caught it; one asserting "not zero" would have passed on a wrong
     answer.
 
+232. **Four orb-and-colour grids that stored whatever was typed, and a
+    colour box that indexes `rgbbmp[]` unbounded.** The write side of the
+    same read/write pass. Windows validates every row of these dialogs
+    **before storing any of them** -- its `for (j = 0; j <= 1; j++)`
+    two-pass loop, once to check and once to store -- so one bad value
+    refuses the dialog instead of half-applying it. Aspect Settings,
+    Object Settings, More Object Settings and Moon Object Settings all
+    stored straight through here.
+
+    Orbs and orb additions outside +/-360 make a nonsense chart; the
+    **colour is memory safety**. `KvFromKi(ki)` is
+    `ki >= 0 ? rgbbmp[ki] : -ki` and `rgbbmp[]` holds `cColor2` (26)
+    entries, so a number typed into a colour box is an unbounded index
+    into it on every redraw. Same shape as item 225's telescope planet.
+
+    Windows uses a different validator per dialog and each is ported as
+    it stands: `FValidColorA`, `FValidColor2A`, `FValidColorMA`, and for
+    More Object Settings the conditional
+    `i < starLo ? FValidColor2A : FValidColorSA`, since the stars row
+    accepts `kStar` and the ranges before it do not.
+
+    **Also checked in the same pass and clean:** all 23 of Windows'
+    `SetEditR()` calls have a Qt counterpart at the *same precision*
+    -- the orb grids at -2, the influences at 2, the zodiac offset and
+    the wheel ratio at 6, and so on -- so no real field is written with
+    `QString::number()`'s full precision.
+
+    The assertion drives Aspect Settings and says why only that one: the
+    four store loops are copies of each other and the colour reader is
+    shared, so a grid apiece would be four tests of one function. Its own
+    first draft was weak in the way this project keeps rediscovering --
+    the "good value" half re-entered the *starting* value, so it would
+    have passed on a dialog that applied nothing. Each row now names a
+    different value that must land. Falsified by disabling the three
+    checks: three assertions, reading 400.0, -400.0 and 999.
+
 
 ## Features this fork adds to both builds
 
