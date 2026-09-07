@@ -4118,6 +4118,95 @@ static void TestChartNowQt()
 // draws its version line -- the only line in the box in kWhiteA -- white
 // on white. Windows picks kBlackA there instead; charts0.cpp does the
 // same for this build now.
+// The chart window's size limits, and the settings file that depends on
+// them.
+//
+// Windows clamps the window to 180..4096 in both axes with
+// WM_GETMINMAXINFO. This port had no limit at all, and with "Window
+// Resizes Chart" on -- the default -- the canvas size IS gs.xWin/gs.yWin.
+// "Save Program Settings" writes those as ":Xw <x> <y>", and NSwXw()
+// REFUSES anything outside 180..4096, which does not merely drop that one
+// line: the whole file is discarded, the settings before the bad line as
+// well as those after it. So a window dragged small, one Save, and every
+// saved setting is gone at the next launch.
+//
+// The second half of this group is that round trip end to end, because
+// the first half alone would pass on a build that kept gs.xWin valid and
+// still wrote something unreadable.
+static void TestWindowSizeQt()
+{
+  static CONST struct { int dx, dy; CONST char *szWhy; } rgt[] = {
+    {900, 700,   "an ordinary size passes through"},
+    {220, 200,   "a small window"},
+    {100, 100,   "smaller than the window manager's own floor"},
+    {5200, 4600, "larger than Astrolog draws"} };
+  int xWinSav = gs.xWin, yWinSav = gs.yWin;
+  QSize sizeSav;
+  char szPath[cchSzMax];
+  char *szFileOutSav = is.szFileOut;
+  int nWriteFormatSav = us.nWriteFormat, nScaleTextSav = gs.nScaleText;
+  flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
+  int i;
+
+  Group("Chart window size limits");
+  if (gi.qwind == NULL || gi.qcanvas == NULL) {
+    printf("  no window\n");
+    return;
+  }
+  sizeSav = gi.qwind->size();
+  SetNoPopupQt(fTrue);
+
+  for (i = 0; i < (int)(sizeof(rgt)/sizeof(rgt[0])); i++) {
+    gi.qwind->resize(rgt[i].dx, rgt[i].dy);
+    QApplication::processEvents();
+    RedrawQt();
+    QApplication::processEvents();
+    Check(FValidGraphX(gs.xWin) && FValidGraphY(gs.yWin),
+      "%s: %dx%d leaves a chart size the switches accept (%dx%d)",
+      rgt[i].szWhy, rgt[i].dx, rgt[i].dy, gs.xWin, gs.yWin);
+  }
+
+  // End to end: shrink, save, poison, replay, and require a setting
+  // written AFTER ":Xw" to come back.
+  gi.qwind->resize(220, 200);
+  QApplication::processEvents();
+  RedrawQt();
+  QApplication::processEvents();
+  // ":XS" is the line FOutputSettings() writes immediately after ":Xw",
+  // so it is the first thing an abort there costs. 150 rather than a
+  // rounder number because FValidScaleText() wants a multiple of 50 --
+  // and the first draft of this used 250 for the character scale, which
+  // FValidScale() refuses for wanting a multiple of 100. That looked
+  // exactly like the bug under test.
+  gs.nScaleText = 150;
+  sprintf2(S(szPath), "%s/astrolog-qt-winsize-%d.as",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+  us.fNoWrite = fFalse;
+  FCloneSz(szPath, &is.szFileOut);
+  us.nWriteFormat = 0;
+  Check(FOutputSettings(), "the settings save at a small window size");
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+
+  gs.nScaleText = 100;
+  Check(FProcessSwitchFile(szPath, NULL),
+    "and the file they wrote loads all the way through");
+  Check(gs.nScaleText == 150,
+    "including the line right after \":Xw\", which an abort there is what "
+    "costs (graphics text scale %d, wanted 150)", gs.nScaleText);
+  QFile::remove(QString::fromLocal8Bit(szPath));
+
+  gi.qwind->resize(sizeSav);
+  QApplication::processEvents();
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  gs.nScaleText = nScaleTextSav;
+  us.fNoWrite = fNoWriteSav;
+  SetNoPopupQt(fPopupSav);
+  RedrawQt();
+}
+
+
 static void TestCreditColorsQt()
 {
   flag fInvSav = gs.fInverse, fGraphicsSav = us.fGraphics;
@@ -11528,6 +11617,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"text-pager",           TestPagerQt},
   {"chart-scroll",         TestChartScrollQt},
   {"chart-store",          TestChartStoreQt},
+  {"window-size",          TestWindowSizeQt},
   {"credit-colors",        TestCreditColorsQt},
   {"transit-mode",         TestTransitModeQt},
   {"menu-actions",         TestAllMenuActionsQt},

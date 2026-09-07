@@ -10252,6 +10252,66 @@ are the more useful half to read before starting something new.
     no failures, on both.
 
 
+244. **A window dragged small wrote a settings file that stopped loading
+    halfway.** Windows clamps its chart window to 180..4096 in both axes
+    with `WM_GETMINMAXINFO` (`ptMinTrackSize` / `ptMaxTrackSize`,
+    `wdriver.cpp`). This port set no limit at all -- the Qt window's own
+    floor was 69x100 -- and with "Window Resizes Chart" on, which is the
+    default, the canvas size **is** `gs.xWin`/`gs.yWin`.
+
+    "Save Program Settings" writes those as `:Xw <x> <y>`, and `NSwXw()`
+    refuses anything outside 180..4096. A refused line in a settings file
+    does not merely lose that line: `FProcessSwitchFile()` does
+    `goto LDone` on the first failure, so **everything after it is never
+    read** -- and `:Xw` sits about three quarters of the way through, so
+    what goes is every graphics default, every object and aspect setting,
+    every colour and every macro.
+
+    Measured: a window at 220x200 left `gs.yWin` at 169, and the file that
+    produced stopped at that line. The other end matters too and is easier
+    to reach by accident -- maximising on a display wider than 4096 wrote
+    a `:Xw` just as unreadable.
+
+    The clamp is on the **canvas**, not the window: a window dragged
+    smaller now scrolls over a 180 pixel chart rather than refusing to
+    move, which the scroll area is already there for. Measured after:
+    220x200 gives 206x180, 100x100 gives 180x180, 5200x4600 gives
+    4096x4096, and 900x700 passes through untouched.
+
+    **Two false starts, both worth recording**, because each looked
+    exactly like a bigger bug:
+
+    * A hand-written three line file "proved" that one bad `:Xw` discards
+      the settings **before** it as well as after. It does not.
+      `FProcessSwitchFile()` refuses any file whose first character is not
+      `@`, and the hand-written file had no header, so nothing in it was
+      ever read. The real answer -- lines before the failure are applied,
+      lines after it are not -- only appears with a file
+      `FOutputSettings()` actually wrote.
+    * The round-trip assertion then failed with the fix in place, which
+      read as the fix not working. The test was writing `gs.nScale = 250`,
+      and `FValidScale()` wants a multiple of 100. The assertion was
+      failing on its own bad input at a line 30 past the one under test.
+
+    New group `window-size`: three sizes that must leave a chart size the
+    switches accept, plus the round trip end to end -- shrink, save,
+    poison `gs.nScaleText`, replay, and require the value back, because
+    `:XS` is the line written immediately after `:Xw` and so the first
+    thing an abort there costs. Falsified by removing the two lines: five
+    of the eight assertions fail.
+
+    **Windows very likely has a narrower version of this, and the oracle
+    is left alone.** Its clamp is on the WINDOW, but `WM_SIZE` assigns
+    `gs.xWin = wi.xClient` -- the CLIENT area, which is the window less
+    caption, menu bar and borders, call it 50 pixels. So at its own
+    minimum window size Windows should be writing a `:Xw` of about
+    172x130, which `NSwXw()` refuses just the same. That is reasoning from
+    the code, not a measurement: driving the real `astrolog.exe` to its
+    minimum size under Wine and reading back what it saves is a scenario
+    nobody has written, and the fix would be a line in `wdriver.cpp` that
+    nothing here can run. Recorded rather than guessed at.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows

@@ -5853,6 +5853,24 @@ void BeginQt()
   gi.qwind->setWindowTitle(szAppName);
   ApplyTitleBarThemeQt(gi.qwind);
   gi.qcanvas = new ChartCanvas();
+  // The chart never smaller or larger than Astrolog's own limits, which
+  // Windows enforces on the WINDOW with WM_GETMINMAXINFO (wdriver.cpp,
+  // ptMinTrackSize/ptMaxTrackSize). Enforced on the CANVAS here rather
+  // than on the window, so a window dragged smaller scrolls over a 180
+  // pixel chart instead of refusing to move: the scroll area is already
+  // there for exactly that.
+  //
+  // Not cosmetic. With "Window Resizes Chart" on -- the default -- the
+  // canvas size IS gs.xWin/gs.yWin, "Save Program Settings" writes them
+  // as ":Xw <x> <y>", and NSwXw() REFUSES a value outside 180 to 4096.
+  // A refused line in a settings file does not merely lose that line:
+  // FProcessSwitchFile() stops reading there, so everything after it goes
+  // too -- from ":Xw" that is every graphics default, every object and
+  // aspect setting, every colour and every macro. Measured: a window at
+  // 220x200 left gs.yWin at 169, and the file that produced stopped at
+  // that line.
+  gi.qcanvas->setMinimumSize(BITMAPX1, BITMAPY1);
+  gi.qcanvas->setMaximumSize(BITMAPX, BITMAPY);
   qi.pscroll = new QScrollArea();
   qi.pscroll->setWidget(gi.qcanvas);
   qi.pscroll->setFrameShape(QFrame::NoFrame);
