@@ -1260,6 +1260,7 @@ extern void TextCharQt P((int, int, int));
 extern void TextColorQt P((KI));
 extern void PrintWarningQt P((CONST char *, flag));
 extern void PrintNoticeQt P((CONST char *));
+extern int NScrollChartQt P((void));
 #endif
 
 /* Set by a port's chart info dialog to receive rows from the atlas      */

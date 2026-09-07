@@ -9893,6 +9893,41 @@ are the more useful half to read before starting something new.
     is about. Falsified by narrowing the guard back: the popup switch's
     16 bytes land in the text stream.
 
+235. **The transit graph showed its first screenful and no more.** Still
+    the same sweep. Shared core reads a scrollbar position in exactly one
+    place that is not panning: xcharts2.cpp:1404, where the transit graph
+    picks **which** aspect rows to draw when there are more than fit --
+    `cRow = (cRow - rows that fit) * wi.yScroll / nScrollDiv` on Windows,
+    and `cRow = 0` on everything else.
+
+    Rows past the bottom of the window are **not drawn at all**, so the
+    scroll area could never reach them: there is nothing there for it to
+    scroll to. The four Scroll menu items moved the viewport, which for a
+    chart the size of its own window does nothing.
+
+    `qi.nScrollChart` is this build's `wi.yScroll`, 0 to `nScrollDiv`,
+    moved by those same four items and read back through
+    `NScrollChartQt()`. `nScrollDiv` and `nScrollPage` move out of
+    `#ifdef WIN` in astrolog.h, since both GUI builds now need the
+    constant and neither is a Win32 type. `ScrollChartQt()` redraws now
+    too -- it never had to before, because moving a scroll bar repaints
+    itself.
+
+    Asserted on the render: a 700 by 220 window, scroll to the beginning,
+    scroll to the end, and the two images have to differ. Falsified by
+    putting `cRow = 0` back.
+
+    **Three neighbours in the same sweep were checked and left alone**, and
+    the reasons are worth keeping so the next pass does not re-open them.
+    `ChDeg()`'s and `ChartTransitGraph()`'s `gs.nFontTxt` branches assume
+    Windows draws text charts in an Astrolog font; this port draws them in
+    the `-WF` console font and the `line-drawing` group asserts that
+    deliberate divergence. `FActionX()`'s two `gs.fAutoScale` blocks fit
+    the chart to `wi.xClient`, and this port's screen path does not go
+    through `FActionX()` at all. And `AnsiColor()`'s `SetTextColor` block
+    only looked unmatched because the detector reads one `#if` at a time:
+    the Qt branch sits immediately above it and is identical.
+
 
 ## Features this fork adds to both builds
 

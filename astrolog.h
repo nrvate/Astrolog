@@ -2760,11 +2760,19 @@ typedef struct _OrbitalElements {
 
 #define szFileJPLCore  "astrolog.jpl"
 #define szFileExoCore  "astexo.csv"
+// How a scroll position is expressed: a fraction of nScrollDiv. Windows
+// keeps it in wi.yScroll and this port in qi.nScrollChart, and shared
+// core divides by it in xcharts2.cpp to pick which aspect rows a transit
+// graph draws -- so both GUI builds need the constant, not just the one
+// that has a WI struct.
+#if defined(WIN) || defined(QT)
+#define nScrollDiv 24
+#define nScrollPage 6
+#endif
+
 #ifdef WIN
 #define szFileTempCore "astrolog.tmp"
 #define szFileAutoCore "astrolog.bmp"
-#define nScrollDiv 24
-#define nScrollPage 6
 #define cchSzMaxFile 128
 
 typedef struct _WindowInternal {

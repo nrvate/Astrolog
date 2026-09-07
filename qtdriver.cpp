@@ -216,6 +216,16 @@ typedef struct _qtuserinterface {
   // Windows' wi.fStarLine, which lives in the Win32-only WI struct.
   flag fStarLine = fFalse;
 
+  // Windows' wi.yScroll, as a 0..nScrollDiv fraction. It is a scrollbar
+  // position there, and shared core reads it in exactly ONE place that
+  // is not panning: xcharts2.cpp:1404, where the transit graph uses it to
+  // choose WHICH aspect rows to draw when there are more than fit. That
+  // one had "#else cRow = 0", so this build always drew the first
+  // screenful and the rest were unreachable. The scroll area cannot help:
+  // the extra rows are never drawn at all, so there is nothing for it to
+  // scroll to.
+  int nScrollChart = 0;
+
   // Custom labels set by -WM (a macro slot) and -WM0 (a submenu), which
   // is how a Windows user names their macros in astrolog.as. Windows
   // applies these immediately with ModifyMenu on its Win32-only wi.hmenu;
@@ -697,8 +707,22 @@ void ClearScreenQt()
 // scrollbars, so these just drive them.
 void ScrollChartQt(int nDir)
 {
-  if (qi.pscroll == NULL)
+  // The chart-content fraction moves too, not just the viewport. A chart
+  // that pages its own rows draws none of what is past the bottom, so
+  // the scroll area has nothing to scroll to and these four menu items
+  // could never reach it -- see qi.nScrollChart.
+  switch (nDir) {
+  case -1: qi.nScrollChart -= nScrollDiv / 8; break;
+  case  1: qi.nScrollChart += nScrollDiv / 8; break;
+  case  0: qi.nScrollChart = 0; break;
+  case  2: qi.nScrollChart = nScrollDiv; break;
+  }
+  qi.nScrollChart = Min(Max(qi.nScrollChart, 0), nScrollDiv);
+
+  if (qi.pscroll == NULL) {
+    RedrawQt();
     return;
+  }
   QScrollBar *psb = qi.pscroll->verticalScrollBar();
   QScrollBar *psbH = qi.pscroll->horizontalScrollBar();
 
@@ -714,6 +738,16 @@ void ScrollChartQt(int nDir)
     psbH->setValue(psbH->maximum());
     break;
   }
+  RedrawQt();
+}
+
+
+// The chart-content scroll position, 0 to nScrollDiv. Read by shared core
+// (xcharts2.cpp) the way Windows reads wi.yScroll.
+
+int NScrollChartQt(void)
+{
+  return qi.nScrollChart;
 }
 
 

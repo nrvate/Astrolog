@@ -3349,6 +3349,59 @@ static void TestGraphicsSizeQt()
 // no longer goes through PrintSz() at all, which IS observable: it used
 // to land in the captured text.
 
+// The transit graph's own scrolling, which did not exist here.
+//
+// That chart draws aspect rows until it runs out of window and then
+// stops. Windows picks the STARTING row from its scrollbar
+// (xcharts2.cpp:1404, "cRow * wi.yScroll / nScrollDiv"); every other
+// build had "#else cRow = 0", so the first screenful was all there ever
+// was. The scroll area could not help: the rows past the bottom are not
+// drawn at all, so there is nothing there to scroll to.
+//
+// Asserted on the render, because that is the whole of the claim: with
+// more rows than fit, scrolling to the end has to show something
+// different from the top.
+
+static void TestChartScrollQt()
+{
+  int nModeSav = gi.nMode, xSav = gs.xWin, ySav = gs.yWin;
+  flag fGraphicsSav = us.fGraphics;
+  int nRelSav = us.nRel;
+  QImage imTop, imEnd;
+  QAction *paEnd = PaFindActionTestQt("Scroll to &End");
+  QAction *paHome = PaFindActionTestQt("Scroll &to Beginning");
+
+  Group("Transit graph scrolling");
+  Check(paEnd != NULL && paHome != NULL,
+    "the two scroll-to-limit menu items are there");
+  if (paEnd == NULL || paHome == NULL)
+    return;
+
+  // A short window, so the rows certainly overflow it.
+  us.fGraphics = fTrue;
+  SetRelQt(rcTransit);
+  SetChartModeQt(gTraNatGra);
+  gs.xWin = 700; gs.yWin = 220;
+  paHome->trigger();
+  if (gi.qim != NULL)
+    imTop = gi.qim->copy();
+  paEnd->trigger();
+  if (gi.qim != NULL)
+    imEnd = gi.qim->copy();
+
+  Check(!imTop.isNull() && !imEnd.isNull(), "both renders happened");
+  Check(imTop != imEnd,
+    "scrolling to the end of a transit graph shows different rows");
+
+  paHome->trigger();
+  gs.xWin = xSav; gs.yWin = ySav;
+  SetRelQt(nRelSav);
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+  RedrawQt();
+}
+
+
 static void TestNoticeQt()
 {
   char szFile[cchSzMax];
@@ -11045,6 +11098,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"font-pack",            TestFontPackQt},
   {"combo-pick",           TestComboPickQt},
   {"screen-colors",        TestScreenColorsQt},
+  {"chart-scroll",         TestChartScrollQt},
   {"notice",               TestNoticeQt},
   {"orb-grid",             TestOrbGridQt},
   {"field-parse",          TestFieldParseQt},

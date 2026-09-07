@@ -1400,10 +1400,20 @@ void XChartTransit(flag fTrans, flag fProg)
   }
 
   // Determine scrolling position if too many aspects to fit on bitmap.
+  //
+  // The one place outside panning that reads a scrollbar position: rows
+  // past the bottom are not drawn at all, so without a starting offset
+  // they cannot be reached by scrolling a window either. That is what
+  // "#else cRow = 0" meant for every non-Windows build -- the first
+  // screenful and no more.
 #ifdef WIN
   cRow = (cRow - (gs.yWin / (yRow + 1))) * wi.yScroll / nScrollDiv;
 #else
+#ifdef QT
+  cRow = (cRow - (gs.yWin / (yRow + 1))) * NScrollChartQt() / nScrollDiv;
+#else
   cRow = 0;
+#endif
 #endif
 
   // Draw the individual aspects present in order.
