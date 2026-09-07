@@ -3045,8 +3045,20 @@ static void AnimTickQt(void)
   if (s_fAnimTickQt)
     return;
   s_fAnimTickQt = fTrue;
+  // Redraw, NOT recast. Animate() casts the chart itself where it moved
+  // the time (its last two lines are CastRelation()/CastChart(0)), and
+  // returns early without casting at all where it only rotated a map or a
+  // globe -- so a recast here was a second cast per frame in the first
+  // case and an entirely gratuitous one in the second. Measured at 2 and 1
+  // casts per tick; Windows does 1 and 0, because its WM_TIMER sets
+  // wi.fRedraw and nothing else (wdriver.cpp:1031).
+  //
+  // ciMain is already right on every path out of Animate(): it assigns it
+  // for a plain chart, and restores ciCore from it for the relationship
+  // and transit ones, which is the whole of what RecastAndRedrawQt() would
+  // have done before casting again.
   Animate(gs.nAnim, gi.nDir);
-  RecastAndRedrawQt();
+  RedrawQt();
   s_fAnimTickQt = fFalse;
 }
 

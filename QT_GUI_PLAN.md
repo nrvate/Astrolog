@@ -9047,6 +9047,46 @@ are the more useful half to read before starting something new.
     without a file picker, the way `PrintChartToFileTestQt()` reaches
     printing without a printer.
 
+212. **Every animation frame cast the chart twice.** Found reading the
+    animation path against Windows' `WM_TIMER`.
+
+    `Animate()` (xscreen.cpp) casts the chart **itself** -- its last two
+    lines are `CastRelation()`/`CastChart(0)` -- and returns early without
+    casting at all when it only rotated a map or a globe. Windows' timer
+    handler therefore does `Animate(); wi.fRedraw = fTrue;
+    ProcessState();` and nothing more. `AnimTickQt()` called
+    `RecastAndRedrawQt()`, so it cast a **second** time on every frame
+    that moved the time, and cast **gratuitously** on every frame that
+    only turned a map.
+
+    Measured rather than reasoned: `-~q1` fires from inside `CastChart()`,
+    so counting it counts casts. Two per tick and one per map tick before;
+    one and zero after, which is what Windows does.
+
+    `ciMain` is already right on every path out of `Animate()` -- it
+    assigns it for a plain chart and restores `ciCore` from it for the
+    relationship and transit ones -- which is the whole of what
+    `RecastAndRedrawQt()` did before casting again.
+
+    The existing assertions that a tick *advances* the chart stay, and are
+    what stops this from being satisfied by a tick that casts nothing.
+
+    **There is no assertion on the count, and that was a decision rather
+    than an omission.** The hook does not fire once per call: a sector
+    chart casts once per division and fired it 228 times for a single
+    cast, a relationship chart casts one per ring, and several chart types
+    cast again while drawing. Pinning all three -- and measuring the unit
+    in the same breath rather than assuming it was 1 -- still left the
+    count reading the same with the bug present and without it inside the
+    full suite, while biting cleanly when the group ran alone. A net that
+    works only sometimes is worse than none, so the three drafts went in
+    the bin and the reason is written where the assertion would have been.
+
+    One of those drafts also took the suite down. Calling `Animate()` a
+    second time to get a baseline advances the chart and re-casts, and the
+    suite segfaulted several groups later -- which is worth knowing on its
+    own: `Animate()` is not a function a test can call speculatively.
+
 
 ## Features this fork adds to both builds
 

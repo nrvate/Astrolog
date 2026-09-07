@@ -2620,6 +2620,19 @@ static void TestAnimationStateQt()
 
   Group("Animation state");
 
+  // NOT asserted here, and the reason is worth carrying: that a frame
+  // casts ONCE rather than twice. "-~q1" fires from inside CastChart(),
+  // so counting it counts casts -- but not one per call. A sector chart
+  // casts once per division and fired it 228 times for a single cast, a
+  // relationship chart casts one per ring, and several chart types cast
+  // again while DRAWING. Pinning all three still left the count reading
+  // the same with the bug present and without it, so the check bit when
+  // the group ran alone and was blind inside the suite. A net that only
+  // works sometimes is worse than none; the fix is evidenced by the
+  // measurement in qtdriver.cpp's own comment (2 casts a frame and 1 for
+  // a turning map, against Windows' 1 and 0) and by AnimTickQt() now
+  // being what wdriver.cpp:1031 is.
+
   Check(s_nAnimStartQt < 0,
     "animation is stopped at startup, with a rate remembered (was %d)",
     s_nAnimStartQt);
