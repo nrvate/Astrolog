@@ -10503,6 +10503,53 @@ are the more useful half to read before starting something new.
     one changes what drawing MEANS.
 
 
+248. **A standing net for the surface item 247 came out of.** Three
+    findings of the same shape have now been made by hand -- "Reverse
+    Background" and "Monochrome" doing nothing on screen while working
+    perfectly in an exported file, and "Timed Exposure" the same. Each
+    was found by someone happening to look.
+
+    `tools/inert_option_audit.py` asks exactly the right question --
+    "does this option move at least one render, or say why it cannot" --
+    and has caught a real one (`-XE 1 20` rendering byte-identically to no
+    `-XE` at all). It **cannot see this surface**: it runs `./astrolog`,
+    whose renders all go through a file writer, and the Qt screen path is
+    `RedrawQt()` -> `DrawChartX()` with no writer in it.
+
+    New group `screen-options` closes that. Every graphics toggle the
+    menus offer -- fourteen of them -- must move at least one screen
+    render, or carry a reason here why it cannot. First mode that moves
+    wins, out of a wheel, a globe, a world map, a sphere and an orbit
+    chart, so most flags cost one comparison rather than five: 15
+    assertions in 0.7 s.
+
+    One allowlist entry, `gs.fJetTrail`, and its reason is structural
+    rather than an excuse: it draws one chart over the LAST one, so two
+    renders of the *same* chart are identical either way. The `jet-trail`
+    group is what sees that, by rendering two *different* charts.
+
+    Falsified by making one option inert the way the three real ones were
+    -- pinning `QPainter::Antialiasing` off instead of following
+    `gs.fAntialias` -- which fails the group at "0 pixels".
+
+    **Two things the sweep raised and neither is a port bug**, recorded so
+    the next reader does not re-chase them:
+
+    * `gs.fAllStar` ("Show Full Star List") moves only the **orbit** chart
+      on screen, through a scale factor at `xdevice.cpp:2566`, and only
+      while the fixed stars are restricted -- with `us.fStar` already on,
+      that `||` is already true and the flag changes nothing. It is in the
+      group because the orbit chart is in the mode list.
+    * Its **text** half prints nothing at all. `ChartListing()` and
+      `ChartOrbit()` both have a `if (gs.fAllStar)` block that calls
+      `SwissComputeStarSort()`, and that yields no stars even with
+      `/swe` and its `sefstars.txt` present. Measured in the CONSOLE
+      build, which is the point: `./astrolog -v =XU _X` prints exactly one
+      more line than `./astrolog -v`, and that line is the `PrintL()`
+      before the list. Both builds behave identically, so whatever this
+      is, it is not the port's.
+
+
 ### A knowing divergence found in the same sweep, and left alone
 
 `BeginFileX()` (`xdevice.cpp`) returns `fFalse` immediately on Windows

@@ -4288,6 +4288,96 @@ static void TestTextExtentQt()
 // Strictly more ink, not a threshold: the second render adds whatever the
 // first drew and the second does not cover, so the counts cannot be equal
 // unless the buffer was cleared. Measured at 158,527 against 151,633.
+// Every graphics toggle in the menus has to move at least one SCREEN
+// render, or say here why it cannot.
+//
+// tools/inert_option_audit.py asks the same question of the console
+// build's FILE renders and has caught a real one ("-XE 1 20" rendering
+// byte-identically to no -XE at all). It cannot see this surface: it runs
+// ./astrolog, and the screen path is RedrawQt() -> DrawChartX() with no
+// file writer in it. That gap is not theoretical -- "Reverse Background"
+// and "Monochrome" were both found doing nothing on screen while working
+// perfectly in an exported file (work log item 50's neighbourhood), and
+// "Timed Exposure" the same (item 247). Three of the same shape, each
+// found by hand.
+//
+// First mode that moves wins, so the common ones come first and most
+// flags cost one comparison rather than five.
+typedef struct {
+  flag *pf;
+  CONST char *szName;
+  CONST char *szWhyInert;    // NULL when the flag must move something.
+} SCREENOPT;
+
+static void TestScreenOptionsQt()
+{
+  static CONST int rgnMode[5] = {gWheel, gGlobe, gWorldMap, gSphere, gOrbit};
+  SCREENOPT rgt[] = {
+    {&gs.fBorder,      "Show Border",         NULL},
+    {&gs.fText,        "Show Chart Info",     NULL},
+    {&gs.fThick,       "Thicker Lines",       NULL},
+    {&gs.fAntialias,   "Antialias Lines",     NULL},
+    {&gs.fLabel,       "Show Glyph Labels",   NULL},
+    {&gs.fAllStar,     "Show Full Star List", NULL},
+    {&gs.fAllExo,      "Show Exoplanets",     NULL},
+    {&gs.fHouseExtra,  "Show House Details",  NULL},
+    {&gs.fEquator,     "Show Equator",        NULL},
+    {&gs.fLabelCity,   "Show Cities",         NULL},
+    {&gs.fEcliptic,    "Use Ecliptic Axis",   NULL},
+    {&gs.fIndianWheel, "Show Indian Wheels",  NULL},
+    {&gs.fAlt,         "Modify Display",      NULL},
+    {&gs.fJetTrail,    "Timed Exposure",
+     "draws one chart over the LAST one, so two renders of the same chart "
+     "are identical either way -- the jet-trail group is what sees it"} };
+  int nModeSav = gi.nMode, xWinSav = gs.xWin, yWinSav = gs.yWin;
+  flag fGraphicsSav = us.fGraphics;
+  int i, k, x, y;
+
+  Group("Graphics options move a screen render");
+  us.fGraphics = fTrue;
+  gs.xWin = gs.yWin = 500;
+  for (i = 0; i < (int)(sizeof(rgt)/sizeof(rgt[0])); i++) {
+    flag fSav = *rgt[i].pf;
+    int cDiff = 0, nModeMoved = 0;
+
+    for (k = 0; k < 5 && cDiff <= 0; k++) {
+      QImage imOff, imOn;
+
+      *rgt[i].pf = fFalse;
+      SetChartModeQt(rgnMode[k]);
+      RedrawQt();
+      if (gi.qim == NULL)
+        continue;
+      imOff = gi.qim->copy();
+      *rgt[i].pf = fTrue;
+      SetChartModeQt(rgnMode[k]);
+      RedrawQt();
+      if (gi.qim == NULL || gi.qim->size() != imOff.size())
+        continue;
+      imOn = gi.qim->copy();
+      for (y = 0; y < imOff.height(); y++)
+        for (x = 0; x < imOff.width(); x++)
+          if (imOff.pixel(x, y) != imOn.pixel(x, y))
+            cDiff++;
+      if (cDiff > 0)
+        nModeMoved = rgnMode[k];
+    }
+    *rgt[i].pf = fSav;
+    if (rgt[i].szWhyInert != NULL)
+      Check(cDiff <= 0,
+        "\"%s\" moves no screen render, and should not: %s",
+        rgt[i].szName, rgt[i].szWhyInert);
+    else
+      Check(cDiff > 0, "\"%s\" changes what the screen shows "
+        "(chart mode %d, %d pixels)", rgt[i].szName, nModeMoved, cDiff);
+  }
+
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+}
+
+
 static void TestJetTrailQt()
 {
   flag fTrailSav = gs.fJetTrail, fGraphicsSav = us.fGraphics;
@@ -11775,6 +11865,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"window-size",          TestWindowSizeQt},
   {"text-extent",          TestTextExtentQt},
   {"jet-trail",            TestJetTrailQt},
+  {"screen-options",       TestScreenOptionsQt},
   {"credit-colors",        TestCreditColorsQt},
   {"transit-mode",         TestTransitModeQt},
   {"menu-actions",         TestAllMenuActionsQt},

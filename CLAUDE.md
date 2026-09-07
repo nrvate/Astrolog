@@ -501,6 +501,15 @@ python3 tools/image_audit.py         # every image Astrolog writes is a
                                      # after the build rather than with
                                      # the pure-Python audits
 python3 tools/inert_option_audit.py  # every option in the graphics matrix
+                                     # -- the FILE renders only; the Qt
+                                     # suite's "screen-options" group asks
+                                     # the same question of the SCREEN
+                                     # ones, which this cannot see because
+                                     # it runs ./astrolog and every render
+                                     # there goes through a file writer.
+                                     # Three options were found dead on
+                                     # screen and working in a file before
+                                     # that group existed
                                      # moves at least one render, or says
                                      # in an annotated allowlist why it
                                      # cannot. "-XE 1 20" rendered exactly
