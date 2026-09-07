@@ -10800,6 +10800,26 @@ this is the note that explains the wall of dialogs.
     run.
 
 
+254. **The `.dmg` step failed silently, and it is the flaky one.** The
+    `v8.00-qt.15` release job died at `== dmg` with nothing printed after
+    it. `hdiutil create` had `-quiet`, which suppresses its *error* as
+    well as its progress, so under `set -e` the step's whole diagnostic
+    was its own heading.
+
+    The cause is in the job's cleanup line rather than its output:
+    `Terminate orphan process: (diskimages-help)`. `hdiutil` drives
+    `diskimages-helper`, and on a shared runner that helper can still be
+    holding the previous attach when the next create asks for a device.
+    The identical commit had packaged cleanly in a `publish=false`
+    dispatch eight minutes earlier, which is what rules out the code.
+
+    Three attempts with a five-second pause, the error kept and printed
+    on each, and the whole log printed if the third fails. Only the
+    progress meter is gone now. The loop's three paths -- always fails,
+    fails once then succeeds, succeeds first time -- were run against a
+    stub on Linux, since `hdiutil` cannot be.
+
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.

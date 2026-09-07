@@ -278,8 +278,36 @@ rm -f "$out/chart.txt" "$out/run.out"
 
 echo "== dmg"
 dmg="$out/astrolog-$ver-macos.dmg"
-hdiutil create -volname "Astrolog $ver" -srcfolder "$app" \
-  -ov -quiet -format UDZO "$dmg"
+# RETRIED, AND NOT QUIET. "hdiutil create" is the flakiest step in this
+# script: it drives diskimages-helper, and on a shared runner that helper
+# can still be holding the previous attach when the next create asks for
+# a device. The v8.00-qt.15 release failed here after the identical
+# commit had packaged cleanly in a dry run eight minutes earlier, and the
+# job's own cleanup line -- "Terminate orphan process: (diskimages-help)"
+# -- is the whole diagnosis.
+#
+# It failed SILENTLY, which was the worse half: "-quiet" suppresses
+# hdiutil's error as well as its progress, so under "set -e" the step
+# printed "== dmg" and exited 1 with nothing after it. Errors are kept
+# and shown now, and only the progress meter is dropped.
+i=1
+while :; do
+  if hdiutil create -volname "Astrolog $ver" -srcfolder "$app" \
+       -ov -format UDZO "$dmg" >"$out/hdiutil.log" 2>&1; then
+    break
+  fi
+  if [ "$i" -ge 3 ]; then
+    echo "   hdiutil create failed $i times:"
+    sed 's/^/   /' "$out/hdiutil.log"
+    exit 1
+  fi
+  echo "   hdiutil create failed (attempt $i), retrying"
+  sed 's/^/   /' "$out/hdiutil.log"
+  rm -f "$dmg"
+  i=$((i+1))
+  sleep 5
+done
+rm -f "$out/hdiutil.log"
 ls -lh "$dmg" | awk '{print "   "$5"  "$9}'
 
 # Mount it and run the app from INSIDE, which is the only copy anyone
