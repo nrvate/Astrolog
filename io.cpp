@@ -3723,9 +3723,14 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     ch = *pch;
     if (ch != '\'' && ch != ';')
       continue;
-    // Encode ' and ; characters in the URL to %NN format.
+    // Encode ' and ; characters in the URL to %NN format. Check the
+    // shift fits first: each encoding grows the string by 2 bytes, and
+    // szUrl is a fixed cchSzLine*2 buffer. If it would not fit, leave
+    // the character unencoded rather than writing past the end.
     for (pch2 = pch; *pch2; pch2++)
       ;
+    if (pch2 + 2 >= szUrl + cchSzLine*2)
+      continue;
     for (pch2 += 2; pch2 >= pch; pch2--)
       *pch2 = *(pch2 - 2);
     pch[0] = '%';
