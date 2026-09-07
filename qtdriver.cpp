@@ -258,9 +258,13 @@ typedef struct _qtuserinterface {
 
 static QTUI qi;
 
-// Room left in one of qi's fixed menu tables, checked the way the shared
-// core's checked tables are (AssertIndex, astrolog.h -- live under
-// QTTEST, inert in a shipping build).
+// Room left in one of qi's fixed menu tables. TWO things, and the second
+// is the one that matters in a shipping build: AssertRoomQt() says so
+// loudly under QTTEST, and the CRoomQt() test at each call site skips the
+// write. AssertIndex is inert without QTTEST, so the assert alone left
+// the release build writing past the array -- the check-and-skip is what
+// the restriction-category site had done all along, and these two now
+// match it.
 //
 // Each of those tables is an array with a running count and no guard, so
 // adding a 17th relationship chart or a 9th restriction category would
@@ -273,8 +277,8 @@ static QTUI qi;
 //
 // The bound comes from the array itself rather than a constant beside it,
 // so resizing one cannot leave its guard behind.
-#define AssertRoomQt(c, rg) \
-  AssertIndex(c, (int)(sizeof(rg)/sizeof((rg)[0])) - 1)
+#define CRoomQt(rg) ((int)(sizeof(rg)/sizeof((rg)[0])))
+#define AssertRoomQt(c, rg) AssertIndex(c, CRoomQt(rg) - 1)
 
 
 // The widget the chart is actually painted onto. Astrolog keeps rendering
@@ -1354,9 +1358,11 @@ static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
     SetChartModeQt(mode);
   });
   AssertRoomQt(qi.cChartMode, qi.rgpaChartMode);
-  qi.rgpaChartMode[qi.cChartMode] = pa;
-  qi.rgnChartMode[qi.cChartMode] = mode;
-  qi.cChartMode++;
+  if (qi.cChartMode < CRoomQt(qi.rgpaChartMode)) {
+    qi.rgpaChartMode[qi.cChartMode] = pa;
+    qi.rgnChartMode[qi.cChartMode] = mode;
+    qi.cChartMode++;
+  }
   return pa;
 }
 
@@ -1391,9 +1397,11 @@ static QAction *AddChartModeTextAction(QMenu *pmenu, CONST char *szLabel,
     SetChartModeQt(mode);
   });
   AssertRoomQt(qi.cChartMode, qi.rgpaChartMode);
-  qi.rgpaChartMode[qi.cChartMode] = pa;
-  qi.rgnChartMode[qi.cChartMode] = mode;
-  qi.cChartMode++;
+  if (qi.cChartMode < CRoomQt(qi.rgpaChartMode)) {
+    qi.rgpaChartMode[qi.cChartMode] = pa;
+    qi.rgnChartMode[qi.cChartMode] = mode;
+    qi.cChartMode++;
+  }
   return pa;
 }
 
@@ -1541,9 +1549,11 @@ static QAction *AddRelAction(QMenu *pmenu, QActionGroup *pgroup,
     SetRelQt(fToggle ? (us.nRel ? rcNone : rcDual) : rc);
   });
   AssertRoomQt(qi.cRel, qi.rgpaRel);
-  qi.rgpaRel[qi.cRel] = pa;
-  qi.rgnRel[qi.cRel] = rc;
-  qi.cRel++;
+  if (qi.cRel < CRoomQt(qi.rgpaRel)) {
+    qi.rgpaRel[qi.cRel] = pa;
+    qi.rgnRel[qi.cRel] = rc;
+    qi.cRel++;
+  }
   return pa;
 }
 
@@ -1958,8 +1968,7 @@ static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setChecked(pfield != NULL ? *pfield != 0 : !ignore[lo]);
-  if (pfield != NULL && qi.ccatres < (int)(sizeof(qi.rgcatres)/sizeof(CATRES))) {
-    AssertRoomQt(qi.ccatres, qi.rgcatres);
+  if (pfield != NULL && qi.ccatres < CRoomQt(qi.rgcatres)) {
     CATRES *pcat = &qi.rgcatres[qi.ccatres++];
     pcat->pa = pa; pcat->pfield = pfield; pcat->lo = lo; pcat->hi = hi;
     pcat->fTransit = fTransit;
