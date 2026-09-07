@@ -8531,6 +8531,40 @@ are the more useful half to read before starting something new.
     first would pass on a build where mode 0 happened to be fine and the
     guard was doing nothing, with no way to tell which.
 
+198. **"Open Charts in Folder" read an empty folder in old style
+    format.** Found the same way as item 197: two pieces of code doing
+    one job, diffed. `ShowOpenChartDirDialogQt()` walks the folder with
+    `QDir` rather than calling shared core's `OpenDir()`, and a
+    reimplementation drifts.
+
+    Three of its differences are deliberate improvements and worth
+    keeping, which is why the fix is not "just call `OpenDir()`":
+
+    * `OpenDir()`'s POSIX branch matches `.as` **case sensitively**
+      (`pch[-2] == 'a' && pch[-1] == 's'`), so a folder of `.AS` files
+      copied from a Windows install reads as empty on Linux.
+    * It does not sort, so the chart list comes back in whatever order
+      `readdir()` hands back.
+    * It says nothing at all when a folder yields no charts.
+
+    The fourth was a gap. `us.fWriteOld` -- the **"Save Chart Info Files
+    in Old Style Format"** box in File Settings, `dxFi_Yo`, present in
+    both builds -- widens the walk to *every* file in the folder and
+    stops excluding astrolog.as, atlas.as and timezone.as. Windows
+    advertises it in its own dialog title, "Astrolog *.as" against
+    "Astrolog *.*". The Qt version always filtered `*.as`, so with that
+    box ticked a folder of old style chart files -- which have no
+    extension of their own to filter on -- read as empty.
+
+    **The command had no coverage either**, for the same reason printing
+    had none: it opens a directory picker. The walk is split into
+    `COpenChartDirQt()` now and the `open-dir` group drives it over a
+    scratch folder of four files, **every one of them a loadable chart**
+    so that a skip is a decision rather than a parse failure: two `.as`
+    (one of them `.AS`), one named astrolog.as, one `.txt`. Two load with
+    the box clear, all four with it ticked. Before the fix the second
+    answer was two, so the pair is discriminating by construction.
+
 
 ## Features this fork adds to both builds
 

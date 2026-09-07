@@ -2449,25 +2449,40 @@ void ShowChartListDialogQt()
 // default data files are skipped, same as there, since a folder of charts
 // often sits alongside them.
 
-void ShowOpenChartDirDialogQt()
-{
-  QString qsDir = QFileDialog::getExistingDirectory(gi.qwind,
-    "Open Charts in Folder");
-  if (qsDir.isEmpty())
-    return;
+// Load every chart file in one folder into the chart list, and say how
+// many. Split out from the dialog below so it can be driven without a
+// directory picker in front of it -- the same reason PrintChartToQt()
+// is split out of PrintChartQt().
 
+static int COpenChartDirQt(CONST QString &qsDir)
+{
   QDir dir(qsDir);
-  // Both cases: QDir's name filters are case sensitive on Linux, and
-  // chart files copied from a Windows install are often ".AS".
-  QStringList qslFiles = dir.entryList(QStringList() << "*.as" << "*.AS",
-    QDir::Files, QDir::Name);
+  // "Save Chart Info Files in Old Style Format" (dxFi_Yo, us.fWriteOld)
+  // widens this to every file in the folder, and stops excluding the
+  // three default data files -- which is what OpenDir() does in shared
+  // core and what Windows' DlgOpenDir advertises in its own title,
+  // "Astrolog *.as" against "Astrolog *.*". An old-format chart file has
+  // no extension of its own to filter on, so narrowing to "*.as" while
+  // that box is ticked means the folder reads as empty.
+  //
+  // This dialog does NOT simply call OpenDir(), and deliberately: that
+  // function matches ".as" case sensitively on its POSIX branch, so a
+  // folder of ".AS" files copied from a Windows install reads as empty
+  // on Linux; it does not sort, so the list order is whatever readdir
+  // hands back; and it says nothing when a folder yields no charts.
+  // Those three are worth keeping. Honouring us.fWriteOld is what was
+  // missing.
+  flag fAll = us.fWriteOld;
+  QStringList qslFiles = dir.entryList(fAll ? QStringList("*") :
+    (QStringList() << "*.as" << "*.AS"), QDir::Files, QDir::Name);
   CI ciT = ciCore;
   int cAdded = 0;
 
   for (CONST QString &qsFile : qslFiles) {
-    if (qsFile.compare(DEFAULT_INFOFILE, Qt::CaseInsensitive) == 0 ||
+    if (!fAll &&
+      (qsFile.compare(DEFAULT_INFOFILE, Qt::CaseInsensitive) == 0 ||
       qsFile.compare(DEFAULT_ATLASFILE, Qt::CaseInsensitive) == 0 ||
-      qsFile.compare(DEFAULT_TIMECHANGE, Qt::CaseInsensitive) == 0)
+      qsFile.compare(DEFAULT_TIMECHANGE, Qt::CaseInsensitive) == 0))
       continue;
     QByteArray ba = dir.filePath(qsFile).toLocal8Bit();
     if (!FInputData(ba.constData()))
@@ -2477,14 +2492,30 @@ void ShowOpenChartDirDialogQt()
     cAdded++;
   }
   ciCore = ciT;
+  return cAdded;
+}
 
-  if (cAdded <= 0) {
+
+void ShowOpenChartDirDialogQt()
+{
+  QString qsDir = QFileDialog::getExistingDirectory(gi.qwind,
+    "Open Charts in Folder");
+  if (qsDir.isEmpty())
+    return;
+  if (COpenChartDirQt(qsDir) <= 0) {
     QMessageBox::warning(gi.qwind, szAppName,
       "No chart files were loaded from that folder.");
     return;
   }
   RecastAndRedrawQt();
 }
+
+#ifdef QTTEST
+int COpenChartDirTestQt(CONST char *szDir)
+{
+  return COpenChartDirQt(QString::fromUtf8(szDir));
+}
+#endif
 
 
 // Save the chart list, equivalent to Windows' cmdSaveList: the same

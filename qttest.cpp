@@ -1338,6 +1338,7 @@ static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
 }
 
 
+extern int COpenChartDirTestQt(CONST char *);      // qtdialog.cpp
 extern void PrintChartToFileTestQt(CONST char *);  // qtdriver.cpp
 extern void AnimTickTestQt(void);                 // qtdriver.cpp
 extern flag FAnimTickBusyTestQt(void);
@@ -7587,6 +7588,94 @@ static void TestPrintQt()
 }
 
 
+/*
+******************************************************************************
+** Open Charts in Folder.
+******************************************************************************
+*/
+
+// Which files that command picks up, which it skips, and what the "Save
+// Chart Info Files in Old Style Format" box does to both.
+//
+// With the box clear the folder is read as "*.as", case insensitively so
+// that ".AS" files copied from a Windows install are seen, and Astrolog's
+// own three data files are skipped by name. With it ticked the filter
+// widens to every file and those three exclusions stop applying -- which
+// is what OpenDir() does in shared core and what Windows' own dialog
+// title advertises, "Astrolog *.as" against "Astrolog *.*". An old style
+// chart file has no extension of its own, so narrowing to "*.as" while
+// that box is ticked makes the folder read as empty.
+//
+// This does not go through the dialog, which would want a directory
+// picker answered; the walk is split out for that, the same way the
+// print render is.
+
+static flag FWriteChartFileQt(CONST QString &strPath, CONST char *szName)
+{
+  QFile file(strPath);
+
+  if (!file.open(QIODevice::WriteOnly))
+    return fFalse;
+  QByteArray ba = QString(
+    "@AI800  ; Astrolog chart info.\n"
+    "-qb Jun 15 1990 12:34pm ST 8W 122:19W 47:36N\n"
+    "-zi \"%1\" \"Nowhere\"\n").arg(QString::fromUtf8(szName)).toLocal8Bit();
+  flag f = (file.write(ba) == ba.size());
+  file.close();
+  return f && file.error() == QFileDevice::NoError;
+}
+
+static void TestOpenDirQt()
+{
+  int cciSav = is.cci, cLoaded;
+  flag fOldSav = us.fWriteOld, fPopupSav = FNoPopupQt();
+  CI ciCoreSav = ciCore;
+
+  Group("Open charts in folder");
+  SetNoPopupQt(fTrue);
+  QString strDir = QDir::tempPath() + QString("/astrolog-qt-dir-%1")
+    .arg((int)QCoreApplication::applicationPid());
+  QDir().mkpath(strDir);
+
+  // Four files, every one of them a loadable chart -- including the two
+  // that are meant to be skipped, so that a skip is a decision rather
+  // than a parse failure.
+  flag fWrote =
+    FWriteChartFileQt(strDir + "/one.as", "One") &&
+    FWriteChartFileQt(strDir + "/two.AS", "Two") &&
+    FWriteChartFileQt(strDir + "/" + DEFAULT_INFOFILE, "Default") &&
+    FWriteChartFileQt(strDir + "/three.txt", "Three");
+  Check(fWrote, "four chart files written to a scratch folder");
+
+  QByteArray baDir = strDir.toLocal8Bit();
+  is.cci = 0;
+  us.fWriteOld = fFalse;
+  cLoaded = COpenChartDirTestQt(baDir.constData());
+  Check(cLoaded == 2,
+    "only the two .as files load, case regardless (%d)", cLoaded);
+  Check(is.cci == 2, "and both reached the chart list (%d)", is.cci);
+
+  is.cci = 0;
+  us.fWriteOld = fTrue;
+  cLoaded = COpenChartDirTestQt(baDir.constData());
+  Check(cLoaded == 4,
+    "old style format widens it to every file, exclusions and all (%d)",
+    cLoaded);
+
+  QFile::remove(strDir + "/one.as");
+  QFile::remove(strDir + "/two.AS");
+  QFile::remove(strDir + "/" + DEFAULT_INFOFILE);
+  QFile::remove(strDir + "/three.txt");
+  QDir().rmdir(strDir);
+
+  is.cci = cciSav;
+  us.fWriteOld = fOldSav;
+  ciCore = ciCoreSav;
+  SetNoPopupQt(fPopupSav);
+  printf("  the folder walk filters and skips the way the oracle does\n");
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -8517,6 +8606,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"copy-text-bom",        TestCopyTextBomQt},
   {"restrict-recall",      TestRestrictRecallQt},
   {"printing",             TestPrintQt},
+  {"open-dir",             TestOpenDirQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},
