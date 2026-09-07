@@ -7335,6 +7335,39 @@ static void TestCopyTextBomQt()
       "%s: and does not start with a byte order mark", szWhat);
   }
 
+  // The box-drawing half. Astrolog draws its text wheels out of IBM code
+  // page 437 line characters when us.fAnsiChar is on, which the View
+  // menu's "Colored Text" turns on -- and those are raw high bytes, not
+  // UTF-8. fromUtf8() turned every box edge into U+FFFD on the clipboard
+  // while the canvas showed them correctly, because TextCharQt() has
+  // mapped each high byte through WchFromChIBM() all along.
+  //
+  // Windows has no such gap and that is why this was invisible from its
+  // side: cmdCopyText hands the bytes over as CF_OEMTEXT and lets the
+  // paste target convert.
+  {
+    flag fAnsiCharSav = us.fAnsiChar, fAnsiColorSav = us.fAnsiColor;
+    us.fAnsiChar = fTrue; us.fAnsiColor = fFalse;
+    us.nCharsetOut = ccNone;
+    // gHouse, not gWheel. rgchartmode[] maps gHouse to us.fWheel and
+    // gWheel to us.fListing (xscreen.cpp:1392 and 1409), so the obvious
+    // reading of the two names is the wrong way round -- and a listing
+    // has degree signs but no box edges, so this asked about a chart
+    // that was not being drawn and failed on it. The two Copy triggers
+    // above each run Action() and leave the chart on the listing, so the
+    // pin has to be repeated here rather than done once at the top.
+    SetChartModeQt(gHouse);
+    us.fGraphics = fFalse;
+    QApplication::clipboard()->setText(QString("sentinel"));
+    pa->trigger();
+    QString str = QApplication::clipboard()->text();
+    Check(!str.contains(QChar(0xFFFD)),
+      "IBM line characters survive the trip to the clipboard");
+    Check(str.contains(QChar(0x2502)) || str.contains(QChar(0x2500)),
+      "and arrive as real box drawing, not as something else");
+    us.fAnsiChar = fAnsiCharSav; us.fAnsiColor = fAnsiColorSav;
+  }
+
   // And the mark really is there to be stripped. Without this the pair
   // above passes on a build that never writes one, which is the same
   // assertion as no assertion.

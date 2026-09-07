@@ -8446,6 +8446,57 @@ are the more useful half to read before starting something new.
     this. Falsified the same way as the others, by removing the fix on a
     scratch copy and watching it name the function.
 
+196. **Every box edge of a copied text wheel arrived as U+FFFD.** A
+    fourth parity axis, and the one CLAUDE.md describes without anything
+    checking it: `#ifdef WIN` blocks in *shared core* with no `QT`
+    counterpart -- the shape work log items 39 and 54 came from. Four
+    files have such blocks and no mention of `QT` at all. Three were
+    fine (a `GetModuleFileName`, a Win32 scroll offset, an antialiasing
+    variant). The fourth pointed at something real, though not at
+    itself.
+
+    charts1.cpp guards a `PrintChart()` block with `#ifdef WIN`: *"Turn
+    off IBM line characters if displaying in font other than
+    Terminal."* Astrolog draws its text wheels and grids out of code
+    page 437 line characters when `us.fAnsiChar` is on, and the **View
+    menu's "Colored Text" turns that on** -- it flips `fAnsiColor` and
+    `fAnsiChar` together, in both builds.
+
+    The guard itself is *correctly* absent here. `TextCharQt()` maps
+    every high byte through `WchFromChIBM()` before drawing it, so the
+    canvas shows proper box drawing rather than suppressing it -- a
+    better answer than Windows', and the reason this file has no `QT` in
+    it. But the **capture** path does not go through `TextCharQt()`: Copy
+    Chart Text Output and printing a text chart both write a file and
+    read it back, and that read was `QString::fromUtf8()`. Raw byte 0xB3
+    is not UTF-8. Measured: the captured file fails to decode at position
+    4, and every box edge came back U+FFFD.
+
+    Windows has no such gap, which is exactly why it was invisible from
+    the Windows side: `cmdCopyText` hands the bytes to the clipboard as
+    **CF_OEMTEXT** when `us.nCharsetOut` says IBM and lets the paste
+    target convert. A Qt clipboard carries a QString, so the conversion
+    has to happen in the port. `CaptureTextChartQt()` decodes by the
+    codepage the file was written in now -- UTF-8, Latin-1, or the same
+    `WchFromChIBM()` mapping the canvas has always used.
+
+    **And this closed a hole in the audit that found it.** `us.nCharsetOut`
+    was on `backend_parity_audit.py`'s allowlist, with the reason "picks
+    a Win32 clipboard format; Qt's is Unicode" -- which is true and was
+    the wrong conclusion, because "Qt's clipboard is Unicode" means the
+    conversion moves into the port rather than disappearing. The field is
+    named in live Qt code now, so the entry went stale and the audit
+    said so. That stale check was written on general principle; this is
+    the first time it earned its keep.
+
+    Two traps in the test, both costing a run. `rgchartmode[]` maps
+    **`gHouse` to `us.fWheel` and `gWheel` to `us.fListing`**
+    (xscreen.cpp:1392 and 1409), so the obvious reading of those two
+    names is the wrong way round, and pinning `gWheel` asked about a
+    listing -- which has degree signs and no box edges. And the pin has
+    to be repeated immediately before the assertion, because each Copy
+    runs `Action()` and leaves the chart on the listing again.
+
 
 ## Features this fork adds to both builds
 

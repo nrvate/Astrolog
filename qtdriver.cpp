@@ -1114,8 +1114,33 @@ static QString CaptureTextChartQt(flag fHTML)
   QString qs;
   QFile file(szTemp);
   if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    qs = QString::fromUtf8(file.readAll());
+    QByteArray ba = file.readAll();
     file.close();
+    // Decode by the codepage the file was WRITTEN in, not by hope.
+    // Astrolog draws its text wheels and grids out of IBM code page 437
+    // line characters when us.fAnsiChar is on -- which the View menu's
+    // "Colored Text" turns on -- and those are raw high bytes, not UTF-8.
+    // Handing them to fromUtf8() turned every box edge into U+FFFD on the
+    // clipboard, while the canvas showed them correctly: TextCharQt()
+    // has mapped each high byte through WchFromChIBM() all along. This is
+    // the same mapping, for the path that goes through a file.
+    //
+    // Windows does not need it, and that is why the gap was invisible
+    // from the Windows side: cmdCopyText hands the bytes to the clipboard
+    // as CF_OEMTEXT when us.nCharsetOut says IBM, and lets the paste
+    // target convert. A Qt clipboard carries a QString, so the conversion
+    // has to happen here.
+    if (us.nCharsetOut == ccUTF8)
+      qs = QString::fromUtf8(ba);
+    else if (us.nCharsetOut == ccLatin || us.nCharset == ccLatin)
+      qs = QString::fromLatin1(ba);
+    else {
+      qs.reserve(ba.size());
+      for (int i = 0; i < ba.size(); i++) {
+        uchar b = (uchar)ba.at(i);
+        qs += QChar(b >= 128 ? (wchar)WchFromChIBM(b) : (wchar)b);
+      }
+    }
   }
   // Astrolog writes a UTF-8 byte order mark at the head of the file when
   // us.nCharsetOut is ccUTF8 ("-Yao3"). That is right for a file and

@@ -68,12 +68,15 @@ ALLOW = {
     # unbound here (QT_GUI_PLAN.md item 2).
     "us.nScrollRow": "Windows' text pager; Qt has a QScrollArea instead",
 
-    # Read in exactly one place on Windows, to choose between CF_OEMTEXT
-    # and CF_TEXT when putting a text chart on the clipboard. Qt's
-    # clipboard carries QString, so there is no byte encoding to choose.
-    # The capture strips the UTF-8 BOM instead, which is the one thing
-    # the codepage does change about what it captures.
-    "us.nCharsetOut": "picks a Win32 clipboard format; Qt's is Unicode",
+    # us.nCharsetOut used to be listed here, on the reasoning that
+    # Windows reads it only to pick CF_OEMTEXT over CF_TEXT and a Qt
+    # clipboard carries a QString. That reading is what hid a bug: the
+    # conversion Windows delegates to the paste target has to happen in
+    # the port instead, and it did not, so every box edge of a text wheel
+    # arrived as U+FFFD. CaptureTextChartQt() decodes by the codepage the
+    # file was written in now, which means the field is named in live Qt
+    # code and the entry went stale -- this audit said so, which is the
+    # stale check earning its place.
 
     # Not a setting Windows acts on at all: it appears once, as the upper
     # ADDRESS BOUND of the second ClearB() range,
