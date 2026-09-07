@@ -261,6 +261,24 @@ dword LRead(FILE *file)
 }
 
 
+// Write a string to a file with any double quotes converted to single
+// quotes, so it can be embedded in a double-quoted parameter field of a
+// chart file without breaking the format. Nothing is written for a null
+// or empty string. This is the one home for the escape loop that
+// FOutputData and FOutputChartList each used to hand-roll around every
+// name and location they wrote.
+
+void PrintQuotedSz(FILE *file, CONST char *sz)
+{
+  CONST char *pch;
+
+  if (sz == NULL)
+    return;
+  for (pch = sz; *pch; pch++)
+    putc(*pch != '"' ? *pch : '\'', file);
+}
+
+
 // Read one line from a file into the given buffer: skip any leading
 // control characters (collapsing blank lines and line ends), then copy
 // characters until the next control character or the buffer is full,
@@ -492,13 +510,9 @@ flag FOutputData(void)
       fprintf(file, "%s %s\n", SzZone(Zon), SzLocation(Lon, Lat));
       // Don't want double quotes within double quoted string parameters.
       fprintf(file, "%czi \"", chSwitch);
-      if (FSzSet(ciMain.nam))
-        for (pch = ciMain.nam; *pch; pch++)
-          putc(*pch != '"' ? *pch : '\'', file);
+      PrintQuotedSz(file, ciMain.nam);
       fprintf(file, "\" \"");
-      if (FSzSet(ciMain.loc))
-        for (pch = ciMain.loc; *pch; pch++)
-          putc(*pch != '"' ? *pch : '\'', file);
+      PrintQuotedSz(file, ciMain.loc);
       fprintf(file, "\"\n");
       us.fAnsiChar = i;
     }
@@ -537,13 +551,9 @@ flag FOutputData(void)
       fprintf(file, "@AP%s  ; %s chart positions.\n", szVerCore, szAppName);
       // Don't want double quotes within double quoted string parameters.
       fprintf(file, "%czi \"", chSwitch);
-      if (FSzSet(ciMain.nam))
-        for (pch = ciMain.nam; *pch; pch++)
-          putc(*pch != '"' ? *pch : '\'', file);
+      PrintQuotedSz(file, ciMain.nam);
       fprintf(file, "\" \"");
-      if (FSzSet(ciMain.loc))
-        for (pch = ciMain.loc; *pch; pch++)
-          putc(*pch != '"' ? *pch : '\'', file);
+      PrintQuotedSz(file, ciMain.loc);
       fprintf(file, "\"\n");
       iMax = Max(is.nObj, cuspHi);
       for (i = 0; i <= iMax; i++) if (!ignore[i] || FCusp(i)) {
@@ -1403,16 +1413,13 @@ flag FOutputChartList()
     fprintf(file, "%s %s ", SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
     // Don't put double quotes within double quoted string parameters.
     putc('"', file);
-    // Guard the unset name/location that chart slots 3-6 start life with,
-    // the same way the chart info writer above already does. Reachable by
-    // saving a chart list that a never-named chart was copied into.
-    if (FSzSet(pci->nam))
-      for (pch = pci->nam; *pch; pch++)
-        putc(*pch != '"' ? *pch : '\'', file);
+    // PrintQuotedSz writes nothing for the unset name/location that chart
+    // slots 3-6 start life with, the same way the chart info writer above
+    // already guards. Reachable by saving a chart list that a never-named
+    // chart was copied into.
+    PrintQuotedSz(file, pci->nam);
     fprintf(file, "\" \"");
-    if (FSzSet(pci->loc))
-      for (pch = pci->loc; *pch; pch++)
-        putc(*pch != '"' ? *pch : '\'', file);
+    PrintQuotedSz(file, pci->loc);
     fprintf(file, "\"\n");
     us.fAnsiChar = nSav;
   }
