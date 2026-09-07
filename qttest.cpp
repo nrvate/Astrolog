@@ -3755,6 +3755,45 @@ static void TestInterfaceSettingsQt()
     SetNoUpdateQt(fUpdSav); SetNoPopupQt(fPopSav); SetBmpWindowQt(fBmpSav);
   }
 
+  // The rest of the Qt side's own state: the animation delay, the
+  // antialiasing level, and the names the Macro menu and its submenus have
+  // been given. Those three live in qi rather than in us or gs, so neither
+  // settings sweep can see them, and the macro names are the only user
+  // text the port stores of its own.
+  {
+    int nDelaySav = NAnimDelayQt(), nAaSav = NAntialiasQt();
+    QByteArray baMacSav(SzSet(SzMacroNameQt(0)));
+    QByteArray baSubSav(SzSet(SzMacroSubNameQt(0)));
+    char szLine[cchSzLine];
+
+    SetAnimDelayQt(137);
+    SetAntialiasQt(9);
+    FProcessCommandLine((char *)"-WM 1 \"ProbeMacroName\"");
+    FProcessCommandLine((char *)"-WM0 0 \"ProbeSubName\"");
+    Check(FOutputSettings(), "the Qt interface state writes to a file");
+
+    SetAnimDelayQt(1);
+    SetAntialiasQt(1);
+    FProcessCommandLine((char *)"-WM 1 \"\"");
+    FProcessCommandLine((char *)"-WM0 0 \"\"");
+    Check(FProcessSwitchFile(szPath, NULL), "and the file loads back");
+    Check(NAnimDelayQt() == 137, "the animation delay survives (%d)",
+      NAnimDelayQt());
+    Check(NAntialiasQt() == 9, "the antialiasing level survives (%d)",
+      NAntialiasQt());
+    Check(FEqSz(SzSet(SzMacroNameQt(0)), "ProbeMacroName"),
+      "a renamed macro survives (\"%s\")", SzSet(SzMacroNameQt(0)));
+    Check(FEqSz(SzSet(SzMacroSubNameQt(0)), "ProbeSubName"),
+      "and a renamed macro submenu (\"%s\")", SzSet(SzMacroSubNameQt(0)));
+
+    SetAnimDelayQt(nDelaySav);
+    SetAntialiasQt(nAaSav);
+    sprintf2(S(szLine), "-WM 1 \"%s\"", baMacSav.constData());
+    FProcessCommandLine(szLine);
+    sprintf2(S(szLine), "-WM0 0 \"%s\"", baSubSav.constData());
+    FProcessCommandLine(szLine);
+  }
+
   // ARITY, ON ONE COMMAND LINE. Everything above replays a settings file,
   // and a settings file cannot see an arity bug: each line is parsed on
   // its own, so a switch that consumes one argument too many just runs
@@ -5872,6 +5911,126 @@ static void TestSettingsArraysQt()
   AdjustAspectCount();
   printf("  %d settings arrays asked, %d lost, %d stale excuses\n",
     csetarray, cLost, cStale);
+}
+
+
+// ---- And the settings that are strings in arrays ----
+//
+// The two sweeps above cover the scalar fields and the numeric arrays. The
+// last of the configuration is user text held in arrays: renamed objects,
+// custom star names, and the 96 macros. Each has its own ownership rule --
+// szObjDisp[] is the object's own name when it is not custom, and
+// SetObjDisp() is the only thing that knows it -- so they are set and put
+// back through those rather than by assignment.
+//
+// Same shape as the field sweep's strings: mark every element, save,
+// poison to empty, replay, compare. The marker is over cchSzMax again,
+// because "-YD" and "-YU" formatted their value through sz until this
+// group was written.
+
+static void TestSettingsStringsQt()
+{
+  char szPath[cchSzMax], szMark[cchSzLine];
+  QVector<QByteArray> rgbaObj(cObj+1), rgbaStar(cStar+1), rgbaMac(cMacro);
+  QVector<bool> rgfObjCustom(cObj+1);
+  char *szFileOutSav = is.szFileOut;
+  int nWriteFormatSav = us.nWriteFormat;
+  flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
+  int i, cLost = 0, cAsked = 0;
+
+  Group("Settings strings");
+  SetNoPopupQt(fTrue);
+
+  // Pristine, for the restore.
+  for (i = 0; i <= cObj; i++) {
+    rgfObjCustom[i] = FObjDispCustom(i);
+    rgbaObj[i] = QByteArray(szObjDisp[i]);
+  }
+  for (i = 1; i <= cStar; i++)
+    rgbaStar[i] = QByteArray(SzSet(szStarCustom[i]));
+  for (i = 0; i < cMacro; i++)
+    rgbaMac[i] = QByteArray(i < is.cszMacro ? SzSet(is.rgszMacro[i]) : "");
+
+  // Marked, which is what has to come back. Object names go through
+  // NParseSz() when a file names one, so the marker keeps the object's own
+  // name at its head and every one stays distinct.
+  for (i = 0; i <= cObj; i++) {
+    sprintf2(S(szMark), "%.3sProbe%d", szObjName[i], i);
+    SetObjDisp(i, szMark);
+    cAsked++;
+  }
+  for (i = 1; i <= cStar; i++) {
+    sprintf2(S(szMark), "StarProbe%d", i);
+    FCloneSz(szMark, &szStarCustom[i]);
+    cAsked++;
+  }
+  if (FEnsureMacro(cMacro))
+    for (i = 0; i < cMacro; i++) {
+      SzSetFieldMarkQt(i, S(szMark));
+      FCloneSz(szMark, &is.rgszMacro[i]);
+      cAsked++;
+    }
+
+  sprintf2(S(szPath), "%s/astrolog-qt-strings-%d.as",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+  is.szFileOut = szPath;
+  Check(FOutputSettings(), "the settings writer wrote a file to ask about");
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+
+  for (i = 0; i <= cObj; i++)
+    SetObjDisp(i, szObjName[i]);
+  for (i = 1; i <= cStar; i++)
+    FCloneSz("", &szStarCustom[i]);
+  for (i = 0; i < is.cszMacro; i++)
+    FCloneSz("", &is.rgszMacro[i]);
+
+  Check(FProcessSwitchFile(szPath, NULL),
+    "and the file it wrote loads back with every string emptied");
+
+  for (i = 0; i <= cObj; i++) {
+    sprintf2(S(szMark), "%.3sProbe%d", szObjName[i], i);
+    if (!FEqSz(szObjDisp[i], szMark)) {
+      Check(fFalse, "szObjDisp[%d] (-YD) did not survive a save and reload",
+        i);
+      cLost++;
+      break;
+    }
+  }
+  for (i = 1; i <= cStar; i++) {
+    sprintf2(S(szMark), "StarProbe%d", i);
+    if (!FEqSz(SzSet(szStarCustom[i]), szMark)) {
+      Check(fFalse,
+        "szStarCustom[%d] (-YU) did not survive a save and reload", i);
+      cLost++;
+      break;
+    }
+  }
+  for (i = 0; i < cMacro; i++) {
+    SzSetFieldMarkQt(i, S(szMark));
+    if (i >= is.cszMacro || !FEqSz(SzSet(is.rgszMacro[i]), szMark)) {
+      Check(fFalse,
+        "is.rgszMacro[%d] (-M0) did not survive a save and reload", i);
+      cLost++;
+      break;
+    }
+  }
+
+  for (i = 0; i <= cObj; i++)
+    SetObjDisp(i, rgfObjCustom[i] ? rgbaObj[i].constData() : szObjName[i]);
+  for (i = 1; i <= cStar; i++)
+    FCloneSz(rgbaStar[i].isEmpty() ? NULL : rgbaStar[i].constData(),
+      &szStarCustom[i]);
+  for (i = 0; i < is.cszMacro && i < cMacro; i++)
+    FCloneSz(rgbaMac[i].isEmpty() ? NULL : rgbaMac[i].constData(),
+      &is.rgszMacro[i]);
+  us.fNoWrite = fNoWriteSav;
+  SetNoPopupQt(fPopupSav);
+  remove(szPath);
+  printf("  %d settings strings asked, %d lost\n", cAsked, cLost);
 }
 
 
@@ -9190,6 +9349,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"graphics-mode",        TestGraphicsModeSourceQt},
   {"settings-fields",      TestSettingsFieldsQt},
   {"settings-arrays",      TestSettingsArraysQt},
+  {"settings-strings",     TestSettingsStringsQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},

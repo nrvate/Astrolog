@@ -8822,6 +8822,27 @@ are the more useful half to read before starting something new.
     made-up angle. Four assertions in the eclipse search failed exactly
     that way before the two snapshots were separated.
 
+205. **And the last of it: the strings in arrays, and the Qt side's own.**
+    Two surfaces the first two sweeps structurally cannot reach.
+
+    `settings-strings` covers the user text held in arrays -- renamed
+    objects, custom star names, and the 96 macros -- 280 strings, each set
+    and put back through the accessor that owns it, because `szObjDisp[]`
+    is the object's own name when it is not custom and only `SetObjDisp()`
+    knows that. Nothing was lost, but `-YD` and `-YU` were formatting user
+    text through `sz` and are printed in pieces now, like everything else
+    that carries a value a user typed.
+
+    `interface-settings` gains the rest of `qi`: the animation delay, the
+    antialiasing level, and the names the Macro menu and its submenus have
+    been given. Those live neither in `us` nor in `gs`, so no sweep can
+    see them, and the macro names are the only user text the port stores of
+    its own. `-WM`/`-WM0` were formatting through `sz` too.
+
+    With that the configuration is covered end to end: 342 scalar fields,
+    24 numeric arrays, 280 strings in arrays, and the Qt side's five. What
+    is not carried is carried by a ledger entry saying why.
+
 
 ## Features this fork adds to both builds
 

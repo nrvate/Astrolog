@@ -250,17 +250,33 @@ been hunted twice and left open.
 
 **The settings sweeps** are the other. Every check before them asked about
 the settings somebody had thought to ask about, and each one found more;
-these generate their vocabulary instead. `settings-fields` reads
-`settingsfields.h`, generated from `astrolog.h`, which names all 342 scalar
-members of `US` and `GS`; `settings-arrays` covers the 24 global arrays the
-Restrictions, Object Settings, Aspect Settings and Set Colors dialogs edit,
-which no field sweep can see. Both save the settings, poison everything,
-replay the file and report what did not come back, by name and by index.
-The field sweep's first run found **206 lost settings**, the
-AstroExpression hooks being 46 of them; the array sweep found the aspect
-restrictions, which `us.nAsp` cannot carry because it is *derived* from
-them. Nothing here can fall behind the writer again without a group saying
-so by name.
+these generate their vocabulary instead. Three of them, covering the whole
+configuration between them:
+
+- `settings-fields` reads `settingsfields.h`, generated from `astrolog.h`,
+  which names all 342 scalar members of `US` and `GS`.
+- `settings-arrays` covers the 24 global arrays the Restrictions, Object
+  Settings, Aspect Settings and Set Colors dialogs edit.
+- `settings-strings` covers the user text held in arrays: renamed objects,
+  custom star names and the 96 macros, each through the accessor that owns
+  it.
+
+All three save the settings, poison everything, replay the file and report
+what did not come back, by name and by index. The field sweep's first run
+found **206 lost settings**, the AstroExpression hooks being 46 of them;
+the array sweep found the aspect restrictions, which `us.nAsp` cannot carry
+because it is *derived* from them. `interface-settings` closes the last of
+it -- the animation delay, the antialiasing level and the macro menu names
+live in `qi` rather than in `us` or `gs`, so no sweep can see them.
+Nothing here can fall behind the writer again without a group saying so by
+name.
+
+**Every string setting is printed in pieces, never formatted through
+`sz`.** That buffer is `cchSzMax`, which is 255, and an AstroExpression or
+a star list runs to hundreds of characters; a truncated value does not
+merely lose its tail, it loses its closing quote and the next word on the
+line is read as a switch. The sweeps' markers are 300 characters so a
+regression is caught by the truncation rather than by luck.
 
 Several groups drive real dialogs rather than calling into them: Object
 Selections through seven cases, the Calculation Settings ephemeris list,

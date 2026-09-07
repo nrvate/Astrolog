@@ -1556,8 +1556,10 @@ flag FOutputSettings()
   PrintF("; Default elevation     [in feet or meters     ]\n");
   sprintf2(S(sz), "-zf %s                 ", SzTemperature(us.tmpDef)); PrintFSz();
   PrintF("; Default temperature   [in Fahren. or Celsius ]\n");
-  sprintf2(S(sz), "-zj \"%s\" \"%s\" ; Default name and location\n\n",
-    SzSet(ciDefa.nam), SzSet(ciDefa.loc)); PrintFSz();
+  // In pieces: a name and a location are user text, and sz is cchSzMax.
+  PrintF("-zj \""); PrintF(SzSet(ciDefa.nam));
+  PrintF("\" \""); PrintF(SzSet(ciDefa.loc));
+  PrintF("\" ; Default name and location\n\n");
 
   // The -Yz line needs to be before the -n line in order to take effect.
   sprintf2(S(sz), "-Yz %ld   ", us.lTimeAddition); PrintFSz();
@@ -2307,7 +2309,8 @@ flag FOutputSettings()
   for (i = 0; i < custLo; i++) {
     if (FObjDispCustom(i)) {
       fAny = fTrue;
-      sprintf2(S(sz), "-YD %d \"%s\"\n", i, szObjDisp[i]); PrintFSz();
+      sprintf2(S(sz), "-YD %d \"", i); PrintFSz();
+      PrintF(szObjDisp[i]); PrintF("\"\n");
     }
   }
   for (i = custLo; i <= custHi; i++) {
@@ -2327,7 +2330,8 @@ flag FOutputSettings()
         i, rgObjSwiss[j], f2 ? " " : "\n"); PrintFSz();
     }
     if (f2) {
-      sprintf2(S(sz), "-YD %d \"%s\"\n", i, szObjDisp[i]); PrintFSz();
+      sprintf2(S(sz), "-YD %d \"", i); PrintFSz();
+      PrintF(szObjDisp[i]); PrintF("\"\n");
     }
   }
   if (!fAny)
@@ -2342,11 +2346,14 @@ flag FOutputSettings()
       continue;
     fAny = fTrue;
     if (f1) {
-      sprintf2(S(sz), "-YU %d %s%s", i, szStarCustom[j], f2 ? " " : "\n");
+      sprintf2(S(sz), "-YU %d ", i); PrintFSz();
+      PrintF(szStarCustom[j]);
+      sprintf2(S(sz), "%s", f2 ? " " : "\n");
       PrintFSz();
     }
     if (f2) {
-      sprintf2(S(sz), "-YD %d \"%s\"\n", i, szObjDisp[i]); PrintFSz();
+      sprintf2(S(sz), "-YD %d \"", i); PrintFSz();
+      PrintF(szObjDisp[i]); PrintF("\"\n");
     }
   }
   if (!fAny)
@@ -2655,13 +2662,15 @@ flag FOutputSettings()
     if (SzMacroNameQt(i) == NULL)
       continue;
     fAny = fTrue;
-    sprintf2(S(sz), "-WM %d \"%s\"\n", i+1, SzMacroNameQt(i)); PrintFSz();
+    sprintf2(S(sz), "-WM %d \"", i+1); PrintFSz();
+    PrintF(SzMacroNameQt(i)); PrintF("\"\n");
   }
   for (i = 0; i < cMSub; i++) {
     if (SzMacroSubNameQt(i) == NULL)
       continue;
     fAny = fTrue;
-    sprintf2(S(sz), "-WM0 %d \"%s\"\n", i, SzMacroSubNameQt(i)); PrintFSz();
+    sprintf2(S(sz), "-WM0 %d \"", i); PrintFSz();
+    PrintF(SzMacroSubNameQt(i)); PrintF("\"\n");
   }
   if (!fAny)
     PrintF("; [No menus renamed]\n");
