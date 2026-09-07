@@ -81,7 +81,7 @@ flag FProper(int i)
       // FHasMoon() is the >= 0 guard, and it has to come first: ObjOrbit()
       // answers -1 for a body that orbits nothing, so testing ignore[j]
       // ahead of it reads one byte below the array. "-X8" on a wheel was
-      // enough (work log item 134).
+      // enough.
       if (FHasMoon(j) && !ignore[j] &&
         !(j == us.objCenter && gi.nMode != gOrbit))
         f = fFalse;

@@ -326,7 +326,7 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
   // unbounded recursion, and each level costs a cchSzLine line buffer
   // plus a MAXSWITCHES argv on this frame, so the stack runs out quickly:
   // a file whose only content is "-i <its own name>" segfaults, and so do
-  // two files naming each other. Both measured on 2026-09-06.
+  // two files naming each other.
   //
   // Refused with a warning at a depth no honest file reaches. Counted
   // around the whole body rather than at the -i switch, so it bounds
@@ -1589,8 +1589,8 @@ flag FOutputSettings()
   PrintF(
     "; Don't display :00 seconds [\"_b2\" shows anyway, \"=b2\" skips   ]\n");
   // The ephemeris backend is three fields (astrolog.h, "-b" state table)
-  // and none of them used to be written here, so a chart cast with
-  // Moshier, JPL or Matrix came back as Swiss on the next run.
+  // and all three have to be written, or a chart cast with Moshier, JPL
+  // or Matrix comes back as Swiss.
   // Order is load-bearing twice: every "-b" suffix also toggles
   // fEphemFiles, so the plain "=b"/"_b" line has to come last to settle
   // it; and the four nSwissEph spellings are mutually exclusive toggles
@@ -1622,13 +1622,11 @@ flag FOutputSettings()
     "; Wheel subdivision type    [Change \"0\" to desired subdivision ]\n");
   // nAspectSort is an index, not the switch letter that set it, so map
   // it back through the same order the -a handler reads.
-  // ":a", not "-a". CHART TYPE IS NOT A SAVED SETTING, and both of these
-  // lines used to change it: NSwa() opens with SwitchF(us.fAspList) and
-  // NSwm() with SwitchF(us.fMidpoint), so a saved file came back up in
-  // the aspect list or the midpoint listing instead of the user's chart.
-  // Reported from a real settings file, 2026-09-06. The ":" prefix sets
-  // neither -- FSwitchF() returns the flag unchanged when none of fOr,
-  // fAnd and fNot is set -- while the sort letter still lands.
+  // ":a", not "-a". CHART TYPE IS NOT A SAVED SETTING, and "-a" would
+  // change it: NSwa() opens with SwitchF(us.fAspList), NSwm() with
+  // SwitchF(us.fMidpoint). The ":" prefix sets neither -- FSwitchF()
+  // returns the flag unchanged when none of fOr, fAnd and fNot is set --
+  // while the sort letter still lands.
   sprintf2(S(sz), ":a%c     ", "jonOPACDM"[us.nAspectSort]); PrintFSz();
   PrintF(
     "; Aspect list sort order    [j power, o orb, n orb value, O name]\n");
@@ -2254,7 +2252,7 @@ flag FOutputSettings()
   // build ignored would have claimed a round trip that did not happen --
   // but the File Settings dialog edits all three, so the effect was a
   // setting the GUI offers and no file could keep. The switches set the
-  // flags since 2026-09-06, so they round trip.
+  // flags, so they round trip.
   PrintF("\n\n");
   PrintF("; MENU NAMES:\n\n");
   fAny = fFalse;
@@ -2762,12 +2760,9 @@ real RParseSz(CONST char *szEntry, int pm)
 // Stop and wait for the user to enter a line of text given a prompt to
 // display and a string buffer to fill with it.
 
-// The size parameter is not decoration. This used to read a hardcoded
-// cchSzMax (255) into whatever the caller passed, and three callers pass
-// char[cchSzDef] (80): NInputRange, RInputRange, and the scroll pause in
-// general.cpp. Typing 251 characters at "Enter month for chart" -- a
-// documented prompt, reached by "astrolog -i tty" -- smashed the stack in
-// every build. Work log item 176.
+// The size parameter is not decoration: three callers pass
+// char[cchSzDef] (80) rather than cchSzMax (255) -- NInputRange,
+// RInputRange, and the scroll pause in general.cpp.
 
 void InputString(CONST char *szPrompt, char *sz, int cchMax)
 {
@@ -2783,10 +2778,8 @@ void InputString(CONST char *szPrompt, char *sz, int cchMax)
     Terminate(tcForce);                      // the program on some systems.
 
     // Terminate() RETURNS under -0q, and fgets() leaves the buffer
-    // untouched at EOF -- so everything below used to parse whatever the
-    // caller's stack happened to hold. That is where -0q got a year of
-    // 1905 out of nowhere, and once an AstroExpression function named
-    // from a garbage byte. Give it a defined empty string instead.
+    // untouched at EOF, so everything below would parse whatever the
+    // caller's stack held. Give it a defined empty string.
     sz[0] = chNull;
     is.S = file;
     is.cchCol = 0;

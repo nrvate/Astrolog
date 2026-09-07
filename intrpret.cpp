@@ -68,7 +68,7 @@
 // both directions of each system's tables -- the same pairs the
 // suite's "rulership" group holds to their cross-agreement invariants.
 // One table and three loops replace nine copied stanzas, the
-// clone-and-swap shape that bred the bugs work log items 37 and 38
+// clone-and-swap shape that bred the two bugs
 // record (a sign-keyed table indexed by object, and a wrong ignore7
 // flag, each hiding in a hand-copied block).
 
@@ -1469,7 +1469,7 @@ void ChartInfluence(void)
     // The object-keyed direction on purpose: this loop's "i" is an
     // object, and rgObj1/rgObj2 hold the sign it rules -- using the
     // sign-keyed pair here once read off the end of a 13-entry table
-    // for every object above Pisces (work log item 38). The two
+    // for every object above Pisces. The two
     // directions also spell "none" differently, which is why the
     // secondary's test is "if nonzero" where the sign-keyed sites test
     // "> 0".
@@ -1478,7 +1478,7 @@ void ChartInfluence(void)
     // whatever global follows it and credited a garbage "sign". Present
     // in upstream's nine copied stanzas too; caught by the suite's
     // long-strings battery the first time -j0 ran with stars
-    // unrestricted under ASan (work log item 115).
+    // unrestricted under ASan.
     if (i <= oNorm)
       for (prs = rgrulersys; prs < rgrulersys + crulersys; prs++) {
         if (ignore7[prs->rr])

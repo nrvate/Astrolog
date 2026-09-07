@@ -811,7 +811,7 @@ static int NSwYu(CONST char *szSwitch, PARSEIN *pin)
 {
   // Settings files pack fEclipseAny into the "0" suffix, so an explicit
   // "=Yu" or "_Yu" means it is off; only a bare toggling -Yu leaves it
-  // alone (see the -Yu fixed-point fix, work log item 66).
+  // alone.
   if (pin->fOr || pin->fAnd)
     us.fEclipseAny = fFalse;
   SwitchF(us.fEclipse);
@@ -1648,11 +1648,9 @@ static int NSwXw(CONST char *szSwitch, PARSEIN *pin)
     return tcError;
   if (FErrorValN("Xw", !FValidGraphY(j), j, 2))
     return tcError;
-  // gs.xWin includes the sidebar everywhere else in this program -- the
-  // places that want the chart alone subtract it and add it back -- and
-  // FOutputSettings() writes this switch without it, saying so in the
-  // comment beside the value. This did not add it back once, so every
-  // save-and-reload shrank the window by one sidebar (work log).
+  // gs.xWin includes the sidebar everywhere else in this program, and
+  // FOutputSettings() writes this switch WITHOUT it, so it has to be
+  // added back here or every save-and-reload shrinks the window by one.
   gs.xWin = i; gs.yWin = j;
   if (fSidebar)
     gs.xWin += (SIDESIZE * gi.nScaleText) >> 1;
@@ -2171,11 +2169,10 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
   else if (ch1 == 's')
     us.nSwissEph = FSwitchF(us.nSwissEph == 1);
   else if (ch1 == 'p' || ch1 == 'a') {
-    // The Placalc backend was removed on 2026-09-04 (698 lines nothing
-    // executed, behind a switch the shipped astrolog.as locks out), but
-    // its two spellings stay ACCEPTED: the settings writer emitted
-    // "_bp" and "_ba" into every file it saved before then, and a saved
-    // file must keep loading. The off forms are silent. A request to turn
+    // The Placalc backend is gone, but its two spellings stay ACCEPTED:
+    // the settings writer emitted "_bp" and "_ba" into every file saved
+    // before it went, and a saved file must keep loading. The off forms
+    // are silent. A request to turn
     // it on -- "=bp", or a bare "-bp" toggle -- is answered with what
     // actually happens, once, rather than refused: refusing would abort
     // loading a settings file over an engine that no longer exists.
@@ -2185,12 +2182,12 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
         "the Swiss Ephemeris is used instead.");
     return 0;
   } else if (ch1 == 'm') {
-    // A subswitch refused by its -0 guard used to fall out of the chain
-    // and reach the fEphemFiles toggle below anyway, turning the working
-    // backend off with nothing put in its place: with the shipped
-    // astrolog.as ("=0b"), a plain "-bm" cast every body at 0Ari00'00"
-    // and said nothing. Refuse the whole switch instead, the way
-    // fNoGraphics and fNoRead already do. Only a request to turn the
+    // A subswitch refused by its -0 guard must not fall out of the chain
+    // and reach the fEphemFiles toggle below, which would turn the
+    // working backend off with nothing in its place -- under the shipped
+    // "=0b", a plain "-bm" then casts every body at 0Ari00'00" silently.
+    // Refuse the whole switch, as fNoGraphics and fNoRead do. Only a
+    // request to turn the
     // backend ON is refused: the settings writer emits "_bm" into every
     // saved file, and that must stay loadable under "=0b".
     if (us.fNoOldCalc && FSwitchF(us.fMatrixPla)) {
@@ -3772,10 +3769,8 @@ static CONST SWITCHTILDE rgswtilde[] = {
 };
 #endif
 
-// De-soup verdicts (phase 2, P4, 2026-08-30): every prefix row below
-// was read and sorted. Promoted out of here: the -~ hooks (rgswtilde),
-// the two-flag chart families (-l -j -K -Q -8, now pf2 flag rows), and
-// -v0. What stays, stays for cause: -m's suffixes combine (-ma0 is
+// Prefix rows: switches whose handler parses the rest of the spelling
+// itself. What is here stays for cause -- -m's suffixes combine (-ma0 is
 // summary+aspects+midpoints, a meaningful spelling no row can carry);
 // -b's backend suffixes share the fEphemFiles fall-through toggle;
 // -z/-q/-d/-p/-r parse chart info and progression arguments where

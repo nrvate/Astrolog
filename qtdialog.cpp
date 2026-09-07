@@ -284,11 +284,8 @@ static QChar ChMnemonicQt(CONST QString &str)
 
 
 // Windows dialogs activate a control from its mnemonic letter alone --
-// "s" ticks "&Sun" -- while Qt wants Alt held down. Both builds take the
-// mnemonics from the same "&" in astrolog.rc, so the only difference is
-// how the keystroke is routed; on a grid of 52 restriction checkboxes it
-// is the difference between the dialog being usable from the keyboard and
-// not being usable at all.
+// "s" ticks "&Sun" -- while Qt wants Alt held. Both take the mnemonics
+// from the same "&" in astrolog.rc; only the routing differs.
 //
 // Installed on the dialog rather than on each control, so it sees the key
 // after the focused widget has declined it. A field that takes typing
@@ -593,19 +590,11 @@ typedef struct {
 // Find a built control by the symbol the resource gave it -- the whole
 // symbol, carrying no index.
 //
-// rc2qt.py splits a trailing run of digits off a resource symbol into
-// nIdx, so "dbRe_R0" arrives here as szId "dbRe_R" with nIdx 0, and only a
-// symbol that ended in no digits at all gets nIdx -1. Matching on szId
-// alone therefore returned whichever of "dbRe_R0", "dbRe_R1" and "dbRe_R"
-// the generated table listed first -- a different control the moment the
-// resource is reordered, and the wrong one in three dialogs already:
-// "Toggle Minors" and "Toggle &Majors" were dead while their Restrict All
-// buttons silently ran the toggle as well, and "E&quatorial Longitudes"
-// loaded and stored through the "&Equatorial Latitudes" box beside it.
-//
-// Matching nIdx too makes a bare lookup mean what it says. Callers that
-// want one of the indexed controls ask for it by index instead, with
-// PwRcFindIdxQt(). See work log item 52.
+// rc2qt.py splits a trailing run of digits off a symbol into nIdx, so
+// "dbRe_R0" arrives as szId "dbRe_R" with nIdx 0, and only a symbol
+// ending in no digits gets nIdx -1. Matching szId alone would return
+// whichever of "dbRe_R0", "dbRe_R1" and "dbRe_R" the table listed first.
+// Callers wanting an indexed control use PwRcFindIdxQt().
 static QWidget *PwRcFindQt(CONST QVector<RCBUILT> &rgbuilt, CONST char *szId)
 {
   for (int i = 0; i < rgbuilt.size(); i++)
@@ -642,13 +631,10 @@ static CONST RCCTL *PctlBuiltQt(CONST QVector<RCBUILT> *prg, int i)
 // How much wider than its box a control's text is, as a ratio. 1.0 or
 // less means it fits.
 //
-// This used to SHRINK the control's font until the text fitted, down to
-// 70% and then wrapping. That fitted, and it looked it: every dialog was
-// a patchwork of type sizes, worst on Windows where the font is not the
-// one the resource was measured against. The resource's boxes are in
-// dialog units derived from the dialog font, so the honest fix is to
-// make the unit bigger for the whole dialog and let the dialog grow --
-// one type size everywhere, the layout still Windows'.
+// Shrinking the offending control's font instead would fit, but leaves a
+// dialog a patchwork of type sizes. The resource's boxes are in dialog
+// units derived from the dialog font, so the fix is to widen the unit
+// for the whole dialog and let it grow: one type size, layout unchanged.
 static real RRcTextRatioQt(QWidget *pw, CONST QString &str, int dxBox)
 {
   if (str.isEmpty() || dxBox <= 0)
@@ -670,18 +656,10 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
   // font's average character width, one vertical an eighth of its line
   // height. Keeping them exactly that keeps the resource's proportions.
   //
-  // Two things were tried here and are wrong. Widening the units so the
-  // longest label fits nearly doubles the dialog: "Atlas City Coloring:"
-  // sits in a 35 unit box and demands a base of 19 against a natural 9.
-  // Shrinking the whole dialog font does nothing at all, because the base
-  // unit is derived from that same font, so the space available shrinks
-  // exactly as fast as the text in it.
-  //
-  // What does work is leaving the boxes where the resource put them and
-  // shrinking the text of just the control that overflows -- see
-  // RcFitTextQt() below. The layout stays Windows', and the strings that
-  // this font renders wider than MS Shell Dlg did simply come out a point
-  // or so smaller.
+  // Two alternatives are wrong. Widening the units so the longest label
+  // fits nearly doubles the dialog. Shrinking the dialog font does
+  // nothing, since the base unit derives from that same font, so the
+  // space shrinks as fast as the text in it.
   QFontMetrics fm(pdlg->font());
   int dxBase = fm.averageCharWidth(), dyBase = fm.height();
   int i, iPass;
@@ -771,21 +749,12 @@ static void RcBuildDialogQt(QDialog *pdlg, CONST RCCTL *rgctl, int cctl,
   // MEASURE FIRST, THEN LAY OUT ONCE. Every control's text is measured
   // against the box the resource gave it, and the widest overflow sets
   // one horizontal unit for the whole dialog. The dialog grows by the
-  // same factor, so the layout stays exactly the resource's proportions
-  // and every control keeps the dialog font at its own size.
+  // same factor, so the layout keeps the resource's proportions and every
+  // control keeps the dialog font at one size.
   //
-  // What this replaced, on the maintainer's word ("the text for options
-  // is of variable size and rather sloppy looking... make the text fixed
-  // size and expand the dialog to fit as needed"): each control that
-  // overflowed had its own font shrunk, in half-point steps to 70%, and
-  // then wrapped. Every dialog came out a patchwork of type sizes,
-  // worst on Windows, whose dialog font is not the one MS Shell Dlg's
-  // units were measured against.
-  //
-  // The cap is 1.5, so a single pathological string cannot double a
+  // Capped at 1.5, so a single pathological string cannot double a
   // dialog. Past it a label wraps and anything else is clipped by its
-  // box, which is visible and therefore fixable, rather than silently
-  // shrunk.
+  // box -- visible, and therefore fixable, rather than silently shrunk.
   real rScale = 1.0;
   for (i = 0; i < cctl; i++) {
     CONST RCCTL *pctlM = PctlBuiltQt(prgbuilt, i);
@@ -1077,23 +1046,17 @@ void ShowOpenChartDialogQt()
 // Save the current chart to a file chosen via a standard file picker, the
 // same way Windows' DlgSaveChart does for its "Save Chart" command.
 
-// Windows' OPENFILENAME appends lpstrDefExt when the user types a name
-// with no extension of its own, and DlgSaveChart sets one for every
-// format it writes: as, aaf, qck, ics, txt or htm, bmp or png, wmf, eps,
-// svg, dw. Qt's getSaveFileName appends nothing -- defaultSuffix is
-// empty and the static convenience function does not expose it -- so a
-// name typed as "mychart" was saved as a file literally called
-// "mychart".
+// Append the format's extension when the typed name has none, which is
+// what Windows' OPENFILENAME does through lpstrDefExt. Qt's
+// getSaveFileName appends nothing, and a chart saved without ".as" is
+// invisible to "Open Charts in Folder", which filters on it.
 //
-// That is not merely untidy. "Open Charts in Folder" filters on ".as",
-// so a chart saved without one is invisible to the command whose whole
-// job is to find it. Doing this in code rather than through a
-// QFileDialog property also makes it the same on every platform, which
-// the native pickers are not.
+// In code rather than through a QFileDialog property, so it is the same
+// on every platform; the native pickers are not.
 //
-// "Already has an extension" means a dot in the LAST path component,
-// which is what lpstrDefExt tests too: a folder named "charts.old"
-// holding a file typed as "june" still gets its suffix.
+// "Already has an extension" means a dot in the LAST path component, so
+// a folder named "charts.old" holding a file typed as "june" still gets
+// its suffix.
 
 static QString StrDefaultSuffixQt(CONST QString &str, CONST char *szExt)
 {
@@ -1444,9 +1407,6 @@ void ShowExportTextDialogQt()
   // txt or htm, exactly as Windows picks between them on us.fTextHTML.
   qs = StrDefaultSuffixQt(qs, !us.fTextHTML ? "txt" : "htm");
   QByteArray ba = qs.toLocal8Bit();
-  // Was a second, hand-rolled copy of this dance, and it was missing the
-  // is.S restore -- so exporting text left the stream pointing at a
-  // closed FILE and armed a double fclose() on exit (work log item 154).
   // us.fTextHTML is passed through rather than forced, so the File
   // Settings "Export as HTML" choice still decides.
   CaptureTextToFileQt(ba.constData(), us.fTextHTML);
@@ -1741,10 +1701,8 @@ void ShowGraphicsSettingsDialogQt()
 
   // The other numeric fields, checked the same way and BEFORE anything is
   // stored, so a bad one refuses the dialog instead of half-applying it.
-  // They were read straight into the settings with no check at all, while
-  // the switches that set the same fields have always validated them --
-  // and QString::toInt() answers 0 for an empty or non-numeric field, so
-  // the bad value is one keystroke away rather than a deliberate act.
+  // QString::toInt() answers 0 for an empty or non-numeric field, so a
+  // bad value is one keystroke away.
   //
   // The delay is the one that bites: SetAnimDelayQt(0) is
   // QTimer::setInterval(0), which fires as fast as the event loop will
@@ -3430,9 +3388,8 @@ void ShowCommandLineDialogQt()
 // About, equivalent to Windows' DlgAbout.
 
 // The credits and license text Windows' dlgAbout carries, verbatim.
-// Astrolog's own license requires these notices stay with the program, so
-// they belong here rather than being trimmed to a version number -- which
-// is all this dialog used to show.
+// Astrolog's license requires these notices stay with the program, so
+// they cannot be trimmed to a version number.
 
 static CONST char *rgszAboutQt[] = {
   "By Walter D. Pullen (Astara@msn.com)",
@@ -4234,13 +4191,11 @@ void ShowDisplayDialogQt()
   us.nCharset = NRcStoreRadioQt(rgbuilt, 8, 4, us.nCharset);
   us.nAppSep = NRcStoreRadioQt(rgbuilt, 12, 3, us.nAppSep);
   // Raising the count has to un-restrict what it now includes, and that
-  // loop must read the *old* us.nAsp -- so both loops run before the
-  // assignment below, and the order is the whole fix. Windows has this
-  // loop but assigns us.nAsp first, so its copy iterates zero times and
-  // its aspect count can only ever be lowered; the divergence is
-  // deliberate (QT_GUI_PLAN.md 8.12). It was lost once to a
-  // transcription pass and silently reproduced the Windows bug for
-  // months, which is why TestAspectCountQt() now drives both directions.
+  // loop must read the OLD us.nAsp -- so both loops run before the
+  // assignment below. Windows assigns us.nAsp first, so its copy iterates
+  // zero times and its count can only ever be lowered; diverging from
+  // that is deliberate (QT_GUI_PLAN.md 8.12) and TestAspectCountQt()
+  // drives both directions.
   for (int i = us.nAsp + 1; i <= na; i++)
     ignorea[ASPT(i)] = fFalse;
   for (int i = na + 1; i <= cAspect; i++)
@@ -4355,12 +4310,9 @@ void ShowMoonObjectDialogQt()
 // function rather than being copied a third and fourth time.
 
 // Parse one Object Customization definition string into an OBJDEF. The
-// parse itself is FObjDefParse() in calc.cpp -- this used to be a third
-// copy of it, and the copies had drifted: this one lacked the
-// FObjSelFlagRun() guard, so a definition ending in a body's name would
-// read the name's letters as point and flag markers. An empty field now
-// comes back as an invalid object rather than quietly parsing as object
-// zero, so the dialog's own validation message fires instead.
+// parse itself is FObjDefParse() in calc.cpp, called rather than copied.
+// An empty field comes back as an invalid object rather than parsing as
+// object zero, so the dialog's own validation message fires.
 static void ParseCustomDefQt(CONST QString &str, OBJDEF *pod)
 {
   QByteArray ba = str.toLocal8Bit();

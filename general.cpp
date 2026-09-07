@@ -578,9 +578,8 @@ real SphDistance(real lon1, real lat1, real lon2, real lat2)
   // and above it for 3.75% of latitudes in double precision, where
   // RAcosD() returns NaN. Any two objects sharing a position sent that
   // NaN into ChartMidpoint()'s span total and on to SzDegree(), whose
-  // (int)NaN is INT_MIN and whose "%3d" then wrote 20-odd bytes into a
-  // 15-byte buffer: an intermittent fortify abort, hunted twice before
-  // (work log items 133 and 142).
+  // (int)NaN is INT_MIN and whose "%3d" then writes 20-odd bytes into a
+  // 15-byte buffer.
   r = RAcosD(Min(Max(r, -1.0), 1.0));
   return r;
 }
@@ -2333,13 +2332,9 @@ CONST char *SzColorHTML(KI ki)
 // Autodetect whether Daylight Saving Time is in effect at the default
 // location for a given date and time, and return its offset in hours.
 //
-// BOTH PLATFORM BRANCHES OF GetTimeNow() CALL THIS, which is the whole
-// point of it existing. They used to decide it in two different and
-// incompatible ways, so the same chart cast with "-z0 Autodetect" came
-// out "DT Zone 8W" from the Linux build and "ST Zone 8W" from the
-// Windows one. Measured 2026-09-02 over a January date and a July date:
-// Linux said daylight time for both, Windows said standard time for
-// both, and neither was answering the question.
+// BOTH PLATFORM BRANCHES OF GetTimeNow() CALL THIS, which is the point
+// of it existing: deciding it separately gave the two builds different
+// answers for the same chart under "-z0 Autodetect".
 //
 // The Windows side compared GetSystemTime() against GetLocalTime(),
 // which asks whether the HOST MACHINE is on DST right now. The Unix side

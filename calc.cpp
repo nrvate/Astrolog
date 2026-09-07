@@ -493,7 +493,7 @@ void HousePullenSinusoidalRatio(real Asc)
 // sum to 1080, 1800, 3240 or 3960, so the cusps circle three to eleven
 // times and house assignment is meaningless rather than merely odd. The
 // existing guard above covered Placidus and Koch only, and keyed on the
-// polar circle rather than on the result (work log items 141, 157, 158).
+// polar circle rather than on the result.
 //
 // Checking the RESULT rather than listing systems and latitudes is what
 // makes this one check serve both engines, and it will catch a system that
@@ -522,7 +522,7 @@ void HousePullenSinusoidalRatio(real Asc)
 // library's own guard was written to refuse. Third-party code is out of
 // scope here (REFACTORING.md non-goals); this check is the boundary our
 // code presents to it, which is in scope, and it produces exactly the
-// Porphyry fallback that file uses everywhere else (work log item 160).
+// Porphyry fallback that file uses everywhere else.
 
 flag FEnsureHousePartition(int housesystem)
 {
@@ -2985,12 +2985,9 @@ CONST OBJSEL rgObjSel[] = {
   {0, SE_POSEIDON - SE_FICT_OFFSET_1, "Poseidon"},
 
   // THIS LIST IS THE BUNDLE. Every body below has its ephemeris in
-  // ephem/, and every asteroid file in ephem/ is below -- that is the
-  // rule the list is kept to, and tools/check-ephem.sh keeps the files
-  // honest from the other side. Before 2026-09-05 it was a hand-picked
-  // 38 that included Eros, Hidalgo, Icarus, Apollo, Aten and Phaethon,
-  // which nobody had asked for and which the maintainer did not
-  // recognise; those files are gone with their entries.
+  // ephem/, and every asteroid file in ephem/ is below. That is the rule
+  // the list is kept to; tools/check-ephem.sh keeps the files honest from
+  // the other side.
   //
   // Chiron and Pholus need no file of their own: seas_18.se1 computes
   // Chiron, and Pholus has a built-in definition (type 2 here, from
@@ -3144,15 +3141,15 @@ void ObjDefGet(int obj, OBJDEF *pod)
 }
 
 
-// Put a definition into a custom slot: the four arrays, plus the one side
-// effect every write path used to carry for itself -- a slot pointed at a
-// different body, or at a different point of one, drops the old body's
-// glyph and draws its name instead (a north node is not the planet, so
-// nPnt is part of the identity; the calculation flags are not). The
-// display name is deliberately NOT set here: -Ye always renames, the
+// Put a definition into a custom slot: the four arrays, plus the side
+// effect every write path needs -- a slot pointed at a different body, or
+// a different point of one, drops the old body's glyph and draws its name
+// instead. A north node is not the planet, so nPnt is part of the
+// identity; the calculation flags are not.
+//
+// The display name is deliberately NOT set here: -Ye always renames, the
 // dialogs rename only a name the user left alone, so name policy stays
-// with the caller. This replaces five separate store sites, three of
-// which had already grown their own copies of the glyph rule.
+// with the caller.
 
 void ObjDefSet(int obj, CONST OBJDEF *pod)
 {
@@ -3181,8 +3178,7 @@ flag FObjIsCOBOf(int obj, int objPla)
 
 // Format a definition as the text Object Customization shows and every
 // definition field accepts: "h120", "Mar", "2 n", "j2 nHS". The inverse
-// of FObjDefParse(), and like the parse it used to exist in several
-// places -- here, and open coded in both Custom Objects dialogs.
+// of FObjDefParse().
 
 void SzObjDefFormat(char *sz, int cchMax, CONST OBJDEF *pod)
 {
@@ -3233,11 +3229,10 @@ void SzObjSelDef(char *sz, int cchMax, int iobj)
 // empty field; the caller still has to check FValidCustom() on the result,
 // as the dialogs do.
 //
-// The definition half is Windows' own parse from DlgCustom, moved here so
-// there is one copy rather than the three this program used to carry. Its
-// "if (pch > sz)" guard matters: without it an all alphabetic definition
-// reads its own letters as flags, so "Ven" would set the node flag off its
-// own 'n'.
+// The definition half is Windows' own parse from DlgCustom, kept in one
+// place. Its "if (pch > sz)" guard matters: without it an all-alphabetic
+// definition reads its own letters as flags, so "Ven" would set the node
+// flag off its own 'n'.
 
 // Whether some object's forced midpoint reads this object's position.
 //
@@ -4140,14 +4135,10 @@ LNext:
   // Returning fFalse here ended the whole enumeration at the first miss,
   // which made "-XE <low> <high>" draw NOTHING whenever the range began
   // at, or reached, a body the ephemeris does not have -- not a partial
-  // set, nothing, and the chart came out byte-identical to one drawn
-  // with no -XE at all. That is invisible by construction: the option
-  // still runs, still renders, still checksums. It cost this project two
-  // findings. "-XE 1 20" sat in the graphics matrix from the day it was
-  // written, inert for its whole life because asteroid 9 had no file;
-  // and on 2026-09-05 "-XE 433 433" went inert the moment Eros left the
-  // bundle. Both were caught by tools/inert_option_audit.py, which had
-  // to be written for exactly this.
+  // set, nothing, and the chart came out byte-identical to one drawn with
+  // no -XE at all -- invisible by construction, since the option still
+  // runs, renders and checksums. tools/inert_option_audit.py exists to
+  // catch that.
   //
   // Skipping is also what a user means: "draw asteroids 1 to 100" asks
   // for the ones that exist. The cost is that a range whose bodies are
@@ -4200,9 +4191,8 @@ LNext:
 
   // The body's own number, which is NOT the caller's loop counter: this
   // enumeration skips a body with no ephemeris file, and the sorted form
-  // returns them in magnitude or name order, so a counter drifts off the
-  // moment either happens. PrintObjects() printed that counter until
-  // 2026-09-05 and labelled Bellona as 27 with asteroid 27 absent.
+  // returns them in magnitude or name order, so a counter drifts the
+  // moment either happens.
   pes->nAst = iast;
 
   // Determine asteroid display name.

@@ -277,7 +277,7 @@ void CastRelation(void)
       // which is a different number. GCC's warning here is a false
       // positive it cannot see past -- cChart is never below 1, so i == 1
       // always runs -- and initializing rSav to silence it would be
-      // inventing a value. Left alone by verdict (work log item 175).
+      // inventing a value. Left alone deliberately.
       rSav = is.MC;
     } else if (i == 2)
       t2 = t;

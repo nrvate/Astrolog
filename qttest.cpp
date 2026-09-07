@@ -109,14 +109,9 @@ extern int CaccelTestQt();
 // So the suite asserts one number -- all of them resolve -- and there is
 // nothing for a run to declare.
 //
-// There used to be ASTROLOG_QT_EPHEM, "full" against /swe and "minimal"
-// against ephem/, because the bundle answered for 19 of 39 rows and a
-// run on ephem/ tested half as much while passing. Declaring the mode
-// was how that stopped being invisible. Bundling the other 20 files made
-// both modes assert the same number, and on 2026-09-05 the bundle and
-// the list became the same set by construction, so the knob had two
-// settings that could not differ. It went; the assertion it protected
-// stayed, and is stronger for having one answer.
+// The bundled ephem/ and the Object Selections list are one set by
+// construction, so a run against it and a run against /swe assert the
+// same number and there is no mode to declare.
 
 
 static int s_cPass = 0, s_cFail = 0;
@@ -528,13 +523,11 @@ static void TestChartRenderQt()
   }
   SetChartModeQt(nSav);
 
-  // The loop above drives SetChartModeQt() directly, which leaves
-  // us.fGraphics alone -- so it only ever exercised whichever mode the
-  // suite happened to be in. A user picks these off the Chart menu, and
-  // the two chart types with no case in DrawChartX() (Aspect List and
-  // Arabic Parts) render an empty window unless the menu action turns
-  // graphics off first, the way Windows does. Fire the actions themselves,
-  // with graphics deliberately on, so that path is covered.
+  // The loop above calls SetChartModeQt() directly, leaving us.fGraphics
+  // alone. A user picks these off the Chart menu, and the two types with
+  // no case in DrawChartX() -- Aspect List and Arabic Parts -- render
+  // empty unless the menu action turns graphics off first. Fire the
+  // actions themselves, with graphics on, to cover that path.
   CONST char *rgszChart[] = { "Standard Radi&x", "House &Wheel",
     "Aspect Midpoint &Grid", "&Aspect List", "&Midpoint List",
     "Local Hori&zon", "Solar System &Orbit", "Ga&uquelin Sectors",
@@ -576,15 +569,14 @@ static void TestChartRenderQt()
 
 // Trigger every menu item that doesn't open a dialog and check the app
 // survives and still draws. Deliberately does not reset state between
-// items, so this walks through a long chain of odd setting combinations
-// -- which is the point, since that's where the crashes have been.
+// items, so this walks a long chain of odd setting combinations, which
+// is where the crashes have been.
 //
 // Skipped: anything whose label ends in "..." (those open a dialog and
 // would block; the dialog test covers them), and Quit.
 //
-// WHAT IT LEAVES BEHIND, measured, because every group after it inherits
-// this and three separate assertions in one week failed on the leftovers
-// rather than on their own subject:
+// WHAT IT LEAVES BEHIND, measured, since every group after it inherits
+// this:
 //
 //   us.nRel      -7    a relationship chart -- RecastAndRedrawQt() then
 //                      goes down CastRelation(), which rewrites ciMain
@@ -599,10 +591,9 @@ static void TestChartRenderQt()
 //   us.fFlip 1, us.fGeodetic 1, us.fDecan 1, us.fHouse3D 1,
 //   us.fIndian 1, us.nHouseSystem 22, gs.fColor 0, gs.nScale 200
 //
-// A new group that asserts on positions, dates or rendering pins what it
-// depends on and restores it -- field by field, never by assigning a
-// saved US or GS struct back, since both carry char * fields other code
-// frees. See the eclipse and animation groups for worked examples.
+// A group asserting on positions, dates or rendering pins what it needs
+// from that list and restores it -- field by field, never by assigning a
+// saved US or GS back, since both carry char * fields other code frees.
 
 static void TestAllMenuActionsQt()
 {
@@ -1252,7 +1243,7 @@ static void TestBadInputQt()
   Check(fTrue, "PrintError() returned instead of terminating");
 
   // A 400-digit switch parameter, which crashed twice over before
-  // REFACTORING.md B1's net pinned it (work log item 117): NParseSz()
+  // REFACTORING.md B1's net pinned it: NParseSz()
   // and RParseSz() copied their argument into a cchSzMax local
   // unbounded, and FErrorValR() then formatted the astronomical
   // out-of-range value through two buffers too small for any big
@@ -1276,38 +1267,25 @@ static void TestBadInputQt()
 }
 
 
-// The body list the Object Selections dialog offers is a table of
-// {definition type, definition index, name} triples, and its whole value is
-// that the numbers are right -- that {1, 7066} really is Nessus. A digit
-// wrong there silently puts a different body in the chart, which no other
-// check would notice. So resolve each entry the way the -Ye handler does
-// (astrolog.cpp, the SwissGetObjName call) and compare against the name the
-// table claims.
+// The Object Selections list is a table of {type, index, name} triples,
+// and its whole value is that {1, 7066} really is Nessus -- a digit wrong
+// there silently puts a different body in the chart. Resolve each entry
+// the way the -Ye handler does and compare against the name it claims.
 //
-// Only entries whose ephemeris data is actually present can be checked;
-// this checkout ships the orbital elements and eight asteroid files, so the
-// rest come back as szObjUnknown. Those are skipped rather than failed --
-// a missing file is not a wrong number -- and the count of what was really
-// verified is printed, so the check can't quietly degrade to nothing.
+// Only entries whose ephemeris data is present can be checked; the rest
+// come back szObjUnknown and are skipped, with the verified count printed
+// so this cannot degrade to nothing.
 //
-// Know what this does and does not catch. A number changed to another real
-// body IS caught, and that is the dangerous case: the dialog would offer
-// "Sedna" and quietly put Eris in the chart. A number changed to one that
-// resolves to nothing is NOT caught, because it is indistinguishable here
-// from a body whose ephemeris file simply isn't installed -- it only drops
-// the printed count. That case is self announcing anyway: the user picks it
-// and the name comes up "???" straight away.
+// Catches a number changed to ANOTHER REAL BODY, which is the dangerous
+// case -- the dialog offering "Sedna" and charting Eris. Does not catch
+// one that resolves to nothing, which is indistinguishable from a missing
+// file here and announces itself as "???" when the user picks it.
 // Drive a modal dialog: wait for it to appear, run "fnOn" against it, and
 // make sure it is gone before returning.
 //
-// Everything here is a stoppable QTimer rather than QTimer::singleShot,
-// for the reason the menu group and StrOpenDialogQt already are: a queued
-// close cannot be cancelled, so one armed by a test that has finished goes
-// on to close the first modal window a *later* test opens. That is not
-// theoretical -- adding a two-assertion diagnostic before the Object
-// Selections group made three of its assertions fail, because the
-// diagnostic's own closers were still pending. A test whose result depends
-// on what ran before it is reporting on the suite, not the program.
+// Stoppable QTimers rather than QTimer::singleShot: a queued close cannot
+// be cancelled, so one armed by a finished test goes on to close the
+// first modal a LATER test opens.
 static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
 {
   QTimer tPoll, tNet;
@@ -1385,11 +1363,9 @@ static flag FWriteScratchQt(CONST QString &strPath, CONST char *sz)
 // it. The routes that need no helper program are the ones testable in
 // process; the portal and gsettings routes depend on the desktop the
 // developer is sitting at and are deliberately not asserted here.
-// The application icon. Windows takes it from the "icon" resource in
-// astrolog.rc; this port had none at all until 2026-09-01, which is
-// invisible by inspection because a window with a failed icon load looks
-// exactly like a window that never asked for one. So the check is that it
-// resolves, and at the sizes a panel or task switcher actually requests.
+// The application icon. A window whose icon failed to load looks exactly
+// like one that never asked for an icon, so the check is that it
+// resolves, at the sizes a panel or task switcher requests.
 
 // Save every dialog as a PNG, for a visual baseline. QTSHOTDIR=<dir>.
 //
@@ -1425,20 +1401,14 @@ static void DialogShotCaptureQt(CONST char *szDir)
 
 
 
-// Does every control actually FIT inside the dialog that holds it?
+// Does every control actually FIT inside the dialog that holds it? The
+// dialogs are setFixedSize(), so a control past the edge is not scrolled
+// to, it is gone.
 //
-// CLAUDE.md names this as the thing the suite cannot say: "the suite
-// already proves each dialog opens with the right title; what it cannot
-// say is whether a control sits off the edge". A screenshot shows it to
-// a person, but nobody looks at 25 screenshots on three platforms, and
-// the dialogs are setFixedSize() -- so a control past the edge is not
-// scrolled to, it is gone.
-//
-// This is cheap to assert because RcBuildDialogQt() makes every control
-// a DIRECT child of the dialog, positioned in absolute coordinates from
-// the resource. No scroll areas, no nesting: a child's geometry() is
-// already in the dialog's own coordinates, and anything outside the
-// dialog's rect is off the edge.
+// Cheap to assert because RcBuildDialogQt() makes every control a direct
+// child of the dialog in absolute coordinates -- no scroll areas, no
+// nesting -- so a child's geometry() is already in the dialog's own
+// coordinates and anything outside its rect is off the edge.
 //
 // It is worth having because the layout is computed rather than fixed:
 // one scale factor is derived from the widest string that must not wrap
@@ -1454,9 +1424,8 @@ static void DialogShotCaptureQt(CONST char *szDir)
 //   astrolog -M0 1 "<1500 characters>" -M 1
 // A macro is the reachable path, and an AstroExpression string is
 // another. Neither GUI can reach it -- Windows caps its Enter Command
-// Line box at cchSzLine and the Qt one at cchSzMax -- which is why it
-// went unnoticed; it is the programmatic callers that hand this a string
-// nobody measured.
+// Line box at cchSzLine and the Qt one at cchSzMax -- so it is the
+// programmatic callers that hand this an unmeasured string.
 //
 // The popup is suppressed because the refusal raises a warning, and in
 // this build with a QApplication alive that is a MODAL MESSAGE BOX. The
@@ -1536,22 +1505,15 @@ static void TestLongCommandLineQt()
 // have to survive, and the case a chart cast from bare coordinates
 // actually produces.
 
-// Settings files that include each other with -i.
+// Settings files that include each other with -i. FProcessSwitchFile()
+// recurses, and each level carries a cchSzLine buffer and a MAXSWITCHES
+// argv on the frame, so an unbounded chain exhausts the stack.
 //
-// -i recurses into FProcessSwitchFile(), and nothing bounded it. Each
-// level carries a cchSzLine line buffer and a MAXSWITCHES argv on the
-// frame, so the stack goes quickly: a file whose only content is "-i
-// <its own name>" segfaulted, and so did two files naming each other,
-// which is the one a user reaches by accident.
-//
-// Tested as two CHAINS either side of the limit rather than by breaking
-// the guard: a chain shorter than cFileDepthMax must load, a chain longer
-// than it must be refused, and moving the limit flips one or the other.
-// The deepest file in each chain sets "=b0", so "did it load" is a
-// setting that either arrived or did not -- not a return value, which
-// says nothing here: a refused inner file does NOT propagate failure
-// outward, so the outer call reports success either way. An earlier
-// version of this test asserted that return and could not fail.
+// Two CHAINS either side of the limit, rather than breaking the guard:
+// one shorter than cFileDepthMax must load, one longer must be refused,
+// and moving the limit flips one of them. The deepest file sets "=b0",
+// so "did it load" is a setting that arrived -- not a return value, which
+// says nothing: a refused inner file does not propagate failure outward.
 //
 // The popup is suppressed because refusing raises a warning, and in this
 // build that is a modal message box the suite would stop dead on.
@@ -1800,14 +1762,10 @@ static void TestDialogFitQt()
   // wrapping on for a label whose text overflows its box, so if no label
   // anywhere wrapped, the loop above asserted nothing at all and the fact
   // that it "passed" would be meaningless.
-  // A check that examined nothing would pass too. Measured 2026-09-06:
-  // 37 labels have wrapping enabled and THREE of them genuinely take two
-  // lines -- "Atlas City Coloring:", "Daylight Saving:" and "Correction
-  // for Now:" -- each wanting 40px against boxes of 47 to 50. The margin
-  // is comfortable and scales with the font (the same three want 64
-  // against 76-80 at a 20pt interface font), which is why this passes
-  // rather than being tight. Falsified by shrinking a wrapped label's box
-  // to two thirds: six dialogs fail, naming the label and both numbers.
+  // A check that examined nothing would pass too, so require that some
+  // label really does wrap: 37 have wrapping enabled and three take two
+  // lines. The margin scales with the font, so this passes rather than
+  // sitting tight against the limit.
   Check(cWrap > 0, "and some label actually wraps, or the above proves "
     "nothing (%d)", cWrap);
   printf("  and no wrapped label is cut off by the box it wraps inside\n");
@@ -1920,10 +1878,9 @@ static void TestConsoleFontQt()
   Check(cProp > 1, "the interface list offers proportional faces too");
 
   // Establish the no-preference baseline before capturing what "default"
-  // looks like. A settings file can carry a menu font -- the maintainer's
-  // does, which is how this was found -- and then "back to how startup
-  // left it" is not the default at all, so the restore assertions below
-  // would be comparing against that person's taste.
+  // looks like. A settings file can carry a menu font, and then "back to
+  // how startup left it" is not the default at all -- the restore
+  // assertions below would compare against that person's taste.
   SetMenuFontQt("", 0);
   SetMenuAntialiasQt(fTrue);
   ApplyUiFontQt();
@@ -2078,10 +2035,9 @@ static void TestColorSchemeQt()
     // disturbing what the user chose. Both directions, so this cannot
     // pass by the two happening to agree.
     // The env var is unset around each "is the SAVED theme honoured"
-    // assertion. The first draft left it set to "light" across the saved-
-    // light check, which therefore passed on the env var and would have
-    // passed with the saved preference ignored entirely. Sabotage found
-    // it. The two saved-theme checks also have to be a PAIR: detection
+    // assertion: left set, that check passes on the env var whether or
+    // not the saved preference is read at all. The two saved-theme
+    // checks also have to be a PAIR: detection
     // returns one fixed value on any given machine, so a build that
     // ignored the preference can satisfy at most one of them, whichever
     // desktop the suite runs on.
@@ -2405,13 +2361,10 @@ int s_nAnimStartQt = 0;   // gs.nAnim as the program started, before any test
 // Animation: one switch, and only the switch moves it.
 //
 // Upstream stores the jump rate and the running state in the sign and
-// magnitude of one int, with gi.fPause a second independent stop on top.
-// That is why every control here used to be able to start the chart
-// moving by accident -- picking a rate did, reversing direction did, and
-// the control actually named Pause did nothing at all from a standing
-// start. This port now has one running/not-running state behind
-// FAnimRunningQt()/SetAnimRunningQt(), and these pin down that only the
-// two controls meant to touch it do.
+// magnitude of one int, with gi.fPause a second stop on top, so any
+// control could start the chart moving by accident. This port has one
+// running state behind FAnimRunningQt()/SetAnimRunningQt(); these pin
+// down that only the two controls meant to touch it do.
 //
 // Deliberately not Windows' behaviour; see "Known divergences".
 // Clear Screen, in both modes. Text charts draw into the same buffer the
@@ -2491,14 +2444,13 @@ static void TestClearScreenQt()
 // without putting the caller's back, so a capture that does not restore
 // it leaves the stream on a closed FILE -- and the outer Action() the
 // whole GUI runs inside fcloses the same handle again on exit, which
-// glibc aborts on. Export Chart Text Output had its own copy of the
-// dance and was missing exactly that line (work log item 154).
+// glibc aborts on.
 //
 // is.S is put back by hand after the check so a regression here fails
 // this group instead of taking the rest of the suite down with it.
 
-// The Rising chart's altitude gradient, which the Qt screen path did not
-// draw until work log item 156. XChartRising() packs either one bit per
+// The Rising chart's altitude gradient. XChartRising() packs either one
+// bit per
 // object -- an index into an eight-entry palette -- or one byte per
 // object, which across up to three objects is a packed RGB. An
 // "#ifndef WINANY || !gi.fFile" clause forced every non-Windows SCREEN
@@ -2669,19 +2621,13 @@ static void TestAnimationStateQt()
     "and both agree it is stopped");
 #undef FRunningQt
 
-  // A TICK MUST NOT RUN INSIDE ANOTHER TICK. Casting a chart can enter a
-  // nested event loop -- FGetUrlQt() runs one for the length of a JPL
-  // Horizons fetch, and so does any modal a cast puts up -- and this
-  // timer keeps firing inside one. Unguarded, the second tick advances
-  // the chart again, casts it at a new time, misses the reply cache
-  // because the time is part of its key, and starts another fetch inside
-  // the first. Frames arriving faster than a web service answers nest
-  // without bound.
+  // A tick must not run inside another tick: a cast can enter a nested
+  // event loop where this timer keeps firing, and an unguarded second
+  // tick nests another cast inside the first without bound.
   //
-  // The contract is testable without a network or a nested loop: while a
-  // tick is in progress, another one does nothing at all. Both halves
-  // are asserted, because "does nothing" passes just as well on a tick
-  // that never worked.
+  // Testable without a network or a nested loop: while a tick is in
+  // progress another does nothing. Both halves are asserted, since "does
+  // nothing" passes just as well on a tick that never worked.
   // Pin what a frame depends on rather than inheriting it: a direction
   // of zero advances nothing, and a relationship chart sends
   // RecastAndRedrawQt() down CastRelation(), which rewrites ciMain from
@@ -2868,41 +2814,21 @@ static void TestMenuResyncQt()
 ******************************************************************************
 */
 
-// A dialog normalises what it shows, and that is by design: with seconds
-// switched off, 5:47:55pm displays as "5:47pm" and comes back parsed as
-// 5:47:00. Windows does the identical thing from the identical pair of
-// calls -- SzTim() to fill the box, RParseSz(sz, pmTim) to read it -- so
-// the FIRST OK legitimately moves settings.
+// Pressing OK twice must equal pressing it once. The FIRST OK
+// legitimately moves settings -- a dialog normalises what it shows, so
+// with seconds off 5:47:55pm displays as "5:47pm" and parses back as
+// 5:47:00, exactly as Windows does from the same SzTim()/RParseSz() pair.
+// The second must not: a value losing precision each round trip, a list
+// growing an entry, a flag that toggles where it should set.
 //
-// The second one must not. A setting that keeps drifting every time the
-// dialog is visited is the defect this looks for: a value losing
-// precision on each round trip, a list growing an entry, a flag that
-// toggles where it should set. That class is invisible to every other
-// group here, because each of those asks whether one named field came
-// back right rather than whether the dialog as a whole is settled.
+// Compared as a SAVED SETTINGS FILE rather than a memcmp of us and gs,
+// which carry char * fields FCloneSz() reallocates on every OK -- their
+// bytes differ while the settings do not. That covers ignore[] and
+// rgobjset[] for free; chart info is not in the file, so ciMain's eight
+// numeric fields are compared beside it.
 //
-// Two things make it work without a per-dialog table of exceptions,
-// which is the shape this project has learned not to write:
-//
-//   * The comparison is a SAVED SETTINGS FILE, not a memcmp of us and
-//     gs. Those structs carry char * fields that FCloneSz() reallocates
-//     on every OK -- us.szADB does it whether or not the box changed --
-//     so their bytes differ while nothing about the settings does.
-//     FOutputSettings() writes the values, which is the question. It
-//     also covers ignore[], rgobjset[] and the rest for free.
-//   * Chart info is not in that file, so ciMain's eight numeric fields
-//     are compared beside it.
-//
-// Putting the settings back afterward is done by SAVING them first and
-// LOADING that file at the end, not by a struct copy of us and gs. Two
-// reasons, and the first is a bug rather than a preference: a copy taken
-// before an OK holds char * fields that the OK has since freed, so
-// assigning it back is a use-after-free. The second is that this group
-// visits all 25 dialogs and OKs each of them twice, which normalises a
-// great deal -- and a later group that pins ten fields by hand and
-// inherits the eleventh then fails on the leftovers rather than on its
-// own subject. Reload through the program's own parser and every
-// setting the file covers goes back at once, pointers included.
+// Settings are put back by saving and reloading rather than by a struct
+// copy: a copy taken before an OK holds pointers the OK has since freed.
 
 static flag FSaveSettingsToQt(CONST char *szPath)
 {
@@ -3555,7 +3481,7 @@ static flag FWantInterfaceQt(CONST char *sz)
 }
 
 // The three File Settings flags -Wn/-Wt/-Wb, which the switches ignored
-// and the writer skipped until 2026-09-06.
+// and the writer skipped.
 static flag FWantWinFlagQt(CONST char *sz)
 {
   return FEqSzPrefixQt(sz, "_Wn") || FEqSzPrefixQt(sz, "=Wn") ||
@@ -4171,10 +4097,9 @@ static void TestObjSelDialogQt()
   // What the dialog chose has to reach the settings file, or the user
   // picks their bodies again every launch. The cases above assert that
   // the dialog SET something; that it SURVIVES is a different question,
-  // and the one a user actually has. The gap is the shape of work log
-  // item 140: a writer that omits a setting is invisible both to
-  // registry_audit.py, which only checks that what IS written resolves,
-  // and to the round trip, whose fixture never set it.
+  // and the one a user actually has. A writer that omits a setting is
+  // invisible both to registry_audit.py, which only checks that what IS
+  // written resolves, and to a round trip whose fixture never set it.
   //
   // Here, not after the six cases below: case 4 leaves a midpoint in
   // force[iobj] and renames the slot, so a re-run of case 0 down there
@@ -4316,13 +4241,13 @@ static void TestObjSelTableQt()
       "list says \"%s\" for type %d index %d, ephemeris says \"%s\"",
       rgObjSel[i].szName, rgObjSel[i].nTyp, rgObjSel[i].nObj, szName);
   }
-  // Exactly, not a floor. Two reasons, both measured 2026-09-02. A floor
+  // Exactly, not a floor. Two reasons. A floor
   // tests the guess: 11 of these bodies resolve with no ephemeris files at
   // all -- "-Yi1" pointed at a directory that does not exist still answers
   // for 11 of them from the Moshier formulas -- so "cCheck > 0" passes on a
   // run that found nothing. And every body that fails to resolve skips its
   // own assertion above, silently, so this number is also the count of
-  // assertions the loop actually ran. Measured 2026-09-02, when the list
+  // assertions the loop actually ran. When the list
   // was 39 rows: 83 passed on /swe, 63 on ephem/, 53 on nothing, with no
   // failure to show for the difference. The list is 78 rows now and both
   // ephemerides answer for all of them, which is the point of keeping
@@ -5034,9 +4959,8 @@ static void TestSharedCoreFixesQt()
     // PrintSz(), which writes to is.S -- a FILE* that only Action() opens
     // and closes -- so calling it from inside the suite puts characters
     // into a stream that is not open, and glibc frees a backup buffer it
-    // never allocated. That is a heap corruption in the TEST, not in the
-    // code under test, and it cost an hour of bisecting a "regression"
-    // that was the regression test. Its switch, "-YYt", is checked as a
+    // never allocated -- a heap corruption in the TEST rather than in
+    // the code under test. Its switch, "-YYt", is checked as a
     // separate process in run-qt-tests.sh's startup diagnostics instead,
     // which is where a crash reachable from the command line belongs.
 
@@ -5144,7 +5068,7 @@ static void TestSharedCoreFixesQt()
 // systems: sign-keyed (a sign's ruler and co-ruler) and object-keyed (an
 // object's ruled and co-ruled sign). The two directions spell "none"
 // differently -- -1 sign-keyed, where 0 is a real object, the Earth; 0
-// object-keyed -- and work log item 38 is what one forgotten difference
+// object-keyed -- and one forgotten difference is what
 // cost: an esoteric block tested a sign-keyed table the object-keyed way
 // and used -1 as an array index. Pin the encodings, and pin the shipped
 // defaults agreeing with themselves: every ruler a sign names must name
@@ -5665,40 +5589,26 @@ static void ProbeQt()
 
 // ---- The numeric oracle ----
 //
-// Every other net in this project is differential. tools/switch-matrix.sh
-// byte-diffs the tree against an older build of ITSELF; tools/win-tests.sh
-// and the text-chart diff compare two builds that share this same core;
-// the sanitizer sweeps prove no bad memory access, not a right answer. All
-// of those can prove "unchanged". None of them can prove "correct", and a
-// differential actively locks a wrong answer in -- fixing a defect that
-// shipped in 1993 reads as a regression. Before this group the entire
-// suite contained exactly two assertions about a computed number, both
-// house cusps on the Matrix path (see TestCastCookingQt).
+// Every other net in this project is differential and can prove only
+// "unchanged". This one asks the ephemeris library the same question
+// Astrolog asks it and requires the same answer.
 //
-// So: ask the ephemeris library the same question Astrolog asks it, and
-// require the same answer. The Astrolog-object -> Swiss-body mapping below
-// is written out here on purpose rather than read from calc.cpp, so this
-// is an independent transcription and a drift in that mapping fails.
+// The Astrolog-object -> Swiss-body mapping below is transcribed here on
+// purpose rather than read from calc.cpp, so a drift in that mapping
+// fails. What it tests is Astrolog's glue -- object numbering, the flags
+// in FSwissPlanet(), delta-T, the sidereal offset, ProcessPlanet()'s
+// rectangular-to-zodiac conversion -- which is where the calculation bugs
+// have been.
 //
-// What that actually tests is Astrolog's glue, not Swiss's arithmetic:
-// object numbering, the flag construction in FSwissPlanet(), the delta-T
-// shift, the sidereal offset, and ProcessPlanet()'s rectangular-to-zodiac
-// conversion. That glue is where every calculation bug this project has
-// found actually lived -- the star-numbered rulership tables, the missing
-// FNorm guards, the raw-rObjDiam eclipse checkers.
-//
-// Measured 2026-08-31, and the numbers are why the tolerances look the way
-// they do:
-//   * Swiss agreement is EXACT -- 0.000000 arcsec, 15 bodies, 7 epochs
-//     1900-2080, tropical and sidereal alike. rEpsSwiss is slack against
-//     future compiler reassociation, not a fudge factor.
-//   * Matrix-vs-Swiss worst case over the same epochs: Sun-Mars 0.010 deg,
-//     Jupiter-Neptune 0.255, Pluto 0.867, Chiron/Ceres/Pallas 2.33, Juno
-//     8.17, Vesta 11.01. The per-body tolerances carry about 2x headroom.
-//     This leg is catastrophe detection: it is what would have caught the
-//     all-zero chart that -bm produced for years (work log item 139).
-//   * All 40 house systems partition the circle exactly once at mid
-//     latitude: 12 positive gaps summing to 360 to within 1e-9.
+// Why the tolerances are what they are:
+//   * Swiss agreement is EXACT: 0.000000 arcsec over 15 bodies and 7
+//     epochs, tropical and sidereal. rEpsSwiss is slack against compiler
+//     reassociation, not a fudge factor.
+//   * Matrix vs Swiss is catastrophe detection, not precision. Worst case
+//     runs from 0.010 deg (Sun-Mars) to 11.01 (Vesta); the per-body
+//     tolerances carry about 2x headroom.
+//   * All 40 house systems partition the circle once: 12 positive gaps
+//     summing to 360 within 1e-9.
 
 typedef struct _OracleBody {
   int obj;         // Astrolog object index
@@ -5880,7 +5790,7 @@ static void TestNumericOracleQt()
     // objects sharing a position are ordinary (a tight conjunction, or two
     // slots both left at 0.0), and the NaN reached ChartMidpoint()'s span
     // total and then SzDegree(), where (int)NaN is INT_MIN and "%3d" wrote
-    // past a 15-byte buffer. That is the intermittent abort of work log
+    // past a 15-byte buffer. That is the intermittent abort of
     // items 133 and 142, and it is why this leg sweeps rather than spot
     // checks: the failing latitudes are scattered a few ULP apart.
     {
@@ -5900,7 +5810,7 @@ static void TestNumericOracleQt()
       // Not exactly zero, and that is arithmetic rather than a defect: the
       // spherical law of cosines resolves small distances no finer than
       // acos(1-eps) ~ sqrt(2*eps), about 1.2e-6 degrees here. Measured
-      // worst case 2026-08-31 was 1.7e-06; the bound is an order above it.
+      // worst case measured 1.7e-06; the bound is an order above it.
       // Switching to haversine would fix the precision and change every
       // distance the program prints, so it is not on the table.
       Check(rMax < 1.0e-5,
@@ -5947,7 +5857,7 @@ static void TestNumericOracleQt()
     // (calc.cpp:508, Placidus and Koch fall back to Porphyry).
     //
     // This asserts the partition for every combination EXCEPT the ones
-    // measured as degenerate on 2026-09-01, and separately asserts that
+    // measured as degenerate, and separately asserts that
     // set is exactly what it was: a system that starts failing shows up,
     // and a system that gets fixed shows up too. The table is the record
     // of a real defect in shared core, not an excuse for it -- see work
@@ -6332,13 +6242,13 @@ static void TestNumericOracleQt()
     //
     // Plus the data itself: every entry inside the coordinate ranges its
     // own struct implies, and no empty name. A truncated atlas is a real
-    // failure mode here -- work log item 149 found one re-parsing a line
+    // failure mode here -- one such found a probe re-parsing a line
     // 33,219 times -- and nothing else in the suite looks at the table's
     // contents at all.
     if (FEnsureAtlas()) {
       // Astrolog's longitude is positive WEST, which is the opposite of
       // the geographic convention and is exactly the mistake this leg
-      // caught in its own first draft: the probes read as eight world
+      // caught while writing it: the probes read as eight world
       // cities and were resolving to their mirror images -- Chicago's
       // coordinates found Korla, in Xinjiang. Both sides of the check
       // agreed, because both used the same wrong number.
@@ -6359,9 +6269,8 @@ static void TestNumericOracleQt()
       // DisplayAtlasNearby() prints a whole city list through is.S on
       // its way to returning the index -- the "just return the index"
       // early exit is in the fDialog branch, and that branch does not
-      // fill *piae the way this needs. So it gets a stream of its own,
-      // which is work log item 165's hazard: this leg shipped without
-      // one, into a FILE nothing had opened, and crashed 3 runs in 10.
+      // fill *piae the way this needs. So it gets a stream of its own:
+      // without one it prints into a FILE nothing has opened.
       //
       // The last line before the segfault named the WIREFRAME writer,
       // because PrintProgress goes to unbuffered stderr while this went
@@ -6409,7 +6318,7 @@ static void TestNumericOracleQt()
           rgszProbe[i], is.rgae[iaeGot].szNam, is.rgae[iaeWant].szNam);
 
         // And that the answer is in the right hemisphere at all. This is
-        // the assertion the leg's own first draft would have failed:
+        // the assertion a weaker version would have missed:
         // Astrolog's longitude is positive WEST, and geographic-sign
         // probes resolved to mirror-image cities half a world away while
         // both sides of the comparison agreed with each other.
@@ -6532,22 +6441,18 @@ static void TestNumericOracleQt()
 
     // ---- Leg 13: the in-day search finds real conjunctions ----
     // The search functions have no reference outside this repo, and
-    // unlike positions they have no library to ask. What they do have is
-    // the same invariant leg 9 uses for returns: **a hit, re-cast, must
-    // satisfy the condition it was searching for.** Nothing else in the
-    // suite exercises ChartInDaySearch() at all.
+    // unlike positions they have no library to ask. The invariant is the
+    // one leg 9 uses for returns: a hit, re-cast, must satisfy the
+    // condition it was searching for.
     //
-    // Restricted to the Sun and Moon with conjunction as the only
-    // aspect, and with sign and direction changes and the
-    // void-of-course pass turned off, every hit is a new moon. Without
-    // those restrictions the search reports six other event kinds and
-    // half the hits are not aspects -- measured, and the first draft of
-    // this leg asserted otherwise.
+    // Restricted to Sun and Moon with conjunction the only aspect, and
+    // sign changes, direction changes and the void-of-course pass off,
+    // every hit is a new moon. Without those the search reports six
+    // other event kinds and half the hits are not aspects.
     //
-    // Two things are checked, and the second is not an internal
-    // invariant at all: the separation at each hit, and the interval
-    // between consecutive hits, which must be the synodic month. That
-    // number belongs to the solar system rather than to this program.
+    // Two checks, and the second is not an internal invariant at all:
+    // the separation at each hit, and the interval between consecutive
+    // hits, which must be the synodic month.
     {
       Borrow bList(us.fListAuto, fTrue), bRet(is.fReturn, fFalse);
       Borrow bMonth(us.fInDayMonth, fTrue), bYear(us.fInDayYear, fFalse);
@@ -6699,7 +6604,7 @@ static void TestNumericOracleQt()
     // per object; re-cast each and convert the object to horizon
     // coordinates, and the event's own name says what must be true:
     // "rises" and "sets" put it on the horizon, "zeniths" and "nadirs"
-    // put it on the meridian. Measured at 41.85N on 2020-03-20 the
+    // put it on the meridian. At 41.85N on 2020-03-20 the
     // altitudes come back -0.001 and 0.000 and the azimuths 270.005 and
     // 90.004, so the tolerances below are twenty times the observed
     // error rather than a guess.
@@ -6880,42 +6785,23 @@ static void TestAtlasSinkQt()
 ******************************************************************************
 */
 
-// Every other net in this suite is differential or structural: it says a
-// number did not change, or that a file is well formed. This one says a
-// number is RIGHT, and it can, because the answers come from outside the
-// program entirely -- the coordinates of six cities and the dates the
-// United States and Australia moved their clocks. Those are facts about
-// the world, not about this repository, so a regression in the atlas
-// data or the timezone rules shows up here as a wrong answer rather than
-// as a diff somebody has to judge.
+// The atlas and time zone engine, against facts from outside this
+// repository: where six cities are, and when two countries moved their
+// clocks. A regression shows up here as a wrong answer rather than as a
+// diff somebody has to judge.
 //
-// The DST dates are chosen to be the ones a rule change moved, since a
-// naive implementation gets the ordinary cases right:
+// The DST dates are the ones a rule change moved, since the ordinary
+// cases come out right by accident:
 //
-//   * 15 March 2006 is standard time in Seattle and 15 March 2007 is
-//     daylight time. The US moved the start from the first Sunday in
-//     April to the second Sunday in March, effective 2007.
-//   * 15 January 1974 is DAYLIGHT time. The Emergency Daylight Saving
-//     Time Energy Conservation Act put the whole country on year-round
-//     DST from 6 January that year.
-//   * 7 March 2020 is standard and 8 March 2020 is daylight -- the
-//     transition day itself, where an off-by-one lands.
-//   * Sydney is on daylight time in January and standard time in July,
-//     which is the sign of the whole southern hemisphere.
-//   * Mumbai, Kathmandu and Adelaide are on half and quarter hour
-//     offsets, where a zone stored as a whole number of hours breaks.
+//   15 Mar 2006 standard / 15 Mar 2007 daylight  the 2007 US rule change
+//   15 Jan 1974 DAYLIGHT                          year-round DST that year
+//   7 Mar 2020 standard / 8 Mar 2020 daylight     the transition day
+//   Sydney: daylight in January                   southern hemisphere
+//   Mumbai, Kathmandu, Adelaide                   half and quarter hours
 //
-// The table falsifies itself, which matters because these are all
-// "equals" assertions: it holds both answers for the same city on
-// different dates (Seattle is standard on 15 March 2006 and daylight on
-// 15 March 2007), and four different zone offsets, so no constant reply
-// -- always standard, always daylight, always a whole hour -- passes it.
-// The coordinate half was falsified in the writing: three of the six
-// expectations were wrong on the first run and it named all three.
-//
-// Coordinates are compared as the string a user reads rather than as a
-// signed real, so the test cannot be written to agree with a sign
-// convention it got wrong.
+// The table falsifies itself: it holds both answers for one city on
+// different dates and four different offsets, so no constant reply
+// passes -- not "always standard", not "always a whole hour".
 
 // Degrees WEST and degrees NORTH, from an atlas that is not this one.
 // Astrolog stores longitude positive west, which SzLocation() renders as
@@ -7095,35 +6981,24 @@ static void TestEclipseQt()
   Group("Eclipses");
   us.fEclipse = fTrue;
   us.fEclipseAny = fTrue;         // What astrolog.as ships: "=Yu0".
-  // Pin the geometry rather than inheriting it. TestAllMenuActionsQt()
-  // fires every menu item and leaves the program wherever that lands;
-  // measured after it, this group inherited a relationship chart
-  // (nRel -7), a dwad, a navamsa, a solar chart, flipped and geodetic
-  // houses, sidereal, decans, 3D houses, an Indian wheel and house
-  // system 22 -- every one of which moves a planet's longitude or the
-  // frame it is measured in. Heliocentric was the loudest: it makes
-  // NCheckEclipseLunar() return etUndefined outright, because the centre
-  // body IS the Sun. Topocentric positions are pinned too; they move the
-  // Moon by up to a degree, which is more than the whole annular/total
-  // margin. This is item 111's lesson, and it cost a failing run here
-  // before the state was pinned rather than guessed at.
+  // Pin the geometry rather than inheriting it: every field below moves
+  // a planet's longitude or the frame it is measured in, and
+  // TestAllMenuActionsQt() leaves all of them set -- see the list above
+  // that function. Heliocentric is the loudest, making
+  // NCheckEclipseLunar() return etUndefined outright. Topocentric
+  // positions move the Moon by more than the annular/total margin.
   //
-  // us.fEquator was the one that took measuring rather than listing, and
-  // it is worth knowing about on its own. CastChart() converts ecliptic
-  // to equatorial under "-sr", but the loop is
-  // "for (i...) if (!ignore[i])" -- so a RESTRICTED object keeps its
-  // ecliptic coordinates while everything else becomes equatorial. This
-  // group inherited a restricted Sun, so the Sun's latitude stayed 0.000
-  // while the Moon's became 12.276, and the separation between them was
-  // measured across two different coordinate systems. Astrolog does not
-  // read a restricted object's position anywhere the author could find,
-  // so this is an observation rather than a reported defect -- but it is
-  // exactly the kind of thing a test that pins nothing walks into.
+  // us.fEquator is worth knowing about on its own: CastChart() converts
+  // ecliptic to equatorial under "-sr", but the loop skips restricted
+  // objects -- so a RESTRICTED body keeps ecliptic coordinates while
+  // everything else does not, and a separation between the two is
+  // measured across two coordinate systems. Astrolog does not appear to
+  // read a restricted object's position, so this is an observation rather
+  // than a reported defect.
   //
-  // The saved copy is restored field by field below rather than by
-  // assigning the struct back: us carries char * fields that other code
-  // frees and reallocates, so putting a whole stale copy back is a
-  // use-after-free. Only the scalars touched above are restored.
+  // Restored field by field below rather than by assigning the struct
+  // back: us carries char * fields other code frees, so putting a stale
+  // copy back is a use-after-free.
   US usSav = us;
   us.objCenter = oEar;
   us.fTopoPos = fFalse;
@@ -7407,29 +7282,20 @@ static void TestCopyTextBomQt()
 ******************************************************************************
 */
 
-// dbRe_YRi in astrolog.rc is a "Recall" push button, and both builds
-// have it. It restores the restrictions from ignoreMem[], the set
-// InitRestrictions(fTrue) last stored.
+// The Object Restrictions dialog's "Recall" button (dbRe_YRi) restores
+// from ignoreMem[], which InitRestrictions(fTrue) last stored. Windows
+// stores that after reading astrolog.as and the command line;
+// InitProgram() stores it before either, so a build that does not repeat
+// the call hands back the COMPILED defaults instead.
 //
-// Windows stores that straight after reading astrolog.as and the command
-// line (wdriver.cpp:711), so Recall hands back what the user's settings
-// file set up. InitProgram() also stores it, but before either has been
-// read -- so a build that does not repeat the call after the switches
-// hands back the COMPILED defaults instead, throwing away whatever the
-// settings file restricted. This port did not repeat it.
+// Startup is what is asserted, so the runner snapshots both arrays before
+// any group can touch restrictions -- which also makes this independent
+// of where the group sits in the table.
 //
-// Startup is what is being asserted, so the two arrays are snapshotted by
-// the runner before any group has had a chance to touch restrictions.
-// That also makes the check independent of where this group sits in the
-// table, which is worth something given how many assertions in this suite
-// have failed on another group's leftovers.
-//
-// In a plain run the two are equal either way, because astrolog.as
-// restricts nothing the compiled defaults do not -- tools/defaults_audit.py
-// is what keeps that true. So run-qt-tests.sh runs this group a second
-// time in its startup diagnostics with "-YR 0 0 1" on the command line,
-// where they are equal only if the store really did happen after the
-// switches.
+// In a plain run the two are equal either way, since astrolog.as
+// restricts nothing the defaults do not. run-qt-tests.sh runs this group
+// a second time with "-R Sun" on the command line, where they can only
+// be equal if the store really happened after the switches.
 
 static byte s_rgbIgnoreStartQt[objMax], s_rgbIgnoreMemStartQt[objMax];
 
@@ -7513,11 +7379,17 @@ static void TestPrintQt()
 
   Group("Printing");
   QVector<flag> rgfSav(cchartmode);
+  flag fColorSav = gs.fColor;
   int i;
   for (i = 0; i < cchartmode; i++)
     rgfSav[i] = *rgchartmode[i].pf;
   us.nRel = rcNone;
   us.fGraphics = fTrue;
+  // Colour on: the colour-count assertion below separates a drawn chart
+  // from a blank page, and a monochrome wheel draws in four colours --
+  // close enough to blank to make the threshold meaningless.
+  // TestAllMenuActionsQt() leaves gs.fColor clear.
+  gs.fColor = fTrue;
   SetChartModeQt(gHouse);
   cbChart = CbPrintPdfQt("a wheel");
   Check(cbChart > 20000, "a graphics chart prints a page with a chart on it "
@@ -7566,6 +7438,11 @@ static void TestPrintQt()
     delete gi.qim;
     gi.qim = pqimSav; gi.qpaint = pqpaintSav;
 
+    // Two measures, neither of which depends on colour depth or scale.
+    // A count of distinct colours does: a monochrome wheel has four.
+    // And pixel(0,0) is not the background here, since DrawChartX()
+    // repaints it and the corner can be an outlier -- so the second
+    // measure compares the two renders against each other.
     auto cColour = [](CONST QImage &im) {
       QSet<QRgb> set;
       for (int y = 0; y < im.height(); y += 4)
@@ -7573,15 +7450,20 @@ static void TestPrintQt()
           set.insert(im.pixel(x, y));
       return set.size();
     };
+    int cDiff = 0;
+    for (int y = 0; y < imBlank.height(); y += 2)
+      for (int x = 0; x < imBlank.width(); x += 2)
+        cDiff += (imBlank.pixel(x, y) != imDrawn.pixel(x, y));
     Check(cColour(imBlank) <= 2,
       "DrawChartX() with gi.nMode unset draws nothing (%d colours)",
       cColour(imBlank));
-    Check(cColour(imDrawn) > 4,
-      "and with a real mode it draws a chart (%d colours)",
-      cColour(imDrawn));
+    Check(cDiff > 100,
+      "and with a real mode it draws a chart the unset one did not "
+      "(%d pixels differ)", cDiff);
   }
 
   us.fGraphics = fGraphicsSav; gi.nMode = nModeSav; us.nRel = nRelSav;
+  gs.fColor = fColorSav;
   for (i = 0; i < cchartmode; i++)
     *rgchartmode[i].pf = rgfSav[i];
   RedrawQt();

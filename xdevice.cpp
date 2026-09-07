@@ -645,12 +645,10 @@ flag FBmpDrawBack(Bitmap *bDest)
 
 #ifdef QT
   // Interactively on Qt, blit the blended cache straight onto the chart
-  // image. Without this the only non-file path here is the WINANY one
-  // below, so the background silently never got drawn -- and because this
-  // function still returned fTrue, callers believed one had been drawn and
-  // skipped their own erase (see the dtErase test in xcharts0.cpp), which
-  // is why loading a background used to blank the chart's backdrop
-  // instead of showing the image.
+  // image. The only other non-file path here is the WINANY one below, and
+  // this function returns fTrue either way -- so without this a caller
+  // believes a background was drawn and skips its own erase (the dtErase
+  // test in xcharts0.cpp), leaving the backdrop blank.
   //
   // A Bitmap row is 3 bytes per pixel in B,G,R order (see _SetRGB above)
   // padded out to a long boundary, which is exactly Format_BGR888 with a
@@ -727,9 +725,8 @@ flag FBmpDrawMap()
   // The same thing WINANY does just above, for the same reason: the
   // portable composition below needs a real Bitmap to draw into, and
   // gi.bmp is the file export buffer, which nothing allocates on the
-  // screen path. This used to bail out here instead and let the caller
-  // fall back to its vector map, so "Use Detailed World Map" was a menu
-  // item that did nothing on screen while still working for file output.
+  // screen path. Without it the caller falls back to its vector map, so
+  // "Use Detailed World Map" does nothing on screen.
   //
   // gi.bmp is the right buffer to borrow rather than a new one: the
   // export path allocates it itself whenever it runs (xscreen.cpp),
@@ -982,13 +979,10 @@ flag FBmpDrawMap2(int x1, int y1, int x2, int y2,
   }
 #endif
 #ifdef QT
-  // The same thing WINANY does just above, and for the same reason this
-  // function's sibling FBmpDrawMap() needed it: "bmp" starts out pointing
-  // at gi.bmp, the file export buffer, which nothing allocates on the
-  // screen path -- so the BmpSetAll() below wrote through a null pointer.
-  // This used to bail out here instead, which stopped the crash by
-  // dropping the feature: the local space chart (-Nl) fell back to its
-  // vector map on screen while file output got the detailed one.
+  // The same thing WINANY does just above, and for the reason
+  // FBmpDrawMap() needs it: "bmp" starts out pointing at gi.bmp, the file
+  // export buffer, which nothing allocates on the screen path -- so the
+  // BmpSetAll() below would write through a null pointer.
   //
   // No 2:1 fit here, unlike FBmpDrawMap(): this draws into a rectangle
   // the CALLER chose inside a full canvas bitmap, so the canvas is the
@@ -1725,7 +1719,7 @@ void MetaWord(word w)
     // and without this the guard would report the overflow and then
     // perform it -- one word past the end of gi.bm per call, for the rest
     // of the drawing. Truncating is what the message above already claims
-    // happens (work log item 166).
+    // happens.
     return;
   }
   *gi.pwMetaCur = w;
@@ -1999,7 +1993,7 @@ void WriteWire(FILE *file)
 
       // Output one line segment. Six words, and the loop condition only
       // knows that ONE remains -- so check before reading the other five
-      // rather than after (work log items 166 and 173).
+      // rather than after.
       if (pw + 6 > gi.pwWireCur)
         break;
       x1 = (short)pw[0]; y1 = (short)pw[1]; z1 = (short)pw[2];
@@ -2013,11 +2007,9 @@ void WriteWire(FILE *file)
       // follows (WireLine() writes it that way).
       //
       // **Its length has to be read whether or not the color is being
-      // written out.** This used to advance by two unconditionally when
-      // gs.fColor was clear, so a three-word record left the cursor one
-      // word short and everything after it was read at the wrong offset
-      // -- data words parsed as segment markers, and a six-word read
-      // starting anywhere, including past the end of the buffer.
+      // written out.** Advancing by two unconditionally leaves a
+      // three-word record one word short, and everything after it is read
+      // at the wrong offset.
       if (pw + 2 > gi.pwWireCur)
         break;
       n = BLo(pw[1]);

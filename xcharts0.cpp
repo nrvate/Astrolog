@@ -353,11 +353,8 @@ void DrawSidebar()
       AdjustTextScale();
     }
 #if defined(WINANY) || defined(QT)
-    // WINANY only until 2026-09-06, and only because DrawGlyph() was
-    // Windows-only when this was written. The port has had its own since
-    // the font work, so this drew nothing on Qt while the Graphics
-    // Settings dialog happily offered the option: rgszWheelCornerQt[] has
-    // all seven, and rgiWheelCornerOrderQt[] lists this one.
+    // Both GUI builds: Graphics Settings offers this corner style in
+    // each, and both have DrawGlyph().
     else if (gs.nDecaType == 6) {
       // If decoration value 6, draw heart characters in each corner. <3
       Borrow bScale(gi.nScale,
@@ -1915,11 +1912,9 @@ void DrawMap(flag fSky, flag fGlobe, real deg)
   char sz[cchSzDef], chT;
   int cx = gs.xWin/2, cy = gs.yWin/2, rx, ry,
     x, y, xold, yold, m, n, u, v, i, j, k, l, xp, yp;
-  // Pixels per degree. A globe is still drawn at the integer Character
-  // Scale -- it is sized as a circle, not as a 360x180 rectangle -- but a
-  // rectangular map takes its scale from the window, so it fills whatever
-  // it is given. When the window is the size the map used to be forced
-  // to, the two are equal to the pixel and nothing moves.
+  // Pixels per degree. A globe is drawn at the integer Character Scale,
+  // being sized as a circle rather than a 360x180 rectangle; a
+  // rectangular map takes its scale from the window and fills it.
   real rScl;
   flag fSimple = fFalse, fDir = (gi.nMode == gSphere && gs.fSouth),
     fDidBitmap;

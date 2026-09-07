@@ -83,7 +83,7 @@ US us = {
   // Main subflags: fLoopInit, fSabian, fSeconds, fSecond1K, fSecondHide,
   // then fMatrixPla (on only when no ephemeris is compiled in), then
   // fMatrixStar through fListAuto. Two entries fewer than before
-  // 2026-09-04, when fPlacalcAst and fPlacalcPla sat between them.
+  // when fPlacalcAst and fPlacalcPla sat between them.
   0, 0, 0, 0, 0,
 #ifdef EPHEM
   0,
@@ -1216,7 +1216,7 @@ CONST char *szInteract[cAspect+1];
 // szInteract[], which IS fully initialized, and intrpret.cpp then reads
 // szTherefore[asp][0] -- so "-A 24 -YIA 19 <text> -I" dereferenced NULL
 // and dumped core. Same class as ruler2[] being one short, and reachable
-// in both builds. See work log item 171.
+// in both builds.
 CONST char *szThereforeDef[cAspect+1] = {"",
   "Both parts are prominent in their psyche", "Balance is needed",
   "Adaptation is required by both sides", "", "",

@@ -126,14 +126,12 @@ typedef struct {
   flag fTransit;   // also count the transit set as making this included
 } CATRES;
 
-// The port's mutable window state in one place -- the analogue of Windows'
-// WI struct (astrolog.h), which is Win32-only. What used to be ~40
-// file-scope statics lives here so ownership is visible; the CONST tables
-// (menus, hotkeys, context menus) stay beside the code that uses them.
+// The port's mutable window state, the analogue of Windows' Win32-only WI
+// struct. The CONST tables -- menus, hotkeys, context menus -- stay
+// beside the code that uses them.
 //
-// Rule, paid for once as gotcha 7: the chart-mode and relationship
-// tracking arrays are looked up BY VALUE, never by index. Menu build
-// order is not a stable interface.
+// Rule: the chart-mode and relationship arrays are looked up BY VALUE,
+// never by index. Menu build order is not a stable interface.
 typedef struct _qtuserinterface {
   // Is the chart window fully set up? Guards against a resize event
   // arriving (during initial widget layout) before there is a chart.
@@ -259,25 +257,10 @@ typedef struct _qtuserinterface {
 
 static QTUI qi;
 
-// Room left in one of qi's fixed menu tables. TWO things, and the second
-// is the one that matters in a shipping build: AssertRoomQt() says so
-// loudly under QTTEST, and the CRoomQt() test at each call site skips the
-// write. AssertIndex is inert without QTTEST, so the assert alone left
-// the release build writing past the array -- the check-and-skip is what
-// the restriction-category site had done all along, and these two now
-// match it.
-//
-// Each of those tables is an array with a running count and no guard, so
-// adding a 17th relationship chart or a 9th restriction category would
-// write past the end into whatever member of qi follows it. They cannot
-// overflow from today's code -- every entry is added by a literal call
-// during menu construction -- and that is exactly why the guard is worth
-// having: the failure would arrive with some future menu item, silently,
-// as corruption of a neighbouring field rather than as a crash at the
-// write.
-//
-// The bound comes from the array itself rather than a constant beside it,
-// so resizing one cannot leave its guard behind.
+// Room left in one of qi's fixed menu tables. AssertRoomQt() is loud
+// under QTTEST; AssertIndex is inert without it, so each call site also
+// tests CRoomQt() and skips the write. The bound comes from the array
+// itself, so resizing one cannot leave its guard behind.
 #define CRoomQt(rg) ((int)(sizeof(rg)/sizeof((rg)[0])))
 #define AssertRoomQt(c, rg) AssertIndex(c, CRoomQt(rg) - 1)
 
@@ -323,17 +306,11 @@ static QPoint PtGlobalQt(CONST QMouseEvent *pevent)
 }
 
 
-// "-0q" forbids quitting, and Windows refuses WM_CLOSE outright when it
-// is set, with "Program exiting is not allowed now." (wdriver.cpp:1130).
-// This port never referenced us.fNoQuit at all, so the one lockdown
-// switch whose entire purpose is that the user cannot leave did nothing
-// here: File / Exit closed the window, so did the Alt+F4 macro, so did
-// the window manager's own button.
-//
-// An event filter rather than a QMainWindow subclass, because gi.qwind is
-// a plain QMainWindow -- and it catches every route to a close rather
-// than the two that go through a menu handler. The last of those three is
-// the one guarding the handlers would have missed.
+// "-0q" forbids quitting: Windows refuses WM_CLOSE outright when
+// us.fNoQuit is set. An event filter rather than a QMainWindow subclass,
+// since gi.qwind is a plain one -- and it catches every route to a
+// close, including the window manager's button, which guarding the two
+// menu handlers would miss.
 
 class NoQuitFilterQt : public QObject {
 public:
@@ -376,13 +353,11 @@ protected:
   // actual current size, and redraws first if not.
   void paintEvent(QPaintEvent *) override
   {
-    // Text charts now draw into gi.qim too, so this size check applies in
-    // both modes -- it used to skip text mode, back when text lived in a
-    // window of its own and this buffer went stale.
-    // Only chase the widget's size when a window resize is supposed to
-    // change the chart. With that off the chart keeps its own size and
-    // this widget is sized to match it instead (see ApplySizeModeQt), so
-    // redrawing to fit here would fight that and repaint forever.
+    // Applies in both modes: text charts draw into gi.qim too. Only
+    // chase the widget's size when a resize is meant to change the
+    // chart -- with that off the chart keeps its size and this widget is
+    // sized to match it (ApplySizeModeQt), so redrawing to fit here
+    // would fight that and repaint forever.
     if (qi.fReady && qi.fWindowChart &&
       width() >= 1 && height() >= 1 &&
       (gi.qim == NULL || gi.qim->width() != width() ||
@@ -676,18 +651,11 @@ void ToggleFullScreenQt()
 }
 
 
-// Clear Screen. Windows calls DrawClearScreen(), which can't be used here
-// because it draws through gi.qpaint, and that only exists for the length
-// of a redraw. Filling the buffer with the background color is what that
-// would have done anyway (its DrawColor(gi.kiOff) + DrawBlock pair).
-//
-// One path serves both modes, because text charts draw into this same
-// buffer (see RedrawQt()). It used to branch on us.fGraphics and send text
-// mode to a ClearTextWindowQt() that cleared the separate text window --
-// and that window stopped being created when text moved onto the canvas,
-// so Clear Screen silently did nothing in text mode from then until
-// 2026-09-01. gi.kiOff is kMainA[fInverse] (xscreen.cpp:162), which is the
-// colour Windows' TextClearScreen() passes to WinClearScreen().
+// Clear Screen. Fills the chart buffer with gi.kiOff, which is what
+// Windows' DrawClearScreen() amounts to; that one cannot be used here
+// because it draws through gi.qpaint, which exists only during a redraw.
+// One path serves both modes, since text charts draw into this same
+// buffer.
 void ClearScreenQt()
 {
   if (gi.qim == NULL)
@@ -772,18 +740,11 @@ void PrintWarningQt(CONST char *sz, flag fError)
 // the same into gi.qim, so pressing V switches what the window shows
 // rather than opening a second window beside it.
 
-// Windows draws text charts in "Terminal", a bitmap font whose glyphs are
-// exactly the 8x12 cell it lays them out on, which is why they come out
-// crisp. Forcing a TrueType face into that same cell doesn't: at 12 pixels
-// its advance is nearer 7, so the glyphs end up thin and cramped with a
-// ragged gap at the end of every cell.
-//
-// So the cell comes from the font here rather than the font from the cell.
-// The chart is laid out in character cells either way, so the columns still
-// line up; the text is simply rendered at a size the face was drawn for.
-// The size still follows gs.nScale, so Character Scale keeps working.
-// Defined further down, beside the theme preference they share a file
-// with; forward declared here the way StrThemePrefQt() is above.
+// The text cell comes from the font here, not the font from the cell.
+// Windows uses Terminal, a bitmap face whose glyphs are exactly its 8x12
+// cell; a TrueType face forced into that cell comes out thin and cramped.
+// The chart is laid out in cells either way, so columns still line up,
+// and the size still follows gs.nScale.
 QString StrConsoleFontQt(void);
 int NConsoleFontSizeQt(void);
 flag FConsoleAntialiasQt(void);
@@ -817,21 +778,13 @@ static void SetTextMetricsQt()
   if (qi.yChar < 1) qi.yChar = 12;
 }
 
-// "Antialias Lines" (gs.fAntialias, Graphics / Chart Effects), applied
-// the way Qt does it rather than the way Windows has to.
+// "Antialias Lines" (gs.fAntialias, Graphics / Chart Effects). A
+// QPainter render hint rather than a port of Windows' 2x2 blend pass,
+// which GDI needs and Qt does not.
 //
-// GDI has no antialiasing, so Windows fakes it two ways: render at a
-// multiple and shrink (wi.fSmoothZoom), or walk the finished bitmap
-// blending 2x2 blocks whose diagonals match (FBmpAntialias, xdevice.cpp).
-// The port had neither -- FBmpAntialias() reads gi.bmp, which is the file
-// export buffer and unallocated on screen, so it returns early -- and
-// nothing set QPainter's own hint either, so the menu item did nothing.
-//
-// A render hint rather than a port of the 2x2 pass: it antialiases while
-// drawing instead of inferring edges from the result, and costs nothing
-// when off. Safe for DrawFill(), which compares exact pixel colours to
-// find its boundary: a softened edge pixel is still not the background
-// colour, so a fill stops sooner rather than leaking through.
+// Safe for DrawFill(), which compares exact pixel colours to find its
+// boundary: a softened edge pixel is still not the background colour, so
+// a fill stops sooner rather than leaking through.
 
 static void ApplyAntialiasQt(void)
 {
@@ -865,34 +818,21 @@ void TextCharQt(int xCell, int yCell, int ch)
 }
 
 
-// Capturing a text chart as text. Text mode renders through a wholly
-// separate path from the graphics one -- Action() (astrolog.cpp) calls
-// PrintChart() instead of FActionX()/DrawChartX(), driven by
-// is.S/is.szFileScreen rather than gi.qpaint. So: point is.szFileScreen at
-// a temp file, optionally ask for HTML output (so colour comes from real
-// <font color> tags instead of needing an ANSI escape parser), run
-// Action(), and read the file back. Same trick ShowExportTextDialogQt()
-// in qtdialog.cpp uses.
-//
-// This used to end in a persistent QTextBrowser window. It does not any
-// more: RedrawQt() draws text charts into the canvas buffer, the way
-// Windows draws them into its client area, so the only callers left want
-// the string itself.
+// Capture a text chart as a string. Text mode renders through a separate
+// path from graphics -- Action() calls PrintChart(), driven by
+// is.S/is.szFileScreen rather than gi.qpaint -- so point is.szFileScreen
+// at a temp file, run Action(), and read it back. HTML output is offered
+// so colour arrives as <font color> tags rather than ANSI escapes.
 
-// Shared by the Edit menu's Copy Chart Text Output --
-// Print, equivalent to Windows' DlgPrint(). Two things are copied from
-// there: the chart is scaled up before rendering so it doesn't print at
-// screen resolution, and "Export Text and Print in Intuitive Manner"
-// (us.fSmartSave) forces a white background, since printing a black one
-// wastes a cartridge.
+// Print, equivalent to Windows' DlgPrint(). The chart is scaled up before
+// rendering so it does not print at screen resolution, and
+// us.fSmartSave forces a white background.
 //
-// Windows scales by METAMUL (12) because it draws into a metafile-style
-// printer DC, where that costs nothing. Here the chart has to be rendered
-// into a real QImage first -- DrawFill() (xgeneral.cpp) reads and writes
-// gi.qim pixels directly, so gi.qim and gi.qpaint must describe the same
-// surface, exactly as they do on screen. At METAMUL a default window
-// would need a 9120x6900 image, around 250MB, so this uses a smaller
-// multiplier that still prints well above screen resolution.
+// Windows scales by METAMUL (12) into a printer DC. Here the chart is
+// rendered into a real QImage first -- DrawFill() reads and writes gi.qim
+// directly, so gi.qim and gi.qpaint must describe one surface -- and
+// METAMUL would want ~250MB for a default window. This multiplier still
+// prints well above screen resolution.
 
 #define PRINTMUL 4
 
@@ -920,8 +860,7 @@ static void PrintChartToQt(QPrinter *pprinter)
   flag fNoMemory = fFalse;
   {
     // Borrow the render geometry and both canvas pointers; the closing
-    // brace restores all seven on every exit, which is what the two
-    // hand-written restore blocks here used to do (gotcha 3's site).
+    // brace restores all seven on every exit.
     Borrow bx(gs.xWin), by(gs.yWin);
     Borrow bs(gs.nScale), bst(gs.nScaleText);
     Borrow bi(gs.fInverse);
@@ -946,20 +885,12 @@ static void PrintChartToQt(QPrinter *pprinter)
       gi.qpaint = new QPainter(gi.qim);
       ApplyAntialiasQt();
       InitColors();
-      // The same guard RedrawQt() applies, and this path needs it just as
-      // much: DrawChartX() switches on gi.nMode and has NO default case,
-      // and mode 0 is not a chart at all (gWheel is 1) -- so with the mode
-      // unset it draws nothing and the page comes out blank. Every other
-      // route into DrawChartX() is covered, RedrawQt() by its own copy of
-      // this line and every export by FActionX() (xscreen.cpp:1471); this
-      // one goes straight there and was the only one without it.
-      //
-      // Reachable while the SCREEN still shows a chart, which is what
-      // makes it worth guarding rather than shrugging at: the View menu's
-      // "Show Graphics" handler sets gi.nMode = 0 and then calls
-      // RedrawQt(), which returns at its first line when "Don't
-      // Automatically Redraw Screen" is on -- leaving the old picture on
-      // the canvas and the mode at zero.
+      // DrawChartX() switches on gi.nMode with no default case, and mode
+      // 0 is not a chart (gWheel is 1), so an unset mode draws nothing.
+      // RedoMenuQt() and FActionX() carry the same guard; this path goes
+      // straight to DrawChartX() and needs its own. Reachable while the
+      // screen still shows a chart, since "Show Graphics" zeroes the mode
+      // and its redraw is a no-op under "Don't Automatically Redraw".
       if (gi.nMode == 0)
         gi.nMode = DetectGraphicsChartMode();
       gi.nScaleT = 1;
@@ -1049,9 +980,8 @@ void PasteChartQt()
   }
   if (!tmp.open())
     return;
-  // Closed but not removed: the code below reopens it by name, and on
-  // Windows an open handle would block that. The destructor still
-  // deletes it, which is what the unlink() here used to do.
+  // Closed but not removed: the code below reopens it by name, which an
+  // open handle would block on Windows. The destructor still deletes it.
   baTemp = tmp.fileName().toLocal8Bit();
   szTemp = baTemp.data();
   tmp.close();
@@ -1105,27 +1035,15 @@ void PasteChartQt()
 // real. Doesn't touch us.fGraphics; callers decide how to reflect that.
 
 // Render the current chart's text output to a file, touching nothing.
-// One place, because there are three things to put back and only two of
-// them are obvious -- the third cost a reproduction to find (work log
-// item 154), and Export Chart Text Output was getting it wrong.
+// Three things have to be put back, and only two are obvious:
 //
-// us.fGraphics: Action() branches on it ("if (us.fGraphics) FActionX();
-// else PrintChart();"). If it is still true here, Action() takes the
-// *graphics* path, which for QT calls InteractQt() again -- a second,
-// nested Qt event loop.
-//
-// us.fTextHTML: the caller says which it wants rather than inheriting
-// whatever the File Settings dialog last left.
-//
-// is.S: the whole GUI runs inside an Action() call already (main ->
-// Action -> FActionX -> InteractQt), so the one below is nested. It
-// opens is.S on the file and fclose()s it on the way out, but never puts
-// the caller's back -- so is.S is left pointing at a closed FILE.
-// Everything printing through it afterwards writes to a dead handle, and
-// the outer Action() eventually fclose()s the same FILE a second time,
-// which glibc catches as "invalid stdio handle" and aborts on.
-// astrolog.cpp:464 saves and restores it around its own nested call for
-// exactly this reason.
+//   us.fGraphics  Action() branches on it. Left true, it takes the
+//                 graphics path, which nests a second Qt event loop.
+//   us.fTextHTML  the caller chooses, rather than inheriting whatever
+//                 File Settings last left.
+//   is.S          the nested Action() opens it on the file and fcloses
+//                 it, but never restores the caller's -- leaving is.S on
+//                 a closed FILE and arming a double fclose at exit.
 
 void CaptureTextToFileQt(CONST char *szFile, flag fHTML)
 {
@@ -1158,20 +1076,12 @@ static QString CaptureTextChartQt(flag fHTML)
   if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
     QByteArray ba = file.readAll();
     file.close();
-    // Decode by the codepage the file was WRITTEN in, not by hope.
-    // Astrolog draws its text wheels and grids out of IBM code page 437
-    // line characters when us.fAnsiChar is on -- which the View menu's
-    // "Colored Text" turns on -- and those are raw high bytes, not UTF-8.
-    // Handing them to fromUtf8() turned every box edge into U+FFFD on the
-    // clipboard, while the canvas showed them correctly: TextCharQt()
-    // has mapped each high byte through WchFromChIBM() all along. This is
-    // the same mapping, for the path that goes through a file.
-    //
-    // Windows does not need it, and that is why the gap was invisible
-    // from the Windows side: cmdCopyText hands the bytes to the clipboard
-    // as CF_OEMTEXT when us.nCharsetOut says IBM, and lets the paste
-    // target convert. A Qt clipboard carries a QString, so the conversion
-    // has to happen here.
+    // Decode by the codepage the file was written in. With us.fAnsiChar
+    // on -- the View menu's "Colored Text" -- text wheels are drawn out
+    // of IBM code page 437 line characters, which are raw high bytes,
+    // not UTF-8. Same mapping TextCharQt() applies on the canvas.
+    // Windows hands these to the clipboard as CF_OEMTEXT and lets the
+    // paste target convert; a QString has to be converted here.
     if (us.nCharsetOut == ccUTF8)
       qs = QString::fromUtf8(ba);
     else if (us.nCharsetOut == ccLatin || us.nCharset == ccLatin)
@@ -1454,27 +1364,15 @@ static QAction *PaRegisterCheckQt(QAction *pa, std::function<bool()> pfn)
 }
 
 
-// Re-derive every menu check mark from the settings behind it, equivalent
-// to Windows' RedoMenu(). Call it only where Windows sets wi.fMenuAll or
-// calls RedoMenu() outright -- four places, each one a route by which an
-// arbitrary switch can change a setting without going through the menu
-// item that owns it: the Enter Command Line dialog, running a macro,
-// Graphics Settings, and the Redraw command. Everywhere else the rule in
-// QT_GUI_PLAN.md item 9 still holds: mirror the specific Dlg*, and where
-// Windows leaves a check mark stale, leave it stale.
+// Re-derive every menu check mark from the setting behind it, the
+// equivalent of Windows' RedoMenu(). Call it ONLY where Windows sets
+// wi.fMenuAll: Enter Command Line, a macro, Graphics Settings, Redraw.
+// Elsewhere see QT_GUI_PLAN.md item 9.
 //
-// The chart type radio is deliberately not in here. It has its own
-// machinery (SnapChartModeQt/SyncChartModeFromFlagsQt), which the two
-// arbitrary-switch callers already run either side of the switches.
-//
-// Note this is a pure read, which SyncRestrictMenuQt() is not: that one
-// re-derives each "Include <category>" flag from ignore[] and writes it
-// back, which is right after a restriction dialog and wrong here.
-// Windows' RedoMenu() only reads those flags (CheckMenu with us.fUranian
-// and the rest), and so does this. A command line that restricted a
-// whole category by hand must not have its us.f* flag switched off as a
-// side effect of the menus catching up -- that flag is a calculation
-// input, not just a check mark.
+// Excludes the chart type radio, which has its own machinery
+// (SnapChartModeQt/SyncChartModeFromFlagsQt). A pure read, unlike
+// SyncRestrictMenuQt(), which writes the "Include <category>" flags back
+// from ignore[]; those are calculation inputs, not just check marks.
 
 void RedoMenuQt()
 {
@@ -1612,18 +1510,14 @@ void SetChartModeQt(int mode)
 
   for (i = 0; i < cchartmode; i++)
     *rgchartmode[i].pf = fFalse;
-  // Two more that walking the table cannot reach. Windows clears a raw
-  // struct byte range here (us.fListing through us.fVelocity, plus
-  // us.fCredit through us.fLoop -- wdriver.cpp:1164), and that range
-  // holds fAtlasLook ("-N") and fZoneChange ("-Nz"), neither of which
-  // has an rgchartmode[] row. Both are ADDITIVE listings: charts1.cpp
-  // appends each to whatever the chart already printed. So left set they
-  // staple an atlas dump onto the end of every chart picked afterwards,
-  // for the rest of the session -- and this port has no menu item for
-  // either, so there is no way to turn them back off short of another
-  // command line. tools/backend_parity_audit.py derives that range from
-  // the struct and fails if a flag in it is neither in the table nor
-  // named here, so a new one upstream cannot slip past.
+  // Two the table cannot reach. Windows clears a raw struct byte range
+  // here, and it holds fAtlasLook ("-N") and fZoneChange ("-Nz"), which
+  // have no rgchartmode[] row. Both are ADDITIVE listings -- charts1.cpp
+  // appends each to whatever the chart already printed -- and this port
+  // has no menu item for either, so left set they staple an atlas dump
+  // onto every chart from then on. backend_parity_audit.py derives that
+  // range from the struct and fails if a flag in it is neither in the
+  // table nor named here.
   us.fAtlasLook = us.fZoneChange = fFalse;
   // DrawChartX() switches directly on gi.nMode with no fallback if it's 0,
   // and DetectGraphicsChartMode() (xscreen.cpp, normally what
@@ -1643,21 +1537,16 @@ void SetChartModeQt(int mode)
 }
 
 
-// Command switches set the us.f* chart-type flags directly, without going
-// through SetChartModeQt(), so nothing updates gi.nMode or the Chart menu
-// and the chart keeps drawing as whatever was last picked from a menu.
-// Windows has the same split and doesn't resolve it: after "-Z" its
-// RedoMenu() re-derives the menu radio but gi.nMode still isn't touched,
-// so its menu and its chart actively disagree. Rather than reproduce
-// that, snapshot the flags around the switches and, if they turned one
-// on, route it through SetChartModeQt() so the flags, gi.nMode and the
-// menu all end up agreeing.
+// Command switches set the us.f* chart-type flags directly, leaving
+// gi.nMode and the Chart menu on whatever was last picked. Snapshot the
+// flags around the switches, and route a newly set one through
+// SetChartModeQt() so flags, mode and menu agree. Windows has the same
+// split and leaves its menu and chart disagreeing.
 //
 // Snapshot-and-compare rather than deriving the mode from the flags
-// afterward, because a switch only sets its own flag and leaves the
-// previous mode's flag standing -- after "-Z" from a wheel chart both
-// fListing and fHorizon are true, and picking between them by priority
-// is guesswork. Which one is newly set is not.
+// afterward: a switch sets its own flag and leaves the previous one
+// standing, so after "-Z" from a wheel both fListing and fHorizon are
+// true. Which is newly set is unambiguous; which has priority is not.
 
 void SnapChartModeQt(flag *rgf)
 {
@@ -1714,22 +1603,12 @@ void SetRelQt(int rc)
   RecastAndRedrawQt();
 }
 
-// Windows runs cmdRelNo and cmdRelComparison through one shared toggle --
-// SetRel(us.nRel ? rcNone : rcDual), wdriver.cpp:1571 -- so either item
-// turns off a relationship chart of any kind, and turns comparison on when
-// there isn't one. That is why astrolog.rc gives both menu items the same
-// "c" accelerator (lines 309-310), and it is the only way back to a single
-// chart from the keyboard.
-//
-// Wiring each item to its own fixed mode looks right and is not: 'c' then
-// set rcDual unconditionally, so from Alt+Shift+N a user reached the
-// transit chart and could never leave it -- pressing 'c' again just set
-// comparison again. Confirmed against the real Windows build under Wine:
-// from transit mode, 'c' renders pixel-identical to the single chart it
-// started from, and a second 'c' gives comparison.
-//
-// fToggle marks the two items that share that toggle. Every other mode is
-// a plain set, as Windows has it.
+// Add one relationship chart type. fToggle marks the two items Windows
+// runs through a shared toggle -- SetRel(us.nRel ? rcNone : rcDual) -- so
+// either turns a relationship chart off, and turns comparison on when
+// there is none. Both carry the same "c" accelerator in astrolog.rc, and
+// that toggle is the only way back to a single chart from the keyboard.
+// Every other mode is a plain set.
 
 static QAction *AddRelAction(QMenu *pmenu, QActionGroup *pgroup,
   CONST char *szLabel, int rc, flag fToggle = fFalse)
@@ -1851,16 +1730,13 @@ void ApplyTitleBarThemeQt(QWidget *pw);
 
 // The interface theme submenu: System, Light, Dark, exclusive.
 //
-// A menu rather than a control in a dialog, because every dialog in this
-// port is generated from astrolog.rc by tools/rc2qt.py and audited against
-// it by four separate checks. A hand-added control would be a permanent
-// divergence in the one place this project keeps mechanically honest. The
-// menus are hand-built already, and Windows has no such setting to diverge
-// from -- it follows the OS and always has.
+// A menu rather than a dialog control: the dialogs are generated from
+// astrolog.rc and audited against it, so a hand-added control there would
+// be a permanent divergence. Windows has no such setting, since it
+// follows the OS.
 //
-// Exclusivity by hand rather than QActionGroup: that class lives in
-// QtWidgets on Qt5 and moved to QtGui in Qt6, and this file builds against
-// both. Three checkboxes and one lambda is cheaper than the #if.
+// Exclusivity by hand rather than QActionGroup, which moved from
+// QtWidgets to QtGui in Qt6 and this file builds against both.
 
 static void BuildThemeMenuQt(QMenu *pmenuWin)
 {
@@ -3133,26 +3009,13 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
 }
 
 
-// One animation frame. Advance the chart and redraw it.
+// One animation frame. Not reentrant: a cast can enter a nested event
+// loop -- a JPL Horizons fetch, or any modal it puts up -- where this
+// timer keeps firing, and a second tick would nest another cast inside
+// the first without bound.
 //
-// A TICK MUST NOT RUN INSIDE ANOTHER TICK, and it is not enough to say
-// so: casting a chart can enter a nested event loop, and this timer keeps
-// firing inside one. Two routes reach it.
-//
-// A "j<n>" custom object is fetched from JPL Horizons, and FGetUrlQt()
-// runs a nested QEventLoop while it waits. The tick fires inside that,
-// advances the chart, casts it at a NEW time -- which misses the reply
-// cache, because the time is part of the URL that keys it -- and starts
-// another fetch inside the first. A public web service answering in
-// 400ms against a 100ms frame interval nests four deep per frame and
-// does not stop: a stack of progress dialogs, each Cancel aborting only
-// its own level. The other route is any modal a cast puts up, a warning
-// box among them, which is the same shape with no network involved.
-//
-// The guard is one flag rather than stopping the timer, because a
-// stopped timer has to be restarted on every path out of the cast --
-// including the ones that throw a dialog -- and a missed restart leaves
-// the animation dead with no way back short of toggling it.
+// A flag rather than stopping the timer, which would have to be
+// restarted on every path out of the cast.
 
 static flag s_fAnimTickQt = fFalse;
 
@@ -3185,22 +3048,14 @@ static void StartAnimTimerQt(QMainWindow *pwind)
 }
 
 
-// Animation state.
+// Animation state. gs.nAnim carries two things: its magnitude is the jump
+// rate and its sign is whether animation is running, with gi.fPause a
+// second stop on top. The encoding is fixed by -Xn and saved settings, so
+// it is decoded here once and nowhere else in this file.
 //
-// Upstream stores two things in one int: the magnitude of gs.nAnim is the
-// jump rate, and its sign is whether animation is running. gi.fPause is a
-// second, independent stop on top of that. The encoding has to stay -- the
-// -Xn switch and saved settings both depend on it (xscreen.cpp:1814) --
-// but it is written down here once, and nothing else in this file reasons
-// about it. Six call sites used to open-code "(gs.nAnim < 0 ? -1 : 1) * x"
-// and "neg(gs.nAnim)", and a sign wrong in any of them is invisible until
-// something moves that shouldn't. Three of this port's animation bugs were
-// exactly that.
-//
-// Above this line there is one idea, not two: animation is running or it
-// isn't, and one control starts and stops it. There is no separate "arm
-// it first" step, which is a divergence from Windows and a deliberate one
-// -- see "Known divergences" in QT_GUI_PLAN.md.
+// One idea, not two: animation runs or it does not, and one control does
+// both. Windows has a separate "arm it first" step; see "Known
+// divergences" in QT_GUI_PLAN.md.
 
 static flag FAnimRunningQt(void) { return gs.nAnim >= 1 && !gi.fPause; }
 
@@ -3458,39 +3313,25 @@ static void BuildAstrologMenus(QMainWindow *pwind)
 }
 
 
-// Astrolog ships the astrology symbol fonts it draws with in font/, and
-// on Windows they are expected to be installed system wide. Register them
-// with Qt at startup instead, so selecting one in Graphics Settings works
-// out of the box on a machine that has never installed them. The family
-// names inside the files match rgszFontName[] exactly, which is what
+// Register the bundled astrology symbol fonts with Qt at startup, so
+// Graphics Settings can select one on a machine that never installed
+// them. The family names in font/ match rgszFontName[], which is what
 // DrawSzFont() looks them up by.
 //
-// Not bundled: Wingdings (proprietary, Windows only) and the plain text
-// families near the end of rgszFontName[] -- Arial, Courier New and so on
-// -- which come from the system if present. Qt substitutes something
-// readable when they aren't, which is the same thing Windows does.
+// Not bundled: Wingdings, and the plain text families at the end of
+// rgszFontName[], which come from the system if present.
 
-// Astrolog's Windows dialogs are laid out in units of the dialog font's
-// average character width, against MS Shell Dlg. A font whose strings run
-// wider than that per unit of average width doesn't fit the boxes the
-// resource gives them: measured across all 630 pieces of text in the
-// dialogs, this desktop's default overflows 168 of them where Liberation
-// Sans overflows 8. Liberation is metrically compatible with Arial and
-// close enough to MS Shell Dlg to lay out the same way, so the interface
-// uses it and the bundled copy means that holds on any machine.
+// Apply the interface font. Called at startup and again when Display
+// Settings closes, so a new face reaches the already built window.
 //
-// That is the default rather than the law: the user can pick any family
-// and size in Display Settings, beside the console font, and this is
-// what applies the choice. Called at startup and again from that dialog,
-// so a new face reaches the menus and the already built window without a
-// restart; what it takes to make that true on both Qt versions is at the
-// bottom of the function.
+// Liberation Sans by default: astrolog.rc lays dialogs out in units of
+// MS Shell Dlg's average character width, and Liberation is metrically
+// compatible enough to fit the same boxes. The user can pick any family
+// and size instead.
 //
-// The point size stays whatever the desktop asked for unless the user
-// says otherwise, so desktop scaling still applies with no preference
-// set. The desktop's own size is remembered on the first call, because
-// after the first change QApplication::font() reports what WE set and
-// "follow the desktop" would then mean "follow the last choice".
+// Size 0 means follow the desktop. The desktop's own size is remembered
+// on the first call: after a change, QApplication::font() reports what
+// this set, so re-reading it would mean "follow the last choice".
 QString StrMenuFontQt(void);
 int NMenuFontSizeQt(void);
 flag FMenuAntialiasQt(void);
@@ -3570,24 +3411,16 @@ static void LoadBundledFontsQt()
 }
 
 
-// Keyboard shortcuts, the Qt equivalent of Windows' "accelerator
-// ACCELERATORS" table in astrolog.rc (~line 3061). Astrolog's whole
-// single-keystroke interface lives there -- "v" to swap between graphics
-// and text, Alt+Shift+N for a transit chart, and so on -- and none of it
-// existed here until now.
+// Keyboard shortcuts, from the ACCELERATORS table in astrolog.rc.
+// Generated, not transcribed. Each names a menu bar item by label and
+// binds to that QAction, so nothing is reimplemented and Qt draws the
+// shortcut beside the item for free.
 //
-// Same approach as the context menus: every accelerator names a cmd* the
-// menu bar already implements, so these bind to the existing QAction by
-// its label rather than duplicating anything. A side benefit is that Qt
-// then renders the shortcut alongside the item in the menu, which
-// Windows does and this port previously didn't.
-//
-// Generated from the resource; the 96 macro F-keys are handled by
-// BuildMacroMenus() instead and excluded here. Twenty-three accelerators
-// are deliberately not bound because their commands are ones this port
-// doesn't implement on purpose -- the Setup submenu, the Window Settings
-// submenu, Print Setup, the wallpaper modes -- plus the four text
-// scrolling ones, which the text window's own scrollbar handles.
+// The 96 macro F-keys are BuildMacroMenus()' job and are excluded. A
+// fixed set is deliberately unbound -- commands this port does not
+// implement (Setup, Window Settings, Print Setup, wallpaper) plus the
+// four text-scrolling ones, which the scroll area handles. The suite's
+// "hotkeys" group asserts that exact set.
 
 typedef struct {
   CONST char *szKey;      // Qt key sequence text.
@@ -3865,18 +3698,13 @@ static CONST HOTKEY rghotkeyQt[] = {
 #include "qtrcaccel.h"
 #include "qtrccmd.h"
 
-// Windows hands every menu choice to one WM_COMMAND switch, and applies
-// the "-~WQ" AstroExpression (us.szExpMenu) to the command id before the
-// switch runs -- so an expression can veto a command or swap it for
-// another. This port binds each action to its own handler and had no id
-// to hand over, which is why the hook was unimplemented.
-//
-// ConnectMenuQt() supplies the missing half without giving every call
-// site a command constant: it looks the id up from the action's own
-// label, and records the handler against that id so a substituted
-// command can be dispatched to the right place. Actions whose label is
-// not in the resource (the runtime-renamed macros, the website links)
-// get a plain connection and simply do not take part.
+// Windows applies the "-~WQ" AstroExpression (us.szExpMenu) to a command
+// id before dispatching it, so an expression can veto a command or swap
+// it for another. This port binds each action to its own handler, so
+// ConnectMenuQt() looks the id up from the action's label and records the
+// handler against it, letting a substituted command reach the right
+// place. Actions whose label is not in the resource -- renamed macros,
+// website links -- get a plain connection and do not take part.
 static QVector<QPair<int, std::function<void()> > > s_rgcmdfnQt;
 
 static int NCmdFromLabelQt(CONST QString &str)
@@ -3895,17 +3723,11 @@ static void ConnectMenuQt(QAction *pa, QObject *pctx,
 {
   int cmd = NCmdFromLabelQt(pa->text());
 
-  // fRegister is fFalse for context menu entries, and has to be. This
-  // list exists so an AstroExpression that answers with a DIFFERENT
-  // command id can find that command's handler, and every command
-  // already has a menu bar entry that registered one at startup --
-  // BuildAstrologMenus() runs once. A context menu is rebuilt on every
-  // right click and deleted when it closes, so registering its entries
-  // appended to this list forever: 14 of the 411 context labels resolve
-  // to a command id, so a session of right clicking grew it without
-  // bound. Nothing broke, because the menu bar entries were appended
-  // first and the lookup below takes the first match -- it just grew,
-  // and the scan with it.
+  // fRegister must be fFalse for context menu entries. This list lets an
+  // AstroExpression naming a different command id find that command's
+  // handler, and the menu bar registered one for every command at
+  // startup. A context menu is rebuilt on every right click, so
+  // registering its entries would grow this list without bound.
   if (cmd > 0 && fRegister)
     s_rgcmdfnQt.append(qMakePair(cmd, fn));
   QObject::connect(pa, &QAction::triggered, pctx, [cmd, fn]() {
@@ -3937,18 +3759,14 @@ CONST RCACCEL *PaccelTestQt() { return rgaccelQt; }
 int CaccelTestQt() { return caccelQt; }
 #endif
 
-// Show the accelerator column the way Windows shows it. Qt renders that
-// column from the QKeySequence, spelling every modifier out -- "Shift+V",
-// "Alt+Shift+O" -- while astrolog.rc writes the string Windows draws
-// verbatim after a "\t", capitalising a letter to mean Shift: "V",
-// "Alt+O". Same keys either way, but the notation is on every menu, every
-// time, and a Windows user reads it on every item.
+// Show the accelerator column the way Windows shows it: astrolog.rc
+// writes the string verbatim after a "\t", capitalising a letter to mean
+// Shift ("V", "Alt+O"), where Qt would spell every modifier out.
 //
-// A tab in a QAction's text is what Qt checks *first* when painting a
-// menu row, ahead of the shortcut, so appending the resource's own string
-// replaces the rendering without touching what the shortcut does. The
-// label stays the item's identity: everything here finds an action by its
-// label, so the lookups compare only up to the tab.
+// Qt paints a tab in a QAction's text ahead of the shortcut, so appending
+// the resource's own string replaces the rendering without touching what
+// the shortcut does. The label stays the item's identity, so lookups
+// compare only up to the tab.
 static void ApplyAccelTextQt(QMainWindow *pwind)
 {
   int i;
@@ -3990,24 +3808,17 @@ static void ApplyHotkeysQt(QMainWindow *pwind)
 
 
 
-// Right-click context menus, the Qt equivalent of Windows' DoPopup()
-// dispatch from WM_RBUTTONDOWN (wdriver.cpp). Windows keeps one menu
-// resource per chart type in astrolog.rc (menuV, menuG, menuZ and the
-// rest, from ~line 607) and picks between them on gi.nMode.
+// Right-click context menus, the equivalent of Windows' DoPopup()
+// dispatch from WM_RBUTTONDOWN. One table per chart type, picked on
+// gi.nMode, generated from the menu resources in astrolog.rc.
 //
-// Every entry in those resources is an ordinary cmd* command that the
-// menu bar already implements, so rather than duplicate any behaviour
-// these tables name the *menu bar item* each entry should act through,
-// by its label. PmenuBuildContextQt() then looks that item up and builds
-// a proxy action that forwards to it and mirrors its checkmark. That
-// keeps one implementation and one piece of state per command, which
-// matters because most of these are toggles.
-//
-// The indirection is needed because Windows gives the same command a
-// different label depending on which context menu it appears in --
-// cmdChartModify is "Draw Houses Same Size" on a Western wheel and
-// "Toggle North Indian" on an Indian one -- so the context label can't
-// simply be the menu bar item's own text.
+// Each entry names the menu bar item to act through, by label;
+// PmenuBuildContextQt() builds a proxy that forwards to it and mirrors
+// its check mark, so there is one implementation and one piece of state
+// per command. The indirection is needed because Windows gives the same
+// command different labels in different context menus -- cmdChartModify
+// is "Draw Houses Same Size" on a Western wheel and "Toggle North
+// Indian" on an Indian one.
 
 typedef struct {
   CONST char *szLabel;    // What this context menu calls the command.
@@ -4745,17 +4556,12 @@ public:
     return QProxyStyle::styleHint(hint, popt, pw, pret);
   }
 
-  // Fusion draws a checkbox or radio outline by DARKENING the window
-  // colour, which is right on a light desktop and invisible on a dark
-  // one -- the toggle beside a menu item came out #2a2a2a on #353535,
-  // black on black. Qt has a fallback for exactly this and it never
-  // fires: it asks whether the window colour's lightness is 0, which is
-  // true only of pure black.
-  //
-  // So on a dark palette these two primitives are drawn with a lightened
-  // copy of it, which is where Fusion reads the outline and the box fill
-  // from. Nothing else is touched, and a light palette or a style that is
-  // not Fusion takes the ordinary path.
+  // Fusion draws a checkbox or radio outline by darkening the window
+  // colour, which is invisible on a dark one -- and its own fallback
+  // fires only when the window colour is pure black. So on a dark
+  // palette draw these two primitives with a lightened copy of it, which
+  // is where Fusion reads the outline and box fill from. A light palette
+  // or a non-Fusion style takes the ordinary path.
   void drawPrimitive(PrimitiveElement pe, CONST QStyleOption *popt,
     QPainter *ppaint, CONST QWidget *pw = NULL) const override
   {
@@ -4801,21 +4607,13 @@ private:
 };
 
 
-// Linux has no single place to ask "is the desktop in dark mode?", and Qt5
-// has no API for it at all: QStyleHints::colorScheme() only arrived in Qt
-// 6.5, and what it does there is read the XDG desktop portal -- the
-// cross-desktop standard every current desktop publishes. So read the
-// portal directly, and fall back to each desktop's own setting for the
-// ones that don't run one. Everything here stays inside the Qt 5.12 API,
-// which is the oldest of the Ubuntu LTS releases this fork targets.
+// Is the desktop in dark mode? Qt5 has no API for it, and its gtk3
+// platform theme supplies no palette, so whether a machine looked right
+// came down to which style plugin happened to be installed.
 //
-// This is needed because Qt5's gtk3 platform theme plugin loads and then
-// supplies no palette. Verified on Mint/Cinnamon with QT_DEBUG_PLUGINS:
-// libqgtk3.so loads, and the palette stays Qt's default light #efefef
-// while the desktop sits on Mint-L-Dark. The gtk2 plugin does supply one
-// (#383838 there), so whether a machine looks right comes down to whether
-// qt5-style-plugins happens to be installed. Detecting it ourselves ends
-// that lottery.
+// Read the XDG desktop portal directly -- which is what Qt 6.5's
+// QStyleHints::colorScheme() does -- and fall back to each desktop's own
+// setting where none runs. Stays inside the Qt 5.12 API.
 
 #define nSchemeNone  (-1)
 #define nSchemeLight 0
@@ -4919,18 +4717,10 @@ static int NSchemeFromXfceQt(void)
 }
 
 
-// Read one key out of an INI-style file.
-//
-// Written by hand rather than with QSettings, for two reasons, both found
-// the hard way on Qt 5.15.13. QSettings cannot read a key whose section
-// name contains a colon -- which is exactly kdeglobals' [Colors:Window]:
-// allKeys() lists "Colors:Window/BackgroundNormal" and passing that very
-// string back to value() returns an empty variant, as do beginGroup() and
-// a percent-encoded key. And QSettings caches parsed files by timestamp
-// and size, so a file rewritten inside the same second to a value of the
-// same length reads back stale. The first bug silently reports every KDE
-// desktop as light; the second only shows up under test, but both are
-// invisible at the call site.
+// Read one key out of an INI-style file. By hand rather than QSettings,
+// which cannot read a section name containing a colon -- kdeglobals'
+// [Colors:Window] -- and which caches parsed files by timestamp and size,
+// so one rewritten within a second to a same-length value reads stale.
 
 static QString SzIniValueQt(CONST QString &strPath, CONST char *szSect,
   CONST char *szKey)
@@ -5015,18 +4805,10 @@ static int NSchemeFromGtkFileQt(void)
 // Cheapest and most explicit first, then the standard, then per desktop,
 // then the files that need no helper program at all.
 
-// The interface settings -- the theme, and the two fonts -- live in
-// astrolog.as with everything else, reached through -WI, -WF and -WG.
-//
-// They used to be in a QSettings file of their own, on the reasoning that
-// window chrome is not an astrological setting. That bought nothing and
-// cost a second configuration file in a different place on each platform:
-// ~/.config/Astrolog/Astrolog.ini on Linux, elsewhere on Windows and
-// macOS. Astrolog already has a settings file that is the same file
-// everywhere, that the user already knows how to edit, and that "File /
-// Save Program Settings" already writes -- so these belong in it, and a
-// GUI-only switch sitting in astrolog.as is not new either: -WN, -Wx and
-// -Ww have always done exactly that.
+// The interface settings -- the theme and the two fonts -- live in
+// astrolog.as with everything else, as -WI, -WF and -WG. One settings
+// file on every platform; -WN, -Wx and -Ww are GUI-only switches that
+// have always lived there too.
 //
 // The accessors below are the whole interface to these values; nothing
 // outside this file touches qi's fields directly.
@@ -5395,18 +5177,13 @@ void ApplyColorSchemeQt(void)
 }
 
 
-// Windows draws a window's title bar itself, and hands an application a
-// light one unless it asks otherwise -- so every dark dialog came up
-// under a white header. DWMWA_USE_IMMERSIVE_DARK_MODE is the ask: 20
-// since Windows 10 20H1, 19 in 1809, and nothing at all before that,
-// where the call is simply refused and the bar stays as it was.
+// Ask Windows for a dark title bar: DWMWA_USE_IMMERSIVE_DARK_MODE, 20
+// since Windows 10 20H1 and 19 in 1809, refused before that. Resolved by
+// name through QLibrary so the build needs no new library and this file
+// needs no windows.h, whose macros collide with the core's.
 //
-// Resolved by name through QLibrary rather than linked, so the build
-// needs no new library and this file needs no windows.h -- which on this
-// tree is worth avoiding, since the core's own macros collide with it.
-// A no-op everywhere else: on Linux the title bar belongs to the window
-// manager, which follows the desktop's own theme and takes no
-// instruction from a client.
+// A no-op elsewhere: on Linux the title bar belongs to the window
+// manager, which takes no instruction from a client.
 
 // A COLORREF, which is 0x00BBGGRR -- the reverse byte order of every
 // other colour in this file, and the sort of thing that is wrong until
@@ -5503,12 +5280,9 @@ void FinalizeQt(void)
   }
 
   // The two interface font names, cloned by SetConsoleFontQt() and
-  // SetMenuFontQt() through FCloneSz() -- which allocates through
-  // PAllocate(), so an unfreed one is counted by the exit-time check in
-  // astrolog.cpp. They arrived with -WF/-WG on 2026-09-06 and this was
-  // not updated, so a settings file naming both fonts produced exactly
-  // "Number of memory allocations not freed before exiting: 2" on every
-  // quit. Reported from a real session.
+  // SetMenuFontQt() through FCloneSz(), which allocates through
+  // PAllocate() -- so an unfreed one is counted by the exit-time check in
+  // astrolog.cpp and reported as an unfreed allocation on every quit.
   DeallocatePIf(qi.szFontCon);
   qi.szFontCon = NULL;
   DeallocatePIf(qi.szFontMen);
@@ -5522,41 +5296,18 @@ void FinalizeQt(void)
 ******************************************************************************
 */
 
-// Astrolog needs to fetch exactly one thing: a body's positions from JPL
-// Horizons, for the "j<n>" custom object definition. Upstream does that by
-// handing a sprintf'd command line to system() and shelling out to wget --
-// which means an undeclared dependency on wget being installed, a shell
-// string built from a URL, no timeout, and a completely frozen window for
-// however long the network takes.
+// Fetch a URL to a file. Astrolog needs exactly one: a body's position
+// from JPL Horizons, for a "j<n>" custom object. Qt Network replaces
+// upstream's shell-out to wget, which had no timeout and no TLS.
 //
-// None of that is necessary here. Qt Network is part of the same Qt this
-// build already requires, under the same licence as the modules already
-// linked, and it speaks TLS -- which matters, because the Horizons URL is
-// https and so a plain-HTTP client would not do.
+// Synchronous by contract -- ComputeEphem() cannot draw without the
+// answer -- but implemented with a nested event loop, so the window keeps
+// painting and can offer a Cancel button.
 //
-// The call has to *look* synchronous, because its shared callers are: one
-// of them is inside ComputeEphem() and a chart genuinely cannot be drawn
-// without the position. So this runs a nested event loop rather than
-// blocking, which is the difference between a window that keeps painting
-// and offers a Cancel button, and one the desktop greys out and offers to
-// kill.
+// qi.pnam is one manager for the session, not one per fetch: Qt pools
+// connections per manager, so the TLS handshake is paid once per host.
 
 #define cmsGetUrlQt 30000       // Give up on a fetch after this long.
-
-// One manager for the whole session, not one per fetch.
-//
-// Qt pools connections and keeps them alive per manager, so a persistent
-// one costs a TCP connection and a TLS handshake once and reuses them for
-// every later request to the same host. A local manager -- which is what
-// this was at first -- throws that away and pays a fresh handshake for
-// every object looked up, which is exactly the waste the cache below it
-// exists to avoid.
-//
-// The server does not offer HTTP/2 (its ALPN advertises http/1.1 only),
-// so there is no multiplexing to be had; the attribute is set anyway so
-// this picks it up for free if that ever changes. Pipelining would not
-// help either way: each fetch runs to completion before the next starts,
-// so there is never more than one request in flight to pipeline.
 flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
 {
   QEventLoop evloop;
@@ -5712,18 +5463,14 @@ static void MessageFilterQt(QtMsgType typ, CONST QMessageLogContext &ctx,
 #endif
 
 
-// Windows gives its window the astrlog1.ico artwork, through the "icon"
-// resource that astrolog.rc deliberately lists first so the application
-// icon "remains consistent on all systems" (wdriver.cpp:572). Qt has no
-// resource script, so the same artwork is loaded from disk: the three PNG
-// sizes this fork extracts from that .ico for its desktop entry, and the
-// .ico itself when they are not there. Both are looked for beside the
-// executable and then in the working directory, which is where
-// PixAstrologIconQt() and the bundled fonts already look.
+// The application icon, from astrlog1.ico's artwork. Qt has no resource
+// script, so it is loaded from disk: the three PNG sizes this fork
+// extracts for its desktop entry, falling back to the .ico. Looked for
+// beside the executable and then in the working directory, as
+// PixAstrologIconQt() and the bundled fonts are.
 //
-// Not static because the suite checks it: an icon that silently fails to
-// load leaves a window that looks exactly like one that never asked for
-// an icon at all, which is how this went unnoticed until now.
+// Not static because the suite checks it: an icon that fails to load
+// looks exactly like one that was never asked for.
 
 QIcon IconAstrologQt()
 {
@@ -5763,24 +5510,11 @@ void BeginQt()
   s_pfnMsgPrevQt = qInstallMessageHandler(MessageFilterQt);
 #endif
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-  // Qt6 always enables high-DPI scaling -- the attributes that used to
-  // turn it off were removed -- and it changed the default rounding
-  // policy from Round to PassThrough, so a fractional screen scale is
-  // applied as-is instead of being rounded to a whole number.
-  //
-  // Measured on a 115 DPI display: the Qt5 build reports devicePixelRatio
-  // 1.0 and a 1600x2560 screen; the Qt6 build, with nothing else changed,
-  // reports 1.1979 and 1336x2137. Everything drew about 20% larger, which
-  // is what a user sees as "magnified".
-  //
-  // Round is the right answer twice over. It is what Qt5 defaulted to, so
-  // the two builds agree; and the Windows build does no fractional
-  // scaling at all, so it is also what parity means here. It matters more
-  // than usual for this program because the chart is laid out in whole
-  // character cells (SetTextMetricsQt), and a fractional factor puts
-  // those cell boundaries between pixels.
-  //
-  // Must precede the QApplication constructor; it is ignored afterwards.
+  // Qt6 defaults to PassThrough, so a fractional screen scale is applied
+  // as-is; Qt5 and the Windows build round. Round here so all three
+  // agree, and because the chart is laid out in whole character cells
+  // (SetTextMetricsQt) that a fractional factor puts between pixels.
+  // Must precede the QApplication constructor; ignored afterwards.
   QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
     Qt::HighDpiScaleFactorRoundingPolicy::Round);
 #endif
@@ -5824,23 +5558,14 @@ void BeginQt()
 }
 
 
-// Destroy the window and the application, in that order, before the
-// process exits. Qt wants its widgets gone before the QApplication and
-// the QApplication gone before the thread that made it ends; exit() ends
-// the thread with both still alive, and Qt6 says so out loud:
+// Destroy the window and then the application, before the process exits.
+// Qt wants its widgets gone before the QApplication and the QApplication
+// gone before the thread that made it; exit() ends the thread with both
+// alive, which Qt6 reports as "QThreadStorage: entry destroyed before end
+// of thread".
 //
-//     QThreadStorage: entry 2 destroyed before end of thread 0x...
-//     QThreadStorage: entry 1 destroyed before end of thread 0x...
-//
-// twice on every clean exit, which is what the maintainer saw. Qt5 tears
-// the same state down without complaining, so this was invisible until
-// the Qt6 build existed. Measured both ways: with this, the Qt6 build
-// prints neither line, and the suite still reports 3561 of 3561.
-//
-// Both exit paths come through here -- the real binary from EndQt(),
-// which xscreen.cpp's EndX() calls once exec() returns, and the test
-// binary from below, which never reaches EndX() because it exits from
-// inside InteractQt().
+// Both exit paths come through here: the real binary from EndQt(), and
+// the test binary, which exits from inside InteractQt().
 
 void ShutdownQt()
 {
@@ -5857,10 +5582,8 @@ void ShutdownQt()
 }
 
 
-// Hand control over to Qt once the window is up, analogous to InteractX()'s
-// XNextEvent() loop for X11, except here Qt itself drives all further
-// keyboard, mouse, menu, and dialog interaction; this call blocks until the
-// user quits (e.g. via File / Quit, which closes the main window).
+// Hand control to Qt once the window is up, the counterpart of X11's
+// InteractX(). Blocks until the main window closes.
 
 void InteractQt()
 {
