@@ -447,6 +447,58 @@ log item 159, pinned by `.gitattributes` and checked by
 `tools/line_endings_audit.py`. Upstream's tarball is not, so expect the
 diff itself to be noisy.
 
+15. **Fifteen preferences that cannot be saved, and what it would take.**
+    *(Open, and waiting on a decision rather than on work. Raised
+    2026-09-07 after work log items 202-205 closed everything else in the
+    configuration.)*
+
+    A display preference spelt as a **sub-letter of a chart type switch**
+    is toggled by the same prefix that selects the chart, so there is no
+    spelling that saves the preference alone. Checked rather than assumed:
+    each of these fields is assigned at exactly one site in `switch.cpp`,
+    and none has an alternative spelling.
+
+    | field | switch | what it also toggles |
+    |---|---|---|
+    | `us.fWheelReverse` | `-w0` | `us.fWheel` |
+    | `us.fGridConfig` | `-g0` | `us.fGrid` |
+    | `us.fGridMidpoint` | `-gm` | `us.fGrid` |
+    | `us.fAspSummary` | `-a0` | `us.fAspList` |
+    | `us.fDistance` | `-ad` / `-gd` | the chart type |
+    | `us.fParallel` | `-ap` / `-gp` | the chart type |
+    | `us.fMidSummary` | `-m0` | `us.fMidpoint` |
+    | `us.fPrimeVert` | `-Z0` | `us.fHorizon` |
+    | `us.fLatitudeCross` | `-L0` | `us.fAstroGraph` |
+    | `us.fArabicFlip` | `-P0` | `us.fArabic` |
+    | `us.fCalendarYear` | `-Ky` | `us.fCalendar` (`SWITCHFLAG.pf2`) |
+    | `us.fInfluenceSign` | `-j0` | `us.fInfluence` (same) |
+    | `us.fSectorApprox` | `-l0` | `us.fSector` (same) |
+    | `us.fMoonChartSep` | `-80` | `us.fMoonChart` (same) |
+    | `gs.fSouth` | `-XX0`/`-XG0`/`-XP0` | `gi.nMode` |
+    | `gs.fMollweide` | `-XW0` | `gi.nMode` |
+
+    Twelve of them are set by a *settings* dialog, so a user unticks
+    "Show aspect summary" in Chart Settings, saves, restarts, and finds it
+    back on. `settings-fields` carries all sixteen in its ledger, so they
+    are recorded rather than forgotten.
+
+    **Three ways out, none of which should be taken without the
+    maintainer choosing one**, because each adds switch surface:
+
+    - **A `-Y` spelling each**, e.g. `-Yw0`, `-Yg0`, `-Ya0`. Readable in a
+      settings file, sixteen new rows in the registry, and sixteen lines
+      in `-H`. The most in keeping with how the rest of the file reads.
+    - **One packed field**, the way `:YXf #%06x` carries the six font
+      choices. One new switch and one line in the file, opaque to a person
+      editing it by hand.
+    - **Leave them**, and say so in the dialogs. Cheapest, and the only
+      option that ships nothing new.
+
+    What is NOT a way out, and was tried on paper first: writing
+    `=g0` and then `_g` to undo the chart type. It works, and it makes
+    every settings file turn those chart types off -- which "File / Open"
+    of a settings file would then do mid-session, in front of the user.
+
 ## How this fork's Qt backend works
 
 - **Multi-backend selection**: `astrolog.h` uses `#ifdef X11` / `WIN` /
