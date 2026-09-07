@@ -335,6 +335,22 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
   // the decrement is at LDone.
   static int cFileDepth = 0;
 
+#ifdef QT
+  // Graphics mode is view state in a GUI build, not a setting, so a
+  // settings file does not get to change it here. The Qt window is created
+  // inside FActionX(), which Action() only reaches when us.fGraphics is
+  // set, so a file saved while a text chart was displayed carries "_X" and
+  // the next "astrolog-qt -i <file>" prints nothing and exits. Windows
+  // cannot hit this: WinMain() brings its window up before Action() runs,
+  // and us.fGraphics only picks the renderer inside it.
+  //
+  // Saved and restored around the whole body, so a nested -i restores what
+  // its own caller had. A command line "_X" still works -- that is not a
+  // file, and it is what the startup probes in run-qt-tests.sh use to run
+  // this build to completion with no window.
+  flag fGraphicsSav = us.fGraphics;
+#endif
+
   // Open a file if don't already have one.
   fHaveFile = (file != NULL);
   if (!fHaveFile) {
@@ -404,6 +420,9 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
   fRet = fTrue;
 
 LDone:
+#ifdef QT
+  us.fGraphics = fGraphicsSav;
+#endif
   if (fDepth)      // Only if this call actually took a level.
     cFileDepth--;
   if (szLine != rgchLine)
@@ -1568,6 +1587,10 @@ flag FOutputSettings()
   sprintf2(S(sz), "-A %d    ", us.nAsp); PrintFSz();
   PrintF(
     "; Number of aspects         [Change \"5\" to desired number      ]\n");
+  sprintf2(S(sz), "-RO %.3s ", us.objRequire >= 0 ? szObjName[us.objRequire] :
+    "None"); PrintFSz();
+  PrintF(
+    "; Require object in aspects [\"None\", or an object to require   ]\n");
   i = us.nHouseSystem; sprintf2(S(sz), "-c %.4s ", i == hsEqualMC ?
     rgSystem[1].sz : (i == hsSineDelta ? rgSystem[3].sz : szSystem[i]));
   PrintFSz();
@@ -1576,6 +1599,38 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cc3     ", ChDashF(us.fHouse3D)); PrintFSz();
   PrintF(
     "; 3D house boundaries       [\"=c3\" is 3D houses, \"_c3\" is 2D   ]\n");
+  // The plane as well as the flag: NSwc() sets us.nHouse3D from the
+  // argument and ends in SwitchF(us.fHouse3D), which the line above
+  // already carries. ":" sets the value and leaves the flag alone.
+  sprintf2(S(sz), ":c3 %d   ", us.nHouse3D); PrintFSz();
+  PrintF(
+    "; 3D houses plane           [\"1\" prime vert., \"2\" horiz, \"3\" eq]\n");
+  sprintf2(S(sz), "-x %.3f ", us.rHarmonic); PrintFSz();
+  PrintF(
+    "; Harmonic chart factor     [Change \"1\" to desired harmonic    ]\n");
+  sprintf2(S(sz), "-4 %d    ", us.nDwad); PrintFSz();
+  PrintF(
+    "; Dwad nesting level        [Change \"1\" to desired nesting     ]\n");
+  // The solar chart object, its "on Midheaven" variant and the "start of
+  // sign" suffix are one switch: "-1"/"-2" with an optional "0". "_1"
+  // spells none, since NSwOnAsc() zeroes both fields when fAnd is set.
+  //
+  // The object is written even in the none case, and has to be. NSwOnAsc()
+  // parses its optional argument before it looks at fAnd, and NParseSz()
+  // answers 0 for any one-character token -- its "not a number" guard sits
+  // inside a "cch >= 2" test -- so a bare "_1" swallows the ";" that starts
+  // this line's comment and the next word is read as a switch.
+  //
+  // us.fSolarWhole with no object is the one state this cannot carry: the
+  // "0" suffix means "start of sign" and NSwOnAsc() forces the flag false
+  // whenever fAnd zeroes the object. It is inert there anyway -- calc.cpp
+  // reads it only inside "if (us.objOnAsc)".
+  sprintf2(S(sz), "%c%c%s %.3s ", us.objOnAsc == 0 ? '_' : '-',
+    us.objOnAsc >= 0 ? '1' : '2', us.fSolarWhole ? "0" : "",
+    szObjName[us.objOnAsc == 0 ? oSun : NAbs(us.objOnAsc)-1]);
+  PrintFSz();
+  PrintF(
+    "; Solar chart object        [\"_1\" none, \"-1\"/\"-2\" Asc/MC, 0=sign]\n");
   sprintf2(S(sz), "%ck      ", ChDashF(us.fAnsiColor)); PrintFSz();
   PrintF(
     "; Ansi color text           [\"=k\" is color, \"_k\" is monochrome ]\n");
@@ -1659,6 +1714,10 @@ flag FOutputSettings()
     (char)us.nArabicSort, us.nArabicParts); PrintFSz();
   PrintF(
     "; Arabic parts, sort order  [\"i\" index, \"z\" zodiac, \"n\" name  ]\n");
+  sprintf2(S(sz), ":U%c     ", us.nStarSort <= 0 ? 'i' :
+    (char)us.nStarSort); PrintFSz();
+  PrintF(
+    "; Star sort order           [\"i\" index, \"z\" zodiac, \"n\" name  ]\n");
   sprintf2(S(sz), ":N %d   ", us.nAtlasList); PrintFSz();
   PrintF(
     "; Atlas rows to list        [Change to desired number of cities ]\n");
@@ -1680,6 +1739,9 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cYs     ", ChDashF(us.fSidereal2)); PrintFSz();
   PrintF(
     "; Use plane of solar system [\"_Ys\" is ecliptic, \"=Ys\" is solar ]\n");
+  sprintf2(S(sz), "%cYm     ", ChDashF(us.fMoonMove)); PrintFSz();
+  PrintF(
+    "; Moons orbit central obj   [\"=Ym\" orbits it, \"_Ym\" doesn't   ]\n");
   sprintf2(S(sz), "%cYn     ", ChDashF(us.fTrueNode)); PrintFSz();
   PrintF(
     "; Which Nodes and Lilith    [\"_Yn\" shows mean, \"=Yn\" shows true]\n");
@@ -2167,6 +2229,25 @@ flag FOutputSettings()
   sprintf2(S(sz), ":XL%d            ", gs.nLabelCity); PrintFSz();
   PrintF(
     "; Atlas city coloring       [\"1\" through \"5\", when -XA is on   ]\n");
+  sprintf2(S(sz), "%cX8              ", ChDashF(gs.fMoonWheel)); PrintFSz();
+  PrintF(
+    "; Moons in wheels[\"=X8\" orbits the planet, \"_X8\" doesn't  ]\n");
+  // NSwXU() ends in SwitchF(gs.fAllStar), which is a chart type toggle
+  // and not a saved setting, so ":" again -- the two bits land and the
+  // toggle is left where it was.
+  sprintf2(S(sz), ":XU%d             ", gs.nAllStar); PrintFSz();
+  PrintF(
+    "; Star dot, name [\"0\" neither, \"1\" dot, \"2\" name, \"3\" both]\n");
+  // "_X1" spells none: NSwX1Or2() zeroes gs.objLeft when fAnd is set and
+  // takes no argument in that case.
+  if (gs.objLeft == 0)
+    sprintf2(S(sz), "_X1              ");
+  else
+    sprintf2(S(sz), ":X%c %.3s          ", gs.objLeft > 0 ? '1' : '2',
+      szObjName[NAbs(gs.objLeft)-1]);
+  PrintFSz();
+  PrintF(
+    "; Rotate wheel   [\"_X1\" none, \"-X1\" left edge, \"-X2\" top   ]\n");
   sprintf2(S(sz), ":Xk %s          ", SzColor2(gi.kiPen)); PrintFSz();
   PrintF(
     "; Pen scribble color\n");

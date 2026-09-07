@@ -110,6 +110,14 @@
 :N 9                    ; EXPECT ^:N 9
 -Yb 11                  ; EXPECT ^-Yb 11
 :XL4                    ; EXPECT ^:XL4
+-RO Mar                 ; EXPECT ^-RO Mar
+:c3 3                   ; EXPECT ^:c3 3
+-x 5                    ; EXPECT ^-x 5\.000
+-4 3                    ; EXPECT ^-4 3
+:Uz                     ; EXPECT ^:Uz
+:XU3                    ; EXPECT ^:XU3
+-10 Ven                 ; EXPECT ^-10 Ven
+:X2 Jup                 ; EXPECT ^:X2 Jup
 -zj "Fixture Name" "Fixture Place"  ; EXPECT ^-zj "Fixture Name"
 :sd                     ; EXPECT ^:sd
 ; :YXf has no fixture line either: the writer emits the aggregate

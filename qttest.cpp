@@ -1340,6 +1340,7 @@ extern QStringList RgstrMenuFontQt(void);
 extern flag FMenuAntialiasQt(void);
 extern void SetMenuAntialiasQt(flag f);
 extern void ApplyUiFontQt(void);
+extern void ScheduleUiFontReapplyQt(void);
 extern QString StrThemePrefQt(void);
 extern void SetThemePrefQt(CONST char *);
 extern void ApplyColorSchemeQt(void);
@@ -1913,6 +1914,33 @@ static void TestConsoleFontQt()
     "a widget already built follows it");
   Check(pmb->font().family() == QString("JetBrains Mono"),
     "and so does a menu bar, which the platform themes claim");
+
+  // A platform theme is allowed to apply ITS font after the event loop
+  // starts -- qt5ct posts applySettings() as a queued call from its
+  // constructor -- and that throws away what BeginQt() set. Measured with
+  // QT_QPA_PLATFORMTHEME=qt5ct: the chosen face at the end of startup,
+  // the desktop's one turn of the loop later, which is exactly why the
+  // menus came up wrong and closing Display Settings put them right.
+  // ScheduleUiFontReapplyQt() is the answer, so play the theme's part
+  // here and require the schedule to win.
+  QApplication::setFont(QFont("Liberation Serif", 9));
+  Check(QApplication::font().family() != QString("JetBrains Mono"),
+    "a theme applying its own font does take effect");
+  ScheduleUiFontReapplyQt();
+  for (i = 0; i < 20; i++)
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+  Check(QApplication::font().family() == QString("JetBrains Mono"),
+    "and the deferred re-apply takes the interface font back");
+
+  // And a menu bar built AFTER the change, which is the startup order:
+  // the settings file is read, ApplyUiFontQt() runs, and only then does
+  // BuildAstrologMenus() create the menus. A platform theme registers its
+  // QMenuBar font as a CLASS default, and a class default outranks the
+  // plain application font for a widget created later -- so a face that
+  // reached the menus on screen need not reach the ones built next.
+  QMenuBar *pmbLate = new QMenuBar(&wOpen);
+  Check(pmbLate->font().family() == QString("JetBrains Mono"),
+    "and a menu bar built after the change starts out with it");
 
   // Smoothing, which is why this exists: the console font asks for
   // antialiasing by name and the interface one did not, so on a desktop
@@ -5245,6 +5273,46 @@ static void TestNestedIncludeQt()
 }
 
 
+// Graphics mode is view state, not a setting, and a settings file must not
+// be able to turn the GUI off. "Save Program Settings" with a text chart on
+// screen writes "_X"; the window is created inside FActionX(), which
+// Action() only reaches when us.fGraphics is set, so before the fix
+// "astrolog-qt -i <that file>" printed nothing and exited. Two-sided: the
+// same "_X" straight from a command line still has to work, because that is
+// how run-qt-tests.sh runs this build to completion with no window.
+static void TestGraphicsModeSourceQt()
+{
+  char szFile[cchSzMax];
+  CONST char *rgsz[3];
+  FILE *file;
+  flag fSav = us.fGraphics, fPopupSav = FNoPopupQt();
+
+  Group("Graphics mode source");
+  SetNoPopupQt(fTrue);
+  sprintf2(S(szFile), "%s/astrolog-qt-gfx-%d.as",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+  file = fopen(szFile, "w");
+  fprintf(file, "@AD800  ; graphics mode\n"
+    "_X               ; Graphics chart display [\"_X\" is text]\n");
+  fclose(file);
+
+  us.fGraphics = fTrue;
+  Check(FProcessSwitchFile(szFile, NULL), "a file holding \"_X\" loads");
+  Check(us.fGraphics, "and it did not turn the GUI off");
+
+  rgsz[0] = szAppNameCore; rgsz[1] = "_X"; rgsz[2] = NULL;
+  Check(FProcessSwitches(2, (char **)rgsz, NULL),
+    "\"_X\" on a command line is accepted");
+  Check(!us.fGraphics, "and there it still selects text mode");
+
+  us.fGraphics = fSav;
+  SetNoPopupQt(fPopupSav);
+  remove(szFile);
+  printf("  a settings file cannot turn graphics mode off; a switch can\n");
+}
+
+
 // The switch registry's structural invariants. Every switch spelling
 // in the program resolves through three tables scanned in order, with
 // prefix rows matching any spelling they begin. Two mistakes are easy
@@ -8497,6 +8565,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"rulership",            TestRulershipTablesQt},
   {"esoteric-tables",      TestEsotericTablesQt},
   {"nested-include",       TestNestedIncludeQt},
+  {"graphics-mode",        TestGraphicsModeSourceQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},

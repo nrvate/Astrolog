@@ -3376,6 +3376,28 @@ void ApplyUiFontQt(void)
 }
 
 
+// Ask for the interface font again once the event loop is turning.
+//
+// A platform theme is allowed to apply its own settings after startup:
+// qt5ct posts applySettings() as a queued call from its constructor, and
+// that calls QApplication::setFont() with the desktop's font, throwing
+// away what ApplyUiFontQt() set a moment earlier. Measured with
+// QT_QPA_PLATFORMTHEME=qt5ct -- "Fira Code Retina" 16 at the end of
+// BeginQt(), "Ubuntu" 10 after one turn of the loop -- which is why the
+// menus came up in the desktop font and only took the chosen one when
+// Display Settings was closed, that being the first re-apply to happen
+// after the theme had had its turn. The palette and the style survive
+// that pass; the font is the only casualty.
+//
+// A zero timer, not a queued call: Qt runs zero timers after the posted
+// events of the same iteration, so this lands after the theme's metacall
+// however early that was posted.
+void ScheduleUiFontReapplyQt(void)
+{
+  QTimer::singleShot(0, gi.qapp, []() { ApplyUiFontQt(); });
+}
+
+
 static void LoadBundledFontsQt()
 {
   CONST char *rgszFontFile[] = { "Astro.ttf", "EnigmaAstrology.ttf",
@@ -5555,6 +5577,7 @@ void BeginQt()
   if (qi.fWindPos)
     gi.qwind->move(qi.xWind, qi.yWind);
   gi.qwind->show();
+  ScheduleUiFontReapplyQt();
 }
 
 
