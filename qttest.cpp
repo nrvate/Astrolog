@@ -51,6 +51,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QRadioButton>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
@@ -1686,6 +1687,160 @@ static void TestGraphicsFieldsQt()
 
   SetAnimDelayQt(nDelaySav);
   gs.nGridCell = nGridSav;
+
+  // The other five fields Windows checks here, which this dialog stored
+  // unchecked until 2026-09-07. Two of them are memory safety: gs.objTrack
+  // and gs.objLeft INDEX planet[] (xcharts1.cpp:1680, 2321, 3113) and both
+  // come from NParseSz(), which hands back whatever number was typed --
+  // "9999" in the telescope planet box was an out-of-range read.
+  //
+  // Each one both ways. "Refuses everything" would pass the bad half on
+  // its own, and it is a real failure mode here: the dialog returns at the
+  // first bad field, so a check that only ever fed it rubbish could not
+  // tell a working validation from a broken store.
+  {
+    // Each row starts from a known GOOD value rather than from whatever
+    // the last group left, and names what the good input must produce.
+    // Both matter: with the starting value taken on trust, the refusal
+    // half is vacuous whenever it already equals the bad input, and
+    // "the value changed" is vacuous whenever it already equals the good
+    // one -- which is exactly how the first draft failed in the full
+    // suite (text scale was already 150) while passing alone.
+    static CONST struct {
+      CONST char *szId;    // control's object name
+      flag fCombo;         // a QComboBox rather than a QLineEdit
+      int iDup;            // which control of that name, in table order
+      int nStart;          // put the setting here first
+      CONST char *szBad, *szGood;
+      int nGood;           // what the good input must store
+      int *pn;             // the setting
+      CONST char *szWhat;
+    } rgt[] = {
+      {"dcGr_Xs",  fTrue,  0, 200, "0",    "300",  300, &gs.nScale,
+       "character scale"},
+      {"dcGr_XSS", fTrue,  0, 100, "0",    "150",  150, &gs.nScaleText,
+       "text scale"},
+      {"deGr_XZ",  fFalse, 0, oMoo, "9999", "None", -1, &gs.objTrack,
+       "telescope planet"}};
+    int iT;
+
+    for (iT = 0; iT < (int)(sizeof(rgt)/sizeof(*rgt)); iT++) {
+      CONST char *szId = rgt[iT].szId, *szBad = rgt[iT].szBad;
+      CONST char *szGood = rgt[iT].szGood;
+      flag fCombo = rgt[iT].fCombo;
+      int iDup = rgt[iT].iDup;
+      int nSav = *rgt[iT].pn, nAfterBad, nAfterGood;
+
+      *rgt[iT].pn = rgt[iT].nStart;
+
+      auto fnSet = [szId, fCombo, iDup](QWidget *pw, CONST char *szText) {
+        if (fCombo) {
+          QList<QComboBox *> rg = pw->findChildren<QComboBox *>(szId);
+          if (iDup < rg.size())
+            rg[iDup]->setEditText(szText);
+        } else {
+          QList<QLineEdit *> rg = pw->findChildren<QLineEdit *>(szId);
+          if (iDup < rg.size())
+            rg[iDup]->setText(szText);
+        }
+        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+          if (ppb->text() == "OK") {
+            ppb->click();
+            return;
+          }
+        pw->close();
+      };
+
+      DriveModalQt(ShowGraphicsSettingsDialogQt,
+        [&fnSet, szBad](QWidget *pw) { fnSet(pw, szBad); });
+      nAfterBad = *rgt[iT].pn;
+      DriveModalQt(ShowGraphicsSettingsDialogQt,
+        [&fnSet, szGood](QWidget *pw) { fnSet(pw, szGood); });
+      nAfterGood = *rgt[iT].pn;
+
+      Check(nAfterBad == rgt[iT].nStart,
+        "%s refuses \"%s\" and stores nothing (%d, was %d)",
+        rgt[iT].szWhat, szBad, nAfterBad, rgt[iT].nStart);
+      Check(nAfterGood == rgt[iT].nGood,
+        "%s accepts \"%s\" (%d, want %d)", rgt[iT].szWhat, szGood,
+        nAfterGood, rgt[iT].nGood);
+      *rgt[iT].pn = nSav;
+    }
+  }
+
+  // The rotation planet needs its own block: gs.objLeft is the field it
+  // feeds, and that is "0" whenever the three-way radio beside it says
+  // "none" -- so accepting a good value is only visible with the radio
+  // moved as well. The first draft left the radio alone and read 0 for
+  // both halves.
+  //
+  // And index 0, not 1: PwRcFindIdxQt() looks the control up by the
+  // RESOURCE index (the symbol is "deGr_X1"), but rc2qt.py splits that
+  // digit off into nIdx and the object name is plain "deGr_X" -- of which
+  // this dialog has exactly one. Asking findChildren() for [1] touched
+  // nothing, so the refusal half passed because nothing had changed,
+  // which is the same as no assertion. Measured: one line edit named
+  // "deGr_X", holding "Sun", and three radios named "dr".
+  {
+    int nSav = gs.objLeft, nBad, nGood;
+
+    gs.objLeft = 0;
+    DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+      QList<QLineEdit *> rg = pw->findChildren<QLineEdit *>("deGr_X");
+      if (!rg.isEmpty())
+        rg[0]->setText("9999");
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text() == "OK") { ppb->click(); return; }
+      pw->close();
+    });
+    nBad = gs.objLeft;
+    DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+      QList<QLineEdit *> rg = pw->findChildren<QLineEdit *>("deGr_X");
+      QList<QRadioButton *> rgrb = pw->findChildren<QRadioButton *>("dr");
+      if (!rg.isEmpty())
+        rg[0]->setText("Moon");
+      if (rgrb.size() > 1)
+        rgrb[1]->setChecked(fTrue);
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text() == "OK") { ppb->click(); return; }
+      pw->close();
+    });
+    nGood = gs.objLeft;
+    Check(nBad == 0,
+      "rotation planet refuses \"9999\" and stores nothing (%d)", nBad);
+    Check(nGood == oMoo + 1,
+      "and accepts the Moon with the radio on (%d, want %d)",
+      nGood, oMoo + 1);
+    gs.objLeft = nSav;
+  }
+
+  // The zoom is a real, so it needs its own pair rather than the table.
+  {
+    real rSav = gs.rspace, rBad, rGood;
+
+    gs.rspace = 1.0;
+    DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+      QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_YXS");
+      if (pe != NULL)
+        pe->setText("-1");
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text() == "OK") { ppb->click(); return; }
+      pw->close();
+    });
+    rBad = gs.rspace;
+    DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
+      QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_YXS");
+      if (pe != NULL)
+        pe->setText("2.5");
+      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+        if (ppb->text() == "OK") { ppb->click(); return; }
+      pw->close();
+    });
+    rGood = gs.rspace;
+    Check(rBad == 1.0, "telescope zoom refuses -1 (%.4f)", (double)rBad);
+    Check(rGood == 2.5, "and accepts 2.5 (%.4f)", (double)rGood);
+    gs.rspace = rSav;
+  }
   printf("  the dialog validates what the switches validate\n");
 }
 

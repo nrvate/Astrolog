@@ -1722,6 +1722,44 @@ void ShowGraphicsSettingsDialogQt()
   if (!FValidTilt(rTiltN))
     { ErrorEnsureQt(&dlg, (int)rTiltN, "horizon tilt"); return; }
 
+  // Five more fields Windows checks here (wdialog.cpp:2993-3002) that this
+  // dialog stored unchecked. Two of them are memory safety rather than a
+  // strange picture: gs.objTrack and gs.objLeft are used to INDEX
+  // planet[] (xcharts1.cpp:1680, 2321, 3113), and both come from
+  // NParseSz(), which hands back whatever number was typed. "9999" in the
+  // telescope planet box was an out-of-range read of an object array.
+  //
+  // Every combo box here is editable, so none of these is a menu of safe
+  // choices: toInt() answers 0 for anything it cannot parse, and 0 is
+  // outside all three integer ranges.
+  int nScaleN = pcbScale != NULL ?
+    pcbScale->currentText().toInt() : gs.nScale;
+  int nScaleTN = pcbScaleT != NULL ?
+    pcbScaleT->currentText().toInt() : gs.nScaleText;
+  real rSpaceN = peAU != NULL ? peAU->text().toDouble() : gs.rspace;
+  int nTrack = gs.objTrack, nLeft = 0;
+
+  if (peTrack != NULL) {
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
+      peTrack->text().toLocal8Bit().constData());
+    nTrack = FMatchSz(sz, "None") ? -1 : NParseSz(sz, pmObject);
+  }
+  if (peLeft != NULL) {
+    sprintf2(S(sz), "%.*s", cchSzMax-1,
+      peLeft->text().toLocal8Bit().constData());
+    nLeft = NParseSz(sz, pmObject);
+  }
+  if (!FValidScale(nScaleN))
+    { ErrorEnsureQt(&dlg, nScaleN, "character scale"); return; }
+  if (!FValidScaleText(nScaleTN))
+    { ErrorEnsureQt(&dlg, nScaleTN, "text scale"); return; }
+  if (!FValidTelescope(nTrack))
+    { ErrorEnsureQt(&dlg, nTrack, "telescope planet"); return; }
+  if (!FValidZoom(rSpaceN))
+    { ErrorEnsureQt(&dlg, (int)rSpaceN, "telescope zoom"); return; }
+  if (peLeft != NULL && !FItem(nLeft))
+    { ErrorEnsureQt(&dlg, nLeft, "rotation planet"); return; }
+
   RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   if (pcbNoUpd != NULL)
     SetNoUpdateQt(pcbNoUpd->isChecked());
@@ -1749,18 +1787,14 @@ void ShowGraphicsSettingsDialogQt()
       }
     }
   }
-  if (peAU != NULL)    gs.rspace = peAU->text().toDouble();
+  gs.rspace = rSpaceN;
   gs.rRot = rRotN;
   gs.rTilt = rTiltN;
   gs.nDecaSize = nDeca;
   SetAnimDelayQt(nDelay);
-  if (peTrack != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peTrack->text().toLocal8Bit().constData());
-    gs.objTrack = FMatchSz(sz, "None") ? -1 : NParseSz(sz, pmObject);
-  }
-  if (pcbScale != NULL)  gs.nScale = pcbScale->currentText().toInt();
-  if (pcbScaleT != NULL) gs.nScaleText = pcbScaleT->currentText().toInt();
+  gs.objTrack = nTrack;
+  gs.nScale = nScaleN;
+  gs.nScaleText = nScaleTN;
   if (pcbCorner != NULL) {
     sprintf2(S(sz), "%.*s", cchSzMax-1,
       pcbCorner->currentText().toLocal8Bit().constData());
@@ -1814,12 +1848,8 @@ void ShowGraphicsSettingsDialogQt()
   if (gs.nFontAll != 0)
     gi.nFontPrev = gs.nFontAll;
   i = NRcStoreRadioQt(rgbuilt, 1, 3, 0);
-  if (peLeft != NULL) {
-    sprintf2(S(sz), "%.*s", cchSzMax-1,
-      peLeft->text().toLocal8Bit().constData());
-    j = NParseSz(sz, pmObject);
-    gs.objLeft = (i == 0 ? 0 : (i == 1 ? j+1 : -j-1));
-  }
+  if (peLeft != NULL)
+    gs.objLeft = (i == 0 ? 0 : (i == 1 ? nLeft+1 : -nLeft-1));
   for (i = 0; i < cglyph; i++)
     *rgglyph[i].pn = NRcStoreRadioSzQt(rgbuilt, "drg", rgglyph[i].nFirst,
       rgglyph[i].cRadio, *rgglyph[i].pn - 1) + 1;

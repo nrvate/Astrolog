@@ -9537,6 +9537,48 @@ are the more useful half to read before starting something new.
     check mark now, which is exactly what the fix above makes
     trustworthy, and asserts the starting state rather than assuming it.
 
+225. **Five unvalidated fields in Graphics Settings, and one of them
+    segfaults.** Found by a fifth sweep of the same kind: which
+    `FValid*` macros `wdialog.cpp` uses that `qtdialog.cpp` does not.
+    `FValidScale`, `FValidScaleText`, `FValidTelescope` and `FValidZoom`
+    appeared **zero** times here, and `FItem` one time fewer.
+
+    All five are in the same dialog, all five are editable (the two scale
+    controls are `setEditable(fTrue)` combo boxes, so none of them is a
+    menu of safe choices), and `QString::toInt()` answers 0 for anything
+    it cannot parse.
+
+    Two are memory safety rather than a strange picture. `gs.objTrack`
+    (telescope planet) and `gs.objLeft` (rotation planet) both come from
+    `NParseSz()`, which hands back whatever number was typed, and both are
+    used to **index `planet[]`** -- xcharts1.cpp:1680, 2321 and 3113.
+    `cObj` is 133.
+
+    **Measured, and it is not theoretical**: with the checks disabled and
+    "9999" typed into the telescope planet box, the assertion run does not
+    fail, it **dumps core**. That is the falsification for that row, and
+    it is the reason this is a fix rather than a tidy-up.
+
+    The other three are the character scale (must be 100-`MAXSCALE` and a
+    multiple of 100), the text scale (a multiple of 50) and the telescope
+    zoom (0.0001 to 360, or exactly 0).
+
+    `graphics-fields` covered the animation delay and printed "the dialog
+    validates what the switches validate", which was a larger claim than
+    it tested. It now tests all six, each one both ways.
+
+    **Two drafts of that group were vacuous, both in the familiar way.**
+    The rotation planet row asked `findChildren("deGr_X")[1]`, and there
+    is exactly one control of that name -- `PwRcFindIdxQt()` looks it up
+    by the *resource* index, which is 1 because the symbol is `deGr_X1`,
+    while `rc2qt.py` splits that digit off and names the widget plain
+    `deGr_X`. Nothing was typed, so the refusal passed because nothing had
+    changed. And the "accepts a good value" half was written as "the value
+    changed", which failed in the full suite because an earlier group had
+    already left the text scale at the good value. Every row now sets a
+    known starting value and names the exact result the good input must
+    produce.
+
 
 ## Features this fork adds to both builds
 
