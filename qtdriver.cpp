@@ -72,6 +72,7 @@
 #include <QtGui/QFontDatabase>
 #include <QtCore/QDir>
 #include <QtCore/QVector>
+#include <QtCore/QPointer>
 #include <QtCore/QUrl>
 #include <QtCore/QTimer>
 #include <functional>
@@ -1307,12 +1308,73 @@ void SyncHouseSetMenuQt()
     qi.paDwad->setChecked(us.nDwad > 0);
 }
 
+// Every checkable menu item, paired with a predicate that re-reads the
+// setting behind it. Windows' RedoMenu() does the same job with sixty
+// hand written CheckMenu() calls, and a hand written list can fall behind
+// the menus; this one is registered by the item itself, so it can't.
+//
+// QPointer rather than a raw QAction*: the menu bar is built once and
+// these outlive nothing today, but a null is cheaper than the rule that
+// they must.
+
+typedef struct {
+  QPointer<QAction> pa;
+  std::function<bool()> pfn;
+} MENUCHECK;
+
+static QVector<MENUCHECK> rgmcheckQt;
+
+static QAction *PaRegisterCheckQt(QAction *pa, std::function<bool()> pfn)
+{
+  MENUCHECK mc;
+
+  if (pa == NULL)
+    return pa;
+  mc.pa = pa;
+  mc.pfn = pfn;
+  rgmcheckQt.append(mc);
+  return pa;
+}
+
+
+// Re-derive every menu check mark from the settings behind it, equivalent
+// to Windows' RedoMenu(). Call it only where Windows sets wi.fMenuAll or
+// calls RedoMenu() outright -- four places, each one a route by which an
+// arbitrary switch can change a setting without going through the menu
+// item that owns it: the Enter Command Line dialog, running a macro,
+// Graphics Settings, and the Redraw command. Everywhere else the rule in
+// QT_GUI_PLAN.md item 9 still holds: mirror the specific Dlg*, and where
+// Windows leaves a check mark stale, leave it stale.
+//
+// The chart type radio is deliberately not in here. It has its own
+// machinery (SnapChartModeQt/SyncChartModeFromFlagsQt), which the two
+// arbitrary-switch callers already run either side of the switches.
+//
+// Note this is a pure read, which SyncRestrictMenuQt() is not: that one
+// re-derives each "Include <category>" flag from ignore[] and writes it
+// back, which is right after a restriction dialog and wrong here.
+// Windows' RedoMenu() only reads those flags (CheckMenu with us.fUranian
+// and the rest), and so does this. A command line that restricted a
+// whole category by hand must not have its us.f* flag switched off as a
+// side effect of the menus catching up -- that flag is a calculation
+// input, not just a check mark.
+
+void RedoMenuQt()
+{
+  int i;
+
+  for (i = 0; i < rgmcheckQt.size(); i++)
+    if (rgmcheckQt[i].pa != NULL)
+      rgmcheckQt[i].pa->setChecked(rgmcheckQt[i].pfn());
+}
+
 static QAction *AddToggleAction(QMenu *pmenu, CONST char *szLabel,
   flag *pfield, flag fRecast)
 {
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setChecked(*pfield != 0);
+  PaRegisterCheckQt(pa, [pfield]() { return *pfield != 0; });
   ConnectMenuQt(pa, pa, [pfield, pa, fRecast]() {
     *pfield = !*pfield;
     pa->setChecked(*pfield != 0);
@@ -1337,6 +1399,7 @@ static QAction *AddSelectAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setChecked(*ptarget == value);
   pa->setActionGroup(pgroup);
+  PaRegisterCheckQt(pa, [value, ptarget]() { return *ptarget == value; });
   ConnectMenuQt(pa, pa, [value, ptarget, fRecast]() {
     *ptarget = value;
     if (fRecast)
@@ -1545,6 +1608,7 @@ static QAction *AddRelAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(us.nRel == rc);
+  PaRegisterCheckQt(pa, [rc]() { return us.nRel == rc; });
   ConnectMenuQt(pa, pa, [rc, fToggle]() {
     SetRelQt(fToggle ? (us.nRel ? rcNone : rcDual) : rc);
   });
@@ -1683,6 +1747,9 @@ static void BuildThemeMenuQt(QMenu *pmenuWin)
     rgpa[i] = pmenuTheme->addAction(rgTheme[i].szLabel);
     rgpa[i]->setCheckable(true);
     rgpa[i]->setChecked(strNow == QString(rgTheme[i].szValue));
+    CONST char *szValue = rgTheme[i].szValue;
+    PaRegisterCheckQt(rgpa[i],
+      [szValue]() { return StrThemePrefQt() == QString(szValue); });
   }
   for (i = 0; i < 3; i++) {
     CONST char *szValue = rgTheme[i].szValue;
@@ -1716,6 +1783,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   qi.paGraphics = pmenu->addAction("Show &Graphics");
   qi.paGraphics->setCheckable(fTrue);
   qi.paGraphics->setChecked(us.fGraphics != 0);
+  PaRegisterCheckQt(qi.paGraphics, []() { return us.fGraphics != 0; });
   ConnectMenuQt(qi.paGraphics, pwind, []() {
     us.fGraphics = !us.fGraphics;
     qi.paGraphics->setChecked(us.fGraphics != 0);
@@ -1732,7 +1800,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QMenu *pmenuWin = pmenu->addMenu("&Window Settings");
   QAction *paRedraw = pmenuWin->addAction("&Redraw Screen");
   ConnectMenuQt(paRedraw, pwind,
-    []() { RedrawForceQt(); });
+    []() { RedoMenuQt(); RedrawForceQt(); });
   QAction *paClear = pmenuWin->addAction("&Clear Screen");
   ConnectMenuQt(paClear, pwind,
     []() { ClearScreenQt(); });
@@ -1740,6 +1808,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paHourglass = pmenuWin->addAction("&Hourglass on Redraw");
   paHourglass->setCheckable(true);
   paHourglass->setChecked(qi.fHourglass != fFalse);
+  PaRegisterCheckQt(paHourglass, []() { return qi.fHourglass != fFalse; });
   ConnectMenuQt(paHourglass, pwind,
     [paHourglass]() {
       qi.fHourglass = !qi.fHourglass;
@@ -1750,6 +1819,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paChartWin = pmenuWin->addAction("Ch&art Resizes Window");
   paChartWin->setCheckable(true);
   paChartWin->setChecked(qi.fChartWindow != fFalse);
+  PaRegisterCheckQt(paChartWin, []() { return qi.fChartWindow != fFalse; });
   ConnectMenuQt(paChartWin, pwind,
     [paChartWin]() {
       qi.fChartWindow = !qi.fChartWindow;
@@ -1760,6 +1830,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paWinChart = pmenuWin->addAction("&Window Resizes Chart");
   paWinChart->setCheckable(true);
   paWinChart->setChecked(qi.fWindowChart != fFalse);
+  PaRegisterCheckQt(paWinChart, []() { return qi.fWindowChart != fFalse; });
   ConnectMenuQt(paWinChart, pwind,
     [paWinChart]() {
       qi.fWindowChart = !qi.fWindowChart;
@@ -1774,6 +1845,8 @@ static void BuildViewMenu(QMainWindow *pwind)
     []() { ResizeWindowToChartQt(); });
   QAction *paFull = pmenuWin->addAction("Size Window &Full Screen");
   paFull->setCheckable(true);
+  PaRegisterCheckQt(paFull,
+    []() { return gi.qwind != NULL && gi.qwind->isFullScreen(); });
   ConnectMenuQt(paFull, pwind,
     [paFull]() {
       ToggleFullScreenQt();
@@ -1797,6 +1870,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paColorText = pmenu->addAction("&Colored Text");
   paColorText->setCheckable(true);
   paColorText->setChecked(us.fAnsiColor != 0);
+  PaRegisterCheckQt(paColorText, []() { return us.fAnsiColor != 0; });
   ConnectMenuQt(paColorText, pwind,
     [paColorText]() {
       us.fAnsiColor = !us.fAnsiColor;
@@ -1813,6 +1887,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   QAction *paInterpret = pmenu->addAction("Show &Interpretations");
   paInterpret->setCheckable(true);
   paInterpret->setChecked(us.fInterpret != 0);
+  PaRegisterCheckQt(paInterpret, []() { return us.fInterpret != 0; });
   ConnectMenuQt(paInterpret, pwind,
     [paInterpret]() {
       us.fInterpret = !us.fInterpret;
@@ -1832,6 +1907,7 @@ static void BuildViewMenu(QMainWindow *pwind)
   qi.paApplying = pmenu->addAction("&Applying Aspects");
   qi.paApplying->setCheckable(true);
   qi.paApplying->setChecked(us.nAppSep == 1);
+  PaRegisterCheckQt(qi.paApplying, []() { return us.nAppSep == 1; });
   ConnectMenuQt(qi.paApplying, pwind, []() {
     us.nAppSep = !us.nAppSep;
     qi.paApplying->setChecked(us.nAppSep == 1);
@@ -1968,6 +2044,10 @@ static QAction *AddCategoryRestrictAction(QMenu *pmenu, CONST char *szLabel,
   QAction *pa = pmenu->addAction(szLabel);
   pa->setCheckable(true);
   pa->setChecked(pfield != NULL ? *pfield != 0 : !ignore[lo]);
+  if (pfield != NULL)
+    PaRegisterCheckQt(pa, [pfield]() { return *pfield != 0; });
+  else
+    PaRegisterCheckQt(pa, [lo]() { return !ignore[lo]; });
   if (pfield != NULL && qi.ccatres < CRoomQt(qi.rgcatres)) {
     CATRES *pcat = &qi.rgcatres[qi.ccatres++];
     pcat->pa = pa; pcat->pfield = pfield; pcat->lo = lo; pcat->hi = hi;
@@ -2007,6 +2087,7 @@ static void BuildSettingMenu(QMainWindow *pwind)
   qi.paHelio = pmenu->addAction("He&liocentric");
   qi.paHelio->setCheckable(true);
   qi.paHelio->setChecked(us.objCenter != oEar);
+  PaRegisterCheckQt(qi.paHelio, []() { return us.objCenter != oEar; });
   ConnectMenuQt(qi.paHelio, pwind, []() {
     SetCentric(us.objCenter == oEar ? oSun : oEar);
     SyncHelioMenuQt();
@@ -2069,6 +2150,7 @@ static void BuildSettingMenu(QMainWindow *pwind)
   qi.paSolar = pmenuHouseSet->addAction("&Solar Chart");
   qi.paSolar->setCheckable(true);
   qi.paSolar->setChecked(us.objOnAsc != 0);
+  PaRegisterCheckQt(qi.paSolar, []() { return us.objOnAsc != 0; });
   ConnectMenuQt(qi.paSolar, pwind, []() {
     us.objOnAsc = us.objOnAsc ? 0 : oSun+1;
     qi.paSolar->setChecked(us.objOnAsc != 0);
@@ -2198,6 +2280,7 @@ static void BuildChartMenu(QMainWindow *pwind)
   qi.paProgress = pmenu->addAction("&Progressions...");
   qi.paProgress->setCheckable(fTrue);
   qi.paProgress->setChecked(us.fProgress != 0);
+  PaRegisterCheckQt(qi.paProgress, []() { return us.fProgress != 0; });
   ConnectMenuQt(qi.paProgress, pwind,
     []() { ShowProgressDialogQt(); });
   pmenu->addSeparator();
@@ -2222,6 +2305,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paReverse = pmenu->addAction("&Reverse Background");
   paReverse->setCheckable(true);
   paReverse->setChecked(gs.fInverse != 0);
+  PaRegisterCheckQt(paReverse, []() { return gs.fInverse != 0; });
   ConnectMenuQt(paReverse, pwind, [paReverse]() {
     gs.fInverse = !gs.fInverse;
     paReverse->setChecked(gs.fInverse != 0);
@@ -2231,6 +2315,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paMono = pmenu->addAction("&Monochrome");
   paMono->setCheckable(true);
   paMono->setChecked(!gs.fColor);
+  PaRegisterCheckQt(paMono, []() { return !gs.fColor; });
   ConnectMenuQt(paMono, pwind, [paMono]() {
     gs.fColor = !gs.fColor;
     paMono->setChecked(!gs.fColor);
@@ -2284,6 +2369,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paSidebar = pmenuEffects->addAction("Show Info &Sidebar");
   paSidebar->setCheckable(true);
   paSidebar->setChecked(gs.fDoSidebar != 0);
+  PaRegisterCheckQt(paSidebar, []() { return gs.fDoSidebar != 0; });
   ConnectMenuQt(paSidebar, pwind, [paSidebar]() {
     gs.fDoSidebar = !gs.fDoSidebar;
     paSidebar->setChecked(gs.fDoSidebar != 0);
@@ -2304,6 +2390,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paConstel = pmenuMap->addAction("Show &Constellations");
   paConstel->setCheckable(true);
   paConstel->setChecked(gs.fConstel != 0);
+  PaRegisterCheckQt(paConstel, []() { return gs.fConstel != 0; });
   ConnectMenuQt(paConstel, pwind, [paConstel]() {
     gs.fConstel = !gs.fConstel;
     paConstel->setChecked(gs.fConstel != 0);
@@ -2323,6 +2410,7 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paStarLine = pmenuMap->addAction("Show Constellation &Lines");
   paStarLine->setCheckable(true);
   paStarLine->setChecked(qi.fStarLine != 0);
+  PaRegisterCheckQt(paStarLine, []() { return qi.fStarLine != 0; });
   ConnectMenuQt(paStarLine, pwind, [paStarLine]() {
     CONST char **ppch;
     qi.fStarLine = !qi.fStarLine;
@@ -2552,6 +2640,7 @@ static void RunMacroQt(int iMacro)
     SnapChartModeQt(rgfMode.data());
     FProcessCommandLine(is.rgszMacro[iMacro]);
     SyncChartModeFromFlagsQt(rgfMode.constData());
+    RedoMenuQt();
     RecastAndRedrawQt();
     return;
   }
@@ -2988,6 +3077,7 @@ static QAction *AddAnimRateAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(NAbs(gs.nAnim) == rate);
+  PaRegisterCheckQt(pa, [rate]() { return NAbs(gs.nAnim) == rate; });
   ConnectMenuQt(pa, pa, [rate]() { SetAnimRateQt(rate); });
   return pa;
 }
@@ -2999,6 +3089,7 @@ static QAction *AddAnimFactorAction(QMenu *pmenu, QActionGroup *pgroup,
   pa->setCheckable(true);
   pa->setActionGroup(pgroup);
   pa->setChecked(NAbs(gi.nDir) == factor);
+  PaRegisterCheckQt(pa, [factor]() { return NAbs(gi.nDir) == factor; });
   ConnectMenuQt(pa, pa, [factor]() {
     gi.nDir = (gi.nDir > 0 ? 1 : -1) * factor;
   });
@@ -3013,6 +3104,7 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   // upstream's menu, kept for parity; the behaviour behind them is not.
   qi.paAnimRun = pmenu->addAction("Do &Animation");
   qi.paAnimRun->setCheckable(true);
+  PaRegisterCheckQt(qi.paAnimRun, []() { return FAnimRunningQt() != 0; });
   ConnectMenuQt(qi.paAnimRun, pwind,
     []() { SetAnimRunningQt(!FAnimRunningQt()); });
 
@@ -3050,6 +3142,7 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   QAction *paReverse = pmenu->addAction("&Reverse Direction");
   paReverse->setCheckable(true);
   paReverse->setChecked(gi.nDir < 0);
+  PaRegisterCheckQt(paReverse, []() { return gi.nDir < 0; });
   // Reverse only reverses. Windows also starts animation here when it was
   // stopped, which means a direction control silently doubles as a start
   // button -- another divergence, and deliberate.
@@ -3063,6 +3156,7 @@ static void BuildAnimateMenu(QMainWindow *pwind)
   // when nothing is moving starts it, pressing it again stops it.
   qi.paAnimPause = pmenu->addAction("&Pause Animation");
   qi.paAnimPause->setCheckable(true);
+  PaRegisterCheckQt(qi.paAnimPause, []() { return !FAnimRunningQt(); });
   ConnectMenuQt(qi.paAnimPause, pwind,
     []() { SetAnimRunningQt(!FAnimRunningQt()); });
   AddToggleAction(pmenu, "&Timed Exposure", &gs.fJetTrail, fFalse);

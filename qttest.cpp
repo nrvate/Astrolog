@@ -2637,6 +2637,145 @@ static void TestAnimationStateQt()
 // out of astrolog.rc, so only the routing differs, and on the restriction
 // grid of 52 checkboxes it decides whether the dialog can be used from
 // the keyboard at all.
+/*
+******************************************************************************
+** Menu check marks after a setting changes behind the menu's back.
+******************************************************************************
+*/
+
+// Windows redetermines every menu check mark (RedoMenu(), driven by
+// wi.fMenuAll) after the four routes that can move a setting without
+// going through the menu item that owns it: the Enter Command Line
+// dialog, running a macro, Graphics Settings, and Redraw Screen.
+// RedoMenuQt() is this port's equivalent. Before it existed, typing
+// "-Xr" into the command line dialog inverted the chart and left
+// "Reverse Background" unchecked for the rest of the session.
+//
+// Each case flips the setting directly, the way FProcessCommandLine
+// does, then requires the check mark to be stale until RedoMenuQt() runs
+// and correct immediately after. The stale leg is what makes the other
+// one mean anything: without it a case whose predicate reads the wrong
+// field still passes whenever the two happen to agree.
+//
+// The six between them cover every way an item registers -- a plain flag
+// (AddToggleAction), a value out of a set (AddSelectAction), a derived
+// condition, an inverted one, and two one-offs.
+
+static void TestMenuResyncQt()
+{
+  flag fSidSav = us.fSidereal, fColorSav = gs.fColor;
+  int nScaleSav = gs.nScale, nAppSav = us.nAppSep;
+  int objCenSav = us.objCenter, nDirSav = gi.nDir;
+
+  Group("Menu resync");
+
+  QAction *paSid = PaFindActionTestQt("&Sidereal Zodiac");
+  QAction *paMed = PaFindActionTestQt("&Medium");
+  QAction *paApp = PaFindActionTestQt("&Applying Aspects");
+  QAction *paHel = PaFindActionTestQt("He&liocentric");
+  QAction *paMon = PaFindActionTestQt("&Monochrome");
+  QAction *paRev = PaFindActionTestQt("&Reverse Direction");
+  Check(paSid != NULL && paMed != NULL && paApp != NULL && paHel != NULL &&
+    paMon != NULL && paRev != NULL, "all six items are on the menu bar");
+  if (paSid == NULL || paMed == NULL || paApp == NULL || paHel == NULL ||
+    paMon == NULL || paRev == NULL)
+    return;
+
+  // A plain flag, registered by AddToggleAction().
+  us.fSidereal = fFalse;
+  RedoMenuQt();
+  Check(!paSid->isChecked(), "Sidereal Zodiac starts unchecked");
+  us.fSidereal = fTrue;
+  Check(!paSid->isChecked(), "and nothing else puts it right");
+  RedoMenuQt();
+  Check(paSid->isChecked(), "RedoMenuQt() does");
+
+  // One value out of a set, registered by AddSelectAction(). A scale
+  // typed into Graphics Settings that matches none of the four presets
+  // has to leave all four unchecked, which is what Windows shows.
+  gs.nScale = 200;
+  RedoMenuQt();
+  Check(paMed->isChecked(), "Character Scale / Medium follows gs.nScale");
+  gs.nScale = 250;
+  RedoMenuQt();
+  Check(!paMed->isChecked(),
+    "a scale matching no preset leaves the preset unchecked");
+
+  // Derived, and not simply "non-zero": Windows checks nAppSep == 1
+  // everywhere, so Waxing/Waning (2) shows unchecked.
+  us.nAppSep = 1;
+  RedoMenuQt();
+  Check(paApp->isChecked(), "Applying Aspects follows nAppSep == 1");
+  us.nAppSep = 2;
+  Check(paApp->isChecked(), "still stale at nAppSep == 2");
+  RedoMenuQt();
+  Check(!paApp->isChecked(),
+    "and Waxing/Waning reads as unchecked, as on Windows");
+
+  // Derived from a value that isn't a flag at all.
+  us.objCenter = oEar;
+  RedoMenuQt();
+  Check(!paHel->isChecked(), "Heliocentric is off with Earth at the center");
+  us.objCenter = oSun;
+  Check(!paHel->isChecked(), "nothing else notices the center moved");
+  RedoMenuQt();
+  Check(paHel->isChecked(), "RedoMenuQt() does");
+
+  // Inverted: the item is on when the flag is off. A predicate that
+  // dropped the negation would pass every case above and fail here.
+  gs.fColor = fTrue;
+  RedoMenuQt();
+  Check(!paMon->isChecked(), "Monochrome is off while color is on");
+  gs.fColor = fFalse;
+  RedoMenuQt();
+  Check(paMon->isChecked(), "and on when color goes off");
+
+  // A sign test rather than an equality.
+  gi.nDir = 1;
+  RedoMenuQt();
+  Check(!paRev->isChecked(), "Reverse Direction is off going forward");
+  gi.nDir = -3;
+  Check(!paRev->isChecked(), "still stale after the direction flips");
+  RedoMenuQt();
+  Check(paRev->isChecked(), "and on once it resyncs, at any factor");
+
+  // The "Include <category>" items are the one place where resyncing the
+  // menu could change what gets computed. SyncRestrictMenuQt() re-derives
+  // each flag from ignore[] and writes it back, which is right after a
+  // restriction dialog; RedoMenuQt() must only read it, because Windows'
+  // RedoMenu() only reads it (CheckMenu with us.fUranian). Otherwise a
+  // command line that restricted the Uranians by hand would find the
+  // us.fUranian it also set switched back off by the menus catching up,
+  // and that flag reaches matrix.cpp.
+  QAction *paUra = PaFindActionTestQt("Include &Uranians");
+  Check(paUra != NULL, "Include Uranians is on the menu bar");
+  if (paUra != NULL) {
+    flag fUraSav = us.fUranian;
+    flag rgfIgnoreSav[uranHi - uranLo + 1];
+    int i;
+
+    for (i = uranLo; i <= uranHi; i++) {
+      rgfIgnoreSav[i - uranLo] = ignore[i];
+      ignore[i] = fTrue;
+    }
+    us.fUranian = fTrue;
+    RedoMenuQt();
+    Check(us.fUranian, "RedoMenuQt() leaves a category flag alone");
+    Check(paUra->isChecked(), "and shows the flag, not the restrictions");
+    SyncRestrictMenuQt();
+    Check(!us.fUranian,
+      "where SyncRestrictMenuQt() does re-derive it, and clears it");
+    for (i = uranLo; i <= uranHi; i++)
+      ignore[i] = rgfIgnoreSav[i - uranLo];
+    us.fUranian = fUraSav;
+  }
+
+  us.fSidereal = fSidSav; gs.fColor = fColorSav; gs.nScale = nScaleSav;
+  us.nAppSep = nAppSav; us.objCenter = objCenSav; gi.nDir = nDirSav;
+  RedoMenuQt();
+}
+
+
 static void TestDialogMnemonicsQt()
 {
   Group("Dialog mnemonic keys");
@@ -7327,6 +7466,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"text-export",          TestTextExportQt},
   {"rising-gradient",      TestRisingGradientQt},
   {"animation",            TestAnimationStateQt},
+  {"menu-resync",          TestMenuResyncQt},
   {"mnemonics",            TestDialogMnemonicsQt},
   {"arrow-keys",           TestDialogArrowKeysQt},
   {"midpoint-glyph",       TestMidpointGlyphQt},

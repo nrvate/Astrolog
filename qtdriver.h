@@ -91,6 +91,12 @@ int CChartModeQt();
 void SnapChartModeQt(flag *rgf);
 void SyncChartModeFromFlagsQt(CONST flag *rgf);
 
+// Re-derive every menu checkmark from the setting behind it, equivalent
+// to Windows' RedoMenu(). Only for the routes by which an arbitrary
+// switch can change a setting without going through the menu item that
+// owns it -- see the note at the definition in qtdriver.cpp.
+void RedoMenuQt();
+
 // Refresh the View menu's "Print Nearest Second" and "Applying Aspects"
 // checkmarks, which the Display Settings dialog can also change.
 void SyncDisplayMenuQt();

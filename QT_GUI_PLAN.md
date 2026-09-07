@@ -645,6 +645,14 @@ diff itself to be noisy.
    `us.nHouseSystem`, because `DlgCalc` doesn't `WiCheckMenu` it either.
    Still don't build a general `RedoMenu()`-style blanket resync — check
    the specific `Dlg*` and mirror it.
+   *(Extended 2026-09-06 — work log item 183.)* Four of them do the
+   blanket resync on Windows, and mirroring those means doing it here
+   too: `DlgCommand`, the macro handler, `DlgGraphics` and
+   `cmdWinRedraw` all set `wi.fMenuAll`, which `RedoMenu()` services.
+   `RedoMenuQt()` is the equivalent and is called from exactly those
+   four and no others. Everywhere else the rule is unchanged, and
+   adding a fifth `RedoMenuQt()` call because it looks tidier is the
+   thing this item exists to forbid.
 10. **Wheel events edit combo boxes in the scrolling dialogs.** Qt
    delivers a wheel event to whatever widget is under the pointer, so
    scrolling a tall dialog silently changed any combo that slid past the
@@ -7704,6 +7712,77 @@ are the more useful half to read before starting something new.
     not happened. The diff review caught both, which is the step that
     cannot be skipped -- and a helper in a shared scratch directory
     wants a name nobody else will pick.
+
+183. **`RedoMenuQt()`: the four places Windows resyncs every check mark,
+    and this port resynced none of them.** Item 9 above says to mirror
+    the specific `Dlg*`, and `DlgCommand` is a specific `Dlg*` -- it ends
+    with `wi.fCast = wi.fMenuAll = fTrue`, and `wi.fMenuAll` is Windows'
+    "redetermine *all* menu checks", serviced by `RedoMenu()` in
+    wdriver.cpp. So does the macro handler (`cmdMacro01`), so does
+    `DlgGraphics`, and so does `cmdWinRedraw`. Four routes, each one a
+    way for an arbitrary switch to move a setting without going through
+    the menu item that owns it.
+
+    This port had the routes and not the resync. Typing `-Xr` into Enter
+    Command Line inverted the chart and left **Reverse Background**
+    unchecked for the rest of the session; a macro that set `-s` left
+    **Sidereal Zodiac** unticked while the chart was sidereal; an exact
+    `-Xs 250` typed into Graphics Settings left **Character Scale /
+    Medium** ticked at a scale that was no longer 200. The qtdialog.cpp
+    note above Graphics Settings had said as much in writing --
+    "Windows' own DlgGraphics leans on a full `RedoMenu()` for that,
+    which this port deliberately doesn't have" -- so this was a known
+    shortfall rather than a discovery, recorded and then left.
+
+    **Windows' `RedoMenu()` is sixty hand written `CheckMenu()` calls,
+    and a hand written list is exactly the thing that falls behind the
+    menus.** This one cannot: each checkable item registers a predicate
+    that re-reads its own setting (`PaRegisterCheckQt()`), and
+    `RedoMenuQt()` is the loop over them. The two general helpers,
+    `AddToggleAction()` and `AddSelectAction()`, register for free --
+    every item built through them is covered with no per-item work and
+    no way to add a 36th and forget. The one-off checkable items
+    register a line each, and each predicate is the expression that
+    item's own toggle already used, so there is nothing to transcribe.
+
+    The chart type radio is deliberately excluded: it has its own
+    machinery (`SnapChartModeQt`/`SyncChartModeFromFlagsQt`), which the
+    two arbitrary-switch callers already run either side of the
+    switches, and putting it in the registry too would mean two
+    mechanisms for one radio.
+
+    **`RedoMenuQt()` is a pure read, and the first draft was not.** It
+    began by calling `SyncRestrictMenuQt()` for the seven "Include
+    <category>" items, which looked like reuse and was a behaviour
+    change: that function re-derives each `us.f*` category flag from
+    `ignore[]` and *writes it back*. Right after a restriction dialog,
+    where `ignore[]` is what the user just edited. Wrong after a command
+    line, where `-u -YR 76 82 1` would set `us.fUranian` and restrict the
+    range, and the menus catching up would then switch the flag off
+    again -- and `us.fUranian` is a calculation input (matrix.cpp reads
+    it to decide how far the object loop runs), not just a check mark.
+    Windows' `RedoMenu()` reads those flags and nothing more --
+    `CheckMenu(cmdResUranian, us.fUranian)`, with `!ignore[oChi]` for
+    Minors, the one category with no flag of its own -- so this reads
+    them too, through the same predicate registry as everything else.
+    The `menu-resync` group pins both halves: `RedoMenuQt()` leaves the
+    flag alone, and `SyncRestrictMenuQt()` still clears it, so the
+    difference between them can't be quietly collapsed later.
+
+    Item 9's rule is unchanged and this doesn't loosen it: `RedoMenuQt()`
+    is called from four places and no others, because Windows calls
+    `RedoMenu()` from four places and no others. A dialog that Windows
+    leaves stale is still left stale here.
+
+    The `menu-resync` group covers six items, one per registration kind
+    -- a plain flag, a value out of a set, a derived condition
+    (`nAppSep == 1`, not "non-zero", which is the detail Windows is
+    specific about), an inverted one, a non-flag value, and a sign test.
+    Each case flips the setting the way `FProcessCommandLine()` does,
+    requires the check mark to be **stale** until `RedoMenuQt()` runs,
+    and correct straight after. The stale leg is the falsification built
+    in: with a `RedoMenuQt()` that did nothing, every "RedoMenuQt() does"
+    assertion fails, and no sabotage is needed to know that.
 
 
 ## Features this fork adds to both builds

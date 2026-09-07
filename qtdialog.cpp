@@ -1531,10 +1531,11 @@ static CONST char *rgszDecaFillQt[8] = {"None", "Standard", "Rainbow RGB",
 // these overlap menu items already built (Character Scale submenu, Map
 // Orientation submenu, Modify Chart) -- that's deliberate and matches
 // Windows: the menu items step values coarsely, while this dialog is where
-// an exact value gets typed in. As elsewhere, no attempt is made to resync
-// those menus' checkmarks afterward if a value set here doesn't line up
-// with one of their preset choices (Windows' own DlgGraphics leans on a
-// full RedoMenu() for that, which this port deliberately doesn't have).
+// an exact value gets typed in. Windows' DlgGraphics sets wi.fMenuAll on
+// the way out so those menus come back in step, and RedoMenuQt() at the
+// end of this one does the same job: a scale of 250 typed here leaves all
+// four Character Scale entries unchecked, which is what it should look
+// like and what Windows shows.
 //
 // Skipped, as Win32-only (it lives in the WI struct): "Don't
 // Automatically Redraw Screen" (wi.fNoUpdate).
@@ -1770,6 +1771,7 @@ void ShowGraphicsSettingsDialogQt()
       rgglyph[i].cRadio, *rgglyph[i].pn - 1) + 1;
   if (fResize && gs.xWin > 0 && gs.yWin > 0)
     gi.qwind->resize(gs.xWin, gs.yWin);
+  RedoMenuQt();
   RecastAndRedrawQt();
 }
 
@@ -3303,6 +3305,7 @@ void ShowCommandLineDialogQt()
   ciMain = ciCore;
   InitColorsX();
   SyncChartModeFromFlagsQt(rgfMode.constData());
+  RedoMenuQt();
   RecastAndRedrawQt();
 }
 
