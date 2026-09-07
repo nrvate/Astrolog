@@ -1329,6 +1329,7 @@ extern void AnimTickTestQt(void);                 // qtdriver.cpp
 extern flag FAnimTickBusyTestQt(void);
 extern void SetAnimTickBusyTestQt(flag);
 extern flag FThemeNameDarkTestQt(CONST char *);   // qtdriver.cpp
+extern flag FBootPathTestQt(CONST char *, char *, int);  // qtdriver.cpp
 extern QIcon IconAstrologQt();                   // qtdriver.cpp
 extern void SetHomeTestQt(CONST char *);          // qtdriver.cpp
 extern int NSchemeFromKdeTestQt(void);
@@ -8119,11 +8120,31 @@ static void TestLockdownQt()
   us.nWriteFormat = nWriteFormatSav;
   is.szFileOut = szFileOutSav;
 
+  // -0i: the Help menu's eleven file openers and F1, which hand a file to
+  // the desktop's default application. Windows routes all of them through
+  // BootExternal(), which refuses under this flag; the Qt build called
+  // FileOpen() inline at every site and so opened the documentation, the
+  // four data files and the two ".url" shortcuts with lockdown on. Both
+  // halves, because a helper that never resolved anything would pass the
+  // refusal on its own.
+  {
+    char szPath[cchSzMax];
+    flag fNoReadSav = us.fNoRead;
+
+    us.fNoRead = fFalse;
+    Check(FBootPathTestQt(DEFAULT_INFOFILE, S(szPath)),
+      "without -0i the Help menu resolves a data file to open");
+    us.fNoRead = fTrue;
+    Check(!FBootPathTestQt(DEFAULT_INFOFILE, S(szPath)),
+      "with -0i the same file is refused before it is handed to the desktop");
+    us.fNoRead = fNoReadSav;
+  }
+
   us.fNoQuit = fNoQuitSav; us.fNoGraphics = fNoGraphicsSav;
   us.fGraphics = fGraphicsSav;
   SetNoPopupQt(fPopupSav);
   RedrawQt();
-  printf("  three lockdown switches enforced, both ways each\n");
+  printf("  four lockdown switches enforced, both ways each\n");
 }
 
 

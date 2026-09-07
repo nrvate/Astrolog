@@ -9087,6 +9087,64 @@ are the more useful half to read before starting something new.
     suite segfaulted several groups later -- which is worth knowing on its
     own: `Animate()` is not a function a test can call speculatively.
 
+213. **The Help menu opened every file with `-0i` set.** Found sweeping
+    the two GUI backends for `us.fNo*` site counts -- the same shape as
+    item 192, one level down: the *field* was enforced somewhere in the
+    Qt build, so `backend_parity_audit.py` was satisfied, but the
+    individual *sites* were not.
+
+    Windows funnels twelve commands through one function,
+    `BootExternal()` (wdriver.cpp:241), and its first act is to refuse
+    when `us.fNoRead` is set: "File reading is disabled." The Qt build had
+    no such funnel. Each of the nine Help menu document and data openers,
+    the two `.url` shortcuts and F1's help called `FileOpen()` inline and
+    handed the result to `QDesktopServices::openUrl()`, so a copy locked
+    down with `-0i` still opened `astrolog.htm`, `astrolog.as`,
+    `seorbel.txt`, `sefstars.txt`, the atlas, the time zone table, the
+    exoplanet list and both websites.
+
+    Twelve call sites became one, `FBootPathQt()`, which does the refusal
+    and the path resolution and hands back the path.
+
+    Two smaller things fell out of the funnel. The not-found message is
+    `PrintWarning()` now rather than a direct `QMessageBox::warning()`,
+    which is both Windows' own route for it and the only one **"Don't
+    Show Popup Messages"** (`qi.fNoPopup`) can suppress -- a box called
+    directly ignores the setting the user just ticked. And the wording is
+    Windows' wording, "not found!" rather than "not found.".
+
+    Asserted in the `lockdown` group, both ways, and falsified by
+    removing the guard: 11 passed, 1 failed. The "without" half matters
+    -- a helper that resolved nothing would pass the refusal on its own.
+
+    **`us.fNoWrite` was checked in the same sweep and is fine.** Windows'
+    other five sites are the four `WSETUP` program-group commands, which
+    have no Qt equivalent at all, and the clipboard copies, where the
+    vector ones already refuse (`CopyChartVectorQt()`) and Copy Chart
+    Bitmap needs no guard because it copies `gi.qim` straight to the
+    clipboard without writing anything.
+
+214. **File / Open Chart was a second copy of Open Chart #2's code,
+    missing a line.** Windows has one `DlgOpenChart()` for all six slots,
+    branching once inside: slot 1 does `cp1 = cp0`, slots 2-6 store into
+    `rgpci[]`/`rgpcp[]` and put `ciCore` back. The port had
+    `FOpenChartIntoQt()`, a faithful copy of that with **both** branches,
+    and a separate `ShowOpenChartDialogQt()` for slot 1 that duplicated
+    the seven-row filter list and had neither branch -- so it skipped the
+    `cp1 = cp0` and did not restore `ciCore` when the read failed.
+
+    The observable half is the failed read: `FInputData()` can leave
+    `ciCore` partly overwritten, and Windows puts the old chart back.
+    The `cp1` half is close to unobservable -- every consumer of `cp1`
+    (`CastRelation()`, `ChartTransit()`, the list filter) sets it itself
+    immediately before use, so only an AstroExpression reading
+    `ObjLon1` and friends outside a relationship chart could see the
+    difference. It is written down as the reason the divergence was
+    fixed rather than as a bug report, because it is not one.
+
+    `ShowOpenChartDialogQt()` is now three lines calling
+    `ShowOpenChartIntoDialogQt(1)`, and there is one filter list.
+
 
 ## Features this fork adds to both builds
 

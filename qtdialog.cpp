@@ -1014,35 +1014,6 @@ static flag FNoWriteQt()
 }
 
 
-// Load a chart file chosen via a standard file picker, exactly as Windows'
-// DlgOpenChart does via the stock Windows file dialog -- no custom dialog
-// is needed here either, just FInputData() doing the actual work.
-
-void ShowOpenChartDialogQt()
-{
-  if (FNoReadQt())
-    return;
-  // The filter list is Windows' DlgOpenChart lpstrFilter, verbatim: every
-  // format FInputData() can read gets its own row there, not just .as.
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Chart", QString(),
-    "Astrolog Files (*.as);;"
-    "Astrological Exchange Files (*.aaf);;"
-    "Quick*Chart Files (*.qck);;"
-    "Astrodatabank Files (*.xml);;"
-    "iCalendar Files (*.ics);;"
-    "Text Files [Solar Fire] (*.txt);;"
-    "All Files (*)");
-  if (qs.isEmpty())
-    return;
-  QByteArray ba = qs.toLocal8Bit();
-  if (!FInputData(ba.constData())) {
-    QMessageBox::warning(gi.qwind, szAppName, "Could not read that chart file.");
-    return;
-  }
-  RecastAndRedrawQt();
-}
-
-
 // Save the current chart to a file chosen via a standard file picker, the
 // same way Windows' DlgSaveChart does for its "Save Chart" command.
 
@@ -2126,7 +2097,8 @@ static void ShowOpenChartIntoDialogQt(int iChart)
     return;
   QString qsTitle = iChart <= 1 ? QString("Open Chart") :
     QString("Open Chart #%1").arg(iChart);
-  // Same seven-filter list as ShowOpenChartDialogQt(), from Windows.
+  // The filter list is Windows' DlgOpenChart lpstrFilter, verbatim: every
+  // format FInputData() can read gets its own row there, not just .as.
   QString qs = QFileDialog::getOpenFileName(gi.qwind, qsTitle, QString(),
     "Astrolog Files (*.as);;"
     "Astrological Exchange Files (*.aaf);;"
@@ -2144,6 +2116,17 @@ static void ShowOpenChartIntoDialogQt(int iChart)
   }
   RecastAndRedrawQt();
 }
+
+// File / Open Chart. Slot 1 is not a special case: Windows' DlgOpenChart
+// runs the same body for every slot, and the branch it takes for slot 1
+// ("cp1 = cp0") is the half this used to skip by having a separate
+// function of its own. One path also means one filter list.
+
+void ShowOpenChartDialogQt()
+{
+  ShowOpenChartIntoDialogQt(1);
+}
+
 
 void ShowOpenChart2DialogQt()
 {

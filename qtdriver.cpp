@@ -2648,6 +2648,46 @@ static QString SzMacroKeyQt(int iSet, int iKey)
   return str + QString("F%1").arg(iKey + 1);
 }
 
+
+// Resolve a file the program is about to hand to the desktop's default
+// application -- the documentation, the four data files, the two ".url"
+// shortcuts, and F1's help. Windows routes every one of those through
+// BootExternal(), which refuses outright when "-0i" has turned file
+// reading off; nothing here did, so under that lockdown the Qt build
+// still opened all of them. The wording is BootExternal()'s own
+// ("reading"), not the file picker's ("input"), because these are the
+// same sites.
+
+static flag FBootPathQt(CONST char *szFile, char *szPath, int cchPath)
+{
+  char sz[cchSzMax];
+
+  if (us.fNoRead) {
+    PrintWarning("File reading is disabled.");
+    return fFalse;
+  }
+  if (FileOpen(szFile, 2, szPath, cchPath) == NULL) {
+    // PrintWarning() and not QMessageBox::warning(), which is what these
+    // sites used to call: Windows says it through PrintWarning() too, so
+    // this wording is its wording, and more to the point that is the one
+    // route "Don't Show Popup Messages" (qi.fNoPopup) can suppress. A
+    // direct box ignores the setting the user just ticked.
+    sprintf2(S(sz), "File '%s' not found!", szFile);
+    PrintWarning(sz);
+    return fFalse;
+  }
+  return fTrue;
+}
+
+
+#ifdef QTTEST
+flag FBootPathTestQt(CONST char *szFile, char *szPath, int cchPath)
+{
+  return FBootPathQt(szFile, szPath, cchPath);
+}
+#endif
+
+
 // Run macro "iMacro" (1 based, as Windows numbers them). Undefined slots
 // mostly just say so, but Windows gives two of them a default meaning,
 // kept here: F1 opens the documentation, and Alt+F4 quits.
@@ -2668,11 +2708,8 @@ static void RunMacroQt(int iMacro)
     return;
   }
   if (iMacro == 1) {
-    if (FileOpen("astrolog.htm", 2, S(szPath)) != NULL)
+    if (FBootPathQt("astrolog.htm", S(szPath)))
       QDesktopServices::openUrl(QUrl::fromLocalFile(szPath));
-    else
-      QMessageBox::warning(gi.qwind, szAppName,
-        "File 'astrolog.htm' not found.");
     return;
   }
   if (iMacro == 40) {
@@ -3262,11 +3299,8 @@ static void BuildHelpMenu(QMainWindow *pwind)
     CONST char *szFile = rgszDoc[i];
     ConnectMenuQt(pa, pwind, [szFile]() {
       char szPath[cchSzMax];
-      if (FileOpen(szFile, 2, S(szPath)) != NULL)
+      if (FBootPathQt(szFile, S(szPath)))
         QDesktopServices::openUrl(QUrl::fromLocalFile(szPath));
-      else
-        QMessageBox::warning(gi.qwind, szAppName,
-          QString("File '%1' not found.").arg(szFile));
     });
   }
 
@@ -3281,11 +3315,8 @@ static void BuildHelpMenu(QMainWindow *pwind)
     CONST char *szFile = rgszWebsite[i];
     ConnectMenuQt(pa, pwind, [szFile]() {
       char szPath[cchSzMax];
-      if (FileOpen(szFile, 2, S(szPath)) == NULL) {
-        QMessageBox::warning(gi.qwind, szAppName,
-          QString("File '%1' not found.").arg(szFile));
+      if (!FBootPathQt(szFile, S(szPath)))
         return;
-      }
       QSettings settings(szPath, QSettings::IniFormat);
       QString qsUrl = settings.value("InternetShortcut/URL").toString();
       if (qsUrl.isEmpty()) {
