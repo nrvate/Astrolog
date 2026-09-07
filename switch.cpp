@@ -1478,13 +1478,16 @@ static int NSwXb(CONST char *szSwitch, PARSEIN *pin)
   char ch1;
 
   // The lockdown gates SELECTING an output file, not recording which kind
-  // a later one would be. FOutputSettings() writes this switch as ":Xb*",
-  // and ":" leaves gs.ft exactly where it was, so nothing is selected and
-  // there is nothing to refuse -- while the flat test refused the line and
-  // stopped the whole load, which meant a saved settings file did not load
-  // at all under "-0o". Measured: "The switch -Xb is not allowed now."
-  // from a default save. The file write itself is gated in BeginFileX().
-  if ((us.fNoWrite || is.fSzInteract) && FSwitchF2(gs.ft == ftBmp)) {
+  // a later one would be, and the file write itself is gated in
+  // BeginFileX(). A flat "us.fNoWrite" test refused the ":Xb*" line
+  // FOutputSettings() emits, and one refusal stops the whole load, so a
+  // saved settings file did not load at all under "-0o" -- measured, as
+  // "The switch -Xb is not allowed now." from a default save.
+  //
+  // The test is on the RESULT, not the prefix: a switch that leaves gs.ft
+  // where it already was selects nothing, whatever the prefix said.
+  if ((us.fNoWrite || is.fSzInteract) &&
+    FSwitchF2(gs.ft == ftBmp) * ftBmp != gs.ft) {
     ErrorArgv("Xb");
     return tcError;
   }
@@ -1508,7 +1511,8 @@ static int NSwXp(CONST char *szSwitch, PARSEIN *pin)
   // As NSwXb() above: refuse only a prefix that would actually select a
   // PostScript file, so the ":Xp" line a settings file carries still loads
   // under the lockdown.
-  if ((us.fNoWrite || is.fSzInteract) && FSwitchF2(gs.ft == ftPS)) {
+  if ((us.fNoWrite || is.fSzInteract) &&
+    FSwitchF2(gs.ft == ftPS) * ftPS != gs.ft) {
     ErrorArgv("Xp");
     return tcError;
   }
@@ -1658,12 +1662,12 @@ static int NSwXw(CONST char *szSwitch, PARSEIN *pin)
     return tcError;
   if (FErrorValN("Xw", !FValidGraphY(j), j, 2))
     return tcError;
-  // gs.xWin includes the sidebar everywhere else in this program, and
-  // FOutputSettings() writes this switch WITHOUT it, so it has to be
-  // added back here or every save-and-reload shrinks the window by one.
+  // Verbatim, both ways. This used to add the sidebar width back, because
+  // FOutputSettings() subtracted it; the pair only agreed when fSidebar
+  // read the same at save and at load, and it cannot -- that macro tests
+  // gi.nMode, and the chart mode is not a saved setting. So saving with a
+  // wheel chart's sidebar showing narrowed the window every time.
   gs.xWin = i; gs.yWin = j;
-  if (fSidebar)
-    gs.xWin += (SIDESIZE * gi.nScaleText) >> 1;
   return darg + 1;
 }
 
@@ -2313,9 +2317,18 @@ static int NSwp(CONST char *szSwitch, PARSEIN *pin)
   real rT;
   int i;
 
-  us.nProgress = (ch1 == '0') + 2*(ch1 == '1');
-  if (us.nProgress)
-    ch1 = ch2;
+  // The progression METHOD is named only by the "0" and "1" spellings.
+  // Assigning it for every -p* meant "-pd", "-pC", "-pO" and "-pc" -- each
+  // of which only sets a progression parameter -- silently reset it to
+  // secondary, and FOutputSettings() writes three of those, so loading any
+  // settings file reset it too. Plain "-p", "-pt" and "-pn" still do, which
+  // is what they have always done.
+  if (ch1 == '0' || ch1 == '1' ||
+    (ch1 != 'd' && ch1 != 'C' && ch1 != 'O' && ch1 != 'c')) {
+    us.nProgress = (ch1 == '0') + 2*(ch1 == '1');
+    if (us.nProgress)
+      ch1 = ch2;
+  }
   if (pin->fAnd && ch1 != 'c') {
     us.fProgress = fFalse;
     return 0;
@@ -4049,6 +4062,23 @@ static int NProcessSwitchTable(CONST char *szName, PARSEIN *pin)
       return i;
     }
   return nSwitchAbsent;
+}
+
+
+// The AstroExpression hooks, by name and by the slot each fills, so
+// FOutputSettings() can write all of them without keeping a second copy of
+// rgswtilde[] that would fall behind it. Returns fFalse past the end.
+
+flag FSwitchTildeRow(int i, CONST char **pszName, char ***pppch)
+{
+#ifdef EXPRESS
+  if (i >= 0 && i < (int)(sizeof(rgswtilde)/sizeof(*rgswtilde))) {
+    *pszName = rgswtilde[i].szName;
+    *pppch = rgswtilde[i].ppch;
+    return fTrue;
+  }
+#endif
+  return fFalse;
 }
 
 

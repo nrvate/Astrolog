@@ -59,6 +59,7 @@ gen() {   # a generated table still matches its generator
 gen  "dialogs from astrolog.rc"  qtrcdlg.h   python3 tools/rc2qt.py astrolog.rc
 gen  "accelerators"              qtrcaccel.h python3 tools/rc_accel.py astrolog.rc
 gen  "command ids"               qtrccmd.h   python3 tools/rc_cmd.py astrolog.rc resource.h
+gen  "settings fields"           settingsfields.h python3 tools/gen_settings_fields.py astrolog.h
 for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
          rc_flagtype_audit rc_casttype_audit backend_parity_audit \
          defaults_audit registry_audit settings_coverage_audit \

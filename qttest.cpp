@@ -77,6 +77,11 @@
 #include "astrolog.h"
 #include "extern.h"
 #include "qtdriver.h"
+// Every scalar member of US and GS by name, generated from astrolog.h, so
+// the settings round trip can ask about all of them rather than one at a
+// time. See tools/gen_settings_fields.py.
+#include <stddef.h>
+#include "settingsfields.h"
 
 #ifdef SWISS
 // The oracle calls the ephemeris library directly, so this file needs the
@@ -5025,20 +5030,30 @@ static void TestSharedCoreFixesQt()
     szObjDisp[oFor] = dispSav;
   }
 
-  // gs.xWin includes the sidebar; FOutputSettings() writes ":Xw" without
-  // it and says so in the comment beside the value. Reading it back has
-  // to add it on again, and did not -- so save, reload, save, reload
-  // walked the window down 240 pixels a cycle. Mirror exactly what
-  // io.cpp writes, rather than writing a file, and require the value to
-  // come back where it started.
-  gi.nMode = gWheel; gs.fText = fTrue; gs.fDoSidebar = fTrue;
-  gs.yWin = 1260;
-  gs.xWin = 1260 + ((SIDESIZE * gi.nScaleText) >> 1);
-  i = gs.xWin; if (fSidebar) i -= (SIDESIZE * gi.nScaleText) >> 1;
-  sprintf2(S(szLine), ":Xw %d %d", i, gs.yWin);
-  FProcessCommandLine(szLine);
-  Check(gs.xWin == 1260 + ((SIDESIZE * gi.nScaleText) >> 1),
-    "a saved window width reloads to the width it was saved at");
+  // The window size is written and read verbatim. It used to be written
+  // with the sidebar width subtracted and read with it added back, which
+  // agreed only when fSidebar read the same at both ends -- and it cannot,
+  // because that macro tests gi.nMode and the chart mode is not a saved
+  // setting. So save, reload, save, reload walked the window down 240
+  // pixels a cycle. Asserted from both sides of fSidebar, since agreeing
+  // with itself in one state is exactly what the old pair did.
+  {
+    int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode;
+    flag fTextSav = gs.fText, fSideSav = gs.fDoSidebar;
+
+    gi.nMode = gWheel; gs.fText = fTrue;
+    for (i = 0; i <= 1; i++) {
+      gs.fDoSidebar = (i > 0);
+      gs.xWin = 1500; gs.yWin = 1260;
+      sprintf2(S(szLine), ":Xw %d %d", gs.xWin, gs.yWin);
+      FProcessCommandLine(szLine);
+      Check(gs.xWin == 1500 && gs.yWin == 1260,
+        "a saved window size reloads unchanged, sidebar %s (%d x %d)",
+        i > 0 ? "on" : "off", gs.xWin, gs.yWin);
+    }
+    gs.xWin = xWinSav; gs.yWin = yWinSav; gi.nMode = nModeSav;
+    gs.fText = fTextSav; gs.fDoSidebar = fSideSav;
+  }
 
   // A forced midpoint is computed in CastChart() from planet[] of its two
   // sources, and ComputeEphem() skips any restricted object above the
@@ -5270,6 +5285,374 @@ static void TestNestedIncludeQt()
   SetNoPopupQt(fPopupSav);
   remove(szInner); remove(szOuter);
   printf("  an include inside a settings file hands the channel back\n");
+}
+
+
+// ---- Every settings field, asked at once ----
+//
+// FOutputSettings() is a hand-maintained list of sprintf2() lines and the
+// reader is the switch registry. Nothing in the program knows which fields
+// the pair is supposed to carry between them, so every check written before
+// this one asked about the settings somebody remembered to ask about, and
+// the ones nobody remembered were exactly the ones that got lost.
+//
+// This asks about all of them. settingsfields.h names every scalar member
+// of US and GS, generated from astrolog.h; the test saves the current
+// settings, poisons every field, replays the file, and names what did not
+// come back. It found 62 lost settings on its first run, of which the
+// AstroExpression hooks were 46.
+//
+// The ledger below is what is EXPECTED not to come back, each entry with a
+// reason. A field that starts surviving is reported too, so an entry cannot
+// quietly go stale.
+
+typedef struct _setfieldskip {
+  CONST char *szName;   // A field name, or a whole section with "*"
+  CONST char *szWhy;
+} SETFIELDSKIP;
+
+static CONST SETFIELDSKIP rgsetskip[] = {
+
+  // Two whole sections. Which chart to draw has never been a saved
+  // setting: astrolog.as would then dictate the chart on every launch,
+  // and the ":" prefix discipline in FOutputSettings() exists precisely
+  // to write a value without disturbing one of these.
+  {"Chart types*",       "chart type, not a saved setting"},
+  {"Table chart types*", "chart type, not a saved setting"},
+
+  {"us.fGraphics",    "-X, view state; and in a GUI build a settings "
+                      "file deliberately cannot change it at all"},
+  {"gs.szDisplay",    "-Xd, the X11 display this run opened"},
+  {"us.nRel",         "-r family, which chart is being compared, not a "
+                      "preference"},
+  {"us.fProgress",    "-p, a progressed chart is a chart"},
+  {"us.nProgress",    "-p0/-p1, chosen with the progression it belongs to"},
+  {"us.fInDayMonth",  "-dm, the span of one transit search"},
+  {"us.fInDayYear",   "-dy, the same"},
+  {"us.nEphemYears",  "\"-EY 0\" is refused (FErrorValN, i < 1) and 0 is "
+                      "what the Chart Settings box unticked leaves, while "
+                      "\":Ey\" reads us.fEphemeris and is not deterministic"},
+  {"us.rRatio",       "\"-r0 <file1> <file2> [<ratio>]\" wants two chart "
+                      "files to name a ratio, and a settings file has none"},
+
+  // A display preference spelt as a sub-letter of a CHART TYPE switch.
+  // The handler toggles the preference and the chart type from the same
+  // prefix, so "=" or "-" would select that chart on load and ":" carries
+  // neither flag. There is no spelling that saves the preference alone:
+  // the settings format IS the command line, and the command line was
+  // never asked to separate the two. Thirteen fields, one finding.
+  {"us.fWheelReverse", "NSww: \"-w0\" toggles it and us.fWheel"},
+  {"us.fGridConfig",   "NSwg: \"-g0\" toggles it and us.fGrid"},
+  {"us.fGridMidpoint", "NSwg: \"-gm\" toggles it and us.fGrid"},
+  {"us.fAspSummary",   "NSwa: \"-a0\" toggles it and us.fAspList"},
+  {"us.fDistance",     "NSwa/NSwg: \"-ad\"/\"-gd\" toggle it and the type"},
+  {"us.fParallel",     "NSwa/NSwg: \"-ap\"/\"-gp\" toggle it and the type"},
+  {"us.fMidSummary",   "NSwm: \"-m0\" toggles it and us.fMidpoint"},
+  {"us.fPrimeVert",    "NSwZ: \"-Z0\" toggles it and us.fHorizon"},
+  {"us.fLatitudeCross","NSwL: \"-L0\" toggles it and us.fAstroGraph"},
+  {"us.fArabicFlip",   "NSwP: \"-P0\" toggles it and us.fArabic"},
+  {"us.fCalendarYear", "the \"Ky\" registry row sets us.fCalendar too"},
+  {"us.fInfluenceSign","the \"j0\" registry row sets us.fInfluence too"},
+  {"us.fSectorApprox", "the \"l0\" registry row sets us.fSector too"},
+  {"us.fMoonChartSep", "the \"80\" registry row sets us.fMoonChart too"},
+  {"gs.fSouth",        "the \"0\" suffix on -XX/-XG/-XP, whose handlers "
+                       "zero gi.nMode the way gs.rRot's do"},
+  {"gs.fMollweide",    "NSwXW: \"-XW0\" toggles it and zeroes gi.nMode"},
+  {"gs.rRot",          "every switch that sets it (-XX/-XW/-XG/-XP) ends "
+                       "in \"gi.nMode = FSwitchF2(gi.nMode == <mode>) * "
+                       "<mode>\", zeroing the chart mode"},
+  {"gs.rTilt",         "same as gs.rRot -- -XX and -XG set both"},
+  {"gs.objTrack",      "same as gs.rRot -- -XZ zeroes gi.nMode too"},
+  {"gs.fBackDraw",     "says a bitmap loaded with \"-XI <file>\" is "
+                       "showing, and the file name is not saved either"},
+  // What this run was asked to do, rather than what it remembers.
+  {"us.fWriteFile",   "-o, write this chart to a file"},
+  {"us.nWriteFormat", "-o, and in which format"},
+  {"us.fNoDisplay",   "-Y0, print nothing this run"},
+  {"us.cSequenceLine","-Yq, how many charts this run draws"},
+  {"us.nListAll",     "-5e, draw every chart in the list, an action"},
+  {"gs.fRoot",        "-XB, draw on the X11 root window"},
+  {"gs.nAnim",        "-Xn, start up in animation mode"},
+
+  // A preference the switch language cannot separate from a chart.
+  {"us.fGraphAll",    "NSwB/NSwV: \"-B0\"/\"-V0\" toggle it and the "
+                      "chart type"},
+  {"gs.fConstel",     "NSwXF: \"-XF\" also sets gi.nMode to the world "
+                      "map unless it already holds one of five modes"},
+  {"gs.fPrintMap",    "NSwXP: \"-XPv\" zeroes gi.nMode and gs.rRot with "
+                      "it"},
+  {"us.nProgress",    "no spelling sets the progression method without "
+                      "also demanding a date: \"-p0\" falls through "
+                      "NSwp() to the three-argument branch"},
+
+  // One-way by design, like the rest of the -0 lockdown family: NSw0 sets
+  // fTrue and nothing sets it back, so a settings file could disable
+  // AstroExpressions but never re-enable them. Not written, for the same
+  // reason "-0o", "-0X" and "-0q" are not.
+  {"us.fNoExp",       "-0~ only ever turns expressions off"} };
+
+// Fields this test cannot poison, and so cannot ask about. Poisoning them
+// changes what the reader will ACCEPT or what the run itself does, rather
+// than only what it remembers: with "-0X" set the file's own graphics
+// lines become an error and the load stops at the first one.
+static CONST SETFIELDSKIP rgsetnopoison[] = {
+  {"us.fNoRead",     "the -0 lockdown family gates the reader itself"},
+  {"us.fNoWrite",    "same"},
+  {"us.fNoGraphics", "same"},
+  {"us.fNoQuit",     "same"},
+  {"us.fLoop",       "-Q, how this run was invoked, not what it remembers"},
+  {"us.fLoopInit",   "-Q0, the same"},
+  {"us.fNoSwitches", "whether a command line was given at all"},
+  {"us.fSzPersist",  "an allocation discipline, not a setting"},
+  {"gs.ft",          "which file a render would be written to, chosen per "
+                     "invocation; and every \"-Xb\"/\":Xp\" line in the "
+                     "file writes it, so a poisoned value is overwritten "
+                     "rather than remembered"} };
+
+// gs.szStarsLin and gs.szStarsLnk are not two independent strings: the
+// count of names in the first sizes gi.rges, which FProcessYXU() allocates
+// in the same breath. Writing either directly leaves that array smaller
+// than the list it is indexed by, and the heap goes with it a few groups
+// later. So this pair is set through the one call that owns them.
+static flag FSetFieldPairQt(CONST SETTINGFIELD *psf)
+{
+  return FEqSz(psf->szName, "gs.szStarsLin") ||
+    FEqSz(psf->szName, "gs.szStarsLnk");
+}
+
+
+static flag FSetFieldAskQt(CONST SETTINGFIELD *psf)
+{
+  int i;
+
+  for (i = 0; i < (int)(sizeof(rgsetnopoison)/sizeof(SETFIELDSKIP)); i++)
+    if (FEqSz(psf->szName, rgsetnopoison[i].szName))
+      return fFalse;
+  return fTrue;
+}
+
+
+// The marker one string field is set to. Deliberately over cchSzMax, so a
+// writer that formats it through a fixed buffer is caught by the truncation
+// rather than by luck.
+static void SzSetFieldMarkQt(int i, char *sz, int cchMax)
+{
+  int cch;
+
+  sprintf2(sz, cchMax, "AstrologFieldProbe%d-", i);
+  for (cch = CchSz(sz); cch < 300 && cch < cchMax-1; cch++)
+    sz[cch] = 'x';
+  sz[cch] = chNull;
+}
+
+
+static byte *PbSetFieldQt(CONST SETTINGFIELD *psf)
+{
+  return (byte *)(psf->fGs ? (void *)&gs : (void *)&us) + psf->off;
+}
+
+
+// The reason a field is not expected to survive, or NULL if it is.
+static CONST char *SzSetFieldSkipQt(CONST SETTINGFIELD *psf)
+{
+  int i, cch;
+
+  for (i = 0; i < (int)(sizeof(rgsetskip)/sizeof(SETFIELDSKIP)); i++) {
+    cch = CchSz(rgsetskip[i].szName);
+    if (rgsetskip[i].szName[cch-1] == '*') {
+      // A whole section, named as it appears in astrolog.h.
+      if (CchSz(psf->szSect) == cch-1 &&
+        !memcmp(psf->szSect, rgsetskip[i].szName, cch-1))
+        return rgsetskip[i].szWhy;
+    } else if (FEqSz(psf->szName, rgsetskip[i].szName))
+      return rgsetskip[i].szWhy;
+  }
+  return NULL;
+}
+
+
+static void TestSettingsFieldsQt()
+{
+  CONST char *szWhy;
+  char szPath[cchSzMax], szMark[cchSzLine];
+  QVector<real> rgrSav(csetfield);
+  QVector<QByteArray> rgbaSav(csetfield);
+  QVector<bool> rgfNull(csetfield);
+  char *szFileOutSav = is.szFileOut;
+  int nWriteFormatSav = us.nWriteFormat;
+  flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
+  int i, cLost = 0, cStale = 0, cAsked = 0;
+
+  Group("Every settings field");
+  SetNoPopupQt(fTrue);
+
+  // Snapshot the PRISTINE state, which is what gets put back at the end.
+  // Every group after this one runs against whatever this leaves behind,
+  // and this one rewrites nearly every setting there is. The strings are copied, not pointed at: FCloneSzCore()
+  // writes into the destination buffer in place when it is big enough,
+  // so a saved pointer would follow the field rather than remember it.
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    byte *pb = PbSetFieldQt(psf);
+    switch (psf->ch) {
+    case 'f': case 'i': rgrSav[i] = (real)*(int *)pb;  break;
+    case 'l':           rgrSav[i] = (real)*(long *)pb; break;
+    case 'r':           rgrSav[i] = *(real *)pb;       break;
+    case 'c':           rgrSav[i] = (real)*(char *)pb; break;
+    case 's':
+      rgfNull[i] = (*(char **)pb == NULL);
+      if (!rgfNull[i])
+        rgbaSav[i] = QByteArray(*(char **)pb);
+      break;
+    }
+  }
+
+  // Then give every string field a value, so the question asked of it is
+  // "does a set value survive" rather than "is an unset one still unset".
+  // Most are empty in any ordinary run, and an empty field round trips
+  // through a writer that skips it. The marker is what the comparison
+  // below expects back; rgbaSav[] keeps the pristine value for the restore.
+  //
+  // And the marker is LONGER THAN cchSzMax, which is 255. A writer that
+  // formats one of these through sprintf2() into sz truncates it, and a
+  // truncated one does not merely lose its tail: it loses the closing
+  // quote, and the next word on the line is read as a switch. That is what
+  // happened to the -YXU star list, whose constellation set alone runs to
+  // thousands of characters.
+  for (i = 0; i < csetfield; i++)
+    if (rgsetfield[i].ch == 's' && FSetFieldAskQt(&rgsetfield[i]) &&
+      !FSetFieldPairQt(&rgsetfield[i])) {
+      SzSetFieldMarkQt(i, S(szMark));
+      FCloneSz(szMark, (char **)PbSetFieldQt(&rgsetfield[i]));
+    }
+  {
+    char szLin[cchSzLine], szLnk[cchSzLine];
+    for (i = 0; i < csetfield; i++)
+      if (FEqSz(rgsetfield[i].szName, "gs.szStarsLin"))
+        SzSetFieldMarkQt(i, S(szLin));
+      else if (FEqSz(rgsetfield[i].szName, "gs.szStarsLnk"))
+        SzSetFieldMarkQt(i, S(szLnk));
+    FProcessYXU(szLin, szLnk, fFalse);
+  }
+
+  sprintf2(S(szPath), "%s/astrolog-qt-fields-%d.as",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+  is.szFileOut = szPath;
+  Check(FOutputSettings(), "the settings writer wrote a file to ask about");
+  is.szFileOut = szFileOutSav;
+  us.nWriteFormat = nWriteFormatSav;
+
+  // Poison everything the ledger does not excuse, so a field the file
+  // fails to carry stays visibly wrong. "^1" rather than a constant, so
+  // the new value stays near the old one and inside whatever range the
+  // switch that reads it back will accept.
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    byte *pb = PbSetFieldQt(psf);
+    if (!FSetFieldAskQt(psf))
+      continue;
+    cAsked++;
+    switch (psf->ch) {
+    case 'f': case 'i': *(int *)pb ^= 1;            break;
+    case 'l':           *(long *)pb ^= 1L;          break;
+    case 'r':           *(real *)pb += 1.0;         break;
+    case 'c':           *(char *)pb ^= 1;           break;
+    // Strings are poisoned to empty rather than to a marker, so that a
+    // field the writer skips because it is unset does not read as lost.
+    case 's':
+      if (FSetFieldPairQt(psf))
+        FProcessYXU("", "", fFalse);
+      else
+        FCloneSz("", (char **)pb);
+      break;
+    }
+  }
+
+  SetNoPopupQt(fPopupSav);
+  Check(FProcessSwitchFile(szPath, NULL),
+    "and the file it wrote loads back with every field poisoned");
+  SetNoPopupQt(fTrue);
+
+  // Compare, and report by name. One assertion per lost field, because a
+  // count says nothing about which one and the names are the whole value.
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    byte *pb = PbSetFieldQt(psf);
+    flag fBack;
+
+    if (!FSetFieldAskQt(psf))
+      continue;
+    if (psf->ch == 's') {
+      // NULL and "" are one state: FSzSet() is what every reader of these
+      // uses, and a writer that emits "" for an unset field is right.
+      char *sz = *(char **)pb;
+      SzSetFieldMarkQt(i, S(szMark));
+      fBack = (sz != NULL && FEqSz(sz, szMark));
+    } else {
+      real r = psf->ch == 'r' ? *(real *)pb :
+        (psf->ch == 'l' ? (real)*(long *)pb :
+        (psf->ch == 'c' ? (real)*(char *)pb : (real)*(int *)pb));
+      fBack = (r == rgrSav[i]);
+    }
+    szWhy = SzSetFieldSkipQt(psf);
+    if (szWhy == NULL) {
+      if (!fBack) {
+        Check(fFalse, "%s (%s) did not survive a save and reload",
+          psf->szName, psf->szSwitch[0] ? psf->szSwitch : "no switch");
+        cLost++;
+      }
+    } else if (fBack) {
+      // It was poisoned and came back anyway, so the ledger is out of
+      // date -- the writer grew a line for it.
+      Check(fFalse, "%s survives now; drop its entry (\"%s\")",
+        psf->szName, szWhy);
+      cStale++;
+    }
+  }
+
+  // Put everything back, scalars from the snapshot and strings through
+  // the same call that owns them, before any other group runs.
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    byte *pb = PbSetFieldQt(psf);
+    switch (psf->ch) {
+    case 'f': case 'i': *(int *)pb = (int)rgrSav[i];   break;
+    case 'l':           *(long *)pb = (long)rgrSav[i]; break;
+    case 'r':           *(real *)pb = rgrSav[i];       break;
+    case 'c':           *(char *)pb = (char)rgrSav[i]; break;
+    case 's':
+      if (FSetFieldPairQt(psf))
+        break;    // both halves restored together, just below
+      FCloneSz(rgfNull[i] ? NULL : rgbaSav[i].constData(), (char **)pb);
+      break;
+    }
+  }
+  {
+    QByteArray baLin, baLnk;
+    for (i = 0; i < csetfield; i++)
+      if (FEqSz(rgsetfield[i].szName, "gs.szStarsLin"))
+        baLin = rgfNull[i] ? QByteArray() : rgbaSav[i];
+      else if (FEqSz(rgsetfield[i].szName, "gs.szStarsLnk"))
+        baLnk = rgfNull[i] ? QByteArray() : rgbaSav[i];
+    FProcessYXU(baLin.constData(), baLnk.constData(), fFalse);
+  }
+  us.fNoWrite = fNoWriteSav;
+  SetNoPopupQt(fPopupSav);
+  remove(szPath);
+  // Two caches are computed from fields this group rewrote and are not
+  // recomputed by putting the fields back: the Swiss ephemeris search
+  // path, which "-Yi" invalidates by hand, and the colour palette, which
+  // "-YXK0" rebuilds. Leaving the first stale pointed every later group at
+  // a marker directory, and 63 of 78 bodies stopped resolving.
+  is.fSwissPathSet = fFalse;
+  InitColorPalette(gs.fInverse);
+  AdjustRestrictions();
+  AdjustAspectCount();
+  printf("  %d of %d settings fields asked, %d lost, %d stale excuses\n",
+    cAsked, csetfield, cLost, cStale);
 }
 
 
@@ -8586,6 +8969,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"esoteric-tables",      TestEsotericTablesQt},
   {"nested-include",       TestNestedIncludeQt},
   {"graphics-mode",        TestGraphicsModeSourceQt},
+  {"settings-fields",      TestSettingsFieldsQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},

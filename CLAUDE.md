@@ -227,11 +227,14 @@ and locations, the five import file formats parse and their long-line
 truncation points hold, all 341 menu items fire without crashing, 258/258 Windows menu
 items present, 256 show Windows' own accelerator text, every body the
 Object Selections list offers resolves against the bundled ephemeris and
-answers to the name the file gives it (78 as of 2026-09-05), the application icon resolves at
+answers to the name the file gives it (78 as of 2026-09-05), every scalar
+member of `US` and `GS` either survives a save and reload or says in a
+ledger why it cannot (335 of 342 asked, as of 2026-09-07), the application
+icon resolves at
 all three sizes, and bad input (missing files, unknown switches) doesn't
 terminate the process.
 
-One group is not like the others. **The numeric oracle** (`oracle`, 575
+Two groups are not like the others. **The numeric oracle** (`oracle`, 575
 assertions on 2026-09-05, up from 307 when it was written) is the only
 net here that can say a number is *right* rather
 than *unchanged*: it asks the Swiss Ephemeris library the same question
@@ -244,6 +247,15 @@ is differential and cannot distinguish "correct" from "unchanged"; see
 work log item 141, and items 140 and 142 for the two shared-core bugs it
 found — one before a line of it was written, one a fortify abort that had
 been hunted twice and left open.
+
+**The settings field sweep** (`settings-fields`) is the other. Every check
+before it asked about the settings somebody had thought to ask about, and
+each one found more; this one generates its vocabulary from the struct
+instead. `settingsfields.h`, generated from `astrolog.h`, names all 342
+fields, and the group saves the settings, poisons every field it can,
+replays the file and reports what did not come back. Its first run found
+**206 lost settings**, the AstroExpression hooks being 46 of them. Nothing
+here can fall behind the writer again without the group saying so by name.
 
 Several groups drive real dialogs rather than calling into them: Object
 Selections through seven cases, the Calculation Settings ephemeris list,
@@ -658,15 +670,29 @@ switch matrix was byte-identical over 75,471 lines while proving nothing
 about them. Sabotage one site and re-run before trusting a clean diff:
 a harness whose invocations all error also diffs to zero.
 
-And three tables generated from the resource. Regenerate after any `.rc`
-change; piping into `diff` is how you check they are still in sync, which
-is the pre-commit form — the plain `>` form overwrites the committed file:
+And four generated tables — three from the resource, one from
+`astrolog.h`. Regenerate after any `.rc` change, or after adding a field to
+`US` or `GS`; piping into `diff` is how you check they are still in sync,
+which is the pre-commit form — the plain `>` form overwrites the committed
+file:
 
 ```sh
 python3 tools/rc2qt.py astrolog.rc | diff - qtrcdlg.h                # dialogs
 python3 tools/rc_accel.py astrolog.rc | diff - qtrcaccel.h           # accelerators
 python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h    # cmd ids
+python3 tools/gen_settings_fields.py astrolog.h | diff - settingsfields.h
 ```
+
+That last one is every scalar member of `US` and `GS` by name, with the
+section it sits under and the switch its own comment names. It exists so
+the suite can ask about **all** of them at once rather than one at a time:
+the `settings-fields` group saves the settings, poisons every field,
+replays the file and names what did not come back. Its first run found
+**206 lost settings**, including all 46 AstroExpression hooks — a user who
+kept expressions in `astrolog.as` lost every one of them the first time
+they saved. Seven fields cannot be poisoned and 34 are expected not to
+survive, each with a measured reason in the group's own ledger; everything
+else round trips or the group fails by name.
 
 ```sh
 

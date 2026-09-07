@@ -8704,6 +8704,87 @@ are the more useful half to read before starting something new.
     refuses the value 0, and a background flag whose bitmap file name is
     not saved either.
 
+203. **Ask about every field at once, and 206 were lost.** Items 200-202
+    each asked about the settings somebody had thought to ask about, and
+    each found more. The generalisation is to stop choosing: generate the
+    vocabulary from the struct.
+
+    `tools/gen_settings_fields.py` reads `astrolog.h` and emits
+    `settingsfields.h`, every scalar member of `US` and `GS` with its
+    offset, its type, the section comment it sits under and the switch its
+    own trailing comment names -- 342 fields, checked in `make check` like
+    the three tables generated from `astrolog.rc`. The `settings-fields`
+    group then saves the settings, poisons every field it can, replays the
+    file and names what did not come back.
+
+    **206 lost on the first run.** The largest group by far was the 46
+    AstroExpression hooks: `-~Q1`, `-~O`, `-~Xt` and the rest were written
+    by nobody, so a user who kept expressions in `astrolog.as` lost every
+    one of them the first time they used "Save Program Settings". They are
+    written from `rgswtilde[]` itself now, through a new
+    `FSwitchTildeRow()` accessor, so a hook added to the registry is
+    written without anyone remembering to.
+
+    Beside those: 13 obscure `-Y` flags from the barycentre to atmospheric
+    refraction, 12 graphics flags from object labels to the equator line,
+    the five chart transformations (`-3 -9 -f -G -J`), the central object
+    `-h`, interpretation `-I`, Delta-T, the two position additions, the
+    rotation objects, the rising gradient, the sign divisions, the output
+    character set, the sidereal offset applied to every object, the decan
+    type, the ephemeris step, the asteroid range, the orbit trail depth,
+    the wireframe triangle count, the sidebar text, the star link lists,
+    and five file-name settings.
+
+    **Three bugs the sweep turned up that are not omissions.**
+
+    The window size shrank on every save. `FOutputSettings()` wrote `:Xw`
+    with the sidebar width subtracted and `NSwXw()` added it back, and the
+    pair only agrees when `fSidebar` reads the same at both ends -- which
+    it cannot, because that macro tests `gi.nMode` and the chart mode is
+    not a saved setting. Written and read verbatim now, and the suite
+    asserts it from both sides of `fSidebar`, since agreeing with itself in
+    one state is exactly what the old pair did.
+
+    Setting a progression parameter reset the progression method. `NSwp()`
+    assigned `us.nProgress` for every `-p*` spelling, so `-pd`, `-pC`,
+    `-pO` and `-pc` -- each of which only sets a parameter -- silently
+    reset it to secondary, and the writer emits three of those. Plain
+    `-p`, `-pt` and `-pn` still do, which is what they have always done.
+
+    And a settings file did not load under `-0o`, which item 202 had
+    already narrowed once. The narrowing was still wrong: it tested the
+    prefix rather than the result, so a `":Xb"` line was refused whenever
+    `gs.ft` already held that type. The test is on the result now -- a
+    switch that leaves `gs.ft` where it was selects nothing.
+
+    **Two traps in writing the strings, both measured rather than
+    reasoned.** `sz` is `cchSzMax`, which is 255, and an AstroExpression or
+    a star list runs to hundreds of characters; a value formatted through
+    `sprintf2()` does not merely lose its tail but loses its closing quote,
+    and the next word on the line is read as a switch. Every string setting
+    is printed in pieces now, the way the `-M0` macro writer always was,
+    and the group's marker is 300 characters so a regression is caught by
+    the truncation rather than by luck. And the quote character is chosen
+    per value -- whichever of `'` and `"` the value itself does not
+    contain -- with a value holding both refused out loud rather than
+    corrupted.
+
+    **The group has to leave the world as it found it**, and getting that
+    wrong cost a debugging pass: it rewrites nearly every setting there is,
+    and two caches are computed from fields it touches. Leaving the Swiss
+    ephemeris path stale pointed every later group at a marker directory
+    and 63 of 78 bodies stopped resolving. `gs.szStarsLin` was worse: the
+    count of names in it sizes `gi.rges`, which `FProcessYXU()` allocates
+    in the same breath, so writing it directly left that array smaller than
+    the list indexing it and the heap went down a few groups later.
+
+    Seven fields cannot be poisoned -- the `-0` lockdown family and three
+    others, since poisoning them changes what the reader will accept rather
+    than what it remembers -- and 34 are expected not to survive, each with
+    its reason in the group's ledger. The largest category there is still
+    the one item 202 named: a display preference spelt as a sub-letter of a
+    chart type switch cannot be written at all.
+
 
 ## Features this fork adds to both builds
 

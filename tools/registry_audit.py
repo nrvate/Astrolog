@@ -66,10 +66,16 @@ def writer_spellings():
     """Every switch token FOutputSettings() emits."""
     s = read('io.cpp')
     ia = s.index('flag FOutputSettings()')
-    ib = s.index('\nflag ', ia + 10)
+    # The function's own closing brace, not the next "flag " at column 0:
+    # every function between this one and FInputData() is static or returns
+    # something else, so the old bound swallowed 200 lines of NParseSz() and
+    # its comments. Harmless while the quote parity happened to line up, and
+    # not once it did not -- it invented "1;" and "4." out of ordinary C.
+    ib = s.index('\n}\n', ia)
     body = s[ia:ib]
     out = []
-    for m in re.finditer(r'"([^"]*)"', body):
+    # A C string, escapes included, so a \" inside one does not end it.
+    for m in re.finditer(r'"((?:[^"\\]|\\.)*)"', body):
         text = m.group(1)
         for t in re.finditer(r'(?:^|\\n|\s)[-=_:](?:%c)?'
                              r'([A-Za-z0-9~;@.>+]+)\s', text):

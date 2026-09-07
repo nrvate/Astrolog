@@ -1510,6 +1510,8 @@ flag FOutputSettings()
   int nForce;
   real rForce;
   flag f1, f2, fAny;
+  CONST char *szT;
+  char **ppchT, *pchT, chT;
 #ifdef SWISS
   int j;
 #endif
@@ -1593,6 +1595,28 @@ flag FOutputSettings()
   sprintf2(S(sz), "-A %d    ", us.nAsp); PrintFSz();
   PrintF(
     "; Number of aspects         [Change \"5\" to desired number      ]\n");
+  sprintf2(S(sz), "%c3      ", ChDashF(us.fDecan)); PrintFSz();
+  PrintF(
+    "; Decan positions           [\"=3\" is decans, \"_3\" is normal   ]\n");
+  sprintf2(S(sz), "%c9      ", ChDashF(us.fNavamsa)); PrintFSz();
+  PrintF(
+    "; Navamsa positions         [\"=9\" is navamsa, \"_9\" is normal  ]\n");
+  sprintf2(S(sz), "%cf      ", ChDashF(us.fFlip)); PrintFSz();
+  PrintF(
+    "; Domal chart               [\"=f\" swaps house and sign, \"_f\" not]\n");
+  sprintf2(S(sz), "%cG      ", ChDashF(us.fGeodetic)); PrintFSz();
+  PrintF(
+    "; Geodetic houses           [\"=G\" is geodetic, \"_G\" is normal ]\n");
+  sprintf2(S(sz), "%cJ      ", ChDashF(us.fIndian)); PrintFSz();
+  PrintF(
+    "; Indian style charts       [\"=J\" is Indian, \"_J\" is Western  ]\n");
+  // "-I" takes an optional column count, and gets away with writing the
+  // flag alone where the solar chart line could not: NSwI() only consumes
+  // an argument when NFromSz() of it is nonzero, and the ";" that starts
+  // this line's comment reads as 0. ":I" below carries the column count.
+  sprintf2(S(sz), "%cI      ", ChDashF(us.fInterpret)); PrintFSz();
+  PrintF(
+    "; Interpretation            [\"=I\" interprets, \"_I\" doesn't    ]\n");
   sprintf2(S(sz), "%cA3     ", ChDashF(us.fAspect3D)); PrintFSz();
   PrintF(
     "; 3D aspects                [\"=A3\" uses latitude, \"_A3\" doesn't]\n");
@@ -1620,6 +1644,9 @@ flag FOutputSettings()
   sprintf2(S(sz), ":c3 %d   ", us.nHouse3D); PrintFSz();
   PrintF(
     "; 3D houses plane           [\"1\" prime vert., \"2\" horiz, \"3\" eq]\n");
+  sprintf2(S(sz), "-h %.3s  ", szObjName[us.objCenter]); PrintFSz();
+  PrintF(
+    "; Central object            [Change \"Ear\" to desired center    ]\n");
   sprintf2(S(sz), "-x %.3f ", us.rHarmonic); PrintFSz();
   PrintF(
     "; Harmonic chart factor     [Change \"1\" to desired harmonic    ]\n");
@@ -1640,7 +1667,7 @@ flag FOutputSettings()
   // "0" suffix means "start of sign" and NSwOnAsc() forces the flag false
   // whenever fAnd zeroes the object. It is inert there anyway -- calc.cpp
   // reads it only inside "if (us.objOnAsc)".
-  sprintf2(S(sz), "%c%c%s %.3s ", us.objOnAsc == 0 ? '_' : '-',
+  sprintf2(S(sz), "%c%c%s %-5.3s", us.objOnAsc == 0 ? '_' : '-',
     us.objOnAsc >= 0 ? '1' : '2', us.fSolarWhole ? "0" : "",
     szObjName[us.objOnAsc == 0 ? oSun : NAbs(us.objOnAsc)-1]);
   PrintFSz();
@@ -1742,6 +1769,19 @@ flag FOutputSettings()
   sprintf2(S(sz), "-Yb %d   ", us.nBioday); PrintFSz();
   PrintF(
     "; Biorhythm day cycle       [Change \"1\" to desired day length   ]\n");
+  // The decan type as well as the flag: the "=v3" line above carries the
+  // type only while the decan listing is on, and ":" here sets the type
+  // without touching us.fListDecan either way.
+  sprintf2(S(sz), ":v3 %d   ", Max(us.nDecanType, 1)); PrintFSz();
+  PrintF(
+    "; Decan display type        [\"1\" ruler, \"2\" sign, \"3\" nakshatra]\n");
+  // ":E0" leaves us.fEphemeris alone; the argument is a rate letter and a
+  // factor, the two halves NSwE() reads out of one token.
+  sprintf2(S(sz), ":E0 %c%d  ", us.nEphemRate == -2 ? 'n' :
+    (us.nEphemRate == -1 ? 'h' : (us.nEphemRate == 1 ? 'm' :
+    (us.nEphemRate == 2 ? 'y' : 'd'))), us.nEphemFactor); PrintFSz();
+  PrintF(
+    "; Ephemeris step            [\"n\" min, \"h\" hour, \"d\" day, etc ]\n");
   sprintf2(S(sz), "%c5      ", ChDashF(us.fListAuto)); PrintFSz();
   PrintF(
     "; Transits go to chart list [\"=5\" sets list, \"_5\" does nothing ]\n");
@@ -1754,6 +1794,11 @@ flag FOutputSettings()
   sprintf2(S(sz), "-YQ %d   ", us.nScrollRow); PrintFSz();
   PrintF(
     "; Text screen scroll limit  [Change \"24\" or set to \"0\" for none]\n");
+  // ":Ys" carries the offset without toggling us.fSidereal2, which the
+  // "%cYs" line below already carries.
+  sprintf2(S(sz), ":Ys %.5f ", us.rZodiacOffsetAll); PrintFSz();
+  PrintF(
+    "; Solar system plane offset [Degrees added to every position    ]\n");
   sprintf2(S(sz), "%cYs     ", ChDashF(us.fSidereal2)); PrintFSz();
   PrintF(
     "; Use plane of solar system [\"_Ys\" is ecliptic, \"=Ys\" is solar ]\n");
@@ -1778,6 +1823,26 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cYo     ", ChDashF(us.fWriteOld)); PrintFSz();
   PrintF(
     "; Old style chart info files[\"=Yo\" is old style, \"_Yo\" is new]\n");
+  sprintf2(S(sz), "%cYnn    ", ChDashF(us.fNaturalNode)); PrintFSz();
+  PrintF(
+    "; Natural node distances    [\"=Ynn\" is natural, \"_Ynn\" not   ]\n");
+  sprintf2(S(sz), "%cYp     ", ChDashF(us.fPolarAsc)); PrintFSz();
+  PrintF(
+    "; Polar Ascendant           [\"=Yp\" flips it, \"_Yp\" doesn't   ]\n");
+  sprintf2(S(sz), "%cYRh    ", ChDashF(us.fIgnoreAuto)); PrintFSz();
+  PrintF(
+    "; Auto restrict unavailable [\"=YRh\" hides them, \"_YRh\" not   ]\n");
+  // "-YUb0" sets both of these and "-YUb" only the first, so the pair
+  // round trips in this order and no other.
+  sprintf2(S(sz), "%cYUb0   ", ChDashF(us.fStarMagAbs)); PrintFSz();
+  PrintF(
+    "; Star magnitude absolute   [\"=YUb0\" absolute, \"_YUb0\" not   ]\n");
+  sprintf2(S(sz), "%cYUb    ", ChDashF(us.fStarMagDist)); PrintFSz();
+  PrintF(
+    "; Star magnitude by distance[\"=YUb\" adjusts it, \"_YUb\" not  ]\n");
+  sprintf2(S(sz), "%c~0     ", ChDashF(us.fExpOff)); PrintFSz();
+  PrintF(
+    "; AstroExpressions off      [\"=~0\" ignores them, \"_~0\" runs  ]\n");
   sprintf2(S(sz), "%cYm     ", ChDashF(us.fMoonMove)); PrintFSz();
   PrintF(
     "; Moons orbit central obj   [\"=Ym\" orbits it, \"_Ym\" doesn't   ]\n");
@@ -1815,6 +1880,39 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cYz1    ", ChDashF(us.fOffsetOnly)); PrintFSz();
   PrintF(
     "; Combine DST and time zone [\"=Yz1\" combines, \"_Yz1\" doesn't   ]\n");
+  sprintf2(S(sz), ":Yao%d   ", us.nCharsetOut); PrintFSz();
+  PrintF(
+    "; Output character set      [\"0\" ASCII, \"1\" IBM, \"2\" MS, \"3\" ]\n");
+  // rInvalid means "work Delta-T out", which is what "_Yz0" alone asks
+  // for; any other value is the number of seconds to force.
+  if (us.rDeltaT == rInvalid)
+    sprintf2(S(sz), "_Yz0    ");
+  else
+    sprintf2(S(sz), "-Yz0 %.4f ", us.rDeltaT);
+  PrintFSz();
+  PrintF(
+    "; Delta-T seconds           [\"_Yz0\" computes it, or force one ]\n");
+  sprintf2(S(sz), "-YzO %.4f ", us.rObjAddition); PrintFSz();
+  PrintF(
+    "; Object position addition  [Degrees added to every object     ]\n");
+  sprintf2(S(sz), "-YzC %.4f ", us.rCuspAddition); PrintFSz();
+  PrintF(
+    "; Cusp position addition    [Degrees added to every house cusp ]\n");
+  // The "0" suffix is us.fObjRotWhole, the way "-10" carries
+  // us.fSolarWhole with the solar chart object.
+  sprintf2(S(sz), "-Y1%s %.3s %.3s ", us.fObjRotWhole ? "0" : "",
+    szObjName[us.objRot1], szObjName[us.objRot2]); PrintFSz();
+  PrintF(
+    "; Rotate objects            [\"0\" uses the start of the sign   ]\n");
+  sprintf2(S(sz), "-YZ %d   ", us.nHorizon); PrintFSz();
+  PrintF(
+    "; Rising chart gradient     [\"0\" through \"7\"                 ]\n");
+  sprintf2(S(sz), "-YRd %d  ", us.nSignDiv); PrintFSz();
+  PrintF(
+    "; Sign divisions            [Change \"3\" to desired divisions  ]\n");
+  sprintf2(S(sz), "-Y5I %d %d ", us.iExpADB, us.cExpADB); PrintFSz();
+  PrintF(
+    "; Astrodatabank filter      [Starting index, and how many      ]\n");
   sprintf2(S(sz), "-YP %d   ", us.nArabicNight); PrintFSz();
   PrintF(
     "; Arabic part formula       [\"1\" is fixed, \"0\" checks if night ]\n");
@@ -1839,8 +1937,61 @@ flag FOutputSettings()
     "point -Yi1 to ephemeris dir, -Yi2 to font dir, etc.\n\n");
   for (i = 0; i < 10; i++)
     if (FSzSet(us.rgszPath[i])) {
-      sprintf2(S(sz), "-Yi%d \"%s\"\n", i, us.rgszPath[i]); PrintFSz();
+      sprintf2(S(sz), "-Yi%d \"", i); PrintFSz();
+      PrintF(us.rgszPath[i]);
+      PrintF("\"\n");
     }
+
+  // Printed in pieces, never through sprintf2(): sz is cchSzMax and these
+  // hold whatever the user put in them. A star list or an AstroExpression
+  // runs to hundreds of characters, and a truncated one does not merely
+  // lose its tail -- it loses the closing quote, and the next word becomes
+  // a switch. That is what the "-M0" macro writer below has always done.
+  PrintF("-Y5i \""); PrintF(SzSet(us.szADB)); PrintF("\"\n");
+  PrintF("-YkE \""); PrintF(SzSet(us.szAstColor)); PrintF("\"\n");
+  PrintF("-YkU \""); PrintF(SzSet(us.szStarsColor)); PrintF("\"\n");
+  PrintF("-YUx \""); PrintF(SzSet(us.szExoList)); PrintF("\"\n");
+  // The "0" suffix is us.fStarsList: both spellings take the file name,
+  // and which one is written is the flag.
+  PrintF(us.fStarsList ? "-YRU0 \"" : "-YRU \"");
+  PrintF(SzSet(us.szStarsList)); PrintF("\"\n");
+  PrintF("; Astrodatabank, asteroid color, star color, exoplanet and "
+    "star list files\n");
+
+#ifdef EXPRESS
+  // Every AstroExpression hook, driven from the registry's own table
+  // rather than a second copy of it, so a hook added there is written
+  // here without anyone remembering to. A user who keeps expressions in
+  // astrolog.as used to lose all of them the first time they saved.
+  //
+  // Quoted with whichever of ' and " the expression itself does not
+  // contain. NParseCommandLine() honours both; an expression holding both
+  // cannot be written, which no built-in macro does and this says out
+  // loud rather than corrupting.
+  PrintF("\n\n; ASTROEXPRESSION HOOKS:\n\n");
+  fAny = fFalse;
+  for (i = 0; FSwitchTildeRow(i, &szT, &ppchT); i++)
+    if (FSzSet(*ppchT)) {
+      f1 = f2 = fFalse;
+      for (pchT = *ppchT; *pchT; pchT++) {
+        f1 |= (*pchT == '"');
+        f2 |= (*pchT == '\'');
+      }
+      if (f1 && f2) {
+        sprintf2(S(sz), "; [-%s holds both quote characters and cannot "
+          "be written]\n", szT);
+        PrintFSz();
+        continue;
+      }
+      chT = f1 ? '\'' : '"';
+      sprintf2(S(sz), "-%s %c", szT, chT); PrintFSz();
+      PrintF(*ppchT);
+      sprintf2(S(sz), "%c\n", chT); PrintFSz();
+      fAny = fTrue;
+    }
+  if (!fAny)
+    PrintF("; [No AstroExpressions defined]\n");
+#endif
 
   PrintF("\n\n; DEFAULT RESTRICTIONS:\n"
     ";  0-10: Ear Sun Moo Mer Ven Mar Jup Sat Ura Nep Plu\n"
@@ -2225,9 +2376,14 @@ flag FOutputSettings()
   PrintF("; Color charts       [\"=Xm\" is color, \"_Xm\" is monochrome]\n");
   sprintf2(S(sz), "%cXr              ", ChDashF(gs.fInverse)); PrintFSz();
   PrintF("; Reverse background [\"_Xr\" is black, \"=Xr\" is white     ]\n");
-  i = gs.xWin; if (fSidebar) i -= (SIDESIZE * gi.nScaleText) >> 1;
-  sprintf2(S(sz), ":Xw %d %d      ", i, gs.yWin); PrintFSz();
-  PrintF("; Default X and Y resolution (not including sidebar)\n");
+  // Written verbatim, and read back verbatim. Upstream subtracted the
+  // sidebar width here and NSwXw() added it back, which only agrees when
+  // fSidebar reads the same at both ends -- and it cannot, because that
+  // macro tests gi.nMode and the chart mode is not a saved setting. Saving
+  // a wheel chart with its sidebar showing narrowed the window by half a
+  // SIDESIZE every time, with nothing to put it back.
+  sprintf2(S(sz), ":Xw %d %d      ", gs.xWin, gs.yWin); PrintFSz();
+  PrintF("; Default X and Y resolution\n");
   sprintf2(S(sz), ":Xs %d          ", gs.nScale); PrintFSz();
   PrintF("; Character scale     [100-400]\n");
   sprintf2(S(sz), ":XS %d          ", gs.nScaleText); PrintFSz();
@@ -2273,6 +2429,63 @@ flag FOutputSettings()
   sprintf2(S(sz), ":Xp%-13s", gs.fPSComplete ? "0" : ""); PrintFSz();
   PrintF(
     "; PostScript     [\":Xp0\" complete, \":Xp\" encapsulated     ]\n");
+  sprintf2(S(sz), "%cXt              ", ChDashF(gs.fText)); PrintFSz();
+  PrintF(
+    "; Chart info     [\"=Xt\" prints it on the chart, \"_Xt\" not ]\n");
+  sprintf2(S(sz), "%cXi              ", ChDashF(gs.fAlt)); PrintFSz();
+  PrintF(
+    "; Alternate mode [\"=Xi\" is the alternate chart, \"_Xi\" not ]\n");
+  sprintf2(S(sz), "%cXl              ", ChDashF(gs.fLabel)); PrintFSz();
+  PrintF(
+    "; Object labels  [\"=Xl\" labels them, \"_Xl\" doesn't        ]\n");
+  sprintf2(S(sz), "%cXj              ", ChDashF(gs.fJetTrail)); PrintFSz();
+  PrintF(
+    "; Jet trails     [\"=Xj\" keeps old frames, \"_Xj\" clears    ]\n");
+  sprintf2(S(sz), "%cXe              ", ChDashF(gs.fEquator)); PrintFSz();
+  PrintF(
+    "; Equator line   [\"=Xe\" draws it on maps, \"_Xe\" doesn't   ]\n");
+  sprintf2(S(sz), "%cXC              ", ChDashF(gs.fHouseExtra)); PrintFSz();
+  PrintF(
+    "; House rings    [\"=XC\" draws the extra ones, \"_XC\" not   ]\n");
+  sprintf2(S(sz), "%cXU              ", ChDashF(gs.fAllStar)); PrintFSz();
+  PrintF(
+    "; All stars      [\"=XU\" draws sefstars.txt, \"_XU\" doesn't ]\n");
+  sprintf2(S(sz), "%cXUx             ", ChDashF(gs.fAllExo)); PrintFSz();
+  PrintF(
+    "; All exoplanets [\"=XUx\" draws them, \"_XUx\" doesn't      ]\n");
+  sprintf2(S(sz), "%cYXe             ", ChDashF(gs.fEcliptic)); PrintFSz();
+  PrintF(
+    "; Ecliptic line  [\"=YXe\" draws it on maps, \"_YXe\" doesn't ]\n");
+  // "-YXk0" sets both of these and "-YXk" only the first, so the pair
+  // round trips in this order and no other, like the -YUb family.
+  sprintf2(S(sz), "%cYXk0            ", ChDashF(gs.fColorHouse)); PrintFSz();
+  PrintF(
+    "; House coloring [\"=YXk0\" colors houses, \"_YXk0\" doesn't  ]\n");
+  sprintf2(S(sz), "%cYXk             ", ChDashF(gs.fColorSign)); PrintFSz();
+  PrintF(
+    "; Sign coloring  [\"=YXk\" colors signs, \"_YXk\" doesn't     ]\n");
+  sprintf2(S(sz), "%cYXK0            ", ChDashF(gs.fAltPalette)); PrintFSz();
+  PrintF(
+    "; Palette        [\"=YXK0\" is the alternate one, \"_YXK0\" not]\n");
+  sprintf2(S(sz), ":XE%d %d %d       ", gs.nAstLabel, gs.nAstLo, gs.nAstHi);
+  PrintFSz();
+  PrintF(
+    "; Asteroid range [Label style, then the low and high numbers  ]\n");
+  sprintf2(S(sz), ":YXj0 %d          ", gs.zspace); PrintFSz();
+  PrintF(
+    "; Orbit trail Z  [Depth of the solar system orbit trails      ]\n");
+  sprintf2(S(sz), ":YXW %d           ", gs.nTriangles); PrintFSz();
+  PrintF(
+    "; Triangle count [Subdivisions in the wireframe globe         ]\n");
+  PrintF("-YXt \""); PrintF(SzSet(gs.szSidebar)); PrintF("\"\n");
+  PrintF("; Extra sidebar text\n");
+  // Both halves of -YXU in one call, which is what the un-suffixed
+  // spelling does: it replaces the two lists rather than appending. The
+  // constellation set alone is thousands of characters, which is why this
+  // is printed rather than formatted.
+  PrintF("-YXU \""); PrintF(SzSet(gs.szStarsLin));
+  PrintF("\" \""); PrintF(SzSet(gs.szStarsLnk)); PrintF("\"\n");
+  PrintF("; Star names to link up, and the indexes of the pairs\n");
   sprintf2(S(sz), "%cXN              ", ChDashF(gs.fAnimMap)); PrintFSz();
   PrintF(
     "; Animate map    [\"=XN\" rotates the map, \"_XN\" the time  ]\n");

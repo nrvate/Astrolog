@@ -20,11 +20,13 @@
 #        query back on is refused, loudly, by design (work log item 140).
 #        Flipping them is asking the program to do what it just forbade.
 #        Yu0 normalizes to Yu because the "0" suffix is state, not name.
-#        Also exempt: 1, 2, X1 and X2, which are not booleans at all. They
-#        are object-valued switches whose "none" is spelt with "_", so the
-#        flip asks "=X1" for an object that is not on the line -- it takes
-#        the ";" that starts the comment, and the next word is read as a
-#        switch. Their values are covered by leg 3 instead.
+#        Also exempt: 1, 2, X1, X2 and Yz0, which are not booleans at all.
+#        The first four are object-valued switches whose "none" is spelt
+#        with "_", and Yz0 is a real-valued one whose "_Yz0" means "work
+#        Delta-T out for me" and takes no argument. Either way the flip
+#        asks for an argument the line does not carry -- it takes the ";"
+#        that starts the comment, and the next word is read as a switch.
+#        Their values are covered by leg 3 instead.
 # Leg 3: tools/settings-fixture.as sets value switches to sentinels; each
 #        line's "; EXPECT <regex>" must match the resulting save. A value
 #        switch whose save-twin regresses stops matching -- this is what
@@ -51,7 +53,7 @@ fi
 python3 - "$T/rt-A.as" "$T/rt-F.as" <<'PYEOF'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
-EXEMPT = re.compile(r'^[=_](X\b|X1\b|X2\b|1\b|2\b|0b|0n|v3|bp|bm|bJ)')
+EXEMPT = re.compile(r'^[=_](X\b|X1\b|X2\b|1\b|2\b|Yz0\b|0b|0n|v3|bp|bm|bJ)')
 out = []
 for ln in open(src):
     if ln and ln[0] in '=_' and not EXEMPT.match(ln):

@@ -38,7 +38,10 @@
 -YJ0 Mar Aqu       ; EXPECT ^-YJ0 Mar Aqu
 -Y7O 5 5 7         ; EXPECT ^-Y7O 0 10 +3 +2 4 4 5 7
 -Y7C 3 3 45        ; EXPECT ^-Y7C 1 12 +17 +4 45
--YR 5 5 1          ; EXPECT ^-YR 0 10 +1 0 0 0 0 1
+; Mars restricted here, and Earth unrestricted and Jupiter restricted by
+; the "-h Jup" line below, which is what SetCentric() does to the object it
+; centers on. Both effects in one sentinel on purpose.
+-YR 5 5 1          ; EXPECT ^-YR 0 10 +0 0 0 0 0 1 1
 -YRT 5 5 1         ; EXPECT ^-YRT 0 10 +1 0 1 0 0 1
 -YjA 4 4 0.7       ; EXPECT ^-YjA 1 5 .*0\.7
 -Fm 20 2 3         ; EXPECT ^-Fm 20 2 3
@@ -120,6 +123,31 @@
 :X2 Jup                 ; EXPECT ^:X2 Jup
 :Xp                     ; EXPECT ^:Xp
 :Xbp                    ; EXPECT ^:Xbp
+-h Jup                  ; EXPECT ^-h Jup
+:Ys 1.5                 ; EXPECT ^:Ys 1\.50000
+-Y1 Mar Ven             ; EXPECT ^-Y1 Mar Ven
+-Y5i "fixture-adb"      ; EXPECT ^-Y5i "fixture-adb"
+-Y5I 7 3                ; EXPECT ^-Y5I 7 3
+:Yao2                   ; EXPECT ^:Yao2
+-YkE "fixture-ast"      ; EXPECT ^-YkE "fixture-ast"
+-YkU "fixture-starcol"  ; EXPECT ^-YkU "fixture-starcol"
+-YRd 5                  ; EXPECT ^-YRd 5
+-YRU0 "fixture-stars"   ; EXPECT ^-YRU0 "fixture-stars"
+-YUx "fixture-exo"      ; EXPECT ^-YUx "fixture-exo"
+-YZ 4                   ; EXPECT ^-YZ 4
+-Yz0 42.5               ; EXPECT ^-Yz0 42\.5000
+-YzO 1.25               ; EXPECT ^-YzO 1\.2500
+-YzC 2.5                ; EXPECT ^-YzC 2\.5000
+:v3 2                   ; EXPECT ^:v3 2
+:E0 m15                 ; EXPECT ^:E0 m15
+:XE1 4 9                ; EXPECT ^:XE1 4 9
+:YXj0 7                 ; EXPECT ^:YXj0 7
+:YXW 12                 ; EXPECT ^:YXW 12
+-YXt "fixture sidebar"  ; EXPECT ^-YXt "fixture sidebar"
+-YXU "Sirius" "1"       ; EXPECT ^-YXU "Sirius" "1"
+-~Q1 "=a 1"             ; EXPECT ^-~Q1 "=a 1"
+; The writer picks the quote character the expression itself does not use.
+-~O 'a "quoted" one'    ; EXPECT ^-~O .a .quoted. one.
 -zj "Fixture Name" "Fixture Place"  ; EXPECT ^-zj "Fixture Name"
 :sd                     ; EXPECT ^:sd
 ; :YXf has no fixture line either: the writer emits the aggregate
