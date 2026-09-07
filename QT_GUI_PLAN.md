@@ -9962,6 +9962,22 @@ are the more useful half to read before starting something new.
     hypothesis is recorded so the next sweep does not spend the same hour
     on it.
 
+    **A postscript on item 235's own cost.** Its group put a transit graph
+    on screen three times, and after `menu-actions` -- which lifts every
+    restriction and leaves a dozen calculation flags set -- each render
+    took **five seconds** rather than a tenth of one. 42 s for one group.
+
+    Pinning did not fix it, and the bisection is worth recording because
+    it is all negative: restricting `ignore[]`, then `ignore2[]` as well,
+    then the fixed stars, the house system, `nEphemYears` and the
+    in-day/in-year range flags, took 42 s to 41. Whatever dominates is
+    none of those.
+
+    Moving the group **before** `menu-actions` in the table did fix it, to
+    0.5 s. That is the better answer anyway: a group about which rows a
+    chart draws should not have its inputs chosen by the group before it.
+    The object-set pin stays, for that reason rather than for speed.
+
 
 ## Features this fork adds to both builds
 

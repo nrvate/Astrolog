@@ -3411,6 +3411,8 @@ static void TestChartScrollQt()
   int nModeSav = gi.nMode, xSav = gs.xWin, ySav = gs.yWin;
   flag fGraphicsSav = us.fGraphics;
   int nRelSav = us.nRel;
+  flag rgfIgnoreSav[objMax], rgfIgnore2Sav[objMax];
+  int i;
   QImage imTop, imEnd;
   QAction *paEnd = PaFindActionTestQt("Scroll to &End");
   QAction *paHome = PaFindActionTestQt("Scroll &to Beginning");
@@ -3420,6 +3422,17 @@ static void TestChartScrollQt()
     "the two scroll-to-limit menu items are there");
   if (paEnd == NULL || paHome == NULL)
     return;
+
+  // Its own object set, both sides of the transit, for the reason
+  // TestLineDrawingQt() gives: the subject is which ROWS get drawn, and
+  // inheriting whatever the last group left would decide that instead.
+  for (i = 0; i <= oNorm; i++) {
+    rgfIgnoreSav[i] = ignore[i];
+    rgfIgnore2Sav[i] = ignore2[i];
+    ignore[i] = ignore2[i] = (i > oSat);
+  }
+  AdjustRestrictions();
+
 
   // A short window, so the rows certainly overflow it.
   us.fGraphics = fTrue;
@@ -3438,6 +3451,11 @@ static void TestChartScrollQt()
     "scrolling to the end of a transit graph shows different rows");
 
   paHome->trigger();
+  for (i = 0; i <= oNorm; i++) {
+    ignore[i] = rgfIgnoreSav[i];
+    ignore2[i] = rgfIgnore2Sav[i];
+  }
+  AdjustRestrictions();
   gs.xWin = xSav; gs.yWin = ySav;
   SetRelQt(nRelSav);
   us.fGraphics = fGraphicsSav;
@@ -11082,6 +11100,11 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"ray-digit-fill",       TestRayDigitFillQt},
   {"aspect-count",         TestAspectCountQt},
   {"divergences",          TestDivergencesQt},
+  // BEFORE "menu-actions", and that is a timing decision as much as a
+  // tidiness one: a transit graph in the state that group leaves behind
+  // takes five seconds a render rather than a tenth, and this draws
+  // three. Measured at 42 s after it and 0.5 s before.
+  {"chart-scroll",         TestChartScrollQt},
   {"menu-actions",         TestAllMenuActionsQt},
   {"menu-parity",          TestMenuParityQt},
   {"menu-extra",           TestMenuExtraQt},
@@ -11143,7 +11166,6 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"combo-pick",           TestComboPickQt},
   {"screen-colors",        TestScreenColorsQt},
   {"key-help",             TestKeyHelpQt},
-  {"chart-scroll",         TestChartScrollQt},
   {"notice",               TestNoticeQt},
   {"orb-grid",             TestOrbGridQt},
   {"field-parse",          TestFieldParseQt},

@@ -185,8 +185,9 @@ QTTESTBIN=./astrolog-qt6-test ./run-qt-tests.sh  # the suite against Qt6:
 make check                       # what CI used to run on every push:
                                  # generated tables, ten audits, the
                                  # builds, the suite, the assertion
-                                 # scripts' self-test. 53 s, and
-                                 # tools/check.sh says what it leaves
+                                 # scripts' self-test. About 1m30 on
+                                 # this machine, most of it the suite,
+                                 # and tools/check.sh says what it leaves
                                  # out (the differential, the container
                                  # build check, the sanitizers, the
                                  # warning audit, the Swiss oracle)
@@ -970,7 +971,9 @@ On a private Xvfb display, `import -window root` is fine.
 ## CI, and what it will not let you do
 
 **`make check` is the pre-commit command**, since nothing runs on a
-push any more: 53 seconds for the generated tables, the ten audits, both
+push any more: about a minute and a half on this machine (measured
+2026-09-07 at 1m32, and it grows with the suite -- it was 53 seconds when
+this line was written) for the generated tables, the audits, both
 builds, the suite and the assertion scripts' self-test. A dispatch of
 `release.yml` with `publish` off is the other half -- it builds and
 tests on all three platforms without publishing, so the release workflow
