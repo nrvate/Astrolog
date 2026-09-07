@@ -913,6 +913,16 @@ flag API DlgList(HWND hdlg, uint message, WORD wParam, LONG lParam)
       pci = &is.rgci[i];
       if (fFilter) {
         if (*sz1) {
+          // A chart with no name cannot contain a name to match, so it
+          // filters out -- and asking is not optional. ciDefa.nam is NULL
+          // until astrolog.as sets it with "-zj", so a run started where
+          // that file is not found has a NULL name on every chart the
+          // Chart List's "Copy From slot" appends, and filtering one of
+          // those dumped core in both builds. The rest of the program
+          // tests these two with FSzSet(); only the three list filters
+          // did not.
+          if (!FSzSet(pci->nam))
+            continue;
           for (j = 0; pci->nam[j]; j++)
             if (FEqSzSubI(sz1, &pci->nam[j]))
               break;
@@ -920,6 +930,9 @@ flag API DlgList(HWND hdlg, uint message, WORD wParam, LONG lParam)
             continue;
         }
         if (*sz2) {
+          // The same for the location.
+          if (!FSzSet(pci->loc))
+            continue;
           for (j = 0; pci->loc[j]; j++)
             if (FEqSzSubI(sz2, &pci->loc[j]))
               break;

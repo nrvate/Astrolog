@@ -2675,6 +2675,16 @@ void FilterCIList(CONST char *szName, CONST char *szLocation)
     pci = &is.rgci[i];
     // Chart must have both the name and location strings within it.
     if (*szName) {
+      // A chart with no name cannot contain a name to match, so it
+      // filters out -- and asking is not optional. ciDefa.nam is NULL
+      // until astrolog.as sets it with "-zj", so a run started where
+      // that file is not found has a NULL name on every chart the
+      // Chart List's "Copy From slot" appends, and filtering one of
+      // those dumped core in both builds. The rest of the program
+      // tests these two with FSzSet(); only the three list filters
+      // did not.
+      if (!FSzSet(pci->nam))
+        continue;
       for (j = 0; pci->nam[j]; j++)
         if (FEqSzSubI(szName, &pci->nam[j]))
           break;
@@ -2682,6 +2692,9 @@ void FilterCIList(CONST char *szName, CONST char *szLocation)
         continue;
     }
     if (*szLocation) {
+      // The same for the location.
+      if (!FSzSet(pci->loc))
+        continue;
       for (j = 0; pci->loc[j]; j++)
         if (FEqSzSubI(szLocation, &pci->loc[j]))
           break;

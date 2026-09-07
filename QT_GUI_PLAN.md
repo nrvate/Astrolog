@@ -8968,6 +8968,37 @@ are the more useful half to read before starting something new.
     it takes 0, 1 or 2 and all three resolve as switches. The Qt suite
     asserts that one by its effect instead.
 
+209. **Filtering the chart list dumped core on a chart with no name.**
+    Found reviewing the Chart List dialog against `wdialog.cpp`.
+
+    The filter walks the name string a character at a time --
+    `for (j = 0; pci->nam[j]; j++)` -- in three places: `FilterCIList()`
+    in `general.cpp`, `RcFillChartListQt()` here, and `DlgList()` in
+    `wdialog.cpp`. **None of the three asked whether the name was there.**
+    Everywhere else in the program these two fields are read through
+    `FSzSet()`, which is the program's own statement that they can be
+    NULL; the list filters were the outliers.
+
+    And NULL is not hypothetical. `ciDefa.nam` starts NULL and only
+    `astrolog.as`'s `-zj` line sets it, so **a run started where that file
+    is not found has a NULL name on every chart**. Reproduced end to end
+    by copying the binary to an empty directory: the Chart List's "Copy
+    From slot" appends such a chart, and Filter dumps core. Both builds,
+    since the loop is the same in all three.
+
+    Guarded in all three, with the same reading the loop already has --
+    a chart with no name cannot contain the name being searched for, so it
+    filters out. Falsified by removing one guard and watching the group
+    segfault.
+
+    The Chart List has one more divergence, left alone deliberately:
+    Windows restores the list selection after Sort, Delete and Copy From
+    slot (`LB_SETCURSEL` with the index clamped, `wdialog.cpp:1019`) and
+    this port refills without it, so the selection is lost after each. It
+    is a real parity gap and a real annoyance -- three deletes means three
+    re-selections -- but it is behaviour rather than a defect, and worth
+    doing as its own change rather than folded into a crash fix.
+
 
 ## Features this fork adds to both builds
 

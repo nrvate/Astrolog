@@ -4807,6 +4807,30 @@ static void TestChartListFilterQt()
     "and the one left is the one that matched (\"%s\")",
     is.cci > 0 ? SzSet(is.rgci[0].nam) : "");
 
+  // A chart with NO name at all, which the three list filters used to
+  // walk straight off. ciDefa.nam is NULL until astrolog.as sets it with
+  // "-zj", so a run started where that file is not found has a NULL name
+  // on every chart "Copy From slot" appends -- and filtering one dumped
+  // core. Reproduced by running the test binary from a directory with no
+  // astrolog.as in it, then reduced to this.
+  //
+  // Both filters, because they are two separate loops and the location
+  // one was as unguarded as the name one.
+  {
+    CI ciNull = ciMain;
+
+    ciNull.nam = NULL; ciNull.loc = NULL;
+    is.cci = 0;
+    FAppendCIList(&ciNull);
+    Check(is.cci == 1, "a chart with a NULL name goes into the list");
+    FilterCIList("AstrologNoSuchName", "");
+    Check(is.cci == 0, "filtering it by name does not walk off the NULL");
+    is.cci = 0;
+    FAppendCIList(&ciNull);
+    FilterCIList("", "AstrologNoSuchPlace");
+    Check(is.cci == 0, "and neither does filtering it by location");
+  }
+
   is.cci = cciSav;
   printf("  the chart list honours its AstroExpression filter\n");
 }
