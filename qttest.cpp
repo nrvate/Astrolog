@@ -6928,6 +6928,162 @@ static void TestAtlasZoneQt()
 }
 
 
+/*
+******************************************************************************
+** Eclipses, against the published canon.
+******************************************************************************
+*/
+
+// The same argument as the atlas group above, on a harder surface: which
+// eclipses happened, and what kind each was, are facts recorded outside
+// this repository. Astrolog decides the type itself, from the angular
+// sizes and separation of two discs, so agreement with NASA's canon is a
+// real check on that arithmetic rather than a check that it has not
+// changed.
+//
+// One subtlety worth stating, because it looks like a bug and is not.
+// The type of a solar eclipse depends on WHERE you are, and Astrolog has
+// two modes. With us.fEclipseAny set -- which is what astrolog.as ships,
+// and what "=Yu0" means -- it asks whether the eclipse is total or
+// annular anywhere on Earth, and answers exactly as the canon does. With
+// it clear ("=Yu" on its own, which deliberately turns it off, work log
+// item 66) it asks geocentrically, and at the moment of ecliptic
+// conjunction the Moon's disc almost never covers the Sun's completely
+// from the Earth's centre -- so every solar eclipse reads "Partial".
+// That is the honest geocentric answer, not a defect, and this group
+// pins both modes so the distinction cannot be quietly lost.
+//
+// Times are UT at greatest eclipse, rounded to the minute.
+
+typedef struct {
+  int mon, day, yea;
+  real tim;                 // UT hours at greatest eclipse.
+  flag fSolar;
+  int et;                   // What the canon says.
+  CONST char *szWhat;
+} ECLIPSEFACT;
+
+static CONST ECLIPSEFACT rgeclipseQt[] = {
+  {  8, 21, 2017, 18.43, fTrue,  etTotal,   "the 2017 American totality"},
+  {  2, 26, 2017, 14.90, fTrue,  etAnnular, "annular over South America"},
+  {  7,  2, 2019, 19.38, fTrue,  etTotal,   "total over Chile"},
+  { 12, 26, 2019,  5.30, fTrue,  etAnnular, "annular over Indonesia"},
+  {  6, 21, 2020,  6.68, fTrue,  etAnnular, "annular over Africa and Asia"},
+  { 12, 14, 2020, 16.23, fTrue,  etTotal,   "total over Patagonia"},
+  {  6, 10, 2021, 10.72, fTrue,  etAnnular, "annular over the Arctic"},
+  { 12,  4, 2021,  7.55, fTrue,  etTotal,   "total over Antarctica"},
+  {  4,  8, 2024, 18.30, fTrue,  etTotal,   "the 2024 American totality"},
+  { 10,  2, 2024, 18.75, fTrue,  etAnnular, "annular over the South Pacific"},
+  {  1, 31, 2018, 13.50, fFalse, etTotal,   "total lunar"},
+  {  7, 27, 2018, 20.37, fFalse, etTotal,   "the century's longest totality"},
+  {  1, 21, 2019,  5.20, fFalse, etTotal,   "total lunar"},
+  {  5, 16, 2022,  4.20, fFalse, etTotal,   "total lunar"},
+  {  9, 18, 2024,  2.72, fFalse, etPartial, "a shallow partial lunar"} };
+#define ceclipseQt ((int)(sizeof(rgeclipseQt) / sizeof(ECLIPSEFACT)))
+
+static void TestEclipseQt()
+{
+  CI ciCoreSav = ciCore, ciMainSav = ciMain;
+  flag fEclSav = us.fEclipse, fAnySav = us.fEclipseAny;
+  flag fTopoSav = us.fTopoPos;
+  int objCenSav = us.objCenter, cSolar = 0, i, et;
+  real rPct;
+
+  Group("Eclipses");
+  us.fEclipse = fTrue;
+  us.fEclipseAny = fTrue;         // What astrolog.as ships: "=Yu0".
+  // Pin the geometry rather than inheriting it. TestAllMenuActionsQt()
+  // fires every menu item and leaves the program wherever that lands;
+  // measured after it, this group inherited a relationship chart
+  // (nRel -7), a dwad, a navamsa, a solar chart, flipped and geodetic
+  // houses, sidereal, decans, 3D houses, an Indian wheel and house
+  // system 22 -- every one of which moves a planet's longitude or the
+  // frame it is measured in. Heliocentric was the loudest: it makes
+  // NCheckEclipseLunar() return etUndefined outright, because the centre
+  // body IS the Sun. Topocentric positions are pinned too; they move the
+  // Moon by up to a degree, which is more than the whole annular/total
+  // margin. This is item 111's lesson, and it cost a failing run here
+  // before the state was pinned rather than guessed at.
+  //
+  // us.fEquator was the one that took measuring rather than listing, and
+  // it is worth knowing about on its own. CastChart() converts ecliptic
+  // to equatorial under "-sr", but the loop is
+  // "for (i...) if (!ignore[i])" -- so a RESTRICTED object keeps its
+  // ecliptic coordinates while everything else becomes equatorial. This
+  // group inherited a restricted Sun, so the Sun's latitude stayed 0.000
+  // while the Moon's became 12.276, and the separation between them was
+  // measured across two different coordinate systems. Astrolog does not
+  // read a restricted object's position anywhere the author could find,
+  // so this is an observation rather than a reported defect -- but it is
+  // exactly the kind of thing a test that pins nothing walks into.
+  //
+  // The saved copy is restored field by field below rather than by
+  // assigning the struct back: us carries char * fields that other code
+  // frees and reallocates, so putting a whole stale copy back is a
+  // use-after-free. Only the scalars touched above are restored.
+  US usSav = us;
+  us.objCenter = oEar;
+  us.fTopoPos = fFalse;
+  us.nRel = rcNone;
+  us.fProgress = fFalse;
+  us.rHarmonic = 1.0;
+  us.nDwad = 0;
+  us.fNavamsa = fFalse;
+  us.objOnAsc = 0;
+  us.fFlip = us.fGeodetic = us.fSidereal = us.fParallel = fFalse;
+  us.rZodiacOffset = 0.0;
+  us.fDecan = us.fHouse3D = us.fIndian = fFalse;
+  us.fEquator = us.fEquator2 = fFalse;
+  us.nHouseSystem = 0;
+
+  for (i = 0; i < ceclipseQt; i++) {
+    CONST ECLIPSEFACT *pef = &rgeclipseQt[i];
+
+    ciCore.mon = pef->mon; ciCore.day = pef->day; ciCore.yea = pef->yea;
+    ciCore.tim = pef->tim;
+    ciCore.dst = 0.0; ciCore.zon = 0.0;      // The times above are UT.
+    ciCore.lon = 0.0; ciCore.lat = 51.5;
+    CastChart(1);
+    et = pef->fSolar ? NCheckEclipse(oSun, oMoo, &rPct) :
+      NCheckEclipseLunar(us.objCenter, oMoo, oSun, &rPct);
+    Check(et == pef->et,
+      "%d/%d/%d is a %s %s eclipse -- %s (got %d)", pef->mon, pef->day,
+      pef->yea, pef->et == etTotal ? "total" :
+      (pef->et == etAnnular ? "annular" : "partial"),
+      pef->fSolar ? "solar" : "lunar", pef->szWhat, et);
+    cSolar += pef->fSolar;
+  }
+
+  // And the other mode. Geocentrically, from the Earth's centre at the
+  // moment of conjunction, the 2017 and 2024 totalities are partial --
+  // which is right, and is what a reader of "=Yu" without the "0" sees.
+  us.fEclipseAny = fFalse;
+  ciCore.mon = 8; ciCore.day = 21; ciCore.yea = 2017; ciCore.tim = 18.43;
+  ciCore.dst = 0.0; ciCore.zon = 0.0; ciCore.lon = 0.0; ciCore.lat = 51.5;
+  CastChart(1);
+  et = NCheckEclipse(oSun, oMoo, &rPct);
+  Check(et == etPartial,
+    "and geocentrically the same eclipse is partial, not total (got %d)",
+    et);
+
+  us.fEclipse = fEclSav; us.fEclipseAny = fAnySav;
+  us.objCenter = objCenSav; us.fTopoPos = fTopoSav;
+  us.nRel = usSav.nRel; us.fProgress = usSav.fProgress;
+  us.rHarmonic = usSav.rHarmonic; us.nDwad = usSav.nDwad;
+  us.fNavamsa = usSav.fNavamsa; us.objOnAsc = usSav.objOnAsc;
+  us.fFlip = usSav.fFlip; us.fGeodetic = usSav.fGeodetic;
+  us.fSidereal = usSav.fSidereal; us.fParallel = usSav.fParallel;
+  us.rZodiacOffset = usSav.rZodiacOffset; us.fDecan = usSav.fDecan;
+  us.fHouse3D = usSav.fHouse3D; us.fIndian = usSav.fIndian;
+  us.fEquator = usSav.fEquator; us.fEquator2 = usSav.fEquator2;
+  us.nHouseSystem = usSav.nHouseSystem;
+  ciCore = ciCoreSav; ciMain = ciMainSav;
+  CastChart(1);
+  printf("  %d solar and %d lunar eclipses match the canon\n",
+    cSolar, ceclipseQt - cSolar);
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -7836,6 +7992,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"long-command-line",    TestLongCommandLineQt},
   {"atlas-sink",           TestAtlasSinkQt},
   {"atlas-zone",           TestAtlasZoneQt},
+  {"eclipses",             TestEclipseQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},

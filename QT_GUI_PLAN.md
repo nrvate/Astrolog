@@ -8115,6 +8115,79 @@ are the more useful half to read before starting something new.
     ("Unknown function: 'NoSuchFunction'") but had nothing to say about
     that one.
 
+190. **Which eclipses happened, and what kind each was.** The same
+    argument as item 189, on a harder surface: eclipse dates and types
+    are recorded outside this repository, and Astrolog works the type out
+    itself from the angular sizes and separation of two discs. Agreement
+    with NASA's canon is a check on that arithmetic; a differential over
+    the same output would only say it had not moved.
+
+    Ten solar and five lunar eclipses over 2017-2024, all correct,
+    including every total and every annular one. The `eclipses` group
+    pins them.
+
+    **One thing looked exactly like a bug and was not**, and the shape of
+    it is worth keeping. With `=Yu` on the command line, every solar
+    eclipse in ten years reads "Partial" -- 2017-08-21 and 2024-04-08
+    included, which are the two most famous totalities of the period.
+    Three things had to be established before that meant anything:
+
+    * The type does not vary with the chart's location, so it is being
+      decided geocentrically rather than from where the reader stands.
+    * With `us.fEclipseAny` set instead, every one of the ten is right:
+      Total for 2017-08-21, Annular for 2019-12-26, Total for 2021-12-04.
+      A different code path, `NCheckEclipseSolar()`, which asks whether
+      the eclipse is total or annular *anywhere on Earth*.
+    * `astrolog.as` ships `=Yu0`, so `fEclipseAny` is on by default and a
+      normal user sees the correct answers. `=Yu` on its own deliberately
+      clears it -- `NSwYu()` says so in a comment, because a settings file
+      packs `fEclipseAny` into the "0" suffix (work log item 66).
+
+    So the geocentric reading is the honest answer to a different
+    question: at the moment of ecliptic conjunction, seen from the
+    Earth's centre, the Moon's disc almost never covers the Sun's
+    completely. The group pins **both** modes -- the ten canon types with
+    `fEclipseAny` set, and 2017-08-21 reading partial without it -- so the
+    distinction cannot be quietly collapsed into one later.
+
+    Like the atlas table, this one falsifies itself: it holds three
+    different expected types for solar eclipses, so no constant reply
+    passes, and the final assertion requires the *opposite* answer for an
+    eclipse already asserted total, so a checker that ignored the mode
+    fails it. Both were confirmed by observation rather than by sabotage
+    -- the all-partial mode is what the console prints today.
+
+    **And it failed the first full run, on inherited state**, which is
+    item 111's lesson arriving again in a new group. Alone it passed; in
+    the suite the five annular eclipses came back total and all five
+    lunar ones came back `etUndefined`, which `NCheckEclipseLunar()`
+    returns when the centre body *is* the Sun. `TestAllMenuActionsQt()`
+    fires every menu item and leaves the program where that lands:
+    measured, this group inherited a **relationship chart** (`nRel` -7),
+    a dwad, a navamsa, a solar chart, flipped and geodetic houses,
+    sidereal, decans, 3D houses, an Indian wheel and house system 22.
+    All of those are pinned now, and restored field by field rather than
+    by assigning a saved `US` back -- that struct carries `char *` fields
+    other code frees, so putting a stale copy back is a use-after-free.
+
+    **One of them took measuring rather than listing, and is worth
+    knowing on its own.** Pinning the obvious eleven did not fix it: the
+    lunar eclipses still read `etNone`. Printing the actual positions
+    showed the Sun at latitude 0.000 and the Moon at 12.276 -- and the
+    Moon's ecliptic latitude cannot exceed 5.3 degrees, so that was not
+    an ecliptic latitude at all. `CastChart()` converts ecliptic to
+    equatorial under `-sr`, and the loop is
+    `for (i...) if (!ignore[i])`, so **a restricted object keeps its
+    ecliptic coordinates while everything else becomes equatorial**. The
+    inherited state had a restricted Sun, so the separation between Sun
+    and Moon was being measured across two different coordinate systems.
+    Astrolog does not appear to read a restricted object's position
+    anywhere, so this is recorded as an observation rather than a
+    reported defect -- but it is exactly what a test that pins nothing
+    walks into, and the debugging lesson is the one this project keeps
+    relearning: print the number, do not reason about which flag it
+    might be.
+
 
 ## Features this fork adds to both builds
 
