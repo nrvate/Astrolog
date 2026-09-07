@@ -8565,6 +8565,35 @@ are the more useful half to read before starting something new.
     the box clear, all four with it ticked. Before the fix the second
     answer was two, so the pair is discriminating by construction.
 
+199. **A chart saved as "mychart" was a file called "mychart".** Windows'
+    `OPENFILENAME` appends `lpstrDefExt` when the typed name carries no
+    extension of its own, and `DlgSaveChart` sets one for **every** format
+    it writes: `as`, `aaf`, `qck`, `ics`, `txt` or `htm`, `bmp` or `png`,
+    `wmf`, `eps`, `svg`, `dw`. The Qt build set none anywhere --
+    `QFileDialog`'s `defaultSuffix` is empty and the static
+    `getSaveFileName()` does not expose it -- so a name typed without one
+    was saved exactly as typed.
+
+    Not merely untidy, and this is what makes it worth fixing rather than
+    shrugging at: **"Open Charts in Folder" filters on `.as`**, so a chart
+    saved without an extension is invisible to the command whose whole job
+    is to find it. Work log item 198 is the other half of the same story.
+
+    Done in code rather than through a `QFileDialog` property, for a
+    reason: the native pickers do not agree with each other about this,
+    and a rule written here is the same on Linux, on macOS and in the
+    Windows Qt build. Thirteen call sites, with the format's extension at
+    each -- including the two Windows itself decides at runtime, `txt`
+    against `htm` on `us.fTextHTML` and `bmp` against `png` on
+    `gs.chBmpMode`.
+
+    The rule is "a dot in the **last path component**", which is what
+    `lpstrDefExt` tests too, and the test says why: a folder named
+    `charts.old` holding a file typed as `june` still gets its suffix,
+    which a naive `lastIndexOf('.')` gets wrong. Nine cases, and the ones
+    that matter are the negatives -- a name that already ends in `.dat`
+    keeps it, because a user who typed that meant it.
+
 
 ## Features this fork adds to both builds
 

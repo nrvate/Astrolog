@@ -1338,6 +1338,7 @@ static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
 }
 
 
+extern QString StrDefaultSuffixTestQt(CONST QString &, CONST char *);
 extern int COpenChartDirTestQt(CONST char *);      // qtdialog.cpp
 extern void PrintChartToFileTestQt(CONST char *);  // qtdriver.cpp
 extern void AnimTickTestQt(void);                 // qtdriver.cpp
@@ -7676,6 +7677,57 @@ static void TestOpenDirQt()
 }
 
 
+/*
+******************************************************************************
+** The extension a save dialog adds when the user types none.
+******************************************************************************
+*/
+
+// Windows' OPENFILENAME appends lpstrDefExt, and DlgSaveChart sets one
+// for every format it writes. Qt's getSaveFileName appends nothing --
+// defaultSuffix is empty and the static convenience function does not
+// expose it -- so a name typed as "mychart" was saved as a file called
+// exactly that. Not merely untidy: "Open Charts in Folder" filters on
+// ".as", so a chart saved without one is invisible to the command whose
+// job is to find it.
+//
+// The cases below are the ones that decide whether the rule is right
+// rather than merely present. A name that already has an extension keeps
+// it, whatever it is -- a user who typed "chart.dat" meant that. And
+// "has an extension" is a dot in the LAST path component: a folder named
+// "charts.old" holding a file typed as "june" still gets its suffix, the
+// case a naive lastIndexOf('.') gets wrong.
+
+static void TestSaveSuffixQt()
+{
+  static CONST struct {
+    CONST char *szIn, *szExt, *szWant, *szWhy;
+  } rgt[] = {
+    {"mychart",            "as",  "mychart.as",     "no extension"},
+    {"mychart.as",         "as",  "mychart.as",     "already right"},
+    {"mychart.dat",        "as",  "mychart.dat",    "already something"},
+    {"/tmp/june",          "as",  "/tmp/june.as",   "a path"},
+    {"/tmp/charts.old/june", "as", "/tmp/charts.old/june.as",
+                                                    "a dotted FOLDER"},
+    {"/tmp/charts.old/june.as", "as", "/tmp/charts.old/june.as",
+                                                    "and one with a name"},
+    {"chart",              "png", "chart.png",      "another format"},
+    {"chart.",             "as",  "chart.",         "a trailing dot counts"},
+    {"",                   "as",  "",               "nothing stays nothing"} };
+  int i;
+
+  Group("Save file extension");
+  for (i = 0; i < (int)(sizeof(rgt)/sizeof(rgt[0])); i++) {
+    QString str = StrDefaultSuffixTestQt(QString::fromUtf8(rgt[i].szIn),
+      rgt[i].szExt);
+    Check(str == QString::fromUtf8(rgt[i].szWant),
+      "\"%s\" + %s is \"%s\" -- %s (got \"%s\")", rgt[i].szIn, rgt[i].szExt,
+      rgt[i].szWant, rgt[i].szWhy, str.toLocal8Bit().constData());
+  }
+  printf("  a typed name gets the format's extension, and keeps its own\n");
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -8607,6 +8659,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"restrict-recall",      TestRestrictRecallQt},
   {"printing",             TestPrintQt},
   {"open-dir",             TestOpenDirQt},
+  {"save-suffix",          TestSaveSuffixQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},

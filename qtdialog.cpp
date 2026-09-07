@@ -1077,6 +1077,44 @@ void ShowOpenChartDialogQt()
 // Save the current chart to a file chosen via a standard file picker, the
 // same way Windows' DlgSaveChart does for its "Save Chart" command.
 
+// Windows' OPENFILENAME appends lpstrDefExt when the user types a name
+// with no extension of its own, and DlgSaveChart sets one for every
+// format it writes: as, aaf, qck, ics, txt or htm, bmp or png, wmf, eps,
+// svg, dw. Qt's getSaveFileName appends nothing -- defaultSuffix is
+// empty and the static convenience function does not expose it -- so a
+// name typed as "mychart" was saved as a file literally called
+// "mychart".
+//
+// That is not merely untidy. "Open Charts in Folder" filters on ".as",
+// so a chart saved without one is invisible to the command whose whole
+// job is to find it. Doing this in code rather than through a
+// QFileDialog property also makes it the same on every platform, which
+// the native pickers are not.
+//
+// "Already has an extension" means a dot in the LAST path component,
+// which is what lpstrDefExt tests too: a folder named "charts.old"
+// holding a file typed as "june" still gets its suffix.
+
+static QString StrDefaultSuffixQt(CONST QString &str, CONST char *szExt)
+{
+  int iSlash;
+
+  if (str.isEmpty())
+    return str;
+  iSlash = Max(str.lastIndexOf(QChar('/')), str.lastIndexOf(QChar('\\')));
+  if (str.lastIndexOf(QChar('.')) > iSlash)
+    return str;
+  return str + QChar('.') + QString::fromLatin1(szExt);
+}
+
+#ifdef QTTEST
+QString StrDefaultSuffixTestQt(CONST QString &str, CONST char *szExt)
+{
+  return StrDefaultSuffixQt(str, szExt);
+}
+#endif
+
+
 void ShowSaveChartDialogQt()
 {
   if (FNoWriteQt())
@@ -1085,6 +1123,7 @@ void ShowSaveChartDialogQt()
     "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, "as");
   QByteArray ba = qs.toLocal8Bit();
   // FCloneSz, like the seven other save dialogs in this file and like the
   // -o switch handler. SzClone() with a plain assignment DROPPED whatever
@@ -1114,6 +1153,7 @@ void ShowSaveChartPositionsDialogQt()
     QString(), "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, "as");
   QByteArray ba = qs.toLocal8Bit();
   FCloneSz(ba.constData(), &is.szFileOut);
   us.nWriteFormat = '0';
@@ -1135,6 +1175,7 @@ void ShowSaveSettingsDialogQt()
     DEFAULT_INFOFILE, "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, "as");
   QByteArray ba = qs.toLocal8Bit();
   FCloneSz(ba.constData(), &is.szFileOut);
   if (!FOutputSettings())
@@ -1157,6 +1198,7 @@ void ShowSaveAAFDialogQt()
     "Astrological Exchange Files (*.aaf);;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, "aaf");
   QByteArray ba = qs.toLocal8Bit();
   FCloneSz(ba.constData(), &is.szFileOut);
   if (!FOutputAAFFile())
@@ -1172,6 +1214,7 @@ void ShowSaveQuickDialogQt()
     "Quick*Chart Files (*.qck);;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, "qck");
   QByteArray ba = qs.toLocal8Bit();
   FCloneSz(ba.constData(), &is.szFileOut);
   if (!FOutputQuickFile())
@@ -1188,6 +1231,7 @@ void ShowSaveCalendarDialogQt()
     "iCalendar Files (*.ics);;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, "ics");
   QByteArray ba = qs.toLocal8Bit();
   FCloneSz(ba.constData(), &is.szFileOut);
   if (!FOutputCalendarFile())
@@ -1268,8 +1312,13 @@ static flag FExportChartQt(CONST char *szFile, int ft)
   return f;
 }
 
+// szExt is the extension Windows' lpstrDefExt carries for this format,
+// added when the typed name has none of its own. NULL means the caller
+// works it out for itself, which only the bitmap does -- bmp or png,
+// depending on gs.chBmpMode, the same branch DlgSaveChart takes.
+
 static void ShowExportGraphicsDialogQt(CONST char *szTitle,
-  CONST char *szFilter, int ft)
+  CONST char *szFilter, int ft, CONST char *szExt)
 {
   if (FNoWriteQt())
     return;
@@ -1277,6 +1326,8 @@ static void ShowExportGraphicsDialogQt(CONST char *szTitle,
     QString(szFilter) + ";;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, szExt != NULL ? szExt :
+    (gs.chBmpMode != 'P' ? "bmp" : "png"));
   QByteArray ba = qs.toLocal8Bit();
   if (!FExportChartQt(ba.constData(), ft))
     QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
@@ -1286,31 +1337,31 @@ void ShowExportBitmapDialogQt()
 {
   gs.chBmpMode = 'B';
   ShowExportGraphicsDialogQt("Export Chart Bitmap",
-    "Windows Bitmaps (*.bmp)", ftBmp);
+    "Windows Bitmaps (*.bmp)", ftBmp, NULL);
 }
 
 void ShowExportMetafileDialogQt()
 {
   ShowExportGraphicsDialogQt("Export Chart Metafile",
-    "Windows Metafiles (*.wmf)", ftWmf);
+    "Windows Metafiles (*.wmf)", ftWmf, "wmf");
 }
 
 void ShowExportPSDialogQt()
 {
   ShowExportGraphicsDialogQt("Export Chart PostScript",
-    "PostScript Files (*.eps *.ps)", ftPS);
+    "PostScript Files (*.eps *.ps)", ftPS, "eps");
 }
 
 void ShowExportSVGDialogQt()
 {
   ShowExportGraphicsDialogQt("Export Chart SVG",
-    "Scalable Vector Graphics (*.svg)", ftSVG);
+    "Scalable Vector Graphics (*.svg)", ftSVG, "svg");
 }
 
 void ShowExportWireDialogQt()
 {
   ShowExportGraphicsDialogQt("Export Chart Wireframe",
-    "Daedalus Wireframes (*.dw)", ftWire);
+    "Daedalus Wireframes (*.dw)", ftWire, "dw");
 }
 
 
@@ -1390,6 +1441,8 @@ void ShowExportTextDialogQt()
     QString(), "Text Files (*.txt);;All Files (*)");
   if (qs.isEmpty())
     return;
+  // txt or htm, exactly as Windows picks between them on us.fTextHTML.
+  qs = StrDefaultSuffixQt(qs, !us.fTextHTML ? "txt" : "htm");
   QByteArray ba = qs.toLocal8Bit();
   // Was a second, hand-rolled copy of this dance, and it was missing the
   // is.S restore -- so exporting text left the stream pointing at a
@@ -2535,6 +2588,7 @@ void ShowSaveChartListDialogQt()
     QString(), "Astrolog Chart Files (*.as);;All Files (*)");
   if (qs.isEmpty())
     return;
+  qs = StrDefaultSuffixQt(qs, "as");
   QByteArray ba = qs.toLocal8Bit();
   FCloneSz(ba.constData(), &is.szFileOut);
   us.nWriteFormat = 'l';
