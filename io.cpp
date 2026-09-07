@@ -2140,6 +2140,9 @@ flag FOutputSettings()
   sprintf2(S(sz), ":Xv %d            ", gs.nDecaFill); PrintFSz();
   PrintF(
     "; Wheel fill    [\"0\" none, \"1\" standard, \"2\" rainbow, etc.  ]\n");
+  sprintf2(S(sz), ":Xk %s          ", SzColor2(gi.kiPen)); PrintFSz();
+  PrintF(
+    "; Pen scribble color\n");
   sprintf2(S(sz), ":Xkv %s         ", SzColor2(gs.kiDeca)); PrintFSz();
   PrintF(
     "; Wheel corners decoration color\n");
