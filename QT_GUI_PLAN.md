@@ -8620,6 +8620,38 @@ are the more useful half to read before starting something new.
     also accepts `kMax`, and the KV/QRgb byte orders are kept apart by
     the proper accessors.
 
+201. **The same question, asked mechanically: five more settings the
+    writer dropped.** Item 200 found the pen colour by reading one
+    dialog. The generalisation is a sweep -- every `us.*`/`gs.*`/`gi.*`
+    field a Qt dialog *assigns*, against every field
+    `FOutputSettings()` names -- which returned 68 candidates.
+
+    Most are false positives, and knowing why matters: leg 2 of
+    `settings-round-trip.sh` already flips every registry flag and
+    requires it to survive, so the `f*` entries are covered by a path the
+    sweep cannot see. Rather than reason about the rest, they were tested
+    end to end: set each through its switch, save, and **diff against a
+    default save**.
+
+    Of six tried, only side effects reached the file. `-Un` moved the
+    star restrictions and `-XL` set its flag; the colouring choice, and
+    `-P`, `-L`, `-Yb` and `-N` entirely, left no trace. Five settings,
+    all offered in Chart Settings or Graphics Settings -- dialogs
+    generated from `astrolog.rc`, so both builds lost them.
+
+    **Four of the five need the `:` prefix**, and getting that wrong
+    would have been worse than the bug: each of those switches toggles a
+    chart type flag as well as setting its value, so a saved file spelt
+    with "-" would change the chart on load. That is the defect fixed
+    once already for `:a` and `:m`. Verified by a byte-identical
+    save/reload/save, not by reading.
+
+    Five fixture lines keep them, because leg 3b demands a sentinel for
+    every value switch the save contains. The sweep is worth re-running
+    on the remaining 60-odd candidates, one dialog at a time; what it
+    cannot do on its own is tell a setting from a transient, which is why
+    each has to be tested rather than listed.
+
 
 ## Features this fork adds to both builds
 
@@ -8657,6 +8689,35 @@ cannot reach, and `tools/windrive.sh` cannot read a control's value
 (there is no AT-SPI under Wine), so it rests on the shared behavioural
 claim and inspection. Said plainly here rather than left to look
 covered.
+
+### Five more settings the dialogs offer and the writer dropped
+
+Found by sweeping the fields the Qt dialogs ASSIGN against the fields
+`FOutputSettings()` names, then testing the survivors end to end rather
+than trusting the sweep. Verified by diffing a save with the settings
+applied against a default save -- of six tried, only side effects reached
+the file:
+
+    -XL3   the "=XL" flag was written, the colouring choice 3 was not
+    -P 12  no trace at all
+    -L 5   no trace at all
+    -Yb 7  no trace at all
+    -N 5   no trace at all
+
+All five are offered in Chart Settings or Graphics Settings, dialogs
+generated from `astrolog.rc` and therefore present in both builds, so
+both lost them.
+
+**The `:` prefix is load-bearing on four of the five.** `NSwN` ends in
+`SwitchF(us.fAtlasLook)`, `NSwP` in `SwitchF(us.fArabic)`, `NSwL` in
+`SwitchF(us.fAstroGraph)` and `NSwXL` in `SwitchF(gs.fLabelCity)` -- so
+writing them with "-" would make a saved file change the chart type on
+load, which is the defect fixed once already for `:a` and `:m`. `:` sets
+neither, since `FSwitchF()` returns the flag unchanged when none of
+`fOr`, `fAnd` and `fNot` is set, while the value still lands.
+
+Five fixture lines, so leg 3b of the round trip -- "every value switch
+the save contains has a sentinel" -- keeps them. 81 sentinels now.
 
 ### The pen scribble colour was set but never saved
 

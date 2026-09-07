@@ -102,6 +102,14 @@
 -YkC Pur Ora Pin Cya    ; EXPECT ^-YkC +Pur Ora Pin Cya
 :YXG 212121             ; EXPECT ^:YXG 212121
 :Xk Pur                 ; EXPECT ^:Xk Pur
+; Five values that reached no line of the save until the writer
+; grew one each. Every switch here also toggles a chart type flag,
+; which is why the writer spells them with ":".
+:L 7 4                  ; EXPECT ^:L 7 4
+:Pz 33                  ; EXPECT ^:Pz 33
+:N 9                    ; EXPECT ^:N 9
+-Yb 11                  ; EXPECT ^-Yb 11
+:XL4                    ; EXPECT ^:XL4
 -zj "Fixture Name" "Fixture Place"  ; EXPECT ^-zj "Fixture Name"
 :sd                     ; EXPECT ^:sd
 ; :YXf has no fixture line either: the writer emits the aggregate
