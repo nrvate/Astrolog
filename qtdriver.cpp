@@ -898,14 +898,15 @@ void TextCharQt(int xCell, int yCell, int ch)
 
 static QString CaptureTextChartQt(flag fHTML);   // defined below
 
-void PrintChartQt()
-{
-  QPrinter printer(QPrinter::HighResolution);
-  QPrintDialog dlgPrint(&printer, gi.qwind);
+// Render the current chart onto an already-chosen printer. Split out from
+// PrintChartQt() so that something other than a person with a printer can
+// exercise it: a QPrinter set to PdfFormat goes through every line below,
+// which is how the print path is tested at all -- before this it was the
+// one user-facing command with no coverage of any kind.
 
-  dlgPrint.setWindowTitle("Print Chart");
-  if (dlgPrint.exec() != QDialog::Accepted)
-    return;
+static void PrintChartToQt(QPrinter *pprinter)
+{
+  QPrinter &printer = *pprinter;
 
   // Text charts aren't drawn at all, they're printed. Hand Qt the same
   // HTML listing the text window already displays and let it paginate.
@@ -945,6 +946,22 @@ void PrintChartQt()
       gi.qpaint = new QPainter(gi.qim);
       ApplyAntialiasQt();
       InitColors();
+      // The same guard RedrawQt() applies, and this path needs it just as
+      // much: DrawChartX() switches on gi.nMode and has NO default case,
+      // and mode 0 is not a chart at all (gWheel is 1) -- so with the mode
+      // unset it draws nothing and the page comes out blank. Every other
+      // route into DrawChartX() is covered, RedrawQt() by its own copy of
+      // this line and every export by FActionX() (xscreen.cpp:1471); this
+      // one goes straight there and was the only one without it.
+      //
+      // Reachable while the SCREEN still shows a chart, which is what
+      // makes it worth guarding rather than shrugging at: the View menu's
+      // "Show Graphics" handler sets gi.nMode = 0 and then calls
+      // RedrawQt(), which returns at its first line when "Don't
+      // Automatically Redraw Screen" is on -- leaving the old picture on
+      // the canvas and the mode at zero.
+      if (gi.nMode == 0)
+        gi.nMode = DetectGraphicsChartMode();
       gi.nScaleT = 1;
       AdjustTextScale();
       DrawChartX();
@@ -971,6 +988,31 @@ void PrintChartQt()
   }
   RedrawQt();
 }
+
+
+void PrintChartQt()
+{
+  QPrinter printer(QPrinter::HighResolution);
+  QPrintDialog dlgPrint(&printer, gi.qwind);
+
+  dlgPrint.setWindowTitle("Print Chart");
+  if (dlgPrint.exec() != QDialog::Accepted)
+    return;
+  PrintChartToQt(&printer);
+}
+
+#ifdef QTTEST
+// Print to a PDF, which is the only way a headless run can reach the
+// code above.
+void PrintChartToFileTestQt(CONST char *szFile)
+{
+  QPrinter printer(QPrinter::HighResolution);
+
+  printer.setOutputFormat(QPrinter::PdfFormat);
+  printer.setOutputFileName(QString::fromUtf8(szFile));
+  PrintChartToQt(&printer);
+}
+#endif
 
 
 // Paste, equivalent to Windows' FFilePaste(): take whatever is on the

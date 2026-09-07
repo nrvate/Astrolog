@@ -8497,6 +8497,40 @@ are the more useful half to read before starting something new.
     to be repeated immediately before the assertion, because each Copy
     runs `Action()` and leaves the chart on the listing again.
 
+197. **Printing could hand you a blank page while the screen showed a
+    chart.** `DrawChartX()` switches on `gi.nMode` and has **no default
+    case**, and mode 0 is not a chart -- `gWheel` is 1. Every route into
+    it guards against that: `RedrawQt()` with its own
+    `if (gi.nMode == 0) gi.nMode = DetectGraphicsChartMode();`, and every
+    export through `FActionX()` (xscreen.cpp:1471). `PrintChartQt()`
+    calls `DrawChartX()` directly and was the only one without it.
+
+    That is reachable *while the canvas still shows a chart*, which is
+    what makes it worth guarding rather than shrugging at. The View
+    menu's "Show Graphics" handler sets `gi.nMode = 0` and then calls
+    `RedrawQt()` -- which returns at its first line when "Don't
+    Automatically Redraw Screen" is on. The old picture stays on the
+    canvas, the mode stays zero, and Print renders nothing.
+
+    **Print had no coverage of any kind before this**, because
+    `PrintChartQt()` opens a `QPrintDialog` and a headless run has nobody
+    to answer it. The render is split into `PrintChartToQt(QPrinter *)`
+    now, so a `QPrinter` set to `PdfFormat` goes through every line of
+    it, and the `printing` group prints three PDFs: a wheel, a wheel with
+    the mode deliberately unset, and a text chart.
+
+    The measurement is what makes it convincing rather than plausible.
+    A chart is rendered into an image and embedded, so a page with a
+    chart on it is enormous next to a page with a uniform background,
+    which compresses to nothing. Measured: **923,363 bytes for the wheel
+    and 923,363 for the wheel with the mode unset -- byte for byte the
+    same chart** -- against 12,250 for the text page. And the premise is
+    asserted directly rather than inferred: `DrawChartX()` with
+    `gi.nMode` at zero fills a 400x400 image with **at most two colours**,
+    where a real mode gives more than four. Without that second pair the
+    first would pass on a build where mode 0 happened to be fine and the
+    guard was doing nothing, with no way to tell which.
+
 
 ## Features this fork adds to both builds
 

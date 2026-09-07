@@ -39,6 +39,7 @@
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMenuBar>
+#include <QtCore/QSet>
 #include <QtGui/QClipboard>
 // QAction moved to QtGui in Qt6; see the same guard in qtdriver.cpp.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -1337,6 +1338,7 @@ static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
 }
 
 
+extern void PrintChartToFileTestQt(CONST char *);  // qtdriver.cpp
 extern void AnimTickTestQt(void);                 // qtdriver.cpp
 extern flag FAnimTickBusyTestQt(void);
 extern void SetAnimTickBusyTestQt(flag);
@@ -7467,6 +7469,124 @@ static void TestRestrictRecallQt()
 }
 
 
+/*
+******************************************************************************
+** Printing.
+******************************************************************************
+*/
+
+// Print was the one user-facing command with no coverage of any kind,
+// because PrintChartQt() opens a QPrintDialog and a headless run has
+// nobody to answer it. The render is split out now, so a QPrinter set to
+// PdfFormat goes through every line of it.
+//
+// What is asserted is not "a file appeared" -- a blank page is a file.
+// A chart is rendered into an image and that image is embedded, so a page
+// with a chart on it is much larger than a page with a uniform background,
+// which compresses to almost nothing. The middle case is the point:
+// printing with gi.nMode UNSET has to produce the same chart, because
+// DrawChartX() switches on that field and has no default case, and the
+// View menu can leave it at zero while the screen still shows a chart.
+
+static qint64 CbPrintPdfQt(CONST char *szWhy)
+{
+  QString strPath = QDir::tempPath() + QString("/astrolog-qt-print-%1.pdf")
+    .arg((int)QCoreApplication::applicationPid());
+  QByteArray ba = strPath.toLocal8Bit();
+
+  QFile::remove(strPath);
+  PrintChartToFileTestQt(ba.constData());
+  qint64 cb = QFileInfo(strPath).size();
+  QFile::remove(strPath);
+  if (cb <= 0)
+    printf("    (%s produced no PDF at all)\n", szWhy);
+  return cb;
+}
+
+static void TestPrintQt()
+{
+  flag fGraphicsSav = us.fGraphics;
+  int nModeSav = gi.nMode, nRelSav = us.nRel;
+  qint64 cbChart, cbUnset, cbText;
+
+  Group("Printing");
+  QVector<flag> rgfSav(cchartmode);
+  int i;
+  for (i = 0; i < cchartmode; i++)
+    rgfSav[i] = *rgchartmode[i].pf;
+  us.nRel = rcNone;
+  us.fGraphics = fTrue;
+  SetChartModeQt(gHouse);
+  cbChart = CbPrintPdfQt("a wheel");
+  Check(cbChart > 20000, "a graphics chart prints a page with a chart on it "
+    "(%lld bytes)", (long long)cbChart);
+
+  // The reason the guard exists. Nothing else in this suite reaches it:
+  // every other route into DrawChartX() sets the mode on the way past.
+  us.fGraphics = fTrue;
+  gi.nMode = 0;
+  cbUnset = CbPrintPdfQt("a wheel with the mode unset");
+  Check(cbUnset > cbChart / 2,
+    "and so does one printed with gi.nMode unset (%lld vs %lld bytes)",
+    (long long)cbUnset, (long long)cbChart);
+
+  us.fGraphics = fFalse;
+  cbText = CbPrintPdfQt("a text chart");
+  Check(cbText > 2000, "a text chart prints too (%lld bytes)",
+    (long long)cbText);
+  printf("  sizes: wheel %lld, wheel with no mode %lld, text %lld bytes\n",
+    (long long)cbChart, (long long)cbUnset, (long long)cbText);
+
+  // The premise the guard rests on, asserted rather than asserted-about:
+  // DrawChartX() with gi.nMode at zero draws NOTHING. Without this the
+  // assertion above passes on a build where mode 0 happens to be fine and
+  // the guard is doing nothing, and nobody would know which.
+  {
+    QImage *pqimSav = gi.qim;
+    QPainter *pqpaintSav = gi.qpaint;
+    us.fGraphics = fTrue;
+    gi.qim = new QImage(400, 400, QImage::Format_RGB32);
+    gi.qim->fill(Qt::black);
+    gi.qpaint = new QPainter(gi.qim);
+    InitColors();
+    gi.nScaleT = 1;
+    AdjustTextScale();
+    gi.nMode = 0;
+    DrawChartX();
+    delete gi.qpaint;
+    QImage imBlank = *gi.qim;
+    gi.qim->fill(Qt::black);
+    gi.qpaint = new QPainter(gi.qim);
+    gi.nMode = gHouse;
+    DrawChartX();
+    delete gi.qpaint;
+    QImage imDrawn = *gi.qim;
+    delete gi.qim;
+    gi.qim = pqimSav; gi.qpaint = pqpaintSav;
+
+    auto cColour = [](CONST QImage &im) {
+      QSet<QRgb> set;
+      for (int y = 0; y < im.height(); y += 4)
+        for (int x = 0; x < im.width(); x += 4)
+          set.insert(im.pixel(x, y));
+      return set.size();
+    };
+    Check(cColour(imBlank) <= 2,
+      "DrawChartX() with gi.nMode unset draws nothing (%d colours)",
+      cColour(imBlank));
+    Check(cColour(imDrawn) > 4,
+      "and with a real mode it draws a chart (%d colours)",
+      cColour(imDrawn));
+  }
+
+  us.fGraphics = fGraphicsSav; gi.nMode = nModeSav; us.nRel = nRelSav;
+  for (i = 0; i < cchartmode; i++)
+    *rgchartmode[i].pf = rgfSav[i];
+  RedrawQt();
+  printf("  graphics and text both print, with the mode set or not\n");
+}
+
+
 typedef struct _qttestentry {
   CONST char *szName;
   void (*pfn)();
@@ -8396,6 +8516,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"lockdown",             TestLockdownQt},
   {"copy-text-bom",        TestCopyTextBomQt},
   {"restrict-recall",      TestRestrictRecallQt},
+  {"printing",             TestPrintQt},
   {"chartmode-table",      TestChartModeTableQt},
   {"cast-cooking",         TestCastCookingQt},
   {"line-drawing",         TestLineDrawingQt},
