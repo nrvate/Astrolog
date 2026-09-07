@@ -1276,7 +1276,25 @@ void RedrawQt()
   // thing itself.
   int dxWin = gs.xWin, dyWin = gs.yWin;
   gi.qim = new QImage(gs.xWin, gs.yWin, QImage::Format_RGB32);
-  gi.qim->fill(Qt::black);
+  // InitColorsX() is what turns "Reverse Background" (gs.fInverse) and
+  // "Monochrome" (gs.fColor) into the colours the drawing code actually
+  // reads: gi.kiOn, kiOff, kiLite and kiGray, and the whole *B family --
+  // kMainB, kRainbowB, kElemB, kAspB, kObjB, kRayB (xscreen.cpp:124).
+  // FActionX() calls it before every render to a FILE (xscreen.cpp:1672).
+  // This screen path never did, so both menu items worked when exporting
+  // a chart and did NOTHING on screen.
+  //
+  // Measured before the fix rather than reasoned: with reverse on, the
+  // commonest pixel of a wheel stayed black and gi.kiOn/kiOff stayed
+  // 15/0; with monochrome on, the render still had 14 distinct colours.
+  //
+  // After InitColors() above, not before: that one derives kObjA[] from
+  // the per-object settings, and this derives kObjB[] from kObjA[].
+  InitColorsX();
+  // And the background is gi.kiOff, not black. Same colour ClearScreenQt()
+  // uses, and what Windows' TextClearScreen() resolves to.
+  KV kvBack = KvFromKi(gi.kiOff);
+  gi.qim->fill(QColor(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack)));
   gi.qpaint = new QPainter(gi.qim);
   ApplyAntialiasQt();
   // With no mode set, work one out from the chart flags the way FActionX

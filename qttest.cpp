@@ -52,6 +52,7 @@
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QRadioButton>
+#include <QtCore/QMap>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
@@ -758,10 +759,21 @@ static void TestAllMenuActionsQt()
     // out to two degrees is a border, its axis labels and a single star --
     // and on the coarser grid that came to exactly 20 differing samples,
     // failing a "more than 20" check for drawing exactly what it should.
+    //
+    // Measured against the BACKGROUND the renderer actually used, not
+    // against pixel(0,0). That corner holds the border when one is drawn,
+    // and in monochrome the border is the same colour as everything else
+    // -- so a telescope chart whose disc fills the frame came to twenty
+    // odd differing samples and read as blank, in 23 of these items at
+    // once. It was the check that was blind, not the chart. gi.kiOff is
+    // what RedrawQt() fills with, so it is what "did anything get drawn"
+    // has to compare against.
+    KV kvBackT = KvFromKi(gi.kiOff);
+    QRgb rgbBackT = qRgb(RgbR(kvBackT), RgbG(kvBackT), RgbB(kvBackT));
     cpix = 0;
     for (y = 0; y < gi.qim->height(); y += 4)
       for (x = 0; x < gi.qim->width(); x += 4)
-        if (gi.qim->pixel(x, y) != gi.qim->pixel(0, 0))
+        if (gi.qim->pixel(x, y) != rgbBackT)
           cpix++;
     Check(cpix > 20, "after \"%s\": chart went blank",
       str.toLocal8Bit().constData());
@@ -3303,6 +3315,92 @@ static void TestGraphicsSizeQt()
 // loops are copies of one another and the colour reader is shared, so a
 // grid apiece would be four tests of one function. Both directions, and
 // the refusal is measured by the setting NOT moving.
+
+// "Reverse Background" and "Monochrome", which did nothing on screen.
+//
+// InitColorsX() (xscreen.cpp:124) is what turns gs.fInverse and gs.fColor
+// into the colours the drawing code reads: gi.kiOn, kiOff, kiLite, kiGray
+// and the whole *B family. FActionX() calls it before every render to a
+// FILE; RedrawQt() never did, and filled its buffer with a hardcoded
+// black. So both View menu items worked when exporting a chart and were
+// inert on screen.
+//
+// Measured before the fix: with reverse on, the commonest pixel of a
+// wheel stayed black and kiOn/kiOff stayed 15/0; with monochrome on, the
+// render still had 14 distinct colours.
+//
+// Asserted on the RENDER rather than on the flags, because the flags were
+// always being set -- that is exactly why backend_parity_audit.py, which
+// works per field, could not see this.
+
+static void TestScreenColorsQt()
+{
+  flag fInvSav = gs.fInverse, fColorSav = gs.fColor;
+  int nModeSav = gi.nMode;
+  flag fGraphicsSav = us.fGraphics;
+  int cDistinct[3] = {0, 0, 0};
+  int rgcGrey[3] = {0, 0, 0}, rgcAll[3] = {1, 1, 1};
+  QRgb rgbBack[3] = {0, 0, 0};
+  int pass;
+
+  Group("Reverse and monochrome on screen");
+
+  us.fGraphics = fTrue;
+  SetChartModeQt(gWheel);
+  for (pass = 0; pass < 3; pass++) {
+    QMap<QRgb, int> cnt;
+    int x, y;
+
+    gs.fInverse = (pass == 1);
+    gs.fColor = (pass != 2);
+    RedrawQt();
+    if (gi.qim == NULL)
+      continue;
+    for (y = 0; y < gi.qim->height(); y += 3)
+      for (x = 0; x < gi.qim->width(); x += 3)
+        cnt[gi.qim->pixel(x, y)]++;
+    cDistinct[pass] = (int)cnt.size();
+    {
+      int cGrey = 0, cAll = 0;
+      for (QRgb k : cnt.keys()) {
+        cAll += cnt[k];
+        if (qRed(k) == qGreen(k) && qGreen(k) == qBlue(k))
+          cGrey += cnt[k];
+      }
+      rgcGrey[pass] = cGrey; rgcAll[pass] = cAll;
+    }
+    // The commonest sample is the background, on every chart that does
+    // not fill its frame.
+    for (QRgb k : cnt.keys())
+      if (cnt[k] > cnt.value(rgbBack[pass], -1))
+        rgbBack[pass] = k;
+  }
+
+  Check(rgbBack[0] == qRgb(0, 0, 0),
+    "a plain wheel is drawn on black (%08x)", (unsigned)rgbBack[0]);
+  Check(rgbBack[1] == qRgb(255, 255, 255),
+    "and \"Reverse Background\" puts it on white (%08x)",
+    (unsigned)rgbBack[1]);
+  // Counted as GREY pixels rather than as distinct colours. With
+  // antialiasing on -- which an earlier group leaves on -- a monochrome
+  // wheel has 57 shades between its background and its ink, all of them
+  // grey; a distinct-colour threshold fails on that and says nothing
+  // about hue, which is the whole subject. This passes alone and in the
+  // full suite for the same reason rather than by a wider bound.
+  Check(rgcGrey[0] * 100 / rgcAll[0] < 90,
+    "a colour wheel is mostly not grey (%d%% grey)",
+    rgcGrey[0] * 100 / rgcAll[0]);
+  Check(rgcGrey[2] * 100 / rgcAll[2] >= 99,
+    "and \"Monochrome\" leaves only the background, the ink and the "
+    "shades between them (%d%% grey, %d colours)",
+    rgcGrey[2] * 100 / rgcAll[2], cDistinct[2]);
+
+  gs.fInverse = fInvSav; gs.fColor = fColorSav;
+  us.fGraphics = fGraphicsSav;
+  SetChartModeQt(nModeSav);
+  RedrawQt();
+}
+
 
 static void TestOrbGridQt()
 {
@@ -10866,6 +10964,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"graphics-size",        TestGraphicsSizeQt},
   {"font-pack",            TestFontPackQt},
   {"combo-pick",           TestComboPickQt},
+  {"screen-colors",        TestScreenColorsQt},
   {"orb-grid",             TestOrbGridQt},
   {"field-parse",          TestFieldParseQt},
   {"orbit-buffer",         TestOrbitBufferQt},

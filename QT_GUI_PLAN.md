@@ -9821,6 +9821,50 @@ are the more useful half to read before starting something new.
     different value that must land. Falsified by disabling the three
     checks: three assertions, reading 400.0, -400.0 and 999.
 
+233. **"Reverse Background" and "Monochrome" did nothing on screen.**
+    Found by the sweep CLAUDE.md prescribes for exactly this -- a `WIN`
+    branch in shared core with no `QT` in it -- run mechanically over
+    every shared file. 93 such blocks; most are GDI calls, and the short
+    ones with no Win32 API in them are the ones worth reading.
+
+    `InitColorsX()` (xscreen.cpp:124) is what turns `gs.fInverse` and
+    `gs.fColor` into the colours the drawing code actually reads:
+    `gi.kiOn`, `kiOff`, `kiLite`, `kiGray`, and the whole `*B` family --
+    `kMainB`, `kRainbowB`, `kElemB`, `kAspB`, `kObjB`, `kRayB`.
+    `FActionX()` calls it before every render to a **file**
+    (xscreen.cpp:1672). `RedrawQt()` never did, and filled its buffer with
+    a hardcoded `Qt::black`. So both View menu items worked when exporting
+    a chart and were **inert on screen**, which is where a user looks.
+
+    Measured before anything was changed: with reverse on, the commonest
+    pixel of a wheel stayed black and `kiOn`/`kiOff` stayed 15/0; with
+    monochrome on, the render still had **14** distinct colours. After:
+    white background, and 3.
+
+    `backend_parity_audit.py` could not see it, and the reason is
+    structural -- it asks whether the Qt GUI *acts on* each `us.`/`gs.`
+    field, and both menu handlers do assign their flag. What was missing
+    was the derivation downstream of the assignment. The assertion is on
+    the RENDER for the same reason.
+
+    **The fix broke 23 assertions in `menu-actions`, and that was the
+    check being blind rather than the chart.** It counted samples
+    differing from `pixel(0, 0)` -- and that corner holds the border, which
+    in monochrome is the same colour as everything else, so a telescope
+    chart whose disc fills the frame read as blank. It compares against
+    `KvFromKi(gi.kiOff)` now, the colour `RedrawQt()` actually filled with,
+    which is what "did anything get drawn" has to mean. Nothing had ever
+    exercised it with monochrome working.
+
+    **And the new assertion's own first form was wrong in the full suite
+    for the same family of reason.** It counted distinct colours and
+    wanted four or fewer; a monochrome wheel with **antialiasing** on --
+    which an earlier group leaves on -- has 57 shades between its
+    background and its ink. All of them grey, which is the actual subject:
+    it counts grey PIXELS now (`R == G == B`) and requires 99% of a
+    monochrome render and under 90% of a colour one. That passes alone and
+    in the full suite for the same reason rather than by a wider bound.
+
 
 ## Features this fork adds to both builds
 
