@@ -7037,6 +7037,98 @@ static void TestFillBoundsQt()
 }
 
 
+// One resource dialog, dlgRestrict, serves two commands: Object
+// Restrictions edits ignore[] and Transit Object Restrictions edits
+// ignore2[]. Three things therefore have to differ between them, and two
+// of the three were wrong here until 2026-09-07, both reported from daily
+// use rather than found by anything in this tree.
+//
+// The copy button is the visible one. astrolog.rc labels it "Copy &from
+// Transit Restriction Set", which is correct in the dialog that edits
+// ignore[] and exactly backwards in the one that edits ignore2[], where
+// it copies the standard set IN. Windows overrides the text at
+// WM_INITDIALOG; this build showed the resource's, so it announced the
+// opposite of what it did.
+//
+// Recall is the invisible one, and worse: it read ignoreMem, the
+// remembered STANDARD set, in the dialog that edits the transit set.
+// Nothing about the dialog looks wrong when it does that -- the boxes
+// just come back holding someone else's answer.
+
+static void TestTransitRestrictQt()
+{
+  byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
+  byte rgbMemSav[objMax], rgbMem2Sav[objMax];
+  QString strLabelTra, strLabelStd;
+
+  Group("Transit restriction dialog");
+  CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
+  CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
+  CopyRgb(ignoreMem, rgbMemSav, sizeof(rgbMemSav));
+  CopyRgb(ignore2Mem, rgbMem2Sav, sizeof(rgbMem2Sav));
+
+  // Four sources, four different answers for the same two objects, so no
+  // assertion below can pass by reading the wrong one. Mars and Jupiter
+  // because AdjustRestrictions() derives nothing from them.
+  ignore[oMar]     = fTrue;  ignore[oJup]     = fFalse;
+  ignore2[oMar]    = fFalse; ignore2[oJup]    = fFalse;
+  ignoreMem[oMar]  = fFalse; ignoreMem[oJup]  = fTrue;
+  ignore2Mem[oMar] = fTrue;  ignore2Mem[oJup] = fTrue;
+
+  DriveModalQt(ShowTransitRestrictDialogQt, [&strLabelTra](QWidget *pw) {
+    QPushButton *ppb = pw->findChild<QPushButton *>("dbRT");
+    if (ppb != NULL) {
+      strLabelTra = ppb->text();
+      ppb->click();
+    }
+    QPushButton *ppbOK = pw->findChild<QPushButton *>("IDOK");
+    if (ppbOK != NULL)
+      ppbOK->click();
+  });
+  Check(strLabelTra == QString("Copy &From Standard Restriction Set"),
+    "the transit dialog's copy button names the STANDARD set, as Windows "
+    "relabels it (\"%s\")", strLabelTra.toLocal8Bit().constData());
+  Check(ignore2[oMar] == fTrue && ignore2[oJup] == fFalse,
+    "and copies from ignore[], not from one of the other three sets "
+    "(Mars %d Jupiter %d, wanted 1 0)", ignore2[oMar], ignore2[oJup]);
+
+  // Recall, from a starting point that is none of the four sources.
+  ignore2[oMar] = fFalse; ignore2[oJup] = fFalse;
+  DriveModalQt(ShowTransitRestrictDialogQt, [](QWidget *pw) {
+    QPushButton *ppb = pw->findChild<QPushButton *>("dbRe_YRi");
+    if (ppb != NULL)
+      ppb->click();
+    QPushButton *ppbOK = pw->findChild<QPushButton *>("IDOK");
+    if (ppbOK != NULL)
+      ppbOK->click();
+  });
+  Check(ignore2[oMar] == fTrue && ignore2[oJup] == fTrue,
+    "Recall hands back ignore2Mem, the remembered TRANSIT set, not "
+    "ignoreMem (Mars %d Jupiter %d, wanted 1 1)",
+    ignore2[oMar], ignore2[oJup]);
+
+  // And the standard dialog is not relabelled with it, which is the way
+  // a fix for the above goes wrong.
+  DriveModalQt(ShowRestrictDialogQt, [&strLabelStd](QWidget *pw) {
+    QPushButton *ppb = pw->findChild<QPushButton *>("dbRT");
+    if (ppb != NULL)
+      strLabelStd = ppb->text();
+    QPushButton *ppbCancel = pw->findChild<QPushButton *>("IDCANCEL");
+    if (ppbCancel != NULL)
+      ppbCancel->click();
+  });
+  Check(strLabelStd == QString("Copy &from Transit Restriction Set"),
+    "the standard dialog keeps the label astrolog.rc gave it (\"%s\")",
+    strLabelStd.toLocal8Bit().constData());
+
+  CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
+  CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
+  CopyRgb(rgbMemSav, ignoreMem, sizeof(rgbMemSav));
+  CopyRgb(rgbMem2Sav, ignore2Mem, sizeof(rgbMem2Sav));
+  AdjustRestrictions();
+}
+
+
 static void TestObjSelTableQt()
 {
   char szName[cchSzDef];
@@ -12317,6 +12409,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"expression-functions", TestExpressionFunctionsQt},
   {"swiss-enumerate",      TestSwissEnumerateQt},
   {"fill-bounds",          TestFillBoundsQt},
+  {"transit-restrict",     TestTransitRestrictQt},
   {"objsel-table",         TestObjSelTableQt},
   {"timers",               TestTimerSanityQt},
   {"objsel-dialog",        TestObjSelDialogQt},

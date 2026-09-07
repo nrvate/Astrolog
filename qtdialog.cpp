@@ -2950,6 +2950,16 @@ typedef struct {
   int nIdx;           // Its index, or -1 when the symbol carries none.
   int nAction, lo, hi;
   CONST byte *rgSource;
+  // Relabel the button, or absent to keep what astrolog.rc gave it. One
+  // resource dialog serves two commands here, so a label that is right
+  // for one of them is wrong for the other, and Windows overrides it at
+  // WM_INITDIALOG rather than carrying a second dialog. Rows that do not
+  // relabel leave this off, which value-initialises it to NULL.
+  //
+  // tools/rc_mnemonic_audit.py cannot see a label set here, because it
+  // reads astrolog.rc -- and it cannot see Windows' SetDlgItemText
+  // either, so the two sides of an override are level only by hand.
+  CONST char *szLabel;
 } RCRESBUT;
 
 static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
@@ -2985,6 +2995,8 @@ static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
       PwRcFindQt(rgbuilt, pbut->szId));
     if (ppb == NULL)
       continue;
+    if (pbut->szLabel != NULL)
+      ppb->setText(QString::fromLatin1(pbut->szLabel));
     QObject::connect(ppb, &QPushButton::clicked, &dlg,
       [&rgpcb, pbut, lo, hi]() {
         int jlo = Max(pbut->lo, lo), jhi = Min(pbut->hi, hi);
@@ -3064,8 +3076,20 @@ void ShowTransitRestrictDialogQt()
     {"dbRe_RC",  -1, resToggle, cuspLo,  cuspHi,  NULL},
     {"dbRe_Ru",  -1, resToggle, uranLo,  uranHi,  NULL},
     {"dbRe_Ry",  -1, resToggle, dwarfLo, dwarfHi, NULL},
-    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore.rgn},
-    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignoreMem} };
+    // Both of these differ from the standard dialog above, and both were
+    // wrong here. astrolog.rc labels dbRT "Copy &from Transit Restriction
+    // Set", which is right in the dialog that edits ignore[] and exactly
+    // backwards in this one, where the button copies the STANDARD set in.
+    // Windows relabels it at WM_INITDIALOG (DlgRestrict, wdialog.cpp);
+    // this build showed the resource's text, so it told the user it was
+    // about to do the opposite of what it does. Reported from daily use.
+    {"dbRT",     -1, resCopy,   0,       dwarfHi, ignore.rgn,
+      "Copy &From Standard Restriction Set"},
+    // And Recall handed back ignoreMem, the remembered STANDARD set, in
+    // the dialog that edits the transit one. InitRestrictions()
+    // (astrolog.cpp) stores both; Windows reads ignore2Mem here and
+    // nothing in this build did.
+    {"dbRe_YRi", -1, resCopy,   0,       dwarfHi, ignore2Mem} };
 
   ShowRcRestrictQt("Transit Object Restrictions", rgctlRestrict,
     cctlRestrict, dxRestrict, dyRestrict, 0, dwarfHi, ignore2.rgn,

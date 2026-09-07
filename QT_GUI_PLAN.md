@@ -10820,6 +10820,52 @@ this is the note that explains the wall of dialogs.
     stub on Linux, since `hdiutil` cannot be.
 
 
+255. **The transit restrictions dialog lied about its copy button, and
+    its Recall read the wrong set.** Reported by the maintainer from
+    daily use, which is plan item 7 working exactly as it is supposed to:
+    both halves were invisible to 5,148 assertions and seventeen audits.
+
+    `astrolog.rc` has ONE dialog, `dlgRestrict`, serving two commands.
+    Object Restrictions edits `ignore[]`; Transit Object Restrictions
+    edits `ignore2[]`. Three things must differ between them, and two
+    were wrong here.
+
+    **The label.** `dbRT` reads "Copy &from Transit Restriction Set" in
+    the resource, which is correct in the dialog that edits `ignore[]`
+    and exactly backwards in the one that edits `ignore2[]`, where the
+    button copies the standard set *in*. Windows overrides the text at
+    `WM_INITDIALOG` -- `SetDlgItemText(hdlg, dbRT, "Copy &From Standard
+    Restriction Set")`, `wdialog.cpp:2028` -- and this build did not, so
+    it announced the opposite of what it does. The copy itself was
+    right; only the text lied.
+
+    **Recall.** `dbRe_YRi` sourced `ignoreMem`, the remembered STANDARD
+    set, in the dialog that edits the transit one. Windows reads
+    `ignore2Mem` (`wdialog.cpp:2067`) and `InitRestrictions()`
+    (`astrolog.cpp:523`) stores both. This is the worse half and the one
+    nobody would report: the dialog looks correct while it does it, the
+    boxes just come back holding another set's answer.
+
+    `RCRESBUT` gains an optional `szLabel`, which is the same mechanism
+    Windows uses and costs nothing at the other call sites -- rows that
+    do not relabel simply leave it off.
+
+    New group `transit-restrict`. Four sources are set to four different
+    answers for Mars and Jupiter, so no assertion can pass by reading the
+    wrong array, and it checks that the STANDARD dialog is *not*
+    relabelled with it -- which is the way a fix for this goes wrong.
+    Falsified by restoring both bugs: the label check reports the
+    resource's text, and Recall reports "Mars 0 Jupiter 1", which is
+    `ignoreMem`'s pair exactly.
+
+    **A process note worth more than the bug.** The first revert of that
+    sabotage hit an ambiguous match and aborted *before writing*, so
+    `make check` ran against the still-broken tree and failed with the
+    same two assertions. The match-count rule did its job; what did not
+    happen was reading the revert's own output before trusting a run
+    built on it.
+
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
