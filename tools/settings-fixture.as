@@ -9,6 +9,8 @@
 
 ; Before "-A", because every "-RA" ends in AdjustAspectCount() and would
 ; recompute the count from the restrictions it just set.
+; The sixteen chart sub-option flags, packed. Bits 0, 2 and 15 set.
+-Y2 #8005          ; EXPECT ^-Y2 #8005
 -RA1 4 9           ; EXPECT ^-RA1 4 9
 -A 11              ; EXPECT ^-A 11
 -c Whol            ; EXPECT ^-c Whol

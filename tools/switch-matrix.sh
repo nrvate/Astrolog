@@ -13,10 +13,19 @@
 # one every parser increment was proven against, was comparing 19% of
 # the surface it had already chosen, and any change past the thirtieth
 # matching line was invisible to it. The cap now clears every dump with
-# headroom (1000 is above any dump: a whole settings file is ~330
+# headroom (1000 is above any dump: a whole settings file is ~400
 # lines). Found by a change that ADDED five settings lines: the five
 # pushed five others off the bottom, which is what a fixed window does
 # to a diff that is supposed to be exact.
+#
+# THE FILTER ITSELF IS THE SAME HAZARD ONE LEVEL UP, and it bit on
+# 2026-09-07: a commit that added "-Y2" to the settings writer diffed to
+# ZERO here, because no pattern in the list matched it. A hand-maintained
+# list of interesting prefixes is exactly the shape the settings writer
+# was in before the sweeps, and it fails the same way -- silently, and
+# looking like a proof. The "-Y", ":Y", "-~" and "-RA" families are taken
+# whole now rather than prefix by prefix, so a new technical setting is
+# covered by construction.
 #
 #   git worktree add /tmp/base <commit>   # the pre-change baseline
 #   make -C /tmp/base -j4                 # (never stash around this;
@@ -60,7 +69,7 @@ if [ "${1:-}" = "--one" ]; then
       | awk -v t="$W" '{ i = index($0, t); while (i) { $0 = substr($0, 1, i - 1) "TMP" substr($0, i + length(t)); i = index($0, t) } print } NR >= 2 { exit }'
     # The relevant settings lines. "-m 1000" is the cap "head -1000"
     # provided; see the header for why it is 1000 and not 30.
-    grep -m 1000 -E "^-YA[oamd]|^-Yj|^-YJ|^-Yk|^-YAa|^-YR|^-Y7|^-YD|^-Ye|^-zl|^-z0|^:YX|^[=_]YX|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k" $W/o.as 2>/dev/null
+    grep -m 1000 -E "^[-=_:]Y|^-~|^[-=_:]RA|^-zl|^-z0|^:Xw|^:Xs|^:XS|^[=_]X|^:XE|^:X1|^-A |^[=_]?RO?|^[=_]?[bspc1-4fGJ9]|^-h|^-x|^-F|^:p|^-z|^-M0|^:5|^[=_]k|^:U|^:E0|^:v3|^:c3" $W/o.as 2>/dev/null
   } > "$T/out/$i"
   rm -rf "$W"
   exit 0

@@ -271,6 +271,14 @@ live in `qi` rather than in `us` or `gs`, so no sweep can see them.
 Nothing here can fall behind the writer again without a group saying so by
 name.
 
+**Sixteen chart sub-option flags ride in one packed field, `-Y2`.** Each is
+otherwise spelt as a sub-letter of a *chart type* switch -- `-w0`, `-g0`,
+`-a0`, `-Z0`, the `0` on the globe switches -- so the prefix that carries
+the preference also selects the chart, and `:` carries neither. `-Y2` is a
+settings-only switch that touches no chart type. `rgpfSubopt[]` in
+`switch.cpp` is the one table both ends read, and **its order is the file
+format**: append, never insert.
+
 **Every string setting is printed in pieces, never formatted through
 `sz`.** That buffer is `cchSzMax`, which is 255, and an AstroExpression or
 a star list runs to hundreds of characters; a truncated value does not
@@ -668,9 +676,19 @@ tools/switch-matrix.sh <binary>      # 529 invocations: the switch surface,
                                      # built"). Four workers since
                                      # 2026-09-05, MATRIX_JOBS=1 for the
                                      # serial form, byte-identical output
-                                     # either way: 16 s here, 71 s on a
+                                     # either way: 20 s here, 71 s on a
                                      # runner, which is why it is back in
-                                     # the push differential
+                                     # the push differential.
+                                     # WHICH SETTINGS LINES IT COMPARES is
+                                     # a grep, and it used to be a
+                                     # hand-maintained list of interesting
+                                     # prefixes -- the same shape the
+                                     # settings writer was in, failing the
+                                     # same way. A commit adding "-Y2" to
+                                     # the writer diffed to ZERO on
+                                     # 2026-09-07 because no pattern
+                                     # matched it. The -Y, :Y, -~ and -RA
+                                     # families are taken whole now
 tools/influence-matrix.sh <binary>   # the same for -j/-j0/-7 output
 tools/graphics-matrix.sh <binary>    # 224 renders, nonzero if any
                                      # produced no file (work log item

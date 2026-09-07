@@ -9,8 +9,15 @@ harmonic factor, the dwad level, the solar chart object, the 3D house
 plane, the required aspect object, the star sort order, the star dot and
 name bits, the wheel rotation object, and three moon settings -- each of
 them a control a user sets, saves, and finds back at its default next
-launch. Six were false alarms and five cannot be written at all; both sets
-are in ALLOW below, each with the reason measured rather than assumed.
+launch. Six were false alarms and the rest could not be written at all;
+both sets are in ALLOW below, each with the reason measured rather than
+assumed.
+
+Sixteen of those unwritable ones are carried now, by "-Y2" as one packed
+field: every one of them was spelt as a sub-letter of a chart type switch,
+so the prefix that carried the preference also selected the chart. The
+fields are named in switch.cpp's rgpfSubopt[] rather than in the writer,
+which is why writer_names() reads that table too.
 
 The dialogs that count are the ones whose resource caption says Settings
 (plus the object and colour ones, which are settings by any other name).
@@ -67,10 +74,6 @@ ALLOW = {
     "us.rRatio":
         '"-r0 <file1> <file2> [<ratio>]" needs two chart files to name a '
         'ratio, and a settings file has none to give',
-    "us.fMoonChartSep":
-        'the "80" registry row sets us.fMoonChart as well (SWITCHFLAG.pf2), '
-        'so any prefix that carries the flag also turns the moons chart on, '
-        'and ":" carries neither',
     "gs.rRot":
         'every switch that sets it (-XX/-XW/-XG/-XP) ends in '
         '"gi.nMode = FSwitchF2(gi.nMode == <mode>) * <mode>", which zeroes '
@@ -85,32 +88,6 @@ ALLOW = {
         'it says a background bitmap loaded with "-XI <file>" is showing, '
         'and the file name is not saved either, so the flag alone restores '
         'nothing',
-    # The largest group, and the structural one: these are display
-    # preferences spelt as a sub-letter of a CHART TYPE switch, so the
-    # handler toggles the preference and the chart type from the same
-    # prefix. "=" or "-" would select that chart on load, and ":" carries
-    # neither flag, so there is no spelling that saves them alone. The
-    # settings format is the command line, and the command line was never
-    # asked to separate the two.
-    "us.fWheelReverse": 'NSww: "-w0" toggles it and us.fWheel',
-    "us.fGridConfig": 'NSwg: "-g0" toggles it and us.fGrid',
-    "us.fGridMidpoint": 'NSwg: "-gm" toggles it and us.fGrid',
-    "us.fAspSummary": 'NSwa: "-a0" toggles it and us.fAspList',
-    "us.fDistance": 'NSwa/NSwg: "-ad"/"-gd" toggle it and the chart type',
-    "us.fMidSummary": 'NSwm: "-m0" toggles it and us.fMidpoint',
-    "us.fPrimeVert": 'NSwZ: "-Z0" toggles it and us.fHorizon',
-    "us.fLatitudeCross": 'NSwL: "-L0" toggles it and us.fAstroGraph',
-    "us.fArabicFlip": 'NSwP: "-P0" toggles it and us.fArabic',
-    "us.fCalendarYear":
-        'the "Ky" registry row sets us.fCalendar as well (SWITCHFLAG.pf2)',
-    "us.fInfluenceSign":
-        'the "j0" registry row sets us.fInfluence as well',
-    "us.fSectorApprox":
-        'the "l0" registry row sets us.fSector as well',
-    "gs.fSouth":
-        'NSwXX/NSwXG/NSwXP: the "0" suffix toggles it, and those handlers '
-        'zero gi.nMode the way gs.rRot\'s do',
-    "gs.fMollweide": 'NSwXW: "-XW0" toggles it and zeroes gi.nMode',
 }
 
 FIELD = re.compile(r"\b(us|gs)\.([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)")
@@ -157,7 +134,17 @@ def writer_names(path):
     text = open(path, encoding="utf-8").read()
     i = text.index("flag FOutputSettings()")
     j = text.index("\n}\n", i)
-    return set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", strip_comments(text[i:j])))
+    out = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*",
+                         strip_comments(text[i:j])))
+    # The writer emits "-Y2" as one packed field, so the sixteen chart
+    # sub-option flags it carries are named in switch.cpp's table rather
+    # than here. They are written; without this the audit says otherwise.
+    sw = open(os.path.join(os.path.dirname(path), "switch.cpp"),
+              encoding="utf-8").read()
+    k = sw.index("rgpfSubopt[] = {")
+    out |= set(re.findall(r"&(?:us|gs)\.([A-Za-z0-9_]+)",
+                          sw[k:sw.index("};", k)]))
+    return out
 
 
 def main():

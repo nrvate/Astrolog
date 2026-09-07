@@ -74,6 +74,8 @@ extern int NPromptSwitches P((char *, int, char *[MAXSWITCHES]));
 extern flag FProcessSwitches P((int, char **, PARSECTX *));
 extern flag FSwitchRegistryRow P((int, CONST char **, int *, int *));
 extern flag FSwitchTildeRow P((int, CONST char **, char ***));
+extern int NSuboptFlags P((void));
+extern void SetSuboptFlags P((int));
 extern void InitRestrictions P((flag));
 extern void AdjustRulership P((TBLSIG &, TBLSIG &, int, int, flag));
 extern void InitProgram P((void));

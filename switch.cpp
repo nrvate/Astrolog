@@ -880,6 +880,14 @@ static int NSwY1Core(int argc, char **argv, flag fAnd, flag fZero)
   return 2;
 }
 
+static int NSwY2(CONST char *szSwitch, PARSEIN *pin)
+{
+  if (FErrorArgc("Y2", pin->argc, 1))
+    return tcError;
+  SetSuboptFlags(NFromSz(pin->argv[1]));
+  return 1;
+}
+
 static int NSwY1(CONST char *szSwitch, PARSEIN *pin)
 {
   return NSwY1Core(pin->argc, pin->argv, pin->fAnd, fFalse);
@@ -3855,6 +3863,7 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"Yu",   0,      NSwYu},   {"Yu0",  0,      NSwYu0},
   {"Ys",   0,      NSwYs},   {"Yc",   0,      NSwYc},
   {"Yl",   0,      NSwYl, 1},   {"Y1",   0,      NSwY1},
+  {"Y2",   0,      NSwY2, 1},
   {"Y10",  0,      NSwY10},  {"Yz",   0,      NSwYz, 1},
   {"Yz0",  0,      NSwYz0},  {"YzO",  0,      NSwYzO},
   {"YzC",  0,      NSwYzC},  {"YQ",   0,      NSwYQ, 1},
@@ -4062,6 +4071,63 @@ static int NProcessSwitchTable(CONST char *szName, PARSEIN *pin)
       return i;
     }
   return nSwitchAbsent;
+}
+
+
+// The chart sub-option flags that no switch can carry on its own.
+//
+// Each of these is spelt as a SUB-LETTER of a chart type switch -- "-w0",
+// "-g0", "-a0", "-Z0", the "0" on the globe switches -- so the handler
+// toggles the preference and the chart type from the same prefix. "=" or
+// "-" would select that chart when a settings file loaded, and ":" carries
+// neither flag, so there was no spelling that saved the preference alone
+// and FOutputSettings() dropped all sixteen. "-Y2" is one packed field for
+// the lot, the way ":YXf" carries the six font choices: a settings-only
+// switch that touches no chart type.
+//
+// THE ORDER IS THE FILE FORMAT. A row inserted rather than appended
+// silently reinterprets every settings file already written, so new flags
+// go on the end.
+
+static flag * CONST rgpfSubopt[] = {
+  &us.fWheelReverse,    // 0x0001, otherwise -w0
+  &us.fGridConfig,      // 0x0002, otherwise -g0
+  &us.fGridMidpoint,    // 0x0004, otherwise -gm
+  &us.fAspSummary,      // 0x0008, otherwise -a0
+  &us.fDistance,        // 0x0010, otherwise -ad or -gd
+  &us.fParallel,        // 0x0020, otherwise -ap or -gp
+  &us.fMidSummary,      // 0x0040, otherwise -m0
+  &us.fPrimeVert,       // 0x0080, otherwise -Z0
+  &us.fLatitudeCross,   // 0x0100, otherwise -L0
+  &us.fArabicFlip,      // 0x0200, otherwise -P0
+  &us.fCalendarYear,    // 0x0400, otherwise -Ky
+  &us.fInfluenceSign,   // 0x0800, otherwise -j0
+  &us.fSectorApprox,    // 0x1000, otherwise -l0
+  &us.fMoonChartSep,    // 0x2000, otherwise -80
+  &gs.fSouth,           // 0x4000, otherwise -XX0, -XG0 or -XP0
+  &gs.fMollweide };     // 0x8000, otherwise -XW0
+
+#define csubopt (int)(sizeof(rgpfSubopt)/sizeof(flag *))
+
+
+// Pack those sixteen into one number, and unpack one back into them.
+
+int NSuboptFlags(void)
+{
+  int i, n = 0;
+
+  for (i = 0; i < csubopt; i++)
+    n |= (*rgpfSubopt[i] != 0) << i;
+  return n;
+}
+
+
+void SetSuboptFlags(int n)
+{
+  int i;
+
+  for (i = 0; i < csubopt; i++)
+    *rgpfSubopt[i] = ((n >> i) & 1);
 }
 
 

@@ -5374,29 +5374,10 @@ static CONST SETFIELDSKIP rgsetskip[] = {
   {"us.rRatio",       "\"-r0 <file1> <file2> [<ratio>]\" wants two chart "
                       "files to name a ratio, and a settings file has none"},
 
-  // A display preference spelt as a sub-letter of a CHART TYPE switch.
-  // The handler toggles the preference and the chart type from the same
-  // prefix, so "=" or "-" would select that chart on load and ":" carries
-  // neither flag. There is no spelling that saves the preference alone:
-  // the settings format IS the command line, and the command line was
-  // never asked to separate the two. Thirteen fields, one finding.
-  {"us.fWheelReverse", "NSww: \"-w0\" toggles it and us.fWheel"},
-  {"us.fGridConfig",   "NSwg: \"-g0\" toggles it and us.fGrid"},
-  {"us.fGridMidpoint", "NSwg: \"-gm\" toggles it and us.fGrid"},
-  {"us.fAspSummary",   "NSwa: \"-a0\" toggles it and us.fAspList"},
-  {"us.fDistance",     "NSwa/NSwg: \"-ad\"/\"-gd\" toggle it and the type"},
-  {"us.fParallel",     "NSwa/NSwg: \"-ap\"/\"-gp\" toggle it and the type"},
-  {"us.fMidSummary",   "NSwm: \"-m0\" toggles it and us.fMidpoint"},
-  {"us.fPrimeVert",    "NSwZ: \"-Z0\" toggles it and us.fHorizon"},
-  {"us.fLatitudeCross","NSwL: \"-L0\" toggles it and us.fAstroGraph"},
-  {"us.fArabicFlip",   "NSwP: \"-P0\" toggles it and us.fArabic"},
-  {"us.fCalendarYear", "the \"Ky\" registry row sets us.fCalendar too"},
-  {"us.fInfluenceSign","the \"j0\" registry row sets us.fInfluence too"},
-  {"us.fSectorApprox", "the \"l0\" registry row sets us.fSector too"},
-  {"us.fMoonChartSep", "the \"80\" registry row sets us.fMoonChart too"},
-  {"gs.fSouth",        "the \"0\" suffix on -XX/-XG/-XP, whose handlers "
-                       "zero gi.nMode the way gs.rRot's do"},
-  {"gs.fMollweide",    "NSwXW: \"-XW0\" toggles it and zeroes gi.nMode"},
+  // The sixteen chart sub-option flags that used to sit here -- every one
+  // spelt as a sub-letter of a chart type switch, and so unwritable on its
+  // own -- are carried by "-Y2" as one packed field now (rgpfSubopt[] in
+  // switch.cpp). They are asked about like any other field.
   {"gs.rRot",          "every switch that sets it (-XX/-XW/-XG/-XP) ends "
                        "in \"gi.nMode = FSwitchF2(gi.nMode == <mode>) * "
                        "<mode>\", zeroing the chart mode"},

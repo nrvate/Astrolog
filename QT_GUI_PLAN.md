@@ -447,10 +447,10 @@ log item 159, pinned by `.gitattributes` and checked by
 `tools/line_endings_audit.py`. Upstream's tarball is not, so expect the
 diff itself to be noisy.
 
-15. **Fifteen preferences that cannot be saved, and what it would take.**
-    *(Open, and waiting on a decision rather than on work. Raised
-    2026-09-07 after work log items 202-205 closed everything else in the
-    configuration.)*
+15. ~~**Sixteen preferences that cannot be saved.**~~ — **closed
+    2026-09-07** (work log item 206). The maintainer chose the packed
+    field, and `-Y2` carries all sixteen. What follows is why they could
+    not be carried any other way.
 
     A display preference spelt as a **sub-letter of a chart type switch**
     is toggled by the same prefix that selects the chart, so there is no
@@ -477,22 +477,14 @@ diff itself to be noisy.
     | `gs.fSouth` | `-XX0`/`-XG0`/`-XP0` | `gi.nMode` |
     | `gs.fMollweide` | `-XW0` | `gi.nMode` |
 
-    Twelve of them are set by a *settings* dialog, so a user unticks
-    "Show aspect summary" in Chart Settings, saves, restarts, and finds it
-    back on. `settings-fields` carries all sixteen in its ledger, so they
-    are recorded rather than forgotten.
+    Twelve of them are set by a *settings* dialog, so a user unticked
+    "Show aspect summary" in Chart Settings, saved, restarted, and found it
+    back on.
 
-    **Three ways out, none of which should be taken without the
-    maintainer choosing one**, because each adds switch surface:
-
-    - **A `-Y` spelling each**, e.g. `-Yw0`, `-Yg0`, `-Ya0`. Readable in a
-      settings file, sixteen new rows in the registry, and sixteen lines
-      in `-H`. The most in keeping with how the rest of the file reads.
-    - **One packed field**, the way `:YXf #%06x` carries the six font
-      choices. One new switch and one line in the file, opaque to a person
-      editing it by hand.
-    - **Leave them**, and say so in the dialogs. Cheapest, and the only
-      option that ships nothing new.
+    Three ways out were put to the maintainer -- a `-Y` spelling each,
+    one packed field, or leaving them -- and the packed field was chosen:
+    one new switch and one line in the file, against sixteen registry rows
+    and sixteen lines of `-H`.
 
     What is NOT a way out, and was tried on paper first: writing
     `=g0` and then `_g` to undo the chart type. It works, and it makes
@@ -8894,6 +8886,28 @@ are the more useful half to read before starting something new.
     With that the configuration is covered end to end: 342 scalar fields,
     24 numeric arrays, 280 strings in arrays, and the Qt side's five. What
     is not carried is carried by a ledger entry saying why.
+
+206. **One packed field for the sixteen that could not be spelled.** To-do
+    item 15 put three options to the maintainer and the packed field was
+    chosen. `-Y2 #<hex>` carries all sixteen chart sub-option flags:
+    `rgpfSubopt[]` in `switch.cpp` is the one table, `NSuboptFlags()` packs
+    it and `SetSuboptFlags()` unpacks it, so the reader and the writer
+    cannot drift apart.
+
+    **The order of that table is the file format**, which is the one thing
+    a later change can get wrong quietly: a row inserted rather than
+    appended reinterprets every settings file already written, so the
+    comment says so beside the table.
+
+    `-Y2` is a settings-only switch and touches no chart type, which is the
+    whole point; verified by saving with three of the flags flipped and
+    checking no chart-type line appears in the file. Sixteen ledger entries
+    left the `settings-fields` group and one left
+    `tools/settings_coverage_audit.py`, whose `writer_names()` reads the
+    table too -- these fields are written, just not by name in `io.cpp`.
+
+    Falsified by pointing one table row at the wrong field and watching the
+    sweep name `us.fGridConfig`.
 
 
 ## Features this fork adds to both builds

@@ -1906,6 +1906,14 @@ flag FOutputSettings()
   sprintf2(S(sz), "-YZ %d   ", us.nHorizon); PrintFSz();
   PrintF(
     "; Rising chart gradient     [\"0\" through \"7\"                 ]\n");
+  // The sixteen chart sub-option flags in one field, because every one of
+  // them is otherwise spelt as a sub-letter of a CHART TYPE switch and the
+  // prefix that carries the preference also selects the chart. See
+  // rgpfSubopt[] in switch.cpp for what each bit is; the order there is
+  // this line's format.
+  sprintf2(S(sz), "-Y2 #%04x ", NSuboptFlags()); PrintFSz();
+  PrintF(
+    "; Chart sub-option flags    [Packed; see -Y2 in the -H help text ]\n");
   sprintf2(S(sz), "-YRd %d  ", us.nSignDiv); PrintFSz();
   PrintF(
     "; Sign divisions            [Change \"3\" to desired divisions  ]\n");

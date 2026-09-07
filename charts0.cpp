@@ -605,6 +605,12 @@ void DisplaySwitchesRare(void)
   PrintS(" _YC: Automatically ignore insignificant house cusp aspects.");
   PrintS(" _YO: Automatically adjust settings when exporting and printing.");
   PrintS(" _Y8: Clip text charts at the rightmost (e.g. 80th) column.");
+  PrintS(" _Y2 <flags>: Set chart sub-option flags, as one packed number.");
+  PrintS(
+    "  #0001 -w0, #0002 -g0, #0004 -gm, #0008 -a0, #0010 -ad, #0020 -ap,");
+  PrintS(
+    "  #0040 -m0, #0080 -Z0, #0100 -L0, #0200 -P0, #0400 -Ky, #0800 -j0,");
+  PrintS("  #1000 -l0, #2000 -80, #4000 -XX0, #8000 -XW0.");
   PrintS(" _Ya[0-3]: Set text input encoding to none, IBM, Latin-1, or UTF8.");
   PrintS(" _Yao[0-3]: Set output encoding to none, IBM, Latin-1, or UTF8.");
   PrintS(" _YQ <rows>: Pause text scrolling after a page full has printed.");
