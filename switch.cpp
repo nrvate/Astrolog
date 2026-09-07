@@ -1477,7 +1477,14 @@ static int NSwXb(CONST char *szSwitch, PARSEIN *pin)
 {
   char ch1;
 
-  if (us.fNoWrite || is.fSzInteract) {
+  // The lockdown gates SELECTING an output file, not recording which kind
+  // a later one would be. FOutputSettings() writes this switch as ":Xb*",
+  // and ":" leaves gs.ft exactly where it was, so nothing is selected and
+  // there is nothing to refuse -- while the flat test refused the line and
+  // stopped the whole load, which meant a saved settings file did not load
+  // at all under "-0o". Measured: "The switch -Xb is not allowed now."
+  // from a default save. The file write itself is gated in BeginFileX().
+  if ((us.fNoWrite || is.fSzInteract) && FSwitchF2(gs.ft == ftBmp)) {
     ErrorArgv("Xb");
     return tcError;
   }
@@ -1498,7 +1505,10 @@ static int NSwXb(CONST char *szSwitch, PARSEIN *pin)
 #ifdef PSCRIPT
 static int NSwXp(CONST char *szSwitch, PARSEIN *pin)
 {
-  if (us.fNoWrite || is.fSzInteract) {
+  // As NSwXb() above: refuse only a prefix that would actually select a
+  // PostScript file, so the ":Xp" line a settings file carries still loads
+  // under the lockdown.
+  if ((us.fNoWrite || is.fSzInteract) && FSwitchF2(gs.ft == ftPS)) {
     ErrorArgv("Xp");
     return tcError;
   }

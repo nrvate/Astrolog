@@ -256,16 +256,17 @@ section runs
 the binary as its own process, because an in-process suite cannot test
 the startup that happens before its own event loop (see plan item 27).
 
-Fourteen standing audits, all currently clean and all run by `make check`
+Fifteen standing audits, all currently clean and all run by `make check`
 (and so by a release, which runs the same command) — six of the
 port against `astrolog.rc`, one of the Qt GUI against the Windows one, one of the compiled defaults against
 `astrolog.as`, one of the switch registry against the help text and
-settings writer, one of round-trip fixture coverage, one of line endings,
+settings writer, one of the settings dialogs against the settings writer,
+one of round-trip fixture coverage, one of line endings,
 one of the MSVC project against the makefile's source list, and one of
 the Qt build's own source groups and headers, and one of the image
 writers against the format specifications. That last one needs a built
 `./astrolog`, so it runs after the build step rather than with the
-pure-Python ones. A fourteenth is listed below with them and is **not**
+pure-Python ones. A sixteenth is listed below with them and is **not**
 run by `make check`: the graphics matrix's own options.
 
 ```sh
@@ -366,6 +367,28 @@ python3 tools/fixture_coverage_audit.py  # every ranged settings switch
 python3 tools/line_endings_audit.py  # any carriage return in a tracked
                                      # text file; the tree is LF
                                      # everywhere since work log item 159
+python3 tools/settings_coverage_audit.py  # a setting a settings dialog
+                                     # offers that "Save Program Settings"
+                                     # drops. FOutputSettings() is a
+                                     # hand-maintained list of sprintf2()
+                                     # lines and nothing had ever compared
+                                     # it against the dialogs: its first
+                                     # run named 24 real losses, from the
+                                     # harmonic factor to the PNG export
+                                     # box. It reads the RCFLAG tables as
+                                     # well as plain assignments, because
+                                     # most checkboxes are table rows and
+                                     # the first draft, which read only
+                                     # assignments, missed all of them.
+                                     # Twenty-seven fields are allowed to
+                                     # be missing, each with a measured
+                                     # reason -- and most of those are one
+                                     # finding: a display preference spelt
+                                     # as a sub-letter of a CHART TYPE
+                                     # switch cannot be written at all,
+                                     # because every prefix that carries
+                                     # the preference also selects the
+                                     # chart
 python3 tools/registry_audit.py      # every spelling the -H text documents
                                      # or FOutputSettings() writes resolves
                                      # to a registry row; found -YYI dead
@@ -431,7 +454,7 @@ python3 tools/vcxproj_audit.py       # Astrolog.vcxproj lists exactly the
                                      # gave a link error nothing explained
 ```
 
-`make check` runs all fourteen, plus a set of assertions that are scripts
+`make check` runs all fifteen, plus a set of assertions that are scripts
 rather than workflow steps so they can be falsified in a second instead
 of by pushing. Since 2026-09-05 `tools/ci-selftest.sh` feeds each of them
 input it must refuse and, where cheap, input it must accept -- 49 cases,

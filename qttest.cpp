@@ -7221,6 +7221,26 @@ static void TestLockdownQt()
   us.fNoWrite = fFalse;
   Check(FOutputSettings() && QFileInfo(strPath).size() > 0,
     "and without it the same call writes the file");
+
+  // And a saved file has to LOAD under the same lockdown, which it did
+  // not: NSwXb() refused the ":Xb*" line the writer emits, and one
+  // refusal stops the whole load, so "-0o" made a user's own settings
+  // unreadable. The lockdown gates SELECTING an output file, which ":"
+  // provably cannot do -- FSwitchF2() leaves gs.ft where it was -- while
+  // "-Xb", which does select one, still has to be refused.
+  {
+    CONST char *rgsz[3];
+    int ftSav = gs.ft;
+
+    us.fNoWrite = fTrue;
+    Check(FProcessSwitchFile(baPath.constData(), NULL),
+      "with -0o a file the writer just saved still loads");
+    rgsz[0] = szAppNameCore; rgsz[1] = "-Xb"; rgsz[2] = NULL;
+    Check(!FProcessSwitches(2, (char **)rgsz, NULL) && gs.ft != ftBmp,
+      "and \"-Xb\", which would select one, is still refused");
+    us.fNoWrite = fFalse;
+    gs.ft = ftSav;
+  }
   QFile::remove(strPath);
   us.fNoWrite = fNoWriteSav;
   us.nWriteFormat = nWriteFormatSav;

@@ -1581,12 +1581,27 @@ flag FOutputSettings()
   sprintf2(S(sz), ":s%c     ", szDegForm[us.nDegForm]); PrintFSz();
   PrintF(
     "; Zodiac display format     [\"z\" is sign, \"d\" is 0-360 deg, etc]\n");
+  // Before the "sr0" line and not after it: "-sr" toggles us.fEquator AND
+  // us.fEquator2 (NSws, "if (ch2 != '0')"), while "-sr0" toggles only the
+  // second, so the pair only round trips in this order.
+  sprintf2(S(sz), "%csr     ", ChDashF(us.fEquator)); PrintFSz();
+  PrintF(
+    "; Equatorial longitudes     [\"=sr\" right ascension, \"_sr\" not]\n");
   sprintf2(S(sz), "%csr0    ", ChDashF(us.fEquator2)); PrintFSz();
   PrintF(
     "; Latitudes or declinations [\"_sr0\" shows lat., \"=sr0\" declin. ]\n");
   sprintf2(S(sz), "-A %d    ", us.nAsp); PrintFSz();
   PrintF(
     "; Number of aspects         [Change \"5\" to desired number      ]\n");
+  sprintf2(S(sz), "%cA3     ", ChDashF(us.fAspect3D)); PrintFSz();
+  PrintF(
+    "; 3D aspects                [\"=A3\" uses latitude, \"_A3\" doesn't]\n");
+  sprintf2(S(sz), "%cAp     ", ChDashF(us.fAspectLat)); PrintFSz();
+  PrintF(
+    "; 3D orbs                   [\"=Ap\" orbs span latitude too    ]\n");
+  sprintf2(S(sz), "%cAP     ", ChDashF(us.fParallel2)); PrintFSz();
+  PrintF(
+    "; Parallels use ecliptic    [\"=AP\" ecliptic, \"_AP\" equatorial]\n");
   sprintf2(S(sz), "-RO %.3s ", us.objRequire >= 0 ? szObjName[us.objRequire] :
     "None"); PrintFSz();
   PrintF(
@@ -1634,6 +1649,9 @@ flag FOutputSettings()
   sprintf2(S(sz), "%ck      ", ChDashF(us.fAnsiColor)); PrintFSz();
   PrintF(
     "; Ansi color text           [\"=k\" is color, \"_k\" is monochrome ]\n");
+  sprintf2(S(sz), "%ckh     ", ChDashF(us.fTextHTML)); PrintFSz();
+  PrintF(
+    "; Text files in HTML        [\"=kh\" is HTML, \"_kh\" is Ansi     ]\n");
   sprintf2(S(sz), "%cb0     ", ChDashF(us.fSeconds)); PrintFSz();
   PrintF(
     "; Print zodiac seconds      [\"_b0\" to minute, \"=b0\" to second  ]\n");
@@ -1739,6 +1757,27 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cYs     ", ChDashF(us.fSidereal2)); PrintFSz();
   PrintF(
     "; Use plane of solar system [\"_Ys\" is ecliptic, \"=Ys\" is solar ]\n");
+  sprintf2(S(sz), "%cYh     ", ChDashF(us.fBarycenter)); PrintFSz();
+  PrintF(
+    "; Barycenter instead of Sun [\"=Yh\" is barycentric, \"_Yh\" not ]\n");
+  sprintf2(S(sz), "%cYf     ", ChDashF(us.fRefract)); PrintFSz();
+  PrintF(
+    "; Atmospheric refraction    [\"=Yf\" applies it, \"_Yf\" doesn't ]\n");
+  sprintf2(S(sz), "%cYc     ", ChDashF(us.fHouseAngle)); PrintFSz();
+  PrintF(
+    "; Cusps are house positions [\"=Yc\" positions, \"_Yc\" angles   ]\n");
+  sprintf2(S(sz), "%cYn0    ", ChDashF(us.fNoNutation)); PrintFSz();
+  PrintF(
+    "; Tropical zodiac nutation  [\"_Yn0\" nutates, \"=Yn0\" doesn't  ]\n");
+  sprintf2(S(sz), "%cYT     ", ChDashF(us.fTruePos)); PrintFSz();
+  PrintF(
+    "; True space positions      [\"=YT\" is true, \"_YT\" apparent   ]\n");
+  sprintf2(S(sz), "%cYV     ", ChDashF(us.fTopoPos)); PrintFSz();
+  PrintF(
+    "; Topocentric positions     [\"=YV\" topocentric, \"_YV\" geo    ]\n");
+  sprintf2(S(sz), "%cYo     ", ChDashF(us.fWriteOld)); PrintFSz();
+  PrintF(
+    "; Old style chart info files[\"=Yo\" is old style, \"_Yo\" is new]\n");
   sprintf2(S(sz), "%cYm     ", ChDashF(us.fMoonMove)); PrintFSz();
   PrintF(
     "; Moons orbit central obj   [\"=Ym\" orbits it, \"_Ym\" doesn't   ]\n");
@@ -2229,6 +2268,14 @@ flag FOutputSettings()
   sprintf2(S(sz), ":XL%d            ", gs.nLabelCity); PrintFSz();
   PrintF(
     "; Atlas city coloring       [\"1\" through \"5\", when -XA is on   ]\n");
+  // ":Xp"/":Xp0" only records whether a PostScript file would be complete
+  // or encapsulated; NSwXp() leaves gs.ft alone under this prefix.
+  sprintf2(S(sz), ":Xp%-13s", gs.fPSComplete ? "0" : ""); PrintFSz();
+  PrintF(
+    "; PostScript     [\":Xp0\" complete, \":Xp\" encapsulated     ]\n");
+  sprintf2(S(sz), "%cXN              ", ChDashF(gs.fAnimMap)); PrintFSz();
+  PrintF(
+    "; Animate map    [\"=XN\" rotates the map, \"_XN\" the time  ]\n");
   sprintf2(S(sz), "%cX8              ", ChDashF(gs.fMoonWheel)); PrintFSz();
   PrintF(
     "; Moons in wheels[\"=X8\" orbits the planet, \"_X8\" doesn't  ]\n");
@@ -2254,7 +2301,12 @@ flag FOutputSettings()
   sprintf2(S(sz), ":Xkv %s         ", SzColor2(gs.kiDeca)); PrintFSz();
   PrintF(
     "; Wheel corners decoration color\n");
-  sprintf2(S(sz), ":Xb%c             ", gi.fBmp ? 'w' : ChUncap(gs.chBmpMode));
+  // "w" and "b" are the same gs.chBmpMode with gi.fBmp telling them apart;
+  // every other spelling is the mode's own letter. Reading gi.fBmp first
+  // collapsed them all: it is true by default, so "Xbp" -- the PNG box in
+  // File Settings -- and the four text modes all came back as Windows .bmp.
+  sprintf2(S(sz), ":Xb%c             ", gs.chBmpMode == 'B' ?
+    (gi.fBmp ? 'w' : 'b') : ChUncap(gs.chBmpMode));
   PrintFSz();
   PrintF(
     "; Bitmap file type   [\"Xbw\" is Windows .bmp, \"Xbp\" is .png  ]\n");

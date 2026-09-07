@@ -8652,6 +8652,58 @@ are the more useful half to read before starting something new.
     cannot do on its own is tell a setting from a transient, which is why
     each has to be tested rather than listed.
 
+202. **The sweep made a check, and it named 24 more.** Item 201 left the
+    sweep as something to re-run by hand. It is
+    `tools/settings_coverage_audit.py` now: every `us.*`/`gs.*` field a
+    *settings* dialog sets, against every field `FOutputSettings()`
+    names, with the chart-casting dialogs (Transits, Progressions, Set
+    Chart Info, Chart List) excluded by name and reason. 116 fields
+    across 13 dialogs.
+
+    Its first draft read assignments only and missed every checkbox,
+    because most of them are not assigned in code at all -- they are
+    `RCFLAG` rows, `{"<control>", <index>, &us.fWhatever, <invert>}`,
+    that `RcLoadFlagsQt()` drives both ways. It reported `us.fSolarWhole`
+    as set by no dialog, which is how that was noticed. Reading the
+    tables as well took the finding from 6 fields to 30.
+
+    Twenty-four were real. Eleven values -- the harmonic factor, the dwad
+    level, the 3D houses plane, the solar chart object and its "start of
+    sign", the required aspect object, the star sort order, the star dot
+    and name bits, the wheel rotation object, moons orbiting the central
+    object, moons in wheels -- and thirteen flags, from 3D aspects and
+    atmospheric refraction to HTML text export and the barycentre.
+
+    **The bitmap file type was never saved at all.** `":Xb%c"` read
+    `gi.fBmp` first, and that is true by default, so all seven spellings
+    came back as `w`: the PNG box in File Settings, and the four text
+    modes with it. `gs.chBmpMode` distinguishes them and `gi.fBmp` only
+    separates `w` from `b`.
+
+    **And a saved settings file did not load under `-0o`.** `NSwXb()`
+    refused outright when `us.fNoWrite` was set -- "The switch -Xb is not
+    allowed now", from a default save, and one refusal stops the whole
+    load. The lockdown gates *selecting* an output file, which `":Xb"`
+    provably cannot do (`FSwitchF2()` leaves `gs.ft` where it was), and
+    the write itself is gated in `BeginFileX()`. Narrowed to the prefixes
+    that would actually select one; `-Xb <file>` is still refused.
+
+    **Twenty-seven fields cannot be written, and thirteen of those are
+    one finding.** A display preference spelt as a sub-letter of a chart
+    type switch -- `-w0`, `-g0`, `-gm`, `-a0`, `-m0`, `-Z0`, `-L0`,
+    `-P0`, `-Ky`, `-j0`, `-l0`, `-XW0`, the `0` suffix on the globe
+    switches -- is toggled by the same prefix that selects the chart, and
+    `":"` carries neither. There is no spelling that saves the preference
+    alone. The settings format *is* the command line, and the command
+    line was never asked to separate a preference from a chart type.
+    Each is in the audit's allowlist with its handler named.
+
+    The others are measured too: fonts carried inside `gs.nFontAll`, a
+    ratio whose switch wants two chart files, three globe fields whose
+    switches zero `gi.nMode`, an ephemeris year count whose switch
+    refuses the value 0, and a background flag whose bitmap file name is
+    not saved either.
+
 
 ## Features this fork adds to both builds
 

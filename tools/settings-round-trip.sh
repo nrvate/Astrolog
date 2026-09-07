@@ -97,12 +97,13 @@ done < "$T/rt-expect.txt"
 #
 # Flag switches are not in scope here: they save with "_" and "=" prefixes
 # and leg 2 flips every one of them.
-# Two exemptions, each measured and each recorded beside its own line in
-# tools/settings-fixture.as. "Xb*" because NSwXb() refuses when
-# us.fNoWrite is set, which is the state a save runs in; "YXf" because the
-# writer emits an aggregate the switch can only set one component at a
-# time.
-EXEMPT="Xb* YXf"
+# One exemption, measured and recorded beside its own line in
+# tools/settings-fixture.as: "YXf", because the writer emits an aggregate
+# the switch can only set one component at a time. "Xb*" was exempt too,
+# on the grounds that NSwXb() refuses when us.fNoWrite is set; that refusal
+# is now narrowed to a prefix that would actually select an output file, so
+# the fixture can set the bitmap mode and leg 3 asserts it comes back.
+EXEMPT="YXf"
 grep -oE "^[-:][A-Za-z0-9]+" "$T/rt-S.as" | sort -u > "$T/rt-saved.txt"
 uncov=0
 while IFS= read -r sw; do
