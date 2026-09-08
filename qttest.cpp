@@ -7056,6 +7056,86 @@ static void TestFillBoundsQt()
 // Nothing about the dialog looks wrong when it does that -- the boxes
 // just come back holding someone else's answer.
 
+// A renamed object shows the name the user gave it in the two restriction
+// dialogs, and a stock one keeps the label -- and the mnemonic -- that
+// astrolog.rc gave it.
+//
+// Reassigning a uranian or dwarf slot through Object Selections and then
+// finding "Vulcan" in the restriction list is exactly the confusion that
+// dialog exists to remove. Neither backend relabelled before this: Qt's
+// ShowRcRestrictQt() only setChecked() per box, and Windows' DlgRestrict
+// WM_INITDIALOG only SetCheck(), so both showed the resource string. The
+// fix is in wdialog.cpp and qtdialog.cpp with no QT guard, the way this
+// fork's other both-builds changes go in.
+//
+// The stock leg is not padding. The resource labels carry mnemonics --
+// "&Earth", "M&oon", "Ur&anus", "Vu&lcan" -- so a relabel that fired
+// unconditionally would strip the accelerator off all 52 boxes, and
+// tools/rc_mnemonic_audit.py reads astrolog.rc and cannot see a relabel
+// done at runtime. FObjDispCustom() is the guard; this asserts it holds.
+//
+// Every box carries objectName "dx" (szId is "dx", the number lives in
+// nIdx), so findChild() cannot address one -- the labels are collected
+// from findChildren() and matched by text.
+
+static void TestRestrictObjectNamesQt()
+{
+  CONST char *szStock = "Vu&lcan";      // astrolog.rc's dx35, = uranLo
+  CONST char *szNew = "ZZProbeBody";
+  QStringList strLabels;
+  flag fDispWasOwn = !FObjDispCustom(uranLo);
+  CONST char *szDispSav = szObjDisp[uranLo];
+  int i;
+
+  Group("Restriction dialog object names");
+
+  // Force the slot stock FIRST. Its first draft did not, and read "S/M"
+  // there: the settings this suite loads have uranLo forced to the
+  // Sun/Moon midpoint and renamed, so the stock leg was never stock and
+  // the "no longer shows Vu&lcan" leg below passed vacuously -- it was
+  // asserting the absence of a string that was never present. A test
+  // whose baseline depends on the tester's own astrolog.as is not a test.
+  SetObjDisp(uranLo, szObjName[uranLo]);
+  strLabels.clear();
+  DriveModalQt(ShowRestrictDialogQt, [&strLabels](QWidget *pw) {
+    for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+      strLabels.append(p->text());
+    QPushButton *ppb = pw->findChild<QPushButton *>("IDCANCEL");
+    if (ppb != NULL)
+      ppb->click();
+  });
+  Check(strLabels.contains(QString(szStock)),
+    "a stock slot keeps astrolog.rc's label, mnemonic and all (\"%s\" "
+    "among %d boxes)", szStock, strLabels.size());
+
+  SetObjDisp(uranLo, szNew);
+  for (i = 0; i <= 1; i++) {
+    strLabels.clear();
+    DriveModalQt(i ? ShowTransitRestrictDialogQt : ShowRestrictDialogQt,
+      [&strLabels](QWidget *pw) {
+        for (QCheckBox *p : pw->findChildren<QCheckBox *>())
+          strLabels.append(p->text());
+        QPushButton *ppb = pw->findChild<QPushButton *>("IDCANCEL");
+        if (ppb != NULL)
+          ppb->click();
+      });
+    Check(strLabels.contains(QString(szNew)),
+      "%s shows a renamed slot's own name (\"%s\")",
+      i ? "Transit Object Restrictions" : "Object Restrictions", szNew);
+    Check(!strLabels.contains(QString(szStock)),
+      "and no longer shows the resource's \"%s\" for it", szStock);
+  }
+
+  // Restore, through the accessor that owns the convention.
+  if (fDispWasOwn)
+    SetObjDisp(uranLo, szObjName[uranLo]);
+  else
+    SetObjDisp(uranLo, szDispSav);
+  Check(FObjDispCustom(uranLo) == !fDispWasOwn,
+    "and the slot is put back the way it was found");
+}
+
+
 static void TestTransitRestrictQt()
 {
   byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
@@ -12485,6 +12565,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"expression-functions", TestExpressionFunctionsQt},
   {"swiss-enumerate",      TestSwissEnumerateQt},
   {"fill-bounds",          TestFillBoundsQt},
+  {"restrict-obj-names",   TestRestrictObjectNamesQt},
   {"transit-restrict",     TestTransitRestrictQt},
   {"objsel-table",         TestObjSelTableQt},
   {"timers",               TestTimerSanityQt},

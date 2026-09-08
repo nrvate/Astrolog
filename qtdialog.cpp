@@ -2992,6 +2992,21 @@ static void ShowRcRestrictQt(CONST char *szTitle, CONST RCCTL *rgctl,
       continue;
     QCheckBox *pcb = (QCheckBox *)rgbuilt[i].pw;
     pcb->setChecked(rgignore[iObj] != 0);
+    // A slot the user renamed -- through Object Selections, the Custom
+    // Objects dialog, or -YD -- shows the name they gave it rather than
+    // the one astrolog.rc baked in. Reassigning a uranian or dwarf slot
+    // and then finding "Vulcan" in this list is exactly the confusion
+    // Object Selections exists to remove.
+    //
+    // Only when it IS renamed, which is what FObjDispCustom() asks. The
+    // resource labels carry mnemonics -- "&Earth", "M&oon", "Ur&anus",
+    // "Vu&lcan" -- and overwriting unconditionally would drop the
+    // accelerator from every box in the dialog. A name the user typed
+    // has no assigned accelerator to lose. tools/rc_mnemonic_audit.py
+    // reads astrolog.rc and cannot see a relabel done here, the same
+    // blind spot the RCRESBUT button overrides above sit in.
+    if (FObjDispCustom(iObj))
+      pcb->setText(QString::fromLatin1(szObjDisp[iObj]));
     rgpcb[iObj - lo] = pcb;
   }
 

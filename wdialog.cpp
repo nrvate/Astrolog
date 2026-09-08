@@ -2028,8 +2028,17 @@ flag API DlgRestrict(HWND hdlg, uint message, WORD wParam, LONG lParam)
       SetDlgItemText(hdlg, dbRT, "Copy &From Standard Restriction Set");
       pb = ignore2.rgn;
     }
-    for (i = 0; i <= dwarfHi; i++)
+    for (i = 0; i <= dwarfHi; i++) {
       SetCheck(dx01 + i, pb[i]);
+      // A slot the user renamed -- through Object Selections, the Custom
+      // Objects dialog, or -YD -- shows the name they gave it rather than
+      // the one astrolog.rc baked in. Only when it IS renamed: the
+      // resource labels carry mnemonics ("&Earth", "Ur&anus", "Vu&lcan")
+      // and overwriting unconditionally would drop the accelerator from
+      // every box here. A name the user typed has none to lose.
+      if (FObjDispCustom(i))
+        SetDlgItemText(hdlg, dx01 + i, szObjDisp[i]);
+    }
     return fTrue;
 
   case WM_COMMAND:
