@@ -753,7 +753,6 @@ void XChartGridRelation()
 
   nScale = gi.nScale/gi.nScaleT;
   unit = CELLSIZE*gi.nScale; siz = (gi.nGridCell+1)*unit;
-  *szT = chNull;
   i = us.fSmartCusp; us.fSmartCusp = fFalse;
   j = us.objRequire; us.objRequire = -1;
   if (!FCreateGridRelation(gs.fAlt != us.fGridMidpoint))
@@ -878,7 +877,7 @@ void XChartEphemeris()
   x1 = (3 + Min(cYea, 2))*xFontT; y1 = unit*2;
   x2 = gs.xWin - x1;
   y2 = gs.yWin - y1 - gs.fText*yFontT;
-  xs = x2 - x1; ys = y2 - y1;
+  xs = x2 - x1; ys = y2 - y1; ys = Max(ys, 1);
   dd = (daytot / ys + 2) * (2 - us.fSeconds);
   dd = Min(dd, 28);
 
@@ -900,7 +899,6 @@ void XChartEphemeris()
       if (i < -dx || i > dx)
         continue;
       m = x1 + NMultDiv(xs, i+dx, dx << 1);
-      j = i > cSign ? 1 : i;
       DrawColor(i ? gi.kiLite : gi.kiOn);
       sprintf2(S(sz), "%s%d", i > 0 ? "+" : "", i);
       DrawSz(sz, m, y2+2, dtTop | dtScale2);
@@ -1061,7 +1059,7 @@ void XChartEsoteric()
     daytot = DayInMonth(Mon, Yea);
   x1 = (3 + Min(cYea, 2))*xFontT; y1 = 6*gi.nScaleTextT2;
   x2 = gs.xWin - x1; y2 = gs.yWin - y1;
-  xs = x2 - x1; ys = y2 - y1;
+  xs = x2 - x1; ys = y2 - y1; ys = Max(ys, 1);
   dd = (daytot / ys + 1) * (2 - us.fSeconds);
   dd = Min(dd, 28);
 
@@ -1407,10 +1405,10 @@ void XChartTransit(flag fTrans, flag fProg)
   // "#else cRow = 0" meant for every non-Windows build -- the first
   // screenful and no more.
 #ifdef WIN
-  cRow = (cRow - (gs.yWin / (yRow + 1))) * wi.yScroll / nScrollDiv;
+  cRow = (cRow - Max(1, (gs.yWin - yo) / yRow)) * wi.yScroll / nScrollDiv;
 #else
 #ifdef QT
-  cRow = (cRow - (gs.yWin / (yRow + 1))) * NScrollChartQt() / nScrollDiv;
+  cRow = (cRow - Max(1, (gs.yWin - yo) / yRow)) * NScrollChartQt() / nScrollDiv;
 #else
   cRow = 0;
 #endif
@@ -1692,6 +1690,10 @@ flag XChartRising()
         if (!gi.fBmp || !gs.fColor || (gi.fFile && gs.ft > ftBmp))
           n = (n << 1) | (alt >= 0.0);
         else
+          // 63.99 not 64.0 above the horizon: the 192 base plus 63
+          // tops out at 255 (white) at the zenith, which 192+64 would
+          // overshoot by one. Below the horizon 64+64 tops out at 128
+          // (mid-gray) at the nadir, which is the intended contrast.
           n = (n << 8) | (alt >= 0.0 ? 192+(int)(alt/rDegQuad*63.99) :
             64+(int)(alt/rDegQuad*64.0));
       }
