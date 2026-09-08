@@ -122,6 +122,19 @@ for m in "" -XX -XX0 -XW -XW0 -XG -XG0 -XP -XP0 -XZ \
          -g -g0 -Z -Z0 -L -L0 -7 -l -d -E -j -8 -5 -k0 -v -w -m -S; do
   g $m
 done
+# The -E ephemeris and -7 ray chart share one date walker in xcharts2.cpp;
+# these four render its year branches, which the bare entries never reach.
+# Spellings, each measured: "-E -EY 2" renders the WHEEL, not an ephemeris,
+# because the second -E toggles the mode back off -- "-EY 2" alone is the
+# real two-year form and -Ey the one-year. The ray chart takes its years
+# from -ZdY/-Zdy, which set nEphemYears without engaging -E. Parallel
+# declination (-gp) cannot be combined with -E at all: -g sets the grid
+# mode, which rgchartmode ranks above ephemeris, so there is deliberately
+# no entry for it -- it would render the grid and test nothing.
+g -EY 2
+g -Ey
+g -7 -ZdY 2
+g -7 -Zdy
 # "-Xw 800 400" is a base, not an option, so that -XQ can be TESTED
 # rather than allowlisted: it only does anything when the bitmap is not
 # square, which was an annotated claim in inert_option_audit.py until
