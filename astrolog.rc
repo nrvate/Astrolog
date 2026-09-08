@@ -2184,28 +2184,28 @@ BEGIN
     COMBOBOX        dck19,335,135,50,160,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
     COMBOBOX        dck20,335,150,50,160,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
     COMBOBOX        dck21,335,165,50,160,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Earth",IDC_STATIC,5,15,30,8
-    LTEXT           "Sun",IDC_STATIC,5,30,30,8
-    LTEXT           "Moon",IDC_STATIC,5,45,30,8
-    LTEXT           "Mercury",IDC_STATIC,5,60,30,8
-    LTEXT           "Venus",IDC_STATIC,5,75,30,8
-    LTEXT           "Mars",IDC_STATIC,5,90,30,8
-    LTEXT           "Jupiter",IDC_STATIC,5,105,30,8
-    LTEXT           "Saturn",IDC_STATIC,5,120,30,8
-    LTEXT           "Uranus",IDC_STATIC,5,135,30,8
-    LTEXT           "Neptune",IDC_STATIC,5,150,30,8
-    LTEXT           "Pluto",IDC_STATIC,5,165,30,8
-    LTEXT           "Chiron",IDC_STATIC,190,15,50,8
-    LTEXT           "Ceres",IDC_STATIC,190,30,50,8
-    LTEXT           "Pallas Athena",IDC_STATIC,190,45,50,8
-    LTEXT           "Juno",IDC_STATIC,190,60,50,8
-    LTEXT           "Vesta",IDC_STATIC,190,75,50,8
-    LTEXT           "North Node",IDC_STATIC,190,90,50,8
-    LTEXT           "South Node",IDC_STATIC,190,105,50,8
-    LTEXT           "Lilith",IDC_STATIC,190,120,50,8
-    LTEXT           "Part of Fortune",IDC_STATIC,190,135,50,8
-    LTEXT           "Vertex",IDC_STATIC,190,150,50,8
-    LTEXT           "East Point",IDC_STATIC,190,165,50,8
+    LTEXT           "Earth",dno01,5,15,30,8
+    LTEXT           "Sun",dno02,5,30,30,8
+    LTEXT           "Moon",dno03,5,45,30,8
+    LTEXT           "Mercury",dno04,5,60,30,8
+    LTEXT           "Venus",dno05,5,75,30,8
+    LTEXT           "Mars",dno06,5,90,30,8
+    LTEXT           "Jupiter",dno07,5,105,30,8
+    LTEXT           "Saturn",dno08,5,120,30,8
+    LTEXT           "Uranus",dno09,5,135,30,8
+    LTEXT           "Neptune",dno10,5,150,30,8
+    LTEXT           "Pluto",dno11,5,165,30,8
+    LTEXT           "Chiron",dno12,190,15,50,8
+    LTEXT           "Ceres",dno13,190,30,50,8
+    LTEXT           "Pallas Athena",dno14,190,45,50,8
+    LTEXT           "Juno",dno15,190,60,50,8
+    LTEXT           "Vesta",dno16,190,75,50,8
+    LTEXT           "North Node",dno17,190,90,50,8
+    LTEXT           "South Node",dno18,190,105,50,8
+    LTEXT           "Lilith",dno19,190,120,50,8
+    LTEXT           "Part of Fortune",dno20,190,135,50,8
+    LTEXT           "Vertex",dno21,190,150,50,8
+    LTEXT           "East Point",dno22,190,165,50,8
     LTEXT           "Max Orb",IDC_STATIC,40,5,30,8
     LTEXT           "Add",IDC_STATIC,75,5,20,8
     LTEXT           "Influence",IDC_STATIC,100,5,30,8
@@ -2348,37 +2348,37 @@ BEGIN
     COMBOBOX        dck28,451,120,45,160,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
     COMBOBOX        dck29,451,135,45,160,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
     COMBOBOX        dck30,451,150,45,160,CBS_DROPDOWN | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Ascendant",IDC_STATIC,5,15,40,8
-    LTEXT           "2nd Cusp",IDC_STATIC,5,30,40,8
-    LTEXT           "3rd Cusp",IDC_STATIC,5,45,40,8
-    LTEXT           "Nadir",IDC_STATIC,5,60,40,8
-    LTEXT           "5th Cusp",IDC_STATIC,5,75,40,8
-    LTEXT           "6th Cusp",IDC_STATIC,5,90,40,8
-    LTEXT           "Descendant",IDC_STATIC,5,105,40,8
-    LTEXT           "8th Cusp",IDC_STATIC,5,120,40,8
-    LTEXT           "9th Cusp",IDC_STATIC,5,135,40,8
-    LTEXT           "Midheaven",IDC_STATIC,5,150,40,8
-    LTEXT           "11th Cusp",IDC_STATIC,5,165,40,8
-    LTEXT           "12th Cusp",IDC_STATIC,5,180,40,8
-    LTEXT           "Vulcan",IDC_STATIC,175,15,30,8
-    LTEXT           "Cupido",IDC_STATIC,175,30,30,8
-    LTEXT           "Hades",IDC_STATIC,175,45,30,8
-    LTEXT           "Zeus",IDC_STATIC,175,60,30,8
-    LTEXT           "Kronos",IDC_STATIC,175,75,30,8
-    LTEXT           "Apollon",IDC_STATIC,175,90,30,8
-    LTEXT           "Admetos",IDC_STATIC,175,105,30,8
-    LTEXT           "Vulkanus",IDC_STATIC,175,120,30,8
-    LTEXT           "Poseidon",IDC_STATIC,175,135,30,8
-    LTEXT           "Hygiea",IDC_STATIC,335,15,35,8
-    LTEXT           "Pholus",IDC_STATIC,335,30,35,8
-    LTEXT           "Eris",IDC_STATIC,335,45,35,8
-    LTEXT           "Haumea",IDC_STATIC,335,60,35,8
-    LTEXT           "Makemake",IDC_STATIC,335,75,35,8
-    LTEXT           "Gonggong",IDC_STATIC,335,90,35,8
-    LTEXT           "Quaoar",IDC_STATIC,335,105,35,8
-    LTEXT           "Sedna",IDC_STATIC,335,120,35,8
-    LTEXT           "Orcus",IDC_STATIC,335,135,35,8
-    LTEXT           "All Stars",IDC_STATIC,335,150,35,8
+    LTEXT           "Ascendant",dno01,5,15,40,8
+    LTEXT           "2nd Cusp",dno02,5,30,40,8
+    LTEXT           "3rd Cusp",dno03,5,45,40,8
+    LTEXT           "Nadir",dno04,5,60,40,8
+    LTEXT           "5th Cusp",dno05,5,75,40,8
+    LTEXT           "6th Cusp",dno06,5,90,40,8
+    LTEXT           "Descendant",dno07,5,105,40,8
+    LTEXT           "8th Cusp",dno08,5,120,40,8
+    LTEXT           "9th Cusp",dno09,5,135,40,8
+    LTEXT           "Midheaven",dno10,5,150,40,8
+    LTEXT           "11th Cusp",dno11,5,165,40,8
+    LTEXT           "12th Cusp",dno12,5,180,40,8
+    LTEXT           "Vulcan",dno13,175,15,30,8
+    LTEXT           "Cupido",dno14,175,30,30,8
+    LTEXT           "Hades",dno15,175,45,30,8
+    LTEXT           "Zeus",dno16,175,60,30,8
+    LTEXT           "Kronos",dno17,175,75,30,8
+    LTEXT           "Apollon",dno18,175,90,30,8
+    LTEXT           "Admetos",dno19,175,105,30,8
+    LTEXT           "Vulkanus",dno20,175,120,30,8
+    LTEXT           "Poseidon",dno21,175,135,30,8
+    LTEXT           "Hygiea",dno22,335,15,35,8
+    LTEXT           "Pholus",dno23,335,30,35,8
+    LTEXT           "Eris",dno24,335,45,35,8
+    LTEXT           "Haumea",dno25,335,60,35,8
+    LTEXT           "Makemake",dno26,335,75,35,8
+    LTEXT           "Gonggong",dno27,335,90,35,8
+    LTEXT           "Quaoar",dno28,335,105,35,8
+    LTEXT           "Sedna",dno29,335,120,35,8
+    LTEXT           "Orcus",dno30,335,135,35,8
+    LTEXT           "All Stars",dno31,335,150,35,8
     LTEXT           "Max",IDC_STATIC,50,5,20,8
     LTEXT           "Add",IDC_STATIC,75,5,20,8
     LTEXT           "Influ.",IDC_STATIC,100,5,16,8
@@ -2535,38 +2535,38 @@ BEGIN
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,340,149,155,10
     CONTROL         "&Wheel Charts Show Moons Orbiting Planet",dxMo_X8,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,340,159,155,10
-    LTEXT           "Phobos",IDC_STATIC,5,15,35,8
-    LTEXT           "Deimos",IDC_STATIC,5,30,35,8
-    LTEXT           "Ganymede",IDC_STATIC,5,45,35,8
-    LTEXT           "Callisto",IDC_STATIC,5,60,35,8
-    LTEXT           "Io",IDC_STATIC,5,75,35,8
-    LTEXT           "Europa",IDC_STATIC,5,90,35,8
-    LTEXT           "Titan",IDC_STATIC,5,105,35,8
-    LTEXT           "Rhea",IDC_STATIC,5,120,35,8
-    LTEXT           "Iapetus",IDC_STATIC,5,135,35,8
-    LTEXT           "Dione",IDC_STATIC,5,150,35,8
-    LTEXT           "Tethys",IDC_STATIC,5,165,35,8
-    LTEXT           "Enceladus",IDC_STATIC,5,180,35,8
-    LTEXT           "Mimas",IDC_STATIC,171,15,34,8
-    LTEXT           "Hyperion",IDC_STATIC,171,30,30,8
-    LTEXT           "Titania",IDC_STATIC,171,45,30,8
-    LTEXT           "Oberon",IDC_STATIC,171,60,30,8
-    LTEXT           "Umbriel",IDC_STATIC,171,75,30,8
-    LTEXT           "Ariel",IDC_STATIC,171,90,30,8
-    LTEXT           "Miranda",IDC_STATIC,171,105,30,8
-    LTEXT           "Triton",IDC_STATIC,171,120,30,8
-    LTEXT           "Proteus",IDC_STATIC,171,135,30,8
-    LTEXT           "Nereid",IDC_STATIC,171,150,30,8
-    LTEXT           "Charon",IDC_STATIC,171,165,30,8
-    LTEXT           "Hydra",IDC_STATIC,171,180,30,8
-    LTEXT           "Nix",IDC_STATIC,330,15,45,8
-    LTEXT           "Kerberos",IDC_STATIC,330,30,45,8
-    LTEXT           "Styx",IDC_STATIC,330,45,45,8
-    LTEXT           "Jupiter COB",IDC_STATIC,330,60,45,8
-    LTEXT           "Saturn COB",IDC_STATIC,330,75,45,8
-    LTEXT           "Uranus COB",IDC_STATIC,330,90,45,8
-    LTEXT           "Neptune COB",IDC_STATIC,330,105,45,8
-    LTEXT           "Pluto COB",IDC_STATIC,330,120,45,8
+    LTEXT           "Phobos",dno01,5,15,35,8
+    LTEXT           "Deimos",dno02,5,30,35,8
+    LTEXT           "Ganymede",dno03,5,45,35,8
+    LTEXT           "Callisto",dno04,5,60,35,8
+    LTEXT           "Io",dno05,5,75,35,8
+    LTEXT           "Europa",dno06,5,90,35,8
+    LTEXT           "Titan",dno07,5,105,35,8
+    LTEXT           "Rhea",dno08,5,120,35,8
+    LTEXT           "Iapetus",dno09,5,135,35,8
+    LTEXT           "Dione",dno10,5,150,35,8
+    LTEXT           "Tethys",dno11,5,165,35,8
+    LTEXT           "Enceladus",dno12,5,180,35,8
+    LTEXT           "Mimas",dno13,171,15,34,8
+    LTEXT           "Hyperion",dno14,171,30,30,8
+    LTEXT           "Titania",dno15,171,45,30,8
+    LTEXT           "Oberon",dno16,171,60,30,8
+    LTEXT           "Umbriel",dno17,171,75,30,8
+    LTEXT           "Ariel",dno18,171,90,30,8
+    LTEXT           "Miranda",dno19,171,105,30,8
+    LTEXT           "Triton",dno20,171,120,30,8
+    LTEXT           "Proteus",dno21,171,135,30,8
+    LTEXT           "Nereid",dno22,171,150,30,8
+    LTEXT           "Charon",dno23,171,165,30,8
+    LTEXT           "Hydra",dno24,171,180,30,8
+    LTEXT           "Nix",dno25,330,15,45,8
+    LTEXT           "Kerberos",dno26,330,30,45,8
+    LTEXT           "Styx",dno27,330,45,45,8
+    LTEXT           "Jupiter COB",dno28,330,60,45,8
+    LTEXT           "Saturn COB",dno29,330,75,45,8
+    LTEXT           "Uranus COB",dno30,330,90,45,8
+    LTEXT           "Neptune COB",dno31,330,105,45,8
+    LTEXT           "Pluto COB",dno32,330,120,45,8
     LTEXT           "Max",IDC_STATIC,45,5,20,8
     LTEXT           "Add",IDC_STATIC,71,5,20,8
     LTEXT           "Influ.",IDC_STATIC,95,5,16,8

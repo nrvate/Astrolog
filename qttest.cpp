@@ -7126,6 +7126,82 @@ static void TestRestrictObjectNamesQt()
       "and no longer shows the resource's \"%s\" for it", szStock);
   }
 
+  // The same for the three Object Settings dialogs, whose row labels all
+  // shared IDC_STATIC and so could not be addressed at all until
+  // astrolog.rc gave them dno01.. . These are QLabels, not checkboxes,
+  // and each dialog numbers dno from 1 over its OWN object range:
+  // dlgObject 0..oCore, dlgObject2 oAsc..dwarfHi+1, dlgObjectM
+  // moonsLo..cobHi. uranLo sits in dlgObject2's range, so that is the
+  // one that can see this slot; the other two are driven with a slot of
+  // their own.
+  struct { void (*pfn)(void); CONST char *szDlg; int iobj; } rgdlg[] = {
+    {ShowObjectDialogQt,     "Object Settings",      oMar},
+    {ShowObject2DialogQt,    "More Object Settings", uranLo},
+    {ShowMoonObjectDialogQt, "Moon Object Settings", moonsLo} };
+
+  for (i = 0; i < (int)(sizeof(rgdlg)/sizeof(rgdlg[0])); i++) {
+    int iobj = rgdlg[i].iobj;
+    flag fOwn = !FObjDispCustom(iobj);
+    CONST char *szSav = szObjDisp[iobj];
+    QStringList strBefore, strAfter;
+
+    SetObjDisp(iobj, szObjName[iobj]);
+    DriveModalQt(rgdlg[i].pfn, [&strBefore](QWidget *pw) {
+      for (QLabel *p : pw->findChildren<QLabel *>())
+        strBefore.append(p->text());
+      QPushButton *ppb = pw->findChild<QPushButton *>("IDCANCEL");
+      if (ppb != NULL)
+        ppb->click();
+    });
+    Check(!strBefore.contains(QString(szNew)),
+      "%s does not show \"%s\" before the rename (%d labels)",
+      rgdlg[i].szDlg, szNew, strBefore.size());
+
+    SetObjDisp(iobj, szNew);
+    DriveModalQt(rgdlg[i].pfn, [&strAfter](QWidget *pw) {
+      for (QLabel *p : pw->findChildren<QLabel *>())
+        strAfter.append(p->text());
+      QPushButton *ppb = pw->findChild<QPushButton *>("IDCANCEL");
+      if (ppb != NULL)
+        ppb->click();
+    });
+    Check(strAfter.contains(QString(szNew)),
+      "%s shows a renamed slot's own name", rgdlg[i].szDlg);
+    Check(strAfter.size() == strBefore.size(),
+      "%s gained no label doing it (%d then %d)", rgdlg[i].szDlg,
+      strBefore.size(), strAfter.size());
+
+    if (fOwn)
+      SetObjDisp(iobj, szObjName[iobj]);
+    else
+      SetObjDisp(iobj, szSav);
+  }
+
+  // The aggregate "Fixed Stars" row in dlgObject2 stands for the whole
+  // star range rather than for one object, so it must keep the
+  // resource's label even when szObjDisp[starLo] is customised -- the
+  // off-by-one that a "- oAsc + i0" index invites.
+  {
+    flag fOwn = !FObjDispCustom(starLo);
+    CONST char *szSav = szObjDisp[starLo];
+    QStringList strLab;
+
+    SetObjDisp(starLo, szNew);
+    DriveModalQt(ShowObject2DialogQt, [&strLab](QWidget *pw) {
+      for (QLabel *p : pw->findChildren<QLabel *>())
+        strLab.append(p->text());
+      QPushButton *ppb = pw->findChild<QPushButton *>("IDCANCEL");
+      if (ppb != NULL)
+        ppb->click();
+    });
+    Check(!strLab.contains(QString(szNew)),
+      "the collective Fixed Stars row keeps the resource's label");
+    if (fOwn)
+      SetObjDisp(starLo, szObjName[starLo]);
+    else
+      SetObjDisp(starLo, szSav);
+  }
+
   // Restore, through the accessor that owns the convention.
   if (fDispWasOwn)
     SetObjDisp(uranLo, szObjName[uranLo]);

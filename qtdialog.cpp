@@ -4028,6 +4028,28 @@ void ShowColorDialogQt()
 // are deoNN/deaNN/deiNN and the color list dckNN, all numbered from one
 // over the object range, so they load and store by index.
 
+// Relabel one Object Settings row when the user has renamed that slot.
+// The row labels shared IDC_STATIC until now, so not one of them could be
+// addressed by name; they carry dno01.. like every other indexed control
+// in these dialogs. Unlike the restriction checkboxes there is no
+// mnemonic at stake -- an LTEXT row label never had one -- but the
+// FObjDispCustom() guard is kept all the same, so a stock row shows the
+// resource's spelling ("Pallas Athena", "Part of Fortune") rather than
+// szObjName[]'s shorter one.
+
+static void RcLabelObjRowQt(CONST QVector<RCBUILT> &rgbuilt, int nIdx,
+  int iobj)
+{
+  QLabel *plab;
+
+  if (!FObjDispCustom(iobj))
+    return;
+  plab = (QLabel *)PwRcFindIdxQt(rgbuilt, "dno", nIdx);
+  if (plab != NULL)
+    plab->setText(QString::fromLatin1(szObjDisp[iobj]));
+}
+
+
 void ShowObjectDialogQt()
 {
   QDialog dlg(gi.qwind);
@@ -4053,6 +4075,7 @@ void ShowObjectDialogQt()
     if (rgpeInf[i] != NULL)
       rgpeInf[i]->setText(SzFormatRQt(rgobjset[i].inf, -2));
     FillColorComboQt(rgpcbColor[i], rgobjset[i].kolor, 1);
+    RcLabelObjRowQt(rgbuilt, i+1, i);
   }
   RcWireOkCancelQt(&dlg, rgbuilt);
   PrepareDialogQt(&dlg);
@@ -4130,6 +4153,11 @@ void ShowObject2DialogQt()
       peInf->setText(SzFormatRQt(rgobjset[i].inf, -2));
     // Windows widens the color list by one on the collective stars row.
     FillColorComboQt(pcbColor, rgobjset[i].kolor, 1 + (i == starLo));
+    // i0 > dwarfHi is the aggregate "Fixed Stars" row, which stands for
+    // the whole star range rather than for one object, so it keeps the
+    // resource's label.
+    if (i0 <= dwarfHi)
+      RcLabelObjRowQt(rgbuilt, j+1, i);
     rgpeOrb.append(peOrb); rgpeAdd.append(peAdd);
     rgpeInf.append(peInf); rgpcbColor.append(pcbColor);
     j++;
@@ -4751,6 +4779,7 @@ void ShowMoonObjectDialogQt()
     if (peInf != NULL)
       peInf->setText(SzFormatRQt(rgobjset[i].inf, -2));
     FillColorComboQt(pcbColor, rgobjset[i].kolor, 3);
+    RcLabelObjRowQt(rgbuilt, j+1, i);
     rgpeOrb.append(peOrb); rgpeAdd.append(peAdd);
     rgpeInf.append(peInf); rgpcbColor.append(pcbColor);
   }

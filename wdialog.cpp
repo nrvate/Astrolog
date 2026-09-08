@@ -1475,6 +1475,13 @@ flag API DlgObject(HWND hdlg, uint message, WORD wParam, LONG lParam)
       SetEditR(hdlg, dea01 + i, rgobjset[i].add, -1);
       SetEditR(hdlg, dei01 + i, rgobjset[i].inf, -2);
       SetEditColor(hdlg, dck00 + i, rgobjset[i].kolor, 1);
+      // A slot the user renamed shows the name they gave it. These row
+      // labels shared IDC_STATIC until now, so not one of them could be
+      // addressed; they carry dno01.. like every other indexed control
+      // in the dialog. No mnemonic to preserve here -- unlike the
+      // restriction checkboxes, an LTEXT row label never had one.
+      if (FObjDispCustom(i))
+        SetDlgItemText(hdlg, dno01 + i, szObjDisp[i]);
     }
     return fTrue;
 
@@ -1532,6 +1539,11 @@ flag API DlgObject2(HWND hdlg, uint message, WORD wParam, LONG lParam)
       SetEditR(hdlg, dea01 - oAsc + i0, rgobjset[i].add, -1);
       SetEditR(hdlg, dei01 - oAsc + i0, rgobjset[i].inf, -2);
       SetEditColor(hdlg, dck00 - oAsc + i0, rgobjset[i].kolor, 1 + (i == starLo));
+      // As DlgObject above. i0 > dwarfHi is the aggregate "Fixed Stars"
+      // row, which stands for the whole star range rather than for one
+      // object, so it keeps the resource's label.
+      if (i0 <= dwarfHi && FObjDispCustom(i))
+        SetDlgItemText(hdlg, dno01 - oAsc + i0, szObjDisp[i]);
     }
     return fTrue;
 
@@ -1591,6 +1603,9 @@ flag API DlgObjectM(HWND hdlg, uint message, WORD wParam, LONG lParam)
       SetEditR(hdlg, dea01 - moonsLo + i, rgobjset[i].add, -1);
       SetEditR(hdlg, dei01 - moonsLo + i, rgobjset[i].inf, -2);
       SetEditColor(hdlg, dck00 - moonsLo + i, rgobjset[i].kolor, 3);
+      // As DlgObject above.
+      if (FObjDispCustom(i))
+        SetDlgItemText(hdlg, dno01 - moonsLo + i, szObjDisp[i]);
     }
     SetCheck(dxMo_Ym, us.fMoonMove);
     SetCheck(dxMo_80, us.fMoonChartSep);
