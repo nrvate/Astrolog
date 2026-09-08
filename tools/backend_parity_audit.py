@@ -98,6 +98,19 @@ def strip_comments(src):
     return re.sub(r"//[^\n]*", " ", src)
 
 
+# Comments AND string/character literals. Comments have been stripped from
+# the start -- this audit's own first run passed a field because a comment
+# had just started mentioning it -- and a literal is the same hazard one
+# step over. It only began to matter once the function check counted a
+# name where it is REFERENCED and not merely where it is called: without
+# this, a core function's name inside an error message would read as the
+# Qt build using it, and mask a real gap.
+def strip_code(src):
+    src = strip_comments(src)
+    src = re.sub(r'"(?:[^"\\\n]|\\.)*"', " ", src)
+    return re.sub(r"'(?:[^'\\\n]|\\.)*'", " ", src)
+
+
 def fields(paths):
     out = set()
     for path in paths:
@@ -177,12 +190,22 @@ def chart_flag_gaps():
 # and functions DEFINED in wdriver.cpp or wdialog.cpp are out too, since
 # those are Win32 by construction -- that is what removes Dlg*, SetEdit*,
 # WndProc, RedoMenu and the rest, 72 names down to 17.
+#
+# A name counts where it is CALLED and equally where it is merely
+# REFERENCED, because handing a function to somebody else as a value is
+# using it. This looked like a detail until it wasn't: bbd3525 gave the
+# five save dialogs one home, SaveFileAsQt(..., pfnWrite, szError), and
+# from that commit qtdialog.cpp named FOutputData and its four siblings
+# with no "(" after them. A call-only pattern reported all five as absent
+# from a backend that acts on every one of them, and "make check" -- the
+# pre-commit command, with no push lane behind it any more -- was red for
+# four commits before anyone ran it. An audit that cannot see a callback
+# is an audit that goes off the first time somebody factors one out.
 
 ALLOWFN = {
     "CchSz": "string length; the Qt code uses QString",
     "ClearB": "memset over a struct range; Qt clears through tables",
     "PAllocate": "Astrolog's allocator; Qt objects are new/delete",
-    "DeallocateP": "ditto",
     "ConvertSzToLatin": "Win32 dialogs are ANSI; Qt controls are Unicode",
     "DrawClearScreen": "draws through gi.qpaint, which only exists for the "
                        "length of a redraw -- ClearScreenQt() fills the "
@@ -212,37 +235,48 @@ def function_gaps():
     with open("extern.h", newline="") as f:
         core = set(re.findall(r"\b(\w+)\s*P\(\(", f.read()))
     if not core:
-        return None, "cannot find any P(( declarations in extern.h"
+        return None, None, "cannot find any P(( declarations in extern.h"
 
-    def calls(paths):
+    # Every identifier the source names, called or not -- see above. The
+    # intersection with `core` is what makes so loose a pattern safe.
+    def used(paths):
         out = set()
         for path in paths:
             with open(path, newline="") as f:
-                out |= set(re.findall(r"\b(\w+)\s*\(", strip_comments(f.read())))
+                out |= set(re.findall(r"\b(\w+)\b", strip_code(f.read())))
         return out
 
     wsrc = ""
     for path in WIN:
         with open(path, newline="") as f:
-            wsrc += strip_comments(f.read())
+            wsrc += strip_code(f.read())
     here = set(re.findall(r"^\s*(?:\w[\w *]*?)\b(\w+)\s*\([^;]*\)\s*$",
                           wsrc, re.M))
-    missing = sorted(((calls(WIN) & core) - (calls(QT) & core)) - here)
-    return [f for f in missing if f not in ALLOWFN], None
+    missing = sorted(((used(WIN) & core) - (used(QT) & core)) - here)
+    # An entry that is no longer missing is reported, the way the field
+    # allowlist below has always reported its own. ALLOWFN had no such
+    # check and had gone stale by one: DeallocateP, which the Qt build
+    # calls five times, was carrying the reason "Qt objects are new/delete".
+    return ([f for f in missing if f not in ALLOWFN],
+            sorted(f for f in ALLOWFN if f not in missing), None)
 
 
 def main():
-    gapsFn, err = function_gaps()
+    gapsFn, staleFn, err = function_gaps()
     if err is not None:
         print(err)
         return 1
     if gapsFn:
         for f in gapsFn:
-            print("  %-20s called by the Windows GUI and by nothing in the "
+            print("  %-20s named by the Windows GUI and by nothing in the "
                   "Qt one" % (f + "()"))
         print("\nEither the Qt backend is missing behaviour the oracle has,")
         print("or it does the same job another way -- in which case add it")
         print("to ALLOWFN WITH THE REASON.")
+        return 1
+    if staleFn:
+        print("  allowlisted in ALLOWFN but the Qt GUI names it after all, "
+              "so the entry is stale: %s" % " ".join(staleFn))
         return 1
 
     gapsChart, err = chart_flag_gaps()
