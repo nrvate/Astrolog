@@ -9397,6 +9397,81 @@ static void OraclePinUtQt(int yea, int mon, int day, real tim)
   ciCore.nam = ciCore.loc = NULL;
 }
 
+// The Julian day the Matrix engine computes, against the Swiss Ephemeris
+// library's own swe_julday() -- the same shape as the numeric oracle
+// below, and for the same reason: this is one of the few places here
+// that can say a number is RIGHT rather than merely unchanged.
+//
+// It exists because work log commit abd0a58 fixed a real bug in
+// MatrixMdyToJulian() -- raw C division where the algorithm needs floor,
+// so for years before 4800 BC, where 12*(yea+4800)+mon-3 goes negative,
+// truncation-toward-zero silently shifted the whole chart -- and proved
+// it with a harness that was thrown away afterwards. Nothing standing
+// covered it: MatrixMdyToJulian() is reached only from MdyToJulian()
+// with us.fEphemFiles off, the numeric oracle's epochs are 1900..2080,
+// and chart-matrix.sh casts over one pinned modern date. A fix nothing
+// tests is a fix that regresses quietly.
+//
+// The calendar flag is taken from the Matrix formula's own switch point
+// -- it reckons in the JULIAN calendar at or below 2299171 and Gregorian
+// above, which is what JulianToMdy()'s Swiss branch spells as
+// "JD >= 2299171.0". Measured, not assumed: with that flag the two agree
+// on every one of the dates below, and the pre-abd0a58 formula does not.
+//
+// Note what this deliberately does NOT assert: that MatrixJulianToMdy()
+// inverts it. It does not, below the 1582 switch -- the forward
+// conversion is Julian there and the reverse is proleptic Gregorian
+// throughout, so 1-06-15 comes back as 1-06-13 and -9000-06-15 as
+// -9000-04-07. That asymmetry is upstream's, predates this fork, and
+// changing it would move real chart output; it is written down here so
+// the next person to measure it does not read it as a new defect.
+
+static void TestMatrixJulianQt()
+{
+  int yea, mon, cDate = 0, cBad = 0, yeaBad = 0, monBad = 0;
+  long jm, jswe;
+
+  Group("Matrix Julian day");
+
+  for (yea = -9999; yea <= 2399; yea++)
+    for (mon = 1; mon <= 12; mon++) {
+      jm = MatrixMdyToJulian(mon, 15, yea);
+      jswe = (long)SwissJulDay(mon, 15, yea, 12.0, jm > 2299171);
+      cDate++;
+      if (jm != jswe) {
+        if (cBad == 0) {
+          yeaBad = yea; monBad = mon;
+        }
+        cBad++;
+      }
+    }
+  Check(cBad == 0, "the Matrix Julian day matches Swiss on all %d dates "
+    "from -9999 to 2399 (%d differ, first %d-%02d-15)",
+    cDate, cBad, yeaBad, monBad);
+
+  // The range the bug lived in, called out on its own so a failure says
+  // which half broke. Below -4800 the intermediate goes negative, which
+  // is the whole point; above it the old and new formulas agree, so a
+  // regression that only touches the floor-division path still leaves
+  // this leg passing and the leg below failing.
+  cBad = 0;
+  for (yea = -9999; yea < -4800; yea++)
+    for (mon = 1; mon <= 12; mon++) {
+      jm = MatrixMdyToJulian(mon, 15, yea);
+      if (jm != (long)SwissJulDay(mon, 15, yea, 12.0, jm > 2299171))
+        cBad++;
+    }
+  Check(cBad == 0, "and on all %d dates below 4800 BC, where the "
+    "intermediate is negative (%d differ)", (9999-4800)*12, cBad);
+
+  // A spot value with the arithmetic written out, so a reader can check
+  // the harness itself rather than trusting two functions to agree:
+  // 1 Jan 1990 noon is JD 2447893.
+  Check(MatrixMdyToJulian(1, 1, 1990) == 2447893,
+    "1 Jan 1990 is JD 2447893 (%ld)", MatrixMdyToJulian(1, 1, 1990));
+}
+
+
 static void TestNumericOracleQt()
 {
   static CONST int rgyea[] = {1900, 1940, 1980, 2000, 2020, 2050, 2080};
@@ -12466,6 +12541,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"line-drawing",         TestLineDrawingQt},
   {"long-strings",         TestLongStringsQt},
   {"file-parsers",         TestFileParsersQt},
+  {"matrix-julian",        TestMatrixJulianQt},
   {"oracle",               TestNumericOracleQt},
   // LAST ON PURPOSE, and the runner asserts it stays last. This group
   // opens all 25 dialogs and OKs each of them twice, which is the point
