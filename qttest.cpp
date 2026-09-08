@@ -7084,7 +7084,17 @@ static void TestRestrictObjectNamesQt()
   CONST char *szNew = "ZZProbeBody";
   QStringList strLabels;
   flag fDispWasOwn = !FObjDispCustom(uranLo);
-  CONST char *szDispSav = szObjDisp[uranLo];
+  // A COPY, not the pointer. SetObjDisp() DeallocateP()s the old buffer
+  // whenever it resets a slot to stock, so saving szObjDisp[obj] itself
+  // leaves a dangling pointer that the restore below then reads. That
+  // survived every Linux run -- glibc left the freed bytes intact -- and
+  // failed on macOS, where the freed block was handed straight back out
+  // for the "ZZProbeBody" clone, so the restore put THAT back and the
+  // Fixed Stars leg tripped over it. It broke the v8.00-qt.16 release.
+  // The same read-after-free-invisible-on-Linux shape CLAUDE.md already
+  // records once. The QByteArray is a named variable, not a temporary,
+  // for the same reason.
+  QByteArray baDispSav(szObjDisp[uranLo]);
   int i;
 
   Group("Restriction dialog object names");
@@ -7142,7 +7152,7 @@ static void TestRestrictObjectNamesQt()
   for (i = 0; i < (int)(sizeof(rgdlg)/sizeof(rgdlg[0])); i++) {
     int iobj = rgdlg[i].iobj;
     flag fOwn = !FObjDispCustom(iobj);
-    CONST char *szSav = szObjDisp[iobj];
+    QByteArray baSav(szObjDisp[iobj]);   // a copy; see above
     QStringList strBefore, strAfter;
 
     SetObjDisp(iobj, szObjName[iobj]);
@@ -7174,7 +7184,7 @@ static void TestRestrictObjectNamesQt()
     if (fOwn)
       SetObjDisp(iobj, szObjName[iobj]);
     else
-      SetObjDisp(iobj, szSav);
+      SetObjDisp(iobj, baSav.constData());
   }
 
   // The aggregate "Fixed Stars" row in dlgObject2 stands for the whole
@@ -7182,11 +7192,21 @@ static void TestRestrictObjectNamesQt()
   // resource's label even when szObjDisp[starLo] is customised -- the
   // off-by-one that a "- oAsc + i0" index invites.
   {
+    // Its OWN marker, not szNew. dlgObject2 also carries uranLo's row,
+    // and the restriction legs above deliberately leave uranLo renamed
+    // to szNew until the end of the group -- so asserting the absence of
+    // szNew here was really asserting something about uranLo, and it was
+    // uranLo's label that answered. It passed on Linux only because the
+    // restore it depended on was reading a freed buffer that happened to
+    // still hold the old bytes; macOS restored the real value and the
+    // leg failed, taking the v8.00-qt.16 release with it. A marker used
+    // by exactly one slot cannot be answered by another.
+    CONST char *szStar = "ZZProbeStar";
     flag fOwn = !FObjDispCustom(starLo);
-    CONST char *szSav = szObjDisp[starLo];
+    QByteArray baSav(szObjDisp[starLo]);   // a copy; see above
     QStringList strLab;
 
-    SetObjDisp(starLo, szNew);
+    SetObjDisp(starLo, szStar);
     DriveModalQt(ShowObject2DialogQt, [&strLab](QWidget *pw) {
       for (QLabel *p : pw->findChildren<QLabel *>())
         strLab.append(p->text());
@@ -7194,19 +7214,19 @@ static void TestRestrictObjectNamesQt()
       if (ppb != NULL)
         ppb->click();
     });
-    Check(!strLab.contains(QString(szNew)),
+    Check(!strLab.contains(QString(szStar)),
       "the collective Fixed Stars row keeps the resource's label");
     if (fOwn)
       SetObjDisp(starLo, szObjName[starLo]);
     else
-      SetObjDisp(starLo, szSav);
+      SetObjDisp(starLo, baSav.constData());
   }
 
   // Restore, through the accessor that owns the convention.
   if (fDispWasOwn)
     SetObjDisp(uranLo, szObjName[uranLo]);
   else
-    SetObjDisp(uranLo, szDispSav);
+    SetObjDisp(uranLo, baDispSav.constData());
   Check(FObjDispCustom(uranLo) == !fDispWasOwn,
     "and the slot is put back the way it was found");
 }
