@@ -849,12 +849,12 @@ void XChartGridRelation()
 
 
 // This is a subprocedure of XChartEphemeris() and XChartEsoteric(). Walk a
-// date range -- one month, or with -Ey/-EY one or more years -- one day-step
-// at a time, casting a chart for each step, drawing the today marker, the
-// day or month dashes, and the edge labels, while fEso selects each chart's
-// own content: planet position lines for the ephemeris, Ray influence lines
-// for the esoteric chart. The two were ~80% copies of each other; this is
-// the one shared body.
+// date range -- one month, or us.nEphemYears years when that is nonzero --
+// one day-step at a time, casting a chart for each step, drawing the today
+// marker, the day or month dashes, and the edge labels, while fEso selects
+// each chart's own content: planet position lines for the ephemeris, Ray
+// influence lines for the esoteric chart. The two were ~80% copies of each
+// other; this is the one shared body.
 //
 // The differences that remain explicit fEso branches are the real ones:
 // the top margin and step density, the marker color, the per-day content,
@@ -877,7 +877,11 @@ static void XChartEphemerisCore(flag fEso)
 
   if (fEso)
     EnsureRay();
-  cYea = us.nEphemYears;    // Is -EY on to do multiple years at once?
+  // Is a multiple year range on? Every switch that sets this also selects a
+  // chart type (-Ey/-EY set us.fEphemeris, -Zdy/-ZdY us.fHorizonSearch), and
+  // rgchartmode[] ranks gEsoteric above both, so "-7 -Ey" and "-7 -Zdy" draw
+  // the same one year ray chart -- measured, not assumed.
+  cYea = us.nEphemYears;
   if (!fEso && us.fProgress) {
     mon0 = MonT; day0 = DayT; yea0 = YeaT;
   } else {
@@ -900,33 +904,33 @@ static void XChartEphemerisCore(flag fEso)
 
   if (fEso) {
 
-  // Label Rays along the top axis.
+    // Label Rays along the top axis.
 
-  for (i = 1; i <= cRay+1; i++) {
-    m = x1 + NMultDiv(xs, i-1, cRay+1);
-    DrawColor(gi.kiGray);
-    DrawDash(m, y1, m, y2, 2);
-    if (i <= cRay)
-      sprintf2(S(sz), "Ray %d", i);
-    else
-      sprintf2(S(sz), "Average");
-    DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
-    DrawSz(sz, x1 + xs*(i-1)/8, gi.nScaleTextT2, dtCent | dtTop | dtScale2);
-  }
+    for (i = 1; i <= cRay+1; i++) {
+      m = x1 + NMultDiv(xs, i-1, cRay+1);
+      DrawColor(gi.kiGray);
+      DrawDash(m, y1, m, y2, 2);
+      if (i <= cRay)
+        sprintf2(S(sz), "Ray %d", i);
+      else
+        sprintf2(S(sz), "Average");
+      DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
+      DrawSz(sz, x1 + xs*(i-1)/8, gi.nScaleTextT2, dtCent | dtTop | dtScale2);
+    }
 
   } else if (!us.fParallel) {
 
-  // Display glyphs of the zodiac along the bottom axis.
+    // Display glyphs of the zodiac along the bottom axis.
 
-  for (i = 1; i <= cSign+1; i++) {
-    m = x1 + NMultDiv(xs, i-1, 12);
-    j = i > cSign ? 1 : i;
-    DrawColor(kSignB(j));
-    DrawSign(j, m, y2 + unit);
-    if (!gs.fColorSign)
-      DrawColor(gi.kiGray);
-    DrawDash(m, y1, m, y2, 2);
-  }
+    for (i = 1; i <= cSign+1; i++) {
+      m = x1 + NMultDiv(xs, i-1, 12);
+      j = i > cSign ? 1 : i;
+      DrawColor(kSignB(j));
+      DrawSign(j, m, y2 + unit);
+      if (!gs.fColorSign)
+        DrawColor(gi.kiGray);
+      DrawDash(m, y1, m, y2, 2);
+    }
 
   } else {
     dx = gs.nRayWidth / 10; dx = Min(dx, 90); dx = Max(dx, 1);
@@ -984,83 +988,83 @@ static void XChartEphemerisCore(flag fEso)
 
     if (fEso) {
 
-    // Compute Ray influences for current day.
-    for (i = 0; i <= cRay+1; i++)
-      rRay[i] = 0.0;
-    ComputeInfluence(power1, power2);
-    for (i = 0; i <= oNorm; i++) {
-      power[i] = power1[i] + power2[i];
-      if (FIgnore(i))
-        continue;
-      k = SFromZ(planet[i]);
-      for (j = 1; j <= cRay; j++)
-        if (rgSignRay2[SIGT(k)][j]) {
-          if (!gs.fAlt)
-            rRay[j] += power[i];
-          else
-            rRay[j] += power[i] / (420 / rgSignRay2[SIGT(k)][j]);
-        }
-    }
-    for (i = 0; i <= cRay; i++)
-      rRay[cRay+1] += rRay[i] / 7.0;
-
-    // Draw a line segment for each Ray during this time section.
-    if (d > 1)
-      for (i = 1; i <= cRay+1; i++) {
-        k = x1 + (i-1)*xs/8;
-        m = k + (int)((real)xs * rRaySav[i] / 8.0 / (real)gs.nRayWidth);
-        u = k + (int)((real)xs * rRay[i]    / 8.0 / (real)gs.nRayWidth);
-        DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
-        DrawLine(m, n, u, v);
+      // Compute Ray influences for current day.
+      for (i = 0; i <= cRay+1; i++)
+        rRay[i] = 0.0;
+      ComputeInfluence(power1, power2);
+      for (i = 0; i <= oNorm; i++) {
+        power[i] = power1[i] + power2[i];
+        if (FIgnore(i))
+          continue;
+        k = SFromZ(planet[i]);
+        for (j = 1; j <= cRay; j++)
+          if (rgSignRay2[SIGT(k)][j]) {
+            if (!gs.fAlt)
+              rRay[j] += power[i];
+            else
+              rRay[j] += power[i] / (420 / rgSignRay2[SIGT(k)][j]);
+          }
       }
+      for (i = 0; i <= cRay; i++)
+        rRay[cRay+1] += rRay[i] / 7.0;
+
+      // Draw a line segment for each Ray during this time section.
+      if (d > 1)
+        for (i = 1; i <= cRay+1; i++) {
+          k = x1 + (i-1)*xs/8;
+          m = k + (int)((real)xs * rRaySav[i] / 8.0 / (real)gs.nRayWidth);
+          u = k + (int)((real)xs * rRay[i]    / 8.0 / (real)gs.nRayWidth);
+          DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
+          DrawLine(m, n, u, v);
+        }
 
     } else {
 
-    if (us.fParallel)
-      for (i = 0; i <= is.nObj; i++) {
-        rT = (planetalt[i] * rDegHalf / (real)dx) + rDegHalf;
-        rT = Min(rT, rDegMax);
-        rT = Max(rT, 0.0);
-        planet[i] = rT;
-      }
-
-    // Draw planet glyphs along top of chart.
-    if (d <= 1) {
-      for (i = 0; i <= is.nObj; i++) {
-        j = !FProperEphem2(i);
-        symbol[i*2] = (j || us.nRel > rcDual) ? -rLarge : cp2.obj[i];
-        j = !FProper(i);
-        symbol[i*2+1] = (j ? -rLarge : planet[i]);
-      }
-      FillSymbolLine(symbol);
-      fSav = gs.fLabel; gs.fLabel = fTrue;
-      for (i = is.nObj*2+1; i >= 0; i--) {
-        j = i >> 1;
-        if (symbol[i] >= 0.0)
-          DrawObject(j, x1 + (int)((real)xs * symbol[i] / rDegMax), unit);
-      }
-      gs.fLabel = fSav;
-      if (us.nRel <= rcDual) {
-        for (i = is.nObj; i >= 0; i--) {
-          if (!FProperEphem2(i))
-            continue;
-          j = x1 + (int)((real)xs * cp2.obj[i] / rDegMax);
-          DrawColor(kObjB[i]);
-          DrawDash(j, y1, j, y2, 1);
+      if (us.fParallel)
+        for (i = 0; i <= is.nObj; i++) {
+          rT = (planetalt[i] * rDegHalf / (real)dx) + rDegHalf;
+          rT = Min(rT, rDegMax);
+          rT = Max(rT, 0.0);
+          planet[i] = rT;
         }
-      }
 
-    // Draw a line segment for each object during this time section.
-    } else
-      for (i = is.nObj; i >= 0; i--) {
-        if (!FProper(i))
-          continue;
-        m = x1 + (int)((real)xs * objSav[i] / rDegMax);
-        u = x1 + (int)((real)xs * planet[i] / rDegMax);
-        DrawColor(kObjB[i]);
-        DrawWrap(m, n, u, v,
-          !us.fParallel && ret[i] > 0.0 && i != oFor ? -x1 : x1, x2);
-      }
+      // Draw planet glyphs along top of chart.
+      if (d <= 1) {
+        for (i = 0; i <= is.nObj; i++) {
+          j = !FProperEphem2(i);
+          symbol[i*2] = (j || us.nRel > rcDual) ? -rLarge : cp2.obj[i];
+          j = !FProper(i);
+          symbol[i*2+1] = (j ? -rLarge : planet[i]);
+        }
+        FillSymbolLine(symbol);
+        fSav = gs.fLabel; gs.fLabel = fTrue;
+        for (i = is.nObj*2+1; i >= 0; i--) {
+          j = i >> 1;
+          if (symbol[i] >= 0.0)
+            DrawObject(j, x1 + (int)((real)xs * symbol[i] / rDegMax), unit);
+        }
+        gs.fLabel = fSav;
+        if (us.nRel <= rcDual) {
+          for (i = is.nObj; i >= 0; i--) {
+            if (!FProperEphem2(i))
+              continue;
+            j = x1 + (int)((real)xs * cp2.obj[i] / rDegMax);
+            DrawColor(kObjB[i]);
+            DrawDash(j, y1, j, y2, 1);
+          }
+        }
+
+      // Draw a line segment for each object during this time section.
+      } else
+        for (i = is.nObj; i >= 0; i--) {
+          if (!FProper(i))
+            continue;
+          m = x1 + (int)((real)xs * objSav[i] / rDegMax);
+          u = x1 + (int)((real)xs * planet[i] / rDegMax);
+          DrawColor(kObjB[i]);
+          DrawWrap(m, n, u, v,
+            !us.fParallel && ret[i] > 0.0 && i != oFor ? -x1 : x1, x2);
+        }
 
     }
 
