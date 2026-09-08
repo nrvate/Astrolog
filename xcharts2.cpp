@@ -848,24 +848,40 @@ void XChartGridRelation()
 }
 
 
-// Draw a chart showing a graphical ephemeris for the given month, year, or
-// range of years, with the date on the vertical axis and the zodiac on the
-// horizontal, as done when the -E is combined with the -X switch.
+// This is a subprocedure of XChartEphemeris() and XChartEsoteric(). Walk a
+// date range -- one month, or with -Ey/-EY one or more years -- one day-step
+// at a time, casting a chart for each step, drawing the today marker, the
+// day or month dashes, and the edge labels, while fEso selects each chart's
+// own content: planet position lines for the ephemeris, Ray influence lines
+// for the esoteric chart. The two were ~80% copies of each other; this is
+// the one shared body.
+//
+// The differences that remain explicit fEso branches are the real ones:
+// the top margin and step density, the marker color, the per-day content,
+// and the esoteric chart's lack of a progression twin -- under -p the
+// ephemeris walks the progressed date range, the ray chart the natal one.
+// Everything else that reads a date field goes through mon0/day0/yea0,
+// which both charts set to the dates their range covers, so the shared
+// marker, dash and label conditions mean the same thing on both sides.
 
-void XChartEphemeris()
+static void XChartEphemerisCore(flag fEso)
 {
-  real symbol[cObj*2+2], objSav[objMax], rT;
+  real symbol[cObj*2+2], objSav[objMax], rT,
+    rRay[cRay+2], rRaySav[cRay+2], power1[objMax], power2[objMax],
+    power[oNorm+1];
   char sz[cchSzDef];
   int cYea, unit = 6*gi.nScale, daytot, d = 1, dd, day, mon, yea = 0, monsiz,
     mon0, day0, yea0, x1, y1, x2, y2, xs, ys, m, n, u,
-    v = 0, vold = nNegative, i, j, dx = 0;
+    v = 0, vold = nNegative, i, j, k, dx = 0;
   flag fSav;
 
+  if (fEso)
+    EnsureRay();
   cYea = us.nEphemYears;    // Is -EY on to do multiple years at once?
-  if (!us.fProgress) {
-    mon0 = Mon; day0 = Day; yea0 = Yea;
-  } else {
+  if (!fEso && us.fProgress) {
     mon0 = MonT; day0 = DayT; yea0 = YeaT;
+  } else {
+    mon0 = Mon; day0 = Day; yea0 = Yea;
   }
   if (cYea) {
     daytot = 0;
@@ -874,26 +890,45 @@ void XChartEphemeris()
     day = 1; mon = 1; yea = yea0; monsiz = 31;
   } else
     daytot = DayInMonth(mon0, yea0);
-  x1 = (3 + Min(cYea, 2))*xFontT; y1 = unit*2;
+  x1 = (3 + Min(cYea, 2))*xFontT;
+  y1 = fEso ? 6*gi.nScaleTextT2 : unit*2;
   x2 = gs.xWin - x1;
-  y2 = gs.yWin - y1 - gs.fText*yFontT;
+  y2 = gs.yWin - y1 - (fEso ? 0 : gs.fText*yFontT);
   xs = x2 - x1; ys = y2 - y1; ys = Max(ys, 1);
-  dd = (daytot / ys + 2) * (2 - us.fSeconds);
+  dd = (daytot / ys + (fEso ? 1 : 2)) * (2 - us.fSeconds);
   dd = Min(dd, 28);
+
+  if (fEso) {
+
+  // Label Rays along the top axis.
+
+  for (i = 1; i <= cRay+1; i++) {
+    m = x1 + NMultDiv(xs, i-1, cRay+1);
+    DrawColor(gi.kiGray);
+    DrawDash(m, y1, m, y2, 2);
+    if (i <= cRay)
+      sprintf2(S(sz), "Ray %d", i);
+    else
+      sprintf2(S(sz), "Average");
+    DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
+    DrawSz(sz, x1 + xs*(i-1)/8, gi.nScaleTextT2, dtCent | dtTop | dtScale2);
+  }
+
+  } else if (!us.fParallel) {
 
   // Display glyphs of the zodiac along the bottom axis.
 
-  if (!us.fParallel)
-    for (i = 1; i <= cSign+1; i++) {
-      m = x1 + NMultDiv(xs, i-1, 12);
-      j = i > cSign ? 1 : i;
-      DrawColor(kSignB(j));
-      DrawSign(j, m, y2 + unit);
-      if (!gs.fColorSign)
-        DrawColor(gi.kiGray);
-      DrawDash(m, y1, m, y2, 2);
-    }
-  else {
+  for (i = 1; i <= cSign+1; i++) {
+    m = x1 + NMultDiv(xs, i-1, 12);
+    j = i > cSign ? 1 : i;
+    DrawColor(kSignB(j));
+    DrawSign(j, m, y2 + unit);
+    if (!gs.fColorSign)
+      DrawColor(gi.kiGray);
+    DrawDash(m, y1, m, y2, 2);
+  }
+
+  } else {
     dx = gs.nRayWidth / 10; dx = Min(dx, 90); dx = Max(dx, 1);
     for (i = -90; i <= 90; i += (dx > 30 ? 10 : (dx > 6 ? 5 : 1))) {
       if (i < -dx || i > dx)
@@ -907,7 +942,7 @@ void XChartEphemeris()
     }
   }
 
-  // Loop and display planet movements for one day segment.
+  // Loop and display movements for one day segment.
 
   while (d <= daytot + 1) {
     n = v;
@@ -918,7 +953,7 @@ void XChartEphemeris()
         v = y1 + NMultDiv(ys, d-2+day0, daytot);
       else
         v = y1 + NMultDiv(ys, (d-1)*24 + (int)Tim, daytot*24);
-      DrawColor(kDkGreenB);
+      DrawColor(fEso ? kDkCyanB : kDkGreenB);
       DrawLine(x1, v, x2, v);
     }
     v = y1 + NMultDiv(ys, d-1, daytot);
@@ -927,20 +962,60 @@ void XChartEphemeris()
       DrawColor(gi.kiGray);
       DrawDash(x1, v, x2, v, cYea <= 1 || mon == 1 ? 1 : 3);
     }
-    if (d > 1)
-      for (i = 0; i <= is.nObj; i++)
-        objSav[i] = planet[i];
+    if (d > 1) {
+      if (fEso) {
+        for (i = 1; i <= cRay+1; i++)
+          rRaySav[i] = rRay[i];
+      } else
+        for (i = 0; i <= is.nObj; i++)
+          objSav[i] = planet[i];
+    }
     ciCore = ciMain;
     if (cYea) {
       MM = mon; DD = day; YY = yea;
     } else {
       MM = mon0; DD = d; YY = yea0;
     }
-    if (us.fProgress) {
+    if (!fEso && us.fProgress) {
       is.JDp = MdytszToJulian(MM, DD, YY, TT, SS, ZZ);
       ciCore = ciMain;
     }
     CastChart(-1);
+
+    if (fEso) {
+
+    // Compute Ray influences for current day.
+    for (i = 0; i <= cRay+1; i++)
+      rRay[i] = 0.0;
+    ComputeInfluence(power1, power2);
+    for (i = 0; i <= oNorm; i++) {
+      power[i] = power1[i] + power2[i];
+      if (FIgnore(i))
+        continue;
+      k = SFromZ(planet[i]);
+      for (j = 1; j <= cRay; j++)
+        if (rgSignRay2[SIGT(k)][j]) {
+          if (!gs.fAlt)
+            rRay[j] += power[i];
+          else
+            rRay[j] += power[i] / (420 / rgSignRay2[SIGT(k)][j]);
+        }
+    }
+    for (i = 0; i <= cRay; i++)
+      rRay[cRay+1] += rRay[i] / 7.0;
+
+    // Draw a line segment for each Ray during this time section.
+    if (d > 1)
+      for (i = 1; i <= cRay+1; i++) {
+        k = x1 + (i-1)*xs/8;
+        m = k + (int)((real)xs * rRaySav[i] / 8.0 / (real)gs.nRayWidth);
+        u = k + (int)((real)xs * rRay[i]    / 8.0 / (real)gs.nRayWidth);
+        DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
+        DrawLine(m, n, u, v);
+      }
+
+    } else {
+
     if (us.fParallel)
       for (i = 0; i <= is.nObj; i++) {
         rT = (planetalt[i] * rDegHalf / (real)dx) + rDegHalf;
@@ -987,9 +1062,11 @@ void XChartEphemeris()
           !us.fParallel && ret[i] > 0.0 && i != oFor ? -x1 : x1, x2);
       }
 
+    }
+
     // Label months or days in the month along the left and right edges.
     if (d <= daytot && (!cYea || (day == 1 && (cYea <= 1 || mon == 1))) &&
-      v-vold > (yFont-2)*gi.nScaleTextT) {
+      (fEso || v-vold > (yFont-2)*gi.nScaleTextT)) {
       if (cYea) {
         if (cYea <= 1)
           sprintf2(S(sz), "%.3s", szMonth[mon]);
@@ -1005,6 +1082,8 @@ void XChartEphemeris()
         dtLeft | dtBottom | dtScale2);
       DrawSz(sz, x2 + xFontT/2, v + (yFont-2)*gi.nScaleTextT,
         dtLeft | dtBottom | dtScale2);
+      // The ephemeris keeps its labels spaced with vold; the esoteric
+      // chart never reads it (its guard above short-circuits on fEso).
       vold = v;
     }
 
@@ -1036,151 +1115,23 @@ void XChartEphemeris()
 }
 
 
+// Draw a chart showing a graphical ephemeris for the given month, year, or
+// range of years, with the date on the vertical axis and the zodiac on the
+// horizontal, as done when the -E is combined with the -X switch.
+
+void XChartEphemeris()
+{
+  XChartEphemerisCore(fFalse);
+}
+
+
 // Draw a chart showing a graphical ephemeris of Ray influences for the given
 // month or year, with the date on the vertical axis and each Ray on the
 // horizontal, as done when the -7 is combined with the -X switch.
 
 void XChartEsoteric()
 {
-  real rRay[cRay+2], rRaySav[cRay+2], power1[objMax], power2[objMax],
-    power[oNorm+1];
-  char sz[cchSzDef];
-  int cYea, daytot, d = 1, dd, day, mon, yea = 0, monsiz,
-    x1, y1, x2, y2, xs, ys, m, n, u, v = 0, i, j, k;
-
-  EnsureRay();
-  cYea = us.nEphemYears;    // Is -EY on to do multiple years at once?
-  if (cYea) {
-    daytot = 0;
-    for (i = 0; i < cYea; i++)
-      daytot += DayInYear(Yea + i);
-    day = 1; mon = 1; yea = Yea; monsiz = 31;
-  } else
-    daytot = DayInMonth(Mon, Yea);
-  x1 = (3 + Min(cYea, 2))*xFontT; y1 = 6*gi.nScaleTextT2;
-  x2 = gs.xWin - x1; y2 = gs.yWin - y1;
-  xs = x2 - x1; ys = y2 - y1; ys = Max(ys, 1);
-  dd = (daytot / ys + 1) * (2 - us.fSeconds);
-  dd = Min(dd, 28);
-
-  // Label Rays along the top axis.
-
-  for (i = 1; i <= cRay+1; i++) {
-    m = x1 + NMultDiv(xs, i-1, cRay+1);
-    DrawColor(gi.kiGray);
-    DrawDash(m, y1, m, y2, 2);
-    if (i <= cRay)
-      sprintf2(S(sz), "Ray %d", i);
-    else
-      sprintf2(S(sz), "Average");
-    DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
-    DrawSz(sz, x1 + xs*(i-1)/8, gi.nScaleTextT2, dtCent | dtTop | dtScale2);
-  }
-
-  // Loop and display Ray influences for one day segment.
-
-  while (d <= daytot + 1) {
-    n = v;
-    if (gs.fLabel &&
-      (cYea ? (mon == Mon && day == 1 && yea == Yea) : (d == Day))) {
-      // Marker line for specific day.
-      if (cYea)
-        v = y1 + NMultDiv(ys, d-2+Day, daytot);
-      else
-        v = y1 + NMultDiv(ys, (d-1)*24 + (int)Tim, daytot*24);
-      DrawColor(kDkCyanB);
-      DrawLine(x1, v, x2, v);
-    }
-    v = y1 + NMultDiv(ys, d-1, daytot);
-    if (!gs.fEquator && (!cYea || day == 1)) {
-      // Marker line for day or month.
-      DrawColor(gi.kiGray);
-      DrawDash(x1, v, x2, v, cYea <= 1 || mon == 1 ? 1 : 3);
-    }
-    if (d > 1)
-      for (i = 1; i <= cRay+1; i++)
-        rRaySav[i] = rRay[i];
-    ciCore = ciMain;
-    if (cYea) {
-      MM = mon; DD = day; YY = yea;
-    } else
-      DD = d;
-    CastChart(-1);
-
-    // Compute Ray influences for current day.
-    for (i = 0; i <= cRay+1; i++)
-      rRay[i] = 0.0;
-    ComputeInfluence(power1, power2);
-    for (i = 0; i <= oNorm; i++) {
-      power[i] = power1[i] + power2[i];
-      if (FIgnore(i))
-        continue;
-      k = SFromZ(planet[i]);
-      for (j = 1; j <= cRay; j++)
-        if (rgSignRay2[SIGT(k)][j]) {
-          if (!gs.fAlt)
-            rRay[j] += power[i];
-          else
-            rRay[j] += power[i] / (420 / rgSignRay2[SIGT(k)][j]);
-        }
-    }
-    for (i = 0; i <= cRay; i++)
-      rRay[cRay+1] += rRay[i] / 7.0;
-
-    // Draw a line segment for each Ray during this time section.
-    if (d > 1)
-      for (i = 1; i <= cRay+1; i++) {
-        k = x1 + (i-1)*xs/8;
-        m = k + (int)((real)xs * rRaySav[i] / 8.0 / (real)gs.nRayWidth);
-        u = k + (int)((real)xs * rRay[i]    / 8.0 / (real)gs.nRayWidth);
-        DrawColor(i <= cRay ? kRayB[RAYT(i)] : gi.kiOn);
-        DrawLine(m, n, u, v);
-      }
-
-    // Label months or days in the month along the left and right edges.
-    if (d <= daytot && (!cYea || (day == 1 && (cYea <= 1 || mon == 1)))) {
-      if (cYea) {
-        if (cYea <= 1)
-          sprintf2(S(sz), "%.3s", szMonth[mon]);
-        else
-          sprintf2(S(sz), "%4d", yea);
-        i = (cYea <= 1 ? mon == Mon : yea == Yea);
-      } else {
-        sprintf2(S(sz), "%2d", d);
-        i = (d == Day);
-      }
-      DrawColor(gs.fLabel && i ? gi.kiOn : gi.kiLite);
-      DrawSz(sz,      xFontT/2, v + (yFont-2)*gi.nScaleTextT,
-        dtLeft | dtBottom | dtScale2);
-      DrawSz(sz, x2 + xFontT/2, v + (yFont-2)*gi.nScaleTextT,
-        dtLeft | dtBottom | dtScale2);
-    }
-
-    // Now increment the day counter. For a month always go up by one.
-    // For a year go up by four or until the end of the month reached.
-    if (cYea) {
-      day += dd;
-      if (day > monsiz) {
-        d += dd - (day-monsiz-1);
-        if (d <= daytot + 1) {
-          mon++;
-          if (mon > cSign) {
-            yea++;
-            mon = 1;
-          }
-          monsiz = DayInMonth(mon, yea);
-          day = 1;
-        }
-      } else
-        d += dd;
-    } else
-      d++;
-  }
-  DrawColor(gi.kiLite);
-  DrawEdge(x1, y1, x2, y2);
-
-  ciCore = ciMain;    // Recast original chart.
-  CastChart(1);
+  XChartEphemerisCore(fTrue);
 }
 
 
