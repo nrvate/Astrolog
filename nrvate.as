@@ -151,7 +151,7 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 ; DEFAULT TRANSIT RESTRICTIONS:
 
 -YRT 0 10    1 0 0 0 0 0 0 0 0 0 0    ; Planets
--YRT 11 21   0 0 1 1 1 0 0 1 0 1 1    ; Minor planets
+-YRT 11 21   0 0 1 1 1 0 0 1 1 1 1    ; Minor planets
 -YRT 22 33   1 1 1 1 1 1 1 1 1 1 1 1  ; House cusps
 -YRT 34 42   0 0 1 1 1 1 1 1 0        ; Uranians
 -YRT 43 51   1 0 0 0 1 1 1 1 0        ; Dwarfs
