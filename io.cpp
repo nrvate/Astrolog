@@ -457,7 +457,7 @@ LDone:
 
 flag FOutputData(void)
 {
-  char sz[cchSzMax], *pch;
+  char sz[cchSzMax];
   FILE *file;
   int i, j, iMax;
   real rT;
@@ -1386,7 +1386,7 @@ LDone:
 
 flag FOutputChartList()
 {
-  char sz[cchSzDef], *pch;
+  char sz[cchSzDef];
   FILE *file;
   CI *pci;
   int i, nSav;

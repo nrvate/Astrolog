@@ -747,7 +747,7 @@ void XChartWheelMulti()
 
 void XChartGridRelation()
 {
-  char sz[cchSzDef], szT[cchSzDef];
+  char sz[cchSzDef];
   int nScale, unit, siz, x, y, i, j, i0, j0, k;
   KI c;
 
