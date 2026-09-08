@@ -153,8 +153,8 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 -YRT 0 10    1 0 0 0 0 0 0 0 0 0 0    ; Planets
 -YRT 11 21   0 0 1 1 1 0 0 1 1 1 1    ; Minor planets
 -YRT 22 33   1 1 1 1 1 1 1 1 1 1 1 1  ; House cusps
--YRT 34 42   0 0 1 1 1 1 1 1 0        ; Uranians
--YRT 43 51   1 0 0 0 1 1 1 1 0        ; Dwarfs
+-YRT 34 42   0 1 1 1 1 1 1 1 1        ; Uranians
+-YRT 43 51   1 1 1 1 1 1 1 1 1        ; Dwarfs
 -YRT 52 78   1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Moons
 -YRT 79 83   1 1 1 1 1                ; Centers of Body
 -YRT 84 108  1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1  ; Fixed stars
