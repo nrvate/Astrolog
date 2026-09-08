@@ -20,7 +20,26 @@ NAME = astrolog
 # The source list lives in one file for every build; see the header
 # there before adding a source.
 include Makefile.srcs
-OBJS = $(patsubst %.cpp,%.o,$(SRC_CORE) $(SRC_GRAPHICS) $(SRC_SWISS))
+# Where the objects go. EMPTY by default, so an ordinary build puts them
+# in the repo root exactly as it always has and every existing recipe,
+# script and habit is unaffected. An alternate configuration sets it and
+# gets a directory of its own.
+#
+# That is not a tidiness feature. tools/asan-sweep.sh and
+# tools/ubsan-sweep.sh build this same core with overridden CPPFLAGS, and
+# with nowhere else to put the result they had to borrow the repo root
+# and then "make clean-console" it -- before the run, after it, and again
+# on an EXIT trap. Three consequences, all of them bad and all of them
+# now gone: ./astrolog was deleted while a sweep ran, so anything else
+# started against it failed confusingly (CLAUDE.md warns about exactly
+# this, and it is the "two sessions in one tree" hazard); a full console
+# rebuild was needed afterwards to undo the cleaning; and no two sweeps
+# could ever run at the same time. Makefile.qt has had OBJDIR all along
+# -- the Qt6 builds are just "OBJDIR=obj-qt6" -- so this only brings the
+# plain makefile level with it.
+OBJDIR =
+objdir = $(if $(OBJDIR),$(OBJDIR)/,)
+OBJS = $(patsubst %.cpp,$(objdir)%.o,$(SRC_CORE) $(SRC_GRAPHICS) $(SRC_SWISS))
 
 
 # If you don't have X windows, delete the "-lX11" part from the line below:
@@ -55,6 +74,19 @@ default: $(NAME) qt
 
 $(NAME): $(OBJS)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
+
+# Only reached when OBJDIR is set; with it empty, $(objdir)%.o is plain
+# %.o and make's built-in rule compiles as it always has. The order-only
+# "| $(OBJDIR)" is what Makefile.qt learned the hard way -- an ordinary
+# prerequisite would make every object newer than the directory holding
+# it and rebuild the world on each run.
+ifneq ($(OBJDIR),)
+$(OBJDIR)/%.o: %.cpp | $(OBJDIR)
+	g++ $(CPPFLAGS) -c -o $@ $<
+
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
+endif
 
 
 # "make clean" cleans everything this tree can build -- eight binaries

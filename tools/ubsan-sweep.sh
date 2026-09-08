@@ -17,16 +17,16 @@
 #   1. The Makefile links with LIBS, not LDFLAGS. Passing -fsanitize to
 #      LDFLAGS is silently ignored, and LIBS also carries -s, which strips
 #      the binary so even "nm" looks empty afterwards.
-#   2. The Makefile ignores OBJDIR -- OBJS is patsubst'd into the tree
-#      root. So a build "into obj-ubsan" relinks the EXISTING objects,
-#      instrumented or not, and overwrites ./astrolog's objects on the way.
+#   2. The build needs its OWN OBJDIR. The plain Makefile used to ignore
+#      OBJDIR and patsubst OBJS into the tree root, so a build "into
+#      obj-ubsan" relinked the EXISTING objects, instrumented or not, and
+#      overwrote ./astrolog's objects on the way. The Makefile takes
+#      OBJDIR now, the way Makefile.qt always did, so this is a matter of
+#      passing it -- but pass it, or (2) comes straight back.
 #
 # The first attempt at this hit both and swept 366 invocations of an
 # uninstrumented binary. It is verified here instead of assumed: the
 # script checks for libubsan before running anything.
-#
-# Because of (2) this leaves the tree's .o files instrumented. It runs
-# "make clean-console" at the end for that reason.
 set -e
 
 want=${1:-both}
@@ -34,7 +34,7 @@ cd "$(dirname "$0")/.."
 
 echo "== building with -fsanitize=undefined"
 # Target named for the reason tools/asan-sweep.sh gives at its build line.
-make NAME=astrolog-ubsan astrolog-ubsan \
+make OBJDIR=obj-ubsan-sweep NAME=astrolog-ubsan astrolog-ubsan \
   CPPFLAGS="-MMD -MP -O1 -g -std=gnu++17 -fsanitize=undefined \
     -Wno-write-strings -Wno-narrowing -Wno-comment" \
   LIBS="-lm -lX11 -ldl -fsanitize=undefined" -j4 >/dev/null
@@ -90,6 +90,6 @@ if [ "$want" = both ] || [ "$want" = qt ]; then
   fi
 fi
 
-echo "== restoring the tree's objects (the Makefile ignores OBJDIR)"
-make clean-console >/dev/null 2>&1 || true
+# Nothing to restore: OBJDIR keeps the instrumented objects in their own
+# directory, so the tree's own were never disturbed.
 exit $rc

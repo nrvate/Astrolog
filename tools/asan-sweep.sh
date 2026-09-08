@@ -56,16 +56,19 @@ hits=0
 runs=0
 
 echo "== building the console ASan binary (QTTEST brings the range guards)"
-make clean-console >/dev/null 2>&1
-# The target is named: a plain "make" builds the Qt port too, and NAME= and
-# CPPFLAGS= given on the command line reach that sub-make through MAKEFLAGS.
-make NAME=$BIN $BIN -j4 \
+# OBJDIR keeps the sanitized objects out of the repo root. Before the
+# plain Makefile had it, this had to build INTO the root and then
+# "make clean-console" on both sides and on an EXIT trap -- which deleted
+# ./astrolog while the sweep ran, forced a full console rebuild
+# afterwards, and made it impossible to run two sweeps at once. The
+# target is named because a plain "make" builds the Qt port too, and
+# NAME=/CPPFLAGS= on the command line reach that sub-make through
+# MAKEFLAGS.
+make OBJDIR=obj-asan-sweep NAME=$BIN $BIN -j4 \
   CPPFLAGS="-DQTTEST -fsanitize=address -g -O0 -Wno-write-strings \
     -Wno-narrowing -Wno-comment" \
   LIBS="-fsanitize=address -lm -lX11 -ldl" >"$OUT/build.log" 2>&1 || {
-  echo "build failed, see $OUT/build.log"; make clean-console >/dev/null 2>&1; exit 2; }
-make clean-console >/dev/null 2>&1
-trap 'make clean-console >/dev/null 2>&1' EXIT
+  echo "build failed, see $OUT/build.log"; exit 2; }
 
 # A sanitizer report, or any of the aborts a guard raises.
 BAD='AddressSanitizer|stack smashing|buffer overflow detected|Assertion .* failed'
