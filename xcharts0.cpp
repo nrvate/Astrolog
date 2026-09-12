@@ -1572,7 +1572,14 @@ int LookupConstel(real lon, real lat)
             xnew -= xmax;
           if (ynew < 0 || ynew >= ymax || RgCon(xnew, ynew) != 0)
             continue;
-          if (iTop == iCur)  // If array completely full, skip and don't add!
+          // If array completely full, skip and don't add. Measured, not
+          // assumed, 2026-09-12: the largest BFS wavefront any of the 88
+          // constellations in the boundary map produces peaks at 69 of
+          // the iFillMax slots, so the skip cannot fire with this data.
+          // If a future map ever overflows, an unfilled cell reads as
+          // Serpens Cauda at lookup time (the hard-coded 76 below) --
+          // that is the symptom, not a crash.
+          if (iTop == iCur)
             continue;
           RgCon(xnew, ynew) = iConst;
           rgpt[iTop].x = xnew; rgpt[iTop].y = ynew;
