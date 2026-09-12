@@ -697,6 +697,20 @@ diff itself to be noisy.
    four and no others. Everywhere else the rule is unchanged, and
    adding a fifth `RedoMenuQt()` call because it looks tidier is the
    thing this item exists to forbid.
+   *(Superseded 2026-09-07 by commit e7d0599, "Menu items that change a
+   setting another item displays" — the paragraph above was written four
+   days before it and no longer describes the code.)* The dialog-level
+   calls are still exactly those four, but `ConnectMenuQt()` now calls
+   `RedoMenuQt()` after **every** menu action, menu bar and context menu
+   alike. It is safe by construction rather than by review: every entry
+   in `rgmcheckQt` was registered through `PaRegisterCheckQt()` with a
+   predicate that *reads* the setting behind it, so re-deriving can only
+   ever agree with the program's own state, and the re-derivation is a
+   pure read that deliberately excludes the chart-type radio. The
+   per-dialog rules above are now the fallback for anything that changes
+   a setting *without* going through a menu action — a dialog's OK
+   button, an AstroExpression, a switch — where `SyncXxxMenuQt()` is
+   still the only resync that happens.
 10. **Wheel events edit combo boxes in the scrolling dialogs.** Qt
    delivers a wheel event to whatever widget is under the pointer, so
    scrolling a tall dialog silently changed any combo that slid past the

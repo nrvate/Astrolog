@@ -3786,7 +3786,12 @@ static void LoadBundledFontsQt()
     for (j = 0; j < rgstrDir.size(); j++) {
       QString str = rgstrDir[j] + "/" + rgszFontFile[i];
       if (QFile::exists(str)) {
-        QFontDatabase::addApplicationFont(str);
+        // addApplicationFont() returns -1 and says nothing when a font
+        // file cannot be parsed; a user missing StarFont Sans would have
+        // had no signal at all. A qWarning reaches the console (and the
+        // CI log) without bothering anyone in the window itself.
+        if (QFontDatabase::addApplicationFont(str) < 0)
+          qWarning() << "Astrolog: could not load font" << str;
         break;
       }
     }

@@ -1022,6 +1022,20 @@ static void ErrorEnsureQt(QWidget *pw, int n, CONST char *szField)
 }
 
 
+// The real-valued fields' version. Windows' EnsureR() casts the value to
+// int on the way into the message (extern.h:1169), so a user who typed
+// "1.5" into Horizon Rotation was told "The value 1 is not valid" -- about
+// a number they never entered. This build names the value it parsed; the
+// wording stays this port's own, which already differs from Windows'
+// ErrorEnsure().
+static void ErrorEnsureRQt(QWidget *pw, real r, CONST char *szField)
+{
+  QMessageBox::warning(pw, szAppName,
+    QString("The value %1 is not valid for the %2 field.")
+    .arg(SzFormatRQt(r, -6)).arg(szField));
+}
+
+
 // One of the resource's radio groups: a run of drNN controls that are
 // mutually exclusive and together pick a value. They are built ungrouped
 // (see RcBuildDialogQt), so exclusivity is enforced here.
@@ -1558,7 +1572,7 @@ void ShowFileSettingsDialogQt()
   rI = pcbPct != NULL ?
     RFromSz(pcbPct->currentText().toLocal8Bit().constData()) : gs.rBackPct;
   if (!FValidAntialias(nwx)) { ErrorEnsureQt(&dlg, nwx, "antialias"); return; }
-  if (!FValidBackPct(rI))    { ErrorEnsureQt(&dlg, (int)rI, "background transparency"); return; }
+  if (!FValidBackPct(rI))    { ErrorEnsureRQt(&dlg, rI, "background transparency"); return; }
 
   RcStoreFlagsQt(rgbuilt, rgflag, CRcFlag(rgflag));
   if (pcbBmpP != NULL) {
@@ -1622,6 +1636,12 @@ static CONST char *rgszFontDispQt[cFont] = {szAppNameCore, "Wingdings",
   "Astro", "Enigma", "Hamburg", "Astronomicon", "StarFont",
   "StarFont Serif", "Hank's Nakshatra", "Arial", "Courier New", "Consolas",
   "Lucida", "Cascadia"};
+// The order Windows' own match loop (wdialog.cpp:3050) tries them in,
+// written out as data. Its index variable walks 2, 0, 1, 3, 4, ... by
+// arithmetic ("Astro" before "Astrolog"/"Astronomicon", everything else
+// in list order); this table says that in one glance instead.
+static CONST int rgnFontOrderQt[cFont] = {2, 0, 1, 3, 4, 5, 6, 7, 8, 9,
+  10, 11, 12, 13};
 
 static CONST char *rgszDecaFillQt[8] = {"None", "Standard", "Rainbow RGB",
   "Rainbow RYB", "Ruler Sign", "Ruler House", "7 Rays Sign", "7 Rays House"};
@@ -1830,9 +1850,9 @@ void ShowGraphicsSettingsDialogQt()
   if (!FValidDecaSize(nDeca))
     { ErrorEnsureQt(&dlg, nDeca, "wheel corner size"); return; }
   if (!FValidRotation(rRotN))
-    { ErrorEnsureQt(&dlg, (int)rRotN, "horizon rotation"); return; }
+    { ErrorEnsureRQt(&dlg, rRotN, "horizon rotation"); return; }
   if (!FValidTilt(rTiltN))
-    { ErrorEnsureQt(&dlg, (int)rTiltN, "horizon tilt"); return; }
+    { ErrorEnsureRQt(&dlg, rTiltN, "horizon tilt"); return; }
 
   // Five more fields Windows checks here (wdialog.cpp:2993-3002) that this
   // dialog stored unchecked. Two of them are memory safety rather than a
@@ -1866,7 +1886,7 @@ void ShowGraphicsSettingsDialogQt()
   if (!FValidTelescope(nTrack))
     { ErrorEnsureQt(&dlg, nTrack, "telescope planet"); return; }
   if (!FValidZoom(rSpaceN))
-    { ErrorEnsureQt(&dlg, (int)rSpaceN, "telescope zoom"); return; }
+    { ErrorEnsureRQt(&dlg, rSpaceN, "telescope zoom"); return; }
   if (peLeft != NULL && !FItem(nLeft))
     { ErrorEnsureQt(&dlg, nLeft, "rotation planet"); return; }
 
@@ -1954,7 +1974,7 @@ void ShowGraphicsSettingsDialogQt()
     // Windows' loop, order and all (wdialog.cpp:3050). Three things it
     // does that a plain 0..cFont-1 scan does not:
     //
-    // The ORDER is 2, 0, 1, 3, 4, ... -- "Astro" is checked before
+    // The ORDER is rgnFontOrderQt[] below -- "Astro" is checked before
     // "Astrolog" and "Astronomicon" because FMatchSz() takes a prefix of
     // three characters or more, so all three match the typed word "Astro"
     // and only the exact one should win. This took the LAST match instead
@@ -1965,10 +1985,11 @@ void ShowGraphicsSettingsDialogQt()
     //
     // And no match at all falls back to Astrolog's own font rather than
     // leaving whatever was there, which is what makes a typo visible.
-    for (j = 2; j < cFont; j += (j == 2 ? -2 : (j == 1 ? 2 : 1)))
-      if (FValidFont(i, j) && FMatchSz(sz, rgszFontDispQt[j]))
+    for (j = 0; j < cFont; j++)
+      if (FValidFont(i, rgnFontOrderQt[j]) &&
+        FMatchSz(sz, rgszFontDispQt[rgnFontOrderQt[j]]))
         break;
-    *rgpnFont[i] = j < cFont ? j : 0;
+    *rgpnFont[i] = j < cFont ? rgnFontOrderQt[j] : 0;
   }
   // gs.nFontAll is the six fields above PACKED, and it is not a cache:
   // "Save Program Settings" writes it as ":YXf #%06x" (io.cpp:2572), the
@@ -3321,9 +3342,9 @@ void ShowTransitDialogQt()
   if (!FValidMon(mon))           { ErrorEnsureQt(&dlg, mon, "month"); return; }
   if (!FValidYea(yea))           { ErrorEnsureQt(&dlg, yea, "year"); return; }
   if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); return; }
-  if (!FValidTim(tim))           { ErrorEnsureQt(&dlg, (int)tim, "time"); return; }
-  if (!FValidDst(dst))           { ErrorEnsureQt(&dlg, (int)dst, "daylight saving"); return; }
-  if (!FValidZon(zon))           { ErrorEnsureQt(&dlg, (int)zon, "time zone"); return; }
+  if (!FValidTim(tim))           { ErrorEnsureRQt(&dlg, tim, "time"); return; }
+  if (!FValidDst(dst))           { ErrorEnsureRQt(&dlg, dst, "daylight saving"); return; }
+  if (!FValidZon(zon))           { ErrorEnsureRQt(&dlg, zon, "time zone"); return; }
   if (!FValidDivision(nd))       { ErrorEnsureQt(&dlg, nd, "searching divisions"); return; }
 
   SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
@@ -3501,9 +3522,9 @@ void ShowProgressDialogQt()
   if (!FValidMon(mon))          { ErrorEnsureQt(&dlg, mon, "month"); return; }
   if (!FValidYea(yea))          { ErrorEnsureQt(&dlg, yea, "year"); return; }
   if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); return; }
-  if (!FValidTim(tim))          { ErrorEnsureQt(&dlg, (int)tim, "time"); return; }
-  if (!FValidDst(dst))          { ErrorEnsureQt(&dlg, (int)dst, "daylight saving"); return; }
-  if (!FValidZon(zon))          { ErrorEnsureQt(&dlg, (int)zon, "time zone"); return; }
+  if (!FValidTim(tim))          { ErrorEnsureRQt(&dlg, tim, "time"); return; }
+  if (!FValidDst(dst))          { ErrorEnsureRQt(&dlg, dst, "daylight saving"); return; }
+  if (!FValidZon(zon))          { ErrorEnsureRQt(&dlg, zon, "time zone"); return; }
 
   if (pcbOn != NULL)
     us.fProgress = pcbOn->isChecked();
@@ -3911,9 +3932,9 @@ void ShowAspectDialogQt()
     rAng = RFieldQt(rgpeAngle[i]->text());
     kT = NColorFromComboQt(rgpcbColor[i]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rOrb, "orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "orb"); return; }
     if (!FBetween(rAng, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rAng, "angle"); return; }
+      { ErrorEnsureRQt(&dlg, rAng, "angle"); return; }
     if (!FValidColorA(kT))
       { ErrorEnsureQt(&dlg, kT, "color"); return; }
   }
@@ -4102,9 +4123,9 @@ void ShowObjectDialogQt()
     rAdd = RFieldQt(rgpeAdd[i]->text());
     kT = NColorFromComboQt(rgpcbColor[i]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rOrb, "max orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); return; }
     if (!FBetween(rAdd, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rAdd, "orb addition"); return; }
+      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); return; }
     if (!FValidColor2A(kT))
       { ErrorEnsureQt(&dlg, kT, "color"); return; }
   }
@@ -4188,9 +4209,9 @@ void ShowObject2DialogQt()
     rAdd = RFieldQt(rgpeAdd[j]->text());
     kT = NColorFromComboQt(rgpcbColor[j]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rOrb, "max orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); return; }
     if (!FBetween(rAdd, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rAdd, "orb addition"); return; }
+      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); return; }
     // The stars row takes kStar as well, which the ranges before it do
     // not; Windows picks the validator the same way.
     if (!(i < starLo ? FValidColor2A(kT) : FValidColorSA(kT)))
@@ -4348,10 +4369,10 @@ void ShowCalcDialogQt()
     SzFieldQt(sz, peSolar->text());
     n1 = NParseSz(sz, pmObject);
   }
-  if (!FValidOffset(rs))      { ErrorEnsureQt(&dlg, (int)rs, "zodiac offset"); return; }
+  if (!FValidOffset(rs))      { ErrorEnsureRQt(&dlg, rs, "zodiac offset"); return; }
   if (!FValidSystem(nc))      { ErrorEnsureQt(&dlg, nc, "house system"); return; }
   if (!FValidCenter(nh))      { ErrorEnsureQt(&dlg, nh, "central planet"); return; }
-  if (!FValidHarmonic(rx))    { ErrorEnsureQt(&dlg, (int)rx, "harmonic factor"); return; }
+  if (!FValidHarmonic(rx))    { ErrorEnsureRQt(&dlg, rx, "harmonic factor"); return; }
   if (!FValidDwad(n4))        { ErrorEnsureQt(&dlg, n4, "dwad nesting"); return; }
   if (!FItem(n1))             { ErrorEnsureQt(&dlg, n1, "Solar chart planet"); return; }
 
@@ -4686,7 +4707,7 @@ void ShowDisplayDialogQt()
     return;
   }
   if (ryw < 0.0) {
-    ErrorEnsureQt(&dlg, (int)ryw, "stationary velocity");
+    ErrorEnsureRQt(&dlg, ryw, "stationary velocity");
     return;
   }
 
@@ -4826,9 +4847,9 @@ void ShowMoonObjectDialogQt()
     rAdd = RFieldQt(rgpeAdd[j]->text());
     kT = NColorFromComboQt(rgpcbColor[j]);
     if (!FBetween(rOrb, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rOrb, "max orb"); return; }
+      { ErrorEnsureRQt(&dlg, rOrb, "max orb"); return; }
     if (!FBetween(rAdd, -rDegMax, rDegMax))
-      { ErrorEnsureQt(&dlg, (int)rAdd, "orb addition"); return; }
+      { ErrorEnsureRQt(&dlg, rAdd, "orb addition"); return; }
     if (!FValidColorMA(kT))
       { ErrorEnsureQt(&dlg, kT, "color"); return; }
   }
