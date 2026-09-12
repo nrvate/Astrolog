@@ -1371,6 +1371,19 @@ The things that have actually caught bugs in this project:
   dialogs, the 42 context menus and the menu mnemonics were all derived
   from it. Hand transcription introduced errors every time it was used.
 
+- **Resolve findings the day they are raised — fix them, or close them
+  with a reason.** This codebase is the maintainer's and the agents', and
+  an "open" finding with no date and no reason is not a backlog, it is
+  rot: the 2026-09-12 recheck of a five-day-old review killed four of its
+  nine open items against the code or the Windows oracle, and the real
+  P2 among the survivors had to be re-derived from scratch anyway. Fixed
+  means fixed with a net proven to fail without the fix; closed means the
+  killing evidence is written down where the finding was raised, so it is
+  never re-flagged; deferred means a date and a why in the ledger — and
+  any finding carried across sessions is re-verified against the current
+  tree before anyone acts on it, because "still open" lists rot the
+  moment the code moves.
+
 `QT_GUI_PLAN.md`'s "Working pattern / verification methodology" section
 has the long form, including the GUI-automation traps specific to this
 setup — they are non-obvious and cost real time to rediscover.

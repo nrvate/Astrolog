@@ -557,6 +557,19 @@ def one_file(src):
         q = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True,
                            errors='replace')
+        if RE_ERROR.search(q.stdout) and src.endswith('.h'):
+            # A header is not a translation unit: extern.h names types
+            # astrolog.h defines, and auditing it alone was a permanent
+            # false alarm ("DOES NOT COMPILE") that said nothing about
+            # the header's own warnings. Retry the way every header
+            # here actually lives -- preincluded behind astrolog.h.
+            # Vendored headers (sweodef.h, swephexp.h and kin) are their
+            # own prelude and fail under astrolog.h's macro environment;
+            # they keep the plain reading and its verdict.
+            cmd = [cxx] + expanded.split() + ['-c', '-o', '/dev/null',
+              '-include', 'astrolog.h', src]
+            q = subprocess.run(cmd, cwd=ROOT, stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT, text=True, errors='replace')
         counts = parse(q.stdout, name)
         if RE_ERROR.search(q.stdout):
             print('%s: %s DOES NOT COMPILE' % (src, name))
