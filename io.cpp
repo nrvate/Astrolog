@@ -370,12 +370,8 @@ flag FProcessSwitchFile(CONST char *szFile, FILE *file)
 #endif
 
   // Open a file if don't already have one.
-  fHaveFile = (file != NULL);
-  if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL, 0);
-    if (file == NULL)
-      goto LDone;
-  }
+  if (!FOpenFileArg(szFile, &file, &fHaveFile))
+    goto LDone;
   if (cFileDepth >= cFileDepthMax) {
     sprintf2(S(rgchLine), "Settings files are nested more than %d deep at "
       "'%s', which usually means a file includes itself.", cFileDepthMax,
@@ -585,6 +581,43 @@ flag FOutputData(void)
 }
 
 
+// The "open a file if don't already have one" preamble the chart list
+// importers share. Returns FALSE only when it had to open and could not.
+// The caller keeps its own "if (!fOpened) goto LDone;" so every cleanup
+// stays at its own LDone.
+
+flag FOpenFileArg(CONST char *szFile, FILE **pfile, flag *pfOpened)
+{
+  *pfOpened = (*pfile != NULL);
+  if (!*pfOpened) {
+    *pfile = FileOpen(szFile, 0, NULL, 0);
+    if (*pfile == NULL)
+      return fFalse;
+  }
+  return fTrue;
+}
+
+
+// The one range check five chart list importers share (AAF, Quick*Chart,
+// Astrodatabank, SFText, and FInputData's old-style records). The MM DD YY
+// TT SS ZZ OO AA aliases read ciCore, which every caller has just filled.
+// Returns TRUE and reports through PrintWarning when anything is out of
+// range; szKind names the file kind for the message.
+
+flag FValidCIField(CONST char *szKind)
+{
+  if (!FValidMon(MM) || !FValidDay(DD, MM, YY) || !FValidYea(YY) ||
+    !FValidTim(TT) || !FValidZon(ZZ) || !FValidLon(OO) || !FValidLat(AA)) {
+    char szT[cchSzLine];
+
+    sprintf2(S(szT), "Values in %s are out of range.", szKind);
+    PrintWarning(szT);
+    return fFalse;
+  }
+  return fTrue;
+}
+
+
 // Load an Astrological Exchange Format (AAF) file into the chart list, given
 // a file name or a file handle.
 
@@ -594,12 +627,8 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
   int grf;
   flag fHaveFile, fRet = fFalse;
 
-  fHaveFile = (file != NULL);
-  if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL, 0);
-    if (file == NULL)
-      goto LDone;
-  }
+  if (!FOpenFileArg(szFile, &file, &fHaveFile))
+    goto LDone;
   do {
 
   grf = 0;
@@ -683,11 +712,8 @@ flag FProcessAAFFile(CONST char *szFile, FILE *file)
       goto LDone;
     }
   }
-  if (!FValidMon(MM) || !FValidDay(DD, MM, YY) || !FValidYea(YY) ||
-    !FValidTim(TT) || !FValidZon(ZZ) || !FValidLon(OO) || !FValidLat(AA)) {
-    PrintWarning("Values in AAF file are out of range.");
+  if (!FValidCIField("AAF file"))
     goto LDone;
-  }
   if (!FAppendCIList(&ciCore))
     goto LDone;
 
@@ -788,12 +814,8 @@ flag FProcessQuickFile(CONST char *szFile, FILE *file)
   int i;
   flag fHaveFile, fRet = fFalse;
 
-  fHaveFile = (file != NULL);
-  if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL, 0);
-    if (file == NULL)
-      goto LDone;
-  }
+  if (!FOpenFileArg(szFile, &file, &fHaveFile))
+    goto LDone;
   do {
     if (!FReadSzLineTrim(file, szLine, cchSzMax)) {
       fRet = fTrue;
@@ -832,11 +854,8 @@ flag FProcessQuickFile(CONST char *szFile, FILE *file)
     if (FZonDst(&szLine[23+24])) {
       ZZ += 1.0; SS += 1.0;
     }
-    if (!FValidMon(MM) || !FValidDay(DD, MM, YY) || !FValidYea(YY) ||
-      !FValidTim(TT) || !FValidZon(ZZ) || !FValidLon(OO) || !FValidLat(AA)) {
-      PrintWarning("Values in Quick*Chart file are out of range.");
+    if (!FValidCIField("Quick*Chart file"))
       goto LDone;
-    }
     if (!FAppendCIList(&ciCore))
       goto LDone;
   } while (!feof(file));
@@ -939,12 +958,8 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
   int i, grf, cchSz = (us.szADB == NULL ? 0 : CchSz(us.szADB));
   flag fHaveFile, fDidOne = fFalse, fDidStart, fDidEnd, fDidLon, fRet = fFalse;
 
-  fHaveFile = (file != NULL);
-  if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL, 0);
-    if (file == NULL)
-      goto LDone;
-  }
+  if (!FOpenFileArg(szFile, &file, &fHaveFile))
+    goto LDone;
   do {
 #ifdef EXPRESS
     if (!us.fExpOff && FSzSet(us.szExpADB)) {
@@ -1075,11 +1090,8 @@ flag FProcessADBFile(CONST char *szFile, FILE *file)
     goto LDone;
   }
   ZZ += SS;
-  if (!FValidMon(MM) || !FValidDay(DD, MM, YY) || !FValidYea(YY) ||
-    !FValidTim(TT) || !FValidZon(ZZ) || !FValidLon(OO) || !FValidLat(AA)) {
-    PrintWarning("Values in Astrodatabank file are out of range.");
+  if (!FValidCIField("Astrodatabank file"))
     goto LDone;
-  }
   if (cchSz > 0 && (grf & 2048) == 0)
     continue;
 #ifdef EXPRESS
@@ -1112,12 +1124,8 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
   int nState = -1, cch;
   flag fHaveFile, fRet = fFalse;
 
-  fHaveFile = (file != NULL);
-  if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL, 0);
-    if (file == NULL)
-      goto LDone;
-  }
+  if (!FOpenFileArg(szFile, &file, &fHaveFile))
+    goto LDone;
   loop {
 
   if (!FReadSzLineTrim(file, szLine, cchSzLine))
@@ -1206,11 +1214,8 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
       pch++;
     OO = RParseSz(pch, pmLon);
     nState = 4;
-    if (!FValidMon(MM) || !FValidDay(DD, MM, YY) || !FValidYea(YY) ||
-      !FValidTim(TT) || !FValidZon(ZZ) || !FValidLon(OO) || !FValidLat(AA)) {
-      PrintWarning("Values in text file are out of range.");
+    if (!FValidCIField("text file"))
       goto LDone;
-    }
     if (!FAppendCIList(&ciCore))
       goto LDone;
   } else if (nState == 4) {
@@ -1241,12 +1246,8 @@ flag FProcessCalendarFile(CONST char *szFile, FILE *file)
   int nState = -1, hr, min, sec;
   flag fHaveFile, fRet = fFalse;
 
-  fHaveFile = (file != NULL);
-  if (!fHaveFile) {
-    file = FileOpen(szFile, 0, NULL, 0);
-    if (file == NULL)
-      goto LDone;
-  }
+  if (!FOpenFileArg(szFile, &file, &fHaveFile))
+    goto LDone;
 
   loop {
     if (!FReadSzLineTrim(file, szLine, cchSzLine))
@@ -3458,11 +3459,8 @@ flag FInputData(CONST char *szFile)
     }
     TT = DecToDeg(TT); ZZ = DecToDeg(ZZ);
     OO = DecToDeg(OO); AA = DecToDeg(AA);
-    if (!FValidMon(MM) || !FValidDay(DD, MM, YY) || !FValidYea(YY) ||
-      !FValidTim(TT) || !FValidZon(ZZ) || !FValidLon(OO) || !FValidLat(AA)) {
-      PrintWarning("Values in old style chart info file are out of range.");
+    if (!FValidCIField("old style chart info file"))
       goto LDone;
-    }
     ciCore.nam = ciCore.loc = (char *)"";
     if (!us.fWriteOld) {
       // Set chart name to filename (minus path and extension) unless -Yo on.

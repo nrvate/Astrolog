@@ -395,6 +395,8 @@ extern CONST char *SzColorHTML P((KI));
 extern void GetTimeNow P((int *, int *, int *, real *, real, real));
 extern int NFromAltN P((int));
 extern char *SzProcessProgname P((char *));
+extern flag FOpenFileArg P((CONST char *szFile, FILE **pfile, flag *pfOpened));
+extern flag FValidCIField P((CONST char *szKind));
 extern flag FAppendCIList P((CONST CI *));
 extern flag FSortCIList P((int));
 extern void FilterCIList P((CONST char *, CONST char *));
