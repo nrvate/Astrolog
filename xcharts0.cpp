@@ -1229,6 +1229,7 @@ void DrawObjects(ObjDraw *rgod, int cod, int zEdge)
 void DrawAspectLine(int obj1, int obj2, int cx, int cy,
   real deg1, real deg2, real rx, real ry, real rz, flag fEclipse)
 {
+  real rOrb;
   int asp = grid->n[obj1][obj2], orb = (int)(grid->v[obj1][obj2]*3600.0),
     x1, y1, x2, y2, nDash, nSav, col;
 
@@ -1256,9 +1257,19 @@ void DrawAspectLine(int obj1, int obj2, int cx, int cy,
   if ((gs.nDashMax >= 0) != gs.fAlt) {
     nDash = NAbs(orb) / (60*60*2);
     nDash = Min(nDash, NAbs(gs.nDashMax));
-  } else
-    nDash = NAbs(orb) * NAbs(gs.nDashMax) /
-      (int)(GetOrb(obj1, obj2, asp)*3600.0);
+  } else {
+    rOrb = GetOrb(obj1, obj2, asp);
+    // The allowed orb is user-settable to any real (-YAo takes them all,
+    // and the -YAd additions sum in) with no floor, and the aspect in the
+    // grid need not have qualified through it: the AstroExpression orb
+    // hook overwrites the qualifying orb, so "=z 90" with a zero allowed
+    // orb reaches this division with a zero divisor and dies of SIGFPE.
+    // Nothing can be spread over a non-positive allowed orb anyway --
+    // DrawDash() with skip 0 draws a solid line, and clamps negatives to
+    // it too -- so say solid and skip the arithmetic.
+    nDash = rOrb <= 0.0 ? 0 :
+      NAbs(orb) * NAbs(gs.nDashMax) / (int)(rOrb*3600.0);
+  }
   DrawDash(x1, y1, x2, y2, nDash);
 
   // Draw aspect glyph over middle of line.
@@ -2409,7 +2420,12 @@ flag EnumStarsLines(flag fInit, ES **ppes1, ES **ppes2)
       pchCur++;
   }
 
-  // Parse second star index.
+  // Parse second star index. A trailing separator -- a dangling "3" or
+  // "1_2_" -- leaves the cursor on end of string, and atoi("") is 0, which
+  // passed the range check below and drew a line to star 0 that no list
+  // asked for. An incomplete pair ends the list instead.
+  if (!FNumCh(*pchCur))
+    return fFalse;
   i2 = iBase + atoi(pchCur);
   iMax = Max(iMax, i2);
   while (FNumCh(*pchCur))

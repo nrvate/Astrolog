@@ -799,8 +799,18 @@ void EquToHorizon2(real lon, real lat, int x1, int y1, int xs, int ys,
 
 
 #define NDashAspect(i, j, asp, orb) (gs.nDashMax >= 0 ? \
-  Min(NAbs((int)(orb*3600.0)) / (60*60*2), gs.nDashMax) : NAbs((int)(orb* \
-  3600.0)) * NAbs(gs.nDashMax) / (int)(GetOrb(i, j, asp)*3600.0))
+  Min(NAbs((int)(orb*3600.0)) / (60*60*2), gs.nDashMax) : \
+  (GetOrb(i, j, asp) <= 0.0 ? 0 : NAbs((int)(orb*3600.0)) * \
+  NAbs(gs.nDashMax) / (int)(GetOrb(i, j, asp)*3600.0)))
+
+// The trailing <= 0.0 arm: the allowed orb is user-settable to any real
+// (-YAo, and the -YAd additions sum in) with no floor, and the aspect in
+// the grid need not have qualified through it -- the AstroExpression orb
+// hook overwrites the qualifying orb, so a zero allowed orb reaches this
+// division with a zero divisor and dies of SIGFPE. DrawDash() draws a
+// solid line for skip 0 and clamps negatives to it, so "solid" is both
+// the safe and the honest answer. Same guard as DrawAspectLine()
+// (xcharts0.cpp), which draws the wheel's aspect lines.
 
 // Draw the local horizon, and draw in the planets where they are at the time
 // in question, as done when the -Z is combined with the -X switch.

@@ -12550,6 +12550,152 @@ static void TestAspectCountQt()
 }
 
 
+// DrawAspectLine's dash divisor: NAbs(orb) * NAbs(gs.nDashMax) /
+// (int)(GetOrb(obj1, obj2, asp)*3600.0) -- and the same division again in
+// xcharts1.cpp's NDashAspect macro, which the grid charts use. GetOrb() is
+// the minimum of user-settable orbs plus user-settable .add values, with
+// no floor, so -YAo 1 1 0 alone gets it to exactly zero.
+//
+// The ordinary cast path cannot reach the divisor with a zero orb --
+// GetAspect() qualifies with a STRICT RAbs(rDiff) < rOrb against the same
+// GetOrb(), so a zero-orb aspect never enters the grid, and every chart
+// draw rebuilds the grid (FCreateGrid at draw time), so seeding grid->n
+// from the test does not survive either -- the first draft of this group
+// proved that the hard way by passing on the unfixed code. The reach is
+// the AstroExpression orb hook: GetAspect() OVERWRITES its qualifying orb
+// with the expression's answer while the draw side divides by the raw
+// GetOrb(), so "=z 90" qualifies every pair while the underlying allowed
+// orb stays zero. nrvate.as itself carries a -~A hook, so the path is not
+// theoretical. A SIGFPE here is the bug, not the test breaking -- proven
+// by reverting the guard, which aborts exactly in the wheel render below.
+
+static void TestAspectDashQt()
+{
+  real rgOrbSav[cAspect+1];
+  OBJSET rgosSav[oNorm1+1];
+  GRDOBJB rgbIgnSav, rgbIgn2Sav;
+  char *szExpSav = us.szExpAsp;
+  int nDashSav = gs.nDashMax, i;
+  flag fAltSav = gs.fAlt, fExpSav = us.fExpOff;
+
+  Group("Aspect line dash");
+  CopyRgb((pbyte)rAspOrb.rgn, (pbyte)rgOrbSav, sizeof(rAspOrb.rgn));
+  CopyRgb((pbyte)rgobjset.rgn, (pbyte)rgosSav, sizeof(rgobjset.rgn));
+  CopyRgb((pbyte)ignore.rgn, (pbyte)rgbIgnSav.rgn, sizeof(ignore.rgn));
+  CopyRgb((pbyte)ignore2.rgn, (pbyte)rgbIgn2Sav.rgn, sizeof(ignore2.rgn));
+
+  // Every conjunction's ALLOWED orb at exactly zero, every object
+  // unrestricted, and an expression hook that qualifies everything with
+  // orb 90. GetOrb() is then zero for every pair at draw time.
+  rAspOrb[ASPT(aCon)] = 0.0;
+  for (i = 0; i <= oNorm1; i++) {
+    rgobjset[i].orb = 360.0;
+    rgobjset[i].add = 0.0;
+    ignore[i] = fFalse;
+    ignore2[i] = fFalse;
+  }
+  us.fExpOff = fFalse;
+  us.szExpAsp = (char *)"=z 90";
+  gs.nDashMax = -10;
+  gs.fAlt = fFalse;
+
+  SetChartModeQt(gWheel);
+  Check(gi.qim != NULL && !gi.qim->isNull(),
+    "a wheel drew with a zero allowed orb behind expression-qualified "
+    "aspects, without dividing by it");
+
+  // Same for the grid charts, which take NDashAspect's copy of the same
+  // division.
+  SetChartModeQt(gGrid);
+  Check(gi.qim != NULL && !gi.qim->isNull(),
+    "an aspect grid drew with a zero allowed orb behind "
+    "expression-qualified aspects");
+
+  // A NEGATIVE allowed orb (reachable through negative .add): the divisor
+  // goes negative, and DrawDash() clamps a negative skip to a solid line,
+  // so both the old and new code must merely render.
+  rAspOrb[ASPT(aCon)] = 10.0;
+  rgobjset[0].add = -20.0;
+  SetChartModeQt(gWheel);
+  Check(gi.qim != NULL && !gi.qim->isNull(),
+    "a wheel drew with a negative allowed orb behind "
+    "expression-qualified aspects");
+
+  // The other dash branch -- (gs.nDashMax >= 0) == gs.fAlt -- divides
+  // nothing; exercise it once so the group covers both arms.
+  rgobjset[0].add = 0.0;
+  rAspOrb[ASPT(aCon)] = 5.0;
+  gs.nDashMax = 10;
+  SetChartModeQt(gWheel);
+  Check(gi.qim != NULL && !gi.qim->isNull(),
+    "the positive-dash-limit branch still renders");
+
+  us.szExpAsp = szExpSav;
+  us.fExpOff = fExpSav;
+  CopyRgb((pbyte)rgOrbSav, (pbyte)rAspOrb.rgn, sizeof(rAspOrb.rgn));
+  CopyRgb((pbyte)rgosSav, (pbyte)rgobjset.rgn, sizeof(rgobjset.rgn));
+  CopyRgb((pbyte)rgbIgnSav.rgn, (pbyte)ignore.rgn, sizeof(ignore.rgn));
+  CopyRgb((pbyte)rgbIgn2Sav.rgn, (pbyte)ignore2.rgn, sizeof(ignore2.rgn));
+  gs.nDashMax = nDashSav;
+  gs.fAlt = fAltSav;
+}
+
+// EnumStarsLines()'s parser drew a line to star 0 for a dangling pair: a
+// link list ending in "_" (or a bare trailing index) left the second
+// parse reading atoi("") == 0, and star 0 passed the range check. A list
+// that means star 0 writes "0"; a missing index is an INCOMPLETE pair and
+// should end the list, not draw to a star nobody named. The parse runs
+// against gi.rges, which FProcessYXU() sizes from the NAME list -- so
+// this group drives the real -YXU path with a two-star list and asks the
+// enumerator directly, then puts every global it touched back.
+
+static void TestStarLinksQt()
+{
+  // Content, not pointers: FProcessYXU() deallocates the strings it
+  // replaces, so a saved pointer would dangle the moment the first call
+  // below ran, and restoring from it read freed memory -- usually intact,
+  // occasionally reused by a later allocation, which surfaced three
+  // groups later as a garbage line in a settings replay. The first draft
+  // of this group did exactly that.
+  char szLinSav[cchSzLine], szLnkSav[cchSzLine];
+  ES *pes1, *pes2;
+
+  Group("Star links");
+  if (FSzSet(gs.szStarsLin))
+    sprintf2(S(szLinSav), "%s", gs.szStarsLin);
+  else
+    szLinSav[0] = chNull;
+  if (FSzSet(gs.szStarsLnk))
+    sprintf2(S(szLnkSav), "%s", gs.szStarsLnk);
+  else
+    szLnkSav[0] = chNull;
+  FProcessYXU("Aldebaran,Antares", "0_1", fFalse);
+  Check(gi.cStarsLin == 2, "the two-star list reserved %d slots",
+    gi.cStarsLin);
+  Check(EnumStarsLines(fTrue, &pes1, &pes2), "the enumerator initialized");
+  Check(EnumStarsLines(fFalse, &pes1, &pes2),
+    "a complete pair 0_1 yields its stars");
+  Check(EnumStarsLines(fFalse, &pes1, &pes2) == fFalse,
+    "the list holds exactly one pair");
+
+  // The dangling shapes. Each used to yield a pair with star 0 as its
+  // second element -- a line to Aldebaran (index 0) that no list drew.
+  FProcessYXU("Aldebaran,Antares", "1_", fFalse);
+  EnumStarsLines(fTrue, &pes1, &pes2);
+  Check(!EnumStarsLines(fFalse, &pes1, &pes2),
+    "a trailing \"1_\" does not yield a pair to star 0");
+  FProcessYXU("Aldebaran,Antares", "1;0_", fFalse);
+  EnumStarsLines(fTrue, &pes1, &pes2);
+  Check(EnumStarsLines(fFalse, &pes1, &pes2),
+    "the complete pair before the dangling one still yields");
+  Check(!EnumStarsLines(fFalse, &pes1, &pes2),
+    "the dangling pair after it does not");
+
+  // Back the way the group found it: through the same FProcessYXU() path
+  // that owns these strings, never through the deallocated originals.
+  FProcessYXU(szLinSav, szLnkSav, fFalse);
+}
+
 // The guard for "Known divergences from Windows".
 //
 // A divergence is a claim about behaviour that no audit can check: the
@@ -12622,6 +12768,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"chart-render",         TestChartRenderQt},
   {"ray-digit-fill",       TestRayDigitFillQt},
   {"aspect-count",         TestAspectCountQt},
+  {"aspect-dash",          TestAspectDashQt},
+  {"star-links",           TestStarLinksQt},
   {"divergences",          TestDivergencesQt},
   // BEFORE "menu-actions", and that is a timing decision as much as a
   // tidiness one: a transit graph in the state that group leaves behind
