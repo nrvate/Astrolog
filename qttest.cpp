@@ -2412,6 +2412,13 @@ static void TestColorSchemeQt()
   // away from -- only the value the run started with to put back.
   {
     QString strThemeSave = StrThemePrefQt();
+    // The environment variable as the process started with it, so a run
+    // under ASTROLOG_QT_THEME=dark stays dark after this group. Put back
+    // LAST, below: every check from the first qunsetenv() on needs it
+    // unset -- the saved-theme pair, "auto" falling through to detection,
+    // and choosing Dark actually repainting would all be pinned by it.
+    flag fThemeEnvSav = qEnvironmentVariableIsSet("ASTROLOG_QT_THEME");
+    QByteArray baThemeEnvSav = qgetenv("ASTROLOG_QT_THEME");
 
     SetThemePrefQt("auto");
     Check(StrThemePrefQt() == "auto", "with nothing chosen, the theme is auto");
@@ -2521,6 +2528,8 @@ static void TestColorSchemeQt()
     ApplyColorSchemeQt();
     Check(QApplication::palette().color(QPalette::Window).lightness() >= 128,
       "and choosing Light brings it back");
+    if (fThemeEnvSav)
+      qputenv("ASTROLOG_QT_THEME", baThemeEnvSav);
     SetThemePrefQt(strThemeSave.toUtf8().constData());
     ApplyColorSchemeQt();
     QApplication::setPalette(palWas);
@@ -13247,6 +13256,8 @@ static flag s_fHaveInfoCanaryQt;
 static QByteArray s_rgbaMacroCanaryQt[cMacro], s_rgbaMSubCanaryQt[cMSub];
 static QByteArray s_baLinCanaryQt, s_baLnkCanaryQt;
 static QVector<CI> s_rgciCanaryQt;
+static QByteArray s_baThemeCanaryQt;
+static flag s_fThemeSetCanaryQt;
 static QVector<QByteArray> s_rgbaNamCanaryQt, s_rgbaLocCanaryQt;
 
 static void CanarySnapQt()
@@ -13263,6 +13274,10 @@ static void CanarySnapQt()
     s_rgbaMSubCanaryQt[i] = QByteArray(SzSet(SzMacroSubNameQt(i)));
   s_baLinCanaryQt = QByteArray(SzSet(gs.szStarsLin));
   s_baLnkCanaryQt = QByteArray(SzSet(gs.szStarsLnk));
+  // The one environment variable a group sets. Unset and set-to-empty are
+  // different states to NDarkPreferenceQt(), so both are kept.
+  s_fThemeSetCanaryQt = qEnvironmentVariableIsSet("ASTROLOG_QT_THEME");
+  s_baThemeCanaryQt = qgetenv("ASTROLOG_QT_THEME");
   s_rgciCanaryQt.resize(is.cci);
   s_rgbaNamCanaryQt.resize(is.cci);
   s_rgbaLocCanaryQt.resize(is.cci);
@@ -13324,6 +13339,15 @@ static void CanaryDiffQt(CONST char *szGroup)
       CANARY("ignore2[%d %s] %d -> %d", i, i < cObj ? SzSet(szObjName[i]) :
         "", s_ign2CanaryQt.rgn[i], ignore2.rgn[i]);
   }
+  if (s_fThemeSetCanaryQt != qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ||
+    s_baThemeCanaryQt != qgetenv("ASTROLOG_QT_THEME"))
+    CANARY("ASTROLOG_QT_THEME %s%s%s -> %s%s%s",
+      s_fThemeSetCanaryQt ? "\"" : "", s_fThemeSetCanaryQt ?
+      s_baThemeCanaryQt.constData() : "unset", s_fThemeSetCanaryQt ? "\"" : "",
+      qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ? "\"" : "",
+      qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ?
+      qgetenv("ASTROLOG_QT_THEME").constData() : "unset",
+      qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ? "\"" : "");
   if (s_cciCanaryQt != is.cci)
     CANARY("is.cci %d -> %d", s_cciCanaryQt, is.cci);
   if (s_fHaveInfoCanaryQt != is.fHaveInfo)

@@ -553,3 +553,63 @@ hand-built command line. `run-qt-tests.sh` never starts with a chart list,
 so a regression to a count-only save passes the suite. Giving the suite a
 preloaded run of its own would close it; that changes what `make check`
 runs and how long it takes, so it is left for the maintainer.
+
+### Plan item 8 -- V1: `color-scheme` unsets `ASTROLOG_QT_THEME` for good
+
+**The canary could not see this, so it was taught to first.** An
+environment variable is process state no field table names. The canary
+now records whether `ASTROLOG_QT_THEME` is set and its value, before and
+after each group -- set-to-empty and unset kept apart, because
+`NDarkPreferenceQt()` treats them differently -- and prints
+`ASTROLOG_QT_THEME "dark" -> unset` when a group changes it.
+
+**Falsified before the change.** `color-scheme` alone, with the canary:
+
+- run under `ASTROLOG_QT_THEME=dark`:
+  `[canary color-scheme: ASTROLOG_QT_THEME "dark" -> unset]`, 47 passed;
+- run with it unset: no canary line, 47 passed.
+
+So a developer checking the dark scheme with the variable, as CLAUDE.md
+says to, got the groups before `color-scheme` dark and every group after
+it under the saved preference instead, with nothing saying so.
+
+**The change.** The group saves whether the variable is set and its value
+next to the theme preference it already saved, and puts the variable back
+at the end of the block.
+
+**Gotcha: where the restore goes is not free.** The obvious place is the
+existing `qunsetenv()` straight after the two "the env var outranks a
+saved theme" checks. It would be wrong there. Every check after that line
+needs the variable unset: "auto" has to fall through to detection, an
+empty preference must not read as a choice, and "choosing Dark actually
+darkens the palette" would pass on the variable alone. So the restore
+goes last, just before the saved preference is re-applied -- which also
+means the closing `ApplyColorSchemeQt()` sees the environment the group
+started with.
+
+**Checked, because it is the shape of a bug this project already paid
+for:** the canary's new line prints `qgetenv("ASTROLOG_QT_THEME").constData()`
+-- a pointer into a temporary `QByteArray`. CLAUDE.md records a
+read-after-free from exactly `constData()` on a temporary, invisible on
+Linux and a SIGSEGV on macOS. That one bound the pointer to a variable
+that outlived the temporary. Here the temporary is an argument inside the
+`CANARY()` macro's single comma expression, so it lives until the end of
+that full expression, which is after the `printf()` that reads it. Safe
+as written; it would stop being safe the moment someone hoists the
+`constData()` into a local, and the line is left un-hoisted on purpose.
+
+**After the change, alone:** under `ASTROLOG_QT_THEME=dark`, `[canary: 0
+changes left behind by 0 groups]`, 47 passed; with it unset, the same. So
+the saved-theme pair, "auto" and the repaint checks still run with the
+variable cleared inside the group -- the restore did not land early.
+
+**The full suite, variable unset:** `PASS: 5198 passed, 0 failed`, canary
+lines identical to item 7's run -- as expected, since with nothing to put
+back the restore does nothing.
+
+**The full suite under `ASTROLOG_QT_THEME=dark` -- the run V1 is about:**
+`PASS: 5198 passed, 0 failed`, and no `ASTROLOG_QT_THEME` canary line in
+it, so the variable held for every group after `color-scheme`. Before the
+change the same run would have switched to the saved preference a fifth
+of the way in. The suite has no failure under a forced dark theme, which
+nobody had measured before.
