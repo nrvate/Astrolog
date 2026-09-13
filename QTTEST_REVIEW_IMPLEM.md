@@ -1579,3 +1579,34 @@ comments are recorded, not renumbered.
 **Suite.** `PASS: 5185 passed, 0 failed`. Against item 20's canary run the
 only difference is one line gone: `[canary oracle: ignore2[2 Moon] 1 -> 0]`,
 N-A, which is what the two stages above were for.
+
+### Plan item 22 -- B1: five `Check(fTrue, ...)` that could not fail
+
+**What B1 said.** `TestBadInputQt()` asserted five things with `Check(fTrue,
+...)`: that `FileOpen()` returned for a missing file, that
+`FProcessCommandLine()` returned after a missing `-i` file, after an unknown
+switch and after a 400-digit time, and that `PrintError()` returned rather than
+terminating. Reaching each line is the test, as the group's comments say -- but
+each counted as a pass, so the suite total carried five assertions that could
+not fail, and the pattern was unique to this group.
+
+**The change.** The five calls are gone, their comments kept. A comment at the
+top of the group says what actually asserts the behaviour: a call that
+terminates or crashes takes the process down before the group's closing
+`printf`, and the run ends without that line or the suite's summary. That
+closing line now names all four things survived -- it had never mentioned the
+400-digit time.
+
+**Not a `Reached()` helper.** The review offered one, printing in verbose mode
+and not counting. It would be a sixth kind of statement whose only effect is to
+print when nothing went wrong; the closing line already does that, for the whole
+group, every run.
+
+**Checked.** No `Check(fTrue` call is left in the file (one textual match, in
+the new comment). Warning audit empty. `bad-input` alone: 2 passed, down from 7,
+and it prints "survived missing files, a bad switch, PrintError() and a
+400-digit time". **The suite count moves by five, on purpose.**
+
+**Suite.** `PASS: 5180 passed, 0 failed` -- five fewer than 5185, the five
+removed calls -- and canary lines identical to item 21's run. **Every count
+after this item is against 5180.**

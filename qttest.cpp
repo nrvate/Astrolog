@@ -1451,23 +1451,24 @@ static void TestBadInputQt()
 
   Group("Bad input");
   SetNoPopupQt(fTrue);          // no message boxes during an automated run
+  // Most of what this group asserts is that each call below RETURNS. That
+  // used to be five Check(fTrue, ...) lines, which counted five passes for
+  // reaching them and could not fail. The assertion is the printf at the
+  // end: a call that terminates or crashes takes the process down before it,
+  // and the run ends without this group's summary line or the suite's.
 
   Check(FileOpen("no-such-file-here.as", 0, NULL, 0) == NULL,
     "FileOpen() found a file that isn't there");
-  Check(fTrue, "FileOpen() on a missing file returned");
 
   // The macro path proper: a command line naming a file that isn't here.
   sprintf2(S(sz), "-i no-such-file-here.as");
   FProcessCommandLine(sz);
-  Check(fTrue, "FProcessCommandLine() returned after a missing -i file");
 
   // And an outright bad switch, the other way a stale macro goes wrong.
   sprintf2(S(sz), "-ZZzzz");
   FProcessCommandLine(sz);
-  Check(fTrue, "FProcessCommandLine() returned after an unknown switch");
 
   PrintError("Test error; the suite expects to keep running past this.");
-  Check(fTrue, "PrintError() returned instead of terminating");
 
   // A 400-digit switch parameter, which crashed twice over before
   // REFACTORING.md B1's net pinned it: NParseSz()
@@ -1485,12 +1486,12 @@ static void TestBadInputQt()
       szLong[i] = '6';
     szLong[i] = chNull;
     FProcessCommandLine(szLong);
-    Check(fTrue, "FProcessCommandLine() returned after a 400-digit time");
     ciCore = ciSav;
   }
 
   SetNoPopupQt(fSav);
-  printf("  survived missing files, a bad switch and PrintError()\n");
+  printf("  survived missing files, a bad switch, PrintError() and a "
+    "400-digit time\n");
 }
 
 
