@@ -13027,10 +13027,15 @@ static void TestDivergencesQt()
   flag fAspSav = gs.fLabelAsp, fCitySav = gs.fLabelCity;
   int nCitySav = gs.nLabelCity;
   gs.fLabelAsp = fFalse; gs.nLabelCity = 1;
+  // The city colour combo by its own id, as TestComboPickQt() does. This
+  // used to set EVERY combo showing "None" to "Rainbow", and was harmless
+  // only because the store matches exactly and falls back to index 0 --
+  // which is "None" -- in the decoration corner and fill combos alike.
   DriveModalQt(ShowGraphicsSettingsDialogQt, [](QWidget *pw) {
-    for (QComboBox *p : pw->findChildren<QComboBox *>())
-      if (p->currentText() == "None")
-        p->setEditText("Rainbow");
+    QComboBox *pcb = pw->findChild<QComboBox *>("dcGr_XL");
+
+    if (pcb != NULL)
+      pcb->setEditText("Rainbow");
     for (QPushButton *p : pw->findChildren<QPushButton *>())
       if (p->text() == "OK") p->click();
   });

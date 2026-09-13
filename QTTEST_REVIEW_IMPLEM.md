@@ -375,3 +375,39 @@ by 0 groups]`, still 9 passed. The full suite, canary on: `PASS: 5198
 passed, 0 failed`, and its canary lines against item 3b's run (the
 clock-driven `gs.rRot`/`gs.rTilt` filtered, and the stderr fragments
 stripped) lose exactly one line -- the macro name -- and gain none.
+
+### Plan item 5 -- K2: `divergences` sets every "None" combo to "Rainbow"
+
+**K2's leak does not reproduce, and the reason is in the store, not the
+test.** The review predicted that the decoration fill combo would take
+"Rainbow" by prefix match ("Rainbow RYB") and leave `gs.nDecaFill`
+changed. Reading the Graphics Settings store (`qtdialog.cpp`, after the
+dialog's OK): the wheel corner, decoration fill and city colour combos
+are all matched with `FEqSzI()` -- **exact**, case-insensitive -- since
+the fix `TestComboPickQt()` pins ("a list with no prefix pairs is
+unaffected"). "Rainbow" matches no entry of the corner or fill tables;
+the store then falls back to index 0, and index 0 of both tables is
+"None". So a combo that showed "None" stores "None" again. The prefix
+premise was true of an older store, not of this tree.
+
+**Measured, not only read.** `ASTROLOG_QT_TESTS=divergences` with the
+canary and `-i nrvate.as`, before the change: the only line is
+`gs.yWin 1558 -> 1529` (N-C), no `nDecaFill`, no `nDecaType`. The full-suite
+canary baseline agrees (only the clock-driven globe angles).
+
+**Changed anyway, as a robustness fix rather than a leak fix.** The
+group's claim is about one control, and it depended on a second,
+unrelated fact -- the fallback index being "None" in two other tables --
+to be harmless. It now finds `dcGr_XL` by object name, as
+`TestComboPickQt()` does, and touches nothing else.
+
+**Falsified: the by-id lookup still reaches the control the checks are
+about.** Built with the id deliberately misspelled (`dcGr_XLsabotage`),
+`divergences` alone fails both city checks -- "picking a city colouring
+left gs.fLabelAsp clear" and "city colouring scheme is 1, wanted 5" (3
+passed, 2 failed). With the id restored by reversing that exact string, 5
+passed. A lookup that silently found nothing would otherwise have read
+as a pass on a dialog nobody touched.
+
+**Suite.** `PASS: 5198 passed, 0 failed`, and the canary lines identical
+to item 4's run (clock-driven globe angles filtered).
