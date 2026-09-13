@@ -114,14 +114,11 @@ extern int CaccelTestQt();
 #define rgaccelQt PaccelTestQt()
 #define caccelQt CaccelTestQt()
 
-// The bundled ephem/ and the body list are one set: every row of
-// rgObjSel[] has its file here, and every asteroid file here is a row.
-// So the suite asserts one number -- all of them resolve -- and there is
-// nothing for a run to declare.
-//
-// The bundled ephem/ and the Object Selections list are one set by
-// construction, so a run against it and a run against /swe assert the
-// same number and there is no mode to declare.
+// The bundled ephem/ and the Object Selections list are one set: every row
+// of rgObjSel[] has its file here, and every asteroid file here is a row.
+// So the suite asserts one number -- all of them resolve -- a run against
+// ephem/ and a run against /swe assert the same one, and there is no mode
+// for a run to declare.
 
 
 static int s_cPass = 0, s_cFail = 0;
@@ -394,7 +391,6 @@ static void TestDialogsQt()
 // this checkout produced. What a FAIL here means is that the label and
 // the macro disagree -- a wiring error, the only way this can break.
 
-// The generated git sha the About dialog shows; see qtdialog.cpp.
 // DriveModalQt() is defined further down in this file, beside the timers
 // it arms; the About group below predates it in reading order.
 static void DriveModalQt(void (*pfnOpen)(),
@@ -1423,19 +1419,6 @@ static void TestBadInputQt()
 }
 
 
-// The Object Selections list is a table of {type, index, name} triples,
-// and its whole value is that {1, 7066} really is Nessus -- a digit wrong
-// there silently puts a different body in the chart. Resolve each entry
-// the way the -Ye handler does and compare against the name it claims.
-//
-// Only entries whose ephemeris data is present can be checked; the rest
-// come back szObjUnknown and are skipped, with the verified count printed
-// so this cannot degrade to nothing.
-//
-// Catches a number changed to ANOTHER REAL BODY, which is the dangerous
-// case -- the dialog offering "Sedna" and charting Eris. Does not catch
-// one that resolves to nothing, which is indistinguishable from a missing
-// file here and announces itself as "???" when the user picks it.
 // Drive a modal dialog: wait for it to appear, run "fnOn" against it, and
 // make sure it is gone before returning.
 //
@@ -1517,15 +1500,6 @@ static flag FWriteScratchQt(CONST QString &strPath, CONST char *sz)
   return fTrue;
 }
 
-// Does the port follow the desktop into dark mode? Qt5 has no API for
-// this -- QStyleHints::colorScheme() is Qt 6.5 -- and Qt5's own gtk3
-// platform theme loads without supplying any palette, so the port detects
-// it. The routes that need no helper program are the ones testable in
-// process; the portal and gsettings routes depend on the desktop the
-// developer is sitting at and are deliberately not asserted here.
-// The application icon. A window whose icon failed to load looks exactly
-// like one that never asked for an icon, so the check is that it
-// resolves, at the sizes a panel or task switcher requests.
 
 // Save every dialog as a PNG, for a visual baseline. QTSHOTDIR=<dir>.
 //
@@ -1559,21 +1533,6 @@ static void DialogShotCaptureQt(CONST char *szDir)
   }
 }
 
-
-
-// Does every control actually FIT inside the dialog that holds it? The
-// dialogs are setFixedSize(), so a control past the edge is not scrolled
-// to, it is gone.
-//
-// Cheap to assert because RcBuildDialogQt() makes every control a direct
-// child of the dialog in absolute coordinates -- no scroll areas, no
-// nesting -- so a child's geometry() is already in the dialog's own
-// coordinates and anything outside its rect is off the edge.
-//
-// It is worth having because the layout is computed rather than fixed:
-// one scale factor is derived from the widest string that must not wrap
-// and applied to the whole dialog (RRcTextRatioQt), so a font, a
-// platform, or a translated string can push a control out.
 
 // A command line longer than the buffer it is copied into.
 //
@@ -1685,20 +1644,6 @@ static void TestLongCommandLineQt()
   printf("  over-long input is truncated or refused, never copied blind\n");
 }
 
-
-// Every "Save Chart As" format, for a chart carrying NO name and NO
-// location.
-//
-// FOutputAAFFile() dereferenced a NULL pch in exactly that case and
-// segfaulted -- "astrolog -q 1 1 2000 0 -oa file.aaf", which is casting a
-// chart and saving it. It hid behind the default settings file, which
-// fills both fields with -zj, so only a chart that replaces them reaches
-// it. Nothing here wrote any of these formats, so nothing could have
-// caught it.
-//
-// Written with the fields EMPTY on purpose: that is the case the writers
-// have to survive, and the case a chart cast from bare coordinates
-// actually produces.
 
 // Settings files that include each other with -i. FProcessSwitchFile()
 // recurses, and each level carries a cchSzLine buffer and a MAXSWITCHES
@@ -1981,6 +1926,19 @@ static void TestGraphicsFieldsQt()
 }
 
 
+// Every "Save Chart As" format, for a chart carrying NO name and NO
+// location.
+//
+// FOutputAAFFile() dereferenced a NULL pch in exactly that case and
+// segfaulted -- "astrolog -q 1 1 2000 0 -oa file.aaf", which is casting a
+// chart and saving it. It hid behind the default settings file, which
+// fills both fields with -zj, so only a chart that replaces them reaches
+// it. Nothing here wrote any of these formats, so nothing could have
+// caught it.
+//
+// Written with the fields EMPTY on purpose: that is the case the writers
+// have to survive, and the case a chart cast from bare coordinates
+// actually produces.
 static void TestChartExportQt()
 {
   CONST char rgchFmt[] = {'d', 'l', 'a', 'q', 'c'};
@@ -2085,6 +2043,19 @@ static void TestChartExportQt()
 }
 
 
+// Does every control actually FIT inside the dialog that holds it? The
+// dialogs are setFixedSize(), so a control past the edge is not scrolled
+// to, it is gone.
+//
+// Cheap to assert because RcBuildDialogQt() makes every control a direct
+// child of the dialog in absolute coordinates -- no scroll areas, no
+// nesting -- so a child's geometry() is already in the dialog's own
+// coordinates and anything outside its rect is off the edge.
+//
+// It is worth having because the layout is computed rather than fixed:
+// one scale factor is derived from the widest string that must not wrap
+// and applied to the whole dialog (RRcTextRatioQt), so a font, a
+// platform, or a translated string can push a control out.
 static void TestDialogFitQt()
 {
   Group("Dialog controls fit their dialog");
@@ -2160,10 +2131,6 @@ static void TestDialogFitQt()
     Check(dyWorst <= 0, "%s: a wrapped label still fits its box (%s)",
       rgdlgQt[i].szTitle, szWorst[0] != chNull ? szWorst : "none wrapped");
   }
-  // A check that examined nothing would pass too. The layout only turns
-  // wrapping on for a label whose text overflows its box, so if no label
-  // anywhere wrapped, the loop above asserted nothing at all and the fact
-  // that it "passed" would be meaningless.
   // A check that examined nothing would pass too, so require that some
   // label really does wrap: 37 have wrapping enabled and three take two
   // lines. The margin scales with the font, so this passes rather than
@@ -2174,6 +2141,9 @@ static void TestDialogFitQt()
 }
 
 
+// The application icon. A window whose icon failed to load looks exactly
+// like one that never asked for an icon, so the check is that it
+// resolves, at the sizes a panel or task switcher requests.
 static void TestAppIconQt()
 {
   QList<QSize> rgsize;
@@ -2375,6 +2345,12 @@ static void TestConsoleFontQt()
 }
 
 
+// Does the port follow the desktop into dark mode? Qt5 has no API for
+// this -- QStyleHints::colorScheme() is Qt 6.5 -- and Qt5's own gtk3
+// platform theme loads without supplying any palette, so the port detects
+// it. The routes that need no helper program are the ones testable in
+// process; the portal and gsettings routes depend on the desktop the
+// developer is sitting at and are deliberately not asserted here.
 static void TestColorSchemeQt()
 {
   Group("Desktop colour scheme");
@@ -2796,20 +2772,6 @@ static void TestSharedSymbolBoxesQt()
 
 int s_nAnimStartQt = 0;   // gs.nAnim as the program started, before any test
 
-// Animation: one switch, and only the switch moves it.
-//
-// Upstream stores the jump rate and the running state in the sign and
-// magnitude of one int, with gi.fPause a second stop on top, so any
-// control could start the chart moving by accident. This port has one
-// running state behind FAnimRunningQt()/SetAnimRunningQt(); these pin
-// down that only the two controls meant to touch it do.
-//
-// Deliberately not Windows' behaviour; see "Known divergences".
-// Clear Screen, in both modes. Text charts draw into the same buffer the
-// graphics ones do, but ClearScreenQt() used to branch on us.fGraphics and
-// send text mode to a ClearTextWindowQt() that cleared the separate text
-// window the port stopped creating -- so the command silently did nothing
-// there. Reverting the fix makes the text half of this fail.
 
 static long CpixDifferQt()
 {
@@ -2825,6 +2787,11 @@ static long CpixDifferQt()
   return cpix;
 }
 
+// Clear Screen, in both modes. Text charts draw into the same buffer the
+// graphics ones do, but ClearScreenQt() used to branch on us.fGraphics and
+// send text mode to a ClearTextWindowQt() that cleared the separate text
+// window the port stopped creating -- so the command silently did nothing
+// there. Reverting the fix makes the text half of this fail.
 static void TestClearScreenQt()
 {
   flag fGraphicsSav = us.fGraphics;
@@ -2877,15 +2844,6 @@ static void TestClearScreenQt()
   gi.nMode = nModeSav;
 }
 
-// The one text-capture dance, and the global it is easy to forget.
-// Action() opens is.S on the export file and fclose()s it on the way out
-// without putting the caller's back, so a capture that does not restore
-// it leaves the stream on a closed FILE -- and the outer Action() the
-// whole GUI runs inside fcloses the same handle again on exit, which
-// glibc aborts on.
-//
-// is.S is put back by hand after the check so a regression here fails
-// this group instead of taking the rest of the suite down with it.
 
 // The Rising chart's altitude gradient. XChartRising() packs either one
 // bit per
@@ -2943,6 +2901,15 @@ static void TestRisingGradientQt()
 }
 
 
+// The one text-capture dance, and the global it is easy to forget.
+// Action() opens is.S on the export file and fclose()s it on the way out
+// without putting the caller's back, so a capture that does not restore
+// it leaves the stream on a closed FILE -- and the outer Action() the
+// whole GUI runs inside fcloses the same handle again on exit, which
+// glibc aborts on.
+//
+// is.S is put back by hand after the check so a regression here fails
+// this group instead of taking the rest of the suite down with it.
 static void TestTextExportQt()
 {
   char szFile[cchSzMax];
@@ -3123,20 +3090,6 @@ static QString StrApplyInfoQt(int mon, int day, int yea)
 #endif
 
 
-// "Chart for Now", which is not the same command in a relationship chart.
-//
-// Windows' cmdNow is Animate(iAnimNow, 0), and Animate() chooses which
-// chart the present moment lands in: the twin slot for a comparison or a
-// transit chart, the transit slot (and is.JDp with it) for a progression,
-// the main chart only otherwise. This port called FInputData() and
-// RecastAndRedrawQt(), which assigns ciMain unconditionally -- so on a
-// transit chart the menu item REPLACED THE NATAL CHART with today
-// instead of moving the transits to it, and the chart the user had been
-// looking at was gone.
-//
-// Both shapes, because the plain one always worked and a fix that broke
-// it would be worse than the bug.
-
 // The "Now" button in the Transit and Progression dialogs, which filled
 // in four of the six fields it is supposed to.
 //
@@ -3236,33 +3189,6 @@ static void DriveSpaceCountQt(int cspace)
 }
 
 
-// gs.nFontAll, the packed form of the six graphics font settings, and
-// gi.nFontPrev, the copy File Settings restores from.
-//
-// The Graphics Settings dialog stored the six fields and recomputed
-// neither. That is not a cache going stale in private: "Save Program
-// Settings" writes gs.nFontAll as ":YXf #%06x" (io.cpp:2572), so a font
-// chosen in the dialog was SAVED WRONG; the metafile writer sizes its
-// object table from it (xdevice.cpp:1808 and 1866); and File Settings'
-// "Use Astrolog Font" box reads it and, when re-ticked, multiplies
-// gi.nFontPrev -- which nothing here ever wrote, so that restored
-// whatever astrolog.as had rather than what the user picked.
-//
-// Windows does both, in this order, at wdialog.cpp:3067, and so does the
-// "-YXf" switch handler.
-
-// The chart size typed into Graphics Settings, which came back smaller
-// than it was typed.
-//
-// The dialog resized the WINDOW to the chart's size. A window is bigger
-// than its chart viewport by the menu bar and the frame, and with "Window
-// Resizes Chart" on -- the default -- the viewport's size is written
-// straight back into gs.xWin/gs.yWin by the canvas. So 640 by 480 became
-// 640 by rather less than 480, silently, and reopening the dialog showed
-// the reduced number. ResizeWindowToChartQt() measures the chrome and
-// adds it; that is what it exists for, and Windows calls its equivalent
-// here (wdialog.cpp:3006).
-
 // Menu items that change a setting ANOTHER item displays.
 //
 // Windows corrects the other item's check mark by hand in the same
@@ -3355,6 +3281,17 @@ static void TestMenuSideEffectsQt()
 }
 
 
+// The chart size typed into Graphics Settings, which came back smaller
+// than it was typed.
+//
+// The dialog resized the WINDOW to the chart's size. A window is bigger
+// than its chart viewport by the menu bar and the frame, and with "Window
+// Resizes Chart" on -- the default -- the viewport's size is written
+// straight back into gs.xWin/gs.yWin by the canvas. So 640 by 480 became
+// 640 by rather less than 480, silently, and reopening the dialog showed
+// the reduced number. ResizeWindowToChartQt() measures the chrome and
+// adds it; that is what it exists for, and Windows calls its equivalent
+// here (wdialog.cpp:3006).
 static void TestGraphicsSizeQt()
 {
   int xWinSav = gs.xWin, yWinSav = gs.yWin;
@@ -3417,95 +3354,6 @@ static void TestGraphicsSizeQt()
   RedrawQt();
 }
 
-
-// The three plain combo boxes in Graphics Settings whose store loop kept
-// the LAST prefix match instead of the first exact one.
-//
-// FMatchSz() matches a prefix of three characters or more, and two of
-// these lists contain entries that are prefixes of other entries: "Region"
-// is a prefix of "Region+State", and "Rays 1" of both "Rays 1,2" and
-// "Rays 12345". Keeping the last match therefore stored a DIFFERENT row
-// than the one clicked -- from the dropdown, not from typing, which is
-// what makes it worth an assertion rather than a note. Windows uses
-// FEqSzI() and breaks on the first (wdialog.cpp:3038, 3044, 3080).
-
-// Numeric dialog fields, read through Astrolog's own parsers.
-//
-// Windows reads every one of them with GetEditN()/GetEditR(), which are
-// NFromSz() and RFromSz() -- and those accept more than a plain decimal:
-// "#1f" is hexadecimal, "##1010" binary, and either kind may be an
-// ASTROEXPRESSION when it starts with "~". QString::toInt() and
-// toDouble() accept none of that and answer 0, so all three spellings
-// worked on Windows and silently became zero here, in about forty
-// fields.
-//
-// Driven through the Graphics Settings dialog because it has both an
-// integer field and a real one, and because a value of 0 in either is
-// refused by the validation added earlier -- so "became zero" is a
-// visible failure rather than a quiet one.
-
-// The four orb-and-colour grids, which stored whatever was typed.
-//
-// Windows validates every row of these dialogs BEFORE storing any of
-// them -- its "for (j = 0; j <= 1; j++)" two-pass loop -- and refuses on
-// a bad orb, a bad orb addition or a bad colour. All four of this port's
-// stored straight through.
-//
-// The colour is memory safety rather than a strange picture: KvFromKi()
-// is "ki >= 0 ? rgbbmp[ki] : -ki", and rgbbmp[] has cColor2 entries, so a
-// number typed into a colour box indexes it unbounded on every redraw.
-// Same shape as the telescope planet field.
-//
-// The Aspect Settings dialog stands for all four here: the four store
-// loops are copies of one another and the colour reader is shared, so a
-// grid apiece would be four tests of one function. Both directions, and
-// the refusal is measured by the setting NOT moving.
-
-// "Reverse Background" and "Monochrome", which did nothing on screen.
-//
-// InitColorsX() (xscreen.cpp:124) is what turns gs.fInverse and gs.fColor
-// into the colours the drawing code reads: gi.kiOn, kiOff, kiLite, kiGray
-// and the whole *B family. FActionX() calls it before every render to a
-// FILE; RedrawQt() never did, and filled its buffer with a hardcoded
-// black. So both View menu items worked when exporting a chart and were
-// inert on screen.
-//
-// Measured before the fix: with reverse on, the commonest pixel of a
-// wheel stayed black and kiOn/kiOff stayed 15/0; with monochrome on, the
-// render still had 14 distinct colours.
-//
-// Asserted on the RENDER rather than on the flags, because the flags were
-// always being set -- that is exactly why backend_parity_audit.py, which
-// works per field, could not see this.
-
-// PrintNotice(), the third kind of message, which had no Qt branch.
-//
-// PrintWarning() and PrintError() have routed to PrintWarningQt() since
-// the port began. PrintNotice() fell through to the plain non-Windows
-// path and wrote to STDERR, where a window has nobody reading it --
-// Windows shows an information box. Two things reach it: the "-YYT"
-// switch and an AstroExpression asking to show a value.
-//
-// The popup is suppressed for the whole run (NRunQtTestTableQt sets
-// qi.fNoPopup), so what this can assert is that PrintNotice() takes the
-// Qt path and returns without writing anything: is.S must be untouched
-// and nothing may reach the text stream. Before the fix it printed to
-// stderr, which is invisible here -- so the real subject is that "-YYT"
-// no longer goes through PrintSz() at all, which IS observable: it used
-// to land in the captured text.
-
-// The transit graph's own scrolling, which did not exist here.
-//
-// That chart draws aspect rows until it runs out of window and then
-// stops. Windows picks the STARTING row from its scrollbar
-// (xcharts2.cpp:1404, "cRow * wi.yScroll / nScrollDiv"); every other
-// build had "#else cRow = 0", so the first screenful was all there ever
-// was. The scroll area could not help: the rows past the bottom are not
-// drawn at all, so there is nothing there to scroll to.
-//
-// Asserted on the render, because that is the whole of the claim: with
-// more rows than fit, scrolling to the end has to show something
-// different from the top.
 
 // The two key and mouse help lines this build implements and did not
 // document. Same class as the "-W" switch help: "-H documents what a
@@ -3598,6 +3446,18 @@ static void TestPagerQt()
 }
 
 
+// The transit graph's own scrolling, which did not exist here.
+//
+// That chart draws aspect rows until it runs out of window and then
+// stops. Windows picks the STARTING row from its scrollbar
+// (xcharts2.cpp:1404, "cRow * wi.yScroll / nScrollDiv"); every other
+// build had "#else cRow = 0", so the first screenful was all there ever
+// was. The scroll area could not help: the rows past the bottom are not
+// drawn at all, so there is nothing there to scroll to.
+//
+// Asserted on the render, because that is the whole of the claim: with
+// more rows than fit, scrolling to the end has to show something
+// different from the top.
 static void TestChartScrollQt()
 {
   int nModeSav = gi.nMode, xSav = gs.xWin, ySav = gs.yWin;
@@ -3687,6 +3547,21 @@ static void TestChartScrollQt()
 }
 
 
+// PrintNotice(), the third kind of message, which had no Qt branch.
+//
+// PrintWarning() and PrintError() have routed to PrintWarningQt() since
+// the port began. PrintNotice() fell through to the plain non-Windows
+// path and wrote to STDERR, where a window has nobody reading it --
+// Windows shows an information box. Two things reach it: the "-YYT"
+// switch and an AstroExpression asking to show a value.
+//
+// The popup is suppressed for the whole run (NRunQtTestTableQt sets
+// qi.fNoPopup), so what this can assert is that PrintNotice() takes the
+// Qt path and returns without writing anything: is.S must be untouched
+// and nothing may reach the text stream. Before the fix it printed to
+// stderr, which is invisible here -- so the real subject is that "-YYT"
+// no longer goes through PrintSz() at all, which IS observable: it used
+// to land in the captured text.
 static void TestNoticeQt()
 {
   char szFile[cchSzMax];
@@ -3751,6 +3626,22 @@ static void TestNoticeQt()
 }
 
 
+// "Reverse Background" and "Monochrome", which did nothing on screen.
+//
+// InitColorsX() (xscreen.cpp:124) is what turns gs.fInverse and gs.fColor
+// into the colours the drawing code reads: gi.kiOn, kiOff, kiLite, kiGray
+// and the whole *B family. FActionX() calls it before every render to a
+// FILE; RedrawQt() never did, and filled its buffer with a hardcoded
+// black. So both View menu items worked when exporting a chart and were
+// inert on screen.
+//
+// Measured before the fix: with reverse on, the commonest pixel of a
+// wheel stayed black and kiOn/kiOff stayed 15/0; with monochrome on, the
+// render still had 14 distinct colours.
+//
+// Asserted on the RENDER rather than on the flags, because the flags were
+// always being set -- that is exactly why backend_parity_audit.py, which
+// works per field, could not see this.
 static void TestScreenColorsQt()
 {
   flag fInvSav = gs.fInverse, fColorSav = gs.fColor;
@@ -3820,6 +3711,22 @@ static void TestScreenColorsQt()
 }
 
 
+// The four orb-and-colour grids, which stored whatever was typed.
+//
+// Windows validates every row of these dialogs BEFORE storing any of
+// them -- its "for (j = 0; j <= 1; j++)" two-pass loop -- and refuses on
+// a bad orb, a bad orb addition or a bad colour. All four of this port's
+// stored straight through.
+//
+// The colour is memory safety rather than a strange picture: KvFromKi()
+// is "ki >= 0 ? rgbbmp[ki] : -ki", and rgbbmp[] has cColor2 entries, so a
+// number typed into a colour box indexes it unbounded on every redraw.
+// Same shape as the telescope planet field.
+//
+// The Aspect Settings dialog stands for all four here: the four store
+// loops are copies of one another and the colour reader is shared, so a
+// grid apiece would be four tests of one function. Both directions, and
+// the refusal is measured by the setting NOT moving.
 static void TestOrbGridQt()
 {
   real rOrbSav = rAspOrb[ASPT(1)], rAngSav = rAspAngle[ASPT(1)];
@@ -3906,6 +3813,20 @@ static void TestOrbGridQt()
 }
 
 
+// Numeric dialog fields, read through Astrolog's own parsers.
+//
+// Windows reads every one of them with GetEditN()/GetEditR(), which are
+// NFromSz() and RFromSz() -- and those accept more than a plain decimal:
+// "#1f" is hexadecimal, "##1010" binary, and either kind may be an
+// ASTROEXPRESSION when it starts with "~". QString::toInt() and
+// toDouble() accept none of that and answer 0, so all three spellings
+// worked on Windows and silently became zero here, in about forty
+// fields.
+//
+// Driven through the Graphics Settings dialog because it has both an
+// integer field and a real one, and because a value of 0 in either is
+// refused by the validation added earlier -- so "became zero" is a
+// visible failure rather than a quiet one.
 static void TestFieldParseQt()
 {
   int nGridSav = gs.nGridCell;
@@ -3966,6 +3887,16 @@ static void TestFieldParseQt()
 }
 
 
+// The three plain combo boxes in Graphics Settings whose store loop kept
+// the LAST prefix match instead of the first exact one.
+//
+// FMatchSz() matches a prefix of three characters or more, and two of
+// these lists contain entries that are prefixes of other entries: "Region"
+// is a prefix of "Region+State", and "Rays 1" of both "Rays 1,2" and
+// "Rays 12345". Keeping the last match therefore stored a DIFFERENT row
+// than the one clicked -- from the dropdown, not from typing, which is
+// what makes it worth an assertion rather than a note. Windows uses
+// FEqSzI() and breaks on the first (wdialog.cpp:3038, 3044, 3080).
 static void TestComboPickQt()
 {
   int nDecaTypeSav = gs.nDecaType, nLabelCitySav = gs.nLabelCity;
@@ -4054,6 +3985,20 @@ static void TestComboPickQt()
 }
 
 
+// gs.nFontAll, the packed form of the six graphics font settings, and
+// gi.nFontPrev, the copy File Settings restores from.
+//
+// The Graphics Settings dialog stored the six fields and recomputed
+// neither. That is not a cache going stale in private: "Save Program
+// Settings" writes gs.nFontAll as ":YXf #%06x" (io.cpp:2572), so a font
+// chosen in the dialog was SAVED WRONG; the metafile writer sizes its
+// object table from it (xdevice.cpp:1808 and 1866); and File Settings'
+// "Use Astrolog Font" box reads it and, when re-ticked, multiplies
+// gi.nFontPrev -- which nothing here ever wrote, so that restored
+// whatever astrolog.as had rather than what the user picked.
+//
+// Windows does both, in this order, at wdialog.cpp:3067, and so does the
+// "-YXf" switch handler.
 static void TestFontPackQt()
 {
   int nFontAllSav = gs.nFontAll, nFontPrevSav = gi.nFontPrev;
@@ -4285,6 +4230,19 @@ static void TestNowButtonsQt()
 }
 
 
+// "Chart for Now", which is not the same command in a relationship chart.
+//
+// Windows' cmdNow is Animate(iAnimNow, 0), and Animate() chooses which
+// chart the present moment lands in: the twin slot for a comparison or a
+// transit chart, the transit slot (and is.JDp with it) for a progression,
+// the main chart only otherwise. This port called FInputData() and
+// RecastAndRedrawQt(), which assigns ciMain unconditionally -- so on a
+// transit chart the menu item REPLACED THE NATAL CHART with today
+// instead of moving the transits to it, and the chart the user had been
+// looking at was gone.
+//
+// Both shapes, because the plain one always worked and a fix that broke
+// it would be worse than the bug.
 static void TestChartNowQt()
 {
   CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciCoreSav = ciCore;
@@ -4327,26 +4285,6 @@ static void TestChartNowQt()
 }
 
 
-// The credits box under "Reverse Background". Both GUIs paint the text
-// canvas in gi.kiOff, which gs.fInverse makes WHITE, and DisplayCredits()
-// draws its version line -- the only line in the box in kWhiteA -- white
-// on white. Windows picks kBlackA there instead; charts0.cpp does the
-// same for this build now.
-// The chart window's size limits, and the settings file that depends on
-// them.
-//
-// Windows clamps the window to 180..4096 in both axes with
-// WM_GETMINMAXINFO. This port had no limit at all, and with "Window
-// Resizes Chart" on -- the default -- the canvas size IS gs.xWin/gs.yWin.
-// "Save Program Settings" writes those as ":Xw <x> <y>", and NSwXw()
-// REFUSES anything outside 180..4096, which does not merely drop that one
-// line: the whole file is discarded, the settings before the bad line as
-// well as those after it. So a window dragged small, one Save, and every
-// saved setting is gone at the next launch.
-//
-// The second half of this group is that round trip end to end, because
-// the first half alone would pass on a build that kept gs.xWin valid and
-// still wrote something unreadable.
 // A text chart is as big as it prints, and that has nothing to do with the
 // window: is.cchColMax and is.cchRow come from the chart and from
 // us.fClip80/us.nScreenWidth. Drawn into a buffer the size of the window,
@@ -4434,22 +4372,6 @@ static void TestTextExtentQt()
 }
 
 
-// "Timed Exposure" (gs.fJetTrail, "-Xj"), which draws each chart over the
-// last so an animation leaves trails. Windows implements it by having
-// DrawClearScreen() return without erasing (xgeneral.cpp:639); this path
-// allocated a fresh buffer and filled it on every redraw, so that early
-// return had nothing left to protect and the menu item did nothing at all
-// on screen.
-//
-// It is invisible to every other net here on purpose: tools/graphics-
-// matrix.sh renders "-Xj" and inert_option_audit.py carries it on the
-// allowlist, with the reason that it "draws trails BETWEEN chart updates
-// -- animation only, not one render". Two renders are the smallest thing
-// that can see it.
-//
-// Strictly more ink, not a threshold: the second render adds whatever the
-// first drew and the second does not cover, so the counts cannot be equal
-// unless the buffer was cleared. Measured at 158,527 against 151,633.
 // Every graphics toggle in the menus has to move at least one SCREEN
 // render, or say here why it cannot.
 //
@@ -4804,6 +4726,22 @@ static void TestNullNamesQt()
 }
 
 
+// "Timed Exposure" (gs.fJetTrail, "-Xj"), which draws each chart over the
+// last so an animation leaves trails. Windows implements it by having
+// DrawClearScreen() return without erasing (xgeneral.cpp:639); this path
+// allocated a fresh buffer and filled it on every redraw, so that early
+// return had nothing left to protect and the menu item did nothing at all
+// on screen.
+//
+// It is invisible to every other net here on purpose: tools/graphics-
+// matrix.sh renders "-Xj" and inert_option_audit.py carries it on the
+// allowlist, with the reason that it "draws trails BETWEEN chart updates
+// -- animation only, not one render". Two renders are the smallest thing
+// that can see it.
+//
+// Strictly more ink, not a threshold: the second render adds whatever the
+// first drew and the second does not cover, so the counts cannot be equal
+// unless the buffer was cleared. Measured at 158,527 against 151,633.
 static void TestJetTrailQt()
 {
   flag fTrailSav = gs.fJetTrail, fGraphicsSav = us.fGraphics;
@@ -4844,6 +4782,21 @@ static void TestJetTrailQt()
 }
 
 
+// The chart window's size limits, and the settings file that depends on
+// them.
+//
+// Windows clamps the window to 180..4096 in both axes with
+// WM_GETMINMAXINFO. This port had no limit at all, and with "Window
+// Resizes Chart" on -- the default -- the canvas size IS gs.xWin/gs.yWin.
+// "Save Program Settings" writes those as ":Xw <x> <y>", and NSwXw()
+// REFUSES anything outside 180..4096, which does not merely drop that one
+// line: the whole file is discarded, the settings before the bad line as
+// well as those after it. So a window dragged small, one Save, and every
+// saved setting is gone at the next launch.
+//
+// The second half of this group is that round trip end to end, because
+// the first half alone would pass on a build that kept gs.xWin valid and
+// still wrote something unreadable.
 static void TestWindowSizeQt()
 {
   static CONST struct { int dx, dy; CONST char *szWhy; } rgt[] = {
@@ -4920,6 +4873,11 @@ static void TestWindowSizeQt()
 }
 
 
+// The credits box under "Reverse Background". Both GUIs paint the text
+// canvas in gi.kiOff, which gs.fInverse makes WHITE, and DisplayCredits()
+// draws its version line -- the only line in the box in kWhiteA -- white
+// on white. Windows picks kBlackA there instead; charts0.cpp does the
+// same for this build now.
 static void TestCreditColorsQt()
 {
   flag fInvSav = gs.fInverse, fGraphicsSav = us.fGraphics;
@@ -5245,6 +5203,15 @@ static void TestAtlasApplyQt()
 }
 
 
+// Animation: one switch, and only the switch moves it.
+//
+// Upstream stores the jump rate and the running state in the sign and
+// magnitude of one int, with gi.fPause a second stop on top, so any
+// control could start the chart moving by accident. This port has one
+// running state behind FAnimRunningQt()/SetAnimRunningQt(); these pin
+// down that only the two controls meant to touch it do.
+//
+// Deliberately not Windows' behaviour; see "Known divergences".
 static void TestAnimationStateQt()
 {
   int nAnimSav = gs.nAnim, nDirSav = gi.nDir;
@@ -5386,11 +5353,6 @@ static void TestAnimationStateQt()
   printf("  one switch starts and stops it; nothing else moves the chart\n");
 }
 
-// Windows dialogs act on a mnemonic letter pressed on its own -- "s"
-// ticks "&Sun" -- while Qt wants Alt held. Both builds read the same "&"
-// out of astrolog.rc, so only the routing differs, and on the restriction
-// grid of 52 checkboxes it decides whether the dialog can be used from
-// the keyboard at all.
 /*
 ******************************************************************************
 ** Menu check marks after a setting changes behind the menu's back.
@@ -5693,6 +5655,11 @@ static void TestOkSettlesQt()
 }
 
 
+// Windows dialogs act on a mnemonic letter pressed on its own -- "s"
+// ticks "&Sun" -- while Qt wants Alt held. Both builds read the same "&"
+// out of astrolog.rc, so only the routing differs, and on the restriction
+// grid of 52 checkboxes it decides whether the dialog can be used from
+// the keyboard at all.
 static void TestDialogMnemonicsQt()
 {
   Group("Dialog mnemonic keys");
@@ -5966,19 +5933,6 @@ static void TestMidpointGlyphQt()
 }
 
 
-// Pointing a slot at a different body drops the old body's glyph.
-//
-// -Ye does this (astrolog.cpp, now via SetObjGlyphNoneCore) and the two
-// Object Selections dialogs did not -- szDrawObject was referenced zero
-// times in either of them. So Chiron assigned to a slot from the command
-// line drew its name, while the same assignment made through the dialog
-// kept the old body's glyph, on a point the position list, the sidebar
-// and the dialog itself all called Chiron. The same fault as the midpoint
-// glyph above, in the path nobody had looked at.
-//
-// Row 1 (Cupido) on purpose: nrvate.as redefines row 0 already, so that
-// slot's glyph is the sentinel before the test starts and there would be
-// nothing to observe. This one still holds its own glyph.
 // Force one custom-object slot to its COMPILED default: no user
 // definition, and both glyph pointers back at the shared constant rather
 // than a clone. Three groups need that state and none of them can assume
@@ -6016,6 +5970,19 @@ static void ResetCustomSlotQt(int iobj)
 }
 
 
+// Pointing a slot at a different body drops the old body's glyph.
+//
+// -Ye does this (astrolog.cpp, now via SetObjGlyphNoneCore) and the two
+// Object Selections dialogs did not -- szDrawObject was referenced zero
+// times in either of them. So Chiron assigned to a slot from the command
+// line drew its name, while the same assignment made through the dialog
+// kept the old body's glyph, on a point the position list, the sidebar
+// and the dialog itself all called Chiron. The same fault as the midpoint
+// glyph above, in the path nobody had looked at.
+//
+// Row 1 (Cupido) on purpose: nrvate.as redefines row 0 already, so that
+// slot's glyph is the sentinel before the test starts and there would be
+// nothing to observe. This one still holds its own glyph.
 static void TestObjSelGlyphQt()
 {
   int iobj = uranLo + 1;
@@ -7228,24 +7195,6 @@ static void TestFillBoundsQt()
 }
 
 
-// One resource dialog, dlgRestrict, serves two commands: Object
-// Restrictions edits ignore[] and Transit Object Restrictions edits
-// ignore2[]. Three things therefore have to differ between them, and two
-// of the three were wrong here until 2026-09-07, both reported from daily
-// use rather than found by anything in this tree.
-//
-// The copy button is the visible one. astrolog.rc labels it "Copy &from
-// Transit Restriction Set", which is correct in the dialog that edits
-// ignore[] and exactly backwards in the one that edits ignore2[], where
-// it copies the standard set IN. Windows overrides the text at
-// WM_INITDIALOG; this build showed the resource's, so it announced the
-// opposite of what it did.
-//
-// Recall is the invisible one, and worse: it read ignoreMem, the
-// remembered STANDARD set, in the dialog that edits the transit set.
-// Nothing about the dialog looks wrong when it does that -- the boxes
-// just come back holding someone else's answer.
-
 // A renamed object shows the name the user gave it in the two restriction
 // dialogs, and a stock one keeps the label -- and the mnemonic -- that
 // astrolog.rc gave it.
@@ -7422,6 +7371,23 @@ static void TestRestrictObjectNamesQt()
 }
 
 
+// One resource dialog, dlgRestrict, serves two commands: Object
+// Restrictions edits ignore[] and Transit Object Restrictions edits
+// ignore2[]. Three things therefore have to differ between them, and two
+// of the three were wrong here until 2026-09-07, both reported from daily
+// use rather than found by anything in this tree.
+//
+// The copy button is the visible one. astrolog.rc labels it "Copy &from
+// Transit Restriction Set", which is correct in the dialog that edits
+// ignore[] and exactly backwards in the one that edits ignore2[], where
+// it copies the standard set IN. Windows overrides the text at
+// WM_INITDIALOG; this build showed the resource's, so it announced the
+// opposite of what it did.
+//
+// Recall is the invisible one, and worse: it read ignoreMem, the
+// remembered STANDARD set, in the dialog that edits the transit set.
+// Nothing about the dialog looks wrong when it does that -- the boxes
+// just come back holding someone else's answer.
 static void TestTransitRestrictQt()
 {
   byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
@@ -7496,6 +7462,19 @@ static void TestTransitRestrictQt()
 }
 
 
+// The Object Selections list is a table of {type, index, name} triples,
+// and its whole value is that {1, 7066} really is Nessus -- a digit wrong
+// there silently puts a different body in the chart. Resolve each entry
+// the way the -Ye handler does and compare against the name it claims.
+//
+// Only entries whose ephemeris data is present can be checked; the rest
+// come back szObjUnknown and are skipped, with the verified count printed
+// so this cannot degrade to nothing.
+//
+// Catches a number changed to ANOTHER REAL BODY, which is the dangerous
+// case -- the dialog offering "Sedna" and charting Eris. Does not catch
+// one that resolves to nothing, which is indistinguishable from a missing
+// file here and announces itself as "???" when the user picks it.
 static void TestObjSelTableQt()
 {
   char szName[cchSzDef];
@@ -7644,22 +7623,6 @@ static void TestObjSelParseQt()
 }
 
 
-// Forced object positions have to survive being written to a settings file
-// and read back. FOutputSettings() had no "-F"/"-Fm" section at all, so
-// File / Save Program Settings silently dropped every forced position --
-// including ones set by hand in a user's own astrolog.as, which is how it
-// was found. The write loop covers every object rather than any narrower
-// range on purpose: a forced position can sit on anything from 0 to cObj,
-// and this asserts an out-of-range one is not lost, since that is the
-// failure that would destroy someone's configuration rather than annoy
-// them. Remove the io.cpp block and the first two checks here fail.
-// Two bugs in shared upstream code, neither of them Qt specific -- both
-// files have no "ifdef QT" in them at all -- and both of the kind that
-// produce a plausible number rather than an obvious failure.
-// A GUI casts the same relationship chart repeatedly; the console builds
-// cast once and exit. charts2.cpp was written for the latter and only
-// excepted WIN, so this build took the console path while behaving like a
-// GUI -- see plan item 39.
 static QString s_strCombo;
 static QString s_strComboWin;
 
@@ -7746,9 +7709,6 @@ static void TestChartInfoTimeQt()
 }
 
 
-// Windows leaves an ephemeris out of this list when the user has switched
-// it off; see plan item 41. The maintainer's own settings file sets both
-// restrictions, so this is the list they actually get.
 static int s_cRowList;
 static QString s_strRow0;
 
@@ -7776,15 +7736,6 @@ static void FilterChartListQt()
 }
 
 
-// Windows' DlgList narrows the chart list by AstroExpression as well as by
-// name and location; this one did not. See plan item 42.
-// Windows fires the redraw notification hook at the end of its redraw;
-// the X11 path fires it from a block that excludes both GUI builds, so
-// this one never did. See plan item 43.
-// The accelerator column is drawn from astrolog.rc's own text, not from
-// Qt's rendering of the key sequence; see plan item 44. Every label in the
-// generated table has to still name a real menu item, or the column
-// silently goes missing for it.
 // Evaluate an AstroExpression and return what it left in @z.
 static int NExpEvalQt(CONST char *sz)
 {
@@ -7833,6 +7784,10 @@ static void TestExpressionFunctionsQt()
 }
 
 
+// The accelerator column is drawn from astrolog.rc's own text, not from
+// Qt's rendering of the key sequence; see plan item 44. Every label in the
+// generated table has to still name a real menu item, or the column
+// silently goes missing for it.
 static void TestAccelTextQt()
 {
   int i, j, cFound = 0, cShown = 0, cWant = 0;
@@ -7890,6 +7845,9 @@ static void TestAccelTextQt()
 }
 
 
+// Windows fires the redraw notification hook at the end of its redraw;
+// the X11 path fires it from a block that excludes both GUI builds, so
+// this one never did. See plan item 43.
 static void TestExpressionHooksQt()
 {
   char *szSav = us.szExpDisp3;
@@ -7956,6 +7914,8 @@ static void TestExpressionHooksQt()
 }
 
 
+// Windows' DlgList narrows the chart list by AstroExpression as well as by
+// name and location; this one did not. See plan item 42.
 static void TestChartListFilterQt()
 {
   int cciSav, i;
@@ -8095,6 +8055,9 @@ static void TestChartListFilterQt()
 }
 
 
+// Windows leaves an ephemeris out of this list when the user has switched
+// it off; see plan item 41. The maintainer's own settings file sets both
+// restrictions, so this is the list they actually get.
 static void TestEphemerisListQt()
 {
   flag fNetSav = us.fNoNetwork, fOldSav = us.fNoOldCalc;
@@ -8126,6 +8089,10 @@ static void TestEphemerisListQt()
 }
 
 
+// A GUI casts the same relationship chart repeatedly; the console builds
+// cast once and exit. charts2.cpp was written for the latter and only
+// excepted WIN, so this build took the console path while behaving like a
+// GUI -- see plan item 39.
 static void TestRelationshipModeQt()
 {
   CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciSaveSav = ciSave, ciOrig;
@@ -8228,6 +8195,9 @@ static void TestRelationshipModeQt()
 }
 
 
+// Two bugs in shared upstream code, neither of them Qt specific -- both
+// files have no "ifdef QT" in them at all -- and both of the kind that
+// produce a plausible number rather than an obvious failure.
 static void TestSharedCoreFixesQt()
 {
   real rgforceSav[objMax], rMid;
@@ -9452,6 +9422,15 @@ static void TestRegistryQt()
 }
 
 
+// Forced object positions have to survive being written to a settings file
+// and read back. FOutputSettings() had no "-F"/"-Fm" section at all, so
+// File / Save Program Settings silently dropped every forced position --
+// including ones set by hand in a user's own astrolog.as, which is how it
+// was found. The write loop covers every object rather than any narrower
+// range on purpose: a forced position can sit on anything from 0 to cObj,
+// and this asserts an out-of-range one is not lost, since that is the
+// failure that would destroy someone's configuration rather than annoy
+// them. Remove the io.cpp block and the first two checks here fail.
 static void TestForcedPositionsQt()
 {
   real rgforceSav[objMax];
@@ -9730,7 +9709,6 @@ static void ProbeQt()
   printf("us.nHouseSystem=%d (%s)  fEphemFiles=%d\n",
     us.nHouseSystem, szSystem[us.nHouseSystem], us.fEphemFiles);
 }
-
 
 
 // ---- The numeric oracle ----
@@ -12390,9 +12368,6 @@ static void TestFileParsersQt()
 }
 
 
-// Work log item 115: item 114's crasher class -- a user-supplied string
-// formatted through a fixed-size line buffer -- pinned across the whole
-// text chart surface rather than just the two functions caught crashing.
 // The IBM line drawing divergence, in its own group and next to
 // TestLongStringsQt() because it shares that test's hazard: it calls
 // Action() to render a text chart to a file, which needs the chart
@@ -12546,6 +12521,10 @@ static void TestLineDrawingQt()
 }
 
 
+// Work log item 115: item 114's crasher class -- a user-supplied string
+// formatted through a fixed-size line buffer -- pinned across the whole
+// text chart surface rather than just the two functions caught crashing.
+//
 // Every mode in rgchartmode[] is rendered to a file with a 120-character
 // chart name and location in place; each one surviving with output is
 // the assertion, the way TestBadInputQt() treats a crash. This is the

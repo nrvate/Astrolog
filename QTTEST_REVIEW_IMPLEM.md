@@ -1164,3 +1164,76 @@ empty, and the two groups alone pass 5 and 12 again.
 **Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
 15's run. A heap copy in place of a literal changes nothing a run can see
 until something clones over it -- which is the point.
+
+### Plan item 17 -- the comment pass: displaced comment blocks moved to their functions
+
+**No code change, and proven so.** One commit that moves comments only.
+The review counted "about 30" displaced blocks; the move is **31**, because
+several of the review's entries were two or three headers for different
+functions run together with no separator between them -- the dark-mode and
+application-icon pair, the credits box and the window-size limits, forced
+positions with the shared-core bugs and relationship mode, three chart-list
+headers above `NExpEvalQt()`, and the Animation block with Clear Screen's
+under it. Each was split at the line where its own first sentence starts.
+
+**Found by text, not by line number.** Items 14 to 16 had inserted lines
+above most of these blocks, so the review's line numbers pointed into
+unrelated code by then -- a dump taken by number between items came back
+with code lines where comments should be. The move script
+(`$CLAUDE_JOB_DIR/tmp/move_comments.py`, not committed) names each block by
+its exact first and last line and each target by its exact signature, and
+stops if any of those matches other than once, if a block contains a
+non-comment line, or if two blocks overlap. A dry run resolved all 31
+before anything was written.
+
+**Checked after writing, three ways:**
+
+- **Every non-blank line is still there, and nothing else is:** the multiset
+  of non-blank lines before and after differs by exactly one added `//`, the
+  separator joining work log item 115's paragraph to the comment that
+  already sat above `TestLongStringsQt()`. So no code line moved, changed or
+  vanished; 14 blank lines went, each one of a pair a cut block left behind.
+- **Each block is where it belongs:** for all 31, walking down from the
+  block's first line through comment lines lands exactly on its target's
+  signature. 0 placement failures.
+- **It still compiles clean and behaves the same:** warning audit empty;
+  suite below.
+
+**Seven of the 31 were one run in reverse order** -- combo picks, field
+parse, orb grids, screen colours, notice, chart scroll, and key help (which
+was right) -- which is what a pass that reordered functions without their
+leading comments leaves, as the review guessed.
+
+**The blank-line side effect, checked.** The move collapses a run of blank
+lines to at most two, so no cut leaves a hole. That rule also tidied the
+two runs of three blank lines that were already in the file, away from any
+cut. Checked that the collapse did not go too far: no function's closing
+`}` is now followed directly by a comment or by the next function (0 before,
+0 after).
+
+**The duplicated paragraphs, in the same pass as the plan asks (H2, D1,
+E3).** Each was read in the current tree first:
+
+- **H2:** two consecutive paragraphs near the top both said the bundled
+  `ephem/` and the body list are one set. Merged into one that keeps the
+  first's facts (every `rgObjSel[]` row has its file, every asteroid file is
+  a row) and the second's point (a run against `ephem/` and one against
+  `/swe` assert the same number).
+- **D1:** the line "The generated git sha the About dialog shows; see
+  qtdialog.cpp." restated the long About comment directly above it, and is
+  gone. The review's structural fix -- move `DriveModalQt()` up and drop its
+  forward declaration -- is a code move, which a comment-only commit cannot
+  carry. **Not done here**; the forward declaration and its explanatory
+  comment stay.
+- **E3:** of two consecutive paragraphs both opening "A check that examined
+  nothing would pass too", the first was the draft of the second and is
+  gone.
+
+A line-by-line comparison before and after these three: 13 comment lines
+removed, 5 added, and **no non-comment line changed**. Warning audit empty.
+
+**Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
+16's run. That run used a binary built from the moved comments *before* the
+H2/D1/E3 edits; those three changed comment lines only (checked line by
+line above, and the file compiled clean after them), so the result stands
+for the committed source without a second 3-minute run.
