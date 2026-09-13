@@ -1391,3 +1391,110 @@ combined count, which would have read like a result for one.
 
 **Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
 18's run.
+
+### Plan item 20 -- structure: result statics, parallel arrays, the fixed 48, one verbose flag
+
+Five review findings in one plan item, one commit. The edit is a script
+(`$CLAUDE_JOB_DIR/tmp/item20.py`) with a dry-run mode; every replacement is
+confined to its own function and must match its expected count or nothing
+is written.
+
+**N1 -- the seven result statics become locals.** Each carried a value out
+of a `DriveModalQt()` lambda to the test that asked for it. `DriveModalQt()`
+takes a `std::function`, so a capturing lambda does the same job without a
+file-scope global. Surveyed first, because three of the seven were read
+*outside* the helper that set them:
+
+| Static | Now |
+|---|---|
+| `s_cTickQt` (timers) | a local captured by reference in both nested lambdas |
+| `s_strTimField` | a local in `StrChartInfoTimeQt()`, returned |
+| `s_strCombo` | a local in `StrEphemListQt()`, returned |
+| `s_strComboWin` | read by `TestEphemerisListQt()`: `StrEphemListQt(QString *pstrWin)` |
+| `s_cRowList`, `s_strRow0` | read by `TestChartListFilterQt()`: `FilterChartListQt(int *, QString *)` |
+| `s_strLookupQt` | read by one of seven callers: `DriveObjSelQt()` became `StrDriveObjSelQt()`, returning it |
+
+`TestChartListFilterQt()` also reused `s_cRowList` inside an unrelated
+lambda of its own; that use got its own captured local. The review's
+exceptions stay static, as it said they must: `s_cRangeMsgQt` and
+`s_cAtlasRow` are read by C callbacks.
+
+**R2 and N3 -- parallel arrays become one table each.** `TestChartRenderQt()`
+(mode and name, 23 rows), `GraphicsChartCaptureQt()` (mode and file, 24) and
+`TextChartCaptureQt()` (menu action and file, 8). The script pairs the two
+initialiser lists only after checking they have the same length, which is
+exactly the hazard R2 named -- nothing compiled checked it before.
+
+**N5 -- the fixed 48.** Three groups snapshotted the chart-mode flags into
+`flag rgfSav[48]` and guarded it with `cchartmode <= 48`; two others already
+used `QVector<flag>(cchartmode)`. All five use the vector now. The guard in
+`TestChartModeTableQt()`'s count check goes; `TestLineDrawingQt()`'s two
+`&& j < 48` bounds go; and `TestLongStringsQt()`'s `Check(cchartmode <= 48,
+...)` goes entirely, because with a vector it can only pass. **The suite
+count moves by one here, on purpose.**
+
+**N12 -- one verbose flag.** Four `getenv("ASTROLOG_QT_TEST_VERBOSE")` calls,
+two of them inside per-item loops, read one `static flag s_fVerboseQt` set
+once when the table starts, next to the canary's flag.
+
+**F13.** `s_nAnimStartQt` is `static`. Checked first that nothing outside
+`qttest.cpp` names it.
+
+**Gotchas in the script, both caught by its dry run before anything was
+written:**
+
+- The table-builder took each array's name from the last word of its
+  declaration, and for `CONST char *rgszMode[]` that word is `*rgszMode[]`.
+  The `*` went into a regular expression and Python refused it. Every
+  replacement before that point had already matched its expected count in
+  memory; nothing reached the file.
+- Adding `static ` pushed `s_nAnimStartQt`'s trailing comment past 79
+  columns. The dry run lists new over-long lines; the comment moved above
+  the declaration.
+
+**Why this one needs more than the suite.** `GraphicsChartCaptureQt()` and
+`TextChartCaptureQt()` run only under `QTGRAPHDIR`/`QTTEXTDIR`, so the suite
+never executes them. Their proof is a comparison of the file names each
+writes, captured with the binary from *before* the change -- which is why
+the verification chain takes its baseline first, before it rebuilds.
+
+**Compared against a baseline taken on the pre-change binary.**
+
+- The six groups whose values now travel through locals, alone, before and
+  after: `chart-render` 125, `ephemeris-list` 8, `chart-list` 11,
+  `info-time` 5, `timers` 2, `objsel-dialog` 18 -- identical.
+- `GraphicsChartCaptureQt()`: 24 PNG names before, the same 24 after.
+- Verbose mode: the `[timers: 2 assertions]` line identical with
+  `ASTROLOG_QT_TEST_VERBOSE=1`, and no such line without it.
+
+**Falsified: the checks read the new paths, not something left over.**
+
+```
+FilterChartListQt() leaves *pcRow unset:
+  FAIL  an expression that keeps everything keeps 3 (got -1)
+  FAIL  an expression that keeps nothing empties the list (got -1 rows, "")
+StrDriveObjSelQt() returns an empty string:
+  FAIL  Lookup Names turns that number into a name ("")
+```
+
+Both reversed by exact string (`grep -c` for the marker reads 0), and the six
+groups back at their baseline counts.
+
+**Gotcha: the text capture comparison proved nothing, and looked like it
+passed.** The baseline and the after run both reported "0 text", and the
+names "matched" -- 0 against 0. The runner checks `QTGRAPHDIR` first and
+*returns*, so with both variables set in one run, `TextChartCaptureQt()` is
+never reached. The graphics half is sound; the text half needed its own run.
+The pre-change binary was gone by then, but the old file-name list is known
+exactly from the source before the edit (radix, wheel, grid, calendar,
+influence, ephemeris, aspectlist, midpointlist), so a `QTTEXTDIR`-only run is
+checked against that literal list instead.
+
+**The text capture, on its own run** (`QTTEXTDIR` only): "capturing 8 text
+charts", no chart reported NOT FOUND, "nothing rendered" or FAILED, and the
+files written are exactly the pre-change list -- aspectlist, calendar,
+ephemeris, grid, influence, midpointlist, radix, wheel.
+
+**Suite.** `PASS: 5185 passed, 0 failed` -- one fewer than 5186, the
+`Check(cchartmode <= 48, ...)` that N5 removed -- and canary lines identical
+to item 19's run. **Every count after this item is against 5185.**

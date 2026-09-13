@@ -122,6 +122,9 @@ extern int CaccelTestQt();
 
 
 static int s_cPass = 0, s_cFail = 0;
+// ASTROLOG_QT_TEST_VERBOSE, read once when the table starts rather than
+// once per rendered item inside the loops that print it.
+static flag s_fVerboseQt = fFalse;
 static CONST char *s_szGroup = "";
 static QString s_strModal;
 
@@ -145,7 +148,7 @@ static int s_cPassGroup = 0;
 
 static void GroupEnd(void)
 {
-  if (s_szGroup[0] != chNull && getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL)
+  if (s_szGroup[0] != chNull && s_fVerboseQt)
     printf("  [%s: %d assertions]\n", s_szGroup, s_cPass - s_cPassGroup);
   s_cPassGroup = s_cPass;
 }
@@ -648,38 +651,37 @@ static void TestChartRenderQt()
   // else. They passed "rendered blank" here only because that check
   // compared against the border. The menu-firing group asserts they switch
   // to text mode, which is the invariant that matters for them.
-  CONST int rgnMode[] = { gWheel, gHouse, gGrid, gMidpoint,
-    gHorizon, gOrbit, gSector, gCalendar, gDisposit, gEsoteric,
-    gAstroGraph, gEphemeris, gRising, gLocal, gMoons,
-    gTraTraGra, gTraNatGra, gSphere, gWorldMap, gGlobe, gPolar,
-    gTelescope, gBiorhythm };
-  CONST char *rgszMode[] = { "Wheel", "House", "Grid", "Midpoint",
-    "Horizon", "Orbit", "Sector", "Calendar", "Influence", "Esoteric",
-    "AstroGraph", "Ephemeris", "Rising", "Local", "Moons",
-    "TraTraGra", "TraNatGra", "Sphere", "WorldMap", "Globe", "Polar",
-    "Telescope", "Biorhythm" };
-  int i, cmode = (int)(sizeof(rgnMode) / sizeof(int)), nSav = gi.nMode;
+  CONST struct { int n; CONST char *sz; } rgmode[] = {
+    {gWheel, "Wheel"}, {gHouse, "House"}, {gGrid, "Grid"},
+    {gMidpoint, "Midpoint"}, {gHorizon, "Horizon"}, {gOrbit, "Orbit"},
+    {gSector, "Sector"}, {gCalendar, "Calendar"}, {gDisposit, "Influence"},
+    {gEsoteric, "Esoteric"}, {gAstroGraph, "AstroGraph"},
+    {gEphemeris, "Ephemeris"}, {gRising, "Rising"}, {gLocal, "Local"},
+    {gMoons, "Moons"}, {gTraTraGra, "TraTraGra"}, {gTraNatGra, "TraNatGra"},
+    {gSphere, "Sphere"}, {gWorldMap, "WorldMap"}, {gGlobe, "Globe"},
+    {gPolar, "Polar"}, {gTelescope, "Telescope"}, {gBiorhythm, "Biorhythm"}};
+  int i, cmode = (int)(sizeof(rgmode) / sizeof(*rgmode)), nSav = gi.nMode;
   // Named before drawing, flushed, so a crash says which one.
   long cpix;
 
   Group("Chart rendering");
   for (i = 0; i < cmode; i++) {
-    if (getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL) {
-      printf("    rendering: %s\n", rgszMode[i]); fflush(stdout);
+    if (s_fVerboseQt) {
+      printf("    rendering: %s\n", rgmode[i].sz); fflush(stdout);
     }
-    SetChartModeQt(rgnMode[i]);
-    Check(gi.nMode == rgnMode[i], "%s: gi.nMode did not take", rgszMode[i]);
-    Check(gi.qim != NULL, "%s: no image was rendered", rgszMode[i]);
+    SetChartModeQt(rgmode[i].n);
+    Check(gi.nMode == rgmode[i].n, "%s: gi.nMode did not take", rgmode[i].sz);
+    Check(gi.qim != NULL, "%s: no image was rendered", rgmode[i].sz);
     if (gi.qim == NULL)
       continue;
     Check(gi.qim->width() == gs.xWin && gi.qim->height() == gs.yWin,
-      "%s: image is %dx%d, chart size is %dx%d", rgszMode[i],
+      "%s: image is %dx%d, chart size is %dx%d", rgmode[i].sz,
       gi.qim->width(), gi.qim->height(), gs.xWin, gs.yWin);
     // A chart that drew nothing leaves the fill colour everywhere inside
     // its border.
     cpix = CpixDrawnQt(16);
     Check(cpix > 20, "%s: rendered blank (%ld samples inside the border "
-      "differ from the background)", rgszMode[i], cpix);
+      "differ from the background)", rgmode[i].sz, cpix);
   }
   SetChartModeQt(nSav);
 
@@ -877,14 +879,14 @@ static void TestAllMenuActionsQt()
     // Name each item before firing it, flushed, so that when one takes
     // the process down the log says which. Set ASTROLOG_QT_TEST_VERBOSE
     // to see it; a clean run doesn't need the noise.
-    if (getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL) {
+    if (s_fVerboseQt) {
       printf("    firing: %s\n", str.toLocal8Bit().constData());
       fflush(stdout);
     }
     rgpa[i]->trigger();
     if (!s_strModal.isEmpty()) {
       cmodal++;
-      if (getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL)
+      if (s_fVerboseQt)
         printf("      modal: %s -> %s\n", str.toLocal8Bit().constData(),
           s_strModal.toLocal8Bit().constData());
     }
@@ -2820,7 +2822,8 @@ static void TestSharedSymbolBoxesQt()
 }
 
 
-int s_nAnimStartQt = 0;   // gs.nAnim as the program started, before any test
+// gs.nAnim as the program started, before any test.
+static int s_nAnimStartQt = 0;
 
 
 static long CpixDifferQt()
@@ -6813,7 +6816,6 @@ static void TestObjDefSetQt()
 }
 
 
-static int s_cTickQt = 0;
 
 // Does a queued timer fire while a modal dialog is up, and while a second
 // modal is up inside the first? Three of the tests here depend on it.
@@ -6824,11 +6826,12 @@ static void TestTimerSanityQt()
   // A shot armed before a modal has to fire during its exec(), and one
   // armed inside that has to fire during a second modal opened from it.
   // Every dialog test here depends on both, and neither is obvious.
-  s_cTickQt = 0;
-  DriveModalQt(ShowCalcDialogQt, [](QWidget *pw) {
+  int cTick = 0;
+
+  DriveModalQt(ShowCalcDialogQt, [&cTick](QWidget *pw) {
     QTimer t;
     t.setSingleShot(fTrue);
-    QObject::connect(&t, &QTimer::timeout, []() { s_cTickQt++; });
+    QObject::connect(&t, &QTimer::timeout, [&cTick]() { cTick++; });
     t.start(50 * nScaleTest);
     QMessageBox box(QMessageBox::Warning, "T", "nested", QMessageBox::Ok);
     QTimer tClose;
@@ -6840,20 +6843,20 @@ static void TestTimerSanityQt()
     tClose.stop();
     pw->close();
   });
-  Check(s_cTickQt == 1,
+  Check(cTick == 1,
     "a queued shot fires during a modal nested inside a modal (%d)",
-    s_cTickQt);
+    cTick);
   printf("  queued timers fire at both nesting levels\n");
 }
 
 
-static QString s_strLookupQt;
 
 // Open Object Selections, do one thing to the first row, press OK.
-static void DriveObjSelQt(int nWhat)
+static QString StrDriveObjSelQt(int nWhat)
 {
-  s_strLookupQt = QString();
-  DriveModalQt(ShowObjectSelDialogQt, [nWhat](QWidget *pw) {
+  QString strLookup;
+
+  DriveModalQt(ShowObjectSelDialogQt, [nWhat, &strLookup](QWidget *pw) {
     QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
     QList<QLineEdit *> rgle, rgall = pw->findChildren<QLineEdit *>();
     QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
@@ -6879,7 +6882,7 @@ static void DriveObjSelQt(int nWhat)
           rgb[b]->click();
           break;
         }
-      s_strLookupQt = rgle[0]->text();
+      strLookup = rgle[0]->text();
       break;
     case 2:                                   // a name the user typed
       rgcb[0]->setEditText("Chiron");
@@ -6919,6 +6922,7 @@ static void DriveObjSelQt(int nWhat)
       }
     pw->close();
   });
+  return strLookup;
 }
 
 
@@ -6941,7 +6945,7 @@ static void TestObjSelDialogQt()
 
   Group("Object Selections dialog");
 
-  DriveObjSelQt(0);
+  StrDriveObjSelQt(0);
   Check(rgObjSwiss[iobj - custLo] == 2060,
     "picking a body from the list sets it (obj %d)",
     rgObjSwiss[iobj - custLo]);
@@ -6991,17 +6995,18 @@ static void TestObjSelDialogQt()
     us.fNoWrite = fNoWriteSav;
   }
 
-  DriveObjSelQt(1);
+  QString strLookup = StrDriveObjSelQt(1);
+
   Check(rgObjSwiss[iobj - custLo] == 52872,
     "a raw ephemeris number sets the body (obj %d)",
     rgObjSwiss[iobj - custLo]);
-  Check(s_strLookupQt == QString("Okyrhoe"),
+  Check(strLookup == QString("Okyrhoe"),
     "Lookup Names turns that number into a name (\"%s\")",
-    s_strLookupQt.toLocal8Bit().constData());
+    strLookup.toLocal8Bit().constData());
   Check(FEqSz(szObjDisp[iobj], "Okyrhoe"), "which is what gets saved (%s)",
     szObjDisp[iobj]);
 
-  DriveObjSelQt(2);
+  StrDriveObjSelQt(2);
   Check(FEqSz(szObjDisp[iobj], "AstrologSuiteName"),
     "a name the user typed is kept, not overwritten (%s)", szObjDisp[iobj]);
 
@@ -7010,7 +7015,7 @@ static void TestObjSelDialogQt()
   int nRow5Sav = rgObjSwiss[uranLo + 5 - custLo], nRow4, nRow6;
   nRow4 = rgObjSwiss[uranLo + 4 - custLo];
   nRow6 = rgObjSwiss[uranLo + 6 - custLo];
-  DriveObjSelQt(3);
+  StrDriveObjSelQt(3);
   Check(rgObjSwiss[uranLo + 5 - custLo] == 2060,
     "a row other than the first sets that row (obj %d)",
     rgObjSwiss[uranLo + 5 - custLo]);
@@ -7023,7 +7028,7 @@ static void TestObjSelDialogQt()
   // A midpoint has to rename the slot too, or it sits at the midpoint
   // under the name of the body it used to be.
   ClearB((pbyte)force.rgn, sizeof(force));
-  DriveObjSelQt(4);
+  StrDriveObjSelQt(4);
   Check(force[iobj] == ForceMid(oSun, oMoo),
     "a midpoint typed into the box is stored (%.1f)", force[iobj]);
   Check(FEqSz(szObjDisp[iobj], "Sun/Moo"),
@@ -7031,7 +7036,7 @@ static void TestObjSelDialogQt()
 
   // Cancel discards everything.
   int nBeforeCancel = rgObjSwiss[iobj - custLo];
-  DriveObjSelQt(5);
+  StrDriveObjSelQt(5);
   Check(rgObjSwiss[iobj - custLo] == nBeforeCancel,
     "Cancel discards what was typed (%d)", rgObjSwiss[iobj - custLo]);
 
@@ -7044,7 +7049,7 @@ static void TestObjSelDialogQt()
   // the two, for an assertion that adds nothing: that the settings
   // survive an unparseable entry is the part that matters, and it fails
   // if the guard is removed.
-  DriveObjSelQt(6);
+  StrDriveObjSelQt(6);
   Check(rgObjSwiss[iobj - custLo] == nBeforeCancel,
     "an unparseable definition applies nothing (%d)",
     rgObjSwiss[iobj - custLo]);
@@ -7616,43 +7621,43 @@ static void TestObjSelParseQt()
 }
 
 
-static QString s_strCombo;
-static QString s_strComboWin;
 
 // Capture the ephemeris dropdown's contents from the Calculation Settings
 // dialog, then close it. The dialog blocks in exec(), so as everywhere
 // else here the inspection has to be queued before it opens.
-static QString StrEphemListQt()
+static QString StrEphemListQt(QString *pstrWin)
 {
-  s_strCombo = QString();
-  s_strComboWin = QString();
-  DriveModalQt(ShowCalcDialogQt, [](QWidget *pw) {
-    s_strComboWin = pw->windowTitle();
+  QString strCombo, strWin;
+
+  DriveModalQt(ShowCalcDialogQt, [&strCombo, &strWin](QWidget *pw) {
+    strWin = pw->windowTitle();
     QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
     for (int i = 0; i < rg.size(); i++) {
       QStringList items;
       for (int j = 0; j < rg[i]->count(); j++)
         items << rg[i]->itemText(j);
       if (items.join(",").contains("Swiss")) {
-        s_strCombo = items.join(" | ");
+        strCombo = items.join(" | ");
         break;
       }
     }
     pw->close();
   });
-  return s_strCombo;
+  if (pstrWin != NULL)
+    *pstrWin = strWin;
+  return strCombo;
 }
 
 
 // The time as the Set Chart Info dialog puts it in its own field, which
 // is a different question from what SzTim() returns: the field is what
 // the user reads.
-static QString s_strTimField;
 
 static QString StrChartInfoTimeQt()
 {
-  s_strTimField = QString();
-  DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
+  QString strTim;
+
+  DriveModalQt(ShowChartInfoDialogQt, [&strTim](QWidget *pw) {
     QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
     for (int i = 0; i < rg.size(); i++) {
       QStringList items;
@@ -7662,13 +7667,13 @@ static QString StrChartInfoTimeQt()
       // same way the ephemeris list above is: these controls are built
       // from the resource and carry no object name.
       if (items.contains("Midnight")) {
-        s_strTimField = rg[i]->currentText();
+        strTim = rg[i]->currentText();
         break;
       }
     }
     pw->close();
   });
-  return s_strTimField;
+  return strTim;
 }
 
 
@@ -7702,15 +7707,13 @@ static void TestChartInfoTimeQt()
 }
 
 
-static int s_cRowList;
-static QString s_strRow0;
 
 // Open the chart list, press Filter, and report what the list holds.
-static void FilterChartListQt()
+static void FilterChartListQt(int *pcRow, QString *pstrRow0)
 {
-  s_cRowList = -1;
-  s_strRow0 = QString();
-  DriveModalQt(ShowChartListDialogQt, [](QWidget *pw) {
+  *pcRow = -1;
+  *pstrRow0 = QString();
+  DriveModalQt(ShowChartListDialogQt, [pcRow, pstrRow0](QWidget *pw) {
     QList<QPushButton *> rgb = pw->findChildren<QPushButton *>();
     for (int b = 0; b < rgb.size(); b++)
       if (rgb[b]->text().contains("Filter") &&
@@ -7720,9 +7723,9 @@ static void FilterChartListQt()
       }
     QList<QListWidget *> rgl = pw->findChildren<QListWidget *>();
     if (rgl.size() > 0) {
-      s_cRowList = rgl[0]->count();
-      if (s_cRowList > 0)
-        s_strRow0 = rgl[0]->item(0)->text();
+      *pcRow = rgl[0]->count();
+      if (*pcRow > 0)
+        *pstrRow0 = rgl[0]->item(0)->text();
     }
     pw->close();
   });
@@ -7911,7 +7914,8 @@ static void TestExpressionHooksQt()
 // name and location; this one did not. See plan item 42.
 static void TestChartListFilterQt()
 {
-  int cciSav, i;
+  int cciSav, i, cRow;
+  QString strRow0;
   char *szSav = us.szExpListF;
   ChartListPinQt pinList;
 
@@ -7940,15 +7944,15 @@ static void TestChartListFilterQt()
     is.cci);
 
   us.szExpListF = SzClone("1");     // keep everything
-  FilterChartListQt();
-  Check(s_cRowList == 3, "an expression that keeps everything keeps 3 (got %d)",
-    s_cRowList);
+  FilterChartListQt(&cRow, &strRow0);
+  Check(cRow == 3, "an expression that keeps everything keeps 3 (got %d)",
+    cRow);
 
   us.szExpListF = SzClone("0");     // keep nothing
-  FilterChartListQt();
-  Check(s_cRowList == 1 && s_strRow0.contains("No charts"),
+  FilterChartListQt(&cRow, &strRow0);
+  Check(cRow == 1 && strRow0.contains("No charts"),
     "an expression that keeps nothing empties the list (got %d rows, \"%s\")",
-    s_cRowList, s_strRow0.toLocal8Bit().constData());
+    cRow, strRow0.toLocal8Bit().constData());
 
   us.szExpListF = szSav;
 
@@ -7997,7 +8001,7 @@ static void TestChartListFilterQt()
       FAppendCIList(&ciCore);
     }
     cciWas = is.cci;
-    DriveModalQt(ShowChartListDialogQt, [](QWidget *pw) {
+    DriveModalQt(ShowChartListDialogQt, [&cRow](QWidget *pw) {
       QListWidget *pl = pw->findChild<QListWidget *>("dlLi");
       if (pl != NULL)
         pl->setCurrentRow(1);
@@ -8007,16 +8011,16 @@ static void TestChartListFilterQt()
           break;
         }
       // Read the selection back out before the dialog goes away.
-      s_cRowList = pl != NULL ? pl->currentRow() : -99;
+      cRow = pl != NULL ? pl->currentRow() : -99;
       if (FClickButtonQt(pw, "Cancel"))
         return;
       pw->close();
     });
     Check(is.cci == cciWas - 1, "Delete Chart removed one (%d of %d)",
       is.cci, cciWas);
-    Check(s_cRowList == 1,
+    Check(cRow == 1,
       "and the highlight stayed on row 1 rather than being lost (%d)",
-      s_cRowList);
+      cRow);
   }
 
   // A chart with NO name at all, which the three list filters used to
@@ -8054,14 +8058,14 @@ static void TestChartListFilterQt()
 static void TestEphemerisListQt()
 {
   flag fNetSav = us.fNoNetwork, fOldSav = us.fNoOldCalc;
-  QString str;
+  QString str, strWin;
 
   Group("Ephemeris list");
 
   us.fNoNetwork = us.fNoOldCalc = fTrue;
-  str = StrEphemListQt();
+  str = StrEphemListQt(&strWin);
   Check(!str.isEmpty(), "the ephemeris list was found at all (modal seen: \"%s\")",
-    s_strComboWin.toLocal8Bit().constData());
+    strWin.toLocal8Bit().constData());
   Check(!str.contains("Web"),
     "no web query offered when web queries are off: %s",
     str.toLocal8Bit().constData());
@@ -8071,7 +8075,7 @@ static void TestEphemerisListQt()
   Check(str.contains("Swiss"), "Swiss Ephemeris is still offered");
 
   us.fNoNetwork = us.fNoOldCalc = fFalse;
-  str = StrEphemListQt();
+  str = StrEphemListQt(NULL);
   Check(str.contains("Web"), "the web query is offered when allowed");
   Check(str.contains("Matrix"), "Matrix is offered when allowed");
   Check(!str.contains("Placalc"),
@@ -9541,17 +9545,17 @@ static void TestForcedPositionsQt()
 //   QTGRAPHDIR=out/qtg ./run-qt-tests.sh
 static void GraphicsChartCaptureQt(CONST char *szDir)
 {
-  CONST int rgnMode[] = { gWheel, gHouse, gGrid, gMidpoint,
-    gHorizon, gOrbit, gSector, gCalendar, gDisposit, gEsoteric,
-    gAstroGraph, gEphemeris, gRising, gLocal, gMoons, gExo,
-    gTraTraGra, gTraNatGra, gSphere, gWorldMap, gGlobe, gPolar,
-    gTelescope, gBiorhythm };
-  CONST char *rgszFile[] = { "wheel", "house", "grid", "midpoint",
-    "horizon", "orbit", "sector", "calendar", "influence", "esoteric",
-    "astrograph", "ephemeris", "rising", "local", "moons", "exo",
-    "tratragra", "tranatgra", "sphere", "worldmap", "globe", "polar",
-    "telescope", "biorhythm" };
-  int i, cmode = (int)(sizeof(rgnMode) / sizeof(int)), nSav = gi.nMode;
+  CONST struct { int n; CONST char *szFile; } rgmode[] = {
+    {gWheel, "wheel"}, {gHouse, "house"}, {gGrid, "grid"},
+    {gMidpoint, "midpoint"}, {gHorizon, "horizon"}, {gOrbit, "orbit"},
+    {gSector, "sector"}, {gCalendar, "calendar"}, {gDisposit, "influence"},
+    {gEsoteric, "esoteric"}, {gAstroGraph, "astrograph"},
+    {gEphemeris, "ephemeris"}, {gRising, "rising"}, {gLocal, "local"},
+    {gMoons, "moons"}, {gExo, "exo"}, {gTraTraGra, "tratragra"},
+    {gTraNatGra, "tranatgra"}, {gSphere, "sphere"}, {gWorldMap, "worldmap"},
+    {gGlobe, "globe"}, {gPolar, "polar"}, {gTelescope, "telescope"},
+    {gBiorhythm, "biorhythm"}};
+  int i, cmode = (int)(sizeof(rgmode) / sizeof(*rgmode)), nSav = gi.nMode;
   flag fSav = us.fGraphics, fPopupSav;
   QElapsedTimer tim;
   qint64 msDraw, msSave;
@@ -9573,17 +9577,17 @@ static void GraphicsChartCaptureQt(CONST char *szDir)
   us.fGraphics = fTrue;
   for (i = 0; i < cmode; i++) {
     tim.start();
-    SetChartModeQt(rgnMode[i]);
+    SetChartModeQt(rgmode[i].n);
     msDraw = tim.elapsed();
     if (gi.qim == NULL) {
-      printf("  %-12s nothing rendered\n", rgszFile[i]);
+      printf("  %-12s nothing rendered\n", rgmode[i].szFile);
       continue;
     }
     tim.start();
-    QString str = QString("%1/%2.png").arg(szDir).arg(rgszFile[i]);
+    QString str = QString("%1/%2.png").arg(szDir).arg(rgmode[i].szFile);
     flag fOk = gi.qim->save(str);
     msSave = tim.elapsed();
-    printf("  %-12s draw %5lldms  save %4lldms  %s\n", rgszFile[i],
+    printf("  %-12s draw %5lldms  save %4lldms  %s\n", rgmode[i].szFile,
       (long long)msDraw, (long long)msSave, fOk ? "" : "WRITE FAILED");
     fflush(stdout);
   }
@@ -9595,12 +9599,12 @@ static void GraphicsChartCaptureQt(CONST char *szDir)
 
 static void TextChartCaptureQt(CONST char *szDir)
 {
-  CONST char *rgszAct[] = { "Standard Radi&x", "House &Wheel",
-    "Aspect Midpoint &Grid", "&Calendar", "Inf&luence", "&Ephemeris",
-    "&Aspect List", "&Midpoint List" };
-  CONST char *rgszFile[] = { "radix", "wheel", "grid", "calendar",
-    "influence", "ephemeris", "aspectlist", "midpointlist" };
-  int i, cchart = (int)(sizeof(rgszAct) / sizeof(char *));
+  CONST struct { CONST char * szAct; CONST char *szFile; } rgchart[] = {
+    {"Standard Radi&x", "radix"}, {"House &Wheel", "wheel"},
+    {"Aspect Midpoint &Grid", "grid"}, {"&Calendar", "calendar"},
+    {"Inf&luence", "influence"}, {"&Ephemeris", "ephemeris"},
+    {"&Aspect List", "aspectlist"}, {"&Midpoint List", "midpointlist"}};
+  int i, cchart = (int)(sizeof(rgchart) / sizeof(*rgchart));
 
   // The chart tools/text-chart-capture.sh leaves the Windows build on:
   // Nov 19 1971 11:01am, ST Zone 8W, no name or location string (a name
@@ -9636,20 +9640,20 @@ static void TextChartCaptureQt(CONST char *szDir)
   }
   printf("capturing %d text charts to %s\n", cchart, szDir);
   for (i = 0; i < cchart; i++) {
-    QAction *pa = PaFindActionTestQt(rgszAct[i]);
+    QAction *pa = PaFindActionTestQt(rgchart[i].szAct);
     if (pa == NULL) {
-      printf("  %-24s NOT FOUND\n", rgszAct[i]);
+      printf("  %-24s NOT FOUND\n", rgchart[i].szAct);
       continue;
     }
     pa->trigger();
     us.fGraphics = fFalse;      // deterministic, unlike toggling "v"
     RedrawQt();
     if (gi.qim == NULL) {
-      printf("  %-24s nothing rendered\n", rgszAct[i]);
+      printf("  %-24s nothing rendered\n", rgchart[i].szAct);
       continue;
     }
-    QString str = QString("%1/%2.png").arg(szDir).arg(rgszFile[i]);
-    printf("  %s%s\n", rgszFile[i],
+    QString str = QString("%1/%2.png").arg(szDir).arg(rgchart[i].szFile);
+    printf("  %s%s\n", rgchart[i].szFile,
       gi.qim->save(str) ? "" : "   FAILED TO WRITE");
     fflush(stdout);
   }
@@ -11890,11 +11894,11 @@ static void TestChartModeTableQt()
     {gObscure,    &us.fSwitchRare},    {gKeystroke,  &us.fKeyGraph},
     {gCredit,     &us.fCredit}};
   CONST int cExpected = (int)(sizeof(rgExpected) / sizeof(CHARTMODE));
-  flag rgfSav[48];
+  QVector<flag> rgfSav(cchartmode);
   int i, j, nRelSav = us.nRel;
 
   Group("Chart mode table");
-  Check(cchartmode == cExpected && cchartmode <= 48,
+  Check(cchartmode == cExpected,
     "the table carries all %d chart modes (%d)", cExpected, cchartmode);
   Check(cchartmodeDetect == 16,
     "the first 16 rows are the detection rows (%d)", cchartmodeDetect);
@@ -12341,7 +12345,8 @@ static void TestLineDrawingQt()
 {
   CI ciMainSav = ciMain, ciCoreSav = ciCore;
   int nFontSav = gs.nFontTxt, j;
-  flag rgfSav[48], fPopupSav = FNoPopupQt();
+  QVector<flag> rgfSav(cchartmode);
+  flag fPopupSav = FNoPopupQt();
   byte rgbIgnSav[oNorm+1];
   static char szFont0[65536];
   long cbFont0 = 0;
@@ -12408,7 +12413,7 @@ static void TestLineDrawingQt()
       ignore[j] = (j > oCore);
     AdjustRestrictions();
 
-    for (j = 0; j < cchartmode && j < 48; j++) {
+    for (j = 0; j < cchartmode; j++) {
       rgfSav[j] = *rgchartmode[j].pf;
       *rgchartmode[j].pf = fFalse;
     }
@@ -12463,7 +12468,7 @@ static void TestLineDrawingQt()
       "differing -- that is the #ifdef WIN line-drawing behaviour, which "
       "this port must not copy", cb, cbFont0, cRule);
     gs.nFontTxt = nFontSav;
-    for (j = 0; j < cchartmode && j < 48; j++)
+    for (j = 0; j < cchartmode; j++)
       *rgchartmode[j].pf = rgfSav[j];
     for (j = 0; j <= oNorm; j++)
       ignore[j] = rgbIgnSav[j];
@@ -12490,13 +12495,13 @@ static void TestLongStringsQt()
   char szOut[cchSzMax];
   FILE *fileSav;
   CI ciMainSav = ciMain, ciCoreSav = ciCore;
-  flag rgfSav[48], fPopupSav = FNoPopupQt();
+  QVector<flag> rgfSav(cchartmode);
+  flag fPopupSav = FNoPopupQt();
   long cb;
   int i, j;
   FILE *file;
 
   Group("Long strings through every text chart");
-  Check(cchartmode <= 48, "the flag snapshot holds the table (%d)", cchartmode);
   // A text search mode can warn (missing ephemeris range, say), and a
   // warning is a modal box nothing will click.
   SetNoPopupQt(fTrue);
@@ -13521,6 +13526,7 @@ static int NRunQtTestTableQt()
   // run down with it.
   FILE *fileSStart = is.S;
   s_fCanaryQt = getenv("ASTROLOG_QT_TEST_CANARY") != NULL;
+  s_fVerboseQt = getenv("ASTROLOG_QT_TEST_VERBOSE") != NULL;
   for (i = 0; i < cqttestQt; i++) {
     if (!FTestWantedQt(szFilter, rgqttestQt[i].szName))
       continue;
