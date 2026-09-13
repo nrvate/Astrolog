@@ -8344,7 +8344,10 @@ static void TestSharedCoreFixesQt()
     // separate process in run-qt-tests.sh's startup diagnostics instead,
     // which is where a crash reachable from the command line belongs.
 
-    gs.szSidebar = szHuge;
+    // A heap copy, for the reason the ~A assignment in TestAspectDashQt()
+    // gives: -YXt FCloneSz()es gs.szSidebar, and a static array is not a
+    // buffer it may free (K7).
+    gs.szSidebar = SzClone(szHuge);
     gs.nDecaFill = 6;
     SetChartModeQt(gWheel);
     Check(gi.qim != NULL,
@@ -12821,7 +12824,13 @@ static void TestAspectDashQt()
     ignore2[i] = fFalse;
   }
   us.fExpOff = fFalse;
-  us.szExpAsp = (char *)"=z 90";
+  // SzClone(), not a string literal: ~A FCloneSz()es this field, which
+  // frees the old buffer when the new text does not fit, and freeing a
+  // literal is a crash with no useful backtrace (review finding K7). Not
+  // freed on restore: SzClone() takes its allocation off the counters and
+  // DeallocateP() would count it off again -- the file's other SzClone()
+  // assignments are left the same way.
+  us.szExpAsp = SzClone("=z 90");
   gs.nDashMax = -10;
   gs.fAlt = fFalse;
 

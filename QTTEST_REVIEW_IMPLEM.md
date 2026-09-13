@@ -1100,3 +1100,67 @@ the `chart-export` rewrite line is gone.
   a stale settings/chart output name, pointing at a file that no longer
   exists, that the Windows oracle never sets. The likely fix is for the
   copy path to leave `is.szFileOut` alone, as Windows does.
+
+### Plan item 16 -- K7: a string literal and a static array installed into settings that get freed
+
+**What K7 said.** `TestAspectDashQt()` assigns a string literal to
+`us.szExpAsp` and `TestSharedCoreFixesQt()` assigns a static array to
+`gs.szSidebar`; both put the old pointer back, and "only `-YXt` ever
+`FCloneSz()`es the sidebar, so nothing frees a literal today". The plan:
+`SzClone()` instead, "freeing on restore".
+
+**Checked before relying on it.** Both fields are cloned by a switch --
+`-YXt` for the sidebar (switch.cpp) and `~A` for the aspect expression,
+through the AstroExpression switch table -- and `FCloneSz()` frees the old
+buffer whenever the new text does not fit. So the hazard is one switch in
+the window away from a crash, for both, not only the sidebar.
+
+**Falsified before the change, and it crashes rather than fails.** The
+sabotage is exactly what those two switches do: an `FCloneSz()` of a longer
+value straight after each install -- a padded `"=z 90"` into `us.szExpAsp`,
+4000 characters into `gs.szSidebar`. Each group alone:
+
+```
+== aspect-dash rc=134   munmap_chunk(): invalid pointer
+== shared-core rc=134   free(): invalid pointer
+```
+
+Both abort the process -- glibc refusing to free a literal and a static
+array -- which is why CLAUDE.md calls this "a crash with no useful
+backtrace": the fault is in the suite, and it surfaces in allocator code.
+
+**The change, and the part of the plan it does not follow.** Both installs
+use `SzClone()`, so the field always holds a heap buffer `FCloneSz()` may
+free. They are **not** freed on restore, against the plan's wording, for
+a reason read out of `general.cpp`: `PAllocate()` adds each allocation to
+`is.cAlloc`, `is.cAllocTotal` and `is.cbAllocSize`; `SzClone()` subtracts
+all three again, so its strings are invisible to the leak counters by
+design; `DeallocateP()` subtracts from `is.cAlloc` a second time. Freeing
+an `SzClone()` string therefore drives the live-allocation count below the
+truth. The file's other `SzClone()` assignments (`us.szExpDisp3`,
+`us.szExpMenu`, `us.szExpListF`) are not freed either; these follow them.
+
+**Checked: the aborts did not leave core files in the tree.** `timeout`
+reported "the monitored command dumped core" for both, which reads like a
+`core` file next to the binary, waiting to be staged. It is not: this
+machine's `/proc/sys/kernel/core_pattern` pipes dumps to
+`systemd-coredump`, so they went to the system's coredump store, and
+`git status` showed only the two files being edited. On a machine whose
+pattern is a plain `core`, a sabotage run like this one would leave one in
+the worktree.
+
+**After the change, with the same sabotage still in:**
+
+```
+== aspect-dash rc=0   PASS: 5 passed, 0 failed
+== shared-core rc=0   PASS: 12 passed, 0 failed
+```
+
+The switch-shaped clone now frees a heap buffer, as it may. The sabotage
+lines were then removed by exact string (`grep -c "K7 SABOTAGE"` reads 0,
+and the diff is back to the intended 11 lines), the warning audit is
+empty, and the two groups alone pass 5 and 12 again.
+
+**Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
+15's run. A heap copy in place of a literal changes nothing a run can see
+until something clones over it -- which is the point.
