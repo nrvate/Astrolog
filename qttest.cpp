@@ -12795,14 +12795,16 @@ static void TestSortStarQt()
   CI ciMainSav = ciMain, ciCoreSav = ciCore;
   flag fGraphSav = us.fGraphics, fInterpSav = us.fInterpret;
   flag fArabicSav = us.fArabic, fFortune = fFalse;
+  flag fOrbitSav = us.fOrbit, fObjectSav = us.fObject;
+  flag fHaveInfoSav = is.fHaveInfo;
   int nSortSav = us.nStarSort, nPartSav = us.nArabicParts;
+  int nArabicSortSav = us.nArabicSort;
   int nRelSav = us.nRel;
   char szFile[cchSzMax], szCmd[cchSzLine], szLine[cchSzLine], *pch;
   QByteArray baDir = QDir::tempPath().toLocal8Bit();
   CONST char *szDir = baDir.constData();
-  int i, iSir, iAch, cLin;
+  int iSir, iAch, cLin;
   real rMag;
-  char szAbbrev[8], szSignFull[24];
 
   Group("Star sort outputs");
   CopyRgb((pbyte)ignore.rgn, (pbyte)rgbIgnSav.rgn, sizeof(ignore.rgn));
@@ -12894,7 +12896,6 @@ static void TestSortStarQt()
   is.S = fileSav;
   fFortune = fFalse;
   fileT = fopen(szFile, "r");
-  fileT = fopen(szFile, "r");
   if (fileT != NULL) {
     while (fgets(szLine, cchSzLine, fileT) != NULL) {
       if (strstr(szLine, "Part of Fortune in Capricorn and 3rd House") !=
@@ -12950,8 +12951,21 @@ static void TestSortStarQt()
   // the next cast's !us.fCusp branch re-restricted the cusps. Recompute
   // the derived flags from the restored set.
   RedoRestrictions();
+  // The legs' switches toggle or set these, and nothing above puts them
+  // back: -Un sets the star sort, -S toggles the orbit chart, -HO toggles
+  // the object table (not the orbit data, -HS), -Pn sets the PARTS sort
+  // and toggles -P, -qb sets fHaveInfo. Measured by diffing every US/GS
+  // scalar across the group: all of these but fHaveInfo, which is not in
+  // that table, came back changed.
   us.fGraphics = fGraphSav;
   us.fInterpret = fInterpSav;
+  us.fArabic = fArabicSav;
+  us.fOrbit = fOrbitSav;
+  us.fObject = fObjectSav;
+  us.nStarSort = nSortSav;
+  us.nArabicSort = nArabicSortSav;
+  us.nArabicParts = nPartSav;
+  is.fHaveInfo = fHaveInfoSav;
   us.nRel = nRelSav;
   ciMain = ciMainSav; ciCore = ciCoreSav;
   is.S = fileSav;
