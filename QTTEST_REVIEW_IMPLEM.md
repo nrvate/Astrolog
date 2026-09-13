@@ -337,3 +337,41 @@ sixth digit".
   therefore counts just the set-up checks: the writer wrote a file, and
   the file loads back. A small count from either one is what "every field
   survived" looks like, not a sign the sweep was skipped.
+
+### Plan item 4 -- K1: `forced-positions` renames macro 1 and leaves it
+
+**The change.** `TestForcedPositionsQt()` saves macro 1's name into a
+`QByteArray` before its `-WM 1 "AstrologQtSuiteMacro"` and replays it at
+the end as `-WM 1 "<saved>"` -- the idiom `TestInterfaceSettingsQt()`
+already used for the same experiment.
+
+**Gotcha: the restore gets its own `cchSzLine` buffer.** The group's
+`szLine` is `cchSzMax` (255), and the restore command is the saved name
+plus eight characters, so a long macro name read back from a user's
+settings would have been cut off -- and with it the closing quote, which
+CLAUDE.md records as the way a truncated string setting turns its tail
+into a switch.
+
+**Not resolved: a name containing a double quote.** The replay quotes the
+saved name as it is, so a macro named `say "hi"` comes back mangled.
+`TestInterfaceSettingsQt()`'s restore has the same limit, and the writer
+(`FOutputSettings()`) is the thing that decides how such a name is
+spelled in a file, so the right fix is to restore through whatever escape
+the writer uses, not to invent one here. Neither `nrvate.as` nor the
+bundled settings carry such a name.
+
+**Falsified with the canary, alone.** Before the change,
+`ASTROLOG_QT_TESTS=forced-positions` with the canary on reports
+`macro name 1 "" -> "AstrologQtSuiteMacro"` (9 passed). In the full suite
+the same line read `"Default Planets" -> ...`. No earlier group touches
+that slot (the canary baseline has no other macro line); the name is the
+maintainer's own, from `nrvate.as`, which `run-qt-tests.sh` loads with
+`-i` when given no arguments. So in the run the hard rule prescribes, the
+leak replaced a real user setting for the rest of the process, not an
+empty slot.
+
+**After the change.** The same solo run: `[canary: 0 changes left behind
+by 0 groups]`, still 9 passed. The full suite, canary on: `PASS: 5198
+passed, 0 failed`, and its canary lines against item 3b's run (the
+clock-driven `gs.rRot`/`gs.rTilt` filtered, and the stderr fragments
+stripped) lose exactly one line -- the macro name -- and gain none.

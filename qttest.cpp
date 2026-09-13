@@ -9321,6 +9321,8 @@ static void TestForcedPositionsQt()
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite, fFoundMacro = fFalse;
   char szPath[cchSzMax], szLine[cchSzMax], szMid[cchSzMax], szPos[cchSzMax];
+  char szMacro[cchSzLine];
+  QByteArray baMacroSav(SzSet(SzMacroNameQt(0)));
   FILE *file;
 
   Group("Forced object positions");
@@ -9410,6 +9412,13 @@ static void TestForcedPositionsQt()
   is.szFileOut = szFileOutSav;
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
+  // Macro 1's name back as the group found it, the way
+  // TestInterfaceSettingsQt() does: every later group that saves settings
+  // wrote "AstrologQtSuiteMacro" into its file, and the Macro menu showed
+  // it for the rest of the run. Its own buffer, because szLine above is
+  // cchSzMax and a saved name can be longer than the command around it.
+  sprintf2(S(szMacro), "-WM 1 \"%s\"", baMacroSav.constData());
+  FProcessCommandLine(szMacro);
   printf("  forced positions round trip through a settings file\n");
 }
 
