@@ -626,8 +626,10 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 // The width a "%s" conversion into a cchSzMax buffer carries in a scanf
 // format string: scanf cannot take the destination's size as an argument
 // the way the S()/sprintf2() idiom does, so the bound is baked into the
-// format itself.
-#define cchSzScanMax (cchSzMax-1)
+// format itself. STRINGIZE stringifies the TOKEN, not the evaluated
+// expression, so the number is written out here and cchSzMax is the
+// constant it must agree with.
+#define cchSzScanMax 254
 #define STRINGIZE2(x) #x
 #define STRINGIZE(x) STRINGIZE2(x)
 #define szFmtScanTok "%" STRINGIZE(cchSzScanMax) "s"
