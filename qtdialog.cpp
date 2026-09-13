@@ -1318,14 +1318,22 @@ void ShowOpenWorldDialogQt()
 // before that process exits -- here it can be called many times in one
 // running session, so save/restore all three unconditionally regardless,
 // and re-render the on-screen chart afterward.
+//
+// fFileOut says whether the name also becomes is.szFileOut, the settings
+// and chart output name. Windows' Save and Export dialog sets both
+// (wdialog.cpp, after GetSaveFileName()); its Copy Chart case sets only
+// gi.szFileOut, since the name is a temporary file that is deleted as soon
+// as its contents are on the clipboard. Setting both from Copy left that
+// deleted file's name behind as this build's output name.
 
-static flag FExportChartQt(CONST char *szFile, int ft)
+static flag FExportChartQt(CONST char *szFile, int ft, flag fFileOut)
 {
   int xWinSave = gs.xWin, yWinSave = gs.yWin, nScaleSave = gs.nScale;
   flag fGraphicsSave = us.fGraphics;
   flag f;
 
-  FCloneSz(szFile, &is.szFileOut);
+  if (fFileOut)
+    FCloneSz(szFile, &is.szFileOut);
   FCloneSz(szFile, &gi.szFileOut);
   gs.ft = ft;
   us.fGraphics = fTrue;
@@ -1349,7 +1357,7 @@ static flag FExportChartQt(CONST char *szFile, int ft)
 // exists in qtdriver.cpp.
 flag FExportChartToFileTestQt(CONST char *szFile, int ft)
 {
-  return FExportChartQt(szFile, ft);
+  return FExportChartQt(szFile, ft, fTrue);
 }
 #endif
 
@@ -1366,7 +1374,7 @@ static void ShowExportGraphicsDialogQt(CONST char *szTitle,
   qs = StrDefaultSuffixQt(qs, szExt != NULL ? szExt :
     (gs.chBmpMode != 'P' ? "bmp" : "png"));
   QByteArray ba = qs.toLocal8Bit();
-  if (!FExportChartQt(ba.constData(), ft))
+  if (!FExportChartQt(ba.constData(), ft, fTrue))
     QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
 }
 
@@ -1449,7 +1457,7 @@ static void CopyChartVectorQt(int ft, CONST char *szMime)
   char *szTemp = baTemp.data();
   tmp.close();
 
-  if (FExportChartQt(szTemp, ft)) {
+  if (FExportChartQt(szTemp, ft, fFalse)) {
     QFile file(szTemp);
     if (file.open(QIODevice::ReadOnly)) {
       QByteArray ba = file.readAll();
@@ -3853,6 +3861,10 @@ void ShowAboutDialogQt()
   }
   playout->addSpacing(8);
   QDialogButtonBox *pbuttons = new QDialogButtonBox(QDialogButtonBox::Ok);
+  // The id every resource dialog's OK carries as its object name (the
+  // dialog builder names each control after its id), so a caller finds this
+  // one the same way: by name, not by a label that can change.
+  pbuttons->button(QDialogButtonBox::Ok)->setObjectName("IDOK");
   playout->addWidget(pbuttons);
   QObject::connect(pbuttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   PrepareDialogQt(&dlg);

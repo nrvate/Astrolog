@@ -28,6 +28,8 @@ instead, which survives edits and still says where to look.
   tools/warning_audit.py --build console # just one
   tools/warning_audit.py --update        # rewrite the baseline
   tools/warning_audit.py --file io.cpp   # one file, seconds, no baseline
+  tools/warning_audit.py --cached        # the full gate, compiling only
+                                         # what changed since the last run
 
 Exit 0 when the report matches the baseline, 1 otherwise.
 
@@ -46,6 +48,7 @@ and 0 under mingw g++ 10.
 """
 
 import argparse
+import hashlib
 import os
 import re
 import subprocess
@@ -174,6 +177,126 @@ def short_func(sig):
 def mask(msg):
     """Numbers move when a buffer is resized; the shape does not."""
     return re.sub(r'\d+', 'N', msg)
+
+
+# --cached: the same report, compiling only what changed.
+#
+# The full audit is five clean builds, because a compiler says nothing about a
+# file it does not compile: an up-to-date object is silence, not a clean bill.
+# So a cache cannot keep objects alone -- it has to keep what the compiler SAID
+# when it made each one. Three pieces:
+#
+#   Objects only, never linked, into a directory of their own outside the
+#   tree (WARNING_AUDIT_CACHE, default ~/.cache/astrolog-warning-audit). No
+#   binary here is touched, "make clean" cannot reach it, and a session
+#   building in the tree meanwhile is not disturbed.
+#
+#   A second makefile, read after the real one, whose pattern rule has the
+#   same target and prerequisites and so REPLACES the real rule -- GNU make's
+#   rule for identical pattern rules. Its recipe is the real recipe with the
+#   compiler's output kept in "<object>.warn". Every makefile here compiles
+#   with a literal g++ or $(CXX) that no command-line variable could wrap, so
+#   the rule is the only place to stand.
+#
+#   A key over everything that changes what the compiler says and that make
+#   does not track: the flags as make expands them ($(QT_CFLAGS) included),
+#   the makefile and Makefile.srcs themselves (Swiss's -Wno-* exemption lives
+#   there), and the compiler's --version. A changed key is a fresh directory.
+#   Header edits need nothing extra: -MMD -MP go back into the flags -- the
+#   audit's own flags replace the makefiles', which carry them -- and make's
+#   own dependency files decide what recompiles.
+#
+# The report is every listed object's .warn, parsed exactly as the full
+# audit parses a build's output -- per file, which is also why the full
+# audit's -j4 interleaving never mattered. An object with no .warn stops the
+# run: if the replacement rule ever stopped replacing, the real rule would
+# build silently and the report would read clean, which is the one failure
+# this must not have.
+CACHE_ROOT = os.environ.get('WARNING_AUDIT_CACHE', os.path.join(
+    os.path.expanduser('~'), '.cache', 'astrolog-warning-audit'))
+
+RULE_LINUX = ('$(OBJDIR)/%.o: %.cpp | $(OBJDIR)\n'
+              '\tg++ $(CPPFLAGS) -c -o $@ $< >$@.warn 2>&1; '
+              's=$$?; cat $@.warn; exit $$s\n')
+RULE_WIN = ('$(ODIR)/%.o: %.cpp | $(ODIR)\n'
+            '\t$(CXX) $(CFLAGS) -c $< -o $@ >$@.warn 2>&1; '
+            's=$$?; cat $@.warn; exit $$s\n')
+
+
+def build_spec(name):
+    """(makefile, flag variable, flags, env, object list var, dir var, cxx)."""
+    if name == 'qt6':
+        makefile, var, flags = QT6_BUILD
+        env = qt6_env()
+    elif name == 'qt6-test':
+        makefile, var, flags = QT6_TEST_BUILD
+        env = qt6_env()
+    else:
+        makefile, var, flags = BUILDS[name]
+        env = None
+    win = makefile in ('Makefile.win', 'Makefile.wcli')
+    return (makefile, var, flags, env, 'OBJ' if win else 'OBJS',
+            'ODIR' if win else 'OBJDIR',
+            'x86_64-w64-mingw32-g++' if win else 'g++')
+
+
+def make_echo(makefile, env, expr, extra=()):
+    """What make expands expr to, for this makefile."""
+    p = subprocess.run(['make', '--no-print-directory', '-f', makefile]
+                       + list(extra) + ['--eval=warnaudit:;@echo %s' % expr,
+                                        'warnaudit'],
+                       cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                       stderr=subprocess.DEVNULL, text=True)
+    return p.stdout.strip()
+
+
+def cached_build(name):
+    """Like run_build(), from the cache. Returns (output, failed)."""
+    makefile, var, flags, env, objvar, dirvar, cxx = build_spec(name)
+    flags = flags + ' -MMD -MP'
+    h = hashlib.sha256()
+    # The rule is in the key too: a changed rule must start a fresh
+    # directory, or the old .warn files would be read as the new rule's.
+    h.update(('%s\0%s\0%s\0%s%s\0' % (name, var,
+                                      make_echo(makefile, env, flags),
+                                      RULE_LINUX, RULE_WIN)).encode())
+    for f in (makefile, 'Makefile.srcs'):
+        with open(os.path.join(ROOT, f), 'rb') as fp:
+            h.update(fp.read())
+    h.update(subprocess.run([cxx, '--version'], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL).stdout)
+    key = h.hexdigest()[:16]
+    cdir = os.path.join(CACHE_ROOT, '%s-%s' % (name, key))
+    os.makedirs(cdir, exist_ok=True)
+    # Older keys for this build are dead weight; "qt" must not take
+    # "qt-test" or "qt6" with it, so the pattern is exact.
+    for d in os.listdir(CACHE_ROOT):
+        if (re.fullmatch(re.escape(name) + r'-[0-9a-f]{16}', d)
+                and d != os.path.basename(cdir)):
+            subprocess.run(['rm', '-rf', os.path.join(CACHE_ROOT, d)])
+    rule = os.path.join(cdir, 'rule.mk')
+    with open(rule, 'w') as f:
+        f.write(RULE_WIN if objvar == 'OBJ' else RULE_LINUX)
+    dirarg = '%s=%s' % (dirvar, cdir)
+    objs = make_echo(makefile, env, '$(%s)' % objvar, [dirarg]).split()
+    if not objs:
+        return 'no object list from %s' % makefile, True
+    p = subprocess.run(['make', '--no-print-directory', '-f', makefile,
+                        '-f', rule, JOBS, '%s=%s' % (var, flags), dirarg]
+                       + objs, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT, text=True, errors='replace')
+    if p.returncode != 0 or RE_ERROR.search(p.stdout):
+        return p.stdout, True
+    parts = []
+    for o in objs:
+        try:
+            with open(o + '.warn', errors='replace') as f:
+                parts.append(f.read())
+        except FileNotFoundError:
+            return ('%s has no %s.warn: the cache rule did not replace '
+                    'the makefile rule, so this build said nothing this '
+                    'audit could read\n' % (o, o)), True
+    return ''.join(parts), False
 
 
 def run_build(name, clean=True):
@@ -355,6 +478,10 @@ def main():
                     help='build only the Qt5 twins and gate on the Qt6 '
                          'ledger; for a runner that has Qt6 but not the '
                          'compiler tools/warnings.txt describes')
+    ap.add_argument('--cached', action='store_true',
+                    help='the full gate, compiling only what changed since '
+                         'the last --cached run; objects and what the '
+                         'compiler said about each are kept outside the tree')
     ap.add_argument('--no-clean', action='store_true',
                     help='reuse existing objects (partial report; for '
                          'iterating, never for a baseline)')
@@ -378,6 +505,11 @@ def main():
     if args.qt6_only:
         args.build = ['qt', 'qt-test']
     builds = args.build or sorted(BUILDS)
+    if args.update and args.cached:
+        sys.stderr.write(
+            'refusing to --update from --cached: the baseline is written from '
+            'a full clean build, which is what --cached is measured against\n')
+        return 1
     if args.update and args.build:
         sys.stderr.write(
             'refusing to --update from a subset: the baseline covers every '
@@ -387,7 +519,10 @@ def main():
     counts = {}
     for name in builds:
         sys.stderr.write('building %s ...\n' % name)
-        output, failed = run_build(name, clean=not args.no_clean)
+        if args.cached:
+            output, failed = cached_build(name)
+        else:
+            output, failed = run_build(name, clean=not args.no_clean)
         if failed:
             sys.stderr.write(
                 '\n%s FAILED TO BUILD -- audit aborted.\n'
@@ -421,7 +556,8 @@ def main():
                              'so a missing Qt6 is a failure here rather than '
                              'the skip it is in a full run.\n' % QT6_PKGCONFIG)
             return 2
-        return audit_qt6(args.update, counts, clean=not args.no_clean)
+        return audit_qt6(args.update, counts, clean=not args.no_clean,
+                         cached=args.cached)
 
     if args.build:
         # Not a gate. The first column is the set of builds that agree on
@@ -461,9 +597,10 @@ def main():
         print('  tools/warning_audit.py --update')
         rc = 1
 
-    return audit_qt6(args.update, counts, clean=not args.no_clean) or rc
+    return audit_qt6(args.update, counts, clean=not args.no_clean,
+                     cached=args.cached) or rc
 
-def audit_qt6(update, base_counts, clean=True):
+def audit_qt6(update, base_counts, clean=True, cached=False):
     """The Qt6 build against its own ledger. Zero when there is no Qt6.
 
     Only what Qt6 warns about and Qt5 does not. The shared core produces
@@ -483,7 +620,10 @@ def audit_qt6(update, base_counts, clean=True):
     counts = {}
     for name, twin in (('qt6', 'qt'), ('qt6-test', 'qt-test')):
         sys.stderr.write('building %s ...\n' % name)
-        output, failed = run_build(name, clean=clean)
+        if cached:
+            output, failed = cached_build(name)
+        else:
+            output, failed = run_build(name, clean=clean)
         if failed:
             sys.stderr.write('\n%s FAILED TO BUILD -- audit aborted.\n' % name)
             for line in output.splitlines():

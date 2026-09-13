@@ -682,15 +682,26 @@ tools/warning_audit.py               # all five builds clean with -Wall,
                                      # line is a warning to fix, not to
                                      # record; the vendored Swiss sources
                                      # are exempted in Makefile.srcs
-                                     # instead. About 70 seconds, not the
-                                     # six minutes this said before
-                                     # anyone timed it. Plus
+                                     # instead. About 100 seconds with
+                                     # the Qt6 legs, not the six minutes
+                                     # this said before anyone timed it.
+                                     # Plus
                                      # the two Qt6 builds, where there is
                                      # a Qt6, against warnings-qt6.txt --
                                      # which holds only what Qt6 warns
                                      # about and Qt5 does not, and is
                                      # empty. Skipped, not failed, on a
                                      # machine with no Qt6
+tools/warning_audit.py --cached      # the same gate, the same report,
+                                     # compiling only what changed since
+                                     # the last --cached run: 0.5 s with
+                                     # nothing changed. Objects and what
+                                     # the compiler said about each live in
+                                     # ~/.cache/astrolog-warning-audit, out
+                                     # of make clean's reach. Proven
+                                     # against the full audit with planted
+                                     # warnings (QTTEST_REVIEW_IMPLEM.md);
+                                     # --update still needs the full one
 tools/warning_audit.py --file io.cpp # one file, seconds, no baseline --
                                      # the loop to use while fixing; it
                                      # covers Qt6 too where present

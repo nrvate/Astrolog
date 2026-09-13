@@ -191,6 +191,50 @@ case $out in
     exit 1 ;;
 esac
 
+# The chart size a settings file asks for is the chart size a launch
+# draws. BeginQt() sized the whole WINDOW to it, menu bar included, and
+# the canvas then wrote the smaller viewport back into the setting -- so
+# every launch followed by "Save Program Settings" saved a chart 25
+# pixels shorter than the one it loaded. Only a fresh process has a
+# startup to look at.
+#
+# Nothing but "=X" beside the size. "_Xv0" after it looked like a way to
+# keep the sidebar out of the question and instead ended the process at
+# once with no output, and "_Xv0 =X" let the tree's square-charts default
+# turn 760 by 600 into 600 by 600 -- both measured, both read here as a
+# failure of the thing being asserted.
+echo
+echo "== Chart size at startup =="
+out=`ASTROLOG_QT_WINSIZE_PROBE=760x600 ASTROLOG_QT_TESTS=startup-chart-size \
+  $QTRUN "$BIN" -Yi1 ephem :Xw 760 600 =X <"$QTIN" 2>&1`
+case $out in
+  *"PASS: "[1-9]*" passed, 0 failed"*)
+    echo "  ok: a launch draws the chart size its settings ask for" ;;
+  *)
+    echo "  FAIL: \":Xw 760 600\" did not come up as a 760 by 600 chart."
+    echo "        The window has to be sized AROUND the chart, as"
+    echo "        ResizeWindowToChart() does on Windows."
+    echo "$out" | sed 's/^/        /'
+    exit 1 ;;
+esac
+
+# And with the chart's sidebar showing. The shared core added the sidebar's
+# width to gs.xWin on the way into the window, and in this port gs.xWin
+# already includes it -- so every launch followed by a save widened the chart
+# by 160 pixels. "=Xt =Xv0" is what makes a wheel show its sidebar; "_XQ"
+# keeps squaring out of the width.
+out=`ASTROLOG_QT_WINSIZE_PROBE=760x600 ASTROLOG_QT_TESTS=startup-chart-size \
+  $QTRUN "$BIN" -Yi1 ephem :Xw 760 600 =Xt =Xv0 _XQ =X <"$QTIN" 2>&1`
+case $out in
+  *"PASS: "[1-9]*" passed, 0 failed"*)
+    echo "  ok: and with the sidebar showing, the width is not grown by it" ;;
+  *)
+    echo "  FAIL: with the sidebar on, \":Xw 760 600\" did not come up 760 wide."
+    echo "        gs.xWin already includes the sidebar here; nothing may add it."
+    echo "$out" | sed 's/^/        /'
+    exit 1 ;;
+esac
+
 echo
 echo "== Ephemeris search path =="
 probe=/nonexistent-astrolog-ephem-probe

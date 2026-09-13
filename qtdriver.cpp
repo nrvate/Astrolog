@@ -2614,7 +2614,10 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
   QAction *paSquare = pmenu->addAction("S&quare Screen");
   ConnectMenuQt(paSquare, pwind, []() {
     SquareX(&gs.xWin, &gs.yWin, fTrue);
-    gi.qwind->resize(gs.xWin, gs.yWin);
+    // Around the chart, not to it: the latter left the menu bar's height
+    // out of a chart that was meant to be square (wdriver.cpp calls
+    // ResizeWindowToChart() here).
+    ResizeWindowToChartQt();
     us.fGraphics = fTrue;
     RedrawQt();
   });
@@ -3733,6 +3736,22 @@ void ApplyUiFontQt(void)
   CONST QWidgetList rgpw = QApplication::allWidgets();
   for (int i = 0; i < rgpw.size(); i++)
     QApplication::sendEvent(rgpw[i], &evt);
+
+  // The menu bar's height follows the font, and the window's does not, so
+  // the chart viewport took up the difference -- and with "Window Resizes
+  // Chart" on, the canvas writes the viewport back into gs.xWin/gs.yWin.
+  // A font changed and changed back left the chart a few pixels off, and
+  // Save Program Settings recorded that (review finding N-J). Windows has
+  // no interface font, so the chart size is what has to stay put: lay the
+  // window out now rather than on the next turn of the loop, while
+  // gs.xWin/gs.yWin still hold the chart's size, and fit the window
+  // around it. Not with the option off: then the chart's size is not
+  // chased, and the window is the user's to size.
+  if (gi.qwind != NULL && qi.fWindowChart) {
+    if (gi.qwind->layout() != NULL)
+      gi.qwind->layout()->activate();
+    ResizeWindowToChartQt();
+  }
 }
 
 
@@ -5989,6 +6008,18 @@ void BeginQt()
   if (qi.fWindPos)
     gi.qwind->move(qi.xWind, qi.yWind);
   gi.qwind->show();
+  // And then sized so the CHART is gs.xWin by gs.yWin, as Windows' startup
+  // does with ResizeWindowToChart(). The resize above sizes the window to
+  // it, which loses the menu bar's height from the chart; the canvas wrote
+  // the smaller viewport back into gs.yWin, and every launch followed by
+  // "Save Program Settings" saved a chart 25 pixels shorter. Measured
+  // after show() and not before: a hidden scroll area has had no resize
+  // event, so its viewport is not laid out and the chrome measures 122 by
+  // 25 rather than 0 by 25. Nothing adopts the viewport before
+  // InteractQt() sets qi.fReady, so the first size cannot leak into
+  // gs.yWin. A text chart keeps the plain resize; that function leaves
+  // it alone, as Windows' does.
+  ResizeWindowToChartQt();
   ScheduleUiFontReapplyQt();
 }
 

@@ -10879,6 +10879,60 @@ this is the note that explains the wall of dialogs.
     happen was reading the revert's own output before trusting a run
     built on it.
 
+256. **Every launch followed by "Save Program Settings" saved a chart 25
+    pixels shorter.** `BeginQt()` sized the whole window, menu bar
+    included, to `gs.xWin`/`gs.yWin`; with "Window Resizes Chart" on the
+    canvas wrote the smaller viewport back, and the next launch loaded
+    it. `:Xw 760 600` became 760 by 575, then 735 by 550, then 710 by 525
+    over three real launches (the width follows under `=XQ`); 29 pixels a
+    time under `nrvate.as`'s larger menu font. Square Screen had the same
+    bare resize and left a chart that was not square. Windows sizes the
+    window around the chart in both places (`ResizeWindowToChart()`,
+    `xscreen.cpp`), and the port already had `ResizeWindowToChartQt()`;
+    both now call it, startup **after** `show()` -- measured before it,
+    a hidden scroll area's viewport is not laid out and the chrome came
+    back 122 by 25. New group `startup-chart-size`, and a "Chart size at startup"
+    section in `run-qt-tests.sh` because startup is only visible from a
+    fresh process; both failed before the fix. Found while tracing it and
+    left open: the core adds the sidebar's width to `gs.xWin` on the way
+    into `BeginX()`, so under `nrvate.as` the width grows 80 a launch --
+    and measured under Wine, Windows grows it at launch as well, sidebar
+    on or off, so that half is left for the maintainer.
+    QTTEST_REVIEW_IMPLEM.md, second batch, N-C.
+
+257. **A vector Copy Chart left a deleted temporary file's name as the
+    output file name.** `CopyChartVectorQt()` exports to a
+    `QTemporaryFile` through `FExportChartQt()`, which cloned the name
+    into `is.szFileOut` as well as `gi.szFileOut`; the file is deleted as
+    soon as its contents are on the clipboard. Windows' copy case
+    (`cmdCopyBitmap` through `cmdCopyWire`) sets `gi.szFileOut` only,
+    while its Save and Export dialog sets both. `FExportChartQt()` takes
+    an `fFileOut` flag now: Export passes it, Copy does not. Found by the
+    suite's canary as a change `menu-actions` left behind. New group
+    `copy-chart-name` puts a marker in `is.szFileOut`, triggers Copy Chart
+    SVG, requires the SVG source on the clipboard so the copy provably ran,
+    and requires the marker back; it failed before the fix with the
+    temporary name.
+
+258. **The chart width grew by the sidebar at every launch followed by a
+    save, in both builds.** The fork made `:Xw` verbatim and removed
+    upstream's sidebar subtraction from the writer, but two startup adds
+    survived: Windows' `ResizeWindowToChart()` added the sidebar whenever
+    `gi.nMode == 0`, and the Qt path's `ISG` branch added it before
+    `BeginX()`. Both removed (the `ISG` add kept for X11); and the
+    squaring branch now sets the sidebar aside under Qt as under Windows,
+    which the Qt add had been hiding. Qt probe 920 -> 760 wide; Windows
+    under Wine 936 -> 776, the 160 exactly. QTTEST_REVIEW_IMPLEM.md.
+
+259. **Changing the interface font moved the chart size.** The menu bar's
+    height follows the font (15 to 42 px measured) and the window kept its
+    size, so the chart viewport -- and, with "Window Resizes Chart" on,
+    `gs.yWin` -- took the difference. `ApplyUiFontQt()` now lays the window
+    out at once and calls `ResizeWindowToChartQt()`, so the window resizes
+    instead. New group `ui-font-chart-size` failed 2 of 6 before, passes
+    after; the `layout()->activate()` is falsified as required.
+    QTTEST_REVIEW_IMPLEM.md.
+
 
 ## Features this fork adds to both builds
 

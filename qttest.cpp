@@ -170,21 +170,25 @@ static void Group(CONST char *sz)
   printf("\n== %s ==\n", sz);
 }
 
-// The first push button in pw whose label is exactly szText, or NULL. Every
-// dialog driver here used to write this loop out by hand -- 37 of them, in
-// seven shapes -- and two idioms for the same action sat in one function.
-static QPushButton *PpbButtonQt(QWidget *pw, CONST char *szText)
+// The push button in pw whose object name is szName -- "IDOK", "IDCANCEL" --
+// or NULL. Every dialog driver here used to write a loop out by hand, 37
+// of them in seven shapes, matching the button's LABEL.
+//
+// By name, not by label, because a label is display text: a mnemonic moves
+// in it ("&OK"), a theme or a translation can rewrite it, and Windows never
+// finds these buttons by what they say -- IDOK and IDCANCEL are the ids
+// every resource dialog in astrolog.rc gives them, and the dialog builder
+// makes each control's id its object name. The one dialog not built from
+// the resource, About, names its OK the same way.
+static QPushButton *PpbButtonQt(QWidget *pw, CONST char *szName)
 {
-  for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-    if (ppb->text() == szText)
-      return ppb;
-  return NULL;
+  return pw->findChild<QPushButton *>(QString::fromLatin1(szName));
 }
 
 // Click that button, and say whether there was one to click.
-static flag FClickButtonQt(QWidget *pw, CONST char *szText)
+static flag FClickButtonQt(QWidget *pw, CONST char *szName)
 {
-  QPushButton *ppb = PpbButtonQt(pw, szText);
+  QPushButton *ppb = PpbButtonQt(pw, szName);
 
   if (ppb == NULL)
     return fFalse;
@@ -484,10 +488,40 @@ static void TestDialogsQt()
 // this checkout produced. What a FAIL here means is that the label and
 // the macro disagree -- a wiring error, the only way this can break.
 
-// DriveModalQt() is defined further down in this file, beside the timers
-// it arms; the About group below predates it in reading order.
-static void DriveModalQt(void (*pfnOpen)(),
-  std::function<void(QWidget *)> fnOn);
+// Drive a modal dialog: wait for it to appear, run "fnOn" against it, and
+// make sure it is gone before returning.
+//
+// Stoppable QTimers rather than QTimer::singleShot: a queued close cannot
+// be cancelled, so one armed by a finished test goes on to close the
+// first modal a LATER test opens.
+static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
+{
+  QTimer tPoll, tNet;
+  flag fDone = fFalse;
+
+  QObject::connect(&tPoll, &QTimer::timeout, [&]() {
+    QWidget *pw;
+    if (fDone)
+      return;
+    pw = QApplication::activeModalWidget();
+    if (pw == NULL)
+      return;
+    fDone = fTrue;
+    fnOn(pw);
+  });
+  // If the dialog never appeared, or fnOn left it open, do not hang the
+  // run on it.
+  QObject::connect(&tNet, &QTimer::timeout, []() {
+    QWidget *pw = QApplication::activeModalWidget();
+    if (pw != NULL)
+      pw->close();
+  });
+  tPoll.start(80 * nScaleTest);
+  tNet.start(3000 * nScaleTest);
+  pfnOpen();
+  tPoll.stop();
+  tNet.stop();
+}
 
 // The generated git sha the About dialog shows; see qtdialog.cpp. A build
 // from a git archive has none, and the assertion below is relative to the
@@ -510,11 +544,8 @@ static void TestAboutVersionQt()
         strGot = plabel->text();
         break;
       }
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") {
-        ppb->click();
-        break;
-      }
+    if (!FClickButtonQt(pw, "IDOK"))
+      pw->close();
   });
   QString strExpected = QString("%1 version %2 (Qt)%3").arg(szAppName,
     szVersionCore,
@@ -657,8 +688,56 @@ static long CpixDrawnQt(int nMargin)
     RgbB(kvBack)), 4, nMargin);
 }
 
+// The chart-type flags as a group found them. SetChartModeQt(nModeSav) is
+// not a restore: it clears every flag in rgchartmode[] and sets the ONE
+// whose row maps to nModeSav -- so a group that found no flag set (which
+// is how a settings file leaves them) left one set, and a group that found
+// several left one (review findings N-B and N-D).
+//
+// The flags go back LAST, after the mode's redraw, and nothing draws after
+// them. A TEXT chart drawn with no chart-type flag set picks the listing
+// itself (charts1.cpp, "didn't indicate anything") and sets us.fListing --
+// so a restore that redrew after putting the flags back re-created the
+// leak in every group that ended in text mode, and a group that draws text
+// without ever calling SetChartModeQt() leaks the same way; those take
+// RestoreChartFlagsQt() alone.
+typedef struct {
+  QVector<flag> rgf;
+  flag fAtlasLook, fZoneChange;
+} CHARTFLAGSQT;
+
+static void SnapChartFlagsQt(CHARTFLAGSQT *pcf)
+{
+  int i;
+
+  pcf->rgf.resize(cchartmode);
+  for (i = 0; i < cchartmode; i++)
+    pcf->rgf[i] = *rgchartmode[i].pf;
+  pcf->fAtlasLook = us.fAtlasLook;
+  pcf->fZoneChange = us.fZoneChange;
+}
+
+static void RestoreChartFlagsQt(CONST CHARTFLAGSQT *pcf)
+{
+  int i;
+
+  for (i = 0; i < cchartmode; i++)
+    *rgchartmode[i].pf = pcf->rgf[i];
+  us.fAtlasLook = pcf->fAtlasLook;
+  us.fZoneChange = pcf->fZoneChange;
+}
+
+static void RestoreChartModeQt(int nMode, CONST CHARTFLAGSQT *pcf)
+{
+  SetChartModeQt(nMode);
+  RestoreChartFlagsQt(pcf);
+}
+
 static void TestChartRenderQt()
 {
+  CHARTFLAGSQT cfSav;
+
+  SnapChartFlagsQt(&cfSav);
   // The graphics charts only. gAspect, gArabic and gExo were in this list
   // and are not graphics charts: DrawChartX() has no case for any of them,
   // Windows sets us.fGraphics = fFalse for all three (cmdChartAspect,
@@ -698,7 +777,7 @@ static void TestChartRenderQt()
     Check(cpix > 20, "%s: rendered blank (%ld samples inside the border "
       "differ from the background)", rgmode[i].sz, cpix);
   }
-  SetChartModeQt(nSav);
+  RestoreChartModeQt(nSav, &cfSav);
 
   // The loop above calls SetChartModeQt() directly, leaving us.fGraphics
   // alone. A user picks these off the Chart menu, and the two types with
@@ -732,7 +811,7 @@ static void TestChartRenderQt()
       us.fGraphics ? "on" : "off", fWantText ? "off" : "on");
   }
   us.fGraphics = fSav;
-  SetChartModeQt(nSav);
+  RestoreChartModeQt(nSav, &cfSav);
   printf("  %d chart types rendered, %d fired from the Chart menu\n",
     cmode, cchart);
 }
@@ -752,41 +831,226 @@ static void TestChartRenderQt()
 // Skipped: anything whose label ends in "..." (those open a dialog and
 // would block; the dialog test covers them), and Quit.
 //
-// WHAT IT LEAVES BEHIND, measured, since every group after it inherits
-// this:
+// WHAT IT LEAVES BEHIND: nothing the three settings sweeps can name, since
+// 2026-09-13. It snapshots every member of US and GS, the 24 settings
+// arrays, the object, star and macro strings and both window-sizing flags
+// (MENUSTATEQT above), puts them back after the sweep, and asserts that
+// they came back.
 //
-//   us.nRel      -7    a relationship chart -- RecastAndRedrawQt() then
-//                      goes down CastRelation(), which rewrites ciMain
-//   us.objCenter oSun  heliocentric; NCheckEclipseLunar() returns
-//                      etUndefined outright when the centre IS the Sun
-//   us.fEquator  1     ecliptic converted to equatorial -- and the loop
-//                      skips restricted objects, so a restricted body
-//                      keeps ECLIPTIC coordinates while the rest do not
-//   ignore[oSun] 1     the Sun restricted, which is what makes the line
-//                      above visible
-//   us.fSidereal 1, us.nDwad 1, us.fNavamsa 1, us.objOnAsc 2,
-//   us.fFlip 1, us.fGeodetic 1, us.fDecan 1, us.fHouse3D 1,
-//   us.fIndian 1, us.nHouseSystem 22, gs.fColor 0, gs.nScale 200
+// It used to leave all of it. The canary counted 187 changes, and before
+// the restore 89 fields and arrays differed -- among them us.nRel -7 (a
+// relationship chart, so every recast rewrote ciMain), us.objCenter oSun,
+// the Sun restricted, both window-sizing flags inverted, and ten arrays
+// the canary cannot see: ignore, ignore2, ignorea, rgobjset, rAspOrb,
+// force, ruler1 and the derived rules, rules2 and kObjA. Every group after
+// it inherited that, and two of them had come to depend on it without
+// failing alone being noticed: "menu-resync" restricted the Uranians in
+// ignore[] only, and "screen-colors" counted the background as grey.
 //
-//   And the two window-sizing flags, which are checkable menu items like
-//   the rest and so come out INVERTED from their defaults:
-//
-//   qi.fChartWindow  1   "Chart Resizes Window" -- RedrawQt() then fits
-//                        the window around the chart after every redraw
-//   qi.fWindowChart  0   "Window Resizes Chart" -- the canvas stops
-//                        writing its own size back into gs.xWin/gs.yWin
-//
-//   Both were missing from this list until 2026-09-07, and both silenced
-//   an assertion that measured window geometry: one made the group skip
-//   itself, the other corrected the very bug it was checking for. See
-//   TestGraphicsSizeQt(), which pins them.
-//
-// A group asserting on positions, dates or rendering pins what it needs
-// from that list and restores it -- field by field, never by assigning a
-// saved US or GS back, since both carry char * fields other code frees.
+// A group that needs particular settings still pins them itself -- field
+// by field, never by assigning a saved US or GS back, since both carry
+// char * fields other code frees.
+
+static byte *PbSetFieldQt(CONST SETTINGFIELD *psf);
+static flag FSetFieldPairQt(CONST SETTINGFIELD *psf);
+static int CSetArrayQt();
+static void *PvSetArrayQt(int i, int *pcb, CONST char **psz);
+
+// What the sweep can change that a later group can see, kept by CONTENT:
+// every member of US and GS through settingsfields.h, the 24 global arrays
+// the "settings-arrays" group knows (restrictions, per-object settings,
+// aspect and influence tables, rulerships, palette), the object display
+// names, custom star names and macros the "settings-strings" group knows,
+// and the two window-sizing flags. Between the three sweeps that is the
+// whole configuration. Strings are copied rather than pointed at, for the
+// reason TestSettingsFieldsQt() gives -- FCloneSz() writes into a big
+// enough destination in place.
+typedef struct {
+  QVector<real> rgr;
+  QVector<QByteArray> rgba;
+  QVector<bool> rgfNull;
+  QVector<QByteArray> rgbaArr;
+  QVector<QByteArray> rgbaObj, rgbaStar, rgbaMac;
+  QVector<bool> rgfObjCustom;
+  int cszMacro;
+  flag fWindowChart, fChartWindow;
+} MENUSTATEQT;
+
+static void SnapMenuStateQt(MENUSTATEQT *pms)
+{
+  int i;
+
+  pms->rgr.resize(csetfield);
+  pms->rgba.resize(csetfield);
+  pms->rgfNull.resize(csetfield);
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    byte *pb = PbSetFieldQt(psf);
+    switch (psf->ch) {
+    case 'f': case 'i': pms->rgr[i] = (real)*(int *)pb;  break;
+    case 'l':           pms->rgr[i] = (real)*(long *)pb; break;
+    case 'r':           pms->rgr[i] = *(real *)pb;       break;
+    case 'c':           pms->rgr[i] = (real)*(char *)pb; break;
+    case 's':
+      pms->rgfNull[i] = (*(char **)pb == NULL);
+      pms->rgba[i] = QByteArray(SzSet(*(char **)pb));
+      break;
+    }
+  }
+  pms->rgbaArr.resize(CSetArrayQt());
+  for (i = 0; i < CSetArrayQt(); i++) {
+    CONST char *szName;
+    int cb;
+    void *pv = PvSetArrayQt(i, &cb, &szName);
+    pms->rgbaArr[i] = QByteArray((CONST char *)pv, cb);
+  }
+  pms->rgbaObj.resize(cObj+1);
+  pms->rgfObjCustom.resize(cObj+1);
+  for (i = 0; i <= cObj; i++) {
+    pms->rgfObjCustom[i] = FObjDispCustom(i);
+    pms->rgbaObj[i] = QByteArray(SzSet(szObjDisp[i]));
+  }
+  pms->rgbaStar.resize(cStar+1);
+  for (i = 1; i <= cStar; i++)
+    pms->rgbaStar[i] = QByteArray(SzSet(szStarCustom[i]));
+  pms->cszMacro = is.cszMacro;
+  pms->rgbaMac.resize(cMacro);
+  for (i = 0; i < cMacro; i++)
+    pms->rgbaMac[i] = QByteArray(i < is.cszMacro ?
+      SzSet(is.rgszMacro[i]) : "");
+  pms->fWindowChart = FWindowChartQt();
+  pms->fChartWindow = FChartWindowQt();
+}
+
+// How many of those differ from the snapshot now, naming the first few.
+static int CDiffMenuStateQt(CONST MENUSTATEQT *pms)
+{
+  int i, c = 0;
+  flag fSame;
+
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    byte *pb = PbSetFieldQt(psf);
+    switch (psf->ch) {
+    case 'f': case 'i': fSame = ((real)*(int *)pb == pms->rgr[i]);  break;
+    case 'l':           fSame = ((real)*(long *)pb == pms->rgr[i]); break;
+    case 'r':           fSame = (*(real *)pb == pms->rgr[i]);       break;
+    case 'c':           fSame = ((real)*(char *)pb == pms->rgr[i]); break;
+    default:
+      fSame = ((*(char **)pb == NULL) == pms->rgfNull[i] &&
+        pms->rgba[i] == QByteArray(SzSet(*(char **)pb)));
+      break;
+    }
+    if (!fSame && c++ < 8)
+      printf("    still changed: %s\n", psf->szName);
+  }
+  for (i = 0; i < CSetArrayQt(); i++) {
+    CONST char *szName;
+    int cb;
+    void *pv = PvSetArrayQt(i, &cb, &szName);
+    if (pms->rgbaArr[i] != QByteArray((CONST char *)pv, cb) && c++ < 8)
+      printf("    still changed: the %s array\n", szName);
+  }
+  for (i = 0; i <= cObj; i++)
+    if (pms->rgfObjCustom[i] != FObjDispCustom(i) ||
+      pms->rgbaObj[i] != QByteArray(SzSet(szObjDisp[i]))) {
+      if (c++ < 8)
+        printf("    still changed: display name of object %d\n", i);
+    }
+  for (i = 1; i <= cStar; i++)
+    if (pms->rgbaStar[i] != QByteArray(SzSet(szStarCustom[i])) && c++ < 8)
+      printf("    still changed: custom star name %d\n", i);
+  for (i = 0; i < cMacro; i++)
+    if (pms->rgbaMac[i] != QByteArray(i < is.cszMacro ?
+      SzSet(is.rgszMacro[i]) : "") && c++ < 8)
+      printf("    still changed: macro %d\n", i + 1);
+  if (FWindowChartQt() != pms->fWindowChart && c++ < 8)
+    printf("    still changed: Window Resizes Chart\n");
+  if (FChartWindowQt() != pms->fChartWindow && c++ < 8)
+    printf("    still changed: Chart Resizes Window\n");
+  return c;
+}
+
+// Put the snapshot back. The window flags first, since "Chart Resizes
+// Window" resizes as it is set; then the restriction sets, the scalars,
+// and the strings -- the star pair through the one call that owns it, the
+// rest through FCloneSz() and only where they changed. Then the caches
+// computed from what was just put back, as TestSettingsFieldsQt() found
+// them: the ephemeris search path and the colour palette. And
+// RedoRestrictions() last among the settings, because its category flags
+// are derived from the sets and a wrong pair would be recomputed over.
+static void RestoreMenuStateQt(CONST MENUSTATEQT *pms)
+{
+  QByteArray baLin, baLnk;
+  flag fLinNull = fFalse, fLnkNull = fFalse, fPairSame = fTrue;
+  int i;
+
+  SetWindowChartQt(pms->fWindowChart);
+  SetChartWindowQt(pms->fChartWindow);
+  for (i = 0; i < CSetArrayQt(); i++) {
+    CONST char *szName;
+    int cb;
+    void *pv = PvSetArrayQt(i, &cb, &szName);
+    CopyRgb((pbyte)pms->rgbaArr[i].constData(), (pbyte)pv, cb);
+  }
+  // The strings "settings-strings" restores, the way it restores them.
+  for (i = 0; i <= cObj; i++)
+    if (pms->rgfObjCustom[i] != FObjDispCustom(i) ||
+      pms->rgbaObj[i] != QByteArray(SzSet(szObjDisp[i])))
+      SetObjDisp(i, pms->rgfObjCustom[i] ? pms->rgbaObj[i].constData() :
+        szObjName[i]);
+  for (i = 1; i <= cStar; i++)
+    if (pms->rgbaStar[i] != QByteArray(SzSet(szStarCustom[i])))
+      FCloneSz(pms->rgbaStar[i].isEmpty() ? NULL :
+        pms->rgbaStar[i].constData(), &szStarCustom[i]);
+  for (i = 0; i < is.cszMacro && i < cMacro; i++)
+    if (pms->rgbaMac[i] != QByteArray(i < pms->cszMacro ?
+      SzSet(is.rgszMacro[i]) : ""))
+      FCloneSz(pms->rgbaMac[i].isEmpty() ? NULL :
+        pms->rgbaMac[i].constData(), &is.rgszMacro[i]);
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    byte *pb = PbSetFieldQt(psf);
+    switch (psf->ch) {
+    case 'f': case 'i': *(int *)pb = (int)pms->rgr[i];   break;
+    case 'l':           *(long *)pb = (long)pms->rgr[i]; break;
+    case 'r':           *(real *)pb = pms->rgr[i];       break;
+    case 'c':           *(char *)pb = (char)pms->rgr[i]; break;
+    case 's':
+      if ((*(char **)pb == NULL) == pms->rgfNull[i] &&
+        pms->rgba[i] == QByteArray(SzSet(*(char **)pb)))
+        break;
+      if (FSetFieldPairQt(psf)) {
+        fPairSame = fFalse;
+        break;
+      }
+      FCloneSz(pms->rgfNull[i] ? NULL : pms->rgba[i].constData(),
+        (char **)pb);
+      break;
+    }
+  }
+  if (!fPairSame) {
+    for (i = 0; i < csetfield; i++)
+      if (FEqSz(rgsetfield[i].szName, "gs.szStarsLin")) {
+        baLin = pms->rgba[i]; fLinNull = pms->rgfNull[i];
+      } else if (FEqSz(rgsetfield[i].szName, "gs.szStarsLnk")) {
+        baLnk = pms->rgba[i]; fLnkNull = pms->rgfNull[i];
+      }
+    FProcessYXU(fLinNull ? NULL : baLin.constData(),
+      fLnkNull ? NULL : baLnk.constData(), fFalse);
+  }
+  is.fSwissPathSet = fFalse;
+  InitColorPalette(gs.fInverse);
+  RedoRestrictions();
+  AdjustAspectCount();
+  ResizeWindowToChartQt();
+  RedoMenuQt();
+  RecastAndRedrawQt();
+}
 
 static void TestAllMenuActionsQt()
 {
+  MENUSTATEQT msSav;
   QList<QAction *> rgpa;
   int i, k, cfired = 0, cmodal = 0, ctext = 0, cskip = 0;
   long cpix;
@@ -829,6 +1093,7 @@ static void TestAllMenuActionsQt()
   // "a plain wheel is drawn on black", which read back white because the
   // white background of the previous group's render was still there.
   flag fJetTrailSav = gs.fJetTrail;
+  SnapMenuStateQt(&msSav);
   int rgnTypSav[cCust], rgnObjSav[cCust], rgnPntSav[cCust], rgnFlgSav[cCust];
   char rgszGlyphSav[cCust][cchSzMax], rgszGlyph2Sav[cCust][cchSzMax];
   char rgszDispSav[cCust][cchSzMax];
@@ -939,23 +1204,20 @@ static void TestAllMenuActionsQt()
     Check(gi.qim->width() > 0 && gi.qim->height() > 0,
       "after \"%s\": image is %dx%d", str.toLocal8Bit().constData(),
       gi.qim->width(), gi.qim->height());
-    // Sampled every four pixels rather than every eight. A chart can be
-    // legitimately sparse without being blank -- a telescope chart zoomed
-    // out to two degrees is a border, its axis labels and a single star --
-    // and on the coarser grid that came to exactly 20 differing samples,
-    // failing a "more than 20" check for drawing exactly what it should.
+    // Counted inside a 16 pixel margin, against the background RedrawQt()
+    // filled with -- CpixDrawnQt(), the same measure "chart-render" uses.
+    // This used to count the whole image, where the border and the header
+    // and footer lines alone come to 800-900 samples: a chart that drew
+    // nothing at all passed "more than 20" with room to spare, so the
+    // check could not report a blank chart (review finding N-F). Measured
+    // over all 341 items on this machine's settings, the sparsest real
+    // chart inside the margin is the solar system orbit at 93.
     //
-    // Measured against the BACKGROUND the renderer actually used, not
-    // against pixel(0,0). That corner holds the border when one is drawn,
-    // and in monochrome the border is the same colour as everything else
-    // -- so a telescope chart whose disc fills the frame came to twenty
-    // odd differing samples and read as blank, in 23 of these items at
-    // once. It was the check that was blind, not the chart. gi.kiOff is
-    // what RedrawQt() fills with, so it is what "did anything get drawn"
-    // has to compare against.
-    KV kvBackT = KvFromKi(gi.kiOff);
-    QRgb rgbBackT = qRgb(RgbR(kvBackT), RgbG(kvBackT), RgbB(kvBackT));
-    cpix = CpixNotColorQt(gi.qim, rgbBackT, 4, 0);
+    // The history still applies to the threshold: sampled every four
+    // pixels rather than eight, because a telescope chart zoomed out to two
+    // degrees is legitimately a few stars; and against gi.kiOff rather than
+    // pixel(0,0), which holds the border.
+    cpix = CpixDrawnQt(16);
     Check(cpix > 20, "after \"%s\": chart went blank",
       str.toLocal8Bit().constData());
   }
@@ -1001,6 +1263,10 @@ static void TestAllMenuActionsQt()
   }
 
   gs.fJetTrail = fJetTrailSav;
+  RestoreMenuStateQt(&msSav);
+  i = CDiffMenuStateQt(&msSav);
+  Check(i == 0, "the sweep put back every setting it changed (%d still "
+    "differ)", i);
 
   // Said out loud, on every platform, because the comment above worried
   // about exactly this: a lower total is otherwise indistinguishable from
@@ -1453,8 +1719,14 @@ static void TestBadInputQt()
 {
   flag fSav = FNoPopupQt();
   char sz[cchSzMax];
+  int nModeSav = gi.nMode;
+  CHARTFLAGSQT cfSav;
 
   Group("Bad input");
+  // "-ZZzzz" is read as far as "-Z", the horizon chart's switch, before it
+  // is refused, and a chart-type switch goes through SetChartModeQt() --
+  // so this group used to leave the horizon chart selected.
+  SnapChartFlagsQt(&cfSav);
   SetNoPopupQt(fTrue);          // no message boxes during an automated run
   // Most of what this group asserts is that each call below RETURNS. That
   // used to be five Check(fTrue, ...) lines, which counted five passes for
@@ -1494,46 +1766,12 @@ static void TestBadInputQt()
     ciCore = ciSav;
   }
 
+  RestoreChartModeQt(nModeSav, &cfSav);
   SetNoPopupQt(fSav);
   printf("  survived missing files, a bad switch, PrintError() and a "
     "400-digit time\n");
 }
 
-
-// Drive a modal dialog: wait for it to appear, run "fnOn" against it, and
-// make sure it is gone before returning.
-//
-// Stoppable QTimers rather than QTimer::singleShot: a queued close cannot
-// be cancelled, so one armed by a finished test goes on to close the
-// first modal a LATER test opens.
-static void DriveModalQt(void (*pfnOpen)(), std::function<void(QWidget *)> fnOn)
-{
-  QTimer tPoll, tNet;
-  flag fDone = fFalse;
-
-  QObject::connect(&tPoll, &QTimer::timeout, [&]() {
-    QWidget *pw;
-    if (fDone)
-      return;
-    pw = QApplication::activeModalWidget();
-    if (pw == NULL)
-      return;
-    fDone = fTrue;
-    fnOn(pw);
-  });
-  // If the dialog never appeared, or fnOn left it open, do not hang the
-  // run on it.
-  QObject::connect(&tNet, &QTimer::timeout, []() {
-    QWidget *pw = QApplication::activeModalWidget();
-    if (pw != NULL)
-      pw->close();
-  });
-  tPoll.start(80 * nScaleTest);
-  tNet.start(3000 * nScaleTest);
-  pfnOpen();
-  tPoll.stop();
-  tNet.stop();
-}
 
 
 extern QString StrDefaultSuffixTestQt(CONST QString &, CONST char *);
@@ -1834,7 +2072,7 @@ static void TestGraphicsFieldsQt()
     QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_WN");
     if (pe != NULL)
       pe->setText("0");
-    FClickButtonQt(pw, "OK");
+    FClickButtonQt(pw, "IDOK");
   });
   Check(NAnimDelayQt() == nDelaySav,
     "an animation delay of 0 is refused, not stored (%d, want %d)",
@@ -1846,7 +2084,7 @@ static void TestGraphicsFieldsQt()
     QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_WN");
     if (pe != NULL)
       pe->setText("250");
-    FClickButtonQt(pw, "OK");
+    FClickButtonQt(pw, "IDOK");
   });
   Check(NAnimDelayQt() == 250,
     "while a delay inside the range is applied (%d, want 250)",
@@ -1910,7 +2148,7 @@ static void TestGraphicsFieldsQt()
           if (iDup < rg.size())
             rg[iDup]->setText(szText);
         }
-        if (FClickButtonQt(pw, "OK"))
+        if (FClickButtonQt(pw, "IDOK"))
           return;
         pw->close();
       };
@@ -1953,7 +2191,7 @@ static void TestGraphicsFieldsQt()
       QList<QLineEdit *> rg = pw->findChildren<QLineEdit *>("deGr_X");
       if (!rg.isEmpty())
         rg[0]->setText("9999");
-      if (FClickButtonQt(pw, "OK"))
+      if (FClickButtonQt(pw, "IDOK"))
         return;
       pw->close();
     });
@@ -1965,7 +2203,7 @@ static void TestGraphicsFieldsQt()
         rg[0]->setText("Moon");
       if (rgrb.size() > 1)
         rgrb[1]->setChecked(fTrue);
-      if (FClickButtonQt(pw, "OK"))
+      if (FClickButtonQt(pw, "IDOK"))
         return;
       pw->close();
     });
@@ -1987,7 +2225,7 @@ static void TestGraphicsFieldsQt()
       QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_YXS");
       if (pe != NULL)
         pe->setText("-1");
-      if (FClickButtonQt(pw, "OK"))
+      if (FClickButtonQt(pw, "IDOK"))
         return;
       pw->close();
     });
@@ -1996,7 +2234,7 @@ static void TestGraphicsFieldsQt()
       QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_YXS");
       if (pe != NULL)
         pe->setText("2.5");
-      if (FClickButtonQt(pw, "OK"))
+      if (FClickButtonQt(pw, "IDOK"))
         return;
       pw->close();
     });
@@ -2428,6 +2666,78 @@ static void TestConsoleFontQt()
 }
 
 
+// Changing the interface font must not change the chart's size (review
+// finding N-J). The menu bar takes its height from that font, so with
+// the window left alone the chart viewport shrinks or grows by the
+// difference -- and with "Window Resizes Chart" on the canvas writes the
+// viewport back into gs.xWin/gs.yWin, where Save Program Settings records
+// it. Measured before the fix: the menu bar 29 pixels in the settings
+// file's font, 30 in JetBrains Mono 13, 15 in Liberation Sans 6, and the
+// chart height following each. Windows has no interface font at all, so
+// the chart size staying put is what parity means.
+static void TestUiFontChartSizeQt()
+{
+  QString strMenSav = StrMenuFontQt();
+  int nMenSav = NMenuFontSizeQt(), i;
+  flag fGraphSav = us.fGraphics, fWinChartSav = FWindowChartQt();
+  int xWinSav = gs.xWin, yWinSav = gs.yWin;
+
+  Group("Interface font change keeps the chart size");
+
+  // Graphics with "Window Resizes Chart" on: the state the chart size is
+  // chased in. Otherwise nothing writes the viewport back and the group
+  // would pass on the bug.
+  us.fGraphics = fTrue;
+  SetWindowChartQt(fTrue);
+  ResizeWindowToChartQt();
+  RedrawQt();
+  for (i = 0; i < 20; i++)
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5 * nScaleTest);
+  int xWin0 = gs.xWin, yWin0 = gs.yWin;
+  QSize sizeView0 = SizeChartViewportTestQt();
+  Check(sizeView0.width() == xWin0 && sizeView0.height() == yWin0,
+    "the viewport starts out the chart's size (%d by %d, chart %d by %d)",
+    sizeView0.width(), sizeView0.height(), xWin0, yWin0);
+
+  // Two sizes far enough apart that the menu bar's height has to change,
+  // whatever the settings file asked for.
+  static CONST int rgnSize[2] = {24, 6};
+  for (int j = 0; j < 2; j++) {
+    SetMenuFontQt("Liberation Sans", rgnSize[j]);
+    ApplyUiFontQt();
+    for (i = 0; i < 20; i++)
+      QCoreApplication::processEvents(QEventLoop::AllEvents, 5 * nScaleTest);
+    QSize sizeView = SizeChartViewportTestQt();
+    Check(gs.xWin == xWin0 && gs.yWin == yWin0 &&
+      sizeView == sizeView0,
+      "a %d point interface font keeps the chart %d by %d (chart %d by %d, "
+      "viewport %d by %d, menu bar %d)", rgnSize[j], xWin0, yWin0,
+      gs.xWin, gs.yWin, sizeView.width(), sizeView.height(),
+      gi.qwind != NULL ? gi.qwind->menuBar()->height() : -1);
+  }
+
+  // And back to what the settings file asked for: the round trip a user
+  // makes, which is what left the chart a few pixels off.
+  SetMenuFontQt(strMenSav.toUtf8().constData(), nMenSav);
+  ApplyUiFontQt();
+  for (i = 0; i < 20; i++)
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5 * nScaleTest);
+  QSize sizeView = SizeChartViewportTestQt();
+  Check(gs.xWin == xWin0 && gs.yWin == yWin0 && sizeView == sizeView0,
+    "and putting the font back keeps it too (chart %d by %d, viewport "
+    "%d by %d)", gs.xWin, gs.yWin, sizeView.width(), sizeView.height());
+
+  us.fGraphics = fGraphSav;
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  SetWindowChartQt(fWinChartSav);
+  ResizeWindowToChartQt();
+  RedrawQt();
+  for (i = 0; i < 20; i++)
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5 * nScaleTest);
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+}
+
+
 // Does the port follow the desktop into dark mode? Qt5 has no API for
 // this -- QStyleHints::colorScheme() is Qt 6.5 -- and Qt5's own gtk3
 // platform theme loads without supplying any palette, so the port detects
@@ -2641,16 +2951,30 @@ static void TestColorSchemeQt()
 
 
 // Click a button by its label in a modal, then OK.
+// "-WM <n> <name>", quoted with whichever of " and ' the name does not
+// contain -- the rule FOutputSettings() applies to AstroExpressions, and
+// NParseCommandLine() honours both. The restores wrote "%s" between double
+// quotes, so a name holding a " put the rest of it on the command line as
+// switches. A name holding both cannot be written; say so rather than
+// corrupt it.
+static void SzMacroNameSwitchQt(char *sz, int cchMax, CONST char *szSwitch,
+  CONST char *szName)
+{
+  char chQuote = strchr(szName, '"') != NULL ? '\'' : '"';
+
+  if (chQuote == '\'' && strchr(szName, '\'') != NULL)
+    printf("  note: \"%s\" holds both quote characters and cannot be put "
+      "back through %s\n", szName, szSwitch);
+  sprintf2(sz, cchMax, "%s %c%s%c", szSwitch, chQuote, szName, chQuote);
+}
+
 static void ClickInModalQt(void (*pfnOpen)(), CONST char *szButton)
 {
   DriveModalQt(pfnOpen, [szButton](QWidget *pw) {
-    QPushButton *ppbHit = NULL, *ppbOK = NULL;
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>()) {
+    QPushButton *ppbHit = NULL, *ppbOK = PpbButtonQt(pw, "IDOK");
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
       if (ppb->text() == QString(szButton))
         ppbHit = ppb;
-      if (ppb->text() == "OK")
-        ppbOK = ppb;
-    }
     if (ppbHit != NULL)
       ppbHit->click();
     if (ppbOK != NULL)
@@ -2667,7 +2991,7 @@ static void TickInModalQt(void (*pfnOpen)(), CONST char *szLabel)
     for (QCheckBox *p : pw->findChildren<QCheckBox *>())
       if (p->text() == QString(szLabel))
         pcb = p;
-    ppbOK = PpbButtonQt(pw, "OK");
+    ppbOK = PpbButtonQt(pw, "IDOK");
     if (pcb != NULL)
       pcb->setChecked(fTrue);
     if (ppbOK != NULL)
@@ -2736,6 +3060,13 @@ static void TestDialogButtonWiringQt()
   // Same shape in Aspect Settings: dbAs_RA0/dbAs_RA1/dbAs_RA, where the
   // toggle covers the first five aspects (wdialog.cpp:1380).
   byte rgbASav[cAspect+1];
+  // us.nAsp as well as the flags: Aspect Settings' OK derives it from
+  // ignorea[] (qtdialog.cpp, as wdialog.cpp does), so putting the flags
+  // back alone leaves the count the toggled set produced (review finding
+  // N-E). It only shows when the toggle changes the highest unrestricted
+  // aspect -- never from this machine's settings, always from what
+  // "menu-actions" used to leave.
+  int nAspSav = us.nAsp;
   for (i = 1; i <= cAspect; i++)
     rgbASav[i] = ignorea[ASPT(i)];
   ClickInModalQt(ShowAspectDialogQt, "Toggle &Majors");
@@ -2748,6 +3079,7 @@ static void TestDialogButtonWiringQt()
   Check(cOut == 0, "and leaves the rest alone (%d)", cOut);
   for (i = 1; i <= cAspect; i++)
     ignorea[ASPT(i)] = rgbASav[i];
+  us.nAsp = nAspSav;
 
   // And the same collision on a pair of checkboxes rather than buttons:
   // dxSe_sr is "&Equatorial Latitudes" (nIdx 0) and "E&quatorial
@@ -2761,7 +3093,7 @@ static void TestDialogButtonWiringQt()
     for (QCheckBox *p : pw->findChildren<QCheckBox *>())
       if (p->text() == "E&quatorial Longitudes")
         pcb = p;
-    ppbOK = PpbButtonQt(pw, "OK");
+    ppbOK = PpbButtonQt(pw, "IDOK");
     if (pcb != NULL)
       pcb->setChecked(fTrue);
     if (ppbOK != NULL)
@@ -2831,7 +3163,7 @@ static void TestSharedSymbolBoxesQt()
       if (p->text() == "7") peStep = p;
       if (p->text() == "15") peDist = p;
     }
-    ppbOK = PpbButtonQt(pw, "OK");
+    ppbOK = PpbButtonQt(pw, "IDOK");
     if (peStep != NULL) peStep->setText("9");
     if (peDist != NULL) peDist->setText("21");
     if (ppbOK != NULL) ppbOK->click();
@@ -2933,8 +3265,10 @@ static void TestClearScreenQt()
 static void TestRisingGradientQt()
 {
   int nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics;
   flag rgfIgnoreSav[objMax];
+  SnapChartFlagsQt(&cfChartSav);
   QSet<QRgb> setColor;
   int x, y, i, ckv = 0;
 
@@ -2968,7 +3302,7 @@ static void TestRisingGradientQt()
     ignore[i] = rgfIgnoreSav[i];
   RedoRestrictions();
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
 
@@ -2988,8 +3322,10 @@ static void TestTextExportQt()
   flag fGraphicsSav = us.fGraphics, fHTMLSav = us.fTextHTML;
   FILE *fileT;
   long cb = -1;
+  CHARTFLAGSQT cfChartSav;
 
   Group("Text export");
+  SnapChartFlagsQt(&cfChartSav);
   SzScratchPathQt(S(szFile), "textexport", ".tmp");
   CaptureTextToFileQt(szFile, fFalse);
 
@@ -3093,6 +3429,7 @@ static void TestTextExportQt()
     gs.fAltPalette = fAltSav;
     CopyRgb((pbyte)rgbbmpSav, (pbyte)rgbbmp, sizeof(rgbbmp));
   }
+  RestoreChartFlagsQt(&cfChartSav);
 }
 
 
@@ -3148,7 +3485,7 @@ static QString StrApplyInfoQt(int mon, int day, int yea)
       ppbAppl->click();
       strDst = pcbDst->currentText();
     }
-    FClickButtonQt(pw, "Cancel");
+    FClickButtonQt(pw, "IDCANCEL");
     pw->close();
   });
   return strDst;
@@ -3193,7 +3530,7 @@ static void TestNowButtonQt(void (*pfnOpen)(), CONST char *szDst,
       strDst = pcbDst->currentText();
       strZon = pcbZon->currentText();
     }
-    FClickButtonQt(pw, "Cancel");
+    FClickButtonQt(pw, "IDCANCEL");
   });
 
   // Compared against ciDefa put through the same formatting the dialog
@@ -3243,7 +3580,7 @@ static void DriveSpaceCountQt(int cspace)
 
     if (peSpace != NULL)
       peSpace->setText(QString::number(cspace));
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
     pw->close();
   });
@@ -3279,6 +3616,8 @@ static void TestMenuSideEffectsQt()
   flag fStarSav = gs.fAllStar, fIndSav = gs.fIndianWheel;
   flag fAutoSav = gs.fAutoScale, fHouseSav = gs.fHouseExtra;
   int nScaleSav = gs.nScale, nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Menu side effects");
   Check(paSide != NULL && paText != NULL && paLine != NULL &&
@@ -3337,7 +3676,7 @@ static void TestMenuSideEffectsQt()
   gs.fAllStar = fStarSav; gs.fIndianWheel = fIndSav;
   gs.fAutoScale = fAutoSav; gs.fHouseExtra = fHouseSav;
   gs.nScale = nScaleSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
   RedoMenuQt();
 }
 
@@ -3385,7 +3724,7 @@ static void TestGraphicsSizeQt()
 
     if (peX != NULL) peX->setText(QString::number(xWant));
     if (peY != NULL) peY->setText(QString::number(yWant));
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
     pw->close();
   });
@@ -3409,6 +3748,82 @@ static void TestGraphicsSizeQt()
   SetWindowChartQt(fWinChartSav);
   SetChartWindowQt(fChartWinSav);
   ResizeWindowToChartQt();
+  RedrawQt();
+}
+
+
+// The chart size a launch is asked for, and the one Square Screen asks
+// for, have to be the chart size that results.
+//
+// The same mistake as the group above, in the two places it survived:
+// BeginQt() and the Square Screen command resized the WINDOW to the
+// chart's size. The window is taller than its chart viewport by the menu
+// bar, and with "Window Resizes Chart" on the canvas writes the viewport
+// back into gs.xWin/gs.yWin -- so a launch with ":Xw 760 600" drew a
+// 760 by 575 chart, "Save Program Settings" wrote ":Xw 760 575", and the
+// next launch drew 735 by 550 (the width follows under "=XQ"). Measured
+// over three launches: 25 pixels a generation, 29 under nrvate.as's
+// larger menu font. Square Screen produced a chart that was not square.
+// Windows sizes the window around the chart in both places
+// (ResizeWindowToChart(), xscreen.cpp).
+//
+// Startup cannot be reached in process once the suite is running, so
+// run-qt-tests.sh launches this group alone with ":Xw 760 600" on the
+// command line and ASTROLOG_QT_WINSIZE_PROBE saying what it asked for.
+
+static void TestChartWindowSizeQt()
+{
+  CONST char *szProbe = getenv("ASTROLOG_QT_WINSIZE_PROBE");
+  QAction *paSquare = PaFindActionTestQt("S&quare Screen");
+  int xWinSav = gs.xWin, yWinSav = gs.yWin, xWant = 0, yWant = 0;
+  flag fGraphicsSav = us.fGraphics, fWinChartSav = FWindowChartQt();
+  QSize sizeView;
+
+  Group("Chart size kept by startup and Square Screen");
+  if (szProbe != NULL) {
+    Check(sscanf(szProbe, "%dx%d", &xWant, &yWant) == 2,
+      "ASTROLOG_QT_WINSIZE_PROBE reads as WIDTHxHEIGHT (\"%s\")", szProbe);
+    // Long enough for the first paint, which is what writes the viewport
+    // back into gs.xWin/gs.yWin and so what a save would record.
+    QApplication::processEvents(QEventLoop::AllEvents, 200 * nScaleTest);
+    sizeView = SizeChartViewportTestQt();
+    Check(sizeView.width() == xWant && sizeView.height() == yWant,
+      "startup's chart viewport is the size the settings asked for (%d by "
+      "%d, wanted %d by %d; window %d by %d)", sizeView.width(),
+      sizeView.height(), xWant, yWant, gi.qwind->width(), gi.qwind->height());
+    Check(gs.xWin == xWant && gs.yWin == yWant,
+      "and gs.xWin/gs.yWin, which Save Program Settings writes, still say "
+      "so after the first paint (%d by %d)", gs.xWin, gs.yWin);
+  }
+
+  Check(paSquare != NULL, "the Square Screen item is present");
+  if (paSquare == NULL)
+    return;
+  // Graphics and "Window Resizes Chart" on, the state the canvas adopts
+  // its viewport in; a chart that is not already square.
+  SetWindowChartQt(fTrue);
+  us.fGraphics = fTrue;
+  gs.xWin = 700; gs.yWin = 500;
+  ResizeWindowToChartQt();
+  RedrawQt();
+  QApplication::processEvents(QEventLoop::AllEvents, 200 * nScaleTest);
+  paSquare->trigger();
+  QApplication::processEvents(QEventLoop::AllEvents, 200 * nScaleTest);
+  // What SquareX() makes of 700 by 500, rather than "width equals
+  // height": it adds the sidebar's width and leaves maps and grids alone.
+  xWant = 700; yWant = 500;
+  SquareX(&xWant, &yWant, fTrue);
+  sizeView = SizeChartViewportTestQt();
+  Check(sizeView.width() == xWant && sizeView.height() == yWant &&
+    gs.xWin == xWant && gs.yWin == yWant,
+    "Square Screen leaves the chart viewport, and gs.xWin/gs.yWin, at the "
+    "size it squared to (viewport %d by %d, gs %d by %d, wanted %d by %d)",
+    sizeView.width(), sizeView.height(), gs.xWin, gs.yWin, xWant, yWant);
+
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  ResizeWindowToChartQt();
+  us.fGraphics = fGraphicsSav;
+  SetWindowChartQt(fWinChartSav);
   RedrawQt();
 }
 
@@ -3481,7 +3896,9 @@ static void TestKeyHelpQt()
 static void TestPagerQt()
 {
   int nScrollSav = us.nScrollRow, nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics;
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Text pager in a window");
 
@@ -3499,7 +3916,7 @@ static void TestPagerQt()
     "and it is a window that makes that the right answer");
 
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
   RedrawQt();
 }
 
@@ -3519,11 +3936,13 @@ static void TestPagerQt()
 static void TestChartScrollQt()
 {
   int nModeSav = gi.nMode, xSav = gs.xWin, ySav = gs.yWin;
+  CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics;
   int nRelSav = us.nRel;
   flag rgfIgnoreSav[objMax], rgfIgnore2Sav[objMax];
   int i;
   QImage imTop, imEnd;
+  SnapChartFlagsQt(&cfChartSav);
   QAction *paEnd = PaFindActionTestQt("Scroll to &End");
   QAction *paHome = PaFindActionTestQt("Scroll &to Beginning");
 
@@ -3600,7 +4019,7 @@ static void TestChartScrollQt()
   gs.xWin = xSav; gs.yWin = ySav;
   SetRelQt(nRelSav);
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
   RedrawQt();
 }
 
@@ -3702,11 +4121,13 @@ static void TestScreenColorsQt()
 {
   flag fInvSav = gs.fInverse, fColorSav = gs.fColor;
   int nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics;
   int cDistinct[3] = {0, 0, 0};
   int rgcGrey[3] = {0, 0, 0}, rgcAll[3] = {1, 1, 1};
   QRgb rgbBack[3] = {0, 0, 0};
   int pass;
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Reverse and monochrome on screen");
 
@@ -3725,20 +4146,28 @@ static void TestScreenColorsQt()
       for (x = 0; x < gi.qim->width(); x += 3)
         cnt[gi.qim->pixel(x, y)]++;
     cDistinct[pass] = (int)cnt.size();
-    {
-      int cGrey = 0, cAll = 0;
-      for (QRgb k : cnt.keys()) {
-        cAll += cnt[k];
-        if (qRed(k) == qGreen(k) && qGreen(k) == qBlue(k))
-          cGrey += cnt[k];
-      }
-      rgcGrey[pass] = cGrey; rgcAll[pass] = cAll;
-    }
     // The commonest sample is the background, on every chart that does
     // not fill its frame.
     for (QRgb k : cnt.keys())
       if (cnt[k] > cnt.value(rgbBack[pass], -1))
         rgbBack[pass] = k;
+    // Grey counted among what was DRAWN, background left out. Black and
+    // white are grey, so with the background in the count a wheel of thin
+    // lines is "mostly grey" whatever colour its lines are: 99% on this
+    // machine's settings, where the check only ever passed because
+    // "menu-actions" had left thick lines, a filled decan ring and a full
+    // background image behind it.
+    {
+      int cGrey = 0, cAll = 0;
+      for (QRgb k : cnt.keys()) {
+        if (k == rgbBack[pass])
+          continue;
+        cAll += cnt[k];
+        if (qRed(k) == qGreen(k) && qGreen(k) == qBlue(k))
+          cGrey += cnt[k];
+      }
+      rgcGrey[pass] = cGrey; rgcAll[pass] = Max(cAll, 1);
+    }
   }
 
   Check(rgbBack[0] == qRgb(0, 0, 0),
@@ -3762,7 +4191,7 @@ static void TestScreenColorsQt()
 
   gs.fInverse = fInvSav; gs.fColor = fColorSav;
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
   RedrawQt();
 }
 
@@ -3826,7 +4255,7 @@ static void TestOrbGridQt()
           else if (pcb != NULL)
             pcb->setEditText(szBad);
         }
-        if (FClickButtonQt(pw, "OK"))
+        if (FClickButtonQt(pw, "IDOK"))
           return;
         pw->close();
       });
@@ -3846,7 +4275,7 @@ static void TestOrbGridQt()
           else if (pcb != NULL)
             pcb->setEditText(szGood);
         }
-        if (FClickButtonQt(pw, "OK"))
+        if (FClickButtonQt(pw, "IDOK"))
           return;
         pw->close();
       });
@@ -3913,7 +4342,7 @@ static void TestFieldParseQt()
 
         if (pe != NULL)
           pe->setText(szType);
-        if (FClickButtonQt(pw, "OK"))
+        if (FClickButtonQt(pw, "IDOK"))
           return;
         pw->close();
       });
@@ -3929,7 +4358,7 @@ static void TestFieldParseQt()
 
     if (pe != NULL)
       pe->setText("~Add 30 15");
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
     pw->close();
   });
@@ -3989,7 +4418,7 @@ static void TestComboPickQt()
 
         if (pcb != NULL)
           pcb->setEditText(szPick);
-        if (FClickButtonQt(pw, "OK"))
+        if (FClickButtonQt(pw, "IDOK"))
           return;
         pw->close();
       });
@@ -4024,7 +4453,7 @@ static void TestComboPickQt()
         QComboBox *pcb = pw->findChild<QComboBox *>(szId);
         if (pcb != NULL)
           str = pcb->currentText();
-        if (FClickButtonQt(pw, "Cancel"))
+        if (FClickButtonQt(pw, "IDCANCEL"))
           return;
         pw->close();
       });
@@ -4086,7 +4515,7 @@ static void TestFontPackQt()
       pcb->setEditText("Consolas");
       cFound++;
     }
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
     pw->close();
   });
@@ -4126,7 +4555,7 @@ static void TestFontPackQt()
       QList<QComboBox *> rg = pw->findChildren<QComboBox *>("dcGr_Xf");
       if (!rg.isEmpty())
         cItem = rg[0]->count();
-      if (FClickButtonQt(pw, "Cancel"))
+      if (FClickButtonQt(pw, "IDCANCEL"))
         return;
       pw->close();
     });
@@ -4171,7 +4600,7 @@ static void TestFontPackQt()
         QList<QComboBox *> rg = pw->findChildren<QComboBox *>("dcGr_Xf");
         if (iSlot < rg.size())
           rg[iSlot]->setEditText(szType);
-        if (FClickButtonQt(pw, "OK"))
+        if (FClickButtonQt(pw, "IDOK"))
           return;
         pw->close();
       });
@@ -4268,7 +4697,7 @@ static void TestNowButtonsQt()
         ppbNow->click();
         strNam = peNam->text();
       }
-      FClickButtonQt(pw, "Cancel");
+      FClickButtonQt(pw, "IDCANCEL");
     });
     ciCore.nam = pszNamSav;
     Check(strNam == QString(szNamT),
@@ -4298,6 +4727,8 @@ static void TestChartNowQt()
 {
   CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciCoreSav = ciCore;
   int nRelSav = us.nRel, nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
+  SnapChartFlagsQt(&cfChartSav);
   QAction *pa = PaFindActionTestQt("Chart for &Now");
 
   Group("Chart for Now");
@@ -4331,7 +4762,7 @@ static void TestChartNowQt()
     ciTwin.yea);
 
   SetRelQt(nRelSav);
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
   ciMain = ciMainSav; ciTwin = ciTwinSav; ciCore = ciCoreSav;
 }
 
@@ -4358,8 +4789,10 @@ static void TestTextExtentQt()
     {gEphemeris, "the ephemeris listing, which is wider"},
     {gWheel,     "and the text wheel, which is a little of both"} };
   int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics;
   int i, k, x, y, rgc[2];
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Text charts bigger than the window");
   us.fGraphics = fFalse;
@@ -4419,7 +4852,7 @@ static void TestTextExtentQt()
 
   gs.xWin = xWinSav; gs.yWin = yWinSav;
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
 
@@ -4470,8 +4903,10 @@ static void TestScreenOptionsQt()
      "draws one chart over the LAST one, so two renders of the same chart "
      "are identical either way -- the jet-trail group is what sees it"} };
   int nModeSav = gi.nMode, xWinSav = gs.xWin, yWinSav = gs.yWin;
+  CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics;
   int i, k;
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Graphics options move a screen render");
   us.fGraphics = fTrue;
@@ -4569,7 +5004,7 @@ static void TestScreenOptionsQt()
 
   gs.xWin = xWinSav; gs.yWin = yWinSav;
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 #undef cnModeScreenOpt
 }
 
@@ -4734,7 +5169,7 @@ static void TestNullNamesQt()
     for (QLabel *pl : pw->findChildren<QLabel *>())
       if (pl->text().contains("null"))
         lstBad.append(pl->text());
-    if (FClickButtonQt(pw, "Cancel"))
+    if (FClickButtonQt(pw, "IDCANCEL"))
       return;
     pw->close();
   });
@@ -4754,7 +5189,7 @@ static void TestNullNamesQt()
       for (int j = 0; j < plw->count(); j++)
         if (plw->item(j)->text().contains("null"))
           lstBad.append(plw->item(j)->text());
-    if (FClickButtonQt(pw, "Cancel"))
+    if (FClickButtonQt(pw, "IDCANCEL"))
       return;
     pw->close();
   });
@@ -4791,8 +5226,10 @@ static void TestJetTrailQt()
 {
   flag fTrailSav = gs.fJetTrail, fGraphicsSav = us.fGraphics;
   int nModeSav = gi.nMode, xWinSav = gs.xWin, yWinSav = gs.yWin;
+  CHARTFLAGSQT cfChartSav;
   real rRotSav = gs.rRot;
   int iPass, x, y, rgcInk[2];
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Timed Exposure leaves a trail");
   us.fGraphics = fTrue;
@@ -4823,7 +5260,7 @@ static void TestJetTrailQt()
   gs.rRot = rRotSav;
   gs.xWin = xWinSav; gs.yWin = yWinSav;
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
 
@@ -4925,9 +5362,11 @@ static void TestCreditColorsQt()
 {
   flag fInvSav = gs.fInverse, fGraphicsSav = us.fGraphics;
   int nModeSav = gi.nMode, iPass, x, y;
+  CHARTFLAGSQT cfChartSav;
   int xWinSav = gs.xWin, yWinSav = gs.yWin, nAnsiSav = us.fAnsiColor;
   int rgcInk[2] = {0, 0};
   QRgb rgkv[2];
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Credits box under both backgrounds");
 
@@ -4983,7 +5422,7 @@ static void TestCreditColorsQt()
   gs.xWin = xWinSav; gs.yWin = yWinSav;
   us.fAnsiColor = nAnsiSav;
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
 
@@ -5004,11 +5443,13 @@ static void TestTransitModeQt()
 {
   int rgnMode[4] = {gTraTraTim, gTraTraInf, gTraNatTim, gTraNatInf};
   int nModeSav = gi.nMode, nEphemYearsSav = us.nEphemYears, nAspSav;
+  CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics;
   flag fMonthSav = us.fInDayMonth, fYearSav = us.fInDayYear;
   byte rgfIgnoreSav[objMax];
   QImage imBase, imBase2;
   int i, cBase = 0, cDiff;
+  SnapChartFlagsQt(&cfChartSav);
 
   Group("Transit list modes drawn as graphics");
 
@@ -5075,7 +5516,7 @@ LDone:
   us.nEphemYears = nEphemYearsSav;
   us.fInDayMonth = fMonthSav; us.fInDayYear = fYearSav;
   us.fGraphics = fGraphicsSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
 
@@ -5095,6 +5536,8 @@ static void TestChartStoreQt()
   CI ciSaveSav = ciSave;
   flag fGraphicsSav = us.fGraphics, fMonthSav, fYearSav;
   int nRelSav = us.nRel, nModeSav = gi.nMode, yea1, yea2, yea3;
+  CHARTFLAGSQT cfChartSav;
+  SnapChartFlagsQt(&cfChartSav);
   QAction *paStore = PaFindActionTestQt("&Store Chart Info");
   QAction *paRecall = PaFindActionTestQt("Re&call Chart Info");
   FILE *fileSav = is.S;
@@ -5140,7 +5583,7 @@ static void TestChartStoreQt()
   paStore->trigger();
   ciCore.yea = 2000; ciMain = ciCore;
   DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
   });
   paRecall->trigger();
@@ -5201,7 +5644,7 @@ static void TestChartStoreQt()
     "and so does a text -Zd rising/setting search (yea %d)", ciMain.yea);
 
   SetRelQt(nRelSav);
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
   us.fGraphics = fGraphicsSav;
   ciMain = ciMainSav; ciTwin = ciTwinSav; ciCore = ciCoreSav;
   ciSave = ciSaveSav;
@@ -5502,12 +5945,19 @@ static void TestMenuResyncQt()
   Check(paUra != NULL, "Include Uranians is on the menu bar");
   if (paUra != NULL) {
     flag fUraSav = us.fUranian;
-    flag rgfIgnoreSav[uranHi - uranLo + 1];
+    flag rgfIgnoreSav[uranHi - uranLo + 1], rgfIgnore2Sav[uranHi - uranLo + 1];
     int i;
 
+    // Both sets. RedoRestrictions() counts a category as included while
+    // EITHER set leaves one of its bodies unrestricted, so restricting the
+    // Uranians in ignore[] alone asserts nothing unless ignore2[] happens
+    // to restrict them too. It did, for as long as "menu-actions" left
+    // them restricted there; with that group putting its state back this
+    // check failed in the full suite -- and had always failed alone.
     for (i = uranLo; i <= uranHi; i++) {
       rgfIgnoreSav[i - uranLo] = ignore[i];
-      ignore[i] = fTrue;
+      rgfIgnore2Sav[i - uranLo] = ignore2[i];
+      ignore[i] = ignore2[i] = fTrue;
     }
     us.fUranian = fTrue;
     RedoMenuQt();
@@ -5516,8 +5966,10 @@ static void TestMenuResyncQt()
     SyncRestrictMenuQt();
     Check(!us.fUranian,
       "where SyncRestrictMenuQt() does re-derive it, and clears it");
-    for (i = uranLo; i <= uranHi; i++)
+    for (i = uranLo; i <= uranHi; i++) {
       ignore[i] = rgfIgnoreSav[i - uranLo];
+      ignore2[i] = rgfIgnore2Sav[i - uranLo];
+    }
     us.fUranian = fUraSav;
   }
 
@@ -5551,12 +6003,13 @@ static void TestMenuResyncQt()
 
 static flag FSaveSettingsToQt(CONST char *szPath)
 {
-  char *szSav = is.szFileOut;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   flag f;
 
-  is.szFileOut = (char *)szPath;
+  FCloneSz(szPath, &is.szFileOut);
   f = FOutputSettings();
-  is.szFileOut = szSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   return f;
 }
 
@@ -5572,8 +6025,13 @@ static QByteArray BaReadFileQt(CONST QString &strPath)
 static void ClickOkInModalQt(void (*pfnOpen)())
 {
   DriveModalQt(pfnOpen, [](QWidget *pw) {
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
+    // Said, not swallowed. Closing instead is a CANCEL, and "ok-settles"
+    // asks whether pressing OK twice settles -- a dialog it could not press
+    // OK in passed that question by never being asked it.
+    Check(fFalse, "\"%s\" has no IDOK button to press",
+      pw->windowTitle().toLocal8Bit().constData());
     pw->close();
   });
 }
@@ -6046,7 +6504,7 @@ static void TestObjSelGlyphQt()
     QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
     if (rgcb.size() > 1)
       pcb = rgcb[1];
-    ppbOK = PpbButtonQt(pw, "OK");
+    ppbOK = PpbButtonQt(pw, "IDOK");
     if (pcb != NULL)
       pcb->setEditText("10199");
     if (ppbOK != NULL)
@@ -6150,12 +6608,10 @@ static void TestObjSelLookupQt()
       pcb = rgcb[0];
     if (!rgpe.isEmpty())
       pe = rgpe[0];
-    for (QPushButton *p : pw->findChildren<QPushButton *>()) {
+    for (QPushButton *p : pw->findChildren<QPushButton *>())
       if (p->text() == "&Lookup Names")
         ppb = p;
-      if (p->text() == "Cancel")
-        ppbCancel = p;
-    }
+    ppbCancel = PpbButtonQt(pw, "IDCANCEL");
     Check(pcb != NULL && pe != NULL && ppb != NULL,
       "the first row's two boxes and the Lookup Names button are there");
     if (pcb == NULL || pe == NULL || ppb == NULL) {
@@ -6303,7 +6759,8 @@ static void TestSettingsRoundTripQt()
 {
   byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
   OBJSET rgosSav[oNorm1+1];
-  char *szFileOutSav = is.szFileOut;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite;
   char szPath[cchSzMax];
@@ -6348,7 +6805,7 @@ static void TestSettingsRoundTripQt()
   SzScratchPathQt(S(szPath), "roundtrip", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
-  is.szFileOut = szPath;
+  FCloneSz(szPath, &is.szFileOut);
   Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
 
   // Overwrite in memory, so anything the file failed to carry stays wrong.
@@ -6384,7 +6841,7 @@ static void TestSettingsRoundTripQt()
   CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
   CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
   CopyRgb((pbyte)rgosSav, (pbyte)rgobjset.rgn, sizeof(rgobjset.rgn));
-  is.szFileOut = szFileOutSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
   RedoRestrictions();
@@ -6404,7 +6861,9 @@ static void TestSettingsRoundTripQt()
 
 static void TestInterfaceSettingsQt()
 {
-  char szPath[cchSzMax], *szFileOutSav;
+  char szPath[cchSzMax];
+  QByteArray baFileOutSav;
+  flag fFileOutSav;
   QString strConSav, strMenSav, strThemeSav;
   int nConSav, nMenSav, nWriteFormatSav;
   flag fConSav, fMenSav, fNoWriteSav;
@@ -6416,7 +6875,8 @@ static void TestInterfaceSettingsQt()
   strMenSav = StrMenuFontQt();    nMenSav = NMenuFontSizeQt();
   fConSav = FConsoleAntialiasQt(); fMenSav = FMenuAntialiasQt();
   strThemeSav = StrThemePrefQt();
-  szFileOutSav = is.szFileOut;
+  baFileOutSav = QByteArray(SzSet(is.szFileOut));
+  fFileOutSav = is.szFileOut != NULL;
   nWriteFormatSav = us.nWriteFormat;
   fNoWriteSav = us.fNoWrite;
 
@@ -6429,7 +6889,7 @@ static void TestInterfaceSettingsQt()
   SzScratchPathQt(S(szPath), "interface", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
-  is.szFileOut = szPath;
+  FCloneSz(szPath, &is.szFileOut);
   Check(FOutputSettings(), "Save Program Settings wrote the file");
 
   // Clobber every one of them, so anything the file failed to carry stays
@@ -6563,9 +7023,9 @@ static void TestInterfaceSettingsQt()
 
     SetAnimDelayQt(nDelaySav);
     SetAntialiasQt(nAaSav);
-    sprintf2(S(szLine), "-WM 1 \"%s\"", baMacSav.constData());
+    SzMacroNameSwitchQt(S(szLine), "-WM 1", baMacSav.constData());
     FProcessCommandLine(szLine);
-    sprintf2(S(szLine), "-WM0 0 \"%s\"", baSubSav.constData());
+    SzMacroNameSwitchQt(S(szLine), "-WM0 0", baSubSav.constData());
     FProcessCommandLine(szLine);
   }
 
@@ -6632,7 +7092,7 @@ static void TestInterfaceSettingsQt()
       SetConsoleFontQt(rgt[i].szCon, rgt[i].nCon);
       SetMenuFontQt(rgt[i].szMen, rgt[i].nMen);
       DriveModalQt(ShowDisplayDialogQt, [](QWidget *pw) {
-        if (FClickButtonQt(pw, "OK"))
+        if (FClickButtonQt(pw, "IDOK"))
           return;
         pw->close();
       });
@@ -6652,7 +7112,11 @@ static void TestInterfaceSettingsQt()
   SetMenuFontQt(strMenSav.toUtf8().constData(), nMenSav);
   SetMenuAntialiasQt(fMenSav);
   SetThemePrefQt(strThemeSav.toUtf8().constData());
-  is.szFileOut = szFileOutSav;
+  // Applied, not only stored: the group applied each face it tried, so
+  // putting the settings back without applying them left the whole
+  // application in the last test font.
+  ApplyUiFontQt();
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
   printf("  the interface settings live in astrolog.as with everything else\n");
@@ -6715,7 +7179,7 @@ static void TestCustomDialogParseQt()
       peDef->setText("10199 Chariklo");
     if (peDef1 != NULL)
       peDef1->setText("52872");
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
     pw->close();
   });
@@ -6935,25 +7399,20 @@ static QString StrDriveObjSelQt(int nWhat)
       break;
     case 5:                                   // changed, then cancelled
       rgcb[0]->setEditText("2060");
-      for (b = 0; b < rgb.size(); b++)
-        if (rgb[b]->text().contains("Cancel")) {
-          rgb[b]->click();
-          return;
-        }
+      if (FClickButtonQt(pw, "IDCANCEL"))
+        return;
       break;
     case 6:                                   // nonsense
       rgcb[0]->setEditText("zznotabody");
       break;
     }
-    for (b = 0; b < rgb.size(); b++)
-      if (rgb[b]->text() == "OK") {
-        rgb[b]->click();
-        // OK refuses an unparseable row and leaves the dialog open, with
-        // its warning already dismissed by the net in DriveModalQt.
-        if (pw->isVisible())
-          pw->close();
-        return;
-      }
+    if (FClickButtonQt(pw, "IDOK")) {
+      // OK refuses an unparseable row and leaves the dialog open, with
+      // its warning already dismissed by the net in DriveModalQt.
+      if (pw->isVisible())
+        pw->close();
+      return;
+    }
     pw->close();
   });
   return strLookup;
@@ -6999,14 +7458,16 @@ static void TestObjSelDialogQt()
   // does not produce a clean "Chiron" and this would be measuring the
   // leftovers. Slot state on exit is what case 0 already left.
   {
-    char szPath[cchSzMax], *szFileOutSav = is.szFileOut;
+    char szPath[cchSzMax];
+    QByteArray baFileOutSav(SzSet(is.szFileOut));
+    flag fFileOutSav = is.szFileOut != NULL;
     int nWriteFormatSav = us.nWriteFormat, i;
     flag fNoWriteSav = us.fNoWrite;
 
     SzScratchPathQt(S(szPath), "objsel", ".as");
     us.fNoWrite = fFalse;
     us.nWriteFormat = 'd';
-    is.szFileOut = szPath;
+    FCloneSz(szPath, &is.szFileOut);
     Check(FOutputSettings(), "Save Program Settings wrote the file");
 
     // Aim the slot somewhere else entirely, so a file that carries
@@ -7047,7 +7508,7 @@ static void TestObjSelDialogQt()
     }
 
     QFile::remove(QString::fromLocal8Bit(szPath));
-    is.szFileOut = szFileOutSav;
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
     us.nWriteFormat = nWriteFormatSav;
     us.fNoWrite = fNoWriteSav;
   }
@@ -7904,7 +8365,13 @@ static void TestAccelTextQt()
 static void TestExpressionHooksQt()
 {
   char *szSav = us.szExpDisp3;
+  int nModeSav = gi.nMode;
+  // Taken here, not beside the menu-command half that changes the mode:
+  // the text redraw just below already sets us.fListing when no chart type
+  // is set, so a snapshot taken after it remembered the leak as the start.
+  CHARTFLAGSQT cfChartSav;
 
+  SnapChartFlagsQt(&cfChartSav);
   Group("AstroExpression hooks");
   us.szExpDisp3 = SzClone("=z 4242");
   ExpSetN(iLetterZ, 0);
@@ -7939,7 +8406,6 @@ static void TestExpressionHooksQt()
   // port had no command id at dispatch until ConnectMenuQt(); see item 45.
   char *szMenuSav = us.szExpMenu;
   QAction *paGrid = PaFindActionTestQt("Aspect Midpoint &Grid");
-  int nModeSav = gi.nMode;
 
   Check(paGrid != NULL, "the Aspect Midpoint Grid item is there to fire");
   if (paGrid != NULL) {
@@ -7962,7 +8428,7 @@ static void TestExpressionHooksQt()
       "with no expression the command runs as itself (mode %d)", gi.nMode);
   }
   us.szExpMenu = szMenuSav;
-  SetChartModeQt(nModeSav);
+  RestoreChartModeQt(nModeSav, &cfChartSav);
   printf("  the redraw and menu command hooks both fire\n");
 }
 
@@ -8031,7 +8497,7 @@ static void TestChartListFilterQt()
     for (QPushButton *ppb : pw->findChildren<QPushButton *>())
       if (ppb->text().contains("Filter") && !ppb->text().contains("Remove"))
         ppb->click();
-    if (FClickButtonQt(pw, "OK"))
+    if (FClickButtonQt(pw, "IDOK"))
       return;
     pw->close();
   });
@@ -8069,7 +8535,7 @@ static void TestChartListFilterQt()
         }
       // Read the selection back out before the dialog goes away.
       cRow = pl != NULL ? pl->currentRow() : -99;
-      if (FClickButtonQt(pw, "Cancel"))
+      if (FClickButtonQt(pw, "IDCANCEL"))
         return;
       pw->close();
     });
@@ -8347,6 +8813,9 @@ static void TestSharedCoreFixesQt()
     char szSmall[100];
     char *szSideSav = gs.szSidebar;
     int nModeSav = gi.nMode, nFillSav = gs.nDecaFill;
+    CHARTFLAGSQT cfSav;
+
+    SnapChartFlagsQt(&cfSav);
 
     for (i = 0; i < 3000; i++)
       szHuge[i] = 'Y';
@@ -8376,7 +8845,7 @@ static void TestSharedCoreFixesQt()
       "a 3000-character sidebar renders instead of smashing the stack");
     gs.szSidebar = szSideSav;
     gs.nDecaFill = nFillSav;
-    SetChartModeQt(nModeSav);
+    RestoreChartModeQt(nModeSav, &cfSav);
   }
 
   // Work log item 93: a slot forced to a midpoint draws its NAME in
@@ -8828,7 +9297,8 @@ static void TestSettingsFieldsQt()
   QVector<real> rgrSav(csetfield);
   QVector<QByteArray> rgbaSav(csetfield);
   QVector<bool> rgfNull(csetfield);
-  char *szFileOutSav = is.szFileOut;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   int nWriteFormatSav = us.nWriteFormat;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   int i, cLost = 0, cStale = 0, cAsked = 0;
@@ -8888,9 +9358,9 @@ static void TestSettingsFieldsQt()
   SzScratchPathQt(S(szPath), "fields", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
-  is.szFileOut = szPath;
+  FCloneSz(szPath, &is.szFileOut);
   Check(FOutputSettings(), "the settings writer wrote a file to ask about");
-  is.szFileOut = szFileOutSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
 
   // Poison everything the ledger does not excuse, so a field the file
@@ -9027,68 +9497,81 @@ typedef struct _setarray {
   CONST char *szWhy;    // NULL when it has to survive
 } SETARRAY;
 
+static SETARRAY rgsetarray[] = {
+  // iLo is 1 wherever element 0 is unused padding -- the aspect, sign and
+  // rulership tables are all indexed from 1 -- and iHi names the last
+  // element the writer's own loop reaches. Both are transcribed from
+  // FOutputSettings(), and a bound set too wide fails loudly here rather
+  // than quietly, which is the direction to be wrong in.
+  {"ignore",      ignore.rgn,      sizeof(ignore.rgn),      'b',
+    0, cObj, NULL},
+  {"ignore2",     ignore2.rgn,     sizeof(ignore2.rgn),     'b',
+    0, cObj, NULL},
+  {"ignorez",     ignorez,         sizeof(ignorez),         'b',
+    0, arAnt, NULL},
+  {"ignore7",     ignore7,         sizeof(ignore7),         'b',
+    0, rrMax-1, NULL},
+  {"ignorea",     ignorea.rgn,     sizeof(ignorea.rgn),     'b',
+    1, cAspect, NULL},
+  {"rgobjset",    rgobjset.rgn,    sizeof(rgobjset.rgn),    'o',
+    0, oNorm1, NULL},
+  {"force",       force.rgn,       sizeof(force.rgn),       'r',
+    0, cObj, NULL},
+  {"rgrBonusInf", rgrBonusInf,     sizeof(rgrBonusInf),     'r',
+    1, 5, NULL},
+  {"rHouseInf",   rHouseInf,       sizeof(rHouseInf),       'r',
+    1, cSign+5, NULL},
+  {"rAspInf",     rAspInf.rgn,     sizeof(rAspInf.rgn),     'r',
+    1, 18, NULL},
+  {"rAspAngle",   rAspAngle.rgn,   sizeof(rAspAngle.rgn),   'r',
+    1, cAspect, NULL},
+  {"rAspOrb",     rAspOrb.rgn,     sizeof(rAspOrb.rgn),     'r',
+    1, cAspect, NULL},
+  {"ruler1",      ruler1.rgn,      sizeof(ruler1.rgn),      'i',
+    1, 10, NULL},
+  {"ruler2",      ruler2.rgn,      sizeof(ruler2.rgn),      'i',
+    1, 10, NULL},
+  {"exalt",       exalt.rgn,       sizeof(exalt.rgn),       'i',
+    1, 10, NULL},
+  {"kAspA",       kAspA.rgn,       sizeof(kAspA.rgn),       'i',
+    1, 18, NULL},
+  {"kMainA",      kMainA,          sizeof(kMainA),          'i',
+    0, 8, NULL},
+  {"kRainbowA",   kRainbowA,       sizeof(kRainbowA),       'i',
+    1, cRainbow, NULL},
+  {"kElemA",      kElemA,          sizeof(kElemA),          'i',
+    0, cElem-1, NULL},
+  // Derived, and the deriving is what puts them right.
+  {"rules",       rules.rgn,       sizeof(rules.rgn),       'i', 1, cSign,
+   "sign-keyed view of ruler1[], rebuilt by the \"-YJ\" reader"},
+  {"rules2",      rules2.rgn,      sizeof(rules2.rgn),      'i', 1, cSign,
+   "sign-keyed view of ruler2[], the same"},
+  {"kObjA",       kObjA.rgn,       sizeof(kObjA.rgn),       'i', 0, cObj,
+   "computed from rgobjset[].kolor and the rulership colors, not stored"},
+  {"starname",    starname,        sizeof(starname),        'i', 1, cStar,
+   "the star sort order for this run, rebuilt whenever stars are cast"},
+  {"pluszone",    pluszone,        sizeof(pluszone),        'b',
+    1, cSector,
+   "the sector plus zones, which are compiled in and have no switch"} };
+#define csetarray (int)(sizeof(rgsetarray)/sizeof(SETARRAY))
+
+// For "menu-actions", which is defined long before this table and restores
+// every array in it after its sweep.
+static int CSetArrayQt() { return csetarray; }
+
+static void *PvSetArrayQt(int i, int *pcb, CONST char **psz)
+{
+  *pcb = rgsetarray[i].cb;
+  *psz = rgsetarray[i].szName;
+  return rgsetarray[i].pv;
+}
+
 static void TestSettingsArraysQt()
 {
-  SETARRAY rgsetarray[] = {
-    // iLo is 1 wherever element 0 is unused padding -- the aspect, sign and
-    // rulership tables are all indexed from 1 -- and iHi names the last
-    // element the writer's own loop reaches. Both are transcribed from
-    // FOutputSettings(), and a bound set too wide fails loudly here rather
-    // than quietly, which is the direction to be wrong in.
-    {"ignore",      ignore.rgn,      sizeof(ignore.rgn),      'b',
-      0, cObj, NULL},
-    {"ignore2",     ignore2.rgn,     sizeof(ignore2.rgn),     'b',
-      0, cObj, NULL},
-    {"ignorez",     ignorez,         sizeof(ignorez),         'b',
-      0, arAnt, NULL},
-    {"ignore7",     ignore7,         sizeof(ignore7),         'b',
-      0, rrMax-1, NULL},
-    {"ignorea",     ignorea.rgn,     sizeof(ignorea.rgn),     'b',
-      1, cAspect, NULL},
-    {"rgobjset",    rgobjset.rgn,    sizeof(rgobjset.rgn),    'o',
-      0, oNorm1, NULL},
-    {"force",       force.rgn,       sizeof(force.rgn),       'r',
-      0, cObj, NULL},
-    {"rgrBonusInf", rgrBonusInf,     sizeof(rgrBonusInf),     'r',
-      1, 5, NULL},
-    {"rHouseInf",   rHouseInf,       sizeof(rHouseInf),       'r',
-      1, cSign+5, NULL},
-    {"rAspInf",     rAspInf.rgn,     sizeof(rAspInf.rgn),     'r',
-      1, 18, NULL},
-    {"rAspAngle",   rAspAngle.rgn,   sizeof(rAspAngle.rgn),   'r',
-      1, cAspect, NULL},
-    {"rAspOrb",     rAspOrb.rgn,     sizeof(rAspOrb.rgn),     'r',
-      1, cAspect, NULL},
-    {"ruler1",      ruler1.rgn,      sizeof(ruler1.rgn),      'i',
-      1, 10, NULL},
-    {"ruler2",      ruler2.rgn,      sizeof(ruler2.rgn),      'i',
-      1, 10, NULL},
-    {"exalt",       exalt.rgn,       sizeof(exalt.rgn),       'i',
-      1, 10, NULL},
-    {"kAspA",       kAspA.rgn,       sizeof(kAspA.rgn),       'i',
-      1, 18, NULL},
-    {"kMainA",      kMainA,          sizeof(kMainA),          'i',
-      0, 8, NULL},
-    {"kRainbowA",   kRainbowA,       sizeof(kRainbowA),       'i',
-      1, cRainbow, NULL},
-    {"kElemA",      kElemA,          sizeof(kElemA),          'i',
-      0, cElem-1, NULL},
-    // Derived, and the deriving is what puts them right.
-    {"rules",       rules.rgn,       sizeof(rules.rgn),       'i', 1, cSign,
-     "sign-keyed view of ruler1[], rebuilt by the \"-YJ\" reader"},
-    {"rules2",      rules2.rgn,      sizeof(rules2.rgn),      'i', 1, cSign,
-     "sign-keyed view of ruler2[], the same"},
-    {"kObjA",       kObjA.rgn,       sizeof(kObjA.rgn),       'i', 0, cObj,
-     "computed from rgobjset[].kolor and the rulership colors, not stored"},
-    {"starname",    starname,        sizeof(starname),        'i', 1, cStar,
-     "the star sort order for this run, rebuilt whenever stars are cast"},
-    {"pluszone",    pluszone,        sizeof(pluszone),        'b',
-      1, cSector,
-     "the sector plus zones, which are compiled in and have no switch"} };
-  int csetarray = (int)(sizeof(rgsetarray)/sizeof(SETARRAY));
   char szPath[cchSzMax];
   QVector<QByteArray> rgbaSav(csetarray), rgbaWant(csetarray);
-  char *szFileOutSav = is.szFileOut;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   int nWriteFormatSav = us.nWriteFormat;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   int i, j, cb, cLost = 0, cStale = 0;
@@ -9131,9 +9614,9 @@ static void TestSettingsArraysQt()
   SzScratchPathQt(S(szPath), "arrays", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
-  is.szFileOut = szPath;
+  FCloneSz(szPath, &is.szFileOut);
   Check(FOutputSettings(), "the settings writer wrote a file to ask about");
-  is.szFileOut = szFileOutSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
 
   // Poison by type, so the new value stays in the neighbourhood of the old
@@ -9256,7 +9739,8 @@ static void TestSettingsStringsQt()
   char szPath[cchSzMax], szMark[cchSzLine];
   QVector<QByteArray> rgbaObj(cObj+1), rgbaStar(cStar+1), rgbaMac(cMacro);
   QVector<bool> rgfObjCustom(cObj+1);
-  char *szFileOutSav = is.szFileOut;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   int nWriteFormatSav = us.nWriteFormat;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   int i, cLost = 0, cAsked = 0;
@@ -9297,9 +9781,9 @@ static void TestSettingsStringsQt()
   SzScratchPathQt(S(szPath), "strings", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
-  is.szFileOut = szPath;
+  FCloneSz(szPath, &is.szFileOut);
   Check(FOutputSettings(), "the settings writer wrote a file to ask about");
-  is.szFileOut = szFileOutSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
 
   for (i = 0; i <= cObj; i++)
@@ -9478,7 +9962,8 @@ static void TestRegistryQt()
 static void TestForcedPositionsQt()
 {
   real rgforceSav[objMax];
-  char *szFileOutSav = is.szFileOut;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite, fFoundMacro = fFalse;
   char szPath[cchSzMax], szLine[cchSzMax], szMid[cchSzMax], szPos[cchSzMax];
@@ -9507,7 +9992,7 @@ static void TestForcedPositionsQt()
   SzScratchPathQt(S(szPath), "force-test", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
-  is.szFileOut = szPath;
+  FCloneSz(szPath, &is.szFileOut);
   Check(FOutputSettings(), "FOutputSettings() wrote a settings file");
 
   szMid[0] = szPos[0] = chNull;
@@ -9570,7 +10055,7 @@ static void TestForcedPositionsQt()
   remove(szPath);
   for (i = 0; i < objMax; i++)
     force[i] = rgforceSav[i];
-  is.szFileOut = szFileOutSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
   // Macro 1's name back as the group found it, the way
@@ -9578,7 +10063,7 @@ static void TestForcedPositionsQt()
   // wrote "AstrologQtSuiteMacro" into its file, and the Macro menu showed
   // it for the rest of the run. Its own buffer, because szLine above is
   // cchSzMax and a saved name can be longer than the command around it.
-  sprintf2(S(szMacro), "-WM 1 \"%s\"", baMacroSav.constData());
+  SzMacroNameSwitchQt(S(szMacro), "-WM 1", baMacroSav.constData());
   FProcessCommandLine(szMacro);
   printf("  forced positions round trip through a settings file\n");
 }
@@ -9619,18 +10104,22 @@ static void GraphicsChartCaptureQt(CONST char *szDir)
     {gSector, "sector"}, {gCalendar, "calendar"}, {gDisposit, "influence"},
     {gEsoteric, "esoteric"}, {gAstroGraph, "astrograph"},
     {gEphemeris, "ephemeris"}, {gRising, "rising"}, {gLocal, "local"},
-    {gMoons, "moons"}, {gExo, "exo"}, {gTraTraGra, "tratragra"},
+    {gMoons, "moons"}, {gTraTraGra, "tratragra"},
     {gTraNatGra, "tranatgra"}, {gSphere, "sphere"}, {gWorldMap, "worldmap"},
     {gGlobe, "globe"}, {gPolar, "polar"}, {gTelescope, "telescope"},
     {gBiorhythm, "biorhythm"}};
   int i, cmode = (int)(sizeof(rgmode) / sizeof(*rgmode)), nSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
   flag fSav = us.fGraphics, fPopupSav;
   QElapsedTimer tim;
   qint64 msDraw, msSave;
+  SnapChartFlagsQt(&cfChartSav);
 
-  // gAspect and gArabic are absent on purpose: DrawChartX() has no case
-  // for either, which is why Windows forces text mode for exactly those
-  // two (item 24).
+  // gAspect, gArabic and gExo are absent on purpose: DrawChartX() has no
+  // case for any of them, which is why Windows forces text mode for all
+  // three (item 24), and chart-render dropped them for the same reason.
+  // gExo was still here and captured a blank frame: two colours in
+  // 1798x1558, background and border.
   if (!QDir().mkpath(QString(szDir))) {
     printf("cannot create %s\n", szDir);
     return;
@@ -9661,7 +10150,7 @@ static void GraphicsChartCaptureQt(CONST char *szDir)
   }
   us.fGraphics = fSav;
   SetNoPopupQt(fPopupSav);
-  SetChartModeQt(nSav);
+  RestoreChartModeQt(nSav, &cfChartSav);
 }
 
 
@@ -11324,8 +11813,10 @@ static void TestLockdownQt()
 {
   flag fNoQuitSav = us.fNoQuit, fNoGraphicsSav = us.fNoGraphics;
   flag fGraphicsSav = us.fGraphics, fPopupSav = FNoPopupQt();
+  CHARTFLAGSQT cfChartSav;
 
   Group("Lockdown switches");
+  SnapChartFlagsQt(&cfChartSav);
   SetNoPopupQt(fTrue);           // the refusal warns; not in a test run
 
   // -0X: graphics forced off before the chart is drawn, and the View
@@ -11376,11 +11867,12 @@ static void TestLockdownQt()
   QByteArray baPath = strPath.toLocal8Bit();
   flag fNoWriteSav = us.fNoWrite;
   int nWriteFormatSav = us.nWriteFormat;
-  char *szFileOutSav = is.szFileOut;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
 
   QFile::remove(strPath);
   us.nWriteFormat = 'd';
-  is.szFileOut = (char *)baPath.constData();
+  FCloneSz(baPath.constData(), &is.szFileOut);
   us.fNoWrite = fTrue;
   Check(!FOutputSettings() && !QFile::exists(strPath),
     "with -0o the settings writer refuses and writes nothing");
@@ -11410,7 +11902,7 @@ static void TestLockdownQt()
   QFile::remove(strPath);
   us.fNoWrite = fNoWriteSav;
   us.nWriteFormat = nWriteFormatSav;
-  is.szFileOut = szFileOutSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
 
   // -0i: the Help menu's eleven file openers and F1, which hand a file to
   // the desktop's default application. Windows routes all of them through
@@ -11436,7 +11928,49 @@ static void TestLockdownQt()
   us.fGraphics = fGraphicsSav;
   SetNoPopupQt(fPopupSav);
   RedrawQt();
+  RestoreChartFlagsQt(&cfChartSav);
   printf("  four lockdown switches enforced, both ways each\n");
+}
+
+
+// Copy Chart in a vector format leaves the output file name alone.
+//
+// The vector copies export to a temporary file and put its contents on the
+// clipboard, through the same FExportChartQt() the Export menu uses -- and
+// that cloned the name into is.szFileOut as well as gi.szFileOut. So after
+// any vector Copy Chart this build carried, as its settings and chart
+// output name, a temporary file that had already been deleted. Windows'
+// copy case (wdriver.cpp, cmdCopyBitmap through cmdCopyWire) clones the
+// temporary name into gi.szFileOut only; its Save and Export dialog sets
+// both, and so does this port's. Found by the suite's canary, as a change
+// "menu-actions" left behind.
+
+static void TestCopyChartNameQt()
+{
+  QAction *pa = PaFindActionTestQt("Copy Chart &SVG");
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL, fGraphicsSav = us.fGraphics;
+  CONST char *szMark = "astrolog-qt-copy-name-marker.dat";
+
+  Group("Copy Chart leaves the output file name alone");
+  Check(pa != NULL, "Copy Chart SVG is on the menu bar");
+  if (pa == NULL)
+    return;
+  FCloneSz(szMark, &is.szFileOut);
+  us.fGraphics = fTrue;
+  QApplication::clipboard()->setText(QString("sentinel"));
+  pa->trigger();
+  // The copy has to have happened, or "the name is unchanged" is about a
+  // command that returned early.
+  Check(QApplication::clipboard()->text().contains("<svg"),
+    "the SVG copy ran: its source is on the clipboard");
+  Check(FEqSz(SzSet(is.szFileOut), szMark),
+    "is.szFileOut still names what it named before the copy (now \"%s\")",
+    SzSet(is.szFileOut));
+
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+  us.fGraphics = fGraphicsSav;
+  RedrawQt();
 }
 
 
@@ -12679,7 +13213,10 @@ static void TestRayDigitFillQt()
   CONST int rgnBad[] = {999, 888, 909};
   CONST char *rgszBad[] = {"999", "888", "909"};
 
+  CHARTFLAGSQT cfSav;
+
   Group("Ray digit wheel fill");
+  SnapChartFlagsQt(&cfSav);
   nRaySav = rgSignRay[SIGT(sAri)];
   nFillSav = gs.nDecaFill;
   rBackSav = gs.rBackPct;
@@ -12726,7 +13263,7 @@ static void TestRayDigitFillQt()
   rgSignRay[SIGT(sAri)] = nRaySav;
   gs.nDecaFill = nFillSav;
   gs.rBackPct = rBackSav;
-  SetChartModeQt(nSav);
+  RestoreChartModeQt(nSav, &cfSav);
 }
 
 
@@ -12766,7 +13303,7 @@ static void TestAspectCountQt()
     QPushButton *ppbOK = NULL;
     for (QLineEdit *p : pw->findChildren<QLineEdit *>())
       if (p->text() == "11") pe = p;
-    ppbOK = PpbButtonQt(pw, "OK");
+    ppbOK = PpbButtonQt(pw, "IDOK");
     if (pe != NULL) pe->setText("20");
     if (ppbOK != NULL) ppbOK->click();
   });
@@ -12783,7 +13320,7 @@ static void TestAspectCountQt()
     QPushButton *ppbOK = NULL;
     for (QLineEdit *p : pw->findChildren<QLineEdit *>())
       if (p->text() == "20") pe = p;
-    ppbOK = PpbButtonQt(pw, "OK");
+    ppbOK = PpbButtonQt(pw, "IDOK");
     if (pe != NULL) pe->setText("3");
     if (ppbOK != NULL) ppbOK->click();
   });
@@ -12822,10 +13359,12 @@ static void TestAspectDashQt()
   OBJSET rgosSav[oNorm1+1];
   GRDOBJB rgbIgnSav, rgbIgn2Sav;
   char *szExpSav = us.szExpAsp;
-  int nDashSav = gs.nDashMax, i;
+  int nDashSav = gs.nDashMax, i, nModeSav = gi.nMode;
   flag fAltSav = gs.fAlt, fExpSav = us.fExpOff;
+  CHARTFLAGSQT cfChartSav;
 
   Group("Aspect line dash");
+  SnapChartFlagsQt(&cfChartSav);
   CopyRgb((pbyte)rAspOrb.rgn, (pbyte)rgOrbSav, sizeof(rAspOrb.rgn));
   CopyRgb((pbyte)rgobjset.rgn, (pbyte)rgosSav, sizeof(rgobjset.rgn));
   CopyRgb((pbyte)ignore.rgn, (pbyte)rgbIgnSav.rgn, sizeof(ignore.rgn));
@@ -12891,6 +13430,7 @@ static void TestAspectDashQt()
   CopyRgb((pbyte)rgbIgn2Sav.rgn, (pbyte)ignore2.rgn, sizeof(ignore2.rgn));
   gs.nDashMax = nDashSav;
   gs.fAlt = fAltSav;
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
 // EnumStarsLines()'s parser drew a line to star 0 for a dangling pair: a
@@ -12968,12 +13508,14 @@ static void TestSortStarQt()
   flag fHaveInfoSav = is.fHaveInfo;
   int nSortSav = us.nStarSort, nPartSav = us.nArabicParts;
   int nArabicSortSav = us.nArabicSort;
-  int nRelSav = us.nRel;
+  int nRelSav = us.nRel, nModeSav = gi.nMode;
   char szFile[cchSzMax], szCmd[cchSzLine], szLine[cchSzLine], *pch;
   int iSir, iAch, cLin;
   real rMag;
+  CHARTFLAGSQT cfChartSav;
 
   Group("Star sort outputs");
+  SnapChartFlagsQt(&cfChartSav);
   CopyRgb((pbyte)ignore.rgn, (pbyte)rgbIgnSav.rgn, sizeof(ignore.rgn));
   us.fGraphics = fFalse;
   us.nRel = rcNone;                 // prior groups leave a relationship
@@ -12983,18 +13525,23 @@ static void TestSortStarQt()
                                     // grid live -- is never reached
 
   SzScratchPathQt(S(szFile), "sortstar", ".tmp");
-#define SORTSTAR_LEG(command) \
-  sprintf2(S(szCmd), command); \
-  FProcessCommandLine(szCmd); \
-  CaptureTextToFileQt(szFile, fFalse); \
-  is.S = fileSav; \
-  fileT = fopen(szFile, "r");
+  // One leg: run the command, capture the text chart it leaves, put is.S
+  // back, and open the capture. A function rather than the macro it was, so
+  // what it assigns is at the call ("fileT = FileLeg(...)") and the command
+  // is an argument to "%s" rather than itself the format string.
+  auto FileLeg = [&](CONST char *szCommand) -> FILE * {
+    sprintf2(S(szCmd), "%s", szCommand);
+    FProcessCommandLine(szCmd);
+    CaptureTextToFileQt(szFile, fFalse);
+    is.S = fileSav;
+    return fopen(szFile, "r");
+  };
 
   // D0-1: -HO with stars sorted by name and Sirius restricted must drop
   // exactly Sirius's row. Pre-fix, the restriction of slot i landed on
   // whichever star sorted into slot i: Achernar's row vanished instead.
   iSir = iAch = -1;
-  SORTSTAR_LEG("-R0 -Un -R Sirius -HO")
+  fileT = FileLeg("-R0 -Un -R Sirius -HO");
   if (fileT != NULL) {
     cLin = 0;
     while (fgets(szLine, cchSzLine, fileT) != NULL) {
@@ -13016,7 +13563,7 @@ static void TestSortStarQt()
   // brightness of whichever star sorted into the row's slot. The orbit
   // chart's position row carries the 3-letter abbreviation ("Siri:"),
   // not the full name -- match that shape, read the trailing magnitude.
-  SORTSTAR_LEG("-R0 -Un -S -HO")
+  fileT = FileLeg("-R0 -Un -S -HO");
   rMag = 0.0;
   if (fileT != NULL) {
     while (fgets(szLine, cchSzLine, fileT) != NULL) {
@@ -13060,7 +13607,6 @@ static void TestSortStarQt()
   is.fHaveInfo = fTrue;             // -qb sets it too; redundant but cheap
   CaptureTextToFileQt(szFile, fFalse);
   is.S = fileSav;
-  fFortune = fFalse;
   fileT = fopen(szFile, "r");
   if (fileT != NULL) {
     while (fgets(szLine, cchSzLine, fileT) != NULL) {
@@ -13109,7 +13655,6 @@ static void TestSortStarQt()
     us.nRel = nRelSav2;
   }
 
-#undef SORTSTAR_LEG
   CopyRgb((pbyte)rgbIgnSav.rgn, (pbyte)ignore.rgn, sizeof(ignore.rgn));
   // -R0 restricted every object, and the -R handler's own
   // RedoRestrictions() recomputed the category flags from the restricted
@@ -13135,6 +13680,7 @@ static void TestSortStarQt()
   us.nRel = nRelSav;
   ciMain = ciMainSav; ciCore = ciCoreSav;
   is.S = fileSav;
+  RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
 // The guard for "Known divergences from Windows".
@@ -13161,7 +13707,7 @@ static void TestDivergencesQt()
   real dstSav = ciCore.dst;
   ciCore.dst = dstAuto;
   DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
-    FClickButtonQt(pw, "OK");
+    FClickButtonQt(pw, "IDOK");
   });
   Check(ciCore.dst == dstAuto,
     "an Autodetect daylight setting did not survive the chart info "
@@ -13190,7 +13736,7 @@ static void TestDivergencesQt()
 
     if (pcb != NULL)
       pcb->setEditText("Rainbow");
-    FClickButtonQt(pw, "OK");
+    FClickButtonQt(pw, "IDOK");
   });
   Check(gs.fLabelAsp,
     "picking a city colouring left gs.fLabelAsp clear, so the cities "
@@ -13263,6 +13809,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"objsel-parse",         TestObjSelParseQt},
   {"color-scheme",         TestColorSchemeQt},
   {"console-font",         TestConsoleFontQt},
+  {"ui-font-chart-size",   TestUiFontChartSizeQt},
   {"app-icon",             TestAppIconQt},
   {"dialog-buttons",       TestDialogButtonWiringQt},
   {"shared-symbols",       TestSharedSymbolBoxesQt},
@@ -13293,6 +13840,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"now-buttons",          TestNowButtonsQt},
   {"menu-side-effects",    TestMenuSideEffectsQt},
   {"graphics-size",        TestGraphicsSizeQt},
+  {"startup-chart-size",   TestChartWindowSizeQt},
   {"font-pack",            TestFontPackQt},
   {"combo-pick",           TestComboPickQt},
   {"screen-colors",        TestScreenColorsQt},
@@ -13303,6 +13851,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"orbit-buffer",         TestOrbitBufferQt},
   {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},
+  {"copy-chart-name",      TestCopyChartNameQt},
   {"restrict-recall",      TestRestrictRecallQt},
   {"printing",             TestPrintQt},
   {"open-dir",             TestOpenDirQt},
@@ -13586,6 +14135,26 @@ static int NRunQtTestTableQt()
   Check(FMatchSz(rgqttestQt[cqttestQt-1].szName, "ok-settles"),
     "\"ok-settles\" is still the last group in the table (found \"%s\")",
     rgqttestQt[cqttestQt-1].szName);
+  // Every name once. ASTROLOG_QT_TESTS matches by substring, and so does
+  // everything built on it -- run-qt-tests.sh's startup probes launch one
+  // group by name -- so a second entry under the same name runs silently
+  // beside the first. "window-size" was given to a new group on
+  // 2026-09-13 while an older group already had it: the startup probe ran
+  // both, and the per-group canary inventory counted 106 groups of 107.
+  //
+  // Counted, then asserted once: a Check() per pair was 5,671 passes, which
+  // is a suite count nobody could read anything from.
+  {
+    int j, cDup = 0, iDup = -1, jDup = -1;
+    for (i = 0; i < cqttestQt; i++)
+      for (j = i + 1; j < cqttestQt; j++)
+        if (FEqSz(rgqttestQt[i].szName, rgqttestQt[j].szName) && cDup++ == 0) {
+          iDup = i; jDup = j;
+        }
+    Check(cDup == 0, "every group name is in the table once (%d repeated; "
+      "first \"%s\", entries %d and %d)", cDup,
+      iDup >= 0 ? rgqttestQt[iDup].szName : "", iDup, jDup);
+  }
   // is.S is opened by Action() and by nothing else, and Action() fcloses
   // it on the way out without putting the caller's back. A group that
   // points is.szFileScreen at a file and runs Action() therefore leaves

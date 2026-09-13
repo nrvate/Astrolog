@@ -1834,7 +1834,7 @@ linked worktree `/nvm/work/qttest`, one commit per item, nothing merged.
 | 9 | O2, O5, O6 | fixed | 653464d |
 | 10 | W1 (markers) | fixed | 3941283 |
 | 11 | R1 | fixed; three text-only charts left the render list | 4eb0cde |
-| 12 | M4 | **not worked** -- see below | -- |
+| 12 | M4 | **not worked in the first batch**; worked in the second, see "M4 worked" | -- |
 | 13 | S3 | closed with evidence, no change | 4a710c6 |
 | 14 | S1 | fixed | a3c5d51 |
 | 15 | S2, K6 | fixed, plus the same fault in `chart-export` | c54e976 |
@@ -1849,7 +1849,8 @@ linked worktree `/nvm/work/qttest`, one commit per item, nothing merged.
 | 24 | H4, L1, N7 | fixed; H4 not falsified | 9d699c0 |
 | 25 | N13 | closed with a reason, no change | 0c7d615 |
 
-**Plan item 12 (M4) was not worked, and this is the one gap in the table.** It
+**Plan item 12 (M4) was not worked, and this is the one gap in the table.**
+(Decided and worked in the second batch below: `menu-actions` restores everything.) It
 asked to check that the menu-firing group's restore covers everything a macro's
 settings file can reach. The canary's first run answered part of it -- after
 `menu-actions` 130 restriction slots, 66 scalars and both star lists are
@@ -1927,3 +1928,654 @@ failed.
 - **Sabotages here were always reversed by exact string**, never by
   `git checkout`, and every one was confirmed gone with `grep -c` before the
   run that followed.
+
+---
+
+# Second batch: the deferrals, decided and worked
+
+After the squash of `qttest` into `qt` (`b0e6fa5`), every deferral above was
+gone over with the maintainer. Branch `qttest2`, in the linked worktree
+`/nvm/work/qttest2`, from `qt` at `b0e6fa5`; one commit per item again, and a
+squash merge on approval. Baseline on that commit: `PASS: 5190 passed, 0
+failed`, canary 201 changes in 10 groups.
+
+## Decisions
+
+| Deferral | Decision |
+|---|---|
+| N-I, Copy Chart leaves a temp name in `is.szFileOut` | fix to match Windows: the copy path does not touch `is.szFileOut` |
+| M4 (plan item 12), `menu-actions` leftovers | `menu-actions` restores what it changes; no general per-group reset |
+| N-B, N-D, N-E, N-F, N-G, N-H | fix each one the evidence makes certain |
+| N-C, `gs.yWin` 600 to 575 | trace the 25 pixels, then fix (below) |
+| warning audit speed | build an incremental, cached audit |
+| buttons by `IDOK`/`IDCANCEL` | do it; name About's OK button `IDOK` |
+| six groups assigning a stack path to `is.szFileOut` | convert to item 15's save by content |
+| D1, T4, T5, a double quote in a restored macro name | do them |
+| O1, splitting the oracle | not in this batch |
+
+**A general state reset was considered and not taken.** The core has no reset to
+compiled defaults: `us`, `is`, `gs` and `gi` get their values once, from the
+initialisers in `data.cpp` and `xdata.cpp`; `InitProgram()` resets only pointer
+tables, restrictions, colours and the custom-object tables, and
+`InitVariables()` only the volatile flags the `-Q` loop needs. A reset would have
+meant snapshotting the whole state at table start and restoring it before every
+group. The maintainer chose `menu-actions` restoring itself instead.
+
+## N-C traced: the 25 pixels are the menu bar, and the chart shrinks on every save
+
+A temporary probe (`ProbeQt()`, removed afterwards) printed the window, the
+scroll-area viewport, the canvas, `gi.qim` and `gs.xWin`/`gs.yWin` around opening
+and cancelling the Restrictions dialog:
+
+- the menu bar is **25 pixels** high, **29** under `nrvate.as`'s larger menu font --
+  exactly the two drops the canary had recorded (600 to 575, 1558 to 1529);
+- `gs.yWin` was **already** the smaller number when the probe started, before any
+  dialog. The dialog groups were only the first to force a graphics repaint after
+  startup; `paintEvent()` then adopts the canvas height ("Window Resizes Chart").
+
+**Cause.** Startup sizes the *whole window*, menu bar included, to the saved chart
+size: `gi.qwind->resize(gs.xWin, gs.yWin)` in `qtdriver.cpp`, just before
+`show()`. The chart area comes out a menu bar shorter, and the first repaint writes
+that back into `gs.yWin`. **Square Screen** does the same with the same call.
+The port already has the right routine, `ResizeWindowToChartQt()`, which keeps
+whatever of the window is not viewport; startup and Square Screen do not use it.
+
+**Windows does it the other way round.** `gs.xWin`/`gs.yWin` are the *client*
+area there (`WM_SIZE` stores `wi.xClient`/`wi.yClient`), and `WinMain` calls
+`ResizeWindowToChart()` before `ShowWindow()` -- which grows the window so the
+client area is the chart size, and does nothing in text mode.
+
+**It compounds.** Three real launches, each loading the settings file the previous
+one saved, starting from `:Xw 760 600`:
+
+| Launch | Loaded | Window | Chart area | Saved |
+|---|---|---|---|---|
+| 1 | 760x600 | 760x600 | 760x575 | 760x575 |
+| 2 | 760x575 | 735x575 | 735x550 | 735x550 |
+| 3 | 735x550 | 710x550 | 710x525 | 710x525 |
+
+The width follows from the second launch on because the saved file carries `=XQ`
+(square charts): squaring a wheel from the shortened canvas takes the width with
+it. With `_XQ` added to the same file, the width does not shrink that way.
+
+So a user with a graphics chart who saves settings loses 25 pixels of chart height
+every launch. **Decision: fix to match Windows**, startup and Square Screen.
+
+## N-C fixed: the window is sized around the chart
+
+**The net first.** New group `startup-chart-size` (`TestChartWindowSizeQt()`; first registered as `window-size`, a name already taken -- see "N-C follow-up"), two legs:
+
+- **Startup**, reachable only from a fresh process. `run-qt-tests.sh` gains a
+  "Chart size at startup" section that launches the group alone with
+  `:Xw 760 600 =X` and `ASTROLOG_QT_WINSIZE_PROBE=760x600`; the group then
+  requires the chart viewport **and** `gs.xWin`/`gs.yWin` (what a save writes) to
+  be 760 by 600 after the first paint. The runner accepts only
+  `PASS: [1-9]... passed, 0 failed`, checked against the real pre-fix failure line,
+  an empty filter match and a two-digit failure count.
+- **Square Screen**, in the full suite: from a 700 by 500 chart, trigger the item
+  and require the viewport and `gs` to equal what `SquareX()` makes of 700 by 500
+  -- not "width equals height", since `SquareX()` adds the sidebar and leaves maps
+  and grids alone.
+
+Before the fix, both failed exactly as traced: startup "760 by 575, wanted 760 by
+600; window 760 by 600", and Square Screen "viewport 740 by 471 ... wanted 740 by
+500" under `nrvate.as` (the 29-pixel menu bar).
+
+**The fix** (`qtdriver.cpp`): Square Screen calls `ResizeWindowToChartQt()` where it
+called `resize(gs.xWin, gs.yWin)`, in Windows' order (resize, then `us.fGraphics`).
+`BeginQt()` keeps its plain resize -- a text chart still wants it, and
+`ResizeWindowToChartQt()` returns in text mode as Windows' does -- and calls
+`ResizeWindowToChartQt()` **after** `show()`.
+
+**Gotcha: not before `show()`.** The first attempt measured before showing, laying
+the window out first with `layout()->activate()`. It measured the chrome as 122 by
+25 instead of 0 by 25 and opened an 882 by 697 chart: a hidden `QScrollArea` has
+had no resize event, so its viewport is not laid out whatever the main window's
+layout says. After `show()` the pending resize events have been delivered and the
+measurement is exact. Nothing adopts the interim size, because `paintEvent()` only
+writes the viewport back once `InteractQt()` has set `qi.fReady`.
+
+**Not fixed here, found on the way: under `nrvate.as` the width grows 80 a launch.**
+Under `nrvate.as` the same probe opened 840 by 600 for `:Xw 760 600`.
+Traced with temporary prints: `gs.xWin` is **already 840 on entry to `BeginQt()`**.
+The shared core's `#ifdef ISG` branch in `FActionX()` (`xscreen.cpp`,
+`else if (fSidebar) gs.xWin += SIDESIZE...` just before `BeginX()`) adds the
+sidebar, the canvas adopts it, and a save records 840 -- so the width grows 80 a
+launch, which is the "920 wide" the drift experiment saw with `_XQ`. It is not the
+menu bar, not a window minimum (69 by 98) and not this fix. It is **not the sidebar
+switch alone**: `-Yi1 ephem :Xw 760 600 =X =Xv0` comes up 760 wide, so some other
+setting in `nrvate.as` decides whether `fSidebar` holds on that path (the macro
+reads `gi.nMode`). Windows' own `ResizeWindowToChart()` adds the sidebar too,
+whenever `gi.nMode == 0`, so what Windows does over a launch and a save has to be
+**measured** before the port is changed; that is the next item.
+
+**Gotcha in the probe itself.** A first version added `_Xv0` to keep the sidebar
+out of it. `=X _Xv0` ends the process at once, exit 0, **no output at all** -- the
+runner read the empty string as the assertion failing -- and `_Xv0 =X` lets the
+tree's square-charts default make 760 by 600 into 600 by 600. The probe is plain
+`:Xw 760 600 =X`, the command measured failing before the fix and passing after.
+Why `=X _Xv0` exits silently is its own question, recorded to look at.
+
+**Measured on Windows afterwards, and it changes the question.** The real
+`astrolog.exe` under Wine on a private display, `-Wt -Yi1 ephem :Xw 760 600 ... =X`,
+window geometry read with `xdotool` after a ten-second settle, each case run twice
+in swapped order with identical results:
+
+| Switches before `=X` | Window |
+|---|---|
+| `_Xv0 _XQ` | 936x635 |
+| `=Xv0 _XQ` | 936x635 |
+| `=Xv0` | 936x635 |
+| (`=X _Xv0`, graphics turned off) | 1432x873 |
+
+The width **does not depend on the sidebar switch at all** on Windows. Its startup
+`ResizeWindowToChart()` adds `SIDESIZE * gi.nScaleText / 2` whenever
+`gi.nMode == 0`, which it is before the first chart is drawn, and `WM_SIZE` then
+stores the client width in `gs.xWin`. So a Windows launch followed by a save
+records a width larger than it loaded as well. This fork's settings writer saves
+`:Xw` **verbatim** -- upstream subtracted the sidebar on save and `NSwXw()` added it
+back, and `io.cpp` records why that pair was removed -- so the growth is in both
+builds, in the file format, and in a fix this fork made on purpose. **For the
+maintainer:** not changed here. The Qt port is left matching its oracle, as the
+decision for N-C asked.
+
+**`=X _Xv0` turns graphics off, on both builds.** `NProcessSwitchTable()`
+(`switch.cpp`) calls `SwitchF2(us.fGraphics)` for every `grfSwGraphics` flag row, so
+the prefix of `_Xv0` is also the prefix of graphics mode. Windows then opens its
+text window (the 1432x873 above). The Qt binary exiting 0 **with no output at all**
+is the same fact on this build, and by design: the `graphics-mode` group
+(`TestGraphicsModeSourceQt()`) asserts that `_X` on a command line still selects
+text mode, because that is how `run-qt-tests.sh` runs this build to completion with
+no window -- the window is created inside `FActionX()`, which `Action()` reaches
+only with graphics on, so the suite, which runs from `InteractQt()`, never starts.
+(First recorded here as untraced; traced the same day.) The probe does not say
+`_Xv0`.
+
+## N-I fixed: Copy Chart leaves the output file name alone
+
+**The net first.** New group `copy-chart-name` (`TestCopyChartNameQt()`): put a
+marker name in `is.szFileOut`, trigger **Copy Chart SVG** from the menu bar, then
+
+- require the SVG source on the clipboard, so "the name is unchanged" cannot pass
+  on a copy that returned early (under `-0o`, say);
+- require `is.szFileOut` to still be the marker.
+
+It restores `is.szFileOut` by content and `us.fGraphics` afterwards. Before the fix:
+`FAIL is.szFileOut still names what it named before the copy (now
+"/tmp/astrolog-qt-copy-CXzEMF")`, the other three checks passing -- so the copy
+ran and the name was overwritten, exactly as N-I said.
+
+**The fix** (`qtdialog.cpp`): `FExportChartQt()` gains `flag fFileOut`, and only
+clones into `is.szFileOut` when it is set. `gi.szFileOut` is still set every time,
+since `FActionX()`'s file writers read that one. Callers:
+
+| Caller | `fFileOut` | Windows |
+|---|---|---|
+| `ShowExportGraphicsDialogQt()` (the five Export items) | true | `wdialog.cpp` clones the chosen name into both after `GetSaveFileName()` |
+| `FExportChartToFileTestQt()` (the suite's picker-less Export) | true | it stands in for the Export items |
+| `CopyChartVectorQt()` (Metafile, PostScript, SVG, Wireframe) | false | `wdriver.cpp`'s copy case clones into `gi.szFileOut` only |
+
+Copy Chart Bitmap and Text never went through this: the first copies `gi.qim`, the
+second captures the text chart.
+
+After the fix `copy-chart-name` passes (4) and so does `chart-export` (22), which
+drives the same function through the Export hook.
+
+**The full suite:** `PASS: 5195 passed, 0 failed`, startup section ok. Against the
+N-C run the canary loses exactly one line -- `menu-actions: is.szFileOut "(NULL)"
+-> "/tmp/..."` -- and nothing else moves.
+
+## M4 worked: `menu-actions` puts back everything it changes
+
+**Decided:** no general per-group state reset (see "Why no general state reset"),
+and `menu-actions` restores what it changes itself.
+
+**Measured first.** Snapshot before the sweep, compare after, no restore: **89**
+fields and arrays differed. The canary had named the scalars, the restriction slots
+and the star lists; the comparison added ten whole arrays it cannot see --
+`ignore`, `ignore2`, `ignorea`, `rgobjset`, `rAspOrb`, `force`, `ruler1`, and the
+derived `rules`, `rules2`, `kObjA`. So M4's own worry -- per-object state a macro's
+settings file reaches, orbs and colours -- was real. Object display names, custom
+star names and macros did **not** change; they are restored anyway so the snapshot
+is the whole configuration rather than the part that moved today.
+
+**The vocabulary is the three sweeps', not a hand list.** `MENUSTATEQT` holds:
+
+- every member of US and GS, through `settingsfields.h` (the `settings-fields`
+  sweep's table), scalars by value and strings by content;
+- the 24 arrays of `settings-arrays`, whose table moved from inside
+  `TestSettingsArraysQt()` to file scope with two accessors, `CSetArrayQt()` and
+  `PvSetArrayQt()`, since `menu-actions` is defined 8,000 lines earlier;
+- object display names, custom star names and macros, as `settings-strings` holds
+  them;
+- "Window Resizes Chart" and "Chart Resizes Window", which live in `qi` and no
+  sweep sees.
+
+**The restore** follows the idioms those groups proved: window flags first (one of
+them resizes as it is set), arrays by byte copy, scalars by value, strings through
+`FCloneSz()` only where they changed, the star pair through `FProcessYXU()`, object
+names through `SetObjDisp()`; then the caches computed from them
+(`is.fSwissPathSet = fFalse`, `InitColorPalette()`), `RedoRestrictions()` and
+`AdjustAspectCount()` as `settings-arrays` ends, `ResizeWindowToChartQt()`,
+`RedoMenuQt()`, `RecastAndRedrawQt()`. The check runs after all of that, so a
+restored value that a recompute then overwrote is caught too.
+
+**The net:** `the sweep put back every setting it changed (%d still differ)`,
+naming the first eight. Falsified twice: with no restore at all, **191** differ
+(counting restriction slots one by one, as that version did); with the array
+copy-back skipped, 15 differ and it names `ignore`, `ignore2`, `ignorea` and the
+category flags and `us.nAsp` derived from them.
+
+**Two groups were depending on the leftovers,** and both **failed when run alone**
+before any of this -- they had passed only in the full suite:
+
+- `menu-resync` restricted the Uranians in `ignore[]` only and expected
+  `SyncRestrictMenuQt()` to clear `us.fUranian`. `RedoRestrictions()` counts a
+  category as included while *either* set leaves a body unrestricted, so it only
+  passed while `menu-actions` had left `ignore2[]` restricting them. It pins both
+  sets now. Its alone-failure before the fix is its falsification.
+- `screen-colors` asserted "a colour wheel is mostly not grey" counting the
+  background, and black is grey: 99% on `nrvate.as`, where it only passed because
+  the sweep had left thick lines, a filled decan ring and a 100% background image.
+  It counts grey among drawn pixels now. Falsified by forcing that pass to
+  monochrome: 100% grey, and it fails.
+
+Both pass alone under `-i nrvate.as` and `-Yi1 ephem`.
+
+**The full suite:** `PASS: 5196 passed, 0 failed`, startup section ok. The canary
+goes from **199 changes left behind by 9 groups to 10 by 7** (four of the ten are
+`gs.rRot`/`gs.rTilt`). N-E's `us.nAsp` line is gone with the leftovers that caused
+it. What remains is three chart-flag leaks (`chart-render` `us.fListing`,
+`bad-input` and `shared-core` `us.fHorizon`, which is N-B/N-D) and `gs.yWin`
+moving by a few pixels in the three groups that change the interface font --
+visible now that "Window Resizes Chart" is no longer left off.
+
+## N-B and N-D fixed: every group puts the chart-type flags back, not just the mode
+
+**The fault.** `SetChartModeQt(nModeSav)` is not a restore: it clears every flag
+in `rgchartmode[]` and sets the one whose row maps to `nModeSav`. A group that
+found no chart-type flag set -- which is how a settings file leaves them -- left
+one set.
+
+**Why the chase stopped working.** After M4 the canary named three groups, each
+reproduced alone: `chart-render` `us.fListing 0 -> 1`, `shared-core` the same,
+`bad-input` `us.fHorizon 0 -> 1`. Fixing them unmasked `ray-digit-fill`; fixing
+that unmasked `aspect-dash`; then `star-sort-outputs`. Each was real, and each had
+been invisible only because a group before it already left the flag at 1, so its
+own leak changed nothing the canary could see. A canary that compares each group
+with the one before cannot see a leak into state that is already leaked.
+
+**So the measurement changed: every group run alone.** A script ran all 107 groups
+one per process under the canary, four at a time -- about 28 seconds -- and listed
+what each left behind **starting from a fresh launch**. That is the inventory the
+chase could never produce, and it is how the rest were found at once.
+
+**The fix.** `CHARTFLAGSQT`, `SnapChartFlagsQt()`, `RestoreChartFlagsQt()` and
+`RestoreChartModeQt(nMode, &saved)`, which puts the mode back and then the flags
+(every `rgchartmode[]` flag plus `us.fAtlasLook` and `us.fZoneChange`, the two
+`SetChartModeQt()` clears outside that table).
+
+**The flags go back last, with nothing drawn after them.** The first version
+redrew after restoring, and the inventory still showed `chart-store` and
+`expression-hooks` leaking. A **text** chart drawn with no chart-type flag set picks
+the listing itself -- `charts1.cpp`, `us.fListing = fTrue; // didn't indicate
+anything` -- so a redraw after the restore, in a group that ended in text mode,
+re-created the leak. `lockdown` and `text-export` leak through that same line
+without ever calling `SetChartModeQt()`, so they take `RestoreChartFlagsQt()`
+alone.
+
+**Where it is used.** 22 restores in 23 functions' worth of groups:
+
+- the first three: `chart-render` (twice -- its second half fires the Chart menu
+  and ends in a restore of its own), `shared-core`, `bad-input`;
+- the unmasked: `ray-digit-fill`, `aspect-dash` (which never put the mode back at
+  all), `star-sort-outputs` (its `-S` switch changes the mode);
+- every other bare `SetChartModeQt(nModeSav)` or `(nSav)` in the file, converted
+  by pattern with each snapshot inspected in place: `rising-gradient`,
+  `menu-side-effects`, `text-pager`, `chart-scroll`, `screen-colors`, `chart-now`,
+  `text-extent`, `screen-options`, `jet-trail`, `credit-colors`, `transit-mode`,
+  `chart-store`, `expression-hooks` and `GraphicsChartCaptureQt()`;
+- flags only: `lockdown`, `text-export`.
+
+`expression-hooks` needed its snapshot moved: the sweep put it beside the mode it
+saves, halfway down the function, after a text redraw had already set the listing,
+so it faithfully restored the leaked state. It is taken at the top now.
+
+`bad-input` has no chart-mode call; its deliberately bad switch `-ZZzzz` is read as
+far as `-Z`, the horizon chart, and a chart-type switch is routed through
+`SetChartModeQt()`.
+
+**Evidence.** Before: the canary lines above, each with its group alone. After: the
+alone inventory over all 107 groups names **no chart-type flag in any group**; the
+only lines left are the two interface-font groups' `gs.yWin` (N-J). No per-group
+assertion was added: checking the flags straight after restoring them cannot fail;
+the inventory is the measurement.
+
+## N-E fixed: the Aspect leg of `dialog-buttons` puts `us.nAsp` back
+
+`ClickInModalQt()` clicks the button **and then OK**, and Aspect Settings' OK
+derives `us.nAsp` from `ignorea[]`. The leg saved and restored `ignorea[]` only.
+From this machine's settings the toggle never changes the highest unrestricted
+aspect, so nothing showed -- after M4 the canary line was gone. It showed while
+`menu-actions` left aspects restricted.
+
+**Reproduced before fixing**, with a temporary precondition (aspects 6 onward
+restricted, as those leftovers had them) and a temporary switch to skip the fix,
+one build, removed afterwards:
+
+```
+nAsp at leg start 5, after restore 0     (no fix -- N-E's own "5 -> 0")
+nAsp at leg start 5, after restore 5     (fix)
+```
+
+The fix saves `us.nAsp` with the flags and puts it back with them.
+
+## N-F fixed: the menu-firing "chart went blank" check can see a blank chart
+
+It counted samples over the whole image, where the border and the header and
+footer lines alone are 800-900 -- "more than 20" passed a chart that drew nothing.
+It now uses `CpixDrawnQt(16)`, the in-margin measure `chart-render` got in item 11,
+with the same threshold.
+
+**Measured first:** over all 341 menu items on `nrvate.as`, the lowest in-margin
+count is **93**, after "Solar System &Orbit" (then 667 Local Horizon, 1649 Moons).
+**Falsified:** filling the buffer with the background just before the count made
+**322** items fail "chart went blank" -- every item that reaches the check.
+Reverted by exact string and rebuilt before anything else ran.
+
+## N-G closed with a reason: `clear-screen` is not blind with the corner
+
+`CpixDifferQt()` compares against `pixel(0,0)`, and R1's worry was a border
+standing in for the background. `clear-screen` never draws, though: it paints the
+whole buffer one colour, checks that is uniform **and** not the background, clears,
+then checks the buffer is uniform against the corner **and** that the corner is
+`gi.kiOff`. The last two together say every sampled pixel is the background, which
+is the claim. No change.
+
+## N-H fixed: the graphics capture no longer writes a blank Exo chart
+
+`GraphicsChartCaptureQt()` (`QTGRAPHDIR`) still listed `gExo`, which `chart-render`
+dropped in item 11 because `DrawChartX()` has no case for it. Before: 24 captures,
+and `exo.png` at 1798x1558 held **two colours**, 2,793,370 background samples and
+7,914 border. After: 23 captures and no `exo.png`. The comment now names all three
+text-only charts.
+
+## N-C follow-up: the new group's name was already taken
+
+The chart-size group added for N-C was registered as `window-size`, and an older
+group, `TestWindowSizeQt()`, has had that name all along. Nothing noticed:
+
+- `ASTROLOG_QT_TESTS` matches by substring, so the "Chart size at startup" probe in
+  `run-qt-tests.sh` ran **both** groups -- the older one first, in table order,
+  which is exactly what a probe of *startup* state must not do;
+- the per-group canary inventory kept one summary file per name and counted 106
+  groups of 107, which is how it surfaced.
+
+**Renamed** `startup-chart-size`, which no other group name contains and which
+contains none; the probe now reports `1 of 107 groups matched`, and passes.
+
+**And the class is closed:** the table runner asserts every group name appears
+once, as it already asserts `ok-settles` is last. Falsified twice -- against the
+tree before the rename (`group name "window-size" is in the table twice`), and in
+its final single-assertion form against a temporary second `credit-colors` entry
+(`1 repeated; first "credit-colors", entries 20 and 21`), reverted by exact string.
+The first form made one `Check()` per pair, 5,671 passes on every run; it counts
+quietly and asserts once now.
+
+**The full suite after all of the second batch's suite items (N-B/N-D, N-E, N-F,
+N-G, N-H and this):** `PASS: 5197 passed, 0 failed` -- one more than M4's 5196,
+the duplicate-name check -- and the startup section passes. The canary is down to
+**7 changes left behind by 5 groups**: `gs.rRot`/`gs.rTilt`, and the three
+`gs.yWin` lines of N-J (`dialog-buttons` moves it back by one after
+`console-font`). No chart-type flag appears in any group. The seven commits for
+these items were built from one working tree by hunk: each commit's `qttest.cpp`
+was generated from HEAD with that commit's hunks, every removed line checked
+against HEAD, the last equal to the tested tree byte for byte, and each
+intermediate compiled on its own (with the final one compiled as the control for
+that check).
+
+## New finding, open: N-J -- changing the interface font moves `gs.yWin`
+
+The alone inventory leaves exactly two lines, both in groups that change the
+interface (menu) font and put it back: `console-font` `gs.yWin 1558 -> 1557` and
+`interface-settings` `gs.yWin 1558 -> 1562`. The menu bar's height follows the
+font, the window keeps its size, and with "Window Resizes Chart" on the canvas
+writes the new viewport height back into `gs.yWin`. That part is how Windows
+behaves too, when its own menu font changes.
+
+What is not explained is that restoring the font does not restore the height: the
+chart comes back 1 and 4 pixels different, not equal. Unmeasured: whether the menu
+bar returns to its first height after the reapply, and whether the canvas adopts
+before or after it. A user who changes the interface font and changes it back
+would save a chart a few pixels off. **Open, for the maintainer**; not fixed
+without measuring.
+
+## The warning audit, incremental: `tools/warning_audit.py --cached`
+
+**Decided:** make the audit fast by caching, and require its report to match the full
+audit's exactly.
+
+**Why a cache has to keep what the compiler said.** The full audit is five clean builds
+(seven with Qt6) because a compiler reports nothing about a file it does not compile:
+an up-to-date object is silence, not a clean bill. So the cache keeps each object's
+compiler output beside it and the report is read from those, not from a build log.
+
+**How.**
+
+- **Objects only, never linked, outside the tree** (`WARNING_AUDIT_CACHE`, default
+  `~/.cache/astrolog-warning-audit/<build>-<key>`). No binary in the tree is touched,
+  `make clean` cannot reach it, and a session building in the tree is not disturbed.
+- **A second makefile replaces the compile rule.** `make -f Makefile.qt -f rule.mk`: a
+  pattern rule with the same target and prerequisites as the real one replaces it, and
+  its recipe is the real recipe with the output kept in `<object>.warn`. Every makefile
+  here compiles with a literal `g++` or `$(CXX)` that no command-line variable wraps,
+  so the rule is the only place to stand.
+- **A key over what make does not track:** the flags as make expands them (so a new
+  `$(QT_CFLAGS)` counts), the makefile and `Makefile.srcs` (the Swiss `-Wno-*`
+  exemption is there), the compiler's `--version`, and the replacement rule itself. A
+  changed key is a fresh directory; old keys for that build are removed.
+- **Header edits** need nothing extra once `-MMD -MP` go back into the flags -- the
+  audit's own flags replace the makefiles', which carry them -- because make's own
+  dependency files then decide what recompiles.
+- **Guards.** An object with no `.warn` stops the run: if the replacement rule ever
+  stopped replacing, the real rule would build silently and the report would read
+  clean. And `--cached --update` is refused: the baseline is written from a full clean
+  build, which is what the cached mode is measured against.
+
+**Measured.** On this machine, all five builds plus both Qt6 legs: a cold `--cached` run (empty
+cache) **1 min 39 s**, the same as the full audit's 1 min 39 s; a second run with
+nothing changed **0.48 s**; after an edit to `astrolog.h`, which every file includes,
+1 min 42 s, because every object really does recompile; after an edit to one `.cpp`,
+only that object in each build.
+
+**Proven against the full audit.** Two warnings planted at once -- an unused variable in
+`io.cpp` and an unused `static` in `astrolog.h` -- then `--cached` and the full audit
+run on the same tree. Both reported exactly the same four NEW lines, compared
+sorted and byte for byte, including the header warning's per-build counts (29, 31 and
+32 files), which is the part a per-object cache could most plausibly get wrong:
+
+```
+NEW  console+qt+qt-test+wcli+win  io.cpp      FOutputSettings  -Wunused-variable   1
+NEW  console+wcli                 astrolog.h  (header)         -Wunused-variable  29
+NEW  qt-test                      astrolog.h  (header)         -Wunused-variable  32
+NEW  qt+win                       astrolog.h  (header)         -Wunused-variable  31
+```
+
+Then both plants reverted by exact string (no marker left): the next `--cached` run
+recompiled and came back clean -- no stale `.warn` survived -- and the one after took
+0.47 s. The rule text went into the key before this proof, so the proof ran against
+the final key.
+
+## Buttons by IDOK and IDCANCEL
+
+**What changed.** `PpbButtonQt()` and `FClickButtonQt()` find a dialog's button by
+**object name**, `IDOK` or `IDCANCEL`, instead of by its label. All 37 calls pass
+the name, and the four drivers that compared labels inline -- the About group,
+`ClickInModalQt()`, `objsel-lookup` and `timers` -- use the helpers.
+
+**Why names.** A label is display text: a mnemonic moves in it, and a theme or a
+translation can rewrite it. Windows never finds these buttons by what they say;
+`IDOK` and `IDCANCEL` are the ids `astrolog.rc` gives them in all 25 resource
+dialogs, and `qtdialog.cpp`'s builder makes every control's id its object name.
+
+**The one dialog outside the resource.** About builds a `QDialogButtonBox` by hand,
+so its OK had no name. It gets `setObjectName("IDOK")`.
+
+**And a quiet fallback made loud.** `ClickOkInModalQt()` -- which `ok-settles`
+uses to press OK in every dialog, twice -- closed a dialog it found no OK in and
+moved on. Closing is a cancel, so a dialog it could not press OK in passed
+"pressing OK settles" by never being asked. It now fails by the dialog's title,
+and adds no passes when it succeeds.
+
+**The net, and it failed first.** With the suite switched to names and About not
+yet named: `ok-settles` alone failed three times with `"About Astrolog" has no IDOK button to press` (57 passed, 3 failed) -- the dialog the old label lookup had been pressing by its text, and the one the old fallback would have cancelled without a word. Then About's button named: `ok-settles` alone passed 57 of 57, and so did the groups that drive buttons, each alone: `about-version` 4, `objsel-lookup` 15, `timers` 3, `dialog-buttons` 11, `graphics-fields` 14, `objsel-dialog` 21, `objsel-glyph` 6. The full suite: 5197 passed, 0 failed, the same count, since the new check adds no passes; the canary unchanged.
+
+## Tidy-ups: D1, T4 and T5, and the macro-name quote
+
+**D1.** `DriveModalQt()` is defined where it was forward-declared, above the About
+group that first uses it, and the declaration and its apology are gone. It uses
+`QTimer`, `QApplication` and `nScaleTest` (defined at the top of the file), so
+nothing it needs moves.
+
+**T4.** `SORTSTAR_LEG` was a five-statement macro that assigned `fileT` behind the
+caller's back. It is a lambda now, `fileT = FileLeg("...")`, so what it assigns is
+at the call, and the command is an argument to `"%s"` rather than itself the
+format string.
+
+**T5.** `fFortune` was initialised at its declaration and reset to the same value
+just before its only use. The reset is gone; the declaration keeps the initialiser,
+which is the file's convention.
+
+**The macro-name quote.** Three restores put a saved macro name back as
+`-WM 1 "%s"`. A name holding `"` put the rest of itself on the command line as
+switches. `SzMacroNameSwitchQt()` quotes with whichever of `"` and `'` the name does
+not contain -- the rule `FOutputSettings()` already applies to AstroExpressions,
+and `NParseCommandLine()` honours both -- and says so, rather than corrupting, for
+a name holding both. (The settings writer's own `-WM` line always uses `"`; that is
+recorded here, not changed.)
+
+**Evidence.** The quote fault needs the `"` to be followed by a space or punctuation --
+the command-line parser only ends a quoted word there -- so a first probe named
+`Probe"Quote` came back intact before the change too, and proved nothing. Started with
+macro 1 named `Probe" x`, `interface-settings` and `forced-positions` each left
+`macro name 1 "Probe" x" -> "Probe"` before the change (which also shows the startup
+rename took), and neither leaves a macro-name line after it (44 and 10 passed).
+`star-sort-outputs` passes alone after T4/T5 (7). Each of the three commits was built
+on its own. Full suite on all three: `PASS: 5197 passed, 0 failed`, no canary change
+outside `gs.rRot`, `gs.rTilt` and N-J's `gs.yWin`.
+
+## The pointer-assigned output names, saved by content
+
+**What was left from item 15.** Item 15 converted the groups that *cloned* into the
+user's output-name buffer and "checked and left alone" the ones that only point
+`is.szFileOut` at a buffer of their own by plain assignment and put the pointer
+back -- latent, since a stack address sitting in `is` is freed or written through
+by anything in the window that clones into or frees that field (`FExportChartQt()`
+for Export, `-o` on a command line, `InitVariables()`, `FinalizeProgram()`). The
+deferral named "six groups"; re-derived against the current tree it is **nine
+sites**:
+
+`FSaveSettingsToQt()` (the helper `ok-settles` saves through), `settings-roundtrip`,
+`interface-settings`, `objsel-dialog`, `settings-fields`, `settings-arrays`,
+`settings-strings`, `forced-positions` and `lockdown` (whose buffer was a
+`QByteArray`'s, the same hazard). `chart-export` keeps item 15's deliberate hybrid.
+
+**The change.** Each saves `is.szFileOut` as a `QByteArray` plus whether it was set,
+puts its own path in through `FCloneSz()`, and restores with `FCloneSz()` of the
+saved text or of NULL. No address of a group's own buffer reaches `is` at all.
+A script made the nine edits, each scoped to its own function with every match
+asserted exactly once; afterwards the only `is.szFileOut =` assignment left in
+the file is `chart-export`'s.
+
+**What can and cannot be shown.** No assertion can fail before this change: the
+hazard needs something in a group's window that frees or clones the field, and
+none of the nine reaches one today. What can be shown is that nothing moved.
+
+Each of the nine groups was run alone under the canary, started with `-i nrvate.as -o`
+and a 144-character path, so any clone into that buffer lands in place. Before and after
+the change every group matched once, left no canary line, and reported the same count:
+`settings-roundtrip` 15, `interface-settings` 44, `objsel-dialog` 21,
+`settings-fields` 4, `settings-arrays` 4, `settings-strings` 4, `forced-positions` 10,
+`lockdown` 13, `ok-settles` 57. **The measurement can see the name:** `lockdown`'s
+restore sabotaged to `FCloneSz(NULL, ...)` made the canary name the 144-character path
+going to NULL; reverted by exact string and rebuilt. Full suite:
+`PASS: 5197 passed, 0 failed`, canary unchanged.
+
+## The chart width grew by the sidebar at every launch -- fixed, both builds
+
+**First recorded as open (N-C follow-up) and left for the maintainer. It should not
+have been; it is fixed.**
+
+**Cause, in both builds, one root.** Upstream saved `:Xw` with the sidebar taken off
+and added it back at startup. This fork made `:Xw` verbatim (for a documented reason:
+the subtraction depended on the chart mode, which is not saved) and removed the
+subtraction, but two startup additions survived:
+
+- **Windows**, `ResizeWindowToChart()` (`xscreen.cpp`): the window was sized to
+  `gs.xWin` **plus the sidebar whenever `gi.nMode == 0`**, which is exactly startup;
+  `WM_SIZE` then stored the wider client width in `gs.xWin`, and a save wrote it.
+- **Qt**, `FActionX()`'s `ISG` branch: `else if (fSidebar) gs.xWin += sidebar` before
+  `BeginX()`; the canvas adopted the wider viewport and a save wrote it. This add was
+  also quietly compensating for a second fault: the squaring branch took the sidebar
+  off before squaring and put it back **only under `#ifdef WIN`**, so under Qt a
+  square wheel with its sidebar was squared down to its height and then re-widened by
+  that add.
+
+**Fix.** `ResizeWindowToChart()` no longer adds a sidebar (Windows and WCLI); the
+`ISG` add is `#ifndef QT` (X11 keeps it -- there `gs.xWin` excludes the sidebar and
+nothing adopts the window size back); and the squaring branch handles the sidebar under
+Qt as it does under Windows.
+
+**Evidence.**
+
+- Qt, new second probe in `run-qt-tests.sh`'s "Chart size at startup": `:Xw 760 600
+  =Xt =Xv0 _XQ =X` came up **920 by 600** before (760 + the 160 sidebar at the
+  default text scale) and 760 by 600 after. Fixing only the `ISG` add made the
+  original probe (`:Xw 760 600 =X`, square with sidebar) come up 600 wide -- which is
+  how the squaring half was found; with both halves both probes pass.
+- Windows, the real `astrolog.exe` under Wine, same switches, window geometry before
+  and after the change built from this tree: **936 -> 776** wide, with the sidebar on
+  and off alike -- down by exactly the 160 the startup term added, so the client area
+  now equals the saved width.
+- Full suite: `PASS: 5197 passed, 0 failed`; size groups alone pass (`window-size`,
+  `startup-chart-size`, `graphics-size`, `screen-options`, `chart-render`,
+  `menu-side-effects`).
+- Visible consequence on `nrvate.as` (`:Xw 1600 1558`, square charts, sidebar): the
+  window now comes up with the square chart plus sidebar -- `gs.yWin` 1360 -- where it
+  was the requested height with the chart squared inside it. That is the Windows
+  squaring rule, now applied to Qt at startup.
+
+## N-J fixed: an interface font change keeps the chart size
+
+**First recorded as open. It should not have been; it is fixed.**
+
+**Cause, measured** (offscreen, window 1798x1587). The menu bar's height follows the
+interface font -- 29 px for `nrvate.as`'s Fira Code Retina 14, 30 for JetBrains Mono 13,
+15 for Liberation Sans 6, 42 for Liberation Sans 24 -- and `ApplyUiFontQt()` left the
+window size alone, so the chart viewport absorbed the difference and, with "Window
+Resizes Chart" on, `ChartCanvas::paintEvent()` wrote it into `gs.xWin`/`gs.yWin`, where
+a save records it. The restore itself was not asymmetric (the saved face gives 29 px
+again); the bar only takes its new height on the next event-loop turn, so a group that
+ended with a re-apply still pending left a stale height (`console-font`
+`gs.yWin 1558 -> 1557`), and `interface-settings` restored the menu font *setting*
+without applying it at all, leaving Liberation Serif 12 and a 25 px bar
+(`gs.yWin 1558 -> 1562`).
+
+**Fix.** At the end of `ApplyUiFontQt()`, with "Window Resizes Chart" on, the main
+window is laid out at once (`layout()->activate()`) and `ResizeWindowToChartQt()` fits
+the window around `gs.xWin` by `gs.yWin` -- the window resizes, the chart does not.
+With the flag off the window is the user's to size and nothing is chased. Windows has no
+interface font, so parity is "the chart size does not move".
+
+**The net.** New group `ui-font-chart-size`: interface font to 24 pt and 6 pt and back,
+chart size and viewport checked after each. On the unfixed code it failed 2 of 6
+(`a 24 point interface font keeps the chart 1798 by 1558 (chart 1798 by 1545 ...
+menu bar 42)`, and 1572 at 6 pt); with the fix 6 of 6, the window becoming 1600 and
+1573 while the viewport holds. **`activate()` is needed**, falsified: removed, the group
+fails the same two checks again (1360 -> 1347 and 1374 on the current tree); restored,
+it passes. Each group alone leaves no canary line now.
+
+**And the font `interface-settings` left behind.** Its restore now calls
+`ApplyUiFontQt()` after putting the settings back. Measured with temporary prints:
+the application font was Fira Code Retina 14 at the group's start and **Liberation Serif
+12** at its end before the call, Fira Code Retina 14 after.

@@ -595,8 +595,14 @@ void ResizeWindowToChart()
   GetClientRect(wi.hwnd, &rcCli);
   rcNew.left = rcOld.left + gi.xOffset;
   rcNew.top  = rcOld.top  + gi.yOffset;
-  rcNew.right = rcNew.left + gs.xWin + (gi.nMode == 0 ? (SIDESIZE *
-    gi.nScaleText) >> 1 : 0) + (rcOld.right - rcOld.left - rcCli.right);
+  // gs.xWin is the whole client area, sidebar included: WM_SIZE stores the
+  // client width in it and ":Xw" is saved and loaded as it stands. So no
+  // sidebar is added here. Upstream added one whenever gi.nMode was 0 --
+  // i.e. at startup, before a chart had been drawn -- because upstream's
+  // settings writer took the sidebar off ":Xw"; with that subtraction gone,
+  // every launch followed by a save widened the window by the sidebar.
+  rcNew.right = rcNew.left + gs.xWin +
+    (rcOld.right - rcOld.left - rcCli.right);
   rcNew.bottom = rcNew.top + gs.yWin +
     (rcOld.bottom - rcOld.top - rcCli.bottom);
   if (rcNew.right > xScr)
@@ -1541,8 +1547,21 @@ flag FActionX()
       if (fSidebar)
         gs.xWin -= (SIDESIZE * gi.nScaleText * wi.nScaleWin) >> 1;
 #endif
+    // The sidebar is not part of the square, here as on Windows: gs.xWin is
+    // the whole chart area in the Qt port too. Without this a square wheel
+    // with its sidebar was squared to its height and lost the sidebar's
+    // width, which an unconditional add before BeginX() used to put back --
+    // and that add grew every chart that was NOT squared by the same amount.
+#ifdef QT
+      if (fSidebar)
+        gs.xWin -= (SIDESIZE * gi.nScaleText) >> 1;
+#endif
       n = Min(gs.xWin, gs.yWin);
       gs.xWin = gs.yWin = n;
+#ifdef QT
+      if (fSidebar)
+        gs.xWin += (SIDESIZE * gi.nScaleText) >> 1;
+#endif
 #ifdef WIN
       if (fSidebar)
         gs.xWin += (SIDESIZE * gi.nScaleText * wi.nScaleWin) >> 1;
@@ -1679,8 +1698,16 @@ flag FActionX()
       if (gs.yWin == 0)
         gs.yWin = DEFAULTY;
       SquareX(&gs.xWin, &gs.yWin, fFalse);
-    } else if (fSidebar)
+    }
+#ifndef QT
+    // X11's gs.xWin is the chart without the sidebar, and the window has to
+    // be made wide enough for both. Not in the Qt port: there gs.xWin is the
+    // whole chart area, sidebar included -- the canvas writes its viewport
+    // back into it, and ":Xw" is saved as it stands -- so adding the sidebar
+    // here grew the saved width by it on every launch followed by a save.
+    else if (fSidebar)
       gs.xWin += (SIDESIZE * gi.nScaleText) >> 1;
+#endif
     BeginX();
   }
 #endif
