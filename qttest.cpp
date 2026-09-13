@@ -12777,6 +12777,177 @@ static void TestStarLinksQt()
   FProcessYXU(szLinSav, szLnkSav, fFalse);
 }
 
+// Standing legs for the trigger paths the four byte-diff matrices never
+// exercise: D0-1 (-HO restricts stars by object under a sort), D1-1 (the
+// orbit chart's brightness column), D0-2 (a sorted Arabic-parts
+// interpretation pairs name with position), and A-4 (grid sub-options
+// survive). Each leg builds its own capture, reads it, and removes it
+// before the next leg starts, so no leg depends on buffers another
+// leg's Action() might have run over. The -P legs drive the review's
+// own chart through -qb in the command line so the parts compute, and
+// clear restrictions with -R0 so the star table is whole. The pre-fix
+// code fails each Check with the wrong-row shape the review measured.
+
+static void TestSortStarQt()
+{
+  FILE *fileSav = is.S, *fileT;
+  GRDOBJB rgbIgnSav;
+  CI ciMainSav = ciMain, ciCoreSav = ciCore;
+  flag fGraphSav = us.fGraphics, fInterpSav = us.fInterpret;
+  flag fArabicSav = us.fArabic, fFortune = fFalse;
+  int nSortSav = us.nStarSort, nPartSav = us.nArabicParts;
+  int nRelSav = us.nRel;
+  char szFile[cchSzMax], szCmd[cchSzLine], szLine[cchSzLine], *pch;
+  int i, iSir, iAch, cLin;
+  real rMag;
+  char szAbbrev[8], szSignFull[24];
+
+  Group("Star sort outputs");
+  CopyRgb((pbyte)ignore.rgn, (pbyte)rgbIgnSav.rgn, sizeof(ignore.rgn));
+  us.fGraphics = fFalse;
+  us.nRel = rcNone;                 // prior groups leave a relationship
+                                    // chart set; Action() then walks
+                                    // CastRelation, and PrintChart --
+                                    // where the Arabic parts and the
+                                    // grid live -- is never reached
+
+#define SORTSTAR_LEG(command) \
+  sprintf2(S(szCmd), command); \
+  FProcessCommandLine(szCmd); \
+  CaptureTextToFileQt(szFile, fFalse); \
+  is.S = fileSav; \
+  fileT = fopen(szFile, "r");
+
+  // D0-1: -HO with stars sorted by name and Sirius restricted must drop
+  // exactly Sirius's row. Pre-fix, the restriction of slot i landed on
+  // whichever star sorted into slot i: Achernar's row vanished instead.
+  iSir = iAch = -1;
+  SORTSTAR_LEG("-R0 -Un -R Sirius -HO")
+  if (fileT != NULL) {
+    cLin = 0;
+    while (fgets(szLine, cchSzLine, fileT) != NULL) {
+      if (iSir < 0 && strstr(szLine, "Sirius") != NULL)
+        iSir = cLin;
+      else if (iAch < 0 && strstr(szLine, "Achernar") != NULL)
+        iAch = cLin;
+      cLin++;
+    }
+    fclose(fileT);
+  }
+  Check(iSir < 0, "the sorted -HO table drops the restricted Sirius");
+  Check(iAch >= 0, "and still shows Achernar, whose slot the old code "
+    "restricted instead (row %d)", iAch);
+  QFile::remove(QString(szFile));
+
+  // D1-1: the orbit chart's brightness column must be the row star's
+  // OWN magnitude. Sirius is -1.46; the pre-fix code printed the
+  // brightness of whichever star sorted into the row's slot. The orbit
+  // chart's position row carries the 3-letter abbreviation ("Siri:"),
+  // not the full name -- match that shape, read the trailing magnitude.
+  SORTSTAR_LEG("-R0 -Un -S -HO")
+  rMag = 0.0;
+  if (fileT != NULL) {
+    while (fgets(szLine, cchSzLine, fileT) != NULL) {
+      if (strstr(szLine, "Siri:") != NULL &&
+        strstr(szLine, "Star #") != NULL) {
+        pch = szLine + CchSz(szLine);
+        while (pch > szLine && pch[-1] != ' ')
+          pch--;
+        rMag = RFromSz(pch);
+        break;
+      }
+    }
+    fclose(fileT);
+  }
+  Check(rMag < -1.0,
+    "the sorted orbit chart's Sirius row shows Sirius's own brightness "
+    "(%.2f)", rMag);
+  QFile::remove(QString(szFile));
+
+  // D0-2: with the parts sorted by name (-Pn) and interpretations on,
+  // the Part of Fortune's text must name the sign its own position
+  // carries. Pre-fix, the interpretation loop paired each part's NAME
+  // with another part's POSITION, so on this chart the text read a
+  // different sign and house. The review measured the correct pairing:
+  // Fortune at 9Cap13, 3rd house. The -HO table half of the check was
+  // dropped: -R0, which the other legs need to keep their star tables
+  // whole, turns the interpretation output off entirely, so the net
+  // stands on the -I render alone.
+  ciCore = ciMain;
+  sprintf2(S(szCmd), "-Un -Pn -I -HO "
+    "-qb 7 4 1976 12 0 8 122:19:55W 47:36:22N");
+  FProcessCommandLine(szCmd);
+  us.fArabic = fTrue;               // -Pn toggles it; pin again
+  us.fInterpret = fTrue;            // -I toggles it; pin again
+  us.nArabicParts = cPart;          // prior groups may have left a count
+                                    // of zero; with zero no part prints
+  // Fortune's formula is Asc - Sun + Moo; ComputeArabic() refuses a part
+  // whose formula object is restricted, and prior groups may have
+  // restricted one of the three (true means restricted here).
+  ignore[oAsc] = ignore[oSun] = ignore[oMoo] = fFalse;
+  is.fHaveInfo = fTrue;             // the -qb below leaves it unset
+  CaptureTextToFileQt(szFile, fFalse);
+  is.S = fileSav;
+  fFortune = fFalse;
+  fileT = fopen(szFile, "r");
+  fileT = fopen(szFile, "r");
+  if (fileT != NULL) {
+    while (fgets(szLine, cchSzLine, fileT) != NULL) {
+      if (strstr(szLine, "Part of Fortune in Capricorn and 3rd House") !=
+        NULL) {
+        fFortune = fTrue;
+        break;
+      }
+    }
+    fclose(fileT);
+  }
+  Check(fFortune, "the sorted -Pn -I text pairs the Fortune's name with "
+    "its own position (Capricorn, 3rd house)");
+  QFile::remove(QString(szFile));
+  us.fInterpret = fInterpSav;
+
+  // A-4: InitVariables() is what the -Q loop runs between iterations,
+  // and pre-fix it cleared the on-by-default chart sub-options along
+  // with the chart types. The fix split the ClearB into two ranges that
+  // leave the sub-option block alone; the direct net is that the five
+  // flags survive the call.
+  {
+    // InitVariables() clears us.fInterpret/us.fProgress/is.fHaveInfo/
+    // is.fMult/us.nRel and both ClearB ranges; snapshot everything it
+    // touches so the call leaves the suite exactly as it found it. The
+    // check reads the five sub-options after the call: pre-fix they were
+    // inside the cleared ranges and came back zero.
+    byte rgbChartSav[(pbyte)&us.fVelocity - (pbyte)&us.fListing];
+    byte rgbTableSav[(pbyte)&us.fLoop - (pbyte)&us.fCredit];
+    flag fInterpSav2 = us.fInterpret, fProgSav = us.fProgress;
+    flag fHaveSav = is.fHaveInfo, fMultSav = is.fMult;
+    int nRelSav2 = us.nRel;
+
+    CopyRgb((pbyte)&us.fListing, rgbChartSav, sizeof(rgbChartSav));
+    CopyRgb((pbyte)&us.fCredit, rgbTableSav, sizeof(rgbTableSav));
+    InitVariables();
+    Check(us.fGridConfig && us.fAspSummary && us.fMidSummary &&
+      us.fInfluenceSign && us.fLatitudeCross,
+      "InitVariables() leaves the five on-by-default sub-options on "
+      "(%d%d%d%d%d)", us.fGridConfig, us.fAspSummary, us.fMidSummary,
+      us.fInfluenceSign, us.fLatitudeCross);
+    CopyRgb(rgbChartSav, (pbyte)&us.fListing, sizeof(rgbChartSav));
+    CopyRgb(rgbTableSav, (pbyte)&us.fCredit, sizeof(rgbTableSav));
+    us.fInterpret = fInterpSav2; us.fProgress = fProgSav;
+    is.fHaveInfo = fHaveSav; is.fMult = fMultSav;
+    us.nRel = nRelSav2;
+  }
+
+#undef SORTSTAR_LEG
+  CopyRgb((pbyte)rgbIgnSav.rgn, (pbyte)ignore.rgn, sizeof(ignore.rgn));
+  AdjustRestrictions();
+  us.fGraphics = fGraphSav;
+  us.fInterpret = fInterpSav;
+  us.nRel = nRelSav;
+  ciMain = ciMainSav; ciCore = ciCoreSav;
+  is.S = fileSav;
+}
+
 // The guard for "Known divergences from Windows".
 //
 // A divergence is a claim about behaviour that no audit can check: the
@@ -12852,6 +13023,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"aspect-count",         TestAspectCountQt},
   {"aspect-dash",          TestAspectDashQt},
   {"star-links",           TestStarLinksQt},
+  {"star-sort-outputs",    TestSortStarQt},
   {"divergences",          TestDivergencesQt},
   // BEFORE "menu-actions", and that is a timing decision as much as a
   // tidiness one: a transit graph in the state that group leaves behind
