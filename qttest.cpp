@@ -384,6 +384,60 @@ static void TestDialogsQt()
 }
 
 
+// The About dialog's version line carries the git sha the binary was
+// built from, when it was built from a checkout: szVersionGit comes from
+// a generated gitsha.h (see the include in qtdialog.cpp), and a build
+// from a git archive -- the containers of tools/build-check.sh, the
+// release packaging -- generates an empty one. So the assertion is
+// relative to the macro rather than absolute: the label must say exactly
+// what szVersionGit says, bracket included or bracket absent, whatever
+// this checkout produced. What a FAIL here means is that the label and
+// the macro disagree -- a wiring error, the only way this can break.
+
+// The generated git sha the About dialog shows; see qtdialog.cpp.
+// DriveModalQt() is defined further down in this file, beside the timers
+// it arms; the About group below predates it in reading order.
+static void DriveModalQt(void (*pfnOpen)(),
+  std::function<void(QWidget *)> fnOn);
+
+// The generated git sha the About dialog shows; see qtdialog.cpp. A build
+// from a git archive has none, and the assertion below is relative to the
+// macro rather than absolute for exactly that reason.
+#if __has_include("gitsha.h")
+#include "gitsha.h"
+#endif
+#ifndef szVersionGit
+#define szVersionGit ""
+#endif
+
+static void TestAboutVersionQt()
+{
+  QString strGot;
+
+  Group("About version line");
+  DriveModalQt(ShowAboutDialogQt, [&strGot](QWidget *pw) {
+    for (QLabel *plabel : pw->findChildren<QLabel *>())
+      if (plabel->text().contains("version")) {
+        strGot = plabel->text();
+        break;
+      }
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text() == "OK") {
+        ppb->click();
+        break;
+      }
+  });
+  QString strExpected = QString("%1 version %2 (Qt)%3").arg(szAppName,
+    szVersionCore,
+    szVersionGit[0] ? QString(" [%1]").arg(szVersionGit) : QString());
+  Check(!strGot.isEmpty(), "no version label found in the About dialog");
+  if (!strGot.isEmpty())
+    Check(strGot == strExpected, "the About version line says \"%s\", "
+      "wanted \"%s\"", strGot.toLocal8Bit().constData(),
+      strExpected.toLocal8Bit().constData());
+}
+
+
 /*
 ******************************************************************************
 ** Context menus.
@@ -12763,6 +12817,7 @@ static void TestDivergencesQt()
 
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
+  {"about-version",        TestAboutVersionQt},
   {"context-menus",        TestContextMenusQt},
   {"hotkeys",              TestHotkeysQt},
   {"chart-render",         TestChartRenderQt},

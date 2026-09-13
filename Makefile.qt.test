@@ -64,6 +64,19 @@ $(NAME): $(OBJS)
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
+# The git sha this build came from, which qtdialog.cpp includes for the
+# About dialog's version line. gitsha.h is a FORCE prerequisite, so
+# tools/gitsha.py runs on every make invocation; it writes the file only
+# when the sha has changed, so nothing rebuilds in between. A tree without
+# .git (a git archive export) answers empty, and the About line shows no
+# bracket. See the include in qtdialog.cpp for the full story.
+gitsha.h: FORCE
+	python3 tools/gitsha.py gitsha.h
+FORCE:
+.PHONY: FORCE
+
+$(OBJDIR)/qtdialog.o: gitsha.h
+
 # qtdialog.cpp includes the generated dialog tables; without this the
 # object file survives a regeneration and the change appears to do nothing.
 

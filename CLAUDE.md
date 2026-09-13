@@ -800,6 +800,21 @@ python3 tools/rc_cmd.py astrolog.rc resource.h | diff - qtrccmd.h    # cmd ids
 python3 tools/gen_settings_fields.py astrolog.h | diff - settingsfields.h
 ```
 
+**And a fifth generated file that is deliberately never committed**:
+`gitsha.h`, written by `tools/gitsha.py` from a FORCE rule in every
+makefile that compiles `qtdialog.cpp` (and by `tools/msvc-build-qt.cmd` on
+the Windows runner). It holds `szVersionGit`, the last eight characters of
+HEAD, which the About dialog's version line appends in brackets. The
+FORCE-plus-content-diff arrangement is what keeps it honest: the generator
+runs on every make, writes only when the sha changed, so a new commit
+recompiles `qtdialog.cpp` and nothing else. It cannot be committed for the
+reason its header records: the content would be the sha of the commit
+carrying it. A build from a `git archive` -- the containers of
+`tools/build-check.sh`, the release packaging -- has no `.git`, and the
+About line falls back to no bracket; `qtdialog.cpp` compiles with the file
+absent either way (`__has_include`), so nothing has to run the generator
+before a bare compile succeeds.
+
 That last one is every scalar member of `US` and `GS` by name, with the
 section it sits under and the switch its own comment names. It exists so
 the suite can ask about **all** of them at once rather than one at a time:

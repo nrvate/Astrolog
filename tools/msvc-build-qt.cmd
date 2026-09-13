@@ -89,6 +89,11 @@ python tools\qt-srcs.py --only core > srcs-core.txt || exit /b 1
 python tools\qt-srcs.py --only qt   > srcs-qt.txt   || exit /b 1
 python tools\qt-srcs.py --only test > srcs-test.txt || exit /b 1
 
+rem The git sha the About dialog shows. Same FORCE-plus-content-diff
+rem generator the makefiles run on Linux; a checkout without .git answers
+rem empty and the About line shows no bracket.
+python tools\gitsha.py gitsha.h || exit /b 1
+
 rem vswhere, not a hardcoded edition path: the runner image moves and the
 rem edition is not something to guess at. vswhere ships with every
 rem installer since 2017 and answers where the toolset actually is.

@@ -71,6 +71,23 @@
 #include "astrolog.h"
 #include "qtdriver.h"
 
+// The git sha this build came from, shown in the About dialog's version
+// line. Generated at build time by a FORCE rule in every makefile that
+// compiles this file (and by tools/msvc-build-qt.cmd on the Windows
+// runner), through tools/gitsha.py -- whose FORCE-plus-content-diff
+// arrangement is why a new commit recompiles qtdialog.cpp and nothing
+// else. gitsha.h itself is deliberately not tracked: its content would be
+// the sha of the commit carrying it, which cannot be written before that
+// commit exists. A build from a git archive -- tools/build-check.sh's
+// containers, the release packaging's source export -- has no .git, the
+// macro comes out empty, and the About line simply shows no bracket.
+#if __has_include("gitsha.h")
+#include "gitsha.h"
+#endif
+#ifndef szVersionGit
+#define szVersionGit ""
+#endif
+
 #include <QtCore/QDir>
 #include <QtCore/QTemporaryFile>
 
@@ -3814,7 +3831,8 @@ void ShowAboutDialogQt()
   // Windows and macOS, so naming a platform here was wrong on two of
   // them -- the Windows package said "for Linux (Qt)".
   QLabel *plabelVer = new QLabel(
-    QString("%1 version %2 (Qt)").arg(szAppName, szVersionCore));
+    QString("%1 version %2 (Qt)%3").arg(szAppName, szVersionCore,
+    szVersionGit[0] ? QString(" [%1]").arg(szVersionGit) : QString()));
   QFont fontBold = plabelVer->font();
   fontBold.setBold(true);
   plabelVer->setFont(fontBold);

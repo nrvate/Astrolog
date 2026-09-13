@@ -59,3 +59,9 @@ obj-wcli/
 # one reached a commit through "git add -A" (see the commit removing it).
 astrolog-base
 astrolog-qt-base
+
+# Generated at build time by every makefile and tools/msvc-build-qt.cmd:
+# the git sha the About dialog shows. Never tracked -- its content is the
+# sha of the commit carrying it, which cannot exist before that commit.
+# tools/gitsha.py's header has the full story.
+/gitsha.h
