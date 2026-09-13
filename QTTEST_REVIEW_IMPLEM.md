@@ -1778,3 +1778,114 @@ lines.
 
 **Suite.** `PASS: 5190 passed, 0 failed` -- six more than 5184, the six new
 checks -- and canary lines identical to item 23's run.
+
+## Outcome
+
+Every item of the phased plan is accounted for below: a commit, closed with the
+evidence that killed it, or not done with the reason. Branch `qttest`, in the
+linked worktree `/nvm/work/qttest`, one commit per item, nothing merged.
+
+| Plan item | Finding(s) | Outcome | Commit |
+|---|---|---|---|
+| 1 | W1 (debug line) | done by `dcd939b` before this work | -- |
+| 2 | T1, T2, T3 | fixed; T2's field list corrected by measurement | cff7b1a |
+| 3 | warning gate | added to `make check` | e7001ff |
+| 3a | canary | added, and extended through items 7, 8 and 15 | 5f431c3 |
+| 3b | K8 | fixed | d074eb3 |
+| 4 | K1 | fixed | 6a82aa5 |
+| 5 | K2 | leak did not reproduce; robustness change made | fc5af7d |
+| 6 | K3 | fixed | aeb6183 |
+| 7 | K4, K5 | fixed | e39fbc6 |
+| 8 | V1 | fixed | 627a57e |
+| 9 | O2, O5, O6 | fixed | 653464d |
+| 10 | W1 (markers) | fixed | 3941283 |
+| 11 | R1 | fixed; three text-only charts left the render list | 4eb0cde |
+| 12 | M4 | **not worked** -- see below | -- |
+| 13 | S3 | closed with evidence, no change | 4a710c6 |
+| 14 | S1 | fixed | a3c5d51 |
+| 15 | S2, K6 | fixed, plus the same fault in `chart-export` | c54e976 |
+| 16 | K7 | fixed | 9e4ba14 |
+| 17 | comment pass, H2, D1, E3 | done, comments only | c717d3f |
+| 18 | C1-C4, G1 | done | f9444d6 |
+| 19 | scratch paths, pixel loops | done | e8d60fd |
+| 20 | N1, R2, N3, N5, N12, F13 | done | 99d1e15 |
+| 21 | O3, O4 (and N-A) | done; O1 not done | 5571562 |
+| 22 | B1 | done | 0fafc22 |
+| 23 | U1, U2, Check buffer | fixed | e0cfadf |
+| 24 | H4, L1, N7 | fixed; H4 not falsified | 9d699c0 |
+| 25 | N13 | closed with a reason, no change | 0c7d615 |
+
+**Plan item 12 (M4) was not worked, and this is the one gap in the table.** It
+asked to check that the menu-firing group's restore covers everything a macro's
+settings file can reach. The canary's first run answered part of it -- after
+`menu-actions` 130 restriction slots, 66 scalars and both star lists are
+changed -- but deciding which of those the group *should* restore, as opposed to
+leave for the groups after it to pin, is a judgement about that group's design
+that no item here made. Left for the maintainer, with that measurement.
+
+### The suite's count, and every place it moved
+
+| After | Count | Why |
+|---|---|---|
+| baseline (`dcd939b`) | 5198 | |
+| item 11 | 5186 | three text-only charts left the render list, four checks each |
+| item 20 | 5185 | the `cchartmode <= 48` guard check, which only guarded the 48 |
+| item 22 | 5180 | five `Check(fTrue, ...)` |
+| item 23 | 5184 | two new checks each for U1 and U2 |
+| item 24 | 5190 | six new checks: one per recursion chain, the self-including file, three scratch-file opens |
+
+Every other item left the count where it was, and every full run above was 0
+failed.
+
+### Findings this work turned up
+
+- **N-A** (the oracle left `ignore2[]` changed) -- **fixed** in item 21, with a
+  real check that failed first.
+- **N-B** `text-pager`, **N-D** four more groups -- clear chart-type flags
+  through `SetChartModeQt()` and do not put them back. **Open.**
+- **N-C** `gs.yWin` 600 to 575 after groups that open certain dialogs. **Open,
+  not traced.**
+- **N-E** `dialog-buttons` leaves `us.nAsp` changed. **Open.**
+- **N-F** the menu-firing "chart went blank" check has no margin, so the border
+  alone passes it. **Open** -- item 11 fixed the same blind spot in
+  `chart-render` and deliberately left this one.
+- **N-G** `CpixDifferQt()` compares against the corner. **Open.**
+- **N-H** `GraphicsChartCaptureQt()` captures `gExo`, a text-only chart. **Open.**
+- **N-I** (port, not the suite) -- vector Copy Chart leaves a deleted temp file's
+  name in `is.szFileOut`, where Windows sets `gi.szFileOut` only. **Deferred
+  2026-09-13** for the maintainer's call.
+
+### Not resolved, in one place
+
+- The warning gate in `make check` covers `qttest.cpp` only (item 3).
+- A macro name containing a double quote does not survive `forced-positions`'
+  restore (item 4).
+- No standing net for K3 or K4: both are falsified with hand-built command lines
+  that no ordinary run makes (items 6, 7).
+- Dialog buttons are found by label, not by `IDOK`/`IDCANCEL` (item 18).
+- The oracle is still one 1,024-line function (O1, item 21).
+- `DriveModalQt()` still needs its forward declaration (D1's structural half,
+  item 17).
+- T4 and T5 (a macro and a double initialisation in `TestSortStarQt()`) were P3s
+  with no plan item.
+- H4's fix is not falsified (item 24).
+
+### Gotchas worth carrying forward
+
+- **An exact-string edit that fails does not stop a shell chain.** Item 15's
+  first attempt: the replace refused, and a build, a solo run and a suite ran on
+  the old binary and looked like a verification. Read an edit's own output and
+  the binary's timestamp before anything after it.
+- **Check what a measurement cannot see before believing it.** Several times in
+  this work a clean result was an instrument that could not have failed: the
+  corner-pixel blank check (item 11), a text capture that never ran because the
+  runner returns after the graphics capture (item 20), an unused-variable count
+  that matched comment text (item 19), an atlas log that the Qt `PrintSz()`
+  never writes to (item 25), and a no-SWISS compile stopped by a missing Qt
+  header (item 21).
+- **The canary's own blind spots**: `is`/`gi`/`ci*` beyond the fields named,
+  `rgobjset[]` and the colours; clock-driven `gs.rRot`/`gs.rTilt` differ run to
+  run; reals print with `%g`; stderr can split a line in a redirected log.
+- **Sabotages here were always reversed by exact string**, never by
+  `git checkout`, and every one was confirmed gone with `grep -c` before the
+  run that followed.
