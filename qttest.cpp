@@ -5841,9 +5841,27 @@ static void TestMidpointGlyphQt()
   // that is testing the leftovers, not the change -- this one failed twice
   // that way, on gs.fLabel and then on us.nRel, before the state was
   // pinned rather than guessed at one field per attempt.
-  US usSav = us;
-  GS gsSav = gs;
+  //
+  // Saved field by field, not as "US usSav = us": a whole-struct copy
+  // restores every char * member to the pointer it held, and anything
+  // between that reallocates one (FCloneSz() frees the old buffer) leaves
+  // the restore pointing at freed memory. Nothing here reallocates one
+  // today, which is luck rather than design. These are the ten fields the
+  // group sets below, plus the chart-type flags: SetChartModeQt() inside
+  // the hash lambda rewrites those, and restoring gi.nMode does not put
+  // them back. Measured with the canary: with the whole-struct restore
+  // removed, this group alone left us.fListing and gs.fText changed. The
+  // other nine of the ten equal their entry values in a solo run and not
+  // after TestAllMenuActionsQt(), so all ten are kept.
+  int nRelSav = us.nRel, objCenterSav = us.objCenter;
+  flag fIndianSav = us.fIndian, fHouse3DSav = us.fHouse3D;
+  flag fSiderealSav = us.fSidereal, fEquatorSav = gs.fEquator;
+  flag fThickSav = gs.fThick, fColorSav = gs.fColor;
+  flag fTextSav = gs.fText, fLabelSav = gs.fLabel;
+  byte rgbChartSav[(pbyte)&us.fVelocity - (pbyte)&us.fListing];
   CI ciSav = ciCore;
+
+  CopyRgb((pbyte)&us.fListing, rgbChartSav, sizeof(rgbChartSav));
 
   // Pin the chart's moment too, to CONSTANTS. The first pin here was
   // "ciCore = ciTwin", which only worked while ciTwin still held its
@@ -5915,8 +5933,12 @@ static void TestMidpointGlyphQt()
   ignore[obj] = fIgnoreSav;
   force[obj] = forceSav;
   szObjDisp[obj] = szDispSav;
-  us = usSav;
-  gs = gsSav;
+  us.nRel = nRelSav; us.objCenter = objCenterSav;
+  us.fIndian = fIndianSav; us.fHouse3D = fHouse3DSav;
+  us.fSidereal = fSiderealSav; gs.fEquator = fEquatorSav;
+  gs.fThick = fThickSav; gs.fColor = fColorSav;
+  gs.fText = fTextSav; gs.fLabel = fLabelSav;
+  CopyRgb(rgbChartSav, (pbyte)&us.fListing, sizeof(rgbChartSav));
   ciCore = ciSav;
   RedoRestrictions();
   CastChart(1);

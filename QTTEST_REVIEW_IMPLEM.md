@@ -892,3 +892,69 @@ re-flagged".
 **S4, also in Phase 3's header, was already closed by item 7.**
 `TestNullNamesQt()` and `TestExportRoundTripQt()` empty the chart list
 and append; `ChartListPinQt` now saves and restores every entry in both.
+
+### Plan item 14 -- S1: `midpoint-glyph` restores `us` and `gs` by whole-struct copy
+
+**What S1 said.** `TestMidpointGlyphQt()` does `US usSav = us; GS gsSav =
+gs; ... us = usSav; gs = gsSav;` -- the pattern this file's own rules
+forbid, because a whole-struct restore puts every `char *` member back to
+the pointer it held, and anything in between that reallocates one leaves
+the restore pointing at freed memory. "Safe by luck"; the group pins about
+ten fields by hand and could restore those instead.
+
+**Checked before relying on either half.**
+
+- *Is the hazard live?* The group calls `SetChartModeQt()`, `RedrawQt()`
+  and `CastChart()` between the copy and the restore. `SetChartModeQt()`
+  (qtdriver.cpp) contains no `FCloneSz`, `SzClone`, `DeallocateP` or
+  `us.sz`/`gs.sz` at all. So S1 is right that nothing reallocates a string
+  today -- it is a latent hazard, not a current fault, and the change is
+  a hardening.
+- *Would "restore the ten fields" be enough?* No, and this is the part the
+  review could not have seen by reading. The group's hash lambda calls
+  `SetChartModeQt(gWheel)`, which rewrites the chart-type flags; restoring
+  `gi.nMode` does not put those back (the same shape as N-B and N-D).
+  Measured: with the struct restore removed for a measurement build (and
+  put back by reversing the exact string), the group alone left
+
+  ```
+  [canary midpoint-glyph: us.fListing 0 -> 1]
+  [canary midpoint-glyph: gs.fText 1 -> 0]
+  ```
+
+  -- one of the ten, and one chart-type flag that is not among them. The
+  other nine of the ten showed nothing only because a solo run already
+  holds the values the group sets; after `TestAllMenuActionsQt()` in the
+  full suite they do not, so all ten are kept.
+
+**The change.** The whole-struct copies are gone. The ten fields the group
+sets are saved and restored by name, and the chart-type flag block
+(`us.fListing` up to `us.fVelocity`) is saved and restored as bytes -- the
+same range and idiom `TestSortStarQt()`'s A-4 leg already uses around
+`InitVariables()` -- so every flag `SetChartModeQt()` can touch comes back,
+whichever mode the group was entered in. `ciCore` keeps its struct copy:
+S3's analysis (item 13) applies, since nothing frees a chart's strings.
+
+**Falsified: the canary sees each pin.** The group alone with the pins:
+`[canary: 0 changes left behind by 0 groups]`, 4 passed. Rebuilt with the
+`gs.fText` restore left out on purpose:
+
+```
+[canary midpoint-glyph: gs.fText 1 -> 0]
+```
+
+Put back by reversing that exact string (`git diff --stat` back to the
+intended change), 0 changes again. So the restore is doing the work, and
+the canary would name the next field somebody adds to the group without
+restoring.
+
+**Gotcha, caught in review of this very item: the first version of the
+new comment said "the other eight".** Ten fields are pinned and one of
+them leaked (`gs.fText`); `us.fListing` is not one of the ten. So nine
+showed nothing. Corrected before committing -- the kind of wrong number
+that CLAUDE.md records three documents once disagreeing over.
+
+**Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item 10's run. The
+struct copies restored more than the group changed, and the pins restore
+exactly what it changes, so a full run cannot tell them apart -- the
+canary runs above are the evidence.
