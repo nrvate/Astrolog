@@ -6,7 +6,7 @@ http://www.astrolog.org/ftp/ast80src.zip — the changes upstream made in
 8.00 are listed at http://www.astrolog.org/ftp/updat800.htm
 
 Everything Astrolog does, and all of its chart calculation and drawing
-code, is Walter D. Pullen's work. See LICENSE.HTM.
+code, is Walter D. Pullen's work. See license.htm.
 
 ## What this fork adds
 
@@ -14,7 +14,8 @@ A **Qt GUI backend**, with the menus and dialogs the Windows build has,
 and since v8.00-qt.6 the interface every platform ships — Linux, Windows
 and macOS. Upstream's Linux build uses X11 directly and is driven by
 single-keystroke commands; this one gives you the same nine menus and
-25 dialogs a Windows user would recognise. The native Win32 build is
+the same dialogs a Windows user would recognise -- 24 of the 25, the
+25th being Object Selections, this fork's own addition. The native Win32 build is
 still compiled and driven by hand, as the behavioural reference the port is
 judged against.
 
@@ -46,8 +47,8 @@ Releases carry the two binaries a user cannot easily build themselves:
 **On Linux, build it.** There are no `.deb` or `.rpm` packages and no
 package repository: they were dropped on 2026-09-05, because the
 download counts showed nothing outside the project's own automation had
-ever fetched one, and a seven-distribution matrix is a poor thing to
-maintain for that. Building takes two commands and about twenty seconds
+ever fetched one, and a matrix packaging seven distro releases is a
+poor thing to maintain for that. Building takes two commands and about twenty seconds
 on a modern machine. `tools/build-check.sh` holds these package
 lists and runs them in a container of each distribution and casts a chart with the
 result; **last run 2026-09-05, twelve of twelve** — Ubuntu
@@ -59,9 +60,8 @@ the date above is old, that is what it means.
 ```sh
 # Debian, Ubuntu, Mint
 sudo apt install g++ make pkg-config libx11-dev qt6-base-dev
-# qtbase5-dev instead on Ubuntu 22.04 and 24.04 and on Debian 12, which
-# have no Qt6 development package; the makefile builds against whichever
-# pkg-config finds
+# qtbase5-dev instead on Ubuntu 22.04 and 24.04 and on Debian 12 works
+# too -- the makefile builds against whichever pkg-config finds
 # Fedora
 sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel
 # Rocky / Alma / RHEL 9 and 10 — the Qt package differs, and CRB holds
@@ -135,7 +135,8 @@ package (`qtbase5-dev` or `qt6-base-dev` on Debian/Ubuntu/Mint) and
 missing. Object files go to `obj-qt/`, so this can be
 built alongside the regular `astrolog` binary without interfering with it:
 plain `make` builds the stock X11 version and the Qt port together, and
-`make all` builds everything this tree has, the Windows binaries included.
+`make all` builds the five release builds -- the console, the Qt port,
+its test binary and the two Windows ones.
 
 `make install` deliberately leaves the data where it is — the ephemeris
 files, the atlas, the fonts, `astrolog.as` — and installs small wrappers
@@ -150,8 +151,8 @@ items, every dialog, all 42 right-click context menus and 264 keyboard
 shortcuts are implemented, and each dialog has been read field-by-field
 against its Windows counterpart — labels, field order, number formatting,
 dropdown contents, and which menu checkmarks it refreshes on OK. Menu
-mnemonics sit on the same letters Windows uses, so Alt-key muscle memory
-carries over. Charts animate, print, paste, run all 96 macro slots, and
+mnemonics follow Windows' resource script, with a few dozen deliberate
+exceptions recorded in QT_GUI_PLAN.md. Charts animate, print, paste, run all 96 macro slots, and
 draw with Astrolog's bundled astrology fonts. Text charts render in the
 main window on a character grid, as they do on Windows, rather than in a
 separate text box.
@@ -188,8 +189,8 @@ ASTROLOG_QT_THEME=light ./astrolog-qt
 
 ```
 make check                 # what to run before a commit: generated
-                           # tables, ten audits, both builds, the suite
-                           # and the assertion scripts, about a minute
+                           # tables, seventeen audits, both builds and
+                           # the suite, about a minute and a half
 make qt-test && ./run-qt-tests.sh    # just the suite
 ```
 
@@ -235,33 +236,39 @@ tools/win-tests.sh
 It takes minutes rather than seconds, so it is run when a change ships in
 both builds rather than before every commit.
 
-There are also eleven standing audits — four checking this port against
-Windows' resource script, one checking the compiled defaults against the
-shipped settings file, one checking the switch registry against the help
-text, one checking that every ranged switch has a round-trip fixture, one
-checking line endings, one checking the MSVC project against the
-makefile's source list, one checking the Qt build's own source groups
-and headers, and one checking that every option in the graphics matrix
-actually changes a render:
+There are also seventeen standing audits, all run by `make check`. The
+ones most useful by hand:
 
 ```
 python3 tools/rc_audit.py          # dialog controls nothing wires up
 python3 tools/rc_mnemonic_audit.py # "&" placement vs the .rc
 python3 tools/rc_field_audit.py    # a control wired to the wrong setting
 python3 tools/rc_lookup_audit.py   # a by-name lookup resolving to nothing
+python3 tools/rc_flagtype_audit.py # a dialog flag bound to a control that
+                                   # is not a checkbox
+python3 tools/rc_casttype_audit.py # a control cast to the wrong Qt class
+python3 tools/rc_context_audit.py  # right-click menu entries vs the .rc
+python3 tools/backend_parity_audit.py  # every us./gs. setting the Windows
+                                   # GUI acts on, this one acts on too
 python3 tools/defaults_audit.py    # data.cpp initializers vs astrolog.as
 python3 tools/registry_audit.py    # documented switches that resolve nowhere
+python3 tools/settings_coverage_audit.py  # a setting a dialog offers that
+                                   # Save Program Settings drops
 python3 tools/fixture_coverage_audit.py  # ranged switches with no fixture
 python3 tools/line_endings_audit.py      # a carriage return in the source
 python3 tools/vcxproj_audit.py     # the MSVC project vs Makefile.win
 python3 tools/qt_srcs_audit.py     # the Qt build's source groups, and no
                                    # unguarded POSIX header in them
+python3 tools/image_audit.py       # every image Astrolog writes is a
+                                   # valid file of its format
 python3 tools/inert_option_audit.py  # a matrix option that changes nothing
 ```
 
 And the compiler itself: `tools/warning_audit.py` compiles all five
 builds, plus the two Qt6 ones where a Qt6 exists, with `-Wall` against
-`tools/warnings.txt` — which is empty, so any warning at all fails.
+`tools/warnings.txt` — which is empty, so any warning at all fails. The
+two Qt6 legs are checked against a second ledger, `tools/warnings-qt6.txt`,
+also empty, holding only what Qt6 warns about and Qt5 does not.
 
 The dialog tables, accelerators and command IDs are *generated* from the
 resource script rather than transcribed, and regenerating them into a
