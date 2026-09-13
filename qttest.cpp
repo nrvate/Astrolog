@@ -12798,6 +12798,8 @@ static void TestSortStarQt()
   int nSortSav = us.nStarSort, nPartSav = us.nArabicParts;
   int nRelSav = us.nRel;
   char szFile[cchSzMax], szCmd[cchSzLine], szLine[cchSzLine], *pch;
+  QByteArray baDir = QDir::tempPath().toLocal8Bit();
+  CONST char *szDir = baDir.constData();
   int i, iSir, iAch, cLin;
   real rMag;
   char szAbbrev[8], szSignFull[24];
@@ -12811,6 +12813,8 @@ static void TestSortStarQt()
                                     // where the Arabic parts and the
                                     // grid live -- is never reached
 
+  sprintf2(S(szFile), "%s/astrolog-qt-sortstar-%d.tmp", szDir,
+    (int)QCoreApplication::applicationPid());
 #define SORTSTAR_LEG(command) \
   sprintf2(S(szCmd), command); \
   FProcessCommandLine(szCmd); \
@@ -12879,13 +12883,13 @@ static void TestSortStarQt()
   FProcessCommandLine(szCmd);
   us.fArabic = fTrue;               // -Pn toggles it; pin again
   us.fInterpret = fTrue;            // -I toggles it; pin again
-  us.nArabicParts = cPart;          // prior groups may have left a count
-                                    // of zero; with zero no part prints
+  us.nArabicParts = cPart;          // the compiled default; pinned in
+                                    // case a later refactor changes it
   // Fortune's formula is Asc - Sun + Moo; ComputeArabic() refuses a part
-  // whose formula object is restricted, and prior groups may have
-  // restricted one of the three (true means restricted here).
+  // whose formula object is restricted (true means restricted here),
+  // and the suite's earlier groups leave restrictions behind.
   ignore[oAsc] = ignore[oSun] = ignore[oMoo] = fFalse;
-  is.fHaveInfo = fTrue;             // the -qb below leaves it unset
+  is.fHaveInfo = fTrue;             // -qb sets it too; redundant but cheap
   CaptureTextToFileQt(szFile, fFalse);
   is.S = fileSav;
   fFortune = fFalse;
@@ -12940,7 +12944,12 @@ static void TestSortStarQt()
 
 #undef SORTSTAR_LEG
   CopyRgb((pbyte)rgbIgnSav.rgn, (pbyte)ignore.rgn, sizeof(ignore.rgn));
-  AdjustRestrictions();
+  // -R0 restricted every object, and the -R handler's own
+  // RedoRestrictions() recomputed the category flags from the restricted
+  // set: us.fCusp came back 0 and stayed 0 after the restore above, so
+  // the next cast's !us.fCusp branch re-restricted the cusps. Recompute
+  // the derived flags from the restored set.
+  RedoRestrictions();
   us.fGraphics = fGraphSav;
   us.fInterpret = fInterpSav;
   us.nRel = nRelSav;
