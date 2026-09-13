@@ -1709,3 +1709,72 @@ checks (the long name is written; it replays whole) and the U2 net is two (the
 negative case and its control). The prediction miscounted; the per-group
 counts above (18 to 20, 41 to 43) agree with the measured total. **Every count
 after this item is against 5184.**
+
+### Plan item 24 -- H4, L1, N7: a safety net that could not see popups, and file opens nobody checked
+
+**H4 -- the dialog net.** `StrOpenDialogQt()` arms two timers: one to capture
+and close the dialog it opened, and a net 1.5 seconds later in case that close
+did not take. The first looked for `activeModalWidget()` and then fell back to
+`activePopupWidget()`; the net looked only for the modal one. A dialog that came
+up as a popup and survived its first close would have hung the run. The net has
+the same fallback now.
+
+**Not falsified, and said so.** Proving H4 would mean making a dialog open as a
+popup *and* ignore its first close, which none of the 25 does and nothing in the
+suite can arrange without changing the dialogs themselves. The change is two
+lines, mirroring the ones directly above it in the same function, and `dialogs`
+still passes at its count. That is the evidence there is.
+
+**L1 -- the recursion group's files.** `TestFileRecursionQt()` writes two chains
+of settings files, one comfortably inside the include-depth limit and one past
+it, then asserts the first loads and the second is refused. Every `QFile::open()`
+was `if (open) { write }` with no else. On a full or read-only temp directory the
+second chain would be missing and "refused" would pass -- for having nothing to
+include. One check per chain now counts the links that could not be written
+(one check per file would add dozens of lines), and the file that includes
+itself gets its own check.
+
+**N7 -- two groups `fprintf()` to a `FILE *` nobody checked.**
+`TestNestedIncludeQt()` (two files) and `TestGraphicsModeSourceQt()` (one) called
+`fopen()` and wrote straight through the result. A full temp directory would be
+a segfault, not a FAIL. Each open is now checked and the write guarded.
+
+**Baseline, before the change**, each group alone: `file-recursion` 5,
+`nested-include` 5, `graphics-mode` 5, `dialogs` 131.
+
+**After the change**, each group alone: `file-recursion` 8 (+3),
+`nested-include` 7 (+2), `graphics-mode` 6 (+1), `dialogs` 131 (unchanged).
+
+**Falsified: the opens fail, and the new checks say so.** Each sabotage reversed
+by exact string before the next.
+
+- **L1**, every chain file and the self-including file opened read-only (so
+  every open fails):
+
+  ```
+  FAIL  all 15 files of the chain were written (15 not)
+  FAIL  a chain 15 deep loads, and its last file is read
+  FAIL  all 25 files of the chain were written (25 not)
+  FAIL  the file that includes itself was written
+  FAIL: 4 passed, 4 failed
+  ```
+
+  The line that is *not* there is the finding. "A chain 25 deep is refused
+  before the stack goes" still **passed** with no files written -- a chain that
+  does not exist is refused very reliably. That is exactly what L1 predicted,
+  and before this item nothing in the group would have said so. Now the check
+  directly before it does.
+- **N7**, the three scratch files opened for reading instead of writing (so
+  every `fopen()` returns NULL): `nested-include` failed 6, the two new checks
+  among them; `graphics-mode` failed 2, the new check among them. **Neither
+  process crashed** -- both exited with the ordinary failure status, and the
+  groups went on to fail their own checks on the missing files. What the same
+  sabotage did *without* the guards was not run; that it would crash in
+  `fprintf(NULL, ...)` is the review's claim, and glibc's documented behaviour,
+  not a measurement made here.
+
+No sabotage line left afterwards, and the diff was back to the intended 47
+lines.
+
+**Suite.** `PASS: 5190 passed, 0 failed` -- six more than 5184, the six new
+checks -- and canary lines identical to item 23's run.

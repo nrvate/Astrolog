@@ -389,6 +389,11 @@ static QString StrOpenDialogQt(void (*pfn)())
   // the whole suite on one dialog.
   QObject::connect(&tNet, &QTimer::timeout, []() {
     QWidget *pw = QApplication::activeModalWidget();
+    // The same fallback the opening timer has: a dialog that came up as a
+    // popup, and whose first close did not take, is invisible to
+    // activeModalWidget() and would hang the run (review finding H4).
+    if (pw == NULL)
+      pw = QApplication::activePopupWidget();
     if (pw != NULL)
       pw->close();
   });
@@ -1739,7 +1744,7 @@ static void TestFileRecursionQt()
   flag fPopupSav = FNoPopupQt(), fSecondsSav = us.fSeconds;
   QTemporaryDir dir;
   char szHead[cchSzMax], szPath[cchSzMax], szSelf[cchSzMax];
-  int rgcDepth[2], i, j;
+  int rgcDepth[2], i, j, cOpenBad;
 
   Group("Settings file recursion");
 
@@ -1751,6 +1756,7 @@ static void TestFileRecursionQt()
   SetNoPopupQt(fTrue);
 
   for (i = 0; i < 2; i++) {
+    cOpenBad = 0;
     for (j = 0; j < rgcDepth[i]; j++) {
       QString str;
       sprintf2(S(szPath), "%s/chain%d-%d.as",
@@ -1764,10 +1770,15 @@ static void TestFileRecursionQt()
       if (file.open(QIODevice::WriteOnly)) {
         file.write(str.toLocal8Bit());
         file.close();
-      }
+      } else
+        cOpenBad++;
       if (j == 0)
         sprintf2(S(szHead), "%s", szPath);
     }
+    // Every link written, or "refused" below passes on a chain that was
+    // never there to refuse (review finding L1).
+    Check(cOpenBad == 0, "all %d files of the chain were written (%d not)",
+      rgcDepth[i], cOpenBad);
     us.fSeconds = fFalse;
     FProcessSwitchFile(szHead, NULL);
     if (i == 0)
@@ -1784,7 +1795,10 @@ static void TestFileRecursionQt()
   sprintf2(S(szSelf), "%s/self.as", dir.path().toLocal8Bit().constData());
   {
     QFile file(QString::fromLocal8Bit(szSelf));
-    if (file.open(QIODevice::WriteOnly)) {
+    flag fOpen = file.open(QIODevice::WriteOnly);
+
+    Check(fOpen, "the file that includes itself was written");
+    if (fOpen) {
       file.write(QString("@AD800\n-i %1\n=b0\n").arg(
         QString::fromLocal8Bit(szSelf)).toLocal8Bit());
       file.close();
@@ -8603,13 +8617,21 @@ static void TestNestedIncludeQt()
   SetNoPopupQt(fTrue);    // a failing load must fail, not open a box
   SzScratchPathQt(S(szInner), "nest-inner", ".as");
   SzScratchPathQt(S(szOuter), "nest-outer", ".as");
+  // Checked and guarded: an fprintf() to a NULL FILE is a crash, not a FAIL
+  // (review finding N7).
   file = fopen(szInner, "w");
-  fprintf(file, "@AD800  ; inner\n-YQ 41\n");
-  fclose(file);
+  Check(file != NULL, "the inner include file was created");
+  if (file != NULL) {
+    fprintf(file, "@AD800  ; inner\n-YQ 41\n");
+    fclose(file);
+  }
   file = fopen(szOuter, "w");
-  fprintf(file, "@AD800  ; outer\n-i \"%s\"\n-YY 1\n"
-    "0.0\t0.0\tUS\tNowhere\tAfrica/Abidjan\n-YQ 47\n", szInner);
-  fclose(file);
+  Check(file != NULL, "the outer include file was created");
+  if (file != NULL) {
+    fprintf(file, "@AD800  ; outer\n-i \"%s\"\n-YY 1\n"
+      "0.0\t0.0\tUS\tNowhere\tAfrica/Abidjan\n-YQ 47\n", szInner);
+    fclose(file);
+  }
 
   us.nScrollRow = 24;
   fRet = FProcessSwitchFile(szOuter, NULL);
@@ -9351,9 +9373,12 @@ static void TestGraphicsModeSourceQt()
   SetNoPopupQt(fTrue);
   SzScratchPathQt(S(szFile), "gfx", ".as");
   file = fopen(szFile, "w");
-  fprintf(file, "@AD800  ; graphics mode\n"
-    "_X               ; Graphics chart display [\"_X\" is text]\n");
-  fclose(file);
+  Check(file != NULL, "the settings file was created");   // N7
+  if (file != NULL) {
+    fprintf(file, "@AD800  ; graphics mode\n"
+      "_X               ; Graphics chart display [\"_X\" is text]\n");
+    fclose(file);
+  }
 
   us.fGraphics = fTrue;
   Check(FProcessSwitchFile(szFile, NULL), "a file holding \"_X\" loads");
