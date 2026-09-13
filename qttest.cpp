@@ -179,6 +179,59 @@ static flag FClickButtonQt(QWidget *pw, CONST char *szText)
   return fTrue;
 }
 
+// A scratch file name: "<temp>/astrolog-qt-<szName>-<pid><szSuffix>". Every
+// group that writes a file to read back built this with its own sprintf2()
+// from QDir::tempPath() -- 28 of them, a few through a local copy of the
+// path -- and the process id keeps two suites on one machine apart.
+//
+// The QByteArray is named, not a temporary, on purpose. toLocal8Bit() returns
+// a temporary, so "sz = QDir::tempPath().toLocal8Bit().constData()" leaves
+// sz dangling at the semicolon -- which Linux survived, reading bytes nothing
+// had reused yet, and macOS did not: SIGSEGV in the nested include group, in
+// the first run that got far enough to reach it. That group kept the path
+// in a local QByteArray for this reason until this helper took it over.
+static void SzScratchPathQt(char *sz, int cchMax, CONST char *szName,
+  CONST char *szSuffix)
+{
+  QByteArray baDir = QDir::tempPath().toLocal8Bit();
+
+  sprintf2(sz, cchMax, "%s/astrolog-qt-%s-%d%s", baDir.constData(), szName,
+    (int)QCoreApplication::applicationPid(), szSuffix);
+}
+
+// Samples of pim, every nStep pixels and inside nMargin of each edge, that
+// differ from rgb. -1 when there is no image. Callers pass the colour they
+// mean: the background for "did anything draw", the corner for the one
+// group that still asks that (N-G).
+static long CpixNotColorQt(CONST QImage *pim, QRgb rgb, int nStep, int nMargin)
+{
+  long cpix = 0;
+  int x, y;
+
+  if (pim == NULL)
+    return -1;
+  for (y = nMargin; y < pim->height() - nMargin; y += nStep)
+    for (x = nMargin; x < pim->width() - nMargin; x += nStep)
+      if (pim->pixel(x, y) != rgb)
+        cpix++;
+  return cpix;
+}
+
+// Samples, every nStep pixels over the area both images cover, where the
+// two differ.
+static long CpixDiffImagesQt(CONST QImage &im1, CONST QImage &im2, int nStep)
+{
+  long cpix = 0;
+  int x, y, xMax = Min(im1.width(), im2.width()),
+    yMax = Min(im1.height(), im2.height());
+
+  for (y = 0; y < yMax; y += nStep)
+    for (x = 0; x < xMax; x += nStep)
+      if (im1.pixel(x, y) != im2.pixel(x, y))
+        cpix++;
+  return cpix;
+}
+
 // Report one assertion. Passes are counted but only failures are printed,
 // so a clean run stays short enough to actually read.
 static void Check(flag fOk, CONST char *szFmt, ...)
@@ -580,18 +633,10 @@ static void TestHotkeysQt()
 // the sparsest real one measured, orbit, 59.
 static long CpixDrawnQt(int nMargin)
 {
-  long cpix = 0;
-  int x, y;
   KV kvBack = KvFromKi(gi.kiOff);
-  QRgb rgbBack = qRgb(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack));
 
-  if (gi.qim == NULL)
-    return -1;
-  for (y = nMargin; y < gi.qim->height() - nMargin; y += 4)
-    for (x = nMargin; x < gi.qim->width() - nMargin; x += 4)
-      if (gi.qim->pixel(x, y) != rgbBack)
-        cpix++;
-  return cpix;
+  return CpixNotColorQt(gi.qim, qRgb(RgbR(kvBack), RgbG(kvBack),
+    RgbB(kvBack)), 4, nMargin);
 }
 
 static void TestChartRenderQt()
@@ -726,7 +771,7 @@ static void TestChartRenderQt()
 static void TestAllMenuActionsQt()
 {
   QList<QAction *> rgpa;
-  int i, k, cfired = 0, cmodal = 0, ctext = 0, cskip = 0, x, y;
+  int i, k, cfired = 0, cmodal = 0, ctext = 0, cskip = 0;
   long cpix;
 
   Group("Firing every menu item");
@@ -893,11 +938,7 @@ static void TestAllMenuActionsQt()
     // has to compare against.
     KV kvBackT = KvFromKi(gi.kiOff);
     QRgb rgbBackT = qRgb(RgbR(kvBackT), RgbG(kvBackT), RgbB(kvBackT));
-    cpix = 0;
-    for (y = 0; y < gi.qim->height(); y += 4)
-      for (x = 0; x < gi.qim->width(); x += 4)
-        if (gi.qim->pixel(x, y) != rgbBackT)
-          cpix++;
+    cpix = CpixNotColorQt(gi.qim, rgbBackT, 4, 0);
     Check(cpix > 20, "after \"%s\": chart went blank",
       str.toLocal8Bit().constData());
   }
@@ -2784,16 +2825,9 @@ int s_nAnimStartQt = 0;   // gs.nAnim as the program started, before any test
 
 static long CpixDifferQt()
 {
-  long cpix = 0;
-  int x, y;
-
   if (gi.qim == NULL)
     return -1;
-  for (y = 0; y < gi.qim->height(); y += 4)
-    for (x = 0; x < gi.qim->width(); x += 4)
-      if (gi.qim->pixel(x, y) != gi.qim->pixel(0, 0))
-        cpix++;
-  return cpix;
+  return CpixNotColorQt(gi.qim, gi.qim->pixel(0, 0), 4, 0);
 }
 
 // Clear Screen, in both modes. Text charts draw into the same buffer the
@@ -2924,14 +2958,11 @@ static void TestTextExportQt()
   char szFile[cchSzMax];
   FILE *fileSav = is.S;
   flag fGraphicsSav = us.fGraphics, fHTMLSav = us.fTextHTML;
-  QByteArray baDir = QDir::tempPath().toLocal8Bit();
-  CONST char *szDir = baDir.constData();
   FILE *fileT;
   long cb = -1;
 
   Group("Text export");
-  sprintf2(S(szFile), "%s/astrolog-qt-textexport-%d.tmp", szDir,
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szFile), "textexport", ".tmp");
   CaptureTextToFileQt(szFile, fFalse);
 
   Check(is.S == fileSav,
@@ -3564,7 +3595,6 @@ static void TestChartScrollQt()
 static void TestNoticeQt()
 {
   char szFile[cchSzMax];
-  QByteArray baDir = QDir::tempPath().toLocal8Bit();
   flag fPopupSav = FNoPopupQt(), fGraphicsSav = us.fGraphics;
   int iT;
 
@@ -3576,8 +3606,7 @@ static void TestNoticeQt()
   // guard, which is the asymmetry this group is about.
   us.fGraphics = fFalse;
 
-  sprintf2(S(szFile), "%s/astrolog-qt-notice-%d.txt", baDir.constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szFile), "notice", ".txt");
 
   // The output stream is redirected around the switch itself, because
   // that is when the text is printed -- a capture taken afterwards would
@@ -4414,7 +4443,7 @@ static void TestScreenOptionsQt()
      "are identical either way -- the jet-trail group is what sees it"} };
   int nModeSav = gi.nMode, xWinSav = gs.xWin, yWinSav = gs.yWin;
   flag fGraphicsSav = us.fGraphics;
-  int i, k, x, y;
+  int i, k;
 
   Group("Graphics options move a screen render");
   us.fGraphics = fTrue;
@@ -4438,10 +4467,7 @@ static void TestScreenOptionsQt()
       if (gi.qim == NULL || gi.qim->size() != imOff.size())
         continue;
       imOn = gi.qim->copy();
-      for (y = 0; y < imOff.height(); y++)
-        for (x = 0; x < imOff.width(); x++)
-          if (imOff.pixel(x, y) != imOn.pixel(x, y))
-            cDiff++;
+      cDiff += CpixDiffImagesQt(imOff, imOn, 1);
       if (cDiff > 0)
         nModeMoved = rgnMode[k];
     }
@@ -4496,10 +4522,7 @@ static void TestScreenOptionsQt()
           if (gi.qim == NULL || gi.qim->size() != imOff.size())
             continue;
           imOn = gi.qim->copy();
-          for (y = 0; y < imOff.height(); y++)
-            for (x = 0; x < imOff.width(); x++)
-              if (imOff.pixel(x, y) != imOn.pixel(x, y))
-                cDiff++;
+          cDiff += CpixDiffImagesQt(imOff, imOn, 1);
           if (cDiff > 0) {
             nFontMoved = n; nModeMoved = rgnMode[k];
           }
@@ -4839,9 +4862,7 @@ static void TestWindowSizeQt()
   // FValidScale() refuses for wanting a multiple of 100. That looked
   // exactly like the bug under test.
   gs.nScaleText = 150;
-  sprintf2(S(szPath), "%s/astrolog-qt-winsize-%d.as",
-    QDir::tempPath().toLocal8Bit().constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szPath), "winsize", ".as");
   us.fNoWrite = fFalse;
   FCloneSz(szPath, &is.szFileOut);
   us.nWriteFormat = 0;
@@ -4959,7 +4980,7 @@ static void TestTransitModeQt()
   flag fMonthSav = us.fInDayMonth, fYearSav = us.fInDayYear;
   byte rgfIgnoreSav[objMax];
   QImage imBase, imBase2;
-  int i, x, y, cBase = 0, cDiff;
+  int i, cBase = 0, cDiff;
 
   Group("Transit list modes drawn as graphics");
 
@@ -4997,10 +5018,7 @@ static void TestTransitModeQt()
   // pixel wide, and sampling every other pixel each way threw away 98% of
   // them -- measured, 20,349 differing pixels down to 208. The renders
   // are what this group costs, not the walks.
-  for (y = 0; y < imBase.height(); y++)
-    for (x = 0; x < imBase.width(); x++)
-      if (imBase.pixel(x, y) != imBase2.pixel(x, y))
-        cBase++;
+  cBase += CpixDiffImagesQt(imBase, imBase2, 1);
 
   for (i = 0; i < 4; i++) {
     us.fGraphics = fTrue;
@@ -5009,10 +5027,7 @@ static void TestTransitModeQt()
     RedrawQt();
     cDiff = 0;
     if (gi.qim != NULL && gi.qim->size() == imBase.size())
-      for (y = 0; y < imBase.height(); y++)
-        for (x = 0; x < imBase.width(); x++)
-          if (gi.qim->pixel(x, y) != imBase.pixel(x, y))
-            cDiff++;
+      cDiff = CpixDiffImagesQt(*gi.qim, imBase, 1);
     Check(cDiff > 1000,
       "mode %d draws a chart body, not just the frame (%d changed pixels; "
       "two bodiless modes differ by %d)", rgnMode[i], cDiff, cBase);
@@ -5054,7 +5069,6 @@ static void TestChartStoreQt()
   int nRelSav = us.nRel, nModeSav = gi.nMode, yea1, yea2, yea3;
   QAction *paStore = PaFindActionTestQt("&Store Chart Info");
   QAction *paRecall = PaFindActionTestQt("Re&call Chart Info");
-  QByteArray baDir = QDir::tempPath().toLocal8Bit();
   FILE *fileSav = is.S;
   char szT[cchSzMax];
 
@@ -5083,8 +5097,7 @@ static void TestChartStoreQt()
   ciMain.yea = 1990; ciCore = ciMain;
   paStore->trigger();
   ciMain.yea = 2000; ciCore = ciMain;
-  sprintf2(S(szT), "%s/astrolog-qt-store-%d.tmp", baDir.constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szT), "store", ".tmp");
   CaptureTextToFileQt(szT, fFalse);
   is.S = fileSav;
   QFile::remove(QString(szT));
@@ -6304,9 +6317,7 @@ static void TestSettingsRoundTripQt()
   rgobjset[iMoon].tinf = 4.0;
   rgobjset[iCusp].tinf = 6.0;
 
-  sprintf2(S(szPath), "%s/astrolog-qt-roundtrip-%d.as",
-    QDir::tempPath().toLocal8Bit().constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szPath), "roundtrip", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -6387,9 +6398,7 @@ static void TestInterfaceSettingsQt()
   SetMenuAntialiasQt(fTrue);
   SetThemePrefQt("dark");
 
-  sprintf2(S(szPath), "%s/astrolog-qt-interface-%d.as",
-    QDir::tempPath().toLocal8Bit().constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szPath), "interface", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -6956,9 +6965,7 @@ static void TestObjSelDialogQt()
     int nWriteFormatSav = us.nWriteFormat, i;
     flag fNoWriteSav = us.fNoWrite;
 
-    sprintf2(S(szPath), "%s/astrolog-qt-objsel-%d.as",
-      QDir::tempPath().toLocal8Bit().constData(),
-      (int)QCoreApplication::applicationPid());
+    SzScratchPathQt(S(szPath), "objsel", ".as");
     us.fNoWrite = fFalse;
     us.nWriteFormat = 'd';
     is.szFileOut = szPath;
@@ -8226,9 +8233,7 @@ static void TestSharedCoreFixesQt()
     ciMain.nam = szLongNam; ciMain.loc = szLongLoc;
     ciCore = ciMain;
     us.fSeconds = fTrue;
-    sprintf2(S(szOut), "%s/astrolog-qt-longloc-%d.txt",
-      QDir::tempPath().toLocal8Bit().constData(),
-      (int)QCoreApplication::applicationPid());
+    SzScratchPathQt(S(szOut), "longloc", ".txt");
     FILE *fileSSav = is.S;
     // The user's -os name by content, put back below (K6): this used
     // to end in FCloneSz(NULL, ...), which dropped it.
@@ -8543,25 +8548,14 @@ static void TestEsotericTablesQt()
 static void TestNestedIncludeQt()
 {
   char szInner[cchSzMax], szOuter[cchSzMax];
-  // The QByteArray has to outlive the pointer into it. toLocal8Bit()
-  // returns a temporary, so "szTmp = QDir::tempPath().toLocal8Bit()
-  // .constData()" leaves szTmp dangling at the semicolon -- which Linux
-  // survived, reading bytes nothing had reused yet, and macOS did not:
-  // SIGSEGV in this group, in the first run that got far enough to
-  // reach it. Every other site passes the expression straight to
-  // sprintf2(), where the temporary lives to the end of the call.
-  QByteArray baTmp = QDir::tempPath().toLocal8Bit();
-  CONST char *szTmp = baTmp.constData();
   FILE *file;
   int nScrollSav = us.nScrollRow;
   flag fRet, fPopupSav = FNoPopupQt();
 
   Group("Nested include");
   SetNoPopupQt(fTrue);    // a failing load must fail, not open a box
-  sprintf2(S(szInner), "%s/astrolog-qt-nest-inner-%d.as", szTmp,
-    (int)QCoreApplication::applicationPid());
-  sprintf2(S(szOuter), "%s/astrolog-qt-nest-outer-%d.as", szTmp,
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szInner), "nest-inner", ".as");
+  SzScratchPathQt(S(szOuter), "nest-outer", ".as");
   file = fopen(szInner, "w");
   fprintf(file, "@AD800  ; inner\n-YQ 41\n");
   fclose(file);
@@ -8822,9 +8816,7 @@ static void TestSettingsFieldsQt()
     FProcessYXU(szLin, szLnk, fFalse);
   }
 
-  sprintf2(S(szPath), "%s/astrolog-qt-fields-%d.as",
-    QDir::tempPath().toLocal8Bit().constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szPath), "fields", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -9067,9 +9059,7 @@ static void TestSettingsArraysQt()
     rgbaWant[i] = QByteArray((CONST char *)rgsetarray[i].pv,
       rgsetarray[i].cb);
 
-  sprintf2(S(szPath), "%s/astrolog-qt-arrays-%d.as",
-    QDir::tempPath().toLocal8Bit().constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szPath), "arrays", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -9235,9 +9225,7 @@ static void TestSettingsStringsQt()
       cAsked++;
     }
 
-  sprintf2(S(szPath), "%s/astrolog-qt-strings-%d.as",
-    QDir::tempPath().toLocal8Bit().constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szPath), "strings", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -9314,9 +9302,7 @@ static void TestGraphicsModeSourceQt()
 
   Group("Graphics mode source");
   SetNoPopupQt(fTrue);
-  sprintf2(S(szFile), "%s/astrolog-qt-gfx-%d.as",
-    QDir::tempPath().toLocal8Bit().constData(),
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szFile), "gfx", ".as");
   file = fopen(szFile, "w");
   fprintf(file, "@AD800  ; graphics mode\n"
     "_X               ; Graphics chart display [\"_X\" is text]\n");
@@ -9446,7 +9432,7 @@ static void TestForcedPositionsQt()
   sprintf2(S(szLine), "-WM 1 \"AstrologQtSuiteMacro\"");
   FProcessCommandLine(szLine);
 
-  sprintf2(S(szPath), "%s/astrolog-qt-force-test-%d.as", QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szPath), "force-test", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
   is.szFileOut = szPath;
@@ -10274,9 +10260,7 @@ static void TestNumericOracleQt()
         char szTmpRet[cchSzMax];
         FILE *fileRetSav = is.S, *fileRet;
 
-        sprintf2(S(szTmpRet), "%s/astrolog-qt-return-%d.txt",
-          QDir::tempPath().toLocal8Bit().constData(),
-          (int)QCoreApplication::applicationPid());
+        SzScratchPathQt(S(szTmpRet), "return", ".txt");
         fileRet = fopen(szTmpRet, "w");
         if (fileRet != NULL)
           is.S = fileRet;
@@ -10461,9 +10445,7 @@ static void TestNumericOracleQt()
       // ordering. An hour went into WriteWire() before a backtrace said
       // qttest.cpp:4596.
       fileAtlSav = is.S;
-      sprintf2(S(szTmpAtl), "%s/astrolog-qt-atlas-%d.txt",
-        QDir::tempPath().toLocal8Bit().constData(),
-        (int)QCoreApplication::applicationPid());
+      SzScratchPathQt(S(szTmpAtl), "atlas", ".txt");
       fileAtl = fopen(szTmpAtl, "w");
       Check(fileAtl != NULL, "the atlas leg got a stream of its own");
       if (fileAtl != NULL)
@@ -10598,9 +10580,7 @@ static void TestNumericOracleQt()
         FILE *fileIntSav = is.S, *fileInt;
         long lcb;
 
-        sprintf2(S(szTmpInt), "%s/astrolog-qt-interp-%d.txt",
-          QDir::tempPath().toLocal8Bit().constData(),
-          (int)QCoreApplication::applicationPid());
+        SzScratchPathQt(S(szTmpInt), "interp", ".txt");
         fileInt = fopen(szTmpInt, "w");
         if (fileInt != NULL) {
           is.S = fileInt;
@@ -10649,9 +10629,7 @@ static void TestNumericOracleQt()
       FILE *fileDaySav, *fileDay;
       int cNew = 0, cBadSep = 0, cGap = 0, cBadGap = 0, iMon, j;
 
-      sprintf2(S(szTmpDay), "%s/astrolog-qt-inday-%d.txt",
-        QDir::tempPath().toLocal8Bit().constData(),
-        (int)QCoreApplication::applicationPid());
+      SzScratchPathQt(S(szTmpDay), "inday", ".txt");
 
       for (iMon = 1; iMon <= 6; iMon++) {
         OraclePinUtQt(2020, iMon, 1, 0.0);
@@ -10743,9 +10721,7 @@ static void TestNumericOracleQt()
       }
       ciTran = ciCore;
       is.cci = 0;
-      sprintf2(S(szTmpTra), "%s/astrolog-qt-transit-%d.txt",
-        QDir::tempPath().toLocal8Bit().constData(),
-        (int)QCoreApplication::applicationPid());
+      SzScratchPathQt(S(szTmpTra), "transit", ".txt");
       fileTraSav = is.S;
       fileTra = fopen(szTmpTra, "w");
       if (fileTra != NULL)
@@ -10813,9 +10789,7 @@ static void TestNumericOracleQt()
       for (j = 0; j <= cObj; j++)
         ignore[j] = (j != oSun);
       is.cci = 0;
-      sprintf2(S(szTmpHor), "%s/astrolog-qt-horizon-%d.txt",
-        QDir::tempPath().toLocal8Bit().constData(),
-        (int)QCoreApplication::applicationPid());
+      SzScratchPathQt(S(szTmpHor), "horizon", ".txt");
       fileHorSav = is.S;
       fileHor = fopen(szTmpHor, "w");
       if (fileHor != NULL)
@@ -11700,11 +11674,7 @@ static void TestPrintQt()
       "something (%dx%d against %dx%d)",
       imBlank.width(), imBlank.height(), imDrawn.width(), imDrawn.height());
     int cDiff = 0;
-    int yMax = Min(imBlank.height(), imDrawn.height());
-    int xMax = Min(imBlank.width(), imDrawn.width());
-    for (int y = 0; y < yMax; y += 2)
-      for (int x = 0; x < xMax; x += 2)
-        cDiff += (imBlank.pixel(x, y) != imDrawn.pixel(x, y));
+    cDiff = (int)CpixDiffImagesQt(imBlank, imDrawn, 2);
     Check(cColour(imBlank) <= 2,
       "DrawChartX() with gi.nMode unset draws nothing (%d colours)",
       cColour(imBlank));
@@ -12180,8 +12150,7 @@ static void TestFileParsersQt()
   for (i = 0; i < 2047; i++)
     szPad[i] = 'P';
   szPad[2047] = chNull;
-  sprintf2(S(szFile), "%s/astrolog-qt-parserfixture-%d.tmp",
-    QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szFile), "parserfixture", ".tmp");
 
   // iCalendar, fgets through the whole cchSzLine buffer: a 400-char
   // SUMMARY arrives intact (it used to truncate at 246, the old
@@ -12444,8 +12413,7 @@ static void TestLineDrawingQt()
       *rgchartmode[j].pf = fFalse;
     }
     us.fGrid = fTrue;
-    sprintf2(S(szOut), "%s/astrolog-qt-linedraw-%d.txt",
-      QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
+    SzScratchPathQt(S(szOut), "linedraw", ".txt");
     // The user's -os name by content, put back below (K6): this used
     // to end in FCloneSz(NULL, ...), which dropped it.
     QByteArray baScreenSav(SzSet(is.szFileScreen));
@@ -12546,8 +12514,7 @@ static void TestLongStringsQt()
     ciCore = ciMain;
     for (i = 0; i < cchartmode; i++)
       rgfSav[i] = *rgchartmode[i].pf;
-    sprintf2(S(szOut), "%s/astrolog-qt-longstrings-%d.txt",
-      QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
+    SzScratchPathQt(S(szOut), "longstrings", ".txt");
     // The user's -os name by content, put back below (K6): this used
     // to end in FCloneSz(NULL, ...), which dropped it.
     QByteArray baScreenSav(SzSet(is.szFileScreen));
@@ -12915,8 +12882,6 @@ static void TestSortStarQt()
   int nArabicSortSav = us.nArabicSort;
   int nRelSav = us.nRel;
   char szFile[cchSzMax], szCmd[cchSzLine], szLine[cchSzLine], *pch;
-  QByteArray baDir = QDir::tempPath().toLocal8Bit();
-  CONST char *szDir = baDir.constData();
   int iSir, iAch, cLin;
   real rMag;
 
@@ -12929,8 +12894,7 @@ static void TestSortStarQt()
                                     // where the Arabic parts and the
                                     // grid live -- is never reached
 
-  sprintf2(S(szFile), "%s/astrolog-qt-sortstar-%d.tmp", szDir,
-    (int)QCoreApplication::applicationPid());
+  SzScratchPathQt(S(szFile), "sortstar", ".tmp");
 #define SORTSTAR_LEG(command) \
   sprintf2(S(szCmd), command); \
   FProcessCommandLine(szCmd); \

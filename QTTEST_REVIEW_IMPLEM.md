@@ -1304,3 +1304,90 @@ test group matches", which would have read like the sabotage biting.
 **Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
 17's run -- the seven "click every match" loops clicking only the first
 match changed no group's outcome.
+
+### Plan item 19 -- one helper for scratch paths, two for pixel counts
+
+**The review's "8 blank-image loops" were two different things.** Read one
+by one, the nine loops that compare pixels split into:
+
+- **four that compare against one colour** -- `FPixmapFlatQt()` (any pixel
+  unlike the corner), `CpixDrawnQt()` (background, inside a margin), the
+  menu-firing group's "chart went blank" (background), and `CpixDifferQt()`
+  (the corner);
+- **five that compare two images** -- two in `TestScreenOptionsQt()`, two in
+  `TestTransitModeQt()`, one in `TestPrintQt()`.
+
+A single `CpixNotBackgroundQt()` would have fitted neither set whole.
+
+**The change.**
+
+- `CpixNotColorQt(pim, rgb, nStep, nMargin)` counts samples unlike a given
+  colour. `CpixDrawnQt()`, the menu-firing loop and `CpixDifferQt()` call it,
+  **each still passing the colour it compared against before** -- the
+  background for the first two, the corner for the third. That the
+  menu-firing check and `CpixDifferQt()` have blind spots (N-F, N-G) is
+  their own finding; a deduplication that quietly changed what they compare
+  would be a second change hiding in the first. `FPixmapFlatQt()` stays
+  hand-written: it stops at the first differing pixel and does not count.
+- `CpixDiffImagesQt(im1, im2, nStep)` counts differing samples over the
+  area both images cover. Checked before relying on that: all four
+  full-size loops already require equal sizes before comparing (the two
+  in `TestScreenOptionsQt()` skip on a size mismatch, `TestTransitModeQt()`
+  checks both), and `TestPrintQt()` already walked the smaller extent. So
+  "the common area" is exactly what each walked. Steps kept: 1 at the four,
+  2 at the print group.
+- `SzScratchPathQt(sz, cch, szName, szSuffix)` builds
+  `<temp>/astrolog-qt-<name>-<pid><suffix>`. All 28 scratch-path `sprintf2()`
+  calls had that shape; 25 end in `.as`, `.txt` or `.tmp` and are replaced.
+  The three whose suffix carries a mode letter or an extension stay. Six of
+  the 28 passed a local rather than `QDir::tempPath()` itself; each local was
+  traced to `QDir::tempPath().toLocal8Bit()` first, so no file moved.
+
+**Locals the change left unused, removed in the same edit:** `baDir`/`szDir`
+in four groups, `x`/`y` in three, and `baTmp`/`szTmp` in the nested include
+group -- the last with a comment worth keeping, which moved (below).
+
+**Gotcha: my own unused-variable check counted comment text.** Before
+writing, a dry run reported each local's remaining uses in its function.
+It said `szTmp` still appeared three times in `TestNestedIncludeQt()`. Two
+of those were inside the comment explaining it. The warning audit -- plan
+item 3's gate, which this chain runs before building anything -- reported
+`unused variable 'szTmp'` and stopped the chain before one test ran. The
+gate did its job on the first commit after it existed.
+
+**The comment that went with `szTmp` records a real crash, so it moved
+rather than went.** It explained why the temp path is held in a named
+`QByteArray`: a `constData()` pointer into a temporary dangles at the
+semicolon -- which Linux survived and macOS did not, with a SIGSEGV in
+that group. `SzScratchPathQt()` now does exactly that for every caller, so
+the explanation, with its evidence, is the helper's comment.
+
+**Falsified: each helper is what its callers now stand on.** Four groups
+alone with the helpers in: `chart-render` 125, `screen-options` 21,
+`transit-mode` 7, `printing` 7 passed. Then one sabotage at a time, each
+reversed by exact string before the next:
+
+```
+CpixNotColorQt() returns 0:     chart-render:   FAIL: 102 passed, 23 failed
+CpixDiffImagesQt() returns 0:   screen-options: FAIL: 3 passed, 18 failed
+                                transit-mode:   FAIL: 3 passed, 4 failed
+                                printing:       FAIL: 6 passed, 1 failed
+```
+
+The 23 are exactly the 23 graphics charts reading as blank. `grep -c` for the
+sabotage marker read 0 afterwards. `SzScratchPathQt()` got no sabotage run:
+it builds the same format from the same pieces as the calls it replaced,
+and every one of the 25 callers writes its file and reads it back in the
+suite, so a wrong path fails them without help.
+
+**Gotcha: a name check that said "missing" for a group that ran.** The
+chain first confirms each group name exists in the table, after item 18
+showed why. `print` came back with 0 exact matches -- the table row is
+`printing` -- and still ran the right group, because `ASTROLOG_QT_TESTS`
+matches by substring (`strstr()` in `FTestWantedQt()`), and `printing` is
+the only name containing "print". Checked before trusting that run. A
+substring filter that happened to catch two groups would have printed one
+combined count, which would have read like a result for one.
+
+**Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
+18's run.
