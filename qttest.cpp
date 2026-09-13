@@ -12749,18 +12749,15 @@ static void TestStarLinksQt()
   // occasionally reused by a later allocation, which surfaced three
   // groups later as a garbage line in a settings replay. The first draft
   // of this group did exactly that.
-  char szLinSav[cchSzLine], szLnkSav[cchSzLine];
+  //
+  // And content of any LENGTH: these were cchSzLine stack buffers, so a
+  // star list longer than 1019 characters -- the constellation list runs
+  // to thousands -- came back cut short for the rest of the run, and the
+  // settings sweep after this group then faithfully preserved the cut.
+  QByteArray baLinSav(SzSet(gs.szStarsLin)), baLnkSav(SzSet(gs.szStarsLnk));
   ES *pes1, *pes2;
 
   Group("Star links");
-  if (FSzSet(gs.szStarsLin))
-    sprintf2(S(szLinSav), "%s", gs.szStarsLin);
-  else
-    szLinSav[0] = chNull;
-  if (FSzSet(gs.szStarsLnk))
-    sprintf2(S(szLnkSav), "%s", gs.szStarsLnk);
-  else
-    szLnkSav[0] = chNull;
   FProcessYXU("Aldebaran,Antares", "0_1", fFalse);
   Check(gi.cStarsLin == 2, "the two-star list reserved %d slots",
     gi.cStarsLin);
@@ -12785,7 +12782,7 @@ static void TestStarLinksQt()
 
   // Back the way the group found it: through the same FProcessYXU() path
   // that owns these strings, never through the deallocated originals.
-  FProcessYXU(szLinSav, szLnkSav, fFalse);
+  FProcessYXU(baLinSav.constData(), baLnkSav.constData(), fFalse);
 }
 
 // Standing legs for the trigger paths the four byte-diff matrices never

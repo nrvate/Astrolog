@@ -411,3 +411,47 @@ as a pass on a dialog nobody touched.
 
 **Suite.** `PASS: 5198 passed, 0 failed`, and the canary lines identical
 to item 4's run (clock-driven globe angles filtered).
+
+### Plan item 6 -- K3: `star-links` saves the star lists into 1020 bytes
+
+**The change.** `TestStarLinksQt()` saved `gs.szStarsLin` and
+`gs.szStarsLnk` by `sprintf2()` into two `cchSzLine` stack buffers and put
+them back through `FProcessYXU()`. It now copies both into `QByteArray`s
+(content, not pointers -- the reason the group's own comment gives for not
+saving the pointer still stands) and restores from those. The empty-list
+case needs no branch any more: `SzSet()` turns a NULL list into "", which
+is what the old `else` wrote.
+
+**Why it could be made to fail at all.** K3 was latent: `nrvate.as`
+carries `-YXU "" ""`, so no run anyone makes by default has a list to
+lose. The falsification needed a long list from outside, and that is
+possible only because nothing upstream of the group caps it -- checked
+before relying on it: the `-YXU` handler passes both arguments straight to
+`FProcessYXU()`, which allocates to `CchSz()` and validates nothing.
+
+**Falsified.** `ASTROLOG_QT_TESTS=star-links`, the canary on, with
+`-YXU` given a 1979-character star list and a 1439-character link list
+after `-i nrvate.as` on the command line. Before the change:
+
+```
+[canary star-links: gs.szStarsLin length 1979 -> 1019]
+[canary star-links: gs.szStarsLnk length 1439 -> 1019]
+PASS: 8 passed, 0 failed
+```
+
+-- both cut at 1019 characters, and the group itself passing, which is
+the point: nothing in the suite noticed.
+
+**After the change.** The same run: `[canary: 0 changes left behind by
+0 groups]`, still 8 passed -- both lists come back at their full length.
+The full suite, canary on: `PASS: 5198 passed, 0 failed`, canary lines
+identical to item 5's run.
+
+**Not resolved: the suite still does not *assert* this.** The
+falsification is a canary line under a hand-built command line, not a
+`Check()`; a regression back to a fixed buffer would pass the suite
+exactly as before, because no run carries a long list. A standing net
+would be the `settings-strings` sweep poisoning the star lists with its
+300-character marker across `star-links` -- but that is a change to the
+sweep's design, not to this group, and is left for the maintainer to
+want.
