@@ -157,6 +157,28 @@ static void Group(CONST char *sz)
   printf("\n== %s ==\n", sz);
 }
 
+// The first push button in pw whose label is exactly szText, or NULL. Every
+// dialog driver here used to write this loop out by hand -- 37 of them, in
+// seven shapes -- and two idioms for the same action sat in one function.
+static QPushButton *PpbButtonQt(QWidget *pw, CONST char *szText)
+{
+  for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+    if (ppb->text() == szText)
+      return ppb;
+  return NULL;
+}
+
+// Click that button, and say whether there was one to click.
+static flag FClickButtonQt(QWidget *pw, CONST char *szText)
+{
+  QPushButton *ppb = PpbButtonQt(pw, szText);
+
+  if (ppb == NULL)
+    return fFalse;
+  ppb->click();
+  return fTrue;
+}
+
 // Report one assertion. Passes are counted but only failures are printed,
 // so a clean run stays short enough to actually read.
 static void Check(flag fOk, CONST char *szFmt, ...)
@@ -1744,9 +1766,7 @@ static void TestGraphicsFieldsQt()
     QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_WN");
     if (pe != NULL)
       pe->setText("0");
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK")
-        ppb->click();
+    FClickButtonQt(pw, "OK");
   });
   Check(NAnimDelayQt() == nDelaySav,
     "an animation delay of 0 is refused, not stored (%d, want %d)",
@@ -1758,9 +1778,7 @@ static void TestGraphicsFieldsQt()
     QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_WN");
     if (pe != NULL)
       pe->setText("250");
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK")
-        ppb->click();
+    FClickButtonQt(pw, "OK");
   });
   Check(NAnimDelayQt() == 250,
     "while a delay inside the range is applied (%d, want 250)",
@@ -1824,11 +1842,8 @@ static void TestGraphicsFieldsQt()
           if (iDup < rg.size())
             rg[iDup]->setText(szText);
         }
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "OK") {
-            ppb->click();
-            return;
-          }
+        if (FClickButtonQt(pw, "OK"))
+          return;
         pw->close();
       };
 
@@ -1870,8 +1885,8 @@ static void TestGraphicsFieldsQt()
       QList<QLineEdit *> rg = pw->findChildren<QLineEdit *>("deGr_X");
       if (!rg.isEmpty())
         rg[0]->setText("9999");
-      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-        if (ppb->text() == "OK") { ppb->click(); return; }
+      if (FClickButtonQt(pw, "OK"))
+        return;
       pw->close();
     });
     nBad = gs.objLeft;
@@ -1882,8 +1897,8 @@ static void TestGraphicsFieldsQt()
         rg[0]->setText("Moon");
       if (rgrb.size() > 1)
         rgrb[1]->setChecked(fTrue);
-      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-        if (ppb->text() == "OK") { ppb->click(); return; }
+      if (FClickButtonQt(pw, "OK"))
+        return;
       pw->close();
     });
     nGood = gs.objLeft;
@@ -1904,8 +1919,8 @@ static void TestGraphicsFieldsQt()
       QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_YXS");
       if (pe != NULL)
         pe->setText("-1");
-      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-        if (ppb->text() == "OK") { ppb->click(); return; }
+      if (FClickButtonQt(pw, "OK"))
+        return;
       pw->close();
     });
     rBad = gs.rspace;
@@ -1913,8 +1928,8 @@ static void TestGraphicsFieldsQt()
       QLineEdit *pe = pw->findChild<QLineEdit *>("deGr_YXS");
       if (pe != NULL)
         pe->setText("2.5");
-      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-        if (ppb->text() == "OK") { ppb->click(); return; }
+      if (FClickButtonQt(pw, "OK"))
+        return;
       pw->close();
     });
     rGood = gs.rspace;
@@ -2584,9 +2599,7 @@ static void TickInModalQt(void (*pfnOpen)(), CONST char *szLabel)
     for (QCheckBox *p : pw->findChildren<QCheckBox *>())
       if (p->text() == QString(szLabel))
         pcb = p;
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK")
-        ppbOK = p;
+    ppbOK = PpbButtonQt(pw, "OK");
     if (pcb != NULL)
       pcb->setChecked(fTrue);
     if (ppbOK != NULL)
@@ -2680,9 +2693,7 @@ static void TestDialogButtonWiringQt()
     for (QCheckBox *p : pw->findChildren<QCheckBox *>())
       if (p->text() == "E&quatorial Longitudes")
         pcb = p;
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK")
-        ppbOK = p;
+    ppbOK = PpbButtonQt(pw, "OK");
     if (pcb != NULL)
       pcb->setChecked(fTrue);
     if (ppbOK != NULL)
@@ -2752,9 +2763,7 @@ static void TestSharedSymbolBoxesQt()
       if (p->text() == "7") peStep = p;
       if (p->text() == "15") peDist = p;
     }
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK")
-        ppbOK = p;
+    ppbOK = PpbButtonQt(pw, "OK");
     if (peStep != NULL) peStep->setText("9");
     if (peDist != NULL) peDist->setText("21");
     if (ppbOK != NULL) ppbOK->click();
@@ -3080,9 +3089,7 @@ static QString StrApplyInfoQt(int mon, int day, int yea)
       ppbAppl->click();
       strDst = pcbDst->currentText();
     }
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "Cancel")
-        ppb->click();
+    FClickButtonQt(pw, "Cancel");
     pw->close();
   });
   return strDst;
@@ -3127,9 +3134,7 @@ static void TestNowButtonQt(void (*pfnOpen)(), CONST char *szDst,
       strDst = pcbDst->currentText();
       strZon = pcbZon->currentText();
     }
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "Cancel")
-        ppb->click();
+    FClickButtonQt(pw, "Cancel");
   });
 
   // Compared against ciDefa put through the same formatting the dialog
@@ -3179,11 +3184,8 @@ static void DriveSpaceCountQt(int cspace)
 
     if (peSpace != NULL)
       peSpace->setText(QString::number(cspace));
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") {
-        ppb->click();
-        return;
-      }
+    if (FClickButtonQt(pw, "OK"))
+      return;
     pw->close();
   });
 }
@@ -3324,11 +3326,8 @@ static void TestGraphicsSizeQt()
 
     if (peX != NULL) peX->setText(QString::number(xWant));
     if (peY != NULL) peY->setText(QString::number(yWant));
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") {
-        ppb->click();
-        return;
-      }
+    if (FClickButtonQt(pw, "OK"))
+      return;
     pw->close();
   });
   QApplication::processEvents(QEventLoop::AllEvents, 200 * nScaleTest);
@@ -3770,8 +3769,8 @@ static void TestOrbGridQt()
           else if (pcb != NULL)
             pcb->setEditText(szBad);
         }
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "OK") { ppb->click(); return; }
+        if (FClickButtonQt(pw, "OK"))
+          return;
         pw->close();
       });
       Check(rAspOrb[ASPT(1)] == 7.0 && rAspAngle[ASPT(1)] == 0.0 && kAspA[ASPT(1)] == 15,
@@ -3790,8 +3789,8 @@ static void TestOrbGridQt()
           else if (pcb != NULL)
             pcb->setEditText(szGood);
         }
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "OK") { ppb->click(); return; }
+        if (FClickButtonQt(pw, "OK"))
+          return;
         pw->close();
       });
       {
@@ -3857,8 +3856,8 @@ static void TestFieldParseQt()
 
         if (pe != NULL)
           pe->setText(szType);
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "OK") { ppb->click(); return; }
+        if (FClickButtonQt(pw, "OK"))
+          return;
         pw->close();
       });
       Check(gs.nGridCell == rgt[iT].nWant, "\"%s\" reads as %d -- %s (%d)",
@@ -3873,8 +3872,8 @@ static void TestFieldParseQt()
 
     if (pe != NULL)
       pe->setText("~Add 30 15");
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") { ppb->click(); return; }
+    if (FClickButtonQt(pw, "OK"))
+      return;
     pw->close();
   });
   Check(gs.rRot == 45.0,
@@ -3933,8 +3932,8 @@ static void TestComboPickQt()
 
         if (pcb != NULL)
           pcb->setEditText(szPick);
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "OK") { ppb->click(); return; }
+        if (FClickButtonQt(pw, "OK"))
+          return;
         pw->close();
       });
       Check(*rgt[iT].pn == rgt[iT].nWant, "%s (%d, want %d)",
@@ -3968,8 +3967,8 @@ static void TestComboPickQt()
         QComboBox *pcb = pw->findChild<QComboBox *>(szId);
         if (pcb != NULL)
           str = pcb->currentText();
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "Cancel") { ppb->click(); return; }
+        if (FClickButtonQt(pw, "Cancel"))
+          return;
         pw->close();
       });
       Check(str == QString("None"),
@@ -4030,11 +4029,8 @@ static void TestFontPackQt()
       pcb->setEditText("Consolas");
       cFound++;
     }
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") {
-        ppb->click();
-        return;
-      }
+    if (FClickButtonQt(pw, "OK"))
+      return;
     pw->close();
   });
 
@@ -4073,8 +4069,8 @@ static void TestFontPackQt()
       QList<QComboBox *> rg = pw->findChildren<QComboBox *>("dcGr_Xf");
       if (!rg.isEmpty())
         cItem = rg[0]->count();
-      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-        if (ppb->text() == "Cancel") { ppb->click(); return; }
+      if (FClickButtonQt(pw, "Cancel"))
+        return;
       pw->close();
     });
     Check(cItem == 5,
@@ -4118,8 +4114,8 @@ static void TestFontPackQt()
         QList<QComboBox *> rg = pw->findChildren<QComboBox *>("dcGr_Xf");
         if (iSlot < rg.size())
           rg[iSlot]->setEditText(szType);
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "OK") { ppb->click(); return; }
+        if (FClickButtonQt(pw, "OK"))
+          return;
         pw->close();
       });
       Check(*rgpn[iSlot] == rgt[iT].nWant, "%s (%d, want %d)",
@@ -4215,9 +4211,7 @@ static void TestNowButtonsQt()
         ppbNow->click();
         strNam = peNam->text();
       }
-      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-        if (ppb->text() == "Cancel")
-          ppb->click();
+      FClickButtonQt(pw, "Cancel");
     });
     ciCore.nam = pszNamSav;
     Check(strNam == QString(szNamT),
@@ -4689,8 +4683,8 @@ static void TestNullNamesQt()
     for (QLabel *pl : pw->findChildren<QLabel *>())
       if (pl->text().contains("null"))
         lstBad.append(pl->text());
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "Cancel") { ppb->click(); return; }
+    if (FClickButtonQt(pw, "Cancel"))
+      return;
     pw->close();
   });
   Check(lstBad.isEmpty(),
@@ -4709,8 +4703,8 @@ static void TestNullNamesQt()
       for (int j = 0; j < plw->count(); j++)
         if (plw->item(j)->text().contains("null"))
           lstBad.append(plw->item(j)->text());
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "Cancel") { ppb->click(); return; }
+    if (FClickButtonQt(pw, "Cancel"))
+      return;
     pw->close();
   });
   Check(lstBad.isEmpty(),
@@ -5105,8 +5099,8 @@ static void TestChartStoreQt()
   paStore->trigger();
   ciCore.yea = 2000; ciMain = ciCore;
   DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") { ppb->click(); return; }
+    if (FClickButtonQt(pw, "OK"))
+      return;
   });
   paRecall->trigger();
   Check(ciMain.yea == 1990,
@@ -5537,11 +5531,8 @@ static QByteArray BaReadFileQt(CONST QString &strPath)
 static void ClickOkInModalQt(void (*pfnOpen)())
 {
   DriveModalQt(pfnOpen, [](QWidget *pw) {
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") {
-        ppb->click();
-        return;
-      }
+    if (FClickButtonQt(pw, "OK"))
+      return;
     pw->close();
   });
 }
@@ -6014,9 +6005,7 @@ static void TestObjSelGlyphQt()
     QList<QComboBox *> rgcb = pw->findChildren<QComboBox *>();
     if (rgcb.size() > 1)
       pcb = rgcb[1];
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK")
-        ppbOK = p;
+    ppbOK = PpbButtonQt(pw, "OK");
     if (pcb != NULL)
       pcb->setEditText("10199");
     if (ppbOK != NULL)
@@ -6597,8 +6586,8 @@ static void TestInterfaceSettingsQt()
       SetConsoleFontQt(rgt[i].szCon, rgt[i].nCon);
       SetMenuFontQt(rgt[i].szMen, rgt[i].nMen);
       DriveModalQt(ShowDisplayDialogQt, [](QWidget *pw) {
-        for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-          if (ppb->text() == "OK") { ppb->click(); return; }
+        if (FClickButtonQt(pw, "OK"))
+          return;
         pw->close();
       });
       Check(StrConsoleFontQt() == QString(rgt[i].szCon) &&
@@ -6680,11 +6669,8 @@ static void TestCustomDialogParseQt()
       peDef->setText("10199 Chariklo");
     if (peDef1 != NULL)
       peDef1->setText("52872");
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") {
-        ppb->click();
-        return;
-      }
+    if (FClickButtonQt(pw, "OK"))
+      return;
     pw->close();
   });
 
@@ -7977,8 +7963,8 @@ static void TestChartListFilterQt()
     for (QPushButton *ppb : pw->findChildren<QPushButton *>())
       if (ppb->text().contains("Filter") && !ppb->text().contains("Remove"))
         ppb->click();
-    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-      if (ppb->text() == "OK") { ppb->click(); return; }
+    if (FClickButtonQt(pw, "OK"))
+      return;
     pw->close();
   });
   Check(is.cci == 1,
@@ -8015,8 +8001,8 @@ static void TestChartListFilterQt()
         }
       // Read the selection back out before the dialog goes away.
       s_cRowList = pl != NULL ? pl->currentRow() : -99;
-      for (QPushButton *ppb : pw->findChildren<QPushButton *>())
-        if (ppb->text() == "Cancel") { ppb->click(); return; }
+      if (FClickButtonQt(pw, "Cancel"))
+        return;
       pw->close();
     });
     Check(is.cci == cciWas - 1, "Delete Chart removed one (%d of %d)",
@@ -12725,8 +12711,7 @@ static void TestAspectCountQt()
     QPushButton *ppbOK = NULL;
     for (QLineEdit *p : pw->findChildren<QLineEdit *>())
       if (p->text() == "11") pe = p;
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK") ppbOK = p;
+    ppbOK = PpbButtonQt(pw, "OK");
     if (pe != NULL) pe->setText("20");
     if (ppbOK != NULL) ppbOK->click();
   });
@@ -12743,8 +12728,7 @@ static void TestAspectCountQt()
     QPushButton *ppbOK = NULL;
     for (QLineEdit *p : pw->findChildren<QLineEdit *>())
       if (p->text() == "20") pe = p;
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK") ppbOK = p;
+    ppbOK = PpbButtonQt(pw, "OK");
     if (pe != NULL) pe->setText("3");
     if (ppbOK != NULL) ppbOK->click();
   });
@@ -13125,8 +13109,7 @@ static void TestDivergencesQt()
   real dstSav = ciCore.dst;
   ciCore.dst = dstAuto;
   DriveModalQt(ShowChartInfoDialogQt, [](QWidget *pw) {
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK") p->click();
+    FClickButtonQt(pw, "OK");
   });
   Check(ciCore.dst == dstAuto,
     "an Autodetect daylight setting did not survive the chart info "
@@ -13155,8 +13138,7 @@ static void TestDivergencesQt()
 
     if (pcb != NULL)
       pcb->setEditText("Rainbow");
-    for (QPushButton *p : pw->findChildren<QPushButton *>())
-      if (p->text() == "OK") p->click();
+    FClickButtonQt(pw, "OK");
   });
   Check(gs.fLabelAsp,
     "picking a city colouring left gs.fLabelAsp clear, so the cities "

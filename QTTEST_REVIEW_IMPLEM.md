@@ -1237,3 +1237,70 @@ removed, 5 added, and **no non-comment line changed**. Warning audit empty.
 H2/D1/E3 edits; those three changed comment lines only (checked line by
 line above, and the file compiled clean after them), so the result stands
 for the committed source without a second 3-minute run.
+
+### Plan item 18 -- one button helper for the dialog drivers
+
+**The review's counts were low, and the loops were not all one thing.** C1
+counted 23 "OK loops" and 16 Cancel variants. A classification of every
+button loop in the current tree found 32 matching "OK" by label and 10
+matching "Cancel", in seven shapes -- and the shapes do not all do the same
+thing:
+
+| Shape | Sites | What it does |
+|---|---|---|
+| click first match, return (one line) | 18 | the common one |
+| click first match, return (braced) | 6 | same, incl. `ClickOkInModalQt()` |
+| click every match, keep looping (two-line) | 5 | clicks all "OK"s |
+| click every match, keep looping (one line) | 2 | same |
+| remember the button, click later (two-line) | 4 | fields set in between |
+| remember the button, click later (one line) | 2 | same |
+| anything else | 5 | left hand-written, below |
+
+**The change.** Two helpers after `Group()`: `PpbButtonQt(pw, szText)`
+returns the first push button labelled exactly `szText`, and
+`FClickButtonQt(pw, szText)` clicks it and says whether there was one. The
+37 loops of the first six shapes are replaced by a script whose six
+patterns each had to match exactly their expected count, or nothing was
+written. The "remember" shapes become `ppbOK = PpbButtonQt(pw, "OK");`.
+
+**Behaviour change, deliberate and bounded:** the seven "click every match"
+loops now click the first match only. They differ only on a dialog with
+two identically labelled buttons, which none of these dialogs has; the
+review (G2) had already called the difference harmless.
+
+**Left hand-written, and why.** The five loops still matching a button by
+label each do more than find one button:
+
+- `TestAboutVersionQt()` breaks out after OK and reads the dialog after;
+- `ClickInModalQt()` finds a named button *and* OK in the same pass;
+- `DriveObjSelQt()` (two loops) walks an indexed button list and handles
+  OK refusing an unparseable row;
+- `TestObjSelLookupQt()` collects several controls and Cancel in one pass.
+
+**Not done: standardising on object names (`IDOK`/`IDCANCEL`).** The plan
+asked for it where it exists. Eight sites already look buttons up that way.
+But a label lookup works on every dialog, and an object-name lookup only on
+the ones built from `astrolog.rc`; moving each site over needs that checked
+dialog by dialog, which is its own change. The helpers make it one edit
+later.
+
+**Falsified: the call sites go through the helper.** Four dialog-driving
+groups alone, with the helpers in: `graphics-fields` 13, `field-parse` 6,
+`orb-grid` 7, `chart-list` 11 passed -- the same counts as before the
+change. Rebuilt with `FClickButtonQt()` returning true without clicking:
+
+```
+graphics-fields: FAIL: 7 passed, 6 failed
+field-parse:     FAIL: 1 passed, 5 failed
+orb-grid:        FAIL: 4 passed, 3 failed
+chart-list:      FAIL: 9 passed, 2 failed
+```
+
+The sabotage line was then removed by exact string (`grep -c` reads 0) and
+the four pass again at 13, 6, 7 and 11. The group names used were checked
+to exist in the table first: a misspelt filter prints its own "FAIL: no
+test group matches", which would have read like the sabotage biting.
+
+**Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
+17's run -- the seven "click every match" loops clicking only the first
+match changed no group's outcome.
