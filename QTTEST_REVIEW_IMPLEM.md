@@ -165,7 +165,11 @@ the current file, exit 0 and empty; `dcd939b`'s file, the gate fails with
 exactly the six `-Wunused-variable` warnings and no "DOES NOT COMPILE". Then
 `make check` again, below.
 
-MAKECHECK-RESULT
+**`make check` on the finished branch, second run:** every generated table,
+every audit, both builds, `warnings: qttest.cpp ok`, the image and inert-option
+audits, both `-W` arity checks, and the suite at `PASS: 5190 passed, 0 failed`
+-- "== all clear". (The first run had passed everything but this gate, the
+suite included at 5190.)
 
 ### Plan item 3a -- the group canary, `ASTROLOG_QT_TEST_CANARY`
 
