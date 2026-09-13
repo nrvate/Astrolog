@@ -10035,7 +10035,8 @@ static void TestNumericOracleQt()
               }
               fIsBad = (RAbs(rSumH - rDegMax) > 0.01 || rGapMinH < 0.001);
               fExpectBad = fFalse;
-              for (iDeg = 0; iDeg < 1; iDeg++)
+              for (iDeg = 0; iDeg < (int)(sizeof(rgDegen)/sizeof(*rgDegen));
+                iDeg++)
                 if (rgDegen[iDeg] == i)
                   fExpectBad = fTrue;
               cCase++;
@@ -10058,13 +10059,13 @@ static void TestNumericOracleQt()
       Check(cUnexpected == 0,
         "no house system degenerates toward the pole beyond Pullen "
         "(S.Delta), whose collapse is deliberate (%d new)", cUnexpected);
-      for (iDeg = 0; iDeg < 1; iDeg++)
+      for (iDeg = 0; iDeg < (int)(sizeof(rgDegen)/sizeof(*rgDegen)); iDeg++)
         if (!rgfSeenBad[rgDegen[iDeg]])
           cMissingBad++;
       Check(cMissingBad == 0,
         "and Pullen (S.Delta) still collapses, as its author wrote "
-        "(%d appear changed "
-        "fixed -- if that is deliberate, drop them from rgDegen)",
+        "(%d expected to collapse no longer do -- if that is a deliberate "
+        "fix, drop them from rgDegen)",
         cMissingBad);
       Check(cExpectedBad > 0,
         "the polar sweep reaches the degenerate region at all (%d cases)",
@@ -10256,7 +10257,7 @@ static void TestNumericOracleQt()
     // does it see nothing halfway between two consecutive ones.
     //
     // Measured over five epochs, 1900 through 2060: 60 solar eclipses,
-    // 59 midpoints, 40 lunar. Every one agrees except a single case,
+    // 55 midpoints, 40 lunar. Every one agrees except a single case,
     // named below with its number rather than folded into a threshold.
     {
       static CONST int rgyeaEcl[] = {1900, 1940, 1980, 2020, 2060};
@@ -10327,7 +10328,7 @@ static void TestNumericOracleQt()
           etWant = (typ & SE_ECL_TOTAL) ? etTotal :
             ((typ & SE_ECL_PARTIAL) ? etPartial : etPenumbra);
 
-          // The one disagreement in 159 checks, and it is the boundary
+          // The one disagreement in 155 checks, and it is the boundary
           // rather than a wrong answer: the total lunar eclipse of
           // 2021-05-26 was total for about fifteen minutes, magnitude
           // 1.009. Astrolog measures 98.9% umbral overlap and calls it

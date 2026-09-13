@@ -613,3 +613,50 @@ it, so the variable held for every group after `color-scheme`. Before the
 change the same run would have switched to the saved preference a fifth
 of the way in. The suite has no failure under a forced dark theme, which
 nobody had measured before.
+
+### Plan item 9 -- O2, O5, O6: the oracle's degenerate-house loop and two stale numbers
+
+**O2, the change.** Leg 4b walks `rgDegen[]` -- the house systems expected
+to collapse toward the pole -- in two loops, both written `iDeg < 1`. The
+set had shrunk from seven entries to one and the bound was edited to
+match; the next entry added would have been silently ignored by both.
+Both loops are bounded by `sizeof(rgDegen)/sizeof(*rgDegen)` now.
+
+**O2, why it needs a falsification even though nothing changes today.**
+With one entry, `< 1` and the `sizeof` bound run the same single pass,
+so the suite cannot tell them apart, and "the count did not move" says
+nothing about whether the new bound reads a second entry. So it was
+checked the one way that can see it: build with a second entry added to
+`rgDegen[]` and require the leg to notice.
+
+**O5.** The failure message for the "still collapses" check read "(%d
+appear changed fixed -- if that is deliberate, drop them from rgDegen)",
+two drafts spliced together. It now says what the number is: how many
+systems expected to collapse no longer do.
+
+**O6.** The eclipse leg's comment said "59 midpoints" and, further down,
+"the one disagreement in 159 checks", while the assertion requires 55
+gaps. The assertion is right and both comments were stale: `jdPrev` is
+reset at the start of each of the five epochs, so each epoch's twelve
+eclipses give eleven gaps, 5 x 11 = 55, and 60 + 55 + 40 = 155. Checked
+from the loop, not taken from the assertion.
+
+**Falsified.** The oracle alone with the change: 576 passed. Built with
+`rgDegen[] = { hsSineDelta, hsPlacidus }` -- Placidus added, which does not
+collapse at these latitudes:
+
+```
+FAIL  and Pullen (S.Delta) still collapses, as its author wrote (1 expected
+      to collapse no longer do -- if that is a deliberate fix, drop them
+      from rgDegen)
+FAIL: 575 passed, 1 failed
+```
+
+So the bound now reads the second entry -- the old `< 1` would have
+passed that build -- and the same run shows the O5 message reading as a
+sentence. With the entry removed again (the exact string reversed, not a
+checkout), 576 passed.
+
+**Suite.** `PASS: 5198 passed, 0 failed`, canary lines identical to item
+8's run. Nothing here changes what runs: one-entry loops, a message only
+printed on failure, and two comments.
