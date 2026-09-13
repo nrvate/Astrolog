@@ -249,7 +249,7 @@ static long CpixDiffImagesQt(CONST QImage &im1, CONST QImage &im2, int nStep)
 // so a clean run stays short enough to actually read.
 static void Check(flag fOk, CONST char *szFmt, ...)
 {
-  char sz[cchSzMax];
+  char sz[cchSzLine];
   va_list ap;
 
   va_start(ap, szFmt);
@@ -6186,7 +6186,7 @@ static flag FEqSzPrefixQt(CONST char *szLine, CONST char *szSwitch)
   for (i = 0; szSwitch[i]; i++)
     if (szLine[i] != szSwitch[i])
       return fFalse;
-  return szLine[i] <= ' ';
+  return (uchar)szLine[i] <= ' ';
 }
 
 
@@ -6205,14 +6205,14 @@ static flag FEqSzPrefixQt(CONST char *szLine, CONST char *szSwitch)
 static int CReplaySettingsQt(CONST char *szPath,
   flag (*pfnWant)(CONST char *))
 {
-  char szLine[cchSzMax];
+  char szLine[cchSzLine];
   FILE *file;
   int i, cLine = 0;
 
   file = FileOpen(szPath, 3, NULL, 0);
   if (file == NULL)
     return -1;
-  while (fgets(szLine, cchSzMax, file) != NULL) {
+  while (fgets(szLine, cchSzLine, file) != NULL) {
     if (!pfnWant(szLine))
       continue;
     for (i = 0; szLine[i]; i++)          // Keep the line, minus its \n.
@@ -6425,6 +6425,15 @@ static void TestInterfaceSettingsQt()
   SetMenuFontQt("Courier", 9);
   SetMenuAntialiasQt(fFalse);
   SetThemePrefQt("light");
+
+  // FEqSzPrefixQt() is what every filter below leans on. A switch has
+  // ended when the next byte is a space or a control character -- not when
+  // it is a byte above 0x7F, which with char signed compared as negative and
+  // so "ended" the switch too (review finding U2). "-WF" then a UTF-8 "e"
+  // is not "-WF".
+  Check(!FEqSzPrefixQt("-WF\xC3\xA9 x", "-WF"),
+    "a switch followed by a UTF-8 byte is not that switch");
+  Check(FEqSzPrefixQt("-WF x", "-WF"), "and one followed by a space is");
 
   i = CReplaySettingsQt(szPath, FWantInterfaceQt);
   Check(i == 5, "and all five lines read back (%d)", i);
@@ -6999,6 +7008,29 @@ static void TestObjSelDialogQt()
       rgObjSwiss[iobj - custLo]);
     Check(FEqSz(szObjDisp[iobj], "Chiron"),
       "and so does the name it gave the slot (%s)", szObjDisp[iobj]);
+
+    // A name longer than cchSzMax through the same replay (review finding
+    // U1). CReplaySettingsQt() read the file 255 bytes at a time, so a long
+    // "-YD" line came back in two pieces and its tail ran as a command line
+    // of its own. The object names are user text with no length limit, and
+    // since the settings-strings sweep writes 300-character markers, this
+    // is the length a real save can produce.
+    {
+      QByteArray baLong = QByteArray("LongSlotName") + QByteArray(288, 'x');
+
+      FCloneSzCore(baLong.constData(), (char **)&szObjDisp[iobj],
+        szObjDisp[iobj] == szObjName[iobj]);
+      Check(FOutputSettings(), "a 300-character slot name is written");
+      FCloneSzCore("NotChiron", (char **)&szObjDisp[iobj],
+        szObjDisp[iobj] == szObjName[iobj]);
+      CReplaySettingsQt(szPath, FWantObjDefQt);
+      Check(FEqSz(szObjDisp[iobj], baLong.constData()),
+        "and replays whole, not cut at 255 (%d characters back)",
+        CchSz(szObjDisp[iobj]));
+      // Back to what case 0 left, which the cases below start from.
+      FCloneSzCore("Chiron", (char **)&szObjDisp[iobj],
+        szObjDisp[iobj] == szObjName[iobj]);
+    }
 
     QFile::remove(QString::fromLocal8Bit(szPath));
     is.szFileOut = szFileOutSav;

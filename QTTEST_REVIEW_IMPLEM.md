@@ -1637,3 +1637,75 @@ into the suite's output. The one row lands in the chart buffer, which the next
 render replaces. Installing `SinkAtlasRowQt()` would change nothing observable,
 and would stop the leg testing the path it names: the console lookup, with no
 sink.
+
+### Plan item 23 -- U1, U2 and `Check()`'s buffer: 255 bytes where a line can be longer
+
+**U1 was less latent than the review thought.** The review called
+`CReplaySettingsQt()`'s `fgets(szLine, cchSzMax, file)` latent: "None of the
+five filters that use it today select a long switch". One of them does.
+`FWantObjDefQt()` replays `-Ye` and `-YD` lines, and a `-YD` line carries an
+object name the user typed, with no length limit -- and since item 10 the
+settings-strings sweep writes 300-character names on purpose.
+
+**U2 is theoretical, and checked directly anyway.** `FEqSzPrefixQt()` ends a
+switch at `szLine[i] <= ' '`; with `char` signed, a byte above 0x7F is negative
+and passes that test. No settings writer puts a non-ASCII byte straight after a
+switch name, so no replay can hit it -- which is why the net is two direct
+calls to the helper, not a round trip.
+
+**Both nets written first and seen failing, then the fixes.** A two-stage
+script (`$CLAUDE_JOB_DIR/tmp/item23.py`):
+
+- **U1 net**, inside the Object Selections dialog group's existing save and
+  replay: name the slot with a 300-character name, save, clobber, replay
+  through `CReplaySettingsQt(szPath, FWantObjDefQt)`, and require the whole name
+  back. The leg then puts "Chiron" back, because the six cases after it start
+  from what case 0 left.
+- **U2 nets**, before the interface-settings replay: `"-WF\xC3\xA9 x"` must not
+  match `-WF`, and `"-WF x"` must -- the control, so a helper that matched
+  nothing would fail too.
+
+**Stage 1, the nets without the fixes**, each group alone:
+
+```
+objsel-dialog:      FAIL  and replays whole, not cut at 255 (233 characters back)
+                    FAIL: 19 passed, 1 failed
+interface-settings: FAIL  a switch followed by a UTF-8 byte is not that switch
+                    FAIL: 42 passed, 1 failed
+```
+
+Exactly the new check in each, and nothing else.
+
+**Why 233 and not something near 255.** The name did not lose its tail at the
+255th byte of the *name*. For a customised slot the writer (`FOutputSettings()`,
+the custom-object loop) puts the definition and the name on **one line** --
+`-Yeb 34 2060 -YD 34 "LongSlotName..."` -- so about 21 characters of switches
+come before the name starts. `fgets()` keeps 254 bytes of the line, and 254 - 21
+is 233. The rest of the line was read as the next "line" and run as a command
+line of its own, which is the second half of what U1 described.
+
+**Stage 2, the fixes.** `CReplaySettingsQt()` reads into a `cchSzLine` buffer
+with `fgets(szLine, cchSzLine, file)`; `FEqSzPrefixQt()` compares
+`(uchar)szLine[i] <= ' '`. The same two groups alone: `objsel-dialog` 20 passed,
+`interface-settings` 43 passed -- two more each than before the item (18 and
+41), because each net is two checks.
+
+**`Check()`'s own buffer, shown with a sabotage because no passing run can.**
+`Check()` formats its message into a local buffer, and only a *failing* check
+prints it, so its size is invisible to a green suite. A temporary
+`Check(fFalse, ...)` with a 400-character message went into the `timers` group
+for both builds:
+
+- stage 1, buffer `cchSzMax`: the failure line printed at **262** characters --
+  cut short (`vsnprintf()` truncates safely; the message is just lost);
+- stage 2, buffer `cchSzLine`: printed at **424** characters, whole.
+
+The temporary check was then removed (`grep -c` for its marker reads 0), and
+the warning audit is empty.
+
+**Suite.** `PASS: 5184 passed, 0 failed`, canary lines identical to item 22's
+run. **Four** more than 5180, not the three first predicted: the U1 leg is two
+checks (the long name is written; it replays whole) and the U2 net is two (the
+negative case and its control). The prediction miscounted; the per-group
+counts above (18 to 20, 41 to 43) agree with the measured total. **Every count
+after this item is against 5184.**
