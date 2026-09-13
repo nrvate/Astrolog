@@ -10,14 +10,12 @@ code, is Walter D. Pullen's work. See license.htm.
 
 ## What this fork adds
 
-A **Qt GUI backend**, with the menus and dialogs the Windows build has,
-and since v8.00-qt.6 the interface every platform ships — Linux, Windows
-and macOS. Upstream's Linux build uses X11 directly and is driven by
-single-keystroke commands; this one gives you the same nine menus and
-the same dialogs a Windows user would recognise -- 24 of the 25, the
-25th being Object Selections, this fork's own addition. The native Win32 build is
-still compiled and driven by hand, as the behavioural reference the port is
-judged against.
+A **Qt GUI backend**, with the menus and dialogs the Windows build has --
+the interface every platform ships: Linux, Windows and macOS. Upstream's
+Linux build uses X11 directly and is driven by single-keystroke commands;
+this one gives you the same nine menus and the same dialogs a Windows
+user would recognise -- 24 of the 25, the 25th being Object Selections,
+this fork's own addition.
 
 The port itself changes almost nothing in the shared calculation or
 rendering core, and where it must, it does so inside `#ifdef QT`. The new
@@ -27,16 +25,12 @@ and `qtdialog.cpp` (dialogs), which stand in for the Windows-only
 compile line, following the same pattern astrolog.h already used for its
 `X11`/`WIN`/`WCLI` choice, so the existing builds are unaffected.
 
-Separately, the fork adds a few things to **both** builds — a new Object
-Selections dialog, and fixes for settings the program was silently
-failing to save. Those deliberately carry no `QT` guard, because they go
-into `astrolog.rc`, `wdialog.cpp` and the shared code the way upstream
-would take them. See "Features this fork adds to both builds" in
-`QT_GUI_PLAN.md`.
+Separately, the fork adds an Object Selections dialog and settings-save
+fixes, both in the Windows build too.
 
 ## Installing
 
-Releases carry the two binaries a user cannot easily build themselves:
+Releases carry the binaries a user cannot easily build themselves:
 
 | | |
 |---|---|
@@ -44,18 +38,12 @@ Releases carry the two binaries a user cannot easily build themselves:
 | `.zip` | Windows, the same files — unpack and run, no install needed. The Qt build with its runtime included |
 | `.dmg` | macOS 12 or later, Apple Silicon only — read the note below before downloading |
 
-**On Linux, build it.** There are no `.deb` or `.rpm` packages and no
-package repository: they were dropped on 2026-09-05, because the
-download counts showed nothing outside the project's own automation had
-ever fetched one, and a matrix packaging seven distro releases is a
-poor thing to maintain for that. Building takes two commands and about twenty seconds
-on a modern machine. `tools/build-check.sh` holds these package
-lists and runs them in a container of each distribution and casts a chart with the
-result; **last run 2026-09-05, twelve of twelve** — Ubuntu
-22.04/24.04/26.04, Debian 12/13, Fedora 43/44, Rocky 9/10, Arch,
-openSUSE Tumbleweed and Alpine. It needs Docker and about ten minutes,
-so it is run by hand before a release rather than on every change; if
-the date above is old, that is what it means.
+**On Linux, build it.** There are no `.deb` or `.rpm` packages; building
+takes two commands and about twenty seconds. `tools/build-check.sh`
+verifies the package lists below by building the tree in a container of
+each of twelve distributions -- Ubuntu 22.04/24.04/26.04, Debian 12/13,
+Fedora 43/44, Rocky 9/10, Arch, openSUSE Tumbleweed and Alpine -- and
+casting a chart with the result.
 
 ```sh
 # Debian, Ubuntu, Mint
@@ -86,10 +74,7 @@ the fonts, `astrolog.as` — and installs wrappers that run the in-tree
 binaries, so the checkout has to stay put. `PREFIX=$HOME/.local` needs no
 root.
 
-Every release stays. Until September 2026 cutting one retired all but
-the newest two, because a package repository was rebuilt from them; with
-that gone there is no reason to delete binaries somebody may still
-want.
+Every release stays; nothing is ever pruned.
 
 The tree carries the ephemeris for every body the Object Selections
 dialog offers, and the dialog offers every body the tree carries: the
@@ -104,19 +89,16 @@ Versions are `8.00-qt.N`: upstream numbers the program, this numbers the
 port.
 
 **macOS needs one extra step, once.** The app is ad-hoc signed but not
-*notarized*, because notarizing requires an Apple Developer subscription
-and a signing secret in this repository. So a `.dmg` downloaded through a
-browser carries Gatekeeper's quarantine flag and macOS will refuse to
-open it. Either right-click the app and choose **Open** (which offers a
-one-time override the double-click does not), or:
+notarized, so a `.dmg` downloaded through a browser carries Gatekeeper's
+quarantine flag and macOS will refuse to open it. Either right-click the
+app and choose **Open** (which offers a one-time override the
+double-click does not), or:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Astrolog.app
 ```
 
-A download fetched with `curl` is never quarantined in the first place
-and simply runs. None of this is a signal about the binary — it is what
-every un-notarized macOS build looks like.
+A download fetched with `curl` is never quarantined and simply runs.
 
 
 ## Building
@@ -138,19 +120,14 @@ plain `make` builds the stock X11 version and the Qt port together, and
 `make all` builds the five release builds -- the console, the Qt port,
 its test binary and the two Windows ones.
 
-`make install` deliberately leaves the data where it is — the ephemeris
-files, the atlas, the fonts, `astrolog.as` — and installs small wrappers
-that run the in-tree binary, along with a menu entry and icons for the Qt
-build. The checkout therefore has to stay put; re-run `make install` if you
-move it, or `make uninstall` to remove what it wrote.
+Re-run `make install` if you move the checkout, or `make uninstall` to
+remove what it wrote.
 
 ## Status
 
 Feature complete against the Windows build. All nine menus, all 258 menu
 items, every dialog, all 42 right-click context menus and 264 keyboard
-shortcuts are implemented, and each dialog has been read field-by-field
-against its Windows counterpart — labels, field order, number formatting,
-dropdown contents, and which menu checkmarks it refreshes on OK. Menu
+shortcuts are implemented. Menu
 mnemonics follow Windows' resource script, with a few dozen deliberate
 exceptions recorded in QT_GUI_PLAN.md. Charts animate, print, paste, run all 96 macro slots, and
 draw with Astrolog's bundled astrology fonts. Text charts render in the
@@ -159,8 +136,7 @@ separate text box.
 
 It also goes slightly *past* the Windows build in one place: an Object
 Selections dialog (Ctrl+T) that puts a chosen body or a midpoint into any
-Uranian or Dwarf slot, which neither build previously offered — added to
-both, not just this one.
+Uranian or Dwarf slot.
 
 A handful of smaller things are either deliberately different from
 Windows or deliberately left out — mostly Win32-only settings with no
@@ -171,13 +147,10 @@ left for you to discover.
 
 ## Appearance
 
-The Qt build follows the desktop's light/dark setting. Qt 5 has no API for
-this — `QStyleHints::colorScheme()` arrived in Qt 6.5 — and Qt 5's own gtk3
-platform theme loads without supplying a palette, so Astrolog reads the
-preference itself: the `org.freedesktop.appearance` portal first, which is
-what Qt 6.5 reads too, then GNOME/Cinnamon/MATE via `gsettings`, XFCE via
+The Qt build follows the desktop's light/dark setting, reading the
+preference from the desktop's own channel: the `org.freedesktop.appearance`
+portal first, then GNOME/Cinnamon/MATE via `gsettings`, XFCE via
 `xfconf-query`, then `kdeglobals`, `gtk-3.0/settings.ini` and `GTK_THEME`.
-The last three need no helper programs installed.
 
 Set `ASTROLOG_QT_THEME=dark` or `=light` to override the detection:
 
@@ -201,15 +174,13 @@ against `astrolog.rc`, and bad input. Several groups drive the real
 dialogs and assert what they leave behind, rather than calling the code
 underneath them. No X display needed; exits nonzero on failure.
 
-One group answers a different kind of question. Everything else here is
-*differential* — it can tell you an answer changed, never that it is
-right. The **numeric oracle** asks the Swiss Ephemeris library the same
-question Astrolog asks it, through an object mapping written out
-independently in the test file, and requires the same answer: exact
-agreement over 15 bodies and seven epochs from 1900 to 2080. It also
-cross-checks Astrolog's own built-in planetary formulas against Swiss,
-and requires all 40 house systems to divide the circle once. It found two
-shared-core bugs on the day it was written.
+One group answers a different kind of question. The **numeric oracle**
+asks the Swiss Ephemeris library the same question Astrolog asks it,
+through an object mapping written out independently in the test file,
+and requires exact agreement over 15 bodies and seven epochs from 1900
+to 2080. It also cross-checks Astrolog's built-in planetary formulas
+against Swiss, and requires all 40 house systems to divide the circle
+once.
 
 Four byte-diff harnesses prove a change to shared code left behaviour
 alone, and they cover disjoint surfaces. `tools/chart-matrix.sh` renders
@@ -221,10 +192,9 @@ covers the influence charts. Run any of them against an older build of the
 tree and diff.
 
 It defaults to `-i nrvate.as`, the maintainer's settings file, which
-reaches the full ephemeris at `/swe`. Since 2026-09-03 the bundled
-`ephem/` resolves the same 39 bodies, so the release run runs the suite with
-`-Yi1 ephem` and gets the same count; before that, a run without `/swe`
-quietly skipped a fifth of the checks.
+reaches the full ephemeris at `/swe`. The bundled `ephem/` resolves the
+same 39 bodies, so the release run runs the suite with `-Yi1 ephem` and
+gets the same count.
 
 The Windows build has a small suite of its own, driving the real binary
 under Wine:
