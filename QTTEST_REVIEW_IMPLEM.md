@@ -107,3 +107,32 @@ The leak probe's diff against the baseline lost exactly eight lines and
 gained none: the five `star-sort-outputs` fields, and the three
 `text-pager` fields that were only ever star-sort's leak being cleared
 downstream.
+
+### Plan item 3 -- the one-file warning audit in `make check`
+
+**The change.** A `warnings: qttest.cpp` step in `tools/check.sh`, straight
+after the test binary builds, running `tools/warning_audit.py --file
+qttest.cpp`. Measured at 8.6 s on this machine (with the suite running
+beside it), against 70 s for the full five-build audit that stays out of
+the fast loop.
+
+**Gotcha, and the reason the step is a function rather than a plain
+`step`:** as recorded under item 2, `--file` exits 0 when it prints
+warnings. A plain `step "..." python3 tools/warning_audit.py --file
+qttest.cpp` would have been green over exactly the six warnings it was
+added to catch. The step's function fails on a nonzero exit (the file
+does not compile) *or* on any output at all.
+
+**Falsified.** The function alone, over `dcd939b`'s `qttest.cpp` copied
+into the tree root: `rc=1`. Over the fixed file: `rc=0`, no output. Run
+in isolation rather than through `make check`, because `make check`
+rebuilds the test binary and a suite was running against it in the same
+worktree.
+
+**Not resolved: only `qttest.cpp`.** The plan asked for this file and the
+reason is specific to it -- it is the file that changes most, and two
+consecutive commits put warnings in it. Every other file still reaches
+the warning ledger only through the full audit, which nothing runs
+unless someone remembers. Adding the rest one file at a time would cost
+about nine seconds each; widening it is a maintainer's call about how
+long `make check` may take, so it is left as stated here.
