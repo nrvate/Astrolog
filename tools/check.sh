@@ -71,6 +71,18 @@ done
 step "build: console and Qt"     make -j4
 step "build: the test binary"    make qt-test -j4
 
+# The compiler's warnings for the suite's own source. The full warning
+# audit is five builds and 70 s, so it is not here -- and that is how two
+# commits in a row (028b4ba, dcd939b) landed six -Wunused-variable in
+# qttest.cpp with this command green. One file is about nine seconds.
+# NOT its exit code: "--file" exits 0 when it prints warnings (it fails
+# only on a file that does not compile), so any output at all fails.
+nowarn() {
+  out=$(python3 tools/warning_audit.py --file "$1" 2>&1) || { echo "$out"; return 1; }
+  [ -z "$out" ] || { echo "$out"; return 1; }
+}
+step "warnings: qttest.cpp"      nowarn qttest.cpp
+
 # Needs the console binary, so it goes after the build rather than up
 # with the pure-Python audits. Eleven image writers, each checked against
 # its own format instead of against a previous build -- the one question

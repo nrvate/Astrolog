@@ -209,9 +209,14 @@ Four caveats, all already paid for:
 
 - **A group that passes alone and fails in the full run is inheriting
   state.** `menu-actions` leaves every setting wherever firing 338 items
-  lands, and anything after it must set what it depends on. Dump the
-  globals in a solo run and a full run and diff them (work log item 57)
-  rather than guessing one variable per rebuild.
+  lands, and anything after it must set what it depends on. Don't guess
+  one variable per rebuild: `ASTROLOG_QT_TEST_CANARY=1 ./run-qt-tests.sh`
+  prints, after every group, each `US`/`GS` field, restriction slot, macro
+  name and star list it left changed, as `[canary <group>: ...]`, which
+  names the group that did it. It cannot see `is`, `gi`, `ci*` beyond two
+  fields, `rgobjset[]` or the colours; for those, dump the globals in a
+  solo run and a full run and diff them (work log item 57). Its lines can
+  be split by stderr progress messages in a redirected log.
 - **Never run two suites at the same time.** The regular and ASan
   binaries (and any capture run) write the same fixture paths under
   `$TMPDIR` — `astrolog-qt-longstrings.txt`, `astrolog-qt-roundtrip.as`
@@ -275,7 +280,7 @@ they touch it and flush, so the last line printed is the culprit:
 ASTROLOG_QT_TEST_VERBOSE=1 ./run-qt-tests.sh
 ```
 
-That covers the 26 chart renders (`rendering: TraNatGra`) and all 338
+That covers the 23 chart renders (`rendering: TraNatGra`) and all 338
 menu items fired (`firing: Chart Settings...`). A clean run does not need
 the noise, which is why it is off by default — reach for it the moment a
 run dies without saying where.
@@ -570,7 +575,7 @@ aborts the release build.
 a check is not a check: these two found seven bugs and then existed
 only as a paragraph, which is the same failure the divergence list had.
 
-The suite is a good host because it already renders 26 chart types and
+The suite is a good host because it already renders 23 chart types and
 fires all 341 menu items, so one run exercises far more than a person
 clicking could. `ProbeQt()` works under ASan too, which is how the
 second instance of the esoteric-influence bug was confirmed rather than

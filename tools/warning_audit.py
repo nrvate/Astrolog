@@ -546,7 +546,11 @@ def one_file(src):
         # Ask make to expand $(QT_CFLAGS) rather than reimplementing
         # pkg-config here.
         p = subprocess.run(
-            ['make', '-f', makefile, '--eval=warnaudit:;@echo %s' % flags,
+            # --no-print-directory: under "make check" the parent's MAKEFLAGS
+            # reach this make, which then prints "make[1]: Entering directory"
+            # lines to stdout -- and every word of them became a g++ argument.
+            ['make', '--no-print-directory', '-f', makefile,
+             '--eval=warnaudit:;@echo %s' % flags,
              'warnaudit'], cwd=ROOT, env=env, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True)
         expanded = p.stdout.strip()
