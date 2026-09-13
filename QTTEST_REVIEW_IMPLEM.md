@@ -455,3 +455,101 @@ would be the `settings-strings` sweep poisoning the star lists with its
 300-character marker across `star-links` -- but that is a change to the
 sweep's design, not to this group, and is left for the maintainer to
 want.
+
+### Plan item 7 -- K4/K5: the chart list is emptied and refilled, and only its length comes back
+
+**How to get a chart list into a test run at all.** Every run anyone makes
+starts with `is.cci == 0`, which is why K4 and K5 have never failed: a
+settings file loaded with `-i` does not append to the list. Three things
+do -- an AAF file, a Quick*Chart file, and Open Charts in Folder. Read
+before relying on it: `-i <file>` goes to `FInputData()`, which sends a
+file whose first character is `#` to `FProcessAAFFile()`, and that appends
+**every** record in the file. So a three-record AAF file on the command
+line after `-i nrvate.as` starts the suite with three charts in the list.
+The records copy the `#B93:` line the suite's own parser test already
+proves loads. Kept at `$CLAUDE_JOB_DIR/tmp/charts/preload.aaf` for the
+duration.
+
+**K5, falsified first because it needs no new instrument.** `chart-list`
+alone with the three preloaded:
+
+```
+FAIL  an expression that keeps everything keeps 3 (got 6)
+FAIL: 10 passed, 1 failed
+```
+
+The group appends three charts to whatever is there, then asserts the
+dialog shows exactly three rows. Its own `is.cci >= cciSav + 3` two lines
+earlier had it right; the row check did not.
+
+**K4 needed the canary to look inside the list.** The same run's canary
+reported nothing about the chart list, because every one of these groups
+puts `is.cci` back -- the length is all it restored, and the length was
+all the canary compared. So item 7 extends the canary first (it is the
+instrument, and it goes in the same commit): after each group it compares
+each entry the before and after lists share -- date, time, zone,
+coordinates, and the name and location by content -- names the first three
+that differ and counts the rest.
+
+**String ownership, checked before designing the save.** A `CI` holds
+`nam` and `loc` as pointers, and `FAppendCIList()` copies the struct
+shallowly. Saving the entries and writing them back is only safe if
+nothing in between frees those strings. Read: `FilterCIList()` compacts
+the array and frees nothing; the chart list dialog's "Delete Chart"
+shifts entries down with `CopyRgb` and frees nothing; `FAppendCIList()`
+reallocates `is.rgci` when it grows, but copies every entry across and
+never shrinks the allocation, so a saved count always fits back. A
+shallow copy of the entries is therefore enough.
+
+**The change.** `ChartListPinQt` -- a `QVector<CI>` of every entry, taken
+when it is constructed, and a `Restore()` that writes them back and sets
+the count. It replaces the count-only save in `export-roundtrip`,
+`null-names`, `chart-list` and `open-dir`, and the first-eight-entries save
+in the four oracle legs, which lost everything past the eighth chart. The
+four oracle `cciSav` declarations had nothing left to read them and were
+removed with it -- they would have been item 3's gate failing on this
+commit. `chart-list` also empties the list explicitly after taking its pin
+(K5), and its "three charts went into the list" check is now exact.
+
+**Deliberately left alone: `TestFileParsersQt()`.** It also saves
+`is.cci` and puts it back, which reads like a thirteenth site. It is not:
+it never empties the list, only loads parser files that append past the
+end, so restoring the count trims exactly what it added and the entries
+before it are untouched. A pin there would be correct and prove nothing.
+
+**Falsified, K4, with the extended canary** (built before the fix, so the
+instrument is the only thing that changed). Each group alone with the
+three preloaded charts:
+
+- `export-roundtrip`: `is.rgci[0] "PreloadChart1" 3/4/1981 -> "Probe Name"`
+- `null-names`: `is.rgci[0] "PreloadChart1" 3/4/1981 -> ""`
+- `chart-list`: entries 0, 1 and 2 all overwritten, plus K5's failure
+- `open-dir`: entries 0, 1 and 2 -> "Default", "One", "Three"
+- `oracle`: nothing -- its four legs saved the first eight entries, and
+  three fit. (A ninth chart would have been lost; not measured, read.)
+
+And the whole suite started that way ended `FAIL: 5197 passed, 1 failed`,
+the canary following the list from group to group -- `null-names`
+overwriting what `export-roundtrip` had already overwritten, and so on --
+while every group's own count came back.
+
+**After the change, alone with the preload:** `export-roundtrip` 18,
+`null-names` 3, `chart-list` 11, `open-dir` 5, `oracle` 576 passed, and
+not one chart-list canary line among them. `chart-list` passes the check
+that failed.
+
+**The whole suite with the preload, after:** `PASS: 5198 passed, 0 failed`
+-- the count a run with an empty list gets -- and no chart-list canary
+line anywhere in it. Before: 5197 and one failure, with the list rewritten
+four groups in a row.
+
+**And the default run, no preload:** `PASS: 5198 passed, 0 failed`, canary
+lines identical to item 6's. With the list empty on entry the pin saves
+nothing and restores nothing, so no ordinary run can tell the change is
+there -- which is the whole of why K4 and K5 lasted.
+
+**Not resolved: no standing net.** As with item 6, the falsification is a
+hand-built command line. `run-qt-tests.sh` never starts with a chart list,
+so a regression to a count-only save passes the suite. Giving the suite a
+preloaded run of its own would close it; that changes what `make check`
+runs and how long it takes, so it is left for the maintainer.

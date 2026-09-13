@@ -4571,6 +4571,28 @@ static void TestScreenOptionsQt()
 // zone and the daylight flag come back zero, the time comes back shifted
 // to UTC, and the location comes back as the DEFAULT because an .ics
 // event carries no coordinates.
+// The whole chart list, kept and put back. Groups that exercise the list
+// empty it and append their own charts; putting back only is.cci leaves
+// the charts a user loaded overwritten by the suite's (review finding K4).
+// A shallow copy of each CI is enough: nothing a group reaches frees an
+// entry's nam or loc -- FilterCIList() compacts, "Delete Chart" shifts down
+// -- and FAppendCIList() never shrinks the allocation, so the saved count
+// always fits back.
+struct ChartListPinQt {
+  QVector<CI> rgci;
+  ChartListPinQt() {
+    int i;
+    for (i = 0; i < is.cci; i++)
+      rgci.append(is.rgci[i]);
+  }
+  void Restore() {
+    int i;
+    for (i = 0; i < rgci.size(); i++)
+      is.rgci[i] = rgci[i];
+    is.cci = rgci.size();
+  }
+};
+
 static void TestExportRoundTripQt()
 {
   static CONST struct {
@@ -4583,9 +4605,10 @@ static void TestExportRoundTripQt()
     {FOutputCalendarFile, "ics", "iCalendar",             fFalse} };
   char szPath[cchSzMax];
   char *szFileOutSav = is.szFileOut;
-  int nWriteFormatSav = us.nWriteFormat, cciSav = is.cci, i;
+  int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   CI ciWant, ciSav = ciCore, ciMainSav = ciMain;
+  ChartListPinQt pinList;
 
   Group("Chart export formats round trip");
   SetNoPopupQt(fTrue);
@@ -4650,7 +4673,7 @@ static void TestExportRoundTripQt()
     }
   }
 
-  ciCore = ciSav; ciMain = ciMainSav; is.cci = cciSav;
+  ciCore = ciSav; ciMain = ciMainSav; pinList.Restore();
   us.fNoWrite = fNoWriteSav;
   SetNoPopupQt(fPopupSav);
 }
@@ -4669,7 +4692,8 @@ static void TestExportRoundTripQt()
 static void TestNullNamesQt()
 {
   char *rgszNamSav[cRing+1], *rgszLocSav[cRing+1];
-  int cciSav = is.cci, i;
+  int i;
+  ChartListPinQt pinList;
   QStringList lstBad;
 
   Group("Charts with no name or location");
@@ -4713,7 +4737,7 @@ static void TestNullNamesQt()
     (int)lstBad.size(), lstBad.size() == 1 ? "" : "s",
     lstBad.isEmpty() ? "" : lstBad[0].toLocal8Bit().constData());
 
-  is.cci = cciSav;
+  pinList.Restore();
   for (i = 1; i <= cRing; i++) {
     rgpci[i]->nam = rgszNamSav[i];
     rgpci[i]->loc = rgszLocSav[i];
@@ -7851,10 +7875,16 @@ static void TestExpressionHooksQt()
 
 static void TestChartListFilterQt()
 {
-  int cciSav = is.cci, i;
+  int cciSav, i;
   char *szSav = us.szExpListF;
+  ChartListPinQt pinList;
 
   Group("Chart list filter");
+  // From an empty list, on purpose: every row count below is about the
+  // three charts this group appends, and with a list already loaded the
+  // first of them read 6 for a reason unrelated to the filter (K5).
+  is.cci = 0;
+  cciSav = is.cci;
   // CI.nam is a pointer, not a buffer: after "ciCore = ciMain" it aims at
   // the name string cloned from the settings file, which for nrvate.as is
   // a one-byte "". The sprintf that used to be here wrote twenty bytes
@@ -7870,7 +7900,8 @@ static void TestChartListFilterQt()
     ciCore.nam = rgszNamT[i];
     FAppendCIList(&ciCore);
   }
-  Check(is.cci >= cciSav + 3, "three charts went into the list");
+  Check(is.cci == cciSav + 3, "three charts went into the list (%d)",
+    is.cci);
 
   us.szExpListF = SzClone("1");     // keep everything
   FilterChartListQt();
@@ -7976,7 +8007,7 @@ static void TestChartListFilterQt()
     Check(is.cci == 0, "and neither does filtering it by location");
   }
 
-  is.cci = cciSav;
+  pinList.Restore();
   printf("  the chart list honours its AstroExpression filter\n");
 }
 
@@ -10139,12 +10170,11 @@ static void TestNumericOracleQt()
       Borrow bList(us.fListAuto, fTrue), bRet(is.fReturn, fTrue);
       Borrow bMonth(us.fInDayMonth, fTrue), bYear(us.fInDayYear, fFalse);
       Borrow bDivision(us.nDivision, 48);
-      CI rgciSav[8], ciTranSav = ciTran;
+      CI ciTranSav = ciTran;
+      ChartListPinQt pinList;
       real rNatalSun;
-      int cciSav = is.cci, cRet = 0, cBadRet = 0, j;
+      int cRet = 0, cBadRet = 0, j;
 
-      for (j = 0; j < 8 && j < cciSav; j++)
-        rgciSav[j] = is.rgci[j];
       OraclePinChartQt(2020);
       CastChart(1);
       rNatalSun = planet[oSun];
@@ -10197,9 +10227,7 @@ static void TestNumericOracleQt()
       Check(cBadRet == 0,
         "and the Sun is at its natal longitude in every one (%d off by "
         "more than 0.01 degrees)", cBadRet);
-      is.cci = cciSav;
-      for (j = 0; j < 8 && j < cciSav; j++)
-        is.rgci[j] = rgciSav[j];
+      pinList.Restore();
       ciTran = ciTranSav;
     }
 
@@ -10542,15 +10570,13 @@ static void TestNumericOracleQt()
       Borrow bDiv(us.nDivision, 48), bAsp(us.nAsp, 1);
       Borrow bSign(us.fIgnoreSign, fTrue), bDir(us.fIgnoreDir, fTrue);
       Borrow bDalt(us.fIgnoreDiralt, fTrue), bDlen(us.fIgnoreDirlen, fTrue);
-      CI rgciSav[8], ciMainSav2 = ciMain;
+      CI ciMainSav2 = ciMain;
+      ChartListPinQt pinList;
       real rgjdNew[8], rSep, rGap;
       char szTmpDay[cchSzMax];
       FILE *fileDaySav, *fileDay;
-      int cciSav = is.cci, cNew = 0, cBadSep = 0, cGap = 0, cBadGap = 0,
-        iMon, j;
+      int cNew = 0, cBadSep = 0, cGap = 0, cBadGap = 0, iMon, j;
 
-      for (j = 0; j < 8 && j < cciSav; j++)
-        rgciSav[j] = is.rgci[j];
       sprintf2(S(szTmpDay), "%s/astrolog-qt-inday-%d.txt",
         QDir::tempPath().toLocal8Bit().constData(),
         (int)QCoreApplication::applicationPid());
@@ -10584,9 +10610,7 @@ static void TestNumericOracleQt()
           cNew++;
         }
       }
-      is.cci = cciSav;
-      for (j = 0; j < 8 && j < cciSav; j++)
-        is.rgci[j] = rgciSav[j];
+      pinList.Restore();
       ciMain = ciMainSav2;
 
       Check(cNew >= 6, "the in-day search found a new moon in each of six "
@@ -10623,14 +10647,13 @@ static void TestNumericOracleQt()
       Borrow bDiv(us.nDivision, 48), bAsp(us.nAsp, 1);
       Borrow bSign(us.fIgnoreSign, fTrue), bDir(us.fIgnoreDir, fTrue);
       Borrow bDalt(us.fIgnoreDiralt, fTrue), bDlen(us.fIgnoreDirlen, fTrue);
-      CI rgciSav[8], ciTranSav2 = ciTran, ciMainSav3 = ciMain;
+      CI ciTranSav2 = ciTran, ciMainSav3 = ciMain;
+      ChartListPinQt pinList;
       real rNatalSun2, rSep2;
       char szTmpTra[cchSzMax];
       FILE *fileTraSav, *fileTra;
-      int cciSav = is.cci, cTra = 0, cBadTra = 0, j;
+      int cTra = 0, cBadTra = 0, j;
 
-      for (j = 0; j < 8 && j < cciSav; j++)
-        rgciSav[j] = is.rgci[j];
 
       OraclePinUtQt(2020, 3, 1, 0.0);
       ciMain = ciCore;
@@ -10669,9 +10692,7 @@ static void TestNumericOracleQt()
         if (rSep2 > 0.01)
           cBadTra++;
       }
-      is.cci = cciSav;
-      for (j = 0; j < 8 && j < cciSav; j++)
-        is.rgci[j] = rgciSav[j];
+      pinList.Restore();
       ciTran = ciTranSav2; ciMain = ciMainSav3;
 
       Check(cTra > 0, "the transit search found the Moon reaching the "
@@ -10705,14 +10726,13 @@ static void TestNumericOracleQt()
       // inherit.
       Borrow bList(us.fListAuto, fTrue);
       Borrow bHMon(us.fInDayMonth, fFalse), bHYea(us.fInDayYear, fFalse);
-      CI rgciSav[8], ciMainSav4 = ciMain;
+      CI ciMainSav4 = ciMain;
+      ChartListPinQt pinList;
       real azi, alt, mc, kT, rAltZen = -rLarge, rAltNad = rLarge;
       char szTmpHor[cchSzMax], *pchNam;
       FILE *fileHorSav, *fileHor;
-      int cciSav = is.cci, cHor = 0, cBadHor = 0, cKind = 0, j;
+      int cHor = 0, cBadHor = 0, cKind = 0, j;
 
-      for (j = 0; j < 8 && j < cciSav; j++)
-        rgciSav[j] = is.rgci[j];
 
       OraclePinUtQt(2020, 3, 20, 0.0);
       ciCore.lon = 87.65; ciCore.lat = 41.85;
@@ -10763,9 +10783,7 @@ static void TestNumericOracleQt()
             cBadHor++;
         }
       }
-      is.cci = cciSav;
-      for (j = 0; j < 8 && j < cciSav; j++)
-        is.rgci[j] = rgciSav[j];
+      pinList.Restore();
       ciMain = ciMainSav4;
 
       Check(cHor == 4, "the horizon search reports four Sun events in a "
@@ -11671,9 +11689,10 @@ static flag FWriteChartFileQt(CONST QString &strPath, CONST char *szName)
 
 static void TestOpenDirQt()
 {
-  int cciSav = is.cci, cLoaded;
+  int cLoaded;
   flag fOldSav = us.fWriteOld, fPopupSav = FNoPopupQt();
   CI ciCoreSav = ciCore;
+  ChartListPinQt pinList;
 
   Group("Open charts in folder");
   SetNoPopupQt(fTrue);
@@ -11712,7 +11731,7 @@ static void TestOpenDirQt()
   QFile::remove(strDir + "/three.txt");
   QDir().rmdir(strDir);
 
-  is.cci = cciSav;
+  pinList.Restore();
   us.fWriteOld = fOldSav;
   ciCore = ciCoreSav;
   SetNoPopupQt(fPopupSav);
@@ -13212,7 +13231,12 @@ static flag FTestWantedQt(CONST char *szFilter, CONST char *szName)
 // point of the group. What it is for is the diff between two runs, and
 // the answer to "what did the group before mine leave behind?"
 //
-// What it cannot see: is/gi/ci* beyond the two fields named (no generated
+// And the chart list's CONTENT, entry by entry, not only its length: a group
+// that empties the list, appends its own charts and puts the count back
+// has overwritten the charts a user loaded while is.cci says nothing
+// happened (review finding K4).
+//
+// What it cannot see: is/gi/ci* beyond the fields named (no generated
 // table for them), US/GS string members other than the star lists
 // (pointer identity says nothing), rgobjset[] and the colour arrays.
 static flag s_fCanaryQt = fFalse;
@@ -13222,6 +13246,8 @@ static int s_cciCanaryQt, s_cCanaryQt = 0, s_cGroupCanaryQt = 0;
 static flag s_fHaveInfoCanaryQt;
 static QByteArray s_rgbaMacroCanaryQt[cMacro], s_rgbaMSubCanaryQt[cMSub];
 static QByteArray s_baLinCanaryQt, s_baLnkCanaryQt;
+static QVector<CI> s_rgciCanaryQt;
+static QVector<QByteArray> s_rgbaNamCanaryQt, s_rgbaLocCanaryQt;
 
 static void CanarySnapQt()
 {
@@ -13237,6 +13263,14 @@ static void CanarySnapQt()
     s_rgbaMSubCanaryQt[i] = QByteArray(SzSet(SzMacroSubNameQt(i)));
   s_baLinCanaryQt = QByteArray(SzSet(gs.szStarsLin));
   s_baLnkCanaryQt = QByteArray(SzSet(gs.szStarsLnk));
+  s_rgciCanaryQt.resize(is.cci);
+  s_rgbaNamCanaryQt.resize(is.cci);
+  s_rgbaLocCanaryQt.resize(is.cci);
+  for (i = 0; i < is.cci; i++) {
+    s_rgciCanaryQt[i] = is.rgci[i];
+    s_rgbaNamCanaryQt[i] = QByteArray(SzSet(is.rgci[i].nam));
+    s_rgbaLocCanaryQt[i] = QByteArray(SzSet(is.rgci[i].loc));
+  }
 }
 
 static void CanaryDiffQt(CONST char *szGroup)
@@ -13308,6 +13342,29 @@ static void CanaryDiffQt(CONST char *szGroup)
   if (s_baLnkCanaryQt != QByteArray(SzSet(gs.szStarsLnk)))
     CANARY("gs.szStarsLnk length %d -> %d", (int)s_baLnkCanaryQt.size(),
       CchSz(SzSet(gs.szStarsLnk)));
+  {
+    // Entries compared only over the length both lists share; a length
+    // change is already its own line above. Three named, the rest counted,
+    // because a list can hold hundreds.
+    int cciBoth = Min(s_rgciCanaryQt.size(), is.cci), cDiff = 0;
+
+    for (i = 0; i < cciBoth; i++) {
+      CONST CI &ciOld = s_rgciCanaryQt[i], &ciNew = is.rgci[i];
+      if (ciOld.mon == ciNew.mon && ciOld.day == ciNew.day &&
+        ciOld.yea == ciNew.yea && ciOld.tim == ciNew.tim &&
+        ciOld.dst == ciNew.dst && ciOld.zon == ciNew.zon &&
+        ciOld.lon == ciNew.lon && ciOld.lat == ciNew.lat &&
+        s_rgbaNamCanaryQt[i] == QByteArray(SzSet(ciNew.nam)) &&
+        s_rgbaLocCanaryQt[i] == QByteArray(SzSet(ciNew.loc)))
+        continue;
+      if (cDiff++ < 3)
+        CANARY("is.rgci[%d] \"%s\" %d/%d/%d -> \"%s\" %d/%d/%d", i,
+          s_rgbaNamCanaryQt[i].constData(), ciOld.mon, ciOld.day, ciOld.yea,
+          SzSet(ciNew.nam), ciNew.mon, ciNew.day, ciNew.yea);
+    }
+    if (cDiff > 3)
+      CANARY("and %d more chart list entries changed", cDiff - 3);
+  }
 #undef CANARY
   if (s_cCanaryQt > cBefore)
     s_cGroupCanaryQt++;
