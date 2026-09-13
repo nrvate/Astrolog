@@ -850,3 +850,45 @@ then showed `io.cpp` untouched), 3 passed, 0 failed.
 11's run. The group's assertion count does not move -- per-element
 failures report through `Check(fFalse, ...)` only -- so the whole of the
 change is in what those checks can now see.
+
+### Plan item 13 -- S3: `ok-settles` restores the chart info by struct copy -- closed, no change
+
+**What S3 said.** `TestOkSettlesQt()` ends `ciMain = ciSav; ciCore =
+ciCoreSav;`, a copy taken before 25 dialog OKs, "one of which (Set Chart
+Info) `FCloneSz()`es `ciCore.nam` and `.loc`" -- so the copy's pointers
+are either freed or, when the new text fits, overwritten in place by
+`FCloneSzCore()`. The plan's answer was a `CIPin` of the eight numeric
+fields.
+
+**Killed against the code, in three reads:**
+
+1. **`FCloneSzCore()` does behave as S3 says** (general.cpp): it copies in
+   place when the old buffer is large enough, and otherwise frees it. So
+   the premise about the function is right; the question is whether
+   anything calls it on a chart's name.
+2. **Nothing does.** Both chart info dialogs (`ShowChartInfoForQt()` and
+   the default-chart one) build a local `CI` with **fresh `SzClone()`
+   copies** and assign the struct (`*pci = ci`, `ciDefa = ci`), and their
+   own comment says why: "FCloneSz FREES the old pointer, so editing a
+   name here pulled it out from under every other CI still holding it".
+   The settings replay the group runs goes through `-zi` and `-qb`, which
+   likewise assign fresh `SzClone()` copies (switch.cpp).
+3. **Nothing frees a chart's name or location anywhere in the tree.** A
+   search for `DeallocateP`/`DeallocatePIf` on a `nam` or `loc` found one
+   hit, `express.cpp`'s `DeallocateP(szAlloc)` -- an expression list
+   buffer that matched the pattern by its name.
+
+So a `CI` copied before the OKs holds pointers that are still allocated
+and whose text nobody has touched. The struct restore is correct as
+written, and replacing it with eight numeric fields would have left the
+name and location wherever the last OK put them -- a worse restore.
+
+S3 was a real hazard in an earlier tree -- the dialogs' comment records
+exactly that bug being fixed -- and a stale finding in this one. Closed
+here with that evidence, per CLAUDE.md's "closed means the killing
+evidence is written down where the finding was raised, so it is never
+re-flagged".
+
+**S4, also in Phase 3's header, was already closed by item 7.**
+`TestNullNamesQt()` and `TestExportRoundTripQt()` empty the chart list
+and append; `ChartListPinQt` now saves and restores every entry in both.
