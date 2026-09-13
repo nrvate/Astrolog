@@ -1321,6 +1321,10 @@ flag WritePNG(CONST Bitmap *b, FILE *file)
   int cbRow, cbDataBmp, cRowBlock, cBlock, iBlock, cbBlock;
   cbRow = b->x*cbPixelK + 1;
   cbDataBmp = cbRow * b->y;
+  // One deflate block header holds up to 65535 bytes; a window wider
+  // than ~21,845 pixels would zero the divisor. FValidGraphX caps the
+  // width far below that, and this pins it.
+  Assert(cbRow <= 65535);
   cRowBlock = 65535 / cbRow;
   cBlock = (b->y + (cRowBlock - 1)) / cRowBlock;
 

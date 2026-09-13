@@ -966,8 +966,10 @@ void PrintObjects(void)
 
   if (us.fStar) {
     CastChart(0);
-    for (i = starLo; i <= starHi; i++) if (!ignore[i]) {
+    for (i = starLo; i <= starHi; i++) {
       j = rgobjList[i];
+      if (ignore[j])
+        continue;
       AnsiColor(kObjA[j]);
       sprintf2(S(sz), "%3d %-12s", i, szObjDisp[j]); PrintSz(sz);
       sprintf2(S(sz), "Star #%2d  ", i-oNorm); PrintSz(sz);
@@ -1339,9 +1341,9 @@ void PrintOrbit(void)
   PrintSz("   Name: Distance   Year Diameter     Day       Mass Density  "
     "Axis Satellites\n\n");
   for (i = 0; i <= is.nObj; i++) {
-    if (ignore[i] || !FThing(i))
-      continue;
     j = rgobjList[i];
+    if (ignore[j] || !FThing(j))
+      continue;
     AnsiColor(kObjA[j]);
     sprintf2(S(sz), "%7.7s: %8.4f", szObjDisp[j],
       j < starLo ? rObjDist[j]/rObjDist[oEar] : cp0.dist[j]/rLYToAU);
@@ -1625,7 +1627,7 @@ void DisplayArabic(void)
 #endif
 #ifdef INTERPRET
     if (us.fInterpret) {
-      InterpretArabic(l, rPart[i], rLat[i], rDir[i]);
+      InterpretArabic(l, rPart[l], rLat[l], rDir[l]);
       continue;
     }
 #endif

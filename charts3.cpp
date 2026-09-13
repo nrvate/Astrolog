@@ -251,6 +251,14 @@ void ChartInDaySearch(flag fProg)
   real divsiz, d1, d2, e1, e2, f1, f2, g;
   flag fYear, fVoid, fPrint = fTrue;
   CP cpA, cpB;
+#if defined(WIN) || defined(QT)
+  // PrintInDays() stores the chart of each event it prints into ciSave,
+  // which in the console leaves the last event where "-i set" recalls it,
+  // but in a GUI is the Store Chart Info slot the Chart menu fills and
+  // Recall reads. Put it back after the search, like the same guard in
+  // Action() keeps a text redraw from overwriting it.
+  CI ciSaveSav = ciSave;
+#endif
 
   // If parameter 'fProg' is set, look for changes in a progressed chart.
 
@@ -672,6 +680,10 @@ void ChartInDaySearch(flag fProg)
   if (counttotal == 0 && fPrint)
     PrintSz("No transit events found.\n");
 
+#if defined(WIN) || defined(QT)
+  ciSave = ciSaveSav;
+#endif
+
   // Recompute original chart placements as have overwritten them.
 
   ciCore = ciMain;
@@ -696,6 +708,12 @@ void ChartTransitSearch(flag fProg)
   flag fPrint = fTrue;
   CP cpA, cpB, cpN = cp0;
   CI ciSav, ciCast = ciSave, ciEvent;
+#if defined(WIN) || defined(QT)
+  // The graphic calendar branch below stores each event it draws into
+  // ciSave, which in a GUI is the Store Chart Info slot. Same guard as
+  // ChartInDaySearch() above.
+  CI ciSaveSav = ciSave;
+#endif
 
   // Print header row.
 
@@ -1075,6 +1093,10 @@ void ChartTransitSearch(flag fProg)
   if (counttotal == 0 && fPrint)
     PrintSz("No transits found.\n");
 
+#if defined(WIN) || defined(QT)
+  ciSave = ciSaveSav;
+#endif
+
   // Recompute original chart placements as have overwritten them.
 
   ciCore = ciMain; ciTran = ciSav;
@@ -1410,6 +1432,13 @@ void ChartHorizonRising(void)
   int yea0, yea1, yea2, mon0, mon1, mon2, day0, day1, day2, counttotal = 0;
   flag fSav1 = us.fSidereal, fSav2 = us.fSeconds, fYear;
   CI ciSav, ciEvent;
+#if defined(WIN) || defined(QT)
+  // This search writes the chart of each rising, setting, zenith and
+  // nadir event into ciSave, which in the console leaves the last event
+  // where "-i set" recalls it, but in a GUI is the Store Chart Info slot
+  // the Chart menu fills and Recall reads. Put it back after the search.
+  CI ciSaveSav = ciSave;
+#endif
 
   us.fSidereal = fFalse;
   division = us.nDivision;
@@ -1617,6 +1646,10 @@ void ChartHorizonRising(void)
   if (counttotal == 0)
     PrintSz("No horizon events found.\n");
 
+#if defined(WIN) || defined(QT)
+  ciSave = ciSaveSav;
+#endif
+
   // Recompute original chart placements as have overwritten them.
 
   ciCore = ciMain; ciTwin = ciSav;
@@ -1804,17 +1837,15 @@ flag ChartExoplanet(flag fColor)
       return fFalse;
     is.cexod = cexod;
     ClearB((pbyte)is.rgexod, sizeof(ExoData) * cexod);
-    for (i = 0; i < cexod; i++) {
+    for (i = n = 0; i < cexod; i++) {
       // Read in data for next exoplanet
       if (fgets(szLine, cchSzLine, file) == NULL)
         return fFalse;
-      pexod = &is.rgexod[i];
+      pexod = &is.rgexod[n];
       for (pch = szLine; *pch && *pch != ','; pch++)
         ;
       if (pch > szLine)
         pch[-1] = chNull;
-      if (!FCloneSz(szLine + (szLine[0] != chNull), &pexod->sz))
-        return fFalse;
       pch++;
       hr = atoi(pch); min = atoi(pch+3); lon = atof(pch+6);
       pexod->ra = (real)NAbs(hr) + (real)min/60.0 + lon/3600.0;
@@ -1842,8 +1873,16 @@ flag ChartExoplanet(flag fColor)
       pexod->periodU = atof(pch);
       AdvancePast(',');
       pexod->dur = atof(pch);
+      // A period of zero or less would never advance this entry's transit
+      // in the loop below, hanging the chart. Drop such entries.
+      if (pexod->period <= 0.0)
+        continue;
+      if (!FCloneSz(szLine + (szLine[0] != chNull), &pexod->sz))
+        return fFalse;
+      n++;
     }
     fclose(file);
+    is.cexod = cexod = n;
   } else
     cexod = is.cexod;
 

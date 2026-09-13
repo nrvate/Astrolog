@@ -2766,6 +2766,10 @@ flag FEnumerateCIList(int nListAll)
   Assert(FBetween(nListAll, 1, 4));
   if (!(!us.fExpOff && FSzSet(us.szExpListY)))
     return fFalse;
+  // The loop below always runs its body once, so an empty chart list has
+  // nothing to enumerate and is.rgci is still NULL.
+  if (is.cci < 1)
+    return fFalse;
   for (i = 0; i <= 2; i++) {
     ciSav[i] = *rgpci[i];
     cpSav[i] = *rgpcp[i];
@@ -2883,11 +2887,13 @@ int UTF8ToWch(CONST uchar *pch, wchar *pwch)
   }
 
   // 3 byte UTF8 sequence: Characters 0x800 - 0xffff
-  ch3 = pch[2];
-  if ((ch1 & 0xf0) == 0xe0 && (ch2 & 0xc0) == 0x80 && (ch3 & 0xc0) == 0x80) {
-    if (pwch != NULL)
-      *pwch = ((ch1 & 0x0f) << 12) | ((ch2 & 0x3f) << 6) | (ch3 & 0x3f);
-    return 3;
+  if ((ch1 & 0xf0) == 0xe0 && (ch2 & 0xc0) == 0x80) {
+    ch3 = pch[2];
+    if ((ch3 & 0xc0) == 0x80) {
+      if (pwch != NULL)
+        *pwch = ((ch1 & 0x0f) << 12) | ((ch2 & 0x3f) << 6) | (ch3 & 0x3f);
+      return 3;
+    }
   }
 
   // Treat illegal UTF8 sequence as one byte character
@@ -3393,6 +3399,8 @@ pbyte PAllocate(long cb, CONST char *szType)
 
 #ifdef DEBUG
   // Put sentinels at ends of allocation to check for buffer overruns.
+  if (pb == NULL)
+    return NULL;
   *(dword *)pb = dwCanary;
   *(dword *)(pb + sizeof(dword)) = cb;
   *(dword *)(pb + sizeof(dword)*2 + cb) = dwCanary;

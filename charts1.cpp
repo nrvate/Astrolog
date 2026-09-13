@@ -1662,7 +1662,7 @@ void ChartOrbit(void)
       }
     }
     if (FStar(i)) {
-      sprintf2(S(sz), " %5.2f", rStarBright[j-oNorm]); PrintSz(sz);
+      sprintf2(S(sz), " %5.2f", rStarBright[i-oNorm]); PrintSz(sz);
     }
     PrintL();
   }
@@ -2924,8 +2924,10 @@ void PrintChart(flag fProg)
     if (us.nRel > rcDual) {
       fCall = us.fSmartCusp; us.fSmartCusp = fFalse;
       nSav = us.objRequire; us.objRequire = -1;
-      if (!FCreateGrid(fFalse))
+      if (!FCreateGrid(fFalse)) {
+        us.fSmartCusp = fCall; us.objRequire = nSav;
         return;
+      }
       us.fSmartCusp = fCall; us.objRequire = nSav;
       inv(fCall);
       ChartGrid();

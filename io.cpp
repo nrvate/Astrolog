@@ -310,15 +310,15 @@ flag FReadSzLineSkip(FILE *file, char *szLine, int cchLine)
 // Read one line from a file into the given buffer with fgets, stripping
 // the line end and any other trailing whitespace. Unlike the reader
 // above this does deliver empty lines, which some formats use as state
-// separators. Returns fFalse at end of file, including for a final line
-// with no line end of its own, which is what every caller's hand-rolled
-// loop did before it.
+// separators. Returns fFalse only when nothing was delivered; a final
+// line with no line end of its own is delivered like any other, and the
+// next call returns fFalse.
 
 flag FReadSzLineTrim(FILE *file, char *szLine, int cchLine)
 {
   char *pch;
 
-  if (fgets(szLine, cchLine, file) == NULL || feof(file))
+  if (fgets(szLine, cchLine, file) == NULL)
     return fFalse;
   for (pch = szLine; *pch; pch++)
     ;
@@ -1193,7 +1193,7 @@ flag FProcessSFTextFile(CONST char *szFile, FILE *file)
     ZZ = RParseSz(pch, pmZon) + SS;
     nState = 3;
   } else if (nState == 3) {
-    for (pch2 = szLine; *pch2 <= ' '; pch2++)
+    for (pch2 = szLine; *pch2 && *pch2 <= ' '; pch2++)
       ;
     for (pch = pch2; *pch; pch++)
       ;
@@ -2592,6 +2592,13 @@ flag FOutputSettings()
   sprintf2(S(sz), "%s ", SzLength(gs.yInch)); PrintFSz();
   PrintF("; PostScript paper X and Y sizes\n\n");
 #endif
+  // Load-bearing line order: every "%cX<flag>" line above is an off form
+  // under the "_" prefix, and FSwitchF2 clears us.fGraphics for each of
+  // those on load. This master line must stay the LAST graphics line the
+  // writer emits, or a saved file's own flags would override the mode it
+  // was saved in. (The Qt settings-file reader is immune -- it restores
+  // us.fGraphics around the whole file -- but the console and Windows
+  // builds read the flags as they come.)
   sprintf2(S(sz), "%cX               ", ChDashF(us.fGraphics)); PrintFSz();
   PrintF("; Graphics chart display [\"_X\" is text, \"=X\" is graphics]\n");
 #endif
@@ -2953,6 +2960,7 @@ int NParseSz(CONST char *szEntry, int pm)
         if (FMatchSz(sz, szAspectAbbrev[i]))
           return kAspA[ASPT(i)];
       if (ch0 == '#' && CchSz(sz) == 7) {
+        i = 0;
         for (n = 1; sz[n]; n += 2)
           i = (i << 8) | (NHex(ChUncap(sz[n])) << 4) | NHex(ChUncap(sz[n+1]));
         i = Rgb(RgbB(i), RgbG(i), RgbR(i));
@@ -3490,12 +3498,12 @@ flag FInputData(CONST char *szFile)
     // already in memory so we don't have to calculate them later.
 
     for (i = 1; i <= oNorm; i++) {
-      if (fscanf(file, "%s%lf%lf%lf", sz, &k, &l, &m) < 4) {
+      if (fscanf(file, szFmtScanTok "%lf%lf%lf", sz, &k, &l, &m) < 4) {
         PrintWarning("Old style position file ended early.");
         goto LDone;
       }
       planet[i] = Mod((l-1.0)*30.0+k+m/60.0);
-      if (fscanf(file, "%s%lf%lf", sz, &k, &l) < 3) {
+      if (fscanf(file, szFmtScanTok "%lf%lf", sz, &k, &l) < 3) {
         PrintWarning("Old style position file ended early.");
         goto LDone;
       }
@@ -3525,7 +3533,7 @@ flag FInputData(CONST char *szFile)
         i = oVtx-1;
     }
     for (i = 1; i <= cSign/2; i++) {
-      if (fscanf(file, "%s%lf%lf%lf", sz, &k, &l, &m) < 4) {
+      if (fscanf(file, szFmtScanTok "%lf%lf%lf", sz, &k, &l, &m) < 4) {
         PrintWarning("Old style position file ended early.");
         goto LDone;
       }
@@ -3775,7 +3783,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     } else if (phase < 0 && FEqRgch(szLine, "Target body name: ", 18, fTrue)) {
       // Search for JPL name of body this ephemeris is for.
       i = 0;
-      for (pch = szLine+18; *pch &&
+      for (pch = szLine+18; *pch && i < cchSzMax-1 &&
         !(pch[0] == ' ' && (pch[1] == ' ' || pch[1] == '(')); pch++)
         szName[i++] = *pch;
       szName[i] = chNull;

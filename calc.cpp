@@ -3535,7 +3535,7 @@ flag FSwissPlanet(int ind, real jd, int indCent,
   double jde, xx[6], xnasc[6], xndsc[6], xperi[6], xaphe[6], *px;
   char serr[AS_MAXCH], szErr[AS_MAXCH + cchSzDef];
   static int nSwissEph = 0;
-  flag fHelio = (indCent != oEar);
+  flag fHelio = (indCent != oEar), fFail = fFalse;
 
   // Reset Swiss Ephemeris if changing computation method.
   if (us.nSwissEph != nSwissEph)
@@ -3621,13 +3621,19 @@ flag FSwissPlanet(int ind, real jd, int indCent,
         else if (ix != 2)
           iobjCent += (ix <= 0 ? SE_FICT_OFFSET_1 : (ix == 1 ? SE_AST_OFFSET :
             SE_PLMOON_OFFSET));
-        else if (!FSwissFromObj(iobjCent, &iobjCent))
-          return fFalse;
-      } else
-        return fFalse;
+        else if (!FSwissFromObj(iobjCent, &iobjCent)) {
+          fFail = fTrue;
+          goto LRestore;
+        }
+      } else {
+        fFail = fTrue;
+        goto LRestore;
+      }
       // Can happen if object customized to be a COB.
-      if (iobj == iobjCent)
-        return fFalse;
+      if (iobj == iobjCent) {
+        fFail = fTrue;
+        goto LRestore;
+      }
       nRet = swe_calc_pctr(jde, iobj, iobjCent, iflag, xx, serr);
     }
   } else {
@@ -3650,7 +3656,12 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     }
   }
 
-  // Clean up and return position.
+  // Clean up and return position. The label is reached by fall-through on
+  // success, and by goto from the central-object branches above, which can
+  // bail after a custom body's definition flags were inverted in place --
+  // the restore below must run on every way out. It sits before the nRet
+  // check because those paths never ran a computation to check.
+LRestore:
   if (nFlg > 0) {
     if (nFlg & 2)  inv(us.fSidereal);
     if (nFlg & 4)  inv(us.fBarycenter);
@@ -3658,6 +3669,8 @@ flag FSwissPlanet(int ind, real jd, int indCent,
     if (nFlg & 16) inv(us.fTruePos);
     if (nFlg & 32) inv(us.fTopoPos);
   }
+  if (fFail)
+    return fFalse;
   if (nRet < 0) {
     if (!is.fNoEphFile) {
       is.fNoEphFile = fTrue;
@@ -4063,6 +4076,12 @@ static void SortESArray(int ces, flag fStar)
 // Like SwissComputeStar(), but potentially apply the star sorting method to
 // the order stars are returned.
 
+// Cap on the sorted star enumeration. The shipped sefstars.txt holds 1360
+// stars; at the old literal 1500 a catalogue grown by ~140 would have been
+// silently truncated from every sorted listing (-Un, -Ub, ...) while the
+// unsorted one still showed them. 2000 leaves the same headroom again.
+#define cStarSortMax 2000
+
 flag SwissComputeStarSort(real jd, ES *pes)
 {
   static int ces = 0, istar = 0;
@@ -4081,7 +4100,7 @@ flag SwissComputeStarSort(real jd, ES *pes)
   }
 
   // Allocate list and put all stars within it.
-  ces = 1500;
+  ces = cStarSortMax;
   if (ces > is.cesSort) {
     if (is.rgesSort != NULL)
       DeallocateP(is.rgesSort);
@@ -4091,7 +4110,7 @@ flag SwissComputeStarSort(real jd, ES *pes)
     is.cesSort = ces;
   }
   SwissComputeStar(jd, pes);
-  for (i = 0; i < 1500 && SwissComputeStar(jd, &is.rgesSort[i]); i++)
+  for (i = 0; i < cStarSortMax && SwissComputeStar(jd, &is.rgesSort[i]); i++)
     ;
   ces = i;
   istar = 0;
@@ -4322,23 +4341,31 @@ flag SwissComputeAsteroidSort(real jd, ES *pes)
 
 
 // Wrapper around Swiss Ephemeris planet name lookup routine.
+// swe_get_planet_name() takes no size and may fill AS_MAXCH (256) bytes --
+// an asteroid name read as a whole line of seasnam.txt, or a fictitious
+// body's name from seorbel.txt, either user-editable -- so the answer is
+// read into a Swiss-sized buffer and copied out through the caller's
+// cchMax. Callers pass cchSzDef (80: the -Ye switch handler and the
+// Object Selections lookups) or cchSzMax (255: the custom-object dialogs),
+// so a name is truncated at the caller's own bound, never overrun.
 
 void SwissGetObjName(char *sz, int cchMax, int iobj)
 {
-  char *pch;
+  char szSwiss[AS_MAXCH], *pch;
 
   if (iobj < 0)
     iobj = -iobj + SE_FICT_OFFSET_1;
   else
     iobj += SE_AST_OFFSET;
-  swe_get_planet_name(iobj, sz);
+  swe_get_planet_name(iobj, szSwiss);
 
   // Check for object not found.
-  for (pch = sz; *pch; pch++)
+  for (pch = szSwiss; *pch; pch++)
     if (FMatchSz(" not found", pch)) {
-      sprintf2(sz, cchMax, "%s", szObjUnknown);
+      sprintf2(S(szSwiss), "%s", szObjUnknown);
       break;
     }
+  sprintf2(sz, cchMax, "%s", szSwiss);
 }
 
 

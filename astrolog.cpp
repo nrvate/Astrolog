@@ -86,13 +86,20 @@ void InitColors(void)
         kElemA[((*ptblRuler)[OBJT(i)]-1) & 3] : kLtGray;
     else if (k == kPlanet) {
       // Moon colors are dim versions of the color of the planet they orbit.
-      k = kObjA[!FBetween(i, cobLo, cobHi) ? ObjOrbit(i) :
-        oJup + (i - cobLo)];
-      if (FBetween(k, 0, cColor-1))
-        k ^= 8;
+      // Only -YkO or a settings file can put a body that orbits nothing
+      // (the Sun, a cusp, a Uranian) in this branch; gray it like the
+      // element branch grays an unruled body.
+      k = !FBetween(i, cobLo, cobHi) ? ObjOrbit(i) : oJup + (i - cobLo);
+      if (k < 0)
+        k = kLtGray;
       else {
-        k = KvFromKi(k);
-        k = -(int)Rgb(RgbR(k) >> 1, RgbG(k) >> 1, RgbB(k) >> 1);
+        k = kObjA[k];
+        if (FBetween(k, 0, cColor-1))
+          k ^= 8;
+        else {
+          k = KvFromKi(k);
+          k = -(int)Rgb(RgbR(k) >> 1, RgbG(k) >> 1, RgbB(k) >> 1);
+        }
       }
     }
     kObjA[i] = k;
@@ -163,6 +170,8 @@ void Action(void)
   // If the -kh switch is in effect, start outputting a new HTML file.
 
   fHTML = us.fTextHTML && !us.fGraphics && is.S != stdout;
+  if (us.nCharsetOut == ccUTF8 && is.S != stdout)
+    fprintf(is.S, "%c%c%c", 0xef, 0xbb, 0xbf);   // UTF-8 BOM: first bytes
   if (fHTML) {
     fHTMLClip = is.nHTML < 0;
     is.nHTML = 2;
@@ -180,9 +189,6 @@ void Action(void)
     is.nHTML = 3;
   } else
     is.nHTML = 0;
-
-  if (us.nCharsetOut == ccUTF8 && is.S != stdout)
-    fprintf(is.S, "%c%c%c", 0xef, 0xbb, 0xbf);
 
   // If the -5e switch is in effect, loop over all charts in chart list.
 
@@ -363,7 +369,13 @@ void InitVariables(void)
   us.fInterpret = us.fProgress = is.fHaveInfo = is.fMult = fFalse;
   us.nRel = rcNone;
   FCloneSz(NULL, &is.szFileScreen);
-  ClearB((pbyte)&us.fListing, (int)((pbyte)&us.fLoop - (pbyte)&us.fListing));
+  // Clear the chart types and the table chart types, but not the
+  // suboptions between them: several are on by default (-g0, -a0, -m0,
+  // -j0, -L0) and are setups, not chart selections.
+  ClearB((pbyte)&us.fListing,
+    (int)((pbyte)&us.fVelocity - (pbyte)&us.fListing));
+  ClearB((pbyte)&us.fCredit,
+    (int)((pbyte)&us.fLoop - (pbyte)&us.fCredit));
 }
 #endif
 
@@ -385,6 +397,14 @@ flag FProcessCommandLine(CONST char *szLine)
   flag fT = fFalse;
   FILE *fileT;
 
+  // Nesting depth of this call. The initial command line is depth 0;
+  // each macro, AstroExpression string, or settings-file line that runs
+  // a command line comes back through here one level deeper. Every
+  // route in (command line, macro menu, AstroExpression, settings file)
+  // passes through this one function, so this one counter bounds them
+  // all, the way cFileDepth bounds -i nesting in FProcessSwitchFile().
+  static int cCmdDepth = 0;
+
   if (szLine == NULL || *szLine == chNull)
     return fTrue;
   cb = CchSz(szLine)+1;
@@ -395,8 +415,8 @@ flag FProcessCommandLine(CONST char *szLine)
   // "-M 1" aborts with *** stack smashing detected *** and dumps core.
   // Reachable from a macro, from an AstroExpression string, and from
   // anything else that hands this a string it did not measure. Neither
-  // GUI can reach it -- Windows caps its Enter Command Line box at
-  // cchSzLine and the Qt one at cchSzMax -- which is why it survived.
+  // GUI can reach it -- both cap their Enter Command Line box at
+  // cchSzLine -- which is why it survived.
   //
   // REFUSED, not truncated. Half a command line is a different command
   // line, not a shorter one: cutting "-Yi1 "/some/path"" in the middle
@@ -409,6 +429,18 @@ flag FProcessCommandLine(CONST char *szLine)
     PrintWarning(szCommandLine);
     return fFalse;
   }
+
+  // A command line that runs itself recurses here until the stack is
+  // gone, the way a file that includes itself once did before
+  // cFileDepthMax; the same reasoning and the same limit bound both.
+  if (cCmdDepth >= cFileDepthMax) {
+    sprintf2(S(szCommandLine),
+      "Command lines are nested more than %d deep at '%.60s', which "
+      "usually means a macro runs itself.", cFileDepthMax, szLine);
+    PrintWarning(szCommandLine);
+    return fFalse;
+  }
+  cCmdDepth++;
 
   // Check for filename on command line.
   if (!FChSwitch(szLine[0])) {
@@ -429,6 +461,9 @@ flag FProcessCommandLine(CONST char *szLine)
     sprintf2(S(szCommandLine), "Failed to parse command line: %s", szLine);
     PrintWarning(szCommandLine);
   }
+  // Lowered on every exit past the guard, success or failure, so a
+  // command line that errors partway cannot leave the count elevated.
+  cCmdDepth--;
   return fT;
 }
 
@@ -872,7 +907,8 @@ int main()
   int argc;
   char **argv;
 #endif
-  char szCommandLine[cchSzMax], *rgsz[MAXSWITCHES];
+  char szCommandLine[cchSzLine], *rgsz[MAXSWITCHES];
+  flag fT;
 #ifdef BETA
   char szBeta[cchSzMax];
 #endif
@@ -910,26 +946,39 @@ LBegin:
     argv = rgsz;
   }
   is.szProgName = argv[0];
-  if (FProcessSwitches(argc, argv, NULL)) {
+  fT = FProcessSwitches(argc, argv, NULL);
+#ifdef QT
+  // Windows does this at the same point -- straight after its own
+  // FProcessCommandLine(), wdriver.cpp:711, whether or not the command
+  // line parsed -- and it matters because the Object Restrictions dialog
+  // has a "Recall" button (dbRe_YRi in astrolog.rc) that restores from
+  // this remembered set. InitProgram() stored it before astrolog.as or
+  // the command line had been read, so without this the button in a GUI
+  // build hands back the COMPILED defaults and throws away whatever the
+  // user's settings file restricted -- on a command line with one bad
+  // switch as much as on a clean one. The console build has no such
+  // button and keeps upstream's behaviour, which is why this is guarded
+  // rather than moved into InitProgram().
+  InitRestrictions(fTrue);
+#endif
+  if (fT) {
     if (!is.fNoSwitches && us.fLoopInit) {
       is.fNoSwitches = fTrue;
       goto LBegin;
     }
-#ifdef QT
-    // Windows does this at the same point -- straight after its own
-    // FProcessCommandLine(), wdriver.cpp:711 -- and it matters because
-    // the Object Restrictions dialog has a "Recall" button (dbRe_YRi in
-    // astrolog.rc) that restores from this remembered set. InitProgram()
-    // stored it before astrolog.as or the command line had been read, so
-    // without this the button in a GUI build hands back the COMPILED
-    // defaults and throws away whatever the user's settings file
-    // restricted. The console build has no such button and keeps
-    // upstream's behaviour, which is why this is guarded rather than
-    // moved into InitProgram().
-    InitRestrictions(fTrue);
-#endif
     Action();
   }
+  #ifdef QT
+  // Once this binary has shown a window there is no operator at stdin:
+  // Windows' WinMain never reads us.fLoop, a desktop launcher's stdin is
+  // /dev/null, and a terminal session would sit at a prompt nobody
+  // expects after the chart window is gone. The QApplication is created
+  // lazily at the first window (qtdriver.cpp), so NULL means the process
+  // has run as a console program all along -- under _X, or scripted --
+  // and keeps the loop.
+  if (gi.qapp != NULL)
+    us.fLoop = us.fNoQuit = fFalse;
+#endif
   if (us.fLoop || us.fNoQuit) {  // If -Q in effect loop back and get switch
     PrintL2();                   // info for another chart to display.
     InitVariables();

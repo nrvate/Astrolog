@@ -623,12 +623,22 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 #define cchSzDef  80
 #define cchSzMax  255
 #define cchSzLine (cchSzMax*4)
+// The width a "%s" conversion into a cchSzMax buffer carries in a scanf
+// format string: scanf cannot take the destination's size as an argument
+// the way the S()/sprintf2() idiom does, so the bound is baked into the
+// format itself.
+#define cchSzScanMax (cchSzMax-1)
+#define STRINGIZE2(x) #x
+#define STRINGIZE(x) STRINGIZE2(x)
+#define szFmtScanTok "%" STRINGIZE(cchSzScanMax) "s"
 
 // How deeply settings files may include each other with -i before the
 // nesting is treated as a loop. Files legitimately nest a level or two --
 // astrolog.as naming a chart file, say -- and never twenty; unbounded
 // nesting is a stack overflow, since each level carries a cchSzLine
-// buffer and a MAXSWITCHES argv (io.cpp, FProcessSwitchFile).
+// buffer and a MAXSWITCHES argv (io.cpp, FProcessSwitchFile). The same
+// limit bounds command-line nesting through FProcessCommandLine()
+// (astrolog.cpp), where a macro level carries the same buffers.
 #define cFileDepthMax 20
 #define dwCanary  0x87654321
 #define nDegMax   360

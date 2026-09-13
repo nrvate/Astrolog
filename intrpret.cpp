@@ -130,6 +130,37 @@ void FieldWord(CONST char *sz)
 }
 
 
+// Format an aspect interaction string (the -YIA table) into sz. The
+// strings are user data, so they are never passed to printf as a format:
+// the modifier replaces the first "%s", "%%" prints as one percent sign,
+// and any other percent sequence prints literally.
+
+static void InterpretFormatSz(char *szDest, CONST char *szFmt,
+  CONST char *szMod)
+{
+  char *pch = szDest, *pchEnd = szDest + cchSzMax - 1;
+  CONST char *pch2;
+  flag fSub = fFalse;
+  char ch;
+
+  while ((ch = *szFmt++) != chNull && pch < pchEnd) {
+    if (ch == '%') {
+      if (*szFmt == '%')
+        szFmt++;
+      else if (*szFmt == 's' && !fSub) {
+        for (pch2 = szMod; *pch2 && pch < pchEnd; pch2++)
+          *pch++ = *pch2;
+        szFmt++;
+        fSub = fTrue;
+        continue;
+      }
+    }
+    *pch++ = ch;
+  }
+  *pch = chNull;
+}
+
+
 // Display a general interpretation of what each sign of the zodiac, house,
 // planet or object, and aspect means. This is called when printing the
 // interpretation table in the -HI switch.
@@ -181,7 +212,7 @@ void InterpretGeneral(void)
       continue;
     AnsiColor(kAspA[ASPT(i)]);
     sprintf2(S(sz), "When planets are %s, one", szAspectName[i]);
-    FieldWord(sz); sprintf2(S(sz), szInteract[i], ""); FieldWord(sz);
+    FieldWord(sz); InterpretFormatSz(sz, szInteract[i], ""); FieldWord(sz);
     FieldWord("another.");
     if (szTherefore[i][0]) {
       sprintf2(S(sz), "%s.", szTherefore[i]); FieldWord(sz);
@@ -329,7 +360,7 @@ void InterpretAspectCore(int x, int asp, int y, int nOrb)
   }
 #endif
   FieldWord(sz); FieldWord(szMindPart[x]);
-  sprintf2(S(sz), szInteract[asp], szModify[Min(nOrb, 2)][asp-1]);
+  InterpretFormatSz(sz, szInteract[asp], szModify[Min(nOrb, 2)][asp-1]);
   FieldWord(sz);
   sprintf2(S(sz), "their %s.", szMindPart[y]); FieldWord(sz);
   if (szTherefore[asp][0]) {
@@ -496,7 +527,7 @@ void InterpretInDay(int source, int aspect, int dest)
     FInterpretObj(source) && FInterpretObj(dest)) {
     AnsiColor(kAspA[ASPT(aspect)]);
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
-    sprintf2(S(sz), szInteract[aspect], szModify[1][aspect-1]);
+    InterpretFormatSz(sz, szInteract[aspect], szModify[1][aspect-1]);
     FieldWord(sz);
     sprintf2(S(sz), "energies of %s.", szMindPart[dest]); FieldWord(sz);
     if (szTherefore[aspect][0]) {
@@ -523,7 +554,7 @@ void InterpretTransit(int source, int aspect, int dest)
   if (FInterpretObj(source) && FInterpretAsp(aspect) && FInterpretObj(dest)) {
     AnsiColor(kAspA[ASPT(aspect)]);
     FieldWord("Energy representing"); FieldWord(szMindPart[source]);
-    sprintf2(S(sz), szInteract[aspect], szModify[1][aspect-1]);
+    InterpretFormatSz(sz, szInteract[aspect], szModify[1][aspect-1]);
     FieldWord(sz);
     if (source != dest) {
       sprintf2(S(sz), "%s's %s.", szPerson0, szMindPart[dest]);
@@ -626,7 +657,7 @@ void InterpretAspectRelation(int x, int y)
   sprintf2(S(sz), "%s %s %s: %s's",
     szObjDisp[x], SzAspect(asp), szObjDisp[y], szPerson1);
   FieldWord(sz); FieldWord(szMindPart[x]);
-  sprintf2(S(sz), szInteract[asp],
+  InterpretFormatSz(sz, szInteract[asp],
     szModify[Min(NAbs((int)(grid->v[y][x]*3600.0))/(150*60), 2)][asp-1]);
   FieldWord(sz);
   sprintf2(S(sz), "%s's %s.", szPerson2, szMindPart[y]); FieldWord(sz);

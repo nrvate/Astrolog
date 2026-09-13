@@ -528,7 +528,7 @@ LNotNow:
 
 void CommandLineX()
 {
-  char szCommandLine[cchSzMax], *rgsz[MAXSWITCHES];
+  char szCommandLine[cchSzLine], *rgsz[MAXSWITCHES];
   int argc, fT;
 
   ciCore = ciMain;

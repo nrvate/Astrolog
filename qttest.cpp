@@ -5011,7 +5011,7 @@ static void TestChartStoreQt()
 {
   CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciCoreSav = ciCore;
   CI ciSaveSav = ciSave;
-  flag fGraphicsSav = us.fGraphics;
+  flag fGraphicsSav = us.fGraphics, fMonthSav, fYearSav;
   int nRelSav = us.nRel, nModeSav = gi.nMode, yea1, yea2, yea3;
   QAction *paStore = PaFindActionTestQt("&Store Chart Info");
   QAction *paRecall = PaFindActionTestQt("Re&call Chart Info");
@@ -5092,6 +5092,33 @@ static void TestChartStoreQt()
   Check(ciMain.yea == 1990,
     "leaving midpoint mode restores the chart it was entered from (yea %d)",
     ciMain.yea);
+
+  // The -d and -Zd event printers. PrintInDays() and ChartHorizonRising()
+  // store the chart of every event they print into ciSave with no
+  // restore, which in the console is the "-i set" feature but in a GUI is
+  // the Store slot: Recall after either chart handed back the last
+  // event's time instead of the stored chart.
+  fMonthSav = us.fInDayMonth; fYearSav = us.fInDayYear;
+  ciMain.yea = 1990; ciCore = ciMain;
+  paStore->trigger();
+  ciMain.yea = 2000; ciCore = ciMain;
+  us.fGraphics = fFalse;
+  us.fInDayMonth = fTrue; us.fInDayYear = fFalse;
+  SetChartModeQt(gTraTraTim);
+  us.fInDayMonth = fMonthSav; us.fInDayYear = fYearSav;
+  paRecall->trigger();
+  Check(ciMain.yea == 1990,
+    "a text -d event search between Store and Recall leaves the stored "
+    "chart alone (yea %d)", ciMain.yea);
+
+  ciMain.yea = 1990; ciCore = ciMain;
+  paStore->trigger();
+  ciMain.yea = 2000; ciCore = ciMain;
+  us.fGraphics = fFalse;
+  SetChartModeQt(gRising);
+  paRecall->trigger();
+  Check(ciMain.yea == 1990,
+    "and so does a text -Zd rising/setting search (yea %d)", ciMain.yea);
 
   SetRelQt(nRelSav);
   SetChartModeQt(nModeSav);

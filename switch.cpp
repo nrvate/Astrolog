@@ -435,6 +435,8 @@ static int NSwYR7(CONST char *szSwitch, PARSEIN *pin)
 static int NSwYRd(CONST char *szSwitch, PARSEIN *pin)
 {
   us.nSignDiv = NFromSz(pin->argv[1]);
+  if (FErrorValN(szSwitch, us.nSignDiv < 1, us.nSignDiv, 1))
+    return 0;
   return 1;
 }
 
@@ -2456,9 +2458,10 @@ static int NSwFour(CONST char *szSwitch, PARSEIN *pin)
 {
   int i, darg = 0;
 
-  if (pin->argc > 1 && (i = NFromSz(pin->argv[1])) >= 0)
+  if (pin->argc > 1 && FNumCh(pin->argv[1][0])) {
+    i = NFromSz(pin->argv[1]);
     darg++;
-  else
+  } else
     i = 1;
   if (FErrorValN("4", !FValidDwad(i), i, 0))
     return tcError;
@@ -4274,6 +4277,10 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       if (i == nSwitchStop)
         return fTrue;
       if (i < 0)
+        return fFalse;
+      // A handler may consume at most what it was given; a future arity
+      // slip becomes an error here instead of a walk past argv.
+      if (i > argc)
         return fFalse;
       argc -= i; argv += i;
       argc--; argv++;
