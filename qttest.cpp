@@ -2622,7 +2622,7 @@ static void TestDialogButtonWiringQt()
 
   for (i = 0; i <= dwarfHi && i <= oNorm; i++)
     ignore[i] = rgbSav[i];
-  AdjustRestrictions();
+  RedoRestrictions();
 
   // Same shape in Aspect Settings: dbAs_RA0/dbAs_RA1/dbAs_RA, where the
   // toggle covers the first five aspects (wdialog.cpp:1380).
@@ -2885,6 +2885,7 @@ static void TestRisingGradientQt()
     "(%d distinct colours)", ckv);
   for (i = 0; i < objMax; i++)
     ignore[i] = rgfIgnoreSav[i];
+  RedoRestrictions();
   us.fGraphics = fGraphicsSav;
   SetChartModeQt(nModeSav);
 }
@@ -3625,7 +3626,7 @@ static void TestChartScrollQt()
     ignore[i] = rgfIgnoreSav[i];
     ignore2[i] = rgfIgnore2Sav[i];
   }
-  AdjustRestrictions();
+  RedoRestrictions();
   gs.xWin = xSav; gs.yWin = ySav;
   SetRelQt(nRelSav);
   us.fGraphics = fGraphicsSav;
@@ -4989,6 +4990,7 @@ static void TestTransitModeQt()
 LDone:
   for (i = 0; i < objMax; i++)
     ignore[i] = rgfIgnoreSav[i];
+  RedoRestrictions();
   us.nAsp = nAspSav;
   us.nEphemYears = nEphemYearsSav;
   us.fInDayMonth = fMonthSav; us.fInDayYear = fYearSav;
@@ -5600,7 +5602,7 @@ static void TestOkSettlesQt()
   ciMain = ciSav; ciCore = ciCoreSav;
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
-  AdjustRestrictions();
+  RedoRestrictions();
   printf("  %d dialogs settle on the first OK, %d still drifting\n",
     cdlgQt - cDrift, cDrift);
 }
@@ -5851,7 +5853,7 @@ static void TestMidpointGlyphQt()
   us = usSav;
   gs = gsSav;
   ciCore = ciSav;
-  AdjustRestrictions();
+  RedoRestrictions();
   CastChart(1);
   printf("  a slot forced to a midpoint is labelled, not glyphed\n");
 }
@@ -5980,7 +5982,7 @@ static void TestObjSelGlyphQt()
   rgTypSwiss[iobj - custLo] = nTypSav;
   rgObjSwiss[iobj - custLo] = nObjSav;
   ignore[iobj] = fIgnoreSav;
-  AdjustRestrictions();
+  RedoRestrictions();
   CastChart(1);
   printf("  a slot given a new body stops drawing the old one\n");
 }
@@ -6283,7 +6285,7 @@ static void TestSettingsRoundTripQt()
   is.szFileOut = szFileOutSav;
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
-  AdjustRestrictions();
+  RedoRestrictions();
   printf("  what Save Program Settings writes is what it reads back\n");
 }
 
@@ -6989,7 +6991,7 @@ static void TestObjSelDialogQt()
   } else
     FCloneSzCore(szDispSav, (char **)&szObjDisp[iobj],
       szObjDisp[iobj] == szObjName[iobj]);
-  AdjustRestrictions();
+  RedoRestrictions();
   printf("  the dialog sets the body, names it, and it reaches the file\n");
 }
 
@@ -7383,7 +7385,7 @@ static void TestTransitRestrictQt()
   CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
   CopyRgb(rgbMemSav, ignoreMem, sizeof(rgbMemSav));
   CopyRgb(rgbMem2Sav, ignore2Mem, sizeof(rgbMem2Sav));
-  AdjustRestrictions();
+  RedoRestrictions();
 }
 
 
@@ -8327,7 +8329,7 @@ static void TestSharedCoreFixesQt()
   }
   gs.xWin = xWinSav; gs.yWin = yWinSav; gi.nMode = nModeSav;
   gs.fText = fTextSav; gs.fDoSidebar = fDoSidebarSav;
-  AdjustRestrictions();
+  RedoRestrictions();
   CastChart(1);
   printf("  window size round trips, forced midpoints read real positions\n");
 }
@@ -8856,7 +8858,7 @@ static void TestSettingsFieldsQt()
   // a marker directory, and 63 of 78 bodies stopped resolving.
   is.fSwissPathSet = fFalse;
   InitColorPalette(gs.fInverse);
-  AdjustRestrictions();
+  RedoRestrictions();
   AdjustAspectCount();
   printf("  %d of %d settings fields asked, %d lost, %d stale excuses\n",
     cAsked, csetfield, cLost, cStale);
@@ -9075,7 +9077,7 @@ static void TestSettingsArraysQt()
   us.fNoWrite = fNoWriteSav;
   SetNoPopupQt(fPopupSav);
   remove(szPath);
-  AdjustRestrictions();
+  RedoRestrictions();
   AdjustAspectCount();
   printf("  %d settings arrays asked, %d lost, %d stale excuses\n",
     csetarray, cLost, cStale);
@@ -12395,7 +12397,7 @@ static void TestLineDrawingQt()
       *rgchartmode[j].pf = rgfSav[j];
     for (j = 0; j <= oNorm; j++)
       ignore[j] = rgbIgnSav[j];
-    AdjustRestrictions();
+    RedoRestrictions();
   }
   ciMain = ciMainSav; ciCore = ciCoreSav;
   CastChart(1);              // Put the shared chart state back for the rest.

@@ -244,3 +244,96 @@ for the rest of this work.
   `SetChartModeQt(gWheel)` then `SetChartModeQt(nModeSav)` does not put
   the flags back; it silently undid star-sort's T2 leak for every later
   group (item 2).
+
+### Plan item 3b -- K8: `RedoRestrictions()` where a group restores `ignore[]`
+
+**What the sites turned out to be.** The review counted "16 call sites in
+12 groups". Read one by one, the 16 `AdjustRestrictions()` lines in
+`qttest.cpp` are two different things:
+
+- **12 restores** -- the call right after a group puts `ignore[]` (and
+  sometimes `ignore2[]`, the `ignoreMem` copies, or all of `us`) back:
+  `dialog-buttons`, `chart-scroll` (its second call), `ok-settles`,
+  `midpoint-glyph` (second), `objsel-glyph`, `settings-roundtrip`,
+  `objsel-dialog`, `transit-restrict`, `shared-core` (second),
+  `settings-fields`, `settings-arrays`, `line-drawing` (second). All 12
+  now call `RedoRestrictions()`.
+- **4 set-ups** -- the call right after a group restricts objects for a
+  leg (`chart-scroll`, `midpoint-glyph`, `shared-core` and `line-drawing`,
+  each the first of its two). These stay `AdjustRestrictions()`: they run
+  before anything could have re-derived the flags, and changing a leg's
+  set-up changes what the leg measures, which no plan item asked for.
+
+Plus the two restores the review found calling nothing at all,
+`rising-gradient` and `transit-mode`: each gets `RedoRestrictions()`
+after its restore loop. (They were also not recomputing `is.nObj`.)
+
+**Why it is safe everywhere.** `RedoRestrictions()` (general.cpp) only
+*reads* `ignore[]`/`ignore2[]`, writes the six category flags from them,
+and ends by calling `AdjustRestrictions()` -- read in full before the
+change, so "superset" is checked, not assumed.
+
+**Falsified before the change, per group, with the canary.** Each of the
+15 affected groups run alone (`ASTROLOG_QT_TESTS=<group>`, the canary on,
+the binary from item 3a), so the only state a group can have touched is
+its own:
+
+- `dialog-buttons`: `us.fUranian 0 -> 1`, `us.fDwarf 0 -> 1` -- the
+  dialog-OK route K8 named (`SyncRestrictMenuQt()` re-derives the flags
+  from "Restrict All", the group puts the array back, the flags stay).
+- `settings-roundtrip`: `us.fMoons 0 -> 1` -- the `-YR` replay route K8
+  named. Neither is a suite-order artefact: both leak from a clean start.
+- `transit-restrict`, `objsel-dialog`, `objsel-glyph`, `menu-resync`:
+  *no* flag change alone. Their full-suite flag lines (in the item-3a
+  baseline) come from the state they inherit, which K8's fix at the
+  groups before them is expected to remove; the full-suite run says.
+
+**After the change, the same 15 solo runs.** Exactly three canary lines
+gone -- `dialog-buttons`' `us.fUranian` and `us.fDwarf`, and
+`settings-roundtrip`'s `us.fMoons` -- and every other line, and every
+group's assertion count, identical. So the fix removes what K8 described
+and nothing else, and no group's legs depended on the stale flags.
+`tools/warning_audit.py --file qttest.cpp`: empty.
+
+**The full suite, canary on:** `PASS: 5198 passed, 0 failed`. Against
+the item-3a canary baseline, **every category-flag line is gone** --
+`transit-restrict`, `objsel-dialog` and `objsel-glyph` (`us.fUranian`),
+`dialog-buttons` (`us.fUranian`, `us.fDwarf`) and `menu-resync`
+(`us.fDwarf`) -- including the four groups that did not leak alone, which
+were therefore inheriting the stale flags from `dialog-buttons` and
+`settings-roundtrip` upstream. `menu-actions`' own flag lines remain;
+that group changes restrictions by design (item 12).
+
+**Gotcha: two canary runs never diff clean, because of the clock.**
+The only other lines that moved were `gs.rRot` and `gs.rTilt` in
+`chart-render`, `divergences`, `menu-actions` and `shared-symbols` --
+different values in each run (120.729 in one, 122.164 in the next). The
+globe's rotation follows the current time, so any group that draws a
+globe leaves a time-dependent value. Filter those two fields out before
+diffing canary logs.
+
+**Gotcha: the canary prints reals with `%g`, and a change can read as
+`120.729 -> 120.729`.** It compares bytes, so the change is real; six
+significant digits hide it. Not changed in this item -- a wider format
+would move every real line in the baseline, and the fix belongs with the
+canary, not with K8. Read an equal-looking pair as "differs below the
+sixth digit".
+
+**Other things the solo runs show, not K8, recorded rather than fixed:**
+
+- **N-C (P3) `gs.yWin 600 -> 575`** after every group that opens a
+  restriction or Object Selections dialog (`dialog-buttons`,
+  `transit-restrict`, `objsel-dialog`, `objsel-glyph`). Plausibly the
+  window being laid out again around a dialog under the offscreen
+  platform; not traced.
+- **N-D (P3) `us.fListing 0 -> 1`** after `rising-gradient`,
+  `transit-mode`, `chart-scroll` and `shared-core` -- every one of them
+  restores with `SetChartModeQt(nModeSav)`, the same shape as N-B.
+- **N-E (P3) `dialog-buttons` leaves `us.nAsp 5 -> 0`.**
+- **Not a problem, though it looks like one: `settings-fields` and
+  `settings-arrays` pass only 3 assertions each.** Both sweeps check
+  hundreds of fields, but a field is reported through `Check(fFalse,
+  ...)`, which runs only when that field fails to survive. A clean run
+  therefore counts just the set-up checks: the writer wrote a file, and
+  the file loads back. A small count from either one is what "every field
+  survived" looks like, not a sign the sweep was skipped.
