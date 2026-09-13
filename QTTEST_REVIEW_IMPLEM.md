@@ -137,6 +137,36 @@ unless someone remembers. Adding the rest one file at a time would cost
 about nine seconds each; widening it is a maintainer's call about how
 long `make check` may take, so it is left as stated here.
 
+**Follow-up, found by the first `make check` of the finished branch: the gate
+failed under `make check` and nowhere else.** Every step passed except
+`warnings: qttest.cpp`, and its output was not a compiler warning:
+
+```
+g++: error: make[1]:: linker input file not found
+g++: error: '/nvm/work/qttest': linker input file not found
+```
+
+`warning_audit.py --file` learns the build's flags by running a child `make`
+and reading its stdout. Under `make check` the parent's `MAKEFLAGS` reach that
+child, which then prints `make[1]: Entering directory '/nvm/work/qttest'` to
+stdout -- and every word of it became a g++ argument. Reproduced outside make
+with `MAKEFLAGS=w MAKELEVEL=1`: exit 2, "qt DOES NOT COMPILE". Without them:
+exit 0, empty.
+
+**The falsification above was blind to exactly this.** It ran the gate's
+function from a plain shell, which is the one context the gate never runs in.
+It proved the gate reads warnings; it could not prove the gate works where it
+is installed.
+
+**Fixed at the root**, in `tools/warning_audit.py` rather than in `check.sh`:
+`--no-print-directory` on that child `make`, so any caller running under make
+gets the flags and nothing else. Re-falsified **under make's environment**:
+the current file, exit 0 and empty; `dcd939b`'s file, the gate fails with
+exactly the six `-Wunused-variable` warnings and no "DOES NOT COMPILE". Then
+`make check` again, below.
+
+MAKECHECK-RESULT
+
 ### Plan item 3a -- the group canary, `ASTROLOG_QT_TEST_CANARY`
 
 **What the plan asked for** was a fixed list printed at each `Group()`:
@@ -1886,6 +1916,10 @@ failed.
 - **The canary's own blind spots**: `is`/`gi`/`ci*` beyond the fields named,
   `rgobjset[]` and the colours; clock-driven `gs.rRot`/`gs.rTilt` differ run to
   run; reals print with `%g`; stderr can split a line in a redirected log.
+- **Prove a gate in the context it runs in.** Item 3's warning gate was
+  falsified from a plain shell and failed under `make check`, because make's
+  environment changed what a child `make` prints. The first `make check` of the
+  finished branch found it; nothing else could have.
 - **Sabotages here were always reversed by exact string**, never by
   `git checkout`, and every one was confirmed gone with `grep -c` before the
   run that followed.
