@@ -280,7 +280,7 @@ they touch it and flush, so the last line printed is the culprit:
 ASTROLOG_QT_TEST_VERBOSE=1 ./run-qt-tests.sh
 ```
 
-That covers the 26 chart renders (`rendering: TraNatGra`) and all 338
+That covers the 23 chart renders (`rendering: TraNatGra`) and all 338
 menu items fired (`firing: Chart Settings...`). A clean run does not need
 the noise, which is why it is off by default — reach for it the moment a
 run dies without saying where.
@@ -575,7 +575,7 @@ aborts the release build.
 a check is not a check: these two found seven bugs and then existed
 only as a paragraph, which is the same failure the divergence list had.
 
-The suite is a good host because it already renders 26 chart types and
+The suite is a good host because it already renders 23 chart types and
 fires all 341 menu items, so one run exercises far more than a person
 clicking could. `ProbeQt()` works under ASan too, which is how the
 second instance of the esoteric-influence bug was confirmed rather than

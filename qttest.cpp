@@ -548,19 +548,54 @@ static void TestHotkeysQt()
 // gi.nMode handling once had, and it needs no screenshotting: the chart
 // is already a QImage in memory.
 
+// How much of gi.qim a chart actually drew: samples, every fourth pixel,
+// that differ from the background RedrawQt() filled with, gi.kiOff -- not
+// from pixel(0,0), which holds the BORDER. Against the corner every
+// background sample counts as drawn, and "blank" cannot be reported at all:
+// measured on the chart-render loop's own renders, orbit came to about
+// 174,000 against the corner and 939 against the background.
+//
+// And inside a margin, because the border and the header and footer text
+// lines are drawn whether or not the chart is, and are not the chart: in
+// those renders they alone came to 800-900 samples, well over any useful
+// threshold. At a 16 pixel margin a chart that draws nothing scores 0 and
+// the sparsest real one measured, orbit, 59.
+static long CpixDrawnQt(int nMargin)
+{
+  long cpix = 0;
+  int x, y;
+  KV kvBack = KvFromKi(gi.kiOff);
+  QRgb rgbBack = qRgb(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack));
+
+  if (gi.qim == NULL)
+    return -1;
+  for (y = nMargin; y < gi.qim->height() - nMargin; y += 4)
+    for (x = nMargin; x < gi.qim->width() - nMargin; x += 4)
+      if (gi.qim->pixel(x, y) != rgbBack)
+        cpix++;
+  return cpix;
+}
+
 static void TestChartRenderQt()
 {
-  CONST int rgnMode[] = { gWheel, gHouse, gGrid, gAspect, gMidpoint,
+  // The graphics charts only. gAspect, gArabic and gExo were in this list
+  // and are not graphics charts: DrawChartX() has no case for any of them,
+  // Windows sets us.fGraphics = fFalse for all three (cmdChartAspect,
+  // cmdChartArabic, cmdChartExo), and each renders its border and nothing
+  // else. They passed "rendered blank" here only because that check
+  // compared against the border. The menu-firing group asserts they switch
+  // to text mode, which is the invariant that matters for them.
+  CONST int rgnMode[] = { gWheel, gHouse, gGrid, gMidpoint,
     gHorizon, gOrbit, gSector, gCalendar, gDisposit, gEsoteric,
-    gAstroGraph, gEphemeris, gArabic, gRising, gLocal, gMoons, gExo,
+    gAstroGraph, gEphemeris, gRising, gLocal, gMoons,
     gTraTraGra, gTraNatGra, gSphere, gWorldMap, gGlobe, gPolar,
     gTelescope, gBiorhythm };
-  CONST char *rgszMode[] = { "Wheel", "House", "Grid", "Aspect", "Midpoint",
+  CONST char *rgszMode[] = { "Wheel", "House", "Grid", "Midpoint",
     "Horizon", "Orbit", "Sector", "Calendar", "Influence", "Esoteric",
-    "AstroGraph", "Ephemeris", "Arabic", "Rising", "Local", "Moons", "Exo",
+    "AstroGraph", "Ephemeris", "Rising", "Local", "Moons",
     "TraTraGra", "TraNatGra", "Sphere", "WorldMap", "Globe", "Polar",
     "Telescope", "Biorhythm" };
-  int i, x, y, cmode = (int)(sizeof(rgnMode) / sizeof(int)), nSav = gi.nMode;
+  int i, cmode = (int)(sizeof(rgnMode) / sizeof(int)), nSav = gi.nMode;
   // Named before drawing, flushed, so a crash says which one.
   long cpix;
 
@@ -577,14 +612,11 @@ static void TestChartRenderQt()
     Check(gi.qim->width() == gs.xWin && gi.qim->height() == gs.yWin,
       "%s: image is %dx%d, chart size is %dx%d", rgszMode[i],
       gi.qim->width(), gi.qim->height(), gs.xWin, gs.yWin);
-    // A chart that drew nothing leaves the fill colour everywhere.
-    cpix = 0;
-    for (y = 0; y < gi.qim->height(); y += 4)
-      for (x = 0; x < gi.qim->width(); x += 4)
-        if (gi.qim->pixel(x, y) != gi.qim->pixel(0, 0))
-          cpix++;
-    Check(cpix > 100, "%s: rendered blank (%ld pixels differ from the "
-      "background)", rgszMode[i], cpix);
+    // A chart that drew nothing leaves the fill colour everywhere inside
+    // its border.
+    cpix = CpixDrawnQt(16);
+    Check(cpix > 20, "%s: rendered blank (%ld samples inside the border "
+      "differ from the background)", rgszMode[i], cpix);
   }
   SetChartModeQt(nSav);
 

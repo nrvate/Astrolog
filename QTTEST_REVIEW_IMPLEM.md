@@ -660,3 +660,125 @@ checkout), 576 passed.
 **Suite.** `PASS: 5198 passed, 0 failed`, canary lines identical to item
 8's run. Nothing here changes what runs: one-entry loops, a message only
 printed on failure, and two comments.
+
+### Plan item 11 -- R1: the chart-render group judges "blank" against the corner pixel
+
+**The review was right about the comparison and wrong about the size of
+it.** R1 said the corner holds the border, that comparing against it
+"would misreport a monochrome run", and that the group passes only
+because it runs in colour. Measured on the renders the group makes
+(`GraphicsChartCaptureQt()`, which is "that loop plus a save" through the
+same `SetChartModeQt()`), in colour *and* monochrome:
+
+- the corner is the border -- grey `(191,191,191)` in colour, white in
+  monochrome -- and the background is black;
+- so against the corner nearly **every** sample counts as drawn: orbit
+  scored about 174,000 against the corner and 939 against the background.
+
+The consequence is not a false failure in monochrome. It is that the
+check **cannot report blank at all**, in any run. A chart that draws
+nothing still differs from its border everywhere.
+
+**Measured with the instrument's own blind spot in mind.** Two traps on
+the way, both caught by measuring a second way:
+
+- *"2 distinct colours" as proof a run was monochrome* -- checked by
+  counting the colour run too: 6 to 14 colours per chart against 2, so
+  `-Xm` did take.
+- *Row bands of "non-background" pixels* came back as one band covering
+  every row, because the border's two side columns cross every row.
+  Re-measured with 16 pixels cut from each side: exo's only content is
+  rows 1544-1553 (the footer line), horizon's header is rows 3-12.
+
+**What is actually drawn inside the border.** Samples (every fourth
+pixel) differing from the background inside a margin, colour run:
+
+| margin | exo | orbit | calendar | horizon | border+text alone |
+|---|---|---|---|---|---|
+| 8 px | 71 | 130 | 117 | 202 | ~800-900 |
+| 16 px | **0** | 59 | 117 | 122 | -- |
+
+So the border and the header and footer lines alone are 800-900 samples.
+Comparing against `gi.kiOff` -- the fix R1 proposed -- with the group's
+threshold of 100 would still pass a chart that drew nothing but its frame.
+The margin is what makes "blank" measurable.
+
+**And exo really is blank: it is not a graphics chart.** Viewed: its
+render is the border and the footer, nothing else. `DrawChartX()` has no
+`case gExo`; the Qt menu adds it through `AddChartModeTextAction()`, like
+Aspect List and Arabic Parts; and **Windows sets `us.fGraphics = fFalse`
+for `cmdChartExo`**, as it does for `cmdChartAspect` and
+`cmdChartArabic` (`wdriver.cpp`). The render list in `TestChartRenderQt()`
+holds all three -- `gAspect`, `gArabic`, `gExo` -- and has passed "renders
+non-blank" on all three for as long as the corner check has existed.
+
+**A correction to the record: QT_GUI_PLAN.md work log item 24.** That item
+found Aspect List and Arabic Parts drawing an empty window, and says "A
+pixel-blankness assertion did not catch this (something still paints
+offscreen)". Nothing was painting offscreen. The assertion compared
+against the border, so it could not see a blank chart. The item's fix --
+asserting `us.fGraphics` rather than pixels -- was the right one, and the
+reason it gave for needing it was not. The work log is left as written;
+this is where the correction lives.
+
+**Found here, not fixed (not in the plan, each needs its own net):**
+
+- **N-F (P2) the menu-firing group's "chart went blank" check has the same
+  blind spot, one layer down.** It compares against `gi.kiOff`, as R1
+  recommends, but over the whole image with a threshold of 20 -- and the
+  border and text lines alone are 800-900 samples. It cannot report a
+  blank chart either.
+- **N-G (P3) `CpixDifferQt()`, used by `clear-screen`, compares against
+  `pixel(0,0)`.** R1 hoped it might be the shared helper; it has the
+  corner comparison too. Whether it is blind there depends on whether a
+  cleared screen draws a border, which was not measured.
+- **N-H (P3) `GraphicsChartCaptureQt()` captures `gExo`**, while its own
+  comment says Aspect and Arabic are left out "on purpose: DrawChartX()
+  has no case for either". Exo is the same case.
+
+**The change.** `CpixDrawnQt(nMargin)` counts samples inside a margin that
+differ from `gi.kiOff`; `TestChartRenderQt()` uses it at 16 pixels with a
+threshold of more than 20 (the sparsest real chart measured is 59). And
+`gAspect`, `gArabic` and `gExo` leave the group's render list, with a
+comment saying why: they are text charts on both builds, and the
+menu-firing group already asserts the invariant that matters for them
+(that choosing one switches graphics off).
+
+**Falsified, with no sabotage needed -- the tree already held the blank
+renders.** Built with the new check and the list *unchanged*, the group
+alone:
+
+```
+FAIL  Aspect: rendered blank (0 samples inside the border differ from the background)
+FAIL  Arabic: rendered blank (0 samples inside the border differ from the background)
+FAIL  Exo: rendered blank (0 samples inside the border differ from the background)
+FAIL: 134 passed, 3 failed
+```
+
+-- the same three and only those, in colour and in monochrome (`-Xm`),
+where the corner check had passed all 26 (137 passed). So the new check
+fails exactly the charts that draw nothing, and passes every chart that
+draws something, including orbit at 59.
+
+With the three removed: 125 passed, 0 failed, in colour and in
+monochrome. The 12 fewer assertions are the three modes' four checks
+each.
+
+**Documents that stated the old count.** CLAUDE.md ("26 chart types
+render non-blank") and QT_TESTING.md (twice) describe the suite as it is,
+so they say 23 now. QT_GUI_PLAN.md and REFACTORING.md also say 26, in work
+log entries and campaign records that describe the suite as it was when
+they were written; those are left alone.
+
+**Gotcha: `_Xm` on the command line does not do what it does in a
+settings file.** Tried first for a monochrome run, it printed nothing
+but `nrvate.as`'s own `-YRd` range warning and exited 0 without running a
+group -- that warning appears in every run, so it was not the cause.
+`FProcessSwitches()` does read a leading `_` as "and"; why the command
+line then stops was not traced. `-Xm`, which toggles, gave the monochrome
+run instead. Noted so nobody reads a silent exit 0 as a passing run.
+
+**The full suite:** `PASS: 5186 passed, 0 failed` -- 12 fewer than 5198,
+exactly the three removed modes' four checks each -- and canary lines
+identical to item 9's run. **The suite's count moves here, on purpose.**
+Every count in this document after this item is against 5186.

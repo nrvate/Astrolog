@@ -225,8 +225,8 @@ cannot see a fortify-detected overflow. Work log item 142 was invisible
 to it for that reason and had to be caught in an optimized `-g` build.
 
 What it covers: 25 dialogs open/close with the right titles, 42 context
-menus resolve, 264 shortcuts bound and unique, 26 chart types render
-non-blank, all 35 text chart modes survive 120-character chart names
+menus resolve, 264 shortcuts bound and unique, 23 graphics charts draw
+inside the border, all 35 text chart modes survive 120-character chart names
 and locations, the five import file formats parse and their long-line
 truncation points hold, all 341 menu items fire without crashing, 258/258 Windows menu
 items present, 256 show Windows' own accelerator text, every body the
