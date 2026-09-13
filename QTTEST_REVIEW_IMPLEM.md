@@ -1610,3 +1610,30 @@ and it prints "survived missing files, a bad switch, PrintError() and a
 **Suite.** `PASS: 5180 passed, 0 failed` -- five fewer than 5185, the five
 removed calls -- and canary lines identical to item 21's run. **Every count
 after this item is against 5180.**
+
+### Plan item 25 -- N13: does the atlas sink group leak a city listing into the log? -- closed, no change
+
+(Done before items 23 and 24: it changes only this document, and doing it
+between their code commits would have staged it with one of them.)
+
+**What N13 said.** `TestAtlasSinkQt()`'s "console city lookup" leg sets
+`pfnAtlasRow = NULL` and calls `DisplayAtlasLookup(..., fFalse, ...)`, which
+prints the city row through `PrintSz()` into `is.S`; `TestAtlasZoneQt()`
+installs a sink for exactly that reason. "Worth checking the suite log for a
+stray city listing."
+
+**The log was checked, and the check could not have seen one.** The full-suite
+log from item 20 has nothing after the `== Atlas row sink ==` header, and no
+line anywhere shaped like a city row. That would read as "closed" -- but the
+question to ask first was whether a listing *could* reach the log. It cannot.
+`PrintSz()` (general.cpp) has a Qt branch: when `is.S` is stdout, each
+character goes to `TextCharQt()`, into the chart window's text buffer, and the
+`} else` after that branch skips the path that writes to the stream. `is.S` is
+stdout at that point. So in this build the console leg draws its row into the
+chart window, and no log can ever show it, stray or not.
+
+**So N13 is closed with that reason, not with the empty log.** Nothing leaks
+into the suite's output. The one row lands in the chart buffer, which the next
+render replaces. Installing `SinkAtlasRowQt()` would change nothing observable,
+and would stop the leg testing the path it names: the console lookup, with no
+sink.
