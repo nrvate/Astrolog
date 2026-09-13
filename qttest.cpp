@@ -87,6 +87,16 @@
 #include <stddef.h>
 #include "settingsfields.h"
 
+// This file needs the Swiss Ephemeris. The core still builds without it --
+// astrolog.h's "#define SWISS" can be commented out -- but this file does
+// not: compiled with that define removed, it fails 112 times in 15
+// functions, most in the oracle, ProbeQt, the custom-dialog parser and the
+// menu firing. The #error makes the cause the FIRST line of that output.
+// It does not make it the only one: GCC keeps compiling after #error, and
+// the undeclared names still follow it.
+#ifndef SWISS
+#error "qttest.cpp needs SWISS -- see the #define in astrolog.h"
+#endif
 #ifdef SWISS
 // The oracle calls the ephemeris library directly, so this file needs the
 // Swiss headers -- and the same "ret" dance calc.cpp does, since astrolog.h
@@ -9837,20 +9847,21 @@ static void TestNumericOracleQt()
   static CONST int rgyea[] = {1900, 1940, 1980, 2000, 2020, 2050, 2080};
   flag fPopupSav = FNoPopupQt();
   CI ciCoreSav = ciCore, ciMainSav = ciMain;
-  flag rgfIgnoreSav[objMax];
+  flag rgfIgnoreSav[objMax], rgfIgnore2Sav[objMax];
   real rgrSwiss[coracle], rD;
   double xx[6];
   char serr[AS_MAXCH];
   real jd;
-  int iy, i, cGood;
+  int iy, i, cBad;
+  int nRelSav = us.nRel, objCenterSav = us.objCenter;
+  flag fSidSav = us.fSidereal, f3DSav = us.fHouse3D, fProgSav = us.fProgress;
 
   Group("Numeric oracle");
   SetNoPopupQt(fTrue);
-#ifndef SWISS
-  Check(fFalse, "built without SWISS: the oracle cannot run");
-#else
-  for (i = 0; i < objMax; i++)
+  for (i = 0; i < objMax; i++) {
     rgfIgnoreSav[i] = ignore[i];
+    rgfIgnore2Sav[i] = ignore2[i];
+  }
   {
     // The same borrow list TestCastCookingQt's pinned-cusp check uses,
     // plus the backend, since this group is about which engine answers.
@@ -10846,13 +10857,27 @@ static void TestNumericOracleQt()
         "with the Sun higher at its zenith than its nadir (%.1f vs %.1f)",
         rAltZen, rAltNad);
     }
-    cGood = 1;
   }
 
-  for (i = 0; i < objMax; i++)
+  // Both sets back, and the category flags re-derived from them (K8). The
+  // group restored only ignore[] until 2026-09-13, and the transit legs
+  // write ignore2[] too: run alone it left 14 transit restrictions changed,
+  // in the full suite the Moon's.
+  for (i = 0; i < objMax; i++) {
     ignore[i] = rgfIgnoreSav[i];
-  Check(cGood == 1, "the oracle restored every borrowed setting");
-#endif
+    ignore2[i] = rgfIgnore2Sav[i];
+  }
+  RedoRestrictions();
+  // What this line always claimed, now checked instead of a flag set to 1
+  // unconditionally: both restriction sets and the borrowed settings the
+  // legs lean on hardest are back where the group found them.
+  for (i = 0, cBad = 0; i < objMax; i++)
+    cBad += ignore[i] != rgfIgnoreSav[i] || ignore2[i] != rgfIgnore2Sav[i];
+  Check(cBad == 0 && us.nRel == nRelSav && us.objCenter == objCenterSav &&
+    us.fSidereal == fSidSav && us.fHouse3D == f3DSav &&
+    us.fProgress == fProgSav,
+    "the oracle restored every borrowed setting (%d restriction slots "
+    "differ)", cBad);
   ciCore = ciCoreSav; ciMain = ciMainSav;
   CastChart(1);                // Leave real positions for the rest.
   SetNoPopupQt(fPopupSav);

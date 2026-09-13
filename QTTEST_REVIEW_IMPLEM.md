@@ -1498,3 +1498,84 @@ ephemeris, grid, influence, midpointlist, radix, wheel.
 **Suite.** `PASS: 5185 passed, 0 failed` -- one fewer than 5186, the
 `Check(cchartmode <= 48, ...)` that N5 removed -- and canary lines identical
 to item 19's run. **Every count after this item is against 5185.**
+
+### Plan item 21 -- the oracle: a dead no-SWISS branch, a check that could not fail, and N-A
+
+**O4 -- the `#ifndef SWISS` branch, measured rather than read.** The review
+said the oracle's "built without SWISS" fallback cannot compile, because the
+body table above it uses `SE_SUN` and friends unguarded. Two facts decided the
+fix. First, **the core still treats SWISS as optional**: about 18 source files
+wrap Swiss code in `#ifdef SWISS`, and `astrolog.h` tells a builder to comment
+its `#define SWISS` out -- so removing the fallback outright would be wrong.
+Second, **this file cannot build without it anyway**. Compiled from a scratch
+copy with the define commented out (the define lives in `astrolog.h`, so
+`-USWISS` is overridden and the headers had to be copied alongside), it failed
+in 15 groups, the oracle being only one. Guarding the oracle table alone would
+have fixed nothing. So: the dead branch is gone, and one `#error` near the
+includes names the requirement.
+
+**Gotcha: the no-SWISS check's first attempt measured the wrong thing.** Its
+flags came from an expansion that dropped the Qt include paths, and the compile
+stopped at `QtWidgets/QApplication: No such file or directory` -- which says
+nothing about SWISS. The command was taken from `make -n -W qttest.cpp
+qt-test` instead, and checked with a control: the same command on the
+unmodified file compiles clean.
+
+**Gotcha: my own comment on the `#error` was wrong, and the measurement caught
+it.** It said the file would "say so once instead of 72 times". Recompiled
+after adding it, the `#error` is indeed the first line of the output -- and GCC
+carries on after it, so every undeclared name still follows. The comment now
+says exactly that.
+
+**And the error count moved because of this item, which the first guess got
+wrong.** Before the change the no-SWISS compile reported 72 errors in 15
+functions, the oracle among them with 1. After it, 117 lines match the
+same `: error:` pattern: the `#error`, 112 errors in `qttest.cpp` across 15
+functions -- the oracle now with 45 -- and 4 more that land in `extern.h`,
+from a macro there that names `FObjMidSource`. The working note first blamed two different grep
+patterns. It was not that -- both counts used `: error:`. The dead branch had
+been doing the one thing it could: the oracle's whole body sat in its `#else`
+half, so a build without SWISS never preprocessed it. Removing the branch
+exposes that body to the same compile. It changes nothing a real build sees,
+since the `#error` now fires first either way, but the number in the comment
+is the measured one after the change, not the one from before it.
+
+Measured with the item's final source: the `#error` first, then 112
+undeclared-name errors in 15 functions -- the four largest NumericOracle 45, Probe 15, CustomDialogParse 10, AllMenuActions 8.
+
+**O3 -- `cGood`, and the finding it had been hiding.** `cGood = 1` was set
+unconditionally at the end of the borrow block and checked after it: a sixth
+`Check(fTrue)`. It is now a real check that both restriction sets and five of
+the borrowed settings the legs lean on hardest are back where the group found
+them. Written that way, it is the net for **N-A** (the oracle leaves
+`ignore2[]` changed), which item 3a's canary had found and nothing asserted.
+So the fix came in two stages:
+
+- **Stage 1, the check without the fix.** The oracle alone:
+
+  ```
+  FAIL  the oracle restored every borrowed setting (14 restriction slots differ)
+  FAIL: 575 passed, 1 failed
+  ```
+
+  and the canary named the same 14, every one an `ignore2[]` slot. The group
+  saved and restored `ignore[]` only; three transit legs write `ignore2[]`.
+- **Stage 2, the fix.** Both sets saved and restored, then
+  `RedoRestrictions()` (item 3b's lesson). The oracle alone: 576 passed, and
+  `[canary: 0 changes left behind by 0 groups]`.
+
+**N-A is closed here.** Its entry under "New findings" above stays as the record
+of where it was found.
+
+**O1 -- not done, with a reason.** Splitting the 1,024-line oracle into one
+static function per leg was reviewed and left. The legs run inside one
+`Borrow` block that pins about 25 settings for all of them, and share locals
+(`rgrSwiss`, `xx`, `serr`, `jd`, `iy`); each leg function would have to be
+called from inside that block and take or redeclare what it uses. That is a
+large, behaviour-neutral diff whose only payoff is structure, in the group
+this suite trusts most for correctness. The out-of-order leg numbers in its
+comments are recorded, not renumbered.
+
+**Suite.** `PASS: 5185 passed, 0 failed`. Against item 20's canary run the
+only difference is one line gone: `[canary oracle: ignore2[2 Moon] 1 -> 0]`,
+N-A, which is what the two stages above were for.
