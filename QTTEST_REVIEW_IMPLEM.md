@@ -782,3 +782,71 @@ run instead. Noted so nobody reads a silent exit 0 as a passing run.
 exactly the three removed modes' four checks each -- and canary lines
 identical to item 9's run. **The suite's count moves here, on purpose.**
 Every count in this document after this item is against 5186.
+
+### Plan item 10 -- W1: the settings-strings markers are too short to catch what the header says they catch
+
+(Done after item 11, not before: both needed the test binary to
+themselves for a sabotaged build, and item 11's runs were already under
+way. The commit order says 11 then 10; the plan's order is unchanged.)
+
+**What the review said.** `TestSettingsStringsQt()`'s header: "The marker
+is over cchSzMax again, because -YD and -YU formatted their value through
+sz until this group was written." Only the macro markers were long (300
+characters, through `SzSetFieldMarkQt()`). The object-name marker was
+`"%.3sProbe%d"` and the star marker `"StarProbe%d"` -- nine to twelve
+characters -- so the regression the header names could not be caught.
+
+**Checked before relying on "they can be made long".** Neither switch caps
+its value: `-YD` stores through `SetObjDisp()` and `-YU` through
+`FCloneSz()`, both of the whole argument, and `NParseSz()`'s `cchSzMax`
+copy applies only to the *object* argument, not the name. The writer
+(`FOutputSettings()`) prints both values in pieces with `PrintF()`, and
+the reader already round-trips the 300-character macro markers through
+the same settings file, so a long value survives the reader too.
+
+**Falsified before the change: the short markers pass a broken writer.**
+`io.cpp` was changed, for the length of the check only, to the shape the
+header describes -- one `sprintf2()` through `sz` for the first `-YD`
+loop and for `-YU` (each target string confirmed to occur exactly once
+before replacing it). `settings-strings` alone, with the markers as they
+were:
+
+```
+PASS: 3 passed, 0 failed
+```
+
+So the group certified a writer that cuts every renamed object and
+custom star at 255 characters.
+
+**The change.** `SzStringMarkQt(szHead, i, ...)` builds `"<head>Probe<i>-"`
+and pads it with `x` to 300 characters, as `SzSetFieldMarkQt()` does for
+the macros; the object markers keep their three-letter object head so
+every element stays distinct. Used where the markers are set and where
+they are checked, so the two cannot drift apart.
+
+**Falsified after the change: the long markers fail the same broken
+writer.** Rebuilt with the markers lengthened and `io.cpp` still
+sabotaged, the group alone:
+
+```
+FAIL  and the file it wrote loads back with every string emptied
+FAIL  szObjDisp[0] (-YD) did not survive a save and reload
+FAIL  szStarCustom[1] (-YU) did not survive a save and reload
+FAIL  is.rgszMacro[0] (-M0) did not survive a save and reload
+FAIL: 2 passed, 4 failed
+```
+
+The last two lines are worth reading closely, because they are CLAUDE.md's
+warning happening in front of us: a `-YD` value cut at 255 characters
+loses its closing quote, so the *rest of the file* is read wrongly -- the
+reload itself reports failure, and the macros, whose writer was not
+touched, are lost with it. A truncated string setting does not only lose
+its tail.
+
+With `io.cpp` put back (the same two exact strings reversed; `git diff`
+then showed `io.cpp` untouched), 3 passed, 0 failed.
+
+**Suite.** `PASS: 5186 passed, 0 failed`, canary lines identical to item
+11's run. The group's assertion count does not move -- per-element
+failures report through `Check(fFalse, ...)` only -- so the whole of the
+change is in what those checks can now see.

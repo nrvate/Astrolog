@@ -9170,6 +9170,22 @@ static void TestSettingsArraysQt()
 // because "-YD" and "-YU" formatted their value through sz until this
 // group was written.
 
+// The marker an object name or custom star name is set to: a short head
+// that keeps every element distinct, padded with 'x' past cchSzMax. Short
+// markers could not catch the regression the header above names -- a
+// writer that formats the value through sz cuts it at 255 characters, and
+// "SunProbe1" is 9. Measured: with the -YD and -YU writers put back to one
+// sprintf2() through sz, the short markers passed and these fail.
+static void SzStringMarkQt(CONST char *szHead, int i, char *sz, int cchMax)
+{
+  int cch;
+
+  sprintf2(sz, cchMax, "%.3sProbe%d-", szHead, i);
+  for (cch = CchSz(sz); cch < 300 && cch < cchMax-1; cch++)
+    sz[cch] = 'x';
+  sz[cch] = chNull;
+}
+
 static void TestSettingsStringsQt()
 {
   char szPath[cchSzMax], szMark[cchSzLine];
@@ -9197,12 +9213,12 @@ static void TestSettingsStringsQt()
   // NParseSz() when a file names one, so the marker keeps the object's own
   // name at its head and every one stays distinct.
   for (i = 0; i <= cObj; i++) {
-    sprintf2(S(szMark), "%.3sProbe%d", szObjName[i], i);
+    SzStringMarkQt(szObjName[i], i, S(szMark));
     SetObjDisp(i, szMark);
     cAsked++;
   }
   for (i = 1; i <= cStar; i++) {
-    sprintf2(S(szMark), "StarProbe%d", i);
+    SzStringMarkQt("Star", i, S(szMark));
     FCloneSz(szMark, &szStarCustom[i]);
     cAsked++;
   }
@@ -9234,7 +9250,7 @@ static void TestSettingsStringsQt()
     "and the file it wrote loads back with every string emptied");
 
   for (i = 0; i <= cObj; i++) {
-    sprintf2(S(szMark), "%.3sProbe%d", szObjName[i], i);
+    SzStringMarkQt(szObjName[i], i, S(szMark));
     if (!FEqSz(szObjDisp[i], szMark)) {
       Check(fFalse, "szObjDisp[%d] (-YD) did not survive a save and reload",
         i);
@@ -9243,7 +9259,7 @@ static void TestSettingsStringsQt()
     }
   }
   for (i = 1; i <= cStar; i++) {
-    sprintf2(S(szMark), "StarProbe%d", i);
+    SzStringMarkQt("Star", i, S(szMark));
     if (!FEqSz(SzSet(szStarCustom[i]), szMark)) {
       Check(fFalse,
         "szStarCustom[%d] (-YU) did not survive a save and reload", i);
