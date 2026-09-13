@@ -136,3 +136,111 @@ the warning ledger only through the full audit, which nothing runs
 unless someone remembers. Adding the rest one file at a time would cost
 about nine seconds each; widening it is a maintainer's call about how
 long `make check` may take, so it is left as stated here.
+
+### Plan item 3a -- the group canary, `ASTROLOG_QT_TEST_CANARY`
+
+**What the plan asked for** was a fixed list printed at each `Group()`:
+`ignore[oAsc]`, the six category flags, `us.nRel`, `us.fGraphics`,
+`is.cci`, `is.S`, macro slot 1's name, the star list's length.
+
+**What was built is wider, and a diff rather than a dump.** The leak probe
+from item 2 had already shown that a fixed list is the wrong shape: the
+fields T2 guessed were not the fields that leaked, and a list somebody
+chose is exactly the vocabulary problem the settings sweeps were written
+to escape. So the canary snapshots before each group, in the runner
+(`NRunQtTestTableQt()`, not `Group()` -- the runner is where a table
+entry's boundaries are, so an "after" exists for the last group too and
+the name printed is the one `ASTROLOG_QT_TESTS` selects by), and after the group prints one line per thing that differs:
+
+- every non-string member of `US` and `GS` -- 269 of the table's 342;
+  the other 73 are `char *` -- by name, old and new value, through
+  `rgsetfield[]`, which covers the six category flags, `us.nRel` and
+  `us.fGraphics` from the plan's list;
+- every slot of `ignore[]` and `ignore2[]`, with the object's name;
+- all 96 macro names and 8 macro submenu names, by content;
+- `gs.szStarsLin` and `gs.szStarsLnk`, by content (lengths printed);
+- `is.cci` and `is.fHaveInfo`.
+
+`is.S` is left to the check the runner already had, which *fails* rather
+than reports and repairs the pointer.
+
+**It reports; it never fails.** `menu-actions` changes dozens of settings
+by design, and several groups' lasting changes are their purpose. The
+useful outputs are the diff between two runs' canary lines, and the
+answer to "what did the group before mine leave behind?" A closing line
+counts changes and groups.
+
+**Gotchas while writing it.**
+
+- `ignore[i]` goes through `GRDOBJB::operator[]`, which asserts `i` is
+  below `cObj` in a `-DQTTEST` build. The canary walks `rgn[]` directly to
+  `objMax` so it never trips the assertion on the slots past `cObj`.
+- `flag` is `int`, so `'f'` and `'i'` fields share a comparison; `real`
+  fields compare by bytes, not `==`, so a NaN left in a field (the
+  settings sweeps poison with them) is not reported as changed on every
+  group.
+- The sizes come from the field's type letter, not from the gap to the
+  next offset, because `US` has padding.
+
+**What it cannot see**, stated in its comment: `is`, `gi` and the `ci*`
+structs beyond the two fields named (there is no generated table for
+them), string members of `US`/`GS` other than the star lists, `rgobjset[]`
+and the colour arrays. Each of those is a place a leak can still hide.
+
+**Suite.** With the canary on: `PASS: 5198 passed, 0 failed` and
+`[canary: 208 changes left behind by 16 groups]`. Off: `PASS: 5198 passed, 0 failed` and not one line containing
+"canary" -- the default output is unchanged.
+
+**Checked against the probe.** Every scalar line names the same field in
+the same group as the item-2 probe did (less the eight lines item 2
+fixed). So the scalar leg is the probe, and the probe was right.
+
+**Falsified, by leaks that were already there.** Each leg the probe did not
+have reported something on its first run, and each report is a known or
+checkable real leak rather than a planted one:
+
+- **The string leg:** `forced-positions: macro name 1 "Default Planets"
+  -> "AstrologQtSuiteMacro"`. That is review finding **K1**, open and
+  unfixed at this point -- the canary found it with nobody telling it to
+  look at macros. (K1 is plan item 4; the canary line is its
+  falsification.)
+- **The restriction leg:** `oracle: ignore2[2 Moon] 1 -> 0`. **A new
+  finding, not in the review:** the numeric oracle leaves the Moon
+  unrestricted in the transit set. Recorded under "New findings" below
+  rather than fixed inside this item.
+- **The star-list leg:** `menu-actions` and `menu-side-effects` each
+  change both star lists' content.
+
+**What the first run says about `menu-actions`.** 186 of the 208 lines.
+Besides the 66 scalars the probe saw, it leaves **130 restriction slots
+changed** -- nearly every moon, star and cusp unrestricted, the
+planets and Vulcan restricted in both sets, Earth unrestricted -- and
+both star lists rewritten. Its header already says it leaves settings
+dirty, but the leftovers list above it does not mention restrictions, and
+every group after it runs with that set. That is review finding M4's
+territory (plan item 12) and is taken up there.
+
+**Gotcha: canary lines can be split by the program's own output.** One
+line in the first run read `[canary transit-restrict: us.fUraCreating
+graphics chart in memory.`, with the rest of the canary line somewhere
+later in the log. `PrintProgress()` (general.cpp) writes to **stderr**,
+which is unbuffered; the canary writes to **stdout**, which is
+block-buffered when `run-qt-tests.sh` sends both to one file with `2>&1`.
+So a progress message lands in the file at the moment it is printed, in
+the middle of whatever stdout block is still pending. A grep for
+`\[canary ` still finds the line; a parser that expects the closing `]`
+on the same line does not. Compare canary output with that in mind, or
+run with stdout line-buffered through a pty (`tools/ci-run-suite.sh`
+gives it one).
+
+The first canary run is kept at `/nvm/work/qttest-canary-baseline.log`
+for the rest of this work.
+
+## New findings (turned up while working the plan)
+
+- **N-A (P2) `oracle` leaves `ignore2[oMoo]` cleared.** Measured by the
+  canary (item 3a). Not yet traced to a leg.
+- **N-B (P3) `text-pager` clears chart-type flags it did not set.**
+  `SetChartModeQt(gWheel)` then `SetChartModeQt(nModeSav)` does not put
+  the flags back; it silently undid star-sort's T2 leak for every later
+  group (item 2).

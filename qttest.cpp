@@ -13181,6 +13181,125 @@ static flag FTestWantedQt(CONST char *szFilter, CONST char *szName)
   return fFalse;
 }
 
+// The group canary. ASTROLOG_QT_TEST_CANARY=1 names, after every group,
+// each piece of process state it left different from how it found it:
+// every non-string member of US and GS (by name, through settingsfields.h),
+// each restriction slot, every macro and macro submenu name, both star
+// lists, the chart list's length and is.fHaveInfo.
+//
+// Two sessions built this by hand with a throwaway printf before it was
+// kept -- dcd939b's sweep for the restricted Ascendant, and work log item
+// 57's "dump the globals and diff them" -- and the first run of the
+// generalised form named 92 changed fields in 15 groups. A group that
+// leaks is a "passes alone, fails in the suite" trap for every group
+// after it, and nothing else in the suite can say which group it was.
+//
+// It reports and never fails: "menu-actions" fires every menu item and
+// changes dozens of settings by design, and some groups' changes are the
+// point of the group. What it is for is the diff between two runs, and
+// the answer to "what did the group before mine leave behind?"
+//
+// What it cannot see: is/gi/ci* beyond the two fields named (no generated
+// table for them), US/GS string members other than the star lists
+// (pointer identity says nothing), rgobjset[] and the colour arrays.
+static flag s_fCanaryQt = fFalse;
+static byte s_rgbUsCanaryQt[sizeof(US)], s_rgbGsCanaryQt[sizeof(GS)];
+static GRDOBJB s_ignCanaryQt, s_ign2CanaryQt;
+static int s_cciCanaryQt, s_cCanaryQt = 0, s_cGroupCanaryQt = 0;
+static flag s_fHaveInfoCanaryQt;
+static QByteArray s_rgbaMacroCanaryQt[cMacro], s_rgbaMSubCanaryQt[cMSub];
+static QByteArray s_baLinCanaryQt, s_baLnkCanaryQt;
+
+static void CanarySnapQt()
+{
+  int i;
+
+  CopyRgb((pbyte)&us, s_rgbUsCanaryQt, sizeof(US));
+  CopyRgb((pbyte)&gs, s_rgbGsCanaryQt, sizeof(GS));
+  s_ignCanaryQt = ignore; s_ign2CanaryQt = ignore2;
+  s_cciCanaryQt = is.cci; s_fHaveInfoCanaryQt = is.fHaveInfo;
+  for (i = 0; i < cMacro; i++)
+    s_rgbaMacroCanaryQt[i] = QByteArray(SzSet(SzMacroNameQt(i)));
+  for (i = 0; i < cMSub; i++)
+    s_rgbaMSubCanaryQt[i] = QByteArray(SzSet(SzMacroSubNameQt(i)));
+  s_baLinCanaryQt = QByteArray(SzSet(gs.szStarsLin));
+  s_baLnkCanaryQt = QByteArray(SzSet(gs.szStarsLnk));
+}
+
+static void CanaryDiffQt(CONST char *szGroup)
+{
+  int i, cBefore = s_cCanaryQt;
+#define CANARY(...) (printf("  [canary %s: ", szGroup), printf(__VA_ARGS__), \
+  printf("]\n"), s_cCanaryQt++)
+
+  for (i = 0; i < csetfield; i++) {
+    CONST SETTINGFIELD *psf = &rgsetfield[i];
+    CONST byte *pbNew = PbSetFieldQt(psf);
+    CONST byte *pbOld = (psf->fGs ? s_rgbGsCanaryQt : s_rgbUsCanaryQt) +
+      psf->off;
+    switch (psf->ch) {
+    case 'f':
+    case 'i': {
+      int nOld, nNew;
+      CopyRgb((pbyte)pbOld, (pbyte)&nOld, sizeof(int));
+      CopyRgb((pbyte)pbNew, (pbyte)&nNew, sizeof(int));
+      if (nOld != nNew)
+        CANARY("%s %d -> %d", psf->szName, nOld, nNew);
+      break;
+    }
+    case 'l': {
+      long lOld, lNew;
+      CopyRgb((pbyte)pbOld, (pbyte)&lOld, sizeof(long));
+      CopyRgb((pbyte)pbNew, (pbyte)&lNew, sizeof(long));
+      if (lOld != lNew)
+        CANARY("%s %ld -> %ld", psf->szName, lOld, lNew);
+      break;
+    }
+    case 'r': {
+      real rOld, rNew;
+      CopyRgb((pbyte)pbOld, (pbyte)&rOld, sizeof(real));
+      CopyRgb((pbyte)pbNew, (pbyte)&rNew, sizeof(real));
+      if (memcmp(&rOld, &rNew, sizeof(real)) != 0)
+        CANARY("%s %g -> %g", psf->szName, rOld, rNew);
+      break;
+    }
+    case 'c':
+      if (*pbOld != *pbNew)
+        CANARY("%s %d -> %d", psf->szName, *pbOld, *pbNew);
+      break;
+    }
+  }
+  for (i = 0; i < objMax; i++) {
+    if (s_ignCanaryQt.rgn[i] != ignore.rgn[i])
+      CANARY("ignore[%d %s] %d -> %d", i, i < cObj ? SzSet(szObjName[i]) :
+        "", s_ignCanaryQt.rgn[i], ignore.rgn[i]);
+    if (s_ign2CanaryQt.rgn[i] != ignore2.rgn[i])
+      CANARY("ignore2[%d %s] %d -> %d", i, i < cObj ? SzSet(szObjName[i]) :
+        "", s_ign2CanaryQt.rgn[i], ignore2.rgn[i]);
+  }
+  if (s_cciCanaryQt != is.cci)
+    CANARY("is.cci %d -> %d", s_cciCanaryQt, is.cci);
+  if (s_fHaveInfoCanaryQt != is.fHaveInfo)
+    CANARY("is.fHaveInfo %d -> %d", s_fHaveInfoCanaryQt, is.fHaveInfo);
+  for (i = 0; i < cMacro; i++)
+    if (s_rgbaMacroCanaryQt[i] != QByteArray(SzSet(SzMacroNameQt(i))))
+      CANARY("macro name %d \"%s\" -> \"%s\"", i + 1,
+        s_rgbaMacroCanaryQt[i].constData(), SzSet(SzMacroNameQt(i)));
+  for (i = 0; i < cMSub; i++)
+    if (s_rgbaMSubCanaryQt[i] != QByteArray(SzSet(SzMacroSubNameQt(i))))
+      CANARY("macro submenu name %d \"%s\" -> \"%s\"", i,
+        s_rgbaMSubCanaryQt[i].constData(), SzSet(SzMacroSubNameQt(i)));
+  if (s_baLinCanaryQt != QByteArray(SzSet(gs.szStarsLin)))
+    CANARY("gs.szStarsLin length %d -> %d", (int)s_baLinCanaryQt.size(),
+      CchSz(SzSet(gs.szStarsLin)));
+  if (s_baLnkCanaryQt != QByteArray(SzSet(gs.szStarsLnk)))
+    CANARY("gs.szStarsLnk length %d -> %d", (int)s_baLnkCanaryQt.size(),
+      CchSz(SzSet(gs.szStarsLnk)));
+#undef CANARY
+  if (s_cCanaryQt > cBefore)
+    s_cGroupCanaryQt++;
+}
+
 static int NRunQtTestTableQt()
 {
   CONST char *szFilter = getenv("ASTROLOG_QT_TESTS");
@@ -13245,12 +13364,17 @@ static int NRunQtTestTableQt()
   // as well as reported, because one leak should not take the rest of the
   // run down with it.
   FILE *fileSStart = is.S;
+  s_fCanaryQt = getenv("ASTROLOG_QT_TEST_CANARY") != NULL;
   for (i = 0; i < cqttestQt; i++) {
     if (!FTestWantedQt(szFilter, rgqttestQt[i].szName))
       continue;
     cRun++;
     timerTest.start();
+    if (s_fCanaryQt)
+      CanarySnapQt();
     rgqttestQt[i].pfn();
+    if (s_fCanaryQt)
+      CanaryDiffQt(rgqttestQt[i].szName);
     if (is.S != fileSStart) {
       Check(fFalse, "group \"%s\" left is.S on another stream; "
         "Action() has closed it and the next print would abort",
@@ -13271,6 +13395,9 @@ static int NRunQtTestTableQt()
   if (szFilter != NULL)
     printf("\n%d of %d groups matched \"%s\"\n", cRun, cqttestQt,
       szFilter);
+  if (s_fCanaryQt)
+    printf("\n[canary: %d changes left behind by %d groups]\n",
+      s_cCanaryQt, s_cGroupCanaryQt);
   printf("\n%s: %d passed, %d failed\n",
     s_cFail == 0 ? "PASS" : "FAIL", s_cPass, s_cFail);
   return s_cFail > 0;

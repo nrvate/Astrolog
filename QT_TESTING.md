@@ -209,9 +209,14 @@ Four caveats, all already paid for:
 
 - **A group that passes alone and fails in the full run is inheriting
   state.** `menu-actions` leaves every setting wherever firing 338 items
-  lands, and anything after it must set what it depends on. Dump the
-  globals in a solo run and a full run and diff them (work log item 57)
-  rather than guessing one variable per rebuild.
+  lands, and anything after it must set what it depends on. Don't guess
+  one variable per rebuild: `ASTROLOG_QT_TEST_CANARY=1 ./run-qt-tests.sh`
+  prints, after every group, each `US`/`GS` field, restriction slot, macro
+  name and star list it left changed, as `[canary <group>: ...]`, which
+  names the group that did it. It cannot see `is`, `gi`, `ci*` beyond two
+  fields, `rgobjset[]` or the colours; for those, dump the globals in a
+  solo run and a full run and diff them (work log item 57). Its lines can
+  be split by stderr progress messages in a redirected log.
 - **Never run two suites at the same time.** The regular and ASan
   binaries (and any capture run) write the same fixture paths under
   `$TMPDIR` — `astrolog-qt-longstrings.txt`, `astrolog-qt-roundtrip.as`
