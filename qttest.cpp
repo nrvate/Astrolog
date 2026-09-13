@@ -1987,6 +1987,11 @@ static void TestChartExportQt()
   CONST char *rgszFmt[] = {"settings", "chart list", "AAF", "Quick*Chart",
     "iCalendar"};
   char szPath[cchSzMax], *szFileOutSav = is.szFileOut, *szNamSav, *szLocSav;
+  // The pointer AND the text: the bitmap leg below reaches FExportChartQt(),
+  // which FCloneSz()es its path into is.szFileOut -- in place when it fits
+  // -- so the pointer alone comes back holding "astrolog-qt-bmpmode-..."
+  // (S2's shape, in a group the review did not list).
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite;
 
@@ -2067,7 +2072,13 @@ static void TestChartExportQt()
   }
 
   ciMain.nam = szNamSav; ciMain.loc = szLocSav;
+  // Pointer first, then text. The format loop left is.szFileOut aimed at
+  // the stack array szPath, and FCloneSz() into that would free a stack
+  // address; the saved pointer is the heap buffer, so put it back and copy
+  // the saved text into it.
   is.szFileOut = szFileOutSav;
+  if (szFileOutSav != NULL)
+    FCloneSz(baFileOutSav.constData(), &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
   printf("  every export format survives a chart with empty fields\n");
@@ -4645,7 +4656,14 @@ static void TestExportRoundTripQt()
     {FOutputQuickFile,    "qck", "Quick*Chart",           fTrue},
     {FOutputCalendarFile, "ics", "iCalendar",             fFalse} };
   char szPath[cchSzMax];
-  char *szFileOutSav = is.szFileOut;
+  // The user's -o name by content, not by pointer: FCloneSz() below copies
+  // the scratch path INTO that buffer when it fits, so a saved pointer
+  // comes back holding the scratch path (review finding S2, measured with
+  // a long -o on the command line). Restored through FCloneSz() too, so no
+  // stack buffer is ever left in is.szFileOut for InitVariables(),
+  // FExportChartQt() or FinalizeProgram() to free.
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   CI ciWant, ciSav = ciCore, ciMainSav = ciMain;
@@ -4674,7 +4692,7 @@ static void TestExportRoundTripQt()
     FCloneSz(szPath, &is.szFileOut);
     us.nWriteFormat = 0;
     fW = rgt[i].pfn();
-    is.szFileOut = szFileOutSav;
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
     us.nWriteFormat = nWriteFormatSav;
 
     is.cci = 0;
@@ -4836,7 +4854,9 @@ static void TestWindowSizeQt()
   int xWinSav = gs.xWin, yWinSav = gs.yWin;
   QSize sizeSav;
   char szPath[cchSzMax];
-  char *szFileOutSav = is.szFileOut;
+  // By content, for the reason TestExportRoundTripQt() gives (S2).
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
   int nWriteFormatSav = us.nWriteFormat, nScaleTextSav = gs.nScaleText;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   int i;
@@ -4879,7 +4899,7 @@ static void TestWindowSizeQt()
   FCloneSz(szPath, &is.szFileOut);
   us.nWriteFormat = 0;
   Check(FOutputSettings(), "the settings save at a small window size");
-  is.szFileOut = szFileOutSav;
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
 
   gs.nScaleText = 100;
@@ -8254,6 +8274,10 @@ static void TestSharedCoreFixesQt()
       QDir::tempPath().toLocal8Bit().constData(),
       (int)QCoreApplication::applicationPid());
     FILE *fileSSav = is.S;
+    // The user's -os name by content, put back below (K6): this used
+    // to end in FCloneSz(NULL, ...), which dropped it.
+    QByteArray baScreenSav(SzSet(is.szFileScreen));
+    flag fScreenSav = is.szFileScreen != NULL;
     FCloneSz(szOut, &is.szFileScreen);
     us.fGraphics = fFalse;
     us.fListing = fTrue; us.fWheel = fFalse;
@@ -8268,7 +8292,8 @@ static void TestSharedCoreFixesQt()
     is.S = fileSSav;
     us.fWheel = fWheelSav; us.fListing = fListSav;
     us.fGraphics = fGraphSav;
-    FCloneSz(NULL, &is.szFileScreen);
+    FCloneSz(fScreenSav ? baScreenSav.constData() : NULL,
+      &is.szFileScreen);
     us.fSeconds = fSecSav;
     ciMain = ciMainSav; ciCore = ciCoreSav;
     file = fopen(szOut, "rb");
@@ -12457,6 +12482,10 @@ static void TestLineDrawingQt()
     us.fGrid = fTrue;
     sprintf2(S(szOut), "%s/astrolog-qt-linedraw-%d.txt",
       QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
+    // The user's -os name by content, put back below (K6): this used
+    // to end in FCloneSz(NULL, ...), which dropped it.
+    QByteArray baScreenSav(SzSet(is.szFileScreen));
+    flag fScreenSav = is.szFileScreen != NULL;
     FCloneSz(szOut, &is.szFileScreen);
 
     // The claim is that gs.nFontTxt changes nothing about a *text*
@@ -12493,7 +12522,8 @@ static void TestLineDrawingQt()
         cbFont0 = cb;
     }
     remove(szOut);
-    FCloneSz(NULL, &is.szFileScreen);
+    FCloneSz(fScreenSav ? baScreenSav.constData() : NULL,
+      &is.szFileScreen);
     Check(cbFont0 > 100, "the grid chart wrote %ld bytes, so this proves "
       "nothing", cbFont0);
     Check(cb == cbFont0 && cRule == 0,
@@ -12550,6 +12580,10 @@ static void TestLongStringsQt()
       rgfSav[i] = *rgchartmode[i].pf;
     sprintf2(S(szOut), "%s/astrolog-qt-longstrings-%d.txt",
       QDir::tempPath().toLocal8Bit().constData(), (int)QCoreApplication::applicationPid());
+    // The user's -os name by content, put back below (K6): this used
+    // to end in FCloneSz(NULL, ...), which dropped it.
+    QByteArray baScreenSav(SzSet(is.szFileScreen));
+    flag fScreenSav = is.szFileScreen != NULL;
     FCloneSz(szOut, &is.szFileScreen);
 
     // Action() opens is.S on is.szFileScreen and fclose()s it on the way
@@ -12584,7 +12618,8 @@ static void TestLongStringsQt()
     }
 
     remove(szOut);
-    FCloneSz(NULL, &is.szFileScreen);
+    FCloneSz(fScreenSav ? baScreenSav.constData() : NULL,
+      &is.szFileScreen);
     for (i = 0; i < cchartmode; i++)
       *rgchartmode[i].pf = rgfSav[i];
   }
@@ -13311,6 +13346,11 @@ static flag FTestWantedQt(CONST char *szFilter, CONST char *szName)
 // point of the group. What it is for is the diff between two runs, and
 // the answer to "what did the group before mine leave behind?"
 //
+// And the two output file names, by content and by whether they are set at
+// all: a group that points is.szFileOut or is.szFileScreen at a scratch file
+// through FCloneSz() either overwrites the user's -o/-os name in place or
+// frees it (review findings S2, K6).
+//
 // And the chart list's CONTENT, entry by entry, not only its length: a group
 // that empties the list, appends its own charts and puts the count back
 // has overwritten the charts a user loaded while is.cci says nothing
@@ -13328,6 +13368,8 @@ static QByteArray s_rgbaMacroCanaryQt[cMacro], s_rgbaMSubCanaryQt[cMSub];
 static QByteArray s_baLinCanaryQt, s_baLnkCanaryQt;
 static QVector<CI> s_rgciCanaryQt;
 static QByteArray s_baThemeCanaryQt;
+static QByteArray s_baFileOutCanaryQt, s_baFileScreenCanaryQt;
+static flag s_fFileOutSetCanaryQt, s_fFileScreenSetCanaryQt;
 static flag s_fThemeSetCanaryQt;
 static QVector<QByteArray> s_rgbaNamCanaryQt, s_rgbaLocCanaryQt;
 
@@ -13349,6 +13391,10 @@ static void CanarySnapQt()
   // different states to NDarkPreferenceQt(), so both are kept.
   s_fThemeSetCanaryQt = qEnvironmentVariableIsSet("ASTROLOG_QT_THEME");
   s_baThemeCanaryQt = qgetenv("ASTROLOG_QT_THEME");
+  s_fFileOutSetCanaryQt = is.szFileOut != NULL;
+  s_baFileOutCanaryQt = QByteArray(SzSet(is.szFileOut));
+  s_fFileScreenSetCanaryQt = is.szFileScreen != NULL;
+  s_baFileScreenCanaryQt = QByteArray(SzSet(is.szFileScreen));
   s_rgciCanaryQt.resize(is.cci);
   s_rgbaNamCanaryQt.resize(is.cci);
   s_rgbaLocCanaryQt.resize(is.cci);
@@ -13419,6 +13465,17 @@ static void CanaryDiffQt(CONST char *szGroup)
       qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ?
       qgetenv("ASTROLOG_QT_THEME").constData() : "unset",
       qEnvironmentVariableIsSet("ASTROLOG_QT_THEME") ? "\"" : "");
+  if (s_fFileOutSetCanaryQt != (is.szFileOut != NULL) ||
+    s_baFileOutCanaryQt != QByteArray(SzSet(is.szFileOut)))
+    CANARY("is.szFileOut \"%s\" -> \"%s\"%s",
+      s_fFileOutSetCanaryQt ? s_baFileOutCanaryQt.constData() : "(NULL)",
+      is.szFileOut != NULL ? is.szFileOut : "(NULL)",
+      s_fFileOutSetCanaryQt == (is.szFileOut != NULL) ? " (rewritten)" : "");
+  if (s_fFileScreenSetCanaryQt != (is.szFileScreen != NULL) ||
+    s_baFileScreenCanaryQt != QByteArray(SzSet(is.szFileScreen)))
+    CANARY("is.szFileScreen \"%s\" -> \"%s\"",
+      s_fFileScreenSetCanaryQt ? s_baFileScreenCanaryQt.constData() :
+      "(NULL)", is.szFileScreen != NULL ? is.szFileScreen : "(NULL)");
   if (s_cciCanaryQt != is.cci)
     CANARY("is.cci %d -> %d", s_cciCanaryQt, is.cci);
   if (s_fHaveInfoCanaryQt != is.fHaveInfo)

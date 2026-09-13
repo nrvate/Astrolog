@@ -958,3 +958,145 @@ that CLAUDE.md records three documents once disagreeing over.
 struct copies restored more than the group changed, and the pins restore
 exactly what it changes, so a full run cannot tell them apart -- the
 canary runs above are the evidence.
+
+### Plan item 15 -- S2 and K6: the output file names are cloned over and dropped
+
+**What the review said.** S2: `export-roundtrip` and `window-size` do
+`FCloneSz(szPath, &is.szFileOut)` and later put back a *saved pointer*.
+`FCloneSzCore()` copies into the old buffer when the new text fits, so a
+run started with `-o` gets its name overwritten by the scratch path; when
+it does not fit, the old buffer is freed and the restored pointer
+dangles. K6: `shared-core`, `line-drawing` and `long-strings` clone their
+scratch name into `is.szFileScreen` and finish with `FCloneSz(NULL, ...)`,
+so a run started with `-os` loses it. The plan said: assign the pointer,
+as `FSaveSettingsToQt()` does.
+
+**The canary was taught to see it first.** It now records both names by
+content and by whether they are set at all, and names a change.
+
+**Falsified before the change,** each group alone:
+
+- `export-roundtrip` and `window-size`, started with `-o` and a 140-character
+  path (long enough that the scratch path is copied in place rather than
+  reallocated, so the result is deterministic instead of a read of freed
+  memory): `is.szFileOut` changed in both; in `window-size` the user's
+  name now read as the group's `/tmp/...` scratch path.
+- `shared-core`, `line-drawing`, `long-strings`, started with `-os`:
+  `is.szFileScreen "<path>" -> "(NULL)"` in all three.
+
+**Why the fix is not the plan's pointer assignment.** Before writing it, a
+search for every write to these two fields outside the suite:
+
+| Where | What |
+|---|---|
+| `InitVariables()` (astrolog.cpp) | `FCloneSz(NULL, &is.szFileScreen)` -- frees it |
+| `CaptureTextToFileQt()` (qtdriver.cpp) | clones into `is.szFileScreen`, then frees it |
+| `FExportChartQt()`, `StrDefaultSuffixTestQt()` (qtdialog.cpp) | clone into `is.szFileOut` |
+| `-o`, `-os`, `>` (`NSwoCore()`, switch.cpp) | clone into both |
+| `FinalizeProgram()` | frees both at exit |
+
+A stack buffer's address left in either field while any of those runs is
+freed or written through. Assigning the pointer is safe only as long as
+nothing in the group's window reaches one of them -- the same "safe by
+luck" S1 was about. So both halves are saved **by content** instead: a
+`QByteArray` of the value and a flag for whether it was set at all. The
+scratch name still goes in through `FCloneSz()`, and the restore is
+`FCloneSz()` of the saved text, or of NULL when there was none. No stack
+address ever reaches `is`, whatever runs in between.
+
+**Checked and left alone.** Six other groups save `is.szFileOut` by pointer
+and point it at a stack path by plain assignment (`is.szFileOut = szPath`).
+They never clone into the user's buffer, so they cannot overwrite it, and
+they put the original pointer back. They carry the latent hazard in the
+table above only if their windows reach one of those functions. The review
+did not flag them, and changing them would need its own measurement.
+
+**After the change, the same five runs:**
+
+- `export-roundtrip` with the long `-o`: `[canary: 0 changes left behind by
+  0 groups]`, 18 passed; `window-size`: 0 changes, 8 passed.
+- `line-drawing` and `long-strings` with `-os`: 0 changes, 7 and 37
+  passed. `shared-core`: its `is.szFileScreen` line is gone, and the only
+  line left is `us.fListing 0 -> 1` -- N-D, the chart-type flag
+  `SetChartModeQt()` sets and nothing restores, which was there before
+  this item and is not one of the file names.
+
+**The first full suite after the change passed (`PASS: 5186 passed, 0
+failed`) and its canary diff against item 14 gained two lines.** Neither
+is a regression -- the canary had never watched these names before this
+item, and neither group was touched by it -- and both are real:
+
+```
+[canary menu-actions: is.szFileOut "(NULL)" -> "/tmp/astrolog-qt-copy-SInaUX"]
+[canary chart-export: is.szFileOut "/tmp/astrolog-qt-copy-SInaUX" -> "/tmp/astrolog-qt-bmpmode-<pid>-P" (rewritten)]
+```
+
+**`chart-export` is S2's shape at a third site the review did not list.**
+It saves `is.szFileOut` as a bare pointer; its bitmap leg calls
+`FExportChartToFileTestQt()`, which reaches `FExportChartQt()`, which
+`FCloneSz()`es its path into `is.szFileOut` -- in place, because the name
+`menu-actions` left there is long enough. The pointer comes back holding
+the bitmap leg's path. Invisible whenever `is.szFileOut` is NULL on entry,
+which is every run except one following `menu-actions`.
+
+**Gotcha: the obvious fix frees a stack address.** Between the bitmap leg
+and the restore, the group's format loop sets `is.szFileOut = szPath` --
+a stack array. Restoring with `FCloneSz(saved, &is.szFileOut)`, as the
+other five sites now do, would hand that stack address to `FCloneSzCore()`,
+which frees the old buffer when the new text does not fit. So this site
+restores in two steps: the saved pointer first (the heap buffer, which
+drops the stack address without freeing it), then the saved text copied
+into it. The five sites changed above never point the field at the stack,
+which was checked before relying on the simpler restore there.
+
+**Gotcha, paid for on this site: an exact-string edit that fails does
+not stop a chained command.** The first attempt replaced `is.szFileOut =
+szFileOutSav;` file-wide, and that line occurs nine times. The replace
+helper's count check refused and the Python script exited before writing
+anything, which is the hard rule working. But the verification ran in the
+same shell command without `set -e`, so it carried on: the warning audit
+passed on the unchanged file, `make` found nothing to rebuild, and a
+single-group run and a full suite started against the old binary, printing
+results that looked like a verification. Caught by reading the output
+top-down: the traceback, and a binary timestamp that had not moved. The
+suite was stopped through its task ID, and the edit was redone with both
+replacements confined to `TestChartExportQt()`'s own body. Lesson for the
+rest of this work: check the edit's own output, and the binary's
+timestamp, before believing anything after it.
+
+**That accident produced this site's pre-fix evidence.** The single-group
+run against the old binary, started with the long `-o` and with nothing
+from `menu-actions` in the way:
+
+```
+[canary chart-export: is.szFileOut "<scratch>/ooo...o.as" -> "/tm..."]
+```
+
+So `chart-export` overwrites a user's `-o` name on its own. `menu-actions`
+only made it visible in the default run.
+
+**After the scoped edit, confirmed rebuilt** (binary timestamp moved to
+14:03:43, warning audit empty): `chart-export` alone with the long `-o`
+reports `[canary: 0 changes left behind by 0 groups]`, 22 passed.
+
+**The full suite, on the rebuilt binary:** `PASS: 5186 passed, 0 failed`.
+Against item 14's canary run it gains exactly one line, the N-I port leak
+below (`menu-actions` leaving a Copy temp file's name in `is.szFileOut`);
+the `chart-export` rewrite line is gone.
+
+## New findings, deferred
+
+- **N-I (P2, port, not the suite) -- Copy Chart leaves a deleted temp
+  file's name in `is.szFileOut`.** Deferred 2026-09-13: it is shipping
+  code outside this review, and changing it needs its own net and a
+  maintainer's call on the Windows split below. Found by the canary above.
+  `CopyChartVectorQt()` (qtdialog.cpp) exports to a `QTemporaryFile` through
+  `FExportChartQt()`, which does `FCloneSz(szFile, &is.szFileOut)` *and*
+  `FCloneSz(szFile, &gi.szFileOut)` and restores neither. For Save and
+  Export that matches Windows exactly -- `wdialog.cpp` clones the chosen
+  name into both. For Copy it does not: Windows' `cmdCopyBitmap` through
+  `cmdCopyWire` case (wdriver.cpp) clones the temp name into
+  **`gi.szFileOut` only**. So after any vector Copy Chart this build carries
+  a stale settings/chart output name, pointing at a file that no longer
+  exists, that the Windows oracle never sets. The likely fix is for the
+  copy path to leave `is.szFileOut` alone, as Windows does.
