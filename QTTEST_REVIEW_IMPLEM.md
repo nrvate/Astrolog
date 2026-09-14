@@ -2728,3 +2728,48 @@ and not a leak: the canary run named no group changing `us.fSeconds`.
 check` runs it, the unfixed binary fails the two read-backs and the fixed one passes 8
 of 8, also with `_b0` forced; `make check` on the merged tree: all clear, 5218 passed,
 0 failed.
+
+# Fourth batch: a clang gate, before the v8.00-qt.20 release
+
+## Why
+
+`v8.00-qt.19`'s first release run failed on macOS ("No clang warnings") and on Windows
+(MSVC compile) for two arrays in `qttest.cpp` sized by a pointer difference,
+`byte rgbChartSav[(pbyte)&us.fVelocity - (pbyte)&us.fListing]`. g++ folds that to a
+constant in silence, Apple clang warns (`-Wgnu-folding-constant`), MSVC refuses it
+(C2131). `ab451d7` fixed the code; nothing local could have caught it. The maintainer
+asked for a current clang on this box and a gate before `.20`.
+
+## `tools/clang-gate.sh`, in `make check`
+
+Both Qt builds' objects (`Makefile.qt`, `Makefile.qt.test`) compiled with the newest
+`clang++` on the machine, with the makefiles' own `CPPFLAGS` -- the macOS job's build --
+and the log held to `tools/ci-assert-clang-clean.sh <log> 0`, that job's assertion. The
+mechanism is the cached warning audit's: a second makefile replaces the compile rule and
+keeps each object's output, the cache is per checkout, and the key covers the compiler
+version, the warning flag, the makefiles and the rule. An object without its output
+stops the run. No clang is a skip.
+
+**The first draft was blind, and the proof said so.** With the `.19` code planted back
+into `qttest.cpp`, clang 22 reported the tree clean. Measured on a small probe holding
+the same two declarations: clang 22 and clang 14 give **0 warnings** with default flags
+and even with `-Wgnu-folding-constant` asked for. Newer clang no longer folds such an
+array; it treats it as a real variable-length array and says so only under
+`-Wvla-cxx-extension` (in `-Wall`); clang 14 under `-Wvla-extension`. The Apple clang of
+the macOS runner (LLVM 17 era) still folds and warns by default. So the gate names that
+one class explicitly, choosing whichever spelling the compiler accepts. It does not take
+all of `-Wall`: the gate stays the release lanes' rule plus the one class both of them
+fail on.
+
+**Proven.** Plant restored: clang 22 fails `qttest.cpp:8589:26: warning: variable length
+arrays in C++ are a Clang extension [-Wvla-cxx-extension]`; clang 14 fails the same line
+under `-Wvla-extension`. Reverted by exact string: clean, 0 warnings in our sources and 0
+in vendored Swiss. Timings at `-j2`: 70 s cold, 0.3 s with nothing changed.
+
+**Setting up clang here, recorded because both steps failed once.** Linux Mint 21.2 is
+Ubuntu jammy underneath and its archive stops at clang 14; `apt.llvm.org`'s
+`llvm-toolchain-jammy-22` repository supplies clang 22.1.8 (LLVM's `llvm.sh` does not
+recognise Mint, and the repository's directory listing is served gzip-compressed, which
+defeated a first attempt to read the version from it). And any clang on this box failed
+on `<type_traits>` until `libstdc++-12-dev` was installed: clang takes its C++ library
+headers from the newest GCC install it finds, GCC 12, whose headers were missing.

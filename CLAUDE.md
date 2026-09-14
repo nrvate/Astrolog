@@ -710,6 +710,26 @@ tools/warning_audit.py --cached      # the same gate, the same report,
                                      # against the full audit with planted
                                      # warnings (QTTEST_REVIEW_IMPLEM.md);
                                      # --update still needs the full one
+tools/clang-gate.sh                  # both Qt builds through clang, the
+                                     # macOS release job's compiler, held to
+                                     # that job's rule: the makefiles' own
+                                     # flags and zero warnings -- plus the
+                                     # variable-length-array class named
+                                     # explicitly (-Wvla-cxx-extension, or
+                                     # -Wvla-extension on an older clang).
+                                     # That one flag is the point: a gate on
+                                     # clang's defaults was measured BLIND to
+                                     # the pointer-difference array bound
+                                     # that failed v8.00-qt.19's macOS and
+                                     # MSVC legs; Linux clang 14 and 22 say
+                                     # nothing by default where Apple clang
+                                     # warns. Objects cached per checkout
+                                     # like the warning audit: 0.3 s warm,
+                                     # about 70 s cold at -j2. In make check;
+                                     # no clang is a skip. This box has
+                                     # clang 22 from apt.llvm.org (jammy
+                                     # repo) and needed libstdc++-12-dev, or
+                                     # ANY clang fails on <type_traits>
 tools/warning_audit.py --file io.cpp # one file, seconds, no baseline --
                                      # the loop to use while fixing; it
                                      # covers Qt6 too where present

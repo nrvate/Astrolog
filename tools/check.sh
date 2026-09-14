@@ -94,6 +94,16 @@ step "warnings: Linux builds"    python3 tools/warning_audit.py --cached \
                                    --gate-subset --build console \
                                    --build qt --build qt-test
 
+# And the same two Qt builds through clang, the compiler the macOS release
+# job uses, held to that job's rule: the makefiles' own flags and not one
+# warning. GCC and clang disagree about what is worth saying, and the first
+# run of the v8.00-qt.19 release failed on macOS for arrays sized by a
+# pointer difference that g++ compiled in silence -- an hour after the tag,
+# and on MSVC too, which rejects the same construct outright. This puts that
+# class in front of the commit instead. A machine with no clang skips it;
+# the macOS job stays the gate of record there.
+step "clang: both Qt builds"     tools/clang-gate.sh
+
 # Needs the console binary, so it goes after the build rather than up
 # with the pure-Python audits. Eleven image writers, each checked against
 # its own format instead of against a previous build -- the one question
