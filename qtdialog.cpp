@@ -138,6 +138,26 @@ static QString SzZoneEditQt(real zon)
 }
 
 
+// A longitude or latitude as the dialogs' combo fields display it.
+// SzLocation() pads the degrees to three columns so a chart header's two
+// coordinates line up, and is.ichLocSplit counts those columns as fixed --
+// so the pad on a sub-90 LATITUDE is the byte the split consumes and the
+// latitude arrives trimmed, while the LONGITUDE keeps its own whenever it
+// is under 100 degrees: " 97:44'35W" beside a "30:16'01N" that lines up
+// with nothing. An edit field has nothing to line up with; trimmed for
+// the fields, for the same reason StrTimEditQt() trims SzTim(). The parse
+// back through RParseSz() reads leading spaces either way; Windows'
+// SetEditSZOA() sets the padded text, so this is a small deliberate
+// divergence from the oracle.
+
+static QString SzCoordEditQt(CONST char *sz)
+{
+  while (*sz == ' ')
+    sz++;
+  return QString(sz);
+}
+
+
 // Copy a dialog field's text into a fixed char buffer, truncated to
 // cchSzMax-1 characters plus the terminator. The one home for the
 // truncating copy the dialog store sides hand-rolled over twenty of.
@@ -2210,8 +2230,8 @@ static void RcAtlasApplyQt(QListWidget *plist,
   sprintf2(S(sz), "%s", SzLocation(is.rgae[iae].lon, is.rgae[iae].lat));
   us.fAnsiChar = nSav;
   sz[is.ichLocSplit] = chNull;
-  if (pcbLon != NULL) pcbLon->setEditText(&sz[0]);
-  if (pcbLat != NULL) pcbLat->setEditText(&sz[is.ichLocSplit+1]);
+  if (pcbLon != NULL) pcbLon->setEditText(SzCoordEditQt(&sz[0]));
+  if (pcbLat != NULL) pcbLat->setEditText(SzCoordEditQt(&sz[is.ichLocSplit+1]));
   if (peLoc != NULL) peLoc->setText(SzCity(iae));
 }
 #endif // ATLAS
@@ -2246,10 +2266,10 @@ static void RcLoadChartInfoQt(CONST QVector<RCBUILT> &rgbuilt, CONST CI *pci)
   sprintf2(S(sz), "%s", SzLocation(pci->lon, pci->lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
-  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInLon"), &sz[0],
-    RgstrLonQt());
+  FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInLon"),
+    SzCoordEditQt(&sz[0]), RgstrLonQt());
   FillComboQt((QComboBox *)PwRcFindQt(rgbuilt, "dcInLat"),
-    &sz[is.ichLocSplit+1], RgstrLatQt());
+    SzCoordEditQt(&sz[is.ichLocSplit+1]), RgstrLatQt());
   QLineEdit *peName = (QLineEdit *)PwRcFindQt(rgbuilt, "deInNam");
   QLineEdit *peLoc = (QLineEdit *)PwRcFindQt(rgbuilt, "deInLoc");
   if (peName != NULL)
@@ -3191,8 +3211,8 @@ void ShowDefaultInfoDialogQt()
   sprintf2(S(sz), "%s", SzLocation(ciDefa.lon, ciDefa.lat));
   us.fAnsiChar = nSavChar;
   sz[is.ichLocSplit] = chNull;
-  FillComboQt(pcbLon, &sz[0], RgstrLonQt());
-  FillComboQt(pcbLat, &sz[is.ichLocSplit+1], RgstrLatQt());
+  FillComboQt(pcbLon, SzCoordEditQt(&sz[0]), RgstrLonQt());
+  FillComboQt(pcbLat, SzCoordEditQt(&sz[is.ichLocSplit+1]), RgstrLatQt());
   FillComboQt(pcbElv, SzElevation(us.elvDef),
     QStringList() << "0m" << "1000ft");
   FillComboQt(pcbTmp, SzTemperature(us.tmpDef),

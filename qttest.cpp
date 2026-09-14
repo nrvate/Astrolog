@@ -8230,6 +8230,78 @@ static void TestChartInfoTimeQt()
 }
 
 
+// The longitude and latitude fields of the Set Chart Info dialog, read
+// the way StrChartInfoTimeQt() reads the time field beside it: the combos
+// are built from the resource and carry no object name, so their
+// suggestion lists are what identifies them.
+static void StrChartInfoCoordQt(QString *pstrLon, QString *pstrLat)
+{
+  DriveModalQt(ShowChartInfoDialogQt, [pstrLon, pstrLat](QWidget *pw) {
+    QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
+    for (int i = 0; i < rg.size(); i++) {
+      QStringList items;
+      for (int j = 0; j < rg[i]->count(); j++)
+        items << rg[i]->itemText(j);
+      if (items.contains("122W20")) {
+        if (pstrLon != NULL)
+          *pstrLon = rg[i]->currentText();
+      } else if (items.contains("47N36")) {
+        if (pstrLat != NULL)
+          *pstrLat = rg[i]->currentText();
+      }
+    }
+    pw->close();
+  });
+}
+
+
+static void TestChartInfoCoordQt()
+{
+  real lonSav = ciCore.lon, latSav = ciCore.lat;
+  // Austin, TX, in degrees: a longitude under 100, which is where the
+  // padding shows.
+  real lonWant = 97.0 + 44.0/60.0 + 35.0/3600.0;
+  real latWant = 30.0 + 16.0/60.0 + 1.0/3600.0;
+  QString strLon, strLat;
+
+  Group("Chart info coordinate fields");
+
+  // SzLocation() pads the degrees to three columns so a chart header's
+  // coordinates line up, and the field used to carry that pad: "97:44'35W"
+  // arrived as " 97:44'35W", beside a latitude the same split had already
+  // trimmed (the latitude's pad is the byte is.ichLocSplit consumes).
+  // The parse back through RParseSz() reads the pad either way, so the OK
+  // handler never noticed; same class of indent StrTimEditQt() trims,
+  // same direction as the "info-time" group above.
+  ciCore.lon = lonWant; ciCore.lat = latWant;
+  StrChartInfoCoordQt(&strLon, &strLat);
+  Check(!strLon.isEmpty(), "the longitude field was found at all");
+  Check(!strLon.startsWith(' '),
+    "a sub-100 longitude is not indented: \"%s\"",
+    strLon.toLocal8Bit().constData());
+  Check(RAbs(RParseSz(strLon.toLocal8Bit().constData(), pmLon) - lonWant)
+      < 1.0/3600.0,
+    "and it still reads back as the longitude set (\"%s\")",
+    strLon.toLocal8Bit().constData());
+  Check(!strLat.isEmpty() && !strLat.startsWith(' '),
+    "the latitude field is not indented either: \"%s\"",
+    strLat.toLocal8Bit().constData());
+  Check(RAbs(RParseSz(strLat.toLocal8Bit().constData(), pmLat) - latWant)
+      < 1.0/3600.0,
+    "and it still reads back as the latitude set (\"%s\")",
+    strLat.toLocal8Bit().constData());
+
+  // Three digits, where there was never any padding to trim: the same
+  // field has to be untouched.
+  ciCore.lon = 122.0 + 20.0/60.0;
+  StrChartInfoCoordQt(&strLon, NULL);
+  Check(strLon.startsWith("122"), "a three digit longitude is unchanged: "
+    "\"%s\"", strLon.toLocal8Bit().constData());
+
+  ciCore.lon = lonSav; ciCore.lat = latSav;
+}
+
+
 
 // Open the chart list, press Filter, and report what the list holds.
 static void FilterChartListQt(int *pcRow, QString *pstrRow0)
@@ -13801,6 +13873,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"ephemeris-list",       TestEphemerisListQt},
   {"chart-list",           TestChartListFilterQt},
   {"info-time",            TestChartInfoTimeQt},
+  {"info-coord",           TestChartInfoCoordQt},
   {"expression-hooks",     TestExpressionHooksQt},
   {"accel-text",           TestAccelTextQt},
   {"expression-functions", TestExpressionFunctionsQt},
