@@ -3519,10 +3519,11 @@ static void BuildAnimateMenu(QMainWindow *pwind)
     []() { SetAnimRunningQt(!FAnimRunningQt()); });
 
   QMenu *pmenuRate = pmenu->addMenu("&Jump Rate");
-  QAction *paNow = pmenuRate->addAction("Update to &Now");
-  ConnectMenuQt(paNow, pwind, []() { SetAnimRateQt(iAnimNow); });
-  pmenuRate->addSeparator();
   QActionGroup *pgroupRate = new QActionGroup(pwind);
+  // One of the rates, checked like them: Windows' cmdAnimateNow sits inside
+  // the RadioMenu(cmdAnimateNo1, cmdAnimateNo_13) range (wdriver.cpp:2295).
+  AddAnimRateAction(pmenuRate, pgroupRate, "Update to &Now", iAnimNow);
+  pmenuRate->addSeparator();
   AddAnimRateAction(pmenuRate, pgroupRate, "&Seconds", 1);
   AddAnimRateAction(pmenuRate, pgroupRate, "&Minutes", 2);
   AddAnimRateAction(pmenuRate, pgroupRate, "&Hours", 3);

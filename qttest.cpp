@@ -6825,6 +6825,27 @@ static void TestAnimationStateQt()
     paSecs == NULL || paRev == NULL)
     return;
 
+  // Update to Now is one of the rates, a radio item with them, as it is on
+  // Windows. It was a plain item here, never shown checked.
+  {
+    QAction *paNow = PaFindActionTestQt("Update to &Now");
+    Check(paNow != NULL, "Jump Rate has Update to Now");
+    if (paNow != NULL) {
+      paNow->trigger();
+      Check(NAbs(gs.nAnim) == iAnimNow && paNow->isChecked() &&
+        !paHours->isChecked() && !paSecs->isChecked(), "choosing it checks "
+        "it and no other rate (rate %d, checked %d)", NAbs(gs.nAnim),
+        paNow->isChecked());
+      paHours->trigger();
+      Check(!paNow->isChecked() && paHours->isChecked(),
+        "and another rate unchecks it");
+      gs.nAnim = -iAnimNow;
+      RedoMenuQt();
+      Check(paNow->isChecked() && !paHours->isChecked(), "and a rate of Now "
+        "set behind the menu's back is shown checked on the next redo");
+    }
+  }
+
   // The guard the timer itself uses.
 #define FRunningQt() (gs.nAnim >= 1 && !gi.fPause)
   gs.nAnim = -10; gi.fPause = fFalse;
