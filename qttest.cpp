@@ -1268,7 +1268,7 @@ static void TestGenerateGifQt()
   ga.fLoop = fTrue;
   s_iGifCancelQt = 1;
   {
-    char szPart[cchSzMax];
+    char szPart[cchSzMax + 8];   // Room for ".part" on the longest path.
     QFile fileOld(QString::fromLocal8Bit(szGif));
     QByteArray baOld;
 
@@ -14228,7 +14228,8 @@ static void TestSaveSuffixQt()
   {
     extern flag s_fSaveFileTestQt;
     extern QStringList s_rgstrSaveFileTestQt;
-    char szBase[cchSzMax], szTxt[cchSzMax];
+    // Room for the extension on a path of the longest a scratch path is.
+    char szBase[cchSzMax], szTxt[cchSzMax + 8];
     QString strAsked;
     int cAsked, iCase;
     Borrow bNoWrite(us.fNoWrite, fFalse);
