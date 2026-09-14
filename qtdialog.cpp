@@ -1190,7 +1190,47 @@ QString StrDefaultSuffixTestQt(CONST QString &str, CONST char *szExt)
 {
   return StrDefaultSuffixQt(str, szExt);
 }
+
+// The suite's stand-in for the file picker: while set, each save dialog
+// takes its next name from the list instead of asking, and an empty list
+// is a cancel.
+flag s_fSaveFileTestQt = fFalse;
+QStringList s_rgstrSaveFileTestQt;
 #endif
+
+
+// Ask for a file to save to, with the default extension added. The picker
+// asks before replacing the file it was given, but adding the extension
+// names a different file, and "june" typed over an existing june.gif
+// replaced it without a word. So that one is asked about here, in the
+// words of Windows' own dialog, whose default extension is added before
+// its question; No goes back to the picker, as it does there.
+
+static QString StrSaveFileNameQt(CONST char *szTitle, CONST QString &qsStart,
+  CONST QString &qsFilter, CONST char *szExt)
+{
+  QString qs, qsExt, qsDir = qsStart;
+
+  loop {
+#ifdef QTTEST
+    if (s_fSaveFileTestQt)
+      qs = s_rgstrSaveFileTestQt.isEmpty() ? QString() :
+        s_rgstrSaveFileTestQt.takeFirst();
+    else
+#endif
+    qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, qsDir, qsFilter);
+    if (qs.isEmpty())
+      return qs;
+    qsExt = StrDefaultSuffixQt(qs, szExt);
+    if (qsExt == qs || !QFileInfo::exists(qsExt) ||
+      QMessageBox::question(gi.qwind, "Confirm Save As",
+      QString("%1 already exists.\nDo you want to replace it?").arg(
+      QFileInfo(qsExt).fileName()), QMessageBox::Yes | QMessageBox::No,
+      QMessageBox::No) == QMessageBox::Yes)
+      return qsExt;
+    qsDir = qs;
+  }
+}
 
 
 // The shared body of the Save dialogs: pick a file, default its suffix,
@@ -1216,11 +1256,10 @@ static void SaveFileAsQt(CONST char *szTitle, CONST char *szStart,
   if (FNoWriteQt())
     return;
   qsStart = (szStart != NULL ? QString(szStart) : QString());
-  qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, qsStart,
-    QString(szFilter) + ";;All Files (*)");
+  qs = StrSaveFileNameQt(szTitle, qsStart,
+    QString(szFilter) + ";;All Files (*)", szExt);
   if (qs.isEmpty())
     return;
-  qs = StrDefaultSuffixQt(qs, szExt);
   QByteArray ba = qs.toLocal8Bit();
   FCloneSz(ba.constData(), &is.szFileOut);
   us.nWriteFormat = nWriteFormat;
@@ -1390,12 +1429,11 @@ static void ShowExportGraphicsDialogQt(CONST char *szTitle,
 {
   if (FNoWriteQt())
     return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, QString(),
-    QString(szFilter) + ";;All Files (*)");
+  QString qs = StrSaveFileNameQt(szTitle, QString(),
+    QString(szFilter) + ";;All Files (*)", szExt != NULL ? szExt :
+    (gs.chBmpMode != 'P' ? "bmp" : "png"));
   if (qs.isEmpty())
     return;
-  qs = StrDefaultSuffixQt(qs, szExt != NULL ? szExt :
-    (gs.chBmpMode != 'P' ? "bmp" : "png"));
   QByteArray ba = qs.toLocal8Bit();
   if (!FExportChartQt(ba.constData(), ft, fTrue))
     QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
@@ -1718,11 +1756,10 @@ void ShowGenerateGifDialogQt()
     n = 2*n - 2;
   if (n > cGifFrameMax)
     return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Animated GIF",
-    QString(), "GIF Images (*.gif);;All Files (*)");
+  QString qs = StrSaveFileNameQt("Save Animated GIF", QString(),
+    "GIF Images (*.gif);;All Files (*)", "gif");
   if (qs.isEmpty())
     return;
-  qs = StrDefaultSuffixQt(qs, "gif");
   QByteArray ba = qs.toLocal8Bit();
   ga.szFile = ba.data();
   FWriteGifQt(&ga, n);
@@ -1847,11 +1884,10 @@ void ShowExportTextDialogQt()
 {
   if (FNoWriteQt())
     return;
-  QString qs = QFileDialog::getSaveFileName(gi.qwind, SzExportTextTitleQt(),
-    QString(), SzExportTextFilterQt());
+  QString qs = StrSaveFileNameQt(SzExportTextTitleQt(), QString(),
+    SzExportTextFilterQt(), SzExportTextExtQt());
   if (qs.isEmpty())
     return;
-  qs = StrDefaultSuffixQt(qs, SzExportTextExtQt());
   QByteArray ba = qs.toLocal8Bit();
   // us.fTextHTML is passed through rather than forced, so the File
   // Settings "Export as HTML" choice still decides.

@@ -13998,6 +13998,68 @@ static void TestSaveSuffixQt()
   }
   printf("  a typed name gets the format's extension, and keeps its own\n");
 
+  // Adding the extension names another file, which the picker never saw:
+  // "june" typed over an existing june.txt replaced it without a word.
+  // Windows adds its default extension before OFN_OVERWRITEPROMPT asks.
+  // No goes back to the picker (here the stand-in, now empty: a cancel).
+  {
+    extern flag s_fSaveFileTestQt;
+    extern QStringList s_rgstrSaveFileTestQt;
+    char szBase[cchSzMax], szTxt[cchSzMax];
+    QString strAsked;
+    int cAsked, iCase;
+    Borrow bNoWrite(us.fNoWrite, fFalse);
+    Borrow bHTML(us.fTextHTML, fFalse);
+    Borrow bTest(s_fSaveFileTestQt, fTrue);
+
+    SzScratchPathQt(S(szBase), "replace", "");
+    sprintf2(S(szTxt), "%s.txt", szBase);
+    // 0: typed without the extension, answer No. 1: the same, answer Yes.
+    // 2: typed with it, which is the picker's own question, not this one.
+    for (iCase = 0; iCase < 3; iCase++) {
+      QFile file(QString::fromLocal8Bit(szTxt));
+      QByteArray ba;
+      if (file.open(QIODevice::WriteOnly)) {
+        file.write("keep");
+        file.close();
+      }
+      s_rgstrSaveFileTestQt.clear();
+      s_rgstrSaveFileTestQt.append(QString::fromLocal8Bit(iCase < 2 ?
+        szBase : szTxt));
+      cAsked = 0;
+      strAsked.clear();
+      DriveModalQt(ShowExportTextDialogQt, [&](QWidget *pw) {
+        QMessageBox *pmb = qobject_cast<QMessageBox *>(pw);
+        cAsked++;
+        if (pmb != NULL) {
+          strAsked = pmb->windowTitle() + ": " + pmb->text();
+          pmb->button(iCase == 0 ? QMessageBox::No : QMessageBox::Yes)->
+            click();
+        } else
+          pw->close();
+      });
+      if (file.open(QIODevice::ReadOnly)) {
+        ba = file.readAll();
+        file.close();
+      }
+      if (iCase == 0)
+        Check(cAsked == 1 && strAsked.contains("already exists") &&
+          ba == "keep", "\"replace\" typed over an existing replace.txt "
+          "asks first, and No leaves it alone (asked %d: \"%s\"; %d bytes)",
+          cAsked, strAsked.toLocal8Bit().constData(), (int)ba.size());
+      else if (iCase == 1)
+        Check(cAsked == 1 && ba != "keep" && ba.size() > 0,
+          "and Yes replaces it (asked %d; %d bytes)", cAsked,
+          (int)ba.size());
+      else
+        Check(cAsked == 0 && ba != "keep" && ba.size() > 0,
+          "a name typed with its extension is not asked about twice "
+          "(asked %d; %d bytes)", cAsked, (int)ba.size());
+    }
+    s_rgstrSaveFileTestQt.clear();
+    remove(szTxt);
+  }
+
   // The other half of the same Windows code (DlgSaveChart, cmdSaveText):
   // title, filter AND extension all follow us.fTextHTML. Only the
   // extension did here, so "Export as HTML" opened a picker titled
