@@ -12643,6 +12643,120 @@ static CONST ATLASZONE rgatlaszoneQt[] = {
 // does not scribble a city listing through the suite's output.
 static void SinkAtlasRowQt(CONST char *, int) { }
 
+// Progressions and directions, pinned against numbers from OUTSIDE this
+// repository: pyswisseph (upstream Swiss Ephemeris 2.10.03), scripted in
+// the progress branch's scratch refs.py, which states every convention it
+// computes under. Natal chart: 19 Nov 1971 11:01 PST, Seattle, Placidus,
+// tropical, geocentric; progressed to 13 Sep 2026. Each row is the MC, the
+// Ascendant, and the Sun, Moon and Mars, in degrees; the tolerance is 0.02
+// arcminute.
+
+typedef struct _PROGREFQT {
+  CONST char *szCase;   // The switches the row stands for.
+  int nProg;            // us.nProgress
+  flag fRAMC;           // us.fProgRAMC ("=pc")
+  real rgr[5];          // MC, Asc, Sun, Moon, Mars
+} PROGREFQT;
+
+static CONST PROGREFQT rgprogrefQt[] = {
+  {"-p",      ptCast,     fFalse,
+    {211.38945, 270.80603, 292.51399, 258.43915,  11.58140}},
+  {"-p0",     ptSolarArc, fFalse,
+    {279.24917, 338.20421, 292.51399, 311.88859,  33.03053}},
+  {"-p1",     ptMixed,    fFalse,
+    {279.24917, 338.20421, 292.51399, 258.43915,  11.58140}},
+  {"-p0 =pc", ptSolarArc, fTrue,
+    {279.24917,  20.49878, 292.51399, 311.88859,  33.03053}},
+  {"-p1 =pc", ptMixed,    fTrue,
+    {279.24917,  20.49878, 292.51399, 258.43915,  11.58140}},
+};
+
+static void TestProgressionsQt()
+{
+  static CONST int rgobjProg[5] = {oMC, oAsc, oSun, oMoo, oMar};
+  static CONST char *rgszProg[5] = {"MC", "Asc", "Sun", "Moon", "Mars"};
+  CI ciCoreSav = ciCore, ciMainSav = ciMain, ciDefaSav = ciDefa;
+  flag rgfIgnoreSav[objMax];
+  real rMC;
+  int i, j;
+
+  Group("Progressions and directions");
+  for (i = 0; i < objMax; i++)
+    rgfIgnoreSav[i] = ignore[i];
+  {
+    // The oracle's borrow list: one engine, no chart transformations.
+    Borrow bEphem(us.fEphemFiles, fTrue), bSid(us.fSidereal, fFalse);
+    Borrow bMat(us.fMatrixPla, fFalse);
+    Borrow bSwiss(us.nSwissEph, 0), bNoOld(us.fNoOldCalc, fFalse);
+    Borrow b3D(us.fHouse3D, fFalse), bProg(us.fProgress, fTrue);
+    Borrow bEqu(us.fEquator, fFalse), bEqu2(us.fEquator2, fFalse);
+    Borrow bFlip(us.fFlip, fFalse), bGeo(us.fGeodetic, fFalse);
+    Borrow bRotW(us.fObjRotWhole, fFalse), bExp(us.fExpOff, fTrue);
+    Borrow bCtr(us.objCenter, (int)oEar), bRel(us.nRel, (int)rcNone);
+    Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+    Borrow bCusp(us.rCuspAddition, 0.0), bObjAdd(us.rObjAddition, 0.0);
+    Borrow bTopo(us.fTopoPos, fFalse), bTrue(us.fTruePos, fFalse);
+    Borrow bNut(us.fNoNutation, fFalse);
+    Borrow bDT(us.rDeltaT, rInvalid);
+    Borrow bBary(us.fBarycenter, fFalse), bHel(us.fHouseAngle, fFalse);
+    Borrow bAsc(us.objOnAsc, 0), bRot1(us.objRot1, 0), bRot2(us.objRot2, 0);
+    Borrow bHarm(us.rHarmonic, 1.0);
+    Borrow bDecan(us.fDecan, fFalse);
+    Borrow bDwad(us.nDwad, 0), bNav(us.fNavamsa, fFalse);
+    Borrow bHouse(us.nHouseSystem, (int)hsPlacidus);
+    Borrow bMethod(us.nProgress, (int)ptCast), bRAMC(us.fProgRAMC, fFalse);
+    Borrow bArc(us.objProgArc, (int)oSun);
+    Borrow bDay(us.rProgDay, rDayInYear), bCuspR(us.rProgCusp, 1.0);
+    Borrow bJDp(is.JDp);
+    for (i = 0; i < 5; i++)
+      ignore[rgobjProg[i]] = fFalse;
+
+    // The natal chart, and default chart info as the maintainer keeps it:
+    // Pacific zone with the Daylight field fixed ON, which is what exposes
+    // a target moment resolved against the defaults rather than the date.
+    ciCore = ciMain;
+    SetCI(ciCore, 11, 19, 1971, HM(11, 1), 0.0, 8.0,
+      122.0 + 19.0/60.0 + 59.0/3600.0, 47.0 + 36.0/60.0 + 35.0/3600.0);
+    ciCore.nam = ciCore.loc = NULL;
+    SetCI(ciDefa, 1, 1, 2000, 0.0, 1.0, 8.0, ciCore.lon, ciCore.lat);
+    ciDefa.nam = ciDefa.loc = NULL;
+
+    for (j = 0; j < (int)(sizeof(rgprogrefQt)/sizeof(PROGREFQT)); j++) {
+      CONST PROGREFQT *ppr = &rgprogrefQt[j];
+      us.nProgress = ppr->nProg;
+      us.fProgRAMC = ppr->fRAMC;
+      is.JDp = MdytszToJulian(9, 13, 2026, 0.0, 1.0, 8.0);
+      CastChart(1);
+      for (i = 0; i < 5; i++) {
+        real rD = MinDistance(planet[rgobjProg[i]], ppr->rgr[i]) * 60.0;
+        Check(rD <= 0.02, "%s to 13 Sep 2026: %s %.5f, reference %.5f "
+          "(%.3f' off)", ppr->szCase, rgszProg[i], planet[rgobjProg[i]],
+          ppr->rgr[i], rD);
+      }
+    }
+
+    // Recalculating the cusps from the directed MC must give that MC back:
+    // the MC is converted to a RAMC and houses are cast from it, so any
+    // frame mismatch between the two steps moves it. Tighter than the
+    // table, because a mean-for-true obliquity slip is 0.006' here.
+    us.nProgress = ptSolarArc;
+    us.fProgRAMC = fFalse;
+    is.JDp = MdytszToJulian(9, 13, 2026, 0.0, 1.0, 8.0);
+    CastChart(1);
+    rMC = planet[oMC];
+    us.fProgRAMC = fTrue;
+    CastChart(1);
+    Check(MinDistance(rMC, planet[oMC]) < 1.0e-6,
+      "=pc recalculates the cusps from the directed MC and keeps it "
+      "(%.7f, then %.7f)", rMC, planet[oMC]);
+  }
+  for (i = 0; i < objMax; i++)
+    ignore[i] = rgfIgnoreSav[i];
+  ciCore = ciCoreSav; ciMain = ciMainSav; ciDefa = ciDefaSav;
+  CastChart(1);
+}
+
+
 static void TestAtlasZoneQt()
 {
   void (*pfnSav)(CONST char *, int) = pfnAtlasRow;
@@ -14959,6 +15073,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"long-strings",         TestLongStringsQt},
   {"file-parsers",         TestFileParsersQt},
   {"matrix-julian",        TestMatrixJulianQt},
+  {"progressions",         TestProgressionsQt},
   {"oracle",               TestNumericOracleQt},
   // LAST ON PURPOSE, and the runner asserts it stays last. This group
   // opens all 25 dialogs and OKs each of them twice, which is the point

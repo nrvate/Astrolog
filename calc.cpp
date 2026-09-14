@@ -1293,7 +1293,12 @@ static void ComputeChartProgressions()
   if (us.fProgRAMC) {
     k = us.fGeodetic; us.fGeodetic = fTrue;
     r = Tropical(planet[oMC]); r2 = 0.0;
-    EclToEqu(&r, &r2);
+    // With the TRUE obliquity, which is what SwissHouse() casts the houses
+    // with. is.OB is the mean one (SwissHouse's "*ob = eps"), and converting
+    // with it put the recalculated MC 0.37" of arc short of the directed MC
+    // it was derived from, for the chart of 19 Nov 1971 progressed to 2026.
+    CoorXform(&r, &r2, RObliquityTrue(JulianDayFromTime(
+      us.nProgress == ptSolarArc ? is.T : is.Tp)));
     r = Untropical(r);
     SwissHouse(us.nProgress == ptSolarArc ? is.T : is.Tp,
       rDegMax - r, AA, us.nHouseSystem, &r, &r, &r, &r, &r, &r, &r, &r);
@@ -3801,6 +3806,22 @@ void SwissHouse(real jd, real lon, real lat, int housesystem, real *asc,
     is.nHouseSystem = housesystem;
     FEnsureHousePartition(housesystem);
   }
+}
+
+
+// Return the true obliquity of the ecliptic (mean obliquity plus nutation in
+// obliquity) at a Julian day, computed exactly as SwissHouse() computes the
+// value it casts houses with. SwissHouse()'s own "ob" output is the MEAN
+// obliquity, so it can't be used to put a point into the same frame as the
+// houses it returns.
+
+real RObliquityTrue(real jd)
+{
+  double nutlo[2], tjde;
+
+  tjde = jd + (us.rDeltaT == rInvalid ? swe_deltat(jd) : us.rDeltaT/86400.0);
+  swi_nutation(tjde, 0, nutlo);
+  return swi_epsiln(tjde, 0) * RADTODEG + nutlo[1] * RADTODEG;
 }
 
 

@@ -557,6 +557,7 @@ extern flag FSwissPlanet
   P((int, real, int, real *, real *, real *, real *, real *, real *));
 extern void SwissHouse P((real, real, real, int,
   real *, real *, real *, real *, real *, real *, real *, real *));
+extern real RObliquityTrue P((real));
 extern void SwissComputeStars P((real, flag));
 extern flag SwissComputeStar P((real, ES *));
 extern flag SwissComputeStarSort P((real, ES *));
