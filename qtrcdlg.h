@@ -381,11 +381,11 @@ static CONST RCCTL rgctlDefault[] = {
 #define dxDefault 415
 #define dyDefault 142
 
-// dlgProgress -- 281 x 132 dialog units, from astrolog.rc
+// dlgProgress -- 281 x 162 dialog units, from astrolog.rc
 #define szTitleProgress "Progressions"
 static CONST RCCTL rgctlProgress[] = {
-  {ctlButton, "OK", "IDOK", -1, 225,115,50,14},
-  {ctlButton, "Cancel", "IDCANCEL", -1, 170,115,50,14},
+  {ctlButton, "OK", "IDOK", -1, 225,145,50,14},
+  {ctlButton, "Cancel", "IDCANCEL", -1, 170,145,50,14},
   {ctlButton, "&Now", "dbPr_pn", -1, 115,5,50,14},
   {ctlCheck,  "Do &Progression", "dxPr_p", -1, 5,5,85,10},
   {ctlRadio,  "&Secondary (Calculated Cusps)", "dr", 1, 10,35,110,10},
@@ -395,6 +395,8 @@ static CONST RCCTL rgctlProgress[] = {
   {ctlCombo,  "", "dcPr_pC", -1, 70,80,90,50},
   {ctlEdit,   "", "dePr_pO", -1, 120,95,40,13},
   {ctlCheck,  "Solar Arc Cusps &Recalculated with New MC", "dxPr_pc", -1, 10,110,150,10},
+  {ctlCombo,  "", "dcPr_pa", -1, 70,125,90,50},
+  {ctlCheck,  "Con&verse Progression", "dxPr_pv", -1, 10,140,150,10},
   {ctlCombo,  "", "dcPrMon", -1, 215,15,55,115},
   {ctlCombo,  "", "dcPrDay", -1, 215,30,55,65},
   {ctlCombo,  "", "dcPrYea", -1, 215,45,55,110},
@@ -404,19 +406,20 @@ static CONST RCCTL rgctlProgress[] = {
   {ctlLabel,  "Degrees Per Day:", "IDC_STATIC", -1, 10,65,57,8},
   {ctlLabel,  "Cusp Move Ratio:", "IDC_STATIC", -1, 10,80,57,8},
   {ctlLabel,  "Solar Arc Based on This Planet:", "IDC_STATIC", -1, 10,95,100,8},
+  {ctlLabel,  "Direction Arc:", "IDC_STATIC", -1, 10,125,57,8},
   {ctlLabel,  "Month:", "IDC_STATIC", -1, 175,15,35,8},
   {ctlLabel,  "Day:", "IDC_STATIC", -1, 175,30,35,8},
   {ctlLabel,  "Year:", "IDC_STATIC", -1, 175,45,35,8},
   {ctlLabel,  "Time:", "IDC_STATIC", -1, 175,60,35,8},
   {ctlLabel,  "Daylight:", "IDC_STATIC", -1, 175,75,35,8},
   {ctlLabel,  "Zone:", "IDC_STATIC", -1, 175,90,35,8},
-  {ctlGroup,  "Progression Type", "IDC_STATIC", -1, 5,25,160,100},
+  {ctlGroup,  "Progression Type", "IDC_STATIC", -1, 5,25,160,130},
   {ctlGroup,  "Progressed Chart Info", "IDC_STATIC", -1, 170,5,105,105},
   {ctlIcon,   "", "icon", 3, 135,35,21,20},
 };
 #define cctlProgress (int)(sizeof(rgctlProgress) / sizeof(RCCTL))
 #define dxProgress 281
-#define dyProgress 132
+#define dyProgress 162
 
 // dlgTransit -- 225 x 232 dialog units, from astrolog.rc
 #define szTitleTransit "Transits"

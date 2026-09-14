@@ -2689,6 +2689,8 @@ CONST real rgrProg[4] =
   {rDayInYear * rDegMax, rDayInYear, 29.530588, 27.321661};
 CONST char *rgszProgCusp[2] = {"Quotidian", "Solar"};
 CONST real rgrProgCusp[2] = {1.0, rDayInYear};
+CONST char *rgszProgArc[4] =
+  {"Solar Arc", "Solar Arc in RA", "Naibod", "Naibod in RA"};
 
 // Processing function for the progression settings dialog, as brought up with
 // the Chart / Progressions menu command.
@@ -2696,7 +2698,7 @@ CONST real rgrProgCusp[2] = {1.0, rDayInYear};
 flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
 {
   char sz[cchSzMax], szT[cchSzDef];
-  int npO, mon, day, yea, i;
+  int npO, npa, mon, day, yea, i;
   real tim, dst, zon, rd, rC;
 
   switch (message) {
@@ -2725,6 +2727,13 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
     else
       SetEdit(dePr_pO, "None");
     SetCheck(dxPr_pc, us.fProgRAMC);
+    for (i = 0; i < 4; i++) {
+      sprintf2(S(sz), "%d %s", i, rgszProgArc[i]);
+      SetCombo(dcPr_pa, sz);
+      if (us.nProgArc == i)
+        SetEdit(dcPr_pa, sz);
+    }
+    SetCheck(dxPr_pv, us.fProgConverse);
     SetEditMDYT(hdlg, dcPrMon, dcPrDay, dcPrYea, dcPrTim,
       MonT, DayT, YeaT, TimT);
     SetEditSZOA(hdlg, dcPrDst, dcPrZon, dcDeLon, dcDeLat,
@@ -2752,6 +2761,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
         rd = rDayInYear / rd;
       rC = GetEditR(hdlg, dcPr_pC);
       GetEdit(dePr_pO, sz); npO = NParseSz(sz, pmObject);
+      GetEdit(dcPr_pa, sz); npa = NFromSz(sz);
       GetEdit(dcPrMon, sz); mon = NParseSz(sz, pmMon);
       GetEdit(dcPrDay, sz); day = NParseSz(sz, pmDay);
       GetEdit(dcPrYea, sz); yea = NParseSz(sz, pmYea);
@@ -2761,6 +2771,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
       EnsureR(rd, rd != 0.0, "degree per day");
       EnsureR(rC, rC != 0.0, "cusp move ratio");
       EnsureN(npO, FValidProgArc(npO), "solar arc planet");
+      EnsureN(npa, FValidProgArcType(npa), "direction arc");
       EnsureN(mon, FValidMon(mon), "month");
       EnsureN(yea, FValidYea(yea), "year");
       EnsureN(day, FValidDay(day, mon, yea), "day");
@@ -2775,6 +2786,8 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
       us.rProgCusp = rC;
       us.objProgArc = npO;
       us.fProgRAMC = GetCheck(dxPr_pc);
+      us.nProgArc = npa;
+      us.fProgConverse = GetCheck(dxPr_pv);
       SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
       SetProgressTarget(MonT, DayT, YeaT, TimT);
       wi.fCast = fTrue;

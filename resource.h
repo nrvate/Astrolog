@@ -215,6 +215,7 @@
 #define dck31                           1138
 #define dcPr_pC                         1139
 #define dcPr_pd                         1140
+#define dcPr_pa                         1733
 #define dcPrDay                         1141
 #define dcPrDst                         1142
 #define dcPrMon                         1143
@@ -691,6 +692,7 @@
 #define dxMo_Ym                         1582
 #define dxPr_p                          1583
 #define dxPr_pc                         1584
+#define dxPr_pv                         1734
 #define dxSe_10                         1585
 #define dxSe_A3                         1586
 #define dxSe_Ap                         1587
@@ -1179,7 +1181,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        226
 #define _APS_NEXT_COMMAND_VALUE         40366
-#define _APS_NEXT_CONTROL_VALUE         1733
+#define _APS_NEXT_CONTROL_VALUE         1735
 #define _APS_NEXT_SYMED_VALUE           102
 #endif
 #endif

@@ -12852,6 +12852,43 @@ static void TestProgressionsQt()
 }
 
 
+// The Progressions dialog's direction arc and converse controls, driven:
+// they must show the settings they load from and store what they are left
+// holding, in the Qt build as in dlgProgress on Windows.
+
+static void TestProgressDialogQt()
+{
+  Borrow bOn(us.fProgress), bMethod(us.nProgress);
+  Borrow bJDp(is.JDp);
+  Borrow bArcType(us.nProgArc, (int)paNaibod);
+  Borrow bConv(us.fProgConverse, fTrue);
+  CI ciTranSav = ciTran;
+  QString strArc;
+  int nConv = -1;
+
+  Group("Progressions dialog");
+  DriveModalQt(ShowProgressDialogQt, [&](QWidget *pw) {
+    QComboBox *pcb = pw->findChild<QComboBox *>("dcPr_pa");
+    QCheckBox *pck = pw->findChild<QCheckBox *>("dxPr_pv");
+    if (pcb != NULL && pck != NULL) {
+      strArc = pcb->currentText();
+      nConv = pck->isChecked();
+      pcb->setEditText("3 Naibod in RA");
+      pck->setChecked(fFalse);
+    }
+    FClickButtonQt(pw, "IDOK");
+  });
+  Check(strArc.startsWith("2 "), "the direction arc box shows -pa 2 "
+    "(\"%s\")", strArc.toLocal8Bit().constData());
+  Check(nConv == 1, "the converse box shows =pv (%d)", nConv);
+  Check(us.nProgArc == paNaibodRA, "OK stores the direction arc (%d)",
+    us.nProgArc);
+  Check(!us.fProgConverse, "OK stores the converse box (%d)",
+    us.fProgConverse);
+  ciTran = ciTranSav;
+}
+
+
 static void TestAtlasZoneQt()
 {
   void (*pfnSav)(CONST char *, int) = pfnAtlasRow;
@@ -15169,6 +15206,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"file-parsers",         TestFileParsersQt},
   {"matrix-julian",        TestMatrixJulianQt},
   {"progressions",         TestProgressionsQt},
+  {"progress-dialog",      TestProgressDialogQt},
   {"oracle",               TestNumericOracleQt},
   // LAST ON PURPOSE, and the runner asserts it stays last. This group
   // opens all 25 dialogs and OKs each of them twice, which is the point

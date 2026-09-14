@@ -3724,6 +3724,8 @@ static CONST real rgrProgQt[4] =
   {rDayInYear * rDegMax, rDayInYear, 29.530588, 27.321661};
 static CONST char *rgszProgCuspQt[2] = {"Quotidian", "Solar"};
 static CONST real rgrProgCuspQt[2] = {1.0, rDayInYear};
+static CONST char *rgszProgArcQt[4] =
+  {"Solar Arc", "Solar Arc in RA", "Naibod", "Naibod in RA"};
 
 // Progressions, transcribed from dlgProgress.
 
@@ -3732,7 +3734,7 @@ void ShowProgressDialogQt()
   QDialog dlg(gi.qwind);
   QVector<RCBUILT> rgbuilt;
   char sz[cchSzMax], szT[cchSzDef];
-  int npO, mon, day, yea, i;
+  int npO, npa, mon, day, yea, i;
   real tim, dst, zon, rd, rC;
 
   dlg.setWindowTitle(szTitleProgress);
@@ -3744,6 +3746,8 @@ void ShowProgressDialogQt()
   QComboBox *pcbRate = (QComboBox *)PwRcFindQt(rgbuilt, "dcPr_pd");
   QComboBox *pcbCusp = (QComboBox *)PwRcFindQt(rgbuilt, "dcPr_pC");
   QLineEdit *peArc = (QLineEdit *)PwRcFindQt(rgbuilt, "dePr_pO");
+  QComboBox *pcbArcType = (QComboBox *)PwRcFindQt(rgbuilt, "dcPr_pa");
+  QCheckBox *pcbConverse = (QCheckBox *)PwRcFindQt(rgbuilt, "dxPr_pv");
   QComboBox *pcbMon = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrMon");
   QComboBox *pcbDay = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrDay");
   QComboBox *pcbYea = (QComboBox *)PwRcFindQt(rgbuilt, "dcPrYea");
@@ -3786,6 +3790,21 @@ void ShowProgressDialogQt()
   }
   if (peArc != NULL)
     peArc->setText(SzObjNameQt(us.objProgArc));
+  // The direction arc offers its four choices by number and name, the
+  // number being what is read back, as the rate list does.
+  if (pcbArcType != NULL) {
+    QStringList rgstr;
+    QString strCur;
+    for (i = 0; i < 4; i++) {
+      sprintf2(S(sz), "%d %s", i, rgszProgArcQt[i]);
+      rgstr << sz;
+      if (us.nProgArc == i)
+        strCur = sz;
+    }
+    FillComboQt(pcbArcType, strCur, rgstr);
+  }
+  if (pcbConverse != NULL)
+    pcbConverse->setChecked(us.fProgConverse != 0);
 
   sprintf2(S(sz), "%.3s", szMonth[FValidMon(MonT) ? MonT : 1]);
   FillComboQt(pcbMon, sz, RgstrMonthQt());
@@ -3821,6 +3840,11 @@ void ShowProgressDialogQt()
     SzFieldQt(sz, peArc->text());
     npO = NParseSz(sz, pmObject);
   }
+  npa = us.nProgArc;
+  if (pcbArcType != NULL) {
+    SzFieldQt(sz, pcbArcType->currentText());
+    npa = NFromSz(sz);
+  }
   mon = pcbMon != NULL ?
     NParseSz(pcbMon->currentText().toLocal8Bit().constData(), pmMon) : MonT;
   day = pcbDay != NULL ?
@@ -3837,6 +3861,7 @@ void ShowProgressDialogQt()
   if (rd == 0.0)                { ErrorEnsureQt(&dlg, 0, "degree per day"); return; }
   if (rC == 0.0)                { ErrorEnsureQt(&dlg, 0, "cusp move ratio"); return; }
   if (!FValidProgArc(npO))      { ErrorEnsureQt(&dlg, npO, "solar arc planet"); return; }
+  if (!FValidProgArcType(npa))  { ErrorEnsureQt(&dlg, npa, "direction arc"); return; }
   if (!FValidMon(mon))          { ErrorEnsureQt(&dlg, mon, "month"); return; }
   if (!FValidYea(yea))          { ErrorEnsureQt(&dlg, yea, "year"); return; }
   if (!FValidDay(day, mon, yea)) { ErrorEnsureQt(&dlg, day, "day"); return; }
@@ -3853,6 +3878,9 @@ void ShowProgressDialogQt()
   us.objProgArc = npO;
   if (pcbRAMC != NULL)
     us.fProgRAMC = pcbRAMC->isChecked();
+  us.nProgArc = npa;
+  if (pcbConverse != NULL)
+    us.fProgConverse = pcbConverse->isChecked();
   SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
   SetProgressTarget(MonT, DayT, YeaT, TimT);
   SyncProgressMenuQt();
