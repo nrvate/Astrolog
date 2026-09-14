@@ -291,4 +291,8 @@ uninstall:
 # Compiler-generated header dependencies; see Makefile.qt for the
 # reasoning and what the hand-written version missed.
 -include $(OBJS:.o=.d)
+
+# An object with no .d is out of date; see Makefile.qt.
+$(OBJS:.o=.d):
+$(OBJS): %.o: %.d
 #

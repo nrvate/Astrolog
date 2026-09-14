@@ -138,6 +138,10 @@ step "w-switch-arity (Qt)"       tools/w-switch-arity.sh ./astrolog-qt-test
 # review's wider buffer moved that split rather than removing it.
 step "long prompt line refused"  tools/long-prompt-check.sh ./astrolog
 
+# An object with no .d beside it is rebuilt, since make cannot otherwise
+# know its headers; a stale xdata.o broke animated GIFs (Makefile.qt).
+step "objects without .d rebuilt"  tools/stale-object-check.sh
+
 # The other two toolchains, when this machine has them. Both are here
 # because their absence has cost this project real time: Makefile.win
 # went 62 commits without compiling while three work log items listed

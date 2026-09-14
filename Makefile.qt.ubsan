@@ -128,4 +128,8 @@ clean:
 # not wedge the build.
 -include $(OBJS:.o=.d)
 
+# An object with no .d is out of date; see Makefile.qt.
+$(OBJS:.o=.d):
+$(OBJS): %.o: %.d
+
 .PHONY: clean

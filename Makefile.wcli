@@ -74,4 +74,8 @@ clean:
 # Compiler-generated header dependencies; see Makefile.qt.
 -include $(OBJ:.o=.d)
 
+# An object with no .d is out of date; see Makefile.qt.
+$(OBJ:.o=.d):
+$(OBJ): %.o: %.d
+
 .PHONY: clean

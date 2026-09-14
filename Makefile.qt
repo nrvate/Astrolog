@@ -147,4 +147,16 @@ clean:
 # not wedge the build.
 -include $(OBJS:.o=.d)
 
+# An object with no .d beside it is out of date, whatever its timestamp.
+# The -include above only knows the headers of objects that HAVE a .d, so
+# an object built without -MMD -- by hand, or by a tool that overrides the
+# compile rule -- was never rebuilt when a header changed. That shipped a
+# Qt build (2026-09-14) whose xdata.o still defined the old, smaller GI
+# struct while every other object wrote the new GIF fields past its end:
+# animated GIFs failed on their first frame and the chart turned white.
+# The empty rule makes a missing .d count as just remade, which rebuilds
+# its object; tools/stale-object-check.sh holds this in make check.
+$(OBJS:.o=.d):
+$(OBJS): %.o: %.d
+
 .PHONY: clean
