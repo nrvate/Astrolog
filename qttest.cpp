@@ -624,7 +624,7 @@ static void TestAboutVersionQt()
       pw->close();
   });
   QString strExpected = QString("%1 version %2 (Qt)%3").arg(szAppName,
-    szVersionCore,
+    szVersionQt,
     szVersionGit[0] ? QString(" [%1]").arg(szVersionGit) : QString());
   Check(!strGot.isEmpty(), "no version label found in the About dialog");
   if (!strGot.isEmpty())

@@ -10944,6 +10944,11 @@ this is the note that explains the wall of dialogs.
     putting `" ` into the settings sweeps' markers, which failed on the
     old writer and pass now. QTTEST_REVIEW_IMPLEM.md, third batch.
 
+263. **The About box showed upstream's version, not the fork's.** Its
+    version line used `szVersionCore`, "8.00". It uses `szVersionQt` now:
+    "Astrolog version 8.00-qt.20 (Qt)" and the commit in brackets.
+    `about-version` updated to require it.
+
 265. **The Linux taskbar showed a rocket for the port, and the port was
     right.** Measured on the running window: `WM_CLASS` "astrolog" and
     `_NET_WM_ICON` at 16, 32 and 48. Cinnamon's window tracker, queried

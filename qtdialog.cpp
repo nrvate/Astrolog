@@ -3859,7 +3859,7 @@ void ShowAboutDialogQt()
   // Windows and macOS, so naming a platform here was wrong on two of
   // them -- the Windows package said "for Linux (Qt)".
   QLabel *plabelVer = new QLabel(
-    QString("%1 version %2 (Qt)%3").arg(szAppName, szVersionCore,
+    QString("%1 version %2 (Qt)%3").arg(szAppName, szVersionQt,
     szVersionGit[0] ? QString(" [%1]").arg(szVersionGit) : QString()));
   QFont fontBold = plabelVer->font();
   fontBold.setBold(true);
