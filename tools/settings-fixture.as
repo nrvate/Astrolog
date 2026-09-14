@@ -165,8 +165,7 @@
 ; a writer that stopped short of the END of a span -- "-YjA" at 18 of 24,
 ; "-Y7O" skipping 11-33 and 52-83 -- matched every EXPECT here for years.
 ; Each ranged switch now also sets the last index its registry row accepts
-; (fixture_coverage_audit.py checks it). "-YkA" is the one missing, and
-; that audit says why.
+; (fixture_coverage_audit.py checks it).
 -YAo 24 24 1.5          ; EXPECT ^-YAo 19 24 .* 1\.5 +; Very
 -YAm 84 84 7            ; EXPECT ^-YAm 84 84 +7 +;
 -YAd 84 84 2            ; EXPECT ^-YAd 84 84 +2 +;
@@ -174,6 +173,7 @@
 -YjT 84 84 61           ; EXPECT ^-YjT 84 84 +61 +;
 -YjC 12 12 7            ; EXPECT ^-YjC 1 12 .* 7 +; Houses
 -YjA 24 24 0.35         ; EXPECT ^-YjA 19 24 .* 0\.35 +; Very
+-YkA 24 24 Sky          ; EXPECT ^-YkA 19 24 .* Sky +; Extra
 ; A value of 10 or more, which "%4.1f" wrote with no space before it.
 -YjA 20 20 12.5         ; EXPECT ^-YjA 19 24 +0\.05 12\.5 0\.05
 -YR 133 133 0           ; EXPECT ^-YR 109 133 .* 1 0 +; Fixed

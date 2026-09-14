@@ -64,8 +64,6 @@ from defaults_audit import build_symbols  # noqa: E402
 # Rows whose last index the fixture cannot assert yet, each with the reason.
 # The audit fails when one of these is covered after all: drop the entry.
 SPAN_EXEMPT = {
-    'YkA': 'the writer stops at aspect 18, so a sentinel at 24 would fail '
-           'leg 3; that gap is fixed on its own branch, which drops this',
 }
 
 
