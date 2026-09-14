@@ -11024,6 +11024,21 @@ this is the note that explains the wall of dialogs.
     Start Menu shortcut into the real home, where it outlives the prefix.
     The script sets `WINEDLLOVERRIDES=winemenubuilder.exe=d` now.
 
+266. **Progressions: two shared-core errors, and the directions Solar Fire
+    offers.** An audit against upstream Swiss Ephemeris (pyswisseph
+    2.10.03) of the chart of 19 Nov 1971 Seattle found two real errors.
+    `=pc` converted the directed MC to a RAMC with `is.OB`, which is
+    SwissHouse's *mean* obliquity, then cast houses with the true one, so
+    the MC came back 0.37" short of itself and the Ascendant 0.013' off;
+    `RObliquityTrue()` fixed it. And the `-p` target moment was 0:00 in the
+    *default* zone and Daylight field, so with `-z0 1` every winter target
+    was an hour early -- 2.3' on a quotidian MC. It is resolved in
+    CastChart() now, against the natal chart. Then `-pa` and `-pv` added
+    right ascension, Naibod and converse directions; see "Features this
+    fork adds to both builds". The `progressions` group pins 22 charts and
+    two target dates against the pyswisseph script, and every piece was
+    sabotaged to a named failure.
+
 
 ## Features this fork adds to both builds
 
@@ -11530,6 +11545,57 @@ of them fail with the fix removed.
 
 The menu parity test requires every Qt-only menu item to be listed in
 `rgqtonlyQt[]` with a reason, and "Generate Animation..." is there.
+
+### Directions in right ascension, by Naibod, and converse
+
+`-pa <0-3>` and `-pv`, in `NSwp()`, saved as `:pa` and `=pv`/`_pv`, and
+offered in the Progressions dialog of both builds as "Direction Arc" and
+"Converse Progression" (`dcPr_pa`, `dxPr_pv`). Work log item 266.
+
+`-pa` says what `-p0` directs the planets by and what `-p0` and `-p1`
+direct the angles by. It has no effect on `-p`, whose angles are quotidian.
+
+| `-pa` | arc | planets (`-p0`) | angles |
+|---|---|---|---|
+| 0 | true arc of the `-pO` object in longitude (as always) | longitude + arc | MC, cusps + arc; `=pc` casts cusps from the MC |
+| 1 | RA(progressed Sun) - RA(natal Sun), each with its moment's true obliquity | RA + arc, same latitude | cast from natal RAMC + arc |
+| 2 | Naibod: 360/365.24219 deg per progressed day | longitude + arc | as 0 |
+| 3 | Naibod | RA + arc, same latitude | cast from natal RAMC + arc |
+
+**The convention for a planet in right ascension**, since Solar Fire's
+manual defines RA progression only for the MC ("The MC's right ascension
+is progressed by the same right ascension arc as the Sun", Chart Angle
+Progression Type, p. 305): its RA comes from its natal longitude *and*
+latitude with the natal true obliquity; the arc is added; the result is
+the longitude, at the *same ecliptic latitude*, whose RA that is.
+`RDirectRA()` solves it in closed form. RA-directed angles are cast from
+the RAMC at the birth latitude, the way `=pc` casts from a directed MC, so
+`=pc` is implied there. So `-p1 -pa 3` is secondary progressions with
+Naibod-in-RA angles, Solar Fire's other angle types being `-p1 -pa 1`,
+`-p1 -pa 2 =pc`, `-p1 =pc` and `-p`.
+
+**Naibod in longitude used to need `-pO -1 -pd X0.9856473`**, which also
+changes the rate `-p` and `-p1` progress planets at. `-pa 2` leaves `-pd`
+alone.
+
+**`-pv` is converse.** `-p` and `-p1` planets (and `-p`'s quotidian
+angles) are cast at birth minus the elapsed time over `-pd`, the standard
+converse secondary; every direction subtracts the *forward* arc, rather
+than using the arc of the converse-progressed Sun.
+
+`-pa 0` without `-pv` runs the original arc code unchanged; the
+`progressions` group pins it along with the new rows.
+
+### A progression target is local to the natal chart
+
+`SetProgressTarget()` keeps the target date (`is.ciProg`); CastChart()
+resolves it in the natal chart's zone with Daylight Saving from the time
+zone rules of the atlas city nearest its location, on the target date
+(`FDstForLocation()`). With no rules for that place in that zone, the
+natal chart's own Daylight setting is used. A chart typed in UT is
+therefore progressed to 0:00 UT, which is the one intended difference
+`tools/chart-matrix.sh` shows. Relationship charts and transit searches
+that set `is.JDp` themselves are not touched.
 
 ## Known divergences from Windows
 
