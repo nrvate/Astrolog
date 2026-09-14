@@ -478,6 +478,82 @@ static void TestDialogsQt()
 }
 
 
+// The case StrOpenDialogQt()'s safety net exists for, which none of the
+// real dialogs is: a window that comes up as a POPUP and ignores its first
+// close. The opening timer finds it through activePopupWidget() and closes
+// it; that close is refused; only the net's second close can end it (review
+// finding H4). Without that, a real dialog would block the run forever --
+// so this opener carries its own bound, well past the net, and records
+// whether the net or the bound is what ended its loop. A hang becomes a
+// FAIL that says which.
+static int s_cCloseProbeQt = 0;
+static flag s_fProbeBoundQt = fFalse;
+
+class PopupProbeQt : public QWidget
+{
+public:
+  PopupProbeQt() : QWidget(NULL, Qt::Popup) {}
+  QEventLoop evl;
+protected:
+  void closeEvent(QCloseEvent *pe) override
+  {
+    s_cCloseProbeQt++;
+    if (s_cCloseProbeQt == 1) {
+      pe->ignore();  // The first close does not take.
+      return;
+    }
+    pe->accept();
+    evl.quit();
+  }
+};
+
+static void ShowIgnoringPopupQt()
+{
+  PopupProbeQt *pw = new PopupProbeQt;
+  QTimer tBound;
+
+  pw->setWindowTitle("Ignoring Popup Probe");
+  pw->resize(200, 100);
+  tBound.setSingleShot(fTrue);
+  QObject::connect(&tBound, &QTimer::timeout, [pw]() {
+    s_fProbeBoundQt = fTrue;
+    pw->evl.quit();
+  });
+  tBound.start(5000 * nScaleTest);
+  pw->show();
+  pw->evl.exec();  // Blocks as a modal dialog's exec() would.
+  tBound.stop();
+  pw->hide();       // Whatever ended the loop, leave no popup behind.
+  delete pw;
+}
+
+static void TestPopupNetQt()
+{
+  QElapsedTimer t;
+  QString str;
+  qint64 ms;
+
+  Group("Dialog net vs. a popup that ignores its first close");
+  s_cCloseProbeQt = 0;
+  s_fProbeBoundQt = fFalse;
+  t.start();
+  str = StrOpenDialogQt(ShowIgnoringPopupQt);
+  ms = t.elapsed();
+  Check(str == "Ignoring Popup Probe", "the opening timer found the popup "
+    "(title \"%s\")", str.toLocal8Bit().constData());
+  Check(!s_fProbeBoundQt, "the net closed the popup, not the probe's own "
+    "%d ms bound -- without it this would have hung the run",
+    5000 * nScaleTest);
+  Check(s_cCloseProbeQt == 2, "closed twice, the first refused (got %d)",
+    s_cCloseProbeQt);
+  Check(ms < 4000 * nScaleTest, "returned in %lld ms", (long long)ms);
+  Check(QApplication::activePopupWidget() == NULL,
+    "no popup is left open afterwards");
+  s_cCloseProbeQt = 0;
+  s_fProbeBoundQt = fFalse;
+}
+
+
 // The About dialog's version line carries the git sha the binary was
 // built from, when it was built from a checkout: szVersionGit comes from
 // a generated gitsha.h (see the include in qtdialog.cpp), and a build
@@ -5047,6 +5123,64 @@ struct ChartListPinQt {
   }
 };
 
+// The standing net for ChartListPinQt (review finding K4). No ordinary run
+// starts with a chart list -- is.cci is 0 unless an AAF or Quick*Chart file
+// or a folder was loaded -- so a pin that restored only the count passed
+// every run. Construct one of these BEFORE a group's pin and it appends
+// cSeed charts of its own, distinct from each other and from anything a
+// group appends; Verify() after the pin's Restore() asserts each came back
+// by content and then trims them off. Ten, more than the eight the oracle
+// legs' pre-fix save kept -- though that save was measured NOT to lose
+// anything with ten seeded: each leg empties the list and appends at most
+// four, so entries past the eighth are never overwritten.
+struct ChartListSeedQt {
+  enum { cSeed = 10 };
+  int cciBase;
+  flag fSeeded;
+  ChartListSeedQt() {
+    static char rgszNam[cSeed][cchSzDef], rgszLoc[cSeed][cchSzDef];
+    CI ci;
+    int i;
+
+    cciBase = is.cci;
+    fSeeded = fTrue;
+    for (i = 0; i < cSeed; i++) {
+      ClearB((pbyte)&ci, sizeof(CI));
+      ci.mon = 1 + i; ci.day = 2 + i; ci.yea = 1601 + i;
+      ci.tim = 1.25 + i; ci.zon = -3.0; ci.lon = 10.5 + i; ci.lat = -20.5;
+      sprintf2(S(rgszNam[i]), "SuiteSeedChart%d", i);
+      sprintf2(S(rgszLoc[i]), "SuiteSeedPlace%d", i);
+      ci.nam = rgszNam[i]; ci.loc = rgszLoc[i];
+      fSeeded &= FAppendCIList(&ci);
+    }
+  }
+  void Verify(CONST char *szGroup) {
+    int i, iBad = -1;
+    CONST CI *pci;
+    char szWant[cchSzDef];
+
+    for (i = 0; i < cSeed && iBad < 0; i++) {
+      if (cciBase + i >= is.cci) {
+        iBad = i;
+        break;
+      }
+      pci = &is.rgci[cciBase + i];
+      sprintf2(S(szWant), "SuiteSeedChart%d", i);
+      if (pci->mon != 1 + i || pci->day != 2 + i || pci->yea != 1601 + i ||
+        pci->tim != 1.25 + i || pci->lon != 10.5 + i ||
+        !FEqSz(SzSet(pci->nam), szWant))
+        iBad = i;
+    }
+    Check(fSeeded && iBad < 0 && is.cci == cciBase + cSeed,
+      "%s puts back the charts it found in the list, not just their count "
+      "(%d of %d, first wrong entry %d: \"%s\")", szGroup,
+      is.cci - cciBase, (int)cSeed, iBad,
+      iBad >= 0 && cciBase + iBad < is.cci ?
+      SzSet(is.rgci[cciBase + iBad].nam) : "");
+    is.cci = cciBase;
+  }
+};
+
 static void TestExportRoundTripQt()
 {
   static CONST struct {
@@ -5069,6 +5203,7 @@ static void TestExportRoundTripQt()
   int nWriteFormatSav = us.nWriteFormat, i;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   CI ciWant, ciSav = ciCore, ciMainSav = ciMain;
+  ChartListSeedQt seedList;
   ChartListPinQt pinList;
 
   Group("Chart export formats round trip");
@@ -5135,6 +5270,7 @@ static void TestExportRoundTripQt()
   }
 
   ciCore = ciSav; ciMain = ciMainSav; pinList.Restore();
+  seedList.Verify("export-roundtrip");
   us.fNoWrite = fNoWriteSav;
   SetNoPopupQt(fPopupSav);
 }
@@ -5154,6 +5290,7 @@ static void TestNullNamesQt()
 {
   char *rgszNamSav[cRing+1], *rgszLocSav[cRing+1];
   int i;
+  ChartListSeedQt seedList;
   ChartListPinQt pinList;
   QStringList lstBad;
 
@@ -5199,6 +5336,7 @@ static void TestNullNamesQt()
     lstBad.isEmpty() ? "" : lstBad[0].toLocal8Bit().constData());
 
   pinList.Restore();
+  seedList.Verify("null-names");
   for (i = 1; i <= cRing; i++) {
     rgpci[i]->nam = rgszNamSav[i];
     rgpci[i]->loc = rgszLocSav[i];
@@ -6986,7 +7124,7 @@ static void TestInterfaceSettingsQt()
 
     SetAnimDelayQt(137);
     SetAntialiasQt(9);
-    FProcessCommandLine((char *)"-WM 1 \"ProbeMacroName\"");
+    FProcessCommandLine((char *)"-WM 1 'Probe\" MacroName'");
     FProcessCommandLine((char *)"-WM0 0 \"ProbeSubName\"");
     Check(FOutputSettings(), "the Qt interface state writes to a file");
 
@@ -6999,7 +7137,7 @@ static void TestInterfaceSettingsQt()
       NAnimDelayQt());
     Check(NAntialiasQt() == 9, "the antialiasing level survives (%d)",
       NAntialiasQt());
-    Check(FEqSz(SzSet(SzMacroNameQt(0)), "ProbeMacroName"),
+    Check(FEqSz(SzSet(SzMacroNameQt(0)), "Probe\" MacroName"),
       "a renamed macro survives (\"%s\")", SzSet(SzMacroNameQt(0)));
     Check(FEqSz(SzSet(SzMacroSubNameQt(0)), "ProbeSubName"),
       "and a renamed macro submenu (\"%s\")", SzSet(SzMacroSubNameQt(0)));
@@ -8258,6 +8396,7 @@ static void StrChartInfoCoordQt(QString *pstrLon, QString *pstrLat)
 static void TestChartInfoCoordQt()
 {
   real lonSav = ciCore.lon, latSav = ciCore.lat;
+  flag fSecondsSav = us.fSeconds;
   // Austin, TX, in degrees: a longitude under 100, which is where the
   // padding shows.
   real lonWant = 97.0 + 44.0/60.0 + 35.0/3600.0;
@@ -8265,6 +8404,11 @@ static void TestChartInfoCoordQt()
   QString strLon, strLat;
 
   Group("Chart info coordinate fields");
+  // Seconds shown, pinned: the fields carry seconds only when us.fSeconds
+  // is on, and the read-back checks below are to the second. The group
+  // passed only when the groups before it happened to leave it on --
+  // measured, with "_b0" it fails both read-backs ("97:44W").
+  us.fSeconds = fTrue;
 
   // SzLocation() pads the degrees to three columns so a chart header's
   // coordinates line up, and the field used to carry that pad: "97:44'35W"
@@ -8299,6 +8443,7 @@ static void TestChartInfoCoordQt()
     "\"%s\"", strLon.toLocal8Bit().constData());
 
   ciCore.lon = lonSav; ciCore.lat = latSav;
+  us.fSeconds = fSecondsSav;
 }
 
 
@@ -8517,6 +8662,7 @@ static void TestChartListFilterQt()
   int cciSav, i, cRow;
   QString strRow0;
   char *szSav = us.szExpListF;
+  ChartListSeedQt seedList;
   ChartListPinQt pinList;
 
   Group("Chart list filter");
@@ -8648,6 +8794,7 @@ static void TestChartListFilterQt()
   }
 
   pinList.Restore();
+  seedList.Verify("chart-list");
   printf("  the chart list honours its AstroExpression filter\n");
 }
 
@@ -9335,7 +9482,7 @@ static void SzSetFieldMarkQt(int i, char *sz, int cchMax)
 {
   int cch;
 
-  sprintf2(sz, cchMax, "AstrologFieldProbe%d-", i);
+  sprintf2(sz, cchMax, "AstrologFieldProbe%d-\" q-", i);
   for (cch = CchSz(sz); cch < 300 && cch < cchMax-1; cch++)
     sz[cch] = 'x';
   sz[cch] = chNull;
@@ -9805,10 +9952,26 @@ static void SzStringMarkQt(CONST char *szHead, int i, char *sz, int cchMax)
 {
   int cch;
 
-  sprintf2(sz, cchMax, "%.3sProbe%d-", szHead, i);
+  sprintf2(sz, cchMax, "%.3sProbe%d-\" q-", szHead, i);
   for (cch = CchSz(sz); cch < 300 && cch < cchMax-1; cch++)
     sz[cch] = 'x';
   sz[cch] = chNull;
+}
+
+// Macro 1's marker holds both quote characters, which is the one text the
+// settings writer cannot quote exactly; every other marker holds only a
+// double quote followed by a space, which it must quote with singles.
+static void SzBothQuotesMarkQt(int i, char *szMark)
+{
+  char *pch;
+
+  if (i != 1)
+    return;
+  for (pch = szMark; *pch; pch++)
+    if (*pch == 'x') {
+      *pch = '\'';
+      break;
+    }
 }
 
 static void TestSettingsStringsQt()
@@ -9851,6 +10014,7 @@ static void TestSettingsStringsQt()
   if (FEnsureMacro(cMacro))
     for (i = 0; i < cMacro; i++) {
       SzSetFieldMarkQt(i, S(szMark));
+      SzBothQuotesMarkQt(i, szMark);
       FCloneSz(szMark, &is.rgszMacro[i]);
       cAsked++;
     }
@@ -9893,6 +10057,15 @@ static void TestSettingsStringsQt()
   }
   for (i = 0; i < cMacro; i++) {
     SzSetFieldMarkQt(i, S(szMark));
+    SzBothQuotesMarkQt(i, szMark);
+    // What comes back for the one marker holding both quote characters:
+    // no quote character is left to quote it with, so the writer turns its
+    // double quotes into single ones rather than write a line that stops
+    // the whole file loading.
+    if (i == 1)
+      for (char *pch = szMark; *pch; pch++)
+        if (*pch == '"')
+          *pch = '\'';
     if (i >= is.cszMacro || !FEqSz(SzSet(is.rgszMacro[i]), szMark)) {
       Check(fFalse,
         "is.rgszMacro[%d] (-M0) did not survive a save and reload", i);
@@ -10469,6 +10642,7 @@ static void TestMatrixJulianQt()
 static void TestNumericOracleQt()
 {
   static CONST int rgyea[] = {1900, 1940, 1980, 2000, 2020, 2050, 2080};
+  ChartListSeedQt seedList;       // before its four legs' pins, below
   flag fPopupSav = FNoPopupQt();
   CI ciCoreSav = ciCore, ciMainSav = ciMain;
   flag rgfIgnoreSav[objMax], rgfIgnore2Sav[objMax];
@@ -11502,6 +11676,7 @@ static void TestNumericOracleQt()
     us.fProgress == fProgSav,
     "the oracle restored every borrowed setting (%d restriction slots "
     "differ)", cBad);
+  seedList.Verify("oracle");
   ciCore = ciCoreSav; ciMain = ciMainSav;
   CastChart(1);                // Leave real positions for the rest.
   SetNoPopupQt(fPopupSav);
@@ -12432,6 +12607,7 @@ static void TestOpenDirQt()
   int cLoaded;
   flag fOldSav = us.fWriteOld, fPopupSav = FNoPopupQt();
   CI ciCoreSav = ciCore;
+  ChartListSeedQt seedList;
   ChartListPinQt pinList;
 
   Group("Open charts in folder");
@@ -12472,6 +12648,7 @@ static void TestOpenDirQt()
   QDir().rmdir(strDir);
 
   pinList.Restore();
+  seedList.Verify("open-dir");
   us.fWriteOld = fOldSav;
   ciCore = ciCoreSav;
   SetNoPopupQt(fPopupSav);
@@ -13532,6 +13709,25 @@ static void TestStarLinksQt()
   // star list longer than 1019 characters -- the constellation list runs
   // to thousands -- came back cut short for the rest of the run, and the
   // settings sweep after this group then faithfully preserved the cut.
+  //
+  // The standing net for that (review finding K3): no ordinary run has a
+  // list to lose -- nrvate.as carries -YXU "" "" -- so the group gives the
+  // save below one of its own, several times longer than the old buffer,
+  // and asserts it comes back whole. The user's lists are kept outside it.
+  QByteArray baUserLin(SzSet(gs.szStarsLin)), baUserLnk(SzSet(gs.szStarsLnk));
+  QByteArray baLongLin, baLongLnk;
+  int iLong;
+
+  for (iLong = 0; iLong < 200; iLong++) {
+    baLongLin += iLong > 0 ? "," : "";
+    baLongLin += iLong & 1 ? "Antares" : "Aldebaran";
+    baLongLnk += iLong > 0 ? ";" : "";
+    baLongLnk += QByteArray::number(iLong) + "_" + QByteArray::number(
+      (iLong + 1) % 200);
+  }
+  FProcessYXU(baLongLin.constData(), baLongLnk.constData(), fFalse);
+
+  {
   QByteArray baLinSav(SzSet(gs.szStarsLin)), baLnkSav(SzSet(gs.szStarsLnk));
   ES *pes1, *pes2;
 
@@ -13561,6 +13757,13 @@ static void TestStarLinksQt()
   // Back the way the group found it: through the same FProcessYXU() path
   // that owns these strings, never through the deallocated originals.
   FProcessYXU(baLinSav.constData(), baLnkSav.constData(), fFalse);
+  }
+  Check(QByteArray(SzSet(gs.szStarsLin)) == baLongLin &&
+    QByteArray(SzSet(gs.szStarsLnk)) == baLongLnk,
+    "a %d and a %d character star list come back whole (%d, %d)",
+    (int)baLongLin.size(), (int)baLongLnk.size(),
+    CchSz(SzSet(gs.szStarsLin)), CchSz(SzSet(gs.szStarsLnk)));
+  FProcessYXU(baUserLin.constData(), baUserLnk.constData(), fFalse);
 }
 
 // Standing legs for the trigger paths the four byte-diff matrices never
@@ -13830,6 +14033,7 @@ static void TestDivergencesQt()
 
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
+  {"popup-net",            TestPopupNetQt},
   {"about-version",        TestAboutVersionQt},
   {"context-menus",        TestContextMenusQt},
   {"hotkeys",              TestHotkeysQt},

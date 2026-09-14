@@ -10933,6 +10933,17 @@ this is the note that explains the wall of dialogs.
     after; the `layout()->activate()` is falsified as required.
     QTTEST_REVIEW_IMPLEM.md.
 
+260. **A saved setting holding a double quote broke the settings file.**
+    Every string setting -- paths, star and exoplanet lists, object and
+    star names, the sidebar text, the default chart name, macros, menu
+    names and font names -- was written between bare double quotes, so
+    a `"` followed by a space ended the parameter early and the refused
+    line stopped the rest of the file loading. `PrintQuotedParamSz()`
+    quotes with `'` when the text holds a `"`, as the AstroExpression
+    writer did, and only text holding both loses anything. Found by
+    putting `" ` into the settings sweeps' markers, which failed on the
+    old writer and pass now. QTTEST_REVIEW_IMPLEM.md, third batch.
+
 
 ## Features this fork adds to both builds
 

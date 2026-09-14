@@ -26,6 +26,7 @@
 #   tools/build-check.sh              the source build on twelve distributions
 #   tools/asan-sweep.sh, ubsan-sweep.sh, coverage-report.sh
 #   tools/warning_audit.py            70 s, five builds, empty ledger
+#                                     (the three Linux ones ARE here, cached)
 #
 # The mingw Win32 and Qt6 builds ARE here, when this machine has their
 # toolchains, because each has silently stopped compiling before.
@@ -71,17 +72,27 @@ done
 step "build: console and Qt"     make -j4
 step "build: the test binary"    make qt-test -j4
 
-# The compiler's warnings for the suite's own source. The full warning
-# audit is five builds and 70 s, so it is not here -- and that is how two
-# commits in a row (028b4ba, dcd939b) landed six -Wunused-variable in
-# qttest.cpp with this command green. One file is about nine seconds.
-# NOT its exit code: "--file" exits 0 when it prints warnings (it fails
-# only on a file that does not compile), so any output at all fails.
-nowarn() {
-  out=$(python3 tools/warning_audit.py --file "$1" 2>&1) || { echo "$out"; return 1; }
-  [ -z "$out" ] || { echo "$out"; return 1; }
-}
-step "warnings: qttest.cpp"      nowarn qttest.cpp
+# The compiler's warnings, for every source file the three Linux builds
+# compile. The full audit is five builds and 70 s, so it is not here -- and
+# that is how two commits in a row (028b4ba, dcd939b) landed six
+# -Wunused-variable in qttest.cpp with this command green. What stood here
+# next was a gate on qttest.cpp alone, which left the other sixty-odd files
+# and every header to an audit nothing ran.
+#
+# --cached keeps the objects and what the compiler said about each outside
+# the tree, one cache per checkout, so a run with nothing changed is under a
+# second and an edit recompiles what make says it touches -- a header edit
+# included. Cold, it is about a minute and a half at -j4.
+#
+# Console, qt and qt-test, not win, wcli or Qt6: a release runner has no
+# mingw and no hand-installed Qt6. A subset run is not normally a gate (its
+# first column renames shared sites); --gate-subset makes it one on "any
+# warning at all", which holds because tools/warnings.txt is empty, and it
+# refuses outright the day that stops being true. That is its exit code, not
+# a test of its output: the output names what it found either way.
+step "warnings: Linux builds"    python3 tools/warning_audit.py --cached \
+                                   --gate-subset --build console \
+                                   --build qt --build qt-test
 
 # Needs the console binary, so it goes after the build rather than up
 # with the pure-Python audits. Eleven image writers, each checked against

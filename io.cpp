@@ -279,6 +279,38 @@ void PrintQuotedSz(FILE *file, CONST char *sz)
 }
 
 
+// Write a string setting as one quoted parameter that reads back exactly.
+// Quoted with " unless the text holds a ", in which case with ' -- the
+// command line parser honours either (NParseCommandLine() ends a quoted
+// word at its own quote character followed by a space or punctuation), and
+// it is the rule the AstroExpression writer already used. Only text holding
+// both cannot be quoted exactly: its double quotes are written as single
+// ones, as chart files always have, so the line still loads and the lines
+// after it are not lost with it. A setting's text was written between bare
+// double quotes before, and one holding " followed by a space or
+// punctuation ended the parameter early and stopped the whole file loading
+// at that line.
+
+void PrintQuotedParamSz(FILE *file, CONST char *sz)
+{
+  CONST char *pch;
+  flag fDouble = fFalse, fSingle = fFalse;
+
+  sz = SzSet(sz);
+  for (pch = sz; *pch; pch++) {
+    fDouble |= (*pch == '"');
+    fSingle |= (*pch == '\'');
+  }
+  if (fDouble && !fSingle) {
+    putc('\'', file); fputs(sz, file); putc('\'', file);
+    return;
+  }
+  putc('"', file);
+  PrintQuotedSz(file, sz);
+  putc('"', file);
+}
+
+
 // Read one line from a file into the given buffer: skip any leading
 // control characters (collapsing blank lines and line ends), then copy
 // characters until the next control character or the buffer is full,
@@ -1565,9 +1597,9 @@ flag FOutputSettings()
   sprintf2(S(sz), "-zf %s                 ", SzTemperature(us.tmpDef)); PrintFSz();
   PrintF("; Default temperature   [in Fahren. or Celsius ]\n");
   // In pieces: a name and a location are user text, and sz is cchSzMax.
-  PrintF("-zj \""); PrintF(SzSet(ciDefa.nam));
-  PrintF("\" \""); PrintF(SzSet(ciDefa.loc));
-  PrintF("\" ; Default name and location\n\n");
+  PrintF("-zj "); PrintQuotedParamSz(file, ciDefa.nam);
+  PrintF(" "); PrintQuotedParamSz(file, ciDefa.loc);
+  PrintF(" ; Default name and location\n\n");
 
   // The -Yz line needs to be before the -n line in order to take effect.
   sprintf2(S(sz), "-Yz %ld   ", us.lTimeAddition); PrintFSz();
@@ -1952,9 +1984,9 @@ flag FOutputSettings()
     "point -Yi1 to ephemeris dir, -Yi2 to font dir, etc.\n\n");
   for (i = 0; i < 10; i++)
     if (FSzSet(us.rgszPath[i])) {
-      sprintf2(S(sz), "-Yi%d \"", i); PrintFSz();
-      PrintF(us.rgszPath[i]);
-      PrintF("\"\n");
+      sprintf2(S(sz), "-Yi%d ", i); PrintFSz();
+      PrintQuotedParamSz(file, us.rgszPath[i]);
+      PrintF("\n");
     }
 
   // Printed in pieces, never through sprintf2(): sz is cchSzMax and these
@@ -1962,14 +1994,14 @@ flag FOutputSettings()
   // runs to hundreds of characters, and a truncated one does not merely
   // lose its tail -- it loses the closing quote, and the next word becomes
   // a switch. That is what the "-M0" macro writer below has always done.
-  PrintF("-Y5i \""); PrintF(SzSet(us.szADB)); PrintF("\"\n");
-  PrintF("-YkE \""); PrintF(SzSet(us.szAstColor)); PrintF("\"\n");
-  PrintF("-YkU \""); PrintF(SzSet(us.szStarsColor)); PrintF("\"\n");
-  PrintF("-YUx \""); PrintF(SzSet(us.szExoList)); PrintF("\"\n");
+  PrintF("-Y5i "); PrintQuotedParamSz(file, us.szADB); PrintF("\n");
+  PrintF("-YkE "); PrintQuotedParamSz(file, us.szAstColor); PrintF("\n");
+  PrintF("-YkU "); PrintQuotedParamSz(file, us.szStarsColor); PrintF("\n");
+  PrintF("-YUx "); PrintQuotedParamSz(file, us.szExoList); PrintF("\n");
   // The "0" suffix is us.fStarsList: both spellings take the file name,
   // and which one is written is the flag.
-  PrintF(us.fStarsList ? "-YRU0 \"" : "-YRU \"");
-  PrintF(SzSet(us.szStarsList)); PrintF("\"\n");
+  PrintF(us.fStarsList ? "-YRU0 " : "-YRU ");
+  PrintQuotedParamSz(file, us.szStarsList); PrintF("\n");
   PrintF("; Astrodatabank, asteroid color, star color, exoplanet and "
     "star list files\n");
 
@@ -2325,8 +2357,8 @@ flag FOutputSettings()
   for (i = 0; i < custLo; i++) {
     if (FObjDispCustom(i)) {
       fAny = fTrue;
-      sprintf2(S(sz), "-YD %d \"", i); PrintFSz();
-      PrintF(szObjDisp[i]); PrintF("\"\n");
+      sprintf2(S(sz), "-YD %d ", i); PrintFSz();
+      PrintQuotedParamSz(file, szObjDisp[i]); PrintF("\n");
     }
   }
   for (i = custLo; i <= custHi; i++) {
@@ -2346,8 +2378,8 @@ flag FOutputSettings()
         i, rgObjSwiss[j], f2 ? " " : "\n"); PrintFSz();
     }
     if (f2) {
-      sprintf2(S(sz), "-YD %d \"", i); PrintFSz();
-      PrintF(szObjDisp[i]); PrintF("\"\n");
+      sprintf2(S(sz), "-YD %d ", i); PrintFSz();
+      PrintQuotedParamSz(file, szObjDisp[i]); PrintF("\n");
     }
   }
   if (!fAny)
@@ -2363,13 +2395,13 @@ flag FOutputSettings()
     fAny = fTrue;
     if (f1) {
       sprintf2(S(sz), "-YU %d ", i); PrintFSz();
-      PrintF(szStarCustom[j]);
+      PrintQuotedParamSz(file, szStarCustom[j]);
       sprintf2(S(sz), "%s", f2 ? " " : "\n");
       PrintFSz();
     }
     if (f2) {
-      sprintf2(S(sz), "-YD %d \"", i); PrintFSz();
-      PrintF(szObjDisp[i]); PrintF("\"\n");
+      sprintf2(S(sz), "-YD %d ", i); PrintFSz();
+      PrintQuotedParamSz(file, szObjDisp[i]); PrintF("\n");
     }
   }
   if (!fAny)
@@ -2519,14 +2551,14 @@ flag FOutputSettings()
   sprintf2(S(sz), ":YXW %d           ", gs.nTriangles); PrintFSz();
   PrintF(
     "; Triangle count [Subdivisions in the wireframe globe         ]\n");
-  PrintF("-YXt \""); PrintF(SzSet(gs.szSidebar)); PrintF("\"\n");
+  PrintF("-YXt "); PrintQuotedParamSz(file, gs.szSidebar); PrintF("\n");
   PrintF("; Extra sidebar text\n");
   // Both halves of -YXU in one call, which is what the un-suffixed
   // spelling does: it replaces the two lists rather than appending. The
   // constellation set alone is thousands of characters, which is why this
   // is printed rather than formatted.
-  PrintF("-YXU \""); PrintF(SzSet(gs.szStarsLin));
-  PrintF("\" \""); PrintF(SzSet(gs.szStarsLnk)); PrintF("\"\n");
+  PrintF("-YXU "); PrintQuotedParamSz(file, gs.szStarsLin);
+  PrintF(" "); PrintQuotedParamSz(file, gs.szStarsLnk); PrintF("\n");
   PrintF("; Star names to link up, and the indexes of the pairs\n");
   sprintf2(S(sz), "%cXN              ", ChDashF(gs.fAnimMap)); PrintFSz();
   PrintF(
@@ -2609,9 +2641,9 @@ flag FOutputSettings()
   for (i = 0; i < is.cszMacro; i++)
     if (is.rgszMacro != NULL && FSzSet(is.rgszMacro[i])) {
       fAny = fTrue;
-      sprintf2(S(sz), "-M0 %d \"", i); PrintFSz();
-      PrintF(is.rgszMacro[i]);
-      PrintF("\"\n");
+      sprintf2(S(sz), "-M0 %d ", i); PrintFSz();
+      PrintQuotedParamSz(file, is.rgszMacro[i]);
+      PrintF("\n");
     }
   if (!fAny)
     PrintF("; [No macros defined]\n");
@@ -2624,24 +2656,24 @@ flag FOutputSettings()
     if (!wi.rgfM[i])
       continue;
     fAny = fTrue;
-    sprintf2(S(sz), "-WM %d \"", i+1); PrintFSz();
+    sprintf2(S(sz), "-WM %d ", i+1); PrintFSz();
     GetMenuString(wi.hmenu, cmdMacro01 + i, sz, cchSzDef, MF_BYCOMMAND);
     for (pch = sz; *pch; pch++)
       if (*pch == '\t') {
         *pch = chNull;
         break;
       }
-    PrintFSz();
-    sprintf2(S(sz), "\"\n"); PrintFSz();
+    PrintQuotedParamSz(file, sz);
+    PrintF("\n");
   }
   for (i = 0; i < cMSub; i++) {
     if (!wi.rgfME[i])
       continue;
     fAny = fTrue;
-    sprintf2(S(sz), "-WM0 %d \"", i); PrintFSz();
+    sprintf2(S(sz), "-WM0 %d ", i); PrintFSz();
     GetMenuString(wi.hmenuEdit, i+2, sz, cchSzDef, MF_BYPOSITION);
-    PrintFSz();
-    sprintf2(S(sz), "\"\n"); PrintFSz();
+    PrintQuotedParamSz(file, sz);
+    PrintF("\n");
   }
   if (!fAny)
     PrintF("; [No menus defined]\n");
@@ -2685,15 +2717,15 @@ flag FOutputSettings()
     if (SzMacroNameQt(i) == NULL)
       continue;
     fAny = fTrue;
-    sprintf2(S(sz), "-WM %d \"", i+1); PrintFSz();
-    PrintF(SzMacroNameQt(i)); PrintF("\"\n");
+    sprintf2(S(sz), "-WM %d ", i+1); PrintFSz();
+    PrintQuotedParamSz(file, SzMacroNameQt(i)); PrintF("\n");
   }
   for (i = 0; i < cMSub; i++) {
     if (SzMacroSubNameQt(i) == NULL)
       continue;
     fAny = fTrue;
-    sprintf2(S(sz), "-WM0 %d \"", i); PrintFSz();
-    PrintF(SzMacroSubNameQt(i)); PrintF("\"\n");
+    sprintf2(S(sz), "-WM0 %d ", i); PrintFSz();
+    PrintQuotedParamSz(file, SzMacroSubNameQt(i)); PrintF("\n");
   }
   if (!fAny)
     PrintF("; [No menus renamed]\n");
@@ -2720,15 +2752,15 @@ flag FOutputSettings()
   sprintf2(S(sz), "-WI %d    ", NThemePrefQt()); PrintFSz();
   PrintF("; Interface theme                "
     "[\"0\" desktop, \"1\" light, \"2\" dark ]\n");
-  sprintf2(S(sz), "-WF \"%s\" %d ", SzConsoleFontQt(), NConsoleFontSizeQt());
-  PrintFSz();
+  PrintF("-WF "); PrintQuotedParamSz(file, SzConsoleFontQt());
+  sprintf2(S(sz), " %d ", NConsoleFontSizeQt()); PrintFSz();
   PrintF("; Chart text font and size       "
     "[Empty name and 0 follow -Xs       ]\n");
   sprintf2(S(sz), "%cWFa     ", ChDashF(FConsoleAntialiasQt())); PrintFSz();
   PrintF("; Antialias the chart text font  "
     "[\"=WFa\" smooths it, \"_WFa\" doesn't]\n");
-  sprintf2(S(sz), "-WG \"%s\" %d ", SzMenuFontQt(), NMenuFontSizeQt());
-  PrintFSz();
+  PrintF("-WG "); PrintQuotedParamSz(file, SzMenuFontQt());
+  sprintf2(S(sz), " %d ", NMenuFontSizeQt()); PrintFSz();
   PrintF("; Interface font and size        "
     "[Empty name and 0 follow desktop   ]\n");
   sprintf2(S(sz), "%cWGa     ", ChDashF(FMenuAntialiasQt())); PrintFSz();

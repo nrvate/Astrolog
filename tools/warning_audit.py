@@ -30,6 +30,11 @@ instead, which survives edits and still says where to look.
   tools/warning_audit.py --file io.cpp   # one file, seconds, no baseline
   tools/warning_audit.py --cached        # the full gate, compiling only
                                          # what changed since the last run
+  tools/warning_audit.py --cached --gate-subset \
+      --build console --build qt --build qt-test
+                                         # the Linux builds as a GATE, for
+                                         # a machine with no mingw or Qt6;
+                                         # what "make check" runs
 
 Exit 0 when the report matches the baseline, 1 otherwise.
 
@@ -58,8 +63,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASELINE = os.path.join(ROOT, 'tools', 'warnings.txt')
 
 # -j4 and no higher: the maintainer's machine shares this NAS with other
-# work, and a wider build has been asked not to happen.
-JOBS = '-j4'
+# work, and a wider build has been asked not to happen. WARNING_AUDIT_JOBS
+# can only say something narrower, for a session sharing the CPUs with
+# other agents; the report does not depend on it.
+JOBS = '-j%d' % max(1, min(4, int(os.environ.get('WARNING_AUDIT_JOBS', '4'))))
 
 # Every build's real flags plus -Wall. Keep these in step with the
 # makefiles when those change; the audit deliberately owns its own copy so
@@ -212,8 +219,18 @@ def mask(msg):
 # run: if the replacement rule ever stopped replacing, the real rule would
 # build silently and the report would read clean, which is the one failure
 # this must not have.
-CACHE_ROOT = os.environ.get('WARNING_AUDIT_CACHE', os.path.join(
-    os.path.expanduser('~'), '.cache', 'astrolog-warning-audit'))
+#
+# One cache per CHECKOUT, not one per machine. make decides what to recompile
+# by comparing an object's mtime with the source's in the tree it runs in, so
+# two worktrees sharing a directory each read the other's objects as proof
+# their own files had not changed: an edit made in one tree before the other
+# last ran the audit was never compiled, and its warning never reported. The
+# flat layout did exactly that -- the three trees on this machine had
+# identical makefiles, so identical keys, so one directory each build.
+CACHE_ROOT = os.path.join(
+    os.environ.get('WARNING_AUDIT_CACHE', os.path.join(
+        os.path.expanduser('~'), '.cache', 'astrolog-warning-audit')),
+    hashlib.sha256(ROOT.encode()).hexdigest()[:12])
 
 RULE_LINUX = ('$(OBJDIR)/%.o: %.cpp | $(OBJDIR)\n'
               '\tg++ $(CPPFLAGS) -c -o $@ $< >$@.warn 2>&1; '
@@ -485,6 +502,10 @@ def main():
     ap.add_argument('--no-clean', action='store_true',
                     help='reuse existing objects (partial report; for '
                          'iterating, never for a baseline)')
+    ap.add_argument('--gate-subset', action='store_true',
+                    help='with --build: exit 1 on ANY warning line; valid '
+                         'only while tools/warnings.txt is empty, and '
+                         'refused otherwise')
     args = ap.parse_args()
 
     if args.file:
@@ -510,6 +531,28 @@ def main():
             'refusing to --update from --cached: the baseline is written from '
             'a full clean build, which is what --cached is measured against\n')
         return 1
+    # --gate-subset: a subset run is not a gate, for the reason given where
+    # it prints, and that reason has a hole exactly as wide as the ledger.
+    # The first column renames shared sites -- but with nothing in the
+    # ledger there is nothing to rename, and every line a subset prints is
+    # new whatever its first column says. So a subset CAN gate, on "any line
+    # at all", for as long as the ledger stays empty -- and must refuse to
+    # the moment it is not, because then a known site would fail it forever.
+    # This is what lets "make check" gate on the three Linux builds on a
+    # runner with no mingw and no Qt6, which the full audit would need.
+    if args.gate_subset:
+        if not args.build or args.update or args.qt6_only:
+            sys.stderr.write('--gate-subset needs --build, and neither '
+                             '--update nor --qt6-only\n')
+            return 2
+        with open(BASELINE) as f:
+            known = [l for l in f if l.strip() and not l.startswith('#')]
+        if known:
+            sys.stderr.write(
+                'refusing --gate-subset: %s has %d lines, and a subset '
+                'report can only be gated against an EMPTY ledger. Fix them, '
+                'or gate with the full audit.\n' % (BASELINE, len(known)))
+            return 2
     if args.update and args.build:
         sys.stderr.write(
             'refusing to --update from a subset: the baseline covers every '
@@ -558,6 +601,15 @@ def main():
             return 2
         return audit_qt6(args.update, counts, clean=not args.no_clean,
                          cached=args.cached)
+
+    if args.build and args.gate_subset:
+        if lines:
+            print('\n'.join(lines))
+            print('\n%d warnings in %d sites across %s, and the ledger is '
+                  'empty: fix them.' % (total, len(lines), ', '.join(builds)))
+            return 1
+        print('warning gate clean: 0 warnings across %s' % ', '.join(builds))
+        return 0
 
     if args.build:
         # Not a gate. The first column is the set of builds that agree on

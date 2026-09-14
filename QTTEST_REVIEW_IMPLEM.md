@@ -89,7 +89,7 @@ output. So "exit 0" is not "clean", and any gate built on it -- plan item
 warning lines, `exit 0`.
 
 **A new finding the probe turned up, not fixed here: `text-pager`
-repaints over leaks.** In the baseline, `text-pager` (the group straight
+repaints over leaks.** *(Resolved in the second batch: "N-B and N-D fixed".)* In the baseline, `text-pager` (the group straight
 after `star-sort-outputs`) *also* reported `us.fOrbit`, `us.fArabic` and
 `us.fObject` changed -- because `TestPagerQt()` calls
 `SetChartModeQt(gWheel)`, which clears the chart-type flags, and its
@@ -354,6 +354,8 @@ canary, not with K8. Read an equal-looking pair as "differs below the
 sixth digit".
 
 **Other things the solo runs show, not K8, recorded rather than fixed:**
+*(All three resolved in the second batch: N-C traced and fixed, N-D with N-B,
+N-E fixed -- see those sections.)*
 
 - **N-C (P3) `gs.yWin 600 -> 575`** after every group that opens a
   restriction or Object Selections dialog (`dialog-buttons`,
@@ -756,6 +758,7 @@ reason it gave for needing it was not. The work log is left as written;
 this is where the correction lives.
 
 **Found here, not fixed (not in the plan, each needs its own net):**
+*(Resolved in the second batch: N-F fixed, N-G closed with a reason, N-H fixed.)*
 
 - **N-F (P2) the menu-firing group's "chart went blank" check has the same
   blind spot, one layer down.** It compares against `gi.kiOff`, as R1
@@ -1119,6 +1122,9 @@ below (`menu-actions` leaving a Copy temp file's name in `is.szFileOut`);
 the `chart-export` rewrite line is gone.
 
 ## New findings, deferred
+
+*(N-I was fixed in the second batch: "N-I fixed: Copy Chart leaves the output file
+name alone".)*
 
 - **N-I (P2, port, not the suite) -- Copy Chart leaves a deleted temp
   file's name in `is.szFileOut`.** Deferred 2026-09-13: it is shipping
@@ -1877,33 +1883,44 @@ failed.
 - **N-A** (the oracle left `ignore2[]` changed) -- **fixed** in item 21, with a
   real check that failed first.
 - **N-B** `text-pager`, **N-D** four more groups -- clear chart-type flags
-  through `SetChartModeQt()` and do not put them back. **Open.**
-- **N-C** `gs.yWin` 600 to 575 after groups that open certain dialogs. **Open,
-  not traced.**
-- **N-E** `dialog-buttons` leaves `us.nAsp` changed. **Open.**
+  through `SetChartModeQt()` and do not put them back. **Fixed** (second batch).
+- **N-C** `gs.yWin` 600 to 575 after groups that open certain dialogs. **Traced
+  and fixed** (second batch: the window was sized to the chart, not around it).
+- **N-E** `dialog-buttons` leaves `us.nAsp` changed. **Fixed** (second batch).
 - **N-F** the menu-firing "chart went blank" check has no margin, so the border
-  alone passes it. **Open** -- item 11 fixed the same blind spot in
-  `chart-render` and deliberately left this one.
-- **N-G** `CpixDifferQt()` compares against the corner. **Open.**
-- **N-H** `GraphicsChartCaptureQt()` captures `gExo`, a text-only chart. **Open.**
+  alone passes it. **Fixed** (second batch).
+- **N-G** `CpixDifferQt()` compares against the corner. **Closed with a reason**
+  (second batch).
+- **N-H** `GraphicsChartCaptureQt()` captures `gExo`, a text-only chart. **Fixed**
+  (second batch).
 - **N-I** (port, not the suite) -- vector Copy Chart leaves a deleted temp file's
-  name in `is.szFileOut`, where Windows sets `gi.szFileOut` only. **Deferred
-  2026-09-13** for the maintainer's call.
+  name in `is.szFileOut`, where Windows sets `gi.szFileOut` only. **Fixed**
+  (second batch).
 
 ### Not resolved, in one place
 
-- The warning gate in `make check` covers `qttest.cpp` only (item 3).
+*(Status as of the third batch, 2026-09-13. Each item below was open when this
+list was written.)*
+
+- The warning gate in `make check` covers `qttest.cpp` only (item 3). **Worked in
+  the third batch** -- see "The warning gate covers every Linux build".
 - A macro name containing a double quote does not survive `forced-positions`'
-  restore (item 4).
+  restore (item 4). **Fixed** (second batch, "Tidy-ups"), and the settings
+  writer's own quoting fixed in the third batch.
 - No standing net for K3 or K4: both are falsified with hand-built command lines
-  that no ordinary run makes (items 6, 7).
+  that no ordinary run makes (items 6, 7). **Worked in the third batch** -- see
+  "Standing nets for K3 and K4".
 - Dialog buttons are found by label, not by `IDOK`/`IDCANCEL` (item 18).
-- The oracle is still one 1,024-line function (O1, item 21).
+  **Fixed** (second batch).
+- The oracle is still one 1,024-line function (O1, item 21). **Closed by the
+  maintainer's decision** (2026-09-13): not split. A long function with no defect
+  to its name is not a finding to act on.
 - `DriveModalQt()` still needs its forward declaration (D1's structural half,
-  item 17).
+  item 17). **Fixed** (second batch).
 - T4 and T5 (a macro and a double initialisation in `TestSortStarQt()`) were P3s
-  with no plan item.
-- H4's fix is not falsified (item 24).
+  with no plan item. **Fixed** (second batch).
+- H4's fix is not falsified (item 24). **Worked in the third batch** -- see
+  "H4 falsified".
 
 ### Gotchas worth carrying forward
 
@@ -2077,7 +2094,8 @@ records a width larger than it loaded as well. This fork's settings writer saves
 back, and `io.cpp` records why that pair was removed -- so the growth is in both
 builds, in the file format, and in a fix this fork made on purpose. **For the
 maintainer:** not changed here. The Qt port is left matching its oracle, as the
-decision for N-C asked.
+decision for N-C asked. *(Superseded the same day: fixed in both builds -- see
+"The chart width grew by the sidebar at every launch -- fixed, both builds".)*
 
 **`=X _Xv0` turns graphics off, on both builds.** `NProcessSwitchTable()`
 (`switch.cpp`) calls `SwitchF2(us.fGraphics)` for every `grfSwGraphics` flag row, so
@@ -2348,7 +2366,8 @@ chart comes back 1 and 4 pixels different, not equal. Unmeasured: whether the me
 bar returns to its first height after the reapply, and whether the canvas adopts
 before or after it. A user who changes the interface font and changes it back
 would save a chart a few pixels off. **Open, for the maintainer**; not fixed
-without measuring.
+without measuring. *(Superseded the same day: measured and fixed -- see "N-J fixed:
+an interface font change keeps the chart size".)*
 
 ## The warning audit, incremental: `tools/warning_audit.py --cached`
 
@@ -2363,7 +2382,8 @@ compiler output beside it and the report is read from those, not from a build lo
 **How.**
 
 - **Objects only, never linked, outside the tree** (`WARNING_AUDIT_CACHE`, default
-  `~/.cache/astrolog-warning-audit/<build>-<key>`). No binary in the tree is touched,
+  `~/.cache/astrolog-warning-audit/<build>-<key>`; per checkout since the gate work
+  below found a shared cache could hide an edit). No binary in the tree is touched,
   `make clean` cannot reach it, and a session building in the tree is not disturbed.
 - **A second makefile replaces the compile rule.** `make -f Makefile.qt -f rule.mk`: a
   pattern rule with the same target and prerequisites as the real one replaces it, and
@@ -2452,7 +2472,9 @@ switches. `SzMacroNameSwitchQt()` quotes with whichever of `"` and `'` the name 
 not contain -- the rule `FOutputSettings()` already applies to AstroExpressions,
 and `NParseCommandLine()` honours both -- and says so, rather than corrupting, for
 a name holding both. (The settings writer's own `-WM` line always uses `"`; that is
-recorded here, not changed.)
+recorded here, not changed. *Superseded: the writer was fixed in the third batch,
+for every string setting, not only `-WM` -- see "The settings writer quotes every
+string so it reads back".*)
 
 **Evidence.** The quote fault needs the `"` to be followed by a space or punctuation --
 the command-line parser only ends a quoted word there -- so a first probe named
@@ -2579,3 +2601,130 @@ it passes. Each group alone leaves no canary line now.
 `ApplyUiFontQt()` after putting the settings back. Measured with temporary prints:
 the application font was Fira Code Retina 14 at the group's start and **Liberation Serif
 12** at its end before the call, Fira Code Retina 14 after.
+
+# Third batch: every open item, resolved
+
+## The settings writer quotes every string so it reads back
+
+**Found** while checking the second batch's own "recorded, not changed" note about the
+`-WM` line, then measured wider. Every string setting was written between bare double
+quotes -- search paths (`-Yi`), the atlas and colour files (`-Y5i`, `-YkE`, `-YkU`),
+the exoplanet and star lists (`-YUx`, `-YRU`, `-YXU`), object display names (`-YD`),
+the sidebar text (`-YXt`), the default chart name and location (`-zj`), every macro
+(`-M0`), the menu names (`-WM`, `-WM0`, both builds) and the two font names (`-WF`,
+`-WG`); `-YU`'s star definition had no quotes at all. `NParseCommandLine()` ends a
+quoted parameter at its quote character followed by a space or punctuation, so any of
+those holding `"` followed by a space -- a macro such as `-i "my file.as"` is exactly
+that -- ended early, and a refused line stops `FProcessSwitchFile()` reading the rest of
+the file. The chart-file writers (`-zi`) were never affected: `PrintQuotedSz()` turns a
+`"` into `'` there.
+
+**The net came from the sweeps, not a hand-picked probe.** The `settings-fields` and
+`settings-strings` markers now carry `" q-`, and `interface-settings`' menu-name probe
+`Probe" MacroName`. On the unfixed writer: `settings-fields` "the file it wrote loads
+back" failed and every field written after the first broken line read as lost (40+
+names, from the category flags to the AstroExpression hooks); `settings-strings` lost
+`-YD`, `-YU` and `-M0`; `interface-settings` lost the macro names and everything the
+file carried after them.
+
+**The fix** is one helper, `PrintQuotedParamSz()` (`io.cpp`), at all of those sites:
+quoted with `"`, or with `'` when the text holds a `"` -- the rule the AstroExpression
+writer already used. Text holding both cannot be quoted exactly; its double quotes are
+written as single ones, as chart files always have, so the line loads and the lines
+after it are not lost. `settings-strings` gives that fallback its own marker (macro 1
+holds both characters, expected back with `'`).
+
+**Evidence.** After the fix the three groups pass alone: `settings-fields` 335 of 342
+asked, 0 lost; `settings-strings` 280 asked, 0 lost; `interface-settings` 44 passed.
+The fallback falsified: writing both-quotes text raw inside `"` made
+`settings-strings` fail "the file it wrote loads back" and lose `is.rgszMacro[1]`;
+reverted by exact string, 0 lost again. `tools/warning_audit.py --file io.cpp` compiles
+it under all five builds, Windows and wcli included, with no warning.
+
+## H4 falsified
+
+**H4, falsified after the fact.** No real dialog is a popup that ignores its first
+close, so the suite now has one. `ShowIgnoringPopupQt()` (`qttest.cpp`) shows a
+`Qt::Popup` widget and blocks in its own `QEventLoop` as `exec()` would; its
+`closeEvent` refuses the first close and accepts the second. It also carries its own
+5 s limit and records when that limit is what ended it, so a broken net is a FAIL, not
+a hung run. The `popup-net` group drives it through `StrOpenDialogQt()` and requires:
+the opening timer finds it by title, the net ends it rather than the limit, exactly two
+closes, return within 4 s, and no popup left open.
+
+**With the net's `activePopupWidget()` fallback disabled** (a marked sabotage), the group
+exits 1 at 5009 ms with three FAILs -- the limit ended it, one close only, and the
+elapsed time; without the opener's own limit that run would never have ended.
+**Restored** (exact-string revert, no marker left), it passes 7 of 7 in 1559 ms, the
+canary is clean, and the full suite passes 5206, 0 failed. It costs about 1.5 s, the
+net's own delay. (`loop` is a macro in `astrolog.h`, which is why the event loop member
+is named `evl`.)
+
+## Standing nets for K3 and K4
+
+Both fixes had been falsified only on hand-built command lines, because no ordinary
+run carries a long star list or a chart list. Each now has an assertion that runs every
+time.
+
+**K3.** `star-links` gives its own save a **1799-character** name list and a
+**1379-character** link list, and asserts both come back byte-identical, before putting
+the user's lists back from an outer copy. With the old `cchSzLine` buffers filled by
+`sprintf2()` put back (a marked sabotage) it fails `a 1799 and a 1379 character star
+list come back whole (1019, 1019)`; reverted, 10 passed.
+
+**K4.** `ChartListSeedQt` appends ten distinct charts before the pin in
+`export-roundtrip`, `null-names`, `chart-list`, `open-dir` and `oracle`, asserts every
+entry by date, time, longitude and name after the group's `Restore()`, and trims them
+off -- so each group sees only its own seed whatever runs before it. With a count-only
+restore (the K4 shape) all five fail, e.g. `open-dir puts back the charts it found in
+the list, not just their count (10 of 10, first wrong entry 0: "Default")`; reverted,
+20 / 5 / 13 / 7 / 578 passed, canary clean. Six passes added in all.
+
+**A correction to plan item 7.** The oracle legs' pre-fix "save only the first eight
+entries" shape loses nothing even with ten charts seeded: each leg empties the list and
+appends at most four, so the entries past the eighth are never overwritten. What the net
+catches in `oracle` is a count-only restore, which the other four share.
+
+## The warning gate covers every Linux build
+
+**The warnings gate in `make check`.** `tools/check.sh` runs
+`tools/warning_audit.py --cached --gate-subset --build console --build qt --build
+qt-test`, which compiles every source file and header of the three Linux builds with the
+audit's `-Wall` flags. Before 2026-09-13 the step compiled `qttest.cpp` alone, and every
+other file reached the compiler only through the full audit, which nothing ran. A subset
+run is normally not a gate -- its first column renames shared sites -- so
+`--gate-subset` makes it one on "any warning at all", which holds only while
+`tools/warnings.txt` is empty; it refuses (exit 2) once it is not. win, wcli and Qt6 stay
+with the full audit, because a release runner has no mingw or hand-installed Qt6.
+`WARNING_AUDIT_JOBS=1` narrows the build on a shared machine.
+
+**Falsified under `make check` itself**, which is where the earlier gate had broken: an
+unused variable planted in `io.cpp` failed the step (`console+qt+qt-test io.cpp
+FileOpen -Wunused-variable`, rc 2), one planted in `astrolog.h` failed it across all
+three builds, and with both reverted by exact string the step reads `warning gate clean:
+0 warnings across console, qt, qt-test`. Warm 0.26 s, cold about 40 s; a header edit
+recompiles what includes it.
+
+**And a bug in the cached audit, found while building this.** The cache was one
+directory shared by every checkout on the machine. make compares file times inside its
+own tree, so objects written from one worktree could be newer than another worktree's
+edit and hide it -- a new warning unreported. The cache is now per checkout,
+`~/.cache/astrolog-warning-audit/<checkout hash>/`. The "Measured" and "Proven" results
+in the cached-audit section above were taken with one checkout using the cache, so they
+stand; what they could not have seen is two.
+
+## Merging qt: `info-coord` assumed seconds were shown
+
+`qt` moved by four commits while this batch was open, and merged into `qttest3` with no
+text conflict. `make check` on the merged tree then failed two checks in `info-coord`,
+the chart info coordinate group `qt`'s newest commit added: `and it still reads back as
+the longitude set ("97:44W")` and the latitude's. The fields carry seconds only when
+`us.fSeconds` is on; `make check` runs the suite with `-Yi1 ephem`, which reads the
+tree's `astrolog.as`, and that has `_b0`. So the group failed under `make check` on `qt`
+itself -- it had passed only in runs with `-i nrvate.as` (`=b0`). Not a merge fault
+and not a leak: the canary run named no group changing `us.fSeconds`.
+
+**Fix:** the group pins `us.fSeconds` on and restores it. **Net:** alone, as `make
+check` runs it, the unfixed binary fails the two read-backs and the fixed one passes 8
+of 8, also with `_b0` forced; `make check` on the merged tree: all clear, 5218 passed,
+0 failed.

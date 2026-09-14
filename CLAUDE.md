@@ -193,7 +193,10 @@ make check                       # what CI used to run on every push:
                                  # and tools/check.sh says what it leaves
                                  # out (the differential, the container
                                  # build check, the sanitizers, the
-                                 # warning audit, the Swiss oracle)
+                                 # Windows and Qt6 legs of the warning
+                                 # audit, the Swiss oracle) -- the Linux
+                                 # builds' warnings it does gate, every
+                                 # file, through the cached audit
 make install                     # two wrappers on PATH, a menu entry and
                                  # icons; the data stays
                                  # in the checkout, so the tree has to stay
@@ -697,8 +700,13 @@ tools/warning_audit.py --cached      # the same gate, the same report,
                                      # the last --cached run: 0.5 s with
                                      # nothing changed. Objects and what
                                      # the compiler said about each live in
-                                     # ~/.cache/astrolog-warning-audit, out
-                                     # of make clean's reach. Proven
+                                     # ~/.cache/astrolog-warning-audit/,
+                                     # one directory per checkout (a shared
+                                     # one let one worktree's objects hide
+                                     # another's edit), out of make clean's
+                                     # reach. make check runs it with
+                                     # --gate-subset over the three Linux
+                                     # builds. Proven
                                      # against the full audit with planted
                                      # warnings (QTTEST_REVIEW_IMPLEM.md);
                                      # --update still needs the full one
