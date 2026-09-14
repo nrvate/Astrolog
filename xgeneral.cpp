@@ -51,6 +51,7 @@
 ** Last code change made 5/28/2026.
 */
 
+#include <string.h>
 #include "astrolog.h"
 
 
@@ -372,10 +373,16 @@ void DrawBlock(int x1, int y1, int x2, int y2)
         for (y = y1; y <= y2; y++)
           for (x = x1; x <= x2; x++)
             BmSet(gi.bm, x, y, gi.kiCur);
-      } else {
-        for (y = y1; y <= y2; y++)
-          for (x = x1; x <= x2; x++)
-            BmpSetXY(&gi.bmp, x, y, gi.kvCur);
+      } else if (x1 <= x2 && y1 <= y2) {
+        // Set the first row's pixels, then copy that row to the rest: the
+        // same bytes, where one call per pixel was about a sixth of a
+        // large animated GIF's time, most of it clearing the background.
+        long cbRow = gi.bmp.clRow << 2, cb = (long)(x2 - x1 + 1) * 3;
+        for (x = x1; x <= x2; x++)
+          BmpSetXY(&gi.bmp, x, y1, gi.kvCur);
+        for (y = y1 + 1; y <= y2; y++)
+          memcpy(gi.bmp.rgb + y*cbRow + x1*3, gi.bmp.rgb + y1*cbRow + x1*3,
+            cb);
       }
     }
 #ifdef PSCRIPT

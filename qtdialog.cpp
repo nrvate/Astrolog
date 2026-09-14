@@ -66,6 +66,7 @@
 #include <QtCore/QStringList>
 #include <QtCore/QEvent>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QVector>
 #include <QtCore/QMimeData>
 #include <QtGui/QClipboard>
@@ -1440,14 +1441,23 @@ static CONST struct { int nUnit; CONST char *sz; } rggifunitQt[] = {
 #define cgifunitQt ((int)(sizeof(rggifunitQt)/sizeof(rggifunitQt[0])))
 
 static QProgressDialog *s_pprogGifQt = NULL;
+static QElapsedTimer s_timerGifQt;
+
+// Called after every frame. Moving the bar and pumping events is kept to
+// once every 50 ms, plus the first frame and the last: a frame can take a
+// few milliseconds, and thousands of them each repainting the dialog was
+// a cost of its own. The cancel is still seen within 50 ms.
 
 static flag FGifProgressQt(int iFrame, int cFrame)
 {
   if (s_pprogGifQt == NULL)
     return fTrue;
-  s_pprogGifQt->setMaximum(cFrame);
-  s_pprogGifQt->setValue(iFrame);
-  QCoreApplication::processEvents();
+  if (iFrame <= 1 || iFrame >= cFrame || s_timerGifQt.elapsed() >= 50) {
+    s_pprogGifQt->setMaximum(cFrame);
+    s_pprogGifQt->setValue(iFrame);
+    QCoreApplication::processEvents();
+    s_timerGifQt.start();
+  }
   return !s_pprogGifQt->wasCanceled();
 }
 

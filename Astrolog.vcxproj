@@ -91,6 +91,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="astrolog.h" />
+    <ClInclude Include="cgif.h" />
+    <ClInclude Include="cgif_raw.h" />
     <ClInclude Include="extern.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="swehouse.h" />
@@ -114,6 +116,8 @@
     <ClCompile Include="astrolog.cpp" />
     <ClCompile Include="atlas.cpp" />
     <ClCompile Include="calc.cpp" />
+    <ClCompile Include="cgif.cpp" />
+    <ClCompile Include="cgif_raw.cpp" />
     <ClCompile Include="charts0.cpp" />
     <ClCompile Include="charts1.cpp" />
     <ClCompile Include="charts2.cpp" />

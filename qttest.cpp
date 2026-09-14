@@ -105,6 +105,7 @@
 #include "swephexp.h"
 #define ret cp0.dir
 #endif
+#include "cgif.h"
 
 #ifdef QTTEST
 
@@ -719,13 +720,19 @@ static void TestChartHeaderQt()
 // a textbook LZW decoder with early change, so an encoder bug in the code
 // width or the table reset shows up as a wrong or truncated picture rather
 // than agreeing with itself. It also rejects a global color table, which
-// the writer never emits.
+// the writer never emits. Frames are composited as a viewer shows them:
+// each image drawn at its offset over the canvas left by the one before,
+// skipping its transparent index -- the writer stores later frames as
+// only what changed, and rgim holds what is on screen after each.
 
 typedef struct {
   int x, y;              // Logical screen.
   int nDelay;            // Last graphic control extension's delay, or -1.
   flag fLoop;            // Did a NETSCAPE2.0 looping extension appear?
-  QVector<QImage> rgim;  // Every frame, as RGB32.
+  QVector<QImage> rgim;  // Every frame as shown, as RGB32.
+  QVector<int> rgcbData; // Each frame's LZW coded image data, in bytes.
+  QVector<int> rgcDrawn; // Pixels each frame drew: not transparent, inside.
+  QVector<int> rgcRect;  // Pixels in each frame's image rectangle.
 } GIFDECQT;
 
 static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
@@ -736,6 +743,9 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
 
   pgd->x = pgd->y = 0; pgd->nDelay = -1; pgd->fLoop = fFalse;
   pgd->rgim.clear();
+  pgd->rgcbData.clear();
+  pgd->rgcDrawn.clear();
+  pgd->rgcRect.clear();
   if (!file.open(QIODevice::ReadOnly))
     return fFalse;
   ba = file.readAll();
@@ -745,6 +755,9 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
   if (cb < 13 || memcmp(pb, "GIF89a", 6) != 0 || (pb[10] & 0x80))
     return fFalse;
   pgd->x = W(6); pgd->y = W(8);
+  QImage imCanvas(pgd->x, pgd->y, QImage::Format_RGB32);
+  imCanvas.fill(qRgb(0, 0, 0));
+  int iTrans = -1;
   i = 13;
   while (i < cb) {
     if (pb[i] == 0x3B)
@@ -755,8 +768,15 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
       if (pb[i+1] == 0xFF && i + 14 <= cb &&
         memcmp(pb + i + 3, "NETSCAPE2.0", 11) == 0)
         pgd->fLoop = fTrue;
-      if (pb[i+1] == 0xF9 && i + 6 <= cb)
+      if (pb[i+1] == 0xF9 && i + 7 <= cb) {
         pgd->nDelay = W(i+4);
+        iTrans = (pb[i+3] & 1) ? pb[i+6] : -1;
+        // Disposal: 0 and 1 leave the frame in place, which is all this
+        // compositing implements. 2 and 3 are refused rather than drawn
+        // as if they were 1, so a writer choosing them cannot pass.
+        if (((pb[i+3] >> 2) & 7) > 1)
+          return fFalse;
+      }
       i += 2;
       while (i < cb && pb[i] != 0)
         i += pb[i] + 1;
@@ -765,8 +785,11 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
     }
     if (pb[i] != 0x2C || i + 10 > cb)
       return fFalse;
-    int w = W(i+5), h = W(i+7), packed = pb[i+9];
+    int xLeft = W(i+1), yTop = W(i+3), w = W(i+5), h = W(i+7);
+    int packed = pb[i+9];
     i += 10;
+    if (w < 1 || h < 1 || xLeft + w > pgd->x || yTop + h > pgd->y)
+      return fFalse;
     if (!(packed & 0x80))
       return fFalse;
     int cPal = 1 << ((packed & 7) + 1);
@@ -787,6 +810,7 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
       i += pb[i] + 1;
     }
     i++;
+    pgd->rgcbData.append(data.size());
 
     int rgPre[4096], rgSuf[4096], rgFirst[4096];
     int codeClear = 1 << cBitMin, cBit = cBitMin + 1, avail = codeClear + 2;
@@ -836,13 +860,19 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
     }
     if (out.size() != w * h)
       return fFalse;
-    QImage im(w, h, QImage::Format_RGB32);
+    int cDrawn = 0;
     for (j = 0; j < w * h; j++) {
       if (out[j] >= cPal)
         return fFalse;
-      im.setPixel(j % w, j / w, pal[out[j]]);
+      if (out[j] != iTrans) {
+        imCanvas.setPixel(xLeft + j % w, yTop + j / w, pal[out[j]]);
+        cDrawn++;
+      }
     }
-    pgd->rgim.append(im);
+    pgd->rgcDrawn.append(cDrawn);
+    pgd->rgcRect.append(w * h);
+    pgd->rgim.append(imCanvas.copy());
+    iTrans = -1;    // A control extension applies to one image only.
   }
   return fFalse;    // No trailer.
 }
@@ -851,11 +881,14 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
 // the chart the animation moves, and the main chart.
 static QVector<CI> s_rgciMovedQt, s_rgciMainQt;
 static int s_iGifCancelQt = -1;
+static GA *s_pgaResizeQt = NULL;   // Resize frames 2 and 3 of this request.
 
 static flag FGifProgressTestQt(int iFrame, int cFrame)
 {
   s_rgciMovedQt.append(*PciAnimate());
   s_rgciMainQt.append(ciMain);
+  if (s_pgaResizeQt != NULL)
+    s_pgaResizeQt->xWin = iFrame == 1 ? 300 : 500;
   return iFrame != s_iGifCancelQt;
 }
 
@@ -885,29 +918,34 @@ static void TestGenerateGifQt()
 
   Group("Generate animated GIF");
 
-  // The LZW coder alone, over every string length from 1 to 1200 and some
-  // long enough to fill and clear the code table, in 2, 4, 16 and 256
-  // colours, noise and runs. Whether a picture's last code lands on a code
-  // width boundary depends on its content, so chart renders only hit that
-  // case by luck: the full suite drew one, this group alone did not, and a
-  // frame missing the widening at its end passed here while failing there.
+  // The LZW coding, which is the vendored cgif's, over every string length
+  // from 1 to 1200 and some long enough to fill and clear the code table,
+  // in 2 to 256 colours, noise and runs: each string is written as a one
+  // row GIF through cgif's own API and read back by the decoder above.
+  // Whether a picture's last code lands on a code width boundary depends
+  // on its content, so chart renders only hit that case by luck: the full
+  // suite drew one, this group alone did not, and a frame missing the
+  // widening at its end passed here while failing there. Colour counts
+  // that are not a power of two are here because cgif sizes its first
+  // code from the table it is given.
   {
-    CONST int rgnAlpha[4] = {2, 4, 16, 256};
+    CONST int rgnAlpha[6] = {2, 3, 4, 16, 17, 256};
     CONST int rgcBig[4] = {4096, 8191, 20000, 65535};
     char szLzw[cchSzMax];
-    int ia, cBitMin, len, j, il, cTried = 0, cFail = 0;
+    byte rgbPal[3*256];
+    int ia, len, j, il, cTried = 0, cFail = 0;
     dword lSeed;
 
     sprintf2(S(szLzw), "%s/astrolog-qt-lzw-%d.gif",
       QDir::tempPath().toLocal8Bit().constData(),
       (int)QCoreApplication::applicationPid());
-    for (ia = 0; ia < 4; ia++) {
-      for (cBitMin = 2; (1 << cBitMin) < rgnAlpha[ia]; cBitMin++)
-        ;
+    for (j = 0; j < 256; j++)
+      rgbPal[3*j] = rgbPal[3*j+1] = rgbPal[3*j+2] = (byte)j;
+    for (ia = 0; ia < 6; ia++) {
       // Past 1200, the four long strings, then for 256 colours of noise --
       // about one code a pixel -- every length where the table's first
       // clear falls, so one of them ends on the code just after a clear.
-      for (il = 1; il <= 1200 + 4 + (ia == 3 ? 900 : 0); il++) {
+      for (il = 1; il <= 1200 + 4 + (ia == 5 ? 900 : 0); il++) {
         len = il <= 1200 ? il : (il <= 1204 ? rgcBig[il - 1201] :
           3500 + (il - 1205));
         QVector<byte> rgPix(len);
@@ -918,36 +956,35 @@ static void TestGenerateGifQt()
             (j / 7) % rgnAlpha[ia] :
             (lSeed >> 16) % rgnAlpha[ia]);
         }
-        FILE *file = fopen(szLzw, "wb");
-        if (file == NULL) {
+        CGIF_Config gc;
+        ClearB((pbyte)&gc, sizeof(gc));
+        gc.path = szLzw;
+        gc.attrFlags = CGIF_ATTR_NO_GLOBAL_TABLE;
+        gc.width = (uint16_t)len; gc.height = 1;
+        CGIF *pgif = cgif_newgif(&gc);
+        if (pgif == NULL) {
           cFail++;
           continue;
         }
-        fwrite("GIF89a", 1, 6, file);
-        putc(len & 0xff, file); putc(len >> 8, file); putc(1, file);
-        putc(0, file); putc(0, file); putc(0, file); putc(0, file);
-        putc(0x2C, file);
-        for (j = 0; j < 4; j++)
-          putc(0, file);
-        putc(len & 0xff, file); putc(len >> 8, file); putc(1, file);
-        putc(0, file);
-        putc(0x80 | (cBitMin - 1), file);
-        for (j = 0; j < (1 << cBitMin); j++) {
-          putc(j, file); putc(j, file); putc(j, file);
-        }
-        FWriteGifLzw(file, rgPix.constData(), len, cBitMin);
-        putc(0x3B, file);
-        fclose(file);
+        CGIF_FrameConfig fc;
+        ClearB((pbyte)&fc, sizeof(fc));
+        fc.pLocalPalette = rgbPal;
+        fc.numLocalPaletteEntries = (uint16_t)rgnAlpha[ia];
+        fc.pImageData = rgPix.data();
+        fc.attrFlags = CGIF_FRAME_ATTR_USE_LOCAL_TABLE;
+        int nAdd = cgif_addframe(pgif, &fc);
+        int nClose = cgif_close(pgif);
         cTried++;
         GIFDECQT gdT;
-        flag fOk = FDecodeGifQt(szLzw, &gdT) && gdT.rgim.size() == 1 &&
+        flag fOk = nAdd == CGIF_OK && nClose == CGIF_OK &&
+          FDecodeGifQt(szLzw, &gdT) && gdT.rgim.size() == 1 &&
           gdT.rgim[0].width() == len;
         for (j = 0; fOk && j < len; j++)
           fOk = qRed(gdT.rgim[0].pixel(j, 0)) == rgPix[j];
         cFail += !fOk;
       }
     }
-    Check(cFail == 0, "the LZW coder round trips %d strings, 1 to 65535 "
+    Check(cFail == 0, "cgif's LZW coding round trips %d strings, 1 to 65535 "
       "pixels in 2 to 256 colours, through the independent decoder (%d "
       "did not)", cTried, cFail);
     remove(szLzw);
@@ -994,6 +1031,24 @@ static void TestGenerateGifQt()
       "%d, delay %d)", szWhat, gd.fLoop, gd.nDelay);
     if (gd.rgim.size() != 3)
       continue;
+    // Frames after the first are stored as only what changed: the
+    // rectangle that moved, its unchanged pixels transparent. That is most
+    // of why thousands of frames are quick to write, and nothing else here
+    // would notice it gone -- every frame would still composite right. So
+    // count what each frame actually draws: all of the screen for frame 1,
+    // and for 5 days of a wheel's motion, under half of it after that, from
+    // an image rectangle smaller than the screen.
+    int cScreen = gd.x * gd.y;
+    Check(gd.rgcDrawn.size() == 3 && gd.rgcDrawn[0] == cScreen &&
+      gd.rgcDrawn[1] * 2 < cScreen && gd.rgcDrawn[2] * 2 < cScreen &&
+      gd.rgcRect[1] < cScreen && gd.rgcRect[2] < cScreen,
+      "and frames 2 and 3 draw only what changed, under half the screen, "
+      "from a smaller rectangle "
+      "(%s: %d, %d and %d of %d pixels; rectangles %d, %d, %d; %d, %d, %d "
+      "bytes)", szWhat, gd.rgcDrawn.value(0), gd.rgcDrawn.value(1),
+      gd.rgcDrawn.value(2), cScreen, gd.rgcRect.value(0),
+      gd.rgcRect.value(1), gd.rgcRect.value(2), gd.rgcbData.value(0),
+      gd.rgcbData.value(1), gd.rgcbData.value(2));
     for (i = 0; i < 3; i += 2) {
       ciMain.day = 15 + i*5;
       ciCore = ciMain;
@@ -1014,6 +1069,62 @@ static void TestGenerateGifQt()
   gs.chBmpMode = 'B'; gi.fBmp = fFalse;
   Check(ciMain.day == 15 && ciMain.tim == 12.0,
     "the chart is put back where it was (day %d)", ciMain.day);
+
+  // Frames of another size than the first, which fixes the screen: frame
+  // 2 renders 100 pixels narrower and must show frame 1 beside it, as a
+  // viewer does with a smaller image left in place over the last; frame 3
+  // renders 100 wider and is clipped. In the 24 bit bitmap a frame's
+  // palette is its own, so frame 1's pixels have to be re-indexed into it.
+  for (int iMode = 0; iMode < 2; iMode++) {
+    gs.chBmpMode = iMode == 0 ? 'B' : 'P';
+    gi.fBmp = iMode == 1;
+    CONST char *szWhat = iMode == 0 ? "16 color" : "24 bit";
+    QImage rgimExp[3];
+    remove(szGif);
+    s_pgaResizeQt = &ga;
+    flag fGen = FGenerateGif(&ga);
+    s_pgaResizeQt = NULL;
+    ga.xWin = 400;
+    for (i = 0; i < 3; i++) {
+      gs.xWin = i == 0 ? 400 : (i == 1 ? 300 : 500);
+      ciMain.day = 15 + i*5;
+      ciCore = ciMain;
+      CastChart(0);
+      remove(szBmp);
+      FExportChartToFileTestQt(szBmp, ftBmp);
+      rgimExp[i] = QImage(QString::fromLocal8Bit(szBmp)).convertToFormat(
+        QImage::Format_RGB32);
+    }
+    gs.xWin = 400;
+    ciMain = ciMainSav; ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990;
+    ciMain.tim = 12.0; ciCore = ciMain;
+    CastChart(0);
+    Check(fGen && FDecodeGifQt(szGif, &gd) && gd.rgim.size() == 3 &&
+      gd.x == rgimExp[0].width() && gd.y == rgimExp[0].height() &&
+      rgimExp[1].width() == gd.x - 100 && rgimExp[2].width() == gd.x + 100,
+      "a %s GIF whose frames render 100 narrower and then 100 wider keeps "
+      "the first frame's %dx%d screen (%dx%d, %d frames; renders %d, %d "
+      "and %d wide)", szWhat, rgimExp[0].width(), rgimExp[0].height(),
+      gd.x, gd.y, (int)gd.rgim.size(), rgimExp[0].width(),
+      rgimExp[1].width(), rgimExp[2].width());
+    if (gd.rgim.size() != 3)
+      continue;
+    QImage im2 = rgimExp[0].copy(), im3;
+    {
+      QPainter paint(&im2);
+      paint.drawImage(0, 0, rgimExp[1]);
+    }
+    im3 = im2.copy();
+    {
+      QPainter paint(&im3);
+      paint.drawImage(0, 0, rgimExp[2]);
+    }
+    Check(gd.rgim[1] == im2, "%s frame 2, narrower, is its render with "
+      "frame 1 still showing beside it", szWhat);
+    Check(gd.rgim[2] == im3, "%s frame 3, wider, is its render clipped to "
+      "the screen", szWhat);
+  }
+  gs.chBmpMode = 'B'; gi.fBmp = fFalse;
 
   // A multiwheel: the generator moves the chart Animate() moves, the
   // transiting one, and leaves the natal chart alone.

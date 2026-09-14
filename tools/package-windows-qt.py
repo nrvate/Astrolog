@@ -67,7 +67,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_FILES = ["astrolog.as", "atlas.as", "timezone.as",
               "sefstars.txt", "seorbel.txt", "astexo.csv", "earth.bmp",
               "astrlog1.ico",
-              "astrolog.htm", "changes.htm", "license.htm"]
+              "astrolog.htm", "changes.htm", "license.htm",
+              "cgif-license.txt"]
 DATA_DIRS = ["ephem", "font", "icons"]
 EXTRA_PLUGINS = ["qoffscreen.dll", "qminimal.dll"]
 CRT_DLLS = ["msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll",

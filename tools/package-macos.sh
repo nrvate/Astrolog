@@ -87,7 +87,7 @@ echo "== staging $ver"
 cp astrolog-qt "$app/Contents/MacOS/Astrolog"
 cp -R ephem font icons "$app/Contents/MacOS/"
 cp astrolog.as atlas.as timezone.as sefstars.txt seorbel.txt astexo.csv \
-   earth.bmp "$app/Contents/MacOS/"
+   earth.bmp cgif-license.txt "$app/Contents/MacOS/"
 
 # The icon. The largest source art in this tree is 48x48, so every size
 # above that is an upscale and will look soft next to a modern app icon.

@@ -6,7 +6,9 @@ http://www.astrolog.org/ftp/ast80src.zip — the changes upstream made in
 8.00 are listed at http://www.astrolog.org/ftp/updat800.htm
 
 Everything Astrolog does, and all of its chart calculation and drawing
-code, is Walter D. Pullen's work. See license.htm.
+code, is Walter D. Pullen's work. See license.htm. Two libraries are
+vendored: the Swiss Ephemeris (its licence is part of license.htm) and,
+for writing animated GIFs, cgif (MIT; cgif-license.txt).
 
 ## What this fork adds
 

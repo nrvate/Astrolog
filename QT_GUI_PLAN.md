@@ -11039,6 +11039,40 @@ this is the note that explains the wall of dialogs.
     two target dates against the pyswisseph script, and every piece was
     sabotaged to a named failure.
 
+267. **Animated GIFs through the vendored cgif, and 1.8 times faster.**
+    The maintainer found thousands of frames too slow. The hand-written
+    LZW coder (`FWriteGifLzw()`) is gone; `FWriteGifFrame()` hands cgif
+    v0.5.4's indexed API one frame at a time, marks unchanged pixels
+    transparent itself and lets cgif crop to the changed rectangle. See
+    "Animated GIFs" under "Features this fork adds to both builds" for the
+    five decisions, of which the one worth remembering is measured: cgif's
+    own transparency pass made the benchmark slower, 11.1 s against 8.5,
+    because it compares through the palettes a pixel at a time. 337 frames
+    of 1600x1360: 8.46 s and 29.2 MB before, 4.79 s and 19.7 MB after, with
+    frames decoded by PIL identical to the old writer's in 16 colour and 24
+    bit modes. `DrawBlock()`'s 24 bit fill copies its first row rather
+    than setting each pixel, byte-identical over all 571 renders of
+    `tools/graphics-matrix.sh` against the old binary; one pixel off, 198
+    of them move. The Qt progress bar updates at most every 50 ms.
+
+    cgif compiles as C++ (renamed `.cpp`, casts and one pair of braces,
+    recorded in each header) inside `SRC_GRAPHICS`, so the makefiles,
+    `tools/qt-srcs.py`, `tools/msvc-build-qt.cmd` and the audits needed
+    nothing; `Astrolog.vcxproj` gained the two files. `cgif-license.txt`
+    ships in the Windows zip, installer and macOS bundle.
+
+    The `generate-gif` group's decoder now composites frames at their
+    offsets over the frame before, honouring the transparent index, and
+    refuses disposal 2 and 3. New or changed nets, each sabotaged to a
+    named failure: frames 2 and 3 draw under half the screen from a
+    smaller rectangle (transparency and cropping both off: exactly those
+    two checks fail, every frame still exact; cropping alone off: the same
+    two); frames rendered narrower and wider keep the first screen, the
+    narrower showing frame 1 beside it (skip re-indexing those pixels in
+    24 bit: that check fails); and the LZW round trip now drives cgif over
+    8124 one-row GIFs (code width one code late in `cgif_raw.cpp`: 7735
+    fail).
+
 
 ## Features this fork adds to both builds
 
@@ -11490,17 +11524,63 @@ that are not obvious from the dialog:
 The delay is stored in hundredths of a second, with a minimum of 2,
 because browsers show a delay of 0 or 1 as a tenth of a second.
 
-**The GIF writer** is new, in xdevice.cpp: GIF89a, lossless LZW, and a
-local palette per frame -- the chart's 16 colours exactly, the two of a
-monochrome chart, or up to 256 exact colours from a 24 bit bitmap. Only a
-frame with more than 256, which takes a photographic background, falls
-back to a 3-3-2 cube. The code width grows when the code just assigned
-reaches the width's limit, and the table is cleared at 4095.
+**The GIF writer** is `FWriteGifFrame()` in xdevice.cpp, on top of the
+vendored **cgif** library (v0.5.4, MIT, `cgif.cpp`/`cgif_raw.cpp`, licence
+in `cgif-license.txt`) since 2026-09-14, when generating thousands of
+frames proved too slow with the hand-written LZW coder it replaced (work
+log item 267). GIF89a, lossless, and a local palette per frame -- the
+chart's 16 colours exactly, the two of a monochrome chart, or up to 256
+exact colours from a 24 bit bitmap. Only a frame with more than 256, which
+takes a photographic background, falls back to a 3-3-2 cube.
 `BeginFileX()` hands each render the open GIF (`gi.fileGif`) instead of a
-file of its own and `EndFileX()` appends the render as the next frame, so
-every frame goes through the same `FActionX()` path as Export Chart
-Bitmap. The charts are put back as they were afterward, and a cancelled
-or failed GIF is removed.
+file of its own, `EndFileX()` appends the render as the next frame, and
+`FEndGif()` flushes the frames cgif holds and writes the trailer, so every
+frame goes through the same `FActionX()` path as Export Chart Bitmap. The
+charts are put back as they were afterward, and a cancelled or failed GIF
+is removed.
+
+**Frames after the first are deltas.** Every frame is left in place
+(disposal 1). A pixel already showing its colour gets a spare transparent
+index one past the palette, and cgif (`CGIF_FRAME_GEN_USE_DIFF_WINDOW`)
+crops the frame to the rectangle holding the rest. Five decisions, each
+measured or forced:
+
+- **The transparency is marked by Astrolog, not by cgif's own
+  `CGIF_FRAME_GEN_USE_TRANSPARENCY`.** cgif compares frames through their
+  palettes one pixel at a time, and with a local palette per frame that
+  made the 337-frame benchmark below *slower* than the old coder, 11.1 s
+  against 8.5. `FWriteGifFrame()` instead compares each render pixel
+  with a buffer of the colours on screen, in the same pass that maps it to
+  a palette index, and never looks a pixel up that did not change.
+- **`CGIF_GEN_KEEP_IDENT_FRAMES`**: cgif would otherwise fold a frame
+  identical to the one before into that frame's delay, and the frame
+  count is part of what the user asked for.
+- **A frame of a different size** is clipped to the first frame's screen,
+  and where it is smaller the rest of the screen keeps what was showing,
+  re-indexed into the new frame's palette -- what the old writer's
+  smaller image at the origin looked like. cgif needs full-size frames.
+- **A frame of 256 colours has no index to spare** and is sent whole
+  within its rectangle; so is one that needs the 3-3-2 cube.
+- **cgif compiles as C++.** It is renamed `.cpp` and sits in
+  `SRC_GRAPHICS`, so no makefile, `tools/qt-srcs.py` or the MSVC script
+  needed a C rule or a new group; the only edits are the casts and one
+  pair of braces C++ forces, listed in each file's header. It compiles
+  without a warning under g++ -Wall, mingw and clang, so it needs no
+  exemption like the Swiss files'.
+
+**Speed**, 337 frames of 1600x1360 24 bit wheel stepping an hour at a
+time (`-Xw 1600 1360 -Xbw -Xg ... 1 3 50`), console build: **8.46 s, 25
+ms a frame, 29.2 MB** with the old coder, **4.79 s, 14 ms a frame, 19.7
+MB** now; stepping a day, 8.88 s and 29.0 MB against 4.80 s and 17.2 MB.
+The old profile was the LZW coder 59%, colour mapping 21%, `BmpSetXY`
+10%, `DrawBlock` 4%. Now it is cgif's LZW 48%, `FWriteGifFrame()` 29%,
+memmove 8%, and drawing under 5% -- `DrawBlock` fills a 24 bit block by
+setting one row and copying it, and it was clearing the background a
+pixel at a time. What limits it now is that a wheel changes somewhere
+near every edge in each step: the changed rectangle averages 93% of the
+screen, and cgif's LZW walks every pixel of it, transparent runs
+included. The Qt dialog's progress bar and event pump run at most every
+50 ms.
 
 **The command line** is
 
@@ -11520,7 +11600,11 @@ and 3 are pixel-identical to Export Chart Bitmap for the same dates, in
 16-colour and in 24 bit mode; that frames differ; that the charts are
 restored afterward; that a transit and a bi-wheel chart move the second
 wheel exactly as `Animate(iAnimDay, 5)` does while the natal chart stays;
-that a 49-hour step, two day carries, lands on 1:00 and 2:00 two days on; that
+that a 49-hour step, two day carries, lands on 1:00 and 2:00 two days on;
+that frames 2 and 3 draw under half the screen from a rectangle smaller
+than it; that frames rendered 100 pixels narrower and then wider keep the
+first frame's screen, the narrower showing frame 1 beside it and the wider
+clipped, in both bitmap modes; that
 play-once writes no loop extension; that Cancel leaves no file; that back
 and forth gives 15, 20, 25, 20 June with the last frame equal to the
 second; that the menu item is disabled for a text chart and a spinning
@@ -11538,10 +11622,17 @@ group alone did not, a real bug: a frame's end-of-information code written
 one bit narrow when the decoder's last table entry reached a code width
 boundary. PIL read those files anyway, which is why the by-hand comparison
 missed it; the suite's decoder is strict and refused. Whether a frame hits
-that is up to its content, so the group also drives `FWriteGifLzw()`
-directly over 4816 strings -- every length to 1200, four long ones, and 900
-lengths across the first table clear, in 2, 4, 16 and 256 colours -- and 9
-of them fail with the fix removed.
+that is up to its content, so the group also round-trips generated
+strings through the encoder. Since cgif it drives cgif's own API, one-row
+GIFs of 8124 strings -- every length to 1200, four long ones, and 900
+lengths across the first table clear, in 2, 3, 4, 16, 17 and 256 colours,
+since cgif sizes its first code from the table -- and growing the code
+width one code late fails 7735 of them.
+
+The decoder composites frames as a viewer does -- each image at its
+offset over the one before, skipping its transparent index -- and refuses
+disposal methods 2 and 3, which it does not implement, rather than drawing
+them as 1.
 
 The menu parity test requires every Qt-only menu item to be listed in
 `rgqtonlyQt[]` with a reason, and "Generate Animation..." is there.

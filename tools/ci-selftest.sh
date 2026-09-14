@@ -137,7 +137,7 @@ stage() {  # stage <dir>: the required payload as empty files, manifest written.
   mkdir -p "$1/ephem" "$1/font"
   for f in ephem/*.se1; do : > "$1/$f"; done
   for f in astrolog.as atlas.as timezone.as sefstars.txt seorbel.txt astexo.csv \
-           earth.bmp astrolog.htm changes.htm license.htm astrolog.exe; do : > "$1/$f"; done
+           earth.bmp astrolog.htm changes.htm license.htm cgif-license.txt astrolog.exe; do : > "$1/$f"; done
   (cd "$1" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 }
 stage "$T/pkg"

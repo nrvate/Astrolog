@@ -33,7 +33,7 @@ dir=${1:?usage: ci-verify-package.sh <package directory>}
 required="ephem/sepl_18.se1 ephem/semo_18.se1 ephem/seas_18.se1
           astrolog.as atlas.as timezone.as
           sefstars.txt seorbel.txt astexo.csv earth.bmp
-          astrolog.htm changes.htm license.htm"
+          astrolog.htm changes.htm license.htm cgif-license.txt"
 forbidden="nrvate.as astrolog.cpp qtdriver.cpp Makefile .git"
 
 bad=0

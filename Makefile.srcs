@@ -26,8 +26,15 @@ SRC_CORE = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp \
   intrpret.cpp io.cpp matrix.cpp
 
 # The graphics half: chart drawing and the device backends it draws to.
+# cgif.cpp and cgif_raw.cpp are the vendored cgif library (MIT, see
+# cgif-license.txt), which writes animated GIFs for xdevice.cpp. They sit
+# here rather than in a group of their own because every build that
+# compiles the graphics compiles them, and a new group is one that
+# tools/qt-srcs.py and six makefiles would each have to learn about. They
+# compile warning-free under g++ -Wall, mingw and clang, so unlike the
+# Swiss files below they need no exemption.
 SRC_GRAPHICS = xdata.cpp xgeneral.cpp xdevice.cpp xcharts0.cpp \
-  xcharts1.cpp xcharts2.cpp xscreen.cpp
+  xcharts1.cpp xcharts2.cpp xscreen.cpp cgif.cpp cgif_raw.cpp
 
 # The Swiss Ephemeris library, vendored. Upstream's files, not this
 # fork's -- see CLAUDE.md on sweph.cpp's line endings.

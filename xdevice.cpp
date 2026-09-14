@@ -52,6 +52,7 @@
 */
 
 #include "astrolog.h"
+#include "cgif.h"
 
 
 #ifdef GRAPH
@@ -1257,148 +1258,86 @@ void WriteBmp(FILE *file)
 
 // Animated GIF output, one frame per chart render: FGenerateGif() in
 // xscreen.cpp opens the file and sets gi.fileGif, BeginFileX() hands every
-// render that handle instead of opening a file of its own, and EndFileX()
-// appends the render here as the next frame. Each frame carries its own
-// palette -- the chart's 16 colours exactly, the two of a monochrome
-// chart, or for a 24 bit bitmap the colours actually used when there are
-// 256 or fewer. Only a frame with more, which takes a photographic
-// background, falls back to a fixed 3-3-2 palette. The LZW coding itself
-// is lossless: no frame loses anything a palette can hold.
+// render that handle instead of opening a file of its own, EndFileX()
+// appends the render here as the next frame, and FEndGif() finishes the
+// file. Each frame carries its own palette -- the chart's 16 colours
+// exactly, the two of a monochrome chart, or for a 24 bit bitmap the
+// colours actually used when there are 256 or fewer. Only a frame with
+// more, which takes a photographic background, falls back to a fixed 3-3-2
+// palette.
+//
+// The GIF encoding is the vendored cgif library (cgif.cpp, cgif_raw.cpp;
+// MIT, see cgif-license.txt), which replaced a hand-written LZW coder here
+// because generating thousands of frames was too slow. Every frame after
+// the first is sent as a delta: a pixel already showing its colour is
+// given a spare transparent index here, and cgif crops the frame to the
+// rectangle holding the rest. The transparency is marked here rather than
+// by cgif's own CGIF_FRAME_GEN_USE_TRANSPARENCY because cgif compares two
+// frames through their palettes one pixel at a time, which with a local
+// palette per frame made 337 frames slower than the old coder, 11.1
+// seconds against 8.5. Every frame is still lossless: what a viewer shows
+// after frame N is exactly the chart rendered for frame N.
 
-#define cGifCodeMax 4096
-#define cGifHash    5003
-#define cGifSlot    1024
+#define cGifSlot 1024
 
-typedef struct _GifOut {
-  FILE *file;
-  dword lAcc;          // Code bits not yet a whole byte.
-  int cBit;
-  byte rgbBlock[255];  // Data sub-block being filled.
-  int cbBlock;
-} GIFOUT;
+static CGIF *pgifOut = NULL;       // The GIF, once frame 1 fixed its size.
+static byte *rgbGifPix = NULL;     // A frame's palette indexes, for cgif.
+static uint32_t *rglGifShow = NULL; // The colours shown after the last frame.
 
-static void GifPutByte(GIFOUT *pgo, int b)
+typedef struct _GifPalette {
+  KV rgkv[256];
+  int rgnSlot[cGifSlot];
+  int cKv;
+} GIFPAL;
+
+// Output callback for cgif: every byte of the file goes through here.
+
+static int NGifWrite(void *pContext, CONST uint8_t *pData, CONST size_t cb)
 {
-  pgo->rgbBlock[pgo->cbBlock++] = (byte)b;
-  if (pgo->cbBlock >= 255) {
-    putc(255, pgo->file);
-    fwrite(pgo->rgbBlock, 1, 255, pgo->file);
-    pgo->cbBlock = 0;
-  }
+  return fwrite(pData, 1, cb, (FILE *)pContext) == cb ? 0 : -1;
 }
 
-static void GifPutCode(GIFOUT *pgo, int code, int cBit)
+// The palette index of a colour, adding it if new. Returns -1 when the
+// palette already holds 256 other colours.
+
+static int IGifColor(GIFPAL *pgp, KV kv)
 {
-  pgo->lAcc |= (dword)code << pgo->cBit;
-  pgo->cBit += cBit;
-  while (pgo->cBit >= 8) {
-    GifPutByte(pgo, (int)(pgo->lAcc & 0xff));
-    pgo->lAcc >>= 8;
-    pgo->cBit -= 8;
+  int h = (int)((((dword)kv * 2654435761u) & 0xffffffffu) >> 22);
+
+  while (pgp->rgnSlot[h] >= 0 && pgp->rgkv[pgp->rgnSlot[h]] != kv)
+    h = (h + 1) & (cGifSlot-1);
+  if (pgp->rgnSlot[h] < 0) {
+    if (pgp->cKv >= 256)
+      return -1;
+    pgp->rgkv[pgp->cKv] = kv;
+    pgp->rgnSlot[h] = pgp->cKv++;
   }
+  return pgp->rgnSlot[h];
 }
 
-static void GifPutWord(FILE *file, int w)
-{
-  putc(w & 0xff, file);
-  putc((w >> 8) & 0xff, file);
-}
-
-
-// LZW code a frame's palette indexes as GIF image data. The code width
-// grows when the code just assigned reaches the current width's limit, one
-// entry ahead of a decoder, which assigns its entries a code later; and
-// the table is cleared when it fills. Not static: the suite drives it
-// directly over strings chosen to reach every width boundary.
-
-flag FWriteGifLzw(FILE *file, CONST byte *rgPix, long cPix, int cBitMin)
-{
-  GIFOUT go;
-  int *rgnKey, *rgnCode;
-  int codeClear = 1 << cBitMin, codeMax, cBit, prefix, k, h, d, nKey;
-  long i;
-
-  rgnKey = (int *)PAllocate(cGifHash * sizeof(int), "GIF table");
-  if (rgnKey == NULL)
-    return fFalse;
-  rgnCode = (int *)PAllocate(cGifHash * sizeof(int), "GIF table");
-  if (rgnCode == NULL) {
-    DeallocateP(rgnKey);
-    return fFalse;
-  }
-  for (h = 0; h < cGifHash; h++)
-    rgnKey[h] = -1;
-  go.file = file; go.lAcc = 0; go.cBit = 0; go.cbBlock = 0;
-  putc(cBitMin, file);
-  cBit = cBitMin + 1;
-  codeMax = codeClear + 1;
-  GifPutCode(&go, codeClear, cBit);
-  prefix = rgPix[0];
-  for (i = 1; i < cPix; i++) {
-    k = rgPix[i];
-    nKey = (prefix << 8) | k;
-    h = ((k << 4) ^ prefix) % cGifHash;
-    d = h == 0 ? 1 : cGifHash - h;
-    while (rgnKey[h] >= 0 && rgnKey[h] != nKey) {
-      h -= d;
-      if (h < 0)
-        h += cGifHash;
-    }
-    if (rgnKey[h] == nKey) {
-      prefix = rgnCode[h];
-      continue;
-    }
-    GifPutCode(&go, prefix, cBit);
-    codeMax++;
-    rgnKey[h] = nKey;
-    rgnCode[h] = codeMax;
-    if (codeMax >= (1 << cBit))
-      cBit++;
-    if (codeMax >= cGifCodeMax-1) {
-      GifPutCode(&go, codeClear, cBit);
-      for (h = 0; h < cGifHash; h++)
-        rgnKey[h] = -1;
-      cBit = cBitMin + 1;
-      codeMax = codeClear + 1;
-    }
-    prefix = k;
-  }
-  GifPutCode(&go, prefix, cBit);
-  // A decoder adds a table entry on reading that last code as well, and
-  // widens its codes if the entry reaches the limit, so the end code must
-  // be at that width. Missing this wrote a frame lenient readers still
-  // showed and a strict one refused, only for pictures whose code count
-  // ended on a boundary. (A decoder adds nothing for the first code after
-  // a clear, but there codeMax+1 is clear+2, below the limit, so the test
-  // cannot fire -- a guard for that case was tried and proved inert.)
-  if (codeMax + 1 >= (1 << cBit) && cBit < 12)
-    cBit++;
-  GifPutCode(&go, codeClear + 1, cBit);
-  if (go.cBit > 0)
-    GifPutByte(&go, (int)(go.lAcc & 0xff));
-  if (go.cbBlock > 0) {
-    putc(go.cbBlock, file);
-    fwrite(go.rgbBlock, 1, go.cbBlock, file);
-  }
-  putc(0, file);
-  DeallocateP(rgnCode);
-  DeallocateP(rgnKey);
-  return fTrue;
-}
+#define BGifQuant(kv) ((byte)((RgbR(kv) >> 5) << 5 | (RgbG(kv) >> 5) << 2 | \
+  RgbB(kv) >> 6))
 
 
 // Append the chart just rendered to the open animated GIF as its next
-// frame, writing the file's header first if this is the first one. The
-// first frame fixes the logical screen; a later frame of another size is
-// clipped to it rather than refused.
+// frame, starting the file if this is the first one. The first frame fixes
+// the logical screen. A later frame of another size is clipped to it, and
+// where it is smaller the rest of the screen keeps showing the frame
+// before, as a viewer shows it, since no frame is ever cleared.
 
 static flag FWriteGifFrame(FILE *file)
 {
-  KV rgkv[256], kv;
-  int rgnSlot[cGifSlot];
-  int x, y, xs, ys, cKv = 0, cBit, i, h;
-  flag fQuant = fFalse;
-  byte *rgPix;
+  GIFPAL gp;
+  CGIF_Config gc;
+  CGIF_FrameConfig fc;
+  byte rgbPal[3*256];
+  CONST byte *pbRow;
+  byte *pb;
+  uint32_t *pl;
+  KV kv, kvLast = 0;
+  uint32_t rglFix[16];
+  int x, y, xs, ys, xGif, yGif, i, iLast = -1, iTrans = -1;
+  flag fQuant = fFalse, fShort, fDone = fFalse, fShowOk = fTrue;
 
   if (gi.fBmp) {
     xs = gi.bmp.x; ys = gi.bmp.y;
@@ -1406,88 +1345,241 @@ static flag FWriteGifFrame(FILE *file)
     xs = gs.xWin; ys = gs.yWin;
   }
   if (gi.cGifFrame == 0) {
+    if (xs <= 0 || ys <= 0 || xs > 0xFFFF || ys > 0xFFFF)
+      return fFalse;
+    rgbGifPix = (byte *)PAllocate((long)xs * ys, "GIF frame");
+    if (rgbGifPix == NULL)
+      return fFalse;
+    rglGifShow = (uint32_t *)PAllocate((long)xs * ys * sizeof(uint32_t),
+      "GIF frame");
+    if (rglGifShow == NULL)
+      return fFalse;
+    ClearB((pbyte)&gc, sizeof(gc));
+    gc.attrFlags = CGIF_ATTR_IS_ANIMATED | CGIF_ATTR_NO_GLOBAL_TABLE |
+      (gi.fGifLoop ? 0 : CGIF_ATTR_NO_LOOP);
+    // Keep a frame identical to the one before rather than folding its
+    // delay into that one: the frame count is part of what was asked for.
+    gc.genFlags = CGIF_GEN_KEEP_IDENT_FRAMES;
+    gc.width = (uint16_t)xs; gc.height = (uint16_t)ys;
+    gc.numLoops = CGIF_INFINITE_LOOP;
+    gc.pWriteFn = NGifWrite;
+    gc.pContext = file;
+    pgifOut = cgif_newgif(&gc);
+    if (pgifOut == NULL)
+      return fFalse;
     gi.xGif = xs; gi.yGif = ys;
-    fwrite("GIF89a", 1, 6, file);
-    GifPutWord(file, xs); GifPutWord(file, ys);
-    putc(0, file);    // No global color table; every frame has its own.
-    putc(0, file); putc(0, file);
-    if (gi.fGifLoop) {
-      putc(0x21, file); putc(0xFF, file); putc(11, file);
-      fwrite("NETSCAPE2.0", 1, 11, file);
-      putc(3, file); putc(1, file); GifPutWord(file, 0); putc(0, file);
-    }
   }
-  xs = Min(xs, gi.xGif); ys = Min(ys, gi.yGif);
+  if (pgifOut == NULL || rgbGifPix == NULL || rglGifShow == NULL)
+    return fFalse;
+  xGif = gi.xGif; yGif = gi.yGif;
+  xs = Min(xs, xGif); ys = Min(ys, yGif);
   if (xs <= 0 || ys <= 0)
     return fFalse;
-  rgPix = (byte *)PAllocate((long)xs * ys, "GIF frame");
-  if (rgPix == NULL)
-    return fFalse;
+  fShort = gi.cGifFrame > 0 && (xs < xGif || ys < yGif);
 
-  // Map every pixel to a palette index.
-  if (!gi.fBmp) {
-    cKv = gs.fColor ? 16 : 2;
-    for (i = 0; i < cKv; i++)
-      rgkv[i] = gs.fColor ? rgbbmp[i] : (i ? Rgb(255, 255, 255) : 0);
-    for (y = 0; y < ys; y++)
-      for (x = 0; x < xs; x++) {
-        i = FBmGet(gi.bm, x, y);
-        rgPix[(long)y*xs + x] = (byte)(gs.fColor ? i : (i != 0));
+  // The usual frame: the same size as the screen and not the first. One
+  // pass, a row at a time, both maps each pixel to its palette index and
+  // compares it with what is showing -- a pixel already showing its colour
+  // is not looked up in the palette at all. In the 24 bit bitmap its index
+  // is not known until the palette is, so it is marked 255 meanwhile, and
+  // a frame needing a 256th colour gives up here for the full pass below.
+  if (gi.cGifFrame > 0 && !fShort) {
+    if (!gi.fBmp) {
+      gp.cKv = gs.fColor ? 16 : 2;
+      for (i = 0; i < gp.cKv; i++) {
+        gp.rgkv[i] = gs.fColor ? rgbbmp[i] : (i ? Rgb(255, 255, 255) : 0);
+        rglFix[i] = (uint32_t)gp.rgkv[i];
       }
-  } else {
-    for (h = 0; h < cGifSlot; h++)
-      rgnSlot[h] = -1;
-    for (y = 0; y < ys && !fQuant; y++)
+      iTrans = gp.cKv;
+      for (y = 0; y < ys; y++) {
+        pbRow = gi.bm + (long)y * gi.cbBmpRow;
+        pb = rgbGifPix + (long)y * xGif;
+        pl = rglGifShow + (long)y * xGif;
+        for (x = 0; x < xs; x++) {
+          i = (pbRow[x >> 1] >> ((x & 1) ? 0 : 4)) & 15;
+          if (!gs.fColor)
+            i = (i != 0);
+          if (pl[x] == rglFix[i])
+            pb[x] = (byte)iTrans;
+          else {
+            pb[x] = (byte)i;
+            pl[x] = rglFix[i];
+          }
+        }
+      }
+      fDone = fTrue;
+    } else {
+      for (i = 0; i < cGifSlot; i++)
+        gp.rgnSlot[i] = -1;
+      gp.cKv = 0;
+      fDone = fTrue;
+      for (y = 0; y < ys && fDone; y++) {
+        pbRow = gi.bmp.rgb + (long)y * (gi.bmp.clRow << 2);
+        pb = rgbGifPix + (long)y * xGif;
+        pl = rglGifShow + (long)y * xGif;
+        for (x = 0; x < xs; x++, pbRow += cbPixelK) {
+          kv = _GetP(pbRow);
+          if (pl[x] == (uint32_t)kv) {
+            pb[x] = 255;
+            continue;
+          }
+          if (kv != kvLast || iLast < 0) {
+            iLast = IGifColor(&gp, kv);
+            kvLast = kv;
+            if (iLast < 0 || iLast >= 255) {
+              fDone = fShowOk = fFalse;
+              break;
+            }
+          }
+          pb[x] = (byte)iLast;
+          pl[x] = (uint32_t)kv;
+        }
+      }
+      if (fDone) {
+        iTrans = gp.cKv;
+        if (iTrans < 255)
+          for (pb = rgbGifPix; pb < rgbGifPix + (long)xGif * yGif; pb++)
+            *pb = *pb == 255 ? (byte)iTrans : *pb;
+      }
+    }
+  }
+
+  // Every other frame: map every pixel of the render to a palette index,
+  // a row at a time, then compare the frame with what is showing.
+  if (!fDone && !gi.fBmp) {
+    gp.cKv = gs.fColor ? 16 : 2;
+    for (i = 0; i < gp.cKv; i++)
+      gp.rgkv[i] = gs.fColor ? rgbbmp[i] : (i ? Rgb(255, 255, 255) : 0);
+    for (y = 0; y < ys; y++) {
+      pbRow = gi.bm + (long)y * gi.cbBmpRow;
+      pb = rgbGifPix + (long)y * xGif;
       for (x = 0; x < xs; x++) {
-        kv = _GetXY(&gi.bmp, x, y);
-        h = (int)((((dword)kv * 2654435761u) & 0xffffffffu) >> 22);
-        while (rgnSlot[h] >= 0 && rgkv[rgnSlot[h]] != kv)
-          h = (h + 1) & (cGifSlot-1);
-        if (rgnSlot[h] < 0) {
-          if (cKv >= 256) {
+        i = (pbRow[x >> 1] >> ((x & 1) ? 0 : 4)) & 15;
+        pb[x] = (byte)(gs.fColor ? i : (i != 0));
+      }
+    }
+  } else if (!fDone) {
+    for (i = 0; i < cGifSlot; i++)
+      gp.rgnSlot[i] = -1;
+    gp.cKv = 0;
+    for (y = 0; y < ys && !fQuant; y++) {
+      pbRow = gi.bmp.rgb + (long)y * (gi.bmp.clRow << 2);
+      pb = rgbGifPix + (long)y * xGif;
+      for (x = 0; x < xs; x++, pbRow += cbPixelK) {
+        kv = _GetP(pbRow);
+        if (kv != kvLast || iLast < 0) {
+          iLast = IGifColor(&gp, kv);
+          kvLast = kv;
+          if (iLast < 0) {
             fQuant = fTrue;
             break;
           }
-          rgkv[cKv] = kv;
-          rgnSlot[h] = cKv++;
         }
-        rgPix[(long)y*xs + x] = (byte)rgnSlot[h];
+        pb[x] = (byte)iLast;
       }
-    if (fQuant) {
-      for (i = 0; i < 256; i++)
-        rgkv[i] = Rgb((i >> 5)*255/7, ((i >> 2) & 7)*255/7, (i & 3)*255/3);
-      cKv = 256;
-      for (y = 0; y < ys; y++)
-        for (x = 0; x < xs; x++) {
-          kv = _GetXY(&gi.bmp, x, y);
-          rgPix[(long)y*xs + x] = (byte)((RgbR(kv) >> 5) << 5 |
-            (RgbG(kv) >> 5) << 2 | RgbB(kv) >> 6);
-        }
     }
   }
-  for (cBit = 1; (1 << cBit) < cKv; cBit++)
-    ;
+  // What a smaller frame leaves showing of the last one, in this frame's
+  // palette. A 16 colour palette is the same every frame, so every such
+  // colour is in it already.
+  for (y = 0; y < yGif && fShort && !fDone && !fQuant; y++) {
+    pb = rgbGifPix + (long)y * xGif;
+    pl = rglGifShow + (long)y * xGif;
+    for (x = y < ys ? xs : 0; x < xGif; x++) {
+      if (gi.fBmp)
+        iLast = IGifColor(&gp, pl[x]);
+      else
+        for (iLast = gp.cKv-1; iLast > 0 && gp.rgkv[iLast] != pl[x]; iLast--)
+          ;
+      if (iLast < 0) {
+        fQuant = fTrue;
+        break;
+      }
+      pb[x] = (byte)iLast;
+    }
+  }
+  if (fQuant && !fDone) {
+    for (i = 0; i < 256; i++)
+      gp.rgkv[i] = Rgb((i >> 5)*255/7, ((i >> 2) & 7)*255/7, (i & 3)*255/3);
+    gp.cKv = 256;
+    for (y = 0; y < yGif; y++) {
+      pbRow = gi.bmp.rgb + (long)y * (gi.bmp.clRow << 2);
+      pb = rgbGifPix + (long)y * xGif;
+      pl = rglGifShow + (long)y * xGif;
+      for (x = 0; x < xGif; x++, pbRow += cbPixelK)
+        if (x < xs && y < ys)
+          pb[x] = BGifQuant(_GetP(pbRow));
+        else
+          pb[x] = BGifQuant(pl[x]);
+    }
+  }
 
-  // Graphic control extension: the delay, and leave the frame in place.
-  putc(0x21, file); putc(0xF9, file); putc(4, file);
-  putc(0x04, file); GifPutWord(file, gi.nGifDelay); putc(0, file);
-  putc(0, file);
-  // Image descriptor and its local color table.
-  putc(0x2C, file);
-  GifPutWord(file, 0); GifPutWord(file, 0);
-  GifPutWord(file, xs); GifPutWord(file, ys);
-  putc(0x80 | (cBit-1), file);
-  for (i = 0; i < (1 << cBit); i++) {
-    kv = i < cKv ? rgkv[i] : 0;
-    putc(RgbR(kv), file); putc(RgbG(kv), file); putc(RgbB(kv), file);
+  // A viewer leaves each frame in place, so a pixel already showing its
+  // colour need not be sent again: it gets the spare index just past the
+  // palette, which is transparent. The first frame sends everything, and
+  // so does one whose palette is full and has no index to spare -- or
+  // whose comparison above stopped part way, having already moved on what
+  // is showing, which only a frame of 256 or more colours does.
+  if (!fDone && gi.cGifFrame > 0 && gp.cKv < 256 && fShowOk)
+    iTrans = gp.cKv;
+  for (y = 0; y < yGif && !fDone; y++) {
+    pb = rgbGifPix + (long)y * xGif;
+    pl = rglGifShow + (long)y * xGif;
+    for (x = 0; x < xGif; x++) {
+      kv = gp.rgkv[pb[x]];
+      if (iTrans >= 0 && pl[x] == (uint32_t)kv)
+        pb[x] = (byte)iTrans;
+      else
+        pl[x] = (uint32_t)kv;
+    }
   }
-  if (!FWriteGifLzw(file, rgPix, (long)xs * ys, Max(cBit, 2))) {
-    DeallocateP(rgPix);
+
+  // The local colour table, with the transparent index's entry if used.
+  for (i = 0; i < gp.cKv + (iTrans >= 0); i++) {
+    kv = i < gp.cKv ? gp.rgkv[i] : 0;
+    rgbPal[3*i] = (byte)RgbR(kv); rgbPal[3*i+1] = (byte)RgbG(kv);
+    rgbPal[3*i+2] = (byte)RgbB(kv);
+  }
+  ClearB((pbyte)&fc, sizeof(fc));
+  fc.pLocalPalette = rgbPal;
+  fc.numLocalPaletteEntries = (uint16_t)(gp.cKv + (iTrans >= 0));
+  fc.pImageData = rgbGifPix;
+  fc.attrFlags = CGIF_FRAME_ATTR_USE_LOCAL_TABLE;
+  if (iTrans >= 0) {
+    fc.attrFlags |= CGIF_FRAME_ATTR_HAS_SET_TRANS;
+    fc.transIndex = (uint8_t)iTrans;
+  }
+  // cgif then crops the frame to the rectangle that is not transparent.
+  fc.genFlags = CGIF_FRAME_GEN_USE_DIFF_WINDOW;
+  fc.delay = (uint16_t)gi.nGifDelay;
+  if (cgif_addframe(pgifOut, &fc) != CGIF_OK)
     return fFalse;
-  }
-  DeallocateP(rgPix);
   gi.cGifFrame++;
   return !ferror(file);
+}
+
+
+// Finish the animated GIF FGenerateGif() is writing: the frames cgif still
+// holds, and the trailer. Frees what the frames used. Returns whether all
+// of it was written; the caller still closes the file.
+
+flag FEndGif()
+{
+  flag fOk = fTrue;
+
+  if (pgifOut != NULL) {
+    fOk = cgif_close(pgifOut) == CGIF_OK;
+    pgifOut = NULL;
+  }
+  if (rgbGifPix != NULL) {
+    DeallocateP(rgbGifPix);
+    rgbGifPix = NULL;
+  }
+  if (rglGifShow != NULL) {
+    DeallocateP(rglGifShow);
+    rglGifShow = NULL;
+  }
+  return fOk;
 }
 
 

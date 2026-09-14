@@ -1645,7 +1645,8 @@ flag FGenerateGif(CONST GA *pga)
       break;
     }
   }
-  putc(0x3B, file);    // GIF trailer
+  if (!FEndGif())    // The frames cgif still holds, and the trailer.
+    fOk = fFalse;
   if (ferror(file))
     fOk = fFalse;
   if (fclose(file) != 0)

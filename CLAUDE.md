@@ -688,7 +688,11 @@ tools/warning_audit.py               # all five builds clean with -Wall,
                                      # line is a warning to fix, not to
                                      # record; the vendored Swiss sources
                                      # are exempted in Makefile.srcs
-                                     # instead. About 100 seconds with
+                                     # instead. The other vendored
+                                     # library, cgif (cgif.cpp,
+                                     # cgif_raw.cpp: animated GIFs, MIT,
+                                     # cgif-license.txt), compiles clean
+                                     # and has no exemption. About 100 seconds with
                                      # the Qt6 legs, not the six minutes
                                      # this said before anyone timed it.
                                      # Plus

@@ -59,7 +59,7 @@ cp "$bin" "$dir/"
 cp -r ephem font "$dir/"
 cp astrolog.as atlas.as timezone.as "$dir/"
 cp sefstars.txt seorbel.txt astexo.csv earth.bmp "$dir/"
-cp astrolog.htm changes.htm license.htm "$dir/"
+cp astrolog.htm changes.htm license.htm cgif-license.txt "$dir/"
 
 # actions/upload-artifact does not preserve unix modes, so a binary can
 # arrive 0644 and refuse to execute. swisseph's first tagged release

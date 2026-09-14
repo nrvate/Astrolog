@@ -984,7 +984,7 @@ extern void WriteAscii P((FILE *));
 extern void WriteBmp P((FILE *));
 extern flag BeginFileX P((void));
 extern void EndFileX P((void));
-extern flag FWriteGifLzw P((FILE *, CONST byte *, long, int));
+extern flag FEndGif P((void));
 extern void PsStrokeForce P((void));
 extern void PsStroke P((int));
 extern void PsLineCap P((flag));

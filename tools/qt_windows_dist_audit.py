@@ -80,7 +80,7 @@ need("astrlog1.ico", "the fallback when the PNGs are missing")
 # the runner that forgot it, not two jobs downstream.
 for f in ("astrolog.as", "atlas.as", "timezone.as", "sefstars.txt",
           "seorbel.txt", "astexo.csv", "earth.bmp",
-          "astrolog.htm", "changes.htm", "license.htm"):
+          "astrolog.htm", "changes.htm", "license.htm", "cgif-license.txt"):
     need(f, "data every package ships")
 need(os.path.join("font"), "the chart fonts")
 need("SHA256SUMS", "the manifest tools/package-windows-qt.py writes")
