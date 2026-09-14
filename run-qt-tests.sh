@@ -248,6 +248,32 @@ case $err in
 esac
 
 echo
+echo "== -Xg says it ignores -Xo =="
+# -Xg writes the animation to its own file, so an -Xo beside it writes
+# nothing -- and said nothing about it, leaving the user to look for a
+# bitmap that never came. The GIF has to have been written, or the warning
+# is about a run that did nothing.
+qdir=`mktemp -d`
+err=`ASTROLOG_QT_TESTS=no-such-group $QTRUN "$BIN" -Yi1 ephem \
+  -qa 6 15 1990 12:00 0 122W19 47N36 -Xb -Xo "$qdir/q.bmp" \
+  -Xg "$qdir/q.gif" 6 15 1990 12:00 6 16 1990 12:00 1 4 100 \
+  <"$QTIN" 2>&1 >/dev/null`
+qgif=0; [ -s "$qdir/q.gif" ] && qgif=1
+rm -rf "$qdir"
+if [ $qgif -eq 0 ]; then
+  echo "  FAIL: -Xg wrote no GIF, so this proves nothing"
+  exit 1
+fi
+case $err in
+  *"-Xo is ignored with -Xg"*)
+    echo "  ok: -Xg with -Xo writes the GIF and says -Xo is ignored" ;;
+  *)
+    echo "  FAIL: -Xg with -Xo said nothing about -Xo:"
+    echo "$err" | sed 's/^/        /'
+    exit 1 ;;
+esac
+
+echo
 echo "== Chart size at startup =="
 out=`ASTROLOG_QT_WINSIZE_PROBE=760x600 ASTROLOG_QT_TESTS=startup-chart-size \
   $QTRUN "$BIN" -Yi1 ephem :Xw 760 600 =X <"$QTIN" 2>&1`

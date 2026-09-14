@@ -288,6 +288,11 @@ LNextLine:
     // animated GIF of one. The request is spent once run, so nothing that
     // reaches here again writes the file a second time.
     if (gi.ga.szFile != NULL) {
+      // -Xg names its own file, so an -Xo beside it writes nothing. Say so
+      // rather than leave the user looking for a bitmap that never comes.
+      if (gi.szFileOut != NULL)
+        PrintWarning("Switch -Xo is ignored with -Xg, "
+          "which writes the animation to its own file.");
       FGenerateGif(&gi.ga);
       FCloneSz(NULL, &gi.ga.szFile);
     } else
