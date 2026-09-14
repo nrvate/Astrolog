@@ -11073,6 +11073,33 @@ this is the note that explains the wall of dialogs.
     8124 one-row GIFs (code width one code late in `cgif_raw.cpp`: 7735
     fail).
 
+268. **Animated GIFs compressed on worker threads, and a setting for how
+    many.** The maintainer asked for it and for a box to choose the cores.
+    Rendering stays on the main thread; workers map, crop and LZW-encode
+    each frame into a buffer, and the main thread writes them in order.
+    What made it hard is that a frame's delta depends on the frame before:
+    workers rebuild what is showing from the previous render on a guess
+    about quantization and redo the frame when the guess was wrong, wait
+    where a smaller frame is involved, and take the predecessor's screen
+    outright when it is ready. Output is byte-identical at 1 to 4 threads
+    and to bc8f622's writer, on the 337-frame benchmark in both modes.
+    337 frames of 1600x1360: 4.72 s before, 4.66 s on one thread, 2.33 s
+    on two, 1.64 s on four, peaking at about 600 MB because rendering
+    outruns the workers until the queue's budget stops it. The queue is
+    bounded by 512 MB rather than a frame count, at the maintainer's
+    request, so short animations render first and compress after; the
+    progress callback reports both counts, on the main thread,
+    and the Qt progress box has two bars. `-YXgt` (`gs.nGifThread`, 0 for
+    every core) is written by Save Program Settings and is the Threads box
+    in Generate Animation. cgif's `cgif_raw_addframe()` was split so its
+    encoding writes through any callback. The Win32 oracle stays on one
+    thread: mingw's win32 thread model has no `std::thread`. Found and
+    fixed on the way: a frame giving up at its 256th changed colour mapped
+    its top left corner's run with a stale palette index when that was the
+    corner's colour. 16 new assertions in `generate-gif`, nine sabotages
+    caught; see "Animated GIFs" under "Features this fork adds to both
+    builds".
+
 
 ## Features this fork adds to both builds
 
@@ -11490,10 +11517,14 @@ the maintainer's choice.
 as the chart info dialogs have them), a Step as a count and a unit (the
 Animate menu's units: seconds to millennia, and 1/10, 1/100 and 1/1000
 of a second), the Frame delay in milliseconds (default: the animation
-delay), the Size (default: the chart's), Loop forever and Back and forth.
+delay), the Size (default: the chart's), Loop forever, Back and forth, and
+Threads, which is the saved setting `-YXgt` rather than a choice for the
+session: 0, shown as "All cores", up to the machine's core count.
 A line under the fields gives the frame count live, and OK is disabled
 while the request is invalid. OK then asks for a file and shows a
-progress dialog with Cancel. It opens at the moving chart's current date
+progress box with Cancel, 120 ms on: a bar for the charts rendered and one
+for the frames compressed and written, each with its "N of M". It opens
+at the moving chart's current date
 with 30 steps of the Animate menu's current rate and factor. The menu
 item is greyed out for text charts and for map charts whose animation
 spins the map rather than moving time (`FAnimateRotates()`), re-tested
@@ -11534,16 +11565,80 @@ exact colours from a 24 bit bitmap. Only a frame with more than 256, which
 takes a photographic background, falls back to a 3-3-2 cube.
 `BeginFileX()` hands each render the open GIF (`gi.fileGif`) instead of a
 file of its own, `EndFileX()` appends the render as the next frame, and
-`FEndGif()` flushes the frames cgif holds and writes the trailer, so every
-frame goes through the same `FActionX()` path as Export Chart Bitmap. The
-charts are put back as they were afterward, and a cancelled or failed GIF
-is removed.
+`FEndGif()` writes the frames still being compressed and the trailer, so
+every frame goes through the same `FActionX()` path as Export Chart Bitmap.
+The charts are put back as they were afterward, and a cancelled or failed
+GIF is removed.
+
+**Frames are compressed on worker threads** since 2026-09-14 (work log
+item 268), `gs.nGifThread` of them: `-YXgt <n>` in `astrolog.as`, the
+Threads box in the dialog, 0 for every core. Rendering stays on the main
+thread, since it is `FActionX()` over global state. The main thread copies
+what the GIF needs of each render and queues it; workers map it to palette
+indexes, mark and crop the delta and LZW-encode it into a buffer of their
+own; and the main thread writes finished frames strictly in order, between
+renders. cgif's raw layer was split for it -- `cgif_raw_encodeframe()`, the
+one edit C++ did not force, recorded in `cgif_raw.cpp`'s header -- and the
+high-level `cgif.cpp` is used only by the suite's LZW round trip now: its
+frame queue compares each frame with the one before, so it cannot run
+frames side by side.
+
+The output is the same bytes at every thread count, and the same bytes as
+the one-thread writer before it -- the 337-frame benchmark below in both
+bitmap modes, at 1 to 4 threads, against a build of bc8f622. That is the
+whole design, because a frame's delta depends on the frame before:
+
+- **What is showing before frame N** is frame N-1's render -- unless N-1
+  was quantized, when it is that render's 3-3-2 colours, or N-1 or N is
+  smaller than the screen, when older pixels show around it. A worker
+  rebuilds it from N-1's copied render, guessing whether N-1 was quantized
+  (as the last frame written was), and checks the guess once N-1 is
+  mapped, redoing the frame when it was wrong. When N-1 is already mapped
+  it takes what N-1 left showing instead, which is all the one-thread path
+  ever does; when a smaller frame is involved it waits for N-1.
+- **Cropping is the writer's own now**, by cgif's rule exactly: a frame
+  with a transparent index is cropped to what is not transparent; one with
+  none -- 255 or more changed colours, a full palette, a quantized frame --
+  to what differs from the screen or was transparent in frame N-1, so such
+  a frame waits for N-1's indexes.
+- **Memory bounds the queue, not a frame count**: `cbGifQueueMax`, 512 MB
+  of copied renders, indexes and encoded frames, and at least two frames a
+  thread are always allowed. Rendering runs ahead of the workers until
+  then, so a short animation is rendered first and compressed after, and
+  the progress box has a bar for each. Unbounded, 5000 frames of 1600x1360
+  would be 32 GB, which is why the maintainer's "render everything, then
+  compress" became this rather than two passes.
+- **The progress callback** takes frames rendered, frames written and the
+  total, and is called on the main thread only -- workers never touch Qt:
+  once after each render, before writing what the workers have finished,
+  so no frame is reported written in the report that first counts it
+  rendered; and every 50 ms or less while the queue is full or the last
+  frames are compressed. Cancel is honoured in both, and stops the workers
+  without waiting for their queue.
+- **One thread encodes inline**, with no copy of the render and no thread
+  started. So does the Win32 oracle build, always: `Makefile.win`'s mingw-w64
+  uses the win32 thread model, which has no `std::thread` before GCC 13, and
+  `xdevice.cpp` tests `_GLIBCXX_HAS_GTHREADS` (its `GIFTHREADS`) rather than
+  moving that build to the posix-model compiler, which would change the
+  oracle's runtime. MSVC, clang and the Linux g++ builds all have threads;
+  the Linux makefiles link with `-pthread`, which glibc 2.34 and later do
+  not need and older ones do. Checked under Wine: `astrolog-wcli.exe`
+  given `-YXgt 4` writes, on its one thread, the same bytes as the Linux
+  console build on four (5 frames of a 400x400 wheel).
+
+Found on the way and fixed: a 24 bit frame that gave up on its changed
+colours at the 256th carried that colour's cached palette index into the
+full pass, which starts the palette over. When the colour was also the top
+left corner's, the corner's run was written with an index the new palette
+gave another colour. It takes 256 colours, one of them changed onto the
+corner's colour, so no chart in the suite drew one; a made-up frame does.
 
 **Frames after the first are deltas.** Every frame is left in place
 (disposal 1). A pixel already showing its colour gets a spare transparent
-index one past the palette, and cgif (`CGIF_FRAME_GEN_USE_DIFF_WINDOW`)
-crops the frame to the rectangle holding the rest. Five decisions, each
-measured or forced:
+index one past the palette, and the frame is cropped to the rectangle
+holding the rest -- by cgif (`CGIF_FRAME_GEN_USE_DIFF_WINDOW`) until the
+threads, by the writer to cgif's rule since. Five decisions, each measured
+or forced:
 
 - **The transparency is marked by Astrolog, not by cgif's own
   `CGIF_FRAME_GEN_USE_TRANSPARENCY`.** cgif compares frames through their
@@ -11581,6 +11676,29 @@ near every edge in each step: the changed rectangle averages 93% of the
 screen, and cgif's LZW walks every pixel of it, transparent runs
 included. The Qt dialog's progress bar and event pump run at most every
 50 ms.
+
+**Threaded**, the same case, console build (`-YXgt`), peak memory from
+`/usr/bin/time`:
+
+| Threads | Wall | User | Peak RSS | Against the old writer |
+|---|---|---|---|---|
+| old writer (bc8f622) | 4.72 s | 4.66 s | 32 MB | |
+| 1 | 4.66 s | 4.61 s | 30 MB | 1.0x |
+| 2 | 2.33 s | 5.43 s | 590 MB | 2.0x |
+| 3 | 1.90 s | 6.48 s | 593 MB | 2.5x |
+| 4 | 1.64 s | 7.32 s | 611 MB | 2.9x |
+
+Two runs each, averaged, and every file byte-identical to the old
+writer's. The peak is the queue's budget doing its job: rendering, at
+about 3 ms a frame here, outruns even four workers, so a 24 bit run fills
+the 512 MB and holds there.
+
+A 16 colour render copies a sixth as much, and only two threads, which it
+still outruns, fill the budget: the old writer 6.91 s and 29 MB, then
+6.51 s and 25 MB on one thread, 2.96 s and about 500 MB on two, 2.05 s
+and 175 MB on three, and 1.88 s and 73 MB on four -- 3.7 times the old
+writer, the files again byte-identical. Past four threads nothing was
+measured, by the rule of this machine.
 
 **The command line** is
 
@@ -11633,6 +11751,53 @@ The decoder composites frames as a viewer does -- each image at its
 offset over the one before, skipping its transparent index -- and refuses
 disposal methods 2 and 3, which it does not implement, rather than drawing
 them as 1.
+
+**The threads** added 16 assertions to the group (92 now). Eight cases
+write the same GIF on 1, 2, 3 and 4 threads and require the files byte
+for byte the same: 16 colour over 7 dates back and forth (12 frames), 24
+bit over 7 dates and back and forth, a 24 bit bi-wheel, 24 bit quantized
+on 2 frames in 3, frames narrower and wider in both modes, and two frames
+made up whole that give up on their palette at the corner's colour --
+which must also decode exact. The workers are held until every frame is
+rendered (`fGifWorkerHold`), because frames this small are otherwise each
+compressed before the next is rendered and no threaded path runs; frames
+are drawn over by `pfnGifFrameHook`. Both are unconditional in the core,
+for the reason `FailIndexQt()` is: the MSVC build compiles the core once,
+without `QTTEST`. Then: on 2 threads no frame is reported written before it
+is reported rendered, and all are reported rendered while one is still to
+write; a cancel on 3 threads while frames are compressed stops within a
+second, keeping the file it would have replaced and leaving no `.part`;
+the progress box shows both bars counted and its Cancel stops a 3-thread
+GIF -- over 200 frames each held 3 ms by a frame hook, because without it
+the full suite once finished them inside the box's 120 ms delay, a flake
+the group alone never showed; the Threads box shows 0 as "All cores",
+runs to the core count, and
+sets `gs.nGifThread` on OK and not on Cancel; and `:YXgt`, as the settings
+writer writes it, reads back. The `settings-fields` sweep asks about the
+new field with the rest.
+
+Nine sabotages, one at a time, each caught: frames written out of order (6
+fail); one palette scratch shared by the workers (6); a wrong quantization
+guess never redone (1); the corner fix removed (1: the corner decoded
+#fdc864 against #0a141e); finished frames written before the render is
+reported (2); Cancel ignored while compressing (1); the writer's `:YXgt`
+line removed (2, the direct assertion and the sweep); the dialog not
+applying Threads (2); and the progress box never shown (2). The cancel's
+one-second bound is loose: a sabotage that drains the queue before stopping
+finishes well inside it on frames this size, so what the net holds is that
+a cancel stops and cleans up, not how fast.
+
+**ThreadSanitizer** found nothing, and was shown able to. It has to be
+clang's: g++ 11's libtsan has no interceptor for
+`pthread_cond_clockwait`, which libstdc++'s `condition_variable::wait_for`
+calls, so it never sees the mutex released and reports a "double lock"
+and races on fields only ever touched under the lock -- eleven of them, all
+false. Built with clang 22 (`-fsanitize=thread`, run under `setarch -R`,
+which a 6.8 kernel's address randomisation needs), the `generate-gif` group
+passes with no report, and the console build writes a back-and-forth
+24 bit and 16 colour GIF on 3 threads with no report and the bytes of 1
+thread. With the shared-palette sabotage the same run reports two races, in
+`FGifMapFrame()` and `IGifColor()`.
 
 The menu parity test requires every Qt-only menu item to be listed in
 `rgqtonlyQt[]` with a reason, and "Generate Animation..." is there.
