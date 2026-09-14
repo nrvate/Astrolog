@@ -1827,6 +1827,14 @@ flag FActionX()
   if (fSidebar)
     gs.xWin -= (SIDESIZE * gi.nScaleText) >> 1;
 #endif
+#ifdef QT
+  // A file is the size it was asked for, sidebar included, as on Windows:
+  // the branch below adds the sidebar back. Without this every bitmap and
+  // GIF came out the sidebar wider than asked. Files only, since gs.xWin
+  // on screen is the canvas, which already includes it.
+  if (fSidebar && gi.fFile)
+    gs.xWin -= (SIDESIZE * gi.nScaleText) >> 1;
+#endif
 
   if (gi.fFile) {
     if (!BeginFileX())

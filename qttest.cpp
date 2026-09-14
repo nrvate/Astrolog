@@ -1126,6 +1126,53 @@ static void TestGenerateGifQt()
   }
   gs.chBmpMode = 'B'; gi.fBmp = fFalse;
 
+  // The size asked for is the size written, sidebar included, as Windows
+  // writes the window's client size. Every file used to be the sidebar
+  // wider than asked, and a wheel squared to a small size drew into an
+  // area the sidebar wider than its height: 400x400 made 640x160. A chart
+  // kept square is the square that fits beside the sidebar, the arithmetic
+  // FActionX() does under WIN.
+  {
+    CONST struct { int x, y; flag fKeep; } rgsize[] = {
+      {1600, 1000, fFalse}, {400, 400, fFalse}, {1600, 1360, fTrue},
+      {1600, 1000, fTrue}, {400, 400, fTrue} };
+    Borrow bText(gs.fText, fTrue);
+    Borrow bSide(gs.fDoSidebar, fTrue);
+    Borrow bSquare(gs.fKeepSquare, fFalse);
+    GA gaSize = ga;
+    int xSide = (SIDESIZE * (gs.nScaleText / 50)) >> 1, xWant, yWant;
+
+    gaSize.mon2 = gaSize.mon1; gaSize.day2 = gaSize.day1;
+    gaSize.yea2 = gaSize.yea1; gaSize.tim2 = gaSize.tim1;
+    gaSize.pfnProgress = NULL;
+    for (i = 0; i < (int)(sizeof(rgsize)/sizeof(rgsize[0])); i++) {
+      gs.fKeepSquare = rgsize[i].fKeep;
+      xWant = rgsize[i].x; yWant = rgsize[i].y;
+      if (rgsize[i].fKeep) {
+        yWant = Min(xWant - xSide, yWant);
+        xWant = yWant + xSide;
+      }
+      gaSize.xWin = rgsize[i].x; gaSize.yWin = rgsize[i].y;
+      remove(szGif);
+      // Written first: a Check()'s arguments are read in no fixed order.
+      flag fOk = FGenerateGif(&gaSize) && FDecodeGifQt(szGif, &gd);
+      Check(fOk &&
+        gd.rgim.size() == 1 && gd.rgim[0].width() == xWant &&
+        gd.rgim[0].height() == yWant, "a GIF asked for at %dx%d%s is "
+        "%dx%d (got %dx%d)", rgsize[i].x, rgsize[i].y, rgsize[i].fKeep ?
+        ", kept square," : "", xWant, yWant,
+        gd.rgim.size() > 0 ? gd.rgim[0].width() : 0,
+        gd.rgim.size() > 0 ? gd.rgim[0].height() : 0);
+      Borrow bXWinT(gs.xWin, rgsize[i].x);
+      Borrow bYWinT(gs.yWin, rgsize[i].y);
+      remove(szBmp);
+      FExportChartToFileTestQt(szBmp, ftBmp);
+      QImage im(QString::fromLocal8Bit(szBmp));
+      Check(im.width() == xWant && im.height() == yWant, "and so is a "
+        "bitmap export (got %dx%d)", im.width(), im.height());
+    }
+  }
+
   // A multiwheel: the generator moves the chart Animate() moves, the
   // transiting one, and leaves the natal chart alone.
   CONST struct { int nRel; CONST char *sz; } rgrel[] = {
