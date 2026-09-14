@@ -90,8 +90,23 @@ $(OBJDIR):
 # when the sha has changed, so nothing rebuilds in between. A tree without
 # .git (a git archive export) answers empty, and the About line shows no
 # bracket. See the include in qtdialog.cpp for the full story.
+#
+# Python is called through a fallback, because it is not always "python3":
+# Arch's package is "python" and installs no "python3" alias, and a box
+# with neither gets the archive answer -- an empty sha, not a broken
+# build. A python that EXISTS but fails is still an error; only the
+# absence of one falls through. The empty write is content-guarded like
+# the script's own, for the same rebuild reason.
 gitsha.h: FORCE
-	python3 tools/gitsha.py gitsha.h
+	@if command -v python3 >/dev/null 2>&1; then \
+	  python3 tools/gitsha.py gitsha.h; \
+	elif command -v python >/dev/null 2>&1; then \
+	  python tools/gitsha.py gitsha.h; \
+	else \
+	  printf '#define szVersionGit ""\n' > gitsha.h.tmp; \
+	  cmp -s gitsha.h.tmp gitsha.h 2>/dev/null || mv gitsha.h.tmp gitsha.h; \
+	  rm -f gitsha.h.tmp; \
+	fi
 FORCE:
 .PHONY: FORCE
 
