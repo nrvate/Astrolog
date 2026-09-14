@@ -1,3 +1,8 @@
+// Vendored from cgif v0.5.4, MIT licensed; see cgif_raw.cpp's header. One
+// edit, made 2026-09-14: the declaration of cgif_raw_encodeframe(), the
+// encoding half of cgif_raw_addframe() split out so Astrolog can encode
+// animated GIF frames on worker threads. cgif_raw.cpp says why.
+
 #ifndef CGIF_RAW_H
 #define CGIF_RAW_H
 
@@ -60,6 +65,7 @@ typedef struct {
 // prototypes
 CGIFRaw*    cgif_raw_newgif   (const CGIFRaw_Config* pConfig);
 cgif_result cgif_raw_addframe (CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig);
+cgif_result cgif_raw_encodeframe(const CGIFRaw_Config* pGIFConfig, const CGIFRaw_FrameConfig* pConfig, cgif_write_fn* pWriteFn, void* pContext);
 cgif_result cgif_raw_close    (CGIFRaw* pGIF);
 
 #ifdef __cplusplus

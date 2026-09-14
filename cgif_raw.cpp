@@ -12,6 +12,13 @@
 //   - a cast from int to cgif_result where an int is stored or returned;
 //   - braces around the byte list block in LZW_GenerateStream(), because
 //     its "goto LZWGENERATE_Cleanup" jumped past initialized declarations.
+// And one edit that C++ did not force, made 2026-09-14 so frames can be
+// encoded on worker threads (FWriteGifFrame() in xdevice.cpp): the body of
+// cgif_raw_addframe() is cgif_raw_encodeframe() now, which reads the GIF's
+// configuration, writes through a callback it is given, and touches no
+// CGIFRaw state. cgif_raw_addframe() calls it with the GIF's own callback
+// and records the result, so it behaves and writes every byte as upstream's
+// does. The declaration is the one line added to cgif_raw.h.
 // Keep it that way: an edit here beyond what C++ forces makes every future
 // update from upstream a merge.
 
@@ -489,8 +496,8 @@ CGIFRaw* cgif_raw_newgif(const CGIFRaw_Config* pConfig) {
   return pGIF;
 }
 
-/* add new frame to the raw GIF stream */
-cgif_result cgif_raw_addframe(CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig) {
+/* encode a frame, passing its bytes to pWriteFn; touches no CGIFRaw state */
+cgif_result cgif_raw_encodeframe(const CGIFRaw_Config* pGIFConfig, const CGIFRaw_FrameConfig* pConfig, cgif_write_fn* pWriteFn, void* pContext) {
   uint8_t    aFrameHeader[SIZE_FRAME_HEADER];
   uint8_t    aGraphicExt[SIZE_GRAPHIC_EXT];
   LZWResult  encResult;
@@ -501,13 +508,9 @@ cgif_result cgif_raw_addframe(CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig)
   uint16_t   initDictLen;
   uint8_t    pow2LCT, initCodeLen;
 
-  if(pGIF->curResult != CGIF_OK && pGIF->curResult != CGIF_PENDING) {
-    return pGIF->curResult; // return previous error
-  }
   // check for invalid LCT size
   if(pConfig->sizeLCT > 256) {
-    pGIF->curResult = CGIF_ERROR; // invalid LCT size
-    return pGIF->curResult;
+    return CGIF_ERROR; // invalid LCT size
   }
 
   rWrite = 0;
@@ -523,13 +526,13 @@ cgif_result cgif_raw_addframe(CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig)
     IMAGE_PACKED_FIELD(aFrameHeader) |= ((pow2LCT- 1) << 0);
     numEffColors = pConfig->sizeLCT;
   } else {
-    numEffColors = pGIF->config.sizeGCT; // global color table in use
+    numEffColors = pGIFConfig->sizeGCT; // global color table in use
   }
   // encode frame interlaced?
   IMAGE_PACKED_FIELD(aFrameHeader) |= (isInterlaced << 6);
 
   // transparency in use? we might need to increase numEffColors
-  if((pGIF->config.attrFlags & (CGIF_RAW_ATTR_IS_ANIMATED)) && (pConfig->attrFlags & (CGIF_RAW_FRAME_ATTR_HAS_TRANS)) && pConfig->transIndex >= numEffColors) {
+  if((pGIFConfig->attrFlags & (CGIF_RAW_ATTR_IS_ANIMATED)) && (pConfig->attrFlags & (CGIF_RAW_FRAME_ATTR_HAS_TRANS)) && pConfig->transIndex >= numEffColors) {
     numEffColors = pConfig->transIndex + 1;
   }
 
@@ -552,8 +555,7 @@ cgif_result cgif_raw_addframe(CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig)
   if(isInterlaced) {
     uint8_t* pInterlaced = (uint8_t*)malloc(MULU16(pConfig->width, pConfig->height));
     if(pInterlaced == NULL) {
-      pGIF->curResult = CGIF_EALLOC;
-      return pGIF->curResult;
+      return CGIF_EALLOC;
     }
     uint8_t* p = pInterlaced;
     // every 8th row (starting with row 0)
@@ -585,13 +587,12 @@ cgif_result cgif_raw_addframe(CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig)
   // generate LZW raster data (actual image data)
   // check for errors
   if(r != CGIF_OK) {
-    pGIF->curResult = (cgif_result)r;
     return (cgif_result)r;
   }
 
   // check whether the Graphic Control Extension is required or not:
   // It's required for animations and frames with transparency.
-  int needsGraphicCtrlExt = (pGIF->config.attrFlags & CGIF_RAW_ATTR_IS_ANIMATED) | (pConfig->attrFlags & CGIF_RAW_FRAME_ATTR_HAS_TRANS);
+  int needsGraphicCtrlExt = (pGIFConfig->attrFlags & CGIF_RAW_ATTR_IS_ANIMATED) | (pConfig->attrFlags & CGIF_RAW_FRAME_ATTR_HAS_TRANS);
   // do things for animation / transparency, if required.
   if(needsGraphicCtrlExt) {
     memset(aGraphicExt, 0, SIZE_GRAPHIC_EXT);
@@ -608,27 +609,31 @@ cgif_result cgif_raw_addframe(CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig)
     const uint16_t delayLE = hU16toLE(pConfig->delay);
     memcpy(aGraphicExt + GEXT_OFFSET_DELAY, &delayLE, sizeof(uint16_t));
     // write Graphic Control Extension
-    rWrite |= pGIF->config.pWriteFn(pGIF->config.pContext, aGraphicExt, SIZE_GRAPHIC_EXT);
+    rWrite |= pWriteFn(pContext, aGraphicExt, SIZE_GRAPHIC_EXT);
   }
 
   // write frame
-  rWrite |= pGIF->config.pWriteFn(pGIF->config.pContext, aFrameHeader, SIZE_FRAME_HEADER);
+  rWrite |= pWriteFn(pContext, aFrameHeader, SIZE_FRAME_HEADER);
   if(useLCT) {
-    rWrite |= pGIF->config.pWriteFn(pGIF->config.pContext, pConfig->pLCT, pConfig->sizeLCT * 3);
+    rWrite |= pWriteFn(pContext, pConfig->pLCT, pConfig->sizeLCT * 3);
     const uint16_t numBytesLeft = ((1 << pow2LCT) - pConfig->sizeLCT) * 3;
-    rWrite |= writeDummyBytes(pGIF->config.pWriteFn, pGIF->config.pContext, numBytesLeft);
+    rWrite |= writeDummyBytes(pWriteFn, pContext, numBytesLeft);
   }
-  rWrite |= pGIF->config.pWriteFn(pGIF->config.pContext, &initialCodeSize, 1);
-  rWrite |= pGIF->config.pWriteFn(pGIF->config.pContext, encResult.pRasterData, encResult.sizeRasterData);
+  rWrite |= pWriteFn(pContext, &initialCodeSize, 1);
+  rWrite |= pWriteFn(pContext, encResult.pRasterData, encResult.sizeRasterData);
 
-  // check for write errors
-  if(rWrite) {
-    pGIF->curResult = CGIF_EWRITE;
-  } else {
-    pGIF->curResult = CGIF_OK;
-  }
   // cleanup
   free(encResult.pRasterData);
+  // check for write errors
+  return rWrite ? CGIF_EWRITE : CGIF_OK;
+}
+
+/* add new frame to the raw GIF stream */
+cgif_result cgif_raw_addframe(CGIFRaw* pGIF, const CGIFRaw_FrameConfig* pConfig) {
+  if(pGIF->curResult != CGIF_OK && pGIF->curResult != CGIF_PENDING) {
+    return pGIF->curResult; // return previous error
+  }
+  pGIF->curResult = cgif_raw_encodeframe(&pGIF->config, pConfig, pGIF->config.pWriteFn, pGIF->config.pContext);
   return pGIF->curResult;
 }
 
