@@ -1494,7 +1494,40 @@ static flag FGifDateQt(CONST GIFDATEQT &gd, int *mon, int *day, int *yea,
     FValidTim(*tim);
 }
 
+// Write an animated GIF behind a progress box. Nothing animates or redraws
+// until it is done -- the box processes events between frames, while the
+// frame's file state is still set -- and the chart is redrawn once after.
+
+static flag FWriteGifQt(GA *pga, int cWrite)
+{
+  QProgressDialog prog("Writing the animated GIF...", "Cancel", 0, cWrite,
+    gi.qwind);
+  int grfSav = GrfHoldQt();
+  flag fOk, fCanceled;
+
+  prog.setWindowModality(Qt::WindowModal);
+  prog.setMinimumDuration(500);
+  s_pprogGifQt = &prog;
+  pga->pfnProgress = FGifProgressQt;
+  SetHoldQt(grfHoldAnim | grfHoldRedraw);
+  fOk = FGenerateGif(pga);
+  SetHoldQt(grfSav);
+  fCanceled = prog.wasCanceled();
+  s_pprogGifQt = NULL;
+  prog.reset();
+  RedrawQt();
+  if (!fOk && !fCanceled)
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
+  return fOk;
+}
+
 #ifdef QTTEST
+// The writer the dialog runs once a file is picked, for the suite.
+flag FWriteGifTestQt(GA *pga, int cWrite)
+{
+  return FWriteGifQt(pga, cWrite);
+}
+
 // The dialog's frame count line, for the suite to read while it drives the
 // dialog; empty when no Generate Animation dialog is open.
 QString s_strGifCountQt;
@@ -1518,6 +1551,14 @@ void ShowGenerateGifDialogQt()
       "first.");
     return;
   }
+
+  // The animation holds still while this is open: Start below is where the
+  // moving chart is now, and a tick would leave it stale before OK.
+  struct HOLDQT {
+    int grfSav;
+    HOLDQT() { grfSav = GrfHoldQt(); SetHoldQt(grfSav | grfHoldAnim); }
+    ~HOLDQT() { SetHoldQt(grfSav); }
+  } hold;
 
   // Start where the moving chart is now, stepping as the Animate menu is
   // set to, for 30 steps.
@@ -1684,20 +1725,7 @@ void ShowGenerateGifDialogQt()
   qs = StrDefaultSuffixQt(qs, "gif");
   QByteArray ba = qs.toLocal8Bit();
   ga.szFile = ba.data();
-
-  QProgressDialog prog("Writing the animated GIF...", "Cancel", 0, n,
-    gi.qwind);
-  prog.setWindowModality(Qt::WindowModal);
-  prog.setMinimumDuration(500);
-  s_pprogGifQt = &prog;
-  ga.pfnProgress = FGifProgressQt;
-  flag fOk = FGenerateGif(&ga);
-  flag fCanceled = prog.wasCanceled();
-  s_pprogGifQt = NULL;
-  prog.reset();
-  RedrawQt();
-  if (!fOk && !fCanceled)
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
+  FWriteGifQt(&ga, n);
 }
 
 void ShowExportMetafileDialogQt()

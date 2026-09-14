@@ -160,6 +160,14 @@ typedef struct _qtuserinterface {
   // works, and goes through RedrawForceQt() to say so explicitly.
   flag fNoUpdate = fFalse;
 
+  // What Generate Animation holds still while it runs (grfHold* in
+  // qtdriver.h). Its dialog is open over a chart whose date it read, and
+  // its progress box processes events between frames while gs.ft and
+  // gi.fFile still describe the frame being written -- so an animation
+  // tick, or a paint after a resize, reached DrawBlock() with a file's
+  // state and a screen's buffer, and crashed.
+  int grfHold = 0;
+
   // Windows' wi.fNoPopup and wi.fBmpWindow, which File Settings edits.
   // The first suppresses warning message boxes; the second says a chart
   // bitmap should be grabbed from the window rather than redrawn, which
@@ -378,6 +386,7 @@ protected:
     // from us.fClip80/us.nScreenWidth -- so there is nothing to re-lay-out
     // when the window changes.
     if (qi.fReady && qi.fWindowChart && us.fGraphics &&
+      !(qi.grfHold & grfHoldRedraw) &&
       width() >= 1 && height() >= 1 &&
       (gi.qim == NULL || gi.qim->width() != width() ||
       gi.qim->height() != height())) {
@@ -1325,7 +1334,7 @@ static void NotifyRedrawQt(void)
 
 void RedrawQt()
 {
-  if (qi.fNoUpdate)
+  if (qi.fNoUpdate || (qi.grfHold & grfHoldRedraw))
     return;
   // "-0X" forbids graphics, and Windows enforces it at the end of every
   // command (wdriver.cpp:2507) -- which is this point: after whatever the
@@ -3124,6 +3133,16 @@ int NAnimDelayQt()
   return qi.nTimerDelay;
 }
 
+int GrfHoldQt()
+{
+  return qi.grfHold;
+}
+
+void SetHoldQt(int grf)
+{
+  qi.grfHold = grf;
+}
+
 void SetAnimDelayQt(int nDelay)
 {
   qi.nTimerDelay = nDelay;
@@ -3380,7 +3399,7 @@ static void AnimTickQt(void)
 {
   // Same guard Windows' WM_TIMER uses. Note gs.nAnim < 1 covers both
   // "off" (negative, remembering the rate) and "never set".
-  if (gs.nAnim < 1 || gi.fPause)
+  if (gs.nAnim < 1 || gi.fPause || (qi.grfHold & grfHoldAnim))
     return;
   if (s_fAnimTickQt)
     return;

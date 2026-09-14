@@ -1212,6 +1212,83 @@ static void TestGenerateGifQt()
     "cancelling leaves no half written file behind");
   s_iGifCancelQt = -1;
 
+  // Writing while the animation runs. The progress box processes events
+  // between frames, and gs.ft and gi.fFile still describe the frame just
+  // written when it does -- so an animation tick crashed in BmpSetXY(), and
+  // a repaint after a resize freed a pointer it did not own. What the tick
+  // does not crash, it moves: the chart the frames are stepped from. Both
+  // run here, a tick and a resized repaint on every pass of the events,
+  // and the GIF must still be the one written with nothing going on.
+  {
+    extern flag FWriteGifTestQt(GA *, int);
+    extern void AnimTickTestQt(void);
+    GIFDECQT gdRef;
+    QTimer tResize;
+    QSize sizeCanvas = gi.qcanvas->size();
+    int cResize = 0, nDelaySav = NAnimDelayQt();
+    Borrow bAnim(gs.nAnim, -iAnimDay);
+    Borrow bPause(gi.fPause, fFalse);
+    Borrow bDir(gi.nDir, 1);
+
+    ga.mon1 = 6; ga.day1 = 15; ga.yea1 = 1990; ga.tim1 = 12.0;
+    ga.mon2 = 6; ga.day2 = 25; ga.yea2 = 1990; ga.tim2 = 12.0;
+    ga.nCount = 1;
+    ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+    ciCore = ciMain;
+    CastChart(0);
+    remove(szGif);
+    Check(FWriteGifTestQt(&ga, 11) && FDecodeGifQt(szGif, &gdRef) &&
+      gdRef.rgim.size() == 11, "a GIF of 11 days is written with the "
+      "animation stopped (%d frames)", (int)gdRef.rgim.size());
+
+    QObject::connect(&tResize, &QTimer::timeout, [&]() {
+      cResize++;
+      gi.qcanvas->resize(sizeCanvas.width() + (cResize & 1 ? 9 : -9),
+        sizeCanvas.height());
+      // Sent rather than repaint(), which does nothing for a canvas that is
+      // not on screen, as it need not be in this run.
+      // And the redraw that paint makes when the window chases its size,
+      // which a canvas that is not the window chart does not reach.
+      QPaintEvent evPaint(gi.qcanvas->rect());
+      QCoreApplication::sendEvent(gi.qcanvas, &evPaint);
+      RedrawQt();
+    });
+    gs.nAnim = iAnimDay;
+    SetAnimDelayQt(1);
+    tResize.start(0);
+    remove(szGif);
+    flag fOk = FWriteGifTestQt(&ga, 11) && FDecodeGifQt(szGif, &gd);
+    tResize.stop();
+    SetAnimDelayQt(nDelaySav);
+    gs.nAnim = -iAnimDay;
+    gi.qcanvas->resize(sizeCanvas);
+    Check(cResize > 0, "and again with the animation running and the "
+      "chart resized and repainted %d times while it wrote (visible %d)",
+      cResize, gi.qcanvas->isVisible());
+    Check(fOk && gd.rgim.size() == 11 && gd.rgim == gdRef.rgim,
+      "which writes the very same frames (%d)", (int)gd.rgim.size());
+    ga.nCount = 5;
+
+    // The dialog holds the animation still too: its Start is the moving
+    // chart's date as the dialog opened.
+    CI ciBefore = ciMain;
+    flag fMoved = fTrue;
+    gs.nAnim = iAnimDay;
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      AnimTickTestQt();
+      fMoved = !FEqCI(ciMain, ciBefore);
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    Check(!fMoved, "an animation tick while Generate Animation is open "
+      "does not move the chart");
+    AnimTickTestQt();
+    Check(!FEqCI(ciMain, ciBefore), "and one after it closes does");
+    gs.nAnim = -iAnimDay;
+    ciMain = ciBefore; ciCore = ciMain;
+    CastChart(0);
+  }
+
   // The menu item greys out for a text chart and for a spinning map.
   QAction *paGif = PaFindActionTestQt("&Generate Animation...");
   Check(paGif != NULL, "Animate has Generate Animation...");

@@ -94,6 +94,12 @@ void SyncRestrictMenuQt();
 // Windows' Win32-only wi.nTimerDelay. Graphics Settings edits it; the
 // setter retimes the running animation timer immediately.
 int NAnimDelayQt();
+// What Generate Animation holds still: the animation tick, and every
+// redraw. See qi.grfHold.
+#define grfHoldAnim   1
+#define grfHoldRedraw 2
+int GrfHoldQt();
+void SetHoldQt(int grf);
 
 // Readbacks for the AstroExpression functions in express.cpp: the
 // hourglass setting, Windows' KvDialog() colour picker, and the cursor
