@@ -1613,9 +1613,9 @@ static flag FWriteGifQt(GA *pga, int cWrite)
 }
 
 // What Generate Animation remembers for the session, taken when OK is
-// pressed: the step, the delay, the size and how it plays. Not the dates:
-// Start is always where the moving chart is as the dialog opens, and Stop
-// is 30 of the remembered steps on from it.
+// pressed: everything it asks, the dates included, so it reopens as it was
+// last used. Until then Start is where the moving chart is as the dialog
+// opens, and Stop is 30 steps on from it.
 static GA s_gaGifLastQt;
 static flag s_fGifLastQt = fFalse;
 
@@ -1642,7 +1642,7 @@ void ShowGenerateGifDialogQt()
 {
   QDialog dlg(gi.qwind);
   GIFDATEQT rggd[2];
-  CI ciStop;
+  CI ciStart, ciStop;
   CONST CI *pciT;
   int nUnit, nCount, i, n;
 
@@ -1675,15 +1675,21 @@ void ShowGenerateGifDialogQt()
     nUnit = s_gaGifLastQt.nUnit;
     nCount = s_gaGifLastQt.nCount;
   }
-  ciStop = *PciAnimate();
-  StepAnimateCi(&ciStop, nUnit, nCount * 30);
+  ciStart = ciStop = *PciAnimate();
+  if (s_fGifLastQt) {
+    ciStart.mon = s_gaGifLastQt.mon1; ciStart.day = s_gaGifLastQt.day1;
+    ciStart.yea = s_gaGifLastQt.yea1; ciStart.tim = s_gaGifLastQt.tim1;
+    ciStop.mon = s_gaGifLastQt.mon2; ciStop.day = s_gaGifLastQt.day2;
+    ciStop.yea = s_gaGifLastQt.yea2; ciStop.tim = s_gaGifLastQt.tim2;
+  } else
+    StepAnimateCi(&ciStop, nUnit, nCount * 30);
 
   dlg.setWindowTitle("Generate Animation");
   QVBoxLayout *playout = new QVBoxLayout(&dlg);
   QGridLayout *pgrid = new QGridLayout();
   playout->addLayout(pgrid);
   for (i = 0; i < 2; i++) {
-    pciT = i == 0 ? PciAnimate() : &ciStop;
+    pciT = i == 0 ? &ciStart : &ciStop;
     QLabel *plabel = new QLabel(i == 0 ? "&Start:" : "S&top:", &dlg);
     rggd[i].pcbMon = PcbGifFieldQt(&dlg, RgstrMonthQt(),
       szMonth[FValidMon(pciT->mon) ? pciT->mon : 1]);
@@ -1693,6 +1699,10 @@ void ShowGenerateGifDialogQt()
       QString::number(pciT->yea));
     rggd[i].pcbTim = PcbGifFieldQt(&dlg, RgstrTimeQt(),
       StrTimEditQt(pciT->tim));
+    rggd[i].pcbMon->setObjectName(i == 0 ? "IDGIFMON1" : "IDGIFMON2");
+    rggd[i].pcbDay->setObjectName(i == 0 ? "IDGIFDAY1" : "IDGIFDAY2");
+    rggd[i].pcbYea->setObjectName(i == 0 ? "IDGIFYEA1" : "IDGIFYEA2");
+    rggd[i].pcbTim->setObjectName(i == 0 ? "IDGIFTIM1" : "IDGIFTIM2");
     plabel->setBuddy(rggd[i].pcbMon);
     pgrid->addWidget(plabel, i, 0);
     pgrid->addWidget(rggd[i].pcbMon, i, 1);
@@ -1756,7 +1766,7 @@ void ShowGenerateGifDialogQt()
   // short of the start, so the loop joins up without a doubled frame.
   QCheckBox *pcbBounce = new QCheckBox("&Back and forth", &dlg);
   pcbBounce->setObjectName("IDGIFBOUNCE");
-  pcbBounce->setChecked(s_fGifLastQt && s_gaGifLastQt.fBounce);
+  pcbBounce->setChecked(s_fGifLastQt ? s_gaGifLastQt.fBounce : fTrue);
   pgrid->addWidget(pcbBounce, 6, 1, 1, 3);
   // A saved setting, not a choice for the session: -YXgt. 0 is every core
   // the machine has, and is shown as such rather than as this machine's

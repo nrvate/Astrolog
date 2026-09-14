@@ -1772,22 +1772,35 @@ static void TestGenerateGifQt()
     if (!FClickButtonQt(pw, "IDCANCEL"))
       pw->close();
   });
-  Check(strCount.startsWith("31 frames"), "the dialog opens on 31 frames, "
-    "the chart's date and 30 steps of the Animate menu's rate (\"%s\")",
-    strCount.toLocal8Bit().constData());
+  Check(strCount.startsWith("60 frames"), "the dialog opens on 31 dates "
+    "played back and forth, the chart's date and 30 steps of the Animate "
+    "menu's rate (\"%s\")", strCount.toLocal8Bit().constData());
 
   // The dialog remembers its choices for the session, on OK and not on
-  // Cancel: step, unit, delay, size, Loop and Back and forth.
+  // Cancel: the dates, step, unit, delay, size, Loop and Back and forth,
+  // which is on until it is turned off.
   {
     extern flag s_fSaveFileTestQt;
     extern void ForgetGifDialogTestQt();
     Borrow bPicker(s_fSaveFileTestQt, fTrue);   // and the picker cancels
     int nCount = 0, nDelay = 0, x = 0, y = 0, nCountCancel = 0;
-    QString strUnit;
-    flag fLoop = fTrue, fBounce = fFalse;
+    QString strUnit, strDate1, strDate2;
+    flag fLoop = fTrue, fBounce = fTrue, fBounceFresh = fFalse;
 
     ForgetGifDialogTestQt();
     DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      fBounceFresh = pw->findChild<QCheckBox *>("IDGIFBOUNCE")->isChecked();
+      for (int i = 1; i <= 2; i++) {
+        QComboBox *pcbMon = pw->findChild<QComboBox *>(
+          QString("IDGIFMON%1").arg(i));
+        pcbMon->setEditText(pcbMon->itemText(1));
+        pw->findChild<QComboBox *>(QString("IDGIFDAY%1").arg(i))->
+          setEditText(i == 1 ? "3" : "5");
+        pw->findChild<QComboBox *>(QString("IDGIFYEA%1").arg(i))->
+          setEditText("1987");
+        pw->findChild<QComboBox *>(QString("IDGIFTIM%1").arg(i))->
+          setEditText("6:00");
+      }
       pw->findChild<QSpinBox *>("IDGIFCOUNT")->setValue(7);
       QComboBox *pcb = pw->findChild<QComboBox *>("IDGIFUNIT");
       pcb->setCurrentIndex(pcb->findText("Hours"));
@@ -1795,7 +1808,7 @@ static void TestGenerateGifQt()
       pw->findChild<QSpinBox *>("IDGIFX")->setValue(500);
       pw->findChild<QSpinBox *>("IDGIFY")->setValue(450);
       pw->findChild<QCheckBox *>("IDGIFLOOP")->setChecked(false);
-      pw->findChild<QCheckBox *>("IDGIFBOUNCE")->setChecked(true);
+      pw->findChild<QCheckBox *>("IDGIFBOUNCE")->setChecked(false);
       SettleGifCountQt(s_cGifRecountQt);
       if (!FClickButtonQt(pw, "IDOK"))
         pw->close();
@@ -1808,15 +1821,23 @@ static void TestGenerateGifQt()
       y = pw->findChild<QSpinBox *>("IDGIFY")->value();
       fLoop = pw->findChild<QCheckBox *>("IDGIFLOOP")->isChecked();
       fBounce = pw->findChild<QCheckBox *>("IDGIFBOUNCE")->isChecked();
+      strDate1 = pw->findChild<QComboBox *>("IDGIFDAY1")->currentText() +
+        " " + pw->findChild<QComboBox *>("IDGIFYEA1")->currentText();
+      strDate2 = pw->findChild<QComboBox *>("IDGIFDAY2")->currentText() +
+        " " + pw->findChild<QComboBox *>("IDGIFYEA2")->currentText();
       pw->findChild<QSpinBox *>("IDGIFCOUNT")->setValue(9);
       if (!FClickButtonQt(pw, "IDCANCEL"))
         pw->close();
     });
+    Check(fBounceFresh, "Generate Animation opens with Back and forth on");
     Check(nCount == 7 && strUnit == "Hours" && nDelay == 250 && x == 500 &&
-      y == 450 && !fLoop && fBounce, "Generate Animation reopens with the "
+      y == 450 && !fLoop && !fBounce, "Generate Animation reopens with the "
       "choices it was OKed with (%d %s, %d msec, %dx%d, loop %d, back and "
       "forth %d)", nCount, strUnit.toLocal8Bit().constData(), nDelay, x, y,
       fLoop, fBounce);
+    Check(strDate1 == "3 1987" && strDate2 == "5 1987", "and with the "
+      "dates it was OKed with (start %s, stop %s)",
+      strDate1.toLocal8Bit().constData(), strDate2.toLocal8Bit().constData());
     DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
       nCountCancel = pw->findChild<QSpinBox *>("IDGIFCOUNT")->value();
       if (!FClickButtonQt(pw, "IDCANCEL"))
@@ -1909,6 +1930,7 @@ static void TestGenerateGifQt()
       int c0 = s_cGifRecountQt;
       nMin = psp->minimum();
       nStep = psp->singleStep();
+      pw->findChild<QCheckBox *>("IDGIFBOUNCE")->setChecked(false);
       psp->setValue(25);
       SettleGifCountQt(c0);
       strPlay = s_strGifCountQt;

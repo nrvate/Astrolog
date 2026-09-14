@@ -11517,15 +11517,18 @@ the maintainer's choice.
 as the chart info dialogs have them), a Step as a count and a unit (the
 Animate menu's units: seconds to millennia, and 1/10, 1/100 and 1/1000
 of a second), the Frame delay in milliseconds (default: the animation
-delay), the Size (default: the chart's), Loop forever, Back and forth, and
+delay), the Size (default: the chart's), Loop forever, Back and forth (on
+by default, at the maintainer's request, 2026-09-14), and
 Threads, which is the saved setting `-YXgt` rather than a choice for the
 session: 0, shown as "All cores", up to the machine's core count.
 A line under the fields gives the frame count live, and OK is disabled
 while the request is invalid. OK then asks for a file and shows a
 progress box with Cancel, 120 ms on: a bar for the charts rendered and one
-for the frames compressed and written, each with its "N of M". It opens
-at the moving chart's current date
-with 30 steps of the Animate menu's current rate and factor. The menu
+for the frames compressed and written, each with its "N of M". The first
+time in a session it opens at the moving chart's current date with 30
+steps of the Animate menu's current rate and factor; after an OK it
+reopens exactly as it was OKed, the dates included, for the rest of the
+session. The menu
 item is greyed out for text charts and for map charts whose animation
 spins the map rather than moving time (`FAnimateRotates()`), re-tested
 each time the menu opens.
@@ -11726,7 +11729,8 @@ clipped, in both bitmap modes; that
 play-once writes no loop extension; that Cancel leaves no file; that back
 and forth gives 15, 20, 25, 20 June with the last frame equal to the
 second; that the menu item is disabled for a text chart and a spinning
-map; that the dialog opens on "31 frames"; and that `-Xg0` and `-Xgb`
+map; that the dialog opens on "60 frames" (31 dates, back and forth) and
+reopens with the dates and choices it was OKed with; and that `-Xg0` and `-Xgb`
 parse and are refused from Enter Command Line. By hand as well: the
 console build's `-Xg` output against `-Xo` bitmap exports of the same
 dates, compared with PIL -- first and last frames pixel-identical in `-Xb`
