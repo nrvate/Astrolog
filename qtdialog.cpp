@@ -52,6 +52,7 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QProgressDialog>
+#include <QtCore/QTimer>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QPushButton>
@@ -1578,8 +1579,10 @@ flag FWriteGifTestQt(GA *pga, int cWrite)
 }
 
 // The dialog's frame count line, for the suite to read while it drives the
-// dialog; empty when no Generate Animation dialog is open.
+// dialog; empty when no Generate Animation dialog is open. And how many
+// times it has been counted.
 QString s_strGifCountQt;
+int s_cGifRecountQt = 0;
 #endif
 
 void ShowGenerateGifDialogQt()
@@ -1725,7 +1728,7 @@ void ShowGenerateGifDialogQt()
     pga->yWin = pspY->value();
     return NGifFrameCount(pga);
   };
-  auto fnUpdate = [&]() {
+  auto fnRecount = [&]() {
     GA ga;
     int c = fnFill(&ga);
     int cWrite = ga.fBounce && c > 1 ? 2*c - 2 : c;
@@ -1747,9 +1750,22 @@ void ShowGenerateGifDialogQt()
     plabelCount->setText(str);
 #ifdef QTTEST
     s_strGifCountQt = str;
+    s_cGifRecountQt++;
 #endif
     pbb->button(QDialogButtonBox::Ok)->setEnabled(c >= 1 &&
       c <= cGifFrameMax && cWrite <= cGifFrameMax);
+  };
+  // Counting steps the chart a frame at a time, and a small unit over a
+  // long range is thousands of AddTime() calls a frame -- a third of a
+  // second, measured. So a run of keystrokes counts once, after the last,
+  // and OK waits for it.
+  QTimer tRecount;
+  tRecount.setSingleShot(true);
+  tRecount.setInterval(150);
+  QObject::connect(&tRecount, &QTimer::timeout, &dlg, fnRecount);
+  auto fnUpdate = [&]() {
+    pbb->button(QDialogButtonBox::Ok)->setEnabled(false);
+    tRecount.start();
   };
   for (i = 0; i < 2; i++) {
     QObject::connect(rggd[i].pcbMon, &QComboBox::editTextChanged, &dlg,
@@ -1768,7 +1784,7 @@ void ShowGenerateGifDialogQt()
   QObject::connect(pcbUnit, QOverload<int>::of(&QComboBox::currentIndexChanged),
     &dlg, fnUpdate);
   QObject::connect(pcbBounce, &QCheckBox::toggled, &dlg, fnUpdate);
-  fnUpdate();
+  fnRecount();
 
   n = dlg.exec();
 #ifdef QTTEST

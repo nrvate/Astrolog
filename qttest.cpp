@@ -894,6 +894,18 @@ static flag FGifProgressTestQt(int iFrame, int cFrame)
 }
 
 extern QString s_strGifCountQt;
+extern int s_cGifRecountQt;
+
+// Let the Generate Animation dialog's frame count catch up with an edit,
+// which it does once the typing stops.
+static void SettleGifCountQt(int cBefore)
+{
+  QElapsedTimer t;
+
+  t.start();
+  while (s_cGifRecountQt == cBefore && t.elapsed() < 3000 * nScaleTest)
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+}
 
 static void TestGenerateGifQt()
 {
@@ -1417,6 +1429,7 @@ static void TestGenerateGifQt()
       pw->findChild<QSpinBox *>("IDGIFY")->setValue(450);
       pw->findChild<QCheckBox *>("IDGIFLOOP")->setChecked(false);
       pw->findChild<QCheckBox *>("IDGIFBOUNCE")->setChecked(true);
+      SettleGifCountQt(s_cGifRecountQt);
       if (!FClickButtonQt(pw, "IDOK"))
         pw->close();
     });
@@ -1445,6 +1458,36 @@ static void TestGenerateGifQt()
     Check(nCountCancel == 7, "and not with a change it was cancelled on "
       "(%d)", nCountCancel);
     ForgetGifDialogTestQt();
+  }
+
+  // Counting frames can take a third of a second, so a run of edits counts
+  // once, after the last, and OK is off until it has.
+  {
+    int cSync = -1, cAfter = -1;
+    flag fOkPending = fTrue, fOkAfter = fFalse;
+    QString strBefore, strAfter;
+
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      QSpinBox *psp = pw->findChild<QSpinBox *>("IDGIFCOUNT");
+      int c0 = s_cGifRecountQt, n;
+      strBefore = s_strGifCountQt;
+      for (n = 2; n <= 6; n++)
+        psp->setValue(n);
+      cSync = s_cGifRecountQt - c0;
+      fOkPending = PpbButtonQt(pw, "IDOK")->isEnabled();
+      SettleGifCountQt(c0);
+      QCoreApplication::processEvents(QEventLoop::AllEvents, 300);
+      cAfter = s_cGifRecountQt - c0;
+      fOkAfter = PpbButtonQt(pw, "IDOK")->isEnabled();
+      strAfter = s_strGifCountQt;
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    Check(cSync == 0 && !fOkPending, "five quick edits to the step count "
+      "nothing yet, with OK off (counted %d, OK %d)", cSync, fOkPending);
+    Check(cAfter == 1 && fOkAfter && strAfter != strBefore, "and then "
+      "count once, with OK back on (counted %d, OK %d: \"%s\")", cAfter,
+      fOkAfter, strAfter.toLocal8Bit().constData());
   }
 
   // -Xg carries the same request on a command line, and is refused where
