@@ -3837,20 +3837,7 @@ typedef struct _switchdef {
                         // check in the handler and leave this 0.
 } SWITCHDEF;
 
-#ifdef QTTEST
-// A handler that reports consuming one argument more than it was given --
-// the arity slip FProcessSwitches()'s guard exists for. Test builds only, so
-// the suite can hold the guard to it.
-static int NSwQtOverconsume(CONST char *szSwitch, PARSEIN *pin)
-{
-  return pin->argc;
-}
-#endif
-
 static CONST SWITCHDEF rgswitchdef[] = {
-#ifdef QTTEST
-  {"ZQtOverconsume", 0, NSwQtOverconsume},
-#endif
   {"Yj0",  0,      NSwYj0},  {"Yj7",  0,      NSwYj7},
   {"YAD",  0,      NSwYAD, 4},  {"YJ",   0,      NSwYJ},
   {"YJ0",  0,      NSwYJ0},  {"YJ7",  0,      NSwYJ7},
@@ -4269,6 +4256,18 @@ static int NProcessSwitchesNullW(int argc, char **argv, int pos)
 #endif
 
 
+// Did a switch's handler claim more parameters than it was given? argc
+// still counts the switch itself at the point this is asked, so a handler
+// may consume at most argc - 1. The guard used to be "cConsumed > argc",
+// which let exactly one too many through and walked parsing past the end of
+// argv. A function of its own so the suite can hold it to the boundary in
+// every build: the Windows test binary compiles this file without QTTEST,
+// so a test-only switch row here would not exist there.
+flag FSwitchOverconsumed(int cConsumed, int argc)
+{
+  return cConsumed >= argc;
+}
+
 flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
 {
   int ich, i;
@@ -4304,7 +4303,7 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
       // too many through, and parsing then read past the end of argv; and
       // the refusal it did make was silent. A future arity slip is now an
       // error with a name.
-      if (i >= argc) {
+      if (FSwitchOverconsumed(i, argc)) {
         char szT[cchSzDef];
         sprintf2(S(szT), "Switch %c%s claims more parameters than it was "
           "given.", chSwitch, argv[0] + ich);

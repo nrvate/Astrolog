@@ -2317,9 +2317,15 @@ since `v8.00-qt.15` was surveyed and **run**, not only read: 26 found. Verdicts:
     while `argc` still counted the switch itself, so a handler reporting exactly one
     argument more than it was given passed and parsing walked past `argv` (the survey
     saw environment strings read as switches); when it did fire, it refused silently.
-    Now `i >= argc`, with an error naming the switch. Net: a `QTTEST`-only row,
-    `ZQtOverconsume`, whose handler returns `pin->argc`, and a `bad-input` check that it
-    is refused -- on the old guard the group **crashed** (SIGSEGV).
+    Now `i >= argc`, with an error naming the switch, through `FSwitchOverconsumed()`.
+    Net: `bad-input` holds that function to the boundary (consuming 0 of 1 and 1 of 2
+    accepted; 1 of 1 and 2 of 2 refused), which fails with the condition set back to
+    `>`. A first net used a `QTTEST`-only switch row whose handler over-consumed, and
+    made `bad-input` crash with SIGSEGV on the old guard -- but the release dry run's
+    Windows leg failed it: `tools/msvc-build-qt.cmd` compiles the shared core once,
+    WITHOUT `/DQTTEST`, so that row did not exist in the Windows test binary and the
+    `-Z` prefix row took the name as a horizon chart instead. A test hook in a
+    shared-core file under `#ifdef QTTEST` is absent from the Windows suite.
   - **The wider console prompt buffers** (A-5) moved the split of an over-long line
     from 254 to 1,019 characters without removing it: `InputString()` never asked
     whether `fgets()` had reached the line's end, so the rest ran as the next command

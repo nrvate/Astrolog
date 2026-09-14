@@ -1827,8 +1827,13 @@ static void TestBadInputQt()
   // refused, not followed off the end of argv. FProcessSwitches() tested
   // "i > argc" while argc still counted the switch itself, so exactly one
   // too many passed the guard and parsing read past the argument list.
-  Check(!FProcessCommandLine((char *)"-ZQtOverconsume"),
-    "a handler consuming more than it was given is refused");
+  // Asked of the guard itself rather than through a test-only switch: the
+  // Windows test binary compiles the shared core without QTTEST, so such a
+  // row was absent there and "-Z", a prefix row, took the name instead.
+  Check(!FSwitchOverconsumed(0, 1) && !FSwitchOverconsumed(1, 2) &&
+    FSwitchOverconsumed(1, 1) && FSwitchOverconsumed(2, 2),
+    "a handler may consume what it was given and not one more (0 of 1 and "
+    "1 of 2 accepted; 1 of 1 and 2 of 2 refused)");
 
   // A 400-digit switch parameter, which crashed twice over before
   // REFACTORING.md B1's net pinned it: NParseSz()

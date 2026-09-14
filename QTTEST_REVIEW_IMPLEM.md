@@ -2810,8 +2810,13 @@ v8.00-qt.15, verified".
 
 - **`FProcessSwitches()`'s guard** let a handler take exactly one argument more than it
   was given (`i > argc` with the switch still counted) and refused silently otherwise.
-  Now `i >= argc` with a named error. The new `QTTEST`-only `ZQtOverconsume` row made
-  `bad-input` crash with SIGSEGV on the old guard and pass on the new one.
+  Now `i >= argc` with a named error, through `FSwitchOverconsumed()`, which `bad-input`
+  holds to the boundary; set back to `>`, the check fails. **The first net did not
+  travel:** a `QTTEST`-only switch row with an over-consuming handler crashed `bad-input`
+  on the old guard and passed here, then failed the release dry run on Windows. The MSVC
+  build compiles the shared core without `/DQTTEST`, so the row was absent there and the
+  `-Z` prefix row took `-ZQtOverconsume` as a horizon chart. Test hooks belong in the Qt
+  files or `qttest.cpp`, never under `#ifdef QTTEST` in the shared core.
 - **`InputString()`** left the rest of an over-long line in stdin to be read as the next
   answer, so the review's wider prompt buffer moved the split to 1,019 characters.
   Now a line that fills the buffer is read away and refused with a message, and one
