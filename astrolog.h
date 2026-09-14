@@ -608,6 +608,15 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 // upstream's to set.
 #define szVersionFork "20"
 #define szVersionQt   szVersionCore "-qt." szVersionFork
+// What a chart's own header says, text or graphics: "Astrolog 8.00 Qt" in
+// the Qt build so a screenshot shows which program drew it, and upstream's
+// "Astrolog 8.00" everywhere else -- szVersionCore itself is left alone,
+// for the reasons above.
+#ifdef QT
+#define szVersionChart szVersionCore " Qt"
+#else
+#define szVersionChart szVersionCore
+#endif
 #define szVerCore     "800"
 #define szDateCore    "May 2026"
 #define szAddressCore \

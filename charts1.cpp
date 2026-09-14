@@ -81,7 +81,7 @@ void PrintHeader(int nSpace)
 
   fNam = FSzSet(ciMain.nam); fLoc = FSzSet(ciMain.loc);
   AnsiColor(kWhiteA);
-  sprintf2(S(sz), "%s %s", szAppName, szVersionCore); PrintSz(sz);
+  sprintf2(S(sz), "%s %s", szAppName, szVersionChart); PrintSz(sz);
   if (!us.fSeconds || fNam)
     PrintSz(" chart ");
   else
@@ -736,7 +736,7 @@ void PrintWheelCenter(int irow)
 
   switch (irow) {
   case 0:
-    sprintf2(S(sz), "%s %s chart", szAppName, szVersionCore);
+    sprintf2(S(sz), "%s %s chart", szAppName, szVersionChart);
     break;
   case 1:
     sprintf2(S(sz), "%s", ciMain.nam);

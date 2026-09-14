@@ -409,7 +409,7 @@ void DrawSidebar()
 
   // Print chart header and setting information.
 
-  sprintf2(S(sz), "%s %s", szAppName, szVersionCore);
+  sprintf2(S(sz), "%s %s", szAppName, szVersionChart);
   DrawPrint(sz, gi.kiOn, fFalse);
   if (us.nRel == rcComposite) {
     DrawInfo(&ciMain, szC1, fFalse);

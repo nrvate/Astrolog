@@ -634,6 +634,81 @@ static void TestAboutVersionQt()
 }
 
 
+// The Qt build names its charts "Astrolog 8.00 Qt" (szVersionChart), in a
+// graphics chart's sidebar and in a text chart's header, so a screenshot
+// shows which program drew it.
+
+static void TestChartHeaderQt()
+{
+  Borrow bNoWrite(us.fNoWrite, fFalse);
+  Borrow bGraphics(us.fGraphics, fTrue);
+  Borrow bMode(gi.nMode, (int)gWheel);
+  Borrow bRel(us.nRel, (int)rcNone);
+  Borrow bXWin(gs.xWin, 400);
+  Borrow bYWin(gs.yWin, 400);
+  // The SVG export below clones its file name into both output names. Put
+  // back by content, as K6 has every other test do.
+  QByteArray baFileOutSav(SzSet(is.szFileOut)), baGiOutSav(SzSet(gi.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL, fGiOutSav = gi.szFileOut != NULL;
+
+  Group("Chart header names the Qt build");
+
+  // The Qt build names itself in a chart's header, read out of an SVG
+  // export of a wheel's sidebar, where it is text rather than pixels.
+  {
+    Borrow bText(gs.fText, fTrue);
+    Borrow bSide(gs.fDoSidebar, fTrue);
+    // With a text font, not the built-in strokes, so SVG writes <text>.
+    Borrow bFont(gs.nFontTxt, 1);
+    char szSvg[cchSzMax];
+    QByteArray baSvg;
+
+    sprintf2(S(szSvg), "%s/astrolog-qt-header-%d.svg",
+      QDir::tempPath().toLocal8Bit().constData(),
+      (int)QCoreApplication::applicationPid());
+    remove(szSvg);
+    FExportChartToFileTestQt(szSvg, ftSVG);
+    QFile fileSvg(QString::fromLocal8Bit(szSvg));
+    if (fileSvg.open(QIODevice::ReadOnly)) {
+      baSvg = fileSvg.readAll();
+      fileSvg.close();
+    }
+    Check(baSvg.contains(szAppNameCore " " szVersionCore " Qt"),
+      "a graphics chart's header says \"" szAppNameCore " " szVersionCore
+      " Qt\" (SVG of %d bytes)", (int)baSvg.size());
+    remove(szSvg);
+  }
+  {
+    char szTxt[cchSzMax];
+    QByteArray baScreenSav(SzSet(is.szFileScreen)), baTxt;
+    flag fScreenSav = is.szFileScreen != NULL;
+    FILE *fileSSav = is.S;
+    Borrow bGraphTxt(us.fGraphics, fFalse);
+    Borrow bList(us.fListing, fTrue);
+    Borrow bWheel(us.fWheel, fFalse);
+
+    SzScratchPathQt(S(szTxt), "chartheader", ".txt");
+    FCloneSz(szTxt, &is.szFileScreen);
+    Action();                       // PrintHeader() path (-v listing).
+    is.S = fileSSav;                // Action() leaves is.S moved.
+    FCloneSz(fScreenSav ? baScreenSav.constData() : NULL, &is.szFileScreen);
+    QFile fileTxt(QString::fromLocal8Bit(szTxt));
+    if (fileTxt.open(QIODevice::ReadOnly)) {
+      baTxt = fileTxt.readAll();
+      fileTxt.close();
+    }
+    Check(baTxt.contains(szAppNameCore " " szVersionCore " Qt"),
+      "and a text chart's header says \"" szAppNameCore " " szVersionCore
+      " Qt\" too (%d bytes)", (int)baTxt.size());
+    remove(szTxt);
+  }
+
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+  FCloneSz(fGiOutSav ? baGiOutSav.constData() : NULL, &gi.szFileOut);
+  RecastAndRedrawQt();
+}
+
+
 /*
 ******************************************************************************
 ** Context menus.
@@ -14095,6 +14170,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"popup-net",            TestPopupNetQt},
   {"about-version",        TestAboutVersionQt},
+  {"chart-header-qt",      TestChartHeaderQt},
   {"context-menus",        TestContextMenusQt},
   {"hotkeys",              TestHotkeysQt},
   {"chart-render",         TestChartRenderQt},

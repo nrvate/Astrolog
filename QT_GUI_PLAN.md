@@ -10949,6 +10949,17 @@ this is the note that explains the wall of dialogs.
     "Astrolog version 8.00-qt.20 (Qt)" and the commit in brackets.
     `about-version` updated to require it.
 
+264. **Chart headers say "Astrolog 8.00 Qt" in the Qt build.** The
+    maintainer's reason: a screenshot should show which program drew it.
+    The text chart header and wheel centre (charts1.cpp) and the graphics
+    sidebar (xcharts0.cpp) use a new `szVersionChart`, which is
+    `szVersionCore " Qt"` under `QT` and `szVersionCore` everywhere else.
+    `szVersionCore` itself is untouched, because the banner, `-H` and
+    express.cpp's `atof()` read it (QT_CI_PLAN.md Q2). Nets in
+    `chart-header-qt`: an SVG export with a text font contains
+    "Astrolog 8.00 Qt", and so does a text listing written through
+    `is.szFileScreen`.
+
 265. **The Linux taskbar showed a rocket for the port, and the port was
     right.** Measured on the running window: `WM_CLASS` "astrolog" and
     `_NET_WM_ICON` at 16, 32 and 48. Cinnamon's window tracker, queried
