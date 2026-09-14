@@ -10944,6 +10944,20 @@ this is the note that explains the wall of dialogs.
     putting `" ` into the settings sweeps' markers, which failed on the
     old writer and pass now. QTTEST_REVIEW_IMPLEM.md, third batch.
 
+262. **The settings writer dropped the colours of aspects 19 to 24.**
+    `FOutputSettings()` wrote `-YkA 1 5`, `-YkA 6 11` and `-YkA 12 18`, and
+    nothing for Decile and the five user-defined aspects (`aDc3`,
+    `aUd1`-`aUd5`), though `cAspect` is 24 and the parser has always
+    accepted 1 to `cAspect`. The `settings-arrays` sweep could not see it:
+    its range for `kAspA` was 1 to 18, copied from the writer, so it asked
+    only about what the writer already wrote -- the blind spot was exactly
+    where the answer was. The maintainer found it by counting. The writer
+    now writes `-YkA 19 24`, `astrolog.as` carries the line
+    (`DkC DkG DkG DkG DkG DkG`), and the sweep's range is `cAspect`. An
+    agent audit of the writer for the same shape found more -- `-YjA`
+    19-24, `-Y7O`, `-YJ`, `-YJ7`, and `-YS`/`-YE`/`-YAD`/`-YI*` -- which
+    were fixed on branch `writerfix`, which landed right after this.
+
 263. **The About box showed upstream's version, not the fork's.** Its
     version line used `szVersionCore`, "8.00". It uses `szVersionQt` now:
     "Astrolog version 8.00-qt.20 (Qt)" and the commit in brackets.

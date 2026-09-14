@@ -9845,7 +9845,7 @@ static SETARRAY rgsetarray[] = {
   {"exalt",       exalt.rgn,       sizeof(exalt.rgn),       'i',
     1, 10, NULL},
   {"kAspA",       kAspA.rgn,       sizeof(kAspA.rgn),       'i',
-    1, 18, NULL},
+    1, cAspect, NULL},
   {"kMainA",      kMainA,          sizeof(kMainA),          'i',
     0, 8, NULL},
   {"kRainbowA",   kRainbowA,       sizeof(kRainbowA),       'i',

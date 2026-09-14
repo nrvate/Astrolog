@@ -2333,7 +2333,10 @@ flag FOutputSettings()
   PrintF("      ; Minor aspect colors\n-YkA 12 18 ");
   for (i = 12; i <= 18; i++)
     { sprintf2(S(sz), " %s", SzColor2(kAspA[ASPT(i)])); PrintFSz(); }
-  PrintF("  ; Obscure aspect colors\n\n-YkC       ");
+  PrintF("  ; Obscure aspect colors\n-YkA 19 24 ");
+  for (i = 19; i <= cAspect; i++)
+    { sprintf2(S(sz), " %s", SzColor2(kAspA[ASPT(i)])); PrintFSz(); }
+  PrintF("      ; Extra aspect colors\n\n-YkC       ");
 
   for (i = eFir; i <= eWat; i++)
     { sprintf2(S(sz), " %s", SzColor2(kElemA[i])); PrintFSz(); }

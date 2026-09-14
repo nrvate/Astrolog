@@ -221,6 +221,7 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 -YkA 1 5    Yel Blu Red Gre Cya          ; Major aspect colors
 -YkA 6 11   Mag Mag Mai Mai DkC DkC      ; Minor aspect colors
 -YkA 12 18  DkC Mar Pur Pur Mar Mar Pur  ; Obscure aspect colors
+-YkA 19 24  DkC DkG DkG DkG DkG DkG      ; Extra aspect colors
 
 -YkC        Red Yel Gre Blu                      ; Element colors
 -Yk7 1 7    Red Ind For Yel Amb Ros Vio          ; Ray colors
