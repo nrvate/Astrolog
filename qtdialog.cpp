@@ -1558,7 +1558,19 @@ static flag FWriteGifQt(GA *pga, int cWrite)
   return fOk;
 }
 
+// What Generate Animation remembers for the session, taken when OK is
+// pressed: the step, the delay, the size and how it plays. Not the dates:
+// Start is always where the moving chart is as the dialog opens, and Stop
+// is 30 of the remembered steps on from it.
+static GA s_gaGifLastQt;
+static flag s_fGifLastQt = fFalse;
+
 #ifdef QTTEST
+void ForgetGifDialogTestQt()
+{
+  s_fGifLastQt = fFalse;
+}
+
 // The writer the dialog runs once a file is picked, for the suite.
 flag FWriteGifTestQt(GA *pga, int cWrite)
 {
@@ -1603,6 +1615,10 @@ void ShowGenerateGifDialogQt()
   if (nUnit == iAnimNow || !FBetween(nUnit, 1, 13))
     nUnit = iAnimDay;
   nCount = Max(NAbs(gi.nDir), 1);
+  if (s_fGifLastQt) {
+    nUnit = s_gaGifLastQt.nUnit;
+    nCount = s_gaGifLastQt.nCount;
+  }
   ciStop = *PciAnimate();
   StepAnimateCi(&ciStop, nUnit, nCount * 30);
 
@@ -1631,9 +1647,11 @@ void ShowGenerateGifDialogQt()
 
   QLabel *plabelStep = new QLabel("Ste&p:", &dlg);
   QSpinBox *pspCount = new QSpinBox(&dlg);
+  pspCount->setObjectName("IDGIFCOUNT");
   pspCount->setRange(1, 32000);
   pspCount->setValue(nCount);
   QComboBox *pcbUnit = new QComboBox(&dlg);
+  pcbUnit->setObjectName("IDGIFUNIT");
   for (i = 0; i < cgifunitQt; i++) {
     pcbUnit->addItem(rggifunitQt[i].sz);
     if (rggifunitQt[i].nUnit == nUnit)
@@ -1648,7 +1666,9 @@ void ShowGenerateGifDialogQt()
   QSpinBox *pspDelay = new QSpinBox(&dlg);
   pspDelay->setRange(1, 32000);
   pspDelay->setSuffix(" msec");
-  pspDelay->setValue(FValidTimer(NAnimDelayQt()) ? NAnimDelayQt() : 100);
+  pspDelay->setObjectName("IDGIFDELAY");
+  pspDelay->setValue(s_fGifLastQt ? s_gaGifLastQt.nDelay :
+    (FValidTimer(NAnimDelayQt()) ? NAnimDelayQt() : 100));
   plabelDelay->setBuddy(pspDelay);
   pgrid->addWidget(plabelDelay, 3, 0);
   pgrid->addWidget(pspDelay, 3, 1, 1, 2);
@@ -1657,8 +1677,12 @@ void ShowGenerateGifDialogQt()
   QSpinBox *pspX = new QSpinBox(&dlg), *pspY = new QSpinBox(&dlg);
   pspX->setRange(BITMAPX1, BITMAPX);
   pspY->setRange(BITMAPY1, BITMAPY);
-  pspX->setValue(gs.xWin > 0 ? gs.xWin : DEFAULTX);
-  pspY->setValue(gs.yWin > 0 ? gs.yWin : DEFAULTY);
+  pspX->setObjectName("IDGIFX");
+  pspY->setObjectName("IDGIFY");
+  pspX->setValue(s_fGifLastQt ? s_gaGifLastQt.xWin :
+    (gs.xWin > 0 ? gs.xWin : DEFAULTX));
+  pspY->setValue(s_fGifLastQt ? s_gaGifLastQt.yWin :
+    (gs.yWin > 0 ? gs.yWin : DEFAULTY));
   plabelSize->setBuddy(pspX);
   pgrid->addWidget(plabelSize, 4, 0);
   pgrid->addWidget(pspX, 4, 1);
@@ -1666,17 +1690,22 @@ void ShowGenerateGifDialogQt()
   pgrid->addWidget(pspY, 4, 3);
 
   QCheckBox *pcbLoop = new QCheckBox("&Loop forever", &dlg);
-  pcbLoop->setChecked(true);
+  pcbLoop->setObjectName("IDGIFLOOP");
+  pcbLoop->setChecked(s_fGifLastQt ? s_gaGifLastQt.fLoop : fTrue);
   pgrid->addWidget(pcbLoop, 5, 1, 1, 3);
   // Forward to the stop date, then back through the same frames to one
   // short of the start, so the loop joins up without a doubled frame.
   QCheckBox *pcbBounce = new QCheckBox("&Back and forth", &dlg);
+  pcbBounce->setObjectName("IDGIFBOUNCE");
+  pcbBounce->setChecked(s_fGifLastQt && s_gaGifLastQt.fBounce);
   pgrid->addWidget(pcbBounce, 6, 1, 1, 3);
 
   QLabel *plabelCount = new QLabel(&dlg);
   playout->addWidget(plabelCount);
   QDialogButtonBox *pbb = new QDialogButtonBox(QDialogButtonBox::Ok |
     QDialogButtonBox::Cancel, &dlg);
+  pbb->button(QDialogButtonBox::Ok)->setObjectName("IDOK");
+  pbb->button(QDialogButtonBox::Cancel)->setObjectName("IDCANCEL");
   playout->addWidget(pbb);
   QObject::connect(pbb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   QObject::connect(pbb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
@@ -1751,6 +1780,8 @@ void ShowGenerateGifDialogQt()
   n = fnFill(&ga);
   if (n < 1 || n > cGifFrameMax)
     return;
+  s_gaGifLastQt = ga;
+  s_fGifLastQt = fTrue;
   if (ga.fBounce && n > 1)
     n = 2*n - 2;
   if (n > cGifFrameMax)

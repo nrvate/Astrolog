@@ -53,6 +53,7 @@
 #include <QtWidgets/QScrollBar>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QRadioButton>
 #include <QtCore/QMap>
 #include <QtWidgets/QLabel>
@@ -1395,6 +1396,56 @@ static void TestGenerateGifQt()
   Check(strCount.startsWith("31 frames"), "the dialog opens on 31 frames, "
     "the chart's date and 30 steps of the Animate menu's rate (\"%s\")",
     strCount.toLocal8Bit().constData());
+
+  // The dialog remembers its choices for the session, on OK and not on
+  // Cancel: step, unit, delay, size, Loop and Back and forth.
+  {
+    extern flag s_fSaveFileTestQt;
+    extern void ForgetGifDialogTestQt();
+    Borrow bPicker(s_fSaveFileTestQt, fTrue);   // and the picker cancels
+    int nCount = 0, nDelay = 0, x = 0, y = 0, nCountCancel = 0;
+    QString strUnit;
+    flag fLoop = fTrue, fBounce = fFalse;
+
+    ForgetGifDialogTestQt();
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      pw->findChild<QSpinBox *>("IDGIFCOUNT")->setValue(7);
+      QComboBox *pcb = pw->findChild<QComboBox *>("IDGIFUNIT");
+      pcb->setCurrentIndex(pcb->findText("Hours"));
+      pw->findChild<QSpinBox *>("IDGIFDELAY")->setValue(250);
+      pw->findChild<QSpinBox *>("IDGIFX")->setValue(500);
+      pw->findChild<QSpinBox *>("IDGIFY")->setValue(450);
+      pw->findChild<QCheckBox *>("IDGIFLOOP")->setChecked(false);
+      pw->findChild<QCheckBox *>("IDGIFBOUNCE")->setChecked(true);
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      nCount = pw->findChild<QSpinBox *>("IDGIFCOUNT")->value();
+      strUnit = pw->findChild<QComboBox *>("IDGIFUNIT")->currentText();
+      nDelay = pw->findChild<QSpinBox *>("IDGIFDELAY")->value();
+      x = pw->findChild<QSpinBox *>("IDGIFX")->value();
+      y = pw->findChild<QSpinBox *>("IDGIFY")->value();
+      fLoop = pw->findChild<QCheckBox *>("IDGIFLOOP")->isChecked();
+      fBounce = pw->findChild<QCheckBox *>("IDGIFBOUNCE")->isChecked();
+      pw->findChild<QSpinBox *>("IDGIFCOUNT")->setValue(9);
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    Check(nCount == 7 && strUnit == "Hours" && nDelay == 250 && x == 500 &&
+      y == 450 && !fLoop && fBounce, "Generate Animation reopens with the "
+      "choices it was OKed with (%d %s, %d msec, %dx%d, loop %d, back and "
+      "forth %d)", nCount, strUnit.toLocal8Bit().constData(), nDelay, x, y,
+      fLoop, fBounce);
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      nCountCancel = pw->findChild<QSpinBox *>("IDGIFCOUNT")->value();
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    Check(nCountCancel == 7, "and not with a change it was cancelled on "
+      "(%d)", nCountCancel);
+    ForgetGifDialogTestQt();
+  }
 
   // -Xg carries the same request on a command line, and is refused where
   // -Xo is: from Enter Command Line.
