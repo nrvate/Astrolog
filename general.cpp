@@ -1465,8 +1465,11 @@ void PrintSzFormat(CONST char *sz, flag fPopup)
 
 void PrintProgress(CONST char *sz)
 {
-#ifndef WIN
-  // Progress messages are ignored in the Windows version.
+#if !defined(WIN) && !defined(QT)
+  // Progress messages are ignored in the Windows version, and in the Qt one
+  // for the same reason: a GUI has no console to show them on, and from a
+  // terminal every bitmap export -- and every frame of an animated GIF --
+  // printed two lines of "Creating graphics chart in memory." spam.
   AnsiColor(kYellowA);
   fprintf(stderr, "%s\n", sz);
   AnsiColor(kDefault);

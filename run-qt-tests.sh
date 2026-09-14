@@ -224,6 +224,30 @@ for f in nrvate.as astrolog.as; do
 done
 
 echo
+echo "== Progress messages stay out of the terminal =="
+# PrintProgress() wrote "Creating graphics chart in memory." to stderr in
+# every build but Windows, so the Qt build printed two lines per bitmap
+# export -- and per frame of an animated GIF -- to whatever terminal it was
+# started from. Windows ignores these; so does this build now. The export
+# has to have happened, or "nothing printed" is about a run that did nothing.
+qdir=`mktemp -d`
+err=`ASTROLOG_QT_TESTS=no-such-group $QTRUN "$BIN" -Yi1 ephem \
+  -qa 6 15 1990 12:00 0 122W19 47N36 -Xb -Xo "$qdir/q.bmp" <"$QTIN" 2>&1 >/dev/null`
+if [ ! -s "$qdir/q.bmp" ]; then
+  echo "  FAIL: the command line bitmap export wrote no file, so this proves nothing"
+  rm -rf "$qdir"; exit 1
+fi
+rm -rf "$qdir"
+case $err in
+  *"graphics chart in memory"*|*"chart bitmap to file"*)
+    echo "  FAIL: a bitmap export printed progress messages to the terminal:"
+    echo "$err" | grep -E "graphics chart in memory|chart bitmap to file" | sed 's/^/        /'
+    exit 1 ;;
+  *)
+    echo "  ok: a bitmap export prints no progress messages" ;;
+esac
+
+echo
 echo "== Chart size at startup =="
 out=`ASTROLOG_QT_WINSIZE_PROBE=760x600 ASTROLOG_QT_TESTS=startup-chart-size \
   $QTRUN "$BIN" -Yi1 ephem :Xw 760 600 =X <"$QTIN" 2>&1`
