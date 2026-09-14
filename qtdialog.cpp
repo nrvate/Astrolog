@@ -1667,7 +1667,10 @@ void ShowGenerateGifDialogQt()
 
   QLabel *plabelDelay = new QLabel("Frame &delay:", &dlg);
   QSpinBox *pspDelay = new QSpinBox(&dlg);
-  pspDelay->setRange(1, 32000);
+  // The file holds hundredths of a second, and 2 is the fastest a GIF
+  // really plays; see FGenerateGif().
+  pspDelay->setRange(20, 32000);
+  pspDelay->setSingleStep(10);
   pspDelay->setSuffix(" msec");
   pspDelay->setObjectName("IDGIFDELAY");
   pspDelay->setValue(s_fGifLastQt ? s_gaGifLastQt.nDelay :
@@ -1744,9 +1747,11 @@ void ShowGenerateGifDialogQt()
       str = QString("More than %1 frames; use a larger step.").arg(
         cGifFrameMax);
     else
+      // At the delay the file stores, not the one typed: FGenerateGif()
+      // rounds it to hundredths of a second, and to no less than 2.
       str = QString("%1 frame%2, playing for %3 seconds.").arg(cWrite).arg(
-        cWrite == 1 ? "" : "s").arg((double)cWrite * ga.nDelay / 1000.0, 0,
-        'f', 1);
+        cWrite == 1 ? "" : "s").arg((double)cWrite *
+        Max((ga.nDelay + 5) / 10, 2) / 100.0, 0, 'f', 1);
     plabelCount->setText(str);
 #ifdef QTTEST
     s_strGifCountQt = str;

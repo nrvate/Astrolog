@@ -1490,6 +1490,32 @@ static void TestGenerateGifQt()
       fOkAfter, strAfter.toLocal8Bit().constData());
   }
 
+  // "Playing for" is at the delay the file stores: hundredths of a second,
+  // rounded, 2 at the least. 31 frames at 25 msec are stored at 3/100 s
+  // each, 0.93 s, where the typed delay said 0.8. And the delay box starts
+  // at that least, 20 msec, in steps of 10.
+  {
+    QString strPlay;
+    int nMin = 0, nStep = 0;
+
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      QSpinBox *psp = pw->findChild<QSpinBox *>("IDGIFDELAY");
+      int c0 = s_cGifRecountQt;
+      nMin = psp->minimum();
+      nStep = psp->singleStep();
+      psp->setValue(25);
+      SettleGifCountQt(c0);
+      strPlay = s_strGifCountQt;
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    Check(strPlay == "31 frames, playing for 0.9 seconds.", "31 frames at "
+      "25 msec play for 0.9 seconds, as stored (\"%s\")",
+      strPlay.toLocal8Bit().constData());
+    Check(nMin == 20 && nStep == 10, "and the delay box goes from 20 msec "
+      "in steps of 10 (%d, %d)", nMin, nStep);
+  }
+
   // -Xg's help names the units its <unit> takes. It used to send the reader
   // to -Xn for them, whose help lists none.
   {
