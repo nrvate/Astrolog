@@ -6335,7 +6335,12 @@ static void TestMidpointGlyphQt()
   flag fSiderealSav = us.fSidereal, fEquatorSav = gs.fEquator;
   flag fThickSav = gs.fThick, fColorSav = gs.fColor;
   flag fTextSav = gs.fText, fLabelSav = gs.fLabel;
-  byte rgbChartSav[(pbyte)&us.fVelocity - (pbyte)&us.fListing];
+  // offsetof, not a pointer difference: an array bound has to be a
+  // constant expression, and MSVC refuses a pointer difference outright
+  // (C2131) where gcc folds it silently and clang warns (-Wgnu-folding-
+  // constant). The release lane's clang and MSVC legs both stopped on
+  // this; the offsets are what settingsfields.h carries, too.
+  byte rgbChartSav[offsetof(US, fVelocity) - offsetof(US, fListing)];
   CI ciSav = ciCore;
 
   CopyRgb((pbyte)&us.fListing, rgbChartSav, sizeof(rgbChartSav));
@@ -13634,8 +13639,8 @@ static void TestSortStarQt()
     // touches so the call leaves the suite exactly as it found it. The
     // check reads the five sub-options after the call: pre-fix they were
     // inside the cleared ranges and came back zero.
-    byte rgbChartSav[(pbyte)&us.fVelocity - (pbyte)&us.fListing];
-    byte rgbTableSav[(pbyte)&us.fLoop - (pbyte)&us.fCredit];
+    byte rgbChartSav[offsetof(US, fVelocity) - offsetof(US, fListing)];
+    byte rgbTableSav[offsetof(US, fLoop) - offsetof(US, fCredit)];
     flag fInterpSav2 = us.fInterpret, fProgSav = us.fProgress;
     flag fHaveSav = is.fHaveInfo, fMultSav = is.fMult;
     int nRelSav2 = us.nRel;
