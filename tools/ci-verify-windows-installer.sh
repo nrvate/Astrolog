@@ -58,6 +58,12 @@ echo "   ProductVersion and FileVersion both read $want"
 
 WINEPREFIX=$(mktemp -d)/pfx
 export WINEPREFIX WINEDEBUG=-all
+# A throwaway prefix does not keep the installer's Start Menu shortcut out
+# of the real desktop: winemenubuilder writes it to the user's own
+# ~/.local/share/applications/wine, pointing into this prefix, and it
+# outlives the prefix. One was found there matching the port's own window
+# class ("Astrolog.desktop"). Disabled, so the check leaves nothing behind.
+export WINEDLLOVERRIDES="winemenubuilder.exe=d"
 trap 'rm -rf "$(dirname "$WINEPREFIX")"' EXIT
 mkdir -p "$WINEPREFIX"
 timeout 300 wineboot -i >/dev/null 2>&1 || true

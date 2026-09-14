@@ -10944,6 +10944,19 @@ this is the note that explains the wall of dialogs.
     putting `" ` into the settings sweeps' markers, which failed on the
     old writer and pass now. QTTEST_REVIEW_IMPLEM.md, third batch.
 
+265. **The Linux taskbar showed a rocket for the port, and the port was
+    right.** Measured on the running window: `WM_CLASS` "astrolog" and
+    `_NET_WM_ICON` at 16, 32 and 48. Cinnamon's window tracker, queried
+    through `org.Cinnamon.Eval`, had matched the window to app id
+    "Astrolog.desktop" -- the maintainer's own launcher in
+    `~/.local/share/applications`, whose `Icon=` is
+    `cinnamon-panel-launcher`, the rocket. Not a code bug. Found beside it,
+    and a bug of ours: `~/.local/share/applications/wine/Programs/Astrolog/Astrolog.desktop`,
+    left by `tools/ci-verify-windows-installer.sh`. A throwaway
+    `WINEPREFIX` does not stop winemenubuilder writing the installer's
+    Start Menu shortcut into the real home, where it outlives the prefix.
+    The script sets `WINEDLLOVERRIDES=winemenubuilder.exe=d` now.
+
 
 ## Features this fork adds to both builds
 
