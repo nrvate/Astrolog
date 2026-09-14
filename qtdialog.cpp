@@ -3854,7 +3854,7 @@ void ShowProgressDialogQt()
   if (pcbRAMC != NULL)
     us.fProgRAMC = pcbRAMC->isChecked();
   SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
-  is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
+  SetProgressTarget(MonT, DayT, YeaT, TimT);
   SyncProgressMenuQt();
   RecastAndRedrawQt();
 }

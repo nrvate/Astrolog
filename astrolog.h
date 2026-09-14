@@ -2483,6 +2483,14 @@ typedef struct _InternalSettings {
   real rDeltaT;        // Delta-T at chart time, in days.
   real jdDeltaT;       // JD for cached Delta-T offset above.
   real rNut;           // Nutation offset.
+  // A progression target is a local calendar date, and which zone and
+  // Daylight Saving it is local to is the NATAL chart's, on the target
+  // date -- which can't be known when -p is parsed, since the chart may
+  // not be loaded yet. So the date is kept, is.JDp holds a provisional
+  // value computed with the defaults, and CastChart() resolves it. Last
+  // in the struct so data.cpp's positional initializer zero-fills them.
+  CI ciProg;           // Local date and time -p asked to progress to.
+  real JDpTarget;      // is.JDp as last derived from ciProg.
 } IS;
 
 #ifdef GRAPH

@@ -1791,6 +1791,49 @@ flag DisplayAtlasNearby(real lon, real lat, flag fDialog, int *piae,
 }
 
 
+// Given a location and a local date and time in a standard zone, determine
+// the Daylight Saving offset in effect there then, from the time zone change
+// rules of the atlas city nearest the location. Returns fFalse, leaving
+// *pdst alone, if the atlas or the rules can't answer, or if the rules put
+// that place in a different standard zone on that date than the one given,
+// since then they aren't rules for the chart that asked. Used to resolve a
+// progression target date against the natal chart; see CastChart().
+
+flag FDstForLocation(real lon, real lat, int mon, int day, int yea, real tim,
+  real zon, real *pdst)
+{
+  static real lonPrev = rInvalid, latPrev = rInvalid;
+  static int iznPrev = -1;
+  CI ci;
+  real rDist, rBest = 0.0;
+  int iae, iaeBest = -1;
+
+  if (!FEnsureAtlas() || !FEnsureTimezoneChanges())
+    return fFalse;
+  // The nearest city is a scan of the whole atlas, so remember it: a GUI
+  // recasts the same chart on every redraw.
+  if (lon != lonPrev || lat != latPrev) {
+    for (iae = 0; iae < is.cae; iae++) {
+      rDist = SphDistance(lon, lat, is.rgae[iae].lon, is.rgae[iae].lat);
+      if (iaeBest < 0 || rDist < rBest) {
+        iaeBest = iae;
+        rBest = rDist;
+      }
+    }
+    lonPrev = lon; latPrev = lat;
+    iznPrev = iaeBest >= 0 ? is.rgae[iaeBest].izn : -1;
+  }
+  if (iznPrev < 0)
+    return fFalse;
+  SetCI(ci, mon, day, yea, tim, 0.0, zon, lon, lat);
+  ci.nam = ci.loc = NULL;
+  if (!DisplayTimezoneChanges(iznPrev, fFalse, &ci) || ci.zon != zon)
+    return fFalse;
+  *pdst = ci.dst;
+  return fTrue;
+}
+
+
 // Sanitize a time, in which the individual parameters may be out of range.
 // For example, 25:00 on 32 Dec 2026 gets converted to 1:00 on 2 Jan 2027.
 

@@ -12671,6 +12671,22 @@ static CONST PROGREFQT rgprogrefQt[] = {
     {279.24917,  20.49878, 292.51399, 258.43915,  11.58140}},
 };
 
+// The target moment is 0:00 local on the target date in the NATAL chart's
+// zone with Daylight Saving as Seattle's rules have it THEN: 1 Jan 2000 is
+// standard time, 08:00 UT, even though the default Daylight field is fixed
+// on; 4 Jul 2026 is daylight time, 07:00 UT, even though the natal chart
+// was born on standard time. Quotidian -p, where the hour shows most.
+typedef struct _PROGDSTQT {
+  int mon, day, yea;
+  real rUT;             // The moment the target must resolve to, in UT.
+  real rgr[5];          // MC, Asc, Sun, Moon, Mars
+} PROGDSTQT;
+
+static CONST PROGDSTQT rgprogdstQt[] = {
+  {1, 1, 2000, 8.0, {289.33558,  40.31190, 265.30709, 266.66017, 354.36517}},
+  {7, 4, 2026, 7.0, {136.61125, 216.07527, 292.31586, 255.99540,  11.45424}},
+};
+
 static void TestProgressionsQt()
 {
   static CONST int rgobjProg[5] = {oMC, oAsc, oSun, oMoo, oMar};
@@ -12725,7 +12741,7 @@ static void TestProgressionsQt()
       CONST PROGREFQT *ppr = &rgprogrefQt[j];
       us.nProgress = ppr->nProg;
       us.fProgRAMC = ppr->fRAMC;
-      is.JDp = MdytszToJulian(9, 13, 2026, 0.0, 1.0, 8.0);
+      SetProgressTarget(9, 13, 2026, 0.0);
       CastChart(1);
       for (i = 0; i < 5; i++) {
         real rD = MinDistance(planet[rgobjProg[i]], ppr->rgr[i]) * 60.0;
@@ -12741,7 +12757,7 @@ static void TestProgressionsQt()
     // table, because a mean-for-true obliquity slip is 0.006' here.
     us.nProgress = ptSolarArc;
     us.fProgRAMC = fFalse;
-    is.JDp = MdytszToJulian(9, 13, 2026, 0.0, 1.0, 8.0);
+    SetProgressTarget(9, 13, 2026, 0.0);
     CastChart(1);
     rMC = planet[oMC];
     us.fProgRAMC = fTrue;
@@ -12749,6 +12765,36 @@ static void TestProgressionsQt()
     Check(MinDistance(rMC, planet[oMC]) < 1.0e-6,
       "=pc recalculates the cusps from the directed MC and keeps it "
       "(%.7f, then %.7f)", rMC, planet[oMC]);
+
+    // The target's Daylight Saving is the target date's, at the natal place.
+    us.nProgress = ptCast;
+    us.fProgRAMC = fFalse;
+    for (j = 0; j < (int)(sizeof(rgprogdstQt)/sizeof(PROGDSTQT)); j++) {
+      CONST PROGDSTQT *ppd = &rgprogdstQt[j];
+      real jdWant = (real)MdyToJulian(ppd->mon, ppd->day, ppd->yea) +
+        ppd->rUT / 24.0;
+      SetProgressTarget(ppd->mon, ppd->day, ppd->yea, 0.0);
+      CastChart(1);
+      Check(RAbs(is.JDp - jdWant) * 24.0 * 60.0 < 0.01,
+        "a -p target of %d/%d/%d resolves to %02.0f:00 UT (got %+.3f hours "
+        "from it)", ppd->mon, ppd->day, ppd->yea, ppd->rUT,
+        (is.JDp - jdWant) * 24.0);
+      for (i = 0; i < 5; i++) {
+        real rD = MinDistance(planet[rgobjProg[i]], ppd->rgr[i]) * 60.0;
+        Check(rD <= 0.02, "-p to %d/%d/%d: %s %.5f, reference %.5f "
+          "(%.3f' off)", ppd->mon, ppd->day, ppd->yea, rgszProg[i],
+          planet[rgobjProg[i]], ppd->rgr[i], rD);
+      }
+    }
+
+    // A moment put into is.JDp by anything else -- a relationship chart, a
+    // transit search -- is not the target date and must not be moved.
+    SetProgressTarget(1, 1, 2000, 0.0);
+    is.JDp += 0.25;
+    rMC = is.JDp;
+    CastChart(1);
+    Check(is.JDp == rMC, "a moment set directly in is.JDp is left alone "
+      "(moved %g days)", is.JDp - rMC);
   }
   for (i = 0; i < objMax; i++)
     ignore[i] = rgfIgnoreSav[i];

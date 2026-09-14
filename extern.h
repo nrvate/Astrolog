@@ -494,6 +494,7 @@ extern CONST char *szStarNameSwiss[cStar+1];
 
 extern long MdyToJulian P((int, int, int));
 extern real MdytszToJulian P((int, int, int, real, real, real));
+extern void SetProgressTarget P((int, int, int, real));
 extern void JulianToMdy P((real, int *, int *, int *));
 extern real RHousePlaceIn3DCore P((real, real));
 extern real RHousePlaceIn3D P((real, real));
@@ -749,6 +750,7 @@ extern flag DisplayAtlasNearby P((real, real, flag, int *, flag));
 extern void AdjustTime P((int *, int *, int *, int *));
 extern flag DisplayTimezoneChanges P((int, flag, CI *));
 extern real ZondefFromIzn P((int));
+extern flag FDstForLocation P((real, real, int, int, int, real, real, real *));
 #endif
 
 

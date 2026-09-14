@@ -102,9 +102,13 @@ void PrintHeader(int nSpace)
       fLoc ? ciMain.loc : "", fLoc ? " " : "", SzLocation(Lon, Lat));
     PrintSz(sz);
     if (us.fProgress) {
+      // The offset the target was actually resolved with, when CastChart()
+      // resolved one against this chart; see SetProgressTarget().
+      flag fTarget = is.JDp == is.JDpTarget && FValidMon(is.ciProg.mon);
       sprintf2(S(sz), "Progressed To: %.3s %s %s (%s)\n",
         szDay[DayOfWeek(MonT, DayT, YeaT)], SzDate(MonT, DayT, YeaT, 3),
-        SzTim(TimT), SzOffset(ciDefa.zon, ciDefa.dst, LonT)); PrintSz(sz);
+        SzTim(TimT), SzOffset(fTarget ? is.ciProg.zon : ciDefa.zon,
+        fTarget ? is.ciProg.dst : ciDefa.dst, LonT)); PrintSz(sz);
     }
   }
 

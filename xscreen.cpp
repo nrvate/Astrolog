@@ -1465,7 +1465,7 @@ void AnimateCommit(void)
     ciTran = ciCore;
     ciCore = ciMain;
     if (us.fProgress)
-      is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
+      SetProgressTarget(MonT, DayT, YeaT, TimT);
   } else
     ciMain = ciCore;
   if (us.nRel)

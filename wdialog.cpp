@@ -2776,7 +2776,7 @@ flag API DlgProgress(HWND hdlg, uint message, WORD wParam, LONG lParam)
       us.objProgArc = npO;
       us.fProgRAMC = GetCheck(dxPr_pc);
       SetCI(ciTran, mon, day, yea, tim, dst, zon, ciDefa.lon, ciDefa.lat);
-      is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
+      SetProgressTarget(MonT, DayT, YeaT, TimT);
       wi.fCast = fTrue;
     }
     if (wParam == IDOK || wParam == IDCANCEL) {

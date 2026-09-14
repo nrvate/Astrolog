@@ -2476,7 +2476,7 @@ static int NSwp(CONST char *szSwitch, PARSEIN *pin)
     return tcError;
   else if (ch1 == 't' && FErrorValR("p", !FValidTim(TimT), TimT, 4))
     return tcError;
-  is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
+  SetProgressTarget(MonT, DayT, YeaT, TimT);
   return i;
 }
 
@@ -3488,8 +3488,7 @@ static int NSwi(CONST char *szSwitch, PARSEIN *pin)
   } else if (ch1 == 't') {
     ciTran = ciCore;
     ciCore = ci;
-    is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT,
-      ciDefa.dst, ciDefa.zon);
+    SetProgressTarget(MonT, DayT, YeaT, TimT);
   } else if (ch1 == 's') {
     ciSave = ciCore;
     ciCore = ci;

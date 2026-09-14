@@ -95,6 +95,22 @@ real MdytszToJulian(int mon, int day, int yea, real tim, real dst, real zon)
 }
 
 
+// Set the date a progressed chart progresses to, given as a local calendar
+// date and time. is.JDp gets the moment in the default zone, as it always
+// did, but that is provisional: CastChart() recomputes it in the zone of
+// the chart being progressed, with Daylight Saving as in effect there on
+// the target date. See is.ciProg.
+
+void SetProgressTarget(int mon, int day, int yea, real tim)
+{
+  SetCI(is.ciProg, mon, day, yea, tim, ciDefa.dst, ciDefa.zon,
+    ciDefa.lon, ciDefa.lat);
+  is.ciProg.nam = is.ciProg.loc = NULL;
+  is.JDp = is.JDpTarget = MdytszToJulian(mon, day, yea, tim,
+    ciDefa.dst, ciDefa.zon);
+}
+
+
 // Take a Julian day value, and convert it back into the corresponding month,
 // day, and year.
 
@@ -1478,6 +1494,25 @@ real CastChart(int nContext)
     ZZ = OO / 15.0;
   else if (ZZ == zonLAT)
     ZZ = OO / 15.0 - SwissLatLmt(is.JD);
+
+  // Resolve a progression target date against this chart: its zone, with
+  // Daylight Saving as the time zone rules of its location have it ON THE
+  // TARGET DATE. Before this the target took the default zone and Daylight
+  // setting, so with the Daylight field fixed on, a winter target was an
+  // hour off. Where no rules answer -- no atlas, or the location's zone on
+  // that date isn't the chart's -- the chart's own Daylight setting is
+  // kept. Only a target that SetProgressTarget() set is touched: anything
+  // else that has put a moment into is.JDp since is left alone.
+  if (us.fProgress && is.JDp == is.JDpTarget && FValidMon(is.ciProg.mon)) {
+    real dstProg = DstReal(SS);
+#ifdef ATLAS
+    FDstForLocation(OO, AA, is.ciProg.mon, is.ciProg.day, is.ciProg.yea,
+      is.ciProg.tim, ZZ, &dstProg);
+#endif
+    is.ciProg.dst = dstProg; is.ciProg.zon = ZZ;
+    is.JDp = is.JDpTarget = MdytszToJulian(is.ciProg.mon, is.ciProg.day,
+      is.ciProg.yea, is.ciProg.tim, dstProg, ZZ);
+  }
   if (SS == dstAuto)
     SS = (real)is.fDst;
   TT = RSgn(TT)*RFloor(RAbs(TT))+RFract(RAbs(TT)) + (ZZ - SS);
