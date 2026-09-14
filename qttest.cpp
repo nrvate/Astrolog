@@ -1267,9 +1267,37 @@ static void TestGenerateGifQt()
     gd.rgim.size() == 3, "unticking Loop writes a GIF that plays once");
   ga.fLoop = fTrue;
   s_iGifCancelQt = 1;
-  remove(szGif);
-  Check(!FGenerateGif(&ga) && !QFile::exists(QString::fromLocal8Bit(szGif)),
-    "cancelling leaves no half written file behind");
+  {
+    char szPart[cchSzMax];
+    QFile fileOld(QString::fromLocal8Bit(szGif));
+    QByteArray baOld;
+
+    sprintf2(S(szPart), "%s.part", szGif);
+    remove(szGif);
+    Check(!FGenerateGif(&ga) && !QFile::exists(QString::fromLocal8Bit(szGif))
+      && !QFile::exists(QString::fromLocal8Bit(szPart)),
+      "cancelling leaves no half written file behind");
+    // Over a file that is already there, a cancel must leave that file: the
+    // frames go to a file beside it, which replaces it only once whole.
+    if (fileOld.open(QIODevice::WriteOnly)) {
+      fileOld.write("keep");
+      fileOld.close();
+    }
+    flag fWrote = FGenerateGif(&ga);
+    if (fileOld.open(QIODevice::ReadOnly)) {
+      baOld = fileOld.readAll();
+      fileOld.close();
+    }
+    Check(!fWrote && baOld == "keep" &&
+      !QFile::exists(QString::fromLocal8Bit(szPart)), "cancelling a GIF "
+      "over an existing file leaves that file as it was (%d bytes)",
+      (int)baOld.size());
+    s_iGifCancelQt = -1;
+    fWrote = FGenerateGif(&ga);
+    Check(fWrote && FDecodeGifQt(szGif, &gd) && gd.rgim.size() == 3 &&
+      !QFile::exists(QString::fromLocal8Bit(szPart)), "and finishing one "
+      "replaces it, with nothing left beside it");
+  }
   s_iGifCancelQt = -1;
 
   // Writing while the animation runs. The progress box processes events

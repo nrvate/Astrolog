@@ -1564,10 +1564,10 @@ flag FGenerateGif(CONST GA *pga)
   int ftSav = gs.ft, xWinSav = gs.xWin, yWinSav = gs.yWin,
     nScaleSav = gs.nScale, cFrame, i, nDir;
   flag fGraphicsSav = us.fGraphics, fOk = fTrue, fCancel = fFalse;
-  char sz[cchSzMax];
+  char sz[cchSzMax], *szTemp;
   FILE *file;
   CI ci, *rgci = NULL;
-  int cWrite;
+  int cWrite, cchTemp;
 
   if (us.fNoWrite || pga->szFile == NULL)
     return fFalse;
@@ -1594,10 +1594,21 @@ flag FGenerateGif(CONST GA *pga)
     if (rgci == NULL)
       return fFalse;
   }
-  file = fopen(pga->szFile, "wb");
+  // The frames go to a file beside the one asked for, which takes its place
+  // only once the GIF is whole. Written in place, a cancel or a failed
+  // write removed the half written file -- and so the GIF it had replaced.
+  cchTemp = CchSz(pga->szFile) + 6;
+  szTemp = (char *)PAllocate(cchTemp, "animation file name");
+  if (szTemp == NULL) {
+    DeallocatePIf(rgci);
+    return fFalse;
+  }
+  sprintf2(szTemp, cchTemp, "%s.part", pga->szFile);
+  file = fopen(szTemp, "wb");
   if (file == NULL) {
     sprintf2(S(sz), "Couldn't create output file: %s", pga->szFile);
     PrintWarning(sz);
+    DeallocateP(szTemp);
     DeallocatePIf(rgci);
     return fFalse;
   }
@@ -1666,8 +1677,16 @@ flag FGenerateGif(CONST GA *pga)
     CastChart(0);
   ciCore = ciCoreSav;
 
-  if (!fOk || fCancel)
+  // POSIX rename() replaces a file in one step; Windows' will not replace
+  // one at all, so there the old file goes first.
+  if (fOk && !fCancel && rename(szTemp, pga->szFile) != 0) {
     remove(pga->szFile);
+    if (rename(szTemp, pga->szFile) != 0)
+      fOk = fFalse;
+  }
+  if (!fOk || fCancel)
+    remove(szTemp);
+  DeallocateP(szTemp);
   if (!fOk) {
     sprintf2(S(sz), "Couldn't write animation file: %s", pga->szFile);
     PrintWarning(sz);
