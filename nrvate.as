@@ -103,10 +103,12 @@ _Yz0    ; Delta-T seconds           ["_Yz0" computes it, or force one ]
 =0n     ; Internet Web queries      ["=0n" disables them, "_0n" allows ]
 
 -Yw 0.0       ; Stationary movement threshold  [0.0 is never "S"]
-:pd 365.24219 ; Progression degrees per day    [365 is secondary]
+:pd 365.24219 ; Real days per progressed day   [365 is secondary]
 :pC 1.0       ; Progressed cusp movement ratio [1.0 is quotidian]
 :pO Sun       ; Solar arc based on this planet [-1 is fixed rate]
-_pc           ; Solar arc recalc based on MC   [=pc recalculates]
+=pc           ; Solar arc recalc based on MC   [=pc recalculates]
+:pa 0         ; Direction arc and measure      [1,3 RA; 2,3 Naibod]
+_pv           ; Converse progress/directions   [=pv is converse]
 
 
 ; FILE PATHS (-Yi1 through -Yi9):
@@ -190,6 +192,11 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 -Aa 23 157.5  ; QuatroUndecile
 
 
+; CHANGED ASPECT NAMES:
+
+; [No aspect names are different from defaults]
+
+
 ; DEFAULT MAX PLANET ASPECT ORBS:
 
 -YAm 0 10    360 360 360 360 360 360 360 360 360 360 360      ; Planets
@@ -226,6 +233,7 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 -YjA 1 5    1.0 0.9 0.8 0.5 0.5          ; Major aspects
 -YjA 6 11   0.4 0.4 0.6 0.6 0.2 0.2      ; Minor aspects
 -YjA 12 18  0.2 0.2 0.1 0.1 0.2 0.2 0.1  ; Obscure aspects
+-YjA 19 24  0.05 0.05 0.05 0.05 0.05 0.05  ; Very obscure aspects
 
 ; DEFAULT TRANSIT INFLUENCES:
 
@@ -270,8 +278,11 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 
 -Y7C 1 12   17 4 2 37 15 26 3 4 456 137 5 26  ; Signs
 -Y7O 0 10   3 2 4 4 5 6 2 3 7 6 1             ; Planets
+-Y7O 11 21  0 0 0 0 0 0 0 0 0 0 0             ; Minor planets
+-Y7O 22 33  1 4 2 3 1 2 3 4 5 7 5 6           ; Cusp objects
 -Y7O 34 42  1 0 0 0 0 0 0 0 0                 ; Uranians
 -Y7O 43 51  0 0 3 2 1 4 7 6 5                 ; Dwarfs
+-Y7O 52 83  0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  ; Moons and body centers
 
 
 ; DEFAULT COLORS:
@@ -292,6 +303,7 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 -YkA 1 5    Yel Blu Red Gre Cya          ; Major aspect colors
 -YkA 6 11   Mag Mag Yel Yel DkC DkC      ; Minor aspect colors
 -YkA 12 18  DkC Mar DkG DkG Mar Mar DkG  ; Obscure aspect colors
+-YkA 19 24  DkC DkG DkG DkG DkG DkG      ; Extra aspect colors
 
 -YkC        Red Yel Gre Cya                      ; Element colors
 -Yk7 1 7    Red Blu Gre Yel Ora Mag Pur          ; Ray colors
@@ -309,6 +321,16 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 ; [No star objects are different from defaults]
 
 
+; CHANGED OBJECT DIAMETERS AND ORBITS:
+
+; [No object diameters or orbits are different from defaults]
+
+
+; CHANGED INTERPRETATION TEXT:
+
+; [No interpretation text is different from defaults]
+
+
 ; FORCED OBJECT POSITIONS:
 
 -Fm 18 1 2
@@ -321,7 +343,7 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 _XJ              ; Indian type wheels ["_XJ" is Western, "=XJ" is Indian  ]
 =Xm              ; Color charts       ["=Xm" is color, "_Xm" is monochrome]
 _Xr              ; Reverse background ["_Xr" is black, "=Xr" is white     ]
-:Xw 1600 1558      ; Default X and Y resolution
+:Xw 1600 1360      ; Default X and Y resolution
 :Xs 200          ; Character scale     [100-400]
 :XS 150          ; Graphics text scale [100-400]
 :XI0 25 1        ; Transparency % and background orientation [0-100, -1 to 1 ]
