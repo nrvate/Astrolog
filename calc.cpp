@@ -1256,6 +1256,113 @@ void ComputeEphem(real t)
 // are computed and before the final sort and house assignment.
 
 
+// Return the direction arc, in degrees, for a progressed chart directed with
+// -pa or -pv, and in *pjd the Julian day of the chart it is measured from.
+// Naibod's rate is the Sun's mean motion, 360/365.24219 degrees for each
+// progressed day (-pd real days). Otherwise it is the true arc of the -pO
+// object between that chart's moment and its progressed moment at the -pd
+// rate, in longitude, or in right ascension with each moment's own true
+// obliquity; "-pO -1" is one degree per progressed day. A converse chart is
+// directed by the forward arc, subtracted.
+
+static real RProgArc(real *pjd)
+{
+  real jd, rDays, r;
+#ifdef SWISS
+  real lon1, lat1, lon2, lat2, rT;
+#endif
+
+  jd = JulianDayFromTime(us.nProgress == ptSolarArc ? is.T : is.Tp);
+  rDays = (is.JDp - jd - 0.5) / us.rProgDay;
+  *pjd = jd;
+  if (FProgArcNaibod(us.nProgArc))
+    r = rDays * rDegMax / rDayInYear;
+#ifdef SWISS
+  else if (us.objProgArc >= 0) {
+    FSwissPlanet(us.objProgArc, jd, us.objCenter,
+      &lon1, &lat1, &rT, &rT, &rT, &rT);
+    FSwissPlanet(us.objProgArc, jd + rDays, us.objCenter,
+      &lon2, &lat2, &rT, &rT, &rT, &rT);
+    if (FProgArcRA(us.nProgArc)) {
+      CoorXform(&lon1, &lat1, RObliquityTrue(jd));
+      CoorXform(&lon2, &lat2, RObliquityTrue(jd + rDays));
+    }
+    r = MinDifference(lon1, lon2);
+  }
+#endif
+  else
+    r = rDays;
+  return us.fProgConverse ? -r : r;
+}
+
+
+#ifdef SWISS
+// Direct a point by an arc in right ascension, keeping its ecliptic
+// latitude: return the tropical longitude, at the same latitude, whose right
+// ascension is the point's own plus the arc. With x = cos(e) cos(a) and
+// y = sin(a), the ecliptic point with right ascension a lies at longitude
+// atan2(y, x); a latitude b moves it by asin(tan(b) sin(e) cos(a) / |x,y|),
+// which solves cos(b) (sin(L) cos(e) cos(a) - cos(L) sin(a)) = sin(b) sin(e)
+// cos(a) on the branch that reduces to atan2(y, x) at b = 0.
+
+static real RDirectRA(real lon, real lat, real arc, real obl)
+{
+  real ra = lon, dec = lat, e, a, x, y, s;
+
+  CoorXform(&ra, &dec, obl);
+  e = RFromD(obl);
+  a = RFromD(Mod(ra + arc));
+  x = RCos(e) * RCos(a);
+  y = RSin(a);
+  s = RTan(RFromD(lat)) * RSin(e) * RCos(a) / RSqr(x*x + y*y);
+  s = Max(-1.0, Min(1.0, s));
+  return Mod(DFromR(RAngle(x, y) + RAsin(s)));
+}
+
+
+// Apply a direction arc in right ascension (-pa 1 or 3). For a solar arc
+// chart each planet is moved to the longitude at its own ecliptic latitude
+// whose right ascension is its natal one plus the arc. The angles and cusps
+// are cast from the natal RAMC plus the arc, at the birth latitude, the way
+// =pc casts them from a directed MC; the Part of Fortune moves with them as
+// it does in longitude. Everything uses the natal chart's true obliquity.
+
+static void ApplyProgArcRA(real r)
+{
+  real t = us.nProgress == ptSolarArc ? is.T : is.Tp, obl, armc,
+    asc, mc, vtx, ep, rT;
+  int i, k;
+
+  obl = RObliquityTrue(JulianDayFromTime(t));
+  if (us.nProgress == ptSolarArc) {
+    for (i = 0; i <= is.nObj; i++) {
+      if (i == oFor)
+        i = cuspHi+1;    // Skip over house cusp objects handled below.
+      planet[i] = Untropical(RDirectRA(Tropical(planet[i]), planetalt[i],
+        r, obl));
+    }
+  }
+  r /= us.rProgCusp;
+  planet[oFor] = Untropical(RDirectRA(Tropical(planet[oFor]),
+    planetalt[oFor], r, obl));
+  // is.RA carries the offset SwissHouse() adds to everything it returns.
+  armc = is.RA - (us.fSidereal ? is.rSid - is.rNut : is.rSid) + r;
+  k = us.fGeodetic; us.fGeodetic = fTrue;
+  SwissHouse(t, rDegMax - Mod(armc), AA, us.nHouseSystem,
+    &asc, &mc, &rT, &vtx, &ep, &rT, &rT, &rT);
+  us.fGeodetic = k;
+  planet[oVtx] = vtx; planet[oEP] = ep;
+  for (i = 1; i <= cSign; i++)
+    planet[cuspLo-1 + i] = chouse[i];
+  if (!us.fHouseAngle) {
+    planet[oAsc] = asc; planet[oMC] = mc;
+    planet[oDes] = Mod(asc + rDegHalf);
+    planet[oNad] = Mod(mc + rDegHalf);
+  }
+}
+#endif
+
+
 // Apply solar arc or mixed progression offsets to planet and house positions.
 // This is the block that was inline in CastChart() under
 // "if (us.fProgress && us.nProgress != ptCast)".
@@ -1265,6 +1372,11 @@ static void ComputeChartProgressions()
   real r, r2;
   int i, k;
 
+  // A direction in right ascension, by Naibod's rate, or converse, has its
+  // own arc. The original arc below is kept exactly as it was.
+  if (us.nProgArc != paLong || us.fProgConverse) {
+    r = RProgArc(&r2);
+  } else
   // Compute true arc based on planet movement, or a fixed rate offset.
 #ifdef SWISS
   if (us.objProgArc >= 0) {
@@ -1288,6 +1400,12 @@ static void ComputeChartProgressions()
     ExpSetR(iLetterZ, r);
     ParseExpression(us.szExpProg0);
     r = RExpGet(iLetterZ);
+  }
+#endif
+#ifdef SWISS
+  if (FProgArcRA(us.nProgArc)) {
+    ApplyProgArcRA(r);
+    return;
   }
 #endif
   // Full solar arc progressions apply offset to all planets.
@@ -1527,15 +1645,20 @@ real CastChart(int nContext)
 
     // For ptCast, is.Tp is time that progressed chart cusps cast for.
     // For ptMixed, is.Tp is base chart time to solar arc cusps from.
+    // A converse chart (-pv) is cast as far BEFORE birth as a forward one
+    // is after it. A solar arc chart's own moment stays forward, since a
+    // converse direction subtracts the forward arc.
     is.Tp = is.T;
     if (us.nProgress != ptMixed)
-      is.Tp += (is.JDp - is.Tp) / ((us.nProgress != ptSolarArc ||
+      is.Tp += (us.fProgConverse && us.nProgress == ptCast ? -1.0 : 1.0) *
+        (is.JDp - is.Tp) / ((us.nProgress != ptSolarArc ||
         us.objProgArc < 0) ? (us.rProgDay * us.rProgCusp) : rDayInYear);
     is.Tp = (is.Tp - 2415020.5) / 36525.0;
 
     // Determine actual time that a progressed chart is to be cast for.
     if (us.nProgress != ptSolarArc) {
-      is.T += ((is.JDp - is.T) / us.rProgDay);
+      is.T += (us.fProgConverse ? -1.0 : 1.0) * ((is.JDp - is.T) /
+        us.rProgDay);
 #ifdef EXPRESS
       // Adjust progression times with AstroExpressions.
       if (!us.fExpOff && FSzSet(us.szExpProg)) {

@@ -82,7 +82,7 @@ US us = {
 
   // Main subflags: fLoopInit, fSabian, fSeconds, fSecond1K, fSecondHide,
   // then fMatrixPla (on only when no ephemeris is compiled in), then
-  // fMatrixStar through fListAuto. Two entries fewer than before
+  // fMatrixStar through fListAuto, fProgConverse among them. Two entries fewer than before
   // when fPlacalcAst and fPlacalcPla sat between them.
   0, 0, 0, 0, 0,
 #ifdef EPHEM
@@ -90,7 +90,7 @@ US us = {
 #else
   1,
 #endif
-  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0,
 
   // Obscure flags
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
@@ -117,6 +117,7 @@ US us = {
   oSun,
   0,
   ptCast,
+  paLong,
   DIVISIONS,
   SCREENWIDTH,
   0,

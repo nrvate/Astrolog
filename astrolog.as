@@ -55,6 +55,8 @@ _Yz1    ; Combine DST and time zone ["=Yz1" combines, "_Yz1" doesn't   ]
 :pC 1.0       ; Progressed cusp movement ratio [1.0 is quotidian]
 :pO Sun       ; Solar arc based on this planet [-1 is fixed rate]
 _pc           ; Solar arc recalc based on MC   [=pc recalculates]
+:pa 0         ; Direction arc and measure      [1,3 RA; 2,3 Naibod]
+_pv           ; Converse progress/directions   [=pv is converse]
 
 
 ; FILE PATHS (-Yi1 through -Yi9):

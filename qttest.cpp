@@ -12651,24 +12651,67 @@ static void SinkAtlasRowQt(CONST char *, int) { }
 // Ascendant, and the Sun, Moon and Mars, in degrees; the tolerance is 0.02
 // arcminute.
 
+//   -pa 1  solar arc in right ascension: planets keep their ecliptic
+//          latitude and take the longitude whose RA is theirs plus the arc;
+//          angles from natal RAMC plus the arc.
+//   -pa 2  Naibod in longitude, 360/365.24219 degrees per year.
+//   -pa 3  Naibod in right ascension, as -pa 1 with Naibod's arc.
+//   -pv    converse: -p and -p1 planets at birth minus the elapsed time
+//          over 365.24219; every direction subtracts the forward arc.
+
 typedef struct _PROGREFQT {
   CONST char *szCase;   // The switches the row stands for.
   int nProg;            // us.nProgress
+  int nArc;             // us.nProgArc ("-pa")
+  flag fConv;           // us.fProgConverse ("=pv")
   flag fRAMC;           // us.fProgRAMC ("=pc")
   real rgr[5];          // MC, Asc, Sun, Moon, Mars
 } PROGREFQT;
 
 static CONST PROGREFQT rgprogrefQt[] = {
-  {"-p",      ptCast,     fFalse,
+  // The original four methods, unchanged.
+  {"-p",      ptCast,     paLong, fFalse, fFalse,
     {211.38945, 270.80603, 292.51399, 258.43915,  11.58140}},
-  {"-p0",     ptSolarArc, fFalse,
+  {"-p0",     ptSolarArc, paLong, fFalse, fFalse,
     {279.24917, 338.20421, 292.51399, 311.88859,  33.03053}},
-  {"-p1",     ptMixed,    fFalse,
+  {"-p1",     ptMixed,    paLong, fFalse, fFalse,
     {279.24917, 338.20421, 292.51399, 258.43915,  11.58140}},
-  {"-p0 =pc", ptSolarArc, fTrue,
+  {"-p0 =pc", ptSolarArc, paLong, fFalse, fTrue,
     {279.24917,  20.49878, 292.51399, 311.88859,  33.03053}},
-  {"-p1 =pc", ptMixed,    fTrue,
+  {"-p1 =pc", ptMixed,    paLong, fFalse, fTrue,
     {279.24917,  20.49878, 292.51399, 258.43915,  11.58140}},
+  // Directions in right ascension and by Naibod's rate.
+  {"-p0 -pa 1", ptSolarArc, paRA, fFalse, fFalse,
+    {280.01096,  22.11069, 292.51396, 310.73630,  41.35189}},
+  {"-p1 -pa 1", ptMixed,    paRA, fFalse, fFalse,
+    {280.01096,  22.11069, 292.51399, 258.43915,  11.58140}},
+  {"-p0 -pa 2", ptSolarArc, paNaibod, fFalse, fFalse,
+    {277.55721, 336.51225, 290.82203, 310.19663,  31.33857}},
+  {"-p0 -pa 2 =pc", ptSolarArc, paNaibod, fFalse, fTrue,
+    {277.55721,  16.86336, 290.82203, 310.19663,  31.33857}},
+  {"-p1 -pa 2 =pc", ptMixed,    paNaibod, fFalse, fTrue,
+    {277.55721,  16.86336, 292.51399, 258.43915,  11.58140}},
+  {"-p0 -pa 3", ptSolarArc, paNaibodRA, fFalse, fFalse,
+    {274.68148,  10.53726, 287.08635, 305.16024,  35.39256}},
+  {"-p1 -pa 3", ptMixed,    paNaibodRA, fFalse, fFalse,
+    {274.68148,  10.53726, 292.51399, 258.43915,  11.58140}},
+  // Converse.
+  {"-p =pv",  ptCast,     paLong, fTrue, fFalse,
+    {235.24705, 296.13065, 182.23132, 252.04949, 313.65379}},
+  {"-p0 =pv", ptSolarArc, paLong, fTrue, fFalse,
+    {167.80469, 226.75973, 181.06951, 200.44411, 281.58605}},
+  {"-p0 =pv =pc", ptSolarArc, paLong, fTrue, fTrue,
+    {167.80469, 237.94283, 181.06951, 200.44411, 281.58605}},
+  {"-p1 =pv", ptMixed,    paLong, fTrue, fFalse,
+    {167.80469, 226.75973, 182.23132, 252.04949, 313.65379}},
+  {"-p0 -pa 1 =pv", ptSolarArc, paRA, fTrue, fFalse,
+    {159.69511, 232.34162, 174.19554, 197.60505, 278.85917}},
+  {"-p0 -pa 2 =pv", ptSolarArc, paNaibod, fTrue, fFalse,
+    {169.49665, 228.45169, 182.76147, 202.13607, 283.27801}},
+  {"-p0 -pa 3 =pv", ptSolarArc, paNaibodRA, fTrue, fFalse,
+    {165.91847, 236.63959, 180.50392, 203.74864, 284.15412}},
+  {"-p1 -pa 3 =pv", ptMixed,    paNaibodRA, fTrue, fFalse,
+    {165.91847, 236.63959, 182.23132, 252.04949, 313.65379}},
 };
 
 // The target moment is 0:00 local on the target date in the NATAL chart's
@@ -12721,6 +12764,8 @@ static void TestProgressionsQt()
     Borrow bDwad(us.nDwad, 0), bNav(us.fNavamsa, fFalse);
     Borrow bHouse(us.nHouseSystem, (int)hsPlacidus);
     Borrow bMethod(us.nProgress, (int)ptCast), bRAMC(us.fProgRAMC, fFalse);
+    Borrow bArcType(us.nProgArc, (int)paLong);
+    Borrow bConv(us.fProgConverse, fFalse);
     Borrow bArc(us.objProgArc, (int)oSun);
     Borrow bDay(us.rProgDay, rDayInYear), bCuspR(us.rProgCusp, 1.0);
     Borrow bJDp(is.JDp);
@@ -12740,6 +12785,8 @@ static void TestProgressionsQt()
     for (j = 0; j < (int)(sizeof(rgprogrefQt)/sizeof(PROGREFQT)); j++) {
       CONST PROGREFQT *ppr = &rgprogrefQt[j];
       us.nProgress = ppr->nProg;
+      us.nProgArc = ppr->nArc;
+      us.fProgConverse = ppr->fConv;
       us.fProgRAMC = ppr->fRAMC;
       SetProgressTarget(9, 13, 2026, 0.0);
       CastChart(1);
@@ -12756,6 +12803,8 @@ static void TestProgressionsQt()
     // frame mismatch between the two steps moves it. Tighter than the
     // table, because a mean-for-true obliquity slip is 0.006' here.
     us.nProgress = ptSolarArc;
+    us.nProgArc = paLong;
+    us.fProgConverse = fFalse;
     us.fProgRAMC = fFalse;
     SetProgressTarget(9, 13, 2026, 0.0);
     CastChart(1);

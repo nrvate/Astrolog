@@ -2042,6 +2042,10 @@ flag FOutputSettings()
   PrintF("       ; Solar arc based on this planet [-1 is fixed rate]\n");
   sprintf2(S(sz), "%cpc", ChDashF(us.fProgRAMC)); PrintFSz();
   PrintF("           ; Solar arc recalc based on MC   [=pc recalculates]\n");
+  sprintf2(S(sz), ":pa %d", us.nProgArc); PrintFSz();
+  PrintF("         ; Direction arc and measure      [1,3 RA; 2,3 Naibod]\n");
+  sprintf2(S(sz), "%cpv", ChDashF(us.fProgConverse)); PrintFSz();
+  PrintF("           ; Converse progress/directions   [=pv is converse]\n");
 
   PrintF("\n\n; FILE PATHS (-Yi1 through -Yi9):\n; For example, "
     "point -Yi1 to ephemeris dir, -Yi2 to font dir, etc.\n\n");

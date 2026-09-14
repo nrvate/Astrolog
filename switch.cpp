@@ -2407,18 +2407,20 @@ static int NSwp(CONST char *szSwitch, PARSEIN *pin)
   int i;
 
   // The progression METHOD is named only by the "0" and "1" spellings.
-  // Assigning it for every -p* meant "-pd", "-pC", "-pO" and "-pc" -- each
+  // Assigning it for every -p* meant "-pd", "-pC", "-pO" and "-pc" (and
+  // now "-pa" and "-pv") -- each
   // of which only sets a progression parameter -- silently reset it to
   // secondary, and FOutputSettings() writes three of those, so loading any
   // settings file reset it too. Plain "-p", "-pt" and "-pn" still do, which
   // is what they have always done.
   if (ch1 == '0' || ch1 == '1' ||
-    (ch1 != 'd' && ch1 != 'C' && ch1 != 'O' && ch1 != 'c')) {
+    (ch1 != 'd' && ch1 != 'C' && ch1 != 'O' && ch1 != 'c' &&
+    ch1 != 'a' && ch1 != 'v')) {
     us.nProgress = (ch1 == '0') + 2*(ch1 == '1');
     if (us.nProgress)
       ch1 = ch2;
   }
-  if (pin->fAnd && ch1 != 'c') {
+  if (pin->fAnd && ch1 != 'c' && ch1 != 'v') {
     us.fProgress = fFalse;
     return 0;
   } else if (ch1 == 'd') {
@@ -2450,6 +2452,17 @@ static int NSwp(CONST char *szSwitch, PARSEIN *pin)
     return 1;
   } else if (ch1 == 'c') {
     SwitchF(us.fProgRAMC);
+    return 0;
+  } else if (ch1 == 'a') {
+    if (FErrorArgc("pa", pin->argc, 1))
+      return tcError;
+    i = NFromSz(pin->argv[1]);
+    if (FErrorValN("pa", !FValidProgArcType(i), i, 0))
+      return tcError;
+    us.nProgArc = i;
+    return 1;
+  } else if (ch1 == 'v') {
+    SwitchF(us.fProgConverse);
     return 0;
   }
   SwitchF(us.fProgress);

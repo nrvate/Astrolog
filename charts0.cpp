@@ -519,6 +519,8 @@ void DisplaySwitches(void)
     " _pC <days>: Set factor to use when progressing cusps (default 1.0).");
   PrintS(" _pO <obj>: Set object to use when doing solar arc progression.");
   PrintS(" _pc: Solar arc house cusps recomputed based on progressed MC.");
+  PrintS(" _pa <0-3>: Direct by solar arc, in RA, Naibod, Naibod in RA.");
+  PrintS(" _pv: Converse: progress backward in time, subtract arcs.");
   PrintS(" _x <value>: Cast harmonic chart based on specified factor.");
   PrintS(" _1 [<objnum>]: Cast chart with specified object on Ascendant.");
   PrintS(" _2 [<objnum>]: Cast chart with specified object on Midheaven.");

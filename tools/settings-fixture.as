@@ -68,6 +68,7 @@
 :pC 2.5                 ; EXPECT ^:pC 2\.5
 :pd 360.5               ; EXPECT ^:pd 360\.5
 :pO Mar                 ; EXPECT ^:pO Mar
+:pa 3                   ; EXPECT ^:pa 3
 :s Lahi                 ; EXPECT ^:s Lahi
 :XS 250                 ; EXPECT ^:XS 250
 :Xv 2                   ; EXPECT ^:Xv 2

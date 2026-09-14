@@ -1073,6 +1073,21 @@ enum _progressiontype {
   ptMixed    = 2,
 };
 
+// Direction arcs for -pa: what -p0 directs the planets by, and what -p0 and
+// -p1 direct the angles by. Bit 0 says right ascension rather than
+// longitude, bit 1 says Naibod's mean rate rather than the true arc of the
+// -pO object.
+
+enum _progressionarc {
+  paLong     = 0,  // True solar arc in longitude, as always.
+  paRA       = 1,  // True solar arc in right ascension.
+  paNaibod   = 2,  // Naibod in longitude, 360/365.24219 degrees per year.
+  paNaibodRA = 3,  // Naibod in right ascension.
+};
+
+#define FProgArcRA(n)     (((n) & paRA) != 0)
+#define FProgArcNaibod(n) (((n) & paNaibod) != 0)
+
 // Biorhythm cycle constants
 
 #define brPhy 23.0
@@ -1532,6 +1547,7 @@ enum _terminationcode {
 #define FValidMacro2(n) FBetween(n, 1, cMacro)
 #define FValidList(n) FBetween(n, 0, is.cci-1)
 #define FValidProgArc(obj) (FBetween(obj, -1, cObj) && FObject(obj))
+#define FValidProgArcType(n) FBetween(n, paLong, paNaibodRA)
 #define FValidGlyphs(n) FBetween(n, 0, 223222)
 #define FValidFont(n, i) (FBetween(i, 0, cFont-1) && \
   rgszFontAllow[n][i] >= '0')
@@ -2241,6 +2257,7 @@ typedef struct _UserSettings {
   flag fEquator;     // -sr
   flag fEquator2;    // -sr0
   flag fProgRAMC;    // -pc
+  flag fProgConverse; // -pv
   flag fAnsiChar;    // -k0
   flag fTextHTML;    // -kh
   flag fSolarWhole;  // -10
@@ -2311,6 +2328,7 @@ typedef struct _UserSettings {
   int   objProgArc;    // -pO
   int   nDegForm;      // -s
   int   nProgress;     // -p0
+  int   nProgArc;      // -pa
   int   nDivision;     // -d
   int   nScreenWidth;  // -I
   int   nWriteFormat;  // -o
