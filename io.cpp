@@ -2105,44 +2105,62 @@ flag FOutputSettings()
     "; 52-78: Planetary moons\n"
     "; 79-83: Planetary centers of body\n"
     "; 84-133: Fixed stars\n"
-    "\n-YR 0 10     ");
-  for (i = 0; i <= 10; i++) PrintF(SzNumF(ignore[i]));
-  PrintF("   ; Planets\n-YR 11 21    ");
-  for (i = 11; i <= 21; i++) PrintF(SzNumF(ignore[i]));
-  PrintF("   ; Minor planets\n-YR 22 33    ");
-  for (i = 22; i <= 33; i++) PrintF(SzNumF(ignore[i]));
-  PrintF(" ; House cusps\n-YR 34 42    ");
-  for (i = 34; i <= 42; i++) PrintF(SzNumF(ignore[i]));
-  PrintF("       ; Uranians\n-YR 43 51    ");
-  for (i = 43; i <= 51; i++) PrintF(SzNumF(ignore[i]));
-  PrintF("       ; Dwarfs\n-YR 52 78    ");
-  for (i = 52; i <= 78; i++) PrintF(SzNumF(ignore[i]));
-  PrintF(" ; Moons\n-YR 79 83    ");
-  for (i = 79; i <= 83; i++) PrintF(SzNumF(ignore[i]));
-  PrintF("               ; Centers of body\n-YR 84 108   ");
-  for (i = 84; i <= 108; i++) PrintF(SzNumF(ignore[i]));
-  PrintF(" ; Fixed stars\n-YR 109 133  ");
-  for (i = 109; i <= 133; i++) PrintF(SzNumF(ignore[i]));
+    "\n");
+  PrintSpanHead(file, "-YR", 0, oMain, 13);
+  for (i = 0; i <= oMain; i++) PrintF(SzNumF(ignore[i]));
+  PrintF("   ; Planets\n");
+  PrintSpanHead(file, "-YR", oMain+1, oCore, 13);
+  for (i = oMain+1; i <= oCore; i++) PrintF(SzNumF(ignore[i]));
+  PrintF("   ; Minor planets\n");
+  PrintSpanHead(file, "-YR", cuspLo, cuspHi, 13);
+  for (i = cuspLo; i <= cuspHi; i++) PrintF(SzNumF(ignore[i]));
+  PrintF(" ; House cusps\n");
+  PrintSpanHead(file, "-YR", uranLo, uranHi, 13);
+  for (i = uranLo; i <= uranHi; i++) PrintF(SzNumF(ignore[i]));
+  PrintF("       ; Uranians\n");
+  PrintSpanHead(file, "-YR", dwarfLo, dwarfHi, 13);
+  for (i = dwarfLo; i <= dwarfHi; i++) PrintF(SzNumF(ignore[i]));
+  PrintF("       ; Dwarfs\n");
+  PrintSpanHead(file, "-YR", moonsLo, moonsHi, 13);
+  for (i = moonsLo; i <= moonsHi; i++) PrintF(SzNumF(ignore[i]));
+  PrintF(" ; Moons\n");
+  PrintSpanHead(file, "-YR", cobLo, cobHi, 13);
+  for (i = cobLo; i <= cobHi; i++) PrintF(SzNumF(ignore[i]));
+  PrintF("               ; Centers of body\n");
+  PrintSpanHead(file, "-YR", starLo, starLo+cStar/2-1, 13);
+  for (i = starLo; i <= starLo+cStar/2-1; i++) PrintF(SzNumF(ignore[i]));
+  PrintF(" ; Fixed stars\n");
+  PrintSpanHead(file, "-YR", starLo+cStar/2, starHi, 13);
+  for (i = starLo+cStar/2; i <= starHi; i++) PrintF(SzNumF(ignore[i]));
   PrintF(" ; Fixed stars\n\n");
 
-  PrintF("; DEFAULT TRANSIT RESTRICTIONS:\n\n-YRT 0 10    ");
-  for (i = 0; i <= 10; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF("   ; Planets\n-YRT 11 21   ");
-  for (i = 11; i <= 21; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF("   ; Minor planets\n-YRT 22 33   ");
-  for (i = 22; i <= 33; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF(" ; House cusps\n-YRT 34 42   ");
-  for (i = 34; i <= 42; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF("       ; Uranians\n-YRT 43 51   ");
-  for (i = 43; i <= 51; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF("       ; Dwarfs\n-YRT 52 78   ");
-  for (i = 52; i <= 78; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF(" ; Moons\n-YRT 79 83   ");
-  for (i = 79; i <= 83; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF("               ; Centers of Body\n-YRT 84 108  ");
-  for (i = 84; i <= 108; i++) PrintF(SzNumF(ignore2[i]));
-  PrintF(" ; Fixed stars\n-YRT 109 133 ");
-  for (i = 109; i <= 133; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF("; DEFAULT TRANSIT RESTRICTIONS:\n\n");
+  PrintSpanHead(file, "-YRT", 0, oMain, 13);
+  for (i = 0; i <= oMain; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF("   ; Planets\n");
+  PrintSpanHead(file, "-YRT", oMain+1, oCore, 13);
+  for (i = oMain+1; i <= oCore; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF("   ; Minor planets\n");
+  PrintSpanHead(file, "-YRT", cuspLo, cuspHi, 13);
+  for (i = cuspLo; i <= cuspHi; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF(" ; House cusps\n");
+  PrintSpanHead(file, "-YRT", uranLo, uranHi, 13);
+  for (i = uranLo; i <= uranHi; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF("       ; Uranians\n");
+  PrintSpanHead(file, "-YRT", dwarfLo, dwarfHi, 13);
+  for (i = dwarfLo; i <= dwarfHi; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF("       ; Dwarfs\n");
+  PrintSpanHead(file, "-YRT", moonsLo, moonsHi, 13);
+  for (i = moonsLo; i <= moonsHi; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF(" ; Moons\n");
+  PrintSpanHead(file, "-YRT", cobLo, cobHi, 13);
+  for (i = cobLo; i <= cobHi; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF("               ; Centers of Body\n");
+  PrintSpanHead(file, "-YRT", starLo, starLo+cStar/2-1, 13);
+  for (i = starLo; i <= starLo+cStar/2-1; i++) PrintF(SzNumF(ignore2[i]));
+  PrintF(" ; Fixed stars\n");
+  PrintSpanHead(file, "-YRT", starLo+cStar/2, starHi, 13);
+  for (i = starLo+cStar/2; i <= starHi; i++) PrintF(SzNumF(ignore2[i]));
   PrintF(" ; Fixed stars\n\n");
 
   sprintf2(S(sz), "-YR0 %s%s ; Restrict sign changes, direction changes\n",
@@ -2238,58 +2256,89 @@ flag FOutputSettings()
     PrintF("; [No aspect names are different from defaults]\n");
   PrintF("\n\n");
 
-  PrintF("; DEFAULT MAX PLANET ASPECT ORBS:\n\n-YAm 0 10   ");
-  for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
-  PrintF("      ; Planets\n-YAm 11 21  ");
-  for (i = 11; i <= 21; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
-  PrintF("      ; Minor planets\n-YAm 22 33  ");
-  for (i = 22; i <= 33; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
-  PrintF("  ; Cusp objects\n-YAm 34 42  ");
-  for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
-  PrintF("              ; Uranians\n-YAm 43 51  ");
-  for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
-  PrintF("              ; Dwarfs\n-YAm 52 83  ");
-  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
-  PrintF("  ; Moons and body centers\n-YAm 84 84  ");
-  sprintf2(S(sz), "%4.0f", rgobjset[84].orb); PrintFSz();
+  PrintF("; DEFAULT MAX PLANET ASPECT ORBS:\n\n");
+  PrintSpanHead(file, "-YAm", 0, oMain, 12);
+  for (i = 0; i <= oMain; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
+  PrintF("      ; Planets\n");
+  PrintSpanHead(file, "-YAm", oMain+1, oCore, 12);
+  for (i = oMain+1; i <= oCore; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
+  PrintF("      ; Minor planets\n");
+  PrintSpanHead(file, "-YAm", cuspLo, cuspHi, 12);
+  for (i = cuspLo; i <= cuspHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
+  PrintF("  ; Cusp objects\n");
+  PrintSpanHead(file, "-YAm", uranLo, uranHi, 12);
+  for (i = uranLo; i <= uranHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
+  PrintF("              ; Uranians\n");
+  PrintSpanHead(file, "-YAm", dwarfLo, dwarfHi, 12);
+  for (i = dwarfLo; i <= dwarfHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
+  PrintF("              ; Dwarfs\n");
+  PrintSpanHead(file, "-YAm", moonsLo, cobHi, 12);
+  for (i = moonsLo; i <= cobHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
+  PrintF("  ; Moons and body centers\n");
+  PrintSpanHead(file, "-YAm", starLo, starLo, 12);
+  sprintf2(S(sz), "%4.0f", rgobjset[starLo].orb); PrintFSz();
   PrintF("                                              ; Fixed stars\n");
 
-  PrintF("\n; DEFAULT PLANET ASPECT ORB ADDITIONS:\n\n-YAd 0 10   ");
-  for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
-  PrintF("    ; Planets\n-YAd 11 21  ");
-  for (i = 11; i <= 21; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
-  PrintF("    ; Minor planets\n-YAd 22 33  ");
-  for (i = 22; i <= 33; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
-  PrintF("  ; Cusp objects\n-YAd 34 42  ");
-  for (i = 34; i <= 42; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
-  PrintF("        ; Uranians\n-YAd 43 51  ");
-  for (i = 43; i <= 51; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
-  PrintF("        ; Dwarfs\n-YAd 52 83  ");
-  for (i = 52; i <= 83; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
-  PrintF("  ; Moons and body centers\n-YAd 84 84  ");
-  sprintf2(S(sz), " %.0f", rgobjset[84].add); PrintFSz();
+  PrintF("\n; DEFAULT PLANET ASPECT ORB ADDITIONS:\n\n");
+  PrintSpanHead(file, "-YAd", 0, oMain, 12);
+  for (i = 0; i <= oMain; i++) { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
+  PrintF("    ; Planets\n");
+  PrintSpanHead(file, "-YAd", oMain+1, oCore, 12);
+  for (i = oMain+1; i <= oCore; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
+  PrintF("    ; Minor planets\n");
+  PrintSpanHead(file, "-YAd", cuspLo, cuspHi, 12);
+  for (i = cuspLo; i <= cuspHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
+  PrintF("  ; Cusp objects\n");
+  PrintSpanHead(file, "-YAd", uranLo, uranHi, 12);
+  for (i = uranLo; i <= uranHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
+  PrintF("        ; Uranians\n");
+  PrintSpanHead(file, "-YAd", dwarfLo, dwarfHi, 12);
+  for (i = dwarfLo; i <= dwarfHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
+  PrintF("        ; Dwarfs\n");
+  PrintSpanHead(file, "-YAd", moonsLo, cobHi, 12);
+  for (i = moonsLo; i <= cobHi; i++)
+    { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
+  PrintF("  ; Moons and body centers\n");
+  PrintSpanHead(file, "-YAd", starLo, starLo, 12);
+  sprintf2(S(sz), " %.0f", rgobjset[starLo].add); PrintFSz();
   PrintF("                        ; Fixed stars\n\n\n");
 
-  PrintF("; DEFAULT INFLUENCES:\n\n-Yj 0 10   ");
-  for (i = 0; i <= 10; i++)
+  PrintF("; DEFAULT INFLUENCES:\n\n");
+  PrintSpanHead(file, "-Yj", 0, oMain, 11);
+  for (i = 0; i <= oMain; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
-  PrintF("     ; Planets\n-Yj 11 21  ");
-  for (i = 11; i <= 21; i++)
+  PrintF("     ; Planets\n");
+  PrintSpanHead(file, "-Yj", oMain+1, oCore, 11);
+  for (i = oMain+1; i <= oCore; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
-  PrintF("     ; Minor planets\n-Yj 22 33  ");
-  for (i = 22; i <= 33; i++)
+  PrintF("     ; Minor planets\n");
+  PrintSpanHead(file, "-Yj", cuspLo, cuspHi, 11);
+  for (i = cuspLo; i <= cuspHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
-  PrintF("  ; Cusp objects\n-Yj 34 42  ");
-  for (i = 34; i <= 42; i++)
+  PrintF("  ; Cusp objects\n");
+  PrintSpanHead(file, "-Yj", uranLo, uranHi, 11);
+  for (i = uranLo; i <= uranHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
-  PrintF("           ; Uranians\n-Yj 43 51  ");
-  for (i = 43; i <= 51; i++)
+  PrintF("           ; Uranians\n");
+  PrintSpanHead(file, "-Yj", dwarfLo, dwarfHi, 11);
+  for (i = dwarfLo; i <= dwarfHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
-  PrintF("           ; Dwarfs\n-Yj 52 83  ");
-  for (i = 52; i <= 83; i++)
+  PrintF("           ; Dwarfs\n");
+  PrintSpanHead(file, "-Yj", moonsLo, cobHi, 11);
+  for (i = moonsLo; i <= cobHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
-  PrintF("  ; Moons and body centers\n-Yj 84 84   ");
-  sprintf2(S(sz), "%2.0f", rgobjset[84].inf); PrintFSz();
+  PrintF("  ; Moons and body centers\n");
+  PrintSpanHead(file, "-Yj", starLo, starLo, 12);
+  sprintf2(S(sz), "%2.0f", rgobjset[starLo].inf); PrintFSz();
   PrintF("                                   ; Fixed stars\n\n");
 
   PrintF("-YjC 1 12  ");
@@ -2314,26 +2363,33 @@ flag FOutputSettings()
     PrintRExact(file, "%4.1f", rAspInf[ASPT(i)]);
   PrintF("  ; Very obscure aspects\n\n");
 
-  PrintF("; DEFAULT TRANSIT INFLUENCES:\n\n-YjT 0 10  ");
-  for (i = 0; i <= 10; i++)
+  PrintF("; DEFAULT TRANSIT INFLUENCES:\n\n");
+  PrintSpanHead(file, "-YjT", 0, oMain, 11);
+  for (i = 0; i <= oMain; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
-  PrintF("  ; Planets\n-YjT 11 21 ");
-  for (i = 11; i <= 21; i++)
+  PrintF("  ; Planets\n");
+  PrintSpanHead(file, "-YjT", oMain+1, oCore, 11);
+  for (i = oMain+1; i <= oCore; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
-  PrintF("  ; Minor planets\n-YjT 22 33 ");
-  for (i = 22; i <= 33; i++)
+  PrintF("  ; Minor planets\n");
+  PrintSpanHead(file, "-YjT", cuspLo, cuspHi, 11);
+  for (i = cuspLo; i <= cuspHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
-  PrintF("  ; Cusp objects\n-YjT 34 42 ");
-  for (i = 34; i <= 42; i++)
+  PrintF("  ; Cusp objects\n");
+  PrintSpanHead(file, "-YjT", uranLo, uranHi, 11);
+  for (i = uranLo; i <= uranHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
-  PrintF("        ; Uranians\n-YjT 43 51 ");
-  for (i = 43; i <= 51; i++)
+  PrintF("        ; Uranians\n");
+  PrintSpanHead(file, "-YjT", dwarfLo, dwarfHi, 11);
+  for (i = dwarfLo; i <= dwarfHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
-  PrintF("        ; Dwarfs\n-YjT 52 83 ");
-  for (i = 52; i <= 83; i++)
+  PrintF("        ; Dwarfs\n");
+  PrintSpanHead(file, "-YjT", moonsLo, cobHi, 11);
+  for (i = moonsLo; i <= cobHi; i++)
     { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
-  PrintF("  ; Moons and body centers\n-YjT 84 84  ");
-  sprintf2(S(sz), "%2.0f", rgobjset[84].tinf); PrintFSz();
+  PrintF("  ; Moons and body centers\n");
+  PrintSpanHead(file, "-YjT", starLo, starLo, 12);
+  sprintf2(S(sz), "%2.0f", rgobjset[starLo].tinf); PrintFSz();
   PrintF("                                ; Fixed stars\n\n");
 
   sprintf2(S(sz), "-Yj0 %.0f %.0f %.0f %.0f ",
@@ -2413,32 +2469,41 @@ flag FOutputSettings()
     "; Magenta, Maroon, DkGreen, DkCyan, DkBlue; "
     "Element, Ray, Star, Planet;\n"
     "; DkGray, Orange, Pink, Brown, Indigo, Forest, Amber, Rose, Sky, Violet"
-    "\n\n-YkO 0 10  ");
-  for (i = 0; i <= 10; i++)
+    "\n\n");
+  PrintSpanHead(file, "-YkO", 0, oMain, 11);
+  for (i = 0; i <= oMain; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("      ; Planet colors\n-YkO 11 21 ");
-  for (i = 11; i <= 21; i++)
+  PrintF("      ; Planet colors\n");
+  PrintSpanHead(file, "-YkO", oMain+1, oCore, 11);
+  for (i = oMain+1; i <= oCore; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("      ; Minor colors\n-YkO 22 33 ");
-  for (i = 22; i <= 33; i++)
+  PrintF("      ; Minor colors\n");
+  PrintSpanHead(file, "-YkO", cuspLo, cuspHi, 11);
+  for (i = cuspLo; i <= cuspHi; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("  ; Cusp colors\n-YkO 34 42 ");
-  for (i = 34; i <= 42; i++)
+  PrintF("  ; Cusp colors\n");
+  PrintSpanHead(file, "-YkO", uranLo, uranHi, 11);
+  for (i = uranLo; i <= uranHi; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("              ; Uranian colors\n-YkO 43 51 ");
-  for (i = 43; i <= 51; i++)
+  PrintF("              ; Uranian colors\n");
+  PrintSpanHead(file, "-YkO", dwarfLo, dwarfHi, 11);
+  for (i = dwarfLo; i <= dwarfHi; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("              ; Dwarf colors\n-YkO 52 63 ");
-  for (i = 52; i <= 63; i++)
+  PrintF("              ; Dwarf colors\n");
+  PrintSpanHead(file, "-YkO", moonsLo, moonsLo+11, 11);
+  for (i = moonsLo; i <= moonsLo+11; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("  ; Moons\n-YkO 64 75 ");
-  for (i = 64; i <= 75; i++)
+  PrintF("  ; Moons\n");
+  PrintSpanHead(file, "-YkO", moonsLo+12, moonsLo+23, 11);
+  for (i = moonsLo+12; i <= moonsLo+23; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("  ; Moons\n-YkO 76 83 ");
-  for (i = 76; i <= 83; i++)
+  PrintF("  ; Moons\n");
+  PrintSpanHead(file, "-YkO", moonsLo+24, cobHi, 11);
+  for (i = moonsLo+24; i <= cobHi; i++)
     { sprintf2(S(sz), " %s", SzColor2(rgobjset[i].kolor)); PrintFSz(); }
-  PrintF("                  ; Moons\n-YkO 84 84 ");
-  sprintf2(S(sz), " %s", SzColor2(rgobjset[84].kolor)); PrintFSz();
+  PrintF("                  ; Moons\n");
+  PrintSpanHead(file, "-YkO", starLo, starLo, 11);
+  sprintf2(S(sz), " %s", SzColor2(rgobjset[starLo].kolor)); PrintFSz();
   for (i = 0; i < 46; i++) PrintF(" ");
   PrintF("; Fixed stars\n\n-YkA 1 5   ");
 

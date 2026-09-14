@@ -2397,3 +2397,12 @@ its `astrolog.as` lines or its `settings-arrays` row. The fixture audit
 excuses it by name in `SPAN_EXEMPT` and fails the day the fixture reaches
 aspect 24 (checked by adding that line to a copy: *"-YkA: reaches its last
 index now; drop its SPAN_EXEMPT entry"*).
+
+**And the literals (item 8).** The object-group loops and span heads for
+`-YR`, `-YRT`, `-YAm`, `-YAd`, `-Yj`, `-YjT` and `-YkO` in
+`FOutputSettings()` now use `oMain`, `oCore`, `cuspLo`..`starHi`, through
+`PrintSpanHead()`, instead of 10/21/33/42/51/78/83/108/133. Proven
+byte-identical, not argued: the console build's saved file from compiled
+defaults, from `nrvate.as` and from `tools/settings-fixture.as`, before and
+after, `cmp` clean all three. The `-YkA` lines, the `i < 46` padding and
+the column-padding strings are untouched.
