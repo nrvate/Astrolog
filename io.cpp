@@ -2033,7 +2033,7 @@ flag FOutputSettings()
   PrintF("\n-Yw "); FormatR(S(sz), us.rStation, 5); PrintFSz();
   PrintF("       ; Stationary movement threshold  [0.0 is never \"S\"]\n");
   sprintf2(S(sz),
-    ":pd %9.5f ; Progression degrees per day    [365 is secondary]\n",
+    ":pd %9.5f ; Real days per progressed day   [365 is secondary]\n",
     us.rProgDay); PrintFSz();
   PrintF(":pC "); FormatR(S(sz), us.rProgCusp, 5); PrintFSz();
   PrintF("       ; Progressed cusp movement ratio [1.0 is quotidian]\n");

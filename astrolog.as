@@ -51,7 +51,7 @@ _Yz1    ; Combine DST and time zone ["=Yz1" combines, "_Yz1" doesn't   ]
 =0n     ; Internet Web queries      ["=0n" disables them, "_0n" allows ]
 
 -Yw 0.0       ; Stationary movement threshold  [0.0 is never "S"]
-:pd 365.24219 ; Progression degrees per day    [365 is secondary]
+:pd 365.24219 ; Real days per progressed day   [365 is secondary]
 :pC 1.0       ; Progressed cusp movement ratio [1.0 is quotidian]
 :pO Sun       ; Solar arc based on this planet [-1 is fixed rate]
 _pc           ; Solar arc recalc based on MC   [=pc recalculates]
