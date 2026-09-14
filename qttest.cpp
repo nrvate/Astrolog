@@ -1823,6 +1823,13 @@ static void TestBadInputQt()
 
   PrintError("Test error; the suite expects to keep running past this.");
 
+  // A handler that reports consuming one argument more than it was given is
+  // refused, not followed off the end of argv. FProcessSwitches() tested
+  // "i > argc" while argc still counted the switch itself, so exactly one
+  // too many passed the guard and parsing read past the argument list.
+  Check(!FProcessCommandLine((char *)"-ZQtOverconsume"),
+    "a handler consuming more than it was given is refused");
+
   // A 400-digit switch parameter, which crashed twice over before
   // REFACTORING.md B1's net pinned it: NParseSz()
   // and RParseSz() copied their argument into a cchSzMax local
@@ -10089,6 +10096,54 @@ static void TestSettingsStringsQt()
 }
 
 
+// "-YRd 0" is a setting, not a mistake. The settings writer saves
+// us.nSignDiv as it stands, and 0 -- no degree events -- is a value the
+// program holds and draws correctly. The post-build review's fix for S-7
+// made the reader refuse anything below 1, so a file the program itself
+// saved stopped loading at that line: a refused line ends the whole file,
+// and in the maintainer's own settings that took the ephemeris path with it.
+// A negative count is still refused. Asserted through a settings FILE with a
+// sentinel after the line, because "the value came back" is not the claim;
+// "the rest of the file still loads" is.
+static void TestSignDivZeroQt()
+{
+  char szPath[cchSzMax];
+  FILE *file;
+  int nDivSav = us.nSignDiv, nScrollSav = us.nScrollRow;
+  flag fPopupSav = FNoPopupQt();
+
+  Group("Sign divisions of zero load");
+  SetNoPopupQt(fTrue);
+  SzScratchPathQt(S(szPath), "yrdzero", ".as");
+  file = fopen(szPath, "w");
+  Check(file != NULL, "the settings file was created");
+  if (file != NULL) {
+    fprintf(file, "@AD800  ; sign divisions of zero\n"
+      "-YRd 0  ; Sign divisions\n"
+      "-YQ 7   ; a line after it, which has to load too\n");
+    fclose(file);
+  }
+  us.nSignDiv = 3; us.nScrollRow = 0;
+  Check(FProcessSwitchFile(szPath, NULL),
+    "a settings file holding \"-YRd 0\" loads without an error");
+  Check(us.nSignDiv == 0, "and sets no sign divisions (%d)", us.nSignDiv);
+  Check(us.nScrollRow == 7,
+    "and the line after it still loads (-YQ reads %d, wanted 7)",
+    us.nScrollRow);
+
+  us.nSignDiv = 3;
+  Check(!FProcessCommandLine((char *)"-YRd -1"),
+    "a negative count is still refused");
+  Check(us.nSignDiv == 3,
+    "and the refused value is not kept (%d, wanted 3)", us.nSignDiv);
+
+  remove(szPath);
+  us.nSignDiv = nDivSav; us.nScrollRow = nScrollSav;
+  SetNoPopupQt(fPopupSav);
+  printf("  -YRd 0 reads back, and the file goes on loading after it\n");
+}
+
+
 // Graphics mode is view state, not a setting, and a settings file must not
 // be able to turn the GUI off. "Save Program Settings" with a text chart on
 // screen writes "_X"; the window is created inside FActionX(), which
@@ -14068,6 +14123,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"rulership",            TestRulershipTablesQt},
   {"esoteric-tables",      TestEsotericTablesQt},
   {"nested-include",       TestNestedIncludeQt},
+  {"yrd-zero-loads",       TestSignDivZeroQt},
   {"graphics-mode",        TestGraphicsModeSourceQt},
   {"settings-fields",      TestSettingsFieldsQt},
   {"settings-arrays",      TestSettingsArraysQt},

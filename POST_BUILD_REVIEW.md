@@ -680,6 +680,27 @@ is stated by the program instead of assumed. Matrices byte-identical
 (no net leg passes a sub-1 value; the review measured `-YRd 0` renders
 as no-op), and a `-YRd 0` invocation now exits with an error message.
 
+**Status corrected 2026-09-13: that fix was wrong, and is replaced.** Zero
+is a setting, not a mistake -- "no degree events" is a value the program
+holds and draws correctly, and `FOutputSettings()` writes `us.nSignDiv` as
+it stands, so any settings file saved with it (the maintainer's `nrvate.as`
+among them, since 2026-09-07) printed `Value 0 passed to parameter #1 of
+switch -YRd out of range` on every launch. And the refusal did not refuse:
+the handler returned 0 rather than `tcError` after storing the value, so
+`-YRd -1` was accepted and kept. And it was worse than a message: 0 is
+the COMPILED DEFAULT, so any settings saved without touching the field carry
+`-YRd 0`. Measured by the validator survey on that code: with such a file as
+the default `astrolog.as`, the console build printed the error and drew **no
+chart at all** (0 lines against 22), and `-i nrvate.as` stopped the whole
+command line the same way. (Inside the suite, `FProcessSwitchFile()` read on
+past the line, which is why a first in-process measurement looked harmless.) `-YRd` now refuses only a
+negative count, the way `-YQ` does: checked before it is stored, refused with
+`tcError`. Nets: the suite's `yrd-zero-loads` group (a file with `-YRd 0` and
+a line after it loads; `-YRd -1` is refused and not kept -- the refusal half
+failed on the old code), and `run-qt-tests.sh`'s "Settings files load
+cleanly", which requires `nrvate.as` and `astrolog.as` to load with nothing
+on stderr and printed the error above on the old code.
+
 **S-8 -- Nothing in `FProcessSwitches()` refuses a handler that
 consumes more than it was given.** *note, hardening.*
 
@@ -2283,3 +2304,34 @@ corrected in passing: A-3's cycle lives in `NInputRange`'s reprompt
 loop, not `main()`'s (so the first fix shape could not have worked),
 and EX-1's one-past read *does* fire under ASan when the probe uses
 the lists' grow quantum.
+
+
+## Validators added since v8.00-qt.15, verified -- 2026-09-13
+
+Prompted by the `-YRd` regression (S-7, corrected above), every validator the fork added
+since `v8.00-qt.15` was surveyed and **run**, not only read: 26 found. Verdicts:
+
+- **Regression (1):** `-YRd` refusing 0 -- fixed; see S-7's corrected status.
+- **Weak (2), both fixed:**
+  - **The over-consumption guard in `FProcessSwitches()`** (S-8) tested `i > argc`
+    while `argc` still counted the switch itself, so a handler reporting exactly one
+    argument more than it was given passed and parsing walked past `argv` (the survey
+    saw environment strings read as switches); when it did fire, it refused silently.
+    Now `i >= argc`, with an error naming the switch. Net: a `QTTEST`-only row,
+    `ZQtOverconsume`, whose handler returns `pin->argc`, and a `bad-input` check that it
+    is refused -- on the old guard the group **crashed** (SIGSEGV).
+  - **The wider console prompt buffers** (A-5) moved the split of an over-long line
+    from 254 to 1,019 characters without removing it: `InputString()` never asked
+    whether `fgets()` had reached the line's end, so the rest ran as the next command
+    (a long line ending `-Hc` printed the credits), and every `NInputRange()` prompt
+    had the same hole. A line that fills the buffer is now read away and refused with a
+    message; one that ends exactly at the buffer's end still fits. Net:
+    `tools/long-prompt-check.sh`, in `make check`, which failed on the old code.
+- **Inert (1):** a `WritePNG` `Assert`, empty outside DEBUG builds.
+- **OK (22):** every other validator, each with its reproduction in the survey's notes
+  -- among them the command-nesting limit (20 deep runs, 21 refused), `-4`'s numeric
+  test, the interpretation format escape, the old-style position file token widths, the
+  last-line-without-newline readers, `FValidCIField` on all six chart-file writers'
+  output, the quoting writer (`"`, `'`, both, 300 characters), and the Qt dialogs'
+  load-side clamps (by reading). Not run: Solar Fire and Horizons input, the X11
+  command line, and the original crash inputs of three older fixes.

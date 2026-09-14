@@ -434,9 +434,17 @@ static int NSwYR7(CONST char *szSwitch, PARSEIN *pin)
 
 static int NSwYRd(CONST char *szSwitch, PARSEIN *pin)
 {
-  us.nSignDiv = NFromSz(pin->argv[1]);
-  if (FErrorValN(szSwitch, us.nSignDiv < 1, us.nSignDiv, 1))
-    return 0;
+  int n;
+
+  // 0 is a setting -- no degree events -- and the settings writer saves it:
+  // refusing it (the post-build review's S-7) printed an error on loading
+  // any file saved that way. A negative count is the mistake. Checked before
+  // it is stored, and refused as -YQ refuses, so it is neither kept nor
+  // silently consumed.
+  n = NFromSz(pin->argv[1]);
+  if (FErrorValN(szSwitch, n < 0, n, 1))
+    return tcError;
+  us.nSignDiv = n;
   return 1;
 }
 
@@ -3829,7 +3837,20 @@ typedef struct _switchdef {
                         // check in the handler and leave this 0.
 } SWITCHDEF;
 
+#ifdef QTTEST
+// A handler that reports consuming one argument more than it was given --
+// the arity slip FProcessSwitches()'s guard exists for. Test builds only, so
+// the suite can hold the guard to it.
+static int NSwQtOverconsume(CONST char *szSwitch, PARSEIN *pin)
+{
+  return pin->argc;
+}
+#endif
+
 static CONST SWITCHDEF rgswitchdef[] = {
+#ifdef QTTEST
+  {"ZQtOverconsume", 0, NSwQtOverconsume},
+#endif
   {"Yj0",  0,      NSwYj0},  {"Yj7",  0,      NSwYj7},
   {"YAD",  0,      NSwYAD, 4},  {"YJ",   0,      NSwYJ},
   {"YJ0",  0,      NSwYJ0},  {"YJ7",  0,      NSwYJ7},
@@ -4278,10 +4299,18 @@ flag FProcessSwitches(int argc, char **argv, PARSECTX *pctx)
         return fTrue;
       if (i < 0)
         return fFalse;
-      // A handler may consume at most what it was given; a future arity
-      // slip becomes an error here instead of a walk past argv.
-      if (i > argc)
+      // A handler may consume at most what it was given -- argc - 1, since
+      // argc still counts the switch itself here. "i > argc" let exactly one
+      // too many through, and parsing then read past the end of argv; and
+      // the refusal it did make was silent. A future arity slip is now an
+      // error with a name.
+      if (i >= argc) {
+        char szT[cchSzDef];
+        sprintf2(S(szT), "Switch %c%s claims more parameters than it was "
+          "given.", chSwitch, argv[0] + ich);
+        PrintError(szT);
         return fFalse;
+      }
       argc -= i; argv += i;
       argc--; argv++;
       continue;

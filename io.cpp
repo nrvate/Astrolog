@@ -3246,6 +3246,26 @@ void InputString(CONST char *szPrompt, char *sz, int cchMax)
     return;
   }
   cch = CchSz(sz);
+  // A line longer than the buffer is refused whole. fgets() stops at the
+  // buffer's end and leaves the rest of the line in stdin, where the next
+  // read took it as the NEXT answer -- a long command line ran its tail as a
+  // second command, and a long answer to a number prompt spilled into the
+  // prompts after it. So read the rest of the line away and answer empty.
+  if (cch >= cchMax-1 && sz[cch-1] != '\n') {
+    // Unless the line ended exactly at the buffer's end: then only its
+    // newline is left, and the line itself fits.
+    int ch = getc(stdin);
+    if (ch == '\n' || ch == EOF)
+      goto LFits;
+    while ((ch = getc(stdin)) != EOF && ch != '\n')
+      ;
+    is.S = file;
+    PrintWarning("That line is too long, and was ignored.");
+    sz[0] = chNull;
+    is.cchCol = 0;
+    return;
+  }
+LFits:
   while (cch > 0 && sz[cch-1] < ' ')
     cch--;
   sz[cch] = chNull;

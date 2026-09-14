@@ -132,6 +132,12 @@ step "inert_option_audit"        python3 tools/inert_option_audit.py
 step "w-switch-arity (console)"  tools/w-switch-arity.sh ./astrolog
 step "w-switch-arity (Qt)"       tools/w-switch-arity.sh ./astrolog-qt-test
 
+# A command line typed at the console prompt that is longer than the prompt
+# reads is refused whole. InputString() used to leave the rest of the line in
+# stdin, where the next read ran it as a second command; the post-build
+# review's wider buffer moved that split rather than removing it.
+step "long prompt line refused"  tools/long-prompt-check.sh ./astrolog
+
 # The other two toolchains, when this machine has them. Both are here
 # because their absence has cost this project real time: Makefile.win
 # went 62 commits without compiling while three work log items listed

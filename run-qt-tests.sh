@@ -203,6 +203,26 @@ esac
 # once with no output, and "_Xv0 =X" let the tree's square-charts default
 # turn 760 by 600 into 600 by 600 -- both measured, both read here as a
 # failure of the thing being asserted.
+# A settings file the program can load, loads without a word on stderr. The
+# post-build review's fix for S-7 made -YRd refuse 0, which the settings
+# writer saves, and every launch from the maintainer's nrvate.as printed
+# "Value 0 passed to parameter #1 of switch -YRd out of range" -- while this
+# script, which runs everything against that file, passed. The in-process
+# suite cannot see its own startup's messages; a separate process can.
+echo
+echo "== Settings files load cleanly =="
+for f in nrvate.as astrolog.as; do
+  err=`ASTROLOG_QT_TESTS=no-such-group $QTRUN "$BIN" -i "$f" <"$QTIN" 2>&1 >/dev/null`
+  case $err in
+    *"Astrolog:"*)
+      echo "  FAIL: loading $f printed an error:"
+      echo "$err" | grep "Astrolog:" | sed 's/^/        /'
+      exit 1 ;;
+    *)
+      echo "  ok: $f loads without an error" ;;
+  esac
+done
+
 echo
 echo "== Chart size at startup =="
 out=`ASTROLOG_QT_WINSIZE_PROBE=760x600 ASTROLOG_QT_TESTS=startup-chart-size \

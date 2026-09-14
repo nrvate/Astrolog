@@ -2773,3 +2773,47 @@ recognise Mint, and the repository's directory listing is served gzip-compressed
 defeated a first attempt to read the version from it). And any clang on this box failed
 on `<type_traits>` until `libstdc++-12-dev` was installed: clang takes its C++ library
 headers from the newest GCC install it finds, GCC 12, whose headers were missing.
+
+# -YRd 0 printed an error on every launch
+
+**Reported by the maintainer:** `./astrolog-qt -i nrvate.as` printed `Astrolog: Value 0
+passed to parameter #1 of switch -YRd out of range.` The post-build review's S-7 fix
+(`354f355`, 2026-09-13) made `-YRd` refuse values below 1, but 0 is a value the settings
+writer saves -- `nrvate.as` has carried `-YRd 0` since 2026-09-07.
+
+**Two diagnoses, both partly wrong, settled by measuring outside the suite.** A first one
+said the file stopped loading at the line and took `/swe` with it. A second, measured
+only in process, said loading carried on and nothing was lost -- true of
+`FProcessSwitchFile()` inside the suite, where the handler printed its error and
+returned 0 rather than `tcError`. The validator survey then ran the programs
+themselves: `-YRd 0` is the **compiled default**, so any settings saved without touching
+it carry the line; with such a file as the default `astrolog.as` the console build
+printed the error and drew **no chart at all** (0 lines against 22), and `-i nrvate.as`
+stopped the whole command line. And the "refusal" refused nothing: `-YRd -1` was
+accepted and kept.
+
+**Fix:** `-YRd` refuses only a negative count, checked before it is stored, with
+`tcError`, the shape `-YQ` uses. **Nets:** the new `yrd-zero-loads` group (the refusal
+half failed on the old code: `a negative count is still refused`, `and the refused value
+is not kept (-1, wanted 3)`), and a startup section in `run-qt-tests.sh`, "Settings
+files load cleanly", requiring `nrvate.as` and `astrolog.as` to load with nothing on
+stderr -- the old binary printed exactly the error above, which that section matches.
+Every other validator added since `v8.00-qt.15` is being checked the same way.
+
+# Every validator added since v8.00-qt.15, verified
+
+After `-YRd`, the maintainer asked for every new validator to be verified. A survey found
+26 since `v8.00-qt.15` and ran each: 22 OK, 1 inert outside DEBUG, the `-YRd`
+regression, and two that did not do what they claimed. Both fixed here, with nets that
+failed first; the full account is in `POST_BUILD_REVIEW.md`, "Validators added since
+v8.00-qt.15, verified".
+
+- **`FProcessSwitches()`'s guard** let a handler take exactly one argument more than it
+  was given (`i > argc` with the switch still counted) and refused silently otherwise.
+  Now `i >= argc` with a named error. The new `QTTEST`-only `ZQtOverconsume` row made
+  `bad-input` crash with SIGSEGV on the old guard and pass on the new one.
+- **`InputString()`** left the rest of an over-long line in stdin to be read as the next
+  answer, so the review's wider prompt buffer moved the split to 1,019 characters.
+  Now a line that fills the buffer is read away and refused with a message, and one
+  ending exactly at the buffer's end is accepted. `tools/long-prompt-check.sh`, added to
+  `make check`, failed on the old code ("its tail (-Hc) ran") and passes now.
