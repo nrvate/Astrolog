@@ -10269,16 +10269,28 @@ typedef struct _setarray {
   void *pv;             // The array's first element
   int cb;               // Its size in bytes
   char ch;              // b byte, i int, r real, o OBJSET
-  int iLo, iHi;         // The elements that are settings; iHi < 0 is "all"
+  int iLo, iHi;         // The elements that are settings
   CONST char *szWhy;    // NULL when it has to survive
 } SETARRAY;
 
+// An iHi that is taken from the switch registry at run time.
+#define iHiRegistry -2
+#ifdef MATRIX
+// The reals in rgoe[], every row's.
+#define crOEQt (int)(sizeof(rgoe)/sizeof(rgoe[0]) * (sizeof(OE)/sizeof(real)))
+#endif
+
 static SETARRAY rgsetarray[] = {
-  // iLo is 1 wherever element 0 is unused padding -- the aspect, sign and
-  // rulership tables are all indexed from 1 -- and iHi names the last
-  // element the writer's own loop reaches. Both are transcribed from
-  // FOutputSettings(), and a bound set too wide fails loudly here rather
-  // than quietly, which is the direction to be wrong in.
+  // The bounds are what the READER accepts, never what the writer's loops
+  // reach: bounds copied from FOutputSettings() agree with it by
+  // construction, so a writer that stops short can never be caught -- and
+  // for years "-YjA" 19-24, "-Y7O" 11-33 and 52-83, and every rulership
+  // but the planets', were lost that way while this table said 18, 10 and
+  // 10. So iHi is iHiRegistry wherever a row of switch.cpp's rgswranged[]
+  // stores into the array, resolved through FRangedBoundsForTable(); and
+  // otherwise it is the range the switch's own handler checks, named in
+  // the row. iLo is 1 wherever element 0 is unused padding -- the aspect
+  // and sign tables are indexed from 1 -- and never below the registry's.
   {"ignore",      ignore.rgn,      sizeof(ignore.rgn),      'b',
     0, cObj, NULL},
   {"ignore2",     ignore2.rgn,     sizeof(ignore2.rgn),     'b',
@@ -10298,17 +10310,18 @@ static SETARRAY rgsetarray[] = {
   {"rHouseInf",   rHouseInf,       sizeof(rHouseInf),       'r',
     1, cSign+5, NULL},
   {"rAspInf",     rAspInf.rgn,     sizeof(rAspInf.rgn),     'r',
-    1, 18, NULL},
+    1, iHiRegistry, NULL},
   {"rAspAngle",   rAspAngle.rgn,   sizeof(rAspAngle.rgn),   'r',
     1, cAspect, NULL},
   {"rAspOrb",     rAspOrb.rgn,     sizeof(rAspOrb.rgn),     'r',
     1, cAspect, NULL},
+  // "-YJ" and "-YJ0": FNorm(), NSwRulershipCore() and NSwYJ0().
   {"ruler1",      ruler1.rgn,      sizeof(ruler1.rgn),      'i',
-    1, 10, NULL},
+    0, oNorm, NULL},
   {"ruler2",      ruler2.rgn,      sizeof(ruler2.rgn),      'i',
-    1, 10, NULL},
+    0, oNorm, NULL},
   {"exalt",       exalt.rgn,       sizeof(exalt.rgn),       'i',
-    1, 10, NULL},
+    0, oNorm, NULL},
   {"kAspA",       kAspA.rgn,       sizeof(kAspA.rgn),       'i',
     1, cAspect, NULL},
   {"kMainA",      kMainA,          sizeof(kMainA),          'i',
@@ -10317,6 +10330,30 @@ static SETARRAY rgsetarray[] = {
     1, cRainbow, NULL},
   {"kElemA",      kElemA,          sizeof(kElemA),          'i',
     0, cElem-1, NULL},
+  {"kRayA",       kRayA.rgn,       sizeof(kRayA.rgn),       'i',
+    1, iHiRegistry, NULL},
+  {"rgObjRay",    rgObjRay.rgn,    sizeof(rgObjRay.rgn),    'i',
+    0, iHiRegistry, NULL},
+  {"rgSignRay",   rgSignRay.rgn,   sizeof(rgSignRay.rgn),   'i',
+    1, iHiRegistry, NULL},
+  // "-YJ7" and "-YJ70": FNorm() in NSwRulershipCore().
+  {"rgObjEso1",   rgObjEso1.rgn,   sizeof(rgObjEso1.rgn),   'i',
+    0, oNorm, NULL},
+  {"rgObjEso2",   rgObjEso2.rgn,   sizeof(rgObjEso2.rgn),   'i',
+    0, oNorm, NULL},
+  {"rgObjHie1",   rgObjHie1.rgn,   sizeof(rgObjHie1.rgn),   'i',
+    0, oNorm, NULL},
+  {"rgObjHie2",   rgObjHie2.rgn,   sizeof(rgObjHie2.rgn),   'i',
+    0, oNorm, NULL},
+  // "-YS": FNorm() in NSwYS().
+  {"rObjDiam",    rObjDiam,        sizeof(rObjDiam),        'r',
+    0, oNorm, NULL},
+#ifdef MATRIX
+  // "-YE": every real of every row, since FObjOE() in NSwYE() reaches all
+  // of them. Element-wise, as an array of reals, which is what OE is.
+  {"rgoe",        rgoe,            sizeof(rgoe),            'r',
+    0, crOEQt - 1, NULL},
+#endif
   // Derived, and the deriving is what puts them right.
   {"rules",       rules.rgn,       sizeof(rules.rgn),       'i', 1, cSign,
    "sign-keyed view of ruler1[], rebuilt by the \"-YJ\" reader"},
@@ -10342,6 +10379,12 @@ static void *PvSetArrayQt(int i, int *pcb, CONST char **psz)
   return rgsetarray[i].pv;
 }
 
+static int CbSetArrayElemQt(CONST SETARRAY *psa)
+{
+  return psa->ch == 'b' ? 1 : (psa->ch == 'i' ? (int)sizeof(int) :
+    (psa->ch == 'r' ? (int)sizeof(real) : (int)sizeof(OBJSET)));
+}
+
 static void TestSettingsArraysQt()
 {
   char szPath[cchSzMax];
@@ -10351,9 +10394,55 @@ static void TestSettingsArraysQt()
   int nWriteFormatSav = us.nWriteFormat;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   int i, j, cb, cLost = 0, cStale = 0;
+  QVector<int> rgiHi(csetarray);
+  // Derived from the object-keyed esoteric and hierarchical tables by the
+  // "-YJ7" and "-YJ70" readers, which the replay below runs; put back at
+  // the end, since no row here owns them.
+  TBLSIG rgSignEso1Sav = rgSignEso1, rgSignEso2Sav = rgSignEso2,
+    rgSignHie1Sav = rgSignHie1, rgSignHie2Sav = rgSignHie2;
 
   Group("Settings arrays");
   SetNoPopupQt(fTrue);
+
+  // The upper bounds the registry owns, resolved.
+  for (i = 0; i < csetarray; i++) {
+    SETARRAY *psa = &rgsetarray[i];
+    int iMin, iMax;
+
+    rgiHi[i] = psa->iHi;
+    if (psa->iHi != iHiRegistry)
+      continue;
+    rgiHi[i] = -1;
+    if (!FRangedBoundsForTable(psa->pv, CbSetArrayElemQt(psa), &iMin,
+      &iMax)) {
+      Check(fFalse, "%s takes its bounds from the registry, and no "
+        "rgswranged[] row stores into it", psa->szName);
+      continue;
+    }
+    if (psa->iLo < iMin)
+      Check(fFalse, "%s is asked from %d, below the %d its switch accepts",
+        psa->szName, psa->iLo, iMin);
+    rgiHi[i] = iMax;
+  }
+
+#ifdef MATRIX
+  // "-YE" on an object with no row of its own in rgoe[]. The reader checked
+  // only FHelio(), which Vulcan passes -- its index lands on Vesta's row --
+  // and so does every dwarf, moon and body center, whose index runs past
+  // the end of the table: "-YE Hyg" wrote rgoe[22] of 22.
+  {
+    QByteArray baOe((CONST char *)rgoe, sizeof(rgoe));
+
+    Check(!FProcessCommandLine((char *)"-YE Vul 13.5 .3 0 0 7 0 0 339 0 0 "
+      "209 1 0 34 713 0"), "\"-YE\" refuses Vulcan, which has no orbital "
+      "elements of its own");
+    Check(!FProcessCommandLine((char *)"-YE Hyg 13.5 .3 0 0 7 0 0 339 0 0 "
+      "209 1 0 34 713 0"), "\"-YE\" refuses Hygiea, whose index is past "
+      "the end of rgoe[]");
+    Check(baOe == QByteArray((CONST char *)rgoe, sizeof(rgoe)),
+      "and neither of them wrote to rgoe[]");
+  }
+#endif
 
   // The PRISTINE state, which is what gets put back at the end. Taken
   // before the fill below, or the fill would be what every later group
@@ -10381,6 +10470,25 @@ static void TestSettingsArraysQt()
   for (i = 1; i <= cAspect; i++)
     ignorea[ASPT(i)] = (i % 3) == 0;
   AdjustAspectCount();
+  // And the tables written only where they differ from the compiled default
+  // -- the rulerships, bar the planets' "-YJ" and "-YJ0", the diameters and
+  // the orbital elements -- moved off it everywhere. The rulerships in the
+  // shape their switch stores: a first sign that is never 0, and a second
+  // that is never the first.
+  for (i = 0; i <= oNorm; i++) {
+    ruler1[OBJT(i)] = ruler1Def[OBJT(i)] % cSign + 1;
+    ruler2[OBJT(i)] = ruler1[OBJT(i)] % cSign + 1;
+    exalt[OBJT(i)] = exaltDef[OBJT(i)] % cSign + 1;
+    rgObjEso1[OBJT(i)] = rgObjEso1Def[OBJT(i)] % cSign + 1;
+    rgObjEso2[OBJT(i)] = rgObjEso1[OBJT(i)] % cSign + 1;
+    rgObjHie1[OBJT(i)] = rgObjHie1Def[OBJT(i)] % cSign + 1;
+    rgObjHie2[OBJT(i)] = rgObjHie1[OBJT(i)] % cSign + 1;
+    rObjDiam[i] = rObjDiamDef[i] + 0.5 + (real)i;
+  }
+#ifdef MATRIX
+  for (i = 0; i < crOEQt; i++)
+    ((real *)rgoe)[i] = ((CONST real *)rgoeDef)[i] + 0.5;
+#endif
 
   // And the state the file has to bring back, which is the filled one.
   for (i = 0; i < csetarray; i++)
@@ -10427,10 +10535,8 @@ static void TestSettingsArraysQt()
     int ib = -1;
 
     {
-      int cbElem = psa->ch == 'b' ? 1 : (psa->ch == 'i' ?
-        (int)sizeof(int) : (psa->ch == 'r' ? (int)sizeof(real) :
-        (int)sizeof(OBJSET)));
-      for (cb = psa->iLo * cbElem; cb < (psa->iHi + 1) * cbElem &&
+      int cbElem = CbSetArrayElemQt(psa);
+      for (cb = psa->iLo * cbElem; cb < (rgiHi[i] + 1) * cbElem &&
         cb < psa->cb; cb++)
         if (pbWas[cb] != pbIs[cb]) {
           ib = cb;
@@ -10470,6 +10576,8 @@ static void TestSettingsArraysQt()
   for (i = 0; i < csetarray; i++)
     CopyRgb((pbyte)rgbaSav[i].constData(), (pbyte)rgsetarray[i].pv,
       rgsetarray[i].cb);
+  rgSignEso1 = rgSignEso1Sav; rgSignEso2 = rgSignEso2Sav;
+  rgSignHie1 = rgSignHie1Sav; rgSignHie2 = rgSignHie2Sav;
   us.fNoWrite = fNoWriteSav;
   SetNoPopupQt(fPopupSav);
   remove(szPath);
@@ -10526,6 +10634,47 @@ static void SzBothQuotesMarkQt(int i, char *szMark)
     }
 }
 
+// The aspect display names and the interpretation phrases, which a settings
+// file changes with "-YAD" and the "-YI" family. Each slot holds its
+// compiled text by POINTER until a switch clones a copy, and the program
+// frees only what is not that pointer, so "back to the default" puts the
+// pointer back rather than a copy of the text.
+typedef struct _setsztable {
+  CONST char *szName, *szHead;
+  CONST char **rgsz, **rgszDef;
+  int iLo, iHi;
+} SETSZTABLE;
+
+static CONST SETSZTABLE rgsetsz[] = {
+  {"szAspectDisp (-YAD)",       "Asp", szAspectDisp,       szAspectName,
+    1, cAspect2},
+  {"szAspectAbbrevDisp (-YAD)", "Abb", szAspectAbbrevDisp, szAspectAbbrev,
+    1, cAspect2},
+  {"szAspectGlyphDisp (-YAD)",  "Gly", szAspectGlyphDisp,  szAspectGlyph,
+    1, cAspect2},
+#ifdef INTERPRET
+  {"szMindPart (-YI)",   "Min", szMindPart,  szMindPartDef,  0, cObj},
+  {"szDesc (-YIa)",      "Dsc", szDesc,      szDescDef,      1, cSign},
+  {"szDesire (-YIv)",    "Dsr", szDesire,    szDesireDef,    1, cSign},
+  {"szLifeArea (-YIC)",  "Lif", szLifeArea,  szLifeAreaDef,  1, cSign},
+  {"szInteract (-YIA)",  "Int", szInteract,  szInteractDef,  1, cAspect},
+  {"szTherefore (-YIA0)", "The", szTherefore, szThereforeDef, 1, cAspect},
+#endif
+  };
+#define csetsz (int)(sizeof(rgsetsz)/sizeof(SETSZTABLE))
+
+// szNew NULL is the compiled default.
+static void SetSzTableQt(CONST char **ppsz, CONST char *szDef,
+  CONST char *szNew)
+{
+  if (szNew == NULL) {
+    if (*ppsz != szDef)
+      DeallocateP((char *)*ppsz);
+    *ppsz = szDef;
+  } else
+    FCloneSzCore(szNew, (char **)ppsz, *ppsz == szDef);
+}
+
 static void TestSettingsStringsQt()
 {
   char szPath[cchSzMax], szMark[cchSzLine];
@@ -10536,11 +10685,19 @@ static void TestSettingsStringsQt()
   int nWriteFormatSav = us.nWriteFormat;
   flag fNoWriteSav = us.fNoWrite, fPopupSav = FNoPopupQt();
   int i, cLost = 0, cAsked = 0;
+  int t;
+  QVector<QByteArray> rgbaSz;
+  QVector<bool> rgfSzDef;
 
   Group("Settings strings");
   SetNoPopupQt(fTrue);
 
   // Pristine, for the restore.
+  for (t = 0; t < csetsz; t++)
+    for (i = rgsetsz[t].iLo; i <= rgsetsz[t].iHi; i++) {
+      rgfSzDef.append(rgsetsz[t].rgsz[i] == rgsetsz[t].rgszDef[i]);
+      rgbaSz.append(QByteArray(SzSet(rgsetsz[t].rgsz[i])));
+    }
   for (i = 0; i <= cObj; i++) {
     rgfObjCustom[i] = FObjDispCustom(i);
     rgbaObj[i] = QByteArray(szObjDisp[i]);
@@ -10571,6 +10728,13 @@ static void TestSettingsStringsQt()
       cAsked++;
     }
 
+  for (t = 0; t < csetsz; t++)
+    for (i = rgsetsz[t].iLo; i <= rgsetsz[t].iHi; i++) {
+      SzStringMarkQt(rgsetsz[t].szHead, i, S(szMark));
+      SetSzTableQt(&rgsetsz[t].rgsz[i], rgsetsz[t].rgszDef[i], szMark);
+      cAsked++;
+    }
+
   SzScratchPathQt(S(szPath), "strings", ".as");
   us.fNoWrite = fFalse;
   us.nWriteFormat = 'd';
@@ -10585,9 +10749,23 @@ static void TestSettingsStringsQt()
     FCloneSz("", &szStarCustom[i]);
   for (i = 0; i < is.cszMacro; i++)
     FCloneSz("", &is.rgszMacro[i]);
+  for (t = 0; t < csetsz; t++)
+    for (i = rgsetsz[t].iLo; i <= rgsetsz[t].iHi; i++)
+      SetSzTableQt(&rgsetsz[t].rgsz[i], rgsetsz[t].rgszDef[i], NULL);
 
   Check(FProcessSwitchFile(szPath, NULL),
     "and the file it wrote loads back with every string emptied");
+
+  for (t = 0; t < csetsz; t++)
+    for (i = rgsetsz[t].iLo; i <= rgsetsz[t].iHi; i++) {
+      SzStringMarkQt(rgsetsz[t].szHead, i, S(szMark));
+      if (!FEqSz(SzSet(rgsetsz[t].rgsz[i]), szMark)) {
+        Check(fFalse, "%s[%d] did not survive a save and reload",
+          rgsetsz[t].szName, i);
+        cLost++;
+        break;
+      }
+    }
 
   for (i = 0; i <= cObj; i++) {
     SzStringMarkQt(szObjName[i], i, S(szMark));
@@ -10634,6 +10812,14 @@ static void TestSettingsStringsQt()
   for (i = 0; i < is.cszMacro && i < cMacro; i++)
     FCloneSz(rgbaMac[i].isEmpty() ? NULL : rgbaMac[i].constData(),
       &is.rgszMacro[i]);
+  {
+    int iSz = 0;
+
+    for (t = 0; t < csetsz; t++)
+      for (i = rgsetsz[t].iLo; i <= rgsetsz[t].iHi; i++, iSz++)
+        SetSzTableQt(&rgsetsz[t].rgsz[i], rgsetsz[t].rgszDef[i],
+          rgfSzDef[iSz] ? NULL : rgbaSz[iSz].constData());
+  }
   us.fNoWrite = fNoWriteSav;
   SetNoPopupQt(fPopupSav);
   remove(szPath);

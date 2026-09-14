@@ -211,6 +211,25 @@ static CONST SWITCHRANGED rgswranged[] = {
   {"Yk",  "Yk", 0,        0, 8,       kMainA,            sizeof(int),
     vtColor, 0, cColor2-1, NULL}};
 
+// The index bounds the registry accepts for the table whose first slot is
+// pv, with elements cbElem bytes apart; fFalse when no row stores there.
+// For the suite's "settings-arrays" group, which takes its bounds from here
+// rather than from the settings writer it is checking: bounds copied from
+// the writer can never catch the writer stopping short. Not behind QTTEST,
+// for the reason FailIndexQt() in general.cpp gives.
+flag FRangedBoundsForTable(CONST void *pv, int cbElem, int *piMin, int *piMax)
+{
+  int i;
+
+  for (i = 0; i < (int)(sizeof(rgswranged)/sizeof(SWITCHRANGED)); i++)
+    if (rgswranged[i].pvBase == pv && rgswranged[i].cbStride == cbElem) {
+      *piMin = rgswranged[i].iMin;
+      *piMax = rgswranged[i].iMax;
+      return fTrue;
+    }
+  return fFalse;
+}
+
 static int NProcessSwitchRanged(CONST SWITCHRANGED *psr, int argc,
   char **argv)
 {
@@ -669,7 +688,7 @@ static int NSwYE(CONST char *szSwitch, PARSEIN *pin)
   if (FErrorArgc("YE", pin->argc, 17))
     return tcError;
   i = NParseSz(pin->argv[1], pmObject);
-  if (FErrorValN("YE", !FHelio(i), i, 1))
+  if (FErrorValN("YE", !FObjOE(i), i, 1))
     return tcError;
   oe.sma = RFromSz(pin->argv[2]);
   oe.ec0 = atof(pin->argv[3]);  oe.ec1 = atof(pin->argv[4]);  oe.ec2 = atof(pin->argv[5]);

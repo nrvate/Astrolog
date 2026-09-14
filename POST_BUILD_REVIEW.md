@@ -2341,3 +2341,59 @@ since `v8.00-qt.15` was surveyed and **run**, not only read: 26 found. Verdicts:
   output, the quoting writer (`"`, `'`, both, 300 characters), and the Qt dialogs'
   load-side clamps (by reading). Not run: Solar Fire and Horizons input, the X11
   command line, and the original crash inputs of three older fixes.
+
+
+## Settings the writer dropped, 2026-09-13
+
+An audit compared every table a switch accepts against what
+`FOutputSettings()` writes. Each gap below was re-verified on this tree
+before it was touched: the switch took the value and acted on it, and the
+file "Save Program Settings" wrote did not carry it. Every fix has a net,
+and every net was sabotaged back to the old behaviour and seen to fail.
+The sabotage evidence is quoted from the failing run.
+
+| # | Setting | Gap | Fix | Net, and the failure its sabotage produced |
+|---|---|---|---|---|
+| W-1 | `-YjA` aspect influence | written 1-18 of `cAspect` = 24; and `%4.1f` wrote the 0.05 of aspects 19-24 as `0.1`, and a value of 10 or more with no space before it | a `-YjA 19 24` line; `PrintRExact()` falls back to as many digits as round-trip and always separates | `settings-arrays`, bound now from the registry: *"rAspInf[19] did not survive a save and reload (was 0.0500, back as 0.1000)"*; fixture `-YjA 20 20 12.5`: *"leg 3 MISS: ^-YjA 19 24 +0\.05 12\.5 0\.05"* (the line saved as `0.0512.50.05...` and would not load back) |
+| W-2 | `-Y7O` object Rays | 11-33 and 52-83 skipped; the cusps have non-zero defaults | the whole 0..`oNorm` span, in six lines grouped like `-Yj` | *"rgObjRay[23] did not survive a save and reload (was 4, back as 5)"* |
+| W-3 | `-YJ`/`-YJ0` rulerships, exaltations | objects 1-10 only; Earth and 11-51 have defaults. `-YJ Chi Ari Tau` was live and lost | objects 0..`oNorm` wherever they differ from the compiled default (`ruler1Def` and kin, copied by `InitProgram()`); the planets always, by name as before, others by number with the name in a comment | *"ruler1[0] did not survive a save and reload (was 10, back as 11)"* |
+| W-4 | `-YJ7`/`-YJ70` esoteric, hierarchical | never written | the same, where they differ | *"rgObjEso1[11] did not survive a save and reload (was 1, back as 0)"* |
+| W-5 | `-YS` diameters | never written | written where different from `rObjDiamDef` | *"rObjDiam[0] did not survive a save and reload (was 12742.5168, back as 12743.5168)"* |
+| W-6 | `-YE` orbital elements | never written | written where different from `rgoeDef`, one line per row, exact digits | *"rgoe[0] did not survive a save and reload (was 358.9758, back as 359.9758)"* |
+| W-7 | `-YAD` aspect names | never written | a new "CHANGED ASPECT NAMES" section; an unchanged part is written `""`, which the switch reads as the default | `settings-strings`: *"szAspectDisp (-YAD)[1] did not survive a save and reload"*, and the same for the abbreviation and glyph |
+| W-8 | `-YI`, `-YIa`, `-YIv`, `-YIC`, `-YIA`, `-YIA0` | never written | a new "CHANGED INTERPRETATION TEXT" section, against the existing `sz*Def` tables | *"szMindPart (-YI)[0] did not survive..."* and one line for each of the other five |
+| W-9 | `-YE` reader | **out of bounds.** It checked `FHelio()`, which Vulcan passes (its index is Vesta's row) and so does every dwarf, moon and body center: `-YE Hyg ...` wrote `rgoe[22]` of 22 | `FObjOE()` in extern.h, used by the reader and the writer | `settings-arrays`: *"\"-YE\" refuses Vulcan..."*, *"\"-YE\" refuses Hygiea, whose index is past the end of rgoe[]"*, *"and neither of them wrote to rgoe[]"* |
+
+Nothing was excluded: every table had either a compiled default to compare
+against (`sz*Def`, `szAspectName`) or could be given one for the price of a
+copy at startup, so no default save grows by a setting line it does not
+need. A default save does gain `-YjA 19 24`, three `-Y7O` lines and three
+"[No ... different from defaults]" sections; `astrolog.as` carries the two
+value lines, which `tools/defaults_audit.py` checks against `data.cpp`, and
+not the empty sections, as it already omits the aspect angle and forced
+position ones.
+
+**Why the sweep had never caught this.** The `settings-arrays` table's
+bounds were "transcribed from `FOutputSettings()`" -- so it asked exactly
+what the writer wrote, and a writer stopping short agreed with it by
+construction. Bounds now come from the reader: `iHiRegistry` rows take
+theirs from `rgswranged[]` through `FRangedBoundsForTable()` in switch.cpp,
+and the rest name the handler check they copy (`FNorm()` in
+`NSwRulershipCore()`, `NSwYS()`; `FObjOE()` in `NSwYE()`). New rows:
+`rgObjRay`, `rgSignRay`, `kRayA`, `rgObjEso1/2`, `rgObjHie1/2`, `rObjDiam`,
+`rgoe`. The table written only where it differs is filled off its default
+first, as `force[]` and `rAspAngle[]` already were.
+
+**Why the fixture had never caught it either.** It set one index near the
+start of each span. `tools/settings-fixture.as` now also sets the last
+index each ranged switch's registry row accepts, and
+`tools/fixture_coverage_audit.py` requires that, evaluating `iMax` from
+astrolog.h. Sabotaged by deleting `-YjA 24 24` from a copy: *"-YjA: no
+fixture line reaches its last index, 24"*.
+
+**Left open, on purpose, with a date:** `-YkA` 19-24 is the same shape and
+is being fixed on its own branch; this one does not touch its writer lines,
+its `astrolog.as` lines or its `settings-arrays` row. The fixture audit
+excuses it by name in `SPAN_EXEMPT` and fails the day the fixture reaches
+aspect 24 (checked by adding that line to a copy: *"-YkA: reaches its last
+index now; drop its SPAN_EXEMPT entry"*).

@@ -73,6 +73,7 @@ extern int NParseCommandLine P((char *, char **));
 extern int NPromptSwitches P((char *, int, char *[MAXSWITCHES]));
 extern flag FProcessSwitches P((int, char **, PARSECTX *));
 extern flag FSwitchOverconsumed P((int, int));
+extern flag FRangedBoundsForTable P((CONST void *, int, int *, int *));
 extern flag FSwitchRegistryRow P((int, CONST char **, int *, int *));
 extern flag FSwitchTildeRow P((int, CONST char **, char ***));
 extern int NSuboptFlags P((void));
@@ -260,7 +261,7 @@ extern CONST char *szAspectDisp[cAspect2+1],
 
 extern CONST real rObjDist[oNorm+1], rObjYear[oNorm+1], rObjDay[oNorm+1],
   rObjMass[oPlu+1], rObjAxis[oPlu+1];
-extern real rObjDiam[oNorm+1];
+extern real rObjDiam[oNorm+1], rObjDiamDef[oNorm+1];
 extern CONST int cSatellite[oPlu+1], nMooMap[6][8], rgobjHasMoons[cHasMoons];
 
 extern CONST AI ai[cPart];
@@ -272,6 +273,8 @@ extern CONST KV rgbbmp[cColor2];
 #endif
 
 extern TBLOBJ rgObjRay, rgObjEso1, rgObjEso2, rgObjHie1, rgObjHie2;
+extern TBLOBJ ruler1Def, ruler2Def, exaltDef, rgObjEso1Def, rgObjEso2Def,
+  rgObjHie1Def, rgObjHie2Def;
 extern TBLSIG rgSignRay, rgSignEso1, rgSignEso2, rgSignHie1, rgSignHie2;
 extern TBLSIGRAY rgSignRay2;
 extern TBLRAY kRayA;
@@ -579,7 +582,13 @@ extern void SwissRevJul P((real, int, int *, int *, int *, real *));
 #define IoeFromObj(obj) \
   ((obj) < oMoo ? 0 : ((obj) <= cPlanet ? (obj)-2 : (obj)-uranLo+cPlanet-2))
 
-extern OE rgoe[oVes+cUran-2];
+// The objects with a row of their own in rgoe[]: FHelio() alone is not
+// the test, since it also passes Vulcan, whose index lands on Vesta's row,
+// and every dwarf, moon and body center, whose index runs past the end of
+// the table. "-YE" checked only FHelio() and so wrote out of bounds.
+#define FObjOE(obj) (FHelio(obj) && (obj) <= uranHi && (obj) != oVul)
+
+extern OE rgoe[oVes+cUran-2], rgoeDef[oVes+cUran-2];
 
 extern long MatrixMdyToJulian P((int, int, int));
 extern void MatrixJulianToMdy P((real, int *, int *, int *));

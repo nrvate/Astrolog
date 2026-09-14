@@ -159,3 +159,48 @@
 ; (":YXf #%06x" of gs.nFontAll, io.cpp) while the switch sets one
 ; component at a time through a sub-letter -- YXft, YXfs and so on --
 ; so no single line can set what one line saves. Measured 2026-09-02.
+
+; ---- The last index of every span, 2026-09-13 ----
+; Every line above sets one index near the start of its switch's range, so
+; a writer that stopped short of the END of a span -- "-YjA" at 18 of 24,
+; "-Y7O" skipping 11-33 and 52-83 -- matched every EXPECT here for years.
+; Each ranged switch now also sets the last index its registry row accepts
+; (fixture_coverage_audit.py checks it). "-YkA" is the one missing, and
+; that audit says why.
+-YAo 24 24 1.5          ; EXPECT ^-YAo 19 24 .* 1\.5 +; Very
+-YAm 84 84 7            ; EXPECT ^-YAm 84 84 +7 +;
+-YAd 84 84 2            ; EXPECT ^-YAd 84 84 +2 +;
+-Yj 84 84 3             ; EXPECT ^-Yj 84 84 +3 +;
+-YjT 84 84 61           ; EXPECT ^-YjT 84 84 +61 +;
+-YjC 12 12 7            ; EXPECT ^-YjC 1 12 .* 7 +; Houses
+-YjA 24 24 0.35         ; EXPECT ^-YjA 19 24 .* 0\.35 +; Very
+; A value of 10 or more, which "%4.1f" wrote with no space before it.
+-YjA 20 20 12.5         ; EXPECT ^-YjA 19 24 +0\.05 12\.5 0\.05
+-YR 133 133 0           ; EXPECT ^-YR 109 133 .* 1 0 +; Fixed
+-YRT 133 133 0          ; EXPECT ^-YRT 109 133 .* 1 0 +; Fixed
+-Y7O 83 83 4            ; EXPECT ^-Y7O 52 83 .* 0 4 +; Moons
+-Y7O 25 25 7            ; EXPECT ^-Y7O 22 33 +1 4 2 7 1
+-Y7C 12 12 3            ; EXPECT ^-Y7C 1 12 .* 5 3 +; Signs
+-YkO 84 84 Pink         ; EXPECT ^-YkO 84 84 +Pin
+-Yk0 7 7 Sky            ; EXPECT ^-Yk0 1 7 .* Blu Sky +; Rainbow
+-Yk7 7 7 Sky            ; EXPECT ^-Yk7 1 7 .* Ros Sky +; Ray
+-Yk 8 8 Sky             ; EXPECT ^-Yk  0 8 .* DkB Sky +; Main
+-YAa 24 24 170.5        ; EXPECT ^-Aa 24 170\.5
+
+; ---- Settings the writer dropped, 2026-09-13 ----
+; Each was accepted and acted on, and lost on the next save. The rulerships
+; of any object but the planets, and the rest, are written where they differ
+; from the compiled default, which is what these sentinels are.
+-YJ Chi Ari Tau         ; EXPECT ^-YJ 11 Ari Tau  ; Chiron
+-YJ0 Chi Gem            ; EXPECT ^-YJ0 11 Gem  ; Chiron
+-YJ7 Chi Ari 0          ; EXPECT ^-YJ7 11 Ari 0  ; Chiron
+-YJ70 Chi Leo 0         ; EXPECT ^-YJ70 11 Leo 0  ; Chiron
+-YS Chi 999.125         ; EXPECT ^-YS 11 999\.125
+-YE Chi 13.5 .3 0 0 7 0 0 339 0 0 209 1 0 34 713 0.25  ; EXPECT ^-YE 11 13\.5 0\.3 0 0 7 0 0 339 0 0 209 1 0 34 713 0\.25
+-YAD 1 "Conjoin" "" ""  ; EXPECT ^-YAD 1 "Conjoin" "" ""
+-YI 5 "a fixture mind"  ; EXPECT ^-YI 5 "a fixture mind"
+-YIa 3 "fixture curious"      ; EXPECT ^-YIa 3 "fixture curious"
+-YIv 4 "fixture desire"       ; EXPECT ^-YIv 4 "fixture desire"
+-YIC 6 "fixture area"         ; EXPECT ^-YIC 6 "fixture area"
+-YIA 2 "fixture clash"        ; EXPECT ^-YIA 2 "fixture clash"
+-YIA0 2 "fixture therefore"   ; EXPECT ^-YIA0 2 "fixture therefore"

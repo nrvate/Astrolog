@@ -1532,6 +1532,62 @@ flag FOutputDaedalusStar()
 
 #define PrintFSz() PrintF(sz)
 #define PrintRSz(r, n) FormatR(S(sz), r, n); PrintF(sz)
+
+// Print a real for a settings file, with a space before it: in szFmt when
+// that reads back as the same value, so the compiled defaults keep the
+// columns they have always had, and otherwise in as many digits as it takes.
+// A lossy format is a lost setting: "%4.1f" wrote the 0.05 influence of
+// aspects 19-24 as "0.1", and a value of 10 or more, having no space in
+// front of it, ran into the value before it.
+static void PrintRExact(FILE *file, CONST char *szFmt, real r)
+{
+  char sz[cchSzDef];
+  int n;
+
+  sprintf2(S(sz), szFmt, r);
+  for (n = 6; atof(sz) != r && n <= 17; n++)
+    sprintf2(S(sz), "%.*g", n, r);
+  if (sz[0] != ' ')
+    PrintF(" ");
+  PrintF(sz);
+}
+
+// The head of one span line, "-YR 22 33" and the like, padded to cch
+// characters so the values after it keep their columns.
+static void PrintSpanHead(FILE *file, CONST char *szSw, int iLo, int iHi,
+  int cch)
+{
+  char sz[cchSzDef];
+
+  sprintf2(S(sz), "%s %d %d", szSw, iLo, iHi);
+  fprintf(file, "%-*s", cch, sz);
+}
+
+// One rulership line: "-YJ", "-YJ0", "-YJ7" or "-YJ70", an object, and one
+// or two signs. The planets are written by name, as they always have been;
+// any other object by number, since a three letter prefix of its name need
+// not be unique, with the name in a comment.
+static void PrintRulerLine(FILE *file, CONST char *szSw, int obj, int sign1,
+  int sign2, flag fTwo)
+{
+  flag fName = FBetween(obj, 1, oPlu);
+
+  if (fName)
+    fprintf(file, "%s %.3s", szSw, szObjName[obj]);
+  else
+    fprintf(file, "%s %d", szSw, obj);
+  // Both signs need the "0" guard: szSignName[0] is the empty string, so
+  // an object with no primary ruler wrote "-YJ Ura  0" -- two arguments
+  // where the switch takes three, and the file would not load back.
+  // Reachable from a shipped macro: astrolog.as's own M0 41 contains
+  // "-YJ Ura 0 0".
+  fprintf(file, " %.3s", sign1 <= 0 ? "0" : szSignName[sign1]);
+  if (fTwo)
+    fprintf(file, " %.3s", sign2 <= 0 ? "0" : szSignName[sign2]);
+  if (!fName)
+    fprintf(file, "  ; %s", szObjName[obj]);
+  fprintf(file, "\n");
+}
 CONST char *szDegForm = "zhdn";
 CONST char *szTypSwiss[] = {"", "b", "O", "m", "j", "A"};
 CONST char *szPntSwiss[] = {"", "n", "s", "p", "a"};
@@ -2159,6 +2215,29 @@ flag FOutputSettings()
     PrintF("; [No aspect angles are different from defaults]\n");
   PrintF("\n\n");
 
+  // An aspect's display name, abbreviation or glyph description, "-YAD".
+  // Only the changed ones; an unchanged part is written as "", which the
+  // switch reads as "keep the default".
+  PrintF("; CHANGED ASPECT NAMES:\n\n");
+  fAny = fFalse;
+  for (i = 1; i <= cAspect2; i++) {
+    flag fName = !FEqSz(szAspectDisp[i], szAspectName[i]),
+      fAbbrev = !FEqSz(szAspectAbbrevDisp[i], szAspectAbbrev[i]),
+      fGlyph = !FEqSz(szAspectGlyphDisp[i], szAspectGlyph[i]);
+    if (!fName && !fAbbrev && !fGlyph)
+      continue;
+    fAny = fTrue;
+    sprintf2(S(sz), "-YAD %d ", i); PrintFSz();
+    PrintQuotedParamSz(file, fName ? szAspectDisp[i] : ""); PrintF(" ");
+    PrintQuotedParamSz(file, fAbbrev ? szAspectAbbrevDisp[i] : "");
+    PrintF(" ");
+    PrintQuotedParamSz(file, fGlyph ? szAspectGlyphDisp[i] : "");
+    PrintF("\n");
+  }
+  if (!fAny)
+    PrintF("; [No aspect names are different from defaults]\n");
+  PrintF("\n\n");
+
   PrintF("; DEFAULT MAX PLANET ASPECT ORBS:\n\n-YAm 0 10   ");
   for (i = 0; i <= 10; i++) { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("      ; Planets\n-YAm 11 21  ");
@@ -2218,15 +2297,22 @@ flag FOutputSettings()
     { sprintf2(S(sz), " %.0f", rHouseInf[i]); PrintFSz(); }
   PrintF("  ; Houses\n\n-YjA 1 5   ");
 
+  // Every aspect the Aspect Settings dialog and "-YjA" reach, 1 to
+  // cAspect. The writer stopped at 18, so the influence of the six very
+  // obscure aspects was lost on every save.
   for (i = 1; i <= 5; i++)
-    { sprintf2(S(sz), "%4.1f", rAspInf[ASPT(i)]); PrintFSz(); }
+    PrintRExact(file, "%4.1f", rAspInf[ASPT(i)]);
   PrintF("          ; Major aspects\n-YjA 6 11  ");
   for (i = 6; i <= 11; i++)
-    { sprintf2(S(sz), "%4.1f", rAspInf[ASPT(i)]); PrintFSz(); }
+    PrintRExact(file, "%4.1f", rAspInf[ASPT(i)]);
   PrintF("      ; Minor aspects\n-YjA 12 18 ");
   for (i = 12; i <= 18; i++)
-    { sprintf2(S(sz), "%4.1f", rAspInf[ASPT(i)]); PrintFSz(); }
-  PrintF("  ; Obscure aspects\n\n");
+    PrintRExact(file, "%4.1f", rAspInf[ASPT(i)]);
+  PrintF("  ; Obscure aspects\n");
+  PrintSpanHead(file, "-YjA", 19, cAspect, 11);
+  for (i = 19; i <= cAspect; i++)
+    PrintRExact(file, "%4.1f", rAspInf[ASPT(i)]);
+  PrintF("  ; Very obscure aspects\n\n");
 
   PrintF("; DEFAULT TRANSIT INFLUENCES:\n\n-YjT 0 10  ");
   for (i = 0; i <= 10; i++)
@@ -2260,36 +2346,67 @@ flag FOutputSettings()
   PrintF(" ; In Esoteric, Hierarchical, Ray ruling (signs, houses)\n\n\n");
 
   PrintF("; DEFAULT RULERSHIPS & EXALTATIONS:\n\n");
-  // Both rulerships need the "0" guard, not just the second. szSignName[0]
-  // is the empty string, so an object with no primary ruler wrote
-  // "-YJ Ura  0" -- two arguments where the switch takes three, and the
-  // file this program had just saved would not load back:
-  // "Astrolog: Too few parameters to switch -YJ (2 given, 3 required)",
-  // a hard startup failure. Reachable from a shipped macro: astrolog.as's
-  // own M0 41 contains "-YJ Ura 0 0".
-  for (i = 1; i <= 10; i++)
-    { sprintf2(S(sz), "-YJ %.3s %.3s %.3s\n", szObjName[i],
-    ruler1[OBJT(i)] <= 0 ? "0" : szSignName[ruler1[OBJT(i)]],
-    ruler2[OBJT(i)] <= 0 ? "0" : szSignName[ruler2[OBJT(i)]]); PrintFSz(); }
+  // The planets always, and any other object the switches accept (0 to
+  // oNorm) where it differs from the compiled default. Only the planets
+  // were ever written, so "-YJ Chi Ari Tau" changed Chiron's ruler for the
+  // session and lost it on the next save; "-YJ7" and "-YJ70" were not
+  // written at all.
+  for (i = 0; i <= oNorm; i++)
+    if (FBetween(i, 1, oPlu) || ruler1[OBJT(i)] != ruler1Def[OBJT(i)] ||
+      ruler2[OBJT(i)] != ruler2Def[OBJT(i)])
+      PrintRulerLine(file, "-YJ", i, ruler1[OBJT(i)], ruler2[OBJT(i)], fTrue);
   PrintF("\n");
-  for (i = 1; i <= 10; i++)
-    { sprintf2(S(sz), "-YJ0 %.3s %.3s\n", szObjName[i],
-    exalt[OBJT(i)] <= 0 ? "0" : szSignName[exalt[OBJT(i)]]); PrintFSz(); }
+  for (i = 0; i <= oNorm; i++)
+    if (FBetween(i, 1, oPlu) || exalt[OBJT(i)] != exaltDef[OBJT(i)])
+      PrintRulerLine(file, "-YJ0", i, exalt[OBJT(i)], 0, fFalse);
+  fAny = fFalse;
+  for (i = 0; i <= oNorm; i++)
+    if (rgObjEso1[OBJT(i)] != rgObjEso1Def[OBJT(i)] ||
+      rgObjEso2[OBJT(i)] != rgObjEso2Def[OBJT(i)]) {
+      if (!fAny)
+        PrintF("\n");
+      fAny = fTrue;
+      PrintRulerLine(file, "-YJ7", i, rgObjEso1[OBJT(i)], rgObjEso2[OBJT(i)],
+        fTrue);
+    }
+  fAny = fFalse;
+  for (i = 0; i <= oNorm; i++)
+    if (rgObjHie1[OBJT(i)] != rgObjHie1Def[OBJT(i)] ||
+      rgObjHie2[OBJT(i)] != rgObjHie2Def[OBJT(i)]) {
+      if (!fAny)
+        PrintF("\n");
+      fAny = fTrue;
+      PrintRulerLine(file, "-YJ70", i, rgObjHie1[OBJT(i)],
+        rgObjHie2[OBJT(i)], fTrue);
+    }
   PrintF("\n\n");
 
   PrintF("; DEFAULT RAYS:\n\n-Y7C 1 12  ");
   for (i = 1; i <= cSign; i++)
     { sprintf2(S(sz), " %d", rgSignRay[SIGT(i)]); PrintFSz(); }
-  PrintF("  ; Signs\n-Y7O 0 10  ");
-  for (i = 0; i <= 10; i++)
-    { sprintf2(S(sz), " %d", rgObjRay[OBJT(i)]); PrintFSz(); }
-  PrintF("             ; Planets\n-Y7O 34 42 ");
-  for (i = 34; i <= 42; i++)
-    { sprintf2(S(sz), " %d", rgObjRay[OBJT(i)]); PrintFSz(); }
-  PrintF("                 ; Uranians\n-Y7O 43 51 ");
-  for (i = 43; i <= 51; i++)
-    { sprintf2(S(sz), " %d", rgObjRay[OBJT(i)]); PrintFSz(); }
-  PrintF("                 ; Dwarfs\n\n\n");
+  PrintF("  ; Signs\n");
+  // The whole span "-Y7O" accepts, 0 to oNorm. The minor planets, the
+  // cusps (whose defaults are not zero), the moons and the body centers
+  // were skipped, so a Ray set on any of them was lost on save.
+  {
+    static CONST struct { int iLo, iHi; CONST char *szPad, *szName; } rgspan[] =
+      {{0, oMain, "             ", "Planets"},
+      {oMain+1, oCore, "             ", "Minor planets"},
+      {cuspLo, cuspHi, "           ", "Cusp objects"},
+      {uranLo, uranHi, "                 ", "Uranians"},
+      {dwarfLo, dwarfHi, "                 ", "Dwarfs"},
+      {moonsLo, oNorm, "  ", "Moons and body centers"}};
+    int k;
+
+    for (k = 0; k < (int)(sizeof(rgspan)/sizeof(rgspan[0])); k++) {
+      PrintSpanHead(file, "-Y7O", rgspan[k].iLo, rgspan[k].iHi, 11);
+      for (i = rgspan[k].iLo; i <= rgspan[k].iHi; i++)
+        { sprintf2(S(sz), " %d", rgObjRay[OBJT(i)]); PrintFSz(); }
+      sprintf2(S(sz), "%s; %s\n", rgspan[k].szPad, rgspan[k].szName);
+      PrintFSz();
+    }
+  }
+  PrintF("\n\n");
 
   PrintF("; DEFAULT COLORS:\n; Black, White, Gray, LtGray, "
     "Red, Maize, Yellow, Green, Cyan, Blue, Purple,\n"
@@ -2409,6 +2526,86 @@ flag FOutputSettings()
   }
   if (!fAny)
     PrintF("; [No star objects are different from defaults]\n");
+  PrintF("\n\n");
+#endif
+
+  // An object's diameter ("-YS") and, for the bodies the Matrix formulas
+  // compute, its orbital elements ("-YE"). Only those that differ from the
+  // compiled defaults, which InitProgram() keeps.
+  PrintF("; CHANGED OBJECT DIAMETERS AND ORBITS:\n\n");
+  fAny = fFalse;
+  for (i = 0; i <= oNorm; i++) {
+    if (rObjDiam[i] == rObjDiamDef[i])
+      continue;
+    fAny = fTrue;
+    sprintf2(S(sz), "-YS %d", i); PrintFSz();
+    PrintRExact(file, "%.10g", rObjDiam[i]);
+    sprintf2(S(sz), "  ; %s\n", szObjName[i]); PrintFSz();
+  }
+#ifdef MATRIX
+  for (i = 0; i <= oNorm; i++) {
+    CONST OE *poe;
+    int k, cr = (int)(sizeof(OE)/sizeof(real));
+
+    // Earth and the Sun share a row, which Earth writes.
+    if (!FObjOE(i) || (i > 0 && IoeFromObj(i) == IoeFromObj(i-1)))
+      continue;
+    poe = &rgoe[IoeFromObj(i)];
+    for (k = 0; k < cr; k++)
+      if (((CONST real *)poe)[k] !=
+        ((CONST real *)&rgoeDef[IoeFromObj(i)])[k])
+        break;
+    if (k >= cr)
+      continue;
+    fAny = fTrue;
+    // In the switch's argument order, which is not the structure's.
+    sprintf2(S(sz), "-YE %d", i); PrintFSz();
+    PrintRExact(file, "%.10g", poe->sma);
+    PrintRExact(file, "%.10g", poe->ec0); PrintRExact(file, "%.10g", poe->ec1);
+    PrintRExact(file, "%.10g", poe->ec2);
+    PrintRExact(file, "%.10g", poe->in0); PrintRExact(file, "%.10g", poe->in1);
+    PrintRExact(file, "%.10g", poe->in2);
+    PrintRExact(file, "%.10g", poe->ap0); PrintRExact(file, "%.10g", poe->ap1);
+    PrintRExact(file, "%.10g", poe->ap2);
+    PrintRExact(file, "%.10g", poe->an0); PrintRExact(file, "%.10g", poe->an1);
+    PrintRExact(file, "%.10g", poe->an2);
+    PrintRExact(file, "%.10g", poe->ma0); PrintRExact(file, "%.10g", poe->ma1);
+    PrintRExact(file, "%.10g", poe->ma2);
+    sprintf2(S(sz), "  ; %s\n", szObjName[i]); PrintFSz();
+  }
+#endif
+  if (!fAny)
+    PrintF("; [No object diameters or orbits are different from defaults]\n");
+  PrintF("\n\n");
+
+#ifdef INTERPRET
+  // The interpretation phrases, "-YI" and its five siblings. Only those
+  // that differ from the compiled text.
+  PrintF("; CHANGED INTERPRETATION TEXT:\n\n");
+  fAny = fFalse;
+  {
+    static CONST struct {
+      CONST char *szSw, **rgsz, **rgszDef;
+      int iLo, iHi;
+    } rgyi[] = {{"-YI",   szMindPart,  szMindPartDef,  0, cObj},
+      {"-YIa",  szDesc,      szDescDef,      1, cSign},
+      {"-YIv",  szDesire,    szDesireDef,    1, cSign},
+      {"-YIC",  szLifeArea,  szLifeAreaDef,  1, cSign},
+      {"-YIA",  szInteract,  szInteractDef,  1, cAspect},
+      {"-YIA0", szTherefore, szThereforeDef, 1, cAspect}};
+    int k;
+
+    for (k = 0; k < (int)(sizeof(rgyi)/sizeof(rgyi[0])); k++)
+      for (i = rgyi[k].iLo; i <= rgyi[k].iHi; i++) {
+        if (FEqSz(SzSet(rgyi[k].rgsz[i]), SzSet(rgyi[k].rgszDef[i])))
+          continue;
+        fAny = fTrue;
+        sprintf2(S(sz), "%s %d ", rgyi[k].szSw, i); PrintFSz();
+        PrintQuotedParamSz(file, rgyi[k].rgsz[i]); PrintF("\n");
+      }
+  }
+  if (!fAny)
+    PrintF("; [No interpretation text is different from defaults]\n");
   PrintF("\n\n");
 #endif
 

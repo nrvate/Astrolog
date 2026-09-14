@@ -528,6 +528,14 @@ TBLOBJ rgObjHie2 = {0,
   0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+// The compiled defaults of the object-keyed rulership tables above, copied
+// by InitProgram() before any switch is read. FOutputSettings() writes a
+// rulership only where it differs from these -- the planets excepted, which
+// it always writes -- so a default save stays the size it was, and a
+// changed ruler for any object the switch accepts is not lost.
+TBLOBJ ruler1Def, ruler2Def, exaltDef, rgObjEso1Def, rgObjEso2Def,
+  rgObjHie1Def, rgObjHie2Def;
 TBLSIG rgSignEso1 = {-1,
   oMer, oVul, oVen, oNep, oSun, oMoo, oUra, oMar, oEar, oSat, oJup, oPlu};
 TBLSIG rgSignEso2 = {-1,
@@ -753,6 +761,7 @@ real rObjDiam[oNorm+1] = {12742.0168, 1392000.0, 3475.0,
   1353.0*2.0, 209.0*2.0, 170.0*2.0,
   605.0*2.0, 39.0*2.0, 38.0*2.0, 13.0*2.0, 11.0*2.0,
   139822.0, 116464.0, 50724.0, 49244.0, 2376.6};  // Units: km
+real rObjDiamDef[oNorm+1];  // Compiled rObjDiam[], as ruler1Def[] is.
 CONST real rObjDay[oNorm+1] = {24.0, 30.0*24.0, 27.322*24.0,
   58.65*24.0, 243.01*24.0, 24.6229, 9.841, 10.233, 17.9, 19.2, 6.3872*24.0,
   5.918, 9.074170, 7.8132, 7.210, 5.34212766, 0.0, 0.0, 0.0,

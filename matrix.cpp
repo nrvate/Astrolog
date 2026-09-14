@@ -136,6 +136,7 @@ OE rgoe[oVes+cUran-2] = {
 {55.9826, 54.2986, 0,0,0,0,77.445895,0,0,0,0,0,0,0,0,0}, // Vulkanus
 {165.3595,48.6486, 0,0,0,0,83.493733,0,0,0,0,0,0,0,0,0}  // Poseidon
 };
+OE rgoeDef[oVes+cUran-2];  // Compiled rgoe[], copied by InitProgram().
 
 CONST real rStarBrightMatrix[cStar+1] = {0,
  -1.46,-0.72,-0.01,-0.04, 0.03, 0.08, 0.12, 0.38, 0.50, 0.46,

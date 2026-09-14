@@ -41,7 +41,16 @@ EXPECT. Measured against the real output rather than a regex over source,
 which is what made it tractable -- 38 uncovered, now 0 with two measured
 exemptions. Work log item 172.
 
-Exit 0 when every non-"~" ranged row is in the fixture, 1 otherwise.
+AND THE END OF EVERY SPAN, since 2026-09-13. A fixture line that sets one
+index near the start of a range says nothing about a writer that stops
+before its end, and three did: "-YjA" was written to 18 of 24, "-Y7O" left
+out 11-33 and 52-83. Every row must also have a fixture line whose index
+range covers the row's iMax, the last index the READER accepts (evaluated
+from astrolog.h's constants the way defaults_audit.py does). One row is
+excused, below, with its reason; an excuse that is no longer needed fails.
+
+Exit 0 when every non-"~" ranged row is in the fixture and reaches its last
+index, 1 otherwise.
 """
 
 import os
@@ -49,6 +58,15 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, 'tools'))
+from defaults_audit import build_symbols  # noqa: E402
+
+# Rows whose last index the fixture cannot assert yet, each with the reason.
+# The audit fails when one of these is covered after all: drop the entry.
+SPAN_EXEMPT = {
+    'YkA': 'the writer stops at aspect 18, so a sentinel at 24 would fail '
+           'leg 3; that gap is fixed on its own branch, which drops this',
+}
 
 
 def main():
@@ -67,6 +85,36 @@ def main():
 
     covered = set(re.findall(r'^\s*[-:=_]([A-Za-z0-9]+)', fx, re.M))
     missing = [r for r in want if r not in covered]
+
+    # The span leg: some fixture line's index range covers the row's iMax.
+    syms = build_symbols(open(os.path.join(ROOT, 'astrolog.h')).read() +
+                         '\n' + open(os.path.join(ROOT, 'extern.h')).read())
+    spans = {}
+    for name, lo, hi in re.findall(
+            r'^\s*[-:=_]([A-Za-z0-9]+)\s+(\d+)\s+(\d+)\b', fx, re.M):
+        spans.setdefault(name, []).append((int(lo), int(hi)))
+    short, stale = [], []
+    for name, expr in re.findall(
+            r'\{"([^"~][^"]*)",\s*"[^"]*",\s*\w+,\s*\w+,\s*([^,]+),',
+            m.group(1)):
+        e = re.sub(r'\b([a-zA-Z_]\w*)\b',
+                   lambda g: str(syms.get(g.group(1), g.group(1))), expr)
+        imax = int(eval(e, {"__builtins__": {}}, {}))
+        hit = any(lo <= imax <= hi for lo, hi in spans.get(name, []))
+        if name in SPAN_EXEMPT:
+            if hit:
+                stale.append(name)
+            continue
+        if not hit:
+            short.append((name, imax))
+    if short or stale:
+        for name, imax in short:
+            print('  -%s: no fixture line reaches its last index, %d'
+                  % (name, imax))
+        for name in stale:
+            print('  -%s: reaches its last index now; drop its SPAN_EXEMPT '
+                  'entry ("%s")' % (name, SPAN_EXEMPT[name]))
+        return 1
 
     if missing:
         print('ranged settings switches with no fixture line (%d of %d):'

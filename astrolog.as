@@ -157,6 +157,7 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 -YjA 1 5    1.0 0.8 0.8 0.6 0.6          ; Major aspects
 -YjA 6 11   0.4 0.4 0.2 0.2 0.2 0.2      ; Minor aspects
 -YjA 12 18  0.1 0.1 0.1 0.1 0.1 0.1 0.1  ; Obscure aspects
+-YjA 19 24  0.05 0.05 0.05 0.05 0.05 0.05  ; Very obscure aspects
 
 ; DEFAULT TRANSIT INFLUENCES:
 
@@ -199,8 +200,11 @@ _pc           ; Solar arc recalc based on MC   [=pc recalculates]
 
 -Y7C 1 12   17 4 2 37 15 26 3 4 456 137 5 26  ; Signs
 -Y7O 0 10   3 2 4 4 5 6 2 3 7 6 1             ; Planets
+-Y7O 11 21  0 0 0 0 0 0 0 0 0 0 0             ; Minor planets
+-Y7O 22 33  1 4 2 3 1 2 3 4 5 7 5 6           ; Cusp objects
 -Y7O 34 42  1 0 0 0 0 0 0 0 0                 ; Uranians
 -Y7O 43 51  0 0 3 2 1 4 7 6 5                 ; Dwarfs
+-Y7O 52 83  0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0  ; Moons and body centers
 
 
 ; DEFAULT COLORS:

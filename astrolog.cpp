@@ -601,6 +601,15 @@ void InitProgram()
   is.S = stdout;
   ClearB((pbyte)szStarCustom, sizeof(szStarCustom));
   InitRestrictions(fTrue);
+  // Before any switch, so these hold the compiled defaults the settings
+  // writer compares against (data.cpp, by ruler1Def).
+  ruler1Def = ruler1; ruler2Def = ruler2; exaltDef = exalt;
+  rgObjEso1Def = rgObjEso1; rgObjEso2Def = rgObjEso2;
+  rgObjHie1Def = rgObjHie1; rgObjHie2Def = rgObjHie2;
+  CopyRgb((pbyte)rObjDiam, (pbyte)rObjDiamDef, sizeof(rObjDiam));
+#ifdef MATRIX
+  CopyRgb((pbyte)rgoe, (pbyte)rgoeDef, sizeof(rgoe));
+#endif
   for (i = 0; i < objMax; i++) {
     szObjDisp[i] = szObjName[i];
     rgobjList[i] = i;
