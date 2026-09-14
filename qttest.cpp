@@ -1316,6 +1316,37 @@ static void TestGenerateGifQt()
       "which writes the very same frames (%d)", (int)gd.rgim.size());
     ga.nCount = 5;
 
+    // A file that cannot be written says so once. FGenerateGif() warns,
+    // and the dialog used to put up a box of its own after it.
+    {
+      QTimer tClose;
+      QVector<QString> rgstrBox;
+      char szBad[cchSzMax];
+      flag fPopupSav = FNoPopupQt();
+
+      sprintf2(S(szBad), "%s/astrolog-qt-no-such-dir-%d/a.gif",
+        QDir::tempPath().toLocal8Bit().constData(),
+        (int)QCoreApplication::applicationPid());
+      QObject::connect(&tClose, &QTimer::timeout, [&]() {
+        QWidget *pw = QApplication::activeModalWidget();
+        if (pw == NULL)
+          return;
+        QMessageBox *pmb = qobject_cast<QMessageBox *>(pw);
+        rgstrBox.append(pmb != NULL ? pmb->text() : pw->windowTitle());
+        pw->close();
+      });
+      SetNoPopupQt(fFalse);
+      tClose.start(50 * nScaleTest);
+      GA gaBad = ga;
+      gaBad.szFile = szBad;
+      flag fWrote = FWriteGifTestQt(&gaBad, 11);
+      tClose.stop();
+      SetNoPopupQt(fPopupSav);
+      Check(!fWrote && rgstrBox.size() == 1, "a GIF that cannot be written "
+        "puts up one box, not two (%d: \"%s\")", (int)rgstrBox.size(),
+        rgstrBox.isEmpty() ? "" : rgstrBox.last().toLocal8Bit().constData());
+    }
+
     // The dialog holds the animation still too: its Start is the moving
     // chart's date as the dialog opened.
     CI ciBefore = ciMain;

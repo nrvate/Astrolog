@@ -1541,7 +1541,7 @@ static flag FWriteGifQt(GA *pga, int cWrite)
   QProgressDialog prog("Writing the animated GIF...", "Cancel", 0, cWrite,
     gi.qwind);
   int grfSav = GrfHoldQt();
-  flag fOk, fCanceled;
+  flag fOk;
 
   prog.setWindowModality(Qt::WindowModal);
   prog.setMinimumDuration(500);
@@ -1550,12 +1550,11 @@ static flag FWriteGifQt(GA *pga, int cWrite)
   SetHoldQt(grfHoldAnim | grfHoldRedraw);
   fOk = FGenerateGif(pga);
   SetHoldQt(grfSav);
-  fCanceled = prog.wasCanceled();
   s_pprogGifQt = NULL;
   prog.reset();
   RedrawQt();
-  if (!fOk && !fCanceled)
-    QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
+  // No box of its own on a failure: FGenerateGif() has already said what
+  // went wrong, and a second box saying it again was one too many.
   return fOk;
 }
 
