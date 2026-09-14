@@ -360,5 +360,6 @@ static CONST SETTINGFIELD rgsetfield[] = {
   {"gs.nTriangles", "", "-YXW", (short)(offsetof(GS, nTriangles)), 'i', 1},
   {"gs.szStarsLin", "", "-YXU", (short)(offsetof(GS, szStarsLin)), 's', 1},
   {"gs.szStarsLnk", "", "-YXU", (short)(offsetof(GS, szStarsLnk)), 's', 1},
+  {"gs.nGifThread", "", "-YXgt", (short)(offsetof(GS, nGifThread)), 'i', 1},
 };
 #define csetfield (int)(sizeof(rgsetfield)/sizeof(SETTINGFIELD))

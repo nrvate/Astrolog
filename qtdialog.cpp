@@ -51,7 +51,7 @@
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QFileDialog>
-#include <QtWidgets/QProgressDialog>
+#include <QtWidgets/QProgressBar>
 #include <QtCore/QTimer>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QScrollArea>
@@ -1479,25 +1479,48 @@ static CONST struct { int nUnit; CONST char *sz; } rggifunitQt[] = {
   {13, "1/1000th Seconds"} };
 #define cgifunitQt ((int)(sizeof(rggifunitQt)/sizeof(rggifunitQt[0])))
 
-static QProgressDialog *s_pprogGifQt = NULL;
+// The box a GIF is written behind: one bar for the charts rendered and one
+// for the frames compressed and written, which trails it -- frames are
+// compressed on worker threads, and rendering runs ahead of them as far as
+// the queue's memory allows, so a short animation fills the first bar before
+// the second has far to go. See FWriteGifFrame() in xdevice.cpp.
+typedef struct {
+  QDialog *pdlg;
+  QProgressBar *rgppb[2];
+  QLabel *rgplabel[2];
+  QElapsedTimer tShown;   // Since the GIF started, for the delayed show.
+  flag fCancel;
+} GIFPROGQT;
+
+static GIFPROGQT *s_pgpGifQt = NULL;
 static QElapsedTimer s_timerGifQt;
 
-// Called after every frame. Moving the bar and pumping events is kept to
-// once every 50 ms, plus the first frame and the last: a frame can take a
-// few milliseconds, and thousands of them each repainting the dialog was
-// a cost of its own. The cancel is still seen within 50 ms.
+// Called on the main thread after every frame renders, and while the last
+// frames are compressed. Moving the bars and pumping events is kept to once
+// every 50 ms, plus the first frame and the end: a frame can take a few
+// milliseconds, and thousands of them each repainting the box was a cost of
+// its own. The box itself waits 120 ms to appear, so a GIF quicker than that
+// never flashes one; the cancel is still seen within 50 ms.
 
-static flag FGifProgressQt(int iFrame, int cFrame)
+static flag FGifProgressQt(int iRender, int iWrite, int cFrame)
 {
-  if (s_pprogGifQt == NULL)
+  GIFPROGQT *pgp = s_pgpGifQt;
+  int rgn[2] = {iRender, iWrite}, i;
+
+  if (pgp == NULL)
     return fTrue;
-  if (iFrame <= 1 || iFrame >= cFrame || s_timerGifQt.elapsed() >= 50) {
-    s_pprogGifQt->setMaximum(cFrame);
-    s_pprogGifQt->setValue(iFrame);
+  if (iRender <= 1 || iWrite >= cFrame || s_timerGifQt.elapsed() >= 50) {
+    for (i = 0; i < 2; i++) {
+      pgp->rgppb[i]->setMaximum(cFrame);
+      pgp->rgppb[i]->setValue(rgn[i]);
+      pgp->rgplabel[i]->setText(QString("%1 of %2").arg(rgn[i]).arg(cFrame));
+    }
+    if (!pgp->pdlg->isVisible() && pgp->tShown.elapsed() >= 120)
+      pgp->pdlg->show();
     QCoreApplication::processEvents();
     s_timerGifQt.start();
   }
-  return !s_pprogGifQt->wasCanceled();
+  return !pgp->fCancel;
 }
 
 // Can the current chart be made into an animated GIF? Only a graphics
@@ -1539,20 +1562,50 @@ static flag FGifDateQt(CONST GIFDATEQT &gd, int *mon, int *day, int *yea,
 
 static flag FWriteGifQt(GA *pga, int cWrite)
 {
-  QProgressDialog prog("Writing the animated GIF...", "Cancel", 0, cWrite,
-    gi.qwind);
-  int grfSav = GrfHoldQt();
+  QDialog dlg(gi.qwind);
+  GIFPROGQT gp;
+  CONST char *rgsz[2] = {"Rendering charts:", "Compressing frames:"};
+  CONST char *rgszName[2] = {"IDGIFRENDER", "IDGIFWRITE"};
+  int grfSav = GrfHoldQt(), i;
   flag fOk;
 
-  prog.setWindowModality(Qt::WindowModal);
-  prog.setMinimumDuration(500);
-  s_pprogGifQt = &prog;
+  dlg.setWindowTitle("Writing Animated GIF");
+  dlg.setObjectName("IDGIFPROGRESS");
+  dlg.setWindowModality(Qt::WindowModal);
+  QVBoxLayout *playout = new QVBoxLayout(&dlg);
+  QGridLayout *pgrid = new QGridLayout();
+  playout->addLayout(pgrid);
+  gp.pdlg = &dlg;
+  for (i = 0; i < 2; i++) {
+    gp.rgppb[i] = new QProgressBar(&dlg);
+    gp.rgppb[i]->setObjectName(rgszName[i]);
+    gp.rgppb[i]->setRange(0, cWrite);
+    gp.rgppb[i]->setValue(0);
+    gp.rgppb[i]->setTextVisible(false);
+    gp.rgppb[i]->setMinimumWidth(240);
+    gp.rgplabel[i] = new QLabel(QString("0 of %1").arg(cWrite), &dlg);
+    gp.rgplabel[i]->setObjectName(QString(rgszName[i]) + "N");
+    pgrid->addWidget(new QLabel(rgsz[i], &dlg), i, 0);
+    pgrid->addWidget(gp.rgppb[i], i, 1);
+    pgrid->addWidget(gp.rgplabel[i], i, 2);
+  }
+  QDialogButtonBox *pbb = new QDialogButtonBox(QDialogButtonBox::Cancel,
+    &dlg);
+  pbb->button(QDialogButtonBox::Cancel)->setObjectName("IDCANCEL");
+  playout->addWidget(pbb);
+  gp.fCancel = fFalse;
+  // Cancel, Escape and the close box all reject the box.
+  QObject::connect(pbb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  QObject::connect(&dlg, &QDialog::rejected, [&gp]() { gp.fCancel = fTrue; });
+  gp.tShown.start();
+
+  s_pgpGifQt = &gp;
   pga->pfnProgress = FGifProgressQt;
   SetHoldQt(grfHoldAnim | grfHoldRedraw);
   fOk = FGenerateGif(pga);
   SetHoldQt(grfSav);
-  s_pprogGifQt = NULL;
-  prog.reset();
+  s_pgpGifQt = NULL;
+  dlg.hide();
   RedrawQt();
   // No box of its own on a failure: FGenerateGif() has already said what
   // went wrong, and a second box saying it again was one too many.
@@ -1705,6 +1758,20 @@ void ShowGenerateGifDialogQt()
   pcbBounce->setObjectName("IDGIFBOUNCE");
   pcbBounce->setChecked(s_fGifLastQt && s_gaGifLastQt.fBounce);
   pgrid->addWidget(pcbBounce, 6, 1, 1, 3);
+  // A saved setting, not a choice for the session: -YXgt. 0 is every core
+  // the machine has, and is shown as such rather than as this machine's
+  // count, so a settings file carried to a bigger machine uses all of its
+  // cores. A count saved on a bigger machine is kept, not clipped by merely
+  // opening the box.
+  QLabel *plabelThread = new QLabel("T&hreads:", &dlg);
+  QSpinBox *pspThread = new QSpinBox(&dlg);
+  pspThread->setObjectName("IDGIFTHREADS");
+  pspThread->setRange(0, Max(NGifThreadMax(), gs.nGifThread));
+  pspThread->setSpecialValueText("All cores");
+  pspThread->setValue(gs.nGifThread);
+  plabelThread->setBuddy(pspThread);
+  pgrid->addWidget(plabelThread, 7, 0);
+  pgrid->addWidget(pspThread, 7, 1, 1, 2);
 
   QLabel *plabelCount = new QLabel(&dlg);
   playout->addWidget(plabelCount);
@@ -1803,6 +1870,7 @@ void ShowGenerateGifDialogQt()
     return;
   s_gaGifLastQt = ga;
   s_fGifLastQt = fTrue;
+  gs.nGifThread = pspThread->value();
   if (ga.fBounce && n > 1)
     n = 2*n - 2;
   if (n > cGifFrameMax)

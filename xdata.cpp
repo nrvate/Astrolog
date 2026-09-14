@@ -83,7 +83,7 @@ GS gs = {
 #endif
   200, 100, 0, 0, 0, 3, 1, 0, 0.0, 0.0, oMoo, BITMAPMODE, 25.0, 1, 0,
   8.5, 11.0, NULL, 0, 25, 11, 1, kMax, NULL, oCore, 0.0, 1000, 0, 600,
-  1, 1, 1, 2, 2, 1, fFalse, fFalse, fTrue, 7, 0, 0, NULL, NULL};
+  1, 1, 1, 2, 2, 1, fFalse, fFalse, fTrue, 7, 0, 0, NULL, NULL, 0};
 
 GI gi = {
   0, fFalse, 0, 0,

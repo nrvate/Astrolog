@@ -2891,6 +2891,8 @@ flag FOutputSettings()
   PrintF("; Esoteric Ray column influence width\n");
   sprintf2(S(sz), ":YXx %d           ", gs.nThickAdjust); PrintFSz();
   PrintF("; Line thickness adjustment for vector formats\n");
+  sprintf2(S(sz), ":YXgt %d          ", gs.nGifThread); PrintFSz();
+  PrintF("; Threads writing animated GIFs [\"0\" for all cores]\n");
   sprintf2(S(sz), ":YXf #%06x     ", gs.nFontAll); PrintFSz();
   PrintF("; Fonts to use [text, signs, houses, planets, aspects, naks.]\n");
   sprintf2(S(sz), ":YXv %d %d %d      ", gs.nDecaType, gs.nDecaSize,

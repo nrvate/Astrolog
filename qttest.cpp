@@ -54,6 +54,8 @@
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QProgressBar>
+#include <QtCore/QThread>
 #include <QtWidgets/QRadioButton>
 #include <QtCore/QMap>
 #include <QtWidgets/QLabel>
@@ -883,14 +885,108 @@ static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
 static QVector<CI> s_rgciMovedQt, s_rgciMainQt;
 static int s_iGifCancelQt = -1;
 static GA *s_pgaResizeQt = NULL;   // Resize frames 2 and 3 of this request.
+// What the reports said about the two counts: was a frame ever counted
+// written before it was counted rendered, and was every frame counted
+// rendered while one was still to be written?
+static flag s_fGifWriteAheadQt = fFalse, s_fGifRenderFirstQt = fFalse;
+static int s_iGifRenderLastQt = 0;
+static flag s_fGifCancelCompressQt = fFalse, s_fGifCancelledCompressingQt =
+  fFalse;
+static QElapsedTimer s_tGifCancelQt;   // From the cancel.
 
-static flag FGifProgressTestQt(int iFrame, int cFrame)
+static flag FGifProgressTestQt(int iRender, int iWrite, int cFrame)
 {
-  s_rgciMovedQt.append(*PciAnimate());
-  s_rgciMainQt.append(ciMain);
-  if (s_pgaResizeQt != NULL)
-    s_pgaResizeQt->xWin = iFrame == 1 ? 300 : 500;
-  return iFrame != s_iGifCancelQt;
+  if (iWrite > iRender)
+    s_fGifWriteAheadQt = fTrue;
+  if (iRender == cFrame && iWrite < cFrame)
+    s_fGifRenderFirstQt = fTrue;
+  // Once a frame. Rendering done, the report repeats while the last frames
+  // are compressed; a frame is reported once more only while the queue is
+  // full, which frames this small never fill.
+  if (!(iRender == cFrame && iRender == s_iGifRenderLastQt)) {
+    s_rgciMovedQt.append(*PciAnimate());
+    s_rgciMainQt.append(ciMain);
+    if (s_pgaResizeQt != NULL)
+      s_pgaResizeQt->xWin = iRender == 1 ? 300 : 500;
+  }
+  s_iGifRenderLastQt = iRender;
+  // A cancel while frames are being compressed: everything rendered, some
+  // written and not all.
+  if (s_fGifCancelCompressQt && iRender == cFrame && iWrite > 0 &&
+    iWrite < cFrame) {
+    s_fGifCancelledCompressingQt = fTrue;
+    s_tGifCancelQt.start();
+    return fFalse;
+  }
+  return iRender != s_iGifCancelQt;
+}
+
+// Draw straight into the 24 bit bitmap a GIF frame is about to be made
+// from, through pfnGifFrameHook, what no chart draws. 1: a block of 400
+// colours on every frame but each third, so those frames have more than
+// 256 and are quantized and the rest are not. 2: two frames made up whole,
+// the second giving up on its changed colours at the 256th, which is the
+// colour of its top left corner -- whose run was then mapped to an index
+// from the abandoned palette, and so drawn in the wrong colour.
+static int s_nGifHookQt = 0;
+static QVector<QImage> s_rgimGifHookQt;   // What each mode 2 frame is.
+
+// A frame hook that only takes its time: 3 ms a frame, so a GIF of small
+// frames lasts long enough for its progress box to appear. Without it 200
+// frames once finished inside the box's 120 ms delay, in the full suite.
+static void GifSlowHookTestQt(int iFrame)
+{
+  QElapsedTimer t;
+
+  (void)iFrame;
+  t.start();
+  while (t.elapsed() < 3)
+    QThread::msleep(1);
+}
+
+static void SetGifPixelTestQt(QImage *pim, int x, int y, KV kv)
+{
+  byte *pb = gi.bmp.rgb + (long)y * (gi.bmp.clRow << 2) + x * 3;
+
+  pb[0] = (byte)RgbB(kv); pb[1] = (byte)RgbG(kv); pb[2] = (byte)RgbR(kv);
+  if (pim != NULL)
+    pim->setPixel(x, y, qRgb(RgbR(kv), RgbG(kv), RgbB(kv)));
+}
+
+static void GifHookTestQt(int iFrame)
+{
+  CONST KV kvA = Rgb(10, 20, 30), kvE = Rgb(250, 1, 1);
+  int x, y;
+
+  if (!gi.fBmp)
+    return;
+  if (s_nGifHookQt == 1) {
+    if (iFrame % 3 == 1)
+      return;
+    for (y = 0; y < 20; y++)
+      for (x = 0; x < 20; x++)
+        SetGifPixelTestQt(NULL, x, y, Rgb(x*12 + iFrame, y*12, 77));
+    return;
+  }
+  QImage im(gi.bmp.x, gi.bmp.y, QImage::Format_RGB32);
+  for (y = 0; y < gi.bmp.y; y++)
+    for (x = 0; x < gi.bmp.x; x++)
+      SetGifPixelTestQt(&im, x, y, kvA);
+  SetGifPixelTestQt(&im, 1, 0, kvE);
+  if (iFrame == 0) {
+    SetGifPixelTestQt(&im, 3, 0, Rgb(0, 255, 0));
+    SetGifPixelTestQt(&im, 0, 2, Rgb(0, 0, 255));
+  } else {
+    // Changed, in the order the writer meets them: 254 new colours, the
+    // colour in the corner already showing beside it, and then the corner's
+    // own colour, where another was showing. 256 in all, the frame's whole
+    // palette, so it is not quantized.
+    SetGifPixelTestQt(&im, 3, 0, Rgb(0, 200, 100));
+    for (x = 0; x < 254; x++)
+      SetGifPixelTestQt(&im, x, 1, Rgb(x, 200, 100));
+    SetGifPixelTestQt(&im, 254, 1, kvE);
+  }
+  s_rgimGifHookQt.append(im);
 }
 
 extern QString s_strGifCountQt;
@@ -1138,6 +1234,199 @@ static void TestGenerateGifQt()
       "the screen", szWhat);
   }
   gs.chBmpMode = 'B'; gi.fBmp = fFalse;
+
+  // The same GIF on any number of threads, byte for byte. Frames are
+  // compressed on worker threads and written in order, and what a frame's
+  // delta compares with depends on the frame before, which a worker may not
+  // have finished: this is the net for that whole design, FWriteGifFrame().
+  // The workers are held until every frame is rendered, so frames really
+  // are mapped side by side and on guesses -- frames this small are each
+  // otherwise done before the next is rendered, and those paths never run.
+  {
+    CONST struct {
+      CONST char *sz;
+      flag fBmp, fBounce;
+      int nRel, nHook;
+      flag fResize;
+      int nDay2;
+    } rgcase[] = {
+      {"16 color, 7 dates back and forth", fFalse, fTrue, rcNone, 0, fFalse,
+        21},
+      {"24 bit, 7 dates", fTrue, fFalse, rcNone, 0, fFalse, 21},
+      {"24 bit, 7 dates back and forth", fTrue, fTrue, rcNone, 0, fFalse, 21},
+      {"a 24 bit bi-wheel", fTrue, fFalse, rcDual, 0, fFalse, 21},
+      {"24 bit, quantized on 2 frames in 3", fTrue, fTrue, rcNone, 1, fFalse,
+        21},
+      {"24 bit, frames narrower and wider", fTrue, fFalse, rcNone, 0, fTrue,
+        25},
+      {"16 color, frames narrower and wider", fFalse, fFalse, rcNone, 0,
+        fTrue, 25},
+      {"24 bit, a palette given up on at its corner's colour", fTrue, fFalse,
+        rcNone, 2, fFalse, 16} };
+    auto baRead = [](CONST char *sz) {
+      QFile file(QString::fromLocal8Bit(sz));
+      return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    };
+    Borrow bThread(gs.nGifThread, 1);
+    Borrow bHold(fGifWorkerHold, fFalse);
+    CI ciTwinCase = ciTwin;
+
+    for (int ic = 0; ic < (int)(sizeof(rgcase)/sizeof(rgcase[0])); ic++) {
+      QByteArray rgba[5];
+      QString strBad;
+      GA gaT = ga;
+
+      gaT.mon1 = 6; gaT.day1 = 15; gaT.yea1 = 1990; gaT.tim1 = 12.0;
+      gaT.mon2 = 6; gaT.day2 = rgcase[ic].nDay2; gaT.yea2 = 1990;
+      gaT.tim2 = 12.0;
+      gaT.nUnit = iAnimDay; gaT.nCount = rgcase[ic].fResize ? 5 : 1;
+      gaT.fBounce = rgcase[ic].fBounce; gaT.fLoop = fTrue;
+      gs.chBmpMode = rgcase[ic].fBmp ? 'P' : 'B'; gi.fBmp = rgcase[ic].fBmp;
+      us.nRel = rgcase[ic].nRel;
+      if (us.nRel != rcNone) {
+        ciTwin = ciMain; ciTwin.mon = 1; ciTwin.day = 1; ciTwin.yea = 2000;
+        ciTwin.tim = 0.0;
+        gaT.mon1 = gaT.mon2 = 1; gaT.day1 = 1; gaT.day2 = 7;
+        gaT.yea1 = gaT.yea2 = 2000; gaT.tim1 = gaT.tim2 = 0.0;
+        ciCore = ciMain;
+        CastRelation();
+      }
+      s_nGifHookQt = rgcase[ic].nHook;
+      pfnGifFrameHook = rgcase[ic].nHook ? GifHookTestQt : NULL;
+      for (int nT = 1; nT <= 4; nT++) {
+        gs.nGifThread = nT;
+        fGifWorkerHold = nT > 1;
+        gaT.xWin = 400;
+        s_pgaResizeQt = rgcase[ic].fResize ? &gaT : NULL;
+        s_rgimGifHookQt.clear();
+        remove(szGif);
+        flag fGen = FGenerateGif(&gaT);
+        rgba[nT] = fGen ? baRead(szGif) : QByteArray();
+        if (rgba[nT].isEmpty() || rgba[nT] != rgba[1])
+          strBad += QString(" %1 threads, %2 bytes;").arg(nT).arg(
+            rgba[nT].size());
+      }
+      s_pgaResizeQt = NULL;
+      pfnGifFrameHook = NULL;
+      fGifWorkerHold = fFalse;
+      Check(strBad.isEmpty(), "%s: the GIF is byte for byte the same on 1, "
+        "2, 3 and 4 threads (%d bytes;%s)", rgcase[ic].sz,
+        (int)rgba[1].size(), strBad.toLocal8Bit().constData());
+      if (rgcase[ic].nHook == 2) {
+        flag fOk = FDecodeGifQt(szGif, &gd) && gd.rgim.size() == 2 &&
+          s_rgimGifHookQt.size() == 2;
+        Check(fOk && gd.rgim[0] == s_rgimGifHookQt[0] &&
+          gd.rgim[1] == s_rgimGifHookQt[1], "and both its frames are exact, "
+          "the corner included (corner #%06x, wanted #%06x)",
+          fOk ? (int)(gd.rgim[1].pixel(0, 0) & 0xffffff) : -1,
+          fOk ? (int)(s_rgimGifHookQt[1].pixel(0, 0) & 0xffffff) : -1);
+      }
+      us.nRel = rcNone;
+      ciTwin = ciTwinCase;
+    }
+    gs.chBmpMode = 'B'; gi.fBmp = fFalse;
+    ciMain = ciMainSav; ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990;
+    ciMain.tim = 12.0; ciCore = ciMain;
+    CastChart(0);
+  }
+
+  // Two counts are reported, charts rendered and frames written, and
+  // rendering runs ahead: a short GIF is all rendered before it is all
+  // written. Each frame is reported rendered before the finished frames are
+  // written, so even a frame done at once is never counted written first.
+  {
+    Borrow bThread(gs.nGifThread, 2);
+
+    s_fGifWriteAheadQt = s_fGifRenderFirstQt = fFalse;
+    remove(szGif);
+    flag fGen = FGenerateGif(&ga);
+    Check(fGen && !s_fGifWriteAheadQt && s_fGifRenderFirstQt, "on 2 threads "
+      "no frame is reported written before it is reported rendered, and all "
+      "3 are reported rendered while one is still to be written (written "
+      "first %d, rendered first %d)", s_fGifWriteAheadQt,
+      s_fGifRenderFirstQt);
+  }
+
+  // A cancel while frames are being compressed, on 3 threads, over a file
+  // that is already there: it stops at once, keeps that file, and leaves
+  // nothing beside it.
+  {
+    Borrow bThread(gs.nGifThread, 3);
+    Borrow bHold(fGifWorkerHold, fTrue);
+    Borrow bBmpModeT(gs.chBmpMode, 'P');
+    Borrow bBmpT(gi.fBmp, fTrue);
+    char szPart[cchSzMax + 8];   // Room for ".part" on the longest path.
+    GA gaT = ga;
+    QByteArray baOld;
+    QFile fileOld(QString::fromLocal8Bit(szGif));
+    qint64 msStop = -1;
+
+    gaT.mon2 = 7; gaT.day2 = 15; gaT.nCount = 1;   // 31 frames,
+    gaT.xWin = gaT.yWin = 1000;                     // big enough to take a while.
+    sprintf2(S(szPart), "%s.part", szGif);
+    remove(szGif);
+    if (fileOld.open(QIODevice::WriteOnly)) {
+      fileOld.write("keep");
+      fileOld.close();
+    }
+    s_fGifCancelCompressQt = fTrue;
+    s_fGifCancelledCompressingQt = fFalse;
+    flag fGen = FGenerateGif(&gaT);
+    msStop = s_fGifCancelledCompressingQt ? s_tGifCancelQt.elapsed() : -1;
+    s_fGifCancelCompressQt = fFalse;
+    if (fileOld.open(QIODevice::ReadOnly)) {
+      baOld = fileOld.readAll();
+      fileOld.close();
+    }
+    Check(!fGen && s_fGifCancelledCompressingQt && baOld == "keep" &&
+      !QFile::exists(QString::fromLocal8Bit(szPart)) && msStop >= 0 &&
+      msStop < 1000 * nScaleTest, "cancelling on 3 threads while frames are "
+      "compressed stops in %lld ms, keeping the file it was to replace (%d "
+      "bytes) with nothing beside it", (long long)msStop, (int)baOld.size());
+    ciMain = ciMainSav; ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990;
+    ciMain.tim = 12.0; ciCore = ciMain;
+    CastChart(0);
+    remove(szGif);
+  }
+
+  // Threads is a saved setting: "Save Program Settings" writes it as -YXgt,
+  // and that line reads back.
+  {
+    char szPath[cchSzMax], szLine[cchSzMax];
+    int nFormatSav = us.nWriteFormat;
+    Borrow bThread(gs.nGifThread, 7);
+    QByteArray baHead, baLine;
+
+    SzScratchPathQt(S(szPath), "gifthreads", ".as");
+    us.nWriteFormat = 'd';
+    FCloneSz(szPath, &is.szFileOut);
+    flag fOut = FOutputSettings();
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+    us.nWriteFormat = nFormatSav;
+    {
+      QFile file(QString::fromLocal8Bit(szPath));
+      // The header line, which the reader requires, and that one line.
+      if (file.open(QIODevice::ReadOnly))
+        for (QByteArray ba : file.readAll().split('\n')) {
+          if (baHead.isEmpty())
+            baHead = ba;
+          if (ba.startsWith(":YXgt "))
+            baLine = ba;
+        }
+    }
+    SzScratchPathQt(S(szLine), "gifthreads-line", ".as");
+    {
+      QFile file(QString::fromLocal8Bit(szLine));
+      if (file.open(QIODevice::WriteOnly))
+        file.write(baHead + "\n" + baLine + "\n");
+    }
+    gs.nGifThread = 0;
+    flag fIn = fOut && !baLine.isEmpty() && FProcessSwitchFile(szLine, NULL);
+    Check(fIn && gs.nGifThread == 7, "Threads is saved as \"%s\" and reads "
+      "back as %d", baLine.constData(), gs.nGifThread);
+    remove(szPath);
+    remove(szLine);
+  }
 
   // The size asked for is the size written, sidebar included, as Windows
   // writes the window's client size. Every file used to be the sidebar
@@ -1388,6 +1677,56 @@ static void TestGenerateGifQt()
         rgstrBox.isEmpty() ? "" : rgstrBox.last().toLocal8Bit().constData());
     }
 
+    // The box a GIF is written behind: a bar for charts rendered and one for
+    // frames compressed, each counted, and a Cancel that stops at once.
+    {
+      QTimer tProg;
+      QString strRender, strWrite;
+      flag fBars = fFalse, fClicked = fFalse;
+      QElapsedTimer tClick;
+      qint64 msStop = -1;
+      char szPart[cchSzMax + 8];   // Room for ".part" on the longest path.
+      Borrow bThread(gs.nGifThread, 3);
+      GA gaLong = ga;
+
+      gaLong.mon2 = 12; gaLong.day2 = 31; gaLong.nCount = 1;
+      sprintf2(S(szPart), "%s.part", szGif);
+      pfnGifFrameHook = GifSlowHookTestQt;
+      QObject::connect(&tProg, &QTimer::timeout, [&]() {
+        if (fClicked)
+          return;
+        for (QWidget *pw : QApplication::topLevelWidgets()) {
+          if (pw->objectName() != "IDGIFPROGRESS" || !pw->isVisible())
+            continue;
+          QLabel *plR = pw->findChild<QLabel *>("IDGIFRENDERN"),
+            *plW = pw->findChild<QLabel *>("IDGIFWRITEN");
+          strRender = plR != NULL ? plR->text() : QString();
+          strWrite = plW != NULL ? plW->text() : QString();
+          fBars = pw->findChild<QProgressBar *>("IDGIFRENDER") != NULL &&
+            pw->findChild<QProgressBar *>("IDGIFWRITE") != NULL &&
+            strRender.contains(" of ") && strWrite.contains(" of ");
+          tClick.start();
+          fClicked = FClickButtonQt(pw, "IDCANCEL");
+          return;
+        }
+      });
+      tProg.start(20);
+      remove(szGif);
+      flag fWrote = FWriteGifTestQt(&gaLong, NGifFrameCount(&gaLong));
+      msStop = fClicked ? tClick.elapsed() : -1;
+      tProg.stop();
+      pfnGifFrameHook = NULL;
+      Check(fBars && fClicked, "writing shows a box with a bar each for "
+        "charts rendered and frames compressed, counted (\"%s\", \"%s\")",
+        strRender.toLocal8Bit().constData(),
+        strWrite.toLocal8Bit().constData());
+      Check(!fWrote && msStop >= 0 && msStop < 1000 * nScaleTest &&
+        !QFile::exists(QString::fromLocal8Bit(szGif)) &&
+        !QFile::exists(QString::fromLocal8Bit(szPart)), "and its Cancel "
+        "stops a GIF on 3 threads in %lld ms, leaving no file",
+        (long long)msStop);
+    }
+
     // The dialog holds the animation still too: its Start is the moving
     // chart's date as the dialog opened.
     CI ciBefore = ciMain;
@@ -1485,6 +1824,45 @@ static void TestGenerateGifQt()
     });
     Check(nCountCancel == 7, "and not with a change it was cancelled on "
       "(%d)", nCountCancel);
+    ForgetGifDialogTestQt();
+  }
+
+  // Threads is the saved setting itself, not a choice for the session: the
+  // box shows gs.nGifThread, 0 as "All cores", runs to the machine's core
+  // count, and OK sets it.
+  {
+    extern flag s_fSaveFileTestQt;
+    extern void ForgetGifDialogTestQt();
+    Borrow bPicker(s_fSaveFileTestQt, fTrue);   // and the picker cancels
+    Borrow bThread(gs.nGifThread, 0);
+    QString strAll;
+    int nMax = -1, nWant = Min(3, NGifThreadMax()), nShown = -1;
+
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      QSpinBox *psp = pw->findChild<QSpinBox *>("IDGIFTHREADS");
+      if (psp != NULL) {
+        strAll = psp->text();
+        nMax = psp->maximum();
+        psp->setValue(nWant);
+      }
+      if (!FClickButtonQt(pw, "IDOK"))
+        pw->close();
+    });
+    Check(strAll == "All cores" && nMax == NGifThreadMax() &&
+      gs.nGifThread == nWant, "Generate Animation's Threads box shows 0 as "
+      "\"%s\", runs to %d, and OK sets the setting to %d (got %d)",
+      strAll.toLocal8Bit().constData(), nMax, nWant, gs.nGifThread);
+    DriveModalQt(ShowGenerateGifDialogQt, [&](QWidget *pw) {
+      QSpinBox *psp = pw->findChild<QSpinBox *>("IDGIFTHREADS");
+      nShown = psp != NULL ? psp->value() : -1;
+      if (psp != NULL)
+        psp->setValue(0);
+      if (!FClickButtonQt(pw, "IDCANCEL"))
+        pw->close();
+    });
+    Check(nShown == nWant && gs.nGifThread == nWant, "and reopens showing "
+      "it, which Cancel leaves as it was (shown %d, now %d)", nShown,
+      gs.nGifThread);
     ForgetGifDialogTestQt();
   }
 

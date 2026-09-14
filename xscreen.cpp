@@ -1563,11 +1563,11 @@ flag FGenerateGif(CONST GA *pga)
   real JDpSav = is.JDp;
   int ftSav = gs.ft, xWinSav = gs.xWin, yWinSav = gs.yWin,
     nScaleSav = gs.nScale, cFrame, i, nDir;
-  flag fGraphicsSav = us.fGraphics, fOk = fTrue, fCancel = fFalse;
+  flag fGraphicsSav = us.fGraphics, fOk = fTrue, fCancel = fFalse, fMore;
   char sz[cchSzMax], *szTemp;
   FILE *file;
   CI ci, *rgci = NULL;
-  int cWrite, cchTemp;
+  int cWrite, cchTemp, n;
 
   if (us.fNoWrite || pga->szFile == NULL)
     return fFalse;
@@ -1651,12 +1651,42 @@ flag FGenerateGif(CONST GA *pga)
       fOk = fFalse;
       break;
     }
-    if (pga->pfnProgress != NULL && !(*pga->pfnProgress)(i+1, cWrite)) {
+    // Report the frame, then write what the threads compressing frames have
+    // finished -- in that order, so a frame is never counted written in the
+    // same report that first counts it rendered. While their queue is full,
+    // wait for them, still reporting and still answering to Cancel.
+    for (n = 0; ; n++) {
+      if (pga->pfnProgress != NULL &&
+        !(*pga->pfnProgress)(i+1, NGifWritten(), cWrite)) {
+        fCancel = fTrue;
+        break;
+      }
+      if (!FGifPump(n == 0 ? gpNoWait : gpWaitRoom, &fMore)) {
+        fOk = fFalse;
+        break;
+      }
+      if (!fMore)
+        break;
+    }
+    if (!fOk || fCancel)
+      break;
+  }
+  // Every frame is rendered: wait for the rest to be compressed.
+  while (fOk && !fCancel) {
+    if (!FGifPump(gpWaitAll, &fMore)) {
+      fOk = fFalse;
+      break;
+    }
+    if (pga->pfnProgress != NULL &&
+      !(*pga->pfnProgress)(cWrite, NGifWritten(), cWrite)) {
       fCancel = fTrue;
       break;
     }
+    if (!fMore)
+      break;
   }
-  if (!FEndGif())    // The frames cgif still holds, and the trailer.
+  // The trailer, or on a cancel or failure the workers stopped at once.
+  if (!FEndGif(fOk && !fCancel))
     fOk = fFalse;
   if (ferror(file))
     fOk = fFalse;

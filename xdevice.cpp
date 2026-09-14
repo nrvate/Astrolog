@@ -51,8 +51,26 @@
 ** Last code change made 5/28/2026.
 */
 
+// The animated GIF writer's worker threads; see FWriteGifFrame(). mingw-w64
+// built with the win32 thread model, which is Makefile.win's compiler, has
+// no std::thread before GCC 13, and there a GIF is written on one thread.
+#include <cstddef>
+#include <cstring>
+#if !defined(__GLIBCXX__) || defined(_GLIBCXX_HAS_GTHREADS)
+#define GIFTHREADS
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#endif
+#include <deque>
+#include <memory>
+#include <vector>
+
 #include "astrolog.h"
 #include "cgif.h"
+#include "cgif_raw.h"
 
 
 #ifdef GRAPH
@@ -1270,19 +1288,44 @@ void WriteBmp(FILE *file)
 // MIT, see cgif-license.txt), which replaced a hand-written LZW coder here
 // because generating thousands of frames was too slow. Every frame after
 // the first is sent as a delta: a pixel already showing its colour is
-// given a spare transparent index here, and cgif crops the frame to the
-// rectangle holding the rest. The transparency is marked here rather than
-// by cgif's own CGIF_FRAME_GEN_USE_TRANSPARENCY because cgif compares two
-// frames through their palettes one pixel at a time, which with a local
-// palette per frame made 337 frames slower than the old coder, 11.1
-// seconds against 8.5. Every frame is still lossless: what a viewer shows
-// after frame N is exactly the chart rendered for frame N.
+// given a spare transparent index, and the frame is cropped to the
+// rectangle holding the rest. Every frame is still lossless: what a viewer
+// shows after frame N is exactly the chart rendered for frame N.
+//
+// FRAMES ARE ENCODED ON WORKER THREADS, gs.nGifThread of them (-YXgt, 0 for
+// every core). Rendering cannot move: it is FActionX() over global state.
+// So the main thread renders a frame, copies the rows the GIF needs, and
+// queues the copy; workers map it to palette indexes, mark and crop the
+// delta, and LZW encode it into a buffer of its own; and the main thread
+// writes finished frames strictly in order between renders. The output is
+// the same bytes at any thread count, which the suite checks.
+//
+// What a frame depends on is the whole design. Its delta compares it with
+// what is SHOWING, and that is the previous frame's render -- the same size
+// as the screen and not quantized -- except in two cases: a frame drawn
+// smaller than the screen leaves older pixels showing around it, and a
+// quantized frame shows its 3-3-2 colours. A worker therefore rebuilds what
+// is showing from the previous render's copy, GUESSING whether that frame
+// was quantized, and checks the guess once the previous frame is mapped,
+// redoing the frame when it was wrong; a successor of a smaller frame, or a
+// smaller frame itself, waits for its predecessor instead. When the
+// predecessor is already mapped the worker takes what it left showing
+// outright, which is also all the single threaded path ever does. Cropping
+// a frame that has no transparent index needs the previous frame's
+// transparency too -- cgif's rule, kept so the bytes did not change -- and
+// waits for it the same way.
+//
+// The queue is bounded by memory, not frames: renders may run ahead of the
+// workers until what is queued holds cbGifQueueMax bytes, and at least two
+// frames a thread are always allowed. A short animation is so rendered
+// first and compressed after, and FGenerateGif() reports both counts.
 
 #define cGifSlot 1024
 
-static CGIF *pgifOut = NULL;       // The GIF, once frame 1 fixed its size.
-static byte *rgbGifPix = NULL;     // A frame's palette indexes, for cgif.
-static uint32_t *rglGifShow = NULL; // The colours shown after the last frame.
+// Most bytes of copied renders, palette indexes and encoded frames the
+// queue may hold before rendering waits for the workers. 5000 frames of a
+// 1600x1360 24 bit chart would be 32 GB unbounded; this is about 55 of them.
+#define cbGifQueueMax (512L << 20)
 
 typedef struct _GifPalette {
   KV rgkv[256];
@@ -1290,11 +1333,160 @@ typedef struct _GifPalette {
   int cKv;
 } GIFPAL;
 
-// Output callback for cgif: every byte of the file goes through here.
+#ifdef GIFTHREADS
+typedef std::atomic<long long> GIFCOUNT;
+#else
+typedef long long GIFCOUNT;
+#endif
+
+// A render as a worker sees it: its rows over the screen, copied.
+struct GIFSNAP {
+  byte *rgb;         // The rows, as the bitmap holds them.
+  long cb;           // Bytes in rgb, when this owns them.
+  int xs, ys;        // Its size, clipped to the screen.
+  long cbRow;        // Bytes in a row.
+  flag fBmp;         // 24 bit rows, rather than 4 bits a pixel?
+  int cKvFix;        // 16 colour: palette size, 16 or 2 for monochrome,
+  KV rgkvFix[16];    // and the colour of each index.
+  GIFCOUNT *pcbMem;  // What is counted against cbGifQueueMax.
+  GIFSNAP() : rgb(NULL), cb(0), pcbMem(NULL) {}
+  ~GIFSNAP() { if (cb > 0) { free(rgb); *pcbMem -= cb; } }
+};
+
+// One frame of the GIF, from its render to its encoded bytes.
+struct GIFJOB {
+  int iFrame;                        // 0 for the first.
+  std::shared_ptr<GIFSNAP> psnap;    // Its render.
+  std::shared_ptr<GIFSNAP> psnapPrev;  // The previous frame's render.
+  std::shared_ptr<GIFJOB> pjobPrev;  // The previous frame, till done.
+  flag fShort;       // Smaller than the screen somewhere?
+  flag fQuantGuess;  // Was the previous frame quantized, as guessed?
+  int nDelay;        // Hundredths of a second.
+  // Set by whoever maps and encodes it, read under the pipe's lock.
+  flag fMapped;      // Are the palette indexes below final?
+  flag fDone;        // Is the encoded frame below final?
+  flag fError;       // Did mapping or encoding fail?
+  flag fDropShow;    // Its successor rebuilt what shows: free plShow.
+  byte *pbPix;       // A palette index for each screen pixel,
+  long cbPix;        // which is this many.
+  uint32_t *plShow;  // The screen after this frame, for its successor.
+  KV rgkv[256];      // The palette,
+  int cKv;           // its size,
+  int iTrans;        // and its transparent index, or -1 for none.
+  flag fQuant;       // Is it the 3-3-2 palette?
+  flag fRect;        // Did mapping find the rectangle below? Only a frame
+  int xl, yt, xr, yb;  // with no transparent index needs it to.
+  byte *pbOut;       // The encoded frame, as it goes in the file.
+  long cbOut, cbOutMax;
+  GIFCOUNT *pcbMem;
+  GIFJOB() : iFrame(0), fShort(fFalse), fQuantGuess(fFalse), nDelay(0),
+    fMapped(fFalse), fDone(fFalse), fError(fFalse), fDropShow(fFalse),
+    pbPix(NULL), cbPix(0), plShow(NULL), cKv(0), iTrans(-1), fQuant(fFalse),
+    fRect(fFalse), xl(0), yt(0), xr(-1), yb(-1), pbOut(NULL), cbOut(0),
+    cbOutMax(0), pcbMem(NULL) {}
+  ~GIFJOB();
+};
+
+// The GIF being written: its screen, its workers and its queue.
+struct GIFPIPE {
+  int xGif, yGif;          // The logical screen, fixed by frame 1.
+  CGIFRaw *praw;           // cgif's stream; header and trailer only.
+  CGIFRaw_Config rc;       // What the encoder reads of it.
+  FILE *file;
+  int cThread;             // Workers; 0 means frames encode inline.
+  int cWritten;            // Frames in the file so far.
+  flag fQuantLast;         // Was the last frame written quantized?
+  flag fError;             // Did writing or encoding a frame fail?
+  std::shared_ptr<GIFSNAP> psnapLast;   // Frame N-1, for frame N.
+  std::shared_ptr<GIFJOB> pjobLast;
+  std::deque<std::shared_ptr<GIFJOB>> qjobFile;  // Queued, not written.
+  GIFCOUNT cbMem;          // Bytes queued: renders, indexes, encodings.
+#ifdef GIFTHREADS
+  std::deque<std::shared_ptr<GIFJOB>> qjobWork;  // Not yet started.
+  std::vector<std::thread> rgthread;
+  std::mutex mtx;
+  std::condition_variable cvWork;   // A job queued, or stop.
+  std::condition_variable cvState;  // A job mapped or done, or stop.
+  flag fStop;
+  flag fHold;    // fGifWorkerHold, until rendering is done.
+#endif
+  GIFPIPE() : xGif(0), yGif(0), praw(NULL), file(NULL), cThread(0),
+    cWritten(0), fQuantLast(fFalse), fError(fFalse), cbMem(0)
+#ifdef GIFTHREADS
+    , fStop(fFalse), fHold(fFalse)
+#endif
+    {}
+};
+
+GIFJOB::~GIFJOB()
+{
+  if (pcbMem == NULL)
+    return;
+  if (pbPix != NULL) { free(pbPix); *pcbMem -= cbPix; }
+  if (plShow != NULL) { free(plShow); *pcbMem -= cbPix * sizeof(uint32_t); }
+  if (pbOut != NULL) { free(pbOut); *pcbMem -= cbOutMax; }
+}
+
+static GIFPIPE *s_ppipeGif = NULL;
+
+// A test's hook on each frame as it reaches the GIF writer, to draw what no
+// chart draws. Not under QTTEST: the MSVC build compiles the core once
+// without it, and the suite that sets it would not link.
+void (*pfnGifFrameHook)(int) = NULL;
+
+// A test's switch, unconditional for the same reason: hold the workers until
+// every frame is rendered, so frames are mapped side by side and on guesses.
+// A GIF of small frames is otherwise each frame done before the next is
+// rendered, and the paths that depend on timing never run.
+flag fGifWorkerHold = fFalse;
+
+// Allocate and free what counts against cbGifQueueMax. malloc() rather
+// than PAllocate(), whose counters are not the workers' to touch.
+
+static void *PvGifAlloc(GIFCOUNT *pcb, long cb)
+{
+  void *pv = malloc(cb);
+
+  if (pv != NULL)
+    *pcb += cb;
+  return pv;
+}
+
+static void GifFree(GIFCOUNT *pcb, void *pv, long cb)
+{
+  if (pv != NULL) {
+    free(pv);
+    *pcb -= cb;
+  }
+}
+
+// Output callback for cgif's header and trailer: to the file.
 
 static int NGifWrite(void *pContext, CONST uint8_t *pData, CONST size_t cb)
 {
   return fwrite(pData, 1, cb, (FILE *)pContext) == cb ? 0 : -1;
+}
+
+// Output callback for an encoded frame: to the job's buffer.
+
+static int NGifBuffer(void *pContext, CONST uint8_t *pData, CONST size_t cb)
+{
+  GIFJOB *pj = (GIFJOB *)pContext;
+  long cbNew;
+  byte *pb;
+
+  if (pj->cbOut + (long)cb > pj->cbOutMax) {
+    cbNew = Max(pj->cbOutMax * 2, pj->cbOut + (long)cb + 4096);
+    pb = (byte *)realloc(pj->pbOut, cbNew);
+    if (pb == NULL)
+      return -1;
+    *pj->pcbMem += cbNew - pj->cbOutMax;
+    pj->pbOut = pb;
+    pj->cbOutMax = cbNew;
+  }
+  memcpy(pj->pbOut + pj->cbOut, pData, cb);
+  pj->cbOut += (long)cb;
+  return 0;
 }
 
 // The palette index of a colour, adding it if new. Returns -1 when the
@@ -1317,65 +1509,92 @@ static int IGifColor(GIFPAL *pgp, KV kv)
 
 #define BGifQuant(kv) ((byte)((RgbR(kv) >> 5) << 5 | (RgbG(kv) >> 5) << 2 | \
   RgbB(kv) >> 6))
+#define KvGifQuant(i) Rgb(((i) >> 5)*255/7, (((i) >> 2) & 7)*255/7, \
+  ((i) & 3)*255/3)
 
+// What the screen shows after a frame the size of the screen: its render,
+// or the 3-3-2 colours of it when the frame was quantized.
 
-// Append the chart just rendered to the open animated GIF as its next
-// frame, starting the file if this is the first one. The first frame fixes
-// the logical screen. A later frame of another size is clipped to it, and
-// where it is smaller the rest of the screen keeps showing the frame
-// before, as a viewer shows it, since no frame is ever cleared.
-
-static flag FWriteGifFrame(FILE *file)
+static void GifShowFromSnap(CONST GIFSNAP *ps, flag fQuant, uint32_t *rgl,
+  int xGif, int yGif)
 {
-  GIFPAL gp;
-  CGIF_Config gc;
-  CGIF_FrameConfig fc;
-  byte rgbPal[3*256];
   CONST byte *pbRow;
-  byte *pb;
+  uint32_t *pl;
+  int x, y, i;
+
+  for (y = 0; y < yGif; y++) {
+    pbRow = ps->rgb + (long)y * ps->cbRow;
+    pl = rgl + (long)y * xGif;
+    if (!ps->fBmp) {
+      for (x = 0; x < xGif; x++) {
+        i = (pbRow[x >> 1] >> ((x & 1) ? 0 : 4)) & 15;
+        if (ps->cKvFix < 16)
+          i = (i != 0);
+        pl[x] = (uint32_t)ps->rgkvFix[i];
+      }
+    } else if (!fQuant) {
+      for (x = 0; x < xGif; x++, pbRow += cbPixelK)
+        pl[x] = (uint32_t)_GetP(pbRow);
+    } else {
+      for (x = 0; x < xGif; x++, pbRow += cbPixelK) {
+        i = BGifQuant(_GetP(pbRow));
+        pl[x] = (uint32_t)KvGifQuant(i);
+      }
+    }
+  }
+}
+
+#ifdef GIFTHREADS
+// Wait for a job's predecessor to be mapped. Returns fFalse on stop.
+
+static flag FGifWaitMapped(GIFPIPE *pp, GIFJOB *pjPrev,
+  std::unique_lock<std::mutex> &lk)
+{
+  pp->cvState.wait(lk, [pp, pjPrev]{ return pp->fStop || pjPrev->fMapped; });
+  return !pp->fStop;
+}
+#endif
+
+// The previous frame's palette indexes and transparent index, waiting for
+// it to be mapped if it is not yet.
+
+static flag FGifPrevMask(GIFPIPE *pp, GIFJOB *pj, CONST byte **ppb,
+  int *piTrans)
+{
+  GIFJOB *pjPrev = pj->pjobPrev.get();
+
+#ifdef GIFTHREADS
+  std::unique_lock<std::mutex> lk(pp->mtx);
+  if (!FGifWaitMapped(pp, pjPrev, lk))
+    return fFalse;
+#endif
+  *ppb = pjPrev->pbPix;
+  *piTrans = pjPrev->iTrans;
+  return pjPrev->pbPix != NULL;
+}
+
+// Map a render to palette indexes and mark what is already showing
+// transparent, updating rglShow, what shows, to what shows after it. This is
+// the writer as it was when frames were encoded one after another, byte for
+// byte, apart from where it is noted.
+
+static flag FGifMapFrame(GIFPIPE *pp, GIFJOB *pj, uint32_t *rglShow)
+{
+  CONST GIFSNAP *ps = pj->psnap.get();
+  GIFPAL gp;
+  CONST byte *pbRow, *pbPrev = NULL;
+  byte *pb, *rgbPix = pj->pbPix;
   uint32_t *pl;
   KV kv, kvLast = 0;
   uint32_t rglFix[16];
-  int x, y, xs, ys, xGif, yGif, i, iLast = -1, iTrans = -1;
-  flag fQuant = fFalse, fShort, fDone = fFalse, fShowOk = fTrue;
+  int x, y, xs, ys, xGif = pp->xGif, yGif = pp->yGif, i, iLast = -1,
+    iTrans = -1, iTransPrev = -1;
+  flag fFirst = pj->iFrame == 0, fQuant = fFalse, fShort, fDone = fFalse,
+    fShowOk = fTrue;
 
-  if (gi.fBmp) {
-    xs = gi.bmp.x; ys = gi.bmp.y;
-  } else {
-    xs = gs.xWin; ys = gs.yWin;
-  }
-  if (gi.cGifFrame == 0) {
-    if (xs <= 0 || ys <= 0 || xs > 0xFFFF || ys > 0xFFFF)
-      return fFalse;
-    rgbGifPix = (byte *)PAllocate((long)xs * ys, "GIF frame");
-    if (rgbGifPix == NULL)
-      return fFalse;
-    rglGifShow = (uint32_t *)PAllocate((long)xs * ys * sizeof(uint32_t),
-      "GIF frame");
-    if (rglGifShow == NULL)
-      return fFalse;
-    ClearB((pbyte)&gc, sizeof(gc));
-    gc.attrFlags = CGIF_ATTR_IS_ANIMATED | CGIF_ATTR_NO_GLOBAL_TABLE |
-      (gi.fGifLoop ? 0 : CGIF_ATTR_NO_LOOP);
-    // Keep a frame identical to the one before rather than folding its
-    // delay into that one: the frame count is part of what was asked for.
-    gc.genFlags = CGIF_GEN_KEEP_IDENT_FRAMES;
-    gc.width = (uint16_t)xs; gc.height = (uint16_t)ys;
-    gc.numLoops = CGIF_INFINITE_LOOP;
-    gc.pWriteFn = NGifWrite;
-    gc.pContext = file;
-    pgifOut = cgif_newgif(&gc);
-    if (pgifOut == NULL)
-      return fFalse;
-    gi.xGif = xs; gi.yGif = ys;
-  }
-  if (pgifOut == NULL || rgbGifPix == NULL || rglGifShow == NULL)
-    return fFalse;
-  xGif = gi.xGif; yGif = gi.yGif;
-  xs = Min(xs, xGif); ys = Min(ys, yGif);
-  if (xs <= 0 || ys <= 0)
-    return fFalse;
-  fShort = gi.cGifFrame > 0 && (xs < xGif || ys < yGif);
+  xs = ps->xs; ys = ps->ys;
+  fShort = pj->fShort;
+  pj->fRect = fFalse;
 
   // The usual frame: the same size as the screen and not the first. One
   // pass, a row at a time, both maps each pixel to its palette index and
@@ -1383,21 +1602,21 @@ static flag FWriteGifFrame(FILE *file)
   // is not looked up in the palette at all. In the 24 bit bitmap its index
   // is not known until the palette is, so it is marked 255 meanwhile, and
   // a frame needing a 256th colour gives up here for the full pass below.
-  if (gi.cGifFrame > 0 && !fShort) {
-    if (!gi.fBmp) {
-      gp.cKv = gs.fColor ? 16 : 2;
+  if (!fFirst && !fShort) {
+    if (!ps->fBmp) {
+      gp.cKv = ps->cKvFix;
       for (i = 0; i < gp.cKv; i++) {
-        gp.rgkv[i] = gs.fColor ? rgbbmp[i] : (i ? Rgb(255, 255, 255) : 0);
+        gp.rgkv[i] = ps->rgkvFix[i];
         rglFix[i] = (uint32_t)gp.rgkv[i];
       }
       iTrans = gp.cKv;
       for (y = 0; y < ys; y++) {
-        pbRow = gi.bm + (long)y * gi.cbBmpRow;
-        pb = rgbGifPix + (long)y * xGif;
-        pl = rglGifShow + (long)y * xGif;
+        pbRow = ps->rgb + (long)y * ps->cbRow;
+        pb = rgbPix + (long)y * xGif;
+        pl = rglShow + (long)y * xGif;
         for (x = 0; x < xs; x++) {
           i = (pbRow[x >> 1] >> ((x & 1) ? 0 : 4)) & 15;
-          if (!gs.fColor)
+          if (gp.cKv < 16)
             i = (i != 0);
           if (pl[x] == rglFix[i])
             pb[x] = (byte)iTrans;
@@ -1413,10 +1632,14 @@ static flag FWriteGifFrame(FILE *file)
         gp.rgnSlot[i] = -1;
       gp.cKv = 0;
       fDone = fTrue;
+      // What shows is left alone until the pass is known to finish: the
+      // full pass below, and the rectangle of a frame with no transparent
+      // index, compare with it as it was. (When this pass updated it as it
+      // went, a frame giving up here compared with a screen half moved on.)
       for (y = 0; y < ys && fDone; y++) {
-        pbRow = gi.bmp.rgb + (long)y * (gi.bmp.clRow << 2);
-        pb = rgbGifPix + (long)y * xGif;
-        pl = rglGifShow + (long)y * xGif;
+        pbRow = ps->rgb + (long)y * ps->cbRow;
+        pb = rgbPix + (long)y * xGif;
+        pl = rglShow + (long)y * xGif;
         for (x = 0; x < xs; x++, pbRow += cbPixelK) {
           kv = _GetP(pbRow);
           if (pl[x] == (uint32_t)kv) {
@@ -1432,39 +1655,46 @@ static flag FWriteGifFrame(FILE *file)
             }
           }
           pb[x] = (byte)iLast;
-          pl[x] = (uint32_t)kv;
         }
       }
       if (fDone) {
         iTrans = gp.cKv;
-        if (iTrans < 255)
-          for (pb = rgbGifPix; pb < rgbGifPix + (long)xGif * yGif; pb++)
-            *pb = *pb == 255 ? (byte)iTrans : *pb;
+        pl = rglShow;
+        for (pb = rgbPix; pb < rgbPix + (long)xGif * yGif; pb++, pl++) {
+          if (*pb == 255)
+            *pb = (byte)iTrans;
+          else
+            *pl = (uint32_t)gp.rgkv[*pb];
+        }
       }
     }
   }
 
   // Every other frame: map every pixel of the render to a palette index,
   // a row at a time, then compare the frame with what is showing.
-  if (!fDone && !gi.fBmp) {
-    gp.cKv = gs.fColor ? 16 : 2;
+  if (!fDone && !ps->fBmp) {
+    gp.cKv = ps->cKvFix;
     for (i = 0; i < gp.cKv; i++)
-      gp.rgkv[i] = gs.fColor ? rgbbmp[i] : (i ? Rgb(255, 255, 255) : 0);
+      gp.rgkv[i] = ps->rgkvFix[i];
     for (y = 0; y < ys; y++) {
-      pbRow = gi.bm + (long)y * gi.cbBmpRow;
-      pb = rgbGifPix + (long)y * xGif;
+      pbRow = ps->rgb + (long)y * ps->cbRow;
+      pb = rgbPix + (long)y * xGif;
       for (x = 0; x < xs; x++) {
         i = (pbRow[x >> 1] >> ((x & 1) ? 0 : 4)) & 15;
-        pb[x] = (byte)(gs.fColor ? i : (i != 0));
+        pb[x] = (byte)(gp.cKv == 16 ? i : (i != 0));
       }
     }
   } else if (!fDone) {
     for (i = 0; i < cGifSlot; i++)
       gp.rgnSlot[i] = -1;
     gp.cKv = 0;
+    // The palette starts over, so must the last lookup. Without this, a
+    // frame that gave up above on the colour at its top left corner mapped
+    // that corner's run to an index the new palette never gave it.
+    iLast = -1;
     for (y = 0; y < ys && !fQuant; y++) {
-      pbRow = gi.bmp.rgb + (long)y * (gi.bmp.clRow << 2);
-      pb = rgbGifPix + (long)y * xGif;
+      pbRow = ps->rgb + (long)y * ps->cbRow;
+      pb = rgbPix + (long)y * xGif;
       for (x = 0; x < xs; x++, pbRow += cbPixelK) {
         kv = _GetP(pbRow);
         if (kv != kvLast || iLast < 0) {
@@ -1483,10 +1713,10 @@ static flag FWriteGifFrame(FILE *file)
   // palette. A 16 colour palette is the same every frame, so every such
   // colour is in it already.
   for (y = 0; y < yGif && fShort && !fDone && !fQuant; y++) {
-    pb = rgbGifPix + (long)y * xGif;
-    pl = rglGifShow + (long)y * xGif;
+    pb = rgbPix + (long)y * xGif;
+    pl = rglShow + (long)y * xGif;
     for (x = y < ys ? xs : 0; x < xGif; x++) {
-      if (gi.fBmp)
+      if (ps->fBmp)
         iLast = IGifColor(&gp, pl[x]);
       else
         for (iLast = gp.cKv-1; iLast > 0 && gp.rgkv[iLast] != pl[x]; iLast--)
@@ -1500,12 +1730,12 @@ static flag FWriteGifFrame(FILE *file)
   }
   if (fQuant && !fDone) {
     for (i = 0; i < 256; i++)
-      gp.rgkv[i] = Rgb((i >> 5)*255/7, ((i >> 2) & 7)*255/7, (i & 3)*255/3);
+      gp.rgkv[i] = KvGifQuant(i);
     gp.cKv = 256;
     for (y = 0; y < yGif; y++) {
-      pbRow = gi.bmp.rgb + (long)y * (gi.bmp.clRow << 2);
-      pb = rgbGifPix + (long)y * xGif;
-      pl = rglGifShow + (long)y * xGif;
+      pbRow = ps->rgb + (long)y * ps->cbRow;
+      pb = rgbPix + (long)y * xGif;
+      pl = rglShow + (long)y * xGif;
       for (x = 0; x < xGif; x++, pbRow += cbPixelK)
         if (x < xs && y < ys)
           pb[x] = BGifQuant(_GetP(pbRow));
@@ -1518,67 +1748,521 @@ static flag FWriteGifFrame(FILE *file)
   // colour need not be sent again: it gets the spare index just past the
   // palette, which is transparent. The first frame sends everything, and
   // so does one whose palette is full and has no index to spare -- or
-  // whose comparison above stopped part way, having already moved on what
-  // is showing, which only a frame of 256 or more colours does.
-  if (!fDone && gi.cGifFrame > 0 && gp.cKv < 256 && fShowOk)
+  // whose comparison above gave up part way, which only a frame of 255 or
+  // more changed colours does. Such a frame is cropped to what differs
+  // from the screen or was transparent in the frame before, as cgif did.
+  if (!fDone && !fFirst && gp.cKv < 256 && fShowOk)
     iTrans = gp.cKv;
+  if (!fDone && !fFirst && iTrans < 0) {
+    if (!FGifPrevMask(pp, pj, &pbPrev, &iTransPrev))
+      return fFalse;
+    pj->fRect = fTrue;
+    pj->xl = xGif; pj->yt = yGif; pj->xr = pj->yb = -1;
+  }
   for (y = 0; y < yGif && !fDone; y++) {
-    pb = rgbGifPix + (long)y * xGif;
-    pl = rglGifShow + (long)y * xGif;
+    pb = rgbPix + (long)y * xGif;
+    pl = rglShow + (long)y * xGif;
     for (x = 0; x < xGif; x++) {
       kv = gp.rgkv[pb[x]];
       if (iTrans >= 0 && pl[x] == (uint32_t)kv)
         pb[x] = (byte)iTrans;
-      else
+      else {
+        if (pj->fRect && (pl[x] != (uint32_t)kv ||
+          (iTransPrev >= 0 && pbPrev[(long)y * xGif + x] == iTransPrev))) {
+          pj->xl = Min(pj->xl, x); pj->xr = Max(pj->xr, x);
+          pj->yt = Min(pj->yt, y); pj->yb = y;
+        }
         pl[x] = (uint32_t)kv;
+      }
     }
   }
 
+  for (i = 0; i < gp.cKv; i++)
+    pj->rgkv[i] = gp.rgkv[i];
+  pj->cKv = gp.cKv;
+  pj->iTrans = iTrans;
+  pj->fQuant = fQuant;
+  return fTrue;
+}
+
+// Crop a mapped frame to what it changes and encode it into the job's
+// buffer: graphic control extension, image descriptor, local colour table
+// and LZW data, the bytes cgif_raw_addframe() would write.
+
+static flag FGifEncodeFrame(GIFPIPE *pp, GIFJOB *pj)
+{
+  CGIFRaw_FrameConfig fc;
+  byte rgbPal[3*256], *pbCrop = NULL, *pb;
+  KV kv;
+  int x, y, xl, yt, xr, yb, i;
+  int xGif = pp->xGif, yGif = pp->yGif;
+  long cbCrop = 0;
+  cgif_result r;
+
+  if (pj->iFrame == 0) {
+    xl = yt = 0; xr = xGif-1; yb = yGif-1;
+  } else if (pj->fRect) {
+    xl = pj->xl; yt = pj->yt; xr = pj->xr; yb = pj->yb;
+  } else {
+    // The rectangle of what is not transparent, each edge found by working
+    // in from it and stopping at the first pixel sent, as cgif does.
+    xl = xGif; xr = -1;
+    for (yt = 0; yt < yGif; yt++) {
+      pb = pj->pbPix + (long)yt * xGif;
+      for (x = 0; x < xGif && pb[x] == pj->iTrans; x++)
+        ;
+      if (x < xGif) {
+        xl = x;
+        for (x = xGif-1; pb[x] == pj->iTrans; x--)
+          ;
+        xr = x;
+        break;
+      }
+    }
+    for (yb = yGif-1; yb > yt; yb--) {
+      pb = pj->pbPix + (long)yb * xGif;
+      for (x = 0; x < xGif && pb[x] == pj->iTrans; x++)
+        ;
+      if (x < xGif) {
+        xl = Min(xl, x);
+        for (x = xGif-1; pb[x] == pj->iTrans; x--)
+          ;
+        xr = Max(xr, x);
+        break;
+      }
+    }
+    for (y = yt+1; y < yb; y++) {
+      pb = pj->pbPix + (long)y * xGif;
+      for (x = 0; x < xl && pb[x] == pj->iTrans; x++)
+        ;
+      xl = x;
+      for (x = xGif-1; x > xr && pb[x] == pj->iTrans; x--)
+        ;
+      xr = x;
+    }
+    if (yt >= yGif)
+      xr = -1;
+  }
+  if (xr < 0) {    // Nothing changed: one pixel, as cgif sends.
+    xl = xr = yt = yb = 0;
+  }
+
+  ClearB((pbyte)&fc, sizeof(fc));
+  if (pj->iFrame == 0)
+    fc.pImageData = pj->pbPix;
+  else {
+    cbCrop = (long)(xr - xl + 1) * (yb - yt + 1);
+    pbCrop = (byte *)PvGifAlloc(pj->pcbMem, cbCrop);
+    if (pbCrop == NULL)
+      return fFalse;
+    for (y = yt; y <= yb; y++)
+      memcpy(pbCrop + (long)(y - yt) * (xr - xl + 1),
+        pj->pbPix + (long)y * xGif + xl, xr - xl + 1);
+    fc.pImageData = pbCrop;
+  }
   // The local colour table, with the transparent index's entry if used.
-  for (i = 0; i < gp.cKv + (iTrans >= 0); i++) {
-    kv = i < gp.cKv ? gp.rgkv[i] : 0;
+  for (i = 0; i < pj->cKv + (pj->iTrans >= 0); i++) {
+    kv = i < pj->cKv ? pj->rgkv[i] : 0;
     rgbPal[3*i] = (byte)RgbR(kv); rgbPal[3*i+1] = (byte)RgbG(kv);
     rgbPal[3*i+2] = (byte)RgbB(kv);
   }
-  ClearB((pbyte)&fc, sizeof(fc));
-  fc.pLocalPalette = rgbPal;
-  fc.numLocalPaletteEntries = (uint16_t)(gp.cKv + (iTrans >= 0));
-  fc.pImageData = rgbGifPix;
-  fc.attrFlags = CGIF_FRAME_ATTR_USE_LOCAL_TABLE;
-  if (iTrans >= 0) {
-    fc.attrFlags |= CGIF_FRAME_ATTR_HAS_SET_TRANS;
-    fc.transIndex = (uint8_t)iTrans;
+  fc.pLCT = rgbPal;
+  fc.sizeLCT = (uint16_t)(pj->cKv + (pj->iTrans >= 0));
+  if (pj->iTrans >= 0) {
+    fc.attrFlags = CGIF_RAW_FRAME_ATTR_HAS_TRANS;
+    fc.transIndex = (uint8_t)pj->iTrans;
   }
-  // cgif then crops the frame to the rectangle that is not transparent.
-  fc.genFlags = CGIF_FRAME_GEN_USE_DIFF_WINDOW;
-  fc.delay = (uint16_t)gi.nGifDelay;
-  if (cgif_addframe(pgifOut, &fc) != CGIF_OK)
-    return fFalse;
-  gi.cGifFrame++;
-  return !ferror(file);
+  fc.width = (uint16_t)(xr - xl + 1); fc.height = (uint16_t)(yb - yt + 1);
+  fc.left = (uint16_t)xl; fc.top = (uint16_t)yt;
+  fc.delay = (uint16_t)pj->nDelay;
+  fc.disposalMethod = DISPOSAL_METHOD_LEAVE;
+  r = cgif_raw_encodeframe(&pp->rc, &fc, NGifBuffer, pj);
+  GifFree(pj->pcbMem, pbCrop, cbCrop);
+  return r == CGIF_OK;
 }
 
+// Map and encode one frame: on a worker, or inline when there are none.
 
-// Finish the animated GIF FGenerateGif() is writing: the frames cgif still
-// holds, and the trailer. Frees what the frames used. Returns whether all
-// of it was written; the caller still closes the file.
-
-flag FEndGif()
+static void GifRunJob(GIFPIPE *pp, GIFJOB *pj)
 {
-  flag fOk = fTrue;
+  GIFJOB *pjPrev = pj->pjobPrev.get();
+  long cbShow = (long)pp->xGif * pp->yGif * sizeof(uint32_t);
+  uint32_t *rglShow = NULL;
+  flag fOk = fTrue, fKnown = fTrue, fQuantPrev = pj->fQuantGuess;
 
-  if (pgifOut != NULL) {
-    fOk = cgif_close(pgifOut) == CGIF_OK;
-    pgifOut = NULL;
+  // What shows before this frame. Taken from the previous frame when it is
+  // mapped; rebuilt from its render, on a guess, when it is not; waited for
+  // when a frame smaller than the screen is involved, since then only the
+  // previous frame knows.
+  if (pjPrev != NULL) {
+#ifdef GIFTHREADS
+    std::unique_lock<std::mutex> lk(pp->mtx);
+    if (!pjPrev->fMapped && (pjPrev->fShort || pj->fShort) &&
+      !FGifWaitMapped(pp, pjPrev, lk))
+      fOk = fFalse;
+#endif
+    if (fOk && pjPrev->fMapped) {
+      fQuantPrev = pjPrev->fQuant;
+      rglShow = pjPrev->plShow;
+      pjPrev->plShow = NULL;
+    } else if (fOk) {
+      pjPrev->fDropShow = fTrue;
+      fKnown = fFalse;
+    }
   }
-  if (rgbGifPix != NULL) {
-    DeallocateP(rgbGifPix);
-    rgbGifPix = NULL;
+  if (fOk && rglShow == NULL && pjPrev != NULL && pj->psnapPrev == NULL)
+    fOk = fFalse;    // A predecessor that failed, encoding inline.
+  if (fOk && rglShow == NULL) {
+    rglShow = (uint32_t *)PvGifAlloc(pj->pcbMem, cbShow);
+    if (rglShow == NULL)
+      fOk = fFalse;
+    else if (pjPrev != NULL)
+      GifShowFromSnap(pj->psnapPrev.get(), fQuantPrev, rglShow, pp->xGif,
+        pp->yGif);
   }
-  if (rglGifShow != NULL) {
-    DeallocateP(rglGifShow);
-    rglGifShow = NULL;
+  while (fOk) {
+    fOk = FGifMapFrame(pp, pj, rglShow);
+    if (!fOk || fKnown)
+      break;
+    // Check the guess, and do the frame again if it was wrong.
+    {
+#ifdef GIFTHREADS
+      std::unique_lock<std::mutex> lk(pp->mtx);
+      if (!FGifWaitMapped(pp, pjPrev, lk)) {
+        fOk = fFalse;
+        break;
+      }
+#endif
+      fKnown = fTrue;
+      if (pjPrev->fQuant == fQuantPrev)
+        break;
+      fQuantPrev = pjPrev->fQuant;
+    }
+    GifShowFromSnap(pj->psnapPrev.get(), fQuantPrev, rglShow, pp->xGif,
+      pp->yGif);
   }
+  pj->psnap.reset();
+  pj->psnapPrev.reset();
+  {
+#ifdef GIFTHREADS
+    std::unique_lock<std::mutex> lk(pp->mtx);
+#endif
+    if (fOk && !pj->fDropShow)
+      pj->plShow = rglShow;
+    else
+      GifFree(pj->pcbMem, rglShow, cbShow);
+    pj->fMapped = fTrue;
+    pj->fError = !fOk;
+#ifdef GIFTHREADS
+    pp->cvState.notify_all();
+#endif
+  }
+  if (fOk)
+    fOk = FGifEncodeFrame(pp, pj);
+  {
+#ifdef GIFTHREADS
+    std::unique_lock<std::mutex> lk(pp->mtx);
+#endif
+    pj->fError = !fOk;
+    pj->fDone = fTrue;
+    pj->pjobPrev.reset();
+#ifdef GIFTHREADS
+    pp->cvState.notify_all();
+#endif
+  }
+}
+
+#ifdef GIFTHREADS
+static void GifWorker(GIFPIPE *pp)
+{
+  std::unique_lock<std::mutex> lk(pp->mtx);
+  std::shared_ptr<GIFJOB> pj;
+
+  loop {
+    pp->cvWork.wait(lk, [pp]{ return pp->fStop ||
+      (!pp->fHold && !pp->qjobWork.empty()); });
+    if (pp->fStop)
+      break;
+    pj = pp->qjobWork.front();
+    pp->qjobWork.pop_front();
+    lk.unlock();
+    GifRunJob(pp, pj.get());
+    pj.reset();
+    lk.lock();
+  }
+}
+#endif
+
+// How many threads encode an animated GIF, as gs.nGifThread asks: a count,
+// or 0 for one a core. 1 encodes on the main thread, as does any build whose
+// compiler has no std::thread.
+
+int NGifThreadMax()
+{
+#ifdef GIFTHREADS
+  return Min(Max((int)std::thread::hardware_concurrency(), 1),
+    cGifThreadMax);
+#else
+  return 1;
+#endif
+}
+
+int NGifThreads()
+{
+#ifdef GIFTHREADS
+  return gs.nGifThread > 0 ? Min(gs.nGifThread, cGifThreadMax) :
+    NGifThreadMax();
+#else
+  return 1;
+#endif
+}
+
+// Write the frames at the head of the queue that are finished, in order.
+// Returns fFalse once any frame has failed.
+
+static flag FGifWriteDone(GIFPIPE *pp)
+{
+  std::shared_ptr<GIFJOB> pj;
+
+  loop {
+    {
+#ifdef GIFTHREADS
+      std::unique_lock<std::mutex> lk(pp->mtx);
+#endif
+      if (pp->qjobFile.empty() || !pp->qjobFile.front()->fDone)
+        break;
+      pj = pp->qjobFile.front();
+      pp->qjobFile.pop_front();
+    }
+    if (pj->fError || fwrite(pj->pbOut, 1, pj->cbOut, pp->file) !=
+      (size_t)pj->cbOut)
+      pp->fError = fTrue;
+    pp->fQuantLast = pj->fQuant;
+    pp->cWritten++;
+    pj.reset();
+  }
+  return !pp->fError && !ferror(pp->file);
+}
+
+// Append the chart just rendered to the open animated GIF as its next
+// frame, starting the file if this is the first one. The first frame fixes
+// the logical screen. A later frame of another size is clipped to it, and
+// where it is smaller the rest of the screen keeps showing the frame
+// before, as a viewer shows it, since no frame is ever cleared. The frame
+// is queued for the workers, or encoded here if there are none, and every
+// finished frame is written.
+
+static flag FWriteGifFrame(FILE *file)
+{
+  GIFPIPE *pp = s_ppipeGif;
+  std::shared_ptr<GIFSNAP> psnap;
+  std::shared_ptr<GIFJOB> pj;
+  int xs, ys, i, cThread;
+  long cb;
+
+  if (pfnGifFrameHook != NULL)
+    (*pfnGifFrameHook)(gi.cGifFrame);
+  if (gi.fBmp) {
+    xs = gi.bmp.x; ys = gi.bmp.y;
+  } else {
+    xs = gs.xWin; ys = gs.yWin;
+  }
+  if (gi.cGifFrame == 0) {
+    if (xs <= 0 || ys <= 0 || xs > 0xFFFF || ys > 0xFFFF || pp != NULL)
+      return fFalse;
+    pp = new GIFPIPE;
+    s_ppipeGif = pp;
+    pp->xGif = xs; pp->yGif = ys;
+    pp->file = file;
+    ClearB((pbyte)&pp->rc, sizeof(pp->rc));
+    pp->rc.attrFlags = CGIF_RAW_ATTR_IS_ANIMATED |
+      (gi.fGifLoop ? 0 : CGIF_RAW_ATTR_NO_LOOP);
+    pp->rc.width = (uint16_t)xs; pp->rc.height = (uint16_t)ys;
+    pp->rc.numLoops = CGIF_INFINITE_LOOP;
+    pp->rc.pWriteFn = NGifWrite;
+    pp->rc.pContext = file;
+    pp->praw = cgif_raw_newgif(&pp->rc);    // The header, written now.
+    if (pp->praw == NULL)
+      return fFalse;
+    gi.xGif = xs; gi.yGif = ys;
+    cThread = NGifThreads();
+#ifdef GIFTHREADS
+    pp->fHold = fGifWorkerHold;
+    // A thread that cannot be started leaves fewer; none, and frames are
+    // encoded inline. The vector is sized first, so growing it can never
+    // throw with a running thread in hand.
+    try {
+      pp->rgthread.reserve(cThread > 1 ? cThread : 0);
+      for (i = 0; cThread > 1 && i < cThread; i++)
+        pp->rgthread.emplace_back(GifWorker, pp);
+    } catch (...) {
+    }
+    pp->cThread = (int)pp->rgthread.size();
+#else
+    (void)cThread; (void)i;
+#endif
+  }
+  if (pp == NULL || pp->praw == NULL || pp->fError)
+    return fFalse;
+  xs = Min(xs, pp->xGif); ys = Min(ys, pp->yGif);
+  if (xs <= 0 || ys <= 0)
+    return fFalse;
+
+  // Copy what the GIF needs of the render. Encoding inline, it is read
+  // before the next render, so the bitmap is used where it lies.
+  psnap = std::make_shared<GIFSNAP>();
+  psnap->pcbMem = &pp->cbMem;
+  psnap->xs = xs; psnap->ys = ys;
+  psnap->fBmp = gi.fBmp;
+  psnap->cbRow = gi.fBmp ? (long)gi.bmp.clRow << 2 : (long)gi.cbBmpRow;
+  psnap->cKvFix = gs.fColor ? 16 : 2;
+  for (i = 0; i < psnap->cKvFix; i++)
+    psnap->rgkvFix[i] = gs.fColor ? rgbbmp[i] : (i ? Rgb(255, 255, 255) : 0);
+  if (pp->cThread == 0)
+    psnap->rgb = gi.fBmp ? gi.bmp.rgb : gi.bm;
+  else {
+    cb = psnap->cbRow * ys;
+    psnap->rgb = (byte *)PvGifAlloc(&pp->cbMem, cb);
+    if (psnap->rgb == NULL)
+      return fFalse;
+    psnap->cb = cb;
+    memcpy(psnap->rgb, gi.fBmp ? gi.bmp.rgb : gi.bm, cb);
+  }
+
+  pj = std::make_shared<GIFJOB>();
+  pj->pcbMem = &pp->cbMem;
+  pj->iFrame = gi.cGifFrame;
+  pj->fShort = gi.cGifFrame > 0 && (xs < pp->xGif || ys < pp->yGif);
+  pj->fQuantGuess = pp->fQuantLast;
+  pj->nDelay = gi.nGifDelay;
+  pj->psnap = psnap;
+  pj->cbPix = (long)pp->xGif * pp->yGif;
+  pj->pbPix = (byte *)PvGifAlloc(&pp->cbMem, pj->cbPix);
+  if (pj->pbPix == NULL)
+    return fFalse;
+  if (pp->cThread > 0) {
+    pj->psnapPrev = pp->psnapLast;
+    pp->psnapLast = psnap;
+  }
+  pj->pjobPrev = pp->pjobLast;
+  pp->pjobLast = pj;
+  gi.cGifFrame++;
+#ifdef GIFTHREADS
+  if (pp->cThread > 0) {
+    std::unique_lock<std::mutex> lk(pp->mtx);
+    pp->qjobFile.push_back(pj);
+    pp->qjobWork.push_back(pj);
+    lk.unlock();
+    pp->cvWork.notify_one();
+    return !pp->fError && !ferror(file);
+  }
+#endif
+  pp->qjobFile.push_back(pj);
+  GifRunJob(pp, pj.get());
+  return FGifWriteDone(pp);
+}
+
+// Frames of the animated GIF being written that are in the file so far.
+
+int NGifWritten()
+{
+  return s_ppipeGif != NULL ? s_ppipeGif->cWritten : 0;
+}
+
+// Write what the workers have finished. With gpWaitRoom, first wait (a
+// little) for room in the queue if it is full; with gpWaitAll, for any frame
+// still being encoded. *pfMore says whether there is still no room, or
+// still a frame to come. Returns fFalse once a frame has failed.
+
+flag FGifPump(int gp, flag *pfMore)
+{
+  GIFPIPE *pp = s_ppipeGif;
+  flag fMore = fFalse;
+
+  if (pp == NULL) {
+    *pfMore = fFalse;
+    return fTrue;
+  }
+#ifdef GIFTHREADS
+  if (pp->cThread > 0 && gp != gpNoWait) {
+    std::unique_lock<std::mutex> lk(pp->mtx);
+    if (pp->fHold) {
+      pp->fHold = fFalse;
+      pp->cvWork.notify_all();
+    }
+    auto fnWaiting = [pp, gp]() {
+      if (pp->qjobFile.empty() || pp->qjobFile.front()->fDone)
+        return fFalse;
+      return gp == gpWaitAll ? fTrue :
+        (flag)((int)pp->qjobFile.size() >= 2*pp->cThread &&
+        pp->cbMem >= cbGifQueueMax);
+    };
+    if (fnWaiting())
+      pp->cvState.wait_for(lk, std::chrono::milliseconds(50),
+        [&]() { return !fnWaiting(); });
+  }
+#endif
+  if (!FGifWriteDone(pp))
+    return fFalse;
+#ifdef GIFTHREADS
+  if (pp->cThread > 0) {
+    std::unique_lock<std::mutex> lk(pp->mtx);
+    fMore = gp == gpWaitAll ? !pp->qjobFile.empty() :
+      ((int)pp->qjobFile.size() >= 2*pp->cThread &&
+      pp->cbMem >= cbGifQueueMax);
+  }
+#endif
+  *pfMore = fMore;
+  return fTrue;
+}
+
+// Finish the animated GIF FGenerateGif() is writing: with fFinish, every
+// frame still queued and the trailer; without it, stop the workers and
+// drop what they hold, which a cancel wants done at once. Frees what the
+// frames used. Returns whether all of it was written; the caller still
+// closes the file.
+
+flag FEndGif(flag fFinish)
+{
+  GIFPIPE *pp = s_ppipeGif;
+  flag fOk = fTrue, fMore;
+
+  if (pp == NULL)
+    return fTrue;
+  while (fFinish && fOk && !pp->fError) {
+    fOk = FGifPump(gpWaitAll, &fMore);
+    if (!fMore)
+      break;
+  }
+#ifdef GIFTHREADS
+  {
+    std::unique_lock<std::mutex> lk(pp->mtx);
+    pp->fStop = fTrue;
+    pp->qjobWork.clear();
+    pp->cvWork.notify_all();
+    pp->cvState.notify_all();
+  }
+  for (auto &th : pp->rgthread)
+    th.join();
+#endif
+  if (fFinish && (!pp->qjobFile.empty() || pp->cWritten != gi.cGifFrame))
+    fOk = fFalse;
+  pp->qjobFile.clear();
+  pp->psnapLast.reset();
+  pp->pjobLast.reset();
+  if (pp->praw != NULL) {
+    // The trailer. cgif's raw stream says PENDING, never OK, when every
+    // frame reached the file some other way than its own addframe.
+    if (fFinish) {
+      if (cgif_raw_close(pp->praw) == CGIF_EWRITE)
+        fOk = fFalse;
+    } else
+      free(pp->praw);    // What cgif_raw_close() frees, without a trailer.
+  }
+  if (pp->fError)
+    fOk = fFalse;
+  s_ppipeGif = NULL;
+  delete pp;
   return fOk;
 }
 

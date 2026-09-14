@@ -44,7 +44,9 @@ OBJS = $(patsubst %.cpp,$(objdir)%.o,$(SRC_CORE) $(SRC_GRAPHICS) $(SRC_SWISS))
 
 # If you don't have X windows, delete the "-lX11" part from the line below:
 # If not compiling with GNUC, delete the "-ldl" part from the line below:
-LIBS = -lm -lX11 -ldl -s
+# -pthread for the animated GIF writer's std::thread (xdevice.cpp). glibc
+# 2.34 and later need nothing; older ones fail at run time without it.
+LIBS = -lm -lX11 -ldl -pthread -s
 # -std=gnu++17 is not decoration. calc.cpp uses class template argument
 # deduction ("Borrow bciCore(ciCore);"), a C++17 feature. g++ 11 defaults
 # to gnu++17 so this build happened to work, but Makefile.win relied on

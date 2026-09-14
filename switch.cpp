@@ -1369,6 +1369,17 @@ static int NSwYXa(CONST char *szSwitch, PARSEIN *pin)
   return 1;
 }
 
+static int NSwYXgt(CONST char *szSwitch, PARSEIN *pin)
+{
+  int i;
+
+  i = NFromSz(pin->argv[1]);
+  if (FErrorValN("YXgt", !FBetween(i, 0, cGifThreadMax), i, 0))
+    return tcError;
+  gs.nGifThread = i;
+  return 1;
+}
+
 static int NSwYXx(CONST char *szSwitch, PARSEIN *pin)
 {
   gs.nThickAdjust = NFromSz(pin->argv[1]);
@@ -3982,6 +3993,7 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"YXk",  0,      NSwYXk},   {"YXk0", 0, NSwYXk0},
   {"YXK",  0,      NSwYXK, 2},   {"YXK0", 0, NSwYXK0},
   {"YXa",  0,      NSwYXa, 1},   {"YXx",  0,      NSwYXx, 1},
+  {"YXgt", 0,      NSwYXgt, 1},
   {"YXW",  0,      NSwYXW},
 #ifdef SWISS
   {"YXU",  0,      NSwYXU, 2},   {"YXU0", 0, NSwYXU0},

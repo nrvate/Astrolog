@@ -271,6 +271,7 @@ _XL              ; Show cities   ["=XL" shows them in charts, "_XL" doesn't  ]
 :YXj 0           ; Orbit trail count
 :YX7 600         ; Esoteric Ray column influence width
 :YXx 0           ; Line thickness adjustment for vector formats
+:YXgt 0          ; Threads writing animated GIFs ["0" for all cores]
 :YXf #000000     ; Fonts to use [text, signs, houses, planets, aspects, naks.]
 :YXp 0           ; PostScript paper orientation ["-1" portrait, "1" landscape]
 :YXp0 8.5in 11in ; PostScript paper X and Y sizes

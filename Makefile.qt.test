@@ -50,7 +50,7 @@ endif
 
 QT_CFLAGS = $(shell pkg-config --cflags $(QT_MODULES) 2>/dev/null)
 QT_LIBS = $(shell pkg-config --libs $(QT_MODULES) 2>/dev/null)
-LIBS = $(QT_LIBS) -lm -ldl
+LIBS = $(QT_LIBS) -lm -ldl -pthread
 CPPFLAGS = -MMD -MP -DQT -DQTTEST -O -fPIC -std=gnu++17 -Wno-write-strings -Wno-narrowing \
  -Wno-comment $(QT_CFLAGS)
 RM = rm -f

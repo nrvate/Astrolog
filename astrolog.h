@@ -2606,6 +2606,7 @@ typedef struct _GraphicsSettings {
   int nTriangles;    // Triangles/cubes grid to draw on maps, if any (-YXW).
   char *szStarsLin;  // Names of extra stars for linking (-YXU).
   char *szStarsLnk;  // Indexes of star pairs to link up (-YXU).
+  int nGifThread;    // Threads writing animated GIFs, 0 all cores (-YXgt).
 } GS;
 
 // GA is one animated GIF request: the dates it runs between, how far each
@@ -2623,10 +2624,21 @@ typedef struct _GifAnimation {
   flag fBounce;          // Forward to the last date, then back again?
   int xWin, yWin;        // Frame size, or 0 for the chart's own.
   char *szFile;          // File to write. Non-NULL means -Xg is pending.
-  flag (*pfnProgress)(int, int);  // Frames done, of count; fFalse cancels.
+  // Called on the main thread after each frame renders, and while frames
+  // are still being compressed: frames rendered, frames written to the
+  // file, and the count. Returning fFalse cancels.
+  flag (*pfnProgress)(int, int, int);
 } GA;
 
 #define cGifFrameMax 5000  // Most frames one animated GIF may have.
+#define cGifThreadMax 256  // Most threads that may write one (-YXgt).
+
+// How FGifPump() waits for the threads compressing an animated GIF.
+enum _gifpump {
+  gpNoWait   = 0,  // Write what is finished, and return.
+  gpWaitRoom = 1,  // Wait a little first if the queue is full.
+  gpWaitAll  = 2,  // Wait a little first if any frame is unfinished.
+};
 
 // GI is IS for graphics: the canvas, buffers, cursors, and per-render
 // scratch. Never serialized, never user intent.

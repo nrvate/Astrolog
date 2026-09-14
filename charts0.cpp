@@ -775,6 +775,7 @@ void DisplaySwitchesRare(void)
   PrintS(" _YXe: Align certain charts to plane of ecliptic.");
   PrintS(" _YXa <num>: Set limit to dashedness in aspect lines drawn.");
   PrintS(" _YXx <num>: Adjust thickness of lines by this many units.");
+  PrintS(" _YXgt <num>: Set threads writing animated GIFs, 0 for all cores.");
 #ifdef SWISS
   PrintS(" _YXU <starlist> <linklist>: Define lines between extra stars.");
   PrintS(" _YXU0 <starlist> <linklist>: Append instead of replace lines.");
