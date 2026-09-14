@@ -1533,20 +1533,27 @@ flag FOutputDaedalusStar()
 #define PrintFSz() PrintF(sz)
 #define PrintRSz(r, n) FormatR(S(sz), r, n); PrintF(sz)
 
-// Print a real for a settings file, with a space before it: in szFmt when
-// that reads back as the same value, so the compiled defaults keep the
-// columns they have always had, and otherwise in as many digits as it takes.
-// A lossy format is a lost setting: "%4.1f" wrote the 0.05 influence of
-// aspects 19-24 as "0.1", and a value of 10 or more, having no space in
-// front of it, ran into the value before it.
+// Format a real for a settings file: in szFmt when that reads back as the
+// same value, so the compiled defaults keep the columns they have always
+// had, and otherwise in as many digits as it takes. A lossy format is a
+// lost setting: "%4.1f" wrote the 0.05 influence of aspects 19-24 as "0.1",
+// and "%.0f" wrote an influence or a star's orb of 7.5 as "8".
+static void FormatRExact(char *sz, int cchMax, CONST char *szFmt, real r)
+{
+  int n;
+
+  sprintf2(sz, cchMax, szFmt, r);
+  for (n = 6; atof(sz) != r && n <= 17; n++)
+    sprintf2(sz, cchMax, "%.*g", n, r);
+}
+
+// The same, printed with a space before it: a value of 10 or more written
+// through "%4.1f", having no space in front of it, ran into the one before.
 static void PrintRExact(FILE *file, CONST char *szFmt, real r)
 {
   char sz[cchSzDef];
-  int n;
 
-  sprintf2(S(sz), szFmt, r);
-  for (n = 6; atof(sz) != r && n <= 17; n++)
-    sprintf2(S(sz), "%.*g", n, r);
+  FormatRExact(S(sz), szFmt, r);
   if (sz[0] != ' ')
     PrintF(" ");
   PrintF(sz);
@@ -2281,7 +2288,7 @@ flag FOutputSettings()
     { PrintF(" "); PrintRSz(rgobjset[i].orb, -306); }
   PrintF("  ; Moons and body centers\n");
   PrintSpanHead(file, "-YAm", starLo, starLo, 12);
-  sprintf2(S(sz), "%4.0f", rgobjset[starLo].orb); PrintFSz();
+  FormatRExact(S(sz), "%4.0f", rgobjset[starLo].orb); PrintFSz();
   PrintF("                                              ; Fixed stars\n");
 
   PrintF("\n; DEFAULT PLANET ASPECT ORB ADDITIONS:\n\n");
@@ -2309,41 +2316,41 @@ flag FOutputSettings()
     { PrintF(" "); PrintRSz(rgobjset[i].add, -6); }
   PrintF("  ; Moons and body centers\n");
   PrintSpanHead(file, "-YAd", starLo, starLo, 12);
-  sprintf2(S(sz), " %.0f", rgobjset[starLo].add); PrintFSz();
+  FormatRExact(S(sz), " %.0f", rgobjset[starLo].add); PrintFSz();
   PrintF("                        ; Fixed stars\n\n\n");
 
   PrintF("; DEFAULT INFLUENCES:\n\n");
   PrintSpanHead(file, "-Yj", 0, oMain, 11);
   for (i = 0; i <= oMain; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].inf); }
   PrintF("     ; Planets\n");
   PrintSpanHead(file, "-Yj", oMain+1, oCore, 11);
   for (i = oMain+1; i <= oCore; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].inf); }
   PrintF("     ; Minor planets\n");
   PrintSpanHead(file, "-Yj", cuspLo, cuspHi, 11);
   for (i = cuspLo; i <= cuspHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].inf); }
   PrintF("  ; Cusp objects\n");
   PrintSpanHead(file, "-Yj", uranLo, uranHi, 11);
   for (i = uranLo; i <= uranHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].inf); }
   PrintF("           ; Uranians\n");
   PrintSpanHead(file, "-Yj", dwarfLo, dwarfHi, 11);
   for (i = dwarfLo; i <= dwarfHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].inf); }
   PrintF("           ; Dwarfs\n");
   PrintSpanHead(file, "-Yj", moonsLo, cobHi, 11);
   for (i = moonsLo; i <= cobHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].inf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].inf); }
   PrintF("  ; Moons and body centers\n");
   PrintSpanHead(file, "-Yj", starLo, starLo, 12);
-  sprintf2(S(sz), "%2.0f", rgobjset[starLo].inf); PrintFSz();
+  FormatRExact(S(sz), "%2.0f", rgobjset[starLo].inf); PrintFSz();
   PrintF("                                   ; Fixed stars\n\n");
 
   PrintF("-YjC 1 12  ");
   for (i = 1; i <= cSign; i++)
-    { sprintf2(S(sz), " %.0f", rHouseInf[i]); PrintFSz(); }
+    { PrintRExact(file, " %.0f", rHouseInf[i]); }
   PrintF("  ; Houses\n\n-YjA 1 5   ");
 
   // Every aspect the Aspect Settings dialog and "-YjA" reach, 1 to
@@ -2366,39 +2373,45 @@ flag FOutputSettings()
   PrintF("; DEFAULT TRANSIT INFLUENCES:\n\n");
   PrintSpanHead(file, "-YjT", 0, oMain, 11);
   for (i = 0; i <= oMain; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].tinf); }
   PrintF("  ; Planets\n");
   PrintSpanHead(file, "-YjT", oMain+1, oCore, 11);
   for (i = oMain+1; i <= oCore; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].tinf); }
   PrintF("  ; Minor planets\n");
   PrintSpanHead(file, "-YjT", cuspLo, cuspHi, 11);
   for (i = cuspLo; i <= cuspHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].tinf); }
   PrintF("  ; Cusp objects\n");
   PrintSpanHead(file, "-YjT", uranLo, uranHi, 11);
   for (i = uranLo; i <= uranHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].tinf); }
   PrintF("        ; Uranians\n");
   PrintSpanHead(file, "-YjT", dwarfLo, dwarfHi, 11);
   for (i = dwarfLo; i <= dwarfHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].tinf); }
   PrintF("        ; Dwarfs\n");
   PrintSpanHead(file, "-YjT", moonsLo, cobHi, 11);
   for (i = moonsLo; i <= cobHi; i++)
-    { sprintf2(S(sz), " %2.0f", rgobjset[i].tinf); PrintFSz(); }
+    { PrintRExact(file, " %2.0f", rgobjset[i].tinf); }
   PrintF("  ; Moons and body centers\n");
   PrintSpanHead(file, "-YjT", starLo, starLo, 12);
-  sprintf2(S(sz), "%2.0f", rgobjset[starLo].tinf); PrintFSz();
+  FormatRExact(S(sz), "%2.0f", rgobjset[starLo].tinf); PrintFSz();
   PrintF("                                ; Fixed stars\n\n");
 
-  sprintf2(S(sz), "-Yj0 %.0f %.0f %.0f %.0f ",
-    rgrBonusInf[1], rgrBonusInf[2], rHouseInf[cSign + 1],
-    rHouseInf[cSign + 2]); PrintFSz();
+  PrintF("-Yj0");
+  PrintRExact(file, " %.0f", rgrBonusInf[1]);
+  PrintRExact(file, " %.0f", rgrBonusInf[2]);
+  PrintRExact(file, " %.0f", rHouseInf[cSign + 1]);
+  PrintRExact(file, " %.0f", rHouseInf[cSign + 2]);
+  PrintF(" ");
   PrintF(" ; In ruling sign, exalted sign, ruling house, exalted house\n");
-  sprintf2(S(sz), "-Yj7 %.0f %.0f %.0f %.0f %.0f %.0f ", rgrBonusInf[3],
-    rgrBonusInf[4], rgrBonusInf[5], rHouseInf[cSign + 3],
-    rHouseInf[cSign + 4], rHouseInf[cSign + 5]); PrintFSz();
+  PrintF("-Yj7");
+  for (i = 3; i <= 5; i++)
+    PrintRExact(file, " %.0f", rgrBonusInf[i]);
+  for (i = cSign + 3; i <= cSign + 5; i++)
+    PrintRExact(file, " %.0f", rHouseInf[i]);
+  PrintF(" ");
   PrintF(" ; In Esoteric, Hierarchical, Ray ruling (signs, houses)\n\n\n");
 
   PrintF("; DEFAULT RULERSHIPS & EXALTATIONS:\n\n");

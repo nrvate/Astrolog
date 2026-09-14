@@ -10490,6 +10490,19 @@ static void TestSettingsArraysQt()
     ((real *)rgoe)[i] = ((CONST real *)rgoeDef)[i] + 0.5;
 #endif
 
+  // And every real a quarter off where it was, so a writer that rounds --
+  // "%.0f" wrote the influences, the house influences and the star orbs
+  // until 2026-09-13 -- brings back something else. Whole-number values
+  // passed through a rounding writer untouched.
+  for (i = 0; i < csetarray; i++)
+    if (rgsetarray[i].ch == 'r')
+      for (j = 0; j < rgsetarray[i].cb / (int)sizeof(real); j++)
+        ((real *)rgsetarray[i].pv)[j] += 0.25;
+  for (j = 0; j <= oNorm1; j++) {
+    rgobjset.rgn[j].orb += 0.25;  rgobjset.rgn[j].add += 0.25;
+    rgobjset.rgn[j].inf += 0.25;  rgobjset.rgn[j].tinf += 0.25;
+  }
+
   // And the state the file has to bring back, which is the filled one.
   for (i = 0; i < csetarray; i++)
     rgbaWant[i] = QByteArray((CONST char *)rgsetarray[i].pv,
@@ -10515,11 +10528,11 @@ static void TestSettingsArraysQt()
         ((int *)psa->pv)[j] ^= 1;
     } else if (psa->ch == 'r') {
       for (j = 0; j < psa->cb / (int)sizeof(real); j++)
-        ((real *)psa->pv)[j] += 1.0;
+        ((real *)psa->pv)[j] += 0.25;
     } else {
       for (j = 0; j <= oNorm1; j++) {
-        rgobjset.rgn[j].orb += 1.0;  rgobjset.rgn[j].add += 1.0;
-        rgobjset.rgn[j].inf += 1.0;  rgobjset.rgn[j].tinf += 1.0;
+        rgobjset.rgn[j].orb += 0.25;  rgobjset.rgn[j].add += 0.25;
+        rgobjset.rgn[j].inf += 0.25;  rgobjset.rgn[j].tinf += 0.25;
         rgobjset.rgn[j].kolor ^= 1;
       }
     }
@@ -10560,8 +10573,21 @@ static void TestSettingsArraysQt()
         else if (psa->ch == 'r')
           sprintf2(S(szWas), "%.4f", ((CONST real *)pbWas)[iElem]),
           sprintf2(S(szIs), "%.4f", ((CONST real *)pbIs)[iElem]);
-        else
-          sprintf2(S(szWas), "(objset)"), sprintf2(S(szIs), "(objset)");
+        else {
+          // Name the column, since "rgobjset[0] moved" is not a finding.
+          static CONST char *rgszCol[] = {"orb", "add", "inf", "tinf"};
+          int iCol = (ib % (int)sizeof(OBJSET)) / (int)sizeof(real);
+          CONST OBJSET *posWas = &((CONST OBJSET *)pbWas)[iElem],
+            *posIs = &((CONST OBJSET *)pbIs)[iElem];
+
+          if (iCol >= 4)
+            sprintf2(S(szWas), "kolor %d", posWas->kolor),
+            sprintf2(S(szIs), "%d", posIs->kolor);
+          else
+            sprintf2(S(szWas), "%s %.4f", rgszCol[iCol],
+              ((CONST real *)posWas)[iCol]),
+            sprintf2(S(szIs), "%.4f", ((CONST real *)posIs)[iCol]);
+        }
         Check(fFalse, "%s[%d] did not survive a save and reload "
           "(was %s, back as %s)", psa->szName, iElem, szWas, szIs);
         cLost++;

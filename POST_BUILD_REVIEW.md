@@ -2406,3 +2406,19 @@ byte-identical, not argued: the console build's saved file from compiled
 defaults, from `nrvate.as` and from `tools/settings-fixture.as`, before and
 after, `cmp` clean all three. The `-YkA` lines, the `i < 46` padding and
 the column-padding strings are untouched.
+
+**And the rounding writers (W-10).** `-Yj`, `-YjT`, `-YjC`, `-Yj0`,
+`-Yj7` and the fixed-star `-YAm`/`-YAd` values were written with
+`%.0f`/`%2.0f`/`%4.0f`, so a fractional value -- `-YAm 1 1 7.5`, an
+influence of 4.25 -- came back rounded. Every one now goes through
+`FormatRExact()`/`PrintRExact()`: the old format when it reads back
+exactly, as many digits as it takes when not. Default saves are unchanged
+(compiled defaults, `nrvate.as` and the fixture, `cmp` clean before and
+after), so `astrolog.as` and `defaults_audit.py` needed nothing; a save of
+ten fractional values reaches a fixed point on reload. The sweep could not
+see it because its fill and poison were whole numbers, which a rounding
+writer passes untouched: every real in `settings-arrays` is now filled a
+quarter off before the save and poisoned by +0.25, and an `rgobjset` loss
+names its column. Sabotage, the planets' `-Yj` loop put back to
+`sprintf2(S(sz), " %2.0f", ...)` and the star orb to `"%4.0f"`: *"rgobjset[0]
+did not survive a save and reload (was inf 30.2500, back as 30.0000)"*.
