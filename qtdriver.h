@@ -175,6 +175,8 @@ void ShowCustomDialogQt();
 void ShowCustomStarDialogQt();
 void ShowObjectSelDialogQt();
 void ShowExportBitmapDialogQt();
+void ShowGenerateGifDialogQt();
+flag FCanGenerateGifQt();
 void ShowExportMetafileDialogQt();
 void ShowExportPSDialogQt();
 void ShowExportSVGDialogQt();

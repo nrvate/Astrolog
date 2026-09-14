@@ -2582,6 +2582,26 @@ typedef struct _GraphicsSettings {
   char *szStarsLnk;  // Indexes of star pairs to link up (-YXU).
 } GS;
 
+// GA is one animated GIF request: the dates it runs between, how far each
+// frame steps, and how the result plays. Filled by -Xg or the Qt dialog.
+
+typedef struct _GifAnimation {
+  int mon1, day1, yea1;  // First frame's date and time, in the zone of the
+  real tim1;             // chart an animation moves (see PciAnimate()).
+  int mon2, day2, yea2;  // No frame goes past this date and time.
+  real tim2;
+  int nUnit;             // Step unit, as -Xn takes it: 1-9 or 11-13.
+  int nCount;            // Step size, in those units.
+  int nDelay;            // Milliseconds each frame shows for.
+  flag fLoop;            // Does the GIF loop forever, or play once?
+  flag fBounce;          // Forward to the last date, then back again?
+  int xWin, yWin;        // Frame size, or 0 for the chart's own.
+  char *szFile;          // File to write. Non-NULL means -Xg is pending.
+  flag (*pfnProgress)(int, int);  // Frames done, of count; fFalse cancels.
+} GA;
+
+#define cGifFrameMax 5000  // Most frames one animated GIF may have.
+
 // GI is IS for graphics: the canvas, buffers, cursors, and per-render
 // scratch. Never serialized, never user intent.
 
@@ -2687,6 +2707,15 @@ typedef struct _GraphicsInternal {
   KI kiInFile;        // Actual line color currently in file.
   int zDefault;       // Default elevation for 2D drawing.
 #endif
+  // Last, so xdata.cpp's positional initializer zero-fills them.
+  FILE *fileGif;      // Animated GIF being written, one frame per render.
+  int xGif;           // Its logical screen size, fixed by the first frame.
+  int yGif;
+  int cGifFrame;      // Frames written to it so far.
+  int nGifDelay;      // Its frame delay, in hundredths of a second.
+  flag fGifLoop;      // Does it loop forever?
+  flag fGifError;     // Did writing a frame fail?
+  GA ga;              // The -Xg request, waiting for Action() to run it.
 } GI;
 #endif // GRAPH
 

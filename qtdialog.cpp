@@ -51,6 +51,8 @@
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QProgressDialog>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QAbstractButton>
@@ -1415,6 +1417,277 @@ void ShowExportBitmapDialogQt()
     "Export Chart Bitmap", fPng ?
     "Portable Network Graphics (*.png)" : "Windows Bitmaps (*.bmp)",
     ftBmp, NULL);
+}
+
+// Generate Animation, which Windows does not have: see "Animated GIFs" in
+// QT_GUI_PLAN.md. The dialog asks only what the settings cannot say -- the
+// dates, the step, how the GIF plays and how big it is -- and every frame
+// is the chart the window shows, stepped the way the Animate menu steps
+// it: the second chart of a bi-wheel or transit chart, the transiting
+// chart of a transit or progression, the chart itself otherwise
+// (PciAnimate()). The frame count follows the fields as they are typed,
+// and OK stays off while they describe no GIF that can be written.
+
+typedef struct {
+  QComboBox *pcbMon, *pcbDay, *pcbYea, *pcbTim;
+} GIFDATEQT;
+
+static CONST struct { int nUnit; CONST char *sz; } rggifunitQt[] = {
+  {1, "Seconds"}, {2, "Minutes"}, {3, "Hours"}, {iAnimDay, "Days"},
+  {5, "Months"}, {6, "Years"}, {7, "Decades"}, {8, "Centuries"},
+  {9, "Millennia"}, {11, "1/10th Seconds"}, {12, "1/100th Seconds"},
+  {13, "1/1000th Seconds"} };
+#define cgifunitQt ((int)(sizeof(rggifunitQt)/sizeof(rggifunitQt[0])))
+
+static QProgressDialog *s_pprogGifQt = NULL;
+
+static flag FGifProgressQt(int iFrame, int cFrame)
+{
+  if (s_pprogGifQt == NULL)
+    return fTrue;
+  s_pprogGifQt->setMaximum(cFrame);
+  s_pprogGifQt->setValue(iFrame);
+  QCoreApplication::processEvents();
+  return !s_pprogGifQt->wasCanceled();
+}
+
+// Can the current chart be made into an animated GIF? Only a graphics
+// chart, and only one whose animation moves time rather than spinning a
+// map. The menu item greys out on the same test.
+
+flag FCanGenerateGifQt()
+{
+  if (gi.nMode == 0 && us.fGraphics)
+    gi.nMode = DetectGraphicsChartMode();
+  return us.fGraphics && !FAnimateRotates();
+}
+
+static QComboBox *PcbGifFieldQt(QWidget *pw, CONST QStringList &rgstr,
+  CONST QString &str)
+{
+  QComboBox *pcb = new QComboBox(pw);
+
+  pcb->setEditable(true);
+  pcb->addItems(rgstr);
+  pcb->setEditText(str);
+  return pcb;
+}
+
+static flag FGifDateQt(CONST GIFDATEQT &gd, int *mon, int *day, int *yea,
+  real *tim)
+{
+  *mon = NParseSz(gd.pcbMon->currentText().toLocal8Bit().constData(), pmMon);
+  *day = NParseSz(gd.pcbDay->currentText().toLocal8Bit().constData(), pmDay);
+  *yea = NParseSz(gd.pcbYea->currentText().toLocal8Bit().constData(), pmYea);
+  *tim = RParseSz(gd.pcbTim->currentText().toLocal8Bit().constData(), pmTim);
+  return FValidMon(*mon) && FValidYea(*yea) && FValidDay(*day, *mon, *yea) &&
+    FValidTim(*tim);
+}
+
+#ifdef QTTEST
+// The dialog's frame count line, for the suite to read while it drives the
+// dialog; empty when no Generate Animation dialog is open.
+QString s_strGifCountQt;
+#endif
+
+void ShowGenerateGifDialogQt()
+{
+  QDialog dlg(gi.qwind);
+  GIFDATEQT rggd[2];
+  CI ciStop;
+  CONST CI *pciT;
+  int nUnit, nCount, i, n;
+
+  if (FNoWriteQt())
+    return;
+  if (!FCanGenerateGifQt()) {
+    QMessageBox::information(gi.qwind, szAppName, us.fGraphics ?
+      "This chart animates by rotating its map rather than by moving time, "
+      "so it can't be made into an animated GIF." :
+      "Animated GIFs are made from graphics charts. Show a graphics chart "
+      "first.");
+    return;
+  }
+
+  // Start where the moving chart is now, stepping as the Animate menu is
+  // set to, for 30 steps.
+  nUnit = NAbs(gs.nAnim);
+  if (nUnit == iAnimNow || !FBetween(nUnit, 1, 13))
+    nUnit = iAnimDay;
+  nCount = Max(NAbs(gi.nDir), 1);
+  ciStop = *PciAnimate();
+  StepAnimateCi(&ciStop, nUnit, nCount * 30);
+
+  dlg.setWindowTitle("Generate Animation");
+  QVBoxLayout *playout = new QVBoxLayout(&dlg);
+  QGridLayout *pgrid = new QGridLayout();
+  playout->addLayout(pgrid);
+  for (i = 0; i < 2; i++) {
+    pciT = i == 0 ? PciAnimate() : &ciStop;
+    QLabel *plabel = new QLabel(i == 0 ? "&Start:" : "S&top:", &dlg);
+    rggd[i].pcbMon = PcbGifFieldQt(&dlg, RgstrMonthQt(),
+      szMonth[FValidMon(pciT->mon) ? pciT->mon : 1]);
+    rggd[i].pcbDay = PcbGifFieldQt(&dlg, RgstrDayQt(),
+      QString::number(pciT->day));
+    rggd[i].pcbYea = PcbGifFieldQt(&dlg, RgstrYearQt(),
+      QString::number(pciT->yea));
+    rggd[i].pcbTim = PcbGifFieldQt(&dlg, RgstrTimeQt(),
+      StrTimEditQt(pciT->tim));
+    plabel->setBuddy(rggd[i].pcbMon);
+    pgrid->addWidget(plabel, i, 0);
+    pgrid->addWidget(rggd[i].pcbMon, i, 1);
+    pgrid->addWidget(rggd[i].pcbDay, i, 2);
+    pgrid->addWidget(rggd[i].pcbYea, i, 3);
+    pgrid->addWidget(rggd[i].pcbTim, i, 4);
+  }
+
+  QLabel *plabelStep = new QLabel("Ste&p:", &dlg);
+  QSpinBox *pspCount = new QSpinBox(&dlg);
+  pspCount->setRange(1, 32000);
+  pspCount->setValue(nCount);
+  QComboBox *pcbUnit = new QComboBox(&dlg);
+  for (i = 0; i < cgifunitQt; i++) {
+    pcbUnit->addItem(rggifunitQt[i].sz);
+    if (rggifunitQt[i].nUnit == nUnit)
+      pcbUnit->setCurrentIndex(i);
+  }
+  plabelStep->setBuddy(pspCount);
+  pgrid->addWidget(plabelStep, 2, 0);
+  pgrid->addWidget(pspCount, 2, 1);
+  pgrid->addWidget(pcbUnit, 2, 2, 1, 2);
+
+  QLabel *plabelDelay = new QLabel("Frame &delay:", &dlg);
+  QSpinBox *pspDelay = new QSpinBox(&dlg);
+  pspDelay->setRange(1, 32000);
+  pspDelay->setSuffix(" msec");
+  pspDelay->setValue(FValidTimer(NAnimDelayQt()) ? NAnimDelayQt() : 100);
+  plabelDelay->setBuddy(pspDelay);
+  pgrid->addWidget(plabelDelay, 3, 0);
+  pgrid->addWidget(pspDelay, 3, 1, 1, 2);
+
+  QLabel *plabelSize = new QLabel("Si&ze:", &dlg);
+  QSpinBox *pspX = new QSpinBox(&dlg), *pspY = new QSpinBox(&dlg);
+  pspX->setRange(BITMAPX1, BITMAPX);
+  pspY->setRange(BITMAPY1, BITMAPY);
+  pspX->setValue(gs.xWin > 0 ? gs.xWin : DEFAULTX);
+  pspY->setValue(gs.yWin > 0 ? gs.yWin : DEFAULTY);
+  plabelSize->setBuddy(pspX);
+  pgrid->addWidget(plabelSize, 4, 0);
+  pgrid->addWidget(pspX, 4, 1);
+  pgrid->addWidget(new QLabel("by", &dlg), 4, 2, Qt::AlignCenter);
+  pgrid->addWidget(pspY, 4, 3);
+
+  QCheckBox *pcbLoop = new QCheckBox("&Loop forever", &dlg);
+  pcbLoop->setChecked(true);
+  pgrid->addWidget(pcbLoop, 5, 1, 1, 3);
+  // Forward to the stop date, then back through the same frames to one
+  // short of the start, so the loop joins up without a doubled frame.
+  QCheckBox *pcbBounce = new QCheckBox("&Back and forth", &dlg);
+  pgrid->addWidget(pcbBounce, 6, 1, 1, 3);
+
+  QLabel *plabelCount = new QLabel(&dlg);
+  playout->addWidget(plabelCount);
+  QDialogButtonBox *pbb = new QDialogButtonBox(QDialogButtonBox::Ok |
+    QDialogButtonBox::Cancel, &dlg);
+  playout->addWidget(pbb);
+  QObject::connect(pbb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  QObject::connect(pbb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+  auto fnFill = [&](GA *pga) -> int {
+    *pga = GA();
+    if (!FGifDateQt(rggd[0], &pga->mon1, &pga->day1, &pga->yea1, &pga->tim1))
+      return -2;
+    if (!FGifDateQt(rggd[1], &pga->mon2, &pga->day2, &pga->yea2, &pga->tim2))
+      return -3;
+    pga->nCount = pspCount->value();
+    pga->nUnit = rggifunitQt[Max(pcbUnit->currentIndex(), 0)].nUnit;
+    pga->nDelay = pspDelay->value();
+    pga->fLoop = pcbLoop->isChecked();
+    pga->fBounce = pcbBounce->isChecked();
+    pga->xWin = pspX->value();
+    pga->yWin = pspY->value();
+    return NGifFrameCount(pga);
+  };
+  auto fnUpdate = [&]() {
+    GA ga;
+    int c = fnFill(&ga);
+    int cWrite = ga.fBounce && c > 1 ? 2*c - 2 : c;
+    QString str;
+
+    if (c == -2)
+      str = "The start date or time isn't valid.";
+    else if (c == -3)
+      str = "The stop date or time isn't valid.";
+    else if (c < 1)
+      str = "That step doesn't move the chart.";
+    else if (c > cGifFrameMax || cWrite > cGifFrameMax)
+      str = QString("More than %1 frames; use a larger step.").arg(
+        cGifFrameMax);
+    else
+      str = QString("%1 frame%2, playing for %3 seconds.").arg(cWrite).arg(
+        cWrite == 1 ? "" : "s").arg((double)cWrite * ga.nDelay / 1000.0, 0,
+        'f', 1);
+    plabelCount->setText(str);
+#ifdef QTTEST
+    s_strGifCountQt = str;
+#endif
+    pbb->button(QDialogButtonBox::Ok)->setEnabled(c >= 1 &&
+      c <= cGifFrameMax && cWrite <= cGifFrameMax);
+  };
+  for (i = 0; i < 2; i++) {
+    QObject::connect(rggd[i].pcbMon, &QComboBox::editTextChanged, &dlg,
+      fnUpdate);
+    QObject::connect(rggd[i].pcbDay, &QComboBox::editTextChanged, &dlg,
+      fnUpdate);
+    QObject::connect(rggd[i].pcbYea, &QComboBox::editTextChanged, &dlg,
+      fnUpdate);
+    QObject::connect(rggd[i].pcbTim, &QComboBox::editTextChanged, &dlg,
+      fnUpdate);
+  }
+  QObject::connect(pspCount, QOverload<int>::of(&QSpinBox::valueChanged),
+    &dlg, fnUpdate);
+  QObject::connect(pspDelay, QOverload<int>::of(&QSpinBox::valueChanged),
+    &dlg, fnUpdate);
+  QObject::connect(pcbUnit, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    &dlg, fnUpdate);
+  QObject::connect(pcbBounce, &QCheckBox::toggled, &dlg, fnUpdate);
+  fnUpdate();
+
+  n = dlg.exec();
+#ifdef QTTEST
+  s_strGifCountQt.clear();
+#endif
+  if (n != QDialog::Accepted)
+    return;
+  GA ga;
+  n = fnFill(&ga);
+  if (n < 1 || n > cGifFrameMax)
+    return;
+  if (ga.fBounce && n > 1)
+    n = 2*n - 2;
+  if (n > cGifFrameMax)
+    return;
+  QString qs = QFileDialog::getSaveFileName(gi.qwind, "Save Animated GIF",
+    QString(), "GIF Images (*.gif);;All Files (*)");
+  if (qs.isEmpty())
+    return;
+  qs = StrDefaultSuffixQt(qs, "gif");
+  QByteArray ba = qs.toLocal8Bit();
+  ga.szFile = ba.data();
+
+  QProgressDialog prog("Writing the animated GIF...", "Cancel", 0, n,
+    gi.qwind);
+  prog.setWindowModality(Qt::WindowModal);
+  prog.setMinimumDuration(500);
+  s_pprogGifQt = &prog;
+  ga.pfnProgress = FGifProgressQt;
+  flag fOk = FGenerateGif(&ga);
+  flag fCanceled = prog.wasCanceled();
+  s_pprogGifQt = NULL;
+  prog.reset();
+  RedrawQt();
+  if (!fOk && !fCanceled)
+    QMessageBox::warning(gi.qwind, szAppName, "Could not write that file.");
 }
 
 void ShowExportMetafileDialogQt()

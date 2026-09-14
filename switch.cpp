@@ -1603,6 +1603,56 @@ static int NSwXo(CONST char *szSwitch, PARSEIN *pin)
   return 1;
 }
 
+// -Xg: write an animated GIF of the chart stepping through time, from one
+// date and time to another, the way Animate() steps it. Everything else
+// about the frames -- chart type, settings, size -- is what the rest of
+// the command line set, as it is for -Xo. The GIF itself is written when
+// Action() reaches the graphics. -Xg0 plays once instead of looping, and
+// -Xgb loops forward and back again.
+
+static int NSwXg(CONST char *szSwitch, PARSEIN *pin)
+{
+  GA ga;
+
+  if (us.fNoWrite || is.fSzInteract) {
+    ErrorArgv("Xg");
+    return tcError;
+  }
+  if (FErrorArgc("Xg", pin->argc, 12))
+    return tcError;
+  ClearB((pbyte)&ga, sizeof(GA));
+  ga.mon1 = NParseSz(pin->argv[2], pmMon);
+  ga.day1 = NParseSz(pin->argv[3], pmDay);
+  ga.yea1 = NParseSz(pin->argv[4], pmYea);
+  ga.tim1 = RParseSz(pin->argv[5], pmTim);
+  ga.mon2 = NParseSz(pin->argv[6], pmMon);
+  ga.day2 = NParseSz(pin->argv[7], pmDay);
+  ga.yea2 = NParseSz(pin->argv[8], pmYea);
+  ga.tim2 = RParseSz(pin->argv[9], pmTim);
+  ga.nCount = NFromSz(pin->argv[10]);
+  ga.nUnit = NFromSz(pin->argv[11]);
+  ga.nDelay = NFromSz(pin->argv[12]);
+  if (FErrorValN("Xg", !FValidMon(ga.mon1), ga.mon1, 2) ||
+    FErrorValN("Xg", !FValidDay(ga.day1, ga.mon1, ga.yea1), ga.day1, 3) ||
+    FErrorValN("Xg", !FValidYea(ga.yea1), ga.yea1, 4) ||
+    FErrorValR("Xg", !FValidTim(ga.tim1), ga.tim1, 5) ||
+    FErrorValN("Xg", !FValidMon(ga.mon2), ga.mon2, 6) ||
+    FErrorValN("Xg", !FValidDay(ga.day2, ga.mon2, ga.yea2), ga.day2, 7) ||
+    FErrorValN("Xg", !FValidYea(ga.yea2), ga.yea2, 8) ||
+    FErrorValR("Xg", !FValidTim(ga.tim2), ga.tim2, 9) ||
+    FErrorValN("Xg", !FBetween(ga.nCount, 1, 32000), ga.nCount, 10) ||
+    FErrorValN("Xg", !FBetween(ga.nUnit, 1, 13) || ga.nUnit == iAnimNow,
+      ga.nUnit, 11) ||
+    FErrorValN("Xg", !FValidTimer(ga.nDelay), ga.nDelay, 12))
+    return tcError;
+  ga.fLoop = (szSwitch[2] != '0');
+  ga.fBounce = (szSwitch[2] == 'b');
+  FCloneSz(pin->argv[1], &gi.ga.szFile);
+  ga.szFile = gi.ga.szFile;
+  gi.ga = ga;
+  return 12;
+}
+
 #ifdef X11
 static int NSwXB(CONST char *szSwitch, PARSEIN *pin)
 {
@@ -3912,6 +3962,9 @@ static CONST SWITCHDEF rgswitchdef[] = {
   {"YXG",  grfSwPrefix, NSwYXG},   {"YXf",  grfSwPrefix, NSwYXf},
   {"X",    grfSwGraphics, NSwX},
   {"Xo",   grfSwGraphics, NSwXo},
+  {"Xg",   grfSwGraphics, NSwXg, 12},
+  {"Xg0",  grfSwGraphics, NSwXg, 12},
+  {"Xgb",  grfSwGraphics, NSwXg, 12},
   {"XI",   grfSwGraphics, NSwXI, 1},
   {"XI0",  grfSwGraphics, NSwXI0},
   {"XIW",  grfSwGraphics, NSwXIW, 1},

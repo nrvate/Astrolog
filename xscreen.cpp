@@ -470,9 +470,7 @@ void BeginX()
 
 void Animate(int mode, int toadd)
 {
-  if (((gi.nMode == gAstroGraph || gi.nMode == gSphere) && gs.fAnimMap) ||
-    ((gi.nMode == gWorldMap || gi.nMode == gGlobe || gi.nMode == gPolar) &&
-    (gs.fAlt || gs.fAnimMap))) {
+  if (FAnimateRotates()) {
     gs.rRot += (real)toadd;
     if (gs.rRot >= rDegMax)     // For animating map displays, add in
       gs.rRot -= rDegMax;       // appropriate degree value.
@@ -495,28 +493,10 @@ void Animate(int mode, int toadd)
 #ifndef TIMEFUNC
 LNotNow:
 #endif
-    if (us.nRel == rcDual || us.nRel <= rcTransit)
-      ciCore = ciTwin;
-    else if (us.fProgress || us.fTransit || us.fTransitInf || us.fTransitGra)
-      ciCore = ciTran;
-    else
-      ciCore = ciMain;
+    ciCore = *PciAnimate();
     AddTime(&ciCore, mode, toadd);
   }
-  if (us.nRel == rcDual || us.nRel <= rcTransit) {
-    ciTwin = ciCore;
-    ciCore = ciMain;
-  } else if (us.fProgress || us.fTransit || us.fTransitInf || us.fTransitGra) {
-    ciTran = ciCore;
-    ciCore = ciMain;
-    if (us.fProgress)
-      is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
-  } else
-    ciMain = ciCore;
-  if (us.nRel)
-    CastRelation();
-  else
-    CastChart(0);
+  AnimateCommit();
 }
 
 
@@ -1455,6 +1435,243 @@ int DetectGraphicsChartMode()
   if (us.nRel == rcBiorhythm)  // A value test, not a flag, so not a row.
     return gBiorhythm;
   return gWheel;
+}
+
+
+// Which chart an animation moves: the second chart of a bi-wheel or a
+// transit chart, the transiting chart of a progression or transit listing,
+// and otherwise the chart itself. Animate() and the GIF generator both ask
+// here, so a GIF moves exactly the chart the running animation would.
+
+CI *PciAnimate(void)
+{
+  if (us.nRel == rcDual || us.nRel <= rcTransit)
+    return &ciTwin;
+  if (us.fProgress || us.fTransit || us.fTransitInf || us.fTransitGra)
+    return &ciTran;
+  return &ciMain;
+}
+
+
+// Store ciCore, as an animation step left it, back into the chart
+// PciAnimate() names, and cast.
+
+void AnimateCommit(void)
+{
+  if (us.nRel == rcDual || us.nRel <= rcTransit) {
+    ciTwin = ciCore;
+    ciCore = ciMain;
+  } else if (us.fProgress || us.fTransit || us.fTransitInf || us.fTransitGra) {
+    ciTran = ciCore;
+    ciCore = ciMain;
+    if (us.fProgress)
+      is.JDp = MdytszToJulian(MonT, DayT, YeaT, TimT, ciDefa.dst, ciDefa.zon);
+  } else
+    ciMain = ciCore;
+  if (us.nRel)
+    CastRelation();
+  else
+    CastChart(0);
+}
+
+
+// Does animating the current chart spin its map rather than move time?
+
+flag FAnimateRotates(void)
+{
+  return ((gi.nMode == gAstroGraph || gi.nMode == gSphere) && gs.fAnimMap) ||
+    ((gi.nMode == gWorldMap || gi.nMode == gGlobe || gi.nMode == gPolar) &&
+    (gs.fAlt || gs.fAnimMap));
+}
+
+
+// Step a chart's date and time by toadd units. AddTime() carries at most
+// one overflow per call, which is why the animation menus stop at nine
+// units, so a larger step goes nine units at a time.
+
+void StepAnimateCi(CI *pci, int mode, int toadd)
+{
+  int n;
+
+  for (n = NAbs(toadd); n > 0; n -= 9)
+    AddTime(pci, mode, (toadd < 0 ? -1 : 1) * Min(n, 9));
+}
+
+
+#define rGifEpsilon  2.0E-9    // Days; under a fifth of a millisecond.
+
+// The Julian day of a chart's date and time, in that chart's own zone.
+
+static real JdAnimateCi(CONST CI *pci)
+{
+  return MdytszToJulian(pci->mon, pci->day, pci->yea, pci->tim, pci->dst,
+    pci->zon);
+}
+
+
+// How many frames an animated GIF request makes: its first date and time,
+// then each step that does not go past its last. Returns -1 for a request
+// whose step is invalid or would not move the chart, and cGifFrameMax+1
+// for one that would make more frames than that.
+
+int NGifFrameCount(CONST GA *pga)
+{
+  CI ci = *PciAnimate();
+  real jd, jdStop, jdNew;
+  int n, nDir;
+
+  if (!FBetween(pga->nUnit, 1, 13) || pga->nUnit == iAnimNow ||
+    pga->nCount < 1)
+    return -1;
+  ci.mon = pga->mon2; ci.day = pga->day2; ci.yea = pga->yea2;
+  ci.tim = pga->tim2;
+  jdStop = JdAnimateCi(&ci);
+  ci.mon = pga->mon1; ci.day = pga->day1; ci.yea = pga->yea1;
+  ci.tim = pga->tim1;
+  jd = JdAnimateCi(&ci);
+  nDir = jdStop >= jd ? 1 : -1;
+  for (n = 1; n <= cGifFrameMax; n++) {
+    StepAnimateCi(&ci, pga->nUnit, nDir * pga->nCount);
+    jdNew = JdAnimateCi(&ci);
+    if ((jdNew - jdStop) * nDir > rGifEpsilon)
+      return n;
+    if ((jdNew - jd) * nDir <= 0.0)
+      return -1;
+    jd = jdNew;
+  }
+  return cGifFrameMax + 1;
+}
+
+
+// Write an animated GIF: move the chart an animation moves to the request's
+// first date and time, render it as a bitmap, step it the way Animate()
+// does, and repeat until the next step would pass the last date and time.
+// Every frame is the render Export Chart Bitmap makes, in the current
+// settings, and every chart is put back as it was afterward.
+//
+// Back and forth goes on from the last frame through the same dates in
+// reverse, stopping one short of the first so a looping GIF has no
+// doubled frame at either end. The way back re-renders the dates the way
+// forward RECORDED rather than stepping backward, because a calendar step
+// does not always undo: 31 January plus a month and minus a month is not
+// 31 January.
+
+flag FGenerateGif(CONST GA *pga)
+{
+  CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciTranSav = ciTran,
+    ciCoreSav = ciCore;
+  real JDpSav = is.JDp;
+  int ftSav = gs.ft, xWinSav = gs.xWin, yWinSav = gs.yWin,
+    nScaleSav = gs.nScale, cFrame, i, nDir;
+  flag fGraphicsSav = us.fGraphics, fOk = fTrue, fCancel = fFalse;
+  char sz[cchSzMax];
+  FILE *file;
+  CI ci, *rgci = NULL;
+  int cWrite;
+
+  if (us.fNoWrite || pga->szFile == NULL)
+    return fFalse;
+  if (gi.nMode == 0)
+    gi.nMode = DetectGraphicsChartMode();
+  if (FAnimateRotates()) {
+    PrintError("This chart animates by rotating its map, not by moving time, "
+      "so it can't be made into an animated GIF.");
+    return fFalse;
+  }
+  cFrame = NGifFrameCount(pga);
+  if (cFrame < 1) {
+    PrintError("The animation's step does not move the chart.");
+    return fFalse;
+  }
+  cWrite = pga->fBounce && cFrame > 1 ? 2*cFrame - 2 : cFrame;
+  if (cFrame > cGifFrameMax || cWrite > cGifFrameMax) {
+    sprintf2(S(sz), "An animation can have at most %d frames.", cGifFrameMax);
+    PrintError(sz);
+    return fFalse;
+  }
+  if (cWrite > cFrame) {
+    rgci = (CI *)PAllocate(sizeof(CI) * cFrame, "animation dates");
+    if (rgci == NULL)
+      return fFalse;
+  }
+  file = fopen(pga->szFile, "wb");
+  if (file == NULL) {
+    sprintf2(S(sz), "Couldn't create output file: %s", pga->szFile);
+    PrintWarning(sz);
+    DeallocatePIf(rgci);
+    return fFalse;
+  }
+  gi.fileGif = file;
+  gi.cGifFrame = 0;
+  gi.fGifError = fFalse;
+  gi.fGifLoop = pga->fLoop;
+  // Hundredths of a second. Browsers show a delay of 0 or 1 as a tenth of a
+  // second, so 2 is the fastest a GIF really plays.
+  gi.nGifDelay = Max((pga->nDelay + 5) / 10, 2);
+
+  ci = *PciAnimate();
+  ci.mon = pga->mon2; ci.day = pga->day2; ci.yea = pga->yea2;
+  ci.tim = pga->tim2;
+  ciCore = *PciAnimate();
+  ciCore.mon = pga->mon1; ciCore.day = pga->day1; ciCore.yea = pga->yea1;
+  ciCore.tim = pga->tim1;
+  nDir = JdAnimateCi(&ci) >= JdAnimateCi(&ciCore) ? 1 : -1;
+  AnimateCommit();
+  for (i = 0; i < cWrite; i++) {
+    if (i >= cFrame) {
+      ciCore = rgci[2*cFrame - 2 - i];
+      AnimateCommit();
+    } else if (i > 0) {
+      ciCore = *PciAnimate();
+      StepAnimateCi(&ciCore, pga->nUnit, nDir * pga->nCount);
+      AnimateCommit();
+    }
+    if (rgci != NULL && i < cFrame)
+      rgci[i] = *PciAnimate();
+    if (pga->xWin > 0)
+      gs.xWin = pga->xWin;
+    if (pga->yWin > 0)
+      gs.yWin = pga->yWin;
+    gs.ft = ftBmp;
+    us.fGraphics = fTrue;
+    FActionX();
+    gs.xWin = xWinSav; gs.yWin = yWinSav; gs.nScale = nScaleSav;
+    if (gi.fGifError || gi.cGifFrame != i+1) {
+      fOk = fFalse;
+      break;
+    }
+    if (pga->pfnProgress != NULL && !(*pga->pfnProgress)(i+1, cWrite)) {
+      fCancel = fTrue;
+      break;
+    }
+  }
+  putc(0x3B, file);    // GIF trailer
+  if (ferror(file))
+    fOk = fFalse;
+  if (fclose(file) != 0)
+    fOk = fFalse;
+  gi.fileGif = NULL;
+  gi.fFile = fFalse;
+  DeallocatePIf(rgci);
+  gs.ft = ftSav;
+  us.fGraphics = fGraphicsSav;
+
+  ciMain = ciMainSav; ciTwin = ciTwinSav; ciTran = ciTranSav;
+  is.JDp = JDpSav;
+  ciCore = ciMain;
+  if (us.nRel)
+    CastRelation();
+  else
+    CastChart(0);
+  ciCore = ciCoreSav;
+
+  if (!fOk || fCancel)
+    remove(pga->szFile);
+  if (!fOk) {
+    sprintf2(S(sz), "Couldn't write animation file: %s", pga->szFile);
+    PrintWarning(sz);
+  }
+  return fOk && !fCancel;
 }
 
 

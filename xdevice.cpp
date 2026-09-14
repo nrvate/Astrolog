@@ -1255,6 +1255,242 @@ void WriteBmp(FILE *file)
 }
 
 
+// Animated GIF output, one frame per chart render: FGenerateGif() in
+// xscreen.cpp opens the file and sets gi.fileGif, BeginFileX() hands every
+// render that handle instead of opening a file of its own, and EndFileX()
+// appends the render here as the next frame. Each frame carries its own
+// palette -- the chart's 16 colours exactly, the two of a monochrome
+// chart, or for a 24 bit bitmap the colours actually used when there are
+// 256 or fewer. Only a frame with more, which takes a photographic
+// background, falls back to a fixed 3-3-2 palette. The LZW coding itself
+// is lossless: no frame loses anything a palette can hold.
+
+#define cGifCodeMax 4096
+#define cGifHash    5003
+#define cGifSlot    1024
+
+typedef struct _GifOut {
+  FILE *file;
+  dword lAcc;          // Code bits not yet a whole byte.
+  int cBit;
+  byte rgbBlock[255];  // Data sub-block being filled.
+  int cbBlock;
+} GIFOUT;
+
+static void GifPutByte(GIFOUT *pgo, int b)
+{
+  pgo->rgbBlock[pgo->cbBlock++] = (byte)b;
+  if (pgo->cbBlock >= 255) {
+    putc(255, pgo->file);
+    fwrite(pgo->rgbBlock, 1, 255, pgo->file);
+    pgo->cbBlock = 0;
+  }
+}
+
+static void GifPutCode(GIFOUT *pgo, int code, int cBit)
+{
+  pgo->lAcc |= (dword)code << pgo->cBit;
+  pgo->cBit += cBit;
+  while (pgo->cBit >= 8) {
+    GifPutByte(pgo, (int)(pgo->lAcc & 0xff));
+    pgo->lAcc >>= 8;
+    pgo->cBit -= 8;
+  }
+}
+
+static void GifPutWord(FILE *file, int w)
+{
+  putc(w & 0xff, file);
+  putc((w >> 8) & 0xff, file);
+}
+
+
+// LZW code a frame's palette indexes as GIF image data. The code width
+// grows when the code just assigned reaches the current width's limit, one
+// entry ahead of a decoder, which assigns its entries a code later; and
+// the table is cleared when it fills. Not static: the suite drives it
+// directly over strings chosen to reach every width boundary.
+
+flag FWriteGifLzw(FILE *file, CONST byte *rgPix, long cPix, int cBitMin)
+{
+  GIFOUT go;
+  int *rgnKey, *rgnCode;
+  int codeClear = 1 << cBitMin, codeMax, cBit, prefix, k, h, d, nKey;
+  long i;
+
+  rgnKey = (int *)PAllocate(cGifHash * sizeof(int), "GIF table");
+  if (rgnKey == NULL)
+    return fFalse;
+  rgnCode = (int *)PAllocate(cGifHash * sizeof(int), "GIF table");
+  if (rgnCode == NULL) {
+    DeallocateP(rgnKey);
+    return fFalse;
+  }
+  for (h = 0; h < cGifHash; h++)
+    rgnKey[h] = -1;
+  go.file = file; go.lAcc = 0; go.cBit = 0; go.cbBlock = 0;
+  putc(cBitMin, file);
+  cBit = cBitMin + 1;
+  codeMax = codeClear + 1;
+  GifPutCode(&go, codeClear, cBit);
+  prefix = rgPix[0];
+  for (i = 1; i < cPix; i++) {
+    k = rgPix[i];
+    nKey = (prefix << 8) | k;
+    h = ((k << 4) ^ prefix) % cGifHash;
+    d = h == 0 ? 1 : cGifHash - h;
+    while (rgnKey[h] >= 0 && rgnKey[h] != nKey) {
+      h -= d;
+      if (h < 0)
+        h += cGifHash;
+    }
+    if (rgnKey[h] == nKey) {
+      prefix = rgnCode[h];
+      continue;
+    }
+    GifPutCode(&go, prefix, cBit);
+    codeMax++;
+    rgnKey[h] = nKey;
+    rgnCode[h] = codeMax;
+    if (codeMax >= (1 << cBit))
+      cBit++;
+    if (codeMax >= cGifCodeMax-1) {
+      GifPutCode(&go, codeClear, cBit);
+      for (h = 0; h < cGifHash; h++)
+        rgnKey[h] = -1;
+      cBit = cBitMin + 1;
+      codeMax = codeClear + 1;
+    }
+    prefix = k;
+  }
+  GifPutCode(&go, prefix, cBit);
+  // A decoder adds a table entry on reading that last code as well, and
+  // widens its codes if the entry reaches the limit, so the end code must
+  // be at that width. Missing this wrote a frame lenient readers still
+  // showed and a strict one refused, only for pictures whose code count
+  // ended on a boundary. (A decoder adds nothing for the first code after
+  // a clear, but there codeMax+1 is clear+2, below the limit, so the test
+  // cannot fire -- a guard for that case was tried and proved inert.)
+  if (codeMax + 1 >= (1 << cBit) && cBit < 12)
+    cBit++;
+  GifPutCode(&go, codeClear + 1, cBit);
+  if (go.cBit > 0)
+    GifPutByte(&go, (int)(go.lAcc & 0xff));
+  if (go.cbBlock > 0) {
+    putc(go.cbBlock, file);
+    fwrite(go.rgbBlock, 1, go.cbBlock, file);
+  }
+  putc(0, file);
+  DeallocateP(rgnCode);
+  DeallocateP(rgnKey);
+  return fTrue;
+}
+
+
+// Append the chart just rendered to the open animated GIF as its next
+// frame, writing the file's header first if this is the first one. The
+// first frame fixes the logical screen; a later frame of another size is
+// clipped to it rather than refused.
+
+static flag FWriteGifFrame(FILE *file)
+{
+  KV rgkv[256], kv;
+  int rgnSlot[cGifSlot];
+  int x, y, xs, ys, cKv = 0, cBit, i, h;
+  flag fQuant = fFalse;
+  byte *rgPix;
+
+  if (gi.fBmp) {
+    xs = gi.bmp.x; ys = gi.bmp.y;
+  } else {
+    xs = gs.xWin; ys = gs.yWin;
+  }
+  if (gi.cGifFrame == 0) {
+    gi.xGif = xs; gi.yGif = ys;
+    fwrite("GIF89a", 1, 6, file);
+    GifPutWord(file, xs); GifPutWord(file, ys);
+    putc(0, file);    // No global color table; every frame has its own.
+    putc(0, file); putc(0, file);
+    if (gi.fGifLoop) {
+      putc(0x21, file); putc(0xFF, file); putc(11, file);
+      fwrite("NETSCAPE2.0", 1, 11, file);
+      putc(3, file); putc(1, file); GifPutWord(file, 0); putc(0, file);
+    }
+  }
+  xs = Min(xs, gi.xGif); ys = Min(ys, gi.yGif);
+  if (xs <= 0 || ys <= 0)
+    return fFalse;
+  rgPix = (byte *)PAllocate((long)xs * ys, "GIF frame");
+  if (rgPix == NULL)
+    return fFalse;
+
+  // Map every pixel to a palette index.
+  if (!gi.fBmp) {
+    cKv = gs.fColor ? 16 : 2;
+    for (i = 0; i < cKv; i++)
+      rgkv[i] = gs.fColor ? rgbbmp[i] : (i ? Rgb(255, 255, 255) : 0);
+    for (y = 0; y < ys; y++)
+      for (x = 0; x < xs; x++) {
+        i = FBmGet(gi.bm, x, y);
+        rgPix[(long)y*xs + x] = (byte)(gs.fColor ? i : (i != 0));
+      }
+  } else {
+    for (h = 0; h < cGifSlot; h++)
+      rgnSlot[h] = -1;
+    for (y = 0; y < ys && !fQuant; y++)
+      for (x = 0; x < xs; x++) {
+        kv = _GetXY(&gi.bmp, x, y);
+        h = (int)((((dword)kv * 2654435761u) & 0xffffffffu) >> 22);
+        while (rgnSlot[h] >= 0 && rgkv[rgnSlot[h]] != kv)
+          h = (h + 1) & (cGifSlot-1);
+        if (rgnSlot[h] < 0) {
+          if (cKv >= 256) {
+            fQuant = fTrue;
+            break;
+          }
+          rgkv[cKv] = kv;
+          rgnSlot[h] = cKv++;
+        }
+        rgPix[(long)y*xs + x] = (byte)rgnSlot[h];
+      }
+    if (fQuant) {
+      for (i = 0; i < 256; i++)
+        rgkv[i] = Rgb((i >> 5)*255/7, ((i >> 2) & 7)*255/7, (i & 3)*255/3);
+      cKv = 256;
+      for (y = 0; y < ys; y++)
+        for (x = 0; x < xs; x++) {
+          kv = _GetXY(&gi.bmp, x, y);
+          rgPix[(long)y*xs + x] = (byte)((RgbR(kv) >> 5) << 5 |
+            (RgbG(kv) >> 5) << 2 | RgbB(kv) >> 6);
+        }
+    }
+  }
+  for (cBit = 1; (1 << cBit) < cKv; cBit++)
+    ;
+
+  // Graphic control extension: the delay, and leave the frame in place.
+  putc(0x21, file); putc(0xF9, file); putc(4, file);
+  putc(0x04, file); GifPutWord(file, gi.nGifDelay); putc(0, file);
+  putc(0, file);
+  // Image descriptor and its local color table.
+  putc(0x2C, file);
+  GifPutWord(file, 0); GifPutWord(file, 0);
+  GifPutWord(file, xs); GifPutWord(file, ys);
+  putc(0x80 | (cBit-1), file);
+  for (i = 0; i < (1 << cBit); i++) {
+    kv = i < cKv ? rgkv[i] : 0;
+    putc(RgbR(kv), file); putc(RgbG(kv), file); putc(RgbB(kv), file);
+  }
+  if (!FWriteGifLzw(file, rgPix, (long)xs * ys, Max(cBit, 2))) {
+    DeallocateP(rgPix);
+    return fFalse;
+  }
+  DeallocateP(rgPix);
+  gi.cGifFrame++;
+  return !ferror(file);
+}
+
+
 #define LFlipB(l) ((((l) & 0xff) << 24) | (((l) & 0xff00) << 8) | \
   (((l) & 0xff0000) >> 8) | (((l) & 0xff000000) >> 24))
 
@@ -1388,6 +1624,10 @@ flag BeginFileX()
 
   if (us.fNoWrite)
     return fFalse;
+  if (gi.fileGif != NULL) {    // An animated GIF is open: render into it.
+    gi.file = gi.fileGif;
+    return fTrue;
+  }
 #ifdef WIN
   if (gi.szFileOut == NULL)
     return fFalse;
@@ -1456,6 +1696,12 @@ void EndFileX()
 {
   if (gi.file == NULL)
     return;
+  if (gi.file == gi.fileGif) {    // The next frame of an animated GIF.
+    if (gs.ft != ftBmp || !FWriteGifFrame(gi.file))
+      gi.fGifError = fTrue;
+    gi.file = NULL;
+    return;
+  }
   if (gs.ft == ftBmp) {
     PrintProgress("Writing chart bitmap to file.");
     if (gs.chBmpMode == 'B') {

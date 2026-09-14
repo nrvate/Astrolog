@@ -3564,6 +3564,14 @@ static void BuildAnimateMenu(QMainWindow *pwind)
     RecastAndRedrawQt();
   });
   pmenu->addSeparator();
+  // Not a Windows command; see ShowGenerateGifDialogQt(). Greyed out while
+  // the chart is text, or a map whose animation spins it rather than
+  // moving time -- re-tested each time the menu opens.
+  QAction *paGif = pmenu->addAction("&Generate Animation...");
+  ConnectMenuQt(paGif, pwind, []() { ShowGenerateGifDialogQt(); });
+  QObject::connect(pmenu, &QMenu::aboutToShow, pwind,
+    [paGif]() { paGif->setEnabled(FCanGenerateGifQt()); });
+  pmenu->addSeparator();
   QAction *paStore = pmenu->addAction("&Store Chart Info");
   ConnectMenuQt(paStore, pwind,
     []() { ciSave = ciMain; });

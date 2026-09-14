@@ -711,6 +711,466 @@ static void TestChartHeaderQt()
 
 /*
 ******************************************************************************
+** Animated GIFs.
+******************************************************************************
+*/
+
+// A GIF decoder written from the format, not from xdevice.cpp's encoder:
+// a textbook LZW decoder with early change, so an encoder bug in the code
+// width or the table reset shows up as a wrong or truncated picture rather
+// than agreeing with itself. It also rejects a global color table, which
+// the writer never emits.
+
+typedef struct {
+  int x, y;              // Logical screen.
+  int nDelay;            // Last graphic control extension's delay, or -1.
+  flag fLoop;            // Did a NETSCAPE2.0 looping extension appear?
+  QVector<QImage> rgim;  // Every frame, as RGB32.
+} GIFDECQT;
+
+static flag FDecodeGifQt(CONST char *szFile, GIFDECQT *pgd)
+{
+  QFile file(QString::fromLocal8Bit(szFile));
+  QByteArray ba;
+  int cb, i, j;
+
+  pgd->x = pgd->y = 0; pgd->nDelay = -1; pgd->fLoop = fFalse;
+  pgd->rgim.clear();
+  if (!file.open(QIODevice::ReadOnly))
+    return fFalse;
+  ba = file.readAll();
+  CONST uchar *pb = (CONST uchar *)ba.constData();
+  cb = ba.size();
+  auto W = [pb](int k) { return pb[k] | (pb[k+1] << 8); };
+  if (cb < 13 || memcmp(pb, "GIF89a", 6) != 0 || (pb[10] & 0x80))
+    return fFalse;
+  pgd->x = W(6); pgd->y = W(8);
+  i = 13;
+  while (i < cb) {
+    if (pb[i] == 0x3B)
+      return fTrue;
+    if (pb[i] == 0x21) {
+      if (i + 2 >= cb)
+        return fFalse;
+      if (pb[i+1] == 0xFF && i + 14 <= cb &&
+        memcmp(pb + i + 3, "NETSCAPE2.0", 11) == 0)
+        pgd->fLoop = fTrue;
+      if (pb[i+1] == 0xF9 && i + 6 <= cb)
+        pgd->nDelay = W(i+4);
+      i += 2;
+      while (i < cb && pb[i] != 0)
+        i += pb[i] + 1;
+      i++;
+      continue;
+    }
+    if (pb[i] != 0x2C || i + 10 > cb)
+      return fFalse;
+    int w = W(i+5), h = W(i+7), packed = pb[i+9];
+    i += 10;
+    if (!(packed & 0x80))
+      return fFalse;
+    int cPal = 1 << ((packed & 7) + 1);
+    if (i + 3*cPal + 1 > cb)
+      return fFalse;
+    QVector<QRgb> pal;
+    for (j = 0; j < cPal; j++)
+      pal.append(qRgb(pb[i+3*j], pb[i+3*j+1], pb[i+3*j+2]));
+    i += 3*cPal;
+    int cBitMin = pb[i++];
+    if (cBitMin < 2 || cBitMin > 8)
+      return fFalse;
+    QByteArray data;
+    while (i < cb && pb[i] != 0) {
+      if (i + 1 + pb[i] > cb)
+        return fFalse;
+      data.append((CONST char *)pb + i + 1, pb[i]);
+      i += pb[i] + 1;
+    }
+    i++;
+
+    int rgPre[4096], rgSuf[4096], rgFirst[4096];
+    int codeClear = 1 << cBitMin, cBit = cBitMin + 1, avail = codeClear + 2;
+    int old = -1, c, k;
+    long iBit = 0, cBitData = (long)data.size() * 8;
+    QVector<uchar> out, stack;
+    for (j = 0; j < codeClear; j++) {
+      rgPre[j] = -1; rgSuf[j] = j; rgFirst[j] = j;
+    }
+    loop {
+      if (iBit + cBit > cBitData)
+        return fFalse;    // No end-of-information code.
+      for (c = 0, k = 0; k < cBit; k++)
+        c |= ((data[(int)((iBit + k) >> 3)] >> ((iBit + k) & 7)) & 1) << k;
+      iBit += cBit;
+      if (c == codeClear) {
+        cBit = cBitMin + 1; avail = codeClear + 2; old = -1;
+        continue;
+      }
+      if (c == codeClear + 1)
+        break;
+      if (old < 0) {
+        if (c >= codeClear)
+          return fFalse;
+        out.append((uchar)c);
+        old = c;
+        continue;
+      }
+      if (c > avail)
+        return fFalse;
+      stack.clear();
+      if (c == avail)
+        stack.append((uchar)rgFirst[old]);
+      for (k = c < avail ? c : old; k >= 0; k = rgPre[k])
+        stack.append((uchar)rgSuf[k]);
+      for (j = stack.size() - 1; j >= 0; j--)
+        out.append(stack[j]);
+      if (avail < 4096) {
+        rgPre[avail] = old;
+        rgSuf[avail] = c < avail ? rgFirst[c] : rgFirst[old];
+        rgFirst[avail] = rgFirst[old];
+        avail++;
+        if (avail >= (1 << cBit) && cBit < 12)
+          cBit++;
+      }
+      old = c;
+    }
+    if (out.size() != w * h)
+      return fFalse;
+    QImage im(w, h, QImage::Format_RGB32);
+    for (j = 0; j < w * h; j++) {
+      if (out[j] >= cPal)
+        return fFalse;
+      im.setPixel(j % w, j / w, pal[out[j]]);
+    }
+    pgd->rgim.append(im);
+  }
+  return fFalse;    // No trailer.
+}
+
+// What each frame of a generation saw, captured through its progress hook:
+// the chart the animation moves, and the main chart.
+static QVector<CI> s_rgciMovedQt, s_rgciMainQt;
+static int s_iGifCancelQt = -1;
+
+static flag FGifProgressTestQt(int iFrame, int cFrame)
+{
+  s_rgciMovedQt.append(*PciAnimate());
+  s_rgciMainQt.append(ciMain);
+  return iFrame != s_iGifCancelQt;
+}
+
+extern QString s_strGifCountQt;
+
+static void TestGenerateGifQt()
+{
+  Borrow bNoWrite(us.fNoWrite, fFalse);
+  Borrow bGraphics(us.fGraphics, fTrue);
+  Borrow bMode(gi.nMode, (int)gWheel);
+  Borrow bRel(us.nRel, (int)rcNone);
+  Borrow bBmpMode(gs.chBmpMode, 'B');
+  Borrow bBmp(gi.fBmp, fFalse);
+  Borrow bXWin(gs.xWin, 400);
+  Borrow bYWin(gs.yWin, 400);
+  Borrow bAnimMap(gs.fAnimMap, fFalse);
+  CI ciMainSav = ciMain, ciTwinSav = ciTwin, ciTranSav = ciTran,
+    ciCoreSav = ciCore;
+  char szGif[cchSzMax], szBmp[cchSzMax];
+  GIFDECQT gd;
+  GA ga;
+  int i;
+  // The bitmap exports below clone their file names into both output
+  // names. Put back by content, as K6 has every other test do.
+  QByteArray baFileOutSav(SzSet(is.szFileOut)), baGiOutSav(SzSet(gi.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL, fGiOutSav = gi.szFileOut != NULL;
+
+  Group("Generate animated GIF");
+
+  // The LZW coder alone, over every string length from 1 to 1200 and some
+  // long enough to fill and clear the code table, in 2, 4, 16 and 256
+  // colours, noise and runs. Whether a picture's last code lands on a code
+  // width boundary depends on its content, so chart renders only hit that
+  // case by luck: the full suite drew one, this group alone did not, and a
+  // frame missing the widening at its end passed here while failing there.
+  {
+    CONST int rgnAlpha[4] = {2, 4, 16, 256};
+    CONST int rgcBig[4] = {4096, 8191, 20000, 65535};
+    char szLzw[cchSzMax];
+    int ia, cBitMin, len, j, il, cTried = 0, cFail = 0;
+    dword lSeed;
+
+    sprintf2(S(szLzw), "%s/astrolog-qt-lzw-%d.gif",
+      QDir::tempPath().toLocal8Bit().constData(),
+      (int)QCoreApplication::applicationPid());
+    for (ia = 0; ia < 4; ia++) {
+      for (cBitMin = 2; (1 << cBitMin) < rgnAlpha[ia]; cBitMin++)
+        ;
+      // Past 1200, the four long strings, then for 256 colours of noise --
+      // about one code a pixel -- every length where the table's first
+      // clear falls, so one of them ends on the code just after a clear.
+      for (il = 1; il <= 1200 + 4 + (ia == 3 ? 900 : 0); il++) {
+        len = il <= 1200 ? il : (il <= 1204 ? rgcBig[il - 1201] :
+          3500 + (il - 1205));
+        QVector<byte> rgPix(len);
+        lSeed = (dword)len * 2654435761u + ia;
+        for (j = 0; j < len; j++) {
+          lSeed = (lSeed * 1103515245u + 12345u) & 0xffffffffu;
+          rgPix[j] = (byte)(len % 3 == 0 && len < 3500 ?
+            (j / 7) % rgnAlpha[ia] :
+            (lSeed >> 16) % rgnAlpha[ia]);
+        }
+        FILE *file = fopen(szLzw, "wb");
+        if (file == NULL) {
+          cFail++;
+          continue;
+        }
+        fwrite("GIF89a", 1, 6, file);
+        putc(len & 0xff, file); putc(len >> 8, file); putc(1, file);
+        putc(0, file); putc(0, file); putc(0, file); putc(0, file);
+        putc(0x2C, file);
+        for (j = 0; j < 4; j++)
+          putc(0, file);
+        putc(len & 0xff, file); putc(len >> 8, file); putc(1, file);
+        putc(0, file);
+        putc(0x80 | (cBitMin - 1), file);
+        for (j = 0; j < (1 << cBitMin); j++) {
+          putc(j, file); putc(j, file); putc(j, file);
+        }
+        FWriteGifLzw(file, rgPix.constData(), len, cBitMin);
+        putc(0x3B, file);
+        fclose(file);
+        cTried++;
+        GIFDECQT gdT;
+        flag fOk = FDecodeGifQt(szLzw, &gdT) && gdT.rgim.size() == 1 &&
+          gdT.rgim[0].width() == len;
+        for (j = 0; fOk && j < len; j++)
+          fOk = qRed(gdT.rgim[0].pixel(j, 0)) == rgPix[j];
+        cFail += !fOk;
+      }
+    }
+    Check(cFail == 0, "the LZW coder round trips %d strings, 1 to 65535 "
+      "pixels in 2 to 256 colours, through the independent decoder (%d "
+      "did not)", cTried, cFail);
+    remove(szLzw);
+  }
+  sprintf2(S(szGif), "%s/astrolog-qt-gif-%d.gif",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+  sprintf2(S(szBmp), "%s/astrolog-qt-gif-%d.img",
+    QDir::tempPath().toLocal8Bit().constData(),
+    (int)QCoreApplication::applicationPid());
+
+  ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+  ciCore = ciMain;
+  CastChart(0);
+  ClearB((pbyte)&ga, sizeof(GA));
+  ga.mon1 = 6; ga.day1 = 15; ga.yea1 = 1990; ga.tim1 = 12.0;
+  ga.mon2 = 6; ga.day2 = 25; ga.yea2 = 1990; ga.tim2 = 12.0;
+  ga.nUnit = iAnimDay; ga.nCount = 5; ga.nDelay = 100; ga.fLoop = fTrue;
+  ga.xWin = 400; ga.yWin = 400;
+  ga.szFile = szGif;
+  ga.pfnProgress = FGifProgressTestQt;
+
+  // The frame count: both ends, and a stop date the step cannot land on.
+  Check(NGifFrameCount(&ga) == 3, "15 to 25 June in steps of 5 days is 3 "
+    "frames (got %d)", NGifFrameCount(&ga));
+  ga.day2 = 24;
+  Check(NGifFrameCount(&ga) == 2, "and 15 to 24 June is 2, no frame past "
+    "the stop (got %d)", NGifFrameCount(&ga));
+  ga.day2 = 25;
+
+  // Every frame is exactly the bitmap Export Chart Bitmap writes for the
+  // same date, in both the 16 color and the 24 bit bitmap.
+  for (int iMode = 0; iMode < 2; iMode++) {
+    gs.chBmpMode = iMode == 0 ? 'B' : 'P';
+    gi.fBmp = iMode == 1;
+    CONST char *szWhat = iMode == 0 ? "16 color" : "24 bit";
+    s_rgciMovedQt.clear(); s_rgciMainQt.clear();
+    remove(szGif);
+    Check(FGenerateGif(&ga), "a %s GIF of a wheel is written", szWhat);
+    Check(FDecodeGifQt(szGif, &gd), "and decodes as a GIF (%s)", szWhat);
+    Check(gd.rgim.size() == 3, "with 3 frames (%s, got %d)", szWhat,
+      (int)gd.rgim.size());
+    Check(gd.fLoop && gd.nDelay == 10, "looping, 10/100 s a frame (%s: loop "
+      "%d, delay %d)", szWhat, gd.fLoop, gd.nDelay);
+    if (gd.rgim.size() != 3)
+      continue;
+    for (i = 0; i < 3; i += 2) {
+      ciMain.day = 15 + i*5;
+      ciCore = ciMain;
+      CastChart(0);
+      remove(szBmp);
+      FExportChartToFileTestQt(szBmp, ftBmp);
+      QImage im(QString::fromLocal8Bit(szBmp));
+      Check(!im.isNull() && im.convertToFormat(QImage::Format_RGB32) ==
+        gd.rgim[i], "%s frame %d is pixel for pixel the bitmap export of "
+        "%d June (%dx%d against %dx%d)", szWhat, i+1, 15 + i*5,
+        gd.rgim[i].width(), gd.rgim[i].height(), im.width(), im.height());
+    }
+    ciMain = ciMainSav; ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990;
+    ciMain.tim = 12.0; ciCore = ciMain;
+    CastChart(0);
+    Check(gd.rgim[0] != gd.rgim[1], "and the frames differ (%s)", szWhat);
+  }
+  gs.chBmpMode = 'B'; gi.fBmp = fFalse;
+  Check(ciMain.day == 15 && ciMain.tim == 12.0,
+    "the chart is put back where it was (day %d)", ciMain.day);
+
+  // A multiwheel: the generator moves the chart Animate() moves, the
+  // transiting one, and leaves the natal chart alone.
+  CONST struct { int nRel; CONST char *sz; } rgrel[] = {
+    {rcTransit, "transit"}, {rcDual, "bi-wheel"} };
+  for (int ir = 0; ir < 2; ir++) {
+    us.nRel = rgrel[ir].nRel;
+    ciTwin = ciMain; ciTwin.mon = 1; ciTwin.day = 1; ciTwin.yea = 2000;
+    ciTwin.tim = 0.0;
+    CI ciTwinStart = ciTwin;
+    ciCore = ciTwin;
+    Animate(iAnimDay, 5);
+    CI ciAnimated = ciTwin;
+    ciTwin = ciTwinStart;
+    ciCore = ciMain;
+    CastRelation();
+    s_rgciMovedQt.clear(); s_rgciMainQt.clear();
+    ga.mon1 = 1; ga.day1 = 1; ga.yea1 = 2000; ga.tim1 = 0.0;
+    ga.mon2 = 1; ga.day2 = 11; ga.yea2 = 2000; ga.tim2 = 0.0;
+    remove(szGif);
+    Check(FGenerateGif(&ga), "a %s GIF is written", rgrel[ir].sz);
+    Check(s_rgciMovedQt.size() == 3 && s_rgciMovedQt[0].day == 1 &&
+      s_rgciMovedQt[1].day == ciAnimated.day &&
+      s_rgciMovedQt[1].mon == ciAnimated.mon &&
+      s_rgciMovedQt[2].day == 11,
+      "its frames step the %s chart exactly as Animate() does (1, %d, 11 "
+      "Jan; got %d frames)", rgrel[ir].sz, ciAnimated.day,
+      (int)s_rgciMovedQt.size());
+    Check(PciAnimate() == &ciTwin, "and that chart is the second wheel");
+    Check(s_rgciMainQt.size() == 3 && s_rgciMainQt[0].day == 15 &&
+      s_rgciMainQt[2].day == 15 && s_rgciMainQt[2].yea == 1990,
+      "while the natal chart stays on 15 June 1990 (%s)", rgrel[ir].sz);
+    Check(ciTwin.day == 1 && ciTwin.mon == 1 && ciTwin.yea == 2000,
+      "and the %s chart is put back afterward (day %d)", rgrel[ir].sz,
+      ciTwin.day);
+  }
+  us.nRel = rcNone;
+
+  // A step AddTime() cannot carry in one call: it takes one overflow per
+  // call, and 49 hours from midnight overflows the day twice. A 25 hour
+  // step, the first form of this check, carries once and passed with the
+  // step done in a single call -- measured by sabotage.
+  ga.mon1 = 1; ga.day1 = 1; ga.yea1 = 2000; ga.tim1 = 0.0;
+  ga.mon2 = 1; ga.day2 = 5; ga.yea2 = 2000; ga.tim2 = 2.0;
+  ga.nUnit = 3; ga.nCount = 49;
+  s_rgciMovedQt.clear(); s_rgciMainQt.clear();
+  remove(szGif);
+  Check(FGenerateGif(&ga) && s_rgciMovedQt.size() == 3 &&
+    s_rgciMovedQt[1].day == 3 && s_rgciMovedQt[1].tim == 1.0 &&
+    s_rgciMovedQt[2].day == 5 && s_rgciMovedQt[2].tim == 2.0,
+    "a 49 hour step lands on 3 Jan 1:00 and 5 Jan 2:00 (%d frames; "
+    "second %d Jan %.2f)", (int)s_rgciMovedQt.size(),
+    s_rgciMovedQt.size() > 1 ? s_rgciMovedQt[1].day : 0,
+    s_rgciMovedQt.size() > 1 ? (double)s_rgciMovedQt[1].tim : 0.0);
+  ga.nUnit = iAnimDay; ga.nCount = 5;
+
+  // Back and forth: forward through every date, then back through the very
+  // same frames, one short of the first so a loop has no doubled frame.
+  ga.mon1 = 6; ga.day1 = 15; ga.yea1 = 1990; ga.tim1 = 12.0;
+  ga.mon2 = 6; ga.day2 = 25; ga.yea2 = 1990; ga.tim2 = 12.0;
+  ga.fBounce = fTrue;
+  s_rgciMovedQt.clear(); s_rgciMainQt.clear();
+  remove(szGif);
+  Check(FGenerateGif(&ga) && FDecodeGifQt(szGif, &gd) &&
+    gd.rgim.size() == 4 && gd.fLoop, "back and forth over 3 dates writes 4 "
+    "frames, looping (got %d)", (int)gd.rgim.size());
+  Check(gd.rgim.size() == 4 && gd.rgim[3] == gd.rgim[1] &&
+    gd.rgim[2] != gd.rgim[1] && s_rgciMovedQt.size() == 4 &&
+    s_rgciMovedQt[2].day == 25 && s_rgciMovedQt[3].day == 20,
+    "running 15, 20, 25, 20 June, the way back the very frames of the way "
+    "forward");
+  ga.fBounce = fFalse;
+
+  // Play once, and a cancel.
+  ga.fLoop = fFalse;
+  ga.mon1 = 6; ga.day1 = 15; ga.yea1 = 1990; ga.tim1 = 12.0;
+  ga.mon2 = 6; ga.day2 = 25; ga.yea2 = 1990; ga.tim2 = 12.0;
+  remove(szGif);
+  Check(FGenerateGif(&ga) && FDecodeGifQt(szGif, &gd) && !gd.fLoop &&
+    gd.rgim.size() == 3, "unticking Loop writes a GIF that plays once");
+  ga.fLoop = fTrue;
+  s_iGifCancelQt = 1;
+  remove(szGif);
+  Check(!FGenerateGif(&ga) && !QFile::exists(QString::fromLocal8Bit(szGif)),
+    "cancelling leaves no half written file behind");
+  s_iGifCancelQt = -1;
+
+  // The menu item greys out for a text chart and for a spinning map.
+  QAction *paGif = PaFindActionTestQt("&Generate Animation...");
+  Check(paGif != NULL, "Animate has Generate Animation...");
+  if (paGif != NULL) {
+    QObject *pmenu = paGif->parent();
+    QMetaObject::invokeMethod(pmenu, "aboutToShow");
+    Check(paGif->isEnabled(), "and it is enabled on a wheel");
+    us.fGraphics = fFalse;
+    QMetaObject::invokeMethod(pmenu, "aboutToShow");
+    Check(!paGif->isEnabled(), "disabled on a text chart");
+    us.fGraphics = fTrue;
+    gi.nMode = gWorldMap; gs.fAnimMap = fTrue;
+    QMetaObject::invokeMethod(pmenu, "aboutToShow");
+    Check(!paGif->isEnabled(), "and disabled on a map that animates by "
+      "spinning");
+    gi.nMode = gWheel; gs.fAnimMap = fFalse;
+  }
+
+  // The dialog counts frames from the moving chart's own date, 30 steps.
+  QString strCount;
+  DriveModalQt(ShowGenerateGifDialogQt, [&strCount](QWidget *pw) {
+    strCount = s_strGifCountQt;
+    if (!FClickButtonQt(pw, "IDCANCEL"))
+      pw->close();
+  });
+  Check(strCount.startsWith("31 frames"), "the dialog opens on 31 frames, "
+    "the chart's date and 30 steps of the Animate menu's rate (\"%s\")",
+    strCount.toLocal8Bit().constData());
+
+  // -Xg carries the same request on a command line, and is refused where
+  // -Xo is: from Enter Command Line.
+  {
+    char szSw[cchSzLine];
+
+    sprintf2(S(szSw), "-Xg0 %s 6 15 1990 12:00 6 25 1990 12:00 5 4 250",
+      szGif);
+    FCloneSz(NULL, &gi.ga.szFile);
+    Check(FProcessCommandLine(szSw) && gi.ga.szFile != NULL &&
+      FEqSz(gi.ga.szFile, szGif) && gi.ga.nCount == 5 &&
+      gi.ga.nUnit == iAnimDay && gi.ga.nDelay == 250 && !gi.ga.fLoop &&
+      gi.ga.day1 == 15 && gi.ga.day2 == 25 && gi.ga.tim2 == 12.0,
+      "-Xg0 records the request: file, both dates, step, delay, play once");
+    FCloneSz(NULL, &gi.ga.szFile);
+    Borrow bInteract(is.fSzInteract, fTrue);
+    Check(!FProcessCommandLine(szSw) && gi.ga.szFile == NULL,
+      "and is refused from Enter Command Line, as -Xo is");
+  }
+  {
+    char szSw[cchSzLine];
+
+    sprintf2(S(szSw), "-Xgb %s 6 15 1990 12:00 6 25 1990 12:00 5 4 250",
+      szGif);
+    Check(FProcessCommandLine(szSw) && gi.ga.fBounce && gi.ga.fLoop,
+      "and -Xgb asks for a looping back and forth one");
+    FCloneSz(NULL, &gi.ga.szFile);
+  }
+
+  remove(szGif);
+  remove(szBmp);
+  ciMain = ciMainSav; ciTwin = ciTwinSav; ciTran = ciTranSav;
+  ciCore = ciCoreSav;
+  CastChart(0);
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+  FCloneSz(fGiOutSav ? baGiOutSav.constData() : NULL, &gi.szFileOut);
+  RecastAndRedrawQt();
+}
+
+
+/*
+******************************************************************************
 ** Context menus.
 ******************************************************************************
 */
@@ -1796,7 +2256,12 @@ static CONST struct { CONST char *szLabel, *szWhy; } rgqtonlyQt[] = {
              "detection makes necessary. Windows themes the frame for "
              "its app and needs no such menu."},
   {"Light",  "ditto -- forces light whatever the desktop says"},
-  {"Dark",   "ditto -- forces dark"} };
+  {"Dark",   "ditto -- forces dark"},
+  {"Generate Animation...", "Animate > Generate Animation. A fork "
+             "feature the maintainer asked for: writes the chart as an "
+             "animated GIF, stepped between two dates the way the Animate "
+             "menu steps it. Windows has no GIF writer and no such command "
+             "(QT_GUI_PLAN.md, \"Animated GIFs\")."} };
 
 #define cqtonlyQt (int)(sizeof(rgqtonlyQt) / sizeof(rgqtonlyQt[0]))
 
@@ -14236,6 +14701,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"text-export",          TestTextExportQt},
   {"rising-gradient",      TestRisingGradientQt},
   {"animation",            TestAnimationStateQt},
+  {"generate-gif",         TestGenerateGifQt},
   {"menu-resync",          TestMenuResyncQt},
   {"mnemonics",            TestDialogMnemonicsQt},
   {"arrow-keys",           TestDialogArrowKeysQt},

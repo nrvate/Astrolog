@@ -1843,6 +1843,10 @@ void DisplaySwitchesX(void)
   PrintS(" _X3: Create Daedalus wireframe vector file instead of bitmap.");
 #endif
   PrintS(" _Xo <file>: Write output bitmap or graphic to specified file.");
+  PrintS(" _Xg <file> <mon1> <day1> <yea1> <tim1> <mon2> <day2> <yea2> <tim2>");
+  PrintS("  <count> <unit> <delay>: Write animated GIF of chart stepping in");
+  PrintS("  time, <count> units of -Xn <unit> each <delay> msec. _Xg0 plays");
+  PrintS("  once, and _Xgb goes forward then back again, looping.");
 #ifdef X11
   PrintS(" _XB: Display X chart on root instead of in a separate window.");
 #endif

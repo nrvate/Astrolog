@@ -284,8 +284,14 @@ LNextLine:
 
 #ifdef GRAPH
   if (us.fGraphics) {
-    // If in -X graphics mode, go make a graphics chart.
-    FActionX();
+    // If in -X graphics mode, go make a graphics chart -- or, with -Xg, an
+    // animated GIF of one. The request is spent once run, so nothing that
+    // reaches here again writes the file a second time.
+    if (gi.ga.szFile != NULL) {
+      FGenerateGif(&gi.ga);
+      FCloneSz(NULL, &gi.ga.szFile);
+    } else
+      FActionX();
     iLine = cSequenceLine;    // Once any graphics drawn, stop looping!
   } else
 #endif
@@ -840,6 +846,7 @@ void FinalizeProgram(flag fSkip)
   DeallocatePIf(gi.rgspace);
   DeallocatePIf(gi.rgConstel);
   DeallocatePIf(gi.szFileOut);
+  DeallocatePIf(gi.ga.szFile);
   DeallocatePIf(gs.szSidebar);
   for (i = 0; i <= cRing; i++)
     DeallocatePIf(szWheelX[i]);

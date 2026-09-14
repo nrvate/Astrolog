@@ -906,6 +906,12 @@ fractional-second values), Jump Factor submenu (9 unit values), Reverse
 Direction, Pause Animation, Timed Exposure, Step Forward/Backward, Store/
 Recall Chart Info.
 
+Also **Generate Animation...**, which Windows does not have: it writes the
+chart stepping between two dates as an animated GIF (2026-09-13). Unlike
+Object Selections it is not in the resource, so `menu-extra` counts it
+through `rgqtonlyQt[]` -- see "Animated GIFs" under "Features this fork
+adds to both builds".
+
 ### Help — COMPLETE except Setup (not applicable)
 Done: Open Documentation..., Open Changes, Open License, Open Default
 Settings, Open Orbital Elements, Open Star List, Open Atlas, Open Time
@@ -10944,6 +10950,37 @@ this is the note that explains the wall of dialogs.
     putting `" ` into the settings sweeps' markers, which failed on the
     old writer and pass now. QTTEST_REVIEW_IMPLEM.md, third batch.
 
+261. **Animated GIFs, a fork feature.** Animate / Generate Animation...
+    and `-Xg`/`-Xg0`/`-Xgb` write the chart stepping between two dates as
+    an animated GIF; the full description is "Animated GIFs" under
+    "Features this fork adds to both builds". What it turned out to need
+    in shared core: `Animate()`'s choice of which chart moves became
+    `PciAnimate()` and `AnimateCommit()`, so a GIF cannot move a
+    different chart from the one the live animation moves; steps over
+    nine units go nine at a time, because `AddTime()` carries one
+    overflow per call; and back and forth replays the recorded dates
+    rather than stepping backward, because a calendar month does not
+    always undo. The GIF writer is new in xdevice.cpp and every frame goes
+    through `FActionX()`, the path Export Chart Bitmap takes. New group
+    `generate-gif`, 42 assertions, reads the output with its own decoder
+    and requires frames pixel-identical to the bitmap export; the console
+    build's `-Xg` was compared with `-Xo` exports by PIL as well, first
+    and last frames identical in `-Xb` and `-Xbp`.
+
+    Falsified by 15 sabotages, one at a time (LZW code width, table
+    reset, both palette paths, which chart moves, steps over nine units,
+    back-and-forth order, cancel, chart restore, the menu grey-out, the
+    About line, the chart header, the -YkA writer, the Enter Command Line
+    refusal, and the console `-Xg` hook): 14 caught on the first run. The
+    step check was the miss -- a 25 hour step carries the day once, which
+    a single `AddTime()` call also gets right -- and it is a 49 hour step
+    now, caught. The full suite then found a real writer bug the group
+    alone could not: the end code of a frame written one bit narrow when
+    the last code's table entry reached a width boundary. It depends on
+    picture content, so the group now also round-trips 4816 generated
+    strings (1 to 65535 pixels, 2 to 256 colours, across the first table
+    clear) through the LZW coder; with the fix removed, 9 fail.
+
 262. **The settings writer dropped the colours of aspects 19 to 24.**
     `FOutputSettings()` wrote `-YkA 1 5`, `-YkA 6 11` and `-YkA 12 18`, and
     nothing for Decile and the five user-defined aspects (`aDc3`,
@@ -11392,6 +11429,108 @@ unconditional, the GUI-less branch consuming each switch's arguments and
 discarding it, so a saved file loads everywhere. Item 32 is the story of
 mistaking the old behaviour for a hang.
 
+### Animated GIFs
+
+Asked for by the maintainer, 2026-09-13. **Animate / Generate
+Animation...** writes the chart as an animated GIF, stepping it from one
+date and time to another. The core and the switch are in every build; the
+dialog is Qt only. The Win32 oracle build gets `-Xg` and no dialog, by
+the maintainer's choice.
+
+**The dialog** asks for Start and Stop (month, day, year and time fields,
+as the chart info dialogs have them), a Step as a count and a unit (the
+Animate menu's units: seconds to millennia, and 1/10, 1/100 and 1/1000
+of a second), the Frame delay in milliseconds (default: the animation
+delay), the Size (default: the chart's), Loop forever and Back and forth.
+A line under the fields gives the frame count live, and OK is disabled
+while the request is invalid. OK then asks for a file and shows a
+progress dialog with Cancel. It opens at the moving chart's current date
+with 30 steps of the Animate menu's current rate and factor. The menu
+item is greyed out for text charts and for map charts whose animation
+spins the map rather than moving time (`FAnimateRotates()`), re-tested
+each time the menu opens.
+
+**Which chart moves is Animate()'s own choice, not a copy of it.** That
+choice was split out of `Animate()` as `PciAnimate()` and
+`AnimateCommit()` in xscreen.cpp, and `FGenerateGif()` calls both, so a
+GIF moves exactly the chart the running animation moves: the second wheel
+of a bi-wheel or transit chart (`rcDual`, `rcTransit`), `ciTran` for a
+transit or progression listing, and `ciMain` otherwise -- which means a
+tri- or quad-wheel moves `ciMain`, as `Animate()` does. Three details
+that are not obvious from the dialog:
+
+- **A step over nine units goes nine at a time.** `AddTime()` carries
+  only one overflow per call, which is why the Animate menus stop at
+  nine; `StepAnimateCi()` loops.
+- **The frame count** (`NGifFrameCount()`) is the start date, then each
+  step that does not pass the stop, with a tolerance of 2e-9 day (under a
+  fifth of a millisecond). A step that does not move the chart is
+  refused, and so is a count over `cGifFrameMax`, 5000.
+- **Back and forth renders the forward dates in reverse**, as recorded,
+  rather than stepping backward -- a calendar month step does not always
+  undo, since 31 January plus a month minus a month is not 31 January. It
+  stops one short of the first frame so a looping GIF has no doubled
+  frame at either end: three dates make four frames.
+
+The delay is stored in hundredths of a second, with a minimum of 2,
+because browsers show a delay of 0 or 1 as a tenth of a second.
+
+**The GIF writer** is new, in xdevice.cpp: GIF89a, lossless LZW, and a
+local palette per frame -- the chart's 16 colours exactly, the two of a
+monochrome chart, or up to 256 exact colours from a 24 bit bitmap. Only a
+frame with more than 256, which takes a photographic background, falls
+back to a 3-3-2 cube. The code width grows when the code just assigned
+reaches the width's limit, and the table is cleared at 4095.
+`BeginFileX()` hands each render the open GIF (`gi.fileGif`) instead of a
+file of its own and `EndFileX()` appends the render as the next frame, so
+every frame goes through the same `FActionX()` path as Export Chart
+Bitmap. The charts are put back as they were afterward, and a cancelled
+or failed GIF is removed.
+
+**The command line** is
+
+    -Xg <file> <mon1> <day1> <yea1> <tim1> <mon2> <day2> <yea2> <tim2>
+        <count> <unit> <delay>
+
+with `-Xg0` playing once and `-Xgb` going back and forth, looping. It is
+refused under `-0o` and from Enter Command Line, as `-Xo` is. It stores
+the request in `gi.ga`, which runs when `Action()` reaches the graphics
+and is then cleared.
+
+**The nets.** Group `generate-gif`, 42 assertions, decodes what it writes
+with a textbook GIF decoder of its own in qttest.cpp, written from the
+format rather than from the encoder, so the two cannot share a mistake.
+It checks the frame count, the loop extension and delay; that frames 1
+and 3 are pixel-identical to Export Chart Bitmap for the same dates, in
+16-colour and in 24 bit mode; that frames differ; that the charts are
+restored afterward; that a transit and a bi-wheel chart move the second
+wheel exactly as `Animate(iAnimDay, 5)` does while the natal chart stays;
+that a 49-hour step, two day carries, lands on 1:00 and 2:00 two days on; that
+play-once writes no loop extension; that Cancel leaves no file; that back
+and forth gives 15, 20, 25, 20 June with the last frame equal to the
+second; that the menu item is disabled for a text chart and a spinning
+map; that the dialog opens on "31 frames"; and that `-Xg0` and `-Xgb`
+parse and are refused from Enter Command Line. By hand as well: the
+console build's `-Xg` output against `-Xo` bitmap exports of the same
+dates, compared with PIL -- first and last frames pixel-identical in `-Xb`
+and `-Xbp` modes.
+
+Every one of those was falsified by sabotage (work log item 261 lists the
+15), and one sabotage slipping through changed a check: the multi-unit
+step is 49 hours, because 25 carries the day only once and so passed with
+the step done in a single `AddTime()` call. The full suite caught what the
+group alone did not, a real bug: a frame's end-of-information code written
+one bit narrow when the decoder's last table entry reached a code width
+boundary. PIL read those files anyway, which is why the by-hand comparison
+missed it; the suite's decoder is strict and refused. Whether a frame hits
+that is up to its content, so the group also drives `FWriteGifLzw()`
+directly over 4816 strings -- every length to 1200, four long ones, and 900
+lengths across the first table clear, in 2, 4, 16 and 256 colours -- and 9
+of them fail with the fix removed.
+
+The menu parity test requires every Qt-only menu item to be listed in
+`rgqtonlyQt[]` with a reason, and "Generate Animation..." is there.
+
 ## Known divergences from Windows
 
 Every place this port knowingly *differs* from Windows, so none of it
@@ -11479,6 +11618,7 @@ version must fail the test, or it only proves "something happens here".
 |---|---|---|---|
 | Chart info dialogs | Daylight shows and offers "Autodetect" | Windows resolves `dstAuto` via `DstReal()` before display, discarding the user's "work it out for me" choice on the next OK. Showing it survives a round trip. | `divergences` — resolving it away on display fails the round trip |
 | Command line dialog | Doesn't save/restore `us.fLoop`/`is.fMult` around the call | `CommandLineX()` does. Only matters for a typed line that itself starts a multi-chart sequence. | **nothing yet** — the only observable is a typed line that starts a multi-chart run, which the in-process suite has no way to drive. Recorded as untested rather than left to look covered. |
+| Animate menu | Has **Generate Animation...**, which Windows does not | A fork feature the maintainer asked for, 2026-09-13; the Win32 build takes `-Xg` but has no dialog. See "Animated GIFs" under "Features this fork adds to both builds". | `menu-extra`, through its `rgqtonlyQt[]` entry; `generate-gif` for what it does |
 | Restriction dialogs | (Since 8.9) checkbox = restricted, matching Windows | Previously "Show X" = visible, i.e. inverted. Flipped *toward* Windows, but it's a visible change to anyone used to the old Qt wording. | not a live divergence — it *matches* Windows now, so it is a historical note about older Qt builds, and `dialog-buttons` already pins the sense through `ignore[]` |
 
 **Two rows left this table on 2026-08-30** (work log item 132), and the

@@ -134,9 +134,11 @@ draw with Astrolog's bundled astrology fonts. Text charts render in the
 main window on a character grid, as they do on Windows, rather than in a
 separate text box.
 
-It also goes slightly *past* the Windows build in one place: an Object
+It also goes slightly *past* the Windows build in two places: an Object
 Selections dialog (Ctrl+T) that puts a chosen body or a midpoint into any
-Uranian or Dwarf slot.
+Uranian or Dwarf slot, and Animate / Generate Animation..., which writes
+the chart stepping between two dates as an animated GIF (`-Xg` on the
+command line, in every build).
 
 A handful of smaller things are either deliberately different from
 Windows or deliberately left out — mostly Win32-only settings with no

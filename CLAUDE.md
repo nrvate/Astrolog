@@ -236,7 +236,10 @@ items present, 256 show Windows' own accelerator text, every body the
 Object Selections list offers resolves against the bundled ephemeris and
 answers to the name the file gives it (78 as of 2026-09-05), every scalar
 member of `US` and `GS` either survives a save and reload or says in a
-ledger why it cannot (335 of 342 asked, as of 2026-09-07), the application
+ledger why it cannot (335 of 342 asked, as of 2026-09-07), an animated
+GIF of a chart stepping through time decodes -- through a decoder of the
+suite's own, not derived from the encoder -- to frames pixel-identical to
+Export Chart Bitmap for the same dates, the application
 icon resolves at
 all three sizes, and bad input (missing files, unknown switches) doesn't
 terminate the process.
