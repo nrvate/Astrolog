@@ -1847,8 +1847,11 @@ void DisplaySwitchesX(void)
   PrintS(" _Xo <file>: Write output bitmap or graphic to specified file.");
   PrintS(" _Xg <file> <mon1> <day1> <yea1> <tim1> <mon2> <day2> <yea2> <tim2>");
   PrintS("  <count> <unit> <delay>: Write animated GIF of chart stepping in");
-  PrintS("  time, <count> units of -Xn <unit> each <delay> msec. _Xg0 plays");
-  PrintS("  once, and _Xgb goes forward then back again, looping.");
+  PrintS("  time, <count> units each <delay> msec. <unit> is 1 seconds,");
+  PrintS("  2 minutes, 3 hours, 4 days, 5 months, 6 years, 7 decades,");
+  PrintS("  8 centuries, 9 millennia, or 11, 12 or 13 for 1/10th, 1/100th");
+  PrintS("  or 1/1000th seconds. _Xg0 plays once, and _Xgb goes forward then");
+  PrintS("  back again, looping.");
 #ifdef X11
   PrintS(" _XB: Display X chart on root instead of in a separate window.");
 #endif

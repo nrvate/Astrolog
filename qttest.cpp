@@ -1490,6 +1490,29 @@ static void TestGenerateGifQt()
       fOkAfter, strAfter.toLocal8Bit().constData());
   }
 
+  // -Xg's help names the units its <unit> takes. It used to send the reader
+  // to -Xn for them, whose help lists none.
+  {
+    char szTxt[cchSzMax];
+    QByteArray baHelp;
+    Borrow bGraphHelp(us.fGraphics, fFalse);
+    Borrow bSwitch(us.fSwitch, fTrue);
+
+    SzScratchPathQt(S(szTxt), "helpxg", ".txt");
+    CaptureTextToFileQt(szTxt, fFalse);
+    QFile fileHelp(QString::fromLocal8Bit(szTxt));
+    if (fileHelp.open(QIODevice::ReadOnly)) {
+      baHelp = fileHelp.readAll();
+      fileHelp.close();
+    }
+    remove(szTxt);
+    Check(baHelp.contains("-Xg <file>") &&
+      baHelp.contains("<unit> is 1 seconds,") &&
+      baHelp.contains("9 millennia, or 11, 12 or 13 for 1/10th, 1/100th") &&
+      !baHelp.contains("units of -Xn"), "the -Xg help lists its units "
+      "(%d bytes of help)", (int)baHelp.size());
+  }
+
   // -Xg carries the same request on a command line, and is refused where
   // -Xo is: from Enter Command Line.
   {
