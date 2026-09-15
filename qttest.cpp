@@ -14562,10 +14562,35 @@ static void TestTextWordHighlightQt()
       StrTextPhraseAtPtQt(rgrc[i].x(), rgrc[i].y()) == QString("Moon"),
       "rect %d of \"Moon\" reads back as \"Moon\", bare", i);
 
-  // Whole words only: "Moo" occurs only inside "Moon" here, and both
-  // sides of a match must be word boundaries, so it lights nothing.
-  Check(RgrcTextWordQt("Moo").isEmpty(),
-    "\"Moo\" lights nothing, though \"Moon\" holds it");
+  // Colons are punctuation too, and the aspect list's summary line glues
+  // them to every abbreviation it counts ("Sex: 10"): the word under the
+  // mouse there is the abbreviation alone, which is what makes the
+  // summary's count light the Sex rows above it.
+  rgrcN = RgrcTextWordQt("Sex");
+  Check(rgrcN.size() >= 2, "the listing shows Sex on rows and in its "
+    "summary line (got %d)", rgrcN.size());
+  for (i = 0; i < rgrcN.size(); i++)
+    Check(StrTextWordAtPtQt(rgrcN[i].x(), rgrcN[i].y()) == QString("Sex"),
+      "rect %d of \"Sex\" reads back as \"Sex\", colon not included", i);
+
+  // And the summary's own "Opp:" -- the one string only the summary
+  // spells with its colon -- hovers as the bare "Opp", which is how the
+  // summary's count comes to light the Opp rows above it.
+  rgrcN = RgrcTextWordQt("Opp:");
+  Check(!rgrcN.isEmpty(), "the summary line counts the oppositions");
+  if (!rgrcN.isEmpty()) {
+    Check(StrTextWordAtPtQt(rgrcN[0].x(), rgrcN[0].y()) == QString("Opp") &&
+      StrTextPhraseAtPtQt(rgrcN[0].x(), rgrcN[0].y()) == QString("Opp"),
+      "the summary's \"Opp:\" hovers as bare \"Opp\"");
+    Check(RgrcTextWordQt("Opp").size() >= rgrcN.size(),
+      "and bare \"Opp\" lights at least every place \"Opp:\" sits");
+  }
+
+  // Whole words only: "Mo" occurs only inside longer words here ("Moon"
+  // on the rows, "Moo" in the summary's count), and both sides of a match
+  // must be word boundaries, so it lights nothing.
+  Check(RgrcTextWordQt("Mo").isEmpty(),
+    "\"Mo\" lights nothing, though \"Moon\" and \"Moo\" hold it");
   Check(RgrcTextWordQt(QString()).isEmpty(),
     "an empty word lights nothing");
   Check(RgrcTextWordQt("Plutop").isEmpty(),

@@ -1126,15 +1126,18 @@ int WchTextGridQt(int xCell, int yCell)
 }
 
 // A word character in the retained grid: anything printable that is not
-// a space and not a bracket. The listings glue brackets to whatever they
-// wrap -- "(New Moon)", "(Pis)" -- and a run of non-space cells would
-// glob the bracket into the word under the mouse; the brackets are
-// punctuation, never part of a name, so they separate words instead of
-// joining them. (Box-drawing characters and every other glyph above
-// 127 stay word characters, so a run of grid line still reads as one.)
+// a space and not a bracket or a colon. The listings glue brackets to
+// whatever they wrap -- "(New Moon)", "(Pis)" -- and colons to the
+// labels they follow ("Moon:", "SSx:" in the aspect summary), and a run
+// of non-space cells would glob either into the word under the mouse;
+// they are punctuation, never part of a name, so they separate words
+// instead of joining them. That is what makes a summary line's "SSx:"
+// hover as "SSx" and light the SSx rows above it. (Box-drawing
+// characters and every other glyph above 127 stay word characters, so a
+// run of grid line still reads as one.)
 static flag FIsWordChQt(int wch)
 {
-  char szBrackets[] = "()[]{}<>";
+  char szBrackets[] = "()[]{}<>:";
   int i;
 
   if (wch <= ' ')
