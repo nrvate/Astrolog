@@ -504,16 +504,12 @@ public:
     if (rgpb.isEmpty())
       return QObject::eventFilter(pobj, pev);
     // An AMBIGUOUS mnemonic -- several buttons share the letter -- moves
-    // focus to the next match and CLICKS it, in one keystroke. This reads
-    // like a bug (surely Windows just cycles focus?) and was flagged as
-    // exactly that in the 2026-09-12 smell pass. The oracle said
-    // otherwise: driven under Wine, the real Transits dialog -- where
-    // "&Now" and "N&one" share 'n' -- was opened, focus was put on the
-    // None radio, and a bare 'n' fired &Now in one press: the date fields
-    // jumped from the chart's Nov 18 1971 to the current moment and the
-    // focus ring landed on the Now button. Windows focuses AND clicks,
-    // and this does the same. Measured, not reasoned -- the second
-    // qtdialog finding to die on the oracle.
+    // focus to the next match and CLICKS it, in one keystroke. That is
+    // Windows' behavior too, confirmed against the real build under Wine
+    // on the Transits dialog, where "&Now" and "N&one" share 'n': a bare
+    // 'n' with the None radio focused fired &Now in the same press. The
+    // suite pins this in TestDialogMnemonicsQt; do not "fix" it into a
+    // cycle-without-click.
     int i = rgpb.indexOf(qobject_cast<QAbstractButton *>(pwFocus));
     QAbstractButton *pb = rgpb[(i + 1) % rgpb.size()];
     pb->setFocus(Qt::ShortcutFocusReason);

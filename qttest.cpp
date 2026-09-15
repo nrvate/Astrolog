@@ -1946,10 +1946,8 @@ static void TestGenerateGifQt()
 
   // -Xg's help names the units its <unit> takes. It used to send the reader
   // to -Xn for them, whose help lists none. The help spells switches with
-  // the platform's switch character, '-' here and '/' on Windows -- so the
-  // needles are built from chSwitch, or the assertion fails every Windows
-  // run while passing every Linux one. (It did: its first release run was
-  // the first Windows run, and v8.00-qt.21's Windows job died on it.)
+  // the platform's switch character, '-' here and '/' on Windows, so the
+  // needles are built from chSwitch rather than written with either.
   {
     char szTxt[cchSzMax], szXg[cchSzDef], szXn[cchSzDef];
     QByteArray baHelp;

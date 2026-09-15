@@ -1142,9 +1142,6 @@ static flag FIsWordChQt(int wch)
   return wch >= 0x80;
 }
 
-// The span of the word containing a cell, read out of the retained grid:
-// the maximal run of word characters left and right along the row. fFalse
-// when the cell holds no word.
 // Is this cell a digit? Part of the value-globbing rules below.
 static flag FIsDigitChQt(int wch)
 {
@@ -1179,6 +1176,9 @@ static flag FStartsWordQt(int ch, int chNext)
     ((ch == '+' || ch == '-') && FIsDigitChQt(chNext));
 }
 
+// The span of the word containing a cell: it starts at a word character
+// or a sign before a digit, and extends over word characters and over
+// punctuation that glues. fFalse when the cell holds no word.
 static flag FWordSpanAtCellQt(int xCell, int yCell, int *px1, int *px2)
 {
   int x;
