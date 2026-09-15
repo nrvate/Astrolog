@@ -7778,6 +7778,50 @@ static void TestDialogMnemonicsQt()
     pw->close();
   });
 
+  // The AMBIGUOUS mnemonic, pinned to the oracle's verdict. The Transits
+  // dialog's "&Now" and "N&one" share 'n', and the 2026-09-12 smell pass
+  // flagged the port's focus-AND-click as surely divergent from Windows'
+  // believed cycle-focus-without-click. The Wine oracle said the opposite:
+  // driven on the real build, a bare n with the None radio focused fired
+  // &Now in one press -- the date fields jumped from the chart's date to
+  // the current moment and the focus ring landed on the Now button. This
+  // asserts that, so nobody fixes it into the cycle behavior later: the
+  // Daylight sentinel only reads "Yes" again if &Now actually fired, and
+  // the focus has to be ON the Now button when the keystroke settles.
+  DriveModalQt(ShowTransitDialogQt, [](QWidget *pw) {
+    QComboBox *pcbDst = pw->findChild<QComboBox *>("dcTrDst");
+    QRadioButton *prbNone = NULL;
+    QPushButton *ppbNow = NULL;
+
+    for (QRadioButton *prb : pw->findChildren<QRadioButton *>())
+      if (prb->text() == QString("N&one"))
+        prbNone = prb;
+    for (QPushButton *ppb : pw->findChildren<QPushButton *>())
+      if (ppb->text().contains("Now"))
+        ppbNow = ppb;
+    Check(prbNone != NULL && ppbNow != NULL,
+      "the Transits dialog has its ambiguous Now/None pair");
+    if (prbNone != NULL && ppbNow != NULL && pcbDst != NULL) {
+      // What &Now writes, recorded from clicking it directly: asserting
+      // against a literal reads whatever an earlier group left ciDefa at.
+      pcbDst->setEditText("sentinelD");
+      ppbNow->click();
+      QString strDirect = pcbDst->currentText();
+      pcbDst->setEditText("sentinel2");
+      prbNone->setFocus();
+      QKeyEvent ev(QEvent::KeyPress, (int)Qt::Key_N, Qt::NoModifier,
+        QString("n"));
+      QApplication::sendEvent(pw, &ev);
+      Check(ppbNow->hasFocus(),
+        "an ambiguous mnemonic moves focus to the next match");
+      Check(pcbDst->currentText() == strDirect,
+        "and CLICKS it in the same keystroke (\"%s\" = what a direct "
+        "click writes; the oracle showed Windows doing the same)",
+        pcbDst->currentText().toLocal8Bit().constData());
+    }
+    pw->close();
+  });
+
   printf("  bare mnemonic letters work, and text fields still take typing\n");
 }
 
