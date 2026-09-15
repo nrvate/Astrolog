@@ -12137,6 +12137,73 @@ static void TextChartCaptureQt(CONST char *szDir)
 }
 
 
+// The INTERACTIVE text console to PNGs, the counterpart of the two
+// capture loops above: not what a chart prints (that is
+// TextChartCaptureQt()), but what the canvas WIDGET shows -- the aspect
+// list's sortable header row, a sort applied to it, and the word
+// highlight with a pin and a hover together. Those are exactly the
+// states whose look you cannot judge from gi.qim, because the header and
+// the highlight washes paint in paintEvent() on the way to the screen.
+//
+//   QTCANVASDIR=out/shots ./run-qt-tests.sh
+//
+// The pins are the same classic-set chart the two aspect-list suite
+// groups use; change those or change this in step, or the shots and the
+// assertions describe different listings.
+static void ConsoleShotCaptureQt(CONST char *szDir)
+{
+  byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
+  int k;
+
+  CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
+  CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
+  for (k = 0; k < objMax; k++)
+    ignore[k] = ignore2[k] = !(FBetween(k, oSun, oPlu) || k == oNod ||
+      k == oAsc || k == oMC);
+  RedoRestrictions();
+  us.nAsp = cAspect;
+  for (k = 1; k <= cAspect; k++)
+    ignorea[ASPT(k)] = fFalse;
+  ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+  ciCore = ciMain;
+  CastChart(0);
+  us.fGraphics = fFalse;
+
+  QDir().mkpath(QString(szDir));
+
+  // The -v listing: text as it prints, no header, no highlight.
+  SetChartModeQt(gWheel);
+  gi.qcanvas->grab().toImage().save(QString("%1/%2.png").arg(szDir)
+    .arg("listing"));
+
+  // The aspect list with its header, unsorted.
+  SetChartModeQt(gAspect);
+  gi.qcanvas->grab().toImage().save(QString("%1/%2.png").arg(szDir)
+    .arg("aspectlist"));
+
+  // Sorted once by Obj1: the view reordered and renumbered, the header
+  // carrying the key's direction mark.
+  QVector<QRect> rgrcH = RgrcTextWordQt("Obj1");
+  if (!rgrcH.isEmpty())
+    TextClickAtPtQt(rgrcH[0].x(), rgrcH[0].y());
+  gi.qcanvas->grab().toImage().save(QString("%1/%2.png").arg(szDir)
+    .arg("aspectlist-sorted"));
+
+  // The word highlight: Sun pinned (the stronger wash) while Moon hovers
+  // (the softer one).
+  SetTextHighlightQt(QString("Sun"));
+  SetTextHoverQt(QString("Moon"));
+  gi.qcanvas->grab().toImage().save(QString("%1/%2.png").arg(szDir)
+    .arg("highlight"));
+
+  SetTextHighlightQt(QString());
+  ClearTextHoverQt();
+  CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
+  CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
+  RedoRestrictions();
+}
+
+
 /*
 ******************************************************************************
 ** Entry point.
@@ -16907,6 +16974,10 @@ int NRunQtTestsQt()
   }
   if (getenv("QTSHOTDIR") != NULL) {
     DialogShotCaptureQt(getenv("QTSHOTDIR"));
+    return fFalse;
+  }
+  if (getenv("QTCANVASDIR") != NULL) {
+    ConsoleShotCaptureQt(getenv("QTCANVASDIR"));
     return fFalse;
   }
   s_nAnimStartQt = gs.nAnim;
