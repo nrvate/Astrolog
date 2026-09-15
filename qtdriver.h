@@ -26,6 +26,13 @@
 #ifndef __QTDRIVER_H
 #define __QTDRIVER_H
 
+// The text console's word highlight below hands back QStrings and QRects,
+// and this header is only ever included by sources that have Qt includes
+// ahead of it already (qtdriver.cpp, qtdialog.cpp, qttest.cpp).
+#include <QtCore/QRect>
+#include <QtCore/QString>
+#include <QtCore/QVector>
+
 // Recompute the chart positions from the current chart info (ciCore), then
 // redraw. Call this after a change that affects what gets cast, such as
 // editing chart info, orbs, or object restrictions.
@@ -211,6 +218,29 @@ void ClearScreenQt();
 // at a closed FILE. See the definition in qtdriver.cpp.
 void CaptureTextToFileQt(CONST char *szFile, flag fHTML);
 void ScrollChartQt(int nDir);
+
+// The text console's word highlight. The render records every character it
+// draws into a retained grid (one cell per character, see TextCharQt()),
+// and the mouse hit-tests words out of it: hovering a word softly lights
+// every instance of it in the listing, and clicking pins the word until it
+// is clicked again. TextClickAtPtQt and TextHoverAtPtQt take a point in
+// canvas pixels, exactly what the canvas's mouse handlers are handed; the
+// setters behind them take the word itself, which is what the suite drives.
+void TextClickAtPtQt(int xPix, int yPix);
+void TextHoverAtPtQt(int xPix, int yPix);
+void ClearTextHoverQt(void);
+void SetTextHighlightQt(CONST QString &strWord);
+void SetTextHoverQt(CONST QString &strWord);
+// The word under a canvas point, or a null string when the point is
+// between words or past the end of what was drawn.
+QString StrTextWordAtPtQt(int xPix, int yPix);
+// Every place the word appears in the retained grid, as canvas pixel
+// rectangles. A match is a whole word, so "Jup" does not light part of
+// "Jupiter".
+QVector<QRect> RgrcTextWordQt(CONST QString &strWord);
+// One cell of the retained grid, or 0 for a cell nothing was drawn in,
+// including any cell outside it entirely.
+int WchTextGridQt(int xCell, int yCell);
 
 #endif // __QTDRIVER_H
 

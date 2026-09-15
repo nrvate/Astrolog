@@ -186,6 +186,20 @@ typedef struct _qtuserinterface {
   KV kvText = 0;
   QFont fontText;
 
+  // What the text console drew, retained one character per cell.
+  // TextCharQt() records into this as the chart renders, so that the
+  // mouse can hit-test words in it afterwards -- the render itself is
+  // fire and forget, and once done the text exists only as pixels in
+  // gi.qim. Row major; a zero cell was never drawn to. The two word
+  // highlights read it, one pinned by a click and one soft under the
+  // cursor, each holding the word it lights and where that word sits.
+  wchar *rgwchGrid = NULL;
+  int cchGrid = 0, crowGrid = 0;
+  QString strTextHi;
+  QVector<QRect> rgrcTextHi;
+  QString strTextHover;
+  QVector<QRect> rgrcTextHover;
+
   // Menu items that a dialog can also change, so they need re-syncing
   // when it closes -- the job Windows does with the WiCheckMenu() calls
   // sprinkled through DlgCalc and DlgDisplay.
@@ -359,6 +373,10 @@ public:
     // under X11 but on release under Windows, so it isn't even consistent
     // between the two platforms this program targets).
     setContextMenuPolicy(Qt::PreventContextMenu);
+    // Plain mouse moves arrive only with tracking on, and the text
+    // console's hover highlight is a plain mouse move. Graphics mode
+    // ignores buttonless moves either way.
+    setMouseTracking(true);
   }
 
 protected:
@@ -397,12 +415,35 @@ protected:
     QPainter p(this);
     if (gi.qim != NULL)
       p.drawImage(0, 0, *gi.qim);
+    // The text console's word highlights, over the ink: two washes of the
+    // same amber, the hover lighter than the pinned word, so hovering a
+    // pinned word just brightens it. Drawn here rather than baked into
+    // gi.qim, so that changing either costs a repaint and not a re-render,
+    // and so the pixel-exact nets (chart-render, the export matrices)
+    // reading gi.qim see none of it.
+    if (!us.fGraphics) {
+      int i;
+      for (i = 0; i < qi.rgrcTextHover.size(); i++)
+        p.fillRect(qi.rgrcTextHover[i], QColor(255, 200, 0, 56));
+      for (i = 0; i < qi.rgrcTextHi.size(); i++)
+        p.fillRect(qi.rgrcTextHi[i], QColor(255, 200, 0, 112));
+    }
   }
 
   void resizeEvent(QResizeEvent *pevent) override
   {
     QWidget::resizeEvent(pevent);
     update();
+  }
+
+  void leaveEvent(QEvent *pevent) override
+  {
+    // Leaving the canvas drops the hover half; a pinned word stays.
+    if (!qi.strTextHover.isEmpty()) {
+      ClearTextHoverQt();
+      update();
+    }
+    QWidget::leaveEvent(pevent);
   }
 
   // Windows' chart window does three things with the mouse that aren't
@@ -427,6 +468,15 @@ protected:
     if (pevent->button() != Qt::LeftButton)
       return;
 
+    // The text console's left click is its own thing -- Scribble() is
+    // graphics only: click a word to pin every instance of it, click it
+    // again or click between words to let go. TextClickAtPtQt() is where
+    // the work happens; see it in qtdriver.cpp.
+    if (!us.fGraphics) {
+      TextClickAtPtQt(pevent->pos().x(), pevent->pos().y());
+      return;
+    }
+
     // Alt+click on a world map relocates the chart to that spot. Windows
     // consumes the click either way, so Alt+click never also scribbles.
     if (pevent->modifiers() & Qt::AltModifier) {
@@ -441,6 +491,13 @@ protected:
 
   void mouseMoveEvent(QMouseEvent *pevent) override
   {
+    // A buttonless move is the text console's hover. Nothing in graphics
+    // mode does anything with one, so it returns there as before.
+    if (!(pevent->buttons() & (Qt::LeftButton | Qt::RightButton))) {
+      TextHoverAtPtQt(pevent->pos().x(), pevent->pos().y());
+      return;
+    }
+
     if (pevent->buttons() & Qt::RightButton) {
       if (FRotatableQt())
         RotateByDrag(pevent->pos());
@@ -922,6 +979,179 @@ void TextColorQt(KI ki)
   qi.kvText = KvFromKi(ki);
 }
 
+// The retained text grid the character draws below also record, one cell
+// per character, so the mouse can hit-test words in the console after the
+// render. Growth is on demand and never shrinks: re-rendering into the
+// same allocation just zeroes it, and a chart that renders smaller than an
+// earlier one costs nothing.
+
+// Record one character, growing the grid around the cell if needed. Cell
+// positions can't reach the caps here -- the canvas itself is bounded by
+// BITMAPX x BITMAPY and a cell is qi.xChar x qi.yChar pixels -- but they
+// are checked rather than trusted, because a cell past the caps would
+// write outside the grid.
+static void RecordTextGridQt(int xCell, int yCell, int wch)
+{
+  int cchNew, crowNew, y;
+  wchar *rgwchNew;
+
+  if (xCell < 0 || yCell < 0 || xCell >= BITMAPX || yCell >= BITMAPY)
+    return;
+  if (xCell >= qi.cchGrid || yCell >= qi.crowGrid) {
+    cchNew = Min(Max(Max(qi.cchGrid * 2, xCell + 1), 128), BITMAPX);
+    crowNew = Min(Max(Max(qi.crowGrid * 2, yCell + 1), 64), BITMAPY);
+    rgwchNew = new wchar[cchNew * crowNew];
+    memset(rgwchNew, 0, (size_t)cchNew * crowNew * sizeof(wchar));
+    for (y = 0; y < qi.crowGrid; y++)
+      memcpy(rgwchNew + y * cchNew, qi.rgwchGrid + y * qi.cchGrid,
+        qi.cchGrid * sizeof(wchar));
+    delete[] qi.rgwchGrid;
+    qi.rgwchGrid = rgwchNew;
+    qi.cchGrid = cchNew;
+    qi.crowGrid = crowNew;
+  }
+  qi.rgwchGrid[yCell * qi.cchGrid + xCell] = (wchar)wch;
+}
+
+// Empty the grid ahead of a text render. The allocation stays: charts
+// redraw often, and the biggest chart seen is a fine thing to keep room
+// for.
+static void TextGridResetQt(void)
+{
+  if (qi.rgwchGrid != NULL)
+    memset(qi.rgwchGrid, 0,
+      (size_t)qi.cchGrid * qi.crowGrid * sizeof(wchar));
+}
+
+// And give it back, when the window that shows it is going away.
+static void TextGridFreeQt(void)
+{
+  delete[] qi.rgwchGrid;
+  qi.rgwchGrid = NULL;
+  qi.cchGrid = qi.crowGrid = 0;
+}
+
+// One character of the retained grid, or 0 for a cell nothing was drawn
+// in, including any cell outside it entirely.
+int WchTextGridQt(int xCell, int yCell)
+{
+  if (qi.rgwchGrid == NULL || xCell < 0 || yCell < 0 ||
+    xCell >= qi.cchGrid || yCell >= qi.crowGrid)
+    return 0;
+  return qi.rgwchGrid[yCell * qi.cchGrid + xCell];
+}
+
+// The word under a canvas point, as one string: the maximal run of
+// non-space cells left and right along the row. The pixel-to-cell math is
+// the draw below read backwards -- a cell's glyph starts xCell * qi.xChar
+// + 4 pixels in, and its row spans yCell * qi.yChar to (yCell + 1) *
+// qi.yChar -- so a point inside a drawn glyph finds the cell it belongs
+// to. Null string between words and past the end of what was drawn.
+QString StrTextWordAtPtQt(int xPix, int yPix)
+{
+  int xCell = (xPix - 4) / qi.xChar, yCell = yPix / qi.yChar;
+  int x1, x2, x;
+  QString str;
+
+  if (WchTextGridQt(xCell, yCell) <= ' ')
+    return str;
+  x1 = x2 = xCell;
+  while (WchTextGridQt(x1 - 1, yCell) > ' ')
+    x1--;
+  while (WchTextGridQt(x2 + 1, yCell) > ' ')
+    x2++;
+  for (x = x1; x <= x2; x++)
+    str += QChar(WchTextGridQt(x, yCell));
+  return str;
+}
+
+// Every place the word appears in the retained grid, as canvas pixel
+// rectangles, one per occurrence. A match is a whole word: the cells on
+// both sides of it in its row must not be more word, so "Jup" does not
+// light part of "Jupiter". The rectangle is where TextCharQt() put the
+// glyphs, not the tight ink bounds, which is what a highlight wants.
+QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
+{
+  QVector<QRect> rgrc;
+  int cwch = strWord.size(), x, y, i;
+
+  if (cwch < 1 || qi.rgwchGrid == NULL)
+    return rgrc;
+  for (y = 0; y < qi.crowGrid; y++)
+    for (x = 0; x <= qi.cchGrid - cwch; x++) {
+      if (WchTextGridQt(x - 1, y) > ' ')
+        continue;
+      for (i = 0; i < cwch && WchTextGridQt(x + i, y) ==
+        strWord[i].unicode(); i++)
+        ;
+      if (i < cwch || WchTextGridQt(x + cwch, y) > ' ')
+        continue;
+      rgrc << QRect(x * qi.xChar + 4, y * qi.yChar, cwch * qi.xChar,
+        qi.yChar);
+    }
+  return rgrc;
+}
+
+// The two highlight layers, each a word plus where it sits. The pinned one
+// is what a click set (or cleared); the other is whatever is under the
+// cursor. Refresh re-reads the pinned word after every text render, so a
+// pinned word survives switching charts and chart types -- the same word
+// lights in the new listing, which is the point of pinning one.
+void SetTextHighlightQt(CONST QString &strWord)
+{
+  qi.strTextHi = strWord;
+  qi.rgrcTextHi = RgrcTextWordQt(strWord);
+}
+
+void SetTextHoverQt(CONST QString &strWord)
+{
+  qi.strTextHover = strWord;
+  qi.rgrcTextHover = RgrcTextWordQt(strWord);
+}
+
+static void RefreshTextHighlightQt(void)
+{
+  if (!qi.strTextHi.isEmpty())
+    qi.rgrcTextHi = RgrcTextWordQt(qi.strTextHi);
+}
+
+void ClearTextHoverQt(void)
+{
+  qi.strTextHover = QString();
+  qi.rgrcTextHover.clear();
+}
+
+// The mouse, forwarded by the canvas's mousePressEvent and mouseMoveEvent
+// below: the text console's click and hover. Keeping them here puts every
+// piece of the text grid logic in this file, and gives the suite the same
+// entry points a mouse press has. Nothing to do in graphics mode, where a
+// left button scribbles and Alt+click relocates instead.
+void TextClickAtPtQt(int xPix, int yPix)
+{
+  QString str;
+
+  if (us.fGraphics)
+    return;
+  str = StrTextWordAtPtQt(xPix, yPix);
+  SetTextHighlightQt(str == qi.strTextHi ? QString() : str);
+  if (gi.qcanvas != NULL)
+    gi.qcanvas->update();
+}
+
+void TextHoverAtPtQt(int xPix, int yPix)
+{
+  QString str;
+
+  if (us.fGraphics)
+    return;
+  str = StrTextWordAtPtQt(xPix, yPix);
+  if (str == qi.strTextHover)
+    return;
+  SetTextHoverQt(str);
+  if (gi.qcanvas != NULL)
+    gi.qcanvas->update();
+}
+
 // Called from PrintSz() (general.cpp) for each character, with the cell
 // the text engine has reached and the character already decoded to a wide
 // one. The decoding is that caller's job because a UTF-8 character spans
@@ -932,6 +1162,10 @@ void TextCharQt(int xCell, int yCell, int wch)
   if (gi.qpaint == NULL)
     return;
 
+  // Only text charts come through here -- graphics text is DrawSz() in
+  // xcharts0.cpp, which never calls this -- so what the grid retains is
+  // always the whole console.
+  RecordTextGridQt(xCell, yCell, wch);
   gi.qpaint->setPen(QColor(RgbR(qi.kvText), RgbG(qi.kvText),
     RgbB(qi.kvText)));
   gi.qpaint->drawText(xCell * qi.xChar + 4, (yCell + 1) * qi.yChar,
@@ -1336,6 +1570,11 @@ void RedrawQt()
 {
   if (qi.fNoUpdate || (qi.grfHold & grfHoldRedraw))
     return;
+  // A redraw is about to replace what the console held, so the hover is
+  // gone. The pinned word is not: the text branch re-records the grid
+  // below and looks the word up in it again, so it re-lights in whatever
+  // listing is now up.
+  ClearTextHoverQt();
   // "-0X" forbids graphics, and Windows enforces it at the end of every
   // command (wdriver.cpp:2507) -- which is this point: after whatever the
   // user asked for, before the chart is drawn. This port never referenced
@@ -1426,6 +1665,11 @@ void RedrawQt()
   // text chart instead of going black while a second window holds it.
   if (!us.fGraphics) {
     SetTextMetricsQt();
+    // What the console is about to draw is what the mouse will hit-test
+    // against, so the retained grid starts empty here, ahead of Action().
+    // Two passes can happen below; both draw the same characters, so the
+    // recording is idempotent.
+    TextGridResetQt();
     gi.qpaint->setRenderHint(QPainter::TextAntialiasing,
       FConsoleAntialiasQt());
     gi.qpaint->setFont(qi.fontText);
@@ -1490,6 +1734,9 @@ void RedrawQt()
       is.fMult = fMultSav;
     }
     is.S = fileSav;
+    // The grid is complete and so is the console it describes: whatever
+    // word is pinned lights in it.
+    RefreshTextHighlightQt();
     delete gi.qpaint;
     gi.qpaint = NULL;
     gs.xWin = dxWin; gs.yWin = dyWin;
@@ -6069,6 +6316,7 @@ void ShutdownQt()
     gi.qcanvas = NULL;
     qi.pscroll = NULL;
   }
+  TextGridFreeQt();
   if (gi.qapp != NULL) {
     delete gi.qapp;
     gi.qapp = NULL;

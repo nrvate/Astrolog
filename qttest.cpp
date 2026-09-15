@@ -14142,6 +14142,131 @@ static void TestCopyChartNameQt()
 }
 
 
+// The text console's word highlight: the grid TextCharQt() records, the
+// words hit-tested out of it, and the two layers of highlight the mouse
+// drives off that grid. The aspect list is the subject because it is the
+// chart the feature exists for -- the same object name over and over, one
+// line per aspect -- and a fixed chart makes every count reproducible.
+//
+// The state assertions go through the same entry points the canvas's mouse
+// handlers forward to (TextClickAtPtQt/TextHoverAtPtQt), and what they
+// observe is the canvas itself: the highlight paints in paintEvent(), not
+// in gi.qim, so QWidget::grab() sees it and the pixel-exact nets that read
+// gi.qim do not.
+static void TestTextWordHighlightQt()
+{
+  int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
+  flag fGraphicsSav = us.fGraphics, fNoDisplaySav = us.fNoDisplay;
+  flag fClipSav = us.fClip80;
+  CI ciSav = ciCore, ciMainSav = ciMain;
+  byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
+  QVector<QRect> rgrc;
+  QImage imBase, imHover, imBoth, imPinned, imBack;
+  int i;
+
+  SnapChartFlagsQt(&cfChartSav);
+  CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
+  CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
+
+  // Pin everything the listing's words depend on: a fixed sky and exactly
+  // the classic set -- Sun through Pluto, the Node, and the angles -- in
+  // BOTH restriction sets, because RedoRestrictions() reads a category as
+  // on if EITHER side includes it. Anything wider and the listing grows
+  // hundreds of lines of moons and uranians, down past the canvas's own
+  // size cap; anything narrower and "Moon" may not be on it at all. A
+  // group earlier in the table may have restricted anything, so this
+  // group does not inherit.
+  us.fNoDisplay = fFalse;
+  us.fClip80 = fFalse;
+  for (i = 0; i < objMax; i++) {
+    ignore[i] = ignore2[i] = !(FBetween(i, oSun, oPlu) || i == oNod ||
+      i == oAsc || i == oMC);
+  }
+  // The category flags the next cast reads (us.fCusp and friends) are
+  // derived from the arrays here, not the other way around.
+  RedoRestrictions();
+  ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+  ciCore = ciMain;
+  CastChart(0);
+  us.fGraphics = fFalse;
+  SetChartModeQt(gAspect);
+
+  Group("Text console word highlight");
+
+  // The render recorded what it drew: the matcher finds "Moon" on the
+  // several aspect lines it belongs to, and the pixel math reads back the
+  // same word the mouse would see under it.
+  rgrc = RgrcTextWordQt("Moon");
+  Check(rgrc.size() >= 2, "the aspect list puts \"Moon\" on at least two "
+    "lines (got %d)", rgrc.size());
+  for (i = 0; i < rgrc.size(); i++)
+    Check(StrTextWordAtPtQt(rgrc[i].x(), rgrc[i].y()) == QString("Moon"),
+      "rect %d of \"Moon\" reads back as \"Moon\"", i);
+
+  // Whole words only: "Moo" occurs only inside "Moon" here, and both
+  // sides of a match must be word boundaries, so it lights nothing.
+  Check(RgrcTextWordQt("Moo").isEmpty(),
+    "\"Moo\" lights nothing, though \"Moon\" holds it");
+  Check(RgrcTextWordQt(QString()).isEmpty(),
+    "an empty word lights nothing");
+  Check(RgrcTextWordQt("Plutop").isEmpty(),
+    "a word the listing has no instance of lights nothing");
+
+  // The whole stack, pixels on. Hover washes every instance softly;
+  // clicking pins them harder; leaving drops the hover and a second click
+  // takes the pin back off, back to the exact canvas this started with.
+  imBase = gi.qcanvas->grab().toImage();
+  TextHoverAtPtQt(rgrc[0].x(), rgrc[0].y());
+  imHover = gi.qcanvas->grab().toImage();
+  Check(CpixDiffImagesQt(imBase, imHover, 1) > 0,
+    "hovering \"Moon\" repaints the canvas (%d pixels differ)",
+    (int)CpixDiffImagesQt(imBase, imHover, 1));
+  TextClickAtPtQt(rgrc[0].x(), rgrc[0].y());
+  imBoth = gi.qcanvas->grab().toImage();
+  Check(CpixDiffImagesQt(imHover, imBoth, 1) > 0,
+    "and clicking it brightens the wash over the hover");
+  ClearTextHoverQt();
+  imPinned = gi.qcanvas->grab().toImage();
+  Check(CpixDiffImagesQt(imBoth, imPinned, 1) > 0,
+    "and leaving the canvas drops the hover wash");
+  TextClickAtPtQt(rgrc[0].x(), rgrc[0].y());
+  imBack = gi.qcanvas->grab().toImage();
+  Check(CpixDiffImagesQt(imBase, imBack, 1) == 0,
+    "and clicking the word again returns the exact canvas (%d pixels "
+    "differ)", (int)CpixDiffImagesQt(imBase, imBack, 1));
+
+  // A pin survives re-renders: it is looked up in each new grid, so
+  // switching to graphics and back re-lights it, and a click made over
+  // the graphics chart (whose grid is stale) left it alone.
+  TextClickAtPtQt(rgrc[0].x(), rgrc[0].y());
+  imPinned = gi.qcanvas->grab().toImage();
+  us.fGraphics = fTrue;
+  SetChartModeQt(gWheel);
+  TextClickAtPtQt(rgrc[0].x(), rgrc[0].y());
+  us.fGraphics = fFalse;
+  SetChartModeQt(gAspect);
+  imBack = gi.qcanvas->grab().toImage();
+  Check(CpixDiffImagesQt(imPinned, imBack, 1) == 0,
+    "a pinned word re-lights after a round trip to graphics and back "
+    "(%d pixels differ)", (int)CpixDiffImagesQt(imPinned, imBack, 1));
+
+  // Leave nothing behind: no pin, no hover, no chart state for a later
+  // group's listing to inherit.
+  SetTextHighlightQt(QString());
+  ClearTextHoverQt();
+  CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
+  CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
+  RedoRestrictions();
+  ciCore = ciSav; ciMain = ciMainSav;
+  us.fNoDisplay = fNoDisplaySav;
+  us.fClip80 = fClipSav;
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  us.fGraphics = fGraphicsSav;
+  RestoreChartModeQt(nModeSav, &cfChartSav);
+}
+
+
 // Copy Chart Text Output, with the output codepage set to UTF-8.
 //
 // Astrolog writes a byte order mark at the head of a UTF-8 file, which is
@@ -16115,6 +16240,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"orbit-buffer",         TestOrbitBufferQt},
   {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},
+  {"text-word-highlight",  TestTextWordHighlightQt},
   {"copy-chart-name",      TestCopyChartNameQt},
   {"restrict-recall",      TestRestrictRecallQt},
   {"printing",             TestPrintQt},
