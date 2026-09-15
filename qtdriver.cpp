@@ -1145,15 +1145,82 @@ static flag FIsWordChQt(int wch)
 // The span of the word containing a cell, read out of the retained grid:
 // the maximal run of word characters left and right along the row. fFalse
 // when the cell holds no word.
+// Is this cell a digit? Part of the value-globbing rules below.
+static flag FIsDigitChQt(int wch)
+{
+  return wch >= '0' && wch <= '9';
+}
+
+// Does the punctuation cell chGlue sit INSIDE a word? It does when the
+// cells on both sides of it are word characters -- the point in "10.28",
+// the colons in "22:07:28", the slash in "1/10th" -- or when it is one of
+// the arc-minute and arc-second marks a degree value ends in, "08'" and
+// "37'50\"", which hang off a digit with nothing owed after them.
+static flag FGluesQt(int chPrev, int chGlue, int chNext)
+{
+
+  // The glue cell has to be punctuation itself. This check is what keeps
+  // a SPACE from reading as glue between two words: without it, "North
+  // Node" is one word and neither "North" nor "Node" can match alone.
+  if (chGlue <= ' ' || chGlue >= 0x80 || FIsWordChQt(chGlue))
+    return fFalse;
+  if (FIsWordChQt(chPrev) && FIsWordChQt(chNext))
+    return fTrue;
+  return (chGlue == '\'' || chGlue == '"' || chGlue == '%') &&
+    FIsDigitChQt(chPrev);
+}
+
+// Does the cell ch START a word? A word character does; a sign does when
+// a digit follows, so "+7:26'" and "-0.070" are whole values, sign and
+// all, while the dash in "- orb:" separates.
+static flag FStartsWordQt(int ch, int chNext)
+{
+  return FIsWordChQt(ch) ||
+    ((ch == '+' || ch == '-') && FIsDigitChQt(chNext));
+}
+
 static flag FWordSpanAtCellQt(int xCell, int yCell, int *px1, int *px2)
 {
-  if (!FIsWordChQt(WchTextGridQt(xCell, yCell)))
+  int x;
+
+  if (!FStartsWordQt(WchTextGridQt(xCell, yCell),
+    WchTextGridQt(xCell + 1, yCell)))
     return fFalse;
   *px1 = *px2 = xCell;
-  while (FIsWordChQt(WchTextGridQt(*px1 - 1, yCell)))
-    (*px1)--;
-  while (FIsWordChQt(WchTextGridQt(*px2 + 1, yCell)))
-    (*px2)++;
+  // Right: word characters, and punctuation that glues to what the run
+  // already holds.
+  for (x = *px2 + 1; ; x++) {
+    int ch = WchTextGridQt(x, yCell);
+    if (FIsWordChQt(ch)) {
+      *px2 = x;
+      continue;
+    }
+    if (FGluesQt(WchTextGridQt(*px2, yCell), ch,
+      WchTextGridQt(x + 1, yCell))) {
+      *px2 = x;
+      continue;
+    }
+    break;
+  }
+  // Left: word characters, a sign hanging before a digit, and punctuation
+  // gluing the run's first cell to the word before it.
+  for (x = *px1 - 1; x >= 0; x--) {
+    int ch = WchTextGridQt(x, yCell);
+    int chAfter = WchTextGridQt(x + 1, yCell);
+    if (FIsWordChQt(ch)) {
+      *px1 = x;
+      continue;
+    }
+    if (FStartsWordQt(ch, chAfter)) {
+      *px1 = x;
+      continue;
+    }
+    if (FGluesQt(WchTextGridQt(x - 1, yCell), ch, chAfter)) {
+      *px1 = x;
+      continue;
+    }
+    break;
+  }
   return fTrue;
 }
 
@@ -1291,12 +1358,26 @@ QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
     return rgrc;
   for (y = 0; y < crow; y++)
     for (x = 0; x <= cch - cwch; x++) {
-      if (FIsWordChQt(WchTextGridQt(x - 1, y)))
+      int chBefore = WchTextGridQt(x - 1, y);
+      int chAfter = WchTextGridQt(x + cwch, y);
+      if (FIsWordChQt(chBefore) || FIsWordChQt(chAfter))
         continue;
       for (i = 0; i < cwch && WchTextGridQt(x + i, y) ==
         strWord[i].unicode(); i++)
         ;
-      if (i < cwch || FIsWordChQt(WchTextGridQt(x + cwch, y)))
+      if (i < cwch)
+        continue;
+      // The boundary cells are punctuation, but punctuation glues: a
+      // sign before the value's first digit starts the value, a mark
+      // after the value's last digit ends it, and a point or colon
+      // between word characters sits inside one. A match has to be the
+      // whole value -- "0:08" inside "+0:08'" is a fragment, and not
+      // what the mouse asked for.
+      if (FStartsWordQt(chBefore, strWord[0].unicode()) ||
+        FGluesQt(WchTextGridQt(x - 2, y), chBefore,
+          strWord[0].unicode()) ||
+        FGluesQt(strWord[cwch - 1].unicode(), chAfter,
+          WchTextGridQt(x + cwch + 1, y)))
         continue;
       rgrc << QRect(x * qi.xChar + 4, (y + 1) * qi.yChar - fm.ascent(),
         cwch * qi.xChar, fm.ascent() + fm.descent());

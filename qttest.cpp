@@ -14503,8 +14503,9 @@ static void TestTextWordHighlightQt()
   CI ciSav = ciCore, ciMainSav = ciMain;
   byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
   QVector<QRect> rgrc, rgrcN, rgrcN2;
+  QStringList rgsz0;
   QImage imBase, imHover, imBoth, imPinned, imBack;
-  int i;
+  int i, yHdr = -1;
 
   SnapChartFlagsQt(&cfChartSav);
   CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
@@ -14584,6 +14585,41 @@ static void TestTextWordHighlightQt()
       "the summary's \"Opp:\" hovers as bare \"Opp\"");
     Check(RgrcTextWordQt("Opp").size() >= rgrcN.size(),
       "and bare \"Opp\" lights at least every place \"Opp:\" sits");
+  }
+
+  // Values glob whole: the first data row's orb is sign, colons and arc
+  // mark as one word, and its power keeps its decimal point. Hovering a
+  // fragment is not possible -- the whole value is the word.
+  for (i = 0; i < 10; i++)
+    if (StrRowSortTestQt(i, 40).contains(QString("Obj1"))) {
+      yHdr = i;
+      break;
+    }
+  if (yHdr >= 0) {
+    rgsz0 = RgszRowTokensTestQt(yHdr + 1, 90);
+    int iOrb = -1, iPow = -1;
+    for (int iT = 0; iT < rgsz0.size(); iT++) {
+      if (rgsz0[iT].startsWith("orb:"))
+        iOrb = iT;
+      if (rgsz0[iT].startsWith("power:"))
+        iPow = iT;
+    }
+    if (iOrb >= 0 && iOrb + 1 < rgsz0.size()) {
+      QString strOrb = rgsz0[iOrb + 1];
+      rgrcN = RgrcTextWordQt(strOrb);
+      Check(!rgrcN.isEmpty() && StrTextWordAtPtQt(rgrcN[0].x(),
+        rgrcN[0].y()) == strOrb && StrTextPhraseAtPtQt(rgrcN[0].x(),
+        rgrcN[0].y()) == strOrb, "the orb globs whole (\"%s\")",
+        strOrb.toLocal8Bit().constData());
+    }
+    if (iPow >= 0 && iPow + 1 < rgsz0.size()) {
+      QString strPow = rgsz0[iPow + 1];
+      rgrcN = RgrcTextWordQt(strPow);
+      Check(!rgrcN.isEmpty() && StrTextWordAtPtQt(rgrcN[0].x(),
+        rgrcN[0].y()) == strPow && StrTextPhraseAtPtQt(rgrcN[0].x(),
+        rgrcN[0].y()) == strPow, "the power globs whole (\"%s\")",
+        strPow.toLocal8Bit().constData());
+    }
   }
 
   // Whole words only: "Mo" occurs only inside longer words here ("Moon"
