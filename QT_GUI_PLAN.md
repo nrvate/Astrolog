@@ -11109,22 +11109,34 @@ this is the note that explains the wall of dialogs.
     existed only as pixels once the render returned, which is why there
     was nothing to hit-test. The mouse hit-tests words out of the grid
     (the maximal run of non-space cells along a row, read back through the
-    same pixel math the draw uses), and two washes of the same amber paint
-    in `paintEvent()`: one pinned by a click until a second click or an
-    empty one takes it back, one soft under the cursor. A pinned word is
+    same pixel math the draw uses), and two washes paint in `paintEvent()`:
+    one pinned by a click until a second click or an empty one takes it
+    back, one soft under the cursor. The washes are the ink's own colour
+    at low alpha, not a tint, so they fight none of the colours a listing
+    already prints, and they come from `gi.kiOn` so that Reverse
+    Background washes dark on white instead of invisible. A pinned word is
     looked up again in every new grid, so it re-lights in whatever listing
     is up after a chart change. Matching is whole words, so "Moo" lights
     nothing inside "Moon", and the 4-letter forms of the object listing
-    are their own words. The overlay paints on the canvas rather than into
-    `gi.qim`, which is why the pixel-exact nets (chart-render, the export
-    matrices) see none of it. The suite group's first draft pinned its
-    object set by writing `ignore[]` alone and calling
-    `RedoRestrictions()`, which read the untouched `ignore2[]` half and
-    turned every category back on -- 800 rows of moons and uranians,
-    canvas capped, highlight below the fold; the pin restricts both sets
-    and names its keep-set explicitly. 15 assertions in
-    `text-word-highlight`, three sabotages caught (recorder off, boundary
-    check off, overlay off); the full suite is clean under ASan.
+    are their own words. Object names that CONTAIN a space -- "North
+    Node", "East Point", a customised name -- are one unit: the hovered
+    word extends across a gap of exactly one space cell only when the
+    joined text equals an entry of `szObjDisp[]`, the same table the
+    listings print, so hovering either half of "North Node" lights the
+    whole of it while "Sun (Gem) Con (Gem)" (single spaces throughout the
+    aspect list) never falsely fuses. `PrintAspect()` caps names at 7
+    characters ("%7.7s"), so a truncated instance ("North N") is no name
+    and stays on the word fallback. The overlay paints on the canvas
+    rather than into `gi.qim`, which is why the pixel-exact nets
+    (chart-render, the export matrices) see none of it. The suite group's
+    first draft pinned its object set by writing `ignore[]` alone and
+    calling `RedoRestrictions()`, which read the untouched `ignore2[]`
+    half and turned every category back on -- 800 rows of moons and
+    uranians, canvas capped, highlight below the fold; the pin restricts
+    both sets and names its keep-set explicitly. 24 assertions in
+    `text-word-highlight`, four sabotages caught (recorder off, boundary
+    check off, overlay off, name table off); the full suite is clean
+    under ASan.
 
 
 ## Features this fork adds to both builds

@@ -14158,27 +14158,43 @@ static void TestTextWordHighlightQt()
   int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode;
   CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics, fNoDisplaySav = us.fNoDisplay;
-  flag fClipSav = us.fClip80;
+  flag fClipSav = us.fClip80, fInterpSav = us.fInterpret;
+  int nRelSav = us.nRel, nAspSav = us.nAsp, k;
+  byte rgbASav[cAspect + 1];
   CI ciSav = ciCore, ciMainSav = ciMain;
   byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax];
-  QVector<QRect> rgrc;
+  QVector<QRect> rgrc, rgrcN, rgrcN2;
   QImage imBase, imHover, imBoth, imPinned, imBack;
   int i;
 
   SnapChartFlagsQt(&cfChartSav);
   CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
   CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
+  for (k = 1; k <= cAspect; k++)
+    rgbASav[k] = ignorea[ASPT(k)];
 
-  // Pin everything the listing's words depend on: a fixed sky and exactly
-  // the classic set -- Sun through Pluto, the Node, and the angles -- in
-  // BOTH restriction sets, because RedoRestrictions() reads a category as
-  // on if EITHER side includes it. Anything wider and the listing grows
-  // hundreds of lines of moons and uranians, down past the canvas's own
-  // size cap; anything narrower and "Moon" may not be on it at all. A
-  // group earlier in the table may have restricted anything, so this
-  // group does not inherit.
+  // Pin everything the listing's words depend on. A fixed sky AND a fixed
+  // observer: the angles (Ascendant, Midheaven) depend on where and when,
+  // and an earlier group in the table may have moved the chart's location,
+  // so the four time-and-place fields are pinned as well as the date, to
+  // the program's own Seattle defaults. The relationship mode and the
+  // interpretation switch are pinned too, because either reshapes the
+  // listing out of the aspect list altogether -- a group earlier in the
+  // table may have left either on. The classic keep-set -- Sun through
+  // Pluto, the Node, and the angles -- goes into BOTH restriction sets,
+  // because RedoRestrictions() reads a category as on if EITHER side
+  // includes it; anything wider and the listing grows hundreds of lines
+  // of moons and uranians, down past the canvas's own size cap.
   us.fNoDisplay = fFalse;
   us.fClip80 = fFalse;
+  us.fInterpret = fFalse;
+  us.nRel = rcNone;
+  // And every aspect allowed: an earlier group can leave the aspect
+  // count and aspect restrictions wherever it likes, and each one that
+  // comes in restricted takes candidate lines out of the listing.
+  us.nAsp = cAspect;
+  for (k = 1; k <= cAspect; k++)
+    ignorea[ASPT(k)] = fFalse;
   for (i = 0; i < objMax; i++) {
     ignore[i] = ignore2[i] = !(FBetween(i, oSun, oPlu) || i == oNod ||
       i == oAsc || i == oMC);
@@ -14187,6 +14203,8 @@ static void TestTextWordHighlightQt()
   // derived from the arrays here, not the other way around.
   RedoRestrictions();
   ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+  ciMain.dst = 0.0; ciMain.zon = 8.0;
+  ciMain.lon = 122.0 + 19.0/60.0; ciMain.lat = 47.0 + 36.0/60.0;
   ciCore = ciMain;
   CastChart(0);
   us.fGraphics = fFalse;
@@ -14212,6 +14230,32 @@ static void TestTextWordHighlightQt()
     "an empty word lights nothing");
   Check(RgrcTextWordQt("Plutop").isEmpty(),
     "a word the listing has no instance of lights nothing");
+
+  // Object names that contain a space are one unit. "North Node" reaches
+  // the listings by szObjDisp[], and the phrase matcher joins the hovered
+  // word across single-space gaps only when the joined text is a display
+  // name: hovering either half of the phrase lights the whole of it, and
+  // the raw word underneath is still the word. ("Node" occurs only inside
+  // the phrase here, so its rects are exactly the phrase's rects.)
+  rgrcN = RgrcTextWordQt("North Node");
+  Check(rgrcN.size() >= 2, "the aspect list shows \"North Node\" in full "
+    "on at least two lines (got %d)", rgrcN.size());
+  if (!rgrcN.isEmpty()) {
+    Check(StrTextPhraseAtPtQt(rgrcN[0].x(), rgrcN[0].y()) ==
+      QString("North Node"),
+      "hovering the \"North\" half reads back the phrase");
+    Check(StrTextWordAtPtQt(rgrcN[0].x(), rgrcN[0].y()) == QString("North"),
+      "and the raw word under it is still the raw word");
+    rgrcN2 = RgrcTextWordQt("Node");
+    Check(rgrcN2.size() == rgrcN.size(),
+      "\"Node\" occurs only inside \"North Node\" here (%d rects of each)",
+      rgrcN2.size());
+    if (!rgrcN2.isEmpty())
+      Check(StrTextPhraseAtPtQt(rgrcN2[0].x(), rgrcN2[0].y()) ==
+        QString("North Node") &&
+        StrTextWordAtPtQt(rgrcN2[0].x(), rgrcN2[0].y()) == QString("Node"),
+        "hovering the \"Node\" half reaches the same phrase leftward");
+  }
 
   // The whole stack, pixels on. Hover washes every instance softly;
   // clicking pins them harder; leaving drops the hover and a second click
@@ -14257,7 +14301,12 @@ static void TestTextWordHighlightQt()
   ClearTextHoverQt();
   CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
   CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
+  for (k = 1; k <= cAspect; k++)
+    ignorea[ASPT(k)] = rgbASav[k];
+  us.nAsp = nAspSav;
   RedoRestrictions();
+  us.fInterpret = fInterpSav;
+  us.nRel = nRelSav;
   ciCore = ciSav; ciMain = ciMainSav;
   us.fNoDisplay = fNoDisplaySav;
   us.fClip80 = fClipSav;

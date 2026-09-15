@@ -416,17 +416,26 @@ protected:
     if (gi.qim != NULL)
       p.drawImage(0, 0, *gi.qim);
     // The text console's word highlights, over the ink: two washes of the
-    // same amber, the hover lighter than the pinned word, so hovering a
-    // pinned word just brightens it. Drawn here rather than baked into
-    // gi.qim, so that changing either costs a repaint and not a re-render,
-    // and so the pixel-exact nets (chart-render, the export matrices)
-    // reading gi.qim see none of it.
+    // ink's own colour, the hover lighter than the pinned word, so
+    // hovering a pinned word just brightens it. Neutral on purpose -- a
+    // tinted wash fights the many colours a listing already prints --
+    // and taken from gi.kiOn rather than hard white so that Reverse
+    // Background (white paper, black ink) washes dark instead. Drawn here
+    // rather than baked into gi.qim, so that changing either costs a
+    // repaint and not a re-render, and so the pixel-exact nets
+    // (chart-render, the export matrices) reading gi.qim see none of it.
     if (!us.fGraphics) {
+      KV kv = KvFromKi(gi.kiOn);
+      QColor col(RgbR(kv), RgbG(kv), RgbB(kv));
       int i;
-      for (i = 0; i < qi.rgrcTextHover.size(); i++)
-        p.fillRect(qi.rgrcTextHover[i], QColor(255, 200, 0, 56));
-      for (i = 0; i < qi.rgrcTextHi.size(); i++)
-        p.fillRect(qi.rgrcTextHi[i], QColor(255, 200, 0, 112));
+      for (i = 0; i < qi.rgrcTextHover.size(); i++) {
+        col.setAlpha(48);
+        p.fillRect(qi.rgrcTextHover[i], col);
+      }
+      for (i = 0; i < qi.rgrcTextHi.size(); i++) {
+        col.setAlpha(96);
+        p.fillRect(qi.rgrcTextHi[i], col);
+      }
     }
   }
 
@@ -1041,8 +1050,33 @@ int WchTextGridQt(int xCell, int yCell)
   return qi.rgwchGrid[yCell * qi.cchGrid + xCell];
 }
 
-// The word under a canvas point, as one string: the maximal run of
-// non-space cells left and right along the row. The pixel-to-cell math is
+// The span of the word containing a cell, read out of the retained grid:
+// the maximal run of non-space cells left and right along the row. fFalse
+// when the cell holds no word.
+static flag FWordSpanAtCellQt(int xCell, int yCell, int *px1, int *px2)
+{
+  if (WchTextGridQt(xCell, yCell) <= ' ')
+    return fFalse;
+  *px1 = *px2 = xCell;
+  while (WchTextGridQt(*px1 - 1, yCell) > ' ')
+    (*px1)--;
+  while (WchTextGridQt(*px2 + 1, yCell) > ' ')
+    (*px2)++;
+  return fTrue;
+}
+
+// The grid's characters from one row, first column through last inclusive.
+static QString StrWordSpanQt(int yCell, int x1, int x2)
+{
+  QString str;
+  int x;
+
+  for (x = x1; x <= x2; x++)
+    str += QChar(WchTextGridQt(x, yCell));
+  return str;
+}
+
+// The word under a canvas point, as one string. The pixel-to-cell math is
 // the draw below read backwards -- a cell's glyph starts xCell * qi.xChar
 // + 4 pixels in, and its row spans yCell * qi.yChar to (yCell + 1) *
 // qi.yChar -- so a point inside a drawn glyph finds the cell it belongs
@@ -1050,26 +1084,95 @@ int WchTextGridQt(int xCell, int yCell)
 QString StrTextWordAtPtQt(int xPix, int yPix)
 {
   int xCell = (xPix - 4) / qi.xChar, yCell = yPix / qi.yChar;
-  int x1, x2, x;
-  QString str;
+  int x1, x2;
 
-  if (WchTextGridQt(xCell, yCell) <= ' ')
-    return str;
-  x1 = x2 = xCell;
-  while (WchTextGridQt(x1 - 1, yCell) > ' ')
-    x1--;
-  while (WchTextGridQt(x2 + 1, yCell) > ' ')
-    x2++;
-  for (x = x1; x <= x2; x++)
-    str += QChar(WchTextGridQt(x, yCell));
-  return str;
+  if (!FWordSpanAtCellQt(xCell, yCell, &x1, &x2))
+    return QString();
+  return StrWordSpanQt(yCell, x1, x2);
+}
+
+// Is this text one of the display names objects are known by? szObjDisp[]
+// is the table the listings actually print -- PrintAspect()'s "%7.7s"
+// reads it -- so a name customised by -Yo is matched as the custom text,
+// and a long name truncated by the field (PrintAspect caps at 7
+// characters, "North Node" down to "North N") is simply not here, which
+// leaves such an instance on the word fallback below.
+static flag FObjNamePhraseQt(CONST QString &str)
+{
+  int i;
+
+  if (str.isEmpty())
+    return fFalse;
+  for (i = 0; i < objMax; i++)
+    if (str == szObjDisp[i])
+      return fTrue;
+  return fFalse;
+}
+
+// The word or NAME under a canvas point. Names that contain a space --
+// "North Node", "East Point", a customised object name -- are one thing
+// on screen, so they are one thing here: the hovered word extends across
+// a gap of exactly one space cell, leftward and rightward, and the longest
+// extension that equals a display name wins. The wider gaps that separate
+// columns never bridge, and a join has to BE a name, so "Sun (Gem) Con"
+// (single spaces throughout the aspect list) does not falsely fuse --
+// only real names can. Null string when the point is on no word at all.
+QString StrTextPhraseAtPtQt(int xPix, int yPix)
+{
+  // Three words each way around the hovered one, which is slot 3; every
+  // object name fits in that window with room to spare.
+  int xCell = (xPix - 4) / qi.xChar, yCell = yPix / qi.yChar;
+  int rgx1[7], rgx2[7], i, j, x;
+  QString rgsz[7], strT, strBest;
+  const int ih = 3, cSlot = 7;
+
+  if (!FWordSpanAtCellQt(xCell, yCell, &rgx1[ih], &rgx2[ih]))
+    return strBest;
+  rgsz[ih] = StrWordSpanQt(yCell, rgx1[ih], rgx2[ih]);
+  for (i = ih - 1; i >= 0; i--) {
+    if (WchTextGridQt(rgx1[i + 1] - 1, yCell) != ' ')
+      break;
+    if (!FWordSpanAtCellQt(rgx1[i + 1] - 2, yCell, &rgx1[i], &rgx2[i]))
+      break;
+    rgsz[i] = StrWordSpanQt(yCell, rgx1[i], rgx2[i]);
+  }
+  for (i = ih + 1; i < cSlot; i++) {
+    if (WchTextGridQt(rgx2[i - 1] + 1, yCell) != ' ')
+      break;
+    if (!FWordSpanAtCellQt(rgx2[i - 1] + 2, yCell, &rgx1[i], &rgx2[i]))
+      break;
+    rgsz[i] = StrWordSpanQt(yCell, rgx1[i], rgx2[i]);
+  }
+
+  // Which runs of those words containing the hovered one name an object?
+  // The longest such run is the unit: "North" alone names nothing while
+  // "North Node" does, and hovering the "Node" half reaches the same
+  // phrase leftward. Without a name, the hovered word is the unit, as it
+  // always was.
+  for (i = 0; i <= ih; i++)
+    for (j = ih; j < cSlot; j++) {
+      if (rgsz[i].isEmpty() || rgsz[j].isEmpty())
+        continue;
+      strT = rgsz[i];
+      for (x = i + 1; x <= j; x++) {
+        strT += QChar(' ');
+        strT += rgsz[x];
+      }
+      if (!FObjNamePhraseQt(strT))
+        continue;
+      if (strBest.isEmpty() || strT.size() > strBest.size())
+        strBest = strT;
+    }
+  return strBest.isEmpty() ? rgsz[ih] : strBest;
 }
 
 // Every place the word appears in the retained grid, as canvas pixel
 // rectangles, one per occurrence. A match is a whole word: the cells on
 // both sides of it in its row must not be more word, so "Jup" does not
-// light part of "Jupiter". The rectangle is where TextCharQt() put the
-// glyphs, not the tight ink bounds, which is what a highlight wants.
+// light part of "Jupiter". A phrase with inner spaces -- "North Node" --
+// matches the same way, each inner space being one space cell exactly.
+// The rectangle is where TextCharQt() put the glyphs, not the tight ink
+// bounds, which is what a highlight wants.
 QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
 {
   QVector<QRect> rgrc;
@@ -1132,7 +1235,7 @@ void TextClickAtPtQt(int xPix, int yPix)
 
   if (us.fGraphics)
     return;
-  str = StrTextWordAtPtQt(xPix, yPix);
+  str = StrTextPhraseAtPtQt(xPix, yPix);
   SetTextHighlightQt(str == qi.strTextHi ? QString() : str);
   if (gi.qcanvas != NULL)
     gi.qcanvas->update();
@@ -1144,7 +1247,7 @@ void TextHoverAtPtQt(int xPix, int yPix)
 
   if (us.fGraphics)
     return;
-  str = StrTextWordAtPtQt(xPix, yPix);
+  str = StrTextPhraseAtPtQt(xPix, yPix);
   if (str == qi.strTextHover)
     return;
   SetTextHoverQt(str);
