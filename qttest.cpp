@@ -1945,13 +1945,19 @@ static void TestGenerateGifQt()
   }
 
   // -Xg's help names the units its <unit> takes. It used to send the reader
-  // to -Xn for them, whose help lists none.
+  // to -Xn for them, whose help lists none. The help spells switches with
+  // the platform's switch character, '-' here and '/' on Windows -- so the
+  // needles are built from chSwitch, or the assertion fails every Windows
+  // run while passing every Linux one. (It did: its first release run was
+  // the first Windows run, and v8.00-qt.21's Windows job died on it.)
   {
-    char szTxt[cchSzMax];
+    char szTxt[cchSzMax], szXg[cchSzDef], szXn[cchSzDef];
     QByteArray baHelp;
     Borrow bGraphHelp(us.fGraphics, fFalse);
     Borrow bSwitch(us.fSwitch, fTrue);
 
+    sprintf2(S(szXg), "%cXg <file>", chSwitch);
+    sprintf2(S(szXn), "units of %cXn", chSwitch);
     SzScratchPathQt(S(szTxt), "helpxg", ".txt");
     CaptureTextToFileQt(szTxt, fFalse);
     QFile fileHelp(QString::fromLocal8Bit(szTxt));
@@ -1960,10 +1966,10 @@ static void TestGenerateGifQt()
       fileHelp.close();
     }
     remove(szTxt);
-    Check(baHelp.contains("-Xg <file>") &&
+    Check(baHelp.contains(szXg) &&
       baHelp.contains("<unit> is 1 seconds,") &&
       baHelp.contains("9 millennia, or 11, 12 or 13 for 1/10th, 1/100th") &&
-      !baHelp.contains("units of -Xn"), "the -Xg help lists its units "
+      !baHelp.contains(szXn), "the -Xg help lists its units "
       "(%d bytes of help)", (int)baHelp.size());
   }
 
@@ -12269,9 +12275,17 @@ static void ConsoleShotCaptureQt(CONST char *szDir)
 // Nothing here is a test. Do not add assertions; put those in the suite.
 static void ProbeQt()
 {
-  printf("gi.nMode=%d (gWheel=%d gHouse=%d)\n", gi.nMode, gWheel, gHouse);
-  printf("us.nHouseSystem=%d (%s)  fEphemFiles=%d\n",
-    us.nHouseSystem, szSystem[us.nHouseSystem], us.fEphemFiles);
+  // Scratch: what does the -Xg help capture actually hold?
+  Borrow bGraph(us.fGraphics, fFalse);
+  Borrow bSwitch(us.fSwitch, fTrue);
+  char szTxt[cchSzMax];
+  SzScratchPathQt(S(szTxt), "probehelp", ".txt");
+  CaptureTextToFileQt(szTxt, fFalse);
+  QFile f(QString::fromLocal8Bit(szTxt));
+  f.open(QIODevice::ReadOnly);
+  QString s = f.readAll();
+  int i = s.indexOf("Xg <file>");
+  printf("probe: size %d idx %d\n", s.size(), i);
 }
 
 
