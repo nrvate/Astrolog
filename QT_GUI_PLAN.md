@@ -11164,6 +11164,26 @@ this is the note that explains the wall of dialogs.
     the old order. 14 assertions in `aspect-sort`, a dead-comparator
     sabotage caught; the full suite is clean under ASan.
 
+271. **The aspect list's labels center over their fields, and the object
+    columns sort by object number.** Both are follow-ups to item 270.
+    The labels anchor by SEARCHING the first data row for the exact
+    strings it prints -- the truncated object names, the aspect
+    abbreviation, the core's own "orb:"/"power:" -- rather than by
+    counting word runs, which is what slid every label a field left when
+    a multi-word name ("North N") opened the row; each label then centers
+    over its field's extent (the 7-cell first name box, the abbrev, the
+    10-cell second name box), so a short first name's label no longer
+    tracks where that name happens to start. The object columns sort by
+    object number -- the ephemeris's own order, matching the rest of the
+    program's object lists -- with alphabetical order behind the "=WA"
+    switch and a radio pair in Display Settings, stored in astrolog.as
+    like the interface settings around it (the Windows `-W` handler
+    consumes the flag so one file loads everywhere). The multi-word net
+    is a keep-set of just the two nodes: their opposition is the whole
+    listing, and its row is fully known -- though the leg pins
+    `fSmartCusp` off, whose duplicate-suppression would otherwise remove
+    that very row.
+
 
 ## Features this fork adds to both builds
 

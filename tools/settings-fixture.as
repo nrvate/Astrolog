@@ -149,6 +149,7 @@
 :XE1 4 9                ; EXPECT ^:XE1 4 9
 :YXj0 7                 ; EXPECT ^:YXj0 7
 :YXW 12                 ; EXPECT ^:YXW 12
+:YXgt 7                 ; EXPECT ^:YXgt 7
 -YXt "fixture sidebar"  ; EXPECT ^-YXt "fixture sidebar"
 -YXU "Sirius" "1"       ; EXPECT ^-YXU "Sirius" "1"
 -~Q1 "=a 1"             ; EXPECT ^-~Q1 "=a 1"

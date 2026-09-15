@@ -196,6 +196,12 @@ int NProcessSwitchesW(int pos, PARSEIN *pin)
     darg += i;
     break;
 
+  case 'A':
+    // The Qt build's aspect list sorts its object columns by name or by
+    // object number. There is no sortable list here, but the flag takes
+    // no argument, and one astrolog.as loads everywhere.
+    break;
+
   case 'o':
     if (ch1 == '0' || ch2 == '0') {
       SwitchF(wi.fAutoSaveNum);

@@ -231,6 +231,7 @@ typedef struct _qtuserinterface {
   int rnSortCol[4];             // Active sort keys, primary first.
   flag rgfSortDesc[4];
   int cSortKeys = 0;
+  flag fSortObjAlpha = fFalse;  // -WA: object columns sort by name.
   QVector<ASPROWQT> rgasprow;   // Rows the sink delivered, print order.
 
   // Menu items that a dialog can also change, so they need re-syncing
@@ -1397,7 +1398,7 @@ enum { tcolObj1, tcolAsp, tcolObj2, tcolOrb, tcolPower };
 // ties falling through to the next, and finally to the order the chart
 // printed -- which is what the stable insertion sort below preserves.
 // The object keys sort by object number, the ephemeris's own order,
-// rather than by name.
+// unless -WA puts them by name.
 static flag FRowLessQt(int a, int b)
 {
   const ASPROWQT &ra = qi.rgasprow[a], &rb = qi.rgasprow[b];
@@ -1406,13 +1407,15 @@ static flag FRowLessQt(int a, int b)
   for (k = 0; k < qi.cSortKeys; k++) {
     switch (qi.rnSortCol[k]) {
     case tcolObj1:
-      z = ra.o1 - rb.o1;
+      z = qi.fSortObjAlpha ? QString(szObjDisp[ra.o1]).compare(
+        QString(szObjDisp[rb.o1]), Qt::CaseInsensitive) : ra.o1 - rb.o1;
       break;
     case tcolAsp:
       z = ra.ahi - rb.ahi;
       break;
     case tcolObj2:
-      z = ra.o2 - rb.o2;
+      z = qi.fSortObjAlpha ? QString(szObjDisp[ra.o2]).compare(
+        QString(szObjDisp[rb.o2]), Qt::CaseInsensitive) : ra.o2 - rb.o2;
       break;
     case tcolOrb:
       z = RAbs(ra.rOrb) < RAbs(rb.rOrb) ? -1 :
@@ -4217,6 +4220,12 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
     darg++;
     break;
 
+  case 'A':
+    // The aspect list's object columns: =WA sorts them by name, _WA by
+    // object number.
+    SwitchF(qi.fSortObjAlpha);
+    break;
+
   // The same three flags Windows sets here, and this build has all three
   // -- qi.fNoUpdate, qi.fNoPopup and qi.fBmpWindow, each with a dialog
   // control editing it. They were accepted as no-ops, which meant a
@@ -6189,6 +6198,21 @@ flag FConsoleAntialiasQt(void)
 void SetConsoleAntialiasQt(flag f)
 {
   qi.fFontConAA = f;
+}
+
+// The aspect list's object columns sort by object number, the
+// ephemeris's own order; =WA flips them to the names' alphabetical
+// order, which is behind the switch because the number order is the
+// one the rest of the program's object lists use.
+
+flag FSortObjAlphaQt(void)
+{
+  return qi.fSortObjAlpha;
+}
+
+void SetSortObjAlphaQt(flag f)
+{
+  qi.fSortObjAlpha = f;
 }
 
 

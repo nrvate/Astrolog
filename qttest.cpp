@@ -14440,6 +14440,19 @@ static void TestAspectSortQt()
       rgsz0[1].toLocal8Bit().constData(),
       rgsz1[1].toLocal8Bit().constData());
 
+    // -WA sorts the object columns by name instead: the same click now
+    // orders the first names alphabetically.
+    SetSortObjAlphaQt(fTrue);
+    TextClickAtPtQt(rgrcH[0].x(), rgrcH[0].y());
+    rgsz0 = RgszRowTokensTestQt(yHdr + 1, 90);
+    rgsz1 = RgszRowTokensTestQt(yHdr + 2, 90);
+    Check(rgsz0.size() > 2 && rgsz1.size() > 2 &&
+      rgsz0[1].compare(rgsz1[1], Qt::CaseInsensitive) <= 0,
+      "with -WA the object columns sort by name instead (\"%s\" then "
+      "\"%s\")", rgsz0[1].toLocal8Bit().constData(),
+      rgsz1[1].toLocal8Bit().constData());
+    SetSortObjAlphaQt(fFalse);
+
     // Power sorts strongest first, and a second click weakest first.
     rgrcP = RgrcTextWordQt("Power");
     if (!rgrcP.isEmpty()) {

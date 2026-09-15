@@ -1962,6 +1962,7 @@ void DisplaySwitchesW(void)
   PrintS(" _WFa: Antialias the font that charts draw text in.");
   PrintS(" _WG <font> <6-48>: Set font and size menus and dialogs use.");
   PrintS(" _WGa: Antialias the font that menus and dialogs use.");
+  PrintS(" _WA: Sort aspect list object columns by name, not object.");
 #if defined(WIN) || defined(QT)
   // Both GUI builds act on these three: each has a flag of its own, the
   // File Settings dialog edits all three in both, and FOutputSettings()

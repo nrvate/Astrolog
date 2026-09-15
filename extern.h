@@ -1283,6 +1283,8 @@ extern CONST char *SzMenuFontQt P((void));
 extern int NMenuFontSizeQt P((void));
 extern flag FMenuAntialiasQt P((void));
 extern int NThemePrefQt P((void));
+extern flag FSortObjAlphaQt P((void));
+extern void SetSortObjAlphaQt P((flag));
 /* Text charts draw into the chart window, as they do on Windows.        */
 extern void TextCharQt P((int, int, int));
 extern void TextColorQt P((KI));

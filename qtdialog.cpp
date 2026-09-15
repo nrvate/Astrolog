@@ -5112,14 +5112,15 @@ void ShowDisplayDialogQt()
   QFontMetrics fmDlg(dlg.font());
   int dxBase = fmDlg.averageCharWidth(), dyBase = fmDlg.height();
   // In the resource's own units. Its content ends at y 250 (the Rising
-  // and Setting group, 215 + 35), so the first row goes at 254 and the
-  // second 20 below it, the resource's own spacing for a row of controls
-  // 14 tall. The buttons then move below both -- below everything rather
-  // than on top of the group box, which is what putting them at the old
-  // button line did. How far they move is measured from where they
-  // actually are rather than assumed, and the dialog grows by the same.
+  // and Setting group, 215 + 35), so the first row goes at 254, the next
+  // two 20 below the one before, at the resource's own spacing for a row
+  // of controls 14 tall. The buttons then move below all three -- below
+  // everything rather than on top of the group box, which is what
+  // putting them at the old button line did. How far they move is
+  // measured from where they actually are rather than assumed, and the
+  // dialog grows by the same.
   int yRow = 254, dyRow = 20, dyCtl = 14 * dyBase / 8;
-  int yBtn = (yRow + dyRow) * dyBase / 8 + dyCtl + dyBase;
+  int yBtn = (yRow + 2*dyRow) * dyBase / 8 + dyCtl + dyBase;
   QWidget *pwOk = PwRcFindQt(rgbuilt, "IDOK");
   QWidget *pwCancel = PwRcFindQt(rgbuilt, "IDCANCEL");
   int dyGrow = pwOk != NULL ? Max(yBtn - pwOk->y(), 0) :
@@ -5139,6 +5140,13 @@ void ShowDisplayDialogQt()
   QLabel *plMenuSize = new QLabel("Size:", &dlg);
   QComboBox *pcbMenuSize = new QComboBox(&dlg);
   QCheckBox *pchMenuAa = new QCheckBox("Sm&ooth", &dlg);
+  // The aspect list's sort order, "-WA" in astrolog.as: object number
+  // (the ephemeris's own order, the default) or the names alphabetically.
+  // The two radios share the dialog as their parent, which makes them
+  // exclusive without a button group.
+  QLabel *plSort = new QLabel("Aspect List Sort:", &dlg);
+  QRadioButton *prbObj = new QRadioButton("&Object order", &dlg);
+  QRadioButton *prbAlpha = new QRadioButton("&Alphabetical", &dlg);
   pchAa->setToolTip("Antialias the text charts");
   pchMenuAa->setToolTip("Antialias the menus and dialogs");
   pchAa->setChecked(FConsoleAntialiasQt());
@@ -5203,6 +5211,27 @@ void ShowDisplayDialogQt()
   xEnd = Max(xEnd, XLayoutFontRowQt(rgpwMen, xLeft,
     (yRow + dyRow) * dyBase / 8, dxLab, dxFace, dxSize, dxPad, dyCtl));
 
+  // The sort row, laid out like the two above it: the label in their
+  // label column, the radios side by side where the combos sit, each
+  // centred on the row's height.
+  prbObj->setChecked(!FSortObjAlphaQt());
+  prbAlpha->setChecked(FSortObjAlphaQt());
+  {
+    int ySort = (yRow + 2*dyRow) * dyBase / 8;
+    int dyObj = prbObj->sizeHint().height(),
+      dyAlpha = prbAlpha->sizeHint().height(),
+      dyLab2 = plSort->sizeHint().height();
+    int xSort = xLeft + dxLab + dxPad;
+
+    plSort->setGeometry(xLeft, ySort + (dyCtl - dyLab2)/2, dxLab, dyLab2);
+    prbObj->setGeometry(xSort, ySort + (dyCtl - dyObj)/2,
+      prbObj->sizeHint().width(), dyObj);
+    xSort += prbObj->sizeHint().width() + dxPad;
+    prbAlpha->setGeometry(xSort, ySort + (dyCtl - dyAlpha)/2,
+      prbAlpha->sizeHint().width(), dyAlpha);
+    xEnd = Max(xEnd, xSort + prbAlpha->sizeHint().width());
+  }
+
   // Widen only if the rows need it, and take the buttons along so they
   // stay on the right edge they were laid out against.
   int dxGrow = Max(xEnd - dlg.width(), 0);
@@ -5234,6 +5263,7 @@ void ShowDisplayDialogQt()
   SetConsoleAntialiasQt(pchAa->isChecked());
   SetMenuFontQt(pcbMenu->currentText().toLocal8Bit().constData(), nSizeMen);
   SetMenuAntialiasQt(pchMenuAa->isChecked());
+  SetSortObjAlphaQt(prbAlpha->isChecked());
   // The interface font is applied here rather than at the next start:
   // QApplication::setFont() reaches every widget that hasn't been given
   // one of its own, which is the menus and this dialog's own children.

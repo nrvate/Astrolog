@@ -3050,6 +3050,9 @@ flag FOutputSettings()
   sprintf2(S(sz), "%cWGa     ", ChDashF(FMenuAntialiasQt())); PrintFSz();
   PrintF("; Antialias the interface font   "
     "[\"=WGa\" smooths it, \"_WGa\" doesn't]\n");
+  sprintf2(S(sz), "%cWA      ", ChDashF(FSortObjAlphaQt())); PrintFSz();
+  PrintF("; Aspect list sorts objects by "
+    "name [\"=WA\" by name, \"_WA\" by number]\n");
 #endif
 
   sprintf2(S(sz), "\n; %s\n", DEFAULT_INFOFILE); PrintFSz();

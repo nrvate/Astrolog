@@ -4341,7 +4341,7 @@ static int NProcessSwitchesNullW(int argc, char **argv, int pos)
   case 'I':                       // -WI <theme>
     carg = 1;
     break;
-  default:                        // -Wh, -Wn, -Wt, -Wb, -WZ, -Wo*, -WS*
+  default:                        // -Wh, -Wn, -Wt, -Wb, -WZ, -Wo*, -WS*, -WA
     carg = 0;
     break;
   }
