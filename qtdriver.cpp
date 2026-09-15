@@ -447,6 +447,12 @@ protected:
       RedrawQt();
     }
     QPainter p(this);
+    // The letterbox when the canvas is bigger than the image -- a text
+    // chart in a window larger than it -- is the chart's own background
+    // colour, not the viewport's gray. In graphics the canvas is the
+    // image exactly, so the fill never shows.
+    KV kvBack = KvFromKi(gi.kiOff);
+    p.fillRect(rect(), QColor(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack)));
     if (gi.qim != NULL)
       p.drawImage(0, 0, *gi.qim);
     // The text console's word highlights, over the ink: two washes of the
@@ -749,10 +755,40 @@ void SetBmpWindowQt(flag f) { qi.fBmpWindow = f; }
 // viewport and paintEvent() picks the chart size up from it. With it off
 // the canvas is sized to the chart instead, and the scroll area grows
 // scrollbars whenever that doesn't fit in the window.
+void ApplySizeModeQt();
+
+// A text chart anchors its image at the top left corner -- where a
+// listing starts -- and the canvas covers the viewport around it, so the
+// window's leftover space is the canvas's own background fill rather
+// than the scroll area's gray with the text floating centered in it.
+// The canvas's minimum is the image, which is what makes the scroll area
+// resizable here safe: a listing longer or wider than the window keeps
+// its scrollbars, because the canvas can never be shrunk below it.
+void ApplyTextSizeModeQt()
+{
+  int dx = gi.qim != NULL ? gi.qim->width() : 0;
+  int dy = gi.qim != NULL ? gi.qim->height() : 0;
+
+  qi.pscroll->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+  qi.pscroll->setWidgetResizable(fTrue);
+  gi.qcanvas->setMinimumSize(Max(BITMAPX1, dx), Max(BITMAPY1, dy));
+}
+
 void ApplySizeModeQt()
 {
   if (qi.pscroll == NULL || gi.qcanvas == NULL)
     return;
+  if (!us.fGraphics) {
+    ApplyTextSizeModeQt();
+    return;
+  }
+  // Graphics mode's own arrangement: the chart centered when smaller
+  // than the window, and the canvas free to shrink back to the chart --
+  // a text render raises its minimum to the image, which has to come
+  // off again here or a window-resized chart could never get smaller
+  // than the last listing was.
+  qi.pscroll->setAlignment(Qt::AlignCenter);
+  gi.qcanvas->setMinimumSize(BITMAPX1, BITMAPY1);
   qi.pscroll->setWidgetResizable(qi.fWindowChart != fFalse);
   if (!qi.fWindowChart && gs.xWin >= 1 && gs.yWin >= 1)
     gi.qcanvas->resize(gs.xWin, gs.yWin);
@@ -1488,8 +1524,7 @@ static void TextViewRenderQt(void)
   gi.qpaint = NULL;
   if (gi.qcanvas != NULL) {
     if (qi.pscroll != NULL)
-      qi.pscroll->setWidgetResizable(fFalse);
-    gi.qcanvas->resize(gi.qim->width(), gi.qim->height());
+      ApplyTextSizeModeQt();
     gi.qcanvas->update();
   }
 }
@@ -2369,13 +2404,8 @@ void RedrawQt()
     TextAspectViewQt();
     RefreshTextHighlightQt();
     gs.xWin = dxWin; gs.yWin = dyWin;
-    if (gi.qcanvas != NULL) {
-      // The scroll area sizes the canvas to the viewport when "Window
-      // Resizes Chart" is on, which is exactly what must not happen here.
-      // ApplySizeModeQt() puts it back on the way to the next graphics
-      // chart.
-      qi.pscroll->setWidgetResizable(fFalse);
-      gi.qcanvas->resize(gi.qim->width(), gi.qim->height());
+    if (gi.qcanvas != NULL && qi.pscroll != NULL) {
+      ApplyTextSizeModeQt();
       gi.qcanvas->update();
     }
     NotifyRedrawQt();

@@ -6283,6 +6283,46 @@ static void TestTextExtentQt()
       "(%d pixels of ink against %d)", rgt[i].sz, rgc[0], rgc[1]);
   }
 
+  // A window LARGER than the text: the canvas fills the viewport, the
+  // leftover space is the chart's own background colour, and the image
+  // stays anchored at the top left corner where a listing begins --
+  // rather than floating centered on the scroll area's gray, which is
+  // what it did.
+  {
+    QSize sizeSav = gi.qwind != NULL ? gi.qwind->size() : QSize();
+    QScrollArea *psa = gi.qwind != NULL ?
+      gi.qwind->findChild<QScrollArea *>() : NULL;
+
+    // A text render at a small chart size, then the window grown past
+    // it: this is the state an enlarging drag leaves -- the paintEvent
+    // size-chase is graphics-only, so nothing re-renders the text.
+    gs.xWin = gs.yWin = 600;
+    SetChartModeQt(gWheel);
+    gi.qwind->resize(1400, 1200);
+    QApplication::processEvents(QEventLoop::AllEvents, 200 * nScaleTest);
+    if (psa != NULL && gi.qcanvas != NULL && gi.qim != NULL) {
+      QSize sizeView = psa->viewport()->size();
+      QImage imGrab = gi.qcanvas->grab().toImage();
+      QRgb kvBg = gi.qim->pixel(1, 1) & 0xffffff;
+
+      Check(gi.qcanvas->width() >= sizeView.width() &&
+        gi.qcanvas->height() >= sizeView.height(),
+        "the canvas covers a window larger than the text (%d by %d for "
+        "a viewport %d by %d)", gi.qcanvas->width(), gi.qcanvas->height(),
+        sizeView.width(), sizeView.height());
+      Check((imGrab.pixel(gi.qcanvas->width()-3,
+        gi.qcanvas->height()-3) & 0xffffff) == kvBg,
+        "and the leftover space is the background colour, not the scroll "
+        "area's gray");
+      Check(psa->widget()->mapTo(psa->viewport(), QPoint(0, 0)) ==
+        QPoint(0, 0), "and the text stays anchored at the top left "
+        "corner");
+    }
+    if (!sizeSav.isEmpty())
+      gi.qwind->resize(sizeSav);
+    QApplication::processEvents(QEventLoop::AllEvents, 200 * nScaleTest);
+  }
+
   // And the point of sizing the canvas to the text: the scroll area now
   // has something to scroll, so the four Scroll commands, the scrollbar
   // and the mouse wheel all reach the rest of a long chart. Before this
