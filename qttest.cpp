@@ -12275,17 +12275,9 @@ static void ConsoleShotCaptureQt(CONST char *szDir)
 // Nothing here is a test. Do not add assertions; put those in the suite.
 static void ProbeQt()
 {
-  // Scratch: what does the -Xg help capture actually hold?
-  Borrow bGraph(us.fGraphics, fFalse);
-  Borrow bSwitch(us.fSwitch, fTrue);
-  char szTxt[cchSzMax];
-  SzScratchPathQt(S(szTxt), "probehelp", ".txt");
-  CaptureTextToFileQt(szTxt, fFalse);
-  QFile f(QString::fromLocal8Bit(szTxt));
-  f.open(QIODevice::ReadOnly);
-  QString s = f.readAll();
-  int i = s.indexOf("Xg <file>");
-  printf("probe: size %d idx %d\n", s.size(), i);
+  printf("gi.nMode=%d (gWheel=%d gHouse=%d)\n", gi.nMode, gWheel, gHouse);
+  printf("us.nHouseSystem=%d (%s)  fEphemFiles=%d\n",
+    us.nHouseSystem, szSystem[us.nHouseSystem], us.fEphemFiles);
 }
 
 
