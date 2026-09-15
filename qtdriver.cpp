@@ -1050,17 +1050,37 @@ int WchTextGridQt(int xCell, int yCell)
   return qi.rgwchGrid[yCell * qi.cchGrid + xCell];
 }
 
+// A word character in the retained grid: anything printable that is not
+// a space and not a bracket. The listings glue brackets to whatever they
+// wrap -- "(New Moon)", "(Pis)" -- and a run of non-space cells would
+// glob the bracket into the word under the mouse; the brackets are
+// punctuation, never part of a name, so they separate words instead of
+// joining them. (Box-drawing characters and every other glyph above
+// 127 stay word characters, so a run of grid line still reads as one.)
+static flag FIsWordChQt(int wch)
+{
+  char szBrackets[] = "()[]{}<>";
+  int i;
+
+  if (wch <= ' ')
+    return fFalse;
+  for (i = 0; szBrackets[i]; i++)
+    if (wch == (uchar)szBrackets[i])
+      return fFalse;
+  return fTrue;
+}
+
 // The span of the word containing a cell, read out of the retained grid:
-// the maximal run of non-space cells left and right along the row. fFalse
+// the maximal run of word characters left and right along the row. fFalse
 // when the cell holds no word.
 static flag FWordSpanAtCellQt(int xCell, int yCell, int *px1, int *px2)
 {
-  if (WchTextGridQt(xCell, yCell) <= ' ')
+  if (!FIsWordChQt(WchTextGridQt(xCell, yCell)))
     return fFalse;
   *px1 = *px2 = xCell;
-  while (WchTextGridQt(*px1 - 1, yCell) > ' ')
+  while (FIsWordChQt(WchTextGridQt(*px1 - 1, yCell)))
     (*px1)--;
-  while (WchTextGridQt(*px2 + 1, yCell) > ' ')
+  while (FIsWordChQt(WchTextGridQt(*px2 + 1, yCell)))
     (*px2)++;
   return fTrue;
 }
@@ -1169,8 +1189,10 @@ QString StrTextPhraseAtPtQt(int xPix, int yPix)
 // Every place the word appears in the retained grid, as canvas pixel
 // rectangles, one per occurrence. A match is a whole word: the cells on
 // both sides of it in its row must not be more word, so "Jup" does not
-// light part of "Jupiter". A phrase with inner spaces -- "North Node" --
-// matches the same way, each inner space being one space cell exactly.
+// light part of "Jupiter" -- and glued punctuation, a bracket or a
+// colon, is not more word, so "Moon" lights inside "(New Moon)" without
+// the bracket. A phrase with inner spaces -- "North Node" -- matches the
+// same way, each inner space being one space cell exactly.
 // The rectangle hugs the glyphs rather than the cell: the draw puts the
 // BASELINE at the bottom of the cell band, so a full-cell rectangle puts
 // the font's leading and the cap-height slack above the ink and none
@@ -1187,12 +1209,12 @@ QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
     return rgrc;
   for (y = 0; y < qi.crowGrid; y++)
     for (x = 0; x <= qi.cchGrid - cwch; x++) {
-      if (WchTextGridQt(x - 1, y) > ' ')
+      if (FIsWordChQt(WchTextGridQt(x - 1, y)))
         continue;
       for (i = 0; i < cwch && WchTextGridQt(x + i, y) ==
         strWord[i].unicode(); i++)
         ;
-      if (i < cwch || WchTextGridQt(x + cwch, y) > ' ')
+      if (i < cwch || FIsWordChQt(WchTextGridQt(x + cwch, y)))
         continue;
       rgrc << QRect(x * qi.xChar + 4, (y + 1) * qi.yChar - fm.ascent(),
         cwch * qi.xChar, fm.ascent() + fm.descent());

@@ -14219,8 +14219,9 @@ static void TestTextWordHighlightQt()
   Check(rgrc.size() >= 2, "the aspect list puts \"Moon\" on at least two "
     "lines (got %d)", rgrc.size());
   for (i = 0; i < rgrc.size(); i++)
-    Check(StrTextWordAtPtQt(rgrc[i].x(), rgrc[i].y()) == QString("Moon"),
-      "rect %d of \"Moon\" reads back as \"Moon\"", i);
+    Check(StrTextWordAtPtQt(rgrc[i].x(), rgrc[i].y()) == QString("Moon") &&
+      StrTextPhraseAtPtQt(rgrc[i].x(), rgrc[i].y()) == QString("Moon"),
+      "rect %d of \"Moon\" reads back as \"Moon\", bare", i);
 
   // Whole words only: "Moo" occurs only inside "Moon" here, and both
   // sides of a match must be word boundaries, so it lights nothing.
@@ -14294,6 +14295,14 @@ static void TestTextWordHighlightQt()
   Check(CpixDiffImagesQt(imPinned, imBack, 1) == 0,
     "a pinned word re-lights after a round trip to graphics and back "
     "(%d pixels differ)", (int)CpixDiffImagesQt(imPinned, imBack, 1));
+
+  // Brackets are punctuation, not words: the listings glue them to
+  // whatever they wrap ("(Half Moon)", "(Pis)"), and the round trip above
+  // now reads the word inside as the word alone. This chart's Sun-Moon
+  // line carries the tag, so the round trip exercises a glued bracket.
+  rgrcN = RgrcTextWordQt("Half");
+  Check(!rgrcN.isEmpty(),
+    "the aspect list carries a \"(Half Moon)\" phase tag to hover");
 
   // Leave nothing behind: no pin, no hover, no chart state for a later
   // group's listing to inherit.
