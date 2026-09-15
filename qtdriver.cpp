@@ -1125,27 +1125,21 @@ int WchTextGridQt(int xCell, int yCell)
   return qi.rgwchGrid[yCell * qi.cchGrid + xCell];
 }
 
-// A word character in the retained grid: anything printable that is not
-// a space and not a bracket or a colon. The listings glue brackets to
-// whatever they wrap -- "(New Moon)", "(Pis)" -- and colons to the
-// labels they follow ("Moon:", "SSx:" in the aspect summary), and a run
-// of non-space cells would glob either into the word under the mouse;
-// they are punctuation, never part of a name, so they separate words
-// instead of joining them. That is what makes a summary line's "SSx:"
-// hover as "SSx" and light the SSx rows above it. (Box-drawing
-// characters and every other glyph above 127 stay word characters, so a
-// run of grid line still reads as one.)
+// A word character in the retained grid: a letter or a digit -- ASCII, or
+// anything above 127, so accented names and the box-drawing characters a
+// colored text wheel is drawn with stay word characters too. Everything
+// else is punctuation the listings glue to their text -- "(New Moon)",
+// "SSx:" in the aspect summary, "- orb:", quotes and dashes -- and it
+// separates words instead of joining them. That is what makes a summary
+// line's "SSx:" hover as "SSx" and light the SSx rows above it, and what
+// keeps a stray ';', '-', '"' or '.' from riding along with the word
+// next to it.
 static flag FIsWordChQt(int wch)
 {
-  char szBrackets[] = "()[]{}<>:";
-  int i;
-
-  if (wch <= ' ')
-    return fFalse;
-  for (i = 0; szBrackets[i]; i++)
-    if (wch == (uchar)szBrackets[i])
-      return fFalse;
-  return fTrue;
+  if ((wch >= '0' && wch <= '9') || (wch >= 'A' && wch <= 'Z') ||
+    (wch >= 'a' && wch <= 'z'))
+    return fTrue;
+  return wch >= 0x80;
 }
 
 // The span of the word containing a cell, read out of the retained grid:
@@ -1267,10 +1261,10 @@ QString StrTextPhraseAtPtQt(int xPix, int yPix)
 // Every place the word appears in the retained grid, as canvas pixel
 // rectangles, one per occurrence. A match is a whole word: the cells on
 // both sides of it in its row must not be more word, so "Jup" does not
-// light part of "Jupiter" -- and glued punctuation, a bracket or a
-// colon, is not more word, so "Moon" lights inside "(New Moon)" without
-// the bracket. A phrase with inner spaces -- "North Node" -- matches the
-// same way, each inner space being one space cell exactly.
+// light part of "Jupiter" -- and glued punctuation, a bracket, a colon
+// or a dash, is not more word, so "Moon" lights inside "(New Moon)"
+// without the bracket. A phrase with inner spaces -- "North Node" --
+// matches the same way, each inner space being one space cell exactly.
 // The rectangle hugs the glyphs rather than the cell: the draw puts the
 // BASELINE at the bottom of the cell band, so a full-cell rectangle puts
 // the font's leading and the cap-height slack above the ink and none
