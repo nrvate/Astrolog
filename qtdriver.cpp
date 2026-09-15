@@ -1171,11 +1171,16 @@ QString StrTextPhraseAtPtQt(int xPix, int yPix)
 // both sides of it in its row must not be more word, so "Jup" does not
 // light part of "Jupiter". A phrase with inner spaces -- "North Node" --
 // matches the same way, each inner space being one space cell exactly.
-// The rectangle is where TextCharQt() put the glyphs, not the tight ink
-// bounds, which is what a highlight wants.
+// The rectangle hugs the glyphs rather than the cell: the draw puts the
+// BASELINE at the bottom of the cell band, so a full-cell rectangle puts
+// the font's leading and the cap-height slack above the ink and none
+// below, and the wash reads as a band floating over the top half of the
+// text. Anchoring the rect at baseline - ascent and giving it
+// ascent + descent centres the wash on the ink the way a selection does.
 QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
 {
   QVector<QRect> rgrc;
+  QFontMetrics fm(qi.fontText);
   int cwch = strWord.size(), x, y, i;
 
   if (cwch < 1 || qi.rgwchGrid == NULL)
@@ -1189,8 +1194,8 @@ QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
         ;
       if (i < cwch || WchTextGridQt(x + cwch, y) > ' ')
         continue;
-      rgrc << QRect(x * qi.xChar + 4, y * qi.yChar, cwch * qi.xChar,
-        qi.yChar);
+      rgrc << QRect(x * qi.xChar + 4, (y + 1) * qi.yChar - fm.ascent(),
+        cwch * qi.xChar, fm.ascent() + fm.descent());
     }
   return rgrc;
 }
