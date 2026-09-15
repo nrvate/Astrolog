@@ -11138,6 +11138,32 @@ this is the note that explains the wall of dialogs.
     check off, overlay off, name table off); the full suite is clean
     under ASan.
 
+270. **The text aspect list has a header row the mouse clicks to sort.**
+    The maintainer asked for it with the columns named -- obj1, asp,
+    obj2, orb, power, and Shift+click chaining several of them. The
+    structured keys behind the rows now reach the GUI through a new
+    `pfnAspectRow` sink in `ChartAspectCore()`, the `pfnAtlasRow` pattern:
+    NULL by default, so Windows and the console print byte-identically to
+    before. The text grid records each cell's palette index alongside its
+    character, and the aspect list re-renders from those cells: a header
+    row above the data -- each label sitting over the column its first
+    data row's own tokens define, so it lands right whatever the degree,
+    seconds and distance formats are doing -- the rows in sort-key order,
+    renumbered, and everything else in place. A click sets the column as
+    the sole key, or reverses it if it already is the primary; Shift+click
+    adds it to the chain, up to four. Power defaults to descending,
+    strongest first, the rest to ascending; the active keys show their
+    direction in the header ("Obj1^"). The sort is a stable insertion
+    sort -- `std::stable_sort` on ints drags a libstdc++
+    temporary-buffer path in that the clang gate flags -- and it sorts
+    the VIEW only: the pristine recording never changes, so a fresh
+    render forgets the keys and prints in the chart's own power order
+    again. Found on the way: mid-rebuild, the header-position token scan
+    must read the PRISTINE grid -- through the previous view it re-read
+    the old header as the first data row and every re-sort silently kept
+    the old order. 14 assertions in `aspect-sort`, a dead-comparator
+    sabotage caught; the full suite is clean under ASan.
+
 
 ## Features this fork adds to both builds
 
