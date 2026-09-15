@@ -1396,6 +1396,8 @@ enum { tcolObj1, tcolAsp, tcolObj2, tcolOrb, tcolPower };
 // Does row a sort before row b under the active keys? Each key in turn,
 // ties falling through to the next, and finally to the order the chart
 // printed -- which is what the stable insertion sort below preserves.
+// The object keys sort by object number, the ephemeris's own order,
+// rather than by name.
 static flag FRowLessQt(int a, int b)
 {
   const ASPROWQT &ra = qi.rgasprow[a], &rb = qi.rgasprow[b];
@@ -1404,15 +1406,13 @@ static flag FRowLessQt(int a, int b)
   for (k = 0; k < qi.cSortKeys; k++) {
     switch (qi.rnSortCol[k]) {
     case tcolObj1:
-      z = QString(szObjDisp[ra.o1]).compare(
-        QString(szObjDisp[rb.o1]), Qt::CaseInsensitive);
+      z = ra.o1 - rb.o1;
       break;
     case tcolAsp:
       z = ra.ahi - rb.ahi;
       break;
     case tcolObj2:
-      z = QString(szObjDisp[ra.o2]).compare(
-        QString(szObjDisp[rb.o2]), Qt::CaseInsensitive);
+      z = ra.o2 - rb.o2;
       break;
     case tcolOrb:
       z = RAbs(ra.rOrb) < RAbs(rb.rOrb) ? -1 :
@@ -1494,15 +1494,16 @@ static void TextViewRenderQt(void)
 // Build the aspect list view from the pristine grid: a header row above
 // the data, the data rows in sort-key order and renumbered, everything
 // else in place. The header's labels anchor to the first data row's own
-// text, so they sit over the columns whatever the degree and distance
-// formats are doing. fFalse (and no view at all, the plain print) when
-// this chart's rows and the sink's don't agree -- an interpret-mode
-// listing has prose rows and gets no header.
+// text and center over their fields, so they sit over the columns
+// whatever the degree and distance formats are doing. fFalse (and no
+// view at all, the plain print) when this chart's rows and the sink's
+// don't agree -- an interpret-mode listing has prose rows and gets no
+// header.
 static flag FBuildAspectViewQt(void)
 {
   static CONST char *rgszLabel[ctcolAspect] =
     {"Obj1", "Asp", "Obj2", "Orb", "Power"};
-  int rgtcolX[ctcolAspect];
+  int rgtcolX[ctcolAspect], rgspan[ctcolAspect];
   QVector<int> rgyData, rgis;
   int cch = qi.cchGrid, crow = qi.crowGrid, x, y, c, i, k;
   int yLast = -1;
@@ -1543,11 +1544,22 @@ static flag FBuildAspectViewQt(void)
   int xPow = strRow.indexOf(QString("power:"), xOrb + 4);
   if (xObj1 < 0 || xAsp < 0 || xObj2 < 0 || xOrb < 0 || xPow < 0)
     return fFalse;
-  rgtcolX[tcolObj1] = xObj1;
+  // Each label centers over the field it names: the first name's
+  // seven-cell %7.7s box (the anchor above sits on the name's first
+  // letter, which right-alignment moves around inside the box), the
+  // abbrev's own width, the second name's ten cells, and the core's
+  // "orb:"/"power:" texts. Every span is text the row itself prints,
+  // so a centered label can't run past cells the row doesn't have.
+  rgtcolX[tcolObj1] = xObj1 - (7 - strObj1.length());
+  rgspan[tcolObj1] = 7;
   rgtcolX[tcolAsp] = xAsp;
+  rgspan[tcolAsp] = strAsp.length();
   rgtcolX[tcolObj2] = xObj2;
+  rgspan[tcolObj2] = 10;
   rgtcolX[tcolOrb] = xOrb;
+  rgspan[tcolOrb] = CchSz("orb:");
   rgtcolX[tcolPower] = xPow;
+  rgspan[tcolPower] = CchSz("power:");
 
   // The sort order over the sink's structured keys: each active key in
   // turn, ties falling through to the next, and finally to the order the
@@ -1576,11 +1588,14 @@ static flag FBuildAspectViewQt(void)
     memcpy(rgwchNew + i * cch, qi.rgwchGrid + i * cch, cch * sizeof(wchar));
     memcpy(rgkiNew + i * cch, qi.rgkiGrid + i * cch, cch * sizeof(byte));
   }
-  // The header row itself: each label in its column, and after each
-  // label that's an active sort key, the direction it's sorting in.
+  // The header row itself: each label centered in its column's field,
+  // and after each label that's an active sort key, the direction it's
+  // sorting in.
   for (k = 0; k < ctcolAspect; k++) {
     CONST char *pch = rgszLabel[k];
-    x = rgtcolX[k];
+    int xLab = rgtcolX[k] + Max(0, (rgspan[k] - CchSz(pch)) >> 1);
+
+    x = xLab;
     while (*pch) {
       rgwchNew[y * cch + x] = (wchar)*pch;
       rgkiNew[y * cch + x] = (byte)kWhiteA;
@@ -1594,8 +1609,8 @@ static flag FBuildAspectViewQt(void)
         x++;
         break;
       }
-    qi.rgrcHdr[k] = QRect(rgtcolX[k] * qi.xChar + 4, y * qi.yChar,
-      (x - rgtcolX[k]) * qi.xChar, qi.yChar);
+    qi.rgrcHdr[k] = QRect(xLab * qi.xChar + 4, y * qi.yChar,
+      (x - xLab) * qi.xChar, qi.yChar);
   }
   // The data rows, in the sorted order, renumbered from one: the index
   // field is always three cells of "%3d", so the ':' and everything

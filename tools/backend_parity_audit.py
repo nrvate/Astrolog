@@ -203,7 +203,6 @@ def chart_flag_gaps():
 # is an audit that goes off the first time somebody factors one out.
 
 ALLOWFN = {
-    "CchSz": "string length; the Qt code uses QString",
     "ClearB": "memset over a struct range; Qt clears through tables",
     "PAllocate": "Astrolog's allocator; Qt objects are new/delete",
     "ConvertSzToLatin": "Win32 dialogs are ANSI; Qt controls are Unicode",

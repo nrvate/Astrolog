@@ -14292,6 +14292,21 @@ static QStringList RgszRowTokensTestQt(int y, int cch)
   return StrRowSortTestQt(y, cch).split(' ', Qt::SkipEmptyParts);
 }
 
+// The object a listing row's first field names: the %7.7s name
+// right-aligned in cells 5-11, looked up against the display names the
+// row itself printed -- the truncation is a prefix of the full name, and
+// no two classic names share a prefix that long.
+static int NObjRowSortTestQt(const QString &strRow)
+{
+  QString str = strRow.mid(5, 7).trimmed();
+  int o;
+
+  for (o = 0; o < objMax; o++)
+    if (QString(szObjDisp[o]).left(str.length()) == str)
+      return o;
+  return -1;
+}
+
 // The sortable aspect list: the header row the view synthesizes, the sort
 // a header click applies, the chain a Shift+click adds, and the
 // interpretation guard. The chart and restriction pins are the same ones
@@ -14356,31 +14371,35 @@ static void TestAspectSortQt()
   rgrcP = RgrcTextWordQt("Power");
   Check(!rgrcH.isEmpty() && !rgrcP.isEmpty(),
     "and its Obj1 and Power labels are hit-testable words");
-  // The labels sit over words that start with letters: the object names
-  // and the aspect abbreviations do, while the degree values a drifting
-  // anchor lands on start with digits. This is what pins the labels to
-  // their columns without hardcoding the listing's contents.
+  // The labels center over their fields, whatever the degree formats
+  // are doing to the row between them: "Obj1" mid name-box -- the
+  // %7.7s cell is always cells 5-11, so the four-letter label always
+  // lands on 6, padding or not -- "Asp" over the abbrev's own letters,
+  // and "Obj2" three cells into the ten-cell second name field, which
+  // ends three cells before the row's own "orb:".
   {
     QString strHdr = StrRowSortTestQt(yHdr, 90);
     QString strRow = StrRowSortTestQt(yHdr + 1, 90);
     int xObj1 = strHdr.indexOf("Obj1"), xAsp = strHdr.indexOf("Asp"),
-      xObj2 = strHdr.indexOf("Obj2");
-    Check(xObj1 >= 0 && xAsp >= 0 && xObj2 >= 0 &&
-      strRow.mid(xObj1, 1)[0].isLetter() &&
-      strRow.mid(xAsp, 1)[0].isLetter() &&
-      strRow.mid(xObj2, 1)[0].isLetter(),
-      "the header labels sit over letter-initial words in the row");
+      xObj2 = strHdr.indexOf("Obj2"), xOrb = strHdr.indexOf("Orb"),
+      xPow = strHdr.indexOf("Power");
+    Check(xObj1 == 6 && xAsp >= 0 && xObj2 >= 0 && xOrb >= 0 &&
+      xPow >= 0 && strRow.mid(xAsp, 1)[0].isLetter() &&
+      xObj2 == xOrb - 10 && xOrb == strRow.indexOf(QString("orb:")) &&
+      xPow == strRow.indexOf(QString("power:")),
+      "the header labels center over their fields");
   }
 
   if (yHdr >= 0 && !rgrcH.isEmpty()) {
-    // Click Obj1: ascending by the displayed first object. Every row's
-    // first name is at least as early in the alphabet as the next one's.
+    // Click Obj1: ascending by object number, the ephemeris's own
+    // order -- every row's first object index is at most the next one's.
     TextClickAtPtQt(rgrcH[0].x(), rgrcH[0].y());
     rgsz0 = RgszRowTokensTestQt(yHdr + 1, 90);
     rgsz1 = RgszRowTokensTestQt(yHdr + 2, 90);
     Check(rgsz0.size() > 2 && rgsz1.size() > 2 &&
-      rgsz0[1].compare(rgsz1[1], Qt::CaseInsensitive) <= 0,
-      "clicking Obj1 sorts the rows by the first object (\"%s\" then "
+      NObjRowSortTestQt(StrRowSortTestQt(yHdr + 1, 90)) <=
+      NObjRowSortTestQt(StrRowSortTestQt(yHdr + 2, 90)),
+      "clicking Obj1 sorts the rows by object number (\"%s\" then "
       "\"%s\")", rgsz0[1].toLocal8Bit().constData(),
       rgsz1[1].toLocal8Bit().constData());
     Check(StrRowSortTestQt(yHdr, 40).contains(QString("Obj1^")),
@@ -14415,7 +14434,8 @@ static void TestAspectSortQt()
     rgsz0 = RgszRowTokensTestQt(yHdr + 1, 90);
     rgsz1 = RgszRowTokensTestQt(yHdr + 2, 90);
     Check(rgsz0.size() > 2 && rgsz1.size() > 2 &&
-      rgsz0[1].compare(rgsz1[1], Qt::CaseInsensitive) >= 0,
+      NObjRowSortTestQt(StrRowSortTestQt(yHdr + 1, 90)) >=
+      NObjRowSortTestQt(StrRowSortTestQt(yHdr + 2, 90)),
       "and the rows run the other way (\"%s\" then \"%s\")",
       rgsz0[1].toLocal8Bit().constData(),
       rgsz1[1].toLocal8Bit().constData());
@@ -14486,7 +14506,10 @@ static void TestAspectSortQt()
   // is fixed -- index in 0-4, the %7.7s first name right-aligned in
   // 5-11, the abbrev at 19, the second position, then the %.10s second
   // name from 29 -- and the core prints the "orb:"/"power:" labels
-  // itself, so where the labels belong can be asserted outright.
+  // itself. The labels CENTER over those fields -- "Obj1" mid-name-box
+  // at 6, "Asp" filling the abbrev at 19, "Obj2" mid-field at 32, "Orb"
+  // and "Power" over the core's own labels -- so where each belongs
+  // can be asserted outright.
   {
     flag fSecondsSav = us.fSeconds, fSmartSav = us.fSmartCusp;
 
@@ -14514,8 +14537,8 @@ static void TestAspectSortQt()
       Check(strRow.mid(5, 7) == QString("North N") &&
         strRow.mid(19, 3) == QString("Opp") &&
         strRow.mid(29, 10) == QString("South Node") &&
-        strHdr.indexOf("Obj1") == 5 && strHdr.indexOf("Asp") == 19 &&
-        strHdr.indexOf("Obj2") == 29 &&
+        strHdr.indexOf("Obj1") == 6 && strHdr.indexOf("Asp") == 19 &&
+        strHdr.indexOf("Obj2") == 32 &&
         strHdr.indexOf("Orb") == strRow.indexOf(QString("orb:")) &&
         strHdr.indexOf("Power") == strRow.indexOf(QString("power:")),
         "the labels sit over the multi-word row's own fields (hdr [%s] "
