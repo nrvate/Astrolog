@@ -1295,3 +1295,10 @@ extern int NScrollChartQt P((void));
 /* Set by a port's chart info dialog to receive rows from the atlas      */
 /* lookups in atlas.cpp, which otherwise print to the text output.       */
 extern void (*pfnAtlasRow) P((CONST char *, int));
+
+/* Set by a GUI that wants the structured keys behind the text aspect    */
+/* list's rows -- displayed object pair, aspect index, orb, power -- one */
+/* call per row printed by ChartAspectCore(). NULL by default; only the  */
+/* Qt text console's sortable aspect list installs it, and only while    */
+/* the listing is actually being rendered to the screen.                 */
+extern void (*pfnAspectRow) P((int, int, int, real, real));

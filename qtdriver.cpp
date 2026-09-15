@@ -126,6 +126,16 @@ typedef struct {
   flag fTransit;   // also count the transit set as making this included
 } CATRES;
 
+// One row of the text aspect list, as delivered by the pfnAspectRow()
+// sink while the chart prints: the displayed object pair, the aspect, and
+// the orb and power the row's numbers show. This is what the sortable
+// aspect list view sorts by -- real values from the chart, not text
+// parsed back out of the console.
+typedef struct {
+  int o1, ahi, o2;
+  real rOrb, rPow;
+} ASPROWQT;
+
 // The port's mutable window state, the analogue of Windows' Win32-only WI
 // struct. The CONST tables -- menus, hotkeys, context menus -- stay
 // beside the code that uses them.
@@ -195,10 +205,33 @@ typedef struct _qtuserinterface {
   // cursor, each holding the word it lights and where that word sits.
   wchar *rgwchGrid = NULL;
   int cchGrid = 0, crowGrid = 0;
+  // And the palette index each cell was drawn in, stamped alongside the
+  // character, so the aspect list view can re-render the console from the
+  // grid alone. (TextColorQt() keeps the current one in kiText.)
+  byte *rgkiGrid = NULL;
+  int kiText = kLtGrayA;
   QString strTextHi;
   QVector<QRect> rgrcTextHi;
   QString strTextHover;
   QVector<QRect> rgrcTextHover;
+
+  // The aspect list view: the console's own cells re-rendered with a
+  // header row above the data, whose labels the mouse clicks to sort.
+  // The pristine grid above is what the chart printed and never changes
+  // after a render; this view is rebuilt from it (rows in sort order,
+  // renumbered, header re-labelled) on every sort click. Empty view
+  // pointers mean "show the pristine grid as it printed", which is every
+  // text chart that isn't an aspect list.
+  wchar *rgwchView = NULL;
+  byte *rgkiView = NULL;
+  int cchView = 0, crowView = 0;
+  flag fHdr = fFalse;           // Is the header row part of the view?
+  int yHdr = -1;                // Its row in the view.
+  QRect rgrcHdr[5];             // The five header labels' hit zones.
+  int rnSortCol[4];             // Active sort keys, primary first.
+  flag rgfSortDesc[4];
+  int cSortKeys = 0;
+  QVector<ASPROWQT> rgasprow;   // Rows the sink delivered, print order.
 
   // Menu items that a dialog can also change, so they need re-syncing
   // when it closes -- the job Windows does with the WiCheckMenu() calls
@@ -479,10 +512,12 @@ protected:
 
     // The text console's left click is its own thing -- Scribble() is
     // graphics only: click a word to pin every instance of it, click it
-    // again or click between words to let go. TextClickAtPtQt() is where
-    // the work happens; see it in qtdriver.cpp.
+    // again or click between words to let go; on an aspect list's header
+    // row it sorts instead. TextClickAtPtQt() is where the work happens;
+    // see it in qtdriver.cpp.
     if (!us.fGraphics) {
-      TextClickAtPtQt(pevent->pos().x(), pevent->pos().y());
+      TextClickAtPtQt(pevent->pos().x(), pevent->pos().y(),
+        (pevent->modifiers() & Qt::ShiftModifier) != 0);
       return;
     }
 
@@ -986,6 +1021,18 @@ static void ApplyAntialiasQt(void)
 void TextColorQt(KI ki)
 {
   qi.kvText = KvFromKi(ki);
+  qi.kiText = ki;
+}
+
+// The sink behind pfnAspectRow() while the text aspect list prints: each
+// row's structured keys, in print order, for the sortable view.
+static void AspectRowSinkQt(int o1, int ahi, int o2, real rOrb, real rPow)
+{
+  ASPROWQT ar;
+
+  ar.o1 = o1; ar.ahi = ahi; ar.o2 = o2;
+  ar.rOrb = rOrb; ar.rPow = rPow;
+  qi.rgasprow.append(ar);
 }
 
 // The retained text grid the character draws below also record, one cell
@@ -1003,6 +1050,7 @@ static void RecordTextGridQt(int xCell, int yCell, int wch)
 {
   int cchNew, crowNew, y;
   wchar *rgwchNew;
+  byte *rgkiNew;
 
   if (xCell < 0 || yCell < 0 || xCell >= BITMAPX || yCell >= BITMAPY)
     return;
@@ -1011,15 +1059,23 @@ static void RecordTextGridQt(int xCell, int yCell, int wch)
     crowNew = Min(Max(Max(qi.crowGrid * 2, yCell + 1), 64), BITMAPY);
     rgwchNew = new wchar[cchNew * crowNew];
     memset(rgwchNew, 0, (size_t)cchNew * crowNew * sizeof(wchar));
-    for (y = 0; y < qi.crowGrid; y++)
+    rgkiNew = new byte[cchNew * crowNew];
+    memset(rgkiNew, 0, (size_t)cchNew * crowNew * sizeof(byte));
+    for (y = 0; y < qi.crowGrid; y++) {
       memcpy(rgwchNew + y * cchNew, qi.rgwchGrid + y * qi.cchGrid,
         qi.cchGrid * sizeof(wchar));
+      memcpy(rgkiNew + y * cchNew, qi.rgkiGrid + y * qi.cchGrid,
+        qi.cchGrid * sizeof(byte));
+    }
     delete[] qi.rgwchGrid;
+    delete[] qi.rgkiGrid;
     qi.rgwchGrid = rgwchNew;
+    qi.rgkiGrid = rgkiNew;
     qi.cchGrid = cchNew;
     qi.crowGrid = crowNew;
   }
   qi.rgwchGrid[yCell * qi.cchGrid + xCell] = (wchar)wch;
+  qi.rgkiGrid[yCell * qi.cchGrid + xCell] = (byte)qi.kiText;
 }
 
 // Empty the grid ahead of a text render. The allocation stays: charts
@@ -1027,23 +1083,42 @@ static void RecordTextGridQt(int xCell, int yCell, int wch)
 // for.
 static void TextGridResetQt(void)
 {
-  if (qi.rgwchGrid != NULL)
+  if (qi.rgwchGrid != NULL) {
     memset(qi.rgwchGrid, 0,
       (size_t)qi.cchGrid * qi.crowGrid * sizeof(wchar));
+    memset(qi.rgkiGrid, 0,
+      (size_t)qi.cchGrid * qi.crowGrid * sizeof(byte));
+  }
+  // A fresh listing sorts the way the chart printed it until clicked.
+  qi.cSortKeys = 0;
 }
 
-// And give it back, when the window that shows it is going away.
+// And give them back, when the window that shows them is going away.
 static void TextGridFreeQt(void)
 {
   delete[] qi.rgwchGrid;
   qi.rgwchGrid = NULL;
+  qi.rgkiGrid = NULL;
   qi.cchGrid = qi.crowGrid = 0;
+  delete[] qi.rgwchView;
+  qi.rgwchView = NULL;
+  qi.rgkiView = NULL;
+  qi.cchView = qi.crowView = 0;
 }
 
-// One character of the retained grid, or 0 for a cell nothing was drawn
-// in, including any cell outside it entirely.
+// One character of the retained grid the VIEW shows -- the pristine
+// recording when no aspect-list view is up, the headered reordered view
+// when one is -- or 0 for a cell nothing was drawn in, including any cell
+// outside it entirely. Everything the mouse does reads this, so the
+// hit-tests always describe what is on screen.
 int WchTextGridQt(int xCell, int yCell)
 {
+  if (qi.rgwchView != NULL) {
+    if (xCell < 0 || yCell < 0 ||
+      xCell >= qi.cchView || yCell >= qi.crowView)
+      return 0;
+    return qi.rgwchView[yCell * qi.cchView + xCell];
+  }
   if (qi.rgwchGrid == NULL || xCell < 0 || yCell < 0 ||
     xCell >= qi.cchGrid || yCell >= qi.crowGrid)
     return 0;
@@ -1203,12 +1278,22 @@ QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
 {
   QVector<QRect> rgrc;
   QFontMetrics fm(qi.fontText);
-  int cwch = strWord.size(), x, y, i;
+  int cwch = strWord.size(), cch, crow, x, y, i;
 
-  if (cwch < 1 || qi.rgwchGrid == NULL)
+  // Scan the grid the view shows, whatever it is: the dimensions below
+  // are the view's when an aspect-list view is up (one row taller than
+  // the recording), else the recording's own.
+  if (qi.rgwchView != NULL) {
+    cch = qi.cchView;
+    crow = qi.crowView;
+  } else {
+    cch = qi.cchGrid;
+    crow = qi.crowGrid;
+  }
+  if (cwch < 1 || (qi.rgwchView == NULL && qi.rgwchGrid == NULL))
     return rgrc;
-  for (y = 0; y < qi.crowGrid; y++)
-    for (x = 0; x <= qi.cchGrid - cwch; x++) {
+  for (y = 0; y < crow; y++)
+    for (x = 0; x <= cch - cwch; x++) {
       if (FIsWordChQt(WchTextGridQt(x - 1, y)))
         continue;
       for (i = 0; i < cwch && WchTextGridQt(x + i, y) ==
@@ -1220,6 +1305,311 @@ QVector<QRect> RgrcTextWordQt(CONST QString &strWord)
         cwch * qi.xChar, fm.ascent() + fm.descent());
     }
   return rgrc;
+}
+
+// The aspect list view: the console's own cells shown with a header row
+// above the data -- "Obj1 Asp Obj2 Orb Power" -- whose labels the mouse
+// clicks to sort. The sort keys chain with Shift+click, primary first.
+
+#define ctcolAspect  5
+#define ccolSortMax  4
+enum { tcolObj1, tcolAsp, tcolObj2, tcolOrb, tcolPower };
+
+// Does row a sort before row b under the active keys? Each key in turn,
+// ties falling through to the next, and finally to the order the chart
+// printed -- which is what the stable insertion sort below preserves.
+static flag FRowLessQt(int a, int b)
+{
+  const ASPROWQT &ra = qi.rgasprow[a], &rb = qi.rgasprow[b];
+  int k, z;
+
+  for (k = 0; k < qi.cSortKeys; k++) {
+    switch (qi.rnSortCol[k]) {
+    case tcolObj1:
+      z = QString(szObjDisp[ra.o1]).compare(
+        QString(szObjDisp[rb.o1]), Qt::CaseInsensitive);
+      break;
+    case tcolAsp:
+      z = ra.ahi - rb.ahi;
+      break;
+    case tcolObj2:
+      z = QString(szObjDisp[ra.o2]).compare(
+        QString(szObjDisp[rb.o2]), Qt::CaseInsensitive);
+      break;
+    case tcolOrb:
+      z = RAbs(ra.rOrb) < RAbs(rb.rOrb) ? -1 :
+        (RAbs(ra.rOrb) > RAbs(rb.rOrb) ? 1 : 0);
+      break;
+    default:
+      z = ra.rPow < rb.rPow ? -1 : (ra.rPow > rb.rPow ? 1 : 0);
+      break;
+    }
+    if (z != 0)
+      return qi.rgfSortDesc[k] ? z > 0 : z < 0;
+  }
+  return fFalse;
+}
+
+// One cell of the PRISTINE grid, the recording TextCharQt() made. The
+// view builder reads this; everything on the mouse side reads the view
+// through WchTextGridQt() instead.
+static int WchPrisQt(int xCell, int yCell)
+{
+  if (qi.rgwchGrid == NULL || xCell < 0 || yCell < 0 ||
+    xCell >= qi.cchGrid || yCell >= qi.crowGrid)
+    return 0;
+  return qi.rgwchGrid[yCell * qi.cchGrid + xCell];
+}
+
+// The grid's characters from one PRISTINE row, first column through last
+// inclusive -- the view-building twin of StrWordSpanQt(), which reads
+// whatever the view shows and is wrong here: mid-rebuild the view is the
+// previous one, whose rows are shifted and whose first data row is the
+// old header.
+static QString StrPrisSpanQt(int yCell, int x1, int x2)
+{
+  QString str;
+  int x;
+
+  for (x = x1; x <= x2; x++)
+    str += QChar(WchPrisQt(x, yCell));
+  return str;
+}
+
+// Re-render the console image from the view grid, character by character,
+// in each cell's own colour. This is the same draw TextCharQt() did,
+// which is why the re-render is indistinguishable from the print except
+// for what the view itself changes: the header row, the row order, and
+// the renumbered index column.
+static void TextViewRenderQt(void)
+{
+  KV kvBack = KvFromKi(gi.kiOff);
+  int dx = gi.qim != NULL ? gi.qim->width() :
+    qi.cchView * qi.xChar + 8;
+  int x, y;
+
+  delete gi.qim;
+  gi.qim = new QImage(dx, qi.crowView * qi.yChar, QImage::Format_RGB32);
+  gi.qim->fill(QColor(RgbR(kvBack), RgbG(kvBack), RgbB(kvBack)));
+  gi.qpaint = new QPainter(gi.qim);
+  gi.qpaint->setRenderHint(QPainter::TextAntialiasing,
+    FConsoleAntialiasQt());
+  gi.qpaint->setFont(qi.fontText);
+  for (y = 0; y < qi.crowView; y++)
+    for (x = 0; x < qi.cchView; x++)
+      if (qi.rgwchView[y * qi.cchView + x] != 0) {
+        KV kv = KvFromKi(qi.rgkiView[y * qi.cchView + x]);
+        gi.qpaint->setPen(QColor(RgbR(kv), RgbG(kv), RgbB(kv)));
+        gi.qpaint->drawText(x * qi.xChar + 4, (y + 1) * qi.yChar,
+          QString(QChar(qi.rgwchView[y * qi.cchView + x])));
+      }
+  delete gi.qpaint;
+  gi.qpaint = NULL;
+  if (gi.qcanvas != NULL) {
+    if (qi.pscroll != NULL)
+      qi.pscroll->setWidgetResizable(fFalse);
+    gi.qcanvas->resize(gi.qim->width(), gi.qim->height());
+    gi.qcanvas->update();
+  }
+}
+
+// Build the aspect list view from the pristine grid: a header row above
+// the data, the data rows in sort-key order and renumbered, everything
+// else in place. The header's label positions come from the first data
+// row's own tokens, so they sit over the columns whatever the degree
+// and distance formats are doing. fFalse (and no view at all, the plain
+// print) when this chart's rows and the sink's don't agree -- an
+// interpret-mode listing has prose rows and gets no header.
+static flag FBuildAspectViewQt(void)
+{
+  // Token spans of the first data row, for the header's column positions.
+  int rgx1[64], rgx2[64], cTok = 0;
+  static CONST char *rgszLabel[ctcolAspect] =
+    {"Obj1", "Asp", "Obj2", "Orb", "Power"};
+  int rgtcolX[ctcolAspect];
+  QVector<int> rgyData, rgis;
+  int cch = qi.cchGrid, crow = qi.crowGrid, x, y, c, i, k;
+  int yLast = -1, itokOrb = -1, itokPow = -1;
+  wchar *rgwchNew;
+  byte *rgkiNew;
+
+  // The data rows: an index field (" %3d" then ':') at the left edge.
+  for (y = 0; y < crow; y++) {
+    c = 0;
+    while (c < 6 && WchPrisQt(c, y) == ' ')
+      c++;
+    if (c > 5)
+      continue;
+    while (c < 6 && WchPrisQt(c, y) >= '0' && WchPrisQt(c, y) <= '9')
+      c++;
+    if (c > 0 && c < 6 && WchPrisQt(c, y) == ':')
+      rgyData.append(y);
+  }
+  if (rgyData.isEmpty() || rgyData.size() != qi.rgasprow.size())
+    return fFalse;
+
+  // The first data row's word runs. The index number is token 0; the
+  // object names, signs and aspect follow at tokens 1, 3 and 5 -- the
+  // brackets around the signs aren't word characters, so each sign is
+  // one token -- and the "orb" and "power" tokens are found by text.
+  x = 0;
+  while (x < cch && cTok < 63) {
+    if (FIsWordChQt(WchPrisQt(x, rgyData[0]))) {
+      rgx1[cTok] = x;
+      while (FIsWordChQt(WchPrisQt(x, rgyData[0])))
+        x++;
+      rgx2[cTok++] = x - 1;
+    } else
+      x++;
+  }
+  if (cTok < 6 || rgx2[0] - rgx1[0] > 2)
+    return fFalse;
+  for (i = 6; i < cTok; i++) {
+    QString str = StrPrisSpanQt(rgyData[0], rgx1[i], rgx2[i]);
+    if (itokOrb < 0 && str.startsWith(QString("orb")))
+      itokOrb = i;
+    else if (itokPow < 0 && str.startsWith(QString("power")))
+      itokPow = i;
+  }
+  if (itokOrb < 0 || itokPow < 0)
+    return fFalse;
+  rgtcolX[tcolObj1] = rgx1[1];
+  rgtcolX[tcolAsp] = rgx1[3];
+  rgtcolX[tcolObj2] = rgx1[5];
+  rgtcolX[tcolOrb] = rgx1[itokOrb];
+  rgtcolX[tcolPower] = rgx1[itokPow];
+
+  // The sort order over the sink's structured keys: each active key in
+  // turn, ties falling through to the next, and finally to the order the
+  // chart printed (a stable sort).
+  rgis.reserve(rgyData.size());
+  for (i = 0; i < rgyData.size(); i++)
+    rgis.append(i);
+  if (qi.cSortKeys > 0)
+    // A stable insertion sort: a listing is at most a few hundred rows,
+    // and std::stable_sort on ints drags a libstdc++ temporary-buffer
+    // path in that clang flags as deprecated.
+    for (i = 1; i < rgis.size(); i++) {
+      int nT = rgis[i], j;
+      for (j = i - 1; j >= 0 && FRowLessQt(nT, rgis[j]); j--)
+        rgis[j + 1] = rgis[j];
+      rgis[j + 1] = nT;
+    }
+
+  // The view: every pristine row, plus one for the header.
+  rgwchNew = new wchar[cch * (crow + 1)];
+  rgkiNew = new byte[cch * (crow + 1)];
+  memset(rgwchNew, 0, (size_t)cch * (crow + 1) * sizeof(wchar));
+  memset(rgkiNew, 0, (size_t)cch * (crow + 1) * sizeof(byte));
+  y = rgyData[0];
+  for (i = 0; i < y; i++) {
+    memcpy(rgwchNew + i * cch, qi.rgwchGrid + i * cch, cch * sizeof(wchar));
+    memcpy(rgkiNew + i * cch, qi.rgkiGrid + i * cch, cch * sizeof(byte));
+  }
+  // The header row itself: each label in its column, and after each
+  // label that's an active sort key, the direction it's sorting in.
+  for (k = 0; k < ctcolAspect; k++) {
+    CONST char *pch = rgszLabel[k];
+    x = rgtcolX[k];
+    while (*pch) {
+      rgwchNew[y * cch + x] = (wchar)*pch;
+      rgkiNew[y * cch + x] = (byte)kWhiteA;
+      pch++;
+      x++;
+    }
+    for (i = 0; i < qi.cSortKeys; i++)
+      if (qi.rnSortCol[i] == k) {
+        rgwchNew[y * cch + x] = qi.rgfSortDesc[i] ? 'v' : '^';
+        rgkiNew[y * cch + x] = (byte)kWhiteA;
+        x++;
+        break;
+      }
+    qi.rgrcHdr[k] = QRect(rgtcolX[k] * qi.xChar + 4, y * qi.yChar,
+      (x - rgtcolX[k]) * qi.xChar, qi.yChar);
+  }
+  // The data rows, in the sorted order, renumbered from one: the index
+  // field is always three cells of "%3d", so the ':' and everything
+  // after it stay put.
+  for (i = 0; i < rgyData.size(); i++) {
+    int ys = rgyData[rgis[i]], yd = y + 1 + i;
+    char szNum[16];
+
+    memcpy(rgwchNew + yd * cch, qi.rgwchGrid + ys * cch, cch * sizeof(wchar));
+    memcpy(rgkiNew + yd * cch, qi.rgkiGrid + ys * cch, cch * sizeof(byte));
+    sprintf2(S(szNum), "%3d", i + 1);
+    for (x = 0; x < 3; x++) {
+      rgwchNew[yd * cch + x] = (wchar)szNum[x];
+      rgkiNew[yd * cch + x] = qi.rgkiGrid[ys * cch + x];
+    }
+    yLast = yd;
+  }
+  // And whatever followed the data -- the summary block -- shifted down
+  // one to make room.
+  for (i = yLast + 1; i < crow + 1; i++) {
+    memcpy(rgwchNew + i * cch, qi.rgwchGrid + (i - 1) * cch,
+      cch * sizeof(wchar));
+    memcpy(rgkiNew + i * cch, qi.rgkiGrid + (i - 1) * cch,
+      cch * sizeof(byte));
+  }
+  delete[] qi.rgwchView;
+  delete[] qi.rgkiView;
+  qi.rgwchView = rgwchNew;
+  qi.rgkiView = rgkiNew;
+  qi.cchView = cch;
+  qi.crowView = crow + 1;
+  qi.fHdr = fTrue;
+  qi.yHdr = y;
+  TextViewRenderQt();
+  return fTrue;
+}
+
+// After every text render: decide whether what printed is a sortable
+// aspect list, and if so show it as the headered view. Without one, the
+// view is simply the pristine grid, which is to say the console as it
+// printed -- every other text chart behaves exactly as before.
+static void TextAspectViewQt(void)
+{
+  delete[] qi.rgwchView;
+  qi.rgwchView = NULL;
+  delete[] qi.rgkiView;
+  qi.rgkiView = NULL;
+  qi.cchView = qi.crowView = 0;
+  qi.fHdr = fFalse;
+  qi.yHdr = -1;
+  if (us.fAspList && qi.rgasprow.size() > 0)
+    FBuildAspectViewQt();
+}
+
+// A header click: click sets the column as the sole sort key (or, on the
+// already-primary column, reverses it); Shift+click adds it to the chain
+// (or reverses it where it already sits). Power defaults to descending,
+// strongest first; the rest to ascending.
+static void SortClickQt(int nCol, flag fShift)
+{
+  int k;
+
+  if (!fShift) {
+    if (qi.cSortKeys >= 1 && qi.rnSortCol[0] == nCol)
+      qi.rgfSortDesc[0] = !qi.rgfSortDesc[0];
+    else {
+      qi.rnSortCol[0] = nCol;
+      qi.rgfSortDesc[0] = nCol == tcolPower;
+      qi.cSortKeys = 1;
+    }
+  } else {
+    for (k = 0; k < qi.cSortKeys; k++)
+      if (qi.rnSortCol[k] == nCol) {
+        qi.rgfSortDesc[k] = !qi.rgfSortDesc[k];
+        break;
+      }
+    if (k >= qi.cSortKeys && qi.cSortKeys < ccolSortMax) {
+      qi.rnSortCol[qi.cSortKeys] = nCol;
+      qi.rgfSortDesc[qi.cSortKeys] = nCol == tcolPower;
+      qi.cSortKeys++;
+    }
+  }
+  if (FBuildAspectViewQt())
+    gi.qcanvas->update();
 }
 
 // The two highlight layers, each a word plus where it sits. The pinned one
@@ -1256,12 +1646,23 @@ void ClearTextHoverQt(void)
 // piece of the text grid logic in this file, and gives the suite the same
 // entry points a mouse press has. Nothing to do in graphics mode, where a
 // left button scribbles and Alt+click relocates instead.
-void TextClickAtPtQt(int xPix, int yPix)
+void TextClickAtPtQt(int xPix, int yPix, flag fShift)
 {
   QString str;
+  int k;
 
   if (us.fGraphics)
     return;
+  // A click on a header label sorts the view; a Shift+click adds the
+  // column to the sort chain. Only then is it an ordinary click, pinning
+  // (or unpinning) the word it's on.
+  if (qi.fHdr) {
+    for (k = 0; k < ctcolAspect; k++)
+      if (qi.rgrcHdr[k].contains(xPix, yPix)) {
+        SortClickQt(k, fShift);
+        return;
+      }
+  }
   str = StrTextPhraseAtPtQt(xPix, yPix);
   SetTextHighlightQt(str == qi.strTextHi ? QString() : str);
   if (gi.qcanvas != NULL)
@@ -1294,7 +1695,7 @@ void TextCharQt(int xCell, int yCell, int wch)
 
   // Only text charts come through here -- graphics text is DrawSz() in
   // xcharts0.cpp, which never calls this -- so what the grid retains is
-  // always the whole console.
+  // always the whole console, characters and their colours both.
   RecordTextGridQt(xCell, yCell, wch);
   gi.qpaint->setPen(QColor(RgbR(qi.kvText), RgbG(qi.kvText),
     RgbB(qi.kvText)));
@@ -1804,10 +2205,15 @@ void RedrawQt()
       FConsoleAntialiasQt());
     gi.qpaint->setFont(qi.fontText);
     qi.kvText = KvFromKi(kLtGrayA);
+    qi.kiText = kLtGrayA;
     is.cchRow = is.cchCol = is.cchColMax = 0;
     FILE *fileSav = is.S;
     flag fMultSav;
     is.S = stdout;
+    // Collect the aspect list's structured rows while the chart prints,
+    // for the sortable view; a fresh pass restarts the collection.
+    qi.rgasprow.clear();
+    pfnAspectRow = AspectRowSinkQt;
     Action();
 
     // A text chart is as big as it prints, and that has nothing to do with
@@ -1842,7 +2248,9 @@ void RedrawQt()
         FConsoleAntialiasQt());
       gi.qpaint->setFont(qi.fontText);
       qi.kvText = KvFromKi(kLtGrayA);
+      qi.kiText = kLtGrayA;
       is.cchRow = is.cchCol = is.cchColMax = 0;
+      qi.rgasprow.clear();
       // Action()'s own text half, minus the cast and minus the "-~Q1" /
       // "-~Q2" hooks, both of which the first pass already did. Calling
       // PrintChart() alone was tried and is wrong: the eleven Help menu
@@ -1864,11 +2272,14 @@ void RedrawQt()
       is.fMult = fMultSav;
     }
     is.S = fileSav;
-    // The grid is complete and so is the console it describes: whatever
-    // word is pinned lights in it.
-    RefreshTextHighlightQt();
+    pfnAspectRow = NULL;
     delete gi.qpaint;
     gi.qpaint = NULL;
+    // The grid is complete: an aspect list shows as the headered sortable
+    // view, every other text chart as it printed. Whatever word is pinned
+    // re-lights in the view.
+    TextAspectViewQt();
+    RefreshTextHighlightQt();
     gs.xWin = dxWin; gs.yWin = dyWin;
     if (gi.qcanvas != NULL) {
       // The scroll area sizes the canvas to the viewport when "Window

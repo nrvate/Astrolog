@@ -1011,6 +1011,13 @@ void PrintAspectSummary(int *ca, int *co, int count, real rPowSum)
 // matrix [i][j]), the position source (planet[] vs. cp1/cp2), the sort keys,
 // the AstroExpression hook, and the line tail that differ between them.
 
+// Deliver each aspect row to a GUI that wants the structured keys behind
+// the text listing -- displayed object pair, aspect index, orb, power.
+// NULL by default; only the Qt text console's sortable aspect list
+// installs it, and only while the listing is being rendered to the screen.
+
+void (*pfnAspectRow)(int, int, int, real, real) = NULL;
+
 static void ChartAspectCore(flag fRel)
 {
   int ca[cAspect + 1], co[objMax];
@@ -1113,6 +1120,21 @@ static void ChartAspectCore(flag fRel)
       PrintAspect(i, planetval(i), planetdir(i), ahi,
         j, planetval(j), planetdir(j), 'a');
     rT = fRel ? grid->v[i][j] : grid->v[j][i];
+    // Deliver the row to a GUI that wants the structured keys behind it
+    // (the Qt text console's sortable aspect list), in the order
+    // PrintAspect() displays: it swaps the pair for the single-chart list
+    // when the row-order table says the second object draws first, and
+    // never for the relationship list -- the same rule, applied to the
+    // pair passed above. NULL by default, so every other build prints
+    // exactly as it always has.
+    if (pfnAspectRow != NULL) {
+      int o1 = fRel ? j : i, o2 = fRel ? i : j;
+      if (!fRel && ahi >= aCon && rgobjList2[o1] > rgobjList2[o2]) {
+        o1 = j;
+        o2 = i;
+      }
+      pfnAspectRow(o1, ahi, o2, rT, phi);
+    }
     AnsiColor(rT < 0.0 ? kWhiteA : kLtGrayA);
     if (fDistance) {
       nSav = us.nDegForm; us.nDegForm = df360;

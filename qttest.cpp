@@ -14142,6 +14142,228 @@ static void TestCopyChartNameQt()
 }
 
 
+// Parse an aspect list orb token, a signed "D:MM'" string, into degrees.
+static real ROrbParseTestQt(CONST QString &str)
+{
+  QString strT = str;
+
+  strT.remove('\'').remove('%');
+  if (strT.contains(':'))
+    return RAbs(strT.section(':', 0, 0).toDouble()) +
+      RAbs(strT.section(':', 1).toDouble()) / 60.0;
+  return RAbs(strT.toDouble());      // distance mode prints a percent
+}
+
+// Row text helpers for the aspect list view assertions. The grid's blank
+// cells were never drawn (zero, not a space), so a row read straight out
+// of it starts with NUL bytes and printf would stop at the first one;
+// every read here maps zero to space first. A row's WORDS are its tokens,
+// split on runs of space, which is also how the view builder found the
+// header's column positions.
+static QString StrRowSortTestQt(int y, int cch)
+{
+  QString str;
+  int x, wch;
+
+  for (x = 0; x < cch; x++) {
+    wch = WchTextGridQt(x, y);
+    str += QChar(wch ? wch : ' ');
+  }
+  return str;
+}
+
+static QStringList RgszRowTokensTestQt(int y, int cch)
+{
+  return StrRowSortTestQt(y, cch).split(' ', Qt::SkipEmptyParts);
+}
+
+// The sortable aspect list: the header row the view synthesizes, the sort
+// a header click applies, the chain a Shift+click adds, and the
+// interpretation guard. The chart and restriction pins are the same ones
+// the word-highlight group pins -- a fixed sky, the classic objects in
+// both restriction sets, every aspect allowed, no relationship or
+// interpretation mode -- because the view sorts the listing that
+// ChartAspectCore() actually printed, and every one of those settings
+// changes what it prints.
+static void TestAspectSortQt()
+{
+  int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
+  flag fGraphicsSav = us.fGraphics, fNoDisplaySav = us.fNoDisplay;
+  flag fClipSav = us.fClip80, fInterpSav = us.fInterpret;
+  int nRelSav = us.nRel, nAspSav = us.nAsp, k;
+  byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax], rgbASav[cAspect + 1];
+  CI ciSav = ciCore, ciMainSav = ciMain;
+  QVector<QRect> rgrcH, rgrcP;
+  QStringList rgsz0, rgsz1;
+  real rOrb0, rOrb1, rPow0, rPow1;
+  int i, yHdr = -1;
+
+  SnapChartFlagsQt(&cfChartSav);
+  CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
+  CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
+  for (k = 1; k <= cAspect; k++)
+    rgbASav[k] = ignorea[ASPT(k)];
+
+  us.fNoDisplay = fFalse;
+  us.fClip80 = fFalse;
+  us.fInterpret = fFalse;
+  us.nRel = rcNone;
+  us.nAsp = cAspect;
+  for (k = 1; k <= cAspect; k++)
+    ignorea[ASPT(k)] = fFalse;
+  for (i = 0; i < objMax; i++)
+    ignore[i] = ignore2[i] = !(FBetween(i, oSun, oPlu) || i == oNod ||
+      i == oAsc || i == oMC);
+  RedoRestrictions();
+  ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+  ciMain.dst = 0.0; ciMain.zon = 8.0;
+  ciMain.lon = 122.0 + 19.0/60.0; ciMain.lat = 47.0 + 36.0/60.0;
+  ciCore = ciMain;
+  CastChart(0);
+  us.fGraphics = fFalse;
+  SetChartModeQt(gAspect);
+
+  Group("Aspect list view sort");
+
+  // The header is part of the view as soon as the list renders, its
+  // labels sitting over the columns they sort; find its row first, since
+  // every assertion reads the rows around it.
+  for (i = 0; i < 10; i++)
+    if (StrRowSortTestQt(i, 40).contains(QString("Obj1"))) {
+      yHdr = i;
+      break;
+    }
+  Check(yHdr >= 0, "the aspect list renders with a clickable header row");
+  rgrcH = RgrcTextWordQt("Obj1");
+  rgrcP = RgrcTextWordQt("Power");
+  Check(!rgrcH.isEmpty() && !rgrcP.isEmpty(),
+    "and its Obj1 and Power labels are hit-testable words");
+
+  if (yHdr >= 0 && !rgrcH.isEmpty()) {
+    // Click Obj1: ascending by the displayed first object. Every row's
+    // first name is at least as early in the alphabet as the next one's.
+    TextClickAtPtQt(rgrcH[0].x(), rgrcH[0].y());
+    rgsz0 = RgszRowTokensTestQt(yHdr + 1, 90);
+    rgsz1 = RgszRowTokensTestQt(yHdr + 2, 90);
+    Check(rgsz0.size() > 2 && rgsz1.size() > 2 &&
+      rgsz0[1].compare(rgsz1[1], Qt::CaseInsensitive) <= 0,
+      "clicking Obj1 sorts the rows by the first object (\"%s\" then "
+      "\"%s\")", rgsz0[1].toLocal8Bit().constData(),
+      rgsz1[1].toLocal8Bit().constData());
+    Check(StrRowSortTestQt(yHdr, 40).contains(QString("Obj1^")),
+      "and the header shows the primary key with its direction");
+
+    // Shift+click Orb adds the secondary key: within a run of rows that
+    // share the first object, the orbs ascend.
+    rgrcP = RgrcTextWordQt("Orb");
+    if (!rgrcP.isEmpty()) {
+      TextClickAtPtQt(rgrcP[0].x(), rgrcP[0].y(), fTrue);
+      flag fOk = fTrue;
+      for (i = yHdr + 1; i < yHdr + 20; i++) {
+        rgsz0 = RgszRowTokensTestQt(i, 90);
+        rgsz1 = RgszRowTokensTestQt(i + 1, 90);
+        int iOrb0 = rgsz0.indexOf("orb:"), iOrb1 = rgsz1.indexOf("orb:");
+        if (iOrb0 < 0 || iOrb1 < 0 || rgsz0.size() < 3 ||
+          rgsz1.size() < 3 || rgsz0[1] != rgsz1[1])
+          continue;
+        rOrb0 = ROrbParseTestQt(rgsz0[iOrb0 + 1]);
+        rOrb1 = ROrbParseTestQt(rgsz1[iOrb1 + 1]);
+        if (rOrb0 > rOrb1 + rSmall)
+          fOk = fFalse;
+      }
+      Check(fOk, "Shift+click Orb chains it after Obj1: orbs ascend "
+        "within each first object's run");
+    }
+
+    // Clicking the primary again reverses it, and the header says so.
+    TextClickAtPtQt(rgrcH[0].x(), rgrcH[0].y());
+    Check(StrRowSortTestQt(yHdr, 40).contains(QString("Obj1v")),
+      "clicking the primary again reverses it (header now Obj1v)");
+    rgsz0 = RgszRowTokensTestQt(yHdr + 1, 90);
+    rgsz1 = RgszRowTokensTestQt(yHdr + 2, 90);
+    Check(rgsz0.size() > 2 && rgsz1.size() > 2 &&
+      rgsz0[1].compare(rgsz1[1], Qt::CaseInsensitive) >= 0,
+      "and the rows run the other way (\"%s\" then \"%s\")",
+      rgsz0[1].toLocal8Bit().constData(),
+      rgsz1[1].toLocal8Bit().constData());
+
+    // Power sorts strongest first, and a second click weakest first.
+    rgrcP = RgrcTextWordQt("Power");
+    if (!rgrcP.isEmpty()) {
+      TextClickAtPtQt(rgrcP[0].x(), rgrcP[0].y());
+      flag fOk = fTrue;
+      rPow0 = 1e9;
+      for (i = yHdr + 1; i < yHdr + 20; i++) {
+        rgsz0 = RgszRowTokensTestQt(i, 90);
+        int iPow = rgsz0.indexOf("power:");
+        if (iPow < 0)
+          continue;
+        rPow1 = rgsz0[iPow + 1].toDouble();
+        if (rPow1 > rPow0)
+          fOk = fFalse;
+        rPow0 = rPow1;
+      }
+      Check(fOk, "clicking Power sorts strongest first");
+      TextClickAtPtQt(rgrcP[0].x(), rgrcP[0].y());
+      fOk = fTrue;
+      rPow0 = -1.0;
+      for (i = yHdr + 1; i < yHdr + 20; i++) {
+        rgsz0 = RgszRowTokensTestQt(i, 90);
+        int iPow = rgsz0.indexOf("power:");
+        if (iPow < 0)
+          continue;
+        rPow1 = rgsz0[iPow + 1].toDouble();
+        if (rPow1 < rPow0)
+          fOk = fFalse;
+        rPow0 = rPow1;
+      }
+      Check(fOk, "and clicking it again sorts weakest first");
+    }
+  }
+
+  // A fresh render forgets the sort and redraws as the chart printed:
+  // the core's own order is power-first, and the header comes back
+  // unmarked.
+  SetChartModeQt(gAspect);
+  Check(RgrcTextWordQt("Obj1v").isEmpty() &&
+    RgrcTextWordQt("Obj1^").isEmpty(),
+    "a fresh render forgets the sort keys");
+  rgsz0 = RgszRowTokensTestQt(yHdr + 2, 90);
+  rgsz1 = RgszRowTokensTestQt(yHdr + 3, 90);
+  rPow0 = rgsz0[rgsz0.indexOf("power:") + 1].toDouble();
+  rPow1 = rgsz1[rgsz1.indexOf("power:") + 1].toDouble();
+  Check(rPow0 >= rPow1,
+    "and the rows print in the chart's own power order (%g then %g)",
+    rPow0, rPow1);
+
+  // The interpretation listing is prose, not aspect rows, and gets no
+  // header and no sortable view.
+  us.fInterpret = fTrue;
+  SetChartModeQt(gAspect);
+  Check(RgrcTextWordQt("Obj1").isEmpty(),
+    "an interpret-mode listing gets no header");
+  us.fInterpret = fFalse;
+
+  // Leave nothing behind: no sort keys left in the view, no chart state
+  // for a later group's listing to inherit.
+  SetChartModeQt(gAspect);
+  CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
+  CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
+  for (k = 1; k <= cAspect; k++)
+    ignorea[ASPT(k)] = rgbASav[k];
+  us.nAsp = nAspSav;
+  RedoRestrictions();
+  us.fInterpret = fInterpSav;
+  us.nRel = nRelSav;
+  ciCore = ciSav; ciMain = ciMainSav;
+  us.fNoDisplay = fNoDisplaySav;
+  us.fClip80 = fClipSav;
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  us.fGraphics = fGraphicsSav;
+  RestoreChartModeQt(nModeSav, &cfChartSav);
+}
+
 // The text console's word highlight: the grid TextCharQt() records, the
 // words hit-tested out of it, and the two layers of highlight the mouse
 // drives off that grid. The aspect list is the subject because it is the
@@ -16299,6 +16521,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"atlas-apply",          TestAtlasApplyQt},
   {"copy-text-bom",        TestCopyTextBomQt},
   {"text-word-highlight",  TestTextWordHighlightQt},
+  {"aspect-sort",          TestAspectSortQt},
   {"copy-chart-name",      TestCopyChartNameQt},
   {"restrict-recall",      TestRestrictRecallQt},
   {"printing",             TestPrintQt},
