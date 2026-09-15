@@ -14306,6 +14306,7 @@ static void TestAspectSortQt()
   CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics, fNoDisplaySav = us.fNoDisplay;
   flag fClipSav = us.fClip80, fInterpSav = us.fInterpret;
+  flag fParSav = us.fParallel;
   int nRelSav = us.nRel, nAspSav = us.nAsp, k;
   byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax], rgbASav[cAspect + 1];
   CI ciSav = ciCore, ciMainSav = ciMain;
@@ -14324,6 +14325,7 @@ static void TestAspectSortQt()
   us.fClip80 = fFalse;
   us.fInterpret = fFalse;
   us.nRel = rcNone;
+  us.fParallel = fFalse;
   us.nAsp = cAspect;
   for (k = 1; k <= cAspect; k++)
     ignorea[ASPT(k)] = fFalse;
@@ -14354,6 +14356,21 @@ static void TestAspectSortQt()
   rgrcP = RgrcTextWordQt("Power");
   Check(!rgrcH.isEmpty() && !rgrcP.isEmpty(),
     "and its Obj1 and Power labels are hit-testable words");
+  // The labels sit over words that start with letters: the object names
+  // and the aspect abbreviations do, while the degree values a drifting
+  // anchor lands on start with digits. This is what pins the labels to
+  // their columns without hardcoding the listing's contents.
+  {
+    QString strHdr = StrRowSortTestQt(yHdr, 90);
+    QString strRow = StrRowSortTestQt(yHdr + 1, 90);
+    int xObj1 = strHdr.indexOf("Obj1"), xAsp = strHdr.indexOf("Asp"),
+      xObj2 = strHdr.indexOf("Obj2");
+    Check(xObj1 >= 0 && xAsp >= 0 && xObj2 >= 0 &&
+      strRow.mid(xObj1, 1)[0].isLetter() &&
+      strRow.mid(xAsp, 1)[0].isLetter() &&
+      strRow.mid(xObj2, 1)[0].isLetter(),
+      "the header labels sit over letter-initial words in the row");
+  }
 
   if (yHdr >= 0 && !rgrcH.isEmpty()) {
     // Click Obj1: ascending by the displayed first object. Every row's
@@ -14460,6 +14477,55 @@ static void TestAspectSortQt()
     "an interpret-mode listing gets no header");
   us.fInterpret = fFalse;
 
+  // A listing whose anchor row opens with a MULTI-WORD name: with only
+  // the two nodes included, the listing is exactly their opposition,
+  // and the row opens with the truncated "North N" -- two word runs
+  // where a single-word name is padding plus one, which is what slides
+  // a positional anchor a field left. The row-order table draws North
+  // first, so the row is fully known. Under these settings its layout
+  // is fixed -- index in 0-4, the %7.7s first name right-aligned in
+  // 5-11, the abbrev at 19, the second position, then the %.10s second
+  // name from 29 -- and the core prints the "orb:"/"power:" labels
+  // itself, so where the labels belong can be asserted outright.
+  {
+    flag fSecondsSav = us.fSeconds, fSmartSav = us.fSmartCusp;
+
+    us.fSeconds = fFalse;
+    // Smart cusps suppress the node opposition as a duplicate of the
+    // conjunction to the opposite node, and the whole listing is that
+    // one row -- so the leg pins it off, the way the group pins
+    // fParallel: a documented setting that changes the aspect set.
+    us.fSmartCusp = fFalse;
+    for (i = 0; i < objMax; i++)
+      ignore[i] = ignore2[i] = !(i == oNod || i == oSou);
+    RedoRestrictions();
+    SetChartModeQt(gAspect);
+    yHdr = -1;
+    for (i = 0; i < 10; i++)
+      if (StrRowSortTestQt(i, 40).contains(QString("Obj1"))) {
+        yHdr = i;
+        break;
+      }
+    Check(yHdr >= 0, "the node-pair listing renders with a header");
+    if (yHdr >= 0) {
+      QString strHdr = StrRowSortTestQt(yHdr, 90);
+      QString strRow = StrRowSortTestQt(yHdr + 1, 90);
+
+      Check(strRow.mid(5, 7) == QString("North N") &&
+        strRow.mid(19, 3) == QString("Opp") &&
+        strRow.mid(29, 10) == QString("South Node") &&
+        strHdr.indexOf("Obj1") == 5 && strHdr.indexOf("Asp") == 19 &&
+        strHdr.indexOf("Obj2") == 29 &&
+        strHdr.indexOf("Orb") == strRow.indexOf(QString("orb:")) &&
+        strHdr.indexOf("Power") == strRow.indexOf(QString("power:")),
+        "the labels sit over the multi-word row's own fields (hdr [%s] "
+        "row [%s])", strHdr.toLocal8Bit().constData(),
+        strRow.toLocal8Bit().constData());
+    }
+    us.fSeconds = fSecondsSav;
+    us.fSmartCusp = fSmartSav;
+  }
+
   // Leave nothing behind: no sort keys left in the view, no chart state
   // for a later group's listing to inherit.
   SetChartModeQt(gAspect);
@@ -14468,6 +14534,7 @@ static void TestAspectSortQt()
   for (k = 1; k <= cAspect; k++)
     ignorea[ASPT(k)] = rgbASav[k];
   us.nAsp = nAspSav;
+  us.fParallel = fParSav;
   RedoRestrictions();
   us.fInterpret = fInterpSav;
   us.nRel = nRelSav;
@@ -14496,6 +14563,7 @@ static void TestTextWordHighlightQt()
   CHARTFLAGSQT cfChartSav;
   flag fGraphicsSav = us.fGraphics, fNoDisplaySav = us.fNoDisplay;
   flag fClipSav = us.fClip80, fInterpSav = us.fInterpret;
+  flag fParSav = us.fParallel;
   int nRelSav = us.nRel, nAspSav = us.nAsp, k;
   byte rgbASav[cAspect + 1];
   CI ciSav = ciCore, ciMainSav = ciMain;
@@ -14527,6 +14595,7 @@ static void TestTextWordHighlightQt()
   us.fClip80 = fFalse;
   us.fInterpret = fFalse;
   us.nRel = rcNone;
+  us.fParallel = fFalse;
   // And every aspect allowed: an earlier group can leave the aspect
   // count and aspect restrictions wherever it likes, and each one that
   // comes in restricted takes candidate lines out of the listing.
@@ -14711,6 +14780,7 @@ static void TestTextWordHighlightQt()
   for (k = 1; k <= cAspect; k++)
     ignorea[ASPT(k)] = rgbASav[k];
   us.nAsp = nAspSav;
+  us.fParallel = fParSav;
   RedoRestrictions();
   us.fInterpret = fInterpSav;
   us.nRel = nRelSav;

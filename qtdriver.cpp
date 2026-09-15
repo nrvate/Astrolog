@@ -1493,21 +1493,19 @@ static void TextViewRenderQt(void)
 
 // Build the aspect list view from the pristine grid: a header row above
 // the data, the data rows in sort-key order and renumbered, everything
-// else in place. The header's label positions come from the first data
-// row's own tokens, so they sit over the columns whatever the degree
-// and distance formats are doing. fFalse (and no view at all, the plain
-// print) when this chart's rows and the sink's don't agree -- an
-// interpret-mode listing has prose rows and gets no header.
+// else in place. The header's labels anchor to the first data row's own
+// text, so they sit over the columns whatever the degree and distance
+// formats are doing. fFalse (and no view at all, the plain print) when
+// this chart's rows and the sink's don't agree -- an interpret-mode
+// listing has prose rows and gets no header.
 static flag FBuildAspectViewQt(void)
 {
-  // Token spans of the first data row, for the header's column positions.
-  int rgx1[64], rgx2[64], cTok = 0;
   static CONST char *rgszLabel[ctcolAspect] =
     {"Obj1", "Asp", "Obj2", "Orb", "Power"};
   int rgtcolX[ctcolAspect];
   QVector<int> rgyData, rgis;
   int cch = qi.cchGrid, crow = qi.crowGrid, x, y, c, i, k;
-  int yLast = -1, itokOrb = -1, itokPow = -1;
+  int yLast = -1;
   wchar *rgwchNew;
   byte *rgkiNew;
 
@@ -1526,36 +1524,30 @@ static flag FBuildAspectViewQt(void)
   if (rgyData.isEmpty() || rgyData.size() != qi.rgasprow.size())
     return fFalse;
 
-  // The first data row's word runs. The index number is token 0; the
-  // object names, signs and aspect follow at tokens 1, 3 and 5 -- the
-  // brackets around the signs aren't word characters, so each sign is
-  // one token -- and the "orb" and "power" tokens are found by text.
-  x = 0;
-  while (x < cch && cTok < 63) {
-    if (FIsWordChQt(WchPrisQt(x, rgyData[0]))) {
-      rgx1[cTok] = x;
-      while (FIsWordChQt(WchPrisQt(x, rgyData[0])))
-        x++;
-      rgx2[cTok++] = x - 1;
-    } else
-      x++;
-  }
-  if (cTok < 6 || rgx2[0] - rgx1[0] > 2)
+  // The label columns anchor to the first data row's own text. The row
+  // prints the sink's own objects and aspect, so search for those exact
+  // strings in print order -- names truncated to the seven cells the
+  // row's format gives them -- then the "orb:"/"power:" labels the core
+  // prints for the last two columns. A name like "North N" spans two
+  // word runs where a short one spans padding plus a single run, so
+  // counting runs or tokens would slide every label a field left;
+  // searching the strings themselves can't.
+  QString strRow = StrPrisSpanQt(rgyData[0], 0, cch - 1);
+  QString strObj1 = QString(szObjDisp[qi.rgasprow[0].o1]).left(7);
+  QString strObj2 = QString(szObjDisp[qi.rgasprow[0].o2]).left(7);
+  QString strAsp = QString(SzAspectAbbrev(qi.rgasprow[0].ahi));
+  int xObj1 = strRow.indexOf(strObj1);
+  int xAsp = strRow.indexOf(strAsp, xObj1 + strObj1.length());
+  int xObj2 = strRow.indexOf(strObj2, xAsp + strAsp.length());
+  int xOrb = strRow.indexOf(QString("orb:"), xObj2 + strObj2.length());
+  int xPow = strRow.indexOf(QString("power:"), xOrb + 4);
+  if (xObj1 < 0 || xAsp < 0 || xObj2 < 0 || xOrb < 0 || xPow < 0)
     return fFalse;
-  for (i = 6; i < cTok; i++) {
-    QString str = StrPrisSpanQt(rgyData[0], rgx1[i], rgx2[i]);
-    if (itokOrb < 0 && str.startsWith(QString("orb")))
-      itokOrb = i;
-    else if (itokPow < 0 && str.startsWith(QString("power")))
-      itokPow = i;
-  }
-  if (itokOrb < 0 || itokPow < 0)
-    return fFalse;
-  rgtcolX[tcolObj1] = rgx1[1];
-  rgtcolX[tcolAsp] = rgx1[3];
-  rgtcolX[tcolObj2] = rgx1[5];
-  rgtcolX[tcolOrb] = rgx1[itokOrb];
-  rgtcolX[tcolPower] = rgx1[itokPow];
+  rgtcolX[tcolObj1] = xObj1;
+  rgtcolX[tcolAsp] = xAsp;
+  rgtcolX[tcolObj2] = xObj2;
+  rgtcolX[tcolOrb] = xOrb;
+  rgtcolX[tcolPower] = xPow;
 
   // The sort order over the sink's structured keys: each active key in
   // turn, ties falling through to the next, and finally to the order the
