@@ -11100,6 +11100,32 @@ this is the note that explains the wall of dialogs.
     caught; see "Animated GIFs" under "Features this fork adds to both
     builds".
 
+269. **The text console highlights every instance of a clicked or hovered
+    word.** The maintainer asked whether the text layer was interactive
+    enough to click "Jupiter" in the aspect list and light every Jupiter
+    aspect, and whether hover could work too; both can. The render already
+    walked every character through `TextCharQt()`, so retaining them in a
+    cell grid as they draw costs almost nothing -- before this, the text
+    existed only as pixels once the render returned, which is why there
+    was nothing to hit-test. The mouse hit-tests words out of the grid
+    (the maximal run of non-space cells along a row, read back through the
+    same pixel math the draw uses), and two washes of the same amber paint
+    in `paintEvent()`: one pinned by a click until a second click or an
+    empty one takes it back, one soft under the cursor. A pinned word is
+    looked up again in every new grid, so it re-lights in whatever listing
+    is up after a chart change. Matching is whole words, so "Moo" lights
+    nothing inside "Moon", and the 4-letter forms of the object listing
+    are their own words. The overlay paints on the canvas rather than into
+    `gi.qim`, which is why the pixel-exact nets (chart-render, the export
+    matrices) see none of it. The suite group's first draft pinned its
+    object set by writing `ignore[]` alone and calling
+    `RedoRestrictions()`, which read the untouched `ignore2[]` half and
+    turned every category back on -- 800 rows of moons and uranians,
+    canvas capped, highlight below the fold; the pin restricts both sets
+    and names its keep-set explicitly. 15 assertions in
+    `text-word-highlight`, three sabotages caught (recorder off, boundary
+    check off, overlay off); the full suite is clean under ASan.
+
 
 ## Features this fork adds to both builds
 
