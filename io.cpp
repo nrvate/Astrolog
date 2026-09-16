@@ -530,14 +530,16 @@ flag FOutputData(void)
         DegToDec(Lon), DegToDec(Lat));
     } else {
       fprintf(file, "@AI%s  ; %s chart info.\n", szVerCore, szAppName);
+      // chSwitchFile, not chSwitch: the file always says '/', whichever
+      // platform wrote it. See the macro in astrolog.h.
       i = us.fAnsiChar;
       us.fAnsiChar = fFalse;
-      fprintf(file, "%cqb %.3s %d %d %s %s ", chSwitch, szMonth[Mon],
+      fprintf(file, "%cqb %.3s %d %d %s %s ", chSwitchFile, szMonth[Mon],
         Day, Yea, SzTim(Tim), Dst == 0.0 ? "ST" : (Dst == 1.0 ? "DT" :
         Dst == dstAuto ? "Autodetect" : SzZone(Dst)));
       fprintf(file, "%s %s\n", SzZone(Zon), SzLocation(Lon, Lat));
       // Don't want double quotes within double quoted string parameters.
-      fprintf(file, "%czi \"", chSwitch);
+      fprintf(file, "%czi \"", chSwitchFile);
       PrintQuotedSz(file, ciMain.nam);
       fprintf(file, "\" \"");
       PrintQuotedSz(file, ciMain.loc);
@@ -578,14 +580,14 @@ flag FOutputData(void)
     } else {
       fprintf(file, "@AP%s  ; %s chart positions.\n", szVerCore, szAppName);
       // Don't want double quotes within double quoted string parameters.
-      fprintf(file, "%czi \"", chSwitch);
+      fprintf(file, "%czi \"", chSwitchFile);
       PrintQuotedSz(file, ciMain.nam);
       fprintf(file, "\" \"");
       PrintQuotedSz(file, ciMain.loc);
       fprintf(file, "\"\n");
       iMax = Max(is.nObj, cuspHi);
       for (i = 0; i <= iMax; i++) if (!ignore[i] || FCusp(i)) {
-        fprintf(file, "%cYF ", chSwitch);
+        fprintf(file, "%cYF ", chSwitchFile);
         fprintf(file, i != oUrT && i != oAlr ? "%-4.4s" : "%-6.6s",
           szObjName[i]);
         rT = FBetween(i, cuspLo-1+4, cuspLo-1+9) ?
@@ -1441,7 +1443,7 @@ flag FOutputChartList()
     nSav = us.fAnsiChar;
     us.fAnsiChar = fFalse;
     fprintf(file, "%cqcl %.3s %2d %d %s %s ",
-      chSwitch, szMonth[pci->mon], pci->day, pci->yea, SzTim(pci->tim),
+      chSwitchFile, szMonth[pci->mon], pci->day, pci->yea, SzTim(pci->tim),
       dst == 0.0 ? "ST" : (dst == 1.0 ? "DT" : SzZone(DstReal(dst))));
     fprintf(file, "%s %s ", SzZone(pci->zon), SzLocation(pci->lon, pci->lat));
     // Don't put double quotes within double quoted string parameters.

@@ -1657,6 +1657,13 @@ public:
 #define chSwitch '/'
 #endif // PC
 
+// The prefix the chart file WRITERS emit, on every platform: the format
+// has been '/'-prefixed since DOS, and that is what external parsers of
+// the files key on, so a file written on a Unix can't read "-qb" and
+// expect every tool in the wild to accept it. Reading is not involved;
+// FChSwitch() above accepts every prefix on every platform.
+#define chSwitchFile '/'
+
 #ifdef GRAPH
 #ifdef WINANY
 #define API FAR PASCAL
@@ -2880,6 +2887,10 @@ typedef struct _WindowInternal {
   HBITMAP hbmp;      // Bitmap storing contents to be copied to window.
   HBITMAP hbmpBack;  // Bitmap for the background image.
   HBITMAP hbmpPrev;  // Bitmap to restore after using background.
+  HDC hdcKeep;       // DC & bitmap holding the window's last fully drawn
+  HBITMAP hbmpKeep;  // contents, copied back over exposure repaints (a
+  int xKeep;         // popup menu closing over the chart) so that scribble
+  int yKeep;         // marks survive them. Drawn at this size.
   HANDLE hMutex;     // To ensure output file isn't already open.
   size_t lTimer;     // Identifier for the animation timer.
   short xScroll;     // Horizontal & vertical scrollbar position.
@@ -2899,6 +2910,7 @@ typedef struct _WindowInternal {
   flag fMenuAll;     // Do we need to redetermine all menu checks?
   flag fNotManual;   // Is window being resized automatically?
   flag fRedraw;      // Do we need to redraw the screen?
+  flag fRedrawNow;   // Is the next paint a real redraw, not an exposure?
   flag fCast;        // Do we need to recast the chart positions?
   flag fSmoothZoom;  // Are we antialiasing from a larger bitmap?
   flag fAbort;       // Did the user cancel printing in progress?

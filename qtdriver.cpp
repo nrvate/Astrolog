@@ -2805,6 +2805,26 @@ static QAction *AddSelectAction(QMenu *pmenu, QActionGroup *pgroup,
 }
 
 
+// Like AddSelectAction(), but selecting a value does not redraw the chart,
+// exactly as Windows' own commands for this setting don't (the pen color
+// cases in NWmCommand set wi.fRedraw nowhere). Used by the scribble pen
+// color menu: a redraw replaces the chart buffer wholesale, which would
+// erase every scribble already on it, making it impossible to draw marks
+// in more than one color per chart. The check marks still update, and the
+// color takes effect on the next stroke.
+static QAction *AddSelectActionNoRedraw(QMenu *pmenu, QActionGroup *pgroup,
+  CONST char *szLabel, int value, int *ptarget)
+{
+  QAction *pa = pmenu->addAction(szLabel);
+  pa->setCheckable(true);
+  pa->setChecked(*ptarget == value);
+  pa->setActionGroup(pgroup);
+  PaRegisterCheckQt(pa, [value, ptarget]() { return *ptarget == value; });
+  ConnectMenuQt(pa, pa, [value, ptarget]() { *ptarget = value; });
+  return pa;
+}
+
+
 static QAction *AddChartModeAction(QMenu *pmenu, CONST char *szLabel,
   int mode)
 {
@@ -3996,22 +4016,25 @@ static void BuildGraphicsMenu(QMainWindow *pwind)
 
   QMenu *pmenuPen = pmenu->addMenu("Scribb&le Color");
   QActionGroup *pgroupPen = new QActionGroup(pwind);
-  AddSelectAction(pmenuPen, pgroupPen, "Blac&k", 0, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&White", 15, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Red", 9, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Green", 10, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Blue", 12, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Yellow", 11, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Magenta", 13, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Cyan", 14, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "Gr&ay", 8, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Lt. Gray", 7, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "Maroo&n", 1, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "Dk. Gr&een", 2, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "Dk. Bl&ue", 4, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "Mai&ze", 3, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Purple", 5, &gi.kiPen, fFalse);
-  AddSelectAction(pmenuPen, pgroupPen, "&Dk. Cyan", 6, &gi.kiPen, fFalse);
+  // Selecting a pen color must not redraw: that erases scribbles already
+  // drawn, so only the newest color could ever show (AddSelectActionNoRedraw
+  // above). Windows' pen menu commands don't redraw either.
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "Blac&k", 0, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&White", 15, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Red", 9, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Green", 10, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Blue", 12, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Yellow", 11, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Magenta", 13, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Cyan", 14, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "Gr&ay", 8, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Lt. Gray", 7, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "Maroo&n", 1, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "Dk. Gr&een", 2, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "Dk. Bl&ue", 4, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "Mai&ze", 3, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Purple", 5, &gi.kiPen);
+  AddSelectActionNoRedraw(pmenuPen, pgroupPen, "&Dk. Cyan", 6, &gi.kiPen);
 
   QAction *paGraphicsSettings = pmenu->addAction("&Graphics Settings...");
   ConnectMenuQt(paGraphicsSettings, pwind,

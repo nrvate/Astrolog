@@ -755,8 +755,98 @@ int PASCAL WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   if (wi.hbmpBack != NULL)
     DeleteObject(wi.hbmpBack);
   DeleteDC(wi.hdcBack);
+  if (wi.hdcKeep != hdcNil)
+    DeleteDC(wi.hdcKeep);
+  if (wi.hbmpKeep != NULL)
+    DeleteObject(wi.hbmpKeep);
   UnregisterClass(szAppName, wi.hinst);
   return (int)msg.wParam;
+}
+
+
+// The "keep" bitmap: a copy of the window's last fully drawn contents, used
+// to service exposure repaints -- a popup menu closing over the window, or
+// another window being dragged off it. Redrawing the chart for those would
+// erase any scribble marks on it, which made it impossible to change the
+// pen color and keep scribbling in more than one color. A real redraw
+// (charts are only ever invalidated through ProcessState) refreshes the
+// bitmap, so scribbles still clear whenever the chart itself is redrawn.
+
+// Ensure the keep bitmap exists and is the size of the window's client
+// area, recreating it if the window was resized. Returns whether a valid
+// bitmap is ready to copy with.
+
+static flag FKeepEnsure(void)
+{
+  HDC hdcWin;
+
+  if (wi.hdcKeep != hdcNil && wi.hbmpKeep != NULL &&
+    wi.xKeep == wi.xClient && wi.yKeep == wi.yClient)
+    return fTrue;
+  if (wi.hdcKeep != hdcNil) {
+    DeleteDC(wi.hdcKeep);
+    wi.hdcKeep = hdcNil;
+  }
+  if (wi.hbmpKeep != NULL) {
+    DeleteObject(wi.hbmpKeep);
+    wi.hbmpKeep = NULL;
+  }
+  hdcWin = GetDC(wi.hwnd);
+  if (hdcWin == hdcNil)
+    return fFalse;
+  wi.hdcKeep = CreateCompatibleDC(hdcWin);
+  wi.hbmpKeep = CreateCompatibleBitmap(hdcWin, wi.xClient, wi.yClient);
+  ReleaseDC(wi.hwnd, hdcWin);
+  if (wi.hdcKeep == hdcNil || wi.hbmpKeep == NULL) {
+    if (wi.hdcKeep != hdcNil) {
+      DeleteDC(wi.hdcKeep);
+      wi.hdcKeep = hdcNil;
+    }
+    if (wi.hbmpKeep != NULL) {
+      DeleteObject(wi.hbmpKeep);
+      wi.hbmpKeep = NULL;
+    }
+    return fFalse;
+  }
+  wi.xKeep = wi.xClient;
+  wi.yKeep = wi.yClient;
+  SelectObject(wi.hdcKeep, wi.hbmpKeep);
+  return fTrue;
+}
+
+
+// Copy a rectangle of the window's current on-screen contents into the keep
+// bitmap, so the next exposure repaint restores them. Does nothing when
+// there's no valid same-size keep bitmap: the scribble just behaves as it
+// always has, erased by the next repaint, until a real redraw reestablishes
+// the bitmap. Passing negative coordinates means "the whole client area".
+
+static void BmpKeepSync(int x1, int y1, int x2, int y2)
+{
+  HDC hdcWin;
+
+  // Only sync into a bitmap that already holds the full chart. Never
+  // create one here: a freshly created bitmap is blank, and copying just
+  // the scribbled rectangle into it would leave garbage everywhere else,
+  // which the next exposure repaint would faithfully restore.
+  if (wi.hdcKeep == hdcNil || wi.hbmpKeep == NULL ||
+    wi.xKeep != wi.xClient || wi.yKeep != wi.yClient)
+    return;
+  if (x1 < 0)
+    x1 = 0;
+  if (y1 < 0)
+    y1 = 0;
+  if (x2 >= wi.xClient)
+    x2 = wi.xClient-1;
+  if (y2 >= wi.yClient)
+    y2 = wi.yClient-1;
+  if (x2 < x1 || y2 < y1)
+    return;
+  hdcWin = GetDC(wi.hwnd);
+  if (hdcWin == hdcNil)
+    return;
+  BitBlt(wi.hdcKeep, x1, y1, x2-x1+1, y2-y1+1, hdcWin, x1, y1, SRCCOPY);
+  ReleaseDC(wi.hwnd, hdcWin);
 }
 
 
@@ -769,7 +859,7 @@ LRESULT API WndProc(HWND hwnd, UINT wMsg, WPARAM wParam, LPARAM lParam)
   HPEN hpen, hpenOld;
   HBRUSH hbr;
   RECT rc;
-  int iParam, x, y;
+  int iParam, x, y, x1, y1, x2, y2;
 
   wi.hwnd = hwnd;
   switch (wMsg) {
@@ -931,6 +1021,7 @@ LRESULT API WndProc(HWND hwnd, UINT wMsg, WPARAM wParam, LPARAM lParam)
       hpen = (HPEN)CreatePen(PS_SOLID, Max(iParam, 0),
         (COLORREF)KvFromKi(gi.kiPen));
       hpenOld = (HPEN)SelectObject(hdc, hpen);
+      x1 = y1 = x2 = y2 = -1;
 
       // Ctrl+click means draw a rectangle. Ctrl+Shift+click does ellipse.
       if (wParam & MK_CONTROL) {
@@ -939,12 +1030,18 @@ LRESULT API WndProc(HWND hwnd, UINT wMsg, WPARAM wParam, LPARAM lParam)
           Ellipse(hdc, wi.xMouse, wi.yMouse, x, y);
         else
           Rectangle(hdc, wi.xMouse, wi.yMouse, x, y);
+        if (wi.xMouse >= 0) {
+          x1 = Min(x, wi.xMouse); x2 = Max(x, wi.xMouse);
+          y1 = Min(y, wi.yMouse); y2 = Max(y, wi.yMouse);
+        }
 
       // Shift+click means draw a line from the last to current position.
       } else if (wParam & MK_SHIFT) {
         if (wi.xMouse >= 0) {
           MoveTo(hdc, wi.xMouse, wi.yMouse);
           LineTo(hdc, x, y);
+          x1 = Min(x, wi.xMouse); x2 = Max(x, wi.xMouse);
+          y1 = Min(y, wi.yMouse); y2 = Max(y, wi.yMouse);
           if (wMsg == WM_MOUSEMOVE) {
             wi.xMouse = x; wi.yMouse = y;
           }
@@ -953,11 +1050,18 @@ LRESULT API WndProc(HWND hwnd, UINT wMsg, WPARAM wParam, LPARAM lParam)
       // A simple click means set a pixel and remember that location.
       } else {
         SetPixel(hdc, x, y, (COLORREF)KvFromKi(gi.kiPen));
+        x1 = x2 = x; y1 = y2 = y;
         wi.xMouse = x; wi.yMouse = y;
       }
       SelectObject(hdc, hpenOld);
       DeleteObject(hpen);
       ReleaseDC(hwnd, hdc);
+      // Copy the just drawn marks into the keep bitmap too, so an exposure
+      // repaint (e.g. the pen color popup menu closing over the chart)
+      // restores them instead of erasing them. Inflate by the pen width.
+      if (x1 >= 0)
+        BmpKeepSync(x1 - Max(iParam, 0) - 2, y1 - Max(iParam, 0) - 2,
+          x2 + Max(iParam, 0) + 2, y2 + Max(iParam, 0) + 2);
       break;
 
     // The mouse has been right clicked on the window.
@@ -1139,6 +1243,14 @@ LClose:
       }
       if (wi.hpen != (HPEN)NULL)
         DeleteObject(wi.hpen);
+      if (wi.hdcKeep != hdcNil) {
+        DeleteDC(wi.hdcKeep);
+        wi.hdcKeep = hdcNil;
+      }
+      if (wi.hbmpKeep != NULL) {
+        DeleteObject(wi.hbmpKeep);
+        wi.hbmpKeep = NULL;
+      }
       if (wi.lTimer != 0)
         KillTimer(hwnd, 1);
       if (hwnd == wi.hwndMain)
@@ -1205,8 +1317,13 @@ void ProcessState()
     DrawMenuBar(wi.hwnd);
     wi.fMenu = fFalse;
   }
-  if (wi.fRedraw)          // Send the window a redraw message if need be.
+  if (wi.fRedraw) {        // Send the window a redraw message if need be.
+    // Mark that the next paint is a real redraw of a changed chart, not
+    // just an exposure repaint, so FRedraw() knows to refresh its keep
+    // bitmap (and not restore scribbles from it) for this paint.
+    wi.fRedrawNow = fTrue;
     RedrawWindow(wi.hwnd, NULL, (HRGN)NULL, RDW_INVALIDATE);
+  }
 }
 
 
@@ -2768,7 +2885,7 @@ flag API FRedraw(void)
   char szFile[cchSzDef];
   int nScrollRow = 0, i;
   flag fSmartText = fFalse, fAnsiColor = fFalse, fAnsiChar = fFalse,
-    fSmartHTML = fFalse, fInverse = fFalse;
+    fSmartHTML = fFalse, fInverse = fFalse, fReal = fFalse;
 
   // Local variables used for copying to the Windows clipboard.
   HFILE hfile;
@@ -2788,8 +2905,32 @@ flag API FRedraw(void)
   }
   HourglassOn;
   ClearB((pbyte)&ps, sizeof(PAINTSTRUCT));
+  // Consume any pending "real redraw" marker: exactly one paint gets to
+  // treat itself as real, and it's whichever one arrives after the
+  // RedrawWindow() that ProcessState() did for a chart change.
+  fReal = wi.fRedrawNow;
+  wi.fRedrawNow = fFalse;
 
   wi.fSmoothZoom = fFalse;
+
+  // An exposure repaint -- a popup menu closing over the window, another
+  // window being dragged off it -- doesn't change the chart, and rerunning
+  // the whole chart for it would erase any scribble marks on it. When the
+  // keep bitmap holds the window's last fully drawn graphics contents,
+  // just copy the repaint rectangle back from it instead. Real redraws and
+  // text charts fall through to the full path as always.
+  if (wi.hdcPrint == hdcNil && us.fGraphics && !fReal &&
+    wi.hdcKeep != hdcNil && wi.hbmpKeep != NULL &&
+    wi.xKeep == wi.xClient && wi.yKeep == wi.yClient) {
+    hdcWin = BeginPaint(wi.hwnd, &ps);
+    BitBlt(hdcWin, ps.rcPaint.left, ps.rcPaint.top,
+      ps.rcPaint.right - ps.rcPaint.left, ps.rcPaint.bottom - ps.rcPaint.top,
+      wi.hdcKeep, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
+    EndPaint(wi.hwnd, &ps);
+    HourglassOff;
+    return fTrue;
+  }
+
   if (wi.hdcPrint != hdcNil)
     wi.hdc = wi.hdcPrint;
   else {
@@ -2926,6 +3067,24 @@ flag API FRedraw(void)
       SelectObject(wi.hdc, hbmpOld);
       DeleteObject(wi.hbmp);
       DeleteDC(wi.hdc);
+    }
+    // The screen now shows the fully drawn chart. Capture it into the keep
+    // bitmap, so subsequent exposure repaints can restore exactly this,
+    // scribbles included. Refresh on a real graphics redraw (the chart
+    // changed), or whenever the bitmap doesn't exist yet or the window has
+    // been resized since. Text charts don't use the bitmap.
+    if (us.fGraphics && (fReal || wi.hdcKeep == hdcNil ||
+      wi.hbmpKeep == NULL || wi.xKeep != wi.xClient ||
+      wi.yKeep != wi.yClient)) {
+      HDC hdcTmp = GetDC(wi.hwnd);
+      if (hdcTmp != hdcNil) {
+        // Ensure after GetDC: a bitmap recreated by Ensure is blank, and
+        // only this copy right after fills it with the finished chart.
+        if (FKeepEnsure())
+          BitBlt(wi.hdcKeep, 0, 0, wi.xClient, wi.yClient, hdcTmp, 0, 0,
+            SRCCOPY);
+        ReleaseDC(wi.hwnd, hdcTmp);
+      }
     }
     EndPaint(wi.hwnd, &ps);
   }

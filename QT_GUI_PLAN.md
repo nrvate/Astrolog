@@ -942,15 +942,17 @@ key `"InternetShortcut/URL"` instead of opening the file itself, since
 Missing: Setup `[P]` submenu — Windows installer only, not applicable,
 skip.
 
-## Work log — items 1-80
+## Work log
 
 Kept because each entry records what was actually found, which is more
 useful than the fact that it's finished. Several were not what their
 original description said they were.
 
-Items 1-15 are completed pieces of work. Items 16-34 are findings — how
-a thing turned out to work, or a class of bug worth not repeating — and
-are the more useful half to read before starting something new.
+The early items were the parity build-out: 1-15 are completed pieces of
+work, 16-34 are findings — how a thing turned out to work, or a class of
+bug worth not repeating — and are the more useful half to read before
+starting something new. The later items keep the same shape: each feature
+or fix says what was found on the way, not only what shipped.
 
 1. ~~Help's 11 list actions~~ — **done 2026-08-24**, see Help section
    above.
@@ -11232,6 +11234,98 @@ this is the note that explains the wall of dialogs.
     altogether -- Enter still activates the default OK and Esc still
     cancels. The walking net drives a full cycle and the wrap.
 
+275. **Chart files always write '/', on every platform.** The chart
+    info, positions and list writers formatted their switch lines with
+    `chSwitch`, the platform's own prefix — so a file written on a Unix
+    started "-qb" while the format's decades-old prefix, and the only
+    one external parsers of the files (ephem file tools in the wild)
+    look for, is "/". Reading never cared: FChSwitch() accepts every
+    prefix. The writers now emit `chSwitchFile` ('/' everywhere, new in
+    astrolog.h), so files are byte-identical however they were written;
+    prompts, banners and switch help keep `chSwitch`, where the
+    platform's prefix is what the user types. A byte-level pin in the
+    export round trip group reads @AI, @AP and @AL files back and
+    asserts /qb, /zi, /YF and /qcl.
+
+276. **The scribble pen color can change mid-scribble, in both builds.**
+    Picking a color from Graphics / Scribble Color called RedrawQt(),
+    which rebuilds gi.qim and erased every mark already on it -- so only
+    the newest color could ever show, and multi-color scribbles were
+    impossible. The Qt pen menu now selects without redrawing
+    (AddSelectActionNoRedraw), matching Windows' own pen commands, whose
+    NWmCommand cases never set a redraw flag. Windows needed the other
+    half: the pen command does not redraw, but the popup menu closing
+    over the chart triggers a WM_PAINT that reran the whole chart, so a
+    "keep" bitmap now holds the window's last fully drawn screen --
+    refreshed on every real redraw (charts invalidate only through
+    ProcessState, which raises fRedrawNow) and blitted back for exposure
+    repaints, with each stroke syncing its rectangle in. Marks still
+    clear on a real redraw, resize reestablishes the bitmap, text and
+    printing never touch it. Pinned by a scribble-pen suite group that
+    strokes in red, changes color through the real menu action, strokes
+    again, and asserts three colors coexist -- falsified by reverting
+    the menu to redraw.
+
+277. **Every file writer gets a byte-level look at what it wrote.** The
+    round trip group proves our readers accept what our writers
+    produced; a lenient reader and a drifting writer agree all the way
+    down, and the tools in the wild parsing these formats do not. A
+    save-formats group reads each scratch file's raw bytes back: @AD
+    settings, AAF's "#: Astrolog" + "#A93", Quick*Chart's name-led
+    101-character rows, the iCalendar VCALENDAR envelope, the -Yo
+    bare-number format, PostScript's %!PS-Adobe, SVG's element pair, the
+    Daedalus "DW#" header, and the WMF placeable key 0x9AC6CDD7; GIF
+    magic stays pinned by the decoder. Two needles were wrong as first
+    written -- Quick*Chart uppercases the month ("JUN", ChCap), and the
+    chart list leg had forgotten to seed a chart -- which is the group
+    doing its job.
+
+278. **The file pickers stop wasting CPU, remember their folders, and
+    fit their columns.** Three picker nits in one pass, all landing in
+    SizeFileDlgQt() which every picker already goes through. The
+    filename box's completer completed against every entry of the
+    directory being typed into -- "/tmp/" on a busy tmp stopped the
+    keystrokes on a model of thousands of files -- so it completes
+    against a directories-only twin of the dialog's model, kept in step
+    with navigation by the dialog's directoryEntered signal; a path's
+    folders are the part worth completing, and they are few. Each
+    picker family remembers the folder it was last used in, for the
+    run, keyed by the picker's title -- Save Chart and Open Chart keep
+    different places, because they are different errands -- and a run
+    starts fresh (deliberately not a setting). And the detail view's
+    Name column stretches while Size/Type/Date fit their contents, the
+    sidebar sized from its own labels' text, both overriding whatever
+    Interactive narrow widths a picker arrives with -- the reported
+    symptom was "Fo...er" and "Date Modi..." in a larger font, where
+    the header's sections had been sized to an empty model: the
+    directory model loads asynchronously, after the header's first
+    layout. The file-pickers group pins all of it, the columns against
+    a picker dressed into the bad state on purpose, the whole shown
+    dialog loaded and measured, the completer and last folder
+    falsified by sabotage.
+
+279. **The filename completer completes a bounded list: every folder,
+    plus the 200 most recently modified files.** Follow-up to item 278's
+    directories-only stopgap. The freeze was never the string matching
+    -- matching thousands of names is microseconds -- it was the
+    QFileSystemModel building a model row and a popup entry for every
+    file in the directory. A flat list of a few hundred names is
+    instant, and "the 200 files you touched most recently" is the
+    working set completion is for. The list is fetched once per
+    directory -- one stat per file, on the directory changing either by
+    navigation or by a path typed into the box, never per keystroke --
+    and a folder's subdirectories need no stat at all. The stock
+    completer's typed-path logic ("typing /tmp/a offers files of /tmp")
+    only engages for a real QFileSystemModel, so CompleterFileQt
+    restores it for the flat list with two virtuals: splitPath
+    completes the last component, pathFromIndex rejoins a chosen
+    completion with the directory typed in front of it. The
+    file-pickers group drives it with real keystrokes (programmatic
+    setText does not drive a completer: the prefix comes from
+    textEdited, and the first written version of this test proved it by
+    matching all four entries of its folder), pins the 200 cap on a
+    260-file folder, and pins the rejoin.
+
 
 ## Features this fork adds to both builds
 
@@ -12271,3 +12365,5 @@ scope and aren't outstanding either: all 42 are ported, see item 1.)
   `git@github.com:nrvate/Astrolog.git` over SSH, and `qt` is pushed to it
   after each commit. `upstream` is `CruiserOne/Astrolog` with its push
   URL deliberately set to `DISABLED` — don't try to push there.
+
+

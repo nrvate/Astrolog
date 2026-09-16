@@ -65,3 +65,14 @@ astrolog-qt-base
 # sha of the commit carrying it, which cannot exist before that commit.
 # tools/gitsha.py's header has the full story.
 /gitsha.h
+
+# Agent-tool and environment config, local to this checkout:
+# per-session agent settings and direnv .envrc.
+.claude*
+.env*
+
+# ephsrv build artifacts: uSockets builds to a static lib, the smoke test
+# compiles to a local binary; the vendored sources and LICENSEs are what
+# is tracked.
+/ephsrv/uSockets/uSockets.a
+/ephsrv/smoketest

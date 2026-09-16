@@ -60,6 +60,11 @@
 #include <QtCore/QMap>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QTreeView>
+#include <QtWidgets/QHeaderView>
+#include <QtWidgets/QListView>
+#include <QtWidgets/QCompleter>
+#include <QtCore/QStringListModel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
@@ -6716,8 +6721,555 @@ static void TestExportRoundTripQt()
     }
   }
 
+  // The chart file format's switch lines carry '/', on every platform:
+  // it has been the format's prefix since DOS, and external parsers of
+  // the files key on it -- one in the maintainer's own tool chest had to
+  // learn "-qb" when a Unix build wrote one. The writers used the
+  // platform's switch character (astrolog.h chSwitch) instead, so Unix
+  // builds emitted "-qb" while Windows emitted "/qb". They emit the
+  // format's canonical prefix now, through chSwitchFile; reading never
+  // minded, FChSwitch() accepting every prefix.
+  {
+    QFile file;
+    QByteArray ba;
+
+    ciCore = ciMain = ciWant;
+    SzScratchPathQt(S(szPath), "switchfile", ".as");
+    FCloneSz(szPath, &is.szFileOut);
+    us.nWriteFormat = 0;
+    Check(FOutputData(), "chart info file writes");
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+    us.nWriteFormat = nWriteFormatSav;
+    file.setFileName(QString::fromLocal8Bit(szPath));
+    if (file.open(QIODevice::ReadOnly))
+      ba = file.readAll();
+    file.close();
+    QFile::remove(QString::fromLocal8Bit(szPath));
+    Check(ba.startsWith("@AI") && ba.contains("/qb ") &&
+      ba.contains("/zi \""),
+      "the chart info file is /-prefixed on every platform (%d bytes, "
+      "\"%.20s\")", (int)ba.size(), ba.constData());
+
+    SzScratchPathQt(S(szPath), "switchfile0", ".as");
+    FCloneSz(szPath, &is.szFileOut);
+    us.nWriteFormat = '0';
+    Check(FOutputData(), "chart positions file writes");
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+    us.nWriteFormat = nWriteFormatSav;
+    file.setFileName(QString::fromLocal8Bit(szPath));
+    ba.clear();
+    if (file.open(QIODevice::ReadOnly))
+      ba = file.readAll();
+    file.close();
+    QFile::remove(QString::fromLocal8Bit(szPath));
+    Check(ba.startsWith("@AP") && ba.contains("/zi \"") &&
+      ba.contains("/YF "),
+      "the chart positions file is /-prefixed on every platform (%d "
+      "bytes)", (int)ba.size());
+
+    is.cci = 0;
+    FAppendCIList(&ciWant);
+    SzScratchPathQt(S(szPath), "switchfilel", ".as");
+    FCloneSz(szPath, &is.szFileOut);
+    us.nWriteFormat = 'l';
+    Check(FOutputData(), "chart list file writes");
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+    us.nWriteFormat = nWriteFormatSav;
+    file.setFileName(QString::fromLocal8Bit(szPath));
+    ba.clear();
+    if (file.open(QIODevice::ReadOnly))
+      ba = file.readAll();
+    file.close();
+    QFile::remove(QString::fromLocal8Bit(szPath));
+    Check(ba.startsWith("@AL") && ba.contains("/qcl "),
+      "the chart list file is /-prefixed on every platform (%d bytes)",
+      (int)ba.size());
+  }
+
   ciCore = ciSav; ciMain = ciMainSav; pinList.Restore();
   seedList.Verify("export-roundtrip");
+  us.fNoWrite = fNoWriteSav;
+  SetNoPopupQt(fPopupSav);
+}
+
+
+// Selecting a pen color from the Scribble Color menu must not redraw the
+// chart. A redraw replaces gi.qim wholesale, which erases every scribble
+// already on it -- so before the fix only the newest color could ever
+// show, and the menu was useless for its whole purpose, changing color
+// mid-scribble. Windows' pen commands never redraw either; their
+// NWmCommand cases (wdriver.cpp, cmdPen00..15) set no redraw flag. The
+// bytes also pin the semantics that did NOT change: scribbles still
+// clear on a real redraw of the chart.
+static void TestScribblePenQt()
+{
+  int kiPenSav = gi.kiPen, nModeSav = gi.nMode;
+  flag fGraphSav = us.fGraphics;
+  QList<QAction *> rgpa;
+  QAction *pa;
+
+  auto click = [](int x, int y) {
+    QMouseEvent evPress(QEvent::MouseButtonPress, QPoint(x, y),
+      QPoint(x, y), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(gi.qcanvas, &evPress);
+    QMouseEvent evRel(QEvent::MouseButtonRelease, QPoint(x, y),
+      QPoint(x, y), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(gi.qcanvas, &evRel);
+  };
+  auto FPixelIs = [](int x, int y, KV kv) -> flag {
+    QRgb rgb;
+    if (gi.qim == NULL)
+      return fFalse;
+    rgb = gi.qim->pixel(x, y);
+    return qRed(rgb) == RgbR(kv) && qGreen(rgb) == RgbG(kv) &&
+      qBlue(rgb) == RgbB(kv);
+  };
+  auto paFind = [&rgpa](CONST char *sz) -> QAction * {
+    QAction *pa = NULL;
+    int i;
+
+    AllActionsTestQt(&rgpa);
+    for (i = 0; i < rgpa.size() && pa == NULL; i++)
+      if (rgpa[i]->text().section(QChar('\t'), 0, 0).remove('&') ==
+        QString(sz))
+        pa = rgpa[i];
+    return pa;
+  };
+
+  Group("Scribble pen color");
+
+  us.fGraphics = fTrue;
+  SetChartModeQt(gWheel);
+  RedrawQt();
+  Check(gi.qim != NULL, "a graphics chart is up to scribble on");
+  if (gi.qim == NULL) {
+    us.fGraphics = fGraphSav;
+    return;
+  }
+
+  // A plain click scribbles one pixel in the pen color. Red is VGA
+  // index 9, against the wheel's dark background, so the bytes read back.
+  gi.kiPen = 9;
+  click(20, 20);
+  Check(FPixelIs(20, 20, KvFromKi(9)),
+    "a click scribbles one pixel in the pen color");
+
+  // Pick Blue from the Scribble Color menu. The old red mark is the
+  // whole point: a redraw here used to erase it.
+  pa = paFind("Blue");
+  Check(pa != NULL, "the Scribble Color menu holds a Blue item");
+  if (pa != NULL) {
+    pa->trigger();
+    Check(gi.kiPen == 12, "picking Blue sets the pen color (%d)", gi.kiPen);
+    Check(FPixelIs(20, 20, KvFromKi(9)),
+      "picking a color does not redraw: the red mark is still there");
+    click(30, 30);
+    Check(FPixelIs(30, 30, KvFromKi(12)), "and the next stroke draws Blue");
+  }
+
+  // More than one color on one chart, which is what the menu is for.
+  pa = paFind("Black");
+  if (pa != NULL) {
+    pa->trigger();
+    Check(gi.kiPen == 0, "picking Black sets the pen color (%d)", gi.kiPen);
+  }
+  click(40, 40);
+  Check(FPixelIs(20, 20, KvFromKi(9)) && FPixelIs(30, 30, KvFromKi(12)) &&
+    FPixelIs(40, 40, KvFromKi(0)),
+    "red, blue and black marks coexist on one chart");
+
+  // The semantics that did not change: a real redraw clears the marks.
+  RedrawQt();
+  Check(gi.qim == NULL || !FPixelIs(20, 20, KvFromKi(9)),
+    "a real redraw still erases the scribbles");
+
+  gi.kiPen = kiPenSav;
+  gi.nMode = nModeSav;
+  us.fGraphics = fGraphSav;
+  RedrawQt();
+}
+
+
+// Every location that saves a file gets a byte-level look at what it
+// wrote. The round trip group proves the readers accept what the writers
+// produced; that is a different claim -- a lenient reader and a writer
+// drifting off format agree all the way down, while the external tools
+// that parse these files (and the next decade of Astrolog itself) do
+// not. Each header here is the format's own, from its spec or from the
+// writer code, not from whichever run this pin was written in.
+static void TestSaveFormatsQt()
+{
+  char szPath[cchSzMax];
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
+  int nWriteFormatSav = us.nWriteFormat;
+  flag fNoWriteSav = us.fNoWrite, fWriteOldSav = us.fWriteOld;
+  flag fGraphSav = us.fGraphics;
+  CI ciWant, ciSav = ciCore, ciMainSav = ciMain;
+  ChartListPinQt pinList;
+  QByteArray ba;
+  QFile file;
+  flag fPopupSav = FNoPopupQt();
+
+  Group("Saved file formats");
+  SetNoPopupQt(fTrue);
+  us.fNoWrite = fFalse;
+  ClearB((pbyte)&ciWant, sizeof(CI));
+  ciWant.mon = 6; ciWant.day = 15; ciWant.yea = 1990;
+  ciWant.tim = 12.0; ciWant.dst = 0.0; ciWant.zon = 0.0;
+  ciWant.lon = 122.0 + 19.0/60.0; ciWant.lat = 47.0 + 36.0/60.0;
+  ciWant.nam = SzClone("Probe Name");
+  ciWant.loc = SzClone("Probe City");
+
+  // Write with one format, then read the scratch file's raw bytes back.
+  auto FWriteBytes = [&](int nFormat) -> flag {
+    bool fOk;
+
+    ciCore = ciMain = ciWant;
+    SzScratchPathQt(S(szPath), "saveformat", ".out");
+    FCloneSz(szPath, &is.szFileOut);
+    us.nWriteFormat = nFormat;
+    fOk = FOutputData();
+    FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+    us.nWriteFormat = nWriteFormatSav;
+    file.setFileName(QString::fromLocal8Bit(szPath));
+    ba.clear();
+    if (file.open(QIODevice::ReadOnly))
+      ba = file.readAll();
+    file.close();
+    QFile::remove(QString::fromLocal8Bit(szPath));
+    return fOk;
+  };
+
+  // Chart info (-o): the format's '@AI' header, and the '/' prefix the
+  // format has used since DOS (see chSwitchFile in astrolog.h).
+  Check(FWriteBytes(0), "the chart info writer runs");
+  Check(ba.startsWith("@AI") && ba.contains("/qb Jun") &&
+    ba.contains("/zi \""),
+    "chart info: @AI header, /qb with a month, /zi (%d bytes)",
+    (int)ba.size());
+
+  // The old numeric format (-Yo): day-of-month and year as bare numbers,
+  // one per line, exactly as the DOS versions wrote them.
+  us.fWriteOld = fTrue;
+  Check(FWriteBytes(0), "the old format chart info writer runs");
+  Check(ba.startsWith("6\n15\n1990\n"),
+    "old format chart info: bare number date lines (%d bytes, \"%.12s\")",
+    (int)ba.size(), ba.constData());
+  us.fWriteOld = fWriteOldSav;
+
+  // Settings (-od / Save Program Settings): its own '@AD' header, and
+  // the default chart's -z lines, which come first in the file.
+  Check(FWriteBytes('d'), "the settings writer runs");
+  Check(ba.startsWith("@AD") && ba.contains("-z ") && ba.contains("-zj "),
+    "settings: @AD header and default chart lines (%d bytes)",
+    (int)ba.size());
+
+  // Astrological Exchange (-oa): a '#: <app> <version>' line, then the
+  // '#A93' record row AAF readers key on.
+  Check(FWriteBytes('a'), "the AAF writer runs");
+  Check(ba.startsWith("#: Astrolog ") && ba.contains("#A93:"),
+    "AAF: '#: Astrolog' header and #A93 record (%d bytes)",
+    (int)ba.size());
+
+  // Quick*Chart (-oq): rows of exactly 101 characters, the name first
+  // and the month as letters -- what other programs' fixed-column
+  // parsers are keyed to.
+  Check(FWriteBytes('q'), "the Quick*Chart writer runs");
+  Check(ba.startsWith("Probe Name") && ba.contains("JUN 15, 1990") &&
+    ba.size() >= 101 && (int)ba.size() % 102 == 0,
+    "Quick*Chart: name-led 101 character rows (%d bytes)", (int)ba.size());
+
+  // iCalendar (-oc): the VCALENDAR envelope this format's readers
+  // require, with the writer's own PRODID.
+  Check(FWriteBytes('c'), "the iCalendar writer runs");
+  Check(ba.startsWith("BEGIN:VCALENDAR") && ba.contains("PRODID:astrolog")
+    && ba.contains("END:VCALENDAR"),
+    "iCalendar: VCALENDAR envelope and PRODID (%d bytes)", (int)ba.size());
+
+  // Chart list (-ol): '@AL' header and a /qcl row per chart -- the same
+  // switch-line family as the chart info file above. One chart seeded,
+  // since a run starts with an empty list.
+  is.cci = 0;
+  FAppendCIList(&ciWant);
+  Check(FWriteBytes('l'), "the chart list writer runs");
+  Check(ba.startsWith("@AL") && ba.contains("/qcl "),
+    "chart list: @AL header and a /qcl row (%d bytes)", (int)ba.size());
+
+  // The vector and bitmap exports go through the Export dialog's own
+  // path, which renders a chart and writes the file in one call.
+  us.fGraphics = fTrue;
+  CastChart(0);
+
+  SzScratchPathQt(S(szPath), "saveformat", ".eps");
+  ba.clear();
+  Check(FExportChartToFileTestQt(szPath, ftPS), "the PostScript export runs");
+  file.setFileName(QString::fromLocal8Bit(szPath));
+  if (file.open(QIODevice::ReadOnly))
+    ba = file.readAll();
+  file.close();
+  QFile::remove(QString::fromLocal8Bit(szPath));
+  Check(ba.startsWith("%!PS-Adobe-2.0") && ba.contains("%%Title"),
+    "PostScript: %!PS-Adobe header and title comment (%d bytes)",
+    (int)ba.size());
+
+  SzScratchPathQt(S(szPath), "saveformat", ".svg");
+  ba.clear();
+  Check(FExportChartToFileTestQt(szPath, ftSVG), "the SVG export runs");
+  file.setFileName(QString::fromLocal8Bit(szPath));
+  if (file.open(QIODevice::ReadOnly))
+    ba = file.readAll();
+  file.close();
+  QFile::remove(QString::fromLocal8Bit(szPath));
+  Check(ba.contains("<svg xmlns") && ba.contains("</svg>"),
+    "SVG: <svg> element opened and closed (%d bytes)", (int)ba.size());
+
+  SzScratchPathQt(S(szPath), "saveformat", ".dw");
+  ba.clear();
+  Check(FExportChartToFileTestQt(szPath, ftWire), "the wireframe export runs");
+  file.setFileName(QString::fromLocal8Bit(szPath));
+  if (file.open(QIODevice::ReadOnly))
+    ba = file.readAll();
+  file.close();
+  QFile::remove(QString::fromLocal8Bit(szPath));
+  Check(ba.startsWith("DW#\n"), "wireframe: DW# header (%d bytes)",
+    (int)ba.size());
+
+  // The metafile's first four bytes are the Placeable Metaheader key
+  // 0x9AC6CDD7, little endian -- every WMF reader's first check.
+  SzScratchPathQt(S(szPath), "saveformat", ".wmf");
+  ba.clear();
+  Check(FExportChartToFileTestQt(szPath, ftWmf), "the metafile export runs");
+  file.setFileName(QString::fromLocal8Bit(szPath));
+  if (file.open(QIODevice::ReadOnly))
+    ba = file.read(4);
+  file.close();
+  QFile::remove(QString::fromLocal8Bit(szPath));
+  Check(ba.startsWith(QByteArray("\xd7\xcd\xc6\x9a", 4)),
+    "metafile: the placeable header key, little endian");
+
+  // GIFs are pinned where they are decoded: FDecodeGifQt refuses any
+  // file whose magic is not "GIF89a", and the animation groups decode
+  // what the writer produced.
+
+  ciCore = ciSav; ciMain = ciMainSav; pinList.Restore();
+  us.fGraphics = fGraphSav;
+  us.fNoWrite = fNoWriteSav;
+  SetNoPopupQt(fPopupSav);
+}
+
+
+// The file pickers: the completer's cost, the detail view's columns and
+// the places sidebar's width, and each picker family's memory of the
+// folder it was last used in -- Save Chart and Open Chart keep
+// different places, because they are different errands.
+static void TestFilePickersQt()
+{
+  QFileDialog dlg(gi.qwind, "Probe Picker");
+  QTreeView *ptree;
+  QListView *pside;
+  QLineEdit *pedit;
+  QCompleter *pcomp = NULL;
+  int dx = 0, i;
+  flag fPopupSav = FNoPopupQt(), fNoWriteSav = us.fNoWrite;
+  int nWriteFormatSav = us.nWriteFormat;
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
+
+  extern QString StrLastDirTestQt(CONST char *szTitle);
+
+  Group("File pickers");
+
+  // The user's condition: a shown picker, its directory model actually
+  // loaded, at a font larger than the defaults. Header sections sized
+  // to an empty model (the model loads asynchronously, after the
+  // header's first layout) clip their own header and every entry -- the
+  // screenshot that reported this shows "Fo...er" and "Date Modi...".
+  {
+    QFileDialog dlgShown(gi.qwind, "Probe Shown", QDir::tempPath());
+    QFont fontS = dlgShown.font();
+    fontS.setPointSize(fontS.pointSize() + 3);
+    dlgShown.setFont(fontS);
+    SizeFileDlgTestQt(&dlgShown);
+    QTreeView *ptreeS = dlgShown.findChild<QTreeView *>(QString("treeView"));
+    QHeaderView *pheadS = ptreeS->header();
+    QEventLoop loopS;
+    QTimer tS;
+    int c = 0;
+
+    QObject::connect(&tS, &QTimer::timeout, [&]() {
+      if (pheadS->sectionSize(0) > 0 || ++c > 60)
+        loopS.quit();
+    });
+    tS.start(50);
+    dlgShown.show();
+    loopS.exec();
+    tS.stop();
+    Check(pheadS->sectionSize(2) >=
+        ptreeS->fontMetrics().horizontalAdvance("Folder") &&
+      pheadS->sectionSize(3) >=
+        ptreeS->fontMetrics().horizontalAdvance("9/16/26 6:55 PM"),
+      "the loaded picker's Type and Date columns fit their contents "
+      "(%d and %d px)", pheadS->sectionSize(2), pheadS->sectionSize(3));
+    dlgShown.close();
+  }
+
+  // Dress a picker that arrives as a saved-state dialog does:
+  // Interactive sections with narrow widths from a smaller font. The
+  // dressing has to override that, or the columns clip exactly as the
+  // user's screenshot showed.
+  {
+    QFont font = dlg.font();
+    font.setPointSize(font.pointSize() + 3);
+    dlg.setFont(font);
+  }
+  ptree = dlg.findChild<QTreeView *>(QString("treeView"));
+  if (ptree != NULL) {
+    QHeaderView *phead = ptree->header();
+    phead->setSectionResizeMode(QHeaderView::Interactive);
+    phead->resizeSection(1, 40);
+    phead->resizeSection(2, 40);
+    phead->resizeSection(3, 40);
+  }
+  SizeFileDlgTestQt(&dlg);
+
+  ptree = dlg.findChild<QTreeView *>(QString("treeView"));
+  Check(ptree != NULL, "the detail view is there to dress");
+  if (ptree != NULL) {
+    QHeaderView *phead = ptree->header();
+    Check(phead->sectionResizeMode(0) == QHeaderView::Stretch,
+      "the Name column stretches");
+    for (i = 1; i < phead->count(); i++)
+      if (phead->sectionResizeMode(i) != QHeaderView::ResizeToContents)
+        break;
+    Check(i == phead->count(), "the other columns fit their contents");
+  }
+
+  pside = dlg.findChild<QListView *>(QString("sidebar"));
+  Check(pside != NULL, "the places sidebar is there to size");
+  if (pside != NULL && pside->model() != NULL) {
+    for (i = 0; i < pside->model()->rowCount(); i++) {
+      QString qs = pside->model()->index(i, 0).data(Qt::DisplayRole).
+        toString();
+      dx = Max(dx, pside->fontMetrics().horizontalAdvance(qs));
+    }
+    Check(pside->width() >= dx, "the sidebar fits its own labels "
+      "(%d px, its longest label needs %d)", pside->width(), dx);
+  }
+
+  // The completer is the one that used to list every file of the
+  // directory being typed into, so "/tmp/" on a busy tmp stopped the
+  // keystrokes. It completes against a bounded list now: every
+  // subdirectory, plus the 200 most recently modified files.
+  pedit = dlg.findChild<QLineEdit *>(QString("fileNameEdit"));
+  if (pedit != NULL) {
+    pcomp = pedit->completer();
+    Check(pcomp != NULL, "the filename box has a completer");
+  }
+  if (pedit != NULL && pcomp != NULL) {
+    extern flag FCompleterBoundedTestQt(CONST QObject *pw);
+    QStringListModel *pmodel;
+    QDir dirT;
+    int i;
+
+    Check(FCompleterBoundedTestQt(pcomp), "the completer is the bounded "
+      "one");
+    pmodel = qobject_cast<QStringListModel *>(pcomp->model());
+    Check(pmodel != NULL, "and it completes against a flat string list");
+
+    // Path behavior on a controlled folder: a typed directory's files
+    // complete, and rejoining puts the typed path back in front.
+    dirT = QDir(QDir::tempPath() + "/astrolog-qt-comp");
+    if (!dirT.exists())
+      QDir::temp().mkpath("astrolog-qt-comp");
+    for (i = 0; i < 3; i++)
+      QFile(QDir::tempPath() +
+        QString("/astrolog-qt-comp/file%1").arg(i)).open(
+        QIODevice::WriteOnly);
+    dirT.mkpath(QString(QDir::tempPath() + "/astrolog-qt-comp/sub"));
+    for (const QChar &ch : QString(QDir::tempPath() +
+      "/astrolog-qt-comp/f")) {
+      QKeyEvent evP(QEvent::KeyPress, ch.toUpper().unicode(),
+        Qt::NoModifier, QString(ch));
+      QKeyEvent evR(QEvent::KeyRelease, ch.toUpper().unicode(),
+        Qt::NoModifier, QString(ch));
+      QApplication::sendEvent(pedit, &evP);
+      QApplication::sendEvent(pedit, &evR);
+    }
+    Check(pcomp->completionCount() == 3, "typing a folder's path with a "
+      "prefix completes its files (%d matches)",
+      pcomp->completionCount());
+    Check(pcomp->completionModel()->index(0, 0).data().toString() ==
+      QString("file0"), "and the completion list holds the folder's "
+      "files (\"%s\")", pcomp->completionModel()->index(0, 0).data().
+      toString().toLocal8Bit().constData());
+    {
+      int ifile = pmodel->stringList().indexOf("file0");
+      Check(ifile >= 0 && pcomp->pathFromIndex(pmodel->index(ifile, 0)) ==
+        QDir::tempPath() + "/astrolog-qt-comp/file0", "and a chosen "
+        "completion rejoins the typed directory");
+    }
+    pedit->clear();
+
+    // The bound: a folder with more files than the cap holds at most
+    // the cap of them, whatever its size.
+    dirT = QDir(QDir::tempPath() + "/astrolog-qt-compcap");
+    if (!dirT.exists())
+      QDir::temp().mkpath("astrolog-qt-compcap");
+    for (i = 0; i < 260; i++)
+      QFile(QDir::tempPath() +
+        QString("/astrolog-qt-compcap/many%1").arg(i, 3, 10,
+        QChar('0'))).open(QIODevice::WriteOnly);
+    for (const QChar &ch : QString(QDir::tempPath() +
+      "/astrolog-qt-compcap/")) {
+      QKeyEvent evP(QEvent::KeyPress, ch.toUpper().unicode(),
+        Qt::NoModifier, QString(ch));
+      QKeyEvent evR(QEvent::KeyRelease, ch.toUpper().unicode(),
+        Qt::NoModifier, QString(ch));
+      QApplication::sendEvent(pedit, &evP);
+      QApplication::sendEvent(pedit, &evR);
+    }
+    Check(pcomp->completionCount() <= 200 + 1,
+      "a 260 file folder completes at most 200 files plus its folder "
+      "(%d)", pcomp->completionCount());
+    pedit->clear();
+    QDir(QDir::tempPath() + "/astrolog-qt-comp").removeRecursively();
+    QDir(QDir::tempPath() + "/astrolog-qt-compcap").removeRecursively();
+  }
+
+  // Per-family last folder, through the real Save Chart path with the
+  // picker stand-in: the write itself fails (the folder does not
+  // exist), which the note does not care about -- it records where the
+  // user picked.
+  SetNoPopupQt(fTrue);
+  us.fNoWrite = fFalse;
+  {
+    extern flag s_fSaveFileTestQt;
+    extern QStringList s_rgstrSaveFileTestQt;
+    Borrow bPicker(s_fSaveFileTestQt, fTrue);
+
+    Check(StrLastDirTestQt("Save Chart").isEmpty(),
+      "a fresh picker family has no last folder");
+    s_rgstrSaveFileTestQt.clear();
+    s_rgstrSaveFileTestQt.append(QString("/tmp/astrolog-qt-lastdir/Probe.as"));
+    DriveModalQt(ShowSaveChartDialogQt, [](QWidget *pw) { pw->close(); });
+    Check(StrLastDirTestQt("Save Chart") ==
+      QString("/tmp/astrolog-qt-lastdir"),
+      "Save Chart remembers the folder of the file it picked (\"%s\")",
+      StrLastDirTestQt("Save Chart").toLocal8Bit().constData());
+
+    s_rgstrSaveFileTestQt.append(QString("/tmp/other/Probe2.as"));
+    DriveModalQt(ShowSaveChartDialogQt, [](QWidget *pw) { pw->close(); });
+    Check(StrLastDirTestQt("Save Chart") == QString("/tmp/other"),
+      "and it moves with the next pick (\"%s\")",
+      StrLastDirTestQt("Save Chart").toLocal8Bit().constData());
+    Check(StrLastDirTestQt("Open Chart").isEmpty(),
+      "Open Chart keeps its own folder, not Save Chart's");
+    s_rgstrSaveFileTestQt.clear();
+  }
+
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+  us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
   SetNoPopupQt(fPopupSav);
 }
@@ -16998,6 +17550,9 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"jet-trail",            TestJetTrailQt},
   {"screen-options",       TestScreenOptionsQt},
   {"export-roundtrip",     TestExportRoundTripQt},
+  {"scribble-pen",         TestScribblePenQt},
+  {"save-formats",         TestSaveFormatsQt},
+  {"file-pickers",         TestFilePickersQt},
   {"null-names",           TestNullNamesQt},
   {"credit-colors",        TestCreditColorsQt},
   {"transit-mode",         TestTransitModeQt},

@@ -53,6 +53,12 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QProgressBar>
+#include <QtWidgets/QCompleter>
+#include <QtWidgets/QHeaderView>
+#include <QtWidgets/QTreeView>
+#include <QtWidgets/QListView>
+#include <QtWidgets/QFileSystemModel>
+#include <QtCore/QHash>
 #include <QtCore/QTimer>
 #include <functional>
 #include <QtWidgets/QSpinBox>
@@ -66,7 +72,10 @@
 #include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QListWidget>
 #include <QtCore/QDir>
+#include <QtCore/QDateTime>
 #include <QtCore/QStringList>
+#include <QtCore/QStringListModel>
+#include <algorithm>
 #include <QtCore/QEvent>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QElapsedTimer>
@@ -95,6 +104,7 @@
 #endif
 
 #include <QtCore/QDir>
+#include <QtCore/QDateTime>
 #include <QtCore/QTemporaryFile>
 
 #ifdef QT
@@ -1216,21 +1226,206 @@ QStringList s_rgstrSaveFileTestQt;
 // words of Windows' own dialog, whose default extension is added before
 // its question; No goes back to the picker, as it does there.
 
+// Each file picker family remembers the folder it was last used in, for
+// this run: the Save Chart dialog comes up where a chart was last saved,
+// Open Chart where one was last read, the map picker where a map was
+// last read, and so on -- the families are keyed by the picker's title,
+// which is a stable unique string per dialog, so Save Chart and Open
+// Chart keep different places the way their menus differ. A run starts
+// with an empty map, so a fresh session begins in the default place;
+// this is deliberately not a setting, and writes nothing anywhere.
+static QHash<QString, QString> s_hashLastDirQt;
+
+static QString StrLastDirQt(CONST QString &qsTitle)
+{
+  return s_hashLastDirQt.value(qsTitle);
+}
+
+static void NoteLastDirQt(CONST QString &qsTitle, CONST QString &qsFile)
+{
+  QString qsDir = QFileInfo(qsFile).absolutePath();
+
+  if (!qsDir.isEmpty())
+    s_hashLastDirQt.insert(qsTitle, qsDir);
+}
+
+#ifdef QTTEST
+void NoteLastDirTestQt(CONST char *szTitle, CONST QString &qsFile)
+{
+  NoteLastDirQt(QString(szTitle), qsFile);
+}
+#endif
+
+// How many of a directory's files, newest first, the filename box's
+// completer holds. The popup can show a screenful; a wider window on
+// the recent past than that buys nothing per keystroke.
+#define cFilesCompleteMax 200
+
+// The filename box's completer over a bounded, flat list. The stock
+// QFileDialog completer completes typed paths ("/tmp/a" -> files of
+// /tmp) by walking its model's hierarchy, which a flat list does not
+// have: the stock logic only engages for a real QFileSystemModel.
+// splitPath and pathFromIndex restore the behavior on the list:
+// complete the last component of what was typed, and rejoin a chosen
+// completion with the directory in front of it.
+class CompleterFileQt : public QCompleter
+{
+public:
+  // The directory the list currently holds, so a fill happens once per
+  // directory and not once per keystroke.
+  QString strDirFilled;
+
+  explicit CompleterFileQt(QObject *pparent = NULL) :
+    QCompleter(pparent) {}
+
+  QStringList splitPath(CONST QString &strPath) const override
+  {
+    int ich = Max(strPath.lastIndexOf(QChar('/')),
+      strPath.lastIndexOf(QChar('\\')));
+
+    return QStringList(strPath.mid(ich + 1));
+  }
+
+  QString pathFromIndex(CONST QModelIndex &idx) const override
+  {
+    QWidget *pw = widget();
+    QLineEdit *pedit = qobject_cast<QLineEdit *>(pw);
+    QString str = pedit != NULL ? pedit->text() : QString();
+    int ich;
+
+    if (!idx.isValid())
+      return str;
+    ich = Max(str.lastIndexOf(QChar('/')), str.lastIndexOf(QChar('\\')));
+    return str.left(ich + 1) + idx.data().toString();
+  }
+};
+
+// Fill the completer's list with a directory: every subdirectory's
+// name, then the cFilesCompleteMax most recently modified files. The
+// recency scan costs one stat per file and runs once per directory,
+// never per keystroke; subdirectories need no stat at all. A directory
+// that cannot be read is remembered as filled, so a name typed under a
+// nonexistent folder does not rescan it every keystroke.
+static void FillCompleterQt(CompleterFileQt *pcomp, CONST QString &qsDir)
+{
+  QStringListModel *pmodel = qobject_cast<QStringListModel *>(
+    pcomp->model());
+  QStringList rgstrDirs, rgstrFiles;
+  QList<QFileInfo> rginfo;
+  QDir dir(qsDir);
+  int i;
+
+  pcomp->strDirFilled = qsDir;
+  if (pmodel == NULL || qsDir.isEmpty() || !dir.exists())
+    return;
+  rgstrDirs = dir.entryList(QDir::AllDirs | QDir::Drives |
+    QDir::NoDotAndDotDot);
+  rginfo = dir.entryInfoList(QDir::Files);
+  std::sort(rginfo.begin(), rginfo.end(),
+    [](CONST QFileInfo &a, CONST QFileInfo &b) {
+    return a.lastModified() > b.lastModified();
+  });
+  for (i = 0; i < rginfo.size() && i < cFilesCompleteMax; i++)
+    rgstrFiles.append(rginfo[i].fileName());
+  pmodel->setStringList(rgstrDirs + rgstrFiles);
+}
+
+#ifdef QTTEST
+flag FCompleterBoundedTestQt(CONST QObject *pw)
+{
+  return dynamic_cast<CONST CompleterFileQt *>(pw) != NULL;
+}
+#endif
+
 // The file pickers, sized to the window. The static QFileDialog helpers
 // always build their own default-sized dialog, which on today's screens
 // is a peephole -- the places sidebar truncates, and so does the file
-// list. Every picker in this file goes through this instead, which
-// sizes the dialog to the window it belongs to: a fraction of it, floors
-// a small window cannot pull below, and the screen's cap above that.
-// Sizing is its own function so the suite can hold it to the floors
-// without putting up a modal.
+// list. Every picker in this file goes through this instead, which sizes
+// the dialog to the window it belongs to: a fraction of it, floors a
+// small window cannot pull below, and the screen's cap above that, and
+// dresses the innards: the list's columns, the sidebar, and the filename
+// box's completer. Sizing is its own function so the suite can hold it
+// to the floors without putting up a modal.
 static void SizeFileDlgQt(QFileDialog *pdlg)
 {
   QRect rcScreen = gi.qwind->screen()->availableGeometry();
+  QTreeView *ptree;
+  QListView *pside;
+  QLineEdit *pedit;
+  int i, dx;
 
   pdlg->resize(
     Max(760, Min(gi.qwind->width() * 3 / 5, rcScreen.width() * 4 / 5)),
     Max(540, Min(gi.qwind->height() * 3 / 5, rcScreen.height() * 4 / 5)));
+
+  // The Name column stretches and the rest fit their contents, which is
+  // what the detail view's defaults get wrong on a larger font: the
+  // fixed columns were pixel widths from a smaller font, so Size, Type
+  // and Date Modified each clipped to ellipses.
+  ptree = pdlg->findChild<QTreeView *>(QString("treeView"));
+  if (ptree != NULL) {
+    QHeaderView *phead = ptree->header();
+
+    phead->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (i = 1; i < phead->count(); i++)
+      phead->setSectionResizeMode(i, QHeaderView::ResizeToContents);
+  }
+
+  // The places sidebar's width from its own labels' text, again so a
+  // larger font does not truncate "Documents" to "Doc".
+  pside = pdlg->findChild<QListView *>(QString("sidebar"));
+  if (pside != NULL && pside->model() != NULL) {
+    dx = 0;
+    for (i = 0; i < pside->model()->rowCount(); i++) {
+      QString qs = pside->model()->index(i, 0).data(Qt::DisplayRole).
+        toString();
+      dx = Max(dx, pside->fontMetrics().horizontalAdvance(qs));
+    }
+    pside->setFixedWidth(dx + pside->fontMetrics().height() +
+      pside->iconSize().width() + 12);
+  }
+
+  // The filename box's completer completes against every entry of the
+  // directory being typed into: type "/tmp/" into a busy tmp and every
+  // keystroke afterwards waits on a model of thousands of files, a
+  // popup of all of them, and a layout pass over both. It completes
+  // against a bounded list instead: every subdirectory of the directory,
+  // and the cFilesCompleteMax most recently modified files -- the files
+  // you are most likely to be typing, and never more of them than the
+  // popup can show. The list is fetched once per directory, when the
+  // typed or navigated directory changes, and matching against a few
+  // hundred names is microseconds. See CompleterFileQt for how the
+  // stock QFileDialog completer's path logic survives the flat list.
+  pedit = pdlg->findChild<QLineEdit *>(QString("fileNameEdit"));
+  if (pedit != NULL) {
+    CompleterFileQt *pcomp = new CompleterFileQt(pedit);
+
+    pcomp->setModel(new QStringListModel(pcomp));
+    pedit->setCompleter(pcomp);
+    FillCompleterQt(pcomp, pdlg->directory().absolutePath());
+    // Both things that change where completions come from: the dialog
+    // navigating (double click into a folder), and a path typed into
+    // the box, which does not navigate anywhere.
+    QObject::connect(pdlg, &QFileDialog::directoryEntered, pcomp,
+      [pcomp](CONST QString &qsDir) {
+      if (pcomp->strDirFilled != qsDir)
+        FillCompleterQt(pcomp, qsDir);
+    });
+    QObject::connect(pedit, &QLineEdit::textChanged, pcomp, [pcomp]() {
+      QWidget *pw = pcomp->widget();
+      QLineEdit *pedit = qobject_cast<QLineEdit *>(pw);
+      QString str, strDir;
+      int ich;
+
+      if (pedit == NULL)
+        return;
+      str = pedit->text();
+      ich = Max(str.lastIndexOf(QChar('/')), str.lastIndexOf(QChar('\\')));
+      strDir = str.left(ich + 1);
+      if (pcomp->strDirFilled != strDir)
+        FillCompleterQt(pcomp, strDir);
+    });
+  }
 }
 
 #ifdef QTTEST
@@ -1238,12 +1433,23 @@ void SizeFileDlgTestQt(QFileDialog *pdlg)
 {
   SizeFileDlgQt(pdlg);
 }
+
+// The pickers' per-family last-folder memory, for the suite to drive.
+QString StrLastDirTestQt(CONST char *szTitle)
+{
+  return StrLastDirQt(QString(szTitle));
+}
 #endif
 
 static QString StrSaveFileNameQt(CONST char *szTitle, CONST QString &qsStart,
   CONST QString &qsFilter, CONST char *szExt)
 {
   QString qs, qsExt, qsDir = qsStart;
+
+  // No start given, so the picker opens where this dialog family was
+  // last used; an empty map value is the default place, as before.
+  if (qsDir.isEmpty())
+    qsDir = StrLastDirQt(QString(szTitle));
 
   loop {
 #ifdef QTTEST
@@ -1267,8 +1473,10 @@ static QString StrSaveFileNameQt(CONST char *szTitle, CONST QString &qsStart,
       QMessageBox::question(gi.qwind, "Confirm Save As",
       QString("%1 already exists.\nDo you want to replace it?").arg(
       QFileInfo(qsExt).fileName()), QMessageBox::Yes | QMessageBox::No,
-      QMessageBox::No) == QMessageBox::Yes)
+      QMessageBox::No) == QMessageBox::Yes) {
+      NoteLastDirQt(szTitle, qsExt);
       return qsExt;
+    }
     qsDir = qs;
   }
 }
@@ -1379,7 +1587,8 @@ void ShowOpenBackgroundDialogQt()
 {
   if (FNoReadQt())
     return;
-  QFileDialog dlg(gi.qwind, "Open Background", QString(),
+  QFileDialog dlg(gi.qwind, "Open Background",
+    StrLastDirQt(QString("Open Background")),
     "Windows Bitmaps (*.bmp);;All Files (*)");
 
   SizeFileDlgQt(&dlg);
@@ -1387,6 +1596,7 @@ void ShowOpenBackgroundDialogQt()
     dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qs.isEmpty())
     return;
+  NoteLastDirQt(QString("Open Background"), qs);
   QByteArray ba = qs.toLocal8Bit();
   if (!FLoadBmp(ba.constData(), &gi.bmpBack, fFalse)) {
     QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
@@ -1400,7 +1610,8 @@ void ShowOpenWorldDialogQt()
 {
   if (FNoReadQt())
     return;
-  QFileDialog dlg(gi.qwind, "Open World Map", QString(),
+  QFileDialog dlg(gi.qwind, "Open World Map",
+    StrLastDirQt(QString("Open World Map")),
     "Windows Bitmaps (*.bmp);;All Files (*)");
 
   SizeFileDlgQt(&dlg);
@@ -1408,6 +1619,7 @@ void ShowOpenWorldDialogQt()
     dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qs.isEmpty())
     return;
+  NoteLastDirQt(QString("Open World Map"), qs);
   QByteArray ba = qs.toLocal8Bit();
   if (!FLoadBmp(ba.constData(), &gi.bmpWorld, fFalse)) {
     QMessageBox::warning(gi.qwind, szAppName, "Could not read that bitmap file.");
@@ -2982,7 +3194,7 @@ static void ShowOpenChartIntoDialogQt(int iChart)
     QString("Open Chart #%1").arg(iChart);
   // The filter list is Windows' DlgOpenChart lpstrFilter, verbatim: every
   // format FInputData() can read gets its own row there, not just .as.
-  QFileDialog dlg(gi.qwind, qsTitle, QString(),
+  QFileDialog dlg(gi.qwind, qsTitle, StrLastDirQt(qsTitle),
     "Astrolog Files (*.as);;"
     "Astrological Exchange Files (*.aaf);;"
     "Quick*Chart Files (*.qck);;"
@@ -2995,6 +3207,7 @@ static void ShowOpenChartIntoDialogQt(int iChart)
     dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qs.isEmpty())
     return;
+  NoteLastDirQt(qsTitle, qs);
   QByteArray ba = qs.toLocal8Bit();
   if (!FOpenChartIntoQt(iChart, ba.constData())) {
     QMessageBox::warning(gi.qwind, szAppName, "Could not read that chart file.");
@@ -3449,7 +3662,8 @@ static int COpenChartDirQt(CONST QString &qsDir)
 
 void ShowOpenChartDirDialogQt()
 {
-  QFileDialog dlg(gi.qwind, "Open Charts in Folder");
+  QFileDialog dlg(gi.qwind, "Open Charts in Folder",
+    StrLastDirQt(QString("Open Charts in Folder")));
 
   dlg.setFileMode(QFileDialog::Directory);
   SizeFileDlgQt(&dlg);
@@ -3457,6 +3671,7 @@ void ShowOpenChartDirDialogQt()
     dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qsDir.isEmpty())
     return;
+  NoteLastDirQt(QString("Open Charts in Folder"), qsDir);
   if (COpenChartDirQt(qsDir) <= 0) {
     QMessageBox::warning(gi.qwind, szAppName,
       "No chart files were loaded from that folder.");

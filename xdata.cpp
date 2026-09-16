@@ -122,9 +122,11 @@ GI gi = {
 WI wi = {
   (HINSTANCE)NULL, (HWND)NULL, (HWND)NULL, (HMENU)NULL, (HMENU)NULL,
   (HACCEL)NULL, hdcNil, hdcNil, hdcNil, (HWND)NULL, (HPEN)NULL, (HBRUSH)NULL,
-  (HFONT)NULL, (HBITMAP)NULL, (HBITMAP)NULL, (HBITMAP)NULL, (HANDLE)NULL,
+  (HFONT)NULL, (HBITMAP)NULL, (HBITMAP)NULL, (HBITMAP)NULL,
+  hdcNil, (HBITMAP)NULL, 0, 0, (HANDLE)NULL,
   0, 0, 0, 0, 0, 0, 0, -1, -1, 1, 0, 0, 0, -1,
-  fFalse, fTrue, fFalse, fFalse, fTrue, fFalse, fFalse, fFalse, fFalse,
+  fFalse, fTrue, fFalse, fFalse, fFalse, fTrue, fFalse, fFalse, fFalse,
+  fFalse,
   1, fFalse, {0, 0, 0, 0}, fFalse, fFalse, {0, 0, 0, NULL}, {0, 0, 0, NULL},
   {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
