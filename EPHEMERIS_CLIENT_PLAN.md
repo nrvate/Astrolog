@@ -9,6 +9,27 @@ written to be implemented without reading this project's conversation.
 Work log entries append at the end, newest last, same convention as
 QT_GUI_PLAN.md.
 
+## Status — how to pick this document's work back up
+
+- **Increment 1 is landed** on branch `ephserver` (worktree
+  `/nvm/work/ephsrv`; work log item 1 below): backend slot (`cmEphSrv=6`,
+  `-bS` selects, `-bW` holds the address and empty `-bW` clears to the
+  default), settings writer and table rows, the QWebSocket state machine
+  in qtdriver.cpp, and the fail-soft `FSrvPlanetQt()` facade in
+  ComputeEphem. Astrolog quick suite: 5649/0, this group's 75 checks
+  included. Build wiring that increment 1 needs and may not find
+  elsewhere: `-I ephsrv` in Makefile.qt and Makefile.qt.test CPPFLAGS and
+  the `Qt*WebSockets` module on their QT_MODULES lines.
+- **Increments 2, 3, 4 are open** (§10), in that order. Increment 2 needs
+  the server running (`make ephsrv` on the same branch, then
+  `tools/ephsrv-golden.sh` for the oracle) because its acceptance is
+  bit-exact parity against the local Swiss path. Increment 4 is the only
+  piece with user-visible blocking UI (§4's dialog and exit ladder) —
+  the maintainer tests such changes by hand, so build both binaries,
+  run the quick suite, and hand over before committing.
+- The fork this connects to is `2.10.03-ts.11`; see the server plan's
+  Status section for branch, commit and gate state.
+
 ## 1. Goals
 
 - A new chart-time ephemeris backend, "Ephemeris Server", that gets every
@@ -74,11 +95,17 @@ These shaped the spec below; each is a design correction, not trivia.
   like the other rows.
 - Settings writer line in the -bs family (io.cpp:1609-1970 pattern) and the
   Qt ephemeris combo entry.
-- New setting: the server address, a ws:// URL or host:port, default
-  localhost:47190 (EPH_DEFAULT_PORT from ephproto.h — the two ends agree
-  with zero configuration). Its switch and mnemonic are chosen at
-  implementation time against switch.cpp's tables; the settings file line
-  follows the quoted-parameter form the -Yi lines use.
+- New setting, as built (increment 1): the server address lives in
+  `us.szEphSrv`, selected by `-bW` — a standalone `-b` suffix that does
+  NOT fall through to the `fEphemFiles` toggle the other backend
+  spellings share, because it sets where the backend connects, not which
+  backend runs. Default: empty string, meaning localhost on
+  EPH_DEFAULT_PORT (47190 from ephproto.h — the two ends agree with zero
+  configuration). The settings writer emits it in the quoted-parameter
+  form the `-Yi` lines use, always — and an empty `-bW` on read CLEARS
+  the address to the default rather than erroring: the writer emits
+  `-bW ""` for the default, and a file that failed to load its own
+  output would be no format at all (73 suite failures taught this).
 - ComputeEphem's dispatch gains fSrvPla = us.nSwissEph == 5, parallel to
   fJPLPla = us.nSwissEph == 3 (calc.cpp:1049).
 - -0n (us.fNoNetwork) disables the backend at selection time: the combo

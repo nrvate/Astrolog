@@ -16,6 +16,41 @@ decision made during that design so a future agent need not re-derive it.
 Work log entries append at the end of this file, newest last. Nothing here
 modifies QT_GUI_PLAN.md, which keeps its own complete work log.
 
+## Status — how to pick this project back up
+
+Everything below is landed and pushed; this section is the resume pointer.
+
+- **Branches.** Server work lives on `ephserver` (worktree
+  `/nvm/work/ephsrv`, branch pushed to origin); the main checkout runs
+  `qt`. Merge `ephserver` into `qt` only when the maintainer says so.
+  Commits: `5211e5e` (uWebSockets v20.80.0 + pinned uSockets vendored),
+  `f8e7112` (round 1: server, client increment 1, gates, both plan
+  docs), `831bd2b` (fork fix lands, workaround removed, static linking).
+- **The Swiss Ephemeris fork** (nrvate/swisseph, `/shares/swisseph`) is at
+  **2.10.03-ts.11** (c86c2b6, tag v2.10.03-ts.11): its delta-t tidal term
+  no longer follows which files a context has open — see work log items 2
+  and 6, and UPSTREAM-BUGS.md section 14 in that repo. The server links
+  `$(SWE_HOME)/libswe.a` by archive path; never `-lswe`.
+- **Two environment traps, both pinned in the build and worth
+  remembering elsewhere:** an installed stale `libswe.so` in
+  `/usr/local/lib` wins the runtime search over `-L` every time (static
+  archive path is the cure), and the fork's ROOT Makefile tracks no
+  header dependencies, so a header-only edit re-archives stale objects
+  (its own tests/ fixed this in 69495ff; the root build has not — small
+  follow-up commit waiting on that repo).
+- **Green today:** server verified end-to-end (8 checks, work log item 1);
+  golden gate 70 columns bit-exact; soak gate 100k files, 0.11s startup,
+  zero scans, fds stable; Astrolog quick suite 5649/0 with client
+  increment 1 included.
+- **Open work, in order:** server increment 3 — the per-loop LRU result
+  cache + bench tool (Part I §10 step 3; the cache slot is already
+  structured into LoopCtx, and the FNV-1a request hash is computed but
+  unused). Client increments 2-4 (EPHEMERIS_CLIENT_PLAN.md §10): 2 =
+  prefetch hook + window cache + bit-exact parity vs the local Swiss
+  path, 3 = animation grid + f32 windows, 4 = required-server dialog +
+  exit ladder. Client 2+ needs the live server as its oracle; server 3
+  wants bench numbers first.
+
 ---
 
 # Part I — Server plan
@@ -63,7 +98,10 @@ Vendored under `ephsrv/`, cgif-style (license files kept, sources pinned):
   `86097c490263ab662d62e8e7b541390bdec7d149`, Apache-2.0 (`LICENSE`).
   Built with OpenSSL (`make WITH_OPENSSL=1`) as `ephsrv/uSockets/uSockets.a`.
 - Swiss Ephemeris thread-safe fork at /shares/swisseph, version
-  `2.10.03-ts.10`: link `libswe.a` (or `.so`). NOT vendored into this repo —
+  `2.10.03-ts.11` (its delta-t tidal term is order-independent as of this
+  version; work log item 6): link `$(SWE_HOME)/libswe.a` by archive path.
+  Never `-lswe` — an installed stale `libswe.so` in /usr/local/lib wins
+  the runtime search over `-L` (see Status). NOT vendored into this repo —
   it is a sibling project with its own build, tests, and release cadence.
 
 Proven compile command (from repo root):
