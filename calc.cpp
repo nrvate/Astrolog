@@ -3706,21 +3706,24 @@ static int GetSwissFlags()
 }
 
 
-flag FSwissPlanet(int ind, real jd, int indCent,
-  real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
-{
-  int iobj, iobjCent, iflag, nRet, nTyp, nPnt = 0, nFlg = 0, ix;
-  OBJDEF od;
-  double jde, xx[6], xnasc[6], xndsc[6], xperi[6], xaphe[6], *px;
-  char serr[AS_MAXCH], szErr[AS_MAXCH + cchSzDef];
-  static int nSwissEph = 0;
-  flag fHelio = (indCent != oEar), fFail = fFalse;
+// Decide what one object IS to the Swiss Ephemeris: its body id, its
+// central body when the chart centers on an unusual one, the SEFLG_* bits
+// the settings dictate, and the node/apsis point when the object is one.
+// This is the half of FSwissPlanet() that reads Astrolog's settings; the
+// other half asks Swiss and is below. Split so that the Ephemeris Server
+// backend can ask the same question and send the answer over the wire.
+//
+// A custom object's definition flags (OBJDEF.nFlg) invert settings for the
+// duration of the decision and are restored on every way out, so a caller
+// sees the settings it had. Returns fFalse for an object Swiss cannot
+// compute at all (the South Node, a custom body that maps to nothing, a
+// center that is the body itself).
 
-  // Reset Swiss Ephemeris if changing computation method.
-  if (us.nSwissEph != nSwissEph)
-    is.fSwissPathSet = fFalse;  // Ensure swe_set_ephe_path() gets called.
-  nSwissEph = us.nSwissEph;
-  SwissEnsurePath();
+flag FSwissPlanetSpec(int ind, int indCent, SWISSSPEC *pss)
+{
+  int iobj, iobjCent = -1, iflag, nTyp, nPnt = 0, nFlg = 0, ix;
+  OBJDEF od;
+  flag fHelio = (indCent != oEar), fFail = fFalse;
 
   // Convert Astrolog object index to Swiss Ephemeris index.
   if (ind == oEar)
@@ -3762,28 +3765,22 @@ flag FSwissPlanet(int ind, real jd, int indCent,
 
   // Convert Astrolog calculation settings to Swiss Ephemeris flags.
   iflag = GetSwissFlags();
+  pss->nSidMode = !us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY : SE_SIDBIT_SSY_PLANE;
   if (fHelio && !FNodal(ind))
     iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
   else if (!fHelio && ind <= oSun && us.fBarycenter)
     iflag |= SEFLG_BARYCTR;
+  pss->topoLon = -OO; pss->topoLat = AA; pss->topoElv = us.elvDef;
   if (us.fTopoPos && !fHelio) {
-    swe_set_topo(-OO, AA, us.elvDef);
     iflag |= SEFLG_TOPOCTR;
     if (us.fTopoPos > 1)      // Special value for faster lookup.
       iflag &= ~SEFLG_SPEED;
   }
 
-  // Compute position of planet or node/helion.
-  if (jd != is.jdDeltaT) {
-    is.jdDeltaT = jd;
-    is.rDeltaT = swe_deltat(jd);
-  }
-  jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+  // The central body, when the chart orbits an unusual one.
   if (nPnt == 0) {
-    if (indCent <= oSun || indCent > oNorm || FNodal(ind) || FNodal(indCent)) {
-      // Normal geocentric or heliocentric position.
-      nRet = swe_calc(jde, iobj, iflag, xx, serr);
-    } else {
+    if (!(indCent <= oSun || indCent > oNorm || FNodal(ind) ||
+      FNodal(indCent))) {
       // Alternate position orbiting an unusual central object.
       if (indCent <= oPlu)
         iobjCent = indCent-1;
@@ -3813,33 +3810,18 @@ flag FSwissPlanet(int ind, real jd, int indCent,
         fFail = fTrue;
         goto LRestore;
       }
-      nRet = swe_calc_pctr(jde, iobj, iobjCent, iflag, xx, serr);
     }
-  } else {
-    if (us.fNaturalNode && iobj == SE_MOON && (nPnt == 3 || nPnt == 4)) {
-      // Special case to get access to SE_INTP_APOG and SE_INTP_PERG.
-      nRet = swe_calc(jde, nPnt == 3 ? SE_INTP_PERG : SE_INTP_APOG, iflag, xx,
-        serr);
-    } else {
-      // Standard case to get node or apsis position.
-      nRet = swe_nod_aps(jde, iobj, iflag, us.fTrueNode ? SE_NODBIT_OSCU :
-        SE_NODBIT_MEAN, xnasc, xndsc, xperi, xaphe, serr);
-      switch (nPnt) {
-      case 1:  px = xnasc; break;  // North node
-      case 2:  px = xndsc; break;  // South node
-      case 3:  px = xperi; break;  // Perihelion point
-      default: px = xaphe; break;  // Aphelion point
-      }
-      for (ix = 0; ix < 6; ix++)
-        xx[ix] = px[ix];
-    }
+  } else if (us.fNaturalNode && iobj == SE_MOON && (nPnt == 3 || nPnt == 4)) {
+    // Special case to get access to SE_INTP_APOG and SE_INTP_PERG.
+    iobj = (nPnt == 3 ? SE_INTP_PERG : SE_INTP_APOG);
+    nPnt = 0;
   }
+  pss->nNodMethod = us.fTrueNode ? SE_NODBIT_OSCU : SE_NODBIT_MEAN;
 
-  // Clean up and return position. The label is reached by fall-through on
-  // success, and by goto from the central-object branches above, which can
-  // bail after a custom body's definition flags were inverted in place --
-  // the restore below must run on every way out. It sits before the nRet
-  // check because those paths never ran a computation to check.
+  // The label is reached by fall-through on success, and by goto from the
+  // central-object branches above, which can bail after a custom body's
+  // definition flags were inverted in place -- the restore below must run
+  // on every way out.
 LRestore:
   if (nFlg > 0) {
     if (nFlg & 2)  inv(us.fSidereal);
@@ -3850,6 +3832,63 @@ LRestore:
   }
   if (fFail)
     return fFalse;
+  pss->iobj = iobj;
+  pss->iobjCent = iobjCent;
+  pss->iflag = iflag;
+  pss->nPnt = nPnt;
+  return fTrue;
+}
+
+
+flag FSwissPlanet(int ind, real jd, int indCent,
+  real *obj, real *objalt, real *dir, real *dist, real *diralt, real *dirlen)
+{
+  int nRet, ix;
+  SWISSSPEC ss;
+  double jde, xx[6], xnasc[6], xndsc[6], xperi[6], xaphe[6], *px;
+  char serr[AS_MAXCH], szErr[AS_MAXCH + cchSzDef];
+  static int nSwissEph = 0;
+
+  // Reset Swiss Ephemeris if changing computation method.
+  if (us.nSwissEph != nSwissEph)
+    is.fSwissPathSet = fFalse;  // Ensure swe_set_ephe_path() gets called.
+  nSwissEph = us.nSwissEph;
+  SwissEnsurePath();
+
+  // What the object is to Swiss, and how the settings want it computed.
+  if (!FSwissPlanetSpec(ind, indCent, &ss))
+    return fFalse;
+  if (ss.iflag & SEFLG_TOPOCTR)
+    swe_set_topo(ss.topoLon, ss.topoLat, ss.topoElv);
+
+  // Compute position of planet or node/helion.
+  if (jd != is.jdDeltaT) {
+    is.jdDeltaT = jd;
+    is.rDeltaT = swe_deltat(jd);
+  }
+  jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+  if (ss.nPnt == 0) {
+    if (ss.iobjCent < 0)
+      // Normal geocentric or heliocentric position.
+      nRet = swe_calc(jde, ss.iobj, ss.iflag, xx, serr);
+    else
+      // Alternate position orbiting an unusual central object.
+      nRet = swe_calc_pctr(jde, ss.iobj, ss.iobjCent, ss.iflag, xx, serr);
+  } else {
+    // Standard case to get node or apsis position.
+    nRet = swe_nod_aps(jde, ss.iobj, ss.iflag, ss.nNodMethod,
+      xnasc, xndsc, xperi, xaphe, serr);
+    switch (ss.nPnt) {
+    case 1:  px = xnasc; break;  // North node
+    case 2:  px = xndsc; break;  // South node
+    case 3:  px = xperi; break;  // Perihelion point
+    default: px = xaphe; break;  // Aphelion point
+    }
+    for (ix = 0; ix < 6; ix++)
+      xx[ix] = px[ix];
+  }
+
+  // Clean up and return position.
   if (nRet < 0) {
     if (!is.fNoEphFile) {
       is.fNoEphFile = fTrue;

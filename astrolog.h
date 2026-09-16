@@ -2800,6 +2800,26 @@ typedef struct _ObjectDefine {
               // node, 16 true position, 32 topocentric. rgFlgSwiss[].
 } OBJDEF;
 
+// Everything FSwissPlanet() decides about one object BEFORE it asks the
+// Swiss Ephemeris: which Swiss body, which central body if any, the flags,
+// and the node/apsis point when the object is one. FSwissPlanetSpec()
+// fills it and FSwissPlanet() computes from it; the Ephemeris Server
+// backend (qtdriver.cpp) fills the same struct and sends it over the
+// wire, so the two paths cannot disagree about what a body IS.
+typedef struct _SwissSpec {
+  int iobj;       // The Swiss body id.
+  int iobjCent;   // swe_calc_pctr()'s central body, or -1 for swe_calc().
+  int iflag;      // The SEFLG_* bits, exactly as swe_calc() gets them.
+  int nPnt;       // 0 the body itself (swe_calc); 1-4 a node or apsis of
+                  // it (swe_nod_aps: 1 north node, 2 south node,
+                  // 3 perihelion, 4 aphelion).
+  int nNodMethod; // swe_nod_aps()'s method when nPnt > 0.
+  int nSidMode;   // swe_set_sid_mode()'s mode when SEFLG_SIDEREAL is set.
+  real topoLon;   // swe_set_topo()'s three, when SEFLG_TOPOCTR is set:
+  real topoLat;   // east-positive longitude, latitude, altitude in meters.
+  real topoElv;
+} SWISSSPEC;
+
 // One custom slot's user settings, the columns of the Object Settings
 // dialogs. Stored as one array of these (rgobjset[] in data.cpp) rather
 // than as five parallel arrays whose initializers have to stay in step

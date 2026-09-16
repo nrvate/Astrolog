@@ -555,6 +555,7 @@ extern flag FObjSelMidPair P((CONST char *, int *, int *));
 extern void ObjSelRemember P((int, int, CONST char *));
 extern flag FObjSelRecall P((CONST char *, int *, int *));
 
+extern flag FSwissPlanetSpec P((int, int, SWISSSPEC *));
 extern flag FSwissPlanet
   P((int, real, int, real *, real *, real *, real *, real *, real *));
 extern void SwissHouse P((real, real, real, int,
