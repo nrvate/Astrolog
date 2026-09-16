@@ -20,6 +20,10 @@ QT_GUI_PLAN.md.
   included. Build wiring that increment 1 needs and may not find
   elsewhere: `-I ephsrv` in Makefile.qt and Makefile.qt.test CPPFLAGS and
   the `Qt*WebSockets` module on their QT_MODULES lines.
+- **Where to work.** Everything through increment 2 is on `qt` (squash
+  commit `3c7a1c9`, 2026-09-16); start increment 3 on a new branch off
+  `qt` with its own worktree and squash it into `qt` when asked. The
+  `ephserver` branch stays for review only.
 - **Increment 2 is landed** (work log item 3): the prefetch hook at the
   head of ComputeEphem(), the window cache, the bounded wait and the
   per-object read, with the `ephem-server-live` suite group casting on the

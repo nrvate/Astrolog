@@ -20,10 +20,14 @@ modifies QT_GUI_PLAN.md, which keeps its own complete work log.
 
 Everything below is landed and pushed; this section is the resume pointer.
 
-- **Branches.** Server work lives on `ephserver` (worktree
-  `/nvm/work/ephsrv`, branch pushed to origin); the main checkout runs
-  `qt`. Merge `ephserver` into `qt` only when the maintainer says so.
-  Commits: `5211e5e` (uWebSockets v20.80.0 + pinned uSockets vendored),
+- **Branches.** Everything through client increment 2 was squash-merged
+  into `qt` as one commit, `3c7a1c9`, on 2026-09-16 at the maintainer's
+  request; `qt` is the tree to work from now. The `ephserver` branch
+  (worktree `/nvm/work/ephsrv`, content-identical at `4905f6c`) stays for
+  review, per the standing convention, but its history is not in `qt`'s,
+  so start increment 3 on a NEW branch off `qt` with its own worktree,
+  and squash it into `qt` when asked -- do not rebase or re-squash
+  `ephserver`. The commits that made it, in order: `5211e5e` (uWebSockets v20.80.0 + pinned uSockets vendored),
   `f8e7112` (round 1: server, client increment 1, gates, both plan
   docs), `831bd2b` (fork fix lands, workaround removed, static linking),
   `a8b5aa2` (Status sections), `816d401` (server increment 3: the result
