@@ -165,10 +165,10 @@ start_server() {   # $1 = --cache-mb
     --cache-mb "$1" > "$LOG" 2>&1 &
   EPHD_PID=$!
   for i in $(seq 1 50); do
-    grep -q "ephemeris path" "$LOG" 2>/dev/null && break
+    grep -q "listening on port" "$LOG" 2>/dev/null && break
     sleep 0.1
   done
-  grep -q "ephemeris path" "$LOG" || { echo "CACHE FAIL: server did not start"; exit 1; }
+  grep -q "listening on port" "$LOG" || { echo "CACHE FAIL: server did not start"; exit 1; }
 }
 stop_server() {
   kill "$EPHD_PID" 2>/dev/null; wait "$EPHD_PID" 2>/dev/null || true

@@ -73,6 +73,7 @@
 #include <QtCore/QSet>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QProcess>
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
 // For the dark scheme assertions: an indicator is drawn into an image and
@@ -157,6 +158,10 @@ extern uint32_t DwReqEphSrvTestQt();
 extern flag FErrEphSrvTestQt(char *, int);
 extern flag FUrlEphSrvTestQt(CONST char *, char *, int);
 extern int NCastWarnSrvTestQt();
+extern int CReqSentEphSrvTestQt();
+extern int CWinSrvTestQt();
+extern CONST char *SzWarnSrvTestQt();
+extern void ClearWinSrvTestQt();
 extern flag FSendEphSrvQt(eph::Request *);
 extern void ClampEphSrvReqQt(eph::Request *);
 extern void EphSrvFinalizeQt();
@@ -17791,7 +17796,7 @@ static void TestEphSrvQt()
     {
       byte rgbMeta[2 * eph::kDataMetaSize];
       double rgcols[2 * 6] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-      size_t cb, ncb;
+      size_t cb, ncb = 0;   // strZ() leaves ncb alone on a bad read.
       char serr[eph::kSerrMax], szName[eph::kMetaNameMax];
       const char *szN;
 
@@ -18019,6 +18024,319 @@ static void TestEphSrvQt()
 }
 
 
+// ---- Ephemeris Server backend, live parity ----
+//
+// Increment 2's acceptance (EPHEMERIS_CLIENT_PLAN.md section 9): a chart
+// cast on the server backend lands BIT-IDENTICAL to the same cast on the
+// local Swiss path. The server is the real astrolog-ephd, launched here on
+// a scratch port over the ephemeris directory this run was started with,
+// so the two paths read the same files; the local cast is the oracle. Not
+// a loopback mock: a mock would answer whatever the test told it to, and
+// the question here is whether the real server, asked the real question,
+// gives the number Swiss gives locally. Skipped, with a printed reason,
+// when the server binary is not built -- "make ephsrv" needs the
+// thread-safe fork -- so a bare checkout's suite stays green.
+//
+// Every scenario casts locally, snapshots the six position arrays, casts
+// on the server, and compares the arrays as bytes. The scenarios are the
+// flag paths FSwissPlanetSpec() takes: tropical geocentric, sidereal,
+// heliocentric, topocentric, true node, an unusual center (swe_calc_pctr),
+// a custom node/apsis object (swe_nod_aps), and a pre-1955 instant where
+// delta-t's tidal term is live. Then the window cache, a drop and a
+// reconnect, and -0n.
+
+typedef struct _EphSnapshot {
+  // The six arrays are macros over cp0 (extern.h), so the members here
+  // carry other names.
+  real rgobj[objMax], rgalt[objMax], rgdir[objMax], rgdiralt[objMax],
+    rgdirlen[objMax];
+  PT3R rgpt[objMax];
+} EPHSNAPSHOT;
+
+static void SnapshotEphQt(EPHSNAPSHOT *ps)
+{
+  int i;
+
+  // Element by element: in this build the arrays are range-checked
+  // wrappers, not memory.
+  for (i = 0; i < objMax; i++) {
+    ps->rgobj[i] = planet[i];
+    ps->rgalt[i] = planetalt[i];
+    ps->rgdir[i] = ret[i];
+    ps->rgdiralt[i] = retalt[i];
+    ps->rgdirlen[i] = retlen[i];
+    ps->rgpt[i] = space[i];
+  }
+}
+
+// Objects whose six values differ between two snapshots, naming the first.
+// With rTol zero the comparison is on the bytes; with a tolerance it is
+// on the magnitude, for the one path where the local library is not the
+// authority (see the centered scenario below).
+static flag FSameEphQt(real r1, real r2, real rTol)
+{
+  return rTol == 0.0 ? memcmp(&r1, &r2, sizeof(real)) == 0 :
+    RAbs(r1 - r2) <= rTol;
+}
+
+static int CDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
+  real rTol, char *szFirst, int cchMax)
+{
+  int i, c = 0;
+
+  *szFirst = chNull;
+  for (i = 0; i < objMax; i++) {
+    if (FSameEphQt(p1->rgobj[i], p2->rgobj[i], rTol) &&
+      FSameEphQt(p1->rgalt[i], p2->rgalt[i], rTol) &&
+      FSameEphQt(p1->rgdir[i], p2->rgdir[i], rTol) &&
+      FSameEphQt(p1->rgdiralt[i], p2->rgdiralt[i], rTol) &&
+      FSameEphQt(p1->rgdirlen[i], p2->rgdirlen[i], rTol) &&
+      FSameEphQt(p1->rgpt[i].x, p2->rgpt[i].x, rTol) &&
+      FSameEphQt(p1->rgpt[i].y, p2->rgpt[i].y, rTol) &&
+      FSameEphQt(p1->rgpt[i].z, p2->rgpt[i].z, rTol))
+      continue;
+    if (c == 0)
+      sprintf2(szFirst, cchMax, "%s: local %a / server %a (lon), "
+        "%a / %a (lat), %a / %a (speed)", szObjName[i],
+        p1->rgobj[i], p2->rgobj[i], p1->rgalt[i], p2->rgalt[i],
+        p1->rgdir[i], p2->rgdir[i]);
+    c++;
+  }
+  return c;
+}
+
+// Wait for the launched server to log that it is listening, which it does
+// once the port is bound -- its "ephemeris path" line comes before that,
+// and a client that connects on it can be refused.
+static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
+{
+  QElapsedTimer tim;
+
+  tim.start();
+  while (tim.elapsed() < msMax) {
+    QApplication::processEvents(QEventLoop::AllEvents, 20);
+    pbaLog->append(pproc->readAllStandardOutput());
+    if (pbaLog->contains("listening on port"))
+      return fTrue;
+    if (pproc->state() == QProcess::NotRunning)
+      return fFalse;
+  }
+  return fFalse;
+}
+
+static void TestEphSrvLiveQt()
+{
+  flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
+    fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
+    fAddrSav = us.szEphSrv != NULL, fSidSav = us.fSidereal,
+    fTopoSav = us.fTopoPos, fTrueNodeSav = us.fTrueNode,
+    fIgnoreSav = ignore[custLo];
+  QByteArray baAddrSav(SzSet(us.szEphSrv));
+  int nSwissSav = us.nSwissEph, objCenterSav = us.objCenter,
+    nObjSav = rgObjSwiss[0], nTypSav = rgTypSwiss[0], nPntSav = rgPntSwiss[0],
+    nFlgSav = rgFlgSwiss[0];
+  CI ciSav = ciCore;
+  QString strBin, strEphe;
+  QProcess proc;
+  QByteArray baLog;
+  EPHSNAPSHOT snLocal, snSrv;
+  char sz[cchSzMax], szDiff[cchSzMax];
+  int port, iScen, cDiff, cWarn, cReq;
+
+  Group("Ephemeris server, live parity");
+  SetNoPopupQt(fTrue);
+  us.fNoNetwork = fFalse;
+
+  strBin = QCoreApplication::applicationDirPath() + "/astrolog-ephd";
+  if (!QFileInfo(strBin).isExecutable()) {
+    printf("  skipped: %s is not built (make ephsrv needs the thread-safe "
+      "Swiss Ephemeris fork)\n", strBin.toLocal8Bit().constData());
+    goto LRestore;
+  }
+  if (us.rgszPath[1] == NULL || us.rgszPath[1][0] == chNull) {
+    printf("  skipped: no -Yi1 ephemeris directory to point the server at\n");
+    goto LRestore;
+  }
+  strEphe = QString::fromLocal8Bit(us.rgszPath[1]);
+  if (!QDir::isAbsolutePath(strEphe))
+    strEphe = QCoreApplication::applicationDirPath() + "/" + strEphe;
+
+  // The real server, on a scratch port, over this run's ephemeris.
+  port = 47500 + (int)(QCoreApplication::applicationPid() % 400);
+  proc.setProcessChannelMode(QProcess::MergedChannels);
+  proc.start(strBin, QStringList() << "--port" << QString::number(port)
+    << "--ephe" << strEphe << "--threads" << "1");
+  Check(FWaitEphdQt(&proc, &baLog, 10000),
+    "astrolog-ephd started on port %d over %s", port,
+    strEphe.toLocal8Bit().constData());
+  if (proc.state() == QProcess::NotRunning)
+    goto LRestore;
+  Check(!baLog.contains("<none found"),
+    "the server found the ephemeris directory");
+
+  // The chart: a fixed UT instant at a fixed place, no zone, no DST.
+  OraclePinUtQt(1990, 6, 15, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;   // west-positive, Seattle-ish
+
+  // Connect the backend.
+  EphSrvFinalizeQt();
+  ClearWinSrvTestQt();
+  sprintf2(S(sz), "localhost:%d", port);
+  FCloneSz(sz, &us.szEphSrv);
+  us.fEphemFiles = fTrue;
+  us.nSwissEph = 5;
+  EphSrvStartupQt();
+  if (!FWaitEstQt(2, 10000)) {
+    FErrEphSrvTestQt(S(sz));
+    Check(fFalse, "the backend welcomes against the real server (state %d, "
+      "retry %d ms, \"%.120s\")", NEphSrvStateTestQt(), NRetryEphSrvTestQt(),
+      sz);
+  } else
+    Check(fTrue, "the backend welcomes against the real server");
+  SetBackoffEphSrvTestQt(100);   // Hurry the ladder for the drop below.
+
+  // The scenarios. Each: settings, local cast, server cast, compare.
+  for (iScen = 0; iScen < 8; iScen++) {
+    CONST char *szScen;
+    real rTol = 0.0;
+    us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+    us.fTrueNode = fFalse; ignore[custLo] = fTrue;
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    switch (iScen) {
+    case 0: szScen = "tropical geocentric"; break;
+    case 1: szScen = "sidereal"; us.fSidereal = fTrue; break;
+    case 2: szScen = "heliocentric"; us.objCenter = oSun; break;
+    case 3: szScen = "topocentric"; us.fTopoPos = fTrue; break;
+    case 4: szScen = "true node"; us.fTrueNode = fTrue; break;
+    case 5: szScen = "centered on Mars (swe_calc_pctr, within 1e-5 deg)";
+      // The one KNOWING divergence, and the server is the right side of
+      // it: the fork fixed swe_calc_pctr() transforming to the ecliptic of
+      // date through caches its own inner calls had re-keyed (its
+      // notes/REVIEW.md, the swe_calc_pctr row), and the library this
+      // build vendors is upstream 2.10.03, kept untouched on purpose.
+      // Measured with a probe against both libraries, fresh and after
+      // other calls: the same 5e-9 degrees for the Earth every time, so
+      // it is not history but the fix; under the maintainer's settings
+      // the largest is Pluto's speed, 1.2e-6 degrees a day. The tolerance
+      // is ten times that; the other seven scenarios stay on the bytes.
+      us.objCenter = oMar; rTol = 1e-5; break;
+    case 6: szScen = "a custom object that is Jupiter's perihelion "
+      "(swe_nod_aps)";
+      ignore[custLo] = fFalse;
+      rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 3;
+      rgFlgSwiss[0] = 0;
+      break;
+    default: szScen = "a 1900 instant, where delta-t's tidal term is live";
+      OraclePinUtQt(1900, 1, 1, 0.0);
+      ciCore.lon = 122.3; ciCore.lat = 47.6;
+      break;
+    }
+    us.nSwissEph = 0;   // The local Swiss path: the oracle.
+    CastChart(0);
+    SnapshotEphQt(&snLocal);
+    us.nSwissEph = 5;   // The server.
+    cWarn = NCastWarnSrvTestQt();
+    CastChart(0);
+    SnapshotEphQt(&snSrv);
+    Check(NCastWarnSrvTestQt() == cWarn,
+      "%s: the server cast raised no warning (\"%.100s\")", szScen,
+      SzWarnSrvTestQt());
+    cDiff = CDiffEphQt(&snLocal, &snSrv, rTol, S(szDiff));
+    Check(cDiff == 0, "%s: server cast %s the local one "
+      "(%d objects differ; first: %s)", szScen,
+      rTol == 0.0 ? "bit-identical to" : "agrees with", cDiff, szDiff);
+    Check(planet[oSun] != 0.0 || planet[oMoo] != 0.0,
+      "%s: the cast computed something at all", szScen);
+    if (iScen == 6) {
+      rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
+      rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
+    }
+  }
+  us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+  us.fTrueNode = fFalse; ignore[custLo] = fIgnoreSav;
+  OraclePinUtQt(1990, 6, 15, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+
+  // The window cache: the same cast again sends nothing.
+  us.nSwissEph = 5;
+  CastChart(0);
+  cReq = CReqSentEphSrvTestQt();
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  Check(CReqSentEphSrvTestQt() == cReq && NCastWarnSrvTestQt() == cWarn,
+    "a repeated cast is answered from the window cache (no request sent)");
+  Check(CWinSrvTestQt() <= 8, "the window cache is bounded (%d held)",
+    CWinSrvTestQt());
+  OraclePinUtQt(1990, 6, 16, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  CastChart(0);
+  Check(CReqSentEphSrvTestQt() > cReq,
+    "a cast at a new instant sends a request");
+
+  // A drop mid-session: the cast fails soft, once in words; the server
+  // comes back and the next cast is bit-identical again.
+  proc.kill();
+  proc.waitForFinished(2000);
+  Check(FWaitEstQt(0, 5000), "the backend sees the server go");
+  OraclePinUtQt(1990, 6, 17, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  Check(NCastWarnSrvTestQt() == cWarn + 1,
+    "a cast with the server gone fails soft with one warning");
+  Check(is.fNoEphFile == fNoEphFileSav, "and sets no fNoEphFile latch");
+  baLog.clear();
+  proc.start(strBin, QStringList() << "--port" << QString::number(port)
+    << "--ephe" << strEphe << "--threads" << "1");
+  Check(FWaitEphdQt(&proc, &baLog, 10000), "the server restarted");
+  Check(FWaitEstQt(2, 15000), "the backend reconnected on its ladder");
+  us.nSwissEph = 0;
+  CastChart(0);
+  SnapshotEphQt(&snLocal);
+  us.nSwissEph = 5;
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  SnapshotEphQt(&snSrv);
+  cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+  Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0,
+    "after the reconnect a cast is bit-identical again (%d differ: %s)",
+    cDiff, szDiff);
+
+  // -0n: fails fast, sends nothing.
+  us.fNoNetwork = fTrue;
+  OraclePinUtQt(1990, 6, 18, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  cReq = CReqSentEphSrvTestQt();
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  Check(NCastWarnSrvTestQt() == cWarn + 1 && CReqSentEphSrvTestQt() == cReq,
+    "under -0n a cast fails fast with one warning and no request");
+  us.fNoNetwork = fFalse;
+
+LRestore:
+  if (proc.state() != QProcess::NotRunning) {
+    proc.kill();
+    proc.waitForFinished(2000);
+  }
+  EphSrvFinalizeQt();
+  ClearWinSrvTestQt();
+  us.fEphemFiles = fEphemSav;
+  us.nSwissEph = nSwissSav;
+  us.fNoNetwork = fNoNetSav;
+  us.fSidereal = fSidSav; us.objCenter = objCenterSav;
+  us.fTopoPos = fTopoSav; us.fTrueNode = fTrueNodeSav;
+  ignore[custLo] = fIgnoreSav;
+  rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
+  rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
+  FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
+  is.fNoEphFile = fNoEphFileSav;
+  ciCore = ciSav;
+  CastChart(0);   // Leave the arrays as the chart before this group had them.
+  SetNoPopupQt(fPopSav);
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"popup-net",            TestPopupNetQt},
@@ -18069,6 +18387,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},
   {"ephem-server",         TestEphSrvQt},
+  {"ephem-server-live",    TestEphSrvLiveQt},
   {"chart-list",           TestChartListFilterQt},
   {"info-time",            TestChartInfoTimeQt},
   {"info-coord",           TestChartInfoCoordQt},

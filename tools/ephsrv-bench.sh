@@ -58,10 +58,10 @@ THREAD_ARG=()
   > "$LOG" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 50); do
-  grep -q "ephemeris path" "$LOG" 2>/dev/null && break
+  grep -q "listening on port" "$LOG" 2>/dev/null && break
   sleep 0.1
 done
-grep -q "ephemeris path" "$LOG" || { echo "BENCH FAIL: server did not start"; exit 1; }
+grep -q "listening on port" "$LOG" || { echo "BENCH FAIL: server did not start"; exit 1; }
 LOOPS=$(sed -nE 's/^([0-9]+) event loop.*/\1/p' "$LOG")
 
 BODIES="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,10005,10006,10007,10008,10009,10010,10011"

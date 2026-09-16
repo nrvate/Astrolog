@@ -90,6 +90,7 @@
 // by the "-I ephsrv" the Qt makefiles carry.
 #include "ephproto.h"
 #include <QtWidgets/QProgressDialog>
+#include <QtCore/QMap>
 #include <QtGui/QTextDocument>
 #include <QtPrintSupport/QPrinter>
 #include <QtPrintSupport/QPrintDialog>
@@ -111,6 +112,13 @@
 
 #include "astrolog.h"
 #include "qtdriver.h"
+// The Swiss Ephemeris constants the Ephemeris Server backend speaks in
+// (SEFLG_*, SE_SIDM_*) and swe_deltat(), which the local path also calls
+// to make the instant it sends -- the vendored library, the one every
+// build links. Before eph_cache.h on purpose: that header keys the
+// flags by name when they are defined and by value when they are not.
+#include "swephexp.h"
+#include "eph_cache.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QTemporaryFile>
@@ -7122,15 +7130,16 @@ static struct {
                               // ladder, refusals the slow tick.
   flag fWelc;                 // welc holds the current session's WELCOME.
   eph::Welcome welc;          // What WELCOME said: limits and caps.
-  uint32_t dwReq;             // The request awaiting an answer, 0 none.
   uint32_t dwReqNext;         // The next request id to hand out.
-  QByteArray baReq;           // The in-flight request's exact wire bytes,
-                              // re-sent verbatim after a reconnect --
-                              // requests are pure functions (lesson 5),
-                              // so there is nothing else to resume. One
-                              // slot: a request sent while one is still
-                              // in flight replaces it, and the replaced
-                              // one's caller fails soft on its timeout.
+  QMap<uint32_t, QByteArray> mpReq;
+                              // Every request awaiting an answer, by id,
+                              // as its exact wire bytes: re-sent verbatim
+                              // after a reconnect -- requests are pure
+                              // functions (lesson 5), so there is nothing
+                              // else to resume. A cast can have several
+                              // in flight at once, one per group of
+                              // objects that share a flag set (below).
+  int cReqSent;               // Requests ever sent, for the suite.
   QString strErr;             // The last refusal or drop's error text.
                               // A version mismatch's server version is
                               // kept here, for the required-server
@@ -7218,7 +7227,7 @@ static void EphSrvDropped(CONST QString &strErr)
                            // re-reads them from its own WELCOME.
   if (!strErr.isEmpty())
     esrv.strErr = strErr;
-  // dwReq and baReq are deliberately kept: the request is re-sent
+  // mpReq is deliberately kept: every request in flight is re-sent
   // verbatim when the next WELCOME arrives.
   ms = esrv.fHad ? esrv.msBack : msEphSrvRetry;
   if (esrv.fHad)
@@ -7239,6 +7248,12 @@ static void EphSrvDropped(CONST QString &strErr)
 }
 
 
+// The window cache's two entry points the message handler needs (defined
+// with the cache below): a DATA chunk lands in the window that asked, an
+// ERROR settles it as failed.
+static flag FWindowChunkQt(uint32_t dwReq, CONST byte *rgb, uint32_t cb);
+static void WindowFailedQt(uint32_t dwReq, CONST char *szErr);
+
 // One message off the wire. What is not understood is answered by closing
 // the connection: a peer that cannot frame the protocol is of no use, and
 // the ladder brings the connection back to a server that can.
@@ -7250,8 +7265,8 @@ static void EphSrvMessage(CONST QByteArray &ba)
   eph::Envelope env;
   QString strErr;
 
-  if (cb < eph::kEnvelopeSize || !eph::parseEnvelope(rgb, &env) ||
-    env.payloadLen != (uint32_t)(cb - eph::kEnvelopeSize))
+  if (cb < (int)eph::kEnvelopeSize || !eph::parseEnvelope(rgb, &env) ||
+    env.payloadLen != (uint32_t)(cb - (int)eph::kEnvelopeSize))
     goto LBad;
   rgb += eph::kEnvelopeSize;
   switch (env.type) {
@@ -7278,27 +7293,30 @@ static void EphSrvMessage(CONST QByteArray &ba)
     esrv.msBack = msEphSrvBackoff;  // A session resets the ladder.
     if (esrv.ptimWelc != NULL)
       esrv.ptimWelc->stop();
-    // An in-flight request is a pure function; re-send it verbatim.
-    if (esrv.dwReq != 0 && !esrv.baReq.isEmpty() && esrv.pws != NULL)
-      esrv.pws->sendBinaryMessage(esrv.baReq);
+    // Every in-flight request is a pure function; re-send each verbatim.
+    if (esrv.pws != NULL)
+      for (QMap<uint32_t, QByteArray>::const_iterator it = esrv.mpReq.begin();
+        it != esrv.mpReq.end(); ++it)
+        esrv.pws->sendBinaryMessage(it.value());
     break;
   case eph::kMsgData:
-    // Increment 2's window cache fills from these. The request id says
-    // which request the chunk answers; for now there is no one waiting,
-    // and the arrival only settles the in-flight slot.
-    if (env.requestId == esrv.dwReq)
-      esrv.dwReq = 0;
+    // The request id says which window the chunk fills. A chunk for no
+    // window -- one evicted while its answer was in flight, or a stray --
+    // is dropped; a chunk the window cannot read is a peer we cannot
+    // read, and settles the window as failed on the way out.
+    if (!FWindowChunkQt(env.requestId, rgb, env.payloadLen))
+      goto LBad;
     break;
   case eph::kMsgError: {
-    // A whole-request error: the in-flight slot it answers is settled,
-    // and its text is kept, for the same reason a version mismatch's is.
+    // A whole-request error settles the window it answers as failed, with
+    // the text, which is also kept for the same reason a version
+    // mismatch's is.
     eph::ErrorMsg err;
     if (!eph::parseError(rgb, env.payloadLen, &err))
       goto LBad;
-    if (err.requestId == esrv.dwReq) {
-      esrv.dwReq = 0;
-      esrv.strErr = QString::fromUtf8(err.text.c_str());
-    }
+    esrv.mpReq.remove(err.requestId);
+    esrv.strErr = QString::fromUtf8(err.text.c_str());
+    WindowFailedQt(err.requestId, err.text.c_str());
     break;
   }
   case eph::kMsgPing:
@@ -7407,20 +7425,28 @@ void ClampEphSrvReqQt(eph::Request *preq)
     preq->precision = eph::kPrecF64;
 }
 
-flag FSendEphSrvQt(eph::Request *preq)
+static uint32_t DwSendEphSrvQt(eph::Request *preq)
 {
   std::vector<uint8_t> rgb, msg;
+  uint32_t dwReq;
 
   if (esrv.est != esWelcomed || esrv.pws == NULL)
-    return fFalse;
+    return 0;
   ClampEphSrvReqQt(preq);
   eph::buildRequest(&rgb, *preq);
-  esrv.dwReq = ++esrv.dwReqNext;
-  msg = eph::makeMessage(eph::kMsgRequest, esrv.dwReq, rgb.data(),
-    rgb.size());
-  esrv.baReq = QByteArray((const char *)msg.data(), (int)msg.size());
-  esrv.pws->sendBinaryMessage(esrv.baReq);
-  return fTrue;
+  dwReq = ++esrv.dwReqNext;
+  if (dwReq == 0)   // Wrapped; 0 means "none" everywhere.
+    dwReq = ++esrv.dwReqNext;
+  msg = eph::makeMessage(eph::kMsgRequest, dwReq, rgb.data(), rgb.size());
+  esrv.mpReq[dwReq] = QByteArray((const char *)msg.data(), (int)msg.size());
+  esrv.cReqSent++;
+  esrv.pws->sendBinaryMessage(esrv.mpReq[dwReq]);
+  return dwReq;
+}
+
+flag FSendEphSrvQt(eph::Request *preq)
+{
+  return DwSendEphSrvQt(preq) != 0;
 }
 
 
@@ -7445,8 +7471,11 @@ void EphSrvStartupQt()
 // Program exit: the socket and the timers go before the application does,
 // the way every other Qt object here is torn down in FinalizeQt().
 
+static void ClearWindowsSrvQt();
+
 void EphSrvFinalizeQt()
 {
+  ClearWindowsSrvQt();
   if (esrv.ptim != NULL) {
     esrv.ptim->stop();
     delete esrv.ptim;
@@ -7464,8 +7493,8 @@ void EphSrvFinalizeQt()
   esrv.est = esDisconnected;
   esrv.fWelc = esrv.fHad = fFalse;
   esrv.msBack = msEphSrvBackoff;
-  esrv.dwReq = esrv.dwReqNext = 0;
-  esrv.baReq = QByteArray();
+  esrv.dwReqNext = 0;
+  esrv.mpReq.clear();
   esrv.strErr = QString();
 }
 
@@ -7483,7 +7512,9 @@ int NRetryEphSrvTestQt() { return esrv.ptim != NULL && esrv.ptim->isActive() ?
   esrv.msRetry : -1; }
 flag FWelcEphSrvTestQt() { return esrv.fWelc; }
 CONST eph::Welcome *PwelcEphSrvTestQt() { return &esrv.welc; }
-uint32_t DwReqEphSrvTestQt() { return esrv.dwReq; }
+uint32_t DwReqEphSrvTestQt() { return esrv.mpReq.isEmpty() ? 0 :
+  esrv.mpReq.lastKey(); }
+int CReqSentEphSrvTestQt() { return esrv.cReqSent; }
 flag FErrEphSrvTestQt(char *sz, int cchMax) {
   QByteArray ba = esrv.strErr.toLocal8Bit();
   CopyRgchToSz(ba.constData(), CchSz(ba.constData())+1, sz, cchMax);
@@ -7499,24 +7530,416 @@ flag FUrlEphSrvTestQt(CONST char *sz, char *szOut, int cchMax) {
   return fTrue;
 }
 
-// The synchronous facade's per-object read (plan §5), ComputeEphem()'s
-// server analogue of the GetJPLHorizons() call site: the same six reals
-// FSwissPlanet() and GetJPLHorizons() fill, at the cast time like Swiss.
+/*
+******************************************************************************
+** Ephemeris server: the window cache, the cast plan, and the facade.
+******************************************************************************
+*/
+
+// A window is one REQUEST's answer: nObj objects over nTime rows from a
+// TT instant, the columns swe_calc() fills, held here so a cast reads per
+// object from memory (EPHEMERIS_CLIENT_PLAN.md section 6). A chart cast is a
+// one-row window; animation (increment 3) widens the row grid. Filled
+// asynchronously by the message handler as the DATA chunks arrive; a cast
+// waits on it, bounded, in SrvPrefetchQt().
+
+typedef struct _EphWindow {
+  QByteArray key;         // The canonical request plus its precision.
+  eph::Request req;       // What was asked, for the row grid and the
+                          // object list the columns are laid out by.
+  uint32_t dwReq;         // In flight under this id; 0 once settled.
+  flag fDone;             // Every row landed.
+  flag fFailed;           // A whole-request ERROR, or a chunk unreadable.
+  QByteArray baErr;       // Its text.
+  uint32_t cRowsGot;
+  QVector<double> rgcol;  // Object-major nObj*nTime*6, f64 whatever the
+                          // wire carried.
+  QVector<int> rgret;     // Per-object retFlag: < 0 failed.
+  QVector<QByteArray> rgserr;   // Per-object error text when failed.
+  flag fMeta;             // rgret/rgserr taken from the first chunk.
+} EPHWINDOW;
+
+#define cWindowSrvQt 8          // Windows kept, most recently used first.
+#define msEphSrvWait 10000      // A cast waits this long for its windows.
+
+static QList<EPHWINDOW *> s_lwinSrvQt;
+
+// The window a request id is filling, or NULL.
+static EPHWINDOW *PwinByReqQt(uint32_t dwReq)
+{
+  if (dwReq == 0)
+    return NULL;
+  for (EPHWINDOW *pwin : s_lwinSrvQt)
+    if (pwin->dwReq == dwReq)
+      return pwin;
+  return NULL;
+}
+
+// The window answering a key, moved to the front (most recently used).
+static EPHWINDOW *PwinByKeyQt(CONST QByteArray &key)
+{
+  for (int i = 0; i < s_lwinSrvQt.size(); i++)
+    if (s_lwinSrvQt[i]->key == key) {
+      EPHWINDOW *pwin = s_lwinSrvQt.takeAt(i);
+      s_lwinSrvQt.prepend(pwin);
+      return pwin;
+    }
+  return NULL;
+}
+
+// The cache key: the server's own canonical form of the request (so the
+// two ends agree on what "the same question" is) plus the precision,
+// which the server leaves out because it converts at send and this
+// leaves in because a chart must never read an f32 window.
+static QByteArray KeyWindowQt(CONST eph::Request &req)
+{
+  std::string k = eph::cacheKeyOf(req);
+  QByteArray ba(k.data(), (int)k.size());
+  ba.append((char)req.precision);
+  return ba;
+}
+
+// Make a window for a request and send the request, evicting the least
+// recently used window past the cap -- an in-flight one included, whose
+// answer then lands nowhere. NULL when not connected: the caller's cast
+// fails soft and the connector is prodded.
+static EPHWINDOW *PwinOpenQt(eph::Request *preq)
+{
+  EPHWINDOW *pwin;
+  uint32_t dwReq;
+  size_t cObj;
+
+  dwReq = DwSendEphSrvQt(preq);   // Clamps preq to WELCOME first.
+  if (dwReq == 0)
+    return NULL;
+  pwin = new EPHWINDOW;
+  pwin->key = KeyWindowQt(*preq);
+  pwin->req = *preq;
+  pwin->dwReq = dwReq;
+  pwin->fDone = pwin->fFailed = pwin->fMeta = fFalse;
+  pwin->cRowsGot = 0;
+  cObj = preq->objs.size();
+  pwin->rgcol.fill(0.0, (int)(cObj * preq->nTime * eph::kColsPerObj));
+  pwin->rgret.fill(0, (int)cObj);
+  pwin->rgserr.resize((int)cObj);
+  s_lwinSrvQt.prepend(pwin);
+  while (s_lwinSrvQt.size() > cWindowSrvQt) {
+    EPHWINDOW *pwinOld = s_lwinSrvQt.takeLast();
+    esrv.mpReq.remove(pwinOld->dwReq);
+    delete pwinOld;
+  }
+  return pwin;
+}
+
+// One DATA chunk into its window. The layout is 4.5's: header, nObj
+// metadata records, then the values object-major for this chunk's rows,
+// f64 or f32 as the header says. Returns fFalse only for a chunk that
+// cannot be read, which the caller treats as a peer that cannot be read.
+static flag FWindowChunkQt(uint32_t dwReq, CONST byte *rgb, uint32_t cb)
+{
+  EPHWINDOW *pwin = PwinByReqQt(dwReq);
+  uint32_t iTime, nRows, nObj, o, r;
+  uint8_t prec;
+  int c;
+  size_t esz;
+
+  if (pwin == NULL)
+    return fTrue;   // Nobody is waiting for it.
+  if (cb < eph::kDataHeaderSize)
+    goto LBad;
+  {
+    eph::Reader rd(rgb, cb);
+    rd.u32();   // chunkIndex; the row range is what places the data.
+    iTime = rd.u32();
+    nRows = rd.u32();
+    prec = rd.u8();
+    nObj = rd.u32();
+    if (!rd.ok() || nObj != (uint32_t)pwin->req.objs.size() ||
+      iTime + nRows > pwin->req.nTime || nRows == 0)
+      goto LBad;
+    if (rd.left() < (size_t)nObj * eph::kDataMetaSize)
+      goto LBad;
+    CONST byte *pbMeta = rgb + (cb - rd.left());
+    if (!pwin->fMeta) {
+      for (o = 0; o < nObj; o++) {
+        CONST byte *pb = pbMeta + (size_t)o * eph::kDataMetaSize;
+        pwin->rgret[(int)o] = eph::getI32(pb);
+        if (pwin->rgret[(int)o] < 0)
+          pwin->rgserr[(int)o] = QByteArray((CONST char *)pb + 8,
+            (int)strnlen((CONST char *)pb + 8, eph::kSerrMax));
+      }
+      pwin->fMeta = fTrue;
+    }
+    rd.skip((size_t)nObj * eph::kDataMetaSize);
+    esz = (prec == eph::kPrecF32) ? 4 : 8;
+    if (rd.left() != (size_t)nObj * nRows * eph::kColsPerObj * esz)
+      goto LBad;
+    CONST byte *pbVal = rgb + (cb - rd.left());
+    for (o = 0; o < nObj; o++) {
+      double *pr = pwin->rgcol.data() +
+        ((size_t)o * pwin->req.nTime + iTime) * eph::kColsPerObj;
+      CONST byte *pb = pbVal + (size_t)o * nRows * eph::kColsPerObj * esz;
+      for (r = 0; r < nRows; r++)
+        for (c = 0; c < (int)eph::kColsPerObj; c++) {
+          size_t i = (size_t)r * eph::kColsPerObj + c;
+          pr[i] = (prec == eph::kPrecF32) ? (double)eph::getF32(pb + i*4) :
+            eph::getF64(pb + i*8);
+        }
+    }
+  }
+  pwin->cRowsGot += nRows;
+  if (pwin->cRowsGot >= pwin->req.nTime) {
+    pwin->fDone = fTrue;
+    esrv.mpReq.remove(pwin->dwReq);
+    pwin->dwReq = 0;
+  }
+  return fTrue;
+
+LBad:
+  pwin->fFailed = fTrue;
+  pwin->baErr = "the server sent a DATA chunk this client could not read";
+  esrv.mpReq.remove(pwin->dwReq);
+  pwin->dwReq = 0;
+  return fFalse;
+}
+
+static void WindowFailedQt(uint32_t dwReq, CONST char *szErr)
+{
+  EPHWINDOW *pwin = PwinByReqQt(dwReq);
+
+  if (pwin == NULL)
+    return;
+  pwin->fFailed = fTrue;
+  pwin->baErr = szErr;
+  pwin->dwReq = 0;
+}
+
+// The cast plan: for the chart being cast, where each object's answer is
+// -- which window, which column -- or why there is none. Built by
+// SrvPrefetchQt() at the head of ComputeEphem()'s loop, read by
+// FSrvPlanetQt() per object inside it.
+
+typedef struct _EphPlanEntry {
+  EPHWINDOW *pwin;        // NULL: no window (not connected, or the object
+                          // is one the local path cannot compute either).
+  int iObj;               // Its column in the window.
+  flag fUnsupported;      // FSwissPlanetSpec() said no: silent, like
+                          // FSwissPlanet() is for the same objects.
+} EPHPLANENTRY;
+
+static struct {
+  real jd;                              // The cast this plan is for.
+  EPHPLANENTRY rgent[objMax];
+  flag fPrefetched;                     // The prefetch ran for jd.
+  QByteArray baErr;                     // Why the cast has no windows, if
+                                        // it has none.
+} s_plan;
+
+// The row's instant, the expression the server evaluates for row r.
+static real JdWindowRowQt(CONST EPHWINDOW *pwin, uint32_t r)
+{
+  return pwin->req.jdStart +
+    (double)((uint64_t)r * (uint64_t)pwin->req.stepSeconds) / 86400.0;
+}
+
+// The prefetch hook (plan section 5): one REQUEST per group of objects that
+// share a flag set, all sent before any is waited on, then one bounded wait
+// for the lot. The grouping is forced by FSwissPlanet()'s own arithmetic --
+// a heliocentric chart's nodes stay geocentric, a custom object's definition
+// flags can flip any setting for that object alone -- so a cast is several
+// questions to Swiss, not one. Objects are skipped here exactly as
+// ComputeEphem()'s loop skips them, and as it routes them elsewhere (the
+// ephemeris-less custom type, the JPL Horizons type).
 //
-// Increment 1 is the cache-miss stub: there is no window cache yet, so
-// this always fails soft, once per cast, and never sets is.fNoEphFile --
-// lesson 3, that latch is for one-shot web queries, and here one dropped
-// cast must not disable a held connection until restart. Increment 2's
-// window-cache read drops in where the stub below is. Casting on the
-// server backend with no connection yet also begins the background
-// connect (EphSrvStartupQt()), so selecting the backend mid-session
-// brings the connector up the way startup would have.
+// The instant sent is TT, made exactly as FSwissPlanet() makes it -- the
+// same delta-t call, the same user override -- under kIflagTimeTT, so the
+// number Swiss sees on the server is the number it would have seen here.
+// That, and the spec being the same function, is what makes a server cast
+// bit-identical to a local one; nothing is "close".
 
-// The once-per-cast warning's counter, for the suite to pin "once".
+typedef struct _EphGroup {
+  int iflag;
+  int iobjCent;
+  int nSidMode;
+  real topoLon, topoLat, topoElv;
+  QVector<int> rgobj;      // Astrolog object indices, in cast order.
+  QVector<eph::ObjSpec> rgspec;
+} EPHGROUP;
+
+static flag s_fInPrefetchQt = fFalse;   // A nested cast during the wait
+                                        // gets no prefetch of its own.
+
+void SrvPrefetchQt(real t, int objCentCalc, int imax)
+{
+  real jd = JulianDayFromTime(t), jde;
+  QVector<EPHGROUP> rggroup;
+  SWISSSPEC ss;
+  int i, ig, objOrbit, cPending;
+  QElapsedTimer tim;
+
+  for (i = 0; i < objMax; i++) {
+    s_plan.rgent[i].pwin = NULL;
+    s_plan.rgent[i].iObj = 0;
+    s_plan.rgent[i].fUnsupported = fFalse;
+  }
+  s_plan.jd = jd;
+  s_plan.fPrefetched = fTrue;
+  s_plan.baErr = QByteArray();
+  if (s_fInPrefetchQt) {
+    s_plan.baErr = "a chart was cast while another cast was waiting on "
+      "the Ephemeris Server";
+    return;
+  }
+  if (us.fNoNetwork) {
+    s_plan.baErr = "Internet features are disabled";
+    return;
+  }
+  if (esrv.est != esWelcomed) {
+    // Casting on the backend with the connector down begins the background
+    // connect, so selecting the server mid-session brings it up the way
+    // startup would have.
+    EphSrvStartupQt();
+    s_plan.baErr = "the Ephemeris Server is not connected";
+    return;
+  }
+
+  // The instant, as FSwissPlanet() makes it.
+  if (jd != is.jdDeltaT) {
+    is.jdDeltaT = jd;
+    is.rDeltaT = swe_deltat(jd);
+  }
+  jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+
+  // Group the objects by what Swiss is asked.
+  for (i = oEar; i <= imax; i++) {
+    if (FSkipEphem(i, objCentCalc, fFalse))
+      continue;
+    if (FCust(i) && rgTypSwiss[i - custLo] == 5)
+      continue;   // Ephemeris-less: ComputeEphem() leaves it alone.
+#ifdef JPLWEB
+    if (FCust(i) && rgTypSwiss[i - custLo] == 4)
+      continue;   // A JPL Horizons object: ComputeEphem() routes it there.
+#endif
+    objOrbit = us.fMoonMove ? ObjOrbit(i) : -1;
+    if (objOrbit < 0 || objOrbit == oSun)
+      objOrbit = objCentCalc;
+    if (!FSwissPlanetSpec(i, objOrbit, &ss)) {
+      s_plan.rgent[i].fUnsupported = fTrue;
+      continue;
+    }
+    // GetSwissFlags() spells the backend number into the ephemeris bits,
+    // and this backend's number is not one Swiss knows: the server IS the
+    // Swiss files, so the request says so. (Measured: left alone, the
+    // number 5 became SEFLG_JPLEPH and the server refused every body.)
+    ss.iflag = (ss.iflag & ~(SEFLG_JPLEPH | SEFLG_MOSEPH)) | SEFLG_SWIEPH;
+    for (ig = 0; ig < rggroup.size(); ig++) {
+      CONST EPHGROUP &g = rggroup[ig];
+      if (g.iflag == ss.iflag && g.iobjCent == ss.iobjCent &&
+        (!(ss.iflag & SEFLG_SIDEREAL) || g.nSidMode == ss.nSidMode) &&
+        (!(ss.iflag & SEFLG_TOPOCTR) || (g.topoLon == ss.topoLon &&
+        g.topoLat == ss.topoLat && g.topoElv == ss.topoElv)) &&
+        g.rgobj.size() < (int)eph::kMaxObjs)
+        break;
+    }
+    if (ig >= rggroup.size()) {
+      EPHGROUP g;
+      g.iflag = ss.iflag; g.iobjCent = ss.iobjCent; g.nSidMode = ss.nSidMode;
+      g.topoLon = ss.topoLon; g.topoLat = ss.topoLat; g.topoElv = ss.topoElv;
+      rggroup.append(g);
+    }
+    eph::ObjSpec spec;
+    if (ss.nPnt == 0) {
+      spec.kind = eph::kObjBody;
+      spec.id = (uint32_t)ss.iobj;
+    } else {
+      spec.kind = eph::kObjNodAps;
+      spec.id = (uint32_t)ss.iobj;
+      spec.point = (uint8_t)ss.nPnt;
+      spec.method = (ss.nNodMethod == SE_NODBIT_OSCU) ? eph::kNodOscu :
+        eph::kNodMean;
+    }
+    rggroup[ig].rgobj.append(i);
+    rggroup[ig].rgspec.append(spec);
+  }
+
+  // One request per group, from the cache when it has been asked before.
+  s_fInPrefetchQt = fTrue;
+  for (ig = 0; ig < rggroup.size(); ig++) {
+    CONST EPHGROUP &g = rggroup[ig];
+    eph::Request req;
+    EPHWINDOW *pwin;
+    QByteArray key;
+
+    for (i = 0; i < g.rgspec.size(); i++)
+      req.objs.push_back(g.rgspec[i]);
+    req.center = g.iobjCent >= 0 ? g.iobjCent : 0;
+    req.iflag = (uint64_t)(uint32_t)g.iflag | eph::kIflagTimeTT |
+      (g.iobjCent >= 0 ? eph::kIflagCenter : 0);
+    req.sidMode = g.nSidMode; req.sidT0 = 0.0; req.sidAyanOff = 0.0;
+    req.topoLon = g.topoLon; req.topoLat = g.topoLat; req.topoElv = g.topoElv;
+    req.jdStart = jde;
+    req.stepSeconds = 600;
+    req.nTime = 1;
+    req.precision = eph::kPrecF64;
+    req.chunkRows = eph::kMaxChunkRows;
+    ClampEphSrvReqQt(&req);
+    key = KeyWindowQt(req);
+    pwin = PwinByKeyQt(key);
+    if (pwin != NULL && pwin->fFailed) {
+      // Ask again: a failure is a fact about that attempt, not the sky.
+      s_lwinSrvQt.removeOne(pwin);
+      delete pwin;
+      pwin = NULL;
+    }
+    if (pwin == NULL)
+      pwin = PwinOpenQt(&req);
+    if (pwin == NULL) {
+      s_plan.baErr = "the Ephemeris Server connection dropped";
+      break;
+    }
+    for (i = 0; i < g.rgobj.size(); i++) {
+      s_plan.rgent[g.rgobj[i]].pwin = pwin;
+      s_plan.rgent[g.rgobj[i]].iObj = i;
+    }
+  }
+
+  // The bounded wait: the window keeps painting, the connector keeps
+  // running (a drop here re-sends the requests after the reconnect), and
+  // a cast that still has nothing at the end fails soft for the objects
+  // whose windows are missing. The windows stay, filling in the
+  // background; the next cast at this instant is a hit.
+  tim.start();
+  for (;;) {
+    cPending = 0;
+    for (i = oEar; i <= imax; i++) {
+      EPHWINDOW *pwin = s_plan.rgent[i].pwin;
+      if (pwin != NULL && !pwin->fDone && !pwin->fFailed)
+        cPending++;
+    }
+    if (cPending == 0 || tim.elapsed() >= msEphSrvWait)
+      break;
+    QCoreApplication::processEvents(QEventLoop::AllEvents |
+      QEventLoop::WaitForMoreEvents, 50);
+  }
+  s_fInPrefetchQt = fFalse;
+  if (cPending > 0)
+    s_plan.baErr = "the Ephemeris Server did not answer in time";
+}
+
+// The synchronous facade's per-object read (plan section 5), ComputeEphem()'s
+// server analogue of the GetJPLHorizons() call site: the same six reals
+// FSwissPlanet() and GetJPLHorizons() fill, from the window the prefetch
+// left for this object, post-processed exactly as FSwissPlanet()
+// post-processes xx[]. Fails soft, once per cast in words, and never sets
+// is.fNoEphFile -- lesson 3, that latch is for one-shot web queries, and
+// here one dropped cast must not disable a held connection until restart.
+
+// The once-per-cast warning's counter and last text, for the suite to pin
+// "once" and to say why when a cast that should have succeeded did not.
 static int s_cSrvWarnQt = 0;
+static char s_szSrvWarnQt[cchSzMax];
 
-flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
-  real *dist, real *diralt, real *dirlen)
+static void SrvWarnOnceQt(real jd, CONST char *szWhy)
 {
   static real rJd = rInvalid;    // The jd the once-per-cast warning was
   static flag fWarned = fFalse;  // raised for.
@@ -7524,23 +7947,98 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
   if (rJd != jd) {
     rJd = jd; fWarned = fFalse;
   }
-  if (!fWarned) {
-    fWarned = fTrue;
-    s_cSrvWarnQt++;
-    if (us.fNoNetwork)
-      PrintWarning("Internet features are disabled; the Ephemeris Server "
-        "is not used for this cast.");
-    else {
-      // Casting on the backend with the connector down begins the
-      // background connect, so selecting the server mid-session brings
-      // it up the way startup would have.
-      EphSrvStartupQt();
-      PrintWarning("The Ephemeris Server is not connected; objects served "
-        "by it fail this cast.");
-    }
-  }
-  return fFalse;
+  if (fWarned)
+    return;
+  fWarned = fTrue;
+  s_cSrvWarnQt++;
+  sprintf2(S(s_szSrvWarnQt), "%s; objects served by the Ephemeris Server "
+    "fail this cast.", szWhy);
+  s_szSrvWarnQt[0] = ChCap(s_szSrvWarnQt[0]);
+  PrintWarning(s_szSrvWarnQt);
 }
+
+flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
+  real *dist, real *diralt, real *dirlen)
+{
+  CONST EPHPLANENTRY *pent;
+  CONST EPHWINDOW *pwin;
+  CONST double *xx;
+  char sz[cchSzMax];
+
+  if (!s_plan.fPrefetched || s_plan.jd != jd || !FBetween(obj, 0, objMax-1)) {
+    // No prefetch ran for this cast: ComputeEphem() was not the caller.
+    SrvWarnOnceQt(jd, "no request was made of the Ephemeris Server for "
+      "this cast");
+    return fFalse;
+  }
+  pent = &s_plan.rgent[obj];
+  if (pent->fUnsupported)
+    return fFalse;   // As FSwissPlanet() is for the same object: silent.
+  pwin = pent->pwin;
+  if (pwin == NULL) {
+    SrvWarnOnceQt(jd, s_plan.baErr.isEmpty() ?
+      "the Ephemeris Server has no answer" : s_plan.baErr.constData());
+    return fFalse;
+  }
+  if (pwin->fFailed) {
+    sprintf2(S(sz), "the Ephemeris Server refused the request (%.160s)",
+      pwin->baErr.constData());
+    SrvWarnOnceQt(jd, sz);
+    return fFalse;
+  }
+  if (!pwin->fDone) {
+    SrvWarnOnceQt(jd, s_plan.baErr.isEmpty() ?
+      "the Ephemeris Server did not answer in time" : s_plan.baErr.constData());
+    return fFalse;
+  }
+  if (pwin->rgret[pent->iObj] < 0) {
+    // This object failed on the server: Swiss's own text, as
+    // FSwissPlanet() would have printed it here.
+    sprintf2(S(sz), "the Ephemeris Server could not compute %s (%.120s)",
+      szObjName[obj], pwin->rgserr[pent->iObj].constData());
+    SrvWarnOnceQt(jd, sz);
+    return fFalse;
+  }
+  // The row for this instant: a cast's window is one row at the cast's
+  // own TT, and the prefetch keyed it so; a wider window (increment 3)
+  // is read at the row whose instant the grid put the cast on.
+  {
+    uint32_t r = 0;
+    real jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
+    if (pwin->req.nTime > 1 && pwin->req.stepSeconds > 0) {
+      real rRow = (jde - pwin->req.jdStart) * 86400.0 / pwin->req.stepSeconds;
+      r = (uint32_t)Max(0, (int)(rRow + 0.5));
+      if (r >= pwin->req.nTime)
+        r = pwin->req.nTime - 1;
+    }
+    if (JdWindowRowQt(pwin, r) != jde) {
+      SrvWarnOnceQt(jd, "the Ephemeris Server window has no row at this "
+        "instant");
+      return fFalse;
+    }
+    xx = pwin->rgcol.constData() +
+      ((size_t)pent->iObj * pwin->req.nTime + r) * eph::kColsPerObj;
+  }
+  *objPos = xx[0] - is.rSid + (us.fSidereal ? us.rZodiacOffset : 0.0) +
+    us.rZodiacOffsetAll;
+  *objAlt = xx[1];
+  *dist   = xx[2];
+  *dir    = xx[3];
+  *diralt = xx[4];
+  *dirlen = xx[5];
+  return fTrue;
+}
+
+static void ClearWindowsSrvQt()
+{
+  while (!s_lwinSrvQt.isEmpty())
+    delete s_lwinSrvQt.takeLast();
+  s_plan.fPrefetched = fFalse;
+}
+
+int CWinSrvTestQt() { return s_lwinSrvQt.size(); }
+CONST char *SzWarnSrvTestQt() { return s_szSrvWarnQt; }
+void ClearWinSrvTestQt() { ClearWindowsSrvQt(); }
 
 int NCastWarnSrvTestQt() { return s_cSrvWarnQt; }
 

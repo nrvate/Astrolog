@@ -804,7 +804,20 @@ static void SetupLoop(LoopCtx *lc) {
     FlushStreams(ws);
   };
   lc->app->ws<Conn>("/*", std::move(behavior));
-  lc->app->listen((int)gOpt.port, [](us_listen_socket_t *) {});
+  // "listening" is the line a client may connect on. The "ephemeris path"
+  // line above it in the log is printed before any loop binds the port,
+  // and a client that connected on it was refused by a server that was
+  // about to listen -- the suite's live group lost that race whenever the
+  // run was slow enough. A port that cannot be bound is fatal, not
+  // silent: a server with no listener answers nobody and looks alive.
+  lc->app->listen((int)gOpt.port, [lc](us_listen_socket_t *sock) {
+    if (sock == nullptr) {
+      Log("ephd: cannot listen on port %u (in use?)", (unsigned)gOpt.port);
+      exit(1);
+    }
+    if (lc->index == 0 || gOpt.verbose)
+      Log("listening on port %u (loop %d)", (unsigned)gOpt.port, lc->index);
+  });
 }
 
 int main(int argc, char **argv) {

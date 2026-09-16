@@ -26,8 +26,11 @@ Everything below is landed and pushed; this section is the resume pointer.
   Commits: `5211e5e` (uWebSockets v20.80.0 + pinned uSockets vendored),
   `f8e7112` (round 1: server, client increment 1, gates, both plan
   docs), `831bd2b` (fork fix lands, workaround removed, static linking),
-  `a8b5aa2` (Status sections), then server increment 3 (the result
-  cache, its gate and the bench; work log item 7).
+  `a8b5aa2` (Status sections), `816d401` (server increment 3: the result
+  cache, its gate and the bench; work log item 7), `e95b5bc` (the
+  FSwissPlanet() split, shared core), `6e29206` (TT instants, node/apsis
+  records, the center bit, the pctr delta-t fix; work log item 8), then
+  client increment 2 (EPHEMERIS_CLIENT_PLAN.md work log item 3).
 - **The Swiss Ephemeris fork** (nrvate/swisseph, `/shares/swisseph`) is at
   **2.10.03-ts.11** (c86c2b6, tag v2.10.03-ts.11): its delta-t tidal term
   no longer follows which files a context has open — see work log items 2
@@ -45,11 +48,11 @@ Everything below is landed and pushed; this section is the resume pointer.
   zero scans, fds stable; cache gate (unit + live, work log item 7);
   bench numbers recorded in §9; Astrolog quick suite 5649/0 with client
   increment 1 included.
-- **Open work, in order:** client increments 2-4
-  (EPHEMERIS_CLIENT_PLAN.md §10): 2 = prefetch hook + window cache +
-  bit-exact parity vs the local Swiss path, 3 = animation grid + f32
-  windows, 4 = required-server dialog + exit ladder. Client 2+ needs the
-  live server as its oracle. The server's four increments are all landed;
+- **Open work, in order:** client increments 3 and 4
+  (EPHEMERIS_CLIENT_PLAN.md §10): 3 = animation grid + f32 windows, 4 =
+  required-server dialog + exit ladder. Client increment 2 is landed
+  (client work log item 3): the `ephem-server-live` suite group casts on
+  the real server and matches the local Swiss path on the bytes. The server's four increments are all landed;
   the bench numbers client 2 sizes its windows against are in work log
   item 7 (a cold 30-body 1000-row window costs the server ~0.65 s to
   compute, a hot one ~3 ms to deliver, so the prefetch must be issued
@@ -171,27 +174,44 @@ reserved for future non-ephemeris services sharing the connection.
 
     u32 nObj
     nObj object records:
-      u8 kind: 0 = body by id, 1 = fixed star by name
+      u8 kind: 0 = body by id, 1 = fixed star by name,
+               2 = node or apsis of a body (added 2026-09-16, work log 8)
       kind 0: u32 id   (SWE id: planet, moon incl. SE_PLMOON_OFFSET,
                         asteroid incl. SE_AST_OFFSET, orbel fictitious body)
       kind 1: sz name  (NUL-terminated, resolved from sefstars.txt)
+      kind 2: u32 id, u8 point (1 north node, 2 south node, 3 perihelion,
+              4 aphelion), u8 method (0 mean, 1 osculating): swe_nod_aps
     i32 center: 0 = use iflag center bits; else swe_calc_pctr body id
-    u64 iflag: full SWE bitmask. Server ORs in SEFLG_SWIEPH.
-      Center bits (SEFLG_HELCTR/BARYCTR/TOPOCTR), SEFLG_SIDEREAL,
-      SEFLG_TRUEPOS, SEFLG_NONUT, SEFLG_SPEED, SEFLG_RSW_EPHEM etc.
-      are all client-supplied; SEFLG_SPEED is added if absent.
+        (or, under kIflagCenter, a swe_calc_pctr body even when 0)
+    u64 iflag: full SWE bitmask in the LOW 32 bits. Server ORs in
+      SEFLG_SWIEPH. Center bits (SEFLG_HELCTR/BARYCTR/TOPOCTR),
+      SEFLG_SIDEREAL, SEFLG_TRUEPOS, SEFLG_NONUT, SEFLG_SPEED,
+      SEFLG_RSW_EPHEM etc. are all client-supplied; SEFLG_SPEED is added
+      if absent. The HIGH 32 bits are the protocol's, stripped before SWE
+      sees the flags (added 2026-09-16, work log 8):
+        bit 32 kIflagTimeTT: jdStart and every row are TT, not UT, and the
+               server calls the ET entry points (swe_calc_r,
+               swe_calc_pctr_r, swe_nod_aps_r, swe_fixstar_r) with the
+               instant exactly as sent -- how a client that makes its own
+               delta-t gets answers bit-identical to calling SWE itself
+        bit 33 kIflagCenter: the center field is a swe_calc_pctr body
+               even when it is 0 (SE_SUN)
     i32 sidMode; f64 sidT0; f64 sidAyanOff
         (swe_set_sid_mode_r triple; applied only when SEFLG_SIDEREAL)
-    f64 topoLon (east-positive degrees); f64 topoLat; f64 topoElv (km)
-        (swe_set_topo_r; applied only when SEFLG_TOPOCTR)
+    f64 topoLon (east-positive degrees); f64 topoLat; f64 topoElv
+        (meters, as swe_set_topo takes it; applied only when SEFLG_TOPOCTR)
     char jplFile[64] (swe_set_jpl_file_r; applied only when SEFLG_JPLEPH)
-    f64 jdStart (UT)
+    f64 jdStart (UT, or TT under kIflagTimeTT)
     u32 stepSeconds
     u32 nTime (rows)
     u8 precision: 0 = f64, 1 = f32
     u32 chunkRows (client hint; server clamps to maxChunkRows)
 
-Row i covers instant `jdStart + i * stepSeconds / 86400.0` (UT).
+Row i covers instant `jdStart + i * stepSeconds / 86400.0`, in the time
+scale jdStart is in; the client evaluates the same expression to find its
+rows, so it is exact, not approximate. A UT instant handed to an entry
+point that takes ET (swe_calc_pctr_r, swe_nod_aps_r) is converted with
+swe_deltat_ex_r first, the conversion swe_calc_ut_r makes itself.
 
 ### 4.5 DATA payload (one chunk)
 
@@ -571,3 +591,24 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
    now builds the wire client too; it used to build the server alone, so
    the gates' fallback `make -s ephsrv` never produced `eph_wsclient`.
    Golden 70/70 bit-exact and soak unchanged with the cache in the path.
+
+8. **Three protocol additions and a server bug, for client increment 2.**
+   `kIflagTimeTT` (bit 32 of iflag): the instants are TT and the server
+   calls the ET entry points with them exactly as sent -- the only way to
+   be bit-identical with a client that computes its own delta-t and lets
+   the user override it. `kIflagCenter` (bit 33): the center field is a
+   swe_calc_pctr body even when it is 0. Object record kind 2: a node or
+   apsis of a body, what a custom object with an rgPntSwiss[] value is.
+   The high half of iflag is the protocol's and never reaches SWE; the
+   cache key keeps it. The bug: increment 1 handed swe_calc_pctr_r the UT
+   instant, and that function takes ET -- a delta-t of error on every
+   centered request; UT requests to it and to swe_nod_aps_r now add
+   swe_deltat_ex_r first. The golden gate grew a leg for each (70 columns
+   to 82) plus a check that a UT request for the Moon at 1900 does NOT
+   match the TT oracle, so a server that ignored the bit fails. Found by
+   the client's live group: the server logged "ephemeris path" before
+   any loop bound the port, so a client connecting on that line could be
+   refused, and a bind failure was silent -- a server with no listener
+   answered nobody and looked alive. It logs "listening on port" from the
+   listen callback now, exits with a message when the port cannot be
+   bound, and the four gates and the suite wait for that line.

@@ -1037,7 +1037,10 @@ void ComputeEphem(real t)
   int objCentCalc, objOrbit, imax, i, j;
   real r1, r2, r3, r4, r5, r6, dist1 = 0.0, dist2 = 0.0, objPla, altPla, objEar, altEar,
     rT;
-  flag fJPLPla, fSrvPla, fJPL, fRet;
+  flag fJPLPla, fJPL, fRet;
+#ifdef QT
+  flag fSrvPla;
+#endif
   PT3R ptPla, ptEar, vEar;
 #ifdef JPLWEB
   flag fSav;
@@ -1047,7 +1050,9 @@ void ComputeEphem(real t)
   // asteroids, Lilith, North Node, and Uranians using ephemeris files.
 
   fJPLPla = us.nSwissEph == 3;
+#ifdef QT
   fSrvPla = FCmSrv();
+#endif
   objCentCalc = us.objCenter;
   if (objCentCalc > oNorm || FNodal(objCentCalc) ||
     (fJPLPla && us.objCenter > oSun) ||
@@ -1055,6 +1060,13 @@ void ComputeEphem(real t)
     objCentCalc = oSun;
 
   imax = Min(oNorm, is.nObj); imax = Max(imax, oSun);
+#ifdef QT
+  // The Ephemeris Server backend asks for the whole cast at once, before
+  // the loop reads it per object below (EPHEMERIS_CLIENT_PLAN.md lesson
+  // 1: the fetch must not be per object).
+  if (fSrvPla)
+    SrvPrefetchQt(t, objCentCalc, imax);
+#endif
   for (i = oEar; i <= imax; i++) {
     if (FSkipEphem(i, objCentCalc, fJPLPla))
       continue;
@@ -1081,9 +1093,8 @@ void ComputeEphem(real t)
         // as the Swiss branch below leaves it.
         fRet = fTrue;
       else {
-        // The server analogue of the Horizons call above. Increment 1:
-        // the facade is cache-miss-only and fails soft once per cast;
-        // increment 2's window-cache read drops in inside FSrvPlanetQt().
+        // The server analogue of the Horizons call above: the six reals
+        // from the window the prefetch left, or a soft failure.
         fRet = FSrvPlanetQt(i, JulianDayFromTime(t), &r1, &r2, &r3, &r4,
           &r5, &r6);
       }

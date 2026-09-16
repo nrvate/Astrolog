@@ -189,6 +189,7 @@ public:
   Reader(const uint8_t *buf, size_t len) : p_(buf), len_(len) {}
   bool ok() const { return !bad_; }
   size_t left() const { return len_ - pos_; }
+  void skip(size_t n) { if (pos_ + n > len_) { bad_ = true; pos_ = len_; } else pos_ += n; }
 
   uint8_t u8()   { if (pos_ + 1 <= len_) return p_[pos_++]; bad_ = true; return 0; }
   uint16_t u16() { if (pos_ + 2 <= len_) { uint16_t v = getU16(p_ + pos_); pos_ += 2; return v; } bad_ = true; return 0; }

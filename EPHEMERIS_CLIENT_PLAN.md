@@ -20,16 +20,29 @@ QT_GUI_PLAN.md.
   included. Build wiring that increment 1 needs and may not find
   elsewhere: `-I ephsrv` in Makefile.qt and Makefile.qt.test CPPFLAGS and
   the `Qt*WebSockets` module on their QT_MODULES lines.
-- **Increments 2, 3, 4 are open** (§10), in that order. Increment 2 needs
-  the server running (`make ephsrv` on the same branch, then
-  `tools/ephsrv-golden.sh` for the oracle) because its acceptance is
-  bit-exact parity against the local Swiss path. The server is complete
-  (its four increments landed; the result cache is server work log item
-  7), and the numbers §6's window sizing should be checked against are
-  in the server plan's §9: a cold 30-body 1000-row window costs ~0.65 s
-  server-side, a hot one ~2.5 ms at f64 and ~1.2 ms at f32 -- and the
-  cache is per event loop, so the client's one long-lived connection is
-  what makes its windows hot. Increment 4 is the only
+- **Increment 2 is landed** (work log item 3): the prefetch hook at the
+  head of ComputeEphem(), the window cache, the bounded wait and the
+  per-object read, with the `ephem-server-live` suite group casting on the
+  real server and comparing to the local Swiss path on the bytes -- seven
+  scenarios bit-identical, the eighth (an unusual center, swe_calc_pctr)
+  within 1e-5 degrees because the local library is the wrong side of a
+  fork fix there (§5 says which). The group skips itself, with a printed
+  reason, when `astrolog-ephd` is not built. Two things it needed from
+  the shared core: FSwissPlanet() split into FSwissPlanetSpec() and the
+  computation (commit e95b5bc, proven byte-identical by both matrices),
+  and three protocol additions (kIflagTimeTT, kIflagCenter, the
+  node/apsis record kind; server plan §4.4 and work log item 8).
+- **Increments 3 and 4 are open** (§10), in that order. The numbers §6's
+  window sizing should be checked against are in the server plan's §9: a
+  cold 30-body 1000-row window costs ~0.65 s server-side, a hot one
+  ~2.5 ms at f64 and ~1.2 ms at f32 -- and the cache is per event loop,
+  so the client's one long-lived connection is what makes its windows
+  hot. Increment 3's window cache, row lookup and grid arithmetic already
+  exist (§6 as built); what it adds is the multi-row request, the
+  background prefetch at 50% consumed, and f32. Increment 4 is the only
+  piece with user-visible blocking UI (§4's dialog and exit ladder) --
+  the maintainer tests such changes by hand, so build both binaries, run
+  the quick suite, and hand over before committing. Increment 4 is the only
   piece with user-visible blocking UI (§4's dialog and exit ladder) —
   the maintainer tests such changes by hand, so build both binaries,
   run the quick suite, and hand over before committing.
@@ -144,6 +157,48 @@ These shaped the spec below; each is a design correction, not trivia.
 
 ## 5. ComputeEphem integration
 
+**As built (increment 2, work log item 3).** The prefetch is
+`SrvPrefetchQt(t, objCentCalc, imax)` in qtdriver.cpp, called under
+`#ifdef QT` before ComputeEphem()'s loop; the per-object read is
+`FSrvPlanetQt()` inside it. Three things the design below did not say,
+learned building it:
+
+- **A cast is several questions, not one.** FSwissPlanet() assembles a
+  different flag set per object -- nodes stay geocentric in a heliocentric
+  chart, the Sun alone takes SEFLG_BARYCTR, a custom object's definition
+  flags can flip any setting for that object -- and the center body can
+  differ per object under -YM (moons orbit their planet). So the prefetch
+  groups objects by (iflag, center, sidereal mode, topo triple) and sends
+  one REQUEST per group, at most 64 objects each, all before waiting on
+  any. A plain chart is one group; a heliocentric one is two.
+- **The mapping is the local path's own function.** FSwissPlanet() was
+  split so that FSwissPlanetSpec() -- which Swiss body, which central
+  body, which flags, which node/apsis point, with the custom-object
+  inversions applied and restored -- serves both. The client cannot
+  transcribe it wrong because it does not transcribe it. One correction
+  the client makes to the spec: GetSwissFlags() spells the backend
+  number into the ephemeris bits, and this backend's number (5) is not
+  one Swiss knows -- it became SEFLG_JPLEPH and the server refused every
+  body until the prefetch masked those bits to SEFLG_SWIEPH, which is
+  what the server is.
+- **The instant is TT, made exactly as the local path makes it.** The
+  same swe_deltat() call, the same is.jdDeltaT cache, the same -Yz0
+  override, sent under kIflagTimeTT so the server's swe_calc_r sees the
+  number the local swe_calc would have. Bit-exact by construction; a UT
+  request would have been bit-exact only if two delta-t implementations
+  happened to agree.
+- **One knowing divergence, and the server is the right side of it.**
+  swe_calc_pctr() in upstream 2.10.03 -- the library this tree vendors,
+  kept untouched on purpose (REFACTORING.md) -- transforms to the ecliptic
+  of date through caches its own inner calls have re-keyed; the fork fixed
+  it (its notes/REVIEW.md). Measured with a probe against both libraries,
+  fresh and after other calls: the same 5e-9 degrees for the Earth every
+  time, and under the maintainer's settings the largest is Pluto's speed
+  at 1.2e-6 degrees a day. So a chart centered on an unusual body differs
+  from the local cast by that much, and the suite holds it to 1e-5
+  rather than to the bytes.
+
+
 - Prefetch hook at the head of ComputeEphem (before the object loop): when
   fSrvPla, scan the object set exactly as the loop's skip logic does
   (FSkipEphem, calc.cpp:999-1024), map each server-bound object to its
@@ -186,6 +241,24 @@ These shaped the spec below; each is a design correction, not trivia.
   (io.cpp:4162) does not apply here.
 
 ## 6. Animation prefetch and the window cache
+
+**As built (increment 2).** The window cache exists: eight windows, most
+recently used first, keyed on the server's own canonical form of the
+request (`eph::cacheKeyOf`, so the two ends agree on what "the same
+question" is) plus the precision, which the server leaves out and the
+client keeps so a chart never reads an f32 window. A chart cast is a
+one-row window at its own TT; FSrvPlanetQt() already finds the row of a
+wider window by the grid expression and refuses an instant that is not
+on the grid, so increment 3 changes the request, not the read. A window
+is filled asynchronously by the message handler as DATA chunks arrive
+and stays after the cast's wait times out, so the next cast at that
+instant is a hit; a failed window is asked again, since a failure is a
+fact about that attempt, not the sky. Several requests can be in flight
+at once (one per object group), all re-sent verbatim after a reconnect.
+The bounded wait is 10 s, pumping the event loop, so the window keeps
+painting and the connector keeps running; a nested cast during the wait
+gets no prefetch of its own and fails soft.
+
 
 - The row grid is anchored at the cast: jdStart = the t ComputeEphem is
   running with, quantized so every animation frame lands exactly on
@@ -291,3 +364,32 @@ Each increment lands green (build both binaries, suite) before the next.
    file failed to reload (73 suite failures; empty now clears to default).
    Suite: 5649 passed, 0 failed, the ephem-server group's 75 checks
    included.
+
+3. **Increment 2 landed: the prefetch, the window cache, the bounded wait,
+   the per-object read, and the live parity gate.** `SrvPrefetchQt()`
+   groups the cast's objects by the flag set FSwissPlanetSpec() gives
+   each (the local path's own function, split out of FSwissPlanet() in
+   e95b5bc with both matrices byte-identical), sends one REQUEST per
+   group at the cast's TT under kIflagTimeTT, and waits up to 10 s on the
+   lot; `FSrvPlanetQt()` reads six reals from the window and post-processes
+   them as FSwissPlanet() does. The `ephem-server-live` group launches the
+   real astrolog-ephd on a scratch port over this run's ephemeris, casts
+   eight scenarios locally and on the server, and compares the six
+   position arrays on the bytes: tropical, sidereal, heliocentric,
+   topocentric, true node, a custom node/apsis object, a 1900 instant --
+   all bit-identical -- and an unusual center within 1e-5 degrees (§5
+   says why that one cannot be on the bytes: the vendored library is the
+   wrong side of a fork fix). Then: a repeated cast sends no request, a
+   drop mid-session fails soft with one warning and no latch, the
+   reconnect restores bit-identical casts, and -0n sends nothing. Three
+   findings on the way: GetSwissFlags() turned the backend's number into
+   SEFLG_JPLEPH and the server refused every body (masked to SEFLG_SWIEPH
+   in the prefetch); the suite's own snapshot could not memcpy the
+   position arrays, which are range-checked wrappers in the test build;
+   and the group passed alone and failed in the full run, because the
+   server logged "ephemeris path" before binding its port and a client
+   connecting on that line was refused -- and a refusal before any
+   session puts the client on its 60 s tick. The server logs "listening
+   on port" once bound, exits rather than running silently when it
+   cannot bind, and every gate waits for that line now (server work log
+   item 8). Full suite green with the group included.

@@ -85,10 +85,18 @@ BUILDS = {
     # name:      (makefile,          flag variable, flags)
     'console':   ('Makefile',        'CPPFLAGS',
                   '-O -Wall ' + COMMON_NO),
+    # -I ephsrv: the Ephemeris Server backend's protocol header, which
+    # qtdriver.cpp and qttest.cpp include (their makefiles carry the same
+    # -I). This table REPLACES the makefile's CPPFLAGS rather than adding
+    # to it, so the include had to be repeated here -- the cached audit
+    # failed to compile qtdriver.cpp for its absence, and every warning
+    # after that failure was missing from a report that would have read
+    # clean.
     'qt':        ('Makefile.qt',     'CPPFLAGS',
-                  '-DQT -O -fPIC -Wall ' + COMMON_NO + ' $(QT_CFLAGS)'),
+                  '-DQT -O -fPIC -Wall -I ephsrv ' + COMMON_NO +
+                  ' $(QT_CFLAGS)'),
     'qt-test':   ('Makefile.qt.test', 'CPPFLAGS',
-                  '-DQT -DQTTEST -O -fPIC -Wall ' + COMMON_NO +
+                  '-DQT -DQTTEST -O -fPIC -Wall -I ephsrv ' + COMMON_NO +
                   ' $(QT_CFLAGS)'),
     # -std=gnu++17 is not decoration: mingw g++ 10 defaults to gnu++14,
     # where calc.cpp's "Borrow bciCore(ciCore);" (class template argument
@@ -122,7 +130,7 @@ BUILDS = {
 QT6_PKGCONFIG = os.environ.get('QT6_PKGCONFIG', '/usr/local/qt6/lib/pkgconfig')
 QT6_BASELINE = os.path.join(ROOT, 'tools', 'warnings-qt6.txt')
 QT6_BUILD = ('Makefile.qt', 'CPPFLAGS',
-             '-DQT -O -fPIC -Wall ' + COMMON_NO + ' $(QT_CFLAGS)')
+             '-DQT -O -fPIC -Wall -I ephsrv ' + COMMON_NO + ' $(QT_CFLAGS)')
 # The -rpath the Makefile's own qt6 target adds, which this has to add
 # too. It builds to the SAME output name, so without it the audit leaves
 # behind an astrolog-qt6 that links and then dies at startup with
@@ -141,7 +149,7 @@ QT6_ARGS = ['OBJDIR=obj-qt6', 'NAME=astrolog-qt6'] + QT6_LD
 # consumer in the tree, so a Qt6 deprecation there is exactly what this
 # ledger exists to show.
 QT6_TEST_BUILD = ('Makefile.qt.test', 'CPPFLAGS',
-                  '-DQT -DQTTEST -O -fPIC -Wall ' + COMMON_NO +
+                  '-DQT -DQTTEST -O -fPIC -Wall -I ephsrv ' + COMMON_NO +
                   ' $(QT_CFLAGS)')
 QT6_TEST_ARGS = ['OBJDIR=obj-qt6-test',
                  'NAME=astrolog-qt6-test'] + QT6_LD
