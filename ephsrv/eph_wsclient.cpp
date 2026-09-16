@@ -8,14 +8,17 @@
 //                [--stars "name[,name...]"] [--jd JD] [--step SEC] [--count N]
 //                [--precision 64|32] [--center N] [--iflag HEX]
 //                [--sid mode,t0,offset] [--topo lon,lat,elv] [--jplfile name]
-//                [--expect-rows N] [--repeat N] [--quiet]
+//                [--expect-rows N] [--repeat N] [--latency FILE] [--quiet]
 //
 // Sends HELLO, prints WELCOME unless --quiet, sends one REQUEST, collects
 // the DATA chunks, and on --out writes one line per object per row in
 // hexfloat: "<objIdx> <id-or-name> <retFlag> <lon> <lat> <dist> <slon>
 // <slat> <sdist>". Exits 0 on success; on a server ERROR the text goes to
 // stderr and the exit is 2. --repeat re-runs the request N times on the
-// same connection (the soak gate's fd-stability barrage).
+// same connection (the soak gate's fd-stability barrage). --latency
+// appends one line per repeat to FILE: the microseconds from the REQUEST
+// send to the last DATA chunk's arrival, which is what a client sees and
+// what tools/ephsrv-bench.sh aggregates.
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -24,6 +27,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -188,7 +192,8 @@ static bool connectWs(const char *host, uint16_t port, int *fdOut) {
 
 int main(int argc, char **argv) {
   const char *host = "127.0.0.1", *outFile = nullptr, *szStars = nullptr,
-             *szSid = nullptr, *szTopo = nullptr, *szJpl = nullptr;
+             *szSid = nullptr, *szTopo = nullptr, *szJpl = nullptr,
+             *latencyFile = nullptr;
   uint16_t port = kDefaultPort;
   std::vector<uint32_t> ids;
   double jd = 2451545.0;
@@ -219,6 +224,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--jplfile") && next(&v)) szJpl = v;
     else if (!strcmp(a, "--expect-rows") && next(&v)) expectRows = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--repeat") && next(&v)) repeat = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--latency") && next(&v)) latencyFile = v;
     else if (!strcmp(a, "--quiet")) quiet = true;
     else { fprintf(stderr, "wsclient: unknown/incomplete option %s\n", a); return 1; }
   }
@@ -297,6 +303,11 @@ int main(int argc, char **argv) {
     fprintf(stderr, "wsclient: cannot write %s\n", outFile);
     return 2;
   }
+  FILE *lat = latencyFile ? fopen(latencyFile, "a") : nullptr;
+  if (latencyFile && !lat) {
+    fprintf(stderr, "wsclient: cannot write %s\n", latencyFile);
+    return 2;
+  }
 
   // Full column store: object-major nObj * count * 6; metadata from the
   // first chunk (identical across chunks).
@@ -309,6 +320,7 @@ int main(int argc, char **argv) {
   for (uint32_t rep = 0; rep < repeat && exitCode == 0; rep++) {
     std::vector<uint8_t> payload;
     buildRequest(&payload, req);
+    auto tSent = std::chrono::steady_clock::now();
     sendWsBinary(fd, makeMessage(kMsgRequest, rep + 1, payload.data(), payload.size()));
 
     std::fill(cols.begin(), cols.end(), 0.0);
@@ -382,6 +394,11 @@ int main(int argc, char **argv) {
       rowsGot += nRows;
       if (rowsGot >= count) break;
     }
+    if (lat && exitCode == 0 && rowsGot == count) {
+      double us = std::chrono::duration<double, std::micro>(
+          std::chrono::steady_clock::now() - tSent).count();
+      fprintf(lat, "%.0f\n", us);
+    }
     if (exitCode == 0 && rowsGot != count) {
       fprintf(stderr, "wsclient: got %u of %u rows\n", rowsGot, count);
       exitCode = 2;
@@ -408,6 +425,7 @@ int main(int argc, char **argv) {
   }
 
   if (out) fclose(out);
+  if (lat) fclose(lat);
   close(fd);
   return exitCode;
 }

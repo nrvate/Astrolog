@@ -12,12 +12,15 @@
 // Sections in this file:
 //   1. startup options (plan 11)
 //   2. ephemeris path discovery (plan 6, 7) -- standalone, no engine code
-//   3. request execution (plan 5) -- one swe_ctx per request, pure function
+//   3. request execution (plan 5) -- one swe_ctx per request, pure function,
+//      answered from the loop's result cache when the same question was
+//      asked before (eph_cache.h)
 //   4. loop wiring -- uWS App, per-loop state, message handlers, backpressure
 //   5. heartbeats -- server PING every 20s, PONG deadline 60s (plan 4.7)
 //   6. main
 
 #include "ephproto.h"
+#include "eph_cache.h"
 
 #include <App.h>
 
@@ -49,7 +52,7 @@ using uWS::WebSocket;
 struct Options {
   uint16_t port = eph::kDefaultPort;
   int threads = (int)std::thread::hardware_concurrency();
-  uint32_t cacheMb = 256;      // accepted, reserved for the result cache
+  uint32_t cacheMb = 256;      // result cache, TOTAL across loops; 0 disables
   std::string ephe;            // --ephe, may be ';'-joined
   bool verbose = false;
 };
@@ -338,9 +341,10 @@ static EphDiscovery DiscoverEphemDirs() {
 // ---------------------------------------------------------------------------
 // 3. Request execution (plan 5)
 //
-// A request is a pure function of its payload: hash it, (cache lookup goes
-// here in a later increment), then for each time row and object call the
-// thread-safe fork on one private context. Per-object failures are recorded
+// A request is a pure function of its payload: build its canonical key,
+// answer from the loop's result cache if it has been asked before, else for
+// each time row and object call the thread-safe fork on one private
+// context and store the result. Per-object failures are recorded
 // in that object's metadata (retFlag < 0 + serr) and never fail the
 // request; a whole-request failure is ERROR 5 with the SWE serr text
 // (plan 4.7). Per-request configuration uses only the _r scoped setters.
@@ -355,8 +359,11 @@ struct Stream {
   uint32_t nObj = 0, nTimeRows = 0, chunkRows = 0;
   uint32_t nextRow = 0;         // next row to send
   uint32_t chunkIndex = 0;
-  std::vector<double> cols;     // object-major nObj*nTimeRows*6 f64 values
-  std::vector<uint8_t> meta;    // nObj * 128 metadata records
+  // The computed columns (object-major nObj*nTimeRows*6 f64) and the nObj
+  // metadata records, shared with the loop's result cache: a hit hands
+  // out the cached entry, a miss the one just computed and inserted. The
+  // stream keeps the entry alive however the cache turns over meanwhile.
+  std::shared_ptr<const eph::CacheEntry> result;
   std::vector<uint8_t> buf;     // chunk scratch, sized once, reused
 };
 
@@ -439,8 +446,8 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
 //
 // One uWS App per event-loop thread; SO_REUSEPORT load-balances accepted
 // connections across loops. Each loop owns a private slice of the context
-// pool (pool total 2x cores) and will own a private LRU result cache in a
-// later increment -- LoopCtx is the structure that cache slots into.
+// pool (pool total 2x cores) and a private LRU result cache (its share of
+// --cache-mb), so nothing on the request path is shared between threads.
 // ---------------------------------------------------------------------------
 
 struct LoopCtx {
@@ -449,8 +456,13 @@ struct LoopCtx {
   std::unique_ptr<uWS::App> app;
   std::vector<swe_ctx *> pool;   // private slice, never shared
   size_t nextCtx = 0;
-  // The per-loop LRU result cache lands here (later increment), keyed on
-  // FNV-1a of the canonical REQUEST payload, capped by --cache-mb.
+  // The per-loop LRU result cache (eph_cache.h), keyed on the canonical
+  // REQUEST, hashed FNV-1a, capped at this loop's share of --cache-mb.
+  eph::ResultCache cache;
+  // Wall time of the last ExecuteRequest's compute, for the verbose log
+  // and the bench: zero on a hit.
+  double lastComputeMs = 0.0;
+  bool lastWasHit = false;
 
   swe_ctx *TakeContext() {
     if (pool.empty()) return nullptr;
@@ -508,6 +520,16 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
                "with --ephe or configure the client's -Yi1";
     return false;
   }
+  const std::string key = eph::cacheKeyOf(req);
+  if (auto hit = lc->cache.get(key)) {
+    stream->result = hit;
+    lc->lastWasHit = true;
+    lc->lastComputeMs = 0.0;
+    return true;
+  }
+  lc->lastWasHit = false;
+  auto t0 = std::chrono::steady_clock::now();
+
   swe_ctx *ctx = lc->TakeContext();
   if (ctx == nullptr) {
     *errCode = eph::kErrInternal;
@@ -518,8 +540,11 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
   ApplyRequestConfig(ctx, req);
 
   const uint32_t nObj = stream->nObj, nTime = stream->nTimeRows;
-  stream->cols.assign((size_t)nObj * nTime * 6, 0.0);
-  stream->meta.assign((size_t)nObj * eph::kDataMetaSize, 0);
+  auto entry = std::make_shared<eph::CacheEntry>();
+  entry->nObj = nObj;
+  entry->nTimeRows = nTime;
+  entry->cols.assign((size_t)nObj * nTime * 6, 0.0);
+  entry->meta.assign((size_t)nObj * eph::kDataMetaSize, 0);
 
   // SWE's iflag is int32; the protocol carries u64 for headroom. SEFLG_SWIEPH
   // is forced (plan 4.4) and SEFLG_SPEED added if absent, so speeds arrive
@@ -551,14 +576,20 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
         fSawSuccess = true;
         retRow0 = ret;
       }
-      double *dst = stream->cols.data() + ((size_t)o * nTime + r) * 6;
+      double *dst = entry->cols.data() + ((size_t)o * nTime + r) * 6;
       for (int c = 0; c < 6; c++) dst[c] = xx[c];
     }
-    eph::writeDataMeta(stream->meta.data() + (size_t)o * eph::kDataMetaSize,
+    eph::writeDataMeta(entry->meta.data() + (size_t)o * eph::kDataMetaSize,
                        fFailed ? -1 : retRow0, retRow0,
                        fFailed ? failSerr : nullptr, fSawSuccess ? name : nullptr);
-
   }
+  lc->lastComputeMs = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - t0).count();
+  // Per-object failures are cached with the rest: the answer is a pure
+  // function of the files on the configured path, and a file that appears
+  // later is picked up the documented way, by restarting the server.
+  stream->result = entry;
+  lc->cache.put(key, std::move(entry));
   return true;
 }
 
@@ -576,8 +607,9 @@ static void FlushStreams(WebSocket<false, true, Conn> *ws) {
       if (rows > s.chunkRows) rows = s.chunkRows;
       size_t chunkLen = 0;
       eph::writeDataChunk(s.buf.data(), s.buf.size(), s.chunkIndex, s.nextRow,
-                          rows, s.nTimeRows, s.nObj, s.precision, s.meta.data(),
-                          s.cols.data(), &chunkLen);
+                          rows, s.nTimeRows, s.nObj, s.precision,
+                          s.result->meta.data(), s.result->cols.data(),
+                          &chunkLen);
       // The chunk buffer holds the DATA payload; SendEnvelope wraps it in
       // the 16-byte envelope the protocol requires.
       auto st = SendEnvelope(ws, eph::kMsgData, s.requestId, s.buf.data(),
@@ -614,11 +646,24 @@ static void RunRequest(WebSocket<false, true, Conn> *ws, LoopCtx *lc,
   }
 
   s.buf.resize(eph::dataPayloadSize(s.nObj, (size_t)s.chunkRows, s.precision));
+  uint32_t nObj = s.nObj, nRows = s.nTimeRows, chunkRows = s.chunkRows;
   c->out.push_back(std::move(s));
-  if (gOpt.verbose)
-    Log("ephd: request %u -> %.1f KiB columns, chunks of %u rows",
-        env.requestId,
-        (double)(s.nObj * s.nTimeRows * 6 * 8) / 1024.0, s.chunkRows);
+  // One line per request under --verbose, and the bench and the cache gate
+  // read it: "cache hit" or "cache miss <ms>", then the cache's state.
+  if (gOpt.verbose) {
+    char szCache[48];
+    if (lc->lastWasHit)
+      snprintf(szCache, sizeof(szCache), "cache hit");
+    else
+      snprintf(szCache, sizeof(szCache), "cache miss %.2f ms", lc->lastComputeMs);
+    Log("ephd: request %u -> %.1f KiB columns, chunks of %u rows, %s; "
+        "cache %zu entries %.1f KiB, %" PRIu64 " hits %" PRIu64
+        " misses %" PRIu64 " evictions",
+        env.requestId, (double)(nObj * nRows * 6 * 8) / 1024.0, chunkRows,
+        szCache, lc->cache.entries(),
+        (double)lc->cache.usedBytes() / 1024.0, lc->cache.hits(),
+        lc->cache.misses(), lc->cache.evictions());
+  }
   FlushStreams(ws);
 }
 
@@ -735,8 +780,9 @@ int main(int argc, char **argv) {
   char szVersion[256];
   swe_version(szVersion);
   Log("astrolog-ephd %s, Swiss Ephemeris %s", kServerVersion, szVersion);
-  Log("%d event loop(s), context pool %d", gOpt.threads,
-      2 * (int)std::thread::hardware_concurrency());
+  Log("%d event loop(s), context pool %d, result cache %u MiB total",
+      gOpt.threads, 2 * (int)std::thread::hardware_concurrency(),
+      gOpt.cacheMb);
   Log("ephemeris path: %s",
       disc.resolved.empty() ? "<none found; file-backed requests fail>" :
       disc.resolved.c_str());
@@ -763,9 +809,14 @@ int main(int argc, char **argv) {
   int nLoops = gOpt.threads;
   int totalCtx = 2 * (int)std::thread::hardware_concurrency();
   if (totalCtx < 2) totalCtx = 2;
+  // --cache-mb is the TOTAL budget; each loop gets an equal share, since
+  // the kernel spreads connections across loops and one loop cannot answer
+  // from another's cache.
+  size_t cacheBytesPerLoop = ((size_t)gOpt.cacheMb * 1024 * 1024) / (size_t)nLoops;
   std::vector<LoopCtx> loops(nLoops);
   for (int i = 0; i < nLoops; i++) {
     loops[i].index = i;
+    loops[i].cache = eph::ResultCache(cacheBytesPerLoop);
     int n = totalCtx / nLoops + (i < totalCtx % nLoops ? 1 : 0);
     for (int j = 0; j < n; j++) {
       swe_ctx *ctx = swe_ctx_new();

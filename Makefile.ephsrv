@@ -50,6 +50,11 @@ CPPFLAGS = -MMD -MP -O2 -std=gnu++17 -I ephsrv/uWebSockets/src \
  -I ephsrv/uSockets/src -I ephsrv -I $(SWE_HOME)
 RM = rm -f
 
+# First target, so "make ephsrv" builds the server AND the wire client the
+# gates and the bench drive. It used to build the server alone, and the
+# gates' "make -s ephsrv" fallback then never produced eph_wsclient.
+all: $(NAME) $(CLIENT)
+
 $(NAME): $(OBJS) ephsrv/uSockets/uSockets.a
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
@@ -82,4 +87,4 @@ clean:
 $(OBJS:.o=.d):
 $(OBJS): %.o: %.d
 
-.PHONY: clean
+.PHONY: all clean

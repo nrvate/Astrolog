@@ -25,7 +25,9 @@ Everything below is landed and pushed; this section is the resume pointer.
   `qt`. Merge `ephserver` into `qt` only when the maintainer says so.
   Commits: `5211e5e` (uWebSockets v20.80.0 + pinned uSockets vendored),
   `f8e7112` (round 1: server, client increment 1, gates, both plan
-  docs), `831bd2b` (fork fix lands, workaround removed, static linking).
+  docs), `831bd2b` (fork fix lands, workaround removed, static linking),
+  `a8b5aa2` (Status sections), then server increment 3 (the result
+  cache, its gate and the bench; work log item 7).
 - **The Swiss Ephemeris fork** (nrvate/swisseph, `/shares/swisseph`) is at
   **2.10.03-ts.11** (c86c2b6, tag v2.10.03-ts.11): its delta-t tidal term
   no longer follows which files a context has open — see work log items 2
@@ -40,16 +42,19 @@ Everything below is landed and pushed; this section is the resume pointer.
   follow-up commit waiting on that repo).
 - **Green today:** server verified end-to-end (8 checks, work log item 1);
   golden gate 70 columns bit-exact; soak gate 100k files, 0.11s startup,
-  zero scans, fds stable; Astrolog quick suite 5649/0 with client
+  zero scans, fds stable; cache gate (unit + live, work log item 7);
+  bench numbers recorded in §9; Astrolog quick suite 5649/0 with client
   increment 1 included.
-- **Open work, in order:** server increment 3 — the per-loop LRU result
-  cache + bench tool (Part I §10 step 3; the cache slot is already
-  structured into LoopCtx, and the FNV-1a request hash is computed but
-  unused). Client increments 2-4 (EPHEMERIS_CLIENT_PLAN.md §10): 2 =
-  prefetch hook + window cache + bit-exact parity vs the local Swiss
-  path, 3 = animation grid + f32 windows, 4 = required-server dialog +
-  exit ladder. Client 2+ needs the live server as its oracle; server 3
-  wants bench numbers first.
+- **Open work, in order:** client increments 2-4
+  (EPHEMERIS_CLIENT_PLAN.md §10): 2 = prefetch hook + window cache +
+  bit-exact parity vs the local Swiss path, 3 = animation grid + f32
+  windows, 4 = required-server dialog + exit ladder. Client 2+ needs the
+  live server as its oracle. The server's four increments are all landed;
+  the bench numbers client 2 sizes its windows against are in work log
+  item 7 (a cold 30-body 1000-row window costs the server ~0.65 s to
+  compute, a hot one ~3 ms to deliver, so the prefetch must be issued
+  well before the window runs out and the 50%-consumed rule of the client
+  plan's §6 leaves seconds of margin).
 
 ---
 
@@ -250,9 +255,22 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
   `swe_fixstar_ut_r` for kind-1 objects, `swe_calc_pctr` when center != 0),
   storing columns; then stream chunks, converting to f32 only at send if
   requested.
-- Result cache: per-loop LRU keyed on FNV-1a of the canonical payload,
-  caching computed f64 columns. Memory-capped (`--cache-mb`, default 256).
-  No invalidation — requests are pure functions of static files.
+- Result cache (as built, work log item 7; `ephsrv/eph_cache.h`): per-loop
+  LRU keyed on the canonical REQUEST, hashed FNV-1a, holding the computed
+  f64 columns and the per-object metadata. The key is everything the
+  answer depends on and nothing else: `precision` and `chunkRows` are
+  delivery parameters and are left out, so a chart's f64 window and the
+  animation's f32 window of the same rows are one computation; the
+  sidereal, topocentric and JPL-file triplets are keyed only under the
+  iflag bit that makes SWE read them; and the two forced flags are folded
+  in. Per-object failures are cached with the rest. Memory-capped
+  (`--cache-mb`, default 256, the TOTAL: each loop gets an equal share,
+  since the kernel spreads connections across loops and one loop cannot
+  answer from another's cache; 0 disables). An entry larger than the
+  loop's whole share is computed and streamed but not stored. Streams
+  hold their entry by `shared_ptr`, so eviction never pulls the columns
+  out from under a slow client. No invalidation — requests are pure
+  functions of static files, and a changed tree is picked up by restart.
 - Backpressure: uWS send buffering; chunks sized so a slow client cannot
   balloon server memory (`maxChunkRows` from WELCOME).
 
@@ -319,7 +337,37 @@ asserted by the soak gate:
 - **Bench**: concurrent WebSocket clients issuing streaming REQUESTs;
   report throughput and p50/p99 latency under load (animation cadence
   target: one 30-body × 1000-row window in well under 25ms server-side,
-  hot-cache).
+  hot-cache). As built: `tools/ephsrv-bench.sh`, five scenarios over that
+  window, client-observed latency from `eph_wsclient --latency` and the
+  server's own compute time from its `--verbose` log. Measured
+  2026-09-16 on this machine (12 cores, 12 loops, the bundled `ephem/`):
+
+  | scenario | p50 ms | p99 ms | n | note |
+  |---|---|---|---|---|
+  | cold, server compute | 647 | 716 | 5 | 30,000 `swe_calc_ut_r` per window |
+  | cold, client round trip | 651 | 719 | 5 | one client, distinct windows |
+  | hot f64, client | 2.5 | 6.4 | 50 | one client, 1.4 MiB per window |
+  | hot f32, client | 1.2 | 1.7 | 50 | one client, 0.7 MiB per window |
+  | hot f64 × 8 clients | 4.3 | 7.6 | 400 | 421 windows/s aggregate |
+  | cold × 8 clients | 719 | 1713 | 40 | 6.5 windows/s aggregate |
+
+  The hot target is met by an order of magnitude. The cold figure is the
+  one client increment 2 has to design around: a window is computed in
+  ~0.65 s, so the prefetch of the next window must be in flight well
+  before the current one runs out, which the client plan's
+  50%-consumed rule (§6 there) gives ~25 s of margin for at 25 ms
+  frames. Cold throughput across loops is sub-linear (6.5 windows/s for
+  8 clients against 1.5 for one) because SO_REUSEPORT hashes each new
+  connection to a loop and two on one loop queue behind each other; the
+  p99 of 1.7 s is that queue.
+- **Cache gate**: `tools/ephsrv-cache.sh`, the result cache's own gate
+  (work log item 7): a unit test compiled against `eph_cache.h` alone for
+  the key canonicalization and the LRU mechanics, then a live server with
+  a 1 MiB cache read through its `--verbose` log -- a repeated window is
+  a hit and bit-identical to the miss that filled it, f32 hits the f64
+  entry, an oversize window is answered and not stored, eviction is LRU
+  rather than FIFO and stays under the cap, and `--cache-mb 0` never
+  hits.
 - **Soak (million-file gate)**: build a synthetic astN farm (one small .se1
   symlinked across ~100k directories), then assert: startup time O(1),
   `getdents`/`opendir` count during startup is zero (strace), fd count
@@ -336,7 +384,9 @@ asserted by the soak gate:
 2. Multi-loop + full context pool + complete surface: fixed stars, pctr
    centers, sidereal/topo/jpl-file params, moons, asteroids, orbel bodies,
    f32 precision, chunk streaming, WELCOME limits.
-3. Result cache (LRU) + bench tool with recorded numbers.
+3. Result cache (LRU) + bench tool with recorded numbers. Landed, work
+   log item 7: `ephsrv/eph_cache.h`, `tools/ephsrv-cache.sh` (its gate)
+   and `tools/ephsrv-bench.sh`.
 4. Gates: golden, soak, fd assertions; runbook; docs finalized.
 
 Each increment lands green before the next starts.
@@ -492,3 +542,32 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
    dependencies, so a header-only edit re-archives stale objects — its
    tests/ learned this the hard way (69495ff) and the root build has
    not yet.
+
+7. **Server increment 3: the result cache, its gate, and the bench.**
+   `ephsrv/eph_cache.h` is the per-loop LRU §5 sketched: keyed on the
+   canonical REQUEST -- the object list in order, center, the iflag with
+   the two forced bits folded in, the sidereal/topo/JPL triplets only
+   under the bit that makes SWE read them, jdStart, step and row count;
+   NOT precision or chunkRows, which are delivery parameters, so a
+   chart's f64 window and the animation's f32 window of the same rows are
+   one computation. FNV-1a is the map's hash and equality is on the whole
+   key. Entries hold the f64 columns and the metadata by `shared_ptr`, and
+   a Stream holds the same pointer, so a slow client keeps its window
+   alive through any number of evictions. `--cache-mb` is the total,
+   split equally across loops; an entry over a loop's share is computed
+   and streamed but not stored; 0 disables. The verbose log names every
+   request "cache hit" or "cache miss N ms" with the cache's state, which
+   is what the gate and the bench read. `tools/ephsrv-cache.sh` was
+   falsified four ways before it was trusted (its header lists them), and
+   its unit half found one bug in the gate itself before any in the code:
+   a hit/miss count the author had mis-tallied. `tools/ephsrv-bench.sh`
+   measured the numbers in §9; two of its own defects are worth the
+   record. A bare `wait` waits for the background server too and the
+   first run hung forever (the client PIDs are named now), and a new
+   connection's first request can miss on a loop that has never seen the
+   window even though another loop has -- the per-loop design's cost,
+   right for a client that keeps one connection for its lifetime and
+   dropped from the hot samples for the bench's purposes. `make ephsrv`
+   now builds the wire client too; it used to build the server alone, so
+   the gates' fallback `make -s ephsrv` never produced `eph_wsclient`.
+   Golden 70/70 bit-exact and soak unchanged with the cache in the path.

@@ -23,7 +23,13 @@ QT_GUI_PLAN.md.
 - **Increments 2, 3, 4 are open** (§10), in that order. Increment 2 needs
   the server running (`make ephsrv` on the same branch, then
   `tools/ephsrv-golden.sh` for the oracle) because its acceptance is
-  bit-exact parity against the local Swiss path. Increment 4 is the only
+  bit-exact parity against the local Swiss path. The server is complete
+  (its four increments landed; the result cache is server work log item
+  7), and the numbers §6's window sizing should be checked against are
+  in the server plan's §9: a cold 30-body 1000-row window costs ~0.65 s
+  server-side, a hot one ~2.5 ms at f64 and ~1.2 ms at f32 -- and the
+  cache is per event loop, so the client's one long-lived connection is
+  what makes its windows hot. Increment 4 is the only
   piece with user-visible blocking UI (§4's dialog and exit ladder) —
   the maintainer tests such changes by hand, so build both binaries,
   run the quick suite, and hand over before committing.
