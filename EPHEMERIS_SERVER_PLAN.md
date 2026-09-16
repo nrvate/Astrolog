@@ -16,6 +16,49 @@ decision made during that design so a future agent need not re-derive it.
 Work log entries append at the end of this file, newest last. Nothing here
 modifies QT_GUI_PLAN.md, which keeps its own complete work log.
 
+## Status — how to pick this project back up
+
+Everything below is landed and pushed; this section is the resume pointer.
+
+- **Branches.** Server work lives on `ephserver` (worktree
+  `/nvm/work/ephsrv`, branch pushed to origin); the main checkout runs
+  `qt`. Merge `ephserver` into `qt` only when the maintainer says so.
+  Commits: `5211e5e` (uWebSockets v20.80.0 + pinned uSockets vendored),
+  `f8e7112` (round 1: server, client increment 1, gates, both plan
+  docs), `831bd2b` (fork fix lands, workaround removed, static linking),
+  `a8b5aa2` (Status sections), `816d401` (server increment 3: the result
+  cache, its gate and the bench; work log item 7), `e95b5bc` (the
+  FSwissPlanet() split, shared core), `6e29206` (TT instants, node/apsis
+  records, the center bit, the pctr delta-t fix; work log item 8), then
+  client increment 2 (EPHEMERIS_CLIENT_PLAN.md work log item 3).
+- **The Swiss Ephemeris fork** (nrvate/swisseph, `/shares/swisseph`) is at
+  **2.10.03-ts.11** (c86c2b6, tag v2.10.03-ts.11): its delta-t tidal term
+  no longer follows which files a context has open — see work log items 2
+  and 6, and UPSTREAM-BUGS.md section 14 in that repo. The server links
+  `$(SWE_HOME)/libswe.a` by archive path; never `-lswe`.
+- **Two environment traps, both pinned in the build and worth
+  remembering elsewhere:** an installed stale `libswe.so` in
+  `/usr/local/lib` wins the runtime search over `-L` every time (static
+  archive path is the cure), and the fork's ROOT Makefile tracks no
+  header dependencies, so a header-only edit re-archives stale objects
+  (its own tests/ fixed this in 69495ff; the root build has not — small
+  follow-up commit waiting on that repo).
+- **Green today:** server verified end-to-end (8 checks, work log item 1);
+  golden gate 70 columns bit-exact; soak gate 100k files, 0.11s startup,
+  zero scans, fds stable; cache gate (unit + live, work log item 7);
+  bench numbers recorded in §9; Astrolog quick suite 5649/0 with client
+  increment 1 included.
+- **Open work, in order:** client increments 3 and 4
+  (EPHEMERIS_CLIENT_PLAN.md §10): 3 = animation grid + f32 windows, 4 =
+  required-server dialog + exit ladder. Client increment 2 is landed
+  (client work log item 3): the `ephem-server-live` suite group casts on
+  the real server and matches the local Swiss path on the bytes. The server's four increments are all landed;
+  the bench numbers client 2 sizes its windows against are in work log
+  item 7 (a cold 30-body 1000-row window costs the server ~0.65 s to
+  compute, a hot one ~3 ms to deliver, so the prefetch must be issued
+  well before the window runs out and the 50%-consumed rule of the client
+  plan's §6 leaves seconds of margin).
+
 ---
 
 # Part I — Server plan
@@ -63,7 +106,10 @@ Vendored under `ephsrv/`, cgif-style (license files kept, sources pinned):
   `86097c490263ab662d62e8e7b541390bdec7d149`, Apache-2.0 (`LICENSE`).
   Built with OpenSSL (`make WITH_OPENSSL=1`) as `ephsrv/uSockets/uSockets.a`.
 - Swiss Ephemeris thread-safe fork at /shares/swisseph, version
-  `2.10.03-ts.10`: link `libswe.a` (or `.so`). NOT vendored into this repo —
+  `2.10.03-ts.11` (its delta-t tidal term is order-independent as of this
+  version; work log item 6): link `$(SWE_HOME)/libswe.a` by archive path.
+  Never `-lswe` — an installed stale `libswe.so` in /usr/local/lib wins
+  the runtime search over `-L` (see Status). NOT vendored into this repo —
   it is a sibling project with its own build, tests, and release cadence.
 
 Proven compile command (from repo root):
@@ -128,27 +174,44 @@ reserved for future non-ephemeris services sharing the connection.
 
     u32 nObj
     nObj object records:
-      u8 kind: 0 = body by id, 1 = fixed star by name
+      u8 kind: 0 = body by id, 1 = fixed star by name,
+               2 = node or apsis of a body (added 2026-09-16, work log 8)
       kind 0: u32 id   (SWE id: planet, moon incl. SE_PLMOON_OFFSET,
                         asteroid incl. SE_AST_OFFSET, orbel fictitious body)
       kind 1: sz name  (NUL-terminated, resolved from sefstars.txt)
+      kind 2: u32 id, u8 point (1 north node, 2 south node, 3 perihelion,
+              4 aphelion), u8 method (0 mean, 1 osculating): swe_nod_aps
     i32 center: 0 = use iflag center bits; else swe_calc_pctr body id
-    u64 iflag: full SWE bitmask. Server ORs in SEFLG_SWIEPH.
-      Center bits (SEFLG_HELCTR/BARYCTR/TOPOCTR), SEFLG_SIDEREAL,
-      SEFLG_TRUEPOS, SEFLG_NONUT, SEFLG_SPEED, SEFLG_RSW_EPHEM etc.
-      are all client-supplied; SEFLG_SPEED is added if absent.
+        (or, under kIflagCenter, a swe_calc_pctr body even when 0)
+    u64 iflag: full SWE bitmask in the LOW 32 bits. Server ORs in
+      SEFLG_SWIEPH. Center bits (SEFLG_HELCTR/BARYCTR/TOPOCTR),
+      SEFLG_SIDEREAL, SEFLG_TRUEPOS, SEFLG_NONUT, SEFLG_SPEED,
+      SEFLG_RSW_EPHEM etc. are all client-supplied; SEFLG_SPEED is added
+      if absent. The HIGH 32 bits are the protocol's, stripped before SWE
+      sees the flags (added 2026-09-16, work log 8):
+        bit 32 kIflagTimeTT: jdStart and every row are TT, not UT, and the
+               server calls the ET entry points (swe_calc_r,
+               swe_calc_pctr_r, swe_nod_aps_r, swe_fixstar_r) with the
+               instant exactly as sent -- how a client that makes its own
+               delta-t gets answers bit-identical to calling SWE itself
+        bit 33 kIflagCenter: the center field is a swe_calc_pctr body
+               even when it is 0 (SE_SUN)
     i32 sidMode; f64 sidT0; f64 sidAyanOff
         (swe_set_sid_mode_r triple; applied only when SEFLG_SIDEREAL)
-    f64 topoLon (east-positive degrees); f64 topoLat; f64 topoElv (km)
-        (swe_set_topo_r; applied only when SEFLG_TOPOCTR)
+    f64 topoLon (east-positive degrees); f64 topoLat; f64 topoElv
+        (meters, as swe_set_topo takes it; applied only when SEFLG_TOPOCTR)
     char jplFile[64] (swe_set_jpl_file_r; applied only when SEFLG_JPLEPH)
-    f64 jdStart (UT)
+    f64 jdStart (UT, or TT under kIflagTimeTT)
     u32 stepSeconds
     u32 nTime (rows)
     u8 precision: 0 = f64, 1 = f32
     u32 chunkRows (client hint; server clamps to maxChunkRows)
 
-Row i covers instant `jdStart + i * stepSeconds / 86400.0` (UT).
+Row i covers instant `jdStart + i * stepSeconds / 86400.0`, in the time
+scale jdStart is in; the client evaluates the same expression to find its
+rows, so it is exact, not approximate. A UT instant handed to an entry
+point that takes ET (swe_calc_pctr_r, swe_nod_aps_r) is converted with
+swe_deltat_ex_r first, the conversion swe_calc_ut_r makes itself.
 
 ### 4.5 DATA payload (one chunk)
 
@@ -212,9 +275,22 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
   `swe_fixstar_ut_r` for kind-1 objects, `swe_calc_pctr` when center != 0),
   storing columns; then stream chunks, converting to f32 only at send if
   requested.
-- Result cache: per-loop LRU keyed on FNV-1a of the canonical payload,
-  caching computed f64 columns. Memory-capped (`--cache-mb`, default 256).
-  No invalidation — requests are pure functions of static files.
+- Result cache (as built, work log item 7; `ephsrv/eph_cache.h`): per-loop
+  LRU keyed on the canonical REQUEST, hashed FNV-1a, holding the computed
+  f64 columns and the per-object metadata. The key is everything the
+  answer depends on and nothing else: `precision` and `chunkRows` are
+  delivery parameters and are left out, so a chart's f64 window and the
+  animation's f32 window of the same rows are one computation; the
+  sidereal, topocentric and JPL-file triplets are keyed only under the
+  iflag bit that makes SWE read them; and the two forced flags are folded
+  in. Per-object failures are cached with the rest. Memory-capped
+  (`--cache-mb`, default 256, the TOTAL: each loop gets an equal share,
+  since the kernel spreads connections across loops and one loop cannot
+  answer from another's cache; 0 disables). An entry larger than the
+  loop's whole share is computed and streamed but not stored. Streams
+  hold their entry by `shared_ptr`, so eviction never pulls the columns
+  out from under a slow client. No invalidation — requests are pure
+  functions of static files, and a changed tree is picked up by restart.
 - Backpressure: uWS send buffering; chunks sized so a slow client cannot
   balloon server memory (`maxChunkRows` from WELCOME).
 
@@ -281,7 +357,37 @@ asserted by the soak gate:
 - **Bench**: concurrent WebSocket clients issuing streaming REQUESTs;
   report throughput and p50/p99 latency under load (animation cadence
   target: one 30-body × 1000-row window in well under 25ms server-side,
-  hot-cache).
+  hot-cache). As built: `tools/ephsrv-bench.sh`, five scenarios over that
+  window, client-observed latency from `eph_wsclient --latency` and the
+  server's own compute time from its `--verbose` log. Measured
+  2026-09-16 on this machine (12 cores, 12 loops, the bundled `ephem/`):
+
+  | scenario | p50 ms | p99 ms | n | note |
+  |---|---|---|---|---|
+  | cold, server compute | 647 | 716 | 5 | 30,000 `swe_calc_ut_r` per window |
+  | cold, client round trip | 651 | 719 | 5 | one client, distinct windows |
+  | hot f64, client | 2.5 | 6.4 | 50 | one client, 1.4 MiB per window |
+  | hot f32, client | 1.2 | 1.7 | 50 | one client, 0.7 MiB per window |
+  | hot f64 × 8 clients | 4.3 | 7.6 | 400 | 421 windows/s aggregate |
+  | cold × 8 clients | 719 | 1713 | 40 | 6.5 windows/s aggregate |
+
+  The hot target is met by an order of magnitude. The cold figure is the
+  one client increment 2 has to design around: a window is computed in
+  ~0.65 s, so the prefetch of the next window must be in flight well
+  before the current one runs out, which the client plan's
+  50%-consumed rule (§6 there) gives ~25 s of margin for at 25 ms
+  frames. Cold throughput across loops is sub-linear (6.5 windows/s for
+  8 clients against 1.5 for one) because SO_REUSEPORT hashes each new
+  connection to a loop and two on one loop queue behind each other; the
+  p99 of 1.7 s is that queue.
+- **Cache gate**: `tools/ephsrv-cache.sh`, the result cache's own gate
+  (work log item 7): a unit test compiled against `eph_cache.h` alone for
+  the key canonicalization and the LRU mechanics, then a live server with
+  a 1 MiB cache read through its `--verbose` log -- a repeated window is
+  a hit and bit-identical to the miss that filled it, f32 hits the f64
+  entry, an oversize window is answered and not stored, eviction is LRU
+  rather than FIFO and stays under the cap, and `--cache-mb 0` never
+  hits.
 - **Soak (million-file gate)**: build a synthetic astN farm (one small .se1
   symlinked across ~100k directories), then assert: startup time O(1),
   `getdents`/`opendir` count during startup is zero (strace), fd count
@@ -298,7 +404,9 @@ asserted by the soak gate:
 2. Multi-loop + full context pool + complete surface: fixed stars, pctr
    centers, sidereal/topo/jpl-file params, moons, asteroids, orbel bodies,
    f32 precision, chunk streaming, WELCOME limits.
-3. Result cache (LRU) + bench tool with recorded numbers.
+3. Result cache (LRU) + bench tool with recorded numbers. Landed, work
+   log item 7: `ephsrv/eph_cache.h`, `tools/ephsrv-cache.sh` (its gate)
+   and `tools/ephsrv-bench.sh`.
 4. Gates: golden, soak, fd assertions; runbook; docs finalized.
 
 Each increment lands green before the next starts.
@@ -389,3 +497,118 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
 # Work log
 
 (Entries append here, newest last.)
+
+## Work log
+
+1. **Round 1 landed: the server, its wire client, and both gates.** The
+   protocol of §4 became ephsrv/ephproto.h (bounds-checked Writer/Reader,
+   static_asserts on every fixed size; the PING/PONG echo payload of the
+   original sketch was dropped — heartbeats ride uWS's sendPingsAutomatically
+   with idleTimeout 30s instead of the sketched 20s app-level ping, which a
+   Qt client answers by itself anyway; the app-level PING/PONG types remain
+   in the envelope). eph_srv.cpp implements §5-§7 and §11: one App per event
+   loop on SO_REUSEPORT, a private slice of the swe_ctx pool per loop,
+   heartbeats delegated to uWS, zero-config discovery with sentinel stats
+   only. Verified end-to-end: WELCOME round trip, Sun+Moon rows, sidereal
+   (Fagan-Bradley ayanamsha through the context path), per-object failure
+   (retFlag -1), ERROR 2 on an oversized REQUEST, ERROR 5 with no ephemeris,
+   f32, and 30 concurrent clients across two loops.
+2. **The fork's shared-context answers are poisoned by body switches at
+   historical dates.** Computing several different bodies on ONE swe_ctx at
+   pre-1972 epochs (where the delta-t table is in force) diverges from a
+   fresh context by ~0.05 arcsec, and a SECOND call for the same body
+   diverges further — while at modern dates (polynomial delta-t) reuse is
+   bit-stable. swe_close_r() between bodies restores fresh-context answers
+   exactly, so ExecuteRequest() calls it after each object's row loop; the
+   pool survives and only the file caches are dropped. This belongs in the
+   fork's own ledger (notes/UPSTREAM-BUGS.md already catalogues the
+   delta-t table's one-shot init); until it is fixed there, every
+   multi-body consumer of the context API needs the same close_r between
+   bodies.
+3. **tools/ephsrv-golden.sh**: bit-exact (hexfloat string equality) against
+   a probe compiled from the same libswe — the context API, not legacy
+   swe_calc_ut, which the fork's one-shot delta-t init makes diverge at
+   historical dates even in one process. 70 columns green: 6 instants ×
+   Sun..Pluto + Vesta, plus sidereal Fagan-Bradley at two instants.
+4. **tools/ephsrv-soak.sh**: the §7 invariants measured, not asserted —
+   with a 100,000-file astN farm the server still starts in 0.11s (0.10s
+   at 2,000 files: O(1), not merely small), the strace log shows zero
+   getdents64 on the farm ever, the fd count did not move over a 200-request
+   barrage (11 before, 11 after), and a missing asteroid is a clean
+   per-object failure that leaves the connection up.
+5. **The client's settings round trip forced one backend-slot correction**:
+   the -bW writer emits the default address as "" and the reader originally
+   refused an empty address as garbage — every written settings file failed
+   to reload, which 73 suite failures traced back to. Empty now clears to
+   the default, like FCloneSz(NULL) elsewhere; the suite stands at 5649/0
+   with the client's new ephem-server group included.
+
+6. **The fork's tidal-term defect is fixed at source, and the server's
+   workaround is gone.** The fork (nrvate/swisseph, 2.10.03-ts.11,
+   c86c2b6) now publishes the DE numbers its setters' header pre-opens
+   read (`sweph_denum_moon`, `jpldenum_cfg`, in `SWI_CFG_PATH`), so every
+   context resolves delta-t's tidal term from the configuration instead of
+   from whichever files it happens to have open — the fresh-context
+   order dependence of work-log item 2 (Moon 272.41632607 vs
+   272.41633228 at JD 2415020.5) is gone at the library level, held by
+   G4's new ORDER property, and the server's per-object swe_close_r()
+   workaround is deleted: the pool contexts stay warm and the golden
+   gate still passes 70 columns bit-exact. Two environment traps fell
+   out of the verification and are now pinned in the build: an installed
+   libswe.so in /usr/local/lib (a month stale) wins the runtime search
+   over -L every time, so Makefile.ephsrv and the golden gate's oracle
+   link $(SWE_HOME)/libswe.a by archive path — a static archive cannot
+   be shadowed; and the fork's root Makefile tracks no header
+   dependencies, so a header-only edit re-archives stale objects — its
+   tests/ learned this the hard way (69495ff) and the root build has
+   not yet.
+
+7. **Server increment 3: the result cache, its gate, and the bench.**
+   `ephsrv/eph_cache.h` is the per-loop LRU §5 sketched: keyed on the
+   canonical REQUEST -- the object list in order, center, the iflag with
+   the two forced bits folded in, the sidereal/topo/JPL triplets only
+   under the bit that makes SWE read them, jdStart, step and row count;
+   NOT precision or chunkRows, which are delivery parameters, so a
+   chart's f64 window and the animation's f32 window of the same rows are
+   one computation. FNV-1a is the map's hash and equality is on the whole
+   key. Entries hold the f64 columns and the metadata by `shared_ptr`, and
+   a Stream holds the same pointer, so a slow client keeps its window
+   alive through any number of evictions. `--cache-mb` is the total,
+   split equally across loops; an entry over a loop's share is computed
+   and streamed but not stored; 0 disables. The verbose log names every
+   request "cache hit" or "cache miss N ms" with the cache's state, which
+   is what the gate and the bench read. `tools/ephsrv-cache.sh` was
+   falsified four ways before it was trusted (its header lists them), and
+   its unit half found one bug in the gate itself before any in the code:
+   a hit/miss count the author had mis-tallied. `tools/ephsrv-bench.sh`
+   measured the numbers in §9; two of its own defects are worth the
+   record. A bare `wait` waits for the background server too and the
+   first run hung forever (the client PIDs are named now), and a new
+   connection's first request can miss on a loop that has never seen the
+   window even though another loop has -- the per-loop design's cost,
+   right for a client that keeps one connection for its lifetime and
+   dropped from the hot samples for the bench's purposes. `make ephsrv`
+   now builds the wire client too; it used to build the server alone, so
+   the gates' fallback `make -s ephsrv` never produced `eph_wsclient`.
+   Golden 70/70 bit-exact and soak unchanged with the cache in the path.
+
+8. **Three protocol additions and a server bug, for client increment 2.**
+   `kIflagTimeTT` (bit 32 of iflag): the instants are TT and the server
+   calls the ET entry points with them exactly as sent -- the only way to
+   be bit-identical with a client that computes its own delta-t and lets
+   the user override it. `kIflagCenter` (bit 33): the center field is a
+   swe_calc_pctr body even when it is 0. Object record kind 2: a node or
+   apsis of a body, what a custom object with an rgPntSwiss[] value is.
+   The high half of iflag is the protocol's and never reaches SWE; the
+   cache key keeps it. The bug: increment 1 handed swe_calc_pctr_r the UT
+   instant, and that function takes ET -- a delta-t of error on every
+   centered request; UT requests to it and to swe_nod_aps_r now add
+   swe_deltat_ex_r first. The golden gate grew a leg for each (70 columns
+   to 82) plus a check that a UT request for the Moon at 1900 does NOT
+   match the TT oracle, so a server that ignored the bit fails. Found by
+   the client's live group: the server logged "ephemeris path" before
+   any loop bound the port, so a client connecting on that line could be
+   refused, and a bind failure was silent -- a server with no listener
+   answered nobody and looked alive. It logs "listening on port" from the
+   listen callback now, exits with a message when the port cannot be
+   bound, and the four gates and the suite wait for that line.

@@ -76,3 +76,9 @@ astrolog-qt-base
 # is tracked.
 /ephsrv/uSockets/uSockets.a
 /ephsrv/smoketest
+
+# The ephemeris server's objects and binaries (Makefile.ephsrv; the vendored
+# uSockets static library was ignored with the ephsrv vendoring).
+/obj-ephsrv/
+/astrolog-ephd
+/eph_wsclient

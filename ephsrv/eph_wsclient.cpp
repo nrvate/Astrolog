@@ -1,0 +1,456 @@
+// eph_wsclient: standalone single-connection WebSocket client for the
+// ephemeris server, used by tools/ephsrv-golden.sh and tools/ephsrv-soak.sh.
+// Raw sockets only: uWS v20.80.0 has no client implementation, so framing is
+// hand-rolled after ephsrv/smoketest.cpp. Protocol comes from ephsrv/
+// ephproto.h (included directly; it is the byte-level authority).
+//
+//   eph_wsclient [--host H] [--port P] [--out FILE] [--objs id[,id...]]
+//                [--stars "name[,name...]"] [--jd JD] [--step SEC] [--count N]
+//                [--precision 64|32] [--center N] [--iflag HEX]
+//                [--sid mode,t0,offset] [--topo lon,lat,elv] [--jplfile name]
+//                [--expect-rows N] [--repeat N] [--latency FILE] [--quiet]
+//                [--tt] [--nodaps id,point,method[;...]]
+//
+// Sends HELLO, prints WELCOME unless --quiet, sends one REQUEST, collects
+// the DATA chunks, and on --out writes one line per object per row in
+// hexfloat: "<objIdx> <id-or-name> <retFlag> <lon> <lat> <dist> <slon>
+// <slat> <sdist>". Exits 0 on success; on a server ERROR the text goes to
+// stderr and the exit is 2. --repeat re-runs the request N times on the
+// same connection (the soak gate's fd-stability barrage). --latency
+// appends one line per repeat to FILE: the microseconds from the REQUEST
+// send to the last DATA chunk's arrival, which is what a client sees and
+// what tools/ephsrv-bench.sh aggregates. --tt marks --jd as TT rather than
+// UT (kIflagTimeTT); --nodaps adds node/apsis records (kind 2: point 1-4,
+// method 0 mean / 1 osculating).
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "ephproto.h"
+
+using namespace eph;
+
+// Bytes over-read by the handshake reader; drained by readFull.
+static std::vector<uint8_t> gPending;
+
+static int readFull(int fd, uint8_t *buf, size_t n) {
+  size_t got = 0;
+  // The handshake reader may have over-read past the HTTP header end -- TCP
+  // happily coalesces the 101 response with the first WebSocket frame -- so
+  // bytes stashed in gPending drain before the socket does.
+  while (got < n && !gPending.empty()) {
+    size_t take = n - got < gPending.size() ? n - got : gPending.size();
+    memcpy(buf + got, gPending.data(), take);
+    gPending.erase(gPending.begin(), gPending.begin() + (long)take);
+    got += take;
+  }
+  while (got < n) {
+    ssize_t r = recv(fd, buf + got, n - got, 0);
+    if (r <= 0) return -1;
+    got += (size_t)r;
+  }
+  return 0;
+}
+
+// Read one complete WebSocket message (de-fragmented). Handles the server's
+// protocol pings (answering them, since uWS closes on missed pongs), close
+// frames, and interleaved control frames. Returns 0 on success.
+enum { kGotMessage = 0, kGotClose = 1 };
+
+static int readWsMessage(int fd, std::vector<uint8_t> *out) {
+  out->clear();
+  int opStart = -1;
+  for (;;) {
+    uint8_t hdr[2];
+    if (readFull(fd, hdr, 2) != 0) return -1;
+    bool fin = hdr[0] & 0x80;
+    int op = hdr[0] & 0x0F;
+    bool masked = hdr[1] & 0x80;
+    (void)masked;   // server frames are never masked
+    uint64_t len = hdr[1] & 0x7F;
+    if (len == 126) {
+      uint8_t e[2];
+      if (readFull(fd, e, 2) != 0) return -1;
+      len = ((uint64_t)e[0] << 8) | e[1];        // WS lengths are big-endian
+    } else if (len == 127) {
+      uint8_t e[8];
+      if (readFull(fd, e, 8) != 0) return -1;
+      len = 0;
+      for (int i = 0; i < 8; i++) len = (len << 8) | e[i];
+    }
+    std::vector<uint8_t> pay((size_t)len);
+    if (len && readFull(fd, pay.data(), (size_t)len) != 0) return -1;
+    if (op == 9) {   // ping: mask + send pong, keep reading
+      uint8_t pong[125];
+      size_t n = pay.size() > 125 ? 125 : pay.size();
+      for (size_t i = 0; i < n; i++) pong[i] = pay[i];
+      for (size_t i = 0; i < n; i++) pong[i] ^= 0;   // placeholder masked below
+      uint8_t frame[132];
+      size_t f = 0;
+      frame[f++] = 0x8A;   // FIN + pong
+      if (n < 126) {
+        frame[f++] = (uint8_t)(0x80 | n);
+      } else {
+        frame[f++] = 0x80 | 126;
+        putU16(frame + f, (uint16_t)n); f += 2;
+      }
+      uint8_t mask[4] = {0x2A, 0x4B, 0x17, 0x99};
+      memcpy(frame + f, mask, 4); f += 4;
+      for (size_t i = 0; i < n; i++) frame[f + i] = pong[i] ^ mask[i & 3];
+      if (send(fd, frame, f + n, 0) < 0) return -1;
+      continue;
+    }
+    if (op == 10) continue;   // pong
+    if (op == 8) return kGotClose;
+    if (op == 2 || op == 1 || op == 0) {
+      if (op != 0 && out->empty()) opStart = op;
+      out->insert(out->end(), pay.begin(), pay.end());
+      if (fin) {
+        (void)opStart;
+        return kGotMessage;
+      }
+      continue;   // fragment; wait for continuation frames
+    }
+    return -1;   // unexpected opcode
+  }
+}
+
+static void sendWsBinary(int fd, const std::vector<uint8_t> &msg) {
+  size_t len = msg.size();
+  std::vector<uint8_t> frame(len + 16);
+  size_t f = 0;
+  frame[f++] = 0x82;   // FIN + binary
+  if (len < 126) {
+    frame[f++] = (uint8_t)(0x80 | len);
+  } else if (len < 65536) {
+    frame[f++] = 0x80 | 126;
+    frame[f++] = (uint8_t)(len >> 8); frame[f++] = (uint8_t)len;
+  } else {
+    frame[f++] = 0x80 | 127;
+    for (int i = 7; i >= 0; i--) frame[f++] = (uint8_t)(len >> (8 * i));
+  }
+  uint8_t mask[4] = {0x1B, 0x77, 0x3E, 0xC2};
+  memcpy(frame.data() + f, mask, 4); f += 4;
+  for (size_t i = 0; i < len; i++) frame[f + i] = msg[i] ^ mask[i & 3];
+  size_t sent = 0;
+  while (sent < f + len) {
+    ssize_t r = send(fd, frame.data() + sent, f + len - sent, 0);
+    if (r <= 0) { fprintf(stderr, "wsclient: send failed\n"); exit(2); }
+    sent += (size_t)r;
+  }
+}
+
+static bool connectWs(const char *host, uint16_t port, int *fdOut) {
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) return false;
+  sockaddr_in addr {};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+  if (inet_pton(AF_INET, host, &addr.sin_addr) != 1)
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  if (connect(fd, (sockaddr *)&addr, sizeof(addr)) != 0) { close(fd); return false; }
+  int one = 1;
+  setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+  timeval tv {};
+  tv.tv_sec = 90;
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+  char hs[256];
+  snprintf(hs, sizeof(hs),
+    "GET / HTTP/1.1\r\n"
+    "Host: %s:%u\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+    "Sec-WebSocket-Version: 13\r\n\r\n", host, (unsigned)port);
+  if (send(fd, hs, strlen(hs), 0) < 0) { close(fd); return false; }
+  std::string acc;
+  while (acc.find("\r\n\r\n") == std::string::npos) {
+    char tmp[1024];
+    ssize_t r = recv(fd, tmp, sizeof(tmp), 0);
+    if (r <= 0) { close(fd); return false; }
+    acc.append(tmp, (size_t)r);
+    if (acc.size() > 65536) { close(fd); return false; }
+  }
+  if (acc.find(" 101 ") == std::string::npos) { close(fd); return false; }
+  size_t hdrEnd = acc.find("\r\n\r\n");
+  if (hdrEnd + 4 < acc.size())
+    gPending.assign(acc.begin() + (long)(hdrEnd + 4), acc.end());
+  *fdOut = fd;
+  return true;
+}
+
+int main(int argc, char **argv) {
+  const char *host = "127.0.0.1", *outFile = nullptr, *szStars = nullptr,
+             *szSid = nullptr, *szTopo = nullptr, *szJpl = nullptr,
+             *latencyFile = nullptr, *szNodAps = nullptr;
+  bool fTT = false;
+  uint16_t port = kDefaultPort;
+  std::vector<uint32_t> ids;
+  double jd = 2451545.0;
+  uint32_t step = 600, count = 5, repeat = 1, expectRows = 0;
+  int precision = 0, center = 0;
+  uint64_t iflag = 0;
+  bool quiet = false;
+  for (int i = 1; i < argc; i++) {
+    const char *a = argv[i];
+    auto next = [&](const char **v) { if (i + 1 < argc) { *v = argv[++i]; return true; } return false; };
+    const char *v;
+    if (!strcmp(a, "--host") && next(&v)) host = v;
+    else if (!strcmp(a, "--port") && next(&v)) port = (uint16_t)atoi(v);
+    else if (!strcmp(a, "--out") && next(&v)) outFile = v;
+    else if (!strcmp(a, "--objs") && next(&v)) {
+      for (char *tok = strtok((char *)v, ","); tok; tok = strtok(nullptr, ","))
+        ids.push_back((uint32_t)strtoul(tok, nullptr, 10));
+    }
+    else if (!strcmp(a, "--stars") && next(&v)) szStars = v;
+    else if (!strcmp(a, "--jd") && next(&v)) jd = atof(v);
+    else if (!strcmp(a, "--step") && next(&v)) step = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--count") && next(&v)) count = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--precision") && next(&v)) precision = atoi(v);
+    else if (!strcmp(a, "--center") && next(&v)) center = atoi(v);
+    else if (!strcmp(a, "--iflag") && next(&v)) iflag = strtoull(v, nullptr, 16);
+    else if (!strcmp(a, "--sid") && next(&v)) szSid = v;
+    else if (!strcmp(a, "--topo") && next(&v)) szTopo = v;
+    else if (!strcmp(a, "--jplfile") && next(&v)) szJpl = v;
+    else if (!strcmp(a, "--expect-rows") && next(&v)) expectRows = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--repeat") && next(&v)) repeat = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--latency") && next(&v)) latencyFile = v;
+    else if (!strcmp(a, "--tt")) fTT = true;
+    else if (!strcmp(a, "--nodaps") && next(&v)) szNodAps = v;
+    else if (!strcmp(a, "--quiet")) quiet = true;
+    else { fprintf(stderr, "wsclient: unknown/incomplete option %s\n", a); return 1; }
+  }
+
+  Request req;
+  for (uint32_t id : ids) req.objs.push_back(ObjSpec{});
+  req.objs.clear();
+  for (uint32_t id : ids) {
+    ObjSpec o;
+    o.kind = kObjBody;
+    o.id = id;
+    req.objs.push_back(o);
+  }
+  if (szStars) {
+    char *buf = strdup(szStars);
+    for (char *tok = strtok(buf, ","); tok; tok = strtok(nullptr, ",")) {
+      ObjSpec o;
+      o.kind = kObjStar;
+      snprintf(o.name, sizeof(o.name), "%s", tok);
+      req.objs.push_back(o);
+    }
+    free(buf);
+  }
+  if (szNodAps) {
+    char *buf = strdup(szNodAps);
+    for (char *tok = strtok(buf, ";"); tok; tok = strtok(nullptr, ";")) {
+      ObjSpec o;
+      unsigned id = 0, point = 0, method = 0;
+      if (sscanf(tok, "%u,%u,%u", &id, &point, &method) != 3) {
+        fprintf(stderr, "wsclient: bad --nodaps entry %s\n", tok);
+        return 1;
+      }
+      o.kind = kObjNodAps;
+      o.id = id;
+      o.point = (uint8_t)point;
+      o.method = (uint8_t)method;
+      req.objs.push_back(o);
+    }
+    free(buf);
+  }
+  req.center = center;
+  req.iflag = iflag | (fTT ? kIflagTimeTT : 0);
+  if (szSid) sscanf(szSid, "%d,%lf,%lf", &req.sidMode, &req.sidT0, &req.sidAyanOff);
+  if (szTopo) sscanf(szTopo, "%lf,%lf,%lf", &req.topoLon, &req.topoLat, &req.topoElv);
+  if (szJpl) snprintf(req.jplFile, sizeof(req.jplFile), "%s", szJpl);
+  req.jdStart = jd;
+  req.stepSeconds = step;
+  req.nTime = count;
+  req.precision = precision ? (uint8_t)kPrecF32 : (uint8_t)kPrecF64;
+  req.chunkRows = kMaxChunkRows;
+  if (req.objs.empty()) { fprintf(stderr, "wsclient: --objs or --stars required\n"); return 1; }
+  if (count == 0 || count > kMaxRows) { fprintf(stderr, "wsclient: bad --count\n"); return 1; }
+
+  int fd;
+  if (!connectWs(host, port, &fd)) {
+    fprintf(stderr, "wsclient: cannot connect to %s:%u\n", host, (unsigned)port);
+    return 2;
+  }
+
+  // HELLO, expect WELCOME.
+  {
+    uint8_t hbuf[sizeof(HelloWire) + 256];
+    uint32_t hlen = 0;
+    buildHello(hbuf, 0, 0, "eph_wsclient/1.0", &hlen);
+    sendWsBinary(fd, makeMessage(kMsgHello, 0, hbuf, hlen));
+    std::vector<uint8_t> msg;
+    if (readWsMessage(fd, &msg) != kGotMessage || msg.size() < kEnvelopeSize) {
+      fprintf(stderr, "wsclient: no WELCOME envelope\n");
+      return 2;
+    }
+    Envelope env;
+    if (!parseEnvelope(msg.data(), &env)) {
+      fprintf(stderr, "wsclient: bad WELCOME envelope\n");
+      return 2;
+    }
+    if (env.type != kMsgWelcome) {
+      fprintf(stderr, "wsclient: expected WELCOME, got type %u\n", env.type);
+      return 2;
+    }
+    Welcome w;
+    if (!parseWelcome(msg.data() + kEnvelopeSize, env.payloadLen, &w)) {
+      fprintf(stderr, "wsclient: malformed WELCOME\n");
+      return 2;
+    }
+    if (!quiet)
+      printf("WELCOME v%u caps=0x%x swe=%u maxObjs=%u maxRows=%u maxChunk=%u "
+             "server=%s\n", w.protoVersion, w.caps, w.swissephVersion,
+             w.maxObjs, w.maxRows, w.maxChunkRows, w.serverVersion.c_str());
+  }
+
+  FILE *out = outFile ? fopen(outFile, "w") : nullptr;
+  if (outFile && !out) {
+    fprintf(stderr, "wsclient: cannot write %s\n", outFile);
+    return 2;
+  }
+  FILE *lat = latencyFile ? fopen(latencyFile, "a") : nullptr;
+  if (latencyFile && !lat) {
+    fprintf(stderr, "wsclient: cannot write %s\n", latencyFile);
+    return 2;
+  }
+
+  // Full column store: object-major nObj * count * 6; metadata from the
+  // first chunk (identical across chunks).
+  std::vector<double> cols((size_t)req.objs.size() * count * 6, 0.0);
+  std::vector<uint8_t> meta((size_t)req.objs.size() * kDataMetaSize, 0);
+  bool fMetaSet = false;
+  uint32_t rowsGot = 0;
+  int exitCode = 0;
+
+  for (uint32_t rep = 0; rep < repeat && exitCode == 0; rep++) {
+    std::vector<uint8_t> payload;
+    buildRequest(&payload, req);
+    auto tSent = std::chrono::steady_clock::now();
+    sendWsBinary(fd, makeMessage(kMsgRequest, rep + 1, payload.data(), payload.size()));
+
+    std::fill(cols.begin(), cols.end(), 0.0);
+    std::fill(meta.begin(), meta.end(), 0);
+    fMetaSet = false;
+    rowsGot = 0;
+
+    for (;;) {
+      std::vector<uint8_t> msg;
+      int st = readWsMessage(fd, &msg);
+      if (st != kGotMessage || msg.size() < kEnvelopeSize) {
+        fprintf(stderr, "wsclient: connection closed mid-request\n");
+        exitCode = 2;
+        break;
+      }
+      Envelope env;
+      if (!parseEnvelope(msg.data(), &env)) {
+        fprintf(stderr, "wsclient: bad envelope on message of %zu bytes\n",
+                msg.size());
+        exitCode = 2;
+        break;
+      }
+      const uint8_t *pl = msg.data() + kEnvelopeSize;
+      if (env.type == kMsgError) {
+        ErrorMsg e;
+        if (!parseError(pl, env.payloadLen, &e)) {
+          fprintf(stderr, "wsclient: malformed ERROR\n");
+        } else {
+          fprintf(stderr, "wsclient: server ERROR %d (request %u): %s\n",
+                  e.code, e.requestId, e.text.c_str());
+        }
+        exitCode = 2;
+        break;
+      }
+      if (env.type != kMsgData) continue;   // ignore anything else
+
+      if (env.payloadLen < kDataHeaderSize) { exitCode = 2; continue; }
+      Reader r(pl, env.payloadLen);
+      uint32_t chunkIndex = r.u32(), iTime = r.u32(), nRows = r.u32();
+      uint8_t prec = r.u8();
+      uint32_t nObj = r.u32();
+      if (!r.ok() || nObj != (uint32_t)req.objs.size() ||
+          iTime + nRows > count) {
+        fprintf(stderr, "wsclient: bad DATA chunk header\n");
+        exitCode = 2;
+        break;
+      }
+      if (!fMetaSet) {
+        r.raw(meta.data(), nObj * kDataMetaSize);
+        fMetaSet = true;
+      } else {
+        std::vector<uint8_t> skip((size_t)nObj * kDataMetaSize);
+        r.raw(skip.data(), skip.size());
+      }
+      if (!r.ok()) { fprintf(stderr, "wsclient: truncated DATA meta\n"); exitCode = 2; break; }
+      size_t nVals = (size_t)nObj * nRows * kColsPerObj;
+      size_t esz = (prec == kPrecF32) ? 4 : 8;
+      std::vector<uint8_t> vals(nVals * esz);
+      r.raw(vals.data(), vals.size());
+      if (!r.ok()) { fprintf(stderr, "wsclient: truncated DATA values\n"); exitCode = 2; break; }
+      for (uint32_t o = 0; o < nObj; o++) {
+        double *dst = cols.data() + ((size_t)o * count + iTime) * kColsPerObj;
+        const uint8_t *src = vals.data() + ((size_t)o * nRows) * kColsPerObj * esz;
+        for (uint32_t rr = 0; rr < nRows; rr++)
+          for (int c = 0; c < (int)kColsPerObj; c++) {
+            dst[(size_t)rr * kColsPerObj + c] =
+              (prec == kPrecF32) ? (double)getF32(src + ((size_t)rr * kColsPerObj + c) * 4)
+                                 : getF64(src + ((size_t)rr * kColsPerObj + c) * 8);
+          }
+      }
+      rowsGot += nRows;
+      if (rowsGot >= count) break;
+    }
+    if (lat && exitCode == 0 && rowsGot == count) {
+      double us = std::chrono::duration<double, std::micro>(
+          std::chrono::steady_clock::now() - tSent).count();
+      fprintf(lat, "%.0f\n", us);
+    }
+    if (exitCode == 0 && rowsGot != count) {
+      fprintf(stderr, "wsclient: got %u of %u rows\n", rowsGot, count);
+      exitCode = 2;
+    }
+    if (exitCode == 0 && expectRows && rowsGot != expectRows) {
+      fprintf(stderr, "wsclient: --expect-rows %u but got %u\n", expectRows, rowsGot);
+      exitCode = 2;
+    }
+    if (exitCode == 0 && out) {
+      for (size_t o = 0; o < req.objs.size(); o++) {
+        int32_t retFlag = getI32(meta.data() + o * kDataMetaSize);
+        const ObjSpec &o2 = req.objs[o];
+        char szWho[128];
+        if (o2.kind == kObjBody) snprintf(szWho, sizeof(szWho), "%u", o2.id);
+        else if (o2.kind == kObjNodAps)
+          snprintf(szWho, sizeof(szWho), "%u,%u,%u", o2.id, o2.point, o2.method);
+        else snprintf(szWho, sizeof(szWho), "%s", o2.name);
+        for (uint32_t r2 = 0; r2 < count; r2++) {
+          const double *d = cols.data() + ((size_t)o * count + r2) * kColsPerObj;
+          fprintf(out, "%zu %s %d %a %a %a %a %a %a\n", o, szWho, retFlag,
+                  d[0], d[1], d[2], d[3], d[4], d[5]);
+        }
+      }
+      fflush(out);
+    }
+  }
+
+  if (out) fclose(out);
+  if (lat) fclose(lat);
+  close(fd);
+  return exitCode;
+}

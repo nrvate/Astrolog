@@ -2261,9 +2261,10 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
   return 2;
 }
 
-// The -b ephemeris-selection family: the digit suffixes are display
-// toggles that stand alone; every other spelling also turns ephemeris
-// files on, exactly as the retired case fell through to.
+// The -b ephemeris-selection family: the digit suffixes and -bW (the
+// server address, not a backend choice) stand alone; every other spelling
+// also turns ephemeris files on, exactly as the retired case fell
+// through to.
 
 static int NSwb(CONST char *szSwitch, PARSEIN *pin)
 {
@@ -2317,6 +2318,36 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
       return tcError;
     }
     us.nSwissEph = FSwitchF(us.nSwissEph == 3) * 3;
+  }
+  else if (ch1 == 'S') {
+    // The Ephemeris Server backend, selected like the other -b backends.
+#ifndef QT
+    // The connection it rides is the Qt build's (qtdriver.cpp); the
+    // console build has none. Keep the spelling accepted the way the
+    // retired Placalc spellings are, so a settings file saved by the GUI
+    // still loads here, answered with what actually happens, once.
+    if (FSwitchF(fFalse))
+      PrintWarning("The Ephemeris Server needs the Qt build; "
+        "the Swiss Ephemeris is used instead.");
+    return 0;
+#endif
+    if (us.fNoNetwork && FSwitchF(us.nSwissEph == 5)) {
+      ErrorArgv("bS");
+      return tcError;
+    }
+    us.nSwissEph = FSwitchF(us.nSwissEph == 5) * 5;
+  }
+  else if (ch1 == 'W') {
+    // The server address, a ws:// URL or host:port. This sets where the
+    // backend connects, not which backend runs, so it is the one -b
+    // suffix that does NOT fall through to the fEphemFiles toggle below.
+    if (FErrorArgc("bW", pin->argc, 1))
+      return tcError;
+    // An empty address is the default (localhost on the protocol's port),
+    // not garbage: the settings writer emits -bW "" for it, and a file
+    // that failed to load its own output would be no format at all.
+    FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL, &us.szEphSrv);
+    return 1;
   }
   SwitchF(us.fEphemFiles);
   return 0;

@@ -73,6 +73,7 @@
 #include <QtCore/QSet>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QProcess>
 #include <QtCore/QElapsedTimer>
 #include <QtGui/QImage>
 // For the dark scheme assertions: an indicator is drawn into an image and
@@ -87,6 +88,16 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QRegularExpression>
+// Before astrolog.h: its own macros (space, ret) collide with Qt's
+// headers, so every Qt include here sits above it, as in qtdriver.cpp.
+// The Ephemeris Server group runs its state machine against a real
+// loopback QWebSocketServer in process, and its protocol round trips
+// against ephproto.h itself -- the same header the client compiles,
+// resolved by the "-I ephsrv" the Qt makefiles carry.
+#include <QtWebSockets/QWebSocketServer>
+#include <QtWebSockets/QWebSocket>
+#include <QtNetwork/QHostAddress>
+#include "ephproto.h"
 #include "astrolog.h"
 #include "extern.h"
 #include "qtdriver.h"
@@ -133,6 +144,27 @@ extern CONST RCACCEL *PaccelTestQt();
 extern int CaccelTestQt();
 #define rgaccelQt PaccelTestQt()
 #define caccelQt CaccelTestQt()
+
+// The Ephemeris Server connection's state hooks (qtdriver.cpp). The state
+// values are the es* constants there: 0 Disconnected, 1 Connecting,
+// 2 Welcomed.
+extern int NEphSrvStateTestQt();
+extern int NBackoffEphSrvTestQt();
+extern void SetBackoffEphSrvTestQt(int);
+extern int NRetryEphSrvTestQt();
+extern flag FWelcEphSrvTestQt();
+extern CONST eph::Welcome *PwelcEphSrvTestQt();
+extern uint32_t DwReqEphSrvTestQt();
+extern flag FErrEphSrvTestQt(char *, int);
+extern flag FUrlEphSrvTestQt(CONST char *, char *, int);
+extern int NCastWarnSrvTestQt();
+extern int CReqSentEphSrvTestQt();
+extern int CWinSrvTestQt();
+extern CONST char *SzWarnSrvTestQt();
+extern void ClearWinSrvTestQt();
+extern flag FSendEphSrvQt(eph::Request *);
+extern void ClampEphSrvReqQt(eph::Request *);
+extern void EphSrvFinalizeQt();
 
 // The bundled ephem/ and the Object Selections list are one set: every row
 // of rgObjSel[] has its file here, and every asteroid file here is a row.
@@ -11747,7 +11779,14 @@ static void TestSettingsFieldsQt()
       continue;
     cAsked++;
     switch (psf->ch) {
-    case 'f': case 'i': *(int *)pb ^= 1;            break;
+    case 'f': case 'i': *(int *)pb ^= 1;
+      // The backend value nSwissEph carries one hole in the switch
+      // language: 4 is no backend, and no spelling writes it back. With
+      // the Ephemeris Server selected (5) the ^=1 below poisons into it,
+      // so poison toward Moshier instead, which -bs carries.
+      if (FEqSz(psf->szName, "us.nSwissEph") && *(int *)pb == 4)
+        *(int *)pb = 1;
+      break;
     case 'l':           *(long *)pb ^= 1L;          break;
     case 'r':           *(real *)pb += 1.0;         break;
     case 'c':           *(char *)pb ^= 1;           break;
@@ -17524,6 +17563,780 @@ static void TestDivergencesQt()
 }
 
 
+// ---- Ephemeris Server backend ----
+//
+// The protocol half asks ephproto.h itself: encode with the builders,
+// decode with the parsers, compare. The state machine half runs against
+// an in-process loopback QWebSocketServer rather than mocked socket
+// states: real sockets on localhost, so connected(), WELCOME, drops and
+// retries all arrive exactly as they do from the real server, and only
+// the ephemeris math is absent. The reconnect ladder is hurried by
+// pinning its base rung to 100ms through SetBackoffEphSrvTestQt(); the
+// assertions wait on states with a bounded event pump, never on sleeps.
+
+// A scratch loopback ephd: answers HELLO with one WELCOME built from the
+// caller's cells (so a scenario can flip the protocol version or the
+// caps between attempts), and records any REQUEST that arrives. The
+// latest client socket lands in *ppconn: QWebSocketServer::close() only
+// stops LISTENING and leaves connected clients alone, so a scenario that
+// wants a drop closes this.
+
+static void WireEphLoopbackQt(QWebSocketServer *psrv, byte *pbProto,
+  uint32_t *pdwCaps, CONST char *szVer, QByteArray *pbaReq,
+  QWebSocket **ppconn)
+{
+  QObject::connect(psrv, &QWebSocketServer::newConnection, psrv,
+    [psrv, pbProto, pdwCaps, szVer, pbaReq, ppconn]() {
+      QWebSocket *pconn;
+      while ((pconn = psrv->nextPendingConnection()) != NULL) {
+        *ppconn = pconn;
+        QObject::connect(pconn, &QWebSocket::binaryMessageReceived, pconn,
+          [pbProto, pdwCaps, szVer, pbaReq, pconn](CONST QByteArray &ba) {
+            eph::Envelope env;
+            const byte *rgb = (const byte *)ba.constData();
+            if (ba.size() < (int)eph::kEnvelopeSize ||
+              !eph::parseEnvelope(rgb, &env))
+              return;
+            rgb += eph::kEnvelopeSize;
+            if (env.type == eph::kMsgHello) {
+              byte rgbW[sizeof(eph::WelcomeWire) + 256];
+              uint32_t dwLen;
+              std::vector<uint8_t> msg;
+              eph::buildWelcome(rgbW, *pdwCaps, 21003, szVer, &dwLen);
+              if (*pbProto != eph::kProtoVersion)
+                eph::putU32(rgbW, *pbProto);
+              msg = eph::makeMessage(eph::kMsgWelcome, 0, rgbW, dwLen);
+              pconn->sendBinaryMessage(QByteArray(
+                (const char *)msg.data(), (int)msg.size()));
+            } else if (env.type == eph::kMsgRequest)
+              *pbaReq = ba;
+          });
+      }
+    });
+}
+
+// Pump the event loop until the connection reaches a state, or time out.
+// The connection's states are the es* constants of qtdriver.cpp: 0
+// Disconnected, 1 Connecting, 2 Welcomed.
+
+static flag FWaitEstQt(int est, int msMax)
+{
+  QElapsedTimer tim;
+
+  tim.start();
+  while (NEphSrvStateTestQt() != est && tim.elapsed() < msMax)
+    QApplication::processEvents(QEventLoop::AllEvents, 20);
+  return NEphSrvStateTestQt() == est;
+}
+
+// The same, until a loopback server has received something.
+static flag FWaitDataQt(CONST QByteArray *pba, int msMax)
+{
+  QElapsedTimer tim;
+
+  tim.start();
+  while (pba->isEmpty() && tim.elapsed() < msMax)
+    QApplication::processEvents(QEventLoop::AllEvents, 20);
+  return !pba->isEmpty();
+}
+
+// The settings-file lines the backend round trip replays: exactly the
+// backend spelling, the address, and the =b line that settles
+// fEphemFiles last -- not the display toggles (-b0/-b1/-b2) or the
+// Matrix spellings a full-file replay would drag in.
+static flag FWantEphSrvQt(CONST char *sz)
+{
+  return FEqSzPrefixQt(sz, "=bS") || FEqSzPrefixQt(sz, "_bS") ||
+    FEqSzPrefixQt(sz, "-bW") || FEqSzPrefixQt(sz, "=b ");
+}
+
+static void TestEphSrvQt()
+{
+  flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
+    fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
+    fAddrSav = us.szEphSrv != NULL;
+  QByteArray baAddrSav(SzSet(us.szEphSrv));
+  QByteArray baFileOutSav(SzSet(is.szFileOut));
+  flag fFileOutSav = is.szFileOut != NULL;
+  int nSwissSav = us.nSwissEph, nWriteFormatSav = us.nWriteFormat;
+  flag fNoWriteSav = us.fNoWrite;
+  int cWarn, i;
+  char sz[cchSzMax], szPath[cchSzMax];
+  CONST eph::Welcome *pw;
+
+  Group("Ephemeris server");
+  SetNoPopupQt(fTrue);   // The facade's warning below would otherwise pop.
+  us.fNoNetwork = fFalse;   // The maintainer's file runs "=0n"; the -0n
+                            // scenarios below set it back themselves.
+
+  // The backend slot: the -bs family reaches it like the other values.
+  FProcessCommandLine("=bs");
+  Check(us.nSwissEph == 1 && us.fEphemFiles, "\"=bs\" is Moshier");
+  FProcessCommandLine("=bj");
+  Check(us.nSwissEph == 2, "\"=bj\" is JPL");
+  FProcessCommandLine("=bJ");
+  Check(us.nSwissEph == 3, "\"=bJ\" is Horizons");
+  FProcessCommandLine("=bS");
+  Check(us.nSwissEph == 5 && us.fEphemFiles, "\"=bS\" is the Ephemeris Server");
+  FProcessCommandLine("_bS");
+  Check(us.nSwissEph == 0, "\"_bS\" is off it");
+  FProcessCommandLine("=bS");
+  FProcessCommandLine("-bW example.com:1234");
+  Check(FEqSz(us.szEphSrv, "example.com:1234"), "-bW stores the address");
+  Check(!FProcessCommandLine("-bW"), "an address-less -bW is refused");
+
+  // The settings writer carries both, and only the one backend spelling,
+  // and they replay.
+  SzScratchPathQt(S(szPath), "ephsrv", ".as");
+  us.fNoWrite = fFalse;
+  us.nWriteFormat = 'd';
+  FCloneSz(szPath, &is.szFileOut);
+  us.fEphemFiles = fTrue;
+  Check(FOutputSettings(), "the settings writer wrote a file");
+  {
+    char szLine[cchSzLine];
+    flag fSawB = fFalse, fSawW = fFalse;
+    FILE *file = FileOpen(szPath, 1, NULL, 0);
+    Check(file != NULL, "and it can be read back");
+    while (file != NULL && FReadSzLineSkip(file, szLine, cchSzLine)) {
+      if (FEqSzPrefixQt(szLine, "=bS"))
+        fSawB = fTrue;
+      if (FEqSz(szLine, "-bW \"example.com:1234\""))
+        fSawW = fTrue;
+    }
+    if (file != NULL)
+      fclose(file);
+    Check(fSawB, "the file carries \"=bS\" for the server backend");
+    Check(fSawW, "and \"-bW\" with the quoted address");
+  }
+  us.nSwissEph = 0;
+  us.fEphemFiles = fFalse;
+  FCloneSz("other.host:9", &us.szEphSrv);
+  i = CReplaySettingsQt(szPath, FWantEphSrvQt);
+  Check(i > 0, "the -b lines replay (%d)", i);
+  Check(us.nSwissEph == 5 && us.fEphemFiles,
+    "\"=bS\" replays to the server backend");
+  Check(FEqSz(us.szEphSrv, "example.com:1234"),
+    "\"-bW\" replays the address");
+  FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
+  us.nWriteFormat = nWriteFormatSav;
+  us.fNoWrite = fNoWriteSav;
+
+  // -0n refuses selecting the backend, changing nothing.
+  us.fNoNetwork = fTrue;
+  Check(!FProcessCommandLine("=bS"), "\"=bS\" is refused under -0n");
+  Check(us.nSwissEph == 5, "and the backend is unchanged");
+  us.fNoNetwork = fFalse;
+
+  // The address setting: default, bare host, host:port, URL, refusal.
+  Check(FUrlEphSrvTestQt(NULL, S(sz)) && FEqSz(sz, "ws://localhost:47190"),
+    "an empty address is localhost on the protocol's default port (%s)",
+    sz);
+  Check(FUrlEphSrvTestQt("", S(sz)) && FEqSz(sz, "ws://localhost:47190"),
+    "so is \"\"");
+  Check(FUrlEphSrvTestQt("example.com", S(sz)) &&
+    FEqSz(sz, "ws://example.com:47190"),
+    "a bare host gets the default port (%s)", sz);
+  Check(FUrlEphSrvTestQt("example.com:1234", S(sz)) &&
+    FEqSz(sz, "ws://example.com:1234"), "host:port passes through");
+  Check(FUrlEphSrvTestQt("ws://example.com:99/x", S(sz)) &&
+    FEqSz(sz, "ws://example.com:99/x"), "so does a ws:// URL");
+  Check(FUrlEphSrvTestQt("wss://secure.example.com", S(sz)) &&
+    FEqSz(sz, "wss://secure.example.com:47190"), "and wss");
+  Check(!FUrlEphSrvTestQt(":", S(sz)), "a hostless spelling is refused");
+
+  // Protocol round trips, straight against ephproto.h.
+  {
+    byte rgbP[5] = {1, 2, 3, 4, 5};
+    std::vector<uint8_t> msg, rgb;
+    eph::Envelope env;
+    eph::Request rq, rq2;
+    eph::ErrorMsg err;
+    byte rgbE[32];
+
+    msg = eph::makeMessage(eph::kMsgRequest, 9, rgbP, 5);
+    Check(msg.size() == eph::kEnvelopeSize + 5, "an envelope wraps its payload");
+    Check(eph::parseEnvelope(msg.data(), &env) &&
+      env.type == eph::kMsgRequest && env.requestId == 9 &&
+      env.payloadLen == 5 && env.flags == 0, "and round trips");
+    msg[0] = 0;
+    Check(!eph::parseEnvelope(msg.data(), &env), "a broken magic refuses");
+
+    rq.objs.resize(3);
+    rq.objs[0].kind = eph::kObjBody; rq.objs[0].id = 2;
+    rq.objs[1].kind = eph::kObjStar;
+    sprintf2(S(sz), "Regulus");
+    strcpy(rq.objs[1].name, sz);
+    rq.objs[2].kind = eph::kObjBody; rq.objs[2].id = nMillion + 1;
+    rq.center = 10;
+    rq.iflag = 256|2|65536;
+    rq.sidMode = 1; rq.sidAyanOff = 0.883208;
+    rq.topoLon = -122.4194; rq.topoLat = 47.6062; rq.topoElv = 12.0;
+    rq.jdStart = 2459010.5; rq.stepSeconds = 600; rq.nTime = 3;
+    rq.precision = eph::kPrecF64; rq.chunkRows = 100;
+    eph::buildRequest(&rgb, rq);
+    Check(rgb.size() == 4 + eph::kObjRecordBodySize*2 +
+      (1 + CchSz("Regulus") + 1) + sizeof(eph::RequestFixed),
+      "a mixed kind-0/kind-1 REQUEST is its parts' size");
+    Check(eph::parseRequest(rgb.data(), rgb.size(), &rq2) == eph::kParseOk,
+      "REQUEST parses");
+    Check(rq2.objs.size() == 3 && rq2.objs[0].id == 2 &&
+      rq2.objs[1].kind == eph::kObjStar &&
+      FEqSz(rq2.objs[1].name, "Regulus") && rq2.objs[2].id == nMillion + 1,
+      "its object records round trip");
+    Check(rq2.center == 10 && rq2.iflag == rq.iflag && rq2.sidMode == 1 &&
+      rq2.sidAyanOff == 0.883208 && rq2.topoLon == -122.4194 &&
+      rq2.topoLat == 47.6062 && rq2.topoElv == 12.0 &&
+      rq2.jdStart == 2459010.5 && rq2.stepSeconds == 600 &&
+      rq2.nTime == 3 && rq2.precision == eph::kPrecF64 &&
+      rq2.chunkRows == 100, "and its fixed fields round trip");
+
+    // A DATA chunk: header, per-object metadata (one ok, one failed),
+    // and the value block.
+    {
+      byte rgbMeta[2 * eph::kDataMetaSize];
+      double rgcols[2 * 6] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+      size_t cb, ncb = 0;   // strZ() leaves ncb alone on a bad read.
+      char serr[eph::kSerrMax], szName[eph::kMetaNameMax];
+      const char *szN;
+
+      eph::writeDataMeta(rgbMeta, 2, 9876, "", "Mercury");
+      eph::writeDataMeta(rgbMeta + eph::kDataMetaSize, -1, 0,
+        "swe_calc_ut_r: bad input", "Sedna");
+      rgb.resize(eph::dataPayloadSize(2, 1, eph::kPrecF64));
+      eph::writeDataChunk(rgb.data(), rgb.size(), 0, 0, 1, 1, 2,
+        eph::kPrecF64, rgbMeta, rgcols, &cb);
+      Check(cb == rgb.size(), "DATA fills exactly its payload size");
+      eph::Reader r(rgb.data(), rgb.size());
+      Check(r.u32() == 0 && r.u32() == 0 && r.u32() == 1 &&
+        r.u8() == eph::kPrecF64 && r.u32() == 2,
+        "its header round trips");
+      Check(r.i32() == 2 && r.i32() == 9876,
+        "the first object's retFlag/flagsUsed");
+      r.raw(serr, eph::kSerrMax);
+      // The name is strZ read out of a fixed 56-byte field: skip the
+      // padding after its NUL, or the next record reads from the middle
+      // of this one.
+      szN = r.strZ(&ncb);
+      Check(szN != NULL && FEqSz(szN, "Mercury"), "and its name");
+      r.raw(szName, eph::kMetaNameMax - (ncb + 1));
+      Check(r.i32() < 0 && r.i32() == 0, "the failed object's retFlag");
+      r.raw(serr, eph::kSerrMax);
+      Check(FEqSz(serr, "swe_calc_ut_r: bad input"), "carries its serr text");
+      szN = r.strZ(&ncb);
+      Check(szN != NULL && FEqSz(szN, "Sedna"), "and its name");
+      r.raw(szName, eph::kMetaNameMax - (ncb + 1));
+      Check(r.f64() == 1.0, "the value block starts with obj0's first column");
+      r.f64(); r.f64(); r.f64(); r.f64();   // obj0's columns 2 through 5.
+      Check(r.f64() == 6.0 && r.f64() == 7.0,
+        "obj0's last column, then obj1's first, object-major");
+    }
+
+    eph::putU32(rgbE, 4);
+    eph::putI32(rgbE + 4, eph::kErrLimits);
+    sprintf2(S(sz), "too big");
+    strcpy((char *)rgbE + 8, sz);
+    msg = eph::makeMessage(eph::kMsgError, 0, rgbE, 8 + CchSz(sz) + 1);
+    Check(eph::parseError(msg.data() + eph::kEnvelopeSize, msg.size() -
+      eph::kEnvelopeSize, &err) && err.requestId == 4 &&
+      err.code == eph::kErrLimits && FEqSz(err.text.c_str(), "too big"),
+      "an ERROR round trips");
+  }
+
+  // REQUEST clamping, with no WELCOME stored: the protocol's constants.
+  EphSrvFinalizeQt();
+  {
+    eph::Request rq;
+    rq.objs.resize(eph::kMaxObjs + 6);
+    rq.nTime = 999999; rq.chunkRows = 9999;
+    rq.precision = eph::kPrecF32;
+    ClampEphSrvReqQt(&rq);
+    Check(rq.objs.size() == eph::kMaxObjs,
+      "nObj clamps to WELCOME maxObjs (%d)", (int)rq.objs.size());
+    Check(rq.nTime == eph::kMaxRows && rq.chunkRows == eph::kMaxChunkRows,
+      "rows and the chunk hint clamp to WELCOME's limits");
+    Check(rq.precision == eph::kPrecF64,
+      "f32 without a caps bit falls back to f64");
+  }
+
+  // The state machine, against three loopback servers: welcomed, then a
+  // version-mismatch refusal (server too old), then re-welcomed with the
+  // f32 caps bit -- and the in-flight request re-sent there verbatim.
+  {
+    QWebSocketServer srv1("eph-loopback-1", QWebSocketServer::NonSecureMode);
+    QWebSocketServer srv2("eph-loopback-2", QWebSocketServer::NonSecureMode);
+    QWebSocketServer srv3("eph-loopback-3", QWebSocketServer::NonSecureMode);
+    byte bProto1 = eph::kProtoVersion, bProto2 = 2, bProto3 =
+      eph::kProtoVersion;
+    uint32_t dwCaps1 = 0, dwCaps2 = 0, dwCaps3 = eph::kCapFloat32;
+    char szVer1[64], szVer2[64], szVer3[64];
+    QByteArray baReq1, baReq2, baReq3;
+    QWebSocket *pconn1 = NULL, *pconn2 = NULL, *pconn3 = NULL;
+    eph::Request rq, rq2;
+    eph::Envelope env;
+    std::vector<uint8_t> rgbExp;
+    uint32_t dwReq;
+    QElapsedTimer tim;
+    flag fSawRetry;
+
+    sprintf2(S(szVer1), "astrolog-ephd 0.1-test");
+    sprintf2(S(szVer2), "astrolog-ephd 0.3-old");
+    sprintf2(S(szVer3), "astrolog-ephd 0.2-f32");
+    Check(srv1.listen(QHostAddress::LocalHost) &&
+      srv2.listen(QHostAddress::LocalHost) &&
+      srv3.listen(QHostAddress::LocalHost),
+      "the loopback servers listen");
+    WireEphLoopbackQt(&srv1, &bProto1, &dwCaps1, szVer1, &baReq1, &pconn1);
+    WireEphLoopbackQt(&srv2, &bProto2, &dwCaps2, szVer2, &baReq2, &pconn2);
+    WireEphLoopbackQt(&srv3, &bProto3, &dwCaps3, szVer3, &baReq3, &pconn3);
+
+    // Select the backend, pointed at the first.
+    us.fEphemFiles = fTrue; us.nSwissEph = 5; us.fNoNetwork = fFalse;
+    EphSrvFinalizeQt();
+    sprintf2(S(sz), "localhost:%d", (int)srv1.serverPort());
+    FCloneSz(sz, &us.szEphSrv);
+    EphSrvStartupQt();
+    Check(NEphSrvStateTestQt() == 1, "the startup hook begins connecting");
+    Check(FWaitEstQt(2, 10000),
+      "the client welcomes against the loopback server");
+    Check(FWelcEphSrvTestQt(), "WELCOME stored");
+    pw = PwelcEphSrvTestQt();
+    Check(pw->maxObjs == eph::kMaxObjs && pw->maxRows == eph::kMaxRows &&
+      pw->maxChunkRows == eph::kMaxChunkRows &&
+      pw->swissephVersion == 21003, "its limits and versions stored");
+    Check(FEqSz(pw->serverVersion.c_str(), szVer1),
+      "and the server's version string with them");
+    Check(NBackoffEphSrvTestQt() == 1000, "a session resets the ladder");
+
+    // One request, on the wire.
+    rq.objs.resize(3);
+    rq.objs[0].kind = eph::kObjBody; rq.objs[0].id = 2;
+    rq.objs[1].kind = eph::kObjBody; rq.objs[1].id = 17;
+    rq.objs[2].kind = eph::kObjStar;
+    sprintf2(S(sz), "Aldebaran");
+    strcpy(rq.objs[2].name, sz);
+    rq.jdStart = 2459010.5; rq.stepSeconds = 600; rq.nTime = 3;
+    rq.chunkRows = 100; rq.precision = eph::kPrecF64;
+    Check(FSendEphSrvQt(&rq), "a request sends while welcomed");
+    dwReq = DwReqEphSrvTestQt();
+    Check(dwReq != 0, "and takes an id");
+    Check(FWaitDataQt(&baReq1, 5000), "the loopback server received it");
+    eph::buildRequest(&rgbExp, rq);
+    Check(eph::parseEnvelope((const byte *)baReq1.constData(), &env) &&
+      env.type == eph::kMsgRequest && env.requestId == dwReq &&
+      baReq1.size() == (int)(rgbExp.size() + eph::kEnvelopeSize) &&
+      memcmp(baReq1.constData() + eph::kEnvelopeSize, rgbExp.data(),
+        rgbExp.size()) == 0, "as exactly the bytes built");
+
+    // With caps 0 stored, f32 still falls back.
+    rq2.precision = eph::kPrecF32; rq2.nTime = 10; rq2.chunkRows = 10;
+    ClampEphSrvReqQt(&rq2);
+    Check(rq2.precision == eph::kPrecF64,
+      "the stored WELCOME's zero caps force f64");
+
+    // Drop, and be refused by a server too old for us. Closing the
+    // server only stops its listening; the client socket is what drops.
+    SetBackoffEphSrvTestQt(100);   // Hurry the ladder.
+    sprintf2(S(sz), "localhost:%d", (int)srv2.serverPort());
+    FCloneSz(sz, &us.szEphSrv);
+    if (pconn1 != NULL)
+      pconn1->close();
+    else
+      srv1.close();
+    Check(DwReqEphSrvTestQt() == dwReq,
+      "the in-flight request survives the drop");
+    tim.start();
+    sz[0] = chNull;
+    fSawRetry = fFalse;
+    while (tim.elapsed() < 5000) {
+      QApplication::processEvents(QEventLoop::AllEvents, 20);
+      if (NRetryEphSrvTestQt() > 0)
+        fSawRetry = fTrue;
+      FErrEphSrvTestQt(sz, cchSzMax);
+      if (strstr(sz, "protocol 2") != NULL)
+        break;
+    }
+    Check(strstr(sz, "protocol 2") != NULL && strstr(sz, szVer2) != NULL &&
+      strstr(sz, "protocol 1") != NULL,
+      "a version mismatch is refused with the server's version retained "
+      "(\"%.80s\")", sz);
+    Check(NEphSrvStateTestQt() != 2, "the mismatched server never welcomes");
+    Check(fSawRetry, "the retry ladder keeps going");
+
+    // The third server tells the truth and carries the f32 caps bit; the
+    // in-flight request is re-sent there verbatim.
+    sprintf2(S(sz), "localhost:%d", (int)srv3.serverPort());
+    FCloneSz(sz, &us.szEphSrv);
+    Check(FWaitEstQt(2, 10000), "the client re-welcomes on the third server");
+    pw = PwelcEphSrvTestQt();
+    Check((pw->caps & eph::kCapFloat32) != 0, "the caps bit arrived");
+    Check(FEqSz(pw->serverVersion.c_str(), szVer3), "from the right server");
+    Check(FWaitDataQt(&baReq3, 5000),
+      "the in-flight request was re-sent after the reconnect");
+    Check(baReq3 == baReq1, "verbatim");
+    rq2.precision = eph::kPrecF32; rq2.nTime = 10; rq2.chunkRows = 10;
+    ClampEphSrvReqQt(&rq2);
+    Check(rq2.precision == eph::kPrecF32,
+      "and the caps bit admits f32");
+  }
+  EphSrvFinalizeQt();
+
+  // The synchronous facade, increment 1: fails soft, warns once per
+  // cast, never latches. The backend is deselected so the connector the
+  // facade prods stays out of the way of these assertions.
+  us.nSwissEph = 1;
+  cWarn = NCastWarnSrvTestQt();
+  {
+    real r1, r2, r3, r4, r5, r6;
+    Check(!FSrvPlanetQt(oSun, 2459010.5, &r1, &r2, &r3, &r4, &r5, &r6),
+      "the facade fails soft");
+    Check(NCastWarnSrvTestQt() == cWarn + 1, "with one warning");
+    Check(!FSrvPlanetQt(oMoo, 2459010.5, &r1, &r2, &r3, &r4, &r5, &r6),
+      "a second object of the same cast fails soft too");
+    Check(NCastWarnSrvTestQt() == cWarn + 1, "still warning once per cast");
+    Check(!FSrvPlanetQt(oSun, 2459010.7, &r1, &r2, &r3, &r4, &r5, &r6),
+      "the next cast fails as well");
+    Check(NCastWarnSrvTestQt() == cWarn + 2, "and warns again, once");
+  }
+  Check(is.fNoEphFile == fNoEphFileSav, "no fNoEphFile latch (lesson 3)");
+
+  // -0n fails fast, and the connector never runs.
+  us.nSwissEph = 5;
+  us.fNoNetwork = fTrue;
+  EphSrvFinalizeQt();
+  cWarn = NCastWarnSrvTestQt();
+  {
+    real r1, r2, r3, r4, r5, r6;
+    Check(!FSrvPlanetQt(oSun, 2459010.9, &r1, &r2, &r3, &r4, &r5, &r6),
+      "-0n fails the facade fast");
+    Check(NCastWarnSrvTestQt() == cWarn + 1, "with its own warning");
+  }
+  Check(NEphSrvStateTestQt() == 0 && NRetryEphSrvTestQt() < 0,
+    "and the connector never runs under -0n");
+
+  EphSrvFinalizeQt();
+  us.fEphemFiles = fEphemSav;
+  us.nSwissEph = nSwissSav;
+  us.fNoNetwork = fNoNetSav;
+  FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
+  is.fNoEphFile = fNoEphFileSav;
+  SetNoPopupQt(fPopSav);
+}
+
+
+// ---- Ephemeris Server backend, live parity ----
+//
+// Increment 2's acceptance (EPHEMERIS_CLIENT_PLAN.md section 9): a chart
+// cast on the server backend lands BIT-IDENTICAL to the same cast on the
+// local Swiss path. The server is the real astrolog-ephd, launched here on
+// a scratch port over the ephemeris directory this run was started with,
+// so the two paths read the same files; the local cast is the oracle. Not
+// a loopback mock: a mock would answer whatever the test told it to, and
+// the question here is whether the real server, asked the real question,
+// gives the number Swiss gives locally. Skipped, with a printed reason,
+// when the server binary is not built -- "make ephsrv" needs the
+// thread-safe fork -- so a bare checkout's suite stays green.
+//
+// Every scenario casts locally, snapshots the six position arrays, casts
+// on the server, and compares the arrays as bytes. The scenarios are the
+// flag paths FSwissPlanetSpec() takes: tropical geocentric, sidereal,
+// heliocentric, topocentric, true node, an unusual center (swe_calc_pctr),
+// a custom node/apsis object (swe_nod_aps), and a pre-1955 instant where
+// delta-t's tidal term is live. Then the window cache, a drop and a
+// reconnect, and -0n.
+
+typedef struct _EphSnapshot {
+  // The six arrays are macros over cp0 (extern.h), so the members here
+  // carry other names.
+  real rgobj[objMax], rgalt[objMax], rgdir[objMax], rgdiralt[objMax],
+    rgdirlen[objMax];
+  PT3R rgpt[objMax];
+} EPHSNAPSHOT;
+
+static void SnapshotEphQt(EPHSNAPSHOT *ps)
+{
+  int i;
+
+  // Element by element: in this build the arrays are range-checked
+  // wrappers, not memory.
+  for (i = 0; i < objMax; i++) {
+    ps->rgobj[i] = planet[i];
+    ps->rgalt[i] = planetalt[i];
+    ps->rgdir[i] = ret[i];
+    ps->rgdiralt[i] = retalt[i];
+    ps->rgdirlen[i] = retlen[i];
+    ps->rgpt[i] = space[i];
+  }
+}
+
+// Objects whose six values differ between two snapshots, naming the first.
+// With rTol zero the comparison is on the bytes; with a tolerance it is
+// on the magnitude, for the one path where the local library is not the
+// authority (see the centered scenario below).
+static flag FSameEphQt(real r1, real r2, real rTol)
+{
+  return rTol == 0.0 ? memcmp(&r1, &r2, sizeof(real)) == 0 :
+    RAbs(r1 - r2) <= rTol;
+}
+
+static int CDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
+  real rTol, char *szFirst, int cchMax)
+{
+  int i, c = 0;
+
+  *szFirst = chNull;
+  for (i = 0; i < objMax; i++) {
+    if (FSameEphQt(p1->rgobj[i], p2->rgobj[i], rTol) &&
+      FSameEphQt(p1->rgalt[i], p2->rgalt[i], rTol) &&
+      FSameEphQt(p1->rgdir[i], p2->rgdir[i], rTol) &&
+      FSameEphQt(p1->rgdiralt[i], p2->rgdiralt[i], rTol) &&
+      FSameEphQt(p1->rgdirlen[i], p2->rgdirlen[i], rTol) &&
+      FSameEphQt(p1->rgpt[i].x, p2->rgpt[i].x, rTol) &&
+      FSameEphQt(p1->rgpt[i].y, p2->rgpt[i].y, rTol) &&
+      FSameEphQt(p1->rgpt[i].z, p2->rgpt[i].z, rTol))
+      continue;
+    if (c == 0)
+      sprintf2(szFirst, cchMax, "%s: local %a / server %a (lon), "
+        "%a / %a (lat), %a / %a (speed)", szObjName[i],
+        p1->rgobj[i], p2->rgobj[i], p1->rgalt[i], p2->rgalt[i],
+        p1->rgdir[i], p2->rgdir[i]);
+    c++;
+  }
+  return c;
+}
+
+// Wait for the launched server to log that it is listening, which it does
+// once the port is bound -- its "ephemeris path" line comes before that,
+// and a client that connects on it can be refused.
+static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
+{
+  QElapsedTimer tim;
+
+  tim.start();
+  while (tim.elapsed() < msMax) {
+    QApplication::processEvents(QEventLoop::AllEvents, 20);
+    pbaLog->append(pproc->readAllStandardOutput());
+    if (pbaLog->contains("listening on port"))
+      return fTrue;
+    if (pproc->state() == QProcess::NotRunning)
+      return fFalse;
+  }
+  return fFalse;
+}
+
+static void TestEphSrvLiveQt()
+{
+  flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
+    fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
+    fAddrSav = us.szEphSrv != NULL, fSidSav = us.fSidereal,
+    fTopoSav = us.fTopoPos, fTrueNodeSav = us.fTrueNode,
+    fIgnoreSav = ignore[custLo];
+  QByteArray baAddrSav(SzSet(us.szEphSrv));
+  int nSwissSav = us.nSwissEph, objCenterSav = us.objCenter,
+    nObjSav = rgObjSwiss[0], nTypSav = rgTypSwiss[0], nPntSav = rgPntSwiss[0],
+    nFlgSav = rgFlgSwiss[0];
+  CI ciSav = ciCore;
+  QString strBin, strEphe;
+  QProcess proc;
+  QByteArray baLog;
+  EPHSNAPSHOT snLocal, snSrv;
+  char sz[cchSzMax], szDiff[cchSzMax];
+  int port, iScen, cDiff, cWarn, cReq;
+
+  Group("Ephemeris server, live parity");
+  SetNoPopupQt(fTrue);
+  us.fNoNetwork = fFalse;
+
+  strBin = QCoreApplication::applicationDirPath() + "/astrolog-ephd";
+  if (!QFileInfo(strBin).isExecutable()) {
+    printf("  skipped: %s is not built (make ephsrv needs the thread-safe "
+      "Swiss Ephemeris fork)\n", strBin.toLocal8Bit().constData());
+    goto LRestore;
+  }
+  if (us.rgszPath[1] == NULL || us.rgszPath[1][0] == chNull) {
+    printf("  skipped: no -Yi1 ephemeris directory to point the server at\n");
+    goto LRestore;
+  }
+  strEphe = QString::fromLocal8Bit(us.rgszPath[1]);
+  if (!QDir::isAbsolutePath(strEphe))
+    strEphe = QCoreApplication::applicationDirPath() + "/" + strEphe;
+
+  // The real server, on a scratch port, over this run's ephemeris.
+  port = 47500 + (int)(QCoreApplication::applicationPid() % 400);
+  proc.setProcessChannelMode(QProcess::MergedChannels);
+  proc.start(strBin, QStringList() << "--port" << QString::number(port)
+    << "--ephe" << strEphe << "--threads" << "1");
+  Check(FWaitEphdQt(&proc, &baLog, 10000),
+    "astrolog-ephd started on port %d over %s", port,
+    strEphe.toLocal8Bit().constData());
+  if (proc.state() == QProcess::NotRunning)
+    goto LRestore;
+  Check(!baLog.contains("<none found"),
+    "the server found the ephemeris directory");
+
+  // The chart: a fixed UT instant at a fixed place, no zone, no DST.
+  OraclePinUtQt(1990, 6, 15, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;   // west-positive, Seattle-ish
+
+  // Connect the backend.
+  EphSrvFinalizeQt();
+  ClearWinSrvTestQt();
+  sprintf2(S(sz), "localhost:%d", port);
+  FCloneSz(sz, &us.szEphSrv);
+  us.fEphemFiles = fTrue;
+  us.nSwissEph = 5;
+  EphSrvStartupQt();
+  if (!FWaitEstQt(2, 10000)) {
+    FErrEphSrvTestQt(S(sz));
+    Check(fFalse, "the backend welcomes against the real server (state %d, "
+      "retry %d ms, \"%.120s\")", NEphSrvStateTestQt(), NRetryEphSrvTestQt(),
+      sz);
+  } else
+    Check(fTrue, "the backend welcomes against the real server");
+  SetBackoffEphSrvTestQt(100);   // Hurry the ladder for the drop below.
+
+  // The scenarios. Each: settings, local cast, server cast, compare.
+  for (iScen = 0; iScen < 8; iScen++) {
+    CONST char *szScen;
+    real rTol = 0.0;
+    us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+    us.fTrueNode = fFalse; ignore[custLo] = fTrue;
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    switch (iScen) {
+    case 0: szScen = "tropical geocentric"; break;
+    case 1: szScen = "sidereal"; us.fSidereal = fTrue; break;
+    case 2: szScen = "heliocentric"; us.objCenter = oSun; break;
+    case 3: szScen = "topocentric"; us.fTopoPos = fTrue; break;
+    case 4: szScen = "true node"; us.fTrueNode = fTrue; break;
+    case 5: szScen = "centered on Mars (swe_calc_pctr, within 1e-5 deg)";
+      // The one KNOWING divergence, and the server is the right side of
+      // it: the fork fixed swe_calc_pctr() transforming to the ecliptic of
+      // date through caches its own inner calls had re-keyed (its
+      // notes/REVIEW.md, the swe_calc_pctr row), and the library this
+      // build vendors is upstream 2.10.03, kept untouched on purpose.
+      // Measured with a probe against both libraries, fresh and after
+      // other calls: the same 5e-9 degrees for the Earth every time, so
+      // it is not history but the fix; under the maintainer's settings
+      // the largest is Pluto's speed, 1.2e-6 degrees a day. The tolerance
+      // is ten times that; the other seven scenarios stay on the bytes.
+      us.objCenter = oMar; rTol = 1e-5; break;
+    case 6: szScen = "a custom object that is Jupiter's perihelion "
+      "(swe_nod_aps)";
+      ignore[custLo] = fFalse;
+      rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 3;
+      rgFlgSwiss[0] = 0;
+      break;
+    default: szScen = "a 1900 instant, where delta-t's tidal term is live";
+      OraclePinUtQt(1900, 1, 1, 0.0);
+      ciCore.lon = 122.3; ciCore.lat = 47.6;
+      break;
+    }
+    us.nSwissEph = 0;   // The local Swiss path: the oracle.
+    CastChart(0);
+    SnapshotEphQt(&snLocal);
+    us.nSwissEph = 5;   // The server.
+    cWarn = NCastWarnSrvTestQt();
+    CastChart(0);
+    SnapshotEphQt(&snSrv);
+    Check(NCastWarnSrvTestQt() == cWarn,
+      "%s: the server cast raised no warning (\"%.100s\")", szScen,
+      SzWarnSrvTestQt());
+    cDiff = CDiffEphQt(&snLocal, &snSrv, rTol, S(szDiff));
+    Check(cDiff == 0, "%s: server cast %s the local one "
+      "(%d objects differ; first: %s)", szScen,
+      rTol == 0.0 ? "bit-identical to" : "agrees with", cDiff, szDiff);
+    Check(planet[oSun] != 0.0 || planet[oMoo] != 0.0,
+      "%s: the cast computed something at all", szScen);
+    if (iScen == 6) {
+      rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
+      rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
+    }
+  }
+  us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+  us.fTrueNode = fFalse; ignore[custLo] = fIgnoreSav;
+  OraclePinUtQt(1990, 6, 15, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+
+  // The window cache: the same cast again sends nothing.
+  us.nSwissEph = 5;
+  CastChart(0);
+  cReq = CReqSentEphSrvTestQt();
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  Check(CReqSentEphSrvTestQt() == cReq && NCastWarnSrvTestQt() == cWarn,
+    "a repeated cast is answered from the window cache (no request sent)");
+  Check(CWinSrvTestQt() <= 8, "the window cache is bounded (%d held)",
+    CWinSrvTestQt());
+  OraclePinUtQt(1990, 6, 16, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  CastChart(0);
+  Check(CReqSentEphSrvTestQt() > cReq,
+    "a cast at a new instant sends a request");
+
+  // A drop mid-session: the cast fails soft, once in words; the server
+  // comes back and the next cast is bit-identical again.
+  proc.kill();
+  proc.waitForFinished(2000);
+  Check(FWaitEstQt(0, 5000), "the backend sees the server go");
+  OraclePinUtQt(1990, 6, 17, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  Check(NCastWarnSrvTestQt() == cWarn + 1,
+    "a cast with the server gone fails soft with one warning");
+  Check(is.fNoEphFile == fNoEphFileSav, "and sets no fNoEphFile latch");
+  baLog.clear();
+  proc.start(strBin, QStringList() << "--port" << QString::number(port)
+    << "--ephe" << strEphe << "--threads" << "1");
+  Check(FWaitEphdQt(&proc, &baLog, 10000), "the server restarted");
+  Check(FWaitEstQt(2, 15000), "the backend reconnected on its ladder");
+  us.nSwissEph = 0;
+  CastChart(0);
+  SnapshotEphQt(&snLocal);
+  us.nSwissEph = 5;
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  SnapshotEphQt(&snSrv);
+  cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+  Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0,
+    "after the reconnect a cast is bit-identical again (%d differ: %s)",
+    cDiff, szDiff);
+
+  // -0n: fails fast, sends nothing.
+  us.fNoNetwork = fTrue;
+  OraclePinUtQt(1990, 6, 18, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  cReq = CReqSentEphSrvTestQt();
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  Check(NCastWarnSrvTestQt() == cWarn + 1 && CReqSentEphSrvTestQt() == cReq,
+    "under -0n a cast fails fast with one warning and no request");
+  us.fNoNetwork = fFalse;
+
+LRestore:
+  if (proc.state() != QProcess::NotRunning) {
+    proc.kill();
+    proc.waitForFinished(2000);
+  }
+  EphSrvFinalizeQt();
+  ClearWinSrvTestQt();
+  us.fEphemFiles = fEphemSav;
+  us.nSwissEph = nSwissSav;
+  us.fNoNetwork = fNoNetSav;
+  us.fSidereal = fSidSav; us.objCenter = objCenterSav;
+  us.fTopoPos = fTopoSav; us.fTrueNode = fTrueNodeSav;
+  ignore[custLo] = fIgnoreSav;
+  rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
+  rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
+  FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
+  is.fNoEphFile = fNoEphFileSav;
+  ciCore = ciSav;
+  CastChart(0);   // Leave the arrays as the chart before this group had them.
+  SetNoPopupQt(fPopSav);
+}
+
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"popup-net",            TestPopupNetQt},
@@ -17573,6 +18386,8 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
   {"ephemeris-list",       TestEphemerisListQt},
+  {"ephem-server",         TestEphSrvQt},
+  {"ephem-server-live",    TestEphSrvLiveQt},
   {"chart-list",           TestChartListFilterQt},
   {"info-time",            TestChartInfoTimeQt},
   {"info-coord",           TestChartInfoCoordQt},

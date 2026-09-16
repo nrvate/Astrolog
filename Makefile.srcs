@@ -47,6 +47,16 @@ SRC_QT   = qtdriver.cpp qtdialog.cpp
 SRC_TEST = qttest.cpp
 SRC_WIN  = wdialog.cpp wdriver.cpp
 
+# The ephemeris WebSocket server (branch ephserver, EPHEMERIS_SERVER_PLAN.md)
+# and the standalone wire client its gates drive. Unlike every other binary
+# in the tree these compile NONE of the engine and link the Swiss Ephemeris
+# thread-safe fork's library in place of the vendored SRC_SWISS files --
+# concurrent requests need the fork's swe_ctx API, which upstream 2.10.03
+# does not have, and the vendored copy stays untouched for the
+# swetest-oracle tooling. Makefile.ephsrv is the only build that compiles
+# this group; its SWE_HOME variable says where the fork lives.
+SRC_EPHSRV = ephsrv/eph_srv.cpp ephsrv/eph_wsclient.cpp
+
 # The vendored Swiss Ephemeris is compiled with two warning classes off:
 # -Wwrite-strings (string literals into char *, 80-odd sites in sweph.cpp
 # alone) and -Wsign-compare (two in search_star_in_list). They are
