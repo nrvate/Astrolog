@@ -1298,7 +1298,8 @@ enum _calculationmethod {
   cmMatrix  = 3,  // Very old Matrix formulas
   cmJPLWeb  = 4,  // JPL Horizons internet Web query
   cmNone    = 5,  // No calculation method
-  cmMax     = 6,
+  cmEphSrv  = 6,  // Ephemeris Server (WebSocket ephemeris service)
+  cmMax     = 7,
 };
 
 // Position Display Format
@@ -2240,6 +2241,7 @@ typedef struct _UserSettings {
   //        1          1       Moshier analytic (-bs)
   //        1          2       JPL ephemeris file (-bj)
   //        1          3       JPL Horizons web query (-bJ)
+  //        1          5       Ephemeris Server (-bS; its address is -bW)
   // fMatrixStar computes fixed stars with Matrix even when Swiss is on.
   // Trap: every backend suffix of -b (-bm -bs -bj -bJ -bU) falls through
   // to also TOGGLE fEphemFiles (NSwb, switch.cpp), so a plain "-bm" with
@@ -2348,6 +2350,9 @@ typedef struct _UserSettings {
   char *szStarsColor;  // -YkU
   char *szStarsList;   // -YRU
   char *szExoList;     // -YUx
+  char *szEphSrv;      // -bW, the Ephemeris Server's ws:// URL or
+                       // host:port; empty means localhost on the
+                       // protocol's default port (ephproto.h)
 
   // Value subsettings
   int   nWheelRows;        // Number of rows per house to use for -w wheel.

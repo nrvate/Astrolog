@@ -38,7 +38,7 @@ OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,\
 # it is opt-in: PKG_CONFIG_PATH=/usr/local/qt6/lib/pkgconfig selects it.
 QT_MAJOR := $(shell pkg-config --exists Qt6Widgets && echo 6 || echo 5)
 QT_MODULES = Qt$(QT_MAJOR)Widgets Qt$(QT_MAJOR)Gui Qt$(QT_MAJOR)Core \
- Qt$(QT_MAJOR)PrintSupport Qt$(QT_MAJOR)Network
+ Qt$(QT_MAJOR)PrintSupport Qt$(QT_MAJOR)Network Qt$(QT_MAJOR)WebSockets
 # Stop by name when Qt is not installed, before anything compiles.
 # Without this, pkg-config prints three lines of its own advice per
 # missing module -- "add the directory containing `Qt5Widgets.pc' to
@@ -73,7 +73,7 @@ QT_LIBS = $(shell pkg-config --libs $(QT_MODULES) 2>/dev/null)
 # -pthread: see the plain Makefile's LIBS.
 LIBS = $(QT_LIBS) -lm -ldl -pthread
 CPPFLAGS = -MMD -MP -DQT -O -fPIC -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment \
- $(QT_CFLAGS)
+ -I ephsrv $(QT_CFLAGS)
 RM = rm -f
 
 $(NAME): $(OBJS)

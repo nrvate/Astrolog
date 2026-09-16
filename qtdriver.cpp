@@ -82,6 +82,13 @@
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
+#include <QtWebSockets/QWebSocket>
+#include <QtCore/QRandomGenerator>
+// The Ephemeris Server's wire protocol, shared with the server end.
+// Compiled into the client on purpose (EPHEMERIS_CLIENT_PLAN.md lesson 7):
+// a protocol mismatch is a compile error, not a runtime mystery. Resolved
+// by the "-I ephsrv" the Qt makefiles carry.
+#include "ephproto.h"
 #include <QtWidgets/QProgressDialog>
 #include <QtGui/QTextDocument>
 #include <QtPrintSupport/QPrinter>
@@ -6875,6 +6882,10 @@ void ApplyTitleBarThemeQt(QWidget *pw)
 // upstream's own leak check firing -- "Number of memory allocations not
 // freed before exiting: 13" for thirteen renamed macros -- which reads
 // like a fault in the chart engine rather than an unfreed menu label.
+// Declared here, defined below with the rest of the Ephemeris Server
+// connection, which FinalizeQt() tears down.
+void EphSrvFinalizeQt();
+
 void FinalizeQt(void)
 {
   int i;
@@ -6883,6 +6894,9 @@ void FinalizeQt(void)
     delete qi.pnam;
     qi.pnam = NULL;
   }
+
+  // The Ephemeris Server's socket and timers go too.
+  EphSrvFinalizeQt();
 
   for (i = 0; i < cMacro; i++) {
     DeallocatePIf(qi.rgszMacro[i]);
@@ -7057,6 +7071,480 @@ flag FGetUrlQt(CONST char *szUrl, CONST char *szFile)
 }
 
 
+/*
+******************************************************************************
+** Ephemeris server connection.
+******************************************************************************
+*/
+
+// The Ephemeris Server backend's one held connection: a WebSocket to the
+// ephd service (EPHEMERIS_CLIENT_PLAN.md §4). State machine Disconnected →
+// Connecting → Welcomed, entirely in the background -- no dialogs, no
+// status noise -- while a local ephemeris path is configured, because the
+// backend is a convenience there and nobody is waiting on it. The
+// required-server mode, whose dialog and exit ladder land in
+// EphSrvStartupQt() at increment 4, is the only blocking UI the plan
+// allows at all.
+//
+// The whole protocol rides ephproto.h (the envelope, HELLO/WELCOME, the
+// limits WELCOME carries); nothing below duplicates it. Qt answers
+// WebSocket protocol-level pings by itself, so there is no heartbeat of
+// our own here (lesson 4); the app-level PING/PONG message types are
+// answered for servers of other clients' sake only.
+
+// Connection states.
+#define esDisconnected 0        // No socket, or the last one is gone.
+#define esConnecting   1        // Socket open, HELLO sent, WELCOME awaited.
+#define esWelcomed     2        // WELCOME parsed; limits/caps govern.
+
+// The reconnect ladder. Before the first WELCOME -- or when the server
+// keeps refusing -- the background path retries on the slow tick. After a
+// session has been had and dropped, the ladder doubles from 1 second,
+// capped at a minute, jittered, so a restarted server is back within a
+// couple of seconds and a dead one is not hammered.
+#define msEphSrvRetry     60000 // Slow background tick before a session.
+#define msEphSrvBackoff   1000  // First rung of the drop ladder.
+#define msEphSrvBackoffMax 60000
+#define msEphSrvHello     15000 // A HELLO with no WELCOME back is a dead
+                                // server; give up on the attempt.
+
+static struct {
+  int est;                    // The es* state.
+  QWebSocket *pws;            // The socket, Connecting or Welcomed; NULL
+                              // in Disconnected.
+  QTimer *ptim;               // The one-shot retry timer, armed whenever
+                              // Disconnected and the backend is selected.
+  QTimer *ptimWelc;           // The HELLO-timeout timer, Connecting only.
+  int msBack;                 // Next rung of the drop ladder.
+  int msRetry;                // The delay actually armed (jittered), for
+                              // the state tests to pin.
+  flag fHad;                  // A session has been had; drops take the
+                              // ladder, refusals the slow tick.
+  flag fWelc;                 // welc holds the current session's WELCOME.
+  eph::Welcome welc;          // What WELCOME said: limits and caps.
+  uint32_t dwReq;             // The request awaiting an answer, 0 none.
+  uint32_t dwReqNext;         // The next request id to hand out.
+  QByteArray baReq;           // The in-flight request's exact wire bytes,
+                              // re-sent verbatim after a reconnect --
+                              // requests are pure functions (lesson 5),
+                              // so there is nothing else to resume. One
+                              // slot: a request sent while one is still
+                              // in flight replaces it, and the replaced
+                              // one's caller fails soft on its timeout.
+  QString strErr;             // The last refusal or drop's error text.
+                              // A version mismatch's server version is
+                              // kept here, for the required-server
+                              // dialog to show (increment 4).
+} esrv;
+
+// Whether the backend is selected and allowed to run. -0n (us.fNoNetwork)
+// disables it entirely; the connector below never runs and ComputeEphem
+// fails fast (plan §8).
+
+static flag FEphSrvOn()
+{
+  return FCmSrv() && !us.fNoNetwork;
+}
+
+
+// Turn the setting into the URL to open. us.szEphSrv is a ws:// URL or
+// host:port; an empty setting is localhost on the protocol's default
+// port, read from ephproto.h, so the two ends agree with zero
+// configuration. The address is read per connect attempt, so changing it
+// takes effect on the next (re)connect.
+
+static flag FUrlEphSrv(CONST char *szAddr, QUrl *purl, QString *pstrErr)
+{
+  QString str = QString::fromUtf8(SzSet(szAddr)).trimmed();
+  QUrl url;
+
+  if (str.isEmpty())
+    str = "localhost";   // The two ends agree with zero configuration.
+
+  if (str.startsWith("ws://", Qt::CaseInsensitive) ||
+      str.startsWith("wss://", Qt::CaseInsensitive))
+    url = QUrl(str);
+  else
+    // A bare host[:port]. The scheme prefix makes QUrl parse the host,
+    // the port and IPv6 brackets alike, and means the port default below
+    // applies to it exactly as to a ws:// spelling without one.
+    url = QUrl("ws://" + str);
+  if (!url.isValid() || url.host().isEmpty()) {
+    *pstrErr = QString("Not a valid Ephemeris Server address: \"%1\"")
+      .arg(str);
+    return fFalse;
+  }
+  if (url.port() < 0)
+    url.setPort(eph::kDefaultPort);
+  *purl = url;
+  return fTrue;
+}
+
+
+// One rung of the ladder, jittered a bit either side so a room full of
+// clients that all lost the server at the same moment do not all knock on
+// the same second.
+
+static int MsEphSrvRetry(int ms);
+
+static void EphSrvConnect();
+
+static int MsEphSrvRetry(int ms)
+{
+  int j = ms / 8;
+
+  if (j > 0)
+    ms += QRandomGenerator::global()->bounded(2*j) - j;
+  return ms;
+}
+
+
+// Tear the socket down and arm the next attempt. Kept in one place
+// because every way out of Connecting and Welcomed comes through it:
+// refusal, version mismatch, a bad frame, a dropped connection.
+
+static void EphSrvDropped(CONST QString &strErr)
+{
+  int ms;
+
+  if (esrv.pws != NULL) {
+    esrv.pws->deleteLater();
+    esrv.pws = NULL;
+  }
+  if (esrv.ptimWelc != NULL)
+    esrv.ptimWelc->stop();
+  esrv.est = esDisconnected;
+  esrv.fWelc = fFalse;     // The limits were the session's; a new one
+                           // re-reads them from its own WELCOME.
+  if (!strErr.isEmpty())
+    esrv.strErr = strErr;
+  // dwReq and baReq are deliberately kept: the request is re-sent
+  // verbatim when the next WELCOME arrives.
+  ms = esrv.fHad ? esrv.msBack : msEphSrvRetry;
+  if (esrv.fHad)
+    esrv.msBack = Min(msEphSrvBackoffMax, esrv.msBack * 2);
+  esrv.msRetry = MsEphSrvRetry(ms);
+  if (esrv.ptim == NULL) {
+    esrv.ptim = new QTimer();
+    esrv.ptim->setSingleShot(fTrue);
+    QObject::connect(esrv.ptim, &QTimer::timeout, esrv.ptim, []() {
+      // Not connected while deselected, and never twice at once. The
+      // address is re-read by EphSrvConnect(), so a setting changed
+      // since the last attempt takes effect here.
+      if (FEphSrvOn() && esrv.est == esDisconnected && esrv.pws == NULL)
+        EphSrvConnect();
+    });
+  }
+  esrv.ptim->start(esrv.msRetry);
+}
+
+
+// One message off the wire. What is not understood is answered by closing
+// the connection: a peer that cannot frame the protocol is of no use, and
+// the ladder brings the connection back to a server that can.
+
+static void EphSrvMessage(CONST QByteArray &ba)
+{
+  const byte *rgb = (const byte *)ba.constData();
+  int cb = ba.size();
+  eph::Envelope env;
+  QString strErr;
+
+  if (cb < eph::kEnvelopeSize || !eph::parseEnvelope(rgb, &env) ||
+    env.payloadLen != (uint32_t)(cb - eph::kEnvelopeSize))
+    goto LBad;
+  rgb += eph::kEnvelopeSize;
+  switch (env.type) {
+  case eph::kMsgWelcome:
+    // One WELCOME per connection, in Connecting only.
+    if (esrv.est != esConnecting ||
+      !eph::parseWelcome(rgb, env.payloadLen, &esrv.welc))
+      goto LBad;
+    if (esrv.welc.protoVersion != eph::kProtoVersion) {
+      // The server is too old (or too new) for us: behave as connection
+      // refused, the retry cycle continues, and the server's version
+      // text is retained so the mismatch is diagnosable (plan §4).
+      esrv.strErr = QString("The Ephemeris Server reports version \"%1\", "
+        "which speaks protocol %2; this client speaks protocol %3.")
+        .arg(esrv.welc.serverVersion.c_str())
+        .arg(esrv.welc.protoVersion).arg(eph::kProtoVersion);
+      esrv.fWelc = fFalse;
+      esrv.pws->close();
+      return;
+    }
+    esrv.est = esWelcomed;
+    esrv.fWelc = fTrue;
+    esrv.fHad = fTrue;
+    esrv.msBack = msEphSrvBackoff;  // A session resets the ladder.
+    if (esrv.ptimWelc != NULL)
+      esrv.ptimWelc->stop();
+    // An in-flight request is a pure function; re-send it verbatim.
+    if (esrv.dwReq != 0 && !esrv.baReq.isEmpty() && esrv.pws != NULL)
+      esrv.pws->sendBinaryMessage(esrv.baReq);
+    break;
+  case eph::kMsgData:
+    // Increment 2's window cache fills from these. The request id says
+    // which request the chunk answers; for now there is no one waiting,
+    // and the arrival only settles the in-flight slot.
+    if (env.requestId == esrv.dwReq)
+      esrv.dwReq = 0;
+    break;
+  case eph::kMsgError: {
+    // A whole-request error: the in-flight slot it answers is settled,
+    // and its text is kept, for the same reason a version mismatch's is.
+    eph::ErrorMsg err;
+    if (!eph::parseError(rgb, env.payloadLen, &err))
+      goto LBad;
+    if (err.requestId == esrv.dwReq) {
+      esrv.dwReq = 0;
+      esrv.strErr = QString::fromUtf8(err.text.c_str());
+    }
+    break;
+  }
+  case eph::kMsgPing:
+    // App-level ping (lesson 4: the protocol-level ones never reach
+    // here, QWebSocket answers them itself). Same id back, empty payload.
+    if (esrv.pws != NULL)
+      esrv.pws->sendBinaryMessage(QByteArray(
+        (const char *)eph::buildPong(env.requestId).data(),
+        (int)(eph::kEnvelopeSize)));
+    break;
+  case eph::kMsgPong:
+    break;
+  default:
+    goto LBad;
+  }
+  return;
+
+LBad:
+  strErr = "The Ephemeris Server sent a message this client could not "
+    "read; closing the connection.";
+  esrv.pws->close();
+  esrv.strErr = strErr;
+}
+
+
+// Open a connection, synchronously in the sense that everything up to the
+// socket is done here; WELCOME arrives by signal.
+
+static void EphSrvConnect()
+{
+  QUrl url;
+  QString strErr;
+
+  if (esrv.pws != NULL)
+    return;      // Already Connecting or Welcomed.
+  if (!FUrlEphSrv(us.szEphSrv, &url, &strErr)) {
+    // A bad setting is a refusal like any other: keep its text and let
+    // the ladder retry, so fixing the setting is enough.
+    EphSrvDropped(strErr);
+    return;
+  }
+  esrv.est = esConnecting;
+  esrv.pws = new QWebSocket(QString("%1/%2").arg(szAppName)
+    .arg(szVersionCore), QWebSocketProtocol::VersionLatest, NULL);
+  QObject::connect(esrv.pws, &QWebSocket::connected, esrv.pws, []() {
+    byte rgbHello[sizeof(eph::HelloWire) + 256];
+    uint32_t dwLen;
+    std::vector<uint8_t> msg;
+
+    // Say hello first; WELCOME comes back by signal.
+    eph::buildHello(rgbHello, 0, 0, szVersionCore, &dwLen);
+    msg = eph::makeMessage(eph::kMsgHello, 0, rgbHello, dwLen);
+    esrv.pws->sendBinaryMessage(QByteArray((const char *)msg.data(),
+      (int)msg.size()));
+    if (esrv.ptimWelc != NULL)
+      esrv.ptimWelc->start(msEphSrvHello);
+  });
+  QObject::connect(esrv.pws, &QWebSocket::disconnected, esrv.pws, []() {
+    // Every way out of Connecting and Welcomed lands here. Say which
+    // thing went wrong when the socket itself has an opinion; the
+    // message handler's refusals have already said theirs.
+    QString strErr;
+    if (esrv.pws != NULL && esrv.pws->error() != QAbstractSocket::UnknownSocketError)
+      strErr = QString("Couldn't reach the Ephemeris Server at %1: %2.")
+        .arg(esrv.pws->requestUrl().toString())
+        .arg(esrv.pws->errorString());
+    EphSrvDropped(strErr);
+  });
+  QObject::connect(esrv.pws, &QWebSocket::binaryMessageReceived, esrv.pws,
+    [](CONST QByteArray &ba) { EphSrvMessage(ba); });
+  QObject::connect(esrv.pws, &QWebSocket::textMessageReceived, esrv.pws,
+    [](CONST QString &str) {
+      // The protocol is binary; a peer speaking text is a peer we cannot
+      // read, and the same close-and-retry answers it.
+      esrv.strErr = "The Ephemeris Server sent a text message where the "
+        "protocol speaks binary; closing the connection.";
+      esrv.pws->close();
+    });
+  esrv.pws->open(url);
+}
+
+
+// Issue one REQUEST. Requires a Welcomed connection; clamps the request
+// to what WELCOME promised first (lesson 5: the caps govern the session).
+// Returns fFalse when there is nothing to send it on -- callers fail soft
+// (plan §8); increment 2's facade waits bounded and cancelable on the
+// answer instead.
+
+void ClampEphSrvReqQt(eph::Request *preq)
+{
+  uint32_t dwObjs = esrv.fWelc ? esrv.welc.maxObjs : eph::kMaxObjs;
+  uint32_t dwRows = esrv.fWelc ? esrv.welc.maxRows : eph::kMaxRows;
+  uint32_t dwChunk = esrv.fWelc ? esrv.welc.maxChunkRows :
+    eph::kMaxChunkRows;
+  uint32_t dwCaps = esrv.fWelc ? esrv.welc.caps : 0;
+
+  if (preq->objs.size() > (size_t)dwObjs)
+    preq->objs.resize(dwObjs);  // The server would refuse the whole
+                                // request; the objects past the cap fail
+                                // soft instead (plan §8).
+  preq->nTime = Min(preq->nTime, dwRows);
+  preq->chunkRows = Min(preq->chunkRows, dwChunk);
+  // Float32 is chosen for animation windows only if the caps bit says the
+  // server supports it; f64 is always legal.
+  if (preq->precision == eph::kPrecF32 && (dwCaps & eph::kCapFloat32) == 0)
+    preq->precision = eph::kPrecF64;
+}
+
+flag FSendEphSrvQt(eph::Request *preq)
+{
+  std::vector<uint8_t> rgb, msg;
+
+  if (esrv.est != esWelcomed || esrv.pws == NULL)
+    return fFalse;
+  ClampEphSrvReqQt(preq);
+  eph::buildRequest(&rgb, *preq);
+  esrv.dwReq = ++esrv.dwReqNext;
+  msg = eph::makeMessage(eph::kMsgRequest, esrv.dwReq, rgb.data(),
+    rgb.size());
+  esrv.baReq = QByteArray((const char *)msg.data(), (int)msg.size());
+  esrv.pws->sendBinaryMessage(esrv.baReq);
+  return fTrue;
+}
+
+
+// The startup path's hook, called from BeginQt(): begin the background
+// connection when the backend is selected. Increment 1 is the silent
+// background path alone; the required-server branch that lands here at
+// increment 4 -- SwissEnsurePath() finding no local ephemeris at all --
+// replaces this body with the modal "Connecting to cloud ephemeris"
+// dialog, the 1s-ten-times-then-60s ladder and the exit with
+// EXIT_NO_EPHEMERIS (plan §4), keeping the background path below for
+// every other case.
+
+void EphSrvStartupQt()
+{
+  if (!FEphSrvOn() || esrv.est != esDisconnected || esrv.pws != NULL ||
+    (esrv.ptim != NULL && esrv.ptim->isActive()))
+    return;
+  EphSrvConnect();
+}
+
+
+// Program exit: the socket and the timers go before the application does,
+// the way every other Qt object here is torn down in FinalizeQt().
+
+void EphSrvFinalizeQt()
+{
+  if (esrv.ptim != NULL) {
+    esrv.ptim->stop();
+    delete esrv.ptim;
+    esrv.ptim = NULL;
+  }
+  if (esrv.ptimWelc != NULL) {
+    esrv.ptimWelc->stop();
+    delete esrv.ptimWelc;
+    esrv.ptimWelc = NULL;
+  }
+  if (esrv.pws != NULL) {
+    esrv.pws->deleteLater();
+    esrv.pws = NULL;
+  }
+  esrv.est = esDisconnected;
+  esrv.fWelc = esrv.fHad = fFalse;
+  esrv.msBack = msEphSrvBackoff;
+  esrv.dwReq = esrv.dwReqNext = 0;
+  esrv.baReq = QByteArray();
+  esrv.strErr = QString();
+}
+
+
+/*
+******************************************************************************
+** Ephemeris server state hooks, for the test suite in qttest.cpp.
+******************************************************************************
+*/
+
+int NEphSrvStateTestQt() { return esrv.est; }
+int NBackoffEphSrvTestQt() { return esrv.msBack; }
+void SetBackoffEphSrvTestQt(int ms) { esrv.msBack = ms; }
+int NRetryEphSrvTestQt() { return esrv.ptim != NULL && esrv.ptim->isActive() ?
+  esrv.msRetry : -1; }
+flag FWelcEphSrvTestQt() { return esrv.fWelc; }
+CONST eph::Welcome *PwelcEphSrvTestQt() { return &esrv.welc; }
+uint32_t DwReqEphSrvTestQt() { return esrv.dwReq; }
+flag FErrEphSrvTestQt(char *sz, int cchMax) {
+  QByteArray ba = esrv.strErr.toLocal8Bit();
+  CopyRgchToSz(ba.constData(), CchSz(ba.constData())+1, sz, cchMax);
+  return !esrv.strErr.isEmpty();
+}
+flag FUrlEphSrvTestQt(CONST char *sz, char *szOut, int cchMax) {
+  QUrl url;
+  QString strErr;
+  if (!FUrlEphSrv(sz, &url, &strErr))
+    return fFalse;
+  QByteArray ba = url.toString().toLocal8Bit();
+  CopyRgchToSz(ba.constData(), CchSz(ba.constData())+1, szOut, cchMax);
+  return fTrue;
+}
+
+// The synchronous facade's per-object read (plan §5), ComputeEphem()'s
+// server analogue of the GetJPLHorizons() call site: the same six reals
+// FSwissPlanet() and GetJPLHorizons() fill, at the cast time like Swiss.
+//
+// Increment 1 is the cache-miss stub: there is no window cache yet, so
+// this always fails soft, once per cast, and never sets is.fNoEphFile --
+// lesson 3, that latch is for one-shot web queries, and here one dropped
+// cast must not disable a held connection until restart. Increment 2's
+// window-cache read drops in where the stub below is. Casting on the
+// server backend with no connection yet also begins the background
+// connect (EphSrvStartupQt()), so selecting the backend mid-session
+// brings the connector up the way startup would have.
+
+// The once-per-cast warning's counter, for the suite to pin "once".
+static int s_cSrvWarnQt = 0;
+
+flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
+  real *dist, real *diralt, real *dirlen)
+{
+  static real rJd = rInvalid;    // The jd the once-per-cast warning was
+  static flag fWarned = fFalse;  // raised for.
+
+  if (rJd != jd) {
+    rJd = jd; fWarned = fFalse;
+  }
+  if (!fWarned) {
+    fWarned = fTrue;
+    s_cSrvWarnQt++;
+    if (us.fNoNetwork)
+      PrintWarning("Internet features are disabled; the Ephemeris Server "
+        "is not used for this cast.");
+    else {
+      // Casting on the backend with the connector down begins the
+      // background connect, so selecting the server mid-session brings
+      // it up the way startup would have.
+      EphSrvStartupQt();
+      PrintWarning("The Ephemeris Server is not connected; objects served "
+        "by it fail this cast.");
+    }
+  }
+  return fFalse;
+}
+
+int NCastWarnSrvTestQt() { return s_cSrvWarnQt; }
+
+
 #ifdef QTTEST
 // The offscreen QPA plugin -- which every headless run of this suite and
 // both capture modes use -- emits "This plugin does not support
@@ -7200,6 +7688,10 @@ void BeginQt()
   // it alone, as Windows' does.
   ResizeWindowToChartQt();
   ScheduleUiFontReapplyQt();
+  // The Ephemeris Server backend connects in the background when it is
+  // the selected backend (plan §4); the required-server branch that
+  // dialogs here at increment 4 lands inside EphSrvStartupQt().
+  EphSrvStartupQt();
 }
 
 

@@ -130,6 +130,7 @@ US us = {
   NULL,
   NULL,
   NULL,
+  NULL,
 
   // Value subsettings
   0, 5, 200, cPart, 22, 0.0, 0.0, rDayInYear, 1.0, 0.5, ccNone, ccNone,
@@ -405,7 +406,7 @@ CONST char *szSuffix[cSign+1] = {"",
 CONST char *szEphem[cmMax] = {
   "Swiss Ephemeris 2.10.03", "Moshier Formulas 2.10.03",
   "JPL Ephemeris 2.10.03", "Matrix Formulas",
-  "JPL Horizons Web Query", "None"};
+  "JPL Horizons Web Query", "None", "Ephemeris Server"};
 
 CONST StrLookR rgZodiacOffset[] = {{"Fagan-Bradley", 0.0},
   {"Lahiri", 0.883208}, {"Deluce", -3.075453}, {"Raman", 2.329509},

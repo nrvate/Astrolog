@@ -1802,10 +1802,18 @@ flag FOutputSettings()
   // These also precede the "=0b" and "=0n" lines below on purpose, so a
   // saved file applies its backend before locking the old engines out.
   sprintf2(S(sz), "%-8s", us.nSwissEph == 1 ? "=bs" : us.nSwissEph == 2 ?
-    "=bj" : us.nSwissEph == 3 ? "=bJ" : "_bs"); PrintFSz();
+    "=bj" : us.nSwissEph == 3 ? "=bJ" : us.nSwissEph == 5 ? "=bS" :
+    "_bs"); PrintFSz();
   PrintF(
     "; Ephemeris backend         "
-    "[\"_bs\" Swiss \"=bs\" Mosh \"=bj\" JPL \"=bJ\" web]\n");
+    "[\"_bs\" Swiss \"=bs\" Mosh \"=bj\" JPL \"=bJ\" web \"=bS\" serv]\n");
+  // Written in pieces, never through sprintf2(): the address is user
+  // text, and a truncated one loses its closing quote, so the next word
+  // becomes a switch. Same discipline as the -Y5i line below.
+  PrintF("-bW "); PrintQuotedParamSz(file, us.szEphSrv); PrintF("\n");
+  PrintF(
+    "; Ephemeris server address  [ws:// URL or host:port; \"\" is "
+    "localhost:47190]\n");
   sprintf2(S(sz), "%cbm     ", ChDashF(us.fMatrixPla)); PrintFSz();
   PrintF(
     "; Use Matrix formulas       [\"=bm\" uses them, \"_bm\" doesn't   ]\n");

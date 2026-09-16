@@ -185,6 +185,19 @@ win:
 wcli:
 	$(MAKE) -f Makefile.wcli
 
+# The ephemeris WebSocket server and its wire client. Deliberately NOT part
+# of "all", like qt6: it wants the thread-safe Swiss Ephemeris fork and its
+# libswe.a built (SWE_HOME in Makefile.ephsrv says where), which a stock
+# checkout does not have -- and there the failure should name that
+# prerequisite, not break every build. "make ephsrv" also builds uSockets
+# (vendored, ephsrv/uSockets) when its static library is missing.
+# .PHONY because a directory named ephsrv/ sits in the tree and would
+# otherwise satisfy the target on sight -- make's mtime logic has no
+# idea it is looking at a source directory.
+.PHONY: ephsrv
+ephsrv:
+	$(MAKE) -f Makefile.ephsrv
+
 # Every build this fork has, in the order the pre-commit checks want them.
 all: $(NAME) qt qt-test win wcli
 

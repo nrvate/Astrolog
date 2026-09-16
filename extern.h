@@ -150,6 +150,7 @@ extern void FinalizeProgram P((flag));
 #define FCmSwissStar() (us.fEphemFiles && !us.fMatrixStar)
 #define FCmMatrix() (!us.fEphemFiles && us.fMatrixPla)
 #define FCmJPLWeb() (us.fEphemFiles && us.nSwissEph >= 3)
+#define FCmSrv() (us.fEphemFiles && us.nSwissEph == 5)
 
 extern US us;
 extern IS is;
@@ -1148,6 +1149,13 @@ extern int NAntialiasQt P((void));
 extern int NAnimDelayQt P((void));
 extern KV KvDialogQt P((void));
 extern void MousePosQt P((int *, int *));
+
+// The Ephemeris Server backend (qtdriver.cpp). ComputeEphem()'s per-object
+// read, the server analogue of the GetJPLHorizons() call site: six reals,
+// the same ones FSwissPlanet() and GetJPLHorizons() fill.
+extern flag FSrvPlanetQt P((int, real,
+  real *, real *, real *, real *, real *, real *));
+extern void EphSrvStartupQt P((void));
 #endif
 
 #ifdef WIN

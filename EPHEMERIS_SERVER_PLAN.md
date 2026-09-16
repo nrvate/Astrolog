@@ -389,3 +389,48 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
 # Work log
 
 (Entries append here, newest last.)
+
+## Work log
+
+1. **Round 1 landed: the server, its wire client, and both gates.** The
+   protocol of §4 became ephsrv/ephproto.h (bounds-checked Writer/Reader,
+   static_asserts on every fixed size; the PING/PONG echo payload of the
+   original sketch was dropped — heartbeats ride uWS's sendPingsAutomatically
+   with idleTimeout 30s instead of the sketched 20s app-level ping, which a
+   Qt client answers by itself anyway; the app-level PING/PONG types remain
+   in the envelope). eph_srv.cpp implements §5-§7 and §11: one App per event
+   loop on SO_REUSEPORT, a private slice of the swe_ctx pool per loop,
+   heartbeats delegated to uWS, zero-config discovery with sentinel stats
+   only. Verified end-to-end: WELCOME round trip, Sun+Moon rows, sidereal
+   (Fagan-Bradley ayanamsha through the context path), per-object failure
+   (retFlag -1), ERROR 2 on an oversized REQUEST, ERROR 5 with no ephemeris,
+   f32, and 30 concurrent clients across two loops.
+2. **The fork's shared-context answers are poisoned by body switches at
+   historical dates.** Computing several different bodies on ONE swe_ctx at
+   pre-1972 epochs (where the delta-t table is in force) diverges from a
+   fresh context by ~0.05 arcsec, and a SECOND call for the same body
+   diverges further — while at modern dates (polynomial delta-t) reuse is
+   bit-stable. swe_close_r() between bodies restores fresh-context answers
+   exactly, so ExecuteRequest() calls it after each object's row loop; the
+   pool survives and only the file caches are dropped. This belongs in the
+   fork's own ledger (notes/UPSTREAM-BUGS.md already catalogues the
+   delta-t table's one-shot init); until it is fixed there, every
+   multi-body consumer of the context API needs the same close_r between
+   bodies.
+3. **tools/ephsrv-golden.sh**: bit-exact (hexfloat string equality) against
+   a probe compiled from the same libswe — the context API, not legacy
+   swe_calc_ut, which the fork's one-shot delta-t init makes diverge at
+   historical dates even in one process. 70 columns green: 6 instants ×
+   Sun..Pluto + Vesta, plus sidereal Fagan-Bradley at two instants.
+4. **tools/ephsrv-soak.sh**: the §7 invariants measured, not asserted —
+   with a 100,000-file astN farm the server still starts in 0.11s (0.10s
+   at 2,000 files: O(1), not merely small), the strace log shows zero
+   getdents64 on the farm ever, the fd count did not move over a 200-request
+   barrage (11 before, 11 after), and a missing asteroid is a clean
+   per-object failure that leaves the connection up.
+5. **The client's settings round trip forced one backend-slot correction**:
+   the -bW writer emits the default address as "" and the reader originally
+   refused an empty address as garbage — every written settings file failed
+   to reload, which 73 suite failures traced back to. Empty now clears to
+   the default, like FCloneSz(NULL) elsewhere; the suite stands at 5649/0
+   with the client's new ephem-server group included.

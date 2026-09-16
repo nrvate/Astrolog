@@ -5111,14 +5111,25 @@ void ShowCalcDialogQt()
     if (!us.fNoNetwork)
       pcbEphem->addItem(szEphem[cmJPLWeb]);
 #endif
+#ifdef EPHEM
+    if (!us.fNoNetwork)
+      pcbEphem->addItem(szEphem[cmEphSrv]);
+#endif
 #ifdef MATRIX
     if (!us.fNoOldCalc)
       pcbEphem->addItem(szEphem[cmMatrix]);
 #endif
     pcbEphem->addItem(szEphem[cmNone]);
+    // The edit text maps nSwissEph to its szEphem row: the first four
+    // values index straight over (0 Swiss, 1 Moshier, 2 JPL, 3 Web), 5
+    // is the Ephemeris Server, and anything else is none. (This used to
+    // index szEphem[nSwissEph] raw, which showed "Matrix Formulas" for a
+    // Horizons selection, since cmMatrix and nSwissEph 3 collide on the
+    // index but not on the meaning.)
     pcbEphem->setEditText(szEphem[!us.fEphemFiles ?
       (us.fMatrixPla ? cmMatrix : cmNone) :
-      (FBetween(us.nSwissEph, 0, cmMax-1) ? us.nSwissEph : cmNone)]);
+      (us.nSwissEph == 5 ? cmEphSrv :
+      (FBetween(us.nSwissEph, 0, cmJPLWeb) ? us.nSwissEph : cmNone))]);
   }
   if (pcbAyan != NULL) {
     // The list offers the named ayanamsas with their offsets, and the
@@ -5209,6 +5220,9 @@ void ShowCalcDialogQt()
     else if (FMatchSz(sz, szEphem[cmMoshier])) { us.fEphemFiles = fTrue; us.nSwissEph = 1; }
     else if (FMatchSz(sz, szEphem[cmJPL]))     { us.fEphemFiles = fTrue; us.nSwissEph = 2; }
     else if (FMatchSz(sz, szEphem[cmJPLWeb]))  { us.fEphemFiles = fTrue; us.nSwissEph = 3; }
+#endif
+#ifdef EPHEM
+    else if (FMatchSz(sz, szEphem[cmEphSrv]))  { us.fEphemFiles = fTrue; us.nSwissEph = 5; }
 #endif
 #ifdef MATRIX
     if (FMatchSz(sz, szEphem[cmMatrix]))
