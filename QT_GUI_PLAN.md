@@ -11184,6 +11184,24 @@ this is the note that explains the wall of dialogs.
     `fSmartCusp` off, whose duplicate-suppression would otherwise remove
     that very row.
 
+272. **The text console drag-selects, and Copy copies the selection.**
+    The press anchors a selection, a drag past the anchor cell grows it
+    over whole rows (full-width in between, each row's trailing blanks
+    stripped off the copy), and the release keeps it -- or, when the
+    press never became a drag, it is the plain click that pins a word or
+    sorts a header, which therefore moved from button-down to button-up.
+    "Copy Chart Text Output" (now Ctrl+C too) copies the selection while
+    one exists and the whole listing when it does not. The selection
+    reads the same retained grid the word highlight does, through the
+    view-or-pristine dimensions -- not `cchView`, which is zero when no
+    aspect view is built, and which silently refused every gesture on
+    every other chart until the clamp learned the fallback. Any
+    re-render drops the selection, in both places a view can change
+    (the redraw and the sort re-render). 10 assertions in `text-select`
+    covering the aspect list and the grid chart alike, a dropped-
+    trailing-blank sabotage caught three ways; the full suite is clean
+    under ASan.
+
 
 ## Features this fork adds to both builds
 

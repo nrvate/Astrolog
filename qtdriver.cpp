@@ -215,6 +215,19 @@ typedef struct _qtuserinterface {
   QString strTextHover;
   QVector<QRect> rgrcTextHover;
 
+  // The drag selection: where the left button went down (a cell), the
+  // cell the drag has reached, the row spans and text that covers, and
+  // the button state between them. Rows and cells are VIEW coordinates
+  // -- what the console shows -- so any re-render clears it.
+  flag fSelPress = fFalse;      // Left button down over the console.
+  flag fSelShift = fFalse;      // What that press was holding, for the
+                                // plain click the release may yet become.
+  int xSel1 = 0, ySel1 = 0;     // The anchor cell.
+  flag fSel = fFalse;           // A drag grew out of that press.
+  int xSel2 = 0, ySel2 = 0;     // Where the drag has reached.
+  QVector<QRect> rgrcTextSel;   // Its row spans, canvas pixels.
+  QString strTextSel;           // The text it covers.
+
   // The aspect list view: the console's own cells re-rendered with a
   // header row above the data, whose labels the mouse clicks to sort.
   // The pristine grid above is what the chart printed and never changes
@@ -468,6 +481,13 @@ protected:
       KV kv = KvFromKi(gi.kiOn);
       QColor col(RgbR(kv), RgbG(kv), RgbB(kv));
       int i;
+      // The drag selection wash, under the word layers: whole cells
+      // rather than glyph-hugging bands, and stronger than the pin, so
+      // the three read as one under the other.
+      for (i = 0; i < qi.rgrcTextSel.size(); i++) {
+        col.setAlpha(128);
+        p.fillRect(qi.rgrcTextSel[i], col);
+      }
       for (i = 0; i < qi.rgrcTextHover.size(); i++) {
         col.setAlpha(48);
         p.fillRect(qi.rgrcTextHover[i], col);
@@ -517,13 +537,13 @@ protected:
     if (pevent->button() != Qt::LeftButton)
       return;
 
-    // The text console's left click is its own thing -- Scribble() is
-    // graphics only: click a word to pin every instance of it, click it
-    // again or click between words to let go; on an aspect list's header
-    // row it sorts instead. TextClickAtPtQt() is where the work happens;
-    // see it in qtdriver.cpp.
+    // The text console's left press is its own thing -- Scribble() is
+    // graphics only: the press starts a drag selection, which the moves
+    // grow and the release resolves; a release that never dragged is
+    // the plain click that pins a word or sorts a header. The work
+    // happens in TextPressAtPtQt() and friends, qtdriver.cpp.
     if (!us.fGraphics) {
-      TextClickAtPtQt(pevent->pos().x(), pevent->pos().y(),
+      TextPressAtPtQt(pevent->pos().x(), pevent->pos().y(),
         (pevent->modifiers() & Qt::ShiftModifier) != 0);
       return;
     }
@@ -555,6 +575,13 @@ protected:
       return;
     }
 
+    // The text console's left drag is its selection growing, not
+    // Scribble(), which is graphics only and returns at once there.
+    if ((pevent->buttons() & Qt::LeftButton) && !us.fGraphics) {
+      TextDragAtPtQt(pevent->pos().x(), pevent->pos().y());
+      return;
+    }
+
     // Windows treats a plain left drag as a series of Shift+clicks, which
     // is what makes dragging draw a continuous line instead of a dotted
     // trail of single pixels. Holding Shift or Ctrl during a drag draws
@@ -572,6 +599,10 @@ protected:
     // and only if this drag didn't actually rotate anything.
     if (pevent->button() == Qt::RightButton && FRotatableQt() && !fRotated)
       ShowContextMenu(PtGlobalQt(pevent));
+    // The text console's left release resolves the press: a drag keeps
+    // its selection, a plain click does the click work.
+    else if (pevent->button() == Qt::LeftButton && !us.fGraphics)
+      TextReleaseAtPtQt(pevent->pos().x(), pevent->pos().y());
   }
 
 private:
@@ -1162,6 +1193,20 @@ int WchTextGridQt(int xCell, int yCell)
   return qi.rgwchGrid[yCell * qi.cchGrid + xCell];
 }
 
+// The dimensions WchTextGridQt() actually indexes: the view's when one
+// is built, the pristine grid's when it is not -- which is every chart
+// but the aspect list. The selection's cell coordinates clamp into
+// these, not into the view's alone.
+static int CchTextAtQt(void)
+{
+  return qi.rgwchView != NULL ? qi.cchView : qi.cchGrid;
+}
+
+static int CrowTextAtQt(void)
+{
+  return qi.rgwchView != NULL ? qi.crowView : qi.crowGrid;
+}
+
 // A word character in the retained grid: a letter or a digit -- ASCII, or
 // anything above 127, so accented names and the box-drawing characters a
 // colored text wheel is drawn with stay word characters too. Everything
@@ -1498,12 +1543,19 @@ static QString StrPrisSpanQt(int yCell, int x1, int x2)
 // which is why the re-render is indistinguishable from the print except
 // for what the view itself changes: the header row, the row order, and
 // the renumbered index column.
+static void ClearTextSelectionQt(void);
+
 static void TextViewRenderQt(void)
 {
   KV kvBack = KvFromKi(gi.kiOff);
   int dx = gi.qim != NULL ? gi.qim->width() :
     qi.cchView * qi.xChar + 8;
   int x, y;
+
+  // The view is about to change row-for-row, which is what a selection's
+  // cells name; a re-sort rebuilds the view without a full redraw, so
+  // this is the second of the two places a selection dies.
+  ClearTextSelectionQt();
 
   delete gi.qim;
   gi.qim = new QImage(dx, qi.crowView * qi.yChar, QImage::Format_RGB32);
@@ -1804,6 +1856,146 @@ void TextHoverAtPtQt(int xPix, int yPix)
   SetTextHoverQt(str);
   if (gi.qcanvas != NULL)
     gi.qcanvas->update();
+}
+
+// The cell a canvas point lands in, clamped into the view -- the draw in
+// TextCharQt() above read backwards, which is the same math the word
+// lookup uses.
+static void CellAtPtQt(int xPix, int yPix, int *px, int *py)
+{
+  *px = (xPix - 4) / qi.xChar;
+  *py = yPix / qi.yChar;
+  if (*px < 0)
+    *px = 0;
+  if (*py < 0)
+    *py = 0;
+  if (*px > CchTextAtQt() - 1)
+    *px = CchTextAtQt() - 1;
+  if (*py > CrowTextAtQt() - 1)
+    *py = CrowTextAtQt() - 1;
+}
+
+// A selection goes away on its own terms: any re-render invalidates the
+// view cells it names. The press state is the drag in progress, which
+// outlives this -- a re-render mid-drag just means the drag restarts
+// from wherever the render left the view.
+static void ClearTextSelectionQt(void)
+{
+  qi.fSel = fFalse;
+  qi.rgrcTextSel.clear();
+  qi.strTextSel = QString();
+}
+
+// The drag selection's row spans and text, rebuilt from the anchor cell
+// to the cell the drag has reached. Rows in between go the full width,
+// and each row's trailing blanks come off -- the shape a terminal's
+// select-and-copy has, which is the gesture this is.
+static void RebuildTextSelQt(void)
+{
+  int cch = CchTextAtQt(), crow = CrowTextAtQt(), y, x, xA, xB;
+  int xTop, yTop, xBot, yBot;
+
+  qi.rgrcTextSel.clear();
+  qi.strTextSel = QString();
+  if (!qi.fSel || cch < 1 || crow < 1)
+    return;
+  if (qi.ySel1 <= qi.ySel2) {
+    xTop = qi.xSel1; yTop = qi.ySel1;
+    xBot = qi.xSel2; yBot = qi.ySel2;
+  } else {
+    xTop = qi.xSel2; yTop = qi.ySel2;
+    xBot = qi.xSel1; yBot = qi.ySel1;
+  }
+  for (y = yTop; y <= yBot; y++) {
+    QString strRow;
+
+    xA = y == yTop ? xTop : 0;
+    xB = y == yBot ? xBot : cch - 1;
+    if (xA > xB) {
+      x = xA; xA = xB; xB = x;
+    }
+    for (x = xA; x <= xB; x++) {
+      int wch = WchTextGridQt(x, y);
+
+      strRow += QChar(wch ? wch : ' ');
+    }
+    while (strRow.endsWith(' '))
+      strRow.chop(1);
+    qi.rgrcTextSel << QRect(xA * qi.xChar + 4, y * qi.yChar,
+      (xB - xA + 1) * qi.xChar, qi.yChar);
+    if (y > yTop)
+      qi.strTextSel += '\n';
+    qi.strTextSel += strRow;
+  }
+}
+
+// The three halves of a drag selection, forwarded by the canvas's mouse
+// handlers: the press records where the left button landed and lets go
+// of whatever a previous drag left, a move to a new cell grows the
+// selection, and the release either keeps it or -- for a press that
+// never became a drag -- is the plain click, which pins a word or sorts
+// a header exactly as it always did. The click moving from press to
+// release is what lets one gesture mean two things without a word
+// pinning mid-drag.
+
+void TextPressAtPtQt(int xPix, int yPix, flag fShift)
+{
+  int x, y;
+
+  if (us.fGraphics || gi.qim == NULL || CchTextAtQt() < 1 ||
+    CrowTextAtQt() < 1)
+    return;
+  CellAtPtQt(xPix, yPix, &x, &y);
+  qi.xSel1 = qi.xSel2 = x;
+  qi.ySel1 = qi.ySel2 = y;
+  qi.fSelPress = fTrue;
+  qi.fSelShift = fShift;
+  ClearTextSelectionQt();
+}
+
+void TextDragAtPtQt(int xPix, int yPix)
+{
+  int x, y;
+
+  if (us.fGraphics || !qi.fSelPress)
+    return;
+  CellAtPtQt(xPix, yPix, &x, &y);
+  if (x == qi.xSel2 && y == qi.ySel2)
+    return;
+  qi.xSel2 = x;
+  qi.ySel2 = y;
+  // Sticky: a drag that wanders back to its anchor is still a drag.
+  qi.fSel = qi.fSel || x != qi.xSel1 || y != qi.ySel1;
+  RebuildTextSelQt();
+  if (gi.qcanvas != NULL)
+    gi.qcanvas->update();
+}
+
+void TextReleaseAtPtQt(int xPix, int yPix)
+{
+  if (us.fGraphics || !qi.fSelPress)
+    return;
+  qi.fSelPress = fFalse;
+  if (qi.fSel) {
+    if (gi.qcanvas != NULL)
+      gi.qcanvas->update();
+    return;
+  }
+  TextClickAtPtQt(xPix, yPix, qi.fSelShift);
+}
+
+// What the selection covers, for the copy path and the suite.
+QString StrTextSelectionQt(void)
+{
+  return qi.strTextSel;
+}
+
+// The pixel rectangle of one view cell -- the wash a selection lays over
+// it, and how the suite aims a press or a drag at a known cell without
+// knowing the font metrics.
+QRect RgrcTextCellQt(int xCell, int yCell)
+{
+  return QRect(xCell * qi.xChar + 4, yCell * qi.yChar, qi.xChar, qi.yChar);
 }
 
 // Called from PrintSz() (general.cpp) for each character, with the cell
@@ -2172,7 +2364,11 @@ static QString CaptureTextChartQt(flag fHTML)
 
 static void CopyChartTextQt()
 {
-  QString qs = CaptureTextChartQt(fFalse);
+  // A drag selection narrows this to just what it covers, as a
+  // terminal's Edit > Copy does. An empty one (blank rows only) copies
+  // nothing rather than clearing the clipboard.
+  QString qs = qi.fSel ? qi.strTextSel : CaptureTextChartQt(fFalse);
+
   if (!qs.isEmpty())
     QApplication::clipboard()->setText(qs);
 }
@@ -2225,10 +2421,12 @@ void RedrawQt()
   if (qi.fNoUpdate || (qi.grfHold & grfHoldRedraw))
     return;
   // A redraw is about to replace what the console held, so the hover is
-  // gone. The pinned word is not: the text branch re-records the grid
-  // below and looks the word up in it again, so it re-lights in whatever
-  // listing is now up.
+  // gone, and with it any drag selection: both name view cells, and the
+  // view is about to change. The pinned word is not: the text branch
+  // re-records the grid below and looks the word up in it again, so it
+  // re-lights in whatever listing is now up.
   ClearTextHoverQt();
+  ClearTextSelectionQt();
   // "-0X" forbids graphics, and Windows enforces it at the end of every
   // command (wdriver.cpp:2507) -- which is this point: after whatever the
   // user asked for, before the chart is drawn. This port never referenced
@@ -3975,6 +4173,9 @@ static void BuildEditMenu(QMainWindow *pwind)
   pmenu->addSeparator();
 
   QAction *paCopyText = pmenu->addAction("Copy Chart &Text Output");
+  // The standard shortcut, so a drag selection copies the way it does
+  // in everything else on the desktop.
+  paCopyText->setShortcut(QKeySequence::Copy);
   ConnectMenuQt(paCopyText, pwind,
     []() { CopyChartTextQt(); });
   QAction *paCopyBmp = pmenu->addAction("Copy Chart &Bitmap");

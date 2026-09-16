@@ -14622,6 +14622,142 @@ static void TestAspectSortQt()
   RestoreChartModeQt(nModeSav, &cfChartSav);
 }
 
+// The text console's drag selection: the press anchors, the drag grows,
+// the release keeps, and Copy Chart Text Output copies what it covers.
+// The same gestures the word highlight drives, one layer up.
+static void TestTextSelectQt()
+{
+  int xWinSav = gs.xWin, yWinSav = gs.yWin, nModeSav = gi.nMode;
+  CHARTFLAGSQT cfChartSav;
+  flag fGraphicsSav = us.fGraphics, fNoDisplaySav = us.fNoDisplay;
+  flag fClipSav = us.fClip80, fInterpSav = us.fInterpret;
+  flag fParSav = us.fParallel;
+  int nRelSav = us.nRel, nAspSav = us.nAsp, k;
+  byte rgbIgnoreSav[objMax], rgbIgnore2Sav[objMax], rgbASav[cAspect + 1];
+  CI ciSav = ciCore, ciMainSav = ciMain;
+  int i, y, yHdr = -1, yRow = -1;
+
+  SnapChartFlagsQt(&cfChartSav);
+  CopyRgb(ignore.rgn, rgbIgnoreSav, sizeof(ignore.rgn));
+  CopyRgb(ignore2.rgn, rgbIgnore2Sav, sizeof(ignore2.rgn));
+  for (k = 1; k <= cAspect; k++)
+    rgbASav[k] = ignorea[ASPT(k)];
+
+  us.fNoDisplay = fFalse;
+  us.fClip80 = fFalse;
+  us.fInterpret = fFalse;
+  us.nRel = rcNone;
+  us.fParallel = fFalse;
+  us.nAsp = cAspect;
+  for (k = 1; k <= cAspect; k++)
+    ignorea[ASPT(k)] = fFalse;
+  for (i = 0; i < objMax; i++)
+    ignore[i] = ignore2[i] = !(FBetween(i, oSun, oPlu) || i == oNod ||
+      i == oAsc || i == oMC);
+  RedoRestrictions();
+  ciMain.mon = 6; ciMain.day = 15; ciMain.yea = 1990; ciMain.tim = 12.0;
+  ciMain.dst = 0.0; ciMain.zon = 8.0;
+  ciMain.lon = 122.0 + 19.0/60.0; ciMain.lat = 47.0 + 36.0/60.0;
+  ciCore = ciMain;
+  CastChart(0);
+  us.fGraphics = fFalse;
+  SetChartModeQt(gAspect);
+
+  Group("Text console drag selection");
+
+  for (i = 0; i < 10; i++)
+    if (StrRowSortTestQt(i, 40).contains(QString("Obj1"))) {
+      yHdr = i;
+      break;
+    }
+  Check(yHdr >= 0, "the aspect list renders for the selection to cover");
+  if (yHdr >= 0) {
+    // Two whole rows, first cell to past the end: the drag clamps into
+    // the view, and each row's trailing blanks come off the copy.
+    QString str1 = StrRowSortTestQt(yHdr + 1, 200);
+    QString str2 = StrRowSortTestQt(yHdr + 2, 200);
+    QRect rc1 = RgrcTextCellQt(0, yHdr + 1);
+    QRect rc2 = RgrcTextCellQt(0, yHdr + 2);
+    QAction *pa = PaFindActionTestQt("Copy Chart &Text Output");
+
+    while (str1.endsWith(' '))
+      str1.chop(1);
+    while (str2.endsWith(' '))
+      str2.chop(1);
+    TextPressAtPtQt(rc1.x(), rc1.y() + rc1.height()/2);
+    TextDragAtPtQt(4 + 200 * 12, rc2.y() + rc2.height()/2);
+    TextReleaseAtPtQt(4 + 200 * 12, rc2.y() + rc2.height()/2);
+    Check(StrTextSelectionQt() == str1 + "\n" + str2,
+      "a two-row drag selects the rows' own text [\"%s\"]",
+      StrTextSelectionQt().toLocal8Bit().constData());
+
+    // Copy Chart Text Output copies the selection while it exists.
+    QApplication::clipboard()->setText(QString("sentinel"));
+    if (pa != NULL)
+      pa->trigger();
+    Check(QApplication::clipboard()->text() == str1 + "\n" + str2,
+      "and Copy Chart Text Output copies the selection, not the whole "
+      "listing");
+  }
+
+  // A plain click lets the selection go, and pins the word under it --
+  // the press that never became a drag is still the old click.
+  if (yHdr >= 0) {
+    QRect rc = RgrcTextCellQt(0, yHdr + 1);
+
+    TextPressAtPtQt(rc.x(), rc.y() + rc.height()/2);
+    TextReleaseAtPtQt(rc.x(), rc.y() + rc.height()/2);
+    Check(StrTextSelectionQt().isEmpty(),
+      "a click lets a previous selection go");
+    Check(!RgrcTextWordQt("Moon").isEmpty() ||
+      !RgrcTextWordQt("Sun").isEmpty(),
+      "and that click still pins the word it was on");
+  }
+
+  // The grid chart is the same console: the same gesture selects one of
+  // its rows whole, and a fresh render drops the selection -- its cells
+  // name a view that no longer exists.
+  us.fGraphics = fFalse;
+  SetChartModeQt(gGrid);
+  for (y = 0; y < 30 && yRow < 0; y++)
+    if (!StrRowSortTestQt(y, 200).trimmed().isEmpty())
+      yRow = y;
+  Check(yRow >= 0, "the grid renders for the selection to cover");
+  if (yRow >= 0) {
+    QString strRow = StrRowSortTestQt(yRow, 200);
+    QRect rc = RgrcTextCellQt(0, yRow);
+
+    while (strRow.endsWith(' '))
+      strRow.chop(1);
+    TextPressAtPtQt(rc.x(), rc.y() + rc.height()/2);
+    TextDragAtPtQt(4 + 200 * 12, rc.y() + rc.height()/2);
+    TextReleaseAtPtQt(4 + 200 * 12, rc.y() + rc.height()/2);
+    Check(StrTextSelectionQt() == strRow,
+      "the grid chart selects a whole row the same way [\"%s\"]",
+      StrTextSelectionQt().toLocal8Bit().constData());
+    SetChartModeQt(gGrid);
+    Check(StrTextSelectionQt().isEmpty(),
+      "and a fresh render drops the selection");
+  }
+
+  // Leave nothing behind.
+  CopyRgb(rgbIgnoreSav, ignore.rgn, sizeof(ignore.rgn));
+  CopyRgb(rgbIgnore2Sav, ignore2.rgn, sizeof(ignore2.rgn));
+  for (k = 1; k <= cAspect; k++)
+    ignorea[ASPT(k)] = rgbASav[k];
+  us.nAsp = nAspSav;
+  us.fParallel = fParSav;
+  RedoRestrictions();
+  us.fInterpret = fInterpSav;
+  us.nRel = nRelSav;
+  ciCore = ciSav; ciMain = ciMainSav;
+  us.fNoDisplay = fNoDisplaySav;
+  us.fClip80 = fClipSav;
+  gs.xWin = xWinSav; gs.yWin = yWinSav;
+  us.fGraphics = fGraphicsSav;
+  RestoreChartModeQt(nModeSav, &cfChartSav);
+}
+
 // The text console's word highlight: the grid TextCharQt() records, the
 // words hit-tested out of it, and the two layers of highlight the mouse
 // drives off that grid. The aspect list is the subject because it is the
@@ -16844,6 +16980,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"copy-text-bom",        TestCopyTextBomQt},
   {"text-word-highlight",  TestTextWordHighlightQt},
   {"aspect-sort",          TestAspectSortQt},
+  {"text-select",          TestTextSelectQt},
   {"copy-chart-name",      TestCopyChartNameQt},
   {"restrict-recall",      TestRestrictRecallQt},
   {"printing",             TestPrintQt},

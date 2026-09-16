@@ -226,6 +226,17 @@ void ScrollChartQt(int nDir);
 // Shift+click adds that column to the sort chain.
 void TextClickAtPtQt(int xPix, int yPix, flag fShift = fFalse);
 void TextHoverAtPtQt(int xPix, int yPix);
+// The drag selection's three halves, the same canvas pixels: the press
+// anchors it (and drops any selection a previous drag left), the moves
+// grow it, and the release keeps it -- or, for a press that never
+// became a drag, does the plain click's work. StrTextSelectionQt is the
+// text it covers, what Copy Chart Text Output copies while one exists.
+void TextPressAtPtQt(int xPix, int yPix, flag fShift = fFalse);
+void TextDragAtPtQt(int xPix, int yPix);
+void TextReleaseAtPtQt(int xPix, int yPix);
+QString StrTextSelectionQt(void);
+// The pixel rectangle of one view cell.
+QRect RgrcTextCellQt(int xCell, int yCell);
 void ClearTextHoverQt(void);
 void SetTextHighlightQt(CONST QString &strWord);
 void SetTextHoverQt(CONST QString &strWord);
