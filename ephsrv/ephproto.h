@@ -67,7 +67,35 @@ enum ErrCode : int32_t {
 enum Precision : uint8_t { kPrecF64 = 0, kPrecF32 = 1 };
 
 // REQUEST object record kind byte.
-enum ObjKind : uint8_t { kObjBody = 0, kObjStar = 1 };
+enum ObjKind : uint8_t {
+  kObjBody   = 0,   // a body by SWE id
+  kObjStar   = 1,   // a fixed star by name
+  kObjNodAps = 2,   // a node or apsis of a body: swe_nod_aps()
+};
+
+// Node/apsis point (kObjNodAps): which of swe_nod_aps()'s four answers.
+enum NodApsPoint : uint8_t {
+  kPntNorthNode = 1, kPntSouthNode = 2, kPntPerihelion = 3, kPntAphelion = 4,
+};
+// Node/apsis method (kObjNodAps): SE_NODBIT_MEAN or SE_NODBIT_OSCU.
+enum NodApsMethod : uint8_t { kNodMean = 0, kNodOscu = 1 };
+
+// Protocol-level bits in REQUEST's u64 iflag. SWE's own flags are int32
+// and live in the low 32 bits, which is all the server hands to SWE; the
+// high half is the protocol's. Both are stripped before any SWE call.
+//
+// kIflagTimeTT: jdStart and every row are TT (ET, "ephemeris time"), not
+// UT, and the server calls the ET entry points (swe_calc_r, swe_calc_pctr_r,
+// swe_nod_aps_r, swe_fixstar_r) with the client's instant exactly as sent.
+// This is how a client that computes its own delta-t -- Astrolog does, and
+// lets the user override it -- gets answers bit-identical to calling SWE
+// itself: the number SWE sees is the number the client made.
+inline constexpr uint64_t kIflagTimeTT = 1ull << 32;
+// kIflagCenter: the center field names a swe_calc_pctr() central body
+// even when it is 0 (SE_SUN). Without the bit, 0 means "no central body"
+// as 4.4 has always said, and a nonzero center means pctr either way.
+inline constexpr uint64_t kIflagCenter = 1ull << 33;
+inline constexpr uint64_t kIflagProtoMask = kIflagTimeTT | kIflagCenter;
 
 // WELCOME limits (server clamps/returns kErrLimits per these).
 inline constexpr uint32_t kMaxObjs       = 64;
@@ -339,9 +367,10 @@ inline bool parseWelcome(const uint8_t *p, size_t len, Welcome *out) {
 //
 //   u32 nObj
 //   nObj object records:
-//     u8 kind (0 body by id, 1 fixed star by name)
+//     u8 kind (0 body by id, 1 fixed star by name, 2 node/apsis of a body)
 //     kind 0: u32 id
 //     kind 1: sz name
+//     kind 2: u32 id, u8 point (NodApsPoint), u8 method (NodApsMethod)
 //   then RequestFixed (141 bytes), fields exactly as the plan lists them.
 
 #pragma pack(push, 1)
@@ -353,7 +382,7 @@ struct RequestFixed {
   double sidAyanOff;
   double topoLon;      // east-positive degrees; only with SEFLG_TOPOCTR
   double topoLat;
-  double topoElv;      // km
+  double topoElv;      // meters, as swe_set_topo() takes it
   char jplFile[64];    // swe_set_jpl_file_r; only with SEFLG_JPLEPH
   double jdStart;      // UT
   uint32_t stepSeconds;
@@ -365,14 +394,18 @@ struct RequestFixed {
 static_assert(sizeof(RequestFixed) == 141, "REQUEST fixed part must be 141 bytes");
 
 // One object record on the wire:
-//   kind 0: 1 byte kind + 4 bytes id           = 5 bytes
-//   kind 1: 1 byte kind + strlen + 1 byte NUL  = 2 + strlen bytes
+//   kind 0: 1 byte kind + 4 bytes id                    = 5 bytes
+//   kind 1: 1 byte kind + strlen + 1 byte NUL           = 2 + strlen bytes
+//   kind 2: 1 byte kind + 4 bytes id + point + method   = 7 bytes
 inline constexpr size_t kObjRecordBodySize = 5;
+inline constexpr size_t kObjRecordNodApsSize = 7;
 
 struct ObjSpec {
   uint8_t kind = kObjBody;
-  uint32_t id = 0;              // kObjBody: raw SWE id
+  uint32_t id = 0;              // kObjBody, kObjNodAps: raw SWE id
   char name[kObjNameMax] = {0}; // kObjStar: NUL-terminated star name
+  uint8_t point = 0;            // kObjNodAps: NodApsPoint
+  uint8_t method = 0;           // kObjNodAps: NodApsMethod
 };
 
 // Host-side, fully decoded REQUEST. Owned by the caller (the vector is the
@@ -418,6 +451,14 @@ inline ParseResult parseRequest(const uint8_t *p, size_t len, Request *out) {
       if (!r.ok() || !s || n + 1 > kObjNameMax) return kParseBad;
       o.kind = kObjStar;
       memcpy(o.name, s, n + 1);
+    } else if (kind == kObjNodAps) {
+      o.kind = kObjNodAps;
+      o.id = r.u32();
+      o.point = r.u8();
+      o.method = r.u8();
+      if (o.point < kPntNorthNode || o.point > kPntAphelion ||
+          o.method > kNodOscu)
+        return kParseBad;
     } else {
       return kParseBad;
     }
@@ -451,7 +492,9 @@ inline ParseResult parseRequest(const uint8_t *p, size_t len, Request *out) {
 inline void buildRequest(std::vector<uint8_t> *out, const Request &req) {
   size_t sz = 4;
   for (const ObjSpec &o : req.objs)
-    sz += (o.kind == kObjBody) ? kObjRecordBodySize : (1 + strlen(o.name) + 1);
+    sz += (o.kind == kObjBody) ? kObjRecordBodySize :
+          (o.kind == kObjNodAps) ? kObjRecordNodApsSize :
+          (1 + strlen(o.name) + 1);
   sz += sizeof(RequestFixed);
   out->resize(sz);
   Writer w(out->data(), sz);
@@ -459,6 +502,7 @@ inline void buildRequest(std::vector<uint8_t> *out, const Request &req) {
   for (const ObjSpec &o : req.objs) {
     w.u8(o.kind);
     if (o.kind == kObjBody) w.u32(o.id);
+    else if (o.kind == kObjNodAps) { w.u32(o.id); w.u8(o.point); w.u8(o.method); }
     else w.strZ(o.name, kObjNameMax);
   }
   w.i32(req.center);

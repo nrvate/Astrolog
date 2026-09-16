@@ -397,31 +397,65 @@ static void ApplyRequestConfig(swe_ctx *ctx, const eph::Request &req) {
 }
 
 // Compute one (object, row) cell. Returns the SWE return flag; on failure
-// serr is filled. kind 0 bodies go through swe_calc_ut_r, or swe_calc_pctr
-// when the request names a center body; kind 1 fixed stars through
-// swe_fixstar_ut_r (which also resolves the name in place).
+// serr is filled. kind 0 bodies go through swe_calc / swe_calc_pctr when
+// the request names a center body; kind 1 fixed stars through swe_fixstar
+// (which also resolves the name in place); kind 2 through swe_nod_aps.
+//
+// The instant is UT unless the request carries kIflagTimeTT, in which case
+// it is TT and the ET entry points get it exactly as sent (ephproto.h says
+// why). swe_calc_pctr_r and swe_nod_aps_r have no UT form of their own
+// that this uses: a UT instant is converted with swe_deltat_ex_r, the
+// same conversion swe_calc_ut_r makes -- the first increment handed
+// swe_calc_pctr_r the UT instant unconverted, which was a delta-t of
+// error on every centered request.
 static int32_t ComputeCell(swe_ctx *ctx, const eph::Request &req,
-                           const eph::ObjSpec &obj, double jdUt,
+                           const eph::ObjSpec &obj, double jd,
                            uint32_t iflag, double xx[6], char *serr,
                            const char **pName, char *nameBuf, size_t nameCap) {
   serr[0] = '\0';
   *pName = nullptr;
+  const bool fTT = (req.iflag & eph::kIflagTimeTT) != 0;
+  const bool fCenter = (req.iflag & eph::kIflagCenter) != 0 || req.center != 0;
+  // The ET instant, for the entry points that take one.
+  auto jdEt = [&]() -> double {
+    return fTT ? jd : jd + swe_deltat_ex_r(ctx, jd, (int32_t)iflag, nullptr);
+  };
   if (obj.kind == eph::kObjStar) {
-    if (req.center != 0) {
+    if (fCenter) {
       // No pctr form exists for fixed stars; say so rather than guess.
       snprintf(serr, 256, "center body not supported for fixed stars");
       return -1;
     }
     snprintf(nameBuf, nameCap, "%s", obj.name);
-    int32_t ret = swe_fixstar_ut_r(ctx, nameBuf, jdUt, (int32_t)iflag, xx, serr);
+    int32_t ret = fTT ?
+      swe_fixstar_r(ctx, nameBuf, jd, (int32_t)iflag, xx, serr) :
+      swe_fixstar_ut_r(ctx, nameBuf, jd, (int32_t)iflag, xx, serr);
     if (ret >= 0) *pName = nameBuf;   // resolved full star name
     return ret;
   }
   int32_t ret;
-  if (req.center != 0)
-    ret = swe_calc_pctr_r(ctx, jdUt, (int32_t)obj.id, req.center, (int32_t)iflag, xx, serr);
-  else
-    ret = swe_calc_ut_r(ctx, jdUt, (int32_t)obj.id, (int32_t)iflag, xx, serr);
+  if (obj.kind == eph::kObjNodAps) {
+    if (fCenter) {
+      snprintf(serr, 256, "center body not supported for nodes and apsides");
+      return -1;
+    }
+    double xnasc[6], xndsc[6], xperi[6], xaphe[6];
+    int32_t method = obj.method == eph::kNodOscu ? SE_NODBIT_OSCU : SE_NODBIT_MEAN;
+    ret = swe_nod_aps_r(ctx, jdEt(), (int32_t)obj.id, (int32_t)iflag, method,
+                        xnasc, xndsc, xperi, xaphe, serr);
+    if (ret >= 0) {
+      const double *px = obj.point == eph::kPntNorthNode ? xnasc :
+                         obj.point == eph::kPntSouthNode ? xndsc :
+                         obj.point == eph::kPntPerihelion ? xperi : xaphe;
+      for (int c = 0; c < 6; c++) xx[c] = px[c];
+    }
+  } else if (fCenter) {
+    ret = swe_calc_pctr_r(ctx, jdEt(), (int32_t)obj.id, req.center, (int32_t)iflag, xx, serr);
+  } else if (fTT) {
+    ret = swe_calc_r(ctx, jd, (int32_t)obj.id, (int32_t)iflag, xx, serr);
+  } else {
+    ret = swe_calc_ut_r(ctx, jd, (int32_t)obj.id, (int32_t)iflag, xx, serr);
+  }
   if (ret >= 0) {
     char nm[96];
     swe_get_planet_name_r(ctx, (int)obj.id, nm);
@@ -546,9 +580,11 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
   entry->cols.assign((size_t)nObj * nTime * 6, 0.0);
   entry->meta.assign((size_t)nObj * eph::kDataMetaSize, 0);
 
-  // SWE's iflag is int32; the protocol carries u64 for headroom. SEFLG_SWIEPH
-  // is forced (plan 4.4) and SEFLG_SPEED added if absent, so speeds arrive
-  // in the columns and clients never derive them.
+  // SWE's iflag is int32 and lives in the low 32 bits; the high half is the
+  // protocol's (kIflagTimeTT, kIflagCenter; ephproto.h) and is read by
+  // ComputeCell from the request, never handed to SWE. SEFLG_SWIEPH is
+  // forced (plan 4.4) and SEFLG_SPEED added if absent, so speeds arrive in
+  // the columns and clients never derive them.
   int32_t iflag = (int32_t)(uint32_t)(req.iflag & 0xFFFFFFFFu) | SEFLG_SWIEPH;
   iflag |= SEFLG_SPEED;
 
@@ -561,10 +597,12 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
     bool fFailed = false, fSawSuccess = false;
     char failSerr[eph::kSerrMax] = {0};
     for (uint32_t r = 0; r < nTime; r++) {
-      double jdUt = req.jdStart +
+      // Row r's instant, UT or TT as the request says; the client computes
+      // the same expression to find its rows, so it must not change.
+      double jd = req.jdStart +
         (double)((uint64_t)r * (uint64_t)req.stepSeconds) / 86400.0;
       double xx[6];
-      int32_t ret = ComputeCell(ctx, req, obj, jdUt, (uint32_t)iflag, xx, serr,
+      int32_t ret = ComputeCell(ctx, req, obj, jd, (uint32_t)iflag, xx, serr,
                                 &name, nameBuf, sizeof(nameBuf));
       if (ret < 0) {
         fFailed = true;

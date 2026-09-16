@@ -9,6 +9,7 @@
 //                [--precision 64|32] [--center N] [--iflag HEX]
 //                [--sid mode,t0,offset] [--topo lon,lat,elv] [--jplfile name]
 //                [--expect-rows N] [--repeat N] [--latency FILE] [--quiet]
+//                [--tt] [--nodaps id,point,method[;...]]
 //
 // Sends HELLO, prints WELCOME unless --quiet, sends one REQUEST, collects
 // the DATA chunks, and on --out writes one line per object per row in
@@ -18,7 +19,9 @@
 // same connection (the soak gate's fd-stability barrage). --latency
 // appends one line per repeat to FILE: the microseconds from the REQUEST
 // send to the last DATA chunk's arrival, which is what a client sees and
-// what tools/ephsrv-bench.sh aggregates.
+// what tools/ephsrv-bench.sh aggregates. --tt marks --jd as TT rather than
+// UT (kIflagTimeTT); --nodaps adds node/apsis records (kind 2: point 1-4,
+// method 0 mean / 1 osculating).
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -193,7 +196,8 @@ static bool connectWs(const char *host, uint16_t port, int *fdOut) {
 int main(int argc, char **argv) {
   const char *host = "127.0.0.1", *outFile = nullptr, *szStars = nullptr,
              *szSid = nullptr, *szTopo = nullptr, *szJpl = nullptr,
-             *latencyFile = nullptr;
+             *latencyFile = nullptr, *szNodAps = nullptr;
+  bool fTT = false;
   uint16_t port = kDefaultPort;
   std::vector<uint32_t> ids;
   double jd = 2451545.0;
@@ -225,6 +229,8 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--expect-rows") && next(&v)) expectRows = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--repeat") && next(&v)) repeat = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--latency") && next(&v)) latencyFile = v;
+    else if (!strcmp(a, "--tt")) fTT = true;
+    else if (!strcmp(a, "--nodaps") && next(&v)) szNodAps = v;
     else if (!strcmp(a, "--quiet")) quiet = true;
     else { fprintf(stderr, "wsclient: unknown/incomplete option %s\n", a); return 1; }
   }
@@ -248,8 +254,25 @@ int main(int argc, char **argv) {
     }
     free(buf);
   }
+  if (szNodAps) {
+    char *buf = strdup(szNodAps);
+    for (char *tok = strtok(buf, ";"); tok; tok = strtok(nullptr, ";")) {
+      ObjSpec o;
+      unsigned id = 0, point = 0, method = 0;
+      if (sscanf(tok, "%u,%u,%u", &id, &point, &method) != 3) {
+        fprintf(stderr, "wsclient: bad --nodaps entry %s\n", tok);
+        return 1;
+      }
+      o.kind = kObjNodAps;
+      o.id = id;
+      o.point = (uint8_t)point;
+      o.method = (uint8_t)method;
+      req.objs.push_back(o);
+    }
+    free(buf);
+  }
   req.center = center;
-  req.iflag = iflag;
+  req.iflag = iflag | (fTT ? kIflagTimeTT : 0);
   if (szSid) sscanf(szSid, "%d,%lf,%lf", &req.sidMode, &req.sidT0, &req.sidAyanOff);
   if (szTopo) sscanf(szTopo, "%lf,%lf,%lf", &req.topoLon, &req.topoLat, &req.topoElv);
   if (szJpl) snprintf(req.jplFile, sizeof(req.jplFile), "%s", szJpl);
@@ -413,6 +436,8 @@ int main(int argc, char **argv) {
         const ObjSpec &o2 = req.objs[o];
         char szWho[128];
         if (o2.kind == kObjBody) snprintf(szWho, sizeof(szWho), "%u", o2.id);
+        else if (o2.kind == kObjNodAps)
+          snprintf(szWho, sizeof(szWho), "%u,%u,%u", o2.id, o2.point, o2.method);
         else snprintf(szWho, sizeof(szWho), "%s", o2.name);
         for (uint32_t r2 = 0; r2 < count; r2++) {
           const double *d = cols.data() + ((size_t)o * count + r2) * kColsPerObj;

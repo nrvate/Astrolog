@@ -83,9 +83,12 @@ inline std::string cacheKeyOf(const Request &req) {
   for (const ObjSpec &o : req.objs) {
     put(&o.kind, 1);
     if (o.kind == kObjBody) put(&o.id, 4);
+    else if (o.kind == kObjNodAps) { put(&o.id, 4); put(&o.point, 1); put(&o.method, 1); }
     else put(o.name, strlen(o.name) + 1);
   }
   put(&req.center, 4);
+  // The protocol's own bits (kIflagTimeTT, kIflagCenter) stay in the key:
+  // a TT instant and a UT instant are different questions.
   uint64_t iflag = req.iflag | (uint64_t)EPH_CACHE_SEFLG_SWIEPH |
                    (uint64_t)EPH_CACHE_SEFLG_SPEED;
   put(&iflag, 8);

@@ -44,13 +44,18 @@ trap cleanup EXIT
 cat > "$SCRATCH/oracle.c" << 'EOF'
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "swephexp.h"
 int main(int argc, char **argv) {
-  /* argv: jd ipl iflagHex sidMode ephePath */
+  /* argv: jd ipl iflagHex sidMode ephePath [mode]
+     mode: ut (default) swe_calc_ut_r; tt swe_calc_r at a TT instant;
+     nodaps:P:M swe_nod_aps_r at TT, point P 1-4, method M 0 mean 1 oscu;
+     pctr:C swe_calc_pctr_r at TT centered on body C */
   double jd = atof(argv[1]);
   int ipl = atoi(argv[2]);
   int32 iflag = (int32)strtoul(argv[3], NULL, 16) | SEFLG_SWIEPH | SEFLG_SPEED;
   int sidMode = atoi(argv[4]);
+  const char *mode = argc > 6 ? argv[6] : "ut";
   char serr[256];
   double xx[6];
   /* The context API, exactly the server's path: the process-global one
@@ -63,7 +68,22 @@ int main(int argc, char **argv) {
   swe_ctx *ctx = swe_ctx_new();
   if (iflag & SEFLG_SIDEREAL)
     swe_set_sid_mode_r(ctx, sidMode, 0.0, 0.0);
-  int32 ret = swe_calc_ut_r(ctx, jd, ipl, iflag, xx, serr);
+  int32 ret;
+  if (strncmp(mode, "nodaps:", 7) == 0) {
+    int pnt = 0, meth = 0;
+    double xn[6], xd[6], xp[6], xa[6], *px;
+    sscanf(mode + 7, "%d:%d", &pnt, &meth);
+    ret = swe_nod_aps_r(ctx, jd, ipl, iflag, meth ? SE_NODBIT_OSCU : SE_NODBIT_MEAN,
+                        xn, xd, xp, xa, serr);
+    px = pnt == 1 ? xn : pnt == 2 ? xd : pnt == 3 ? xp : xa;
+    for (int i = 0; i < 6; i++) xx[i] = px[i];
+  } else if (strncmp(mode, "pctr:", 5) == 0) {
+    ret = swe_calc_pctr_r(ctx, jd, ipl, atoi(mode + 5), iflag, xx, serr);
+  } else if (strcmp(mode, "tt") == 0) {
+    ret = swe_calc_r(ctx, jd, ipl, iflag, xx, serr);
+  } else {
+    ret = swe_calc_ut_r(ctx, jd, ipl, iflag, xx, serr);
+  }
   if (ret < 0) { printf("ERR %s\n", serr); return 1; }
   printf("%a %a %a %a %a %a\n", xx[0], xx[1], xx[2], xx[3], xx[4], xx[5]);
   return 0;
@@ -140,6 +160,45 @@ for jd in 2451545.0 2400000.5; do
     fi
   done < "$SCRATCH/sid.txt"
 done
+
+# The ET entry points behind kIflagTimeTT (the Astrolog client's path: it
+# computes its own delta-t and sends TT), a node/apsis record, and a
+# centered request -- each against the oracle calling the same ET entry
+# point with the same instant. The pctr leg is what caught increment 1
+# handing swe_calc_pctr_r a UT instant.
+leg() {   # leg <label> <oracle-mode> <oracle-ipl> <client args...>
+  local label=$1 mode=$2 ipl=$3; shift 3
+  "$ROOT/eph_wsclient" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \
+    --out "$SCRATCH/leg.txt" --quiet "$@" \
+    || { echo "GOLDEN FAIL: $label request failed"; exit 1; }
+  while read -r idx who retFlag lon lat dist slon slat sdist; do
+    if ! oracle=$("$SCRATCH/oracle" 2415020.5 "$ipl" "0" "0" "$EPH" "$mode"); then
+      echo "GOLDEN FAIL: $label oracle refused: $oracle"; exit 1
+    fi
+    got="$lon $lat $dist $slon $slat $sdist"
+    TRIED=$((TRIED + 1))
+    if [ "$got" != "$oracle" ]; then
+      FAIL=$((FAIL + 1))
+      echo "$label MISMATCH ($who)"; echo "  server: $got"; echo "  oracle: $oracle"
+    fi
+  done < "$SCRATCH/leg.txt"
+}
+leg "TT" tt 1 --tt --objs 1
+leg "TT" tt 4 --tt --objs 4
+for p in 1 2 3 4; do
+  leg "NODAPS mean $p" "nodaps:$p:0" 4 --tt --nodaps "4,$p,0"
+  leg "NODAPS oscu $p" "nodaps:$p:1" 4 --tt --nodaps "4,$p,1"
+done
+leg "PCTR" "pctr:5" 4 --tt --objs 4 --center 5
+# And the pre-1955 instant above is the one where a UT-vs-TT confusion
+# shows: a UT request for the Moon must NOT equal the TT oracle.
+"$ROOT/eph_wsclient" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \
+  --objs 1 --out "$SCRATCH/ut.txt" --quiet
+read -r idx who retFlag lon lat dist slon slat sdist < "$SCRATCH/ut.txt"
+if [ "$lon $lat $dist $slon $slat $sdist" = "$("$SCRATCH/oracle" 2415020.5 1 0 0 "$EPH" tt)" ]; then
+  echo "GOLDEN FAIL: a UT request answered as if it were TT"; exit 1
+fi
+TRIED=$((TRIED + 1))
 
 if [ "$FAIL" -gt 0 ]; then
   echo "GOLDEN FAIL: $FAIL of $TRIED columns mismatched"

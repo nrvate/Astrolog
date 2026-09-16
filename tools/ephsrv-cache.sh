@@ -110,6 +110,18 @@ int main() {
     CHECK(k1 != k0, "a star record must split the key");
     snprintf(r.objs[1].name, sizeof(r.objs[1].name), "Vega");
     CHECK(cacheKeyOf(r) != k1, "the star name must split the key"); }
+  { Request r = base(); r.objs[1].kind = kObjNodAps; r.objs[1].point = kPntPerihelion; r.objs[1].method = kNodMean;
+    std::string k1 = cacheKeyOf(r);
+    CHECK(k1 != k0, "a node/apsis record must split the key");
+    r.objs[1].point = kPntAphelion;
+    std::string k2 = cacheKeyOf(r);
+    CHECK(k2 != k1, "the node/apsis point must split the key");
+    r.objs[1].method = kNodOscu;
+    CHECK(cacheKeyOf(r) != k2, "the node/apsis method must split the key"); }
+  { Request r = base(); r.iflag = kIflagTimeTT;
+    CHECK(cacheKeyOf(r) != k0, "a TT instant is a different question from a UT one"); }
+  { Request r = base(); r.iflag = kIflagCenter;
+    CHECK(cacheKeyOf(r) != k0, "the center bit must split the key"); }
 
   // LRU mechanics: cap 100 bytes, entries of 40 (five doubles).
   ResultCache c(100);
