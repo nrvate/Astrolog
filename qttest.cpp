@@ -9060,13 +9060,65 @@ static QString StrDriveObjSelQt(int nWhat)
     case 6:                                   // nonsense
       rgcb[0]->setEditText("zznotabody");
       break;
+    case 9: {                                 // cycle within the shows
+      QKeyEvent keF(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+      QKeyEvent keB(QEvent::KeyPress, Qt::Key_Backtab, Qt::NoModifier);
+      QList<QCheckBox *> rgx = pw->findChildren<QCheckBox *>();
+
+      QList<QPushButton *> rgbw2 = pw->findChildren<QPushButton *>();
+      int b2;
+      for (b2 = 0; b2 < rgbw2.size(); b2++)
+        if (rgbw2[b2]->objectName() == QString("IDOK"))
+          break;
+      if (b2 < rgbw2.size()) {
+        rgbw2[b2]->setFocus();
+        for (int c = 0; c < 24; c++) {
+          QWidget *pwf = QApplication::focusWidget();
+          printf("dbg cyc bwd %d [%s] at %d,%d\n", c,
+            pwf->metaObject()->className(), pwf->x(), pwf->y());
+          QApplication::sendEvent(pwf, &keB);
+        }
+      }
+      break;
+    }
+    case 8: {                                 // the grid cycles, buttons don't
+      QKeyEvent ke(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+      QList<QCheckBox *> rgx = pw->findChildren<QCheckBox *>();
+      QList<QPushButton *> rgbw = pw->findChildren<QPushButton *>();
+
+      if (!rgx.isEmpty()) {
+        // Off the bottom of the show column, Tab is back at the top of
+        // the definitions: the grid cycles through itself.
+        QCheckBox *pcbLast = rgx[rgx.size() - 1];
+
+        pcbLast->setFocus();
+        QApplication::sendEvent(pcbLast, &ke);
+        strLookup = qobject_cast<QComboBox *>(pw->focusWidget()) != NULL ?
+          QString("wraps") : QString("no wrap");
+      }
+      // The buttons are out of the tab order altogether.
+      for (int b = 0; b < rgbw.size(); b++)
+        if ((rgbw[b]->objectName() == QString("IDOK") ||
+          rgbw[b]->objectName() == QString("IDCANCEL") ||
+          rgbw[b]->objectName() == QString("dbOs_l")) &&
+          rgbw[b]->focusPolicy() != Qt::NoFocus)
+          strLookup += QString("+button");
+      break;
+    }
     case 7: {                                 // tab walks down the columns
       QKeyEvent ke(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
       QComboBox *pcbF = NULL;
       QWidget *pwf;
+      QKeyEvent ke2(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
 
       rgcb[0]->setFocus();
       QApplication::sendEvent(rgcb[0]->focusWidget(), &ke);
+      // A second tab, with nothing typed in between: the untouched row
+      // this leaves must not come out shown.
+      QApplication::sendEvent(rgcb[0]->focusWidget(), &ke2);
+      QList<QCheckBox *> rgx = pw->findChildren<QCheckBox *>();
+      if (!rgx.isEmpty() && rgx[0]->isChecked())
+        strLookup += "+shown";
       // Focus may sit in the editable combo's line-edit proxy; find the
       // combo it belongs to, if any.
       for (pwf = QApplication::focusWidget(); pwf != NULL && pcbF == NULL;
@@ -9121,6 +9173,12 @@ static void TestObjSelDialogQt()
   // one down, so a number, Tab, the next number works without wading
   // through each row's name field and show box.
   {
+    StrDriveObjSelQt(9);
+    QString strCycle = StrDriveObjSelQt(8);
+    Check(strCycle == QString("wraps"),
+      "the grid cycles: Tab off the show column wraps to the "
+      "definitions, and the buttons are out of the order (got \"%s\")",
+      strCycle.toLocal8Bit().constData());
     QString strTab = StrDriveObjSelQt(7);
 
     Check(strTab == QString("down"),

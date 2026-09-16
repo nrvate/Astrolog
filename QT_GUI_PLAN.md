@@ -11219,6 +11219,19 @@ this is the note that explains the wall of dialogs.
     window they belong to -- a fraction of it, floors a small window
     cannot pull below, the screen's cap above.
 
+274. **Object Selections' tab order is the grid, cycling, with Tab
+    selecting.** Follow-up to item 273, from holding the keys down:
+    Tab lands with the next box's text selected (a tab focus reason --
+    that is what makes an edit select-all on focus-in), leaving a
+    typed-over definition checks its row's show box ("entered" means
+    changed, not merely filled -- the rows open showing the bodies they
+    already hold, so wading through untouched ones shows nothing),
+    Shift+Tab retraces the forward path exactly, and the grid cycles:
+    off the bottom of the show column, back to the top of the
+    definitions, with Lookup Names, OK and Cancel out of the tab order
+    altogether -- Enter still activates the default OK and Esc still
+    cancels. The walking net drives a full cycle and the wrap.
+
 
 ## Features this fork adds to both builds
 

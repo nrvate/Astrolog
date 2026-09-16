@@ -54,6 +54,7 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QProgressBar>
 #include <QtCore/QTimer>
+#include <functional>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QPushButton>
@@ -5642,7 +5643,10 @@ class TabColumnsQt : public QObject
 {
 public:
   TabColumnsQt(CONST QList<QWidget *> &rgpw, QWidget *pwAfter,
-    QObject *pparent) : QObject(pparent), rgpw(rgpw), pwAfter(pwAfter)
+    QWidget *pwBefore, QObject *pparent,
+    std::function<void (int)> fnLeft = nullptr) :
+    QObject(pparent), rgpw(rgpw), pwAfter(pwAfter), pwBefore(pwBefore),
+    fnLeft(fnLeft)
     { }
   bool eventFilter(QObject *pobj, QEvent *pev) override
   {
@@ -5654,21 +5658,39 @@ public:
     int i = rgpw.indexOf(qobject_cast<QWidget *>(pobj));
     if (i < 0)
       return QObject::eventFilter(pobj, pev);
-    i += pe->key() == Qt::Key_Tab ? 1 : -1;
-    if (i >= rgpw.size()) {
-      if (pwAfter != NULL)
-        pwAfter->setFocus();
+    if (fnLeft)
+      fnLeft(i);
+    // A tab reason, not a programmatic one: an edit selects its text on
+    // focus-in when the reason is a tab, which is the standard
+    // select-on-tab so the next box's contents type over cleanly.
+    if (pe->key() == Qt::Key_Tab) {
+      if (i + 1 >= rgpw.size()) {
+        if (pwAfter != NULL)
+          pwAfter->setFocus(Qt::TabFocusReason);
+        return true;
+      }
+      rgpw[i + 1]->setFocus(Qt::TabFocusReason);
       return true;
     }
-    if (i < 0)
-      return QObject::eventFilter(pobj, pev);
-    rgpw[i]->setFocus();
-    return true;
+    if (i > 0) {
+      rgpw[i - 1]->setFocus(Qt::BacktabFocusReason);
+      return true;
+    }
+    // Off the top hands back to the bottom of the previous column, the
+    // same retracing the forward direction makes; only out of the first
+    // column does it fall to the natural order, as it did coming in.
+    if (pwBefore != NULL) {
+      pwBefore->setFocus(Qt::BacktabFocusReason);
+      return true;
+    }
+    return QObject::eventFilter(pobj, pev);
   }
 
 private:
   QList<QWidget *> rgpw;
   QWidget *pwAfter;
+  QWidget *pwBefore;
+  std::function<void (int)> fnLeft;
 };
 
 
@@ -5679,7 +5701,7 @@ void ShowObjectSelDialogQt()
   QVector<QCheckBox *> rgpcbShow;
   QVector<QComboBox *> rgpcbDef;
   QVector<QLineEdit *> rgpeName;
-  QVector<QString> rgstrName0;
+  QVector<QString> rgstrName0, rgstrDef0;
   real rgforceSav[cObjSelRow];
   int rgTypSwissSav[cObjSelRow], rgObjSwissSav[cObjSelRow];
   // One OBJDEF a row rather than four arrays that have to stay aligned.
@@ -5723,12 +5745,26 @@ void ShowObjectSelDialogQt()
       } else
         SzObjSelDef(S(sz), iobj);
       pcbDef->setEditText(sz);
-    }
+      // What the field opened with, for the tab-away auto-show: only a
+      // definition the user typed over counts as entered.
+      rgstrDef0.append(pcbDef->currentText());
+    } else
+      rgstrDef0.append(QString());
   }
 
+  // The three buttons leave the tab order: the grid cycles through
+  // itself, and Enter still activates OK, the default button, wherever
+  // focus sits -- Lookup Names and Cancel are the mouse's.
+  for (int n = 0; n < 3; n++) {
+    QPushButton *ppb = (QPushButton *)PwRcFindQt(rgbuilt,
+      n == 0 ? "IDOK" : n == 1 ? "IDCANCEL" : "dbOs_l");
+    if (ppb != NULL)
+      ppb->setFocusPolicy(Qt::NoFocus);
+  }
   // Tab walks down the columns, not across the rows: the definition
   // boxes are what the user types body numbers into -- type a number,
-  // Tab, type the next one -- then the names, then the show boxes.
+  // Tab, type the next one -- then the names, then the show boxes, and
+  // round to the top of the definitions again.
   {
     QList<QWidget *> rgpwDefs, rgpwNames, rgpwShows;
 
@@ -5741,19 +5777,41 @@ void ShowObjectSelDialogQt()
         rgpwShows << rgpcbShow[i];
     }
     if (!rgpwDefs.isEmpty()) {
+      // Leaving a definition box whose text the user typed over checks
+      // its row's show box: enter a body number, Tab, and the object is
+      // both named and shown, without touching the boxes at the end.
+      // "Entered" means changed, not merely filled -- the rows open
+      // showing the bodies they already hold, and wading through those
+      // should not silently re-show hidden ones.
+      auto fnShowTyped = [&rgpcbDef, &rgpcbShow, &rgstrDef0](int i) {
+        if (rgpcbDef[i] == NULL || rgpcbShow[i] == NULL)
+          return;
+        QString str1 = rgpcbDef[i]->currentText().trimmed();
+        if (!str1.isEmpty() && str1 != rgstrDef0[i].trimmed())
+          rgpcbShow[i]->setChecked(fTrue);
+      };
       TabColumnsQt *ptab = new TabColumnsQt(rgpwDefs,
-        rgpwNames.isEmpty() ? NULL : rgpwNames.first(), &dlg);
+        rgpwNames.isEmpty() ? NULL : rgpwNames.first(),
+        rgpwShows.isEmpty() ? NULL : rgpwShows.last(), &dlg,
+        fnShowTyped);
       for (QWidget *pw : rgpwDefs)
         pw->installEventFilter(ptab);
     }
     if (!rgpwNames.isEmpty()) {
       TabColumnsQt *ptab = new TabColumnsQt(rgpwNames,
-        rgpwShows.isEmpty() ? NULL : rgpwShows.first(), &dlg);
+        rgpwShows.isEmpty() ? NULL : rgpwShows.first(),
+        rgpwDefs.isEmpty() ? NULL : rgpwDefs.last(), &dlg);
       for (QWidget *pw : rgpwNames)
         pw->installEventFilter(ptab);
     }
     if (!rgpwShows.isEmpty()) {
-      TabColumnsQt *ptab = new TabColumnsQt(rgpwShows, NULL, &dlg);
+      // The show column hands off to OK both ways: forward out of its
+      // bottom, backward out of OK into its bottom. Without the forward
+      // one a Tab held down cycled straight into a dead end there --
+      // the filter consumed the key with nowhere to send it.
+      TabColumnsQt *ptab = new TabColumnsQt(rgpwShows,
+        rgpwDefs.isEmpty() ? NULL : rgpwDefs.first(),
+        rgpwNames.isEmpty() ? NULL : rgpwNames.last(), &dlg);
       for (QWidget *pw : rgpwShows)
         pw->installEventFilter(ptab);
     }
