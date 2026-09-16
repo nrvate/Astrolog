@@ -59,6 +59,7 @@
 #include <QtWidgets/QRadioButton>
 #include <QtCore/QMap>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
@@ -3244,6 +3245,7 @@ static void TestBadInputQt()
 
 
 extern QString StrDefaultSuffixTestQt(CONST QString &, CONST char *);
+extern void SizeFileDlgTestQt(QFileDialog *);
 extern int COpenChartDirTestQt(CONST char *);      // qtdialog.cpp
 extern void PrintChartToFileTestQt(CONST char *);  // qtdriver.cpp
 extern void AnimTickTestQt(void);                 // qtdriver.cpp
@@ -3928,6 +3930,18 @@ static void TestDialogFitQt()
   Check(cWrap > 0, "and some label actually wraps, or the above proves "
     "nothing (%d)", cWrap);
   printf("  and no wrapped label is cut off by the box it wraps inside\n");
+
+  // The file pickers size to the window: the static QFileDialog helpers
+  // built their default-sized peephole -- sidebar truncated, file list
+  // with it -- before this.
+  {
+    QFileDialog dlg(gi.qwind);
+
+    SizeFileDlgTestQt(&dlg);
+    Check(dlg.width() >= 760 && dlg.height() >= 540,
+      "the file picker sizes to the window, floors and all (%d by %d)",
+      dlg.width(), dlg.height());
+  }
 }
 
 
@@ -9046,6 +9060,22 @@ static QString StrDriveObjSelQt(int nWhat)
     case 6:                                   // nonsense
       rgcb[0]->setEditText("zznotabody");
       break;
+    case 7: {                                 // tab walks down the columns
+      QKeyEvent ke(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+      QComboBox *pcbF = NULL;
+      QWidget *pwf;
+
+      rgcb[0]->setFocus();
+      QApplication::sendEvent(rgcb[0]->focusWidget(), &ke);
+      // Focus may sit in the editable combo's line-edit proxy; find the
+      // combo it belongs to, if any.
+      for (pwf = QApplication::focusWidget(); pwf != NULL && pcbF == NULL;
+        pwf = pwf->parentWidget())
+        pcbF = qobject_cast<QComboBox *>(pwf);
+      strLookup = pcbF == rgcb[1] ? QString("down") :
+        QString("combo %1 of %2").arg(rgcb.indexOf(pcbF)).arg(rgcb.size());
+      break;
+    }
     }
     if (FClickButtonQt(pw, "IDOK")) {
       // OK refuses an unparseable row and leaves the dialog open, with
@@ -9086,6 +9116,17 @@ static void TestObjSelDialogQt()
   Check(FEqSz(szObjDisp[iobj], "Chiron"),
     "and the slot is named after it, not the body it used to be (%s)",
     szObjDisp[iobj]);
+
+  // Tab walks DOWN the columns: from a definition box, next is the next
+  // one down, so a number, Tab, the next number works without wading
+  // through each row's name field and show box.
+  {
+    QString strTab = StrDriveObjSelQt(7);
+
+    Check(strTab == QString("down"),
+      "Tab from a definition box goes to the next one down the column "
+      "(landed on \"%s\")", strTab.toLocal8Bit().constData());
+  }
 
   // What the dialog chose has to reach the settings file, or the user
   // picks their bodies again every launch. The cases above assert that

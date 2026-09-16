@@ -46,6 +46,7 @@
 #include <QtWidgets/QGroupBox>
 #include <QtCore/QFile>
 #include <QtGui/QPixmap>
+#include <QtGui/QScreen>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QDialogButtonBox>
@@ -1214,6 +1215,30 @@ QStringList s_rgstrSaveFileTestQt;
 // words of Windows' own dialog, whose default extension is added before
 // its question; No goes back to the picker, as it does there.
 
+// The file pickers, sized to the window. The static QFileDialog helpers
+// always build their own default-sized dialog, which on today's screens
+// is a peephole -- the places sidebar truncates, and so does the file
+// list. Every picker in this file goes through this instead, which
+// sizes the dialog to the window it belongs to: a fraction of it, floors
+// a small window cannot pull below, and the screen's cap above that.
+// Sizing is its own function so the suite can hold it to the floors
+// without putting up a modal.
+static void SizeFileDlgQt(QFileDialog *pdlg)
+{
+  QRect rcScreen = gi.qwind->screen()->availableGeometry();
+
+  pdlg->resize(
+    Max(760, Min(gi.qwind->width() * 3 / 5, rcScreen.width() * 4 / 5)),
+    Max(540, Min(gi.qwind->height() * 3 / 5, rcScreen.height() * 4 / 5)));
+}
+
+#ifdef QTTEST
+void SizeFileDlgTestQt(QFileDialog *pdlg)
+{
+  SizeFileDlgQt(pdlg);
+}
+#endif
+
 static QString StrSaveFileNameQt(CONST char *szTitle, CONST QString &qsStart,
   CONST QString &qsFilter, CONST char *szExt)
 {
@@ -1226,7 +1251,14 @@ static QString StrSaveFileNameQt(CONST char *szTitle, CONST QString &qsStart,
         s_rgstrSaveFileTestQt.takeFirst();
     else
 #endif
-    qs = QFileDialog::getSaveFileName(gi.qwind, szTitle, qsDir, qsFilter);
+    {
+      QFileDialog dlg(gi.qwind, szTitle, qsDir, qsFilter);
+
+      SizeFileDlgQt(&dlg);
+      qs = dlg.exec() == QDialog::Accepted &&
+        !dlg.selectedFiles().isEmpty() ?
+        dlg.selectedFiles()[0] : QString();
+    }
     if (qs.isEmpty())
       return qs;
     qsExt = StrDefaultSuffixQt(qs, szExt);
@@ -1346,8 +1378,12 @@ void ShowOpenBackgroundDialogQt()
 {
   if (FNoReadQt())
     return;
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open Background",
-    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
+  QFileDialog dlg(gi.qwind, "Open Background", QString(),
+    "Windows Bitmaps (*.bmp);;All Files (*)");
+
+  SizeFileDlgQt(&dlg);
+  QString qs = dlg.exec() != QDialog::Accepted ||
+    dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qs.isEmpty())
     return;
   QByteArray ba = qs.toLocal8Bit();
@@ -1363,8 +1399,12 @@ void ShowOpenWorldDialogQt()
 {
   if (FNoReadQt())
     return;
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, "Open World Map",
-    QString(), "Windows Bitmaps (*.bmp);;All Files (*)");
+  QFileDialog dlg(gi.qwind, "Open World Map", QString(),
+    "Windows Bitmaps (*.bmp);;All Files (*)");
+
+  SizeFileDlgQt(&dlg);
+  QString qs = dlg.exec() != QDialog::Accepted ||
+    dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qs.isEmpty())
     return;
   QByteArray ba = qs.toLocal8Bit();
@@ -2941,7 +2981,7 @@ static void ShowOpenChartIntoDialogQt(int iChart)
     QString("Open Chart #%1").arg(iChart);
   // The filter list is Windows' DlgOpenChart lpstrFilter, verbatim: every
   // format FInputData() can read gets its own row there, not just .as.
-  QString qs = QFileDialog::getOpenFileName(gi.qwind, qsTitle, QString(),
+  QFileDialog dlg(gi.qwind, qsTitle, QString(),
     "Astrolog Files (*.as);;"
     "Astrological Exchange Files (*.aaf);;"
     "Quick*Chart Files (*.qck);;"
@@ -2949,6 +2989,9 @@ static void ShowOpenChartIntoDialogQt(int iChart)
     "iCalendar Files (*.ics);;"
     "Text Files [Solar Fire] (*.txt);;"
     "All Files (*)");
+  SizeFileDlgQt(&dlg);
+  QString qs = dlg.exec() != QDialog::Accepted ||
+    dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qs.isEmpty())
     return;
   QByteArray ba = qs.toLocal8Bit();
@@ -3405,8 +3448,12 @@ static int COpenChartDirQt(CONST QString &qsDir)
 
 void ShowOpenChartDirDialogQt()
 {
-  QString qsDir = QFileDialog::getExistingDirectory(gi.qwind,
-    "Open Charts in Folder");
+  QFileDialog dlg(gi.qwind, "Open Charts in Folder");
+
+  dlg.setFileMode(QFileDialog::Directory);
+  SizeFileDlgQt(&dlg);
+  QString qsDir = dlg.exec() != QDialog::Accepted ||
+    dlg.selectedFiles().isEmpty() ? QString() : dlg.selectedFiles()[0];
   if (qsDir.isEmpty())
     return;
   if (COpenChartDirQt(qsDir) <= 0) {
@@ -5585,6 +5632,46 @@ void ShowCustomDialogQt()
 // shows a slice of them, so a forced midpoint on some object it does not
 // display -- the Part of Fortune, say -- has to come through untouched.
 
+// One column of a control grid, tabbed as a column: Tab to the row
+// down, Shift+Tab to the row up, and past the bottom a handoff to
+// pwAfter, the top of the next column. Installed per widget rather than
+// setTabOrder() because the chain edit measurably does not hold here --
+// an editable combo's focus lives in its line-edit proxy, and the key
+// arrives at the combo only after the edit lets it propagate.
+class TabColumnsQt : public QObject
+{
+public:
+  TabColumnsQt(CONST QList<QWidget *> &rgpw, QWidget *pwAfter,
+    QObject *pparent) : QObject(pparent), rgpw(rgpw), pwAfter(pwAfter)
+    { }
+  bool eventFilter(QObject *pobj, QEvent *pev) override
+  {
+    if (pev->type() != QEvent::KeyPress)
+      return QObject::eventFilter(pobj, pev);
+    QKeyEvent *pe = static_cast<QKeyEvent *>(pev);
+    if (pe->key() != Qt::Key_Tab && pe->key() != Qt::Key_Backtab)
+      return QObject::eventFilter(pobj, pev);
+    int i = rgpw.indexOf(qobject_cast<QWidget *>(pobj));
+    if (i < 0)
+      return QObject::eventFilter(pobj, pev);
+    i += pe->key() == Qt::Key_Tab ? 1 : -1;
+    if (i >= rgpw.size()) {
+      if (pwAfter != NULL)
+        pwAfter->setFocus();
+      return true;
+    }
+    if (i < 0)
+      return QObject::eventFilter(pobj, pev);
+    rgpw[i]->setFocus();
+    return true;
+  }
+
+private:
+  QList<QWidget *> rgpw;
+  QWidget *pwAfter;
+};
+
+
 void ShowObjectSelDialogQt()
 {
   QDialog dlg(gi.qwind);
@@ -5639,6 +5726,38 @@ void ShowObjectSelDialogQt()
     }
   }
 
+  // Tab walks down the columns, not across the rows: the definition
+  // boxes are what the user types body numbers into -- type a number,
+  // Tab, type the next one -- then the names, then the show boxes.
+  {
+    QList<QWidget *> rgpwDefs, rgpwNames, rgpwShows;
+
+    for (i = 0; i < cObjSelRow; i++) {
+      if (rgpcbDef[i] != NULL)
+        rgpwDefs << rgpcbDef[i];
+      if (rgpeName[i] != NULL)
+        rgpwNames << rgpeName[i];
+      if (rgpcbShow[i] != NULL)
+        rgpwShows << rgpcbShow[i];
+    }
+    if (!rgpwDefs.isEmpty()) {
+      TabColumnsQt *ptab = new TabColumnsQt(rgpwDefs,
+        rgpwNames.isEmpty() ? NULL : rgpwNames.first(), &dlg);
+      for (QWidget *pw : rgpwDefs)
+        pw->installEventFilter(ptab);
+    }
+    if (!rgpwNames.isEmpty()) {
+      TabColumnsQt *ptab = new TabColumnsQt(rgpwNames,
+        rgpwShows.isEmpty() ? NULL : rgpwShows.first(), &dlg);
+      for (QWidget *pw : rgpwNames)
+        pw->installEventFilter(ptab);
+    }
+    if (!rgpwShows.isEmpty()) {
+      TabColumnsQt *ptab = new TabColumnsQt(rgpwShows, NULL, &dlg);
+      for (QWidget *pw : rgpwShows)
+        pw->installEventFilter(ptab);
+    }
+  }
   QPushButton *ppbLookup = (QPushButton *)PwRcFindQt(rgbuilt, "dbOs_l");
   if (ppbLookup != NULL)
     QObject::connect(ppbLookup, &QPushButton::clicked, &dlg,

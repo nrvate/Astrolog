@@ -11202,6 +11202,23 @@ this is the note that explains the wall of dialogs.
     trailing-blank sabotage caught three ways; the full suite is clean
     under ASan.
 
+273. **Object Selections tabs down its columns, and the file pickers
+    size to the window.** Both from daily use. The dialog's rows are
+    definition box, name, show box, and the resource order tabs across
+    each row -- so typing body numbers into successive rows meant
+    wading through the other two fields each time; Tab now walks the
+    definition column first, then the names, then the show boxes. A
+    `setTabOrder()` chain measurably does not hold -- an editable
+    combo's focus lives in its line-edit proxy, and the chain stayed in
+    creation order through every variant -- so the keys are answered
+    directly instead, one small event filter per column, each handing
+    off at its bottom to the top of the next. The file pickers built
+    through the static QFileDialog helpers were their default-sized
+    peepholes, sidebar truncated; all five (open chart, open into,
+    background, world map, save family, open folder) now size to the
+    window they belong to -- a fraction of it, floors a small window
+    cannot pull below, the screen's cap above.
+
 
 ## Features this fork adds to both builds
 
