@@ -39,8 +39,15 @@ EPHD_PID=
 EPHD_LOG="$SCRATCH/ephd.log"
 
 cleanup() {
-  [ -n "$EPHD_PID" ] && kill "$EPHD_PID" 2>/dev/null
+  # The traced run's EPHD_PID is strace's, and killing strace leaves the
+  # server it traced alive (two of them were found running an hour after
+  # their gates, 2026-09-16), so the children go first.
+  if [ -n "$EPHD_PID" ]; then
+    pkill -P "$EPHD_PID" 2>/dev/null || true
+    kill "$EPHD_PID" 2>/dev/null || true
+  fi
   [ -z "${KEEP_FARM:-}" ] && rm -rf "$SCRATCH"
+  return 0
 }
 trap cleanup EXIT
 
