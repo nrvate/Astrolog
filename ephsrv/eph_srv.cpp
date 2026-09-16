@@ -558,14 +558,6 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
                        fFailed ? -1 : retRow0, retRow0,
                        fFailed ? failSerr : nullptr, fSawSuccess ? name : nullptr);
 
-    // Drop this object's file caches before the next body: the fork's
-    // cached per-body segments poison cross-body answers on a shared
-    // context at historical dates (pre-1972, where the delta-t table is
-    // in force -- measured: same ctx, Moon then Mercury, differs from a
-    // fresh context by ~0.05 arcsec; swe_close_r between bodies restores
-    // fresh-context answers exactly). close_r releases files without
-    // touching the published config, so the pool ctx stays usable.
-    swe_close_r(ctx);
   }
   return true;
 }

@@ -69,7 +69,10 @@ int main(int argc, char **argv) {
   return 0;
 }
 EOF
-gcc -O2 -I"$SWE_HOME" "$SCRATCH/oracle.c" -L"$SWE_HOME" -lswe -lm -ldl \
+# Static archive, not -lswe: an installed libswe.so (this machine keeps a
+# stale one in /usr/local/lib) wins the runtime search over -L, and the
+# oracle would then answer from a different library than the server.
+gcc -O2 -I"$SWE_HOME" "$SCRATCH/oracle.c" "$SWE_HOME/libswe.a" -lm -ldl \
   -lpthread -o "$SCRATCH/oracle"
 
 "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --threads 1 \

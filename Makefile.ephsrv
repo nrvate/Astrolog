@@ -37,7 +37,14 @@ OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,$(filter-out ephsrv/eph_wsclient.cpp,$(SRC
 # uSockets builds with OpenSSL when the headers are present; the server
 # needs no TLS for a localhost-first deployment, but the vendored default
 # build is WITH_OPENSSL=1 and the link list matches it.
-LIBS = ephsrv/uSockets/uSockets.a -L$(SWE_HOME) -lswe -lssl -lcrypto \
+#
+# libswe is linked by ARCHIVE PATH, not -lswe: an installed libswe.so (this
+# machine has one in /usr/local/lib, root-owned, a month stale) wins the
+# runtime search over -L every time, and every symptom of that is a lie --
+# probes answer from the old library while the fork's own tests, which
+# compile its sources, answer from the new one. The static archive cannot
+# be shadowed.
+LIBS = ephsrv/uSockets/uSockets.a $(SWE_HOME)/libswe.a -lssl -lcrypto \
  -lz -lpthread -lm -ldl
 CPPFLAGS = -MMD -MP -O2 -std=gnu++17 -I ephsrv/uWebSockets/src \
  -I ephsrv/uSockets/src -I ephsrv -I $(SWE_HOME)

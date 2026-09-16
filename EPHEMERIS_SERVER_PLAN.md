@@ -434,3 +434,23 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
    to reload, which 73 suite failures traced back to. Empty now clears to
    the default, like FCloneSz(NULL) elsewhere; the suite stands at 5649/0
    with the client's new ephem-server group included.
+
+6. **The fork's tidal-term defect is fixed at source, and the server's
+   workaround is gone.** The fork (nrvate/swisseph, 2.10.03-ts.11,
+   c86c2b6) now publishes the DE numbers its setters' header pre-opens
+   read (`sweph_denum_moon`, `jpldenum_cfg`, in `SWI_CFG_PATH`), so every
+   context resolves delta-t's tidal term from the configuration instead of
+   from whichever files it happens to have open — the fresh-context
+   order dependence of work-log item 2 (Moon 272.41632607 vs
+   272.41633228 at JD 2415020.5) is gone at the library level, held by
+   G4's new ORDER property, and the server's per-object swe_close_r()
+   workaround is deleted: the pool contexts stay warm and the golden
+   gate still passes 70 columns bit-exact. Two environment traps fell
+   out of the verification and are now pinned in the build: an installed
+   libswe.so in /usr/local/lib (a month stale) wins the runtime search
+   over -L every time, so Makefile.ephsrv and the golden gate's oracle
+   link $(SWE_HOME)/libswe.a by archive path — a static archive cannot
+   be shadowed; and the fork's root Makefile tracks no header
+   dependencies, so a header-only edit re-archives stale objects — its
+   tests/ learned this the hard way (69495ff) and the root build has
+   not yet.
