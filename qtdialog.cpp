@@ -5120,16 +5120,17 @@ void ShowCalcDialogQt()
       pcbEphem->addItem(szEphem[cmMatrix]);
 #endif
     pcbEphem->addItem(szEphem[cmNone]);
-    // The edit text maps nSwissEph to its szEphem row: the first four
-    // values index straight over (0 Swiss, 1 Moshier, 2 JPL, 3 Web), 5
-    // is the Ephemeris Server, and anything else is none. (This used to
-    // index szEphem[nSwissEph] raw, which showed "Matrix Formulas" for a
-    // Horizons selection, since cmMatrix and nSwissEph 3 collide on the
-    // index but not on the meaning.)
-    pcbEphem->setEditText(szEphem[!us.fEphemFiles ?
-      (us.fMatrixPla ? cmMatrix : cmNone) :
-      (us.nSwissEph == 5 ? cmEphSrv :
-      (FBetween(us.nSwissEph, 0, cmJPLWeb) ? us.nSwissEph : cmNone))]);
+    // The edit text is the szEphem row of the calculation method, through
+    // the FCm* predicates as Windows does (wdialog.cpp, the same dialog).
+    // nSwissEph is NOT an szEphem index: Horizons is nSwissEph 3 and row
+    // cmJPLWeb (4), and row 3 is Matrix, so indexing by it showed "Matrix
+    // Formulas" for a Horizons selection and OK switched the backend to
+    // Matrix (EPHEMERIS_REVIEW.md C15). The server is tested first because
+    // FCmJPLWeb() is true for nSwissEph 5 too.
+    pcbEphem->setEditText(szEphem[FCmSrv() ? cmEphSrv :
+      (FCmSwissEph() ? cmSwiss : (FCmSwissMosh() ? cmMoshier :
+      (FCmSwissJPL() ? cmJPL : (FCmMatrix() ? cmMatrix :
+      (FCmJPLWeb() ? cmJPLWeb : cmNone)))))]);
   }
   if (pcbAyan != NULL) {
     // The list offers the named ayanamsas with their offsets, and the
