@@ -25,7 +25,62 @@ version 3, and this section is the design authority behind it.
   advertised now: requests are computed in blocks across loop turns.
 - **Prometheia.** `/shares/ephemeris-prometheia` pins `ephproto.h`,
   `ephsrv/registries.json` and the conformance fixtures (§3.10). With version
-  4 it deletes its wire map (`server/wire_map.*`).
+  4 it deletes its wire map (`server/wire_map.*`). Their session is
+  `ephemeris-prometheia-0b`. Their last reader run passed **85/85** on the
+  previous fixture set with the checksum verified independently.
+
+### The protocol is NOT locked yet. One drop stands between here and the lock.
+
+Section 3 was settled with the Prometheia maintainers over many rounds
+(work log items 0, 0b, 0c). Everything agreed is written down: the prose is in
+§3.5a, the reasoning and measurements in §8. **What has not been done is the
+part that changes bytes.** In order, and as ONE commit, because a fixed-part
+change invalidates every fixture the other side has already verified and their
+reader run is the gate:
+
+1. **`u8 corrApplied` in DATA's META**, immediately after `metaFlags`. There is
+   no reserved byte in that fixed part, so `resolvedNaif` and `firstFailedRow`
+   shift by one. Free now; impossible after the lock. Its meaning is
+   **structural availability** -- the corrections this engine *can* apply to
+   this object, for this kind and this observer. A bit is clear when the engine
+   cannot apply that term here at all, and stays set when the correction ran
+   and contributed nothing. Three bits used (`kCorrLightTime`,
+   `kCorrDeflection`, `kCorrAberration`, already in `ephproto.h`), five spare;
+   unknown high bits are reserved and clients MUST ignore them. It is
+   **diagnostic**: a conformance harness MUST NOT gate comparisons on it
+   (work log 0c, the retraction).
+   - For this server, from the measurements in 0c: kind 1 planetary reports
+     deflection and aberration and NOT light time; kind 1 lunar reports light
+     time and NOT the other two.
+2. **Resolve the §3.4 contradiction** recorded in work log item 2: the CANCEL
+   paragraph invites flushing each block as it completes, while DATA requires
+   the meta-present flag on chunk 0 and META's `rowsOk`, `firstFailedRow` and
+   `partial` are facts about the WHOLE answer. A block cannot be flushed
+   before the last row without writing those before they are known. This
+   server computes in blocks and streams when the answer is whole, which is
+   the normative reading. Needs either a "metadata may be revised on the last
+   chunk" rule or the suggestion withdrawn. **Decide it before the lock, not
+   after.**
+3. **Regenerate the conformance fixtures** (`tools/ephproto4-fixtures.py`) --
+   item 1 moves the bytes of every fixture carrying a DATA message -- and
+   write **one new `# set-sha256`** into `ephsrv/conformance/MANIFEST.tsv`.
+4. **Send the set whole** to Prometheia: `ephsrv/ephproto.h`,
+   `ephsrv/registries.json` and the fixtures with their digest. Their
+   independent reader's verdicts on THAT set are the gate. Green locks §3; one
+   disagreement means nobody locks and §3 changes until only one reading
+   survives.
+
+**Then stop and ask the maintainer about phases 3-7.** They were never
+approved as automatically next; §7 lists them and they are a separate
+decision.
+
+- **Open for the maintainer, no action needed before the lock.** Whether to
+  patch vendored Swiss's `lunar_osc_elem()` to retard in the barycentric
+  frame. Work log 0c has the argument; the recommendation on this branch is
+  **no**, and Prometheia withdrew the suggestion when given it.
+- **A narrative handoff** with the round-by-round reasoning lives at
+  `/nvm/work/ephv4-handoff.md`. It is scratch and not in git; everything
+  load-bearing from it is in this document, which is the authority.
 
 ## 1. Why
 
@@ -735,9 +790,27 @@ may select another from A.20):
 - **Apsides** are the points of the orbit at pericentre, a(1−e), and apocentre,
   a(1+e); method 4 answers the empty focus, 2ae from the centre, in place of
   the apocentre.
-- **Points are geometric:** the correction bits have no effect on them. The
-  answered coordinates are the point as seen from the profile's observer, in its
-  frame and plane, with the zodiac applied.
+- **Corrections apply as sent**, as they do to a body, and the three terms are
+  defined independently (see **Corrections** above). The answered coordinates
+  are the point as seen from the profile's observer, in its frame and plane,
+  with the zodiac applied.
+  - *Deflection* and *aberration* are as for a body, applied to the direction
+    of the point.
+  - *Light time* retards the point to the instant its light would have left it.
+    An orbit point emits no light, so this is a **convention**, not an
+    observable, and two engines may mean different operations by it. Measured
+    2026-09-17 against Prometheia: Swiss's light-time term on the Moon's true
+    node is 0.0031", theirs is 19.10" -- four orders of magnitude apart in the
+    intermediate -- while the two apparent answers agree to 0.0002". Neither
+    is wrong; they are different conventions for a point that has none.
+- **Corrections on an orbit point are not independently meaningful.** The point
+  is a construction rather than an emitter, so a proper SUBSET of the three
+  terms is well defined only within one implementation. Two answers are
+  interoperable when all three terms were applied, or when none were. A server
+  MAY answer a proper subset, and MAY report which terms it applied; a client
+  MUST NOT compare such an answer across servers. This is the reason the
+  astrometric lunar nodes of two conforming servers may differ by 19", while
+  their apparent ones agree to 0.0002".
 - **Osculating (1, 3)** elements come from the body's state vector with
   μ = G(M_centre + M_body) from the ephemeris's own constants (M_body 0 where
   unknown).
@@ -1552,8 +1625,8 @@ the gates the phase touches.
    (0x8004) because one deltaTSec cannot cover a century-long grid; sidereal
    zodiacs (anchor in TT and mean, which ayanamsa each frame gets, ecliptic
    plane only -- equatorial sidereal is now malformed, the ayanamsa column
-   defined); orbit points (which orbit, which plane, geometric, mean models
-   named in the source); fixed stars (an accepted name grammar, components
+   defined); orbit points (which orbit, which plane, corrections as sent,
+   mean models named in the source); fixed stars (an accepted name grammar, components
    ambiguous, no deep-sky objects, distance and resolvedNaif); corrections
    honoured as sent for every observer, with per-observer masks advertised
    (A.3 0x0004 gains the observer bitmask); frames defined exactly, with
@@ -1583,6 +1656,65 @@ the gates the phase touches.
      one REQUEST carries a whole cast, prefetch has its own priority, segments
      answer animation, CANCEL stops wasted computation, and the cache key is
      canonical so one question is computed once.
+
+0c. **Orbit-point corrections, settled with Prometheia (2026-09-17).** The
+   agreement in §3.5a above, and the correction of item 2's physics.
+   - **The term Swiss carries on a planetary orbit point is ABERRATION, not
+     light time.** Prometheia objected to item 2's measurement; re-measured
+     rather than defended, and they were right. `SEFLG_NOABERR` alone moves
+     Jupiter's ascending node **-20.8370"** (their independent figure
+     20.8378"). Item 2 had measured the bits on the lunar *named* bodies,
+     where they genuinely move nothing, and carried the sentence to the
+     planetary case without re-running it.
+   - **Swiss applies zero light time to planetary orbit points.** TRUEPOS and
+     NOABERR|NOGDEFL agree to **0.000000"** on Jupiter, Saturn, Mars and
+     Pluto, by both methods. Deflection is honoured (0.0002-0.008"),
+     aberration is honoured (1-21"), light time is inert. So on kind 1
+     planetary this server structurally cannot honour the light-time bit.
+   - **The lunar points are the other way round**, settled two independent
+     ways. By code: `lunar_osc_elem()` (sweph.c:5692, reached from :976 for
+     SE_TRUE_NODE and :1000 for SE_OSCU_APOG) consults exactly one flag,
+     SEFLG_TRUEPOS, and `grep -c "swi_aberr_light\|swi_deflect_light"` over
+     it returns **0**. By behaviour: SE_MOON itself moves +11.361744" under
+     NOABERR, so the flag is live on the lunar path and only the node
+     function never asks. Lunar points therefore carry light time, and
+     neither aberration nor deflection.
+   - **A hypothesis neither side had named** was killed in passing: that
+     NOABERR might be dead on the whole lunar path, which would have given
+     the same 0.0000" while aberration *was* being applied. The SE_MOON
+     measurement above rules it out.
+   - **The 19.1" astrometric gap is a spec carve-out, not a bug.** Our
+     astrometric lunar nodes equal our apparent ones to the bit; theirs are
+     19.105" away; the apparent answers agree to 0.0002". Both servers are
+     truthful. §3.5a now says corrections on an orbit point are interoperable
+     in full or not at all.
+   - **Declined: patching vendored Swiss's `lunar_osc_elem()`** to retard in
+     the barycentric frame, which would close the 19.1" at a cost of 0.0002"
+     on Astrolog's published apparent nodes. Three reasons, all accepted by
+     Prometheia, who withdrew the suggestion: vendored Swiss must reproduce
+     Swiss, and the golden gate compares against the fork's own swetest, so
+     patching would make that gate measure us against ourselves; "light time
+     to a node" is a convention, so adopting their route into a reference
+     implementation is a convention change dressed as a bug fix; and it is
+     the maintainer's call, not one to take on a peer's suggestion.
+   - **A retraction of our own.** We had written that the golden leg could use
+     the applied-corrections report to decide which objects are comparable.
+     Prometheia showed it cannot: the two lunar answers agree to 0.0002" with
+     DIFFERENT corrections applied, and the mean nodes will differ with
+     IDENTICAL ones. It explains a difference; it does not predict one, and
+     equality of it is neither necessary nor sufficient for two answers to
+     agree. A conformance harness MUST NOT gate comparisons on it.
+   - **Standing fact for the golden leg:** mean orbit points need a looser
+     tolerance than osculating ones (their mean rows differ by 0.006-0.025"
+     against 0.0003-0.012" osculating), because mean-element fits differ
+     between engines. Unrelated to corrections; the reason belongs written at
+     the tolerance.
+   - **Instrumentation finding, and it is general:** compare angular
+     SEPARATIONS, never ecliptic-longitude differences. A 0.063" "gap" read
+     as a real disagreement and was entirely the projection -- the Moon's
+     apparent-vs-astrometric displacement is 11.424861", its longitude
+     difference 11.361744", and the Moon sits at 5.17 degrees latitude.
+     Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
 
 3. **The five debts of the protocol pass, cleared (2026-09-17).** What phase 2
    deferred, and the five §3 rules written after its spec freeze.
@@ -1707,16 +1839,19 @@ the gates the phase touches.
      server and compares the arrays as bytes: all of them are bit-identical
      to the local Swiss path, as they were under version 3.
    - **Two measurements the specification asked for.**
-     - *Orbit points are not geometric in Swiss.* §3.5a says the correction
-       bits have no effect on kind 1. Measured at J2000 with the bundled
-       ephemeris: switching SEFLG_TRUEPOS on moves `swe_nod_aps`'s
-       ascending node of Jupiter by 5.8e-3 degrees (mean and osculating
-       alike), its perihelion by 7.5e-4, and the named lunar bodies by up to
-       2.5e-5 (SE_OSCU_APOG); SEFLG_NOABERR|NOGDEFL alone moves nothing.
-       So Swiss's points carry light time, and honouring the spec's rule
-       would mean answering a different point from the one Astrolog's local
-       cast computes. The server therefore honours the bits as sent, and
-       this is reported rather than kludged: the spec follows the engines.
+     - *Orbit points are not geometric in Swiss.* Measured at J2000 with
+       the bundled ephemeris: switching SEFLG_TRUEPOS on moves
+       `swe_nod_aps`'s ascending node of Jupiter by 5.8e-3 degrees (mean and
+       osculating alike), its perihelion by 7.5e-4, and the named lunar
+       bodies by up to 2.5e-5 (SE_OSCU_APOG). So honouring §3.5a's rule as
+       it then stood would mean answering a different point from the one
+       Astrolog's local cast computes. The server therefore honours the bits
+       as sent, and this was reported rather than kludged: the spec follows
+       the engines. **The conclusion held; the physics cited for it did
+       not** -- see item 0c. This entry said "SEFLG_NOABERR|NOGDEFL alone
+       moves nothing" and inferred that the term Swiss carries is light
+       time. Both halves are wrong for planetary points, and the sentence is
+       kept here only so the correction has something to point at.
      - *Rates against central differences.* Swiss's speeds, against central
        differences of its own positions over +-0.001 day (and +-0.01 and
        +-0.0001, to tell real disagreement from differencing noise):
