@@ -533,7 +533,8 @@ inline Outcome ParseWelcome(const uint8_t *p, size_t n, Welcome *w, std::string 
   else if (r.left()) v.Malformed("bytes after WELCOME");
   if (res8 || res16) v.Malformed("WELCOME reserved fields nonzero");
   if (w->protoSession < kProtoMin) v.Malformed("WELCOME session below 4");
-  if (!w->maxObjs || !w->maxRows || !w->maxChunkRows || !w->maxCells || !w->maxProfiles)
+  if (!w->maxObjs || !w->maxRows || !w->maxChunkRows || !w->maxPayload ||
+      !w->maxCells || !w->maxProfiles)
     v.Malformed("a WELCOME limit is zero");
   *why = v.why();
   return v.outcome();

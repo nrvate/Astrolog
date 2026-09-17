@@ -579,6 +579,43 @@ int main(int argc, char **argv) {
     Check(eph::ParseData(dp.data(), dp.size(), &dback, &why) == eph::kOk &&
               dback.meta[0].corrApplied == 0x87,
           "corrApplied round-trips, high bits included: reserved, never refused");
+    // The capability table the server encodes, pinned where it was measured
+    // (work log 0c and the re-verification): a body from the geocentre sees
+    // every term, a heliocentric one only light time; an orbit point never
+    // light time; the Moon's named osculating point light time only; the
+    // mean lunar elements nothing; a star deflection and aberration. The
+    // field is the capability set -- it does not shrink with the request's
+    // mask.
+    {
+      const auto Live = [](eph::Object o, eph::Profile pf) -> uint8_t {
+        eph::swiss::SwissCall c;
+        std::string w2;
+        if (eph::swiss::MapObject(o, 0, pf, eph::kTimeTT, eph::CanonicalNaN(),
+                                  SEFLG_SWIEPH, &c, &w2) != eph::kOErrNone)
+          return 0xFF;
+        return eph::swiss::CorrectionsLive(c, pf.observer);
+      };
+      eph::Profile geo, helio;
+      geo.observer = eph::kObsGeo; helio.observer = eph::kObsHelio;
+      eph::Object body; body.kind = eph::kObjBody; body.naif = 5;
+      eph::Object jupnode; jupnode.kind = eph::kObjOrbitPoint; jupnode.naif = 5;
+      jupnode.point = eph::kPtAscNode; jupnode.method = eph::kMethOsculating;
+      eph::Object moonnode; moonnode.kind = eph::kObjOrbitPoint; moonnode.naif = 301;
+      moonnode.point = eph::kPtAscNode; moonnode.method = eph::kMethOsculating;
+      eph::Object moonmean = moonnode; moonmean.method = eph::kMethMean;
+      eph::Object star; star.kind = eph::kObjStar; star.name = "Aldebaran";
+      Check(Live(body, geo) == 7, "a geocentric body: every term live");
+      Check(Live(body, helio) == eph::kCorrLightTime,
+            "a heliocentric body: light time only (plaus_iflag)");
+      Check(Live(jupnode, geo) == (eph::kCorrDeflection | eph::kCorrAberration),
+            "a planetary orbit point: deflection and aberration, never light time");
+      Check(Live(moonnode, geo) == eph::kCorrLightTime,
+            "the Moon's named osculating node: light time only");
+      Check(Live(moonmean, geo) == 0,
+            "the mean lunar elements: no term applies");
+      Check(Live(star, geo) == (eph::kCorrDeflection | eph::kCorrAberration),
+            "a fixed star: deflection and aberration, no light time");
+    }
     d.columnsPresent = 0x10;    // a column bit is not: it changes the row width
     dp.clear();
     eph::EncodeData(&dp, d);
@@ -608,6 +645,24 @@ int main(int argc, char **argv) {
                 c.CorrectionMask(eph::kObsGeo, 7) && c.Kind(eph::kObjBody) &&
                 c.TimeScale(eph::kTimeTT) && c.lookupMax >= 32,
             std::string(name) + ": capabilities decode (" + why + ")");
+    }
+    // The zero-limits rule covers maxPayload too (the peer's header review):
+    // a WELCOME advertising no payload budget leaves a client unable to send
+    // anything, and must be refused at the layer that sees it.
+    {
+      std::vector<uint8_t> msg;
+      eph::Welcome w, bad;
+      std::string why;
+      Check(ReadHex(dir + "/welcome_swiss.hex", &msg) &&
+                eph::ParseWelcome(msg.data() + eph::kEnvelopeSize,
+                                  msg.size() - eph::kEnvelopeSize, &w, &why) == eph::kOk,
+            "welcome_swiss.hex parses");
+      bad = w;
+      bad.maxPayload = 0;
+      std::vector<uint8_t> pay;
+      eph::EncodeWelcome(&pay, bad);
+      Check(eph::ParseWelcome(pay.data(), pay.size(), &bad, &why) == eph::kMalformed,
+            "a WELCOME limit of zero is refused, maxPayload included");
     }
     eph::Capabilities c, back;
     c.kinds = 0x2F; c.observers = 0x1F; c.planes = 3; c.forms = 3; c.frames = 0xF;

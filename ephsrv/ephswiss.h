@@ -316,9 +316,10 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
 }
 
 // 3.4 META corrApplied: the correction terms live in the Swiss call that
-// answers this object -- structural availability, not the mask the request
-// asked for. Measured on the fork, not inferred (work log 0c, re-verified
-// live before encoding): the caller intersects this with the profile's mask.
+// answers this object -- the capability set for this kind and this observer,
+// independent of the mask the request asked for. Measured on the fork, not
+// inferred (work log 0c, re-verified live before encoding); this return
+// value IS the field's contents.
 inline uint8_t CorrectionsLive(const SwissCall &c, uint8_t observer) {
   switch (c.kind) {
     case kCallPctr:

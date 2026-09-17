@@ -29,15 +29,19 @@ version 3, and this section is the design authority behind it.
   `ephemeris-prometheia-0b`. Their last reader run passed **85/85** on the
   previous fixture set with the checksum verified independently.
 
-### The drop is encoded, gated and sent. The reader verdict is the lock.
+### §3 is locked. The drop's verdict was 91/91, zero disagreements.
 
 Section 3 was settled with the Prometheia maintainers over many rounds
-(work log items 0, 0b, 0c). Everything agreed is written down: the prose is in
-§3.5a, the reasoning and measurements in §8. The one drop that changes bytes
-has been built, verified and sent to them as one set (work log item 4). What
-remains is their independent reader's verdict on that set -- the gate. Green
-locks §3; one disagreement means nobody locks and §3 changes until only one
-reading survives. The set, as committed:
+(work log items 0, 0b, 0c), encoded as one drop (work log item 4, commit
+0fbc863), and **locked green on 2026-09-18**: their independent reader ran
+that set at 91/91 with zero disagreements, the set-sha256 verified by a
+second implementation (`1c934c7da19965f21ded99a0a53e36eaa3c45434cfbfaeabdd
+afaf154ea454ec`). The verdict letter is `/nvm/work/ephv4-drop-verdicts.md`;
+both questions were confirmed as drafted (work log item 5), and the three
+prose findings from their header review landed in the same commit that
+records the lock. §3 changes now cost a version bump. What remains open is
+the maintainer's decision on **phases 3-7** (§7); on the Prometheia side the
+session migration onto the v4 header is queued on the maintainer's go.
 
 1. **`u8 corrApplied` in DATA's META**, immediately after `metaFlags`.
    `resolvedNaif` and `firstFailedRow` shift by one. Its meaning is
@@ -227,7 +231,9 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
     that this stays possible.
   The exception is anything that does change how following bytes are read: an
   unadvertised bit in DATA's `columnsPresent` changes the row width, so it is
-  malformed.
+  **unsupported**, not malformed — and the same holds for an unadvertised
+  `precision`: both are refused with ERROR 11, a registry-growth refusal this
+  side may answer later, never a claim that the peer broke a rule.
 - **Floats** MUST be finite. The single exception is the canonical quiet NaN,
   `0x7FF8000000000000`, which is allowed only where a field says so.
 - **Canonical input.** A receiver MUST reject non-canonical input (ERROR 1)
@@ -425,7 +431,11 @@ META:
 engine cannot apply that term to this object, for this kind and this
 observer, at all; it stays set when the term's model ran and contributed
 nothing (a deflection that returns zero far from the Sun has still been
-applied). Three bits from A.7 (`kCorrLightTime`, `kCorrDeflection`,
+applied). The field does not depend on what the request asked: a request for
+true positions still reports the terms the engine can apply -- what it asked
+stays the client's own knowledge, and the two conforming servers' bytes will
+differ where their engines differ. Three bits from A.7 (`kCorrLightTime`,
+`kCorrDeflection`,
 `kCorrAberration`); the five low spares are zero, and unknown high bits are
 reserved: clients MUST ignore them and servers MUST NOT refuse them. The
 field is **diagnostic only**: it explains a difference; it does not predict
@@ -467,7 +477,9 @@ The payload is empty, and the envelope's requestId names the request.
   13.7 s, EPHEMERIS_REVIEW.md S4). A server MUST NOT flush each block as it
   completes: DATA carries the metadata on chunk 0, and META's `rowsOk`,
   `firstFailedRow` and `partial` are facts about the whole answer, which an
-  early flush would have to write before they are known. A server that
+  early flush would have to write before they are known -- and a streaming
+  client starts allocating per-object state from chunk 0, so revisable META
+  breaks exactly the client the early flush was meant to serve. A server that
   computes in blocks therefore holds the finished ones and streams when the
   answer is whole.
 - **Already answered completely, or unknown.** The server sends nothing.
@@ -1784,6 +1796,46 @@ the gates the phase touches.
      had the reason: "astrolog-ephd is newer than its sources". A stale
      server still speaking the old META layout reads exactly like a
      protocol bug; `make ephsrv` and everything passed.
+
+5. **The verdict is in: §3 is locked (2026-09-18).** Prometheia's reader ran
+   the drop set once after implementing three of the second-round agreements
+   it had missed (`deadlineMs` in the delivery block, the batched LOOKUP,
+   `u8 nQueries` leading LOOKUP_RESULT) plus the new byte: first run 67/91,
+   every disagreement its own staleness, not our bytes; 91/91 with zero
+   disagreements after. The set-sha256 was verified by a second independent
+   implementation; all three computations agree. Verdict letter:
+   `/nvm/work/ephv4-drop-verdicts.md`; their reader work is committed as
+   e25d74b on their origin/initial, their vendoring of this header and
+   `registries.json` with checksums as 9b7ba97. Both questions confirmed:
+   the §3.4 early-flush withdrawal stands (they added the client-side
+   reason, now in the paragraph: a streaming client allocates per-object
+   state from chunk 0, so revisable META breaks exactly the client the
+   early flush was meant to serve), and **corrApplied is the capability
+   set, not empty on a TRUEPOS request** -- the byte is structural, what
+   the request asked stays the client's own knowledge, and the two
+   servers' differing helio/bary bytes are the diagnostic working. That
+   answer changed one thing on this side: the server had intersected the
+   capability with the request's mask; it now sends `CorrectionsLive()`
+   whole, with the capability table pinned by six unit checks in
+   `ephproto_test` (which had two of its own objects mislabeled while being
+   written -- the behavior was right both times).
+   - **Their header review found no byte-level problems; three prose
+     findings, all landed here:** `ParseWelcome`'s zero-limits rule now
+     covers `maxPayload` (one word; a WELCOME advertising no payload budget
+     is refused, checked in `ephproto_test`, no fixture set moved); §3.1
+     now pins the verdict category for unknown `precision` and
+     `columnsPresent` bits -- **unsupported**, not malformed, per this
+     codec's actual behavior and the registry-growth rule; and the
+     two-part-JD note is recorded as no action (identical arithmetic both
+     ends; a client that puts the whole date in `jd2` loses only its own
+     precision, and if §3 ever wants a guard it is a prose sentence).
+   - **Gates after the follow-ups:** EPHPROTO PASS 319 checks, 91
+     fixtures; GOLDEN PASS 149 bit-exact; ROBUST PASS; make check all
+     clear, suite 5772 passed, 0 failed. The locked set's digest is
+     unchanged (`1c934c7d…`); nothing in this commit moves bytes.
+   - **Phases 3-7 remain a separate maintainer decision.** On the
+     Prometheia side, vendoring is done and the session migration
+     (prometheiad onto the v4 header) is queued on the maintainer's go.
 
 3. **The five debts of the protocol pass, cleared (2026-09-17).** What phase 2
    deferred, and the five §3 rules written after its spec freeze.
