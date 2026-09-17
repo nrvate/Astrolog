@@ -38,6 +38,18 @@ case $mode in
   fast|full) ;;
   *) echo "usage: check.sh [fast|full]"; exit 2 ;;
 esac
+# The suite's logs. CI uploads /tmp/check-suite.log when a release run
+# fails, so a CI run keeps that path; anywhere else each run gets its own
+# directory. Two checks at once -- two worktrees, two sessions on one
+# machine -- used to share the file: one truncated it under the other,
+# the log came back starting with 3274 zero bytes, grep called it binary,
+# and a suite that had passed 5746 to 0 was reported as "printed no PASS
+# line" (2026-09-16).
+if [ -n "${CI:-}" ]; then
+  SUITE_TMP=/tmp
+else
+  SUITE_TMP=$(mktemp -d /tmp/check.XXXXXX)
+fi
 fail=0
 step() {
   name=$1; shift
@@ -167,11 +179,11 @@ if [ "$mode" = full ] && \
   # then and now.
   printf '%-34s ' "the suite, against Qt6"
   if QTTESTBIN=./astrolog-qt6-test \
-       tools/ci-run-suite.sh 600 /tmp/check-suite-qt6.log -Yi1 ephem \
-       >/tmp/check-qt6.out 2>&1; then
-    grep -hoE '^PASS: .*' /tmp/check-suite-qt6.log | tail -1
+       tools/ci-run-suite.sh 600 $SUITE_TMP/check-suite-qt6.log -Yi1 ephem \
+       >$SUITE_TMP/check-qt6.out 2>&1; then
+    grep -hoE '^PASS: .*' $SUITE_TMP/check-suite-qt6.log | tail -1
   else
-    echo FAILED; tail -20 /tmp/check-qt6.out | sed 's/^/    /'; fail=1
+    echo FAILED; tail -20 $SUITE_TMP/check-qt6.out | sed 's/^/    /'; fail=1
   fi
 elif [ "$mode" = full ]; then
   printf '%-34s %s\n' "build: Qt6" "skipped -- no Qt6 outside pkg-config"
@@ -181,11 +193,11 @@ if [ "$mode" = full ]; then
   step "the assertion scripts"   tools/ci-selftest.sh
 fi
 printf '%-34s ' "the suite"
-if tools/ci-run-suite.sh 600 /tmp/check-suite.log \
-     -Yi1 ephem >/tmp/check-suite.out 2>&1; then
-  grep -hoE '^PASS: .*' /tmp/check-suite.log | tail -1
+if tools/ci-run-suite.sh 600 $SUITE_TMP/check-suite.log \
+     -Yi1 ephem >$SUITE_TMP/check-suite.out 2>&1; then
+  grep -hoE '^PASS: .*' $SUITE_TMP/check-suite.log | tail -1
 else
-  echo FAILED; tail -20 /tmp/check-suite.out | sed 's/^/    /'; fail=1
+  echo FAILED; tail -20 $SUITE_TMP/check-suite.out | sed 's/^/    /'; fail=1
 fi
 [ "$fail" -eq 0 ] || { echo "== something above failed"; exit 1; }
 if [ "$mode" = fast ]; then

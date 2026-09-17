@@ -181,6 +181,13 @@ leg() {   # leg <label> <oracle-mode> <oracle-ipl> <client args...>
       FAIL=$((FAIL + 1))
       echo "$label MISMATCH ($who)"; echo "  server: $got"; echo "  oracle: $oracle"
     fi
+    # The flags the server computed with must name the Swiss files: a
+    # Moshier fallback answers close enough to look right in a spot check,
+    # and nothing compared this column (EPHEMERIS_REVIEW.md T13).
+    if [ $((retFlag & 2)) -eq 0 ]; then
+      FAIL=$((FAIL + 1))
+      echo "$label FLAGS ($who): retFlag $retFlag lacks SEFLG_SWIEPH"
+    fi
   done < "$SCRATCH/leg.txt"
 }
 leg "TT" tt 1 --tt --objs 1

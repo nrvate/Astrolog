@@ -271,10 +271,11 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
   result cache. No cross-thread sharing, no locks on the hot path.
 - Context pool: `swe_ctx_new()` / `swe_calc_ut_r()` / `swe_ctx_free()`
   (swephexp.h:774-801 in the fork), contract: one thread at a time per
-  context, contexts fully independent. Pool sized 2x cores, and never
-  smaller than the loop count, so every loop has a context (with
-  `--threads` above 2x cores, loops past the pool used to have none and
-  answered every request ERROR 4). Each context is
+  context, contexts fully independent. ONE context per loop (as built,
+  2026-09-16): a loop is one thread, so more parallelised nothing, opened
+  every file again per context, and made an answer depend on which of a
+  loop's contexts served it. The sketched 2x-cores pool left loops past
+  it with none (`--threads` above 2x cores: ERROR 4). Each context is
   ~23KB; `swe_ctx_new()` inherits the process master config, so the ephemeris
   path set once at startup reaches every context.
 - Per-request configuration uses ONLY the `_r` scoped setters on the serving

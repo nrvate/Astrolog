@@ -79,6 +79,13 @@ for ast in range(n):
     f = os.path.join(d, "se%05d.se1" % ast)
     os.symlink(real, f)
 EOF
+# The main files, so the farm is an ephemeris directory in its own right.
+# The server's --ephe is the whole search path since 2026-09-16; before
+# that a farm without them borrowed ./ephem's through the fallback, which
+# is exactly the silent substitution that was removed.
+for f in sepl_18.se1 semo_18.se1 seas_18.se1; do
+  ln -s "$(dirname "$SOURCE_SE1")/$f" "$FARM/$f"
+done
 
 # a. + b. Startup under strace, timed, with the farm present. The strace
 # a. Startup TIMED with no tracer attached: strace's per-syscall cost
@@ -107,7 +114,10 @@ echo "startup: ${STARTUP_S}s with $FARM_N files (bound ${STARTUP_MAX}s)"
 # violation, because nothing may ever walk the tree.
 kill "$EPHD_PID" 2>/dev/null; wait "$EPHD_PID" 2>/dev/null || true
 EPHD_PID=
-strace -o "$SCRATCH/strace.log" -e trace=getdents64,openat \
+# -y prints each descriptor's path: without it strace names getdents64's
+# descriptor by number only, and the grep below could never match -- a
+# server that walked the whole farm passed (EPHEMERIS_REVIEW.md T1).
+strace -y -o "$SCRATCH/strace.log" -e trace=getdents64,openat \
   "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$FARM" --threads 1 \
   > "$EPHD_LOG" 2>&1 &
 EPHD_PID=$!
@@ -123,12 +133,23 @@ if grep -E "getdents64.*$FARM" "$SCRATCH/strace.log" > /dev/null; then
 fi
 echo "startup scans: zero getdents64 on the farm"
 
-fdbusy() { ls "/proc/$EPHD_PID/fd" 2>/dev/null | wc -l; }
+# The SERVER's descriptors: EPHD_PID is strace's, and counting strace's
+# own descriptors let a server leaking one per request pass (review T1).
+SRV_PID=$(pgrep -P "$EPHD_PID" -x astrolog-ephd | head -1)
+[ -n "$SRV_PID" ] || { echo "SOAK FAIL: no astrolog-ephd under strace $EPHD_PID"; exit 1; }
+fdbusy() { ls "/proc/$SRV_PID/fd" 2>/dev/null | wc -l; }
 
 # A handful of ids that REALLY resolve (the real se00005.se1 at ast0/se00005)
 # plus misses across the farm's tail, so the barrage mixes opens, header
 # rejections and clean per-object errors.
 BARRAGE_IDS="5,6,7,8,9,10,11,12,13,14"
+# One round of each request kind first: the first answer opens the files a
+# request needs, which is the steady state, not a leak. Counted from
+# before any request, the check measured those opens.
+"$ROOT/eph_wsclient" --port "$PORT" --objs "$BARRAGE_IDS" --jd 2451545.0 \
+  --step 600 --count 1 --quiet > /dev/null 2>&1 || true
+"$ROOT/eph_wsclient" --port "$PORT" --objs 100000 --jd 2451545.0 \
+  --step 600 --count 1 --quiet > /dev/null 2>&1 || true
 FD0=$(fdbusy)
 i=0
 while [ "$i" -lt "$BARRAGE" ]; do

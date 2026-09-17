@@ -270,6 +270,14 @@ static EphDiscovery DiscoverEphemDirs() {
     for (const std::string &s : v) AddCandidate(&disc, s, true);
   }
 
+  // An explicit --ephe is the whole search: the operator said where the
+  // files are. Falling through to the environment, the settings file and
+  // the executable's directory found SOME ephemeris when the one named had
+  // none, and a gate pointing the server at a directory with no files was
+  // silently answered from ./ephem (EPHEMERIS_REVIEW.md T3). A directory
+  // with nothing in it is "<none found>", and the log says so.
+  if (gOpt.ephe.empty()) {
+
   // 2. Environment: ASTR<version> ("ASTR" + the version with dots stripped,
   //    the client's ENVIRONVER algorithm, plus the plan's example ASTR80),
   //    then ASTROLOG, then ASTR.
@@ -311,6 +319,8 @@ static EphDiscovery DiscoverEphemDirs() {
 
   // 5. Compile-time default.
   AddCandidate(&disc, EPH_EPHE_DIR_DEFAULT, false);
+
+  }   // gOpt.ephe.empty()
 
   // Probe each candidate for sentinels -- stat() only, never opendir.
   for (EphDir &d : disc.dirs) {
@@ -516,6 +526,13 @@ struct LoopCtx {
   // and the bench: zero on a hit.
   double lastComputeMs = 0.0;
   bool lastWasHit = false;
+  // A request with SE_SIDBIT_PREC_ORIG in its sidereal mode changed this
+  // loop's context's precession and nutation models, and Swiss keeps such
+  // a change (upstream too: it is one process's configuration there). In a
+  // context that serves every request on the loop it leaked into the next
+  // request, tropical ones included -- 31 to 37 arcseconds, measured
+  // (EPHEMERIS_REVIEW.md F8). The next request puts the models back first.
+  bool fModelsTouched = false;
 
   swe_ctx *TakeContext() {
     if (pool.empty()) return nullptr;
@@ -590,7 +607,16 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
     return false;
   }
 
+  if (lc->fModelsTouched) {
+    // All zeros is a fresh context's state: every model at its default.
+    // (An empty string would set this version's explicit model list,
+    // which is not guaranteed to be the same bits.)
+    swe_set_astro_models_r(ctx, (char *)"0,0,0,0,0,0,0,0", 0);
+    lc->fModelsTouched = false;
+  }
   ApplyRequestConfig(ctx, req);
+  if ((req.iflag & SEFLG_SIDEREAL) && (req.sidMode & SE_SIDBIT_PREC_ORIG))
+    lc->fModelsTouched = true;
 
   const uint32_t nObj = stream->nObj, nTime = stream->nTimeRows;
   auto entry = std::make_shared<eph::CacheEntry>();
@@ -907,8 +933,7 @@ int main(int argc, char **argv) {
   Log("astrolog-ephd %s, Swiss Ephemeris %s", kServerVersion, szVersion);
   Log("%d event loop(s), context pool %d, result cache %u MiB total",
       gOpt.threads < 1 ? 1 : gOpt.threads,
-      std::max(std::max(2 * (int)std::thread::hardware_concurrency(), 2),
-               gOpt.threads < 1 ? 1 : gOpt.threads),
+      gOpt.threads < 1 ? 1 : gOpt.threads,
       gOpt.cacheMb);
   Log("ephemeris path: %s",
       disc.resolved.empty() ? "<none found; file-backed requests fail>" :
@@ -958,14 +983,15 @@ int main(int argc, char **argv) {
   }
 
   int nLoops = gOpt.threads < 1 ? 1 : gOpt.threads;
-  // A loop is one thread, so it uses one context at a time; 2x cores is
-  // the pool, but every loop gets at least one. Loops past the pool used
-  // to get none and answer every request ERROR 4 (--threads 64 on 12
-  // cores: 14 of 20 connections), and a hardware_concurrency() of 0 left
-  // the loop count 0 to divide by.
-  int totalCtx = 2 * (int)std::thread::hardware_concurrency();
-  if (totalCtx < 2) totalCtx = 2;
-  if (totalCtx < nLoops) totalCtx = nLoops;
+  // One context per loop. A loop is one thread and uses one context at a
+  // time, so a second context in the same loop parallelised nothing: it
+  // only opened every file a second time, and made the answer depend on
+  // which of the loop's contexts a request happened to land on. The pool
+  // was 2x cores split across loops -- loops past it got none and
+  // answered every request ERROR 4 (--threads 64 on 12 cores: 14 of 20
+  // connections), and with one loop the soak gate watched the server's
+  // descriptors climb by 43 as 24 contexts each opened the same files.
+  int totalCtx = nLoops;
   // --cache-mb is the TOTAL budget; each loop gets an equal share, since
   // the kernel spreads connections across loops and one loop cannot answer
   // from another's cache.

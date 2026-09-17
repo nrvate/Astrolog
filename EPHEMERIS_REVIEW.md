@@ -41,54 +41,55 @@ install lines would all have failed.
 | S12 | JPL setter closes files per request; centered UT JPL delta-t ambiguity | deferred 2026-09-16: correct results, cost only; F1/F5 decide the delta-t half |
 | S13 | eph_wsclient trusts the server (payloadLen, u32 wrap, frame size, requestId, duplicates) | fixed (the gate depends on it) |
 | S-fork | UBSan signed overflow at sweph.c:432 / :4816 from a wire id | open, to the fork review |
-| T1 | Soak gate's scan and fd checks cannot fail (strace prints no paths; pid is strace's) | open |
-| T2 | Multi-chunk window reassembly untested; golden gate --count 1 only | open |
-| T3 | Port ranges of suite and gates overlap; second server silent (see S6); --ephe with no files falls back silently | ports fixed (all below the ephemeral range, disjoint); second server fixed (S6); --ephe fallback open |
-| T4 | Custom node/apsis scenario and window-bound check vacuous under -Yi1 ephem (is.nObj not recomputed) | open |
-| T5 | RMaxDiffEphQt ignores NaN | open |
-| T6 | Offline -0n checks vacuous; live group skips when no server is built | open |
-| T7 | Bench concurrent failures never fail the bench | open |
-| T8 | Sidereal mode never varied; topo at one place; golden has no topo/helio leg | open |
-| T9 | "1900 delta-t" scenario exercises no delta-t; prefetch delta-t line untested | open |
-| T10 | Live group uses whatever astrolog-ephd is next to it; skip reports PASS | open |
-| T11 | ciMain not restored by the live group | open |
-| T12 | "in-flight request survives the drop" checked before any event | open |
-| T13 | Golden never compares retFlag; cache gate's f32 hit compares no values; thin off-grid margin | open |
-| C1 | Bounded wait's processEvents lets nested redraws/casts run mid-cast: painter crash, plan wiped | open |
-| C2 | processEvents(maxtime) drops WaitForMoreEvents: 100% CPU spin for up to 10 s | open |
-| C3 | Startup chart cast before the connection exists; nothing recasts on WELCOME; Connecting casts fail at once | open |
-| C4 | HELLO timeout timer never allocated: a silent peer leaves the client Connecting forever | open |
-| C5 | cRowsGot counts duplicate chunks (reconnect re-send): window done with zero rows | open |
-| C6 | iTime+nRows u32 wrap in FWindowChunkQt: heap write; chunk precision unchecked | open |
-| C7 | Groups capped at kMaxObjs not welc.maxObjs: plan reads past clamped columns | open |
-| C8 | Warning "once" keyed on jd; modal per instant on multi-instant charts | open |
-| C9 | FSrvPlanetQt rebuilds jde from global is.rDeltaT | open |
-| C10 | SrvPrefetchNextQt can evict the covering window before it is in the plan | open |
-| C11 | Reconnect storm: crashing request re-sent every second forever | open |
-| C12 | Socket signal handlers act on global esrv.pws; late signals after Finalize | open |
-| C13 | Local-only Swiss calls under backend 5 carry SEFLG_JPLEPH | open |
-| C14 | flagsUsed never compared; SPEED vs fTopoPos>1; client-side delta-t tid_acc; cache survives address change | open |
-| C15 | Calculation Settings maps nSwissEph 3 to "Matrix Formulas" | open |
-| C16 | Plan doc disagreements (topo units, address field, -0n combo, Status duplicate, shipped =0n) | open |
-| A1 | Background prefetch can evict the covering window before it is in the plan (ASan heap-use-after-free) | open (same as C10) |
-| A2 | A window crossing an ephemeris file's range fails every object for every frame; the warning box stops animation | open |
-| A3 | Background prefetch never fires for steps <= 120 s: the 60 s slack makes the next window look covered | open |
-| A4 | Off-grid frames corrected first-order over up to half a row: arc-minute errors (progressed, midpoint, DST, edited time) | open |
-| A5 | Window cap 8 thrashes at 5+ groups, or 3+ in a relationship chart | open |
-| A6 | The static chart of a relationship cast is treated as a frame | open |
-| A7 | Stop paths that skip the exact recast (warning box, -Xn, -Xnp) | open |
-| A8 | Speed fields not held to the stated tolerance once extrapolated | open |
-| A9 | Coverage gaps: short steps, groups over cap, ephemeris boundary, relationship/progressed/midpoint | open |
-| F1 | c86c2b6: JPLEPH\|SWIEPH delta-t now uses the moon file's term, not JPL's (new departure; server pctr/nod_aps path) | open |
-| F2 | c86c2b6 breaks G8 (check-setest): swe_close never clears the new fields; not behind SWE_UPSTREAM_COMPAT | open |
-| F3 | Default-context threads miss a DE-number change when the path string is unchanged (sweconfig path_changed) | open |
-| F4 | jpldenum_cfg goes stale three ways (set_ephe_path, lazy JPL open, env-only config) | open |
-| F5 | swe_deltat_ex_r MOSEPH\|SWIEPH ignores JPL>Swiss>Moshier precedence (older) | open |
-| F6 | swe_nod_aps_r(Sun, TOPOCTR, MEAN) NaN on a fresh context, history-dependent otherwise | open |
-| F7 | swe_calc_pctr_r with TOPOCTR depends on a previous observer | open |
-| F8 | Pooled server contexts keep precession/nutation models set by an earlier SE_SIDBIT_PREC_ORIG request (-31"..-37") | open |
-| F9 | Planetary moons: first call differs from a repeat of the same call | open |
-| F10 | swi_get_observer shortcut ignores the obliquity cache's flag key | open |
+| T1 | Soak gate's scan and fd checks cannot fail (strace prints no paths; pid is strace's) | fixed (strace -y; fd count on the server's pid, not strace's) |
+| T2 | Multi-chunk window reassembly untested; golden gate --count 1 only | fixed (the live group's animation windows arrive in chunks of 7 rows) |
+| T3 | Port ranges of suite and gates overlap; second server silent (see S6); --ephe with no files falls back silently | fixed: ports below the ephemeral range and disjoint; second server refused (S6); an explicit --ephe is the whole search path, and the soak farm carries its own main files |
+| T4 | Custom node/apsis scenario and window-bound check vacuous under -Yi1 ephem (is.nObj not recomputed) | fixed (AdjustRestrictions; asserts the custom object was cast) |
+| T5 | RMaxDiffEphQt ignores NaN | fixed (NaN is the largest difference) |
+| T6 | Offline -0n checks vacuous; live group skips when no server is built | fixed (-0n through the prefetch, with its own warning text) |
+| T7 | Bench concurrent failures never fail the bench | fixed (failures to a file; missing samples fail) |
+| T8 | Sidereal mode never varied; topo at one place; golden has no topo/helio leg | sidereal: fixed (a second mode, SSY plane); a second topocentric place and golden topo/helio legs deferred 2026-09-16: the suite's helio and topo scenarios cover the client, the golden gate is the server's |
+| T9 | "1900 delta-t" scenario exercises no delta-t; prefetch delta-t line untested | fixed (a progressed scenario reaches the prefetch's own delta-t) |
+| T10 | Live group uses whatever astrolog-ephd is next to it; skip reports PASS | fixed (fails when a server source is newer than the binary) |
+| T11 | ciMain not restored by the live group | fixed |
+| T12 | "in-flight request survives the drop" checked before any event | fixed (asked after the drop is seen) |
+| T13 | Golden never compares retFlag; cache gate's f32 hit compares no values; thin off-grid margin | retFlag in golden legs and f32 values in the cache gate fixed; the thin off-grid margin is moot (off-grid frames are exact now, A4) |
+| C1 | Bounded wait's processEvents lets nested redraws/casts run mid-cast: painter crash, plan wiped | fixed (wait holds input back, owes redraws; nested cast leaves the plan) |
+| C2 | processEvents(maxtime) drops WaitForMoreEvents: 100% CPU spin for up to 10 s | fixed (sleeping event loop; CPU < 0.3x wall asserted) |
+| C3 | Startup chart cast before the connection exists; nothing recasts on WELCOME; Connecting casts fail at once | fixed (WELCOME recasts; Connecting casts wait) |
+| C4 | HELLO timeout timer never allocated: a silent peer leaves the client Connecting forever | fixed (timer created; mute-server check) |
+| C5 | cRowsGot counts duplicate chunks (reconnect re-send): window done with zero rows | fixed (rows bitmap) |
+| C6 | iTime+nRows u32 wrap in FWindowChunkQt: heap write; chunk precision unchecked | fixed (64-bit bound, precision checked) |
+| C7 | Groups capped at kMaxObjs not welc.maxObjs: plan reads past clamped columns | fixed (groups capped at WELCOME maxObjs) |
+| C8 | Warning "once" keyed on jd; modal per instant on multi-instant charts | fixed (per cast generation; one box per 30 s) |
+| C9 | FSrvPlanetQt rebuilds jde from global is.rDeltaT | fixed by reading (the plan keeps its TT instant); no net: nothing in the suite moves delta-t between prefetch and read |
+| C10 | SrvPrefetchNextQt can evict the covering window before it is in the plan | fixed (plan entries assigned before the background open) |
+| C11 | Reconnect storm: crashing request re-sent every second forever | fixed (given up after three sessions) |
+| C12 | Socket signal handlers act on global esrv.pws; late signals after Finalize | fixed by reading (handlers ignore a replaced socket; sockets disconnected before deletion) |
+| C13 | Local-only Swiss calls under backend 5 carry SEFLG_JPLEPH | fixed (backend 5 asks SEFLG_SWIEPH locally) |
+| C14 | flagsUsed never compared; SPEED vs fTopoPos>1; client-side delta-t tid_acc; cache survives address change | cache on address change fixed (settled windows dropped on a new server's WELCOME); flagsUsed closed: the server never falls back (strict fork), and a Moshier answer would be a server bug the golden gate's new flags check catches; SPEED vs fTopoPos>1 closed: unreachable from ComputeEphem; client-side delta-t closed: TT is sent, and the local path makes the same number |
+| C15 | Calculation Settings maps nSwissEph 3 to "Matrix Formulas" | fixed |
+| C16 | Plan doc disagreements (topo units, address field, -0n combo, Status duplicate, shipped =0n) | fixed (client plan §3, §5, §7, Status) |
+| A1 | Background prefetch can evict the covering window before it is in the plan (ASan heap-use-after-free) | fixed (same as C10) |
+| A2 | A window crossing an ephemeris file's range fails every object for every frame; the warning box stops animation | fixed (such frames asked exactly) |
+| A3 | Background prefetch never fires for steps <= 120 s: the 60 s slack makes the next window look covered | fixed (next window looked up by its start) |
+| A4 | Off-grid frames corrected first-order over up to half a row: arc-minute errors (progressed, midpoint, DST, edited time) | fixed (animation rows read only on the grid; off-grid frames exact) |
+| A5 | Window cap 8 thrashes at 5+ groups, or 3+ in a relationship chart | fixed (32 windows or 64 MB) |
+| A6 | The static chart of a relationship cast is treated as a frame | fixed (windows only when the animated chart is the main chart) |
+| A7 | Stop paths that skip the exact recast (warning box, -Xn, -Xnp) | fixed (the stopped timer's tick recasts) |
+| A8 | Speed fields not held to the stated tolerance once extrapolated | closed: speeds are exact once frames are read only on the grid (A4) |
+| A9 | Coverage gaps: short steps, groups over cap, ephemeris boundary, relationship/progressed/midpoint | fixed (short steps, off grid, ephemeris edge, stop paths, multi-chunk now tested) |
+| F1 | c86c2b6: JPLEPH\|SWIEPH delta-t now uses the moon file's term, not JPL's (new departure; server pctr/nod_aps path) | fixed in the fork (review-fixes 3ff1567, ts.12); G4 property 6 |
+| F2 | c86c2b6 breaks G8 (check-setest): swe_close never clears the new fields; not behind SWE_UPSTREAM_COMPAT | fixed in the fork (3ff1567); G8 is its net |
+| F3 | Default-context threads miss a DE-number change when the path string is unchanged (sweconfig path_changed) | fixed in the fork (3ff1567), by reading: path_changed compares both DE numbers |
+| F4 | jpldenum_cfg goes stale three ways (set_ephe_path, lazy JPL open, env-only config) | fixed in the fork (3ff1567); G4 property 6 |
+| F5 | swe_deltat_ex_r MOSEPH\|SWIEPH ignores JPL>Swiss>Moshier precedence (older) | fixed in the fork (3ff1567); G4 property 6 |
+| F6 | swe_nod_aps_r(Sun, TOPOCTR, MEAN) NaN on a fresh context, history-dependent otherwise | fixed in the fork (3ff1567); G4 property 6 |
+| F7 | swe_calc_pctr_r with TOPOCTR depends on a previous observer | fixed in the fork (3ff1567); G4 property 6 |
+| F8 | Pooled server contexts keep precession/nutation models set by an earlier SE_SIDBIT_PREC_ORIG request (-31"..-37") | guarded in the server (models reset before the next request; ephsrv-robust.sh F8): upstream's semantics, so the fork keeps them |
+| F9 | Planetary moons: first call differs from a repeat of the same call | deferred 2026-09-16: bisected to the moon file's own state (not a shared cache), ~1e-10 deg, planetary moons only; notes/REVIEW.md in the fork |
+| F10 | swi_get_observer shortcut ignores the obliquity cache's flag key | fixed in the fork (3ff1567), by reading |
+| F11 | Found fixing A2: inside one request a context answers rows past an ephemeris file's end (a one-row request at the same instant fails) -- a result depending on what the context opened first | fixed in the fork (3ff1567); G4 property 6 |
 | B1 | Every Qt6 distribution fails build-check: qtdialog.cpp includes QtWidgets/QFileSystemModel, which Qt6 has in QtGui (393911d, 2026-09-16) | fixed on qt (4dd0e0e); release dry run green on all three platforms (run 35168610206, 09593d6), which also caught 6 Linux-only suite checks (09593d6) |
 
 ## Report: server (`ephsrv/`)

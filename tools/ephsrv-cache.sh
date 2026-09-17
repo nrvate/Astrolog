@@ -219,7 +219,20 @@ ask "$SCRATCH/f.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500 --preci
 expect "cache hit" "an f32 request must hit the f64 entry"
 # and chunkRows is too: the client always sends kMaxChunkRows, so this is
 # covered by the unit test rather than the wire.
-echo "f32: hit on the f64 entry"
+# And the values are the f64 entry's, rounded: the log word alone said
+# nothing about what came back (EPHEMERIS_REVIEW.md T13).
+python3 - "$SCRATCH/m.txt" "$SCRATCH/f.txt" << 'PYEOF' || { echo "CACHE FAIL: the f32 hit's values are not the f64 entry's"; exit 1; }
+import struct, sys
+a = open(sys.argv[1]).read().split('\n'); b = open(sys.argv[2]).read().split('\n')
+assert len(a) == len(b) and len(a) > 1, "row counts differ"
+for la, lb in zip(a, b):
+    if not la: continue
+    fa, fb = la.split(), lb.split()
+    for x, y in zip(fa[3:], fb[3:]):
+        f32 = struct.unpack('f', struct.pack('f', float.fromhex(x)))[0]
+        assert float.fromhex(y) == f32, (la, lb)
+PYEOF
+echo "f32: hit on the f64 entry, and its values are the entry's rounded to f32"
 
 # c. A window larger than the cap (30 bodies x 1000 rows = 1.4 MiB > 1 MiB)
 #    is answered but not stored: entry count unchanged, second ask misses.

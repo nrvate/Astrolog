@@ -36,20 +36,25 @@ QT_GUI_PLAN.md.
   computation (commit e95b5bc, proven byte-identical by both matrices),
   and three protocol additions (kIflagTimeTT, kIflagCenter, the
   node/apsis record kind; server plan §4.4 and work log item 8).
-- **Increments 3 and 4 are open** (§10), in that order. The numbers §6's
-  window sizing should be checked against are in the server plan's §9: a
-  cold 30-body 1000-row window costs ~0.65 s server-side, a hot one
-  ~2.5 ms at f64 and ~1.2 ms at f32 -- and the cache is per event loop,
-  so the client's one long-lived connection is what makes its windows
-  hot. Increment 3's window cache, row lookup and grid arithmetic already
-  exist (§6 as built); what it adds is the multi-row request, the
-  background prefetch at 50% consumed, and f32. Increment 4 is the only
-  piece with user-visible blocking UI (§4's dialog and exit ladder) --
-  the maintainer tests such changes by hand, so build both binaries, run
-  the quick suite, and hand over before committing. Increment 4 is the only
-  piece with user-visible blocking UI (§4's dialog and exit ladder) —
-  the maintainer tests such changes by hand, so build both binaries,
-  run the quick suite, and hand over before committing.
+- **Increment 3 is landed** on branch `ephanim` (worktree
+  `/nvm/work/ephanim`; work log item 4), not yet on `qt`: animation frames
+  read wide f32 windows on their own grid, the next window goes out in
+  the background from a window's middle, and stopping casts the chart
+  again exactly. **Then the full review** (`EPHEMERIS_REVIEW.md`, work log
+  item 5): five reviewers read the whole project, and every client,
+  animation and test finding was fixed on the same branch -- the bounded
+  wait sleeps and holds user input back, casts made while connecting
+  wait, a WELCOME recasts what missed the server, the HELLO timeout
+  exists, chunks are counted by row, animation windows are read only on
+  their grid. The ledger at the top of that file is the state of every
+  finding. Squash `ephanim` into `qt` when asked.
+- **Increment 4 is open** (§10): the required-server dialog and exit
+  ladder, the status line, and §7's address field. It is the only piece
+  with user-visible blocking UI -- the maintainer tests such changes by
+  hand, so build both binaries, run the quick suite, and hand over before
+  committing.
+- **The fork has open findings** (`EPHEMERIS_REVIEW.md` F1-F11) in a
+  separate repository; ask before working them.
 - The fork this connects to is `2.10.03-ts.11`; see the server plan's
   Status section for branch, commit and gate state.
 
@@ -131,8 +136,11 @@ These shaped the spec below; each is a design correction, not trivia.
   output would be no format at all (73 suite failures taught this).
 - ComputeEphem's dispatch gains fSrvPla = us.nSwissEph == 5, parallel to
   fJPLPla = us.nSwissEph == 3 (calc.cpp:1049).
-- -0n (us.fNoNetwork) disables the backend at selection time: the combo
-  may show it, but ComputeEphem fails fast and says why, once.
+- -0n (us.fNoNetwork) disables the backend at selection time: as built the
+  combo does not offer it at all (qtdialog.cpp), and ComputeEphem fails
+  fast and says why, once per cast. The shipped `astrolog.as` carries
+  `=0n`, so a user who loads it gets "-bS" refused until they clear -0n
+  -- by design, and worth knowing before a bug report says otherwise.
 
 ## 4. Connection lifecycle
 
@@ -226,7 +234,9 @@ learned building it:
     land (is.rSid, calc.cpp:3850-3852) — the server never sees it.
   - Topo: when us.fTopoPos, site coords from ciCore.lon (negated —
     Astrolog is west-positive, the protocol east-positive), ciCore.lat,
-    us.elvDef/1000. SEFLG_TOPOCTR in iflag.
+    us.elvDef/1000. SEFLG_TOPOCTR in iflag. (As built: the triple is
+    what FSwissPlanetSpec() gives, the same OO/AA and elevation in METERS
+    the local path hands swe_set_topo -- the protocol field is meters.)
   - Center: from us.objCenter / us.fBarycenter as the local path does;
     custom central bodies pass the center id and use the protocol's
     swe_calc_pctr path.
@@ -245,6 +255,36 @@ learned building it:
   (io.cpp:4162) does not apply here.
 
 ## 6. Animation prefetch and the window cache
+
+**As built (increment 3 and the review, work log items 4 and 5).** A
+cast an animation tick makes, of the chart the animation moves
+(`PciAnimate() == &ciMain`), at a uniform rate -- seconds, minutes,
+hours, days; sub-second rates on a one-second grid; "now" forward a
+second at a time -- asks for a 1000-row f32 window anchored at the frame
+and running the animation's way, and later frames read the row their
+instant lands on, moved to it along the row's speeds across at most the
+delta-t drift (60 s). A frame inside such a window but OFF its grid -- a
+progressed chart, a midpoint chart, a chart whose time was edited
+mid-animation, an automatic DST jump -- is asked exactly, one row, and
+opens no window: half a row of first-order correction was arc-minutes
+for the Moon. A frame whose window could not compute every object (the
+server fails an object for the whole window when any row fails, so a
+window reaching past an ephemeris file's edge fails bodies whose earlier
+frames are fine) is asked exactly too. When a frame passes the middle of
+its window, the window that STARTS where it ends is requested without
+waiting. Calendar rates, relationship/transit/progressed animations and
+every cast outside a tick stay exact. The cache holds 32 windows or
+64 MB, and never evicts a window the cast being planned points at.
+Stopping, whichever way -- the menu, -Xn, a warning box -- casts the
+chart again exactly: the animation timer keeps ticking while stopped,
+and its first stopped tick does it.
+
+The bounded wait is an event loop that sleeps until something it waits
+on settles, holding user input back; a redraw asked for during it is
+owed, and dropped if anything redraws first; a cast made during it
+leaves the waiting cast's plan alone and fails soft itself. The original
+sketch follows.
+
 
 **As built (increment 2).** The window cache exists: eight windows, most
 recently used first, keyed on the server's own canonical form of the
@@ -290,9 +330,10 @@ gets no prefetch of its own and fails soft.
 
 ## 7. UI surface
 
-- The ephemeris combo gains "Ephemeris Server"; selecting it shows the
-  server address field (default localhost:47190) beside the existing
-  backend controls.
+- The ephemeris combo gains "Ephemeris Server" (built). Selecting it
+  shows the server address field (default localhost:47190) beside the
+  existing backend controls -- NOT built; increment 4. The address is set
+  with -bW today.
 - Connection state appears in the About/status area as one quiet line:
   address, state (Connecting/Online/Retry in Ns), server version from
   WELCOME. No modal anything in background mode (§4).
@@ -397,3 +438,64 @@ Each increment lands green (build both binaries, suite) before the next.
    on port" once bound, exits rather than running silently when it
    cannot bind, and every gate waits for that line now (server work log
    item 8). Full suite green with the group included.
+
+4. **Increment 3 landed: animation windows** (branch `ephanim`,
+   2026-09-16). A tick's cast at a uniform rate reads a 1000-row f32
+   window on the animation's own grid; the next window goes out in the
+   background from a window's middle; stopping casts the chart again
+   exactly. Measured against the local Swiss cast over every object and
+   value: the largest frame difference is 1.5e-5 degrees, half an f32
+   unit at longitudes past 256, and the suite holds frames to 5e-5.
+   Window sizing was checked against the bench: a cold 30-body 1000-row
+   window is ~0.65 s of server compute, the one stall an animation
+   starting cold sees, and half a window is the lead the next one gets
+   -- 50 s at the default 100 ms frame. The first sketch's 2000 rows
+   doubled the stall for lead nobody needs.
+
+5. **The full review, and every client finding fixed** (2026-09-16,
+   `EPHEMERIS_REVIEW.md`, whose ledger is the per-finding record). What
+   it turned up in this half, briefly, because each has a comment where
+   it was fixed and a check in the suite:
+   - The bounded wait spun: `processEvents()` with a maxtime drops
+     `WaitForMoreEvents`, so every miss burned a core for up to 10 s. It
+     is an event loop that sleeps now, woken by whatever it waits on.
+   - The wait let anything run mid-cast: a key could redraw through a
+     second painter on the image the cast held, and a nested cast wiped
+     the waiting cast's plan. User input is held back; redraws are owed;
+     a nested cast fails soft and leaves the plan alone.
+   - The startup chart is cast before Qt's application exists, and
+     nothing recast when the WELCOME came: the chart sat at 0 Aries. A
+     WELCOME now recasts a chart that missed the server, and a cast made
+     while the connection is on its way waits for it.
+   - The HELLO timeout was declared, guarded everywhere, and never
+     created: a peer that took the upgrade and never welcomed held the
+     client Connecting until restart.
+   - Chunks were counted, not rows: a chunk re-sent after a reconnect
+     completed a half-filled window with zeros. A row index near 2^32
+     wrapped past the bounds check into a heap write, and an f32 chunk
+     was accepted for an f64 window.
+   - A request that kept losing its connection was re-sent every second
+     forever; it is given up after three sessions.
+   - Groups were capped at the protocol's 64 objects, not the WELCOME's
+     limit, so a server allowing fewer had its columns read past the end.
+   - The warning was once per instant, not per cast, and a modal each
+     time; it is once per cast and one box per 30 s.
+   - Local Swiss calls under this backend asked for a JPL file; they ask
+     the Swiss files. The Calculation Settings dialog showed a Horizons
+     selection as Matrix and switched it on OK.
+   - Animation: the background prefetch never fired for steps of two
+     minutes or less (the "next window here?" check found the current
+     window's own slack); background opens could evict the window the
+     frame was about to read; off-grid frames were corrected across half
+     a row; a window past an ephemeris edge failed every frame; the
+     static chart of a relationship animation was read from f32; a stop
+     by -Xn or a warning box kept the approximate chart.
+   - The suite: a NaN frame passed every tolerance; the custom-object
+     scenario never cast its object under compiled defaults; the -0n
+     checks could not fail; sidereal was only ever mode 0; nothing
+     reassembled a window from several chunks; the live group ran
+     whatever server binary sat next to it, however stale.
+   Found on the way, in the same session: the Qt build on `qt` had not
+   compiled against Qt6 since that afternoon (an unguarded include), and
+   the WebSockets module was missing from every build and install recipe
+   but two makefiles. Both are fixed on `qt` and shipped in v8.00-qt.24.

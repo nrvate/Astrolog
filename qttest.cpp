@@ -17983,6 +17983,9 @@ static void TestEphSrvQt()
       pconn1->close();
     else
       srv1.close();
+    // Survival is asked once the drop has been seen, not before any event
+    // has run, when it could not have been otherwise (review T12).
+    FWaitEstQt(0, 3000);
     Check(DwReqEphSrvTestQt() == dwReq,
       "the in-flight request survives the drop");
     tim.start();
@@ -18436,7 +18439,8 @@ static void TestEphSrvLiveQt()
     fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
     fAddrSav = us.szEphSrv != NULL, fSidSav = us.fSidereal,
     fTopoSav = us.fTopoPos, fTrueNodeSav = us.fTrueNode,
-    fIgnoreSav = ignore[custLo], fSid2Sav = us.fSidereal2;
+    fIgnoreSav = ignore[custLo], fSid2Sav = us.fSidereal2,
+    fProgSav = us.fProgress;
   QByteArray baAddrSav(SzSet(us.szEphSrv));
   int nSwissSav = us.nSwissEph, objCenterSav = us.objCenter,
     nObjSav = rgObjSwiss[0], nTypSav = rgTypSwiss[0], nPntSav = rgPntSwiss[0],
@@ -18536,11 +18540,11 @@ static void TestEphSrvLiveQt()
   SetBackoffEphSrvTestQt(100);   // Hurry the ladder for the drop below.
 
   // The scenarios. Each: settings, local cast, server cast, compare.
-  for (iScen = 0; iScen < 9; iScen++) {
+  for (iScen = 0; iScen < 10; iScen++) {
     CONST char *szScen;
     real rTol = 0.0;
     us.fSidereal = fFalse; us.fSidereal2 = fFalse; us.objCenter = oEar;
-    us.fTopoPos = fFalse;
+    us.fTopoPos = fFalse; us.fProgress = fFalse;
     us.fTrueNode = fFalse; ignore[custLo] = fTrue;
     AdjustRestrictions();
     OraclePinUtQt(1990, 6, 15, 12.0);
@@ -18573,6 +18577,15 @@ static void TestEphSrvLiveQt()
       // cast at all under compiled defaults, and this scenario repeated
       // the first one (review T4).
       AdjustRestrictions();
+      break;
+    case 9: szScen = "progressed, where the houses and the planets are "
+      "different instants";
+      // The prefetch computes its own delta-t when its instant is not the
+      // one SwissHouse() just cached; a plain chart never reaches that
+      // line (review T9). A progressed chart casts the planets at the
+      // progressed instant.
+      us.fProgress = fTrue;
+      SetProgressTarget(6, 15, 2020, 12.0);
       break;
     case 8: szScen = "sidereal on the solar system plane (a second sid mode)";
       // Fagan-Bradley is sidMode 0, the library's default: a server that
@@ -18607,7 +18620,7 @@ static void TestEphSrvLiveQt()
     }
   }
   us.fSidereal = fFalse; us.fSidereal2 = fSid2Sav; us.objCenter = oEar;
-  us.fTopoPos = fFalse;
+  us.fTopoPos = fFalse; us.fProgress = fProgSav;
   us.fTrueNode = fFalse; ignore[custLo] = fIgnoreSav;
   AdjustRestrictions();
   OraclePinUtQt(1990, 6, 15, 12.0);
@@ -18965,6 +18978,7 @@ LRestore:
   us.nSwissEph = nSwissSav;
   us.fNoNetwork = fNoNetSav;
   us.fSidereal = fSidSav; us.fSidereal2 = fSid2Sav;
+  us.fProgress = fProgSav;
   us.objCenter = objCenterSav;
   us.fTopoPos = fTopoSav; us.fTrueNode = fTrueNodeSav;
   ignore[custLo] = fIgnoreSav;

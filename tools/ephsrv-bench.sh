@@ -126,7 +126,7 @@ T0=$(date +%s.%N)
 for c in $(seq 1 "$CLIENTS"); do
   ( "$ROOT/eph_wsclient" --port "$PORT" --objs "$BODIES" --jd "$JD0" --step $STEP \
       --count $ROWS --quiet --latency "$SCRATCH/hotN.$c.lat" --repeat $((REPEAT + 1)) \
-      || echo "BENCH FAIL: concurrent hot client $c failed" ) &
+      || { echo "BENCH FAIL: concurrent hot client $c failed" | tee -a "$SCRATCH/fail"; } ) &
   PIDS+=($!)
 done
 wait "${PIDS[@]}"
@@ -149,7 +149,7 @@ for c in $(seq 1 "$CLIENTS"); do
       jd=$(python3 -c "print($JD0 + 10000 + $c * 1000 + $i * 100)")
       "$ROOT/eph_wsclient" --port "$PORT" --objs "$BODIES" --jd "$jd" --step $STEP \
         --count $ROWS --quiet --latency "$SCRATCH/coldN.$c.lat" \
-        || echo "BENCH FAIL: concurrent cold client $c failed"
+        || { echo "BENCH FAIL: concurrent cold client $c failed" | tee -a "$SCRATCH/fail"; }
     done
   ) &
   PIDS+=($!)
@@ -160,7 +160,14 @@ cat "$SCRATCH"/coldN.*.lat >> "$SCRATCH/coldN.lat"
 read -r cN_p50 cN_p99 cN_n < <(pct "$SCRATCH/coldN.lat")
 cN_wps=$(python3 -c "print('%.1f' % ($cN_n / ($T1 - $T0)))")
 
-grep -q "BENCH FAIL" "$LOG" && { echo "BENCH FAIL: see the server log"; exit 1; }
+# A concurrent client's failure is written to $SCRATCH/fail by its own
+# subshell. This grepped the SERVER log for the word, which no client ever
+# wrote there, so a failed concurrent client printed a table of blanks and
+# exited 0 (EPHEMERIS_REVIEW.md T7).
+[ ! -s "$SCRATCH/fail" ] || { echo "BENCH FAIL: $(wc -l < "$SCRATCH/fail") concurrent client(s) failed"; exit 1; }
+for f in cold hot64 hot32 hotN coldN; do
+  [ -s "$SCRATCH/$f.lat" ] || { echo "BENCH FAIL: no latency samples for $f"; exit 1; }
+done
 
 echo "ephsrv bench: $LOOPS event loop(s), window = 30 bodies x $ROWS rows @ ${STEP}s, $(nproc) cores"
 echo

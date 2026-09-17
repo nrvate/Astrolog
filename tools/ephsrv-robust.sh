@@ -20,6 +20,8 @@
 #   S6  a second server on a port another one listens on exits nonzero,
 #       rather than sharing the port and half its connections
 #   S10 a second HELLO on one connection is answered
+#   F8  a PREC_ORIG sidereal request's precession models do not reach the
+#       next request on the same loop
 #
 # Knobs (env): SWE_HOME, EPH, PORT (default 29000 + pid % 400, below the
 # ephemeral range; see below), STEP_TIMEOUT (seconds per client run, 60).
@@ -164,6 +166,28 @@ GROW=$((R1 - R0))
 [ "$GROW" -le 4096 ] || fail "S3: resident memory grew $GROW KiB over 20000 connections"
 
 kill "$C" 2>/dev/null || true
+
+# ---- F8: one request's precession model does not reach the next ----------
+# A sidereal mode with SE_SIDBIT_PREC_ORIG (8192) sets the context's
+# precession and nutation models, and Swiss keeps them; the loop's one
+# context then answered every later request on the old models. Asked of
+# two fresh servers: the same tropical question, one of them after a
+# PREC_ORIG request. 1800, where the models part and the files still answer.
+step "F8"
+PORT3=$((PORT + 2)); PORT4=$((PORT + 3))
+start_server "$PORT3" "$SCRATCH/f8a.log" --threads 1 || fail "F8: server did not start"
+F8A=$SRV_PID
+start_server "$PORT4" "$SCRATCH/f8b.log" --threads 1 || fail "F8: server did not start"
+F8B=$SRV_PID
+$CLI --port "$PORT3" --objs 0,1,2,5 --jd 2378600.5 --count 1 --quiet \
+  --out "$SCRATCH/f8a.txt" || fail "F8: tropical request failed"
+$CLI --port "$PORT4" --objs 0 --jd 2378700.5 --count 1 --quiet \
+  --iflag 10000 --sid "8193,0,0" > /dev/null || fail "F8: PREC_ORIG request failed"
+$CLI --port "$PORT4" --objs 0,1,2,5 --jd 2378600.5 --count 1 --quiet \
+  --out "$SCRATCH/f8b.txt" || fail "F8: tropical request after PREC_ORIG failed"
+cmp -s "$SCRATCH/f8a.txt" "$SCRATCH/f8b.txt" \
+  || fail "F8: a tropical answer moved after another request's PREC_ORIG sidereal mode"
+kill "$F8A" "$F8B" 2>/dev/null || true
 
 [ "$FAIL" -eq 0 ] || exit 1
 echo "ROBUST PASS"
