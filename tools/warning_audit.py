@@ -59,7 +59,11 @@ import re
 import subprocess
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# realpath, not abspath: the cache root below is keyed on this string, and
+# this checkout answers to two spellings -- /shares/Astrolog and, through
+# the symlink, /nvmraid/shares/Astrolog. One key per spelling meant a cold
+# cache and a full recompile whenever the spelling changed between runs.
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 BASELINE = os.path.join(ROOT, 'tools', 'warnings.txt')
 
 # -j4 and no higher: the maintainer's machine shares this NAS with other

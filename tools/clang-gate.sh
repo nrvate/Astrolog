@@ -37,11 +37,23 @@
 # if the rule ever stopped replacing, g++ would build silently and this would
 # read clean.
 #
+# The touch in the rule is load bearing. clang writes a .d and its .o in the
+# same clock tick, and when the .d lands even a millisecond later,
+# Makefile.qt's "$(OBJS): %.o: %.d" reads that object as out of date FOREVER
+# -- the gate recompiled a random subset of the cache on every run, 20-40 s
+# each time, for a cache whose whole point is not compiling. g++ writes the
+# .d first, which is why warning_audit's cache and every tree build never
+# had this.
+#
 # No clang at all is a skip, not a failure: a release runner or a user's
 # machine may not have one, and the macOS job is the gate of record there.
 set -e
 cd "$(dirname "$0")/.." || exit 1
-ROOT=$(pwd)
+# Canonical spelling, because the cache root is keyed on this string and
+# this checkout answers to two: /shares/Astrolog and, through the symlink,
+# /nvmraid/shares/Astrolog. Two spellings meant two caches, and a gate run
+# from each in turn recompiled everything, every time.
+ROOT=$(pwd -P)
 
 CXX=${CLANG_CXX:-}
 if [ -z "$CXX" ]; then
@@ -66,7 +78,7 @@ JOBS=${CLANG_GATE_JOBS:-4}
 [ "$JOBS" -le 4 ] 2>/dev/null || JOBS=4
 
 RULE='$(OBJDIR)/%.o: %.cpp | $(OBJDIR)
-	$(CLANGGATECXX) $(CPPFLAGS) $(CLANGGATEFLAGS) -c -o $@ $< >$@.warn 2>&1; s=$$?; cat $@.warn; exit $$s
+	$(CLANGGATECXX) $(CPPFLAGS) $(CLANGGATEFLAGS) -c -o $@ $< >$@.warn 2>&1; s=$$?; test $$s -eq 0 && touch $@; cat $@.warn; exit $$s
 '
 root_key=$(printf '%s' "$ROOT" | sha256sum | cut -c1-12)
 BASE=${CLANG_GATE_CACHE:-$HOME/.cache/astrolog-clang-gate}/$root_key

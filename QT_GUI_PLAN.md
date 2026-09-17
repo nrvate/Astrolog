@@ -11327,6 +11327,29 @@ this is the note that explains the wall of dialogs.
     260-file folder, and pins the rejoin.
 
 
+280. **The clang gate's cache holds, so a warm `make check` stops
+    recompiling under it every run.** Measured 2026-09-16: the gate spent
+    18-40 s and 30-110 s of user CPU per run while compiling nothing the
+    run needed. Two causes. The cache root was keyed on `$(pwd)`, and
+    this checkout answers to two spellings -- `/shares/Astrolog` and,
+    through the symlink, `/nvmraid/shares/Astrolog` -- so runs from the
+    two spellings in turn each found their own cold cache; `pwd -P`
+    (warning_audit.py: `realpath`) makes both spellings one root. And
+    clang writes a .d and its .o in the same clock tick, so whenever the
+    .d landed even a millisecond later, Makefile.qt's
+    `$(OBJS): %.o: %.d` read that object as out of date forever and a
+    random subset -- 19 of 33 in one measured run -- recompiled on every
+    run; the gate's rule now touches the object on a successful compile.
+    g++ writes the .d first, which is why the tree builds and
+    warning_audit's cache never saw this. Warm, the gate is now 0.3 s.
+    The same run also measured the rest of the fast check: the suite is
+    ~90 s and its four costliest groups (graphics-fields, menu-actions,
+    orb-grid, ok-settles, ~53 s together) cost the same run alone as in
+    the full suite -- real work, not state left by earlier groups, so
+    the next cut there means making those groups do less, not
+    reordering them.
+
+
 ## Features this fork adds to both builds
 
 Everything else in this document is about reaching parity with Windows.
