@@ -1,33 +1,27 @@
-// The ephemeris server's per-loop result cache (EPHEMERIS_SERVER_PLAN.md
-// Part I section 5, "Result cache"). One instance per event loop, owned by
-// that loop's thread and touched by nothing else, so it has no lock.
+// The ephemeris server's per-loop result cache (EPHEMERIS_PLUGINS_PLAN.md
+// 3.7). One instance per event loop, owned by that loop's thread and
+// touched by nothing else, so it has no lock.
 //
-// What is cached is the COMPUTED result -- the f64 columns and the
-// per-object metadata records ExecuteRequest() produces -- under a key that
-// is the canonical form of the REQUEST: everything the answer depends on
-// and nothing it does not. Two fields of the wire REQUEST are delivery
-// parameters, not computation parameters, and are left out of the key on
-// purpose: precision (f32 is converted at send, from the same f64 columns)
-// and chunkRows (a framing hint). A client that asks for the same window
-// first at f64 for a chart and then at f32 for animation gets one
-// computation, not two. The configuration triplets are keyed only when the
-// iflag bit that makes SWE read them is set, since the server applies them
-// under the same condition; and SEFLG_SWIEPH|SEFLG_SPEED are folded into the
-// keyed iflag because the server forces both.
+// What is cached is the COMPUTED answer -- the f64 columns, the source
+// table and the per-object metadata ExecuteRequest() produces -- under the
+// key protocol version 4 defines: the server's datasetId followed by the
+// REQUEST's question block, byte for byte as received. The delivery block
+// (precision, priority, chunkRows) stays out of it, so a window asked at f64
+// for a chart and again at f32 in small chunks for animation is one
+// computation. Canonical encoding (3.1: a parser refuses every other
+// spelling) is what makes equal questions equal bytes; nothing here
+// normalises anything. datasetId changes whenever an answer could, so a
+// key can never outlive the files it was computed from.
 //
 // Entries are held by shared_ptr: a stream in flight keeps its entry alive
 // after eviction, so a cache full of big windows can turn over freely while
-// slow clients drain. Memory is accounted at the columns plus the metadata
-// plus the key (held twice, in the list node and the map) and a fixed
-// allowance for the nodes and allocation headers. Without the last two a
-// one-object one-row entry counted 176 bytes against ~550 real, so a cache
-// of chart casts ran to about three times --cache-mb.
-// An entry larger than the whole cap is computed and streamed but not
-// stored, rather than evicting everything to make room for one tenant.
-//
-// No invalidation: requests are pure functions of static files (plan 4.7),
-// and the server is stateless across restarts, which is the documented way
-// to pick up a changed ephemeris tree.
+// slow clients drain. Memory is accounted at the columns plus the metadata's
+// strings plus the key (held twice, in the list node and the map) and a
+// fixed allowance for the nodes and allocation headers. Without the last
+// two a one-object one-row entry counted 176 bytes against ~550 real, so a
+// cache of chart casts ran to about three times --cache-mb. An entry larger
+// than the whole cap is computed and streamed but not stored, rather than
+// evicting everything to make room for one tenant.
 
 #ifndef EPH_CACHE_H
 #define EPH_CACHE_H
@@ -43,82 +37,44 @@
 #include <unordered_map>
 #include <vector>
 
-// The Swiss flags the server forces on every request (eph_srv.cpp
-// ExecuteRequest): folded into the key so "iflag" and "iflag with them
-// already set" are one entry. Values from swephexp.h, restated here so this
-// header does not need the Swiss headers to compile in a test.
-#ifndef SEFLG_SWIEPH
-#define EPH_CACHE_SEFLG_SWIEPH   2L
-#define EPH_CACHE_SEFLG_SPEED    256L
-#define EPH_CACHE_SEFLG_JPLEPH   1L
-#define EPH_CACHE_SEFLG_TOPOCTR  (32 * 1024L)
-#define EPH_CACHE_SEFLG_SIDEREAL (64 * 1024L)
-#else
-#define EPH_CACHE_SEFLG_SWIEPH   SEFLG_SWIEPH
-#define EPH_CACHE_SEFLG_SPEED    SEFLG_SPEED
-#define EPH_CACHE_SEFLG_JPLEPH   SEFLG_JPLEPH
-#define EPH_CACHE_SEFLG_TOPOCTR  SEFLG_TOPOCTR
-#define EPH_CACHE_SEFLG_SIDEREAL SEFLG_SIDEREAL
-#endif
-
 namespace eph {
 
-// One computed result, exactly what ExecuteRequest() fills and
+// One computed answer, exactly what ExecuteRequest() fills and
 // FlushStreams() reads. Immutable once inserted.
 struct CacheEntry {
   uint32_t nObj = 0, nTimeRows = 0;
-  std::vector<double> cols;     // object-major nObj*nTimeRows*6 f64
-  std::vector<uint8_t> meta;    // nObj * kDataMetaSize
-  size_t bytes() const { return cols.size() * sizeof(double) + meta.size(); }
+  uint32_t columnsPresent = 0;           // DATA's columnsPresent
+  uint32_t nCols = 6;                    // 6 + popcount(columnsPresent)
+  std::vector<double> cols;              // object-major nObj*nTimeRows*nCols
+  std::vector<std::string> sources;      // the source table
+  std::vector<Meta> meta;                // nObj
+  size_t bytes() const {
+    size_t n = cols.size() * sizeof(double) + meta.size() * sizeof(Meta);
+    for (const Meta &m : meta) n += m.name.size() + m.errText.size();
+    for (const std::string &s : sources) n += sizeof(std::string) + s.size();
+    return n;
+  }
 };
 
-// The canonical key: a byte string built from the decoded Request, so that
-// it is independent of how the client happened to encode the payload and
-// of the two delivery-only fields. Object records are keyed in the order
-// given -- the columns come back in that order, so a permutation IS a
-// different answer.
-inline std::string cacheKeyOf(const Request &req) {
+// 3.7: datasetId, then the question block exactly as received. The
+// datasetId goes in with its length, so no two (dataset, question) pairs
+// make the same key.
+inline std::string CacheKey(const std::string &datasetId, const uint8_t *payload,
+                            size_t payloadLen, size_t questionOffset) {
   std::string k;
-  k.reserve(64 + req.objs.size() * 8);
-  auto put = [&k](const void *p, size_t n) { k.append((const char *)p, n); };
-  uint32_t nObj = (uint32_t)req.objs.size();
-  put(&nObj, 4);
-  for (const ObjSpec &o : req.objs) {
-    put(&o.kind, 1);
-    if (o.kind == kObjBody) put(&o.id, 4);
-    else if (o.kind == kObjNodAps) { put(&o.id, 4); put(&o.point, 1); put(&o.method, 1); }
-    else put(o.name, strlen(o.name) + 1);
-  }
-  put(&req.center, 4);
-  // The protocol's own bits (kIflagTimeTT, kIflagCenter) stay in the key:
-  // a TT instant and a UT instant are different questions.
-  uint64_t iflag = req.iflag | (uint64_t)EPH_CACHE_SEFLG_SWIEPH |
-                   (uint64_t)EPH_CACHE_SEFLG_SPEED;
-  put(&iflag, 8);
-  if (iflag & (uint64_t)EPH_CACHE_SEFLG_SIDEREAL) {
-    put(&req.sidMode, 4);
-    put(&req.sidT0, 8);
-    put(&req.sidAyanOff, 8);
-  }
-  if (iflag & (uint64_t)EPH_CACHE_SEFLG_TOPOCTR) {
-    put(&req.topoLon, 8);
-    put(&req.topoLat, 8);
-    put(&req.topoElv, 8);
-  }
-  if (iflag & (uint64_t)EPH_CACHE_SEFLG_JPLEPH)
-    put(req.jplFile, strnlen(req.jplFile, kJplFileMax) + 1);
-  put(&req.jdStart, 8);
-  put(&req.stepSeconds, 4);
-  put(&req.nTime, 4);
+  size_t q = questionOffset <= payloadLen ? payloadLen - questionOffset : 0;
+  k.reserve(1 + datasetId.size() + q);
+  k.push_back((char)(uint8_t)datasetId.size());
+  k.append(datasetId);
+  if (q) k.append((const char *)payload + questionOffset, q);
   return k;
 }
 
-// FNV-1a over the canonical key: the plan names the function, and it is
-// the map's hash. Equality is still on the full key bytes, so a collision
-// costs a compare, never a wrong answer. The basis is mixed with a seed
-// drawn once per cache, because every byte hashed is a byte the client
-// chose: with a fixed seed a client can compute keys that share a bucket
-// and turn each lookup into a scan of the whole loop's cache.
+// FNV-1a over the key, the map's hash. Equality is still on the full key
+// bytes, so a collision costs a compare, never a wrong answer. The basis is
+// mixed with a seed drawn once per cache, because every byte hashed is a
+// byte the client chose: with a fixed seed a client can compute keys that
+// share a bucket and turn each lookup into a scan of the whole loop's cache.
 struct CacheKeyHash {
   uint64_t seed = 0;
   size_t operator()(const std::string &k) const {

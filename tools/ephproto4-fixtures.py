@@ -12,10 +12,11 @@ reading of the specification rather than against themselves.
 Each fixture is one complete message (envelope included) as lowercase hex,
 64 digits a line, in ephsrv/conformance/<name>.hex. MANIFEST.tsv lists
 file, direction (c2s/s2c), message type, expected outcome and a note. The
-outcomes are the spec's (3.9): "ok" (parses; re-encodes to the same bytes),
+outcomes are the spec's (3.10): "ok" (parses; re-encodes to the same bytes),
 "malformed" (ERROR 1) and "unsupported" (ERROR 11).
 """
 
+import hashlib
 import math
 import os
 import struct
@@ -83,8 +84,8 @@ def welcome(caps, engine, dataset, ext, server="astrolog-ephd/2.0",
 
 
 def delivery(precision=0, priority=0, representation=0, chunk_rows=0,
-             seg_err=0.0, reserved=0):
-    return (u8(precision) + u8(priority) + u8(representation) + u8(reserved) +
+             seg_err=0.0, max_degree=0):
+    return (u8(precision) + u8(priority) + u8(representation) + u8(max_degree) +
             u32(chunk_rows) + f32(seg_err))
 
 
@@ -201,8 +202,12 @@ def caps_swiss():
         (0x0001, u32(0b111111)),                 # all six kinds
         (0x0002, u32(0b11111)),                  # all observers
         (0x0003, u32(0b11) + u32(0b11) + u32(0b1111)),
-        (0x0004, u8(5) + bytes([7, 0, 3, 5, 1])),
-        (0x0005, u32(0b1111) + u32(0b11111)),
+        # Per-observer correction masks: everything for geocentric,
+        # topocentric and body observers; light time and geometric for the
+        # heliocentric and barycentric ones.
+        (0x0004, u8(5) + u32(0b10011) + u8(7) + u32(0b11111) + u8(0) +
+                 u32(0b10011) + u8(3) + u32(0b10011) + u8(5) + u32(0b11111) + u8(1)),
+        (0x0005, u32(0b1111) + u32(0b10111)),   # not method 3
         (0x0006, u32(0b1110)),                   # no sigma
         (0x0007, u16(len(zodiacs)) + b"".join(str8(z) for z in zodiacs)),
         (0x0008, u32(0b111)),
@@ -213,6 +218,8 @@ def caps_swiss():
         (0x0010, u16(32)),
         (0x0011, u16(2) + str8("cupido") + str8("vulcan")),
         (0x0012, u32(0b11111)),
+        (0x0013, f32(5e-05) + f32(0.0001)),      # rates bound
+
     ]
 
 
@@ -222,7 +229,7 @@ def caps_prometheia():
         (0x0001, u32(0b100011)),                 # body, orbit point, designation
         (0x0002, u32(0b11111)),
         (0x0003, u32(0b11) + u32(0b11) + u32(0b1111)),
-        (0x0004, u8(8) + bytes(range(8))),       # every mask
+        (0x0004, u8(1) + u32(0b11111) + u8(7)),  # every observer, the full mask
         (0x0005, u32(0b1111) + u32(0b11)),       # mean, osculating
         (0x0006, u32(0b0111)),                   # sigma, ayanamsa, light time
         (0x0007, u16(len(zodiacs)) + b"".join(str8(z) for z in zodiacs)),
@@ -232,7 +239,7 @@ def caps_prometheia():
         (0x000B, u16(1) + str8("sbdb") + str8("2026-09-16")),
         (0x000C, str8("usno-observed+smh2016")),
         (0x000D, u16(2) + str8("iau2006") + str8("vondrak2011")),
-        (0x000F, u8(15) + b"\0\0\0" + u32(4096) + f32(0.0001)),
+        (0x000F, u8(15) + b"\0\0\0" + u32(4096) + f32(0.0001) + u32(0b000011)),
         (0x0010, u16(64)),
     ]
 
@@ -324,12 +331,59 @@ def fixtures():
         envelope(DATA, data_chunk(1, 500, 1, 501, 1, 0b001, 0, b"",
                                   [[[12.5, -1.25, 1.5, 0.5, 0.0, 0.0]]]), request_id=2))
     seg = (time(J2000 + 15.0, 0.0) + f64(15.5) + u8(2) + b"\0\0\0" + f32(0.05) +
-           f32(1e-7) + b"".join(f64(c) for c in
+           f32(1e-7) + f32(0.002) + b"".join(f64(c) for c in
                                 [0.001, 0.0005, 0.00001, -0.0021, 0.0001, 0.0, 0.0002, 0.0, 0.0]))
     segd = (u32(0) + u8(0b101) + u8(0) + u16(1) + u16(0) + u16(1) + u32(0) +
-            sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301) + u32(1) + seg)
-    add("segdata_moon", "s2c", SEGDATA, "ok", "one degree-2 segment spanning 31 days",
+            sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301) +
+            u8(0) + u32(1) + seg)
+    add("segdata_moon", "s2c", SEGDATA, "ok", "one degree-2 segment spanning 31 days, no zodiac",
         envelope(SEGDATA, segd, request_id=6))
+    ayanseg = (time(J2000 + 15.0, 0.0) + f64(15.5) + u8(1) + b"\0\0\0" + f32(0.01) +
+               f64(24.74) + f64(0.00057))
+    segd_sid = (u32(0) + u8(0b101) + u8(0) + u16(1) + u16(0) + u16(1) + u32(0) +
+                sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301) +
+                u8(1) + u8(0) + u32(1) + ayanseg + u32(1) + seg)
+    add("segdata_sidereal_ayanamsa", "s2c", SEGDATA, "ok",
+        "tropical coefficients with the profile's ayanamsa series beside them",
+        envelope(SEGDATA, segd_sid, request_id=6))
+    def deltat_table(entries):
+        b = u32(len(entries))
+        for jd, dt in entries:
+            b += time(jd, 0.0) + f64(dt)
+        return b
+
+    add("request_deltat_table", "c2s", REQUEST, "ok",
+        "a UT1 grid with the client's own delta T table (TT instants, ascending)",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(0, 2415020.5, 0.0, DAY_NS, 365), [geo], [obj_body(301)],
+                          ext=[(0x8004, deltat_table([(2415020.5, -2.72), (2451545.0, 63.83),
+                                                      (2488070.0, 77.0)]))]),
+                 request_id=9))
+    add("request_dataset_pin", "c2s", REQUEST, "ok", "a critical datasetId pin",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(10)],
+                          ext=[(0x8003, str8("prometheiad 0.2/de440/sbdb#1a2b3c4d"))]),
+                 request_id=10))
+    m2 = sources(["Swiss Ephemeris files"])
+    m2 += meta(1, source_idx=0, flags=(1 << 5) | (1 << 6), name="Aldebaran")
+    add("data_star_nodistance", "s2c", DATA, "ok",
+        "a star without a parallax: noDistance and ratesApprox",
+        envelope(DATA, data_chunk(0, 0, 1, 1, 0, 0b101, 0, m2,
+                                  [[[69.7, -5.46, 1e9, 0.0, 0.0, 0.0]]]), request_id=11))
+    # 3.1: a client tolerates registry values a newer server sends.
+    m3 = sources(["Swiss Ephemeris files"])
+    m3 += meta(1, source_idx=0, flags=(1 << 7), name="Sun")
+    add("data_meta_unknown_flag", "s2c", DATA, "ok",
+        "META with a flag bit this version does not define: tolerated",
+        envelope(DATA, data_chunk(0, 0, 1, 1, 0, 0b101, 0, m3,
+                                  [[[280.1, 0.0, 0.983, 1.019, 0.0, 0.0]]]), request_id=12))
+    add("data_chunk_future_flag", "s2c", DATA, "ok",
+        "a chunkFlags bit this version does not define: tolerated",
+        envelope(DATA, data_chunk(0, 0, 1, 1, 0, 0b1000101, 0, m3,
+                                  [[[280.1, 0.0, 0.983, 1.019, 0.0, 0.0]]]), request_id=12))
+    add("error_unregistered_code", "s2c", ERROR, "ok",
+        "an ERROR code past the registry: still an error, still retryable",
+        envelope(ERROR, error(200, flags=0b10, text="something new went wrong"), request_id=13))
     add("error_rate_limited", "s2c", ERROR, "ok", "ERROR 6, retryable, retry in 1500 ms",
         envelope(ERROR, error(6, flags=0b10, retry_ms=1500,
                               text="rate limited: 10000 cells a second"), request_id=3))
@@ -344,15 +398,33 @@ def fixtures():
     add("pong", "s2c", PONG, "ok", "", envelope(PONG, b""))
     add("lookup_prefix", "c2s", LOOKUP, "ok", "prefix, hypotheticals and stars included",
         envelope(LOOKUP, u16(8) + u8(0b111) + u8(0) + str8("Lilith") + tlv([]), request_id=8))
+    def match(quality, source_idx, obj_bytes, canonical, designation="",
+              valid=((0.0, 0.0), (0.0, 0.0)), match_len=None):
+        body = (obj_bytes + str8(canonical) + str8(designation) +
+                time(*valid[0]) + time(*valid[1]))
+        n = len(body) if match_len is None else match_len
+        return u8(quality) + u8(source_idx) + u16(n) + body
+
     lr = u16(3) + u8(0) + sources(["SBDB 2026-09-16", "Swiss Ephemeris"])
-    lr += (u8(0) + u8(0) + u16(0) + obj_body(20001181) + str8("1181 Lilith") + str8("1181") +
-           time(0.0) + time(0.0))
-    lr += (u8(1) + u8(1) + u16(0) + obj_orbit(301, 3, 0) + str8("Moon mean apogee") + str8("") +
-           time(0.0) + time(0.0))
-    lr += (u8(1) + u8(1) + u16(0) + obj_hypo("waldemath") + str8("Waldemath") + str8("") +
-           time(0.0) + time(0.0))
+    lr += match(0, 0, obj_body(20001181), "1181 Lilith", "1181")
+    lr += match(1, 1, obj_orbit(301, 3, 0), "Moon mean apogee")
+    lr += match(1, 1, obj_hypo("waldemath"), "Waldemath")
     add("lookup_result_lilith", "s2c", LOOKUP_RESULT, "ok",
         "three kinds answer one name", envelope(LOOKUP_RESULT, lr, request_id=8))
+    # 3.1 and 3.4: matchLen is what lets a client skip a kind added after it
+    # shipped and keep the matches on either side of it.
+    lr2 = u16(3) + u8(0) + sources(["Swiss Ephemeris files"])
+    lr2 += match(0, 0, obj_body(10), "Sun")
+    lr2 += match(1, 0, obj_head(7) + i32(12345) + str8("something new"), "New Thing")
+    lr2 += match(1, 0, obj_body(301), "Moon")
+    add("lookup_result_future_kind", "s2c", LOOKUP_RESULT, "ok",
+        "a match of an unregistered kind, skipped by its matchLen, between two readable ones",
+        envelope(LOOKUP_RESULT, lr2, request_id=8))
+    lr3 = u16(1) + u8(0) + sources(["Swiss Ephemeris files"])
+    lr3 += match(0, 0, obj_body(10), "Sun", match_len=4)
+    add("lookup_result_bad_matchlen", "s2c", LOOKUP_RESULT, "malformed",
+        "matchLen disagrees with a match the reader can read",
+        envelope(LOOKUP_RESULT, lr3, request_id=8))
 
     # -- refused: malformed -------------------------------------------------------
     def bad(name, note, msg, expect="malformed", mtype=REQUEST, direction="c2s"):
@@ -452,10 +524,45 @@ def fixtures():
                                                               equinox_jd=J2000)]), request_id=1))
     bad("seg_err_with_samples", "segTargetErrArcsec 1 with representation 0",
         envelope(REQUEST, delivery(seg_err=1.0) + q_basic, request_id=1))
-    bad("delivery_reserved", "delivery reserved byte 1",
-        envelope(REQUEST, delivery(reserved=1) + q_basic, request_id=1))
+    bad("max_degree_with_samples", "maxDegreeHint 8 with representation 0",
+        envelope(REQUEST, delivery(max_degree=8) + q_basic, request_id=1))
+    bad("deltat_table_and_value", "a delta T table and a finite deltaTSec",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(0, J2000, 0.0, DAY_NS, 2), [geo], [obj_body(10)], delta_t=69.0,
+                          ext=[(0x8004, deltat_table([(J2000, 69.0), (J2000 + 10, 69.1)]))]),
+                 request_id=1))
+    bad("deltat_table_unsorted", "a delta T table whose instants descend",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(0, J2000, 0.0, DAY_NS, 2), [geo], [obj_body(10)],
+                          ext=[(0x8004, deltat_table([(J2000 + 10, 69.1), (J2000, 69.0)]))]),
+                 request_id=1))
+    bad("deltat_table_one_entry", "a delta T table of one entry",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(0, J2000, 0.0, DAY_NS, 2), [geo], [obj_body(10)],
+                          ext=[(0x8004, deltat_table([(J2000, 69.0)]))]), request_id=1))
+    bad("sidereal_on_the_equator", "a sidereal zodiac with plane = equator",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(1, J2000, 0.0, 0, 1),
+                          [profile(plane=1, zodiac="lahiri")], [obj_body(10)]), request_id=1))
     bad("request_id_zero", "a REQUEST with requestId 0",
         envelope(REQUEST, delivery() + q_basic, request_id=0))
+    bad("hello_request_id", "a HELLO with requestId 1",
+        envelope(HELLO, hello(), request_id=1), mtype=HELLO)
+    bad("lookup_id_zero", "a LOOKUP with requestId 0",
+        envelope(LOOKUP, u16(4) + u8(0) + u8(0) + str8("Ceres") + tlv([]), request_id=0),
+        mtype=LOOKUP)
+    bad("data_chunk0_no_meta", "DATA chunk 0 with the meta flag clear",
+        envelope(DATA, data_chunk(0, 0, 1, 1, 0, 0b001, 0, b"",
+                                  [[[280.1, 0.0, 0.983, 1.019, 0.0, 0.0]]]), request_id=1),
+        mtype=DATA, direction="s2c")
+    bad("segdata_chunk0_no_meta", "SEGDATA chunk 0 with the meta flag clear",
+        envelope(SEGDATA, u32(0) + u8(0b001) + u8(0) + u16(1) + u16(0) + u16(1) + u32(0) + u32(0),
+                 request_id=6), mtype=SEGDATA, direction="s2c")
+    bad("lookup_match_profile", "a LOOKUP_RESULT match whose object names profile 1",
+        envelope(LOOKUP_RESULT,
+                 u16(1) + u8(0) + sources(["Swiss Ephemeris files"]) +
+                 match(0, 0, obj_body(10, prof=1), "Sun"), request_id=8),
+        mtype=LOOKUP_RESULT, direction="s2c")
 
     # -- refused: unsupported (registry values or capabilities not implemented) -----
     bad("unknown_critical_tag", "critical REQUEST tag 0x8FFF",
@@ -488,6 +595,10 @@ def fixtures():
                  question(grid_block(1, J2000, 0.0, DAY_NS, 2), [profile(form=1, columns=0b10)],
                           [obj_body(301)]), request_id=1),
         expect="unsupported")
+    bad("elements_centre_unregistered", "elements centre 2 (A.21 has 0 and 1)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
+                                                [obj_elements((J2000, 0.0), 0, 2, [[0.0]] * 6, "x")]),
+                 request_id=1), expect="unsupported")
     bad("zodiac_unregistered", "zodiac token \"martian\"",
         envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
                                                 [profile(zodiac="martian")], [obj_body(10)]), request_id=1),
@@ -505,8 +616,9 @@ def main():
     out = os.path.join(root, "ephsrv", "conformance")
     check = "--check" in sys.argv[1:]
     files = {}
-    rows = ["# file\tdirection\ttype\texpect\tnote"]
+    rows = []
     names = set()
+    digest = hashlib.sha256()
     for name, direction, mtype, expect, note, msg in fixtures():
         assert name not in names, name
         names.add(name)
@@ -514,7 +626,17 @@ def main():
         assert struct.unpack("<I", msg[12:16])[0] == len(msg) - 16, name
         files[name + ".hex"] = hexlines(msg)
         rows.append("\t".join([name + ".hex", direction, str(mtype), expect, note]))
-    files["MANIFEST.tsv"] = "\n".join(rows) + "\n"
+        # 3.10: the FILE's bytes as committed -- hex digits, line breaks and
+        # the trailing newline -- not the message they decode to. Nobody has
+        # to decode anything to check a set, and a file rewritten with
+        # different formatting, a semantic no-op, still changes the digest.
+        digest.update(files[name + ".hex"].encode("ascii"))
+    # The set's identity, over every fixture file in manifest order: a reader
+    # can say "I have a consistent set" rather than inferring it from
+    # timestamps, and a half-written directory is visibly half-written.
+    header = ["# file\tdirection\ttype\texpect\tnote",
+              "# set-sha256 %s" % digest.hexdigest()]
+    files["MANIFEST.tsv"] = "\n".join(header + rows) + "\n"
     if check:
         bad = [f for f, text in files.items()
                if not os.path.exists(os.path.join(out, f)) or
@@ -529,9 +651,17 @@ def main():
     for f in os.listdir(out):
         if f not in files:
             os.remove(os.path.join(out, f))
+    # The manifest LAST, and only once every fixture it names is on disk: it
+    # is what a consumer reads the set through, so its mtime is the set's and
+    # its digest covers what was written (a reader that caught the directory
+    # mid-regeneration otherwise saw new fixtures beside an old manifest).
     for f, text in files.items():
+        if f == "MANIFEST.tsv":
+            continue
         with open(os.path.join(out, f), "w", newline="\n") as fh:
             fh.write(text)
+    with open(os.path.join(out, "MANIFEST.tsv"), "w", newline="\n") as fh:
+        fh.write(files["MANIFEST.tsv"])
     print("ephproto4 fixtures: wrote %d files to %s" % (len(files), os.path.relpath(out, root)))
     return 0
 

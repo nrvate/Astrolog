@@ -87,7 +87,7 @@ refuses_start() {   # refuses_start WHAT GREP ARGS...
 ask() {   # ask EXPECTED-EXIT LABEL CLIENT-ARGS...
   local want=$1 label=$2; shift 2
   set +e
-  "$CLI" --port "$PORT" --objs 0,1 --count 2 --quiet "$@" > "$S/cli.out" 2> "$S/cli.err"
+  "$CLI" --port "$PORT" --objs 10,301 --count 2 --quiet "$@" > "$S/cli.out" 2> "$S/cli.err"
   local got=$?
   set -e
   [ "$got" = "$want" ] || { cat "$S/cli.err"; fail "$label: exit $got, wanted $want"; }
@@ -159,7 +159,7 @@ echo "  reload  a broken pair is refused and the old certificate kept"
 # Now a good pair from the second CA, while a connection streams across the
 # signal: 30 repeats, each reading nothing for 100 ms after sending.
 cp "$S/srv1.key" "$S/live.key"
-"$CLI" --port "$PORT" --tls --ca "$S/ca1.pem" --objs 0,1,2,3,4 --count 400 \
+"$CLI" --port "$PORT" --tls --ca "$S/ca1.pem" --objs 10,301,199,299,4 --count 400 \
   --step 3600 --repeat 30 --sleep-ms 100 --quiet > "$S/long.out" 2> "$S/long.err" &
 LONG_PID=$!
 sleep 0.8

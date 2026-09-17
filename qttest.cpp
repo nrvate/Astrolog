@@ -17670,41 +17670,73 @@ static void WireEphLoopbackQt(QWebSocketServer *psrv, byte *pbProto,
         QObject::connect(pconn, &QWebSocket::binaryMessageReceived, pconn,
           [pbProto, pdwCaps, szVer, pbaReq, pconn](CONST QByteArray &ba) {
             eph::Envelope env;
-            const byte *rgb = (const byte *)ba.constData();
-            if (ba.size() < (int)eph::kEnvelopeSize ||
-              !eph::parseEnvelope(rgb, &env))
+            std::string strWhy;
+            std::vector<uint8_t> pay, msg;
+            CONST byte *rgb = (CONST byte *)ba.constData();
+            if (eph::ParseEnvelope(rgb, (size_t)ba.size(), &env, &strWhy) != eph::kOk)
               return;
-            rgb += eph::kEnvelopeSize;
             if (env.type == eph::kMsgHello) {
               eph::Hello hello;
-              if (eph::parseHello(rgb, env.payloadLen, &hello))
+              if (eph::ParseHello(rgb + eph::kEnvelopeSize, env.payloadLen, &hello,
+                &strWhy) == eph::kOk)
                 s_baHelloTokenQt = QByteArray(hello.token.c_str());
             }
             if (env.type == eph::kMsgHello && *pbProto == 0) {
               // 0: a server for which this client is too old -- ERROR 8,
               // then the close, as astrolog-ephd answers it.
-              std::vector<uint8_t> msg;
-              byte rgbE[256];
-              eph::putU32(rgbE, 0);
-              eph::putU32(rgbE + 4, (uint32_t)eph::kErrVersion);
-              sprintf2((char *)rgbE + 8, 240, "this client speaks protocol 3; "
-                "this server needs 4 to 4 -- update Astrolog");
-              msg = eph::makeMessage(eph::kMsgError, 0, rgbE,
-                8 + strlen((char *)rgbE + 8) + 1);
-              pconn->sendBinaryMessage(QByteArray(
-                (const char *)msg.data(), (int)msg.size()));
+              eph::Error err;
+              err.code = eph::kErrVersion;
+              err.flags = eph::kErrFlagClosing;
+              err.text = "this client needs protocol 5 or newer; this server "
+                "speaks 4 to 4 -- update Astrolog";
+              eph::EncodeError(&pay, err);
+              eph::WriteEnvelope(&msg, eph::kMsgError, 0, pay.size());
+              msg.insert(msg.end(), pay.begin(), pay.end());
+              pconn->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
+                (int)msg.size()));
               pconn->close();
+            } else if (env.type == eph::kMsgHello && *pbProto < eph::kProtoMin) {
+              // A server too old to speak version 4 at all: its refusal in
+              // its own layout and envelope version (3.3 step 5).
+              eph::LegacyError le;
+              le.code = 1;
+              le.text = "bad magic or protocol version";
+              eph::EncodeLegacyError(&pay, le);
+              eph::WriteEnvelope(&msg, eph::kMsgError, 0, pay.size(), *pbProto);
+              msg.insert(msg.end(), pay.begin(), pay.end());
+              pconn->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
+                (int)msg.size()));
             } else if (env.type == eph::kMsgHello) {
-              byte rgbW[sizeof(eph::WelcomeWire) + 256];
-              uint32_t dwLen;
-              std::vector<uint8_t> msg;
-              eph::buildWelcome(rgbW, *pdwCaps, 21003,
-                eph::kMaxCellsDefault, szVer, &dwLen);
-              if (*pbProto != eph::kProtoVersion)
-                eph::putU32(rgbW, *pbProto);
-              msg = eph::makeMessage(eph::kMsgWelcome, 0, rgbW, dwLen);
-              pconn->sendBinaryMessage(QByteArray(
-                (const char *)msg.data(), (int)msg.size()));
+              eph::Welcome w;
+              eph::Capabilities caps;
+              w.protoSession = *pbProto;
+              w.caps = *pdwCaps;
+              w.serverName = szVer;
+              w.engine = "loopback";
+              w.datasetId = "loopback/test/0#00000000";
+              // The capability TLVs WELCOME must carry (3.4), saying this
+              // loopback serves what the client asks of it.
+              caps.kinds = (1u << eph::kObjBody) | (1u << eph::kObjOrbitPoint) |
+                (1u << eph::kObjStar) | (1u << eph::kObjHypothetical) |
+                (1u << eph::kObjDesignation);
+              caps.observers = 0x1F;
+              caps.planes = 3; caps.forms = 3; caps.frames = 0xF;
+              caps.corrMasks = {{0x1F, eph::kCorrMask}, {0x1F, 0},
+                {0x1F, eph::kCorrLightTime}};
+              caps.orbitPoints = 0xF;
+              caps.orbitMethods = 0x17;
+              caps.columns = eph::kColAyanamsa | eph::kColDeltaT;
+              for (int i = 0; i < eph::kZodiacTokenCount; i++)
+                caps.zodiacs.push_back(eph::kZodiacTokens[i]);
+              caps.siderealPlanes = 7;
+              caps.timeScales = 3;
+              caps.deltaTModel = "loopback";
+              eph::EncodeCapabilities(caps, &w.caps_);
+              eph::EncodeWelcome(&pay, w);
+              eph::WriteEnvelope(&msg, eph::kMsgWelcome, 0, pay.size());
+              msg.insert(msg.end(), pay.begin(), pay.end());
+              pconn->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
+                (int)msg.size()));
             } else if (env.type == eph::kMsgRequest)
               *pbaReq = ba;
           });
@@ -17873,128 +17905,140 @@ static void TestEphSrvQt()
     "when none is given");
   Check(!FUrlEphSrvTestQt(":", S(sz)), "a hostless spelling is refused");
 
-  // Protocol round trips, straight against ephproto.h.
+  // Protocol round trips, straight against ephproto.h. The codec has its own
+  // conformance test against the fixtures (ephsrv/ephproto_test.cpp); what
+  // this asks is that the client's compiled copy encodes and parses the
+  // messages this client sends and reads.
   {
-    byte rgbP[5] = {1, 2, 3, 4, 5};
-    std::vector<uint8_t> msg, rgb;
+    std::vector<uint8_t> pay, msg;
     eph::Envelope env;
+    std::string strWhy;
     eph::Request rq, rq2;
-    eph::ErrorMsg err;
-    byte rgbE[32];
+    eph::Error err, err2;
 
-    msg = eph::makeMessage(eph::kMsgRequest, 9, rgbP, 5);
+    eph::WriteEnvelope(&msg, eph::kMsgRequest, 9, 5);
+    msg.insert(msg.end(), 5, (uint8_t)7);
     Check(msg.size() == eph::kEnvelopeSize + 5, "an envelope wraps its payload");
-    Check(eph::parseEnvelope(msg.data(), &env) &&
+    Check(eph::ParseEnvelope(msg.data(), msg.size(), &env, &strWhy) == eph::kOk &&
       env.type == eph::kMsgRequest && env.requestId == 9 &&
-      env.payloadLen == 5 && env.flags == 0, "and round trips");
+      env.payloadLen == 5 && env.flags == 0 && env.version == eph::kProtoVersion,
+      "and round trips");
     msg[0] = 0;
-    Check(!eph::parseEnvelope(msg.data(), &env), "a broken magic refuses");
+    Check(eph::ParseEnvelope(msg.data(), msg.size(), &env, &strWhy) != eph::kOk,
+      "a broken magic refuses");
 
-    rq.objs.resize(3);
-    rq.objs[0].kind = eph::kObjBody; rq.objs[0].id = 2;
-    rq.objs[1].kind = eph::kObjStar;
-    sprintf2(S(sz), "Regulus");
-    strcpy(rq.objs[1].name, sz);
-    rq.objs[2].kind = eph::kObjBody; rq.objs[2].id = nMillion + 1;
-    rq.center = 10;
-    rq.iflag = 256|2|65536;
-    rq.sidMode = 1; rq.sidAyanOff = 0.883208;
-    rq.topoLon = -122.4194; rq.topoLat = 47.6062; rq.topoElv = 12.0;
-    rq.jdStart = 2459010.5; rq.stepSeconds = 600; rq.nTime = 3;
-    rq.precision = eph::kPrecF64; rq.chunkRows = 100;
-    eph::buildRequest(&rgb, rq);
-    Check(rgb.size() == 4 + eph::kObjRecordBodySize*2 +
-      (1 + CchSz("Regulus") + 1) + sizeof(eph::RequestFixed),
-      "a mixed kind-0/kind-1 REQUEST is its parts' size");
-    Check(eph::parseRequest(rgb.data(), rgb.size(), &rq2) == eph::kParseOk,
-      "REQUEST parses");
-    Check(rq2.objs.size() == 3 && rq2.objs[0].id == 2 &&
-      rq2.objs[1].kind == eph::kObjStar &&
-      FEqSz(rq2.objs[1].name, "Regulus") && rq2.objs[2].id == nMillion + 1,
+    // One cast: two profiles (geocentric, and topocentric sidereal on the
+    // invariable plane) over the six kinds of object this client sends.
+    rq.profiles.resize(2);
+    rq.profiles[1].observer = eph::kObsTopo;
+    rq.profiles[1].siteLonEastDeg = -122.4194;
+    rq.profiles[1].siteLatDeg = 47.6062;
+    rq.profiles[1].siteHeightM = 12.0;
+    rq.profiles[1].zodiac = "fagan-bradley";
+    rq.profiles[1].siderealPlane = eph::kSidPlaneInvariable;
+    rq.objs.resize(4);
+    rq.objs[0].kind = eph::kObjBody; rq.objs[0].naif = 199;
+    rq.objs[1].kind = eph::kObjStar; rq.objs[1].name = "Regulus";
+    rq.objs[1].profile = 1;
+    rq.objs[2].kind = eph::kObjOrbitPoint; rq.objs[2].naif = 301;
+    rq.objs[2].point = eph::kPtApo; rq.objs[2].method = eph::kMethOsculating;
+    rq.objs[3].kind = eph::kObjBody; rq.objs[3].naif = 20000001;
+    rq.start = eph::Time{2459010.5, 0.0};
+    rq.stepNs = 600LL * 1000000000LL;
+    rq.nTime = 3;
+    rq.deltaTSec = 69.2;
+    rq.precision = eph::kPrecF64;
+    rq.chunkRows = 100;
+    eph::EncodeRequest(&pay, rq);
+    Check(eph::ParseRequest(pay.data(), pay.size(), &rq2, &strWhy) == eph::kOk,
+      "a REQUEST of two profiles and four objects parses (%s)", strWhy.c_str());
+    Check(rq2.objs.size() == 4 && rq2.objs[0].naif == 199 &&
+      rq2.objs[1].kind == eph::kObjStar && rq2.objs[1].profile == 1 &&
+      FEqSz(rq2.objs[1].name.c_str(), "Regulus") &&
+      rq2.objs[2].point == eph::kPtApo && rq2.objs[3].naif == 20000001,
       "its object records round trip");
-    Check(rq2.center == 10 && rq2.iflag == rq.iflag && rq2.sidMode == 1 &&
-      rq2.sidAyanOff == 0.883208 && rq2.topoLon == -122.4194 &&
-      rq2.topoLat == 47.6062 && rq2.topoElv == 12.0 &&
-      rq2.jdStart == 2459010.5 && rq2.stepSeconds == 600 &&
-      rq2.nTime == 3 && rq2.precision == eph::kPrecF64 &&
-      rq2.chunkRows == 100, "and its fixed fields round trip");
+    Check(rq2.profiles.size() == 2 && rq2.profiles[1].observer == eph::kObsTopo &&
+      rq2.profiles[1].siteLonEastDeg == -122.4194 &&
+      rq2.profiles[1].siteLatDeg == 47.6062 &&
+      FEqSz(rq2.profiles[1].zodiac.c_str(), "fagan-bradley") &&
+      rq2.profiles[1].siderealPlane == eph::kSidPlaneInvariable,
+      "and its profiles");
+    Check(rq2.start.Sum() == 2459010.5 && rq2.stepNs == 600LL * 1000000000LL &&
+      rq2.nTime == 3 && rq2.deltaTSec == 69.2 &&
+      rq2.precision == eph::kPrecF64 && rq2.chunkRows == 100,
+      "and its time and delivery fields");
+    Check(rq2.RowTime(2).Sum() == 2459010.5 + 1200.0 / 86400.0,
+      "and row 2 is the instant the server will compute");
 
-    // A DATA chunk: header, per-object metadata (one ok, one failed),
-    // and the value block.
+    // A DATA chunk: header, metadata for two objects (one failed), values.
     {
-      byte rgbMeta[2 * eph::kDataMetaSize];
-      double rgcols[2 * 6] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-      size_t cb, ncb = 0;   // strZ() leaves ncb alone on a bad read.
-      char serr[eph::kSerrMax], szName[eph::kMetaNameMax];
-      const char *szN;
-
-      eph::writeDataMeta(rgbMeta, 2, 9876, "", "Mercury");
-      eph::writeDataMeta(rgbMeta + eph::kDataMetaSize, -1, 0,
-        "swe_calc_ut_r: bad input", "Sedna");
-      rgb.resize(eph::dataPayloadSize(2, 1, eph::kPrecF64));
-      eph::writeDataChunk(rgb.data(), rgb.size(), 0, 0, 1, 1, 2,
-        eph::kPrecF64, rgbMeta, rgcols, &cb);
-      Check(cb == rgb.size(), "DATA fills exactly its payload size");
-      eph::Reader r(rgb.data(), rgb.size());
-      Check(r.u32() == 0 && r.u32() == 0 && r.u32() == 1 &&
-        r.u8() == eph::kPrecF64 && r.u32() == 2,
-        "its header round trips");
-      Check(r.i32() == 2 && r.i32() == 9876,
-        "the first object's retFlag/flagsUsed");
-      r.raw(serr, eph::kSerrMax);
-      // The name is strZ read out of a fixed 56-byte field: skip the
-      // padding after its NUL, or the next record reads from the middle
-      // of this one.
-      szN = r.strZ(&ncb);
-      Check(szN != NULL && FEqSz(szN, "Mercury"), "and its name");
-      r.raw(szName, eph::kMetaNameMax - (ncb + 1));
-      Check(r.i32() < 0 && r.i32() == 0, "the failed object's retFlag");
-      r.raw(serr, eph::kSerrMax);
-      Check(FEqSz(serr, "swe_calc_ut_r: bad input"), "carries its serr text");
-      szN = r.strZ(&ncb);
-      Check(szN != NULL && FEqSz(szN, "Sedna"), "and its name");
-      r.raw(szName, eph::kMetaNameMax - (ncb + 1));
-      Check(r.f64() == 1.0, "the value block starts with obj0's first column");
-      r.f64(); r.f64(); r.f64(); r.f64();   // obj0's columns 2 through 5.
-      Check(r.f64() == 6.0 && r.f64() == 7.0,
-        "obj0's last column, then obj1's first, object-major");
+      eph::DataChunk d, d2;
+      d.chunkIndex = 0; d.iTime = 0; d.nRows = 1; d.totalRows = 1;
+      d.precision = eph::kPrecF64;
+      d.flags = eph::kChunkLast | eph::kChunkMeta;
+      d.nObj = 2;
+      d.sources.push_back("astrolog-ephd 2.0 | Swiss Ephemeris | files");
+      d.meta.resize(2);
+      d.meta[0].rowsOk = 1; d.meta[0].name = "Mercury"; d.meta[0].resolvedNaif = 199;
+      d.meta[1].rowsOk = 0; d.meta[1].errCode = eph::kOErrDataMissing;
+      d.meta[1].errText = "the ephemeris file for this body is not on the "
+        "server's path";
+      d.meta[1].firstFailedRow = 0;
+      d.values = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+      pay.clear();
+      eph::EncodeData(&pay, d);
+      Check(eph::ParseData(pay.data(), pay.size(), &d2, &strWhy) == eph::kOk &&
+        d2.nObj == 2 && d2.Cols() == 6 && d2.meta[0].rowsOk == 1 &&
+        FEqSz(d2.meta[0].name.c_str(), "Mercury") && d2.meta[1].rowsOk == 0 &&
+        d2.meta[1].errCode == eph::kOErrDataMissing,
+        "a DATA chunk and its metadata round trip (%s)", strWhy.c_str());
+      Check(d2.values[0] == 1.0 && d2.values[6] == 7.0,
+        "its values are object-major");
     }
 
-    eph::putU32(rgbE, 4);
-    eph::putI32(rgbE + 4, eph::kErrLimits);
-    sprintf2(S(sz), "too big");
-    strcpy((char *)rgbE + 8, sz);
-    msg = eph::makeMessage(eph::kMsgError, 0, rgbE, 8 + CchSz(sz) + 1);
-    Check(eph::parseError(msg.data() + eph::kEnvelopeSize, msg.size() -
-      eph::kEnvelopeSize, &err) && err.requestId == 4 &&
-      err.code == eph::kErrLimits && FEqSz(err.text.c_str(), "too big"),
+    err.code = eph::kErrLimits;
+    err.text = "too big";
+    pay.clear();
+    eph::EncodeError(&pay, err);
+    Check(eph::ParseError(pay.data(), pay.size(), &err2, &strWhy) == eph::kOk &&
+      err2.code == eph::kErrLimits && FEqSz(err2.text.c_str(), "too big"),
       "an ERROR round trips");
   }
 
-  // REQUEST clamping, with no WELCOME stored: the protocol's constants.
+  // REQUEST clamping, with no WELCOME stored: the protocol's own defaults.
   EphSrvFinalizeQt();
   {
     eph::Request rq;
-    rq.objs.resize(eph::kMaxObjs + 6);
-    rq.nTime = 999999; rq.chunkRows = 9999;
+    eph::Welcome w;   // the defaults a client assumes before a WELCOME
+    rq.profiles.push_back(eph::Profile());
+    rq.objs.resize(w.maxObjs + 6);
+    for (eph::Object &o : rq.objs) o.naif = 10;
+    rq.nTime = 999999;
+    rq.stepNs = 60LL * 1000000000LL;
+    rq.chunkRows = 9999;
     rq.precision = eph::kPrecF32;
+    rq.priority = 1;
     ClampEphSrvReqQt(&rq);
-    Check(rq.objs.size() == eph::kMaxObjs,
+    Check(rq.objs.size() == w.maxObjs,
       "nObj clamps to WELCOME maxObjs (%d)", (int)rq.objs.size());
-    Check(rq.chunkRows == eph::kMaxChunkRows,
+    Check(rq.chunkRows == w.maxChunkRows,
       "the chunk hint clamps to WELCOME's limit");
     Check(rq.precision == eph::kPrecF64,
       "f32 without a caps bit falls back to f64");
-    // The work bound clamps the rows (protocol 2, S4): 64 objects at the
-    // default 100000 cells is 1562 rows, not the 20000 rows limit -- and
-    // the rows limit still governs when the bound does not bind.
-    Check(rq.nTime == eph::kMaxCellsDefault / eph::kMaxObjs,
+    Check(rq.priority == 0, "and prefetch priority without its caps bit");
+    // The work bound clamps the rows (3.5, S4): 64 objects at the default
+    // 100000 cells is 1562 rows, not the 20000 rows limit -- and the rows
+    // limit still governs when the bound does not bind.
+    Check(rq.nTime == w.maxCells / w.maxObjs,
       "rows clamp to the default work bound (%u)", rq.nTime);
     rq.objs.resize(2);
     rq.nTime = 999999;
     ClampEphSrvReqQt(&rq);
-    Check(rq.nTime == eph::kMaxRows,
+    Check(rq.nTime == w.maxRows,
       "rows clamp to WELCOME maxRows when the work bound allows it");
+    rq.nTime = 1;
+    ClampEphSrvReqQt(&rq);
+    Check(rq.stepNs == 0, "and a one-row window carries no step (3.5)");
   }
 
   // The state machine, against three loopback servers: welcomed, then a
@@ -18004,12 +18048,12 @@ static void TestEphSrvQt()
     QWebSocketServer srv1("eph-loopback-1", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv2("eph-loopback-2", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv3("eph-loopback-3", QWebSocketServer::NonSecureMode);
-    // srv2 is the server too old to talk to: one version below the oldest
-    // this client speaks (kProtoMin -- protocol 3 negotiates, so a version-2
-    // server is welcomed, not refused).
+    // srv2 is a server too old to speak version 4 at all: it answers the
+    // HELLO in protocol 3's layout, the only thing it knows (3.3 step 5 in
+    // reverse -- this is the client meeting an old server).
     byte bProto1 = eph::kProtoVersion, bProto2 = eph::kProtoMin - 1,
       bProto3 = eph::kProtoVersion;
-    uint32_t dwCaps1 = 0, dwCaps2 = 0, dwCaps3 = eph::kCapFloat32;
+    uint32_t dwCaps1 = 0, dwCaps2 = 0, dwCaps3 = eph::kCapF32;
     char szVer1[64], szVer2[64], szVer3[64];
     QByteArray baReq1, baReq2, baReq3;
     QWebSocket *pconn1 = NULL, *pconn2 = NULL, *pconn3 = NULL;
@@ -18042,12 +18086,17 @@ static void TestEphSrvQt()
       "the client welcomes against the loopback server");
     Check(FWelcEphSrvTestQt(), "WELCOME stored");
     pw = PwelcEphSrvTestQt();
-    Check(pw->maxObjs == eph::kMaxObjs && pw->maxRows == eph::kMaxRows &&
-      pw->maxChunkRows == eph::kMaxChunkRows &&
-      pw->maxCells == eph::kMaxCellsDefault &&
-      pw->swissephVersion == 21003, "its limits and versions stored");
-    Check(FEqSz(pw->serverVersion.c_str(), szVer1),
-      "and the server's version string with them");
+    {
+      eph::Welcome w;   // the protocol's defaults, which the loopback sends
+      Check(pw->protoSession == eph::kProtoVersion && pw->maxObjs == w.maxObjs &&
+        pw->maxRows == w.maxRows && pw->maxChunkRows == w.maxChunkRows &&
+        pw->maxCells == w.maxCells && pw->maxProfiles == w.maxProfiles,
+        "its limits stored");
+    }
+    Check(FEqSz(pw->serverName.c_str(), szVer1),
+      "and the server's name with them");
+    Check(FEqSz(pw->datasetId.c_str(), "loopback/test/0#00000000"),
+      "and its datasetId, which every window cache key carries (3.7)");
     Check(s_baHelloTokenQt == QByteArray(SzSet(us.szEphSrvToken)) &&
       !s_baHelloTokenQt.isEmpty(), "HELLO carried the -bT token (\"%s\")",
       s_baHelloTokenQt.constData());
@@ -18063,28 +18112,33 @@ static void TestEphSrvQt()
       ClampEphSrvReqQt(&rqCells);
       Check(rqCells.nTime == 750, "rows clamp to WELCOME maxCells (%u)",
         rqCells.nTime);
-      SetWelcMaxCellsSrvTestQt(eph::kMaxCellsDefault);
+      SetWelcMaxCellsSrvTestQt(eph::Welcome().maxCells);
     }
 
     // One request, on the wire.
+    rq.profiles.push_back(eph::Profile());
     rq.objs.resize(3);
-    rq.objs[0].kind = eph::kObjBody; rq.objs[0].id = 2;
-    rq.objs[1].kind = eph::kObjBody; rq.objs[1].id = 17;
-    rq.objs[2].kind = eph::kObjStar;
-    sprintf2(S(sz), "Aldebaran");
-    strcpy(rq.objs[2].name, sz);
-    rq.jdStart = 2459010.5; rq.stepSeconds = 600; rq.nTime = 3;
+    rq.objs[0].kind = eph::kObjBody; rq.objs[0].naif = 199;
+    rq.objs[1].kind = eph::kObjBody; rq.objs[1].naif = 20000001;
+    rq.objs[2].kind = eph::kObjStar; rq.objs[2].name = "Aldebaran";
+    rq.start = eph::Time{2459010.5, 0.0};
+    rq.stepNs = 600LL * 1000000000LL; rq.nTime = 3;
     rq.chunkRows = 100; rq.precision = eph::kPrecF64;
     Check(FSendEphSrvQt(&rq), "a request sends while welcomed");
     dwReq = DwReqEphSrvTestQt();
     Check(dwReq != 0, "and takes an id");
     Check(FWaitDataQt(&baReq1, 5000), "the loopback server received it");
-    eph::buildRequest(&rgbExp, rq);
-    Check(eph::parseEnvelope((const byte *)baReq1.constData(), &env) &&
-      env.type == eph::kMsgRequest && env.requestId == dwReq &&
-      baReq1.size() == (int)(rgbExp.size() + eph::kEnvelopeSize) &&
-      memcmp(baReq1.constData() + eph::kEnvelopeSize, rgbExp.data(),
-        rgbExp.size()) == 0, "as exactly the bytes built");
+    eph::EncodeRequest(&rgbExp, rq);
+    {
+      std::string strWhy;
+      Check(eph::ParseEnvelope((CONST byte *)baReq1.constData(),
+        (size_t)baReq1.size(), &env, &strWhy) == eph::kOk &&
+        env.type == eph::kMsgRequest && env.requestId == dwReq &&
+        env.version == eph::kProtoVersion &&
+        baReq1.size() == (int)(rgbExp.size() + eph::kEnvelopeSize) &&
+        memcmp(baReq1.constData() + eph::kEnvelopeSize, rgbExp.data(),
+          rgbExp.size()) == 0, "as exactly the bytes built");
+    }
 
     // With caps 0 stored, f32 still falls back.
     rq2.precision = eph::kPrecF32; rq2.nTime = 10; rq2.chunkRows = 10;
@@ -18114,13 +18168,13 @@ static void TestEphSrvQt()
       if (NRetryEphSrvTestQt() > 0)
         fSawRetry = fTrue;
       FErrEphSrvTestQt(sz, cchSzMax);
-      if (strstr(sz, "protocols 2 to 3") != NULL)
+      if (strstr(sz, "older than this client") != NULL)
         break;
     }
-    Check(strstr(sz, "protocols 2 to 3") != NULL && strstr(sz, szVer2) != NULL &&
-      strstr(sz, "protocol 1") != NULL,
-      "a version mismatch is refused with the server's version retained "
-      "(\"%.80s\")", sz);
+    Check(strstr(sz, "older than this client") != NULL &&
+      strstr(sz, "protocol 3") != NULL,
+      "a server too old to speak version 4 is refused, in words, from its "
+      "own layout (\"%.90s\")", sz);
     Check(NEphSrvStateTestQt() != 2, "the mismatched server never welcomes");
     Check(fSawRetry, "the retry ladder keeps going");
 
@@ -18130,8 +18184,8 @@ static void TestEphSrvQt()
     FCloneSz(sz, &us.szEphSrv);
     Check(FWaitEstQt(2, 10000), "the client re-welcomes on the third server");
     pw = PwelcEphSrvTestQt();
-    Check((pw->caps & eph::kCapFloat32) != 0, "the caps bit arrived");
-    Check(FEqSz(pw->serverVersion.c_str(), szVer3), "from the right server");
+    Check((pw->caps & eph::kCapF32) != 0, "the caps bit arrived");
+    Check(FEqSz(pw->serverName.c_str(), szVer3), "from the right server");
     Check(FWaitDataQt(&baReq3, 5000),
       "the in-flight request was re-sent after the reconnect");
     Check(baReq3 == baReq1, "verbatim");
@@ -18140,7 +18194,7 @@ static void TestEphSrvQt()
     Check(rq2.precision == eph::kPrecF32,
       "and the caps bit admits f32");
 
-    // A server this client is too old for (protocol 3's ERROR 8): refused
+    // A server this client is too old for (ERROR 8): refused
     // for good -- the text says to update, and no retry is armed, since
     // asking again changes nothing. Starting the backend again clears it.
     {
@@ -18176,12 +18230,15 @@ static void TestEphSrvQt()
 
   // ---- The review's client findings (EPHEMERIS_REVIEW.md, 2026-09-16) ----
 
-  // C5, C6: the chunk reader. A chunk delivered twice -- a request re-sent
-  // after a reconnect -- must not complete a window it only half filled;
-  // a row index that wraps 32 bits, or a chunk in the wrong precision,
-  // is a chunk this client cannot read.
-  Check(NChunkProbeSrvTestQt(0) == 0, "a chunk delivered twice does not "
-    "complete a window it half fills");
+  // C5, C6: the chunk reader. A chunk delivered twice in one session is a
+  // chunk out of order (3.4: a request's chunks are contiguous and
+  // ascending), so it is refused rather than counted -- it used to complete
+  // a window it had only half filled. A request re-sent into a NEW session
+  // is answered from chunk 0 again, and the window is told so.
+  // A row index that wraps 32 bits, or a chunk in the wrong precision, is a
+  // chunk this client cannot read.
+  Check(NChunkProbeSrvTestQt(0) == -1, "a chunk delivered twice is refused, "
+    "not counted into the window again");
   Check(NChunkProbeSrvTestQt(1) == -1, "a chunk whose rows wrap 32 bits is "
     "refused, not copied");
   Check(NChunkProbeSrvTestQt(2) == -1, "an f32 chunk for an f64 window is "
@@ -18251,7 +18308,7 @@ static void TestEphSrvQt()
       QByteArray baReqW;
       QWebSocket *pconnW = NULL;
       byte bProto = eph::kProtoVersion;
-      uint32_t dwCaps = eph::kCapFloat32;
+      uint32_t dwCaps = eph::kCapF32;
       QWebSocketServer srvWait(QString("wait"),
         QWebSocketServer::NonSecureMode);
       Check(srvWait.listen(QHostAddress::LocalHost, 0), "a silent loopback "
@@ -18293,17 +18350,28 @@ static void TestEphSrvQt()
           QObject::connect(pc, &QWebSocket::binaryMessageReceived, pc,
             [pc, &cReqDrop](CONST QByteArray &ba) {
               eph::Envelope env;
-              if (ba.size() < (int)eph::kEnvelopeSize ||
-                !eph::parseEnvelope((const byte *)ba.constData(), &env))
+              std::string strWhy;
+              if (eph::ParseEnvelope((CONST byte *)ba.constData(),
+                (size_t)ba.size(), &env, &strWhy) != eph::kOk)
                 return;
               if (env.type == eph::kMsgHello) {
-                byte rgbW[sizeof(eph::WelcomeWire) + 256];
-                uint32_t dwLen;
-                eph::buildWelcome(rgbW, 0, 21003, eph::kMaxCellsDefault,
-                  "dropper", &dwLen);
-                std::vector<uint8_t> msg = eph::makeMessage(
-                  eph::kMsgWelcome, 0, rgbW, dwLen);
-                pc->sendBinaryMessage(QByteArray((const char *)msg.data(),
+                eph::Welcome w;
+                eph::Capabilities caps;
+                std::vector<uint8_t> pay, msg;
+                w.serverName = "dropper";
+                w.datasetId = "dropper/test/0#00000000";
+                caps.kinds = 1u << eph::kObjBody;
+                caps.observers = 0x1F;
+                caps.planes = 3; caps.forms = 3; caps.frames = 0xF;
+                caps.corrMasks = {{0x1F, eph::kCorrMask}};
+                caps.orbitPoints = 0xF; caps.orbitMethods = 0x17;
+                caps.columns = 0;
+                caps.siderealPlanes = 7; caps.timeScales = 3;
+                eph::EncodeCapabilities(caps, &w.caps_);
+                eph::EncodeWelcome(&pay, w);
+                eph::WriteEnvelope(&msg, eph::kMsgWelcome, 0, pay.size());
+                msg.insert(msg.end(), pay.begin(), pay.end());
+                pc->sendBinaryMessage(QByteArray((CONST char *)msg.data(),
                   (int)msg.size()));
               } else if (env.type == eph::kMsgRequest) {
                 cReqDrop++;
@@ -18319,9 +18387,10 @@ static void TestEphSrvQt()
     SetBackoffEphSrvTestQt(50);
     {
       eph::Request rqD;
+      rqD.profiles.push_back(eph::Profile());
       rqD.objs.resize(1);
-      rqD.objs[0].kind = eph::kObjBody; rqD.objs[0].id = 0;
-      rqD.jdStart = 2459010.5; rqD.stepSeconds = 600; rqD.nTime = 1;
+      rqD.objs[0].kind = eph::kObjBody; rqD.objs[0].naif = 10;
+      rqD.start = eph::Time{2459010.5, 0.0}; rqD.stepNs = 0; rqD.nTime = 1;
       rqD.chunkRows = 1; rqD.precision = eph::kPrecF64;
       Check(FSendEphSrvQt(&rqD), "a request goes to the dropping server");
       QElapsedTimer tim;
@@ -19088,22 +19157,23 @@ static void TestEphSrvLiveQt()
         "%s)", cDiff, szDiff);
     }
 
-    // A cast with more groups than the cache holds keeps every window it
-    // points at: with room for one, a heliocentric chart (two groups) holds
-    // two, rather than reading the first after the second evicted it.
+    // A cast split into more requests than the window cache holds keeps
+    // every window it points at: a server allowing five objects a request
+    // makes a chart several windows, and with room for one they all have to
+    // survive until the cast has read them.
     ClearWinSrvTestQt();
+    SetWelcMaxObjsSrvTestQt(5);
     SetWindowCapSrvTestQt(1);
-    us.objCenter = oSun;
     {
       EPHSNAPSHOT snL, snS;
       us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
       us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
       cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
-      Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast with more groups "
-        "than the window cap holds all its windows (%d held, %d differ: %s)",
-        CWinSrvTestQt(), cDiff, szDiff);
+      Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast split over more "
+        "requests than the window cap holds all its windows (%d held, %d "
+        "differ: %s)", CWinSrvTestQt(), cDiff, szDiff);
     }
-    us.objCenter = oEar;
+    SetWelcMaxObjsSrvTestQt(eph::Welcome().maxObjs);
     SetWindowCapSrvTestQt(32);
     SetRowsAnimSrvTestQt(1000);
     SetChunkRowsSrvTestQt(500);
@@ -19179,7 +19249,7 @@ static void TestEphSrvLiveQt()
   Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0 && CWinSrvTestQt() >= 3,
     "a server allowing 5 objects a request: %d requests, bit-identical (%d "
     "differ: %s)", CWinSrvTestQt(), cDiff, szDiff);
-  SetWelcMaxObjsSrvTestQt(eph::kMaxObjs);
+  SetWelcMaxObjsSrvTestQt(eph::Welcome().maxObjs);
 
   // -0n: fails fast, sends nothing.
   us.fNoNetwork = fTrue;

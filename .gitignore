@@ -82,4 +82,4 @@ astrolog-qt-base
 /obj-ephsrv/
 /astrolog-ephd
 /eph_wsclient
-/ephproto4_test
+/ephproto_test

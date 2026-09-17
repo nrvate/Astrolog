@@ -81,7 +81,7 @@ done
 grep -q "evt=listen port=" "$LOG" || { echo "BENCH FAIL: server did not start"; exit 1; }
 LOOPS=$(sed -nE 's/.* evt=config .* loops=([0-9]+).*/\1/p' "$LOG")
 
-BODIES="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,10005,10006,10007,10008,10009,10010,10011"
+BODIES="10,301,199,299,4,5,6,7,8,9,399,20002060,20005145,20000001,20000002,20000003,20000004,20000005,20000006,20000007,20000008,20000009,20000010,20000011,20000012,20000013,20000014,20000015,20000016,20000017"
 ROWS=1000
 STEP=600
 JD0=2451545.0
@@ -189,7 +189,7 @@ done
 echo "ephsrv bench: $LOOPS event loop(s), window = 30 bodies x $ROWS rows @ ${STEP}s, $(nproc) cores"
 echo
 printf '%-26s %10s %10s %8s  %s\n' "scenario" "p50 ms" "p99 ms" "n" "note"
-printf '%-26s %10s %10s %8s  %s\n' "cold, server compute" "$cold_s50" "$cold_s99" "$cold_n" "swe_calc_ut_r x 30,000 per window"
+printf '%-26s %10s %10s %8s  %s\n' "cold, server compute" "$cold_s50" "$cold_s99" "$cold_n" "swe_calc_r x 30,000 per window"
 printf '%-26s %10s %10s %8s  %s\n' "cold, client round trip" "$cold_p50" "$cold_p99" "$cold_n" "one client, distinct windows"
 printf '%-26s %10s %10s %8s  %s\n' "hot f64, client" "$h64_p50" "$h64_p99" "$h64_n" "one client, 1.4 MiB per window"
 printf '%-26s %10s %10s %8s  %s\n' "hot f32, client" "$h32_p50" "$h32_p99" "$h32_n" "one client, 0.7 MiB per window"

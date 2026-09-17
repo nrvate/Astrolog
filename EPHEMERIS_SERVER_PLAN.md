@@ -20,6 +20,9 @@ modifies QT_GUI_PLAN.md, which keeps its own complete work log.
 
 Everything below is landed and pushed; this section is the resume pointer.
 
+- **Protocol.** Version 4 since 2026-09-17: EPHEMERIS_PLUGINS_PLAN.md §3 is
+  the specification, `ephsrv/ephproto.h` its codec, and §4 below is a
+  pointer. Read that plan's Status first if you are picking up the server.
 - **Branches.** Everything through client increment 2 was squash-merged
   into `qt` as one commit, `3c7a1c9`, on 2026-09-16 at the maintainer's
   request; `qt` is the tree to work from now. The `ephserver` branch
@@ -133,187 +136,28 @@ uWS v20.80.0 API note: server-side WebSocket handlers are
 `WebSocket<SSL, true, UserData>` — the second template parameter is
 `isServer`, counterintuitively `true` on the server side.
 
-## 4. Protocol v3
+## 4. Protocol (version 3, superseded by version 4)
 
-Shared header `ephsrv/ephproto.h`, compiled into both ends (server and,
-later, the Qt client). All integers little-endian, structs packed, no
-padding; every layout below is exhaustive.
+**The protocol is now EPHEMERIS_PLUGINS_PLAN.md §3, and `ephsrv/ephproto.h`
+is its byte-level authority.** Version 4 is a clean break -- bodies are
+NAIF/SPK-IDs, options are explicit fields in per-object profiles, instants
+are two-part Julian dates -- made so that an engine other than the Swiss
+Ephemeris can serve the same questions without a wire map. `kProtoMin` and
+`kProtoVersion` are both 4: an older client is refused with ERROR 8 written
+in *its* layout, which is the whole of what remains of version 3 in the code
+(`EncodeLegacyError`).
 
-Version 2 (2026-09-16, EPHEMERIS_REVIEW.md S4 and S9) differs from version
-1 in two things, both carried by fields version 1 did not have: WELCOME
-gains `maxCells`, the work bound per REQUEST, and a DATA object whose rows
-fail only in part answers the rows that computed as real and the failed
-rows as NaN. A version-1 peer is refused at the envelope, before any of
-the new fields are read.
+What version 3 was, for the record: a Swiss-numbered protocol whose REQUEST
+carried one `iflag`, one centre and one sidereal mode for the whole request,
+which is why a cast had to be split into several requests (a heliocentric
+chart's nodes stay geocentric, a custom object's flags can flip any setting
+for that object alone). Version 4's profiles carry that per object, so a
+cast is one question. The version 3 layouts are in this file's history; no
+code reads them any more.
 
-Version 3 (2026-09-17, EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phases 3 and 4)
-is the first under a compatibility rule, written into `ephproto.h`'s header
-and binding from here on: each end speaks every version in
-`[kProtoMin, kProtoVersion]` (2 to 3); the envelope's version byte is the
-version THAT message is written in; HELLO names the client's highest
-version and the server answers WELCOME, and everything after it, in the
-lower of that and its own; new fields go only at the end of a structure,
-read only when the session's version has them; optional behaviour goes
-behind a caps bit; `kProtoMin` rises only deliberately. What version 3 adds:
-an optional token at the end of HELLO, ERROR codes 6-8, and the rule that a
-REQUEST before HELLO is refused.
-
-### 4.1 Envelope (16 bytes)
-
-    offset size field
-    0      u16  magic = 0x1EF0
-    2      u8   protoVersion: the version this message is written in, one
-                of kProtoMin..kProtoVersion (2..3)
-    3      u8   flags: bit0 zstd, bit1 float32, bit2-7 reserved (0)
-    4      u16  type
-    6      u16  reserved (0)
-    8      u32  requestId
-    12     u32  payloadLen (bytes)
-
-Types 1-7 are ephemeris service messages and are never reused. Types 8+ are
-reserved for future non-ephemeris services sharing the connection.
-
-| Type | Name | Direction | Meaning |
-|---|---|---|---|
-| 1 | HELLO | C→S | First message after connect |
-| 2 | WELCOME | S→C | Server identity and limits |
-| 3 | REQUEST | C→S | Ephemeris batch request |
-| 4 | DATA | S→C | One chunk of results |
-| 5 | ERROR | S→C | Whole-request error |
-| 6 | PING | both | Heartbeat |
-| 7 | PONG | both | Heartbeat reply |
-
-### 4.2 HELLO payload
-
-    u32 protoVersion (the HIGHEST version the client speaks)
-    u32 caps (bit0 float32, bit1 zstd)
-    u32 build (client build id)
-    sz  version string (NUL-terminated)
-    sz  token (version 3; optional even there -- a HELLO ending after the
-        version string has none; at most 128 bytes)
-
-### 4.3 WELCOME payload
-
-    u32 protoVersion (the session's: the lower of the client's and the
-        server's highest)
-    u32 caps (same bit meanings)
-    u32 swissephVersion (packed major*10000+minor*100+patch)
-    u32 maxObjs    (objects per request)
-    u32 maxRows    (rows per request)
-    u32 maxChunkRows (rows per DATA chunk)
-    u32 maxPayload (bytes)
-    u32 maxCells   (objects x rows per REQUEST; version 2. Default
-                    kMaxCellsDefault = 100000, overridable with
-                    --max-cells; a REQUEST over it is refused ERROR 2)
-    sz  serverVersion string
-
-### 4.4 REQUEST payload
-
-    u32 nObj
-    nObj object records:
-      u8 kind: 0 = body by id, 1 = fixed star by name,
-               2 = node or apsis of a body (added 2026-09-16, work log 8)
-      kind 0: u32 id   (SWE id: planet, moon incl. SE_PLMOON_OFFSET,
-                        asteroid incl. SE_AST_OFFSET, orbel fictitious body;
-                        at most kObjIdMax, which keeps Swiss's own
-                        center-of-body arithmetic and table indexes inside
-                        int32 -- S-fork in EPHEMERIS_REVIEW.md)
-      kind 1: sz name  (NUL-terminated, resolved from sefstars.txt)
-      kind 2: u32 id, u8 point (1 north node, 2 south node, 3 perihelion,
-              4 aphelion), u8 method (0 mean, 1 osculating): swe_nod_aps
-    i32 center: 0 = use iflag center bits; else swe_calc_pctr body id
-        (or, under kIflagCenter, a swe_calc_pctr body even when 0)
-    u64 iflag: full SWE bitmask in the LOW 32 bits. Server ORs in
-      SEFLG_SWIEPH. Center bits (SEFLG_HELCTR/BARYCTR/TOPOCTR),
-      SEFLG_SIDEREAL, SEFLG_TRUEPOS, SEFLG_NONUT, SEFLG_SPEED,
-      SEFLG_RSW_EPHEM etc. are all client-supplied; SEFLG_SPEED is added
-      if absent. The HIGH 32 bits are the protocol's, stripped before SWE
-      sees the flags (added 2026-09-16, work log 8):
-        bit 32 kIflagTimeTT: jdStart and every row are TT, not UT, and the
-               server calls the ET entry points (swe_calc_r,
-               swe_calc_pctr_r, swe_nod_aps_r, swe_fixstar_r) with the
-               instant exactly as sent -- how a client that makes its own
-               delta-t gets answers bit-identical to calling SWE itself
-        bit 33 kIflagCenter: the center field is a swe_calc_pctr body
-               even when it is 0 (SE_SUN)
-    i32 sidMode; f64 sidT0; f64 sidAyanOff
-        (swe_set_sid_mode_r triple; applied only when SEFLG_SIDEREAL)
-    f64 topoLon (east-positive degrees); f64 topoLat; f64 topoElv
-        (meters, as swe_set_topo takes it; applied only when SEFLG_TOPOCTR)
-    char jplFile[64] (swe_set_jpl_file_r; applied only when SEFLG_JPLEPH)
-    f64 jdStart (UT, or TT under kIflagTimeTT)
-    u32 stepSeconds
-    u32 nTime (rows)
-    u8 precision: 0 = f64, 1 = f32
-    u32 chunkRows (client hint; server clamps to maxChunkRows)
-
-Row i covers instant `jdStart + i * stepSeconds / 86400.0`, in the time
-scale jdStart is in; the client evaluates the same expression to find its
-rows, so it is exact, not approximate. A UT instant handed to an entry
-point that takes ET (swe_calc_pctr_r, swe_nod_aps_r) is converted with
-swe_deltat_ex_r first, the conversion swe_calc_ut_r makes itself.
-
-### 4.5 DATA payload (one chunk)
-
-    u32 chunkIndex
-    u32 iTime (first row index in this chunk)
-    u32 nTime (rows in this chunk)
-    u8 precision (0 = f64, 1 = f32)
-    u32 nObj
-    nObj per-object metadata records:
-      i32 retFlag (<0: NO row of this object computed; else flags SWE
-                   actually used)
-      i32 flagsUsed
-      char serr[64]   (the first failed row's SWE text whenever any row
-                       failed, so retFlag >= 0 with a non-empty serr is a
-                       partial answer; zero-filled when nothing failed)
-      char name[56]   (body name)
-    then the data block, object-major, nObj * nTime * 6 values (f64 or f32):
-      xx[0] lon (deg), xx[1] lat (deg), xx[2] dist (AU),
-      xx[3] lonSpeed, xx[4] latSpeed (deg/day), xx[5] distSpeed (AU/day)
-
-A row Swiss could not answer is NaN in all six of its columns, and the
-rows that computed are real (version 2; version 1 failed the object for
-the whole window, so a window reaching past an ephemeris file's edge lost
-every frame before the edge too -- EPHEMERIS_REVIEW.md S9).
-
-These six columns are exactly `swe_calc_ut_r`'s `xx[0..5]` with
-`SEFLG_SPEED`, and exactly the six reals of GetJPLHorizons()' output
-signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
-
-### 4.6 ERROR payload
-
-    u32 requestId; i32 code; sz text
-    codes: 1 bad request/parse (and, from version 3, a REQUEST before
-             HELLO, after which the server closes),
-           2 exceeds WELCOME limits, 3 unknown type, 4 internal,
-           5 ephemeris data (carries SWE serr text),
-           6 rate limited: over the address's or token's cell budget; the
-             text says when to ask again; the connection stays open,
-           7 token refused (missing where required, or unknown); closes,
-           8 client too old: below kProtoMin; sent in the CLIENT's own
-             envelope version so it can be read; closes
-
-### 4.7 Semantics
-
-- REQUEST is answered by one or more DATA chunks for its requestId
-  (chunkIndex ascending, row ranges contiguous), then done. A per-row
-  failure is NaN in that row's six columns, with the first failed row's
-  serr in the object's metadata, and is never fatal to the request. A
-  whole-request failure (e.g. no ephemeris path) is ERROR code 5 with the
-  SWE error text; a REQUEST past the work bound WELCOME advertises is
-  ERROR code 2 before anything is computed.
-- Requests are pure functions of their payload. There is no session state:
-  a dropped connection re-sends the same requestId after reconnect.
-- Heartbeat (as built): uWS protocol-level pings on a 30 s idle timeout,
-  closing a silent connection; the app-level PING/PONG types remain for
-  clients without automatic pong. (The sketch said app PINGs every 20 s
-  with a 60 s deadline; nothing implements that.)
-- The server computes with `swe_calc_ut_r` for UT body requests,
-  `swe_calc_r` under kIflagTimeTT, `swe_fixstar(_ut)_r` for stars, and
-  `swe_calc_pctr_r` / `swe_nod_aps_r` (which take ET) for centered and
-  node/apsis requests, converting a UT instant with `swe_deltat_ex_r`
-  (§4.4 is the detail).
+The rest of this document -- the server's shape, its operations, its gates
+-- stands as written; where it says "protocol v3" or names a version 3
+field, read §3 of EPHEMERIS_PLUGINS_PLAN.md.
 
 ## 5. Server architecture
 
@@ -628,6 +472,19 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
 (Entries append here, newest last.)
 
 ## Work log
+
+0. **The server moved to protocol version 4 (2026-09-17).** §4 above is now
+   a pointer to EPHEMERIS_PLUGINS_PLAN.md §3, which is the protocol, and
+   `ephsrv/ephproto.h` is its codec (the version 3 header of that name is
+   gone; what is left of version 3 in the code is the refusal an older
+   client can read). The server speaks only 4: per-object profiles,
+   NAIF/SPK-ID bodies and typed extras, two-part Julian instants, capability
+   TLVs in WELCOME, LOOKUP, CANCEL, per-object A.17 errors, the ayanamsa and
+   delta T columns, a datasetId every cache key carries. Its operational
+   half -- TLS, SIGHUP, the drain, /healthz /readyz /metrics, the connection
+   caps, tokens, cell budgets, the logfmt log -- is unchanged, and its gates
+   went with it (EPHEMERIS_PLUGINS_PLAN.md work log item 2 has the detail
+   and the measurements).
 
 1. **Round 1 landed: the server, its wire client, and both gates.** The
    protocol of §4 became ephsrv/ephproto.h (bounds-checked Writer/Reader,

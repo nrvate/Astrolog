@@ -86,9 +86,17 @@ docker stop -t 15 ephd       # drains, then exits 0
   drains? No -- the server refuses a port another server is listening on.
   Stop (drains, clients reconnect on their own), replace, start.
 - **Logs**: stdout, one logfmt line an event -- see "Logs" below.
-- **Clients**: an Astrolog whose protocol is older than the server's oldest
-  (`kProtoMin`) is told to update and stops retrying; an older server than
-  a client speaks gets the client's retry ladder.
+- **Clients**: the protocol is **version 4** (EPHEMERIS_PLUGINS_PLAN.md §3;
+  `ephsrv/ephproto.h` is the codec both ends compile). The server speaks
+  only 4 -- `kProtoMin` and `kProtoVersion` are both 4. An Astrolog older
+  than that is answered ERROR 8 in its own layout, told to update, and stops
+  retrying; a server older than the client speaks gets the client's retry
+  ladder. What WELCOME advertises is what the server will do: the object
+  kinds, observers, planes, forms, frames, correction masks, zodiacs,
+  sidereal planes, time scales, extra columns and hypothetical bodies it
+  serves, its limits, its delta T model, and its **datasetId**, which
+  changes whenever an answer could and which every client cache is keyed
+  on. `GET /metrics` reports errors by the version 4 code (A.19).
 
 ## Pointing Astrolog at a server
 

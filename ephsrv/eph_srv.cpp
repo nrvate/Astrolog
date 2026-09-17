@@ -3,8 +3,9 @@
 // Implements EPHEMERIS_SERVER_PLAN.md Part I sections 2-8 and 11: a uWS App
 // per event-loop thread (kernel SO_REUSEPORT balances accepts), a private
 // slice of the Swiss Ephemeris thread-safe fork's context pool per loop,
-// the packed binary protocol of ephproto.h, heartbeats, and zero-
-// configuration ephemeris path discovery. One thread at a time per swe_ctx;
+// protocol version 4 (ephproto.h; EPHEMERIS_PLUGINS_PLAN.md section 3 is its
+// specification, ephswiss.h the mapping of its questions to Swiss calls),
+// heartbeats, and zero-configuration ephemeris path discovery. One thread at a time per swe_ctx;
 // per-request configuration uses ONLY the _r scoped setters; swe_close() is
 // never called and no ephemeris fallback exists (the fork's strict default;
 // swe_set_ephe_fallback is deliberately never called).
@@ -12,9 +13,9 @@
 // Sections in this file:
 //   1. startup options (plan 11)
 //   2. ephemeris path discovery (plan 6, 7) -- standalone, no engine code
-//   3. request execution (plan 5) -- one swe_ctx per request, pure function,
-//      answered from the loop's result cache when the same question was
-//      asked before (eph_cache.h)
+//   3. request execution -- profiles and objects to Swiss calls, a pure
+//      function answered from the loop's result cache when the same
+//      question was asked of the same dataset before (eph_cache.h); LOOKUP
 //   4. loop wiring -- uWS App, per-loop state, message handlers, backpressure
 //   5. heartbeats -- uWS protocol pings on a 30 s idle timeout (plan 4.7)
 //   6. TLS -- certificate checks at startup, reload on SIGHUP
@@ -29,6 +30,7 @@
 
 #include "ephproto.h"
 #include "eph_cache.h"
+#include "ephswiss.h"
 
 #include <App.h>
 
@@ -49,6 +51,8 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
@@ -70,6 +74,19 @@ using uWS::WebSocket;
 // 1. Startup options (plan 11)
 // ---------------------------------------------------------------------------
 
+// The limits WELCOME advertises (EPHEMERIS_PLUGINS_PLAN.md 3.4): objects,
+// rows and profiles a REQUEST, rows a DATA chunk, bytes a message, and the
+// matches a LOOKUP. --max-cells sets maxCells.
+static const uint32_t kMaxObjs = 64, kMaxRows = 20000, kMaxChunkRows = 500;
+static const uint32_t kMaxPayload = 4u * 1024u * 1024u;
+static const uint32_t kMaxCellsDefault = 100000;
+static const uint8_t kMaxProfiles = 16;
+static const uint16_t kLookupMax = 32;
+static const int kErrMax = eph::kErrDraining;   // the highest A.19 code
+// The extra columns (A.10) served: the ayanamsa applied and the delta T
+// used. Not sigma (Swiss has none) nor light time.
+static const uint32_t kColumnsServed = eph::kColAyanamsa | eph::kColDeltaT;
+
 // Log levels, most severe first: a line is written when its level is at or
 // above --log-level's.
 enum LogLevel { kLogError = 0, kLogWarn = 1, kLogInfo = 2, kLogDebug = 3 };
@@ -79,7 +96,7 @@ struct Options {
   uint16_t port = eph::kDefaultPort;
   int threads = (int)std::thread::hardware_concurrency();
   uint32_t cacheMb = 256;      // result cache, TOTAL across loops; 0 disables
-  uint32_t maxCells = eph::kMaxCellsDefault;  // objects x rows per REQUEST
+  uint32_t maxCells = kMaxCellsDefault;  // objects x rows per REQUEST
   std::string ephe;            // --ephe, may be ';'-joined
   int logLevel = kLogInfo;     // --log-level; --verbose is debug
   bool logContents = false;    // --log-contents: what each REQUEST asked
@@ -601,50 +618,54 @@ static EphDiscovery DiscoverEphemDirs() {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Request execution (plan 5)
+// 3. Request execution (EPHEMERIS_PLUGINS_PLAN.md 3.4-3.5, Appendix B)
 //
-// A request is a pure function of its payload: build its canonical key,
-// answer from the loop's result cache if it has been asked before, else for
-// each time row and object call the thread-safe fork on one private
-// context and store the result. A per-row failure is recorded as NaN in
-// that row's columns, with the first failed row's serr in the object's
-// metadata, and never fails the request; a whole-request failure is
-// ERROR 5 with the SWE serr text
-// (plan 4.7). Per-request configuration uses only the _r scoped setters.
+// A request is a pure function of its question block: look it up in the
+// loop's result cache under datasetId + those bytes (3.7), else map each
+// object through its profile to a Swiss call (ephswiss.h), make that call
+// for every row on the loop's one context, and store the answer. A row that
+// fails is NaN in every column and never fails the object; an object whose
+// rows all fail carries its error in META and never fails the request
+// (3.5). Per-request configuration -- sidereal mode, topocentric site --
+// uses only the fork's _r scoped setters, set per object, since two objects
+// of one request may sit in different profiles.
 // ---------------------------------------------------------------------------
 
 struct LoopCtx;   // 4.
 
-// One completed request awaiting/chunk-streaming to its client.
+// One answer awaiting, or streaming to, its client.
 struct Stream {
   uint32_t requestId = 0;
   uint8_t precision = eph::kPrecF64;
+  bool fIgnoredExt = false;     // DATA chunkFlags bit 1
   uint32_t nObj = 0, nTimeRows = 0, chunkRows = 0;
   uint32_t nextRow = 0;         // next row to send
   uint32_t chunkIndex = 0;
-  // The computed columns (object-major nObj*nTimeRows*6 f64) and the nObj
-  // metadata records, shared with the loop's result cache: a hit hands
+  // The computed answer, shared with the loop's result cache: a hit hands
   // out the cached entry, a miss the one just computed and inserted. The
   // stream keeps the entry alive however the cache turns over meanwhile.
   std::shared_ptr<const eph::CacheEntry> result;
-  std::vector<uint8_t> buf;     // chunk scratch, sized once, reused
+  std::vector<uint8_t> buf;     // chunk scratch, reused
   // For the request's log line, written as its last chunk goes out.
   std::chrono::steady_clock::time_point tReq;  // REQUEST received
   double computeMs = 0.0;       // 0 on a cache hit
   bool fHit = false;
   uint32_t stalls = 0;          // times it waited for the client to read
   uint64_t bytes = 0;           // DATA bytes sent
+  uint32_t nProfiles = 0;
+  uint8_t timeMode = 0, timeScale = 0, priority = 0;
   std::string contents;         // --log-contents only: what was asked
   bool fLogged = false;
 };
 
 struct Conn {
   std::deque<Stream> out;       // completed streams, FIFO
-  // Protocol 3. proto is the session's version, fixed by HELLO; 0 before
-  // it, when only HELLO is served. addr is the peer's address as text;
-  // budget is what the cell budget is keyed on -- "t:" and the token when
-  // HELLO gave a known one, "a:" and the address otherwise.
+  // proto is the session's version, fixed by the first HELLO; 0 before it,
+  // when only HELLO and PING are served. addr is the peer's address as
+  // text; budget is what the cell budget is keyed on -- "t:" and the token
+  // when HELLO gave a known one, "a:" and the address otherwise.
   uint8_t proto = 0;
+  uint32_t clientCaps = 0;
   std::chrono::steady_clock::time_point tOpen = std::chrono::steady_clock::now();
   std::string addr;
   std::string budget;
@@ -653,9 +674,10 @@ struct Conn {
   // said the client is, and the connection's totals for its close line.
   uint64_t id = 0;
   int loop = -1;
-  std::string client;           // HELLO's version string
+  std::string client;           // HELLO's clientName
   uint32_t hellos = 0;
   uint64_t reqs = 0, hits = 0, cells = 0, errors = 0, bytesOut = 0;
+  uint64_t lookups = 0, cancels = 0;
 
   // The place is released when the Conn goes, however it goes -- a client
   // that drops between the upgrade and open never reaches the close handler.
@@ -663,11 +685,12 @@ struct Conn {
   // socket and then destroys the original.
   Conn() = default;
   Conn(Conn &&o) noexcept
-    : out(std::move(o.out)), proto(o.proto), tOpen(o.tOpen),
+    : out(std::move(o.out)), proto(o.proto), clientCaps(o.clientCaps), tOpen(o.tOpen),
       addr(std::move(o.addr)), budget(std::move(o.budget)),
       fCountedAddr(o.fCountedAddr), id(o.id), loop(o.loop),
       client(std::move(o.client)), hellos(o.hellos), reqs(o.reqs),
-      hits(o.hits), cells(o.cells), errors(o.errors), bytesOut(o.bytesOut) {
+      hits(o.hits), cells(o.cells), errors(o.errors), bytesOut(o.bytesOut),
+      lookups(o.lookups), cancels(o.cancels) {
     o.fCountedAddr = false;
   }
   Conn &operator=(Conn &&) = delete;
@@ -678,139 +701,420 @@ struct Conn {
 // sends requests and never reads used to make the server compute and hold
 // every one -- 60 MB of columns for each 64-body 20000-row window, kept
 // alive by its stream after the cache let it go -- so past this many the
-// request is refused with ERROR 2 before anything is computed.
+// next request is refused with ERROR 9 (busy, retryable) before anything
+// is computed.
 static const size_t kMaxQueuedStreams = 4;
 
 // Bytes a connection may have buffered unsent before its DATA chunks wait
 // for drain. Applied here rather than as uWS's maxBackpressure; see
-// SetupLoop.
+// WireApp.
 static const unsigned kStreamBackpressure = 4 * 1024 * 1024;
 
-// Server version string for WELCOME.
-static const char kServerVersion[] = "astrolog-ephd/1.0";
+// Server name for WELCOME: 2.0 is the first to speak protocol 4.
+static const char kServerVersion[] = "astrolog-ephd/2.0";
 
-// Pack SWE version "2.10.03-ts.10" into major*10000+minor*100+patch.
-static uint32_t PackSweVersion(const char *szVersion) {
-  int a = 0, b = 0, c = 0;
-  if (sscanf(szVersion, "%d.%d.%d", &a, &b, &c) != 3) return 0;
-  return (uint32_t)(a * 10000 + b * 100 + c);
+// The one source this server has, META's sourceIdx 0: the shape 3.4 gives,
+// <engine> | <ephemeris> | <model>, filled in by BuildWelcome().
+static std::string gSource = "astrolog-ephd 2.0 | Swiss Ephemeris | files";
+
+// WELCOME's payload, the same for every connection: built once in main()
+// from the limits and the dataset, after the ephemeris path is known.
+static std::string gDatasetId;
+static std::string gEngine;
+static std::vector<uint8_t> gWelcome;
+static eph::Capabilities gCaps;
+
+// Swiss's text is Latin-1 in places (asteroid names from seasnam.txt), and
+// a str8 must be UTF-8 without controls (3.1): the bytes that are not are
+// '?'. At most 255 bytes, cut on a character boundary.
+static std::string WireText(const char *sz) {
+  std::string s;
+  for (const unsigned char *p = (const unsigned char *)sz; *p && s.size() < 255; p++)
+    s += (*p >= 0x20 && *p < 0x7F) ? (char)*p : '?';
+  return s;
 }
 
-// Apply the per-request configuration triplets to ctx using ONLY the _r
-// scoped setters (never the process-global forms; concurrent requests with
-// different sidereal/topocentric settings must not interfere). Stale
-// settings are harmless: SWE consults each only when the matching iflag bit
-// is set on the call.
-//
-// The JPL file is set only when it changes (EPHEMERIS_REVIEW.md S12):
-// swe_set_jpl_file_r() closes every file the context has open and rebuilds
-// its delta-t and leap-second tables on each call, so a JPL request for
-// every row of a long animation paid that per request. A loop's pool holds
-// one context, so the name of its open JPL file is loop state; a request
-// naming a different file pays the close once. A file left open across
-// requests is read only by calls that name it (SWIEPH's delta-t comes from
-// the moon file, ctx->fidat[SEI_FILE_MOON]), so no later answer moves.
-static void ApplyRequestConfig(swe_ctx *ctx, std::string *pjplOpen,
-                               const eph::Request &req) {
-  if (req.iflag & SEFLG_SIDEREAL)
-    swe_set_sid_mode_r(ctx, (int32_t)req.sidMode, req.sidT0, req.sidAyanOff);
-  if (req.iflag & SEFLG_TOPOCTR)
-    swe_set_topo_r(ctx, req.topoLon, req.topoLat, req.topoElv);
-  if (req.iflag & SEFLG_JPLEPH && *pjplOpen != req.jplFile) {
-    swe_set_jpl_file_r(ctx, req.jplFile);
-    *pjplOpen = req.jplFile;
-  }
-}
-
-// Compute one (object, row) cell. Returns the SWE return flag; on failure
-// serr is filled. kind 0 bodies go through swe_calc / swe_calc_pctr when
-// the request names a center body; kind 1 fixed stars through swe_fixstar
-// (which also resolves the name in place); kind 2 through swe_nod_aps.
-//
-// The instant is UT unless the request carries kIflagTimeTT, in which case
-// it is TT and the ET entry points get it exactly as sent (ephproto.h says
-// why). swe_calc_pctr_r and swe_nod_aps_r have no UT form of their own
-// that this uses: a UT instant is converted with swe_deltat_ex_r, the
-// same conversion swe_calc_ut_r makes -- the first increment handed
-// swe_calc_pctr_r the UT instant unconverted, which was a delta-t of
-// error on every centered request.
-static int32_t ComputeCell(swe_ctx *ctx, const eph::Request &req,
-                           const eph::ObjSpec &obj, double jd,
-                           uint32_t iflag, double xx[6], char *serr,
-                           const char **pName, char *nameBuf, size_t nameCap) {
-  serr[0] = '\0';
-  *pName = nullptr;
-  const bool fTT = (req.iflag & eph::kIflagTimeTT) != 0;
-  const bool fCenter = (req.iflag & eph::kIflagCenter) != 0 || req.center != 0;
-  // The ET instant, for the entry points that take one.
-  auto jdEt = [&]() -> double {
-    return fTT ? jd : jd + swe_deltat_ex_r(ctx, jd, (int32_t)iflag, nullptr);
-  };
-  if (obj.kind == eph::kObjStar) {
-    if (fCenter) {
-      // No pctr form exists for fixed stars; say so rather than guess.
-      snprintf(serr, 256, "center body not supported for fixed stars");
-      return -1;
-    }
-    snprintf(nameBuf, nameCap, "%s", obj.name);
-    int32_t ret = fTT ?
-      swe_fixstar_r(ctx, nameBuf, jd, (int32_t)iflag, xx, serr) :
-      swe_fixstar_ut_r(ctx, nameBuf, jd, (int32_t)iflag, xx, serr);
-    if (ret >= 0) *pName = nameBuf;   // resolved full star name
-    return ret;
-  }
-  int32_t ret;
-  if (obj.kind == eph::kObjNodAps) {
-    if (fCenter) {
-      snprintf(serr, 256, "center body not supported for nodes and apsides");
-      return -1;
-    }
-    double xnasc[6], xndsc[6], xperi[6], xaphe[6];
-    int32_t method = obj.method == eph::kNodOscu ? SE_NODBIT_OSCU : SE_NODBIT_MEAN;
-    ret = swe_nod_aps_r(ctx, jdEt(), (int32_t)obj.id, (int32_t)iflag, method,
-                        xnasc, xndsc, xperi, xaphe, serr);
-    if (ret >= 0) {
-      const double *px = obj.point == eph::kPntNorthNode ? xnasc :
-                         obj.point == eph::kPntSouthNode ? xndsc :
-                         obj.point == eph::kPntPerihelion ? xperi : xaphe;
-      for (int c = 0; c < 6; c++) xx[c] = px[c];
-      ret = (int32_t)iflag;   // swe_nod_aps_r returns OK, not the flags
-    }
-  } else if (fCenter) {
-    ret = swe_calc_pctr_r(ctx, jdEt(), (int32_t)obj.id, req.center, (int32_t)iflag, xx, serr);
-  } else if (fTT) {
-    ret = swe_calc_r(ctx, jd, (int32_t)obj.id, (int32_t)iflag, xx, serr);
+// A.17 and its text, from a Swiss error message. 3.8 covers META's errText
+// as well as ERROR's: it never quotes instants, places or coordinates, and
+// Swiss's messages routinely name the instant ("jd 2597700.5 outside
+// ephemeris range"). So the class is read off the message and the text is
+// this server's own fixed phrase for that class, plus the file name where
+// Swiss named one (a file name is not a request's contents).
+static uint16_t ObjErrOf(const char *serr, bool fStar, std::string *pText) {
+  uint16_t code;
+  const char *szPhrase;
+  if (strstr(serr, "outside") || strstr(serr, "range") || strstr(serr, "beyond")) {
+    code = eph::kOErrCoverage;
+    szPhrase = "the instant is outside this ephemeris's coverage";
+  } else if (fStar && (strstr(serr, "not found") || strstr(serr, "could not find"))) {
+    code = eph::kOErrUnknownBody;
+    szPhrase = "no star of that name in the catalogue";
+  } else if (strstr(serr, "not found") || strstr(serr, "file") || strstr(serr, "open")) {
+    code = eph::kOErrDataMissing;
+    szPhrase = "the ephemeris file for this body is not on the server's path";
+  } else if (strstr(serr, "not implemented") || strstr(serr, "illegal")) {
+    code = eph::kOErrUnsupported;
+    szPhrase = "this engine does not compute this body or point";
   } else {
-    ret = swe_calc_ut_r(ctx, jd, (int32_t)obj.id, (int32_t)iflag, xx, serr);
+    code = eph::kOErrNumerical;
+    szPhrase = "the engine could not compute this object";
   }
-  if (ret >= 0) {
-    // AS_MAXCH, the fork's contract: a name from seasnam.txt or
-    // seorbel.txt is copied in with strcpy at up to that length.
-    char nm[AS_MAXCH];
-    swe_get_planet_name_r(ctx, (int)obj.id, nm);
-    snprintf(nameBuf, nameCap, "%.*s", (int)nameCap - 1, nm);
-    *pName = nameBuf;
+  *pText = szPhrase;
+  // The file Swiss named, if it named one: se00433.se1, sepl_18.se1 and the
+  // like. Nothing else of the message is carried.
+  const char *q = strstr(serr, ".se1");
+  if (q != nullptr) {
+    const char *start = q;
+    while (start > serr && (isalnum((unsigned char)start[-1]) || start[-1] == '_')) start--;
+    *pText += " (";
+    pText->append(start, (size_t)(q + 4 - start));
+    *pText += ")";
   }
-  return ret;
+  return code;
 }
 
-// Execute one REQUEST into a Stream. Returns false for a whole-request
-// failure and fills errCode/errText (plan 4.6/4.7). The only whole-request
-// failure is the missing-ephemeris-path case: with no ephemeris directory
-// found at startup and SEFLG_SWIEPH forced, every object would fail with
-// the same file-not-found serr, so the first probe's serr becomes the
-// request-level ERROR 5 text and nothing is streamed.
-static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
-                           Stream *stream, int32_t *errCode,
-                           std::string *errText);
+// ---- LOOKUP's catalogue (3.4) ------------------------------------------------
+//
+// A modest resolver: the bodies Swiss serves by name, the Moon's named
+// points, the A.15 hypotheticals, numbered asteroids by number, and fixed
+// stars through Swiss's own catalogue. Only what this server can answer is
+// listed, so every match is something a REQUEST can ask.
+struct NamedObject {
+  const char *name;          // canonical
+  const char *aliases;       // '|'-separated, may be ""
+  const char *designation;   // "" when none
+  uint8_t kind;
+  int32_t naif;
+  uint8_t point, method;
+  const char *token;         // hypotheticals
+};
+
+static const NamedObject kCatalogue[] = {
+  {"Sun", "Sol", "", eph::kObjBody, 10, 0, 0, nullptr},
+  {"Moon", "Luna", "", eph::kObjBody, 301, 0, 0, nullptr},
+  {"Mercury", "", "", eph::kObjBody, 199, 0, 0, nullptr},
+  {"Venus", "", "", eph::kObjBody, 299, 0, 0, nullptr},
+  {"Earth", "", "", eph::kObjBody, 399, 0, 0, nullptr},
+  {"Mars", "", "", eph::kObjBody, 4, 0, 0, nullptr},
+  {"Jupiter", "", "", eph::kObjBody, 5, 0, 0, nullptr},
+  {"Saturn", "", "", eph::kObjBody, 6, 0, 0, nullptr},
+  {"Uranus", "", "", eph::kObjBody, 7, 0, 0, nullptr},
+  {"Neptune", "", "", eph::kObjBody, 8, 0, 0, nullptr},
+  {"Pluto", "", "134340", eph::kObjBody, 9, 0, 0, nullptr},
+  {"Ceres", "", "1", eph::kObjBody, 20000001, 0, 0, nullptr},
+  {"Pallas", "Pallas Athene", "2", eph::kObjBody, 20000002, 0, 0, nullptr},
+  {"Juno", "", "3", eph::kObjBody, 20000003, 0, 0, nullptr},
+  {"Vesta", "", "4", eph::kObjBody, 20000004, 0, 0, nullptr},
+  {"Chiron", "", "2060", eph::kObjBody, 20002060, 0, 0, nullptr},
+  {"Pholus", "", "5145", eph::kObjBody, 20005145, 0, 0, nullptr},
+  {"Lilith", "", "1181", eph::kObjBody, 20001181, 0, 0, nullptr},
+  {"Moon mean node", "Mean Node|North Node|Rahu", "", eph::kObjOrbitPoint, 301,
+   eph::kPtAscNode, eph::kMethMean, nullptr},
+  {"Moon true node", "True Node", "", eph::kObjOrbitPoint, 301, eph::kPtAscNode,
+   eph::kMethOsculating, nullptr},
+  {"Moon mean descending node", "South Node|Ketu", "", eph::kObjOrbitPoint, 301,
+   eph::kPtDescNode, eph::kMethMean, nullptr},
+  {"Moon mean apogee", "Lilith|Black Moon Lilith|Mean Apogee", "", eph::kObjOrbitPoint, 301,
+   eph::kPtApo, eph::kMethMean, nullptr},
+  {"Moon osculating apogee", "True Lilith|Osculating Apogee", "", eph::kObjOrbitPoint, 301,
+   eph::kPtApo, eph::kMethOsculating, nullptr},
+  {"Moon interpolated apogee", "Natural Apogee|Interpolated Apogee", "", eph::kObjOrbitPoint, 301,
+   eph::kPtApo, eph::kMethInterpolated, nullptr},
+  {"Moon interpolated perigee", "Natural Perigee|Priapus|Interpolated Perigee", "",
+   eph::kObjOrbitPoint, 301, eph::kPtPeri, eph::kMethInterpolated, nullptr},
+  {"Cupido", "", "", eph::kObjHypothetical, 0, 0, 0, "cupido"},
+  {"Hades", "", "", eph::kObjHypothetical, 0, 0, 0, "hades"},
+  {"Zeus", "", "", eph::kObjHypothetical, 0, 0, 0, "zeus"},
+  {"Kronos", "", "", eph::kObjHypothetical, 0, 0, 0, "kronos"},
+  {"Apollon", "", "", eph::kObjHypothetical, 0, 0, 0, "apollon"},
+  {"Admetos", "", "", eph::kObjHypothetical, 0, 0, 0, "admetos"},
+  {"Vulcanus", "", "", eph::kObjHypothetical, 0, 0, 0, "vulcanus"},
+  {"Poseidon", "", "", eph::kObjHypothetical, 0, 0, 0, "poseidon"},
+  {"Isis-Transpluto", "Transpluto|Isis", "", eph::kObjHypothetical, 0, 0, 0, "isis-transpluto"},
+  {"Nibiru", "", "", eph::kObjHypothetical, 0, 0, 0, "nibiru"},
+  {"Harrington", "", "", eph::kObjHypothetical, 0, 0, 0, "harrington"},
+  {"Leverrier's Neptune", "", "", eph::kObjHypothetical, 0, 0, 0, "neptune-leverrier"},
+  {"Adams's Neptune", "", "", eph::kObjHypothetical, 0, 0, 0, "neptune-adams"},
+  {"Lowell's Pluto", "", "", eph::kObjHypothetical, 0, 0, 0, "pluto-lowell"},
+  {"Pickering's Pluto", "", "", eph::kObjHypothetical, 0, 0, 0, "pluto-pickering"},
+  {"Vulcan", "", "", eph::kObjHypothetical, 0, 0, 0, "vulcan"},
+  {"White Moon", "Selena", "", eph::kObjHypothetical, 0, 0, 0, "white-moon"},
+  {"Proserpina", "", "", eph::kObjHypothetical, 0, 0, 0, "proserpina"},
+  {"Waldemath", "Dark Moon|Dark Moon Lilith", "", eph::kObjHypothetical, 0, 0, 0, "waldemath"},
+};
+
+static bool EqNoCase(const std::string &a, const char *b, size_t n) {
+  if (a.size() != n) return false;
+  for (size_t i = 0; i < n; i++)
+    if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) return false;
+  return true;
+}
+static bool PrefixNoCase(const std::string &q, const char *b, size_t n) {
+  if (q.size() > n) return false;
+  for (size_t i = 0; i < q.size(); i++)
+    if (tolower((unsigned char)q[i]) != tolower((unsigned char)b[i])) return false;
+  return true;
+}
+
+static eph::Object ObjectOf(const NamedObject &n) {
+  eph::Object o;
+  o.kind = n.kind;
+  o.naif = n.naif;
+  o.point = n.point;
+  o.method = n.method;
+  if (n.token) o.name = n.token;
+  return o;
+}
+
+// The matches for a query, best first (3.4 LOOKUP_RESULT order: quality,
+// then catalogue order), at most cMax; *pfMore when more exist. flags as
+// LOOKUP's: bit 0 prefix, bit 1 hypotheticals, bit 2 stars.
+static void Resolve(swe_ctx *ctx, const std::string &query, uint8_t flags, size_t cMax,
+                    std::vector<eph::Match> *out, bool *pfMore) {
+  std::vector<eph::Match> byQuality[3];
+  auto add = [&](int q, const eph::Object &o, const std::string &name, const char *desig) {
+    eph::Match m;
+    m.quality = (uint8_t)q;
+    m.sourceIdx = 0;
+    m.obj = o;
+    m.canonicalName = name;
+    m.designation = desig ? desig : "";
+    byQuality[q].push_back(std::move(m));
+  };
+  bool fDigits = !query.empty() && query.size() <= 9;
+  for (char ch : query) fDigits = fDigits && ch >= '0' && ch <= '9';
+  bool fCatalogued = false;
+  for (const NamedObject &n : kCatalogue) {
+    if (n.kind == eph::kObjHypothetical && !(flags & 2)) continue;
+    int q = -1;
+    if (EqNoCase(query, n.name, strlen(n.name))) q = 0;
+    else if (*n.designation && EqNoCase(query, n.designation, strlen(n.designation))) q = 1;
+    for (const char *p = n.aliases; q < 0 && *p;) {
+      const char *bar = strchr(p, '|');
+      size_t len = bar ? (size_t)(bar - p) : strlen(p);
+      if (EqNoCase(query, p, len)) q = 1;
+      p = bar ? bar + 1 : p + len;
+    }
+    if (q < 0 && (flags & 1)) {
+      if (PrefixNoCase(query, n.name, strlen(n.name))) q = 2;
+      for (const char *p = n.aliases; q < 0 && *p;) {
+        const char *bar = strchr(p, '|');
+        size_t len = bar ? (size_t)(bar - p) : strlen(p);
+        if (PrefixNoCase(query, p, len)) q = 2;
+        p = bar ? bar + 1 : p + len;
+      }
+    }
+    if (q < 0) continue;
+    if (q == 1 && *n.designation && EqNoCase(query, n.designation, strlen(n.designation)))
+      fCatalogued = true;
+    add(q, ObjectOf(n), n.name, n.designation);
+  }
+  if (fDigits && !fCatalogued) {
+    long num = atol(query.c_str());
+    if (num > 0 && (int64_t)SE_AST_OFFSET + num <= (0x7FFFFFFF - 9099) / 100) {
+      eph::Object o;
+      o.kind = eph::kObjBody;
+      o.naif = 20000000 + (int32_t)num;
+      char nm[AS_MAXCH] = "";
+      swe_get_planet_name_r(ctx, SE_AST_OFFSET + (int)num, nm);
+      add(1, o, WireText(nm), query.c_str());
+    }
+  }
+  if ((flags & 4) && !fDigits && query.size() < SE_MAX_STNAME - 1) {
+    char star[SE_MAX_STNAME * 2] = "", serr[AS_MAXCH] = "";
+    double xx[6];
+    snprintf(star, sizeof(star), "%s", query.c_str());
+    // Swiss's catalogue reads names with ',' as "traditional,Bayer" and a
+    // leading ',' as a designation; a query with its own ',' is left to it.
+    if (swe_fixstar2_r(ctx, star, 2451545.0, SEFLG_SWIEPH, xx, serr) >= 0) {
+      eph::Object o;
+      o.kind = eph::kObjStar;
+      o.name = query;
+      add(PrefixNoCase(query, star, strlen(star)) ? 0 : 1, o, WireText(star), nullptr);
+    }
+  }
+  out->clear();
+  *pfMore = false;
+  for (auto &list : byQuality)
+    for (eph::Match &m : list) {
+      if (out->size() >= cMax) { *pfMore = true; return; }
+      out->push_back(std::move(m));
+    }
+}
+
+// Kind 5: "resolved as an exact LOOKUP" (3.5) -- quality 0 or 1, the
+// hypotheticals included, stars not. More than one is error 6, none 1.
+static uint16_t ResolveDesignation(swe_ctx *ctx, const eph::Object &o, eph::Object *pout,
+                                   std::string *pwhy) {
+  std::vector<eph::Match> m;
+  bool fMore;
+  Resolve(ctx, o.name, 2, 8, &m, &fMore);
+  while (!m.empty() && m.back().quality > 1) m.pop_back();
+  if (m.empty()) { *pwhy = "designation not found"; return eph::kOErrUnknownBody; }
+  if (m.size() > 1) { *pwhy = "designation names more than one object"; return eph::kOErrAmbiguous; }
+  *pout = m[0].obj;
+  pout->profile = o.profile;
+  return eph::kOErrNone;
+}
+
+// One object of a request into its rows of the entry (3.5 columns): the
+// base six, then the extra columns present in bit order -- ayanamsa (the
+// profile's, 0 tropical) and the delta T used, in seconds.
+static void ComputeObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
+                          eph::CacheEntry *e) {
+  const eph::Profile &pf = req.profiles[req.objs[iObj].profile];
+  eph::Meta &m = e->meta[iObj];
+  const uint32_t nTime = e->nTimeRows, nCols = e->nCols;
+  double *dst0 = e->cols.data() + (size_t)iObj * nTime * nCols;
+  eph::swiss::SwissCall c;
+  eph::Object ob = req.objs[iObj];
+  std::string why;
+  uint16_t err = eph::kOErrNone;
+
+  m.sourceIdx = 0;
+  if (ob.kind == eph::kObjDesignation)
+    err = ResolveDesignation(ctx, ob, &ob, &why);
+  if (!err && ob.kind == eph::kObjElements) {
+    err = eph::kOErrUnsupported;
+    why = "orbital elements are not served by this server";
+  }
+  if (!err)
+    // nNative 0: this end answers the wire, and the wire has no native ids
+    // (ephswiss.h). Astrolog's own local plugin is the caller that passes one.
+    err = eph::swiss::MapObject(ob, 0, pf, req.timeScale, req.deltaTSec, SEFLG_SWIEPH, &c, &why);
+  if (err) {
+    for (size_t i = 0; i < (size_t)nTime * nCols; i++) dst0[i] = NAN;
+    m.errCode = err;
+    m.errText = WireText(why.c_str());
+    m.firstFailedRow = 0;
+    m.name = WireText(ob.name.c_str());
+    return;
+  }
+  m.resolvedNaif = c.resolvedNaif;
+  if (c.fApproximated) m.flags |= eph::kMetaApproximated;
+  if (!pf.speeds) m.flags |= eph::kMetaNoSpeeds;
+  if (c.fSidereal) swe_set_sid_mode_r(ctx, c.sidMode, c.sidT0, c.sidAyanT0);
+  if (c.fTopo) swe_set_topo_r(ctx, c.topo[0], c.topo[1], c.topo[2]);
+  const bool fRect = pf.form == eph::kFormRectangular;
+  // 3.5a: Swiss's rates are its own analytic derivatives and differ from
+  // central differences of its positions by more than the tolerance (the
+  // rates-bound capability says by how much), so every object with speeds
+  // says so.
+  if (pf.speeds) m.flags |= eph::kMetaRatesApprox;
+  char serr[AS_MAXCH], star[SE_MAX_STNAME * 2];
+  bool fNamed = false;
+  for (uint32_t r = 0; r < nTime; r++) {
+    eph::Time t = req.RowTime(r);
+    // 3.5: an engine that takes one double evaluates jd1 + jd2, and RowTime
+    // put the row's offset into jd2 first.
+    double jd = t.jd1 + t.jd2;
+    // 3.5: the row's delta T -- the request's table, else its one value,
+    // else NaN, which is this server's own model (swe_deltat_ex_r).
+    const double dtRow = req.DeltaTAt(r);
+    const bool fDtGiven = std::isfinite(dtRow);
+    // The TT instant, for the entry points that have no UT form here.
+    auto jdEt = [&]() -> double {
+      if (!c.fUT && !c.fAddDeltaT) return jd;   // the instant is TT already
+      if (fDtGiven) return jd + dtRow / 86400.0;
+      return jd + swe_deltat_ex_r(ctx, jd, SEFLG_SWIEPH, nullptr);
+    };
+    double xx[6];
+    int32_t ret = -1;
+    serr[0] = '\0';
+    switch (c.kind) {
+      case eph::swiss::kCallCalc:
+        ret = c.fUT && !fDtGiven ? swe_calc_ut_r(ctx, jd, c.ipl, c.iflag, xx, serr)
+                                 : swe_calc_r(ctx, jdEt(), c.ipl, c.iflag, xx, serr);
+        break;
+      case eph::swiss::kCallPctr:
+        ret = swe_calc_pctr_r(ctx, jdEt(), c.ipl, c.iplCenter, c.iflag, xx, serr);
+        break;
+      case eph::swiss::kCallNodAps: {
+        double xn[6], xd[6], xp[6], xa[6];
+        ret = c.fUT && !fDtGiven
+                ? swe_nod_aps_ut_r(ctx, jd, c.ipl, c.iflag, c.nodMethod, xn, xd, xp, xa, serr)
+                : swe_nod_aps_r(ctx, jdEt(), c.ipl, c.iflag, c.nodMethod, xn, xd, xp, xa, serr);
+        const double *px = c.point == 0 ? xn : c.point == 1 ? xd : c.point == 2 ? xp : xa;
+        if (ret >= 0) memcpy(xx, px, sizeof(xx));
+        break;
+      }
+      case eph::swiss::kCallFixstar:
+        snprintf(star, sizeof(star), "%s", c.star.c_str());
+        ret = c.fUT && !fDtGiven ? swe_fixstar2_ut_r(ctx, star, jd, c.iflag, xx, serr)
+                                 : swe_fixstar2_r(ctx, star, jdEt(), c.iflag, xx, serr);
+        break;
+      default:
+        snprintf(serr, sizeof(serr), "unsupported call");
+        break;
+    }
+    double *dst = dst0 + (size_t)r * nCols;
+    if (ret < 0) {
+      for (uint32_t k = 0; k < nCols; k++) dst[k] = NAN;
+      if (m.firstFailedRow == eph::kRowNone) {
+        std::string text;
+        m.firstFailedRow = r;
+        m.errCode = ObjErrOf(serr, c.kind == eph::swiss::kCallFixstar, &text);
+        m.errText = WireText(text.c_str());
+      }
+      continue;
+    }
+    if (c.fOpposite) {
+      // The descending node of a named node body: the point opposite.
+      if (fRect) {
+        for (int k = 0; k < 6; k++) xx[k] = -xx[k];
+      } else {
+        xx[0] = swe_degnorm(xx[0] + 180.0);
+        xx[1] = -xx[1];
+        xx[4] = -xx[4];
+      }
+    }
+    if (!pf.speeds) xx[3] = xx[4] = xx[5] = 0.0;
+    // 3.5a: a star whose catalogue entry has no parallax has no distance.
+    // Swiss answers 1e9 AU for one (sweph.c's rdist), light time and
+    // aberration moving it a little; anything past 1e8 AU is that placeholder.
+    if (c.kind == eph::swiss::kCallFixstar && !fRect && xx[2] > 1e8)
+      m.flags |= eph::kMetaNoDistance;
+    memcpy(dst, xx, sizeof(xx));
+    uint32_t k = 6;
+    if (e->columnsPresent & eph::kColAyanamsa) {
+      double daya = 0.0;
+      if (c.fSidereal) {
+        char serrA[AS_MAXCH];
+        if (swe_get_ayanamsa_ex_r(ctx, jdEt(), c.iflag, &daya, serrA) < 0) daya = NAN;
+      }
+      dst[k++] = daya;
+    }
+    if (e->columnsPresent & eph::kColDeltaT)
+      dst[k++] = fDtGiven ? dtRow : swe_deltat_ex_r(ctx, jd, SEFLG_SWIEPH, nullptr) * 86400.0;
+    m.rowsOk++;
+    if (!fNamed) {
+      fNamed = true;
+      if (c.kind == eph::swiss::kCallFixstar) {
+        m.name = WireText(star);
+      } else {
+        char nm[AS_MAXCH] = "";
+        swe_get_planet_name_r(ctx, c.ipl, nm);
+        std::string s(nm);
+        if (c.kind == eph::swiss::kCallNodAps || c.fOpposite) {
+          static const char *const kPoint[] = {" ascending node", " descending node",
+                                               " perihelion", " aphelion"};
+          s += kPoint[c.fOpposite ? 1 : c.point & 3];
+        }
+        m.name = WireText(s.c_str());
+      }
+    }
+  }
+  if (m.rowsOk > 0 && m.firstFailedRow != eph::kRowNone) m.flags |= eph::kMetaPartial;
+  if (m.rowsOk == 0 && m.errCode == eph::kOErrNone) m.errCode = eph::kOErrInternal;
+}
 
 // ---------------------------------------------------------------------------
 // 4. Loop wiring
 //
 // One uWS App per event-loop thread; SO_REUSEPORT load-balances accepted
-// connections across loops. Each loop owns a private slice of the context
-// pool (pool total 2x cores) and a private LRU result cache (its share of
-// --cache-mb), so nothing on the request path is shared between threads.
+// connections across loops. Each loop owns one Swiss context and a private
+// LRU result cache (its share of --cache-mb), so nothing on the request path
+// is shared between threads.
 // ---------------------------------------------------------------------------
 
 // Counters for /metrics. Each loop writes only its own, so no two threads
@@ -822,7 +1126,8 @@ enum { kComputeBuckets = sizeof(kComputeBucketsMs) / sizeof(*kComputeBucketsMs) 
 struct Metrics {
   std::atomic<uint64_t> connOpen{0}, connTotal{0}, hellos{0};
   std::atomic<uint64_t> requests{0}, cells{0}, cacheHits{0}, cacheMisses{0};
-  std::atomic<uint64_t> errors[eph::kErrMax + 1] = {};  // by code; 0 other
+  std::atomic<uint64_t> lookups{0}, cancels{0};
+  std::atomic<uint64_t> errors[kErrMax + 1] = {};  // by code; 0 other
   std::atomic<uint64_t> refusedConns{0};       // at the upgrade, over a cap
   std::atomic<uint64_t> helloTimeouts{0};
   std::atomic<uint64_t> bytesSent{0}, backpressureWaits{0};
@@ -839,26 +1144,18 @@ struct LoopCtx {
   us_listen_socket_t *listenSock = nullptr;
   us_timer_t *helloTimer = nullptr;         // the HELLO deadline's sweep
   std::unordered_set<void *> socks;
-  std::atomic<uint64_t> pendingStreams{0};  // set by a drain's check
   uWS::Loop *loop = nullptr;
   std::unique_ptr<uWS::App> app;        // plain ws://, or
   std::unique_ptr<uWS::SSLApp> sslApp;  // wss:// under --tls-cert
   std::vector<swe_ctx *> pool;   // private slice, never shared
   size_t nextCtx = 0;
-  // The per-loop LRU result cache (eph_cache.h), keyed on the canonical
-  // REQUEST, hashed FNV-1a, capped at this loop's share of --cache-mb.
+  // The per-loop LRU result cache (eph_cache.h), keyed on datasetId and the
+  // question block, capped at this loop's share of --cache-mb.
   eph::ResultCache cache;
-  // Wall time of the last ExecuteRequest's compute, for the verbose log
-  // and the bench: zero on a hit.
+  // Wall time of the last ExecuteRequest's compute, for the log and the
+  // bench: zero on a hit.
   double lastComputeMs = 0.0;
   bool lastWasHit = false;
-  // A request with SE_SIDBIT_PREC_ORIG in its sidereal mode changed this
-  // loop's context's precession and nutation models, and Swiss keeps such
-  // a change (upstream too: it is one process's configuration there). In a
-  // context that serves every request on the loop it leaked into the next
-  // request, tropical ones included -- 31 to 37 arcseconds, measured
-  // (EPHEMERIS_REVIEW.md F8). The next request puts the models back first.
-  bool fModelsTouched = false;
 
   swe_ctx *TakeContext() {
     if (pool.empty()) return nullptr;
@@ -866,14 +1163,11 @@ struct LoopCtx {
     nextCtx++;
     return ctx;
   }
-
-  // The JPL file the pool's one context has open (EPHEMERIS_REVIEW.md
-  // S12): the setter runs only when a request names a different one.
-  std::string jplOpen;
 };
 
 static thread_local LoopCtx *tlc = nullptr;   // this thread's loop state
 static std::atomic<uint64_t> gConnIds{0};     // the log's conn= ids
+static std::atomic<bool> gDraining{false};
 
 // ---------------------------------------------------------------------------
 // Limits (production plan Phase 3). Shared by every loop, so behind one
@@ -975,92 +1269,10 @@ static bool LoadTokens() {
   return true;
 }
 
-// Heartbeats are uWS's own: sendPingsAutomatically sends WebSocket protocol
-// pings on the idle timeout's cadence and closes silent connections (plan
-// 4.7's intent; QWebSocket answers protocol pings by itself, so a Qt client
-// never sees an app-level PING). The app-level kMsgPing/kMsgPong types stay
-// in the protocol for clients without automatic pong.
-static const int kIdleTimeoutSeconds = 30;
-
-template <bool SSL>
-static typename WebSocket<SSL, true, Conn>::SendStatus
-SendEnvelope(WebSocket<SSL, true, Conn> *ws, uint16_t type,
-             uint32_t requestId, const void *payload,
-             size_t payloadLen, uint8_t flags = 0) {
-  std::vector<uint8_t> msg(eph::kEnvelopeSize + payloadLen);
-  // Every message in the session's version, once HELLO has fixed one.
-  uint8_t version = ((Conn *)ws->getUserData())->proto;
-  eph::writeEnvelope(msg.data(), type, requestId, flags, (uint32_t)payloadLen,
-                     version ? version : eph::kProtoVersion);
-  if (payloadLen) memcpy(msg.data() + eph::kEnvelopeSize, payload, payloadLen);
-  auto st = ws->send(std::string_view((char *)msg.data(), msg.size()),
-                     uWS::OpCode::BINARY);
-  if (st != WebSocket<SSL, true, Conn>::SendStatus::DROPPED) {
-    if (tlc) tlc->m.bytesSent += msg.size();
-    ((Conn *)ws->getUserData())->bytesOut += msg.size();
-  }
-  return st;
-}
-
-// The protocol's ERROR codes by name, for the log's name= key.
-static const char *ErrName(int32_t code) {
-  switch (code) {
-    case eph::kErrBad: return "bad";
-    case eph::kErrLimits: return "limits";
-    case eph::kErrUnknown: return "unknown_type";
-    case eph::kErrInternal: return "internal";
-    case eph::kErrEphemeris: return "ephemeris";
-    case eph::kErrRateLimited: return "rate_limited";
-    case eph::kErrToken: return "token";
-    case eph::kErrVersion: return "version";
-    default: return "other";
-  }
-}
-
-template <bool SSL>
-static void SendError(WebSocket<SSL, true, Conn> *ws, uint32_t requestId,
-                      int32_t code, const char *text) {
-  uint8_t fixed[8];
-  eph::putU32(fixed, requestId);
-  eph::putU32(fixed + 4, (uint32_t)code);
-  size_t n = text ? strlen(text) : 0;
-  std::vector<uint8_t> payload(8 + n + 1);
-  memcpy(payload.data(), fixed, 8);
-  memcpy(payload.data() + 8, text ? text : "", n + 1);
-  if (tlc) tlc->m.errors[code > 0 && code <= eph::kErrMax ? code : 0]++;
-  Conn *c = (Conn *)ws->getUserData();
-  c->errors++;
-  // Every ERROR text is fixed or a count, never a request's contents: Swiss's
-  // per-row text, which names the instant, goes only to the client, inside
-  // the DATA metadata. Keep it that way (production plan decision 0.3) --
-  // a new ERROR that quotes a request must not be logged with its text.
-  // The server's own failures are errors; a client's mistakes, limits and
-  // a missing ephemeris are warnings about that client.
-  LogEvt(code == eph::kErrInternal ? kLogError : kLogWarn, "error")
-    .Conn(c).U("req", requestId).I("code", code).S("name", ErrName(code))
-    .S("msg", std::string_view(text ? text : "").substr(0, 160));
-  SendEnvelope(ws, eph::kMsgError, requestId, payload.data(), payload.size());
-}
-
-// Execute one REQUEST into a Stream. Returns false for a whole-request
-// failure and fills errCode/errText (plan 4.6/4.7). The only whole-request
-// failure is the missing-ephemeris-path case: with no ephemeris directory
-// found at startup and SEFLG_SWIEPH forced, every object fails with
-// the same file-not-found serr, so the first probe's serr becomes the
-// request-level ERROR 5 text and nothing is streamed. A per-row failure
-// is never a request failure: that row's six columns are NaN, the object
-// keeps retFlag >= 0 while any row computed, and its metadata carries the
-// first failed row's serr (plan 4.5, protocol 2).
-static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
-                           Stream *stream, int32_t *errCode,
-                           std::string *errText) {
-  if (!gHaveEphemeris) {
-    *errCode = eph::kErrEphemeris;
-    *errText = "no ephemeris directory found at startup; start the server "
-               "with --ephe or configure the client's -Yi1";
-    return false;
-  }
-  const std::string key = eph::cacheKeyOf(req);
+// Execute one REQUEST (parsed, supported and within limits) into a Stream.
+// Returns false for a whole-request failure (ERROR 4) with errText.
+static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req, const std::string &key,
+                           Stream *stream, std::string *errText) {
   if (auto hit = lc->cache.get(key)) {
     stream->result = hit;
     lc->lastWasHit = true;
@@ -1072,123 +1284,170 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
 
   swe_ctx *ctx = lc->TakeContext();
   if (ctx == nullptr) {
-    *errCode = eph::kErrInternal;
     *errText = "no swe context available";
     return false;
   }
-
-  if (lc->fModelsTouched) {
-    // All zeros is a fresh context's state: every model at its default.
-    // (An empty string would set this version's explicit model list,
-    // which is not guaranteed to be the same bits.)
-    swe_set_astro_models_r(ctx, (char *)"0,0,0,0,0,0,0,0", 0);
-    lc->fModelsTouched = false;
-  }
-  ApplyRequestConfig(ctx, &lc->jplOpen, req);
-  if ((req.iflag & SEFLG_SIDEREAL) && (req.sidMode & SE_SIDBIT_PREC_ORIG))
-    lc->fModelsTouched = true;
-
-  const uint32_t nObj = stream->nObj, nTime = stream->nTimeRows;
+  const uint32_t nObj = (uint32_t)req.objs.size(), nTime = req.nTime;
   auto entry = std::make_shared<eph::CacheEntry>();
   entry->nObj = nObj;
   entry->nTimeRows = nTime;
-  entry->cols.assign((size_t)nObj * nTime * 6, 0.0);
-  entry->meta.assign((size_t)nObj * eph::kDataMetaSize, 0);
-
-  // SWE's iflag is int32 and lives in the low 32 bits; the high half is the
-  // protocol's (kIflagTimeTT, kIflagCenter; ephproto.h) and is read by
-  // ComputeCell from the request, never handed to SWE. SEFLG_SWIEPH is
-  // forced (plan 4.4) and SEFLG_SPEED added if absent, so speeds arrive in
-  // the columns and clients never derive them.
-  int32_t iflag = (int32_t)(uint32_t)(req.iflag & 0xFFFFFFFFu) | SEFLG_SWIEPH;
-  iflag |= SEFLG_SPEED;
-
-  char serr[256];
-  for (uint32_t o = 0; o < nObj; o++) {
-    const eph::ObjSpec &obj = req.objs[o];
-    char nameBuf[eph::kObjNameMax];
-    const char *name = nullptr;
-    char nameKept[eph::kObjNameMax] = {0};
-    int32_t retRow0 = 0;
-    bool fFailed = false, fSawSuccess = false;
-    char failSerr[eph::kSerrMax] = {0};
-    for (uint32_t r = 0; r < nTime; r++) {
-      // Row r's instant, UT or TT as the request says; the client computes
-      // the same expression to find its rows, so it must not change.
-      double jd = req.jdStart +
-        (double)((uint64_t)r * (uint64_t)req.stepSeconds) / 86400.0;
-      double xx[6];
-      int32_t ret = ComputeCell(ctx, req, obj, jd, (uint32_t)iflag, xx, serr,
-                                &name, nameBuf, sizeof(nameBuf));
-      if (ret < 0) {
-        // Protocol 2 (EPHEMERIS_REVIEW.md S9): a row that fails is NaN in
-        // all six columns, and the rows that computed are real. Version 1
-        // failed the object for the whole window here, so a window
-        // reaching past a file's end lost every frame of it.
-        double *dst = entry->cols.data() + ((size_t)o * nTime + r) * 6;
-        for (int c = 0; c < 6; c++) dst[c] = NAN;
-        fFailed = true;
-        if (failSerr[0] == '\0')
-          snprintf(failSerr, sizeof(failSerr), "%.63s", serr);
-        continue;
-      }
-      if (!fSawSuccess) {
-        fSawSuccess = true;
-        retRow0 = ret;
-        // ComputeCell clears the name on every call, so a later failed
-        // row would otherwise leave an object that did compute unnamed.
-        if (name != nullptr)
-          snprintf(nameKept, sizeof(nameKept), "%s", name);
-      }
-      double *dst = entry->cols.data() + ((size_t)o * nTime + r) * 6;
-      for (int c = 0; c < 6; c++) dst[c] = xx[c];
-    }
-    eph::writeDataMeta(entry->meta.data() + (size_t)o * eph::kDataMetaSize,
-                       fSawSuccess ? retRow0 : -1, retRow0,
-                       fFailed ? failSerr : nullptr, fSawSuccess ? nameKept : nullptr);
-  }
+  // 3.5: the extra columns are the requested ones intersected with what
+  // WELCOME advertised. Columns are asked per profile and DATA carries one
+  // set, so the answer carries every column any profile asked for.
+  uint32_t cols = 0;
+  for (const eph::Profile &pf : req.profiles) cols |= pf.columns;
+  entry->columnsPresent = cols & kColumnsServed;
+  entry->nCols = 6 + (uint32_t)eph::PopCount(entry->columnsPresent);
+  entry->cols.assign((size_t)nObj * nTime * entry->nCols, 0.0);
+  entry->sources.push_back(gSource);
+  entry->meta.assign(nObj, eph::Meta());
+  for (uint32_t o = 0; o < nObj; o++) ComputeObject(ctx, req, o, entry.get());
   lc->lastComputeMs = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - t0).count();
   // Per-object failures are cached with the rest: the answer is a pure
-  // function of the files on the configured path, and a file that appears
-  // later is picked up the documented way, by restarting the server.
+  // function of the files on the configured path, and datasetId names them.
   stream->result = entry;
   lc->cache.put(key, std::move(entry));
   return true;
 }
 
-// What a REQUEST asked, as log keys, for --log-contents: the window, the
-// flags and every object -- a body by its Swiss id, a star as s:name, a
-// node or apsis as n:id/point/method.
+// What a REQUEST asked, as log keys, for --log-contents: the instants, the
+// profiles and every object -- a body by its NAIF id, an orbit point as
+// o:naif/point/method, a star s:name, a hypothetical h:token, a designation
+// d:text, elements e:name.
 static std::string RequestContents(const eph::Request &req) {
   LogEvt e;
-  e.F("jd", req.jdStart, 6).U("step_s", req.stepSeconds)
-    .B("tt", (req.iflag & eph::kIflagTimeTT) != 0).X("iflag", req.iflag);
-  if (req.iflag & eph::kIflagCenter) e.I("center", req.center);
-  if (req.iflag & SEFLG_SIDEREAL)
-    e.I("sid_mode", req.sidMode).F("sid_t0", req.sidT0, 6)
-     .F("sid_ayan", req.sidAyanOff, 6);
-  if (req.iflag & SEFLG_TOPOCTR)
-    e.F("topo_lon", req.topoLon, 6).F("topo_lat", req.topoLat, 6)
-     .F("topo_elv", req.topoElv, 1);
-  if (req.jplFile[0]) e.S("jpl", req.jplFile);
+  if (req.timeMode == eph::kTimeGrid)
+    e.F("jd", req.start.jd1 + req.start.jd2, 6).I("step_ns", req.stepNs);
+  else
+    e.F("jd", req.instants.empty() ? 0.0 : req.instants[0].Sum(), 6);
+  // Keys the request's own line does not already carry: it says how many
+  // profiles, which time mode and which scale; this says what was IN them.
+  if (!eph::IsCanonicalNaN(req.deltaTSec)) e.F("delta_t", req.deltaTSec, 3);
+  if (!req.deltaTTable.empty()) e.U("delta_t_table", req.deltaTTable.size());
+  std::string profs;
+  static const char *const kObs[] = {"geo", "topo", "helio", "bary", "body"};
+  for (const eph::Profile &pf : req.profiles) {
+    char sz[256];
+    snprintf(sz, sizeof(sz), "%s%s/%d/%d/%d/c%d/s%d", profs.empty() ? "" : ",",
+             kObs[pf.observer <= eph::kObsBody ? pf.observer : 0], pf.plane, pf.form,
+             pf.frame, pf.corrections, pf.speeds);
+    profs += sz;
+    if (pf.observer == eph::kObsBody) profs += ":" + std::to_string(pf.observerBody);
+    if (pf.observer == eph::kObsTopo) {
+      snprintf(sz, sizeof(sz), ":%.6f:%.6f:%.1f", pf.siteLonEastDeg, pf.siteLatDeg, pf.siteHeightM);
+      profs += sz;
+    }
+    if (!pf.zodiac.empty()) profs += "/z:" + pf.zodiac + ":" + std::to_string(pf.siderealPlane);
+  }
+  e.S("profile_spec", profs);
   std::string objs;
-  for (const eph::ObjSpec &o : req.objs) {
+  for (const eph::Object &o : req.objs) {
     if (!objs.empty()) objs += ',';
-    if (o.kind == eph::kObjStar) objs += std::string("s:") + o.name;
-    else if (o.kind == eph::kObjNodAps)
-      objs += "n:" + std::to_string(o.id) + "/" + std::to_string(o.point) +
-              "/" + std::to_string(o.method);
-    else objs += std::to_string(o.id);
+    switch (o.kind) {
+      case eph::kObjBody: objs += std::to_string(o.naif); break;
+      case eph::kObjOrbitPoint:
+        objs += "o:" + std::to_string(o.naif) + "/" + std::to_string(o.point) + "/" +
+                std::to_string(o.method);
+        break;
+      case eph::kObjStar: objs += "s:" + o.name; break;
+      case eph::kObjHypothetical: objs += "h:" + o.name; break;
+      case eph::kObjDesignation: objs += "d:" + o.name; break;
+      default: objs += "e:" + o.name; break;
+    }
+    if (o.profile) objs += "@" + std::to_string(o.profile);
   }
   e.S("bodies", objs);
   return e.Take();
 }
 
+// Heartbeats are uWS's own: sendPingsAutomatically sends WebSocket protocol
+// pings on the idle timeout's cadence and closes silent connections;
+// QWebSocket answers protocol pings by itself. The app-level PING/PONG
+// messages are answered for clients without automatic pong.
+static const int kIdleTimeoutSeconds = 30;
+
+template <bool SSL>
+static typename WebSocket<SSL, true, Conn>::SendStatus
+SendEnvelope(WebSocket<SSL, true, Conn> *ws, uint16_t type,
+             uint32_t requestId, const void *payload,
+             size_t payloadLen, uint8_t version = 0) {
+  std::vector<uint8_t> msg;
+  msg.reserve(eph::kEnvelopeSize + payloadLen);
+  // Every message in the session's version once HELLO has fixed one; an
+  // older client's refusal in that client's own (3.3).
+  if (version == 0) version = ((Conn *)ws->getUserData())->proto;
+  eph::WriteEnvelope(&msg, type, requestId, payloadLen, version ? version : eph::kProtoVersion);
+  if (payloadLen) msg.insert(msg.end(), (const uint8_t *)payload, (const uint8_t *)payload + payloadLen);
+  auto st = ws->send(std::string_view((char *)msg.data(), msg.size()),
+                     uWS::OpCode::BINARY);
+  if (st != WebSocket<SSL, true, Conn>::SendStatus::DROPPED) {
+    if (tlc) tlc->m.bytesSent += msg.size();
+    ((Conn *)ws->getUserData())->bytesOut += msg.size();
+  }
+  return st;
+}
+
+// The protocol's ERROR codes (A.19) by name, for the log's name= key.
+static const char *ErrName(int code) {
+  static const char *const kNames[kErrMax + 1] = {
+    "other", "malformed", "limits", "unknown_type", "internal", "source",
+    "rate_limited", "token", "version", "busy", "cancelled", "unsupported", "draining"};
+  return code > 0 && code <= kErrMax ? kNames[code] : "other";
+}
+
+// One ERROR (3.4). closing: the connection ends after it (1008, or 1001 when
+// draining). A text never quotes a request's contents (3.8); every one here
+// is fixed or a count. The server's own failures are errors in the log; a
+// client's mistakes, limits and refusals are warnings about that client.
+template <bool SSL>
+static void SendError(WebSocket<SSL, true, Conn> *ws, uint32_t requestId, uint16_t code,
+                      const char *text, uint16_t flags = 0, uint32_t retryAfterMs = 0) {
+  eph::Error err;
+  err.code = code;
+  err.flags = flags;
+  err.retryAfterMs = retryAfterMs;
+  err.text = WireText(text ? text : "");
+  std::vector<uint8_t> pay;
+  eph::EncodeError(&pay, err);
+  if (tlc) tlc->m.errors[code <= kErrMax ? code : 0]++;
+  Conn *c = (Conn *)ws->getUserData();
+  c->errors++;
+  LogEvt(code == eph::kErrInternal ? kLogError : kLogWarn, "error")
+    .Conn(c).U("req", requestId).I("code", code).S("name", ErrName(code))
+    .B("closing", (flags & eph::kErrFlagClosing) != 0)
+    .S("msg", std::string_view(err.text).substr(0, 160));
+  SendEnvelope(ws, eph::kMsgError, requestId, pay.data(), pay.size());
+  if (flags & eph::kErrFlagClosing)
+    ws->end(1008, std::string_view(ErrName(code)));
+}
+
+// 3.3 step 5: an older client's refusal, in its own version and layout.
+template <bool SSL>
+static void SendLegacyVersionError(WebSocket<SSL, true, Conn> *ws, uint8_t version) {
+  Conn *c = (Conn *)ws->getUserData();
+  eph::LegacyError le;
+  char sz[160];
+  snprintf(sz, sizeof(sz), "this client speaks protocol %u; this server needs %u to %u "
+           "-- update Astrolog", (unsigned)version, (unsigned)eph::kProtoMin,
+           (unsigned)eph::kProtoVersion);
+  le.requestId = 0;
+  le.code = eph::kErrVersion;
+  le.text = sz;
+  std::vector<uint8_t> pay;
+  eph::EncodeLegacyError(&pay, le);
+  if (tlc) tlc->m.errors[eph::kErrVersion]++;
+  c->errors++;
+  LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "version")
+    .U("client_proto", version);
+  SendEnvelope(ws, eph::kMsgError, 0, pay.data(), pay.size(), version);
+  ws->end(1008, "protocol too old");
+}
+
 // One line per REQUEST answered, at info: its size, whether the cache had
 // it, how long computing and delivering it took, and the loop's cache.
 // ERRORs have their own line (SendError), so every REQUEST gets exactly
-// one of the two.
+// one of the two, or a cancel line.
 template <bool SSL>
 static void LogRequest(WebSocket<SSL, true, Conn> *ws, const Stream &s,
                        uint64_t bytes) {
@@ -1196,7 +1455,10 @@ static void LogRequest(WebSocket<SSL, true, Conn> *ws, const Stream &s,
   if (!e.On()) return;
   Conn *c = (Conn *)ws->getUserData();
   e.Conn(c).U("req", s.requestId).U("objs", s.nObj).U("rows", s.nTimeRows)
-    .U("cells", (uint64_t)s.nObj * s.nTimeRows).U("prec", s.precision == eph::kPrecF32 ? 32 : 64)
+    .U("cells", (uint64_t)s.nObj * s.nTimeRows).U("profiles", s.nProfiles)
+    .S("time", s.timeMode == eph::kTimeList ? "list" : "grid")
+    .S("scale", s.timeScale == eph::kTimeUT1 ? "ut1" : "tt")
+    .U("prec", s.precision == eph::kPrecF32 ? 32 : 64)
     .U("chunks", (s.nTimeRows + s.chunkRows - 1) / s.chunkRows)
     .S("cache", s.fHit ? "hit" : "miss").F("compute_ms", s.computeMs, 3)
     .F("total_ms", std::chrono::duration<double, std::milli>(
@@ -1219,16 +1481,54 @@ static void LogStall(WebSocket<SSL, true, Conn> *ws, Stream &s) {
     .U("buffered", ws->getBufferedAmount());
 }
 
-// Stream completed chunks to the client, honoring uWS backpressure: stop
+// One DATA chunk's payload (3.4): the header, the source table and META on
+// chunk 0, then the chunk's rows of every object, object-major, in the
+// requested precision.
+static void EncodeChunk(const Stream &s, uint32_t rows, std::vector<uint8_t> *out) {
+  const eph::CacheEntry &e = *s.result;
+  const bool fMeta = s.chunkIndex == 0;
+  const bool fLast = s.nextRow + rows == s.nTimeRows;
+  out->clear();
+  eph::Writer w(out);
+  w.u32(s.chunkIndex); w.u32(s.nextRow); w.u32(rows); w.u32(s.nTimeRows);
+  w.u8(s.precision);
+  w.u8((uint8_t)((fLast ? eph::kChunkLast : 0) | (s.fIgnoredExt ? eph::kChunkIgnoredExt : 0) |
+                 (fMeta ? eph::kChunkMeta : 0)));
+  w.u16((uint16_t)e.nObj);
+  w.u32(e.columnsPresent);
+  if (fMeta) {
+    eph::WriteSources(w, e.sources);
+    for (const eph::Meta &m : e.meta) eph::WriteMeta(w, m);
+  }
+  const size_t esz = s.precision == eph::kPrecF32 ? 4 : 8;
+  const size_t nPer = (size_t)rows * e.nCols;
+  size_t at = out->size();
+  out->resize(at + (size_t)e.nObj * nPer * esz);
+  uint8_t *p = out->data() + at;
+  for (uint32_t o = 0; o < e.nObj; o++) {
+    const double *src = e.cols.data() + ((size_t)o * e.nTimeRows + s.nextRow) * e.nCols;
+    for (size_t i = 0; i < nPer; i++) {
+      uint64_t u;
+      if (esz == 4) {
+        float f = (float)src[i];
+        uint32_t u32;
+        memcpy(&u32, &f, 4);
+        for (int b = 0; b < 4; b++) *p++ = (uint8_t)(u32 >> (8 * b));
+      } else {
+        memcpy(&u, &src[i], 8);
+        for (int b = 0; b < 8; b++) *p++ = (uint8_t)(u >> (8 * b));
+      }
+    }
+  }
+}
+
+// Stream completed answers to the client, honoring uWS backpressure: stop
 // at the first BACKPRESSURE and resume from the drain callback. uWS's
 // BACKPRESSURE means the frame WAS taken and buffered -- only DROPPED means
 // it was not -- so a chunk that returns BACKPRESSURE counts as sent. It
 // used not to, and every such chunk went out twice: a Qt client counting
-// rows marked the window done a chunk early and read zeros for the rest
-// (64 bodies x 20000 rows to a reader asleep 3 s: 41 messages, 20500 rows). Chunks are
-// chunkRows-sized pieces, ascending chunkIndex, contiguous row ranges. The
-// columns are object-major (nObj blocks of nTime*6), so writeDataChunk
-// gathers each object's own row range out of the full column array.
+// rows marked the window done a chunk early and read zeros for the rest.
+// Chunks are chunkRows-sized, ascending chunkIndex, contiguous rows (3.4).
 template <bool SSL>
 static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
   Conn *c = (Conn *)ws->getUserData();
@@ -1242,25 +1542,18 @@ static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
       }
       uint32_t rows = s.nTimeRows - s.nextRow;
       if (rows > s.chunkRows) rows = s.chunkRows;
-      size_t chunkLen = 0;
-      eph::writeDataChunk(s.buf.data(), s.buf.size(), s.chunkIndex, s.nextRow,
-                          rows, s.nTimeRows, s.nObj, s.precision,
-                          s.result->meta.data(), s.result->cols.data(),
-                          &chunkLen);
+      EncodeChunk(s, rows, &s.buf);
       // The request's line goes out BEFORE its last chunk, so it is in the
       // log by the time a client could have its answer -- a gate reading
       // the log straight after a request never races it.
       if (s.nextRow + rows == s.nTimeRows && !s.fLogged) {
         s.fLogged = true;
-        LogRequest(ws, s, s.bytes + eph::kEnvelopeSize + chunkLen);
+        LogRequest(ws, s, s.bytes + eph::kEnvelopeSize + s.buf.size());
       }
-      // The chunk buffer holds the DATA payload; SendEnvelope wraps it in
-      // the 16-byte envelope the protocol requires.
-      auto st = SendEnvelope(ws, eph::kMsgData, s.requestId, s.buf.data(),
-                             chunkLen);
+      auto st = SendEnvelope(ws, eph::kMsgData, s.requestId, s.buf.data(), s.buf.size());
       if (st == WebSocket<SSL, true, Conn>::SendStatus::DROPPED)
         return;   // not sent: this chunk again on drain
-      s.bytes += eph::kEnvelopeSize + chunkLen;
+      s.bytes += eph::kEnvelopeSize + s.buf.size();
       s.nextRow += rows;
       s.chunkIndex++;
       if (st == WebSocket<SSL, true, Conn>::SendStatus::BACKPRESSURE) {
@@ -1273,249 +1566,373 @@ static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
   }
 }
 
-// Execute + enqueue one REQUEST (already decoded and limit-checked).
+// What this server serves, checked after the codec accepted a REQUEST:
+// every value the codec knows but this server did not advertise is
+// ERROR 11 (3.4). NULL when all of it is served.
+static const char *UnservedOf(const eph::Request &req) {
+  if (req.representation != 0) return "segments are not served by this server";
+  if (req.timeScale != eph::kTimeUT1 && req.timeScale != eph::kTimeTT)
+    return "time scale not served: UT1 and TT only";
+  for (const eph::Profile &pf : req.profiles) {
+    if (!gCaps.CorrectionMask(pf.observer, pf.corrections))
+      return "this correction mask is not honoured for this observer";
+    if (!pf.zodiac.empty() && !gCaps.Zodiac(pf.zodiac)) return "zodiac not served";
+  }
+  // Every kind in the registry gets an answer: orbital elements (kind 4),
+  // which WELCOME does not advertise yet, are a per-object error 2 (3.5).
+  return nullptr;
+}
+
+// Execute + enqueue one REQUEST (parsed, checked and charged).
 template <bool SSL>
-static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc,
-                       const eph::Envelope &env, const eph::Request &req) {
+static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t requestId,
+                       const eph::Request &req, const std::string &key, bool fIgnoredExt) {
   Conn *c = (Conn *)ws->getUserData();
 
   Stream s;
   s.tReq = std::chrono::steady_clock::now();
-  s.requestId = env.requestId;
+  s.requestId = requestId;
   s.precision = req.precision;
+  s.fIgnoredExt = fIgnoredExt;
   s.nObj = (uint32_t)req.objs.size();
   s.nTimeRows = req.nTime;
-  uint32_t hint = req.chunkRows ? req.chunkRows : eph::kMaxChunkRows;
-  s.chunkRows = hint > eph::kMaxChunkRows ? eph::kMaxChunkRows : hint;
-  if (s.chunkRows == 0) s.chunkRows = 1;
+  s.nProfiles = (uint32_t)req.profiles.size();
+  s.timeMode = req.timeMode;
+  s.timeScale = req.timeScale;
+  s.priority = req.priority;
+  // A hint, clamped to [1, maxChunkRows]; 0 means maxChunkRows (3.4).
+  s.chunkRows = req.chunkRows == 0 || req.chunkRows > kMaxChunkRows ? kMaxChunkRows : req.chunkRows;
 
-  if (c->out.size() >= kMaxQueuedStreams) {
-    SendError(ws, env.requestId, eph::kErrLimits, "too many answers computed "
-              "and not yet read on this connection");
-    return;
-  }
-  int32_t errCode = 0;
   std::string errText;
   bool fOk;
   try {
-    fOk = ExecuteRequest(lc, req, &s, &errCode, &errText);
+    fOk = ExecuteRequest(lc, req, key, &s, &errText);
   } catch (const std::bad_alloc &) {
     // An exception out of a uWS handler is std::terminate for every loop.
     fOk = false;
-    errCode = eph::kErrInternal;
     errText = "out of memory computing this request";
   }
   if (!fOk) {
-    SendError(ws, env.requestId, errCode, errText.c_str());
+    SendError(ws, requestId, eph::kErrInternal, errText.c_str());
     return;
   }
-
-  s.buf.resize(eph::dataPayloadSize(s.nObj, (size_t)s.chunkRows, s.precision));
-  uint32_t nObj = s.nObj, nRows = s.nTimeRows;
   s.fHit = lc->lastWasHit;
   s.computeMs = lc->lastComputeMs;
   if (gOpt.logContents) s.contents = RequestContents(req);
   c->reqs++;
-  c->cells += (uint64_t)nObj * nRows;
+  c->cells += (uint64_t)s.nObj * s.nTimeRows;
   if (s.fHit) c->hits++;
   lc->m.requests++;
   if (lc->lastWasHit) {
     lc->m.cacheHits++;
   } else {
     lc->m.cacheMisses++;
-    lc->m.cells += (uint64_t)nObj * nRows;
+    lc->m.cells += (uint64_t)s.nObj * s.nTimeRows;
     lc->m.computeCount++;
     lc->m.computeMicros += (uint64_t)(lc->lastComputeMs * 1000.0);
     for (int b = 0; b < kComputeBuckets; b++)
       if (lc->lastComputeMs <= kComputeBucketsMs[b]) lc->m.computeBucket[b]++;
   }
-  c->out.push_back(std::move(s));
+  // 3.9: interactive work is answered before prefetch. A priority 0 answer
+  // goes in front of any queued priority 1 one that has not begun streaming
+  // (chunks of one answer stay in order, so a stream already started keeps
+  // its place).
+  auto it = c->out.end();
+  if (s.priority == 0)
+    for (auto i = c->out.begin(); i != c->out.end(); ++i)
+      if (i->priority != 0 && i->nextRow == 0) { it = i; break; }
+  c->out.insert(it, std::move(s));
   FlushStreams(ws);
 }
 
-// Handle one decoded WebSocket message. The envelope is checked for size
-// agreement first; a payload-length mismatch is a protocol error, not a
-// truncation to recover from. Every HELLO is answered with WELCOME. From
-// protocol 3 a REQUEST before HELLO is refused and the connection closed:
-// HELLO fixes the session's version, which every later message is written
-// in, and carries the token a server may require.
+// A REQUEST: parsed canonically, checked against what this server serves
+// and the limits it advertised, charged, then answered.
+template <bool SSL>
+static void HandleRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t requestId,
+                          const uint8_t *pl, size_t len) {
+  Conn *c = (Conn *)ws->getUserData();
+  eph::Request req;
+  std::string why;
+  bool fIgnored = false;
+  eph::Outcome o = eph::ParseRequest(pl, len, &req, &why, &fIgnored);
+  if (o == eph::kMalformed) {
+    SendError(ws, requestId, eph::kErrMalformed, ("malformed REQUEST: " + why).c_str());
+    return;
+  }
+  if (o == eph::kUnsupported) {
+    SendError(ws, requestId, eph::kErrUnsupported, ("unsupported REQUEST: " + why).c_str());
+    return;
+  }
+  if (const char *szWhy = UnservedOf(req)) {
+    SendError(ws, requestId, eph::kErrUnsupported, szWhy);
+    return;
+  }
+  // The pins (A.4): answered only from the dataset or catalog named.
+  for (const eph::Tlv &e : req.ext) {
+    std::string pin;
+    if (e.tag == eph::kReqTagEphemerisPin && eph::TlvStr8(e, &pin) && pin != gDatasetId) {
+      SendError(ws, requestId, eph::kErrSource, "the pinned ephemeris is not this server's dataset");
+      return;
+    }
+    if (e.tag == eph::kReqTagCatalogPin) {
+      SendError(ws, requestId, eph::kErrSource, "this server has no catalogs to pin");
+      return;
+    }
+    // A precession model (0x0003) is not selectable here: the default is
+    // used and the answer says the extension was ignored.
+    if (e.tag == eph::kReqTagPrecession) fIgnored = true;
+  }
+  // The limits WELCOME advertised (3.5): ERROR 2 before anything is
+  // computed. objects x rows past --max-cells measured 13.7 s on the loop's
+  // only thread for 64 x 20000, and every other connection on that loop
+  // waited for it (EPHEMERIS_REVIEW.md S4).
+  uint64_t cells = (uint64_t)req.objs.size() * (uint64_t)req.nTime;
+  if (req.objs.size() > kMaxObjs || req.nTime > kMaxRows || req.profiles.size() > kMaxProfiles ||
+      cells > gOpt.maxCells) {
+    char sz[160];
+    snprintf(sz, sizeof(sz), "REQUEST asks %zu objects, %u rows, %zu profiles, %" PRIu64
+             " cells; WELCOME's limits are %u, %u, %u and %u", req.objs.size(), req.nTime,
+             req.profiles.size(), cells, kMaxObjs, kMaxRows, (unsigned)kMaxProfiles, gOpt.maxCells);
+    SendError(ws, requestId, eph::kErrLimits, sz);
+    return;
+  }
+  for (const Stream &st : c->out)
+    if (st.requestId == requestId) {
+      SendError(ws, requestId, eph::kErrMalformed, "requestId reused while its answer is outstanding");
+      return;
+    }
+  if (gDraining) {
+    SendError(ws, requestId, eph::kErrDraining, "the server is shutting down; ask another",
+              eph::kErrFlagRetryable);
+    return;
+  }
+  if (c->out.size() >= kMaxQueuedStreams) {
+    SendError(ws, requestId, eph::kErrBusy, "too many answers computed and not yet read on "
+              "this connection", eph::kErrFlagRetryable);
+    return;
+  }
+  if (!gHaveEphemeris) {
+    SendError(ws, requestId, eph::kErrSource, "no ephemeris directory found at startup; start "
+              "the server with --ephe");
+    return;
+  }
+  // The compute budget (production plan Phase 3): charged whether the
+  // answer is cached or not, since which it will be is not known yet.
+  double wait = ChargeCells(c->budget, cells);
+  if (wait > 0.0) {
+    char sz[160];
+    // Rounded UP to the tenth: "0.0 s" for a 12 ms wait read as "now".
+    snprintf(sz, sizeof(sz), "rate limited: %u cells a second; ask again in %.1f s",
+             gOpt.cellsPerSec, std::ceil(wait * 10.0) / 10.0);
+    SendError(ws, requestId, eph::kErrRateLimited, sz, eph::kErrFlagRetryable,
+              (uint32_t)std::ceil(wait * 1000.0));
+    return;
+  }
+  RunRequest(ws, lc, requestId, req, eph::CacheKey(gDatasetId, pl, len, req.questionOffset),
+             fIgnored);
+}
+
+// LOOKUP (3.4): answered at once from the catalogue and Swiss's own names.
+template <bool SSL>
+static void HandleLookup(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t requestId,
+                         const uint8_t *pl, size_t len) {
+  Conn *c = (Conn *)ws->getUserData();
+  eph::Lookup l;
+  std::string why;
+  eph::Outcome o = eph::ParseLookup(pl, len, &l, &why);
+  if (o != eph::kOk) {
+    SendError(ws, requestId, o == eph::kMalformed ? eph::kErrMalformed : eph::kErrUnsupported,
+              ("LOOKUP: " + why).c_str());
+    return;
+  }
+  if (l.maxMatches > kLookupMax) {
+    SendError(ws, requestId, eph::kErrLimits, "LOOKUP asks more matches than WELCOME's limit");
+    return;
+  }
+  swe_ctx *ctx = lc->TakeContext();
+  if (ctx == nullptr) {
+    SendError(ws, requestId, eph::kErrInternal, "no swe context available");
+    return;
+  }
+  eph::LookupResult lr;
+  bool fMore = false;
+  lr.sources.push_back(gSource);
+  Resolve(ctx, l.query, l.flags, l.maxMatches, &lr.matches, &fMore);
+  lr.flags = fMore ? 1 : 0;
+  std::vector<uint8_t> pay;
+  eph::EncodeLookupResult(&pay, lr);
+  c->lookups++;
+  lc->m.lookups++;
+  LogEvt e(kLogInfo, "lookup");
+  e.Conn(c).U("req", requestId).U("matches", lr.matches.size()).B("truncated", fMore)
+    .X("flags", l.flags);
+  if (gOpt.logContents) e.S("query", l.query);
+  SendEnvelope(ws, eph::kMsgLookupResult, requestId, pay.data(), pay.size());
+}
+
+// CANCEL (3.4): a request still being answered loses its unsent chunks and
+// is answered ERROR 10; one answered completely, or unknown, gets nothing.
+//
+// This server computes a whole REQUEST inside one loop callback and then
+// streams it, so a CANCEL that arrives can only drop bytes -- the compute is
+// already done and its (complete) answer is in the result cache, which is
+// what 3.9 asks for the other way round: a PARTIAL answer must never be
+// cached, and none is ever made here. Computing in blocks across loop turns,
+// so that a cancel stops the work as well and one big request stops blocking
+// its loop (EPHEMERIS_REVIEW.md S4: 13.7 s for 64 x 20000 cells), is the next
+// pass's item; the work log records it.
+template <bool SSL>
+static void HandleCancel(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t requestId) {
+  Conn *c = (Conn *)ws->getUserData();
+  for (auto it = c->out.begin(); it != c->out.end(); ++it) {
+    if (it->requestId != requestId) continue;
+    uint32_t sent = it->nextRow, rows = it->nTimeRows;
+    c->out.erase(it);
+    c->cancels++;
+    lc->m.cancels++;
+    LogEvt(kLogInfo, "cancel").Conn(c).U("req", requestId).U("rows_sent", sent)
+      .U("rows", rows);
+    SendError(ws, requestId, eph::kErrCancelled, "cancelled");
+    FlushStreams(ws);
+    return;
+  }
+}
+
+// One message off the wire (3.2, 3.3).
 template <bool SSL>
 static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
                           std::string_view message, LoopCtx *lc) {
-  if (message.size() < eph::kEnvelopeSize) {
-    SendError(ws, 0, eph::kErrBad, "message shorter than the envelope");
-    return;
-  }
+  Conn *c = (Conn *)ws->getUserData();
+  const uint8_t *p = (const uint8_t *)message.data();
+  const uint16_t kPreClose = c->proto ? 0 : eph::kErrFlagClosing;
   eph::Envelope env;
-  if (!eph::parseEnvelope((const uint8_t *)message.data(), &env)) {
-    uint8_t vOld;
-    if (eph::envelopeVersionBelowMin((const uint8_t *)message.data(), &vOld)) {
-      // Too old to talk to, and too old to read a newer envelope: the
-      // refusal goes out in the client's own version, then the close.
-      Conn *c = (Conn *)ws->getUserData();
-      c->proto = vOld;
-      char sz[160];
-      snprintf(sz, sizeof(sz), "this client speaks protocol %u; this server "
-               "needs %u to %u -- update Astrolog", (unsigned)vOld,
-               (unsigned)eph::kProtoMin, (unsigned)eph::kProtoVersion);
-      LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "version")
-        .U("client_proto", vOld);
-      SendError(ws, 0, eph::kErrVersion, sz);
-      ws->end(1008, "protocol too old");
-      return;
-    }
-    SendError(ws, 0, eph::kErrBad, "bad magic or protocol version");
+  std::string why;
+  if (eph::ParseEnvelope(p, message.size(), &env, &why) != eph::kOk) {
+    SendError(ws, 0, eph::kErrMalformed, ("bad envelope: " + why).c_str(), kPreClose);
     return;
   }
-  if (env.flags & ~eph::kEnvFlagMask) {
-    SendError(ws, env.requestId, eph::kErrBad, "unknown envelope flag bits");
+  if (env.version < eph::kProtoMin) {
+    // An older client (3.3 step 5): refused in its own layout, then closed.
+    SendLegacyVersionError(ws, env.version);
     return;
   }
   if (env.flags & eph::kEnvFlagZstd) {
-    // Advertised by no WELCOME caps bit; parsing compressed bytes as raw
-    // would answer a question nobody asked.
-    SendError(ws, env.requestId, eph::kErrBad, "compressed payloads are "
-              "not supported");
+    // No WELCOME advertises compression here; a compressed payload read as
+    // raw would answer a question nobody asked.
+    SendError(ws, env.requestId, eph::kErrUnsupported, "compressed payloads are not served",
+              kPreClose);
     return;
   }
-  if (env.payloadLen > eph::kMaxPayload ||
-      eph::kEnvelopeSize + (size_t)env.payloadLen != message.size()) {
-    SendError(ws, env.requestId, eph::kErrBad, "payload length mismatch");
+  if (env.payloadLen > (c->proto ? kMaxPayload : eph::kPreSessionMaxPayload)) {
+    SendError(ws, env.requestId, eph::kErrLimits, "message larger than the payload limit", kPreClose);
     return;
   }
-  const uint8_t *pl = (const uint8_t *)message.data() + eph::kEnvelopeSize;
-  Conn *c = (Conn *)ws->getUserData();
+  if (eph::CheckRequestId(env, &why) != eph::kOk) {
+    SendError(ws, env.requestId, eph::kErrMalformed, why.c_str(), kPreClose);
+    return;
+  }
+  const uint8_t *pl = p + eph::kEnvelopeSize;
+  const size_t len = env.payloadLen;
+  if (c->proto == 0 && env.type != eph::kMsgHello && env.type != eph::kMsgPing) {
+    // 3.3 step 6: HELLO fixes the session's version, and carries the token.
+    LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "message_first").U("type", env.type);
+    SendError(ws, env.requestId, eph::kErrMalformed, "HELLO first", eph::kErrFlagClosing);
+    return;
+  }
 
   switch (env.type) {
     case eph::kMsgHello: {
       lc->m.hellos++;
       c->hellos++;
-      // Every HELLO is answered: a client that sends a second one is
-      // waiting for a WELCOME, and silence would hang it.
       eph::Hello hello;
-      if (!eph::parseHello(pl, env.payloadLen, &hello)) {
-        SendError(ws, env.requestId, eph::kErrBad, "malformed HELLO");
+      eph::Outcome o = eph::ParseHello(pl, len, &hello, &why);
+      if (o != eph::kOk) {
+        SendError(ws, 0, o == eph::kMalformed ? eph::kErrMalformed : eph::kErrUnsupported,
+                  ("HELLO: " + why).c_str(), kPreClose);
         return;
       }
       // What the client says it is, capped: it is the client's text.
-      c->client = hello.version.substr(0, 80);
-      if (hello.protoVersion < eph::kProtoMin) {
-        LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "version")
-          .U("client_proto", hello.protoVersion).S("client", c->client);
-        char sz[160];
-        c->proto = env.version;
-        snprintf(sz, sizeof(sz), "this client speaks protocol %u; this server "
-                 "needs %u to %u -- update Astrolog",
-                 (unsigned)hello.protoVersion, (unsigned)eph::kProtoMin,
-                 (unsigned)eph::kProtoVersion);
-        SendError(ws, env.requestId, eph::kErrVersion, sz);
-        ws->end(1008, "protocol too old");
+      c->client = hello.clientName.substr(0, 80);
+      if (c->proto != 0) {
+        // 3.3 step 7: answered in the established session, not renegotiated.
+        LogEvt(kLogDebug, "hello").Conn(c).U("proto", c->proto).S("repeat", "1");
+        SendEnvelope(ws, eph::kMsgWelcome, 0, gWelcome.data(), gWelcome.size());
         return;
       }
-      // The session speaks the lower of the two ends' highest versions.
-      // Fixed by the first HELLO; a later HELLO is answered in it.
-      if (c->proto == 0)
-        c->proto = (uint8_t)std::min<uint32_t>(hello.protoVersion,
-                                               eph::kProtoVersion);
+      uint32_t session = std::min<uint32_t>(hello.protoMax, eph::kProtoVersion);
+      if (session < std::max<uint32_t>(hello.protoMin, eph::kProtoMin)) {
+        char sz[160];
+        snprintf(sz, sizeof(sz), "this client needs protocol %u or newer; this server speaks "
+                 "%u to %u", hello.protoMin, (unsigned)eph::kProtoMin, (unsigned)eph::kProtoVersion);
+        LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "version")
+          .U("proto_min", hello.protoMin).U("proto_max", hello.protoMax).S("client", c->client);
+        c->proto = eph::kProtoVersion;
+        SendError(ws, 0, eph::kErrVersion, sz, eph::kErrFlagClosing);
+        return;
+      }
       const char *szToken = hello.token.empty() ? "none" :
                             gTokens.count(hello.token) ? "accepted" : "unknown";
-      if (!hello.token.empty() && gTokens.count(hello.token))
+      if (!hello.token.empty() && gTokens.count(hello.token)) {
         c->budget = "t:" + hello.token;
-      else if (gOpt.requireToken) {
+      } else if (gOpt.requireToken) {
         LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "token")
-          .S("token", szToken).U("client_proto", hello.protoVersion)
-          .S("client", c->client);
-        SendError(ws, env.requestId, eph::kErrToken, hello.token.empty() ?
-                  "this server requires a token" : "unknown token");
-        ws->end(1008, "token refused");
+          .S("token", szToken).U("proto_max", hello.protoMax).S("client", c->client);
+        c->proto = (uint8_t)session;
+        SendError(ws, 0, eph::kErrToken, hello.token.empty() ?
+                  "this server requires a token" : "unknown token", eph::kErrFlagClosing);
         return;
       }
-      {
-        static thread_local char szSweVersion[256];
-        swe_version(szSweVersion);
-        uint8_t wbuf[sizeof(eph::WelcomeWire) + 256];
-        uint32_t wlen = 0;
-        eph::buildWelcome(wbuf, eph::kCapFloat32,
-                          PackSweVersion(szSweVersion), gOpt.maxCells,
-                          kServerVersion, &wlen, c->proto);
-        SendEnvelope(ws, eph::kMsgWelcome, env.requestId, wbuf, wlen);
-      }
-      // The first HELLO at info; a repeat, which a client may send, at debug.
+      c->proto = (uint8_t)session;
+      c->clientCaps = hello.caps;
+      SendEnvelope(ws, eph::kMsgWelcome, 0, gWelcome.data(), gWelcome.size());
       // The token is described, never written.
-      LogEvt(c->hellos == 1 ? kLogInfo : kLogDebug, "hello").Conn(c)
-        .U("client_proto", hello.protoVersion).U("proto", c->proto)
+      LogEvt(kLogInfo, "hello").Conn(c)
+        .U("proto_max", hello.protoMax).U("proto_min", hello.protoMin).U("proto", c->proto)
         .X("caps", hello.caps).U("build", hello.build).S("client", c->client)
         .S("token", szToken)
         .F("after_ms", std::chrono::duration<double, std::milli>(
              std::chrono::steady_clock::now() - c->tOpen).count(), 1);
       break;
     }
-    case eph::kMsgRequest: {
-      if (c->proto == 0) {
-        LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "request_first");
-        SendError(ws, env.requestId, eph::kErrBad, "REQUEST before HELLO");
-        ws->end(1008, "HELLO first");
-        return;
-      }
-      eph::Request req;
-      eph::ParseResult pr = eph::parseRequest(pl, env.payloadLen, &req);
-      if (pr == eph::kParseBad) {
-        SendError(ws, env.requestId, eph::kErrBad, "malformed REQUEST");
-        return;
-      }
-      if (pr == eph::kParseLimits) {
-        SendError(ws, env.requestId, eph::kErrLimits,
-                  "REQUEST exceeds the limits WELCOME advertised");
-        return;
-      }
-      // The work bound WELCOME advertised (protocol 2, kMaxCellsDefault
-      // and --max-cells): a request whose objects x rows exceeds it is
-      // refused rather than computed -- 64 bodies x 20000 rows measured
-      // 13.7 s on the loop's only thread, and every other connection on
-      // that loop waited for it (EPHEMERIS_REVIEW.md S4).
-      {
-        uint64_t cells = (uint64_t)req.objs.size() * (uint64_t)req.nTime;
-        if (cells > gOpt.maxCells) {
-          char sz[128];
-          snprintf(sz, sizeof(sz), "REQUEST asks %" PRIu64 " cells; WELCOME's"
-                   " bound is %u", cells, gOpt.maxCells);
-          SendError(ws, env.requestId, eph::kErrLimits, sz);
-          return;
-        }
-        // The compute budget (production plan Phase 3): charged whether the
-        // answer is cached or not, since which it will be is not known yet.
-        double wait = ChargeCells(c->budget, cells);
-        if (wait > 0.0) {
-          char sz[160];
-          // Rounded UP to the tenth: "0.0 s" for a 12 ms wait read as "now".
-          snprintf(sz, sizeof(sz), "rate limited: %u cells a second; ask "
-                   "again in %.1f s", gOpt.cellsPerSec,
-                   std::ceil(wait * 10.0) / 10.0);
-          SendError(ws, env.requestId, eph::kErrRateLimited, sz);
-          return;
-        }
-      }
-      RunRequest(ws, lc, env, req);
+    case eph::kMsgRequest:
+      HandleRequest(ws, lc, env.requestId, pl, len);
       break;
-    }
-    case eph::kMsgPing: {
+    case eph::kMsgLookup:
+      HandleLookup(ws, lc, env.requestId, pl, len);
+      break;
+    case eph::kMsgCancel:
+      if (len != 0) {
+        SendError(ws, env.requestId, eph::kErrMalformed, "CANCEL carries no payload");
+        return;
+      }
+      HandleCancel(ws, lc, env.requestId);
+      break;
+    case eph::kMsgPing:
+      if (len != 0) {
+        SendError(ws, env.requestId, eph::kErrMalformed, "PING carries no payload", kPreClose);
+        return;
+      }
       SendEnvelope(ws, eph::kMsgPong, env.requestId, nullptr, 0);
       break;
-    }
     case eph::kMsgPong:
-      break;   // the client's answer to our ping; liveness is uWS's job
+      break;   // the client's answer to a ping; liveness is uWS's job
+    case eph::kMsgWelcome: case eph::kMsgData: case eph::kMsgError:
+    case eph::kMsgLookupResult: case eph::kMsgSegData:
+      SendError(ws, env.requestId, eph::kErrMalformed, "a server-to-client message from a client");
+      break;
     default:
-      SendError(ws, env.requestId, eph::kErrUnknown, "unknown message type");
+      SendError(ws, env.requestId, eph::kErrUnknownType, "unknown message type");
       break;
   }
 }
-
 
 template <bool SSL>
 static void OnMessage(WebSocket<SSL, true, Conn> *ws, std::string_view message,
                       uWS::OpCode op) {
   if (op != uWS::OpCode::BINARY) {
-    SendError(ws, 0, eph::kErrBad, "the protocol is binary frames only");
+    Conn *c = (Conn *)ws->getUserData();
+    SendError(ws, 0, eph::kErrMalformed, "the protocol is binary frames only",
+              c->proto ? 0 : eph::kErrFlagClosing);
     return;
   }
   HandleMessage(ws, message, tlc);
@@ -1537,20 +1954,21 @@ static void OnMessage(WebSocket<SSL, true, Conn> *ws, std::string_view message,
 
 static std::vector<LoopCtx> *gLoops = nullptr;
 static std::atomic<int> gListening{0};
-static std::atomic<bool> gDraining{false};
 
 static std::string MetricsText() {
   uint64_t connOpen = 0, connTotal = 0, hellos = 0, requests = 0, cells = 0,
-           hits = 0, misses = 0, bytes = 0, bp = 0, cCompute = 0, uCompute = 0;
-  uint64_t errors[eph::kErrMax + 1] = {0}, buckets[kComputeBuckets] = {0};
+           hits = 0, misses = 0, bytes = 0, bp = 0, cCompute = 0, uCompute = 0,
+           lookups = 0, cancels = 0;
+  uint64_t errors[kErrMax + 1] = {0}, buckets[kComputeBuckets] = {0};
   uint64_t refused = 0, helloTimeouts = 0;
   for (LoopCtx &lc : *gLoops) {
     connOpen += lc.m.connOpen; connTotal += lc.m.connTotal;
     hellos += lc.m.hellos; requests += lc.m.requests; cells += lc.m.cells;
     hits += lc.m.cacheHits; misses += lc.m.cacheMisses;
+    lookups += lc.m.lookups; cancels += lc.m.cancels;
     bytes += lc.m.bytesSent; bp += lc.m.backpressureWaits;
     cCompute += lc.m.computeCount; uCompute += lc.m.computeMicros;
-    for (int i = 0; i <= eph::kErrMax; i++) errors[i] += lc.m.errors[i];
+    for (int i = 0; i <= kErrMax; i++) errors[i] += lc.m.errors[i];
     refused += lc.m.refusedConns; helloTimeouts += lc.m.helloTimeouts;
     for (int b = 0; b < kComputeBuckets; b++) buckets[b] += lc.m.computeBucket[b];
   }
@@ -1577,12 +1995,14 @@ static std::string MetricsText() {
        "ephd_cells_computed_total", cells);
   line("REQUESTs answered from the result cache.", "counter", "ephd_cache_hits_total", hits);
   line("REQUESTs computed.", "counter", "ephd_cache_misses_total", misses);
+  line("LOOKUPs answered.", "counter", "ephd_lookups_total", lookups);
+  line("REQUESTs cancelled while being answered.", "counter", "ephd_cancels_total", cancels);
   line("Bytes of WebSocket messages sent.", "counter", "ephd_bytes_sent_total", bytes);
   line("Times a stream waited for the client to read.", "counter",
        "ephd_backpressure_waits_total", bp);
-  out += "# HELP ephd_errors_total ERRORs sent, by protocol code (0 other).\n"
+  out += "# HELP ephd_errors_total ERRORs sent, by protocol version 4 code (A.19; 0 other).\n"
          "# TYPE ephd_errors_total counter\n";
-  for (int i = 0; i <= eph::kErrMax; i++) {
+  for (int i = 0; i <= kErrMax; i++) {
     snprintf(sz, sizeof(sz), "ephd_errors_total{code=\"%d\"} %" PRIu64 "\n", i,
              errors[i]);
     out += sz;
@@ -1766,7 +2186,7 @@ template <bool SSL>
 static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
   typename uWS::TemplatedApp<SSL>::template WebSocketBehavior<Conn> behavior;
   behavior.compression = uWS::DISABLED;
-  behavior.maxPayloadLength = (unsigned)(eph::kMaxPayload + 65536);
+  behavior.maxPayloadLength = (unsigned)(kMaxPayload + 65536);
   behavior.idleTimeout = kIdleTimeoutSeconds;
   // No uWS limit: past it uWS DROPS every send, ERROR replies included,
   // so a client refused for having too many answers queued never heard it
@@ -2065,6 +2485,135 @@ static void SignalThread(std::vector<LoopCtx> *loops, sigset_t set) {
 
 
 
+// The dataset (3.4 WELCOME datasetId): the engine's version and the identity
+// of every file the discovery found, by path, size and modification time --
+// so replacing, adding or removing a sentinel file, or a new fork, is a new
+// id, and every client cache keyed on the old one lets its answers go. A
+// file Swiss opens that is not a sentinel (an asteroid's) is not seen; the
+// documented way to pick up a changed tree is still a restart, and the id
+// changes with the main files that every tree has.
+static std::string DatasetIdOf(const EphDiscovery &disc, const char *szSwe) {
+  uint64_t h = 14695981039346656037ULL;
+  auto mix = [&h](const void *p, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+      h ^= ((const unsigned char *)p)[i];
+      h *= 1099511628211ULL;
+    }
+  };
+  mix(disc.resolved.data(), disc.resolved.size());
+  for (const EphDir &d : disc.dirs)
+    for (const char *hit : d.hits) {
+      std::string file = d.dir + "/" + hit;
+      struct stat st;
+      if (stat(file.c_str(), &st) != 0) continue;
+      int64_t v[3] = {(int64_t)st.st_size, (int64_t)st.st_mtim.tv_sec, (int64_t)st.st_mtim.tv_nsec};
+      mix(file.data(), file.size() + 1);
+      mix(v, sizeof(v));
+    }
+  // 3.4's shape: <engine>/<ephemeris>/<catalogs>#<8 hex>. This server has no
+  // catalogs, so that field is empty.
+  char sz[160];
+  snprintf(sz, sizeof(sz), "%s/swiss %s/%s#%08x", kServerVersion, szSwe,
+           disc.resolved.empty() ? "" : "files", (unsigned)(h ^ (h >> 32)));
+  return sz;
+}
+
+// WELCOME (3.4) and its capabilities (A.3), which say truthfully what this
+// server does: object kinds 0-3 and 5 (not elements yet), every observer,
+// plane, form and frame, the correction masks Swiss can honour
+// (ephswiss.h ApplyProfile), every A.11 zodiac and sidereal plane, UT1 and
+// TT, the ayanamsa and delta T columns, Swiss's own delta T model, the rate
+// budget when there is one, LOOKUP and the A.15 hypotheticals.
+static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
+  gDatasetId = DatasetIdOf(disc, szSwe);
+  gEngine = std::string("Swiss Ephemeris ") + szSwe + " files";
+  // 3.4's source string shape: <engine> | <ephemeris> | <model>.
+  gSource = std::string(kServerVersion) + " | Swiss Ephemeris " + szSwe + " | files";
+  eph::Capabilities &c = gCaps;
+  c.kinds = (1u << eph::kObjBody) | (1u << eph::kObjOrbitPoint) | (1u << eph::kObjStar) |
+            (1u << eph::kObjHypothetical) | (1u << eph::kObjDesignation);
+  c.observers = 0x1F;
+  c.planes = 0x3;
+  c.forms = 0x3;
+  c.frames = 0xF;
+  // 3.5a: corrections are honoured as sent, and the masks are advertised per
+  // observer (A.3 0x0004). What Swiss does with them, measured rather than
+  // assumed (Appendix B has the same note): swe_calc() and swe_calc_pctr()
+  // pass every heliocentric, barycentric and planet-centred call through
+  // plaus_iflag(), which turns aberration and deflection OFF whatever was
+  // asked -- so for a BODY seen from those observers the masks 7, 3 and 5
+  // answer exactly as mask 1 does. swe_nod_aps() reads the bits itself,
+  // before any such normalisation, and does honour them: Jupiter's
+  // heliocentric ascending node moves 5.8e-3 degrees between mask 7 and
+  // mask 1. One pair of numbers cannot say both things, and the capability
+  // is per observer rather than per object kind, so every mask is
+  // advertised for every observer and the narrowing above is documented.
+  {
+    const uint32_t obsAll = 0x1F;   // every observer of A.5
+    c.corrMasks = {
+      {obsAll, eph::kCorrMask},
+      {obsAll, 0},
+      {obsAll, eph::kCorrLightTime | eph::kCorrDeflection},
+      {obsAll, eph::kCorrLightTime | eph::kCorrAberration},
+      {obsAll, eph::kCorrLightTime},
+    };
+  }
+  c.orbitPoints = 0xF;
+  // Mean, osculating, interpolated and the focal point -- not method 3
+  // (osculating barycentric), whose mass 3.5a pins and Swiss's choice is
+  // unverified (ephswiss.h says so too).
+  c.orbitMethods = (1u << eph::kMethMean) | (1u << eph::kMethOsculating) |
+                   (1u << eph::kMethInterpolated) | (1u << eph::kMethFocal);
+  c.columns = kColumnsServed;
+  for (int i = 0; i < eph::kZodiacTokenCount; i++) c.zodiacs.push_back(eph::kZodiacTokens[i]);
+  c.siderealPlanes = 0x7;
+  c.timeScales = (1u << eph::kTimeUT1) | (1u << eph::kTimeTT);
+  c.deltaTModel = "swiss";
+  c.fRate = gOpt.cellsPerSec != 0;
+  c.cellsPerSec = gOpt.cellsPerSec;
+  c.burst = gOpt.maxCells;
+  c.lookupMax = kLookupMax;
+  // 3.5a's rates bound (A.3 0x0013), measured rather than assumed: Swiss's
+  // speeds against central differences of its own positions over +-0.001,
+  // +-0.01 and +-0.0001 day at J2000, for the Sun, the Moon, Mars, Chiron
+  // and Pluto. Angles agree to 2.4e-6 deg/day, inside 3.5a's 1e-5; DISTANCE
+  // rates do not -- 2.2e-6 AU/day for Mars, 1.7e-5 for Chiron, 4.7e-5 for
+  // Pluto, stable across the three step sizes, so real and not differencing
+  // noise (it is the observer's acceleration over the light time). That is
+  // past the 1e-6 AU/day tolerance, so the bound is advertised and every
+  // object answered with speeds carries ratesApprox.
+  c.fRatesBound = true;
+  c.ratesDegPerDay = 3e-6f;
+  c.ratesAuPerDay = 1e-4f;
+  for (int i = 0; i < eph::kHypotheticalTokenCount; i++)
+    c.hypotheticals.push_back(eph::kHypotheticalTokens[i]);
+  eph::Welcome w;
+  w.protoSession = eph::kProtoVersion;
+  // Advertised is promised: a bit here is behaviour a client WILL take up,
+  // so only what is implemented and exercised by a gate goes in.
+  //   cancel      the message is implemented (ERROR 10, the unsent chunks
+  //               dropped, nothing partial cached), but 3.4 also means the
+  //               server stops COMPUTING, and this one computes a whole
+  //               request in one loop callback. The bit waits for the
+  //               block-wise pass the work log names.
+  //   segments, elements (kind 4), deep sky, orbit method 3
+  //               not implemented at all.
+  //   zstd        not implemented.
+  w.caps = eph::kCapF32 | eph::kCapLookup | eph::kCapInstantLists |
+           eph::kCapPriority | eph::kCapDesignations | eph::kCapDeltaTTable;
+  w.maxObjs = kMaxObjs;
+  w.maxRows = kMaxRows;
+  w.maxChunkRows = kMaxChunkRows;
+  w.maxPayload = kMaxPayload;
+  w.maxCells = gOpt.maxCells;
+  w.maxProfiles = kMaxProfiles;
+  w.serverName = kServerVersion;
+  w.engine = WireText(gEngine.c_str());
+  w.datasetId = gDatasetId;
+  eph::EncodeCapabilities(c, &w.caps_);
+  eph::EncodeWelcome(&gWelcome, w);
+}
+
 int main(int argc, char **argv) {
   if (!parseArgs(argc, argv, &gOpt)) {
     fprintf(stderr, "%s", kUsage);
@@ -2126,6 +2675,8 @@ int main(int argc, char **argv) {
   // serr text, and the discovery log above said why.
   swe_set_ephe_path(disc.resolved.c_str());
   gHaveEphemeris = !disc.resolved.empty();
+  BuildWelcome(disc, szVersion);
+  LogEvt(kLogInfo, "dataset").S("id", gDatasetId).S("engine", gEngine);
 
   // Refuse a port another server already listens on. Every listener
   // uSockets opens sets SO_REUSEPORT, so a second server -- a stale one, or

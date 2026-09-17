@@ -1,4 +1,5 @@
 # file	direction	type	expect	note
+# set-sha256 aecdde299b4a3054b68b9fd95fa91c8e87467177d059d60eb00f33e5795b825b
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -13,7 +14,14 @@ request_segments.hex	c2s	3	ok	segments over 30 days, rectangular, 0.1 arcsec tar
 request_pins.hex	c2s	3	ok	precession model plus critical ephemeris and catalog pins, ascending tags
 data_chunk0_meta.hex	s2c	4	ok	f64, sigma+ayanamsa columns, a partial object with a NaN row
 data_chunk1_nometa_f32.hex	s2c	4	ok	a later f32 chunk without metadata
-segdata_moon.hex	s2c	15	ok	one degree-2 segment spanning 31 days
+segdata_moon.hex	s2c	15	ok	one degree-2 segment spanning 31 days, no zodiac
+segdata_sidereal_ayanamsa.hex	s2c	15	ok	tropical coefficients with the profile's ayanamsa series beside them
+request_deltat_table.hex	c2s	3	ok	a UT1 grid with the client's own delta T table (TT instants, ascending)
+request_dataset_pin.hex	c2s	3	ok	a critical datasetId pin
+data_star_nodistance.hex	s2c	4	ok	a star without a parallax: noDistance and ratesApprox
+data_meta_unknown_flag.hex	s2c	4	ok	META with a flag bit this version does not define: tolerated
+data_chunk_future_flag.hex	s2c	4	ok	a chunkFlags bit this version does not define: tolerated
+error_unregistered_code.hex	s2c	5	ok	an ERROR code past the registry: still an error, still retryable
 error_rate_limited.hex	s2c	5	ok	ERROR 6, retryable, retry in 1500 ms
 error_version_closing.hex	s2c	5	ok	ERROR 8, closing
 error_v3_legacy.hex	s2c	5	ok	ERROR 8 to a version-3 client in that client's own layout (envelope version 3)
@@ -22,6 +30,8 @@ ping.hex	c2s	6	ok
 pong.hex	s2c	7	ok	
 lookup_prefix.hex	c2s	9	ok	prefix, hypotheticals and stars included
 lookup_result_lilith.hex	s2c	10	ok	three kinds answer one name
+lookup_result_future_kind.hex	s2c	10	ok	a match of an unregistered kind, skipped by its matchLen, between two readable ones
+lookup_result_bad_matchlen.hex	s2c	10	malformed	matchLen disagrees with a match the reader can read
 env_bad_magic.hex	c2s	6	malformed	magic 0x1EF1
 env_reserved_nonzero.hex	c2s	6	malformed	envelope reserved u16 = 1
 env_flag_bit.hex	c2s	6	malformed	envelope flag bit 3
@@ -55,8 +65,17 @@ speeds_not_bool.hex	c2s	3	malformed	speeds = 2
 elements_no_terms.hex	c2s	3	malformed	elements with nTerms 0
 equinox_jd_unused.hex	c2s	3	malformed	equinoxJd set with equinox J2000
 seg_err_with_samples.hex	c2s	3	malformed	segTargetErrArcsec 1 with representation 0
-delivery_reserved.hex	c2s	3	malformed	delivery reserved byte 1
+max_degree_with_samples.hex	c2s	3	malformed	maxDegreeHint 8 with representation 0
+deltat_table_and_value.hex	c2s	3	malformed	a delta T table and a finite deltaTSec
+deltat_table_unsorted.hex	c2s	3	malformed	a delta T table whose instants descend
+deltat_table_one_entry.hex	c2s	3	malformed	a delta T table of one entry
+sidereal_on_the_equator.hex	c2s	3	malformed	a sidereal zodiac with plane = equator
 request_id_zero.hex	c2s	3	malformed	a REQUEST with requestId 0
+hello_request_id.hex	c2s	1	malformed	a HELLO with requestId 1
+lookup_id_zero.hex	c2s	9	malformed	a LOOKUP with requestId 0
+data_chunk0_no_meta.hex	s2c	4	malformed	DATA chunk 0 with the meta flag clear
+segdata_chunk0_no_meta.hex	s2c	15	malformed	SEGDATA chunk 0 with the meta flag clear
+lookup_match_profile.hex	s2c	10	malformed	a LOOKUP_RESULT match whose object names profile 1
 unknown_critical_tag.hex	c2s	3	unsupported	critical REQUEST tag 0x8FFF
 observer_unregistered.hex	c2s	3	unsupported	observer 9
 correction_bit_unregistered.hex	c2s	3	unsupported	corrections bit 8
@@ -64,4 +83,5 @@ kind_unregistered.hex	c2s	3	unsupported	object kind 6
 segments_spherical.hex	c2s	3	unsupported	segments with form 0
 segments_list.hex	c2s	3	unsupported	segments over an instant list
 segments_columns.hex	c2s	3	unsupported	segments with the ayanamsa column
+elements_centre_unregistered.hex	c2s	3	unsupported	elements centre 2 (A.21 has 0 and 1)
 zodiac_unregistered.hex	c2s	3	unsupported	zodiac token "martian"

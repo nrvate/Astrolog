@@ -47,6 +47,8 @@ trap cleanup EXIT
 
 # ---- 1. The header on its own -------------------------------------------
 cat > "$SCRATCH/unit.cpp" << 'EOF'
+// eph_cache.h alone -- no server, no Swiss: the key protocol version 4
+// defines (3.7) and the LRU mechanics.
 #include "eph_cache.h"
 #include <cstdio>
 #include <cstdlib>
@@ -54,18 +56,36 @@ using namespace eph;
 static int fails = 0;
 #define CHECK(cond, what) do { if (!(cond)) { printf("unit FAIL: %s\n", what); fails++; } } while (0)
 
+static const char kDataset[] = "astrolog-ephd 2.0/swiss 2.10.03/files#deadbeef";
+
 static Request base() {
   Request r;
-  ObjSpec a; a.kind = kObjBody; a.id = 0;
-  ObjSpec b; b.kind = kObjBody; b.id = 1;
+  r.profiles.push_back(Profile());
+  Object a, b;
+  a.kind = kObjBody; a.naif = 10;
+  b.kind = kObjBody; b.naif = 301;
   r.objs = {a, b};
-  r.iflag = 0;
-  r.jdStart = 2451545.0;
-  r.stepSeconds = 600;
+  r.start = Time{2451545.0, 0.0};
+  r.stepNs = 600LL * 1000000000LL;
   r.nTime = 10;
   r.precision = kPrecF64;
   r.chunkRows = 500;
   return r;
+}
+
+// The key the server computes: encode the request, parse it back (which is
+// what says where the question block starts), then key on it.
+static std::string keyOf(const Request &r, const char *dataset = kDataset) {
+  std::vector<uint8_t> pay;
+  EncodeRequest(&pay, r);
+  Request back;
+  std::string why;
+  if (ParseRequest(pay.data(), pay.size(), &back, &why) != kOk) {
+    printf("unit FAIL: a request this test built does not parse: %s\n", why.c_str());
+    fails++;
+    return std::string();
+  }
+  return CacheKey(dataset, pay.data(), pay.size(), back.questionOffset);
 }
 
 static std::shared_ptr<const CacheEntry> entryOf(size_t nDoubles) {
@@ -75,53 +95,60 @@ static std::shared_ptr<const CacheEntry> entryOf(size_t nDoubles) {
 }
 
 int main() {
-  // Key canonicalization.
+  // The key: delivery out, question in (3.7).
   Request r0 = base();
-  std::string k0 = cacheKeyOf(r0);
+  std::string k0 = keyOf(r0);
+  CHECK(!k0.empty(), "the base request keys");
   { Request r = base(); r.precision = kPrecF32;
-    CHECK(cacheKeyOf(r) == k0, "precision must not split the key"); }
+    CHECK(keyOf(r) == k0, "precision must not split the key"); }
   { Request r = base(); r.chunkRows = 7;
-    CHECK(cacheKeyOf(r) == k0, "chunkRows must not split the key"); }
-  { Request r = base(); r.iflag = EPH_CACHE_SEFLG_SWIEPH | EPH_CACHE_SEFLG_SPEED;
-    CHECK(cacheKeyOf(r) == k0, "the forced flags must not split the key"); }
-  { Request r = base(); r.sidMode = 1; r.sidT0 = 5.0; r.topoLat = 40.0;
-    CHECK(cacheKeyOf(r) == k0, "sidereal/topo fields without their flag bits must not split the key"); }
-  { Request r = base(); r.iflag = EPH_CACHE_SEFLG_SIDEREAL;
-    std::string k1 = cacheKeyOf(r);
-    CHECK(k1 != k0, "SEFLG_SIDEREAL must split the key");
-    r.sidMode = 1;
-    CHECK(cacheKeyOf(r) != k1, "sidMode under SEFLG_SIDEREAL must split the key"); }
-  { Request r = base(); r.iflag = EPH_CACHE_SEFLG_TOPOCTR;
-    std::string k1 = cacheKeyOf(r);
-    r.topoLon = 1.0;
-    CHECK(cacheKeyOf(r) != k1, "topo under SEFLG_TOPOCTR must split the key"); }
-  { Request r = base(); r.jdStart += 1.0;
-    CHECK(cacheKeyOf(r) != k0, "jdStart must split the key"); }
-  { Request r = base(); r.stepSeconds = 601;
-    CHECK(cacheKeyOf(r) != k0, "stepSeconds must split the key"); }
+    CHECK(keyOf(r) == k0, "chunkRows must not split the key"); }
+  { Request r = base(); r.priority = 1;
+    CHECK(keyOf(r) == k0, "priority must not split the key"); }
+  { CHECK(keyOf(r0, "another dataset") != k0,
+          "the datasetId must split the key: another dataset is another answer"); }
+  { Request r = base(); r.start.jd2 += 1.0;
+    CHECK(keyOf(r) != k0, "the first instant must split the key"); }
+  { Request r = base(); r.stepNs += 1000;
+    CHECK(keyOf(r) != k0, "the step must split the key"); }
   { Request r = base(); r.nTime = 11;
-    CHECK(cacheKeyOf(r) != k0, "nTime must split the key"); }
-  { Request r = base(); r.center = 4;
-    CHECK(cacheKeyOf(r) != k0, "center must split the key"); }
+    CHECK(keyOf(r) != k0, "the row count must split the key"); }
+  { Request r = base(); r.timeScale = kTimeUT1;
+    CHECK(keyOf(r) != k0, "the time scale must split the key"); }
+  { Request r = base(); r.deltaTSec = 69.2;
+    CHECK(keyOf(r) != k0, "a given delta T must split the key"); }
   { Request r = base(); std::swap(r.objs[0], r.objs[1]);
-    CHECK(cacheKeyOf(r) != k0, "object order must split the key"); }
-  { Request r = base(); r.objs[1].kind = kObjStar; snprintf(r.objs[1].name, sizeof(r.objs[1].name), "Sirius");
-    std::string k1 = cacheKeyOf(r);
+    CHECK(keyOf(r) != k0, "object order must split the key"); }
+  { Request r = base(); r.objs[1].kind = kObjStar; r.objs[1].name = "Sirius";
+    std::string k1 = keyOf(r);
     CHECK(k1 != k0, "a star record must split the key");
-    snprintf(r.objs[1].name, sizeof(r.objs[1].name), "Vega");
-    CHECK(cacheKeyOf(r) != k1, "the star name must split the key"); }
-  { Request r = base(); r.objs[1].kind = kObjNodAps; r.objs[1].point = kPntPerihelion; r.objs[1].method = kNodMean;
-    std::string k1 = cacheKeyOf(r);
-    CHECK(k1 != k0, "a node/apsis record must split the key");
-    r.objs[1].point = kPntAphelion;
-    std::string k2 = cacheKeyOf(r);
-    CHECK(k2 != k1, "the node/apsis point must split the key");
-    r.objs[1].method = kNodOscu;
-    CHECK(cacheKeyOf(r) != k2, "the node/apsis method must split the key"); }
-  { Request r = base(); r.iflag = kIflagTimeTT;
-    CHECK(cacheKeyOf(r) != k0, "a TT instant is a different question from a UT one"); }
-  { Request r = base(); r.iflag = kIflagCenter;
-    CHECK(cacheKeyOf(r) != k0, "the center bit must split the key"); }
+    r.objs[1].name = "Vega";
+    CHECK(keyOf(r) != k1, "the star name must split the key"); }
+  { Request r = base(); r.objs[1].kind = kObjOrbitPoint; r.objs[1].naif = 301;
+    r.objs[1].point = kPtPeri; r.objs[1].method = kMethMean;
+    std::string k1 = keyOf(r);
+    CHECK(k1 != k0, "an orbit point must split the key");
+    r.objs[1].point = kPtApo;
+    std::string k2 = keyOf(r);
+    CHECK(k2 != k1, "its point must split the key");
+    r.objs[1].method = kMethOsculating;
+    CHECK(keyOf(r) != k2, "and its method"); }
+  { Request r = base(); r.profiles[0].observer = kObsHelio;
+    CHECK(keyOf(r) != k0, "the observer must split the key"); }
+  { Request r = base(); r.profiles[0].corrections = kCorrLightTime;
+    CHECK(keyOf(r) != k0, "the correction mask must split the key"); }
+  { Request r = base(); r.profiles[0].zodiac = "lahiri";
+    std::string k1 = keyOf(r);
+    CHECK(k1 != k0, "a sidereal zodiac must split the key");
+    r.profiles[0].siderealPlane = kSidPlaneInvariable;
+    CHECK(keyOf(r) != k1, "and its plane"); }
+  { Request r = base(); r.profiles[0].columns = kColAyanamsa;
+    CHECK(keyOf(r) != k0, "an extra column must split the key"); }
+  { Request r = base();
+    Tlv e;
+    EncodeDeltaTTable({{{2451545.0, 0.0}, 60.0}, {{2451547.0, 0.0}, 64.0}}, &e);
+    r.ext.push_back(e);
+    CHECK(keyOf(r) != k0, "a delta T table must split the key"); }
 
   // LRU mechanics, in units of what one five-double entry under a
   // one-letter key is charged -- the columns, the key twice and the
@@ -153,6 +180,17 @@ int main() {
   CHECK(held && held->cols.size() == 5, "a held entry survives its eviction");
   CHECK(c.usedBytes() <= U * 5 / 2, "never over the cap");
 
+  // An entry's metadata is charged too: its strings are the object names
+  // and the first failure's text, which a chart-sized answer carries 30 of.
+  {
+    auto e = std::make_shared<CacheEntry>();
+    e->cols.assign(5, 1.0);
+    e->meta.resize(1);
+    e->meta[0].name = "Mercury";
+    e->meta[0].errText = "the instant is outside this ephemeris's coverage";
+    CHECK(ResultCache::chargeOf("A", *e) > U, "metadata is charged with the columns");
+  }
+
   ResultCache z(0);
   z.put("A", entryOf(5));
   CHECK(z.get("A") == nullptr && z.entries() == 0, "zero cap stores nothing");
@@ -168,8 +206,10 @@ g++ -std=gnu++17 -O2 -Wall -I ephsrv "$SCRATCH/unit.cpp" -o "$SCRATCH/unit"
 
 # ---- 2. The live server -------------------------------------------------
 start_server() {   # $1 = --cache-mb
+  # No compute budget: this gate asks the same windows over and over on
+  # purpose, which is exactly what --cells-per-sec is there to refuse.
   "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --threads 1 --verbose \
-    --cache-mb "$1" > "$LOG" 2>&1 &
+    --cells-per-sec 0 --cache-mb "$1" > "$LOG" 2>&1 &
   EPHD_PID=$!
   for i in $(seq 1 50); do
     grep -q "evt=listen port=" "$LOG" 2>/dev/null && break
@@ -204,7 +244,7 @@ start_server 1
 
 # a. A window that fits (10 bodies x 500 rows = 240 KiB): miss, then hit,
 #    bit-identical.
-TEN="0,1,2,3,4,5,6,7,8,9"
+TEN="10,301,199,299,4,5,6,7,8,9"
 ask "$SCRATCH/m.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
 expect "cache=miss" "first window must be a miss"
 ask "$SCRATCH/h.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
@@ -236,7 +276,7 @@ echo "f32: hit on the f64 entry, and its values are the entry's rounded to f32"
 
 # c. A window larger than the cap (30 bodies x 1000 rows = 1.4 MiB > 1 MiB)
 #    is answered but not stored: entry count unchanged, second ask misses.
-THIRTY="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,10005,10006,10007,10008,10009,10010,10011"
+THIRTY="10,301,199,299,4,5,6,7,8,9,399,20000001,20000002,20000003,20000004,20002060,20005145,20000005,20000006,20000007,20000008,20000009,20000010,20000011,20000012,20000013,20000014,20000015,20000016,20000017"
 before=$(entries_of)
 ask "$SCRATCH/big1.txt" --objs "$THIRTY" --jd 2451545.0 --step 600 --count 1000
 expect "cache=miss" "oversize window must miss"

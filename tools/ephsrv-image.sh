@@ -69,7 +69,7 @@ echo "  health  /healthz ok; running as uid $(docker exec "$CID" id -u)"
 HOST_PID=$!
 for _ in $(seq 1 50); do grep -q "evt=listen port=" "$SCRATCH/host.log" && break; sleep 0.1; done
 CLI="$SCRATCH/ctx/eph_wsclient"
-ARGS=(--objs 0,1,2,3,4,5,6,7,8,9,15,10004 --jd 2451545.0 --step 86400 --count 400 --quiet)
+ARGS=(--objs 10,301,199,299,4,5,6,7,8,9,20002060,20000004 --jd 2451545.0 --step 86400 --count 400 --quiet)
 "$CLI" --port "$PORT" "${ARGS[@]}" --out "$SCRATCH/container.txt" || fail "the container's window"
 "$CLI" --port "$((PORT + 1))" "${ARGS[@]}" --out "$SCRATCH/host.txt" || fail "the host's window"
 python3 - "$SCRATCH/container.txt" "$SCRATCH/host.txt" > "$SCRATCH/cmp.txt" << 'PY' || { cat "$SCRATCH/cmp.txt"; fail "the container's window is not the host's"; }
@@ -82,11 +82,11 @@ worst = [0.0] * 6
 moved = 0
 for a, b in zip(c, h):
     fa, fb = a.split(), b.split()
-    if fa[:3] != fb[:3] or len(fa) != len(fb):
-        print("names or flags differ:\n  %s\n  %s" % (a, b)); sys.exit(1)
+    if fa[:5] != fb[:5] or len(fa) != len(fb):
+        print("names, errors or flags differ:\n  %s\n  %s" % (a, b)); sys.exit(1)
     if a != b: moved += 1
     for i in range(6):
-        worst[i] = max(worst[i], abs(float.fromhex(fa[3 + i]) - float.fromhex(fb[3 + i])))
+        worst[i] = max(worst[i], abs(float.fromhex(fa[5 + i]) - float.fromhex(fb[5 + i])))
 tol = [1e-10, 1e-10, 1e-10, 1e-8, 1e-8, 1e-8]
 print("%d rows, %d not bit-identical, worst position %.2g deg, speed %.2g deg/day"
       % (len(h), moved, max(worst[:3]), max(worst[3:])))

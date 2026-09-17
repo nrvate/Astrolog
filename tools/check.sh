@@ -73,10 +73,14 @@ gen  "dialogs from astrolog.rc"  qtrcdlg.h   python3 tools/rc2qt.py astrolog.rc
 gen  "accelerators"              qtrcaccel.h python3 tools/rc_accel.py astrolog.rc
 gen  "command ids"               qtrccmd.h   python3 tools/rc_cmd.py astrolog.rc resource.h
 gen  "settings fields"           settingsfields.h python3 tools/gen_settings_fields.py astrolog.h
-# The protocol v4 conformance fixtures (EPHEMERIS_PLUGINS_PLAN.md 3.9) are a
-# directory, not one file, so the generator checks itself.
+# The protocol v4 conformance fixtures (EPHEMERIS_PLUGINS_PLAN.md 3.10) are a
+# directory, not one file, so the generator checks itself -- contents and the
+# set's own checksum.
 step "protocol v4 fixtures"      python3 tools/ephproto4-fixtures.py --check
-step "protocol v4 codec"         sh -c 'make -s ephproto4_test && ASAN_OPTIONS=detect_leaks=0 ./ephproto4_test ephsrv/conformance'
+step "protocol v4 codec"         sh -c 'make -s ephproto_test && ASAN_OPTIONS=detect_leaks=0 ./ephproto_test ephsrv/conformance'
+# The protocol header is vendored and compiled by the other implementation,
+# so it has to stand on its own: no Astrolog header, C++20, -Werror.
+step "protocol header vendorable" tools/ci-assert-vendorable.sh
 for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
          rc_flagtype_audit rc_casttype_audit rc_context_audit \
          backend_parity_audit \
