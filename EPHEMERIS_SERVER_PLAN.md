@@ -527,7 +527,11 @@ address's compute budget, a bucket refilling at that rate up to
 `--hello-seconds` (10) closes a connection that has not said HELLO.
 `--tokens FILE` lists accepted tokens (one a line, `#` comments; counted in
 the log, never printed); a HELLO with a listed token gets that token's own
-budget, and `--require-token` refuses a HELLO without one (ERROR 7). `--ephe` overrides
+budget, and `--require-token` refuses a HELLO without one (ERROR 7).
+
+Running it somewhere other than a developer's machine -- the pinned fork,
+the container image, the systemd unit and certificate renewal -- is
+`ephsrv/deploy/README.md`. `--ephe` overrides
 discovery (§6). The server is stateless across restarts; killing and
 restarting it is always safe, and clients reconnect transparently (§4.7).
 
@@ -977,3 +981,60 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
    - Not built, on purpose: the trusted-proxy address (decision 0.2 put
      nothing in front of the server) and the PROTO fallback of a version-3
      client to a version-2-only server (no such server will be deployed).
+
+15. **Packaging (2026-09-17, branch `ephpkg`; production plan Phase 5).**
+   - `ephsrv/deploy/SWISSEPH_PIN` names the fork by commit (d1779fe,
+     ts.14) and `tools/ephsrv-fork.sh DEST` fetches and builds exactly it:
+     a shallow, blobless fetch with `ephe/` left out of the sparse checkout
+     -- 47 MB and 3 s, where the first form, sparse but not blobless,
+     downloaded the data anyway (420 MB). A server built against it passes
+     the golden gate against it. Pinned by commit rather than tag: the
+     fork's release workflow fires on tags, and tagging is the
+     maintainer's to do.
+   - `ephsrv/deploy/Dockerfile`: Debian 12, a build stage (the fork, then
+     the server) and a slim runtime (91 MB) running as a system user, the
+     ephemeris mounted at /ephe, HEALTHCHECK on /healthz over http or
+     https, STOPSIGNAL SIGTERM. `tools/ephsrv-image.sh [COMMIT]` builds it
+     from a git archive and proves it: healthy by curl and by Docker, not
+     root, its answers matching a host build of the same pin, the open-file
+     limit raised, `docker stop` draining to exit 0.
+   - Its first run failed "differs from the host's", and the image was
+     right: gcc 12 and glibc 2.36 in the image against gcc 11 and glibc
+     2.35 here moved 66 of 4801 rows by at most 1.3e-14 degrees and 6.5e-11
+     degrees a day -- rounding, the class the fork's cross-toolchain gate
+     allows 1e-5 for. The gate compares names and flags exactly and values
+     within 1e-10 degrees and 1e-8 degrees a day; bit-exactness is a
+     same-toolchain promise, which the golden gate keeps.
+   - The same run found the container's open-file soft limit at 1024, a
+     tenth of `--max-conns`' default: the server now raises its soft limit
+     to the hard one at startup and warns when it is still below the
+     connection cap.
+   - `ephsrv/deploy/astrolog-ephd.service`: a static system user (a
+     DynamicUser cannot read what certbot writes, and systemd credentials
+     are copied only at start, so a reload would not see a renewal), 443 by
+     `CAP_NET_BIND_SERVICE` alone, read-only everything, `ExecReload` as
+     SIGHUP, `TimeoutStopSec` past the drain. `certbot-deploy-hook` copies a
+     renewal to /etc/astrolog-ephd/tls with both files renamed in before
+     the reload. Checked with `systemd-analyze verify` and `sh -n` -- not run
+     on a host; that waits for one.
+   - `ephsrv/deploy/README.md`: build, data, systemd, container, operating.
+   - Not done, waiting on the maintainer: a release job publishing the
+     image and binaries (publishing is outward-facing, and a GHCR image is
+     public), and tagging the fork.
+   - `tools/ephsrv-load.sh`, a measuring instrument for Phases 6 and 7:
+     animators asking cold 30 x 1000 f32 windows back to back and casters
+     asking still charts, together, reporting latency per kind, server CPU
+     and RSS. On this machine (12 cores, other work running):
+
+     | loops | animators | casters | windows/s, p50/p99 | charts p50/p99 | CPU |
+     |---|---|---|---|---|---|
+     | 12 | 0 | 8 | -- | 1.2 / 2.3 ms (1591/s) | 2.1 cores |
+     | 12 | 4 | 8 | 3.3, 1.1 / 2.0 s | 1.3 / 5.1 ms | 3.6 cores, 114 MB |
+     | 2 | 8 | 8 | 2.7, 0.9 / 4.7 s | 2.5 ms / **4.4 s** | 1.7 cores |
+
+     A cold window costs about a second of one core. With loops to spare a
+     still chart never waits (5 ms p99); with more concurrent cold windows
+     than loops it waits behind one, 4.4 s p99 -- Phase 7's stall, real
+     and bounded by exactly that condition. (The casters' throughput under
+     animation is the client side: each chart is a new client process on a
+     machine whose cores the animators hold.)

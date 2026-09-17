@@ -12,7 +12,15 @@ to be resumed from like the other two.
   `ephproto3` (server plan work log item 14): G6, G7, G8 and G9 closed.
   Left from them: a client-side token setting (the server takes tokens;
   the client sends none), and the trusted-proxy address, not needed under
-  decision 0.2. Next: Phase 5 (packaging), whose data copy waits for a host.
+  decision 0.2.
+- **2026-09-17: Phase 5 (packaging) is built** on branch `ephpkg` (server
+  plan work log item 15): the fork pinned by commit and fetched by
+  `tools/ephsrv-fork.sh`, a container image proven by
+  `tools/ephsrv-image.sh`, a systemd unit and certbot hook, and
+  `ephsrv/deploy/README.md`. G15 is closed but for two things that are the
+  maintainer's: a release job that publishes the image and binaries, and
+  tagging the fork. **Phase 6 (go-live) is blocked on a host**: a VPS, the
+  hostname (0.5) and the data copy (0.4).
 - **2026-09-17: Phase 2 (operability) is on `qt`** (ea6cf6f; server plan work
   log item 13): G3 and G4 are closed; G5 turned out not to be a leak (the
   item says why) and is held by a gate check.
@@ -323,6 +331,16 @@ server, those binaries stay in use for years.
   required-server dialog means something to a user with no local files.
 
 ## 9. Phase 7 -- only if measured
+
+**Measured 2026-09-17** (`tools/ephsrv-load.sh`, server plan work log item
+15): a cold animation window is about one core-second; while loops
+outnumber concurrent cold windows a still chart's p99 stays at 5 ms, and
+once they do not it is 4.4 s. So the trigger is concrete: **move compute off
+the loops when the host's expected concurrent animators approach its core
+count**. For a first VPS with a handful of animating users at once and
+`--threads` = cores, not yet; the load test is to be re-run on the real host
+at go-live, and `ephd_compute_seconds` against `ephd_connections_open` in
+`/metrics` shows the approach in production.
 
 - **Compute off the event loop** (G10): workers own the contexts; loops
   parse, queue and stream; results post back with `Loop::defer`. Removes
