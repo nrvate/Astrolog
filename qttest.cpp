@@ -6970,6 +6970,12 @@ static void TestSaveFormatsQt()
       ba = file.readAll();
     file.close();
     QFile::remove(QString::fromLocal8Bit(szPath));
+    // The writers open text files in text mode, so on Windows every line
+    // ends CRLF -- as the Win32 build's do. The checks below are about
+    // content, so line endings are made one form first; asserting LF
+    // bytes failed three of them on the Windows runner (v8.00-qt.24 dry
+    // run, 2026-09-16).
+    ba.replace("\r\n", "\n");
     return fOk;
   };
 
@@ -7064,6 +7070,7 @@ static void TestSaveFormatsQt()
     ba = file.readAll();
   file.close();
   QFile::remove(QString::fromLocal8Bit(szPath));
+  ba.replace("\r\n", "\n");   // CRLF on Windows; see FWriteBytes above
   Check(ba.startsWith("DW#\n"), "wireframe: DW# header (%d bytes)",
     (int)ba.size());
 
@@ -7231,10 +7238,19 @@ static void TestFilePickersQt()
     Check(pcomp->completionCount() == 3, "typing a folder's path with a "
       "prefix completes its files (%d matches)",
       pcomp->completionCount());
-    Check(pcomp->completionModel()->index(0, 0).data().toString() ==
-      QString("file0"), "and the completion list holds the folder's "
-      "files (\"%s\")", pcomp->completionModel()->index(0, 0).data().
-      toString().toLocal8Bit().constData());
+    {
+      // As a set: the list is most recently modified first, and three
+      // files made in one breath share a timestamp on one filesystem and
+      // not on another -- the Windows runner put file2 first.
+      QStringList rgstr;
+      for (int j = 0; j < pcomp->completionCount(); j++)
+        rgstr.append(pcomp->completionModel()->index(j, 0).data().
+          toString());
+      rgstr.sort();
+      Check(rgstr == (QStringList() << "file0" << "file1" << "file2"),
+        "and the completion list holds the folder's files (\"%s\")",
+        rgstr.join(",").toLocal8Bit().constData());
+    }
     {
       int ifile = pmodel->stringList().indexOf("file0");
       Check(ifile >= 0 && pcomp->pathFromIndex(pmodel->index(ifile, 0)) ==
@@ -7285,14 +7301,17 @@ static void TestFilePickersQt()
     s_rgstrSaveFileTestQt.clear();
     s_rgstrSaveFileTestQt.append(QString("/tmp/astrolog-qt-lastdir/Probe.as"));
     DriveModalQt(ShowSaveChartDialogQt, [](QWidget *pw) { pw->close(); });
+    // Compared as the platform resolves the path: on Windows
+    // "/tmp/astrolog-qt-lastdir" is "D:/tmp/astrolog-qt-lastdir".
     Check(StrLastDirTestQt("Save Chart") ==
-      QString("/tmp/astrolog-qt-lastdir"),
+      QFileInfo(QString("/tmp/astrolog-qt-lastdir/Probe.as")).absolutePath(),
       "Save Chart remembers the folder of the file it picked (\"%s\")",
       StrLastDirTestQt("Save Chart").toLocal8Bit().constData());
 
     s_rgstrSaveFileTestQt.append(QString("/tmp/other/Probe2.as"));
     DriveModalQt(ShowSaveChartDialogQt, [](QWidget *pw) { pw->close(); });
-    Check(StrLastDirTestQt("Save Chart") == QString("/tmp/other"),
+    Check(StrLastDirTestQt("Save Chart") ==
+      QFileInfo(QString("/tmp/other/Probe2.as")).absolutePath(),
       "and it moves with the next pick (\"%s\")",
       StrLastDirTestQt("Save Chart").toLocal8Bit().constData());
     Check(StrLastDirTestQt("Open Chart").isEmpty(),
