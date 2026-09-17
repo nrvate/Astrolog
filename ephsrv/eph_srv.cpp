@@ -18,7 +18,8 @@
 //   4. loop wiring -- uWS App, per-loop state, message handlers, backpressure
 //   5. heartbeats -- uWS protocol pings on a 30 s idle timeout (plan 4.7)
 //   6. TLS -- certificate checks at startup, reload on SIGHUP
-//   7. main
+//   7. operations -- /healthz, /readyz, /metrics, and the SIGTERM drain
+//   8. main
 //
 // Every handler is a template over uWS's SSL parameter: one binary serves
 // ws:// or, given --tls-cert and --tls-key, wss:// (production plan Phase 1).
@@ -57,6 +58,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 using uWS::WebSocket;
@@ -75,6 +77,7 @@ struct Options {
   std::string bind;            // --bind: one address; empty is every interface
   std::string tlsCert;         // --tls-cert: PEM, the chain after the leaf
   std::string tlsKey;          // --tls-key: PEM private key
+  uint32_t drainSeconds = 10;  // --drain-seconds: SIGTERM's grace period
   bool Tls() const { return !tlsCert.empty(); }
 };
 
@@ -109,9 +112,14 @@ static bool parseU(const char *s, uint64_t *out) {
 static const char kUsage[] =
   "usage: astrolog-ephd [--port N] [--bind ADDR] [--ephe path] [--threads N]\n"
   "                     [--cache-mb N] [--max-cells N] [--verbose]\n"
-  "                     [--tls-cert FILE --tls-key FILE]\n"
+  "                     [--tls-cert FILE --tls-key FILE] [--drain-seconds N]\n"
   "  --tls-cert/--tls-key  serve wss:// (PEM; the chain after the leaf);\n"
-  "                        SIGHUP reloads both without dropping connections\n";
+  "                        SIGHUP reloads both without dropping connections\n"
+  "  --drain-seconds N     SIGTERM/SIGINT: stop accepting, let answers in\n"
+  "                        flight finish for up to N s (default 10), close\n"
+  "                        every connection 1001, exit 0; a second signal\n"
+  "                        exits at once\n"
+  "  GET /healthz /readyz /metrics on the same port (Prometheus text)\n";
 
 static bool parseArgs(int argc, char **argv, Options *opt) {
   for (int i = 1; i < argc; i++) {
@@ -149,6 +157,10 @@ static bool parseArgs(int argc, char **argv, Options *opt) {
       const char *val;
       if (!needValue(&val) || !*val) return false;
       opt->bind = val;
+    } else if (strcmp(a, "--drain-seconds") == 0) {
+      const char *val;
+      if (!needValue(&val) || !parseU(val, &v) || v > 3600) return false;
+      opt->drainSeconds = (uint32_t)v;
     } else if (strcmp(a, "--tls-cert") == 0) {
       const char *val;
       if (!needValue(&val) || !*val) return false;
@@ -568,8 +580,30 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
 // --cache-mb), so nothing on the request path is shared between threads.
 // ---------------------------------------------------------------------------
 
+// Counters for /metrics. Each loop writes only its own, so no two threads
+// ever write one; the atomics are for the scrape, which a different loop's
+// thread may serve, and sums every loop's.
+static const double kComputeBucketsMs[] = {1, 5, 10, 50, 100, 250, 500,
+                                           1000, 2500, 5000};
+enum { kComputeBuckets = sizeof(kComputeBucketsMs) / sizeof(*kComputeBucketsMs) };
+struct Metrics {
+  std::atomic<uint64_t> connOpen{0}, connTotal{0}, hellos{0};
+  std::atomic<uint64_t> requests{0}, cells{0}, cacheHits{0}, cacheMisses{0};
+  std::atomic<uint64_t> errors[8] = {};        // by ERROR code; 0 is other
+  std::atomic<uint64_t> bytesSent{0}, backpressureWaits{0};
+  std::atomic<uint64_t> computeBucket[kComputeBuckets] = {};
+  std::atomic<uint64_t> computeCount{0}, computeMicros{0};
+};
+
 struct LoopCtx {
   int index = 0;
+  Metrics m;
+  // Operations (section 7): the listen socket, so a drain can close it,
+  // and every open WebSocket on this loop, so a drain can end them. Both
+  // touched only on this loop's thread.
+  us_listen_socket_t *listenSock = nullptr;
+  std::unordered_set<void *> socks;
+  std::atomic<uint64_t> pendingStreams{0};  // set by a drain's check
   uWS::Loop *loop = nullptr;
   std::unique_ptr<uWS::App> app;        // plain ws://, or
   std::unique_ptr<uWS::SSLApp> sslApp;  // wss:// under --tls-cert
@@ -602,6 +636,8 @@ struct LoopCtx {
   std::string jplOpen;
 };
 
+static thread_local LoopCtx *tlc = nullptr;   // this thread's loop state
+
 // Heartbeats are uWS's own: sendPingsAutomatically sends WebSocket protocol
 // pings on the idle timeout's cadence and closes silent connections (plan
 // 4.7's intent; QWebSocket answers protocol pings by itself, so a Qt client
@@ -617,8 +653,11 @@ SendEnvelope(WebSocket<SSL, true, Conn> *ws, uint16_t type,
   std::vector<uint8_t> msg(eph::kEnvelopeSize + payloadLen);
   eph::writeEnvelope(msg.data(), type, requestId, flags, (uint32_t)payloadLen);
   if (payloadLen) memcpy(msg.data() + eph::kEnvelopeSize, payload, payloadLen);
-  return ws->send(std::string_view((char *)msg.data(), msg.size()),
-                  uWS::OpCode::BINARY);
+  auto st = ws->send(std::string_view((char *)msg.data(), msg.size()),
+                     uWS::OpCode::BINARY);
+  if (tlc && st != WebSocket<SSL, true, Conn>::SendStatus::DROPPED)
+    tlc->m.bytesSent += msg.size();
+  return st;
 }
 
 template <bool SSL>
@@ -631,6 +670,11 @@ static void SendError(WebSocket<SSL, true, Conn> *ws, uint32_t requestId,
   std::vector<uint8_t> payload(8 + n + 1);
   memcpy(payload.data(), fixed, 8);
   memcpy(payload.data() + 8, text ? text : "", n + 1);
+  if (tlc) tlc->m.errors[code > 0 && code < 8 ? code : 0]++;
+  // Every ERROR text is fixed or a count, never a request's contents: Swiss's
+  // per-row text, which names the instant, goes only to the client, inside
+  // the DATA metadata. Keep it that way (production plan decision 0.3) --
+  // a new ERROR that quotes a request must not be logged with its text.
   Log("ephd: ERROR %d to request %u: %.120s", code, requestId,
       text ? text : "");
   SendEnvelope(ws, eph::kMsgError, requestId, payload.data(), payload.size());
@@ -767,8 +811,10 @@ static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
   while (!c->out.empty()) {
     Stream &s = c->out.front();
     while (s.nextRow < s.nTimeRows) {
-      if (ws->getBufferedAmount() > kStreamBackpressure)
+      if (ws->getBufferedAmount() > kStreamBackpressure) {
+        if (tlc) tlc->m.backpressureWaits++;
         return;   // the rest on drain, once the peer has read some
+      }
       uint32_t rows = s.nTimeRows - s.nextRow;
       if (rows > s.chunkRows) rows = s.chunkRows;
       size_t chunkLen = 0;
@@ -784,8 +830,10 @@ static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
         return;   // not sent: this chunk again on drain
       s.nextRow += rows;
       s.chunkIndex++;
-      if (st == WebSocket<SSL, true, Conn>::SendStatus::BACKPRESSURE)
+      if (st == WebSocket<SSL, true, Conn>::SendStatus::BACKPRESSURE) {
+        if (tlc) tlc->m.backpressureWaits++;
         return;   // sent and buffered: the rest on drain
+      }
     }
     c->out.pop_front();
   }
@@ -829,6 +877,17 @@ static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc,
 
   s.buf.resize(eph::dataPayloadSize(s.nObj, (size_t)s.chunkRows, s.precision));
   uint32_t nObj = s.nObj, nRows = s.nTimeRows, chunkRows = s.chunkRows;
+  lc->m.requests++;
+  if (lc->lastWasHit) {
+    lc->m.cacheHits++;
+  } else {
+    lc->m.cacheMisses++;
+    lc->m.cells += (uint64_t)nObj * nRows;
+    lc->m.computeCount++;
+    lc->m.computeMicros += (uint64_t)(lc->lastComputeMs * 1000.0);
+    for (int b = 0; b < kComputeBuckets; b++)
+      if (lc->lastComputeMs <= kComputeBucketsMs[b]) lc->m.computeBucket[b]++;
+  }
   c->out.push_back(std::move(s));
   // One line per request under --verbose, and the bench and the cache gate
   // read it: "cache hit" or "cache miss <ms>", then the cache's state.
@@ -887,6 +946,7 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
 
   switch (env.type) {
     case eph::kMsgHello: {
+      lc->m.hellos++;
       // Every HELLO is answered: a client that sends a second one is
       // waiting for a WELCOME, and silence would hang it.
       eph::Hello hello;
@@ -948,7 +1008,6 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
   }
 }
 
-static thread_local LoopCtx *tlc = nullptr;   // this thread's loop state
 
 template <bool SSL>
 static void OnMessage(WebSocket<SSL, true, Conn> *ws, std::string_view message,
@@ -964,6 +1023,183 @@ static void OnMessage(WebSocket<SSL, true, Conn> *ws, std::string_view message,
 // WebSocket behavior (per-socket Conn, message handler,
 // drain resuming the stream), and the listen socket (SO_REUSEPORT lets the
 // kernel balance accepts across the per-thread listeners).
+// ---------------------------------------------------------------------------
+// 7. Operations
+//
+// Three GETs on the WebSocket port (uWS's WebSocket route yields a request
+// without a WebSocket key, so plain GETs reach these): /healthz, the process
+// answers; /readyz, it should be sent traffic -- every loop listening, an
+// ephemeris found, not draining; /metrics, Prometheus text summed over the
+// loops. Nothing in them names a client or a request (decision 0.3).
+// ---------------------------------------------------------------------------
+
+static std::vector<LoopCtx> *gLoops = nullptr;
+static std::atomic<int> gListening{0};
+static std::atomic<bool> gDraining{false};
+
+static std::string MetricsText() {
+  uint64_t connOpen = 0, connTotal = 0, hellos = 0, requests = 0, cells = 0,
+           hits = 0, misses = 0, bytes = 0, bp = 0, cCompute = 0, uCompute = 0;
+  uint64_t errors[8] = {0}, buckets[kComputeBuckets] = {0};
+  for (LoopCtx &lc : *gLoops) {
+    connOpen += lc.m.connOpen; connTotal += lc.m.connTotal;
+    hellos += lc.m.hellos; requests += lc.m.requests; cells += lc.m.cells;
+    hits += lc.m.cacheHits; misses += lc.m.cacheMisses;
+    bytes += lc.m.bytesSent; bp += lc.m.backpressureWaits;
+    cCompute += lc.m.computeCount; uCompute += lc.m.computeMicros;
+    for (int i = 0; i < 8; i++) errors[i] += lc.m.errors[i];
+    for (int b = 0; b < kComputeBuckets; b++) buckets[b] += lc.m.computeBucket[b];
+  }
+  char sz[256];
+  std::string out;
+  auto line = [&](const char *help, const char *type, const char *name,
+                  uint64_t v) {
+    snprintf(sz, sizeof(sz), "# HELP %s %s\n# TYPE %s %s\n%s %" PRIu64 "\n",
+             name, help, name, type, name, v);
+    out += sz;
+  };
+  char szSwe[256];
+  swe_version(szSwe);
+  snprintf(sz, sizeof(sz), "# HELP ephd_build_info Server and Swiss Ephemeris "
+           "versions.\n# TYPE ephd_build_info gauge\nephd_build_info{server=\"%s\","
+           "swisseph=\"%s\",protocol=\"%u\",tls=\"%d\"} 1\n", kServerVersion,
+           szSwe, (unsigned)eph::kProtoVersion, gOpt.Tls() ? 1 : 0);
+  out += sz;
+  line("WebSocket connections open.", "gauge", "ephd_connections_open", connOpen);
+  line("WebSocket connections accepted.", "counter", "ephd_connections_total", connTotal);
+  line("HELLOs answered.", "counter", "ephd_hellos_total", hellos);
+  line("REQUESTs answered with data.", "counter", "ephd_requests_total", requests);
+  line("Cells (objects x rows) computed, cache misses only.", "counter",
+       "ephd_cells_computed_total", cells);
+  line("REQUESTs answered from the result cache.", "counter", "ephd_cache_hits_total", hits);
+  line("REQUESTs computed.", "counter", "ephd_cache_misses_total", misses);
+  line("Bytes of WebSocket messages sent.", "counter", "ephd_bytes_sent_total", bytes);
+  line("Times a stream waited for the client to read.", "counter",
+       "ephd_backpressure_waits_total", bp);
+  out += "# HELP ephd_errors_total ERRORs sent, by protocol code (0 other).\n"
+         "# TYPE ephd_errors_total counter\n";
+  for (int i = 0; i < 8; i++) {
+    snprintf(sz, sizeof(sz), "ephd_errors_total{code=\"%d\"} %" PRIu64 "\n", i,
+             errors[i]);
+    out += sz;
+  }
+  out += "# HELP ephd_compute_seconds Time computing one REQUEST (cache misses).\n"
+         "# TYPE ephd_compute_seconds histogram\n";
+  for (int b = 0; b < kComputeBuckets; b++) {
+    snprintf(sz, sizeof(sz), "ephd_compute_seconds_bucket{le=\"%g\"} %" PRIu64 "\n",
+             kComputeBucketsMs[b] / 1000.0, buckets[b]);
+    out += sz;
+  }
+  snprintf(sz, sizeof(sz), "ephd_compute_seconds_bucket{le=\"+Inf\"} %" PRIu64 "\n"
+           "ephd_compute_seconds_sum %.6f\nephd_compute_seconds_count %" PRIu64 "\n",
+           cCompute, (double)uCompute / 1e6, cCompute);
+  out += sz;
+  line("1 while draining after SIGTERM.", "gauge", "ephd_draining",
+       gDraining ? 1 : 0);
+  return out;
+}
+
+template <bool SSL>
+static void WireOpsRoutes(uWS::TemplatedApp<SSL> *app) {
+  app->get("/healthz", [](auto *res, auto *) {
+    res->writeHeader("Content-Type", "text/plain")->end("ok\n");
+  });
+  app->get("/readyz", [](auto *res, auto *) {
+    const char *why = nullptr;
+    if (gDraining) why = "draining\n";
+    else if (!gHaveEphemeris) why = "no ephemeris directory found at startup\n";
+    else if (gListening.load() < gOpt.threads) why = "not every loop is listening\n";
+    if (why)
+      res->writeStatus("503 Service Unavailable")
+         ->writeHeader("Content-Type", "text/plain")->end(why);
+    else
+      res->writeHeader("Content-Type", "text/plain")->end("ready\n");
+  });
+  app->get("/metrics", [](auto *res, auto *) {
+    std::string body = MetricsText();
+    res->writeHeader("Content-Type", "text/plain; version=0.0.4")->end(body);
+  });
+}
+
+// The drain, SIGTERM's or SIGINT's. The signal thread only posts one defer
+// per loop; everything after runs on the loop itself, on a timer, because
+// a loop that has nothing left returns from run() and its thread-local
+// uWS::Loop goes with it -- the first form drove the drain from its own
+// thread and posted to loops that had already gone (a segfault at exit).
+// Each loop: closes its listen socket, so new connections are refused;
+// every 50 ms asks whether any connection still has an answer queued or
+// bytes buffered unsent, and once none has, or --drain-seconds have passed,
+// ends every WebSocket with 1001 and closes the timer. With no socket and
+// no timer left, run() returns.
+// At the deadline a connection with bytes still buffered is closed hard:
+// end()'s close frame waits behind those bytes, and a reader that never
+// reads never lets it out -- the first form left that loop running forever.
+template <bool SSL>
+static void EndAll(LoopCtx *lc, bool fHard) {
+  std::vector<void *> socks(lc->socks.begin(), lc->socks.end());
+  for (void *p : socks) {
+    auto *ws = (WebSocket<SSL, true, Conn> *)p;
+    if (fHard && ws->getBufferedAmount() > 0)
+      ws->close();
+    else
+      ws->end(1001, "server going away");
+  }
+}
+
+template <bool SSL>
+static bool FIdle(LoopCtx *lc) {
+  for (void *p : lc->socks) {
+    auto *ws = (WebSocket<SSL, true, Conn> *)p;
+    if (!((Conn *)ws->getUserData())->out.empty() || ws->getBufferedAmount() > 0)
+      return false;
+  }
+  return true;
+}
+
+struct DrainTimer {
+  LoopCtx *lc;
+  std::chrono::steady_clock::time_point tEnd;
+};
+
+template <bool SSL>
+static void DrainTick(us_timer_t *t) {
+  DrainTimer *dt = (DrainTimer *)us_timer_ext(t);
+  bool fLate = std::chrono::steady_clock::now() >= dt->tEnd;
+  if (!FIdle<SSL>(dt->lc) && !fLate)
+    return;
+  if (fLate && !FIdle<SSL>(dt->lc))
+    Log("ephd: draining: loop %d still had answers unsent after %u s; "
+        "closing", dt->lc->index, gOpt.drainSeconds);
+  EndAll<SSL>(dt->lc, fLate);
+  us_timer_close(t);
+}
+
+template <bool SSL>
+static void StartDrain(LoopCtx *lc) {
+  if (lc->listenSock) {
+    us_listen_socket_close(SSL, lc->listenSock);
+    lc->listenSock = nullptr;
+  }
+  us_timer_t *t = us_create_timer((us_loop_t *)lc->loop, 0, sizeof(DrainTimer));
+  DrainTimer *dt = (DrainTimer *)us_timer_ext(t);
+  dt->lc = lc;
+  dt->tEnd = std::chrono::steady_clock::now() +
+             std::chrono::seconds(gOpt.drainSeconds);
+  us_timer_set(t, SSL ? DrainTick<true> : DrainTick<false>, 1, 50);
+}
+
+static void Drain(std::vector<LoopCtx> *loops) {
+  const bool fTls = gOpt.Tls();
+  Log("ephd: draining: no new connections; answers in flight have %u s",
+      gOpt.drainSeconds);
+  for (LoopCtx &lc : *loops) {
+    LoopCtx *plc = &lc;
+    lc.loop->defer([plc, fTls]() {
+      if (fTls) StartDrain<true>(plc); else StartDrain<false>(plc);
+    });
+  }
+}
+
 // TLS 1.2's suites, Mozilla's "intermediate" set: forward secrecy and AEAD
 // only (section 6 says why uSockets needs to be told).
 static const char kTlsCiphers[] =
@@ -994,6 +1230,17 @@ static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
   behavior.drain = [](WebSocket<SSL, true, Conn> *ws) {
     FlushStreams(ws);
   };
+  // Counting and tracking only -- Conn is already constructed (see above).
+  behavior.open = [](WebSocket<SSL, true, Conn> *ws) {
+    tlc->m.connOpen++;
+    tlc->m.connTotal++;
+    tlc->socks.insert(ws);
+  };
+  behavior.close = [](WebSocket<SSL, true, Conn> *ws, int, std::string_view) {
+    tlc->m.connOpen--;
+    tlc->socks.erase(ws);
+  };
+  WireOpsRoutes(app);
   app->template ws<Conn>("/*", std::move(behavior));
   // "listening" is the line a client may connect on. The "ephemeris path"
   // line above it in the log is printed before any loop binds the port,
@@ -1011,6 +1258,8 @@ static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
           gOpt.bind.c_str(), (unsigned)gOpt.port);
       exit(1);
     }
+    lc->listenSock = sock;
+    gListening++;
     if (lc->index == 0 || gOpt.verbose)
       // "listening on port N" is what the gates and the suite wait for;
       // what follows it may grow, the prefix may not change.
@@ -1048,9 +1297,15 @@ static void SetupLoop(LoopCtx *lc) {
   }
 }
 
+// Run the loop, then destroy its App on the same thread: the App frees
+// socket contexts on its thread's uWS::Loop, which is thread-local and gone
+// once the thread ends (destroying them from main() after a drain was a
+// segfault).
 static void RunLoop(LoopCtx *lc) {
   if (lc->sslApp) lc->sslApp->run();
   else lc->app->run();
+  lc->sslApp.reset();
+  lc->app.reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -1159,6 +1414,12 @@ static void SignalThread(std::vector<LoopCtx> *loops, sigset_t set) {
     if (sig == SIGHUP) {
       if (gOpt.Tls()) TlsReload(loops);
       else Log("ephd: SIGHUP: no certificate to reload (plain ws://)");
+    } else if (sig == SIGTERM || sig == SIGINT) {
+      if (gDraining.exchange(true)) {
+        Log("ephd: second signal while draining; exiting now");
+        _exit(1);
+      }
+      Drain(loops);
     }
   }
 }
@@ -1269,11 +1530,22 @@ int main(int argc, char **argv) {
   }
 
   gOpt.threads = nLoops;
+  gLoops = &loops;
+  {
+    // Each connection is a descriptor; say how many this process may hold,
+    // since running out looks like a server that stopped accepting.
+    rlimit rl {};
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0)
+      Log("open-file limit %llu (soft), %llu (hard)",
+          (unsigned long long)rl.rlim_cur, (unsigned long long)rl.rlim_max);
+  }
   // Blocked here, before any thread exists, so every loop inherits the mask
   // and only SignalThread ever receives these.
   sigset_t sigs;
   sigemptyset(&sigs);
   sigaddset(&sigs, SIGHUP);
+  sigaddset(&sigs, SIGTERM);
+  sigaddset(&sigs, SIGINT);
   pthread_sigmask(SIG_BLOCK, &sigs, nullptr);
   // A loop's uWS::Loop pointer is set by SetupLoop on its own thread, and
   // TlsReload defers onto it: the signal thread must not start before every
@@ -1294,6 +1566,7 @@ int main(int argc, char **argv) {
   RunLoop(&loops[0]);
   for (std::thread &t : threads) t.join();
 
+  if (gDraining) Log("ephd: drained; exiting");
   for (LoopCtx &lc : loops)
     for (swe_ctx *ctx : lc.pool) {
       swe_close_r(ctx);   // releases file handles; never swe_close(), which

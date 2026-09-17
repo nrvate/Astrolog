@@ -469,7 +469,7 @@ Each increment lands green before the next starts.
 
     astrolog-ephd [--port N] [--bind ADDR] [--ephe path] [--threads N]
                   [--cache-mb N] [--max-cells N] [--verbose]
-                  [--tls-cert FILE --tls-key FILE]
+                  [--tls-cert FILE --tls-key FILE] [--drain-seconds N]
 
 Default port: constant `EPH_DEFAULT_PORT` in ephproto.h (47190), shared with
 the client so both ends agree with zero configuration. `--bind` listens on
@@ -479,7 +479,20 @@ and the server refuses to start on an unreadable, mismatched, expired or
 not-yet-valid one, naming the file; `kill -HUP` reloads both without
 dropping a connection, and a bad pair on reload is refused with the old one
 kept (EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phase 1; `tools/ephsrv-tls.sh`).
-A client given `wss://host` with no port connects to 443. `--ephe` overrides
+A client given `wss://host` with no port connects to 443.
+
+Operations (production plan Phase 2; `tools/ephsrv-ops.sh`): `GET /healthz`
+(200 while the process runs), `GET /readyz` (200 once every loop listens and
+an ephemeris was found; 503 with the reason otherwise, and while draining)
+and `GET /metrics` (Prometheus text: connections, HELLOs, requests, cells
+computed, cache hits and misses, bytes sent, backpressure waits, ERRORs by
+code, a compute-time histogram, build info) answer on the same port, over
+https under TLS. SIGTERM or SIGINT drains: listeners close at once, answers
+in flight finish for up to `--drain-seconds` (default 10), every connection
+is closed 1001 (hard, at the deadline, if it still has bytes unread), and
+the process exits 0; a second signal exits 1 at once. Nothing the server
+logs or exports names a request's instant, place or bodies. The startup log
+gives the open-file limit. `--ephe` overrides
 discovery (§6). The server is stateless across restarts; killing and
 restarting it is always safe, and clients reconnect transparently (§4.7).
 
@@ -847,3 +860,39 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
      ms, 8 hot clients 381 -> 353 windows/s (-7%); cold compute unchanged
      (~600 ms, the Swiss calls dominate). TLS costs under a millisecond a
      window.
+
+13. **Operations (2026-09-17, branch `ephops`; production plan Phase 2).**
+   - `/healthz`, `/readyz`, `/metrics` on the WebSocket port: uWS's
+     WebSocket route yields a GET without a WebSocket key, so plain GETs
+     reach routes registered beside it. Counters are atomics in each loop,
+     written only by that loop and summed on scrape.
+   - The drain first ran on a thread of its own and posted to the loops;
+     a loop with no connection returns from `run()` the moment its listener
+     closes, its thread-local `uWS::Loop` goes with it, and the next post
+     landed on freed memory. Separately, every App was destroyed from
+     `main()` after its loop's thread had exited -- a segfault on every
+     clean exit, never seen before because the server had never exited
+     cleanly. Now the signal thread posts one defer per loop and the drain
+     runs on a uSockets timer inside the loop (which keeps it alive until
+     the drain ends), and each App is destroyed on its own thread.
+   - The first deadline ended busy connections with a close frame, which
+     waits behind their unsent bytes -- a client that never reads kept
+     that loop running forever. At the deadline a connection with bytes
+     buffered is closed hard.
+   - G5 was re-checked against the code and was wrong: every ERROR text the
+     server logs is fixed or a count; Swiss's per-row text, which names the
+     instant, goes only into DATA metadata to the client. What exists now
+     is a comment at the log line and a gate check that a `--verbose`
+     server's log names no requested instant.
+   - Logs stay the line format the gates parse; timestamps come from
+     journald or the container runtime. `--admin-bind` was not built: the
+     routes expose nothing private.
+   - New gate `tools/ephsrv-ops.sh` (about 8 s): the routes and https, the
+     counters moving by exactly what a computed request, a cache hit and an
+     ERROR 2 should move them, `/readyz` 503 with no ephemeris, the privacy
+     check, and three drains (a slow reader receives all 100,000 rows while
+     new connections are refused; a reader that never reads is cut off at
+     `--drain-seconds` and the server exits 0; a second signal exits 1 at
+     once). Its first cache-hit check was flaky -- a second connection can
+     land on the other loop's cache -- and asks on one connection now. With
+     the drain's idle test forced true, the slow reader's check fails.

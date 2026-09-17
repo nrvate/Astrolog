@@ -8,8 +8,12 @@ to be resumed from like the other two.
 
 ## Status
 
-- **2026-09-17: Phase 1 (TLS) is built** on branch `ephtls` (server plan
-  work log item 12): G1, G11, G12 and G14 are closed, G13 on Windows; G2's
+- **2026-09-17: Phase 2 (operability) is built** on branch `ephops` (server
+  plan work log item 13): G3 and G4 are closed; G5 turned out not to be a
+  leak (the item says why) and is held by a gate check. Next: Phases 3 and
+  4 together, as protocol 3.
+- **2026-09-17: Phase 1 (TLS) is on `qt`** (5a252b7; server plan work log
+  item 12): G1, G11, G12 and G14 are closed, G13 on Windows; G2's
   `--bind` exists (the plaintext guard waits for deployment). Still open
   from Phase 1: the macOS package's TLS plugin (verify in a release dry
   run) and `QSslSocket::supportsSsl()` in `tools/build-check.sh`. The
@@ -49,7 +53,7 @@ The gaps:
 | G2 | Binds every interface | `app->listen(port)` with no host; no `--bind` |
 | G3 | No signal handling | SIGTERM kills mid-stream; no drain, no close frame, no certificate reload |
 | G4 | No health, readiness or metrics | the only route is `ws("/*")` |
-| G5 | Unstructured logs, and they leak | `Log()` printf lines with no connection id; the ERROR line (`eph_srv.cpp` ~595) prints Swiss's serr text, which carries the requested instant ("jd 2378490.500000 < lower limit ...") |
+| G5 | Unstructured logs, and they leak | `Log()` printf lines with no connection id. **Wrong as written (re-checked 2026-09-17):** every ERROR text logged is fixed or a count; Swiss's serr, which names the instant, goes only into DATA metadata. Held by `ephsrv-ops.sh`'s privacy check |
 | G6 | No per-client limits | no cap on connections, per address or total; no rate limit |
 | G7 | No authentication | none, and no field in HELLO to carry it |
 | G8 | REQUEST before HELLO is served | `kMsgRequest` handled regardless |
