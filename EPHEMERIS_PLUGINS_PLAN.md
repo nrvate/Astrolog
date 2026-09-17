@@ -842,6 +842,36 @@ with the other. **An engine never trades accuracy for speed silently.**
   its bound in WELCOME (`maxCells`) and a client keeps a request under it
   rather than discovering the limit by being refused.
 
+**The three workloads a client brings**, because they want different things:
+- **A cast.** 30-80 objects at one instant, in front of a user: latency-bound.
+  Round trips hurt; this is where one request per cast matters.
+- **Animation.** A window of instants at a fixed step, about 1000 rows, with
+  the next window prefetched at priority 1 while the current one draws.
+- **Scanning**, the heaviest and the one that shapes segments. Astrolog searches
+  for events -- aspects forming, ingresses, stations, voids, eclipses,
+  progressed hits -- by sampling uniformly and interpolating between adjacent
+  samples: `-d` is 48 divisions a day by default, so a month is about 1500 full
+  casts and a year about 4400 (charts3.cpp:270 and the interpolation at :354).
+  The event time then comes from LINEAR interpolation between two bracketing
+  samples, so its accuracy is limited by the sampling step, not by the
+  ephemeris.
+
+For scanning, **segments are an accuracy change, not a bandwidth one**: the
+client evaluates any instant locally, so an event time comes from root-finding
+on the polynomial instead of interpolating between half-hour samples, and the
+answer stops depending on `-d`. Rates from the analytic derivative make a
+station -- a sign change of the longitude rate -- exact the same way, which is
+why a segment carries a measured rate residual. A fitter should therefore be
+judged on whether the polynomial's ROOTS land where the sampled function's
+roots would, over spans of a month to a year, rather than on looking smooth;
+and where a body needs an unreasonable degree over such a span, more segments
+at a sane degree beat a refusal. The Moon decides it: 13° a day, and a
+year-long scan of lunar aspects is the commonest heavy search in the program.
+
+This is also why the reserved event-search message types (16-31) may stay
+reserved: with segments a client can search correctly for itself, which is a
+better place for that complexity than the protocol.
+
 Measured on the reference implementations (`tools/ephsrv-bench.sh`, and
 Prometheia's own bench): a cold 30-body 1000-row window is about a
 core-second of computation, and a cached one is delivered in milliseconds;
