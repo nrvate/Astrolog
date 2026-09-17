@@ -95,6 +95,7 @@
 // against ephproto.h itself -- the same header the client compiles,
 // resolved by the "-I ephsrv" the Qt makefiles carry.
 #include <QtWebSockets/QWebSocketServer>
+#include <ctime>
 #include <QtWebSockets/QWebSocket>
 #include <QtNetwork/QHostAddress>
 #include "ephproto.h"
@@ -162,6 +163,19 @@ extern int CReqSentEphSrvTestQt();
 extern int CWinSrvTestQt();
 extern CONST char *SzWarnSrvTestQt();
 extern void ClearWinSrvTestQt();
+extern void SetRowsAnimSrvTestQt(int);
+extern void SetWindowCapSrvTestQt(int);
+extern flag FApproxSrvTestQt();
+extern flag FWinInfoSrvTestQt(int, double *, int *, int *, int *, flag *,
+  flag *);
+extern void SetAnimRunningTestQt(flag);
+extern void SetAnimFrameSrvTestQt(flag);
+extern void SetWaitSrvTestQt(int);
+extern void SetHelloSrvTestQt(int);
+extern void SetChunkRowsSrvTestQt(int);
+extern int CRecastSrvTestQt();
+extern void SetWelcMaxObjsSrvTestQt(uint32_t);
+extern int NChunkProbeSrvTestQt(int);
 extern flag FSendEphSrvQt(eph::Request *);
 extern void ClampEphSrvReqQt(eph::Request *);
 extern void EphSrvFinalizeQt();
@@ -10486,11 +10500,11 @@ static void TestObjSelParseQt()
 // Capture the ephemeris dropdown's contents from the Calculation Settings
 // dialog, then close it. The dialog blocks in exec(), so as everywhere
 // else here the inspection has to be queued before it opens.
-static QString StrEphemListQt(QString *pstrWin)
+static QString StrEphemListQt(QString *pstrWin, QString *pstrEdit = NULL)
 {
-  QString strCombo, strWin;
+  QString strCombo, strWin, strEdit;
 
-  DriveModalQt(ShowCalcDialogQt, [&strCombo, &strWin](QWidget *pw) {
+  DriveModalQt(ShowCalcDialogQt, [&strCombo, &strWin, &strEdit](QWidget *pw) {
     strWin = pw->windowTitle();
     QList<QComboBox *> rg = pw->findChildren<QComboBox *>();
     for (int i = 0; i < rg.size(); i++) {
@@ -10499,6 +10513,7 @@ static QString StrEphemListQt(QString *pstrWin)
         items << rg[i]->itemText(j);
       if (items.join(",").contains("Swiss")) {
         strCombo = items.join(" | ");
+        strEdit = rg[i]->currentText();
         break;
       }
     }
@@ -10506,6 +10521,8 @@ static QString StrEphemListQt(QString *pstrWin)
   });
   if (pstrWin != NULL)
     *pstrWin = strWin;
+  if (pstrEdit != NULL)
+    *pstrEdit = strEdit;
   return strCombo;
 }
 
@@ -11027,6 +11044,29 @@ static void TestEphemerisListQt()
   Check(str.contains("Matrix"), "Matrix is offered when allowed");
   Check(!str.contains("Placalc"),
     "Placalc is never offered: the backend was removed on 2026-09-04");
+
+  // The dialog shows the method in use. Horizons is nSwissEph 3, and
+  // indexing szEphem[] by that number showed row 3 -- "Matrix Formulas"
+  // -- so OK switched a Horizons user to Matrix (EPHEMERIS_REVIEW.md C15).
+  {
+    flag fEphSav = us.fEphemFiles, fMatSav = us.fMatrixPla;
+    int nSwSav = us.nSwissEph;
+    QString strEdit;
+    us.fEphemFiles = fTrue;
+    us.nSwissEph = 3;
+    StrEphemListQt(NULL, &strEdit);
+    Check(strEdit == QString(szEphem[cmJPLWeb]), "a Horizons selection "
+      "shows as Horizons (\"%s\")", strEdit.toLocal8Bit().constData());
+    us.nSwissEph = 5;
+    StrEphemListQt(NULL, &strEdit);
+    Check(strEdit == QString(szEphem[cmEphSrv]), "the Ephemeris Server "
+      "shows as itself (\"%s\")", strEdit.toLocal8Bit().constData());
+    us.fEphemFiles = fFalse; us.fMatrixPla = fTrue;
+    StrEphemListQt(NULL, &strEdit);
+    Check(strEdit == QString(szEphem[cmMatrix]), "and Matrix as Matrix "
+      "(\"%s\")", strEdit.toLocal8Bit().constData());
+    us.fEphemFiles = fEphSav; us.fMatrixPla = fMatSav; us.nSwissEph = nSwSav;
+  }
 
   us.fNoNetwork = fNetSav; us.fNoOldCalc = fOldSav;
   printf("  the ephemeris list omits what the user switched off\n");
@@ -17962,6 +18002,9 @@ static void TestEphSrvQt()
       pconn1->close();
     else
       srv1.close();
+    // Survival is asked once the drop has been seen, not before any event
+    // has run, when it could not have been otherwise (review T12).
+    FWaitEstQt(0, 3000);
     Check(DwReqEphSrvTestQt() == dwReq,
       "the in-flight request survives the drop");
     tim.start();
@@ -18000,6 +18043,170 @@ static void TestEphSrvQt()
   }
   EphSrvFinalizeQt();
 
+  // ---- The review's client findings (EPHEMERIS_REVIEW.md, 2026-09-16) ----
+
+  // C5, C6: the chunk reader. A chunk delivered twice -- a request re-sent
+  // after a reconnect -- must not complete a window it only half filled;
+  // a row index that wraps 32 bits, or a chunk in the wrong precision,
+  // is a chunk this client cannot read.
+  Check(NChunkProbeSrvTestQt(0) == 0, "a chunk delivered twice does not "
+    "complete a window it half fills");
+  Check(NChunkProbeSrvTestQt(1) == -1, "a chunk whose rows wrap 32 bits is "
+    "refused, not copied");
+  Check(NChunkProbeSrvTestQt(2) == -1, "an f32 chunk for an f64 window is "
+    "refused");
+
+  // C13: the Swiss calls Astrolog still makes locally under this backend
+  // ask the Swiss files, as under the Swiss backend -- not a JPL file.
+  {
+    real a1, a2, a3, a4, a5, a6, b1, b2, b3, b4, b5, b6;
+    int nSw = us.nSwissEph;
+    flag fE = us.fEphemFiles;
+    us.fEphemFiles = fTrue;
+    us.nSwissEph = 0;
+    flag fA = FSwissPlanet(oMar, 2459010.5, fFalse, &a1, &a2, &a3, &a4, &a5,
+      &a6);
+    us.nSwissEph = 5;
+    flag fB = FSwissPlanet(oMar, 2459010.5, fFalse, &b1, &b2, &b3, &b4, &b5,
+      &b6);
+    us.nSwissEph = nSw; us.fEphemFiles = fE;
+    Check(fA && fB && a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4,
+      "a local Swiss call under the server backend is the Swiss answer "
+      "(%a / %a)", a1, b1);
+  }
+
+  {
+    QWebSocketServer srvMute(QString("mute"),
+      QWebSocketServer::NonSecureMode);
+    QWebSocketServer srvDrop(QString("drop"),
+      QWebSocketServer::NonSecureMode);
+    QList<QWebSocket *> rgpconnMute;
+    int cReqDrop = 0;
+
+    // C4: a peer that takes the upgrade and never WELCOMEs is a refusal
+    // after the HELLO timeout, not a Connecting that lasts until restart.
+    Check(srvMute.listen(QHostAddress::LocalHost, 0), "a mute loopback "
+      "server listens");
+    QObject::connect(&srvMute, &QWebSocketServer::newConnection, &srvMute,
+      [&srvMute, &rgpconnMute]() {
+        QWebSocket *pc;
+        while ((pc = srvMute.nextPendingConnection()) != NULL)
+          rgpconnMute.append(pc);
+      });
+    us.nSwissEph = 5; us.fEphemFiles = fTrue; us.fNoNetwork = fFalse;
+    EphSrvFinalizeQt();
+    sprintf2(S(sz), "localhost:%d", (int)srvMute.serverPort());
+    FCloneSz(sz, &us.szEphSrv);
+    SetHelloSrvTestQt(400);
+    EphSrvStartupQt();
+    Check(NEphSrvStateTestQt() == 1, "connecting to the mute server");
+    {
+      QElapsedTimer tim;
+      tim.start();
+      while (NEphSrvStateTestQt() == 1 && tim.elapsed() < 4000)
+        QApplication::processEvents(QEventLoop::AllEvents, 20);
+    }
+    FErrEphSrvTestQt(S(sz));
+    Check(NEphSrvStateTestQt() == 0 && strstr(sz, "did not answer") != NULL,
+      "a server that never WELCOMEs is given up on (state %d, \"%.80s\")",
+      NEphSrvStateTestQt(), sz);
+    Check(NRetryEphSrvTestQt() > 0, "and the ladder takes it from there");
+    SetHelloSrvTestQt(15000);
+
+    // C2: the bounded wait sleeps. A server that WELCOMEs and never
+    // answers holds a cast for the whole wait; the process must be idle
+    // for it, where the first form spun a core.
+    {
+      QByteArray baReqW;
+      QWebSocket *pconnW = NULL;
+      byte bProto = eph::kProtoVersion;
+      uint32_t dwCaps = eph::kCapFloat32;
+      QWebSocketServer srvWait(QString("wait"),
+        QWebSocketServer::NonSecureMode);
+      Check(srvWait.listen(QHostAddress::LocalHost, 0), "a silent loopback "
+        "server listens");
+      WireEphLoopbackQt(&srvWait, &bProto, &dwCaps, "silent", &baReqW,
+        &pconnW);
+      EphSrvFinalizeQt();
+      sprintf2(S(sz), "localhost:%d", (int)srvWait.serverPort());
+      FCloneSz(sz, &us.szEphSrv);
+      EphSrvStartupQt();
+      Check(FWaitEstQt(2, 5000), "welcomed by the silent server");
+      SetWaitSrvTestQt(1500);
+      {
+        QElapsedTimer tim;
+        std::clock_t c0 = std::clock();
+        tim.start();
+        SrvPrefetchQt(0.905, oEar, oPlu);
+        double sCpu = (double)(std::clock() - c0) / CLOCKS_PER_SEC,
+          sWall = tim.elapsed() / 1000.0;
+        Check(sWall >= 1.4 && sWall < 3.0, "the cast waited its bound "
+          "(%.2f s)", sWall);
+        Check(sCpu < 0.3 * sWall, "and the process slept through it "
+          "(%.2f s of CPU in %.2f s)", sCpu, sWall);
+        Check(!baReqW.isEmpty(), "the request did reach the server");
+      }
+      SetWaitSrvTestQt(10000);
+      EphSrvFinalizeQt();
+    }
+
+    // C11: a request whose every session ends before it is answered -- one
+    // that crashes the server, say -- is given up after three re-sends,
+    // where the first form re-sent it about once a second forever.
+    Check(srvDrop.listen(QHostAddress::LocalHost, 0), "a dropping loopback "
+      "server listens");
+    QObject::connect(&srvDrop, &QWebSocketServer::newConnection, &srvDrop,
+      [&srvDrop, &cReqDrop]() {
+        QWebSocket *pc;
+        while ((pc = srvDrop.nextPendingConnection()) != NULL)
+          QObject::connect(pc, &QWebSocket::binaryMessageReceived, pc,
+            [pc, &cReqDrop](CONST QByteArray &ba) {
+              eph::Envelope env;
+              if (ba.size() < (int)eph::kEnvelopeSize ||
+                !eph::parseEnvelope((const byte *)ba.constData(), &env))
+                return;
+              if (env.type == eph::kMsgHello) {
+                byte rgbW[sizeof(eph::WelcomeWire) + 256];
+                uint32_t dwLen;
+                eph::buildWelcome(rgbW, 0, 21003, "dropper", &dwLen);
+                std::vector<uint8_t> msg = eph::makeMessage(
+                  eph::kMsgWelcome, 0, rgbW, dwLen);
+                pc->sendBinaryMessage(QByteArray((const char *)msg.data(),
+                  (int)msg.size()));
+              } else if (env.type == eph::kMsgRequest) {
+                cReqDrop++;
+                pc->close();
+              }
+            });
+      });
+    EphSrvFinalizeQt();
+    sprintf2(S(sz), "localhost:%d", (int)srvDrop.serverPort());
+    FCloneSz(sz, &us.szEphSrv);
+    EphSrvStartupQt();
+    Check(FWaitEstQt(2, 5000), "welcomed by the dropping server");
+    SetBackoffEphSrvTestQt(50);
+    {
+      eph::Request rqD;
+      rqD.objs.resize(1);
+      rqD.objs[0].kind = eph::kObjBody; rqD.objs[0].id = 0;
+      rqD.jdStart = 2459010.5; rqD.stepSeconds = 600; rqD.nTime = 1;
+      rqD.chunkRows = 1; rqD.precision = eph::kPrecF64;
+      Check(FSendEphSrvQt(&rqD), "a request goes to the dropping server");
+      QElapsedTimer tim;
+      tim.start();
+      while (DwReqEphSrvTestQt() != 0 && tim.elapsed() < 8000) {
+        SetBackoffEphSrvTestQt(50);
+        QApplication::processEvents(QEventLoop::AllEvents, 20);
+      }
+      Check(DwReqEphSrvTestQt() == 0 && cReqDrop == 4, "and is given up "
+        "after three re-sends (%d sends, %s)", cReqDrop,
+        DwReqEphSrvTestQt() == 0 ? "given up" : "still in flight");
+    }
+    EphSrvFinalizeQt();
+    for (QWebSocket *pc : rgpconnMute)
+      pc->deleteLater();
+  }
+
   // The synchronous facade, increment 1: fails soft, warns once per
   // cast, never latches. The backend is deselected so the connector the
   // facade prods stays out of the way of these assertions.
@@ -18019,19 +18226,29 @@ static void TestEphSrvQt()
   }
   Check(is.fNoEphFile == fNoEphFileSav, "no fNoEphFile latch (lesson 3)");
 
-  // -0n fails fast, and the connector never runs.
+  // -0n fails fast, and the connector never runs. Through the prefetch,
+  // as a cast goes: the first form called the per-object read with no
+  // prefetch at all, so it warned "no request was made" whatever -0n said,
+  // and passed with the -0n guards removed (review T6).
   us.nSwissEph = 5;
   us.fNoNetwork = fTrue;
   EphSrvFinalizeQt();
   cWarn = NCastWarnSrvTestQt();
   {
     real r1, r2, r3, r4, r5, r6;
-    Check(!FSrvPlanetQt(oSun, 2459010.9, &r1, &r2, &r3, &r4, &r5, &r6),
-      "-0n fails the facade fast");
-    Check(NCastWarnSrvTestQt() == cWarn + 1, "with its own warning");
+    int cReq0 = CReqSentEphSrvTestQt();
+    SrvPrefetchQt(0.9, oEar, oPlu);
+    Check(!FSrvPlanetQt(oSun, JulianDayFromTime(0.9), &r1, &r2, &r3, &r4,
+      &r5, &r6), "-0n fails the facade fast");
+    Check(NCastWarnSrvTestQt() == cWarn + 1 &&
+      strstr(SzWarnSrvTestQt(), "Internet features are disabled") != NULL,
+      "with the -0n warning (\"%.80s\")", SzWarnSrvTestQt());
+    Check(CReqSentEphSrvTestQt() == cReq0, "and no request");
   }
   Check(NEphSrvStateTestQt() == 0 && NRetryEphSrvTestQt() < 0,
     "and the connector never runs under -0n");
+  EphSrvStartupQt();
+  Check(NEphSrvStateTestQt() == 0, "not even when startup asks it to");
 
   EphSrvFinalizeQt();
   us.fEphemFiles = fEphemSav;
@@ -18124,6 +18341,98 @@ static int CDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
   return c;
 }
 
+// The largest difference between two snapshots over every object and all
+// eight values, and where it is: animation frames are held to a tolerance,
+// and a tolerance is only worth what the number it was chosen from says.
+static real RMaxDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
+  int *piObj, int *piField)
+{
+  int i, f;
+  real r, rMax = 0.0;
+
+  *piObj = *piField = -1;
+  for (i = 0; i < objMax; i++)
+    for (f = 0; f < 8; f++) {
+      switch (f) {
+      case 0: r = p1->rgobj[i] - p2->rgobj[i]; break;
+      case 1: r = p1->rgalt[i] - p2->rgalt[i]; break;
+      case 2: r = p1->rgdir[i] - p2->rgdir[i]; break;
+      case 3: r = p1->rgdiralt[i] - p2->rgdiralt[i]; break;
+      case 4: r = p1->rgdirlen[i] - p2->rgdirlen[i]; break;
+      case 5: r = p1->rgpt[i].x - p2->rgpt[i].x; break;
+      case 6: r = p1->rgpt[i].y - p2->rgpt[i].y; break;
+      default: r = p1->rgpt[i].z - p2->rgpt[i].z; break;
+      }
+      // A longitude either side of 0 Aries is one degree of sky, not 360.
+      if (f == 0 && RAbs(r) > rDegHalf)
+        r = rDegMax - RAbs(r);
+      if (r != r) {
+        // NaN compares false with everything, so "largest" skipped it and
+        // every tolerance check passed a frame of NaNs (review T5). It is
+        // the largest difference there is.
+        *piObj = i; *piField = f;
+        return r;
+      }
+      if (RAbs(r) > rMax) {
+        rMax = RAbs(r); *piObj = i; *piField = f;
+      }
+    }
+  return rMax;
+}
+
+// One animation run on the server backend: nFrame ticks at a rate and
+// direction, each frame compared with the local Swiss cast of the same
+// chart. Returns the largest difference seen, the requests each frame sent
+// (rgcReq, nFrame long) and the warnings raised across the run.
+static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
+  int *pcWarn, char *szWorst, int cchMax)
+{
+  EPHSNAPSHOT snLocal, snSrv;
+  int iFrame, cReq, cWarn, iObj, iField;
+  real r, rMax = 0.0;
+  static CONST char *rgszField[8] = {"lon", "lat", "lon speed",
+    "lat speed", "dist speed", "x", "y", "z"};
+
+  *szWorst = chNull;
+  gs.nAnim = nAnim; gi.nDir = nDir; gi.fPause = fFalse;
+  cWarn = NCastWarnSrvTestQt();
+  for (iFrame = 0; iFrame < nFrame; iFrame++) {
+    // Let the background windows land, as the real event loop would
+    // between two ticks: the test drives the ticks, so nothing else pumps.
+    // The application's own animation timer is held while it pumps, or it
+    // ticks in here too and a frame moves two steps -- measured, and it
+    // put the background sends on unpredictable frames. Held as a tick in
+    // progress, not as a pause: a pause is a stop, and a stop casts the
+    // chart again exactly, which is right in the application and here put
+    // an exact request between every few frames.
+    QElapsedTimer tim;
+    SetAnimTickBusyTestQt(fTrue);
+    tim.start();
+    while (tim.elapsed() < 30)
+      QApplication::processEvents(QEventLoop::AllEvents, 10);
+    SetAnimTickBusyTestQt(fFalse);
+    us.nSwissEph = 5;
+    cReq = CReqSentEphSrvTestQt();
+    AnimTickTestQt();
+    rgcReq[iFrame] = CReqSentEphSrvTestQt() - cReq;
+    SnapshotEphQt(&snSrv);
+    us.nSwissEph = 0;
+    ciCore = ciMain;
+    CastChart(0);
+    SnapshotEphQt(&snLocal);
+    us.nSwissEph = 5;
+    r = RMaxDiffEphQt(&snLocal, &snSrv, &iObj, &iField);
+    if (r > rMax) {
+      rMax = r;
+      sprintf2(szWorst, cchMax, "%s %s at frame %d", szObjName[iObj],
+        rgszField[iField], iFrame + 1);
+    }
+  }
+  *pcWarn = NCastWarnSrvTestQt() - cWarn;
+  gs.nAnim = -nAnim;
+  return rMax;
+}
+
 // Wait for the launched server to log that it is listening, which it does
 // once the port is bound -- its "ephemeris path" line comes before that,
 // and a client that connects on it can be refused.
@@ -18149,12 +18458,13 @@ static void TestEphSrvLiveQt()
     fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
     fAddrSav = us.szEphSrv != NULL, fSidSav = us.fSidereal,
     fTopoSav = us.fTopoPos, fTrueNodeSav = us.fTrueNode,
-    fIgnoreSav = ignore[custLo];
+    fIgnoreSav = ignore[custLo], fSid2Sav = us.fSidereal2,
+    fProgSav = us.fProgress;
   QByteArray baAddrSav(SzSet(us.szEphSrv));
   int nSwissSav = us.nSwissEph, objCenterSav = us.objCenter,
     nObjSav = rgObjSwiss[0], nTypSav = rgTypSwiss[0], nPntSav = rgPntSwiss[0],
     nFlgSav = rgFlgSwiss[0];
-  CI ciSav = ciCore;
+  CI ciSav = ciCore, ciMainSav = ciMain;
   QString strBin, strEphe;
   QProcess proc;
   QByteArray baLog;
@@ -18176,12 +18486,33 @@ static void TestEphSrvLiveQt()
     printf("  skipped: no -Yi1 ephemeris directory to point the server at\n");
     goto LRestore;
   }
+  // The server next to this binary must be built from the sources next to
+  // it: nothing rebuilds it when ephsrv/ changes, and a stale one answered
+  // this group's questions with yesterday's server (review T10).
+  {
+    QDateTime dtBin = QFileInfo(strBin).lastModified(), dtSrc;
+    QString strNewest;
+    for (CONST char *szSrc : {"ephsrv/eph_srv.cpp", "ephsrv/ephproto.h",
+      "ephsrv/eph_cache.h", "ephsrv/uSockets/src/socket.c"}) {
+      QFileInfo fi(QCoreApplication::applicationDirPath() + "/" + szSrc);
+      if (fi.exists() && fi.lastModified() > dtSrc) {
+        dtSrc = fi.lastModified();
+        strNewest = szSrc;
+      }
+    }
+    Check(!dtSrc.isValid() || dtSrc <= dtBin, "astrolog-ephd is newer than "
+      "its sources (%s is newer: make ephsrv)",
+      strNewest.toLocal8Bit().constData());
+  }
   strEphe = QString::fromLocal8Bit(us.rgszPath[1]);
   if (!QDir::isAbsolutePath(strEphe))
     strEphe = QCoreApplication::applicationDirPath() + "/" + strEphe;
 
   // The real server, on a scratch port, over this run's ephemeris.
-  port = 47500 + (int)(QCoreApplication::applicationPid() % 400);
+  // Below the kernel's ephemeral range (32768 up): a port inside it can be
+  // held by some client connection's TIME_WAIT and refused to the server
+  // (tools/ephsrv-robust.sh measured it). The gates use 28000-29399.
+  port = 27000 + (int)(QCoreApplication::applicationPid() % 400);
   proc.setProcessChannelMode(QProcess::MergedChannels);
   proc.start(strBin, QStringList() << "--port" << QString::number(port)
     << "--ephe" << strEphe << "--threads" << "1");
@@ -18197,14 +18528,27 @@ static void TestEphSrvLiveQt()
   OraclePinUtQt(1990, 6, 15, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;   // west-positive, Seattle-ish
 
-  // Connect the backend.
+  // Connect the backend -- and cast before the WELCOME has arrived: a
+  // connection on its way is waited for, like an answer, where the first
+  // form failed that cast at once (EPHEMERIS_REVIEW.md C3).
   EphSrvFinalizeQt();
   ClearWinSrvTestQt();
   sprintf2(S(sz), "localhost:%d", port);
   FCloneSz(sz, &us.szEphSrv);
   us.fEphemFiles = fTrue;
+  us.nSwissEph = 0;
+  CastChart(0);
+  SnapshotEphQt(&snLocal);
   us.nSwissEph = 5;
   EphSrvStartupQt();
+  Check(NEphSrvStateTestQt() == 1, "the backend is connecting");
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  SnapshotEphQt(&snSrv);
+  cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+  Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0, "a cast made while "
+    "connecting waits for the connection and lands bit-identical (%d "
+    "warnings, %d differ: %s)", NCastWarnSrvTestQt() - cWarn, cDiff, szDiff);
   if (!FWaitEstQt(2, 10000)) {
     FErrEphSrvTestQt(S(sz));
     Check(fFalse, "the backend welcomes against the real server (state %d, "
@@ -18215,11 +18559,13 @@ static void TestEphSrvLiveQt()
   SetBackoffEphSrvTestQt(100);   // Hurry the ladder for the drop below.
 
   // The scenarios. Each: settings, local cast, server cast, compare.
-  for (iScen = 0; iScen < 8; iScen++) {
+  for (iScen = 0; iScen < 10; iScen++) {
     CONST char *szScen;
     real rTol = 0.0;
-    us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+    us.fSidereal = fFalse; us.fSidereal2 = fFalse; us.objCenter = oEar;
+    us.fTopoPos = fFalse; us.fProgress = fFalse;
     us.fTrueNode = fFalse; ignore[custLo] = fTrue;
+    AdjustRestrictions();
     OraclePinUtQt(1990, 6, 15, 12.0);
     ciCore.lon = 122.3; ciCore.lat = 47.6;
     switch (iScen) {
@@ -18245,7 +18591,25 @@ static void TestEphSrvLiveQt()
       ignore[custLo] = fFalse;
       rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 3;
       rgFlgSwiss[0] = 0;
+      // is.nObj is the highest object cast, and it is derived from the
+      // restrictions: without recomputing it the custom slot was never
+      // cast at all under compiled defaults, and this scenario repeated
+      // the first one (review T4).
+      AdjustRestrictions();
       break;
+    case 9: szScen = "progressed, where the houses and the planets are "
+      "different instants";
+      // The prefetch computes its own delta-t when its instant is not the
+      // one SwissHouse() just cached; a plain chart never reaches that
+      // line (review T9). A progressed chart casts the planets at the
+      // progressed instant.
+      us.fProgress = fTrue;
+      SetProgressTarget(6, 15, 2020, 12.0);
+      break;
+    case 8: szScen = "sidereal on the solar system plane (a second sid mode)";
+      // Fagan-Bradley is sidMode 0, the library's default: a server that
+      // ignored the mode passed the first sidereal scenario (review T8).
+      us.fSidereal = fTrue; us.fSidereal2 = fTrue; break;
     default: szScen = "a 1900 instant, where delta-t's tidal term is live";
       OraclePinUtQt(1900, 1, 1, 0.0);
       ciCore.lon = 122.3; ciCore.lat = 47.6;
@@ -18268,14 +18632,40 @@ static void TestEphSrvLiveQt()
     Check(planet[oSun] != 0.0 || planet[oMoo] != 0.0,
       "%s: the cast computed something at all", szScen);
     if (iScen == 6) {
+      Check(snSrv.rgobj[custLo] != 0.0, "%s: the custom object was cast "
+        "(is.nObj %d, custLo %d)", szScen, is.nObj, custLo);
       rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
       rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
     }
   }
-  us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+  us.fSidereal = fFalse; us.fSidereal2 = fSid2Sav; us.objCenter = oEar;
+  us.fTopoPos = fFalse; us.fProgress = fProgSav;
   us.fTrueNode = fFalse; ignore[custLo] = fIgnoreSav;
+  AdjustRestrictions();
   OraclePinUtQt(1990, 6, 15, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
+
+  // A cast made inside another cast's wait -- a timer, a paint -- leaves
+  // the waiting cast alone: it lands bit-identical. The first form wiped
+  // the waiting cast's plan on entry and failed every object it had
+  // (EPHEMERIS_REVIEW.md C1).
+  OraclePinUtQt(1990, 7, 4, 3.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  us.nSwissEph = 0;
+  CastChart(0);
+  SnapshotEphQt(&snLocal);
+  us.nSwissEph = 5;
+  {
+    static int cNested;
+    cNested = 0;
+    QTimer::singleShot(0, []() { cNested++; CastChart(0); });
+    CastChart(0);
+    SnapshotEphQt(&snSrv);
+    cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+    Check(cNested == 1 && cDiff == 0, "a cast made during another's wait "
+      "leaves it bit-identical (nested %d, %d differ: %s)", cNested, cDiff,
+      szDiff);
+  }
 
   // The window cache: the same cast again sends nothing.
   us.nSwissEph = 5;
@@ -18285,13 +18675,239 @@ static void TestEphSrvLiveQt()
   CastChart(0);
   Check(CReqSentEphSrvTestQt() == cReq && NCastWarnSrvTestQt() == cWarn,
     "a repeated cast is answered from the window cache (no request sent)");
-  Check(CWinSrvTestQt() <= 8, "the window cache is bounded (%d held)",
+  Check(CWinSrvTestQt() <= 32, "the window cache is bounded (%d held)",
     CWinSrvTestQt());
   OraclePinUtQt(1990, 6, 16, 12.0);
   ciCore.lon = 122.3; ciCore.lat = 47.6;
   CastChart(0);
   Check(CReqSentEphSrvTestQt() > cReq,
     "a cast at a new instant sends a request");
+
+  // Animation (increment 3, plan section 6). A frame an animation tick
+  // casts reads a wide f32 window on the animation's own grid, nearest
+  // row moved along the speeds; the next window goes out in the
+  // background once a frame passes the middle of its own; a calendar rate
+  // and every cast outside a tick stay exact; stopping recasts exactly.
+  // Windows of 20 rows, so the boundaries come within a few dozen frames.
+  {
+    int nAnimSav = gs.nAnim, nDirSav = gi.nDir, nModeSav = gi.nMode,
+      nRelSav = us.nRel, rgcReq[40], cWarnRun, cGroup, iFrame, cBad,
+      nStep, nTime, nPrec, iWin;
+    flag fPauseSav = gi.fPause, fAnim, fDone;
+    double jdStart;
+    real rMax;
+    char szWorst[cchSzMax];
+
+    us.nRel = rcNone; gi.nMode = gWheel;
+    us.nSwissEph = 5;
+    ClearWinSrvTestQt();
+    SetRowsAnimSrvTestQt(20);
+    // Seven rows a chunk: every 20-row window arrives in three, so the
+    // frames below read rows reassembled from several chunks, as every
+    // real 1000-row window is (review T2: nothing tested reassembly).
+    SetChunkRowsSrvTestQt(7);
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+
+    // Forward, five minutes a frame, 32 frames: windows at frames 1, 11
+    // (row 10 of the first, past its middle) and 31 (row 10 of the
+    // second).
+    rMax = RAnimRunSrvQt(2, 5, 32, rgcReq, &cWarnRun, S(szWorst));
+    cGroup = rgcReq[0];
+    Check(cGroup >= 1, "animation: the first frame asks for its window "
+      "(%d requests)", cGroup);
+    FWinInfoSrvTestQt(CWinSrvTestQt() - 1, &jdStart, &nStep, &nTime, &nPrec,
+      &fAnim, &fDone);
+    Check(fAnim && nStep == 300 && nTime == 20 && nPrec == eph::kPrecF32,
+      "animation: the window is f32 on the frame grid (anim %d, step %d s, "
+      "%d rows, precision %d)", fAnim, nStep, nTime, nPrec);
+    cBad = 0;
+    for (iFrame = 1; iFrame < 32; iFrame++)
+      if (rgcReq[iFrame] != ((iFrame == 10 || iFrame == 30) ? cGroup : 0))
+        cBad++;
+    Check(cBad == 0, "animation: only frames 11 and 31 send, each the next "
+      "window in the background (%d frames otherwise; 11: %d, 21: %d, "
+      "31: %d)", cBad, rgcReq[10], rgcReq[20], rgcReq[30]);
+    Check(cWarnRun == 0, "animation: no frame warned (\"%.100s\")",
+      SzWarnSrvTestQt());
+    Check(rMax <= 5e-5, "animation: every frame within 5e-5 of the local "
+      "cast (largest %.3g, %s)", rMax, szWorst);
+    Check(FApproxSrvTestQt(), "animation: the frames are marked approximate");
+
+    // A cast outside a tick, animation or not, is still asked exactly.
+    {
+      EPHSNAPSHOT snL, snS;
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(cDiff == 0, "animation: a cast outside a tick stays bit-identical "
+        "(%d differ: %s)", cDiff, szDiff);
+    }
+
+    // Stopping casts the chart again, exactly. The chart on screen first
+    // has to BE a frame's: the run above ends on the local oracle cast, so
+    // the frame is cast again here the way a tick casts it, and shown to
+    // differ from the local one -- or the assertion after the stop would
+    // pass with no recast at all, which is how its first draft passed.
+    {
+      EPHSNAPSHOT snL, snS;
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5;
+      gs.nAnim = 2; gi.nDir = 5;
+      SetAnimFrameSrvTestQt(fTrue);
+      CastChart(0);
+      SetAnimFrameSrvTestQt(fFalse);
+      SnapshotEphQt(&snS);
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(FApproxSrvTestQt() && cDiff > 0, "animation: a frame's chart is "
+        "the approximate one before the stop (%d objects differ)", cDiff);
+      SetAnimRunningTestQt(fFalse);
+      SnapshotEphQt(&snS);
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5;
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(cDiff == 0 && !FApproxSrvTestQt(), "animation: stopping leaves "
+        "the bit-exact chart (%d differ: %s)", cDiff, szDiff);
+    }
+
+    // Backward, two hours a frame: the window is anchored below the frame
+    // and its successor goes out once the frames pass its middle going
+    // down (frame 11, row 9 of 20).
+    ClearWinSrvTestQt();
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+    rMax = RAnimRunSrvQt(3, -2, 12, rgcReq, &cWarnRun, S(szWorst));
+    cBad = 0;
+    for (iFrame = 0; iFrame < 12; iFrame++)
+      if (rgcReq[iFrame] != ((iFrame == 0 || iFrame == 10) ? cGroup : 0))
+        cBad++;
+    Check(cBad == 0 && cWarnRun == 0, "animation backward: frames 1 and 11 "
+      "send, no others, no warnings (%d frames otherwise; 1: %d, 11: %d)",
+      cBad, rgcReq[0], rgcReq[10]);
+    Check(rMax <= 5e-5, "animation backward: within 5e-5 of the local cast "
+      "(largest %.3g, %s)", rMax, szWorst);
+
+    // Half a second a frame on a one-second grid: every other frame sits
+    // half a row from its row, which only the speed correction closes --
+    // the Moon moves about 1.4e-4 degrees in that half second.
+    ClearWinSrvTestQt();
+    rMax = RAnimRunSrvQt(11, 5, 12, rgcReq, &cWarnRun, S(szWorst));
+    Check(rMax <= 5e-5 && cWarnRun == 0, "animation off the grid: a frame "
+      "half a row out is corrected to within 5e-5 (largest %.3g, %s)",
+      rMax, szWorst);
+
+    // A calendar rate is not a uniform grid: each frame is asked exactly.
+    ClearWinSrvTestQt();
+    rMax = RAnimRunSrvQt(5, 1, 3, rgcReq, &cWarnRun, S(szWorst));
+    fAnim = fTrue;
+    for (iWin = 0; FWinInfoSrvTestQt(iWin, &jdStart, &nStep, &nTime, &nPrec,
+      &fAnim, &fDone) && !fAnim; iWin++)
+      ;
+    Check(rMax == 0.0 && !fAnim && CWinSrvTestQt() > 0, "animation by "
+      "months: bit-identical frames from exact one-row windows (largest "
+      "%.3g, %s)", rMax, szWorst);
+
+    // A frame of a short step (one second) sends its next window from the
+    // middle of the current one: the check for "next window already here"
+    // used to find the current window's own slack and never send it, for
+    // every step of two minutes or less (EPHEMERIS_REVIEW.md A3).
+    ClearWinSrvTestQt();
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+    rMax = RAnimRunSrvQt(1, 1, 25, rgcReq, &cWarnRun, S(szWorst));
+    cBad = 0;
+    for (iFrame = 0; iFrame < 25; iFrame++)
+      if (rgcReq[iFrame] != ((iFrame == 0 || iFrame == 10) ? cGroup : 0))
+        cBad++;
+    Check(cBad == 0 && cWarnRun == 0 && rMax <= 5e-5, "animation by seconds: "
+      "frames 1 and 11 send, frame 21 is already covered (%d frames "
+      "otherwise; 11: %d, 21: %d; largest %.3g)", cBad, rgcReq[10],
+      rgcReq[20], rMax);
+
+    // Frames off the grid -- the chart time edited mid-animation, as a
+    // progressed or midpoint chart's instants are anyway -- are asked
+    // exactly, not read a quarter row away and corrected to first order
+    // (EPHEMERIS_REVIEW.md A4).
+    ClearWinSrvTestQt();
+    rMax = RAnimRunSrvQt(2, 5, 3, rgcReq, &cWarnRun, S(szWorst));
+    ciMain.tim += 2.5 / 60.0;   // Half a five-minute row.
+    rMax = RAnimRunSrvQt(2, 5, 3, rgcReq, &cWarnRun, S(szWorst));
+    Check(rMax == 0.0 && cWarnRun == 0, "animation off its grid: frames are "
+      "asked exactly (largest %.3g, %s)", rMax, szWorst);
+
+    // A window reaching past the edge of the ephemeris files fails every
+    // object for the whole window on the server; frames inside the files
+    // are asked exactly instead of failing (EPHEMERIS_REVIEW.md A2). The
+    // bundled files begin on 1 January 1800 (JD 2378497, measured): nine
+    // days a frame backward from 1 March 1800 is six frames inside them,
+    // and the window anchored below the first frame reaches 1799. (The
+    // END of the files cannot stage this: the fork answers rows past the
+    // end inside a window that began before it -- EPHEMERIS_REVIEW.md F11.)
+    ClearWinSrvTestQt();
+    OraclePinUtQt(1800, 3, 1, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+    rMax = RAnimRunSrvQt(4, -9, 6, rgcReq, &cWarnRun, S(szWorst));
+    Check(rMax == 0.0 && cWarnRun == 0, "animation up to the ephemeris edge: "
+      "no warnings, exact frames (%d warnings, largest %.3g, %s)", cWarnRun,
+      rMax, szWorst);
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+
+    // Stopped some other way than the menu -- a warning box negates
+    // gs.nAnim, and so does -Xn -- the chart on screen is still cast again
+    // exactly: the timer's next tick does it (EPHEMERIS_REVIEW.md A7).
+    ClearWinSrvTestQt();
+    rMax = RAnimRunSrvQt(2, 5, 3, rgcReq, &cWarnRun, S(szWorst));
+    {
+      EPHSNAPSHOT snL, snS;
+      gs.nAnim = 2;
+      SetAnimFrameSrvTestQt(fTrue);
+      CastChart(0);
+      SetAnimFrameSrvTestQt(fFalse);
+      Check(FApproxSrvTestQt(), "animation: the frame on screen is "
+        "approximate before the stop");
+      gs.nAnim = -2;          // What PrintWarningQt() does.
+      AnimTickTestQt();
+      SnapshotEphQt(&snS);
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5;
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(cDiff == 0 && !FApproxSrvTestQt(), "animation stopped by a "
+        "warning box: the next tick leaves the bit-exact chart (%d differ: "
+        "%s)", cDiff, szDiff);
+    }
+
+    // A cast with more groups than the cache holds keeps every window it
+    // points at: with room for one, a heliocentric chart (two groups) holds
+    // two, rather than reading the first after the second evicted it.
+    ClearWinSrvTestQt();
+    SetWindowCapSrvTestQt(1);
+    us.objCenter = oSun;
+    {
+      EPHSNAPSHOT snL, snS;
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast with more groups "
+        "than the window cap holds all its windows (%d held, %d differ: %s)",
+        CWinSrvTestQt(), cDiff, szDiff);
+    }
+    us.objCenter = oEar;
+    SetWindowCapSrvTestQt(32);
+    SetRowsAnimSrvTestQt(1000);
+    SetChunkRowsSrvTestQt(500);
+    ClearWinSrvTestQt();
+    us.nRel = nRelSav; gi.nMode = nModeSav;
+    gs.nAnim = nAnimSav; gi.nDir = nDirSav; gi.fPause = fPauseSav;
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+  }
 
   // A drop mid-session: the cast fails soft, once in words; the server
   // comes back and the next cast is bit-identical again.
@@ -18305,11 +18921,28 @@ static void TestEphSrvLiveQt()
   Check(NCastWarnSrvTestQt() == cWarn + 1,
     "a cast with the server gone fails soft with one warning");
   Check(is.fNoEphFile == fNoEphFileSav, "and sets no fNoEphFile latch");
+  // Once per cast, not once per instant: the same chart cast again is a
+  // second cast, and says so (EPHEMERIS_REVIEW.md C8).
+  CastChart(0);
+  Check(NCastWarnSrvTestQt() == cWarn + 2, "the same chart cast again warns "
+    "again (%d)", NCastWarnSrvTestQt() - cWarn);
+  cReq = CRecastSrvTestQt();
   baLog.clear();
   proc.start(strBin, QStringList() << "--port" << QString::number(port)
     << "--ephe" << strEphe << "--threads" << "1");
   Check(FWaitEphdQt(&proc, &baLog, 10000), "the server restarted");
   Check(FWaitEstQt(2, 15000), "the backend reconnected on its ladder");
+  // The chart that failed for want of the server is cast again by the
+  // WELCOME, not left at 0 Aries until the user does something
+  // (EPHEMERIS_REVIEW.md C3).
+  {
+    QElapsedTimer tim;
+    tim.start();
+    while (CRecastSrvTestQt() == cReq && tim.elapsed() < 3000)
+      QApplication::processEvents(QEventLoop::AllEvents, 20);
+  }
+  Check(CRecastSrvTestQt() == cReq + 1, "the WELCOME recast the chart that "
+    "missed the server (%d recasts)", CRecastSrvTestQt() - cReq);
   us.nSwissEph = 0;
   CastChart(0);
   SnapshotEphQt(&snLocal);
@@ -18321,6 +18954,26 @@ static void TestEphSrvLiveQt()
   Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0,
     "after the reconnect a cast is bit-identical again (%d differ: %s)",
     cDiff, szDiff);
+
+  // A server whose WELCOME allows fewer objects a request than a chart
+  // has: the cast is split into more requests, not clamped under a plan
+  // that still reads the columns cut off (EPHEMERIS_REVIEW.md C7).
+  SetWelcMaxObjsSrvTestQt(5);
+  ClearWinSrvTestQt();
+  OraclePinUtQt(1990, 6, 19, 12.0);
+  ciCore.lon = 122.3; ciCore.lat = 47.6;
+  us.nSwissEph = 0;
+  CastChart(0);
+  SnapshotEphQt(&snLocal);
+  us.nSwissEph = 5;
+  cWarn = NCastWarnSrvTestQt();
+  CastChart(0);
+  SnapshotEphQt(&snSrv);
+  cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+  Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0 && CWinSrvTestQt() >= 3,
+    "a server allowing 5 objects a request: %d requests, bit-identical (%d "
+    "differ: %s)", CWinSrvTestQt(), cDiff, szDiff);
+  SetWelcMaxObjsSrvTestQt(eph::kMaxObjs);
 
   // -0n: fails fast, sends nothing.
   us.fNoNetwork = fTrue;
@@ -18343,14 +18996,18 @@ LRestore:
   us.fEphemFiles = fEphemSav;
   us.nSwissEph = nSwissSav;
   us.fNoNetwork = fNoNetSav;
-  us.fSidereal = fSidSav; us.objCenter = objCenterSav;
+  us.fSidereal = fSidSav; us.fSidereal2 = fSid2Sav;
+  us.fProgress = fProgSav;
+  us.objCenter = objCenterSav;
   us.fTopoPos = fTopoSav; us.fTrueNode = fTrueNodeSav;
   ignore[custLo] = fIgnoreSav;
+  AdjustRestrictions();
   rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
   rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
   FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
   is.fNoEphFile = fNoEphFileSav;
   ciCore = ciSav;
+  ciMain = ciMainSav;   // The scenarios move it too (review T11).
   CastChart(0);   // Leave the arrays as the chart before this group had them.
   SetNoPopupQt(fPopSav);
 }

@@ -17,9 +17,11 @@
 # swetest-oracle tooling. Objects go in obj-ephsrv/ so this can be built
 # alongside everything else without clobbering anything.
 #
-# Prerequisites, both built by the "ephsrv" target below when missing:
-#   the uSockets static library (vendored, ephsrv/uSockets) and the
-#   thread-safe fork's libswe.a ("cd $(SWE_HOME) && make libswe.a").
+# Prerequisites: the uSockets static library (vendored, ephsrv/uSockets),
+#   which the "ephsrv" target builds when missing, and the thread-safe
+#   fork's libswe.a, which it does NOT build -- "cd $(SWE_HOME) && make
+#   libswe.a" -- but does depend on, so a rebuilt fork relinks the server
+#   rather than leaving it answering from the old library.
 #
 # SWE_HOME is where the fork lives. Overridable on the command line the
 # same way QT6_LIBDIR is: "make -f Makefile.ephsrv SWE_HOME=/path".
@@ -55,7 +57,7 @@ RM = rm -f
 # gates' "make -s ephsrv" fallback then never produced eph_wsclient.
 all: $(NAME) $(CLIENT)
 
-$(NAME): $(OBJS) ephsrv/uSockets/uSockets.a
+$(NAME): $(OBJS) ephsrv/uSockets/uSockets.a $(SWE_HOME)/libswe.a
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
 $(CLIENT): $(OBJDIR)/eph_wsclient.o

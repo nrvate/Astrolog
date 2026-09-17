@@ -17,9 +17,11 @@
 //
 // Entries are held by shared_ptr: a stream in flight keeps its entry alive
 // after eviction, so a cache full of big windows can turn over freely while
-// slow clients drain. Memory is accounted at the columns plus the metadata;
-// the map and list overhead is not counted, which errs by well under one
-// percent at the sizes that matter (a 30-body 1000-row window is 1.4 MB).
+// slow clients drain. Memory is accounted at the columns plus the metadata
+// plus the key (held twice, in the list node and the map) and a fixed
+// allowance for the nodes and allocation headers. Without the last two a
+// one-object one-row entry counted 176 bytes against ~550 real, so a cache
+// of chart casts ran to about three times --cache-mb.
 // An entry larger than the whole cap is computed and streamed but not
 // stored, rather than evicting everything to make room for one tenant.
 //
@@ -35,6 +37,7 @@
 #include <cstdint>
 #include <cstring>
 #include <list>
+#include <random>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -112,10 +115,14 @@ inline std::string cacheKeyOf(const Request &req) {
 
 // FNV-1a over the canonical key: the plan names the function, and it is
 // the map's hash. Equality is still on the full key bytes, so a collision
-// costs a compare, never a wrong answer.
+// costs a compare, never a wrong answer. The basis is mixed with a seed
+// drawn once per cache, because every byte hashed is a byte the client
+// chose: with a fixed seed a client can compute keys that share a bucket
+// and turn each lookup into a scan of the whole loop's cache.
 struct CacheKeyHash {
+  uint64_t seed = 0;
   size_t operator()(const std::string &k) const {
-    uint64_t h = 1469598103934665603ULL;
+    uint64_t h = 14695981039346656037ULL ^ seed;
     for (unsigned char c : k) {
       h ^= c;
       h *= 1099511628211ULL;
@@ -126,7 +133,17 @@ struct CacheKeyHash {
 
 class ResultCache {
  public:
-  explicit ResultCache(size_t capBytes = 0) : cap_(capBytes) {}
+  explicit ResultCache(size_t capBytes = 0)
+    : cap_(capBytes), map_(16, CacheKeyHash{SeedOf()}) {}
+
+  // Per-entry bookkeeping beyond the columns, metadata and key bytes: the
+  // list node, the map node and bucket slot, the shared_ptr control block
+  // and the allocation headers of each. Estimated, not measured per entry.
+  static constexpr size_t kEntryOverhead = 320;
+
+  static size_t chargeOf(const std::string &key, const CacheEntry &e) {
+    return e.bytes() + 2 * key.size() + kEntryOverhead;
+  }
 
   size_t capBytes() const { return cap_; }
   size_t usedBytes() const { return used_; }
@@ -156,17 +173,17 @@ class ResultCache {
   // but the container should not hold two of one key).
   void put(const std::string &key, std::shared_ptr<const CacheEntry> entry) {
     if (cap_ == 0 || !entry) return;
-    size_t need = entry->bytes();
+    size_t need = chargeOf(key, *entry);
     if (need > cap_) return;
     auto it = map_.find(key);
     if (it != map_.end()) {
-      used_ -= it->second->entry->bytes();
+      used_ -= chargeOf(it->second->key, *it->second->entry);
       order_.erase(it->second);
       map_.erase(it);
     }
     while (used_ + need > cap_ && !order_.empty()) {
       Node &victim = order_.back();
-      used_ -= victim.entry->bytes();
+      used_ -= chargeOf(victim.key, *victim.entry);
       map_.erase(victim.key);
       order_.pop_back();
       evictions_++;
@@ -177,6 +194,10 @@ class ResultCache {
   }
 
  private:
+  static uint64_t SeedOf() {
+    std::random_device rd;
+    return ((uint64_t)rd() << 32) ^ (uint64_t)rd();
+  }
   struct Node {
     std::string key;
     std::shared_ptr<const CacheEntry> entry;

@@ -16,6 +16,7 @@
 #ifndef EPHPROTO_H
 #define EPHPROTO_H
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -96,6 +97,9 @@ inline constexpr uint64_t kIflagTimeTT = 1ull << 32;
 // as 4.4 has always said, and a nonzero center means pctr either way.
 inline constexpr uint64_t kIflagCenter = 1ull << 33;
 inline constexpr uint64_t kIflagProtoMask = kIflagTimeTT | kIflagCenter;
+
+// The largest |jdStart| a REQUEST may carry (parseRequest).
+inline constexpr double kJdAbsMax = 1e8;
 
 // WELCOME limits (server clamps/returns kErrLimits per these).
 inline constexpr uint32_t kMaxObjs       = 64;
@@ -483,6 +487,20 @@ inline ParseResult parseRequest(const uint8_t *p, size_t len, Request *out) {
   if (!r.ok()) return kParseBad;
 
   if (out->nTime == 0) return kParseBad;
+  // Every real the server hands Swiss must be finite, and the instant must
+  // be one Swiss has an answer for. A NaN jdStart reached
+  // swemmoon.c's corr_mean_node(), which indexes a table with
+  // (int)floor(NaN) -- one 180-byte REQUEST crashed every loop of the
+  // server -- and the library's own range checks are "<" and ">", which
+  // NaN passes. 1e8 days is well past both ends of every ephemeris.
+  if (!std::isfinite(out->jdStart) || std::fabs(out->jdStart) > kJdAbsMax ||
+      !std::isfinite(out->sidT0) || !std::isfinite(out->sidAyanOff) ||
+      !std::isfinite(out->topoLon) || !std::isfinite(out->topoLat) ||
+      !std::isfinite(out->topoElv))
+    return kParseBad;
+  // The high half of iflag is the protocol's; a bit it does not define is
+  // a malformed request, not a cache key that can never hit.
+  if ((out->iflag >> 32) & ~(kIflagProtoMask >> 32)) return kParseBad;
   if (out->nTime > kMaxRows) return kParseLimits;
   if (out->precision > kPrecF32) return kParseBad;
   if (!r.ok() || r.left() != 0) return kParseBad;  // trailing bytes

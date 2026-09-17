@@ -14,7 +14,7 @@
 # Knobs (env):
 #   SWE_HOME   where the thread-safe fork lives  (default /shares/swisseph)
 #   EPH            the ephemeris dir handed to --ephe (default: the repo's)
-#   PORT           scratch port                  (default 47200 + pid % 400)
+#   PORT           scratch port                  (default 28000 + pid % 400)
 #   KEEP           set to keep the server running after the gate
 #
 # Exit 0 with "GOLDEN PASS" when every column matches; nonzero with the
@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.."
 ROOT=$PWD
 SWE_HOME=${SWE_HOME:-/shares/swisseph}
 EPH=${EPH:-$ROOT/ephem}
-PORT=${PORT:-$((47200 + $$ % 400))}
+PORT=${PORT:-$((28000 + $$ % 400))}   # below the ephemeral range: ephsrv-robust.sh says why
 SCRATCH=$(mktemp -d /tmp/ephsrv-golden.XXXXXX)
 EPHD_PID=
 
@@ -180,6 +180,13 @@ leg() {   # leg <label> <oracle-mode> <oracle-ipl> <client args...>
     if [ "$got" != "$oracle" ]; then
       FAIL=$((FAIL + 1))
       echo "$label MISMATCH ($who)"; echo "  server: $got"; echo "  oracle: $oracle"
+    fi
+    # The flags the server computed with must name the Swiss files: a
+    # Moshier fallback answers close enough to look right in a spot check,
+    # and nothing compared this column (EPHEMERIS_REVIEW.md T13).
+    if [ $((retFlag & 2)) -eq 0 ]; then
+      FAIL=$((FAIL + 1))
+      echo "$label FLAGS ($who): retFlag $retFlag lacks SEFLG_SWIEPH"
     fi
   done < "$SCRATCH/leg.txt"
 }

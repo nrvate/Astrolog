@@ -252,10 +252,15 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
   is ERROR code 5 with the SWE error text.
 - Requests are pure functions of their payload. There is no session state:
   a dropped connection re-sends the same requestId after reconnect.
-- Heartbeat: server PINGs every 20s, expects PONG within 60s; client may
-  PING too. Either side closes on missed heartbeats.
-- The server computes with `swe_calc_ut_r` (jd UT; delta-t handled inside
-  SWE, same as the client's local swe_calc(JDE) path).
+- Heartbeat (as built): uWS protocol-level pings on a 30 s idle timeout,
+  closing a silent connection; the app-level PING/PONG types remain for
+  clients without automatic pong. (The sketch said app PINGs every 20 s
+  with a 60 s deadline; nothing implements that.)
+- The server computes with `swe_calc_ut_r` for UT body requests,
+  `swe_calc_r` under kIflagTimeTT, `swe_fixstar(_ut)_r` for stars, and
+  `swe_calc_pctr_r` / `swe_nod_aps_r` (which take ET) for centered and
+  node/apsis requests, converting a UT instant with `swe_deltat_ex_r`
+  (§4.4 is the detail).
 
 ## 5. Server architecture
 
@@ -266,7 +271,11 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
   result cache. No cross-thread sharing, no locks on the hot path.
 - Context pool: `swe_ctx_new()` / `swe_calc_ut_r()` / `swe_ctx_free()`
   (swephexp.h:774-801 in the fork), contract: one thread at a time per
-  context, contexts fully independent. Pool sized 2x cores. Each context is
+  context, contexts fully independent. ONE context per loop (as built,
+  2026-09-16): a loop is one thread, so more parallelised nothing, opened
+  every file again per context, and made an answer depend on which of a
+  loop's contexts served it. The sketched 2x-cores pool left loops past
+  it with none (`--threads` above 2x cores: ERROR 4). Each context is
   ~23KB; `swe_ctx_new()` inherits the process master config, so the ephemeris
   path set once at startup reaches every context.
 - Per-request configuration uses ONLY the `_r` scoped setters on the serving
@@ -295,8 +304,16 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
   hold their entry by `shared_ptr`, so eviction never pulls the columns
   out from under a slow client. No invalidation — requests are pure
   functions of static files, and a changed tree is picked up by restart.
-- Backpressure: uWS send buffering; chunks sized so a slow client cannot
-  balloon server memory (`maxChunkRows` from WELCOME).
+- Backpressure (as built, work log item 9): DATA chunks go out until the
+  connection has 4 MiB buffered unsent, then wait for drain; control
+  replies (WELCOME, ERROR, PONG) always go out. uWS's own
+  `maxBackpressure` is off, because past it uWS drops every send, the
+  refusals included. A connection may hold 4 computed-and-unread answers;
+  past that a REQUEST is refused ERROR 2 before anything is computed.
+  NOT bounded: the CPU one request may take -- 64 bodies x 20000 rows is
+  ~14 s of its loop, during which that loop's other connections wait
+  (EPHEMERIS_REVIEW.md S4, deferred: a cells budget would change what
+  WELCOME promises).
 
 ## 6. Ephemeris path discovery (zero config)
 
@@ -616,3 +633,49 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
    answered nobody and looked alive. It logs "listening on port" from the
    listen callback now, exits with a message when the port cannot be
    bound, and the four gates and the suite wait for that line.
+
+9. **The full review's server findings, fixed with a gate of their own
+   (2026-09-16, EPHEMERIS_REVIEW.md S1-S13).** `tools/ephsrv-robust.sh`
+   holds one assertion per finding, each seen failing with its fix
+   removed:
+   - A REQUEST with a NaN or infinite jdStart crashed every loop (the
+     fork indexes a table with `(int)floor(NaN)` for the mean node and
+     apogee). parseRequest refuses non-finite reals, |jdStart| past 1e8,
+     and iflag bits the protocol does not define.
+   - A chunk that met BACKPRESSURE was sent again on drain -- uWS had
+     buffered it -- so a row-counting client finished early with zeros.
+     Fixing that exposed a stall underneath: vendored uSockets'
+     `us_socket_write2`, the path uWS takes for frames of 16 KB and up,
+     never set `last_write_failed`, so a partial write made from inside
+     the drain callback had its WRITABLE poll turned straight back off
+     and the buffered tail was never sent. The old code had hidden it by
+     re-sending whole chunks. One line in `ephsrv/uSockets/src/socket.c`,
+     marked ASTROLOG PATCH; found by logging each send on the server and
+     each chunk on the client until the two disagreed.
+   - Past uWS's `maxBackpressure` every send was DROPPED, the ERROR
+     refusing a queued request included, so that client waited forever.
+     The ceiling is applied to DATA chunks alone now (§5).
+   - A second `Conn` constructed over the one uWS had made leaked ~575
+     bytes a connection (11 MiB per 20000).
+   - `--threads` above the pool left loops with no context.
+   - uSockets sets SO_REUSEPORT on every listener, so a second server on
+     a port did not fail -- it shared the connections. The server connects
+     to its port before binding and exits if anything answers. (A trial
+     bind was the first form, and it refused ports that only had client
+     connections in TIME_WAIT on them.)
+   - Smaller: the planet-name buffer is AS_MAXCH; the cache charges the
+     key and a per-entry allowance, not the columns alone, and its hash is
+     seeded per cache; every HELLO is parsed and answered; the zstd flag
+     and text frames are refused; a node/apsis retFlag is the flags used;
+     an object's name survives its last row failing; Makefile.ephsrv
+     relinks when the fork's libswe.a changes.
+   - Every gate's port and the suite's moved below the kernel's ephemeral
+     range (32768 up): after the robustness gate's 20000 connections,
+     their TIME_WAIT sockets held ports scattered across it, and the
+     golden gate's server was refused its port with nothing listening.
+   - eph_wsclient checks every answer row by row (a row twice, a row
+     missing, a chunk for another request) and gained `--sleep-ms`,
+     `--burst`, `--cycles` and `--hello` for the gate.
+   Deferred with reasons in the review ledger: a per-request CPU budget,
+   per-row failure reporting (both change the protocol), and the JPL
+   setter's cost.

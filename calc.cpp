@@ -3702,7 +3702,12 @@ static int GetSwissFlags()
   int iflag;
 
   iflag = SEFLG_SPEED;
-  iflag |= (us.nSwissEph <= 0 ? SEFLG_SWIEPH :
+  // The Ephemeris Server backend (nSwissEph 5) is the Swiss files on
+  // another machine, so the calls Astrolog still makes locally under it --
+  // a progressed arc, a star, a phase -- ask the local Swiss files too.
+  // They used to fall to SEFLG_JPLEPH, the value for "anything else", and
+  // went looking for a JPL file nobody chose.
+  iflag |= (us.nSwissEph <= 0 || us.nSwissEph == 5 ? SEFLG_SWIEPH :
     (us.nSwissEph == 1 ? SEFLG_MOSEPH : SEFLG_JPLEPH));
   if (us.fSidereal) {
     swe_set_sid_mode(!us.fSidereal2 ? SE_SIDM_FAGAN_BRADLEY :
