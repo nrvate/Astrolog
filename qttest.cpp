@@ -17653,6 +17653,9 @@ static void TestDivergencesQt()
 // stops LISTENING and leaves connected clients alone, so a scenario that
 // wants a drop closes this.
 
+// The token the last loopback HELLO carried, for the -bT check.
+static QByteArray s_baHelloTokenQt;
+
 static void WireEphLoopbackQt(QWebSocketServer *psrv, byte *pbProto,
   uint32_t *pdwCaps, CONST char *szVer, QByteArray *pbaReq,
   QWebSocket **ppconn)
@@ -17670,6 +17673,11 @@ static void WireEphLoopbackQt(QWebSocketServer *psrv, byte *pbProto,
               !eph::parseEnvelope(rgb, &env))
               return;
             rgb += eph::kEnvelopeSize;
+            if (env.type == eph::kMsgHello) {
+              eph::Hello hello;
+              if (eph::parseHello(rgb, env.payloadLen, &hello))
+                s_baHelloTokenQt = QByteArray(hello.token.c_str());
+            }
             if (env.type == eph::kMsgHello && *pbProto == 0) {
               // 0: a server for which this client is too old -- ERROR 8,
               // then the close, as astrolog-ephd answers it.
@@ -17734,15 +17742,17 @@ static flag FWaitDataQt(CONST QByteArray *pba, int msMax)
 static flag FWantEphSrvQt(CONST char *sz)
 {
   return FEqSzPrefixQt(sz, "=bS") || FEqSzPrefixQt(sz, "_bS") ||
-    FEqSzPrefixQt(sz, "-bW") || FEqSzPrefixQt(sz, "=b ");
+    FEqSzPrefixQt(sz, "-bW") || FEqSzPrefixQt(sz, "-bT") ||
+    FEqSzPrefixQt(sz, "=b ");
 }
 
 static void TestEphSrvQt()
 {
   flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
     fNoEphFileSav = is.fNoEphFile, fPopSav = FNoPopupQt(),
-    fAddrSav = us.szEphSrv != NULL;
+    fAddrSav = us.szEphSrv != NULL, fTokenSav = us.szEphSrvToken != NULL;
   QByteArray baAddrSav(SzSet(us.szEphSrv));
+  QByteArray baTokenSav(SzSet(us.szEphSrvToken));
   QByteArray baFileOutSav(SzSet(is.szFileOut));
   flag fFileOutSav = is.szFileOut != NULL;
   int nSwissSav = us.nSwissEph, nWriteFormatSav = us.nWriteFormat;
@@ -17771,6 +17781,9 @@ static void TestEphSrvQt()
   FProcessCommandLine("-bW example.com:1234");
   Check(FEqSz(us.szEphSrv, "example.com:1234"), "-bW stores the address");
   Check(!FProcessCommandLine("-bW"), "an address-less -bW is refused");
+  FProcessCommandLine("-bT \"tok en-1\"");
+  Check(FEqSz(us.szEphSrvToken, "tok en-1"), "-bT stores the token");
+  Check(!FProcessCommandLine("-bT"), "a token-less -bT is refused");
 
   // The settings writer carries both, and only the one backend spelling,
   // and they replay.
@@ -17782,7 +17795,7 @@ static void TestEphSrvQt()
   Check(FOutputSettings(), "the settings writer wrote a file");
   {
     char szLine[cchSzLine];
-    flag fSawB = fFalse, fSawW = fFalse;
+    flag fSawB = fFalse, fSawW = fFalse, fSawT = fFalse;
     FILE *file = FileOpen(szPath, 1, NULL, 0);
     Check(file != NULL, "and it can be read back");
     while (file != NULL && FReadSzLineSkip(file, szLine, cchSzLine)) {
@@ -17790,21 +17803,26 @@ static void TestEphSrvQt()
         fSawB = fTrue;
       if (FEqSz(szLine, "-bW \"example.com:1234\""))
         fSawW = fTrue;
+      if (FEqSz(szLine, "-bT \"tok en-1\""))
+        fSawT = fTrue;
     }
     if (file != NULL)
       fclose(file);
     Check(fSawB, "the file carries \"=bS\" for the server backend");
     Check(fSawW, "and \"-bW\" with the quoted address");
+    Check(fSawT, "and \"-bT\" with the quoted token");
   }
   us.nSwissEph = 0;
   us.fEphemFiles = fFalse;
   FCloneSz("other.host:9", &us.szEphSrv);
+  FCloneSz(NULL, &us.szEphSrvToken);
   i = CReplaySettingsQt(szPath, FWantEphSrvQt);
   Check(i > 0, "the -b lines replay (%d)", i);
   Check(us.nSwissEph == 5 && us.fEphemFiles,
     "\"=bS\" replays to the server backend");
   Check(FEqSz(us.szEphSrv, "example.com:1234"),
     "\"-bW\" replays the address");
+  Check(FEqSz(us.szEphSrvToken, "tok en-1"), "\"-bT\" replays the token");
   FCloneSz(fFileOutSav ? baFileOutSav.constData() : NULL, &is.szFileOut);
   us.nWriteFormat = nWriteFormatSav;
   us.fNoWrite = fNoWriteSav;
@@ -18008,6 +18026,9 @@ static void TestEphSrvQt()
       pw->swissephVersion == 21003, "its limits and versions stored");
     Check(FEqSz(pw->serverVersion.c_str(), szVer1),
       "and the server's version string with them");
+    Check(s_baHelloTokenQt == QByteArray(SzSet(us.szEphSrvToken)) &&
+      !s_baHelloTokenQt.isEmpty(), "HELLO carried the -bT token (\"%s\")",
+      s_baHelloTokenQt.constData());
     Check(NBackoffEphSrvTestQt() == 1000, "a session resets the ladder");
 
     // What WELCOME promised governs the rows as well (protocol 2, S4): a
@@ -18344,6 +18365,7 @@ static void TestEphSrvQt()
   us.nSwissEph = nSwissSav;
   us.fNoNetwork = fNoNetSav;
   FCloneSz(fAddrSav ? baAddrSav.constData() : NULL, &us.szEphSrv);
+  FCloneSz(fTokenSav ? baTokenSav.constData() : NULL, &us.szEphSrvToken);
   is.fNoEphFile = fNoEphFileSav;
   SetNoPopupQt(fPopSav);
 }

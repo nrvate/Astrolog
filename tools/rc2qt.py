@@ -91,11 +91,13 @@ QT_ONLY_ROWS = {
     "dlgCalc": [
         '  {ctlLabel,  "Server Address:", "dlSe_W", -1, 5,246,80,8},',
         '  {ctlEdit,   "", "deSe_W", -1, 95,243,100,13},',
+        '  {ctlLabel,  "Server Token:", "dlSe_T", -1, 5,262,80,8},',
+        '  {ctlEdit,   "", "deSe_T", -1, 95,259,100,13},',
     ],
 }
 # The extended dialogs reach below the Windows resource's own height.
 QT_ONLY_HEIGHT = {
-    "dlgCalc": 258,
+    "dlgCalc": 274,
 }
 
 

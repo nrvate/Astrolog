@@ -131,6 +131,7 @@ US us = {
   NULL,
   NULL,
   NULL,
+  NULL,   // szEphSrvToken
 
   // Value subsettings
   0, 5, 200, cPart, 22, 0.0, 0.0, rDayInYear, 1.0, 0.5, ccNone, ccNone,

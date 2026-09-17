@@ -5162,6 +5162,16 @@ void ShowCalcDialogQt()
     // same way -bW's empty setting reads back as default.
     QLineEdit *peditAddr = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_W");
     QLabel *plabelAddr = (QLabel *)PwRcFindQt(rgbuilt, "dlSe_W");
+    // The token rides beside it, shown and hidden with it, and masked: it
+    // is a credential for a server that requires one (-bT).
+    QLineEdit *peditToken = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_T");
+    QLabel *plabelToken = (QLabel *)PwRcFindQt(rgbuilt, "dlSe_T");
+    if (peditToken != NULL) {
+      peditToken->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+      peditToken->setPlaceholderText("none");
+      if (SzSet(us.szEphSrvToken))
+        peditToken->setText(QString::fromUtf8(us.szEphSrvToken));
+    }
     if (peditAddr != NULL) {
       if (SzSet(us.szEphSrv))
         peditAddr->setText(QString::fromUtf8(us.szEphSrv));
@@ -5176,14 +5186,22 @@ void ShowCalcDialogQt()
       if (plabelAddr != NULL)
         plabelAddr->setVisible(FShowAddr());
       peditAddr->setVisible(FShowAddr());
+      if (plabelToken != NULL)
+        plabelToken->setVisible(FShowAddr());
+      if (peditToken != NULL)
+        peditToken->setVisible(FShowAddr());
       QObject::connect(pcbEphem, &QComboBox::editTextChanged, peditAddr,
-        [peditAddr, plabelAddr](CONST QString &str) {
+        [peditAddr, plabelAddr, peditToken, plabelToken](CONST QString &str) {
           char szT[cchSzMax];
           SzFieldQt(szT, str);
           bool fShow = FMatchSz(szT, szEphem[cmEphSrv]);
           if (plabelAddr != NULL)
             plabelAddr->setVisible(fShow);
           peditAddr->setVisible(fShow);
+          if (plabelToken != NULL)
+            plabelToken->setVisible(fShow);
+          if (peditToken != NULL)
+            peditToken->setVisible(fShow);
         });
     }
   }
@@ -5292,6 +5310,12 @@ void ShowCalcDialogQt()
       char szAddr[cchSzMax];
       SzFieldQt(szAddr, peditAddr->text());
       FCloneSz(szAddr[0] ? szAddr : NULL, &us.szEphSrv);
+    }
+    QLineEdit *peditToken = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_T");
+    if (peditToken != NULL && FCmSrv()) {
+      char szToken[cchSzMax];
+      SzFieldQt(szToken, peditToken->text());
+      FCloneSz(szToken[0] ? szToken : NULL, &us.szEphSrvToken);
     }
   }
   us.rZodiacOffset = rs;

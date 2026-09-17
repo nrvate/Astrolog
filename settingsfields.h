@@ -197,6 +197,7 @@ static CONST SETTINGFIELD rgsetfield[] = {
   {"us.szStarsList", "Value settings", "-YRU", (short)(offsetof(US, szStarsList)), 's', 0},
   {"us.szExoList", "Value settings", "-YUx", (short)(offsetof(US, szExoList)), 's', 0},
   {"us.szEphSrv", "Value settings", "-bW", (short)(offsetof(US, szEphSrv)), 's', 0},
+  {"us.szEphSrvToken", "Value settings", "-bT", (short)(offsetof(US, szEphSrvToken)), 's', 0},
   {"us.nWheelRows", "Value subsettings", "", (short)(offsetof(US, nWheelRows)), 'i', 0},
   {"us.nAstroGraphStep", "Value subsettings", "", (short)(offsetof(US, nAstroGraphStep)), 'i', 0},
   {"us.nAstroGraphDist", "Value subsettings", "", (short)(offsetof(US, nAstroGraphDist)), 'i', 0},

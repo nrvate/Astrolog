@@ -7543,9 +7543,10 @@ static void EphSrvConnect()
       return;
     // Say hello first; WELCOME comes back by signal.
     // Protocol 3: the highest version this client speaks, the f32 caps it
-    // reads, and no token (a server that requires one refuses with ERROR 7,
-    // which is final above).
-    eph::buildHello(rgbHello, eph::kCapFloat32, 0, szVersionCore, &dwLen);
+    // reads, and the -bT token when one is set (a server that requires one
+    // and gets none, or an unknown one, refuses with ERROR 7, final above).
+    eph::buildHello(rgbHello, eph::kCapFloat32, 0, szVersionCore, &dwLen,
+      SzSet(us.szEphSrvToken));
     msg = eph::makeMessage(eph::kMsgHello, 0, rgbHello, dwLen);
     pws->sendBinaryMessage(QByteArray((const char *)msg.data(),
       (int)msg.size()));

@@ -527,7 +527,10 @@ address's compute budget, a bucket refilling at that rate up to
 `--hello-seconds` (10) closes a connection that has not said HELLO.
 `--tokens FILE` lists accepted tokens (one a line, `#` comments; counted in
 the log, never printed); a HELLO with a listed token gets that token's own
-budget, and `--require-token` refuses a HELLO without one (ERROR 7).
+budget, and `--require-token` refuses a HELLO without one (ERROR 7). On
+the client, the token is `-bT "..."` in astrolog.as, or Calculation Settings'
+Server Token field (masked, shown with the address while the server backend
+is selected).
 
 Running it somewhere other than a developer's machine -- the pinned fork,
 the container image, the systemd unit and certificate renewal -- is
@@ -1038,3 +1041,14 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
      and bounded by exactly that condition. (The casters' throughput under
      animation is the client side: each chart is a new client process on a
      machine whose cores the animators hold.)
+
+16. **The client's token setting, `-bT` (2026-09-17, branch `ephtoken`).**
+    `us.szEphSrvToken`, at the end of `US`'s string settings with its
+    initializer beside the others; the `-b` family's `T` suffix, standing
+    alone like `W`; the settings writer's quoted `-bT` line; a masked Server
+    Token row under Server Address in Calculation Settings (`tools/rc2qt.py`'s
+    Qt-only rows, the dialog now 274 high), shown and hidden with it; and
+    HELLO carrying it. Suite: `-bT` stores, refuses no argument, is written
+    quoted, replays, and the loopback server's HELLO receives it (191 checks
+    in `ephem-server`, from 186); `settings-fields` round-trips the new
+    field unchanged. make check all clear.

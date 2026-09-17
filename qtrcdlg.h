@@ -518,10 +518,12 @@ static CONST RCCTL rgctlCalc[] = {
   {ctlIcon,   "", "icon", 3, 115,212,20,20},
   {ctlLabel,  "Server Address:", "dlSe_W", -1, 5,246,80,8},
   {ctlEdit,   "", "deSe_W", -1, 95,243,100,13},
+  {ctlLabel,  "Server Token:", "dlSe_T", -1, 5,262,80,8},
+  {ctlEdit,   "", "deSe_T", -1, 95,259,100,13},
 };
 #define cctlCalc (int)(sizeof(rgctlCalc) / sizeof(RCCTL))
 #define dxCalc 203
-#define dyCalc 258
+#define dyCalc 274
 
 // dlgChart -- 261 x 247 dialog units, from astrolog.rc
 #define szTitleChart "Chart Settings"

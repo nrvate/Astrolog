@@ -2261,8 +2261,8 @@ static int NSwA(CONST char *szSwitch, PARSEIN *pin)
   return 2;
 }
 
-// The -b ephemeris-selection family: the digit suffixes and -bW (the
-// server address, not a backend choice) stand alone; every other spelling
+// The -b ephemeris-selection family: the digit suffixes, -bW and -bT (the
+// server's address and token, not backend choices) stand alone; every other spelling
 // also turns ephemeris files on, exactly as the retired case fell
 // through to.
 
@@ -2347,6 +2347,15 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     // not garbage: the settings writer emits -bW "" for it, and a file
     // that failed to load its own output would be no format at all.
     FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL, &us.szEphSrv);
+    return 1;
+  }
+  else if (ch1 == 'T') {
+    // The token a server that requires one is given in HELLO (protocol
+    // 3). Like -bW, a setting of where and how to connect, not a backend
+    // choice, and "" is none.
+    if (FErrorArgc("bT", pin->argc, 1))
+      return tcError;
+    FCloneSz(*SzSet(pin->argv[1]) ? pin->argv[1] : NULL, &us.szEphSrvToken);
     return 1;
   }
   SwitchF(us.fEphemFiles);

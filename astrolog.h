@@ -2360,6 +2360,8 @@ typedef struct _UserSettings {
   char *szEphSrv;      // -bW, the Ephemeris Server's ws:// URL or
                        // host:port; empty means localhost on the
                        // protocol's default port (ephproto.h)
+  char *szEphSrvToken; // -bT, the token HELLO carries to a server that
+                       // requires one (protocol 3); empty sends none
 
   // Value subsettings
   int   nWheelRows;        // Number of rows per house to use for -w wheel.

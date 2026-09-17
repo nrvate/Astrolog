@@ -1814,6 +1814,10 @@ flag FOutputSettings()
   PrintF(
     "; Ephemeris server address  [ws:// URL or host:port; \"\" is "
     "localhost:47190]\n");
+  PrintF("-bT "); PrintQuotedParamSz(file, us.szEphSrvToken); PrintF("\n");
+  PrintF(
+    "; Ephemeris server token    [for a server that requires one; \"\" is "
+    "none]\n");
   sprintf2(S(sz), "%cbm     ", ChDashF(us.fMatrixPla)); PrintFSz();
   PrintF(
     "; Use Matrix formulas       [\"=bm\" uses them, \"_bm\" doesn't   ]\n");

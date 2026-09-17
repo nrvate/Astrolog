@@ -10,9 +10,9 @@ to be resumed from like the other two.
 
 - **2026-09-17: Phases 3 and 4 are built** as protocol 3 on branch
   `ephproto3` (server plan work log item 14): G6, G7, G8 and G9 closed.
-  Left from them: a client-side token setting (the server takes tokens;
-  the client sends none), and the trusted-proxy address, not needed under
-  decision 0.2.
+  Left from them: the trusted-proxy address, not needed under decision
+  0.2. The client-side token setting followed on branch `ephtoken`
+  (server plan work log item 16): `-bT`.
 - **2026-09-17: Phase 5 (packaging) is built** on branch `ephpkg` (server
   plan work log item 15): the fork pinned by commit and fetched by
   `tools/ephsrv-fork.sh`, a container image proven by
