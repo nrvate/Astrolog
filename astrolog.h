@@ -606,7 +606,7 @@ template <class T, size_t N> inline size_t CchArray(T (&)[N]) { return N; }
 // changing it would move the switch matrix and every other harness that
 // captures a banner -- a behaviour change, for a number that is
 // upstream's to set.
-#define szVersionFork "23"
+#define szVersionFork "24"
 #define szVersionQt   szVersionCore "-qt." szVersionFork
 // What a chart's own header says, text or graphics: "Astrolog 8.00 Qt" in
 // the Qt build so a screenshot shows which program drew it, and upstream's
