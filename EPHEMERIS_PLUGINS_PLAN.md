@@ -154,6 +154,19 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 - **Enumerated fields** carry registry values (Appendix A). A value the
   receiver does not implement makes REQUEST fail with ERROR 11, not ERROR 1:
   registries grow.
+- **The answering direction tolerates growth.** Registries grow while released
+  clients stay in use, so a client MUST accept a server message carrying a value
+  it does not know, and MUST NOT treat it as malformed:
+  - an unknown per-object `errCode` means that object failed, reason unknown;
+  - unknown META flag bits are ignored;
+  - an unknown ERROR code is a failure of unknown kind — `flags` still says
+    whether the connection is closing and whether a retry may work;
+  - an unknown match `quality`, orbit method or object kind inside a
+    LOOKUP_RESULT means "not something this client can ask for", and the match
+    is skipped.
+  The exception is anything that changes how following bytes are read: an
+  unadvertised bit in DATA's `columnsPresent` changes the row width, so it is
+  malformed.
 - **Floats** MUST be finite. The single exception is the canonical quiet NaN,
   `0x7FF8000000000000`, which is allowed only where a field says so.
 - **Canonical input.** A receiver MUST reject non-canonical input (ERROR 1)
@@ -180,8 +193,9 @@ Every message is a 16-byte envelope followed by `payloadLen` bytes of payload.
   - The client chooses a request's id. It MUST be nonzero and MUST NOT be reused
     while that request's answer is outstanding.
   - Answers carry the id of the question they answer.
-  - Id 0 is for connection-level messages: HELLO, WELCOME, PING, PONG and
-    connection-level ERRORs.
+  - It MUST be 0 on HELLO, WELCOME, PING, PONG and a connection-level ERROR, and
+    MUST be nonzero on REQUEST, CANCEL and LOOKUP and on the DATA, SEGDATA,
+    LOOKUP_RESULT and ERROR messages answering them.
 - **Unknown message type.** ERROR 3, not closing.
 
 ### 3.3 Negotiation and frozen layouts
@@ -848,6 +862,10 @@ the numbers that matter to a GUI are in EPHEMERIS_SERVER_PRODUCTION_PLAN.md.
 - Astrolog's codec tests and Prometheia's `server_ephproto_matches_astrolog`
   test both parse every fixture and check the expected outcome.
 - An `ok` fixture must re-encode to the identical bytes.
+- **What fixtures cannot prove.** A fixture is one message, so the rules about
+  sequences — chunks contiguous, ascending and covering every row exactly once;
+  segments contiguous to 1e-9 day; an answer following its own request — are
+  server-side tests on each side, not fixtures.
 
 ## 4. Source plugins
 
@@ -1101,9 +1119,9 @@ server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from
 - 0x8003 datasetId pin, str8 (critical) — the whole identity in one string;
   ERROR 5 if the server's datasetId differs
 - 0x8004 ΔT table (critical; requires the `ΔT tables` cap): u32 n (2..65535
-  entries allowed by the TLV length), n × {TIME t, f64 deltaTSec}, instants in
-  the request's time scale, strictly ascending, all finite. When present the
-  REQUEST's `deltaTSec` MUST be the canonical NaN (§3.5).
+  entries allowed by the TLV length), n × {TIME t, f64 deltaTSec}, **instants in
+  TT** whatever the request's time scale (§3.5), strictly ascending, all finite.
+  When present the REQUEST's `deltaTSec` MUST be the canonical NaN.
 
 **A.5 Observers:**
 - 0 geocentric
@@ -1226,6 +1244,8 @@ T = (t_TT − epoch) / 36525 Julian centuries, as in `seorbel.txt`.
 - 10 cancelled
 - 11 unsupported (a value, capability or critical extension not advertised)
 - 12 draining (retry elsewhere)
+
+**A.21 Element centres** (kind 4 `centre`): 0 Sun, 1 Earth.
 
 **A.20 Precession model tokens** (REQUEST TLV 0x0003, WELCOME TLV 0x000D):
 - `iau2006` — Capitaine et al. 2003, IAU 2006 (the default)
