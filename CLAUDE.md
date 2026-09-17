@@ -52,6 +52,8 @@ Work happens on branch **`qt`**.
   (`tools/ephsrv-golden.sh`, `-soak.sh`, `-cache.sh`, `-bench.sh`,
   `-robust.sh`) are
   run by hand, like everything else here.
+  `EPHEMERIS_SERVER_PRODUCTION_PLAN.md` is the next step: TLS, limits,
+  operability, packaging and a public address, phase by phase.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the

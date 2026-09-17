@@ -55,7 +55,10 @@ Everything below is landed and pushed; this section is the resume pointer.
   bit-exact, with its heliocentric leg and topocentric legs at Greenwich
   and Sydney), and `make check` is all clear with the live group
   included (suite 5757/0).
-- **Open work: none.** The client's four increments are all landed:
+- **Next: production.** Built is not deployable -- no TLS, limits,
+  health checks, packaging or public address. The plan for that is
+  `EPHEMERIS_SERVER_PRODUCTION_PLAN.md` (2026-09-17).
+- **Open work in this plan: none.** The client's four increments are all landed:
   increment 3 plus the full review's fixes as `11a672c`, protocol 2
   (review items S4, S9, S12, S-fork, T8; work log item 10) as `8d6d1d1`
   from branch `ephdefer`, and increment 4 (the required-server dialog)
