@@ -62,7 +62,13 @@ Work happens on branch **`qt`**.
   to resolve, regenerated fixtures and a new digest), then Prometheia's
   independent reader run is the gate. Read that plan's **Status** section
   before touching the protocol -- a fixed-part change is free now and
-  impossible after the lock. The server links the thread-safe Swiss Ephemeris fork at
+  impossible after the lock. **`EPHEMERIS_PROTOCOL_COLLABORATION.md`** is how
+  that negotiation was actually run between two agent sessions: the shape of a
+  round, the discipline that made objections productive (with the errors on
+  both sides that produced each rule), who decides what, and why a peer agent
+  can never grant permission. Read it before opening a round with another
+  implementation; it is written to work with no peer channel at all.
+  The server links the thread-safe Swiss Ephemeris fork at
   `/shares/swisseph` (a sibling repo, not vendored), so a checkout
   without it builds everything else and the `ephem-server-live` suite
   group skips itself with a printed reason. Its eight gates

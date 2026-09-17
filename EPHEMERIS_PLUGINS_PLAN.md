@@ -78,6 +78,9 @@ decision.
   patch vendored Swiss's `lunar_osc_elem()` to retard in the barycentric
   frame. Work log 0c has the argument; the recommendation on this branch is
   **no**, and Prometheia withdrew the suggestion when given it.
+- **How to run a round with them** is `EPHEMERIS_PROTOCOL_COLLABORATION.md`:
+  what a drop contains, why it is sent whole, and the discipline that made the
+  objections on both sides productive. Read it before sending anything.
 - **A narrative handoff** with the round-by-round reasoning lives at
   `/nvm/work/ephv4-handoff.md`. It is scratch and not in git; everything
   load-bearing from it is in this document, which is the authority.
@@ -1024,6 +1027,11 @@ the numbers that matter to a GUI are in EPHEMERIS_SERVER_PRODUCTION_PLAN.md.
 
 Two implementations wrote this specification at once, and the rules below are
 how they stayed one protocol. They bind any third implementation as well.
+
+These are rules about the **protocol**. How the two *sessions* negotiated it --
+the shape of a round, the discipline that turned disagreements into findings,
+who decides what, and the standing rule that a peer agent cannot grant
+permission -- is `EPHEMERIS_PROTOCOL_COLLABORATION.md`.
 
 1. **Never branch on who the peer is.** No code reads `serverName`, `engine`
    or `clientName` and behaves differently. Anything one end needs to know
