@@ -79,6 +79,10 @@ QT_GUI_PLAN.md.
   field under Server Address in Calculation Settings. The client's default
   address is still `localhost` -- a public default is the production
   plan's Phase 6.
+- **Two traps in selecting the backend, fixed 2026-09-17** (work log item
+  7): `-bS` no longer switches ephemeris files off as it selects the
+  server, and a refusal under `-0n` names `=0n` and the one way to lift it.
+  How to point Astrolog at a server is in `ephsrv/deploy/README.md`.
 - The fork this connects to is `2.10.03-ts.14`; see the server plan's
   Status section for branch, commit and gate state.
 
@@ -163,8 +167,13 @@ These shaped the spec below; each is a design correction, not trivia.
 - -0n (us.fNoNetwork) disables the backend at selection time: as built the
   combo does not offer it at all (qtdialog.cpp), and ComputeEphem fails
   fast and says why, once per cast. The shipped `astrolog.as` carries
-  `=0n`, so a user who loads it gets "-bS" refused until they clear -0n
-  -- by design, and worth knowing before a bug report says otherwise.
+  `=0n`, and **-0n is a one-way lock**: every `-0` switch only ever sets
+  its flag, `_0n` does nothing (`NSwZero()`), and the `astrolog.as` beside
+  the program is read before any `-i` file or the command line -- so no
+  switch can lift it. The only remedy is editing that line to `_0n`,
+  which never sets the lock; both the `-bS` refusal and the cast's warning
+  say so (work log item 7). By design upstream, and worth knowing before a
+  bug report says otherwise.
 
 ## 4. Connection lifecycle
 
@@ -548,3 +557,27 @@ Each increment lands green (build both binaries, suite) before the next.
    offline group gained seven checks (detection truth table, the dialog
    welcoming in one attempt against a loopback server, the ladder
    giving up and returning under the suite's no-exit hook); 5751/0.
+7. **Two selection traps, found by casting from a local server (2026-09-17,
+   branch `ephtraps`).** Pointing the Qt build at `astrolog-ephd` serving
+   `/swe` took two detours, neither a bug in the connection. First,
+   `-bS` answered "The switch -bS is not allowed now" under the
+   maintainer's `nrvate.as` and under the shipped `astrolog.as` alike:
+   both set `=0n`, the lock is one-way, and the file beside the program is
+   read first -- the line's own comment, `"_0n" allows`, is only true of
+   writing `_0n` in the file. The refusal now says that, naming `=0n` and
+   the file, and the cast-time warning under `-0n` (`SrvPrefetchQt()`)
+   does too; the lock itself is upstream's and unchanged. Second, with the
+   lock lifted, `-bS` selected the server and nothing connected: every
+   `-b` suffix falls through to toggling `fEphemFiles`, `nrvate.as` had
+   files on, so `-bS` turned them off, and `FCmSrv()` needs both. `=bS`
+   worked. `-bS` now turns files on whenever it selects the server --
+   it is this fork's spelling, so the fix is ours; upstream's `-bj` and
+   `-bJ` keep the toggle, and turning the server off still falls through.
+   The console build is untouched (its `-bS` returns before either).
+   Nets, both shown to fail with the old code in one build: `-bS` from
+   files-on keeps them on, and the `-0n` refusal's text names `=0n` and
+   `_0n` -- read through a new hook, `SzPopupSuppressedTestQt()`, which
+   collects what suppressed popups would have said, because the refusal is
+   always followed by "Failed to parse command line". Verified live: a
+   plain `-bS` connects to the local server, and the shipped `astrolog.as`
+   prints the new refusal.

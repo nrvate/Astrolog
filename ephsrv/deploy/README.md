@@ -90,6 +90,35 @@ docker stop -t 15 ephd       # drains, then exits 0
   (`kProtoMin`) is told to update and stops retrying; an older server than
   a client speaks gets the client's retry ladder.
 
+## Pointing Astrolog at a server
+
+A development server on this machine is enough to cast from:
+
+```sh
+make ephsrv
+./astrolog-ephd --port 8765 --bind 127.0.0.1 --ephe /swe   # or any ephemeris directory
+./astrolog-qt -bS -bW ws://127.0.0.1:8765
+```
+
+or, in Calculation Settings, choose "Ephemeris Server" and set Server
+Address. Three things to know:
+
+- **`=0n` blocks it, and only an edit lifts it.** Upstream's `astrolog.as`
+  ships `=0n` (no internet features), and `-0n` is a one-way lock: no
+  switch, `_0n` included, can clear it once it is set, and the
+  `astrolog.as` beside the program is read before any `-i` file or the
+  command line. With it set, `-bS` is refused, the server is missing from
+  Calculation Settings' list, and a settings file that selects the server
+  casts those bodies at 0 Aries with a warning. Change the line to `_0n` in that file, and in any
+  `-i` file that also sets it. The refusal and the warning both say this.
+- **The first cast after startup fails soft.** It runs before the
+  connection is up; the chart casts again when the server's WELCOME
+  arrives. With no local ephemeris at all, startup waits for the server in
+  the "Connecting to cloud ephemeris" dialog instead.
+- **`-bS` selects the server and turns ephemeris files on**; a second
+  `-bS` turns the server off. `=bS` always selects it, and is what a saved
+  settings file carries.
+
 ## Logs
 
 One line an event on stdout, flushed as written, so journald or the

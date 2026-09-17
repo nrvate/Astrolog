@@ -2332,10 +2332,30 @@ static int NSwb(CONST char *szSwitch, PARSEIN *pin)
     return 0;
 #endif
     if (us.fNoNetwork && FSwitchF(us.nSwissEph == 5)) {
-      ErrorArgv("bS");
+      // Not ErrorArgv()'s "not allowed now", which left a user nowhere:
+      // -0n is a one-way lock -- NSwZero() ignores "_0n" -- and the shipped
+      // astrolog.as sets it and is read before any -i file or the command
+      // line, so no switch can lift it. Name the setting and the one
+      // remedy there is.
+      PrintError("The Ephemeris Server needs network access, which \"=0n\" "
+        "turns off, and -0n cannot be undone once it is set. Change \"=0n\" "
+        "to \"_0n\" in the settings file that sets it -- the astrolog.as "
+        "beside the program is read first.");
       return tcError;
     }
     us.nSwissEph = FSwitchF(us.nSwissEph == 5) * 5;
+    // Selecting the server turns ephemeris files ON; it does not toggle
+    // them. Every -b suffix falls through to the fEphemFiles toggle below,
+    // and FCmSrv() needs both, so under a settings file that already had
+    // files on -- nrvate.as, and most saved files -- "-bS" selected the
+    // server and switched files off in the same stroke: the backend sat
+    // selected, never connected, and said nothing. -bS is this fork's
+    // spelling, so this is ours to fix; upstream's -bj and -bJ keep the
+    // toggle. Turning the server off still falls through, as those do.
+    if (us.nSwissEph == 5) {
+      us.fEphemFiles = fTrue;
+      return 0;
+    }
   }
   else if (ch1 == 'W') {
     // The server address, a ws:// URL or host:port. This sets where the

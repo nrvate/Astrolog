@@ -166,6 +166,8 @@ extern int NCastWarnSrvTestQt();
 extern int CReqSentEphSrvTestQt();
 extern int CWinSrvTestQt();
 extern CONST char *SzWarnSrvTestQt();
+extern CONST char *SzPopupSuppressedTestQt();
+extern void ClearPopupSuppressedTestQt();
 extern void ClearWinSrvTestQt();
 extern void SetRowsAnimSrvTestQt(int);
 extern void SetWindowCapSrvTestQt(int);
@@ -17777,6 +17779,19 @@ static void TestEphSrvQt()
   Check(us.nSwissEph == 5 && us.fEphemFiles, "\"=bS\" is the Ephemeris Server");
   FProcessCommandLine("_bS");
   Check(us.nSwissEph == 0, "\"_bS\" is off it");
+  // The plain toggle, from the state a settings file leaves: files already
+  // on. It used to toggle them OFF while selecting the server, so the
+  // backend sat selected and never connected.
+  us.fEphemFiles = fTrue;
+  FProcessCommandLine("-bS");
+  Check(us.nSwissEph == 5 && us.fEphemFiles,
+    "\"-bS\" with ephemeris files on selects the server and keeps them on");
+  FProcessCommandLine("-bS");
+  Check(us.nSwissEph == 0, "a second \"-bS\" turns the server off");
+  us.fEphemFiles = fFalse;
+  FProcessCommandLine("-bS");
+  Check(us.nSwissEph == 5 && us.fEphemFiles,
+    "and \"-bS\" with files off turns them on");
   FProcessCommandLine("=bS");
   FProcessCommandLine("-bW example.com:1234");
   Check(FEqSz(us.szEphSrv, "example.com:1234"), "-bW stores the address");
@@ -17829,8 +17844,15 @@ static void TestEphSrvQt()
 
   // -0n refuses selecting the backend, changing nothing.
   us.fNoNetwork = fTrue;
+  ClearPopupSuppressedTestQt();
   Check(!FProcessCommandLine("=bS"), "\"=bS\" is refused under -0n");
   Check(us.nSwissEph == 5, "and the backend is unchanged");
+  // -0n cannot be lifted by any switch, so "not allowed now" was a dead
+  // end: the refusal has to name the line and the remedy.
+  Check(strstr(SzPopupSuppressedTestQt(), "\"=0n\"") != NULL &&
+    strstr(SzPopupSuppressedTestQt(), "\"_0n\"") != NULL,
+    "and the refusal names \"=0n\" and how to allow it (\"%.70s\")",
+    SzPopupSuppressedTestQt());
   us.fNoNetwork = fFalse;
 
   // The address setting: default, bare host, host:port, URL, refusal.
@@ -18351,8 +18373,10 @@ static void TestEphSrvQt()
     Check(!FSrvPlanetQt(oSun, JulianDayFromTime(0.9), &r1, &r2, &r3, &r4,
       &r5, &r6), "-0n fails the facade fast");
     Check(NCastWarnSrvTestQt() == cWarn + 1 &&
-      strstr(SzWarnSrvTestQt(), "Internet features are disabled") != NULL,
-      "with the -0n warning (\"%.80s\")", SzWarnSrvTestQt());
+      strstr(SzWarnSrvTestQt(), "Internet features are disabled") != NULL &&
+      strstr(SzWarnSrvTestQt(), "\"_0n\"") != NULL,
+      "with the -0n warning, saying how to allow it (\"%.80s\")",
+      SzWarnSrvTestQt());
     Check(CReqSentEphSrvTestQt() == cReq0, "and no request");
   }
   Check(NEphSrvStateTestQt() == 0 && NRetryEphSrvTestQt() < 0,

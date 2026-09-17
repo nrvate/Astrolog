@@ -973,10 +973,22 @@ int NScrollChartQt(void)
 // referenced a missing file -- a macro pointing at a path that doesn't
 // exist here, say -- took the whole program down rather than complaining
 // about it. Windows shows a box and carries on, and so does this.
+// What suppressed popups would have shown since the suite last cleared it,
+// joined with " | ", so a test can assert on what a refusal SAYS -- a
+// refused switch is followed by "Failed to parse command line", so the
+// last message alone is never the one that matters.
+static char s_szPopupSuppressedQt[1024];
+CONST char *SzPopupSuppressedTestQt() { return s_szPopupSuppressedQt; }
+void ClearPopupSuppressedTestQt() { s_szPopupSuppressedQt[0] = chNull; }
+
 void PrintWarningQt(CONST char *sz, flag fError)
 {
-  if (FNoPopupQt())
+  if (FNoPopupQt()) {
+    size_t cch = strlen(s_szPopupSuppressedQt);
+    snprintf(s_szPopupSuppressedQt + cch, sizeof(s_szPopupSuppressedQt) - cch,
+      "%s%s", cch ? " | " : "", sz);
     return;
+  }
   // Before the window exists, say it on stderr instead. main() parses
   // astrolog.as and then the command line (astrolog.cpp, the
   // FProcessSwitchFile and FProcessSwitches calls) well before Action()
@@ -8654,7 +8666,12 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
   s_plan.fPrefetched = fTrue;
   s_plan.baErr = QByteArray();
   if (us.fNoNetwork) {
-    s_plan.baErr = "Internet features are disabled";
+    // Says how to undo it: -0n is a one-way lock (NSwZero() ignores
+    // "_0n"), so the setting that selected this backend and the one that
+    // locks it out can both be in one saved file, and nothing short of
+    // editing that file lets the chart cast (switch.cpp, the -bS branch).
+    s_plan.baErr = "Internet features are disabled by \"=0n\"; change it "
+      "to \"_0n\" in astrolog.as to use the Ephemeris Server";
     return;
   }
   if (QCoreApplication::instance() == NULL) {
