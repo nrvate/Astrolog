@@ -1761,6 +1761,49 @@ the gates the phase touches.
      difference 11.361744", and the Moon sits at 5.17 degrees latitude.
      Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
 
+6. **Phase 3a, the source registry skeleton (2026-09-17).** `ephem.h`,
+   `ephem.cpp` and `ephswiss.cpp` join the core group of
+   `Makefile.srcs` (no `#ifdef QT`): the EPHSRCDEF shape of §4.1,
+   EPHPARAM, EPHCAPS, EPHMATCH, the accessors, the fallback walk, and
+   the five built-in sources -- `swiss`, `moshier` and `jpl` as one
+   shared implementation, `matrix` and `none` as legacy-cast stubs.
+   - **One deviation from §4.1, with its reason.** The question type is
+     not declared in `ephproto.h`, because that header is locked
+     byte-identical for phases 3-7; EPHQUERY lives in `ephem.h`
+     instead, shaped as §3.4's question block (one instant, the object
+     list with their Astrolog indices and centres, per-object results,
+     the host-only `nNative`), with the per-object error codes carried
+     as A.17's values. The phase 6 remote adapter translates it to the
+     wire, and the suite pins the codes to the codec's constants.
+   - **Selection does not change.** The chain derives from today's
+     fields (`fEphemFiles`, `nSwissEph`, `fMatrixPla`) and holds one
+     live source; `IEphSrcPrimary()` maps nSwissEph 0 and 5 to `swiss`
+     (the server backend still casts locally through the Swiss files),
+     1 to `moshier`, 2-4 to `jpl`, and files-off to `matrix` or `none`.
+   - **The delegation.** The Swiss sources' FSubmit calls
+     `FSwissPlanet()` per object with the same three arguments
+     ComputeEphem's Swiss branch hands it (index, instant, objOrbit);
+     the row's six reals are the answer columns in the protocol's
+     order, and the one transposition from FSwissPlanet's argument
+     order lives in the submit and in FEphRead(), named in both.
+   - **The net.** The suite's `ephem-registry` group: the six reals as
+     BYTES, host against direct FSwissPlanet calls, over the
+     live-parity scenario list x 18 objects x 4 instants, plus the
+     walk with a refusing head source and the notice. Sabotage-proven:
+     one changed argument in the delegation fails every
+     scenario-instant check.
+   - **Measured while writing the net, and pre-existing.**
+     FSwissPlanet() is history-dependent on a first call: a
+     FSwissPlanet(oLil) at a planet-centred centre shifts the NEXT
+     pctr call by ~1e-8 degrees, and that call's own second invocation
+     is stable again. Casts make one call per object, so cast bytes
+     are unaffected; the net warms each object so host and oracle
+     compare under equal history.
+   - **Gates.** make check all clear, suite 5817 passed / 0 failed
+     (the live-parity group's 83 assertions against the real
+     astrolog-ephd among them); chart, switch, influence and graphics
+     matrices byte-identical against the 6cf3ac3 baseline.
+
 4. **The corrApplied drop, encoded and sent (2026-09-17).** Item 1 of the
    drop list above, plus the §3.4 withdrawal (item 2), the regenerated
    fixtures (item 3) and the set sent to Prometheia (item 4). One commit.
