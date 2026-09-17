@@ -860,6 +860,24 @@ the numbers that matter to a GUI are in EPHEMERIS_SERVER_PRODUCTION_PLAN.md.
 | expected outcome | `ok`, `malformed` (ERROR 1) or `unsupported` (ERROR 11) |
 | note | one line |
 
+**The set is atomic and verifiable.** A regeneration writes every `.hex`
+first and `MANIFEST.tsv` last, and the manifest's header carries
+
+```
+# set-sha256 <64 hex digits>
+```
+
+the SHA-256 over **the bytes of each fixture file exactly as committed**
+(hex digits, line breaks and all, including the trailing newline),
+concatenated in the order the manifest's data rows list them. The manifest
+itself is not part of the input. The verbatim reading is deliberate: it makes
+the line a checksum of the directory as committed rather than of an
+interpretation of it, so a file rewritten with different formatting — a
+semantic no-op — still shows up, and neither side has to decode anything to
+check a set. A reader that computes a different digest has an inconsistent or
+half-written set and MUST refuse to report verdicts rather than report wrong
+ones.
+
 **Who generates and runs them**
 - `tools/ephproto4-fixtures.py` is an **independent reference encoder**, written
   from this section and not from the C++ code. It generates the fixtures.
