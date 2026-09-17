@@ -838,6 +838,14 @@ with the other. **An engine never trades accuracy for speed silently.**
   the per-instant work is memoised rather than recomputed inside the engine.
 - **The cache key is canonical** (§3.7), so the same question asked twice --
   in either precision, in any chunking -- is computed once.
+- **Nothing is per connection that need not be.** The only state the protocol
+  requires a server to hold for a connection is the negotiated version, the
+  token's budget and the answers in flight. Everything else is
+  content-addressed -- the cache key is `datasetId` plus the question block --
+  so any loop, thread or process may serve any request, a reconnecting client
+  loses nothing but what was in flight, and a server scales by adding loops
+  rather than by remembering clients. A future implementation MUST NOT invent a
+  session that answers differ by.
 - **Budgets and limits are per connection, not per answer:** a server states
   its bound in WELCOME (`maxCells`) and a client keeps a request under it
   rather than discovering the limit by being refused.
