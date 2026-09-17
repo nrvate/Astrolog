@@ -28,21 +28,21 @@ command -v docker >/dev/null || { echo "docker not found"; exit 2; }
 recipe() {
   case $1 in
     ubuntu:22.04|ubuntu:24.04|debian:12)
-      echo 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq --no-install-recommends g++ make pkg-config libx11-dev qtbase5-dev' ;;
+      echo 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq --no-install-recommends g++ make pkg-config libx11-dev qtbase5-dev libqt5websockets5-dev' ;;
     ubuntu:26.04|debian:13)
-      echo 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq --no-install-recommends g++ make pkg-config libx11-dev qt6-base-dev' ;;
+      echo 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq --no-install-recommends g++ make pkg-config libx11-dev qt6-base-dev qt6-websockets-dev' ;;
     fedora:*)
-      echo 'dnf install -y -q --setopt=install_weak_deps=False gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel' ;;
+      echo 'dnf install -y -q --setopt=install_weak_deps=False gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel qt6-qtwebsockets-devel' ;;
     *rockylinux:9)
-      echo 'dnf install -y -q dnf-plugins-core >/dev/null 2>&1; (dnf config-manager --set-enabled crb || dnf config-manager --enable crb) >/dev/null 2>&1; dnf install -y -q --setopt=install_weak_deps=False gcc-c++ make pkgconf-pkg-config libX11-devel qt5-qtbase-devel' ;;
+      echo 'dnf install -y -q dnf-plugins-core >/dev/null 2>&1; (dnf config-manager --set-enabled crb || dnf config-manager --enable crb) >/dev/null 2>&1; dnf install -y -q --setopt=install_weak_deps=False gcc-c++ make pkgconf-pkg-config libX11-devel qt5-qtbase-devel qt5-qtwebsockets-devel' ;;
     *rockylinux:10)
-      echo 'dnf install -y -q dnf-plugins-core >/dev/null 2>&1; (dnf config-manager --set-enabled crb || dnf config-manager --enable crb) >/dev/null 2>&1; dnf install -y -q --setopt=install_weak_deps=False gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel' ;;
+      echo 'dnf install -y -q dnf-plugins-core >/dev/null 2>&1; (dnf config-manager --set-enabled crb || dnf config-manager --enable crb) >/dev/null 2>&1; dnf install -y -q --setopt=install_weak_deps=False gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel qt6-qtwebsockets-devel' ;;
     archlinux*)
-      echo 'pacman -Sy --noconfirm --needed gcc make pkgconf libx11 qt6-base >/dev/null' ;;
+      echo 'pacman -Sy --noconfirm --needed gcc make pkgconf libx11 qt6-base qt6-websockets >/dev/null' ;;
     opensuse/*)
-      echo 'zypper -n --gpg-auto-import-keys refresh >/dev/null && zypper -n install -y gcc-c++ make pkgconf-pkg-config libX11-devel qt6-base-devel >/dev/null' ;;
+      echo 'zypper -n --gpg-auto-import-keys refresh >/dev/null && zypper -n install -y gcc-c++ make pkgconf-pkg-config libX11-devel qt6-base-devel qt6-websockets-devel >/dev/null' ;;
     alpine*)
-      echo 'apk add --no-cache g++ make pkgconf libx11-dev qt6-qtbase-dev >/dev/null' ;;
+      echo 'apk add --no-cache g++ make pkgconf libx11-dev qt6-qtbase-dev qt6-qtwebsockets-dev >/dev/null' ;;
     *) echo '' ;;
   esac
 }
@@ -71,11 +71,11 @@ ALL_IMAGES=$IMAGES
 # produced.
 check_readme() {
   ours=$(for i in $ALL_IMAGES; do recipe "$i"; done \
-    | tr ' ' '\n' | grep -E '^(g\+\+|gcc|gcc-c\+\+|make|pkg-config|pkgconf|pkgconf-pkg-config|libx11-dev|libX11-devel|libx11|qt[56]?-?[a-z-]*dev[a-z]*)$' \
+    | tr ' ' '\n' | grep -E '^(g\+\+|gcc|gcc-c\+\+|make|pkg-config|pkgconf|pkgconf-pkg-config|libx11-dev|libX11-devel|libx11|qt6-base|qt6-websockets|qt[56]?-?[a-z-]*dev[a-z]*)$' \
     | sort -u)
   theirs=$(sed -n '/^# Debian, Ubuntu, Mint/,/^git clone/p' README.md \
     | grep -vE '^#' | tr ' ' '\n' \
-    | grep -E '^(g\+\+|gcc|gcc-c\+\+|make|pkg-config|pkgconf|pkgconf-pkg-config|libx11-dev|libX11-devel|libx11|qt[56]?-?[a-z-]*dev[a-z]*)$' \
+    | grep -E '^(g\+\+|gcc|gcc-c\+\+|make|pkg-config|pkgconf|pkgconf-pkg-config|libx11-dev|libX11-devel|libx11|qt6-base|qt6-websockets|qt[56]?-?[a-z-]*dev[a-z]*)$' \
     | sort -u)
   only_here=$(comm -23 <(printf '%s\n' "$ours") <(printf '%s\n' "$theirs"))
   only_there=$(comm -13 <(printf '%s\n' "$ours") <(printf '%s\n' "$theirs"))

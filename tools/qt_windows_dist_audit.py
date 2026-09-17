@@ -53,7 +53,8 @@ elif os.path.exists(os.path.join(d, "astrolog-qt-test.exe")):
     bad.append("astrolog-qt-test.exe  -- the test build is in the SHIPPED tree")
 
 # The Qt runtime windeployqt is supposed to have brought.
-for dll in ("Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll"):
+for dll in ("Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll", "Qt6Network.dll",
+            "Qt6WebSockets.dll"):
     need(dll, "Qt runtime; windeployqt did not run or did not finish")
 
 # The compiler runtime, which the runner has and a user may not.

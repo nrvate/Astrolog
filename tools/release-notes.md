@@ -1,7 +1,7 @@
 ### Installing
 
 **Linux** — build it: `sudo apt install g++ make pkg-config libx11-dev
-qt6-base-dev`, then `make -j4`. The README lists the package names for
+qt6-base-dev qt6-websockets-dev`, then `make -j4`. The README lists the package names for
 Fedora, Rocky, Arch, openSUSE and Alpine, and `tools/build-check.sh`
 proves those commands on all twelve.
 

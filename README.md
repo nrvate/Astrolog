@@ -49,22 +49,26 @@ casting a chart with the result.
 
 ```sh
 # Debian, Ubuntu, Mint
-sudo apt install g++ make pkg-config libx11-dev qt6-base-dev
-# qtbase5-dev instead on Ubuntu 22.04 and 24.04 and on Debian 12 works
-# too -- the makefile builds against whichever pkg-config finds
+sudo apt install g++ make pkg-config libx11-dev qt6-base-dev qt6-websockets-dev
+# qtbase5-dev libqt5websockets5-dev instead on Ubuntu 22.04 and 24.04 and
+# on Debian 12 works too -- the makefile builds against whichever
+# pkg-config finds
 # Fedora
-sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel
+sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-qtbase-devel \
+  qt6-qtwebsockets-devel
 # Rocky / Alma / RHEL 9 and 10 — the Qt package differs, and CRB holds
 # libX11-devel on both
 sudo dnf config-manager --set-enabled crb
 sudo dnf install gcc-c++ make pkgconf-pkg-config libX11-devel \
-  qt5-qtbase-devel      # EL9; use qt6-qtbase-devel on EL10, which has no Qt5
+  qt5-qtbase-devel qt5-qtwebsockets-devel   # EL9
+# EL10, which has no Qt5: qt6-qtbase-devel qt6-qtwebsockets-devel
 # Arch
-sudo pacman -S gcc make pkgconf libx11 qt6-base
+sudo pacman -S gcc make pkgconf libx11 qt6-base qt6-websockets
 # openSUSE
-sudo zypper install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-base-devel
+sudo zypper install gcc-c++ make pkgconf-pkg-config libX11-devel qt6-base-devel \
+  qt6-websockets-devel
 # Alpine
-doas apk add g++ make pkgconf libx11-dev qt6-qtbase-dev
+doas apk add g++ make pkgconf libx11-dev qt6-qtbase-dev qt6-qtwebsockets-dev
 
 git clone https://github.com/nrvate/Astrolog && cd Astrolog
 make -j4          # ./astrolog (console) and ./astrolog-qt (windowed)
@@ -114,9 +118,9 @@ make install     # on PATH; PREFIX=$HOME/.local if you don't want root
 **Qt5 and Qt6 are both supported, and one build covers both**: the
 makefile asks `pkg-config` which is present and builds against the better
 one, so `make qt` is the right command on either. Needs the development
-package (`qtbase5-dev` or `qt6-base-dev` on Debian/Ubuntu/Mint) and
-`pkg-config` — the build stops and names the package if they are
-missing. Object files go to `obj-qt/`, so this can be
+packages (`qtbase5-dev` and `libqt5websockets5-dev`, or `qt6-base-dev`
+and `qt6-websockets-dev`, on Debian/Ubuntu/Mint) and `pkg-config` — the
+build stops and names the package if they are missing. Object files go to `obj-qt/`, so this can be
 built alongside the regular `astrolog` binary without interfering with it:
 plain `make` builds the stock X11 version and the Qt port together, and
 `make all` builds the five release builds -- the console, the Qt port,

@@ -83,7 +83,8 @@ matters when merging a new upstream release:
 ## Prerequisites
 
 ```sh
-sudo apt install qtbase5-dev pkg-config              # build the Qt port
+sudo apt install qtbase5-dev libqt5websockets5-dev pkg-config
+                                                    # build the Qt port
                                                     # (Qt Network too, same package;
                                                     # the makefiles stop and name
                                                     # the package if it is missing)
