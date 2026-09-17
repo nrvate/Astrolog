@@ -30,17 +30,17 @@ install lines would all have failed.
 | S1 | NaN/-inf jdStart crashes the server (fork indexes with (int)floor(NaN)) | fixed (ephsrv-robust.sh S1) |
 | S2 | BACKPRESSURE treated as not-sent: chunks duplicated, client windows done early with zero rows | fixed, plus the uSockets write2 stall it exposed (S2) |
 | S3 | Conn constructed twice per connection, ~575 B leak each | fixed (S3) |
-| S4 | No per-connection memory/CPU bound | queued-answer cap and bad_alloc fixed (S4), plus ERRORs no longer dropped; CPU budget deferred 2026-09-16: changes what WELCOME promises |
+| S4 | No per-connection memory/CPU bound | queued-answer cap and bad_alloc fixed (S4), plus ERRORs no longer dropped; CPU budget deferred 2026-09-16: changes what WELCOME promises. In progress 2026-09-16 on `ephdefer`: protocol 2, WELCOME `maxCells` (default 100000, `--max-cells`), ERROR 2 over it |
 | S5 | --threads above 2x cores leaves loops with no context; hc()==0 divides by zero | fixed (S5) |
 | S6 | A second server on the port silently shares connections (SO_REUSEPORT) | fixed (S6) |
 | S7 | Planet-name buffer 96 < AS_MAXCH | fixed (by reading the callee's contract; no file today has a long enough name to fail) |
 | S8 | Cache byte accounting undercounts small entries; fixed-seed hash floodable; wrong FNV basis | fixed (cache gate unit half re-derived on the new charge) |
-| S9 | One failed row fails the whole object; name lost if last row fails; nod/aps retFlag 0 | name and retFlag fixed; per-row failure deferred 2026-09-16: a protocol change, and A2 is its client-side cost |
+| S9 | One failed row fails the whole object; name lost if last row fails; nod/aps retFlag 0 | name and retFlag fixed; per-row failure deferred 2026-09-16: a protocol change, and A2 is its client-side cost. In progress 2026-09-16 on `ephdefer`: protocol 2, a failed row's values are NaN, retFlag < 0 only when no row computed; the client asks exactly only frames whose row failed |
 | S10 | HELLO not parsed, second HELLO unanswered, zstd flag ignored, text frames accepted, undefined iflag bits keyed | fixed (S10: HELLO); zstd/text refusal and iflag bits by reading |
 | S11 | Doc/code disagreements (heartbeat, entry points, backpressure, pool, port-in-use, Makefile prerequisites) | fixed (server plan §4.7, §5, work log 9; Makefile.ephsrv) |
 | S12 | JPL setter closes files per request; centered UT JPL delta-t ambiguity | deferred 2026-09-16: correct results, cost only; F1/F5 decide the delta-t half |
 | S13 | eph_wsclient trusts the server (payloadLen, u32 wrap, frame size, requestId, duplicates) | fixed (the gate depends on it) |
-| S-fork | UBSan signed overflow at sweph.c:432 / :4816 from a wire id | open, to the fork review |
+| S-fork | UBSan signed overflow at sweph.c:432 / :4816 from a wire id | open 2026-09-16, in progress on branch `ephdefer` with S4/S9/S12/T8 (never carried to the fork's notes/REVIEW.md, which is why F1-F11 closing did not close it) |
 | T1 | Soak gate's scan and fd checks cannot fail (strace prints no paths; pid is strace's) | fixed (strace -y; fd count on the server's pid, not strace's) |
 | T2 | Multi-chunk window reassembly untested; golden gate --count 1 only | fixed (the live group's animation windows arrive in chunks of 7 rows) |
 | T3 | Port ranges of suite and gates overlap; second server silent (see S6); --ephe with no files falls back silently | fixed: ports below the ephemeral range and disjoint; second server refused (S6); an explicit --ephe is the whole search path, and the soak farm carries its own main files |
@@ -90,6 +90,8 @@ install lines would all have failed.
 | F9 | Planetary moons: first call differs from a repeat of the same call | fixed in the fork 2026-09-16 (main 89cbb7e, ts.13): not moon state but a segment boundary -- 2451545.5 starts one of Phobos's 4-day Chebyshev segments, a fresh context loaded that one, and the light-time step left the previous one loaded for every later call; `sweph()` now picks the segment by `get_new_segment()`'s arithmetic. G4 property 6, which fails on the old rule; G1/G8/G24 and the server's golden gate unchanged |
 | F10 | swi_get_observer shortcut ignores the obliquity cache's flag key | fixed in the fork (3ff1567), by reading |
 | F11 | Found fixing A2: inside one request a context answers rows past an ephemeris file's end (a one-row request at the same instant fails) -- a result depending on what the context opened first | fixed in the fork (3ff1567); G4 property 6 |
+| B2 | `-i nrvate.as -Yi1 ephem` failed 23 ephem-server-live checks that `-Yi1 ephem` (make check) passed (2026-09-16) | fixed on qt (9d159fa): the suite's server got -Yi1 only, so seorbel.txt (Vulcan) on -Yi2 was missing; the edge check now skips where no 1800 edge exists; the nested-cast check compares the server's objects and nests at another instant (it passed with the C1 guard removed before) |
+| B3 | Bundled `ephem/sepl_18.se1` defective: Mercury up to 104 deg wrong over JD 2378497.0-2378575.5 (1800-01-01..03-20); upstream Swiss gives the same numbers from it | fixed (00a92da, the maintainer): replaced with the official aloistr/swisseph file, which agrees with /swe. No net yet: a Swiss-vs-Moshier sweep of every bundled planet (bad file 60 deg off, worst good 0.0024 deg, ~3.4 s) was offered for tools/check-ephem.sh |
 | B1 | Every Qt6 distribution fails build-check: qtdialog.cpp includes QtWidgets/QFileSystemModel, which Qt6 has in QtGui (393911d, 2026-09-16) | fixed on qt (4dd0e0e); release dry run green on all three platforms (run 35168610206, 09593d6), which also caught 6 Linux-only suite checks (09593d6) |
 
 ## Report: server (`ephsrv/`)
