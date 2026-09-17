@@ -54,9 +54,9 @@ QT_GUI_PLAN.md.
   with user-visible blocking UI -- the maintainer tests such changes by
   hand, so build both binaries, run the quick suite, and hand over before
   committing.
-- **The fork has open findings** (`EPHEMERIS_REVIEW.md` F1-F11) in a
-  separate repository; ask before working them.
-- The fork this connects to is `2.10.03-ts.12`; see the server plan's
+- **The fork has no open review findings**: `EPHEMERIS_REVIEW.md` F1-F11
+  are all fixed or closed there, F9 last (ts.13).
+- The fork this connects to is `2.10.03-ts.13`; see the server plan's
   Status section for branch, commit and gate state.
 
 ## 1. Goals

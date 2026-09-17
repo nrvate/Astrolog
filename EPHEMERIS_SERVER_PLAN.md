@@ -36,10 +36,11 @@ Everything below is landed and pushed; this section is the resume pointer.
   records, the center bit, the pctr delta-t fix; work log item 8), then
   client increment 2 (EPHEMERIS_CLIENT_PLAN.md work log item 3).
 - **The Swiss Ephemeris fork** (nrvate/swisseph, `/shares/swisseph`) is at
-  **2.10.03-ts.12** (main b8e3355, 2026-09-16): its delta-t tidal term
+  **2.10.03-ts.13** (main 89cbb7e, 2026-09-16): its delta-t tidal term
   no longer follows which files a context has open (ts.11, work log items
   2 and 6), and the full review's fork findings are fixed there
-  (EPHEMERIS_REVIEW.md F1-F11; that repo's notes/REVIEW.md). The server links
+  (EPHEMERIS_REVIEW.md F1-F11, F9 last, in ts.13; that repo's
+  notes/REVIEW.md). The server links
   `$(SWE_HOME)/libswe.a` by archive path; never `-lswe`.
 - **Two environment traps, both pinned in the build and worth
   remembering elsewhere:** an installed stale `libswe.so` in
@@ -111,8 +112,8 @@ Vendored under `ephsrv/`, cgif-style (license files kept, sources pinned):
   `86097c490263ab662d62e8e7b541390bdec7d149`, Apache-2.0 (`LICENSE`).
   Built with OpenSSL (`make WITH_OPENSSL=1`) as `ephsrv/uSockets/uSockets.a`.
 - Swiss Ephemeris thread-safe fork at /shares/swisseph, version
-  `2.10.03-ts.12` (delta-t order-independent since ts.11, work log item 6;
-  the review's fixes in ts.12): link `$(SWE_HOME)/libswe.a` by archive path.
+  `2.10.03-ts.13` (delta-t order-independent since ts.11, work log item 6;
+  the review's fixes in ts.12, F9 in ts.13): link `$(SWE_HOME)/libswe.a` by archive path.
   Never `-lswe` — an installed stale `libswe.so` in /usr/local/lib wins
   the runtime search over `-L` (see Status). NOT vendored into this repo —
   it is a sibling project with its own build, tests, and release cadence.
