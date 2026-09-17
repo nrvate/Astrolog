@@ -27,23 +27,23 @@ install lines would all have failed.
 
 | ID | Finding | State |
 |----|---------|-------|
-| S1 | NaN/-inf jdStart crashes the server (fork indexes with (int)floor(NaN)) | fixing |
-| S2 | BACKPRESSURE treated as not-sent: chunks duplicated, client windows done early with zero rows | fixing |
-| S3 | Conn constructed twice per connection, ~575 B leak each | fixing |
-| S4 | No per-connection memory/CPU bound | fixing (queued-answer cap, bad_alloc); CPU budget open |
-| S5 | --threads above 2x cores leaves loops with no context; hc()==0 divides by zero | fixing |
-| S6 | A second server on the port silently shares connections (SO_REUSEPORT) | fixing |
-| S7 | Planet-name buffer 96 < AS_MAXCH | fixing |
-| S8 | Cache byte accounting undercounts small entries; fixed-seed hash floodable; wrong FNV basis | fixing |
-| S9 | One failed row fails the whole object; name lost if last row fails; nod/aps retFlag 0 | name and retFlag fixing; per-row failure open |
-| S10 | HELLO not parsed, second HELLO unanswered, zstd flag ignored, text frames accepted, undefined iflag bits keyed | fixing |
-| S11 | Doc/code disagreements (heartbeat, entry points, backpressure, pool, port-in-use, Makefile prerequisites) | fixing |
-| S12 | JPL setter closes files per request; centered UT JPL delta-t ambiguity | open |
-| S13 | eph_wsclient trusts the server (payloadLen, u32 wrap, frame size, requestId, duplicates) | fixing |
+| S1 | NaN/-inf jdStart crashes the server (fork indexes with (int)floor(NaN)) | fixed (ephsrv-robust.sh S1) |
+| S2 | BACKPRESSURE treated as not-sent: chunks duplicated, client windows done early with zero rows | fixed, plus the uSockets write2 stall it exposed (S2) |
+| S3 | Conn constructed twice per connection, ~575 B leak each | fixed (S3) |
+| S4 | No per-connection memory/CPU bound | queued-answer cap and bad_alloc fixed (S4), plus ERRORs no longer dropped; CPU budget deferred 2026-09-16: changes what WELCOME promises |
+| S5 | --threads above 2x cores leaves loops with no context; hc()==0 divides by zero | fixed (S5) |
+| S6 | A second server on the port silently shares connections (SO_REUSEPORT) | fixed (S6) |
+| S7 | Planet-name buffer 96 < AS_MAXCH | fixed (by reading the callee's contract; no file today has a long enough name to fail) |
+| S8 | Cache byte accounting undercounts small entries; fixed-seed hash floodable; wrong FNV basis | fixed (cache gate unit half re-derived on the new charge) |
+| S9 | One failed row fails the whole object; name lost if last row fails; nod/aps retFlag 0 | name and retFlag fixed; per-row failure deferred 2026-09-16: a protocol change, and A2 is its client-side cost |
+| S10 | HELLO not parsed, second HELLO unanswered, zstd flag ignored, text frames accepted, undefined iflag bits keyed | fixed (S10: HELLO); zstd/text refusal and iflag bits by reading |
+| S11 | Doc/code disagreements (heartbeat, entry points, backpressure, pool, port-in-use, Makefile prerequisites) | fixed (server plan §4.7, §5, work log 9; Makefile.ephsrv) |
+| S12 | JPL setter closes files per request; centered UT JPL delta-t ambiguity | deferred 2026-09-16: correct results, cost only; F1/F5 decide the delta-t half |
+| S13 | eph_wsclient trusts the server (payloadLen, u32 wrap, frame size, requestId, duplicates) | fixed (the gate depends on it) |
 | S-fork | UBSan signed overflow at sweph.c:432 / :4816 from a wire id | open, to the fork review |
 | T1 | Soak gate's scan and fd checks cannot fail (strace prints no paths; pid is strace's) | open |
 | T2 | Multi-chunk window reassembly untested; golden gate --count 1 only | open |
-| T3 | Port ranges of suite and gates overlap; second server silent (see S6); --ephe with no files falls back silently | open |
+| T3 | Port ranges of suite and gates overlap; second server silent (see S6); --ephe with no files falls back silently | ports fixed (all below the ephemeral range, disjoint); second server fixed (S6); --ephe fallback open |
 | T4 | Custom node/apsis scenario and window-bound check vacuous under -Yi1 ephem (is.nObj not recomputed) | open |
 | T5 | RMaxDiffEphQt ignores NaN | open |
 | T6 | Offline -0n checks vacuous; live group skips when no server is built | open |
@@ -89,7 +89,7 @@ install lines would all have failed.
 | F8 | Pooled server contexts keep precession/nutation models set by an earlier SE_SIDBIT_PREC_ORIG request (-31"..-37") | open |
 | F9 | Planetary moons: first call differs from a repeat of the same call | open |
 | F10 | swi_get_observer shortcut ignores the obliquity cache's flag key | open |
-| B1 | Every Qt6 distribution fails build-check: qtdialog.cpp includes QtWidgets/QFileSystemModel, which Qt6 has in QtGui (393911d, 2026-09-16) | open |
+| B1 | Every Qt6 distribution fails build-check: qtdialog.cpp includes QtWidgets/QFileSystemModel, which Qt6 has in QtGui (393911d, 2026-09-16) | fixed on qt (4dd0e0e); release dry run green on all three platforms (run 35168610206, 09593d6), which also caught 6 Linux-only suite checks (09593d6) |
 
 ## Report: server (`ephsrv/`)
 

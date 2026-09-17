@@ -16,7 +16,7 @@
 //      answered from the loop's result cache when the same question was
 //      asked before (eph_cache.h)
 //   4. loop wiring -- uWS App, per-loop state, message handlers, backpressure
-//   5. heartbeats -- server PING every 20s, PONG deadline 60s (plan 4.7)
+//   5. heartbeats -- uWS protocol pings on a 30 s idle timeout (plan 4.7)
 //   6. main
 
 #include "ephproto.h"
@@ -26,11 +26,16 @@
 
 #include <swephexp.h>
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/resource.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
@@ -368,9 +373,20 @@ struct Stream {
 };
 
 struct Conn {
-  bool greeted = false;
   std::deque<Stream> out;       // completed streams, FIFO
 };
+
+// Answers a connection may have computed and not yet read. A client that
+// sends requests and never reads used to make the server compute and hold
+// every one -- 60 MB of columns for each 64-body 20000-row window, kept
+// alive by its stream after the cache let it go -- so past this many the
+// request is refused with ERROR 2 before anything is computed.
+static const size_t kMaxQueuedStreams = 4;
+
+// Bytes a connection may have buffered unsent before its DATA chunks wait
+// for drain. Applied here rather than as uWS's maxBackpressure; see
+// SetupLoop.
+static const unsigned kStreamBackpressure = 4 * 1024 * 1024;
 
 // Server version string for WELCOME.
 static const char kServerVersion[] = "astrolog-ephd/1.0";
@@ -448,6 +464,7 @@ static int32_t ComputeCell(swe_ctx *ctx, const eph::Request &req,
                          obj.point == eph::kPntSouthNode ? xndsc :
                          obj.point == eph::kPntPerihelion ? xperi : xaphe;
       for (int c = 0; c < 6; c++) xx[c] = px[c];
+      ret = (int32_t)iflag;   // swe_nod_aps_r returns OK, not the flags
     }
   } else if (fCenter) {
     ret = swe_calc_pctr_r(ctx, jdEt(), (int32_t)obj.id, req.center, (int32_t)iflag, xx, serr);
@@ -457,9 +474,11 @@ static int32_t ComputeCell(swe_ctx *ctx, const eph::Request &req,
     ret = swe_calc_ut_r(ctx, jd, (int32_t)obj.id, (int32_t)iflag, xx, serr);
   }
   if (ret >= 0) {
-    char nm[96];
+    // AS_MAXCH, the fork's contract: a name from seasnam.txt or
+    // seorbel.txt is copied in with strcpy at up to that length.
+    char nm[AS_MAXCH];
     swe_get_planet_name_r(ctx, (int)obj.id, nm);
-    snprintf(nameBuf, nameCap, "%s", nm);
+    snprintf(nameBuf, nameCap, "%.*s", (int)nameCap - 1, nm);
     *pName = nameBuf;
   }
   return ret;
@@ -593,6 +612,7 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
     const eph::ObjSpec &obj = req.objs[o];
     char nameBuf[eph::kObjNameMax];
     const char *name = nullptr;
+    char nameKept[eph::kObjNameMax] = {0};
     int32_t retRow0 = 0;
     bool fFailed = false, fSawSuccess = false;
     char failSerr[eph::kSerrMax] = {0};
@@ -613,13 +633,17 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
       if (!fSawSuccess) {
         fSawSuccess = true;
         retRow0 = ret;
+        // ComputeCell clears the name on every call, so a later failed
+        // row would otherwise leave an object that did compute unnamed.
+        if (name != nullptr)
+          snprintf(nameKept, sizeof(nameKept), "%s", name);
       }
       double *dst = entry->cols.data() + ((size_t)o * nTime + r) * 6;
       for (int c = 0; c < 6; c++) dst[c] = xx[c];
     }
     eph::writeDataMeta(entry->meta.data() + (size_t)o * eph::kDataMetaSize,
                        fFailed ? -1 : retRow0, retRow0,
-                       fFailed ? failSerr : nullptr, fSawSuccess ? name : nullptr);
+                       fFailed ? failSerr : nullptr, fSawSuccess ? nameKept : nullptr);
   }
   lc->lastComputeMs = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - t0).count();
@@ -632,7 +656,12 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
 }
 
 // Stream completed chunks to the client, honoring uWS backpressure: stop
-// at the first BACKPRESSURE and resume from the drain callback. Chunks are
+// at the first BACKPRESSURE and resume from the drain callback. uWS's
+// BACKPRESSURE means the frame WAS taken and buffered -- only DROPPED means
+// it was not -- so a chunk that returns BACKPRESSURE counts as sent. It
+// used not to, and every such chunk went out twice: a Qt client counting
+// rows marked the window done a chunk early and read zeros for the rest
+// (64 bodies x 20000 rows to a reader asleep 3 s: 41 messages, 20500 rows). Chunks are
 // chunkRows-sized pieces, ascending chunkIndex, contiguous row ranges. The
 // columns are object-major (nObj blocks of nTime*6), so writeDataChunk
 // gathers each object's own row range out of the full column array.
@@ -641,6 +670,8 @@ static void FlushStreams(WebSocket<false, true, Conn> *ws) {
   while (!c->out.empty()) {
     Stream &s = c->out.front();
     while (s.nextRow < s.nTimeRows) {
+      if (ws->getBufferedAmount() > kStreamBackpressure)
+        return;   // the rest on drain, once the peer has read some
       uint32_t rows = s.nTimeRows - s.nextRow;
       if (rows > s.chunkRows) rows = s.chunkRows;
       size_t chunkLen = 0;
@@ -652,11 +683,12 @@ static void FlushStreams(WebSocket<false, true, Conn> *ws) {
       // the 16-byte envelope the protocol requires.
       auto st = SendEnvelope(ws, eph::kMsgData, s.requestId, s.buf.data(),
                              chunkLen);
-      if (st == WebSocket<false, true, Conn>::SendStatus::BACKPRESSURE ||
-          st == WebSocket<false, true, Conn>::SendStatus::DROPPED)
-        return;   // resume on drain; DROPPED means the peer is going away
+      if (st == WebSocket<false, true, Conn>::SendStatus::DROPPED)
+        return;   // not sent: this chunk again on drain
       s.nextRow += rows;
       s.chunkIndex++;
+      if (st == WebSocket<false, true, Conn>::SendStatus::BACKPRESSURE)
+        return;   // sent and buffered: the rest on drain
     }
     c->out.pop_front();
   }
@@ -676,9 +708,23 @@ static void RunRequest(WebSocket<false, true, Conn> *ws, LoopCtx *lc,
   s.chunkRows = hint > eph::kMaxChunkRows ? eph::kMaxChunkRows : hint;
   if (s.chunkRows == 0) s.chunkRows = 1;
 
+  if (c->out.size() >= kMaxQueuedStreams) {
+    SendError(ws, env.requestId, eph::kErrLimits, "too many answers computed "
+              "and not yet read on this connection");
+    return;
+  }
   int32_t errCode = 0;
   std::string errText;
-  if (!ExecuteRequest(lc, req, &s, &errCode, &errText)) {
+  bool fOk;
+  try {
+    fOk = ExecuteRequest(lc, req, &s, &errCode, &errText);
+  } catch (const std::bad_alloc &) {
+    // An exception out of a uWS handler is std::terminate for every loop.
+    fOk = false;
+    errCode = eph::kErrInternal;
+    errText = "out of memory computing this request";
+  }
+  if (!fOk) {
     SendError(ws, env.requestId, errCode, errText.c_str());
     return;
   }
@@ -721,8 +767,18 @@ static void HandleMessage(WebSocket<false, true, Conn> *ws,
     SendError(ws, 0, eph::kErrBad, "bad magic or protocol version");
     return;
   }
-  if (env.flags & ~eph::kEnvFlagMask ||
-      env.payloadLen > eph::kMaxPayload ||
+  if (env.flags & ~eph::kEnvFlagMask) {
+    SendError(ws, env.requestId, eph::kErrBad, "unknown envelope flag bits");
+    return;
+  }
+  if (env.flags & eph::kEnvFlagZstd) {
+    // Advertised by no WELCOME caps bit; parsing compressed bytes as raw
+    // would answer a question nobody asked.
+    SendError(ws, env.requestId, eph::kErrBad, "compressed payloads are "
+              "not supported");
+    return;
+  }
+  if (env.payloadLen > eph::kMaxPayload ||
       eph::kEnvelopeSize + (size_t)env.payloadLen != message.size()) {
     SendError(ws, env.requestId, eph::kErrBad, "payload length mismatch");
     return;
@@ -732,8 +788,14 @@ static void HandleMessage(WebSocket<false, true, Conn> *ws,
 
   switch (env.type) {
     case eph::kMsgHello: {
-      if (!c->greeted) {
-        c->greeted = true;
+      // Every HELLO is answered: a client that sends a second one is
+      // waiting for a WELCOME, and silence would hang it.
+      eph::Hello hello;
+      if (!eph::parseHello(pl, env.payloadLen, &hello)) {
+        SendError(ws, env.requestId, eph::kErrBad, "malformed HELLO");
+        return;
+      }
+      {
         static thread_local char szSweVersion[256];
         swe_version(szSweVersion);
         uint8_t wbuf[sizeof(eph::WelcomeWire) + 256];
@@ -774,12 +836,16 @@ static void HandleMessage(WebSocket<false, true, Conn> *ws,
 static thread_local LoopCtx *tlc = nullptr;   // this thread's loop state
 
 static void OnMessage(WebSocket<false, true, Conn> *ws, std::string_view message,
-                      uWS::OpCode) {
+                      uWS::OpCode op) {
+  if (op != uWS::OpCode::BINARY) {
+    SendError(ws, 0, eph::kErrBad, "the protocol is binary frames only");
+    return;
+  }
   HandleMessage(ws, message, tlc);
 }
 
 // Per-loop wiring: the thread-local LoopCtx pointer, the App with the
-// WebSocket behavior (per-socket Conn constructed in open, message handler,
+// WebSocket behavior (per-socket Conn, message handler,
 // drain resuming the stream), and the listen socket (SO_REUSEPORT lets the
 // kernel balance accepts across the per-thread listeners).
 static void SetupLoop(LoopCtx *lc) {
@@ -791,11 +857,16 @@ static void SetupLoop(LoopCtx *lc) {
   behavior.compression = uWS::DISABLED;
   behavior.maxPayloadLength = (unsigned)(eph::kMaxPayload + 65536);
   behavior.idleTimeout = kIdleTimeoutSeconds;
-  behavior.maxBackpressure = 4 * 1024 * 1024;
+  // No uWS limit: past it uWS DROPS every send, ERROR replies included,
+  // so a client refused for having too many answers queued never heard it
+  // and waited forever (the robustness gate's S4 hung on exactly that).
+  // FlushStreams applies the ceiling to DATA chunks alone instead.
+  behavior.maxBackpressure = 0;
   behavior.sendPingsAutomatically = true;
-  behavior.open = [](WebSocket<false, true, Conn> *ws) {
-    new ((Conn *)ws->getUserData()) Conn();
-  };
+  // No open handler: uWS constructs Conn itself before open and destroys
+  // it on close. The one this had constructed a second Conn over the live
+  // one, leaking its deque's blocks -- about 575 bytes a connection,
+  // measured as RSS growing linearly over 20000 connect/close cycles.
   behavior.message = [](WebSocket<false, true, Conn> *ws,
                         std::string_view message, uWS::OpCode op) {
     OnMessage(ws, message, op);
@@ -810,6 +881,9 @@ static void SetupLoop(LoopCtx *lc) {
   // about to listen -- the suite's live group lost that race whenever the
   // run was slow enough. A port that cannot be bound is fatal, not
   // silent: a server with no listener answers nobody and looks alive.
+  // (uSockets sets SO_REUSEPORT on every listener, so another server on
+  // the port does NOT fail this; main() checks for one before any loop
+  // starts.)
   lc->app->listen((int)gOpt.port, [lc](us_listen_socket_t *sock) {
     if (sock == nullptr) {
       Log("ephd: cannot listen on port %u (in use?)", (unsigned)gOpt.port);
@@ -832,7 +906,9 @@ int main(int argc, char **argv) {
   swe_version(szVersion);
   Log("astrolog-ephd %s, Swiss Ephemeris %s", kServerVersion, szVersion);
   Log("%d event loop(s), context pool %d, result cache %u MiB total",
-      gOpt.threads, 2 * (int)std::thread::hardware_concurrency(),
+      gOpt.threads < 1 ? 1 : gOpt.threads,
+      std::max(std::max(2 * (int)std::thread::hardware_concurrency(), 2),
+               gOpt.threads < 1 ? 1 : gOpt.threads),
       gOpt.cacheMb);
   Log("ephemeris path: %s",
       disc.resolved.empty() ? "<none found; file-backed requests fail>" :
@@ -857,9 +933,39 @@ int main(int argc, char **argv) {
   swe_set_ephe_path(disc.resolved.c_str());
   gHaveEphemeris = !disc.resolved.empty();
 
-  int nLoops = gOpt.threads;
+  // Refuse a port another server already listens on. Every listener
+  // uSockets opens sets SO_REUSEPORT, so a second server -- a stale one, or
+  // one started twice -- bound "successfully" and the kernel split the
+  // connections between the two: measured, 10 clients got 8 answers from
+  // one and 2 ERROR 5 from the other, and both logged "listening". So ask
+  // the port first: if anything accepts a connection on it, it is taken.
+  // (A trial bind without SO_REUSEPORT was the first form of this, and it
+  // refused ports that only had client connections in TIME_WAIT on them --
+  // which the ephemeral range makes common on a busy machine.)
+  {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr {};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(gOpt.port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (fd >= 0 && connect(fd, (sockaddr *)&addr, sizeof(addr)) == 0) {
+      close(fd);
+      Log("ephd: cannot listen on port %u (another server is listening "
+          "on it)", (unsigned)gOpt.port);
+      return 1;
+    }
+    if (fd >= 0) close(fd);
+  }
+
+  int nLoops = gOpt.threads < 1 ? 1 : gOpt.threads;
+  // A loop is one thread, so it uses one context at a time; 2x cores is
+  // the pool, but every loop gets at least one. Loops past the pool used
+  // to get none and answer every request ERROR 4 (--threads 64 on 12
+  // cores: 14 of 20 connections), and a hardware_concurrency() of 0 left
+  // the loop count 0 to divide by.
   int totalCtx = 2 * (int)std::thread::hardware_concurrency();
   if (totalCtx < 2) totalCtx = 2;
+  if (totalCtx < nLoops) totalCtx = nLoops;
   // --cache-mb is the TOTAL budget; each loop gets an equal share, since
   // the kernel spreads connections across loops and one loop cannot answer
   // from another's cache.
@@ -879,6 +985,7 @@ int main(int argc, char **argv) {
     }
   }
 
+  gOpt.threads = nLoops;
   std::vector<std::thread> threads;
   for (int i = 1; i < nLoops; i++) {
     threads.emplace_back([&loops, i] {

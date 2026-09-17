@@ -10,6 +10,7 @@
 //                [--sid mode,t0,offset] [--topo lon,lat,elv] [--jplfile name]
 //                [--expect-rows N] [--repeat N] [--latency FILE] [--quiet]
 //                [--tt] [--nodaps id,point,method[;...]]
+//                [--sleep-ms MS] [--burst N] [--cycles N] [--hello N]
 //
 // Sends HELLO, prints WELCOME unless --quiet, sends one REQUEST, collects
 // the DATA chunks, and on --out writes one line per object per row in
@@ -22,6 +23,16 @@
 // what tools/ephsrv-bench.sh aggregates. --tt marks --jd as TT rather than
 // UT (kIflagTimeTT); --nodaps adds node/apsis records (kind 2: point 1-4,
 // method 0 mean / 1 osculating).
+//
+// For tools/ephsrv-robust.sh: --sleep-ms reads nothing for MS after each
+// REQUEST is sent, so the server's answer backs up behind it; --burst N
+// sends N requests at once (jd advanced --burst-step days each, default 1,
+// so none share a cache entry; 0 makes them one cached answer) before reading any answer, and prints how many were answered and
+// how many refused with ERROR 2; --cycles N only connects, is welcomed and
+// closes, N times; --hello N sends HELLO N times on one connection and
+// requires a WELCOME for each. Every answer is checked row by row: a row that arrives
+// twice, a row that never arrives, a chunk for another request or a chunk
+// whose rows run past the window is a failure, whatever the row count.
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -91,6 +102,7 @@ static int readWsMessage(int fd, std::vector<uint8_t> *out) {
       len = 0;
       for (int i = 0; i < 8; i++) len = (len << 8) | e[i];
     }
+    if (len > ((uint64_t)64 << 20)) return -1;   // no answer is this big
     std::vector<uint8_t> pay((size_t)len);
     if (len && readFull(fd, pay.data(), (size_t)len) != 0) return -1;
     if (op == 9) {   // ping: mask + send pong, keep reading
@@ -205,6 +217,8 @@ int main(int argc, char **argv) {
   int precision = 0, center = 0;
   uint64_t iflag = 0;
   bool quiet = false;
+  uint32_t sleepMs = 0, burst = 0, cycles = 0, nHello = 1;
+  double burstStep = 1.0;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
     auto next = [&](const char **v) { if (i + 1 < argc) { *v = argv[++i]; return true; } return false; };
@@ -232,12 +246,15 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--tt")) fTT = true;
     else if (!strcmp(a, "--nodaps") && next(&v)) szNodAps = v;
     else if (!strcmp(a, "--quiet")) quiet = true;
+    else if (!strcmp(a, "--sleep-ms") && next(&v)) sleepMs = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--burst") && next(&v)) burst = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--cycles") && next(&v)) cycles = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--hello") && next(&v)) nHello = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--burst-step") && next(&v)) burstStep = atof(v);
     else { fprintf(stderr, "wsclient: unknown/incomplete option %s\n", a); return 1; }
   }
 
   Request req;
-  for (uint32_t id : ids) req.objs.push_back(ObjSpec{});
-  req.objs.clear();
   for (uint32_t id : ids) {
     ObjSpec o;
     o.kind = kObjBody;
@@ -285,13 +302,14 @@ int main(int argc, char **argv) {
   if (count == 0 || count > kMaxRows) { fprintf(stderr, "wsclient: bad --count\n"); return 1; }
 
   int fd;
+  for (uint32_t cyc = 0; cyc <= cycles; cyc++) {
   if (!connectWs(host, port, &fd)) {
     fprintf(stderr, "wsclient: cannot connect to %s:%u\n", host, (unsigned)port);
     return 2;
   }
 
-  // HELLO, expect WELCOME.
-  {
+  // HELLO, expect WELCOME -- --hello N times on this one connection.
+  for (uint32_t h = 0; h < (nHello ? nHello : 1); h++) {
     uint8_t hbuf[sizeof(HelloWire) + 256];
     uint32_t hlen = 0;
     buildHello(hbuf, 0, 0, "eph_wsclient/1.0", &hlen);
@@ -320,6 +338,12 @@ int main(int argc, char **argv) {
              "server=%s\n", w.protoVersion, w.caps, w.swissephVersion,
              w.maxObjs, w.maxRows, w.maxChunkRows, w.serverVersion.c_str());
   }
+  if (cyc < cycles) {
+    close(fd);
+    gPending.clear();
+    if (cyc + 1 == cycles) return 0;   // --cycles: connections only
+  }
+  }
 
   FILE *out = outFile ? fopen(outFile, "w") : nullptr;
   if (outFile && !out) {
@@ -333,25 +357,34 @@ int main(int argc, char **argv) {
   }
 
   // Full column store: object-major nObj * count * 6; metadata from the
-  // first chunk (identical across chunks).
+  // first chunk (identical across chunks), and which rows have landed.
   std::vector<double> cols((size_t)req.objs.size() * count * 6, 0.0);
   std::vector<uint8_t> meta((size_t)req.objs.size() * kDataMetaSize, 0);
-  bool fMetaSet = false;
-  uint32_t rowsGot = 0;
   int exitCode = 0;
+  uint32_t nSend = burst ? burst : 1;
 
   for (uint32_t rep = 0; rep < repeat && exitCode == 0; rep++) {
-    std::vector<uint8_t> payload;
-    buildRequest(&payload, req);
+    // One or (--burst) several requests, ids rep*nSend+1.., sent before
+    // any answer is read.
+    struct Pending { uint32_t id; std::vector<uint8_t> seen; uint32_t got = 0;
+                     bool done = false, refused = false; bool metaSet = false; };
+    std::vector<Pending> pend(nSend);
     auto tSent = std::chrono::steady_clock::now();
-    sendWsBinary(fd, makeMessage(kMsgRequest, rep + 1, payload.data(), payload.size()));
-
+    for (uint32_t k = 0; k < nSend; k++) {
+      Request r2 = req;
+      r2.jdStart = req.jdStart + (double)k * burstStep;
+      std::vector<uint8_t> payload;
+      buildRequest(&payload, r2);
+      pend[k].id = rep * nSend + k + 1;
+      pend[k].seen.assign(count, 0);
+      sendWsBinary(fd, makeMessage(kMsgRequest, pend[k].id, payload.data(), payload.size()));
+    }
+    if (sleepMs) usleep((useconds_t)sleepMs * 1000);
     std::fill(cols.begin(), cols.end(), 0.0);
     std::fill(meta.begin(), meta.end(), 0);
-    fMetaSet = false;
-    rowsGot = 0;
 
-    for (;;) {
+    uint32_t nOpen = nSend;
+    while (nOpen > 0 && exitCode == 0) {
       std::vector<uint8_t> msg;
       int st = readWsMessage(fd, &msg);
       if (st != kGotMessage || msg.size() < kEnvelopeSize) {
@@ -360,40 +393,57 @@ int main(int argc, char **argv) {
         break;
       }
       Envelope env;
-      if (!parseEnvelope(msg.data(), &env)) {
+      if (!parseEnvelope(msg.data(), &env) ||
+          (size_t)env.payloadLen != msg.size() - kEnvelopeSize) {
         fprintf(stderr, "wsclient: bad envelope on message of %zu bytes\n",
                 msg.size());
         exitCode = 2;
         break;
       }
+      Pending *pp = nullptr;
+      for (Pending &p2 : pend)
+        if (p2.id == env.requestId && !p2.done && !p2.refused) pp = &p2;
       const uint8_t *pl = msg.data() + kEnvelopeSize;
       if (env.type == kMsgError) {
         ErrorMsg e;
         if (!parseError(pl, env.payloadLen, &e)) {
           fprintf(stderr, "wsclient: malformed ERROR\n");
-        } else {
-          fprintf(stderr, "wsclient: server ERROR %d (request %u): %s\n",
-                  e.code, e.requestId, e.text.c_str());
+          exitCode = 2;
+          break;
         }
+        if (burst && pp != nullptr && e.code == kErrLimits) {
+          pp->refused = true;
+          nOpen--;
+          continue;
+        }
+        fprintf(stderr, "wsclient: server ERROR %d (request %u): %s\n",
+                e.code, e.requestId, e.text.c_str());
         exitCode = 2;
         break;
       }
       if (env.type != kMsgData) continue;   // ignore anything else
+      if (pp == nullptr) {
+        fprintf(stderr, "wsclient: DATA for request %u, which is not awaiting "
+                "rows\n", env.requestId);
+        exitCode = 2;
+        break;
+      }
 
-      if (env.payloadLen < kDataHeaderSize) { exitCode = 2; continue; }
+      if (env.payloadLen < kDataHeaderSize) { exitCode = 2; break; }
       Reader r(pl, env.payloadLen);
       uint32_t chunkIndex = r.u32(), iTime = r.u32(), nRows = r.u32();
+      (void)chunkIndex;
       uint8_t prec = r.u8();
       uint32_t nObj = r.u32();
-      if (!r.ok() || nObj != (uint32_t)req.objs.size() ||
-          iTime + nRows > count) {
+      if (!r.ok() || nObj != (uint32_t)req.objs.size() || nRows == 0 ||
+          (uint64_t)iTime + nRows > count) {
         fprintf(stderr, "wsclient: bad DATA chunk header\n");
         exitCode = 2;
         break;
       }
-      if (!fMetaSet) {
+      if (!pp->metaSet) {
         r.raw(meta.data(), nObj * kDataMetaSize);
-        fMetaSet = true;
+        pp->metaSet = true;
       } else {
         std::vector<uint8_t> skip((size_t)nObj * kDataMetaSize);
         r.raw(skip.data(), skip.size());
@@ -403,7 +453,17 @@ int main(int argc, char **argv) {
       size_t esz = (prec == kPrecF32) ? 4 : 8;
       std::vector<uint8_t> vals(nVals * esz);
       r.raw(vals.data(), vals.size());
-      if (!r.ok()) { fprintf(stderr, "wsclient: truncated DATA values\n"); exitCode = 2; break; }
+      if (!r.ok() || r.left() != 0) { fprintf(stderr, "wsclient: DATA values not the size the header says\n"); exitCode = 2; break; }
+      for (uint32_t rr = 0; rr < nRows; rr++) {
+        if (pp->seen[iTime + rr]) {
+          fprintf(stderr, "wsclient: row %u of request %u arrived twice\n",
+                  iTime + rr, pp->id);
+          exitCode = 2;
+          break;
+        }
+        pp->seen[iTime + rr] = 1;
+      }
+      if (exitCode) break;
       for (uint32_t o = 0; o < nObj; o++) {
         double *dst = cols.data() + ((size_t)o * count + iTime) * kColsPerObj;
         const uint8_t *src = vals.data() + ((size_t)o * nRows) * kColsPerObj * esz;
@@ -414,15 +474,24 @@ int main(int argc, char **argv) {
                                  : getF64(src + ((size_t)rr * kColsPerObj + c) * 8);
           }
       }
-      rowsGot += nRows;
-      if (rowsGot >= count) break;
+      pp->got += nRows;
+      if (pp->got == count) {
+        pp->done = true;
+        nOpen--;
+      }
     }
-    if (lat && exitCode == 0 && rowsGot == count) {
+    uint32_t rowsGot = pend[nSend - 1].got;
+    if (lat && exitCode == 0 && !burst && rowsGot == count) {
       double us = std::chrono::duration<double, std::micro>(
           std::chrono::steady_clock::now() - tSent).count();
       fprintf(lat, "%.0f\n", us);
     }
-    if (exitCode == 0 && rowsGot != count) {
+    if (burst && exitCode == 0) {
+      uint32_t nDone = 0, nRefused = 0;
+      for (const Pending &p2 : pend) { nDone += p2.done; nRefused += p2.refused; }
+      printf("burst: %u answered in full, %u refused ERROR 2\n", nDone, nRefused);
+    }
+    if (exitCode == 0 && !burst && rowsGot != count) {
       fprintf(stderr, "wsclient: got %u of %u rows\n", rowsGot, count);
       exitCode = 2;
     }
@@ -430,7 +499,7 @@ int main(int argc, char **argv) {
       fprintf(stderr, "wsclient: --expect-rows %u but got %u\n", expectRows, rowsGot);
       exitCode = 2;
     }
-    if (exitCode == 0 && out) {
+    if (exitCode == 0 && out && !burst) {
       for (size_t o = 0; o < req.objs.size(); o++) {
         int32_t retFlag = getI32(meta.data() + o * kDataMetaSize);
         const ObjSpec &o2 = req.objs[o];

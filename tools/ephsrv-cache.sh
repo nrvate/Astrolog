@@ -17,7 +17,7 @@
 # Knobs (env):
 #   SWE_HOME   where the thread-safe fork lives  (default /shares/swisseph)
 #   EPH        the ephemeris dir handed to --ephe (default: the repo's)
-#   PORT       scratch port                      (default 47600 + pid % 300)
+#   PORT       scratch port                      (default 28400 + pid % 300)
 #
 # Exit 0 with "CACHE PASS"; nonzero with the failed assertion. Falsified
 # when written, four ways: with the server's cache.put() removed the live
@@ -32,7 +32,7 @@ cd "$(dirname "$0")/.."
 ROOT=$PWD
 SWE_HOME=${SWE_HOME:-/shares/swisseph}
 EPH=${EPH:-$ROOT/ephem}
-PORT=${PORT:-$((47600 + $$ % 300))}
+PORT=${PORT:-$((28400 + $$ % 300))}   # below the ephemeral range: ephsrv-robust.sh says why
 SCRATCH=$(mktemp -d /tmp/ephsrv-cache.XXXXXX)
 EPHD_PID=
 LOG="$SCRATCH/ephd.log"
@@ -123,28 +123,35 @@ int main() {
   { Request r = base(); r.iflag = kIflagCenter;
     CHECK(cacheKeyOf(r) != k0, "the center bit must split the key"); }
 
-  // LRU mechanics: cap 100 bytes, entries of 40 (five doubles).
-  ResultCache c(100);
+  // LRU mechanics, in units of what one five-double entry under a
+  // one-letter key is charged -- the columns, the key twice and the
+  // per-entry allowance (ResultCache::chargeOf) -- with room for two and a
+  // half of them. The first draft counted columns only, and the cache
+  // really held about three times its cap in chart-sized entries.
+  const size_t U = ResultCache::chargeOf("A", *entryOf(5));
+  CHECK(U == 40 + 2 + ResultCache::kEntryOverhead, "an entry is charged columns, key twice and the allowance");
+  ResultCache c(U * 5 / 2);
   c.put("A", entryOf(5));
   c.put("B", entryOf(5));
-  CHECK(c.usedBytes() == 80 && c.entries() == 2, "two entries account 80 bytes");
+  CHECK(c.usedBytes() == 2 * U && c.entries() == 2, "two entries account two charges");
   CHECK(c.get("A") != nullptr, "A is present");
   c.put("C", entryOf(5));   // must evict B, the least recently used
   CHECK(c.get("B") == nullptr, "B was the LRU and must be evicted");
   CHECK(c.get("A") != nullptr, "A was touched and must survive");
   CHECK(c.get("C") != nullptr, "C was just inserted");
   CHECK(c.evictions() == 1, "exactly one eviction");
-  CHECK(c.usedBytes() == 80 && c.entries() == 2, "accounting after eviction");
+  CHECK(c.usedBytes() == 2 * U && c.entries() == 2, "accounting after eviction");
   CHECK(c.hits() == 3 && c.misses() == 1, "hit/miss counters: A, B(miss), A, C");
-  c.put("D", entryOf(30));  // 240 bytes > cap: refused, nothing evicted
+  c.put("D", entryOf(U * 3 / 8));  // over the cap alone: refused, nothing evicted
   CHECK(c.get("D") == nullptr, "an oversize entry is not stored");
   CHECK(c.entries() == 2 && c.evictions() == 1, "oversize refusal evicts nothing");
-  c.put("A", entryOf(2));   // replace: 16 bytes now
-  CHECK(c.entries() == 2 && c.usedBytes() == 56, "replacing a key re-accounts it");
+  c.put("A", entryOf(2));   // replace with a smaller entry
+  CHECK(c.entries() == 2 && c.usedBytes() == U + ResultCache::chargeOf("A", *entryOf(2)),
+        "replacing a key re-accounts it");
   auto held = c.get("C");
   c.put("E", entryOf(5)); c.put("F", entryOf(5)); c.put("G", entryOf(5));
   CHECK(held && held->cols.size() == 5, "a held entry survives its eviction");
-  CHECK(c.usedBytes() <= 100, "never over the cap");
+  CHECK(c.usedBytes() <= U * 5 / 2, "never over the cap");
 
   ResultCache z(0);
   z.put("A", entryOf(5));

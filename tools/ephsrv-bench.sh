@@ -22,7 +22,7 @@
 # Knobs (env):
 #   SWE_HOME  where the thread-safe fork lives  (default /shares/swisseph)
 #   EPH       the ephemeris dir handed to --ephe (default: the repo's)
-#   PORT      scratch port                      (default 47900 + pid % 100)
+#   PORT      scratch port                      (default 28800 + pid % 100)
 #   THREADS   server event loops               (default: the server's, cores)
 #   CLIENTS   concurrent clients               (default 8)
 #   REPEAT    hot repeats per client           (default 50)
@@ -36,7 +36,7 @@ cd "$(dirname "$0")/.."
 ROOT=$PWD
 SWE_HOME=${SWE_HOME:-/shares/swisseph}
 EPH=${EPH:-$ROOT/ephem}
-PORT=${PORT:-$((47900 + $$ % 100))}
+PORT=${PORT:-$((28800 + $$ % 100))}   # below the ephemeral range: ephsrv-robust.sh says why
 CLIENTS=${CLIENTS:-8}
 REPEAT=${REPEAT:-50}
 COLD=${COLD:-5}

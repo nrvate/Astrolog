@@ -14,7 +14,7 @@
 # Knobs (env):
 #   SWE_HOME   where the thread-safe fork lives  (default /shares/swisseph)
 #   EPH            the ephemeris dir handed to --ephe (default: the repo's)
-#   PORT           scratch port                  (default 47200 + pid % 400)
+#   PORT           scratch port                  (default 28000 + pid % 400)
 #   KEEP           set to keep the server running after the gate
 #
 # Exit 0 with "GOLDEN PASS" when every column matches; nonzero with the
@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.."
 ROOT=$PWD
 SWE_HOME=${SWE_HOME:-/shares/swisseph}
 EPH=${EPH:-$ROOT/ephem}
-PORT=${PORT:-$((47200 + $$ % 400))}
+PORT=${PORT:-$((28000 + $$ % 400))}   # below the ephemeral range: ephsrv-robust.sh says why
 SCRATCH=$(mktemp -d /tmp/ephsrv-golden.XXXXXX)
 EPHD_PID=
 

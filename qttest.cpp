@@ -18251,7 +18251,10 @@ static void TestEphSrvLiveQt()
     strEphe = QCoreApplication::applicationDirPath() + "/" + strEphe;
 
   // The real server, on a scratch port, over this run's ephemeris.
-  port = 47500 + (int)(QCoreApplication::applicationPid() % 400);
+  // Below the kernel's ephemeral range (32768 up): a port inside it can be
+  // held by some client connection's TIME_WAIT and refused to the server
+  // (tools/ephsrv-robust.sh measured it). The gates use 28000-29399.
+  port = 27000 + (int)(QCoreApplication::applicationPid() % 400);
   proc.setProcessChannelMode(QProcess::MergedChannels);
   proc.start(strBin, QStringList() << "--port" << QString::number(port)
     << "--ephe" << strEphe << "--threads" << "1");
