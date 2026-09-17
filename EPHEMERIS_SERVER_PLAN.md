@@ -467,11 +467,19 @@ Each increment lands green before the next starts.
 
 ## 11. Runbook
 
-    astrolog-ephd [--port N] [--ephe path] [--threads N] [--cache-mb N]
-                  [--max-cells N] [--verbose]
+    astrolog-ephd [--port N] [--bind ADDR] [--ephe path] [--threads N]
+                  [--cache-mb N] [--max-cells N] [--verbose]
+                  [--tls-cert FILE --tls-key FILE]
 
 Default port: constant `EPH_DEFAULT_PORT` in ephproto.h (47190), shared with
-the client so both ends agree with zero configuration. `--ephe` overrides
+the client so both ends agree with zero configuration. `--bind` listens on
+one address instead of every interface. `--tls-cert` and `--tls-key` (PEM,
+the chain after the leaf) serve `wss://`: the pair is checked at startup
+and the server refuses to start on an unreadable, mismatched, expired or
+not-yet-valid one, naming the file; `kill -HUP` reloads both without
+dropping a connection, and a bad pair on reload is refused with the old one
+kept (EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phase 1; `tools/ephsrv-tls.sh`).
+A client given `wss://host` with no port connects to 443. `--ephe` overrides
 discovery (§6). The server is stateless across restarts; killing and
 restarting it is always safe, and clients reconnect transparently (§4.7).
 
@@ -788,3 +796,54 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
      it (35 samples, Mercury 110 deg), and so does a directory with no
      files, since a Moshier fallback would otherwise agree with itself.
      About 15 s, in `make check-full`. Closes review item B3's open net.
+
+12. **TLS (2026-09-17, branch `ephtls`; production plan Phase 1).**
+   - The server is `uWS::SSLApp` under `--tls-cert`/`--tls-key` and plain
+     `App` otherwise, one binary: every handler became a template over
+     uWS's SSL parameter. TLS 1.2 is uSockets' own floor; the 1.2 cipher
+     list is set explicitly (Mozilla intermediate) because uSockets applies
+     its default only with DH parameters. `--bind ADDR` added; the default
+     stays every interface.
+   - Startup checks the pair in a scratch OpenSSL context and names the
+     problem -- OpenSSL reports a mismatched key while LOADING it, as "key
+     values mismatch", so that reason is translated rather than printed as
+     an unreadable key. SIGHUP is taken by one `sigwait()` thread (masked
+     everywhere else before any loop starts), which re-checks the files and
+     then defers the load into each loop's own `SSL_CTX`.
+   - `eph_wsclient --tls [--ca FILE] [--sni NAME]`, verifying always; a
+     failed handshake exits 3 with the reason. `ephsrv-golden.sh` under
+     `TLS=1` is 88 columns bit-exact over wss://.
+   - New gate `tools/ephsrv-tls.sh` (4.5 s): refused starts (mismatched
+     key, expired certificate, certificate without key), client refusals
+     (wrong name, untrusted CA, plain client), the protocol floor (1.1
+     refused, 1.2 and 1.3 accepted), and reload (a broken pair keeps the
+     old certificate; a good pair from a second CA reaches new connections
+     while a connection streaming across the signal finishes). Two of its
+     own probes were blind on the first run and are fixed with a comment
+     each: this OpenSSL refuses TLS 1.1 on the CLIENT side by default, so
+     "1.1 refused" said nothing about the server until the probe ran at
+     security level 0 and proved itself against an `s_server` allowing
+     1.1; and TLS 1.3 prints no session block, so a probe reading its
+     "Protocol :" line called every 1.3 handshake refused. With the
+     in-place load disabled, the gate fails "new connection, new CA".
+   - The Qt client: a `wss://` address with no port goes to 443 (the suite
+     had asserted 47190 for it); certificate errors are kept from
+     `sslErrors` and become the drop's text ("presented a certificate this
+     computer does not trust: ..."), never ignored; a `wss://` address in a
+     Qt with no TLS library says so. The `ephem-server-live` group gained a
+     TLS leg: a throwaway CA made with `openssl`, a second server with its
+     certificate, the refusal in words while the CA is untrusted, then a
+     cast over wss:// bit-identical to the local one once it is -- 80 to
+     85 checks. With `ignoreSslErrors()` planted in the handler, the
+     refusal check fails.
+   - `qt_windows_dist_audit.py` requires `tls/qschannelbackend.dll`;
+     v8.00-qt.24's published zip has it, so the requirement cannot break a
+     release that was fine. The macOS `.dmg` is APFS, which 7-Zip here
+     cannot read, so its TLS plugin is unverified until a release dry run.
+   - The robustness, cache, soak and golden gates pass unchanged on the
+     templated server; `make check` all clear (suite 5762/0).
+   - The bench under `TLS=1` (new knob), back to back with plain on the
+     same machine: hot f64 window p50 3.44 -> 4.37 ms, hot f32 1.28 -> 1.60
+     ms, 8 hot clients 381 -> 353 windows/s (-7%); cold compute unchanged
+     (~600 ms, the Swiss calls dominate). TLS costs under a millisecond a
+     window.

@@ -27,6 +27,8 @@
 #   CLIENTS   concurrent clients               (default 8)
 #   REPEAT    hot repeats per client           (default 50)
 #   COLD      cold windows per client          (default 5)
+#   TLS       1 to run every scenario over wss:// against a throwaway CA,
+#             so TLS's cost is a number beside the plain one
 #
 # Prints one table; exits nonzero only if a request fails. Numbers from the
 # run that wrote this are in the plan's work log, item 7.
@@ -54,8 +56,22 @@ trap cleanup EXIT
 
 THREAD_ARG=()
 [ -n "${THREADS:-}" ] && THREAD_ARG=(--threads "$THREADS")
+TLS_SRV=() TLS_CLI=()
+if [ "${TLS:-0}" = 1 ]; then
+  (cd "$SCRATCH" &&
+   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+     -keyout ca.key -out ca.pem -days 2 -subj /CN=ephsrv-bench-ca &&
+   openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+     -keyout srv.key -out srv.csr -subj /CN=localhost &&
+   printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\n' > ext.cnf &&
+   openssl x509 -req -in srv.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+     -out srv.pem -days 1 -extfile ext.cnf) > "$SCRATCH/openssl.log" 2>&1 ||
+    { echo "BENCH FAIL: could not make the test certificates"; exit 1; }
+  TLS_SRV=(--tls-cert "$SCRATCH/srv.pem" --tls-key "$SCRATCH/srv.key")
+  TLS_CLI=(--tls --ca "$SCRATCH/ca.pem")
+fi
 "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --verbose "${THREAD_ARG[@]}" \
-  > "$LOG" 2>&1 &
+  "${TLS_SRV[@]}" > "$LOG" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 50); do
   grep -q "listening on port" "$LOG" 2>/dev/null && break
@@ -71,7 +87,7 @@ JD0=2451545.0
 
 ask() {   # ask <latency-file> <jd> <extra args...>
   local lat=$1 jd=$2; shift 2
-  "$ROOT/eph_wsclient" --port "$PORT" --objs "$BODIES" --jd "$jd" --step $STEP \
+  "$ROOT/eph_wsclient" "${TLS_CLI[@]}" --port "$PORT" --objs "$BODIES" --jd "$jd" --step $STEP \
     --count $ROWS --quiet --latency "$lat" "$@" \
     || { echo "BENCH FAIL: request failed at jd $jd: $*"; exit 1; }
 }
@@ -124,7 +140,7 @@ read -r h32_p50 h32_p99 h32_n < <(pct "$SCRATCH/hot32.lat")
 PIDS=()
 T0=$(date +%s.%N)
 for c in $(seq 1 "$CLIENTS"); do
-  ( "$ROOT/eph_wsclient" --port "$PORT" --objs "$BODIES" --jd "$JD0" --step $STEP \
+  ( "$ROOT/eph_wsclient" "${TLS_CLI[@]}" --port "$PORT" --objs "$BODIES" --jd "$JD0" --step $STEP \
       --count $ROWS --quiet --latency "$SCRATCH/hotN.$c.lat" --repeat $((REPEAT + 1)) \
       || { echo "BENCH FAIL: concurrent hot client $c failed" | tee -a "$SCRATCH/fail"; } ) &
   PIDS+=($!)
@@ -147,7 +163,7 @@ for c in $(seq 1 "$CLIENTS"); do
   (
     for i in $(seq 0 $((COLD - 1))); do
       jd=$(python3 -c "print($JD0 + 10000 + $c * 1000 + $i * 100)")
-      "$ROOT/eph_wsclient" --port "$PORT" --objs "$BODIES" --jd "$jd" --step $STEP \
+      "$ROOT/eph_wsclient" "${TLS_CLI[@]}" --port "$PORT" --objs "$BODIES" --jd "$jd" --step $STEP \
         --count $ROWS --quiet --latency "$SCRATCH/coldN.$c.lat" \
         || { echo "BENCH FAIL: concurrent cold client $c failed" | tee -a "$SCRATCH/fail"; }
     done

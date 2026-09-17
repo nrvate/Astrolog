@@ -84,6 +84,8 @@
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFile>
 #include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QSslError>
+#include <QtNetwork/QSslSocket>
 #include <QtNetwork/QNetworkReply>
 #include <QtNetwork/QNetworkRequest>
 #include <QtWebSockets/QWebSocket>
@@ -7201,6 +7203,8 @@ static struct {
                               // a different server's windows are not
                               // this one's answers.
   QString strErr;             // The last refusal or drop's error text.
+  QString strSslErr;          // Why the certificate was refused, from
+                              // sslErrors; the drop that follows says it.
                               // A version mismatch's server version is
                               // kept here, for the required-server
                               // dialog to show (increment 4).
@@ -7243,8 +7247,14 @@ static flag FUrlEphSrv(CONST char *szAddr, QUrl *purl, QString *pstrErr)
       .arg(str);
     return fFalse;
   }
+  // No port: the protocol's own for ws:// and a bare host, HTTPS's for
+  // wss://, where a public server sits on 443 so it gets through the
+  // firewalls and proxies that only pass web traffic. It used to be the
+  // protocol's port for both, which no public wss:// server would use
+  // (EPHEMERIS_SERVER_PRODUCTION_PLAN.md G12).
   if (url.port() < 0)
-    url.setPort(eph::kDefaultPort);
+    url.setPort(url.scheme().compare("wss", Qt::CaseInsensitive) == 0 ? 443 :
+      eph::kDefaultPort);
   *purl = url;
   return fTrue;
 }
@@ -7485,6 +7495,17 @@ static void EphSrvConnect()
           QString()).arg(s_msEphSrvHelloQt / 1000.0));
     });
   }
+  // A wss:// address with no TLS in this Qt says so, rather than failing a
+  // handshake with a message about sockets. On Linux Qt 5 loads OpenSSL at
+  // run time, so a build can lack it where the machine does.
+  if (url.scheme().compare("wss", Qt::CaseInsensitive) == 0 &&
+    !QSslSocket::supportsSsl()) {
+    EphSrvDropped(QString("Can't open %1: this Astrolog has no TLS support "
+      "(Qt found no SSL library; on Linux, install OpenSSL).")
+      .arg(url.toString()));
+    return;
+  }
+  esrv.strSslErr.clear();
   // Every handler below is about the socket that connected it, and does
   // nothing once that socket has been replaced.
   QWebSocket *pws = new QWebSocket(QString("%1/%2").arg(szAppName)
@@ -7510,12 +7531,29 @@ static void EphSrvConnect()
     QString strErr;
     if (pws != esrv.pws)
       return;
-    if (pws->error() != QAbstractSocket::UnknownSocketError)
+    if (!esrv.strSslErr.isEmpty())
+      strErr = esrv.strSslErr;
+    else if (pws->error() != QAbstractSocket::UnknownSocketError)
       strErr = QString("Couldn't reach the Ephemeris Server at %1: %2.")
         .arg(pws->requestUrl().toString())
         .arg(pws->errorString());
     EphSrvDropped(strErr);
   });
+  // A certificate the client will not trust: each reason in Qt's words,
+  // kept for the drop that follows. The errors are never ignored -- a
+  // client that connected anyway would send birth times and places to
+  // whoever answered.
+  QObject::connect(pws, &QWebSocket::sslErrors, pws,
+    [pws](CONST QList<QSslError> &rgerr) {
+      QStringList rgstr;
+      if (pws != esrv.pws)
+        return;
+      for (CONST QSslError &err : rgerr)
+        rgstr << err.errorString();
+      esrv.strSslErr = QString("The Ephemeris Server at %1 presented a "
+        "certificate this computer does not trust: %2.")
+        .arg(pws->requestUrl().toString()).arg(rgstr.join("; "));
+    });
   QObject::connect(pws, &QWebSocket::binaryMessageReceived, pws,
     [pws](CONST QByteArray &ba) {
       if (pws == esrv.pws)

@@ -98,6 +98,9 @@
 #include <ctime>
 #include <QtWebSockets/QWebSocket>
 #include <QtNetwork/QHostAddress>
+#include <QtNetwork/QSslConfiguration>
+#include <QtNetwork/QSslSocket>
+#include <QtCore/QStandardPaths>
 #include "ephproto.h"
 #include "astrolog.h"
 #include "extern.h"
@@ -17811,7 +17814,8 @@ static void TestEphSrvQt()
   Check(FUrlEphSrvTestQt("ws://example.com:99/x", S(sz)) &&
     FEqSz(sz, "ws://example.com:99/x"), "so does a ws:// URL");
   Check(FUrlEphSrvTestQt("wss://secure.example.com", S(sz)) &&
-    FEqSz(sz, "wss://secure.example.com:47190"), "and wss");
+    FEqSz(sz, "wss://secure.example.com:443"), "and wss, on HTTPS's port "
+    "when none is given");
   Check(!FUrlEphSrvTestQt(":", S(sz)), "a hostless spelling is refused");
 
   // Protocol round trips, straight against ephproto.h.
@@ -19154,6 +19158,121 @@ static void TestEphSrvLiveQt()
     FCloneSz(NULL, &us.szEphSrv);
     is.fNoEphFound = fNoEphSav;
     is.fSwissPathSet = fPathSetSav;
+  }
+
+  // TLS (EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phase 1): the same server
+  // started with a certificate from a throwaway CA. While that CA is not
+  // trusted the backend must refuse the certificate and say why; once it
+  // is, a cast over wss:// must land bit-identical to the local one. This
+  // is the check that THIS build's Qt TLS stack works end to end -- the
+  // server's own gate (tools/ephsrv-tls.sh) cannot say that about Qt.
+  {
+    QString strOpenssl = QStandardPaths::findExecutable("openssl");
+    QTemporaryDir dirTls;
+    QProcess procTls;
+    QByteArray baTlsLog;
+    QSslConfiguration sslSav = QSslConfiguration::defaultConfiguration();
+    int portTls = port + 400;   // 27400-27799: no gate or group uses it
+    char szErr[cchSzMax];
+    flag fCerts, fRefused;
+
+    if (strOpenssl.isEmpty() || !dirTls.isValid() ||
+      !QSslSocket::supportsSsl()) {
+      printf("  (TLS leg skipped: %s)\n", strOpenssl.isEmpty() ?
+        "no openssl on PATH to make a test certificate" :
+        !QSslSocket::supportsSsl() ? "this Qt has no TLS support" :
+        "no temporary directory");
+      goto LRestore;
+    }
+    {
+      QString strDir = dirTls.path();
+      auto FOpenssl = [&](CONST QStringList &rgstr) {
+        QProcess procSsl;
+        procSsl.setWorkingDirectory(strDir);
+        procSsl.start(strOpenssl, rgstr);
+        return procSsl.waitForFinished(20000) &&
+          procSsl.exitStatus() == QProcess::NormalExit &&
+          procSsl.exitCode() == 0;
+      };
+      QFile fileExt(strDir + "/ext.cnf");
+      fCerts = fileExt.open(QIODevice::WriteOnly);
+      if (fCerts) {
+        fileExt.write("subjectAltName=DNS:localhost,IP:127.0.0.1\n");
+        fileExt.close();
+      }
+      fCerts = fCerts &&
+        FOpenssl(QStringList() << "req" << "-x509" << "-newkey" << "ec" <<
+          "-pkeyopt" << "ec_paramgen_curve:prime256v1" << "-nodes" <<
+          "-keyout" << "ca.key" << "-out" << "ca.pem" << "-days" << "2" <<
+          "-subj" << "/CN=astrolog-suite-ca") &&
+        FOpenssl(QStringList() << "req" << "-newkey" << "ec" << "-pkeyopt" <<
+          "ec_paramgen_curve:prime256v1" << "-nodes" << "-keyout" <<
+          "srv.key" << "-out" << "srv.csr" << "-subj" << "/CN=localhost") &&
+        FOpenssl(QStringList() << "x509" << "-req" << "-in" << "srv.csr" <<
+          "-CA" << "ca.pem" << "-CAkey" << "ca.key" << "-CAcreateserial" <<
+          "-out" << "srv.pem" << "-days" << "1" << "-extfile" << "ext.cnf");
+      Check(fCerts, "openssl made the TLS leg's throwaway CA and certificate");
+      if (!fCerts)
+        goto LRestore;
+      procTls.setProcessChannelMode(QProcess::MergedChannels);
+      procTls.start(strBin, QStringList() << "--port" <<
+        QString::number(portTls) << "--ephe" << strEphe << "--threads" << "1"
+        << "--tls-cert" << strDir + "/srv.pem" << "--tls-key" <<
+        strDir + "/srv.key");
+      Check(FWaitEphdQt(&procTls, &baTlsLog, 10000) &&
+        baTlsLog.contains("wss://"), "astrolog-ephd started over wss:// on "
+        "port %d", portTls);
+
+      OraclePinUtQt(1990, 6, 15, 12.0);
+      ciCore.lon = 122.3; ciCore.lat = 47.6;
+      us.fSidereal = fFalse; us.objCenter = oEar; us.fTopoPos = fFalse;
+      us.fEphemFiles = fTrue;
+      us.nSwissEph = 0;
+      CastChart(0);
+      SnapshotEphQt(&snLocal);
+
+      // Not trusted yet: refused, in words.
+      EphSrvFinalizeQt();
+      ClearWinSrvTestQt();
+      sprintf2(S(sz), "wss://localhost:%d", portTls);
+      FCloneSz(sz, &us.szEphSrv);
+      us.nSwissEph = 5;
+      EphSrvStartupQt();
+      {
+        QElapsedTimer tim;
+        tim.start();
+        fRefused = fFalse;
+        while (!fRefused && tim.elapsed() < 10000) {
+          QApplication::processEvents(QEventLoop::AllEvents, 20);
+          fRefused = FErrEphSrvTestQt(S(szErr)) &&
+            strstr(szErr, "does not trust") != NULL;
+        }
+      }
+      Check(fRefused && NEphSrvStateTestQt() != 2, "an untrusted certificate "
+        "is refused, and the reason says so: \"%.160s\"", szErr);
+
+      // Trusted: welcomed, and the cast is the local cast.
+      {
+        QSslConfiguration ssl = sslSav;
+        ssl.addCaCertificates(strDir + "/ca.pem");
+        QSslConfiguration::setDefaultConfiguration(ssl);
+      }
+      EphSrvFinalizeQt();
+      ClearWinSrvTestQt();
+      EphSrvStartupQt();
+      Check(FWaitEstQt(2, 10000), "welcomed over wss:// once the CA is trusted");
+      cWarn = NCastWarnSrvTestQt();
+      CastChart(0);
+      SnapshotEphQt(&snSrv);
+      cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+      Check(NCastWarnSrvTestQt() == cWarn && cDiff == 0, "a cast over wss:// "
+        "is bit-identical to the local cast (%d warnings, %d differ: %s)",
+        NCastWarnSrvTestQt() - cWarn, cDiff, szDiff);
+      EphSrvFinalizeQt();
+      QSslConfiguration::setDefaultConfiguration(sslSav);
+      procTls.kill();
+      procTls.waitForFinished(2000);
+    }
   }
 
 LRestore:

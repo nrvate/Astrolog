@@ -16,6 +16,10 @@
 #   EPH            the ephemeris dir handed to --ephe (default: the repo's)
 #   PORT           scratch port                  (default 28000 + pid % 400)
 #   KEEP           set to keep the server running after the gate
+#   TLS            set to 1 to run the whole comparison over wss://: a
+#                  throwaway CA and a localhost certificate are made in the
+#                  scratch dir, and the client verifies against that CA.
+#                  Same columns, same bits -- TLS must change nothing.
 #
 # Exit 0 with "GOLDEN PASS" when every column matches; nonzero with the
 # first mismatch diff otherwise. Cleans up its server and scratch files.
@@ -101,7 +105,22 @@ EOF
 gcc -O2 -I"$SWE_HOME" "$SCRATCH/oracle.c" "$SWE_HOME/libswe.a" -lm -ldl \
   -lpthread -o "$SCRATCH/oracle"
 
-"$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --threads 1 \
+TLS_SRV=() TLS_CLI=()
+if [ "${TLS:-0}" = 1 ]; then
+  (cd "$SCRATCH" &&
+   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+     -keyout ca.key -out ca.pem -days 2 -subj /CN=ephsrv-golden-ca &&
+   openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+     -keyout srv.key -out srv.csr -subj /CN=localhost &&
+   printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\n' > ext.cnf &&
+   openssl x509 -req -in srv.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+     -out srv.pem -days 1 -extfile ext.cnf) > "$SCRATCH/openssl.log" 2>&1 ||
+    { echo "GOLDEN FAIL: could not make the test certificates"; cat "$SCRATCH/openssl.log"; exit 1; }
+  TLS_SRV=(--tls-cert "$SCRATCH/srv.pem" --tls-key "$SCRATCH/srv.key")
+  TLS_CLI=(--tls --ca "$SCRATCH/ca.pem")
+fi
+
+"$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --threads 1 "${TLS_SRV[@]}" \
   > "$SCRATCH/ephd.log" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 50); do
@@ -119,7 +138,7 @@ FAIL=0
 TRIED=0
 for jd in $JDs; do
   ids=$(echo $BODIES | tr ' ' ',')
-  if ! "$ROOT/eph_wsclient" --port "$PORT" --objs "$ids" --jd "$jd" \
+  if ! "$ROOT/eph_wsclient" "${TLS_CLI[@]}" --port "$PORT" --objs "$ids" --jd "$jd" \
       --step 600 --count 1 --out "$SCRATCH/got.txt" --quiet; then
     echo "GOLDEN FAIL: request for JD $jd failed"; exit 1
   fi
@@ -148,7 +167,7 @@ done
 
 # Sidereal: Fagan-Bradley (mode 0) through both ends at one instant.
 for jd in 2451545.0 2400000.5; do
-  "$ROOT/eph_wsclient" --port "$PORT" --objs 0,1 --jd "$jd" --step 600 \
+  "$ROOT/eph_wsclient" "${TLS_CLI[@]}" --port "$PORT" --objs 0,1 --jd "$jd" --step 600 \
     --count 1 --iflag 10000 --sid "0,0,0" --out "$SCRATCH/sid.txt" --quiet
   while read -r idx who retFlag lon lat dist slon slat sdist; do
     ipl=$who
@@ -181,7 +200,7 @@ done
 # --iflag carries SEFLG_TOPOCTR (0x2000000) for both ends.
 leg() {   # leg <label> <oracle-mode> <oracle-ipl> <iflagHex> <client args...>
   local label=$1 mode=$2 ipl=$3 iflagHex=$4; shift 4
-  "$ROOT/eph_wsclient" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \
+  "$ROOT/eph_wsclient" "${TLS_CLI[@]}" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \
     --out "$SCRATCH/leg.txt" --quiet "$@" \
     || { echo "GOLDEN FAIL: $label request failed"; exit 1; }
   while read -r idx who retFlag lon lat dist slon slat sdist; do
@@ -223,7 +242,7 @@ TOPO="151.2 -33.9 50" \
   leg "TOPO sydney" ut 4 2000000 --objs 4 --topo "151.2,-33.9,50" --iflag 2000000
 # And the pre-1955 instant above is the one where a UT-vs-TT confusion
 # shows: a UT request for the Moon must NOT equal the TT oracle.
-"$ROOT/eph_wsclient" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \
+"$ROOT/eph_wsclient" "${TLS_CLI[@]}" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \
   --objs 1 --out "$SCRATCH/ut.txt" --quiet
 read -r idx who retFlag lon lat dist slon slat sdist < "$SCRATCH/ut.txt"
 if [ "$lon $lat $dist $slon $slat $sdist" = "$("$SCRATCH/oracle" 2415020.5 1 0 0 "$EPH" tt)" ]; then
@@ -235,4 +254,4 @@ if [ "$FAIL" -gt 0 ]; then
   echo "GOLDEN FAIL: $FAIL of $TRIED columns mismatched"
   exit 1
 fi
-echo "GOLDEN PASS: $TRIED columns bit-exact against $SWE_HOME"
+echo "GOLDEN PASS: $TRIED columns bit-exact against $SWE_HOME$([ "${TLS:-0}" = 1 ] && echo ", over wss://")"

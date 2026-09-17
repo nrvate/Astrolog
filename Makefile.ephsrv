@@ -61,7 +61,7 @@ $(NAME): $(OBJS) ephsrv/uSockets/uSockets.a $(SWE_HOME)/libswe.a
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 
 $(CLIENT): $(OBJDIR)/eph_wsclient.o
-	g++ -o $(CLIENT) $(OBJDIR)/eph_wsclient.o
+	g++ -o $(CLIENT) $(OBJDIR)/eph_wsclient.o -lssl -lcrypto
 
 $(OBJDIR)/eph_wsclient.o: ephsrv/eph_wsclient.cpp | $(OBJDIR)
 	g++ $(CPPFLAGS) -c -o $@ $<

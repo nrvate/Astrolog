@@ -11,6 +11,7 @@
 //                [--expect-rows N] [--repeat N] [--latency FILE] [--quiet]
 //                [--tt] [--nodaps id,point,method[;...]]
 //                [--sleep-ms MS] [--burst N] [--cycles N] [--hello N]
+//                [--tls] [--ca FILE] [--sni NAME]
 //
 // Sends HELLO, prints WELCOME unless --quiet, sends one REQUEST, collects
 // the DATA chunks, and on --out writes one line per object per row in
@@ -33,6 +34,18 @@
 // requires a WELCOME for each. Every answer is checked row by row: a row that arrives
 // twice, a row that never arrives, a chunk for another request or a chunk
 // whose rows run past the window is a failure, whatever the row count.
+//
+// --tls speaks wss://: TLS over the same socket, verifying the server's
+// certificate against --ca (a PEM file; the system store without it) and
+// its name against --sni, or --host when --sni is not given. Verification
+// is never switched off -- a gate that wants to see a bad certificate
+// refused has to see the refusal. A failed handshake exits 3 with
+// OpenSSL's reason on stderr, so a gate can tell it from a refused
+// connection (2).
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -57,6 +70,32 @@ using namespace eph;
 // Bytes over-read by the handshake reader; drained by readFull.
 static std::vector<uint8_t> gPending;
 
+// The TLS session when --tls, else null and every read and write is the
+// plain socket's. One connection at a time, so one global is enough.
+static SSL_CTX *gSslCtx = nullptr;
+static SSL *gSsl = nullptr;
+
+static ssize_t ioRecv(int fd, void *buf, size_t n) {
+  if (gSsl == nullptr) return recv(fd, buf, n, 0);
+  int r = SSL_read(gSsl, buf, n > 0x7FFFFFFF ? 0x7FFFFFFF : (int)n);
+  return r > 0 ? r : -1;
+}
+
+static ssize_t ioSend(int fd, const void *buf, size_t n) {
+  if (gSsl == nullptr) return send(fd, buf, n, 0);
+  int r = SSL_write(gSsl, buf, n > 0x7FFFFFFF ? 0x7FFFFFFF : (int)n);
+  return r > 0 ? r : -1;
+}
+
+static void closeConn(int fd) {
+  if (gSsl != nullptr) {
+    SSL_shutdown(gSsl);
+    SSL_free(gSsl);
+    gSsl = nullptr;
+  }
+  close(fd);
+}
+
 static int readFull(int fd, uint8_t *buf, size_t n) {
   size_t got = 0;
   // The handshake reader may have over-read past the HTTP header end -- TCP
@@ -69,7 +108,7 @@ static int readFull(int fd, uint8_t *buf, size_t n) {
     got += take;
   }
   while (got < n) {
-    ssize_t r = recv(fd, buf + got, n - got, 0);
+    ssize_t r = ioRecv(fd, buf + got, n - got);
     if (r <= 0) return -1;
     got += (size_t)r;
   }
@@ -122,7 +161,7 @@ static int readWsMessage(int fd, std::vector<uint8_t> *out) {
       uint8_t mask[4] = {0x2A, 0x4B, 0x17, 0x99};
       memcpy(frame + f, mask, 4); f += 4;
       for (size_t i = 0; i < n; i++) frame[f + i] = pong[i] ^ mask[i & 3];
-      if (send(fd, frame, f + n, 0) < 0) return -1;
+      if (ioSend(fd, frame, f + n) < 0) return -1;
       continue;
     }
     if (op == 10) continue;   // pong
@@ -159,13 +198,27 @@ static void sendWsBinary(int fd, const std::vector<uint8_t> &msg) {
   for (size_t i = 0; i < len; i++) frame[f + i] = msg[i] ^ mask[i & 3];
   size_t sent = 0;
   while (sent < f + len) {
-    ssize_t r = send(fd, frame.data() + sent, f + len - sent, 0);
+    ssize_t r = ioSend(fd, frame.data() + sent, f + len - sent);
     if (r <= 0) { fprintf(stderr, "wsclient: send failed\n"); exit(2); }
     sent += (size_t)r;
   }
 }
 
-static bool connectWs(const char *host, uint16_t port, int *fdOut) {
+// A TLS handshake failure is not a connection failure: exit 3 with the
+// reason, so a gate expecting a refused certificate can require exactly it.
+static void tlsFailed(const char *what) {
+  char sz[256];
+  unsigned long e = ERR_get_error();
+  ERR_error_string_n(e, sz, sizeof(sz));
+  long v = gSsl ? SSL_get_verify_result(gSsl) : X509_V_OK;
+  fprintf(stderr, "wsclient: TLS %s failed: %s%s%s\n", what, e ? sz : "",
+          v != X509_V_OK ? "; certificate: " : "",
+          v != X509_V_OK ? X509_verify_cert_error_string(v) : "");
+  exit(3);
+}
+
+static bool connectWs(const char *host, uint16_t port, int *fdOut,
+                      const char *sni) {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) return false;
   sockaddr_in addr {};
@@ -180,6 +233,22 @@ static bool connectWs(const char *host, uint16_t port, int *fdOut) {
   tv.tv_sec = 90;
   setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
+  if (gSslCtx != nullptr) {
+    const char *name = sni ? sni : host;
+    gSsl = SSL_new(gSslCtx);
+    SSL_set_fd(gSsl, fd);
+    SSL_set_tlsext_host_name(gSsl, name);
+    // Name checking: an IP literal matches the certificate's IP entries,
+    // anything else its DNS names.
+    in_addr ip4 {};
+    if (inet_pton(AF_INET, name, &ip4) == 1)
+      X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(gSsl), name);
+    else
+      SSL_set1_host(gSsl, name);
+    if (SSL_connect(gSsl) != 1)
+      tlsFailed("handshake");
+  }
+
   char hs[256];
   snprintf(hs, sizeof(hs),
     "GET / HTTP/1.1\r\n"
@@ -188,16 +257,16 @@ static bool connectWs(const char *host, uint16_t port, int *fdOut) {
     "Connection: Upgrade\r\n"
     "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
     "Sec-WebSocket-Version: 13\r\n\r\n", host, (unsigned)port);
-  if (send(fd, hs, strlen(hs), 0) < 0) { close(fd); return false; }
+  if (ioSend(fd, hs, strlen(hs)) < 0) { closeConn(fd); return false; }
   std::string acc;
   while (acc.find("\r\n\r\n") == std::string::npos) {
     char tmp[1024];
-    ssize_t r = recv(fd, tmp, sizeof(tmp), 0);
-    if (r <= 0) { close(fd); return false; }
+    ssize_t r = ioRecv(fd, tmp, sizeof(tmp));
+    if (r <= 0) { closeConn(fd); return false; }
     acc.append(tmp, (size_t)r);
-    if (acc.size() > 65536) { close(fd); return false; }
+    if (acc.size() > 65536) { closeConn(fd); return false; }
   }
-  if (acc.find(" 101 ") == std::string::npos) { close(fd); return false; }
+  if (acc.find(" 101 ") == std::string::npos) { closeConn(fd); return false; }
   size_t hdrEnd = acc.find("\r\n\r\n");
   if (hdrEnd + 4 < acc.size())
     gPending.assign(acc.begin() + (long)(hdrEnd + 4), acc.end());
@@ -209,7 +278,8 @@ int main(int argc, char **argv) {
   const char *host = "127.0.0.1", *outFile = nullptr, *szStars = nullptr,
              *szSid = nullptr, *szTopo = nullptr, *szJpl = nullptr,
              *latencyFile = nullptr, *szNodAps = nullptr;
-  bool fTT = false;
+  bool fTT = false, fTls = false;
+  const char *szCa = nullptr, *szSni = nullptr;
   uint16_t port = kDefaultPort;
   std::vector<uint32_t> ids;
   double jd = 2451545.0;
@@ -251,6 +321,9 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--cycles") && next(&v)) cycles = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--hello") && next(&v)) nHello = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--burst-step") && next(&v)) burstStep = atof(v);
+    else if (!strcmp(a, "--tls")) fTls = true;
+    else if (!strcmp(a, "--ca") && next(&v)) szCa = v;
+    else if (!strcmp(a, "--sni") && next(&v)) szSni = v;
     else { fprintf(stderr, "wsclient: unknown/incomplete option %s\n", a); return 1; }
   }
 
@@ -301,9 +374,18 @@ int main(int argc, char **argv) {
   if (req.objs.empty()) { fprintf(stderr, "wsclient: --objs or --stars required\n"); return 1; }
   if (count == 0 || count > kMaxRows) { fprintf(stderr, "wsclient: bad --count\n"); return 1; }
 
+  if (fTls) {
+    gSslCtx = SSL_CTX_new(TLS_client_method());
+    SSL_CTX_set_min_proto_version(gSslCtx, TLS1_2_VERSION);
+    SSL_CTX_set_verify(gSslCtx, SSL_VERIFY_PEER, nullptr);
+    if (szCa ? SSL_CTX_load_verify_locations(gSslCtx, szCa, nullptr) != 1
+             : SSL_CTX_set_default_verify_paths(gSslCtx) != 1)
+      tlsFailed("loading the CA");
+  }
+
   int fd;
   for (uint32_t cyc = 0; cyc <= cycles; cyc++) {
-  if (!connectWs(host, port, &fd)) {
+  if (!connectWs(host, port, &fd, szSni)) {
     fprintf(stderr, "wsclient: cannot connect to %s:%u\n", host, (unsigned)port);
     return 2;
   }
@@ -340,7 +422,7 @@ int main(int argc, char **argv) {
              w.maxCells, w.serverVersion.c_str());
   }
   if (cyc < cycles) {
-    close(fd);
+    closeConn(fd);
     gPending.clear();
     if (cyc + 1 == cycles) return 0;   // --cycles: connections only
   }
@@ -521,6 +603,6 @@ int main(int argc, char **argv) {
 
   if (out) fclose(out);
   if (lat) fclose(lat);
-  close(fd);
+  closeConn(fd);
   return exitCode;
 }

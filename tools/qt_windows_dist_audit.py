@@ -68,6 +68,13 @@ need(os.path.join("platforms", "qoffscreen.dll"),
      "the suite sets QT_QPA_PLATFORM=offscreen; without this it exits at "
      "once, and with only qwindows it blocks forever with no desktop")
 
+# A TLS backend: Qt 6 loads TLS as a plugin, and without one every wss://
+# Ephemeris Server address fails at the handshake with nothing to say why
+# (EPHEMERIS_SERVER_PRODUCTION_PLAN.md G13). windeployqt shipped Schannel's
+# in v8.00-qt.24 -- verified in the published zip -- and nothing asserted it.
+need(os.path.join("tls", "qschannelbackend.dll"),
+     "Qt's TLS backend on Windows; without it wss:// cannot connect")
+
 # IconAstrologQt() tries icons/astrolog{16,32,48}.png beside the
 # executable, then falls back to astrlog1.ico. The artifact once had
 # NEITHER.

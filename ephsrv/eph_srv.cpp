@@ -17,7 +17,11 @@
 //      asked before (eph_cache.h)
 //   4. loop wiring -- uWS App, per-loop state, message handlers, backpressure
 //   5. heartbeats -- uWS protocol pings on a 30 s idle timeout (plan 4.7)
-//   6. main
+//   6. TLS -- certificate checks at startup, reload on SIGHUP
+//   7. main
+//
+// Every handler is a template over uWS's SSL parameter: one binary serves
+// ws:// or, given --tls-cert and --tls-key, wss:// (production plan Phase 1).
 
 #include "ephproto.h"
 #include "eph_cache.h"
@@ -26,7 +30,14 @@
 
 #include <swephexp.h>
 
+#include <openssl/err.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+
 #include <arpa/inet.h>
+#include <csignal>
+#include <ctime>
 #include <netinet/in.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
@@ -61,6 +72,10 @@ struct Options {
   uint32_t maxCells = eph::kMaxCellsDefault;  // objects x rows per REQUEST
   std::string ephe;            // --ephe, may be ';'-joined
   bool verbose = false;
+  std::string bind;            // --bind: one address; empty is every interface
+  std::string tlsCert;         // --tls-cert: PEM, the chain after the leaf
+  std::string tlsKey;          // --tls-key: PEM private key
+  bool Tls() const { return !tlsCert.empty(); }
 };
 
 static Options gOpt;
@@ -90,6 +105,13 @@ static bool parseU(const char *s, uint64_t *out) {
   *out = v;
   return true;
 }
+
+static const char kUsage[] =
+  "usage: astrolog-ephd [--port N] [--bind ADDR] [--ephe path] [--threads N]\n"
+  "                     [--cache-mb N] [--max-cells N] [--verbose]\n"
+  "                     [--tls-cert FILE --tls-key FILE]\n"
+  "  --tls-cert/--tls-key  serve wss:// (PEM; the chain after the leaf);\n"
+  "                        SIGHUP reloads both without dropping connections\n";
 
 static bool parseArgs(int argc, char **argv, Options *opt) {
   for (int i = 1; i < argc; i++) {
@@ -123,14 +145,28 @@ static bool parseArgs(int argc, char **argv, Options *opt) {
       opt->ephe = val;
     } else if (strcmp(a, "--verbose") == 0) {
       opt->verbose = true;
+    } else if (strcmp(a, "--bind") == 0) {
+      const char *val;
+      if (!needValue(&val) || !*val) return false;
+      opt->bind = val;
+    } else if (strcmp(a, "--tls-cert") == 0) {
+      const char *val;
+      if (!needValue(&val) || !*val) return false;
+      opt->tlsCert = val;
+    } else if (strcmp(a, "--tls-key") == 0) {
+      const char *val;
+      if (!needValue(&val) || !*val) return false;
+      opt->tlsKey = val;
     } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
-      printf("usage: astrolog-ephd [--port N] [--ephe path] [--threads N] "
-             "[--cache-mb N] [--max-cells N] [--verbose]\n");
+      printf("%s", kUsage);
       exit(0);
     } else {
       return false;
     }
   }
+  // A certificate without its key, or a key without its certificate, is a
+  // mistake, not a request for plain text.
+  if (opt->tlsCert.empty() != opt->tlsKey.empty()) return false;
   return true;
 }
 
@@ -535,7 +571,8 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
 struct LoopCtx {
   int index = 0;
   uWS::Loop *loop = nullptr;
-  std::unique_ptr<uWS::App> app;
+  std::unique_ptr<uWS::App> app;        // plain ws://, or
+  std::unique_ptr<uWS::SSLApp> sslApp;  // wss:// under --tls-cert
   std::vector<swe_ctx *> pool;   // private slice, never shared
   size_t nextCtx = 0;
   // The per-loop LRU result cache (eph_cache.h), keyed on the canonical
@@ -572,8 +609,9 @@ struct LoopCtx {
 // in the protocol for clients without automatic pong.
 static const int kIdleTimeoutSeconds = 30;
 
-static WebSocket<false, true, Conn>::SendStatus
-SendEnvelope(WebSocket<false, true, Conn> *ws, uint16_t type,
+template <bool SSL>
+static typename WebSocket<SSL, true, Conn>::SendStatus
+SendEnvelope(WebSocket<SSL, true, Conn> *ws, uint16_t type,
              uint32_t requestId, const void *payload,
              size_t payloadLen, uint8_t flags = 0) {
   std::vector<uint8_t> msg(eph::kEnvelopeSize + payloadLen);
@@ -583,7 +621,8 @@ SendEnvelope(WebSocket<false, true, Conn> *ws, uint16_t type,
                   uWS::OpCode::BINARY);
 }
 
-static void SendError(WebSocket<false, true, Conn> *ws, uint32_t requestId,
+template <bool SSL>
+static void SendError(WebSocket<SSL, true, Conn> *ws, uint32_t requestId,
                       int32_t code, const char *text) {
   uint8_t fixed[8];
   eph::putU32(fixed, requestId);
@@ -722,7 +761,8 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
 // chunkRows-sized pieces, ascending chunkIndex, contiguous row ranges. The
 // columns are object-major (nObj blocks of nTime*6), so writeDataChunk
 // gathers each object's own row range out of the full column array.
-static void FlushStreams(WebSocket<false, true, Conn> *ws) {
+template <bool SSL>
+static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
   Conn *c = (Conn *)ws->getUserData();
   while (!c->out.empty()) {
     Stream &s = c->out.front();
@@ -740,11 +780,11 @@ static void FlushStreams(WebSocket<false, true, Conn> *ws) {
       // the 16-byte envelope the protocol requires.
       auto st = SendEnvelope(ws, eph::kMsgData, s.requestId, s.buf.data(),
                              chunkLen);
-      if (st == WebSocket<false, true, Conn>::SendStatus::DROPPED)
+      if (st == WebSocket<SSL, true, Conn>::SendStatus::DROPPED)
         return;   // not sent: this chunk again on drain
       s.nextRow += rows;
       s.chunkIndex++;
-      if (st == WebSocket<false, true, Conn>::SendStatus::BACKPRESSURE)
+      if (st == WebSocket<SSL, true, Conn>::SendStatus::BACKPRESSURE)
         return;   // sent and buffered: the rest on drain
     }
     c->out.pop_front();
@@ -752,7 +792,8 @@ static void FlushStreams(WebSocket<false, true, Conn> *ws) {
 }
 
 // Execute + enqueue one REQUEST (already decoded and limit-checked).
-static void RunRequest(WebSocket<false, true, Conn> *ws, LoopCtx *lc,
+template <bool SSL>
+static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc,
                        const eph::Envelope &env, const eph::Request &req) {
   Conn *c = (Conn *)ws->getUserData();
 
@@ -813,7 +854,8 @@ static void RunRequest(WebSocket<false, true, Conn> *ws, LoopCtx *lc,
 // truncation to recover from. HELLO is answered with WELCOME once; REQUESTs
 // are answered whether or not HELLO came first -- the connection is
 // stateless in every way that matters (plan 4.7).
-static void HandleMessage(WebSocket<false, true, Conn> *ws,
+template <bool SSL>
+static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
                           std::string_view message, LoopCtx *lc) {
   if (message.size() < eph::kEnvelopeSize) {
     SendError(ws, 0, eph::kErrBad, "message shorter than the envelope");
@@ -908,7 +950,8 @@ static void HandleMessage(WebSocket<false, true, Conn> *ws,
 
 static thread_local LoopCtx *tlc = nullptr;   // this thread's loop state
 
-static void OnMessage(WebSocket<false, true, Conn> *ws, std::string_view message,
+template <bool SSL>
+static void OnMessage(WebSocket<SSL, true, Conn> *ws, std::string_view message,
                       uWS::OpCode op) {
   if (op != uWS::OpCode::BINARY) {
     SendError(ws, 0, eph::kErrBad, "the protocol is binary frames only");
@@ -921,12 +964,16 @@ static void OnMessage(WebSocket<false, true, Conn> *ws, std::string_view message
 // WebSocket behavior (per-socket Conn, message handler,
 // drain resuming the stream), and the listen socket (SO_REUSEPORT lets the
 // kernel balance accepts across the per-thread listeners).
-static void SetupLoop(LoopCtx *lc) {
-  tlc = lc;
-  lc->loop = uWS::Loop::get();
-  lc->app = std::make_unique<uWS::App>();
+// TLS 1.2's suites, Mozilla's "intermediate" set: forward secrecy and AEAD
+// only (section 6 says why uSockets needs to be told).
+static const char kTlsCiphers[] =
+  "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:"
+  "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:"
+  "ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305";
 
-  uWS::App::WebSocketBehavior<Conn> behavior;
+template <bool SSL>
+static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
+  typename uWS::TemplatedApp<SSL>::template WebSocketBehavior<Conn> behavior;
   behavior.compression = uWS::DISABLED;
   behavior.maxPayloadLength = (unsigned)(eph::kMaxPayload + 65536);
   behavior.idleTimeout = kIdleTimeoutSeconds;
@@ -940,14 +987,14 @@ static void SetupLoop(LoopCtx *lc) {
   // it on close. The one this had constructed a second Conn over the live
   // one, leaking its deque's blocks -- about 575 bytes a connection,
   // measured as RSS growing linearly over 20000 connect/close cycles.
-  behavior.message = [](WebSocket<false, true, Conn> *ws,
+  behavior.message = [](WebSocket<SSL, true, Conn> *ws,
                         std::string_view message, uWS::OpCode op) {
     OnMessage(ws, message, op);
   };
-  behavior.drain = [](WebSocket<false, true, Conn> *ws) {
+  behavior.drain = [](WebSocket<SSL, true, Conn> *ws) {
     FlushStreams(ws);
   };
-  lc->app->ws<Conn>("/*", std::move(behavior));
+  app->template ws<Conn>("/*", std::move(behavior));
   // "listening" is the line a client may connect on. The "ephemeris path"
   // line above it in the log is printed before any loop binds the port,
   // and a client that connected on it was refused by a server that was
@@ -957,21 +1004,181 @@ static void SetupLoop(LoopCtx *lc) {
   // (uSockets sets SO_REUSEPORT on every listener, so another server on
   // the port does NOT fail this; main() checks for one before any loop
   // starts.)
-  lc->app->listen((int)gOpt.port, [lc](us_listen_socket_t *sock) {
+  auto onListen = [lc](us_listen_socket_t *sock) {
     if (sock == nullptr) {
-      Log("ephd: cannot listen on port %u (in use?)", (unsigned)gOpt.port);
+      Log("ephd: cannot listen on %s port %u (in use, or not an address of "
+          "this host?)", gOpt.bind.empty() ? "every interface," :
+          gOpt.bind.c_str(), (unsigned)gOpt.port);
       exit(1);
     }
     if (lc->index == 0 || gOpt.verbose)
-      Log("listening on port %u (loop %d)", (unsigned)gOpt.port, lc->index);
-  });
+      // "listening on port N" is what the gates and the suite wait for;
+      // what follows it may grow, the prefix may not change.
+      Log("listening on port %u (%s, %s, loop %d)", (unsigned)gOpt.port,
+          SSL ? "wss://" : "ws://",
+          gOpt.bind.empty() ? "every interface" : gOpt.bind.c_str(),
+          lc->index);
+  };
+  if (gOpt.bind.empty())
+    app->listen((int)gOpt.port, std::move(onListen));
+  else
+    app->listen(gOpt.bind, (int)gOpt.port, std::move(onListen));
 }
+
+static void SetupLoop(LoopCtx *lc) {
+  tlc = lc;
+  lc->loop = uWS::Loop::get();
+  if (gOpt.Tls()) {
+    uWS::SocketContextOptions tls;
+    tls.cert_file_name = gOpt.tlsCert.c_str();
+    tls.key_file_name = gOpt.tlsKey.c_str();
+    tls.ssl_ciphers = kTlsCiphers;
+    lc->sslApp = std::make_unique<uWS::SSLApp>(tls);
+    // Checked at startup already (TlsCheckPair), so this is the files
+    // changing in between, not a bad path.
+    if (lc->sslApp->constructorFailed()) {
+      Log("ephd: TLS setup failed on loop %d for %s / %s", lc->index,
+          gOpt.tlsCert.c_str(), gOpt.tlsKey.c_str());
+      exit(1);
+    }
+    WireApp(lc->sslApp.get(), lc);
+  } else {
+    lc->app = std::make_unique<uWS::App>();
+    WireApp(lc->app.get(), lc);
+  }
+}
+
+static void RunLoop(LoopCtx *lc) {
+  if (lc->sslApp) lc->sslApp->run();
+  else lc->app->run();
+}
+
+// ---------------------------------------------------------------------------
+// 6. TLS
+//
+// uSockets floors the protocol at TLS 1.2 itself (crypto/openssl.c) and
+// leaves TLS 1.3's suites at OpenSSL's defaults; the 1.2 list (kTlsCiphers,
+// above SetupLoop) is set because uSockets applies its own only when DH
+// parameters are given.
+// ---------------------------------------------------------------------------
+
+static std::string OpenSslError() {
+  char sz[256] = "";
+  unsigned long e = ERR_get_error();
+  if (e) ERR_error_string_n(e, sz, sizeof(sz));
+  ERR_clear_error();
+  return sz;
+}
+
+// Load the pair into a scratch context and check everything a client would
+// refuse or uSockets would fail on, naming the file: unreadable, not PEM, a
+// key that does not match, a certificate already expired or not yet valid.
+// *pszExpiry gets the leaf's notAfter for the log. The live contexts are
+// only ever touched after this has passed, so a bad renewal never
+// half-replaces a working pair.
+static bool TlsCheckPair(const std::string &cert, const std::string &key,
+                         std::string *pszWhy, std::string *pszExpiry) {
+  SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
+  bool fOk = false;
+  if (ctx == nullptr) {
+    *pszWhy = "cannot create a TLS context: " + OpenSslError();
+  } else if (SSL_CTX_use_certificate_chain_file(ctx, cert.c_str()) != 1) {
+    *pszWhy = "cannot read certificate " + cert + ": " + OpenSslError();
+  } else if (SSL_CTX_use_PrivateKey_file(ctx, key.c_str(), SSL_FILETYPE_PEM) != 1) {
+    // OpenSSL checks the pair while loading the key, so a mismatch
+    // arrives here, as "key values mismatch", not at the check below.
+    if (ERR_GET_REASON(ERR_peek_last_error()) == X509_R_KEY_VALUES_MISMATCH) {
+      ERR_clear_error();
+      *pszWhy = "private key " + key + " does not match certificate " + cert;
+    } else {
+      *pszWhy = "cannot read private key " + key + ": " + OpenSslError();
+    }
+  } else if (SSL_CTX_check_private_key(ctx) != 1) {
+    *pszWhy = "private key " + key + " does not match certificate " + cert;
+  } else {
+    X509 *leaf = SSL_CTX_get0_certificate(ctx);
+    const ASN1_TIME *notAfter = X509_get0_notAfter(leaf);
+    char sz[64] = "?";
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (bio && ASN1_TIME_print(bio, notAfter) == 1) {
+      int n = BIO_read(bio, sz, sizeof(sz) - 1);
+      sz[n > 0 ? n : 0] = '\0';
+    }
+    BIO_free(bio);
+    *pszExpiry = sz;
+    if (X509_cmp_current_time(notAfter) <= 0)
+      *pszWhy = "certificate " + cert + " expired on " + sz;
+    else if (X509_cmp_current_time(X509_get0_notBefore(leaf)) > 0)
+      *pszWhy = "certificate " + cert + " is not valid yet";
+    else
+      fOk = true;
+  }
+  SSL_CTX_free(ctx);
+  return fOk;
+}
+
+// SIGHUP: reload the certificate and key into every loop's live context.
+// Each loop owns its SSLApp and so its own SSL_CTX (its WebSocket contexts
+// share their parent's); only that loop's thread may touch it, so the
+// signal thread checks the files and then defers the load to each loop.
+// OpenSSL takes a new certificate on a context with live connections for
+// the NEXT handshake and leaves established sessions alone -- which
+// tools/ephsrv-tls.sh proves rather than trusts.
+static void TlsReload(std::vector<LoopCtx> *loops) {
+  std::string why, expiry;
+  if (!TlsCheckPair(gOpt.tlsCert, gOpt.tlsKey, &why, &expiry)) {
+    Log("ephd: SIGHUP: keeping the current certificate: %s", why.c_str());
+    return;
+  }
+  Log("ephd: SIGHUP: reloading %s (expires %s)", gOpt.tlsCert.c_str(),
+      expiry.c_str());
+  for (LoopCtx &lc : *loops) {
+    LoopCtx *plc = &lc;
+    lc.loop->defer([plc]() {
+      SSL_CTX *ctx = (SSL_CTX *)plc->sslApp->getNativeHandle();
+      if (SSL_CTX_use_certificate_chain_file(ctx, gOpt.tlsCert.c_str()) != 1 ||
+          SSL_CTX_use_PrivateKey_file(ctx, gOpt.tlsKey.c_str(),
+                                      SSL_FILETYPE_PEM) != 1 ||
+          SSL_CTX_check_private_key(ctx) != 1)
+        Log("ephd: SIGHUP: loop %d failed mid-reload (the files changed "
+            "again?): %s", plc->index, OpenSslError().c_str());
+      else if (gOpt.verbose)
+        Log("ephd: SIGHUP: loop %d reloaded", plc->index);
+    });
+  }
+}
+
+// Signals are taken by one thread in sigwait(), never by a handler: a
+// handler may run on any loop's thread in the middle of anything, and the
+// one uWS call safe from another thread is Loop::defer. Blocked in main()
+// before any thread starts, so every thread inherits the mask.
+static void SignalThread(std::vector<LoopCtx> *loops, sigset_t set) {
+  for (;;) {
+    int sig;
+    if (sigwait(&set, &sig) != 0) continue;
+    if (sig == SIGHUP) {
+      if (gOpt.Tls()) TlsReload(loops);
+      else Log("ephd: SIGHUP: no certificate to reload (plain ws://)");
+    }
+  }
+}
+
+
 
 int main(int argc, char **argv) {
   if (!parseArgs(argc, argv, &gOpt)) {
-    fprintf(stderr, "usage: astrolog-ephd [--port N] [--ephe path] "
-            "[--threads N] [--cache-mb N] [--max-cells N] [--verbose]\n");
+    fprintf(stderr, "%s", kUsage);
     return 1;
+  }
+  // Before anything else can fail on it: a certificate problem named by
+  // file, not a TLS context that uSockets silently could not build.
+  if (gOpt.Tls()) {
+    std::string why, expiry;
+    if (!TlsCheckPair(gOpt.tlsCert, gOpt.tlsKey, &why, &expiry)) {
+      Log("ephd: %s", why.c_str());
+      return 1;
+    }
+    Log("TLS certificate %s, expires %s", gOpt.tlsCert.c_str(), expiry.c_str());
   }
 
   EphDiscovery disc = DiscoverEphemDirs();
@@ -1020,6 +1227,9 @@ int main(int argc, char **argv) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(gOpt.port);
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    // A server bound to one IPv4 address answers there, not on loopback.
+    if (!gOpt.bind.empty())
+      inet_pton(AF_INET, gOpt.bind.c_str(), &addr.sin_addr);
     if (fd >= 0 && connect(fd, (sockaddr *)&addr, sizeof(addr)) == 0) {
       close(fd);
       Log("ephd: cannot listen on port %u (another server is listening "
@@ -1059,15 +1269,29 @@ int main(int argc, char **argv) {
   }
 
   gOpt.threads = nLoops;
+  // Blocked here, before any thread exists, so every loop inherits the mask
+  // and only SignalThread ever receives these.
+  sigset_t sigs;
+  sigemptyset(&sigs);
+  sigaddset(&sigs, SIGHUP);
+  pthread_sigmask(SIG_BLOCK, &sigs, nullptr);
+  // A loop's uWS::Loop pointer is set by SetupLoop on its own thread, and
+  // TlsReload defers onto it: the signal thread must not start before every
+  // loop has one.
+  std::atomic<int> cSetUp{0};
   std::vector<std::thread> threads;
   for (int i = 1; i < nLoops; i++) {
-    threads.emplace_back([&loops, i] {
+    threads.emplace_back([&loops, &cSetUp, i] {
       SetupLoop(&loops[i]);
-      loops[i].app->run();
+      cSetUp++;
+      RunLoop(&loops[i]);
     });
   }
   SetupLoop(&loops[0]);
-  loops[0].app->run();
+  while (cSetUp.load() < nLoops - 1)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  std::thread(SignalThread, &loops, sigs).detach();
+  RunLoop(&loops[0]);
   for (std::thread &t : threads) t.join();
 
   for (LoopCtx &lc : loops)

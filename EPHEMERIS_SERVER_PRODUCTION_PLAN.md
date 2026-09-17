@@ -8,9 +8,15 @@ to be resumed from like the other two.
 
 ## Status
 
-- **2026-09-17: planned, refined against the tree, nothing started.**
-  Phase 0 is decided except what waits for a host (below). Phase 1 (TLS)
-  is next.
+- **2026-09-17: Phase 1 (TLS) is built** on branch `ephtls` (server plan
+  work log item 12): G1, G11, G12 and G14 are closed, G13 on Windows; G2's
+  `--bind` exists (the plaintext guard waits for deployment). Still open
+  from Phase 1: the macOS package's TLS plugin (verify in a release dry
+  run) and `QSslSocket::supportsSsl()` in `tools/build-check.sh`. The
+  bench over TLS is done: under a millisecond a window. Phase 0 is decided except what waits for a host. Next:
+  Phase 2 (operability).
+- Development runs locally until the server is proven; nothing here waits
+  on a VPS before Phase 5.
 - Every claim about the current code below was checked in
   `ephsrv/eph_srv.cpp`, `qtdriver.cpp` or the vendored uWebSockets v20.80.0
   and uSockets on that date. Re-check before acting on one if the code has
