@@ -1,0 +1,1088 @@
+# Modular ephemeris: protocol version 4, source plugins, one way to choose a source
+
+This document is the design record for three linked changes. First, a
+**source-neutral wire protocol, version 4**, which both `astrolog-ephd` and
+Ephemeris Prometheia's `prometheiad` speak natively. Second, **every ephemeris
+source as a compiled-in plugin**, used through a fallback chain. Third, **one
+way to select a source** from the command line, the settings file and an
+Ephemeris Settings dialog in both GUI builds.
+
+Section 3 is **normative**: it is the protocol specification. Once
+implemented, `ephsrv/ephproto.h` is the byte-level authority, as it is for
+version 3, and this section is the design authority behind it.
+
+## Status — how to pick this back up
+
+- **Where.** Branch `ephv4`, branched from `qt` at d9642c0, in worktree
+  `/nvm/work/ephv4`. Each pass lands as one commit on `ephv4`. The whole branch
+  is squashed into `qt` when the maintainer says so; never before.
+- **Approved plan.** `/nvmraid/home/n/.claude/plans/reactive-percolating-prism.md`
+  (2026-09-17). This document supersedes it wherever they differ.
+- **Phases.** See §7. The work log (§8) says which are done.
+- **Prometheia.** `/shares/ephemeris-prometheia` pins `ephproto.h` and runs the
+  conformance fixtures (§3.9). With version 4 it deletes its wire map
+  (`server/wire_map.*`).
+
+## 1. Why
+
+These were found on 2026-09-17 while pointing the Qt GUI at a local server.
+Every item below was verified on branch `qt` at d9642c0.
+
+**Selection state and switches**
+
+1. **One choice is spread over three fields.** `us.fEphemFiles`,
+   `us.nSwissEph` and `us.fMatrixPla` (astrolog.h ~2230–2334) together hold the
+   selected source. Many combinations mean nothing. "None" is not stored at all:
+   it is simply files off with Matrix off.
+2. **Two numberings for the same thing.** The `cm*` enum (astrolog.h:1295) and
+   `nSwissEph` number sources differently: Horizons is 4 in one and 3 in the
+   other, the server 6 and 5. This caused bug C15.
+   - `FCmJPLWeb` is `nSwissEph >= 3` (extern.h:152), so it is also true for the
+     server.
+   - Win32's Calculation Settings shows a server selection as Horizons, and OK
+     saves it as Horizons.
+3. **The command-line toggles depend on prior state** (switch.cpp:2269–2383).
+   - Every `-b` suffix also toggles `fEphemFiles`. From the defaults, `-bj`,
+     `-bs`, `-bJ` or `-bU` therefore gives None.
+   - `-bS` turns files on, but a second `-bS` turns them off.
+   - `_bX` clears any backend, not only its own.
+4. **The settings file only round-trips because of line order.** The writer
+   emits lines in a fixed order that loading depends on (io.cpp:1795–1830).
+5. **Upstream's one-way locks are shipped on.** `=0b` and `=0n` sit in
+   `astrolog.as` and cannot be undone (`_0` does nothing, switch.cpp:3849).
+   - Matrix, Horizons and the server cannot be chosen anywhere.
+   - The dialogs hide them.
+   - A saved file that selects one of them fails to load.
+
+**Connection**
+
+6. **A startup nag and slow retries.** A modal "Connecting to cloud ephemeris"
+   dialog appears at startup, and closing it exits with code 86. Before any
+   session, retries run on a 60 s tick.
+
+**Hidden dependence on local Swiss files**
+
+7. **Side calculations assume local Swiss files.** Progressed arcs, the eclipse
+   Sun, fixed stars, planet phenomena and asteroid listings all do, whatever
+   source is selected.
+
+**Protocol**
+
+8. **Version 3 is Swiss-numbered.** Bodies, flag bits and sidereal modes use the
+   Swiss Ephemeris numbering, so any other engine needs a hand-written wire map.
+   Prometheia's `server/wire_map.hpp` exists only for that reason.
+9. **Version 3 cannot express one cast.**
+   - The observer and flags vary per object within a single cast (fMoonMove,
+     a custom object's nFlg, geocentric nodes in a heliocentric chart, the
+     barycentric Sun), so the client splits a cast into several requests
+     (qtdriver.cpp ~8530).
+   - Sidereal mode "Fagan-Bradley on the invariable plane" is mode 0 plus a
+     plane bit (calc.cpp:3714).
+10. **Small items.**
+    - The AstroExpression `_b` returns `us.fEphemeris` (the -E flag), not the
+      ephemeris-files setting.
+    - `is.fNoEphFile` is a single warning latch shared by unrelated failures.
+    - There is no setting for the JPL file name.
+
+## 2. Decisions (maintainer, 2026-09-17)
+
+**Sources**
+- **No switch disables network sources.** A selected network source is used
+  if it is reachable, and a failure is reported when it happens.
+- **Plugins are compiled in only.**
+- **What a plugin supplies.** Body positions, with capabilities it declares.
+  Houses, ΔT, the calendar and refraction are shared formulas; they need no data
+  files.
+- **Sources are not tied to Swiss.** The design assumes only the selected
+  ephemeris is available: **every call tries the primary source, then
+  successively less ideal ones**, and records which source answered.
+- **Horizons is rewritten** as a proper plugin that takes instants.
+
+**Builds**
+- **Full Win32 parity**, including the Ephemeris Settings dialog.
+- **Real server transports in every build.** Qt uses QWebSocket, Win32 uses
+  WinHTTP's WebSocket client, and the console build uses a plain socket
+  client.
+
+**Protocol version 4**
+- **Bodies are named by NAIF/SPK-IDs**, with typed extras for what NAIF does
+  not cover.
+- **Options are explicit typed fields.**
+- **Clean break.** kProtoMin = 4. No released client speaks 2 or 3 (qt.24
+  shipped version 1), and no public server exists.
+- **Discovery and provenance.** Capabilities come in WELCOME, provenance per
+  object in DATA, and there is a LOOKUP message.
+- **Segments are normative but gated by a capability.**
+
+**Settled in design review**
+- **Local Swiss stays bit-exact** through a host-only native-id hint.
+- **The Swiss fork gains an orbital-elements entry point.**
+
+## 3. Protocol version 4 (normative)
+
+The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
+
+### 3.1 Transport and conventions
+
+**Transport**
+- **WebSocket, binary frames only.** Each frame carries exactly one message.
+  A text frame is ERROR 1.
+- **Default port 47190.** The server port also answers `GET /healthz`,
+  `/readyz` and `/metrics`.
+- **TLS.** `wss://`, with TLS 1.2 or later.
+
+**Encoding**
+- **Byte order.** Integers are little-endian. `f32` and `f64` are IEEE-754 bit
+  patterns, little-endian.
+- **`str8`.** A u8 length followed by that many bytes of UTF-8, with no
+  terminator. The bytes MUST be valid UTF-8 with no C0 control characters.
+- **`TIME`.** Two f64 values, `jd1` and `jd2`: a two-part Julian date whose
+  instant is jd1 + jd2. A sender that has a single double sends it as jd1 with
+  jd2 = 0. Every TIME MUST be finite, with |jd1| + |jd2| ≤ 1e8.
+- **TLV area.** A u16 `totalLen` counts the entry bytes that follow it. Each
+  entry is `{u16 tag, u16 len, len bytes}`.
+  - Tags MUST be strictly ascending by their full u16 value, with no duplicates.
+  - Bit 15 of a tag is **critical**. A receiver that does not know a critical
+    tag MUST refuse the message: for REQUEST that is ERROR 11, closing = 0.
+    Unknown non-critical tags MUST be ignored, and a server that ignored one sets
+    `ignoredExt` in its answer.
+  - Tags 0x0001–0x6FFF (with or without bit 15) are assigned in Appendix A.
+    0x7000–0x7FFF (with or without bit 15) are experimental and never assigned.
+  - Tag numbers are scoped to the message type whose TLV area they appear in.
+- **Reserved fields** MUST be zero. So MUST fields a message's other choices
+  make unused (§3.5).
+- **Enumerated fields** carry registry values (Appendix A). A value the
+  receiver does not implement makes REQUEST fail with ERROR 11, not ERROR 1:
+  registries grow.
+- **Floats** MUST be finite. The single exception is the canonical quiet NaN,
+  `0x7FF8000000000000`, which is allowed only where a field says so.
+- **Canonical input.** A receiver MUST reject non-canonical input (ERROR 1)
+  rather than normalise it. This makes byte equality mean question equality,
+  and the result cache depends on it (§3.7).
+
+### 3.2 Envelope
+
+Every message is a 16-byte envelope followed by `payloadLen` bytes of payload.
+
+| offset | type | field |
+|---|---|---|
+| 0 | u16 | magic `0x1EF0` |
+| 2 | u8 | version the message is written in |
+| 3 | u8 | flags: bit 0 `zstd` (payload compressed with zstd; only when both ends advertised it); bits 1–7 zero |
+| 4 | u16 | type (Appendix A.1) |
+| 6 | u16 | reserved, zero (held for channel multiplexing) |
+| 8 | u32 | requestId |
+| 12 | u32 | payloadLen |
+
+- **payloadLen** MUST NOT exceed WELCOME's `maxPayload` after the session is
+  established. Before that the limit is 64 KiB.
+- **requestId.**
+  - The client chooses a request's id. It MUST be nonzero and MUST NOT be reused
+    while that request's answer is outstanding.
+  - Answers carry the id of the question they answer.
+  - Id 0 is for connection-level messages: HELLO, WELCOME, PING, PONG and
+    connection-level ERRORs.
+- **Unknown message type.** ERROR 3, not closing.
+
+### 3.3 Negotiation and frozen layouts
+
+The layouts of **HELLO, WELCOME's first 28 bytes, ERROR, PING, PONG and
+CANCEL** are frozen for every version ≥ 4. Later versions extend them only
+through their TLV areas. This is what lets two ends of any versions talk long
+enough to agree or refuse.
+
+1. **HELLO.** The client sends HELLO first. Its envelope version is the
+   client's highest version.
+2. **Session version.** A server MUST accept a HELLO in any envelope version
+   ≥ 4. It computes `session = min(client.protoMax, server.max)`.
+3. **No overlap.** If `session < max(client.protoMin, server.min)`, the server
+   sends ERROR 8 (closing) in version `session` if that is ≥ 4, otherwise in
+   version 4, and closes.
+4. **Otherwise** the server answers WELCOME in `session`. Every later message
+   in either direction is written in `session`.
+5. **Older clients.** An envelope with version < 4 comes from an older client.
+   The server answers ERROR 8 in **that client's own layout** (versions 2–3:
+   `u32 requestId, i32 code, NUL-terminated text`) in that version, and closes.
+6. **Message before HELLO.** Any message other than HELLO and PING before HELLO
+   gets ERROR 1 (closing).
+7. **Repeated HELLO.** A second HELLO is answered with WELCOME in the
+   established session, which is not renegotiated.
+8. **Missing HELLO.** A server MAY close a connection that sends no HELLO within
+   its deadline.
+
+### 3.4 Messages
+
+Payload layouts follow; `…` marks a variable part.
+
+#### HELLO (1, client → server)
+| type | field |
+|---|---|
+| u32 | protoMax — the client's highest version |
+| u32 | protoMin — the client's lowest version (4) |
+| u32 | build — the client's build number, or 0 |
+| u32 | clientCaps — Appendix A.2 bits the client can use |
+| str8 | clientName — e.g. `Astrolog 8.00-qt.25` |
+| str8 | token — empty for none; at most 128 bytes; never logged by servers |
+| TLV | HELLO extensions (none assigned) |
+
+#### WELCOME (2, server → client)
+| type | field |
+|---|---|
+| u32 | protoSession |
+| u32 | caps — Appendix A.2 |
+| u32 | maxObjs — objects per REQUEST |
+| u32 | maxRows — rows (instants) per REQUEST |
+| u32 | maxChunkRows — rows per DATA chunk |
+| u32 | maxPayload — bytes per message |
+| u32 | maxCells — objects × rows per REQUEST |
+| u8 | maxProfiles |
+| u8, u16 | reserved |
+| str8 | serverName — e.g. `astrolog-ephd/2.0`, `prometheiad/0.2` |
+| str8 | engine — human-readable, e.g. `Swiss Ephemeris 2.10.03 files`, `Prometheia 0.2, JPL DE440 + SBDB 2026-09-16` |
+| str8 | datasetId — opaque; MUST change whenever any answer the server gives could change (engine version, any data file). Clients key caches on it. |
+| TLV | capabilities (Appendix A.3). Tags 0x0001–0x0006, 0x0008 and 0x0009 MUST be present. |
+
+A client MUST NOT send an option value, object kind, column or message that
+the server did not advertise. A server MUST refuse one that it does not
+support, with ERROR 11 or a per-object error as §3.5 says.
+
+#### REQUEST (3, client → server)
+The payload is a **delivery block**, then a **question block**. Only the
+question block goes into the cache key.
+
+Delivery block (12 bytes):
+| type | field |
+|---|---|
+| u8 | precision — 0 f64, 1 f32 (DATA values only) |
+| u8 | priority — 0 interactive, 1 prefetch |
+| u8 | representation — 0 samples (answered with DATA), 1 segments (answered with SEGDATA; requires the `segments` cap) |
+| u8 | reserved |
+| u32 | chunkRows — a hint; the server clamps it to `[1, maxChunkRows]`, and 0 means `maxChunkRows` |
+| f32 | segTargetErrArcsec — 0 for samples; for segments a finite value > 0, the angular error the client asks for |
+
+Question block:
+| type | field |
+|---|---|
+| u8 | timeScale — Appendix A.9 (0 UT1, 1 TT, 2 TDB) |
+| u8 | timeMode — 0 grid, 1 list |
+| u16 | reserved |
+| … | grid: `TIME start`, `i64 stepNs`, `u32 nTime` · list: `u32 nTime`, `nTime × TIME` |
+| f64 | deltaTSec — TT − UT1 in seconds, or the canonical NaN for "the server's model" |
+| u8 | nProfiles (1..maxProfiles) |
+| … | nProfiles × PROFILE |
+| u16 | nObj (1..maxObjs) |
+| … | nObj × OBJECT |
+| TLV | REQUEST extensions (Appendix A.4) |
+
+PROFILE:
+| type | field |
+|---|---|
+| u8 | observer — A.5 (0 geocentric, 1 topocentric, 2 heliocentric, 3 solar-system barycentre, 4 body) |
+| u8 | plane — A.6 (0 ecliptic, 1 equator) |
+| u8 | form — A.6 (0 spherical, 1 rectangular) |
+| u8 | frame — A.6 (0 true of date, 1 mean of date, 2 J2000, 3 ICRF) |
+| u8 | corrections — A.7 bits (light time 1, deflection 2, aberration 4) |
+| u8 | speeds — 0 or 1 |
+| u8 | siderealPlane — A.8 (0 ecliptic of date, 1 ecliptic of the anchor epoch, 2 invariable plane of the solar system) |
+| u8 | reserved |
+| i32 | observerBody — NAIF id when observer = 4, else 0 |
+| f64 ×3 | siteLonEastDeg, siteLatDeg, siteHeightM — when observer = 1, else 0 |
+| TIME | anchorEpoch — for zodiac `user`, else zero |
+| f64 | anchorAyanamsaDeg — for zodiac `user`, else 0 |
+| u32 | columns — A.10 extra columns wanted |
+| str8 | zodiac — "" tropical, otherwise a token from A.11 |
+| TLV | PROFILE extensions (none assigned) |
+
+OBJECT (a 4-byte head, then a payload that depends on the kind; Appendix A.12):
+| type | field |
+|---|---|
+| u8 | kind |
+| u8 | profile — an index < nProfiles |
+| u16 | reserved |
+
+| kind | payload |
+|---|---|
+| 0 body | `i32 naif` |
+| 1 orbit point | `i32 naif`, `u8 point` (A.13), `u8 method` (A.14), `u16 reserved` |
+| 2 fixed star | `str8 name` — traditional name or Bayer/Flamsteed designation |
+| 3 named hypothetical | `str8 name` — a token from A.15 |
+| 4 elements | `TIME epoch`, `u8 equinox` (A.16), `u8 centre` (0 Sun, 1 Earth), `u8 nTerms` (1..5), `u8 reserved`, `f64 equinoxJd` (A.16 value 4 only, else 0), then `6 × nTerms f64`: the polynomial coefficients c0..c(nTerms−1) of, in order, mean anomaly M (deg), semi-major axis a (AU), eccentricity e, argument of perihelion ω (deg), ascending node Ω (deg), inclination i (deg); then `str8 name` |
+| 5 designation | `str8 designation` — resolved as an exact LOOKUP; ambiguity is a per-object error (§3.5) |
+
+#### DATA (4, server → client)
+Answers a samples REQUEST in one or more chunks. Header (24 bytes):
+| type | field |
+|---|---|
+| u32 | chunkIndex — 0, 1, … |
+| u32 | iTime — index of this chunk's first row |
+| u32 | nRows — rows in this chunk |
+| u32 | totalRows — the request's nTime |
+| u8 | precision — as requested |
+| u8 | chunkFlags — bit 0 last chunk, bit 1 ignoredExt, bit 2 meta present |
+| u16 | nObj |
+| u32 | columnsPresent — the extra columns in this answer (§3.5) |
+
+**Metadata.** If the meta-present flag is set, the source table and the object
+metadata follow the header:
+- **Source table.** `u8 nSources`, then `nSources × str8`: the sources that
+  answered, e.g. `JPL DE440`, `Swiss Ephemeris files (sepl_18)`, `SBDB 2026-09-16`.
+- **Object metadata.** `nObj × META`.
+
+The meta-present flag MUST be set on chunk 0. A server MAY repeat the metadata
+on later chunks, and clients use chunk 0's.
+
+META:
+| type | field |
+|---|---|
+| i32 | rowsOk — rows of this object that computed |
+| u16 | errCode — A.17; the first failure's code, else 0 |
+| u8 | sourceIdx — index into the source table, 0xFF if none |
+| u8 | metaFlags — A.18 |
+| i32 | resolvedNaif — the NAIF id actually computed, or INT32_MIN when not applicable |
+| u32 | firstFailedRow — 0xFFFFFFFF if none |
+| str8 | name — display name, e.g. `Ceres`, `Moon mean apogee` |
+| str8 | errText — the first failure's text, else empty |
+
+**Values.** Objects in request order. For each object come the chunk's rows in
+order, and each row holds `nCols = 6 + popcount(columnsPresent)` values (f64 or
+f32 as the precision says). The column order is in §3.5.
+
+**Chunks.** Chunks are contiguous and ascending, covering every row exactly
+once.
+
+#### ERROR (5, server → client)
+| type | field |
+|---|---|
+| u16 | code — A.19 |
+| u16 | flags — bit 0 closing (the server closes after sending it), bit 1 retryable |
+| u32 | retryAfterMs — 0 if unknown |
+| str8 | text — human-readable; MUST NOT contain request contents that identify a person's chart (instants, places) |
+| TLV | ERROR extensions (none assigned) |
+
+The envelope's requestId names the failed request, or 0 for the connection.
+
+#### PING (6) / PONG (7)
+The payload is empty. Either end MAY send PING at any time, and the other end
+answers PONG with the same requestId.
+
+#### CANCEL (8, client → server)
+The payload is empty, and the envelope's requestId names the request.
+- **Still being answered.** The server stops, discards the unsent chunks and
+  sends ERROR 10 (not closing, not retryable).
+- **Already answered completely, or unknown.** The server sends nothing.
+- **Chunks already in flight.** The client MUST ignore chunks that arrive for a
+  cancelled id.
+
+#### LOOKUP (9, client → server)
+Requires the `lookup` cap.
+| type | field |
+|---|---|
+| u16 | maxMatches — 1..the lookup TLV's limit |
+| u8 | flags — bit 0 prefix match, bit 1 include hypotheticals, bit 2 include stars |
+| u8 | reserved |
+| str8 | query — a name, designation or number, case-insensitive |
+| TLV | LOOKUP extensions (none assigned) |
+
+#### LOOKUP_RESULT (10, server → client)
+| type | field |
+|---|---|
+| u16 | n |
+| u8 | flags — bit 0 truncated (more matches exist) |
+| u8 | nSources, then nSources × str8 |
+| … | n × MATCH |
+
+MATCH:
+| type | field |
+|---|---|
+| u8 | quality — 0 exact canonical name, 1 exact alias or designation, 2 prefix |
+| u8 | sourceIdx |
+| u16 | reserved |
+| … | OBJECT (kind + profile 0 + reserved + payload) — what to put in a REQUEST |
+| str8 | canonicalName |
+| str8 | designation — e.g. `2060`, `1P/Halley`, empty if none |
+| TIME, TIME | validMin, validMax — the coverage for this object; both zero when unknown |
+
+Matches are ordered by quality, then by the server's relevance. A query can
+legitimately match several kinds: "Lilith" is asteroid 1181, the Moon's mean
+apogee, and a hypothetical body.
+
+#### SEGDATA (15, server → client)
+Answers a segments REQUEST (`representation = 1`). Header (16 bytes):
+| type | field |
+|---|---|
+| u32 | chunkIndex |
+| u8 | chunkFlags — bit 0 last, bit 1 ignoredExt, bit 2 meta present |
+| u8 | reserved |
+| u16 | nObj — in the whole answer |
+| u16 | iObj — first object in this chunk |
+| u16 | nObjChunk |
+| u32 | reserved |
+
+Then, when meta is present (always on chunk 0), the source table and
+`nObj × META` exactly as in DATA. Here `rowsOk` counts the segments served, and
+`firstFailedRow` is unused (0xFFFFFFFF). After that, for each object from iObj
+to iObj + nObjChunk − 1: `u32 nSeg` and `nSeg × SEGMENT`.
+
+SEGMENT:
+| type | field |
+|---|---|
+| TIME | mid — the segment's centre |
+| f64 | halfSpanDays — h > 0 |
+| u8 | degree — d, 0..31 |
+| u8 ×3 | reserved |
+| f32 | errArcsec — the bound the server met on the direction |
+| f32 | errRelDist — the bound on relative distance error |
+| f64 × 3(d+1) | Chebyshev coefficients: x0..xd, y0..yd, z0..zd |
+
+Segment rules:
+- **Required form.** A segments REQUEST's profiles MUST have `form = 1`
+  (rectangular) and `columns = 0`, or the REQUEST is ERROR 11.
+- **Grid.** Grid mode is required; the list mode is ERROR 11. The requested
+  **span** runs from the grid's first instant to its last.
+- **Coverage.** Segments for an object are ordered by `mid`, and together they
+  cover the span contiguously. The end of one, mid + h, equals the start of the
+  next, mid′ − h′, to within 1e-9 day.
+- **Evaluation.** For an instant t:
+  - τ = ((t.jd1 − mid.jd1) + (t.jd2 − mid.jd2)) / h, with |τ| ≤ 1.
+  - The position (AU) is x = Σₖ xₖ Tₖ(τ), and likewise y and z, where Tₖ is the
+    Chebyshev polynomial of the first kind.
+  - The velocity (AU/day) is Σₖ xₖ T′ₖ(τ) / h.
+  - The coordinates are rectangular in the profile's observer, plane, frame and
+    corrections. For a sidereal zodiac, the rotation about the plane's pole by
+    the ayanamsa at each instant is included in the fit.
+- **Error bounds.** The server MUST meet `errArcsec` and `errRelDist` against
+  its own sampled answers over the whole segment. It SHOULD make `errArcsec`
+  ≤ `segTargetErrArcsec`. If it cannot, it MUST report the larger value it did
+  meet.
+- **Failure.** An object that could not be computed has `nSeg = 0` and its
+  error in META.
+
+#### Reserved message types
+- **11 SUBSCRIBE, 12 UNSUBSCRIBE.** Server-pushed windows that follow an
+  anchor instant.
+- **13 LIST, 14 LIST_RESULT.** Catalog paging with an opaque cursor.
+- **16–31.** Event searches: stations, ingresses, aspects, eclipses, rise and
+  set, heliacal phenomena.
+
+These numbers are reserved and have no layout yet.
+
+### 3.5 Semantics
+
+**Instants**
+- **Grid.** The instant of row r is the TIME
+  `(start.jd1, start.jd2 + off)`, where `off = (double)(r × stepNs) /
+  86400000000000.0`.
+  - The product `r × stepNs` is computed in i64. A REQUEST where
+    `(nTime−1) × |stepNs|` overflows i64 is ERROR 1.
+  - An engine that takes one double evaluates `start.jd1 + (start.jd2 + off)`.
+  - `stepNs` is signed. It MUST be 0 when nTime = 1 and nonzero otherwise.
+- **List.** Instants in any order; duplicates are allowed.
+- **Time scale.** Instants are in `timeScale`. UT1 instants are converted with
+  `deltaTSec` when it is finite, else with the server's ΔT model; the model's
+  name is in the ΔT-model capability. `deltaTSec` also drives Earth rotation for
+  topocentric work. A client that owns ΔT, as Astrolog does, sends TT instants
+  and its own ΔT.
+
+**Observers and options**
+- **Observer.**
+  - For heliocentric and barycentric observers, the deflection and aberration
+    bits MUST be ignored; light time still applies.
+  - A body observer (4) with `observerBody` equal to the object is a per-object
+    error 2.
+- **Unused fields.** `observerBody`, the site, `anchorEpoch` and
+  `anchorAyanamsaDeg` MUST be zero unless the observer or zodiac uses them.
+  - Site ranges: longitude in [−180, 180], latitude in [−90, 90].
+  - Zodiac `""` (tropical) requires `siderealPlane = 0`.
+  - Zodiac `user` requires a nonzero anchor epoch.
+- **Correction masks.** A server advertises the masks it can honour (A.3,
+  tag 0x0004). A PROFILE with any other mask is ERROR 11.
+- **Speeds.** When `speeds = 0`, the three rate columns are 0 and META's
+  `noSpeeds` flag is set.
+
+**Columns**, per row:
+- The base six:
+  - ecliptic spherical: longitude and latitude (deg), distance (AU), then their
+    rates (deg/day, AU/day);
+  - equatorial spherical: right ascension and declination (deg), distance, then
+    their rates;
+  - rectangular: x, y, z (AU), vx, vy, vz (AU/day).
+- Longitudes and right ascensions are in [0, 360).
+- For a sidereal zodiac, longitudes are reduced by the ayanamsa of the chosen
+  sidereal plane.
+- Extra columns follow in A.10 bit order, for the bits in `columnsPresent`,
+  which is the requested columns intersected with the server's advertised ones.
+  - σ is valid only where META's `hasSigma` is set, and is 0 elsewhere.
+  - Ayanamsa is 0 for tropical.
+
+**Failure**
+- **Row failure.** A row that failed has NaN in every column of that row. An
+  object keeps its computed rows (`partial`).
+- **Object failure.** An object whose rows all failed has `rowsOk = 0` and its
+  errCode and errText set. **One object's failure never fails the request.**
+- **Whole-request failures** are only those in A.19.
+
+**Limits**
+- `nObj ≤ maxObjs`, `nTime ≤ maxRows`, `nObj × nTime ≤ maxCells` and
+  `nProfiles ≤ maxProfiles`; otherwise ERROR 2.
+- A connection holding a server-chosen number of answers the client has not yet
+  read (4 in `astrolog-ephd`) gets ERROR 9 (retryable) for the next one.
+- A server enforcing a compute budget answers ERROR 6 (retryable) with
+  `retryAfterMs`.
+
+**Ordering and delivery**
+- A server MAY interleave chunks of different requests, and MAY answer
+  priority 0 before priority 1. Within one request, chunks stay in order.
+
+**Pins** (REQUEST TLVs 0x8001 and 0x8002, both critical)
+- The request is answered only from the named ephemeris or catalog snapshot, or
+  refused with ERROR 5.
+- This gives reproducibility: a chart can record the `datasetId` or pins it was
+  cast with.
+
+**Designations** (kind 5) resolve exactly as LOOKUP with quality 0 or 1.
+- More than one match is per-object error 6.
+- No match is per-object error 1.
+
+### 3.6 Extension rules
+
+1. **Fixed layouts do not change within version 4.** New fields and new
+   behaviour arrive as TLVs, together with a caps bit or capability TLV when the
+   client must know about them.
+2. **The version is bumped only when a fixed layout must break.** The layouts
+   frozen by §3.3 never break.
+3. **Registries (Appendix A) grow without a version bump.** Values are appended
+   and never reused.
+4. **Neither end sends what the other did not advertise.**
+5. **Experimental tags, types 0x7000–0x7FFF and tags 0x7000–0x7FFF** are for
+   trials between consenting implementations and MUST NOT ship enabled by default.
+
+### 3.7 Caching
+
+- **The key** is `datasetId` followed by the question block's bytes, exactly as
+  received. Canonical encoding (§3.1) makes equal questions equal bytes.
+- **Delivery fields are outside the key.** A question asked for f32 in small
+  chunks is a cache hit on the f64 answer.
+- **Client caches** MUST be keyed on `datasetId` as well, and MUST be dropped
+  when the server address changes.
+
+### 3.8 Security and privacy
+
+- **Logs.** Servers MUST NOT log request contents (instants, places, bodies)
+  unless the operator explicitly enables it, as `astrolog-ephd --log-contents`
+  does. Tokens are never logged.
+- **Error text** never quotes request contents.
+- **Hardening.** Every parser is bounds-checked on truncated input and never
+  allocates in proportion to an unvalidated count before checking it against a
+  limit.
+
+### 3.9 Conformance fixtures
+
+`ephsrv/conformance/` holds complete messages (envelope included) as hex, with
+`MANIFEST.tsv` listing:
+
+| column | contents |
+|---|---|
+| file | fixture name |
+| direction | `c2s` or `s2c` |
+| type | message type |
+| expected outcome | `ok`, `malformed` (ERROR 1) or `unsupported` (ERROR 11) |
+| note | one line |
+
+**Who generates and runs them**
+- `tools/ephproto4-fixtures.py` is an **independent reference encoder**, written
+  from this section and not from the C++ code. It generates the fixtures.
+- Astrolog's codec tests and Prometheia's `server_ephproto_matches_astrolog`
+  test both parse every fixture and check the expected outcome.
+- An `ok` fixture must re-encode to the identical bytes.
+
+## 4. Source plugins
+
+### 4.1 Model
+
+A **source** is anything that answers position questions: a local library
+over data files, formulas, or a remote service. Sources live in a
+compiled-in table in the shared core (`ephem.h`, `ephem.cpp`; the core
+group of `Makefile.srcs`; no `#ifdef QT`), in the house style (`CONST`,
+`P(())`, flags as `flag`).
+
+```c
+typedef struct _EphSrcDef {
+  CONST char *szKey;          // "swiss" -- CLI and settings key
+  CONST char *szName;         // "Swiss Ephemeris files" -- dialogs
+  CONST char *szDesc;         // one line for the dialog
+  CONST EPHPARAM *rgParam;    // declared settings (4.3)
+  int cParam;
+  flag (*FAvailable)(char *szWhy, int cch);  // compiled, files, transport
+  void (*GetCaps)(EPHCAPS *pcaps);           // the WELCOME capability model
+  int  (*State)(char *sz, int cch);          // esReady/esConnecting/esFailed + text
+  void (*Start)(void);                       // local: open; remote: background connect
+  void (*Stop)(void);
+  flag (*FSubmit)(EPHQUERY *pq);             // non-blocking; local ones compute here
+  flag (*FRead)(CONST EPHQUERY *pq, int iObj, int iRow, EPHROW *prow);
+  void (*Hint)(CONST EPHQUERY *pq);          // the next window, for prefetch
+  int  (*NLookup)(CONST char *sz, EPHMATCH *rgm, int cMax);
+} EPHSRCDEF;
+```
+
+**Query and row types**
+- `EPHQUERY` is the host-side form of a version 4 question block (§3.4),
+  declared in `ephproto.h`, so the wire and the plugins cannot drift apart.
+  - Each OBJECT also carries a host-only `nNative`, the source's own id for the
+    body, which never goes on the wire. The local Swiss plugin uses it to make
+    exactly today's calls.
+  - For example: the Moon's nodes through the named `SE_TRUE_NODE` and
+    `SE_MEAN_NODE` bodies versus `swe_nod_aps` for custom points; `-Ye b 1` as
+    `SE_AST_OFFSET+1`; a `seorbel.txt` index.
+- `EPHROW` holds the columns, σ, ayanamsa, errCode, resolvedNaif and the key of
+  the source that answered.
+
+**Casting**
+- **One pass per cast.** The host builds one query per cast (all objects, their
+  profiles and the side calls), submits it to each source it needs, calls
+  `EphCollect(msDeadline)` once, then reads.
+- **Fallback chain.** The selection is an ordered list (§5.1). For each object
+  the host asks the first source in the list that is available, advertises the
+  capability, and has not already failed that object in this cast. When a
+  source fails an object, the next source is asked for the same rows.
+  - One quiet notice per cast says that a fallback served something.
+  - The provenance is shown in the Ephemeris Settings status and is available
+    to text charts and AstroExpressions.
+- **Side calls use the same path**, as instant lists: `RProgArc`, the topocentric
+  Sun in eclipses, fixed stars, planet phenomena and asteroid listings.
+- **Emulation.** Where today's code emulates a capability, the host keeps doing
+  it for any source:
+  - geocentric → heliocentric with light time (today's Horizons path,
+    calc.cpp:1131);
+  - the South Node as the opposite point;
+  - placeholder speeds.
+- **`FCm*` predicates are replaced** by `FEphSpeeds()` (rates available) and
+  `FEphLegacyCast()` (Matrix and None).
+- **Matrix and None** keep their **legacy-cast hook**: `ComputePlanets` and
+  `ComputeLunar` inside CastChart, plus Matrix dates and houses. They therefore
+  stay byte-identical to today.
+
+### 4.2 Built-in sources
+
+| key | module | kind | parameters | notes |
+|---|---|---|---|---|
+| `swiss` | ephswiss.cpp | local | (uses `-Yi` paths) | Swiss Ephemeris files; bit-exact with today |
+| `moshier` | ephswiss.cpp | local | — | analytic; major planets and Moon; always available |
+| `jpl` | ephswiss.cpp | local | `file` | Swiss over a JPL DE file (a new parameter; today there is no setting and the default is de431.eph) |
+| `prometheia` | ephprom.cpp | local | `ephemeris`, `catalog`, `perturbers` | `#ifdef PROMETHEIA`, detected with `pkg-config prometheia`; C API `prometheia_calc*`, `calc_orbit_point*`, `engine_lookup`; ΔT hook bound to Astrolog's |
+| `server` | ephserver.cpp + transport | remote | `url`, `token` | protocol v4; astrolog-ephd or prometheiad |
+| `horizons` | ephhorizons.cpp | remote | — | rewritten to take instants and batch per body over the Horizons API |
+| `matrix` | matrix.cpp | local | — | Sun–Pluto, Moon, mean node; legacy cast |
+| `none` | ephem.cpp | local | — | no bodies; legacy cast |
+
+**Default chain.** When the user names only a primary, sources are appended in
+quality order after it: `swiss`, `jpl`, `prometheia`, `moshier`, `matrix`. The
+same source is never listed twice, and unavailable sources are skipped at cast
+time, not at selection time.
+
+### 4.3 Parameters
+
+```c
+typedef struct _EphParam {
+  CONST char *szKey;     // "url"
+  CONST char *szLabel;   // "Server Address"
+  int nKind;             // epkText, epkPath, epkFile, epkUrl, epkToken
+  CONST char *szDefault; // "" means the source's own default
+} EPHPARAM;
+```
+
+All parameters of all sources share one generated index space: `cEphParam`,
+with enum names like `epServerUrl`. Values live in
+`us.rgszEphParam[cEphParam]`. The command-line key is `source.param`, so
+`-bP server.url wss://host`. The dialog's generic rows are built from the
+table, and a `epkToken` parameter is masked there.
+
+### 4.4 Remote adapter and transports
+
+**The adapter** is generalised from qtdriver.cpp's server client and lives in
+core. It provides:
+- the window cache, keyed on the datasetId plus the question;
+- the animation prefetch through `Hint`;
+- a bounded wait;
+- a background connect with a fast ladder: 1 s doubling to 60 s, before and
+  after a session;
+- a recast when a source becomes ready;
+- the once-per-cast soft warning;
+- terminal refusals (ERROR 7 and 8) that stop the ladder until the settings
+  change.
+
+**Transports** implement `Send`, `Pump(msMax)` and `State`:
+- **Qt:** QWebSocket.
+- **Win32:** WinHTTP WebSocket (Windows 8 and later, native TLS).
+- **Console:** a socket client grown from `ephsrv/eph_wsclient.cpp`, with
+  optional OpenSSL.
+
+**What does not exist any more:** the required-server dialog, exit code 86, and
+the `-0n` fast-fail path. Nothing pops up while a connection is being made.
+
+## 5. Selection, settings, dialogs
+
+### 5.1 State
+
+`us.szEphemSource` holds the chain (e.g. `server,swiss,moshier`), plus
+`us.rgszEphParam[]`. These replace **in place**, in astrolog.h and in data.cpp's
+positional initializer, the fields `fEphemFiles`, `nSwissEph`, `fMatrixPla`,
+`szEphSrv`, `szEphSrvToken`, `fNoOldCalc` and `fNoNetwork`. The default is
+`"swiss"` under `EPHEM`, else `"matrix"`. `settingsfields.h` is regenerated,
+and the settings sweeps validate source keys.
+
+Changing the source resets `is.fSwissPathSet`, the warning latch and the
+adapter caches.
+
+### 5.2 Command line
+
+| spelling | meaning |
+|---|---|
+| `-bE <source[,source…]>` | select the chain; idempotent |
+| `-bP <source.param> <value>` | set a parameter; `""` restores the default |
+
+**Legacy spellings** keep loading exactly as before. They update a parse-time
+shadow {files, n, matrix} the way `NSwb` does today, and the chain is
+recomputed from the shadow after each one:
+- `-b`, `-bs`, `-bj`, `-bJ`, `-bS`, `-bm`, with their `=`, `_` and `:` forms;
+- `-bW` and `-bT` set `server.url` and `server.token`;
+- `-0b` and `-0n` are accepted and do nothing (registered as inert in
+  `tools/inert_option_audit.py`).
+
+-H documents only the new forms, plus one line naming the older spellings.
+
+### 5.3 Settings writer
+
+The writer emits one `-bE` line plus one `-bP` line per non-default parameter.
+There is no order dependence, and `=0b`/`=0n` are not written.
+`astrolog.as` is updated. `nrvate.as` is the maintainer's file and is left
+alone: its old lines keep loading.
+
+### 5.4 Ephemeris Settings dialog (both builds)
+
+**Where it is defined and wired**
+- **Resource.** `dlgEphem` in astrolog.rc (resource.h: dialog 226, command
+  40366, controls from 1735).
+- **Menu.** Setting → "E&phemeris Settings..." after Calculation Settings.
+- **Win32.** `DlgEphem` in wdialog.cpp, a case in wdriver.cpp, a declaration in
+  extern.h.
+- **Qt.** `ShowEphemDialogQt` in qtdialog.cpp; the menu item in qtdriver.cpp
+  `BuildSettingMenu`.
+
+**Controls**
+- a primary-source list, where unavailable sources are shown with their reason;
+- the fallback order;
+- a status line (state and provenance), refreshed by a Win32 timer or a Qt
+  signal;
+- Connect/Test;
+- four generic parameter rows: a label, an edit field, and Browse for paths.
+
+**What leaves Calculation Settings.** The method combo, and the Qt-only
+server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from
+`tools/rc2qt.py`.
+
+## 6. Appendix A — registries
+
+**A.1 Message types:**
+- 1 HELLO
+- 2 WELCOME
+- 3 REQUEST
+- 4 DATA
+- 5 ERROR
+- 6 PING
+- 7 PONG
+- 8 CANCEL
+- 9 LOOKUP
+- 10 LOOKUP_RESULT
+- 11 SUBSCRIBE*
+- 12 UNSUBSCRIBE*
+- 13 LIST*
+- 14 LIST_RESULT*
+- 15 SEGDATA
+- 16–31 event searches*
+- 32–0x6FFF unassigned
+- 0x7000–0x7FFF experimental
+
+(* = reserved, no layout yet.)
+
+**A.2 caps bits** (in HELLO clientCaps and WELCOME caps):
+- 0 f32
+- 1 zstd
+- 2 cancel
+- 3 lookup
+- 4 instant lists
+- 5 priority
+- 6 segments
+- 7 designations (kind 5)
+
+**A.3 WELCOME capability TLVs:**
+| tag | payload |
+|---|---|
+| 0x0001 | object kinds, u32 bitmask of A.12 |
+| 0x0002 | observers, u32 bitmask of A.5 |
+| 0x0003 | planes u32, forms u32, frames u32 (bitmasks of A.6) |
+| 0x0004 | correction masks: u8 n, n × u8 (each a full A.7 mask) |
+| 0x0005 | orbit points u32 (A.13), orbit methods u32 (A.14) |
+| 0x0006 | extra columns u32 (A.10) |
+| 0x0007 | zodiacs: u16 n, n × str8 (A.11 tokens) |
+| 0x0008 | sidereal planes u32 (A.8) |
+| 0x0009 | time scales u32 (A.9) |
+| 0x000A | coverage: u16 n, n × {str8 id, TIME min, TIME max} |
+| 0x000B | catalogs: u16 n, n × {str8 id, str8 snapshot} |
+| 0x000C | ΔT model: str8 |
+| 0x000D | precession models: u16 n, n × str8 |
+| 0x000E | rate: u32 cellsPerSec, u32 burst |
+| 0x000F | segments: u8 maxDegree, u8 ×3 reserved, u32 maxSegmentsPerObject, f32 minErrArcsec |
+| 0x0010 | lookup: u16 maxMatches |
+| 0x0011 | hypotheticals: u16 n, n × str8 (A.15 tokens served) |
+| 0x0012 | equinoxes for elements: u32 bitmask of A.16 |
+
+**A.4 REQUEST TLVs:**
+- 0x0003 precession model, str8 (non-critical; an unknown model falls back and
+  sets ignoredExt)
+- 0x8001 ephemeris pin, str8 (critical)
+- 0x8002 catalog pin, str8 (critical)
+
+**A.5 Observers:**
+- 0 geocentric
+- 1 topocentric
+- 2 heliocentric
+- 3 solar-system barycentre
+- 4 body
+
+**A.6 Planes, forms and frames:**
+- Planes: 0 ecliptic, 1 equator.
+- Forms: 0 spherical, 1 rectangular.
+- Frames: 0 true of date, 1 mean of date, 2 J2000 (mean), 3 ICRF.
+
+**A.7 Correction bits:** 1 light time, 2 gravitational deflection, 4 aberration.
+
+**A.8 Sidereal planes:** 0 ecliptic of date, 1 ecliptic of the anchor epoch,
+2 invariable plane of the solar system.
+
+**A.9 Time scales:** 0 UT1, 1 TT, 2 TDB.
+
+**A.10 Extra column bits:**
+- bit 0: σ, arcsec
+- bit 1: ayanamsa applied, deg
+- bit 2: light time, days
+- bit 3: ΔT used, s
+
+**A.11 Zodiac tokens.** The Swiss Ephemeris 2.10.03 sidereal modes are listed
+in `SE_SIDM_*` order. Other engines implement whichever subset they choose and
+advertise it (A.3 0x0007).
+
+- `fagan-bradley`, `lahiri`, `deluce`, `raman`, `usha-shashi`, `krishnamurti`,
+  `djwhal-khul`, `yukteshwar`, `jn-bhasin`
+- `babyl-kugler1`, `babyl-kugler2`, `babyl-kugler3`, `babyl-huber`,
+  `babyl-etpsc`, `aldebaran-15tau`, `hipparchos`, `sassanian`, `galcent-0sag`
+- `j2000`, `j1900`, `b1950`
+- `suryasiddhanta`, `suryasiddhanta-msun`, `aryabhata`, `aryabhata-msun`,
+  `ss-revati`, `ss-citra`, `true-citra`, `true-revati`, `true-pushya`
+- `galcent-rgilbrand`, `galequ-iau1958`, `galequ-true`, `galequ-mula`,
+  `galalign-mardyks`, `true-mula`, `galcent-mula-wilhelm`, `aryabhata-522`
+- `babyl-britton`, `true-sheoran`, `galcent-cochrane`, `galequ-fiorenza`,
+  `valens-moon`, `lahiri-1940`, `lahiri-vp285`, `krishnamurti-vp291`,
+  `lahiri-icrc`
+- `user` (anchored by the PROFILE's anchor fields)
+
+**A.12 Object kinds:**
+- 0 body
+- 1 orbit point
+- 2 fixed star
+- 3 named hypothetical
+- 4 elements
+- 5 designation
+
+**A.13 Orbit points:** 0 ascending node, 1 descending node, 2 perihelion
+(perigee), 3 aphelion (apogee).
+
+**A.14 Orbit methods:**
+- 0 mean
+- 1 osculating
+- 2 interpolated ("natural"; the Moon only in Swiss)
+- 3 osculating, barycentric
+- 4 focal point
+
+**A.15 Named hypotheticals.** The bodies of Swiss `seorbel.txt`:
+
+| token | seorbel.txt entry |
+|---|---|
+| `cupido`, `hades`, `zeus`, `kronos`, `apollon`, `admetos`, `vulcanus`, `poseidon` | Uranians, 1–8 |
+| `isis-transpluto` | 9 |
+| `nibiru` | 10 |
+| `harrington` | 11 |
+| `neptune-leverrier` | 12 |
+| `neptune-adams` | 13 |
+| `pluto-lowell` | 14 |
+| `pluto-pickering` | 15 |
+| `vulcan` | 16 |
+| `white-moon` | 17 (Selena, the T-term form) |
+| `proserpina` | 18 |
+| `waldemath` | 19 |
+
+A server MAY serve more; each token names one body.
+
+**A.16 Element equinoxes:** 0 J2000, 1 B1950, 2 J1900, 3 of date, 4 explicit
+JD (`equinoxJd`). The element epoch is a TIME in TT. Polynomial terms are in
+T = (t_TT − epoch) / 36525 Julian centuries, as in `seorbel.txt`.
+
+**A.17 Per-object error codes:**
+- 0 none
+- 1 unknown body or name
+- 2 unsupported by this source (kind, observer, option or body)
+- 3 outside the data's time coverage
+- 4 data unavailable (for example a missing file)
+- 5 point undefined (for example the node of a zero-inclination orbit)
+- 6 ambiguous name
+- 7 numerical failure
+- 8 internal
+
+**A.18 META flags:**
+- bit 0 approximated (resolvedNaif differs from the request, e.g. 499 answered
+  as 4)
+- bit 1 extrapolated
+- bit 2 hasSigma
+- bit 3 partial
+- bit 4 noSpeeds
+
+**A.19 ERROR codes:**
+- 1 malformed or non-canonical
+- 2 over a WELCOME limit
+- 3 unknown message type
+- 4 internal
+- 5 source, data or pin unavailable
+- 6 rate limited
+- 7 token required or unknown
+- 8 version
+- 9 busy (too many unread answers)
+- 10 cancelled
+- 11 unsupported (a value, capability or critical extension not advertised)
+- 12 draining (retry elsewhere)
+
+## 6B. Appendix B — mapping to the Swiss Ephemeris
+
+A single shared header, `ephsrv/ephswiss.h`, holds the mapping. Both
+astrolog-ephd and Astrolog's `swiss`/`moshier`/`jpl` plugins use it.
+
+**Bodies**
+- **Canonical Swiss body first.**
+  - 10 → `SE_SUN`
+  - 301 → `SE_MOON`
+  - 199/299 → `SE_MERCURY`/`SE_VENUS`
+  - 399 → `SE_EARTH`
+  - 4–9 → `SE_MARS`..`SE_PLUTO` (system barycentres, Swiss's default)
+  - 20000001–4 → `SE_CERES`..`SE_VESTA`
+  - 20002060 → `SE_CHIRON`
+  - 20005145 → `SE_PHOLUS`
+  - 20134340 → `SE_PLUTO`, flagged approximated
+- **Other numbered asteroids.** 20000000+N → `SE_AST_OFFSET + N`.
+- **Body centres and moons.** x99 and moon ids → `SE_PLMOON_OFFSET + naif`.
+  199–499 are answered as the barycentre and flagged approximated. 0 and 3 are
+  per-object error 2.
+
+**Orbit points**
+- On 301, (point 0, method 0) → `SE_MEAN_NODE`, (0, 1) → `SE_TRUE_NODE`,
+  (3, 0) → `SE_MEAN_APOG`, (3, 1) → `SE_OSCU_APOG`, (3, 2) → `SE_INTP_APOG`
+  and (2, 2) → `SE_INTP_PERG`.
+- Everything else → `swe_nod_aps` with `SE_NODBIT_MEAN`/`OSCU`/`OSCU_BAR`/`FOPOINT`.
+- The descending node is the ascending node's opposite for the named bodies.
+- A host-only `nNative` keeps Astrolog's custom Moon points on `swe_nod_aps`.
+
+**Stars and hypotheticals**
+- **Stars:** `swe_fixstar2`.
+- **Hypotheticals:** `SE_FICT_OFFSET` + the A.15 index.
+- **Elements:** the fork's new orbital-elements entry point.
+
+**Options**
+- **Observer** → `SEFLG_TOPOCTR` plus `swe_set_topo`, `SEFLG_HELCTR`,
+  `SEFLG_BARYCTR`, or `swe_calc_pctr`.
+- **Plane** → `SEFLG_EQUATORIAL`. **Form** → `SEFLG_XYZ`.
+- **Frame:**
+  - true of date: none
+  - mean of date: `SEFLG_NONUT`
+  - J2000: `SEFLG_J2000 | SEFLG_NONUT`
+  - ICRF: `SEFLG_ICRS | SEFLG_J2000 | SEFLG_NONUT`
+- **Corrections.** Swiss can honour the masks 7, 0 (`SEFLG_TRUEPOS`),
+  3 (`SEFLG_NOABERR`), 5 (`SEFLG_NOGDEFL`) and 1 (`NOABERR|NOGDEFL`).
+- **Speeds** → `SEFLG_SPEED`.
+- **Zodiac** → `SEFLG_SIDEREAL` with `swe_set_sid_mode`: the mode from A.11,
+  `SE_SIDM_USER` with the anchor, plus `SE_SIDBIT_ECL_T0` or
+  `SE_SIDBIT_SSY_PLANE` for sidereal planes 1 and 2.
+- **Time scale.** UT1 calls the `_ut` entry points (or TT = UT1 + ΔT when
+  `deltaTSec` is given). TT is used directly. TDB is error 2 unless it converts
+  exactly.
+
+## 6C. Appendix C — mapping to Ephemeris Prometheia
+
+These are Prometheia's C ABI names; the C++ engine is the same.
+
+**Bodies**
+- **Kind 0:** NAIF ids and SBDB SPK-IDs, directly.
+- **Kind 1:** `prometheia_calc_orbit_point` with methods 0 and 1.
+- **Kind 4:** its Kepler engine, when implemented.
+- **Kind 5 and LOOKUP:** `prometheia_engine_lookup`.
+
+**Options**
+- **Observer:** 0–3 → `PROMETHEIA_CENTER_{GEO,TOPO,HELIO,BARY}CENTRIC`, and
+  4 → `PROMETHEIA_CENTER_BODY` + `center_body`.
+- **Plane** → `coords`. **Frame** → `frame` (ICRF, J2000, MEAN_OF_DATE,
+  TRUE_OF_DATE).
+- **Corrections** → `light_time`, `deflection`, `aberration`.
+- **Speeds** → `speed`.
+- **Zodiac:** `fagan-bradley`, `lahiri`, `user` → `sidereal` with the anchor.
+  Sidereal plane 0 only.
+- **Extra columns:** σ → `sigma`, `HAS_SIGMA`; ayanamsa → `ayanamsa_deg`;
+  light time → `light_time_days`.
+- **Time:** TT → `prometheia_calc`, UT1 → `_ut` with the ΔT hook or
+  `deltaTSec`.
+- **Datasets:** `datasetId` derives from the DE file, catalogs and perturbers
+  loaded; the source strings come from `result.source`.
+
+## 7. Phases
+
+Each phase is one or more commits on `ephv4`, each passing `make check` and
+the gates the phase touches.
+
+1. **This document and the conformance fixtures.** Covers §3.9:
+   `tools/ephproto4-fixtures.py` and `ephsrv/conformance/`.
+2. **Protocol v4 in code.**
+   - `ephproto.h`: codecs for every message, TLV, SEGDATA, LOOKUP and CANCEL,
+     plus the conformance test.
+   - `ephsrv/ephswiss.h`.
+   - The Swiss fork's elements entry point.
+   - `eph_srv.cpp`: WELCOME capabilities, profiles, LOOKUP, CANCEL, and segments
+     fitted from samples.
+   - `eph_wsclient.cpp`.
+   - The Qt client: one request per cast.
+   - Every `tools/ephsrv-*.sh` gate moves to v4, with golden bit-exact against
+     the fork's swetest.
+3. **Source registry.**
+   - `ephem.h`/`ephem.cpp`; the `swiss`, `moshier` and `jpl` plugins;
+     `matrix`/`none` as legacy cast.
+   - ComputeEphem and the side calls go through the host API with the fallback
+     chain.
+   - Chart, switch, graphics and influence matrices byte-identical against a
+     baseline.
+4. **Selection re-plumb:** state, `-bE`/`-bP`, the legacy shadow, the writer,
+   the locks, astrolog.as, and the settings sweeps and audits.
+5. **Ephemeris Settings dialog** in both builds; Calculation Settings loses the
+   combo.
+6. **Remote adapter and transports** (Qt, WinHTTP, console socket).
+   - `server` and `horizons` plugins.
+   - The required-server dialog, exit 86 and `is.fNoEphFound` go away.
+7. **Prometheia plugin** (optional dependency, makefile detection, oracle
+   against Swiss on DE440).
+8. **Review** of the whole branch, and a summary for the maintainer.
+
+## 8. Work log
+
+1. **Phase 1, the document (2026-09-17).** Written from the approved plan, three
+   code surveys (state and command line, GUI, connection) and a design review
+   against both codebases.
+   - The review caught four errors in the first draft:
+     - numbered asteroid SPK-IDs are 20000000+N, not 2000000+N;
+     - the sidereal model needed a separate plane field;
+     - a cast needs per-object profiles;
+     - the coords field had to split into plane and form.
+   - `seorbel.txt` confirmed element polynomials in T = Julian centuries from
+     the epoch, up to T⁴, with J1900/B1950/J2000/JDATE equinoxes.
