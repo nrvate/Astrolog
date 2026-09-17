@@ -93,7 +93,9 @@ print("%d rows, %d not bit-identical, worst position %.2g deg, speed %.2g deg/da
 sys.exit(0 if all(w <= t for w, t in zip(worst, tol)) else 1)
 PY
 echo "  answers $(cat "$SCRATCH/cmp.txt")"
-lim=$(docker logs "$CID" 2>&1 | sed -n 's/^open-file limit \([0-9]*\) (soft).*/\1/p')
+# The logfmt line the server writes at startup: evt=nofile soft=N hard=N.
+# This read the sentence that line replaced, and so found nothing to compare.
+lim=$(docker logs "$CID" 2>&1 | sed -nE 's/.* evt=nofile soft=([0-9]+) .*/\1/p' | head -1)
 [ "${lim:-0}" -gt 1024 ] || fail "the open-file limit in the container is ${lim:-unknown}"
 echo "  limits  open-file limit raised to $lim"
 
