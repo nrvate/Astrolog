@@ -871,6 +871,18 @@ with the other. **An engine never trades accuracy for speed silently.**
   the per-instant work is memoised rather than recomputed inside the engine.
 - **The cache key is canonical** (§3.7), so the same question asked twice --
   in either precision, in any chunking -- is computed once.
+- **A segments request's work scales with its SPAN**, not with the answer's
+  size: the first touch of a body marches its memo window across the span, and
+  no size limit expresses that. Hence `maxSegSpanDays` in the segments
+  capability.
+- **Ask a server for the same instant twice.** If the second costs what the
+  first did, something is being recomputed that should have been reused --
+  measured on Prometheia's engine, where a catalogue record was decoded per
+  position outside the memo everything else amortised into, and looked like a
+  28× cost for integrated bodies until it was fixed (1,013 → 5.9 µs, which is
+  now cheaper than a DE read). It is a one-line experiment and it finds what
+  profiling a realistic workload hides, so each implementation should run it on
+  its own engine rather than assume.
 - **Nothing is per connection that need not be.** The only state the protocol
   requires a server to hold for a connection is the negotiated version, the
   token's budget and the answers in flight. Everything else is
@@ -1243,7 +1255,7 @@ server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from
 | 0x000C | ΔT model: str8 |
 | 0x000D | precession models: u16 n, n × str8 |
 | 0x000E | rate: u32 cellsPerSec, u32 burst |
-| 0x000F | segments: u8 maxDegree, u8 ×3 reserved, u32 maxSegmentsPerObject, f32 minErrArcsec, u32 kinds (A.12 bitmask of what it will fit) |
+| 0x000F | segments: u8 maxDegree, u8 ×3 reserved, u32 maxSegmentsPerObject, f32 minErrArcsec, u32 kinds (A.12 bitmask of what it will fit), u32 maxSegSpanDays (the widest span it will fit in one request; 0 = no stated bound) |
 | 0x0010 | lookup: u16 maxMatches |
 | 0x0011 | hypotheticals: u16 n, n × str8 (A.15 tokens served) |
 | 0x0012 | equinoxes for elements: u32 bitmask of A.16 |
