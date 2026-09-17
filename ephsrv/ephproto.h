@@ -31,7 +31,10 @@ namespace eph {
 // ---- 4.1 Envelope constants --------------------------------------------
 
 inline constexpr uint16_t kMagic        = 0x1EF0;
-inline constexpr uint8_t  kProtoVersion = 1;
+// Version 2 (2026-09-16, EPHEMERIS_REVIEW.md S4 and S9): WELCOME carries
+// maxCells, and a DATA object whose rows fail only in part keeps the rows
+// that computed -- a failed row's six values are NaN.
+inline constexpr uint8_t  kProtoVersion = 2;
 inline constexpr uint16_t kDefaultPort  = 47190;
 
 // Message types 1-7 are the ephemeris service messages and are never
@@ -106,6 +109,13 @@ inline constexpr uint32_t kMaxObjs       = 64;
 inline constexpr uint32_t kMaxRows       = 20000;
 inline constexpr uint32_t kMaxChunkRows  = 500;
 inline constexpr uint32_t kMaxPayload    = 4u * 1024u * 1024u;
+// The default work bound: objects x rows in one REQUEST, which the server
+// computes on its loop's only thread before it can answer anyone else on
+// that loop. 64 bodies x 20000 rows measured 13.7 s there; 100000 cells is
+// about a second, and 2 with a missing asteroid file's lookups. A client's
+// largest routine window is 64 objects x 1000 rows. The server may be
+// started with another bound (--max-cells), and WELCOME says which.
+inline constexpr uint32_t kMaxCellsDefault = 100000;
 
 // Field caps the layouts fix.
 inline constexpr size_t kSerrMax     = 64;   // DATA metadata serr text
@@ -290,11 +300,12 @@ struct WelcomeWire {
   uint32_t maxRows;
   uint32_t maxChunkRows;
   uint32_t maxPayload;
+  uint32_t maxCells;        // objects x rows per REQUEST (version 2)
   // sz serverVersion string
 };
 #pragma pack(pop)
 static_assert(sizeof(HelloWire) == 12, "HELLO fixed part must be 12 bytes");
-static_assert(sizeof(WelcomeWire) == 28, "WELCOME fixed part must be 28 bytes");
+static_assert(sizeof(WelcomeWire) == 32, "WELCOME fixed part must be 32 bytes");
 
 inline void buildHello(uint8_t *dst, uint32_t caps, uint32_t build,
                        const char *version, uint32_t *payloadLen) {
@@ -327,7 +338,8 @@ inline bool parseHello(const uint8_t *p, size_t len, Hello *out) {
 }
 
 inline void buildWelcome(uint8_t *dst, uint32_t caps, uint32_t swissephVersion,
-                         const char *serverVersion, uint32_t *payloadLen) {
+                         uint32_t maxCells, const char *serverVersion,
+                         uint32_t *payloadLen) {
   Writer w(dst, sizeof(WelcomeWire) + 256);
   w.u32(kProtoVersion);
   w.u32(caps);
@@ -336,6 +348,7 @@ inline void buildWelcome(uint8_t *dst, uint32_t caps, uint32_t swissephVersion,
   w.u32(kMaxRows);
   w.u32(kMaxChunkRows);
   w.u32(kMaxPayload);
+  w.u32(maxCells);
   w.strZ(serverVersion ? serverVersion : "", 256);
   *payloadLen = (uint32_t)w.size();
 }
@@ -348,6 +361,7 @@ struct Welcome {
   uint32_t maxRows;
   uint32_t maxChunkRows;
   uint32_t maxPayload;
+  uint32_t maxCells;
   std::string serverVersion;
 };
 
@@ -361,6 +375,7 @@ inline bool parseWelcome(const uint8_t *p, size_t len, Welcome *out) {
   out->maxRows = r.u32();
   out->maxChunkRows = r.u32();
   out->maxPayload = r.u32();
+  out->maxCells = r.u32();
   size_t n;
   const char *s = r.strZ(&n);
   if (!r.ok() || !s) return false;
@@ -549,6 +564,14 @@ inline void buildRequest(std::vector<uint8_t> *out, const Request &req) {
 //   u32 nObj
 //   nObj DataMeta records
 //   data block: object-major, nObj * nTime * 6 values (f64 or f32)
+//
+// The metadata is the whole window's, the same in every chunk. An object's
+// rows fail one at a time (an asteroid file's range, the ephemeris edge):
+// a failed row's six values are NaN, and the rows that computed are real.
+// retFlag < 0 means NO row of the object computed; serr carries the first
+// failed row's text whenever any row failed, so a retFlag >= 0 with a
+// non-empty serr is a partial answer. (Version 1 failed the whole object
+// for one failed row and zeroed its values: EPHEMERIS_REVIEW.md S9.)
 
 #pragma pack(push, 1)
 struct DataWire {
@@ -559,9 +582,9 @@ struct DataWire {
   uint32_t nObj;
 };
 struct DataMetaWire {
-  int32_t retFlag;    // <0: this object failed; else flags SWE actually used
+  int32_t retFlag;    // <0: no row computed; else flags SWE actually used
   int32_t flagsUsed;
-  char serr[64];      // SWE error text when retFlag < 0, else zero-filled
+  char serr[64];      // the first failed row's SWE text, else zero-filled
   char name[56];      // body name
 };
 #pragma pack(pop)
