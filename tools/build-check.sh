@@ -12,7 +12,8 @@
 # distribution, from a git archive of HEAD rather than the working tree,
 # so nothing already built here can make it pass.
 #
-# It builds ./astrolog and ./astrolog-qt, then casts a chart with the
+# It builds ./astrolog and ./astrolog-qt, asks the Qt it built against
+# whether TLS works at run time (wss:// needs it), then casts a chart with the
 # console one and requires Chiron to be a real position -- 0Ari00 means
 # the ephemeris was not found, which is what a broken data path looks
 # like rather than a broken build.
@@ -107,12 +108,28 @@ for img in $IMAGES; do
       make astrolog -j4 >/tmp/b1.log 2>&1 || { echo CONSOLE_BUILD_FAILED; tail -15 /tmp/b1.log; exit 1; }
       make qt -j4      >/tmp/b2.log 2>&1 || { echo QT_BUILD_FAILED;      tail -15 /tmp/b2.log; exit 1; }
       ./astrolog -qa 6 15 1990 12:00 0 122W19 47N36 -R1 _X -Yi1 ephem | grep -E '^Chir' | head -1
+      # TLS at run time: the Ephemeris Server backend reaches a public
+      # server over wss://, and Qt finds its TLS support when the program
+      # runs -- Qt 6 as a plugin, Qt 5 by loading OpenSSL -- so a build
+      # that compiled and cast a chart can still have none. Asked of the
+      # same Qt the port was built against, by a probe of five lines.
+      m=\$(pkg-config --exists Qt6Network && echo 6 || echo 5)
+      printf '%s\\n' '#include <QtCore/QCoreApplication>' '#include <QtNetwork/QSslSocket>' \\
+        '#include <cstdio>' 'int main(int c, char **v) { QCoreApplication a(c, v);' \\
+        '  printf(\"TLS %d %s\", (int)QSslSocket::supportsSsl(), qPrintable(QSslSocket::sslLibraryVersionString())); }' > /tmp/tls.cpp
+      g++ -fPIC -o /tmp/tls /tmp/tls.cpp \$(pkg-config --cflags --libs Qt\${m}Network Qt\${m}Core) >/tmp/b3.log 2>&1 \\
+        || { echo TLS_PROBE_BUILD_FAILED; tail -8 /tmp/b3.log; exit 1; }
+      QT_QPA_PLATFORM=offscreen /tmp/tls; echo
     " 2>&1) || { echo "FAILED"; printf '%s\n' "$out" | sed 's/^/    /' | tail -16; fail=1; continue; }
   chiron=$(printf '%s\n' "$out" | grep -E '^Chir' | head -1 || true)
+  tls=$(printf '%s\n' "$out" | grep -E '^TLS ' | head -1 || true)
   case ${chiron:-none} in
-    *0Ari00*|none) echo "BUILT, BAD CHART: ${chiron:-none}"; fail=1 ;;
-    *) echo "ok   $chiron" ;;
+    *0Ari00*|none) echo "BUILT, BAD CHART: ${chiron:-none}"; fail=1; continue ;;
+  esac
+  case ${tls:-none} in
+    "TLS 1"*) echo "ok   $chiron   ${tls#TLS 1 }" ;;
+    *) echo "BUILT, NO TLS AT RUN TIME (${tls:-no probe output}): wss:// cannot connect"; fail=1 ;;
   esac
 done
-[ $fail -eq 0 ] || { echo "== at least one distribution cannot build this tree"; exit 1; }
-echo "== every distribution built both binaries and computed Chiron"
+[ $fail -eq 0 ] || { echo "== at least one distribution cannot build this tree, or has no TLS"; exit 1; }
+echo "== every distribution built both binaries, computed Chiron, and has TLS"

@@ -28,8 +28,9 @@ to be resumed from like the other two.
   item 12): G1, G11, G12 and G14 are closed, G13 on Windows; G2's
   `--bind` exists (the plaintext guard waits for deployment). Still open
   from Phase 1: the macOS package's TLS plugin (verify in a release dry
-  run) and `QSslSocket::supportsSsl()` in `tools/build-check.sh`. The
-  bench over TLS is done: under a millisecond a window. Phase 0 is decided except what waits for a host. Next:
+  run). Done since: the bench over TLS (under a millisecond a window), and
+  `tools/build-check.sh` asking each distribution's Qt for TLS at run time
+  (2026-09-17: all twelve have it, OpenSSL 3.0.2 to 3.6.4). Phase 0 is decided except what waits for a host. Next:
   Phase 2 (operability).
 - Development runs locally until the server is proven; nothing here waits
   on a VPS before Phase 5.
