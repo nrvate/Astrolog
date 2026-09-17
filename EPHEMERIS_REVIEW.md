@@ -1,0 +1,241 @@
+# Ephemeris Server project: full review, 2026-09-16
+
+A full read of everything the ephemeris server project put on `qt` on
+2026-09-16 (squash `3c7a1c9` and its follow-ups) plus client increment 3
+(`ebb87a0`, branch `ephanim`). Five reviewers read in parallel, one area
+each, read-only against the tree at `ebb87a0`, and verified by probe where
+they could: the server, the client connection and cast path, the
+animation increment, the test nets and gates, and the thread-safe Swiss
+Ephemeris fork's changes.
+
+The reports are kept here verbatim, because a finding that exists only in
+a conversation is lost the moment the conversation is. The **ledger** at
+the top is the working state: every finding is fixed (with the net that
+fails without the fix), closed (with the evidence), or deferred (with a
+date and a reason), per CLAUDE.md "Resolve findings the day they are
+raised". Finding IDs are `S` server, `C` client, `A` animation, `T` tests,
+`F` fork, followed by the reviewer's number.
+
+Found while preparing the review, before any reviewer ran, and fixed in
+`1819a62`: the Qt build needs Qt WebSockets and `-I ephsrv` everywhere it
+is built, and only `Makefile.qt` and `Makefile.qt.test` had been told --
+the sanitizer builds did not compile, and the Windows, macOS and Linux
+release legs, the twelve-distribution build check and the README's
+install lines would all have failed.
+
+## Ledger
+
+| ID | Finding | State |
+|----|---------|-------|
+| S1 | NaN/-inf jdStart crashes the server (fork indexes with (int)floor(NaN)) | fixing |
+| S2 | BACKPRESSURE treated as not-sent: chunks duplicated, client windows done early with zero rows | fixing |
+| S3 | Conn constructed twice per connection, ~575 B leak each | fixing |
+| S4 | No per-connection memory/CPU bound | fixing (queued-answer cap, bad_alloc); CPU budget open |
+| S5 | --threads above 2x cores leaves loops with no context; hc()==0 divides by zero | fixing |
+| S6 | A second server on the port silently shares connections (SO_REUSEPORT) | fixing |
+| S7 | Planet-name buffer 96 < AS_MAXCH | fixing |
+| S8 | Cache byte accounting undercounts small entries; fixed-seed hash floodable; wrong FNV basis | fixing |
+| S9 | One failed row fails the whole object; name lost if last row fails; nod/aps retFlag 0 | name and retFlag fixing; per-row failure open |
+| S10 | HELLO not parsed, second HELLO unanswered, zstd flag ignored, text frames accepted, undefined iflag bits keyed | fixing |
+| S11 | Doc/code disagreements (heartbeat, entry points, backpressure, pool, port-in-use, Makefile prerequisites) | fixing |
+| S12 | JPL setter closes files per request; centered UT JPL delta-t ambiguity | open |
+| S13 | eph_wsclient trusts the server (payloadLen, u32 wrap, frame size, requestId, duplicates) | fixing |
+| S-fork | UBSan signed overflow at sweph.c:432 / :4816 from a wire id | open, to the fork review |
+| T1 | Soak gate's scan and fd checks cannot fail (strace prints no paths; pid is strace's) | open |
+| T2 | Multi-chunk window reassembly untested; golden gate --count 1 only | open |
+| T3 | Port ranges of suite and gates overlap; second server silent (see S6); --ephe with no files falls back silently | open |
+| T4 | Custom node/apsis scenario and window-bound check vacuous under -Yi1 ephem (is.nObj not recomputed) | open |
+| T5 | RMaxDiffEphQt ignores NaN | open |
+| T6 | Offline -0n checks vacuous; live group skips when no server is built | open |
+| T7 | Bench concurrent failures never fail the bench | open |
+| T8 | Sidereal mode never varied; topo at one place; golden has no topo/helio leg | open |
+| T9 | "1900 delta-t" scenario exercises no delta-t; prefetch delta-t line untested | open |
+| T10 | Live group uses whatever astrolog-ephd is next to it; skip reports PASS | open |
+| T11 | ciMain not restored by the live group | open |
+| T12 | "in-flight request survives the drop" checked before any event | open |
+| T13 | Golden never compares retFlag; cache gate's f32 hit compares no values; thin off-grid margin | open |
+| C1 | Bounded wait's processEvents lets nested redraws/casts run mid-cast: painter crash, plan wiped | open |
+| C2 | processEvents(maxtime) drops WaitForMoreEvents: 100% CPU spin for up to 10 s | open |
+| C3 | Startup chart cast before the connection exists; nothing recasts on WELCOME; Connecting casts fail at once | open |
+| C4 | HELLO timeout timer never allocated: a silent peer leaves the client Connecting forever | open |
+| C5 | cRowsGot counts duplicate chunks (reconnect re-send): window done with zero rows | open |
+| C6 | iTime+nRows u32 wrap in FWindowChunkQt: heap write; chunk precision unchecked | open |
+| C7 | Groups capped at kMaxObjs not welc.maxObjs: plan reads past clamped columns | open |
+| C8 | Warning "once" keyed on jd; modal per instant on multi-instant charts | open |
+| C9 | FSrvPlanetQt rebuilds jde from global is.rDeltaT | open |
+| C10 | SrvPrefetchNextQt can evict the covering window before it is in the plan | open |
+| C11 | Reconnect storm: crashing request re-sent every second forever | open |
+| C12 | Socket signal handlers act on global esrv.pws; late signals after Finalize | open |
+| C13 | Local-only Swiss calls under backend 5 carry SEFLG_JPLEPH | open |
+| C14 | flagsUsed never compared; SPEED vs fTopoPos>1; client-side delta-t tid_acc; cache survives address change | open |
+| C15 | Calculation Settings maps nSwissEph 3 to "Matrix Formulas" | open |
+| C16 | Plan doc disagreements (topo units, address field, -0n combo, Status duplicate, shipped =0n) | open |
+| A1 | Background prefetch can evict the covering window before it is in the plan (ASan heap-use-after-free) | open (same as C10) |
+| A2 | A window crossing an ephemeris file's range fails every object for every frame; the warning box stops animation | open |
+| A3 | Background prefetch never fires for steps <= 120 s: the 60 s slack makes the next window look covered | open |
+| A4 | Off-grid frames corrected first-order over up to half a row: arc-minute errors (progressed, midpoint, DST, edited time) | open |
+| A5 | Window cap 8 thrashes at 5+ groups, or 3+ in a relationship chart | open |
+| A6 | The static chart of a relationship cast is treated as a frame | open |
+| A7 | Stop paths that skip the exact recast (warning box, -Xn, -Xnp) | open |
+| A8 | Speed fields not held to the stated tolerance once extrapolated | open |
+| A9 | Coverage gaps: short steps, groups over cap, ephemeris boundary, relationship/progressed/midpoint | open |
+| F* | Fork review | pending |
+
+## Report: server (`ephsrv/`)
+
+**1. `ephproto.h:478` (never validated) and `eph_srv.cpp:602` — bug: a REQUEST with jdStart = NaN or -inf crashes the whole process (remote DoS of every loop and client).**
+The fork's `corr_mean_node()` (swemmoon.c:1067) and `corr_mean_apog()` (swemmoon.c:1137) do `(int)floor(NaN)` → INT_MIN and use it as an array index. One ~180-byte REQUEST (kind 0, id 10 mean node or 12 mean apogee, jdStart = NaN) segfaults the server. -inf becomes NaN after the delta-t step on the UT path; NaN goes straight in under kIflagTimeTT. Fix: reject non-finite jdStart (ideally a range too) in `parseRequest()` → kParseBad; the fork should also be hardened (its range checks use `<`/`>`, which NaN passes). Confidence: certain. Verified by probe: `probe_one 47391 10 0 nan` → connection closed, server dead; same stack under ASan. The rest of the NaN/±inf/1e300 sweep was clean with those two bodies skipped.
+
+**2. `eph_srv.cpp:655-658` — bug, silent wrong data: a chunk that hits BACKPRESSURE is re-sent on drain.**
+In the vendored uWS (WebSocket.h:114-217) BACKPRESSURE means the message *was* accepted and buffered; only DROPPED means not sent. `FlushStreams` treats both alike and does not advance `nextRow`/`chunkIndex`, so drain sends the same chunk again. Probe: 64 objs × 20000 rows, reader asleep 3 s → 41 messages, 20500 rows, chunk 1 received twice. Qt client (qtdriver.cpp:7755) adds `nRows` per chunk and marks the window done at `>= nTime` — it finishes before the last chunk and those rows stay 0.0. eph_wsclient (line 418) stops early the same way and never checks requestId, so with `--repeat` the leftovers bleed into the next request. Triggers on localhost only past ~socket buffer + 4 MB (30×5000 did not); over a real network far sooner. Fix: advance on BACKPRESSURE, stop/retry only on DROPPED. Confidence: certain (probe).
+
+**3. `eph_srv.cpp:796-798` — bug: every connection leaks ~575 bytes.**
+uWS already placement-constructs the per-socket `Conn` before calling `open` (HttpResponse.h:373) and destroys it on close (WebSocketContext.h:276). The `open` handler constructs it a second time, so the first `std::deque`'s map/node blocks are never freed. Probe: RSS 82.1 → 93.6 → 105.1 MB over two runs of 20,000 connect/close cycles (linear, ≈575 B/conn). Fix: delete the `open` handler. Confidence: certain.
+
+**4. `eph_srv.cpp:370-373, 686-688` — risk (DoS): no memory or CPU bound per connection; §5's "a slow client cannot balloon memory" is false.**
+`Conn::out` is unbounded and `maxBackpressure` only stops sends, not reads or computes. A client that never reads can pipeline distinct 64×20000 requests (vary jdStart); each allocates 60 MB of columns (measured 60000 KiB) plus a 1.5 MB chunk buffer, and its stream keeps it alive after cache eviction. Each such request also blocks its loop: measured 13.7 s for 64 bodies × 20000 rows; a missing asteroid costs ~22 µs/cell under /swe → ~28 s. All other connections on that loop stall. `bad_alloc` from the 60 MB `assign` is uncaught inside the uWS handler → `std::terminate`. Fix: cap queued streams/bytes per connection (stop reading, or ERROR 2), and consider a cells-per-request budget. Confidence: high (queue/alloc by reading, timings by probe).
+
+**5. `eph_srv.cpp:861-871` — bug: `--threads` above 2×cores gives some loops zero contexts; their connections always fail.**
+`totalCtx = 2*hardware_concurrency`; loops with index ≥ totalCtx get `n = 0`, and every request routed there returns ERROR 4 "no swe context available". Probe: `--threads 64` on a 12-core box → 14 of 20 connections got ERROR 4. Also, if `hardware_concurrency()` returns 0 and `--threads` is not given, line 866 divides by zero at startup. (A loop is single-threaded, so >1 context per loop only multiplies open files.) Confidence: certain (probe).
+
+**6. `eph_srv.cpp:813-817` — risk, contradicts work log 8: a second server on the same port does not fail; it silently takes about half the connections.**
+uSockets always sets SO_REUSEPORT (bsd.c:515-518), so bind never fails against another (even stale) instance; the "cannot listen … exit(1)" branch is effectively dead. Probe: two instances on 47393 (one with ephemeris, one without) both logged "listening"; 10 clients → 8 answers, 2 ERROR 5. Fix: `LIBUS_LISTEN_EXCLUSIVE_PORT` on loop 0, or detect an existing listener first. Confidence: certain (probe).
+
+**7. `eph_srv.cpp:460-461` — risk: stack overflow on long names from data files (not client-driven).**
+`char nm[96]` is passed to `swe_get_planet_name_r`, whose contract is AS_MAXCH (256): it does `strcpy(s, sp)` of a `seasnam.txt` name read with `fgets(AS_MAXCH)` (sweph.c ~7600) and of `seorbel.txt`'s name field (`strcpy(pname, sp)`, swemplan.c:930). Harmless with today's files (longest line in /swe/seasnam.txt is 25 chars) but reachable for any request naming such a body. (Fixed stars are fine: the fork writes back ≤ 41+1+41 bytes.) Confidence: high (callee read).
+
+**8. `eph_cache.h:69, 116-125` — risk: byte accounting undercounts badly for small entries; hash is floodable.**
+A 1-obj × 1-row entry is charged 176 B; real cost (two copies of the ~37-byte key in list node + map key, list and hash nodes, `make_shared` block, two vector allocations) is ~500–550 B, so a cache of tiny entries can use ~3× `--cache-mb`; chart casts (20–40 objs × 1 row) undercount ~6–10%. The header's "well under one percent" holds only for large windows. FNV-1a with a fixed seed over client-chosen bytes (jdStart is 8 free bytes) lets a client construct many keys in one bucket; with ~10⁵ entries per loop lookups degrade to linear with string compares. Nit: the offset basis `1469598103934665603` is not FNV's (`14695981039346656037`; `ephproto.h`'s unused `fnv1a64` has it right) — distribution only. Confidence: medium (estimated by reading, not probed).
+
+**9. `eph_srv.cpp:607-622` — risk (design): one failed row marks the whole object failed.**
+`retFlag = -1` covers the object while successful rows keep their values; the client can't tell which rows are real, and the Qt client (qtdriver.cpp:8206) fails the object for all rows. A window crossing an asteroid file's (or the ephemeris') date edge loses every row. Minor: `ComputeCell` sets `*pName = nullptr` each call, so if the *last* row fails the name is empty even though earlier rows succeeded. For kind 2, `swe_nod_aps_r` returns OK (0), not flags, so `retFlag`/`flagsUsed` are 0, not §4.5's "flags SWE actually used". Confidence: high (reading + probe: nod/aps Moon request → ret=0).
+
+**10. `eph_srv.cpp:734-745` — nit/risk: HELLO and version negotiation are mostly unimplemented.**
+The HELLO payload is never parsed (`parseHello` unused), so malformed HELLO is accepted and the client's `protoVersion`/`caps` are ignored; a second HELLO gets no reply (a client waiting on WELCOME hangs); envelope errors reply with requestId 0 even when it was readable; bad flags byte is reported as "payload length mismatch"; `reserved` unchecked; TEXT frames accepted; the zstd envelope bit is accepted and ignored (compressed bytes would be parsed raw); iflag bits 34–63 accepted and keyed (only cause cache misses).
+
+**11. Doc/code disagreements.** §4.7 and eph_srv.cpp:19 say "server PING every 20s, PONG deadline 60s"; code is uWS automatic pings with `idleTimeout` 30 (work log 1 concedes it; §4.7 never updated). §4.7 says compute via `swe_calc_ut_r`; TT/center/nodaps use other entry points (§4.4 is right). §5's backpressure claim (item 4). §5 "pool 2x cores" + overridable threads breaks (item 5). Work log 8 "port in use is fatal" (item 6). Makefile.ephsrv header says both prerequisites are "built when missing"; nothing builds `libswe.a`, and the server target does not depend on `$(SWE_HOME)/libswe.a`, so rebuilding the fork does not relink the server — the stale-library trap the plan warns about. The "ephsrv target in Makefile" is just a pass-through to Makefile.ephsrv.
+
+**12. `eph_srv.cpp:395-396, 588` — nit: JPL requests go through the fork's JPL setter, which is heavy and slightly ambiguous.**
+`swe_set_jpl_file_r` runs `swi_close_keep_topo_etc` on every JPL request, closing all files (including the fixed-star file), dropping fictitious-body lines and resetting delta-t/leap-second tables — correct (sidereal/topo preserved) but costly. Forcing `SEFLG_SWIEPH` onto a JPLEPH request means the UT→ET conversion for centered requests hands `swe_deltat_ex_r` both ephemeris bits; `calc_deltat` then picks the Swiss moon file's DE number, while `swe_calc_ut_r` strips SWIEPH first via `plaus_iflag`. Matches `swe_nod_aps_ut_r`'s own behaviour, but a centered UT JPL request can differ from JPL's tidal term. Low practical impact.
+
+**13. `eph_wsclient.cpp:384, 389` — nit (test tool): trusts the server.**
+`Reader(pl, env.payloadLen)` without checking payloadLen against `msg.size()` (OOB read); `iTime + nRows > count` can wrap (u32) → OOB write; allocates whatever 64-bit frame length is sent; never checks requestId; row counting broken by duplicates (item 2). Dead code at lines 239-240.
+
+Fork-side note from the fuzz: UBSan reports signed overflow at sweph.c:432 (`ipl*100` with ipl = INT_MIN) and sweph.c:4816 — benign here but UB reachable from a wire id.
+
+Checked and correct: parseRequest enforces nObj ≤ 64 and nTime ≤ 20000 before any allocation; star names must be NUL-terminated within the payload and ≤ 96; jplFile's last byte forced NUL; trailing bytes rejected; point/method range-checked; the Reader's strZ is safe at buffer end. Envelope: payloadLen must equal `message.size()-16` and ≤ 4 MB; uWS `maxPayloadLength` caps before that. Size arithmetic is size_t throughout; the largest product 64·20000·48 = 61 M; chunk ≤ 1,544,209 B < 4 MB. Row instant uses a u64 product and matches qtdriver.cpp:7816 byte for byte. Cache key: unambiguous (nObj first, each record self-delimiting, conditional triplets after the iflag that governs them); complete for everything the server applies (center, full iflag incl. TT/center bits, triplets under their bits, jdStart, step, nTime); precision/chunkRows correctly excluded; no stale sid/topo/JPL leakage across pooled contexts (SWE reads each only under its flag and the setters reset saved positions); delta-t is no longer context-history-dependent with the fork at ts.11. LRU eviction/used accounting consistent, oversize not stored, shared_ptr keeps streamed entries alive. Threads: each loop's cache, context pool and thread-local LoopCtx confined to its thread; explicit contexts neither publish to nor sync from the fork's global config (sweconfig.c:300, 358); `swe_set_ephe_path` once before `swe_ctx_new`; WELCOME version buffer thread_local. Socket lifetime: uWS never calls drain after close; close destroys Conn which releases streams; a client disconnecting during a long compute caused no crash (probe). Entry points: UT → `swe_calc_ut_r`/`swe_fixstar_ut_r`, TT → `swe_calc_r`/`swe_fixstar_r`; `swe_calc_pctr_r`/`swe_nod_aps_r` take ET and UT is converted exactly as `swe_nod_aps_ut_r` does; stars/nod-aps with a center get an explicit per-object error; f32 converted only at send. Fuzz: ASan+UBSan over a verbatim copy of ComputeCell, 64,800–129,600 calls per run, ids {INT_MIN…INT_MAX, −3..−1, 10–61, 9398–9999, 10000+}, iflag 0xFFFFFFFF etc., sidMode ±large, NaN/1e300 topo, jplFile "../../etc/passwd" (fork keeps basename only), finite jd ±1e7/1e300 — no memory errors except item 1. Star name write-back ≤ 83 B fits 96.
+
+Probe sources: `/nvm/work/review-server/` (`probe_dup.cpp`, `probe_one.cpp`, `fuzz.cpp`, `swe-asan/`).
+
+## Report: test nets and gates
+
+Sabotage runs used a scratch worktree at `/nvm/work/review-tests/tree` with faults switched on by environment variables in qtdriver.cpp, then removed. No astrolog-ephd or strace processes were running before or after.
+
+**1. tools/ephsrv-soak.sh:119 and :113/:126 — bug.** The soak gate's two main checks, "zero scans" and "fds stable", can never fail.
+- Scan check: it greps `getdents64.*$FARM`, but strace prints getdents64 with a file-descriptor number, never a path (`getdents64(3, 0x…, 32768)`). The pattern cannot match unless strace runs with `-y`. A server that walks the whole farm at startup would still print "zero getdents64".
+- fd check: `EPHD_PID=$!` at line 113 is strace's pid, not the server's, so `fdbusy` counts strace's descriptors. A server leaking one fd per request passes. The script's own cleanup comment admits this pid is strace.
+- Startup timing: on a 100k-symlink farm a readdir walk fits inside the 2 s limit, so nothing in the gate catches a scan.
+- Plan claims not built: there is no "long run", and the farm is ~100 directories, not the "~100k" §9 describes.
+Confidence high. Verified with strace on `ls` (no paths) and a probe copy of the script (`EPHD_PID=… comm=strace children=astrolog-ephd`, 0 getdents64 lines).
+
+**2. qtdriver.cpp:7717 (DATA chunk reader) and qttest.cpp:18384 — risk, close to bug.** Reassembling a window from more than one chunk is never tested. Production animation windows are 1000 rows and the server's chunk limit is 500, so every real window arrives in two chunks; the suite shrinks windows to 20 rows (one chunk), and chart casts are one row. Sabotage: forcing `iTime = 0` makes chunk 2 overwrite rows 0–499 and leaves 500–999 zero; the live group still passed 53/0 under `-i nrvate.as`. In a real animation, frames past row 500 would put the bodies at 0 Aries. The server's multi-row, multi-chunk output is not checked against the oracle anywhere either: the golden gate uses `--count 1` only and the cache gate compares the server with itself. Confidence high (sabotage).
+
+**3. Port handling, qttest.cpp:18254 and all four gates' `PORT=` lines — risk.** Two servers on the same port both start without error (uSockets sets SO_REUSEPORT; `ss` showed two listeners), so a collision is silent. The ranges overlap: suite 47500–47899, golden 47200–47599, soak 47300–47699, cache 47600–47899. A concurrent or stale server shares the port and the kernel splits connections: the golden gate or suite can pass against an old server; the cache gate's `last_line` can read the previous request's log line; "the backend sees the server go" can hang on the other server. Leaked soak servers were already found once (2026-09-16). Related: `--ephe /tmp` (no ephemeris files) silently fell back to exe-dir discovery (`/nvm/work/ephanim/ephem`), so the `<none found` check cannot tell whether the server reads the same files as the local cast. Confidence high (experiment).
+
+**4. qttest.cpp:18316 (scenario 6, custom Jupiter perihelion) and :18358 (window cache bound) — risk.** Both do nothing under compiled defaults (`-Yi1 ephem`, the recommended invocation and CI's); they only bite under `-i nrvate.as`. The test sets `ignore[custLo]=fFalse` but never recomputes `is.nObj`, so `imax < custLo`, the custom slot is never prefetched, and scenario 6 repeats scenario 0. With `-Yi1 ephem` only objects 0–10 and 16 were prefetched; perihelion→aphelion passed; never evicting passed (≤8 held). Under nrvate.as both sabotages failed (Vulcan differs; 10 windows held). Fix: call AdjustRestrictions() (or restrict objects explicitly) and assert the custom object was computed. Confidence high.
+
+**5. qttest.cpp:18140 (`RMaxDiffEphQt`) — bug.** Ignores NaN (`RAbs(NaN) > rMax` is false), so every animation tolerance check ("within 5e-5", "off the grid", "backward", "by months rMax == 0.0") passes when frames contain NaN. Sabotage: NaN Moon latitude on every frame passed 53/0 under both configurations. Fix: `!(RAbs(r) <= rMax)` or explicit isnan. Confidence high.
+
+**6. qttest.cpp:18010–18022 (offline group's -0n section) — bug (vacuous).** FSrvPlanetQt is called with no prefetch, so it warns "no request was made" whatever -0n says; nothing calls EphSrvStartupQt, so "the connector never runs" holds trivially; "with its own warning" is not the -0n warning. Sabotage: removing the -0n guard from both FEphSrvOn and SrvPrefetchQt left the offline group green; only the live group caught it. The live group skips whenever no astrolog-ephd is built, and neither `make check` nor `make qt-test` builds one, so in CI and on a bare checkout -0n is untested. Confidence high.
+
+**7. tools/ephsrv-bench.sh (`grep -q "BENCH FAIL" "$LOG"`) — bug.** Concurrent client failures never fail the bench: the subshells echo "BENCH FAIL" to stdout, but the grep reads the server log. A failed client also leaves no latency file, so `pct` raises inside a process substitution, which `set -e` does not catch: the table prints blanks with exit 0. Only the sequential requests can fail the bench. Confidence high (reading).
+
+**8. Sidereal mode is never varied — risk.** tools/ephsrv-golden.sh:146 uses `--sid "0,0,0"`, and the suite's sidereal scenario uses Fagan-Bradley = sidMode 0, the library default, so a server ignoring `sidMode` passes both. `us.fSidereal2` (SE_SIDBIT_SSY_PLANE) is never exercised. Topocentric is tested at one location only, so a pooled context keeping a stale `swe_set_topo` would not be caught; the golden gate has no topocentric or heliocentric leg. Confidence medium-high.
+
+**9. qttest.cpp:18319 (1900 scenario) and qtdriver.cpp:7991 — nit/risk.** "Delta-t's tidal term is live" tests nothing about delta-t: both casts take `is.rDeltaT` from SwissHouse, which runs before ComputeEphem at the same jd, and the server is sent TT. The prefetch's own delta-t line never runs in the suite; sabotage adding 1e-3 days (86 s) there passed 53/0. That line is live in production for progressed charts (house cusps at a different time) and untested. Confidence high.
+
+**10. qttest.cpp:18239 (astrolog-ephd lookup) — risk.** The live group uses whatever astrolog-ephd sits next to the test binary; nothing rebuilds it when `ephsrv/*` or `ephproto.h` change, and only a protocol-version bump exposes a stale server. The skip (no server or no -Yi1) prints a line and reports PASS. Confidence high.
+
+**11. TestEphSrvLiveQt, ciMain — nit.** `ciMain` is overwritten at 18387, 18456 and 18579 and never restored; `LRestore` restores only `ciCore`, so later groups inherit 1990-06-15 at 122.3/47.6. (Backoff, rows, cap, nAnim, nMode, nRel are restored.) Confidence high.
+
+**12. qttest.cpp:17953 — nit.** "The in-flight request survives the drop" is checked before any event is processed after `pconn1->close()`, so it is always true; the later "verbatim" re-send check is what covers survival.
+
+**13. Smaller gate nits.** The golden gate never compares the retFlag column (a wrong flags value or a Moshier fallback would pass), and "82 columns bit-exact" counts rows. The cache gate's "f32 hits the f64 entry" checks only the log word, never the f32 values. The speed-correction net bites only through the off-grid check, at 8.1e-5 against a 5e-5 limit — a thin margin.
+
+Nets confirmed to bite (by sabotage): topocentric (dropping SEFLG_TOPOCTR fails it); sidereal (dropping SEFLG_SIDEREAL); heliocentric (dropping SEFLG_HELCTR fails heliocentric, the Mars-centred scenario and the cap-1 window check); true node (mean node sent instead); speed correction (off-grid check); eviction guard ("cast with more groups than the cap"); live -0n ("under -0n a cast fails fast"); under nrvate.as only, the custom node/apsis scenario and the window bound; silent per-object failures (CastChart zeroes cp0 and space first — heliocentric sabotage showed 0x0). Golden and cache gates pass today (4 s, 3 s); not re-sabotaged; the cache gate's four-way falsification is consistent with its code and its log-read race is ruled out (the server logs before sending data). Timing: tests wait on state changes rather than sleeps, and a nested animation tick is blocked by `s_fAnimTickQt`; no flakiness source beyond the port overlap.
+
+## Report: client connection and cast path
+
+Read-only against `ebb87a0`; two probes in `/nvm/work/review-client/` (a startup probe with a copy of astrolog-qt-test, and a 10-line Qt5 program measuring processEvents).
+
+**1. qtdriver.cpp:8133 (the wait), with RedrawQt at 2434 — bug, crash. Confidence medium-high, read not probed.**
+The wait calls `processEvents(AllEvents)` inside a cast, so keys, menus, timers and paint events run mid-cast, and nothing prevents a nested RedrawQt or cast. Crash sequence: a text chart is up; every RedrawQt of a text chart runs Action(), which casts while `gi.qpaint` is open on `gi.qim`; the cast misses the cache and waits; the user presses a time-step hotkey → RecastAndRedrawQt → nested RedrawQt; that makes a second QPainter on the same image (begin fails), then deletes `gi.qpaint` and sets it NULL; the outer Action() keeps printing through a NULL/freed painter. The graphics path gets there too: paintEvent (line 469) calls RedrawQt whenever the canvas size differs, and several graphics charts cast while drawing. Even without a crash, a nested cast wipes the outer plan: SrvPrefetchQt clears `s_plan` at 7959-7967 *before* its `s_fInPrefetchQt` check at 7970, so the outer wait counts 0 pending and leaves, and every outer object fails with a misleading warning. A nested cast also overwrites ciCore, `is.*` and the houses under the outer cast. The Horizons fetch (FGetUrlQt) has the same shape but only for j-objects; here every cache miss is exposed, and holding a step key against a remote server makes it likely.
+
+**2. qtdriver.cpp:8132-8134 — bug, CPU. Confidence high, probed.**
+`processEvents(AllEvents|WaitForMoreEvents, 50)` is the maxtime overload, which drops WaitForMoreEvents, so the loop spins: measured 951,205 iterations/s at 100% CPU with Qt5. Every cache miss burns a core for up to 10 s (and rescans all objects each spin). Fix: a QEventLoop with a QTimer, or `processEvents(WaitForMoreEvents)` without maxtime plus a wake-up timer.
+
+**3. Startup chart is cast before the connection exists — bug. Confidence high, probed.**
+Action() casts (astrolog.cpp:257) before FActionX → BeginQt creates the QApplication. With `=bS` selected, that first ComputeEphem reaches SrvPrefetchQt Disconnected, builds the QWebSocket before any QApplication exists, and fails the cast (probe stderr: "The Ephemeris Server is not connected; objects served by the Ephemeris Server fail this cast." before ProbeQt ran). CastChart clears cp0 first, so every server object sits at 0Ari00. Nothing recasts when WELCOME arrives (kMsgWelcome only re-sends requests); a graphics wheel stays zeroed until the user does something; text charts heal on their next redraw. Any cast made while Connecting also fails at once instead of waiting inside the bounded wait. Contradicts plan §4 ("invisible") and the EphSrvStartupQt comment naming BeginQt as the entry.
+
+**4. qtdriver.cpp:7143 / 7241 / 7312 / 7392 — bug. Confidence high, read.**
+`esrv.ptimWelc` is never allocated; every use is guarded by `!= NULL`, so the HELLO timeout never runs. A peer that accepts the upgrade but never sends WELCOME (a hung ephd, another WebSocket service) leaves the client in esConnecting forever: no retry, and EphSrvStartupQt returns early because `pws != NULL`; every cast fails until restart. Work log 1 and the header claim a 15 s HELLO timeout; no test covers it.
+
+**5. FWindowChunkQt 7754 with the resend at 7316-7320 — bug, silent zeros. Confidence high, read.**
+`cRowsGot += nRows` never checks which rows already arrived, and after a reconnect every in-flight request is re-sent verbatim while the window keeps its partial rows. A 1000-row window in two 500-row chunks: chunk 0 lands → drop → reconnect → re-send → chunk 0 again → `cRowsGot` = 1000 → done with rows 500–999 zero; those frames read longitude 0 speed 0, no warning — exactly §8's "server gone mid-animation". A server repeating a chunk does the same. Fix: per-row/chunk bitmap, or reset `cRowsGot`/`fMeta` on re-send.
+
+**6. FWindowChunkQt 7722 — bug, heap write out of bounds from wire input. Confidence high, read.**
+`iTime + nRows > pwin->req.nTime` is u32 and can wrap (iTime = 0xFFFFFFFF, nRows = 2, payload for 2 rows passes; the copy writes at `((o*nTime)+iTime)*6` doubles, far outside `rgcol`). Also the chunk's `prec` byte is unchecked: anything but F32 is read as f64, and an f32 chunk for an f64 chart window is accepted, silently breaking bit-exactness.
+
+**7. ClampEphSrvReqQt 7435 vs the plan built at 8023/8124 — bug, OOB read. Confidence high, read.**
+Groups are capped at `eph::kMaxObjs`, not `welc.maxObjs`. A WELCOME with maxObjs = 20 and a 30-object group: the clamp cuts the request to 20 but plan entries 20–29 keep `iObj` 20–29, and FSrvPlanetQt reads `rgret[iObj]` (8206), `rgserr`, `rgcol` past their 20-object size (Q_ASSERT in debug, garbage/OOB in release). Today's ephd advertises 64; any other server or configuration triggers it.
+
+**8. SrvWarnOnceQt 8159 — bug, soft-failure semantics. Confidence high by reading; hang probed, box count not.**
+"Once" is keyed only on jd, and PrintWarningQt is modal. A chart that casts many instants (ephemeris listing, transit searches, graphic ephemerides, relationship charts) raises one modal per jd while the server is down; probe: `-E` under `=bS` hung offscreen on a modal once the GUI took over. Conversely, recasting the same jd later is silent with all objects at 0 Aries. Each modal is another nested event loop (finding 1). Plan §8 says "once per cast"; a per-ComputeEphem generation counter plus a session-level rate limit honours that and lesson 3.
+
+**9. FSrvPlanetQt 8223 — risk. Confidence medium, read.**
+`jde` is rebuilt from global `is.rDeltaT` without checking `is.jdDeltaT == jd`. Anything that recomputes delta-t between prefetch and reads (a nested cast or SwissHouse during the wait, a modal, a Horizons fetch in the loop) changes it: chart windows fail the exact `*pdt == 0.0` ("no row at this instant"), animation rows read at the wrong offset. Fix: store `jde` in `s_plan`. Related: a Horizons fetch or modal inside the ComputeEphem loop that runs a nested cast rebuilds `s_plan` for another jd and the outer cast's remaining objects fail.
+
+**10. SrvPrefetchQt / SrvPrefetchNextQt 8085-8088 → PwinOpenQt 7688 — risk, use-after-free. Confidence medium, read.**
+The covering window from PwinCoverQt is not in `s_plan` yet when SrvPrefetchNextQt opens the next window; the new one is prepended, pushing the cover to index 1, and eviction can take it if everything behind it is in the plan (cap 8: needs ≥7 earlier groups; the suite's cap-1 hook: one group). `s_plan` then points at freed memory, read by the wait loop and FSrvPlanetQt. The failed-window delete at 8100-8103 also skips PwinCoverQt's FWindowInPlanQt check; safe today only because group keys are unique.
+
+**11. Reconnect storm — risk. Confidence medium, read.**
+Every WELCOME resets `msBack` to 1 s and `mpReq` entries never expire, so a request that crashes the server (or makes it drop the connection) is re-sent on every reconnect about once a second, forever, while the window waits. A server that WELCOMEs then drops loops the same way.
+
+**12. EphSrvMessage 7358 and the text lambda 7414 — risk. Confidence low-medium.**
+`esrv.pws->close()` without a NULL check; every lambda acts on global `esrv.pws` rather than the socket that signalled; EphSrvFinalizeQt and EphSrvDropped `deleteLater` without `disconnect()`. A late signal from a dying socket can reach handlers after `pws` is NULL or replaced — the suite exercises this, calling EphSrvFinalizeQt repeatedly while pumping events — and a late `disconnected` would re-arm `esrv.ptim` after Finalize. Separately, the `disconnected` lambda overwrites `strErr` whenever `error() != UnknownSocketError`, possibly replacing the retained version-mismatch text §4 wants shown (whether Qt sets RemoteHostClosedError there is unverified).
+
+**13. Local-only Swiss calls under backend 5 — risk.**
+GetSwissFlags turns `nSwissEph == 5` into SEFLG_JPLEPH and only the prefetch masks it. Direct local calls still carry it: FSwissPlanet at calc.cpp:1309/1410/2685/4448 (progressed arc, eclipse globe, -XE asteroids) and GetSwissFlags users at 4072/4143/4420/4639 (stars, phases). They try a JPL file and fall back, possibly per call, and are not the Swiss answer the user picked. Stars were planned as kind-1 records (§5) and not built.
+
+**14. Smaller bit-exactness gaps (nits/risks).** The client never compares the server's `flagsUsed` with what it asked, so a server that fell back to Moshier returns "bit-exact" data silently. The server always adds SEFLG_SPEED while the local path drops it when `us.fTopoPos > 1` (unreachable from ComputeEphem today; only NCheckEclipseSolarLoc sets 2). Delta-t is computed on the client, and swe_deltat's tidal acceleration depends on which local files happen to be open (swi_get_tid_acc): a client with no files uses the DE431 default whatever the server's files are. Cached windows survive an address change or a server with different files.
+
+**15. qtdialog.cpp:5130-5132 — bug. Confidence high, read.**
+The comment says the Horizons mapping is fixed, but `FBetween(us.nSwissEph, 0, cmJPLWeb) ? us.nSwissEph` still maps nSwissEph 3 to `szEphem[3]` "Matrix Formulas": opening Calculation Settings with Horizons selected shows Matrix, and OK switches the backend to Matrix. Windows (wdialog.cpp:2345) maps through the FCm* macros.
+
+**16. Doc/code disagreements (nits).** §5 topo says `us.elvDef/1000` and `ciCore.lon`; the code sends meters and OO/AA, which is correct and matches the local path. §7's address field in the dialog does not exist. §3 says -0n leaves the entry in the combo; the code hides it. The Status section repeats the increment-4 paragraph and still calls increment 3 open. The shipped `astrolog.as` carries `=0n` and -0n cannot be turned off, so `-bS` is refused ("not allowed now") for anyone who loads it (probed) — by design, undocumented. A socket opened before -0n is set stays open.
+
+Checked and correct: the FSwissPlanetSpec split (calc.cpp:3733-3907) is behaviour-identical on the local path — every return path after the inversions goes through LRestore; the node method is read before restore; SE_INTP_PERG/APOG still becomes swe_calc with no center; swe_set_topo same condition and values; sid-mode side effect and SwissEnsurePath in the same order; fSidereal/rZodiacOffset post-processing after the restore. The prefetch skips exactly the loop's objects (FSkipEphem, type 5, type 4 under JPLWEB) with the same objOrbit/-YM rule. Group key: iflag, center, sid mode when sidereal, topo triple when topocentric; node method per object, correct. Request: kIflagCenter, TT with the -Yz0 override, JPLEPH→SWIEPH mask all right; FSrvPlanetQt's post-processing matches FSwissPlanet line for line (is.rSid, rZodiacOffset, rZodiacOffsetAll, xx order); the animation branch's dt is days against deg/day. Protocol: envelope length check, one WELCOME only in Connecting, version mismatch as refusal without setting fHad; an ERROR for an unknown id is harmless; id wrap skips 0; eviction removes `mpReq` entries. Settings: `-bS`/`-bW` arity right in both builds; the console build accepts `=bS` with a one-time warning and never reaches the fEphemFiles toggle; the writer emits `=bS` before `=b` and `=0n` and quotes `-bW`, with `""` reading back as default; each chart path's ClampEphSrvReqQt runs before its key is built.
+
+## Report: animation increment (`ebb87a0`)
+
+Probes ran against a scratch copy (`git archive ebb87a0` into `/nvm/work/review-anim/src`), with probe blocks added to qttest.cpp there, qt-test and qt-asan built, and only the `ephem-server-live` group run.
+
+**1. Use-after-free: the background prefetch can evict the window the cast is about to use.** qtdriver.cpp:7919-7925 (SrvPrefetchNextQt → PwinOpenQt) and 8085-8088. Bug; confidence high on the mechanism. Verified by ASan probe: heap-use-after-free, freed in PwinOpenQt:7693 from SrvPrefetchNextQt, read at SrvPrefetchQt:8128. The covering `pwin` is not yet in `s_plan` when SrvPrefetchNextQt opens the next window; it sits at index 1, and the eviction loop protects only index 0 and plan windows. Once the earlier groups' windows are pinned and cap-1 of them are listed, `pwin` itself is evicted and its dangling pointer is written into the plan, then read by the bounded wait and FSrvPlanetQt. Reproduced with cap 2 and a heliocentric chart (2 groups), minutes×5, 20-row windows. At the shipped cap of 8 it needs 8+ groups, with the 8th-or-later group reaching its middle in a frame where earlier opens did not already evict it. Fix: pin `pwin` (assign the plan entries, or exclude it) before SrvPrefetchNextQt.
+
+**2. An animation window near an ephemeris file's end fails the whole chart, and the animation stops.** qtdriver.cpp:8069-8088 with eph_srv.cpp:599-622. Bug; verified by probe. The server fails an object for the whole window if any row fails. A 1000-row window past the data's range (days rate from 2398-06-01 with the bundled sepl_18/seas_18) makes every body, the Sun included, fail on every frame: 3 warnings in 3 frames, "could not compute Sun (... not available for jd 2597796 ...)", largest difference 131°; the exact one-row cast at the same instant works. In the app PrintWarning (qtdriver.cpp:991) also negates gs.nAnim, so the animation halts with a message box and no exact recast. A window reaches 1000 × factor × step ahead, up to ~24 years at days×9; the same holds backward near a file's start, and for each asteroid file's own range.
+
+**3. Background prefetch never fires for steps of 120 s or less.** qtdriver.cpp:7920-7922 with FRowWindowQt's slack at 7832-7845. Bug; verified by probe. Covers seconds (any factor), all sub-second rates, "now", and minutes×1 (×2 is a floating-point coin toss). The "is the next window already covered" check probes the first row past the current window, and the current window's own 60 s slack accepts that instant, so the next window always looks covered. Probe with 20-row windows: seconds×1, 70 frames → one request, at frame 1; frames 21-70 read by extrapolating up to 50 s past the last row. Minutes×1 forward and backward → sends at frames 22, 43, 64, each a synchronous open after the slack runs out, nothing at the middle. At 1000 rows that is a blocking ~0.65 s cold stall at every window boundary for exactly the rates the feature targets; the suite tests only 300 s and 7200 s steps.
+
+**4. Off-grid frames get only first-order correction over up to half a row; errors reach arc-minutes.** qtdriver.cpp:7842-7845, 8230-8240. Bug (accuracy); verified by probe, triggers by reading. On a days grid dt can be up to 12 h and speeds are returned uncorrected. Probe (days rate, chart time moved 11.9 h inside a held window): Moon longitude 0.045° (2.7') off, latitude 0.037°, a speed field 0.17; at +6 h the largest field error 0.087. Real triggers: progressed charts (is.T moves ~236 s per day-frame, drifting to half-row offsets, calc.cpp:1686); the time-space midpoint (CastRelation, charts2.cpp:357-378) moves at half rate so every other frame sits at dt = 12 h and the Moon jitters; editing the chart time while a days/hours animation runs; auto-DST charts (a steady 1 h offset after a transition); local apparent time (equation-of-time drift). Suggestion: accept only |dt| ≤ ~1 s plus the delta-t slack, else open a window anchored at the frame (minutes/seconds grids already re-anchor that way when a DST jump exceeds half a row).
+
+**5. Cache cap of 8 thrashes once a chart has 5+ groups, or a relationship chart 3+.** qtdriver.cpp:7686-7695, cWindowSrvQt. Risk (performance); verified by probe plus a simulation matching it frame for frame. A single chart needs up to 2G windows at the middle; a relationship chart G static + G current + G next. With 2 groups: cap 3 → extra synchronous re-requests at frames 12, 22, 32; cap 2 (like G ≥ 8 at cap 8) → every frame in the second half of each window re-requests every group's full window.
+
+**6. The static chart of a relationship cast is also treated as a frame.** qtdriver.cpp:4577-4579 (the flag spans all of CastRelation). Risk; by reading. The natal chart of a bi-wheel or transit chart is read from f32 rows (~1.5e-5 off) instead of exact f64, costs an extra 1000-row window per group at animation start (doubling the cold stall), and takes cache slots (feeds #5).
+
+**7. Stop paths that skip the exact recast.** qtdriver.cpp:991-992 (the warning box negates gs.nAnim), switch.cpp:2030 (`-Xn`/`=Xn` from a macro or the command line), `-Xnp`. Risk; by reading. Each stops or pauses without SetAnimRunningQt, so the approximate chart stays on screen and the flag stays set until a later start and stop; #2 hits this path directly. Saving or copying a text chart while running also uses approximate values; the commit's claim holds only after a stop through the menu.
+
+**8. Speed fields are not held to the stated tolerance.** qtdriver.cpp:8236-8238; the qttest tolerance checks. Nit/test gap; by probe. `dir`/`diralt`/`dirlen` are the row's speeds; once a frame is extrapolated (#3's slack region) Moon speed is off by 2.1e-4 (seconds rate) and 2.5e-4 (minutes rate) against the 5e-5 asserted over all eight fields. The half-second test (12 frames) never leaves its window; run to 70 frames it measures 6.4e-5.
+
+**9. Test coverage.** Nit. Nothing tests steps ≤ 120 s for the prefetch (#3), more groups than the cap under animation (#1, #5), a window crossing an ephemeris boundary (#2), or relationship, progressed and midpoint charts. The existing assertions are not vacuous: the months loop ends with fAnim set by the last window; cGroup from frame 0 is sound after ClearWin; the stop test proves the chart differed first; pausing during the 30 ms pumps suppresses the app timer, and the reentrancy guard covers the bounded wait.
+
+Checked and correct: rate numbers (1/2/3/4 seconds/minutes/hours/days, 11-13 sub-second, 10 now; 5-9 return 0 and stay exact); direction and factor (gi.nDir clamped 1-9 by -Xnf and the menu, 0 guarded; the backward anchor puts the frame on the last row; the backward middle trigger is right, frame 11 = row 9 of 20); row arithmetic (no uint32 underflow in `r*2` vs `n-1` for n ≥ 1; nTime 1 or 2 behaves; uint64 row times do not overflow; jdStart rounding over successive windows ~4e-5 s per window); delta-t drift within the slack for these grids; units (degrees, AU, per-day speeds over TT days; Mod() of longitude and sidereal/zodiac offsets applied after, as the exact path does); the cache key includes stepSeconds, precision and flags, so shapes cannot collide across rates; Step Forward/Backward, the GIF generator, map rotation and casts outside a tick stay exact; switching to a calendar rate mid-animation is exact from the next frame (a harmless extra recast on stop); the eviction pin (ClearWindowsSrvQt resets plan pointers, PwinCoverQt never deletes a failed window in the plan, the chart path's failed-window delete cannot hit one); memory ~3 MB per 64-object × 1000-row window, 24 MB at the cap.
