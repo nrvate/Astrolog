@@ -29,46 +29,41 @@ version 3, and this section is the design authority behind it.
   `ephemeris-prometheia-0b`. Their last reader run passed **85/85** on the
   previous fixture set with the checksum verified independently.
 
-### The protocol is NOT locked yet. One drop stands between here and the lock.
+### The drop is encoded, gated and sent. The reader verdict is the lock.
 
 Section 3 was settled with the Prometheia maintainers over many rounds
 (work log items 0, 0b, 0c). Everything agreed is written down: the prose is in
-§3.5a, the reasoning and measurements in §8. **What has not been done is the
-part that changes bytes.** In order, and as ONE commit, because a fixed-part
-change invalidates every fixture the other side has already verified and their
-reader run is the gate:
+§3.5a, the reasoning and measurements in §8. The one drop that changes bytes
+has been built, verified and sent to them as one set (work log item 4). What
+remains is their independent reader's verdict on that set -- the gate. Green
+locks §3; one disagreement means nobody locks and §3 changes until only one
+reading survives. The set, as committed:
 
-1. **`u8 corrApplied` in DATA's META**, immediately after `metaFlags`. There is
-   no reserved byte in that fixed part, so `resolvedNaif` and `firstFailedRow`
-   shift by one. Free now; impossible after the lock. Its meaning is
+1. **`u8 corrApplied` in DATA's META**, immediately after `metaFlags`.
+   `resolvedNaif` and `firstFailedRow` shift by one. Its meaning is
    **structural availability** -- the corrections this engine *can* apply to
-   this object, for this kind and this observer. A bit is clear when the engine
-   cannot apply that term here at all, and stays set when the correction ran
-   and contributed nothing. Three bits used (`kCorrLightTime`,
+   this object, for this kind and this observer. A bit is clear when the
+   engine cannot apply that term here at all, and stays set when the correction
+   ran and contributed nothing. Three bits used (`kCorrLightTime`,
    `kCorrDeflection`, `kCorrAberration`, already in `ephproto.h`), five spare;
    unknown high bits are reserved and clients MUST ignore them. It is
    **diagnostic**: a conformance harness MUST NOT gate comparisons on it
-   (work log 0c, the retraction).
-   - For this server, from the measurements in 0c: kind 1 planetary reports
-     deflection and aberration and NOT light time; kind 1 lunar reports light
-     time and NOT the other two.
-2. **Resolve the §3.4 contradiction** recorded in work log item 2: the CANCEL
-   paragraph invites flushing each block as it completes, while DATA requires
-   the meta-present flag on chunk 0 and META's `rowsOk`, `firstFailedRow` and
-   `partial` are facts about the WHOLE answer. A block cannot be flushed
-   before the last row without writing those before they are known. This
-   server computes in blocks and streams when the answer is whole, which is
-   the normative reading. Needs either a "metadata may be revised on the last
-   chunk" rule or the suggestion withdrawn. **Decide it before the lock, not
-   after.**
-3. **Regenerate the conformance fixtures** (`tools/ephproto4-fixtures.py`) --
-   item 1 moves the bytes of every fixture carrying a DATA message -- and
-   write **one new `# set-sha256`** into `ephsrv/conformance/MANIFEST.tsv`.
-4. **Send the set whole** to Prometheia: `ephsrv/ephproto.h`,
-   `ephsrv/registries.json` and the fixtures with their digest. Their
-   independent reader's verdicts on THAT set are the gate. Green locks §3; one
-   disagreement means nobody locks and §3 changes until only one reading
-   survives.
+   (work log 0c, the retraction). Normative wording in §3.4 (the META table).
+2. **The §3.4 contradiction resolved as drafted** (work log item 2): the
+   early-flush suggestion is withdrawn; a server MUST NOT flush each block as
+   it completes, because META's `rowsOk`, `firstFailedRow` and `partial` are
+   facts about the whole answer. Put to Prometheia as an explicit question in
+   the drop; theirs to confirm or counter.
+3. **Conformance fixtures regenerated** (`tools/ephproto4-fixtures.py`) with
+   the new fixed part, and one new `# set-sha256` in
+   `ephsrv/conformance/MANIFEST.tsv`
+   (`1c934c7da19965f21ded99a0a53e36eaa3c45434cfbfaeabddafaf154ea454ec`,
+   recomputed independently from the on-disk bytes).
+4. **The set sent whole** to Prometheia (`ephemeris-prometheia-0b`):
+   `ephsrv/ephproto.h`, `ephsrv/registries.json` and the fixtures with their
+   digest, plus the §3.4 question and the corrApplied wording question. Their
+   reader's verdicts on THAT set are the gate; their header
+   leniency/strictness review rides in the same reply.
 
 **Then stop and ask the maintainer about phases 3-7.** They were never
 approved as automatically next; §7 lists them and they are a separate
@@ -419,10 +414,23 @@ META:
 | u16 | errCode — A.17; the first failure's code, else 0 |
 | u8 | sourceIdx — index into the source table, 0xFF if none |
 | u8 | metaFlags — A.18 |
+| u8 | corrApplied — A.7 bits; see below |
 | i32 | resolvedNaif — the NAIF id actually computed, or INT32_MIN when not applicable |
 | u32 | firstFailedRow — 0xFFFFFFFF if none |
 | str8 | name — display name, e.g. `Ceres`, `Moon mean apogee` |
 | str8 | errText — the first failure's text, else empty |
+
+`corrApplied` says which correction terms are live for this object here --
+**structural availability**, not the request's mask. A bit is clear when the
+engine cannot apply that term to this object, for this kind and this
+observer, at all; it stays set when the term's model ran and contributed
+nothing (a deflection that returns zero far from the Sun has still been
+applied). Three bits from A.7 (`kCorrLightTime`, `kCorrDeflection`,
+`kCorrAberration`); the five low spares are zero, and unknown high bits are
+reserved: clients MUST ignore them and servers MUST NOT refuse them. The
+field is **diagnostic only**: it explains a difference; it does not predict
+one, and equality of it is neither necessary nor sufficient for two answers
+to agree. A conformance harness MUST NOT gate comparisons on it.
 
 **Values.** Objects in request order. For each object come the chunk's rows in
 order, and each row holds `nCols = 6 + popcount(columnsPresent)` values (f64 or
@@ -456,8 +464,12 @@ The payload is empty, and the envelope's requestId names the request.
   rows across loop turns rather than in one callback: otherwise the work is
   finished by the time the CANCEL is read and only bytes remain to drop, and a
   large request blocks that loop for everyone (64 objects × 20,000 rows measured
-  13.7 s, EPHEMERIS_REVIEW.md S4). Flushing each block as it completes also
-  starts the client's first rows sooner and applies backpressure earlier.
+  13.7 s, EPHEMERIS_REVIEW.md S4). A server MUST NOT flush each block as it
+  completes: DATA carries the metadata on chunk 0, and META's `rowsOk`,
+  `firstFailedRow` and `partial` are facts about the whole answer, which an
+  early flush would have to write before they are known. A server that
+  computes in blocks therefore holds the finished ones and streams when the
+  answer is whole.
 - **Already answered completely, or unknown.** The server sends nothing.
 - **Chunks already in flight.** The client MUST ignore chunks that arrive for a
   cancelled id.
@@ -810,7 +822,8 @@ may select another from A.20):
   is a construction rather than an emitter, so a proper SUBSET of the three
   terms is well defined only within one implementation. Two answers are
   interoperable when all three terms were applied, or when none were. A server
-  MAY answer a proper subset, and MAY report which terms it applied; a client
+  MAY answer a proper subset, and MAY report which terms it applied in META's
+  `corrApplied`; a client
   MUST NOT compare such an answer across servers. This is the reason the
   astrometric lunar nodes of two conforming servers may differ by 19", while
   their apparent ones agree to 0.0002".
@@ -1723,6 +1736,54 @@ the gates the phase touches.
      apparent-vs-astrometric displacement is 11.424861", its longitude
      difference 11.361744", and the Moon sits at 5.17 degrees latitude.
      Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
+
+4. **The corrApplied drop, encoded and sent (2026-09-17).** Item 1 of the
+   drop list above, plus the §3.4 withdrawal (item 2), the regenerated
+   fixtures (item 3) and the set sent to Prometheia (item 4). One commit.
+   - **Every encoding fact was re-measured live before it was encoded** --
+     a C probe against the fork's own libswe.a (`/nvm/work/corrprobe.c`),
+     the same `_r` entry points the server calls, at one instant under
+     explicit iflags. The per-call classification that `CorrectionsLive()`
+     encodes, each row measured: `swe_calc_pctr` honours all three terms
+     as asked (aberration from Jupiter's centre 8.77"); `swe_nod_aps`
+     never applies light time (its underlying positions always carry
+     SEFLG_TRUEPOS; only aberration and deflection are applied afterwards),
+     forces deflection off for the Moon and aberration off for a
+     non-heliocentric one; the Moon's named osculating and interpolated
+     points (`lunar_osc_elem`) carry light time only (TRUEPOS vs default
+     differs on the true node, the osculating apogee and both interpolated
+     points, not under NOABERR or NOGDEFL); the mean lunar elements are
+     analytic and carry nothing; the fixstar path applies deflection and
+     aberration and no light time at all; and `plaus_iflag()` narrows a
+     heliocentric or barycentric body to light time only. Two of the 0c
+     sentences survived re-measurement; one swetest letter trap did not
+     survive the writing of it -- swetest's `-p` letters J..Z are the
+     FICTITIOUS bodies (Jupiter is the digit 5), and a first battery
+     measured Cupido and Vulkanus where it named Jupiter.
+   - **The field** shifts `resolvedNaif` and `firstFailedRow` by one in
+     DATA's META fixed part, in `ephsrv/ephproto.h` (both directions),
+     populated in `eph_srv.cpp` as the profile's mask intersected with
+     `CorrectionsLive()` (ephswiss.h). Diagnostic only; unknown high bits
+     reserved, tolerated and never refused (a fixture carries 0x87 for
+     exactly that).
+   - **§3.4 resolved as drafted:** the early-flush sentence is withdrawn;
+     a server MUST NOT flush each block as it completes, because META's
+     `rowsOk`, `firstFailedRow` and `partial` are facts about the whole
+     answer. This server already holds blocks and streams when the answer
+     is whole. Put to Prometheia as an explicit question with the drop.
+   - **Fixtures regenerated** (92 files, every DATA-carrying one moved);
+     new set-sha256
+     `1c934c7da19965f21ded99a0a53e36eaa3c45434cfbfaeabddafaf154ea454ec`,
+     recomputed independently from the on-disk bytes and equal.
+   - **Sabotage-proven:** flipping one corrApplied bit in `ReadMeta` fails
+     the codec test 7 ways (every fixture re-encode plus the dedicated
+     round-trip check); restored, 311 checks and 91 fixtures pass.
+   - **Gates:** golden 149 comparisons bit-exact; ROBUST PASS; make check
+     all clear, suite 5772 passed, 0 failed. The suite's first run failed
+     the live group with 58 connection failures -- its own freshness check
+     had the reason: "astrolog-ephd is newer than its sources". A stale
+     server still speaking the old META layout reads exactly like a
+     protocol bug; `make ephsrv` and everything passed.
 
 3. **The five debts of the protocol pass, cleared (2026-09-17).** What phase 2
    deferred, and the five §3 rules written after its spec freeze.

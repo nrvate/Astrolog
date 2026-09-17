@@ -315,6 +315,48 @@ inline uint16_t MapObject(const Object &o, int32_t nNative, const Profile &pf,
   return kOErrNone;
 }
 
+// 3.4 META corrApplied: the correction terms live in the Swiss call that
+// answers this object -- structural availability, not the mask the request
+// asked for. Measured on the fork, not inferred (work log 0c, re-verified
+// live before encoding): the caller intersects this with the profile's mask.
+inline uint8_t CorrectionsLive(const SwissCall &c, uint8_t observer) {
+  switch (c.kind) {
+    case kCallPctr:
+      // Honours every term as asked, relative to the centring body
+      // (light time unless SEFLG_TRUEPOS; aberration and deflection after).
+      return kCorrMask;
+    case kCallNodAps:
+      // Light time is never applied: the underlying positions are always
+      // true ones (iflg0 carries SEFLG_TRUEPOS) and only aberration and
+      // deflection are applied afterwards, to the point. For the Moon
+      // deflection is forced off, and aberration runs for a heliocentric
+      // observer only (swecl.c swe_nod_aps_r).
+      if (c.ipl == SE_MOON)
+        return observer == kObsHelio ? kCorrAberration : 0;
+      return kCorrDeflection | kCorrAberration;
+    case kCallFixstar:
+      // Deflection and aberration, honoured as asked for a geocentric or
+      // topocentric observer; the star path applies no light time at all
+      // (sweph.c's fixstar block), and plaus_iflag() forces the pair off
+      // for a heliocentric or barycentric one.
+      return observer == kObsHelio || observer == kObsBary ? 0
+                              : (kCorrDeflection | kCorrAberration);
+    default:  // kCallCalc
+      // The Moon's osculating and interpolated named points are computed by
+      // lunar_osc_elem(), which consults exactly one flag, SEFLG_TRUEPOS:
+      // light time is live, aberration and deflection are never consulted.
+      // The mean lunar elements are analytic: no term applies to them.
+      if (c.ipl == SE_TRUE_NODE || c.ipl == SE_OSCU_APOG ||
+          c.ipl == SE_INTP_APOG || c.ipl == SE_INTP_PERG)
+        return kCorrLightTime;
+      if (c.ipl == SE_MEAN_NODE || c.ipl == SE_MEAN_APOG) return 0;
+      // A body: plaus_iflag() turns aberration and deflection off inside
+      // every heliocentric and barycentric call; light time stays live.
+      return observer == kObsHelio || observer == kObsBary ? kCorrLightTime
+                                                           : kCorrMask;
+  }
+}
+
 // A.11: the Swiss sidereal mode token for SE_SIDM_* number n, or NULL.
 inline const char *ZodiacTokenForSwissMode(int n) {
   if (n >= 0 && n < kZodiacTokenCount - 1) return kZodiacTokens[n];

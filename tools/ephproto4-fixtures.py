@@ -165,10 +165,10 @@ def question(time_bytes, profiles, objects, delta_t=NAN, ext=None,
     return b + tlv(ext or [])
 
 
-def meta(rows_ok, err=0, source_idx=0, flags=0, resolved=-2**31,
+def meta(rows_ok, err=0, source_idx=0, flags=0, corr_applied=0, resolved=-2**31,
          first_failed=0xFFFFFFFF, name="", err_text=""):
-    return (i32(rows_ok) + u16(err) + u8(source_idx) + u8(flags) + i32(resolved) +
-            u32(first_failed) + str8(name) + str8(err_text))
+    return (i32(rows_ok) + u16(err) + u8(source_idx) + u8(flags) + u8(corr_applied) +
+            i32(resolved) + u32(first_failed) + str8(name) + str8(err_text))
 
 
 def sources(names):
@@ -326,9 +326,10 @@ def fixtures():
                           ext=[(0x0003, str8("iau2006")), (0x8001, str8("DE440")),
                                (0x8002, str8("sbdb/2026-09-16"))]), request_id=7))
     m = sources(["JPL DE440", "SBDB 2026-09-16"])
-    m += meta(2, source_idx=0, name="Sun", resolved=10)
+    m += meta(2, source_idx=0, name="Sun", resolved=10, corr_applied=7)
     m += meta(1, err=3, source_idx=1, flags=(1 << 2) | (1 << 3), resolved=20000001,
-              first_failed=1, name="Ceres", err_text="outside catalog coverage")
+              first_failed=1, name="Ceres", err_text="outside catalog coverage",
+              corr_applied=7)
     add("data_chunk0_meta", "s2c", DATA, "ok",
         "f64, sigma+ayanamsa columns, a partial object with a NaN row",
         envelope(DATA, data_chunk(0, 0, 2, 2, 0, 0b101, 0b0011, m,
@@ -343,14 +344,14 @@ def fixtures():
            f32(1e-7) + f32(0.002) + b"".join(f64(c) for c in
                                 [0.001, 0.0005, 0.00001, -0.0021, 0.0001, 0.0, 0.0002, 0.0, 0.0]))
     segd = (u32(0) + u8(0b101) + u8(0) + u16(1) + u16(0) + u16(1) + u32(0) +
-            sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301) +
+            sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301, corr_applied=1) +
             u8(0) + u32(1) + seg)
     add("segdata_moon", "s2c", SEGDATA, "ok", "one degree-2 segment spanning 31 days, no zodiac",
         envelope(SEGDATA, segd, request_id=6))
     ayanseg = (time(J2000 + 15.0, 0.0) + f64(15.5) + u8(1) + b"\0\0\0" + f32(0.01) +
                f64(24.74) + f64(0.00057))
     segd_sid = (u32(0) + u8(0b101) + u8(0) + u16(1) + u16(0) + u16(1) + u32(0) +
-                sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301) +
+                sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301, corr_applied=1) +
                 u8(1) + u8(0) + u32(1) + ayanseg + u32(1) + seg)
     add("segdata_sidereal_ayanamsa", "s2c", SEGDATA, "ok",
         "tropical coefficients with the profile's ayanamsa series beside them",
@@ -374,16 +375,17 @@ def fixtures():
                           ext=[(0x8003, str8("prometheiad 0.2/de440/sbdb#1a2b3c4d"))]),
                  request_id=10))
     m2 = sources(["Swiss Ephemeris files"])
-    m2 += meta(1, source_idx=0, flags=(1 << 5) | (1 << 6), name="Aldebaran")
+    m2 += meta(1, source_idx=0, flags=(1 << 5) | (1 << 6), name="Aldebaran",
+               corr_applied=6)
     add("data_star_nodistance", "s2c", DATA, "ok",
         "a star without a parallax: noDistance and ratesApprox",
         envelope(DATA, data_chunk(0, 0, 1, 1, 0, 0b101, 0, m2,
                                   [[[69.7, -5.46, 1e9, 0.0, 0.0, 0.0]]]), request_id=11))
     # 3.1: a client tolerates registry values a newer server sends.
     m3 = sources(["Swiss Ephemeris files"])
-    m3 += meta(1, source_idx=0, flags=(1 << 7), name="Sun")
+    m3 += meta(1, source_idx=0, flags=(1 << 7), name="Sun", corr_applied=0x87)
     add("data_meta_unknown_flag", "s2c", DATA, "ok",
-        "META with a flag bit this version does not define: tolerated",
+        "META with a flag bit and a corrApplied bit past bit 2: tolerated",
         envelope(DATA, data_chunk(0, 0, 1, 1, 0, 0b101, 0, m3,
                                   [[[280.1, 0.0, 0.983, 1.019, 0.0, 0.0]]]), request_id=12))
     add("data_chunk_future_flag", "s2c", DATA, "ok",

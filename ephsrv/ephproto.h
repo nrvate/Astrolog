@@ -1152,6 +1152,13 @@ struct Meta {
   int32_t rowsOk = 0;
   uint16_t errCode = kOErrNone;
   uint8_t sourceIdx = kSourceNone, flags = 0;
+  // 3.4: which correction terms are live for this object here -- structural
+  // availability (A.7 bits), not the request's mask. Clear when the engine
+  // cannot apply the term at all; set when its model ran, even when it
+  // contributed nothing. Diagnostic only: a conformance harness MUST NOT
+  // gate comparisons on it (3.5a). Unknown high bits are reserved; clients
+  // ignore them.
+  uint8_t corrApplied = 0;
   int32_t resolvedNaif = kNaifNone;
   uint32_t firstFailedRow = kRowNone;
   std::string name, errText;
@@ -1171,6 +1178,7 @@ inline void ReadMeta(Reader &r, Verdict &v, Meta *m, size_t nSources) {
   m->errCode = r.u16();
   m->sourceIdx = r.u8();
   m->flags = r.u8();
+  m->corrApplied = r.u8();
   m->resolvedNaif = r.i32();
   m->firstFailedRow = r.u32();
   m->name = ReadText(r, v, "object name is not text");
@@ -1180,12 +1188,14 @@ inline void ReadMeta(Reader &r, Verdict &v, Meta *m, size_t nSources) {
   if (m->sourceIdx != kSourceNone && m->sourceIdx >= nSources)
     v.Malformed("META names a source that is not in the table");
   // 3.1: a client tolerates registry values it does not know from a server.
-  // A META flag bit, or an errCode, added after this build was released says
-  // something this client cannot act on, not that the server is broken. (A
-  // column bit is different and stays refused: it changes the row width.)
+  // A META flag bit, an errCode, or a corrApplied bit added after this build
+  // was released says something this client cannot act on, not that the
+  // server is broken. (A column bit is different and stays refused: it
+  // changes the row width.)
 }
 inline void WriteMeta(Writer &w, const Meta &m) {
   w.i32(m.rowsOk); w.u16(m.errCode); w.u8(m.sourceIdx); w.u8(m.flags);
+  w.u8(m.corrApplied);
   w.i32(m.resolvedNaif); w.u32(m.firstFailedRow); w.str8(m.name); w.str8(m.errText);
 }
 

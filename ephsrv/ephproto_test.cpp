@@ -572,7 +572,15 @@ int main(int argc, char **argv) {
     eph::EncodeData(&dp, d);
     Check(eph::ParseData(dp.data(), dp.size(), &dback, &why) == eph::kOk &&
               dback.meta[0].flags == 0x80, "an unknown META flag bit is tolerated");
+    meta.corrApplied = 0x87;    // the three A.7 bits plus one past them
+    d.meta[0] = meta;
+    dp.clear();                 // Writer appends; encode fresh
+    eph::EncodeData(&dp, d);
+    Check(eph::ParseData(dp.data(), dp.size(), &dback, &why) == eph::kOk &&
+              dback.meta[0].corrApplied == 0x87,
+          "corrApplied round-trips, high bits included: reserved, never refused");
     d.columnsPresent = 0x10;    // a column bit is not: it changes the row width
+    dp.clear();
     eph::EncodeData(&dp, d);
     Check(eph::ParseData(dp.data(), dp.size(), &dback, &why) != eph::kOk,
           "an unknown column bit is still refused");

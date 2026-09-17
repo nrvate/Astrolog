@@ -1,5 +1,5 @@
 # file	direction	type	expect	note
-# set-sha256 6b3b9157caf8a3fc5c56163e26087714b40356103dfbcdb00e0f85fe0f6d9bcc
+# set-sha256 1c934c7da19965f21ded99a0a53e36eaa3c45434cfbfaeabddafaf154ea454ec
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -20,7 +20,7 @@ segdata_sidereal_ayanamsa.hex	s2c	15	ok	tropical coefficients with the profile's
 request_deltat_table.hex	c2s	3	ok	a UT1 grid with the client's own delta T table (TT instants, ascending)
 request_dataset_pin.hex	c2s	3	ok	a critical datasetId pin
 data_star_nodistance.hex	s2c	4	ok	a star without a parallax: noDistance and ratesApprox
-data_meta_unknown_flag.hex	s2c	4	ok	META with a flag bit this version does not define: tolerated
+data_meta_unknown_flag.hex	s2c	4	ok	META with a flag bit and a corrApplied bit past bit 2: tolerated
 data_chunk_future_flag.hex	s2c	4	ok	a chunkFlags bit this version does not define: tolerated
 error_unregistered_code.hex	s2c	5	ok	an ERROR code past the registry: still an error, still retryable
 error_rate_limited.hex	s2c	5	ok	ERROR 6, retryable, retry in 1500 ms

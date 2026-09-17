@@ -1029,6 +1029,10 @@ static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
     return;
   }
   m.resolvedNaif = prep->c.resolvedNaif;
+  // 3.4 META corrApplied: which terms are live in the call this object is
+  // answered by, intersected with the mask the request asked for (the field
+  // is what the engine applied, not what it was offered).
+  m.corrApplied = pf.corrections & eph::swiss::CorrectionsLive(prep->c, pf.observer);
   if (prep->c.fApproximated) m.flags |= eph::kMetaApproximated;
   if (!pf.speeds) m.flags |= eph::kMetaNoSpeeds;
   // 3.5a: Swiss's rates are its own analytic derivatives and differ from
