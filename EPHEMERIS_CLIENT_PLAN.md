@@ -56,8 +56,8 @@ QT_GUI_PLAN.md.
   ladder is exponential, 1s doubling to 8s, and Cancel exits cleanly).
 - **The fork has no open review findings**: `EPHEMERIS_REVIEW.md` F1-F11
   are all fixed or closed there, F9 last (ts.13).
-- **Protocol 2 is landed** on branch `ephdefer` (worktree
-  `/nvm/work/ephdefer`; 2026-09-16, review items S4, S9, S12, S-fork,
+- **Protocol 2 is landed** on `qt` (squash `8d6d1d1` of branch
+  `ephdefer`, kept for review; 2026-09-16, review items S4, S9, S12, S-fork,
   T8): WELCOME carries `maxCells`, the work bound per REQUEST -- the
   client clamps a window's rows to it in `ClampEphSrvReqQt()`, alongside
   its existing clamps. A failed row is NaN in all six columns and

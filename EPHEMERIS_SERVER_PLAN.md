@@ -49,21 +49,19 @@ Everything below is landed and pushed; this section is the resume pointer.
   header dependencies, so a header-only edit re-archives stale objects
   (its own tests/ fixed this in 69495ff; the root build has not — small
   follow-up commit waiting on that repo).
-- **Green today:** server verified end-to-end (8 checks, work log item 1);
-  golden gate 70 columns bit-exact; soak gate 100k files, 0.11s startup,
-  zero scans, fds stable; cache gate (unit + live, work log item 7);
-  bench numbers recorded in §9; Astrolog quick suite 5649/0 with client
-  increment 1 included.
-- **Open work, in order:** client increments 3 and 4
-  (EPHEMERIS_CLIENT_PLAN.md §10): 3 = animation grid + f32 windows, 4 =
-  required-server dialog + exit ladder. Client increment 2 is landed
-  (client work log item 3): the `ephem-server-live` suite group casts on
-  the real server and matches the local Swiss path on the bytes. The server's four increments are all landed;
-  the bench numbers client 2 sizes its windows against are in work log
-  item 7 (a cold 30-body 1000-row window costs the server ~0.65 s to
-  compute, a hot one ~3 ms to deliver, so the prefetch must be issued
-  well before the window runs out and the 50%-consumed rule of the client
-  plan's §6 leaves seconds of margin).
+- **Green today (2026-09-17):** all five gates pass
+  (`tools/ephsrv-{golden,robust,cache,bench,soak}.sh`; golden 88 columns
+  bit-exact, with its heliocentric leg and topocentric legs at Greenwich
+  and Sydney), and `make check` is all clear with the live group
+  included (suite 5757/0).
+- **Open work: none.** The client's four increments are all landed:
+  increment 3 plus the full review's fixes as `11a672c`, protocol 2
+  (review items S4, S9, S12, S-fork, T8; work log item 10) as `8d6d1d1`
+  from branch `ephdefer`, and increment 4 (the required-server dialog)
+  as `df5c63b` from branch `ephclient4`. Both branches stay for review.
+  Optional, if the maintainer asks: a Swiss-vs-Moshier sweep net for the
+  bundled `ephem/` (EPHEMERIS_REVIEW.md B3), and header dependencies in
+  the fork's root Makefile (above).
 
 ---
 
