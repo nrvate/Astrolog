@@ -11,7 +11,7 @@
 //                [--expect-rows N] [--repeat N] [--latency FILE] [--quiet]
 //                [--tt] [--nodaps id,point,method[;...]]
 //                [--sleep-ms MS] [--burst N] [--cycles N] [--hello N]
-//                [--tls] [--ca FILE] [--sni NAME]
+//                [--tls] [--ca FILE] [--sni NAME] [--proto N] [--token T]
 //
 // Sends HELLO, prints WELCOME unless --quiet, sends one REQUEST, collects
 // the DATA chunks, and on --out writes one line per object per row in
@@ -42,6 +42,16 @@
 // refused has to see the refusal. A failed handshake exits 3 with
 // OpenSSL's reason on stderr, so a gate can tell it from a refused
 // connection (2).
+//
+// --proto N speaks protocol N (default the newest): HELLO names N, every
+// message is written in N, and an answer in a version above N is a
+// failure -- so --proto 2 is an honest version-2 client for the
+// compatibility gate, and --proto 1 a client too old for the server, which
+// must be refused with an ERROR it can read. --token sends a token in a
+// version-3 HELLO. An ERROR in answer to HELLO prints "server ERROR <code>"
+// and exits 2. --no-hello skips HELLO and sends the REQUEST straight away,
+// after --idle-ms if given, for the gate that requires HELLO first and the
+// one that requires a silent connection to be closed.
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -66,6 +76,20 @@
 #include "ephproto.h"
 
 using namespace eph;
+
+// The protocol this client speaks (--proto), and the envelope parse that
+// goes with it: every version from the lower of it and kProtoMin up to it.
+static uint8_t gProto = kProtoVersion;
+static bool parseEnvelopeAs(const uint8_t *src, Envelope *out) {
+  uint8_t lo = gProto < kProtoMin ? gProto : kProtoMin;
+  if (getU16(src) != kMagic || src[2] < lo || src[2] > gProto) return false;
+  out->version = src[2];
+  out->type = getU16(src + 4);
+  out->flags = src[3];
+  out->requestId = getU32(src + 8);
+  out->payloadLen = getU32(src + 12);
+  return true;
+}
 
 // Bytes over-read by the handshake reader; drained by readFull.
 static std::vector<uint8_t> gPending;
@@ -279,7 +303,7 @@ int main(int argc, char **argv) {
              *szSid = nullptr, *szTopo = nullptr, *szJpl = nullptr,
              *latencyFile = nullptr, *szNodAps = nullptr;
   bool fTT = false, fTls = false;
-  const char *szCa = nullptr, *szSni = nullptr;
+  const char *szCa = nullptr, *szSni = nullptr, *szToken = nullptr;
   uint16_t port = kDefaultPort;
   std::vector<uint32_t> ids;
   double jd = 2451545.0;
@@ -287,7 +311,8 @@ int main(int argc, char **argv) {
   int precision = 0, center = 0;
   uint64_t iflag = 0;
   bool quiet = false;
-  uint32_t sleepMs = 0, burst = 0, cycles = 0, nHello = 1;
+  uint32_t sleepMs = 0, burst = 0, cycles = 0, nHello = 1, idleMs = 0;
+  bool fNoHello = false;
   double burstStep = 1.0;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];
@@ -320,10 +345,14 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--burst") && next(&v)) burst = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--cycles") && next(&v)) cycles = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--hello") && next(&v)) nHello = (uint32_t)strtoul(v, nullptr, 10);
+    else if (!strcmp(a, "--no-hello")) fNoHello = true;
+    else if (!strcmp(a, "--idle-ms") && next(&v)) idleMs = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--burst-step") && next(&v)) burstStep = atof(v);
     else if (!strcmp(a, "--tls")) fTls = true;
     else if (!strcmp(a, "--ca") && next(&v)) szCa = v;
     else if (!strcmp(a, "--sni") && next(&v)) szSni = v;
+    else if (!strcmp(a, "--proto") && next(&v)) gProto = (uint8_t)atoi(v);
+    else if (!strcmp(a, "--token") && next(&v)) szToken = v;
     else { fprintf(stderr, "wsclient: unknown/incomplete option %s\n", a); return 1; }
   }
 
@@ -391,19 +420,30 @@ int main(int argc, char **argv) {
   }
 
   // HELLO, expect WELCOME -- --hello N times on this one connection.
-  for (uint32_t h = 0; h < (nHello ? nHello : 1); h++) {
-    uint8_t hbuf[sizeof(HelloWire) + 256];
+  if (idleMs) usleep(idleMs * 1000);
+  for (uint32_t h = 0; !fNoHello && h < (nHello ? nHello : 1); h++) {
+    uint8_t hbuf[kHelloMaxSize];
     uint32_t hlen = 0;
-    buildHello(hbuf, 0, 0, "eph_wsclient/1.0", &hlen);
-    sendWsBinary(fd, makeMessage(kMsgHello, 0, hbuf, hlen));
+    buildHello(hbuf, 0, 0, "eph_wsclient/1.0", &hlen, szToken, gProto);
+    sendWsBinary(fd, makeMessage(kMsgHello, 0, hbuf, hlen, 0, gProto));
     std::vector<uint8_t> msg;
     if (readWsMessage(fd, &msg) != kGotMessage || msg.size() < kEnvelopeSize) {
       fprintf(stderr, "wsclient: no WELCOME envelope\n");
       return 2;
     }
     Envelope env;
-    if (!parseEnvelope(msg.data(), &env)) {
-      fprintf(stderr, "wsclient: bad WELCOME envelope\n");
+    if (!parseEnvelopeAs(msg.data(), &env)) {
+      fprintf(stderr, "wsclient: bad WELCOME envelope (version %u, this "
+              "client speaks %u)\n", msg[2], (unsigned)gProto);
+      return 2;
+    }
+    if (env.type == kMsgError) {
+      ErrorMsg e;
+      if (parseError(msg.data() + kEnvelopeSize, env.payloadLen, &e))
+        fprintf(stderr, "wsclient: server ERROR %d (HELLO, v%u): %s\n", e.code,
+                (unsigned)env.version, e.text.c_str());
+      else
+        fprintf(stderr, "wsclient: malformed ERROR answering HELLO\n");
       return 2;
     }
     if (env.type != kMsgWelcome) {
@@ -460,7 +500,7 @@ int main(int argc, char **argv) {
       buildRequest(&payload, r2);
       pend[k].id = rep * nSend + k + 1;
       pend[k].seen.assign(count, 0);
-      sendWsBinary(fd, makeMessage(kMsgRequest, pend[k].id, payload.data(), payload.size()));
+      sendWsBinary(fd, makeMessage(kMsgRequest, pend[k].id, payload.data(), payload.size(), 0, gProto));
     }
     if (sleepMs) usleep((useconds_t)sleepMs * 1000);
     std::fill(cols.begin(), cols.end(), 0.0);
@@ -476,7 +516,7 @@ int main(int argc, char **argv) {
         break;
       }
       Envelope env;
-      if (!parseEnvelope(msg.data(), &env) ||
+      if (!parseEnvelopeAs(msg.data(), &env) ||
           (size_t)env.payloadLen != msg.size() - kEnvelopeSize) {
         fprintf(stderr, "wsclient: bad envelope on message of %zu bytes\n",
                 msg.size());

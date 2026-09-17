@@ -8,10 +8,14 @@ to be resumed from like the other two.
 
 ## Status
 
-- **2026-09-17: Phase 2 (operability) is built** on branch `ephops` (server
-  plan work log item 13): G3 and G4 are closed; G5 turned out not to be a
-  leak (the item says why) and is held by a gate check. Next: Phases 3 and
-  4 together, as protocol 3.
+- **2026-09-17: Phases 3 and 4 are built** as protocol 3 on branch
+  `ephproto3` (server plan work log item 14): G6, G7, G8 and G9 closed.
+  Left from them: a client-side token setting (the server takes tokens;
+  the client sends none), and the trusted-proxy address, not needed under
+  decision 0.2. Next: Phase 5 (packaging), whose data copy waits for a host.
+- **2026-09-17: Phase 2 (operability) is on `qt`** (ea6cf6f; server plan work
+  log item 13): G3 and G4 are closed; G5 turned out not to be a leak (the
+  item says why) and is held by a gate check.
 - **2026-09-17: Phase 1 (TLS) is on `qt`** (5a252b7; server plan work log
   item 12): G1, G11, G12 and G14 are closed, G13 on Windows; G2's
   `--bind` exists (the plaintext guard waits for deployment). Still open

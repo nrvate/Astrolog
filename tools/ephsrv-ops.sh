@@ -30,9 +30,12 @@ PIDS=()
 CLI="$ROOT/eph_wsclient"
 S="$SCRATCH"
 
+# A kill of a process that already exited fails, and under set -e the LAST
+# command of an && list still stops the script: a passing run exited 1.
 cleanup() {
-  for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done
+  for p in "${PIDS[@]:-}"; do [ -n "$p" ] && { kill "$p" 2>/dev/null || true; }; done
   rm -rf "$SCRATCH"
+  true
 }
 trap cleanup EXIT
 

@@ -78,6 +78,14 @@ struct Options {
   std::string tlsCert;         // --tls-cert: PEM, the chain after the leaf
   std::string tlsKey;          // --tls-key: PEM private key
   uint32_t drainSeconds = 10;  // --drain-seconds: SIGTERM's grace period
+  // Limits (production plan Phase 3). 0 disables each.
+  uint32_t maxConns = 10000;       // --max-conns: WebSockets open, in total
+  uint32_t maxConnsPerAddr = 64;   // --max-conns-per-ip
+  uint32_t cellsPerSec = 10000;    // --cells-per-sec: each address's (or
+                                   // token's) refill; the burst is --max-cells
+  uint32_t helloSeconds = 10;      // --hello-seconds: HELLO deadline
+  std::string tokensFile;          // --tokens: accepted tokens, one a line
+  bool requireToken = false;       // --require-token
   bool Tls() const { return !tlsCert.empty(); }
 };
 
@@ -119,6 +127,17 @@ static const char kUsage[] =
   "                        flight finish for up to N s (default 10), close\n"
   "                        every connection 1001, exit 0; a second signal\n"
   "                        exits at once\n"
+  "                     [--max-conns N] [--max-conns-per-ip N]\n"
+  "                     [--cells-per-sec N] [--hello-seconds N]\n"
+  "                     [--tokens FILE [--require-token]]\n"
+  "  --max-conns N         WebSockets open in total (default 10000; 0 = none)\n"
+  "  --max-conns-per-ip N  from one address (default 64; 0 = none)\n"
+  "  --cells-per-sec N     each address's compute budget, refilling at N\n"
+  "                        cells a second up to --max-cells (default 10000;\n"
+  "                        0 = none); a token has its own budget\n"
+  "  --hello-seconds N     close a connection with no HELLO after N s (10)\n"
+  "  --tokens FILE         accepted tokens, one a line; --require-token\n"
+  "                        refuses a HELLO without one of them\n"
   "  GET /healthz /readyz /metrics on the same port (Prometheus text)\n";
 
 static bool parseArgs(int argc, char **argv, Options *opt) {
@@ -161,6 +180,23 @@ static bool parseArgs(int argc, char **argv, Options *opt) {
       const char *val;
       if (!needValue(&val) || !parseU(val, &v) || v > 3600) return false;
       opt->drainSeconds = (uint32_t)v;
+    } else if (strcmp(a, "--max-conns") == 0 ||
+               strcmp(a, "--max-conns-per-ip") == 0 ||
+               strcmp(a, "--cells-per-sec") == 0 ||
+               strcmp(a, "--hello-seconds") == 0) {
+      const char *val;
+      if (!needValue(&val) || !parseU(val, &v) || v > UINT32_MAX) return false;
+      uint32_t *pv = strcmp(a, "--max-conns") == 0 ? &opt->maxConns :
+                     strcmp(a, "--max-conns-per-ip") == 0 ? &opt->maxConnsPerAddr :
+                     strcmp(a, "--cells-per-sec") == 0 ? &opt->cellsPerSec :
+                     &opt->helloSeconds;
+      *pv = (uint32_t)v;
+    } else if (strcmp(a, "--tokens") == 0) {
+      const char *val;
+      if (!needValue(&val) || !*val) return false;
+      opt->tokensFile = val;
+    } else if (strcmp(a, "--require-token") == 0) {
+      opt->requireToken = true;
     } else if (strcmp(a, "--tls-cert") == 0) {
       const char *val;
       if (!needValue(&val) || !*val) return false;
@@ -179,6 +215,8 @@ static bool parseArgs(int argc, char **argv, Options *opt) {
   // A certificate without its key, or a key without its certificate, is a
   // mistake, not a request for plain text.
   if (opt->tlsCert.empty() != opt->tlsKey.empty()) return false;
+  // Requiring a token with no list of tokens would refuse everyone.
+  if (opt->requireToken && opt->tokensFile.empty()) return false;
   return true;
 }
 
@@ -439,6 +477,27 @@ struct Stream {
 
 struct Conn {
   std::deque<Stream> out;       // completed streams, FIFO
+  // Protocol 3. proto is the session's version, fixed by HELLO; 0 before
+  // it, when only HELLO is served. addr is the peer's address as text;
+  // budget is what the cell budget is keyed on -- "t:" and the token when
+  // HELLO gave a known one, "a:" and the address otherwise.
+  uint8_t proto = 0;
+  std::chrono::steady_clock::time_point tOpen = std::chrono::steady_clock::now();
+  std::string addr;
+  std::string budget;
+  bool fCountedAddr = false;    // holds a place in gConnsByAddr
+
+  // The place is released when the Conn goes, however it goes -- a client
+  // that drops between the upgrade and open never reaches the close handler.
+  // Moving hands the place over, since uWS moves the upgrade's Conn into the
+  // socket and then destroys the original.
+  Conn() = default;
+  Conn(Conn &&o) noexcept
+    : out(std::move(o.out)), proto(o.proto), tOpen(o.tOpen),
+      addr(std::move(o.addr)), budget(std::move(o.budget)),
+      fCountedAddr(o.fCountedAddr) { o.fCountedAddr = false; }
+  Conn &operator=(Conn &&) = delete;
+  ~Conn();
 };
 
 // Answers a connection may have computed and not yet read. A client that
@@ -589,7 +648,9 @@ enum { kComputeBuckets = sizeof(kComputeBucketsMs) / sizeof(*kComputeBucketsMs) 
 struct Metrics {
   std::atomic<uint64_t> connOpen{0}, connTotal{0}, hellos{0};
   std::atomic<uint64_t> requests{0}, cells{0}, cacheHits{0}, cacheMisses{0};
-  std::atomic<uint64_t> errors[8] = {};        // by ERROR code; 0 is other
+  std::atomic<uint64_t> errors[eph::kErrMax + 1] = {};  // by code; 0 other
+  std::atomic<uint64_t> refusedConns{0};       // at the upgrade, over a cap
+  std::atomic<uint64_t> helloTimeouts{0};
   std::atomic<uint64_t> bytesSent{0}, backpressureWaits{0};
   std::atomic<uint64_t> computeBucket[kComputeBuckets] = {};
   std::atomic<uint64_t> computeCount{0}, computeMicros{0};
@@ -638,6 +699,105 @@ struct LoopCtx {
 
 static thread_local LoopCtx *tlc = nullptr;   // this thread's loop state
 
+// ---------------------------------------------------------------------------
+// Limits (production plan Phase 3). Shared by every loop, so behind one
+// mutex; taken once per connection and once per REQUEST, which is nothing
+// beside a REQUEST's computation.
+// ---------------------------------------------------------------------------
+static std::mutex gLimitsMu;
+static uint32_t gConnsTotal = 0;
+static std::unordered_map<std::string, uint32_t> gConnsByAddr;
+struct CellBucket {
+  double cells;
+  std::chrono::steady_clock::time_point t;
+};
+static std::unordered_map<std::string, CellBucket> gBuckets;
+static std::unordered_set<std::string> gTokens;
+
+// Take a place for a new connection, or say why not.
+static const char *AdmitConnection(const std::string &addr) {
+  std::lock_guard<std::mutex> lock(gLimitsMu);
+  if (gOpt.maxConns && gConnsTotal >= gOpt.maxConns)
+    return "the server is at its connection limit";
+  if (gOpt.maxConnsPerAddr && gConnsByAddr[addr] >= gOpt.maxConnsPerAddr)
+    return "too many connections from this address";
+  gConnsTotal++;
+  gConnsByAddr[addr]++;
+  return nullptr;
+}
+
+static void ReleaseConnection(const std::string &addr) {
+  std::lock_guard<std::mutex> lock(gLimitsMu);
+  if (gConnsTotal) gConnsTotal--;
+  auto it = gConnsByAddr.find(addr);
+  if (it != gConnsByAddr.end() && --it->second == 0)
+    gConnsByAddr.erase(it);
+}
+
+Conn::~Conn() {
+  if (fCountedAddr) ReleaseConnection(addr);
+}
+
+// Charge a REQUEST's cells to its budget: the bucket refills at
+// --cells-per-sec up to --max-cells, so one full request is always
+// possible from a full bucket. Returns 0 when charged, else the seconds
+// until it would be.
+static double ChargeCells(const std::string &key, uint64_t cells) {
+  if (!gOpt.cellsPerSec) return 0.0;
+  auto now = std::chrono::steady_clock::now();
+  std::lock_guard<std::mutex> lock(gLimitsMu);
+  auto it = gBuckets.find(key);
+  if (it == gBuckets.end())
+    it = gBuckets.emplace(key, CellBucket{(double)gOpt.maxCells, now}).first;
+  CellBucket &b = it->second;
+  double dt = std::chrono::duration<double>(now - b.t).count();
+  b.cells = std::min((double)gOpt.maxCells, b.cells + dt * gOpt.cellsPerSec);
+  b.t = now;
+  if ((double)cells <= b.cells) {
+    b.cells -= (double)cells;
+    return 0.0;
+  }
+  // Buckets for addresses that have gone quiet refill to full and carry no
+  // information; drop them now and then so the map cannot grow without end.
+  if (gBuckets.size() > 100000)
+    for (auto i = gBuckets.begin(); i != gBuckets.end();)
+      i = std::chrono::duration<double>(now - i->second.t).count() * gOpt.cellsPerSec
+            >= gOpt.maxCells ? gBuckets.erase(i) : std::next(i);
+  return ((double)cells - b.cells) / gOpt.cellsPerSec;
+}
+
+static bool LoadTokens() {
+  if (gOpt.tokensFile.empty()) return true;
+  FILE *f = fopen(gOpt.tokensFile.c_str(), "r");
+  if (!f) {
+    Log("ephd: cannot read --tokens %s: %s", gOpt.tokensFile.c_str(),
+        strerror(errno));
+    return false;
+  }
+  char line[512];
+  while (fgets(line, sizeof(line), f)) {
+    std::string t(line);
+    while (!t.empty() && (t.back() == '\n' || t.back() == '\r' ||
+                          t.back() == ' ' || t.back() == '\t'))
+      t.pop_back();
+    size_t i = t.find_first_not_of(" \t");
+    if (i == std::string::npos || t[i] == '#') continue;
+    t = t.substr(i);
+    if (t.size() > eph::kTokenMax) {
+      Log("ephd: a token in %s is longer than %zu bytes; refusing to start",
+          gOpt.tokensFile.c_str(), eph::kTokenMax);
+      fclose(f);
+      return false;
+    }
+    gTokens.insert(t);
+  }
+  fclose(f);
+  // Counted, never printed: the log is no place for credentials.
+  Log("%zu token(s) from %s%s", gTokens.size(), gOpt.tokensFile.c_str(),
+      gOpt.requireToken ? ", required" : "");
+  return true;
+}
+
 // Heartbeats are uWS's own: sendPingsAutomatically sends WebSocket protocol
 // pings on the idle timeout's cadence and closes silent connections (plan
 // 4.7's intent; QWebSocket answers protocol pings by itself, so a Qt client
@@ -651,7 +811,10 @@ SendEnvelope(WebSocket<SSL, true, Conn> *ws, uint16_t type,
              uint32_t requestId, const void *payload,
              size_t payloadLen, uint8_t flags = 0) {
   std::vector<uint8_t> msg(eph::kEnvelopeSize + payloadLen);
-  eph::writeEnvelope(msg.data(), type, requestId, flags, (uint32_t)payloadLen);
+  // Every message in the session's version, once HELLO has fixed one.
+  uint8_t version = ((Conn *)ws->getUserData())->proto;
+  eph::writeEnvelope(msg.data(), type, requestId, flags, (uint32_t)payloadLen,
+                     version ? version : eph::kProtoVersion);
   if (payloadLen) memcpy(msg.data() + eph::kEnvelopeSize, payload, payloadLen);
   auto st = ws->send(std::string_view((char *)msg.data(), msg.size()),
                      uWS::OpCode::BINARY);
@@ -670,7 +833,7 @@ static void SendError(WebSocket<SSL, true, Conn> *ws, uint32_t requestId,
   std::vector<uint8_t> payload(8 + n + 1);
   memcpy(payload.data(), fixed, 8);
   memcpy(payload.data() + 8, text ? text : "", n + 1);
-  if (tlc) tlc->m.errors[code > 0 && code < 8 ? code : 0]++;
+  if (tlc) tlc->m.errors[code > 0 && code <= eph::kErrMax ? code : 0]++;
   // Every ERROR text is fixed or a count, never a request's contents: Swiss's
   // per-row text, which names the instant, goes only to the client, inside
   // the DATA metadata. Keep it that way (production plan decision 0.3) --
@@ -910,9 +1073,10 @@ static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc,
 
 // Handle one decoded WebSocket message. The envelope is checked for size
 // agreement first; a payload-length mismatch is a protocol error, not a
-// truncation to recover from. HELLO is answered with WELCOME once; REQUESTs
-// are answered whether or not HELLO came first -- the connection is
-// stateless in every way that matters (plan 4.7).
+// truncation to recover from. Every HELLO is answered with WELCOME. From
+// protocol 3 a REQUEST before HELLO is refused and the connection closed:
+// HELLO fixes the session's version, which every later message is written
+// in, and carries the token a server may require.
 template <bool SSL>
 static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
                           std::string_view message, LoopCtx *lc) {
@@ -922,6 +1086,20 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
   }
   eph::Envelope env;
   if (!eph::parseEnvelope((const uint8_t *)message.data(), &env)) {
+    uint8_t vOld;
+    if (eph::envelopeVersionBelowMin((const uint8_t *)message.data(), &vOld)) {
+      // Too old to talk to, and too old to read a newer envelope: the
+      // refusal goes out in the client's own version, then the close.
+      Conn *c = (Conn *)ws->getUserData();
+      c->proto = vOld;
+      char sz[160];
+      snprintf(sz, sizeof(sz), "this client speaks protocol %u; this server "
+               "needs %u to %u -- update Astrolog", (unsigned)vOld,
+               (unsigned)eph::kProtoMin, (unsigned)eph::kProtoVersion);
+      SendError(ws, 0, eph::kErrVersion, sz);
+      ws->end(1008, "protocol too old");
+      return;
+    }
     SendError(ws, 0, eph::kErrBad, "bad magic or protocol version");
     return;
   }
@@ -954,6 +1132,30 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
         SendError(ws, env.requestId, eph::kErrBad, "malformed HELLO");
         return;
       }
+      if (hello.protoVersion < eph::kProtoMin) {
+        char sz[160];
+        c->proto = env.version;
+        snprintf(sz, sizeof(sz), "this client speaks protocol %u; this server "
+                 "needs %u to %u -- update Astrolog",
+                 (unsigned)hello.protoVersion, (unsigned)eph::kProtoMin,
+                 (unsigned)eph::kProtoVersion);
+        SendError(ws, env.requestId, eph::kErrVersion, sz);
+        ws->end(1008, "protocol too old");
+        return;
+      }
+      // The session speaks the lower of the two ends' highest versions.
+      // Fixed by the first HELLO; a later HELLO is answered in it.
+      if (c->proto == 0)
+        c->proto = (uint8_t)std::min<uint32_t>(hello.protoVersion,
+                                               eph::kProtoVersion);
+      if (!hello.token.empty() && gTokens.count(hello.token))
+        c->budget = "t:" + hello.token;
+      else if (gOpt.requireToken) {
+        SendError(ws, env.requestId, eph::kErrToken, hello.token.empty() ?
+                  "this server requires a token" : "unknown token");
+        ws->end(1008, "token refused");
+        return;
+      }
       {
         static thread_local char szSweVersion[256];
         swe_version(szSweVersion);
@@ -961,12 +1163,17 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
         uint32_t wlen = 0;
         eph::buildWelcome(wbuf, eph::kCapFloat32,
                           PackSweVersion(szSweVersion), gOpt.maxCells,
-                          kServerVersion, &wlen);
+                          kServerVersion, &wlen, c->proto);
         SendEnvelope(ws, eph::kMsgWelcome, env.requestId, wbuf, wlen);
       }
       break;
     }
     case eph::kMsgRequest: {
+      if (c->proto == 0) {
+        SendError(ws, env.requestId, eph::kErrBad, "REQUEST before HELLO");
+        ws->end(1008, "HELLO first");
+        return;
+      }
       eph::Request req;
       eph::ParseResult pr = eph::parseRequest(pl, env.payloadLen, &req);
       if (pr == eph::kParseBad) {
@@ -990,6 +1197,18 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
           snprintf(sz, sizeof(sz), "REQUEST asks %" PRIu64 " cells; WELCOME's"
                    " bound is %u", cells, gOpt.maxCells);
           SendError(ws, env.requestId, eph::kErrLimits, sz);
+          return;
+        }
+        // The compute budget (production plan Phase 3): charged whether the
+        // answer is cached or not, since which it will be is not known yet.
+        double wait = ChargeCells(c->budget, cells);
+        if (wait > 0.0) {
+          char sz[160];
+          // Rounded UP to the tenth: "0.0 s" for a 12 ms wait read as "now".
+          snprintf(sz, sizeof(sz), "rate limited: %u cells a second; ask "
+                   "again in %.1f s", gOpt.cellsPerSec,
+                   std::ceil(wait * 10.0) / 10.0);
+          SendError(ws, env.requestId, eph::kErrRateLimited, sz);
           return;
         }
       }
@@ -1040,14 +1259,16 @@ static std::atomic<bool> gDraining{false};
 static std::string MetricsText() {
   uint64_t connOpen = 0, connTotal = 0, hellos = 0, requests = 0, cells = 0,
            hits = 0, misses = 0, bytes = 0, bp = 0, cCompute = 0, uCompute = 0;
-  uint64_t errors[8] = {0}, buckets[kComputeBuckets] = {0};
+  uint64_t errors[eph::kErrMax + 1] = {0}, buckets[kComputeBuckets] = {0};
+  uint64_t refused = 0, helloTimeouts = 0;
   for (LoopCtx &lc : *gLoops) {
     connOpen += lc.m.connOpen; connTotal += lc.m.connTotal;
     hellos += lc.m.hellos; requests += lc.m.requests; cells += lc.m.cells;
     hits += lc.m.cacheHits; misses += lc.m.cacheMisses;
     bytes += lc.m.bytesSent; bp += lc.m.backpressureWaits;
     cCompute += lc.m.computeCount; uCompute += lc.m.computeMicros;
-    for (int i = 0; i < 8; i++) errors[i] += lc.m.errors[i];
+    for (int i = 0; i <= eph::kErrMax; i++) errors[i] += lc.m.errors[i];
+    refused += lc.m.refusedConns; helloTimeouts += lc.m.helloTimeouts;
     for (int b = 0; b < kComputeBuckets; b++) buckets[b] += lc.m.computeBucket[b];
   }
   char sz[256];
@@ -1078,7 +1299,7 @@ static std::string MetricsText() {
        "ephd_backpressure_waits_total", bp);
   out += "# HELP ephd_errors_total ERRORs sent, by protocol code (0 other).\n"
          "# TYPE ephd_errors_total counter\n";
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i <= eph::kErrMax; i++) {
     snprintf(sz, sizeof(sz), "ephd_errors_total{code=\"%d\"} %" PRIu64 "\n", i,
              errors[i]);
     out += sz;
@@ -1094,6 +1315,10 @@ static std::string MetricsText() {
            "ephd_compute_seconds_sum %.6f\nephd_compute_seconds_count %" PRIu64 "\n",
            cCompute, (double)uCompute / 1e6, cCompute);
   out += sz;
+  line("Connections refused at the upgrade by --max-conns or --max-conns-per-ip.",
+       "counter", "ephd_refused_connections_total", refused);
+  line("Connections closed for sending no HELLO within --hello-seconds.",
+       "counter", "ephd_hello_timeouts_total", helloTimeouts);
   line("1 while draining after SIGTERM.", "gauge", "ephd_draining",
        gDraining ? 1 : 0);
   return out;
@@ -1219,16 +1444,39 @@ static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
   // FlushStreams applies the ceiling to DATA chunks alone instead.
   behavior.maxBackpressure = 0;
   behavior.sendPingsAutomatically = true;
-  // No open handler: uWS constructs Conn itself before open and destroys
-  // it on close. The one this had constructed a second Conn over the live
-  // one, leaking its deque's blocks -- about 575 bytes a connection,
-  // measured as RSS growing linearly over 20000 connect/close cycles.
+  // Conn is constructed once, by the upgrade handler below, moved into the
+  // socket by uWS and destroyed on close; open must never construct one.
+  // An open handler once did, over the live one, leaking its deque's
+  // blocks -- about 575 bytes a connection, measured as RSS growing
+  // linearly over 20000 connect/close cycles.
   behavior.message = [](WebSocket<SSL, true, Conn> *ws,
                         std::string_view message, uWS::OpCode op) {
     OnMessage(ws, message, op);
   };
   behavior.drain = [](WebSocket<SSL, true, Conn> *ws) {
     FlushStreams(ws);
+  };
+  // The connection caps, before a WebSocket exists: a refused client gets an
+  // HTTP 503 with the reason, and nothing is allocated for it. Conn is
+  // constructed here, once, with its address -- see the note on open.
+  behavior.upgrade = [](uWS::HttpResponse<SSL> *res, uWS::HttpRequest *req,
+                        us_socket_context_t *context) {
+    std::string addr(res->getRemoteAddressAsText());
+    if (const char *why = AdmitConnection(addr)) {
+      tlc->m.refusedConns++;
+      res->writeStatus("503 Service Unavailable")
+         ->writeHeader("Content-Type", "text/plain")->end(why);
+      return;
+    }
+    Conn conn;
+    conn.addr = addr;
+    conn.budget = "a:" + addr;
+    conn.fCountedAddr = true;
+    res->template upgrade<Conn>(std::move(conn),
+                                req->getHeader("sec-websocket-key"),
+                                req->getHeader("sec-websocket-protocol"),
+                                req->getHeader("sec-websocket-extensions"),
+                                context);
   };
   // Counting and tracking only -- Conn is already constructed (see above).
   behavior.open = [](WebSocket<SSL, true, Conn> *ws) {
@@ -1274,6 +1522,22 @@ static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
     app->listen(gOpt.bind, (int)gOpt.port, std::move(onListen));
 }
 
+template <bool SSL>
+static void HelloSweep(us_timer_t *t) {
+  LoopCtx *lc = *(LoopCtx **)us_timer_ext(t);
+  auto tLimit = std::chrono::steady_clock::now() -
+                std::chrono::seconds(gOpt.helloSeconds);
+  std::vector<void *> late;
+  for (void *p : lc->socks) {
+    Conn *c = (Conn *)((WebSocket<SSL, true, Conn> *)p)->getUserData();
+    if (c->proto == 0 && c->tOpen < tLimit) late.push_back(p);
+  }
+  for (void *p : late) {
+    lc->m.helloTimeouts++;
+    ((WebSocket<SSL, true, Conn> *)p)->end(1008, "no HELLO");
+  }
+}
+
 static void SetupLoop(LoopCtx *lc) {
   tlc = lc;
   lc->loop = uWS::Loop::get();
@@ -1294,6 +1558,14 @@ static void SetupLoop(LoopCtx *lc) {
   } else {
     lc->app = std::make_unique<uWS::App>();
     WireApp(lc->app.get(), lc);
+  }
+  // The HELLO deadline: once a second, close whatever connected and has not
+  // said HELLO within --hello-seconds. Fallthrough, so this timer alone does
+  // not keep a draining loop alive.
+  if (gOpt.helloSeconds) {
+    us_timer_t *t = us_create_timer((us_loop_t *)lc->loop, 1, sizeof(LoopCtx *));
+    *(LoopCtx **)us_timer_ext(t) = lc;
+    us_timer_set(t, gOpt.Tls() ? HelloSweep<true> : HelloSweep<false>, 1000, 1000);
   }
 }
 
@@ -1441,6 +1713,8 @@ int main(int argc, char **argv) {
     }
     Log("TLS certificate %s, expires %s", gOpt.tlsCert.c_str(), expiry.c_str());
   }
+
+  if (!LoadTokens()) return 1;
 
   EphDiscovery disc = DiscoverEphemDirs();
   char szVersion[256];

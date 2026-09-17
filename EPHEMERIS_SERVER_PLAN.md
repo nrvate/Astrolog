@@ -131,7 +131,7 @@ uWS v20.80.0 API note: server-side WebSocket handlers are
 `WebSocket<SSL, true, UserData>` — the second template parameter is
 `isServer`, counterintuitively `true` on the server side.
 
-## 4. Protocol v2
+## 4. Protocol v3
 
 Shared header `ephsrv/ephproto.h`, compiled into both ends (server and,
 later, the Qt client). All integers little-endian, structs packed, no
@@ -144,11 +144,24 @@ fail only in part answers the rows that computed as real and the failed
 rows as NaN. A version-1 peer is refused at the envelope, before any of
 the new fields are read.
 
+Version 3 (2026-09-17, EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phases 3 and 4)
+is the first under a compatibility rule, written into `ephproto.h`'s header
+and binding from here on: each end speaks every version in
+`[kProtoMin, kProtoVersion]` (2 to 3); the envelope's version byte is the
+version THAT message is written in; HELLO names the client's highest
+version and the server answers WELCOME, and everything after it, in the
+lower of that and its own; new fields go only at the end of a structure,
+read only when the session's version has them; optional behaviour goes
+behind a caps bit; `kProtoMin` rises only deliberately. What version 3 adds:
+an optional token at the end of HELLO, ERROR codes 6-8, and the rule that a
+REQUEST before HELLO is refused.
+
 ### 4.1 Envelope (16 bytes)
 
     offset size field
     0      u16  magic = 0x1EF0
-    2      u8   protoVersion = 2
+    2      u8   protoVersion: the version this message is written in, one
+                of kProtoMin..kProtoVersion (2..3)
     3      u8   flags: bit0 zstd, bit1 float32, bit2-7 reserved (0)
     4      u16  type
     6      u16  reserved (0)
@@ -170,14 +183,17 @@ reserved for future non-ephemeris services sharing the connection.
 
 ### 4.2 HELLO payload
 
-    u32 protoVersion
+    u32 protoVersion (the HIGHEST version the client speaks)
     u32 caps (bit0 float32, bit1 zstd)
     u32 build (client build id)
     sz  version string (NUL-terminated)
+    sz  token (version 3; optional even there -- a HELLO ending after the
+        version string has none; at most 128 bytes)
 
 ### 4.3 WELCOME payload
 
-    u32 protoVersion
+    u32 protoVersion (the session's: the lower of the client's and the
+        server's highest)
     u32 caps (same bit meanings)
     u32 swissephVersion (packed major*10000+minor*100+patch)
     u32 maxObjs    (objects per request)
@@ -266,8 +282,15 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
 ### 4.6 ERROR payload
 
     u32 requestId; i32 code; sz text
-    codes: 1 bad request/parse, 2 exceeds WELCOME limits, 3 unknown type,
-           4 internal, 5 ephemeris data (carries SWE serr text)
+    codes: 1 bad request/parse (and, from version 3, a REQUEST before
+             HELLO, after which the server closes),
+           2 exceeds WELCOME limits, 3 unknown type, 4 internal,
+           5 ephemeris data (carries SWE serr text),
+           6 rate limited: over the address's or token's cell budget; the
+             text says when to ask again; the connection stays open,
+           7 token refused (missing where required, or unknown); closes,
+           8 client too old: below kProtoMin; sent in the CLIENT's own
+             envelope version so it can be read; closes
 
 ### 4.7 Semantics
 
@@ -470,6 +493,8 @@ Each increment lands green before the next starts.
     astrolog-ephd [--port N] [--bind ADDR] [--ephe path] [--threads N]
                   [--cache-mb N] [--max-cells N] [--verbose]
                   [--tls-cert FILE --tls-key FILE] [--drain-seconds N]
+                  [--max-conns N] [--max-conns-per-ip N] [--cells-per-sec N]
+                  [--hello-seconds N] [--tokens FILE [--require-token]]
 
 Default port: constant `EPH_DEFAULT_PORT` in ephproto.h (47190), shared with
 the client so both ends agree with zero configuration. `--bind` listens on
@@ -492,7 +517,17 @@ in flight finish for up to `--drain-seconds` (default 10), every connection
 is closed 1001 (hard, at the deadline, if it still has bytes unread), and
 the process exits 0; a second signal exits 1 at once. Nothing the server
 logs or exports names a request's instant, place or bodies. The startup log
-gives the open-file limit. `--ephe` overrides
+gives the open-file limit.
+
+Limits (production plan Phase 3; `tools/ephsrv-limits.sh`), each 0 to
+disable: `--max-conns` (10000) and `--max-conns-per-ip` (64) refuse the
+WebSocket upgrade with HTTP 503; `--cells-per-sec` (10000) is each
+address's compute budget, a bucket refilling at that rate up to
+`--max-cells`, charged per REQUEST and refused ERROR 6 when short;
+`--hello-seconds` (10) closes a connection that has not said HELLO.
+`--tokens FILE` lists accepted tokens (one a line, `#` comments; counted in
+the log, never printed); a HELLO with a listed token gets that token's own
+budget, and `--require-token` refuses a HELLO without one (ERROR 7). `--ephe` overrides
 discovery (§6). The server is stateless across restarts; killing and
 restarting it is always safe, and clients reconnect transparently (§4.7).
 
@@ -896,3 +931,49 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
      once). Its first cache-hit check was flaky -- a second connection can
      land on the other loop's cache -- and asks on one connection now. With
      the drain's idle test forced true, the slow reader's check fails.
+
+14. **Protocol 3: negotiated versions, limits and tokens (2026-09-17,
+    branch `ephproto3`; production plan Phases 3 and 4).**
+   - Found on reading: `parseEnvelope` refused any envelope whose version
+     byte was not exactly `kProtoVersion`, at both ends -- so a version
+     rule in WELCOME alone could not have worked; the first message of an
+     older client never parsed. Both ends now take `[kProtoMin,
+     kProtoVersion]`, the session is the lower of the two highest, and the
+     server stamps everything it sends with it. A client below `kProtoMin`
+     is answered ERROR 8 in ITS version, the one envelope it can read.
+   - Server: HELLO first, a HELLO deadline on a fallthrough timer per loop,
+     connection caps at the upgrade handler (HTTP 503, before a WebSocket
+     exists), a token-bucket cell budget per address or known token, and
+     tokens. Conn is now constructed once, by the upgrade handler, and
+     releases its place in the address table from its destructor with a
+     move constructor handing the place over -- a client dropping between
+     upgrade and open never reaches the close handler.
+   - The Qt client: WELCOME in 2..3 is welcomed; requests go out in the
+     session's version; ERROR 7 and 8 are final (no ladder; the
+     required-server dialog ends at once) until the backend is started
+     again; HELLO now declares the f32 caps it reads. A server below
+     `kProtoMin` still gets the ladder, since a server can be upgraded
+     under a running client. No token setting yet: the server side exists,
+     the client sends none.
+   - `eph_wsclient --proto N` (an honest version-N client: it refuses an
+     answer above N), `--token`, `--no-hello`, `--idle-ms`.
+   - New gate `tools/ephsrv-limits.sh` (about 12 s): versions 3 and 2
+     welcomed in their own versions and 1 refused readably; HELLO first and
+     the deadline; both caps counted and freed; the budget refusing with
+     when to ask, refilling, and a token's own budget; required tokens, none
+     logged. With the budget's charge disabled it fails "5000 more at once".
+     `ephsrv-golden.sh PROTO=2` is the compatibility half: a version-2
+     client, 88 columns bit-exact. The robustness and bench gates start
+     their servers with `--cells-per-sec 0`, since they burst from one
+     address on purpose.
+   - Suite: the too-old loopback server is now one below `kProtoMin`, and a
+     fourth answers HELLO with ERROR 8 -- final, told to update, no retry
+     armed, cleared by starting again. With the final state's early return
+     removed, "no retry is armed" fails.
+   - Two gate-script bugs on the way: `ephsrv-ops.sh` printed OPS PASS and
+     exited 1 -- its cleanup trap's `[ -n "$p" ] && kill "$p"` fails for a
+     process already gone, and under `set -e` the last command of an `&&`
+     list still stops the script. Fixed there and in the new gate.
+   - Not built, on purpose: the trusted-proxy address (decision 0.2 put
+     nothing in front of the server) and the PROTO fallback of a version-3
+     client to a version-2-only server (no such server will be deployed).

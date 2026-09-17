@@ -1,4 +1,4 @@
-// Ephemeris Server protocol v1, shared by the server (eph_srv.cpp) and the
+// Ephemeris Server protocol (version 3), shared by the server (eph_srv.cpp) and the
 // client. This file is the byte-level authority: EPHEMERIS_SERVER_PLAN.md
 // Part I section 4 is the design authority and every layout here is copied
 // from it exactly. All integers little-endian, all structs packed, no
@@ -34,7 +34,26 @@ inline constexpr uint16_t kMagic        = 0x1EF0;
 // Version 2 (2026-09-16, EPHEMERIS_REVIEW.md S4 and S9): WELCOME carries
 // maxCells, and a DATA object whose rows fail only in part keeps the rows
 // that computed -- a failed row's six values are NaN.
-inline constexpr uint8_t  kProtoVersion = 2;
+// Version 3 (2026-09-17, EPHEMERIS_SERVER_PRODUCTION_PLAN.md Phases 3-4):
+// HELLO may carry a token; ERRORs 6-8; and versions are NEGOTIATED.
+//
+// The compatibility rule, from version 3 on. Released clients stay in use
+// for years once a release points them at a public server, so:
+//   - Each end speaks every version in [kProtoMin, kProtoVersion]. The
+//     envelope's version byte is the version THAT message is written in.
+//   - A client's HELLO names the highest version it speaks; the server
+//     answers WELCOME, and everything after it, in the lower of that and its
+//     own. Below kProtoMin the server answers ERROR 8 in the client's OWN
+//     envelope version, so a client too old to parse newer envelopes can
+//     still read why it was refused, and closes.
+//   - New fields go only at the END of a structure, and are read only when
+//     the session's version has them. An existing field is never
+//     reinterpreted or moved. Optional behaviour goes behind a caps bit.
+//   - kProtoMin rises only deliberately, when the clients below it are
+//     known to be gone; the gate keeps a kProtoMin client bit-exact
+//     against the current server (tools/ephsrv-golden.sh PROTO=2).
+inline constexpr uint8_t  kProtoVersion = 3;
+inline constexpr uint8_t  kProtoMin     = 2;
 inline constexpr uint16_t kDefaultPort  = 47190;
 
 // Message types 1-7 are the ephemeris service messages and are never
@@ -65,7 +84,16 @@ enum ErrCode : int32_t {
   kErrUnknown    = 3,  // unknown type
   kErrInternal   = 4,  // internal
   kErrEphemeris  = 5,  // ephemeris data (carries SWE serr text)
+  // Version 3.
+  kErrRateLimited = 6, // over this address's or token's cell budget; the
+                       // text says when to ask again. Not a refusal of the
+                       // connection: later requests are served.
+  kErrToken      = 7,  // the server requires a token and this HELLO's is
+                       // missing or unknown; the server closes after it
+  kErrVersion    = 8,  // this client's protocol is below the server's
+                       // kProtoMin; the server closes after it
 };
+inline constexpr int32_t kErrMax = 8;
 
 // REQUEST precision byte.
 enum Precision : uint8_t { kPrecF64 = 0, kPrecF32 = 1 };
@@ -263,6 +291,7 @@ static_assert(sizeof(EnvelopeWire) == 16, "envelope must be exactly 16 bytes");
 inline constexpr size_t kEnvelopeSize = sizeof(EnvelopeWire);
 
 struct Envelope {
+  uint8_t version;     // the version this message is written in
   uint16_t type;
   uint8_t flags;
   uint32_t requestId;
@@ -270,9 +299,10 @@ struct Envelope {
 };
 
 inline void writeEnvelope(uint8_t *dst, uint16_t type, uint32_t requestId,
-                          uint8_t flags, uint32_t payloadLen) {
+                          uint8_t flags, uint32_t payloadLen,
+                          uint8_t version = kProtoVersion) {
   putU16(dst + 0, kMagic);
-  dst[2] = kProtoVersion;
+  dst[2] = version;
   dst[3] = (uint8_t)(flags & kEnvFlagMask);
   putU16(dst + 4, type);
   putU16(dst + 6, 0);
@@ -280,15 +310,26 @@ inline void writeEnvelope(uint8_t *dst, uint16_t type, uint32_t requestId,
   putU32(dst + 12, payloadLen);
 }
 
-// Parses and validates magic + protocol version. Returns false on either
-// mismatch (caller answers kErrBad).
+// Parses and validates magic + protocol version, accepting every version in
+// [kProtoMin, kProtoVersion]. Returns false on a bad magic or a version
+// outside the range (caller answers kErrBad, or kErrVersion when
+// envelopeVersionBelowMin says the version was the problem).
 inline bool parseEnvelope(const uint8_t *src, Envelope *out) {
   if (getU16(src) != kMagic) return false;
-  if (src[2] != kProtoVersion) return false;
+  if (src[2] < kProtoMin || src[2] > kProtoVersion) return false;
+  out->version = src[2];
   out->type = getU16(src + 4);
   out->flags = src[3];
   out->requestId = getU32(src + 8);
   out->payloadLen = getU32(src + 12);
+  return true;
+}
+
+// A good magic with a version below kProtoMin: a client too old to talk to,
+// which is owed an ERROR it can read (kErrVersion in its own version).
+inline bool envelopeVersionBelowMin(const uint8_t *src, uint8_t *version) {
+  if (getU16(src) != kMagic || src[2] >= kProtoMin) return false;
+  *version = src[2];
   return true;
 }
 
@@ -316,13 +357,22 @@ struct WelcomeWire {
 static_assert(sizeof(HelloWire) == 12, "HELLO fixed part must be 12 bytes");
 static_assert(sizeof(WelcomeWire) == 32, "WELCOME fixed part must be 32 bytes");
 
+// HELLO's payload: the fixed part, the client's version string, and from
+// version 3 a token string (empty for none). dst must hold
+// kHelloMaxSize bytes. proto is the highest version the client speaks.
+inline constexpr size_t kTokenMax = 128;
+inline constexpr size_t kHelloMaxSize = sizeof(HelloWire) + 256 + kTokenMax + 1;
 inline void buildHello(uint8_t *dst, uint32_t caps, uint32_t build,
-                       const char *version, uint32_t *payloadLen) {
-  Writer w(dst, sizeof(HelloWire) + 256);
-  w.u32(kProtoVersion);
+                       const char *version, uint32_t *payloadLen,
+                       const char *token = nullptr,
+                       uint8_t proto = kProtoVersion) {
+  Writer w(dst, kHelloMaxSize);
+  w.u32(proto);
   w.u32(caps);
   w.u32(build);
   w.strZ(version ? version : "", 256);
+  if (proto >= 3)
+    w.strZ(token ? token : "", kTokenMax + 1);
   *payloadLen = (uint32_t)w.size();
 }
 
@@ -331,6 +381,7 @@ struct Hello {
   uint32_t caps;
   uint32_t build;
   std::string version;
+  std::string token;   // version 3; empty when absent
 };
 
 inline bool parseHello(const uint8_t *p, size_t len, Hello *out) {
@@ -343,14 +394,22 @@ inline bool parseHello(const uint8_t *p, size_t len, Hello *out) {
   const char *s = r.strZ(&n);
   if (!r.ok() || !s) return false;
   out->version.assign(s, n);
+  out->token.clear();
+  // Version 3's token is optional on the wire even there: a HELLO that ends
+  // after the version string simply has none.
+  if (out->protoVersion >= 3 && r.left() > 0) {
+    const char *t = r.strZ(&n);
+    if (!r.ok() || !t || n > kTokenMax) return false;
+    out->token.assign(t, n);
+  }
   return true;
 }
 
 inline void buildWelcome(uint8_t *dst, uint32_t caps, uint32_t swissephVersion,
                          uint32_t maxCells, const char *serverVersion,
-                         uint32_t *payloadLen) {
+                         uint32_t *payloadLen, uint8_t proto = kProtoVersion) {
   Writer w(dst, sizeof(WelcomeWire) + 256);
-  w.u32(kProtoVersion);
+  w.u32(proto);
   w.u32(caps);
   w.u32(swissephVersion);
   w.u32(kMaxObjs);
@@ -707,9 +766,11 @@ inline bool parseError(const uint8_t *p, size_t len, ErrorMsg *out) {
 
 inline std::vector<uint8_t> makeMessage(uint16_t type, uint32_t requestId,
                                         const void *payload, size_t payloadLen,
-                                        uint8_t flags = 0) {
+                                        uint8_t flags = 0,
+                                        uint8_t version = kProtoVersion) {
   std::vector<uint8_t> msg(kEnvelopeSize + payloadLen);
-  writeEnvelope(msg.data(), type, requestId, flags, (uint32_t)payloadLen);
+  writeEnvelope(msg.data(), type, requestId, flags, (uint32_t)payloadLen,
+                version);
   if (payloadLen) memcpy(msg.data() + kEnvelopeSize, payload, payloadLen);
   return msg;
 }

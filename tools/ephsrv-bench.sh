@@ -70,7 +70,8 @@ if [ "${TLS:-0}" = 1 ]; then
   TLS_SRV=(--tls-cert "$SCRATCH/srv.pem" --tls-key "$SCRATCH/srv.key")
   TLS_CLI=(--tls --ca "$SCRATCH/ca.pem")
 fi
-"$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --verbose "${THREAD_ARG[@]}" \
+# No compute budget: a bench measures the server, not its rate limit.
+"$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --verbose --cells-per-sec 0 "${THREAD_ARG[@]}" \
   "${TLS_SRV[@]}" > "$LOG" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 50); do

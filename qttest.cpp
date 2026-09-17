@@ -153,6 +153,7 @@ extern int CaccelTestQt();
 // values are the es* constants there: 0 Disconnected, 1 Connecting,
 // 2 Welcomed.
 extern int NEphSrvStateTestQt();
+extern flag FTerminalEphSrvTestQt();
 extern int NBackoffEphSrvTestQt();
 extern void SetBackoffEphSrvTestQt(int);
 extern int NRetryEphSrvTestQt();
@@ -17669,7 +17670,21 @@ static void WireEphLoopbackQt(QWebSocketServer *psrv, byte *pbProto,
               !eph::parseEnvelope(rgb, &env))
               return;
             rgb += eph::kEnvelopeSize;
-            if (env.type == eph::kMsgHello) {
+            if (env.type == eph::kMsgHello && *pbProto == 0) {
+              // 0: a server for which this client is too old -- ERROR 8,
+              // then the close, as astrolog-ephd answers it.
+              std::vector<uint8_t> msg;
+              byte rgbE[256];
+              eph::putU32(rgbE, 0);
+              eph::putU32(rgbE + 4, (uint32_t)eph::kErrVersion);
+              sprintf2((char *)rgbE + 8, 240, "this client speaks protocol 3; "
+                "this server needs 4 to 4 -- update Astrolog");
+              msg = eph::makeMessage(eph::kMsgError, 0, rgbE,
+                8 + strlen((char *)rgbE + 8) + 1);
+              pconn->sendBinaryMessage(QByteArray(
+                (const char *)msg.data(), (int)msg.size()));
+              pconn->close();
+            } else if (env.type == eph::kMsgHello) {
               byte rgbW[sizeof(eph::WelcomeWire) + 256];
               uint32_t dwLen;
               std::vector<uint8_t> msg;
@@ -17949,10 +17964,10 @@ static void TestEphSrvQt()
     QWebSocketServer srv1("eph-loopback-1", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv2("eph-loopback-2", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv3("eph-loopback-3", QWebSocketServer::NonSecureMode);
-    // srv2 is the server too old to talk to: version 1, one below
-    // protocol 2's (this fixture was version 2 itself when the protocol
-    // was 1).
-    byte bProto1 = eph::kProtoVersion, bProto2 = eph::kProtoVersion - 1,
+    // srv2 is the server too old to talk to: one version below the oldest
+    // this client speaks (kProtoMin -- protocol 3 negotiates, so a version-2
+    // server is welcomed, not refused).
+    byte bProto1 = eph::kProtoVersion, bProto2 = eph::kProtoMin - 1,
       bProto3 = eph::kProtoVersion;
     uint32_t dwCaps1 = 0, dwCaps2 = 0, dwCaps3 = eph::kCapFloat32;
     char szVer1[64], szVer2[64], szVer3[64];
@@ -18056,10 +18071,10 @@ static void TestEphSrvQt()
       if (NRetryEphSrvTestQt() > 0)
         fSawRetry = fTrue;
       FErrEphSrvTestQt(sz, cchSzMax);
-      if (strstr(sz, "protocol 2") != NULL)
+      if (strstr(sz, "protocols 2 to 3") != NULL)
         break;
     }
-    Check(strstr(sz, "protocol 2") != NULL && strstr(sz, szVer2) != NULL &&
+    Check(strstr(sz, "protocols 2 to 3") != NULL && strstr(sz, szVer2) != NULL &&
       strstr(sz, "protocol 1") != NULL,
       "a version mismatch is refused with the server's version retained "
       "(\"%.80s\")", sz);
@@ -18081,6 +18096,38 @@ static void TestEphSrvQt()
     ClampEphSrvReqQt(&rq2);
     Check(rq2.precision == eph::kPrecF32,
       "and the caps bit admits f32");
+
+    // A server this client is too old for (protocol 3's ERROR 8): refused
+    // for good -- the text says to update, and no retry is armed, since
+    // asking again changes nothing. Starting the backend again clears it.
+    {
+      QWebSocketServer srv4("eph-loopback-4", QWebSocketServer::NonSecureMode);
+      byte bProto4 = 0;
+      uint32_t dwCaps4 = 0;
+      QByteArray baReq4;
+      QWebSocket *pconn4 = NULL;
+
+      Check(srv4.listen(QHostAddress::LocalHost), "the fourth loopback listens");
+      WireEphLoopbackQt(&srv4, &bProto4, &dwCaps4, "too-new", &baReq4, &pconn4);
+      EphSrvFinalizeQt();
+      sprintf2(S(sz), "localhost:%d", (int)srv4.serverPort());
+      FCloneSz(sz, &us.szEphSrv);
+      EphSrvStartupQt();
+      tim.start();
+      while (!FTerminalEphSrvTestQt() && tim.elapsed() < 5000)
+        QApplication::processEvents(QEventLoop::AllEvents, 20);
+      FErrEphSrvTestQt(S(sz));
+      Check(FTerminalEphSrvTestQt() && strstr(sz, "update Astrolog") != NULL,
+        "a client too old for the server is refused for good, and told to "
+        "update (\"%.80s\")", sz);
+      tim.start();
+      while (tim.elapsed() < 500)
+        QApplication::processEvents(QEventLoop::AllEvents, 20);
+      Check(NRetryEphSrvTestQt() < 0 && NEphSrvStateTestQt() == 0,
+        "and no retry is armed (%d ms)", NRetryEphSrvTestQt());
+      EphSrvFinalizeQt();
+      Check(!FTerminalEphSrvTestQt(), "starting the backend again clears it");
+    }
   }
   EphSrvFinalizeQt();
 

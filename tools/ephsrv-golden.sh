@@ -20,6 +20,9 @@
 #                  throwaway CA and a localhost certificate are made in the
 #                  scratch dir, and the client verifies against that CA.
 #                  Same columns, same bits -- TLS must change nothing.
+#   PROTO          the protocol version the client speaks (default the
+#                  newest). PROTO=2 is the compatibility gate: a client of
+#                  the oldest version this server still speaks, bit-exact.
 #
 # Exit 0 with "GOLDEN PASS" when every column matches; nonzero with the
 # first mismatch diff otherwise. Cleans up its server and scratch files.
@@ -119,6 +122,7 @@ if [ "${TLS:-0}" = 1 ]; then
   TLS_SRV=(--tls-cert "$SCRATCH/srv.pem" --tls-key "$SCRATCH/srv.key")
   TLS_CLI=(--tls --ca "$SCRATCH/ca.pem")
 fi
+[ -n "${PROTO:-}" ] && TLS_CLI+=(--proto "$PROTO")
 
 "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --threads 1 "${TLS_SRV[@]}" \
   > "$SCRATCH/ephd.log" 2>&1 &
@@ -254,4 +258,4 @@ if [ "$FAIL" -gt 0 ]; then
   echo "GOLDEN FAIL: $FAIL of $TRIED columns mismatched"
   exit 1
 fi
-echo "GOLDEN PASS: $TRIED columns bit-exact against $SWE_HOME$([ "${TLS:-0}" = 1 ] && echo ", over wss://")"
+echo "GOLDEN PASS: $TRIED columns bit-exact against $SWE_HOME$([ "${TLS:-0}" = 1 ] && echo ", over wss://")$([ -n "${PROTO:-}" ] && echo ", protocol $PROTO client")"

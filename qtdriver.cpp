@@ -7205,6 +7205,10 @@ static struct {
   QString strErr;             // The last refusal or drop's error text.
   QString strSslErr;          // Why the certificate was refused, from
                               // sslErrors; the drop that follows says it.
+  byte bProto;                // The session's protocol version, from
+                              // WELCOME; what requests are written in.
+  flag fTerminal;             // Refused for good (ERROR 7 or 8): no ladder
+                              // until the backend is started again.
                               // A version mismatch's server version is
                               // kept here, for the required-server
                               // dialog to show (increment 4).
@@ -7313,8 +7317,10 @@ static void EphSrvDropped(CONST QString &strErr)
   esrv.est = esDisconnected;
   esrv.fWelc = fFalse;     // The limits were the session's; a new one
                            // re-reads them from its own WELCOME.
-  if (!strErr.isEmpty())
+  if (!strErr.isEmpty() && !esrv.fTerminal)
     esrv.strErr = strErr;
+  if (esrv.fTerminal)
+    return;   // Refused for good; the text above says why. No retry.
   // mpReq is deliberately kept: every request in flight is re-sent
   // verbatim when the next WELCOME arrives.
   ms = esrv.fHad ? esrv.msBack : msEphSrvRetry;
@@ -7366,19 +7372,24 @@ static void EphSrvMessage(CONST QByteArray &ba)
     if (esrv.est != esConnecting ||
       !eph::parseWelcome(rgb, env.payloadLen, &esrv.welc))
       goto LBad;
-    if (esrv.welc.protoVersion != eph::kProtoVersion) {
-      // The server is too old (or too new) for us: behave as connection
-      // refused, the retry cycle continues, and the server's version
-      // text is retained so the mismatch is diagnosable (plan §4).
+    if (esrv.welc.protoVersion < eph::kProtoMin ||
+      esrv.welc.protoVersion > eph::kProtoVersion) {
+      // A server outside the versions this client speaks: behave as
+      // connection refused, the retry cycle continues -- a server can be
+      // upgraded under a running client -- and the server's version text
+      // is retained so the mismatch is diagnosable. (The other way round,
+      // a client too old for the server, is ERROR 8 and final; below.)
       esrv.strErr = QString("The Ephemeris Server reports version \"%1\", "
-        "which speaks protocol %2; this client speaks protocol %3.")
+        "which speaks protocol %2; this client speaks protocols %3 to %4.")
         .arg(esrv.welc.serverVersion.c_str())
-        .arg(esrv.welc.protoVersion).arg(eph::kProtoVersion);
+        .arg(esrv.welc.protoVersion).arg(eph::kProtoMin)
+        .arg(eph::kProtoVersion);
       esrv.fWelc = fFalse;
       esrv.pws->close();
       return;
     }
     esrv.est = esWelcomed;
+    esrv.bProto = (byte)esrv.welc.protoVersion;
     esrv.fWelc = fTrue;
     esrv.fHad = fTrue;
     esrv.msBack = msEphSrvBackoff;  // A session resets the ladder.
@@ -7435,6 +7446,18 @@ static void EphSrvMessage(CONST QByteArray &ba)
       goto LBad;
     esrv.mpReq.remove(err.requestId);
     esrv.strErr = QString::fromUtf8(err.text.c_str());
+    // Protocol 3: this client is too old for the server (8), or the server
+    // wants a token this client did not give (7). Neither gets better by
+    // asking again, so no ladder: the text says what to do, and starting
+    // the backend again (a new address, a restart) clears it.
+    if (err.code == eph::kErrVersion || err.code == eph::kErrToken) {
+      esrv.fTerminal = fTrue;
+      esrv.strErr = QString("The Ephemeris Server refused this Astrolog: %1")
+        .arg(QString::fromUtf8(err.text.c_str()));
+      if (esrv.pws != NULL)
+        esrv.pws->close();
+      break;
+    }
     WindowFailedQt(err.requestId, err.text.c_str());
     break;
   }
@@ -7512,14 +7535,17 @@ static void EphSrvConnect()
     .arg(szVersionCore), QWebSocketProtocol::VersionLatest, NULL);
   esrv.pws = pws;
   QObject::connect(pws, &QWebSocket::connected, pws, [pws]() {
-    byte rgbHello[sizeof(eph::HelloWire) + 256];
+    byte rgbHello[eph::kHelloMaxSize];   // version 3 adds the token
     uint32_t dwLen;
     std::vector<uint8_t> msg;
 
     if (pws != esrv.pws)
       return;
     // Say hello first; WELCOME comes back by signal.
-    eph::buildHello(rgbHello, 0, 0, szVersionCore, &dwLen);
+    // Protocol 3: the highest version this client speaks, the f32 caps it
+    // reads, and no token (a server that requires one refuses with ERROR 7,
+    // which is final above).
+    eph::buildHello(rgbHello, eph::kCapFloat32, 0, szVersionCore, &dwLen);
     msg = eph::makeMessage(eph::kMsgHello, 0, rgbHello, dwLen);
     pws->sendBinaryMessage(QByteArray((const char *)msg.data(),
       (int)msg.size()));
@@ -7624,7 +7650,10 @@ static uint32_t DwSendEphSrvQt(eph::Request *preq)
   dwReq = ++esrv.dwReqNext;
   if (dwReq == 0)   // Wrapped; 0 means "none" everywhere.
     dwReq = ++esrv.dwReqNext;
-  msg = eph::makeMessage(eph::kMsgRequest, dwReq, rgb.data(), rgb.size());
+  // In the session's version: a server that welcomed version 2 reads
+  // version-2 envelopes.
+  msg = eph::makeMessage(eph::kMsgRequest, dwReq, rgb.data(), rgb.size(), 0,
+    esrv.bProto != 0 ? esrv.bProto : eph::kProtoVersion);
   esrv.mpReq[dwReq].ba = QByteArray((const char *)msg.data(), (int)msg.size());
   esrv.mpReq[dwReq].cResend = 0;
   esrv.cReqSent++;
@@ -7822,8 +7851,8 @@ static flag FWaitRequiredSrvQt()
     // owns the pace from here.
     if (esrv.ptim != NULL)
       esrv.ptim->stop();
-    if (fCancel)
-      break;
+    if (fCancel || esrv.fTerminal)
+      break;   // A refusal for good (ERROR 7 or 8) ends the ladder at once.
     // The required ladder: one second, doubling to eight (the state
     // line above says so), until the hour is up.
     msDelay = s_msEphSrvFastRetryQt;
@@ -7932,6 +7961,8 @@ void SzEphSrvStatusQt(char *sz, int cch)
 void EphSrvFinalizeQt()
 {
   ClearWindowsSrvQt();
+  esrv.fTerminal = fFalse;   // Starting again may meet a different server.
+  esrv.bProto = 0;
   if (esrv.ptim != NULL) {
     esrv.ptim->stop();
     delete esrv.ptim;
@@ -7963,6 +7994,7 @@ void EphSrvFinalizeQt()
 */
 
 int NEphSrvStateTestQt() { return esrv.est; }
+flag FTerminalEphSrvTestQt() { return esrv.fTerminal; }
 int NBackoffEphSrvTestQt() { return esrv.msBack; }
 void SetBackoffEphSrvTestQt(int ms) { esrv.msBack = ms; }
 int NRetryEphSrvTestQt() { return esrv.ptim != NULL && esrv.ptim->isActive() ?

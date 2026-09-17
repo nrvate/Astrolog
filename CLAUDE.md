@@ -48,9 +48,9 @@ Work happens on branch **`qt`**.
   `EPHEMERIS_REVIEW.md`; it links the thread-safe Swiss Ephemeris fork at
   `/shares/swisseph` (a sibling repo, not vendored), so a checkout
   without it builds everything else and the `ephem-server-live` suite
-  group skips itself with a printed reason. Its seven gates
+  group skips itself with a printed reason. Its eight gates
   (`tools/ephsrv-golden.sh`, `-soak.sh`, `-cache.sh`, `-bench.sh`,
-  `-robust.sh`, `-tls.sh`, `-ops.sh`) are
+  `-robust.sh`, `-tls.sh`, `-ops.sh`, `-limits.sh`) are
   run by hand, like everything else here.
   `EPHEMERIS_SERVER_PRODUCTION_PLAN.md` is the next step: TLS, limits,
   operability, packaging and a public address, phase by phase.

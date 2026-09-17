@@ -69,7 +69,9 @@ fail() { echo "ROBUST FAIL: $*"; FAIL=1; }
 # start_server <port> <log> [args...]; sets SRV_PID
 start_server() {
   local port=$1 log=$2; shift 2
-  "$ROOT/astrolog-ephd" --port "$port" --ephe "$EPH" "$@" > "$log" 2>&1 &
+  # --cells-per-sec 0: these legs burst from one address on purpose, and the
+  # compute budget is tools/ephsrv-limits.sh's to test, not theirs.
+  "$ROOT/astrolog-ephd" --port "$port" --ephe "$EPH" --cells-per-sec 0 "$@" > "$log" 2>&1 &
   SRV_PID=$!
   PIDS+=("$SRV_PID")
   for _ in $(seq 1 100); do
@@ -188,7 +190,7 @@ alive "$A" || fail "S9: the server died on the partial window"
 
 # ---- S6: a second server on the same port --------------------------------
 step "S6"
-"$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" > "$SCRATCH/b.log" 2>&1 &
+"$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --cells-per-sec 0 > "$SCRATCH/b.log" 2>&1 &
 B=$!
 PIDS+=("$B")
 sleep 1.5
