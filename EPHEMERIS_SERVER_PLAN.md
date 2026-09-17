@@ -1052,3 +1052,16 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
     quoted, replays, and the loopback server's HELLO receives it (191 checks
     in `ephem-server`, from 186); `settings-fields` round-trips the new
     field unchanged. make check all clear.
+
+17. **The server under AddressSanitizer and UBSan (2026-09-17).** Built with
+    `-fsanitize=address,undefined` (uSockets and the fork uninstrumented)
+    and run through the ops, limits, TLS, golden and robustness gates: no
+    report from either sanitizer. (The robustness gate's S3 fails under
+    ASan by design: its quarantine grows RSS, which is what S3 measures.)
+    A leak check across connections, refusals and a SIGTERM drain found
+    the HELLO-deadline timer never closed, one per loop -- now closed when
+    the drain starts, while the loop still runs to free it. What remains
+    at exit is 424 bytes: a timer and a socket closed during a loop's last
+    iteration, which uSockets frees at the start of the next one, and
+    there is no next one after `run()` returns. Once per process, at exit;
+    recorded, not chased into uSockets' internals.

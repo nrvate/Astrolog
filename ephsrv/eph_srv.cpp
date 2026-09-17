@@ -663,6 +663,7 @@ struct LoopCtx {
   // and every open WebSocket on this loop, so a drain can end them. Both
   // touched only on this loop's thread.
   us_listen_socket_t *listenSock = nullptr;
+  us_timer_t *helloTimer = nullptr;         // the HELLO deadline's sweep
   std::unordered_set<void *> socks;
   std::atomic<uint64_t> pendingStreams{0};  // set by a drain's check
   uWS::Loop *loop = nullptr;
@@ -1405,6 +1406,13 @@ static void StartDrain(LoopCtx *lc) {
     us_listen_socket_close(SSL, lc->listenSock);
     lc->listenSock = nullptr;
   }
+  // Closed here, while the loop still runs to free it: after run() returns
+  // nothing does, and ASan reported the two timers of a two-loop server
+  // leaked at every exit.
+  if (lc->helloTimer) {
+    us_timer_close(lc->helloTimer);
+    lc->helloTimer = nullptr;
+  }
   us_timer_t *t = us_create_timer((us_loop_t *)lc->loop, 0, sizeof(DrainTimer));
   DrainTimer *dt = (DrainTimer *)us_timer_ext(t);
   dt->lc = lc;
@@ -1564,6 +1572,7 @@ static void SetupLoop(LoopCtx *lc) {
   // not keep a draining loop alive.
   if (gOpt.helloSeconds) {
     us_timer_t *t = us_create_timer((us_loop_t *)lc->loop, 1, sizeof(LoopCtx *));
+    lc->helloTimer = t;
     *(LoopCtx **)us_timer_ext(t) = lc;
     us_timer_set(t, gOpt.Tls() ? HelloSweep<true> : HelloSweep<false>, 1000, 1000);
   }
