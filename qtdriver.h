@@ -254,6 +254,11 @@ QVector<QRect> RgrcTextWordQt(CONST QString &strWord);
 // including any cell outside it entirely.
 int WchTextGridQt(int xCell, int yCell);
 
+// Ephemeris Server backend (EPHEMERIS_CLIENT_PLAN.md): the one quiet
+// status line for the About dialog -- address, state, server version.
+// Empty when the backend is not the selected one.
+void SzEphSrvStatusQt(char *sz, int cch);
+
 #endif // __QTDRIVER_H
 
 /* qtdriver.h */
