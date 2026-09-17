@@ -43,12 +43,14 @@ Work happens on branch **`qt`**.
   ephemeris server (`astrolog-ephd`, `make ephsrv`, under `ephsrv/`) and
   the "Ephemeris Server" backend that casts charts from it. Each opens
   with a Status section written to be resumed from; read those first.
-  The server is complete and the client is at increment 2 of 4 as of
-  2026-09-16; it links the thread-safe Swiss Ephemeris fork at
+  The server is complete and the client is at increment 3 of 4 as of
+  2026-09-16, after a full review of the whole project whose ledger is
+  `EPHEMERIS_REVIEW.md`; it links the thread-safe Swiss Ephemeris fork at
   `/shares/swisseph` (a sibling repo, not vendored), so a checkout
   without it builds everything else and the `ephem-server-live` suite
-  group skips itself with a printed reason. Its four gates
-  (`tools/ephsrv-golden.sh`, `-soak.sh`, `-cache.sh`, `-bench.sh`) are
+  group skips itself with a printed reason. Its five gates
+  (`tools/ephsrv-golden.sh`, `-soak.sh`, `-cache.sh`, `-bench.sh`,
+  `-robust.sh`) are
   run by hand, like everything else here.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and

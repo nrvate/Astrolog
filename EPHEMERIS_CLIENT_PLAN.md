@@ -36,8 +36,9 @@ QT_GUI_PLAN.md.
   computation (commit e95b5bc, proven byte-identical by both matrices),
   and three protocol additions (kIflagTimeTT, kIflagCenter, the
   node/apsis record kind; server plan §4.4 and work log item 8).
-- **Increment 3 is landed** on branch `ephanim` (worktree
-  `/nvm/work/ephanim`; work log item 4), not yet on `qt`: animation frames
+- **Increment 3 is landed** and on `qt` (squash `11a672c`, 2026-09-16;
+  branch `ephanim`, worktree `/nvm/work/ephanim`, kept for review; work
+  log item 4): animation frames
   read wide f32 windows on their own grid, the next window goes out in
   the background from a window's middle, and stopping casts the chart
   again exactly. **Then the full review** (`EPHEMERIS_REVIEW.md`, work log
@@ -47,7 +48,7 @@ QT_GUI_PLAN.md.
   wait, a WELCOME recasts what missed the server, the HELLO timeout
   exists, chunks are counted by row, animation windows are read only on
   their grid. The ledger at the top of that file is the state of every
-  finding. Squash `ephanim` into `qt` when asked.
+  finding. Increment 4 starts on a new branch off `qt`.
 - **Increment 4 is open** (§10): the required-server dialog and exit
   ladder, the status line, and §7's address field. It is the only piece
   with user-visible blocking UI -- the maintainer tests such changes by
@@ -55,7 +56,7 @@ QT_GUI_PLAN.md.
   committing.
 - **The fork has open findings** (`EPHEMERIS_REVIEW.md` F1-F11) in a
   separate repository; ask before working them.
-- The fork this connects to is `2.10.03-ts.11`; see the server plan's
+- The fork this connects to is `2.10.03-ts.12`; see the server plan's
   Status section for branch, commit and gate state.
 
 ## 1. Goals
