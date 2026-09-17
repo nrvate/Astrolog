@@ -36,19 +36,20 @@ Everything below is landed and pushed; this section is the resume pointer.
   records, the center bit, the pctr delta-t fix; work log item 8), then
   client increment 2 (EPHEMERIS_CLIENT_PLAN.md work log item 3).
 - **The Swiss Ephemeris fork** (nrvate/swisseph, `/shares/swisseph`) is at
-  **2.10.03-ts.13** (main 89cbb7e, 2026-09-16): its delta-t tidal term
+  **2.10.03-ts.14** (main d1779fe, 2026-09-17): its delta-t tidal term
   no longer follows which files a context has open (ts.11, work log items
-  2 and 6), and the full review's fork findings are fixed there
+  2 and 6), the full review's fork findings are fixed there
   (EPHEMERIS_REVIEW.md F1-F11, F9 last, in ts.13; that repo's
-  notes/REVIEW.md). The server links
+  notes/REVIEW.md), and S-fork is fixed in the library as well as bounded
+  at the server's parse (ts.14, work log item 11). The server links
   `$(SWE_HOME)/libswe.a` by archive path; never `-lswe`.
 - **Two environment traps, both pinned in the build and worth
   remembering elsewhere:** an installed stale `libswe.so` in
   `/usr/local/lib` wins the runtime search over `-L` every time (static
-  archive path is the cure), and the fork's ROOT Makefile tracks no
-  header dependencies, so a header-only edit re-archives stale objects
-  (its own tests/ fixed this in 69495ff; the root build has not — small
-  follow-up commit waiting on that repo).
+  archive path is the cure), and before ts.14 the fork's ROOT Makefile
+  tracked header dependencies by a rotted hand list, so a header-only
+  edit re-archived stale objects -- after pulling a fork older than
+  ts.14, rebuild its libswe.a from clean (`rm -f *.o && make libswe.a`).
 - **Green today (2026-09-17):** all five gates pass
   (`tools/ephsrv-{golden,robust,cache,bench,soak}.sh`; golden 88 columns
   bit-exact, with its heliocentric leg and topocentric legs at Greenwich
@@ -59,9 +60,10 @@ Everything below is landed and pushed; this section is the resume pointer.
   (review items S4, S9, S12, S-fork, T8; work log item 10) as `8d6d1d1`
   from branch `ephdefer`, and increment 4 (the required-server dialog)
   as `df5c63b` from branch `ephclient4`. Both branches stay for review.
-  Optional, if the maintainer asks: a Swiss-vs-Moshier sweep net for the
-  bundled `ephem/` (EPHEMERIS_REVIEW.md B3), and header dependencies in
-  the fork's root Makefile (above).
+  The two optional leftovers are done too (work log item 11): the
+  bundled planet and Moon files are swept against Moshier by
+  `tools/check-ephem.sh`, and the fork's root Makefile takes its header
+  dependencies from the compiler.
 
 ---
 
@@ -110,8 +112,8 @@ Vendored under `ephsrv/`, cgif-style (license files kept, sources pinned):
   `86097c490263ab662d62e8e7b541390bdec7d149`, Apache-2.0 (`LICENSE`).
   Built with OpenSSL (`make WITH_OPENSSL=1`) as `ephsrv/uSockets/uSockets.a`.
 - Swiss Ephemeris thread-safe fork at /shares/swisseph, version
-  `2.10.03-ts.13` (delta-t order-independent since ts.11, work log item 6;
-  the review's fixes in ts.12, F9 in ts.13): link `$(SWE_HOME)/libswe.a` by archive path.
+  `2.10.03-ts.14` (delta-t order-independent since ts.11, work log item 6;
+  the review's fixes in ts.12, F9 in ts.13, S-fork in ts.14): link `$(SWE_HOME)/libswe.a` by archive path.
   Never `-lswe` — an installed stale `libswe.so` in /usr/local/lib wins
   the runtime search over `-L` (see Status). NOT vendored into this repo —
   it is a sibling project with its own build, tests, and release cadence.
@@ -745,3 +747,41 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
      one row over the default bound refused ERROR 2, one row under it
      answered) and S9 (a window crossing the bundled sepl_18's end:
      rows before it real, rows past it NaN, retFlag never negative).
+
+11. **S-fork fixed in the library, which turned out to be two upstream
+    defects and not one (2026-09-17, fork ts.14, main d1779fe, branch
+    `s-fork`); and the two optional leftovers.**
+   - Item 10 said the fork was left alone and that sweph.c:4816 was
+     `ctx->nddat[ipl]` reached out of bounds by a wire id. The second half
+     was wrong. A fuzz of the library itself under UBSan
+     (bounds-strict, float-cast-overflow) placed that report in
+     `get_new_segment()`: `(int32)((tjd - tfstart) / dseg)` with
+     `dseg = 0`. The cause is an ordinary call sequence, no hostile id in
+     it: `swe_calc(SE_ECL_NUT)` under a different ephemeris flag ran
+     `free_planets()` outside its own `ipl != SE_ECL_NUT` exemption, so
+     the files stayed open with their constants zeroed. Sun (Swiss),
+     SE_ECL_NUT (Moshier), Mars (Swiss) returned ERR "sepl_18.se1 is
+     damaged" -- in upstream too, at 3fd0f95 and 91339e5. The same fuzz
+     found `swe_pheno(SE_ECL_NUT)` reading `pla_diam[-1]`/`mag_elem[-1]`
+     and returning OK.
+   - Fixed behind `SWE_UPSTREAM_COMPAT`: `free_planets()` only where the
+     files close, the center-of-body test bounded at `ipl >= SE_ECL_NUT`,
+     `swe_pheno()` refusing `ipl < SE_SUN`. Nets: two new G24
+     `check-compat` cases (both directions) and a new gate, G25
+     `check-hostile` -- every calculation entry point over edge ids and
+     flag sets plus a fixed-seed random walk, UBSan with no recovery; it
+     fails on the compat build, and 400000 random calls were clean on the
+     fix. The fork's whole `make check` and G8 pass; the server's golden
+     gate passes 88 columns bit-exact on ts.14. The fork's
+     notes/UPSTREAM-BUGS.md gained entries 15-17. The server keeps its
+     `kObjIdMax` bound: a protocol should refuse ids no body has anyway.
+   - The fork's root Makefile had a hand-written dependency list that
+     rebuilt 6 of 10 library objects after touching sweph.h; it is
+     `-MMD -MP` now and rebuilds all 10.
+   - `tools/check-ephem.sh` now sweeps the bundled planet and Moon files
+     against Moshier (`tools/ephem-sweep.cpp`, compiled against the
+     vendored Swiss): 952800 samples over 1800-2400, threshold 0.01 deg,
+     worst good 0.0023. The sepl_18.se1 that shipped before 00a92da fails
+     it (35 samples, Mercury 110 deg), and so does a directory with no
+     files, since a Moshier fallback would otherwise agree with itself.
+     About 15 s, in `make check-full`. Closes review item B3's open net.

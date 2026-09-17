@@ -55,7 +55,8 @@ QT_GUI_PLAN.md.
   address field. The maintainer hand-tested the blocking UI (the
   ladder is exponential, 1s doubling to 8s, and Cancel exits cleanly).
 - **The fork has no open review findings**: `EPHEMERIS_REVIEW.md` F1-F11
-  are all fixed or closed there, F9 last (ts.13).
+  are all fixed or closed there, F9 last (ts.13), and S-fork is fixed in
+  the library too (ts.14).
 - **Protocol 2 is landed** on `qt` (squash `8d6d1d1` of branch
   `ephdefer`, kept for review; 2026-09-16, review items S4, S9, S12, S-fork,
   T8): WELCOME carries `maxCells`, the work bound per REQUEST -- the
@@ -69,7 +70,7 @@ QT_GUI_PLAN.md.
   set only when it changes (S12), and REQUEST object ids are bounded
   (`kObjIdMax`) at parse -- Swiss's center-of-body arithmetic overflows
   int32 on ids a wire could otherwise carry (S-fork).
-- The fork this connects to is `2.10.03-ts.13`; see the server plan's
+- The fork this connects to is `2.10.03-ts.14`; see the server plan's
   Status section for branch, commit and gate state.
 
 ## 1. Goals

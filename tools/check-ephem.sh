@@ -15,6 +15,17 @@
 # a body nothing reads is invisible; for a body something reads it is a
 # 0Ari00'00" position, which looks like an answer. Both cost nothing to
 # rule out: 75 files, one read of eight bytes each.
+#
+# A real file with bad numbers in it passes that, and one did: on
+# 2026-09-16 the bundled sepl_18.se1 put Mercury up to 104 degrees out over
+# the first 80 days of 1800 (EPHEMERIS_REVIEW.md B3), and nothing noticed
+# until an animation reached that far back. So the second half compares
+# the planet and Moon files against Moshier over their whole range --
+# tools/ephem-sweep.cpp, which says why that reference and that threshold.
+# About 15 seconds, most of it compiling the vendored Swiss sources into
+# the probe; it fails on the file that shipped (35 samples, 110 degrees)
+# and on a directory with no files in it. The asteroid files have no
+# Moshier to compare with.
 set -eu
 cd "$(dirname "$0")/.."
 [ -d ephem ] || { echo "no ephem/ directory"; exit 2; }
@@ -28,3 +39,10 @@ done
 [ "$n" -gt 0 ] || { echo "ephem/ holds no .se1 files at all"; exit 1; }
 [ "$bad" -eq 0 ] || { echo "== $bad of $n files in ephem/ are not ephemeris data"; exit 1; }
 echo "$n files, all Swiss Ephemeris data"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+g++ -O2 -std=gnu++17 -w -I. -o "$tmp/ephem-sweep" tools/ephem-sweep.cpp \
+  swecl.cpp swedate.cpp swehouse.cpp swejpl.cpp swemmoon.cpp swemplan.cpp \
+  sweph.cpp swephlib.cpp -lm
+"$tmp/ephem-sweep" ephem
