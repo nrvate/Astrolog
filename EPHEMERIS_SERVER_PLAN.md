@@ -1060,7 +1060,13 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
     ASan by design: its quarantine grows RSS, which is what S3 measures.)
     A leak check across connections, refusals and a SIGTERM drain found
     the HELLO-deadline timer never closed, one per loop -- now closed when
-    the drain starts, while the loop still runs to free it. What remains
+    the drain starts, while the loop still runs to free it. Closing it
+    first hung every drained server (the ops gate's deadline leg): the timer
+    was created "fallthrough", uSockets' `us_timer_close()` decrements the
+    loop's live-poll count for every timer though only non-fallthrough ones
+    incremented it, and a count of -1 keeps `while (num_polls)` looping for
+    ever. It is an ordinary timer now; the drain closing it is what lets
+    the loop end. What remains
     at exit is 424 bytes: a timer and a socket closed during a loop's last
     iteration, which uSockets frees at the start of the next one, and
     there is no next one after `run()` returns. Once per process, at exit;

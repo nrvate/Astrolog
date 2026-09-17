@@ -1568,10 +1568,15 @@ static void SetupLoop(LoopCtx *lc) {
     WireApp(lc->app.get(), lc);
   }
   // The HELLO deadline: once a second, close whatever connected and has not
-  // said HELLO within --hello-seconds. Fallthrough, so this timer alone does
-  // not keep a draining loop alive.
+  // said HELLO within --hello-seconds. NOT a fallthrough timer, though that
+  // looks like the right kind for a sweep: uSockets' us_timer_close()
+  // decrements the loop's live-poll count for every timer, and only a
+  // non-fallthrough one ever incremented it, so closing a fallthrough timer
+  // left the count at -1 and `while (num_polls)` never ended -- a drained
+  // server that never exited. This one keeps the loop alive until the
+  // drain closes it, which is what a drain waits for anyway.
   if (gOpt.helloSeconds) {
-    us_timer_t *t = us_create_timer((us_loop_t *)lc->loop, 1, sizeof(LoopCtx *));
+    us_timer_t *t = us_create_timer((us_loop_t *)lc->loop, 0, sizeof(LoopCtx *));
     lc->helloTimer = t;
     *(LoopCtx **)us_timer_ext(t) = lc;
     us_timer_set(t, gOpt.Tls() ? HelloSweep<true> : HelloSweep<false>, 1000, 1000);
