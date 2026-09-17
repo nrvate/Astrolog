@@ -1,5 +1,5 @@
 # file	direction	type	expect	note
-# set-sha256 aecdde299b4a3054b68b9fd95fa91c8e87467177d059d60eb00f33e5795b825b
+# set-sha256 6b3b9157caf8a3fc5c56163e26087714b40356103dfbcdb00e0f85fe0f6d9bcc
 hello_min.hex	c2s	1	ok	no token, no caps
 hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
 hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
@@ -7,6 +7,7 @@ welcome_swiss.hex	s2c	2	ok	astrolog-ephd-like capabilities
 welcome_prometheia.hex	s2c	2	ok	prometheiad-like, with segments
 request_basic.hex	c2s	3	ok	Sun and Moon, TT hourly grid, geocentric
 request_cast_profiles.hex	c2s	3	ok	one cast: three profiles (geo; helio; topocentric Fagan-Bradley on the invariable plane with the ayanamsa column) and all six object kinds
+request_deadline.hex	c2s	3	ok	a prefetch window with a 250 ms deadline: advisory, and outside the cache key
 request_list_ut.hex	c2s	3	ok	instant list in UT1, server's delta T
 request_backward_grid.hex	c2s	3	ok	negative step (animation running backwards)
 request_user_zodiac.hex	c2s	3	ok	user ayanamsha anchored at J2000
@@ -29,7 +30,9 @@ cancel.hex	c2s	8	ok	cancel request 4
 ping.hex	c2s	6	ok	
 pong.hex	s2c	7	ok	
 lookup_prefix.hex	c2s	9	ok	prefix, hypotheticals and stars included
+lookup_batch.hex	c2s	9	ok	four names in one message; maxMatches is the budget for the WHOLE answer
 lookup_result_lilith.hex	s2c	10	ok	three kinds answer one name
+lookup_result_batch.hex	s2c	10	ok	four queries answered in order, one with no match, the message budget spent
 lookup_result_future_kind.hex	s2c	10	ok	a match of an unregistered kind, skipped by its matchLen, between two readable ones
 lookup_result_bad_matchlen.hex	s2c	10	malformed	matchLen disagrees with a match the reader can read
 env_bad_magic.hex	c2s	6	malformed	magic 0x1EF1
@@ -73,6 +76,9 @@ sidereal_on_the_equator.hex	c2s	3	malformed	a sidereal zodiac with plane = equat
 request_id_zero.hex	c2s	3	malformed	a REQUEST with requestId 0
 hello_request_id.hex	c2s	1	malformed	a HELLO with requestId 1
 lookup_id_zero.hex	c2s	9	malformed	a LOOKUP with requestId 0
+lookup_no_queries.hex	c2s	9	malformed	a LOOKUP carrying no query at all
+lookup_budget_zero.hex	c2s	9	malformed	maxMatches 0: a budget of nothing
+lookup_result_no_queries.hex	s2c	10	malformed	a LOOKUP_RESULT answering no query
 data_chunk0_no_meta.hex	s2c	4	malformed	DATA chunk 0 with the meta flag clear
 segdata_chunk0_no_meta.hex	s2c	15	malformed	SEGDATA chunk 0 with the meta flag clear
 lookup_match_profile.hex	s2c	10	malformed	a LOOKUP_RESULT match whose object names profile 1

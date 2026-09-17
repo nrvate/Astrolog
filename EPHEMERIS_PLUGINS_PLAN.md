@@ -18,12 +18,14 @@ version 3, and this section is the design authority behind it.
   is squashed into `qt` when the maintainer says so; never before.
 - **Approved plan.** `/nvmraid/home/n/.claude/plans/reactive-percolating-prism.md`
   (2026-09-17). This document supersedes it wherever they differ.
-- **Phases.** See §7. The work log (§8) says which are done. Phase 2 is
-  done but for the pieces item 2 names as deferred (segments, elements, the
-  block-wise compute and the `cancel` capability that waits on it).
-- **Prometheia.** `/shares/ephemeris-prometheia` pins `ephproto.h` and runs the
-  conformance fixtures (§3.10). With version 4 it deletes its wire map
-  (`server/wire_map.*`).
+- **Phases.** See §7. The work log (§8) says which are done. Phase 2 is done,
+  and work log item 3 cleared what it deferred except **segments** (no fitter;
+  the capability is not advertised) and **orbital elements** (kind 4 is a
+  per-object error 2 until the fork has an entry point). `cancel` IS
+  advertised now: requests are computed in blocks across loop turns.
+- **Prometheia.** `/shares/ephemeris-prometheia` pins `ephproto.h`,
+  `ephsrv/registries.json` and the conformance fixtures (§3.10). With version
+  4 it deletes its wire map (`server/wire_map.*`).
 
 ## 1. Why
 
@@ -1219,6 +1221,14 @@ server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from
 
 ## 6. Appendix A — registries
 
+These registries are also published as **`ephsrv/registries.json`**,
+generated from this appendix by `tools/gen-registries.py` and regenerated and
+diffed by `make check`; `ephsrv/ephproto_test.cpp` requires the codec's own
+constants to agree with it, by name. An implementation may vendor that file
+rather than transcribe the lists below. Values are appended and never reused
+(§3.6), so a pinned copy stays valid; a copy that is missing values is merely
+older than the server it is talking to.
+
 **A.1 Message types:**
 - 1 HELLO
 - 2 WELCOME
@@ -1573,6 +1583,87 @@ the gates the phase touches.
      one REQUEST carries a whole cast, prefetch has its own priority, segments
      answer animation, CANCEL stops wasted computation, and the cache key is
      canonical so one question is computed once.
+
+3. **The five debts of the protocol pass, cleared (2026-09-17).** What phase 2
+   deferred, and the five §3 rules written after its spec freeze.
+   - **`ephsrv/registries.json`**, generated from Appendix A by
+     `tools/gen-registries.py` and diffed by `make check` like every other
+     generated table. 23 registries -- message types, caps bits, both TLV
+     tag spaces, observers, planes, forms, frames, correction bits, sidereal
+     planes, time scales, extra columns, object kinds, orbit points and
+     methods, element equinoxes and centres, per-object error codes, META
+     flags, ERROR codes, the zodiac, hypothetical and precession tokens.
+     `ephproto_test` then requires the CODEC's constants to agree with the
+     file, by name and not by position, so prose, file and code cannot
+     drift; sabotaging one message type's value and one zodiac token was
+     each seen to fail it. The file is the other implementation's to vendor,
+     so it carries nothing of Astrolog's.
+   - **Batched LOOKUP.** LOOKUP carries `u8 nQueries` and that many `str8`
+     queries, LOOKUP_RESULT `u8 nQueries` and one match list each, and
+     `maxMatches` is the budget for the WHOLE message, filled in query order
+     with `truncated` when it runs out. A per-query budget would let a
+     260-byte message ask for 255 x 65,535 matches, and a body picker asking
+     one name at a time is a round trip a name -- Object Selections offers
+     78. Codec, server, wire client (`--lookup`, repeatable) and fixtures;
+     the robust gate's L1 asks four names in one message, checks a query
+     with no match keeps its (empty) place, and checks that three queries
+     under a budget of two come back truncated.
+   - **`u32 deadlineMs`** closes the delivery block, which is 16 bytes now.
+     Advisory and outside the cache key: this server records and logs it and
+     never fails a request for it, because it has one strategy -- samples,
+     computed now -- and so no cheaper one to choose.
+   - **`u32 maxSegSpanDays`** appended to the segments capability (0x000F),
+     codec and fixtures only: nothing here fits segments, and the capability
+     is not advertised.
+   - **The two fitter-side rules** -- the check set including both endpoints
+     (τ = ±1), and the 32-day J2000 lattice with downward-only quantisation
+     of `segTargetErrArcsec` -- have nothing to implement in a server that
+     does not fit, and are written where the fitter will go (`UnservedOf()`
+     in `eph_srv.cpp`), with the measurement that makes the endpoints
+     non-negotiable. Nothing in this tree claims to fit anything.
+   - **Block-wise computation, and the `cancel` capability.** A REQUEST is
+     computed in blocks of rows across turns of its loop, so a CANCEL stops
+     the work rather than only the bytes, a cancelled request caches
+     nothing, and one large request no longer holds its loop. Measured, 8
+     bodies x 20,000 rows: 1420 ms of server CPU answered against 200 ms
+     cancelled 200 ms in, and a one-row request on a second connection
+     answered in 29 ms where it had waited 1132 ms. `tools/ephsrv-robust.sh`
+     C2 gates the three, each seen failing under sabotage.
+   - **Measured against §3.9, and it does not hold here.** "Computing
+     time-major -- every object at one instant, then the next" is 46% SLOWER
+     on this engine: a 30-body 1000-row cold window costs 463 ms that way
+     against 317 ms object-major, because Swiss's caches are per body and
+     want consecutive instants. So a block is a range of rows of ONE object.
+   - **The §3.9 canary, run on this engine.** *The same instant asked 1000
+     times against 1000 distinct instants*, one object, server compute time:
+     Sun 0.07 ms against 8.4 ms, Moon 0.05 against 9.2, Mars 0.07 against
+     9.3, Chiron 0.10 against 12.0, the Moon's true node 0.06 against 11.7.
+     A repeated instant costs about 1% of a fresh one -- Swiss's per-body
+     cache answers it -- so nothing is being recomputed there. **The
+     exception is fixed stars**: Aldebaran costs 3.37 ms for the same
+     instant 1000 times and 3.33 ms for 1000 distinct ones, the same number.
+     Per-position work that does not depend on the instant is redone for
+     every row, which is exactly the shape §3.9 warns about, though the
+     absolute cost is small (3.4 µs a row, against 8.2 for a planet).
+     Recorded as the next pass's item, not restructured in this one.
+     *One object asked first against later*: costs are additive and order
+     does not matter. Mars alone 8.8-10.6 ms, Chiron alone 11.2-12.5, the
+     two together 19.4-22.0 either way round; eight bodies together 68.5-69.8
+     against 69.5 for the sum of the same eight asked alone. No per-window
+     cost is paid by whoever arrives first here, and no body is expensive
+     merely for being asked first -- the one that is dearer (Jupiter) is
+     dearer alone too. That is the other side of the time-major measurement
+     above: there is nothing shared across a cast to reuse, because Swiss
+     recomputes what it needs per body.
+   - **A conflict in §3.4 worth fixing.** The CANCEL paragraph says flushing
+     each block as it completes "starts the client's first rows sooner", but
+     DATA's rules say chunk 0 MUST carry the metadata and that clients use
+     chunk 0's -- and META's `rowsOk`, `firstFailedRow` and `partial` are
+     facts about the whole answer. A server cannot stream a block before the
+     last row is computed without writing those before they are known. This
+     server computes in blocks and streams when the answer is whole, which is
+     what the normative rules require; the suggestion needs either a
+     "metadata may be revised on the last chunk" rule or withdrawal.
 
 2. **Phase 2, protocol version 4 in code (2026-09-17).** `astrolog-ephd`,
    `eph_wsclient` and the Qt client speak version 4 and nothing else, in one

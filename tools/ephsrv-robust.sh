@@ -10,11 +10,18 @@
 #       before HELLO is ERROR 1 and closes; every malformed and unsupported
 #       conformance fixture is refused ERROR 1 or 11 as its MANIFEST says,
 #       and the connection still answers after each
-#   C1  CANCEL: a big answer cancelled while it streams loses its unsent
-#       chunks and is answered ERROR 10, nothing of it follows, the
+#   C1  CANCEL: a big answer cancelled before it is finished loses its
+#       unsent chunks and is answered ERROR 10, nothing of it follows, the
 #       connection answers the next request, and the same window asked
 #       again comes back WHOLE -- a partial answer never becomes a cache
 #       entry (3.9)
+#   C2  and the CANCEL stops the WORK, not just the sending: a request is
+#       computed in blocks of rows across loop turns, so a cancelled window
+#       costs the server less than half the CPU of the same window answered,
+#       the same window asked again is a cache MISS answered whole, and a
+#       one-row request on a second connection is answered while an
+#       8 x 20000 window computes on the first. This is what the `cancel`
+#       capability bit is advertised on
 #   P1  priority: an interactive request queued behind two prefetch ones
 #       that have not begun streaming is answered before them (3.9)
 #   L1  LOOKUP: a name, an alias, a number and a prefix resolve to objects
@@ -192,17 +199,79 @@ $CLI --port "$PORT" --objs "$BODIES" --count 10000 --step 60 --jd 2451600.5 \
   --expect-rows 10000 --quiet 2> "$SCRATCH/c1b.err" ||
   fail "C1: the cancelled window asked again: $(head -1 "$SCRATCH/c1b.err")"
 
+# ---- C2: computed in blocks, so a CANCEL stops the WORK ---------------------
+step "C2"
+# A request is computed in blocks of rows across loop turns (3.4), which is
+# what makes CANCEL mean anything and what lets the `cancel` cap be
+# advertised. Three things follow, and none of them held before:
+#   (a) a cancelled request stops COMPUTING -- the server's CPU says so;
+#   (b) it caches nothing, so the same window asked again is a MISS that
+#       computes a whole answer, not a hit on half of one;
+#   (c) a big request does not starve a second connection on the same loop.
+# DISTINCT bodies, unlike C1's sixty-four Suns: every object of one request
+# is now computed at one instant before the next instant, so a body repeated
+# 64 times is answered 63 times from Swiss's own per-body cache and 128,000
+# cells cost 40 ms. Real work needs real bodies.
+C2_BODIES=10,301,199,299,4,5,6,7
+CLK=$(getconf CLK_TCK)
+cpu_ms() { awk -v hz="$CLK" '{print int(($14 + $15) * 1000 / hz)}' "/proc/$1/stat"; }
+c2_at=$(cpu_ms "$A")
+$CLI --port "$PORT" --objs "$C2_BODIES" --count 20000 --step 60 --jd 2452000.5 --quiet \
+  --expect-rows 20000 > /dev/null 2> "$SCRATCH/c2a.err" ||
+  fail "C2: the uncancelled window: $(head -1 "$SCRATCH/c2a.err")"
+c2_full=$(( $(cpu_ms "$A") - c2_at ))
+c2_at=$(cpu_ms "$A")
+c2_log=$(wc -l < "$SCRATCH/a.log")
+$CLI --port "$PORT" --objs "$C2_BODIES" --count 20000 --step 60 --jd 2452500.5 \
+  --cancel-after-ms 200 --quiet > "$SCRATCH/c2.out" 2> "$SCRATCH/c2.err" ||
+  fail "C2: the cancelled window: $(head -1 "$SCRATCH/c2.err")"
+c2_cut=$(( $(cpu_ms "$A") - c2_at ))
+echo "   C2: the server spent ${c2_full} ms of CPU answering that window, ${c2_cut} ms cancelled"
+[ "$c2_full" -gt 300 ] ||
+  fail "C2: the whole window cost only ${c2_full} ms of CPU; too small to measure a cancel against"
+[ $(( c2_cut * 2 )) -lt "$c2_full" ] ||
+  fail "C2: cancelling cost ${c2_cut} ms against ${c2_full} ms: the computing did not stop"
+grep -q " evt=cancel .* cells_computed=" "$SCRATCH/a.log" ||
+  fail "C2: the cancel line does not say how many cells had been computed"
+# (b) nothing partial cached: the same window again is a miss, answered whole.
+$CLI --port "$PORT" --objs "$C2_BODIES" --count 20000 --step 60 --jd 2452500.5 \
+  --expect-rows 20000 --quiet > /dev/null 2> "$SCRATCH/c2b.err" ||
+  fail "C2: the cancelled window asked again: $(head -1 "$SCRATCH/c2b.err")"
+tail -n +$(( c2_log + 1 )) "$SCRATCH/a.log" | grep -q "evt=req .* rows=20000 .* cache=miss" ||
+  fail "C2: the cancelled window came back from the cache: a partial answer was cached"
+# (c) the loop stays responsive: a one-row request on a SECOND connection,
+# while an 8 x 20000 window computes on the first.
+$CLI --port "$PORT" --objs "$C2_BODIES" --count 20000 --step 60 --jd 2453000.5 --quiet \
+  --expect-rows 20000 > /dev/null 2> "$SCRATCH/c2big.err" &
+c2_big=$!
+sleep 0.3
+c2_t0=$(date +%s%N)
+$CLI --port "$PORT" --objs 10 --count 1 --quiet > /dev/null 2> "$SCRATCH/c2small.err" ||
+  fail "C2: the second connection was not answered: $(head -1 "$SCRATCH/c2small.err")"
+c2_small=$(( ($(date +%s%N) - c2_t0) / 1000000 ))
+c2_bigms=$(( ($(date +%s%N) - c2_t0) / 1000000 ))
+wait "$c2_big" || fail "C2: the big window failed while a second connection asked"
+c2_bigms=$(( ($(date +%s%N) - c2_t0) / 1000000 ))
+echo "   C2: a one-row request took ${c2_small} ms while an 8 x 20000 window took ${c2_bigms} ms"
+[ "$c2_bigms" -gt 600 ] ||
+  fail "C2: the big window took only ${c2_bigms} ms; too short to starve anything"
+[ "$c2_small" -lt 1000 ] && [ $(( c2_small * 2 )) -lt "$c2_bigms" ] ||
+  fail "C2: the small request waited ${c2_small} ms of the big one's ${c2_bigms} ms: the loop was blocked"
+
 # ---- P1: interactive work before prefetch ----------------------------------
 step "P1"
-# Three requests at once, none read for two seconds: the first (prefetch)
-# starts streaming and stalls, the second (prefetch) queues behind it, and
-# the third (interactive) must be answered before that second one.
+# Three requests at once, none read for two seconds: two prefetch, then one
+# interactive, which must be answered before both. Since answers are computed
+# in blocks across loop turns, none of the three has begun STREAMING when the
+# interactive one arrives, so it goes in front of both -- a prefetch keeps its
+# place only once its first chunk is out. Before block-wise computing the
+# first prefetch was computed and streaming by then, and the order was 1,3,2.
 if ! $CLI --port "$PORT" --objs "$BODIES" --count 10000 --step 60 --jd 2451700.5 \
     --burst 3 --burst-step 1 --priority 1,1,0 --sleep-ms 2000 --quiet \
     > "$SCRATCH/p1.out" 2> "$SCRATCH/p1.err"; then
   fail "P1: the three-request burst: $(head -1 "$SCRATCH/p1.err")"
 else
-  grep -q "order 1,3,2" "$SCRATCH/p1.out" ||
+  grep -q "order 3,1,2" "$SCRATCH/p1.out" ||
     fail "P1: the interactive request was not answered before the queued prefetch one ($(cat "$SCRATCH/p1.out"))"
 fi
 
@@ -220,8 +289,24 @@ lookup "an alias" "North Node" 0 'kind=1 o:301/0/0'
 lookup "a number" 433 0 'kind=0 20000433'
 lookup "a prefix" Ura 1 'quality=2 kind=0 7'
 lookup "a hypothetical" Kronos 2 'kind=3 h:kronos'
-lookup "a name of several kinds" Lilith 2 'LOOKUP n=2'
-lookup "a name that matches nothing" Qwertyuiop 3 'LOOKUP n=0'
+lookup "a name of several kinds" Lilith 2 'LOOKUP queries=1 n=2'
+lookup "a name that matches nothing" Qwertyuiop 3 'LOOKUP queries=1 n=0'
+# 3.4: several queries in ONE message, answered in order, sharing one budget.
+$CLI --port "$PORT" --lookup Ceres --lookup Qwertyuiop --lookup Chiron \
+  --lookup "North Node" --max-matches 16 --quiet > "$SCRATCH/l1b.out" 2>&1 ||
+  fail "L1: the batched lookup failed: $(head -1 "$SCRATCH/l1b.out")"
+grep -q 'LOOKUP queries=4 n=3 truncated=0' "$SCRATCH/l1b.out" ||
+  fail "L1: four queries in one message: $(tr '\n' ' ' < "$SCRATCH/l1b.out")"
+grep -q 'QUERY 1 "Qwertyuiop" n=0' "$SCRATCH/l1b.out" ||
+  fail "L1: a query with no match did not keep its place: $(tr '\n' ' ' < "$SCRATCH/l1b.out")"
+# One budget for the whole message: two matches, and truncated says so.
+$CLI --port "$PORT" --lookup Ceres --lookup Chiron --lookup "North Node" \
+  --max-matches 2 --quiet > "$SCRATCH/l1c.out" 2>&1 ||
+  fail "L1: the budgeted lookup failed: $(head -1 "$SCRATCH/l1c.out")"
+grep -q 'LOOKUP queries=3 n=2 truncated=1' "$SCRATCH/l1c.out" ||
+  fail "L1: maxMatches is not the budget for the whole message: $(tr '\n' ' ' < "$SCRATCH/l1c.out")"
+grep -q 'evt=lookup .* queries=4 matches=3' "$SCRATCH/a.log" ||
+  fail "L1: the server did not log the batch"
 $CLI --port "$PORT" --objs 10 --count 1 --quiet || fail "L1: not answering after the lookups"
 
 # ---- S2: every row exactly once under backpressure ----------------------

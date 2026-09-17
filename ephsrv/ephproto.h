@@ -579,6 +579,10 @@ struct Capabilities {
   uint8_t segMaxDegree = 0;
   uint32_t segMaxPerObject = 0, segKinds = 0;
   float segMinErrArcsec = 0.0f;
+  // The widest span it will fit in one request, 0 for no stated bound: the
+  // honest unit for a segments limit is the time WINDOW, not the objects in
+  // it, because the frame work under a window is paid once and shared (3.9).
+  uint32_t segMaxSpanDays = 0;
 
   static bool Bit(uint32_t mask, uint32_t i) { return i < 32 && ((mask >> i) & 1u); }
   bool Kind(uint8_t k) const { return Bit(kinds, k); }
@@ -628,6 +632,7 @@ inline void EncodeCapabilities(const Capabilities &c, TlvList *out) {
   if (c.fSegments) {
     w.u8(c.segMaxDegree); w.u8(0); w.u8(0); w.u8(0);
     w.u32(c.segMaxPerObject); w.f32(c.segMinErrArcsec); w.u32(c.segKinds);
+    w.u32(c.segMaxSpanDays);
     add(kCapTagSegments);
   }
   if (c.fRatesBound) { w.f32(c.ratesDegPerDay); w.f32(c.ratesAuPerDay); add(kCapTagRatesBound); }
@@ -684,6 +689,7 @@ inline Outcome ParseCapabilities(const TlvList &caps, Capabilities *c, std::stri
         c->segMaxPerObject = r.u32();
         c->segMinErrArcsec = r.f32();
         c->segKinds = r.u32();
+        c->segMaxSpanDays = r.u32();
         break;
       case kCapTagRatesBound:
         c->fRatesBound = true;
@@ -741,6 +747,11 @@ struct Request {
   uint8_t maxDegreeHint = 0;   // segments only; 0 lets the server choose
   uint32_t chunkRows = 0;
   float segTargetErrArcsec = 0.0f;
+  // 3.4: how soon the client wants the answer, 0 for "no deadline stated".
+  // Advisory -- a server MAY choose a cheaper strategy to meet it and MUST
+  // NOT fail a request for missing it -- and outside the cache key, like the
+  // rest of the delivery block.
+  uint32_t deadlineMs = 0;
   // Question block.
   uint8_t timeScale = kTimeTT, timeMode = kTimeGrid;
   Time start;              // grid
@@ -756,8 +767,9 @@ struct Request {
   std::vector<Object> objs;
   TlvList ext;
   // Filled by ParseRequest: where the question block starts in the payload
-  // (the cache key is datasetId + payload[questionOffset..], 3.7).
-  size_t questionOffset = 12;
+  // (the cache key is datasetId + payload[questionOffset..], 3.7). The
+  // delivery block is 16 bytes since deadlineMs joined it.
+  size_t questionOffset = 16;
 
   // 3.5 row instant.
   Time RowTime(uint32_t row) const {
@@ -996,14 +1008,15 @@ inline Outcome ParseRequest(const uint8_t *p, size_t n, Request *q, std::string 
                             bool *pfIgnoredExt = nullptr) {
   Reader r(p, n);
   Verdict v;
-  // Delivery block (12 bytes).
+  // Delivery block (16 bytes).
   q->precision = r.u8();
   q->priority = r.u8();
   q->representation = r.u8();
   q->maxDegreeHint = r.u8();
   q->chunkRows = r.u32();
   q->segTargetErrArcsec = r.f32();
-  q->questionOffset = 12;
+  q->deadlineMs = r.u32();
+  q->questionOffset = 16;
   if (q->maxDegreeHint > kSegDegreeMax) v.Unsupported("maxDegreeHint past 31");
   if (q->precision > kPrecF32) v.Unsupported("precision not in the registry");
   if (q->priority > 1) v.Unsupported("priority not in the registry");
@@ -1117,7 +1130,7 @@ inline Outcome ParseRequest(const uint8_t *p, size_t n, Request *q, std::string 
 inline void EncodeRequest(std::vector<uint8_t> *pay, const Request &q) {
   Writer w(pay);
   w.u8(q.precision); w.u8(q.priority); w.u8(q.representation); w.u8(q.maxDegreeHint);
-  w.u32(q.chunkRows); w.f32(q.segTargetErrArcsec);
+  w.u32(q.chunkRows); w.f32(q.segTargetErrArcsec); w.u32(q.deadlineMs);
   w.u8(q.timeScale); w.u8(q.timeMode); w.u16(0);
   if (q.timeMode == kTimeGrid) {
     WriteTime(w, q.start); w.i64(q.stepNs); w.u32(q.nTime);
@@ -1302,10 +1315,14 @@ inline void EncodeLegacyError(std::vector<uint8_t> *pay, const LegacyError &e) {
 
 // ---- 3.4 LOOKUP and LOOKUP_RESULT -----------------------------------------------------
 
+// LOOKUP carries several queries at once and ONE budget for the answer as a
+// whole (3.4): a per-query budget would let a 260-byte message ask for
+// 255 x 65,535 matches, and a body picker asking one name at a time is a
+// round trip per name -- Astrolog's Object Selections offers 78.
 struct Lookup {
-  uint16_t maxMatches = 8;
+  uint16_t maxMatches = 8;   // the budget for the whole answer, 1..the cap's limit
   uint8_t flags = 0;   // bit 0 prefix, bit 1 hypotheticals, bit 2 stars
-  std::string query;
+  std::vector<std::string> queries;   // 1..255, answered in this order
   TlvList ext;
 };
 inline Outcome ParseLookup(const uint8_t *p, size_t n, Lookup *l, std::string *why) {
@@ -1313,20 +1330,27 @@ inline Outcome ParseLookup(const uint8_t *p, size_t n, Lookup *l, std::string *w
   Verdict v;
   l->maxMatches = r.u16();
   l->flags = r.u8();
-  if (r.u8()) v.Malformed("LOOKUP reserved byte nonzero");
-  l->query = ReadText(r, v, "query is not text");
+  uint8_t nQueries = r.u8();
+  l->queries.clear();
+  if (r.ok() && nQueries == 0) v.Malformed("LOOKUP with no queries");
+  for (uint8_t i = 0; i < nQueries && r.ok(); i++)
+    l->queries.push_back(ReadText(r, v, "query is not text"));
   l->ext = ReadTlv(r, v, nullptr, 0);
   if (!r.ok()) v.Malformed("LOOKUP truncated");
   else if (r.left()) v.Malformed("bytes after LOOKUP");
   if (l->maxMatches == 0) v.Malformed("LOOKUP maxMatches 0");
   if (l->flags & ~(uint8_t)7) v.Malformed("LOOKUP flag bits not in the registry");
-  if (r.ok() && l->query.empty()) v.Malformed("empty LOOKUP query");
+  if (r.ok())
+    for (const std::string &q : l->queries)
+      if (q.empty()) v.Malformed("empty LOOKUP query");
   *why = v.why();
   return v.outcome();
 }
 inline void EncodeLookup(std::vector<uint8_t> *pay, const Lookup &l) {
   Writer w(pay);
-  w.u16(l.maxMatches); w.u8(l.flags); w.u8(0); w.str8(l.query); WriteTlv(w, l.ext);
+  w.u16(l.maxMatches); w.u8(l.flags); w.u8((uint8_t)l.queries.size());
+  for (const std::string &q : l.queries) w.str8(q);
+  WriteTlv(w, l.ext);
 }
 
 struct Match {
@@ -1340,55 +1364,65 @@ struct Match {
   bool fUnknownKind = false;
   std::string raw;
 };
+// One answer to a batched LOOKUP: the source table is shared by every query,
+// and the matches come back one list a query, in the order the questions were
+// asked (3.4). `truncated` says the message budget ran out, not that any one
+// query was cut.
 struct LookupResult {
   uint8_t flags = 0;   // bit 0 truncated
   std::vector<std::string> sources;
-  std::vector<Match> matches;
+  std::vector<std::vector<Match>> queries;   // one list per LOOKUP query
 };
 inline Outcome ParseLookupResult(const uint8_t *p, size_t n, LookupResult *lr, std::string *why) {
   Reader r(p, n);
   Verdict v;
-  uint16_t count = r.u16();
+  uint8_t nQueries = r.u8();
   lr->flags = r.u8();   // unknown bits ignored (3.1)
   ReadSources(r, v, &lr->sources);
-  lr->matches.clear();
+  lr->queries.clear();
+  if (r.ok() && nQueries == 0) v.Malformed("LOOKUP_RESULT with no queries");
   // 3.1 in the answering direction: a quality or an object kind this build
   // does not know is a registry that grew. An unknown quality is kept as it
   // came, and an unknown KIND is skipped by its matchLen -- which is what
   // that field is for -- so one new kind does not cost the matches after it.
   bool fStopped = false;
-  for (uint16_t i = 0; i < count && r.ok() && !fStopped; i++) {
-    Match m;
-    m.quality = r.u8();
-    m.sourceIdx = r.u8();
-    uint16_t matchLen = r.u16();
-    size_t leftAt = r.left();
-    if (!r.ok()) break;
-    if (m.sourceIdx >= lr->sources.size()) v.Malformed("match names a source not in the table");
-    if (!ReadObject(r, v, &m.obj, true)) {
-      // A kind this build does not know: matchLen says where the match ends,
-      // so it is skipped -- kept verbatim -- and the rest of the answer is
-      // read (3.4).
-      size_t used = leftAt - r.left();
-      const uint8_t *pRest = matchLen >= used ? r.bytes(matchLen - used) : nullptr;
-      if (pRest == nullptr) {
-        v.Malformed("match length does not cover its object");
-        fStopped = true;
+  for (uint8_t iq = 0; iq < nQueries && r.ok() && !fStopped; iq++) {
+    uint16_t count = r.u16();
+    lr->queries.push_back(std::vector<Match>());
+    std::vector<Match> &matches = lr->queries.back();
+    for (uint16_t i = 0; i < count && r.ok() && !fStopped; i++) {
+      Match m;
+      m.quality = r.u8();
+      m.sourceIdx = r.u8();
+      uint16_t matchLen = r.u16();
+      size_t leftAt = r.left();
+      if (!r.ok()) break;
+      if (m.sourceIdx >= lr->sources.size()) v.Malformed("match names a source not in the table");
+      if (!ReadObject(r, v, &m.obj, true)) {
+        // A kind this build does not know: matchLen says where the match ends,
+        // so it is skipped -- kept verbatim -- and the rest of the answer is
+        // read (3.4).
+        size_t used = leftAt - r.left();
+        const uint8_t *pRest = matchLen >= used ? r.bytes(matchLen - used) : nullptr;
+        if (pRest == nullptr) {
+          v.Malformed("match length does not cover its object");
+          fStopped = true;
+          continue;
+        }
+        m.fUnknownKind = true;
+        m.raw.assign((const char *)p + (n - leftAt), matchLen);
+        matches.push_back(std::move(m));
         continue;
       }
-      m.fUnknownKind = true;
-      m.raw.assign((const char *)p + (n - leftAt), matchLen);
-      lr->matches.push_back(std::move(m));
-      continue;
+      if (m.obj.profile != 0) v.Malformed("match object profile must be 0");
+      m.canonicalName = ReadText(r, v, "canonical name is not text");
+      m.designation = ReadText(r, v, "designation is not text");
+      m.validMin = ReadTime(r, v);
+      m.validMax = ReadTime(r, v);
+      if (r.ok() && leftAt - r.left() != matchLen)
+        v.Malformed("match length disagrees with the match this reader read");
+      matches.push_back(std::move(m));
     }
-    if (m.obj.profile != 0) v.Malformed("match object profile must be 0");
-    m.canonicalName = ReadText(r, v, "canonical name is not text");
-    m.designation = ReadText(r, v, "designation is not text");
-    m.validMin = ReadTime(r, v);
-    m.validMax = ReadTime(r, v);
-    if (r.ok() && leftAt - r.left() != matchLen)
-      v.Malformed("match length disagrees with the match this reader read");
-    lr->matches.push_back(std::move(m));
   }
   if (!r.ok()) v.Malformed("LOOKUP_RESULT truncated");
   else if (r.left() && !fStopped) v.Malformed("bytes after LOOKUP_RESULT");
@@ -1397,23 +1431,26 @@ inline Outcome ParseLookupResult(const uint8_t *p, size_t n, LookupResult *lr, s
 }
 inline void EncodeLookupResult(std::vector<uint8_t> *pay, const LookupResult &lr) {
   Writer w(pay);
-  w.u16((uint16_t)lr.matches.size());
+  w.u8((uint8_t)lr.queries.size());
   w.u8(lr.flags);
   WriteSources(w, lr.sources);
-  for (const Match &m : lr.matches) {
-    w.u8(m.quality); w.u8(m.sourceIdx);
-    if (m.fUnknownKind) {
-      w.u16((uint16_t)m.raw.size());
-      w.raw(m.raw.data(), m.raw.size());
-      continue;
+  for (const std::vector<Match> &matches : lr.queries) {
+    w.u16((uint16_t)matches.size());
+    for (const Match &m : matches) {
+      w.u8(m.quality); w.u8(m.sourceIdx);
+      if (m.fUnknownKind) {
+        w.u16((uint16_t)m.raw.size());
+        w.raw(m.raw.data(), m.raw.size());
+        continue;
+      }
+      size_t at = w.size();
+      w.u16(0);
+      size_t start = w.size();
+      WriteObject(w, m.obj);
+      w.str8(m.canonicalName); w.str8(m.designation);
+      WriteTime(w, m.validMin); WriteTime(w, m.validMax);
+      w.patchU16(at, (uint16_t)(w.size() - start));   // matchLen, as WriteTlv patches its total
     }
-    size_t at = w.size();
-    w.u16(0);
-    size_t start = w.size();
-    WriteObject(w, m.obj);
-    w.str8(m.canonicalName); w.str8(m.designation);
-    WriteTime(w, m.validMin); WriteTime(w, m.validMax);
-    w.patchU16(at, (uint16_t)(w.size() - start));   // matchLen, as WriteTlv patches its total
   }
 }
 

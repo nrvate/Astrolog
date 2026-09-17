@@ -23,7 +23,8 @@
 //   runs        [--repeat N] [--latency FILE] [--sleep-ms MS]
 //               [--burst N [--burst-step DAYS]] [--cycles N] [--hello N]
 //               [--no-hello] [--idle-ms MS] [--cancel-after-ms MS]
-//   other       [--lookup QUERY [--lookup-flags F] [--max-matches N]]
+//   other       [--lookup QUERY ... [--lookup-flags F] [--max-matches N]]
+//               [--deadline-ms MS]
 //               [--send-hex FILE] [--pin DATASET]
 //
 // Sends HELLO, prints WELCOME unless --quiet, sends one REQUEST, collects its
@@ -54,8 +55,12 @@
 // (after --idle-ms if given). --cancel-after-ms MS cancels the request MS
 // after sending it and requires ERROR 10, then a PONG with no DATA for the
 // cancelled request in between. --lookup sends a LOOKUP and prints its
-// matches. --send-hex sends one frame from a hex file (a conformance
-// fixture) and prints what came back. --pin adds an ephemeris pin (A.4).
+// matches; given more than once it batches the queries into ONE message, and
+// --max-matches is then the budget for the whole answer (3.4). --deadline-ms
+// sets the REQUEST's advisory deadline, which a server may use to choose a
+// cheaper strategy and must never fail the request for. --send-hex sends one
+// frame from a hex file (a conformance fixture) and prints what came back.
+// --pin adds an ephemeris pin (A.4).
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -435,7 +440,8 @@ static bool readHexFile(const char *path, std::vector<uint8_t> *out) {
 
 int main(int argc, char **argv) {
   const char *host = "127.0.0.1", *outFile = nullptr, *latencyFile = nullptr;
-  const char *szCa = nullptr, *szSni = nullptr, *szToken = nullptr, *szLookup = nullptr;
+  const char *szCa = nullptr, *szSni = nullptr, *szToken = nullptr;
+  std::vector<std::string> lookups;   // --lookup, repeatable: one message
   const char *szSendHex = nullptr, *szPin = nullptr, *szList = nullptr;
   const char *szDeltaTTable = nullptr, *szPriority = nullptr;
   bool fTls = false, quiet = false, fMeta = false, fUT = false, fNoHello = false;
@@ -445,7 +451,7 @@ int main(int argc, char **argv) {
   int64_t stepNs = 600LL * 1000000000LL;
   uint32_t count = 5, repeat = 1, expectRows = 0, chunkRows = 500;
   uint32_t sleepMs = 0, burst = 0, cycles = 0, nHello = 1, idleMs = 0, cancelAfterMs = 0;
-  int precision = 64, lookupFlags = 0, maxMatches = 8;
+  int precision = 64, lookupFlags = 0, maxMatches = 8, deadlineMs = 0;
   Request req;
   req.profiles.push_back(Profile());
   bool fProfileUsed = false, fFirstProfile = true;
@@ -516,9 +522,10 @@ int main(int argc, char **argv) {
     else if (!strcmp(a, "--no-hello")) fNoHello = true;
     else if (!strcmp(a, "--idle-ms") && next()) idleMs = (uint32_t)strtoul(v, nullptr, 10);
     else if (!strcmp(a, "--cancel-after-ms") && next()) cancelAfterMs = (uint32_t)strtoul(v, nullptr, 10);
-    else if (!strcmp(a, "--lookup") && next()) szLookup = v;
+    else if (!strcmp(a, "--lookup") && next()) lookups.push_back(v);
     else if (!strcmp(a, "--lookup-flags") && next()) lookupFlags = atoi(v);
     else if (!strcmp(a, "--max-matches") && next()) maxMatches = atoi(v);
+    else if (!strcmp(a, "--deadline-ms") && next()) deadlineMs = atoi(v);
     else if (!strcmp(a, "--send-hex") && next()) szSendHex = v;
     else if (!strcmp(a, "--pin") && next()) szPin = v;
     else if (!strcmp(a, "--tls")) fTls = true;
@@ -540,6 +547,7 @@ int main(int argc, char **argv) {
   }
   req.precision = precision == 32 ? kPrecF32 : kPrecF64;
   req.chunkRows = chunkRows;
+  req.deadlineMs = (uint32_t)deadlineMs;
   req.timeScale = fUT ? kTimeUT1 : kTimeTT;
   req.deltaTSec = deltaT;
   if (szList) {
@@ -574,7 +582,7 @@ int main(int argc, char **argv) {
     e.value += szPin;
     req.ext.push_back(e);
   }
-  if (req.objs.empty() && !szLookup && !szSendHex && cycles == 0)
+  if (req.objs.empty() && lookups.empty() && !szSendHex && cycles == 0)
     die("no objects: --objs, --points, --stars, --hypo, --desig or --elements");
 
   if (fTls) {
@@ -666,11 +674,11 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  if (szLookup) {
+  if (!lookups.empty()) {
     Lookup l;
     l.maxMatches = (uint16_t)maxMatches;
     l.flags = (uint8_t)lookupFlags;
-    l.query = szLookup;
+    l.queries = lookups;
     std::vector<uint8_t> pay, msg;
     EncodeLookup(&pay, l);
     sendMessage(fd, kMsgLookup, 1, pay);
@@ -685,10 +693,21 @@ int main(int argc, char **argv) {
     if (env.type != kMsgLookupResult || env.requestId != 1 ||
         ParseLookupResult(msg.data() + kEnvelopeSize, env.payloadLen, &lr, &why) != kOk)
       die("bad LOOKUP_RESULT: %s", why.c_str());
-    printf("LOOKUP n=%zu truncated=%d sources=%zu\n", lr.matches.size(), lr.flags & 1, lr.sources.size());
-    for (const Match &m : lr.matches)
-      printf("MATCH quality=%u kind=%u %s canonical=\"%s\" designation=\"%s\"\n", m.quality, m.obj.kind,
-             labelOf(m.obj).c_str(), m.canonicalName.c_str(), m.designation.c_str());
+    // One line a query, so a gate can count the answers against the
+    // questions, then the matches of each (3.4: the lists come back in the
+    // order the queries were asked).
+    size_t cTotal = 0;
+    for (const auto &q : lr.queries) cTotal += q.size();
+    printf("LOOKUP queries=%zu n=%zu truncated=%d sources=%zu\n", lr.queries.size(), cTotal,
+           lr.flags & 1, lr.sources.size());
+    for (size_t iq = 0; iq < lr.queries.size(); iq++) {
+      printf("QUERY %zu \"%s\" n=%zu\n", iq,
+             iq < l.queries.size() ? l.queries[iq].c_str() : "", lr.queries[iq].size());
+      for (const Match &m : lr.queries[iq])
+        printf("MATCH quality=%u kind=%u %s canonical=\"%s\" designation=\"%s\"\n", m.quality,
+               m.obj.kind, labelOf(m.obj).c_str(), m.canonicalName.c_str(),
+               m.designation.c_str());
+    }
     closeConn(fd);
     return 0;
   }

@@ -968,3 +968,34 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
     shown to fail with the path blanked. Not
     observable, so not logged: a failed TLS handshake (uSockets has no
     hook for it).
+19. **A REQUEST is computed in blocks across loop turns, and the `cancel`
+    capability is advertised (2026-09-17, branch `ephv4`).** The server used
+    to compute a whole answer inside the callback that read the REQUEST.
+    Two things followed, both of them defects: a CANCEL could only drop
+    bytes, since the work was finished by the time it was read, and one
+    large request blocked its loop for every other connection on it
+    (EPHEMERIS_REVIEW.md S4, 13.7 s for 64 objects x 20,000 rows). Now
+    `BeginRequest()` prepares the objects and `AdvanceWork()` computes a
+    block of rows of one object at a time, driven by a per-loop timer that
+    ticks every millisecond while there is work and once a second when there
+    is none. Measured on this machine, 8 bodies x 20,000 rows: 1420 ms of
+    server CPU answered, 200 ms when cancelled 200 ms in; a one-row request
+    on a second connection answered in 29 ms while that window computed,
+    against 1132 ms before. `tools/ephsrv-robust.sh` C2 gates all three, and
+    each was seen failing -- the CPU and starvation legs with the compute
+    drained in one callback, the cache leg with the half-filled entry put in
+    the cache per block.
+    Three things the work turned up. **The block is a range of rows of ONE
+    object**, not one instant of every object: the time-major ordering
+    3.9 suggests -- so that the per-instant work could be memoised across a
+    cast -- measured **46% slower** here (a 30-body 1000-row cold window,
+    463 ms against 317 ms), because Swiss's caches are per body and want
+    consecutive instants. **Chunk 0 must carry every object's META**, and
+    META counts the rows that computed, so a block cannot be streamed as it
+    completes without writing those numbers before they are known; the
+    answer goes out when it is whole, which is what 3.4 requires and not
+    what its CANCEL paragraph suggests. And **the priority rule moved**: an
+    interactive request now overtakes a prefetch that is still being
+    computed, since a prefetch keeps its place only once its first chunk is
+    out -- the robust gate's P1 order went from 1,3,2 to 3,1,2, and nothing
+    computed is thrown away.

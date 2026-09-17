@@ -84,9 +84,10 @@ def welcome(caps, engine, dataset, ext, server="astrolog-ephd/2.0",
 
 
 def delivery(precision=0, priority=0, representation=0, chunk_rows=0,
-             seg_err=0.0, max_degree=0):
+             seg_err=0.0, max_degree=0, deadline_ms=0):
+    # 16 bytes: deadlineMs closes it, advisory and outside the cache key.
     return (u8(precision) + u8(priority) + u8(representation) + u8(max_degree) +
-            u32(chunk_rows) + f32(seg_err))
+            u32(chunk_rows) + f32(seg_err) + u32(deadline_ms))
 
 
 def grid(start_jd1, start_jd2, step_ns, n):
@@ -239,7 +240,10 @@ def caps_prometheia():
         (0x000B, u16(1) + str8("sbdb") + str8("2026-09-16")),
         (0x000C, str8("usno-observed+smh2016")),
         (0x000D, u16(2) + str8("iau2006") + str8("vondrak2011")),
-        (0x000F, u8(15) + b"\0\0\0" + u32(4096) + f32(0.0001) + u32(0b000011)),
+        # maxDegree, reserved, maxSegmentsPerObject, minErrArcsec, kinds,
+        # maxSegSpanDays -- the widest span it will fit in one request.
+        (0x000F, u8(15) + b"\0\0\0" + u32(4096) + f32(0.0001) + u32(0b000011) +
+                 u32(3653)),
         (0x0010, u16(64)),
     ]
 
@@ -294,6 +298,11 @@ def fixtures():
                  question(grid_block(1, 2447963.0, 0.5, 0, 1), [geo, helio, topo_sid], cast,
                           delta_t=56.9),
                  request_id=2))
+    add("request_deadline", "c2s", REQUEST, "ok",
+        "a prefetch window with a 250 ms deadline: advisory, and outside the cache key",
+        envelope(REQUEST, delivery(priority=1, chunk_rows=64, deadline_ms=250) +
+                 question(grid_block(1, J2000, 0.0, 3600 * 10**9, 24), [geo],
+                          [obj_body(301)]), request_id=4))
     add("request_list_ut", "c2s", REQUEST, "ok", "instant list in UT1, server's delta T",
         envelope(REQUEST, delivery() +
                  question(list_block(0, [(2461300.0, 0.5), (2461300.0, 0.25), (2461300.0, 0.5)]),
@@ -396,8 +405,17 @@ def fixtures():
     add("cancel", "c2s", CANCEL, "ok", "cancel request 4", envelope(CANCEL, b"", request_id=4))
     add("ping", "c2s", PING, "ok", "", envelope(PING, b""))
     add("pong", "s2c", PONG, "ok", "", envelope(PONG, b""))
+    def lookup(max_matches, flags, queries, ext=None):
+        b = u16(max_matches) + u8(flags) + u8(len(queries))
+        b += b"".join(str8(q) for q in queries)
+        return b + tlv(ext or [])
+
     add("lookup_prefix", "c2s", LOOKUP, "ok", "prefix, hypotheticals and stars included",
-        envelope(LOOKUP, u16(8) + u8(0b111) + u8(0) + str8("Lilith") + tlv([]), request_id=8))
+        envelope(LOOKUP, lookup(8, 0b111, ["Lilith"]), request_id=8))
+    add("lookup_batch", "c2s", LOOKUP, "ok",
+        "four names in one message; maxMatches is the budget for the WHOLE answer",
+        envelope(LOOKUP, lookup(16, 0, ["Ceres", "Chiron", "Aldebaran", "1P/Halley"]),
+                 request_id=9))
     def match(quality, source_idx, obj_bytes, canonical, designation="",
               valid=((0.0, 0.0), (0.0, 0.0)), match_len=None):
         body = (obj_bytes + str8(canonical) + str8(designation) +
@@ -405,23 +423,41 @@ def fixtures():
         n = len(body) if match_len is None else match_len
         return u8(quality) + u8(source_idx) + u16(n) + body
 
-    lr = u16(3) + u8(0) + sources(["SBDB 2026-09-16", "Swiss Ephemeris"])
-    lr += match(0, 0, obj_body(20001181), "1181 Lilith", "1181")
-    lr += match(1, 1, obj_orbit(301, 3, 0), "Moon mean apogee")
-    lr += match(1, 1, obj_hypo("waldemath"), "Waldemath")
+    def lookup_result(flags, source_names, per_query):
+        """per_query: a list of lists of encoded MATCHes."""
+        b = u8(len(per_query)) + u8(flags) + sources(source_names)
+        for matches in per_query:
+            b += u16(len(matches)) + b"".join(matches)
+        return b
+
+    lr = lookup_result(0, ["SBDB 2026-09-16", "Swiss Ephemeris"], [[
+        match(0, 0, obj_body(20001181), "1181 Lilith", "1181"),
+        match(1, 1, obj_orbit(301, 3, 0), "Moon mean apogee"),
+        match(1, 1, obj_hypo("waldemath"), "Waldemath"),
+    ]])
     add("lookup_result_lilith", "s2c", LOOKUP_RESULT, "ok",
         "three kinds answer one name", envelope(LOOKUP_RESULT, lr, request_id=8))
+    lr_batch = lookup_result(0b1, ["Swiss Ephemeris files"], [
+        [match(0, 0, obj_body(20000001), "Ceres", "1")],
+        [match(0, 0, obj_body(20002060), "Chiron", "2060")],
+        [],                                    # no match for this query
+        [match(2, 0, obj_star("Aldebaran"), "Aldebaran")],
+    ])
+    add("lookup_result_batch", "s2c", LOOKUP_RESULT, "ok",
+        "four queries answered in order, one with no match, the message budget spent",
+        envelope(LOOKUP_RESULT, lr_batch, request_id=9))
     # 3.1 and 3.4: matchLen is what lets a client skip a kind added after it
     # shipped and keep the matches on either side of it.
-    lr2 = u16(3) + u8(0) + sources(["Swiss Ephemeris files"])
-    lr2 += match(0, 0, obj_body(10), "Sun")
-    lr2 += match(1, 0, obj_head(7) + i32(12345) + str8("something new"), "New Thing")
-    lr2 += match(1, 0, obj_body(301), "Moon")
+    lr2 = lookup_result(0, ["Swiss Ephemeris files"], [[
+        match(0, 0, obj_body(10), "Sun"),
+        match(1, 0, obj_head(7) + i32(12345) + str8("something new"), "New Thing"),
+        match(1, 0, obj_body(301), "Moon"),
+    ]])
     add("lookup_result_future_kind", "s2c", LOOKUP_RESULT, "ok",
         "a match of an unregistered kind, skipped by its matchLen, between two readable ones",
         envelope(LOOKUP_RESULT, lr2, request_id=8))
-    lr3 = u16(1) + u8(0) + sources(["Swiss Ephemeris files"])
-    lr3 += match(0, 0, obj_body(10), "Sun", match_len=4)
+    lr3 = lookup_result(0, ["Swiss Ephemeris files"],
+                        [[match(0, 0, obj_body(10), "Sun", match_len=4)]])
     add("lookup_result_bad_matchlen", "s2c", LOOKUP_RESULT, "malformed",
         "matchLen disagrees with a match the reader can read",
         envelope(LOOKUP_RESULT, lr3, request_id=8))
@@ -549,8 +585,15 @@ def fixtures():
     bad("hello_request_id", "a HELLO with requestId 1",
         envelope(HELLO, hello(), request_id=1), mtype=HELLO)
     bad("lookup_id_zero", "a LOOKUP with requestId 0",
-        envelope(LOOKUP, u16(4) + u8(0) + u8(0) + str8("Ceres") + tlv([]), request_id=0),
-        mtype=LOOKUP)
+        envelope(LOOKUP, lookup(4, 0, ["Ceres"]), request_id=0), mtype=LOOKUP)
+    bad("lookup_no_queries", "a LOOKUP carrying no query at all",
+        envelope(LOOKUP, u16(4) + u8(0) + u8(0) + tlv([]), request_id=8), mtype=LOOKUP)
+    bad("lookup_budget_zero", "maxMatches 0: a budget of nothing",
+        envelope(LOOKUP, lookup(0, 0, ["Ceres"]), request_id=8), mtype=LOOKUP)
+    bad("lookup_result_no_queries", "a LOOKUP_RESULT answering no query",
+        envelope(LOOKUP_RESULT, u8(0) + u8(0) + sources(["Swiss Ephemeris files"]),
+                 request_id=8),
+        mtype=LOOKUP_RESULT, direction="s2c")
     bad("data_chunk0_no_meta", "DATA chunk 0 with the meta flag clear",
         envelope(DATA, data_chunk(0, 0, 1, 1, 0, 0b001, 0, b"",
                                   [[[280.1, 0.0, 0.983, 1.019, 0.0, 0.0]]]), request_id=1),

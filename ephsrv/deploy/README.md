@@ -97,6 +97,14 @@ docker stop -t 15 ephd       # drains, then exits 0
   serves, its limits, its delta T model, and its **datasetId**, which
   changes whenever an answer could and which every client cache is keyed
   on. `GET /metrics` reports errors by the version 4 code (A.19).
+- **What the caps bits say this server does** (A.2): `f32`, `cancel`,
+  `lookup`, `instant lists`, `priority`, `designations` and `delta T
+  tables`. `cancel` is advertised because a REQUEST is computed in blocks of
+  rows across turns of its loop, so a CANCEL stops the computing rather than
+  only dropping the bytes left to send; a cancelled request caches nothing,
+  and one large request no longer holds its loop against the other
+  connections on it. `segments`, `zstd` and `deep sky` are not advertised,
+  and a client must not use them.
 
 ## Pointing Astrolog at a server
 
@@ -174,7 +182,9 @@ IPv4-mapped socket):
 | `hello` | info (a repeat: debug) | `conn loop addr client_proto proto caps build client token after_ms`; `token` is `none`, `accepted` or `unknown` |
 | `hello.refuse` | warn | `conn loop addr reason`; reason `version`, `token` or `request_first` |
 | `hello.timeout` | warn | `conn loop addr hello_s` |
-| `req` | info | `conn loop addr req objs rows cells prec chunks cache compute_ms total_ms bytes stalls queued cache_entries cache_kib cache_evictions`; written as the last chunk goes out, so `total_ms` runs from the REQUEST's arrival to its last chunk being sent |
+| `req` | info | `conn loop addr req objs rows cells profiles time scale prec deadline_ms chunks cache compute_ms total_ms bytes stalls queued cache_entries cache_kib cache_evictions`; written as the last chunk goes out, so `total_ms` runs from the REQUEST's arrival to its last chunk being sent. `deadline_ms` is what the client asked for and is advisory: this server has one strategy and never fails a request for it. `compute_ms` is summed over the blocks the answer was computed in, so it is compute time and not elapsed |
+| `lookup` | info | `conn loop addr req queries matches truncated flags` (and `query` under `--log-contents`) -- one LOOKUP may carry up to 255 queries, and `matches` counts the whole answer, which `maxMatches` is the budget for |
+| `cancel` | info | `conn loop addr req rows_sent cells_computed cells rows` -- `cells_computed` against `cells` is what the cancel saved, and none of it is cached |
 | `error` | warn (ERROR 4: error) | `conn loop addr req code name msg` -- every ERROR sent; a REQUEST gets either a `req` line or an `error` line |
 | `stall` | debug | `conn loop addr req row rows buffered` -- an answer waiting for its client to read |
 | `conn.close` | info | `conn loop addr code reason dur_s proto reqs hits cells errors bytes_out unsent_rows client`; code 1006 is a client that went without a close frame |

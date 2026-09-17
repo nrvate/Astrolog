@@ -11,7 +11,9 @@
 #include "ephproto.h"
 #include "ephswiss.h"
 
+#include <climits>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 
@@ -40,6 +42,84 @@ static bool ReadHex(const std::string &path, std::vector<uint8_t> *out) {
 
 static const char *OutcomeName(eph::Outcome o) {
   return o == eph::kOk ? "ok" : o == eph::kMalformed ? "malformed" : "unsupported";
+}
+
+// ---- ephsrv/registries.json (Appendix A, generated) --------------------------
+//
+// The protocol's numbers live in three places -- the specification's prose,
+// this codec, and whatever a second implementation writes -- so the file
+// generated from the prose is read here and the codec's own constants are
+// required to agree with it. What is compared is the binding of a NAME to a
+// NUMBER, which is what a registry is: an entry that moves or is renamed
+// fails loudly instead of passing on its position.
+//
+// Not a JSON parser: tools/gen-registries.py writes one field a line, so the
+// fields are read by scanning, and a file not in that shape yields no entries
+// and fails the count checks below.
+
+struct RegEntry {
+  long num = LONG_MIN;      // value, bit, tag or first
+  std::string name, token;
+};
+
+static std::string g_regJson;
+
+static std::vector<RegEntry> Registry(const char *key) {
+  std::vector<RegEntry> out;
+  size_t at = g_regJson.find("\"" + std::string(key) + "\": {");
+  if (at == std::string::npos) return out;
+  size_t from = g_regJson.find("\"entries\":", at);
+  if (from == std::string::npos) return out;
+  size_t end = g_regJson.find("\"appendix\":", from);
+  if (end == std::string::npos) end = g_regJson.size();
+  std::stringstream ss(g_regJson.substr(from, end - from));
+  std::string line;
+  while (std::getline(ss, line)) {
+    size_t b = line.find_first_not_of(" \t");
+    if (b == std::string::npos) continue;
+    std::string t = line.substr(b);
+    if (t == "{") { out.push_back(RegEntry()); continue; }
+    if (out.empty() || t.empty() || t[0] != '"') continue;
+    size_t colon = t.find("\": ");
+    if (colon == std::string::npos) continue;
+    std::string field = t.substr(1, colon - 1), value = t.substr(colon + 3);
+    while (!value.empty() && (value.back() == ',' || value.back() == ' ')) value.pop_back();
+    if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+      value = value.substr(1, value.size() - 2);
+    if (field == "value" || field == "bit" || field == "tag" || field == "first")
+      out.back().num = strtol(value.c_str(), nullptr, 10);
+    else if (field == "name") out.back().name = value;
+    else if (field == "token") out.back().token = value;
+  }
+  return out;
+}
+
+// The number bound to the first entry whose name starts with szName: the
+// appendix spells several names with a parenthetical ("busy (too many unread
+// answers)"), so a check names the part that identifies the entry.
+static long RegNum(const std::vector<RegEntry> &reg, const char *szName) {
+  size_t n = strlen(szName);
+  for (const RegEntry &e : reg)
+    if (e.name.size() >= n && e.name.compare(0, n, szName) == 0) return e.num;
+  return LONG_MIN;
+}
+
+// The largest number in a registry, for the codec's kXxxMax constants.
+static long RegMax(const std::vector<RegEntry> &reg) {
+  long hi = LONG_MIN;
+  for (const RegEntry &e : reg) hi = e.num > hi ? e.num : hi;
+  return hi;
+}
+
+// Every registry value is one of a set, and the set is exactly the entries:
+// a tag added to the appendix and not to the codec fails here.
+static bool RegTagsAre(const std::vector<RegEntry> &reg, const std::vector<long> &want) {
+  std::vector<long> got = {};
+  for (const RegEntry &e : reg) got.push_back(e.num);
+  std::vector<long> w = want;
+  std::sort(got.begin(), got.end());
+  std::sort(w.begin(), w.end());
+  return got == w;
 }
 
 int main(int argc, char **argv) {
@@ -124,6 +204,7 @@ int main(int argc, char **argv) {
     b.precision = eph::kPrecF32;
     b.chunkRows = 7;
     b.priority = 1;
+    b.deadlineMs = 250;   // advisory delivery, not part of the question
     std::vector<uint8_t> pa, pb;
     eph::EncodeRequest(&pa, a);
     eph::EncodeRequest(&pb, b);
@@ -384,12 +465,48 @@ int main(int argc, char **argv) {
     Check(past.DeltaTAt(0) == 64.0, "after the table it is held constant");
     // The table is in the question block, so two casts with different tables
     // are different questions (3.7).
-    Check(back.questionOffset == 12, "the table rides in the question block");
+    Check(back.questionOffset == 16, "the table rides in the question block");
     eph::Request one;
     one.deltaTSec = 69.2;
     Check(one.DeltaTAt(0) == 69.2, "without a table the one value is every row's");
     eph::Request none;
     Check(eph::IsCanonicalNaN(none.DeltaTAt(0)), "and without either it is the server's model");
+  }
+
+  // 3.4 batched LOOKUP: several queries, one budget, one answer whose lists
+  // come back in the order they were asked.
+  {
+    eph::Lookup l;
+    l.maxMatches = 16;
+    l.queries = {"Ceres", "Chiron", "Aldebaran"};
+    std::vector<uint8_t> pay;
+    std::string why;
+    eph::EncodeLookup(&pay, l);
+    eph::Lookup back;
+    Check(eph::ParseLookup(pay.data(), pay.size(), &back, &why) == eph::kOk &&
+              back.queries == l.queries && back.maxMatches == 16,
+          "a batched LOOKUP round trips (" + why + ")");
+    pay.clear();
+    l.queries.clear();
+    eph::EncodeLookup(&pay, l);
+    Check(eph::ParseLookup(pay.data(), pay.size(), &back, &why) == eph::kMalformed,
+          "a LOOKUP with no query is malformed");
+    eph::LookupResult lr, lrBack;
+    lr.sources.push_back("Swiss Ephemeris files");
+    eph::Match m;
+    m.obj.naif = 20000001;
+    m.canonicalName = "Ceres";
+    lr.queries.push_back({m});
+    lr.queries.push_back({});          // a query with no match keeps its place
+    lr.queries.push_back({m, m});
+    lr.flags = 1;                      // the message budget ran out
+    std::vector<uint8_t> rp;
+    eph::EncodeLookupResult(&rp, lr);
+    Check(eph::ParseLookupResult(rp.data(), rp.size(), &lrBack, &why) == eph::kOk &&
+              lrBack.queries.size() == 3 && lrBack.queries[0].size() == 1 &&
+              lrBack.queries[1].empty() && lrBack.queries[2].size() == 2 &&
+              (lrBack.flags & 1),
+          "three answers keep their order, an empty one among them (" + why + ")");
   }
 
   // 3.1 in the answering direction: a client tolerates registry values a
@@ -401,19 +518,20 @@ int main(int argc, char **argv) {
     m.obj.naif = 10;
     m.canonicalName = "Sun";
     lr.sources.push_back("Swiss Ephemeris files");
-    lr.matches.push_back(m);
+    lr.queries.push_back({m});
     std::vector<uint8_t> pay;
     std::string why;
     eph::EncodeLookupResult(&pay, lr);
     Check(eph::ParseLookupResult(pay.data(), pay.size(), &back, &why) == eph::kOk &&
-              back.matches.size() == 1 && back.matches[0].quality == 9,
+              back.queries.size() == 1 && back.queries[0].size() == 1 &&
+              back.queries[0][0].quality == 9,
           "an unknown match quality is kept, not refused (" + why + ")");
     // An unknown KIND is skipped by its matchLen and the matches on either
     // side are kept -- and the message still re-encodes to the same bytes.
     // The middle match is built as it would arrive from a newer server: a
     // kind past the registry, its own length, and a payload this build
     // cannot read.
-    lr.matches[0].quality = 0;
+    lr.queries[0][0].quality = 0;
     eph::Match unknown;
     unknown.fUnknownKind = true;
     unknown.raw = std::string("\x07\x00\x00\x00", 4) + std::string("future", 6);
@@ -421,21 +539,23 @@ int main(int argc, char **argv) {
     moon.quality = 1;
     moon.obj.naif = 301;
     moon.canonicalName = "Moon";
-    lr.matches.push_back(unknown);
-    lr.matches.push_back(moon);
+    lr.queries[0].push_back(unknown);
+    lr.queries[0].push_back(moon);
     pay.clear();   // the encoders append to their buffer
     eph::EncodeLookupResult(&pay, lr);
     Check(eph::ParseLookupResult(pay.data(), pay.size(), &back, &why) == eph::kOk &&
-              back.matches.size() == 3 && back.matches[1].fUnknownKind &&
-              back.matches[1].raw == unknown.raw && back.matches[2].obj.naif == 301,
+              back.queries[0].size() == 3 && back.queries[0][1].fUnknownKind &&
+              back.queries[0][1].raw == unknown.raw && back.queries[0][2].obj.naif == 301,
           "an unknown match kind is skipped by its length, the rest kept (" + why + ")");
     std::vector<uint8_t> again;
     eph::EncodeLookupResult(&again, back);
     Check(again == pay, "and the message re-encodes to the same bytes");
     // A matchLen that disagrees with a match this reader CAN read is
     // malformed: one of the two ends has miscounted.
+    // nQueries, flags, nSources, the one source's str8, this query's u16
+    // count, then the match's quality and sourceIdx: matchLen follows.
     std::vector<uint8_t> bad = pay;
-    bad[3 + 1 + 1 + 1 + (int)lr.sources[0].size() + 1 + 2] = 4;
+    bad[1 + 1 + 1 + 1 + (int)lr.sources[0].size() + 2 + 2] = 4;
     Check(eph::ParseLookupResult(bad.data(), bad.size(), &back, &why) == eph::kMalformed,
           "a matchLen that does not match what was read is malformed");
 
@@ -503,6 +623,185 @@ int main(int argc, char **argv) {
           "capabilities round trip (" + why + ")");
     tl.erase(tl.begin());
     Check(eph::ParseCapabilities(tl, &back, &why) == eph::kMalformed, "a missing required TLV is malformed");
+  }
+
+  // ephsrv/registries.json against this codec's constants (Appendix A).
+  {
+    std::ifstream in(dir + "/../registries.json", std::ios::binary);
+    std::stringstream ss;
+    ss << in.rdbuf();
+    g_regJson = ss.str();
+    Check(!g_regJson.empty(), "registries.json read");
+
+    auto msg = Registry("message_types");
+    Check(msg.size() >= 18, "A.1 message types parsed (" + std::to_string(msg.size()) + ")");
+    Check(RegNum(msg, "HELLO") == eph::kMsgHello && RegNum(msg, "WELCOME") == eph::kMsgWelcome &&
+              RegNum(msg, "REQUEST") == eph::kMsgRequest && RegNum(msg, "DATA") == eph::kMsgData &&
+              RegNum(msg, "ERROR") == eph::kMsgError && RegNum(msg, "PING") == eph::kMsgPing &&
+              RegNum(msg, "PONG") == eph::kMsgPong && RegNum(msg, "CANCEL") == eph::kMsgCancel &&
+              RegNum(msg, "LOOKUP_RESULT") == eph::kMsgLookupResult &&
+              RegNum(msg, "SEGDATA") == eph::kMsgSegData,
+          "A.1 message types agree with the codec");
+    // "LOOKUP" prefixes "LOOKUP_RESULT", so it is asked for by its own value.
+    Check(msg[eph::kMsgLookup - 1].num == eph::kMsgLookup &&
+              msg[eph::kMsgLookup - 1].name == "LOOKUP",
+          "A.1 LOOKUP is 9");
+
+    auto caps = Registry("caps_bits");
+    Check(caps.size() == 10, "A.2 caps bits parsed (" + std::to_string(caps.size()) + ")");
+    Check(RegNum(caps, "f32") == 0 && RegNum(caps, "zstd") == 1 && RegNum(caps, "cancel") == 2 &&
+              RegNum(caps, "lookup") == 3 && RegNum(caps, "instant lists") == 4 &&
+              RegNum(caps, "priority") == 5 && RegNum(caps, "segments") == 6 &&
+              RegNum(caps, "designations") == 7 && RegNum(caps, "deep sky") == 9,
+          "A.2 caps bit names agree with the codec");
+    Check((1u << RegNum(caps, "f32")) == eph::kCapF32 &&
+              (1u << RegNum(caps, "zstd")) == eph::kCapZstd &&
+              (1u << RegNum(caps, "cancel")) == eph::kCapCancel &&
+              (1u << RegNum(caps, "lookup")) == eph::kCapLookup &&
+              (1u << RegNum(caps, "instant lists")) == eph::kCapInstantLists &&
+              (1u << RegNum(caps, "priority")) == eph::kCapPriority &&
+              (1u << RegNum(caps, "segments")) == eph::kCapSegments &&
+              (1u << RegNum(caps, "designations")) == eph::kCapDesignations &&
+              (1u << RegNum(caps, "deep sky")) == eph::kCapDeepSky &&
+              (1u << caps[8].num) == eph::kCapDeltaTTable,   // the delta T name is not ASCII
+          "A.2 caps masks agree with the codec");
+
+    Check(RegTagsAre(Registry("welcome_capability_tlvs"),
+                     {eph::kCapTagKinds, eph::kCapTagObservers, eph::kCapTagPlanesFormsFrames,
+                      eph::kCapTagCorrections, eph::kCapTagOrbit, eph::kCapTagColumns,
+                      eph::kCapTagZodiacs, eph::kCapTagSiderealPlanes, eph::kCapTagTimeScales,
+                      eph::kCapTagCoverage, eph::kCapTagCatalogs, eph::kCapTagDeltaT,
+                      eph::kCapTagPrecession, eph::kCapTagRate, eph::kCapTagSegments,
+                      eph::kCapTagLookup, eph::kCapTagHypotheticals, eph::kCapTagEquinoxes,
+                      eph::kCapTagRatesBound}),
+          "A.3 WELCOME capability tags are exactly the codec's");
+    Check(RegTagsAre(Registry("request_tlvs"),
+                     {eph::kReqTagPrecession, eph::kReqTagEphemerisPin, eph::kReqTagCatalogPin,
+                      eph::kReqTagDatasetPin, eph::kReqTagDeltaTTable}),
+          "A.4 REQUEST tags are exactly the codec's");
+
+    auto obs = Registry("observers");
+    Check(obs.size() == 5 && RegMax(obs) == eph::kObserverMax &&
+              RegNum(obs, "geocentric") == eph::kObsGeo &&
+              RegNum(obs, "topocentric") == eph::kObsTopo &&
+              RegNum(obs, "heliocentric") == eph::kObsHelio &&
+              RegNum(obs, "solar-system barycentre") == eph::kObsBary &&
+              RegNum(obs, "body") == eph::kObsBody,
+          "A.5 observers agree with the codec");
+    auto planes = Registry("planes"), forms = Registry("forms"), frames = Registry("frames");
+    Check(RegNum(planes, "ecliptic") == eph::kPlaneEcliptic &&
+              RegNum(planes, "equator") == eph::kPlaneEquator &&
+              RegNum(forms, "spherical") == eph::kFormSpherical &&
+              RegNum(forms, "rectangular") == eph::kFormRectangular &&
+              RegNum(frames, "true of date") == eph::kFrameTrueOfDate &&
+              RegNum(frames, "mean of date") == eph::kFrameMeanOfDate &&
+              RegNum(frames, "J2000") == eph::kFrameJ2000 &&
+              RegNum(frames, "ICRF") == eph::kFrameIcrf && RegMax(frames) == eph::kFrameMax,
+          "A.6 planes, forms and frames agree with the codec");
+    auto corr = Registry("correction_bits");
+    Check(corr.size() == 3 && RegNum(corr, "light time") == eph::kCorrLightTime &&
+              RegNum(corr, "gravitational deflection") == eph::kCorrDeflection &&
+              RegNum(corr, "aberration") == eph::kCorrAberration &&
+              (uint8_t)(eph::kCorrLightTime | eph::kCorrDeflection | eph::kCorrAberration) ==
+                  eph::kCorrMask,
+          "A.7 correction bits agree with the codec");
+    auto sid = Registry("sidereal_planes");
+    Check(sid.size() == 3 && RegMax(sid) == eph::kSidPlaneMax &&
+              RegNum(sid, "ecliptic of date") == eph::kSidPlaneDate &&
+              RegNum(sid, "ecliptic of the anchor epoch") == eph::kSidPlaneAnchor &&
+              RegNum(sid, "invariable plane") == eph::kSidPlaneInvariable,
+          "A.8 sidereal planes agree with the codec");
+    auto ts = Registry("time_scales");
+    Check(ts.size() == 3 && RegMax(ts) == eph::kTimeScaleMax && RegNum(ts, "UT1") == eph::kTimeUT1 &&
+              RegNum(ts, "TT") == eph::kTimeTT && RegNum(ts, "TDB") == eph::kTimeTDB,
+          "A.9 time scales agree with the codec");
+    auto cols = Registry("extra_column_bits");
+    // The sigma column's name is Greek in the appendix, so the four are
+    // checked by position -- which is what a bit registry is.
+    Check(cols.size() == 4 && RegTagsAre(cols, {0, 1, 2, 3}) &&
+              eph::kColSigma == 1u && eph::kColAyanamsa == 2u && eph::kColLightTime == 4u &&
+              eph::kColDeltaT == 8u && eph::kColMask == 0xFu,
+          "A.10 extra column bits agree with the codec");
+    auto zod = Registry("zodiac_tokens");
+    bool fZod = zod.size() == (size_t)eph::kZodiacTokenCount;
+    for (size_t i = 0; fZod && i < zod.size(); i++)
+      fZod = zod[i].token == eph::kZodiacTokens[i];
+    Check(fZod, "A.11 zodiac tokens are the codec's, in order (" +
+                    std::to_string(zod.size()) + ")");
+    auto kinds = Registry("object_kinds");
+    Check(kinds.size() == 6 && RegMax(kinds) == eph::kObjKindMax &&
+              RegNum(kinds, "body") == eph::kObjBody &&
+              RegNum(kinds, "orbit point") == eph::kObjOrbitPoint &&
+              RegNum(kinds, "fixed star") == eph::kObjStar &&
+              RegNum(kinds, "named hypothetical") == eph::kObjHypothetical &&
+              RegNum(kinds, "elements") == eph::kObjElements &&
+              RegNum(kinds, "designation") == eph::kObjDesignation,
+          "A.12 object kinds agree with the codec");
+    auto pts = Registry("orbit_points");
+    Check(pts.size() == 4 && RegMax(pts) == eph::kOrbitPointMax &&
+              RegNum(pts, "ascending node") == eph::kPtAscNode &&
+              RegNum(pts, "descending node") == eph::kPtDescNode &&
+              RegNum(pts, "perihelion") == eph::kPtPeri &&
+              RegNum(pts, "aphelion") == eph::kPtApo,
+          "A.13 orbit points agree with the codec");
+    auto meth = Registry("orbit_methods");
+    Check(meth.size() == 5 && RegMax(meth) == eph::kOrbitMethodMax &&
+              RegNum(meth, "mean") == eph::kMethMean &&
+              RegNum(meth, "osculating, barycentric") == eph::kMethOscuBary &&
+              RegNum(meth, "interpolated") == eph::kMethInterpolated &&
+              RegNum(meth, "focal point") == eph::kMethFocal,
+          "A.14 orbit methods agree with the codec");
+    auto hyp = Registry("hypothetical_tokens");
+    bool fHyp = hyp.size() == (size_t)eph::kHypotheticalTokenCount;
+    for (size_t i = 0; fHyp && i < hyp.size(); i++)
+      fHyp = hyp[i].token == eph::kHypotheticalTokens[i];
+    Check(fHyp, "A.15 hypothetical tokens are the codec's, in seorbel.txt order (" +
+                    std::to_string(hyp.size()) + ")");
+    auto eqx = Registry("element_equinoxes");
+    Check(eqx.size() == 5 && RegMax(eqx) == eph::kEquinoxMax &&
+              RegNum(eqx, "J2000") == eph::kEqJ2000 && RegNum(eqx, "B1950") == eph::kEqB1950 &&
+              RegNum(eqx, "J1900") == eph::kEqJ1900 && RegNum(eqx, "of date") == eph::kEqOfDate &&
+              RegNum(eqx, "explicit JD") == eph::kEqExplicit,
+          "A.16 element equinoxes agree with the codec");
+    Check(RegMax(Registry("element_centres")) == eph::kCentreMax,
+          "A.21 element centres agree with the codec");
+    auto oerr = Registry("object_error_codes");
+    Check(oerr.size() == 9 && RegNum(oerr, "none") == eph::kOErrNone &&
+              RegNum(oerr, "unknown body or name") == eph::kOErrUnknownBody &&
+              RegNum(oerr, "unsupported by this source") == eph::kOErrUnsupported &&
+              RegNum(oerr, "outside the data's time coverage") == eph::kOErrCoverage &&
+              RegNum(oerr, "data unavailable") == eph::kOErrDataMissing &&
+              RegNum(oerr, "point undefined") == eph::kOErrUndefinedPoint &&
+              RegNum(oerr, "ambiguous name") == eph::kOErrAmbiguous &&
+              RegNum(oerr, "numerical failure") == eph::kOErrNumerical &&
+              RegNum(oerr, "internal") == eph::kOErrInternal,
+          "A.17 per-object error codes agree with the codec");
+    auto mf = Registry("meta_flags");
+    Check(mf.size() == 7 && (1u << RegNum(mf, "approximated")) == eph::kMetaApproximated &&
+              (1u << RegNum(mf, "extrapolated")) == eph::kMetaExtrapolated &&
+              (1u << RegNum(mf, "hasSigma")) == eph::kMetaHasSigma &&
+              (1u << RegNum(mf, "partial")) == eph::kMetaPartial &&
+              (1u << RegNum(mf, "noSpeeds")) == eph::kMetaNoSpeeds &&
+              (1u << RegNum(mf, "noDistance")) == eph::kMetaNoDistance &&
+              (1u << RegNum(mf, "ratesApprox")) == eph::kMetaRatesApprox &&
+              ((1u << mf.size()) - 1u) == eph::kMetaFlagMask,
+          "A.18 META flags agree with the codec");
+    auto err = Registry("error_codes");
+    Check(err.size() == 12 && RegNum(err, "malformed or non-canonical") == eph::kErrMalformed &&
+              RegNum(err, "over a WELCOME limit") == eph::kErrLimits &&
+              RegNum(err, "unknown message type") == eph::kErrUnknownType &&
+              RegNum(err, "internal") == eph::kErrInternal &&
+              RegNum(err, "source, data or pin unavailable") == eph::kErrSource &&
+              RegNum(err, "rate limited") == eph::kErrRateLimited &&
+              RegNum(err, "token required or unknown") == eph::kErrToken &&
+              RegNum(err, "version") == eph::kErrVersion && RegNum(err, "busy") == eph::kErrBusy &&
+              RegNum(err, "cancelled") == eph::kErrCancelled &&
+              RegNum(err, "unsupported") == eph::kErrUnsupported &&
+              RegNum(err, "draining") == eph::kErrDraining,
+          "A.19 ERROR codes agree with the codec");
+    auto prec = Registry("precession_model_tokens");
+    Check(prec.size() == 2 && prec[0].token == "iau2006" && prec[1].token == "vondrak2011",
+          "A.20 precession model tokens");
   }
 
   // Zodiac registry: the Swiss mode numbers are the token indices.

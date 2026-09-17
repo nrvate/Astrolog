@@ -632,13 +632,37 @@ static EphDiscovery DiscoverEphemDirs() {
 // ---------------------------------------------------------------------------
 
 struct LoopCtx;   // 4.
+struct ObjPrep;   // 3.
 
-// One answer awaiting, or streaming to, its client.
+// A request being computed, in blocks of rows across loop turns (3.4
+// CANCEL). Everything it needs outlives the callback that parsed the
+// REQUEST, so the question is held by value.
+//
+// Nothing here ever reaches the result cache until the last row is computed:
+// a cancelled request caches nothing, or a later identical question hits half
+// an answer (3.4).
+struct Work {
+  eph::Request req;
+  std::string key;                             // datasetId + the question block
+  std::shared_ptr<eph::CacheEntry> entry;      // filled in place
+  std::vector<ObjPrep> prep;                   // one per object, after PrepareObject
+  bool fPrepared = false;
+  uint32_t iObj = 0;                           // the object being computed
+  uint32_t rowNext = 0;                        // its rows computed so far
+  double computeMs = 0.0;                      // summed over its blocks
+};
+
+// One answer awaiting, computing, or streaming to its client.
 struct Stream {
   uint32_t requestId = 0;
   uint8_t precision = eph::kPrecF64;
   bool fIgnoredExt = false;     // DATA chunkFlags bit 1
   uint32_t nObj = 0, nTimeRows = 0, chunkRows = 0;
+  // Set while the answer is still being computed; null once `result` holds a
+  // complete answer. A stream with work pending sends nothing: DATA chunk 0
+  // carries every object's META, and META counts the rows that computed, so
+  // it cannot be written before the last row is known (3.4).
+  std::unique_ptr<Work> work;
   uint32_t nextRow = 0;         // next row to send
   uint32_t chunkIndex = 0;
   // The computed answer, shared with the loop's result cache: a hit hands
@@ -654,12 +678,16 @@ struct Stream {
   uint64_t bytes = 0;           // DATA bytes sent
   uint32_t nProfiles = 0;
   uint8_t timeMode = 0, timeScale = 0, priority = 0;
+  // 3.4: advisory, recorded and logged. This server has one strategy --
+  // samples, computed now -- so there is no cheaper one to choose, and a
+  // request is never failed for the deadline it states.
+  uint32_t deadlineMs = 0;
   std::string contents;         // --log-contents only: what was asked
   bool fLogged = false;
 };
 
 struct Conn {
-  std::deque<Stream> out;       // completed streams, FIFO
+  std::deque<Stream> out;       // answers computing or streaming, FIFO
   // proto is the session's version, fixed by the first HELLO; 0 before it,
   // when only HELLO and PING are served. addr is the peer's address as
   // text; budget is what the cell budget is keyed on -- "t:" and the token
@@ -957,16 +985,24 @@ static uint16_t ResolveDesignation(swe_ctx *ctx, const eph::Object &o, eph::Obje
   return eph::kOErrNone;
 }
 
-// One object of a request into its rows of the entry (3.5 columns): the
-// base six, then the extra columns present in bit order -- ayanamsa (the
-// profile's, 0 tropical) and the delta T used, in seconds.
-static void ComputeObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
-                          eph::CacheEntry *e) {
+// What one object of a request resolved to, kept between the blocks of rows
+// it is computed in: a request is answered across loop turns, so an object's
+// setup happens once and the row loop is re-entered many times.
+struct ObjPrep {
+  eph::swiss::SwissCall c;
+  bool fDead = false;    // failed before a single row; its rows are NaN
+  bool fNamed = false;   // META's name has been filled from the first good row
+};
+
+// The per-object setup: the designation resolved, the body mapped to a Swiss
+// call, and the object-level META. Everything here is cheap and happens once,
+// before any row of any object, because chunk 0 carries every object's META.
+static void PrepareObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
+                          eph::CacheEntry *e, ObjPrep *prep) {
   const eph::Profile &pf = req.profiles[req.objs[iObj].profile];
   eph::Meta &m = e->meta[iObj];
   const uint32_t nTime = e->nTimeRows, nCols = e->nCols;
   double *dst0 = e->cols.data() + (size_t)iObj * nTime * nCols;
-  eph::swiss::SwissCall c;
   eph::Object ob = req.objs[iObj];
   std::string why;
   uint16_t err = eph::kOErrNone;
@@ -981,29 +1017,49 @@ static void ComputeObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
   if (!err)
     // nNative 0: this end answers the wire, and the wire has no native ids
     // (ephswiss.h). Astrolog's own local plugin is the caller that passes one.
-    err = eph::swiss::MapObject(ob, 0, pf, req.timeScale, req.deltaTSec, SEFLG_SWIEPH, &c, &why);
+    err = eph::swiss::MapObject(ob, 0, pf, req.timeScale, req.deltaTSec, SEFLG_SWIEPH,
+                                &prep->c, &why);
   if (err) {
     for (size_t i = 0; i < (size_t)nTime * nCols; i++) dst0[i] = NAN;
     m.errCode = err;
     m.errText = WireText(why.c_str());
     m.firstFailedRow = 0;
     m.name = WireText(ob.name.c_str());
+    prep->fDead = true;
     return;
   }
-  m.resolvedNaif = c.resolvedNaif;
-  if (c.fApproximated) m.flags |= eph::kMetaApproximated;
+  m.resolvedNaif = prep->c.resolvedNaif;
+  if (prep->c.fApproximated) m.flags |= eph::kMetaApproximated;
   if (!pf.speeds) m.flags |= eph::kMetaNoSpeeds;
-  if (c.fSidereal) swe_set_sid_mode_r(ctx, c.sidMode, c.sidT0, c.sidAyanT0);
-  if (c.fTopo) swe_set_topo_r(ctx, c.topo[0], c.topo[1], c.topo[2]);
-  const bool fRect = pf.form == eph::kFormRectangular;
   // 3.5a: Swiss's rates are its own analytic derivatives and differ from
   // central differences of its positions by more than the tolerance (the
   // rates-bound capability says by how much), so every object with speeds
   // says so.
   if (pf.speeds) m.flags |= eph::kMetaRatesApprox;
+}
+
+// Rows [row0, row0 + rows) of one prepared object into the entry (3.5
+// columns): the base six, then the extra columns present in bit order --
+// ayanamsa (the profile's, 0 tropical) and the delta T used, in seconds.
+//
+// Called once per block of rows, so the per-object Swiss settings are applied
+// again on every entry: the context is the loop's, and another object -- or
+// another request's -- block ran on it in between.
+static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
+                              eph::CacheEntry *e, ObjPrep *prep, uint32_t row0,
+                              uint32_t rows) {
+  if (prep->fDead) return;
+  const eph::Profile &pf = req.profiles[req.objs[iObj].profile];
+  eph::Meta &m = e->meta[iObj];
+  const uint32_t nTime = e->nTimeRows, nCols = e->nCols;
+  double *dst0 = e->cols.data() + (size_t)iObj * nTime * nCols;
+  const eph::swiss::SwissCall &c = prep->c;
+  if (c.fSidereal) swe_set_sid_mode_r(ctx, c.sidMode, c.sidT0, c.sidAyanT0);
+  if (c.fTopo) swe_set_topo_r(ctx, c.topo[0], c.topo[1], c.topo[2]);
+  const bool fRect = pf.form == eph::kFormRectangular;
   char serr[AS_MAXCH], star[SE_MAX_STNAME * 2];
-  bool fNamed = false;
-  for (uint32_t r = 0; r < nTime; r++) {
+  bool &fNamed = prep->fNamed;
+  for (uint32_t r = row0; r < row0 + rows && r < nTime; r++) {
     eph::Time t = req.RowTime(r);
     // 3.5: an engine that takes one double evaluates jd1 + jd2, and RowTime
     // put the row's offset into jd2 first.
@@ -1104,6 +1160,13 @@ static void ComputeObject(swe_ctx *ctx, const eph::Request &req, uint32_t iObj,
       }
     }
   }
+}
+
+// The object-level verdict, once its last row is computed (3.5): a partially
+// answered object says so, and one that answered nothing without saying why
+// is this server's fault, not the question's.
+static void FinishObject(eph::CacheEntry *e, uint32_t iObj) {
+  eph::Meta &m = e->meta[iObj];
   if (m.rowsOk > 0 && m.firstFailedRow != eph::kRowNone) m.flags |= eph::kMetaPartial;
   if (m.rowsOk == 0 && m.errCode == eph::kOErrNone) m.errCode = eph::kOErrInternal;
 }
@@ -1143,6 +1206,13 @@ struct LoopCtx {
   // touched only on this loop's thread.
   us_listen_socket_t *listenSock = nullptr;
   us_timer_t *helloTimer = nullptr;         // the HELLO deadline's sweep
+  // The block-wise computation's timer (3.4 CANCEL): ticks every millisecond
+  // while any connection on this loop has an answer still being computed,
+  // once a second otherwise. workCursor rotates which connection is served
+  // first, so one long request cannot hold a tick against the others.
+  us_timer_t *workTimer = nullptr;
+  bool fWorkArmed = false;
+  size_t workCursor = 0;
   std::unordered_set<void *> socks;
   uWS::Loop *loop = nullptr;
   std::unique_ptr<uWS::App> app;        // plain ws://, or
@@ -1152,10 +1222,6 @@ struct LoopCtx {
   // The per-loop LRU result cache (eph_cache.h), keyed on datasetId and the
   // question block, capped at this loop's share of --cache-mb.
   eph::ResultCache cache;
-  // Wall time of the last ExecuteRequest's compute, for the log and the
-  // bench: zero on a hit.
-  double lastComputeMs = 0.0;
-  bool lastWasHit = false;
 
   swe_ctx *TakeContext() {
     if (pool.empty()) return nullptr;
@@ -1269,21 +1335,59 @@ static bool LoadTokens() {
   return true;
 }
 
-// Execute one REQUEST (parsed, supported and within limits) into a Stream.
-// Returns false for a whole-request failure (ERROR 4) with errText.
-static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req, const std::string &key,
-                           Stream *stream, std::string *errText) {
+// ---- Block-wise computation (3.4 CANCEL) ----------------------------------
+//
+// A REQUEST used to be computed inside the callback that read it. That made
+// CANCEL meaningless -- by the time the cancel was read the work was done and
+// only bytes were left to drop -- and one large request blocked its loop for
+// every other connection on it (64 objects x 20,000 rows measured 13.7 s,
+// EPHEMERIS_REVIEW.md S4).
+//
+// Now a request is computed in blocks of rows across loop turns, driven by
+// each loop's work timer. Three properties follow, and the `cancel` cap is
+// advertised because of them:
+//   - a CANCEL stops the computing, not just the sending;
+//   - a cancelled request caches NOTHING: the entry is put in the cache only
+//     when its last row is computed, so a later identical question is a miss
+//     that computes a whole answer rather than a hit on half of one;
+//   - the loop keeps answering everything else while a big request runs.
+//
+// What it does NOT do is stream a block as it completes, which 3.4 mentions
+// under CANCEL. DATA chunk 0 MUST carry every object's META, clients use
+// chunk 0's, and META counts the rows that computed and names the first that
+// failed -- facts about the WHOLE answer. Sending chunk 0 before the last row
+// is computed means writing them before they are known. See the work log.
+
+// Rows of ONE object between two checks of the clock. A block is a range of
+// rows of a single object, in request order, exactly as the whole answer used
+// to be computed in one go -- and that ORDER is worth what it costs to keep:
+// computing every object at one instant before the next instant instead,
+// which is what 3.9 suggests memoising the per-instant work would reward,
+// measured 46% SLOWER on this engine (a 30-body 1000-row cold window: 463 ms
+// against 317 ms). Swiss's own caches are per body, and asking one body for
+// consecutive instants is what they are built for. The work log has the
+// numbers.
+static const uint32_t kBlockRows = 64;
+// How long one stream may compute in one turn of its loop, and how long the
+// whole tick may take before the loop is given back.
+static const double kSliceMs = 4.0, kTickMs = 12.0;
+// What the work timer ticks at with nothing to compute.
+static const int kWorkIdleMs = 1000;
+
+// Start computing a REQUEST: a cache hit is the whole answer at once, a miss
+// leaves a Work for the loop's timer to advance. False is a whole-request
+// failure (ERROR 4) with errText.
+static bool BeginRequest(LoopCtx *lc, const eph::Request &req, const std::string &key,
+                         Stream *stream, std::string *errText) {
   if (auto hit = lc->cache.get(key)) {
     stream->result = hit;
-    lc->lastWasHit = true;
-    lc->lastComputeMs = 0.0;
+    stream->fHit = true;
     return true;
   }
-  lc->lastWasHit = false;
-  auto t0 = std::chrono::steady_clock::now();
-
-  swe_ctx *ctx = lc->TakeContext();
-  if (ctx == nullptr) {
+  // Refused here rather than discovered by the work timer: a loop with no
+  // Swiss context can answer nothing, and a Work it can never advance would
+  // sit in the queue for ever.
+  if (lc->pool.empty()) {
     *errText = "no swe context available";
     return false;
   }
@@ -1298,16 +1402,65 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req, const std::stri
   for (const eph::Profile &pf : req.profiles) cols |= pf.columns;
   entry->columnsPresent = cols & kColumnsServed;
   entry->nCols = 6 + (uint32_t)eph::PopCount(entry->columnsPresent);
-  entry->cols.assign((size_t)nObj * nTime * entry->nCols, 0.0);
+  try {
+    entry->cols.assign((size_t)nObj * nTime * entry->nCols, 0.0);
+  } catch (const std::bad_alloc &) {
+    *errText = "out of memory computing this request";
+    return false;
+  }
   entry->sources.push_back(gSource);
   entry->meta.assign(nObj, eph::Meta());
-  for (uint32_t o = 0; o < nObj; o++) ComputeObject(ctx, req, o, entry.get());
-  lc->lastComputeMs = std::chrono::duration<double, std::milli>(
+  stream->work.reset(new Work());
+  Work *w = stream->work.get();
+  w->req = req;
+  w->key = key;
+  w->entry = std::move(entry);
+  w->prep.resize(nObj);
+  return true;
+}
+
+// One turn's worth of one request. Returns true when the answer is complete,
+// and leaves stream->result and the cache entry set in that case.
+static bool AdvanceWork(LoopCtx *lc, Stream *stream) {
+  Work *w = stream->work.get();
+  swe_ctx *ctx = lc->TakeContext();
+  if (ctx == nullptr) return false;   // no context: try again next turn
+  auto t0 = std::chrono::steady_clock::now();
+  const uint32_t nObj = (uint32_t)w->req.objs.size(), nTime = w->req.nTime;
+  // Every object is prepared before any row, because chunk 0's META names
+  // what each object resolved to.
+  if (!w->fPrepared) {
+    for (uint32_t o = 0; o < nObj; o++)
+      PrepareObject(ctx, w->req, o, w->entry.get(), &w->prep[o]);
+    w->fPrepared = true;
+  }
+  while (w->iObj < nObj) {
+    uint32_t rows = kBlockRows;
+    if (rows > nTime - w->rowNext) rows = nTime - w->rowNext;
+    ComputeObjectRows(ctx, w->req, w->iObj, w->entry.get(), &w->prep[w->iObj], w->rowNext, rows);
+    w->rowNext += rows;
+    if (w->rowNext == nTime) {
+      FinishObject(w->entry.get(), w->iObj);
+      w->iObj++;
+      w->rowNext = 0;
+    }
+    if (std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - t0).count() >= kSliceMs)
+      break;
+  }
+  w->computeMs += std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - t0).count();
+  if (w->iObj < nObj) return false;
   // Per-object failures are cached with the rest: the answer is a pure
   // function of the files on the configured path, and datasetId names them.
-  stream->result = entry;
-  lc->cache.put(key, std::move(entry));
+  stream->computeMs = w->computeMs;
+  stream->result = w->entry;
+  lc->cache.put(w->key, std::move(w->entry));
+  lc->m.computeCount++;
+  lc->m.computeMicros += (uint64_t)(w->computeMs * 1000.0);
+  for (int b = 0; b < kComputeBuckets; b++)
+    if (w->computeMs <= kComputeBucketsMs[b]) lc->m.computeBucket[b]++;
+  stream->work.reset();
   return true;
 }
 
@@ -1458,7 +1611,7 @@ static void LogRequest(WebSocket<SSL, true, Conn> *ws, const Stream &s,
     .U("cells", (uint64_t)s.nObj * s.nTimeRows).U("profiles", s.nProfiles)
     .S("time", s.timeMode == eph::kTimeList ? "list" : "grid")
     .S("scale", s.timeScale == eph::kTimeUT1 ? "ut1" : "tt")
-    .U("prec", s.precision == eph::kPrecF32 ? 32 : 64)
+    .U("prec", s.precision == eph::kPrecF32 ? 32 : 64).U("deadline_ms", s.deadlineMs)
     .U("chunks", (s.nTimeRows + s.chunkRows - 1) / s.chunkRows)
     .S("cache", s.fHit ? "hit" : "miss").F("compute_ms", s.computeMs, 3)
     .F("total_ms", std::chrono::duration<double, std::milli>(
@@ -1529,11 +1682,15 @@ static void EncodeChunk(const Stream &s, uint32_t rows, std::vector<uint8_t> *ou
 // used not to, and every such chunk went out twice: a Qt client counting
 // rows marked the window done a chunk early and read zeros for the rest.
 // Chunks are chunkRows-sized, ascending chunkIndex, contiguous rows (3.4).
+// An answer still being computed sends nothing and is stepped over: the ones
+// behind it in the queue may be complete (a cache hit behind a cold window),
+// and 3.5 lets a server interleave the chunks of different requests.
 template <bool SSL>
 static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
   Conn *c = (Conn *)ws->getUserData();
-  while (!c->out.empty()) {
-    Stream &s = c->out.front();
+  for (auto is = c->out.begin(); is != c->out.end();) {
+    Stream &s = *is;
+    if (s.work) { ++is; continue; }
     while (s.nextRow < s.nTimeRows) {
       if (ws->getBufferedAmount() > kStreamBackpressure) {
         if (tlc) tlc->m.backpressureWaits++;
@@ -1562,13 +1719,87 @@ static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
         return;   // sent and buffered: the rest on drain
       }
     }
-    c->out.pop_front();
+    is = c->out.erase(is);
   }
+}
+
+// One turn of this loop's block-wise computation (3.4 CANCEL): each
+// connection's FIRST unfinished answer gets a slice, and whatever completed
+// is flushed. The connections are taken in a rotating order so that a long
+// request cannot hold the tick's budget against the others.
+//
+// The timer runs every millisecond while there is work and drops back to once
+// a second when there is none: a thousand wakeups a second on an idle server
+// is not free, and setting the interval to zero to stop it is only a stop on
+// the epoll backend -- on kqueue a zero timer fires at once, forever.
+template <bool SSL>
+static void WorkTick(us_timer_t *t) {
+  LoopCtx *lc = *(LoopCtx **)us_timer_ext(t);
+  std::vector<void *> socks(lc->socks.begin(), lc->socks.end());
+  auto t0 = std::chrono::steady_clock::now();
+  bool fMore = false;
+  for (size_t i = 0; i < socks.size(); i++) {
+    auto *ws = (WebSocket<SSL, true, Conn> *)socks[(lc->workCursor + i) % socks.size()];
+    Conn *c = (Conn *)ws->getUserData();
+    Stream *s = nullptr;
+    for (Stream &e : c->out)
+      if (e.work) { s = &e; break; }
+    if (s == nullptr) continue;
+    if (std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - t0).count() >= kTickMs) {
+      // Out of budget: the rest of the connections next turn, starting here.
+      lc->workCursor = (lc->workCursor + i) % socks.size();
+      return;
+    }
+    AdvanceWork(lc, s);
+    fMore = fMore || s->work != nullptr;
+    FlushStreams(ws);
+  }
+  if (!socks.empty()) lc->workCursor = (lc->workCursor + 1) % socks.size();
+  // Another connection's work may have arrived while this ran; the arming
+  // side sets the timer again, so disarm only when nothing is left.
+  if (!fMore) {
+    for (void *p : socks) {
+      Conn *c = (Conn *)((WebSocket<SSL, true, Conn> *)p)->getUserData();
+      for (const Stream &e : c->out)
+        if (e.work) fMore = true;
+    }
+  }
+  if (!fMore && lc->fWorkArmed) {
+    lc->fWorkArmed = false;
+    us_timer_set(t, SSL ? WorkTick<true> : WorkTick<false>, kWorkIdleMs, kWorkIdleMs);
+  }
+}
+
+// Ask for the fast tick: a request has work to compute. Idempotent -- the
+// timer keeps its fast interval until a tick finds nothing left to do.
+static void ArmWorkTimer(LoopCtx *lc) {
+  if (lc->workTimer == nullptr || lc->fWorkArmed) return;
+  lc->fWorkArmed = true;
+  us_timer_set(lc->workTimer, gOpt.Tls() ? WorkTick<true> : WorkTick<false>, 1, 1);
 }
 
 // What this server serves, checked after the codec accepted a REQUEST:
 // every value the codec knows but this server did not advertise is
 // ERROR 11 (3.4). NULL when all of it is served.
+// Segments (representation 1) are refused here, and the segments capability
+// is not advertised, so nothing in this server fits anything. When a fitter
+// is written, three rules of 3.4 bind it and none of them is optional:
+//   - the residuals it reports are MEASURED on a check set of at least
+//     4(d+1) instants that INCLUDES BOTH ENDPOINTS (tau = +-1), not only
+//     interior points: a Chebyshev interpolant's error peaks at the ends and
+//     its derivative's peaks there much harder. Measured on the Moon, a fit
+//     declared 1.48"/day from interior points where an independent sample
+//     found 3.6"/day, and 4.65"/day with the endpoints in -- a server obeying
+//     the weaker reading under-reports by two to three times, in its own
+//     favour;
+//   - it fits fixed 32-day lattice cells aligned from J2000 that cover the
+//     span asked for, not the span itself, so two clients whose spans overlap
+//     share the fits. The lattice is the server's; a client must not be able
+//     to name a boundary;
+//   - it may round segTargetErrArcsec onto its own ladder only DOWNWARD,
+//     toward a finer fit. A client asked for a number because something
+//     downstream depends on it.
 static const char *UnservedOf(const eph::Request &req) {
   if (req.representation != 0) return "segments are not served by this server";
   if (req.timeScale != eph::kTimeUT1 && req.timeScale != eph::kTimeTT)
@@ -1600,13 +1831,14 @@ static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t req
   s.timeMode = req.timeMode;
   s.timeScale = req.timeScale;
   s.priority = req.priority;
+  s.deadlineMs = req.deadlineMs;
   // A hint, clamped to [1, maxChunkRows]; 0 means maxChunkRows (3.4).
   s.chunkRows = req.chunkRows == 0 || req.chunkRows > kMaxChunkRows ? kMaxChunkRows : req.chunkRows;
 
   std::string errText;
   bool fOk;
   try {
-    fOk = ExecuteRequest(lc, req, key, &s, &errText);
+    fOk = BeginRequest(lc, req, key, &s, &errText);
   } catch (const std::bad_alloc &) {
     // An exception out of a uWS handler is std::terminate for every loop.
     fOk = false;
@@ -1616,32 +1848,33 @@ static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t req
     SendError(ws, requestId, eph::kErrInternal, errText.c_str());
     return;
   }
-  s.fHit = lc->lastWasHit;
-  s.computeMs = lc->lastComputeMs;
   if (gOpt.logContents) s.contents = RequestContents(req);
   c->reqs++;
   c->cells += (uint64_t)s.nObj * s.nTimeRows;
   if (s.fHit) c->hits++;
   lc->m.requests++;
-  if (lc->lastWasHit) {
+  if (s.fHit) {
     lc->m.cacheHits++;
   } else {
+    // The compute counters are added when the last block finishes
+    // (AdvanceWork): a cancelled request contributes none of them, which is
+    // the truth about what was computed.
     lc->m.cacheMisses++;
     lc->m.cells += (uint64_t)s.nObj * s.nTimeRows;
-    lc->m.computeCount++;
-    lc->m.computeMicros += (uint64_t)(lc->lastComputeMs * 1000.0);
-    for (int b = 0; b < kComputeBuckets; b++)
-      if (lc->lastComputeMs <= kComputeBucketsMs[b]) lc->m.computeBucket[b]++;
   }
   // 3.9: interactive work is answered before prefetch. A priority 0 answer
   // goes in front of any queued priority 1 one that has not begun streaming
   // (chunks of one answer stay in order, so a stream already started keeps
-  // its place).
+  // its place). The queue is also the order this connection's answers are
+  // COMPUTED in, so an interactive request overtakes a prefetch that is still
+  // being computed -- the blocks that prefetch has already computed are kept
+  // and resumed, nothing is thrown away.
   auto it = c->out.end();
   if (s.priority == 0)
     for (auto i = c->out.begin(); i != c->out.end(); ++i)
       if (i->priority != 0 && i->nextRow == 0) { it = i; break; }
   c->out.insert(it, std::move(s));
+  ArmWorkTimer(lc);
   FlushStreams(ws);
 }
 
@@ -1683,9 +1916,9 @@ static void HandleRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t 
     if (e.tag == eph::kReqTagPrecession) fIgnored = true;
   }
   // The limits WELCOME advertised (3.5): ERROR 2 before anything is
-  // computed. objects x rows past --max-cells measured 13.7 s on the loop's
-  // only thread for 64 x 20000, and every other connection on that loop
-  // waited for it (EPHEMERIS_REVIEW.md S4).
+  // computed. The work itself no longer blocks the loop -- it is computed in
+  // blocks across loop turns -- but a limit is still what keeps one client
+  // from taking the loop's whole compute budget (EPHEMERIS_REVIEW.md S4).
   uint64_t cells = (uint64_t)req.objs.size() * (uint64_t)req.nTime;
   if (req.objs.size() > kMaxObjs || req.nTime > kMaxRows || req.profiles.size() > kMaxProfiles ||
       cells > gOpt.maxCells) {
@@ -1754,44 +1987,65 @@ static void HandleLookup(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t r
     SendError(ws, requestId, eph::kErrInternal, "no swe context available");
     return;
   }
+  // 3.4: maxMatches is the budget for the WHOLE answer, filled in query
+  // order, and `truncated` says the budget ran out -- not that one query was
+  // cut. A query that spends nothing still keeps its (empty) place, so the
+  // lists line up with the questions.
   eph::LookupResult lr;
   bool fMore = false;
+  size_t budget = l.maxMatches, cMatches = 0;
   lr.sources.push_back(gSource);
-  Resolve(ctx, l.query, l.flags, l.maxMatches, &lr.matches, &fMore);
+  for (const std::string &query : l.queries) {
+    std::vector<eph::Match> matches;
+    bool fMoreHere = false;
+    if (budget) Resolve(ctx, query, l.flags, budget, &matches, &fMoreHere);
+    else fMore = true;
+    fMore = fMore || fMoreHere;
+    budget -= matches.size();
+    cMatches += matches.size();
+    lr.queries.push_back(std::move(matches));
+  }
   lr.flags = fMore ? 1 : 0;
   std::vector<uint8_t> pay;
   eph::EncodeLookupResult(&pay, lr);
   c->lookups++;
   lc->m.lookups++;
   LogEvt e(kLogInfo, "lookup");
-  e.Conn(c).U("req", requestId).U("matches", lr.matches.size()).B("truncated", fMore)
-    .X("flags", l.flags);
-  if (gOpt.logContents) e.S("query", l.query);
+  e.Conn(c).U("req", requestId).U("queries", l.queries.size()).U("matches", cMatches)
+    .B("truncated", fMore).X("flags", l.flags);
+  if (gOpt.logContents) {
+    std::string qs;
+    for (const std::string &q : l.queries) qs += (qs.empty() ? "" : ",") + q;
+    e.S("query", qs);
+  }
   SendEnvelope(ws, eph::kMsgLookupResult, requestId, pay.data(), pay.size());
 }
 
 // CANCEL (3.4): a request still being answered loses its unsent chunks and
 // is answered ERROR 10; one answered completely, or unknown, gets nothing.
 //
-// This server computes a whole REQUEST inside one loop callback and then
-// streams it, so a CANCEL that arrives can only drop bytes -- the compute is
-// already done and its (complete) answer is in the result cache, which is
-// what 3.9 asks for the other way round: a PARTIAL answer must never be
-// cached, and none is ever made here. Computing in blocks across loop turns,
-// so that a cancel stops the work as well and one big request stops blocking
-// its loop (EPHEMERIS_REVIEW.md S4: 13.7 s for 64 x 20000 cells), is the next
-// pass's item; the work log records it.
+// Because a request is computed in blocks across loop turns (BeginRequest and
+// AdvanceWork), erasing the stream here stops the COMPUTING too: the Work
+// holds the only reference to the half-filled entry, which has not been put
+// in the result cache and now never will be. That is 3.4's rule -- a
+// cancelled request caches nothing, or a later identical question hits half
+// an answer -- and it is why the `cancel` cap is advertised.
 template <bool SSL>
 static void HandleCancel(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc, uint32_t requestId) {
   Conn *c = (Conn *)ws->getUserData();
   for (auto it = c->out.begin(); it != c->out.end(); ++it) {
     if (it->requestId != requestId) continue;
-    uint32_t sent = it->nextRow, rows = it->nTimeRows;
+    uint32_t sent = it->nextRow, rows = it->nTimeRows, nObj = it->nObj;
+    // What the cancel actually saved: the cells computed before it landed,
+    // against the whole answer's. Read before the erase, which is what frees
+    // the half-filled entry.
+    uint64_t cells = it->work ? (uint64_t)it->work->iObj * rows + it->work->rowNext
+                              : (uint64_t)nObj * rows;
     c->out.erase(it);
     c->cancels++;
     lc->m.cancels++;
     LogEvt(kLogInfo, "cancel").Conn(c).U("req", requestId).U("rows_sent", sent)
-      .U("rows", rows);
+      .U("cells_computed", cells).U("cells", (uint64_t)nObj * rows).U("rows", rows);
     SendError(ws, requestId, eph::kErrCancelled, "cancelled");
     FlushStreams(ws);
     return;
@@ -2135,6 +2389,12 @@ static void DrainTick(us_timer_t *t) {
     LogEvt(kLogDebug, "drain.loop").I("loop", dt->lc->index)
       .U("closing", dt->lc->socks.size());
   EndAll<SSL>(dt->lc, fLate);
+  // Closed here rather than at StartDrain: answers still being computed need
+  // their blocks to finish, and the drain waits for exactly that.
+  if (dt->lc->workTimer) {
+    us_timer_close(dt->lc->workTimer);
+    dt->lc->workTimer = nullptr;
+  }
   us_timer_close(t);
 }
 
@@ -2347,6 +2607,15 @@ static void SetupLoop(LoopCtx *lc) {
     lc->helloTimer = t;
     *(LoopCtx **)us_timer_ext(t) = lc;
     us_timer_set(t, gOpt.Tls() ? HelloSweep<true> : HelloSweep<false>, 1000, 1000);
+  }
+  // The work timer, created idle for the same reason the sweep is not a
+  // fallthrough timer: it is armed and slowed rather than closed and
+  // recreated, and the drain closes it once the loop has nothing left.
+  {
+    us_timer_t *t = us_create_timer((us_loop_t *)lc->loop, 0, sizeof(LoopCtx *));
+    lc->workTimer = t;
+    *(LoopCtx **)us_timer_ext(t) = lc;
+    us_timer_set(t, gOpt.Tls() ? WorkTick<true> : WorkTick<false>, kWorkIdleMs, kWorkIdleMs);
   }
 }
 
@@ -2591,15 +2860,14 @@ static void BuildWelcome(const EphDiscovery &disc, const char *szSwe) {
   w.protoSession = eph::kProtoVersion;
   // Advertised is promised: a bit here is behaviour a client WILL take up,
   // so only what is implemented and exercised by a gate goes in.
-  //   cancel      the message is implemented (ERROR 10, the unsent chunks
-  //               dropped, nothing partial cached), but 3.4 also means the
-  //               server stops COMPUTING, and this one computes a whole
-  //               request in one loop callback. The bit waits for the
-  //               block-wise pass the work log names.
+  //   cancel      a request is computed in blocks of rows across loop turns,
+  //               so a CANCEL stops the WORK and not merely the sending; a
+  //               cancelled request caches nothing, and a large one does not
+  //               starve the loop. tools/ephsrv-robust.sh gates all three.
   //   segments, elements (kind 4), deep sky, orbit method 3
   //               not implemented at all.
   //   zstd        not implemented.
-  w.caps = eph::kCapF32 | eph::kCapLookup | eph::kCapInstantLists |
+  w.caps = eph::kCapF32 | eph::kCapCancel | eph::kCapLookup | eph::kCapInstantLists |
            eph::kCapPriority | eph::kCapDesignations | eph::kCapDeltaTTable;
   w.maxObjs = kMaxObjs;
   w.maxRows = kMaxRows;
