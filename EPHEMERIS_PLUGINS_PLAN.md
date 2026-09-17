@@ -18,7 +18,9 @@ version 3, and this section is the design authority behind it.
   is squashed into `qt` when the maintainer says so; never before.
 - **Approved plan.** `/nvmraid/home/n/.claude/plans/reactive-percolating-prism.md`
   (2026-09-17). This document supersedes it wherever they differ.
-- **Phases.** See §7. The work log (§8) says which are done.
+- **Phases.** See §7. The work log (§8) says which are done. Phase 2 is
+  done but for the pieces item 2 names as deferred (segments, elements, the
+  block-wise compute and the `cancel` capability that waits on it).
 - **Prometheia.** `/shares/ephemeris-prometheia` pins `ephproto.h` and runs the
   conformance fixtures (§3.10). With version 4 it deletes its wire map
   (`server/wire_map.*`).
@@ -871,12 +873,25 @@ with the other. **An engine never trades accuracy for speed silently.**
   the per-instant work is memoised rather than recomputed inside the engine.
 - **The cache key is canonical** (§3.7), so the same question asked twice --
   in either precision, in any chunking -- is computed once.
-- **A segments request's work scales with its SPAN**, not with the answer's
-  size: the first touch of a body marches its memo window across the span, and
-  no size limit expresses that. Hence `maxSegSpanDays` in the segments
-  capability.
-- **Ask a server for the same instant twice.** If the second costs what the
-  first did, something is being recomputed that should have been reused --
+- **A request's cost is dominated by the time WINDOW it touches**, not by the
+  objects in it, and that cost is shared by everything else touching the same
+  window. Measured on Prometheia: the frame work for a year is about 730
+  nutation nodes, roughly 15 ms, paid once and then free for every body, every
+  instant and every client in that window; per-object costs sit within a factor
+  of six of each other (an ephemeris body 14.2 µs, a catalogue body 5.3, a star
+  2.4, an orbit point 3.5), most of the spread being one light-time solve. So
+  the honest unit for a limit is SPAN, which is what `maxSegSpanDays` measures,
+  and the lattice (§3.4) shares not only fitted segments but the frame work
+  beneath them.
+- **Ask a server for the same instant twice, and ask it in a different
+  ORDER.** If the second identical instant costs what the first did, something
+  is being recomputed that should have been reused; and if one object costs
+  several times another of its kind, find out whether that is the object or
+  merely the one asked FIRST -- a per-window cost paid by whoever arrives first
+  reads exactly like an expensive body. Prometheia's engine had both: a
+  catalogue record decoded per position, and then a "28× more expensive"
+  integrated body that turned out to be a planet paying for the window's
+  nutation nodes. Each was hidden under a speedup already banked --
   measured on Prometheia's engine, where a catalogue record was decoded per
   position outside the memo everything else amortised into, and looked like a
   28× cost for integrated bodies until it was fixed (1,013 → 5.9 µs, which is
@@ -1558,6 +1573,102 @@ the gates the phase touches.
      one REQUEST carries a whole cast, prefetch has its own priority, segments
      answer animation, CANCEL stops wasted computation, and the cache key is
      canonical so one question is computed once.
+
+2. **Phase 2, protocol version 4 in code (2026-09-17).** `astrolog-ephd`,
+   `eph_wsclient` and the Qt client speak version 4 and nothing else, in one
+   commit, because the break is clean and the suite's live group casts
+   through both ends at once.
+   - **One header.** `ephsrv/ephproto4.h` became `ephsrv/ephproto.h`
+     (namespace `eph`), and the version 3 header of that name is gone. What
+     remains of version 3 is the refusal an older client can read:
+     `EncodeLegacyError` writes ERROR 8 in that client's own layout and
+     envelope version, which both the limits gate and the robust gate ask
+     for by name. `eph::Object::nNative` moved OUT of the protocol header
+     into `MapObject`'s parameters: the header is a pinned interface the
+     other implementation vendors, and an Astrolog-only hint does not belong
+     in it. `tools/ci-assert-vendorable.sh`, in `make check`, compiles the
+     header alone under C++20 `-Wall -Wextra -Werror` from a directory where
+     no other header of this tree exists.
+   - **The server.** WELCOME carries the capability TLVs that describe what
+     it does; REQUESTs are parsed canonically by the shared codec, then
+     checked against what it serves (ERROR 11), its limits (2), its budget
+     (6), its queue (9) and its drain (12). Each object is mapped through
+     `ephswiss.h` and computed on the fork's `_r` entry points, per-object
+     failures carrying an A.17 code. LOOKUP resolves the bodies Swiss serves
+     by name, the Moon's named points, the A.15 hypotheticals, numbered
+     asteroids and fixed stars. CANCEL drops the unsent chunks and answers
+     ERROR 10. The operational half is untouched.
+   - **Advertised is promised.** The caps bits are f32, lookup, instant
+     lists, priority, designations and delta T tables -- each exercised by a
+     gate. NOT advertised: `cancel` (the message works, but 3.4 also means
+     the server stops computing, and this one computes a whole request in
+     one loop callback), segments, elements (kind 4 answers per-object error
+     2), deep sky, zstd, and orbit method 3.
+   - **The Qt client** builds ONE REQUEST per cast, with a profile per
+     distinct Swiss call `FSwissPlanetSpec()` decides on and an object per
+     body -- `ephswiss.h`'s `ProfileFromSwiss` and `ObjectFromSwiss`, whose
+     round trip through `MapObject` the codec test checks over 681
+     combinations. It splits into more requests only when WELCOME's maxObjs
+     or maxProfiles says to. Window cache keys are the server's own (3.7):
+     the datasetId and the question block's bytes. Animation prefetch
+     windows go out with `priority = 1`; an evicted in-flight window is
+     CANCELled. The suite's live group casts every scenario through the real
+     server and compares the arrays as bytes: all of them are bit-identical
+     to the local Swiss path, as they were under version 3.
+   - **Two measurements the specification asked for.**
+     - *Orbit points are not geometric in Swiss.* §3.5a says the correction
+       bits have no effect on kind 1. Measured at J2000 with the bundled
+       ephemeris: switching SEFLG_TRUEPOS on moves `swe_nod_aps`'s
+       ascending node of Jupiter by 5.8e-3 degrees (mean and osculating
+       alike), its perihelion by 7.5e-4, and the named lunar bodies by up to
+       2.5e-5 (SE_OSCU_APOG); SEFLG_NOABERR|NOGDEFL alone moves nothing.
+       So Swiss's points carry light time, and honouring the spec's rule
+       would mean answering a different point from the one Astrolog's local
+       cast computes. The server therefore honours the bits as sent, and
+       this is reported rather than kludged: the spec follows the engines.
+     - *Rates against central differences.* Swiss's speeds, against central
+       differences of its own positions over +-0.001 day (and +-0.01 and
+       +-0.0001, to tell real disagreement from differencing noise):
+       longitude rates agree to 2.4e-6 deg/day (the Moon; the Sun 2.4e-7),
+       inside 3.5a's 1e-5. Distance rates do not: Mars 2.2e-6 AU/day, Chiron
+       1.7e-5, Pluto 4.7e-5, stable across all three step sizes. So the
+       rates-bound capability (A.3 0x0013) is advertised at 3e-6 deg/day and
+       1e-4 AU/day, and every object answered with speeds carries
+       `ratesApprox`.
+   - **What Swiss does with the correction masks, per observer.**
+     `plaus_iflag()` turns aberration and deflection off inside every
+     heliocentric, barycentric and planet-centred call to `swe_calc`, so for
+     a BODY the masks 7, 3, 5 and 1 all answer as 1 there; `swe_nod_aps`
+     reads the bits itself and honours them. One per-observer pair cannot
+     say both, and A.3 0x0004 is per observer rather than per kind, so every
+     mask is advertised for every observer and the narrowing is recorded
+     here and in Appendix B.
+   - **The gates** all moved to version 4 and pass: golden (149 columns
+     bit-exact against the fork, over instants, time scales, a delta T
+     table, an instant list, every zodiac plane, every observer, frames,
+     forms, correction masks, orbit points and methods including the focal
+     point, fifteen hypotheticals, a designation, and the ayanamsa and delta
+     T columns), robust (the version refusals, every c2s conformance
+     fixture answered as its manifest says, CANCEL, priority ordering,
+     LOOKUP, and the version 3 findings), cache (the key's split, now on
+     datasetId + question bytes), limits, ops (including that a per-object
+     error text carries no instant), soak, tls and bench. `eph_wsclient` was
+     rewritten around profiles, kinds and the new options the gates need.
+   - **Found while doing it.** `Makefile.ephsrv` never included
+     `eph_wsclient`'s dependency file, so a change to `ephproto.h` rebuilt
+     the server and left the client linked against the old layout -- which
+     reads exactly like a protocol bug in whichever end you did not suspect.
+     Fixed with the client's own `.d` in the include list.
+   - **Deferred, with reasons.** Segments (SEGDATA is in the codec and the
+     fixtures; no server implementation, and the capability is not
+     advertised); orbital elements (kind 4 answers per-object error 2 until
+     the fork has an entry point); block-wise computation across loop turns,
+     which is what makes CANCEL worth advertising and what stops one large
+     request blocking its loop (EPHEMERIS_REVIEW.md S4 measured 13.7 s for
+     64 x 20000 cells); a `registries.json` generated from Appendix A; and
+     the server's object-major loop, where Prometheia measured 56 us to
+     2.9 us an object-row by computing time-major and sharing the observer,
+     Sun, frame and nutation work across a cast.
 
 1. **Phase 1, the document (2026-09-17).** Written from the approved plan, three
    code surveys (state and command line, GUI, connection) and a design review
