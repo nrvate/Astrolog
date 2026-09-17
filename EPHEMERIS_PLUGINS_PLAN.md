@@ -367,8 +367,16 @@ answers PONG with the same requestId.
 
 #### CANCEL (8, client → server)
 The payload is empty, and the envelope's requestId names the request.
-- **Still being answered.** The server stops, discards the unsent chunks and
-  sends ERROR 10 (not closing, not retryable).
+- **Still being answered.** The server stops computing what is left, discards
+  the unsent chunks and sends ERROR 10 (not closing, not retryable).
+- **A cancelled request caches nothing.** A partial answer MUST NOT become a
+  cache entry, or a later identical question hits half an answer.
+- **To make CANCEL mean anything**, a server computes a request in blocks of
+  rows across loop turns rather than in one callback: otherwise the work is
+  finished by the time the CANCEL is read and only bytes remain to drop, and a
+  large request blocks that loop for everyone (64 objects × 20,000 rows measured
+  13.7 s, EPHEMERIS_REVIEW.md S4). Flushing each block as it completes also
+  starts the client's first rows sooner and applies backpressure earlier.
 - **Already answered completely, or unknown.** The server sends nothing.
 - **Chunks already in flight.** The client MUST ignore chunks that arrive for a
   cancelled id.
@@ -799,7 +807,17 @@ with the other. **An engine never trades accuracy for speed silently.**
   client then evaluates locally at any instant, with the error it asked for
   stated on the wire.
 - **CANCEL exists so that speed is not wasted:** an animation that moves on
-  drops the window it no longer needs, and the server stops computing it.
+  drops the window it no longer needs, and the server stops computing it
+  (§3.4: in blocks, and caching nothing from a cancelled request).
+- **Share the per-instant work across a cast.** Computing time-major -- every
+  object at one instant, then the next -- lets the observer, Sun, frame and
+  nutation work be memoised across the objects of a cast. Prometheia measured
+  56 → 2.9 µs per object-row from this family of changes: interpolating the
+  nutation series from half-day nodes (0.004 µas against the full series),
+  caching those nodes, Newton's method for light time, memoising the observer
+  and Sun states, and then time-major ordering for a further 17%. The ordering
+  is free to try -- the answer cannot depend on it -- but it only pays where
+  the per-instant work is memoised rather than recomputed inside the engine.
 - **The cache key is canonical** (§3.7), so the same question asked twice --
   in either precision, in any chunking -- is computed once.
 - **Budgets and limits are per connection, not per answer:** a server states
