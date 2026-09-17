@@ -19574,7 +19574,7 @@ static void TestEphemRegistryQt()
           FSwissPlanet(obj, jd, cent, &r1, &r2, &r3, &r4, &r5, &r6);
           // The host's answer: a one-object query down the derived chain.
           EphQueryInit(&eq, jd);
-          FEphQueryAdd(&eq, obj, 0, cent);
+          FEphQueryAdd(&eq, obj, 0, cent, NULL);
           FEphSubmit(&eq);
           fHost = FEphRead(&eq, obj, &h1, &h2, &h3, &h4, &h5, &h6);
           // The oracle: the call the source delegates to, directly.
@@ -19635,8 +19635,8 @@ static void TestEphemRegistryQt()
       rgisrc[0] = IEphSrcFromKey("none");
       rgisrc[1] = IEphSrcFromKey("swiss");
       EphQueryInit(&eq2, jd);
-      FEphQueryAdd(&eq2, oMoo, 0, oEar);
-      FEphQueryAdd(&eq2, oNod, 0, oEar);
+      FEphQueryAdd(&eq2, oMoo, 0, oEar, NULL);
+      FEphQueryAdd(&eq2, oNod, 0, oEar, NULL);
       Check(FEphSubmitChain(&eq2, rgisrc, 2), "a chain whose head refuses "
         "everything is answered by its second source");
       Check(FEphRead(&eq2, oMoo, &h1, &h2, &h3, &h4, &h5, &h6) &&
@@ -19646,7 +19646,7 @@ static void TestEphemRegistryQt()
       Check(FEphFallbackNotice(), "a fallback serving something raises the "
         "notice");
       EphQueryInit(&eq2, jd);
-      FEphQueryAdd(&eq2, oMoo, 0, oEar);
+      FEphQueryAdd(&eq2, oMoo, 0, oEar, NULL);
       Check(!FEphSubmitChain(&eq2, rgisrc, 1), "a chain that reaches only "
         "none answers nothing");
       Check(!FEphRead(&eq2, oMoo, &h1, &h2, &h3, &h4, &h5, &h6),

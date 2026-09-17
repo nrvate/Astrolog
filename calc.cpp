@@ -1101,7 +1101,7 @@ void ComputeEphem(real t)
         objOrbit = us.fMoonMove ? ObjOrbit(i) : -1;
         if (objOrbit < 0 || objOrbit == oSun)
           objOrbit = objCentCalc;
-        FEphQueryAdd(&eq, i, 0, objOrbit);
+        FEphQueryAdd(&eq, i, 0, objOrbit, NULL);
       }
       if (eq.cobj > 0)
         FEphSubmit(&eq);
@@ -1336,6 +1336,7 @@ static real RProgArc(real *pjd)
   real jd, rDays, r;
 #ifdef SWISS
   real lon1, lat1, lon2, lat2, rT;
+  EPHQUERY eqp;
 #endif
 
   jd = JulianDayFromTime(us.nProgress == ptSolarArc ? is.T : is.Tp);
@@ -1345,10 +1346,19 @@ static real RProgArc(real *pjd)
     r = rDays * rDegMax / rDayInYear;
 #ifdef SWISS
   else if (us.objProgArc >= 0) {
-    FSwissPlanet(us.objProgArc, jd, us.objCenter,
-      &lon1, &lat1, &rT, &rT, &rT, &rT);
-    FSwissPlanet(us.objProgArc, jd + rDays, us.objCenter,
-      &lon2, &lat2, &rT, &rT, &rT, &rT);
+    // The side call goes through the registry, as an instant list of
+    // the two instants this arc needs (section 4.1). One query per
+    // instant this phase; FSwissPlanet() runs inside the source's
+    // submit, so the calls -- and their bytes -- are the ones this
+    // branch has always made.
+    EphQueryInit(&eqp, jd);
+    FEphQueryAdd(&eqp, us.objProgArc, 0, us.objCenter, NULL);
+    FEphSubmitSide(&eqp);
+    FEphRead(&eqp, us.objProgArc, &lon1, &lat1, &rT, &rT, &rT, &rT);
+    EphQueryInit(&eqp, jd + rDays);
+    FEphQueryAdd(&eqp, us.objProgArc, 0, us.objCenter, NULL);
+    FEphSubmitSide(&eqp);
+    FEphRead(&eqp, us.objProgArc, &lon2, &lat2, &rT, &rT, &rT, &rT);
     if (FProgArcRA(us.nProgArc)) {
       CoorXform(&lon1, &lat1, RObliquityTrue(jd));
       CoorXform(&lon2, &lat2, RObliquityTrue(jd + rDays));
@@ -1446,8 +1456,11 @@ static void ComputeChartProgressions()
   // Compute true arc based on planet movement, or a fixed rate offset.
 #ifdef SWISS
   if (us.objProgArc >= 0) {
-    FSwissPlanet(us.objProgArc, JulianDayFromTime(is.Tp), us.objCenter,
-      &r, &r2, &r2, &r2, &r2, &r2);
+    EPHQUERY eqp;
+    EphQueryInit(&eqp, JulianDayFromTime(is.Tp));
+    FEphQueryAdd(&eqp, us.objProgArc, 0, us.objCenter, NULL);
+    FEphSubmitSide(&eqp);
+    FEphRead(&eqp, us.objProgArc, &r, &r2, &r2, &r2, &r2, &r2);
     r = Mod(r + is.rSid);
     r2 = (us.nProgress == ptSolarArc ? MinDifference(planet[us.objProgArc],
       r) : MinDifference(r, planet[us.objProgArc]));
@@ -2706,6 +2719,7 @@ int NCheckEclipseSolarLoc(real lon, real lat, real *prPct)
   CI ciSav;
   PT3R ptSav[oMoo+1], ptDiff;
   real obj[oMoo+1], alt[oMoo+1], r1, r2, r3, r4, r5, r6;
+  EPHQUERY eqp;
   int i, et = etUndefined;
   flag fSav1, fSav2;
 
@@ -2718,11 +2732,14 @@ int NCheckEclipseSolarLoc(real lon, real lat, real *prPct)
     obj[i] = planet[i]; alt[i] = planetalt[i];
   }
 
-  // Compute the topocentric position of the Sun at a particular location.
+  // Compute the topocentric position of the Sun at a particular location,
+  // through the registry like every side call (section 4.1).
   i = oSun;
   OO = lon; AA = lat;
-  if (!FSwissPlanet(i, JulianDayFromTime(is.T), us.objCenter,
-    &r1, &r2, &r3, &r4, &r5, &r6))
+  EphQueryInit(&eqp, JulianDayFromTime(is.T));
+  FEphQueryAdd(&eqp, i, 0, us.objCenter, NULL);
+  FEphSubmitSide(&eqp);
+  if (!FEphRead(&eqp, i, &r1, &r2, &r3, &r4, &r5, &r6))
     goto LDone;
   planet[i] = Mod(r1 + is.rSid); planetalt[i] = r2;
   SphToRec(r4, planet[i], planetalt[i],
@@ -4101,22 +4118,82 @@ CONST char *szStarNameSwiss[cStar+1] = {"",
   "", "", "", "Kaus Australis", "", "", "", "", "", "",
   "", "", "", "", "", "", ",M31", ",ze-1Ret", ",SgrA*", ",GA"};
 
+// Resolve the Swiss Ephemeris name of star istar: Astrolog's name, the
+// few translations szStarNameSwiss[] carries, or the user's own custom
+// name. The same translation SwissComputeStars() has always done, split
+// out so the query build and the brightness pass share it.
+
+static void FSwissStarName(int istar, char *sz)
+{
+  if (!FSzSet(szStarCustom[istar])) {
+    if (*szStarNameSwiss[istar])
+      sprintf2(sz, cchSzDef, "%s", szStarNameSwiss[istar]);
+    else
+      sprintf2(sz, cchSzDef, "%s", szObjName[oNorm+istar]);
+  } else
+    sprintf2(sz, cchSzDef, "%s", szStarCustom[istar]);
+}
+
+
+// One star's position through the Swiss Ephemeris: the FSwissPlanet()
+// analogue for the fixed stars, and what the registry's Swiss source
+// runs for a star row. The caller hands the RESOLVED Swiss Ephemeris
+// name (the translation above is host data, not source mapping); the
+// flags are GetSwissFlags()'s plus the centre bits, exactly as
+// SwissComputeStars() and SwissComputeStar() have always built them.
+// The six written to rg[] are the entry point's own values, unwritten
+// when the star failed -- swe_fixstar2()'s contract with its caller's
+// array, which is what makes a failed star keep the previous star's
+// coordinates, as it always has.
+
+flag FSwissStar(char *sz, real jd, real *rg)
+{
+  char serr[AS_MAXCH];
+  int iflag;
+
+  SwissEnsurePath();
+  iflag = GetSwissFlags();
+  if (us.objCenter != oEar)
+    iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
+  // swe_fixstar2() rewrites the name to the star's canonical form in
+  // place, and the callers read it back -- that rewrite IS the display
+  // name of a star enumerated by number -- so the caller's own buffer
+  // is handed on, not a copy.
+  return swe_fixstar2(sz, jd, iflag, rg, serr) >= 0;
+}
+
+
 // Compute fixed star locations. Given a time, call Swiss Ephemeris to
 // compute them. This is similar to FSwissPlanet() in that it knows about
 // and translates between Astrolog and Swiss Ephemeris defintions.
 
 void SwissComputeStars(real jd, flag fInitBright)
 {
-  char sz[cchSzDef], serr[AS_MAXCH];
+  char sz[cchSzDef], serr[AS_MAXCH], rgszName[cStar + 1][cchSzDef];
   int i, iflag;
   double xx[6], mag;
+  EPHQUERY eqs;
 
   SwissEnsurePath();
   if (!fInitBright) {
+    // The cast's star questions go through the registry (section 4.1):
+    // one query, every star the loop below will read, in loop order,
+    // each with its resolved name. FSwissStar() makes the same
+    // swe_fixstar2() calls in the same order inside the submit; the
+    // rows come back raw, and the post-processing below is unchanged.
+    // The brightness initialization beside it keeps its own call: its
+    // instant and flags are fixed calibration constants, not a cast
+    // question.
     jd = JulianDayFromTime(jd);
-    iflag = GetSwissFlags();
-    if (us.objCenter != oEar)
-      iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
+    EphQueryInit(&eqs, jd);
+    for (i = 1; i <= cStar; i++) {
+      if (!(!ignore[oNorm+i] || us.objCenter == oNorm+i))
+        continue;
+      FSwissStarName(i, rgszName[i]);
+      FEphQueryAdd(&eqs, oNorm + i, 0, 0, rgszName[i]);
+    }
+    if (eqs.cobj > 0)
+      FEphSubmitSide(&eqs);
   } else {
     jd = rJD2000;
     iflag = SEFLG_SPEED | SEFLG_SWIEPH | SEFLG_HELCTR;
@@ -4127,16 +4204,16 @@ void SwissComputeStars(real jd, flag fInitBright)
 
     // In most cases Astrolog's star name is the same as Swiss Ephemeris,
     // however for a few stars need to translate to a different string.
-    if (!FSzSet(szStarCustom[i])) {
-      if (*szStarNameSwiss[i])
-        sprintf2(S(sz), "%s", szStarNameSwiss[i]);
-      else
-        sprintf2(S(sz), "%s", szObjName[oNorm+i]);
-    } else
-      sprintf2(S(sz), "%s", szStarCustom[i]);
+    FSwissStarName(i, sz);
 
-    // Compute the star location or get the star's brightness.
-    swe_fixstar2(sz, jd, iflag, xx, serr);
+    // Compute the star location or get the star's brightness. The
+    // brightness pass asks the entry point directly; the position pass
+    // reads its row, which writes the six only on success -- a failed
+    // star leaves the previous star's six standing, as always.
+    if (!fInitBright)
+      FEphReadRaw(&eqs, oNorm + i, xx);
+    else
+      swe_fixstar2(sz, jd, iflag, xx, serr);
     if (!fInitBright) {
       planet[oNorm+i] = Mod(xx[0] + (us.fSidereal ? us.rZodiacOffset : 0.0) +
         us.rZodiacOffsetAll);
@@ -4168,8 +4245,9 @@ void SwissComputeStars(real jd, flag fInitBright)
 flag SwissComputeStar(real jd, ES *pes)
 {
   char serr[AS_MAXCH], *pch, *pchT, chT;
-  int iflag, isz = 0, i;
+  int isz = 0, i;
   double xx[6], dist1 = 0.0, dist2 = 0.0;
+  EPHQUERY eqs;
   static real lonPrev = 0.0, latPrev = 0.0;
   static int istar = 1;
 
@@ -4183,11 +4261,12 @@ flag SwissComputeStar(real jd, ES *pes)
     return fTrue;
   }
 
-  // Determine Swiss Ephemeris flags.
+  // The position question goes through the registry (section 4.1), one
+  // query per star; FSwissStar() makes the same call with the same
+  // flags. The brightness-distance calibration beside it -- a fixed
+  // instant and fixed flags, not a cast question -- and the magnitude
+  // lookup keep their direct calls.
   jd = JulianDayFromTime(jd);
-  iflag = GetSwissFlags();
-  if (us.objCenter != oEar)
-    iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
 
   for (;;) {
   sprintf2(S(pes->sz), "%d", istar);
@@ -4199,7 +4278,10 @@ flag SwissComputeStar(real jd, ES *pes)
       return fFalse;
     dist1 = xx[2];
   }
-  if (swe_fixstar2(pes->sz, jd, iflag, xx, serr) < 0)
+  EphQueryInit(&eqs, jd);
+  FEphQueryAdd(&eqs, istar, 0, 0, pes->sz);
+  FEphSubmitSide(&eqs);
+  if (!FEphReadRaw(&eqs, istar, xx))
     return fFalse;
   pes->lon = Mod(xx[0] + (us.fSidereal ? us.rZodiacOffset : 0.0) +
     us.rZodiacOffsetAll);
@@ -4455,16 +4537,13 @@ flag SwissTestStar(char *sz)
 
 flag SwissComputeAsteroid(real jd, ES *pes, flag fBack)
 {
-  int iflag, i;
+  int i;
   real r1, r2, r3, r4, r5, r6, rDiff;
   char sz[cchSzDef], *pch, *pchT, chT;
+  EPHQUERY eqa;
   static int iast = 1;
 
-  // Determine Swiss Ephemeris flags.
   jd = JulianDayFromTime(jd);
-  iflag = GetSwissFlags();
-  if (us.objCenter != oEar)
-    iflag |= (us.fBarycenter ? SEFLG_BARYCTR : SEFLG_HELCTR);
 
   // Calling with empty parameters means initialize to first asteroid.
   for (;;) {
@@ -4490,8 +4569,12 @@ flag SwissComputeAsteroid(real jd, ES *pes, flag fBack)
   // mostly absent now attempts every number in it rather than stopping,
   // so a very wide range is slow rather than instantly empty -- an
   // honest cost for an honest answer, and the range is the user's own.
-  if (!FSwissPlanet(iast + SE_AST_OFFSET, jd, us.objCenter,
-    &r1, &r2, &r3, &r4, &r5, &r6)) {
+  // The side call goes through the registry (section 4.1), one query
+  // per asteroid; FSwissPlanet() runs inside the submit.
+  EphQueryInit(&eqa, jd);
+  FEphQueryAdd(&eqa, iast + SE_AST_OFFSET, 0, us.objCenter, NULL);
+  FEphSubmitSide(&eqa);
+  if (!FEphRead(&eqa, iast + SE_AST_OFFSET, &r1, &r2, &r3, &r4, &r5, &r6)) {
     iast += (fBack ? -1 : 1);
     continue;
   }

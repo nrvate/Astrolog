@@ -166,6 +166,17 @@ typedef struct _EphQuery {
                         // to make exactly today's call (section 4.1).
   int rgisrc[objMax];   // Registry index of the source that answered, or
                         // ephSrcNone.
+  char *rgszName[objMax];
+                        // A fixed star's resolved Swiss Ephemeris name, or
+                        // NULL for a body. Mutable on purpose: the entry
+                        // point rewrites it to the star's canonical form,
+                        // which is the name the callers display. A star
+                        // row carries the entry point's own six -- which
+                        // are already the answer columns in the
+                        // protocol's order -- because the star callers'
+                        // post-processing is its own; FSwissPlanet()'s
+                        // convention re-associates the sidereal offset,
+                        // which can move a bit.
   EPHROW rgrow[objMax]; // Per-object results, in object order.
 } EPHQUERY;
 

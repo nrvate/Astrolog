@@ -118,24 +118,36 @@ static void StopSwissLocal()
 static flag FSubmitSwissLocal(EPHQUERY *pq)
 {
   EPHROW *prow;
-  real r1, r2, r3, r4, r5, r6;
-  int i;
+  real r1, r2, r3, r4, r5, r6, rgxx[6];
+  int i, ix;
 
   for (i = 0; i < pq->cobj; i++) {
     if (pq->rgisrc[i] != ephSrcNone)
       continue;   // Another source in the walk already answered this one.
     prow = &pq->rgrow[i];
-    if (!FSwissPlanet(pq->rgobj[i], pq->rJD, pq->rgcent[i],
-      &r1, &r2, &r3, &r4, &r5, &r6)) {
-      prow->nErr = ephErrDataUnavailable;
-      continue;
+    if (pq->rgszName[i] != NULL) {
+      // A fixed star: FSwissStar()'s pair answers, and the row is the
+      // entry point's own six -- already the answer columns in the
+      // protocol's order, so no transposition.
+      if (!FSwissStar(pq->rgszName[i], pq->rJD, rgxx)) {
+        prow->nErr = ephErrDataUnavailable;
+        continue;
+      }
+      for (ix = 0; ix < 6; ix++)
+        prow->rg[ix] = rgxx[ix];
+    } else {
+      if (!FSwissPlanet(pq->rgobj[i], pq->rJD, pq->rgcent[i],
+        &r1, &r2, &r3, &r4, &r5, &r6)) {
+        prow->nErr = ephErrDataUnavailable;
+        continue;
+      }
+      prow->rg[0] = r1;   // longitude
+      prow->rg[1] = r2;   // latitude
+      prow->rg[2] = r4;   // distance
+      prow->rg[3] = r3;   // longitude rate
+      prow->rg[4] = r5;   // latitude rate
+      prow->rg[5] = r6;   // distance rate
     }
-    prow->rg[0] = r1;   // longitude
-    prow->rg[1] = r2;   // latitude
-    prow->rg[2] = r4;   // distance
-    prow->rg[3] = r3;   // longitude rate
-    prow->rg[4] = r5;   // latitude rate
-    prow->rg[5] = r6;   // distance rate
     prow->nErr = ephErrNone;
     prow->nNativeRes = pq->rgnNative[i];
   }

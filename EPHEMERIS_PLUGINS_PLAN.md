@@ -1761,6 +1761,47 @@ the gates the phase touches.
      difference 11.361744", and the Moon sits at 5.17 degrees latitude.
      Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
 
+8. **Phase 3c, the side calls through the host (2026-09-17).** The
+   direct FSwissPlanet()/swe_fixstar2() call sites of §4.1's "side
+   calls use the same path" go through the registry: RProgArc()'s two
+   instants (one query each -- one instant per query is this phase's
+   shape, and the arc is its own instant list), the progressed/arc
+   object of ComputeChartProgressions(), the eclipse's topocentric Sun
+   (NCheckEclipseSolarLoc), the asteroid listing (SwissComputeAsteroid),
+   and the star paths: SwissComputeStars() builds one query of every
+   star it will read, each with its resolved name, and SwissComputeStar()
+   asks its position per star. New FSwissStar() is the stars'
+   FSwissPlanet() analogue -- the caller hands the resolved Swiss name,
+   the flags are GetSwissFlags()'s plus the centre bits -- and a star
+   row carries the entry point's OWN six, in the protocol's column
+   order, because the star callers' post-processing is its own and
+   FSwissPlanet()'s convention re-associates the sidereal offset, which
+   can move a bit; swe_fixstar2()'s rewrite of the name in place is
+   preserved (it IS the display name of a star enumerated by number).
+   - **The side-call chain** is its own accessor, IEphSrcSideCall():
+     nSwissEph mapped the way IEphSrcPrimary() maps it, IGNORING the
+     files-off branch. Today's side calls are unconditional Swiss calls
+     with GetSwissFlags()'s bits from nSwissEph, whatever the cast's
+     selection is (§1 item 7); this reproduces that exactly in every
+     selectable mode, and phase 4's chain re-plumb walks the user's own
+     order instead.
+   - **Deferred, with reasons.** FSwissPlanetData() (planet phenomena):
+     its answer is phase, diameter and magnitude, not six position
+     columns -- it needs its own row semantics, not a transposition.
+     The brightness passes of the stars (SwissComputeStars()'s
+     fInitBright, the fixed-instant distance calibration of
+     SwissComputeStar(), SwissTestStar()): fixed calibration constants,
+     not cast questions; their flags do not come from the selection.
+   - **Sabotage-proven.** The chart matrix does NOT render a progressed
+     arc (RProgArc's instant sabotaged: no matrix moved), but the
+     suite's progressions group does -- 24 assertions fail loudly
+     against its pinned references. The star path's watcher is the
+     graphics matrix: one degree off every star moves 32 diff lines;
+     reverted, all four matrices are byte-identical again.
+   - **Gates.** make check all clear, suite 5817 passed / 0 failed;
+     chart, switch, influence and graphics matrices byte-identical
+     against the 6cf3ac3 baseline.
+
 7. **Phase 3b, ComputeEphem's Swiss branch through the host (2026-09-17).**
    The per-object FSwissPlanet() call of calc.cpp's Swiss branch -- and
    its slot-5 custom skip -- goes through the registry: one query built

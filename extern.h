@@ -567,12 +567,21 @@ extern EPHSRCDEF *PephsrcGet P((int));
 extern int IEphSrcFromKey P((CONST char *));
 extern int IEphSrcPrimary P((void));
 extern void EphQueryInit P((EPHQUERY *, real));
-extern flag FEphQueryAdd P((EPHQUERY *, int, int, int));
+extern flag FEphQueryAdd P((EPHQUERY *, int, int, int, char *));
 extern flag FEphFallbackNotice P((void));
+extern int IEphSrcSideCall P((void));
 extern flag FEphSubmitChain P((EPHQUERY *, CONST int *, int));
 extern flag FEphSubmit P((EPHQUERY *));
+extern flag FEphSubmitSide P((EPHQUERY *));
 extern flag FEphRead
   P((CONST EPHQUERY *, int, real *, real *, real *, real *, real *, real *));
+extern flag FEphReadRaw P((CONST EPHQUERY *, int, real *));
+
+// The fixed stars' decision-and-execution pair, the FSwissPlanet()
+// analogue for one star: resolve nothing here -- the caller hands the
+// resolved Swiss Ephemeris name -- and return the entry point's own six
+// in rg[6], unwritten when the star failed.
+extern flag FSwissStar P((char *, real, real *));
 extern void SwissHouse P((real, real, real, int,
   real *, real *, real *, real *, real *, real *, real *, real *));
 extern real RObliquityTrue P((real));

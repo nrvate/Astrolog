@@ -115,6 +115,7 @@ void EphQueryInit(EPHQUERY *pq, real rJD)
     pq->rgcent[i] = 0;
     pq->rgnNative[i] = 0;
     pq->rgisrc[i] = ephSrcNone;
+    pq->rgszName[i] = NULL;
   }
   ClearB((pbyte)pq->rgrow, sizeof(EPHROW) * objMax);
 }
@@ -125,7 +126,8 @@ void EphQueryInit(EPHQUERY *pq, real rJD)
 // indCent FSwissPlanet() would have been handed. False when the query is
 // full, which cannot happen for a cast: objMax bounds it by construction.
 
-flag FEphQueryAdd(EPHQUERY *pq, int obj, int nNative, int cent)
+flag FEphQueryAdd(EPHQUERY *pq, int obj, int nNative, int cent,
+  char *szName)
 {
   int i;
 
@@ -136,7 +138,39 @@ flag FEphQueryAdd(EPHQUERY *pq, int obj, int nNative, int cent)
   pq->rgcent[i] = cent;
   pq->rgnNative[i] = nNative;
   pq->rgisrc[i] = ephSrcNone;
+  pq->rgszName[i] = szName;
   return fTrue;
+}
+
+
+// The source the side calls reach. Today's side calls -- a progressed
+// arc, the eclipse Sun, the fixed stars, an asteroid listing -- are
+// unconditional Swiss calls whose ephemeris bit GetSwissFlags() takes
+// from nSwissEph, whatever the cast's selection is (section 1, item 7:
+// they assume the local Swiss files). This maps nSwissEph the same way
+// IEphSrcPrimary() does, ignoring the files-off branch, so a side call
+// makes the call it has always made while the cast keeps its own
+// selection. Phase 4's chain re-plumb walks the user's order instead.
+
+int IEphSrcSideCall()
+{
+  if (us.nSwissEph == 1)
+    return IEphSrcFromKey("moshier");
+  if (us.nSwissEph == 0 || us.nSwissEph == 5)
+    return IEphSrcFromKey("swiss");
+  return IEphSrcFromKey("jpl");
+}
+
+
+// Submit a side-call query: one query per instant (the side calls take
+// their instants one at a time this phase), down the side-call source.
+
+flag FEphSubmitSide(EPHQUERY *pq)
+{
+  int rgisrc[1];
+
+  rgisrc[0] = IEphSrcSideCall();
+  return FEphSubmitChain(pq, rgisrc, 1);
 }
 
 
@@ -234,6 +268,29 @@ flag FEphRead(CONST EPHQUERY *pq, int ind, real *obj, real *objalt,
   *dist   = pq->rgrow[i].rg[2];
   *diralt = pq->rgrow[i].rg[4];
   *dirlen = pq->rgrow[i].rg[5];
+  return fTrue;
+}
+
+
+// Read one object's six columns in the protocol's own order -- which for
+// a star row is the entry point's raw six. Writes nothing on failure,
+// which is swe_fixstar2()'s own contract with its caller's array: a
+// star that failed leaves the previous star's six standing, exactly as
+// the direct call always has. False when the object is not in the
+// query, or nothing answered it.
+
+flag FEphReadRaw(CONST EPHQUERY *pq, int ind, real *rg)
+{
+  int i, ix;
+
+  for (i = 0; i < pq->cobj; i++)
+    if (pq->rgobj[i] == ind)
+      break;
+  if (i >= pq->cobj || pq->rgisrc[i] == ephSrcNone ||
+    pq->rgrow[i].nErr != ephErrNone)
+    return fFalse;
+  for (ix = 0; ix < 6; ix++)
+    rg[ix] = pq->rgrow[i].rg[ix];
   return fTrue;
 }
 
