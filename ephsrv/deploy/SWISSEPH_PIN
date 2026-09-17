@@ -1,0 +1,7 @@
+# The thread-safe Swiss Ephemeris fork astrolog-ephd is built against, by
+# commit: tools/ephsrv-fork.sh and the container image fetch exactly this,
+# so a server binary is reproducible from one commit of this repository.
+# nrvate/swisseph main, 2.10.03-ts.14 (2026-09-17). Move it deliberately,
+# after the eight server gates pass against the new commit.
+SWE_REPO=https://github.com/nrvate/swisseph.git
+SWE_COMMIT=d1779fef4d151360876676229002ba0daa6c58fb
