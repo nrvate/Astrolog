@@ -97,6 +97,7 @@ endif
 # surprising before. (The UBSan build was missing from the list until
 # 2026-09-05, so "removes every build" was one short of true.)
 clean: clean-console
+	$(RM) ephproto4_test
 	$(MAKE) -f Makefile.qt clean
 	$(MAKE) -f Makefile.qt.test clean
 	$(MAKE) -f Makefile.qt.asan clean
@@ -197,6 +198,15 @@ wcli:
 .PHONY: ephsrv
 ephsrv:
 	$(MAKE) -f Makefile.ephsrv
+
+# The protocol version 4 codec against its conformance fixtures
+# (EPHEMERIS_PLUGINS_PLAN.md 3.9). Unlike the server it needs no Swiss
+# fork -- the codec is header-only -- so make check runs it on any
+# checkout, under AddressSanitizer and UBSan: the truncation sweep in it is
+# only a memory-safety check with a sanitizer behind it.
+ephproto4_test: ephsrv/ephproto4_test.cpp ephsrv/ephproto4.h
+	g++ -std=gnu++17 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+	  -fno-sanitize-recover=all -I ephsrv -o $@ ephsrv/ephproto4_test.cpp
 
 # Every build this fork has, in the order the pre-commit checks want them.
 all: $(NAME) qt qt-test win wcli

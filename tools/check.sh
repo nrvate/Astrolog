@@ -76,6 +76,7 @@ gen  "settings fields"           settingsfields.h python3 tools/gen_settings_fie
 # The protocol v4 conformance fixtures (EPHEMERIS_PLUGINS_PLAN.md 3.9) are a
 # directory, not one file, so the generator checks itself.
 step "protocol v4 fixtures"      python3 tools/ephproto4-fixtures.py --check
+step "protocol v4 codec"         sh -c 'make -s ephproto4_test && ASAN_OPTIONS=detect_leaks=0 ./ephproto4_test ephsrv/conformance'
 for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
          rc_flagtype_audit rc_casttype_audit rc_context_audit \
          backend_parity_audit \
