@@ -47,10 +47,12 @@ cat > "$SCRATCH/oracle.c" << 'EOF'
 #include <string.h>
 #include "swephexp.h"
 int main(int argc, char **argv) {
-  /* argv: jd ipl iflagHex sidMode ephePath [mode]
+  /* argv: jd ipl iflagHex sidMode ephePath [mode [topoLon topoLat topoAlt]]
      mode: ut (default) swe_calc_ut_r; tt swe_calc_r at a TT instant;
      nodaps:P:M swe_nod_aps_r at TT, point P 1-4, method M 0 mean 1 oscu;
-     pctr:C swe_calc_pctr_r at TT centered on body C */
+     pctr:C swe_calc_pctr_r at TT centered on body C.
+     The three trailing args, taken when iflag carries SEFLG_TOPOCTR, are
+     the observer the server's request carried (EPHEMERIS_REVIEW.md T8). */
   double jd = atof(argv[1]);
   int ipl = atoi(argv[2]);
   int32 iflag = (int32)strtoul(argv[3], NULL, 16) | SEFLG_SWIEPH | SEFLG_SPEED;
@@ -68,6 +70,10 @@ int main(int argc, char **argv) {
   swe_ctx *ctx = swe_ctx_new();
   if (iflag & SEFLG_SIDEREAL)
     swe_set_sid_mode_r(ctx, sidMode, 0.0, 0.0);
+  if (iflag & SEFLG_TOPOCTR) {
+    if (argc < 10) { printf("ERR topo needs lon lat alt\n"); return 1; }
+    swe_set_topo_r(ctx, atof(argv[7]), atof(argv[8]), atof(argv[9]));
+  }
   int32 ret;
   if (strncmp(mode, "nodaps:", 7) == 0) {
     int pnt = 0, meth = 0;
@@ -166,13 +172,20 @@ done
 # centered request -- each against the oracle calling the same ET entry
 # point with the same instant. The pctr leg is what caught increment 1
 # handing swe_calc_pctr_r a UT instant.
-leg() {   # leg <label> <oracle-mode> <oracle-ipl> <client args...>
-  local label=$1 mode=$2 ipl=$3; shift 3
+# TO8's additions (EPHEMERIS_REVIEW.md T8): a heliocentric leg -- SEFLG_HELCTR
+# through both ends' iflag -- and two topocentric places, Greenwich and
+# Sydney, at two bodies: a pooled context keeping a stale swe_set_topo
+# from an earlier request answers the second place with the first one's
+# horizon, and only differing places catch it. TOPO is the observer the
+# oracle sets; the client's --topo carries the same three numbers, and
+# --iflag carries SEFLG_TOPOCTR (0x2000000) for both ends.
+leg() {   # leg <label> <oracle-mode> <oracle-ipl> <iflagHex> <client args...>
+  local label=$1 mode=$2 ipl=$3 iflagHex=$4; shift 4
   "$ROOT/eph_wsclient" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \
     --out "$SCRATCH/leg.txt" --quiet "$@" \
     || { echo "GOLDEN FAIL: $label request failed"; exit 1; }
   while read -r idx who retFlag lon lat dist slon slat sdist; do
-    if ! oracle=$("$SCRATCH/oracle" 2415020.5 "$ipl" "0" "0" "$EPH" "$mode"); then
+    if ! oracle=$("$SCRATCH/oracle" 2415020.5 "$ipl" "$iflagHex" "0" "$EPH" "$mode" ${TOPO:-}); then
       echo "GOLDEN FAIL: $label oracle refused: $oracle"; exit 1
     fi
     got="$lon $lat $dist $slon $slat $sdist"
@@ -189,14 +202,25 @@ leg() {   # leg <label> <oracle-mode> <oracle-ipl> <client args...>
       echo "$label FLAGS ($who): retFlag $retFlag lacks SEFLG_SWIEPH"
     fi
   done < "$SCRATCH/leg.txt"
+  unset TOPO
 }
-leg "TT" tt 1 --tt --objs 1
-leg "TT" tt 4 --tt --objs 4
+leg "TT" tt 1 0 --tt --objs 1
+leg "TT" tt 4 0 --tt --objs 4
 for p in 1 2 3 4; do
-  leg "NODAPS mean $p" "nodaps:$p:0" 4 --tt --nodaps "4,$p,0"
-  leg "NODAPS oscu $p" "nodaps:$p:1" 4 --tt --nodaps "4,$p,1"
+  leg "NODAPS mean $p" "nodaps:$p:0" 4 0 --tt --nodaps "4,$p,0"
+  leg "NODAPS oscu $p" "nodaps:$p:1" 4 0 --tt --nodaps "4,$p,1"
 done
-leg "PCTR" "pctr:5" 4 --tt --objs 4 --center 5
+leg "PCTR" "pctr:5" 4 0 --tt --objs 4 --center 5
+leg "HELIO" ut 4 800000 --objs 4 --iflag 800000
+leg "HELIO" ut 1 800000 --objs 1 --iflag 800000
+TOPO="0.0 51.5 24" \
+  leg "TOPO greenwich" ut 1 2000000 --objs 1 --topo "0.0,51.5,24" --iflag 2000000
+TOPO="0.0 51.5 24" \
+  leg "TOPO greenwich" ut 4 2000000 --objs 4 --topo "0.0,51.5,24" --iflag 2000000
+TOPO="151.2 -33.9 50" \
+  leg "TOPO sydney" ut 1 2000000 --objs 1 --topo "151.2,-33.9,50" --iflag 2000000
+TOPO="151.2 -33.9 50" \
+  leg "TOPO sydney" ut 4 2000000 --objs 4 --topo "151.2,-33.9,50" --iflag 2000000
 # And the pre-1955 instant above is the one where a UT-vs-TT confusion
 # shows: a UT request for the Moon must NOT equal the TT oracle.
 "$ROOT/eph_wsclient" --port "$PORT" --jd 2415020.5 --step 600 --count 1 \

@@ -7542,6 +7542,7 @@ void ClampEphSrvReqQt(eph::Request *preq)
   uint32_t dwRows = esrv.fWelc ? esrv.welc.maxRows : eph::kMaxRows;
   uint32_t dwChunk = esrv.fWelc ? esrv.welc.maxChunkRows :
     eph::kMaxChunkRows;
+  uint32_t dwCells = esrv.fWelc ? esrv.welc.maxCells : eph::kMaxCellsDefault;
   uint32_t dwCaps = esrv.fWelc ? esrv.welc.caps : 0;
 
   if (preq->objs.size() > (size_t)dwObjs)
@@ -7549,6 +7550,15 @@ void ClampEphSrvReqQt(eph::Request *preq)
                                 // request; the objects past the cap fail
                                 // soft instead (plan §8).
   preq->nTime = Min(preq->nTime, dwRows);
+  // The work bound WELCOME advertises (protocol 2): a request past
+  // objects x rows is refused whole, so the rows are cut before it is
+  // sent (EPHEMERIS_REVIEW.md S4). One row is always kept: the server's
+  // own nTime == 0 is a refusal, and an over-cap object count on a tiny
+  // bound is the server's ERROR 2 to fail soft on.
+  if ((uint64_t)preq->objs.size() * preq->nTime > dwCells) {
+    uint32_t c = dwCells / (uint32_t)preq->objs.size();
+    preq->nTime = c < 1 ? 1 : c;
+  }
   preq->chunkRows = Min(preq->chunkRows, dwChunk);
   // Float32 is chosen for animation windows only if the caps bit says the
   // server supports it; f64 is always legal.
@@ -7866,9 +7876,12 @@ static flag FWindowChunkQt(uint32_t dwReq, CONST byte *rgb, uint32_t cb)
       for (o = 0; o < nObj; o++) {
         CONST byte *pb = pbMeta + (size_t)o * eph::kDataMetaSize;
         pwin->rgret[(int)o] = eph::getI32(pb);
-        if (pwin->rgret[(int)o] < 0)
-          pwin->rgserr[(int)o] = QByteArray((CONST char *)pb + 8,
-            (int)strnlen((CONST char *)pb + 8, eph::kSerrMax));
+        // The serr text rides along whenever any row failed, with
+        // retFlag >= 0 for an object whose other rows computed
+        // (protocol 2); FSrvPlanetQt prints it for a frame whose row is
+        // NaN. Empty when nothing failed.
+        pwin->rgserr[(int)o] = QByteArray((CONST char *)pb + 8,
+          (int)strnlen((CONST char *)pb + 8, eph::kSerrMax));
       }
       pwin->fMeta = fTrue;
     }
@@ -8094,21 +8107,39 @@ static flag FInsideAnimWindowQt(CONST QByteArray &keyShape, real jd)
   return fFalse;
 }
 
-// Whether any object of a settled window failed. The server fails an
-// object for the whole window when any row fails, so a window reaching
-// past an ephemeris file's range fails bodies whose every frame before the
-// edge is fine (EPHEMERIS_REVIEW.md A2); such a frame is asked exactly.
-static flag FWindowObjFailedQt(CONST EPHWINDOW *pwin)
+// Whether a row of the window's columns is NaN: protocol 2 marks a failed
+// row in all six columns with it, and the rows that computed are real.
+static flag FColNanSrvQt(real r)
 {
+  return r != r;   // The one IEEE property NaN is guaranteed.
+}
+
+// Whether this window fails the frame at the TT instant jde: an object
+// with no row computed at all (retFlag < 0), or one whose row here is
+// NaN. Protocol 2 fails a row one at a time, so a window reaching past an
+// ephemeris file's range still serves every frame before the edge -- the
+// frames past it are asked exactly (EPHEMERIS_REVIEW.md A2, S9). A
+// window still filling answers nothing false: fFalse, and the wait
+// settles before this is asked again.
+static flag FWindowObjFailedQt(CONST EPHWINDOW *pwin, real jde)
+{
+  uint32_t r;
+  real dt;
   int i;
 
   if (pwin->fFailed)
     return fTrue;
   if (!pwin->fDone)
     return fFalse;
-  for (i = 0; i < pwin->rgret.size(); i++)
+  for (i = 0; i < pwin->rgret.size(); i++) {
     if (pwin->rgret[i] < 0)
       return fTrue;
+    if (!FRowWindowQt(pwin, jde, &r, &dt))
+      return fTrue;
+    if (FColNanSrvQt(pwin->rgcol[((size_t)i * pwin->req.nTime + r) *
+      eph::kColsPerObj]))
+      return fTrue;
+  }
   return fFalse;
 }
 
@@ -8398,7 +8429,7 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
       if (reqAnim.nTime > 1) {
         key = KeyShapeWindowQt(reqAnim);
         pwin = PwinCoverQt(key, jde, fTrue);
-        if (pwin != NULL && FWindowObjFailedQt(pwin))
+        if (pwin != NULL && FWindowObjFailedQt(pwin, jde))
           pwin = NULL;
         else if (pwin != NULL)
           fCover = fTrue;
@@ -8467,7 +8498,7 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
       EPHWINDOW *pwin = rgpwin[ig];
       eph::Request req;
 
-      if (pwin == NULL || !pwin->fAnim || !FWindowObjFailedQt(pwin))
+      if (pwin == NULL || !pwin->fAnim || !FWindowObjFailedQt(pwin, jde))
         continue;
       req = pwin->req;
       req.jdStart = jde;
@@ -8597,6 +8628,15 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
     }
     xx = pwin->rgcol.constData() +
       ((size_t)pent->iObj * pwin->req.nTime + r) * eph::kColsPerObj;
+    // Protocol 2: an object whose other rows computed can still fail this
+    // one -- its row is NaN and its metadata carries Swiss's own text, as
+    // FSwissPlanet() would have printed it here (EPHEMERIS_REVIEW.md S9).
+    if (FColNanSrvQt(xx[0])) {
+      sprintf2(S(sz), "the Ephemeris Server could not compute %s (%.120s)",
+        szObjName[obj], pwin->rgserr[pent->iObj].constData());
+      SrvWarnOnceQt(jd, sz);
+      return fFalse;
+    }
     if (pwin->fAnim) {
       s_fSrvApproxQt = fTrue;
       *objPos = Mod(xx[0] + xx[3] * dt) - is.rSid +
@@ -8655,6 +8695,7 @@ void SetChunkRowsSrvTestQt(int c) { s_cChunkRowsQt = c; }
 int CRecastSrvTestQt() { return s_cSrvRecastQt; }
 flag FWaitingSrvTestQt() { return s_fSrvWaitingQt; }
 void SetWelcMaxObjsSrvTestQt(uint32_t dw) { esrv.welc.maxObjs = dw; }
+void SetWelcMaxCellsSrvTestQt(uint32_t dw) { esrv.welc.maxCells = dw; }
 // Feed hand-built DATA chunks to a window of rows 2, one object, f64, held
 // under a request id nothing else uses, and say what became of it:
 // 1 done, 0 still waiting, -1 failed. The cases are the chunk defects the

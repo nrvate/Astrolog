@@ -176,6 +176,7 @@ extern void SetHelloSrvTestQt(int);
 extern void SetChunkRowsSrvTestQt(int);
 extern int CRecastSrvTestQt();
 extern void SetWelcMaxObjsSrvTestQt(uint32_t);
+extern void SetWelcMaxCellsSrvTestQt(uint32_t);
 extern int NChunkProbeSrvTestQt(int);
 extern flag FSendEphSrvQt(eph::Request *);
 extern void ClampEphSrvReqQt(eph::Request *);
@@ -17662,7 +17663,8 @@ static void WireEphLoopbackQt(QWebSocketServer *psrv, byte *pbProto,
               byte rgbW[sizeof(eph::WelcomeWire) + 256];
               uint32_t dwLen;
               std::vector<uint8_t> msg;
-              eph::buildWelcome(rgbW, *pdwCaps, 21003, szVer, &dwLen);
+              eph::buildWelcome(rgbW, *pdwCaps, 21003,
+                eph::kMaxCellsDefault, szVer, &dwLen);
               if (*pbProto != eph::kProtoVersion)
                 eph::putU32(rgbW, *pbProto);
               msg = eph::makeMessage(eph::kMsgWelcome, 0, rgbW, dwLen);
@@ -17913,10 +17915,20 @@ static void TestEphSrvQt()
     ClampEphSrvReqQt(&rq);
     Check(rq.objs.size() == eph::kMaxObjs,
       "nObj clamps to WELCOME maxObjs (%d)", (int)rq.objs.size());
-    Check(rq.nTime == eph::kMaxRows && rq.chunkRows == eph::kMaxChunkRows,
-      "rows and the chunk hint clamp to WELCOME's limits");
+    Check(rq.chunkRows == eph::kMaxChunkRows,
+      "the chunk hint clamps to WELCOME's limit");
     Check(rq.precision == eph::kPrecF64,
       "f32 without a caps bit falls back to f64");
+    // The work bound clamps the rows (protocol 2, S4): 64 objects at the
+    // default 100000 cells is 1562 rows, not the 20000 rows limit -- and
+    // the rows limit still governs when the bound does not bind.
+    Check(rq.nTime == eph::kMaxCellsDefault / eph::kMaxObjs,
+      "rows clamp to the default work bound (%u)", rq.nTime);
+    rq.objs.resize(2);
+    rq.nTime = 999999;
+    ClampEphSrvReqQt(&rq);
+    Check(rq.nTime == eph::kMaxRows,
+      "rows clamp to WELCOME maxRows when the work bound allows it");
   }
 
   // The state machine, against three loopback servers: welcomed, then a
@@ -17926,8 +17938,11 @@ static void TestEphSrvQt()
     QWebSocketServer srv1("eph-loopback-1", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv2("eph-loopback-2", QWebSocketServer::NonSecureMode);
     QWebSocketServer srv3("eph-loopback-3", QWebSocketServer::NonSecureMode);
-    byte bProto1 = eph::kProtoVersion, bProto2 = 2, bProto3 =
-      eph::kProtoVersion;
+    // srv2 is the server too old to talk to: version 1, one below
+    // protocol 2's (this fixture was version 2 itself when the protocol
+    // was 1).
+    byte bProto1 = eph::kProtoVersion, bProto2 = eph::kProtoVersion - 1,
+      bProto3 = eph::kProtoVersion;
     uint32_t dwCaps1 = 0, dwCaps2 = 0, dwCaps3 = eph::kCapFloat32;
     char szVer1[64], szVer2[64], szVer3[64];
     QByteArray baReq1, baReq2, baReq3;
@@ -17963,10 +17978,24 @@ static void TestEphSrvQt()
     pw = PwelcEphSrvTestQt();
     Check(pw->maxObjs == eph::kMaxObjs && pw->maxRows == eph::kMaxRows &&
       pw->maxChunkRows == eph::kMaxChunkRows &&
+      pw->maxCells == eph::kMaxCellsDefault &&
       pw->swissephVersion == 21003, "its limits and versions stored");
     Check(FEqSz(pw->serverVersion.c_str(), szVer1),
       "and the server's version string with them");
     Check(NBackoffEphSrvTestQt() == 1000, "a session resets the ladder");
+
+    // What WELCOME promised governs the rows as well (protocol 2, S4): a
+    // server advertising a small work bound cuts the window to it.
+    {
+      eph::Request rqCells;
+      rqCells.objs.resize(2);
+      rqCells.nTime = 1000;
+      SetWelcMaxCellsSrvTestQt(1500);
+      ClampEphSrvReqQt(&rqCells);
+      Check(rqCells.nTime == 750, "rows clamp to WELCOME maxCells (%u)",
+        rqCells.nTime);
+      SetWelcMaxCellsSrvTestQt(eph::kMaxCellsDefault);
+    }
 
     // One request, on the wire.
     rq.objs.resize(3);
@@ -18169,7 +18198,8 @@ static void TestEphSrvQt()
               if (env.type == eph::kMsgHello) {
                 byte rgbW[sizeof(eph::WelcomeWire) + 256];
                 uint32_t dwLen;
-                eph::buildWelcome(rgbW, 0, 21003, "dropper", &dwLen);
+                eph::buildWelcome(rgbW, 0, 21003, eph::kMaxCellsDefault,
+                  "dropper", &dwLen);
                 std::vector<uint8_t> msg = eph::makeMessage(
                   eph::kMsgWelcome, 0, rgbW, dwLen);
                 pc->sendBinaryMessage(QByteArray((const char *)msg.data(),

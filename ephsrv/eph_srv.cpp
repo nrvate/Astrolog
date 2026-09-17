@@ -58,6 +58,7 @@ struct Options {
   uint16_t port = eph::kDefaultPort;
   int threads = (int)std::thread::hardware_concurrency();
   uint32_t cacheMb = 256;      // result cache, TOTAL across loops; 0 disables
+  uint32_t maxCells = eph::kMaxCellsDefault;  // objects x rows per REQUEST
   std::string ephe;            // --ephe, may be ';'-joined
   bool verbose = false;
 };
@@ -111,6 +112,11 @@ static bool parseArgs(int argc, char **argv, Options *opt) {
       const char *val;
       if (!needValue(&val) || !parseU(val, &v) || v > 1024 * 1024) return false;
       opt->cacheMb = (uint32_t)v;
+    } else if (strcmp(a, "--max-cells") == 0) {
+      const char *val;
+      if (!needValue(&val) || !parseU(val, &v) || v == 0 || v > UINT32_MAX)
+        return false;
+      opt->maxCells = (uint32_t)v;
     } else if (strcmp(a, "--ephe") == 0) {
       const char *val;
       if (!needValue(&val)) return false;
@@ -119,7 +125,7 @@ static bool parseArgs(int argc, char **argv, Options *opt) {
       opt->verbose = true;
     } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
       printf("usage: astrolog-ephd [--port N] [--ephe path] [--threads N] "
-             "[--cache-mb N] [--verbose]\n");
+             "[--cache-mb N] [--max-cells N] [--verbose]\n");
       exit(0);
     } else {
       return false;
@@ -359,9 +365,10 @@ static EphDiscovery DiscoverEphemDirs() {
 // A request is a pure function of its payload: build its canonical key,
 // answer from the loop's result cache if it has been asked before, else for
 // each time row and object call the thread-safe fork on one private
-// context and store the result. Per-object failures are recorded
-// in that object's metadata (retFlag < 0 + serr) and never fail the
-// request; a whole-request failure is ERROR 5 with the SWE serr text
+// context and store the result. A per-row failure is recorded as NaN in
+// that row's columns, with the first failed row's serr in the object's
+// metadata, and never fails the request; a whole-request failure is
+// ERROR 5 with the SWE serr text
 // (plan 4.7). Per-request configuration uses only the _r scoped setters.
 // ---------------------------------------------------------------------------
 
@@ -413,13 +420,25 @@ static uint32_t PackSweVersion(const char *szVersion) {
 // different sidereal/topocentric settings must not interfere). Stale
 // settings are harmless: SWE consults each only when the matching iflag bit
 // is set on the call.
-static void ApplyRequestConfig(swe_ctx *ctx, const eph::Request &req) {
+//
+// The JPL file is set only when it changes (EPHEMERIS_REVIEW.md S12):
+// swe_set_jpl_file_r() closes every file the context has open and rebuilds
+// its delta-t and leap-second tables on each call, so a JPL request for
+// every row of a long animation paid that per request. A loop's pool holds
+// one context, so the name of its open JPL file is loop state; a request
+// naming a different file pays the close once. A file left open across
+// requests is read only by calls that name it (SWIEPH's delta-t comes from
+// the moon file, ctx->fidat[SEI_FILE_MOON]), so no later answer moves.
+static void ApplyRequestConfig(swe_ctx *ctx, std::string *pjplOpen,
+                               const eph::Request &req) {
   if (req.iflag & SEFLG_SIDEREAL)
     swe_set_sid_mode_r(ctx, (int32_t)req.sidMode, req.sidT0, req.sidAyanOff);
   if (req.iflag & SEFLG_TOPOCTR)
     swe_set_topo_r(ctx, req.topoLon, req.topoLat, req.topoElv);
-  if (req.iflag & SEFLG_JPLEPH)
+  if (req.iflag & SEFLG_JPLEPH && *pjplOpen != req.jplFile) {
     swe_set_jpl_file_r(ctx, req.jplFile);
+    *pjplOpen = req.jplFile;
+  }
 }
 
 // Compute one (object, row) cell. Returns the SWE return flag; on failure
@@ -540,6 +559,10 @@ struct LoopCtx {
     nextCtx++;
     return ctx;
   }
+
+  // The JPL file the pool's one context has open (EPHEMERIS_REVIEW.md
+  // S12): the setter runs only when a request names a different one.
+  std::string jplOpen;
 };
 
 // Heartbeats are uWS's own: sendPingsAutomatically sends WebSocket protocol
@@ -577,10 +600,12 @@ static void SendError(WebSocket<false, true, Conn> *ws, uint32_t requestId,
 // Execute one REQUEST into a Stream. Returns false for a whole-request
 // failure and fills errCode/errText (plan 4.6/4.7). The only whole-request
 // failure is the missing-ephemeris-path case: with no ephemeris directory
-// found at startup and SEFLG_SWIEPH forced, every object fails the same
-// file-not-found way, so the request fails whole with ERROR 5. Per-object
-// failures never fail the request: they zero that object's rows and set
-// its metadata retFlag < 0 with the SWE serr text (plan 4.5).
+// found at startup and SEFLG_SWIEPH forced, every object fails with
+// the same file-not-found serr, so the first probe's serr becomes the
+// request-level ERROR 5 text and nothing is streamed. A per-row failure
+// is never a request failure: that row's six columns are NaN, the object
+// keeps retFlag >= 0 while any row computed, and its metadata carries the
+// first failed row's serr (plan 4.5, protocol 2).
 static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
                            Stream *stream, int32_t *errCode,
                            std::string *errText) {
@@ -614,7 +639,7 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
     swe_set_astro_models_r(ctx, (char *)"0,0,0,0,0,0,0,0", 0);
     lc->fModelsTouched = false;
   }
-  ApplyRequestConfig(ctx, req);
+  ApplyRequestConfig(ctx, &lc->jplOpen, req);
   if ((req.iflag & SEFLG_SIDEREAL) && (req.sidMode & SE_SIDBIT_PREC_ORIG))
     lc->fModelsTouched = true;
 
@@ -651,10 +676,16 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
       int32_t ret = ComputeCell(ctx, req, obj, jd, (uint32_t)iflag, xx, serr,
                                 &name, nameBuf, sizeof(nameBuf));
       if (ret < 0) {
+        // Protocol 2 (EPHEMERIS_REVIEW.md S9): a row that fails is NaN in
+        // all six columns, and the rows that computed are real. Version 1
+        // failed the object for the whole window here, so a window
+        // reaching past a file's end lost every frame of it.
+        double *dst = entry->cols.data() + ((size_t)o * nTime + r) * 6;
+        for (int c = 0; c < 6; c++) dst[c] = NAN;
         fFailed = true;
         if (failSerr[0] == '\0')
           snprintf(failSerr, sizeof(failSerr), "%.63s", serr);
-        continue;   // this object's cells for this row stay zeroed
+        continue;
       }
       if (!fSawSuccess) {
         fSawSuccess = true;
@@ -668,7 +699,7 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
       for (int c = 0; c < 6; c++) dst[c] = xx[c];
     }
     eph::writeDataMeta(entry->meta.data() + (size_t)o * eph::kDataMetaSize,
-                       fFailed ? -1 : retRow0, retRow0,
+                       fSawSuccess ? retRow0 : -1, retRow0,
                        fFailed ? failSerr : nullptr, fSawSuccess ? nameKept : nullptr);
   }
   lc->lastComputeMs = std::chrono::duration<double, std::milli>(
@@ -827,7 +858,8 @@ static void HandleMessage(WebSocket<false, true, Conn> *ws,
         uint8_t wbuf[sizeof(eph::WelcomeWire) + 256];
         uint32_t wlen = 0;
         eph::buildWelcome(wbuf, eph::kCapFloat32,
-                          PackSweVersion(szSweVersion), kServerVersion, &wlen);
+                          PackSweVersion(szSweVersion), gOpt.maxCells,
+                          kServerVersion, &wlen);
         SendEnvelope(ws, eph::kMsgWelcome, env.requestId, wbuf, wlen);
       }
       break;
@@ -843,6 +875,21 @@ static void HandleMessage(WebSocket<false, true, Conn> *ws,
         SendError(ws, env.requestId, eph::kErrLimits,
                   "REQUEST exceeds the limits WELCOME advertised");
         return;
+      }
+      // The work bound WELCOME advertised (protocol 2, kMaxCellsDefault
+      // and --max-cells): a request whose objects x rows exceeds it is
+      // refused rather than computed -- 64 bodies x 20000 rows measured
+      // 13.7 s on the loop's only thread, and every other connection on
+      // that loop waited for it (EPHEMERIS_REVIEW.md S4).
+      {
+        uint64_t cells = (uint64_t)req.objs.size() * (uint64_t)req.nTime;
+        if (cells > gOpt.maxCells) {
+          char sz[128];
+          snprintf(sz, sizeof(sz), "REQUEST asks %" PRIu64 " cells; WELCOME's"
+                   " bound is %u", cells, gOpt.maxCells);
+          SendError(ws, env.requestId, eph::kErrLimits, sz);
+          return;
+        }
       }
       RunRequest(ws, lc, env, req);
       break;
@@ -923,7 +970,7 @@ static void SetupLoop(LoopCtx *lc) {
 int main(int argc, char **argv) {
   if (!parseArgs(argc, argv, &gOpt)) {
     fprintf(stderr, "usage: astrolog-ephd [--port N] [--ephe path] "
-            "[--threads N] [--cache-mb N] [--verbose]\n");
+            "[--threads N] [--cache-mb N] [--max-cells N] [--verbose]\n");
     return 1;
   }
 
