@@ -36,7 +36,9 @@ Everything below is landed and pushed; this section is the resume pointer.
   records, the center bit, the pctr delta-t fix; work log item 8), then
   client increment 2 (EPHEMERIS_CLIENT_PLAN.md work log item 3).
 - **The Swiss Ephemeris fork** (nrvate/swisseph, `/shares/swisseph`) is at
-  **2.10.03-ts.14** (main d1779fe, 2026-09-17): its delta-t tidal term
+  **2.10.03-ts.14**, released as tag `v2.10.03-ts.14` (main 47671e5,
+  2026-09-17; the library is d1779fe's, the tag adds a test-only fix that
+  turned the fork's CI green): its delta-t tidal term
   no longer follows which files a context has open (ts.11, work log items
   2 and 6), the full review's fork findings are fixed there
   (EPHEMERIS_REVIEW.md F1-F11, F9 last, in ts.13; that repo's
@@ -50,14 +52,14 @@ Everything below is landed and pushed; this section is the resume pointer.
   tracked header dependencies by a rotted hand list, so a header-only
   edit re-archived stale objects -- after pulling a fork older than
   ts.14, rebuild its libswe.a from clean (`rm -f *.o && make libswe.a`).
-- **Green today (2026-09-17):** all five gates pass
-  (`tools/ephsrv-{golden,robust,cache,bench,soak}.sh`; golden 88 columns
-  bit-exact, with its heliocentric leg and topocentric legs at Greenwich
-  and Sydney), and `make check` is all clear with the live group
-  included (suite 5757/0).
-- **Next: production.** Built is not deployable -- no TLS, limits,
-  health checks, packaging or public address. The plan for that is
-  `EPHEMERIS_SERVER_PRODUCTION_PLAN.md` (2026-09-17).
+- **Green today (2026-09-17):** all eight gates pass
+  (`tools/ephsrv-{golden,robust,cache,bench,soak,tls,ops,limits}.sh`;
+  golden 88 columns bit-exact over ws:// and wss:// and for a protocol-2
+  client) and `-image.sh`; `make check` and `make check-full` are all clear
+  (suite 5771/0 on Qt5, 5765/0 on Qt6).
+- **Production:** the road from built to deployable is
+  `EPHEMERIS_SERVER_PRODUCTION_PLAN.md`; phases 0-5 are done (work log items
+  12-17), go-live waits on a host.
 - **Open work in this plan: none.** The client's four increments are all landed:
   increment 3 plus the full review's fixes as `11a672c`, protocol 2
   (review items S4, S9, S12, S-fork, T8; work log item 10) as `8d6d1d1`

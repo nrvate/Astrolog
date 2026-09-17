@@ -8,32 +8,29 @@ to be resumed from like the other two.
 
 ## Status
 
-- **2026-09-17: Phases 3 and 4 are built** as protocol 3 on branch
-  `ephproto3` (server plan work log item 14): G6, G7, G8 and G9 closed.
-  Left from them: the trusted-proxy address, not needed under decision
-  0.2. The client-side token setting followed on branch `ephtoken`
-  (server plan work log item 16): `-bT`.
-- **2026-09-17: Phase 5 (packaging) is built** on branch `ephpkg` (server
-  plan work log item 15): the fork pinned by commit and fetched by
-  `tools/ephsrv-fork.sh`, a container image proven by
-  `tools/ephsrv-image.sh`, a systemd unit and certbot hook, and
-  `ephsrv/deploy/README.md`. G15 is closed but for two things that are the
-  maintainer's: a release job that publishes the image and binaries, and
-  tagging the fork. **Phase 6 (go-live) is blocked on a host**: a VPS, the
-  hostname (0.5) and the data copy (0.4).
-- **2026-09-17: Phase 2 (operability) is on `qt`** (ea6cf6f; server plan work
-  log item 13): G3 and G4 are closed; G5 turned out not to be a leak (the
-  item says why) and is held by a gate check.
-- **2026-09-17: Phase 1 (TLS) is on `qt`** (5a252b7; server plan work log
-  item 12): G1, G11, G12 and G14 are closed, G13 on Windows; G2's
-  `--bind` exists (the plaintext guard waits for deployment). Still open
-  from Phase 1: the macOS package's TLS plugin (verify in a release dry
-  run). Done since: the bench over TLS (under a millisecond a window), and
-  `tools/build-check.sh` asking each distribution's Qt for TLS at run time
-  (2026-09-17: all twelve have it, OpenSSL 3.0.2 to 3.6.4). Phase 0 is decided except what waits for a host. Next:
-  Phase 2 (operability).
-- Development runs locally until the server is proven; nothing here waits
-  on a VPS before Phase 5.
+**As of 2026-09-17: Phases 0-5 are done and on `qt`; Phase 6 (go-live) is
+blocked on a host; Phase 7 has a measured trigger and is not needed yet.**
+
+| Phase | State | Where |
+|---|---|---|
+| 0 decisions | decided: open + optional tokens, one VPS with TLS in-process, logs count never contents; **deferred to the host**: the data set (0.4) and hostname (0.5) | §2 |
+| 1 TLS | done (5a252b7); the macOS `.dmg`'s TLS plugin unverified until a release dry run | work log 12 |
+| 2 operability | done (ea6cf6f); G5 was not a leak | work log 13 |
+| 3+4 protocol 3 | done (632f3c0); client token `-bT` (99b0e4b); trusted proxy not built (0.2) | work logs 14, 16 |
+| 5 packaging | done (77c530c); a release job publishing the image is the maintainer's call | work log 15 |
+| sanitizers | ASan+UBSan clean over the gates; two HELLO-timer fixes (3133df5, 441a3d5) | work log 17 |
+| 6 go-live | **blocked**: a VPS, 0.4, 0.5 | §8 |
+| 7 compute off loops | not yet: charts stall only when concurrent cold windows outnumber loops | §9 |
+
+Gaps G1-G16 are all closed except G15's publishing half and G16 (the
+client's default address), which is Phase 6. The Swiss Ephemeris fork is
+released as `v2.10.03-ts.14`; `ephsrv/deploy/SWISSEPH_PIN` names that
+tag's commit. Development runs locally until the server is proven.
+
+To resume: read §1's gap table and §8, then `ephsrv/deploy/README.md`.
+The gates are `tools/ephsrv-{golden,soak,cache,bench,robust,tls,ops,limits}.sh`
+and `-image.sh`; `tools/ephsrv-load.sh` measures.
+
 - Every claim about the current code below was checked in
   `ephsrv/eph_srv.cpp`, `qtdriver.cpp` or the vendored uWebSockets v20.80.0
   and uSockets on that date. Re-check before acting on one if the code has

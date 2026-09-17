@@ -70,6 +70,15 @@ QT_GUI_PLAN.md.
   set only when it changes (S12), and REQUEST object ids are bounded
   (`kObjIdMax`) at parse -- Swiss's center-of-body arithmetic overflows
   int32 on ids a wire could otherwise carry (S-fork).
+- **Protocol 3 on the client** (2026-09-17; the server plan's work log
+  items 12, 14 and 16): a `wss://` address with no port goes to 443 and a
+  refused certificate is explained in words; WELCOME in versions 2..3 is
+  accepted and requests go out in the session's version; ERROR 7 (token)
+  and ERROR 8 (client too old) are final, with no retry ladder, until the
+  backend is started again; the token is `-bT`, a masked Server Token
+  field under Server Address in Calculation Settings. The client's default
+  address is still `localhost` -- a public default is the production
+  plan's Phase 6.
 - The fork this connects to is `2.10.03-ts.14`; see the server plan's
   Status section for branch, commit and gate state.
 

@@ -43,9 +43,11 @@ Work happens on branch **`qt`**.
   ephemeris server (`astrolog-ephd`, `make ephsrv`, under `ephsrv/`) and
   the "Ephemeris Server" backend that casts charts from it. Each opens
   with a Status section written to be resumed from; read those first.
-  The server is complete and the client is at increment 3 of 4 as of
-  2026-09-16, after a full review of the whole project whose ledger is
-  `EPHEMERIS_REVIEW.md`; it links the thread-safe Swiss Ephemeris fork at
+  Server and client are complete (the 2026-09-16 full review's ledger is
+  `EPHEMERIS_REVIEW.md`), and `EPHEMERIS_SERVER_PRODUCTION_PLAN.md` took
+  the server from built to deployable on 2026-09-17 -- TLS, operability,
+  protocol 3's limits and tokens, packaging -- with go-live waiting on a
+  host; the operator's guide is `ephsrv/deploy/README.md`. The server links the thread-safe Swiss Ephemeris fork at
   `/shares/swisseph` (a sibling repo, not vendored), so a checkout
   without it builds everything else and the `ephem-server-live` suite
   group skips itself with a printed reason. Its eight gates
@@ -53,8 +55,6 @@ Work happens on branch **`qt`**.
   `-robust.sh`, `-tls.sh`, `-ops.sh`, `-limits.sh`, and `-image.sh` where
   there is Docker) are
   run by hand, like everything else here.
-  `EPHEMERIS_SERVER_PRODUCTION_PLAN.md` is the next step: TLS, limits,
-  operability, packaging and a public address, phase by phase.
 
 The port lives in `qtdriver.cpp` (window, canvas, menus) and
 `qtdialog.cpp` (dialogs), selected with `-DQT`, standing in for the
