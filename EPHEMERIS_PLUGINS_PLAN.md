@@ -847,6 +847,51 @@ Prometheia's own bench): a cold 30-body 1000-row window is about a
 core-second of computation, and a cached one is delivered in milliseconds;
 the numbers that matter to a GUI are in EPHEMERIS_SERVER_PRODUCTION_PLAN.md.
 
+### 3.9a How the implementations work together
+
+Two implementations wrote this specification at once, and the rules below are
+how they stayed one protocol. They bind any third implementation as well.
+
+1. **Never branch on who the peer is.** No code reads `serverName`, `engine`
+   or `clientName` and behaves differently. Anything one end needs to know
+   about the other is a capability bit or a TLV, registered in Appendix A and
+   advertised.
+2. **Advertise only what is implemented and tested.** A capability advertised
+   because it mostly works is worse than one absent: the other end will use it.
+   A bit whose behaviour is incomplete, or which no test exercises, stays dark.
+3. **No silent fallbacks.** An engine that cannot answer the question as asked
+   says so per object, with a code; it never quietly answers a nearby question.
+   A substitution is visible on the wire (`resolvedNaif`, `approximated`) or it
+   does not happen.
+4. **Errors by meaning, not convenience.** A failure maps to the A.17 code
+   that is true. If none fits, the registry gains one, with a fixture.
+5. **No sniffing, no speculative parsing.** The envelope's version and the
+   advertised capabilities are the whole truth; nothing is inferred from
+   content. A place where guessing is tempting is a gap in this document.
+6. **Every rule ships with a fixture or a gate**, in the same change that
+   agrees it. A rule that exists only in prose gets implemented two ways.
+7. **No leniency for one's own convenience.** Neither end accepts a message
+   this document makes malformed because refusing it is inconvenient today; a
+   lenient parser hides the other end's bug until a third implementation
+   appears. An end that is strict where this document is silent fixes the
+   document, not the parser.
+8. **The engine does not know about the wire.** The protocol stops at each
+   side's boundary and is translated there. A protocol field that reaches into
+   engine semantics makes that engine a function of this document's version,
+   and every other consumer of that engine inherits it.
+9. **An objection is a finding.** A disagreement between two readings is the
+   most valuable output either side produces, and it is resolved by changing
+   this document until only one reading survives -- never by one side
+   accommodating the other's code. What earned its place here came from
+   objections: a rule clients could not obey (an unknown match could not be
+   skipped without its length), a rule that named values but not the flag
+   fields beside them, a checksum whose input had two readings, and a
+   capability that would have been advertised for behaviour that could not
+   honour it.
+10. **A rule that needs a comment to implement is not finished.** If either
+    side writes a comment explaining what this document meant in order to make
+    code work, that sentence comes back here as a change.
+
 ### 3.10 Conformance fixtures
 
 `ephsrv/conformance/` holds complete messages (envelope included) as hex, with
