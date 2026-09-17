@@ -166,6 +166,7 @@ extern void ClearWinSrvTestQt();
 extern void SetRowsAnimSrvTestQt(int);
 extern void SetWindowCapSrvTestQt(int);
 extern flag FApproxSrvTestQt();
+extern flag FPlanSrvTestQt(int);
 extern flag FWinInfoSrvTestQt(int, double *, int *, int *, int *, flag *,
   flag *);
 extern void SetAnimRunningTestQt(flag);
@@ -18482,8 +18483,27 @@ static void TestEphSrvLiveQt()
       "Swiss Ephemeris fork)\n", strBin.toLocal8Bit().constData());
     goto LRestore;
   }
-  if (us.rgszPath[1] == NULL || us.rgszPath[1][0] == chNull) {
-    printf("  skipped: no -Yi1 ephemeris directory to point the server at\n");
+  // Every -Yi directory, in the order SwissEnsurePath() searches them and
+  // relative to the executable as it resolves them: an explicit --ephe is
+  // the server's whole search path, so -Yi1 alone left out the files the
+  // local cast found further along. "-i nrvate.as -Yi1 ephem" failed 23
+  // checks that way -- seorbel.txt, and with it Vulcan, is on -Yi2 there
+  // and not in the bundled ephem/ -- while "-Yi1 ephem" alone enables no
+  // fictitious body and passed.
+  for (int i = 0; i < 10; i++) {
+    CONST char *pchDir = us.rgszPath[i];
+    QString strDir;
+    if (!FSzSet(pchDir))
+      continue;
+    strDir = QString::fromLocal8Bit(pchDir);
+    if (!QDir::isAbsolutePath(strDir))
+      strDir = QCoreApplication::applicationDirPath() + "/" + strDir;
+    if (!strEphe.isEmpty())
+      strEphe += ";";
+    strEphe += strDir;
+  }
+  if (strEphe.isEmpty()) {
+    printf("  skipped: no -Yi ephemeris directory to point the server at\n");
     goto LRestore;
   }
   // The server next to this binary must be built from the sources next to
@@ -18504,9 +18524,6 @@ static void TestEphSrvLiveQt()
       "its sources (%s is newer: make ephsrv)",
       strNewest.toLocal8Bit().constData());
   }
-  strEphe = QString::fromLocal8Bit(us.rgszPath[1]);
-  if (!QDir::isAbsolutePath(strEphe))
-    strEphe = QCoreApplication::applicationDirPath() + "/" + strEphe;
 
   // The real server, on a scratch port, over this run's ephemeris.
   // Below the kernel's ephemeral range (32768 up): a port inside it can be
@@ -18658,13 +18675,45 @@ static void TestEphSrvLiveQt()
   {
     static int cNested;
     cNested = 0;
-    QTimer::singleShot(0, []() { cNested++; CastChart(0); });
+    // At another instant, and the waiting cast's chart put back after: a
+    // nested cast at the SAME instant rebuilt an identical plan from the
+    // same windows, so wiping the plan on entry -- C1 itself -- passed.
+    QTimer::singleShot(0, []() {
+      CI ciNested = ciCore;
+      cNested++;
+      ciCore.day = ciCore.day > 14 ? ciCore.day - 13 : ciCore.day + 13;
+      CastChart(0);
+      ciCore = ciNested;
+    });
     CastChart(0);
     SnapshotEphQt(&snSrv);
+    // The server's answers: the objects this cast's plan sent to it. The
+    // rest -- house points, the Part of Fortune -- are the core's own,
+    // which is not re-entrant: a nested CastChart() rewrites the globals
+    // they are made from mid-cast (under -v's per-degree speeds the
+    // waiting cast divided the cusp speeds a second time). No path in the
+    // application casts inside the wait -- input is held back, redraws are
+    // owed, ticks and the WELCOME recast wait -- so this timer stands for
+    // one that might, and what it must not touch is the plan the waiting
+    // cast reads, which is what C1 broke.
+    int cPlan = 0;
+    for (int i = 0; i < objMax; i++) {
+      if (FPlanSrvTestQt(i)) {
+        cPlan++;
+        continue;
+      }
+      snSrv.rgobj[i] = snLocal.rgobj[i]; snSrv.rgalt[i] = snLocal.rgalt[i];
+      snSrv.rgdir[i] = snLocal.rgdir[i];
+      snSrv.rgdiralt[i] = snLocal.rgdiralt[i];
+      snSrv.rgdirlen[i] = snLocal.rgdirlen[i];
+      snSrv.rgpt[i] = snLocal.rgpt[i];
+    }
     cDiff = CDiffEphQt(&snLocal, &snSrv, 0.0, S(szDiff));
+    Check(cPlan > 10, "the nested-cast check compares the server's objects "
+      "(%d of them)", cPlan);
     Check(cNested == 1 && cDiff == 0, "a cast made during another's wait "
-      "leaves it bit-identical (nested %d, %d differ: %s)", cNested, cDiff,
-      szDiff);
+      "leaves the server's answers bit-identical (nested %d, %d differ: %s)",
+      cNested, cDiff, szDiff);
   }
 
   // The window cache: the same cast again sends nothing.
@@ -18846,14 +18895,28 @@ static void TestEphSrvLiveQt()
     // and the window anchored below the first frame reaches 1799. (The
     // END of the files cannot stage this: the fork answers rows past the
     // end inside a window that began before it -- EPHEMERIS_REVIEW.md F11.)
-    ClearWinSrvTestQt();
-    OraclePinUtQt(1800, 3, 1, 12.0);
-    ciCore.lon = 122.3; ciCore.lat = 47.6;
-    ciMain = ciCore;
-    rMax = RAnimRunSrvQt(4, -9, 6, rgcReq, &cWarnRun, S(szWorst));
-    Check(rMax == 0.0 && cWarnRun == 0, "animation up to the ephemeris edge: "
-      "no warnings, exact frames (%d warnings, largest %.3g, %s)", cWarnRun,
-      rMax, szWorst);
+    // Only where the path HAS that edge: a directory reaching before 1800
+    // (nrvate.as puts /swe on -Yi2) leaves nothing to stage, and the
+    // frames are then read from a window whose rows before 1800 came from
+    // an older file than the local cast's -- the two differ by 2e-4 there.
+    {
+      double xEdge[6];
+      char szEdge[AS_MAXCH];
+      int32 retEdge = swe_calc(2378490.5, SE_SUN, SEFLG_SWIEPH, xEdge, szEdge);
+      if (retEdge >= 0 && (retEdge & SEFLG_SWIEPH)) {
+        printf("  (animation up to the ephemeris edge skipped: the ephemeris "
+          "path reaches before 1800, so there is no edge to stage)\n");
+      } else {
+        ClearWinSrvTestQt();
+        OraclePinUtQt(1800, 3, 1, 12.0);
+        ciCore.lon = 122.3; ciCore.lat = 47.6;
+        ciMain = ciCore;
+        rMax = RAnimRunSrvQt(4, -9, 6, rgcReq, &cWarnRun, S(szWorst));
+        Check(rMax == 0.0 && cWarnRun == 0, "animation up to the ephemeris "
+          "edge: no warnings, exact frames (%d warnings, largest %.3g, %s)",
+          cWarnRun, rMax, szWorst);
+      }
+    }
     OraclePinUtQt(1990, 6, 15, 12.0);
     ciCore.lon = 122.3; ciCore.lat = 47.6;
     ciMain = ciCore;

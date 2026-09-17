@@ -8713,6 +8713,9 @@ int NChunkProbeSrvTestQt(int iCase)
 void SetRowsAnimSrvTestQt(int c) { s_cRowsAnimQt = c; }
 void SetWindowCapSrvTestQt(int c) { s_cWindowCapQt = c; }
 flag FApproxSrvTestQt() { return s_fSrvApproxQt; }
+// Whether the last cast's plan routed an object to the server.
+flag FPlanSrvTestQt(int obj)
+  { return FBetween(obj, 0, objMax-1) && s_plan.rgent[obj].pwin != NULL; }
 void SetAnimFrameSrvTestQt(flag f) { s_fAnimFrameQt = f; }
 // The i'th window, most recently used first: its grid, precision, whether
 // it is an animation window and whether it has landed.
