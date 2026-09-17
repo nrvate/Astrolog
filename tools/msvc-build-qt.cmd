@@ -118,8 +118,8 @@ if not defined VERRC exit /b 1
 rc /nologo /I. /DVERSIONRC=%VERRC% /DVERSIONSTR=\"%VERSTR%\" /fo astrolog-qt.res tools\astrolog-qt.rc || exit /b 1
 
 set CXX=/nologo /MP /std:c++17 /Zc:__cplusplus /permissive- /Zc:strictStrings- /EHsc /MD /O2 /W3 /D_CRT_SECURE_NO_WARNINGS /DQT /DPC /DWIN32 /D_WINDOWS /DNDEBUG
-set INC=/I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport"
-set LIBS=/LIBPATH:"%QTDIR%\lib" Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib Qt6Network.lib Qt6PrintSupport.lib user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
+set INC=/I"%QTDIR%\include" /I"%QTDIR%\include\QtCore" /I"%QTDIR%\include\QtGui" /I"%QTDIR%\include\QtWidgets" /I"%QTDIR%\include\QtNetwork" /I"%QTDIR%\include\QtPrintSupport" /I"%QTDIR%\include\QtWebSockets" /Iephsrv
+set LIBS=/LIBPATH:"%QTDIR%\lib" Qt6Widgets.lib Qt6Gui.lib Qt6Core.lib Qt6Network.lib Qt6PrintSupport.lib Qt6WebSockets.lib user32.lib gdi32.lib shell32.lib advapi32.lib ole32.lib
 
 if not exist obj mkdir obj
 if not exist obj-app mkdir obj-app

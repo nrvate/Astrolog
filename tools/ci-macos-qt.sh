@@ -19,7 +19,7 @@
 # - It has NO pkg-config files ("no-pkg-config" is in its qconfig.pri)
 #   and no include/QtCore symlinks: the headers live inside the
 #   frameworks, lib/QtCore.framework/Headers. Makefile.qt finds Qt
-#   through pkg-config and nothing else, so this writes the five .pc
+#   through pkg-config and nothing else, so this writes the six .pc
 #   files Makefile.qt asks for, framework-style, and checks that
 #   pkg-config resolves them before printing anything.
 #
@@ -52,7 +52,7 @@ case $dir in /*) ;; *) dir=$PWD/$dir ;; esac   # aqt runs elsewhere, below
 q=$dir/$ver/macos
 
 if [ ! -x "$q/bin/macdeployqt" ]; then
-  echo "== installing Qt $ver into $dir (aqtinstall 3.3.0, qtbase + qttools)" >&2
+  echo "== installing Qt $ver into $dir (aqtinstall 3.3.0, qtbase + qttools + qtwebsockets)" >&2
   # aqt in a throwaway virtual environment: the runner's Python refuses a
   # bare "pip install" (PEP 668, "externally-managed-environment"), which
   # is how the first run of this script failed. The venv is not part of
@@ -62,7 +62,7 @@ if [ ! -x "$q/bin/macdeployqt" ]; then
   "$venv/bin/pip" install -q "aqtinstall==3.3.0" >&2
   # Run aqt from the venv's directory: it writes aqtinstall.log into the
   # current directory, and that should not be the checkout.
-  (cd "$(dirname "$venv")" && "$venv/bin/aqt" install-qt mac desktop "$ver" clang_64 --archives qtbase qttools -O "$dir") >&2
+  (cd "$(dirname "$venv")" && "$venv/bin/aqt" install-qt mac desktop "$ver" clang_64 --archives qtbase qttools -m qtwebsockets -O "$dir") >&2
   rm -rf "$(dirname "$venv")"
   find "$q" -name '*.dSYM' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 else
@@ -70,12 +70,14 @@ else
 fi
 [ -x "$q/bin/macdeployqt" ] || { echo "no macdeployqt under $q -- the install did not produce a Qt" >&2; exit 1; }
 [ -d "$q/lib/QtWidgets.framework" ] || { echo "no QtWidgets.framework under $q/lib" >&2; exit 1; }
+[ -d "$q/lib/QtWebSockets.framework" ] || { echo "no QtWebSockets.framework under $q/lib -- a cached Qt from before the Ephemeris Server backend? the cache key names the modules" >&2; exit 1; }
 
 mkdir -p "$q/lib/pkgconfig"
-for m in Core Gui Widgets PrintSupport Network; do
+for m in Core Gui Widgets PrintSupport Network WebSockets; do
   case $m in
     Core) req="" ;;
     Gui)  req="Qt6Core" ;;
+    WebSockets) req="Qt6Core Qt6Network" ;;
     *)    req="Qt6Core Qt6Gui" ;;
   esac
   up=$(printf '%s' "$m" | tr '[:lower:]' '[:upper:]')
@@ -93,7 +95,7 @@ for m in Core Gui Widgets PrintSupport Network; do
   } > "$q/lib/pkgconfig/Qt6$m.pc"
 done
 
-PKG_CONFIG_PATH=$q/lib/pkgconfig pkg-config --exists Qt6Widgets Qt6Gui Qt6Core Qt6PrintSupport Qt6Network || {
+PKG_CONFIG_PATH=$q/lib/pkgconfig pkg-config --exists Qt6Widgets Qt6Gui Qt6Core Qt6PrintSupport Qt6Network Qt6WebSockets || {
   echo "pkg-config cannot resolve the .pc files just written under $q/lib/pkgconfig" >&2; exit 1; }
 echo "== pkg-config resolves Qt $(PKG_CONFIG_PATH=$q/lib/pkgconfig pkg-config --modversion Qt6Widgets)" >&2
 

@@ -42,7 +42,7 @@ $(error Qt development files not found. pkg-config cannot find: \
 $(strip $(foreach m,$(QT_MODULES),\
 $(if $(shell pkg-config --exists $(m) 2>/dev/null && echo y),,$(m)))). \
 On Debian/Ubuntu: sudo apt install \
-$(if $(filter 6,$(QT_MAJOR)),qt6-base-dev,qtbase5-dev). If Qt is installed \
+$(if $(filter 6,$(QT_MAJOR)),qt6-base-dev qt6-websockets-dev,qtbase5-dev libqt5websockets5-dev). If Qt is installed \
 somewhere pkg-config does not look, set PKG_CONFIG_PATH to the \
 directory holding its .pc files. See CLAUDE.md, "Prerequisites")
 endif
