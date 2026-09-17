@@ -1761,6 +1761,23 @@ the gates the phase touches.
      difference 11.361744", and the Moon sits at 5.17 degrees latitude.
      Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
 
+7. **Phase 3b, ComputeEphem's Swiss branch through the host (2026-09-17).**
+   The per-object FSwissPlanet() call of calc.cpp's Swiss branch -- and
+   its slot-5 custom skip -- goes through the registry: one query built
+   before the loop, one submit down the derived chain, one read per
+   object. The query holds exactly the objects the loop's Swiss branch
+   will read (not a Horizons object's fJPL, not a slot-5 custom), each
+   with the objOrbit the inline call used to compute, in loop order, so
+   FSubmitSwissLocal()'s delegation makes the same FSwissPlanet() calls
+   in the same order and the cast's bytes cannot move. The JPL Horizons
+   branch and the Qt server branch (SrvPrefetchQt/FSrvPlanetQt) are
+   exactly where they were; they are phase 6 plugins.
+   - **Gates.** make check all clear, suite 5817 passed / 0 failed
+     (the live-parity group among them, so the host path is also
+     bit-identical to the server's answers); chart, switch, influence
+     and graphics matrices byte-identical against the 6cf3ac3 baseline;
+     the whole suite under AddressSanitizer, 5817 passed / 0 failed.
+
 6. **Phase 3a, the source registry skeleton (2026-09-17).** `ephem.h`,
    `ephem.cpp` and `ephswiss.cpp` join the core group of
    `Makefile.srcs` (no `#ifdef QT`): the EPHSRCDEF shape of §4.1,

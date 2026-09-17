@@ -1038,6 +1038,9 @@ void ComputeEphem(real t)
   real r1, r2, r3, r4, r5, r6, dist1 = 0.0, dist2 = 0.0, objPla, altPla, objEar, altEar,
     rT;
   flag fJPLPla, fJPL, fRet;
+#ifdef SWISS
+  EPHQUERY eq;
+#endif
 #ifdef QT
   flag fSrvPla;
 #endif
@@ -1066,6 +1069,44 @@ void ComputeEphem(real t)
   // 1: the fetch must not be per object).
   if (fSrvPla)
     SrvPrefetchQt(t, objCentCalc, imax);
+#endif
+#ifdef SWISS
+  // The Swiss-family source of the registry asks the same way: one
+  // query per cast, submitted once down the chain today's settings
+  // derive (EPHEMERIS_PLUGINS_PLAN.md 4.1), before the loop reads. The
+  // query holds exactly the objects the loop's Swiss branch will read:
+  // not a Horizons object's fJPL, and not a slot-5 custom, which stays
+  // ephemeris-less; each carries the objOrbit the inline call below
+  // used to compute. One FSwissPlanet() call per object in the same
+  // order, through FSubmitSwissLocal()'s delegation, so the calls --
+  // and their bytes -- are the ones this branch has always made.
+  {
+    flag fHost =
+#ifdef QT
+      !fSrvPla;
+#else
+      fTrue;
+#endif
+    if (fHost) {
+      EphQueryInit(&eq, JulianDayFromTime(t));
+      for (i = oEar; i <= imax; i++) {
+        if (FSkipEphem(i, objCentCalc, fJPLPla))
+          continue;
+        if (FCust(i) && rgTypSwiss[i - custLo] == 5)
+          continue;
+        fJPL = FJPL((FCust(i) && rgTypSwiss[i - custLo] == 4) ||
+          (fJPLPla && FBetween(i, 0, cThing) && rgObjJPL[i] > 0));
+        if (fJPL)
+          continue;
+        objOrbit = us.fMoonMove ? ObjOrbit(i) : -1;
+        if (objOrbit < 0 || objOrbit == oSun)
+          objOrbit = objCentCalc;
+        FEphQueryAdd(&eq, i, 0, objOrbit);
+      }
+      if (eq.cobj > 0)
+        FEphSubmit(&eq);
+    }
+  }
 #endif
   for (i = oEar; i <= imax; i++) {
     if (FSkipEphem(i, objCentCalc, fJPLPla))
@@ -1104,13 +1145,11 @@ void ComputeEphem(real t)
 #ifdef SWISS
       if (FCust(i) && rgTypSwiss[i - custLo] == 5)
         fRet = fTrue;
-      else {
-        objOrbit = us.fMoonMove ? ObjOrbit(i) : -1;
-        if (objOrbit < 0 || objOrbit == oSun)
-          objOrbit = objCentCalc;
-        fRet = FSwissPlanet(i, JulianDayFromTime(t), objOrbit,
-          &r1, &r2, &r3, &r4, &r5, &r6);
-      }
+      else
+        // The query above already computed this object: read the row.
+        // Same instant, same objOrbit, one FSwissPlanet() call, the
+        // same six reals -- in FSwissPlanet()'s own argument order.
+        fRet = FEphRead(&eq, i, &r1, &r2, &r3, &r4, &r5, &r6);
 #endif
     }
     if (!fRet)
