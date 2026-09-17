@@ -20,7 +20,7 @@ version 3, and this section is the design authority behind it.
   (2026-09-17). This document supersedes it wherever they differ.
 - **Phases.** See §7. The work log (§8) says which are done.
 - **Prometheia.** `/shares/ephemeris-prometheia` pins `ephproto.h` and runs the
-  conformance fixtures (§3.9). With version 4 it deletes its wire map
+  conformance fixtures (§3.10). With version 4 it deletes its wire map
   (`server/wire_map.*`).
 
 ## 1. Why
@@ -239,7 +239,7 @@ Payload layouts follow; `…` marks a variable part.
 | u8, u16 | reserved |
 | str8 | serverName — e.g. `astrolog-ephd/2.0`, `prometheiad/0.2` |
 | str8 | engine — human-readable, e.g. `Swiss Ephemeris 2.10.03 files`, `Prometheia 0.2, JPL DE440 + SBDB 2026-09-16` |
-| str8 | datasetId — opaque; MUST change whenever any answer the server gives could change (engine version, any data file). Clients key caches on it. |
+| str8 | datasetId — `<engine>/<ephemeris>/<catalogs>#<8 hex>`, the digest over every data file's checksum and the engine version. It MUST change whenever any answer the server gives could change. Clients key caches on it, and may pin it (A.4 0x8003). |
 | TLV | capabilities (Appendix A.3). Tags 0x0001–0x0006, 0x0008 and 0x0009 MUST be present. |
 
 A client MUST NOT send an option value, object kind, column or message that
@@ -256,7 +256,7 @@ Delivery block (12 bytes):
 | u8 | precision — 0 f64, 1 f32 (DATA values only) |
 | u8 | priority — 0 interactive, 1 prefetch |
 | u8 | representation — 0 samples (answered with DATA), 1 segments (answered with SEGDATA; requires the `segments` cap) |
-| u8 | reserved |
+| u8 | maxDegreeHint — segments only: the largest Chebyshev degree the client wants to buffer; 0 lets the server choose. The server also caps by its own capability (A.3 0x000F). 0 for samples |
 | u32 | chunkRows — a hint; the server clamps it to `[1, maxChunkRows]`, and 0 means `maxChunkRows` |
 | f32 | segTargetErrArcsec — 0 for samples; for segments a finite value > 0, the angular error the client asks for |
 
@@ -304,8 +304,8 @@ OBJECT (a 4-byte head, then a payload that depends on the kind; Appendix A.12):
 |---|---|
 | 0 body | `i32 naif` |
 | 1 orbit point | `i32 naif`, `u8 point` (A.13), `u8 method` (A.14), `u16 reserved` |
-| 2 fixed star | `str8 name` — traditional name or Bayer/Flamsteed designation |
-| 3 named hypothetical | `str8 name` — a token from A.15 |
+| 2 fixed star | `str8 name` — an IAU proper name, Bayer, Flamsteed, HR, HD or HIP designation (§3.5a) |
+| 3 named hypothetical | `str8 name` — a token from A.15; elements server-defined (§3.5a) |
 | 4 elements | `TIME epoch`, `u8 equinox` (A.16), `u8 centre` (0 Sun, 1 Earth), `u8 nTerms` (1..5), `u8 reserved`, `f64 equinoxJd` (A.16 value 4 only, else 0), then `6 × nTerms f64`: the polynomial coefficients c0..c(nTerms−1) of, in order, mean anomaly M (deg), semi-major axis a (AU), eccentricity e, argument of perihelion ω (deg), ascending node Ω (deg), inclination i (deg); then `str8 name` |
 | 5 designation | `str8 designation` — resolved as an exact LOOKUP; ambiguity is a per-object error (§3.5) |
 
@@ -420,8 +420,16 @@ Answers a segments REQUEST (`representation = 1`). Header (16 bytes):
 
 Then, when meta is present (always on chunk 0), the source table and
 `nObj × META` exactly as in DATA. Here `rowsOk` counts the segments served, and
-`firstFailedRow` is unused (0xFFFFFFFF). After that, for each object from iObj
-to iObj + nObjChunk − 1: `u32 nSeg` and `nSeg × SEGMENT`.
+`firstFailedRow` is unused (0xFFFFFFFF). Chunk 0 then carries the **ayanamsa
+series**: `u8 nAyan`, and for each, `u8 profile`, `u32 nSeg`, `nSeg × AYANSEG`
+— one entry per profile whose zodiac is not tropical, none otherwise. After
+that, for each object from iObj to iObj + nObjChunk − 1: `u32 nSeg` and
+`nSeg × SEGMENT`.
+
+AYANSEG: `TIME mid`, `f64 halfSpanDays`, `u8 degree`, `u8 ×3 reserved`,
+`f32 errArcsec`, `(degree+1) f64` — the ayanamsa in degrees, evaluated as a
+SEGMENT's axis is, covering the same span. A mean ayanamsa needs about degree
+3 over a century; a true one needs more.
 
 SEGMENT:
 | type | field |
@@ -430,8 +438,9 @@ SEGMENT:
 | f64 | halfSpanDays — h > 0 |
 | u8 | degree — d, 0..31 |
 | u8 ×3 | reserved |
-| f32 | errArcsec — the bound the server met on the direction |
-| f32 | errRelDist — the bound on relative distance error |
+| f32 | errArcsec — the largest residual the server MEASURED on the direction |
+| f32 | errRelDist — the largest measured relative distance residual |
+| f32 | errRateArcsecPerDay — the largest measured residual of the analytic derivative against the server's own rates |
 | f64 × 3(d+1) | Chebyshev coefficients: x0..xd, y0..yd, z0..zd |
 
 Segment rules:
@@ -450,10 +459,23 @@ Segment rules:
   - The coordinates are rectangular in the profile's observer, plane, frame and
     corrections. For a sidereal zodiac, the rotation about the plane's pole by
     the ayanamsa at each instant is included in the fit.
-- **Error bounds.** The server MUST meet `errArcsec` and `errRelDist` against
-  its own sampled answers over the whole segment. It SHOULD make `errArcsec`
-  ≤ `segTargetErrArcsec`. If it cannot, it MUST report the larger value it did
-  meet.
+- **Residuals, measured not claimed.** `errArcsec`, `errRelDist` and
+  `errRateArcsecPerDay` are the largest residuals the server MEASURED against
+  its own answers over the segment, on a check set of at least 4(d+1) instants
+  that includes points between the fit nodes. The server SHOULD make
+  `errArcsec` ≤ `segTargetErrArcsec`; where it cannot, it reports what it
+  measured. (A rigorous bound costs more than the fit; a dense measured
+  residual is cheap and honest.)
+- **The zodiac is not in the fit.** Coefficients are always tropical in the
+  profile's frame. When a profile carries a zodiac, the answer also carries
+  that profile's **ayanamsa series** (below), and the client subtracts it. One
+  fit then serves every zodiac, and a true-of-date ayanamsa -- which carries
+  nutation in longitude, 17″ with an 18.6-year period -- is fitted where it
+  belongs instead of roughening every body's fit.
+- **Which objects.** The segments capability (A.3 0x000F) carries an A.12
+  kinds bitmask; an object of another kind is per-object error 2. Some objects
+  fit badly on purpose: the Moon's osculating perigee moves degrees a day and
+  its longitude rate changes sign.
 - **Failure.** An object that could not be computed has `nSeg = 0` and its
   error in META.
 
@@ -477,27 +499,40 @@ These numbers are reserved and have no layout yet.
   - An engine that takes one double evaluates `start.jd1 + (start.jd2 + off)`.
   - `stepNs` is signed. It MUST be 0 when nTime = 1 and nonzero otherwise.
 - **List.** Instants in any order; duplicates are allowed.
-- **Time scale.** Instants are in `timeScale`. UT1 instants are converted with
-  `deltaTSec` when it is finite, else with the server's ΔT model; the model's
-  name is in the ΔT-model capability. `deltaTSec` also drives Earth rotation for
-  topocentric work. A client that owns ΔT, as Astrolog does, sends TT instants
-  and its own ΔT.
+- **Time scale.** Instants are in `timeScale`. ΔT (TT − UT1) converts UT1
+  instants and drives Earth rotation for topocentric work. Its value at each
+  row comes from, in order:
+  1. the **ΔT table** REQUEST TLV (0x8004, A.4), when present: piecewise-linear
+     interpolation in the table's instants, held constant beyond its ends;
+     `deltaTSec` MUST then be the canonical NaN. **The table's instants are
+     TT**, whatever the request's time scale, and a row's ΔT is interpolated at
+     that row's own numeric instant with no iteration — deterministic on both
+     ends, and for a UT1 row the ΔT so found differs from the TT-argument value
+     by under 1e-5 s;
+  2. a finite `deltaTSec`: that one value for every row, which is the
+     client's responsibility to keep valid over the span it asks (ΔT drifts
+     about a second a year today, and far faster historically);
+  3. otherwise the server's own ΔT model, named in the ΔT-model capability.
+
+  A client that owns ΔT, as Astrolog does, sends TT instants and a ΔT table
+  (or, for short spans, one `deltaTSec`).
 
 **Observers and options**
 - **Observer.**
-  - For heliocentric and barycentric observers, the deflection and aberration
-    bits MUST be ignored; light time still applies.
+  - Correction bits are **honoured as sent, for every observer** (§3.5a). A
+    server advertises, per observer, the masks it can honour (A.3 tag 0x0004);
+    any other combination is ERROR 11.
   - A body observer (4) with `observerBody` equal to the object is a per-object
     error 2.
+- **Sidereal zodiacs apply to the ecliptic plane only.** A PROFILE with a
+  nonempty zodiac and `plane = 1` (equator) is ERROR 1.
 - **Unused fields.** `observerBody`, the site, `anchorEpoch` and
   `anchorAyanamsaDeg` MUST be zero unless the observer or zodiac uses them.
   - Site ranges: longitude in [−180, 180], latitude in [−90, 90].
   - Zodiac `""` (tropical) requires `siderealPlane = 0`.
   - Zodiac `user` requires a nonzero anchor epoch.
-- **Correction masks.** A server advertises the masks it can honour (A.3,
-  tag 0x0004). A PROFILE with any other mask is ERROR 11.
 - **Speeds.** When `speeds = 0`, the three rate columns are 0 and META's
-  `noSpeeds` flag is set.
+  `noSpeeds` flag is set. When `speeds = 1`, rates are as §3.5a defines.
 
 **Columns**, per row:
 - The base six:
@@ -507,12 +542,18 @@ These numbers are reserved and have no layout yet.
     their rates;
   - rectangular: x, y, z (AU), vx, vy, vz (AU/day).
 - Longitudes and right ascensions are in [0, 360).
-- For a sidereal zodiac, longitudes are reduced by the ayanamsa of the chosen
-  sidereal plane.
+- For a sidereal zodiac, longitudes are reduced as §3.5a defines; with
+  rectangular form the vector is rotated about the ecliptic pole by the same
+  ayanamsa, so the two forms stay consistent.
+- **Distance unknown** (a star without a parallax): the distance column and its
+  rate are 0, and META's `noDistance` flag is set.
 - Extra columns follow in A.10 bit order, for the bits in `columnsPresent`,
   which is the requested columns intersected with the server's advertised ones.
   - σ is valid only where META's `hasSigma` is set, and is 0 elsewhere.
-  - Ayanamsa is 0 for tropical.
+  - Ayanamsa is the value subtracted for that row, in degrees (§3.5a); 0 for
+    tropical.
+  - Light time is the τ applied, in days; 0 when light time is off.
+  - ΔT is the TT − UT1 used for that row, in seconds.
 
 **Failure**
 - **Row failure.** A row that failed has NaN in every column of that row. An
@@ -543,6 +584,164 @@ These numbers are reserved and have no layout yet.
 - More than one match is per-object error 6.
 - No match is per-object error 1.
 
+### 3.5a Physical definitions (normative)
+
+Two conforming servers given the same question MUST return the same
+quantity. These definitions say which quantity; the numbers then differ only
+by the ephemerides and models each server names in WELCOME (engine,
+datasetId, coverage, precession models, ΔT model) and per object (the source
+table).
+
+**Frames and planes** (default precession model IAU 2006; REQUEST TLV 0x0003
+may select another from A.20):
+- **True of date (0).** Equator: the true equator and true equinox of date
+  (IAU 2006 precession, IAU 2000A nutation or the server's advertised
+  equivalent). Ecliptic: the mean ecliptic of date, longitudes counted from the
+  true equinox of date (nutation in longitude applied, latitude unchanged by it).
+- **Mean of date (1).** The mean equator, mean ecliptic and mean equinox of
+  date; no nutation.
+- **J2000 (2).** The mean equator and equinox of J2000.0, **including frame
+  bias** (the IAU 2006 J2000 mean dynamical frame). Its ecliptic is that equator
+  rotated by the IAU 2006 J2000 mean obliquity, 84381.406″.
+- **ICRF (3).** ICRS axes, no bias. Its ecliptic is the ICRS equator rotated by
+  84381.406″ about the ICRS x axis.
+- **Topocentric site.** WGS84 ellipsoid; east longitude and geodetic latitude
+  in degrees; height above the ellipsoid in metres.
+
+**Corrections**, honoured as sent for every observer:
+- **Light time (1):** the body's position at the retarded instant t − τ, τ the
+  light time from body to observer.
+- **Deflection (2):** gravitational light deflection by the Sun, applied for
+  every observer that is not the Sun itself — the barycentre included, which
+  sits about 0.005 AU from the Sun's centre. For an observer at the Sun's centre
+  the bit has no effect. A direction inside the solar disc, as seen from the
+  observer, skips deflection rather than evaluating a formula whose denominator
+  vanishes there.
+- **Aberration (4):** relativistic aberration from the observer's velocity
+  relative to the solar-system barycentre, whatever the observer — the Earth's
+  (geocentric), the site's (topocentric, including diurnal motion), the Sun's
+  (heliocentric), zero at the barycentre, the observing body's (observer 4).
+- A server that cannot honour a mask for an observer does not advertise that
+  pair (A.3 0x0004); the client then asks for a mask it can.
+
+**Rates** (`speeds = 1`):
+- The rate columns are **the time derivatives, per day of the request's time
+  scale, of the coordinates answered in the other three columns** — including
+  every change of the pipeline with time (light time, aberration, precession,
+  nutation, the ayanamsa for sidereal zodiacs). Rectangular velocities are the
+  derivatives of the answered x, y, z likewise.
+- A server whose rates may differ from the central difference of its own
+  positions over ±0.001 day by more than **1e-5 °/day** (angles) or
+  **1e-6 AU/day** (distance) sets META's `ratesApprox` flag on the objects
+  concerned, and states its largest such difference in the rates-bound
+  capability (A.3 0x0013). The distance figure is loose on purpose: a distance
+  rate that omits the light-time term differs by the observer's acceleration
+  times the light time — measured at 3e-5 AU/day for Uranus in the Swiss
+  Ephemeris — which is a definitional difference, not an error, and a server
+  whose distance rates omit it says so with the flag.
+
+**Sidereal zodiacs** (plane 0 only; see §3.5):
+- A zodiac has a **zero point**: a mean ayanamsa A₀ at an anchor epoch t₀ (TT).
+  - `user`: t₀ = `anchorEpoch` (TT), A₀ = `anchorAyanamsaDeg`, a **mean**
+    ayanamsa (no nutation in it).
+  - Named tokens (A.11): the published definition of that mode's zero point. A
+    server implements the tokens whose definitions it implements, and advertises
+    exactly those.
+- **siderealPlane 0 (ecliptic of date).** The ayanamsa subtracted at t is
+  A(t) = A₀ + p(t₀, t), p the general precession in longitude from t₀ to t, plus
+  the nutation in longitude at t **for frame 0 only** (true ayanamsa); frame 1
+  uses the mean ayanamsa; frames 2 and 3 use the constant A(J2000.0) mean, a zero
+  point fixed on the J2000 ecliptic.
+- **siderealPlane 1 (ecliptic of the anchor epoch).** Positions are referred to
+  the mean ecliptic and equinox of t₀; longitude is counted from the zero point
+  there (A₀ subtracted, no precession term).
+- **siderealPlane 2 (invariable plane).** Positions are projected onto the
+  invariable plane of the solar system (the orientation the server names in its
+  engine description); longitude is counted along that plane from the zero point
+  carried onto it. Servers that implement it advertise it (A.3 0x0008).
+- The ayanamsa column reports the value subtracted for the row: A(t) for plane
+  0, A₀ for planes 1 and 2.
+
+**Orbit points** (kind 1):
+- **Which orbit.** The body's orbit about the Sun (heliocentric) — or about the
+  solar-system barycentre for method 3 — and, for the Moon (301), its orbit
+  about the Earth.
+- **Nodes** lie on the ecliptic of the profile's frame (the mean ecliptic of
+  date for frames 0 and 1; the J2000 ecliptic for frames 2 and 3). The node is
+  the point on the orbit at that plane crossing, at the orbit's radius there.
+- **Apsides** are the points of the orbit at pericentre, a(1−e), and apocentre,
+  a(1+e); method 4 answers the empty focus, 2ae from the centre, in place of
+  the apocentre.
+- **Points are geometric:** the correction bits have no effect on them. The
+  answered coordinates are the point as seen from the profile's observer, in its
+  frame and plane, with the zodiac applied.
+- **Osculating (1, 3)** elements come from the body's state vector with
+  μ = G(M_centre + M_body) from the ephemeris's own constants (M_body 0 where
+  unknown).
+- **Mean (0)** elements are the server's mean-element model, **named in the
+  object's source string** (source strings are
+  `<engine> | <ephemeris> | <model>`, the first two fields stable and the third
+  free text, e.g. `prometheia 0.1.0 | JPL DE440 | mean elements: DE440 secular fit`) (e.g. "mean elements: DE440 secular fit",
+  "Moon: Simon et al. 1994"). Mean points legitimately differ between models.
+- **Interpolated (2)** is the Moon's "natural" apogee and perigee, a
+  server-defined smoothing of the osculating points, also named in the source.
+- **Which bodies.** Any body with an orbit about its centre. The Sun (10) and
+  the solar-system barycentre (0) have none: per-object error 2.
+- **Method 3 (osculating, barycentric)** takes the elements from the body's
+  barycentric state with μ = the ephemeris's total solar-system GM. A server
+  whose barycentric elements use another mass does not advertise method 3
+  (A.3 0x0005), rather than answer a differently defined point.
+- A point undefined for the orbit (a node of an orbit in the reference plane,
+  an apsis of a circular orbit) is per-object error 5.
+
+**Fixed stars** (kind 2):
+- **Names accepted**, case-insensitive, single spaces:
+  - an IAU (WGSN) proper name, e.g. `Aldebaran`;
+  - a Bayer designation: a Greek letter as its three-letter IAU abbreviation
+    (`alf`, `bet`, …), its English name (`Alpha`) or the Unicode letter (`α`),
+    optionally with a component number (`bet1`, `Beta1`, `β¹`), then the IAU
+    three-letter constellation abbreviation or its Latin genitive
+    (`bet Sco`, `Beta Scorpii`);
+  - a Flamsteed number and constellation, `8 Sco`;
+  - `HR n`, `HD n`, `HIP n`.
+  Servers MAY accept further traditional aliases.
+- **Components.** A name that matches more than one star (`Beta Sco` for β¹
+  and β²) is per-object error 6, exactly as for designations; a client
+  chooses with LOOKUP.
+- **Deep-sky objects.** The `deep sky` cap (A.2 bit 9) means only that kind 2
+  **also resolves deep-sky designations**; WHICH catalogues is machine-readable
+  in the catalogs TLV (A.3 0x000B), one entry each, e.g. `messier`, `ngc`,
+  `ic`. A designation from a catalogue the server did not advertise is
+  per-object error 1. (Praesepe, M 44, and the Pleiades, M 45, are used in
+  astrology and live in the star catalogues; a server with only the Messier
+  catalogue advertises the bit and that one entry.) Two notes for clients: a
+  Messier number is not necessarily an extended object -- M 40 is a double star
+  and M 73 an asterism -- and these objects have no parallax, so they answer
+  with `noDistance`.
+- **Answered as** the star's position from the catalogue with proper motion,
+  parallax and radial velocity propagated to the instant, then the corrections.
+  Distance from the parallax in AU; without a parallax, `noDistance` (§3.5).
+  `resolvedNaif` is INT32_MIN.
+
+**Named hypotheticals** (kind 3): the token names a body; its orbital
+elements are **server-defined** and the object's source string names the set
+used. A client that needs a hypothetical body computed from particular
+elements, identically on every server, sends it as kind 4 with those elements.
+
+**Elements** (kind 4):
+- **Motion is pure two-body Keplerian**: at each instant the polynomial
+  elements are evaluated at T = (t_TT − epoch)/36525 and the position is the
+  Kepler solution with those elements; no perturbations.
+- μ = GM of the centre (Sun or Earth) from the ephemeris's constants, the body
+  massless.
+- The elements refer to the mean ecliptic and equinox named by `equinox`.
+- Light time, deflection and aberration apply as to a body (light time through
+  the same two-body motion); rates are as for any body.
+
+**Error text** (META errText, ERROR text) is covered by §3.8: it never quotes
+instants, places or request contents. Servers rewrite engine messages that
+would.
+
 ### 3.6 Extension rules
 
 1. **Fixed layouts do not change within version 4.** New fields and new
@@ -570,12 +769,49 @@ These numbers are reserved and have no layout yet.
 - **Logs.** Servers MUST NOT log request contents (instants, places, bodies)
   unless the operator explicitly enables it, as `astrolog-ephd --log-contents`
   does. Tokens are never logged.
-- **Error text** never quotes request contents.
+- **Error text** — ERROR's text and every META errText — never contains
+  instants, sites or other request contents; servers rewrite engine messages
+  that would (e.g. "outside the ephemeris's time coverage", not "jd 2461300
+  outside coverage").
 - **Hardening.** Every parser is bounds-checked on truncated input and never
   allocates in proportion to an unvalidated count before checking it against a
   limit.
 
-### 3.9 Conformance fixtures
+### 3.9 Performance and accuracy
+
+Both are requirements, and the protocol is built so that neither is bought
+with the other. **An engine never trades accuracy for speed silently.**
+
+- **Every approximation is on the wire.** `approximated` (the body answered is
+  not the body asked), `extrapolated` (outside the data's fitted range),
+  `ratesApprox` with its bound (A.3 0x0013), `noDistance`, a segment's
+  `errArcsec` and `errRelDist`, and σ where the engine has it. A server that
+  cannot answer a question to its normal accuracy says so per object rather
+  than quietly answering something else.
+- **f32 is a delivery choice, never a computation one.** Servers compute in
+  f64 and round at the last step; the cache holds the f64 answer (§3.7).
+- **The batch is the unit of work.** One REQUEST carries a whole cast --
+  every object, every instant, every profile -- because a request per object
+  costs a round trip each and defeats the server's cache. A client that needs
+  a second window before the first is drawn sends it with `priority = 1`, and
+  the server answers interactive work first.
+- **Segments are the answer to animation** (§3.4): one fit covers a span the
+  client then evaluates locally at any instant, with the error it asked for
+  stated on the wire.
+- **CANCEL exists so that speed is not wasted:** an animation that moves on
+  drops the window it no longer needs, and the server stops computing it.
+- **The cache key is canonical** (§3.7), so the same question asked twice --
+  in either precision, in any chunking -- is computed once.
+- **Budgets and limits are per connection, not per answer:** a server states
+  its bound in WELCOME (`maxCells`) and a client keeps a request under it
+  rather than discovering the limit by being refused.
+
+Measured on the reference implementations (`tools/ephsrv-bench.sh`, and
+Prometheia's own bench): a cold 30-body 1000-row window is about a
+core-second of computation, and a cached one is delivered in milliseconds;
+the numbers that matter to a GUI are in EPHEMERIS_SERVER_PRODUCTION_PLAN.md.
+
+### 3.10 Conformance fixtures
 
 `ephsrv/conformance/` holds complete messages (envelope included) as hex, with
 `MANIFEST.tsv` listing:
@@ -813,6 +1049,8 @@ server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from
 - 5 priority
 - 6 segments
 - 7 designations (kind 5)
+- 8 ΔT tables (REQUEST TLV 0x8004)
+- 9 deep sky (kind 2 also resolves `M n`, `NGC n`, `IC n`)
 
 **A.3 WELCOME capability TLVs:**
 | tag | payload |
@@ -820,7 +1058,7 @@ server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from
 | 0x0001 | object kinds, u32 bitmask of A.12 |
 | 0x0002 | observers, u32 bitmask of A.5 |
 | 0x0003 | planes u32, forms u32, frames u32 (bitmasks of A.6) |
-| 0x0004 | correction masks: u8 n, n × u8 (each a full A.7 mask) |
+| 0x0004 | correction masks per observer: u8 n, n × {u32 observers (A.5 bitmask), u8 mask (A.7)} — each pair says that mask is honoured for those observers |
 | 0x0005 | orbit points u32 (A.13), orbit methods u32 (A.14) |
 | 0x0006 | extra columns u32 (A.10) |
 | 0x0007 | zodiacs: u16 n, n × str8 (A.11 tokens) |
@@ -831,16 +1069,23 @@ server-address and token rows. `QT_ONLY_ROWS` for dlgCalc is removed from
 | 0x000C | ΔT model: str8 |
 | 0x000D | precession models: u16 n, n × str8 |
 | 0x000E | rate: u32 cellsPerSec, u32 burst |
-| 0x000F | segments: u8 maxDegree, u8 ×3 reserved, u32 maxSegmentsPerObject, f32 minErrArcsec |
+| 0x000F | segments: u8 maxDegree, u8 ×3 reserved, u32 maxSegmentsPerObject, f32 minErrArcsec, u32 kinds (A.12 bitmask of what it will fit) |
 | 0x0010 | lookup: u16 maxMatches |
 | 0x0011 | hypotheticals: u16 n, n × str8 (A.15 tokens served) |
 | 0x0012 | equinoxes for elements: u32 bitmask of A.16 |
+| 0x0013 | rates bound: f32 degPerDay, f32 auPerDay — the largest difference of the server's rates from central differences of its positions (§3.5a); absent means rates meet the 1e-5 °/day, 1e-9 AU/day tolerance |
 
 **A.4 REQUEST TLVs:**
 - 0x0003 precession model, str8 (non-critical; an unknown model falls back and
   sets ignoredExt)
 - 0x8001 ephemeris pin, str8 (critical)
 - 0x8002 catalog pin, str8 (critical)
+- 0x8003 datasetId pin, str8 (critical) — the whole identity in one string;
+  ERROR 5 if the server's datasetId differs
+- 0x8004 ΔT table (critical; requires the `ΔT tables` cap): u32 n (2..65535
+  entries allowed by the TLV length), n × {TIME t, f64 deltaTSec}, instants in
+  the request's time scale, strictly ascending, all finite. When present the
+  REQUEST's `deltaTSec` MUST be the canonical NaN (§3.5).
 
 **A.5 Observers:**
 - 0 geocentric
@@ -903,7 +1148,10 @@ advertise it (A.3 0x0007).
 - 3 osculating, barycentric
 - 4 focal point
 
-**A.15 Named hypotheticals.** The bodies of Swiss `seorbel.txt`:
+**A.15 Named hypotheticals.** Tokens name bodies; their elements are
+server-defined (§3.5a), and the source string names the set. The tokens are
+the conventional names of these bodies (listed in the order of Swiss's
+`seorbel.txt`, for reference only):
 
 | token | seorbel.txt entry |
 |---|---|
@@ -944,6 +1192,8 @@ T = (t_TT − epoch) / 36525 Julian centuries, as in `seorbel.txt`.
 - bit 2 hasSigma
 - bit 3 partial
 - bit 4 noSpeeds
+- bit 5 noDistance (a star without a parallax)
+- bit 6 ratesApprox (rates may exceed the §3.5a tolerance; see A.3 0x0013)
 
 **A.19 ERROR codes:**
 - 1 malformed or non-canonical
@@ -958,6 +1208,10 @@ T = (t_TT − epoch) / 36525 Julian centuries, as in `seorbel.txt`.
 - 10 cancelled
 - 11 unsupported (a value, capability or critical extension not advertised)
 - 12 draining (retry elsewhere)
+
+**A.20 Precession model tokens** (REQUEST TLV 0x0003, WELCOME TLV 0x000D):
+- `iau2006` — Capitaine et al. 2003, IAU 2006 (the default)
+- `vondrak2011` — Vondrák, Capitaine & Wallace 2011, long-term
 
 ## 6B. Appendix B — mapping to the Swiss Ephemeris
 
@@ -1043,7 +1297,7 @@ These are Prometheia's C ABI names; the C++ engine is the same.
 Each phase is one or more commits on `ephv4`, each passing `make check` and
 the gates the phase touches.
 
-1. **This document and the conformance fixtures.** Covers §3.9:
+1. **This document and the conformance fixtures.** Covers §3.10:
    `tools/ephproto4-fixtures.py` and `ephsrv/conformance/`.
 2. **Protocol v4 in code.**
    - `ephproto.h`: codecs for every message, TLV, SEGDATA, LOOKUP and CANCEL,
@@ -1075,6 +1329,47 @@ the gates the phase touches.
 8. **Review** of the whole branch, and a summary for the maintainer.
 
 ## 8. Work log
+
+0. **Spec amendments after Prometheia's review (2026-09-17).** The Prometheia
+   maintainers reviewed §3 and Appendices A and C (not B: they are a
+   cleanroom) and found eight places where two conforming servers could
+   legitimately return different numbers. All are now normative in **§3.5a**:
+   rates as derivatives of the answered coordinates with a tolerance and a
+   `ratesApprox` flag plus a rates-bound capability; a critical ΔT-table TLV
+   (0x8004) because one deltaTSec cannot cover a century-long grid; sidereal
+   zodiacs (anchor in TT and mean, which ayanamsa each frame gets, ecliptic
+   plane only -- equatorial sidereal is now malformed, the ayanamsa column
+   defined); orbit points (which orbit, which plane, geometric, mean models
+   named in the source); fixed stars (an accepted name grammar, components
+   ambiguous, no deep-sky objects, distance and resolvedNaif); corrections
+   honoured as sent for every observer, with per-observer masks advertised
+   (A.3 0x0004 gains the observer bitmask); frames defined exactly, with
+   J2000 including frame bias and the site on WGS84; privacy covering META
+   errText. Also: hypothetical elements are server-defined, and a client
+   needing identical numbers everywhere sends kind 4; elements are pure
+   two-body with the centre's GM; precession tokens registered (A.20);
+   segments note that velocities come from the fit.
+
+0b. **Second Prometheia pass, and performance (2026-09-17).** Their second
+   reading found five smaller ambiguities, all now closed: the ΔT table's
+   instants are TT and are interpolated at a row's own numeric value with no
+   iteration (deterministic on both ends); a sidereal rectangular answer is
+   rotated by the same ayanamsa as the spherical one; deep-sky designations
+   (`M n`, `NGC n`, `IC n`) are served under kind 2 behind a new `deep sky`
+   cap, because Praesepe and the Pleiades are used in astrology and live in the
+   star catalogues; orbit points of the Sun and the barycentre are error 2, and
+   method 3's mass is pinned (a server using another does not advertise it);
+   deflection applies at the barycentre, with a solar-disc guard. They also
+   accepted two of ours as improvements on their proposals -- the ratesApprox
+   flag over redefining Swiss's speeds, and an ambiguous star being error 6
+   rather than the brighter component.
+   - New **§3.9 Performance and accuracy**, at the maintainer's instruction
+     that both are keys: every approximation is declared on the wire
+     (approximated, extrapolated, ratesApprox with its bound, noDistance,
+     segment error bounds, σ), f32 is delivery-only and the cache holds f64,
+     one REQUEST carries a whole cast, prefetch has its own priority, segments
+     answer animation, CANCEL stops wasted computation, and the cache key is
+     canonical so one question is computed once.
 
 1. **Phase 1, the document (2026-09-17).** Written from the approved plan, three
    code surveys (state and command line, GUI, connection) and a design review
