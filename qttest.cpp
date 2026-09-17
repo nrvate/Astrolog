@@ -177,6 +177,13 @@ extern void SetChunkRowsSrvTestQt(int);
 extern int CRecastSrvTestQt();
 extern void SetWelcMaxObjsSrvTestQt(uint32_t);
 extern void SetWelcMaxCellsSrvTestQt(uint32_t);
+extern flag FEphSrvRequiredQt();
+extern void SetRequiredEphSrvTestQt(int, int, int);
+extern void SetRequiredNoExitSrvTestQt(flag);
+extern void ResetRequiredSrvTestQt();
+extern flag FRequiredShownSrvTestQt();
+extern int CRequiredTriesSrvTestQt();
+extern void SzEphSrvStatusQt(char *, int);
 extern int NChunkProbeSrvTestQt(int);
 extern flag FSendEphSrvQt(eph::Request *);
 extern void ClampEphSrvReqQt(eph::Request *);
@@ -18917,14 +18924,19 @@ static void TestEphSrvLiveQt()
     Check(rMax == 0.0 && cWarnRun == 0, "animation off its grid: frames are "
       "asked exactly (largest %.3g, %s)", rMax, szWorst);
 
-    // A window reaching past the edge of the ephemeris files fails every
-    // object for the whole window on the server; frames inside the files
-    // are asked exactly instead of failing (EPHEMERIS_REVIEW.md A2). The
-    // bundled files begin on 1 January 1800 (JD 2378497, measured): nine
-    // days a frame backward from 1 March 1800 is six frames inside them,
-    // and the window anchored below the first frame reaches 1799. (The
-    // END of the files cannot stage this: the fork answers rows past the
-    // end inside a window that began before it -- EPHEMERIS_REVIEW.md F11.)
+    // A window reaching past the edge of the ephemeris files: protocol 2
+    // answers the rows that computed as real and the rows past the edge
+    // as NaN, so the frames whose rows computed read their f32 window
+    // rows like any animation frame (within the 5e-5 tolerance), and
+    // only a frame whose nearest row is NaN is asked exactly -- no frame
+    // fails and nothing warns (EPHEMERIS_REVIEW.md A2, S9). Protocol 1
+    // failed the object for the whole window here, which is why this
+    // check once asserted every frame exact. The bundled files begin on
+    // 1 January 1800 (JD 2378497, measured): nine days a frame backward
+    // from 1 March 1800 is six frames inside them, and the window
+    // anchored below the first frame reaches 1799. (The END of the files
+    // cannot stage this: the fork answers rows past the end inside a
+    // window that began before it -- EPHEMERIS_REVIEW.md F11.)
     // Only where the path HAS that edge: a directory reaching before 1800
     // (nrvate.as puts /swe on -Yi2) leaves nothing to stage, and the
     // frames are then read from a window whose rows before 1800 came from
@@ -18942,9 +18954,9 @@ static void TestEphSrvLiveQt()
         ciCore.lon = 122.3; ciCore.lat = 47.6;
         ciMain = ciCore;
         rMax = RAnimRunSrvQt(4, -9, 6, rgcReq, &cWarnRun, S(szWorst));
-        Check(rMax == 0.0 && cWarnRun == 0, "animation up to the ephemeris "
-          "edge: no warnings, exact frames (%d warnings, largest %.3g, %s)",
-          cWarnRun, rMax, szWorst);
+        Check(rMax <= 5e-5 && cWarnRun == 0, "animation up to the ephemeris "
+          "edge: no warnings, frames within tolerance (%d warnings, largest "
+          "%.3g, %s)", cWarnRun, rMax, szWorst);
       }
     }
     OraclePinUtQt(1990, 6, 15, 12.0);
@@ -19078,6 +19090,71 @@ static void TestEphSrvLiveQt()
   Check(NCastWarnSrvTestQt() == cWarn + 1 && CReqSentEphSrvTestQt() == cReq,
     "under -0n a cast fails fast with one warning and no request");
   us.fNoNetwork = fFalse;
+
+  // Required-server mode (increment 4): no local ephemeris anywhere and
+  // the server backend selected -- the startup dialog and its ladder.
+  // The probe is pinned, not re-run: SwissEnsurePath() early-returns
+  // once is.fSwissPathSet is set, so fNoEphFound is whatever the tests
+  // pin here, whatever directories this machine has.
+  {
+    flag fNoEphSav = is.fNoEphFound, fPathSetSav = is.fSwissPathSet;
+    QWebSocketServer srvReq("eph-required", QWebSocketServer::NonSecureMode);
+    byte bProtoReq = eph::kProtoVersion;
+    uint32_t dwCapsReq = 0;
+    char szVerReq[64];
+    QByteArray baReqReq;
+    QWebSocket *pconnReq = NULL;
+
+    is.fSwissPathSet = fTrue;
+    us.fEphemFiles = fTrue; us.nSwissEph = 5;
+    is.fNoEphFound = fTrue;
+    Check(FEphSrvRequiredQt(), "required: the server backend with no "
+      "local ephemeris");
+    us.nSwissEph = 0;
+    Check(!FEphSrvRequiredQt(), "not required: a local backend is "
+      "selected");
+    us.nSwissEph = 5;
+    is.fNoEphFound = fFalse;
+    Check(!FEphSrvRequiredQt(), "not required: a local ephemeris exists");
+    is.fNoEphFound = fTrue;
+
+    // The dialog against a server that answers: one attempt, welcomed,
+    // no ladder, no exit.
+    Check(srvReq.listen(QHostAddress::LocalHost),
+      "the required-mode loopback listens");
+    sprintf2(S(szVerReq), "astrolog-ephd required-test");
+    WireEphLoopbackQt(&srvReq, &bProtoReq, &dwCapsReq, szVerReq, &baReqReq,
+      &pconnReq);
+    sprintf2(S(sz), "localhost:%d", (int)srvReq.serverPort());
+    FCloneSz(sz, &us.szEphSrv);
+    EphSrvFinalizeQt();
+    ResetRequiredSrvTestQt();
+    SetRequiredEphSrvTestQt(1, 1, 30000);
+    EphSrvStartupQt();
+    Check(NEphSrvStateTestQt() == 2 && CRequiredTriesSrvTestQt() == 1,
+      "required mode: the dialog welcomed in one attempt (%d)",
+      CRequiredTriesSrvTestQt());
+    Check(FRequiredShownSrvTestQt(), "the dialog latched itself shown");
+    EphSrvFinalizeQt();
+
+    // The ladder against a port nothing listens on: the attempts tick by,
+    // the give-up returns instead of exiting (the suite's hook), and the
+    // dialog stays latched shown.
+    sprintf2(S(sz), "localhost:1");   // Nothing listens on port 1.
+    FCloneSz(sz, &us.szEphSrv);
+    ResetRequiredSrvTestQt();
+    SetRequiredNoExitSrvTestQt(fTrue);
+    SetRequiredEphSrvTestQt(1, 1, 40);
+    EphSrvStartupQt();
+    Check(CRequiredTriesSrvTestQt() >= 1 && FRequiredShownSrvTestQt(),
+      "the give-up made %d attempts and returned, not exited",
+      CRequiredTriesSrvTestQt());
+    EphSrvFinalizeQt();
+    ResetRequiredSrvTestQt();
+    FCloneSz(NULL, &us.szEphSrv);
+    is.fNoEphFound = fNoEphSav;
+    is.fSwissPathSet = fPathSetSav;
+  }
 
 LRestore:
   if (proc.state() != QProcess::NotRunning) {

@@ -3109,6 +3109,7 @@ void SwissEnsurePath()
   cFound = 0;
   for (i = 0; i < edl.cDir; i++)
     cFound += edl.rgfHas[i];
+  is.fNoEphFound = cFound <= 0;
 
   if (cFound > 0) {
     cLost = CDirJoinEphemQ(&edl, szPath, cchEphemPathMax + 1, fJoinFound);

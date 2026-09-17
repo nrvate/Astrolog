@@ -92,6 +92,7 @@
 
 #include "astrolog.h"
 #include "qtdriver.h"
+#include "ephproto.h"   // eph::kDefaultPort, the address field's default
 
 // The git sha this build came from, shown in the About dialog's version
 // line. Generated at build time by a FORCE rule in every makefile that
@@ -4647,6 +4648,22 @@ void ShowAboutDialogQt()
   plabelVer->setFont(fontBold);
   playout->addWidget(plabelVer);
   playout->addWidget(new QLabel(QString("Released %1").arg(szDateCore)));
+#ifdef EPHEM
+  // The backend's one quiet status line (plan §7): address, state, and
+  // the server's version from WELCOME -- empty when the backend is not
+  // the selected one, in which case nothing shows at all.
+  {
+    char szStatus[cchSzMax];
+    SzEphSrvStatusQt(szStatus, sizeof(szStatus));
+    if (szStatus[0]) {
+      QLabel *plabelSrv = new QLabel(QString::fromUtf8(szStatus));
+      plabelSrv->setTextFormat(Qt::PlainText);
+      plabelSrv->setTextInteractionFlags(Qt::TextBrowserInteraction);
+      playout->addSpacing(8);
+      playout->addWidget(plabelSrv);
+    }
+  }
+#endif
   playout->addSpacing(8);
   for (i = 0; i < (int)(sizeof(rgszAboutQt)/sizeof(char *)); i++) {
     if (!*rgszAboutQt[i]) {
@@ -5138,6 +5155,37 @@ void ShowCalcDialogQt()
       (FCmSwissEph() ? cmSwiss : (FCmSwissMosh() ? cmMoshier :
       (FCmSwissJPL() ? cmJPL : (FCmMatrix() ? cmMatrix :
       (FCmJPLWeb() ? cmJPLWeb : cmNone)))))]);
+    // The server backend's address, beside the method's controls and
+    // visible only while it is the selection (EPHEMERIS_CLIENT_PLAN.md
+    // §7; the Windows dialog has no such row). Empty means the default,
+    // localhost on the protocol's port -- shown as placeholder text, the
+    // same way -bW's empty setting reads back as default.
+    QLineEdit *peditAddr = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_W");
+    QLabel *plabelAddr = (QLabel *)PwRcFindQt(rgbuilt, "dlSe_W");
+    if (peditAddr != NULL) {
+      if (SzSet(us.szEphSrv))
+        peditAddr->setText(QString::fromUtf8(us.szEphSrv));
+      else
+        peditAddr->setPlaceholderText(QString("localhost:%1")
+          .arg(eph::kDefaultPort));
+      auto FShowAddr = [pcbEphem]() {
+        char szT[cchSzMax];
+        SzFieldQt(szT, pcbEphem->currentText());
+        return FMatchSz(szT, szEphem[cmEphSrv]);
+      };
+      if (plabelAddr != NULL)
+        plabelAddr->setVisible(FShowAddr());
+      peditAddr->setVisible(FShowAddr());
+      QObject::connect(pcbEphem, &QComboBox::editTextChanged, peditAddr,
+        [peditAddr, plabelAddr](CONST QString &str) {
+          char szT[cchSzMax];
+          SzFieldQt(szT, str);
+          bool fShow = FMatchSz(szT, szEphem[cmEphSrv]);
+          if (plabelAddr != NULL)
+            plabelAddr->setVisible(fShow);
+          peditAddr->setVisible(fShow);
+        });
+    }
   }
   if (pcbAyan != NULL) {
     // The list offers the named ayanamsas with their offsets, and the
@@ -5236,6 +5284,15 @@ void ShowCalcDialogQt()
     if (FMatchSz(sz, szEphem[cmMatrix]))
       us.fMatrixPla = fTrue;
 #endif
+    // The address rides along with the server selection: stored as
+    // typed, and an empty field is the default, exactly as -bW reads
+    // "" (EPHEMERIS_CLIENT_PLAN.md §3).
+    QLineEdit *peditAddr = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_W");
+    if (peditAddr != NULL && FCmSrv()) {
+      char szAddr[cchSzMax];
+      SzFieldQt(szAddr, peditAddr->text());
+      FCloneSz(szAddr[0] ? szAddr : NULL, &us.szEphSrv);
+    }
   }
   us.rZodiacOffset = rs;
   us.nHouseSystem = nc;

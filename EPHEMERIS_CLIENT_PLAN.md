@@ -49,11 +49,11 @@ QT_GUI_PLAN.md.
   exists, chunks are counted by row, animation windows are read only on
   their grid. The ledger at the top of that file is the state of every
   finding. Increment 4 starts on a new branch off `qt`.
-- **Increment 4 is open** (§10): the required-server dialog and exit
-  ladder, the status line, and §7's address field. It is the only piece
-  with user-visible blocking UI -- the maintainer tests such changes by
-  hand, so build both binaries, run the quick suite, and hand over before
-  committing.
+- **Increment 4 is landed** on `qt` (squash of branch `ephclient4`,
+  cac4183; work log item 6): the required-server dialog and exit
+  ladder (`EXIT_NO_EPHEMERIS` 86), the About status line, and §7's
+  address field. The maintainer hand-tested the blocking UI (the
+  ladder is exponential, 1s doubling to 8s, and Cancel exits cleanly).
 - **The fork has no open review findings**: `EPHEMERIS_REVIEW.md` F1-F11
   are all fixed or closed there, F9 last (ts.13).
 - **Protocol 2 is landed** on branch `ephdefer` (worktree
@@ -165,12 +165,15 @@ These shaped the spec below; each is a design correction, not trivia.
   configured.
 - **Required-server mode**: when SwissEnsurePath() (calc.cpp:2989-3131)
   finds no ephemeris files at all AND the server backend is what would be
-  used, the server is the only source. Startup then shows a modal
-  "Connecting to cloud ephemeris ..." dialog with a waiting bar and the
-  full text of every connection error encountered, appended per attempt.
-  Retry ladder: 1 second apart, 10 times; then every 60 seconds; give up
-  after one hour total; exit with EXIT_NO_EPHEMERIS (proposed value 86 —
-  confirm no collision with existing exit codes at implementation).
+  used, the server is then the only source. Startup shows a modal
+  "Connecting to cloud ephemeris ..." dialog: a thin muted bar filling
+  across each gap and a state line counting the seconds down, the full
+  text of every connection error appended per attempt, and a Cancel
+  button (the window's X is the same). Retry ladder: one second,
+  doubling to eight, for one hour total; Cancel or an exhausted ladder
+  print everything to stderr and exit with EXIT_NO_EPHEMERIS (86, no
+  collision with the tc* codes 0-2 or the test binary's 0/1). The
+  ladder's own wait pumps user input, so Cancel and X always answer.
 - On drop (once Welcomed): reconnect with exponential backoff (1s doubling,
   capped at 60s, jittered). In-flight requestIds are re-sent verbatim after
   reconnect; requests are pure functions, so there is nothing to resume.
@@ -513,3 +516,25 @@ Each increment lands green (build both binaries, suite) before the next.
    compiled against Qt6 since that afternoon (an unguarded include), and
    the WebSockets module was missing from every build and install recipe
    but two makefiles. Both are fixed on `qt` and shipped in v8.00-qt.24.
+6. **Increment 4 landed: the required-server dialog, the exit ladder, the
+   status line, and the address field** (branch `ephclient4` cac4183,
+   2026-09-16, hand-tested by the maintainer before it landed). With the
+   backend selected and no local ephemeris anywhere
+   (SwissEnsurePath's probe, now recorded in `is.fNoEphFound`), startup
+   shows the modal "Connecting to cloud ephemeris" dialog: a thin muted
+   bar filling across each gap, a state line counting the seconds down,
+   the address, and every error text appended per attempt; retries one
+   second apart, doubling to eight seconds, for an hour total; Cancel or
+   the window's X ends it at once, and either that or the exhausted
+   ladder prints everything to stderr and exits `EXIT_NO_EPHEMERIS`
+   (86, past the tc* codes and the test binary's 0/1). The gap waits
+   pump user input, so Cancel and X always answer; the ladder runs
+   from the startup call only -- mid-session a cast fails soft and the
+   WELCOME recasts it. The About dialog gains the one quiet status line
+   (§7): address, state (connecting / online with the server's version /
+   retry in Ns / not connected). Calculation Settings gains the address
+   field beside the method combo, visible only while the server backend
+   is the selection, empty meaning the default like -bW. Suite: the
+   offline group gained seven checks (detection truth table, the dialog
+   welcoming in one attempt against a loopback server, the ladder
+   giving up and returning under the suite's no-exit hook); 5751/0.

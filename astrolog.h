@@ -1410,6 +1410,13 @@ enum _terminationcode {
   tcForce = 2,
 };
 
+// Process exit code for starting up with the Ephemeris Server backend as
+// the only source of ephemeris data (no local files anywhere) and failing
+// to reach a server after the full retry ladder (qtdriver.cpp). Well past
+// the tc* codes (0-2) and the test binary's 0/1, so a launcher or script
+// can tell "couldn't reach the ephemeris" from every other exit.
+#define EXIT_NO_EPHEMERIS 86
+
 
 /*
 ******************************************************************************
@@ -2513,6 +2520,17 @@ typedef struct _InternalSettings {
   real rDeltaT;        // Delta-T at chart time, in days.
   real jdDeltaT;       // JD for cached Delta-T offset above.
   real rNut;           // Nutation offset.
+  // Kept last on purpose: the positional initializer of `is` (data.cpp)
+  // maps fields in order and value-fills the rest, so a new field here
+  // starts at fFalse with no initializer change -- putting it among the
+  // flags near fSwissPathSet would shift every later field's initializer
+  // by one and break the build (EPHEMERIS_REVIEW.md's is-initializer
+  // trap).
+  flag fNoEphFound;    // Did SwissEnsurePath() find no ephemeris files at
+                       // all in any directory it probed? The Ephemeris
+                       // Server startup (qtdriver.cpp) reads this: the
+                       // server is then the only source, and its
+                       // "Connecting to cloud ephemeris" dialog is shown.
   // A progression target is a local calendar date, and which zone and
   // Daylight Saving it is local to is the NATAL chart's, on the target
   // date -- which can't be known when -p is parsed, since the chart may
