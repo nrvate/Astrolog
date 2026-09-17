@@ -19469,6 +19469,196 @@ LRestore:
 }
 
 
+// ---- Ephemeris source registry, phase 3 (EPHEMERIS_PLUGINS_PLAN.md 4) ----
+//
+// The unit net of increment 3a: the source registry's swiss source answers
+// through FSwissPlanet(), the same decision and execution pair
+// ComputeEphem()'s Swiss branch has always used, and the six reals a host
+// read hands back must be the BYTES of a direct FSwissPlanet() call with
+// the same arguments. The scenario list is the live-parity group's
+// (tropical geocentric, sidereal, heliocentric, topocentric, true node, an
+// unusual centre, a custom node/apsis object, a second sidereal mode, a
+// 1900 instant where delta-t's tidal term is live), laid over a matrix of
+// objects and four instants each. One check per scenario and instant,
+// naming the first object whose bytes moved.
+//
+// This is not the live-parity group's question -- there the local cast is
+// the oracle and the server the claimant -- but the shape is the same:
+// compare whole answers, as bytes, over the flag paths the program really
+// takes.
+
+static void TestEphemRegistryQt()
+{
+  static CONST int rgyea[] = {1900, 1990, 2020, 2050};
+  static CONST int rgobj[] = {oSun, oMoo, oEar, oMer, oVen, oMar, oJup,
+    oSat, oUra, oNep, oPlu, oChi, oCer, oVes, oNod, oSou, oLil, oVul};
+  static CONST char *rgszScen[] = {"tropical geocentric", "sidereal",
+    "heliocentric", "topocentric", "true node",
+    "centered on Mars (swe_calc_pctr)",
+    "a custom object that is Jupiter's perihelion (swe_nod_aps)",
+    "sidereal on the solar system plane", "a 1900 instant"};
+  CI ciCoreSav = ciCore, ciMainSav = ciMain;
+  flag fIgnoreSav = ignore[custLo];
+  int nTypSav = rgTypSwiss[0], nObjSav = rgObjSwiss[0],
+    nPntSav = rgPntSwiss[0], nFlgSav = rgFlgSwiss[0];
+  real jd, r1, r2, r3, r4, r5, r6, h1, h2, h3, h4, h5, h6;
+  EPHQUERY eq;
+  int iy, iScen, iObj, obj, cent, cBad, iBad, iSour;
+  flag fHost, fDirect, fBad;
+
+  Group("Ephemeris source registry");
+  {
+    // The selection: files on, the Swiss files source (nSwissEph 0), so
+    // FEphSubmit()'s derived chain holds exactly one source, swiss -- the
+    // delegation this group is about.
+    Borrow bFiles(us.fEphemFiles, fTrue), bSwiss(us.nSwissEph, 0);
+    Borrow bMat(us.fMatrixPla, fFalse);
+    Borrow bSid(us.fSidereal, fFalse), bSid2(us.fSidereal2, fFalse);
+    Borrow bTopo(us.fTopoPos, fFalse), bTrueN(us.fTrueNode, fFalse);
+    Borrow bCtr(us.objCenter, (int)oEar), bMoon(us.fMoonMove, fFalse);
+    Borrow bTrue(us.fTruePos, fFalse), bBary(us.fBarycenter, fFalse);
+    Borrow bNoNut(us.fNoNutation, fFalse);
+    Borrow bZoff(us.rZodiacOffset, 0.0), bZall(us.rZodiacOffsetAll, 0.0);
+    Borrow bElv(us.elvDef, 0.0);
+    // The registry is the same five sources in every build. Key lookup is
+    // how a chain is named, so a typo'd key must be -1, not 0.
+    Check(CEphSrc() == cEphSrcBuiltIn, "the registry holds the %d built-in "
+      "sources (%d)", cEphSrcBuiltIn, CEphSrc());
+    Check(IEphSrcFromKey("swiss") == 0 && IEphSrcFromKey("jpl") == 1 &&
+      IEphSrcFromKey("moshier") == 2 && IEphSrcFromKey("matrix") == 3 &&
+      IEphSrcFromKey("none") == 4 && IEphSrcFromKey("nonesuch") < 0,
+      "every source resolves by its key, and a bad key resolves to none");
+    Check(IEphSrcPrimary() == IEphSrcFromKey("swiss"),
+      "today's selection derives the swiss source as the chain's head");
+
+    for (iScen = 0; iScen < 9; iScen++) {
+      us.fSidereal = fFalse; us.fSidereal2 = fFalse;
+      us.fTopoPos = fFalse; us.fTrueNode = fFalse;
+      us.objCenter = oEar;
+      ignore[custLo] = fTrue;
+      cent = oEar;
+      // The Jupiter-perihelion custom of the live-parity group's scenario
+      // 6: rgTypSwiss 2 (another object), perihelion point.
+      if (iScen == 6) {
+        ignore[custLo] = fFalse;
+        rgTypSwiss[0] = 2; rgObjSwiss[0] = oJup; rgPntSwiss[0] = 3;
+        rgFlgSwiss[0] = 0;
+      }
+      switch (iScen) {
+      case 1: us.fSidereal = fTrue; break;
+      case 2: cent = oSun; break;
+      case 3: us.fTopoPos = fTrue; break;
+      case 4: us.fTrueNode = fTrue; break;
+      case 5: cent = oMar; break;
+      case 7: us.fSidereal = fTrue; us.fSidereal2 = fTrue; break;
+      }
+      for (iy = 0; iy < 4; iy++) {
+        OraclePinUtQt(iScen == 8 ? 1900 : rgyea[iy], 6, 15, 12.0);
+        ciCore.lon = 122.3; ciCore.lat = 47.6;
+        // Cast first: is.T is CastChart()'s own cook of ciCore, and
+        // JulianDayFromTime() reads it -- the same shape the numeric
+        // oracle group uses.
+        CastChart(0);
+        jd = JulianDayFromTime(is.T);
+        cBad = 0; iBad = -1; fBad = fFalse;
+        for (iObj = 0; iObj <= (iScen == 6 ? 0 : (int)(sizeof(rgobj) /
+            sizeof(int)) - 1); iObj++) {
+          obj = iScen == 6 ? custLo : rgobj[iObj];
+          // The library is history-dependent on a first call: measured,
+          // a FSwissPlanet(oLil) at a pctr centre shifts the NEXT pctr
+          // call by ~1e-8 degrees, and that call's own second invocation
+          // is stable again. Casts are deterministic because they make
+          // one call per object; this net makes two, so warm the object
+          // first and compare host against a direct call with the same
+          // history behind it.
+          FSwissPlanet(obj, jd, cent, &r1, &r2, &r3, &r4, &r5, &r6);
+          // The host's answer: a one-object query down the derived chain.
+          EphQueryInit(&eq, jd);
+          FEphQueryAdd(&eq, obj, 0, cent);
+          FEphSubmit(&eq);
+          fHost = FEphRead(&eq, obj, &h1, &h2, &h3, &h4, &h5, &h6);
+          // The oracle: the call the source delegates to, directly.
+          fDirect = FSwissPlanet(obj, jd, cent, &r1, &r2, &r3, &r4, &r5, &r6);
+          if (fDirect != fHost) {
+            cBad++; if (!fBad) { iBad = obj; fBad = fTrue; }
+            continue;
+          }
+          if (!fDirect)
+            continue;
+          // The six reals, as bytes, in FSwissPlanet()'s own argument
+          // order -- which is what FEphRead() hands back.
+          for (iSour = 0; iSour < 6; iSour++) {
+            real rH, rD;
+            switch (iSour) {
+            case 0: rH = h1; rD = r1; break;
+            case 1: rH = h2; rD = r2; break;
+            case 2: rH = h3; rD = r3; break;
+            case 3: rH = h4; rD = r4; break;
+            case 4: rH = h5; rD = r5; break;
+            default: rH = h6; rD = r6; break;
+            }
+            if (memcmp(&rH, &rD, sizeof(real)) != 0) {
+              cBad++; if (!fBad) { iBad = obj; fBad = fTrue; }
+              break;
+            }
+          }
+        }
+        Check(cBad == 0, "%s, year %d: the host's answers are the bytes of "
+          "the direct calls over %d objects (%d differ; first: %s)",
+          rgszScen[iScen], iScen == 8 ? 1900 : rgyea[iy],
+          iScen == 6 ? 1 : (int)(sizeof(rgobj) / sizeof(int)), cBad,
+          iBad >= 0 ? szObjName[iBad] : "");
+      }
+      if (iScen == 6) {
+        rgTypSwiss[0] = nTypSav; rgObjSwiss[0] = nObjSav;
+        rgPntSwiss[0] = nPntSav; rgFlgSwiss[0] = nFlgSav;
+      }
+    }
+    ignore[custLo] = fIgnoreSav;
+  }
+
+  // The walk: a source that refuses an object leaves it to the next
+  // source, the notice says so once, and a chain that answers nothing
+  // reads as failure. The none source refuses every object, so a chain of
+  // [none, swiss] is the walk with a fallback serving everything, and a
+  // chain of [none] alone is the walk with nothing behind it.
+  {
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    CastChart(0);
+    jd = JulianDayFromTime(is.T);
+    {
+      Borrow bFiles(us.fEphemFiles, fTrue), bSwiss(us.nSwissEph, 0);
+      int rgisrc[2];
+      EPHQUERY eq2;
+
+      rgisrc[0] = IEphSrcFromKey("none");
+      rgisrc[1] = IEphSrcFromKey("swiss");
+      EphQueryInit(&eq2, jd);
+      FEphQueryAdd(&eq2, oMoo, 0, oEar);
+      FEphQueryAdd(&eq2, oNod, 0, oEar);
+      Check(FEphSubmitChain(&eq2, rgisrc, 2), "a chain whose head refuses "
+        "everything is answered by its second source");
+      Check(FEphRead(&eq2, oMoo, &h1, &h2, &h3, &h4, &h5, &h6) &&
+        FSwissPlanet(oMoo, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6) &&
+        memcmp(&h1, &r1, sizeof(real)) == 0,
+        "the fallback's answer is the direct call's, bytes again");
+      Check(FEphFallbackNotice(), "a fallback serving something raises the "
+        "notice");
+      EphQueryInit(&eq2, jd);
+      FEphQueryAdd(&eq2, oMoo, 0, oEar);
+      Check(!FEphSubmitChain(&eq2, rgisrc, 1), "a chain that reaches only "
+        "none answers nothing");
+      Check(!FEphRead(&eq2, oMoo, &h1, &h2, &h3, &h4, &h5, &h6),
+        "an unanswered object reads as failure");
+      Check(!FEphFallbackNotice(), "nothing served means no notice");
+    }
+  }
+
+  ciCore = ciCoreSav;
+  ciMain = ciMainSav;
+}
+
 static CONST QTTESTENTRY rgqttestQt[] = {
   {"dialogs",              TestDialogsQt},
   {"popup-net",            TestPopupNetQt},
@@ -19520,6 +19710,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"ephemeris-list",       TestEphemerisListQt},
   {"ephem-server",         TestEphSrvQt},
   {"ephem-server-live",    TestEphSrvLiveQt},
+  {"ephem-registry",       TestEphemRegistryQt},
   {"chart-list",           TestChartListFilterQt},
   {"info-time",            TestChartInfoTimeQt},
   {"info-coord",           TestChartInfoCoordQt},

@@ -559,6 +559,20 @@ extern flag FSkipEphem P((int, int, flag));
 extern flag FSwissPlanetSpec P((int, int, SWISSSPEC *));
 extern flag FSwissPlanet
   P((int, real, int, real *, real *, real *, real *, real *, real *));
+
+// The ephemeris source registry (ephem.h, ephem.cpp, ephswiss.cpp):
+// EPHEMERIS_PLUGINS_PLAN.md section 4.
+extern int CEphSrc P((void));
+extern EPHSRCDEF *PephsrcGet P((int));
+extern int IEphSrcFromKey P((CONST char *));
+extern int IEphSrcPrimary P((void));
+extern void EphQueryInit P((EPHQUERY *, real));
+extern flag FEphQueryAdd P((EPHQUERY *, int, int, int));
+extern flag FEphFallbackNotice P((void));
+extern flag FEphSubmitChain P((EPHQUERY *, CONST int *, int));
+extern flag FEphSubmit P((EPHQUERY *));
+extern flag FEphRead
+  P((CONST EPHQUERY *, int, real *, real *, real *, real *, real *, real *));
 extern void SwissHouse P((real, real, real, int,
   real *, real *, real *, real *, real *, real *, real *, real *));
 extern real RObliquityTrue P((real));

@@ -3017,6 +3017,7 @@ typedef struct _WindowInternal {
 } WI;
 #endif
 
+#include "ephem.h"
 #include "extern.h"
 
 #ifdef __MINGW32__
