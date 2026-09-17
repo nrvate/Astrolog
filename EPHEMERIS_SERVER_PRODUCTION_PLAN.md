@@ -9,8 +9,8 @@ to be resumed from like the other two.
 ## Status
 
 - **2026-09-17: planned, refined against the tree, nothing started.**
-  Phase 0 needs the maintainer's decisions. Phase 1 (TLS) and Phase 2
-  (operability) can start without them.
+  Phase 0 is decided except what waits for a host (below). Phase 1 (TLS)
+  is next.
 - Every claim about the current code below was checked in
   `ephsrv/eph_srv.cpp`, `qtdriver.cpp` or the vendored uWebSockets v20.80.0
   and uSockets on that date. Re-check before acting on one if the code has
@@ -56,35 +56,34 @@ The gaps:
 | G15 | Not packaged or deployed | no release artifact, no `make install`, no unit, no image; the fork is an unpinned sibling checkout (and ts.12-ts.14 are untagged) |
 | G16 | Client default is `localhost` | `FUrlEphSrv()`; a user with no local files sits in the connecting dialog |
 
-## 2. Phase 0 -- decisions (the maintainer's)
+## 2. Phase 0 -- decisions
 
-Each changes what later phases build. A recommendation for each.
+Decided by the maintainer, 2026-09-17:
 
-1. **Who may use it.** Open to any Astrolog install, or keyed?
-   *Recommend:* open, with per-address limits (Phase 3), and optional tokens
-   an operator can require. Keyed-only ends zero configuration.
-2. **Where it runs.** One VPS, several regions, or a managed platform
-   behind a load balancer? This decides three things: who holds the
-   certificate (the server, or the balancer), how real client addresses
-   arrive (directly, `X-Forwarded-For`, or the PROXY protocol), and whether
-   the server ever sees TLS at all.
-   *Recommend:* build TLS in-process (Phase 1) and a trusted-proxy mode
-   (Phase 3) both; each is small, and the choice of host stays reversible.
-3. **What data it serves.** Measured: the bundled `ephem/` is 19 MB
-   (1800-2400 main files, 29 main-belt asteroids, 39 outer bodies); the
-   main files' full 13,000-year range from `/swe` (`sepl*`, `semo*`,
-   `seas*`) is 105 MB; `/swe` whole is about 887,000 files. A chart naming
-   an asteroid the server lacks fails that object with ERROR 5.
-   *Recommend:* full-range main files plus the bundle's asteroids (~125 MB)
-   to start; add asteroids on demand.
-4. **The public address.** A hostname, e.g. `wss://ephem.<domain>` on 443.
-   Nothing ships pointing at it until Phase 6.
-5. **Privacy.** A REQUEST carries the chart's instants and, for topocentric
-   positions, latitude, longitude and altitude: a birth time and place.
-   *Recommend:* the server never logs request contents or Swiss error text
-   (G5), keeps no per-request record beyond counts, and the client ships a
-   short privacy note (About, README) in the release that makes the public
-   server its default.
+1. **Access: open, with optional tokens.** Any Astrolog install connects
+   with no configuration; per-address limits protect the service (Phase
+   3); an operator can require tokens later.
+2. **Hosting: a single VPS, TLS in the server.** Certificates from
+   certbot on the host, the server terminating TLS itself on 443, a
+   systemd unit (Phase 5). The trusted-proxy mode of Phase 3 drops to
+   optional -- nothing sits in front of the server.
+3. **Privacy: counts only, never contents.** No instants, coordinates,
+   star names or Swiss error text in logs; metrics are aggregates; the
+   client ships a privacy note with the release that makes the public
+   server its default (G5, Phase 2).
+
+Deferred to when the VPS is set up, because nothing built before then
+depends on them:
+
+4. **The ephemeris set on the host.** The server answers from whatever
+   `--ephe` names, so this is a copy, not code. Locally it is `/swe`
+   (about 887,000 files). Measured for a smaller host, if one is wanted:
+   the bodies in astromcp's object groups (314 numbered plus 3 files it
+   generates) with the 5 asteroids only Astrolog's Object Selections adds
+   come to 91 MB; the main files add 2 MB (1800-2400), 12 MB (601 BCE -
+   2999 CE, astromcp's span) or 109 MB (the full range).
+5. **The hostname.** Built against a placeholder; the client's default
+   address changes only at go-live (Phase 6).
 
 ## 3. Phase 1 -- TLS
 
@@ -114,10 +113,11 @@ Each changes what later phases build. A recommendation for each.
   connections are untouched. That OpenSSL behaves this way on a context
   with live connections is to be **proven by the gate**, not assumed; the
   fallback is Phase 2's drain plus a supervised restart.
-- `--allow-plaintext-public`: without it, a server with no certificate
-  refuses to start unless `--bind` is a loopback address, so a public
-  plain-text listener takes intent. (Gates bind loopback, so they are
-  unaffected.)
+- Plain text stays local unless asked for: with no certificate the default
+  bind is loopback, and binding any other address without one needs
+  `--allow-plaintext-public`. The gates and the suite connect to
+  127.0.0.1, so they are unaffected; a server started for LAN use today
+  would need the flag.
 - SNI (`addServerName`) is available if one process ever serves several
   names; not needed for one hostname.
 
@@ -163,8 +163,8 @@ Each changes what later phases build. A recommendation for each.
 
 ## 4. Phase 2 -- operability
 
-- `--bind ADDR` (IPv4 or IPv6; default all, as today, so the gates do not
-  change).
+- `--bind ADDR` (IPv4 or IPv6): the default is every interface with a
+  certificate and loopback without one (Phase 1).
 - **Signals.** Handlers do nothing but hand off: a dedicated thread blocks
   in `sigwait()` on SIGTERM, SIGINT and SIGHUP (masked in every other
   thread before the loops start), then acts through `Loop::defer`, which
@@ -273,7 +273,7 @@ server, those binaries stay in use for years.
   developer override pointing at `/shares/swisseph`.
 - **A container image**: multi-stage -- the fork and the server built in a
   builder; a small runtime image with the binary, CA certificates and a
-  non-root user; the ephemeris set (0.3) as a volume or a separate data
+  non-root user; the ephemeris set (0.4) as a volume or a separate data
   image; `HEALTHCHECK` on `/healthz`; `STOPSIGNAL SIGTERM` and a stop
   timeout above `--drain-seconds`.
 - **A systemd unit** for a plain host: `DynamicUser=yes`,
@@ -304,7 +304,7 @@ server, those binaries stay in use for years.
   latency, CPU and memory, and sizing `--threads`, `--max-conns` and
   `--cells-per-sec` from it. This is also Phase 7's measurement.
 - **Then one client release** makes the public `wss://` URL the default
-  address, with `localhost` a setting away, the privacy note (0.5), and
+  address, with `localhost` a setting away, the privacy note (0.3), and
   the terminal "update" message (Phase 4). From that release on, the
   required-server dialog means something to a user with no local files.
 
@@ -323,13 +323,13 @@ server, those binaries stay in use for years.
 
 | Phase | Blocked on | Lands as |
 |---|---|---|
-| 0 decisions | the maintainer | a conversation |
+| 0 decisions | done, bar the host's data and name | -- |
 | 1 TLS | nothing | server + client + `eph_wsclient --tls` + TLS gate; the largest code phase |
 | 2 operability | nothing | signals, three routes, logs; a drain gate |
-| 3 limits | 0.1 for tokens only | limits + robustness-gate legs |
+| 3 limits | nothing | limits + robustness-gate legs |
 | 4 compatibility | must precede 6 | small code, a rule, one gate |
-| 5 packaging | 0.2, 0.3 | scripts, image, unit, release job |
-| 6 go-live | 0.2-0.5, phases 1-5 | deploy, load test, one client release |
+| 5 packaging | nothing (the data copy waits for the host) | scripts, image, unit, release job |
+| 6 go-live | a VPS, 0.4, 0.5, phases 1-5 | deploy, load test, one client release |
 | 7 | the load test | only if measured |
 
 Phases 1 and 2 are independent and can be separate branches. Phases 3 and
