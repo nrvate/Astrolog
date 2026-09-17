@@ -199,7 +199,15 @@ make qt6-test -j4                # Qt6; QT6_PKGCONFIG says where it is.
                                  # These exist only because this machine's
                                  # Qt6 is off pkg-config's path: "make qt"
                                  # already picks Qt6 wherever pkg-config
-                                 # can see it
+                                 # can see it. That hand-installed Qt6
+                                 # needs the WebSockets module too, since
+                                 # the Ephemeris Server backend: it had
+                                 # none, and check-full's Qt6 legs failed
+                                 # to build (and then ran a STALE Qt6 test
+                                 # binary, "passing") until 2026-09-17,
+                                 # when qtwebsockets-everywhere-src-6.8.3
+                                 # was built into /usr/local/qt6 with
+                                 # qt-configure-module
 QTTESTBIN=./astrolog-qt6-test ./run-qt-tests.sh  # the suite against Qt6:
                                  # the suite passes there too
 make check                       # what CI used to run on every push:
