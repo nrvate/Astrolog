@@ -69,9 +69,21 @@ session migration onto the v4 header is queued on the maintainer's go.
    reader's verdicts on THAT set are the gate; their header
    leniency/strictness review rides in the same reply.
 
-**Then stop and ask the maintainer about phases 3-7.** They were never
-approved as automatically next; §7 lists them and they are a separate
-decision.
+**The maintainer has approved phases 3-7 (2026-09-18).** They were never
+approved as automatically next; §7 lists them and they were a separate
+decision. Two conditions ride the approval: the **locked artifacts stay
+byte-identical at cf83dc9** (`ephsrv/ephproto.h`, `ephsrv/registries.json`,
+`ephsrv/conformance/`) -- any spec problem found while implementing becomes a
+new named drop with a new digest and a fresh fixture gate on both sides, not
+an in-place edit -- and the **shared scratch stays put**:
+`/nvm/work/ephv4`, `/nvm/work/ephv4-drop/` and
+`/nvm/work/ephv4-drop-verdicts.md` are read by Prometheia's fixture gate and
+pinned-header test. Phases 3-7 are Astrolog-repo work and are built on this
+tree; the Prometheia session's own queue (session migration, truthful
+corrApplied, wire-map delete, SegmentCache wiring) is separate and runs on
+the maintainer's go. The fitter is theirs: `prometheiad` answers SEGDATA;
+`astrolog-ephd` serves samples and does not advertise the `segments` cap
+(work log item 2).
 
 - **Open for the maintainer, no action needed before the lock.** Whether to
   patch vendored Swiss's `lunar_osc_elem()` to retard in the barycentric
@@ -1833,9 +1845,10 @@ the gates the phase touches.
      fixtures; GOLDEN PASS 149 bit-exact; ROBUST PASS; make check all
      clear, suite 5772 passed, 0 failed. The locked set's digest is
      unchanged (`1c934c7d…`); nothing in this commit moves bytes.
-   - **Phases 3-7 remain a separate maintainer decision.** On the
-     Prometheia side, vendoring is done and the session migration
-     (prometheiad onto the v4 header) is queued on the maintainer's go.
+   - **Phases 3-7 are approved as next (2026-09-18), under the two
+     conditions in the Status section.** On the Prometheia side, vendoring
+     is done and the session migration (prometheiad onto the v4 header) is
+     queued on the maintainer's go.
 
 3. **The five debts of the protocol pass, cleared (2026-09-17).** What phase 2
    deferred, and the five §3 rules written after its spec freeze.
