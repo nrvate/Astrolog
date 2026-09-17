@@ -277,6 +277,7 @@ Delivery block (12 bytes):
 | u8 | maxDegreeHint — segments only: the largest Chebyshev degree the client wants to buffer; 0 lets the server choose. The server also caps by its own capability (A.3 0x000F). 0 for samples |
 | u32 | chunkRows — a hint; the server clamps it to `[1, maxChunkRows]`, and 0 means `maxChunkRows` |
 | f32 | segTargetErrArcsec — 0 for samples; for segments a finite value > 0, the angular error the client asks for |
+| u32 | deadlineMs — how soon the client wants the answer, 0 for "no deadline stated". Advisory: a server MAY choose a cheaper strategy to meet it (samples now rather than a fit), and MUST NOT fail a request for missing it. `priority` says which order to work in; this says how long the work may take, which is a different question and the one that decides between two strategies |
 
 Question block:
 | type | field |
@@ -403,19 +404,26 @@ The payload is empty, and the envelope's requestId names the request.
 Requires the `lookup` cap.
 | type | field |
 |---|---|
-| u16 | maxMatches — 1..the lookup TLV's limit |
+| u16 | maxMatches — the budget for the WHOLE message, 1..the lookup TLV's limit |
 | u8 | flags — bit 0 prefix match, bit 1 include hypotheticals, bit 2 include stars |
-| u8 | reserved |
-| str8 | query — a name, designation or number, case-insensitive |
+| u8 | nQueries — 1..255 |
+| … | nQueries × `str8 query` — a name, designation or number, case-insensitive |
 | TLV | LOOKUP extensions (none assigned) |
+
+`maxMatches` bounds the answer as a whole, not each query: the server fills it
+in query order and sets `truncated` when it runs out. A per-query budget would
+make one small message ask for 255 × 65,535 matches, and a prefix query like
+"a" matches thousands of stars in a real catalogue. Batching is what makes
+LOOKUP usable at all for a body picker: Astrolog's Object Selections offers 78
+bodies, which is 78 round trips one query at a time.
 
 #### LOOKUP_RESULT (10, server → client)
 | type | field |
 |---|---|
-| u16 | n |
-| u8 | flags — bit 0 truncated (more matches exist) |
-| u8 | nSources, then nSources × str8 |
-| … | n × MATCH |
+| u8 | nQueries — the same count the LOOKUP carried, in the same order |
+| u8 | flags — bit 0 truncated (the message budget ran out) |
+| u8 | nSources, then nSources × str8 — shared by every query |
+| … | per query: `u16 n`, then n × MATCH |
 
 MATCH:
 | type | field |
@@ -488,7 +496,14 @@ Segment rules:
 - **Residuals, measured not claimed.** `errArcsec`, `errRelDist` and
   `errRateArcsecPerDay` are the largest residuals the server MEASURED against
   its own answers over the segment, on a check set of at least 4(d+1) instants
-  that includes points between the fit nodes. The server SHOULD make
+  that **MUST include both endpoints of the segment's interval** (τ = ±1) as
+  well as points between the fit nodes. The endpoints are not optional: a
+  Chebyshev interpolant's error peaks near the interval ends, and its
+  DERIVATIVE's error peaks there much harder. Measured: the Moon's
+  `errRateArcsecPerDay` declared from interior points alone was 1.48″/day where
+  an independent sample found 3.6″/day; with the endpoints in the check set the
+  same fit declares 4.65″/day. A server obeying the weaker reading
+  under-reports by a factor of two to three, always in its own favour. The server SHOULD make
   `errArcsec` ≤ `segTargetErrArcsec`; where it cannot, it reports what it
   measured. (A rigorous bound costs more than the fit; a dense measured
   residual is cheap and honest.)
@@ -498,6 +513,24 @@ Segment rules:
   fit then serves every zodiac, and a true-of-date ayanamsa -- which carries
   nutation in longitude, 17″ with an 18.6-year period -- is fitted where it
   belongs instead of roughening every body's fit.
+- **Fit the lattice, not the ask.** A server SHOULD fit fixed lattice cells
+  that cover the requested span -- 32 days, aligned from J2000 -- rather than
+  the span it was asked for, so that two clients whose spans overlap share the
+  fits. The lattice is the SERVER's: a client MUST NOT be able to name a
+  boundary, or the sharing is gone. Measured cost of doing so (one 384-day span
+  against twelve 32-day cells, same body, same target): the worst case is +14%
+  sampler calls (the Moon at 1″), and in half the cases the cells are CHEAPER,
+  because fitting a year as one interval wastes probes before it splits. The
+  client is unaffected: it gets contiguous coverage of what it asked for, and a
+  little either side.
+- **Quantise the ask, downward only.** A server MAY round
+  `segTargetErrArcsec` onto its own ladder (0.001 / 0.01 / 0.1 / 1″), so that
+  two clients asking 0.1 and 0.12 share one fit, but it MUST round toward a
+  FINER fit, never a coarser one. The residual it reports is the truth about
+  what was served, but a client asked for a number because something downstream
+  depends on it, and "you got worse than you asked, look at the metadata" is a
+  defect that surfaces as a wrong ingress time three layers away. Rounding
+  finer costs only the server, which is the right party to bear it.
 - **Which objects.** The segments capability (A.3 0x000F) carries an A.12
   kinds bitmask; an object of another kind is per-object error 2. Some objects
   fit badly on purpose: the Moon's osculating perigee moves degrees a day and
