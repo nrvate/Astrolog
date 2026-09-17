@@ -9,6 +9,7 @@
 // re-encode to identical bytes. Exit 0 with "EPHPROTO4 PASS".
 
 #include "ephproto4.h"
+#include "ephswiss.h"
 
 #include <cstdio>
 #include <fstream>
@@ -150,6 +151,114 @@ int main(int argc, char **argv) {
     Check(std::fabs(pos[0] - (1 + 2 * tau + 3 * T2)) < 1e-15, "segment value");
     Check(std::fabs(vel[0] - (2 + 3 * dT2) / 10.0) < 1e-15, "segment velocity");
     Check(pos[1] == 0.0 && vel[1] == 0.0 && pos[2] == 5.0 && vel[2] == 0.0, "segment other axes");
+  }
+
+  // Appendix B: the Swiss mapping (ephswiss.h).
+  {
+    using namespace eph4::swiss;
+    auto body = [](int32_t naif, int32_t *ipl, int32_t *extra, int32_t *res, bool *fApprox) {
+      return BodyFromNaif(naif, ipl, extra, res, fApprox);
+    };
+    int32_t ipl, extra, res;
+    bool fa;
+    Check(body(10, &ipl, &extra, &res, &fa) == 0 && ipl == SE_SUN && extra == 0, "10 is the Sun");
+    Check(body(4, &ipl, &extra, &res, &fa) == 0 && ipl == SE_MARS && !fa, "4 is Mars (system barycentre)");
+    Check(body(9, &ipl, &extra, &res, &fa) == 0 && ipl == SE_PLUTO, "9 is Pluto");
+    Check(body(599, &ipl, &extra, &res, &fa) == 0 && ipl == SE_JUPITER && extra == SEFLG_CENTER_BODY,
+          "599 is Jupiter's body centre");
+    Check(body(401, &ipl, &extra, &res, &fa) == 0 && ipl == SE_PLMOON_OFFSET + 401, "401 is Phobos");
+    Check(body(20000001, &ipl, &extra, &res, &fa) == 0 && ipl == SE_CERES, "Ceres is SE_CERES, not SE_AST_OFFSET+1");
+    Check(body(20002060, &ipl, &extra, &res, &fa) == 0 && ipl == SE_CHIRON, "Chiron is SE_CHIRON");
+    Check(body(20005145, &ipl, &extra, &res, &fa) == 0 && ipl == SE_PHOLUS, "Pholus is SE_PHOLUS");
+    Check(body(20000433, &ipl, &extra, &res, &fa) == 0 && ipl == SE_AST_OFFSET + 433, "433 Eros");
+    Check(body(20134340, &ipl, &extra, &res, &fa) == 0 && ipl == SE_PLUTO && res == 9 && fa,
+          "134340 answered as Pluto, approximated");
+    Check(body(3, &ipl, &extra, &res, &fa) == eph4::kOErrUnsupported, "3 (EMB) unsupported");
+    Check(body(2000433, &ipl, &extra, &res, &fa) == eph4::kOErrUnknownBody, "the old 2000000+N form is unknown");
+    Check(body(20000000 + 21464746, &ipl, &extra, &res, &fa) == eph4::kOErrUnknownBody,
+          "asteroid numbers past Swiss's ipl bound refused");
+
+    eph4::Profile geo;
+    std::string why;
+    SwissCall c;
+    eph4::Object o;
+    o.kind = eph4::kObjOrbitPoint; o.naif = 301; o.point = eph4::kPtAscNode; o.method = eph4::kMethMean;
+    Check(MapObject(o, geo, eph4::kTimeTT, eph4::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.kind == kCallCalc && c.ipl == SE_MEAN_NODE && !c.fOpposite,
+          "Moon mean ascending node is SE_MEAN_NODE");
+    o.point = eph4::kPtDescNode; o.method = eph4::kMethOsculating;
+    Check(MapObject(o, geo, eph4::kTimeTT, eph4::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.ipl == SE_TRUE_NODE && c.fOpposite,
+          "Moon osculating descending node is SE_TRUE_NODE plus 180");
+    o.point = eph4::kPtApo; o.method = eph4::kMethInterpolated;
+    Check(MapObject(o, geo, eph4::kTimeTT, eph4::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.ipl == SE_INTP_APOG, "interpolated apogee is SE_INTP_APOG");
+    o.point = eph4::kPtAscNode; o.method = eph4::kMethOsculating; o.nNative = 1;
+    Check(MapObject(o, geo, eph4::kTimeTT, eph4::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.kind == kCallNodAps && c.ipl == SE_MOON && c.nodMethod == SE_NODBIT_OSCU && c.point == 0,
+          "nNative 1 forces swe_nod_aps for the Moon (Astrolog's custom points)");
+    o.nNative = 0; o.naif = 5; o.point = eph4::kPtPeri; o.method = eph4::kMethMean;
+    Check(MapObject(o, geo, eph4::kTimeTT, eph4::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.kind == kCallNodAps && c.ipl == SE_JUPITER && c.nodMethod == SE_NODBIT_MEAN && c.point == 2,
+          "Jupiter mean perihelion through swe_nod_aps");
+    o.naif = 301; o.point = eph4::kPtAscNode; o.method = eph4::kMethInterpolated;
+    Check(MapObject(o, geo, eph4::kTimeTT, eph4::CanonicalNaN(), SEFLG_SWIEPH, &c, &why) ==
+              eph4::kOErrUnsupported, "no interpolated lunar node");
+
+    // Astrolog's topocentric Fagan-Bradley chart on the invariable plane.
+    eph4::Profile topo;
+    topo.observer = eph4::kObsTopo;
+    topo.siteLonEastDeg = -122.3; topo.siteLatDeg = 47.6; topo.siteHeightM = 50.0;
+    topo.zodiac = "fagan-bradley";
+    topo.siderealPlane = eph4::kSidPlaneInvariable;
+    eph4::Object sun;
+    sun.naif = 10;
+    Check(MapObject(sun, topo, eph4::kTimeTT, 69.2, SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.iflag == (SEFLG_SWIEPH | SEFLG_SPEED | SEFLG_TOPOCTR | SEFLG_SIDEREAL) &&
+              c.sidMode == (SE_SIDM_FAGAN_BRADLEY | SE_SIDBIT_SSY_PLANE) && c.fTopo &&
+              c.topo[0] == -122.3 && !c.fUT && !c.fAddDeltaT,
+          "topocentric sidereal on the invariable plane is Astrolog's GetSwissFlags");
+    eph4::Profile p2;
+    p2.corrections = eph4::kCorrLightTime | eph4::kCorrDeflection;
+    p2.frame = eph4::kFrameJ2000;
+    p2.plane = eph4::kPlaneEquator;
+    p2.speeds = 0;
+    Check(MapObject(sun, p2, eph4::kTimeUT1, eph4::CanonicalNaN(), SEFLG_MOSEPH, &c, &why) == 0 &&
+              c.iflag == (SEFLG_MOSEPH | SEFLG_NOABERR | SEFLG_J2000 | SEFLG_NONUT | SEFLG_EQUATORIAL) &&
+              c.fUT, "no aberration, J2000 equator, no speeds, UT1 through _ut");
+    p2.corrections = eph4::kCorrDeflection;
+    Check(MapObject(sun, p2, eph4::kTimeTT, 0.0, SEFLG_SWIEPH, &c, &why) == eph4::kOErrUnsupported,
+          "a mask Swiss cannot honour (deflection alone) is unsupported");
+    eph4::Profile jup;
+    jup.observer = eph4::kObsBody;
+    jup.observerBody = 5;
+    Check(MapObject(sun, jup, eph4::kTimeTT, 0.0, SEFLG_SWIEPH, &c, &why) == 0 && c.kind == kCallPctr &&
+              c.ipl == SE_SUN && c.iplCenter == SE_JUPITER, "the Sun seen from Jupiter is swe_calc_pctr");
+    eph4::Object h;
+    h.kind = eph4::kObjHypothetical; h.name = "vulcan";
+    Check(MapObject(h, geo, eph4::kTimeTT, 0.0, SEFLG_SWIEPH, &c, &why) == 0 && c.ipl == SE_VULCAN,
+          "the vulcan token is SE_VULCAN");
+    h.name = "white-moon";
+    Check(MapObject(h, geo, eph4::kTimeTT, 0.0, SEFLG_SWIEPH, &c, &why) == 0 && c.ipl == SE_WHITE_MOON,
+          "the white-moon token is SE_WHITE_MOON");
+    h.name = "cupido";
+    Check(MapObject(h, geo, eph4::kTimeTT, 0.0, SEFLG_SWIEPH, &c, &why) == 0 && c.ipl == SE_CUPIDO,
+          "the cupido token is SE_CUPIDO");
+    eph4::Object d;
+    d.kind = eph4::kObjDesignation; d.name = "2060";
+    Check(MapObject(d, geo, eph4::kTimeTT, 0.0, SEFLG_SWIEPH, &c, &why) == 0 && c.ipl == SE_CHIRON,
+          "designation 2060 is Chiron");
+    eph4::Profile user;
+    user.zodiac = "user";
+    user.anchorEpoch = {2451545.0, 0.0};
+    user.anchorAyanamsaDeg = 23.85;
+    Check(MapObject(sun, user, eph4::kTimeTT, 0.0, SEFLG_SWIEPH, &c, &why) == 0 &&
+              c.sidMode == SE_SIDM_USER && c.sidT0 == 2451545.0 && c.sidAyanT0 == 23.85,
+          "user zodiac is SE_SIDM_USER with the anchor");
+    Check(std::string(ZodiacTokenForSwissMode(SE_SIDM_LAHIRI)) == "lahiri" &&
+              std::string(ZodiacTokenForSwissMode(SE_SIDM_LAHIRI_ICRC)) == "lahiri-icrc" &&
+              std::string(ZodiacTokenForSwissMode(SE_SIDM_USER)) == "user",
+          "zodiac tokens follow SE_SIDM_* numbering");
   }
 
   // Zodiac registry: the Swiss mode numbers are the token indices.

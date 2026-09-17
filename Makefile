@@ -204,9 +204,9 @@ ephsrv:
 # fork -- the codec is header-only -- so make check runs it on any
 # checkout, under AddressSanitizer and UBSan: the truncation sweep in it is
 # only a memory-safety check with a sanitizer behind it.
-ephproto4_test: ephsrv/ephproto4_test.cpp ephsrv/ephproto4.h
+ephproto4_test: ephsrv/ephproto4_test.cpp ephsrv/ephproto4.h ephsrv/ephswiss.h
 	g++ -std=gnu++17 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
-	  -fno-sanitize-recover=all -I ephsrv -o $@ ephsrv/ephproto4_test.cpp
+	  -fno-sanitize-recover=all -I ephsrv -I . -o $@ ephsrv/ephproto4_test.cpp
 
 # Every build this fork has, in the order the pre-commit checks want them.
 all: $(NAME) qt qt-test win wcli
