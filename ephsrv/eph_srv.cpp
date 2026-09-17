@@ -21,6 +21,9 @@
 //   7. operations -- /healthz, /readyz, /metrics, and the SIGTERM drain
 //   8. main
 //
+// The log is one logfmt line an event (LogEvt, below the options): see
+// ephsrv/deploy/README.md for the events and their keys.
+//
 // Every handler is a template over uWS's SSL parameter: one binary serves
 // ws:// or, given --tls-cert and --tls-key, wss:// (production plan Phase 1).
 
@@ -67,13 +70,19 @@ using uWS::WebSocket;
 // 1. Startup options (plan 11)
 // ---------------------------------------------------------------------------
 
+// Log levels, most severe first: a line is written when its level is at or
+// above --log-level's.
+enum LogLevel { kLogError = 0, kLogWarn = 1, kLogInfo = 2, kLogDebug = 3 };
+static const char *const kLogLevelNames[] = {"error", "warn", "info", "debug"};
+
 struct Options {
   uint16_t port = eph::kDefaultPort;
   int threads = (int)std::thread::hardware_concurrency();
   uint32_t cacheMb = 256;      // result cache, TOTAL across loops; 0 disables
   uint32_t maxCells = eph::kMaxCellsDefault;  // objects x rows per REQUEST
   std::string ephe;            // --ephe, may be ';'-joined
-  bool verbose = false;
+  int logLevel = kLogInfo;     // --log-level; --verbose is debug
+  bool logContents = false;    // --log-contents: what each REQUEST asked
   std::string bind;            // --bind: one address; empty is every interface
   std::string tlsCert;         // --tls-cert: PEM, the chain after the leaf
   std::string tlsKey;          // --tls-key: PEM private key
@@ -91,15 +100,145 @@ struct Options {
 
 static Options gOpt;
 
-static void Log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-static void Log(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  vfprintf(stdout, fmt, ap);
-  va_end(ap);
-  fputc('\n', stdout);
-  fflush(stdout);
-}
+// ---------------------------------------------------------------------------
+// The log: one logfmt line an event, to stdout, flushed as written.
+//
+//   ts=2026-09-17T12:34:56.789Z level=info evt=conn.open conn=17 loop=3 addr=203.0.113.9
+//
+// ts, level and evt lead every line, in that order; the event's own keys
+// follow. A value holding a space, '=', '"', '\\' or a control character is
+// quoted, with \" \\ \n \t escapes; an empty one is "". Levels:
+//   error  the server could not do something: a fatal start, a reload that
+//          failed, an ERROR 4
+//   warn   a client refused or cut off (connection caps, a HELLO refused
+//          or never sent, every other ERROR), a degraded start, a drain
+//          that had to cut answers off
+//   info   the default: lifecycle, and every connection, HELLO and REQUEST
+//   debug  per-loop detail, backpressure stalls, the HTTP routes
+// Never logged at any level: a token. Logged only under --log-contents,
+// which says so at startup: what a REQUEST asked -- instants, bodies,
+// sidereal and topocentric settings (production plan decision 0.3).
+// Swiss's per-row error text names the instant and is never logged.
+// ---------------------------------------------------------------------------
+static bool FLog(int level) { return level <= gOpt.logLevel; }
+
+class LogEvt {
+ public:
+  LogEvt(int level, const char *evt) : fOn(FLog(level)) {
+    if (!fOn) return;
+    timespec ts {};
+    clock_gettime(CLOCK_REALTIME, &ts);
+    tm t {};
+    gmtime_r(&ts.tv_sec, &t);
+    char sz[80];
+    snprintf(sz, sizeof(sz), "ts=%04d-%02d-%02dT%02d:%02d:%02d.%03ldZ level=%s evt=",
+             t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min,
+             t.tm_sec, ts.tv_nsec / 1000000L, kLogLevelNames[level]);
+    line = sz;
+    line += evt;
+  }
+  // One write under stdio's lock: loops log from their own threads, and a
+  // line is never interleaved with another.
+  ~LogEvt() {
+    if (!fOn) return;
+    line += '\n';
+    flockfile(stdout);
+    fwrite(line.data(), 1, line.size(), stdout);
+    fflush(stdout);
+    funlockfile(stdout);
+  }
+  // A builder: keys only, no header, never written -- Take() hands the text
+  // to a line that will be (the REQUEST's contents, kept on its Stream).
+  LogEvt() : fOn(true) {}
+  std::string Take() {
+    fOn = false;
+    return std::move(line);
+  }
+  LogEvt &Raw(const std::string &keys) {
+    if (fOn) line += keys;
+    return *this;
+  }
+  LogEvt(const LogEvt &) = delete;
+  LogEvt &operator=(const LogEvt &) = delete;
+
+  bool On() const { return fOn; }
+  LogEvt &U(const char *key, uint64_t v) {
+    if (fOn) Key(key), line += std::to_string(v);
+    return *this;
+  }
+  LogEvt &I(const char *key, int64_t v) {
+    if (fOn) Key(key), line += std::to_string(v);
+    return *this;
+  }
+  LogEvt &F(const char *key, double v, int prec) {
+    if (fOn) {
+      char sz[64];
+      snprintf(sz, sizeof(sz), "%.*f", prec, v);
+      Key(key), line += sz;
+    }
+    return *this;
+  }
+  LogEvt &X(const char *key, uint64_t v) {
+    if (fOn) {
+      char sz[24];
+      snprintf(sz, sizeof(sz), "0x%" PRIx64, v);
+      Key(key), line += sz;
+    }
+    return *this;
+  }
+  LogEvt &B(const char *key, bool v) { return U(key, v ? 1 : 0); }
+  LogEvt &S(const char *key, std::string_view v) {
+    if (!fOn) return *this;
+    Key(key);
+    bool fQuote = v.empty();
+    for (unsigned char ch : v)
+      if (ch <= ' ' || ch == '=' || ch == '"' || ch == '\\' || ch == 0x7f) {
+        fQuote = true;
+        break;
+      }
+    if (!fQuote) {
+      line += v;
+      return *this;
+    }
+    line += '"';
+    for (unsigned char ch : v) {
+      if (ch == '"' || ch == '\\') line += '\\', line += (char)ch;
+      else if (ch == '\n') line += "\\n";
+      else if (ch == '\t') line += "\\t";
+      else if (ch < ' ' || ch == 0x7f) {
+        char sz[8];
+        snprintf(sz, sizeof(sz), "\\x%02x", ch);
+        line += sz;
+      } else line += (char)ch;
+    }
+    line += '"';
+    return *this;
+  }
+  __attribute__((format(printf, 2, 3)))
+  LogEvt &Msg(const char *fmt, ...) {
+    if (!fOn) return *this;
+    char sz[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(sz, sizeof(sz), fmt, ap);
+    va_end(ap);
+    return S("msg", sz);
+  }
+  // A connection's identity: its id, loop and peer address. A template so
+  // Conn, defined below, need not be complete here.
+  template <class C> LogEvt &Conn(const C *c) {
+    return U("conn", c->id).I("loop", c->loop).S("addr", c->addr);
+  }
+
+ private:
+  void Key(const char *key) {
+    line += ' ';
+    line += key;
+    line += '=';
+  }
+  bool fOn;
+  std::string line;
+};
 
 // True when nothing was found and file-backed work must fail whole-request
 // with ERROR 5 instead of per-object rows.
@@ -119,7 +258,9 @@ static bool parseU(const char *s, uint64_t *out) {
 
 static const char kUsage[] =
   "usage: astrolog-ephd [--port N] [--bind ADDR] [--ephe path] [--threads N]\n"
-  "                     [--cache-mb N] [--max-cells N] [--verbose]\n"
+  "                     [--cache-mb N] [--max-cells N]\n"
+  "                     [--log-level error|warn|info|debug] [--verbose]\n"
+  "                     [--log-contents]\n"
   "                     [--tls-cert FILE --tls-key FILE] [--drain-seconds N]\n"
   "  --tls-cert/--tls-key  serve wss:// (PEM; the chain after the leaf);\n"
   "                        SIGHUP reloads both without dropping connections\n"
@@ -138,6 +279,11 @@ static const char kUsage[] =
   "  --hello-seconds N     close a connection with no HELLO after N s (10)\n"
   "  --tokens FILE         accepted tokens, one a line; --require-token\n"
   "                        refuses a HELLO without one of them\n"
+  "  --log-level L         logfmt lines at L and above (default info: every\n"
+  "                        connection, HELLO and REQUEST); --verbose is debug\n"
+  "  --log-contents        log what each REQUEST asks -- instants, bodies,\n"
+  "                        settings -- for debugging; off by default, and a\n"
+  "                        public server should leave it off\n"
   "  GET /healthz /readyz /metrics on the same port (Prometheus text)\n";
 
 static bool parseArgs(int argc, char **argv, Options *opt) {
@@ -171,7 +317,16 @@ static bool parseArgs(int argc, char **argv, Options *opt) {
       if (!needValue(&val)) return false;
       opt->ephe = val;
     } else if (strcmp(a, "--verbose") == 0) {
-      opt->verbose = true;
+      opt->logLevel = kLogDebug;
+    } else if (strcmp(a, "--log-level") == 0) {
+      const char *val;
+      if (!needValue(&val)) return false;
+      int l = 0;
+      while (l <= kLogDebug && strcmp(val, kLogLevelNames[l]) != 0) l++;
+      if (l > kLogDebug) return false;
+      opt->logLevel = l;
+    } else if (strcmp(a, "--log-contents") == 0) {
+      opt->logContents = true;
     } else if (strcmp(a, "--bind") == 0) {
       const char *val;
       if (!needValue(&val) || !*val) return false;
@@ -473,6 +628,14 @@ struct Stream {
   // stream keeps the entry alive however the cache turns over meanwhile.
   std::shared_ptr<const eph::CacheEntry> result;
   std::vector<uint8_t> buf;     // chunk scratch, sized once, reused
+  // For the request's log line, written as its last chunk goes out.
+  std::chrono::steady_clock::time_point tReq;  // REQUEST received
+  double computeMs = 0.0;       // 0 on a cache hit
+  bool fHit = false;
+  uint32_t stalls = 0;          // times it waited for the client to read
+  uint64_t bytes = 0;           // DATA bytes sent
+  std::string contents;         // --log-contents only: what was asked
+  bool fLogged = false;
 };
 
 struct Conn {
@@ -486,6 +649,13 @@ struct Conn {
   std::string addr;
   std::string budget;
   bool fCountedAddr = false;    // holds a place in gConnsByAddr
+  // For the log: an id unique for the process's life, the loop, what HELLO
+  // said the client is, and the connection's totals for its close line.
+  uint64_t id = 0;
+  int loop = -1;
+  std::string client;           // HELLO's version string
+  uint32_t hellos = 0;
+  uint64_t reqs = 0, hits = 0, cells = 0, errors = 0, bytesOut = 0;
 
   // The place is released when the Conn goes, however it goes -- a client
   // that drops between the upgrade and open never reaches the close handler.
@@ -495,7 +665,11 @@ struct Conn {
   Conn(Conn &&o) noexcept
     : out(std::move(o.out)), proto(o.proto), tOpen(o.tOpen),
       addr(std::move(o.addr)), budget(std::move(o.budget)),
-      fCountedAddr(o.fCountedAddr) { o.fCountedAddr = false; }
+      fCountedAddr(o.fCountedAddr), id(o.id), loop(o.loop),
+      client(std::move(o.client)), hellos(o.hellos), reqs(o.reqs),
+      hits(o.hits), cells(o.cells), errors(o.errors), bytesOut(o.bytesOut) {
+    o.fCountedAddr = false;
+  }
   Conn &operator=(Conn &&) = delete;
   ~Conn();
 };
@@ -699,6 +873,7 @@ struct LoopCtx {
 };
 
 static thread_local LoopCtx *tlc = nullptr;   // this thread's loop state
+static std::atomic<uint64_t> gConnIds{0};     // the log's conn= ids
 
 // ---------------------------------------------------------------------------
 // Limits (production plan Phase 3). Shared by every loop, so behind one
@@ -771,8 +946,8 @@ static bool LoadTokens() {
   if (gOpt.tokensFile.empty()) return true;
   FILE *f = fopen(gOpt.tokensFile.c_str(), "r");
   if (!f) {
-    Log("ephd: cannot read --tokens %s: %s", gOpt.tokensFile.c_str(),
-        strerror(errno));
+    LogEvt(kLogError, "fatal").S("file", gOpt.tokensFile)
+      .Msg("cannot read --tokens %s: %s", gOpt.tokensFile.c_str(), strerror(errno));
     return false;
   }
   char line[512];
@@ -785,8 +960,9 @@ static bool LoadTokens() {
     if (i == std::string::npos || t[i] == '#') continue;
     t = t.substr(i);
     if (t.size() > eph::kTokenMax) {
-      Log("ephd: a token in %s is longer than %zu bytes; refusing to start",
-          gOpt.tokensFile.c_str(), eph::kTokenMax);
+      LogEvt(kLogError, "fatal").S("file", gOpt.tokensFile)
+        .Msg("a token in %s is longer than %zu bytes; refusing to start",
+             gOpt.tokensFile.c_str(), eph::kTokenMax);
       fclose(f);
       return false;
     }
@@ -794,8 +970,8 @@ static bool LoadTokens() {
   }
   fclose(f);
   // Counted, never printed: the log is no place for credentials.
-  Log("%zu token(s) from %s%s", gTokens.size(), gOpt.tokensFile.c_str(),
-      gOpt.requireToken ? ", required" : "");
+  LogEvt(kLogInfo, "tokens").U("count", gTokens.size())
+    .S("file", gOpt.tokensFile).B("required", gOpt.requireToken);
   return true;
 }
 
@@ -819,9 +995,26 @@ SendEnvelope(WebSocket<SSL, true, Conn> *ws, uint16_t type,
   if (payloadLen) memcpy(msg.data() + eph::kEnvelopeSize, payload, payloadLen);
   auto st = ws->send(std::string_view((char *)msg.data(), msg.size()),
                      uWS::OpCode::BINARY);
-  if (tlc && st != WebSocket<SSL, true, Conn>::SendStatus::DROPPED)
-    tlc->m.bytesSent += msg.size();
+  if (st != WebSocket<SSL, true, Conn>::SendStatus::DROPPED) {
+    if (tlc) tlc->m.bytesSent += msg.size();
+    ((Conn *)ws->getUserData())->bytesOut += msg.size();
+  }
   return st;
+}
+
+// The protocol's ERROR codes by name, for the log's name= key.
+static const char *ErrName(int32_t code) {
+  switch (code) {
+    case eph::kErrBad: return "bad";
+    case eph::kErrLimits: return "limits";
+    case eph::kErrUnknown: return "unknown_type";
+    case eph::kErrInternal: return "internal";
+    case eph::kErrEphemeris: return "ephemeris";
+    case eph::kErrRateLimited: return "rate_limited";
+    case eph::kErrToken: return "token";
+    case eph::kErrVersion: return "version";
+    default: return "other";
+  }
 }
 
 template <bool SSL>
@@ -835,12 +1028,17 @@ static void SendError(WebSocket<SSL, true, Conn> *ws, uint32_t requestId,
   memcpy(payload.data(), fixed, 8);
   memcpy(payload.data() + 8, text ? text : "", n + 1);
   if (tlc) tlc->m.errors[code > 0 && code <= eph::kErrMax ? code : 0]++;
+  Conn *c = (Conn *)ws->getUserData();
+  c->errors++;
   // Every ERROR text is fixed or a count, never a request's contents: Swiss's
   // per-row text, which names the instant, goes only to the client, inside
   // the DATA metadata. Keep it that way (production plan decision 0.3) --
   // a new ERROR that quotes a request must not be logged with its text.
-  Log("ephd: ERROR %d to request %u: %.120s", code, requestId,
-      text ? text : "");
+  // The server's own failures are errors; a client's mistakes, limits and
+  // a missing ephemeris are warnings about that client.
+  LogEvt(code == eph::kErrInternal ? kLogError : kLogWarn, "error")
+    .Conn(c).U("req", requestId).I("code", code).S("name", ErrName(code))
+    .S("msg", std::string_view(text ? text : "").substr(0, 160));
   SendEnvelope(ws, eph::kMsgError, requestId, payload.data(), payload.size());
 }
 
@@ -959,6 +1157,68 @@ static bool ExecuteRequest(LoopCtx *lc, const eph::Request &req,
   return true;
 }
 
+// What a REQUEST asked, as log keys, for --log-contents: the window, the
+// flags and every object -- a body by its Swiss id, a star as s:name, a
+// node or apsis as n:id/point/method.
+static std::string RequestContents(const eph::Request &req) {
+  LogEvt e;
+  e.F("jd", req.jdStart, 6).U("step_s", req.stepSeconds)
+    .B("tt", (req.iflag & eph::kIflagTimeTT) != 0).X("iflag", req.iflag);
+  if (req.iflag & eph::kIflagCenter) e.I("center", req.center);
+  if (req.iflag & SEFLG_SIDEREAL)
+    e.I("sid_mode", req.sidMode).F("sid_t0", req.sidT0, 6)
+     .F("sid_ayan", req.sidAyanOff, 6);
+  if (req.iflag & SEFLG_TOPOCTR)
+    e.F("topo_lon", req.topoLon, 6).F("topo_lat", req.topoLat, 6)
+     .F("topo_elv", req.topoElv, 1);
+  if (req.jplFile[0]) e.S("jpl", req.jplFile);
+  std::string objs;
+  for (const eph::ObjSpec &o : req.objs) {
+    if (!objs.empty()) objs += ',';
+    if (o.kind == eph::kObjStar) objs += std::string("s:") + o.name;
+    else if (o.kind == eph::kObjNodAps)
+      objs += "n:" + std::to_string(o.id) + "/" + std::to_string(o.point) +
+              "/" + std::to_string(o.method);
+    else objs += std::to_string(o.id);
+  }
+  e.S("bodies", objs);
+  return e.Take();
+}
+
+// One line per REQUEST answered, at info: its size, whether the cache had
+// it, how long computing and delivering it took, and the loop's cache.
+// ERRORs have their own line (SendError), so every REQUEST gets exactly
+// one of the two.
+template <bool SSL>
+static void LogRequest(WebSocket<SSL, true, Conn> *ws, const Stream &s,
+                       uint64_t bytes) {
+  LogEvt e(kLogInfo, "req");
+  if (!e.On()) return;
+  Conn *c = (Conn *)ws->getUserData();
+  e.Conn(c).U("req", s.requestId).U("objs", s.nObj).U("rows", s.nTimeRows)
+    .U("cells", (uint64_t)s.nObj * s.nTimeRows).U("prec", s.precision == eph::kPrecF32 ? 32 : 64)
+    .U("chunks", (s.nTimeRows + s.chunkRows - 1) / s.chunkRows)
+    .S("cache", s.fHit ? "hit" : "miss").F("compute_ms", s.computeMs, 3)
+    .F("total_ms", std::chrono::duration<double, std::milli>(
+         std::chrono::steady_clock::now() - s.tReq).count(), 3)
+    .U("bytes", bytes).U("stalls", s.stalls).U("queued", c->out.size() - 1);
+  if (tlc)
+    e.U("cache_entries", tlc->cache.entries())
+     .F("cache_kib", (double)tlc->cache.usedBytes() / 1024.0, 1)
+     .U("cache_evictions", tlc->cache.evictions());
+  e.Raw(s.contents);
+}
+
+// A stream waiting for its client to read: debug, since a slow reader is
+// normal, and the count is in /metrics and on the request's line.
+template <bool SSL>
+static void LogStall(WebSocket<SSL, true, Conn> *ws, Stream &s) {
+  s.stalls++;
+  LogEvt(kLogDebug, "stall").Conn((Conn *)ws->getUserData())
+    .U("req", s.requestId).U("row", s.nextRow).U("rows", s.nTimeRows)
+    .U("buffered", ws->getBufferedAmount());
+}
+
 // Stream completed chunks to the client, honoring uWS backpressure: stop
 // at the first BACKPRESSURE and resume from the drain callback. uWS's
 // BACKPRESSURE means the frame WAS taken and buffered -- only DROPPED means
@@ -977,6 +1237,7 @@ static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
     while (s.nextRow < s.nTimeRows) {
       if (ws->getBufferedAmount() > kStreamBackpressure) {
         if (tlc) tlc->m.backpressureWaits++;
+        LogStall(ws, s);
         return;   // the rest on drain, once the peer has read some
       }
       uint32_t rows = s.nTimeRows - s.nextRow;
@@ -986,16 +1247,25 @@ static void FlushStreams(WebSocket<SSL, true, Conn> *ws) {
                           rows, s.nTimeRows, s.nObj, s.precision,
                           s.result->meta.data(), s.result->cols.data(),
                           &chunkLen);
+      // The request's line goes out BEFORE its last chunk, so it is in the
+      // log by the time a client could have its answer -- a gate reading
+      // the log straight after a request never races it.
+      if (s.nextRow + rows == s.nTimeRows && !s.fLogged) {
+        s.fLogged = true;
+        LogRequest(ws, s, s.bytes + eph::kEnvelopeSize + chunkLen);
+      }
       // The chunk buffer holds the DATA payload; SendEnvelope wraps it in
       // the 16-byte envelope the protocol requires.
       auto st = SendEnvelope(ws, eph::kMsgData, s.requestId, s.buf.data(),
                              chunkLen);
       if (st == WebSocket<SSL, true, Conn>::SendStatus::DROPPED)
         return;   // not sent: this chunk again on drain
+      s.bytes += eph::kEnvelopeSize + chunkLen;
       s.nextRow += rows;
       s.chunkIndex++;
       if (st == WebSocket<SSL, true, Conn>::SendStatus::BACKPRESSURE) {
         if (tlc) tlc->m.backpressureWaits++;
+        if (s.nextRow < s.nTimeRows) LogStall(ws, s);
         return;   // sent and buffered: the rest on drain
       }
     }
@@ -1010,6 +1280,7 @@ static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc,
   Conn *c = (Conn *)ws->getUserData();
 
   Stream s;
+  s.tReq = std::chrono::steady_clock::now();
   s.requestId = env.requestId;
   s.precision = req.precision;
   s.nObj = (uint32_t)req.objs.size();
@@ -1040,7 +1311,13 @@ static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc,
   }
 
   s.buf.resize(eph::dataPayloadSize(s.nObj, (size_t)s.chunkRows, s.precision));
-  uint32_t nObj = s.nObj, nRows = s.nTimeRows, chunkRows = s.chunkRows;
+  uint32_t nObj = s.nObj, nRows = s.nTimeRows;
+  s.fHit = lc->lastWasHit;
+  s.computeMs = lc->lastComputeMs;
+  if (gOpt.logContents) s.contents = RequestContents(req);
+  c->reqs++;
+  c->cells += (uint64_t)nObj * nRows;
+  if (s.fHit) c->hits++;
   lc->m.requests++;
   if (lc->lastWasHit) {
     lc->m.cacheHits++;
@@ -1053,22 +1330,6 @@ static void RunRequest(WebSocket<SSL, true, Conn> *ws, LoopCtx *lc,
       if (lc->lastComputeMs <= kComputeBucketsMs[b]) lc->m.computeBucket[b]++;
   }
   c->out.push_back(std::move(s));
-  // One line per request under --verbose, and the bench and the cache gate
-  // read it: "cache hit" or "cache miss <ms>", then the cache's state.
-  if (gOpt.verbose) {
-    char szCache[48];
-    if (lc->lastWasHit)
-      snprintf(szCache, sizeof(szCache), "cache hit");
-    else
-      snprintf(szCache, sizeof(szCache), "cache miss %.2f ms", lc->lastComputeMs);
-    Log("ephd: request %u -> %.1f KiB columns, chunks of %u rows, %s; "
-        "cache %zu entries %.1f KiB, %" PRIu64 " hits %" PRIu64
-        " misses %" PRIu64 " evictions",
-        env.requestId, (double)(nObj * nRows * 6 * 8) / 1024.0, chunkRows,
-        szCache, lc->cache.entries(),
-        (double)lc->cache.usedBytes() / 1024.0, lc->cache.hits(),
-        lc->cache.misses(), lc->cache.evictions());
-  }
   FlushStreams(ws);
 }
 
@@ -1097,6 +1358,8 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
       snprintf(sz, sizeof(sz), "this client speaks protocol %u; this server "
                "needs %u to %u -- update Astrolog", (unsigned)vOld,
                (unsigned)eph::kProtoMin, (unsigned)eph::kProtoVersion);
+      LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "version")
+        .U("client_proto", vOld);
       SendError(ws, 0, eph::kErrVersion, sz);
       ws->end(1008, "protocol too old");
       return;
@@ -1126,6 +1389,7 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
   switch (env.type) {
     case eph::kMsgHello: {
       lc->m.hellos++;
+      c->hellos++;
       // Every HELLO is answered: a client that sends a second one is
       // waiting for a WELCOME, and silence would hang it.
       eph::Hello hello;
@@ -1133,7 +1397,11 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
         SendError(ws, env.requestId, eph::kErrBad, "malformed HELLO");
         return;
       }
+      // What the client says it is, capped: it is the client's text.
+      c->client = hello.version.substr(0, 80);
       if (hello.protoVersion < eph::kProtoMin) {
+        LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "version")
+          .U("client_proto", hello.protoVersion).S("client", c->client);
         char sz[160];
         c->proto = env.version;
         snprintf(sz, sizeof(sz), "this client speaks protocol %u; this server "
@@ -1149,9 +1417,14 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
       if (c->proto == 0)
         c->proto = (uint8_t)std::min<uint32_t>(hello.protoVersion,
                                                eph::kProtoVersion);
+      const char *szToken = hello.token.empty() ? "none" :
+                            gTokens.count(hello.token) ? "accepted" : "unknown";
       if (!hello.token.empty() && gTokens.count(hello.token))
         c->budget = "t:" + hello.token;
       else if (gOpt.requireToken) {
+        LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "token")
+          .S("token", szToken).U("client_proto", hello.protoVersion)
+          .S("client", c->client);
         SendError(ws, env.requestId, eph::kErrToken, hello.token.empty() ?
                   "this server requires a token" : "unknown token");
         ws->end(1008, "token refused");
@@ -1167,10 +1440,19 @@ static void HandleMessage(WebSocket<SSL, true, Conn> *ws,
                           kServerVersion, &wlen, c->proto);
         SendEnvelope(ws, eph::kMsgWelcome, env.requestId, wbuf, wlen);
       }
+      // The first HELLO at info; a repeat, which a client may send, at debug.
+      // The token is described, never written.
+      LogEvt(c->hellos == 1 ? kLogInfo : kLogDebug, "hello").Conn(c)
+        .U("client_proto", hello.protoVersion).U("proto", c->proto)
+        .X("caps", hello.caps).U("build", hello.build).S("client", c->client)
+        .S("token", szToken)
+        .F("after_ms", std::chrono::duration<double, std::milli>(
+             std::chrono::steady_clock::now() - c->tOpen).count(), 1);
       break;
     }
     case eph::kMsgRequest: {
       if (c->proto == 0) {
+        LogEvt(kLogWarn, "hello.refuse").Conn(c).S("reason", "request_first");
         SendError(ws, env.requestId, eph::kErrBad, "REQUEST before HELLO");
         ws->end(1008, "HELLO first");
         return;
@@ -1325,9 +1607,38 @@ static std::string MetricsText() {
   return out;
 }
 
+// A peer's address as people write it. uWS's own text is the full
+// uncompressed IPv6 form, and a server listening on every interface sees an
+// IPv4 client as IPv4-mapped -- 0000:0000:0000:0000:0000:ffff:7f00:0001 for
+// 127.0.0.1, measured -- so it is unreadable in the log and ungreppable for
+// the address an operator knows. This is also the per-address limits' key,
+// so one client is one key whichever way it arrived.
+static std::string AddrText(std::string_view bin) {
+  char sz[INET6_ADDRSTRLEN] = "";
+  static const unsigned char kMapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+  if (bin.size() == 16 && memcmp(bin.data(), kMapped, 12) == 0)
+    inet_ntop(AF_INET, bin.data() + 12, sz, sizeof(sz));
+  else if (bin.size() == 16)
+    inet_ntop(AF_INET6, bin.data(), sz, sizeof(sz));
+  else if (bin.size() == 4)
+    inet_ntop(AF_INET, bin.data(), sz, sizeof(sz));
+  return sz;
+}
+
+// The HTTP routes at debug: a monitoring system asks every few seconds.
+template <class Res>
+static void LogHttp(Res *res, const char *path, int status) {
+  LogEvt e(kLogDebug, "http");
+  if (!e.On()) return;
+  e.S("path", path).I("status", status);
+  if (tlc) e.I("loop", tlc->index);
+  e.S("addr", AddrText(res->getRemoteAddress()));
+}
+
 template <bool SSL>
 static void WireOpsRoutes(uWS::TemplatedApp<SSL> *app) {
   app->get("/healthz", [](auto *res, auto *) {
+    LogHttp(res, "/healthz", 200);
     res->writeHeader("Content-Type", "text/plain")->end("ok\n");
   });
   app->get("/readyz", [](auto *res, auto *) {
@@ -1335,6 +1646,7 @@ static void WireOpsRoutes(uWS::TemplatedApp<SSL> *app) {
     if (gDraining) why = "draining\n";
     else if (!gHaveEphemeris) why = "no ephemeris directory found at startup\n";
     else if (gListening.load() < gOpt.threads) why = "not every loop is listening\n";
+    LogHttp(res, "/readyz", why ? 503 : 200);
     if (why)
       res->writeStatus("503 Service Unavailable")
          ->writeHeader("Content-Type", "text/plain")->end(why);
@@ -1342,6 +1654,7 @@ static void WireOpsRoutes(uWS::TemplatedApp<SSL> *app) {
       res->writeHeader("Content-Type", "text/plain")->end("ready\n");
   });
   app->get("/metrics", [](auto *res, auto *) {
+    LogHttp(res, "/metrics", 200);
     std::string body = MetricsText();
     res->writeHeader("Content-Type", "text/plain; version=0.0.4")->end(body);
   });
@@ -1394,8 +1707,13 @@ static void DrainTick(us_timer_t *t) {
   if (!FIdle<SSL>(dt->lc) && !fLate)
     return;
   if (fLate && !FIdle<SSL>(dt->lc))
-    Log("ephd: draining: loop %d still had answers unsent after %u s; "
-        "closing", dt->lc->index, gOpt.drainSeconds);
+    LogEvt(kLogWarn, "drain.cut").I("loop", dt->lc->index)
+      .U("drain_s", gOpt.drainSeconds).U("open", dt->lc->socks.size())
+      .Msg("loop %d still had answers unsent after %u s; closing",
+           dt->lc->index, gOpt.drainSeconds);
+  else
+    LogEvt(kLogDebug, "drain.loop").I("loop", dt->lc->index)
+      .U("closing", dt->lc->socks.size());
   EndAll<SSL>(dt->lc, fLate);
   us_timer_close(t);
 }
@@ -1423,8 +1741,12 @@ static void StartDrain(LoopCtx *lc) {
 
 static void Drain(std::vector<LoopCtx> *loops) {
   const bool fTls = gOpt.Tls();
-  Log("ephd: draining: no new connections; answers in flight have %u s",
-      gOpt.drainSeconds);
+  uint64_t open = 0;
+  for (LoopCtx &lc : *loops) open += lc.m.connOpen;
+  LogEvt(kLogInfo, "drain.start").U("drain_s", gOpt.drainSeconds)
+    .U("open", open)
+    .Msg("draining: no new connections; answers in flight have %u s",
+         gOpt.drainSeconds);
   for (LoopCtx &lc : *loops) {
     LoopCtx *plc = &lc;
     lc.loop->defer([plc, fTls]() {
@@ -1469,14 +1791,19 @@ static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
   // constructed here, once, with its address -- see the note on open.
   behavior.upgrade = [](uWS::HttpResponse<SSL> *res, uWS::HttpRequest *req,
                         us_socket_context_t *context) {
-    std::string addr(res->getRemoteAddressAsText());
+    std::string addr = AddrText(res->getRemoteAddress());
     if (const char *why = AdmitConnection(addr)) {
       tlc->m.refusedConns++;
+      LogEvt(kLogWarn, "conn.refuse").I("loop", tlc->index).S("addr", addr)
+        .S("reason", strstr(why, "address") ? "addr_limit" : "conn_limit")
+        .S("msg", why);
       res->writeStatus("503 Service Unavailable")
          ->writeHeader("Content-Type", "text/plain")->end(why);
       return;
     }
     Conn conn;
+    conn.id = ++gConnIds;
+    conn.loop = tlc->index;
     conn.addr = addr;
     conn.budget = "a:" + addr;
     conn.fCountedAddr = true;
@@ -1491,10 +1818,26 @@ static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
     tlc->m.connOpen++;
     tlc->m.connTotal++;
     tlc->socks.insert(ws);
+    LogEvt(kLogInfo, "conn.open").Conn((Conn *)ws->getUserData())
+      .S("scheme", SSL ? "wss" : "ws").U("open", tlc->m.connOpen.load());
   };
-  behavior.close = [](WebSocket<SSL, true, Conn> *ws, int, std::string_view) {
+  // The connection's whole life on one line: how it ended, how long it
+  // lasted, and what it did. uWS reports 1006 for a peer that vanished
+  // without a close frame, and the code a server-side end() gave otherwise.
+  behavior.close = [](WebSocket<SSL, true, Conn> *ws, int code,
+                      std::string_view message) {
     tlc->m.connOpen--;
     tlc->socks.erase(ws);
+    Conn *c = (Conn *)ws->getUserData();
+    uint64_t unsent = 0;
+    for (const Stream &st : c->out) unsent += st.nTimeRows - st.nextRow;
+    LogEvt(kLogInfo, "conn.close").Conn(c).I("code", code)
+      .S("reason", message.substr(0, 64))
+      .F("dur_s", std::chrono::duration<double>(
+           std::chrono::steady_clock::now() - c->tOpen).count(), 3)
+      .U("proto", c->proto).U("reqs", c->reqs).U("hits", c->hits)
+      .U("cells", c->cells).U("errors", c->errors).U("bytes_out", c->bytesOut)
+      .U("unsent_rows", unsent).S("client", c->client);
   };
   WireOpsRoutes(app);
   app->template ws<Conn>("/*", std::move(behavior));
@@ -1509,20 +1852,21 @@ static void WireApp(uWS::TemplatedApp<SSL> *app, LoopCtx *lc) {
   // starts.)
   auto onListen = [lc](us_listen_socket_t *sock) {
     if (sock == nullptr) {
-      Log("ephd: cannot listen on %s port %u (in use, or not an address of "
-          "this host?)", gOpt.bind.empty() ? "every interface," :
-          gOpt.bind.c_str(), (unsigned)gOpt.port);
+      LogEvt(kLogError, "fatal").I("loop", lc->index).U("port", gOpt.port)
+        .Msg("cannot listen on %s port %u (in use, or not an address of "
+             "this host?)", gOpt.bind.empty() ? "every interface," :
+             gOpt.bind.c_str(), (unsigned)gOpt.port);
       exit(1);
     }
     lc->listenSock = sock;
-    gListening++;
-    if (lc->index == 0 || gOpt.verbose)
-      // "listening on port N" is what the gates and the suite wait for;
-      // what follows it may grow, the prefix may not change.
-      Log("listening on port %u (%s, %s, loop %d)", (unsigned)gOpt.port,
-          SSL ? "wss://" : "ws://",
-          gOpt.bind.empty() ? "every interface" : gOpt.bind.c_str(),
-          lc->index);
+    // "evt=listen port=N" is what the gates and the suite wait for: the
+    // first loop's at info, the rest at debug. Its first keys may not
+    // change order.
+    LogEvt(lc->index == 0 ? kLogInfo : kLogDebug, "listen")
+      .U("port", gOpt.port).S("scheme", SSL ? "wss" : "ws")
+      .S("bind", gOpt.bind.empty() ? "*" : gOpt.bind).I("loop", lc->index);
+    if (++gListening == gOpt.threads)
+      LogEvt(kLogInfo, "ready").U("loops", gOpt.threads);
   };
   if (gOpt.bind.empty())
     app->listen((int)gOpt.port, std::move(onListen));
@@ -1542,6 +1886,9 @@ static void HelloSweep(us_timer_t *t) {
   }
   for (void *p : late) {
     lc->m.helloTimeouts++;
+    LogEvt(kLogWarn, "hello.timeout")
+      .Conn((Conn *)((WebSocket<SSL, true, Conn> *)p)->getUserData())
+      .U("hello_s", gOpt.helloSeconds);
     ((WebSocket<SSL, true, Conn> *)p)->end(1008, "no HELLO");
   }
 }
@@ -1558,8 +1905,8 @@ static void SetupLoop(LoopCtx *lc) {
     // Checked at startup already (TlsCheckPair), so this is the files
     // changing in between, not a bad path.
     if (lc->sslApp->constructorFailed()) {
-      Log("ephd: TLS setup failed on loop %d for %s / %s", lc->index,
-          gOpt.tlsCert.c_str(), gOpt.tlsKey.c_str());
+      LogEvt(kLogError, "fatal").I("loop", lc->index).S("cert", gOpt.tlsCert)
+        .S("key", gOpt.tlsKey).Msg("TLS setup failed");
       exit(1);
     }
     WireApp(lc->sslApp.get(), lc);
@@ -1668,11 +2015,12 @@ static bool TlsCheckPair(const std::string &cert, const std::string &key,
 static void TlsReload(std::vector<LoopCtx> *loops) {
   std::string why, expiry;
   if (!TlsCheckPair(gOpt.tlsCert, gOpt.tlsKey, &why, &expiry)) {
-    Log("ephd: SIGHUP: keeping the current certificate: %s", why.c_str());
+    LogEvt(kLogError, "tls.reload.refused").S("cert", gOpt.tlsCert)
+      .Msg("keeping the current certificate: %s", why.c_str());
     return;
   }
-  Log("ephd: SIGHUP: reloading %s (expires %s)", gOpt.tlsCert.c_str(),
-      expiry.c_str());
+  LogEvt(kLogInfo, "tls.reload").S("cert", gOpt.tlsCert).S("key", gOpt.tlsKey)
+    .S("expires", expiry);
   for (LoopCtx &lc : *loops) {
     LoopCtx *plc = &lc;
     lc.loop->defer([plc]() {
@@ -1681,10 +2029,11 @@ static void TlsReload(std::vector<LoopCtx> *loops) {
           SSL_CTX_use_PrivateKey_file(ctx, gOpt.tlsKey.c_str(),
                                       SSL_FILETYPE_PEM) != 1 ||
           SSL_CTX_check_private_key(ctx) != 1)
-        Log("ephd: SIGHUP: loop %d failed mid-reload (the files changed "
-            "again?): %s", plc->index, OpenSslError().c_str());
-      else if (gOpt.verbose)
-        Log("ephd: SIGHUP: loop %d reloaded", plc->index);
+        LogEvt(kLogError, "tls.reload.failed").I("loop", plc->index)
+          .Msg("failed mid-reload (the files changed again?): %s",
+               OpenSslError().c_str());
+      else
+        LogEvt(kLogDebug, "tls.reload.loop").I("loop", plc->index);
     });
   }
 }
@@ -1697,12 +2046,16 @@ static void SignalThread(std::vector<LoopCtx> *loops, sigset_t set) {
   for (;;) {
     int sig;
     if (sigwait(&set, &sig) != 0) continue;
+    LogEvt(kLogInfo, "signal").S("sig", sig == SIGHUP ? "SIGHUP" :
+                                  sig == SIGTERM ? "SIGTERM" : "SIGINT");
     if (sig == SIGHUP) {
       if (gOpt.Tls()) TlsReload(loops);
-      else Log("ephd: SIGHUP: no certificate to reload (plain ws://)");
+      else LogEvt(kLogWarn, "tls.reload.none")
+             .Msg("no certificate to reload (plain ws://)");
     } else if (sig == SIGTERM || sig == SIGINT) {
       if (gDraining.exchange(true)) {
-        Log("ephd: second signal while draining; exiting now");
+        LogEvt(kLogWarn, "exit").I("status", 1)
+          .Msg("second signal while draining; exiting now");
         _exit(1);
       }
       Drain(loops);
@@ -1722,10 +2075,12 @@ int main(int argc, char **argv) {
   if (gOpt.Tls()) {
     std::string why, expiry;
     if (!TlsCheckPair(gOpt.tlsCert, gOpt.tlsKey, &why, &expiry)) {
-      Log("ephd: %s", why.c_str());
+      LogEvt(kLogError, "fatal").S("cert", gOpt.tlsCert).S("key", gOpt.tlsKey)
+        .S("msg", why);
       return 1;
     }
-    Log("TLS certificate %s, expires %s", gOpt.tlsCert.c_str(), expiry.c_str());
+    LogEvt(kLogInfo, "tls.cert").S("cert", gOpt.tlsCert).S("key", gOpt.tlsKey)
+      .S("expires", expiry);
   }
 
   if (!LoadTokens()) return 1;
@@ -1733,26 +2088,37 @@ int main(int argc, char **argv) {
   EphDiscovery disc = DiscoverEphemDirs();
   char szVersion[256];
   swe_version(szVersion);
-  Log("astrolog-ephd %s, Swiss Ephemeris %s", kServerVersion, szVersion);
-  Log("%d event loop(s), context pool %d, result cache %u MiB total",
-      gOpt.threads < 1 ? 1 : gOpt.threads,
-      gOpt.threads < 1 ? 1 : gOpt.threads,
-      gOpt.cacheMb);
-  Log("ephemeris path: %s",
-      disc.resolved.empty() ? "<none found; file-backed requests fail>" :
-      disc.resolved.c_str());
-  if (gOpt.verbose) {
-    for (const EphDir &d : disc.dirs) {
-      Log("  candidate %s%s: %s", d.dir.c_str(),
-          d.explicitDir ? " (explicit)" : "",
-          d.hits.empty() ? "no sentinels" : d.hits.front());
-      for (size_t i = 1; i < d.hits.size(); i++)
-        Log("    %s", d.hits[i]);
-    }
-    if (disc.cDropped)
-      Log("  %d directory(ies) dropped for SWE's 20-dir/242-byte budget",
-          disc.cDropped);
+  LogEvt(kLogInfo, "start").S("version", kServerVersion)
+    .S("swisseph", szVersion).U("proto_min", eph::kProtoMin)
+    .U("proto", eph::kProtoVersion).I("pid", getpid());
+  LogEvt(kLogInfo, "config").U("port", gOpt.port)
+    .S("bind", gOpt.bind.empty() ? "*" : gOpt.bind).B("tls", gOpt.Tls())
+    .I("loops", gOpt.threads < 1 ? 1 : gOpt.threads).U("cache_mb", gOpt.cacheMb)
+    .U("max_cells", gOpt.maxCells).U("max_conns", gOpt.maxConns)
+    .U("max_conns_per_ip", gOpt.maxConnsPerAddr)
+    .U("cells_per_sec", gOpt.cellsPerSec).U("hello_s", gOpt.helloSeconds)
+    .U("idle_s", kIdleTimeoutSeconds).U("drain_s", gOpt.drainSeconds)
+    .S("log_level", kLogLevelNames[gOpt.logLevel])
+    .B("log_contents", gOpt.logContents);
+  if (gOpt.logContents)
+    LogEvt(kLogWarn, "log.contents")
+      .Msg("--log-contents: every REQUEST's instants, bodies and settings "
+           "are logged; not for a public server");
+  if (disc.resolved.empty())
+    LogEvt(kLogWarn, "ephe").S("path", "")
+      .Msg("no ephemeris directory found; file-backed requests fail");
+  else
+    LogEvt(kLogInfo, "ephe").S("path", disc.resolved)
+      .I("dirs", disc.cJoined);
+  for (const EphDir &d : disc.dirs) {
+    std::string hits;
+    for (const char *h : d.hits) hits += (hits.empty() ? "" : ",") + std::string(h);
+    LogEvt(kLogDebug, "ephe.dir").S("dir", d.dir).B("explicit", d.explicitDir)
+      .S("sentinels", hits);
   }
+  if (disc.cDropped)
+    LogEvt(kLogWarn, "ephe.dropped").I("dirs", disc.cDropped)
+      .Msg("directories dropped for SWE's 20-dir/242-byte budget");
 
   // The one process-global SWE call, before any context exists: contexts
   // inherit config at swe_ctx_new(). An empty path is legal -- strict
@@ -1781,8 +2147,9 @@ int main(int argc, char **argv) {
       inet_pton(AF_INET, gOpt.bind.c_str(), &addr.sin_addr);
     if (fd >= 0 && connect(fd, (sockaddr *)&addr, sizeof(addr)) == 0) {
       close(fd);
-      Log("ephd: cannot listen on port %u (another server is listening "
-          "on it)", (unsigned)gOpt.port);
+      LogEvt(kLogError, "fatal").U("port", gOpt.port)
+        .Msg("cannot listen on port %u (another server is listening on it)",
+             (unsigned)gOpt.port);
       return 1;
     }
     if (fd >= 0) close(fd);
@@ -1810,7 +2177,8 @@ int main(int argc, char **argv) {
     for (int j = 0; j < n; j++) {
       swe_ctx *ctx = swe_ctx_new();
       if (ctx == nullptr) {
-        Log("ephd: swe_ctx_new() failed; reducing the pool");
+        LogEvt(kLogError, "ctx.alloc").I("loop", i)
+          .Msg("swe_ctx_new() failed; reducing the pool");
         break;
       }
       loops[i].pool.push_back(ctx);
@@ -1832,13 +2200,14 @@ int main(int argc, char **argv) {
         rlUp.rlim_cur = rl.rlim_max;
         if (setrlimit(RLIMIT_NOFILE, &rlUp) == 0) rl = rlUp;
       }
-      Log("open-file limit %llu (soft), %llu (hard)",
-          (unsigned long long)rl.rlim_cur, (unsigned long long)rl.rlim_max);
-      if (gOpt.maxConns && rl.rlim_cur != RLIM_INFINITY &&
-          rl.rlim_cur < (rlim_t)gOpt.maxConns + 256)
-        Log("ephd: warning: the open-file limit is below --max-conns %u plus "
-            "the ephemeris files; connections past it will be refused by the "
-            "kernel, not by the server", gOpt.maxConns);
+      bool fLow = gOpt.maxConns && rl.rlim_cur != RLIM_INFINITY &&
+                  rl.rlim_cur < (rlim_t)gOpt.maxConns + 256;
+      LogEvt e(fLow ? kLogWarn : kLogInfo, "nofile");
+      e.U("soft", (uint64_t)rl.rlim_cur).U("hard", (uint64_t)rl.rlim_max);
+      if (fLow)
+        e.Msg("the open-file limit is below --max-conns %u plus the ephemeris "
+              "files; connections past it will be refused by the kernel, not "
+              "by the server", gOpt.maxConns);
     }
   }
   // Blocked here, before any thread exists, so every loop inherits the mask
@@ -1868,7 +2237,8 @@ int main(int argc, char **argv) {
   RunLoop(&loops[0]);
   for (std::thread &t : threads) t.join();
 
-  if (gDraining) Log("ephd: drained; exiting");
+  if (gDraining)
+    LogEvt(kLogInfo, "exit").I("status", 0).Msg("drained; exiting");
   for (LoopCtx &lc : loops)
     for (swe_ctx *ctx : lc.pool) {
       swe_close_r(ctx);   // releases file handles; never swe_close(), which

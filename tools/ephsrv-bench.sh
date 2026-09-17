@@ -75,11 +75,11 @@ fi
   "${TLS_SRV[@]}" > "$LOG" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 50); do
-  grep -q "listening on port" "$LOG" 2>/dev/null && break
+  grep -q "evt=listen port=" "$LOG" 2>/dev/null && break
   sleep 0.1
 done
-grep -q "listening on port" "$LOG" || { echo "BENCH FAIL: server did not start"; exit 1; }
-LOOPS=$(sed -nE 's/^([0-9]+) event loop.*/\1/p' "$LOG")
+grep -q "evt=listen port=" "$LOG" || { echo "BENCH FAIL: server did not start"; exit 1; }
+LOOPS=$(sed -nE 's/.* evt=config .* loops=([0-9]+).*/\1/p' "$LOG")
 
 BODIES="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,10005,10006,10007,10008,10009,10010,10011"
 ROWS=1000
@@ -112,7 +112,7 @@ EOF
 for i in $(seq 0 $((COLD - 1))); do
   ask "$SCRATCH/cold.lat" "$(python3 -c "print($JD0 + $i * 100)")"
 done
-grep -oE "cache miss [0-9.]+ ms" "$LOG" | awk '{print $3 * 1000}' > "$SCRATCH/cold.srv"
+grep -oE "cache=miss compute_ms=[0-9.]+" "$LOG" | awk -F= '{print $3 * 1000}' > "$SCRATCH/cold.srv"
 read -r cold_p50 cold_p99 cold_n < <(pct "$SCRATCH/cold.lat")
 read -r cold_s50 cold_s99 _ < <(pct "$SCRATCH/cold.srv")
 

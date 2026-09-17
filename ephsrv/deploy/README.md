@@ -85,11 +85,87 @@ docker stop -t 15 ephd       # drains, then exits 0
 - **Upgrading**: start the new binary on the same port while the old one
   drains? No -- the server refuses a port another server is listening on.
   Stop (drains, clients reconnect on their own), replace, start.
-- **Logs**: stdout, one line an event. Nothing in them names a request's
-  instant, place or bodies, or a token.
+- **Logs**: stdout, one logfmt line an event -- see "Logs" below.
 - **Clients**: an Astrolog whose protocol is older than the server's oldest
   (`kProtoMin`) is told to update and stops retrying; an older server than
   a client speaks gets the client's retry ladder.
+
+## Logs
+
+One line an event on stdout, flushed as written, so journald or the
+container runtime timestamps, stores and rotates it. Every line is
+[logfmt](https://brandur.org/logfmt) and starts with the same three keys:
+
+```
+ts=2026-09-17T13:55:33.870Z level=info evt=req conn=1 loop=1 addr=127.0.0.1 req=1 objs=3 rows=24 cells=72 prec=64 chunks=1 cache=miss compute_ms=5.132 total_ms=5.310 bytes=3873 stalls=0 queued=0 cache_entries=1 cache_kib=4.2 cache_evictions=0
+```
+
+`ts` is UTC to the millisecond. A value with a space, `=`, `"` or a
+control character is quoted, with `\"`, `\\`, `\n` and `\t` escapes. Loki,
+Vector, Grafana and `hl` read it as it is; by hand, `grep ' evt=conn.close '`
+and `grep ' conn=17 '` go a long way -- `conn` is unique for the process's
+life, so one connection's lines are one grep.
+
+**Levels** (`--log-level`, default `info`; `--verbose` is `debug`):
+
+| level | what |
+|---|---|
+| `error` | the server could not do something: a fatal start, a failed certificate reload, an ERROR 4 |
+| `warn` | a client refused or cut off, a degraded start, a drain that cut answers off |
+| `info` | lifecycle, and every connection, HELLO and REQUEST |
+| `debug` | the other loops' listen lines, each ephemeris directory, backpressure stalls, the HTTP routes, per-loop drain and reload |
+
+**Events** and their own keys. `conn loop addr` means a connection's id,
+its event loop and the client's address (IPv4 written as IPv4, even from an
+IPv4-mapped socket):
+
+| evt | level | keys |
+|---|---|---|
+| `start` | info | `version swisseph proto_min proto pid` |
+| `config` | info | every limit and setting the server is running with |
+| `log.contents` | warn | `msg` -- `--log-contents` is on |
+| `tls.cert` | info | `cert key expires` |
+| `tokens` | info | `count file required` -- tokens are counted, never written |
+| `ephe` | info (warn when none) | `path dirs` |
+| `ephe.dir` | debug | `dir explicit sentinels` |
+| `ephe.dropped` | warn | `dirs msg` -- over Swiss's 20-directory, 242-byte path |
+| `nofile` | info (warn when below `--max-conns`) | `soft hard` |
+| `listen` | info (loop 0), debug | `port scheme bind loop` |
+| `ready` | info | `loops` -- every loop is listening |
+| `conn.refuse` | warn | `loop addr reason msg`; reason `conn_limit` or `addr_limit` (HTTP 503) |
+| `conn.open` | info | `conn loop addr scheme open` (connections open on that loop) |
+| `hello` | info (a repeat: debug) | `conn loop addr client_proto proto caps build client token after_ms`; `token` is `none`, `accepted` or `unknown` |
+| `hello.refuse` | warn | `conn loop addr reason`; reason `version`, `token` or `request_first` |
+| `hello.timeout` | warn | `conn loop addr hello_s` |
+| `req` | info | `conn loop addr req objs rows cells prec chunks cache compute_ms total_ms bytes stalls queued cache_entries cache_kib cache_evictions`; written as the last chunk goes out, so `total_ms` runs from the REQUEST's arrival to its last chunk being sent |
+| `error` | warn (ERROR 4: error) | `conn loop addr req code name msg` -- every ERROR sent; a REQUEST gets either a `req` line or an `error` line |
+| `stall` | debug | `conn loop addr req row rows buffered` -- an answer waiting for its client to read |
+| `conn.close` | info | `conn loop addr code reason dur_s proto reqs hits cells errors bytes_out unsent_rows client`; code 1006 is a client that went without a close frame |
+| `http` | debug | `path status loop addr` |
+| `signal` | info | `sig` |
+| `drain.start` | info | `drain_s open` |
+| `drain.loop` | debug | `loop closing` |
+| `drain.cut` | warn | `loop drain_s open` -- answers still unsent at the deadline |
+| `tls.reload` | info | `cert key expires` |
+| `tls.reload.loop` | debug | `loop` |
+| `tls.reload.refused`, `tls.reload.failed` | error | `cert` or `loop`, `msg` |
+| `tls.reload.none` | warn | `msg` -- SIGHUP to a plain `ws://` server |
+| `exit` | info (a second signal: warn) | `status msg` |
+| `fatal` | error | `msg`, and the file or port it is about |
+| `ctx.alloc` | error | `loop msg` -- a Swiss context could not be made |
+
+**What the log never says.** A token, at any level. And by default nothing
+a request asked: no instant, body, star, sidereal or topocentric setting,
+and not Swiss's per-row error text, which names the instant (the production
+plan's decision 0.3). `--log-contents` adds those to each `req` line --
+`jd step_s tt iflag bodies` and, when the request uses them, `center`,
+`sid_mode sid_t0 sid_ayan`, `topo_lon topo_lat topo_elv` and `jpl` -- for
+debugging a client, and warns at startup that it is on. A public server
+should leave it off. The client's address and its self-reported version
+string (`client`) are logged at info; say so in the service's privacy note.
+
+**Not logged, because the server cannot see it:** a failed TLS handshake.
+uSockets has no hook for one; the connection closes before any upgrade.
 
 ## What is not here yet
 

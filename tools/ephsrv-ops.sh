@@ -10,6 +10,11 @@
 #            cache hit and an ERROR 2 each change exactly what they should;
 #            the routes answer over https too
 #   privacy  nothing in the server's log names a request's instant
+#   log      every line is logfmt with ts, level and evt first; a
+#            connection's life reads in order under one conn id -- open,
+#            HELLO, a miss and a hit, the refused request's ERROR, close
+#            with its totals; --log-contents adds what was asked, and says
+#            so at startup; --log-level warn keeps only warnings and errors
 #   drain    SIGTERM with a slow reader mid-answer: new connections are
 #            refused, the reader gets every row, the server exits 0; a
 #            reader that never reads is cut off at --drain-seconds and the
@@ -51,7 +56,7 @@ start() {   # start PORT LOG ARGS...
   SRV_PID=$!
   PIDS+=("$SRV_PID")
   for _ in $(seq 1 50); do
-    grep -q "listening on port" "$log" 2>/dev/null && return 0
+    grep -q "evt=listen port=" "$log" 2>/dev/null && return 0
     kill -0 "$SRV_PID" 2>/dev/null || return 1
     sleep 0.1
   done
@@ -96,8 +101,76 @@ h0=$(metric "$PORT" ephd_cache_hits_total); e0=$(metric "$PORT" 'ephd_errors_tot
 echo "  routes  the counters move: a computed request, a cache hit, an ERROR 2"
 
 grep -q 2451545 "$S/a.log" && fail "the log names a request's instant"
-echo "  privacy the log names no request's instant"
+grep -q " bodies=" "$S/a.log" && fail "the log names a request's bodies"
+echo "  privacy the log names no request's instant or bodies"
 kill "$SRV_PID"; waitexit "$SRV_PID" 15 || true
+
+# -- log -------------------------------------------------------------------
+# The format, parsed rather than grepped: a line that merely contains the
+# right words passes a grep with a broken quote in the middle of it.
+logfmt() {   # logfmt LOG -> fails naming the first line that is not logfmt
+  python3 - "$1" << 'PY' || fail "$(basename "$1") is not logfmt"
+import re, sys
+val = r'(?:"(?:[^"\\]|\\.)*"|[^\s"=]+)'
+line_re = re.compile(r'^ts=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z level=(error|warn|info|debug) '
+                     r'evt=[a-z.]+( [a-z_]+=' + val + r')*$')
+n = 0
+for l in open(sys.argv[1]).read().splitlines():
+    n += 1
+    if not line_re.match(l):
+        print("  not logfmt: %r" % l); sys.exit(1)
+    keys = re.findall(r' ([a-z_]+)=' + val, l)
+    if len(keys) != len(set(keys)):
+        print("  a key twice: %r" % l); sys.exit(1)
+if n < 5:
+    print("  only %d lines" % n); sys.exit(1)
+PY
+}
+logfmt "$S/a.log"
+python3 - "$S/a.log" << 'PY' || fail "the connection's lines do not tell its story"
+import re, sys
+lines = open(sys.argv[1]).read().splitlines()
+def kv(l): return dict((k, v.strip('"')) for k, v in re.findall(r'([a-z_]+)=("(?:[^"\\]|\\.)*"|\S+)', l))
+ev = [kv(l) for l in lines]
+reqs = [e for e in ev if e["evt"] == "req"]
+assert len(reqs) == 2 and reqs[0]["conn"] == reqs[1]["conn"], "two requests on one connection"
+conn = reqs[0]["conn"]
+mine = [e["evt"] for e in ev if e.get("conn") == conn]
+assert mine == ["conn.open", "hello", "req", "req", "conn.close"], mine
+assert [r["cache"] for r in reqs] == ["miss", "hit"], reqs
+assert reqs[0]["cells"] == "21" and reqs[0]["rows"] == "7", reqs[0]
+close = [e for e in ev if e["evt"] == "conn.close" and e["conn"] == conn][0]
+assert close["reqs"] == "2" and close["hits"] == "1" and close["cells"] == "42", close
+err = [e for e in ev if e["evt"] == "error"]
+assert len(err) == 1 and err[0]["code"] == "2" and err[0]["level"] == "warn", err
+assert [e for e in ev if e["evt"] == "conn.close" and e["conn"] == err[0]["conn"]][0]["errors"] == "1"
+assert any(e["evt"] == "http" and e["path"] == "/metrics" for e in ev), "no http line at debug"
+assert all(e["addr"] == "127.0.0.1" for e in ev if "addr" in e), "an address not as 127.0.0.1"
+PY
+echo "  log     logfmt throughout; one connection's open, HELLO, miss, hit and close"
+
+start "$PORT" "$S/g.log" --ephe "$EPH" --log-contents || fail "the --log-contents server did not start"
+"$CLI" --port "$PORT" --objs 0,1,2 --jd 2451545.0 --count 7 --quiet || fail "the contents request failed"
+kill "$SRV_PID"; waitexit "$SRV_PID" 15 || true
+logfmt "$S/g.log"
+grep -q "level=warn evt=log.contents " "$S/g.log" || fail "--log-contents did not warn at startup"
+grep " evt=req " "$S/g.log" | grep -q " jd=2451545.000000 .* bodies=0,1,2" ||
+  fail "--log-contents did not log what was asked"
+grep -q " level=debug " "$S/g.log" && fail "info logged a debug line"
+echo "  log     --log-contents names the instant and bodies, and warns"
+
+# The listen line is info, so this server is waited for on /healthz.
+"$ROOT/astrolog-ephd" --port "$PORT" --threads 2 --ephe "$EPH" --log-level warn > "$S/h.log" 2>&1 &
+SRV_PID=$!; PIDS+=("$SRV_PID")
+for _ in $(seq 1 50); do
+  [ "$(curl -s "http://127.0.0.1:$PORT/healthz")" = ok ] && break; sleep 0.1
+done
+"$CLI" --port "$PORT" --objs 0,1,2 --jd 2451545.0 --count 7 --quiet || fail "the warn-level request failed"
+"$CLI" --port "$PORT" --objs 0,1,2,3,4,5,6 --count 20000 --quiet 2> /dev/null && fail "140000 cells were not refused"
+kill "$SRV_PID"; waitexit "$SRV_PID" 15 || true
+grep -v " level=warn \| level=error " "$S/h.log" && fail "--log-level warn logged a line below warn"
+grep -q " level=warn evt=error .* code=2 " "$S/h.log" || fail "--log-level warn lost the ERROR 2"
+echo "  log     --log-level warn keeps the ERROR and nothing below warn"
 
 mkdir -p "$S/empty"
 start "$((PORT + 1))" "$S/b.log" --ephe "$S/empty" || fail "the no-ephemeris server did not start"

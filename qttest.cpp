@@ -18555,7 +18555,7 @@ static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
   while (tim.elapsed() < msMax) {
     QApplication::processEvents(QEventLoop::AllEvents, 20);
     pbaLog->append(pproc->readAllStandardOutput());
-    if (pbaLog->contains("listening on port"))
+    if (pbaLog->contains("evt=listen port="))
       return fTrue;
     if (pproc->state() == QProcess::NotRunning)
       return fFalse;
@@ -18648,7 +18648,11 @@ static void TestEphSrvLiveQt()
     strEphe.toLocal8Bit().constData());
   if (proc.state() == QProcess::NotRunning)
     goto LRestore;
-  Check(!baLog.contains("<none found"),
+  // Asked positively: the line must be there and name a path, or a change
+  // to the log's wording passes this vacuously -- the "<none found" form it
+  // replaced did, for a whole make check, when the log became logfmt.
+  Check(baLog.contains(" evt=ephe path=") &&
+    !baLog.contains(" evt=ephe path=\"\""),
     "the server found the ephemeris directory");
 
   // The chart: a fixed UT instant at a fixed place, no zone, no DST.
@@ -19289,7 +19293,7 @@ static void TestEphSrvLiveQt()
         << "--tls-cert" << strDir + "/srv.pem" << "--tls-key" <<
         strDir + "/srv.key");
       Check(FWaitEphdQt(&procTls, &baTlsLog, 10000) &&
-        baTlsLog.contains("wss://"), "astrolog-ephd started over wss:// on "
+        baTlsLog.contains(" scheme=wss "), "astrolog-ephd started over wss:// on "
         "port %d", portTls);
 
       OraclePinUtQt(1990, 6, 15, 12.0);

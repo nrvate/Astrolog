@@ -97,12 +97,12 @@ STARTED=$(date +%s.%N)
   > "$EPHD_LOG" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 $((STARTUP_MAX * 20))); do
-  grep -q "listening on port" "$EPHD_LOG" 2>/dev/null && break
+  grep -q "evt=listen port=" "$EPHD_LOG" 2>/dev/null && break
   sleep 0.1
 done
 ENDED=$(date +%s.%N)
 STARTUP_S=$(echo "$ENDED $STARTED" | awk '{printf "%.2f", $1 - $2}')
-grep -q "listening on port" "$EPHD_LOG" || { echo "SOAK FAIL: server did not start in ${STARTUP_MAX}s"; exit 1; }
+grep -q "evt=listen port=" "$EPHD_LOG" || { echo "SOAK FAIL: server did not start in ${STARTUP_MAX}s"; exit 1; }
 awk -v s="$STARTUP_MAX" -v t="$STARTUP_S" 'BEGIN { exit !(t <= s) }' \
   || { echo "SOAK FAIL: startup took ${STARTUP_S}s > ${STARTUP_MAX}s with $FARM_N files"; exit 1; }
 echo "startup: ${STARTUP_S}s with $FARM_N files (bound ${STARTUP_MAX}s)"
@@ -122,10 +122,10 @@ strace -y -o "$SCRATCH/strace.log" -e trace=getdents64,openat \
   > "$EPHD_LOG" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 $((STARTUP_MAX * 20))); do
-  grep -q "listening on port" "$EPHD_LOG" 2>/dev/null && break
+  grep -q "evt=listen port=" "$EPHD_LOG" 2>/dev/null && break
   sleep 0.1
 done
-grep -q "listening on port" "$EPHD_LOG" || { echo "SOAK FAIL: traced run did not start"; exit 1; }
+grep -q "evt=listen port=" "$EPHD_LOG" || { echo "SOAK FAIL: traced run did not start"; exit 1; }
 if grep -E "getdents64.*$FARM" "$SCRATCH/strace.log" > /dev/null; then
   echo "SOAK FAIL: the tree was scanned:"
   grep -E "getdents64.*$FARM" "$SCRATCH/strace.log" | head -5

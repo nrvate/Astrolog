@@ -59,12 +59,12 @@ else
   "$ROOT/astrolog-ephd" --port "$PORT" --ephe "$EPH" --cells-per-sec 0 \
     --max-conns-per-ip 0 "${THREAD_ARG[@]}" > "$SCRATCH/ephd.log" 2>&1 &
   EPHD_PID=$!
-  for _ in $(seq 1 50); do grep -q "listening on port" "$SCRATCH/ephd.log" && break; sleep 0.1; done
-  grep -q "listening on port" "$SCRATCH/ephd.log" || { echo "LOAD FAIL: server did not start"; exit 1; }
+  for _ in $(seq 1 50); do grep -q "evt=listen port=" "$SCRATCH/ephd.log" && break; sleep 0.1; done
+  grep -q "evt=listen port=" "$SCRATCH/ephd.log" || { echo "LOAD FAIL: server did not start"; exit 1; }
 fi
 
 IDS=$(python3 -c "b=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]+list(range(10005,10100)); print(','.join(map(str,b[:$BODIES])))")
-LOOPS=$(sed -nE 's/^([0-9]+) event loop.*/\1/p' "$SCRATCH/ephd.log" 2>/dev/null || true)
+LOOPS=$(sed -nE 's/.* evt=config .* loops=([0-9]+).*/\1/p' "$SCRATCH/ephd.log" 2>/dev/null || true)
 
 cpu_ticks() { awk '{print $14 + $15}' "/proc/$EPHD_PID/stat"; }
 T_END=$(( $(date +%s) + DURATION ))

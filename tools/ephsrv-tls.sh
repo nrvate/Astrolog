@@ -69,7 +69,7 @@ start() {   # start ARGS... ; waits for the listening line
     > "$S/ephd.log" 2>&1 &
   EPHD_PID=$!
   for _ in $(seq 1 50); do
-    grep -q "listening on port" "$S/ephd.log" 2>/dev/null && return 0
+    grep -q "evt=listen port=" "$S/ephd.log" 2>/dev/null && return 0
     kill -0 "$EPHD_PID" 2>/dev/null || return 1
     sleep 0.1
   done
@@ -104,7 +104,7 @@ refuses_start "a certificate without a key" "usage:" \
 
 # -- client ----------------------------------------------------------------
 start --tls-cert "$S/srv1.pem" --tls-key "$S/srv1.key" || fail "server did not start"
-grep -q "listening on port $PORT (wss://" "$S/ephd.log" || fail "the listening line does not say wss://"
+grep -q "evt=listen port=$PORT scheme=wss " "$S/ephd.log" || fail "the listen line does not say wss"
 ask 0 "trusted" --tls --ca "$S/ca1.pem"
 echo "  client  a verifying client is answered"
 ask 3 "wrong name" --tls --ca "$S/ca1.pem" --sni wrong.example
@@ -151,7 +151,7 @@ kill "$EPHD_PID"; wait "$EPHD_PID" 2>/dev/null || true; EPHD_PID=
 start --tls-cert "$S/live.pem" --tls-key "$S/live.key" || fail "server did not restart"
 cp "$S/srv2.key" "$S/live.key"            # certificate 1, key 2: mismatched
 kill -HUP "$EPHD_PID"
-for _ in $(seq 1 30); do grep -q "SIGHUP" "$S/ephd.log" && break; sleep 0.1; done
+for _ in $(seq 1 30); do grep -q "sig=SIGHUP" "$S/ephd.log" && break; sleep 0.1; done
 grep -q "keeping the current certificate" "$S/ephd.log" || fail "a broken pair was not refused on SIGHUP"
 ask 0 "after a refused reload" --tls --ca "$S/ca1.pem"
 echo "  reload  a broken pair is refused and the old certificate kept"
@@ -166,8 +166,8 @@ sleep 0.8
 kill -0 "$LONG_PID" 2>/dev/null || fail "the long connection ended before the reload; lengthen it"
 cp "$S/srv2.pem" "$S/live.pem"; cp "$S/srv2.key" "$S/live.key"
 kill -HUP "$EPHD_PID"
-for _ in $(seq 1 30); do grep -q "reloading" "$S/ephd.log" && break; sleep 0.1; done
-grep -q "reloading $S/live.pem" "$S/ephd.log" || fail "the good pair was not reloaded"
+for _ in $(seq 1 30); do grep -q "evt=tls.reload" "$S/ephd.log" && break; sleep 0.1; done
+grep -q "evt=tls.reload cert=$S/live.pem " "$S/ephd.log" || fail "the good pair was not reloaded"
 sleep 0.3
 kill -0 "$LONG_PID" 2>/dev/null || fail "the long connection ended before the reload took effect; lengthen it"
 wait "$LONG_PID" || { cat "$S/long.err"; fail "the connection streaming across the reload failed"; }

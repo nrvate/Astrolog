@@ -128,7 +128,7 @@ fi
   > "$SCRATCH/ephd.log" 2>&1 &
 EPHD_PID=$!
 for i in $(seq 1 50); do
-  grep -q "listening on port" "$SCRATCH/ephd.log" 2>/dev/null && break
+  grep -q "evt=listen port=" "$SCRATCH/ephd.log" 2>/dev/null && break
   sleep 0.1
 done
 

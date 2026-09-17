@@ -55,7 +55,7 @@ start() {   # start PORT LOG ARGS...
   SRV_PID=$!
   PIDS+=("$SRV_PID")
   for _ in $(seq 1 50); do
-    grep -q "listening on port" "$log" 2>/dev/null && return 0
+    grep -q "evt=listen port=" "$log" 2>/dev/null && return 0
     kill -0 "$SRV_PID" 2>/dev/null || return 1
     sleep 0.1
   done

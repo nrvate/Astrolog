@@ -67,7 +67,7 @@ echo "  health  /healthz ok; running as uid $(docker exec "$CID" id -u)"
 
 "$SCRATCH/ctx/astrolog-ephd" --port "$((PORT + 1))" --ephe "$ROOT/ephem" --threads 1 > "$SCRATCH/host.log" 2>&1 &
 HOST_PID=$!
-for _ in $(seq 1 50); do grep -q "listening on port" "$SCRATCH/host.log" && break; sleep 0.1; done
+for _ in $(seq 1 50); do grep -q "evt=listen port=" "$SCRATCH/host.log" && break; sleep 0.1; done
 CLI="$SCRATCH/ctx/eph_wsclient"
 ARGS=(--objs 0,1,2,3,4,5,6,7,8,9,15,10004 --jd 2451545.0 --step 86400 --count 400 --quiet)
 "$CLI" --port "$PORT" "${ARGS[@]}" --out "$SCRATCH/container.txt" || fail "the container's window"

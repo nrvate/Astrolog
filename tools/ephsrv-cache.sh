@@ -172,17 +172,17 @@ start_server() {   # $1 = --cache-mb
     --cache-mb "$1" > "$LOG" 2>&1 &
   EPHD_PID=$!
   for i in $(seq 1 50); do
-    grep -q "listening on port" "$LOG" 2>/dev/null && break
+    grep -q "evt=listen port=" "$LOG" 2>/dev/null && break
     sleep 0.1
   done
-  grep -q "listening on port" "$LOG" || { echo "CACHE FAIL: server did not start"; exit 1; }
+  grep -q "evt=listen port=" "$LOG" || { echo "CACHE FAIL: server did not start"; exit 1; }
 }
 stop_server() {
   kill "$EPHD_PID" 2>/dev/null; wait "$EPHD_PID" 2>/dev/null || true
   EPHD_PID=
 }
 # The last request line of the log, i.e. the request the client just made.
-last_line() { grep "ephd: request" "$LOG" | tail -1; }
+last_line() { grep " evt=req " "$LOG" | tail -1; }
 ask() {   # ask <out> <extra client args...>
   local out=$1; shift
   "$ROOT/eph_wsclient" --port "$PORT" --out "$out" --quiet "$@" \
@@ -195,10 +195,10 @@ expect() {   # expect <substring> <what>
     *) echo "CACHE FAIL: $2"; echo "  log: $line"; exit 1 ;;
   esac
 }
-# "cache N entries K.K KiB" -> the KiB figure of the last line.
-kib_of() { last_line | sed -E 's/.*cache [0-9]+ entries ([0-9.]+) KiB.*/\1/'; }
-entries_of() { last_line | sed -E 's/.*cache ([0-9]+) entries.*/\1/'; }
-evictions_of() { last_line | sed -E 's/.*misses ([0-9]+) evictions.*/\1/'; }
+# The cache's state after the last request, from that request's line.
+kib_of() { last_line | sed -E 's/.* cache_kib=([0-9.]+).*/\1/'; }
+entries_of() { last_line | sed -E 's/.* cache_entries=([0-9]+).*/\1/'; }
+evictions_of() { last_line | sed -E 's/.* cache_evictions=([0-9]+).*/\1/'; }
 
 start_server 1
 
@@ -206,9 +206,9 @@ start_server 1
 #    bit-identical.
 TEN="0,1,2,3,4,5,6,7,8,9"
 ask "$SCRATCH/m.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
-expect "cache miss" "first window must be a miss"
+expect "cache=miss" "first window must be a miss"
 ask "$SCRATCH/h.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
-expect "cache hit" "repeated window must be a hit"
+expect "cache=hit" "repeated window must be a hit"
 cmp -s "$SCRATCH/m.txt" "$SCRATCH/h.txt" \
   || { echo "CACHE FAIL: the hit's columns differ from the miss that filled it"; exit 1; }
 echo "hit: bit-identical to the miss that filled it"
@@ -216,7 +216,7 @@ echo "hit: bit-identical to the miss that filled it"
 # b. The same window at f32 is a hit on the f64 entry: precision is a
 #    delivery parameter.
 ask "$SCRATCH/f.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500 --precision 32
-expect "cache hit" "an f32 request must hit the f64 entry"
+expect "cache=hit" "an f32 request must hit the f64 entry"
 # and chunkRows is too: the client always sends kMaxChunkRows, so this is
 # covered by the unit test rather than the wire.
 # And the values are the f64 entry's, rounded: the log word alone said
@@ -239,11 +239,11 @@ echo "f32: hit on the f64 entry, and its values are the entry's rounded to f32"
 THIRTY="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,10005,10006,10007,10008,10009,10010,10011"
 before=$(entries_of)
 ask "$SCRATCH/big1.txt" --objs "$THIRTY" --jd 2451545.0 --step 600 --count 1000
-expect "cache miss" "oversize window must miss"
+expect "cache=miss" "oversize window must miss"
 [ "$(entries_of)" = "$before" ] \
   || { echo "CACHE FAIL: oversize window was stored ($(entries_of) entries, had $before)"; exit 1; }
 ask "$SCRATCH/big2.txt" --objs "$THIRTY" --jd 2451545.0 --step 600 --count 1000
-expect "cache miss" "oversize window must miss again (not stored)"
+expect "cache=miss" "oversize window must miss again (not stored)"
 [ "$(evictions_of)" = "0" ] \
   || { echo "CACHE FAIL: oversize window evicted something"; exit 1; }
 echo "oversize: answered, not stored, nothing evicted"
@@ -256,23 +256,23 @@ echo "oversize: answered, not stored, nothing evicted"
 #    exceeds its cap.
 for d in 1 2 3; do
   ask "$SCRATCH/w$d.txt" --objs "$TEN" --jd "$((2451545 + d)).0" --step 600 --count 500
-  expect "cache miss" "distinct window $d must miss"
+  expect "cache=miss" "distinct window $d must miss"
 done
 ask "$SCRATCH/t.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
-expect "cache hit" "jd+0 must still be present with four windows in"
+expect "cache=hit" "jd+0 must still be present with four windows in"
 ask "$SCRATCH/w4.txt" --objs "$TEN" --jd 2451549.0 --step 600 --count 500
-expect "cache miss" "distinct window 4 must miss"
+expect "cache=miss" "distinct window 4 must miss"
 ev=$(evictions_of)
 [ "$ev" -ge 1 ] || { echo "CACHE FAIL: five windows in a four-window cache evicted nothing"; exit 1; }
 kib=$(kib_of)
 awk -v k="$kib" 'BEGIN { exit !(k <= 1024) }' \
   || { echo "CACHE FAIL: cache holds $kib KiB, over its 1024 KiB cap"; exit 1; }
 ask "$SCRATCH/x.txt" --objs "$TEN" --jd 2451546.0 --step 600 --count 500
-expect "cache miss" "the least recently used window (jd+1) must have been evicted"
+expect "cache=miss" "the least recently used window (jd+1) must have been evicted"
 ask "$SCRATCH/y.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
-expect "cache hit" "the touched window (jd+0) must have survived; eviction is LRU, not FIFO"
+expect "cache=hit" "the touched window (jd+0) must have survived; eviction is LRU, not FIFO"
 ask "$SCRATCH/y2.txt" --objs "$TEN" --jd 2451549.0 --step 600 --count 500
-expect "cache hit" "the most recent window must still be present"
+expect "cache=hit" "the most recent window must still be present"
 echo "eviction: LRU order, $kib KiB under the 1024 KiB cap"
 
 stop_server
@@ -281,7 +281,7 @@ stop_server
 start_server 0
 ask "$SCRATCH/z1.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
 ask "$SCRATCH/z2.txt" --objs "$TEN" --jd 2451545.0 --step 600 --count 500
-expect "cache miss" "with --cache-mb 0 a repeated window must miss"
+expect "cache=miss" "with --cache-mb 0 a repeated window must miss"
 cmp -s "$SCRATCH/z1.txt" "$SCRATCH/z2.txt" \
   || { echo "CACHE FAIL: two uncached computations of one window differ"; exit 1; }
 stop_server

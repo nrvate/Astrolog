@@ -493,7 +493,9 @@ Each increment lands green before the next starts.
 ## 11. Runbook
 
     astrolog-ephd [--port N] [--bind ADDR] [--ephe path] [--threads N]
-                  [--cache-mb N] [--max-cells N] [--verbose]
+                  [--cache-mb N] [--max-cells N]
+                  [--log-level error|warn|info|debug] [--verbose]
+                  [--log-contents]
                   [--tls-cert FILE --tls-key FILE] [--drain-seconds N]
                   [--max-conns N] [--max-conns-per-ip N] [--cells-per-sec N]
                   [--hello-seconds N] [--tokens FILE [--require-token]]
@@ -518,8 +520,16 @@ https under TLS. SIGTERM or SIGINT drains: listeners close at once, answers
 in flight finish for up to `--drain-seconds` (default 10), every connection
 is closed 1001 (hard, at the deadline, if it still has bytes unread), and
 the process exits 0; a second signal exits 1 at once. Nothing the server
-logs or exports names a request's instant, place or bodies. The startup log
-gives the open-file limit.
+logs or exports names a request's instant, place or bodies, unless it was
+started with `--log-contents`. The startup log gives the open-file limit.
+
+Logs (work log item 18; the event reference is `ephsrv/deploy/README.md`,
+"Logs"): one logfmt line an event on stdout, `ts= level= evt=` first, then
+the event's keys -- every connection's open, HELLO and close (with its
+totals), every REQUEST's size, cache outcome and timings, every ERROR and
+refusal, and the lifecycle. `--log-level` (default `info`) filters;
+`--verbose` is `debug`, which adds stalls, the HTTP routes and per-loop
+detail. Scripts wait for `evt=listen port=`.
 
 Limits (production plan Phase 3; `tools/ephsrv-limits.sh`), each 0 to
 disable: `--max-conns` (10000) and `--max-conns-per-ip` (64) refuse the
@@ -1073,3 +1083,31 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
     iteration, which uSockets frees at the start of the next one, and
     there is no next one after `run()` returns. Once per process, at exit;
     recorded, not chased into uSockets' internals.
+18. **Structured logs (2026-09-17, branch `ephlog`).** The maintainer asked
+    for logs "suitable for monitoring and debugging" and chose, in order:
+    request contents only behind an opt-in switch, logfmt, full client
+    addresses, and a line for every REQUEST at the default level. The
+    audit before it: printf lines with no timestamp, level or connection
+    id; nothing at all for a connection opening or closing, a 503 at the
+    caps, a HELLO timeout or a stall; the request line only under
+    `--verbose`. `LogEvt` builds one line and writes it under stdio's lock;
+    33 events, tabled in the deploy README. Three things the first run
+    showed: uWS's address text is the uncompressed IPv6 form, so an IPv4
+    client on an all-interfaces listener logged as
+    `0000:0000:0000:0000:0000:ffff:7f00:0001` -- `AddrText()` writes it as
+    `127.0.0.1`, and is the per-address limits' key too; the contents'
+    body list reused `objs`, the count's key, which the ops gate's
+    duplicate-key check caught before anyone read the line; and the
+    request's line is written BEFORE its last chunk goes out, or a gate
+    reading the log right after its client exits could race it. Gates:
+    `ephsrv-ops.sh` parses every line as logfmt, follows one connection's
+    lines in order, and checks `--log-contents` and `--log-level warn`;
+    the privacy check was shown to fail with contents logged by default.
+    Every gate's startup wait, the cache and bench gates' request-line
+    parsing, and the suite's live group moved to the new lines -- where
+    one check, "the server found the ephemeris directory", had asked
+    `!contains("<none found")` and so passed vacuously once the wording
+    changed; it now requires the `evt=ephe` line with a path, and was
+    shown to fail with the path blanked. Not
+    observable, so not logged: a failed TLS handshake (uSockets has no
+    hook for it).

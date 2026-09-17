@@ -19,6 +19,7 @@ blocked on a host; Phase 7 has a measured trigger and is not needed yet.**
 | 3+4 protocol 3 | done (632f3c0); client token `-bT` (99b0e4b); trusted proxy not built (0.2) | work logs 14, 16 |
 | 5 packaging | done (77c530c); a release job publishing the image is the maintainer's call | work log 15 |
 | sanitizers | ASan+UBSan clean over the gates; two HELLO-timer fixes (3133df5, 441a3d5) | work log 17 |
+| logs | done (branch `ephlog`): logfmt, levels, every connection, HELLO, REQUEST and refusal; `--log-contents` opt-in | work log 18 |
 | 6 go-live | **blocked**: a VPS, 0.4, 0.5 | §8 |
 | 7 compute off loops | not yet: charts stall only when concurrent cold windows outnumber loops | §9 |
 
@@ -63,7 +64,7 @@ The gaps:
 | G2 | Binds every interface | `app->listen(port)` with no host; no `--bind` |
 | G3 | No signal handling | SIGTERM kills mid-stream; no drain, no close frame, no certificate reload |
 | G4 | No health, readiness or metrics | the only route is `ws("/*")` |
-| G5 | Unstructured logs, and they leak | `Log()` printf lines with no connection id. **Wrong as written (re-checked 2026-09-17):** every ERROR text logged is fixed or a count; Swiss's serr, which names the instant, goes only into DATA metadata. Held by `ephsrv-ops.sh`'s privacy check |
+| G5 | Unstructured logs, and they leak | `Log()` printf lines with no connection id. **The leak was wrong as written (re-checked 2026-09-17):** every ERROR text logged is fixed or a count; Swiss's serr, which names the instant, goes only into DATA metadata. **The structure half is closed** (2026-09-17, work log 18): logfmt with ts, level, evt, conn, loop and addr on every line |
 | G6 | No per-client limits | no cap on connections, per address or total; no rate limit |
 | G7 | No authentication | none, and no field in HELLO to carry it |
 | G8 | REQUEST before HELLO is served | `kMsgRequest` handled regardless |
@@ -90,7 +91,10 @@ Decided by the maintainer, 2026-09-17:
 3. **Privacy: counts only, never contents.** No instants, coordinates,
    star names or Swiss error text in logs; metrics are aggregates; the
    client ships a privacy note with the release that makes the public
-   server its default (G5, Phase 2).
+   server its default (G5, Phase 2). **Amended 2026-09-17** when the logs
+   were made structured: the default still logs no contents, and
+   `--log-contents` is an explicit, startup-warned switch for debugging;
+   the client's address and version string are logged in full at info.
 
 Deferred to when the VPS is set up, because nothing built before then
 depends on them:
@@ -209,12 +213,15 @@ depends on them:
     bytes; request latency histogram; bytes sent; backpressure stalls; TLS
     handshake failures; build and fork version as labels. Counters per
     loop (no locks on the hot path), summed on scrape through `defer`.
-- **Logs**: one `key=value` line per event with timestamp, level, loop,
-  connection id and remote address; a per-request line (cells,
-  milliseconds, outcome, cache hit) only with `--log-requests`. **Never**
-  instants, coordinates, star names or Swiss's serr text: the ERROR line
-  at ~595 logs the code and a fixed description, and the text goes only to
-  the client (G5). stderr, so journald or the container runtime rotates.
+- **Logs** (built as planned except where noted; `ephsrv/deploy/README.md`
+  "Logs" is the reference): one logfmt line per event with timestamp,
+  level, loop, connection id and remote address. The per-request line is
+  at the default level, not behind a `--log-requests` switch -- the
+  maintainer's call, for a full access log out of the box -- and
+  `--log-level` filters instead. **Never** instants, coordinates, star
+  names or Swiss's serr text by default; `--log-contents` adds them for
+  debugging and warns at startup. stdout, as the server always wrote,
+  which journald and the container runtime capture the same.
 - **Startup**: `RLIMIT_NOFILE` checked against `--max-conns` (Phase 3) and
   logged; the discovered ephemeris set's sentinel files logged at info.
 
