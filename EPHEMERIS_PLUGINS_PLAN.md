@@ -162,9 +162,13 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
   - an unknown ERROR code is a failure of unknown kind — `flags` still says
     whether the connection is closing and whether a retry may work;
   - an unknown match `quality`, orbit method or object kind inside a
-    LOOKUP_RESULT means "not something this client can ask for", and the match
-    is skipped.
-  The exception is anything that changes how following bytes are read: an
+    LOOKUP_RESULT means "not something this client can ask for": the client
+    skips that match using its `matchLen` and reads the rest;
+  - unknown bits in an answer's flag fields — ERROR `flags`, DATA and SEGDATA
+    `chunkFlags`, LOOKUP_RESULT `flags` — are ignored, and a bit added to those
+    fields later MUST NOT change how following bytes are read, precisely so
+    that this stays possible.
+  The exception is anything that does change how following bytes are read: an
   unadvertised bit in DATA's `columnsPresent` changes the row width, so it is
   malformed.
 - **Floats** MUST be finite. The single exception is the canonical quiet NaN,
@@ -418,7 +422,7 @@ MATCH:
 |---|---|
 | u8 | quality — 0 exact canonical name, 1 exact alias or designation, 2 prefix |
 | u8 | sourceIdx |
-| u16 | reserved |
+| u16 | matchLen — bytes from the end of this field to the end of this MATCH, so a client can skip a match whose object kind it does not know (§3.1). A value that disagrees with a match the client CAN read is malformed |
 | … | OBJECT (kind + profile 0 + reserved + payload) — what to put in a REQUEST |
 | str8 | canonicalName |
 | str8 | designation — e.g. `2060`, `1P/Halley`, empty if none |
