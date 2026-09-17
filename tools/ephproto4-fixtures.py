@@ -1,0 +1,540 @@
+#!/usr/bin/env python3
+"""Ephemeris protocol version 4 conformance fixtures.
+
+An independent reference encoder, written from EPHEMERIS_PLUGINS_PLAN.md
+section 3 and nothing else -- not from ephsrv/ephproto.h -- so the C++
+codecs (Astrolog's and Ephemeris Prometheia's) are checked against a second
+reading of the specification rather than against themselves.
+
+    tools/ephproto4-fixtures.py            # (re)write ephsrv/conformance/
+    tools/ephproto4-fixtures.py --check    # exit 1 if the files differ
+
+Each fixture is one complete message (envelope included) as lowercase hex,
+64 digits a line, in ephsrv/conformance/<name>.hex. MANIFEST.tsv lists
+file, direction (c2s/s2c), message type, expected outcome and a note. The
+outcomes are the spec's (3.9): "ok" (parses; re-encodes to the same bytes),
+"malformed" (ERROR 1) and "unsupported" (ERROR 11).
+"""
+
+import math
+import os
+import struct
+import sys
+
+MAGIC = 0x1EF0
+V4 = 4
+NAN = struct.unpack("<d", bytes.fromhex("000000000000f87f"))[0]
+
+# A.1 message types
+HELLO, WELCOME, REQUEST, DATA, ERROR, PING, PONG, CANCEL = 1, 2, 3, 4, 5, 6, 7, 8
+LOOKUP, LOOKUP_RESULT, SEGDATA = 9, 10, 15
+
+
+# ---- primitives ----------------------------------------------------------
+
+def u8(v): return struct.pack("<B", v)
+def u16(v): return struct.pack("<H", v)
+def u32(v): return struct.pack("<I", v)
+def i32(v): return struct.pack("<i", v)
+def i64(v): return struct.pack("<q", v)
+def f32(v): return struct.pack("<f", v)
+def f64(v): return struct.pack("<d", v)
+def raw_f64(hex_le): return bytes.fromhex(hex_le)
+
+
+def str8(s):
+    b = s.encode("utf-8") if isinstance(s, str) else s
+    assert len(b) <= 255
+    return u8(len(b)) + b
+
+
+def time(jd1, jd2=0.0):
+    return f64(jd1) + f64(jd2)
+
+
+def tlv(entries, sort=True):
+    """entries: list of (tag, payload bytes). sort=False keeps a bad order."""
+    if sort:
+        entries = sorted(entries, key=lambda e: e[0])
+    body = b"".join(u16(t) + u16(len(p)) + p for t, p in entries)
+    return u16(len(body)) + body
+
+
+def envelope(mtype, payload, request_id=0, version=V4, flags=0, reserved=0,
+             magic=MAGIC):
+    return (u16(magic) + u8(version) + u8(flags) + u16(mtype) + u16(reserved) +
+            u32(request_id) + u32(len(payload)) + payload)
+
+
+# ---- messages --------------------------------------------------------------
+
+def hello(proto_max=4, proto_min=4, build=0, caps=0, name="Astrolog 8.00-qt.25",
+          token="", ext=None):
+    return (u32(proto_max) + u32(proto_min) + u32(build) + u32(caps) +
+            str8(name) + str8(token) + tlv(ext or []))
+
+
+def welcome(caps, engine, dataset, ext, server="astrolog-ephd/2.0",
+            limits=(64, 20000, 500, 4 * 1024 * 1024, 100000), max_profiles=16):
+    mo, mr, mc, mp, mcells = limits
+    return (u32(4) + u32(caps) + u32(mo) + u32(mr) + u32(mc) + u32(mp) +
+            u32(mcells) + u8(max_profiles) + u8(0) + u16(0) +
+            str8(server) + str8(engine) + str8(dataset) + tlv(ext))
+
+
+def delivery(precision=0, priority=0, representation=0, chunk_rows=0,
+             seg_err=0.0, reserved=0):
+    return (u8(precision) + u8(priority) + u8(representation) + u8(reserved) +
+            u32(chunk_rows) + f32(seg_err))
+
+
+def grid(start_jd1, start_jd2, step_ns, n):
+    return u8(0) + u16(0) + time(start_jd1, start_jd2) + i64(step_ns) + u32(n)
+
+
+def time_block(scale, mode_bytes):
+    # mode_bytes starts with the timeMode byte
+    return u8(scale) + mode_bytes
+
+
+def grid_block(scale, jd1, jd2, step_ns, n):
+    return u8(scale) + u8(0) + u16(0) + time(jd1, jd2) + i64(step_ns) + u32(n)
+
+
+def list_block(scale, instants):
+    b = u8(scale) + u8(1) + u16(0) + u32(len(instants))
+    for jd1, jd2 in instants:
+        b += time(jd1, jd2)
+    return b
+
+
+def profile(observer=0, plane=0, form=0, frame=0, corrections=7, speeds=1,
+            sidereal_plane=0, reserved=0, observer_body=0, site=(0.0, 0.0, 0.0),
+            anchor=(0.0, 0.0), anchor_ayan=0.0, columns=0, zodiac="", ext=None):
+    return (u8(observer) + u8(plane) + u8(form) + u8(frame) + u8(corrections) +
+            u8(speeds) + u8(sidereal_plane) + u8(reserved) + i32(observer_body) +
+            f64(site[0]) + f64(site[1]) + f64(site[2]) +
+            time(anchor[0], anchor[1]) + f64(anchor_ayan) + u32(columns) +
+            str8(zodiac) + tlv(ext or []))
+
+
+def obj_head(kind, prof=0, reserved=0):
+    return u8(kind) + u8(prof) + u16(reserved)
+
+
+def obj_body(naif, prof=0):
+    return obj_head(0, prof) + i32(naif)
+
+
+def obj_orbit(naif, point, method, prof=0):
+    return obj_head(1, prof) + i32(naif) + u8(point) + u8(method) + u16(0)
+
+
+def obj_star(name, prof=0):
+    return obj_head(2, prof) + str8(name)
+
+
+def obj_hypo(token, prof=0):
+    return obj_head(3, prof) + str8(token)
+
+
+def obj_elements(epoch, equinox, centre, terms, name, equinox_jd=0.0, prof=0):
+    """terms: list of 6 lists (M, a, e, argp, node, incl), each nTerms long."""
+    n = len(terms[0])
+    assert all(len(t) == n for t in terms)
+    b = obj_head(4, prof) + time(*epoch) + u8(equinox) + u8(centre) + u8(n) + u8(0)
+    b += f64(equinox_jd)
+    for element in terms:
+        for c in element:
+            b += f64(c)
+    return b + str8(name)
+
+
+def obj_designation(s, prof=0):
+    return obj_head(5, prof) + str8(s)
+
+
+def question(time_bytes, profiles, objects, delta_t=NAN, ext=None,
+             delta_t_raw=None):
+    b = time_bytes
+    b += raw_f64(delta_t_raw) if delta_t_raw else f64(delta_t)
+    b += u8(len(profiles)) + b"".join(profiles)
+    b += u16(len(objects)) + b"".join(objects)
+    return b + tlv(ext or [])
+
+
+def meta(rows_ok, err=0, source_idx=0, flags=0, resolved=-2**31,
+         first_failed=0xFFFFFFFF, name="", err_text=""):
+    return (i32(rows_ok) + u16(err) + u8(source_idx) + u8(flags) + i32(resolved) +
+            u32(first_failed) + str8(name) + str8(err_text))
+
+
+def sources(names):
+    return u8(len(names)) + b"".join(str8(n) for n in names)
+
+
+def data_chunk(chunk_index, i_time, rows, total_rows, precision, flags, columns,
+               meta_bytes, values):
+    """values: per object, per row, per column floats."""
+    n_obj = len(values)
+    b = (u32(chunk_index) + u32(i_time) + u32(rows) + u32(total_rows) +
+         u8(precision) + u8(flags) + u16(n_obj) + u32(columns))
+    b += meta_bytes
+    pack = f32 if precision == 1 else f64
+    for obj in values:
+        assert len(obj) == rows
+        for row in obj:
+            for v in row:
+                b += pack(v)
+    return b
+
+
+def error(code, flags=0, retry_ms=0, text="", ext=None):
+    return u16(code) + u16(flags) + u32(retry_ms) + str8(text) + tlv(ext or [])
+
+
+# ---- the capability TLVs of two example servers ------------------------------
+
+def caps_swiss():
+    zodiacs = ["fagan-bradley", "lahiri", "raman", "krishnamurti", "user"]
+    return [
+        (0x0001, u32(0b111111)),                 # all six kinds
+        (0x0002, u32(0b11111)),                  # all observers
+        (0x0003, u32(0b11) + u32(0b11) + u32(0b1111)),
+        (0x0004, u8(5) + bytes([7, 0, 3, 5, 1])),
+        (0x0005, u32(0b1111) + u32(0b11111)),
+        (0x0006, u32(0b1110)),                   # no sigma
+        (0x0007, u16(len(zodiacs)) + b"".join(str8(z) for z in zodiacs)),
+        (0x0008, u32(0b111)),
+        (0x0009, u32(0b011)),                    # UT1, TT
+        (0x000A, u16(1) + str8("sepl_18") + time(2378496.5) + time(2524624.5)),
+        (0x000C, str8("swiss-2.10.03")),
+        (0x000E, u32(10000) + u32(100000)),
+        (0x0010, u16(32)),
+        (0x0011, u16(2) + str8("cupido") + str8("vulcan")),
+        (0x0012, u32(0b11111)),
+    ]
+
+
+def caps_prometheia():
+    zodiacs = ["fagan-bradley", "lahiri", "user"]
+    return [
+        (0x0001, u32(0b100011)),                 # body, orbit point, designation
+        (0x0002, u32(0b11111)),
+        (0x0003, u32(0b11) + u32(0b11) + u32(0b1111)),
+        (0x0004, u8(8) + bytes(range(8))),       # every mask
+        (0x0005, u32(0b1111) + u32(0b11)),       # mean, osculating
+        (0x0006, u32(0b0111)),                   # sigma, ayanamsa, light time
+        (0x0007, u16(len(zodiacs)) + b"".join(str8(z) for z in zodiacs)),
+        (0x0008, u32(0b001)),
+        (0x0009, u32(0b111)),                    # UT1, TT, TDB
+        (0x000A, u16(1) + str8("DE440") + time(2287184.5) + time(2688976.5)),
+        (0x000B, u16(1) + str8("sbdb") + str8("2026-09-16")),
+        (0x000C, str8("usno-observed+smh2016")),
+        (0x000D, u16(2) + str8("iau2006") + str8("vondrak2011")),
+        (0x000F, u8(15) + b"\0\0\0" + u32(4096) + f32(0.0001)),
+        (0x0010, u16(64)),
+    ]
+
+
+# ---- the fixtures -------------------------------------------------------------
+
+J2000 = 2451545.0
+DAY_NS = 86400 * 10**9
+
+
+def fixtures():
+    F = []
+
+    def add(name, direction, mtype, expect, note, msg):
+        F.append((name, direction, mtype, expect, note, msg))
+
+    geo = profile()
+    helio = profile(observer=2)
+    topo_sid = profile(observer=1, site=(-122.3, 47.6, 50.0), zodiac="fagan-bradley",
+                       sidereal_plane=2, columns=0b0010)
+    q_basic = question(grid_block(1, J2000, 0.0, 3600 * 10**9, 24), [geo],
+                       [obj_body(10), obj_body(301)])
+
+    # -- accepted -------------------------------------------------------------
+    add("hello_min", "c2s", HELLO, "ok", "no token, no caps",
+        envelope(HELLO, hello()))
+    add("hello_token_caps", "c2s", HELLO, "ok", "token and f32|cancel|lookup|segments caps",
+        envelope(HELLO, hello(caps=0b1001101, token="tok en-1")))
+    add("hello_future_client", "c2s", HELLO, "ok",
+        "a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4",
+        envelope(HELLO, hello(proto_max=9, proto_min=4, name="Astrolog 9"), version=9))
+    add("welcome_swiss", "s2c", WELCOME, "ok", "astrolog-ephd-like capabilities",
+        envelope(WELCOME, welcome(0b10011101, "Swiss Ephemeris 2.10.03 files",
+                                  "swiss-2.10.03/sepl_18", caps_swiss())))
+    add("welcome_prometheia", "s2c", WELCOME, "ok", "prometheiad-like, with segments",
+        envelope(WELCOME, welcome(0b11011101, "Prometheia 0.2, JPL DE440 + SBDB 2026-09-16",
+                                  "prom-0.2/de440/sbdb-20260916", caps_prometheia(),
+                                  server="prometheiad/0.2")))
+    add("request_basic", "c2s", REQUEST, "ok", "Sun and Moon, TT hourly grid, geocentric",
+        envelope(REQUEST, delivery() + q_basic, request_id=1))
+    cast = [obj_body(10), obj_body(301), obj_body(4, prof=1), obj_body(20000001),
+            obj_body(20002060), obj_orbit(301, 0, 1), obj_orbit(301, 3, 0, prof=2),
+            obj_star("Aldebaran"), obj_hypo("cupido"),
+            obj_elements((J2000, 0.0), 0, 0,
+                         [[252.8987988, 707550.7341], [0.13744, 0.0], [0.019, 0.0],
+                          [322.212069, 1670.056], [47.787931, -1670.056], [7.5, 0.0]],
+                         "Vulcan"),
+            obj_designation("1P/Halley")]
+    add("request_cast_profiles", "c2s", REQUEST, "ok",
+        "one cast: three profiles (geo; helio; topocentric Fagan-Bradley on the invariable plane with the ayanamsa column) and all six object kinds",
+        envelope(REQUEST, delivery(precision=1, chunk_rows=500) +
+                 question(grid_block(1, 2447963.0, 0.5, 0, 1), [geo, helio, topo_sid], cast,
+                          delta_t=56.9),
+                 request_id=2))
+    add("request_list_ut", "c2s", REQUEST, "ok", "instant list in UT1, server's delta T",
+        envelope(REQUEST, delivery() +
+                 question(list_block(0, [(2461300.0, 0.5), (2461300.0, 0.25), (2461300.0, 0.5)]),
+                          [geo], [obj_body(5)]), request_id=3))
+    add("request_backward_grid", "c2s", REQUEST, "ok", "negative step (animation running backwards)",
+        envelope(REQUEST, delivery(priority=1) +
+                 question(grid_block(1, J2000, 0.0, -DAY_NS, 10), [geo], [obj_body(6)]),
+                 request_id=4))
+    add("request_user_zodiac", "c2s", REQUEST, "ok", "user ayanamsha anchored at J2000",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(1, J2000, 0.0, 0, 1),
+                          [profile(zodiac="user", anchor=(J2000, 0.0), anchor_ayan=23.85)],
+                          [obj_body(10)]), request_id=5))
+    add("request_segments", "c2s", REQUEST, "ok", "segments over 30 days, rectangular, 0.1 arcsec target",
+        envelope(REQUEST, delivery(representation=1, seg_err=0.1) +
+                 question(grid_block(1, J2000, 0.0, DAY_NS, 31), [profile(form=1)],
+                          [obj_body(301), obj_body(10)]), request_id=6))
+    add("request_pins", "c2s", REQUEST, "ok", "precession model plus critical ephemeris and catalog pins, ascending tags",
+        envelope(REQUEST, delivery() +
+                 question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(20000001)],
+                          ext=[(0x0003, str8("iau2006")), (0x8001, str8("DE440")),
+                               (0x8002, str8("sbdb/2026-09-16"))]), request_id=7))
+    m = sources(["JPL DE440", "SBDB 2026-09-16"])
+    m += meta(2, source_idx=0, name="Sun", resolved=10)
+    m += meta(1, err=3, source_idx=1, flags=(1 << 2) | (1 << 3), resolved=20000001,
+              first_failed=1, name="Ceres", err_text="outside catalog coverage")
+    add("data_chunk0_meta", "s2c", DATA, "ok",
+        "f64, sigma+ayanamsa columns, a partial object with a NaN row",
+        envelope(DATA, data_chunk(0, 0, 2, 2, 0, 0b101, 0b0011, m,
+                                  [[[280.1, 0.0, 0.983, 1.019, 0.0, 0.0, 0.0, 24.1],
+                                    [281.1, 0.0, 0.983, 1.019, 0.0, 0.0, 0.0, 24.1]],
+                                   [[45.0, 2.0, 2.1, 0.2, 0.01, 0.001, 0.003, 24.1],
+                                    [NAN] * 8]]), request_id=7))
+    add("data_chunk1_nometa_f32", "s2c", DATA, "ok", "a later f32 chunk without metadata",
+        envelope(DATA, data_chunk(1, 500, 1, 501, 1, 0b001, 0, b"",
+                                  [[[12.5, -1.25, 1.5, 0.5, 0.0, 0.0]]]), request_id=2))
+    seg = (time(J2000 + 15.0, 0.0) + f64(15.5) + u8(2) + b"\0\0\0" + f32(0.05) +
+           f32(1e-7) + b"".join(f64(c) for c in
+                                [0.001, 0.0005, 0.00001, -0.0021, 0.0001, 0.0, 0.0002, 0.0, 0.0]))
+    segd = (u32(0) + u8(0b101) + u8(0) + u16(1) + u16(0) + u16(1) + u32(0) +
+            sources(["JPL DE440"]) + meta(1, name="Moon", resolved=301) + u32(1) + seg)
+    add("segdata_moon", "s2c", SEGDATA, "ok", "one degree-2 segment spanning 31 days",
+        envelope(SEGDATA, segd, request_id=6))
+    add("error_rate_limited", "s2c", ERROR, "ok", "ERROR 6, retryable, retry in 1500 ms",
+        envelope(ERROR, error(6, flags=0b10, retry_ms=1500,
+                              text="rate limited: 10000 cells a second"), request_id=3))
+    add("error_version_closing", "s2c", ERROR, "ok", "ERROR 8, closing",
+        envelope(ERROR, error(8, flags=0b01, text="this client speaks 9..9; this server 4..4")))
+    add("error_v3_legacy", "s2c", ERROR, "ok",
+        "ERROR 8 to a version-3 client in that client's own layout (envelope version 3)",
+        envelope(ERROR, u32(0) + i32(8) + b"this server needs protocol 4 -- update Astrolog\0",
+                 version=3))
+    add("cancel", "c2s", CANCEL, "ok", "cancel request 4", envelope(CANCEL, b"", request_id=4))
+    add("ping", "c2s", PING, "ok", "", envelope(PING, b""))
+    add("pong", "s2c", PONG, "ok", "", envelope(PONG, b""))
+    add("lookup_prefix", "c2s", LOOKUP, "ok", "prefix, hypotheticals and stars included",
+        envelope(LOOKUP, u16(8) + u8(0b111) + u8(0) + str8("Lilith") + tlv([]), request_id=8))
+    lr = u16(3) + u8(0) + sources(["SBDB 2026-09-16", "Swiss Ephemeris"])
+    lr += (u8(0) + u8(0) + u16(0) + obj_body(20001181) + str8("1181 Lilith") + str8("1181") +
+           time(0.0) + time(0.0))
+    lr += (u8(1) + u8(1) + u16(0) + obj_orbit(301, 3, 0) + str8("Moon mean apogee") + str8("") +
+           time(0.0) + time(0.0))
+    lr += (u8(1) + u8(1) + u16(0) + obj_hypo("waldemath") + str8("Waldemath") + str8("") +
+           time(0.0) + time(0.0))
+    add("lookup_result_lilith", "s2c", LOOKUP_RESULT, "ok",
+        "three kinds answer one name", envelope(LOOKUP_RESULT, lr, request_id=8))
+
+    # -- refused: malformed -------------------------------------------------------
+    def bad(name, note, msg, expect="malformed", mtype=REQUEST, direction="c2s"):
+        add(name, direction, mtype, expect, note, msg)
+
+    bad("env_bad_magic", "magic 0x1EF1", envelope(PING, b"", magic=0x1EF1), mtype=PING)
+    bad("env_reserved_nonzero", "envelope reserved u16 = 1", envelope(PING, b"", reserved=1), mtype=PING)
+    bad("env_flag_bit", "envelope flag bit 3", envelope(PING, b"", flags=0b1000), mtype=PING)
+    bad("hello_min_gt_max", "protoMin 5 > protoMax 4",
+        envelope(HELLO, hello(proto_max=4, proto_min=5)), mtype=HELLO)
+    bad("ping_payload", "PING with a payload", envelope(PING, b"\0"), mtype=PING)
+    bad("trailing_bytes", "one byte after the TLV area",
+        envelope(REQUEST, delivery() + q_basic + b"\0", request_id=1))
+    bad("tlv_unsorted", "tags 0x8001 before 0x0003",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(10)])[:-2] +
+                 tlv([(0x8001, str8("DE440")), (0x0003, str8("iau2006"))], sort=False), request_id=1))
+    bad("tlv_duplicate", "tag 0x0003 twice",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(10)])[:-2] +
+                 tlv([(0x0003, str8("iau2006")), (0x0003, str8("iau2006"))], sort=False), request_id=1))
+    q_len_bad = question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(10)])[:-2] + u16(4)
+    bad("tlv_total_mismatch", "TLV totalLen 4 with no entries",
+        envelope(REQUEST, delivery() + q_len_bad, request_id=1))
+    bad("str8_bad_utf8", "zodiac bytes 0xC3 0x28",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(zodiac=b"\xc3\x28")], [obj_body(10)]),
+                 request_id=1))
+    bad("str8_control", "star name with a newline",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
+                                                [obj_star("Alde\nbaran")]), request_id=1))
+    bad("deltat_signalling_nan", "delta T 0x7FF0000000000001",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(10)],
+                                                delta_t_raw="010000000000f07f"), request_id=1))
+    bad("site_nan", "canonical NaN in a site field (allowed only in delta T)",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(observer=1, site=(NAN, 0.0, 0.0))],
+                                                [obj_body(10)]), request_id=1))
+    bad("ntime_zero", "grid nTime 0",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 0), [geo], [obj_body(10)]),
+                 request_id=1))
+    bad("step_zero_many", "stepNs 0 with nTime 2",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 2), [geo], [obj_body(10)]),
+                 request_id=1))
+    bad("step_nonzero_one", "stepNs 1 day with nTime 1",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, DAY_NS, 1), [geo], [obj_body(10)]),
+                 request_id=1))
+    bad("step_overflow", "(nTime-1) x |stepNs| overflows i64",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 2**62, 3), [geo], [obj_body(10)]),
+                 request_id=1))
+    bad("time_out_of_range", "jd1 = 2e8",
+        envelope(REQUEST, delivery() + question(grid_block(1, 2e8, 0.0, 0, 1), [geo], [obj_body(10)]),
+                 request_id=1))
+    bad("profiles_zero", "nProfiles 0",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [], [obj_body(10)]),
+                 request_id=1))
+    bad("objects_zero", "nObj 0",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo], []), request_id=1))
+    bad("profile_index_range", "object names profile 1 of 1",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(10, prof=1)]),
+                 request_id=1))
+    bad("profile_reserved", "profile reserved byte 1",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [profile(reserved=1)],
+                                                [obj_body(10)]), request_id=1))
+    bad("object_reserved", "object head reserved u16 = 1",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
+                                                [u8(0) + u8(0) + u16(1) + i32(10)]), request_id=1))
+    bad("observer_body_unused", "observerBody 5 with a geocentric observer",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [profile(observer_body=5)],
+                                                [obj_body(10)]), request_id=1))
+    bad("site_unused", "a site with a heliocentric observer",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(observer=2, site=(10.0, 20.0, 0.0))],
+                                                [obj_body(10)]), request_id=1))
+    bad("site_lat_range", "site latitude 91",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(observer=1, site=(0.0, 91.0, 0.0))],
+                                                [obj_body(10)]), request_id=1))
+    bad("tropical_with_plane", "zodiac \"\" with siderealPlane 1",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(sidereal_plane=1)], [obj_body(10)]), request_id=1))
+    bad("user_zodiac_no_anchor", "zodiac user with a zero anchor epoch",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(zodiac="user")], [obj_body(10)]), request_id=1))
+    bad("anchor_unused", "anchor set with a named zodiac",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(zodiac="lahiri", anchor=(J2000, 0.0))],
+                                                [obj_body(10)]), request_id=1))
+    bad("speeds_not_bool", "speeds = 2",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [profile(speeds=2)],
+                                                [obj_body(10)]), request_id=1))
+    bad("elements_no_terms", "elements with nTerms 0",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
+                                                [obj_head(4) + time(J2000) + u8(0) + u8(0) + u8(0) + u8(0) +
+                                                 f64(0.0) + str8("x")]), request_id=1))
+    bad("equinox_jd_unused", "equinoxJd set with equinox J2000",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
+                                                [obj_elements((J2000, 0.0), 0, 0, [[0.0]] * 6, "x",
+                                                              equinox_jd=J2000)]), request_id=1))
+    bad("seg_err_with_samples", "segTargetErrArcsec 1 with representation 0",
+        envelope(REQUEST, delivery(seg_err=1.0) + q_basic, request_id=1))
+    bad("delivery_reserved", "delivery reserved byte 1",
+        envelope(REQUEST, delivery(reserved=1) + q_basic, request_id=1))
+    bad("request_id_zero", "a REQUEST with requestId 0",
+        envelope(REQUEST, delivery() + q_basic, request_id=0))
+
+    # -- refused: unsupported (registry values or capabilities not implemented) -----
+    bad("unknown_critical_tag", "critical REQUEST tag 0x8FFF",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo], [obj_body(10)],
+                                                ext=[(0x8FFF, b"")]), request_id=1),
+        expect="unsupported")
+    bad("observer_unregistered", "observer 9",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [profile(observer=9)],
+                                                [obj_body(10)]), request_id=1),
+        expect="unsupported")
+    bad("correction_bit_unregistered", "corrections bit 8",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(corrections=15)], [obj_body(10)]), request_id=1),
+        expect="unsupported")
+    bad("kind_unregistered", "object kind 6",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1), [geo],
+                                                [obj_head(6) + i32(10)]), request_id=1),
+        expect="unsupported")
+    bad("segments_spherical", "segments with form 0",
+        envelope(REQUEST, delivery(representation=1, seg_err=0.1) +
+                 question(grid_block(1, J2000, 0.0, DAY_NS, 2), [geo], [obj_body(301)]), request_id=1),
+        expect="unsupported")
+    bad("segments_list", "segments over an instant list",
+        envelope(REQUEST, delivery(representation=1, seg_err=0.1) +
+                 question(list_block(1, [(J2000, 0.0), (J2000, 1.0)]), [profile(form=1)],
+                          [obj_body(301)]), request_id=1),
+        expect="unsupported")
+    bad("segments_columns", "segments with the ayanamsa column",
+        envelope(REQUEST, delivery(representation=1, seg_err=0.1) +
+                 question(grid_block(1, J2000, 0.0, DAY_NS, 2), [profile(form=1, columns=0b10)],
+                          [obj_body(301)]), request_id=1),
+        expect="unsupported")
+    bad("zodiac_unregistered", "zodiac token \"martian\"",
+        envelope(REQUEST, delivery() + question(grid_block(1, J2000, 0.0, 0, 1),
+                                                [profile(zodiac="martian")], [obj_body(10)]), request_id=1),
+        expect="unsupported")
+    return F
+
+
+def hexlines(b):
+    h = b.hex()
+    return "\n".join(h[i:i + 64] for i in range(0, len(h), 64)) + "\n"
+
+
+def main():
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    out = os.path.join(root, "ephsrv", "conformance")
+    check = "--check" in sys.argv[1:]
+    files = {}
+    rows = ["# file\tdirection\ttype\texpect\tnote"]
+    names = set()
+    for name, direction, mtype, expect, note, msg in fixtures():
+        assert name not in names, name
+        names.add(name)
+        # Every fixture's envelope length must match its payload.
+        assert struct.unpack("<I", msg[12:16])[0] == len(msg) - 16, name
+        files[name + ".hex"] = hexlines(msg)
+        rows.append("\t".join([name + ".hex", direction, str(mtype), expect, note]))
+    files["MANIFEST.tsv"] = "\n".join(rows) + "\n"
+    if check:
+        bad = [f for f, text in files.items()
+               if not os.path.exists(os.path.join(out, f)) or
+               open(os.path.join(out, f)).read() != text]
+        extra = [f for f in (os.listdir(out) if os.path.isdir(out) else []) if f not in files]
+        if bad or extra:
+            print("ephproto4 fixtures out of date: %s" % ", ".join(sorted(bad + extra)))
+            return 1
+        print("ephproto4 fixtures: %d files current" % len(files))
+        return 0
+    os.makedirs(out, exist_ok=True)
+    for f in os.listdir(out):
+        if f not in files:
+            os.remove(os.path.join(out, f))
+    for f, text in files.items():
+        with open(os.path.join(out, f), "w", newline="\n") as fh:
+            fh.write(text)
+    print("ephproto4 fixtures: wrote %d files to %s" % (len(files), os.path.relpath(out, root)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

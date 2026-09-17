@@ -1,0 +1,67 @@
+# file	direction	type	expect	note
+hello_min.hex	c2s	1	ok	no token, no caps
+hello_token_caps.hex	c2s	1	ok	token and f32|cancel|lookup|segments caps
+hello_future_client.hex	c2s	1	ok	a version-9 client: envelope 9, protoMax 9, protoMin 4; the server answers v4
+welcome_swiss.hex	s2c	2	ok	astrolog-ephd-like capabilities
+welcome_prometheia.hex	s2c	2	ok	prometheiad-like, with segments
+request_basic.hex	c2s	3	ok	Sun and Moon, TT hourly grid, geocentric
+request_cast_profiles.hex	c2s	3	ok	one cast: three profiles (geo; helio; topocentric Fagan-Bradley on the invariable plane with the ayanamsa column) and all six object kinds
+request_list_ut.hex	c2s	3	ok	instant list in UT1, server's delta T
+request_backward_grid.hex	c2s	3	ok	negative step (animation running backwards)
+request_user_zodiac.hex	c2s	3	ok	user ayanamsha anchored at J2000
+request_segments.hex	c2s	3	ok	segments over 30 days, rectangular, 0.1 arcsec target
+request_pins.hex	c2s	3	ok	precession model plus critical ephemeris and catalog pins, ascending tags
+data_chunk0_meta.hex	s2c	4	ok	f64, sigma+ayanamsa columns, a partial object with a NaN row
+data_chunk1_nometa_f32.hex	s2c	4	ok	a later f32 chunk without metadata
+segdata_moon.hex	s2c	15	ok	one degree-2 segment spanning 31 days
+error_rate_limited.hex	s2c	5	ok	ERROR 6, retryable, retry in 1500 ms
+error_version_closing.hex	s2c	5	ok	ERROR 8, closing
+error_v3_legacy.hex	s2c	5	ok	ERROR 8 to a version-3 client in that client's own layout (envelope version 3)
+cancel.hex	c2s	8	ok	cancel request 4
+ping.hex	c2s	6	ok	
+pong.hex	s2c	7	ok	
+lookup_prefix.hex	c2s	9	ok	prefix, hypotheticals and stars included
+lookup_result_lilith.hex	s2c	10	ok	three kinds answer one name
+env_bad_magic.hex	c2s	6	malformed	magic 0x1EF1
+env_reserved_nonzero.hex	c2s	6	malformed	envelope reserved u16 = 1
+env_flag_bit.hex	c2s	6	malformed	envelope flag bit 3
+hello_min_gt_max.hex	c2s	1	malformed	protoMin 5 > protoMax 4
+ping_payload.hex	c2s	6	malformed	PING with a payload
+trailing_bytes.hex	c2s	3	malformed	one byte after the TLV area
+tlv_unsorted.hex	c2s	3	malformed	tags 0x8001 before 0x0003
+tlv_duplicate.hex	c2s	3	malformed	tag 0x0003 twice
+tlv_total_mismatch.hex	c2s	3	malformed	TLV totalLen 4 with no entries
+str8_bad_utf8.hex	c2s	3	malformed	zodiac bytes 0xC3 0x28
+str8_control.hex	c2s	3	malformed	star name with a newline
+deltat_signalling_nan.hex	c2s	3	malformed	delta T 0x7FF0000000000001
+site_nan.hex	c2s	3	malformed	canonical NaN in a site field (allowed only in delta T)
+ntime_zero.hex	c2s	3	malformed	grid nTime 0
+step_zero_many.hex	c2s	3	malformed	stepNs 0 with nTime 2
+step_nonzero_one.hex	c2s	3	malformed	stepNs 1 day with nTime 1
+step_overflow.hex	c2s	3	malformed	(nTime-1) x |stepNs| overflows i64
+time_out_of_range.hex	c2s	3	malformed	jd1 = 2e8
+profiles_zero.hex	c2s	3	malformed	nProfiles 0
+objects_zero.hex	c2s	3	malformed	nObj 0
+profile_index_range.hex	c2s	3	malformed	object names profile 1 of 1
+profile_reserved.hex	c2s	3	malformed	profile reserved byte 1
+object_reserved.hex	c2s	3	malformed	object head reserved u16 = 1
+observer_body_unused.hex	c2s	3	malformed	observerBody 5 with a geocentric observer
+site_unused.hex	c2s	3	malformed	a site with a heliocentric observer
+site_lat_range.hex	c2s	3	malformed	site latitude 91
+tropical_with_plane.hex	c2s	3	malformed	zodiac "" with siderealPlane 1
+user_zodiac_no_anchor.hex	c2s	3	malformed	zodiac user with a zero anchor epoch
+anchor_unused.hex	c2s	3	malformed	anchor set with a named zodiac
+speeds_not_bool.hex	c2s	3	malformed	speeds = 2
+elements_no_terms.hex	c2s	3	malformed	elements with nTerms 0
+equinox_jd_unused.hex	c2s	3	malformed	equinoxJd set with equinox J2000
+seg_err_with_samples.hex	c2s	3	malformed	segTargetErrArcsec 1 with representation 0
+delivery_reserved.hex	c2s	3	malformed	delivery reserved byte 1
+request_id_zero.hex	c2s	3	malformed	a REQUEST with requestId 0
+unknown_critical_tag.hex	c2s	3	unsupported	critical REQUEST tag 0x8FFF
+observer_unregistered.hex	c2s	3	unsupported	observer 9
+correction_bit_unregistered.hex	c2s	3	unsupported	corrections bit 8
+kind_unregistered.hex	c2s	3	unsupported	object kind 6
+segments_spherical.hex	c2s	3	unsupported	segments with form 0
+segments_list.hex	c2s	3	unsupported	segments over an instant list
+segments_columns.hex	c2s	3	unsupported	segments with the ayanamsa column
+zodiac_unregistered.hex	c2s	3	unsupported	zodiac token "martian"
