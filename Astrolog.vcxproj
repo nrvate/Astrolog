@@ -125,6 +125,7 @@
     <ClCompile Include="data.cpp" />
     <ClCompile Include="ephem.cpp" />
     <ClCompile Include="ephswiss.cpp" />
+    <ClCompile Include="ephprom.cpp" />
     <ClCompile Include="express.cpp" />
     <ClCompile Include="general.cpp" />
     <ClCompile Include="intrpret.cpp" />

@@ -2158,6 +2158,81 @@ the gates the phase touches.
      what the normative rules require; the suggestion needs either a
      "metadata may be revised on the last chunk" rule or withdrawal.
 
+6. **Phase 7, the Prometheia plugin, first increment (2026-09-17).**
+   `ephprom.cpp` and `ephprom.h` in the CORE group of `Makefile.srcs`,
+   entirely inside `#ifdef PROMETHEIA`; the makefiles detect the
+   dependency with `pkg-config prometheia` and build without it silently
+   -- the detection lives in `Makefile.srcs` once, each Linux makefile
+   appends two lines after its own flags, and the Windows toolchains get
+   no detection at all because the package is today a Linux static
+   library. Phase 3's `EPHSRCDEF` table is still being built in parallel
+   on branch `eph3` (nothing landed when this was written), so the
+   module carries the parts of the 4.1 model it can own alone and the
+   shapes the sketch names: the three `EPHPARAM` rows with the
+   `prometheia.*` keys, `FAvailable`/`Start`/`Stop`/`State`, the
+   question block of 3.4 as one `FEphPromCompute` over the locked
+   header's own `eph::Profile` and `eph::Object` (so the plugin and the
+   wire cannot drift), LOOKUP under 3.5a's star grammar, and registration
+   into the shared table left as glue. What the binding pins:
+   - **The frame lists run in opposite orders.** The protocol's frames
+     are 0 true of date, 1 mean of date, 2 J2000, 3 ICRF; Prometheia's
+     are 0 ICRF, 1 J2000, 2 mean of date, 3 true of date. A straight
+     copy of the field binds the wrong frame four ways; the suite pins
+     all four mappings in a check that needs no engine and no data file.
+   - **The corrections reach the orbit points.** Prometheia honours the
+     three bits as sent on kind 1 (measured: at the check's instant
+     the light-time bit alone moves the Moon's ascending node -18.4030",
+     the aberration bit alone +18.4053", deflection alone 0.0000", and
+     all three together +0.0015" -- the two large terms nearly cancel), so
+     `corrApplied` is 7 there, and the group asserts each bit passes
+     through. Note that `docs/ENGINE.md` in the Prometheia tree still
+     says an orbit point "is geometric" and none of the terms apply --
+     the engine's behaviour and the locked 3.5a agree with each other
+     and not with that sentence; it reads as a stale doc, reported here
+     rather than assumed.
+   - **The star grammar and the ambiguity rule are the library's
+     namespace, enforced by the plugin.** `star_lookup` returns
+     "Beta Sco" as beta1 and beta2 Sco of equal best quality, and "8 Sco"
+     and "61 Cyg" the same way (a Flamsteed number two stars carry);
+     those are error 6 under 3.5a, and the plugin enforces it from the
+     lookup lists, because `star_find` answers the brighter component
+     and never says there was a choice. `star_lookup`'s exact matching
+     does not know every form of the grammar `star_find` does (a
+     Flamsteed number among them), so the resolver falls back to it when
+     the lookup answers nothing.
+   - **Distance unknown is a sentinel in the library and a flag in the
+     protocol:** a star without a parallax comes back with a huge
+     distance, which becomes column 0 and META's `noDistance`.
+   - **The delta T hook is Astrolog's:** a finite per-cast value when
+     the question carries one, else the -Yz override, else
+     `swe_deltat()` iterated once, so `calc_ut` answers with the same
+     TT-UT1 the local Swiss path would use.
+   A qttest group (`prometheia`, after `ephem-server-live`) runs in both
+   configurations: without PROMETHEIA it prints why it skips and passes,
+   with it the pure mapping checks and the star grammar run with no data
+   file at all, the engine checks run when an ephemeris is found on the
+   -Yi paths (the catalog and perturbers are set when their files are
+   found, and the small-body legs say what they skipped otherwise), and
+   the oracle against the local Swiss path is the next increment.
+   - **One bug the group caught in the plugin the same day:** the file
+     search returned fTrue for an absolute path without writing it to
+     the out path, so the engine opened with an empty catalog while
+     `FAvailable` said fine. The designation and Chiron checks failed
+     with the star namespace's error text, which named the path at once.
+   - **The scratch that runs the oracle** is `/nvm/work/eph7prom-scratch`:
+     the `.pc` inside the Prometheia tree's `build/` resolves its prefix
+     to `/shares` (it assumes a `lib/pkgconfig` layout that does not
+     exist there), so the session wrote its own with the real paths and
+     runs the PROMETHEIA build with `PKG_CONFIG_PATH` pointed at it.
+     Nothing in the repo reads that file.
+   - **Gates:** make check all clear, suite 5689 passed, 0 failed; the
+     full suite with PROMETHEIA compiled in, 5720 passed, 0 failed; the
+     prometheia group itself 54 passed, 0 failed with the engine open
+     against DE440 and the catalog, and a clean skip in both
+     configurations (no PROMETHEIA; PROMETHEIA with no ephemeris on the
+     -Yi paths). The locked artifacts are untouched; `ephsrv/ephproto.h`
+     is read, not written.
+
 2. **Phase 2, protocol version 4 in code (2026-09-17).** `astrolog-ephd`,
    `eph_wsclient` and the Qt client speak version 4 and nothing else, in one
    commit, because the break is clean and the suite's live group casts

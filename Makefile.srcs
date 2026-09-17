@@ -21,9 +21,12 @@
 # groups now; same set, same program, different layout.
 
 # The engine: everything that computes a chart or reads and writes one.
+# ephprom.cpp is the Prometheia source plugin (EPHEMERIS_PLUGINS_PLAN.md
+# 4.2, phase 7): every build compiles it, and without -DPROMETHEIA it is
+# empty, so the default build never references the library.
 SRC_CORE = astrolog.cpp switch.cpp atlas.cpp calc.cpp charts0.cpp \
   charts1.cpp charts2.cpp charts3.cpp data.cpp ephem.cpp ephswiss.cpp \
-  express.cpp general.cpp intrpret.cpp io.cpp matrix.cpp
+  ephprom.cpp express.cpp general.cpp intrpret.cpp io.cpp matrix.cpp
 
 # The graphics half: chart drawing and the device backends it draws to.
 # cgif.cpp and cgif_raw.cpp are the vendored cgif library (MIT, see
@@ -87,3 +90,24 @@ SWISS_OBJS = $(patsubst %.cpp,%.o,$(SRC_SWISS)) \
 $(SWISS_OBJS): override CPPFLAGS += $(SWISS_NOWARN)
 $(SWISS_OBJS): override CFLAGS += $(SWISS_NOWARN)
 
+
+# The Prometheia source plugin's optional dependency (EPHEMERIS_PLUGINS_
+# PLAN.md 4.2, phase 7): detected with `pkg-config prometheia`, and
+# built without it silently -- PROMETHEIA_FLAGS and PROMETHEIA_LIBS come
+# out empty, ephprom.cpp compiles empty, and no binary references the
+# library. The source then reports unavailable through FAvailable. The
+# Windows toolchains get no detection at all: the package is today a
+# Linux static library, and a .pc on a mingw PATH would hand this build
+# Linux paths. A makefile opts in with the two lines after its own
+# CPPFLAGS and LIBS:
+#
+#   CPPFLAGS += $(PROMETHEIA_FLAGS)
+#   LIBS += $(PROMETHEIA_LIBS)
+UNAME := $(shell uname -s 2>/dev/null)
+ifneq ($(findstring Linux,$(UNAME)),Linux)
+PROMETHEIA_FOUND :=
+else
+PROMETHEIA_FOUND := $(shell pkg-config --exists prometheia 2>/dev/null && echo yes)
+endif
+PROMETHEIA_FLAGS := $(if $(PROMETHEIA_FOUND),-DPROMETHEIA $(shell pkg-config --cflags prometheia 2>/dev/null))
+PROMETHEIA_LIBS := $(if $(PROMETHEIA_FOUND),$(shell pkg-config --static --libs prometheia 2>/dev/null))

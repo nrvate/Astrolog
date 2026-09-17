@@ -56,6 +56,12 @@ LIBS = -lm -lX11 -ldl -pthread -s
 CPPFLAGS = -MMD -MP -O -std=gnu++17 -Wno-write-strings -Wno-narrowing -Wno-comment
 RM = rm -f
 
+# The Prometheia plugin's optional dependency; see Makefile.srcs for the
+# detection and for why a machine without the package builds exactly as
+# it always has.
+CPPFLAGS += $(PROMETHEIA_FLAGS)
+LIBS += $(PROMETHEIA_LIBS)
+
 # "make" alone builds two binaries on Linux: upstream's X11 one and this
 # fork's Qt port, side by side. The maintainer's rule, 2026-09-04.
 #

@@ -105,6 +105,10 @@
 #include "astrolog.h"
 #include "extern.h"
 #include "qtdriver.h"
+// The Prometheia source plugin (phase 7). The header is empty without
+// -DPROMETHEIA, so including it is free in the default build and the
+// group below says so rather than failing.
+#include "ephprom.h"
 // Every scalar member of US and GS by name, generated from astrolog.h, so
 // the settings round trip can ask about all of them rather than one at a
 // time. See tools/gen_settings_fields.py.
@@ -18656,6 +18660,327 @@ static flag FWaitEphdQt(QProcess *pproc, QByteArray *pbaLog, int msMax)
   return fFalse;
 }
 
+// The Prometheia source plugin (EPHEMERIS_PLUGINS_PLAN.md 4.2, phase 7).
+// Without -DPROMETHEIA -- pkg-config prometheia unresolved, which is
+// every stock checkout -- the group says so and passes; nothing else in
+// the suite references the library. With it, the pure mapping checks run
+// with no data file at all, the star grammar checks run against the
+// compiled-in star catalog, and the engine checks run when an ephemeris
+// is found on the -Yi paths, each leg saying what it skipped otherwise.
+// The oracle legs against the local Swiss path live in this group too:
+// angular separations only, never longitude differences (work log 0c),
+// with tolerances the measurements carried in headroom.
+static void TestPrometheiaQt()
+{
+#ifndef PROMETHEIA
+  printf("  skipped: compiled without PROMETHEIA (pkg-config prometheia "
+    "did not resolve)\n");
+#else
+  char szWhy[cchSzMax], szErr[256], szState[512];
+  char szStateAfter[512];
+  EPHPROMMATCH rgm[8];
+  flag fCat = fFalse;
+  int idx, cm;
+  uint16_t nErr;
+
+  Group("Prometheia");
+
+  // ---- The parameter table (4.2/4.3): keys, defaults, set and reset --
+  Check(cepPromParam == 3, "the source carries its three parameters (%d)",
+    cepPromParam);
+  Check(FEqSz(rgEphPromParam[0].szKey, "prometheia.ephemeris") &&
+    FEqSz(rgEphPromParam[1].szKey, "prometheia.catalog") &&
+    FEqSz(rgEphPromParam[2].szKey, "prometheia.perturbers"),
+    "the parameter keys are the 4.2 table's");
+  Check(*SzEphPromParam(epPromEphemeris) == chNull,
+    "the ephemeris default is the source's own");
+  EphPromSetParam(epPromCatalog, "catalog-test.epm");
+  Check(FEqSz(SzEphPromParam(epPromCatalog), "catalog-test.epm"),
+    "a parameter set is readable back");
+  EphPromSetParam(epPromCatalog, "");
+  Check(*SzEphPromParam(epPromCatalog) == chNull,
+    "an empty value restores the default");
+  EphPromSetParam(-1, "x");              // out of range: ignored
+  EphPromSetParam(cepPromParam, "x");
+
+  // ---- Profile to options (Appendix C), with no engine and no files --
+  // The frame lists are the SAME FOUR NAMES in OPPOSITE ORDERS: the
+  // protocol 0 true of date, 1 mean of date, 2 J2000, 3 ICRF;
+  // Prometheia 0 ICRF, 1 J2000, 2 mean of date, 3 true of date. A
+  // straight copy binds the wrong frame four ways; this is the one
+  // check that can catch it before any ephemeris is opened.
+  {
+    static CONST int rgnFrameProm[] = {PROMETHEIA_FRAME_TRUE_OF_DATE,
+      PROMETHEIA_FRAME_MEAN_OF_DATE, PROMETHEIA_FRAME_J2000,
+      PROMETHEIA_FRAME_ICRF};
+    eph::Profile pf;
+    prometheia_options opts;
+    int nFrame;
+
+    for (nFrame = 0; nFrame <= eph::kFrameMax; nFrame++) {
+      pf = eph::Profile();
+      pf.frame = (uint8_t)nFrame;
+      Check(FEphPromOptions(&pf, &opts) &&
+        opts.frame == rgnFrameProm[nFrame],
+        "frame %d maps to Prometheia's %d (%d)", nFrame, rgnFrameProm[nFrame],
+        opts.frame);
+    }
+    pf = eph::Profile();
+    Check(FEphPromOptions(&pf, &opts) && opts.center ==
+      PROMETHEIA_CENTER_GEOCENTRIC && opts.coords == PROMETHEIA_COORDS_ECLIPTIC &&
+      opts.sidereal == PROMETHEIA_SIDEREAL_TROPICAL &&
+      opts.light_time && opts.deflection && opts.aberration && opts.speed,
+      "the default profile maps to the default options");
+    pf.corrections = eph::kCorrLightTime;
+    Check(FEphPromOptions(&pf, &opts) && opts.light_time &&
+      !opts.deflection && !opts.aberration,
+      "the correction bits carry one at a time");
+    pf.corrections = eph::kCorrDeflection | eph::kCorrAberration;
+    Check(FEphPromOptions(&pf, &opts) && !opts.light_time &&
+      opts.deflection && opts.aberration, "the correction bits carry pairs");
+    pf.observer = eph::kObsTopo;
+    pf.siteLonEastDeg = -122.3; pf.siteLatDeg = 47.6; pf.siteHeightM = 90.0;
+    Check(FEphPromOptions(&pf, &opts) &&
+      opts.center == PROMETHEIA_CENTER_TOPOCENTRIC &&
+      opts.site_lon_deg == -122.3 && opts.site_lat_deg == 47.6 &&
+      opts.site_height_m == 90.0, "the topocentric site carries through");
+    pf.observer = eph::kObsBody; pf.observerBody = 499;
+    Check(FEphPromOptions(&pf, &opts) && opts.center == PROMETHEIA_CENTER_BODY &&
+      opts.center_body == 499, "a body observer carries its body");
+    pf.observer = eph::kObsBary;
+    Check(FEphPromOptions(&pf, &opts) && opts.center ==
+      PROMETHEIA_CENTER_BARYCENTRIC, "the barycentre observer carries");
+    pf.observer = 5;
+    Check(!FEphPromOptions(&pf, &opts), "an observer out of range refuses");
+
+    // Sidereal zodiacs: the three tokens Appendix C names, the refusals
+    // the protocol and the appendix demand.
+    pf = eph::Profile();
+    pf.zodiac = "lahiri";
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal ==
+      PROMETHEIA_SIDEREAL_LAHIRI, "zodiac lahiri maps to the library's");
+    pf.zodiac = "fagan-bradley";
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal ==
+      PROMETHEIA_SIDEREAL_FAGAN_BRADLEY, "zodiac fagan-bradley maps");
+    pf.zodiac = "user";
+    Check(!FEphPromOptions(&pf, &opts),
+      "zodiac user without an anchor epoch refuses (3.5)");
+    pf.anchorEpoch = eph::Time{2451545.0, 0.0};
+    pf.anchorAyanamsaDeg = 24.0;
+    Check(FEphPromOptions(&pf, &opts) && opts.sidereal ==
+      PROMETHEIA_SIDEREAL_USER && opts.sidereal_epoch_jd == 2451545.0 &&
+      opts.sidereal_ayanamsa_deg == 24.0,
+      "zodiac user carries its anchor");
+    pf.plane = eph::kPlaneEquator;
+    Check(!FEphPromOptions(&pf, &opts),
+      "a sidereal zodiac on the equator refuses (3.5)");
+    pf.plane = eph::kPlaneEcliptic; pf.siderealPlane = eph::kSidPlaneAnchor;
+    Check(!FEphPromOptions(&pf, &opts),
+      "sidereal plane 1 refuses (Appendix C: plane 0 only)");
+    pf.siderealPlane = eph::kSidPlaneDate; pf.zodiac = "sassanian";
+    Check(!FEphPromOptions(&pf, &opts),
+      "an A.11 token this engine does not serve refuses");
+
+    // The columns the question can get, before any engine sees it.
+    pf = eph::Profile();
+    Check(EphPromColumns(&pf, eph::kTimeTT) == 4,
+      "a tropical TT question gets the light-time column only");
+    pf.zodiac = "lahiri"; pf.columns = 2;
+    Check(EphPromColumns(&pf, eph::kTimeTT) == 6,
+      "a sidereal question adds the ayanamsa column");
+    pf.columns = 10;
+    Check(EphPromColumns(&pf, eph::kTimeUT1) == 14,
+      "a UT1 question adds delta T");
+  }
+
+  // ---- The star grammar (3.5a), against the compiled-in catalog ----
+  // No ephemeris file needed: the star catalog is in the library.
+  Check(FEphPromStarResolve("Aldebaran", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "an IAU proper name resolves (%s)", szErr);
+  Check(!FEphPromStarResolve("Beta Sco", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && nErr == eph::kOErrAmbiguous,
+    "a component-ambiguous name is error 6 (%s)", szErr);
+  Check(FEphPromStarResolve("Beta1 Sco", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0, "a numbered component resolves");
+  Check(FEphPromStarResolve("bet1 Sco", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0, "the three-letter form resolves too");
+  Check(FEphPromStarResolve("7 And", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0, "a Flamsteed number resolves");
+  Check(!FEphPromStarResolve("61 Cyg", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && nErr == eph::kOErrAmbiguous,
+    "a Flamsteed number two stars share is error 6 (%s)", szErr);
+  Check(FEphPromStarResolve("HR 5984", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "an HR designation resolves");
+  Check(FEphPromStarResolve("HIP 78820", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "a HIP designation resolves");
+  Check(FEphPromStarResolve("M 45", &idx, &nErr, szErr,
+    (int)sizeof(szErr)), "a Messier designation resolves");
+  Check(!FEphPromStarResolve("No Such Star", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && nErr == eph::kOErrUnknownBody,
+    "an unknown name is error 1");
+
+  // ---- The engine: kinds, error codes, correction pass-through ------
+  // Each leg names what it skipped; none fakes a pass. The catalog and
+  // perturbers are set when their files sit on the searched paths; a
+  // machine without them still checks every body, orbit-point and star
+  // leg, and the catalog's own legs say what they skipped.
+  {
+    char szPath[cchSzMax];
+    if (FEphPromFindFile("sbdb-full-20260916.epm", szPath, sizeof(szPath)))
+      EphPromSetParam(epPromCatalog, szPath);
+    else
+      printf("  note: no sbdb catalog on the -Yi paths, so the small-body "
+        "legs skip\n");
+    if (FEphPromFindFile("sb441-n16-de440span.bsp", szPath, sizeof(szPath)) ||
+      FEphPromFindFile("sb441-n16.bsp", szPath, sizeof(szPath)))
+      EphPromSetParam(epPromPerturbers, szPath);
+    fCat = FSzSet(SzEphPromParam(epPromCatalog));
+  }
+  if (!FEphPromAvailable(szWhy, sizeof(szWhy))) {
+    printf("  skipped: the engine's files are missing (%s)\n", szWhy);
+    return;
+  }
+  if (!FEphPromStart(szWhy, sizeof(szWhy))) {
+    printf("  skipped: the engine did not open (%s)\n", szWhy);
+    return;
+  }
+  Check(NEphPromState(szState, (int)sizeof(szState)) == 0, "state ready (%s)",
+    szState);
+  printf("  engine: %s\n", szState);
+
+  {
+    eph::Profile rgpf[6];
+    eph::Object rgobj[10];
+    EPHPROMANSWER rga[10];
+    double rgVal[10 * kEphPromStride];
+    EPHPROMQ q;
+    prometheia_error err;
+    double jd;
+    int i;
+
+    // One TT instant: 2026-09-17 0h UTC.
+    if (prometheia_utc_to_tt(2026, 9, 17, 0, 0, 0.0, &jd, &err) !=
+      PROMETHEIA_OK) {
+      Check(fFalse, "utc_to_tt refused (%s)", err.message);
+      goto LStop;
+    }
+    rgpf[0] = eph::Profile();                       // apparent, masks 7
+    rgpf[1] = eph::Profile();                       // astrometric, masks 0
+    rgpf[1].corrections = 0;
+    rgpf[2] = eph::Profile();                       // light time only
+    rgpf[2].corrections = eph::kCorrLightTime;
+    rgpf[3] = eph::Profile();                       // aberration only
+    rgpf[3].corrections = eph::kCorrAberration;
+
+    for (i = 0; i < 10; i++) {
+      rga[i].prgVal = rgVal + i * kEphPromStride;   // one row each
+      rgobj[i] = eph::Object();
+    }
+    // 0-3: the Moon's ascending node, osculating, under four masks --
+    // 0 all three, 1 none, 2 light time only, 3 aberration only.
+    for (i = 0; i < 4; i++) {
+      rgobj[i].kind = eph::kObjOrbitPoint;
+      rgobj[i].profile = (uint8_t)i;
+      rgobj[i].naif = PROMETHEIA_MOON;
+      rgobj[i].point = eph::kPtAscNode;
+      rgobj[i].method = eph::kMethOsculating;
+    }
+    // 4: a named hypothetical -- not served.
+    rgobj[4].kind = eph::kObjHypothetical;
+    rgobj[4].profile = 0;
+    rgobj[4].name = "Vulcan";
+    // 5: elements -- its Kepler engine is not implemented.
+    rgobj[5].kind = eph::kObjElements;
+    rgobj[5].profile = 0;
+    rgobj[5].name = "test elements";
+    // 6: the Sun's node -- no orbit.
+    rgobj[6] = rgobj[0];
+    rgobj[6].naif = PROMETHEIA_SUN;
+    // 7: a method out of range.
+    rgobj[7] = rgobj[0];
+    rgobj[7].method = 2;
+    // 8: designation "1" -- Ceres through the catalog.
+    rgobj[8].kind = eph::kObjDesignation;
+    rgobj[8].profile = 0;
+    rgobj[8].name = "1";
+    // 9: an ambiguous star -- error 6.
+    rgobj[9].kind = eph::kObjStar;
+    rgobj[9].profile = 0;
+    rgobj[9].name = "Beta Sco";
+
+    q.nTs = eph::kTimeTT; q.fList = fFalse;
+    q.jd1 = jd; q.jd2 = 0.0; q.stepNs = 0; q.cRow = 1;
+    q.prgJd = NULL;
+    q.rDeltaTSec = rInvalid;
+    q.cprof = 4; q.pargprof = rgpf;
+    q.cobj = 10; q.pargobj = rgobj;
+    Check(FEphPromCompute(&q, rga), "the question computes");
+
+    // The correction bits reach the orbit point: Prometheia honours
+    // them as sent (3.5a), which the plugin must not flatten. Light
+    // time alone moves the Moon's node by its own convention's 19.1"
+    // class, aberration alone by about the same, and all three
+    // together by almost nothing -- the two large terms nearly cancel.
+    // Measured against the library at this instant; these are binding
+    // checks, not engine comparisons.
+    Check(rga[0].rowsOk == 1 && rga[1].rowsOk == 1, "the node computed");
+    {
+      double dLT = RAbs(rgVal[2 * kEphPromStride] -
+        rgVal[1 * kEphPromStride]) * 3600.0;
+      double dAb = RAbs(rgVal[3 * kEphPromStride] -
+        rgVal[1 * kEphPromStride]) * 3600.0;
+      double dAll = RAbs(rgVal[0 * kEphPromStride] -
+        rgVal[1 * kEphPromStride]) * 3600.0;
+      Check(dLT > 15.0 && dLT < 25.0,
+        "the light-time bit moves the Moon's node on its own (%.4f\")", dLT);
+      Check(dAb > 15.0 && dAb < 25.0,
+        "the aberration bit moves the Moon's node on its own (%.4f\")", dAb);
+      Check(dAll < 0.05,
+        "all three masks together move it almost none (%.4f\")", dAll);
+    }
+    Check(rga[0].corrApplied == eph::kCorrMask,
+      "the orbit point reports all three terms live");
+    Check(rga[4].errCode == eph::kOErrUnsupported,
+      "a named hypothetical is error 2 here (%d)", rga[4].errCode);
+    Check(rga[5].errCode == eph::kOErrUnsupported,
+      "elements are error 2 here (%d)", rga[5].errCode);
+    Check(rga[6].errCode == eph::kOErrUnsupported,
+      "the Sun's node is error 2 (%d)", rga[6].errCode);
+    Check(rga[7].errCode == eph::kOErrUnsupported,
+      "orbit method 2 is error 2 (%d)", rga[7].errCode);
+    if (fCat) {
+      Check(rga[8].rowsOk == 1 && rga[8].naif == 20000001,
+        "designation '1' resolves to Ceres (err %d rows %d %s)",
+        rga[8].errCode, rga[8].rowsOk, rga[8].szErr);
+    } else
+      Check(rga[8].errCode == eph::kOErrUnknownBody,
+        "a designation with no catalog is error 1 (%d)", rga[8].errCode);
+    Check(rga[9].errCode == eph::kOErrAmbiguous,
+      "an ambiguous star computes as error 6 (%d)", rga[9].errCode);
+
+    // LOOKUP: bodies first, then the star namespace.
+    cm = NEphPromLookup("Chiron", rgm, 8);
+    if (fCat)
+      Check(cm >= 1 && rgm[0].nKind == eph::kObjBody &&
+        rgm[0].naif == 20002060,
+        "Chiron resolves to its SPK-ID (cm %d naif %d)",
+        cm, cm > 0 ? rgm[0].naif : -1);
+    else
+      Check(cm == 0, "no catalog, no Chiron (%d)", cm);
+    cm = NEphPromLookup("Beta Sco", rgm, 8);
+    Check(cm == 2 && rgm[0].nKind == eph::kObjStar && rgm[1].nKind ==
+      eph::kObjStar, "the ambiguous star LOOKUPs as both components (%d)",
+      cm);
+
+LStop:
+    ;
+  }
+  EphPromStop();
+  Check(NEphPromState(szStateAfter, (int)sizeof(szStateAfter)) == 1,
+    "the engine stopped cleanly (%s)", szStateAfter);
+#endif
+}
+
 static void TestEphSrvLiveQt()
 {
   flag fEphemSav = us.fEphemFiles, fNoNetSav = us.fNoNetwork,
@@ -19828,6 +20153,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"ephem-server",         TestEphSrvQt},
   {"ephem-server-live",    TestEphSrvLiveQt},
   {"ephem-registry",       TestEphemRegistryQt},
+  {"prometheia",           TestPrometheiaQt},
   {"chart-list",           TestChartListFilterQt},
   {"info-time",            TestChartInfoTimeQt},
   {"info-coord",           TestChartInfoCoordQt},
