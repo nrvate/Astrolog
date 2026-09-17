@@ -57,7 +57,14 @@
 #include <QtWidgets/QHeaderView>
 #include <QtWidgets/QTreeView>
 #include <QtWidgets/QListView>
+// QFileSystemModel moved to QtGui in Qt6, like QAction; see the guard in
+// qtdriver.cpp. Unguarded, this line failed every Qt6 build -- the nine
+// Qt6 distributions of tools/build-check.sh and both Qt 6.8.3 release legs.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QtGui/QFileSystemModel>
+#else
 #include <QtWidgets/QFileSystemModel>
+#endif
 #include <QtCore/QHash>
 #include <QtCore/QTimer>
 #include <functional>
