@@ -56,6 +56,19 @@ QT_GUI_PLAN.md.
   committing.
 - **The fork has no open review findings**: `EPHEMERIS_REVIEW.md` F1-F11
   are all fixed or closed there, F9 last (ts.13).
+- **Protocol 2 is landed** on branch `ephdefer` (worktree
+  `/nvm/work/ephdefer`; 2026-09-16, review items S4, S9, S12, S-fork,
+  T8): WELCOME carries `maxCells`, the work bound per REQUEST -- the
+  client clamps a window's rows to it in `ClampEphSrvReqQt()`, alongside
+  its existing clamps. A failed row is NaN in all six columns and
+  `retFlag >= 0` while any row computed: `FWindowObjFailedQt()` now asks
+  the frame's instant, so a window crossing an ephemeris file's edge
+  still serves every frame before it and only the frames past it are
+  asked exactly, and `FSrvPlanetQt()` fails the object for a frame whose
+  row is NaN, printing the metadata's serr text. The server's JPL file is
+  set only when it changes (S12), and REQUEST object ids are bounded
+  (`kObjIdMax`) at parse -- Swiss's center-of-body arithmetic overflows
+  int32 on ids a wire could otherwise carry (S-fork).
 - The fork this connects to is `2.10.03-ts.13`; see the server plan's
   Status section for branch, commit and gate state.
 

@@ -128,17 +128,24 @@ uWS v20.80.0 API note: server-side WebSocket handlers are
 `WebSocket<SSL, true, UserData>` — the second template parameter is
 `isServer`, counterintuitively `true` on the server side.
 
-## 4. Protocol v1
+## 4. Protocol v2
 
 Shared header `ephsrv/ephproto.h`, compiled into both ends (server and,
 later, the Qt client). All integers little-endian, structs packed, no
 padding; every layout below is exhaustive.
 
+Version 2 (2026-09-16, EPHEMERIS_REVIEW.md S4 and S9) differs from version
+1 in two things, both carried by fields version 1 did not have: WELCOME
+gains `maxCells`, the work bound per REQUEST, and a DATA object whose rows
+fail only in part answers the rows that computed as real and the failed
+rows as NaN. A version-1 peer is refused at the envelope, before any of
+the new fields are read.
+
 ### 4.1 Envelope (16 bytes)
 
     offset size field
     0      u16  magic = 0x1EF0
-    2      u8   protoVersion = 1
+    2      u8   protoVersion = 2
     3      u8   flags: bit0 zstd, bit1 float32, bit2-7 reserved (0)
     4      u16  type
     6      u16  reserved (0)
@@ -174,6 +181,9 @@ reserved for future non-ephemeris services sharing the connection.
     u32 maxRows    (rows per request)
     u32 maxChunkRows (rows per DATA chunk)
     u32 maxPayload (bytes)
+    u32 maxCells   (objects x rows per REQUEST; version 2. Default
+                    kMaxCellsDefault = 100000, overridable with
+                    --max-cells; a REQUEST over it is refused ERROR 2)
     sz  serverVersion string
 
 ### 4.4 REQUEST payload
@@ -183,7 +193,10 @@ reserved for future non-ephemeris services sharing the connection.
       u8 kind: 0 = body by id, 1 = fixed star by name,
                2 = node or apsis of a body (added 2026-09-16, work log 8)
       kind 0: u32 id   (SWE id: planet, moon incl. SE_PLMOON_OFFSET,
-                        asteroid incl. SE_AST_OFFSET, orbel fictitious body)
+                        asteroid incl. SE_AST_OFFSET, orbel fictitious body;
+                        at most kObjIdMax, which keeps Swiss's own
+                        center-of-body arithmetic and table indexes inside
+                        int32 -- S-fork in EPHEMERIS_REVIEW.md)
       kind 1: sz name  (NUL-terminated, resolved from sefstars.txt)
       kind 2: u32 id, u8 point (1 north node, 2 south node, 3 perihelion,
               4 aphelion), u8 method (0 mean, 1 osculating): swe_nod_aps
@@ -227,13 +240,21 @@ swe_deltat_ex_r first, the conversion swe_calc_ut_r makes itself.
     u8 precision (0 = f64, 1 = f32)
     u32 nObj
     nObj per-object metadata records:
-      i32 retFlag (<0: this object failed; else flags SWE actually used)
+      i32 retFlag (<0: NO row of this object computed; else flags SWE
+                   actually used)
       i32 flagsUsed
-      char serr[64]   (SWE error text when retFlag < 0, else zero-filled)
+      char serr[64]   (the first failed row's SWE text whenever any row
+                       failed, so retFlag >= 0 with a non-empty serr is a
+                       partial answer; zero-filled when nothing failed)
       char name[56]   (body name)
     then the data block, object-major, nObj * nTime * 6 values (f64 or f32):
       xx[0] lon (deg), xx[1] lat (deg), xx[2] dist (AU),
       xx[3] lonSpeed, xx[4] latSpeed (deg/day), xx[5] distSpeed (AU/day)
+
+A row Swiss could not answer is NaN in all six of its columns, and the
+rows that computed are real (version 2; version 1 failed the object for
+the whole window, so a window reaching past an ephemeris file's edge lost
+every frame before the edge too -- EPHEMERIS_REVIEW.md S9).
 
 These six columns are exactly `swe_calc_ut_r`'s `xx[0..5]` with
 `SEFLG_SPEED`, and exactly the six reals of GetJPLHorizons()' output
@@ -248,10 +269,12 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
 ### 4.7 Semantics
 
 - REQUEST is answered by one or more DATA chunks for its requestId
-  (chunkIndex ascending, row ranges contiguous), then done. Per-object
-  failures are recorded in that object's metadata rows (retFlag < 0), not
-  fatal to the request. A whole-request failure (e.g. no ephemeris path)
-  is ERROR code 5 with the SWE error text.
+  (chunkIndex ascending, row ranges contiguous), then done. A per-row
+  failure is NaN in that row's six columns, with the first failed row's
+  serr in the object's metadata, and is never fatal to the request. A
+  whole-request failure (e.g. no ephemeris path) is ERROR code 5 with the
+  SWE error text; a REQUEST past the work bound WELCOME advertises is
+  ERROR code 2 before anything is computed.
 - Requests are pure functions of their payload. There is no session state:
   a dropped connection re-sends the same requestId after reconnect.
 - Heartbeat (as built): uWS protocol-level pings on a 30 s idle timeout,
@@ -283,8 +306,13 @@ signature (io.cpp:4010) that ComputeEphem() (calc.cpp:1028) consumes.
 - Per-request configuration uses ONLY the `_r` scoped setters on the serving
   context — `swe_set_sid_mode_r`, `swe_set_topo_r`, `swe_set_jpl_file_r` —
   never the process-global forms, so concurrent requests with different
-  sidereal/topocentric settings cannot interfere. Workers never call
-  `swe_close()` (it resets shared config); teardown is `swe_close_r(ctx)`.
+  sidereal/topocentric settings cannot interfere. The JPL setter runs only
+  when a request names a different file than the one the loop's context has
+  open (S12): `swe_set_jpl_file_r` closes every file and rebuilds its
+  delta-t and leap-second tables on each call, which per-JPL-request cost
+  nothing correct and a long JPL animation paid per request. Workers never
+  call `swe_close()` (it resets shared config); teardown is
+  `swe_close_r(ctx)`.
 - Request execution: hash the canonical REQUEST payload → cache lookup →
   on miss, for each time row, for each object, `swe_calc_ut_r` (or
   `swe_fixstar_ut_r` for kind-1 objects, `swe_calc_pctr` when center != 0),
@@ -437,7 +465,7 @@ Each increment lands green before the next starts.
 ## 11. Runbook
 
     astrolog-ephd [--port N] [--ephe path] [--threads N] [--cache-mb N]
-                  [--verbose]
+                  [--max-cells N] [--verbose]
 
 Default port: constant `EPH_DEFAULT_PORT` in ephproto.h (47190), shared with
 the client so both ends agree with zero configuration. `--ephe` overrides
@@ -681,3 +709,41 @@ per landed change, newest last — same convention as QT_GUI_PLAN.md.
    Deferred with reasons in the review ledger: a per-request CPU budget,
    per-row failure reporting (both change the protocol), and the JPL
    setter's cost.
+10. **The review's deferred protocol items are done: protocol 2 (2026-09-16,
+   EPHEMERIS_REVIEW.md S4, S9, S12, S-fork, T8; branch `ephdefer`).**
+   - WELCOME carries `maxCells`, the work bound per REQUEST (§4.3):
+     objects x rows, default 100000 (`kMaxCellsDefault`), startable with
+     `--max-cells`. A REQUEST over it is refused ERROR 2 before anything
+     is computed -- 64 bodies x 20000 rows measured 13.7 s on the loop's
+     only thread, and every other connection on that loop waited. The Qt
+     client clamps a window's rows to the bound in ClampEphSrvReqQt().
+   - A failed row's six values are NaN, and the rows that computed are
+     real; retFlag < 0 only when NO row computed, and serr carries the
+     first failed row's text whenever any row failed (§4.5). Version 1
+     failed the object for the whole window, so a window reaching past an
+     ephemeris file's edge lost every frame before the edge too. The
+     client asks exactly only the frames whose row failed
+     (FWindowObjFailedQt takes the frame's instant) and FSrvPlanetQt
+     fails a NaN row with the metadata's serr.
+   - The JPL setter runs only when a request names a different file than
+     the loop's context has open (S12): swe_set_jpl_file_r closes every
+     file and rebuilds its delta-t and leap-second tables on each call,
+     which a JPL request per row paid for nothing correct. An open file
+     left across requests is read only by calls that name it, so no
+     later answer moves.
+   - REQUEST object ids are bounded at `kObjIdMax` ((INT32_MAX - 9099) /
+     100): past it Swiss's center-of-body mapping (`ipl*100 + 9099`,
+     sweph.c:432) overflows int32 and `ctx->nddat[ipl]` is reached out of
+     bounds (sweph.c:4816) -- UBSan flagged both from the review's fuzz
+     (S-fork). The bound also refuses negative int32 ids, of which
+     SE 2.10 has none. The fork itself was not touched: this is
+     protocol-level validation, and upstream keeps its own arithmetic.
+   - The golden gate gained a heliocentric leg and two topocentric places
+     (Greenwich, Sydney), two bodies each (T8): a pooled context keeping
+     a stale `swe_set_topo` answers the second place with the first
+     one's horizon, and only differing places catch it.
+   - ephsrv-robust.sh: the heavy legs (64 x 10000) start their server
+     with `--max-cells 700000`, and two legs are new -- S4b (a request
+     one row over the default bound refused ERROR 2, one row under it
+     answered) and S9 (a window crossing the bundled sepl_18's end:
+     rows before it real, rows past it NaN, retFlag never negative).

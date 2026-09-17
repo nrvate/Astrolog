@@ -104,6 +104,15 @@ inline constexpr uint64_t kIflagProtoMask = kIflagTimeTT | kIflagCenter;
 // The largest |jdStart| a REQUEST may carry (parseRequest).
 inline constexpr double kJdAbsMax = 1e8;
 
+// The largest object id a REQUEST may name. Swiss's center-of-body mapping
+// computes ipl*100 + 9099 (sweph.c's SEFLG_CENTER_BODY branch) and indexes
+// ctx->nddat[ipl]: an id whose int32 form is negative, or past this bound,
+// is undefined behaviour there -- UBSan flagged both sites when the review's
+// fuzz ran ComputeCell with wire ids across the whole integer range
+// (EPHEMERIS_REVIEW.md S-fork). No object SWE serves comes near it:
+// asteroids, the widest space, are numbered in the millions today.
+inline constexpr uint32_t kObjIdMax = (0x7FFFFFFF - 9099) / 100;
+
 // WELCOME limits (server clamps/returns kErrLimits per these).
 inline constexpr uint32_t kMaxObjs       = 64;
 inline constexpr uint32_t kMaxRows       = 20000;
@@ -465,6 +474,7 @@ inline ParseResult parseRequest(const uint8_t *p, size_t len, Request *out) {
     if (kind == kObjBody) {
       o.kind = kObjBody;
       o.id = r.u32();
+      if (o.id > kObjIdMax) return kParseBad;
     } else if (kind == kObjStar) {
       size_t n;
       const char *s = r.strZ(&n);
@@ -477,7 +487,7 @@ inline ParseResult parseRequest(const uint8_t *p, size_t len, Request *out) {
       o.point = r.u8();
       o.method = r.u8();
       if (o.point < kPntNorthNode || o.point > kPntAphelion ||
-          o.method > kNodOscu)
+          o.method > kNodOscu || o.id > kObjIdMax)
         return kParseBad;
     } else {
       return kParseBad;

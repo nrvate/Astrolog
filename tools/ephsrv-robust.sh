@@ -14,7 +14,14 @@
 #       memory by more than 4 MiB (a second Conn constructed over the live
 #       one leaked ~575 bytes each: 11 MiB over the same run)
 #   S4  a client that pipelines ten big requests and reads nothing is
-#       refused past the queued-answer cap, and the server still answers
+#       refused past the queued-answer cap, and the server still answers;
+#       a request past the work bound WELCOME advertises (objects x rows,
+#       protocol 2) is refused ERROR 2, and the same request one row under
+#       it is answered
+#   S9  a window crossing an ephemeris file's end answers the rows that
+#       computed as real numbers and the rows past it as NaN, with the
+#       object's retFlag still >= 0 -- version 1 failed the object for the
+#       whole window, so every frame before the edge was lost too
 #   S5  --threads far above the context pool answers every connection
 #       (loops past the pool had no context and answered ERROR 4)
 #   S6  a second server on a port another one listens on exits nonzero,
@@ -75,7 +82,12 @@ start_server() {
 alive() { kill -0 "$1" 2>/dev/null; }
 rss_kib() { awk '/^VmRSS:/ {print $2}' "/proc/$1/status"; }
 
-start_server "$PORT" "$SCRATCH/a.log" --threads 1 || { echo "ROBUST FAIL: server did not start"; exit 1; }
+# The heavy legs below (S2, S4's burst) ask 64 x 10000 = 640000 cells, past
+# the default work bound of 100000 -- this server is started with a bound
+# that carries them, and the default bound is what the S4b leg below
+# asserts.
+start_server "$PORT" "$SCRATCH/a.log" --threads 1 --max-cells 700000 \
+  || { echo "ROBUST FAIL: server did not start"; exit 1; }
 A=$SRV_PID
 
 # ---- S1: non-finite instants --------------------------------------------
@@ -128,6 +140,51 @@ else
 fi
 alive "$A" || fail "S4: the server died under the burst"
 $CLI --port "$PORT" --objs 0,1 --count 1 --quiet || fail "S4: not answering after the burst"
+
+# ---- S4b: the work bound WELCOME advertises ------------------------------
+step "S4b"
+# A default-bound server: 10 bodies x 10001 rows is 100010 cells, one row
+# over kMaxCellsDefault, and is refused ERROR 2 with the bound named; the
+# same request one row under it is answered. (10001 rows, not 20001: the
+# rows limit is 20000 and the client refuses more itself.)
+PORT1B=$((PORT + 4))
+start_server "$PORT1B" "$SCRATCH/a1b.log" --threads 1 \
+  || { echo "ROBUST FAIL: S4b: server did not start"; exit 1; }
+B1=$SRV_PID
+if $CLI --port "$PORT1B" --objs 0,1,2,3,4,5,6,7,8,9 --count 10001 --step 60 \
+    --quiet 2> "$SCRATCH/s4b.err"; then
+  fail "S4b: a request one row over the default work bound was answered"
+elif ! grep -q "server ERROR 2" "$SCRATCH/s4b.err"; then
+  fail "S4b: expected ERROR 2, got: $(head -1 "$SCRATCH/s4b.err")"
+fi
+$CLI --port "$PORT1B" --objs 0,1,2,3,4,5,6,7,8,9 --count 10000 --step 60 \
+  --quiet || fail "S4b: a request exactly at the work bound was not answered"
+kill "$B1" 2>/dev/null || true
+
+# ---- S9: rows past an ephemeris file's end are NaN, the rest real --------
+step "S9"
+# The bundled sepl_18 ends in 2399 (measured: JD 2597647 answers, 2597700
+# does not): 400 daily rows from 2597500.5 cross it. The rows before the
+# edge are real numbers, the rows past it are NaN in all six columns, and
+# the object's retFlag stays >= 0 with its serr text -- under protocol 1
+# the whole object failed and every frame before the edge was lost with it.
+PORT9=$((PORT + 5))
+start_server "$PORT9" "$SCRATCH/s9.log" --threads 1 \
+  || { echo "ROBUST FAIL: S9: server did not start"; exit 1; }
+B9=$SRV_PID
+if ! $CLI --port "$PORT9" --objs 0 --jd 2597500.5 --step 86400 --count 400 \
+    --out "$SCRATCH/s9.txt" --quiet; then
+  fail "S9: the window crossing the file's end was not answered"
+else
+  real=$(awk '$4 != "nan" && ($3 + 0) >= 0' "$SCRATCH/s9.txt" | wc -l)
+  nan=$(awk '$4 == "nan"' "$SCRATCH/s9.txt" | wc -l)
+  retbad=$(awk '$3 + 0 < 0' "$SCRATCH/s9.txt" | wc -l)
+  [ "$real" -ge 1 ] || fail "S9: no row before the file's end computed"
+  [ "$nan" -ge 1 ] || fail "S9: no row past the file's end is NaN"
+  [ "$retbad" -eq 0 ] || fail "S9: retFlag went negative with rows computed"
+fi
+kill "$B9" 2>/dev/null || true
+alive "$A" || fail "S9: the server died on the partial window"
 
 # ---- S6: a second server on the same port --------------------------------
 step "S6"

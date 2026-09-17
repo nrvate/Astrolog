@@ -335,8 +335,9 @@ int main(int argc, char **argv) {
     }
     if (!quiet)
       printf("WELCOME v%u caps=0x%x swe=%u maxObjs=%u maxRows=%u maxChunk=%u "
-             "server=%s\n", w.protoVersion, w.caps, w.swissephVersion,
-             w.maxObjs, w.maxRows, w.maxChunkRows, w.serverVersion.c_str());
+             "maxCells=%u server=%s\n", w.protoVersion, w.caps,
+             w.swissephVersion, w.maxObjs, w.maxRows, w.maxChunkRows,
+             w.maxCells, w.serverVersion.c_str());
   }
   if (cyc < cycles) {
     close(fd);
