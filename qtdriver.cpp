@@ -4546,6 +4546,13 @@ int NProcessSwitchesQt(int pos, PARSEIN *pin)
 
 static flag s_fAnimTickQt = fFalse;
 
+// Set for the length of the cast an animation tick makes, and nothing else:
+// the Ephemeris Server backend serves those casts from wide f32 windows on
+// the animation's own grid (EPHEMERIS_CLIENT_PLAN.md section 6), where
+// every other cast is asked exactly.
+static flag s_fAnimFrameQt = fFalse;
+static flag FSrvApproxTakeQt(void);
+
 static void AnimTickQt(void)
 {
   // Same guard Windows' WM_TIMER uses. Note gs.nAnim < 1 covers both
@@ -4567,7 +4574,9 @@ static void AnimTickQt(void)
   // for a plain chart, and restores ciCore from it for the relationship
   // and transit ones, which is the whole of what RecastAndRedrawQt() would
   // have done before casting again.
+  s_fAnimFrameQt = fTrue;
   Animate(gs.nAnim, gi.nDir);
+  s_fAnimFrameQt = fFalse;
   RedrawQt();
   s_fAnimTickQt = fFalse;
 }
@@ -4622,7 +4631,16 @@ static void SetAnimRunningQt(flag fRun)
   gs.nAnim = fRun ? NAnimRateQt() : -NAnimRateQt();
   gi.fPause = fFalse;
   SyncAnimMenuQt();
+  // A frame the Ephemeris Server served from an animation window is
+  // animation-grade, not the exact answer; the chart animation stops on
+  // is cast again the exact way, so what stays on screen -- and what any
+  // text chart or save made from it says -- is the bit-exact chart.
+  if (!fRun && FSrvApproxTakeQt())
+    RecastAndRedrawQt();
 }
+#ifdef QTTEST
+void SetAnimRunningTestQt(flag fRun) { SetAnimRunningQt(fRun); }
+#endif
 
 // Choose the jump rate. Never starts or stops anything.
 static void SetAnimRateQt(int rate)
@@ -7539,12 +7557,19 @@ flag FUrlEphSrvTestQt(CONST char *sz, char *szOut, int cchMax) {
 // A window is one REQUEST's answer: nObj objects over nTime rows from a
 // TT instant, the columns swe_calc() fills, held here so a cast reads per
 // object from memory (EPHEMERIS_CLIENT_PLAN.md section 6). A chart cast is a
-// one-row window; animation (increment 3) widens the row grid. Filled
+// one-row f64 window at its own instant, read exactly; an animation frame
+// reads a wide f32 window on the animation's grid, nearest row corrected by
+// the speed columns (see SrvPrefetchQt()). Filled
 // asynchronously by the message handler as the DATA chunks arrive; a cast
 // waits on it, bounded, in SrvPrefetchQt().
 
 typedef struct _EphWindow {
   QByteArray key;         // The canonical request plus its precision.
+  QByteArray keyShape;    // The same with the rows left out (jdStart and
+                          // nTime): what an animation frame looks a
+                          // covering window up by.
+  flag fAnim;             // An animation window: read at the nearest row,
+                          // speed-corrected. Never matched by a chart cast.
   eph::Request req;       // What was asked, for the row grid and the
                           // object list the columns are laid out by.
   uint32_t dwReq;         // In flight under this id; 0 once settled.
@@ -7562,7 +7587,29 @@ typedef struct _EphWindow {
 #define cWindowSrvQt 8          // Windows kept, most recently used first.
 #define msEphSrvWait 10000      // A cast waits this long for its windows.
 
+// Rows in an animation window. Sized against the server bench
+// (EPHEMERIS_SERVER_PLAN.md section 9): a cold 30-body 1000-row window is
+// ~0.65 s of server compute, which is the one stall an animation starting
+// on cold data sees, and the lead the next window has is half a window --
+// 1000 frames at the default 100 ms delay is 100 s, so 50 s of lead against
+// 0.65 s of work. The plan's first sketch said 2000; that doubles the stall
+// for lead nobody needs.
+#define cRowsAnimSrvQt 1000
+
+// How far past half a row an animation frame may sit and still be read
+// from that row, in seconds. The frames of a uniform rate land on the grid
+// in UT, and the grid is in TT, so they drift off it by however much
+// delta-t changes across a window -- about two seconds over a 1000-day
+// window today, more in antiquity. The speed correction is first order,
+// and a minute of it costs the Moon about 2e-7 degrees.
+#define rSlackAnimSrvQt 60.0
+
 static QList<EPHWINDOW *> s_lwinSrvQt;
+static int s_cWindowCapQt = cWindowSrvQt;   // Settable by the suite.
+static int s_cRowsAnimQt = cRowsAnimSrvQt;  // Settable by the suite.
+static flag s_fSrvApproxQt = fFalse;        // A cast read an animation row
+                                            // since animation last stopped.
+static flag FWindowInPlanQt(CONST EPHWINDOW *pwin);
 
 // The window a request id is filling, or NULL.
 static EPHWINDOW *PwinByReqQt(uint32_t dwReq)
@@ -7599,21 +7646,34 @@ static QByteArray KeyWindowQt(CONST eph::Request &req)
   return ba;
 }
 
+static QByteArray KeyShapeWindowQt(CONST eph::Request &req)
+{
+  eph::Request reqShape = req;
+  reqShape.jdStart = 0.0;
+  reqShape.nTime = 0;
+  return KeyWindowQt(reqShape);
+}
+
 // Make a window for a request and send the request, evicting the least
 // recently used window past the cap -- an in-flight one included, whose
-// answer then lands nowhere. NULL when not connected: the caller's cast
-// fails soft and the connector is prodded.
-static EPHWINDOW *PwinOpenQt(eph::Request *preq)
+// answer then lands nowhere -- but never one the cast being planned points
+// at: a cast with more groups than the cap holds all of its windows until
+// the next cast, rather than reading one freed under it. NULL when not
+// connected: the caller's cast fails soft and the connector is prodded.
+static EPHWINDOW *PwinOpenQt(eph::Request *preq, flag fAnim)
 {
   EPHWINDOW *pwin;
   uint32_t dwReq;
   size_t cObj;
+  int i;
 
   dwReq = DwSendEphSrvQt(preq);   // Clamps preq to WELCOME first.
   if (dwReq == 0)
     return NULL;
   pwin = new EPHWINDOW;
   pwin->key = KeyWindowQt(*preq);
+  pwin->keyShape = KeyShapeWindowQt(*preq);
+  pwin->fAnim = fAnim;
   pwin->req = *preq;
   pwin->dwReq = dwReq;
   pwin->fDone = pwin->fFailed = pwin->fMeta = fFalse;
@@ -7623,9 +7683,13 @@ static EPHWINDOW *PwinOpenQt(eph::Request *preq)
   pwin->rgret.fill(0, (int)cObj);
   pwin->rgserr.resize((int)cObj);
   s_lwinSrvQt.prepend(pwin);
-  while (s_lwinSrvQt.size() > cWindowSrvQt) {
-    EPHWINDOW *pwinOld = s_lwinSrvQt.takeLast();
-    esrv.mpReq.remove(pwinOld->dwReq);
+  for (i = s_lwinSrvQt.size() - 1; i > 0 && s_lwinSrvQt.size() >
+    s_cWindowCapQt; i--) {
+    if (FWindowInPlanQt(s_lwinSrvQt[i]))
+      continue;
+    EPHWINDOW *pwinOld = s_lwinSrvQt.takeAt(i);
+    if (pwinOld->dwReq != 0)
+      esrv.mpReq.remove(pwinOld->dwReq);
     delete pwinOld;
   }
   return pwin;
@@ -7735,11 +7799,129 @@ static struct {
                                         // it has none.
 } s_plan;
 
+static flag FWindowInPlanQt(CONST EPHWINDOW *pwin)
+{
+  int i;
+
+  for (i = 0; i < objMax; i++)
+    if (s_plan.rgent[i].pwin == pwin)
+      return fTrue;
+  return fFalse;
+}
+
 // The row's instant, the expression the server evaluates for row r.
 static real JdWindowRowQt(CONST EPHWINDOW *pwin, uint32_t r)
 {
   return pwin->req.jdStart +
     (double)((uint64_t)r * (uint64_t)pwin->req.stepSeconds) / 86400.0;
+}
+
+// The row a window answers a TT instant from, and the days from that row's
+// instant to it. A chart window answers only the instant it was asked at,
+// on the bytes. An animation window answers any instant within half a row
+// of a row (plus the delta-t slack), from the nearest row.
+static flag FRowWindowQt(CONST EPHWINDOW *pwin, real jde, uint32_t *pr,
+  real *pdt)
+{
+  uint32_t r = 0;
+  real rRow;
+
+  if (pwin->req.nTime > 1 && pwin->req.stepSeconds > 0) {
+    rRow = (jde - pwin->req.jdStart) * 86400.0 / pwin->req.stepSeconds;
+    if (rRow < -0.5 - rSlackAnimSrvQt / pwin->req.stepSeconds ||
+      rRow > (real)pwin->req.nTime - 0.5 + rSlackAnimSrvQt /
+      pwin->req.stepSeconds)
+      return fFalse;
+    rRow = RFloor(rRow + 0.5);
+    r = rRow <= 0.0 ? 0 : rRow >= (real)(pwin->req.nTime - 1) ?
+      pwin->req.nTime - 1 : (uint32_t)rRow;
+  }
+  *pr = r;
+  *pdt = jde - JdWindowRowQt(pwin, r);
+  if (!pwin->fAnim)
+    return *pdt == 0.0;
+  return RAbs(*pdt) * 86400.0 <= pwin->req.stepSeconds * 0.5 +
+    rSlackAnimSrvQt;
+}
+
+// The server row step, in seconds, of the grid the running animation's
+// frames land on, and the direction they move along it; 0 when this cast is
+// not an animation frame, or its rate is a calendar one -- months and up
+// are not a uniform number of seconds, and are cast exactly, one row each.
+// A sub-second rate reads a one-second grid, correcting up to half a
+// second by the speeds; "now" moves forward a second at a time.
+static int NGridAnimSrvQt(int *pnDir)
+{
+  int n = NAbs(gi.nDir);
+
+  *pnDir = gi.nDir < 0 ? -1 : 1;
+  if (!s_fAnimFrameQt)
+    return 0;
+  if (n < 1)
+    n = 1;
+  switch (NAbs(gs.nAnim)) {
+  case 1:  return n;           // Seconds.
+  case 2:  return 60 * n;      // Minutes.
+  case 3:  return 3600 * n;    // Hours.
+  case 4:  return 86400 * n;   // Days.
+  case iAnimNow: *pnDir = 1; return 1;
+  case 11: case 12: case 13: return 1;   // Tenths, hundredths, milliseconds.
+  }
+  return 0;
+}
+
+// The animation window of this shape answering a TT instant, moved to the
+// front, or NULL. A failed one is dropped on the way: asked again, as the
+// chart path does.
+static EPHWINDOW *PwinCoverQt(CONST QByteArray &keyShape, real jde,
+  flag fFront)
+{
+  uint32_t r;
+  real dt;
+  int i;
+
+  for (i = 0; i < s_lwinSrvQt.size(); i++) {
+    EPHWINDOW *pwin = s_lwinSrvQt[i];
+    if (!pwin->fAnim || pwin->keyShape != keyShape ||
+      !FRowWindowQt(pwin, jde, &r, &dt))
+      continue;
+    if (pwin->fFailed) {
+      if (FWindowInPlanQt(pwin))
+        continue;
+      s_lwinSrvQt.removeAt(i--);
+      delete pwin;
+      continue;
+    }
+    if (fFront) {
+      s_lwinSrvQt.removeAt(i);
+      s_lwinSrvQt.prepend(pwin);
+    }
+    return pwin;
+  }
+  return NULL;
+}
+
+// The background prefetch: a frame past the middle of its window, in the
+// direction the animation moves, sends the next window if nothing covers it
+// yet, and does not wait for it. Half a window of frames is the lead.
+static void SrvPrefetchNextQt(EPHWINDOW *pwin, real jde, int nDir)
+{
+  uint32_t r, n = pwin->req.nTime;
+  real dt, dStep = (real)pwin->req.stepSeconds / 86400.0, jdNext;
+  eph::Request req;
+
+  if (!FRowWindowQt(pwin, jde, &r, &dt))
+    return;
+  if (nDir > 0 ? r * 2 < n - 1 : r * 2 > n - 1)
+    return;
+  jdNext = nDir > 0 ? pwin->req.jdStart + (real)n * dStep :
+    pwin->req.jdStart - (real)n * dStep;
+  if (PwinCoverQt(pwin->keyShape, nDir > 0 ? jdNext :
+    jdNext + (real)(n - 1) * dStep, fFalse) != NULL)
+    return;
+  req = pwin->req;
+  req.jdStart = jdNext;
+  PwinOpenQt(&req, fTrue);
 }
 
 // The prefetch hook (plan section 5): one REQUEST per group of objects that
@@ -7774,7 +7956,7 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
   real jd = JulianDayFromTime(t), jde;
   QVector<EPHGROUP> rggroup;
   SWISSSPEC ss;
-  int i, ig, objOrbit, cPending;
+  int i, ig, objOrbit, cPending, nGrid, nDir;
   QElapsedTimer tim;
 
   for (i = 0; i < objMax; i++) {
@@ -7863,6 +8045,11 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
   }
 
   // One request per group, from the cache when it has been asked before.
+  // An animation frame on a uniform rate asks for a wide f32 window on its
+  // grid instead of one row: the window covering this frame if one is held
+  // or in flight, else a new one anchored at the frame and running the way
+  // the animation runs.
+  nGrid = NGridAnimSrvQt(&nDir);
   s_fInPrefetchQt = fTrue;
   for (ig = 0; ig < rggroup.size(); ig++) {
     CONST EPHGROUP &g = rggroup[ig];
@@ -7882,17 +8069,42 @@ void SrvPrefetchQt(real t, int objCentCalc, int imax)
     req.nTime = 1;
     req.precision = eph::kPrecF64;
     req.chunkRows = eph::kMaxChunkRows;
-    ClampEphSrvReqQt(&req);
-    key = KeyWindowQt(req);
-    pwin = PwinByKeyQt(key);
-    if (pwin != NULL && pwin->fFailed) {
-      // Ask again: a failure is a fact about that attempt, not the sky.
-      s_lwinSrvQt.removeOne(pwin);
-      delete pwin;
-      pwin = NULL;
+    pwin = NULL;
+    if (nGrid > 0) {
+      eph::Request reqAnim = req;
+      reqAnim.stepSeconds = (uint32_t)nGrid;
+      reqAnim.nTime = (uint32_t)s_cRowsAnimQt;
+      reqAnim.precision = eph::kPrecF32;
+      ClampEphSrvReqQt(&reqAnim);
+      if (reqAnim.nTime > 1) {
+        key = KeyShapeWindowQt(reqAnim);
+        pwin = PwinCoverQt(key, jde, fTrue);
+        if (pwin == NULL) {
+          if (nDir < 0)
+            reqAnim.jdStart = jde - (real)(reqAnim.nTime - 1) *
+              (real)reqAnim.stepSeconds / 86400.0;
+          pwin = PwinOpenQt(&reqAnim, fTrue);
+        } else if (pwin->fDone)
+          SrvPrefetchNextQt(pwin, jde, nDir);
+        if (pwin == NULL) {
+          s_plan.baErr = "the Ephemeris Server connection dropped";
+          break;
+        }
+      }
+    }
+    if (pwin == NULL) {
+      ClampEphSrvReqQt(&req);
+      key = KeyWindowQt(req);
+      pwin = PwinByKeyQt(key);
+      if (pwin != NULL && pwin->fFailed) {
+        // Ask again: a failure is a fact about that attempt, not the sky.
+        s_lwinSrvQt.removeOne(pwin);
+        delete pwin;
+        pwin = NULL;
+      }
     }
     if (pwin == NULL)
-      pwin = PwinOpenQt(&req);
+      pwin = PwinOpenQt(&req, fFalse);
     if (pwin == NULL) {
       s_plan.baErr = "the Ephemeris Server connection dropped";
       break;
@@ -7999,25 +8211,34 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
     SrvWarnOnceQt(jd, sz);
     return fFalse;
   }
-  // The row for this instant: a cast's window is one row at the cast's
-  // own TT, and the prefetch keyed it so; a wider window (increment 3)
-  // is read at the row whose instant the grid put the cast on.
+  // The row for this instant. A chart cast's window is one row at the
+  // cast's own TT, read on the bytes. An animation frame's is the nearest
+  // row of its grid, moved to the frame's instant along the speeds the
+  // row carries -- first order, over at most half a row plus the delta-t
+  // drift (see rSlackAnimSrvQt), which at f32 is animation-grade and is
+  // why stopping the animation casts the chart again exactly.
   {
-    uint32_t r = 0;
+    uint32_t r;
+    real dt;
     real jde = jd + (us.rDeltaT == rInvalid ? is.rDeltaT : us.rDeltaT/86400.0);
-    if (pwin->req.nTime > 1 && pwin->req.stepSeconds > 0) {
-      real rRow = (jde - pwin->req.jdStart) * 86400.0 / pwin->req.stepSeconds;
-      r = (uint32_t)Max(0, (int)(rRow + 0.5));
-      if (r >= pwin->req.nTime)
-        r = pwin->req.nTime - 1;
-    }
-    if (JdWindowRowQt(pwin, r) != jde) {
+    if (!FRowWindowQt(pwin, jde, &r, &dt)) {
       SrvWarnOnceQt(jd, "the Ephemeris Server window has no row at this "
         "instant");
       return fFalse;
     }
     xx = pwin->rgcol.constData() +
       ((size_t)pent->iObj * pwin->req.nTime + r) * eph::kColsPerObj;
+    if (pwin->fAnim) {
+      s_fSrvApproxQt = fTrue;
+      *objPos = Mod(xx[0] + xx[3] * dt) - is.rSid +
+        (us.fSidereal ? us.rZodiacOffset : 0.0) + us.rZodiacOffsetAll;
+      *objAlt = xx[1] + xx[4] * dt;
+      *dist   = xx[2] + xx[5] * dt;
+      *dir    = xx[3];
+      *diralt = xx[4];
+      *dirlen = xx[5];
+      return fTrue;
+    }
   }
   *objPos = xx[0] - is.rSid + (us.fSidereal ? us.rZodiacOffset : 0.0) +
     us.rZodiacOffsetAll;
@@ -8031,12 +8252,47 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
 
 static void ClearWindowsSrvQt()
 {
+  int i;
+
   while (!s_lwinSrvQt.isEmpty())
     delete s_lwinSrvQt.takeLast();
+  for (i = 0; i < objMax; i++)
+    s_plan.rgent[i].pwin = NULL;
   s_plan.fPrefetched = fFalse;
+  s_fSrvApproxQt = fFalse;
+}
+
+// Whether a cast has read an animation row since this was last asked, and
+// forget it: the question stopping the animation asks.
+static flag FSrvApproxTakeQt(void)
+{
+  flag f = s_fSrvApproxQt;
+
+  s_fSrvApproxQt = fFalse;
+  return f;
 }
 
 int CWinSrvTestQt() { return s_lwinSrvQt.size(); }
+void SetRowsAnimSrvTestQt(int c) { s_cRowsAnimQt = c; }
+void SetWindowCapSrvTestQt(int c) { s_cWindowCapQt = c; }
+flag FApproxSrvTestQt() { return s_fSrvApproxQt; }
+void SetAnimFrameSrvTestQt(flag f) { s_fAnimFrameQt = f; }
+// The i'th window, most recently used first: its grid, precision, whether
+// it is an animation window and whether it has landed.
+flag FWinInfoSrvTestQt(int i, double *pjdStart, int *pnStep, int *pnTime,
+  int *pnPrec, flag *pfAnim, flag *pfDone)
+{
+  if (i < 0 || i >= s_lwinSrvQt.size())
+    return fFalse;
+  CONST EPHWINDOW *pwin = s_lwinSrvQt[i];
+  *pjdStart = pwin->req.jdStart;
+  *pnStep = (int)pwin->req.stepSeconds;
+  *pnTime = (int)pwin->req.nTime;
+  *pnPrec = (int)pwin->req.precision;
+  *pfAnim = pwin->fAnim;
+  *pfDone = pwin->fDone;
+  return fTrue;
+}
 CONST char *SzWarnSrvTestQt() { return s_szSrvWarnQt; }
 void ClearWinSrvTestQt() { ClearWindowsSrvQt(); }
 

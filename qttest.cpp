@@ -162,6 +162,13 @@ extern int CReqSentEphSrvTestQt();
 extern int CWinSrvTestQt();
 extern CONST char *SzWarnSrvTestQt();
 extern void ClearWinSrvTestQt();
+extern void SetRowsAnimSrvTestQt(int);
+extern void SetWindowCapSrvTestQt(int);
+extern flag FApproxSrvTestQt();
+extern flag FWinInfoSrvTestQt(int, double *, int *, int *, int *, flag *,
+  flag *);
+extern void SetAnimRunningTestQt(flag);
+extern void SetAnimFrameSrvTestQt(flag);
 extern flag FSendEphSrvQt(eph::Request *);
 extern void ClampEphSrvReqQt(eph::Request *);
 extern void EphSrvFinalizeQt();
@@ -18105,6 +18112,88 @@ static int CDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
   return c;
 }
 
+// The largest difference between two snapshots over every object and all
+// eight values, and where it is: animation frames are held to a tolerance,
+// and a tolerance is only worth what the number it was chosen from says.
+static real RMaxDiffEphQt(CONST EPHSNAPSHOT *p1, CONST EPHSNAPSHOT *p2,
+  int *piObj, int *piField)
+{
+  int i, f;
+  real r, rMax = 0.0;
+
+  *piObj = *piField = -1;
+  for (i = 0; i < objMax; i++)
+    for (f = 0; f < 8; f++) {
+      switch (f) {
+      case 0: r = p1->rgobj[i] - p2->rgobj[i]; break;
+      case 1: r = p1->rgalt[i] - p2->rgalt[i]; break;
+      case 2: r = p1->rgdir[i] - p2->rgdir[i]; break;
+      case 3: r = p1->rgdiralt[i] - p2->rgdiralt[i]; break;
+      case 4: r = p1->rgdirlen[i] - p2->rgdirlen[i]; break;
+      case 5: r = p1->rgpt[i].x - p2->rgpt[i].x; break;
+      case 6: r = p1->rgpt[i].y - p2->rgpt[i].y; break;
+      default: r = p1->rgpt[i].z - p2->rgpt[i].z; break;
+      }
+      // A longitude either side of 0 Aries is one degree of sky, not 360.
+      if (f == 0 && RAbs(r) > rDegHalf)
+        r = rDegMax - RAbs(r);
+      if (RAbs(r) > rMax) {
+        rMax = RAbs(r); *piObj = i; *piField = f;
+      }
+    }
+  return rMax;
+}
+
+// One animation run on the server backend: nFrame ticks at a rate and
+// direction, each frame compared with the local Swiss cast of the same
+// chart. Returns the largest difference seen, the requests each frame sent
+// (rgcReq, nFrame long) and the warnings raised across the run.
+static real RAnimRunSrvQt(int nAnim, int nDir, int nFrame, int *rgcReq,
+  int *pcWarn, char *szWorst, int cchMax)
+{
+  EPHSNAPSHOT snLocal, snSrv;
+  int iFrame, cReq, cWarn, iObj, iField;
+  real r, rMax = 0.0;
+  static CONST char *rgszField[8] = {"lon", "lat", "lon speed",
+    "lat speed", "dist speed", "x", "y", "z"};
+
+  *szWorst = chNull;
+  gs.nAnim = nAnim; gi.nDir = nDir; gi.fPause = fFalse;
+  cWarn = NCastWarnSrvTestQt();
+  for (iFrame = 0; iFrame < nFrame; iFrame++) {
+    // Let the background windows land, as the real event loop would
+    // between two ticks: the test drives the ticks, so nothing else pumps.
+    // Paused while it pumps, or the application's own animation timer
+    // ticks in here too and a frame moves two steps -- measured, and it
+    // put the background sends on unpredictable frames.
+    QElapsedTimer tim;
+    gi.fPause = fTrue;
+    tim.start();
+    while (tim.elapsed() < 30)
+      QApplication::processEvents(QEventLoop::AllEvents, 10);
+    gi.fPause = fFalse;
+    us.nSwissEph = 5;
+    cReq = CReqSentEphSrvTestQt();
+    AnimTickTestQt();
+    rgcReq[iFrame] = CReqSentEphSrvTestQt() - cReq;
+    SnapshotEphQt(&snSrv);
+    us.nSwissEph = 0;
+    ciCore = ciMain;
+    CastChart(0);
+    SnapshotEphQt(&snLocal);
+    us.nSwissEph = 5;
+    r = RMaxDiffEphQt(&snLocal, &snSrv, &iObj, &iField);
+    if (r > rMax) {
+      rMax = r;
+      sprintf2(szWorst, cchMax, "%s %s at frame %d", szObjName[iObj],
+        rgszField[iField], iFrame + 1);
+    }
+  }
+  *pcWarn = NCastWarnSrvTestQt() - cWarn;
+  gs.nAnim = -nAnim;
+  return rMax;
+}
+
 // Wait for the launched server to log that it is listening, which it does
 // once the port is bound -- its "ephemeris path" line comes before that,
 // and a client that connects on it can be refused.
@@ -18273,6 +18362,154 @@ static void TestEphSrvLiveQt()
   CastChart(0);
   Check(CReqSentEphSrvTestQt() > cReq,
     "a cast at a new instant sends a request");
+
+  // Animation (increment 3, plan section 6). A frame an animation tick
+  // casts reads a wide f32 window on the animation's own grid, nearest
+  // row moved along the speeds; the next window goes out in the
+  // background once a frame passes the middle of its own; a calendar rate
+  // and every cast outside a tick stay exact; stopping recasts exactly.
+  // Windows of 20 rows, so the boundaries come within a few dozen frames.
+  {
+    int nAnimSav = gs.nAnim, nDirSav = gi.nDir, nModeSav = gi.nMode,
+      nRelSav = us.nRel, rgcReq[40], cWarnRun, cGroup, iFrame, cBad,
+      nStep, nTime, nPrec, iWin;
+    flag fPauseSav = gi.fPause, fAnim, fDone;
+    double jdStart;
+    real rMax;
+    char szWorst[cchSzMax];
+
+    us.nRel = rcNone; gi.nMode = gWheel;
+    us.nSwissEph = 5;
+    ClearWinSrvTestQt();
+    SetRowsAnimSrvTestQt(20);
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+
+    // Forward, five minutes a frame, 32 frames: windows at frames 1, 11
+    // (row 10 of the first, past its middle) and 31 (row 10 of the
+    // second).
+    rMax = RAnimRunSrvQt(2, 5, 32, rgcReq, &cWarnRun, S(szWorst));
+    cGroup = rgcReq[0];
+    Check(cGroup >= 1, "animation: the first frame asks for its window "
+      "(%d requests)", cGroup);
+    FWinInfoSrvTestQt(CWinSrvTestQt() - 1, &jdStart, &nStep, &nTime, &nPrec,
+      &fAnim, &fDone);
+    Check(fAnim && nStep == 300 && nTime == 20 && nPrec == eph::kPrecF32,
+      "animation: the window is f32 on the frame grid (anim %d, step %d s, "
+      "%d rows, precision %d)", fAnim, nStep, nTime, nPrec);
+    cBad = 0;
+    for (iFrame = 1; iFrame < 32; iFrame++)
+      if (rgcReq[iFrame] != ((iFrame == 10 || iFrame == 30) ? cGroup : 0))
+        cBad++;
+    Check(cBad == 0, "animation: only frames 11 and 31 send, each the next "
+      "window in the background (%d frames otherwise; 11: %d, 21: %d, "
+      "31: %d)", cBad, rgcReq[10], rgcReq[20], rgcReq[30]);
+    Check(cWarnRun == 0, "animation: no frame warned (\"%.100s\")",
+      SzWarnSrvTestQt());
+    Check(rMax <= 5e-5, "animation: every frame within 5e-5 of the local "
+      "cast (largest %.3g, %s)", rMax, szWorst);
+    Check(FApproxSrvTestQt(), "animation: the frames are marked approximate");
+
+    // A cast outside a tick, animation or not, is still asked exactly.
+    {
+      EPHSNAPSHOT snL, snS;
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(cDiff == 0, "animation: a cast outside a tick stays bit-identical "
+        "(%d differ: %s)", cDiff, szDiff);
+    }
+
+    // Stopping casts the chart again, exactly. The chart on screen first
+    // has to BE a frame's: the run above ends on the local oracle cast, so
+    // the frame is cast again here the way a tick casts it, and shown to
+    // differ from the local one -- or the assertion after the stop would
+    // pass with no recast at all, which is how its first draft passed.
+    {
+      EPHSNAPSHOT snL, snS;
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5;
+      gs.nAnim = 2; gi.nDir = 5;
+      SetAnimFrameSrvTestQt(fTrue);
+      CastChart(0);
+      SetAnimFrameSrvTestQt(fFalse);
+      SnapshotEphQt(&snS);
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(FApproxSrvTestQt() && cDiff > 0, "animation: a frame's chart is "
+        "the approximate one before the stop (%d objects differ)", cDiff);
+      SetAnimRunningTestQt(fFalse);
+      SnapshotEphQt(&snS);
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5;
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(cDiff == 0 && !FApproxSrvTestQt(), "animation: stopping leaves "
+        "the bit-exact chart (%d differ: %s)", cDiff, szDiff);
+    }
+
+    // Backward, two hours a frame: the window is anchored below the frame
+    // and its successor goes out once the frames pass its middle going
+    // down (frame 11, row 9 of 20).
+    ClearWinSrvTestQt();
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+    rMax = RAnimRunSrvQt(3, -2, 12, rgcReq, &cWarnRun, S(szWorst));
+    cBad = 0;
+    for (iFrame = 0; iFrame < 12; iFrame++)
+      if (rgcReq[iFrame] != ((iFrame == 0 || iFrame == 10) ? cGroup : 0))
+        cBad++;
+    Check(cBad == 0 && cWarnRun == 0, "animation backward: frames 1 and 11 "
+      "send, no others, no warnings (%d frames otherwise; 1: %d, 11: %d)",
+      cBad, rgcReq[0], rgcReq[10]);
+    Check(rMax <= 5e-5, "animation backward: within 5e-5 of the local cast "
+      "(largest %.3g, %s)", rMax, szWorst);
+
+    // Half a second a frame on a one-second grid: every other frame sits
+    // half a row from its row, which only the speed correction closes --
+    // the Moon moves about 1.4e-4 degrees in that half second.
+    ClearWinSrvTestQt();
+    rMax = RAnimRunSrvQt(11, 5, 12, rgcReq, &cWarnRun, S(szWorst));
+    Check(rMax <= 5e-5 && cWarnRun == 0, "animation off the grid: a frame "
+      "half a row out is corrected to within 5e-5 (largest %.3g, %s)",
+      rMax, szWorst);
+
+    // A calendar rate is not a uniform grid: each frame is asked exactly.
+    ClearWinSrvTestQt();
+    rMax = RAnimRunSrvQt(5, 1, 3, rgcReq, &cWarnRun, S(szWorst));
+    fAnim = fTrue;
+    for (iWin = 0; FWinInfoSrvTestQt(iWin, &jdStart, &nStep, &nTime, &nPrec,
+      &fAnim, &fDone) && !fAnim; iWin++)
+      ;
+    Check(rMax == 0.0 && !fAnim && CWinSrvTestQt() > 0, "animation by "
+      "months: bit-identical frames from exact one-row windows (largest "
+      "%.3g, %s)", rMax, szWorst);
+
+    // A cast with more groups than the cache holds keeps every window it
+    // points at: with room for one, a heliocentric chart (two groups) holds
+    // two, rather than reading the first after the second evicted it.
+    ClearWinSrvTestQt();
+    SetWindowCapSrvTestQt(1);
+    us.objCenter = oSun;
+    {
+      EPHSNAPSHOT snL, snS;
+      us.nSwissEph = 0; ciCore = ciMain; CastChart(0); SnapshotEphQt(&snL);
+      us.nSwissEph = 5; CastChart(0); SnapshotEphQt(&snS);
+      cDiff = CDiffEphQt(&snL, &snS, 0.0, S(szDiff));
+      Check(CWinSrvTestQt() >= 2 && cDiff == 0, "a cast with more groups "
+        "than the window cap holds all its windows (%d held, %d differ: %s)",
+        CWinSrvTestQt(), cDiff, szDiff);
+    }
+    us.objCenter = oEar;
+    SetWindowCapSrvTestQt(8);
+    SetRowsAnimSrvTestQt(1000);
+    ClearWinSrvTestQt();
+    us.nRel = nRelSav; gi.nMode = nModeSav;
+    gs.nAnim = nAnimSav; gi.nDir = nDirSav; gi.fPause = fPauseSav;
+    OraclePinUtQt(1990, 6, 15, 12.0);
+    ciCore.lon = 122.3; ciCore.lat = 47.6;
+    ciMain = ciCore;
+  }
 
   // A drop mid-session: the cast fails soft, once in words; the server
   // comes back and the next cast is bit-identical again.
