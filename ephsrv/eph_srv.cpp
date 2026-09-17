@@ -1806,12 +1806,26 @@ int main(int argc, char **argv) {
   gOpt.threads = nLoops;
   gLoops = &loops;
   {
-    // Each connection is a descriptor; say how many this process may hold,
-    // since running out looks like a server that stopped accepting.
+    // Each connection is a descriptor, and running out looks like a server
+    // that stopped accepting. Raise the soft limit to the hard one -- a
+    // container's soft limit was 1024 (measured, Docker on this machine),
+    // a tenth of --max-conns' default -- and say what it is, and when it is
+    // still below the connection cap.
     rlimit rl {};
-    if (getrlimit(RLIMIT_NOFILE, &rl) == 0)
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+      if (rl.rlim_cur < rl.rlim_max) {
+        rlimit rlUp = rl;
+        rlUp.rlim_cur = rl.rlim_max;
+        if (setrlimit(RLIMIT_NOFILE, &rlUp) == 0) rl = rlUp;
+      }
       Log("open-file limit %llu (soft), %llu (hard)",
           (unsigned long long)rl.rlim_cur, (unsigned long long)rl.rlim_max);
+      if (gOpt.maxConns && rl.rlim_cur != RLIM_INFINITY &&
+          rl.rlim_cur < (rlim_t)gOpt.maxConns + 256)
+        Log("ephd: warning: the open-file limit is below --max-conns %u plus "
+            "the ephemeris files; connections past it will be refused by the "
+            "kernel, not by the server", gOpt.maxConns);
+    }
   }
   // Blocked here, before any thread exists, so every loop inherits the mask
   // and only SignalThread ever receives these.

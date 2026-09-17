@@ -1,0 +1,22 @@
+#!/bin/sh
+# certbot deploy hook for astrolog-ephd: install as
+#   /etc/letsencrypt/renewal-hooks/deploy/astrolog-ephd   (mode 0755)
+#
+# certbot runs it after every successful issue or renewal with
+# RENEWED_LINEAGE set to the live directory. /etc/letsencrypt is root's and
+# the server runs as astrolog-ephd, so the pair is copied where that group
+# can read it -- both files written beside their targets and renamed in, so
+# the server never reads a certificate from one renewal and a key from
+# another -- then reloaded (SIGHUP). A pair the server cannot use is refused
+# on reload and the old one kept; `journalctl -u astrolog-ephd` says why.
+set -eu
+: "${RENEWED_LINEAGE:?certbot sets RENEWED_LINEAGE}"
+dir=/etc/astrolog-ephd/tls
+install -d -m 0750 -o root -g astrolog-ephd "$dir"
+install -m 0644 -o root -g astrolog-ephd "$RENEWED_LINEAGE/fullchain.pem" "$dir/fullchain.pem.new"
+install -m 0640 -o root -g astrolog-ephd "$RENEWED_LINEAGE/privkey.pem" "$dir/privkey.pem.new"
+mv -f "$dir/fullchain.pem.new" "$dir/fullchain.pem"
+mv -f "$dir/privkey.pem.new" "$dir/privkey.pem"
+if systemctl is-active --quiet astrolog-ephd; then
+  systemctl reload astrolog-ephd
+fi

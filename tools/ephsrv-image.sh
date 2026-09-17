@@ -10,8 +10,16 @@
 # and asked, and must:
 #   - report healthy (/healthz, and Docker's own HEALTHCHECK)
 #   - run as a user other than root
-#   - answer a window byte-identical to a server built on this machine
-#     against the same pinned fork (tools/ephsrv-fork.sh), over the wire
+#   - answer a window like a server built on this machine against the same
+#     pinned fork (tools/ephsrv-fork.sh), over the wire: every name and flag
+#     exact, positions within 1e-10 degrees, speeds within 1e-8 degrees a
+#     day. NOT bit-exact, measured: the image's gcc 12 and glibc 2.36
+#     against this machine's gcc 11 and glibc 2.35 moved 66 of 4801 rows,
+#     by at most 1.3e-14 degrees and 6.5e-11 degrees a day -- libm and
+#     code-generation rounding, the same class the fork's cross-toolchain
+#     gate allows 1e-5 for. Bit-exactness holds within one toolchain, which
+#     is what tools/ephsrv-golden.sh asks.
+#   - raise its open-file limit past the container's soft 1024
 #   - stop on `docker stop` by draining, exit code 0
 #
 # Needs docker. Minutes on a cold cache (two Debian images, the fork, the
@@ -64,8 +72,30 @@ CLI="$SCRATCH/ctx/eph_wsclient"
 ARGS=(--objs 0,1,2,3,4,5,6,7,8,9,15,10004 --jd 2451545.0 --step 86400 --count 400 --quiet)
 "$CLI" --port "$PORT" "${ARGS[@]}" --out "$SCRATCH/container.txt" || fail "the container's window"
 "$CLI" --port "$((PORT + 1))" "${ARGS[@]}" --out "$SCRATCH/host.txt" || fail "the host's window"
-cmp -s "$SCRATCH/container.txt" "$SCRATCH/host.txt" || fail "the container's window differs from the host's"
-echo "  answers $(wc -l < "$SCRATCH/host.txt") rows byte-identical to a host build of the same pin"
+python3 - "$SCRATCH/container.txt" "$SCRATCH/host.txt" > "$SCRATCH/cmp.txt" << 'PY' || { cat "$SCRATCH/cmp.txt"; fail "the container's window is not the host's"; }
+import sys
+c = open(sys.argv[1]).read().splitlines()
+h = open(sys.argv[2]).read().splitlines()
+if len(c) != len(h) or not h:
+    print("row counts differ: %d vs %d" % (len(c), len(h))); sys.exit(1)
+worst = [0.0] * 6
+moved = 0
+for a, b in zip(c, h):
+    fa, fb = a.split(), b.split()
+    if fa[:3] != fb[:3] or len(fa) != len(fb):
+        print("names or flags differ:\n  %s\n  %s" % (a, b)); sys.exit(1)
+    if a != b: moved += 1
+    for i in range(6):
+        worst[i] = max(worst[i], abs(float.fromhex(fa[3 + i]) - float.fromhex(fb[3 + i])))
+tol = [1e-10, 1e-10, 1e-10, 1e-8, 1e-8, 1e-8]
+print("%d rows, %d not bit-identical, worst position %.2g deg, speed %.2g deg/day"
+      % (len(h), moved, max(worst[:3]), max(worst[3:])))
+sys.exit(0 if all(w <= t for w, t in zip(worst, tol)) else 1)
+PY
+echo "  answers $(cat "$SCRATCH/cmp.txt")"
+lim=$(docker logs "$CID" 2>&1 | sed -n 's/^open-file limit \([0-9]*\) (soft).*/\1/p')
+[ "${lim:-0}" -gt 1024 ] || fail "the open-file limit in the container is ${lim:-unknown}"
+echo "  limits  open-file limit raised to $lim"
 
 for _ in $(seq 1 60); do
   [ "$(docker inspect -f '{{.State.Health.Status}}' "$CID")" = healthy ] && break
