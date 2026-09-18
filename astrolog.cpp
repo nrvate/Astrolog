@@ -989,6 +989,21 @@ LBegin:
   // rather than moved into InitProgram().
   InitRestrictions(fTrue);
 #endif
+#ifdef QT
+  // Bind the Ephemeris Server's transport BEFORE the first cast, not when
+  // a window is first created. BeginQt() binds it too, and that is early
+  // enough for anything the GUI does -- but a chart asked for on the
+  // COMMAND LINE is cast here, by Action(), and in a text chart no window
+  // is created first. So "astrolog-qt -bE server -qa ..." used to cast
+  // with no transport registered at all: every body 0Ari00'00", and the
+  // server saw a connection open afterwards and never be asked anything,
+  // which is exactly what the Prometheia project reported seeing from
+  // their daemon's log.
+  //
+  // Binding is only registering a function table; it opens no connection
+  // and costs nothing when the source is unselected.
+  EphSrvTransportBindQt();
+#endif
   if (fT) {
     if (!is.fNoSwitches && us.fLoopInit) {
       is.fNoSwitches = fTrue;

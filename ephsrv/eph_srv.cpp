@@ -1219,6 +1219,23 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
             xnA, xdA, xpA, xaA, serrA) >= 0) {
         rDesc = xdA[2];
         rdotDesc = xdA[5];
+      } else {
+        // The radius could not be had -- at the first instant of the
+        // .se1 span, where this call reaches earlier than the files go.
+        // FAIL the row rather than keep the ascending node's radius: a
+        // fallback to the number this fix exists to remove is worse than
+        // an error, because it is silent and it is wrong only sometimes.
+        // The osculating siblings already fail there; this one was
+        // answering, with the old value, which the Prometheia cross-test
+        // caught at 1800-01-01.
+        for (uint32_t k = 0; k < nCols; k++) dst0[(size_t)r * nCols + k] = NAN;
+        if (m.firstFailedRow == eph::kRowNone) {
+          m.firstFailedRow = r;
+          m.errCode = eph::kOErrCoverage;
+          m.errText = WireText("the instant is outside this ephemeris's "
+                               "coverage");
+        }
+        continue;
       }
       if (fRect) {
         double rAsc = sqrt(xx[0]*xx[0] + xx[1]*xx[1] + xx[2]*xx[2]);
