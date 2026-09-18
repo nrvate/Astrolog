@@ -13,6 +13,36 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
+- **FOR THE MAINTAINER: this branch is ready for your squash decision,
+  with three things named rather than buried.**
+
+  **What it does.** One way to choose an ephemeris source, from the
+  command line (`-bE`/`-bP`), the settings file and an Ephemeris Settings
+  dialog in both builds; every source a plugin behind one registry with
+  an ordered fallback chain; protocol version 4, locked and verified from
+  both ends. The seven legacy selection fields are gone, and so is the
+  startup nag and its exit code.
+
+  **What is NOT done, and why.** The console and WinHTTP transports are
+  unwritten: work, not problems, and low value while Qt is the shipped
+  interface on every platform. The `horizons` plugin is different and I
+  will not pretend otherwise -- its post-processing is cast-level vector
+  arithmetic across the whole object array (it needs the Earth and the
+  Sun together to re-centre a geocentric answer), so it cannot move into
+  a per-object plugin as it stands, and the path only runs against the
+  live JPL API, so a rewrite cannot be verified from here. It is a
+  rewrite someone should do with a network and a plan, not a move.
+
+  **What phase 8 found, because it bears on how much to trust the rest.**
+  A delegated review found six defects in my own phase 6 work, including
+  a CRASHING out-of-bounds write reachable from any chart drawing stars
+  or asteroids with the server selected. Every one of them was in code
+  the suite was green over. They are all fixed, with nets and a
+  sanitizer, but the honest reading is that the suite grew alongside the
+  work and asserted what I was already thinking about. If you want one
+  more thing done before the squash, another independent review pass is
+  worth more than another feature.
+
 - **STATUS (2026-09-18, phase 6 substantially landed).** Phases 2, 3, 4,
   5 and 7 are on this branch and gated, and phase 6 is most of the way
   through: **the server is a registered source reached through the chain,
@@ -2224,6 +2254,74 @@ the gates the phase touches.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+19. **Phase 8, the branch review (2026-09-18).** Four independent
+   passes, because they see different things.
+
+   - **The lock condition holds.** `ephsrv/ephproto.h`,
+     `registries.json` and `ephsrv/conformance/` are byte-identical to
+     `cf83dc9` across every commit on this branch. That is the condition
+     the maintainer's phase 3-7 approval rides on.
+
+   - **The differential is clean.** Chart, influence and graphics
+     matrices byte-identical from the phase 3 baseline to the phase 6
+     head: phases 4, 5 and 6 moved no local cast output at all. The
+     switch matrix differs, and only in the two places it should -- the
+     writer's `-b` family, changed by design in phase 4, and four
+     deliberate negative tests of `-bE`/`-bP` that abort as any bad
+     switch does.
+
+     **Worth keeping: the raw diff of that matrix LIES.** It showed whole
+     `-YJ`, `-Y7C` and `-M0` sections apparently vanishing. They had not.
+     On a concatenated multi-run file a two-line change near one run's
+     `-b` section makes diff re-attribute neighbouring identical lines
+     across run boundaries. Comparing run-by-run, aligned on the `== `
+     markers, gives 543 runs both sides and four differing. Any future
+     reading of that file must align first.
+
+   - **An external check of the server.** Prometheia's `corrapplied.py`
+     run against `astrolog-ephd`: 27 of 29 cases, all three sub-checks on
+     all 27, green. The first verification of our `corrApplied` by an
+     implementation that is not ours. Its first run printed OK having
+     checked ZERO cases -- reported to them and fixed -- which is why the
+     coverage line matters more than the verdict.
+
+   - **A delegated code review found six defects, all now fixed**, and
+     the first of them is the reason phase 8 exists rather than being a
+     formality:
+
+     **D1 was a crashing out-of-bounds write, introduced in 6c, that
+     every gate was green over.** The adapter's plan is addressed by
+     Astrolog object index and is `objMax` long; taking the host's QUERY
+     as the object list let side-call indexes reach it -- an asteroid is
+     `SE_AST_OFFSET + n`, over 10000. AddressSanitizer: SEGV at the
+     write, some 160 KB past the array, reachable from any chart drawing
+     stars or asteroids with the server selected. `FEphQueryAdd()`
+     validates the COUNT against `objMax` and never the INDEX, and the
+     READ side had been range-checked all along while the write had not
+     -- it had not needed to be, while the only producer was a bounded
+     cast loop.
+
+     D2: a star was asked of the server with a DEFAULT profile, so a
+     sidereal or heliocentric chart got tropical geocentric star
+     positions, marked `ephErrNone` so the chain claimed them and the
+     fallback never ran. D4: the bounded wait never covered star objects,
+     so every star request was abandoned and reported as a server
+     timeout. D5: the dialog's parameter rows never recomputed, so with
+     the shipped default there was no way to enter a server address at
+     all, and opening on `jpl` wrote a typed URL into `epJplFile`. D6: a
+     truncated path comparison reopened the Prometheia engine on every
+     call. D3 needed no fix of its own -- D1's refusal already turns away
+     the catalogue-numbered star side call -- **verified rather than
+     assumed**.
+
+   - **The lesson worth carrying past this branch:** every one of D1-D6
+     was in code the suite was green over, and D1 was a crash. A suite
+     that grew to 5989 assertions alongside the work it checks tends to
+     assert what the author was already thinking about. The review that
+     found these was given a brief naming the CLASSES to hunt --
+     lifetimes, bounds, uninitialised reads, error paths -- rather than
+     asked to look for problems.
 
 17. **Phase 6b-6d, the server through the chain (2026-09-18).**
    `ephreq.h` is the one EPHQUERY-to-REQUEST translation every transport
