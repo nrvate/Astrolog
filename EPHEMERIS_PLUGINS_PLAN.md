@@ -2313,6 +2313,23 @@ the gates the phase touches.
      with the refusal removed, `-i nrvate.as` CRASHES the suite outright
      while `-Yi1 ephem` passes.
 
+   - **Why E1 in particular survived every gate, which is structural.**
+     The switch matrix is the check that would be expected to catch a
+     selection bug, and it cannot catch this one: **every one of its 543
+     runs invokes a SINGLE switch.** The `-b` family's runs are `=b`,
+     `_b`, `=bE swiss`, `-bE bogus` and so on, one per invocation. E1
+     needs TWO spellings in sequence -- `=bm` then `_b` -- because the
+     defect is in what the first leaves behind for the second. A harness
+     built one-switch-per-run is blind to the whole class, and after
+     E1 was fixed the matrix was byte-identical, which is the proof: it
+     never exercised the path.
+
+     The suite carries the sequence net now. The matrix does not, and
+     adding a handful of two-switch runs to it would close the class
+     rather than the instance. Same shape as `-XE 1 20` rendering
+     identically to no `-XE` at all: an entry that exercises nothing
+     still diffs to zero, and reads exactly like coverage.
+
    - **What to take from it.** Ten defects, one crashing, several silent
      wrong answers, all in code that every gate was green over. Both
      reviews were given a brief naming the CLASSES to hunt rather than
