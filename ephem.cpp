@@ -720,9 +720,14 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
       // Why, in the source's own words, in case NOTHING answers: a chain
       // whose every source is unavailable used to cast a chart of zeros
       // and say nothing at all.
-      if (cWhy < 2)
-        sprintf2(S(szEphNoSourceWhy), "%s%s%s (%s)",
-          szEphNoSourceWhy, cWhy > 0 ? "; " : "", pephsrc->szKey, szWhy);
+      // APPENDED, not re-formatted through itself: passing the destination
+      // as one of its own arguments is undefined, and the compiler said so
+      // (-Wformat-truncation) the moment the first draft was audited.
+      if (cWhy < 2) {
+        int cchAt = CchSz(szEphNoSourceWhy);
+        sprintf2(szEphNoSourceWhy + cchAt, cchSzMax - cchAt, "%s%s (%s)",
+          cWhy > 0 ? "; " : "", pephsrc->szKey, szWhy);
+      }
       cWhy++;
       continue;
     }
@@ -730,9 +735,11 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
     // down): every open object stays open. Returning true, it has filled
     // a row for every open object, success or per-object error.
     if (!pephsrc->FSubmit(pq)) {
-      if (cWhy < 2)
-        sprintf2(S(szEphNoSourceWhy), "%s%s%s (attempted nothing)",
-          szEphNoSourceWhy, cWhy > 0 ? "; " : "", pephsrc->szKey);
+      if (cWhy < 2) {
+        int cchAt = CchSz(szEphNoSourceWhy);
+        sprintf2(szEphNoSourceWhy + cchAt, cchSzMax - cchAt,
+          "%s%s (attempted nothing)", cWhy > 0 ? "; " : "", pephsrc->szKey);
+      }
       cWhy++;
       continue;
     }
