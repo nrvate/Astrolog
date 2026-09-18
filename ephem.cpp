@@ -310,14 +310,17 @@ int CEphParamOfSrc(CONST char *szKey)
 // four was not the bug; no source declares more than three parameters,
 // so four rows are enough. Naming the indexes by hand was.
 
-int CEphParamRows(int *rgiep, int cMax)
+// The same, for a chain the caller names rather than the one in force --
+// a dialog showing the rows for a source the user has PICKED but not yet
+// applied needs its own chain, not the live selection.
+int CEphParamRowsOf(CONST char *szChain, int *rgiep, int cMax)
 {
   char szHead[cchSzDef];
   int c, i, cRow = 0;
 
   if (rgiep == NULL || cMax <= 0)
     return 0;
-  SzEphChainHead(us.szEphemSource, S(szHead));
+  SzEphChainHead(szChain, S(szHead));
   c = CEphParamOfSrc(szHead);
   for (i = 0; i < c && cRow < cMax; i++) {
     int iep = IepOfSrc(szHead, i);
@@ -325,6 +328,12 @@ int CEphParamRows(int *rgiep, int cMax)
       rgiep[cRow++] = iep;
   }
   return cRow;
+}
+
+
+int CEphParamRows(int *rgiep, int cMax)
+{
+  return CEphParamRowsOf(us.szEphemSource, rgiep, cMax);
 }
 
 

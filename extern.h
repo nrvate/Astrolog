@@ -565,6 +565,7 @@ extern flag FSwissPlanet
 extern int CEphParamOfSrc P((CONST char *));
 extern int IepOfSrc P((CONST char *, int));
 extern int CEphParamRows P((int *, int));
+extern int CEphParamRowsOf P((CONST char *, int *, int));
 extern void EphSrvTransportSet P((CONST EPHTRANS *));
 extern CONST EPHTRANS *PephtransGet P((void));
 extern int CEphSrc P((void));

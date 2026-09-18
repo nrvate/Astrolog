@@ -5364,6 +5364,56 @@ void ShowEphemDialogQt()
   QLabel *plDesc = (QLabel *)PwRcFindQt(rgbuilt, "dsEp_ds");
   QLabel *plStatus = (QLabel *)PwRcFindQt(rgbuilt, "dsEp_st");
 
+  // Applying the rows is separate from WIRING them, because it happens
+  // again whenever the selection changes: the rows are the chain head's
+  // own parameters, so picking a different source must re-label, re-fill
+  // and re-hide them. They did not, until the phase 8 review (D5) -- so
+  // opening on the shipped default (swiss, which declares NO parameters)
+  // and picking the Ephemeris Server left every row hidden, with no way
+  // to type an address in that visit; and opening on jpl and picking the
+  // server left the JPL file row on screen, so a URL typed into it was
+  // written to epJplFile on OK.
+  //
+  // It reads the chain EDIT rather than us.szEphemSource, because the
+  // user's pick is not applied until OK.
+  auto ApplyParamRows = [&rgbuilt, &rgepeParam, &rgiepParam, &cParamRow,
+    peChain]() {
+    int iR;
+    char szChainT[cchSzMax];
+
+    SzFieldQt(szChainT, peChain != NULL ? peChain->text() :
+      QString::fromUtf8(SzSet(us.szEphemSource)));
+    cParamRow = CEphParamRowsOf(szChainT, rgiepParam, cEphParamRowQt);
+    for (iR = 0; iR < cEphParamRowQt; iR++) {
+      QLabel *plL = (QLabel *)PwRcFindIdxQt(rgbuilt, "dsEp_p", iR+1);
+      QLineEdit *peR = (QLineEdit *)PwRcFindIdxQt(rgbuilt, "deEp_p", iR+1);
+      QPushButton *ppbB = (QPushButton *)PwRcFindIdxQt(rgbuilt, "dbEp_b",
+        iR+1);
+      flag fLive = iR < cParamRow;
+      CONST EPHPARAMROW *pepR = fLive ? &rgephparam[rgiepParam[iR]] : NULL;
+
+      rgepeParam[iR] = fLive ? peR : NULL;
+      if (plL != NULL) {
+        plL->setVisible(fLive);
+        if (fLive)
+          plL->setText(QString::fromUtf8(pepR->ep.szLabel) + ":");
+      }
+      if (peR != NULL) {
+        peR->setVisible(fLive);
+        if (fLive) {
+          peR->setText(QString::fromUtf8(
+            SzSet(us.rgszEphParam[rgiepParam[iR]])));
+          peR->setEchoMode(pepR->ep.nKind == epkToken ?
+            QLineEdit::PasswordEchoOnEdit : QLineEdit::Normal);
+        }
+      }
+      if (ppbB != NULL)
+        ppbB->setVisible(fLive && (pepR->ep.nKind == epkPath ||
+          pepR->ep.nKind == epkFile));
+    }
+  };
+
+
   // The list is the registry, in its fallback quality order, with each
   // unavailable source showing the reason its own callback gives. The
   // chain's head selects its row when it is one of this build's sources; a
@@ -5395,7 +5445,7 @@ void ShowEphemDialogQt()
         }
     if (peChain != NULL)
       QObject::connect(plist, &QListWidget::currentRowChanged, &dlg,
-        [plist, peChain, plDesc](int iRow) {
+        [plist, peChain, plDesc, &ApplyParamRows](int iRow) {
         if (iRow < 0)
           return;
         EPHSRCDEF *pephsrc = PephsrcGet(
@@ -5405,6 +5455,7 @@ void ShowEphemDialogQt()
         if (plDesc != NULL)
           plDesc->setText(QString::fromUtf8(pephsrc->szDesc));
         peChain->setText(StrEphemChainQt(peChain->text(), pephsrc->szKey));
+        ApplyParamRows();
       });
   }
   if (peChain != NULL)
@@ -5555,6 +5606,10 @@ void ShowEphemDialogQt()
       dlg.accept();
     });
   }
+  // The initial rows come from the same code every later change uses,
+  // so the two cannot drift.
+  ApplyParamRows();
+
   if (ppbCancel != NULL)
     QObject::connect(ppbCancel, &QPushButton::clicked, &dlg,
       &QDialog::reject);

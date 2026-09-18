@@ -2449,6 +2449,45 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
 static int rgiepParam[cEphParamRowW], cParamRow;
 
 
+// The parameter rows, applied whenever the selection changes rather than
+// once at open: they are the chain head's own parameters, so picking a
+// different source must re-label, re-fill and re-hide them. They did not,
+// until the phase 8 review (D5) -- opening on the shipped default
+// (swiss, which declares NO parameters) and picking the Ephemeris Server
+// left every row hidden with no way to type an address, and opening on
+// jpl left its row on screen so a URL typed there went to epJplFile.
+//
+// Reads the chain EDIT, not us.szEphemSource: the pick is not applied
+// until OK.
+static void SetEphemParamRowsW(HWND hdlg)
+{
+  CONST EPHPARAMROW *pep;
+  char szChainT[cchSzMax], sz[cchSzMax];
+  int i;
+
+  GetEdit(deEp_chain, szChainT);
+  cParamRow = CEphParamRowsOf(szChainT, rgiepParam, cEphParamRowW);
+  for (i = 0; i < cEphParamRowW; i++) {
+    flag fLive = i < cParamRow;
+    ShowWindow(GetDlgItem(hdlg, dsEp_p1 + i), fLive ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hdlg, deEp_p1 + i), fLive ? SW_SHOW : SW_HIDE);
+    if (!fLive) {
+      ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i), SW_HIDE);
+      continue;
+    }
+    pep = &rgephparam[rgiepParam[i]];
+    sprintf2(S(sz), "%s:", pep->ep.szLabel);
+    SetEdit(dsEp_p1 + i, sz);
+    SetEdit(deEp_p1 + i, SzSet(us.rgszEphParam[rgiepParam[i]]));
+    SendDlgItemMessage(hdlg, deEp_p1 + i, EM_SETPASSWORDCHAR,
+      pep->ep.nKind == epkToken ? (WPARAM)'*' : 0, 0);
+    ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i),
+      pep->ep.nKind == epkPath || pep->ep.nKind == epkFile ?
+      SW_SHOW : SW_HIDE);
+  }
+}
+
+
 // Compose the status line: the primary source's state and the once-per-cast
 // notice that a fallback served something. A chain head this build's
 // registry does not resolve is named for what it is rather than reported as
@@ -2564,31 +2603,7 @@ flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
       SetEdit(dsEp_ds, PephsrcGet(i)->szDesc);
     else
       SetEdit(dsEp_ds, "The primary source is not one this build compiles in.");
-    cParamRow = CEphParamRows(rgiepParam, cEphParamRowW);
-    for (i = 0; i < cEphParamRowW; i++) {
-      // A source with fewer parameters than there are rows leaves the
-      // rest empty rather than showing another source's.
-      flag fLive = i < cParamRow;
-      ShowWindow(GetDlgItem(hdlg, dsEp_p1 + i), fLive ? SW_SHOW : SW_HIDE);
-      ShowWindow(GetDlgItem(hdlg, deEp_p1 + i), fLive ? SW_SHOW : SW_HIDE);
-      if (!fLive) {
-        ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i), SW_HIDE);
-        continue;
-      }
-      pep = &rgephparam[rgiepParam[i]];
-      // The table's labels are names ("JPL file"), not captions, so the
-      // colon every other row label in this dialog carries is added here
-      // rather than baked into the generated table.
-      sprintf2(S(sz), "%s:", pep->ep.szLabel);
-      SetEdit(dsEp_p1 + i, sz);
-      SetEdit(deEp_p1 + i, SzSet(us.rgszEphParam[rgiepParam[i]]));
-      if (pep->ep.nKind == epkToken)
-        SendDlgItemMessage(hdlg, deEp_p1 + i, EM_SETPASSWORDCHAR,
-          (WPARAM)'*', 0);
-      ShowWindow(GetDlgItem(hdlg, dbEp_b1 + i),
-        pep->ep.nKind == epkPath || pep->ep.nKind == epkFile ?
-        SW_SHOW : SW_HIDE);
-    }
+    SetEphemParamRowsW(hdlg);
     SetEphemStatusW(hdlg, nTick);
     SetTimer(hdlg, 1, 250, NULL);
     SetFocus(GetDlgItem(hdlg, deEp_chain));
@@ -2611,6 +2626,8 @@ flag API DlgEphem(HWND hdlg, uint message, WORD wParam, LONG lParam)
         pephsrc = PephsrcGet(i);
         SetEdit(dsEp_ds, pephsrc->szDesc);
         SetEphemChainW(hdlg, pephsrc->szKey);
+        SetEphemParamRowsW(hdlg);   // the rows are the new head's
+
       }
     }
     // A Connect report holds the line for a few ticks, then the live state

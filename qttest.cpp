@@ -21353,6 +21353,49 @@ static void TestEphemDialogQt()
     });
   }
 
+  // Picking a source in the list re-makes the parameter rows (phase 8
+  // review, D5). They were built once at open and never again, so with
+  // the shipped default -- "swiss", which declares NO parameters -- every
+  // row was hidden and picking the Ephemeris Server left no way to type
+  // an address in that visit. Worse in the other direction: opening on
+  // "jpl" left its "JPL file" row on screen after picking the server, so
+  // a URL typed there was written to epJplFile on OK.
+  {
+    EphSourceSet("jpl");
+    DriveModalQt(ShowEphemDialogQt, [&](QWidget *pw) {
+      QListWidget *plist = pw->findChild<QListWidget *>("dlEp_src");
+      QList<QLabel *> rgpl = pw->findChildren<QLabel *>("dsEp_p");
+      int iSrv = IEphSrcFromKey("server"), i, iRowSrv = -1;
+
+      if (plist == NULL || rgpl.isEmpty() || iSrv < 0) {
+        pw->close(); return;
+      }
+      // Opened on jpl: one row, and it is jpl's.
+      Check(rgpl[0]->isVisible() && rgpl[0]->text() ==
+        QString("%1:").arg(rgephparam[epJplFile].ep.szLabel),
+        "opened on jpl, row 1 is the JPL file (\"%s\")",
+        rgpl[0]->text().toLocal8Bit().constData());
+
+      for (i = 0; i < plist->count(); i++)
+        if (plist->item(i)->data(Qt::UserRole).toInt() == iSrv)
+          iRowSrv = i;
+      Check(iRowSrv >= 0, "the server has a row to pick");
+      if (iRowSrv >= 0)
+        plist->setCurrentRow(iRowSrv);
+
+      // Picked the server: the rows are ITS parameters now, not jpl's.
+      Check(rgpl[0]->isVisible() && rgpl[0]->text() ==
+        QString("%1:").arg(rgephparam[epServerUrl].ep.szLabel),
+        "after picking the server, row 1 is its address (\"%s\")",
+        rgpl[0]->text().toLocal8Bit().constData());
+      Check(rgpl.size() > 1 && rgpl[1]->isVisible() && rgpl[1]->text() ==
+        QString("%1:").arg(rgephparam[epServerToken].ep.szLabel),
+        "and row 2 is its token");
+      pw->close();
+    });
+    EphSourceSet(szChainSav);
+  }
+
   // Picking a row and OK: the picked key becomes the chain's head with
   // the old chain riding behind it, and the picked source is not also
   // duplicated somewhere in that tail.
