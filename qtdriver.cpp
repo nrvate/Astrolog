@@ -7375,6 +7375,7 @@ static void WindowFailedQt(uint32_t dwReq, CONST char *szErr);
 static void ClearWindowsSrvQt();
 static void ForgetMissedCastSrvQt();
 static flag FSrvObjQuietQt(int obj);
+extern flag s_fSrvStarQt;
 static void ClearSettledWindowsSrvQt();
 static void SrvWelcomedQt();
 
@@ -7925,6 +7926,7 @@ static flag FReadTransQt(CONST EPHQUERY *pq, int iObj, EPHROW *prow)
 {
   real r1, r2, r3, r4, r5, r6;
   int obj;
+  flag fRet;
 
   if (pq == NULL || iObj < 0 || iObj >= pq->cobj)
     return fFalse;
@@ -7942,7 +7944,15 @@ static flag FReadTransQt(CONST EPHQUERY *pq, int iObj, EPHROW *prow)
   // hard rule names and which resolves far more of them from /swe.
   if (FSrvObjQuietQt(obj))
     return fFalse;
-  if (!FSrvPlanetQt(pq->rgobj[iObj], pq->rJD, &r1, &r2, &r3, &r4, &r5, &r6))
+  // D2 made the server compute the star with the chart's own settings;
+  // this is the consumer half of the same contract, which that fix left
+  // behind. Without it a sidereal chart put every fixed star about 24.7
+  // degrees from where the local files put it, with nErr clear, so the
+  // chain claimed the row and never fell back (phase 8, third review).
+  s_fSrvStarQt = (pq->rgszName[iObj] != NULL);
+  fRet = FSrvPlanetQt(pq->rgobj[iObj], pq->rJD, &r1, &r2, &r3, &r4, &r5, &r6);
+  s_fSrvStarQt = fFalse;
+  if (!fRet)
     return fFalse;
   // FSrvPlanetQt() answers in FSwissPlanet()'s argument order; EPHROW
   // carries the protocol's. The one transposition is ephem.h's, and this
@@ -8626,6 +8636,14 @@ static flag FSrvWaitQt(CONST std::function<flag()> &fDone, int msMax)
 // C3).
 static flag s_fSrvCastMissedQt = fFalse;
 
+// Whether the object FSrvPlanetQt() is about to answer is a FIXED STAR.
+// A star row is the entry point's own six and carries no is.rSid: the
+// star callers apply the zodiac themselves, so subtracting it here hands
+// them a second ayanamsa. ephswiss.cpp copies FSwissStar()'s raw six for
+// the same reason and ephprom.cpp branches on the object's kind; this
+// adapter shares one exit with bodies, so it is told instead.
+flag s_fSrvStarQt = fFalse;
+
 
 // Should a missing answer for this object be passed over in SILENCE?
 //
@@ -9130,7 +9148,8 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
     }
     if (pwin->fAnim) {
       s_fSrvApproxQt = fTrue;
-      *objPos = Mod(xx[0] + xx[3] * dt) - is.rSid +
+      *objPos = s_fSrvStarQt ? Mod(xx[0] + xx[3] * dt) :
+        Mod(xx[0] + xx[3] * dt) - is.rSid +
         (us.fSidereal ? us.rZodiacOffset : 0.0) + us.rZodiacOffsetAll;
       *objAlt = xx[1] + xx[4] * dt;
       *dist   = xx[2] + xx[5] * dt;
@@ -9140,7 +9159,8 @@ flag FSrvPlanetQt(int obj, real jd, real *objPos, real *objAlt, real *dir,
       return fTrue;
     }
   }
-  *objPos = xx[0] - is.rSid + (us.fSidereal ? us.rZodiacOffset : 0.0) +
+  *objPos = s_fSrvStarQt ? xx[0] :
+    xx[0] - is.rSid + (us.fSidereal ? us.rZodiacOffset : 0.0) +
     us.rZodiacOffsetAll;
   *objAlt = xx[1];
   *dist   = xx[2];
