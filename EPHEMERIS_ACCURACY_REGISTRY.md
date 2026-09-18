@@ -166,6 +166,51 @@ rather than carrying a rounded decimal in your working units.
 
 ---
 
+## 4. Open: differences neither side can yet adjudicate
+
+Listed because they are real and measured, but with no outside reference
+saying who is right. They are NOT §1 entries: this fork is not claiming to
+be more correct, only different.
+
+### 4.1 The sidereal zero point on the invariable plane — ~31.5″
+
+Sidereal plane 2 (A.8's invariable plane). Both engines' planes coincide —
+latitudes agree to 0.03″ — but longitudes differ by a constant: **−31.51″
+under Fagan/Bradley, −30.42″ under Lahiri**.
+
+**What Swiss does**, read from `swi_trop_ra2sid_lon_sosy()`
+(`sweph.c:4016`): it takes the **equinox of t0** as a vector, rotates it
+into the invariable-plane frame through exactly the chain the bodies take,
+measures the body from that longitude **in the plane**, and only then
+subtracts the ayanamsa as a flat scalar in the plane's own longitude. It
+never carries the sidereal zero point itself onto the plane.
+
+Prometheia instead carries the point at longitude A0 **on the ecliptic of
+t0** onto the plane.
+
+Projection between planes inclined by `i` is not longitude-preserving —
+the distortion is second order, about `(i²/2)·sin(2(λ−Ω))`, and
+`i = 1.578701°` gives 78″ of available distortion — so walking the
+ayanamsa's arc before projecting differs from walking it after by tens of
+arcseconds. **It predicts the zodiac dependence too:** the two treatments
+diverge in proportion to the arc walked, and Fagan/Bradley and Lahiri
+differ by ~0.9° of A0, about 3.5% of 24.7° — and 3.5% of 31.5″ is 1.1″,
+which is the measured gap between them. That agreement is why this is
+recorded as understood rather than merely observed.
+
+A smaller term: Swiss's plane constants (`sweph.h:312`, `:316`) are node
+107.582569°, inclination 1.578701°, against Prometheia's 107.582322° and
+1.578700°. The node differs by 0.89″, so a little of the gap is that, but
+it is not the mechanism.
+
+**Why this is not a §1 entry:** the registry's rule is that a claim of
+being more correct is earned by measurement against something outside this
+project, and there is none here — only a reading of what each side does.
+The ayanamsa is a convention about a direction and the invariable plane is
+a dynamical object, so which frame the convention is applied in may
+genuinely matter; absent an argument from the physics, picking on
+aesthetics would be exactly the reasoning this file exists to prevent.
+
 ## How to add an entry
 
 An entry earns its place by **measurement against something outside this
