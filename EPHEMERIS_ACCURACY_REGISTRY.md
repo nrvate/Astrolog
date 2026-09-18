@@ -12,8 +12,11 @@ reference shows Swiss is wrong, or where Swiss answers one question two
 ways and one of the answers is degenerate, **this fork takes the
 astronomically correct number and records the divergence here.**
 
-This file is that record. It has two halves, and the second is the
-uncomfortable one.
+This file is that record, in four parts: where this fork is deliberately
+more correct than Swiss; where Swiss is known wrong and this fork still
+follows it; divergences declined on purpose; and differences neither side
+can yet adjudicate. **The second part is the uncomfortable one and is
+meant to be.**
 
 ---
 
