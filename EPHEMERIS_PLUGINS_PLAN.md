@@ -42,19 +42,47 @@ version 3, and this section is the design authority behind it.
     convention, topo west→east negation, per-object walk semantics, stable
     registry indexes. Default `make check` on eph7prom all clear; the
     plugin-on Prometheia group is 140/2 (the two held legs only).
-  - **Phase 4 is RUNNING** as a background agent in worktree
-    `/nvm/work/eph4sel`, branch `eph4sel`, off `a4c6b89`: increments 4a
-    state + `us.rgszEphParam[]` (US positional-initializer trap!), 4b
-    `-bE`/`-bP` + legacy shadow, 4c chain live + `FCm*` → `FEphSpeeds()`/
-    `FEphLegacyCast()`, 4d writer + astrolog.as. When it reports: verify
-    per increment — re-read the diffs, re-run the four `tools/*-matrix.sh`
-    byte-diffs per single-source selection against a baseline binary built
-    from `a4c6b89` (normalize each tree's own path in outputs before
-    diffing), `make check` all clear — then merge (expect a small docs-only
-    conflict with `b89475b`). If it has gone quiet: check the worktree's
-    file/object mtimes and `pgrep` for make/cc1plus before assuming a
-    stall. **Phase 5 (the dialog, both builds) fans out once 4a's state
-    lands; phase 6 after 4; phase 8 (branch review) last.**
+  - **Phase 4: the background agent DIED at the 2026-09-17 session
+    switch** (last transcript turn 20:31; its `make check` was killed
+    mid-suite — `/nvm/work/eph4sel-check4b.log` ends at "the suite" with
+    every step before it ok, on the final tree). Worktree
+    `/nvm/work/eph4sel`, branch `eph4sel` off `a4c6b89`, is intact and is
+    the resume point. **Landed:** `c53172e` — increment 4a whole, which
+    also absorbed 4b's parse side and 4d's writer: `us.szEphemSource` +
+    `us.rgszEphParam[]` replacing the seven old fields, generated
+    `ephparam.h` (`tools/gen-eph-params.py` cross-checks §4.2),
+    `-bE`/`-bP` parsing with the legacy shadow kept in step both ways,
+    the writer emitting `-bE` plus one `-bP` per non-default parameter,
+    astrolog.as; data.cpp's US positional initializer was found two
+    entries short and made exact. Self-attested green: suite 5751/0, the
+    four matrices byte-identical against the a4c6b89 baseline (artifacts
+    `/nvm/work/eph4-mx-*`; the baseline binary is still built at
+    `/nvm/work/eph4base/astrolog`). **Uncommitted, the rest of 4b,
+    ungated as a whole:** charts0.cpp's `-H` rewrite (it compiles — the
+    killed check passed its build, inert-audit and arity steps after this
+    edit), qttest.cpp +125 lines of suite legs (5796/0 at 20:29, before
+    the charts0 edit), tools/switch-matrix.sh's filter extension and 13
+    new run legs (never executed), tools/graphics-matrix.sh's filter,
+    tools/inert_option_audit.py's `-0b`/`-0n` registration (proven ok in
+    the killed check). **To finish 4b:** rerun `make check` to
+    completion, then run the switch matrix — the new `-bE`/`-bP` legs
+    differ old-vs-new by design (the baseline binary answers "unknown
+    switch"), so first decide whether the matrix excludes those lines or
+    they are new-binary-only regression legs — then commit. **Then 4c:**
+    the fallback walk reads `us.szEphemSource`'s order (unavailable
+    sources skip at cast time, not selection time),
+    `FEphSpeeds()`/`FEphLegacyCast()` replace every `FCm*` use, the old
+    fields and their shadows are deleted with the US initializer fully
+    migrated, and the per-single-source byte-identity battery runs
+    against eph4base (normalize each tree's own path inside outputs
+    before diffing). **Then 4d:** the settings round-trip net (write,
+    load, compare state). No §8 work-log items were written yet; they
+    start at 9 (eph4sel branched after phase 3's items 6-8, so no
+    renumbering — unlike the eph7prom merge). The agent's full original
+    instructions (increments, nets, house rules) are recoverable from
+    `/nvmraid/home/n/.zcode/cli/rollout/model-io-sess_subagent_agent_5825b6be-cf37-446f-9744-305a2c510a0a.jsonl`,
+    line 1, message 3. **Phase 5 (the dialog, both builds) fans out once
+    4c merges; phase 6 after 4; phase 8 (branch review) last.**
   - **The peer** (Ephemeris Prometheia, repo `/shares/ephemeris-prometheia`,
     session channel the mail file above): their v4 migration is COMPLETE
     including SEGDATA/CANCEL/priority; nothing is owed in either direction;
