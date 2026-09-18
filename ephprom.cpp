@@ -907,13 +907,26 @@ static flag FSubmitProm(EPHQUERY *pq)
       prow->nErr = rga[i].errCode;   // the A.17 values are the ephErr* ones
       continue;
     }
-    // Star rows are the entry point's own six (ephem.h): FSwissStar
-    // answers raw tropical and the consumer's own zodiac machinery
-    // applies the offset -- so unlike the body rows (which mirror
-    // FSwissPlanet's xx[0] - is.rSid) a star row carries no is.rSid.
-    // The library's zodiac option is a label, not a transform (its
-    // values are tropical in the profile's frame), so under fSidereal
-    // the subtraction here would hand the consumer a second ayanamsa.
+    // Star rows are the entry point's own six (ephem.h), and they carry
+    // no is.rSid where the body rows mirror FSwissPlanet's xx[0] -
+    // is.rSid. The reason is the CONSUMER, not the row: ComputeEphem()
+    // re-adds is.rSid to a body row (calc.cpp), and the star callers do
+    // not, so each row is pre-adjusted for the one that reads it.
+    //
+    // A previous version of this comment justified it differently and
+    // was WRONG: it said the library's zodiac option is "a label, not a
+    // transform". It is a transform, and this was measured rather than
+    // argued -- Sirius at 1990-06-15, through this source, reads
+    // 104.449916 tropical and 79.334059 under fagan-bradley, and the
+    // swiss source returns the same two numbers to 0.0000 arcsec. Both
+    // sources hand the star consumer a row already in its zodiac, the
+    // consumer shifts nothing further, and the chart is right.
+    //
+    // The wrong reason mattered: it invited a "fix" that would have
+    // subtracted is.rSid here and put every sidereal star about 25
+    // degrees out -- which is exactly the defect the server source had
+    // as P1. The prometheia group's star-parity leg is the net, and it
+    // checks provenance so a swiss fallback cannot answer for both.
     prow->rg[0] = rgobj[i].kind == eph::kObjStar ? rga[i].prgVal[0] :
       rga[i].prgVal[0] - is.rSid;
     prow->rg[1] = rga[i].prgVal[1];

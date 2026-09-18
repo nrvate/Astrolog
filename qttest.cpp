@@ -20179,6 +20179,85 @@ static void TestPrometheiaQt()
           Check(fFalse, "the host path's Jupiter node did not compute");
       }
 
+      // Finding 2 of the Prometheia session's review of this file.
+      // Star profiles are given zodiac "fagan-bradley" under fSidereal,
+      // while the read deliberately does NOT subtract is.rSid, on the
+      // stated belief that the library's zodiac option is "a label, not
+      // a transform". If it IS a transform, a sidereal star comes back
+      // already shifted and the consumer shifts it again -- about 24.7
+      // degrees, silently, exactly the shape of the server source's P1.
+      //
+      // Settled here by comparing like with like rather than by reading
+      // either side's documentation: the star row THIS source returns
+      // against the one the SWISS source returns for the same star at
+      // the same instant. ephem.h's convention is one row shape for
+      // every source, so they must agree -- and in BOTH zodiacs, since
+      // a zodiac-dependent disagreement is the whole question.
+      {
+        char szStarT[cchSzMax];
+        real p1, p2, p3, p4, p5, p6, s1, s2, s3, s4, s5, s6, rD;
+        int rgisrcS[1], iZod;
+
+        rgisrcS[0] = IEphSrcFromKey("swiss");
+        for (iZod = 0; iZod <= 1; iZod++) {
+          EPHQUERY eqp, eqs;
+          flag fP, fS;
+          Borrow bSidStar(us.fSidereal, iZod ? fTrue : fFalse);
+
+          // Re-cast inside the borrow, or is.rSid keeps the previous
+          // leg's value -- which is zero, and a zero is.rSid makes this
+          // leg blind to the very subtraction it exists to watch. The
+          // first version of this test PASSED with that subtraction
+          // deliberately reinstated for stars, and so proved nothing.
+          CastChart(0);
+          Check(!us.fSidereal || is.rSid != 0.0,
+            "the sidereal leg really has an ayanamsa in is.rSid (%.6f)",
+            is.rSid);
+
+          EphQueryInit(&eqp, jd);
+          sprintf2(S(szStarT), "%s", "Sirius");
+          FEphQueryAdd(&eqp, 1, 0, 0, szStarT);
+          {
+            flag fSub = FEphSubmitChain(&eqp, rgisrc, 1);
+            fP = fSub && FEphRead(&eqp, 1, &p1, &p2, &p3, &p4, &p5, &p6);
+            if (!fP)
+              printf("    (prom submit=%d isrc=%d nErr=%d)\n", (int)fSub,
+                eqp.rgisrc[0], (int)eqp.rgrow[0].nErr);
+          }
+
+          EphQueryInit(&eqs, jd);
+          sprintf2(S(szStarT), "%s", "Sirius");
+          FEphQueryAdd(&eqs, 1, 0, 0, szStarT);
+          fS = FEphSubmitChain(&eqs, rgisrcS, 1) &&
+            FEphRead(&eqs, 1, &s1, &s2, &s3, &s4, &s5, &s6);
+
+          if (!fP || !fS) {
+            printf("  star parity %s: not served by %s (prom nErr %d, "
+              "swiss nErr %d), skipped\n",
+              iZod ? "sidereal" : "tropical", !fP ? "prometheia" : "swiss",
+              (int)eqp.rgrow[0].nErr, (int)eqs.rgrow[0].nErr);
+            continue;
+          }
+          // An angular separation, not a longitude difference: Sirius is
+          // 39 degrees south and a longitude difference there is a
+          // projection rather than a distance.
+          rD = SphDistance(p1, p2, s1, s2) * 3600.0;
+          printf("  star parity %-9s %s %.6f vs %s %.6f: %8.4f\"\n",
+            iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc), p1,
+            SzSet(eqs.rgrow[0].szSrc), s1, rD);
+          // The measurement is worthless if the fallback answered both
+          // sides: a chain of one cannot fall back, but say so rather
+          // than trust it.
+          Check(FEqSz(SzSet(eqp.rgrow[0].szSrc), "prometheia"),
+            "the %s star row really came from prometheia (%s)",
+            iZod ? "sidereal" : "tropical", SzSet(eqp.rgrow[0].szSrc));
+          Check(rD < 1.0, "the %s star row agrees with the swiss source's "
+            "(%.4f\"): one row shape for every source, and the consumer "
+            "applies the zodiac exactly once",
+            iZod ? "sidereal" : "tropical", rD);
+        }
+      }
+
       // The walk: with the ephemeris parameter pointed at a file that
       // is not there, the source's submit refuses and every object
       // stays open; with the Swiss source behind it, the fallback
