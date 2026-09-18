@@ -211,6 +211,39 @@ version 3, and this section is the design authority behind it.
   (use `atan2(|a x b|, a.b)`); and a subset check that reads only the
   mask-0 answer is vacuous against a server that echoes the request.
 
+- **A NAMED DROP IS OPEN: correction masks per object KIND**
+  (`/nvm/work/ephv4-drop-corrkind/DROP.md`, cut 2026-09-18 at `050a5a4`),
+  approved by the maintainer and **sent to Prometheia for review before
+  anything is built** -- deliberately, because their implementer found the
+  kind-4 `nTerms` flaw by reading the text before either side had a codec,
+  which was far cheaper than finding it in a results table.
+
+  **Unlike the kind-4 drop this one MOVES BYTES**: `ephproto.h` gains an
+  enumerator, a `Capabilities` field and its codec, `registries.json` gains
+  a row, and `conformance/`'s `set-sha256` changes. Nothing already on the
+  wire changes meaning and every existing fixture stays valid.
+
+  **Why.** A correction-mask entry is keyed on the OBSERVER (A.3 tag
+  0x0004), but the behaviour depends on the object KIND, and the two
+  disagree in both directions: at the Sun's centre a BODY answers masks 1,
+  3, 5 and 7 identically, while an ORBIT POINT from the same observer
+  genuinely honours them. One entry cannot say both -- and this project hit
+  the consequence from both sides in one day, first advertising the wide
+  reading (which made Prometheia's harness report a 3.2 arcsec
+  disagreement that was really us over-promising) and then enforcing the
+  narrow one (which made the heliocentric orbit point unaskable, caught by
+  `ephsrv-golden` on the next run). The branch currently carries a
+  deliberate divergence -- advertise narrow, accept wide -- which works and
+  is true only until someone reads the spec instead of our source.
+
+  **The proposal:** a new non-critical TLV `0x0014`
+  `CORRECTIONS_BY_KIND`, `{u32 observerMask, u32 kindMask, u8
+  correctionMask}`; `0x0004` keeps its encoding and becomes the
+  INTERSECTION over kinds rather than the union, because it is what a
+  client that has never heard of `0x0014` will trust, and advertised is
+  promised. It costs this project nothing today: our `0x0004` under that
+  reading is byte-identical to what we already advertise.
+
 - **A NAMED DROP IS OPEN: the kind-4 elements rule**
   (`/nvm/work/ephv4-drop-elements/DROP.md`, cut 2026-09-18 at `176e333`).
   §3.5a's "Elements (kind 4)" gains four normative sentences, approved by
