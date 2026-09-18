@@ -675,6 +675,19 @@ flag FEphSubmitSide(EPHQUERY *pq)
 
 static flag fEphFallbackServed = fFalse;
 
+// Why nothing answered, when nothing did: the sources' own reasons, in
+// chain order. A chain of unavailable sources is the one failure that
+// looks exactly like a successful cast -- every body at 0Ari00'00", no
+// error, the houses correct because they are computed from the time and
+// place rather than from an ephemeris. CLAUDE.md names that reading as
+// the trap it is; this is the host saying so out loud.
+char szEphNoSourceWhy[cchSzMax] = "";
+
+CONST char *SzEphNoSourceWhy()
+{
+  return szEphNoSourceWhy;
+}
+
 
 flag FEphFallbackNotice()
 {
@@ -694,21 +707,35 @@ flag FEphSubmitChain(EPHQUERY *pq, CONST int *rgisrcChain, int cisrc)
 {
   EPHSRCDEF *pephsrc;
   char szWhy[cchSzDef];
-  int isrc, i;
+  int isrc, i, cWhy = 0;
   flag fFallback = fFalse, fAny = fFalse;
 
   fEphFallbackServed = fFalse;
+  szEphNoSourceWhy[0] = chNull;
   for (isrc = 0; isrc < cisrc; isrc++) {
     if (rgisrcChain[isrc] < 0 || rgisrcChain[isrc] >= cEphSrcBuiltIn)
       continue;
     pephsrc = PephsrcGet(rgisrcChain[isrc]);
-    if (!pephsrc->FAvailable(szWhy, cchSzDef))
+    if (!pephsrc->FAvailable(szWhy, cchSzDef)) {
+      // Why, in the source's own words, in case NOTHING answers: a chain
+      // whose every source is unavailable used to cast a chart of zeros
+      // and say nothing at all.
+      if (cWhy < 2)
+        sprintf2(S(szEphNoSourceWhy), "%s%s%s (%s)",
+          szEphNoSourceWhy, cWhy > 0 ? "; " : "", pephsrc->szKey, szWhy);
+      cWhy++;
       continue;
+    }
     // A source returning false attempted nothing (a transport that is
     // down): every open object stays open. Returning true, it has filled
     // a row for every open object, success or per-object error.
-    if (!pephsrc->FSubmit(pq))
+    if (!pephsrc->FSubmit(pq)) {
+      if (cWhy < 2)
+        sprintf2(S(szEphNoSourceWhy), "%s%s%s (attempted nothing)",
+          szEphNoSourceWhy, cWhy > 0 ? "; " : "", pephsrc->szKey);
+      cWhy++;
       continue;
+    }
     for (i = 0; i < pq->cobj; i++)
       if (pq->rgisrc[i] == ephSrcNone && pq->rgrow[i].nErr == ephErrNone) {
         pq->rgisrc[i] = rgisrcChain[isrc];

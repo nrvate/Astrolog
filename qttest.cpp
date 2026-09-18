@@ -21400,6 +21400,86 @@ LRestore:
 // compare whole answers, as bytes, over the flag paths the program really
 // takes.
 
+// A chain whose every source is unavailable must SAY SO. This is the one
+// failure that looks exactly like a success: every body reads 0Ari00'00",
+// no error is raised, and the houses are right, because they come from the
+// time and place rather than from an ephemeris. CLAUDE.md names that
+// reading as the project's own trap; until 2026-09-18 the host walked such
+// a chain, answered nothing and drew the chart anyway.
+//
+// Reported by the Prometheia project from OUTSIDE: they cast through
+// "-bE server" in a build with no transport, got a chart rather than a
+// refusal, and could not tell from the output that anything was wrong.
+static void TestEphNoSourceQt()
+{
+  flag fNoEphSav = is.fNoEphFile;
+  EPHQUERY eq;
+  int rgisrc[cEphSrcBuiltIn], cisrc;
+
+  Group("No source could answer");
+
+  // A chain naming only a source this build does not register at all.
+  // CEphChainSrc skips a key it cannot resolve, so the walk has nothing to
+  // ask and must not report success.
+  {
+    EphSelBorrow bChain("horizons");
+    cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+    EphQueryInit(&eq, 2451545.0);
+    FEphQueryAdd(&eq, oSun, 0, oEar, NULL);
+    Check(!FEphSubmitChain(&eq, rgisrc, cisrc),
+      "a chain of nothing this build knows answers nothing (%d sources)",
+      cisrc);
+    Check(eq.rgisrc[0] == ephSrcNone,
+      "and leaves the object unclaimed rather than claiming a zero row");
+  }
+
+  // And a source that IS registered but cannot serve: its own reason is
+  // carried out, because "no source could answer" without a why is nearly
+  // as unhelpful as silence.
+  //
+  // "prometheia" and not "server", deliberately. The first draft used the
+  // server source with its URL cleared, and it FAILED -- by connecting to
+  // a prometheiad another agent had left running on this machine's default
+  // port and answering the query correctly. A net that reaches the network
+  // is a net whose verdict depends on who else is using the machine. This
+  // one asks about a source that is unavailable for a reason no daemon can
+  // change: its library is not compiled in.
+  // The REASON string is not asserted here, and the honest statement of
+  // why is more useful than a leg that pretends to check it. It is written
+  // only when the walk REACHES a source and that source declines -- and in
+  // this binary every registered source is available: the Qt transport is
+  // bound, so "server" answers; "prometheia" resolves to an index outside
+  // cEphSrcBuiltIn when its library is absent and the walk skips it on
+  // bounds before asking. The reason path belongs to the console build,
+  // where "server" is registered and has no transport at all:
+  //
+  //   ./astrolog -bE server -qa 1 1 2000 12:00 0 0e0 0n0
+  //   No ephemeris source could answer this chart: server (There is no
+  //   transport in this build.). Every body reads 0Ari00'00".
+  //
+  // Two earlier drafts of this leg did claim to check it. The first set
+  // the server's URL to empty and PASSED BY CONNECTING to a prometheiad
+  // another agent had left running on this machine's default port. The
+  // second asked about "prometheia" and got an empty reason for the bounds
+  // reason above, which is the walk being right and the test being wrong.
+  printf("  (the reason string is exercised by the console build, which "
+    "has no transport; see the comment here)\n");
+
+  // The other half, or the two assertions above would pass on a host that
+  // never answers anything at all.
+  {
+    EphSelBorrow bChain("swiss");
+    cisrc = CEphChainSrc(us.szEphemSource, rgisrc, cEphSrcBuiltIn);
+    EphQueryInit(&eq, 2451545.0);
+    FEphQueryAdd(&eq, oSun, 0, oEar, NULL);
+    Check(FEphSubmitChain(&eq, rgisrc, cisrc) &&
+      eq.rgisrc[0] != ephSrcNone,
+      "and a chain that CAN answer still does");
+  }
+  is.fNoEphFile = fNoEphSav;
+}
+
+
 static void TestEphemRegistryQt()
 {
   static CONST int rgyea[] = {1900, 1990, 2020, 2050};
@@ -22420,6 +22500,7 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"ephem-server",         TestEphSrvQt},
   {"ephem-server-live",    TestEphSrvLiveQt},
   {"ephem-registry",       TestEphemRegistryQt},
+  {"ephem-no-source",      TestEphNoSourceQt},
   {"prometheia",           TestPrometheiaQt},
   {"chart-list",           TestChartListFilterQt},
   {"info-time",            TestChartInfoTimeQt},

@@ -1090,8 +1090,24 @@ void ComputeEphem(real t)
           objOrbit = objCentCalc;
         FEphQueryAdd(&eq, i, 0, objOrbit, NULL);
       }
-      if (eq.cobj > 0)
-        FEphSubmit(&eq);
+      // A chain that answered NOTHING is the one failure that looks like a
+      // success: every body at 0Ari00'00", no error, and the houses right,
+      // because they come from the time and place rather than from an
+      // ephemeris. Reported from the other side of the wire by the
+      // Prometheia project, who cast a chart through "-bE server" in a
+      // build with no transport and got a chart rather than a refusal.
+      // The sources' own reasons are carried out, because "no ephemeris
+      // source could answer" without a why is nearly as unhelpful as
+      // silence.
+      if (eq.cobj > 0 && !FEphSubmit(&eq) && !is.fNoEphFile) {
+        char szNo[cchSzMax];
+        is.fNoEphFile = fTrue;
+        sprintf2(S(szNo), "No ephemeris source could answer this chart%s%s. "
+          "Every body reads 0Ari00'00\".",
+          FSzSet(SzEphNoSourceWhy()) ? ": " : "",
+          FSzSet(SzEphNoSourceWhy()) ? SzEphNoSourceWhy() : "");
+        PrintWarning(szNo);
+      }
     }
   }
 #endif
