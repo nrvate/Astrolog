@@ -243,8 +243,16 @@ version 3, and this section is the design authority behind it.
   client that has never heard of `0x0014` will trust, and advertised is
   promised.
 
-  **Revision 2 (2026-09-18) after Prometheia's review**, which found four
-  things missing. The one that would have cost an implementation round:
+  **Revisions 2 and 3 (2026-09-18) after two Prometheia reviews.** The
+  second found an error in the FIRST review's own answer, which this
+  project had then written into normative text without checking: revision 2
+  said a REQUEST carries segment series that reference profiles, and it
+  does not -- only `Object` carries a profile index, and `AyanSeries`
+  exists solely in the SEGDATA reply. **A reviewer's question is a
+  question, and turning one into a rule without opening the header is how
+  a specification acquires something that cannot be implemented.**
+
+  Revision 2's four gaps. The one that would have cost an implementation round:
   **where ERROR 11 is decided.** The mask sits on the PROFILE and the kind
   sits on the objects referencing it, so a profile can no longer be judged
   alone -- it is now checked against every (observer, kind) pair of the
