@@ -7374,6 +7374,7 @@ static void ResetWindowChunksQt(uint32_t dwReq);
 static void WindowFailedQt(uint32_t dwReq, CONST char *szErr);
 static void ClearWindowsSrvQt();
 static void ForgetMissedCastSrvQt();
+static flag FSrvObjQuietQt(int obj);
 static void ClearSettledWindowsSrvQt();
 static void SrvWelcomedQt();
 
@@ -7923,8 +7924,23 @@ static flag FSubmitTransQt(CONST EPHQUERY *pq)
 static flag FReadTransQt(CONST EPHQUERY *pq, int iObj, EPHROW *prow)
 {
   real r1, r2, r3, r4, r5, r6;
+  int obj;
 
   if (pq == NULL || iObj < 0 || iObj >= pq->cobj)
+    return fFalse;
+  obj = pq->rgobj[iObj];
+  // An object the REQUEST never carried is not a failure to report: the
+  // translation has no version 4 form for it (ephreq.h skips those), so
+  // this source simply cannot do it and the chain walk offers it to the
+  // next one. Saying so quietly is what every other source does for an
+  // object it cannot compute.
+  //
+  // Without this the adapter's own "the Ephemeris Server has no answer"
+  // warning fired for each of them -- once per cast, as a modal. It did
+  // not show up under "-Yi1 ephem", where few exotic bodies resolve, and
+  // did under "-i nrvate.as", which is the configuration CLAUDE.md's
+  // hard rule names and which resolves far more of them from /swe.
+  if (FSrvObjQuietQt(obj))
     return fFalse;
   if (!FSrvPlanetQt(pq->rgobj[iObj], pq->rJD, &r1, &r2, &r3, &r4, &r5, &r6))
     return fFalse;
@@ -8609,6 +8625,22 @@ static flag FSrvWaitQt(CONST std::function<flag()> &fDone, int msMax)
 // at 0 Aries until the user happens to do something (EPHEMERIS_REVIEW.md
 // C3).
 static flag s_fSrvCastMissedQt = fFalse;
+
+
+// Should a missing answer for this object be passed over in SILENCE?
+//
+// Only when the cast itself was fine and this one object simply was not
+// in the request -- the translation has no version 4 form for it, so
+// this source cannot do it and the chain offers it to the next one,
+// which is not news. A cast-level failure (the server gone, the request
+// refused) sets s_plan.baErr, and that still warns, because then the
+// source COULD have done the object and did not.
+static flag FSrvObjQuietQt(int obj)
+{
+  if (!FBetween(obj, 0, objMax-1))
+    return fTrue;               // no plan slot: never asked
+  return s_plan.rgent[obj].pwin == NULL && s_plan.baErr.isEmpty();
+}
 
 // A cast that could not reach the server sets the flag above, and the
 // next WELCOME recasts it. Finalizing has to drop that intent with
