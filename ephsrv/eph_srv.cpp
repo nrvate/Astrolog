@@ -2143,7 +2143,26 @@ static void WorkTick(us_timer_t *t) {
     Stream *s = nullptr;
     for (Stream &e : c->out)
       if (e.work) { s = &e; break; }
-    if (s == nullptr) continue;
+    if (s == nullptr) {
+      // No computation left -- but there may be COMPUTED rows still unsent,
+      // and this is where they used to be stranded for good. FlushStreams
+      // stops at the first backpressure and resumes from uWS's drain
+      // callback; drain fires when a socket that was FULL becomes writable,
+      // and it does not fire when the buffer emptied without one. A large
+      // answer therefore stopped mid-stream with both socket queues empty,
+      // the client blocked reading, and the server idle in ep_poll holding
+      // rows it would never send again. Measured: 64 objects x 8000 rows
+      // hung permanently (40 minutes before it was killed), 6000 rows did
+      // not, and the server logged the last stall at row 5500 with 564 KB
+      // buffered -- far under the 4 MB ceiling, so it was uWS's
+      // backpressure, not ours. This is the second flush path that makes
+      // the drain callback an optimisation rather than the only way out.
+      if (!c->out.empty()) {
+        FlushStreams(ws);
+        if (!c->out.empty()) fMore = true;   // keep the fast tick
+      }
+      continue;
+    }
     if (std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - t0).count() >= kTickMs) {
       // Out of budget: the rest of the connections next turn, starting here.
@@ -2160,8 +2179,10 @@ static void WorkTick(us_timer_t *t) {
   if (!fMore) {
     for (void *p : socks) {
       Conn *c = (Conn *)((WebSocket<SSL, true, Conn> *)p)->getUserData();
-      for (const Stream &e : c->out)
-        if (e.work) fMore = true;
+      // Unsent rows count as "more", not just uncomputed ones: dropping to
+      // the idle tick with rows still queued is the hang above in slow
+      // motion.
+      if (!c->out.empty()) fMore = true;
     }
   }
   if (!fMore && lc->fWorkArmed) {
