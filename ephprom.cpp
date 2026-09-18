@@ -423,49 +423,39 @@ uint32_t EphPromColumns(CONST eph::Profile *ppf, int nTs)
 flag FEphPromStarResolve(CONST char *sz, int *pidx, uint16_t *pnErr,
   char *szErr, int cch)
 {
-  prometheia_star_match rgm[32];
   prometheia_error err;
-  int cms, i, q = PROMETHEIA_MATCH_PREFIX, cm = 0, istar = -1;
+  int istar = -1;
+  prometheia_status s;
 
-  cms = prometheia_star_lookup(sz, 0, rgm, (int)(sizeof(rgm)/sizeof(*rgm)));
-  if (cms == 0) {
-    // star_lookup's exact matching does not know every form of 3.5a's
-    // grammar star_find does (a Flamsteed number among them); when it
-    // answers nothing, star_find's one-object answer is the lookup.
-    prometheia_status sFind = prometheia_star_find(sz, &istar, &err);
-    if (sFind == PROMETHEIA_OK) {
-      *pidx = istar;
-      return fTrue;
-    }
-    // Every failure here used to be "unknown body". star_find answers one
-    // object, so its ARGUMENT refusal is a name it could not narrow to
-    // one -- which is ambiguity (6), a different thing from a name
-    // nothing answers (1), and the one a caller can act on by asking
-    // LOOKUP. NOT_FOUND stays unknown body.
-    *pnErr = sFind == PROMETHEIA_ERROR_ARGUMENT ? eph::kOErrAmbiguous :
-      eph::kOErrUnknownBody;
-    sprintf2(szErr, cch, "%s", err.message);
-    return fFalse;
+  // ONE decision, and it is the library's own. This used to call
+  // prometheia_star_lookup first and then re-derive the answer from the
+  // match qualities: take the best quality, and call it ambiguous if
+  // more than one match tied there. That reimplemented a judgement the
+  // library already makes, and the two parted company.
+  //
+  // Found by probing prometheiad with our own wire client: "Beta Sco"
+  // came back from the SERVER as Acrab, with a position, while this
+  // function called the same name ambiguous. Their grammar is that a
+  // Bayer designation without a component number answers every
+  // component and find takes the brightest; only DIFFERENT designations
+  // tying are ambiguous. star_find implements that, prometheiad uses
+  // star_find, and so now do we -- which makes the whole class of
+  // divergence impossible rather than fixing one instance of it.
+  //
+  // lookup stays where ranking is the point: NLookupProm's completion
+  // list, which wants every match and their qualities.
+  s = prometheia_star_find(sz, &istar, &err);
+  if (s == PROMETHEIA_OK) {
+    *pidx = istar;
+    return fTrue;
   }
-  for (i = 0; i < cms; i++)
-    q = Min(q, rgm[i].quality);
-  for (i = 0; i < cms; i++)
-    if (rgm[i].quality == q) {
-      cm++;
-      istar = rgm[i].index;
-    }
-  if (cm == 0) {
-    *pnErr = eph::kOErrUnknownBody;
-    sprintf2(szErr, cch, "no star answers '%s'", sz);
-    return fFalse;
-  }
-  if (cm > 1) {
-    *pnErr = eph::kOErrAmbiguous;
-    sprintf2(szErr, cch, "'%s' names %d stars; use LOOKUP", sz, cm);
-    return fFalse;
-  }
-  *pidx = istar;
-  return fTrue;
+  // star_find answers one object, so its ARGUMENT refusal is a name it
+  // could not narrow to one -- ambiguity (6), which a caller can act on
+  // by asking LOOKUP. NOT_FOUND is a name nothing answers (1).
+  *pnErr = s == PROMETHEIA_ERROR_ARGUMENT ? eph::kOErrAmbiguous :
+    eph::kOErrUnknownBody;
+  sprintf2(szErr, cch, "%s", err.message);
+  return fFalse;
 }
 
 // --------------------------------------------------------------------------

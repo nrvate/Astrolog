@@ -19863,18 +19863,35 @@ static void TestPrometheiaQt()
   // No ephemeris file needed: the star catalog is in the library.
   Check(FEphPromStarResolve("Aldebaran", &idx, &nErr, szErr,
     (int)sizeof(szErr)), "an IAU proper name resolves (%s)", szErr);
-  Check(!FEphPromStarResolve("Beta Sco", &idx, &nErr, szErr,
-    (int)sizeof(szErr)) && nErr == eph::kOErrAmbiguous,
-    "a component-ambiguous name is error 6 (%s)", szErr);
+  // A Bayer designation without its component number answers every
+  // component, and the library's find takes the BRIGHTEST -- it is not
+  // ambiguous. This group asserted error 6 here until 2026-09-18,
+  // transcribed from the other project's SERVER.md, which used this very
+  // name as its example of ambiguity and was wrong; their STARS.md
+  // grammar always said otherwise. It was caught by probing their server
+  // with our own wire client and getting a POSITION for "Beta Sco" where
+  // this said 6. Only DIFFERENT designations tying are ambiguous.
+  {
+    int idxB = -1, idxA = -1;
+    Check(FEphPromStarResolve("Beta Sco", &idxB, &nErr, szErr,
+      (int)sizeof(szErr)) && idxB >= 0,
+      "a Bayer designation without a component resolves to the brightest "
+      "of them, rather than refusing as ambiguous");
+    Check(FEphPromStarResolve("Acrab", &idxA, &nErr, szErr,
+      (int)sizeof(szErr)) && idxA == idxB,
+      "and it is the same star its proper name resolves to (%d vs %d)",
+      idxB, idxA);
+  }
   Check(FEphPromStarResolve("Beta1 Sco", &idx, &nErr, szErr,
     (int)sizeof(szErr)) && idx >= 0, "a numbered component resolves");
   Check(FEphPromStarResolve("bet1 Sco", &idx, &nErr, szErr,
     (int)sizeof(szErr)) && idx >= 0, "the three-letter form resolves too");
   Check(FEphPromStarResolve("7 And", &idx, &nErr, szErr,
     (int)sizeof(szErr)) && idx >= 0, "a Flamsteed number resolves");
-  Check(!FEphPromStarResolve("61 Cyg", &idx, &nErr, szErr,
-    (int)sizeof(szErr)) && nErr == eph::kOErrAmbiguous,
-    "a Flamsteed number two stars share is error 6 (%s)", szErr);
+  Check(FEphPromStarResolve("61 Cyg", &idx, &nErr, szErr,
+    (int)sizeof(szErr)) && idx >= 0,
+    "a Flamsteed number two stars share resolves to the brighter, by the "
+    "same rule");
   Check(FEphPromStarResolve("HR 5984", &idx, &nErr, szErr,
     (int)sizeof(szErr)), "an HR designation resolves");
   Check(FEphPromStarResolve("HIP 78820", &idx, &nErr, szErr,
@@ -20021,8 +20038,9 @@ static void TestPrometheiaQt()
     } else
       Check(rga[8].errCode == eph::kOErrUnknownBody,
         "a designation with no catalog is error 1 (%d)", rga[8].errCode);
-    Check(rga[9].errCode == eph::kOErrAmbiguous,
-      "an ambiguous star computes as error 6 (%d)", rga[9].errCode);
+    Check(rga[9].errCode == eph::kOErrNone,
+      "a Bayer designation without a component COMPUTES, at the brightest "
+      "component (%d)", rga[9].errCode);
 
     // LOOKUP, through the source's own entry point: bodies first, then
     // the star namespace. nNative carries the SPK-ID or the star index.
