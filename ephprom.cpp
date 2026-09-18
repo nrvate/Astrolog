@@ -321,6 +321,33 @@ int NEphPromState(char *sz, int cch)
 // in opposite orders, and a straight copy of the field binds the wrong
 // frame in every case.
 
+// Three of this file's mappings are STRAIGHT COPIES of a protocol
+// enumeration into a library one, on the grounds that the two lists
+// agree. That was a comment, and a comment cannot notice the day one of
+// the two lists gains a member or reorders. These make the compiler
+// notice, at no runtime cost -- and they are the answer to the review's
+// Q2 and Q3, which asked whether the orders match: they do, and now
+// nothing can quietly change that. The FRAME lists deliberately run in
+// opposite orders and are switched member by member below rather than
+// copied, which is the one trap this file's header already names.
+static_assert(eph::kObsGeo   == PROMETHEIA_CENTER_GEOCENTRIC &&
+              eph::kObsTopo  == PROMETHEIA_CENTER_TOPOCENTRIC &&
+              eph::kObsHelio == PROMETHEIA_CENTER_HELIOCENTRIC &&
+              eph::kObsBary  == PROMETHEIA_CENTER_BARYCENTRIC &&
+              eph::kObsBody  == PROMETHEIA_CENTER_BODY,
+  "the protocol's observers and Prometheia's centers must agree, because "
+  "popts->center is a straight copy of ppf->observer");
+static_assert(eph::kPlaneEcliptic == PROMETHEIA_COORDS_ECLIPTIC &&
+              eph::kPlaneEquator  == PROMETHEIA_COORDS_EQUATORIAL,
+  "the protocol's planes and Prometheia's coords must agree, because "
+  "popts->coords is a straight copy of ppf->plane");
+static_assert(eph::kPtAscNode  == PROMETHEIA_ORBIT_ASCENDING_NODE &&
+              eph::kPtDescNode == PROMETHEIA_ORBIT_DESCENDING_NODE &&
+              eph::kPtPeri     == PROMETHEIA_ORBIT_PERIHELION &&
+              eph::kPtApo      == PROMETHEIA_ORBIT_APHELION,
+  "the protocol's orbit points and Prometheia's must agree, because "
+  "po->point is passed straight through");
+
 flag FEphPromOptions(CONST eph::Profile *ppf, prometheia_options *popts)
 {
   prometheia_options_init(popts);
