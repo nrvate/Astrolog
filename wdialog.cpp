@@ -2418,6 +2418,10 @@ flag API DlgCalc(HWND hdlg, uint message, WORD wParam, LONG lParam)
       if (FMatchSz(sz, szEphem[cmMatrix]))
         us.fMatrixPla = fTrue;
 #endif
+      // The combo wrote the selection's legacy fields; the chain is
+      // re-derived from them so both representations say the same thing
+      // (ephem.cpp, the selection state).
+      FEphChainFromLegacy();
       us.rZodiacOffset = rs;
       us.nHouseSystem = nc;
       SetCentric(nh);

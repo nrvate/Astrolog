@@ -577,6 +577,20 @@ extern flag FEphRead
   P((CONST EPHQUERY *, int, real *, real *, real *, real *, real *, real *));
 extern flag FEphReadRaw P((CONST EPHQUERY *, int, real *));
 
+// The selection state (EPHEMERIS_PLUGINS_PLAN.md 5.1): the chain
+// us.szEphemSource holds, the parameter values us.rgszEphParam[] carries,
+// and the two directions that keep them and the legacy fields in step
+// while both representations live.
+extern CONST char *SzEphSourceDefault P((void));
+extern void SzEphChainHead P((CONST char *, char *, int));
+extern void EphSourceChanged P((void));
+extern int IEphParamFromKey P((CONST char *));
+extern flag FEphParamSet P((int, CONST char *));
+extern flag FEphParamDefaulted P((int));
+extern void EphLegacyFromChain P((void));
+extern void EphSourceSet P((CONST char *));
+extern flag FEphChainFromLegacy P((void));
+
 // The fixed stars' decision-and-execution pair, the FSwissPlanet()
 // analogue for one star: resolve nothing here -- the caller hands the
 // resolved Swiss Ephemeris name -- and return the entry point's own six

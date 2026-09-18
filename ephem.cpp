@@ -102,6 +102,218 @@ int IEphSrcPrimary()
 }
 
 
+/*
+******************************************************************************
+** The Selection State.
+******************************************************************************
+*/
+
+// The chain us.szEphemSource holds, and the parameter values beside it,
+// are the selection (EPHEMERIS_PLUGINS_PLAN.md 5.1). While the old
+// spellings live -- -b and its suffixes, -bW, -bT, the dialogs' combo --
+// the selection has two representations, and every way in writes BOTH:
+// a legacy spelling re-derives the chain from its shadow (below), and
+// -bE/-bP set the chain and re-derive the shadow. Nothing reads the two
+// against each other, so a file written by either half loads whole.
+
+// The default chain: the Swiss Ephemeris under EPHEM, the Matrix legacy
+// cast without it -- the same default fEphemFiles carries.
+CONST char *SzEphSourceDefault()
+{
+#ifdef EPHEM
+  return "swiss";
+#else
+  return "matrix";
+#endif
+}
+
+
+// A chain's head: the text up to the first comma, which is the primary
+// source. Tokens after it are the fallback order, and the walk
+// (FEphSubmitChain) skips any of them it cannot resolve -- a source this
+// build predates, named by a settings file from a newer one, rides along
+// and is skipped, which is the same rule an unavailable compiled source
+// follows. That is also why an unknown key here is not an error: it is
+// indistinguishable from a source the walk will skip.
+
+void SzEphChainHead(CONST char *szChain, char *sz, int cch)
+{
+  CONST char *pch;
+
+  szChain = SzSet(szChain);
+  for (pch = szChain; *pch && *pch != ','; pch++)
+    ;
+  sprintf2(sz, cch, "%.*s", (int)(pch - szChain), szChain);
+}
+
+
+// Changing the source: the new source's paths, files and caches are not
+// the old one's. is.fSwissPathSet is the Swiss library's path latch, and
+// is.fNoEphFile the one warning latch a failed file shares; both belong
+// to the source that raised them. The server's window cache needs
+// nothing here: it is keyed on the server's own datasetId and dropped
+// when the address changes (qtdriver.cpp), which is the adapter's own
+// definition of "the source changed".
+
+void EphSourceChanged()
+{
+  is.fSwissPathSet = fFalse;
+  is.fNoEphFile = fFalse;
+}
+
+
+// The source parameters' shared index space (4.3), generated into
+// ephparam.h. This is the table's one definition; ephswiss.cpp hands a
+// slice of it to the jpl source's rgParam, and -bP looks keys up here.
+
+CONST EPHPARAMROW rgephparam[cEphParam] = EphParamRowsGenerated();
+
+
+// "server.url" -> epServerUrl, by way of the generated table. -1 when the
+// source or the parameter is not one this build declares; -bP refuses
+// that, the way it refuses an unknown switch -- a settings file this old
+// build cannot name is better refused than silently dropped.
+
+int IEphParamFromKey(CONST char *szKey)
+{
+  char szSrc[cchSzDef], *pch;
+  int iep;
+  CONST EPHPARAMROW *pep;
+
+  if (szKey == NULL)
+    return -1;
+  sprintf2(S(szSrc), "%s", szKey);
+  pch = szSrc;
+  while (*pch && *pch != '.')
+    pch++;
+  if (*pch != '.')
+    return -1;
+  *pch = chNull;
+  for (iep = 0, pep = rgephparam; iep < cEphParam; iep++, pep++)
+    if (FEqSz(pep->szSrc, szSrc) && FEqSz(pep->ep.szKey, pch + 1))
+      return iep;
+  return -1;
+}
+
+
+// One parameter's value. "" restores the declared default, and NULL and
+// "" are one state to every reader, so an empty value stores NULL.
+
+flag FEphParamSet(int iep, CONST char *szVal)
+{
+  if (iep < 0 || iep >= cEphParam)
+    return fFalse;
+  FCloneSz(szVal != NULL && *szVal ? szVal : NULL,
+    &us.rgszEphParam[iep]);
+  return fTrue;
+}
+
+
+// Whether a parameter sits at its default, which is what the settings
+// writer keys its -bP lines on (5.3: one line per non-default parameter).
+
+flag FEphParamDefaulted(int iep)
+{
+  if (iep < 0 || iep >= cEphParam)
+    return fTrue;
+  return !FSzSet(us.rgszEphParam[iep]) ||
+    FEqSz(us.rgszEphParam[iep], rgephparam[iep].ep.szDefault);
+}
+
+
+// Re-derive the legacy shadow from the chain: the head source names the
+// fields the old spellings read, the same mapping IEphSrcPrimary() walks
+// -- with the two sources that have no registry row yet spelled out,
+// because the legacy fields cannot say "server" or "horizons" without
+// also saying what used to be selected beside them. A head this mapping
+// does not know (a future source, or the settings sweep's marker) leaves
+// the shadow alone: the chain is the new representation, and nothing
+// below reads it yet.
+
+void EphLegacyFromChain()
+{
+  char sz[cchSzDef];
+
+  SzEphChainHead(us.szEphemSource, S(sz));
+  if (FEqSz(sz, "moshier")) {
+    us.fEphemFiles = fTrue;  us.nSwissEph = 1;  us.fMatrixPla = fFalse;
+  } else if (FEqSz(sz, "jpl")) {
+    us.fEphemFiles = fTrue;  us.nSwissEph = 2;  us.fMatrixPla = fFalse;
+  } else if (FEqSz(sz, "horizons")) {
+    us.fEphemFiles = fTrue;  us.nSwissEph = 3;  us.fMatrixPla = fFalse;
+  } else if (FEqSz(sz, "server")) {
+    us.fEphemFiles = fTrue;  us.nSwissEph = 5;  us.fMatrixPla = fFalse;
+  } else if (FEqSz(sz, "matrix")) {
+    us.fEphemFiles = fFalse; us.fMatrixPla = fTrue;
+  } else if (FEqSz(sz, "none")) {
+    us.fEphemFiles = fFalse; us.fMatrixPla = fFalse;
+  } else if (!FEqSz(sz, "")) {
+    // "swiss", and every key the shadow cannot name: the Swiss files
+    // selection is what the old fields say for it.
+    us.fEphemFiles = fTrue;  us.nSwissEph = 0;  us.fMatrixPla = fFalse;
+  }
+}
+
+
+// The whole of -bE: set the chain, and keep the two representations in
+// step. Resetting the latches happens only when the chain really
+// changed -- a second -bE of the same chain is idempotent, not a reset.
+
+void EphSourceSet(CONST char *szChain)
+{
+  flag fChanged;
+
+  if (!FSzSet(szChain))
+    szChain = SzEphSourceDefault();
+  fChanged = !FEqSz(SzSet(us.szEphemSource), szChain);
+  if (fChanged) {
+    FCloneSz(szChain, &us.szEphemSource);
+    EphSourceChanged();
+  }
+  EphLegacyFromChain();
+}
+
+
+// The other direction, which every legacy spelling ends with: re-derive
+// the chain from the fields the old code wrote, and reset the latches
+// when that changed the source. Returns whether it did.
+
+flag FEphChainFromLegacy()
+{
+  char sz[cchSzDef];
+  flag fChanged;
+
+  if (!us.fEphemFiles)
+    sprintf2(S(sz), "%s", us.fMatrixPla ? "matrix" : "none");
+  else
+    switch (us.nSwissEph) {
+    case 1:
+      sprintf2(S(sz), "%s", "moshier"); break;
+    case 2:
+      sprintf2(S(sz), "%s", "jpl"); break;
+    case 3:
+      // The Horizons selection: its own branch answers the objects it
+      // covers, and what is left reaches the JPL-file source, which is
+      // where IEphSrcPrimary() has always sent the residue.
+      sprintf2(S(sz), "%s", "horizons,jpl"); break;
+    case 5:
+      // The Ephemeris Server selection: the cast's questions go to the
+      // server, and the side calls -- a progressed arc, a star, the
+      // eclipse Sun -- still ask the local Swiss files, as they always
+      // have (section 1, item 7; the chain names that).
+      sprintf2(S(sz), "%s", "server,swiss"); break;
+    default:
+      sprintf2(S(sz), "%s", "swiss"); break;
+    }
+  fChanged = !FEqSz(SzSet(us.szEphemSource), sz);
+  if (fChanged) {
+    FCloneSz(sz, &us.szEphemSource);
+    EphSourceChanged();
+  }
+  return fChanged;
+}
+
+
 // Start a query: one instant, no objects yet.
 
 void EphQueryInit(EPHQUERY *pq, real rJD)

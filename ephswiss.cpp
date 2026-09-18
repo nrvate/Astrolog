@@ -191,13 +191,11 @@ static int NLookupSwissLocal(CONST char *sz, EPHMATCH *rgm, int cMax)
 // The three sources differ in their names and in the one declared
 // parameter jpl owns (section 4.2); the file name has no setting today --
 // the library's own default, de431.eph, is what runs -- so the parameter
-// is declared with the empty default that means "the source's own".
-
-static CONST EPHPARAM rgparamJpl[] = {
-  {"file", "JPL file", epkFile, ""},
-};
-
-#define cparamJpl (int)(sizeof(rgparamJpl) / sizeof(EPHPARAM))
+// is declared with the empty default that means "the source's own". The
+// declaration is the generated table's (ephparam.h, one row per
+// parameter of every source), and the source hands ITS slice of that
+// table to rgParam, so the command line and any dialog read the same
+// declaration from one place.
 
 
 // The one delegated implementation, wearing each source's bit.
@@ -239,7 +237,7 @@ EPHSRCDEF ephsrcMoshier = {
 EPHSRCDEF ephsrcJpl = {
   "jpl", "JPL ephemeris file",
   "The Swiss Ephemeris over a JPL_DE file.",
-  rgparamJpl, cparamJpl,
+  &rgephparam[epJplFile].ep, 1,
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
   StopSwissLocal, FSubmitJpl, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal

@@ -2141,6 +2141,12 @@ typedef struct _ExtraStar {
 // around a call via the save/restore idiom (CONVENTIONS.md, *Sav), and
 // every borrow restores. Derived and scratch state belongs in IS.
 
+// The ephemeris parameters' shared index space (EPHEMERIS_PLUGINS_PLAN.md
+// 4.3), generated: US sizes us.rgszEphParam[] with cEphParam below, so the
+// enum has to exist before the struct does. The EPHPARAMROW type that
+// carries the rows is ephem.h's, which is included after this struct.
+#include "ephparam.h"
+
 typedef struct _UserSettings {
 
   // Chart types
@@ -2447,6 +2453,28 @@ typedef struct _UserSettings {
   char *szExpListF;    // -~5f
   char *szExpListY;    // -~5Y
   char *szExpADB;      // -~5i
+
+  // Ephemeris selection
+  //
+  // These sit at the END of the struct on purpose: data.cpp's initializer
+  // for the fields above is positional, so appending below it cannot
+  // shift any earlier slot. Until selection fully re-plumbs, the old
+  // spellings read and write BOTH representations: the three legacy
+  // fields above (fEphemFiles, nSwissEph, fMatrixPla, plus
+  // szEphSrv/szEphSrvToken) and this chain, kept in sync by ephem.cpp's
+  // Eph* functions.
+  //
+  // szEphemSource holds the chain as the user set it -- "swiss", or
+  // "server,swiss,moshier" -- written with -bE and recomputed by every
+  // legacy spelling (NSwb). The default is "swiss" under EPHEM, else
+  // "matrix".
+  //
+  // rgszEphParam holds every source's parameters in ONE generated index
+  // space (4.3): ephparam.h's ep* enums, written with -bP as
+  // "source.key" pairs. NULL (or "", which a reader turns into NULL) is
+  // the parameter's own default.
+  char *szEphemSource;           // -bE
+  char *rgszEphParam[cEphParam]; // -bP
 } US;
 
 // IS holds derived and scratch state: recomputed by casting, reset per

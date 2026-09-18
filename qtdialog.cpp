@@ -5310,13 +5310,20 @@ void ShowCalcDialogQt()
       char szAddr[cchSzMax];
       SzFieldQt(szAddr, peditAddr->text());
       FCloneSz(szAddr[0] ? szAddr : NULL, &us.szEphSrv);
+      FCloneSz(szAddr[0] ? szAddr : NULL, &us.rgszEphParam[epServerUrl]);
     }
     QLineEdit *peditToken = (QLineEdit *)PwRcFindQt(rgbuilt, "deSe_T");
     if (peditToken != NULL && FCmSrv()) {
       char szToken[cchSzMax];
       SzFieldQt(szToken, peditToken->text());
       FCloneSz(szToken[0] ? szToken : NULL, &us.szEphSrvToken);
+      FCloneSz(szToken[0] ? szToken : NULL, &us.rgszEphParam[epServerToken]);
     }
+    // The combo wrote the selection's legacy fields, and the address and
+    // token their parameter representations; the chain is re-derived
+    // from the fields so both representations say the same thing
+    // (ephem.cpp, the selection state).
+    FEphChainFromLegacy();
   }
   us.rZodiacOffset = rs;
   us.nHouseSystem = nc;
