@@ -132,6 +132,23 @@ sign missing by 2×.
 defensible conventions, and **every topocentric chart the application draws
 carries it.**
 
+### 2.4 Five names for one star, one of them 2.18° wrong
+
+`sefstars.txt` carries **Rigil Kentaurus, Rigel Kentaurus, Toliman,
+Bungula and Proxima Centauri** as five names on ONE entry, at identical
+coordinates and proper motion. Toliman is α Cen B, 16.45″ from the entry.
+**Proxima Centauri is 2.18 degrees away — 7,860 arcsec** — and is the
+nearest star to the Sun, not a component of the pair's photocentre.
+
+So a client asking for Proxima by name gets α Cen.
+
+**Why this fork still carries it:** `sefstars.txt` is a vendored Swiss data
+file, and editing it means users whose own catalogue differs get different
+answers from the same program version. That is a decision about data
+provenance rather than a code fix. Found by the Prometheia cross-test's
+fixed-star leg, which agrees with this server to 0.008″ on the other 29
+stars it checks.
+
 ### 2.3 Deflection at a planet-centred observer — up to 0.544″, and it bends the Sun's own light
 
 `swe_calc_pctr()` re-bases aberration on the centring body — it passes
@@ -213,6 +230,38 @@ The ayanamsa is a convention about a direction and the invariable plane is
 a dynamical object, so which frame the convention is applied in may
 genuinely matter; absent an argument from the physics, picking on
 aesthetics would be exactly the reasoning this file exists to prevent.
+
+### 4.2 Nodes in a J2000/ICRF frame — up to 10″ latitude
+
+§3.5a says "Nodes lie on the ecliptic of the profile's frame (the mean
+ecliptic of date for frames 0 and 1; the J2000 ecliptic for frames 2 and
+3)." This server computes the node against the ecliptic OF DATE and then
+rotates it, so in a J2000 frame it does not lie on the J2000 ecliptic:
+**+10.013″ of latitude at 1800, 0 at J2000, −3.208″ at 2100** (the Moon's
+mean node, measured against Prometheia, who conform).
+
+**Not listed as a defect, because the sentence is probably the wrong one.**
+The node against the J2000 ecliptic is a genuinely DIFFERENT POINT, not the
+same point in another frame. A client asking for a node in ICRF
+coordinates almost always wants the node it would see today, expressed in
+ICRF — which is what this server answers — rather than the node of the
+orbit against the plane the sky had in 2000.
+
+Raised with the other project as a candidate for amending §3.5a rather than
+for conforming. If the text stands, this becomes a defect and the work is
+ours.
+
+### 4.3 Planetary mean nodes and apsides — 60″ to 3,300″
+
+Swiss takes mean nodes and apsides for Mercury–Neptune from the planetary
+theory **VSOP87** (published manual, "Mean positions"). Prometheia fits
+theirs to **DE440**. The same page anticipates the disagreement: it says
+NASA's DE200-fitted mean elements are not used — 250-year validity, linear
+rates only, not based on a planetary theory — and states that "the
+differences between the DE200 and the VSOP87 mean elements are
+considerable."
+
+Two published sources, not a defect on either side.
 
 ## How to add an entry
 
