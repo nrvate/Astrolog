@@ -17797,6 +17797,229 @@ static flag FWantEphSrvQt(CONST char *sz)
   return FEqSzPrefixQt(sz, "-bE") || FEqSzPrefixQt(sz, "-bP");
 }
 
+#ifdef JPLWEB
+/*
+******************************************************************************
+** JPL Horizons: the question, the reply, and the recorded corpus.
+******************************************************************************
+*/
+
+// Astrolog's Horizons path is the one ephemeris source that cannot be
+// tested here, because it only answers over the network -- so phase 6h sat
+// blocked on "a rewrite cannot be verified from here". This corpus is the
+// answer to that: JPL's replies are recorded ONCE, politely, by
+// tools/horizons-fetch.py, committed, and replayed offline forever after.
+//
+// The hazard a recorded corpus has, and the one this is built to avoid: a
+// fixture that answers a question the client never asks proves nothing. So
+// the fetcher does NOT compose URLs of its own. It asks THIS BINARY what
+// the client would send -- PrintHorizonsUrlsQt() below, built with
+// SzUrlJPLHorizons(), the same function GetJPLHorizons() calls -- and the
+// group then asserts that every committed URL is still the one the builder
+// produces today. Change the query shape and the manifest goes red rather
+// than the fixtures going quietly stale.
+
+typedef struct _HorizonsCase {
+  CONST char *szName;   // Fixture stem, and the manifest's key.
+  int id;               // Horizons COMMAND; nMillion+n is a small body.
+  int yea, mon, day;    // The instant, UT.
+  real tim;
+  flag fTopo;
+  CONST char *szWhy;    // Why this case is in the corpus at all.
+} HORIZONSCASE;
+
+// Sixteen bodies and shapes, two deliberate failures. The epochs are the
+// project's own: 1990-06-15, which the numeric oracle uses, and 1500, far
+// enough out that a date-dependent defect cannot hide behind a modern one.
+static CONST HORIZONSCASE rghorizonsQt[] = {
+  {"sun-1990",     10,  1990, 6, 15, 12.0, fFalse, "the Sun, geocentric"},
+  {"moon-1990",   301,  1990, 6, 15, 12.0, fFalse, "the Moon, the fastest body"},
+  {"earth-1990",  399,  1990, 6, 15, 12.0, fFalse,
+     "Earth: never asked for in a cast -- ComputeEphem synthesises it from "
+     "the Sun -- but the re-centring arithmetic is checked against it"},
+  {"mercury-1990",199,  1990, 6, 15, 12.0, fFalse, "Mercury"},
+  {"venus-1990",  299,  1990, 6, 15, 12.0, fFalse, "Venus"},
+  {"mars-1990",   499,  1990, 6, 15, 12.0, fFalse, "Mars"},
+  {"jupiter-1990",599,  1990, 6, 15, 12.0, fFalse, "Jupiter, a barycentre id"},
+  {"saturn-1990", 699,  1990, 6, 15, 12.0, fFalse, "Saturn"},
+  {"uranus-1990", 799,  1990, 6, 15, 12.0, fFalse, "Uranus"},
+  {"neptune-1990",899,  1990, 6, 15, 12.0, fFalse, "Neptune"},
+  {"pluto-1990",  999,  1990, 6, 15, 12.0, fFalse, "Pluto"},
+  {"sun-1500",     10,  1500, 1,  1, 12.0, fFalse,
+     "the same Sun four centuries earlier: a date-dependent defect cannot "
+     "hide behind a modern epoch"},
+  {"mars-1500",   499,  1500, 1,  1, 12.0, fFalse, "Mars, far-dated"},
+  {"pluto-1500",  999,  1500, 1,  1, 12.0, fFalse,
+     "Pluto, far-dated: the body most likely to fall outside coverage"},
+  {"sun-topo",     10,  1990, 6, 15, 12.0, fTrue,
+     "the topocentric URL shape: COORD_TYPE and SITE_COORD, a different "
+     "branch of the builder that no geocentric case exercises"},
+  {"chiron-1990", nMillion + 2060, 1990, 6, 15, 12.0, fFalse,
+     "a small body: the id carries nMillion and the query grows a trailing "
+     "semicolon, which is then percent-encoded"},
+  // Two failures, recorded on purpose. The error paths need fixtures as
+  // much as the happy one does, and a plausible-looking error page written
+  // by hand would be an invention rather than evidence.
+  {"err-unknown",  9999999, 1990, 6, 15, 12.0, fFalse,
+     "a body id JPL does not know"},
+  {"err-range",    999, 3500, 1,  1, 12.0, fFalse,
+     "an instant outside Pluto's coverage"},
+};
+
+#define chHorTabQt '\t'
+#define szHorDirQt "ephsrv/horizons"
+
+// The site the topocentric case is recorded for. Pinned here rather than
+// taken from whatever settings the suite is running under, or the manifest
+// would not reproduce.
+#define rHorLonQt (-71.0598)
+#define rHorLatQt 42.3584
+#define rHorElvQt 10.0
+
+static void SzUrlHorizonsCaseQt(CONST HORIZONSCASE *phc, char *szUrl, int cch)
+{
+  CI ci;
+
+  ClearB((pbyte)&ci, sizeof(CI));
+  ci.mon = phc->mon; ci.day = phc->day; ci.yea = phc->yea; ci.tim = phc->tim;
+  ci.lon = rHorLonQt; ci.lat = rHorLatQt;
+  SzUrlJPLHorizons(phc->id, &ci, phc->fTopo, rHorLonQt, rHorLatQt,
+    rHorElvQt, szUrl, cch);
+}
+
+
+// Print the corpus as TSV for tools/horizons-fetch.py: stem, expectation,
+// and the URL the client itself would send. Nothing here touches the
+// network -- this only says what WOULD be asked.
+void PrintHorizonsUrlsQt()
+{
+  char szUrl[cchSzLine*2];
+  int i;
+
+  for (i = 0; i < (int)(sizeof(rghorizonsQt)/sizeof(HORIZONSCASE)); i++) {
+    SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+    printf("%s%c%s%c%s\n", rghorizonsQt[i].szName, chHorTabQt,
+      FEqRgch(rghorizonsQt[i].szName, "err-", 4, fTrue) ? "error" : "ok",
+      chHorTabQt, szUrl);
+  }
+}
+
+
+static void TestHorizonsQt()
+{
+  char szUrl[cchSzLine*2], szPath[cchSzMax], szName[cchSzMax], szLine[cchSzLine];
+  PT3R pt[3];
+  FILE *file;
+  int i, cCase = (int)(sizeof(rghorizonsQt)/sizeof(HORIZONSCASE)), cFix = 0;
+
+  // The builder is deterministic and takes no globals, so this half runs
+  // with or without a recorded corpus: the same case must give the same
+  // URL twice, and the two shapes that differ must actually differ.
+  SzUrlHorizonsCaseQt(&rghorizonsQt[0], S(szUrl));
+  if (getenv("ASTROLOG_HORIZONS_URLS") != NULL) {
+    PrintHorizonsUrlsQt();
+    return;
+  }
+  Check(strstr(szUrl, "CENTER=%27500%27") != NULL,
+    "the geocentric query asks Horizons for the geocentre");
+  Check(strstr(szUrl, "QUANTITIES=%2721,31%27") != NULL,
+    "the query asks for light time and ecliptic longitude/latitude, the "
+    "three fields the parser reads by position");
+  Check(strstr(szUrl, "STEP_SIZE=%275%20min%27") != NULL,
+    "one request spans three instants, which is where the rates come from");
+  // The window is centred on the chart's own instant. It was not: the
+  // minute was truncated from one rounding of the time and the second
+  // taken from another, so 12:00 minus five minutes went out as 11:54
+  // rather than 11:55 -- both ends a minute early, the span still 11
+  // minutes, and the middle row, which IS the reported position, a minute
+  // before the chart. See io.cpp's note at the fix.
+  Check(strstr(szUrl, "START_TIME=%271990-JUN-15%2011:55:") != NULL,
+    "the Horizons window starts five minutes before the chart's instant, "
+    "not six");
+  Check(strstr(szUrl, "STOP_TIME=%271990-JUN-15%2012:06:") != NULL,
+    "and ends six minutes after it, so the middle of the three rows is the "
+    "chart's own instant");
+  for (i = 0; i < cCase; i++)
+    if (rghorizonsQt[i].fTopo)
+      break;
+  Check(i < cCase, "the corpus covers the topocentric branch");
+  SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+  Check(strstr(szUrl, "coord@399") != NULL &&
+    strstr(szUrl, "SITE_COORD") != NULL,
+    "the topocentric query names a site rather than the geocentre");
+  for (i = 0; i < cCase; i++)
+    if (rghorizonsQt[i].id >= nMillion)
+      break;
+  Check(i < cCase, "the corpus covers a small body");
+  SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+  Check(strstr(szUrl, "%3B") != NULL,
+    "a small body's trailing semicolon is percent-encoded, not sent raw");
+
+  // The replay half. Absent a recorded corpus this SKIPS and says so
+  // rather than passing quietly -- a group that asserts nothing must not
+  // look like a group that asserted something.
+  for (i = 0; i < cCase; i++) {
+    sprintf2(S(szPath), "%s/%s.txt", szHorDirQt, rghorizonsQt[i].szName);
+    file = fopen(szPath, "r");
+    if (file == NULL)
+      continue;
+    cFix++;
+    // The very parser the client uses, over a reply JPL actually sent.
+    if (FEqRgch(rghorizonsQt[i].szName, "err-", 4, fTrue)) {
+      Check(!FParseJPLHorizons(file, pt, S(szName)),
+        "a recorded Horizons refusal is reported as a failure, not parsed "
+        "into positions");
+    } else {
+      Check(FParseJPLHorizons(file, pt, S(szName)),
+        "a recorded Horizons reply parses into three rows");
+      Check(CchSz(szName) > 0,
+        "a recorded reply yields the target body name");
+      Check(pt[0].z > 0.0 && pt[1].z > 0.0 && pt[2].z > 0.0,
+        "every recorded row carries a positive light time");
+      Check(FBetween(pt[1].x, 0.0, 360.0) && FBetween(pt[1].y, -90.0, 90.0),
+        "the recorded middle row is a real ecliptic longitude and latitude");
+    }
+    fclose(file);
+  }
+
+  // Every committed URL is still the one the builder produces. This is the
+  // assertion that keeps the corpus honest: it goes red when the query
+  // shape moves, instead of the fixtures going quietly stale.
+  sprintf2(S(szPath), "%s/MANIFEST.tsv", szHorDirQt);
+  file = fopen(szPath, "r");
+  if (file == NULL) {
+    printf("  (skipped: no recorded corpus in %s; tools/horizons-fetch.py "
+      "records it, once, from JPL)\n", szHorDirQt);
+    return;
+  }
+  while (FReadSzLineSkip(file, szLine, cchSzLine)) {
+    char *pchName, *pchUrl;
+    if (szLine[0] == '#' || szLine[0] == chNull)
+      continue;
+    pchName = szLine;
+    pchUrl = (char *)strstr(szLine, "https://");
+    if (pchUrl == NULL)
+      continue;
+    for (i = 0; szLine[i] && szLine[i] != chHorTabQt; i++)
+      ;
+    szLine[i] = chNull;
+    for (i = 0; i < cCase; i++)
+      if (FEqSz(rghorizonsQt[i].szName, pchName))
+        break;
+    Check(i < cCase, "every manifest row names a case the corpus defines");
+    if (i >= cCase)
+      continue;
+    SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
+    Check(FEqSz(szUrl, pchUrl),
+      "a committed fixture's URL is still exactly what the client builds "
+      "for that case");
+  }
+  fclose(file);
+  Check(cFix > 0, "the recorded corpus has at least one reply in it");
+}
+#endif // JPLWEB
+
+
 // The ephemeris selection's own spellings, for the dialog group's round
 // trip: nothing else, so the replay cannot drag the legacy spellings
 // along behind the new ones.
@@ -21766,6 +21989,9 @@ static CONST QTTESTENTRY rgqttestQt[] = {
   {"settings-strings",     TestSettingsStringsQt},
   {"registry",             TestRegistryQt},
   {"relationship",         TestRelationshipModeQt},
+#ifdef JPLWEB
+  {"horizons",             TestHorizonsQt},
+#endif
   {"ephem-server",         TestEphSrvQt},
   {"ephem-server-live",    TestEphSrvLiveQt},
   {"ephem-registry",       TestEphemRegistryQt},

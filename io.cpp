@@ -4009,22 +4009,29 @@ static void FJPLCachePut(CONST char *szUrl, CONST PT3R *pt,
 // vectors. Similar to FSwissPlanet() but does a JPL Horizons Web query
 // instead of calling Swiss Ephemeris to compute the position.
 
-flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
-  real *diralt, real *dirlen, char *szOut)
+// Compose the Horizons query for one body at one instant. Split out of
+// GetJPLHorizons() so that it takes its instant and its site as ARGUMENTS
+// rather than reading ciCore and us: that is what lets a recorded reply be
+// replayed against the client offline, because a fixture is only worth
+// something if the question that produced it can be reproduced exactly.
+// EPHEMERIS_PLUGINS_PLAN.md phase 6h.
+//
+// The three instants are the query's own: t-5min, t, t+6min at a 5 minute
+// step, so one request returns exactly 3 rows and the rates below are a
+// finite difference across the outer two. That batching is why the fixture
+// corpus needs one request per body rather than one per body per instant.
+void SzUrlJPLHorizons(int id, CONST CI *pciBase, flag fTopo, real lonSite,
+  real latSite, real elvSite, char *szUrl, int cchUrl)
 {
-  char szUrl[cchSzLine*2], szLine[cchSzLine], szName[cchSzMax],
-    szMon[3][4], *pch, *pch2, ch;
+  char szLine[cchSzLine], szMon[3][4], *pch, *pch2, ch;
   CI ci[3];
-  PT3R pt[3];
-  FILE *file;
-  real sec[3], len[3], rT;
-  int hr[3], min[3], phase = -1, i;
+  real sec[3], rSec;
+  int hr[3], min[3], i;
   flag fSemicolon;
-
 
   // Determine time range to get ephemeris for.
   for (i = 0; i < 3; i++) {
-    ci[i] = ciCore;
+    ci[i] = *pciBase;
     AddTime(&ci[i], 2, 0);     // Sanitize time if hour out of range
     if (i <= 0)
       AddTime(&ci[i], 2, -5);  // Subtract 5 minutes
@@ -4033,16 +4040,31 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     sprintf2(S(szMon[i]), "%.3s", szMonth[ci[i].mon]);
     for (pch = szMon[i]; *pch; pch++)
       *pch = ChCap(*pch);
+    // Minute and second both come from ONE seconds-past-the-hour value,
+    // nudged once. They used to be computed from two different roundings
+    // of the same quantity -- the minute truncated from RFract()*60, the
+    // second from RFract()*3600 + rSmall -- and the two disagreed by a
+    // whole minute wherever the subtraction lost the last bits. 12:00
+    // minus five minutes is 11.916666666666666, whose RFract()*60 is
+    // 54.99999999999997, so the query asked for 11:54:00 while meaning
+    // 11:55:00. Both ends shifted, so the window kept its 11 minute
+    // span and its three rows at a 5 minute step -- and the MIDDLE row,
+    // the one the position is read from, landed one minute before the
+    // chart's own instant. Every Horizons position was a minute early;
+    // for the Moon that is about 33 arcseconds. The rates were unharmed,
+    // since they difference the outer two rows and that span is right
+    // either way, which is why nothing downstream ever looked wrong.
+    rSec = RFract(RAbs(ci[i].tim))*3600.0 + rSmall;
     hr[i] = NFloor(ci[i].tim);
-    min[i] = (int)(RFract(RAbs(ci[i].tim))*60.0);
-    sec[i] =  RMod(RFract(RAbs(ci[i].tim))*3600.0 + rSmall, 60.0);
+    min[i] = (int)(rSec / 60.0);
+    sec[i] = RMod(rSec, 60.0);
   }
 
   // Compose URL to download from internet.
-  if (us.fTopoPos) {
+  if (fTopo) {
     sprintf2(S(szLine), "COORD_TYPE= 'GEODETIC'&"
       "SITE_COORD='%lf,%lf,%lf'&",
-      -ciCore.lon, ciCore.lat, us.elvDef / 1000.0);
+      -lonSite, latSite, elvSite / 1000.0);
   } else
     *szLine = chNull;
   fSemicolon = FBetween(id, nMillion, nMillion*2-1);
@@ -4051,7 +4073,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
   // plain text, so the parse below is unchanged -- verified by fetching
   // both with identical parameters and diffing: same target line, same
   // CSV rows, same $$SOE marker.
-  sprintf2(S(szUrl), "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&"
+  sprintf2(szUrl, cchUrl, "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&"
     "COMMAND='%d%s'&"
     "OBJ_DATA='YES'&"
     "MAKE_EPHEM='YES'&"
@@ -4063,7 +4085,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     "QUANTITIES='21,31'&"
     "CSV_FORMAT='YES'",
     fSemicolon ? id - nMillion : id, fSemicolon ? ";" : "",
-    !us.fTopoPos ? "500" : "coord@399", szLine,
+    !fTopo ? "500" : "coord@399", szLine,
     ci[0].yea, szMon[0], ci[0].day, hr[0], min[0], sec[0],
     ci[2].yea, szMon[2], ci[2].day, hr[2], min[2], sec[2]);
   for (pch = szUrl; *pch; pch++)
@@ -4078,7 +4100,7 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     // the character unencoded rather than writing past the end.
     for (pch2 = pch; *pch2; pch2++)
       ;
-    if (pch2 + 2 >= szUrl + cchSzLine*2)
+    if (pch2 + 2 >= szUrl + cchUrl)
       continue;
     for (pch2 += 2; pch2 >= pch; pch2--)
       *pch2 = *(pch2 - 2);
@@ -4089,18 +4111,21 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
       pch[1] = '3'; pch[2] = 'B';
     }
   }
-  // A reply we already have is the fastest and politest kind.
-  if (FJPLCacheGet(szUrl, pt, S(szName)))
-    goto LProcess;
+}
 
-  GetURL(szUrl, szFileJPLCore);
 
-  // Process downloaded file.
-  file = FileOpen(szFileJPLCore, 1, NULL, 0);
-  if (file == NULL) {
-    // Error message printed inside FileOpen().
-    return fFalse;
-  }
+// Read one Horizons "format=text" reply into its three rows and the target
+// name. Takes an open stream rather than a filename so that a RECORDED
+// reply can be driven through the very same parser the client uses -- the
+// whole point of the split. Returns false when the reply does not carry
+// three rows, which is what a Horizons error page, a truncated download and
+// an unknown body all look like from here.
+flag FParseJPLHorizons(FILE *file, PT3R *pt, char *szName, int cchName)
+{
+  char szLine[cchSzLine], *pch;
+  int phase = -1, i;
+
+  *szName = chNull;
   loop {
     if (!FReadSzLineSkip(file, szLine, cchSzLine))
       break;
@@ -4119,19 +4144,48 @@ flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
     } else if (phase < 0 && FEqRgch(szLine, "Target body name: ", 18, fTrue)) {
       // Search for JPL name of body this ephemeris is for.
       i = 0;
-      for (pch = szLine+18; *pch && i < cchSzMax-1 &&
+      for (pch = szLine+18; *pch && i < cchName-1 &&
         !(pch[0] == ' ' && (pch[1] == ' ' || pch[1] == '(')); pch++)
         szName[i++] = *pch;
       szName[i] = chNull;
     }
   }
+  return phase >= 3;
+}
+
+
+flag GetJPLHorizons(int id, real *obj, real *objalt, real *dir, real *dist,
+  real *diralt, real *dirlen, char *szOut)
+{
+  char szUrl[cchSzLine*2], szName[cchSzMax];
+  PT3R pt[3];
+  FILE *file;
+  real len[3], rT;
+  int i;
+  flag fOk;
+
+  SzUrlJPLHorizons(id, &ciCore, us.fTopoPos, ciCore.lon, ciCore.lat,
+    us.elvDef, S(szUrl));
+  // A reply we already have is the fastest and politest kind.
+  if (FJPLCacheGet(szUrl, pt, S(szName)))
+    goto LProcess;
+
+  GetURL(szUrl, szFileJPLCore);
+
+  // Process downloaded file.
+  file = FileOpen(szFileJPLCore, 1, NULL, 0);
+  if (file == NULL) {
+    // Error message printed inside FileOpen().
+    return fFalse;
+  }
+  fOk = FParseJPLHorizons(file, pt, S(szName));
   fclose(file);
 #ifdef WINANY
   _unlink(szFileJPLCore);
 #else
   remove(szFileJPLCore);
 #endif
-  if (phase < 3) {
+  if (!fOk) {
     if (!is.fNoEphFile) {
       is.fNoEphFile = fTrue;
       PrintWarning("Failed to get positions from " szFileJPLCore);

@@ -467,6 +467,13 @@ extern int NInputRange P((CONST char *, int, int, int));
 extern real RInputRange P((CONST char *, real, real, int));
 extern flag FInputData P((CONST char *));
 #ifdef JPLWEB
+// The Horizons query and its reply, split apart so each can be exercised
+// without a network: the builder takes its instant and site as arguments
+// rather than reading ciCore, and the parser takes an open stream, so a
+// RECORDED reply drives the very same parser the client uses.
+extern void SzUrlJPLHorizons P((int, CONST CI *, flag, real, real, real,
+  char *, int));
+extern flag FParseJPLHorizons P((FILE *, PT3R *, char *, int));
 extern flag GetJPLHorizons P((int,
   real *, real *, real *, real *, real *, real *, char *));
 #endif
