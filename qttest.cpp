@@ -19643,6 +19643,8 @@ static void TestEphemRegistryQt()
         FSwissPlanet(oMoo, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6) &&
         memcmp(&h1, &r1, sizeof(real)) == 0,
         "the fallback's answer is the direct call's, bytes again");
+      Check(eq2.rgisrc[0] == rgisrc[1], "the fallback's provenance names "
+        "the second source");
       Check(FEphFallbackNotice(), "a fallback serving something raises the "
         "notice");
       EphQueryInit(&eq2, jd);
@@ -19652,6 +19654,121 @@ static void TestEphemRegistryQt()
       Check(!FEphRead(&eq2, oMoo, &h1, &h2, &h3, &h4, &h5, &h6),
         "an unanswered object reads as failure");
       Check(!FEphFallbackNotice(), "nothing served means no notice");
+    }
+
+    // The selection maps over its whole domain, not just the default.
+    {
+      struct { int nSwiss; CONST char *szKey; } const rgmap[] = {
+        {0, "swiss"}, {1, "moshier"}, {2, "jpl"}, {3, "jpl"},
+        {4, "jpl"}, {5, "swiss"}};
+      int im;
+      for (im = 0; im < 6; im++) {
+        Borrow bE(us.nSwissEph, rgmap[im].nSwiss);
+        Check(IEphSrcPrimary() == IEphSrcFromKey(rgmap[im].szKey),
+          "nSwissEph %d derives the %s source as the chain's head",
+          rgmap[im].nSwiss, rgmap[im].szKey);
+      }
+      {
+        Borrow bE(us.nSwissEph, 0), bF(us.fEphemFiles, fFalse),
+          bM(us.fMatrixPla, fTrue);
+        Check(IEphSrcPrimary() == IEphSrcFromKey("matrix"),
+          "files off with the Matrix on derives the matrix source");
+        us.fMatrixPla = fFalse;
+        Check(IEphSrcPrimary() == IEphSrcFromKey("none"),
+          "files off with the Matrix off derives the none source");
+      }
+      // The side calls keep the Swiss-family source nSwissEph names,
+      // whatever the files switch says.
+      {
+        Borrow bF(us.fEphemFiles, fFalse), bM(us.fMatrixPla, fTrue);
+        Check(IEphSrcSideCall() == IEphSrcFromKey("swiss"),
+          "a side call under a matrix selection still reaches the Swiss "
+          "files source, as it always has");
+      }
+    }
+
+    // The fallback with the sources' own bits: with the ephemeris
+    // directories gone, the swiss source fails every object (its
+    // delegated call still asks the Swiss files) and the moshier source
+    // behind it answers from the analytic formulas, whose delegated
+    // call carries the Moshier bit. The notice says a fallback served;
+    // the answer is the bytes of a direct call under that same bit.
+    {
+      char *rgpszSav[10];
+      static char szNoEph[] = "/nvm/work/eph3-net/noeph";
+      EPHQUERY eq2;
+      flag fNoEphFileSav = is.fNoEphFile;
+      int iPath;
+      // An EXPLICIT directory with no ephemeris in it, not an empty
+      // list: SwissEnsurePath() falls back to exe-relative defaults
+      // when no -Yi names one, and those still find the bundled files.
+      // The suite's own ephemeris-path group makes the same demand.
+      rgpszSav[0] = us.rgszPath[0];
+      us.rgszPath[0] = szNoEph;
+      for (iPath = 1; iPath < 10; iPath++) {
+        rgpszSav[iPath] = us.rgszPath[iPath];
+        us.rgszPath[iPath] = NULL;
+      }
+      is.fSwissPathSet = fFalse;   // Force the emptied path on the library.
+      is.fNoEphFile = fTrue;       // The failed source's report is data,
+                                   // not a popup for this run to eat.
+      {
+        int rgisrc2[2];
+        Borrow bSwiss(us.nSwissEph, 0);
+        rgisrc2[0] = IEphSrcFromKey("swiss");
+        rgisrc2[1] = IEphSrcFromKey("moshier");
+        // Chiron: nothing behind the Swiss files covers it -- the
+        // library's own silent Moshier fallback covers the planets, so
+        // a planet is the wrong object for this leg (measured: the Sun
+        // still answers with the files gone). With no files, the swiss
+        // source fails it and the moshier source behind it fails it
+        // too: the walk advances, and nothing answers.
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oChi, 0, oEar, NULL);
+        Check(!FEphSubmitChain(&eq2, rgisrc2, 1), "the swiss source alone, "
+          "with no files behind it, answers nothing for Chiron");
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oChi, 0, oEar, NULL);
+        Check(!FEphSubmitChain(&eq2, rgisrc2, 2), "with the files gone, "
+          "Chiron fails through the swiss source to the moshier source "
+          "and neither answers");
+        Check(!FEphFallbackNotice(), "nothing served, no notice");
+      }
+      for (iPath = 0; iPath < 10; iPath++)
+        us.rgszPath[iPath] = rgpszSav[iPath];
+      is.fSwissPathSet = fFalse;   // The next ensure re-derives the real
+                                   // path; the saved flag names the
+                                   // emptied one now.
+      is.fNoEphFile = fNoEphFileSav;
+
+      // Each source's bit is its own, not the setting's: the moshier
+      // source answering under a swiss selection carries the Moshier
+      // flag, so its bytes are the Moshier call's -- measurably NOT the
+      // swiss call's (the two engines disagree in the fourth decimal of
+      // an arcsecond, which is what makes the borrow load-bearing).
+      {
+        int rgisrc3[1];
+        rgisrc3[0] = IEphSrcFromKey("moshier");
+        EphQueryInit(&eq2, jd);
+        FEphQueryAdd(&eq2, oSun, 0, oEar, NULL);
+        Check(FEphSubmitChain(&eq2, rgisrc3, 1), "the moshier source "
+          "answers under a swiss selection");
+        Check(FEphRead(&eq2, oSun, &h1, &h2, &h3, &h4, &h5, &h6),
+          "the moshier source's row reads");
+        {
+          Borrow bMos(us.nSwissEph, 1);
+          FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+          FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        }
+        Check(memcmp(&h1, &r1, sizeof(real)) == 0, "the moshier source's "
+          "answer is the Moshier call's, bytes again");
+        {
+          Borrow bSwi(us.nSwissEph, 0);
+          FSwissPlanet(oSun, jd, oEar, &r1, &r2, &r3, &r4, &r5, &r6);
+        }
+        Check(memcmp(&h1, &r1, sizeof(real)) != 0, "and it is measurably "
+          "not the swiss call's -- the bit is the source's own");
+      }
     }
   }
 

@@ -115,12 +115,22 @@ static void StopSwissLocal()
 // fails identically, so the code only names what the phase 6 wire will
 // report.
 
-static flag FSubmitSwissLocal(EPHQUERY *pq)
+static flag FSubmitSwissLocalBit(EPHQUERY *pq, int nEph)
 {
   EPHROW *prow;
   real r1, r2, r3, r4, r5, r6, rgxx[6];
   int i, ix;
 
+  // This source's OWN ephemeris bit, not the setting's: the three
+  // sources differ only in the SEFLG ephemeris bit (section 4.2), and a
+  // chain would be meaningless while every source inherited the same
+  // bit from us.nSwissEph. Borrowed for the delegated calls, so the
+  // moshier source answers from the analytic formulas and the jpl
+  // source from a JPL file even when the selection names another
+  // source. Under every production chain this phase -- one source, and
+  // its bit equals the setting it was derived from -- the borrow is a
+  // no-op and the delegated call is byte-identical to today's.
+  Borrow bEph(us.nSwissEph, nEph);
   for (i = 0; i < pq->cobj; i++) {
     if (pq->rgisrc[i] != ephSrcNone)
       continue;   // Another source in the walk already answered this one.
@@ -190,12 +200,30 @@ static CONST EPHPARAM rgparamJpl[] = {
 #define cparamJpl (int)(sizeof(rgparamJpl) / sizeof(EPHPARAM))
 
 
+// The one delegated implementation, wearing each source's bit.
+
+static flag FSubmitSwiss(EPHQUERY *pq)
+{
+  return FSubmitSwissLocalBit(pq, 0);
+}
+
+static flag FSubmitMoshier(EPHQUERY *pq)
+{
+  return FSubmitSwissLocalBit(pq, 1);
+}
+
+static flag FSubmitJpl(EPHQUERY *pq)
+{
+  return FSubmitSwissLocalBit(pq, 2);
+}
+
+
 EPHSRCDEF ephsrcSwiss = {
   "swiss", "Swiss Ephemeris files",
   "The Swiss Ephemeris over its own data files.",
   NULL, 0,
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
-  StopSwissLocal, FSubmitSwissLocal, FReadSwissLocal, HintSwissLocal,
+  StopSwissLocal, FSubmitSwiss, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
 };
 
@@ -204,7 +232,7 @@ EPHSRCDEF ephsrcMoshier = {
   "The Moshier analytic formulas; major planets and Moon.",
   NULL, 0,
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
-  StopSwissLocal, FSubmitSwissLocal, FReadSwissLocal, HintSwissLocal,
+  StopSwissLocal, FSubmitMoshier, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
 };
 
@@ -213,7 +241,7 @@ EPHSRCDEF ephsrcJpl = {
   "The Swiss Ephemeris over a JPL_DE file.",
   rgparamJpl, cparamJpl,
   FAvailableSwissLocal, GetCapsSwissLocal, StateSwissLocal, StartSwissLocal,
-  StopSwissLocal, FSubmitSwissLocal, FReadSwissLocal, HintSwissLocal,
+  StopSwissLocal, FSubmitJpl, FReadSwissLocal, HintSwissLocal,
   NLookupSwissLocal
 };
 

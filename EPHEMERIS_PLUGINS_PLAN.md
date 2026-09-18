@@ -1761,6 +1761,43 @@ the gates the phase touches.
      difference 11.361744", and the Moon sits at 5.17 degrees latitude.
      Use `acos(sin b1 sin b2 + cos b1 cos b2 cos(l1-l2))`.
 
+9. **Phase 3d, the chain and the notice (2026-09-17).** The fallback
+   walk of §4.1 is live in every submit, and each Swiss source now
+   carries its OWN ephemeris bit: the three shared-implementation
+   sources borrow their SEFLG value (swiss 0, moshier 1, jpl 2) around
+   the delegated calls, so §4.2's "differing only in the SEFLG
+   ephemeris bit" is enforced rather than inherited -- a chain of two
+   sources asks two genuinely different engines. Under every production
+   chain this phase the bit equals the setting it was derived from, so
+   the borrow is a no-op and the cast's bytes cannot move; the
+   multi-source chain is still phase 6's, and FEphSubmit()'s derived
+   chain stays one source long.
+   - **The notice** stays per walk (one walk is one submit): a flag the
+     walk sets when a source after the first served something, read
+     back by FEphFallbackNotice(). Showing it is the Ephemeris Settings
+     status line, phase 5; per-cast once across the cast's several
+     submits is a phase 6 refinement, unreachable while the chains are
+     one source long.
+   - **The net** exercises the walk three ways. With an explicit empty
+     -Yi directory (NULL paths are not enough -- SwissEnsurePath()
+     falls back to exe-relative defaults and finds the bundled files;
+     measured), Chiron fails through the swiss source to the moshier
+     source and NEITHER answers -- the library's own silent Moshier
+     fallback covers the planets, so a planet was the wrong object for
+     this leg, measured and written down. A [none, swiss] chain shows
+     the fallback serving, with provenance naming the second source and
+     the notice raised. And the moshier source answering under a swiss
+     selection returns the Moshier call's bytes, measurably NOT the
+     swiss call's -- the bit is the source's own. The selection mapping
+     is pinned over its whole domain (nSwissEph 0-5, files off with and
+     without the Matrix), and the side-call accessor keeps the Swiss
+     files source under a matrix selection.
+   - **Gates.** make check all clear, suite 5834 passed / 0 failed
+     (the registry net is 62 assertions in-suite); chart, switch,
+     influence and graphics matrices byte-identical against the 6cf3ac3
+     baseline; the registry net under AddressSanitizer, 64 passed /
+     0 failed.
+
 8. **Phase 3c, the side calls through the host (2026-09-17).** The
    direct FSwissPlanet()/swe_fixstar2() call sites of §4.1's "side
    calls use the same path" go through the registry: RProgArc()'s two
