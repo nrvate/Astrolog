@@ -100,16 +100,33 @@ and proper motion. Two of those five are not that star:
 
 | name | IAU assigns it to | was | error |
 |---|---|---|---|
-| Toliman | α Cen **B** (WGSN 2018-08-10) | α Cen A's position | **16.45″** |
-| Proxima Centauri | α Cen **C** (WGSN 2016-08-21) | α Cen A's position | **2.18° = 7,860″** |
+| Toliman | α Cen **B** (WGSN 2018-08-10) | the shared position | **16.45″** |
+| Proxima Centauri | α Cen **C** (WGSN 2016-08-21) | the shared position | **2.18° = 7,860″** |
+| Rigil Kentaurus, Rigel Kentaurus, Bungula | α Cen **A** (WGSN 2016-11-06) | the shared position | **6.23″** |
 
 A client asking for Proxima Centauri — the nearest star to the Sun, V = 11.13,
-parallax 768 mas — got α Cen A.
+parallax 768 mas — got a position 2.18° away.
 
-**This fork now carries its own astrometry for both**, from SIMBAD, and
-`sefstars.txt` is no longer byte-identical to the Swiss sibling's. Rigil
-Kentaurus, Rigel Kentaurus and Bungula are untouched: all three are names for
-α Cen A, and an alias sharing a position is correct.
+**And the shared position was not α Cen A either**, which took a second pass to
+see. It sits **37.8% of the way from A toward B** — not A (0%), not the pair's
+photocentre (22.5%), not its centre of mass (45.7%) — with a proper motion
+blended the same way (−3608, +686, against A's −3679.25, +473.67 and B's
+−3614.39, +802.98). That is what an **unresolved ground-based measurement of
+the pair** looks like: a centroid whose place depends on the orbit's phase at
+the epoch it was measured, corresponding to no defined modern point at all.
+
+**This fork now carries SIMBAD astrometry for all five names**, and
+`sefstars.txt` is no longer byte-identical to the Swiss sibling's.
+
+**Why the first pass missed it, which is the part worth keeping.** Toliman and
+Proxima were fixed and Rigil Kentaurus was *not*, on the reasoning that it was
+"the AB photocentre" and so defensible. The audit written in the same commit
+gave it a 30″ tolerance and said so in a note. Both halves were wrong: the
+position is not the photocentre, and a 30″ tolerance around a 6.23″ error is an
+exception carved precisely where the audit was supposed to look. Prometheia's
+cross-test found it from outside — our α Cen A sitting 6.23″ from theirs,
+toward B — which is what an independent implementation is for. All three A
+names are held to 5″ now, like B and C.
 
 **Why the earlier reasoning was wrong.** This entry sat in §2 — "Swiss is
 wrong and we still follow it" — on the argument that a vendored data file is a

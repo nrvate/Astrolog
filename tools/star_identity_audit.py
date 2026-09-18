@@ -10,12 +10,23 @@ Proxima Centauri returned alpha Centauri A, 2.18 degrees away, and asking for
 Toliman returned A rather than B, 16.45 arcsec away.  Nothing complained,
 because nothing here had ever compared a name against the sky.
 
+And the position all five shared was not alpha Cen A either.  It sat 37.8%
+of the way from A toward B -- not A (0%), not the pair's photocentre
+(22.5%), not its centre of mass (45.7%) -- which is what an unresolved
+ground-based measurement of the pair looks like, with a proper motion
+blended the same way.  The first version of this audit let that pass under
+a 30 arcsec tolerance carrying a note calling it "the AB photocentre".
+That was an exception carved around the very thing the audit exists to
+catch, and the note was wrong besides.  All three names for A are held to
+5 arcsec now, like B and C.
+
 So the reference comes from outside the repository, the same way the numeric
 oracle's does: catalogued ICRS positions, cited per row.  A generous
 tolerance is deliberate -- this is an IDENTITY check, not a precision one.
 It asks "is this the right star", and the answer is wrong by arcminutes or
-degrees when it is wrong at all.  Where the file knowingly carries something
-other than the catalogue entry, the tolerance says so and why.
+degrees when it is wrong at all.  The wide tolerances are for stars nobody
+has questioned; a star this file has had to CORRECT is held to 5 arcsec, so
+a regression cannot hide inside the slack that let the defect live.
 
 The second check is the one that actually caught both defects: names the IAU
 assigns to DIFFERENT components of a multiple system must sit at different
@@ -35,8 +46,12 @@ PATH = sys.argv[1] if len(sys.argv) > 1 else "sefstars.txt"
 
 # name -> (RA hours, RA min, RA sec, Dec sign*deg, min, sec, tolerance arcsec, note)
 REFERENCE = [
-  ("Rigil Kentaurus", 14, 39, 36.494, -60, 50,  2.374,  30,
-   "SIMBAD alpha Cen A; the file carries the AB photocentre, 6.2\" away"),
+  ("Rigil Kentaurus", 14, 39, 36.494, -60, 50,  2.374,   5,
+   "SIMBAD alpha Cen A"),
+  ("Rigel Kentaurus", 14, 39, 36.494, -60, 50,  2.374,   5,
+   "a spelling variant of the same name, so the same star"),
+  ("Bungula",         14, 39, 36.494, -60, 50,  2.374,   5,
+   "a traditional name for alpha Cen A"),
   ("Toliman",         14, 39, 35.063, -60, 50, 15.099,   5,
    "SIMBAD alpha Cen B"),
   ("Proxima Centauri",14, 29, 42.946, -62, 40, 46.165,   5,
