@@ -424,6 +424,22 @@ run -bP bogus.key v
 run -bP
 run -0b
 run -0n
+
+# SEQUENCES of the -b family, not just each spelling alone. Every other
+# run here invokes ONE switch, and that is a blind spot rather than a
+# style: the legacy spellings share a parse-time shadow, so a defect can
+# live entirely in what one spelling leaves behind for the next. One did
+# -- a Matrix selection became "none" and drew 0Ari00'00" for every body
+# -- and fixing it left this matrix byte-identical, because nothing here
+# ran two of them together. The last is the order the pre-branch settings
+# writer emitted for a Matrix selection, so it is what an old file
+# replays.
+run =bm _b
+run -bm -bU -b
+run _bs =bm _bU _b
+run =bS _b
+run =bE swiss =bm
+run =bj =bs =b
 run =b0
 run =b0
 run =b1
