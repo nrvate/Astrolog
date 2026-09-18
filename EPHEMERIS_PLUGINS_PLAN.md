@@ -34,12 +34,22 @@ version 3, and this section is the design authority behind it.
   rewrite someone should do with a network and a plan, not a move.
 
   **What phase 8 found, because it bears on how much to trust the rest.**
-  Two delegated reviews found TEN defects -- one a crashing
+  Three delegated reviews found THIRTEEN defects -- one a crashing
   out-of-bounds write, several silent wrong answers, including a Matrix
-  selection that drew 0Ari00'00" for every body and a heliocentric chart
-  that computed the lunar node heliocentrically. All are fixed, each with
-  a net proven to fail without its fix. But every one of them was in code
-  that passed every gate.
+  selection that drew 0Ari00'00" for every body, a heliocentric chart
+  that computed the lunar node heliocentrically, and fixed stars 24.7
+  degrees out in every sidereal chart. All are fixed, each with a net
+  proven to fail without its fix -- except P1's, which is named below
+  because it is missing rather than because it is hard. Every one of the
+  thirteen was in code that passed every gate at the time.
+
+  **The third review's own lesson is the one to keep.** It was briefed to
+  hunt what the EARLIER FIXES had broken, not to re-find what they fixed,
+  and its worst finding was exactly that: D2's fix corrected what the
+  server computes without correcting what the consumer does with the
+  answer, and put every fixed star 24.7 degrees out in sidereal charts,
+  silently, with `nErr` clear so the chain claimed the row. A review pass
+  after a round of fixes is not ceremony.
 
   **And the gate itself was the tenth finding.** `make check` and the
   release workflow run the suite under `-Yi1 ephem`; `./run-qt-tests.sh`,
@@ -49,9 +59,20 @@ version 3, and this section is the design authority behind it.
   this branch's life -- and is the one that reaches the crash. **That is
   worth a line in CLAUDE.md whatever you decide about this branch.**
 
-  If there is budget for one more thing before the squash, it is a third
-  review pass over phase 6's transport code: only the first review saw
-  it, and it has changed a great deal since.
+  **That third review has now been done** (work-log item 21), and every
+  finding it raised is fixed. **One piece of work is outstanding and is
+  not a finding:** P1's fix has no regression test, because the suite's
+  loopback daemon is started without a star catalogue on its own path and
+  so cannot serve a star at all. The version written without that passed
+  while sabotaged, and was withdrawn rather than kept. Giving that daemon
+  an `--ephe` pointing at a tree with `sefstars.txt` is the whole of it.
+
+  **Two gate-level findings are recorded here and deliberately NOT added
+  to CLAUDE.md**, because that file is yours: (a) `make check` and the
+  documented `./run-qt-tests.sh` run different configurations, and only
+  one is gated; (b) the switch matrix could not see a switch whose effect
+  depends on what came before it, which is now closed in the harness
+  itself.
 
 - **STATUS (2026-09-18, phase 6 substantially landed).** Phases 2, 3, 4,
   5 and 7 are on this branch and gated, and phase 6 is most of the way
@@ -66,16 +87,21 @@ version 3, and this section is the design authority behind it.
   | 6c the Qt transport, bound at startup | landed `c1c221b` |
   | 6d ComputeEphem's two `#ifdef QT` server branches deleted | landed `6ed60d5` |
   | 6e the required-server dialog, its ladder and exit 86 deleted | landed `05a0c21` |
-  | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **not started** |
-  | 6g the WinHTTP transport (Win32) | **not started** |
-  | 6h the `horizons` plugin | **not started** |
+  | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **not started** -- the framing is in a PROGRAM, not a library, and ten gate scripts drive that program |
+  | 6g the WinHTTP transport (Win32) | **not started** -- low value while Qt is the shipped interface on every platform |
+  | 6h the `horizons` plugin | **not started, and BLOCKED** -- see "What is NOT done" above: cast-level vector arithmetic, verifiable only against the live JPL API |
+
+  Phase 8's three reviews are done and their thirteen findings fixed
+  (work-log items 19-21). **Nothing else on this branch is implementable
+  from here**: what is left is one large extraction, one low-value port
+  and one rewrite that cannot be verified without a network.
 
   **The live parity group casts through the chain bit-identically to the
   local path**, which is the check that says the mechanism works rather
   than merely compiles.
 
   Phase 8 (branch review) and the maintainer's squash-to-qt decision
-  follow. The branch is 60-odd commits ahead of `qt`; each phase kept its
+  follow. The branch is 80 commits ahead of `qt`; each phase kept its
   own dev branch, so it can be reviewed in pieces rather than as one
   diff.
 
