@@ -1129,7 +1129,20 @@ static SidPlane PrepareSidPlane(swe_ctx *ctx, const eph::swiss::SwissCall &c) {
     // precession model the ayanamsa was defined under, so the corrected value
     // is what swe_get_ayanamsa_ex answers AT t0 -- up to 17" apart, which is
     // not a rounding difference.
-    if (swe_get_ayanamsa_ex_r(ctx, t0, SEFLG_SWIEPH, &daya, serrA) < 0) {
+    //
+    // SEFLG_NONUT IS LOAD-BEARING. Without it this is the TRUE ayanamsa at
+    // t0, the arc from the TRUE equinox; 3.5a wants the zero point's longitude
+    // on the MEAN ecliptic and equinox of t0, which is that value less the
+    // nutation in longitude at t0. Putting the true value on a mean frame
+    // moves the origin by dpsi(t0) -- -3.311" for Fagan/Bradley, +16.777" for
+    // Lahiri, +17.346" for Raman, so it is zodiac-dependent and looks exactly
+    // like the defect this code exists to fix. The other engine's anchors are
+    // held as mean values for the same reason, and their cross-test caught
+    // this within an hour of the first version landing: our plane 1, which had
+    // agreed with theirs to 0.003" while Swiss computed it, regressed by
+    // precisely dpsi(t0).
+    if (swe_get_ayanamsa_ex_r(ctx, t0, SEFLG_SWIEPH | SEFLG_NONUT,
+        &daya, serrA) < 0) {
       // A zodiac whose zero point cannot be constructed is REFUSED, not
       // answered on some other plane. A.8 is a request field.
       sp.err = eph::kOErrUnsupported;

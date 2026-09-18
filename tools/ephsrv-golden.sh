@@ -238,6 +238,16 @@ for jd in 2451545.0 2400000.5; do
   leg "sidereal FB Moon jd=$jd" "$jd" 1 10100 0 tt -- --profile zodiac=fagan-bradley --objs 301 --jd "$jd"
 done
 # THE THREE FIXED-PLANE SIDEREAL LEGS ARE GONE, ON PURPOSE (2026-09-18).
+#
+# Plane 1 was briefly put back, because taking A.8's planes in-house does not
+# change what plane 1 MEANS -- the anchor ecliptic is the plane the zodiac is
+# defined on, so the zero point lies in it and both readings coincide, and the
+# in-house answer agrees with Swiss's SE_SIDBIT_ECL_T0 to 0.0000". But
+# agreeing to 0.0000" is not agreeing BIT FOR BIT, and bit-for-bit is this
+# gate's entire contract; a different arithmetic path rounds differently in the
+# last places. tools/sidplane-anchor.sh holds that comparison at a tolerance
+# instead, which is where a leg belongs when the right answer is "the same
+# number" rather than "the same bits".
 # A.8's planes 1 and 2 are this server's own arithmetic since registry 4.1:
 # a sidereal zodiac's zero point is the direction the zodiac NAMES, projected
 # onto the plane, where Swiss carries the equinox of t0 onto the plane and

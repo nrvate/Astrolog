@@ -20812,14 +20812,16 @@ static void TestEphSrvLiveQt()
       Check(rSpread < 0.05, "%s: every served body moved by the SAME angle, "
         "which is what an origin shift means (spread %.5f\" over %d)",
         szScen, rSpread, cMoved);
-      // 28.196", not the 31.469" registry 4.1 quotes. The registry's figure is
-      // measured against PLANE 0, whose own sidereal origin is displaced by
-      // the nutation in longitude when the profile's frame carries nutation
-      // (-13.93" at J2000); this is the raw correction between the old
-      // delegated answer and the new one, with no such reference in it. The
-      // two reconcile: 31.4685 - 3.2730, the post-fix plane-0 residual.
-      Check(RAbs(RAbs(rOff) - 28.2) < 1.0, "%s: and by the angle this fix "
-        "actually applies for Fagan/Bradley, about 28.2\" (measured %.4f\")",
+      // 31.5", which registry 4.1 predicted and the other engine measured
+      // independently as 31.51" between the two servers. The first version of
+      // this leg asserted 28.2" and "explained" the 3.3" gap as a plane-0
+      // reference artefact -- it was not, it was a defect: the anchor was
+      // built from the TRUE ayanamsa at t0 instead of the mean, which is
+      // dpsi(t0) out and zodiac-dependent. An assertion written around a
+      // wrong number would have locked that in, which is the argument for
+      // taking the number from a source outside this project.
+      Check(RAbs(RAbs(rOff) - 31.5) < 0.5, "%s: and by the angle registry 4.1 "
+        "documents for Fagan/Bradley, about 31.5\" (measured %.4f\")",
         szScen, rOff);
     } else {
     cDiff = CDiffEphQt(&snLocal, &snSrv, rTol, S(szDiff));

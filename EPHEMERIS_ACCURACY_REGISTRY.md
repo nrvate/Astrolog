@@ -274,14 +274,29 @@ mode. Prometheia confirmed their construction is the same: ICRF → the mean
 ecliptic and equinox of t0 → rot3(A0), plane 1 that frame, plane 2 its
 projection onto the invariable plane.
 
-**The correction actually applied is 28.196″ for Fagan/Bradley, not the
-31.469″ quoted below**, and the difference is worth keeping. Every figure in
-this entry was measured against **plane 0**, whose own sidereal origin is
-displaced by the nutation in longitude when the profile's frame carries
-nutation — −13.9315″ at J2000 against a measured residual of +13.9359″. So
-plane 0 is not a fixed reference and never was. The numbers reconcile exactly:
-31.4685 − 3.2730 (the post-fix plane-0 residual) = 28.1955, which is what the
-suite measures as the shift between the old delegated answer and the new one.
+**The correction applied is 31.508″ for Fagan/Bradley**, against the 31.469″
+this entry predicted and the −31.51″ the other engine measured independently
+between the two servers. The remainder is the ~20 mas frame bias: our
+construction lives in Swiss's mean equinox and ecliptic of J2000, theirs starts
+from ICRF.
+
+**It read 28.196″ first, and the 3.3″ gap was a defect rather than a
+reference artefact.** `swe_get_ayanamsa_ex` at t0 answers the **true**
+ayanamsa, the arc from the *true* equinox; §3.5a wants the zero point's
+longitude on the **mean** ecliptic and equinox of t0, which is that value less
+the nutation in longitude at t0. Putting the true value on a mean frame moves
+the origin by Δψ(t0) — −3.311″ for Fagan/Bradley, +16.777″ for Lahiri,
++17.346″ for Raman — so it is zodiac-dependent and looks exactly like the
+defect this entry exists to fix. `SEFLG_NONUT` on that one call is the whole
+correction.
+
+**What caught it was a regression, not the new behaviour.** Plane 1 had agreed
+with the other engine to 0.003″ while Swiss computed it, and taking it in-house
+moved it by precisely Δψ(t0). Their cross-test found that within an hour. The
+check that now holds it needs neither engine: **this server's in-house plane 1
+reproduces Swiss's own `SE_SIDBIT_ECL_T0` plane 1 to 0.0000″** at 1900, 2000
+and 2026, which is the anchor convention asserting itself against the
+implementation it replaced.
 
 **Two defects were found by the fix's own nets rather than by inspection.**
 A node under a sidereal fixed plane was still being handed `SEFLG_J2000`,
