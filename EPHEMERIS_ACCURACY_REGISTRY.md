@@ -327,11 +327,39 @@ from somewhere. Two routes, and it is the maintainer's call which:
 - an **additive entry point in the Swiss fork** exposing the precession it
   already computes, the same shape as the elements entry point phase 2 added
   (a fork release, a sibling repo, its own gates);
-- **implementing the precession model here**, which risks not matching Swiss
-  bit-for-bit and so trading one divergence for another.
+- **deriving the rotation from Swiss itself**, measured viable below;
+- ~~implementing the precession model here~~ — **ruled out.** Prometheia put
+  the criterion better than the framing above did: what matters is that our
+  node rotates exactly as *our own bodies* do in that frame. Any model written
+  here, however correct to its own specification, will differ from Swiss in
+  the last digits — and then the node disagrees with our own bodies before it
+  disagrees with anyone else's. That is the failure mode to avoid.
 
-Deriving the rotation numerically from a few bodies per request — which is
-how it was *measured* above — is not a fix and is not proposed.
+**The derived route, measured 2026-09-18.** The rotation does not have to be
+reproduced; it can be derived, because three independent directions in both
+frames determine it and Swiss will give any body in both frames. The node
+then rotates by literally the same rotation the bodies got — the criterion
+satisfied by construction rather than by care.
+
+The objection is conditioning: every body sits near the ecliptic, so does a
+rotation fitted from them hold off it? Fitting from **bodies only** and then
+predicting **stars** is the out-of-sample test:
+
+| fitted from 5 bodies within ±1.7° of the ecliptic | predicted vs actual |
+|---|---|
+| Aldebaran, latitude −5.5° | 9.1e-11″ |
+| Sirius, latitude −39.6° | 3.5e-11″ |
+| Vega, latitude +61.7° | 8.7e-11″ |
+| Polaris, latitude +66.1° | 4.9e-11″ |
+
+That is the float64 noise floor, at three epochs. Near-coplanarity only had to
+leave the fit non-degenerate, not well-spread: a rotation has three parameters
+and five directions over-determine it. `tools/frame-rotation-fit.py`.
+
+So this route needs no sibling-repo release, and the fit residual is its own
+health guard — a degenerate instant announces itself rather than returning a
+quiet wrong matrix. Against that, the fork entry point is conceptually
+cleaner: no cache, no derived matrix, no guard. **The maintainer's call.**
 
 **Net when it lands:** Prometheia's own shape, which is the right one — ask
 for the node in a fixed frame, rotate the of-date answer with the frame
