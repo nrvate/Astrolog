@@ -2437,6 +2437,55 @@ the gates the phase touches.
    findings, and a table of error codes is the worst place for it: a
    wrong answer there is indistinguishable from a real disagreement.
 
+26. **Three upstream Swiss findings the cross-test surfaced, and one
+   harness lesson (2026-09-18).** Legs 2, 3, 4, 5 and 10 are complete from
+   this side (`tools/crosstest-prom.sh`). Leg 10 needed a SEGDATA decoder
+   in `eph_wsclient` -- the codec had been in `ephproto.h` since phase 2
+   and only the consuming half was missing -- and it now evaluates the fit
+   through `Segment::Eval` and compares it with sampled rows: **0.000636
+   arcsec against the 0.001 asked for.**
+
+   **THREE FINDINGS ARE UPSTREAM SWISS, NOT THIS SERVER'S WIRING.**
+   `ephsrv-golden` compares astrolog-ephd against the fork with
+   hand-written flags and is bit-exact over 149 comparisons, so where the
+   server and Swiss agree and both differ from JPL, the difference is
+   Swiss's. Recorded here because the fork is a sibling repository this
+   project does not patch, and because **all three reach the DESKTOP**:
+   Astrolog casts from the same library.
+
+   | what | size | where |
+   |---|---|---|
+   | heliocentric light time | 0.38" Mercury, 0.28" Venus, 0.11" Mars vs Horizons | Swiss's retardation model |
+   | topocentric observer built about the MEAN pole | 0.165" on the Moon | `swi_get_observer` is able to nutate, but every call site passes `SEFLG_NONUT` (sweph.c:3195, 3367, 4108) |
+   | deflection at a planet-centred observer | 7 mas | `swi_deflect_light` builds its geometry from `pldat[SEI_EARTH]`, so Swiss deflects as seen from EARTH and then re-centres |
+
+   The nutation one is the most worth a decision: it is not a modelling
+   choice between two defensible conventions, and **every topocentric
+   chart the application draws carries it.** The Prometheia project pinned
+   it by recovering the observer offset from two topocentric vectors --
+   100-290 m, horizontal, turning epoch to epoch -- and reproducing it to
+   1-3 m at all fifteen rows with the nutation pole offset, the opposite
+   sign missing by 2x.
+
+   **And the harness lesson, which is the one to keep.**
+   `tools/crosstest-prom.sh` reported **eleven confident mismatches across
+   two runs**, including cases the two projects had already settled. The
+   diagnosis was a startup race, and that was fixed -- wrongly. The cause
+   was that the script hardcoded a port, and the OTHER project's rerun had
+   started **our** `astrolog-ephd` on it. Our daemon could not bind, the
+   readiness probe was answered by that other server, and every probe
+   compared astrolog-ephd's answers against Prometheia's contract. The
+   readiness check passed because the port was genuinely serving -- the
+   wrong thing, correctly.
+
+   It now takes port 0 and reads back what it got, and then **asks who
+   answered**: WELCOME names the engine, and a run against anything else
+   aborts. A free port makes the collision unlikely; the identity check
+   makes it impossible to go unnoticed. **Two harnesses on one machine is
+   a failure mode neither project designed for**, and "is this the server
+   I think it is" turns out to be the first question a cross-project gate
+   should ask.
+
 24. **P1's missing net, closed (2026-09-18).** The one thing the three
    reviews left open, and the reason it stayed open for a day: a fixed
    star through the Ephemeris Server could not be tested because the
