@@ -58,3 +58,10 @@ font/** -text
 sefstars.txt -text
 seorbel.txt  -text
 *.htm        -text
+
+# Recorded JPL Horizons replies. These are third-party bytes whose sha256
+# tools/horizons_audit.py asserts against MANIFEST.tsv, so git must not
+# normalize them on any platform -- a clone that rewrote a line ending
+# would fail that audit with nothing to point at. They happen to be LF
+# today; what matters is that they stay exactly as JPL sent them.
+ephsrv/horizons/*.txt -text

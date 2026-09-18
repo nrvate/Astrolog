@@ -17825,6 +17825,7 @@ typedef struct _HorizonsCase {
   int yea, mon, day;    // The instant, UT.
   real tim;
   flag fTopo;
+  flag fErr;            // JPL REFUSES this one, and that is the fixture.
   CONST char *szWhy;    // Why this case is in the corpus at all.
 } HORIZONSCASE;
 
@@ -17832,38 +17833,56 @@ typedef struct _HorizonsCase {
 // project's own: 1990-06-15, which the numeric oracle uses, and 1500, far
 // enough out that a date-dependent defect cannot hide behind a modern one.
 static CONST HORIZONSCASE rghorizonsQt[] = {
-  {"sun-1990",     10,  1990, 6, 15, 12.0, fFalse, "the Sun, geocentric"},
-  {"moon-1990",   301,  1990, 6, 15, 12.0, fFalse, "the Moon, the fastest body"},
-  {"earth-1990",  399,  1990, 6, 15, 12.0, fFalse,
-     "Earth: never asked for in a cast -- ComputeEphem synthesises it from "
-     "the Sun -- but the re-centring arithmetic is checked against it"},
-  {"mercury-1990",199,  1990, 6, 15, 12.0, fFalse, "Mercury"},
-  {"venus-1990",  299,  1990, 6, 15, 12.0, fFalse, "Venus"},
-  {"mars-1990",   499,  1990, 6, 15, 12.0, fFalse, "Mars"},
-  {"jupiter-1990",599,  1990, 6, 15, 12.0, fFalse, "Jupiter, a barycentre id"},
-  {"saturn-1990", 699,  1990, 6, 15, 12.0, fFalse, "Saturn"},
-  {"uranus-1990", 799,  1990, 6, 15, 12.0, fFalse, "Uranus"},
-  {"neptune-1990",899,  1990, 6, 15, 12.0, fFalse, "Neptune"},
-  {"pluto-1990",  999,  1990, 6, 15, 12.0, fFalse, "Pluto"},
-  {"sun-1500",     10,  1500, 1,  1, 12.0, fFalse,
-     "the same Sun four centuries earlier: a date-dependent defect cannot "
+  {"sun-1990",     10,  1990, 6, 15, 12.0, fFalse, fFalse, "the Sun, geocentric"},
+  {"moon-1990",   301,  1990, 6, 15, 12.0, fFalse, fFalse, "the Moon, the fastest body"},
+  {"mercury-1990",199,  1990, 6, 15, 12.0, fFalse, fFalse, "Mercury"},
+  {"venus-1990",  299,  1990, 6, 15, 12.0, fFalse, fFalse, "Venus"},
+  {"mars-1990",   499,  1990, 6, 15, 12.0, fFalse, fFalse, "Mars"},
+  {"jupiter-1990",599,  1990, 6, 15, 12.0, fFalse, fFalse, "Jupiter, a barycentre id"},
+  {"saturn-1990", 699,  1990, 6, 15, 12.0, fFalse, fFalse, "Saturn"},
+  {"uranus-1990", 799,  1990, 6, 15, 12.0, fFalse, fFalse, "Uranus"},
+  {"neptune-1990",899,  1990, 6, 15, 12.0, fFalse, fFalse, "Neptune"},
+  {"pluto-1990",  999,  1990, 6, 15, 12.0, fFalse, fFalse, "Pluto"},
+  {"sun-1500",     10,  1500, 1,  1, 12.0, fFalse, fFalse,
+     "the Sun four centuries earlier. It answers, where Mars and Pluto at "
+     "the same instant do not -- the Sun's coverage runs further back than "
+     "the planets'"},
+  {"mars-1700",   499,  1700, 1,  1, 12.0, fFalse, fFalse,
+     "Mars, far-dated but inside coverage: a date-dependent defect cannot "
      "hide behind a modern epoch"},
-  {"mars-1500",   499,  1500, 1,  1, 12.0, fFalse, "Mars, far-dated"},
-  {"pluto-1500",  999,  1500, 1,  1, 12.0, fFalse,
-     "Pluto, far-dated: the body most likely to fall outside coverage"},
-  {"sun-topo",     10,  1990, 6, 15, 12.0, fTrue,
+
+  {"sun-topo",     10,  1990, 6, 15, 12.0, fTrue,  fFalse,
      "the topocentric URL shape: COORD_TYPE and SITE_COORD, a different "
      "branch of the builder that no geocentric case exercises"},
-  {"chiron-1990", nMillion + 2060, 1990, 6, 15, 12.0, fFalse,
+  {"chiron-1990", nMillion + 2060, 1990, 6, 15, 12.0, fFalse, fFalse,
      "a small body: the id carries nMillion and the query grows a trailing "
      "semicolon, which is then percent-encoded"},
-  // Two failures, recorded on purpose. The error paths need fixtures as
+
+  // The refusals, recorded on purpose. The error paths need fixtures as
   // much as the happy one does, and a plausible-looking error page written
-  // by hand would be an invention rather than evidence.
-  {"err-unknown",  9999999, 1990, 6, 15, 12.0, fFalse,
+  // by hand would be an invention rather than evidence. Each of these was
+  // EXPECTED TO SUCCEED when the corpus was first recorded; JPL said
+  // otherwise, and what it said is now the fixture.
+  {"earth-1990",  399,  1990, 6, 15, 12.0, fFalse, fTrue,
+     "Earth, asked for from Earth's own geocentre -- degenerate, and JPL "
+     "refuses it. This is WHY ComputeEphem() synthesises Earth from the Sun "
+     "instead of fetching it, and the corpus now carries the proof"},
+  {"mars-1500",   499,  1500, 1,  1, 12.0, fFalse, fTrue,
+     "outside coverage: \"No ephemeris for target Mars prior to A.D. "
+     "1600-JAN-01\". The observer tables start at 1600 for the planets, "
+     "which is a real limit the plugin has to report rather than discover"},
+  {"pluto-1500",  999,  1500, 1,  1, 12.0, fFalse, fTrue,
+     "Pluto outside coverage too"},
+  {"pluto-1700",  999,  1700, 1,  1, 12.0, fFalse, fTrue,
+     "and the reason this one is here rather than as a success: Pluto's "
+     "own boundary is \"prior to A.D. 1800-JAN-02\", two centuries later "
+     "than Mars's. The limits are PER BODY, so a plugin cannot carry one "
+     "coverage range for the source -- it has to report ephErrOutsideCover "
+     "per object, which is what this fixture pins"},
+  {"err-unknown",  9999999, 1990, 6, 15, 12.0, fFalse, fTrue,
      "a body id JPL does not know"},
-  {"err-range",    999, 3500, 1,  1, 12.0, fFalse,
-     "an instant outside Pluto's coverage"},
+  {"err-range",    999, 3500, 1,  1, 12.0, fFalse, fTrue,
+     "an instant beyond the far end of coverage"},
 };
 
 #define chHorTabQt '\t'
@@ -17902,7 +17921,7 @@ void PrintHorizonsUrlsQt()
   for (i = 0; i < (int)(sizeof(rghorizonsQt)/sizeof(HORIZONSCASE)); i++) {
     SzUrlHorizonsCaseQt(&rghorizonsQt[i], S(szUrl));
     printf("%s%c%s%c%s\n", rghorizonsQt[i].szName, chHorTabQt,
-      FEqRgch(rghorizonsQt[i].szName, "err-", 4, fTrue) ? "error" : "ok",
+      rghorizonsQt[i].fErr ? "error" : "ok",
       chHorTabQt, szUrl);
   }
 }
@@ -17974,7 +17993,7 @@ static void TestHorizonsQt()
       continue;
     cFix++;
     // The very parser the client uses, over a reply JPL actually sent.
-    if (FEqRgch(rghorizonsQt[i].szName, "err-", 4, fTrue)) {
+    if (rghorizonsQt[i].fErr) {
       Check(!FParseJPLHorizons(file, pt, S(szName)),
         "a recorded Horizons refusal is reported as a failure, not parsed "
         "into positions");
@@ -18001,7 +18020,9 @@ static void TestHorizonsQt()
       "records it, once, from JPL)\n", szHorDirQt);
     return;
   }
-  while (FReadSzLineSkip(file, szLine, cchSzLine)) {
+  // fgets, not FReadSzLineSkip: the manifest is tab separated and that
+  // reader does not hand tabs back, so every row looked like one field.
+  while (fgets(szLine, cchSzLine, file) != NULL) {
     char *pchName, *pchUrl;
     if (szLine[0] == '#' || szLine[0] == chNull)
       continue;
@@ -18009,6 +18030,9 @@ static void TestHorizonsQt()
     pchUrl = (char *)strstr(szLine, "https://");
     if (pchUrl == NULL)
       continue;
+    for (i = 0; pchUrl[i] && pchUrl[i] != '\n' && pchUrl[i] != '\r'; i++)
+      ;
+    pchUrl[i] = chNull;
     for (i = 0; szLine[i] && szLine[i] != chHorTabQt; i++)
       ;
     szLine[i] = chNull;

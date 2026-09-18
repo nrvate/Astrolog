@@ -91,7 +91,7 @@ for a in rc_audit rc_mnemonic_audit rc_field_audit rc_lookup_audit \
          backend_parity_audit \
          defaults_audit registry_audit settings_coverage_audit \
          line_endings_audit fixture_coverage_audit qt_srcs_audit \
-         vcxproj_audit; do
+         horizons_audit vcxproj_audit; do
   step "$a" python3 "tools/$a.py"
 done
 step "build: console and Qt"     make -j4
