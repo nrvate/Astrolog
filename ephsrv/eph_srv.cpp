@@ -2940,9 +2940,17 @@ int main(int argc, char **argv) {
     LogEvt(kLogWarn, "log.contents")
       .Msg("--log-contents: every REQUEST's instants, bodies and settings "
            "are logged; not for a public server");
+  // ERROR, not warn: this server answers ERROR 5 to every file-backed
+  // request in this state, which is nearly every request there is, and a
+  // warn is filtered out entirely by --log-level error -- leaving an
+  // operator with a process that starts, listens, reports healthy and
+  // serves nothing, with no line anywhere saying why. Raised after a
+  // ':'-joined --ephe (the separator is ';') resolved to no directory at
+  // all and the server came up looking fine.
   if (disc.resolved.empty())
-    LogEvt(kLogWarn, "ephe").S("path", "")
-      .Msg("no ephemeris directory found; file-backed requests fail");
+    LogEvt(kLogError, "ephe").S("path", "")
+      .Msg("no ephemeris directory found; every file-backed request will "
+           "fail with ERROR 5 -- check --ephe (its list separator is ';')");
   else
     LogEvt(kLogInfo, "ephe").S("path", disc.resolved)
       .I("dirs", disc.cJoined);
