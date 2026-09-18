@@ -13,9 +13,53 @@ version 3, and this section is the design authority behind it.
 
 ## Status — how to pick this back up
 
-- **STATUS (2026-09-18, phase 4 landed).** Phases 2, 3, 4, 5 and 7 are
-  on this branch and gated. Phase 6 is next; phase 8 (branch review) and
-  the maintainer's squash-to-qt decision follow it.
+- **STATUS (2026-09-18, phase 6 substantially landed).** Phases 2, 3, 4,
+  5 and 7 are on this branch and gated, and phase 6 is most of the way
+  through: **the server is a registered source reached through the chain,
+  and ComputeEphem no longer knows it exists.** What remains of 6 is
+  platform reach and one more plugin, not the mechanism.
+
+  | increment | state |
+  |---|---|
+  | 6a `ephserver.cpp`, the source and the transport interface | landed `176e333` |
+  | 6b `ephreq.h`, the one EPHQUERY-to-REQUEST translation | landed `2bf30e5` |
+  | 6c the Qt transport, bound at startup | landed `c1c221b` |
+  | 6d ComputeEphem's two `#ifdef QT` server branches deleted | landed `6ed60d5` |
+  | 6e the required-server dialog, its ladder and exit 86 deleted | landed `05a0c21` |
+  | 6f the console transport (`eph_wsclient.cpp`'s framing, reusable) | **not started** |
+  | 6g the WinHTTP transport (Win32) | **not started** |
+  | 6h the `horizons` plugin | **not started** |
+
+  **The live parity group casts through the chain bit-identically to the
+  local path**, which is the check that says the mechanism works rather
+  than merely compiles.
+
+  Phase 8 (branch review) and the maintainer's squash-to-qt decision
+  follow. The branch is 60-odd commits ahead of `qt`; each phase kept its
+  own dev branch, so it can be reviewed in pieces rather than as one
+  diff.
+
+- **Where 6f-6h stand, so nobody re-surveys.** `eph_wsclient.cpp` is a
+  standalone PROGRAM with `main()`, not a library, and its socket and
+  WebSocket framing are file-static -- so 6f is an extraction before it
+  is a transport, and ten gate scripts drive that program and must not
+  regress. 6g is low value while Qt is the shipped Windows interface and
+  the Win32 build is only the oracle. 6h is the larger one: the Horizons
+  special case is woven through FIVE sites in `ComputeEphem()`
+  (`fJPL`/`FJPL`), including a post-processing step at the read that
+  re-centres a geocentric answer -- so the plugin has to take that with
+  it, which is what makes it a rewrite rather than a move.
+
+- **corrapplied.py has been run against `astrolog-ephd`, and the result
+  needs reading carefully.** It printed OK and exited 0 having checked
+  **zero of 29 cases**. Not our defect and not theirs in the numbers: of
+  the eight correction masks, Swiss cannot express the three that ask for
+  a correction WITHOUT light time (there is no flag for it), so we
+  advertise five and refuse three, the tool asks for ones we refuse, and
+  every case skips. The per-case reporting is right; the verdict line on
+  top is the bug, and it is the vacuous pass their own notes warn about.
+  Raised with them. **Do not treat a green from that tool as coverage
+  until it fails on nothing-checked.**
 
 - **The 00:20 handoff block below is SUPERSEDED, and one of its central
   claims is DISPROVEN.** It attributed phase 4c's 14 red assertions to a
@@ -2180,6 +2224,59 @@ the gates the phase touches.
      bug into their own `corrapplied.py` and caught it by fault
      injection rather than by trusting the green. The symptom to grep
      for in any existing leg is a column of suspiciously exact zeros.
+
+17. **Phase 6b-6d, the server through the chain (2026-09-18).**
+   `ephreq.h` is the one EPHQUERY-to-REQUEST translation every transport
+   shares; the Qt build binds a transport (`c1c221b`); and
+   `ComputeEphem()` lost both `#ifdef QT` server branches (`6ed60d5`), so
+   a remote cast and a local one no longer take different code to the
+   same question. The live parity group casts through the chain
+   bit-identically to the local path.
+
+   - **A remote source is the first one for which "FSubmit filled the
+     rows" is not automatic.** Removing the legacy branch turned the
+     parity group red at once, every object showing the Earth's
+     180-degree placeholder: the cast reached the server and came back
+     empty. `FEphSubmitChain()` states the contract -- returning true
+     means a row is filled for every open object -- and a local source
+     satisfies it by computing inside FSubmit, while a remote one's
+     answer arrives later. The source now submits the whole query and
+     reads each object back into its row.
+
+   - **An unanswered object must carry an ERROR, not a zero row.** The
+     walk claims any row whose `nErr` is `ephErrNone`, so a silent zero
+     is claimed as an ANSWER and the fallback is never reached -- a chart
+     of zeros from a source that failed, with no notice. Written into the
+     code rather than left to be discovered.
+
+   - **The parameter notification of 16 was wrong and is gone.** Binding
+     a transport exposed it: `Stop()` on a remote source tore down a live
+     connection and its in-flight request because the user edited the
+     address, discarding work the adapter carries across a reconnect.
+     Nine assertions failed and were right to. **A notification is also
+     missed by any path that writes the value another way.** So the rule
+     is inverted: a source compares what it OPENED with what the
+     parameter SAYS, at the point it uses it. Cannot be missed, cannot
+     fire too hard.
+
+   - **`SzSet()` is not a truth test.** It hands back `""` for a null,
+     and `""` is a true pointer -- so `if (SzSet(x))` is always taken.
+     The status line's localhost default was unreachable and the raw null
+     went to `"%s"`: every user who had not set a server address was
+     shown "Ephemeris Server (null)". `FSzSet()` tests; `SzSet()`
+     substitutes.
+
+18. **Phase 6e, the required-server nag deleted (2026-09-18).** The modal
+   startup dialog, its hour-long ladder and `EXIT_NO_EPHEMERIS` existed
+   for a world where a selection was ONE backend. The chain ended it: a
+   source that cannot answer is offered past, and the failure is reported
+   where it happens. **The reporting that replaces it was verified before
+   the deletion, not assumed** -- a body no source could compute already
+   warns once per cast, and a run with no ephemeris at all is documented
+   as supported and quiet because Moshier covers the planets. The suite
+   pins the promise (startup returns at once, is not welcomed, still has
+   a state to show, leaves a local source casting) rather than the
+   behaviour that went.
 
 16. **Phase 6a, and three things it found (2026-09-18).** `ephserver.cpp`
    carries an ordinary `EPHSRCDEF` for the `server` key, over a TRANSPORT
