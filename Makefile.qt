@@ -82,6 +82,9 @@ RM = rm -f
 CPPFLAGS += $(PROMETHEIA_FLAGS)
 LIBS += $(PROMETHEIA_LIBS)
 
+# Stamp the plugin state this dir was built with; see Makefile.srcs.
+$(call prometheia-stamp,$(OBJDIR))
+
 $(NAME): $(OBJS)
 # LDEXTRA is empty for every ordinary build and exists for one case:
 # a hand-installed Qt6 whose libraries are not on the runtime linker

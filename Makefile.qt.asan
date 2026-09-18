@@ -67,6 +67,9 @@ RM = rm -f
 CPPFLAGS += $(PROMETHEIA_FLAGS)
 LIBS += $(PROMETHEIA_LIBS)
 
+# Stamp the plugin state this dir was built with; see Makefile.srcs.
+$(call prometheia-stamp,$(OBJDIR))
+
 $(NAME): $(OBJS)
 	g++ -o $(NAME) $(OBJS) $(LIBS)
 

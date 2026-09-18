@@ -111,3 +111,27 @@ PROMETHEIA_FOUND := $(shell pkg-config --exists prometheia 2>/dev/null && echo y
 endif
 PROMETHEIA_FLAGS := $(if $(PROMETHEIA_FOUND),-DPROMETHEIA $(shell pkg-config --cflags prometheia 2>/dev/null))
 PROMETHEIA_LIBS := $(if $(PROMETHEIA_FOUND),$(shell pkg-config --static --libs prometheia 2>/dev/null))
+
+# That decision is made here, at parse time, and a flip of it changes no
+# source file's mtime -- so make happily links an ephem.o compiled
+# without the plugin beside a plugin-built ephprom.o, and the registry
+# row is silently absent (the trap the phase 7 review hit by hand). Each
+# opting-in makefile calls the stamp below with its object dir: the dir
+# remembers the flags it was last built with, and a change -- or
+# pre-stamp objects with no record to compare -- deletes the three
+# objects the flag can reach, before make has considered them. The
+# command is silent on success by design; its output is makefile text
+# the moment $(shell) returns it.
+define prometheia-stamp
+$(shell d='$(1)'; stamp="$$d/.prometheia-stamp"; \
+  mkdir -p "$$d" 2>/dev/null; \
+  if [ -f "$$d/ephem.o" ] || [ -f "$$d/ephprom.o" ] || [ -f "$$d/qttest.o" ]; then \
+    cur='$(PROMETHEIA_FLAGS)'; old=`cat "$$stamp" 2>/dev/null`; \
+    if [ ! -f "$$stamp" ] || [ x"$$cur" != x"$$old" ]; then \
+      echo "Makefile.srcs: PROMETHEIA state changed; rebuilding ephprom.o ephem.o qttest.o in $$d" >&2; \
+      rm -f "$$d/ephem.o" "$$d/ephprom.o" "$$d/qttest.o" \
+            "$$d/ephem.d" "$$d/ephprom.d" "$$d/qttest.d"; \
+    fi; \
+  fi; \
+  printf '%s\n' '$(PROMETHEIA_FLAGS)' > "$$stamp" 2>/dev/null || true)
+endef
