@@ -7691,6 +7691,22 @@ void ClampEphSrvReqQt(eph::Request *preq)
   uint32_t dwCells = esrv.fWelc ? esrv.welc.maxCells : w.maxCells;
   uint32_t dwCaps = esrv.fWelc ? esrv.welc.caps : 0;
 
+  // Ask only for correction terms this observer LISTS. 3.5a makes an
+  // unlisted mask ERROR 11 -- the whole request, not one object -- and
+  // Astrolog sends the full mask for every cast that is not true-position,
+  // including heliocentric ones. That worked against astrolog-ephd only
+  // because it happened to be lenient about what it accepted; against
+  // Prometheia's server the same cast was refused outright, which the
+  // cross-test found the day astrolog-ephd stopped advertising what it
+  // could not deliver. Narrowing here is right whatever a server accepts:
+  // the terms being dropped are ones that observer would not have applied.
+  if (esrv.fWelc)
+    for (size_t iP = 0; iP < preq->profiles.size(); iP++) {
+      eph::Profile &pf = preq->profiles[iP];
+      if (!esrv.caps.CorrectionMask(pf.observer, pf.corrections))
+        pf.corrections =
+          esrv.caps.BestCorrectionMask(pf.observer, pf.corrections);
+    }
   if (preq->objs.size() > (size_t)dwObjs)
     preq->objs.resize(dwObjs);  // The server would refuse the whole
                                 // request; SrvPrefetchQt splits a cast into

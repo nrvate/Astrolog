@@ -1171,11 +1171,20 @@ static void ComputeObjectRows(swe_ctx *ctx, const eph::Request &req, uint32_t iO
         // carry spans it; a bundle that did not would report 4 where 3
         // was meant, which is the honest limit of this test.
         if (m.errCode == eph::kOErrDataMissing &&
-            c.kind == eph::swiss::kCallCalc) {
+            (c.kind == eph::swiss::kCallCalc ||
+             c.kind == eph::swiss::kCallPctr)) {
           double xxT[6];
           char serrT[AS_MAXCH];
-          if (swe_calc_r(ctx, 2451545.0, c.ipl, c.iflag | SEFLG_TRUEPOS, xxT,
-                         serrT) >= 0) {
+          // The planet-centred call needs its own probe, or the nine
+          // Jupiter-centred rows at the first instant of the span kept
+          // answering 4 while every other observer at that instant
+          // answered 3 -- which is what the cross-test's rerun found.
+          int32_t retT = c.kind == eph::swiss::kCallPctr
+            ? swe_calc_pctr_r(ctx, 2451545.0, c.ipl, c.iplCenter,
+                              c.iflag | SEFLG_TRUEPOS, xxT, serrT)
+            : swe_calc_r(ctx, 2451545.0, c.ipl, c.iflag | SEFLG_TRUEPOS, xxT,
+                         serrT);
+          if (retT >= 0) {
             m.errCode = eph::kOErrCoverage;
             text = "the instant is outside this ephemeris's coverage";
           }
@@ -1890,6 +1899,24 @@ static const char *UnservedOf(const eph::Request &req) {
     // parse. A client that asks for more than the observer can show gets
     // the answer it would have got anyway, and META's corrApplied names
     // the terms that were really live for that object.
+    // Unknown BITS are refused; a mask this observer merely narrows is
+    // not, and that is a deliberate asymmetry rather than laxity.
+    //
+    // WELCOME advertises, per observer, what a BODY will actually see --
+    // at the Sun's centre and the barycentre Swiss turns aberration and
+    // deflection off inside the call. But an ORBIT POINT from those same
+    // observers does honour the bits (swe_nod_aps reads them before any
+    // normalisation), and the capability model is keyed on the observer,
+    // so no advertisement can state both. Enforcing the narrower reading
+    // as acceptance therefore DESTROYS a real capability: ephsrv-golden's
+    // heliocentric Mars perihelion moves when the mask does, and refusing
+    // it made that leg unaskable.
+    //
+    // The interop hazard this was meant to answer -- our client sending a
+    // mask another server would refuse -- is fixed where it belongs, in
+    // the client: ClampEphSrvReqQt() now narrows every profile to a mask
+    // WELCOME lists for its observer. A server being permissive about
+    // what it accepts costs nothing once no client over-asks.
     if ((pf.corrections & ~(uint8_t)eph::kCorrMask) != 0)
       return "this correction mask has bits this server does not define";
     if (!pf.zodiac.empty() && !gCaps.Zodiac(pf.zodiac)) return "zodiac not served";
